@@ -12,7 +12,7 @@ style = haskellDef
           , Tok.reservedNames = words
           , Tok.reservedOpNames = ops } where
   ops = ["->", "=", "∀", "=>"]
-  words = ["forall", "let", "and", "if", "then", "else", "begin", "end", "in"]
+  words = ["forall", "let", "and", "if", "then", "else", "begin", "end", "in", "foreign", "val"]
 
 
 lexer :: Tok.TokenParser ()

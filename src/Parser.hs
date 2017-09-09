@@ -56,12 +56,12 @@ typeP' = parens typeP
   tyForall = do
     reserved "forall"
     nms <- commaSep1 tyVar
-    dot
+    _ <- dot
     cs <- parens . commaSep1 $ typeP
     reservedOp "=>"
     TyForall nms cs <$> typeP
   tyVar = lexeme $ do
-    char '\''
+    _ <- char '\''
     x <- Tok.identStart style
     (x:) <$> many (Tok.identLetter style)
   tyCon = TyCon <$> name
@@ -78,7 +78,7 @@ exprP :: Parser Expr
 exprP = foldl1 App <$> many1 exprP'
 
 toplevelP :: Parser Toplevel
-toplevelP = letStmt <|> valStmt where
+toplevelP = letStmt <|> try foreignVal <|> valStmt where
   letStmt = do
     reserved "let"
     LetStmt <$> flip sepBy1 (reserved "and") (do
@@ -88,8 +88,15 @@ toplevelP = letStmt <|> valStmt where
   valStmt = do
     reserved "val"
     x <- name
-    colon
+    _ <- colon
     ValStmt x <$> typeP
+  foreignVal = do
+    reserved "val"
+    reserved "foreign"
+    x <- name
+    n <- stringLiteral
+    _ <- colon
+    ForeignVal x n <$> typeP
 
 program :: Parser [Toplevel]
 program = semiSep1 toplevelP <* eof
