@@ -33,9 +33,11 @@ data Var
 data Toplevel
   = LetStmt [(Var, Expr)]
   | ValStmt Var Type
+  | ForeignVal Var String Type
 
 instance Pretty Expr where
   pprint (VarRef v) = pprint v
+  pprint (Let [] _) = error "absurd: never parsed"
   pprint (Let ((n, v):xs) e) = do
     kwClr "let " <+> n <+> opClr " = " <+> v <+> newline
     forM_ xs $ \(n, v) -> do
@@ -53,6 +55,7 @@ instance Pretty Expr where
     kwClr "begin " <+> newline
     block 2 $ interleave ("; " <+> newline) e
     kwClr "end"
+  pprint (Literal l) = pprint l
 
 instance Pretty Lit where
   pprint (LiStr s) = strClr s

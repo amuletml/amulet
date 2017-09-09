@@ -1,16 +1,15 @@
 {-# LANGUAGE FlexibleInstances, TypeSynonymInstances #-}
-{-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE DefaultSignatures, BangPatterns #-}
 module Pretty 
   ( module M
-  , PrettyM, PrettyP, PParam(..), PState(..)
+  , PrettyM, PrettyP, PParam(..)
   , Pretty(..)
-  , runPrinter, runPrinter', runPrettyM
+  , runPrinter, runPrettyM
   , defaults, colourless
   , prettyPrint, uglyPrint
   , ppshow
   , colour
   , block
-  , step
   , newline
   , indented
   , body
@@ -39,12 +38,15 @@ module Pretty
 
 import qualified Data.Map as Map
 
-import Control.Monad.RWS.Strict as M hiding (local)
+import Control.Monad.Writer.Strict as M
+import Control.Monad.Reader as M hiding (local)
 import Control.Applicative as M
 import Data.List as M
 import Data.Char as M
 
-type PrettyM = RWS PParam String PState
+import qualified Control.Monad.Reader as RM
+
+type PrettyM = ReaderT PParam (Writer String)
 type PrettyP = PrettyM ()
 
 data PParam
@@ -57,12 +59,9 @@ data PParam
            , typevarColour  :: String
            , greyoutColour  :: String
            , literalColour  :: String
-           , specialColour  :: String }
+           , specialColour  :: String
+           , indent :: Int }
     deriving (Eq, Show)
-
-newtype PState
-  = PState { indent :: Int }
-  deriving (Eq, Show, Ord)
 
 class Pretty a where
   pprint :: a -> PrettyP
@@ -70,13 +69,10 @@ class Pretty a where
   pprint = tell . show
 
 runPrinter :: PParam -> PrettyP -> String
-runPrinter ctx act = let (_, _, ret) = runRWS act ctx (PState 0) in ret
+runPrinter ctx act = let (_, ret) = runWriter (runReaderT act ctx) in ret
 
-runPrinter' :: PParam -> PState -> PrettyM a -> String
-runPrinter' ct st ac = let (_, _, ret) = runRWS ac ct st in ret
-
-runPrettyM :: PParam -> PState -> PrettyM a -> (a, PState, String)
-runPrettyM ct st ac = runRWS ac ct st
+runPrettyM :: PParam -> PrettyM a -> (a, String)
+runPrettyM ct ac = runWriter (runReaderT ac ct)
 
 defaults :: PParam
 defaults = PParam { colours = True
@@ -88,7 +84,8 @@ defaults = PParam { colours = True
                   , typevarColour  = "\x1b[0m"
                   , greyoutColour  = "\x1b[1;30m"
                   , patternColour  = "\x1b[35m"
-                  , specialColour  = "\x1b[33m" }
+                  , specialColour  = "\x1b[33m"
+                  , indent = 0 }
 
 colourless :: PParam
 colourless = defaults { colours = False }
@@ -111,26 +108,20 @@ colour clr cmb
        return y
 
 block :: Pretty a => Int -> a -> PrettyP
-block st ac
-  = do x <- gets indent
-       put $ PState (x + st)
-       pprint ac
-       put $ PState x
-
-step :: Int -> PrettyP
-step x = modify $ \s -> s { indent = indent s + x }
+block st ac = RM.local (\x -> x { indent = indent x + st }) $ pprint ac
 
 newline :: PrettyP
 newline
-  = do x <- gets indent
+  = do x <- asks indent
        tell "\n"
        tell $ replicate x ' '
 
 indented :: Pretty a => a -> PrettyP
 indented x = newline *> pprint x
 
-body :: Pretty a => [a] -> PrettyP
-body b = block 1 $ mapM_ indented b
+body :: Pretty a => Int -> [a] -> PrettyP
+body _ [] = pure ()
+body k b = block k $ mapM_ indented b
 
 typeClr :: Pretty a => a -> PrettyP
 typeClr x = flip colour x =<< asks typeColour
@@ -163,8 +154,8 @@ delim :: (Pretty a, Pretty b, Pretty c) => a -> b -> c -> PrettyP
 delim s e y = pprint s *> pprint y <* pprint e
 
 width :: Pretty a => a -> PrettyM Int
-width ac = do st  <- get
-              let xs = runPrinter' colourless st $ pprint ac
+width ac = do st <- asks indent
+              let xs = runPrinter (colourless { indent = st }) $ pprint ac
                in return $ length xs
 
 between :: (Pretty a, Pretty b, Pretty c) => a -> b -> c -> PrettyP
@@ -172,9 +163,8 @@ between a b c = pprint a >> pprint c >> pprint b
 
 padRight :: Pretty a => a -> Int -> PrettyM String
 padRight ac fl
-  = do st <- get
-       ct <- ask
-       let xs = runPrinter' ct st $ pprint ac
+  = do ct <- ask
+       let xs = runPrinter ct $ pprint ac
         in return $ xs ++ replicate (fl - length xs) ' '
 
 padRight' :: Pretty a => a -> Int -> PrettyP
@@ -182,9 +172,8 @@ padRight' ac fl = padRight ac fl >>= pprint
 
 local :: Pretty a => a -> PrettyM String
 local ac
-  = do st <- get
-       ct <- ask
-       let xs = runPrinter' ct st $ pprint ac
+  = do ct <- ask
+       let xs = runPrinter ct $ pprint ac
         in return xs
 
 parens, braces, squares, angles :: Pretty a => a -> PrettyP
