@@ -1,3 +1,4 @@
+{-# Language MultiWayIf #-}
 module Types.Unify where
 
 import Control.Monad.Except
@@ -24,10 +25,12 @@ unify ta@(TyCon a) tb@(TyCon b)
 
 unify (TyForall vs _ ty) ot = do
   xs <- forM vs $ \_ -> TyVar <$> fresh
+  tell (zipWith ConInstance vs xs)
   let x = apply (M.fromList (zip vs xs)) ty
   unify x ot
 unify ot (TyForall vs _ ty) = do
   xs <- forM vs $ \_ -> TyVar <$> fresh
+  tell (zipWith ConInstance vs xs)
   let x = apply (M.fromList (zip vs xs)) ty
   unify x ot
 
@@ -41,12 +44,21 @@ solve m (ConInstance a t:xs)
   | occurs a t = throwError (Occurs a t)
   | otherwise =
     case M.lookup a m of
-      Just TyVar{} -> solve (M.insert a t m) xs
-      Just t' | t == t' -> solve m xs
-              | TyVar _ <- t -> solve (M.insert a t m) xs
-              | otherwise -> throwError (NotEqual t t')
-      Nothing -> solve (M.insert a t m) xs
+      Just TyVar{} -> solve (M.insert a t m) (substCons a t xs)
+      Just lt ->
+        let t' = apply (M.insert a t m) lt
+         in if | t == t' -> solve m (substCons a t xs)
+               | TyVar _ <- t -> solve (M.insert a t m) (substCons a t xs)
+               | otherwise -> solve m (substCons a t (xs ++ [ConEquality t t']))
+      Nothing -> solve (M.insert a t m) (substCons a t xs)
 solve m [] = pure m
+
+substCons :: String -> Type -> [Constraint] -> [Constraint]
+substCons n t (ConEquality a b:xs) = ConEquality (apply s a) (apply s b):substCons n t xs where
+  s = M.singleton n t
+substCons n t (ConInstance v g:xs) = ConInstance v (apply s g):substCons n t xs where
+  s = M.singleton n t
+substCons _ _ [] = []
 
 occurs :: String -> Type -> Bool
 occurs _ (TyVar _) = False
