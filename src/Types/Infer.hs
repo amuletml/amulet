@@ -49,10 +49,13 @@ infer x
         ks <- forM ns $ \(a, _) -> do
           tv <- TyVar <$> fresh
           pure (a, tv)
+        -- We add each binding to scope with a fresh type variable
         extendMany ks $ do
+          -- Then infer the actual types
           ts <- forM ns $ \(a, t) -> do
             t <- infer t
             pure (a, t)
+          -- And finally infer the body
           extendMany ts (infer b)
 
 extendMany :: MonadReader Env m => [(Var, Type)] -> m a -> m a
