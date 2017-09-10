@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleInstances, TypeSynonymInstances #-}
-{-# LANGUAGE DefaultSignatures, BangPatterns #-}
+{-# LANGUAGE DefaultSignatures #-}
 module Pretty 
   ( module M
   , PrettyM, PrettyP, PParam(..)

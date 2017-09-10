@@ -8,14 +8,11 @@ import Syntax.Subst
 import Syntax
 
 import Types.Unify
-import Control.Arrow
-import Debug.Trace
 
 -- Solve for the type of an expression
 inferExpr :: Env -> Expr -> Either TypeError Type
 inferExpr ct e = do
   (ty, c) <- runInfer ct (infer e)
-  traceShow c $ pure ()
   subst <- solve mempty c
   pure . closeOver . apply subst $ ty
 
@@ -40,8 +37,7 @@ infer x
         tc <- TyVar <$> fresh
         tb <- extend (c, tc) $ infer b
         pure (TyArr tc tb)
-      Begin xs -> do
-        last <$> mapM infer xs
+      Begin xs -> last <$> mapM infer xs
       If c t e -> do
         (tc, tt, te) <- (,,) <$> infer c <*> infer t <*> infer e
         tyBool `unify` tc
