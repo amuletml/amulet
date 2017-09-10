@@ -21,6 +21,16 @@ unify (TyApp a b) (TyApp a' b') = do
 unify ta@(TyCon a) tb@(TyCon b)
   | a == b = pure ()
   | otherwise = throwError (NotEqual ta tb)
+
+unify (TyForall vs _ ty) ot = do
+  xs <- forM vs $ \_ -> TyVar <$> fresh
+  let x = apply (M.fromList (zip vs xs)) ty
+  unify x ot
+unify ot (TyForall vs _ ty) = do
+  xs <- forM vs $ \_ -> TyVar <$> fresh
+  let x = apply (M.fromList (zip vs xs)) ty
+  unify x ot
+
 unify a b = throwError (NotEqual a b)
 
 solve :: Subst -> [Constraint] -> Either TypeError Subst

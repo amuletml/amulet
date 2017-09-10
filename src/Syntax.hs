@@ -12,6 +12,7 @@ data Expr
   | Begin [Expr]
   | Literal Lit
   | Match Expr [(Pattern, Expr)]
+  | BinOp Expr Expr Expr
   deriving (Eq, Show, Ord)
 
 data Pattern
@@ -70,6 +71,7 @@ instance Pretty Expr where
     block 2 $ interleave ("; " <+> newline) e
     kwClr "end"
   pprint (Literal l) = pprint l
+  pprint (BinOp l o r) = pprint l <+> " " <+> pprint o <+> " " <+> pprint r
   pprint (Match t bs) = do
     kwClr "match " <+> t <+> " with" <+> newline
     block 2 $ interleave ("; " <+> newline) bs

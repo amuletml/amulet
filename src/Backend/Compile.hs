@@ -33,11 +33,14 @@ compileExpr s@(Let _ _) = compileIife s
 compileExpr s@(If _ _ _) = compileIife s
 compileExpr s@(Begin _) = compileIife s
 compileExpr s@(Match _ _) = compileIife s
+compileExpr (BinOp l (VarRef (Name o)) r) = LuaBinOp (compileExpr l) (remapOp o) (compileExpr r)
+compileExpr (BinOp _ _ _) = error "absurd: never parsed"
 
 compileStmt :: Returner -> Expr -> [LuaStmt]
 compileStmt r e@(VarRef _) = pureReturn r $ compileExpr e
 compileStmt r e@(Literal _) = pureReturn r $ compileExpr e
 compileStmt r e@(Fun _ _) = pureReturn r $ compileExpr e
+compileStmt r e@BinOp{} = pureReturn r $ compileExpr e
 compileStmt r (Let k c) = let (ns, vs) = unzip $ map compileLet k in
                           (locals ns vs ++ compileStmt r c)
 compileStmt r (If c t e) = [LuaIf (compileExpr c) (compileStmt r t) (compileStmt r e)]
@@ -64,7 +67,6 @@ iife b = LuaCall (LuaFunction [] b) []
 compileIife :: Expr -> LuaExpr
 compileIife = iife . compileStmt (Just LuaReturn)
 
-
 locals :: [LuaVar] -> [LuaExpr] -> [LuaStmt]
 locals xs ys = preDef ++ locals' xs ys where
   locals' (x:xs) (y:ys) = LuaAssign [x] [y]:locals xs ys
@@ -76,3 +78,9 @@ locals xs ys = preDef ++ locals' xs ys where
 pureReturn :: Returner -> LuaExpr -> [LuaStmt]
 pureReturn Nothing _ = []
 pureReturn (Just r) e = [r e]
+
+remapOp :: String -> String
+remapOp "^" = ".."
+remapOp "**" = "^"
+remapOp "<>" = "~="
+remapOp x = x

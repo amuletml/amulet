@@ -14,7 +14,8 @@ style = haskellDef
           , Tok.nestedComments = True
           , Tok.reservedNames = words
           , Tok.reservedOpNames = ops } where
-  ops = ["->", "=", "∀", "=>", "|"]
+
+  ops = ["->", "=", "∀", "=>", "|", "**", "*", "+", "^", "<", ">=", "==", "&&", "||", "/", "-", ">", "<=", "<>"]
   words = ["forall", "let", "and", "if", "then", "else", "begin", "end", "in", "foreign", "val", "true", "false", "match", "with"]
 
 lexer :: Tok.TokenParser ()
