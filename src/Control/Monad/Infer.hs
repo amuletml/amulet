@@ -35,6 +35,8 @@ data TypeError
   = NotEqual Type Type
   | Occurs String Type
   | NotInScope Var
+  | EmptyMatch Expr
+  | EmptyBegin
   deriving (Eq, Show, Ord)
 
 lookupTy :: (MonadError TypeError m, MonadReader Env m) => Var -> m Type
