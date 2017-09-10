@@ -113,7 +113,7 @@ name = Name <$> identifier
 
 lit :: Parser Lit
 lit = intLit <|> strLit <|> true <|> false where
-  intLit = LiInt <$> integer
+  intLit = LiInt <$> natural
   strLit = LiStr <$> stringLiteral
   true = LiBool True <$ reserved "true"
   false = LiBool False <$ reserved "true"
