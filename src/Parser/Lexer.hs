@@ -4,6 +4,9 @@ import Text.Parsec.String
 import Text.Parsec.Language
 import qualified Text.Parsec.Token as Tok
 
+import Data.Functor.Identity
+
+style :: GenLanguageDef String u Identity
 style = haskellDef
           { Tok.commentStart = "(*"
           , Tok.commentEnd = "*)"
