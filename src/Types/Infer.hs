@@ -50,7 +50,6 @@ infer x
       App e1 e2 -> do
         (t1, t2, tv) <- (,,) <$> infer e1 <*> infer e2 <*> (TyVar <$> fresh)
         unify t1 (TyArr t2 tv)
-        unify tv t2
         pure tv
       Let ns b -> do
         ks <- forM ns $ \(a, _) -> do
