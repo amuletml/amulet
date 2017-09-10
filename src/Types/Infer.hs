@@ -7,6 +7,7 @@ import Syntax.Subst
 import Syntax
 
 import Types.Unify
+import Control.Arrow
 
 -- Solve for the type of an expression
 inferExpr :: Env -> Expr -> Either TypeError Type
@@ -44,7 +45,19 @@ infer x
         unify t1 (TyArr t2 tv)
         unify tv t2
         pure tv
-      _ -> undefined
+      Let ns b -> do
+        ks <- forM ns $ \(a, _) -> do
+          tv <- TyVar <$> fresh
+          pure (a, tv)
+        extendMany ks $ do
+          ts <- forM ns $ \(a, t) -> do
+            t <- infer t
+            pure (a, t)
+          extendMany ts (infer b)
+
+extendMany :: MonadReader Env m => [(Var, Type)] -> m a -> m a
+extendMany ((v, t):xs) b = extend (v, t) $ extendMany xs b
+extendMany [] b = b
 
 closeOver :: Type -> Type
 closeOver a = forall fv a where
