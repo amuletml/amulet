@@ -7,6 +7,8 @@ import Text.Parsec
 
 import Parser.Lexer
 
+import Data.Functor.Identity
+
 import Syntax
 
 bindGroup :: Parser [(Var, Expr)]
@@ -62,14 +64,31 @@ patternP = wildcard <|> capture where
   wildcard = Wildcard <$ reservedOp "_"
   capture = Capture . Name <$> identifier
 
+exprP :: Parser Expr
+exprP = exprOpP where
+  expr' = foldl1 App <$> many1 exprP'
+  exprOpP = buildExpressionParser table expr' <?> "expression"
+  bop x = binary x (\a b -> BinOp a (VarRef (Name x)) b)
+  table = [ [ bop "**" AssocRight ]
+          , [ bop "*"  AssocLeft, bop "/" AssocLeft ]
+          , [ bop "+"  AssocLeft, bop "-" AssocLeft ]
+          , [ bop "^"  AssocLeft ]
+          , [ bop "<"  AssocNone, bop ">" AssocNone
+            , bop ">=" AssocNone, bop "<=" AssocNone
+            , bop "==" AssocNone, bop "<>" AssocNone ]
+          , [ bop "&&" AssocNone ]
+          , [ bop "||" AssocNone ] ]
+
 typeP :: Parser Type
 typeP = typeOpP where
   typeOpP = buildExpressionParser table type' <?> "type"
   type' = foldl1 TyApp <$> many1 typeP'
   table = [ [ binary "->" TyArr AssocRight ]]
-  binary n f a = flip Infix a $ do
-    reservedOp n
-    pure f
+
+binary :: String -> (a -> a -> a) -> Assoc -> Operator String () Identity a
+binary n f a = flip Infix a $ do
+  reservedOp n
+  pure f
 
 typeP' :: Parser Type
 typeP' = parens typeP
@@ -98,9 +117,6 @@ lit = intLit <|> strLit <|> true <|> false where
   strLit = LiStr <$> stringLiteral
   true = LiBool True <$ reserved "true"
   false = LiBool False <$ reserved "true"
-
-exprP :: Parser Expr
-exprP = foldl1 App <$> many1 exprP'
 
 toplevelP :: Parser Toplevel
 toplevelP = letStmt <|> try foreignVal <|> valStmt where

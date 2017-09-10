@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 module Types.Infer where
 
+import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 
 import Control.Monad.Infer
@@ -8,22 +9,35 @@ import Syntax.Subst
 import Syntax
 
 import Types.Unify
+import Debug.Trace
 
 -- Solve for the type of an expression
 inferExpr :: Env -> Expr -> Either TypeError Type
 inferExpr ct e = do
   (ty, c) <- runInfer ct (infer e)
-  subst <- solve mempty c
+  subst <- solve mempty (traceShowId c)
   pure . closeOver . apply subst $ ty
 
 -- Solve for the types of lets in a program
 inferProgram :: [Toplevel] -> Either TypeError Env
-inferProgram ct = fst <$> runInfer mempty (inferProg ct)
+inferProgram ct = fst <$> runInfer builtinsEnv (inferProg ct)
 
 tyBool, tyInt, tyString :: Type
 tyInt = TyCon (Name "int")
 tyString = TyCon (Name "string")
 tyBool = TyCon (Name "bool")
+
+builtinsEnv :: Env
+builtinsEnv = Env (M.fromList ops) where
+  op x t = (Name x, t)
+  intOp = tyInt `TyArr` (tyInt `TyArr` tyInt)
+  stringOp = tyString `TyArr` (tyString `TyArr` tyString)
+  intCmp = tyInt `TyArr` (tyInt `TyArr` tyBool)
+  cmp = TyForall ["a"] [] $ TyVar "a" `TyArr` (TyVar "a" `TyArr` tyBool)
+  ops = [ op "+" intOp, op "-" intOp, op "*" intOp, op "/" intOp, op "**" intOp
+        , op "^" stringOp
+        , op "<" intCmp, op ">" intCmp, op ">=" intCmp, op "<=" intCmp
+        , op "==" cmp, op "<>" cmp ]
 
 infer :: Expr -> InferM Type
 infer x
@@ -72,6 +86,8 @@ infer x
           (x:xs) -> do
             mapM_ (unify x) xs
             pure x
+      BinOp l o r -> do
+        infer (App (App o l) r)
 
 -- Returns: Type of the overall thing * type of captures
 inferPattern :: Pattern -> InferM (Type, [(Var, Type)])
