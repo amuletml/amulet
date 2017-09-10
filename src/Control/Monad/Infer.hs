@@ -20,7 +20,7 @@ import Syntax
 
 type InferM = GenT Int (ReaderT Env (WriterT [Constraint] (Except TypeError)))
 
-data Env
+newtype Env
   = Env { scope :: Map.Map Var Type }
   deriving (Eq, Show, Ord)
 

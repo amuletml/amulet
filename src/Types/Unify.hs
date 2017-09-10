@@ -9,8 +9,6 @@ import Syntax
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 
-import Debug.Trace
-
 unify :: Type -> Type -> InferM ()
 unify (TyVar a) b = tell [ConInstance a b]
 unify a (TyVar b) = tell [ConInstance b a]
@@ -21,7 +19,7 @@ unify (TyApp a b) (TyApp a' b') = do
   unify a a'
   unify b b'
 unify ta@(TyCon a) tb@(TyCon b)
-  | traceShowId a == traceShowId b = pure ()
+  | a == b = pure ()
   | otherwise = throwError (NotEqual ta tb)
 unify a b = throwError (NotEqual a b)
 

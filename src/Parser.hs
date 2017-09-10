@@ -9,6 +9,19 @@ import Parser.Lexer
 
 import Syntax
 
+bindGroup :: Parser [(Var, Expr)]
+bindGroup = flip sepBy1 (reserved "and") $ try funDecl <|> varDecl where
+  varDecl = do
+    x <- name
+    reservedOp "="
+    (,) <$> pure x <*> exprP
+  funDecl = do
+    x <- name
+    ps <- many1 name
+    reservedOp "="
+    b <- exprP
+    pure (x, foldr Fun b ps)
+
 exprP' :: Parser Expr
 exprP' = parens exprP
      <|> funExpr
@@ -24,10 +37,7 @@ exprP' = parens exprP
     Fun x <$> exprP
   letExpr = do
     reserved "let"
-    bgs <- flip sepBy1 (reserved "and") $ do
-      x <- name
-      reservedOp "="
-      (,) <$> pure x <*> exprP
+    bgs <- bindGroup
     reserved "in"
     Let bgs <$> exprP
   ifExpr = do
@@ -83,10 +93,7 @@ toplevelP :: Parser Toplevel
 toplevelP = letStmt <|> try foreignVal <|> valStmt where
   letStmt = do
     reserved "let"
-    LetStmt <$> flip sepBy1 (reserved "and") (do
-      x <- name
-      reservedOp "="
-      (,) <$> pure x <*> exprP)
+    LetStmt <$> bindGroup
   valStmt = do
     reserved "val"
     x <- name

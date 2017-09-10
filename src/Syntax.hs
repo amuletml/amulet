@@ -47,7 +47,7 @@ instance Pretty Expr where
   pprint (Let [] _) = error "absurd: never parsed"
   pprint (Let ((n, v):xs) e) = do
     kwClr "let " <+> n <+> opClr " = " <+> v <+> newline
-    forM_ xs $ \(n, v) -> do
+    forM_ xs $ \(n, v) ->
       kwClr "and " <+> n <+> opClr " = " <+> v <+> newline
     pprint e
   pprint (If c t e) = do

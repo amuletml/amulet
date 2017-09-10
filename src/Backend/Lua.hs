@@ -98,7 +98,7 @@ instance Pretty LuaExpr where
     kwClr "function " <+> parens (interleave ", " a)
     body 2 b *> newline
     kwClr "end"
-  pprint (LuaTable ps) = braces $ do
+  pprint (LuaTable ps) = braces $
     forM_ ps $ \(k, v) -> squares k <+> opClr " = " <+> v <+> ", "
   pprint (LuaCall x@LuaFunction{} a) = parens x <+> parens (interleave ", " a)
   pprint (LuaCall x a) = x <+> parens (interleave ", " a)

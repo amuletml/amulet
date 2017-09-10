@@ -9,9 +9,7 @@ import System.Environment
 import System.Posix.Terminal (queryTerminal)
 import System.Posix.IO (stdOutput)
 
-import Control.Monad.Infer
 import Types.Infer
-import Syntax.Subst
 
 main :: IO ()
 main = do
@@ -19,9 +17,12 @@ main = do
   c <- readFile x
   istty <- queryTerminal stdOutput
   case parse program x c of
-    Right prg -> do
-      let out = compileProgram prg
-      if istty
-         then putStrLn $ prettyPrint out
-         else putStrLn $ uglyPrint out
+    Right prg ->
+      case inferProgram prg of
+        Left e -> print e
+        Right _ ->
+          let out = compileProgram prg
+           in if istty
+                then putStrLn $ prettyPrint out
+                else putStrLn $ uglyPrint out
     Left e -> print e
