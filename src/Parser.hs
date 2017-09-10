@@ -13,7 +13,7 @@ bindGroup :: Parser [(Var, Expr)]
 bindGroup = sepBy1 decl (reserved "and") where
   decl = do
     x <- name
-    ps <- many name
+    ps <- many patternP
     reservedOp "="
     bd <- exprP
     case ps of
@@ -31,7 +31,7 @@ exprP' = parens exprP
      <|> Literal <$> lit where
   funExpr = do
     reserved "fun"
-    x <- name
+    x <- patternP
     reservedOp "->"
     Fun x <$> exprP
   letExpr = do

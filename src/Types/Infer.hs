@@ -33,9 +33,9 @@ infer x
                      LiInt _ -> pure tyInt
                      LiStr _ -> pure tyString
                      LiBool _ -> pure tyBool
-      Fun c b -> do
-        tc <- TyVar <$> fresh
-        tb <- extend (c, tc) $ infer b
+      Fun p b -> do
+        (tc, ms) <- inferPattern p
+        tb <- extendMany ms $ infer b
         pure (TyArr tc tb)
       Begin [] -> throwError EmptyBegin
       Begin xs -> last <$> mapM infer xs
