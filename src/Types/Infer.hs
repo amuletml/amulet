@@ -37,6 +37,7 @@ infer x
         tc <- TyVar <$> fresh
         tb <- extend (c, tc) $ infer b
         pure (TyArr tc tb)
+      Begin [] -> throwError EmptyBegin
       Begin xs -> last <$> mapM infer xs
       If c t e -> do
         (tc, tt, te) <- (,,) <$> infer c <*> infer t <*> infer e
@@ -59,6 +60,27 @@ infer x
             pure (a, t)
           -- And finally infer the body
           extendMany ts (infer b)
+      Match t ps -> do
+        tt <- infer t
+        tbs <- forM ps $ \(p, e) -> do
+          (pt, ks) <- inferPattern p
+          tt `unify` pt
+          extendMany ks $ infer e
+        case tbs of
+          [] -> throwError (EmptyMatch (Match t ps))
+          [x] -> pure x
+          (x:xs) -> do
+            mapM_ (unify x) xs
+            pure x
+
+-- Returns: Type of the overall thing * type of captures
+inferPattern :: Pattern -> InferM (Type, [(Var, Type)])
+inferPattern Wildcard = do
+  x <- TyVar <$> fresh
+  pure (x, [])
+inferPattern (Capture v) = do
+  x <- TyVar <$> fresh
+  pure (x, [(v, x)])
 
 inferProg :: [Toplevel] -> InferM Env
 inferProg (LetStmt ns:prg) = do
