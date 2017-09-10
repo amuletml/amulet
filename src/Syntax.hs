@@ -8,7 +8,7 @@ data Expr
   | Let [(Var, Expr)] Expr
   | If Expr Expr Expr
   | App Expr Expr
-  | Fun Var Expr
+  | Fun Pattern Expr
   | Begin [Expr]
   | Literal Lit
   | Match Expr [(Pattern, Expr)]
