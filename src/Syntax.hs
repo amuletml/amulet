@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances #-}
 module Syntax where
 
 import Pretty
@@ -10,6 +11,12 @@ data Expr
   | Fun Var Expr
   | Begin [Expr]
   | Literal Lit
+  | Match Expr [(Pattern, Expr)]
+  deriving (Eq, Show, Ord)
+
+data Pattern
+  = Wildcard
+  | Capture Var
   deriving (Eq, Show, Ord)
 
 data Lit
@@ -63,6 +70,16 @@ instance Pretty Expr where
     block 2 $ interleave ("; " <+> newline) e
     kwClr "end"
   pprint (Literal l) = pprint l
+  pprint (Match t bs) = do
+    kwClr "match " <+> t <+> " with" <+> newline
+    block 2 $ interleave ("; " <+> newline) bs
+
+instance Pretty (Pattern, Expr) where
+  pprint (a, b) = opClr "| " <+> a <+> " -> " <+> b
+
+instance Pretty Pattern where
+  pprint Wildcard = kwClr "_"
+  pprint (Capture x) = pprint x
 
 instance Pretty Lit where
   pprint (LiStr s) = strClr s
