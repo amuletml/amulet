@@ -9,6 +9,10 @@ import System.Environment
 import System.Posix.Terminal (queryTerminal)
 import System.Posix.IO (stdOutput)
 
+import Control.Monad.Infer
+import Types.Infer
+import Syntax.Subst
+
 main :: IO ()
 main = do
   [x] <- getArgs
