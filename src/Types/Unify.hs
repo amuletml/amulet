@@ -9,6 +9,8 @@ import Syntax
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 
+import Debug.Trace
+
 unify :: Type -> Type -> InferM ()
 unify (TyVar a) b = tell [ConInstance a b]
 unify a (TyVar b) = tell [ConInstance b a]
@@ -18,16 +20,25 @@ unify (TyArr a b) (TyArr a' b') = do
 unify (TyApp a b) (TyApp a' b') = do
   unify a a'
   unify b b'
+unify ta@(TyCon a) tb@(TyCon b)
+  | traceShowId a == traceShowId b = pure ()
+  | otherwise = throwError (NotEqual ta tb)
 unify a b = throwError (NotEqual a b)
 
-solve :: [Constraint] -> Either TypeError Subst
-solve (ConEquality a b:xs)
-  | a == b = solve xs
+solve :: Subst -> [Constraint] -> Either TypeError Subst
+solve m (ConEquality a b:xs)
+  | a == b = solve m xs
   | otherwise = throwError (NotEqual a b)
-solve (ConInstance a t:xs)
+solve m (ConInstance a t:xs)
   | occurs a t = throwError (Occurs a t)
-  | otherwise = M.insert a t <$> solve xs
-solve [] = pure M.empty
+  | otherwise =
+    case M.lookup a m of
+      Just TyVar{} -> solve (M.insert a t m) xs
+      Just t' | t == t' -> solve m xs
+              | TyVar _ <- t -> solve (M.insert a t m) xs
+              | otherwise -> throwError (NotEqual t t')
+      Nothing -> solve (M.insert a t m) xs
+solve m [] = pure m
 
 occurs :: String -> Type -> Bool
 occurs _ (TyVar _) = False
