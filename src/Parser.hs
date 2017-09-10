@@ -10,23 +10,22 @@ import Parser.Lexer
 import Syntax
 
 bindGroup :: Parser [(Var, Expr)]
-bindGroup = flip sepBy1 (reserved "and") $ try funDecl <|> varDecl where
-  varDecl = do
+bindGroup = sepBy1 decl (reserved "and") where
+  decl = do
     x <- name
+    ps <- many name
     reservedOp "="
-    (,) <$> pure x <*> exprP
-  funDecl = do
-    x <- name
-    ps <- many1 name
-    reservedOp "="
-    b <- exprP
-    pure (x, foldr Fun b ps)
+    bd <- exprP
+    case ps of
+      [] -> pure (x, bd)
+      _ -> pure (x, foldr Fun bd ps)
 
 exprP' :: Parser Expr
 exprP' = parens exprP
      <|> funExpr
      <|> letExpr
      <|> ifExpr
+     <|> matchExpr
      <|> beginExpr
      <|> VarRef <$> name
      <|> Literal <$> lit where
@@ -48,6 +47,20 @@ exprP' = parens exprP
     reserved "else"
     If c t <$> exprP
   beginExpr = Begin <$> (reserved "begin" *> semiSep1 exprP <* reserved "end")
+  matchExpr = do
+    reserved "match"
+    x <- exprP
+    reserved "with"
+    Match x <$> many1 (do
+      reservedOp "|"
+      p <- patternP
+      reservedOp "->"
+      (,) p <$> exprP)
+
+patternP :: Parser Pattern
+patternP = wildcard <|> capture where
+  wildcard = Wildcard <$ reservedOp "_"
+  capture = Capture . Name <$> identifier
 
 typeP :: Parser Type
 typeP = typeOpP where
