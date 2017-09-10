@@ -9,13 +9,12 @@ import Syntax.Subst
 import Syntax
 
 import Types.Unify
-import Debug.Trace
 
 -- Solve for the type of an expression
 inferExpr :: Env -> Expr -> Either TypeError Type
 inferExpr ct e = do
   (ty, c) <- runInfer ct (infer e)
-  subst <- solve mempty (traceShowId c)
+  subst <- solve mempty c
   pure . closeOver . apply subst $ ty
 
 -- Solve for the types of lets in a program
