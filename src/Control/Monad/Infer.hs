@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 module Control.Monad.Infer
   ( module M
   , InferM
