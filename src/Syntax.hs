@@ -15,6 +15,7 @@ data Expr
 data Lit
   = LiInt Integer
   | LiStr String
+  | LiBool Bool
   deriving (Eq, Show, Ord)
 
 data Type
@@ -34,6 +35,12 @@ data Toplevel
   = LetStmt [(Var, Expr)]
   | ValStmt Var Type
   | ForeignVal Var String Type
+  deriving (Eq, Show, Ord)
+
+data Constraint
+  = ConEquality Type Type
+  | ConInstance String Type
+  deriving (Eq, Show, Ord)
 
 instance Pretty Expr where
   pprint (VarRef v) = pprint v
@@ -60,6 +67,8 @@ instance Pretty Expr where
 instance Pretty Lit where
   pprint (LiStr s) = strClr s
   pprint (LiInt s) = litClr s
+  pprint (LiBool True) = litClr "true"
+  pprint (LiBool False) = litClr "false"
 
 instance Pretty Type where
   pprint (TyCon v) = typeClr v

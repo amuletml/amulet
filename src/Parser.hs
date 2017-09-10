@@ -70,9 +70,11 @@ name :: Parser Var
 name = Name <$> identifier
 
 lit :: Parser Lit
-lit = intLit <|> strLit where
+lit = intLit <|> strLit <|> true <|> false where
   intLit = LiInt <$> integer
   strLit = LiStr <$> stringLiteral
+  true = LiBool True <$ reserved "true"
+  false = LiBool False <$ reserved "true"
 
 exprP :: Parser Expr
 exprP = foldl1 App <$> many1 exprP'

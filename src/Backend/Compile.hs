@@ -27,6 +27,8 @@ compileExpr (Begin xs) = iife (LuaLocal [LuaName "_"] []:(map (exprStmt . compil
   exprStmt = LuaAssign [LuaName "_"] . (:[])
 compileExpr (Literal (LiInt x)) = LuaNumber (fromInteger x)
 compileExpr (Literal (LiStr str)) = LuaString str
+compileExpr (Literal (LiBool True)) = LuaTrue
+compileExpr (Literal (LiBool False)) = LuaFalse
 
 lowerName :: Var -> LuaVar
 lowerName (Refresh a k) = case lowerName a of

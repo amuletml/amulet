@@ -48,11 +48,11 @@ instance Pretty LuaStmt where
     body 2 t *> newline
     kwClr "until " <+> c
   pprint (LuaIf c t []) = do
-    kwClr "if " <+> c <+> kwClr "then"
+    kwClr "if " <+> c <+> kwClr " then"
     body 2 t
     kwClr "end"
   pprint (LuaIf c t e) = do
-    kwClr "if " <+> c <+> kwClr "then"
+    kwClr "if " <+> c <+> kwClr " then"
     body 2 t *> newline
     kwClr "else"
     body 2 e *> newline
