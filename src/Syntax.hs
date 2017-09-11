@@ -43,6 +43,12 @@ data Toplevel
   = LetStmt [(Var, Expr)]
   | ValStmt Var Type
   | ForeignVal Var String Type
+  | TypeDecl Var [String] [(Var, [Type])]
+  deriving (Eq, Show, Ord)
+
+data Kind
+  = KiType
+  | KiArr Kind Kind
   deriving (Eq, Show, Ord)
 
 data Constraint
@@ -77,6 +83,10 @@ instance Pretty Expr where
 
 instance Pretty (Pattern, Expr) where
   pprint (a, b) = opClr "| " <+> a <+> " -> " <+> b
+
+instance Pretty Kind where
+  pprint KiType = kwClr "Type"
+  pprint (KiArr a b) = a <+> opClr " -> " <+> b
 
 instance Pretty Pattern where
   pprint Wildcard = kwClr "_"
