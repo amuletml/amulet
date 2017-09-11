@@ -165,6 +165,3 @@ closeOver a = forall fv a where
   fv = S.toList . ftv $ a
   forall [] a = a
   forall vs a = TyForall vs [] a
-
-instantiate :: Type -> InferM Type
-instantiate = undefined
