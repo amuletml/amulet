@@ -10,13 +10,6 @@ import Syntax
 
 import Types.Unify
 
--- Solve for the type of an expression
-inferExpr :: Env -> Expr -> Either TypeError Type
-inferExpr ct e = do
-  (ty, c) <- runInfer ct (infer e)
-  subst <- solve mempty c
-  pure . closeOver . apply subst $ ty
-
 -- Solve for the types of lets in a program
 inferProgram :: [Toplevel] -> Either TypeError Env
 inferProgram ct = fst <$> runInfer builtinsEnv (inferProg ct)
@@ -38,9 +31,12 @@ builtinsEnv = Env (M.fromList ops) where
         , op "<" intCmp, op ">" intCmp, op ">=" intCmp, op "<=" intCmp
         , op "==" cmp, op "<>" cmp ]
 
+unify :: Expr ->  Type -> Type -> InferM ()
+unify e a b = tell [ConUnify e a b]
+
 infer :: Expr -> InferM Type
-infer x
-  = case x of
+infer expr
+  = case expr of
       VarRef k -> lookupTy k
       Literal c -> case c of
                      LiInt _ -> pure tyInt
@@ -54,12 +50,12 @@ infer x
       Begin xs -> last <$> mapM infer xs
       If c t e -> do
         (tc, tt, te) <- (,,) <$> infer c <*> infer t <*> infer e
-        tyBool `unify` tc
-        tt `unify` te
+        unify c tyBool tc
+        unify expr tt te
         pure te
       App e1 e2 -> do
         (t1, t2, tv) <- (,,) <$> infer e1 <*> infer e2 <*> (TyVar <$> fresh)
-        unify t1 (TyArr t2 tv)
+        unify expr t1 (TyArr t2 tv)
         pure tv
       Let ns b -> do
         ks <- forM ns $ \(a, _) -> do
@@ -77,13 +73,13 @@ infer x
         tt <- infer t
         tbs <- forM ps $ \(p, e) -> do
           (pt, ks) <- inferPattern p
-          tt `unify` pt
+          unify expr tt pt
           extendMany ks $ infer e
         case tbs of
           [] -> throwError (EmptyMatch (Match t ps))
           [x] -> pure x
           (x:xs) -> do
-            mapM_ (unify x) xs
+            mapM_ (unify expr x) xs
             pure x
       BinOp l o r -> do
         infer (App (App o l) r)
@@ -105,11 +101,10 @@ inferProg (LetStmt ns:prg) = do
   extendMany ks $ do
     ts <- forM ns $ \(a, t) -> do
       -- We need the normalised, generalised type
-      ctx <- ask
-      let tp = inferExpr ctx t
-      case tp of
+      (ty, c) <- censor (const mempty) (listen (infer t))
+      case solve mempty c of
         Left e -> throwError e
-        Right x -> pure (a, x)
+        Right x -> pure (a, apply x ty)
     extendMany ts (inferProg prg)
 inferProg (ValStmt v t:prg) = extend (v, t) $ inferProg prg
 inferProg (ForeignVal v _ t:prg) = extend (v, t) $ inferProg prg
@@ -124,3 +119,6 @@ closeOver a = forall fv a where
   fv = S.toList . ftv $ a
   forall [] a = a
   forall vs a = TyForall vs [] a
+
+instantiate :: Type -> InferM Type
+instantiate = undefined
