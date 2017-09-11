@@ -1,11 +1,15 @@
 val foreign read "io.read" : string -> string;
 val foreign print "print" : string -> unit;
 val foreign number_of_string "tonumber" : string -> int;
+val foreign string_of_number "tonumber" : int -> string;
 
-let main _ =
+let fact n
+  = if (n == 0) then
+    1
+  else
+    n * fact (n - 1)
+and main _ =
   let line = read "*l"
   and num = number_of_string line
-   in if (num <> 10) then
-     print "number was not 10!"
-   else
-     print "number was 10!"
+  and fac = fact num
+   in print (line ^ " factorial is " ^ (string_of_number fac))
