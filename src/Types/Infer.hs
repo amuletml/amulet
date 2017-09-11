@@ -5,6 +5,8 @@ import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 
 import Control.Monad.Infer
+import Control.Arrow
+
 import Syntax.Subst
 import Syntax
 
@@ -20,8 +22,9 @@ tyString = TyCon (Name "string")
 tyBool = TyCon (Name "bool")
 
 builtinsEnv :: Env
-builtinsEnv = Env (M.fromList ops) where
+builtinsEnv = Env (M.fromList ops) (M.fromList tps) where
   op x t = (Name x, t)
+  tp x = (Name x, KiType)
   intOp = tyInt `TyArr` (tyInt `TyArr` tyInt)
   stringOp = tyString `TyArr` (tyString `TyArr` tyString)
   intCmp = tyInt `TyArr` (tyInt `TyArr` tyBool)
@@ -30,6 +33,7 @@ builtinsEnv = Env (M.fromList ops) where
         , op "^" stringOp
         , op "<" intCmp, op ">" intCmp, op ">=" intCmp, op "<=" intCmp
         , op "==" cmp, op "<>" cmp ]
+  tps = [ tp "int", tp "string", tp "bool" ]
 
 unify :: Expr ->  Type -> Type -> InferM ()
 unify e a b = tell [ConUnify e a b]
@@ -84,6 +88,23 @@ infer expr
       BinOp l o r -> do
         infer (App (App o l) r)
 
+inferKind :: Type -> InferM Kind
+inferKind (TyVar v) = lookupKind (Name v) `catchError` const (pure KiType)
+inferKind (TyCon v) = lookupKind v
+inferKind (TyForall vs _ k) = extendManyK (zip (map Name vs) (repeat KiType)) $ inferKind k
+inferKind (TyArr a b) = do
+  _ <- inferKind a
+  _ <- inferKind b
+  pure KiType
+inferKind (TyApp a b) = do
+  x <- inferKind a
+  case x of
+    KiArr t bd -> do
+      xb <- inferKind b
+      when (t /= xb) $ throwError (KindsNotEqual t xb)
+      pure bd
+    _ -> throwError (ExpectedArrowKind x)
+
 -- Returns: Type of the overall thing * type of captures
 inferPattern :: Pattern -> InferM (Type, [(Var, Type)])
 inferPattern Wildcard = do
@@ -104,15 +125,30 @@ inferProg (LetStmt ns:prg) = do
       (ty, c) <- censor (const mempty) (listen (infer t))
       case solve mempty c of
         Left e -> throwError e
-        Right x -> pure (a, apply x ty)
+        Right x -> let ty' = apply x ty
+                    in do
+                      _ <- inferKind ty'
+                      pure (a, ty')
     extendMany ts (inferProg prg)
 inferProg (ValStmt v t:prg) = extend (v, t) $ inferProg prg
 inferProg (ForeignVal v _ t:prg) = extend (v, t) $ inferProg prg
+inferProg (TypeDecl n tvs cs:prg) =
+  let mkk [] = KiType
+      mkk (_:xs) = KiArr KiType (mkk xs)
+      mkt [] = foldl TyApp (TyCon n) (TyVar <$> tvs)
+      mkt (x:xs) = TyArr x (mkt xs)
+   in extendKind (n, mkk tvs) $
+      extendMany (map (second mkt) cs) $
+        inferProg prg
 inferProg [] = ask
 
 extendMany :: MonadReader Env m => [(Var, Type)] -> m a -> m a
 extendMany ((v, t):xs) b = extend (v, t) $ extendMany xs b
 extendMany [] b = b
+
+extendManyK :: MonadReader Env m => [(Var, Kind)] -> m a -> m a
+extendManyK ((v, t):xs) b = extendKind (v, t) $ extendManyK xs b
+extendManyK [] b = b
 
 closeOver :: Type -> Type
 closeOver a = forall fv a where
