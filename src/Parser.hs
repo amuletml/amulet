@@ -113,6 +113,12 @@ tyVar = lexeme $ do
 name :: Parser Var
 name = Name <$> identifier
 
+constrName :: Parser Var
+constrName = (Name <$> upperIdent) <?> "constructor name" where
+  upperIdent = lexeme $ do
+    x <- upper
+    (x:) <$> many (Tok.identLetter style)
+
 lit :: Parser Lit
 lit = intLit <|> strLit <|> true <|> false where
   intLit = LiInt <$> natural
@@ -144,7 +150,7 @@ toplevelP = letStmt <|> try foreignVal <|> valStmt <|> dataDecl where
     reservedOp "="
     cs <- many $ do
       reservedOp "|"
-      x <- name
+      x <- constrName
       (,) x <$> sepBy typeP (reservedOp "*")
     pure $ TypeDecl x xs cs
 
