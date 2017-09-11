@@ -124,7 +124,7 @@ lit = intLit <|> strLit <|> true <|> false where
   intLit = LiInt <$> natural
   strLit = LiStr <$> stringLiteral
   true = LiBool True <$ reserved "true"
-  false = LiBool False <$ reserved "true"
+  false = LiBool False <$ reserved "false"
 
 toplevelP :: Parser Toplevel
 toplevelP = letStmt <|> try foreignVal <|> valStmt <|> dataDecl where
