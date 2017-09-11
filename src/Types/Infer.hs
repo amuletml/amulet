@@ -33,7 +33,7 @@ builtinsEnv = Env (M.fromList ops) (M.fromList tps) where
         , op "^" stringOp
         , op "<" intCmp, op ">" intCmp, op ">=" intCmp, op "<=" intCmp
         , op "==" cmp, op "<>" cmp ]
-  tps = [ tp "int", tp "string", tp "bool" ]
+  tps = [ tp "int", tp "string", tp "bool", tp "unit" ]
 
 unify :: Expr ->  Type -> Type -> InferM ()
 unify e a b = tell [ConUnify e a b]
