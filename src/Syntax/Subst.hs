@@ -1,7 +1,9 @@
 module Syntax.Subst
   ( Subst
+  , Substitutable
   , ftv
   , apply
+  , compose
   , M.fromList )
   where
 
@@ -12,17 +14,31 @@ import Syntax
 
 type Subst = M.Map String Type
 
-ftv :: Type -> S.Set String
-ftv TyCon{} = S.empty
-ftv (TyVar v) = S.singleton v
-ftv (TyForall vs cs t) = (foldMap ftv cs `S.union` ftv t) S.\\ S.fromList vs
-ftv (TyApp a b) = ftv a `S.union` ftv b
-ftv (TyArr a b) = ftv a `S.union` ftv b
+class Substitutable a where
+  ftv :: a -> S.Set String
+  apply :: Subst -> a -> a
 
-apply :: Subst -> Type -> Type
-apply _ (TyCon a) = TyCon a
-apply s t@(TyVar v) = M.findWithDefault t v s
-apply s (TyArr a b) = TyArr (apply s a) (apply s b)
-apply s (TyApp a b) = TyApp (apply s a) (apply s b)
-apply s (TyForall v cs t) = TyForall v (map (apply s') cs) (apply s' t) where
-  s' = foldr M.delete s v
+instance Substitutable Type where
+  ftv TyCon{} = S.empty
+  ftv (TyVar v) = S.singleton v
+  ftv (TyForall vs cs t) = (foldMap ftv cs `S.union` ftv t) S.\\ S.fromList vs
+  ftv (TyApp a b) = ftv a `S.union` ftv b
+  ftv (TyArr a b) = ftv a `S.union` ftv b
+
+  apply _ (TyCon a) = TyCon a
+  apply s t@(TyVar v) = M.findWithDefault t v s
+  apply s (TyArr a b) = TyArr (apply s a) (apply s b)
+  apply s (TyApp a b) = TyApp (apply s a) (apply s b)
+  apply s (TyForall v cs t) = TyForall v (map (apply s') cs) (apply s' t) where
+    s' = foldr M.delete s v
+
+instance Substitutable Constraint where
+  ftv (ConUnify _ a b) = ftv a `S.union` ftv b
+  apply s (ConUnify e a b) = ConUnify e (apply s a) (apply s b)
+
+instance Substitutable a => Substitutable [a] where
+  ftv = S.unions . map ftv
+  apply s = map (apply s)
+
+compose :: Subst -> Subst -> Subst
+s1 `compose` s2 = M.map (apply s1) s2 `M.union` s1

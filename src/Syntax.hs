@@ -46,8 +46,7 @@ data Toplevel
   deriving (Eq, Show, Ord)
 
 data Constraint
-  = ConEquality Type Type
-  | ConInstance String Type
+  = ConUnify Expr Type Type
   deriving (Eq, Show, Ord)
 
 instance Pretty Expr where
@@ -71,7 +70,7 @@ instance Pretty Expr where
     block 2 $ interleave ("; " <+> newline) e
     kwClr "end"
   pprint (Literal l) = pprint l
-  pprint (BinOp l o r) = pprint l <+> " " <+> pprint o <+> " " <+> pprint r
+  pprint (BinOp l o r) = parens (pprint l <+> " " <+> pprint o <+> " " <+> pprint r)
   pprint (Match t bs) = do
     kwClr "match " <+> t <+> " with" <+> newline
     block 2 $ interleave ("; " <+> newline) bs
@@ -104,3 +103,5 @@ instance Pretty Var where
   pprint (Name v) = pprint v
   pprint (Refresh v _) = pprint v
 
+instance Pretty Constraint where
+  pprint (ConUnify e a b) = e <+> opClr " <=> " <+> a <+> opClr " ~ " <+> b
