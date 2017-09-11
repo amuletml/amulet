@@ -69,8 +69,8 @@ infer expr
         extendMany ks $ do
           -- Then infer the actual types
           ts <- forM ns $ \(a, t) -> do
-            t <- infer t
-            pure (a, t)
+            t' <- infer t
+            pure (a, t')
           -- And finally infer the body
           extendMany ts (infer b)
       Match t ps -> do
@@ -121,15 +121,7 @@ inferProg (LetStmt ns:prg) = do
     vl <- lookupTy a `catchError` const (pure tv)
     pure (a, vl)
   extendMany ks $ do
-    ts <- forM ns $ \(a, t) -> do
-      -- We need the normalised, generalised type
-      (ty, c) <- censor (const mempty) (listen (infer t))
-      case solve mempty c of
-        Left e -> throwError e
-        Right x -> let ty' = apply x ty
-                    in do
-                      _ <- inferKind ty'
-                      pure (a, ty')
+    ts <- inferLetTy ks ns 
     extendMany ts (inferProg prg)
 inferProg (ValStmt v t:prg) = extend (v, t) $ inferProg prg
 inferProg (ForeignVal v _ t:prg) = extend (v, t) $ inferProg prg
@@ -142,6 +134,23 @@ inferProg (TypeDecl n tvs cs:prg) =
       extendMany (map (second mkt) cs) $
         inferProg prg
 inferProg [] = ask
+
+inferLetTy :: [(Var, Type)] -> [(Var, Expr)] -> InferM [(Var, Type)]
+inferLetTy ks [] = pure ks
+inferLetTy ks ((va, ve):xs) = extendMany ks $ do
+  (ty, c) <- censor (const mempty) (listen (infer ve))
+  vt <- case solve mempty c of
+          Left e -> throwError e
+          Right x -> let ty' = apply x ty
+                      in do _ <- inferKind ty'
+                            pure ty'
+  inferLetTy (updateAlist va vt ks) xs
+
+updateAlist :: Eq a => a -> b -> [(a, b)] -> [(a, b)]
+updateAlist n v ((n', x):xs)
+  | n == n' = (n, v):updateAlist n v xs
+  | otherwise = (n', x):updateAlist n v xs
+updateAlist _ _ [] = []
 
 extendMany :: MonadReader Env m => [(Var, Type)] -> m a -> m a
 extendMany ((v, t):xs) b = extend (v, t) $ extendMany xs b
