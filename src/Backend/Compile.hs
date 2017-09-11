@@ -5,9 +5,11 @@ module Backend.Compile
   , compileConstructors
   ) where
 
-import Syntax
-import Backend.Lua
+import Control.Monad.Gen
 import Control.Monad
+
+import Backend.Lua
+import Syntax
 
 type Returner = Maybe (LuaExpr -> LuaStmt)
 
@@ -45,6 +47,7 @@ compileExpr (VarRef v) = LuaRef (lowerName v)
 compileExpr (App f x) = LuaCall (compileExpr f) [compileExpr x]
 compileExpr (Fun (Capture v) e) = LuaFunction [lowerName v] (compileStmt (Just LuaReturn) e)
 compileExpr (Fun Wildcard e) = LuaFunction [LuaName "_"] (compileStmt (Just LuaReturn) e)
+compileExpr (Fun k e) = LuaFunction [LuaName "__arg__"] (compileStmt (Just LuaReturn) (Match (VarRef (Name "__arg__")) [(k, e)]))
 compileExpr (Literal (LiInt x)) = LuaNumber (fromInteger x)
 compileExpr (Literal (LiStr str)) = LuaString str
 compileExpr (Literal (LiBool True)) = LuaTrue
@@ -65,12 +68,7 @@ compileStmt r (Let k c) = let (ns, vs) = unzip $ map compileLet k in
                           (locals ns vs ++ compileStmt r c)
 compileStmt r (If c t e) = [LuaIf (compileExpr c) (compileStmt r t) (compileStmt r e)]
 compileStmt r (Begin xs) = concatMap (compileStmt Nothing) (init xs) ++ compileStmt r (last xs)
-
-compileStmt _ (Match _ []) = error "Cannot have empty match"
-compileStmt r (Match e ((Wildcard, c):_)) = compileStmt Nothing e ++ compileStmt r c
-compileStmt r (Match e ((Capture v, c):_)) = LuaLocal [lowerName v] [] :
-                                             compileStmt (Just (LuaAssign [lowerName v] . (:[]))) e ++
-                                             compileStmt r c
+compileStmt r (Match s ps) = runGen (compileMatch r s ps)
 
 compileStmt Nothing (App f x) = [LuaCallS (compileExpr f) [compileExpr x]]
 compileStmt (Just r) e@(App _ _) = [r (compileExpr e)]
@@ -104,3 +102,47 @@ remapOp "^" = ".."
 remapOp "**" = "^"
 remapOp "<>" = "~="
 remapOp x = x
+
+foldAnd :: [LuaExpr] -> LuaExpr
+foldAnd = foldl1 k where
+  k l r
+    | r == LuaTrue = l
+    | l == LuaTrue = r
+    | r == LuaFalse || l == LuaFalse = LuaFalse
+    | otherwise = LuaBinOp l "and" r
+
+patternTest :: Pattern -> LuaExpr ->  LuaExpr
+patternTest Wildcard  _ = LuaTrue
+patternTest Capture{} _ = LuaTrue
+patternTest (Destructure con ps) vr
+  = foldAnd (table vr:tag con vr:zipWith3 innerTest ps (repeat vr) [2..]) where
+    innerTest p v k = patternTest p . LuaRef . LuaIndex v . LuaNumber . fromInteger $ k
+    table ex = LuaBinOp (LuaCall (LuaRef (LuaName "type")) [ex]) "==" (LuaString "table")
+    tag (Name con) vr = LuaBinOp (LuaRef (LuaIndex vr (LuaNumber 1))) "==" (LuaString con)
+    tag _ _ = error "absurd: no renaming"
+
+patternBindings :: Pattern -> LuaExpr -> [(LuaVar, LuaExpr)]
+patternBindings Wildcard  _ = []
+patternBindings (Capture (Name k)) v = [(LuaName k, v)]
+patternBindings (Capture _) _ = error "absurd: no renaming"
+patternBindings (Destructure _ ps) vr
+  = concat $ zipWith3 innerBind ps (repeat vr) [2..] where
+    innerBind p v k = patternBindings p . LuaRef . LuaIndex v . LuaNumber . fromInteger $ k
+
+compileMatch :: Returner -> Expr -> [(Pattern, Expr)] -> Gen Int [LuaStmt]
+compileMatch r ex ps = do
+  x <- (LuaName . ("__" ++ ) . (alpha !!)) <$> gen -- matchee
+  let gen ((p, c):ps) = ( patternTest p (LuaRef x)
+                        , let pbs = patternBindings p (LuaRef x)
+                              (a, b) = unzip pbs
+                           in case a of
+                                [] -> []
+                                _ -> [LuaLocal a b]
+                          ++ compileStmt r c )
+                        : gen ps
+      gen [] = [err]
+      err = ( LuaTrue
+            , [LuaCallS (LuaRef (LuaName "error"))
+                        [LuaString "Pattern matching failure in match expression"]])
+  pure $ compileStmt (Just $ LuaLocal [x] . (:[])) ex
+       ++ [ LuaIfElse (gen ps) ]

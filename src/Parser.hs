@@ -9,6 +9,7 @@ import Parser.Lexer
 
 import Data.Functor.Identity
 
+import Control.Monad
 import Syntax
 
 bindGroup :: Parser [(Var, Expr)]
@@ -53,16 +54,32 @@ exprP' = parens exprP
     reserved "match"
     x <- exprP
     reserved "with"
-    Match x <$> many1 (do
-      reservedOp "|"
-      p <- patternP
-      reservedOp "->"
-      (,) p <$> exprP)
+    Match x <$> many1 (arm <?> "match arm")
+  arm = do
+    reservedOp "|"
+    p <- many1 patternP
+    case p of
+      [x] -> do
+        reservedOp "->"
+        (,) x <$> exprP
+      (Destructure v _:xs) -> do
+        reservedOp "->"
+        (,) (Destructure v xs) <$> exprP
+      _ -> mzero
+
 
 patternP :: Parser Pattern
-patternP = wildcard <|> capture where
+patternP = wildcard <|> capture <|> constructor <|> destructure where
   wildcard = Wildcard <$ reservedOp "_"
-  capture = Capture . Name <$> identifier
+  capture = Capture <$> varName
+  varName = (Name <$> lowerIdent) <?> "variableName"
+  constructor = flip Destructure [] <$> constrName
+  destructure = parens $ do
+    ps <- constrName
+    Destructure ps <$> many1 patternP
+  lowerIdent = lexeme $ do
+    x <- lower
+    (x:) <$> many (Tok.identLetter style)
 
 exprP :: Parser Expr
 exprP = exprOpP where

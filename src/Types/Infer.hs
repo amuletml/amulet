@@ -11,6 +11,7 @@ import Syntax.Subst
 import Syntax
 
 import Types.Unify
+import Debug.Trace
 
 -- Solve for the types of lets in a program
 inferProgram :: [Toplevel] -> Either TypeError Env
@@ -113,6 +114,16 @@ inferPattern Wildcard = do
 inferPattern (Capture v) = do
   x <- TyVar <$> fresh
   pure (x, [(v, x)])
+inferPattern (Destructure cns ps) = do
+  pty <- lookupTy cns
+  let args (TyArr a b) = a:args b
+      args k = [k]
+      tys = init (args pty)
+      res = last (args pty)
+      unify' a b = unify undefined a b
+  ptts <- mapM inferPattern ps
+  zipWithM_ unify' (map fst ptts) tys
+  pure (res, concatMap snd ptts)
 
 inferProg :: [Toplevel] -> InferM Env
 inferProg (LetStmt ns:prg) = do

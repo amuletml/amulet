@@ -18,6 +18,7 @@ data Expr
 data Pattern
   = Wildcard
   | Capture Var
+  | Destructure Var [Pattern]
   deriving (Eq, Show, Ord)
 
 data Lit

@@ -11,6 +11,7 @@ data LuaStmt
   | LuaFornum String LuaExpr LuaExpr LuaExpr [LuaStmt]
   | LuaLocal [LuaVar] [LuaExpr]
   | LuaReturn LuaExpr
+  | LuaIfElse [(LuaExpr, [LuaStmt])]
   | LuaBreak
   | LuaCallS LuaExpr [LuaExpr]
   | LuaBit String
@@ -49,7 +50,7 @@ instance Pretty LuaStmt where
     kwClr "until " <+> c
   pprint (LuaIf c t []) = do
     kwClr "if " <+> c <+> kwClr " then"
-    body 2 t
+    body 2 t *> newline
     kwClr "end"
   pprint (LuaIf c t e) = do
     kwClr "if " <+> c <+> kwClr " then"
@@ -57,6 +58,17 @@ instance Pretty LuaStmt where
     kwClr "else"
     body 2 e *> newline
     kwClr "end"
+  pprint (LuaIfElse ((c,t):bs)) = do
+    kwClr "if " <+> c <+> kwClr " then"
+    body 2 t *> newline
+    case bs of
+      [] -> kwClr "end"
+      xs -> do
+        forM_ xs $ \(c, t) -> do
+          kwClr "elseif " <+> c <+> kwClr " then"
+          body 2 t *> newline
+        kwClr "end"
+  pprint (LuaIfElse []) = error "impossible"
   pprint (LuaFornum v s e i b) = do
     kwClr "for " <+> v <+> opClr " = "
     interleave ", " [s, e, i]
@@ -92,7 +104,7 @@ instance Pretty LuaExpr where
   pprint LuaNil = litClr "nil"
   pprint (LuaString k) = str k
   pprint (LuaNumber d) = litClr d
-  pprint (LuaBinOp l o r) = l <+> " " <+> opClr o <+> " " <+> opClr r
+  pprint (LuaBinOp l o r) = l <+> " " <+> opClr o <+> " " <+> r
   pprint (LuaRef x) = pprint x
   pprint (LuaFunction a b) = do
     kwClr "function " <+> parens (interleave ", " a)
