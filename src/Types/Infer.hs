@@ -118,7 +118,8 @@ inferProg :: [Toplevel] -> InferM Env
 inferProg (LetStmt ns:prg) = do
   ks <- forM ns $ \(a, _) -> do
     tv <- TyVar <$> fresh
-    pure (a, tv)
+    vl <- lookupTy a `catchError` const (pure tv)
+    pure (a, vl)
   extendMany ks $ do
     ts <- forM ns $ \(a, t) -> do
       -- We need the normalised, generalised type
