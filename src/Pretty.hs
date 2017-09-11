@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleInstances, TypeSynonymInstances #-}
 {-# LANGUAGE DefaultSignatures #-}
-module Pretty 
+module Pretty
   ( module M
   , PrettyM, PrettyP, PParam(..)
   , Pretty(..)
@@ -8,6 +8,7 @@ module Pretty
   , defaults, colourless
   , prettyPrint, uglyPrint
   , ppshow
+  , tracePretty, tracePrettyId
   , colour
   , block
   , newline
@@ -41,8 +42,9 @@ import qualified Data.Map as Map
 import Control.Monad.Writer.Strict as M
 import Control.Monad.Reader as M hiding (local)
 import Control.Applicative as M
-import Data.List as M
 import Data.Char as M
+import Data.List as M
+import Debug.Trace
 
 import qualified Control.Monad.Reader as RM
 
@@ -98,6 +100,12 @@ uglyPrint = runPrinter colourless . pprint
 
 ppshow :: Pretty a => PParam -> a -> String
 ppshow = (. pprint) . runPrinter
+
+tracePretty :: Pretty a => a -> b -> b
+tracePretty x = trace (prettyPrint x)
+
+tracePrettyId :: Pretty a => a -> a
+tracePrettyId x = tracePretty x x
 
 colour :: Pretty a => String -> a -> PrettyP
 colour clr cmb
