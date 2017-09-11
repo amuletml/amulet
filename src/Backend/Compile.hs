@@ -69,7 +69,7 @@ compileIife = iife . compileStmt (Just LuaReturn)
 
 locals :: [LuaVar] -> [LuaExpr] -> [LuaStmt]
 locals xs ys = preDef ++ locals' xs ys where
-  locals' (x:xs) (y:ys) = LuaAssign [x] [y]:locals xs ys
+  locals' (x:xs) (y:ys) = LuaAssign [x] [y]:locals' xs ys
   locals' _ _ = []
   preDef = case xs of
              [] -> []
