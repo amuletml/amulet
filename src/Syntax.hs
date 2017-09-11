@@ -107,7 +107,7 @@ instance Pretty Type where
   pprint (TyArr x e) = x <+> opClr " -> " <+> e
 
   pprint (TyApp e x@TyApp{}) = parens x <+> opClr " -> " <+> e
-  pprint (TyApp x e) = x <+> opClr " -> " <+> e
+  pprint (TyApp x e) = x <+> opClr " " <+> e
 
 instance Pretty Var where
   pprint (Name v) = pprint v

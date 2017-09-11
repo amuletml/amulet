@@ -102,11 +102,13 @@ typeP' = parens typeP
     cs <- parens . commaSep1 $ typeP
     reservedOp "=>"
     TyForall nms cs <$> typeP
-  tyVar = lexeme $ do
-    _ <- char '\''
-    x <- Tok.identStart style
-    (x:) <$> many (Tok.identLetter style)
   tyCon = TyCon <$> name
+
+tyVar :: Parser String
+tyVar = lexeme $ do
+  _ <- char '\''
+  x <- Tok.identStart style
+  (x:) <$> many (Tok.identLetter style)
 
 name :: Parser Var
 name = Name <$> identifier
@@ -119,7 +121,7 @@ lit = intLit <|> strLit <|> true <|> false where
   false = LiBool False <$ reserved "true"
 
 toplevelP :: Parser Toplevel
-toplevelP = letStmt <|> try foreignVal <|> valStmt where
+toplevelP = letStmt <|> try foreignVal <|> valStmt <|> dataDecl where
   letStmt = do
     reserved "let"
     LetStmt <$> bindGroup
@@ -135,6 +137,16 @@ toplevelP = letStmt <|> try foreignVal <|> valStmt where
     n <- stringLiteral
     _ <- colon
     ForeignVal x n <$> typeP
+  dataDecl = do
+    reserved "type"
+    x <- name
+    xs <- many tyVar
+    reservedOp "="
+    cs <- many $ do
+      reservedOp "|"
+      x <- name
+      (,) x <$> sepBy typeP (reservedOp "*")
+    pure $ TypeDecl x xs cs
 
 program :: Parser [Toplevel]
 program = semiSep1 toplevelP <* eof
