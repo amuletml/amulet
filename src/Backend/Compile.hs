@@ -18,7 +18,13 @@ alpha = [1..] >>= flip replicateM ['a'..'z']
 
 compileProgram :: [Toplevel] -> LuaStmt
 compileProgram = LuaDo . compileProg where
-  compileProg (ForeignVal n s _:xs) = LuaLocal [lowerName n] [LuaBitE s]:compileProg xs
+  compileProg (ForeignVal n' s t:xs)
+    = let genCurried n (TyArr _ a) ags bd = LuaFunction [LuaName (alpha !! n)] [LuaReturn (genCurried (succ n) a (LuaRef (LuaName (alpha !! n)):ags) bd)]
+          genCurried _ _ [] bd = bd
+          genCurried _ _ ags bd = LuaCall bd (reverse ags)
+          (Name n) = n'
+       in LuaLocal [LuaName ("__" ++ n)] [LuaBitE s]
+        : LuaLocal [LuaName n] [genCurried 0 t [] (LuaRef (LuaName ("__" ++ n)))]:compileProg xs
   compileProg (ValStmt _ _:xs) = compileProg xs
   compileProg (LetStmt vs:xs) = locals ns vs' ++ compileProg xs where
     (ns, vs') = unzip $ map compileLet vs
@@ -52,6 +58,7 @@ compileExpr (Literal (LiInt x)) = LuaNumber (fromInteger x)
 compileExpr (Literal (LiStr str)) = LuaString str
 compileExpr (Literal (LiBool True)) = LuaTrue
 compileExpr (Literal (LiBool False)) = LuaFalse
+compileExpr (Literal LiUnit) = LuaNil -- evil!
 compileExpr s@(Let _ _) = compileIife s
 compileExpr s@(If _ _ _) = compileIife s
 compileExpr s@(Begin _) = compileIife s
@@ -114,6 +121,7 @@ foldAnd = foldl1 k where
 patternTest :: Pattern -> LuaExpr ->  LuaExpr
 patternTest Wildcard  _ = LuaTrue
 patternTest Capture{} _ = LuaTrue
+patternTest (PType p _) t = patternTest p t
 patternTest (Destructure con ps) vr
   = foldAnd (table vr:tag con vr:zipWith3 innerTest ps (repeat vr) [2..]) where
     innerTest p v k = patternTest p . LuaRef . LuaIndex v . LuaNumber . fromInteger $ k
@@ -125,6 +133,7 @@ patternBindings :: Pattern -> LuaExpr -> [(LuaVar, LuaExpr)]
 patternBindings Wildcard  _ = []
 patternBindings (Capture (Name k)) v = [(LuaName k, v)]
 patternBindings (Capture _) _ = error "absurd: no renaming"
+patternBindings (PType p _) t = patternBindings p t
 patternBindings (Destructure _ ps) vr
   = concat $ zipWith3 innerBind ps (repeat vr) [2..] where
     innerBind p v k = patternBindings p . LuaRef . LuaIndex v . LuaNumber . fromInteger $ k
