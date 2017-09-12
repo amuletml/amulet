@@ -19,6 +19,8 @@ import Data.Semigroup
 
 import Syntax
 import Syntax.Subst
+import Pretty (prettyPrint)
+import Text.Printf (printf)
 
 type InferM = GenT Int (ReaderT Env (WriterT [Constraint] (Except TypeError)))
 
@@ -45,10 +47,11 @@ data TypeError
   | NotInScope Var
   | EmptyMatch Expr
   | EmptyBegin
+  | ArisingFrom TypeError Expr
 
   | KindsNotEqual Kind Kind
   | ExpectedArrowKind Kind
-  deriving (Eq, Show, Ord)
+  deriving (Eq, Ord)
 
 lookupTy :: (MonadError TypeError m, MonadReader Env m, MonadGen Int m) => Var -> m Type
 lookupTy x = do
@@ -86,3 +89,13 @@ instantiate (TyForall vs _ ty) = do
   f <- map TyVar <$> mapM (const fresh) vs
   instantiate (apply (Map.fromList (zip vs f)) ty)
 instantiate ty = pure ty
+
+instance Show TypeError where
+  show (NotEqual a b) = printf "Type error: failed to unify `%s` with `%s`" (prettyPrint a) (prettyPrint b)
+  show (Occurs v t) = printf "Occurs check: Variable `%s` occurs in `%s`" (prettyPrint v) (prettyPrint t)
+  show (NotInScope e) = printf "Variable not in scope: `%s`" (prettyPrint e)
+  show (EmptyMatch e) = printf "Empty match expression:\n%s" (prettyPrint e)
+  show EmptyBegin = printf "Empty match expression"
+  show (ArisingFrom t v) = printf "%s\n · Arising from use of `%s`" (show t) (prettyPrint v)
+  show (KindsNotEqual a b) = printf "Kind error: failed to unify `%s` with `%s`" (prettyPrint a) (prettyPrint b)
+  show (ExpectedArrowKind a) = printf "Kind error: expected `type -> k`, but got `%s`" (prettyPrint a)
