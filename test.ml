@@ -1,4 +1,4 @@
-type coroutine 'a 'b =;
+type coroutine 'a 'b;
 
 val foreign co_create "coroutine.create" : ('a -> 'b) -> coroutine 'a 'b;
 val foreign co_resume "coroutine.resume" : coroutine 'a 'b -> 'a -> 'b;

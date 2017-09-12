@@ -169,12 +169,15 @@ toplevelP = letStmt <|> try foreignVal <|> valStmt <|> dataDecl where
     reserved "type"
     x <- name
     xs <- many tyVar
-    reservedOp "="
-    cs <- many $ do
-      reservedOp "|"
-      x <- constrName
-      (,) x <$> sepBy typeP (reservedOp "*")
-    pure $ TypeDecl x xs cs
+    eq <- optionMaybe (reservedOp "=")
+    case eq of
+      Just _ -> do
+        cs <- many $ do
+          reservedOp "|"
+          x <- constrName
+          (,) x <$> sepBy typeP (reservedOp "*")
+        pure $ TypeDecl x xs cs
+      Nothing -> pure $ TypeDecl x xs []
 
 program :: Parser [Toplevel]
 program = semiSep1 toplevelP <* eof
