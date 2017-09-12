@@ -41,9 +41,10 @@ runSolve s x = runExcept (execStateT x s)
 
 solve :: Subst -> [Constraint] -> Either TypeError Subst
 solve s [] = pure s
-solve s (ConUnify _ a t:xs) = do
-  s' <- runSolve s (unify a t)
-  solve (s' `compose` s) (apply s' xs)
+solve s (ConUnify e a t:xs) = do
+  case runSolve s (unify a t) of
+    Left err -> Left (ArisingFrom err e)
+    Right s' -> solve (s' `compose` s) (apply s' xs)
 
 occurs :: String -> Type -> Bool
 occurs _ (TyVar _) = False

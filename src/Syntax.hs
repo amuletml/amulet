@@ -19,12 +19,14 @@ data Pattern
   = Wildcard
   | Capture Var
   | Destructure Var [Pattern]
+  | PType Pattern Type
   deriving (Eq, Show, Ord)
 
 data Lit
   = LiInt Integer
   | LiStr String
   | LiBool Bool
+  | LiUnit
   deriving (Eq, Show, Ord)
 
 data Type
@@ -73,14 +75,14 @@ instance Pretty Expr where
   pprint (App f x) = f <+> " " <+> x
   pprint (Fun v e) = kwClr "fun " <+> v <+> opClr " -> " <+> e
   pprint (Begin e) = do
-    kwClr "begin " <+> newline
-    block 2 $ interleave ("; " <+> newline) e
+    kwClr "begin "
+    body 2 e *> newline
     kwClr "end"
   pprint (Literal l) = pprint l
   pprint (BinOp l o r) = parens (pprint l <+> " " <+> pprint o <+> " " <+> pprint r)
   pprint (Match t bs) = do
-    kwClr "match " <+> t <+> " with" <+> newline
-    block 2 $ interleave ("; " <+> newline) bs
+    kwClr "match " <+> t <+> " with"
+    body 2 bs *> newline
 
 instance Pretty (Pattern, Expr) where
   pprint (a, b) = opClr "| " <+> a <+> " -> " <+> b
@@ -92,16 +94,20 @@ instance Pretty Kind where
 instance Pretty Pattern where
   pprint Wildcard = kwClr "_"
   pprint (Capture x) = pprint x
+  pprint (Destructure x []) = pprint x
+  pprint (Destructure x xs) = parens $ x <+> " " <+> interleave " " xs
+  pprint (PType p x) = parens $ p <+> opClr " : " <+> x
 
 instance Pretty Lit where
   pprint (LiStr s) = strClr s
   pprint (LiInt s) = litClr s
   pprint (LiBool True) = litClr "true"
   pprint (LiBool False) = litClr "false"
+  pprint LiUnit = litClr "unit"
 
 instance Pretty Type where
   pprint (TyCon v) = typeClr v
-  pprint (TyVar v) = tvClr v
+  pprint (TyVar v) = opClr "'" <+> tvClr v
   pprint (TyForall vs c v) = kwClr "∀ " <+> interleave " " vs <+> opClr ". " <+> parens (interleave "," c) <+> opClr " => " <+> v
 
   pprint (TyArr x@TyArr{} e) = parens x <+> opClr " -> " <+> e

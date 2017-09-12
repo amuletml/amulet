@@ -67,9 +67,8 @@ exprP' = parens exprP
         (,) (Destructure v xs) <$> exprP
       _ -> mzero
 
-
 patternP :: Parser Pattern
-patternP = wildcard <|> capture <|> constructor <|> destructure where
+patternP = wildcard <|> capture <|> constructor <|> try pType <|> destructure where
   wildcard = Wildcard <$ reservedOp "_"
   capture = Capture <$> varName
   varName = (Name <$> lowerIdent) <?> "variableName"
@@ -80,6 +79,10 @@ patternP = wildcard <|> capture <|> constructor <|> destructure where
   lowerIdent = lexeme $ do
     x <- lower
     (x:) <$> many (Tok.identLetter style)
+  pType = parens $ do
+    x <- patternP
+    reservedOp ":"
+    PType x <$> typeP
 
 exprP :: Parser Expr
 exprP = exprOpP where
@@ -110,7 +113,7 @@ binary n f a = flip Infix a $ do
 typeP' :: Parser Type
 typeP' = parens typeP
      <|> TyVar <$> tyVar
-     <|> tyCon
+     <|> tyCon <|> unitTyCon
      <|> tyForall where
   tyForall = do
     reserved "forall"
@@ -120,6 +123,7 @@ typeP' = parens typeP
     reservedOp "=>"
     TyForall nms cs <$> typeP
   tyCon = TyCon <$> name
+  unitTyCon = TyCon (Name "unit") <$ reserved "unit"
 
 tyVar :: Parser String
 tyVar = lexeme $ do
@@ -137,11 +141,12 @@ constrName = (Name <$> upperIdent) <?> "constructor name" where
     (x:) <$> many (Tok.identLetter style)
 
 lit :: Parser Lit
-lit = intLit <|> strLit <|> true <|> false where
+lit = intLit <|> strLit <|> true <|> false <|> unit where
   intLit = LiInt <$> natural
   strLit = LiStr <$> stringLiteral
   true = LiBool True <$ reserved "true"
   false = LiBool False <$ reserved "false"
+  unit = LiUnit <$ reserved "unit"
 
 toplevelP :: Parser Toplevel
 toplevelP = letStmt <|> try foreignVal <|> valStmt <|> dataDecl where

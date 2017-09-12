@@ -83,7 +83,7 @@ defaults = PParam { colours = True
                   , literalColour  = "\x1b[1;33m"
                   , stringColour   = "\x1b[32m"
                   , typeColour     = "\x1b[34m"
-                  , typevarColour  = "\x1b[0m"
+                  , typevarColour  = "\x1b[36m"
                   , greyoutColour  = "\x1b[1;30m"
                   , patternColour  = "\x1b[35m"
                   , specialColour  = "\x1b[33m"

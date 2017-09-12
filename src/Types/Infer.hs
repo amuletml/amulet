@@ -11,16 +11,16 @@ import Syntax.Subst
 import Syntax
 
 import Types.Unify
-import Debug.Trace
 
 -- Solve for the types of lets in a program
 inferProgram :: [Toplevel] -> Either TypeError Env
 inferProgram ct = fst <$> runInfer builtinsEnv (inferProg ct)
 
-tyBool, tyInt, tyString :: Type
+tyUnit, tyBool, tyInt, tyString :: Type
 tyInt = TyCon (Name "int")
 tyString = TyCon (Name "string")
 tyBool = TyCon (Name "bool")
+tyUnit = TyCon (Name "unit")
 
 builtinsEnv :: Env
 builtinsEnv = Env (M.fromList ops) (M.fromList tps) where
@@ -47,8 +47,9 @@ infer expr
                      LiInt _ -> pure tyInt
                      LiStr _ -> pure tyString
                      LiBool _ -> pure tyBool
+                     LiUnit -> pure tyUnit
       Fun p b -> do
-        (tc, ms) <- inferPattern p
+        (tc, ms) <- inferPattern (unify $ Fun p b) p
         tb <- extendMany ms $ infer b
         pure (TyArr tc tb)
       Begin [] -> throwError EmptyBegin
@@ -77,7 +78,7 @@ infer expr
       Match t ps -> do
         tt <- infer t
         tbs <- forM ps $ \(p, e) -> do
-          (pt, ks) <- inferPattern p
+          (pt, ks) <- inferPattern (unify $ Match t ps) p
           unify expr tt pt
           extendMany ks $ infer e
         case tbs of
@@ -107,23 +108,26 @@ inferKind (TyApp a b) = do
     _ -> throwError (ExpectedArrowKind x)
 
 -- Returns: Type of the overall thing * type of captures
-inferPattern :: Pattern -> InferM (Type, [(Var, Type)])
-inferPattern Wildcard = do
+inferPattern :: (Type -> Type -> InferM ()) -> Pattern -> InferM (Type, [(Var, Type)])
+inferPattern _ Wildcard = do
   x <- TyVar <$> fresh
   pure (x, [])
-inferPattern (Capture v) = do
+inferPattern _ (Capture v) = do
   x <- TyVar <$> fresh
   pure (x, [(v, x)])
-inferPattern (Destructure cns ps) = do
+inferPattern unify (Destructure cns ps) = do
   pty <- lookupTy cns
   let args (TyArr a b) = a:args b
       args k = [k]
       tys = init (args pty)
       res = last (args pty)
-      unify' a b = unify undefined a b
-  ptts <- mapM inferPattern ps
-  zipWithM_ unify' (map fst ptts) tys
+  ptts <- mapM (inferPattern unify) ps
+  zipWithM_ unify (map fst ptts) tys
   pure (res, concatMap snd ptts)
+inferPattern unify (PType p t) = do
+  (t', xs) <- inferPattern unify p
+  unify t' t
+  pure (t, xs)
 
 inferProg :: [Toplevel] -> InferM Env
 inferProg (LetStmt ns:prg) = do
@@ -134,8 +138,8 @@ inferProg (LetStmt ns:prg) = do
   extendMany ks $ do
     ts <- inferLetTy ks ns 
     extendMany ts (inferProg prg)
-inferProg (ValStmt v t:prg) = extend (v, t) $ inferProg prg
-inferProg (ForeignVal v _ t:prg) = extend (v, t) $ inferProg prg
+inferProg (ValStmt v t:prg) = extend (v, closeOver t) $ inferProg prg
+inferProg (ForeignVal v _ t:prg) = extend (v, closeOver t) $ inferProg prg
 inferProg (TypeDecl n tvs cs:prg) =
   let mkk [] = KiType
       mkk (_:xs) = KiArr KiType (mkk xs)
