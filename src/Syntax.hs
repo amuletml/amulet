@@ -1,9 +1,11 @@
-{-# LANGUAGE FlexibleInstances #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
+{-# LANGUAGE FlexibleInstances, TypeSynonymInstances #-}
 module Syntax where
 
+import Text.Parsec.Pos (SourcePos, sourceName, setSourceName)
 import Pretty
 
-data Expr
+data Expr'
   = VarRef Var
   | Let [(Var, Expr)] Expr
   | If Expr Expr Expr
@@ -13,7 +15,9 @@ data Expr
   | Literal Lit
   | Match Expr [(Pattern, Expr)]
   | BinOp Expr Expr Expr
+  | MultiWayIf [(Expr, Expr)]
   deriving (Eq, Show, Ord)
+type Expr = (SourcePos, SourcePos, Expr')
 
 data Pattern
   = Wildcard
@@ -59,7 +63,13 @@ data Constraint
   deriving (Eq, Show, Ord)
 
 instance Pretty Expr where
+  pprint (_, _, e) = pprint e
+
+instance Pretty Expr' where
   pprint (VarRef v) = pprint v
+  pprint (MultiWayIf xs) = do
+    kwClr "if"
+    body 2 xs
   pprint (Let [] _) = error "absurd: never parsed"
   pprint (Let ((n, v):xs) e) = do
     kwClr "let " <+> n <+> opClr " = " <+> v <+> newline
@@ -71,7 +81,7 @@ instance Pretty Expr where
     block 2 $ do
       kwClr "then " <+> t <+> newline
       kwClr "else " <+> e
-  pprint (App c e@App{}) = c <+> " " <+> parens e
+  pprint (App c (_, _, e@App{})) = c <+> " " <+> parens e
   pprint (App f x) = f <+> " " <+> x
   pprint (Fun v e) = kwClr "fun " <+> v <+> opClr " -> " <+> e
   pprint (Begin e) = do
@@ -85,6 +95,9 @@ instance Pretty Expr where
     body 2 bs *> newline
 
 instance Pretty (Pattern, Expr) where
+  pprint (a, b) = opClr "| " <+> a <+> " -> " <+> b
+
+instance Pretty (Expr, Expr) where
   pprint (a, b) = opClr "| " <+> a <+> " -> " <+> b
 
 instance Pretty Kind where
@@ -122,3 +135,11 @@ instance Pretty Var where
 
 instance Pretty Constraint where
   pprint (ConUnify e a b) = e <+> opClr " <=> " <+> a <+> opClr " ~ " <+> b
+
+instance Pretty (SourcePos, SourcePos) where
+  pprint (a, b)
+    = let file = sourceName a
+          a' = init . tail . show . setSourceName a $ ""
+          b' = init . tail . show . setSourceName b $ ""
+       in do
+         file <+> ": " <+> a' <+> " to " <+> b'

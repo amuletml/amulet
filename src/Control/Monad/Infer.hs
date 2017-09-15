@@ -46,7 +46,8 @@ data TypeError
   | Occurs String Type
   | NotInScope Var
   | EmptyMatch Expr
-  | EmptyBegin
+  | EmptyBegin Expr
+  | EmptyMultiWayIf Expr
   | ArisingFrom TypeError Expr
 
   | KindsNotEqual Kind Kind
@@ -95,7 +96,11 @@ instance Show TypeError where
   show (Occurs v t) = printf "Occurs check: Variable `%s` occurs in `%s`" (prettyPrint v) (prettyPrint t)
   show (NotInScope e) = printf "Variable not in scope: `%s`" (prettyPrint e)
   show (EmptyMatch e) = printf "Empty match expression:\n%s" (prettyPrint e)
-  show EmptyBegin = printf "Empty match expression"
-  show (ArisingFrom t v) = printf "%s\n · Arising from use of `%s`" (show t) (prettyPrint v)
+  show (EmptyBegin (s, e, _)) = printf "%s: Empty match expression" (prettyPrint (s, e))
+  show (EmptyMultiWayIf (s, e, _)) = printf "Empty multi-way if expression" (prettyPrint (s, e))
+
+  show (ArisingFrom t (s, e, v)) = printf "%s: %s\n · Arising from use of `%s`" (prettyPrint delta) (show t) (prettyPrint v) where
+    delta = (s, e)
+
   show (KindsNotEqual a b) = printf "Kind error: failed to unify `%s` with `%s`" (prettyPrint a) (prettyPrint b)
   show (ExpectedArrowKind a) = printf "Kind error: expected `type -> k`, but got `%s`" (prettyPrint a)

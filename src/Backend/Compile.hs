@@ -49,36 +49,40 @@ compileLet :: (Var, Expr) -> (LuaVar, LuaExpr)
 compileLet (n, e) = (lowerName n, compileExpr e)
 
 compileExpr :: Expr -> LuaExpr
-compileExpr (VarRef v) = LuaRef (lowerName v)
-compileExpr (App f x) = LuaCall (compileExpr f) [compileExpr x]
-compileExpr (Fun (Capture v) e) = LuaFunction [lowerName v] (compileStmt (Just LuaReturn) e)
-compileExpr (Fun Wildcard e) = LuaFunction [LuaName "_"] (compileStmt (Just LuaReturn) e)
-compileExpr (Fun k e) = LuaFunction [LuaName "__arg__"] (compileStmt (Just LuaReturn) (Match (VarRef (Name "__arg__")) [(k, e)]))
-compileExpr (Literal (LiInt x)) = LuaNumber (fromInteger x)
-compileExpr (Literal (LiStr str)) = LuaString str
-compileExpr (Literal (LiBool True)) = LuaTrue
-compileExpr (Literal (LiBool False)) = LuaFalse
-compileExpr (Literal LiUnit) = LuaNil -- evil!
-compileExpr s@(Let _ _) = compileIife s
-compileExpr s@(If _ _ _) = compileIife s
-compileExpr s@(Begin _) = compileIife s
-compileExpr s@(Match _ _) = compileIife s
-compileExpr (BinOp l (VarRef (Name o)) r) = LuaBinOp (compileExpr l) (remapOp o) (compileExpr r)
-compileExpr (BinOp _ _ _) = error "absurd: never parsed"
+compileExpr (_, _, VarRef v) = LuaRef (lowerName v)
+compileExpr (_, _, App f x) = LuaCall (compileExpr f) [compileExpr x]
+compileExpr (_, _, Fun (Capture v) e) = LuaFunction [lowerName v] (compileStmt (Just LuaReturn) e)
+compileExpr (_, _, Fun Wildcard e) = LuaFunction [LuaName "_"] (compileStmt (Just LuaReturn) e)
+compileExpr (_, _, Fun k e) = LuaFunction [LuaName "__arg__"] (compileStmt (Just LuaReturn) 
+                                                              (undefined, undefined, Match (undefined, undefined, VarRef (Name "__arg__")) [(k, e)]))
+compileExpr (_, _, Literal (LiInt x)) = LuaNumber (fromInteger x)
+compileExpr (_, _, Literal (LiStr str)) = LuaString str
+compileExpr (_, _, Literal (LiBool True)) = LuaTrue
+compileExpr (_, _, Literal (LiBool False)) = LuaFalse
+compileExpr (_, _, Literal LiUnit) = LuaNil -- evil!
+compileExpr s@(_, _, Let _ _) = compileIife s
+compileExpr s@(_, _, If _ _ _) = compileIife s
+compileExpr s@(_, _, Begin _) = compileIife s
+compileExpr s@(_, _, Match _ _) = compileIife s
+compileExpr s@(_, _, MultiWayIf _) = compileIife s
+compileExpr (_, _, BinOp l (_, _, VarRef (Name o)) r) = LuaBinOp (compileExpr l) (remapOp o) (compileExpr r)
+compileExpr (_, _, BinOp _ _ _) = error "absurd: never parsed"
 
 compileStmt :: Returner -> Expr -> [LuaStmt]
-compileStmt r e@(VarRef _) = pureReturn r $ compileExpr e
-compileStmt r e@(Literal _) = pureReturn r $ compileExpr e
-compileStmt r e@(Fun _ _) = pureReturn r $ compileExpr e
-compileStmt r e@BinOp{} = pureReturn r $ compileExpr e
-compileStmt r (Let k c) = let (ns, vs) = unzip $ map compileLet k in
+compileStmt r e@(_, _, VarRef _) = pureReturn r $ compileExpr e
+compileStmt r e@(_, _, Literal _) = pureReturn r $ compileExpr e
+compileStmt r e@(_, _, Fun _ _) = pureReturn r $ compileExpr e
+compileStmt r e@(_, _, BinOp{}) = pureReturn r $ compileExpr e
+compileStmt r (_, _, Let k c) = let (ns, vs) = unzip $ map compileLet k in
                           (locals ns vs ++ compileStmt r c)
-compileStmt r (If c t e) = [LuaIf (compileExpr c) (compileStmt r t) (compileStmt r e)]
-compileStmt r (Begin xs) = concatMap (compileStmt Nothing) (init xs) ++ compileStmt r (last xs)
-compileStmt r (Match s ps) = runGen (compileMatch r s ps)
-
-compileStmt Nothing (App f x) = [LuaCallS (compileExpr f) [compileExpr x]]
-compileStmt (Just r) e@(App _ _) = [r (compileExpr e)]
+compileStmt r (_, _, If c t e) = [LuaIf (compileExpr c) (compileStmt r t) (compileStmt r e)]
+compileStmt r (_, _, MultiWayIf xs)
+  = let compa (a, b) = (compileExpr a, compileStmt r b)
+     in [LuaIfElse (map compa xs)]
+compileStmt r (_, _, Begin xs) = concatMap (compileStmt Nothing) (init xs) ++ compileStmt r (last xs)
+compileStmt r (_, _, Match s ps) = runGen (compileMatch r s ps)
+compileStmt Nothing (_, _, App f x) = [LuaCallS (compileExpr f) [compileExpr x]]
+compileStmt (Just r) e@(_, _, App _ _) = [r (compileExpr e)]
 
 lowerName :: Var -> LuaVar
 lowerName (Refresh a k) = case lowerName a of
