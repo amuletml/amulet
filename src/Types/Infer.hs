@@ -40,8 +40,8 @@ unify :: Expr ->  Type -> Type -> InferM ()
 unify e a b = tell [ConUnify e a b]
 
 infer :: Expr -> InferM Type
-infer expr
-  = case expr of
+infer expr@(start, end, inner)
+  = case inner of
       VarRef k -> lookupTy k
       Literal c -> case c of
                      LiInt _ -> pure tyInt
@@ -49,10 +49,10 @@ infer expr
                      LiBool _ -> pure tyBool
                      LiUnit -> pure tyUnit
       Fun p b -> do
-        (tc, ms) <- inferPattern (unify $ Fun p b) p
+        (tc, ms) <- inferPattern (unify expr) p
         tb <- extendMany ms $ infer b
         pure (TyArr tc tb)
-      Begin [] -> throwError EmptyBegin
+      Begin [] -> throwError (EmptyBegin expr)
       Begin xs -> last <$> mapM infer xs
       If c t e -> do
         (tc, tt, te) <- (,,) <$> infer c <*> infer t <*> infer e
@@ -78,17 +78,27 @@ infer expr
       Match t ps -> do
         tt <- infer t
         tbs <- forM ps $ \(p, e) -> do
-          (pt, ks) <- inferPattern (unify $ Match t ps) p
+          (pt, ks) <- inferPattern (unify expr) p
           unify expr tt pt
           extendMany ks $ infer e
         case tbs of
-          [] -> throwError (EmptyMatch (Match t ps))
+          [] -> throwError (EmptyMatch expr)
           [x] -> pure x
           (x:xs) -> do
             mapM_ (unify expr x) xs
             pure x
+      MultiWayIf xs -> do
+        let (gs, bs) = unzip xs
+
+        mapM_ (unify expr tyBool <=< infer) gs
+        bs' <- mapM infer bs
+        case bs' of
+          [] -> throwError (EmptyMultiWayIf expr)
+          (x:xs) -> do
+            mapM_ (unify expr x) xs
+            pure x
       BinOp l o r -> do
-        infer (App (App o l) r)
+        infer (start, end, App (start, end, App o l) r)
 
 inferKind :: Type -> InferM Kind
 inferKind (TyVar v) = lookupKind (Name v) `catchError` const (pure KiType)

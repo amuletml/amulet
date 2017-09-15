@@ -221,9 +221,6 @@ instance (Pretty a, Pretty b) => Pretty (Map.Map a b) where
     x <- ask
     braces $ intercalate "," $ map (\(k, v) -> x `ppshow` k ++ " => " ++ x `ppshow` v) $ Map.assocs mp
 
-instance (Pretty a, Pretty b, Pretty c) => Pretty (a, b, c) where
-  pprint (a, b, s) = a <+> s <+> b
-
 instance Pretty a => Pretty (a -> PrettyP, a) where
   pprint (x, y) = x y
 
