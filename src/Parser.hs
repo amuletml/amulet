@@ -63,7 +63,7 @@ exprP' = parens exprP
       foldBody (BeginLet vs:xs) = [Let vs (Begin (foldBody xs))]
       foldBody (BeginRun x:xs) = x:foldBody xs
       foldBody [] = []
-  beginStmt = BeginLet <$> letbegin <|> BeginRun <$> exprP where
+  beginStmt = try (BeginRun <$> exprP) <|> (BeginLet <$> letbegin) where
     letbegin = do
       reserved "let"
       bindGroup
