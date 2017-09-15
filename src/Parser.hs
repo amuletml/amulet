@@ -12,6 +12,11 @@ import Data.Functor.Identity
 import Control.Monad
 import Syntax
 
+data BeginStmt
+  = BeginLet [(Var, Expr)]
+  | BeginRun Expr
+  deriving (Eq)
+
 bindGroup :: Parser [(Var, Expr)]
 bindGroup = sepBy1 decl (reserved "and") where
   decl = do
@@ -49,7 +54,19 @@ exprP' = parens exprP
     t <- exprP
     reserved "else"
     If c t <$> exprP
-  beginExpr = Begin <$> (reserved "begin" *> semiSep1 exprP <* reserved "end")
+  beginExpr = do
+    reserved "begin"
+    x <- semiSep1 beginStmt
+    reserved "end"
+    pure . Begin . foldBody $ x
+    where
+      foldBody (BeginLet vs:xs) = [Let vs (Begin (foldBody xs))]
+      foldBody (BeginRun x:xs) = x:foldBody xs
+      foldBody [] = []
+  beginStmt = BeginLet <$> letbegin <|> BeginRun <$> exprP where
+    letbegin = do
+      reserved "let"
+      bindGroup
   matchExpr = do
     reserved "match"
     x <- exprP
