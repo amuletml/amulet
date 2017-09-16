@@ -3,7 +3,6 @@
 module Syntax where
 
 import Control.Comonad
-import Text.Parsec.Pos (SourcePos, sourceName, setSourceName)
 import Pretty
 
 data Expr a
@@ -128,14 +127,6 @@ instance Pretty Var where
 
 instance Pretty (Constraint a) where
   pprint (ConUnify e a b) = e <+> opClr " <=> " <+> a <+> opClr " ~ " <+> b
-
-instance Pretty (SourcePos, SourcePos) where
-  pprint (a, b)
-    = let file = sourceName a
-          a' = init . tail . show . setSourceName a $ ""
-          b' = init . tail . show . setSourceName b $ ""
-       in do
-         file <+> ": " <+> a' <+> " to " <+> b'
 
 instance Comonad Expr where
   extract (VarRef _ p) = p
