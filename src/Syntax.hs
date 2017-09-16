@@ -1,22 +1,22 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
-{-# LANGUAGE FlexibleInstances, TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances, TypeSynonymInstances, DeriveFunctor #-}
 module Syntax where
 
+import Control.Comonad
 import Text.Parsec.Pos (SourcePos, sourceName, setSourceName)
 import Pretty
 
-data Expr'
-  = VarRef Var
-  | Let [(Var, Expr)] Expr
-  | If Expr Expr Expr
-  | App Expr Expr
-  | Fun Pattern Expr
-  | Begin [Expr]
-  | Literal Lit
-  | Match Expr [(Pattern, Expr)]
-  | BinOp Expr Expr Expr
-  deriving (Eq, Show, Ord)
-type Expr = (SourcePos, SourcePos, Expr')
+data Expr a
+  = VarRef Var a
+  | Let [(Var, Expr a)] (Expr a) a
+  | If (Expr a) (Expr a) (Expr a) a
+  | App (Expr a) (Expr a) a
+  | Fun Pattern (Expr a) a
+  | Begin [Expr a] a
+  | Literal Lit a
+  | Match (Expr a) [(Pattern, Expr a)] a
+  | BinOp (Expr a) (Expr a) (Expr a) a
+  deriving (Eq, Show, Ord, Functor)
 
 data Pattern
   = Wildcard
@@ -45,8 +45,8 @@ data Var
   | Refresh Var String
   deriving (Eq, Show, Ord)
 
-data Toplevel
-  = LetStmt [(Var, Expr)]
+data Toplevel a
+  = LetStmt [(Var, Expr a)]
   | ValStmt Var Type
   | ForeignVal Var String Type
   | TypeDecl Var [String] [(Var, [Type])]
@@ -57,43 +57,40 @@ data Kind
   | KiArr Kind Kind
   deriving (Eq, Show, Ord)
 
-data Constraint
-  = ConUnify Expr Type Type
-  deriving (Eq, Show, Ord)
+data Constraint a
+  = ConUnify (Expr a) Type Type
+  deriving (Eq, Show, Ord, Functor)
 
-instance Pretty Expr where
-  pprint (_, _, e) = pprint e
-
-instance Pretty Expr' where
-  pprint (VarRef v) = pprint v
-  pprint (Let [] _) = error "absurd: never parsed"
-  pprint (Let ((n, v):xs) e) = do
+instance Pretty (Expr a) where
+  pprint (VarRef v _) = pprint v
+  pprint (Let [] _ _) = error "absurd: never parsed"
+  pprint (Let ((n, v):xs) e _) = do
     kwClr "let " <+> n <+> opClr " = " <+> v <+> newline
     forM_ xs $ \(n, v) ->
       kwClr "and " <+> n <+> opClr " = " <+> v <+> newline
     pprint e
-  pprint (If c t e) = do
+  pprint (If c t e _) = do
     kwClr "if " <+> c <+> newline
     block 2 $ do
       kwClr "then " <+> t <+> newline
       kwClr "else " <+> e
-  pprint (App c (_, _, e@App{})) = c <+> " " <+> parens e
-  pprint (App f x) = f <+> " " <+> x
-  pprint (Fun v e) = kwClr "fun " <+> v <+> opClr " -> " <+> e
-  pprint (Begin e) = do
+  pprint (App c (e@App{}) _) = c <+> " " <+> parens e
+  pprint (App f x _) = f <+> " " <+> x
+  pprint (Fun v e _) = kwClr "fun " <+> v <+> opClr " -> " <+> e
+  pprint (Begin e _) = do
     kwClr "begin "
     body 2 e *> newline
     kwClr "end"
-  pprint (Literal l) = pprint l
-  pprint (BinOp l o r) = parens (pprint l <+> " " <+> pprint o <+> " " <+> pprint r)
-  pprint (Match t bs) = do
+  pprint (Literal l _) = pprint l
+  pprint (BinOp l o r _) = parens (pprint l <+> " " <+> pprint o <+> " " <+> pprint r)
+  pprint (Match t bs _) = do
     kwClr "match " <+> t <+> " with"
     body 2 bs *> newline
 
-instance Pretty (Pattern, Expr) where
+instance Pretty (Pattern, Expr a) where
   pprint (a, b) = opClr "| " <+> a <+> " -> " <+> b
 
-instance Pretty (Expr, Expr) where
+instance Pretty (Expr a, Expr a) where
   pprint (a, b) = opClr "| " <+> a <+> " -> " <+> b
 
 instance Pretty Kind where
@@ -129,7 +126,7 @@ instance Pretty Var where
   pprint (Name v) = pprint v
   pprint (Refresh v _) = pprint v
 
-instance Pretty Constraint where
+instance Pretty (Constraint a) where
   pprint (ConUnify e a b) = e <+> opClr " <=> " <+> a <+> opClr " ~ " <+> b
 
 instance Pretty (SourcePos, SourcePos) where
@@ -139,3 +136,25 @@ instance Pretty (SourcePos, SourcePos) where
           b' = init . tail . show . setSourceName b $ ""
        in do
          file <+> ": " <+> a' <+> " to " <+> b'
+
+instance Comonad Expr where
+  extract (VarRef _ p) = p
+  extract (Let _ _ p) = p
+  extract (If _ _ _ p) = p
+  extract (App _ _ p) = p
+  extract (Fun _ _ p) = p
+  extract (Begin _ p) = p
+  extract (Literal _ p) = p
+  extract (Match _ _ p) = p
+  extract (BinOp _ _ _ p) = p
+
+  extend f e@(VarRef v _) = VarRef v (f e)
+  extend f e@(Let b c _) = Let (map (fmap (extend f)) b) (extend f c) (f e)
+  extend f e@(If c t b _) = If (extend f c) (extend f t) (extend f b) (f e)
+  extend f e@(App l a _) = App (extend f l) (extend f a) (f e)
+  extend f e@(Fun p b _) = Fun p (extend f b) (f e)
+  extend f e@(Begin es _) = Begin (map (extend f) es) (f e)
+  extend f e@(Literal l _) = Literal l (f e)
+  extend f e@(Match t ps _) = Match (extend f t) (map (fmap (extend f)) ps) (f e)
+  extend f e@(BinOp l o r _) = BinOp (extend f l) (extend f o) (extend f r) (f e)
+

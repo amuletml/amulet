@@ -13,7 +13,7 @@ import Syntax
 import Types.Unify
 
 -- Solve for the types of lets in a program
-inferProgram :: [Toplevel] -> Either TypeError Env
+inferProgram :: [Toplevel a] -> Either (TypeError a) Env
 inferProgram ct = fst <$> runInfer builtinsEnv (inferProg ct)
 
 tyUnit, tyBool, tyInt, tyString :: Type
@@ -36,34 +36,34 @@ builtinsEnv = Env (M.fromList ops) (M.fromList tps) where
         , op "==" cmp, op "<>" cmp ]
   tps = [ tp "int", tp "string", tp "bool", tp "unit" ]
 
-unify :: Expr ->  Type -> Type -> InferM ()
+unify :: Expr a ->  Type -> Type -> InferM a ()
 unify e a b = tell [ConUnify e a b]
 
-infer :: Expr -> InferM Type
-infer expr@(start, end, inner)
-  = case inner of
-      VarRef k -> lookupTy k
-      Literal c -> case c of
-                     LiInt _ -> pure tyInt
-                     LiStr _ -> pure tyString
-                     LiBool _ -> pure tyBool
-                     LiUnit -> pure tyUnit
-      Fun p b -> do
+infer :: Expr a -> InferM a Type
+infer expr
+  = case expr of
+      VarRef k _ -> lookupTy k
+      Literal c _ -> case c of
+                       LiInt _ -> pure tyInt
+                       LiStr _ -> pure tyString
+                       LiBool _ -> pure tyBool
+                       LiUnit -> pure tyUnit
+      Fun p b _ -> do
         (tc, ms) <- inferPattern (unify expr) p
         tb <- extendMany ms $ infer b
         pure (TyArr tc tb)
-      Begin [] -> throwError (EmptyBegin expr)
-      Begin xs -> last <$> mapM infer xs
-      If c t e -> do
+      Begin [] _ -> throwError (EmptyBegin expr)
+      Begin xs _ -> last <$> mapM infer xs
+      If c t e _ -> do
         (tc, tt, te) <- (,,) <$> infer c <*> infer t <*> infer e
         unify c tyBool tc
         unify expr tt te
         pure te
-      App e1 e2 -> do
+      App e1 e2 _ -> do
         (t1, t2, tv) <- (,,) <$> infer e1 <*> infer e2 <*> (TyVar <$> fresh)
         unify expr t1 (TyArr t2 tv)
         pure tv
-      Let ns b -> do
+      Let ns b _ -> do
         ks <- forM ns $ \(a, _) -> do
           tv <- TyVar <$> fresh
           pure (a, tv)
@@ -75,7 +75,7 @@ infer expr@(start, end, inner)
             pure (a, t')
           -- And finally infer the body
           extendMany ts (infer b)
-      Match t ps -> do
+      Match t ps _ -> do
         tt <- infer t
         tbs <- forM ps $ \(p, e) -> do
           (pt, ks) <- inferPattern (unify expr) p
@@ -87,10 +87,10 @@ infer expr@(start, end, inner)
           (x:xs) -> do
             mapM_ (unify expr x) xs
             pure x
-      BinOp l o r -> do
-        infer (start, end, App (start, end, App o l) r)
+      BinOp l o r p -> do
+        infer (App (App o l p) r p)
 
-inferKind :: Type -> InferM Kind
+inferKind :: Type -> InferM a Kind
 inferKind (TyVar v) = lookupKind (Name v) `catchError` const (pure KiType)
 inferKind (TyCon v) = lookupKind v
 inferKind (TyForall vs _ k) = extendManyK (zip (map Name vs) (repeat KiType)) $ inferKind k
@@ -108,7 +108,7 @@ inferKind (TyApp a b) = do
     _ -> throwError (ExpectedArrowKind x)
 
 -- Returns: Type of the overall thing * type of captures
-inferPattern :: (Type -> Type -> InferM ()) -> Pattern -> InferM (Type, [(Var, Type)])
+inferPattern :: (Type -> Type -> InferM a ()) -> Pattern -> InferM a (Type, [(Var, Type)])
 inferPattern _ Wildcard = do
   x <- TyVar <$> fresh
   pure (x, [])
@@ -129,14 +129,14 @@ inferPattern unify (PType p t) = do
   unify t' t
   pure (t, xs)
 
-inferProg :: [Toplevel] -> InferM Env
+inferProg :: [Toplevel a] -> InferM a Env
 inferProg (LetStmt ns:prg) = do
   ks <- forM ns $ \(a, _) -> do
     tv <- TyVar <$> fresh
     vl <- lookupTy a `catchError` const (pure tv)
     pure (a, vl)
   extendMany ks $ do
-    ts <- inferLetTy ks ns 
+    ts <- inferLetTy ks ns
     extendMany ts (inferProg prg)
 inferProg (ValStmt v t:prg) = extend (v, closeOver t) $ inferProg prg
 inferProg (ForeignVal v _ t:prg) = extend (v, closeOver t) $ inferProg prg
@@ -150,7 +150,7 @@ inferProg (TypeDecl n tvs cs:prg) =
         inferProg prg
 inferProg [] = ask
 
-inferLetTy :: [(Var, Type)] -> [(Var, Expr)] -> InferM [(Var, Type)]
+inferLetTy :: [(Var, Type)] -> [(Var, Expr a)] -> InferM a [(Var, Type)]
 inferLetTy ks [] = pure ks
 inferLetTy ks ((va, ve):xs) = extendMany ks $ do
   (ty, c) <- censor (const mempty) (listen (infer ve))

@@ -1,3 +1,5 @@
+{-# LANGUAGE TupleSections #-}
+
 module Parser where
 
 import qualified Text.Parsec.Token as Tok
@@ -10,34 +12,39 @@ import Parser.Lexer
 import Data.Functor.Identity
 
 import Control.Monad
+import Control.Comonad
 import Syntax
 
+type SourceDelta = (SourcePos, SourcePos)
+type Expr' = Expr SourceDelta
+type Toplevel' = Toplevel SourceDelta
+
 data BeginStmt
-  = BeginLet [(Var, Expr)]
-  | BeginRun Expr
+  = BeginLet [(Var, Expr')]
+  | BeginRun Expr'
   deriving (Eq)
 
-bindGroup :: Parser [(Var, Expr)]
+bindGroup :: Parser [(Var, Expr')]
 bindGroup = sepBy1 decl (reserved "and") where
   decl = do
     x <- name
     ps <- many patternP
     reservedOp "="
-    bd@(start,end,_) <- exprP
+    bd <- exprP
     case ps of
       [] -> pure (x, bd)
       _ -> do
-        let fun' pt b = (start, end, Fun pt b)
+        let fun' pt b = Fun pt b (extract bd)
         pure (x, foldr fun' bd ps)
 
-withPos :: Parser a -> Parser (SourcePos, SourcePos, a)
+withPos :: Parser (SourceDelta -> a) -> Parser a
 withPos k = do
   begin <- getPosition
   vl <- k
   end <- getPosition
-  pure (begin, end, vl)
+  pure (vl (begin, end))
 
-exprP' :: Parser Expr
+exprP' :: Parser Expr'
 exprP' = parens exprP
      <|> funExpr
      <|> letExpr
@@ -102,17 +109,17 @@ patternP = wildcard <|> capture <|> constructor <|> try pType <|> destructure wh
     reservedOp ":"
     PType x <$> typeP
 
-exprP :: Parser Expr
+exprP :: Parser Expr'
 exprP = exprOpP where
   expr' = do
-    (start, end, (hd, tl)) <- withPos $ do
+    (hd, tl, pos) <- withPos $ do
       x <- exprP'
       y' <- many exprP'
-      pure (x, y')
-    let app' a b = (start, end, App a b)
+      pure (x, y',)
+    let app' a b = App a b pos
     pure $ foldl app' hd tl
   exprOpP = buildExpressionParser table expr' <?> "expression"
-  bop x = binary x (\(s, e) a b -> (s, e, BinOp a (s, e, (VarRef (Name x))) b))
+  bop x = binary x (\p a b -> BinOp a (VarRef (Name x) p) b p)
   table = [ [ bop "**" AssocRight ]
           , [ bop "*"  AssocLeft, bop "/" AssocLeft ]
           , [ bop "+"  AssocLeft, bop "-" AssocLeft ]
@@ -129,10 +136,10 @@ typeP = typeOpP where
   type' = foldl1 TyApp <$> many1 typeP'
   table = [ [ binary "->" (const TyArr) AssocRight ]]
 
-binary :: String -> ((SourcePos, SourcePos) -> a -> a -> a) -> Assoc -> Operator String () Identity a
+binary :: String -> (SourceDelta -> a -> a -> a) -> Assoc -> Operator String () Identity a
 binary n f a = flip Infix a $ do
-  (start, end, _) <- withPos $ reservedOp n
-  pure (f (start, end))
+  pos <- withPos $ (id <$ reservedOp n)
+  pure (f pos)
 
 typeP' :: Parser Type
 typeP' = parens typeP
@@ -172,7 +179,7 @@ lit = intLit <|> strLit <|> true <|> false <|> unit where
   false = LiBool False <$ reserved "false"
   unit = LiUnit <$ reserved "unit"
 
-toplevelP :: Parser Toplevel
+toplevelP :: Parser Toplevel'
 toplevelP = letStmt <|> try foreignVal <|> valStmt <|> dataDecl where
   letStmt = do
     reserved "let"
@@ -203,5 +210,5 @@ toplevelP = letStmt <|> try foreignVal <|> valStmt <|> dataDecl where
         pure $ TypeDecl x xs cs
       Nothing -> pure $ TypeDecl x xs []
 
-program :: Parser [Toplevel]
+program :: Parser [Toplevel']
 program = semiSep1 toplevelP <* eof

@@ -9,6 +9,7 @@ module Control.Monad.Infer
   )
   where
 
+import Control.Comonad (extract)
 import Control.Monad.Writer.Strict as M
 import Control.Monad.Reader as M
 import Control.Monad.Except as M
@@ -19,10 +20,10 @@ import Data.Semigroup
 
 import Syntax
 import Syntax.Subst
-import Pretty (prettyPrint)
+import Pretty (prettyPrint, Pretty)
 import Text.Printf (printf)
 
-type InferM = GenT Int (ReaderT Env (WriterT [Constraint] (Except TypeError)))
+type InferM a = GenT Int (ReaderT Env (WriterT [Constraint a] (Except (TypeError a))))
 
 data Env
   = Env { values :: Map.Map Var Type
@@ -41,34 +42,34 @@ instance Monoid Env where
 instance Semigroup Env where
   (<>) = mappend
 
-data TypeError
+data TypeError a
   = NotEqual Type Type
   | Occurs String Type
   | NotInScope Var
-  | EmptyMatch Expr
-  | EmptyBegin Expr
-  | EmptyMultiWayIf Expr
-  | ArisingFrom TypeError Expr
+  | EmptyMatch (Expr a)
+  | EmptyBegin (Expr a)
+  | EmptyMultiWayIf (Expr a)
+  | ArisingFrom (TypeError a) (Expr a)
 
   | KindsNotEqual Kind Kind
   | ExpectedArrowKind Kind
   deriving (Eq, Ord)
 
-lookupTy :: (MonadError TypeError m, MonadReader Env m, MonadGen Int m) => Var -> m Type
+lookupTy :: (MonadError (TypeError a) m, MonadReader Env m, MonadGen Int m) => Var -> m Type
 lookupTy x = do
   rs <- asks (Map.lookup x . values)
   case rs of
     Just t -> instantiate t
     Nothing -> throwError (NotInScope x)
 
-lookupKind :: (MonadError TypeError m, MonadReader Env m, MonadGen Int m) => Var -> m Kind
+lookupKind :: (MonadError (TypeError a) m, MonadReader Env m, MonadGen Int m) => Var -> m Kind
 lookupKind x = do
   rs <- asks (Map.lookup x . types)
   case rs of
     Just t -> pure t
     Nothing -> throwError (NotInScope x)
 
-runInfer :: Env -> InferM a -> Either TypeError (a, [Constraint])
+runInfer :: Env -> InferM a b -> Either (TypeError a) (b, [Constraint a])
 runInfer ct ac = runExcept (runWriterT (runReaderT (runGenT ac) ct))
 
 fresh :: MonadGen Int m => m String
@@ -91,16 +92,15 @@ instantiate (TyForall vs _ ty) = do
   instantiate (apply (Map.fromList (zip vs f)) ty)
 instantiate ty = pure ty
 
-instance Show TypeError where
+instance (Pretty a) => Show (TypeError a) where
   show (NotEqual a b) = printf "Type error: failed to unify `%s` with `%s`" (prettyPrint a) (prettyPrint b)
   show (Occurs v t) = printf "Occurs check: Variable `%s` occurs in `%s`" (prettyPrint v) (prettyPrint t)
   show (NotInScope e) = printf "Variable not in scope: `%s`" (prettyPrint e)
   show (EmptyMatch e) = printf "Empty match expression:\n%s" (prettyPrint e)
-  show (EmptyBegin (s, e, _)) = printf "%s: Empty match expression" (prettyPrint (s, e))
-  show (EmptyMultiWayIf (s, e, _)) = printf "Empty multi-way if expression" (prettyPrint (s, e))
+  show (EmptyBegin v) = printf "%s: Empty match expression" (prettyPrint (extract v))
+  show (EmptyMultiWayIf v) = printf "Empty multi-way if expression" (prettyPrint (extract v))
 
-  show (ArisingFrom t (s, e, v)) = printf "%s: %s\n · Arising from use of `%s`" (prettyPrint delta) (show t) (prettyPrint v) where
-    delta = (s, e)
+  show (ArisingFrom t v) = printf "%s: %s\n · Arising from use of `%s`" (prettyPrint (extract v)) (show t) (prettyPrint v)
 
   show (KindsNotEqual a b) = printf "Kind error: failed to unify `%s` with `%s`" (prettyPrint a) (prettyPrint b)
   show (ExpectedArrowKind a) = printf "Kind error: expected `type -> k`, but got `%s`" (prettyPrint a)

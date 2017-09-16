@@ -32,7 +32,7 @@ instance Substitutable Type where
   apply s (TyForall v cs t) = TyForall v (map (apply s') cs) (apply s' t) where
     s' = foldr M.delete s v
 
-instance Substitutable Constraint where
+instance Substitutable (Constraint a) where
   ftv (ConUnify _ a b) = ftv a `S.union` ftv b
   apply s (ConUnify e a b) = ConUnify e (apply s a) (apply s b)
 

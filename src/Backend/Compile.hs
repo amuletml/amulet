@@ -5,6 +5,7 @@ module Backend.Compile
   , compileConstructors
   ) where
 
+import Control.Comonad
 import Control.Monad.Gen
 import Control.Monad
 
@@ -16,7 +17,7 @@ type Returner = Maybe (LuaExpr -> LuaStmt)
 alpha :: [String]
 alpha = [1..] >>= flip replicateM ['a'..'z']
 
-compileProgram :: [Toplevel] -> LuaStmt
+compileProgram :: [Toplevel a] -> LuaStmt
 compileProgram = LuaDo . compileProg where
   compileProg (ForeignVal n' s t:xs)
     = let genCurried n (TyArr _ a) ags bd = LuaFunction [LuaName (alpha !! n)] [LuaReturn (genCurried (succ n) a (LuaRef (LuaName (alpha !! n)):ags) bd)]
@@ -45,40 +46,40 @@ compileConstructors ((a, xs):ys) -- non-unit constructors, hard
     fn _ _ = error "absurd"
 compileConstructors [] = []
 
-compileLet :: (Var, Expr) -> (LuaVar, LuaExpr)
+compileLet :: (Var, Expr a) -> (LuaVar, LuaExpr)
 compileLet (n, e) = (lowerName n, compileExpr e)
 
-compileExpr :: Expr -> LuaExpr
-compileExpr (_, _, VarRef v) = LuaRef (lowerName v)
-compileExpr (_, _, App f x) = LuaCall (compileExpr f) [compileExpr x]
-compileExpr (_, _, Fun (Capture v) e) = LuaFunction [lowerName v] (compileStmt (Just LuaReturn) e)
-compileExpr (_, _, Fun Wildcard e) = LuaFunction [LuaName "_"] (compileStmt (Just LuaReturn) e)
-compileExpr (_, _, Fun k e) = LuaFunction [LuaName "__arg__"] (compileStmt (Just LuaReturn) 
-                                                              (undefined, undefined, Match (undefined, undefined, VarRef (Name "__arg__")) [(k, e)]))
-compileExpr (_, _, Literal (LiInt x)) = LuaNumber (fromInteger x)
-compileExpr (_, _, Literal (LiStr str)) = LuaString str
-compileExpr (_, _, Literal (LiBool True)) = LuaTrue
-compileExpr (_, _, Literal (LiBool False)) = LuaFalse
-compileExpr (_, _, Literal LiUnit) = LuaNil -- evil!
-compileExpr s@(_, _, Let _ _) = compileIife s
-compileExpr s@(_, _, If _ _ _) = compileIife s
-compileExpr s@(_, _, Begin _) = compileIife s
-compileExpr s@(_, _, Match _ _) = compileIife s
-compileExpr (_, _, BinOp l (_, _, VarRef (Name o)) r) = LuaBinOp (compileExpr l) (remapOp o) (compileExpr r)
-compileExpr (_, _, BinOp _ _ _) = error "absurd: never parsed"
+compileExpr :: Expr a -> LuaExpr
+compileExpr (VarRef v _) = LuaRef (lowerName v)
+compileExpr (App f x _) = LuaCall (compileExpr f) [compileExpr x]
+compileExpr (Fun (Capture v) e _) = LuaFunction [lowerName v] (compileStmt (Just LuaReturn) e)
+compileExpr (Fun Wildcard e _) = LuaFunction [LuaName "_"] (compileStmt (Just LuaReturn) e)
+compileExpr f@(Fun k e _) = LuaFunction [LuaName "__arg__"] (compileStmt (Just LuaReturn)
+                                                              (Match (VarRef (Name "__arg__") (extract f)) [(k, e)] (extract f)))
+compileExpr (Literal (LiInt x) _)       = LuaNumber (fromInteger x)
+compileExpr (Literal (LiStr str) _)     = LuaString str
+compileExpr (Literal (LiBool True) _)   = LuaTrue
+compileExpr (Literal (LiBool False) _)  = LuaFalse
+compileExpr (Literal LiUnit _)          = LuaNil -- evil!
+compileExpr s@(Let{}) = compileIife s
+compileExpr s@(If{}) = compileIife s
+compileExpr s@(Begin{}) = compileIife s
+compileExpr s@(Match{}) = compileIife s
+compileExpr (BinOp l (VarRef (Name o) _) r _) = LuaBinOp (compileExpr l) (remapOp o) (compileExpr r)
+compileExpr (BinOp{}) = error "absurd: never parsed"
 
-compileStmt :: Returner -> Expr -> [LuaStmt]
-compileStmt r e@(_, _, VarRef _) = pureReturn r $ compileExpr e
-compileStmt r e@(_, _, Literal _) = pureReturn r $ compileExpr e
-compileStmt r e@(_, _, Fun _ _) = pureReturn r $ compileExpr e
-compileStmt r e@(_, _, BinOp{}) = pureReturn r $ compileExpr e
-compileStmt r (_, _, Let k c) = let (ns, vs) = unzip $ map compileLet k in
-                          (locals ns vs ++ compileStmt r c)
-compileStmt r (_, _, If c t e) = [LuaIf (compileExpr c) (compileStmt r t) (compileStmt r e)]
-compileStmt r (_, _, Begin xs) = concatMap (compileStmt Nothing) (init xs) ++ compileStmt r (last xs)
-compileStmt r (_, _, Match s ps) = runGen (compileMatch r s ps)
-compileStmt Nothing (_, _, App f x) = [LuaCallS (compileExpr f) [compileExpr x]]
-compileStmt (Just r) e@(_, _, App _ _) = [r (compileExpr e)]
+compileStmt :: Returner -> Expr a -> [LuaStmt]
+compileStmt r e@(VarRef{}) = pureReturn r $ compileExpr e
+compileStmt r e@(Literal{}) = pureReturn r $ compileExpr e
+compileStmt r e@(Fun{}) = pureReturn r $ compileExpr e
+compileStmt r e@(BinOp{}) = pureReturn r $ compileExpr e
+compileStmt r (Let k c _) = let (ns, vs) = unzip $ map compileLet k in
+                              (locals ns vs ++ compileStmt r c)
+compileStmt r (If c t e _) = [LuaIf (compileExpr c) (compileStmt r t) (compileStmt r e)]
+compileStmt r (Begin xs _) = concatMap (compileStmt Nothing) (init xs) ++ compileStmt r (last xs)
+compileStmt r (Match s ps _) = runGen (compileMatch r s ps)
+compileStmt Nothing (App f x _) = [LuaCallS (compileExpr f) [compileExpr x]]
+compileStmt (Just r) e@(App{}) = [r (compileExpr e)]
 
 lowerName :: Var -> LuaVar
 lowerName (Refresh a k) = case lowerName a of
@@ -89,7 +90,7 @@ lowerName (Name a) = LuaName a
 iife :: [LuaStmt] -> LuaExpr
 iife b = LuaCall (LuaFunction [] b) []
 
-compileIife :: Expr -> LuaExpr
+compileIife :: Expr a -> LuaExpr
 compileIife = iife . compileStmt (Just LuaReturn)
 
 locals :: [LuaVar] -> [LuaExpr] -> [LuaStmt]
@@ -138,7 +139,7 @@ patternBindings (Destructure _ ps) vr
   = concat $ zipWith3 innerBind ps (repeat vr) [2..] where
     innerBind p v k = patternBindings p . LuaRef . LuaIndex v . LuaNumber . fromInteger $ k
 
-compileMatch :: Returner -> Expr -> [(Pattern, Expr)] -> Gen Int [LuaStmt]
+compileMatch :: Returner -> Expr a -> [(Pattern, Expr a)] -> Gen Int [LuaStmt]
 compileMatch r ex ps = do
   x <- (LuaName . ("__" ++ ) . (alpha !!)) <$> gen -- matchee
   let gen ((p, c):ps) = ( patternTest p (LuaRef x)
