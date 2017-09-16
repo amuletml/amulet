@@ -64,7 +64,6 @@ compileExpr s@(_, _, Let _ _) = compileIife s
 compileExpr s@(_, _, If _ _ _) = compileIife s
 compileExpr s@(_, _, Begin _) = compileIife s
 compileExpr s@(_, _, Match _ _) = compileIife s
-compileExpr s@(_, _, MultiWayIf _) = compileIife s
 compileExpr (_, _, BinOp l (_, _, VarRef (Name o)) r) = LuaBinOp (compileExpr l) (remapOp o) (compileExpr r)
 compileExpr (_, _, BinOp _ _ _) = error "absurd: never parsed"
 
@@ -76,9 +75,6 @@ compileStmt r e@(_, _, BinOp{}) = pureReturn r $ compileExpr e
 compileStmt r (_, _, Let k c) = let (ns, vs) = unzip $ map compileLet k in
                           (locals ns vs ++ compileStmt r c)
 compileStmt r (_, _, If c t e) = [LuaIf (compileExpr c) (compileStmt r t) (compileStmt r e)]
-compileStmt r (_, _, MultiWayIf xs)
-  = let compa (a, b) = (compileExpr a, compileStmt r b)
-     in [LuaIfElse (map compa xs)]
 compileStmt r (_, _, Begin xs) = concatMap (compileStmt Nothing) (init xs) ++ compileStmt r (last xs)
 compileStmt r (_, _, Match s ps) = runGen (compileMatch r s ps)
 compileStmt Nothing (_, _, App f x) = [LuaCallS (compileExpr f) [compileExpr x]]

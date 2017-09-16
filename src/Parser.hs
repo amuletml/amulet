@@ -42,7 +42,6 @@ exprP' = parens exprP
      <|> funExpr
      <|> letExpr
      <|> ifExpr
-     <|> multiwayIfExpr
      <|> matchExpr
      <|> beginExpr
      <|> withPos (VarRef <$> name)
@@ -85,18 +84,6 @@ exprP' = parens exprP
         reservedOp "->"
         (,) (Destructure v xs) <$> exprP
       _ -> mzero
-
-multiwayIfExpr :: Parser Expr
-multiwayIfExpr = withPos $ do
-  reserved "if"
-  as <- many1 arm
-  pure $ MultiWayIf as
-  where
-    arm = do
-      reservedOp "|"
-      g <- exprP
-      reservedOp "->"
-      (,) <$> pure g <*> exprP
 
 patternP :: Parser Pattern
 patternP = wildcard <|> capture <|> constructor <|> try pType <|> destructure where
