@@ -40,9 +40,11 @@ bindGroup = sepBy1 decl (reserved "and") where
 withPos :: Parser (Span -> a) -> Parser a
 withPos k = do
   begin <- getPosition
-  vl <- k
+  k' <- k
   end <- getPosition
-  pure (vl (mkSpan begin end))
+  case mkSpan begin end of
+    Nothing -> mzero <?> (sourceName begin ++ " to be the same file as " ++ sourceName end)
+    Just vl -> pure (k' vl)
 
 exprP' :: Parser Expr'
 exprP' = parens exprP
