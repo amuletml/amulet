@@ -41,7 +41,7 @@ data Type
 
 data Var
   = Name String
-  | Refresh Var String
+  | Refresh Var {-# UNPACK #-} !Int -- for that 1% memory use reductin
   deriving (Eq, Show, Ord)
 
 data Toplevel a
