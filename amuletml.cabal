@@ -20,6 +20,7 @@ executable amuletml
                      , monad-gen >= 0.3 && < 0.4
                      , containers >= 0.5 && < 0.6
                      , transformers >= 0.5 && < 0.6
+                     , comonad >= 5.0 && < 5.1
   hs-source-dirs:      src
   default-language:    Haskell2010
   ghc-options: -Wall -Wno-name-shadowing
