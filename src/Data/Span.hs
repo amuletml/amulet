@@ -16,13 +16,13 @@ data Span
          , col2 :: !Column, line2 :: !Line }
   deriving (Eq, Ord, Show)
 
-mkSpan :: SourcePos -> SourcePos -> Span
-mkSpan a b | sourceName a == sourceName b =
-               Span { fileName = sourceName a
-                    , col1 = sourceColumn a, line1 = sourceLine a
-                    , col2 = sourceColumn b, line2 = sourceLine b }
-
-           | otherwise = error (sourceName a ++ " and " ++ sourceName b ++ " are different")
+mkSpan :: SourcePos -> SourcePos -> Maybe Span
+mkSpan a b
+  | sourceName a == sourceName b
+  = Just (Span { fileName = sourceName a
+               , col1 = sourceColumn a, line1 = sourceLine a
+               , col2 = sourceColumn b, line2 = sourceLine b })
+  | otherwise = Nothing
 
 spanStart, spanEnd :: Span -> SourcePos
 spanStart (Span { fileName = n, line1 = l, col1 = c }) = newPos n l c
