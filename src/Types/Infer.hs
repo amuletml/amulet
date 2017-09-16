@@ -87,16 +87,6 @@ infer expr@(start, end, inner)
           (x:xs) -> do
             mapM_ (unify expr x) xs
             pure x
-      MultiWayIf xs -> do
-        let (gs, bs) = unzip xs
-
-        mapM_ (unify expr tyBool <=< infer) gs
-        bs' <- mapM infer bs
-        case bs' of
-          [] -> throwError (EmptyMultiWayIf expr)
-          (x:xs) -> do
-            mapM_ (unify expr x) xs
-            pure x
       BinOp l o r -> do
         infer (start, end, App (start, end, App o l) r)
 

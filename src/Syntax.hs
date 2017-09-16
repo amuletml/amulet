@@ -15,7 +15,6 @@ data Expr'
   | Literal Lit
   | Match Expr [(Pattern, Expr)]
   | BinOp Expr Expr Expr
-  | MultiWayIf [(Expr, Expr)]
   deriving (Eq, Show, Ord)
 type Expr = (SourcePos, SourcePos, Expr')
 
@@ -67,9 +66,6 @@ instance Pretty Expr where
 
 instance Pretty Expr' where
   pprint (VarRef v) = pprint v
-  pprint (MultiWayIf xs) = do
-    kwClr "if"
-    body 2 xs
   pprint (Let [] _) = error "absurd: never parsed"
   pprint (Let ((n, v):xs) e) = do
     kwClr "let " <+> n <+> opClr " = " <+> v <+> newline
