@@ -2,10 +2,11 @@
 
 module Parser where
 
-import qualified Text.Parsec.Token as Tok
-import Text.Parsec.String
-import Text.Parsec.Expr
+import Data.Span
 import Text.Parsec
+import Text.Parsec.Expr
+import Text.Parsec.String
+import qualified Text.Parsec.Token as Tok
 
 import Parser.Lexer
 
@@ -15,9 +16,8 @@ import Control.Monad
 import Control.Comonad
 import Syntax
 
-type SourceDelta = (SourcePos, SourcePos)
-type Expr' = Expr SourceDelta
-type Toplevel' = Toplevel SourceDelta
+type Expr' = Expr Span
+type Toplevel' = Toplevel Span
 
 data BeginStmt
   = BeginLet [(Var, Expr')]
@@ -37,12 +37,12 @@ bindGroup = sepBy1 decl (reserved "and") where
         let fun' pt b = Fun pt b (extract bd)
         pure (x, foldr fun' bd ps)
 
-withPos :: Parser (SourceDelta -> a) -> Parser a
+withPos :: Parser (Span -> a) -> Parser a
 withPos k = do
   begin <- getPosition
   vl <- k
   end <- getPosition
-  pure (vl (begin, end))
+  pure (vl (mkSpan begin end))
 
 exprP' :: Parser Expr'
 exprP' = parens exprP
@@ -136,7 +136,7 @@ typeP = typeOpP where
   type' = foldl1 TyApp <$> many1 typeP'
   table = [ [ binary "->" (const TyArr) AssocRight ]]
 
-binary :: String -> (SourceDelta -> a -> a -> a) -> Assoc -> Operator String () Identity a
+binary :: String -> (Span -> a -> a -> a) -> Assoc -> Operator String () Identity a
 binary n f a = flip Infix a $ do
   pos <- withPos $ (id <$ reservedOp n)
   pure (f pos)
