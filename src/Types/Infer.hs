@@ -38,10 +38,10 @@ builtinsEnv = Env (M.fromList ops) (M.fromList tps) where
         , op "==" cmp, op "<>" cmp ]
   tps = [ tp "int", tp "string", tp "bool", tp "unit" ]
 
-unify :: Expr a ->  Type -> Type -> InferM a ()
+unify :: Expr a ->  Type -> Type -> Infer a ()
 unify e a b = tell [ConUnify e a b]
 
-infer :: Expr a -> InferM a Type
+infer :: Expr a -> Infer a Type
 infer expr
   = case expr of
       VarRef k _ -> lookupTy k
@@ -92,7 +92,7 @@ infer expr
       BinOp l o r p -> do
         infer (App (App o l p) r p)
 
-inferKind :: Type -> InferM a Kind
+inferKind :: Type -> Infer a Kind
 inferKind (TyVar v) = lookupKind (Name v) `catchError` const (pure KiType)
 inferKind (TyCon v) = lookupKind v
 inferKind (TyForall vs _ k) = extendManyK (zip (map Name vs) (repeat KiType)) $ inferKind k
@@ -110,7 +110,7 @@ inferKind (TyApp a b) = do
     _ -> throwError (ExpectedArrowKind x)
 
 -- Returns: Type of the overall thing * type of captures
-inferPattern :: (Type -> Type -> InferM a ()) -> Pattern -> InferM a (Type, [(Var, Type)])
+inferPattern :: (Type -> Type -> Infer a ()) -> Pattern -> Infer a (Type, [(Var, Type)])
 inferPattern _ Wildcard = do
   x <- TyVar <$> fresh
   pure (x, [])
@@ -131,7 +131,7 @@ inferPattern unify (PType p t) = do
   unify t' t
   pure (t, xs)
 
-inferProg :: [Toplevel a] -> InferM a Env
+inferProg :: [Toplevel a] -> Infer a Env
 inferProg (LetStmt ns:prg) = do
   ks <- forM ns $ \(a, _) -> do
     tv <- TyVar <$> fresh
@@ -152,7 +152,7 @@ inferProg (TypeDecl n tvs cs:prg) =
         inferProg prg
 inferProg [] = ask
 
-inferLetTy :: [(Var, Type)] -> [(Var, Expr a)] -> InferM a [(Var, Type)]
+inferLetTy :: [(Var, Type)] -> [(Var, Expr a)] -> Infer a [(Var, Type)]
 inferLetTy ks [] = pure ks
 inferLetTy ks ((va, ve):xs) = extendMany ks $ do
   (ty, c) <- censor (const mempty) (listen (infer ve))
