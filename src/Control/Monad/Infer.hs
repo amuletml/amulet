@@ -1,10 +1,10 @@
 {-# LANGUAGE FlexibleContexts #-}
 module Control.Monad.Infer
   ( module M
-  , InferM
+  , InferT, Infer
   , TypeError(..)
   , Env(..)
-  , lookupTy, fresh, runInfer, extend
+  , lookupTy, fresh, runInferT, runInfer, extend
   , lookupKind, extendKind
   )
   where
@@ -13,7 +13,7 @@ import Control.Monad.Writer.Strict as M
 import Control.Monad.Reader as M
 import Control.Monad.Except as M
 import Control.Monad.Gen as M
-
+import Control.Monad.Identity
 import Control.Comonad (extract)
 
 import qualified Data.Map.Strict as Map
@@ -30,7 +30,8 @@ import Pretty (prettyPrint, Pretty)
 
 import Text.Printf (printf)
 
-type InferM a = GenT Int (ReaderT Env (WriterT [Constraint a] (Except (TypeError a))))
+type InferT a m = GenT Int (ReaderT Env (WriterT [Constraint a] (ExceptT (TypeError a) m)))
+type Infer a = InferT a Identity
 
 data Env
   = Env { values :: Map.Map Var Type
@@ -76,8 +77,11 @@ lookupKind x = do
     Just t -> pure t
     Nothing -> throwError (NotInScope x)
 
-runInfer :: Env -> InferM a b -> Either (TypeError a) (b, [Constraint a])
+runInfer :: Env -> Infer a b -> Either (TypeError a) (b, [Constraint a])
 runInfer ct ac = runExcept (runWriterT (runReaderT (runGenT ac) ct))
+
+runInferT :: Monad m => Env -> InferT a m b -> m (Either (TypeError a) (b, [Constraint a]))
+runInferT ct ac = runExceptT (runWriterT (runReaderT (runGenT ac) ct))
 
 fresh :: MonadGen Int m => m Text
 fresh = do
