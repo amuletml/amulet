@@ -1,11 +1,11 @@
-{ nixpkgs ? import <nixpkgs> {}, compiler ? "ghc821" }:
+{ nixpkgs ? import <nixpkgs> {}, compiler ? "default" }:
 
 let
 
   inherit (nixpkgs) pkgs;
 
   f = { mkDerivation, base, comonad, containers, monad-gen, mtl
-      , parsec, stdenv, transformers, unix
+      , parsec, stdenv, text, transformers
       }:
       mkDerivation {
         pname = "amuletml";
@@ -14,14 +14,16 @@ let
         isLibrary = false;
         isExecutable = true;
         executableHaskellDepends = [
-          base comonad containers monad-gen mtl parsec transformers unix
+          base comonad containers monad-gen mtl parsec text transformers
         ];
         homepage = "https://amulet.ml";
         description = "A functional programming language";
         license = stdenv.lib.licenses.bsd3;
       };
 
-  haskellPackages = pkgs.haskell.packages.${compiler};
+  haskellPackages = if compiler == "default"
+                       then pkgs.haskellPackages
+                       else pkgs.haskell.packages.${compiler};
 
   drv = haskellPackages.callPackage f {};
 

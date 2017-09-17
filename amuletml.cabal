@@ -15,7 +15,7 @@ executable amuletml
   main-is:             Main.hs
   build-depends:       mtl >= 2.2 && < 2.3
                      , base >= 4.9 && < 4.11
-                     , unix >= 2.7 && < 2.8
+                     , text >= 1.2 && < 1.3
                      , parsec >= 3.1 && < 3.2
                      , monad-gen >= 0.3 && < 0.4
                      , containers >= 0.5 && < 0.6

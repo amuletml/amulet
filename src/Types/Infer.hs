@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, OverloadedStrings #-}
 module Types.Infer where
 
 import qualified Data.Map.Strict as M
@@ -11,6 +11,8 @@ import Syntax.Subst
 import Syntax
 
 import Types.Unify
+
+import qualified Data.Text as T
 
 -- Solve for the types of lets in a program
 inferProgram :: [Toplevel a] -> Either (TypeError a) Env
@@ -143,7 +145,7 @@ inferProg (ForeignVal v _ t:prg) = extend (v, closeOver t) $ inferProg prg
 inferProg (TypeDecl n tvs cs:prg) =
   let mkk [] = KiType
       mkk (_:xs) = KiArr KiType (mkk xs)
-      mkt [] = foldl TyApp (TyCon n) (TyVar <$> tvs)
+      mkt [] = foldl TyApp (TyCon n) (TyVar . T.pack <$> tvs)
       mkt (x:xs) = TyArr x (mkt xs)
    in extendKind (n, mkk tvs) $
       extendMany (map (second mkt) cs) $

@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Backend.Compile
   ( compileProgram
   , compileLet
@@ -12,10 +13,14 @@ import Control.Monad
 import Backend.Lua
 import Syntax
 
+import qualified Data.Text as T
+import Data.Text (Text)
+import Data.Semigroup ((<>))
+
 type Returner = Maybe (LuaExpr -> LuaStmt)
 
-alpha :: [String]
-alpha = [1..] >>= flip replicateM ['a'..'z']
+alpha :: [Text]
+alpha = map (T.pack) ([1..] >>= flip replicateM ['a'..'z'])
 
 compileProgram :: [Toplevel a] -> LuaStmt
 compileProgram = LuaDo . compileProg where
@@ -24,8 +29,8 @@ compileProgram = LuaDo . compileProg where
           genCurried _ _ [] bd = bd
           genCurried _ _ ags bd = LuaCall bd (reverse ags)
           (Name n) = n'
-       in LuaLocal [LuaName ("__" ++ n)] [LuaBitE s]
-        : LuaLocal [LuaName n] [genCurried 0 t [] (LuaRef (LuaName ("__" ++ n)))]:compileProg xs
+       in LuaLocal [LuaName ("__" <> n)] [LuaBitE s]
+        : LuaLocal [LuaName n] [genCurried 0 t [] (LuaRef (LuaName ("__" <> n)))]:compileProg xs
   compileProg (ValStmt _ _:xs) = compileProg xs
   compileProg (LetStmt vs:xs) = locals ns vs' ++ compileProg xs where
     (ns, vs') = unzip $ map compileLet vs
@@ -83,7 +88,7 @@ compileStmt (Just r) e@(App{}) = [r (compileExpr e)]
 
 lowerName :: Var -> LuaVar
 lowerName (Refresh a k) = case lowerName a of
-                            LuaName x -> LuaName (x ++ show k)
+                            LuaName x -> LuaName (x <> T.pack (show k))
                             _ -> error "absurd: no lowering to namespaces"
 lowerName (Name a) = LuaName a
 
@@ -105,7 +110,7 @@ pureReturn :: Returner -> LuaExpr -> [LuaStmt]
 pureReturn Nothing _ = []
 pureReturn (Just r) e = [r e]
 
-remapOp :: String -> String
+remapOp :: Text -> Text
 remapOp "^" = ".."
 remapOp "**" = "^"
 remapOp "<>" = "~="
@@ -141,7 +146,7 @@ patternBindings (Destructure _ ps) vr
 
 compileMatch :: Returner -> Expr a -> [(Pattern, Expr a)] -> Gen Int [LuaStmt]
 compileMatch r ex ps = do
-  x <- (LuaName . ("__" ++ ) . (alpha !!)) <$> gen -- matchee
+  x <- (LuaName . ("__" <>) . (alpha !!)) <$> gen -- matchee
   let gen ((p, c):ps) = ( patternTest p (LuaRef x)
                         , let pbs = patternBindings p (LuaRef x)
                               (a, b) = unzip pbs
