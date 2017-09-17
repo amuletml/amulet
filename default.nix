@@ -1,4 +1,4 @@
-{ nixpkgs ? import <nixpkgs> {}, compiler ? "default" }:
+{ nixpkgs ? import <nixpkgs> {}, compiler ? "ghc821" }:
 
 let
 
@@ -21,12 +21,6 @@ let
         license = stdenv.lib.licenses.bsd3;
       };
 
-  haskellPackages = if compiler == "default"
-                       then pkgs.haskellPackages
-                       else pkgs.haskell.packages.${compiler};
-
+  haskellPackages = pkgs.haskell.packages.${compiler};
   drv = haskellPackages.callPackage f {};
-
-in
-
-  if pkgs.lib.inNixShell then drv.env else drv
+in if pkgs.lib.inNixShell then drv.env else drv
