@@ -1,16 +1,25 @@
 module Parser.Lexer where
 
-import Text.Parsec.String
-import Text.Parsec.Language
 import qualified Text.Parsec.Token as Tok
+import qualified Data.Text as T
+import Text.Parsec.Language
+import Text.Parsec.Text()
+import Text.Parsec.Char
+import Text.Parsec (Parsec)
 
 import Data.Functor.Identity
+import Control.Applicative
 
-style :: GenLanguageDef String u Identity
-style = haskellDef
+style :: GenLanguageDef T.Text u Identity
+style = Tok.LanguageDef
           { Tok.commentStart = "(*"
           , Tok.commentEnd = "*)"
           , Tok.commentLine = ""
+          , Tok.identStart = letter
+          , Tok.identLetter = letter <|> oneOf "_'"
+          , Tok.opStart = Tok.opLetter style
+          , Tok.opLetter = oneOf ":!#$%&*+./<=>?@\\^|-~"
+          , Tok.caseSensitive = True
           , Tok.nestedComments = True
           , Tok.reservedNames = words
           , Tok.reservedOpNames = ops } where
@@ -18,7 +27,9 @@ style = haskellDef
   ops = ["->", "=", "∀", "=>", "|", "**", "*", "+", "^", "<", ">=", "==", "&&", "||", "/", "-", ">", "<=", "<>"]
   words = ["forall", "let", "and", "if", "then", "else", "begin", "end", "in", "foreign", "val", "true", "false", "match", "with", "type", "unit"]
 
-lexer :: Tok.TokenParser ()
+type Parser = Parsec T.Text ()
+
+lexer :: Tok.GenTokenParser T.Text u Identity
 lexer = Tok.makeTokenParser style
 
 identifier :: Parser String

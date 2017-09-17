@@ -2,11 +2,12 @@
 
 module Parser where
 
-import Data.Span
-import Text.Parsec
-import Text.Parsec.Expr
-import Text.Parsec.String
 import qualified Text.Parsec.Token as Tok
+import Text.Parsec.Expr
+import Text.Parsec
+import Data.Span
+
+import qualified Data.Text as T
 
 import Parser.Lexer
 
@@ -105,7 +106,7 @@ patternP = wildcard <|> capture <|> constructor <|> try pType <|> destructure wh
     Destructure ps <$> many1 patternP
   lowerIdent = lexeme $ do
     x <- lower
-    (x:) <$> many (Tok.identLetter style)
+    T.pack . (x:) <$> many (Tok.identLetter style)
   pType = parens $ do
     x <- patternP
     reservedOp ":"
@@ -121,7 +122,7 @@ exprP = exprOpP where
     let app' a b = App a b pos
     pure $ foldl app' hd tl
   exprOpP = buildExpressionParser table expr' <?> "expression"
-  bop x = binary x (\p a b -> BinOp a (VarRef (Name x) p) b p)
+  bop x = binary x (\p a b -> BinOp a (VarRef (Name (T.pack x)) p) b p)
   table = [ [ bop "**" AssocRight ]
           , [ bop "*"  AssocLeft, bop "/" AssocLeft ]
           , [ bop "+"  AssocLeft, bop "-" AssocLeft ]
@@ -138,25 +139,25 @@ typeP = typeOpP where
   type' = foldl1 TyApp <$> many1 typeP'
   table = [ [ binary "->" (const TyArr) AssocRight ]]
 
-binary :: String -> (Span -> a -> a -> a) -> Assoc -> Operator String () Identity a
+binary :: String -> (Span -> a -> a -> a) -> Assoc -> Operator T.Text () Identity a
 binary n f a = flip Infix a $ do
   pos <- withPos $ (id <$ reservedOp n)
   pure (f pos)
 
 typeP' :: Parser Type
 typeP' = parens typeP
-     <|> TyVar <$> tyVar
+     <|> TyVar . T.pack <$> tyVar
      <|> tyCon <|> unitTyCon
      <|> tyForall where
   tyForall = do
     reserved "forall"
-    nms <- commaSep1 tyVar
+    nms <- map (T.pack) <$> commaSep1 tyVar
     _ <- dot
     cs <- parens . commaSep1 $ typeP
     reservedOp "=>"
     TyForall nms cs <$> typeP
   tyCon = TyCon <$> name
-  unitTyCon = TyCon (Name "unit") <$ reserved "unit"
+  unitTyCon = TyCon (Name (T.pack "unit")) <$ reserved "unit"
 
 tyVar :: Parser String
 tyVar = lexeme $ do
@@ -165,18 +166,18 @@ tyVar = lexeme $ do
   (x:) <$> many (Tok.identLetter style)
 
 name :: Parser Var
-name = Name <$> identifier
+name = Name . T.pack <$> identifier
 
 constrName :: Parser Var
 constrName = (Name <$> upperIdent) <?> "constructor name" where
   upperIdent = lexeme $ do
     x <- upper
-    (x:) <$> many (Tok.identLetter style)
+    T.pack . (x:) <$> many (Tok.identLetter style)
 
 lit :: Parser Lit
 lit = intLit <|> strLit <|> true <|> false <|> unit where
   intLit = LiInt <$> natural
-  strLit = LiStr <$> stringLiteral
+  strLit = LiStr . T.pack <$> stringLiteral
   true = LiBool True <$ reserved "true"
   false = LiBool False <$ reserved "false"
   unit = LiUnit <$ reserved "unit"
@@ -195,7 +196,7 @@ toplevelP = letStmt <|> try foreignVal <|> valStmt <|> dataDecl where
     reserved "val"
     reserved "foreign"
     x <- name
-    n <- stringLiteral
+    n <- T.pack <$> stringLiteral
     _ <- colon
     ForeignVal x n <$> typeP
   dataDecl = do

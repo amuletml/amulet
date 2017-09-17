@@ -5,6 +5,8 @@ module Syntax where
 import Control.Comonad
 import Pretty
 
+import Data.Text (Text)
+
 data Expr a
   = VarRef Var a
   | Let [(Var, Expr a)] (Expr a) a
@@ -26,28 +28,28 @@ data Pattern
 
 data Lit
   = LiInt Integer
-  | LiStr String
+  | LiStr Text
   | LiBool Bool
   | LiUnit
   deriving (Eq, Show, Ord)
 
 data Type
   = TyCon Var
-  | TyVar String
-  | TyForall [String] [Type] Type -- constraints
+  | TyVar Text
+  | TyForall [Text] [Type] Type -- constraints
   | TyArr Type Type
   | TyApp Type Type
   deriving (Eq, Show, Ord)
 
 data Var
-  = Name String
+  = Name Text
   | Refresh Var {-# UNPACK #-} !Int -- for that 1% memory use reductin
   deriving (Eq, Show, Ord)
 
 data Toplevel a
   = LetStmt [(Var, Expr a)]
   | ValStmt Var Type
-  | ForeignVal Var String Type
+  | ForeignVal Var Text Type
   | TypeDecl Var [String] [(Var, [Type])]
   deriving (Eq, Show, Ord)
 

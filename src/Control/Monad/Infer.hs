@@ -9,18 +9,25 @@ module Control.Monad.Infer
   )
   where
 
-import Control.Comonad (extract)
 import Control.Monad.Writer.Strict as M
 import Control.Monad.Reader as M
 import Control.Monad.Except as M
 import Control.Monad.Gen as M
+
+import Control.Comonad (extract)
+
 import qualified Data.Map.Strict as Map
 
 import Data.Semigroup
 
-import Syntax
+import qualified Data.Text as T
+import Data.Text (Text)
+
 import Syntax.Subst
+import Syntax
+
 import Pretty (prettyPrint, Pretty)
+
 import Text.Printf (printf)
 
 type InferM a = GenT Int (ReaderT Env (WriterT [Constraint a] (Except (TypeError a))))
@@ -44,7 +51,7 @@ instance Semigroup Env where
 
 data TypeError a
   = NotEqual Type Type
-  | Occurs String Type
+  | Occurs Text Type
   | NotInScope Var
   | EmptyMatch (Expr a)
   | EmptyBegin (Expr a)
@@ -72,7 +79,7 @@ lookupKind x = do
 runInfer :: Env -> InferM a b -> Either (TypeError a) (b, [Constraint a])
 runInfer ct ac = runExcept (runWriterT (runReaderT (runGenT ac) ct))
 
-fresh :: MonadGen Int m => m String
+fresh :: MonadGen Int m => m Text
 fresh = do
   x <- gen
   pure (alpha !! x)
@@ -83,8 +90,8 @@ extend (v, t) = local (\x -> x { values = Map.insert v t (values x) })
 extendKind :: MonadReader Env m => (Var, Kind) -> m a -> m a
 extendKind (v, t) = local (\x -> x { types = Map.insert v t (types x) })
 
-alpha :: [String]
-alpha = [1..] >>= flip replicateM ['a'..'z']
+alpha :: [Text]
+alpha = map T.pack $ [1..] >>= flip replicateM ['a'..'z']
 
 instantiate :: MonadGen Int m => Type -> m Type
 instantiate (TyForall vs _ ty) = do

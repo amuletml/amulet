@@ -2,23 +2,25 @@ module Backend.Lua where
 
 import Pretty
 
+import Data.Text (Text)
+
 data LuaStmt
   = LuaDo [LuaStmt]
   | LuaAssign [LuaVar] [LuaExpr]
   | LuaWhile LuaExpr [LuaStmt]
   | LuaRepeat [LuaStmt] LuaExpr
   | LuaIf LuaExpr [LuaStmt] [LuaStmt]
-  | LuaFornum String LuaExpr LuaExpr LuaExpr [LuaStmt]
+  | LuaFornum Text LuaExpr LuaExpr LuaExpr [LuaStmt]
   | LuaLocal [LuaVar] [LuaExpr]
   | LuaReturn LuaExpr
   | LuaIfElse [(LuaExpr, [LuaStmt])]
   | LuaBreak
   | LuaCallS LuaExpr [LuaExpr]
-  | LuaBit String
+  | LuaBit Text
   deriving (Eq, Show, Ord)
 
 data LuaVar
-  = LuaName String
+  = LuaName Text
   | LuaIndex LuaExpr LuaExpr
   deriving (Eq, Show, Ord)
 
@@ -27,11 +29,11 @@ data LuaExpr
   | LuaNil | LuaTrue | LuaFalse | LuaDots
   | LuaRef LuaVar
   | LuaNumber Double
-  | LuaString String
+  | LuaString Text
   | LuaFunction [LuaVar] [LuaStmt]
   | LuaTable [(LuaExpr, LuaExpr)]
-  | LuaBinOp LuaExpr String LuaExpr
-  | LuaBitE String
+  | LuaBinOp LuaExpr Text LuaExpr
+  | LuaBitE Text
   deriving (Eq, Show, Ord)
 
 instance Pretty LuaStmt where
@@ -87,7 +89,7 @@ instance Pretty LuaStmt where
     interleave ", " vs
     opClr " = "
     interleave ", " xs
-  pprint (LuaBit x) = tell x
+  pprint (LuaBit x) = pprint x
   pprint LuaBreak = kwClr "break"
   pprint (LuaReturn v) = kwClr "return " <+> v
   pprint (LuaCallS x@LuaFunction{} a) = parens x <+> parens (interleave ", " a) <+> ";"
@@ -114,4 +116,4 @@ instance Pretty LuaExpr where
     forM_ ps $ \(k, v) -> squares k <+> opClr " = " <+> v <+> ", "
   pprint (LuaCall x@LuaFunction{} a) = parens x <+> parens (interleave ", " a)
   pprint (LuaCall x a) = x <+> parens (interleave ", " a)
-  pprint (LuaBitE x) = tell x
+  pprint (LuaBitE x) = pprint x

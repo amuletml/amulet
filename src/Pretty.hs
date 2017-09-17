@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleInstances, TypeSynonymInstances #-}
-{-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE DefaultSignatures, OverloadedStrings #-}
+{-# LANGUAGE TypeApplications, ScopedTypeVariables #-}
 module Pretty
   ( module M
   , PrettyM, PrettyP, PParam(..)
@@ -46,34 +47,38 @@ import Data.Char as M
 import Data.List as M
 import Debug.Trace
 
+import qualified Data.Text.IO as T
+import qualified Data.Text as T
+import Data.Text (Text)
+
 import qualified Control.Monad.Reader as RM
 
-type PrettyM = ReaderT PParam (Writer String)
+type PrettyM = ReaderT PParam (Writer Text)
 type PrettyP = PrettyM ()
 
 data PParam
   = PParam { colours        :: Bool
-           , typeColour     :: String
-           , operatorColour :: String
-           , keywordColour  :: String
-           , patternColour  :: String
-           , stringColour   :: String
-           , typevarColour  :: String
-           , greyoutColour  :: String
-           , literalColour  :: String
-           , specialColour  :: String
+           , typeColour     :: Text
+           , operatorColour :: Text
+           , keywordColour  :: Text
+           , patternColour  :: Text
+           , stringColour   :: Text
+           , typevarColour  :: Text
+           , greyoutColour  :: Text
+           , literalColour  :: Text
+           , specialColour  :: Text
            , indent :: Int }
     deriving (Eq, Show)
 
 class Pretty a where
   pprint :: a -> PrettyP
   default pprint :: Show a => a -> PrettyP
-  pprint = tell . show
+  pprint = tell . T.pack . show
 
-runPrinter :: PParam -> PrettyP -> String
+runPrinter :: PParam -> PrettyP -> Text
 runPrinter ctx act = let (_, ret) = runWriter (runReaderT act ctx) in ret
 
-runPrettyM :: PParam -> PrettyM a -> (a, String)
+runPrettyM :: PParam -> PrettyM a -> (a, Text)
 runPrettyM ct ac = runWriter (runReaderT ac ct)
 
 defaults :: PParam
@@ -92,22 +97,22 @@ defaults = PParam { colours = True
 colourless :: PParam
 colourless = defaults { colours = False }
 
-prettyPrint :: Pretty a => a -> String
+prettyPrint :: Pretty a => a -> Text
 prettyPrint = runPrinter defaults . pprint
 
-uglyPrint :: Pretty a => a -> String
+uglyPrint :: Pretty a => a -> Text
 uglyPrint = runPrinter colourless . pprint
 
-ppshow :: Pretty a => PParam -> a -> String
+ppshow :: Pretty a => PParam -> a -> Text
 ppshow = (. pprint) . runPrinter
 
 tracePretty :: Pretty a => a -> b -> b
-tracePretty x = trace (prettyPrint x)
+tracePretty x = trace (T.unpack $ prettyPrint x)
 
 tracePrettyId :: Pretty a => a -> a
 tracePrettyId x = tracePretty x x
 
-colour :: Pretty a => String -> a -> PrettyP
+colour :: Pretty a => Text -> a -> PrettyP
 colour clr cmb
   = do x <- asks colours
        when x (tell clr)
@@ -122,7 +127,7 @@ newline :: PrettyP
 newline
   = do x <- asks indent
        tell "\n"
-       tell $ replicate x ' '
+       tell $ T.replicate x " "
 
 indented :: Pretty a => a -> PrettyP
 indented x = newline *> pprint x
@@ -158,68 +163,69 @@ spcClr x = flip colour x =<< asks specialColour
 greyOut :: Pretty a => a -> PrettyP
 greyOut x = flip colour x =<< asks greyoutColour
 
-delim :: (Pretty a, Pretty b, Pretty c) => a -> b -> c -> PrettyP
+delim :: (Pretty a, Pretty b) => a -> a -> b -> PrettyP
 delim s e y = pprint s *> pprint y <* pprint e
 
 width :: Pretty a => a -> PrettyM Int
 width ac = do st <- asks indent
               let xs = runPrinter (colourless { indent = st }) $ pprint ac
-               in return $ length xs
+               in return $ T.length xs
 
 between :: (Pretty a, Pretty b, Pretty c) => a -> b -> c -> PrettyP
 between a b c = pprint a >> pprint c >> pprint b
 
-padRight :: Pretty a => a -> Int -> PrettyM String
+padRight :: Pretty a => a -> Int -> PrettyM Text
 padRight ac fl
   = do ct <- ask
        let xs = runPrinter ct $ pprint ac
-        in return $ xs ++ replicate (fl - length xs) ' '
+        in return $ xs <> T.replicate (fl - T.length xs) " "
 
 padRight' :: Pretty a => a -> Int -> PrettyP
 padRight' ac fl = padRight ac fl >>= pprint
 
-local :: Pretty a => a -> PrettyM String
+local :: Pretty a => a -> PrettyM Text
 local ac
   = do ct <- ask
        let xs = runPrinter ct $ pprint ac
         in return xs
 
 parens, braces, squares, angles :: Pretty a => a -> PrettyP
-parens  = delim "(" ")"
-braces  = delim "{" "}"
-squares = delim "[" "]"
-angles  = delim "<" ">"
+parens  = delim @Text "(" ")"
+braces  = delim @Text "{" "}"
+squares = delim @Text "[" "]"
+angles  = delim @Text "<" ">"
 
 quotes, dquotes :: Pretty a => a -> PrettyP
-quotes  = delim "'" "'"
-dquotes = delim "\"" "\""
+quotes  = delim @Text "'" "'"
+dquotes = delim @Text "\"" "\""
 
 interleave :: (Pretty a, Pretty b) => b -> [a] -> PrettyP
 interleave x xs = do
   env <- ask
   let x' = env `ppshow` x in
-      tell $ intercalate x' $ map (ppshow env) xs
+      tell $ T.intercalate x' $ map (ppshow env) xs
 
 (<+>) :: (Pretty a, Pretty b) => a -> b -> PrettyP
 a <+> b = pprint a >> pprint b
 infixl 3 <+>
 
 str :: Pretty a => a -> PrettyP
-str = delim (greyOut "\"") (greyOut "\"") . strClr
+str = delim (greyOut @Text "\"") (greyOut @Text "\"") . strClr
 
 ppr :: Pretty a => a -> IO ()
-ppr = putStrLn . runPrinter defaults . pprint
+ppr = T.putStrLn . runPrinter defaults . pprint
 
 instance Pretty PrettyP where pprint = id
-instance Pretty String where pprint = tell
-instance Pretty Char   where pprint = tell . (:[])
+instance Pretty String where pprint = tell . T.pack
+instance Pretty Char   where pprint = tell . T.singleton
+instance Pretty Text   where pprint = tell
 instance Pretty a => Pretty (ZipList a) where
-  pprint (ZipList x) = interleave ", " x
+  pprint (ZipList x) = interleave @a @Text ", " x
 
 instance (Pretty a, Pretty b) => Pretty (Map.Map a b) where
   pprint mp = do
     x <- ask
-    braces $ intercalate "," $ map (\(k, v) -> x `ppshow` k ++ " => " ++ x `ppshow` v) $ Map.assocs mp
+    braces $ T.intercalate "," $ map (\(k, v) -> x `ppshow` k <> " => " <> x `ppshow` v) $ Map.assocs mp
 
 instance Pretty a => Pretty (a -> PrettyP, a) where
   pprint (x, y) = x y

@@ -10,12 +10,14 @@ module Syntax.Subst
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 
+import Data.Text (Text)
+
 import Syntax
 
-type Subst = M.Map String Type
+type Subst = M.Map Text Type
 
 class Substitutable a where
-  ftv :: a -> S.Set String
+  ftv :: a -> S.Set Text
   apply :: Subst -> a -> a
 
 instance Substitutable Type where
