@@ -4,6 +4,8 @@ module Main where
 import Parser
 import Text.Parsec
 import Backend.Compile
+
+import Text.Show.Pretty
 import Pretty
 
 import System.Environment
@@ -34,6 +36,15 @@ main = do
     [x] -> do
       x' <- T.readFile x
       compileFromTo x x' ppr
+    ["dump-bits", x] -> do
+      x' <- T.readFile x
+      case parse program x x' of
+        Right prg -> do
+          pPrint prg
+          case inferProgram prg of
+            Left e -> print e
+            Right ts -> pPrint ts
+        Left e -> print e
     [x, t] -> do
       x' <- T.readFile x
       compileFromTo x x' $ T.writeFile t . uglyPrint
