@@ -5,7 +5,7 @@ let
   inherit (nixpkgs) pkgs;
 
   f = { mkDerivation, base, comonad, containers, monad-gen, mtl
-      , parsec, stdenv, text, transformers
+      , parsec, stdenv, text, transformers, pretty-show
       }:
       mkDerivation {
         pname = "amuletml";
@@ -15,6 +15,7 @@ let
         isExecutable = true;
         executableHaskellDepends = [
           base comonad containers monad-gen mtl parsec text transformers
+          pretty-show # This is here for ghci prettiness
         ];
         homepage = "https://amulet.ml";
         description = "A functional programming language";
