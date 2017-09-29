@@ -1,0 +1,2 @@
+import Text.Show.Pretty (ppShow, pPrint)
+:set -interactive-print pPrint

@@ -21,6 +21,7 @@ executable amuletml
                      , containers >= 0.5 && < 0.6
                      , transformers >= 0.5 && < 0.6
                      , comonad >= 5.0 && < 5.1
+                     , pretty-show
   hs-source-dirs:      src
   default-language:    Haskell2010
   ghc-options: -Wall -Wno-name-shadowing -Wno-missing-home-modules
