@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
-{-# LANGUAGE FlexibleInstances, TypeSynonymInstances, DeriveFunctor #-}
+{-# LANGUAGE FlexibleInstances, TypeSynonymInstances, DeriveFunctor, TypeFamilies, StandaloneDeriving, FlexibleContexts, UndecidableInstances #-}
 module Syntax where
 
 import Control.Comonad
@@ -7,24 +7,38 @@ import Pretty
 
 import Data.Text (Text)
 
-data Expr a
-  = VarRef Var a
-  | Let [(Var, Expr a)] (Expr a) a
-  | If (Expr a) (Expr a) (Expr a) a
-  | App (Expr a) (Expr a) a
-  | Fun Pattern (Expr a) a
-  | Begin [Expr a] a
-  | Literal Lit a
-  | Match (Expr a) [(Pattern, Expr a)] a
-  | BinOp (Expr a) (Expr a) (Expr a) a
-  deriving (Eq, Show, Ord, Functor)
+data ParsePhase = ParsePhase ParsePhase
+data TypedPhase = TypedPhase TypedPhase
 
-data Pattern
+type family Var a :: *
+type instance Var ParsePhase = BoundVar
+type instance Var TypedPhase = BoundVar
+
+data Expr p a
+  = VarRef (Var p) a
+  | Let [(Var p, Expr p a)] (Expr p a) a
+  | If (Expr p a) (Expr p a) (Expr p a) a
+  | App (Expr p a) (Expr p a) a
+  | Fun (Pattern p) (Expr p a) a
+  | Begin [Expr p a] a
+  | Literal Lit a
+  | Match (Expr p a) [(Pattern p, Expr p a)] a
+  | BinOp (Expr p a) (Expr p a) (Expr p a) a
+  deriving (Functor)
+
+deriving instance (Eq (Var p), Eq a) => Eq (Expr p a)
+deriving instance (Show (Var p), Show a) => Show (Expr p a)
+deriving instance (Ord (Var p), Ord a) => Ord (Expr p a)
+
+data Pattern p
   = Wildcard
-  | Capture Var
-  | Destructure Var [Pattern]
-  | PType Pattern Type
-  deriving (Eq, Show, Ord)
+  | Capture (Var p)
+  | Destructure (Var p) [Pattern p]
+  | PType (Pattern p) (Type p)
+
+deriving instance Eq (Var p) => Eq (Pattern p)
+deriving instance Show (Var p) => Show (Pattern p)
+deriving instance Ord (Var p) => Ord (Pattern p)
 
 data Lit
   = LiInt Integer
@@ -33,25 +47,31 @@ data Lit
   | LiUnit
   deriving (Eq, Show, Ord)
 
-data Type
-  = TyCon Var
-  | TyVar Text
-  | TyForall [Text] [Type] Type -- constraints
-  | TyArr Type Type
-  | TyApp Type Type
-  deriving (Eq, Show, Ord)
+data Type p
+  = TyCon (Var p)
+  | TyVar (Var p)
+  | TyForall [Var p] [Type p] (Type p) -- constraints
+  | TyArr (Type p) (Type p)
+  | TyApp (Type p) (Type p)
 
-data Var
+deriving instance Eq (Var p) => Eq (Type p)
+deriving instance Show (Var p) => Show (Type p)
+deriving instance Ord (Var p) => Ord (Type p)
+
+data BoundVar
   = Name Text
-  | Refresh Var {-# UNPACK #-} !Int -- for that 1% memory use reductin
+  | Refresh BoundVar {-# UNPACK #-} !Int -- for that 1% memory use reduction
   deriving (Eq, Show, Ord)
 
-data Toplevel a
-  = LetStmt [(Var, Expr a)]
-  | ValStmt Var Type
-  | ForeignVal Var Text Type
-  | TypeDecl Var [String] [(Var, [Type])]
-  deriving (Eq, Show, Ord)
+data Toplevel p a
+  = LetStmt [(Var p, Expr p a)]
+  | ValStmt (Var p) (Type p)
+  | ForeignVal (Var p) Text (Type p)
+  | TypeDecl (Var p) [Var p] [(Var p, [Type p])]
+
+deriving instance (Eq (Var p), Eq a) => Eq (Toplevel p a)
+deriving instance (Show (Var p), Show a) => Show (Toplevel p a)
+deriving instance (Ord (Var p), Ord a) => Ord (Toplevel p a)
 
 data Kind
   = KiType
@@ -59,10 +79,9 @@ data Kind
   deriving (Eq, Show, Ord)
 
 data Constraint a
-  = ConUnify (Expr a) Type Type
-  deriving (Eq, Show, Ord, Functor)
+  = ConUnify (Expr ParsePhase a) (Type TypedPhase) (Type TypedPhase)
 
-instance Pretty (Expr a) where
+instance (Pretty (Var p)) => Pretty (Expr p a) where
   pprint (VarRef v _) = pprint v
   pprint (Let [] _ _) = error "absurd: never parsed"
   pprint (Let ((n, v):xs) e _) = do
@@ -88,17 +107,17 @@ instance Pretty (Expr a) where
     kwClr "match " <+> t <+> " with"
     body 2 bs *> newline
 
-instance Pretty (Pattern, Expr a) where
+instance (Pretty (Var p)) => Pretty (Pattern p, Expr p a) where
   pprint (a, b) = opClr "| " <+> a <+> " -> " <+> b
 
-instance Pretty (Expr a, Expr a) where
+instance (Pretty (Var p)) => Pretty (Expr p a, Expr p a) where
   pprint (a, b) = opClr "| " <+> a <+> " -> " <+> b
 
 instance Pretty Kind where
   pprint KiType = kwClr "Type"
   pprint (KiArr a b) = a <+> opClr " -> " <+> b
 
-instance Pretty Pattern where
+instance (Pretty (Var p)) => Pretty (Pattern p) where
   pprint Wildcard = kwClr "_"
   pprint (Capture x) = pprint x
   pprint (Destructure x []) = pprint x
@@ -112,7 +131,7 @@ instance Pretty Lit where
   pprint (LiBool False) = litClr "false"
   pprint LiUnit = litClr "unit"
 
-instance Pretty Type where
+instance (Pretty (Var p)) => Pretty (Type p) where
   pprint (TyCon v) = typeClr v
   pprint (TyVar v) = opClr "'" <+> tvClr v
   pprint (TyForall vs c v) = kwClr "∀ " <+> interleave " " vs <+> opClr ". " <+> parens (interleave "," c) <+> opClr " => " <+> v
@@ -123,14 +142,14 @@ instance Pretty Type where
   pprint (TyApp e x@TyApp{}) = parens x <+> opClr " -> " <+> e
   pprint (TyApp x e) = x <+> opClr " " <+> e
 
-instance Pretty Var where
+instance Pretty BoundVar where
   pprint (Name v) = pprint v
   pprint (Refresh v _) = pprint v
 
 instance Pretty (Constraint a) where
   pprint (ConUnify e a b) = e <+> opClr " <=> " <+> a <+> opClr " ~ " <+> b
 
-instance Comonad Expr where
+instance Comonad (Expr v) where
   extract (VarRef _ p) = p
   extract (Let _ _ p) = p
   extract (If _ _ _ p) = p
@@ -150,4 +169,3 @@ instance Comonad Expr where
   extend f e@(Literal l _) = Literal l (f e)
   extend f e@(Match t ps _) = Match (extend f t) (map (fmap (extend f)) ps) (f e)
   extend f e@(BinOp l o r _) = BinOp (extend f l) (extend f o) (extend f r) (f e)
-

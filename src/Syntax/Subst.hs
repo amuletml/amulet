@@ -1,3 +1,5 @@
+{-# LANGUAGE FlexibleInstances #-}
+
 module Syntax.Subst
   ( Subst
   , Substitutable
@@ -10,17 +12,15 @@ module Syntax.Subst
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 
-import Data.Text (Text)
-
 import Syntax
 
-type Subst = M.Map Text Type
+type Subst = M.Map (Var TypedPhase) (Type TypedPhase)
 
 class Substitutable a where
-  ftv :: a -> S.Set Text
+  ftv :: a -> S.Set (Var TypedPhase)
   apply :: Subst -> a -> a
 
-instance Substitutable Type where
+instance Substitutable (Type TypedPhase) where
   ftv TyCon{} = S.empty
   ftv (TyVar v) = S.singleton v
   ftv (TyForall vs cs t) = (foldMap ftv cs `S.union` ftv t) S.\\ S.fromList vs

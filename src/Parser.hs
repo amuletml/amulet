@@ -17,15 +17,17 @@ import Control.Monad
 import Control.Comonad
 import Syntax
 
-type Expr' = Expr Span
-type Toplevel' = Toplevel Span
+type Expr' = Expr ParsePhase Span
+type Toplevel' = Toplevel ParsePhase Span
+type Type' = Type ParsePhase
+type Pattern' = Pattern ParsePhase
 
 data BeginStmt
-  = BeginLet [(Var, Expr')]
+  = BeginLet [(Var ParsePhase, Expr')]
   | BeginRun Expr'
   deriving (Eq)
 
-bindGroup :: Parser [(Var, Expr')]
+bindGroup :: Parser [(Var ParsePhase, Expr')]
 bindGroup = sepBy1 decl (reserved "and") where
   decl = do
     x <- name
@@ -95,7 +97,7 @@ exprP' = parens exprP
         (,) (Destructure v xs) <$> exprP
       _ -> mzero
 
-patternP :: Parser Pattern
+patternP :: Parser Pattern'
 patternP = wildcard <|> capture <|> constructor <|> try pType <|> destructure where
   wildcard = Wildcard <$ reservedOp "_"
   capture = Capture <$> varName
@@ -122,7 +124,7 @@ exprP = exprOpP where
     let app' a b = App a b pos
     pure $ foldl app' hd tl
   exprOpP = buildExpressionParser table expr' <?> "expression"
-  bop x = binary x (\p a b -> BinOp a (VarRef (Name (T.pack x)) p) b p)
+  bop x = binary x (\p a b -> BinOp a (VarRef (Name (T.pack x)) p) b p :: Expr ParsePhase Span)
   table = [ [ bop "**" AssocRight ]
           , [ bop "*"  AssocLeft, bop "/" AssocLeft ]
           , [ bop "+"  AssocLeft, bop "-" AssocLeft ]
@@ -133,7 +135,7 @@ exprP = exprOpP where
           , [ bop "&&" AssocNone ]
           , [ bop "||" AssocNone ] ]
 
-typeP :: Parser Type
+typeP :: Parser Type'
 typeP = typeOpP where
   typeOpP = buildExpressionParser table type' <?> "type"
   type' = foldl1 TyApp <$> many1 typeP'
@@ -144,14 +146,14 @@ binary n f a = flip Infix a $ do
   pos <- withPos $ (id <$ reservedOp n)
   pure (f pos)
 
-typeP' :: Parser Type
+typeP' :: Parser Type'
 typeP' = parens typeP
-     <|> TyVar . T.pack <$> tyVar
+     <|> TyVar <$> tyVar
      <|> tyCon <|> unitTyCon
      <|> tyForall where
   tyForall = do
     reserved "forall"
-    nms <- map (T.pack) <$> commaSep1 tyVar
+    nms <- commaSep1 tyVar
     _ <- dot
     cs <- parens . commaSep1 $ typeP
     reservedOp "=>"
@@ -159,16 +161,16 @@ typeP' = parens typeP
   tyCon = TyCon <$> name
   unitTyCon = TyCon (Name (T.pack "unit")) <$ reserved "unit"
 
-tyVar :: Parser String
+tyVar :: Parser (Var ParsePhase)
 tyVar = lexeme $ do
   _ <- char '\''
   x <- Tok.identStart style
-  (x:) <$> many (Tok.identLetter style)
+  (Name . T.pack . (x:)) <$> many (Tok.identLetter style)
 
-name :: Parser Var
+name :: Parser (Var ParsePhase)
 name = Name . T.pack <$> identifier
 
-constrName :: Parser Var
+constrName :: Parser (Var ParsePhase)
 constrName = (Name <$> upperIdent) <?> "constructor name" where
   upperIdent = lexeme $ do
     x <- upper

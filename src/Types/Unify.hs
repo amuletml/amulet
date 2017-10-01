@@ -11,16 +11,14 @@ import Syntax
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 
-import Data.Text (Text)
-
 type SolveM a = StateT Subst (Except (TypeError a))
 
-bind :: Text -> Type -> SolveM a ()
+bind :: Var TypedPhase -> Type TypedPhase -> SolveM a ()
 bind var ty | ty == TyVar var = return ()
             | occurs var ty = throwError (Occurs var ty)
             | otherwise = modify ((M.singleton var ty) `compose`)
 
-unify :: Type -> Type -> SolveM a ()
+unify :: Type TypedPhase -> Type TypedPhase -> SolveM a ()
 unify (TyVar a) b = bind a b
 unify a (TyVar b) = bind b a
 unify (TyArr a b) (TyArr a' b') = do
@@ -48,6 +46,6 @@ solve s (ConUnify e a t:xs) = do
     Left err -> Left (ArisingFrom err e)
     Right s' -> solve (s' `compose` s) (apply s' xs)
 
-occurs :: Text -> Type -> Bool
+occurs :: Var TypedPhase -> Type TypedPhase -> Bool
 occurs _ (TyVar _) = False
 occurs x e = x `S.member` ftv e
