@@ -24,4 +24,5 @@ executable amuletml
                      , pretty-show
   hs-source-dirs:      src
   default-language:    Haskell2010
-  ghc-options: -Wall -Wno-name-shadowing -Wno-missing-home-modules
+  default-extensions:  DataKinds
+  ghc-options: -Wextra -Wall -Wno-name-shadowing -Wno-missing-home-modules
