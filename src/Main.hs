@@ -40,10 +40,10 @@ main = do
       x' <- T.readFile x
       case parse program x x' of
         Right prg -> do
-          -- print prg
+          pPrint prg
           case inferProgram prg of
-            Left e -> print e
-            Right ts -> print ts
+            Left e -> pPrint e
+            Right ts -> pPrint ts
         Left e -> print e
     [x, t] -> do
       x' <- T.readFile x
