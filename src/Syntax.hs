@@ -154,7 +154,9 @@ instance Pretty BoundVar where
   pprint (Refresh v _) = pprint v
 
 instance Pretty TypedVar where
-  pprint (TvName v t) = parens $ v <+> opClr " : " <+> t
+  pprint (TvName v t)
+    | t == internalTyVar = pprint v
+    | otherwise = parens $ v <+> opClr " : " <+> t
   pprint (TvRefresh v _) = pprint v
 
 instance Pretty (Var p) => Pretty (Constraint p) where
@@ -219,6 +221,6 @@ instance InternalTV 'ParsePhase where
   internalTyVar = TyVar (Name (pack "«internal»"))
 
 instance InternalTV 'TypedPhase where
-  internalTyVar = TyVar (TvName (pack "«internal»" )internalTyVar)
+  internalTyVar = TyVar (TvName (pack "«internal»") TyStar)
 
 --- vim: fdm=marker
