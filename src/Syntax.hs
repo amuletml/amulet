@@ -1,5 +1,7 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
-{-# LANGUAGE FlexibleInstances, TypeSynonymInstances, DeriveFunctor, TypeFamilies, StandaloneDeriving, FlexibleContexts, UndecidableInstances #-}
+{-# LANGUAGE FlexibleInstances, FlexibleContexts, UndecidableInstances, FlexibleInstances #-}
+{-# LANGUAGE StandaloneDeriving, DeriveFunctor #-}
+{-# LANGUAGE TypeFamilies, DataKinds #-}
 module Syntax where
 
 import Control.Comonad
@@ -7,12 +9,11 @@ import Pretty
 
 import Data.Text (Text)
 
-data ParsePhase = ParsePhase ParsePhase
-data TypedPhase = TypedPhase TypedPhase
+data Phase = ParsePhase | TypedPhase
 
-type family Var a :: *
-type instance Var ParsePhase = BoundVar
-type instance Var TypedPhase = BoundVar
+type family Var (a :: Phase) :: * where
+  Var 'ParsePhase = BoundVar
+  Var 'TypedPhase = BoundVar
 
 data Expr p a
   = VarRef (Var p) a
@@ -79,7 +80,7 @@ data Kind
   deriving (Eq, Show, Ord)
 
 data Constraint a
-  = ConUnify (Expr ParsePhase a) (Type TypedPhase) (Type TypedPhase)
+  = ConUnify (Expr 'ParsePhase a) (Type 'TypedPhase) (Type 'TypedPhase)
 
 instance (Pretty (Var p)) => Pretty (Expr p a) where
   pprint (VarRef v _) = pprint v

@@ -12,10 +12,10 @@ import Syntax
 import Types.Unify
 
 -- Solve for the types of lets in a program
-inferProgram :: [Toplevel ParsePhase a] -> Either (TypeError a) ([Toplevel TypedPhase a], Env)
+inferProgram :: [Toplevel 'ParsePhase a] -> Either (TypeError a) ([Toplevel 'TypedPhase a], Env)
 inferProgram ct = fst <$> runInfer builtinsEnv (inferProg ct)
 
-tyUnit, tyBool, tyInt, tyString :: Type TypedPhase
+tyUnit, tyBool, tyInt, tyString :: Type 'TypedPhase
 tyInt = TyCon (Name "int")
 tyString = TyCon (Name "string")
 tyBool = TyCon (Name "bool")
@@ -35,10 +35,10 @@ builtinsEnv = Env (M.fromList ops) (M.fromList tps) where
         , op "==" cmp, op "<>" cmp ]
   tps = [ tp "int", tp "string", tp "bool", tp "unit" ]
 
-unify :: Expr ParsePhase a ->  Type TypedPhase -> Type TypedPhase -> Infer a ()
+unify :: Expr 'ParsePhase a ->  Type 'TypedPhase -> Type 'TypedPhase -> Infer a ()
 unify e a b = tell [ConUnify e a b]
 
-infer :: Expr ParsePhase a -> Infer a (Expr TypedPhase a, Type TypedPhase)
+infer :: Expr 'ParsePhase a -> Infer a (Expr 'TypedPhase a, Type 'TypedPhase)
 infer expr
   = case expr of
       VarRef k a -> (VarRef k a,) <$> lookupTy k
@@ -104,7 +104,7 @@ infer expr
         unify expr to (TyArr tl (TyArr tr tv))
         pure (BinOp l' o' r' a, tv)
 
-inferKind :: Type ParsePhase -> Infer a (Type TypedPhase, Kind)
+inferKind :: Type 'ParsePhase -> Infer a (Type 'TypedPhase, Kind)
 inferKind (TyVar v) = (TyVar v,) <$> lookupKind v `catchError` const (pure KiType)
 inferKind (TyCon v) = (TyCon v,) <$> lookupKind v
 inferKind (TyForall vs c k) = do
@@ -128,9 +128,9 @@ inferKind (TyApp a b) = do
     _ -> throwError (ExpectedArrowKind x)
 
 -- Returns: Type of the overall thing * type of captures
-inferPattern :: (Type TypedPhase -> Type TypedPhase -> Infer a ())
-             -> Pattern ParsePhase
-             -> Infer a (Pattern TypedPhase, Type TypedPhase, [(Var TypedPhase, Type TypedPhase)])
+inferPattern :: (Type 'TypedPhase -> Type 'TypedPhase -> Infer a ())
+             -> Pattern 'ParsePhase
+             -> Infer a (Pattern 'TypedPhase, Type 'TypedPhase, [(Var 'TypedPhase, Type 'TypedPhase)])
 inferPattern _ Wildcard = do
   x <- TyVar <$> Name <$> fresh
   pure (Wildcard, x, [])
@@ -152,7 +152,7 @@ inferPattern unify (PType p t) = do
   unify pt t'
   pure (PType p' t', pt, vs)
 
-inferProg :: [Toplevel ParsePhase a] -> Infer a ([Toplevel TypedPhase a], Env)
+inferProg :: [Toplevel 'ParsePhase a] -> Infer a ([Toplevel 'TypedPhase a], Env)
 inferProg (LetStmt ns:prg) = do
   ks <- forM ns $ \(a, _) -> do
     tv <- TyVar <$> Name <$> fresh
@@ -170,7 +170,7 @@ inferProg (ForeignVal v d t:prg) = do
 inferProg (TypeDecl n tvs cs:prg) =
   let mkk [] = KiType
       mkk (_:xs) = KiArr KiType (mkk xs)
-      mkt [] = foldl TyApp (TyCon n) (TyVar <$> tvs :: [Type TypedPhase])
+      mkt [] = foldl TyApp (TyCon n) (TyVar <$> tvs :: [Type 'TypedPhase])
       mkt (x:xs) = TyArr x (mkt xs)
    in extendKind (n, mkk tvs) $ do
       cs' <- forM cs (\(v, ty) -> do
@@ -180,9 +180,9 @@ inferProg (TypeDecl n tvs cs:prg) =
         inferProg prg
 inferProg [] = ([],) <$> ask
 
-inferLetTy :: [(Var TypedPhase, Type TypedPhase)]
-           -> [(Var ParsePhase, Expr ParsePhase a)]
-           -> Infer a ([(Var TypedPhase, Expr TypedPhase a)], [(Var TypedPhase, Type TypedPhase)])
+inferLetTy :: [(Var 'TypedPhase, Type 'TypedPhase)]
+           -> [(Var 'ParsePhase, Expr 'ParsePhase a)]
+           -> Infer a ([(Var 'TypedPhase, Expr 'TypedPhase a)], [(Var 'TypedPhase, Type 'TypedPhase)])
 inferLetTy ks [] = pure ([], ks)
 inferLetTy ks ((va, ve):xs) = extendMany ks $ do
   ((ve', ty), c) <- censor (const mempty) (listen (infer ve))
@@ -197,15 +197,15 @@ updateAlist n v (x@(n', _):xs)
   | otherwise = x:updateAlist n v xs
 updateAlist _ _ [] = []
 
-extendMany :: MonadReader Env m => [(Var TypedPhase, Type TypedPhase)] -> m a -> m a
+extendMany :: MonadReader Env m => [(Var 'TypedPhase, Type 'TypedPhase)] -> m a -> m a
 extendMany ((v, t):xs) b = extend (v, t) $ extendMany xs b
 extendMany [] b = b
 
-extendManyK :: MonadReader Env m => [(Var TypedPhase, Kind)] -> m a -> m a
+extendManyK :: MonadReader Env m => [(Var 'TypedPhase, Kind)] -> m a -> m a
 extendManyK ((v, t):xs) b = extendKind (v, t) $ extendManyK xs b
 extendManyK [] b = b
 
-closeOver :: Type TypedPhase -> Type TypedPhase
+closeOver :: Type 'TypedPhase -> Type 'TypedPhase
 closeOver a = forall fv a where
   fv = S.toList . ftv $ a
   forall [] a = a
