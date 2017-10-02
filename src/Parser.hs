@@ -17,17 +17,17 @@ import Control.Monad
 import Control.Comonad
 import Syntax
 
-type Expr' = Expr ParsePhase Span
-type Toplevel' = Toplevel ParsePhase Span
-type Type' = Type ParsePhase
-type Pattern' = Pattern ParsePhase
+type Expr' = Expr 'ParsePhase Span
+type Toplevel' = Toplevel 'ParsePhase Span
+type Type' = Type 'ParsePhase
+type Pattern' = Pattern 'ParsePhase
 
 data BeginStmt
-  = BeginLet [(Var ParsePhase, Expr')]
+  = BeginLet [(Var 'ParsePhase, Expr')]
   | BeginRun Expr'
   deriving (Eq)
 
-bindGroup :: Parser [(Var ParsePhase, Expr')]
+bindGroup :: Parser [(Var 'ParsePhase, Expr')]
 bindGroup = sepBy1 decl (reserved "and") where
   decl = do
     x <- name
@@ -124,7 +124,7 @@ exprP = exprOpP where
     let app' a b = App a b pos
     pure $ foldl app' hd tl
   exprOpP = buildExpressionParser table expr' <?> "expression"
-  bop x = binary x (\p a b -> BinOp a (VarRef (Name (T.pack x)) p) b p :: Expr ParsePhase Span)
+  bop x = binary x (\p a b -> BinOp a (VarRef (Name (T.pack x)) p) b p :: Expr 'ParsePhase Span)
   table = [ [ bop "**" AssocRight ]
           , [ bop "*"  AssocLeft, bop "/" AssocLeft ]
           , [ bop "+"  AssocLeft, bop "-" AssocLeft ]
@@ -161,16 +161,16 @@ typeP' = parens typeP
   tyCon = TyCon <$> name
   unitTyCon = TyCon (Name (T.pack "unit")) <$ reserved "unit"
 
-tyVar :: Parser (Var ParsePhase)
+tyVar :: Parser (Var 'ParsePhase)
 tyVar = lexeme $ do
   _ <- char '\''
   x <- Tok.identStart style
   (Name . T.pack . (x:)) <$> many (Tok.identLetter style)
 
-name :: Parser (Var ParsePhase)
+name :: Parser (Var 'ParsePhase)
 name = Name . T.pack <$> identifier
 
-constrName :: Parser (Var ParsePhase)
+constrName :: Parser (Var 'ParsePhase)
 constrName = (Name <$> upperIdent) <?> "constructor name" where
   upperIdent = lexeme $ do
     x <- upper

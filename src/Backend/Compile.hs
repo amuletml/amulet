@@ -22,7 +22,7 @@ type Returner = Maybe (LuaExpr -> LuaStmt)
 alpha :: [Text]
 alpha = map (T.pack) ([1..] >>= flip replicateM ['a'..'z'])
 
-compileProgram :: [Toplevel TypedPhase a] -> LuaStmt
+compileProgram :: [Toplevel 'TypedPhase a] -> LuaStmt
 compileProgram = LuaDo . compileProg where
   compileProg (ForeignVal n' s t:xs)
     = let genCurried n (TyArr _ a) ags bd = LuaFunction [LuaName (alpha !! n)] [LuaReturn (genCurried (succ n) a (LuaRef (LuaName (alpha !! n)):ags) bd)]
@@ -37,7 +37,7 @@ compileProgram = LuaDo . compileProg where
   compileProg (TypeDecl _ _ cs:xs) = compileConstructors cs ++ compileProg xs
   compileProg [] = [LuaCallS (LuaRef (LuaName "main")) []]
 
-compileConstructors :: [(Var TypedPhase, [Type TypedPhase])] -> [LuaStmt]
+compileConstructors :: [(Var 'TypedPhase, [Type 'TypedPhase])] -> [LuaStmt]
 compileConstructors ((a, []):xs) -- unit constructors, easy
   = LuaLocal [lowerName a] [LuaTable [(LuaNumber 1, LuaString cn)]]:compileConstructors xs where
     (Name cn) = a
@@ -51,10 +51,10 @@ compileConstructors ((a, xs):ys) -- non-unit constructors, hard
     fn _ _ = error "absurd"
 compileConstructors [] = []
 
-compileLet :: (Var TypedPhase, Expr TypedPhase a) -> (LuaVar, LuaExpr)
+compileLet :: (Var 'TypedPhase, Expr 'TypedPhase a) -> (LuaVar, LuaExpr)
 compileLet (n, e) = (lowerName n, compileExpr e)
 
-compileExpr :: Expr TypedPhase a -> LuaExpr
+compileExpr :: Expr 'TypedPhase a -> LuaExpr
 compileExpr (VarRef v _) = LuaRef (lowerName v)
 compileExpr (App f x _) = LuaCall (compileExpr f) [compileExpr x]
 compileExpr (Fun (Capture v) e _) = LuaFunction [lowerName v] (compileStmt (Just LuaReturn) e)
@@ -73,7 +73,7 @@ compileExpr s@(Match{}) = compileIife s
 compileExpr (BinOp l (VarRef (Name o) _) r _) = LuaBinOp (compileExpr l) (remapOp o) (compileExpr r)
 compileExpr (BinOp{}) = error "absurd: never parsed"
 
-compileStmt :: Returner -> Expr TypedPhase a -> [LuaStmt]
+compileStmt :: Returner -> Expr 'TypedPhase a -> [LuaStmt]
 compileStmt r e@(VarRef{}) = pureReturn r $ compileExpr e
 compileStmt r e@(Literal{}) = pureReturn r $ compileExpr e
 compileStmt r e@(Fun{}) = pureReturn r $ compileExpr e
@@ -86,7 +86,7 @@ compileStmt r (Match s ps _) = runGen (compileMatch r s ps)
 compileStmt Nothing (App f x _) = [LuaCallS (compileExpr f) [compileExpr x]]
 compileStmt (Just r) e@(App{}) = [r (compileExpr e)]
 
-lowerName :: Var TypedPhase -> LuaVar
+lowerName :: Var 'TypedPhase -> LuaVar
 lowerName (Refresh a k) = case lowerName a of
                             LuaName x -> LuaName (x <> T.pack (show k))
                             _ -> error "absurd: no lowering to namespaces"
@@ -95,7 +95,7 @@ lowerName (Name a) = LuaName a
 iife :: [LuaStmt] -> LuaExpr
 iife b = LuaCall (LuaFunction [] b) []
 
-compileIife :: Expr TypedPhase a -> LuaExpr
+compileIife :: Expr 'TypedPhase a -> LuaExpr
 compileIife = iife . compileStmt (Just LuaReturn)
 
 locals :: [LuaVar] -> [LuaExpr] -> [LuaStmt]
@@ -124,7 +124,7 @@ foldAnd = foldl1 k where
     | r == LuaFalse || l == LuaFalse = LuaFalse
     | otherwise = LuaBinOp l "and" r
 
-patternTest :: Pattern TypedPhase -> LuaExpr ->  LuaExpr
+patternTest :: Pattern 'TypedPhase -> LuaExpr ->  LuaExpr
 patternTest Wildcard  _ = LuaTrue
 patternTest Capture{} _ = LuaTrue
 patternTest (PType p _) t = patternTest p t
@@ -135,7 +135,7 @@ patternTest (Destructure con ps) vr
     tag (Name con) vr = LuaBinOp (LuaRef (LuaIndex vr (LuaNumber 1))) "==" (LuaString con)
     tag _ _ = error "absurd: no renaming"
 
-patternBindings :: Pattern TypedPhase -> LuaExpr -> [(LuaVar, LuaExpr)]
+patternBindings :: Pattern 'TypedPhase -> LuaExpr -> [(LuaVar, LuaExpr)]
 patternBindings Wildcard  _ = []
 patternBindings (Capture (Name k)) v = [(LuaName k, v)]
 patternBindings (Capture _) _ = error "absurd: no renaming"
@@ -144,7 +144,7 @@ patternBindings (Destructure _ ps) vr
   = concat $ zipWith3 innerBind ps (repeat vr) [2..] where
     innerBind p v k = patternBindings p . LuaRef . LuaIndex v . LuaNumber . fromInteger $ k
 
-compileMatch :: Returner -> Expr TypedPhase a -> [(Pattern TypedPhase, Expr TypedPhase a)] -> Gen Int [LuaStmt]
+compileMatch :: Returner -> Expr 'TypedPhase a -> [(Pattern 'TypedPhase, Expr 'TypedPhase a)] -> Gen Int [LuaStmt]
 compileMatch r ex ps = do
   x <- (LuaName . ("__" <>) . (alpha !!)) <$> gen -- matchee
   let gen ((p, c):ps) = ( patternTest p (LuaRef x)
