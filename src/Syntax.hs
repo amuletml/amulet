@@ -2,34 +2,40 @@
 {-# LANGUAGE FlexibleInstances, FlexibleContexts, UndecidableInstances, FlexibleInstances #-}
 {-# LANGUAGE StandaloneDeriving, DeriveFunctor #-}
 {-# LANGUAGE TypeFamilies, DataKinds #-}
+{-# LANGUAGE LambdaCase #-}
 module Syntax where
 
-import Control.Comonad
 import Pretty
 
-import Data.Text (Text)
+import Data.Text (Text, pack)
+import Data.Span
+
+import Control.Arrow ((***))
 
 data Phase = ParsePhase | TypedPhase
 
 type family Var (a :: Phase) :: * where
   Var 'ParsePhase = BoundVar
-  Var 'TypedPhase = BoundVar
+  Var 'TypedPhase = TypedVar
 
-data Expr p a
-  = VarRef (Var p) a
-  | Let [(Var p, Expr p a)] (Expr p a) a
-  | If (Expr p a) (Expr p a) (Expr p a) a
-  | App (Expr p a) (Expr p a) a
-  | Fun (Pattern p) (Expr p a) a
-  | Begin [Expr p a] a
-  | Literal Lit a
-  | Match (Expr p a) [(Pattern p, Expr p a)] a
-  | BinOp (Expr p a) (Expr p a) (Expr p a) a
-  deriving (Functor)
+type family Ann (a :: Phase) :: * where
+  Ann 'ParsePhase = Span
+  Ann 'TypedPhase = Span
 
-deriving instance (Eq (Var p), Eq a) => Eq (Expr p a)
-deriving instance (Show (Var p), Show a) => Show (Expr p a)
-deriving instance (Ord (Var p), Ord a) => Ord (Expr p a)
+data Expr p
+  = VarRef (Var p) (Ann p)
+  | Let [(Var p, Expr p)] (Expr p) (Ann p)
+  | If (Expr p) (Expr p) (Expr p) (Ann p)
+  | App (Expr p) (Expr p) (Ann p)
+  | Fun (Pattern p) (Expr p) (Ann p)
+  | Begin [Expr p] (Ann p)
+  | Literal Lit (Ann p)
+  | Match (Expr p) [(Pattern p, Expr p)] (Ann p)
+  | BinOp (Expr p) (Expr p) (Expr p) (Ann p)
+
+deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Expr p)
+deriving instance (Show (Var p), Show (Ann p)) => Show (Expr p)
+deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Expr p)
 
 data Pattern p
   = Wildcard
@@ -54,6 +60,7 @@ data Type p
   | TyForall [Var p] [Type p] (Type p) -- constraints
   | TyArr (Type p) (Type p)
   | TyApp (Type p) (Type p)
+  | TyStar -- * :: *
 
 deriving instance Eq (Var p) => Eq (Type p)
 deriving instance Show (Var p) => Show (Type p)
@@ -61,28 +68,30 @@ deriving instance Ord (Var p) => Ord (Type p)
 
 data BoundVar
   = Name Text
-  | Refresh BoundVar {-# UNPACK #-} !Int -- for that 1% memory use reduction
+  | Refresh BoundVar {-# UNPACK #-} !Int
   deriving (Eq, Show, Ord)
 
-data Toplevel p a
-  = LetStmt [(Var p, Expr p a)]
+data TypedVar
+  = TvName Text (Type 'TypedPhase)
+  | TvRefresh TypedVar {-# UNPACK #-} !Int
+  deriving (Eq, Show, Ord)
+
+data Toplevel p
+  = LetStmt [(Var p, Expr p)]
   | ValStmt (Var p) (Type p)
   | ForeignVal (Var p) Text (Type p)
   | TypeDecl (Var p) [Var p] [(Var p, [Type p])]
 
-deriving instance (Eq (Var p), Eq a) => Eq (Toplevel p a)
-deriving instance (Show (Var p), Show a) => Show (Toplevel p a)
-deriving instance (Ord (Var p), Ord a) => Ord (Toplevel p a)
+deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Toplevel p)
+deriving instance (Show (Var p), Show (Ann p)) => Show (Toplevel p)
+deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Toplevel p)
 
-data Kind
-  = KiType
-  | KiArr Kind Kind
-  deriving (Eq, Show, Ord)
+data Constraint p
+  = ConUnify (Expr p) (Type p) (Type p)
 
-data Constraint a
-  = ConUnify (Expr 'ParsePhase a) (Type 'TypedPhase) (Type 'TypedPhase)
+--- Pretty-printing {{{
 
-instance (Pretty (Var p)) => Pretty (Expr p a) where
+instance (Pretty (Var p)) => Pretty (Expr p) where
   pprint (VarRef v _) = pprint v
   pprint (Let [] _ _) = error "absurd: never parsed"
   pprint (Let ((n, v):xs) e _) = do
@@ -108,15 +117,11 @@ instance (Pretty (Var p)) => Pretty (Expr p a) where
     kwClr "match " <+> t <+> " with"
     body 2 bs *> newline
 
-instance (Pretty (Var p)) => Pretty (Pattern p, Expr p a) where
+instance (Pretty (Var p)) => Pretty (Pattern p, Expr p) where
   pprint (a, b) = opClr "| " <+> a <+> " -> " <+> b
 
-instance (Pretty (Var p)) => Pretty (Expr p a, Expr p a) where
+instance (Pretty (Var p)) => Pretty (Expr p, Expr p) where
   pprint (a, b) = opClr "| " <+> a <+> " -> " <+> b
-
-instance Pretty Kind where
-  pprint KiType = kwClr "Type"
-  pprint (KiArr a b) = a <+> opClr " -> " <+> b
 
 instance (Pretty (Var p)) => Pretty (Pattern p) where
   pprint Wildcard = kwClr "_"
@@ -142,31 +147,78 @@ instance (Pretty (Var p)) => Pretty (Type p) where
 
   pprint (TyApp e x@TyApp{}) = parens x <+> opClr " -> " <+> e
   pprint (TyApp x e) = x <+> opClr " " <+> e
+  pprint TyStar = kwClr "Type"
 
 instance Pretty BoundVar where
   pprint (Name v) = pprint v
   pprint (Refresh v _) = pprint v
 
-instance Pretty (Constraint a) where
+instance Pretty TypedVar where
+  pprint (TvName v t) = parens $ v <+> opClr " : " <+> t
+  pprint (TvRefresh v _) = pprint v
+
+instance Pretty (Var p) => Pretty (Constraint p) where
   pprint (ConUnify e a b) = e <+> opClr " <=> " <+> a <+> opClr " ~ " <+> b
 
-instance Comonad (Expr v) where
-  extract (VarRef _ p) = p
-  extract (Let _ _ p) = p
-  extract (If _ _ _ p) = p
-  extract (App _ _ p) = p
-  extract (Fun _ _ p) = p
-  extract (Begin _ p) = p
-  extract (Literal _ p) = p
-  extract (Match _ _ p) = p
-  extract (BinOp _ _ _ p) = p
+--- }}}
 
-  extend f e@(VarRef v _) = VarRef v (f e)
-  extend f e@(Let b c _) = Let (map (fmap (extend f)) b) (extend f c) (f e)
-  extend f e@(If c t b _) = If (extend f c) (extend f t) (extend f b) (f e)
-  extend f e@(App l a _) = App (extend f l) (extend f a) (f e)
-  extend f e@(Fun p b _) = Fun p (extend f b) (f e)
-  extend f e@(Begin es _) = Begin (map (extend f) es) (f e)
-  extend f e@(Literal l _) = Literal l (f e)
-  extend f e@(Match t ps _) = Match (extend f t) (map (fmap (extend f)) ps) (f e)
-  extend f e@(BinOp l o r _) = BinOp (extend f l) (extend f o) (extend f r) (f e)
+extract :: Expr p -> Ann p
+extract (VarRef _ p) = p
+extract (Let _ _ p) = p
+extract (If _ _ _ p) = p
+extract (App _ _ p) = p
+extract (Fun _ _ p) = p
+extract (Begin _ p) = p
+extract (Literal _ p) = p
+extract (Match _ _ p) = p
+extract (BinOp _ _ _ p) = p
+
+--- Raising {{{
+
+-- Raise an expression across phases
+raiseE :: (Var p -> Var p') -- How to raise variables
+      -> (Ann p -> Ann p') -- How to raise annotations
+      -> Expr p -> Expr p'
+raiseE vR aR =
+  let eR = raiseE vR aR
+   in \case
+      VarRef k a -> VarRef (vR k) (aR a)
+      Let bs b a -> Let (map (vR *** eR) bs) (eR b) (aR a)
+      If a b c ann -> If (eR a) (eR b) (eR c) (aR ann)
+      App a b ann -> App (eR a) (eR b) (aR ann)
+      Fun p b a -> Fun (raiseP vR p) (eR b) (aR a)
+      Begin bs an -> Begin (map eR bs) (aR an)
+      Literal l a -> Literal l (aR a)
+      Match e cs a -> Match (eR e) (map (raiseP vR *** eR) cs) (aR a)
+      BinOp a b c an -> BinOp (eR a) (eR b) (eR c) (aR an)
+
+raiseP :: (Var p -> Var p') -- How to raise variables
+       -> Pattern p -> Pattern p'
+raiseP _ Wildcard = Wildcard
+raiseP r (Capture v) = Capture (r v)
+raiseP r (Destructure v s) = Destructure (r v) (map (raiseP r) s)
+raiseP r (PType p t) = PType (raiseP r p) (raiseT r t)
+
+raiseT :: (Var p -> Var p') -- How to raise variables
+       -> Type p -> Type p'
+raiseT r (TyCon v) = TyCon (r v)
+raiseT r (TyVar v) = TyVar (r v)
+raiseT r (TyForall v c t) = TyForall (map r v)
+                                     (map (raiseT r) c)
+                                     (raiseT r t)
+raiseT r (TyArr a b) = TyArr (raiseT r a) (raiseT r b)
+raiseT r (TyApp a b) = TyApp (raiseT r a) (raiseT r b)
+raiseT _ TyStar = TyStar
+
+--- }}}
+
+class InternalTV (p :: Phase) where
+  internalTyVar :: Type p
+
+instance InternalTV 'ParsePhase where
+  internalTyVar = TyVar (Name (pack "«internal»"))
+
+instance InternalTV 'TypedPhase where
+  internalTyVar = TyVar (TvName (pack "«internal»" )internalTyVar)
+
+--- vim: fdm=marker

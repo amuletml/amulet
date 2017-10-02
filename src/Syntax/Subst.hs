@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleInstances, FlexibleContexts, UndecidableInstances #-}
 
 module Syntax.Subst
   ( Subst
@@ -22,19 +22,21 @@ class Substitutable a where
 
 instance Substitutable (Type 'TypedPhase) where
   ftv TyCon{} = S.empty
+  ftv TyStar{} = S.empty
   ftv (TyVar v) = S.singleton v
   ftv (TyForall vs cs t) = (foldMap ftv cs `S.union` ftv t) S.\\ S.fromList vs
   ftv (TyApp a b) = ftv a `S.union` ftv b
   ftv (TyArr a b) = ftv a `S.union` ftv b
 
   apply _ (TyCon a) = TyCon a
+  apply _ TyStar = TyStar
   apply s t@(TyVar v) = M.findWithDefault t v s
   apply s (TyArr a b) = TyArr (apply s a) (apply s b)
   apply s (TyApp a b) = TyApp (apply s a) (apply s b)
   apply s (TyForall v cs t) = TyForall v (map (apply s') cs) (apply s' t) where
     s' = foldr M.delete s v
 
-instance Substitutable (Constraint a) where
+instance Substitutable (Type p) => Substitutable (Constraint p) where
   ftv (ConUnify _ a b) = ftv a `S.union` ftv b
   apply s (ConUnify e a b) = ConUnify e (apply s a) (apply s b)
 

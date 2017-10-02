@@ -51,6 +51,7 @@ import qualified Data.Text.IO as T
 import qualified Data.Text as T
 import Data.Text (Text)
 
+
 import qualified Control.Monad.Reader as RM
 
 type PrettyM = ReaderT PParam (Writer Text)
@@ -234,3 +235,5 @@ instance Pretty Int
 instance Pretty Double
 instance Pretty Float
 instance Pretty Integer
+instance Pretty () where
+  pprint _ = pure ()

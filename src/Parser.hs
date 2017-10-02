@@ -1,4 +1,4 @@
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TupleSections, TypeFamilies #-}
 
 module Parser where
 
@@ -14,11 +14,10 @@ import Parser.Lexer
 import Data.Functor.Identity
 
 import Control.Monad
-import Control.Comonad
 import Syntax
 
-type Expr' = Expr 'ParsePhase Span
-type Toplevel' = Toplevel 'ParsePhase Span
+type Expr' = Expr 'ParsePhase
+type Toplevel' = Toplevel 'ParsePhase
 type Type' = Type 'ParsePhase
 type Pattern' = Pattern 'ParsePhase
 
@@ -124,7 +123,7 @@ exprP = exprOpP where
     let app' a b = App a b pos
     pure $ foldl app' hd tl
   exprOpP = buildExpressionParser table expr' <?> "expression"
-  bop x = binary x (\p a b -> BinOp a (VarRef (Name (T.pack x)) p) b p :: Expr 'ParsePhase Span)
+  bop x = binary x (\p a b -> BinOp a (VarRef (Name (T.pack x)) p) b p :: Expr 'ParsePhase)
   table = [ [ bop "**" AssocRight ]
           , [ bop "*"  AssocLeft, bop "/" AssocLeft ]
           , [ bop "+"  AssocLeft, bop "-" AssocLeft ]

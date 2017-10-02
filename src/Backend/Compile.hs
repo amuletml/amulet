@@ -6,7 +6,6 @@ module Backend.Compile
   , compileConstructors
   ) where
 
-import Control.Comonad
 import Control.Monad.Gen
 import Control.Monad
 
@@ -22,13 +21,13 @@ type Returner = Maybe (LuaExpr -> LuaStmt)
 alpha :: [Text]
 alpha = map (T.pack) ([1..] >>= flip replicateM ['a'..'z'])
 
-compileProgram :: [Toplevel 'TypedPhase a] -> LuaStmt
+compileProgram :: [Toplevel 'TypedPhase] -> LuaStmt
 compileProgram = LuaDo . compileProg where
   compileProg (ForeignVal n' s t:xs)
     = let genCurried n (TyArr _ a) ags bd = LuaFunction [LuaName (alpha !! n)] [LuaReturn (genCurried (succ n) a (LuaRef (LuaName (alpha !! n)):ags) bd)]
           genCurried _ _ [] bd = bd
           genCurried _ _ ags bd = LuaCall bd (reverse ags)
-          (Name n) = n'
+          (TvName n _) = n'
        in LuaLocal [LuaName ("__" <> n)] [LuaBitE s]
         : LuaLocal [LuaName n] [genCurried 0 t [] (LuaRef (LuaName ("__" <> n)))]:compileProg xs
   compileProg (ValStmt _ _:xs) = compileProg xs
@@ -40,27 +39,27 @@ compileProgram = LuaDo . compileProg where
 compileConstructors :: [(Var 'TypedPhase, [Type 'TypedPhase])] -> [LuaStmt]
 compileConstructors ((a, []):xs) -- unit constructors, easy
   = LuaLocal [lowerName a] [LuaTable [(LuaNumber 1, LuaString cn)]]:compileConstructors xs where
-    (Name cn) = a
+    (TvName cn _) = a
 compileConstructors ((a, xs):ys) -- non-unit constructors, hard
   = LuaLocal [lowerName a] [vl]:compileConstructors ys where
     (LuaReturn vl) = fn xs alpha
-    (Name cn) = a
+    (TvName cn _) = a
     mkField x n = (LuaNumber x, LuaRef (LuaName n))
     fn (_:ts) (a:as) = LuaReturn $ LuaFunction [LuaName a] [fn ts as]
     fn [] _ = LuaReturn $ LuaTable ((LuaNumber 1, LuaString cn):take (length xs) (zipWith mkField [2..] alpha))
     fn _ _ = error "absurd"
 compileConstructors [] = []
 
-compileLet :: (Var 'TypedPhase, Expr 'TypedPhase a) -> (LuaVar, LuaExpr)
+compileLet :: (Var 'TypedPhase, Expr 'TypedPhase) -> (LuaVar, LuaExpr)
 compileLet (n, e) = (lowerName n, compileExpr e)
 
-compileExpr :: Expr 'TypedPhase a -> LuaExpr
+compileExpr :: Expr 'TypedPhase -> LuaExpr
 compileExpr (VarRef v _) = LuaRef (lowerName v)
 compileExpr (App f x _) = LuaCall (compileExpr f) [compileExpr x]
 compileExpr (Fun (Capture v) e _) = LuaFunction [lowerName v] (compileStmt (Just LuaReturn) e)
 compileExpr (Fun Wildcard e _) = LuaFunction [LuaName "_"] (compileStmt (Just LuaReturn) e)
 compileExpr f@(Fun k e _) = LuaFunction [LuaName "__arg__"] (compileStmt (Just LuaReturn)
-                                                              (Match (VarRef (Name "__arg__") (extract f)) [(k, e)] (extract f)))
+                                                              (Match (VarRef (TvName "__arg__" undefined) (extract f)) [(k, e)] (extract f)))
 compileExpr (Literal (LiInt x) _)       = LuaNumber (fromInteger x)
 compileExpr (Literal (LiStr str) _)     = LuaString str
 compileExpr (Literal (LiBool True) _)   = LuaTrue
@@ -70,10 +69,10 @@ compileExpr s@(Let{}) = compileIife s
 compileExpr s@(If{}) = compileIife s
 compileExpr s@(Begin{}) = compileIife s
 compileExpr s@(Match{}) = compileIife s
-compileExpr (BinOp l (VarRef (Name o) _) r _) = LuaBinOp (compileExpr l) (remapOp o) (compileExpr r)
+compileExpr (BinOp l (VarRef (TvName o _) _) r _) = LuaBinOp (compileExpr l) (remapOp o) (compileExpr r)
 compileExpr (BinOp{}) = error "absurd: never parsed"
 
-compileStmt :: Returner -> Expr 'TypedPhase a -> [LuaStmt]
+compileStmt :: Returner -> Expr 'TypedPhase -> [LuaStmt]
 compileStmt r e@(VarRef{}) = pureReturn r $ compileExpr e
 compileStmt r e@(Literal{}) = pureReturn r $ compileExpr e
 compileStmt r e@(Fun{}) = pureReturn r $ compileExpr e
@@ -87,15 +86,15 @@ compileStmt Nothing (App f x _) = [LuaCallS (compileExpr f) [compileExpr x]]
 compileStmt (Just r) e@(App{}) = [r (compileExpr e)]
 
 lowerName :: Var 'TypedPhase -> LuaVar
-lowerName (Refresh a k) = case lowerName a of
-                            LuaName x -> LuaName (x <> T.pack (show k))
-                            _ -> error "absurd: no lowering to namespaces"
-lowerName (Name a) = LuaName a
+lowerName (TvRefresh a k) = case lowerName a of
+                              LuaName x -> LuaName (x <> T.pack (show k))
+                              _ -> error "absurd: no lowering to namespaces"
+lowerName (TvName a _) = LuaName a
 
 iife :: [LuaStmt] -> LuaExpr
 iife b = LuaCall (LuaFunction [] b) []
 
-compileIife :: Expr 'TypedPhase a -> LuaExpr
+compileIife :: Expr 'TypedPhase -> LuaExpr
 compileIife = iife . compileStmt (Just LuaReturn)
 
 locals :: [LuaVar] -> [LuaExpr] -> [LuaStmt]
@@ -132,19 +131,19 @@ patternTest (Destructure con ps) vr
   = foldAnd (table vr:tag con vr:zipWith3 innerTest ps (repeat vr) [2..]) where
     innerTest p v k = patternTest p . LuaRef . LuaIndex v . LuaNumber . fromInteger $ k
     table ex = LuaBinOp (LuaCall (LuaRef (LuaName "type")) [ex]) "==" (LuaString "table")
-    tag (Name con) vr = LuaBinOp (LuaRef (LuaIndex vr (LuaNumber 1))) "==" (LuaString con)
+    tag (TvName con _) vr = LuaBinOp (LuaRef (LuaIndex vr (LuaNumber 1))) "==" (LuaString con)
     tag _ _ = error "absurd: no renaming"
 
 patternBindings :: Pattern 'TypedPhase -> LuaExpr -> [(LuaVar, LuaExpr)]
 patternBindings Wildcard  _ = []
-patternBindings (Capture (Name k)) v = [(LuaName k, v)]
+patternBindings (Capture (TvName k _)) v = [(LuaName k, v)]
 patternBindings (Capture _) _ = error "absurd: no renaming"
 patternBindings (PType p _) t = patternBindings p t
 patternBindings (Destructure _ ps) vr
   = concat $ zipWith3 innerBind ps (repeat vr) [2..] where
     innerBind p v k = patternBindings p . LuaRef . LuaIndex v . LuaNumber . fromInteger $ k
 
-compileMatch :: Returner -> Expr 'TypedPhase a -> [(Pattern 'TypedPhase, Expr 'TypedPhase a)] -> Gen Int [LuaStmt]
+compileMatch :: Returner -> Expr 'TypedPhase -> [(Pattern 'TypedPhase, Expr 'TypedPhase)] -> Gen Int [LuaStmt]
 compileMatch r ex ps = do
   x <- (LuaName . ("__" <>) . (alpha !!)) <$> gen -- matchee
   let gen ((p, c):ps) = ( patternTest p (LuaRef x)
