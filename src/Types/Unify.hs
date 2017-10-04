@@ -16,7 +16,7 @@ type SolveM = StateT Subst (Except TypeError)
 bind :: Var 'TypedPhase -> Type 'TypedPhase -> SolveM ()
 bind var ty | ty == TyVar var = return ()
             | occurs var ty = throwError (Occurs var ty)
-            | otherwise = modify ((M.singleton var ty) `compose`)
+            | otherwise = modify (M.singleton var ty `compose`)
 
 unify :: Type 'TypedPhase -> Type 'TypedPhase -> SolveM ()
 unify (TyVar a) b = bind a b
@@ -41,7 +41,7 @@ runSolve s x = runExcept (execStateT x s)
 
 solve :: Subst -> [Constraint 'TypedPhase] -> Either TypeError Subst
 solve s [] = pure s
-solve s (ConUnify e a t:xs) = do
+solve s (ConUnify e a t:xs) =
   case runSolve s (unify a t) of
     Left err -> Left (ArisingFrom err e)
     Right s' -> solve (s' `compose` s) (apply s' xs)

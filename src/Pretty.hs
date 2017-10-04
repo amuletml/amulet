@@ -228,7 +228,7 @@ instance (Pretty a, Pretty b) => Pretty (Map.Map a b) where
     x <- ask
     braces $ T.intercalate "," $ map (\(k, v) -> x `ppshow` k <> " => " <> x `ppshow` v) $ Map.assocs mp
 
-instance Pretty a => Pretty (a -> PrettyP, a) where
+instance Pretty (a -> PrettyP, a) where
   pprint (x, y) = x y
 
 instance Pretty Int

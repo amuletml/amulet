@@ -19,17 +19,17 @@ data Span
 mkSpan :: SourcePos -> SourcePos -> Maybe Span
 mkSpan a b
   | sourceName a == sourceName b
-  = Just (Span { fileName = sourceName a
-               , col1 = sourceColumn a, line1 = sourceLine a
-               , col2 = sourceColumn b, line2 = sourceLine b })
+  = Just Span { fileName = sourceName a
+              , col1 = sourceColumn a, line1 = sourceLine a
+              , col2 = sourceColumn b, line2 = sourceLine b }
   | otherwise = Nothing
 
 spanStart, spanEnd :: Span -> SourcePos
-spanStart (Span { fileName = n, line1 = l, col1 = c }) = newPos n l c
-spanEnd   (Span { fileName = n, line2 = l, col2 = c }) = newPos n l c
+spanStart Span { fileName = n, line1 = l, col1 = c } = newPos n l c
+spanEnd   Span { fileName = n, line2 = l, col2 = c } = newPos n l c
 
 instance Pretty Span where
-  pprint (Span { fileName = n
-               , line1 = l1, col1 = c1
-               , line2 = l2, col2 = c2 })
-    | otherwise = n <+> "[" <+>  l1 <+> ":" <+> c1 <+> " .. " <+> l2 <+> ":" <+> c2 <+> "]"
+  pprint Span { fileName = n
+              , line1 = l1, col1 = c1
+              , line2 = l2, col2 = c2 }
+    = n <+> "[" <+>  l1 <+> ":" <+> c1 <+> " .. " <+> l2 <+> ":" <+> c2 <+> "]"

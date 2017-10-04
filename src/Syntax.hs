@@ -1,6 +1,6 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
-{-# LANGUAGE FlexibleInstances, FlexibleContexts, UndecidableInstances, FlexibleInstances #-}
-{-# LANGUAGE StandaloneDeriving, DeriveFunctor #-}
+{-# LANGUAGE FlexibleInstances, FlexibleContexts, UndecidableInstances #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies, DataKinds #-}
 {-# LANGUAGE LambdaCase #-}
 module Syntax where

@@ -9,7 +9,7 @@ module Control.Monad.Infer
   )
   where
 
-import Control.Monad.Writer.Strict as M
+import Control.Monad.Writer.Strict as M hiding ((<>))
 import Control.Monad.Reader as M
 import Control.Monad.Except as M
 import Control.Monad.Gen as M
@@ -39,15 +39,15 @@ data Env
   deriving (Eq, Show, Ord)
 
 instance Substitutable Env where
-  ftv (Env { values = s }) = ftv (Map.elems s)
-  apply s (env@Env { values = e}) = env { values = Map.map (apply s) e}
+  ftv Env{ values = s } = ftv (Map.elems s)
+  apply s env@Env{ values = e} = env { values = Map.map (apply s) e}
 
 instance Monoid Env where
-  Env a b `mappend` Env a' b' = Env (a `mappend` a') (b `mappend` b')
+  mappend = (<>)
   mempty = Env mempty mempty
 
 instance Semigroup Env where
-  (<>) = mappend
+  Env a b <> Env a' b' = Env (a `mappend` a') (b `mappend` b')
 
 data TypeError where
   NotEqual :: Type 'TypedPhase -> Type 'TypedPhase -> TypeError
@@ -67,7 +67,7 @@ lookupTy x = do
     Just t -> instantiate t
     Nothing -> throwError (NotInScope x)
 
-lookupKind :: (MonadError TypeError m, MonadReader Env m, MonadGen Int m) => Var 'ParsePhase -> m (Type 'TypedPhase)
+lookupKind :: (MonadError TypeError m, MonadReader Env m) => Var 'ParsePhase -> m (Type 'TypedPhase)
 lookupKind x = do
   rs <- asks (Map.lookup x . types)
   case rs of

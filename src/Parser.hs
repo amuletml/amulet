@@ -98,6 +98,8 @@ exprP' = parens exprP
 
 patternP :: Parser Pattern'
 patternP = wildcard <|> capture <|> constructor <|> try pType <|> destructure where
+  constructor, destructure, pType, capture :: Parser Pattern'
+  wildcard :: Parser (Pattern p)
   wildcard = Wildcard <$ reservedOp "_"
   capture = Capture <$> varName
   varName = (Name <$> lowerIdent) <?> "variableName"
@@ -138,11 +140,12 @@ typeP :: Parser Type'
 typeP = typeOpP where
   typeOpP = buildExpressionParser table type' <?> "type"
   type' = foldl1 TyApp <$> many1 typeP'
+  table :: [[ Operator T.Text () Identity (Type p) ]]
   table = [ [ binary "->" (const TyArr) AssocRight ]]
 
 binary :: String -> (Span -> a -> a -> a) -> Assoc -> Operator T.Text () Identity a
 binary n f a = flip Infix a $ do
-  pos <- withPos $ (id <$ reservedOp n)
+  pos <- withPos $ id <$ reservedOp n
   pure (f pos)
 
 typeP' :: Parser Type'
@@ -150,6 +153,7 @@ typeP' = parens typeP
      <|> TyVar <$> tyVar
      <|> tyCon <|> unitTyCon
      <|> tyForall where
+  tyCon, unitTyCon, tyForall :: Parser Type'
   tyForall = do
     reserved "forall"
     nms <- commaSep1 tyVar
