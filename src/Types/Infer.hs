@@ -3,6 +3,7 @@
 module Types.Infer(inferProgram) where
 
 import qualified Data.Map.Strict as M
+import qualified Data.Text as T
 import qualified Data.Set as S
 
 import Control.Monad.Infer
@@ -25,7 +26,9 @@ tyUnit = TyCon (TvName "unit" TyStar)
 
 builtinsEnv :: Env
 builtinsEnv = Env (M.fromList ops) (M.fromList tps) where
+  op :: T.Text -> b -> (BoundVar, b)
   op x t = (Name x, t)
+  tp :: T.Text -> (BoundVar, Type p)
   tp x = (Name x, TyStar)
   intOp = tyInt `TyArr` (tyInt `TyArr` tyInt)
   stringOp = tyString `TyArr` (tyString `TyArr` tyString)
@@ -35,10 +38,11 @@ builtinsEnv = Env (M.fromList ops) (M.fromList tps) where
         , op "^" stringOp
         , op "<" intCmp, op ">" intCmp, op ">=" intCmp, op "<=" intCmp
         , op "==" cmp, op "<>" cmp ]
+  tps :: [(BoundVar, Type p)]
   tps = [ tp "int", tp "string", tp "bool", tp "unit" ]
 
 unify :: Expr 'ParsePhase -> Type 'TypedPhase -> Type 'TypedPhase -> Infer 'TypedPhase ()
-unify e a b = tell [ConUnify (raiseE (flip tag internalTyVar) id e) a b] where
+unify e a b = tell [ConUnify (raiseE (`tag` internalTyVar) id e) a b]
 
 tag :: Var 'ParsePhase -> Type 'TypedPhase -> Var 'TypedPhase
 tag (Name v) t = TvName v t
@@ -73,7 +77,7 @@ infer expr
       App e1 e2 a -> do
         (e1', t1) <- infer e1
         (e2', t2) <- infer e2
-        tv <- TyVar <$> (flip TvName TyStar) <$> fresh
+        tv <- TyVar . flip TvName TyStar <$> fresh
         unify expr t1 (TyArr t2 tv)
         pure (App e1' e2' a, tv)
       Let ns b a -> do
@@ -86,11 +90,12 @@ infer expr
           pure (Let ns' b' a, ty)
       Match t ps a -> do
         (t', tt) <- infer t
-        (ps', tbs) <- unzip <$> (forM ps $ \(p, e) -> do
-          (p', pt, ks) <- inferPattern (unify expr) p
-          unify expr tt pt
-          (e', ty) <- extendMany ks (infer e)
-          pure ((p', e'), ty))
+        (ps', tbs) <- unzip <$> forM ps
+            (\ (p, e) ->
+               do (p', pt, ks) <- inferPattern (unify expr) p
+                  unify expr tt pt
+                  (e', ty) <- extendMany ks (infer e)
+                  pure ((p', e'), ty))
         ty <- case tbs of
                 [] -> throwError (EmptyMatch expr)
                 [x] -> pure x
@@ -102,7 +107,7 @@ infer expr
         (l', tl) <- infer l
         (o', to) <- infer o
         (r', tr) <- infer r
-        tv <- TyVar <$> flip TvName TyStar <$> fresh
+        tv <- TyVar . flip TvName TyStar <$> fresh
         unify expr to (TyArr tl (TyArr tr tv))
         pure (BinOp l' o' r' a, tv)
 
@@ -115,9 +120,9 @@ inferKind (TyCon v) = do
   x <- lookupKind v `catchError` const (pure TyStar)
   pure (TyCon (tag v x), x)
 inferKind (TyForall vs c k) = do
-  (k, t') <- extendManyK (zip (map (flip tag TyStar) vs) (repeat TyStar)) $ inferKind k
+  (k, t') <- extendManyK (zip (map (`tag` TyStar) vs) (repeat TyStar)) $ inferKind k
   c' <- map fst <$> mapM inferKind c
-  pure (TyForall (map (flip tag TyStar) vs) c' k, t')
+  pure (TyForall (map (`tag` TyStar) vs) c' k, t')
 inferKind (TyArr a b) = do
   (a', ka) <- inferKind a
   (b', kb) <- inferKind b
@@ -139,14 +144,15 @@ inferPattern :: (Type 'TypedPhase -> Type 'TypedPhase -> Infer a ())
              -> Pattern 'ParsePhase
              -> Infer a (Pattern 'TypedPhase, Type 'TypedPhase, [(Var 'TypedPhase, Type 'TypedPhase)])
 inferPattern _ Wildcard = do
-  x <- TyVar <$> flip TvName TyStar <$> fresh
+  x <- TyVar . flip TvName TyStar <$> fresh
   pure (Wildcard, x, [])
 inferPattern _ (Capture v) = do
-  x <- TyVar <$> flip TvName TyStar <$> fresh
+  x <- TyVar . flip TvName TyStar <$> fresh
   pure (Capture (tag v x), x, [(tag v x, x)])
 inferPattern unify (Destructure cns ps) = do
   pty <- lookupTy cns
-  let args (TyArr a b) = a:args b
+  let args :: Type p -> [Type p]
+      args (TyArr a b) = a:args b
       args k = [k]
       tys = init (args pty)
       res = last (args pty)
@@ -162,7 +168,7 @@ inferPattern unify (PType p t) = do
 inferProg :: [Toplevel 'ParsePhase] -> Infer 'TypedPhase ([Toplevel 'TypedPhase], Env)
 inferProg (LetStmt ns:prg) = do
   ks <- forM ns $ \(a, _) -> do
-    tv <- TyVar <$> flip TvName TyStar <$> fresh
+    tv <- TyVar . flip TvName TyStar <$> fresh
     vl <- lookupTy a `catchError` const (pure tv)
     pure (tag a tv, vl)
   extendMany ks $ do
@@ -175,16 +181,16 @@ inferProg (ForeignVal v d t:prg) = do
   (t', _) <- inferKind t
   consFst (ForeignVal (tag v t') d t') $ extend (tag v t', closeOver t') $ inferProg prg
 inferProg (TypeDecl n tvs cs:prg) =
-  let mkk [] = TyStar
+  let mkk :: [a] -> Type p
+      mkk [] = TyStar
       mkk (_:xs) = TyArr TyStar (mkk xs)
-      mkt [] = foldl TyApp (TyCon (tag n TyStar)) (TyVar <$> map (flip tag TyStar) tvs :: [Type 'TypedPhase])
-      mkt (x:xs) = TyArr x (mkt xs)
+      mkt = foldr TyArr (foldl TyApp (TyCon (n `tag` TyStar)) (map (TyVar . flip tag TyStar) tvs))
       n' = tag n (mkk tvs)
    in extendKind (n', mkk tvs) $ do
       cs' <- forM cs (\(v, ty) -> do
                          (ty', _) <- unzip <$> mapM inferKind ty
                          pure (tag v (mkt ty'), ty'))
-      consFst (TypeDecl n' (map (flip tag TyStar) tvs) cs') $ extendMany (map (fmap mkt) cs') $
+      consFst (TypeDecl n' (map (`tag` TyStar) tvs) cs') $ extendMany (map (fmap mkt) cs') $
         inferProg prg
 inferProg [] = ([],) <$> ask
 
@@ -221,6 +227,7 @@ extendManyK [] b = b
 closeOver :: Type 'TypedPhase -> Type 'TypedPhase
 closeOver a = forall fv a where
   fv = S.toList . ftv $ a
+  forall :: [Var p] -> Type p -> Type p
   forall [] a = a
   forall vs a = TyForall vs [] a
 
