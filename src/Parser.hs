@@ -211,11 +211,14 @@ toplevelP = letStmt <|> try foreignVal <|> valStmt <|> dataDecl where
     eq <- optionMaybe (reservedOp "=")
     case eq of
       Just _ -> do
+        first <- optionMaybe $ do
+          x <- constrName
+          (,) x <$> sepBy typeP (reservedOp "*")
         cs <- many $ do
           reservedOp "|"
           x <- constrName
           (,) x <$> sepBy typeP (reservedOp "*")
-        pure $ TypeDecl x xs cs
+        pure $ TypeDecl x xs (maybe cs (:cs) first)
       Nothing -> pure $ TypeDecl x xs []
 
 program :: Parser [Toplevel']
