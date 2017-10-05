@@ -52,12 +52,16 @@ data Constraint p
   = ConUnify (Expr p) (Type p) (Type p)
 
 data TypeError where
-  NotEqual :: Type 'TypedPhase -> Type 'TypedPhase -> TypeError
-  Occurs :: Var 'TypedPhase -> Type 'TypedPhase -> TypeError
+  NotEqual :: Pretty (Var p)
+           => Type p -> Type p -> TypeError
+  Occurs   :: Pretty (Var p)
+           => Var p -> Type p -> TypeError
   NotInScope :: Var 'ParsePhase -> TypeError
-  EmptyMatch :: Expr 'ParsePhase -> TypeError
-  EmptyBegin :: Expr 'ParsePhase -> TypeError
-  EmptyMultiWayIf :: Expr 'ParsePhase -> TypeError
+  EmptyMatch :: Pretty (Var p)
+             => Expr p -> TypeError
+  EmptyBegin :: ( Pretty (Var p)
+                , Pretty (Ann p) )
+             => Expr p -> TypeError
   ArisingFrom :: (Pretty (Ann p), Pretty (Var p))
               => TypeError -> Expr p -> TypeError
   ExpectedArrow :: Pretty (Var p) => Type p -> TypeError
@@ -119,8 +123,6 @@ instance Show TypeError where
   show (NotInScope e) = printf "Variable not in scope: `%s`" (prettyPrint e)
   show (EmptyMatch e) = printf "Empty match expression:\n%s" (prettyPrint e)
   show (EmptyBegin v) = printf "%s: Empty match expression" (prettyPrint (extract v))
-  show (EmptyMultiWayIf v) = printf "Empty multi-way if expression" (prettyPrint (extract v))
-
   show (ArisingFrom t v) = printf "%s: %s\n · Arising from use of `%s`" (prettyPrint (extract v)) (show t) (prettyPrint v)
   show (ExpectedArrow a) = printf "Kind error: expected `type -> k`, but got `%s`" (prettyPrint a)
 
