@@ -1,33 +1,32 @@
-{-# LANGUAGE FlexibleContexts, GADTs #-}
+{-# LANGUAGE FlexibleContexts, UndecidableInstances, GADTs #-}
 module Control.Monad.Infer
   ( module M
   , InferT, Infer
   , TypeError(..)
+  , Constraint(..)
   , Env(..)
   , lookupTy, fresh, runInferT, runInfer, extend
   , lookupKind, extendKind
   )
   where
 
-import Control.Monad.Writer.Strict as M hiding ((<>))
-import Control.Monad.Reader as M
 import Control.Monad.Except as M
 import Control.Monad.Gen as M
 import Control.Monad.Identity
-
-import qualified Data.Map.Strict as Map
+import Control.Monad.Reader as M
+import Control.Monad.Writer.Strict as M hiding ((<>))
 
 import Data.Semigroup
+import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 
-import qualified Data.Text as T
 import Data.Text (Text)
-
-import Syntax.Subst
-import Syntax
-
-import Pretty (prettyPrint, Pretty)
-
 import Text.Printf (printf)
+import qualified Data.Text as T
+
+import Pretty hiding (local, (<>))
+import Syntax
+import Syntax.Subst
 
 type InferT p m = GenT Int (ReaderT Env (WriterT [Constraint p] (ExceptT TypeError m)))
 type Infer p = InferT p Identity
@@ -48,6 +47,9 @@ instance Monoid Env where
 
 instance Semigroup Env where
   Env a b <> Env a' b' = Env (a `mappend` a') (b `mappend` b')
+
+data Constraint p
+  = ConUnify (Expr p) (Type p) (Type p)
 
 data TypeError where
   NotEqual :: Type 'TypedPhase -> Type 'TypedPhase -> TypeError
@@ -103,6 +105,13 @@ instantiate ty = pure ty
 lowerVar :: Var 'TypedPhase -> Var 'ParsePhase
 lowerVar (TvName x _) = Name x
 lowerVar (TvRefresh k _) = lowerVar k
+
+instance Substitutable (Type p) => Substitutable (Constraint p) where
+  ftv (ConUnify _ a b) = ftv a `Set.union` ftv b
+  apply s (ConUnify e a b) = ConUnify e (apply s a) (apply s b)
+
+instance Pretty (Var p) => Pretty (Constraint p) where
+  pprint (ConUnify e a b) = e <+> opClr " <=> " <+> a <+> opClr " ~ " <+> b
 
 instance Show TypeError where
   show (NotEqual a b) = printf "Type error: failed to unify `%s` with `%s`" (prettyPrint a) (prettyPrint b)

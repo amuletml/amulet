@@ -86,9 +86,6 @@ deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Toplevel p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Toplevel p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Toplevel p)
 
-data Constraint p
-  = ConUnify (Expr p) (Type p) (Type p)
-
 --- Pretty-printing {{{
 
 instance (Pretty (Var p)) => Pretty (Expr p) where
@@ -158,9 +155,6 @@ instance Pretty TypedVar where
     | t == internalTyVar = pprint v
     | otherwise = parens $ v <+> opClr " : " <+> t
   pprint (TvRefresh v _) = pprint v
-
-instance Pretty (Var p) => Pretty (Constraint p) where
-  pprint (ConUnify e a b) = e <+> opClr " <=> " <+> a <+> opClr " ~ " <+> b
 
 --- }}}
 

@@ -36,10 +36,6 @@ instance Substitutable (Type 'TypedPhase) where
   apply s (TyForall v cs t) = TyForall v (map (apply s') cs) (apply s' t) where
     s' = foldr M.delete s v
 
-instance Substitutable (Type p) => Substitutable (Constraint p) where
-  ftv (ConUnify _ a b) = ftv a `S.union` ftv b
-  apply s (ConUnify e a b) = ConUnify e (apply s a) (apply s b)
-
 instance Substitutable a => Substitutable [a] where
   ftv = S.unions . map ftv
   apply s = map (apply s)
