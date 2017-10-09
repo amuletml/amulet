@@ -208,7 +208,7 @@ inferLetTy ks ((va, ve):xs) = extendMany ks $ do
   ((ve', ty), c) <- censor (const mempty) (listen (infer ve))
   (x, vt) <- case solve mempty c of
                Left e -> throwError e
-               Right x -> pure (x, apply x ty)
+               Right x -> pure (x, closeOver (apply x ty))
   let r (TvName n t) = TvName n (apply x t)
       r (TvRefresh k a) = TvRefresh (r k) a
       ex = raiseE r id ve'
