@@ -13,7 +13,6 @@ import Syntax.Subst
 import Syntax
 
 import Types.Unify
-import Debug.Trace
 
 -- Solve for the types of lets in a program
 inferProgram :: [Toplevel 'ParsePhase] -> Either TypeError ([Toplevel 'TypedPhase], Env)
