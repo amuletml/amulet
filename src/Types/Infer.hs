@@ -13,6 +13,7 @@ import Syntax.Subst
 import Syntax
 
 import Types.Unify
+import Debug.Trace
 
 -- Solve for the types of lets in a program
 inferProgram :: [Toplevel 'ParsePhase] -> Either TypeError ([Toplevel 'TypedPhase], Env)
@@ -173,13 +174,16 @@ inferProg (LetStmt ns:prg) = do
     pure (tag a tv, vl)
   extendMany ks $ do
     (ns', ts) <- inferLetTy ks ns
-    consFst (LetStmt ns') $ extendMany ts (inferProg prg)
+    extendMany ts $
+      consFst (LetStmt ns') $ inferProg prg
 inferProg (ValStmt v t:prg) = do
   (t', _) <- inferKind t
-  consFst (ValStmt (tag v t') t') $ extend (tag v t', closeOver t') $ inferProg prg
+  extend (tag v t', closeOver t') $
+    consFst (ValStmt (tag v t') t') $ inferProg prg
 inferProg (ForeignVal v d t:prg) = do
   (t', _) <- inferKind t
-  consFst (ForeignVal (tag v t') d t') $ extend (tag v t', closeOver t') $ inferProg prg
+  extend (tag v t', closeOver t') $
+    consFst (ForeignVal (tag v t') d t') $ inferProg prg
 inferProg (TypeDecl n tvs cs:prg) =
   let mkk :: [a] -> Type p
       mkk [] = TyStar
@@ -190,8 +194,9 @@ inferProg (TypeDecl n tvs cs:prg) =
       cs' <- forM cs (\(v, ty) -> do
                          (ty', _) <- unzip <$> mapM inferKind ty
                          pure (tag v (mkt ty'), ty'))
-      consFst (TypeDecl n' (map (`tag` TyStar) tvs) cs') $ extendMany (map (fmap mkt) cs') $
-        inferProg prg
+      extendMany (map (fmap mkt) cs') $
+        consFst (TypeDecl n' (map (`tag` TyStar) tvs) cs') $
+          inferProg prg
 inferProg [] = ([],) <$> ask
 
 inferLetTy :: (t ~ 'TypedPhase, p ~ 'ParsePhase)
@@ -210,11 +215,21 @@ inferLetTy ks ((va, ve):xs) = extendMany ks $ do
       ex = raiseE r id ve'
   consFst (tag va vt, ex) $ inferLetTy (updateAlist (tag va vt) vt ks) xs
 
-updateAlist :: Eq a => a -> b -> [(a, b)] -> [(a, b)]
+-- Monomorphic so we can use "close enough" equality
+updateAlist :: Var 'TypedPhase
+            -> b
+            -> [(Var 'TypedPhase, b)] -> [(Var 'TypedPhase, b)]
 updateAlist n v (x@(n', _):xs)
   | n == n' = (n, v):updateAlist n v xs
+  | n `closeEnough` n' = (n, v):updateAlist n v xs
   | otherwise = x:updateAlist n v xs
+  where 
+    closeEnough (TvName a _) (TvName b _) = a == b
+    closeEnough (TvRefresh a b) (TvRefresh a' b')
+      = a `closeEnough` a' && b' >= b
+    closeEnough _ _ = False
 updateAlist _ _ [] = []
+
 
 extendMany :: MonadReader Env m => [(Var 'TypedPhase, Type 'TypedPhase)] -> m a -> m a
 extendMany ((v, t):xs) b = extend (v, t) $ extendMany xs b
