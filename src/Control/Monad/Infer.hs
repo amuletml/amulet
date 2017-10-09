@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts, UndecidableInstances, GADTs #-}
+{-# LANGUAGE StandaloneDeriving #-}
 module Control.Monad.Infer
   ( module M
   , InferT, Infer
@@ -50,6 +51,7 @@ instance Semigroup Env where
 
 data Constraint p
   = ConUnify (Expr p) (Type p) (Type p)
+deriving instance (Show (Expr p), Show (Type p)) => Show (Constraint p)
 
 data TypeError where
   NotEqual :: Pretty (Var p)
@@ -92,10 +94,10 @@ fresh = do
   pure (alpha !! x)
 
 extend :: MonadReader Env m => (Var 'TypedPhase, Type 'TypedPhase) -> m a -> m a
-extend (v, t) = local (\x -> x { values = Map.insert (lowerVar v) t (values x) })
+extend (v, t) = local (\x -> x { values = Map.insert (eraseVarTy v) t (values x) })
 
 extendKind :: MonadReader Env m => (Var 'TypedPhase, Type 'TypedPhase) -> m a -> m a
-extendKind (v, t) = local (\x -> x { types = Map.insert (lowerVar v) t (types x) })
+extendKind (v, t) = local (\x -> x { types = Map.insert (eraseVarTy v) t (types x) })
 
 alpha :: [Text]
 alpha = map T.pack $ [1..] >>= flip replicateM ['a'..'z']
@@ -105,10 +107,6 @@ instantiate (TyForall vs _ ty) = do
   f <- map TyVar <$> mapM (const (flip TvName internalTyVar <$> fresh)) vs
   instantiate (apply (Map.fromList (zip vs f)) ty)
 instantiate ty = pure ty
-
-lowerVar :: Var 'TypedPhase -> Var 'ParsePhase
-lowerVar (TvName x _) = Name x
-lowerVar (TvRefresh k _) = lowerVar k
 
 instance Substitutable (Type p) => Substitutable (Constraint p) where
   ftv (ConUnify _ a b) = ftv a `Set.union` ftv b
