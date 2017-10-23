@@ -12,15 +12,24 @@ import Data.Span
 
 import Control.Arrow ((***))
 
-data Phase = ParsePhase | TypedPhase
+data Parsed 
+data Typed
 
-type family Var (a :: Phase) :: * where
-  Var 'ParsePhase = BoundVar
-  Var 'TypedPhase = TypedVar
+data family Var a
 
-type family Ann (a :: Phase) :: * where
-  Ann 'ParsePhase = Span
-  Ann 'TypedPhase = Span
+data instance Var Parsed
+  = Name Text
+  | Refresh (Var Parsed) {-# UNPACK #-} !Int
+  deriving (Eq, Show, Ord)
+
+data instance Var Typed
+  = TvName Text (Type Typed)
+  | TvRefresh (Var Typed) {-# UNPACK #-} !Int
+  deriving (Eq, Show, Ord)
+
+type family Ann a :: * where
+  Ann Parsed = Span
+  Ann Typed = Span
 
 data Expr p
   = VarRef (Var p) (Ann p)
@@ -65,16 +74,6 @@ data Type p
 deriving instance Eq (Var p) => Eq (Type p)
 deriving instance Show (Var p) => Show (Type p)
 deriving instance Ord (Var p) => Ord (Type p)
-
-data BoundVar
-  = Name Text
-  | Refresh BoundVar {-# UNPACK #-} !Int
-  deriving (Eq, Show, Ord)
-
-data TypedVar
-  = TvName Text (Type 'TypedPhase)
-  | TvRefresh TypedVar {-# UNPACK #-} !Int
-  deriving (Eq, Show, Ord)
 
 data Toplevel p
   = LetStmt [(Var p, Expr p)]
@@ -146,11 +145,11 @@ instance (Pretty (Var p)) => Pretty (Type p) where
   pprint (TyApp x e) = x <+> opClr " " <+> e
   pprint TyStar = kwClr "Type"
 
-instance Pretty BoundVar where
+instance Pretty (Var Parsed) where
   pprint (Name v) = pprint v
   pprint (Refresh v _) = pprint v
 
-instance Pretty TypedVar where
+instance Pretty (Var Typed) where
   pprint (TvName v t)
     | t == internalTyVar = pprint v
     | t == TyStar = pprint v
@@ -209,16 +208,16 @@ raiseT _ TyStar = TyStar
 
 --- }}}
 
-class InternalTV (p :: Phase) where
+class InternalTV p where
   internalTyVar :: Type p
 
-instance InternalTV 'ParsePhase where
+instance InternalTV Parsed where
   internalTyVar = TyVar (Name (pack "«internal»"))
 
-instance InternalTV 'TypedPhase where
+instance InternalTV Typed where
   internalTyVar = TyVar (TvName (pack "«internal»") TyStar)
 
-eraseVarTy :: Var 'TypedPhase -> Var 'ParsePhase
+eraseVarTy :: Var Typed -> Var Parsed
 eraseVarTy (TvName x _) = Name x
 eraseVarTy (TvRefresh k _) = eraseVarTy k
 

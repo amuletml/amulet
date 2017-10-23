@@ -33,8 +33,8 @@ type InferT p m = GenT Int (ReaderT Env (WriterT [Constraint p] (ExceptT TypeErr
 type Infer p = InferT p Identity
 
 data Env
-  = Env { values :: Map.Map (Var 'ParsePhase) (Type 'TypedPhase)
-        , types  :: Map.Map (Var 'ParsePhase) (Type 'TypedPhase)
+  = Env { values :: Map.Map (Var Parsed) (Type Typed)
+        , types  :: Map.Map (Var Parsed) (Type Typed)
         }
   deriving (Eq, Show, Ord)
 
@@ -58,7 +58,7 @@ data TypeError where
            => Type p -> Type p -> TypeError
   Occurs   :: Pretty (Var p)
            => Var p -> Type p -> TypeError
-  NotInScope :: Var 'ParsePhase -> TypeError
+  NotInScope :: Var Parsed -> TypeError
   EmptyMatch :: Pretty (Var p)
              => Expr p -> TypeError
   EmptyBegin :: ( Pretty (Var p)
@@ -68,14 +68,14 @@ data TypeError where
               => TypeError -> Expr p -> TypeError
   ExpectedArrow :: Pretty (Var p) => Type p -> TypeError
 
-lookupTy :: (MonadError TypeError m, MonadReader Env m, MonadGen Int m) => Var 'ParsePhase -> m (Type 'TypedPhase)
+lookupTy :: (MonadError TypeError m, MonadReader Env m, MonadGen Int m) => Var Parsed -> m (Type Typed)
 lookupTy x = do
   rs <- asks (Map.lookup x . values)
   case rs of
     Just t -> instantiate t
     Nothing -> throwError (NotInScope x)
 
-lookupKind :: (MonadError TypeError m, MonadReader Env m) => Var 'ParsePhase -> m (Type 'TypedPhase)
+lookupKind :: (MonadError TypeError m, MonadReader Env m) => Var Parsed -> m (Type Typed)
 lookupKind x = do
   rs <- asks (Map.lookup x . types)
   case rs of
@@ -93,16 +93,16 @@ fresh = do
   x <- gen
   pure (alpha !! x)
 
-extend :: MonadReader Env m => (Var 'TypedPhase, Type 'TypedPhase) -> m a -> m a
+extend :: MonadReader Env m => (Var Typed, Type Typed) -> m a -> m a
 extend (v, t) = local (\x -> x { values = Map.insert (eraseVarTy v) t (values x) })
 
-extendKind :: MonadReader Env m => (Var 'TypedPhase, Type 'TypedPhase) -> m a -> m a
+extendKind :: MonadReader Env m => (Var Typed, Type Typed) -> m a -> m a
 extendKind (v, t) = local (\x -> x { types = Map.insert (eraseVarTy v) t (types x) })
 
 alpha :: [Text]
 alpha = map T.pack $ [1..] >>= flip replicateM ['a'..'z']
 
-instantiate :: MonadGen Int m => Type 'TypedPhase -> m (Type 'TypedPhase)
+instantiate :: MonadGen Int m => Type Typed -> m (Type Typed)
 instantiate (TyForall vs _ ty) = do
   f <- map TyVar <$> mapM (const (flip TvName internalTyVar <$> fresh)) vs
   instantiate (apply (Map.fromList (zip vs f)) ty)
