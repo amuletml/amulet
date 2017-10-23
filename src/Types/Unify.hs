@@ -13,12 +13,12 @@ import qualified Data.Set as S
 
 type SolveM = StateT Subst (Except TypeError)
 
-bind :: Var 'TypedPhase -> Type 'TypedPhase -> SolveM ()
+bind :: Var Typed -> Type Typed -> SolveM ()
 bind var ty | ty == TyVar var = return ()
             | occurs var ty = throwError (Occurs var ty)
             | otherwise = modify (M.singleton var ty `compose`)
 
-unify :: Type 'TypedPhase -> Type 'TypedPhase -> SolveM ()
+unify :: Type Typed -> Type Typed -> SolveM ()
 unify (TyVar a) b = bind a b
 unify a (TyVar b) = bind b a
 unify (TyArr a b) (TyArr a' b') = do
@@ -39,13 +39,13 @@ unify a b = throwError (NotEqual a b)
 runSolve :: Subst -> SolveM b -> Either TypeError Subst
 runSolve s x = runExcept (execStateT x s)
 
-solve :: Subst -> [Constraint 'TypedPhase] -> Either TypeError Subst
+solve :: Subst -> [Constraint Typed] -> Either TypeError Subst
 solve s [] = pure s
 solve s (ConUnify e a t:xs) =
   case runSolve s (unify a t) of
     Left err -> Left (ArisingFrom err e)
     Right s' -> solve (s' `compose` s) (apply s' xs)
 
-occurs :: Var 'TypedPhase -> Type 'TypedPhase -> Bool
+occurs :: Var Typed -> Type Typed -> Bool
 occurs _ (TyVar _) = False
 occurs x e = x `S.member` ftv e

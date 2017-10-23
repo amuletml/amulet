@@ -15,10 +15,10 @@ import Syntax
 import Types.Unify
 
 -- Solve for the types of lets in a program
-inferProgram :: [Toplevel 'ParsePhase] -> Either TypeError ([Toplevel 'TypedPhase], Env)
+inferProgram :: [Toplevel Parsed] -> Either TypeError ([Toplevel Typed], Env)
 inferProgram ct = fst <$> runInfer builtinsEnv (inferProg ct)
 
-tyUnit, tyBool, tyInt, tyString :: Type 'TypedPhase
+tyUnit, tyBool, tyInt, tyString :: Type Typed
 tyInt = TyCon (TvName "int" TyStar)
 tyString = TyCon (TvName "string" TyStar)
 tyBool = TyCon (TvName "bool" TyStar)
@@ -26,9 +26,9 @@ tyUnit = TyCon (TvName "unit" TyStar)
 
 builtinsEnv :: Env
 builtinsEnv = Env (M.fromList ops) (M.fromList tps) where
-  op :: T.Text -> b -> (BoundVar, b)
+  op :: T.Text -> b -> (Var Parsed, b)
   op x t = (Name x, t)
-  tp :: T.Text -> (BoundVar, Type p)
+  tp :: T.Text -> (Var Parsed, Type p)
   tp x = (Name x, TyStar)
   intOp = tyInt `TyArr` (tyInt `TyArr` tyInt)
   stringOp = tyString `TyArr` (tyString `TyArr` tyString)
@@ -38,17 +38,17 @@ builtinsEnv = Env (M.fromList ops) (M.fromList tps) where
         , op "^" stringOp
         , op "<" intCmp, op ">" intCmp, op ">=" intCmp, op "<=" intCmp
         , op "==" cmp, op "<>" cmp ]
-  tps :: [(BoundVar, Type p)]
+  tps :: [(Var Parsed, Type p)]
   tps = [ tp "int", tp "string", tp "bool", tp "unit" ]
 
-unify :: Expr 'ParsePhase -> Type 'TypedPhase -> Type 'TypedPhase -> Infer 'TypedPhase ()
+unify :: Expr Parsed -> Type Typed -> Type Typed -> Infer Typed ()
 unify e a b = tell [ConUnify (raiseE (`tag` internalTyVar) id e) a b]
 
-tag :: Var 'ParsePhase -> Type 'TypedPhase -> Var 'TypedPhase
+tag :: Var Parsed -> Type Typed -> Var Typed
 tag (Name v) t = TvName v t
 tag (Refresh k a) t = TvRefresh (tag k t) a
 
-infer :: Expr 'ParsePhase -> Infer 'TypedPhase (Expr 'TypedPhase, Type 'TypedPhase)
+infer :: Expr Parsed -> Infer Typed (Expr Typed, Type Typed)
 infer expr
   = case expr of
       VarRef k a -> do
@@ -111,7 +111,7 @@ infer expr
         unify expr to (TyArr tl (TyArr tr tv))
         pure (BinOp l' o' r' a, tv)
 
-inferKind :: Type 'ParsePhase -> Infer a (Type 'TypedPhase, Type 'TypedPhase)
+inferKind :: Type Parsed -> Infer a (Type Typed, Type Typed)
 inferKind TyStar = pure (TyStar, TyStar)
 inferKind (TyVar v) = do
   x <- lookupKind v `catchError` const (pure TyStar)
@@ -140,9 +140,9 @@ inferKind (TyApp a b) = do
     _ -> throwError (ExpectedArrow x)
 
 -- Returns: Type of the overall thing * type of captures
-inferPattern :: (Type 'TypedPhase -> Type 'TypedPhase -> Infer a ())
-             -> Pattern 'ParsePhase
-             -> Infer a (Pattern 'TypedPhase, Type 'TypedPhase, [(Var 'TypedPhase, Type 'TypedPhase)])
+inferPattern :: (Type Typed -> Type Typed -> Infer a ())
+             -> Pattern Parsed
+             -> Infer a (Pattern Typed, Type Typed, [(Var Typed, Type Typed)])
 inferPattern _ Wildcard = do
   x <- TyVar . flip TvName TyStar <$> fresh
   pure (Wildcard, x, [])
@@ -165,7 +165,7 @@ inferPattern unify (PType p t) = do
   unify pt t'
   pure (PType p' t', pt, vs)
 
-inferProg :: [Toplevel 'ParsePhase] -> Infer 'TypedPhase ([Toplevel 'TypedPhase], Env)
+inferProg :: [Toplevel Parsed] -> Infer Typed ([Toplevel Typed], Env)
 inferProg (LetStmt ns:prg) = do
   ks <- forM ns $ \(a, _) -> do
     tv <- TyVar . flip TvName TyStar <$> fresh
@@ -198,7 +198,7 @@ inferProg (TypeDecl n tvs cs:prg) =
           inferProg prg
 inferProg [] = ([],) <$> ask
 
-inferLetTy :: (t ~ 'TypedPhase, p ~ 'ParsePhase)
+inferLetTy :: (t ~ Typed, p ~ Parsed)
            => [(Var t, Type t)]
            -> [(Var p, Expr p)]
            -> Infer t ( [(Var t, Expr t)]
@@ -215,9 +215,9 @@ inferLetTy ks ((va, ve):xs) = extendMany ks $ do
   consFst (tag va vt, ex) $ inferLetTy (updateAlist (tag va vt) vt ks) xs
 
 -- Monomorphic so we can use "close enough" equality
-updateAlist :: Var 'TypedPhase
+updateAlist :: Var Typed
             -> b
-            -> [(Var 'TypedPhase, b)] -> [(Var 'TypedPhase, b)]
+            -> [(Var Typed, b)] -> [(Var Typed, b)]
 updateAlist n v (x@(n', _):xs)
   | n == n' = (n, v):updateAlist n v xs
   | n `closeEnough` n' = (n, v):updateAlist n v xs
@@ -230,15 +230,15 @@ updateAlist n v (x@(n', _):xs)
 updateAlist _ _ [] = []
 
 
-extendMany :: MonadReader Env m => [(Var 'TypedPhase, Type 'TypedPhase)] -> m a -> m a
+extendMany :: MonadReader Env m => [(Var Typed, Type Typed)] -> m a -> m a
 extendMany ((v, t):xs) b = extend (v, t) $ extendMany xs b
 extendMany [] b = b
 
-extendManyK :: MonadReader Env m => [(Var 'TypedPhase, Type 'TypedPhase)] -> m a -> m a
+extendManyK :: MonadReader Env m => [(Var Typed, Type Typed)] -> m a -> m a
 extendManyK ((v, t):xs) b = extendKind (v, t) $ extendManyK xs b
 extendManyK [] b = b
 
-closeOver :: Type 'TypedPhase -> Type 'TypedPhase
+closeOver :: Type Typed -> Type Typed
 closeOver a = forall fv a where
   fv = S.toList . ftv $ a
   forall :: [Var p] -> Type p -> Type p

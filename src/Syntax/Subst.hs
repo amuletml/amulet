@@ -14,13 +14,13 @@ import qualified Data.Set as S
 
 import Syntax
 
-type Subst = M.Map (Var 'TypedPhase) (Type 'TypedPhase)
+type Subst = M.Map (Var Typed) (Type Typed)
 
 class Substitutable a where
-  ftv :: a -> S.Set (Var 'TypedPhase)
+  ftv :: a -> S.Set (Var Typed)
   apply :: Subst -> a -> a
 
-instance Substitutable (Type 'TypedPhase) where
+instance Substitutable (Type Typed) where
   ftv TyCon{} = S.empty
   ftv TyStar{} = S.empty
   ftv (TyVar v) = S.singleton v
