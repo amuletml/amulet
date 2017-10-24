@@ -63,6 +63,7 @@ data TypeError where
   EmptyBegin :: ( Pretty (Var p)
                 , Pretty (Ann p) )
              => Expr p -> TypeError
+  FoundHole :: [Expr Typed] -> TypeError
   ArisingFrom :: (Pretty (Ann p), Pretty (Var p))
               => TypeError -> Expr p -> TypeError
   ArisingFromT :: (Pretty (Ann p), Pretty (Var p))
@@ -129,4 +130,7 @@ instance Show TypeError where
   show (ExpectedArrow ap k v)
     = printf "Kind error: In application '%s'\n · expected arrow kind, but got `%s` (kind of `%s`)"
       (prettyPrint ap) (prettyPrint k) (prettyPrint v)
+  show (FoundHole xs) = unlines $ map prnt xs where
+    prnt (Hole v s) = printf "%s: Found typed hole `%s`" (prettyPrint s) (prettyPrint v)
+    prnt _ = undefined
 

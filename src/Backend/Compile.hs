@@ -16,6 +16,8 @@ import qualified Data.Text as T
 import Data.Text (Text)
 import Data.Semigroup ((<>))
 
+import Pretty (uglyPrint)
+
 type Returner = Maybe (LuaExpr -> LuaStmt)
 
 alpha :: [Text]
@@ -61,6 +63,8 @@ compileLet (n, e) = (lowerName n, compileExpr e)
 
 compileExpr :: Expr Typed -> LuaExpr
 compileExpr (VarRef v _) = LuaRef (lowerName v)
+compileExpr (Hole v ann) = LuaCall (LuaRef (LuaName "error")) [LuaString msg] where
+  msg = "Deferred typed hole " <> uglyPrint v <> " (from " <> uglyPrint ann <> ")"
 compileExpr (App f x _) = LuaCall (compileExpr f) [compileExpr x]
 compileExpr (Fun (Capture v _) e _) = LuaFunction [lowerName v] (compileStmt (Just LuaReturn) e)
 compileExpr (Fun (Wildcard _) e _) = LuaFunction [LuaName "_"] (compileStmt (Just LuaReturn) e)
@@ -80,6 +84,7 @@ compileExpr BinOp{} = error "absurd: never parsed"
 
 compileStmt :: Returner -> Expr Typed -> [LuaStmt]
 compileStmt r e@VarRef{} = pureReturn r $ compileExpr e
+compileStmt r e@Hole{} = pureReturn r $ compileExpr e
 compileStmt r e@Literal{} = pureReturn r $ compileExpr e
 compileStmt r e@Fun{} = pureReturn r $ compileExpr e
 compileStmt r e@BinOp{} = pureReturn r $ compileExpr e

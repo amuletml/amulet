@@ -41,6 +41,7 @@ data Expr p
   | Literal Lit (Ann p)
   | Match (Expr p) [(Pattern p, Expr p)] (Ann p)
   | BinOp (Expr p) (Expr p) (Expr p) (Ann p)
+  | Hole (Var p) (Ann p)
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Expr p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Expr p)
@@ -112,6 +113,7 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
   pprint (Match t bs _) = do
     kwClr "match " <+> t <+> " with"
     body 2 bs *> newline
+  pprint (Hole v _) = pprint v -- A typed hole
 
 instance (Pretty (Var p)) => Pretty (Pattern p, Expr p) where
   pprint (a, b) = opClr "| " <+> a <+> " -> " <+> b
@@ -163,6 +165,7 @@ class Annotated f where
 
 instance Annotated Expr where
   annotation (VarRef _ p) = p
+  annotation (Hole _ p) = p
   annotation (Let _ _ p) = p
   annotation (If _ _ _ p) = p
   annotation (App _ _ p) = p
@@ -196,6 +199,7 @@ raiseE vR aR =
   let eR = raiseE vR aR
    in \case
       VarRef k a -> VarRef (vR k) (aR a)
+      Hole k a -> Hole (vR k) (aR a)
       Let bs b a -> Let (map (vR *** eR) bs) (eR b) (aR a)
       If a b c ann -> If (eR a) (eR b) (eR c) (aR ann)
       App a b ann -> App (eR a) (eR b) (aR ann)
