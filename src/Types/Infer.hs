@@ -6,7 +6,7 @@ module Types.Infer(inferProgram) where
 import qualified Data.Map.Strict as M
 import qualified Data.Text as T
 import qualified Data.Set as S
-import Data.Span (internal)
+import Data.Span (internal, Span)
 import Data.Semigroup ((<>))
 
 import Control.Monad.Infer
@@ -16,7 +16,6 @@ import Syntax.Subst
 import Syntax
 
 import Types.Unify
-import Debug.Trace
 
 -- Solve for the types of lets in a program
 inferProgram :: [Toplevel Parsed] -> Either TypeError ([Toplevel Typed], Env)
@@ -28,12 +27,17 @@ tyString = TyCon (TvName "string" (TyStar internal)) internal
 tyBool = TyCon (TvName "bool" (TyStar internal)) internal
 tyUnit = TyCon (TvName "unit" (TyStar internal)) internal
 
-star :: Type Typed
+star :: Ann p ~ Span => Type p
+star = TyStar internal
 
+forall :: Ann p ~ Span => [Var p] -> [Type p] -> Type p -> Type p
 forall a b c = TyForall a b c internal
+
+app, arr :: Ann p ~ Span => Type p -> Type p -> Type p
 arr a b = TyArr a b internal
 app a b = TyApp a b internal
-star = TyStar internal
+
+var, con :: Ann p ~ Span => Var p -> Type p
 var x = TyVar x internal
 con x = TyCon x internal
 
