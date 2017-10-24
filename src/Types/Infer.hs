@@ -149,10 +149,10 @@ inferKind (TyCon v a) = do
   x <- lookupKind v `catchError` const (pure (TyStar a))
   pure (TyCon (tag v x) a, x)
 inferKind (TyForall vs c k a) = do
-  (k, t') <- extendManyK (zip (map (`tag` (TyStar a)) vs) (repeat (TyStar a))) $
+  (k, t') <- extendManyK (zip (map (`tag` TyStar a) vs) (repeat (TyStar a))) $
     inferKind k
   c' <- map fst <$> mapM inferKind c
-  pure (TyForall (map (`tag` (TyStar a)) vs) c' k a, t')
+  pure (TyForall (map (`tag` TyStar a) vs) c' k a, t')
 inferKind (TyArr a b ann) = do
   (a', ka) <- inferKind a
   (b', kb) <- inferKind b
