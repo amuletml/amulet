@@ -21,6 +21,8 @@ import Data.Semigroup
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 
+import Data.Span (internal)
+
 import Data.Text (Text)
 import Text.Printf (printf)
 import qualified Data.Text as T
@@ -54,7 +56,7 @@ data Constraint p
 deriving instance (Show (Expr p), Show (Type p)) => Show (Constraint p)
 
 data TypeError where
-  NotEqual :: Pretty (Var p)
+  NotEqual :: (Show (Ann p), Show (Var p), Pretty (Var p))
            => Type p -> Type p -> TypeError
   Occurs   :: Pretty (Var p)
            => Var p -> Type p -> TypeError
@@ -66,7 +68,10 @@ data TypeError where
              => Expr p -> TypeError
   ArisingFrom :: (Pretty (Ann p), Pretty (Var p))
               => TypeError -> Expr p -> TypeError
-  ExpectedArrow :: Pretty (Var p) => Type p -> TypeError
+  ArisingFromT :: (Pretty (Ann p), Pretty (Var p))
+               => TypeError -> Type p -> TypeError
+  ExpectedArrow :: (Pretty (Var p'), Pretty (Var p))
+                => Type p' -> Type p -> Type p -> TypeError
 
 lookupTy :: (MonadError TypeError m, MonadReader Env m, MonadGen Int m) => Var Parsed -> m (Type Typed)
 lookupTy x = do
@@ -103,8 +108,9 @@ alpha :: [Text]
 alpha = map T.pack $ [1..] >>= flip replicateM ['a'..'z']
 
 instantiate :: MonadGen Int m => Type Typed -> m (Type Typed)
-instantiate (TyForall vs _ ty) = do
-  f <- map TyVar <$> mapM (const (flip TvName internalTyVar <$> fresh)) vs
+instantiate (TyForall vs _ ty _) = do
+  f <- map (flip TyVar internal)
+        <$> mapM (const (flip TvName internalTyVar <$> fresh)) vs
   instantiate (apply (Map.fromList (zip vs f)) ty)
 instantiate ty = pure ty
 
@@ -116,11 +122,14 @@ instance Pretty (Var p) => Pretty (Constraint p) where
   pprint (ConUnify e a b) = e <+> opClr " <=> " <+> a <+> opClr " ~ " <+> b
 
 instance Show TypeError where
-  show (NotEqual a b) = printf "Type error: failed to unify `%s` with `%s`" (prettyPrint a) (prettyPrint b)
+  show (NotEqual a b) = printf "Type error: failed to unify `%s` with `%s`" (show a) (show b)
   show (Occurs v t) = printf "Occurs check: Variable `%s` occurs in `%s`" (prettyPrint v) (prettyPrint t)
   show (NotInScope e) = printf "Variable not in scope: `%s`" (prettyPrint e)
   show (EmptyMatch e) = printf "Empty match expression:\n%s" (prettyPrint e)
-  show (EmptyBegin v) = printf "%s: Empty match expression" (prettyPrint (extract v))
-  show (ArisingFrom t v) = printf "%s: %s\n · Arising from use of `%s`" (prettyPrint (extract v)) (show t) (prettyPrint v)
-  show (ExpectedArrow a) = printf "Kind error: expected `type -> k`, but got `%s`" (prettyPrint a)
+  show (EmptyBegin v) = printf "%s: Empty match expression" (prettyPrint (annotation v))
+  show (ArisingFrom t v) = printf "%s: %s\n · Arising from use of `%s`" (prettyPrint (annotation v)) (show t) (prettyPrint v)
+  show (ArisingFromT t v) = printf "%s: %s\n · Arising from type `%s`" (prettyPrint (annotation v)) (show t) (prettyPrint v)
+  show (ExpectedArrow ap k v)
+    = printf "Kind error: In application '%s'\n · expected arrow kind, but got `%s` (kind of `%s`)"
+      (prettyPrint ap) (prettyPrint k) (prettyPrint v)
 

@@ -23,9 +23,9 @@ alpha = map T.pack ([1..] >>= flip replicateM ['a'..'z'])
 
 compileProgram :: [Toplevel Typed] -> LuaStmt
 compileProgram = LuaDo . compileProg where
-  compileProg (ForeignVal n' s t:xs)
+  compileProg (ForeignVal n' s t _:xs)
     = let genCurried :: Int -> Type p -> [LuaExpr] -> LuaExpr -> LuaExpr
-          genCurried n (TyArr _ a) ags bd
+          genCurried n (TyArr _ a _) ags bd
             = LuaFunction [LuaName (alpha !! n)]
                           [LuaReturn (genCurried (succ n) a (LuaRef (LuaName (alpha !! n)):ags) bd)]
           genCurried _ _ [] bd = bd
@@ -33,10 +33,10 @@ compileProgram = LuaDo . compileProg where
           n = getName n'
        in LuaLocal [LuaName ("__" <> n)] [LuaBitE s]
         : LuaLocal [LuaName n] [genCurried 0 t [] (LuaRef (LuaName ("__" <> n)))]:compileProg xs
-  compileProg (ValStmt _ _:xs) = compileProg xs
-  compileProg (LetStmt vs:xs) = locals ns vs' ++ compileProg xs where
+  compileProg (ValStmt _ _ _:xs) = compileProg xs
+  compileProg (LetStmt vs _:xs) = locals ns vs' ++ compileProg xs where
     (ns, vs') = unzip $ map compileLet vs
-  compileProg (TypeDecl _ _ cs:xs) = compileConstructors cs ++ compileProg xs
+  compileProg (TypeDecl _ _ cs _:xs) = compileConstructors cs ++ compileProg xs
   compileProg [] = [LuaCallS (LuaRef (LuaName "main")) []]
 
 compileConstructors :: [(Var Typed, [Type Typed])] -> [LuaStmt]
@@ -62,10 +62,10 @@ compileLet (n, e) = (lowerName n, compileExpr e)
 compileExpr :: Expr Typed -> LuaExpr
 compileExpr (VarRef v _) = LuaRef (lowerName v)
 compileExpr (App f x _) = LuaCall (compileExpr f) [compileExpr x]
-compileExpr (Fun (Capture v) e _) = LuaFunction [lowerName v] (compileStmt (Just LuaReturn) e)
-compileExpr (Fun Wildcard e _) = LuaFunction [LuaName "_"] (compileStmt (Just LuaReturn) e)
+compileExpr (Fun (Capture v _) e _) = LuaFunction [lowerName v] (compileStmt (Just LuaReturn) e)
+compileExpr (Fun (Wildcard _) e _) = LuaFunction [LuaName "_"] (compileStmt (Just LuaReturn) e)
 compileExpr f@(Fun k e _) = LuaFunction [LuaName "__arg__"] (compileStmt (Just LuaReturn)
-                                                              (Match (VarRef (TvName "__arg__" undefined) (extract f)) [(k, e)] (extract f)))
+                                                              (Match (VarRef (TvName "__arg__" undefined) (annotation f)) [(k, e)] (annotation f)))
 compileExpr (Literal (LiInt x) _)       = LuaNumber (fromInteger x)
 compileExpr (Literal (LiStr str) _)     = LuaString str
 compileExpr (Literal (LiBool True) _)   = LuaTrue
@@ -135,10 +135,10 @@ foldAnd = foldl1 k where
     | otherwise = LuaBinOp l "and" r
 
 patternTest :: Pattern Typed -> LuaExpr ->  LuaExpr
-patternTest Wildcard  _ = LuaTrue
-patternTest Capture{} _ = LuaTrue
-patternTest (PType p _) t = patternTest p t
-patternTest (Destructure con ps) vr
+patternTest Wildcard{}    _ = LuaTrue
+patternTest Capture{}     _ = LuaTrue
+patternTest (PType p _ _) t = patternTest p t
+patternTest (Destructure con ps _) vr
   = foldAnd (table vr:tag con vr:zipWith3 innerTest ps (repeat vr) [2..]) where
     innerTest p v = patternTest p . LuaRef . LuaIndex v . LuaNumber . fromInteger
     table ex = LuaBinOp (LuaCall (LuaRef (LuaName "type")) [ex]) "==" (LuaString "table")
@@ -146,11 +146,11 @@ patternTest (Destructure con ps) vr
     tag _ _ = error "absurd: no renaming"
 
 patternBindings :: Pattern Typed -> LuaExpr -> [(LuaVar, LuaExpr)]
-patternBindings Wildcard  _ = []
-patternBindings (Capture (TvName k _)) v = [(LuaName k, v)]
-patternBindings (Capture _) _ = error "absurd: no renaming"
-patternBindings (PType p _) t = patternBindings p t
-patternBindings (Destructure _ ps) vr
+patternBindings Wildcard{}  _ = []
+patternBindings (Capture (TvName k _) _) v = [(LuaName k, v)]
+patternBindings (Capture _ _) _ = error "absurd: no renaming"
+patternBindings (PType p _ _) t = patternBindings p t
+patternBindings (Destructure _ ps _) vr
   = concat $ zipWith3 innerBind ps (repeat vr) [2..] where
     innerBind p v = patternBindings p . LuaRef . LuaIndex v . LuaNumber . fromInteger
 

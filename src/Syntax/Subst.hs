@@ -23,17 +23,17 @@ class Substitutable a where
 instance Substitutable (Type Typed) where
   ftv TyCon{} = S.empty
   ftv TyStar{} = S.empty
-  ftv (TyVar v) = S.singleton v
-  ftv (TyForall vs cs t) = (foldMap ftv cs `S.union` ftv t) S.\\ S.fromList vs
-  ftv (TyApp a b) = ftv a `S.union` ftv b
-  ftv (TyArr a b) = ftv a `S.union` ftv b
+  ftv (TyVar v _) = S.singleton v
+  ftv (TyForall vs cs t _) = (foldMap ftv cs `S.union` ftv t) S.\\ S.fromList vs
+  ftv (TyApp a b _) = ftv a `S.union` ftv b
+  ftv (TyArr a b _) = ftv a `S.union` ftv b
 
-  apply _ (TyCon a) = TyCon a
-  apply _ TyStar = TyStar
-  apply s t@(TyVar v) = M.findWithDefault t v s
-  apply s (TyArr a b) = TyArr (apply s a) (apply s b)
-  apply s (TyApp a b) = TyApp (apply s a) (apply s b)
-  apply s (TyForall v cs t) = TyForall v (map (apply s') cs) (apply s' t) where
+  apply _ (TyCon a l) = TyCon a l
+  apply _ (TyStar l) = TyStar l
+  apply s t@(TyVar v _) = M.findWithDefault t v s
+  apply s (TyArr a b l) = TyArr (apply s a) (apply s b) l
+  apply s (TyApp a b l) = TyApp (apply s a) (apply s b) l
+  apply s (TyForall v cs t l) = TyForall v (map (apply s') cs) (apply s' t) l where
     s' = foldr M.delete s v
 
 instance Substitutable a => Substitutable [a] where
