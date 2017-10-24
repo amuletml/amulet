@@ -43,6 +43,11 @@ data Expr p
   | BinOp (Expr p) (Expr p) (Expr p) (Ann p)
   | Hole (Var p) (Ann p)
 
+  -- Records
+  | Record [(Var p, Expr p)] (Ann p) -- { foo = bar, baz = quux }
+  | RecordExt (Expr p) [(Var p, Expr p)] (Ann p) -- { foo with baz = quux }
+  | RecordDel (Expr p) [Var p] (Ann p) -- { foo without baz }
+
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Expr p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Expr p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Expr p)
@@ -52,6 +57,7 @@ data Pattern p
   | Capture (Var p) (Ann p)
   | Destructure (Var p) [Pattern p] (Ann p)
   | PType (Pattern p) (Type p) (Ann p)
+  | PRecord [(Var p, Pattern p)] (Ann p)
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Pattern p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Pattern p)
@@ -71,6 +77,7 @@ data Type p
   | TyArr (Type p) (Type p) (Ann p)
   | TyApp (Type p) (Type p) (Ann p)
   | TyStar (Ann p) -- * :: *
+  | TyRows [(Var p, Type p)] (Ann p) -- { foo : int, bar : string }
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Type p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Type p)
@@ -114,6 +121,9 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
     kwClr "match " <+> t <+> " with"
     body 2 bs *> newline
   pprint (Hole v _) = pprint v -- A typed hole
+  pprint (Record rows _) = braces $ interleave ", " $ map (\(n, v) -> n <+> opClr " = " <+> v) rows
+  pprint (RecordExt var rows _) = braces $ var <+> kwClr " with " <+> (interleave ", " $ map (\(n, v) -> n <+> opClr " = " <+> v) rows)
+  pprint (RecordDel var rows _) = braces $ var <+> kwClr " without " <+> interleave ", " rows
 
 instance (Pretty (Var p)) => Pretty (Pattern p, Expr p) where
   pprint (a, b) = opClr "| " <+> a <+> " -> " <+> b
@@ -127,6 +137,7 @@ instance (Pretty (Var p)) => Pretty (Pattern p) where
   pprint (Destructure x [] _) = pprint x
   pprint (Destructure x xs _) = parens $ x <+> " " <+> interleave " " xs
   pprint (PType p x _) = parens $ p <+> opClr " : " <+> x
+  pprint (PRecord rows _) = braces $ interleave ", " $ map (\(x, y) -> x <+> opClr " = " <+> y) rows
 
 instance Pretty Lit where
   pprint (LiStr s) = strClr s
@@ -142,6 +153,7 @@ instance (Pretty (Var p)) => Pretty (Type p) where
 
   pprint (TyArr x@TyArr{} e _) = parens x <+> opClr " -> " <+> e
   pprint (TyArr x e _) = x <+> opClr " -> " <+> e
+  pprint (TyRows rows _) = braces $ interleave ", " . map (\(x, t) -> x <+> opClr " : " <+> t) $ rows
 
   pprint (TyApp e x@TyApp{} _) = e <+> " " <+> parens x
   pprint (TyApp x e _) = x <+> opClr " " <+> e
@@ -174,9 +186,13 @@ instance Annotated Expr where
   annotation (Literal _ p) = p
   annotation (Match _ _ p) = p
   annotation (BinOp _ _ _ p) = p
+  annotation (Record _ p) = p
+  annotation (RecordExt _ _ p) = p
+  annotation (RecordDel _ _ p) = p
 
 instance Annotated Type where
   annotation (TyCon _ p) = p
+  annotation (TyRows _ p) = p
   annotation (TyVar _ p) = p
   annotation (TyForall _ _ _ p) = p
   annotation (TyArr _ _ p) = p
@@ -188,6 +204,7 @@ instance Annotated Pattern where
   annotation (Capture _ p) = p
   annotation (Destructure _ _ p) = p
   annotation (PType _ _ p) = p
+  annotation (PRecord _ p) = p
 
 --- Raising {{{
 
@@ -208,6 +225,9 @@ raiseE vR aR =
       Literal l a -> Literal l (aR a)
       Match e cs a -> Match (eR e) (map (raiseP vR aR *** eR) cs) (aR a)
       BinOp a b c an -> BinOp (eR a) (eR b) (eR c) (aR an)
+      Record rows ann -> Record (map (vR *** eR) rows) (aR ann)
+      RecordExt x rows ann -> RecordExt (eR x) (map (vR *** eR) rows) (aR ann)
+      RecordDel x rows ann -> RecordDel (eR x) (map vR rows) (aR ann)
 
 raiseP :: (Var p -> Var p') -- How to raise variables
        -> (Ann p -> Ann p')
@@ -216,6 +236,7 @@ raiseP _ a (Wildcard p) = Wildcard (a p)
 raiseP v a (Capture n p) = Capture (v n) (a p)
 raiseP v a (Destructure c s p) = Destructure (v c) (map (raiseP v a) s) (a p)
 raiseP v a (PType i t p) = PType (raiseP v a i) (raiseT v a t) (a p)
+raiseP v a (PRecord rs p) = PRecord (map (v *** raiseP v a) rs) (a p)
 
 raiseT :: (Var p -> Var p') -- How to raise variables
        -> (Ann p -> Ann p')
@@ -228,6 +249,7 @@ raiseT v a (TyForall n c t p) = TyForall (map v n)
                                      (a p)
 raiseT v a (TyArr x y p) = TyArr (raiseT v a x) (raiseT v a y) (a p)
 raiseT v a (TyApp x y p) = TyApp (raiseT v a x) (raiseT v a y) (a p)
+raiseT v a (TyRows rows p) = TyRows (map (v *** raiseT v a) rows) (a p)
 raiseT _ a (TyStar p) = TyStar (a p)
 
 --- }}}

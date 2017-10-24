@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RankNTypes, OverloadedStrings #-}
 module Main where
 
 import Parser
@@ -15,6 +15,12 @@ import Types.Infer
 import qualified Data.Text.IO as T
 import qualified Data.Text as T
 
+import qualified Data.Map as M
+
+import Control.Monad.Infer
+
+import Syntax
+
 compileFromTo :: FilePath
               -> T.Text
               -> (forall a. Pretty a => a -> IO ())
@@ -28,6 +34,24 @@ compileFromTo fp x emit =
           let out = compileProgram prg
            in emit out
     Left e -> print e
+
+tag :: Var Parsed -> Type Typed -> Var Typed
+tag (Name v) t = TvName v t
+tag (Refresh k a) t = TvRefresh (tag k t) a
+
+test :: String -> IO ()
+test x = do
+  case parse program "<test>" (T.pack x) of
+    Right prg ->
+      case inferProgram prg of
+        Left e -> print e
+        Right (prg, env) -> do
+          _ <- forM (M.toList $ values env) $ \(k, t) -> do
+            T.putStrLn (prettyPrint k <> " : " <> prettyPrint t)
+          let out = compileProgram prg
+           in T.putStrLn (prettyPrint out)
+    Left e -> print e
+
 
 main :: IO ()
 main = do

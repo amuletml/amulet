@@ -18,6 +18,8 @@ import Syntax
 import Types.Unify
 import Types.Holes
 
+import Data.List
+
 -- Solve for the types of lets in a program
 inferProgram :: [Toplevel Parsed] -> Either TypeError ([Toplevel Typed], Env)
 inferProgram ct = fst <$> runInfer builtinsEnv (inferAndCheck ct) where
@@ -139,6 +141,33 @@ infer expr
         tv <- flip TyVar a . flip TvName (TyStar a) <$> fresh
         unify expr to (TyArr tl (TyArr tr tv a) a)
         pure (BinOp l' o' r' a, tv)
+      Record rows a -> do
+        itps <- forM rows $ \(var', val) -> do
+          (val', typ) <- infer val
+          let var = tag var' typ
+          pure ((var, val'), (var, typ))
+        let (rows', rowts) = unzip itps
+        pure (Record rows' a, TyRows rowts a)
+      RecordExt rec rows a -> do
+        itps <- forM rows $ \(var', val) -> do
+          (val', typ) <- infer val
+          let var = tag var' typ
+          pure ((var, val'), (var, typ))
+        (rec', TyRows rRows _) <- infer rec
+        let (rows', nRows) = unzip itps
+        let overlapping = overlap rRows nRows
+            newTypes = unionBy (\x y -> fst x == fst y) rRows nRows
+        forM_ overlapping $ \(a, b) -> unify expr a b
+        pure (RecordExt rec' rows' a, TyRows newTypes a)
+      RecordDel rec rows a -> do
+        (rec', rtp@(TyRows tp _)) <- infer rec
+        let rowMap = M.fromList (map (\(x, y) -> (eraseVarTy x, (x, y))) tp)
+
+        forM_ rows $ \v -> when (M.notMember v rowMap) $ throwError (NotPresent v rtp)
+        let newRows = foldr (M.delete) rowMap rows
+            rows' = map (fst . (rowMap M.!)) rows
+        pure (RecordDel rec' rows' a, TyRows (M.elems newRows) a)
+
 
 inferKind :: Type Parsed -> Infer a (Type Typed, Type Typed)
 inferKind (TyStar a) = pure (TyStar a, TyStar a)
@@ -160,6 +189,11 @@ inferKind (TyArr a b ann) = do
   when (ka /= TyStar (annotation ka)) $ throwError (NotEqual ka (TyStar ann))
   when (kb /= TyStar (annotation kb)) $ throwError (NotEqual kb (TyStar ann))
   pure (TyArr a' b' ann, TyStar ann)
+inferKind (TyRows rows ann) = do
+  ks <- forM rows $ \(var, typ) -> do
+    (typ', _) <- inferKind typ
+    pure (tag var typ', typ')
+  pure (TyRows ks ann, TyStar ann)
 inferKind ap@(TyApp a b ann) = do
   (a', x) <- inferKind a
   case x of
@@ -190,6 +224,12 @@ inferPattern unify (Destructure cns ps ann) = do
   (ps', ptys, pvs) <- unzip3 <$> mapM (inferPattern unify) ps
   zipWithM_ unify ptys tys
   pure (Destructure (tag cns pty) ps' ann, res, concat pvs)
+inferPattern unify (PRecord rows ann) = do
+  (rowps, rowts, caps) <- unzip3 <$> forM rows (\(var, pat) -> do
+    (p', t, caps) <- inferPattern unify pat
+    pure ((tag var t, p'), (tag var t, t), caps))
+  pure (PRecord rowps ann, TyRows rowts ann, concat caps)
+
 inferPattern unify (PType p t ann) = do
   (p', pt, vs) <- inferPattern unify p
   (t', _) <- inferKind t `catchError` \x -> throwError (ArisingFromT x t)
@@ -228,7 +268,15 @@ inferProg (TypeDecl n tvs cs ann:prg) =
       extendMany (map (fmap mkt) cs') $
         consFst (TypeDecl n' (map (`tag` star) tvs) cs' ann) $
           inferProg prg
-inferProg [] = ([],) <$> ask
+inferProg [] = do
+  let ann = internal
+  (_, c) <- censor (const mempty) . listen $ do
+    x <- lookupTy (Name "main")
+    b <- flip TyVar ann . flip TvName (TyStar ann) <$> fresh
+    unify (VarRef (Name "main") ann) x (TyArr tyUnit b ann)
+  case solve mempty c of
+    Left e -> throwError (Note e "main must be a function from unit to some type")
+    Right _ -> ([],) <$> ask
 
 inferLetTy :: (t ~ Typed, p ~ Parsed)
            => [(Var t, Type t)]
@@ -254,12 +302,8 @@ updateAlist n v (x@(n', _):xs)
   | n == n' = (n, v):updateAlist n v xs
   | n `closeEnough` n' = (n, v):updateAlist n v xs
   | otherwise = x:updateAlist n v xs
-  where 
-    closeEnough (TvName a _) (TvName b _) = a == b
-    closeEnough (TvRefresh a b) (TvRefresh a' b')
-      = a `closeEnough` a' && b' >= b
-    closeEnough _ _ = False
 updateAlist _ _ [] = []
+
 
 
 extendMany :: MonadReader Env m => [(Var Typed, Type Typed)] -> m a -> m a

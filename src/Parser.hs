@@ -57,7 +57,10 @@ exprP' = parens exprP
      <|> beginExpr
      <|> withPos (VarRef <$> name)
      <|> withPos (Hole <$> hole)
-     <|> withPos (Literal <$> lit) where
+     <|> withPos (Literal <$> lit)
+     <|> try recDel
+     <|> try recIns
+     <|> rec where
   hole = lexeme $ do
     '_' <- char '_'
     x <- optionMaybe lower
@@ -102,14 +105,30 @@ exprP' = parens exprP
         reservedOp "->"
         (,) (Destructure v xs p) <$> exprP
       _ -> mzero
+  recDel = withPos . braces $ do
+    x <- exprP
+    reserved "without"
+    RecordDel x <$> many1 name
+  recIns = withPos . braces $ do
+    x <- exprP
+    reserved "with"
+    RecordExt x <$> many1 row
+  rec = withPos $
+          Record <$> braces (many row)
+  row = do
+    x <- name
+    reservedOp "="
+    (x, ) <$> exprP
+
 
 patternP :: Parser Pattern'
 patternP = wildcard
        <|> capture
        <|> constructor
        <|> try pType
-       <|> destructure where
-  wildcard, constructor, destructure, pType, capture :: Parser Pattern'
+       <|> destructure
+       <|> record where
+  wildcard, constructor, destructure, pType, capture, record :: Parser Pattern'
   wildcard = withPos (Wildcard <$ reservedOp "_")
   capture = withPos (Capture <$> varName)
   varName = (Name <$> lowerIdent) <?> "variable name"
@@ -124,6 +143,12 @@ patternP = wildcard
     x <- patternP
     reservedOp ":"
     PType x <$> typeP
+  record = withPos . braces $ do
+    rows <- many $ do
+      x <- name
+      reservedOp "="
+      (x,) <$> patternP
+    pure $ PRecord rows
 
 exprP :: Parser Expr'
 exprP = exprOpP where
@@ -239,4 +264,4 @@ toplevelP = letStmt <|> try foreignVal <|> valStmt <|> dataDecl where
       Nothing -> pure $ TypeDecl x xs []
 
 program :: Parser [Toplevel']
-program = semiSep1 toplevelP <* eof
+program = spaces *> semiSep1 toplevelP <* eof

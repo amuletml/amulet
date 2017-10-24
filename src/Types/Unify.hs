@@ -1,5 +1,5 @@
-{-# Language MultiWayIf #-}
-module Types.Unify (solve, smush) where
+{-# Language MultiWayIf, GADTs #-}
+module Types.Unify (solve, smush, overlap, closeEnough) where
 
 import Control.Monad.Except
 import Control.Monad.State
@@ -12,6 +12,7 @@ import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 
 import Data.Span
+import Data.List
 
 type SolveM = StateT Subst (Except TypeError)
 
@@ -36,7 +37,19 @@ unify t@(TyForall vs _ ty _) t'@(TyForall vs' _ ty' _)
   | length vs /= length vs' = throwError (NotEqual t t')
   -- TODO: Technically we should make fresh variables and do ty[vs/f] ~ ty'[vs'/f]
   | otherwise = unify ty (apply (M.fromList (zip vs' (map (flip TyVar internal) vs))) ty')
+unify (TyRows arow _) (TyRows brow _)
+  = let overlaps = overlap arow brow
+     in do forM_ overlaps $ \(a, b) -> unify a b
+           pure ()
 unify a b = throwError (NotEqual a b)
+
+overlap :: Typed ~ p => [(Var p, Type p)] -> [(Var p, Type p)] -> [(Type p, Type p)]
+overlap xs ys
+  | old <- sortOn fst xs
+  , new <- sortOn fst ys
+  , align <- zip old new
+  = let overlapping = takeWhile (\((a, _), (b, _)) -> a `closeEnough` b) align
+     in map (\((_, t), (_, t')) -> (t, t')) overlapping
 
 smush :: Var Typed -> Var Typed
 smush (TvName v _) = TvName v internalTyVar
@@ -55,3 +68,9 @@ solve s (ConUnify e a t:xs) =
 occurs :: Var Typed -> Type Typed -> Bool
 occurs _ (TyVar _ _) = False
 occurs x e = x `S.member` ftv e
+
+closeEnough :: Var Typed -> Var Typed -> Bool
+closeEnough (TvName a _) (TvName b _) = a == b
+closeEnough (TvRefresh a b) (TvRefresh a' b')
+  = a `closeEnough` a' && b' >= b
+closeEnough _ _ = False

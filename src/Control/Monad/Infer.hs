@@ -70,6 +70,9 @@ data TypeError where
                => TypeError -> Type p -> TypeError
   ExpectedArrow :: (Pretty (Var p'), Pretty (Var p))
                 => Type p' -> Type p -> Type p -> TypeError
+  NotPresent :: (Pretty (Var p), Pretty (Var p'))
+             => Var p -> Type p' -> TypeError
+  Note :: TypeError -> String -> TypeError
 
 lookupTy :: (MonadError TypeError m, MonadReader Env m, MonadGen Int m) => Var Parsed -> m (Type Typed)
 lookupTy x = do
@@ -130,7 +133,9 @@ instance Show TypeError where
   show (ExpectedArrow ap k v)
     = printf "Kind error: In application '%s'\n · expected arrow kind, but got `%s` (kind of `%s`)"
       (prettyPrint ap) (prettyPrint k) (prettyPrint v)
+  show (NotPresent v r) = printf "Row type `%s` does not have element `%s`" (prettyPrint r) (prettyPrint v)
   show (FoundHole xs) = unlines $ map prnt xs where
     prnt (Hole v s) = printf "%s: Found typed hole `%s`" (prettyPrint s) (prettyPrint v)
     prnt _ = undefined
+  show (Note te m) = printf "%s\n · Note: %s" (show te) m
 
