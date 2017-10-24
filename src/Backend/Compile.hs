@@ -15,6 +15,7 @@ import Syntax
 import qualified Data.Text as T
 import Data.Text (Text)
 import Data.Semigroup ((<>))
+import Control.Arrow ((***), (&&&))
 
 import Pretty (uglyPrint)
 
@@ -75,6 +76,19 @@ compileExpr (Literal (LiStr str) _)     = LuaString str
 compileExpr (Literal (LiBool True) _)   = LuaTrue
 compileExpr (Literal (LiBool False) _)  = LuaFalse
 compileExpr (Literal LiUnit _)          = LuaNil -- evil!
+compileExpr (Record rows _)             = LuaTable (map (lowerKey *** compileExpr) rows)
+compileExpr (RecordExt rec exts _)
+  = let rec' = compileExpr rec
+        extend :: [(LuaExpr, LuaExpr)] -> LuaExpr -> LuaExpr
+        extend ((v, e):xs) rec = LuaCall (LuaRef (LuaIndex (LuaRef (LuaName "_G")) (LuaRef (LuaName "rawset")))) [extend xs rec, v, e]
+        extend [] x = x
+     in extend (map (lowerKey *** compileExpr) exts) rec'
+compileExpr (RecordDel rec dels _)
+  = let rec' = compileExpr rec
+        extend :: [(LuaExpr, LuaExpr)] -> LuaExpr -> LuaExpr
+        extend ((v, e):xs) rec = LuaCall (LuaRef (LuaIndex (LuaRef (LuaName "_G")) (LuaRef (LuaName "rawset")))) [extend xs rec, v, e]
+        extend [] x = x
+     in extend (map (lowerKey &&& const LuaNil) dels) rec'
 compileExpr s@Let{} = compileIife s
 compileExpr s@If{} = compileIife s
 compileExpr s@Begin{} = compileIife s
@@ -88,6 +102,9 @@ compileStmt r e@Hole{} = pureReturn r $ compileExpr e
 compileStmt r e@Literal{} = pureReturn r $ compileExpr e
 compileStmt r e@Fun{} = pureReturn r $ compileExpr e
 compileStmt r e@BinOp{} = pureReturn r $ compileExpr e
+compileStmt r e@Record{} = pureReturn r $ compileExpr e
+compileStmt r e@RecordExt{} = pureReturn r $ compileExpr e
+compileStmt r e@RecordDel{} = pureReturn r $ compileExpr e
 compileStmt r (Let k c _) = let (ns, vs) = unzip $ map compileLet k in
                               (locals ns vs ++ compileStmt r c)
 compileStmt r (If c t e _) = [LuaIf (compileExpr c) (compileStmt r t) (compileStmt r e)]
@@ -102,6 +119,13 @@ lowerName (TvRefresh a k)
       LuaName x -> LuaName (x <> T.pack (show k))
       _ -> error "absurd: no lowering to namespaces"
 lowerName (TvName a _) = LuaName a
+
+lowerKey :: Var Typed -> LuaExpr
+lowerKey (TvRefresh a k)
+  = case lowerKey a of
+      LuaString x -> LuaString (x <> T.pack (show k))
+      _ -> error "absurd: no lowering to namespaces"
+lowerKey (TvName a _) = LuaString a
 
 getName :: Var Typed -> Text
 getName (TvRefresh a _) = getName a
@@ -146,9 +170,14 @@ patternTest (PType p _ _) t = patternTest p t
 patternTest (Destructure con ps _) vr
   = foldAnd (table vr:tag con vr:zipWith3 innerTest ps (repeat vr) [2..]) where
     innerTest p v = patternTest p . LuaRef . LuaIndex v . LuaNumber . fromInteger
-    table ex = LuaBinOp (LuaCall (LuaRef (LuaName "type")) [ex]) "==" (LuaString "table")
     tag (TvName con _) vr = LuaBinOp (LuaRef (LuaIndex vr (LuaNumber 1))) "==" (LuaString con)
     tag _ _ = error "absurd: no renaming"
+patternTest (PRecord rs _) vr = foldAnd (table vr:map (test vr) rs) where
+  test vr (var', pat) = patternTest pat (LuaRef (LuaIndex vr (lowerKey var')))
+
+
+table :: LuaExpr -> LuaExpr
+table ex = LuaBinOp (LuaCall (LuaRef (LuaName "type")) [ex]) "==" (LuaString "table")
 
 patternBindings :: Pattern Typed -> LuaExpr -> [(LuaVar, LuaExpr)]
 patternBindings Wildcard{}  _ = []
@@ -158,6 +187,8 @@ patternBindings (PType p _ _) t = patternBindings p t
 patternBindings (Destructure _ ps _) vr
   = concat $ zipWith3 innerBind ps (repeat vr) [2..] where
     innerBind p v = patternBindings p . LuaRef . LuaIndex v . LuaNumber . fromInteger
+patternBindings (PRecord rs _) vr = concatMap (index vr) rs where
+  index vr (var', pat) = patternBindings pat (LuaRef (LuaIndex vr (lowerKey var')))
 
 compileMatch :: Returner -> Expr Typed -> [(Pattern Typed, Expr Typed)] -> Gen Int [LuaStmt]
 compileMatch r ex ps = do

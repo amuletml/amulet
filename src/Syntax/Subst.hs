@@ -12,6 +12,8 @@ module Syntax.Subst
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 
+import Control.Arrow (second)
+
 import Syntax
 
 type Subst = M.Map (Var Typed) (Type Typed)
@@ -27,6 +29,7 @@ instance Substitutable (Type Typed) where
   ftv (TyForall vs cs t _) = (foldMap ftv cs `S.union` ftv t) S.\\ S.fromList vs
   ftv (TyApp a b _) = ftv a `S.union` ftv b
   ftv (TyArr a b _) = ftv a `S.union` ftv b
+  ftv (TyRows rows _) = foldMap (ftv . snd) rows
 
   apply _ (TyCon a l) = TyCon a l
   apply _ (TyStar l) = TyStar l
@@ -35,6 +38,7 @@ instance Substitutable (Type Typed) where
   apply s (TyApp a b l) = TyApp (apply s a) (apply s b) l
   apply s (TyForall v cs t l) = TyForall v (map (apply s') cs) (apply s' t) l where
     s' = foldr M.delete s v
+  apply s (TyRows rows ann) = TyRows (map (second (apply s)) rows) ann
 
 instance Substitutable a => Substitutable [a] where
   ftv = S.unions . map ftv
