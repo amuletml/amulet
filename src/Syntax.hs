@@ -2,7 +2,7 @@
 {-# LANGUAGE FlexibleInstances, FlexibleContexts, UndecidableInstances #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies, DataKinds #-}
-{-# LANGUAGE LambdaCase, MultiParamTypeClasses, FunctionalDependencies #-}
+{-# LANGUAGE LambdaCase #-}
 module Syntax where
 
 import Pretty
