@@ -56,13 +56,10 @@ data Constraint p
 deriving instance (Show (Expr p), Show (Type p)) => Show (Constraint p)
 
 data TypeError where
-  NotEqual :: (Show (Ann p), Show (Var p), Pretty (Var p))
-           => Type p -> Type p -> TypeError
-  Occurs   :: Pretty (Var p)
-           => Var p -> Type p -> TypeError
+  NotEqual :: Pretty (Var p) => Type p -> Type p -> TypeError
+  Occurs   :: Pretty (Var p) => Var p -> Type p -> TypeError
   NotInScope :: Var Parsed -> TypeError
-  EmptyMatch :: Pretty (Var p)
-             => Expr p -> TypeError
+  EmptyMatch :: Pretty (Var p) => Expr p -> TypeError
   EmptyBegin :: ( Pretty (Var p)
                 , Pretty (Ann p) )
              => Expr p -> TypeError
@@ -122,7 +119,7 @@ instance Pretty (Var p) => Pretty (Constraint p) where
   pprint (ConUnify e a b) = e <+> opClr " <=> " <+> a <+> opClr " ~ " <+> b
 
 instance Show TypeError where
-  show (NotEqual a b) = printf "Type error: failed to unify `%s` with `%s`" (show a) (show b)
+  show (NotEqual a b) = printf "Type error: failed to unify `%s` with `%s`" (prettyPrint a) (prettyPrint b)
   show (Occurs v t) = printf "Occurs check: Variable `%s` occurs in `%s`" (prettyPrint v) (prettyPrint t)
   show (NotInScope e) = printf "Variable not in scope: `%s`" (prettyPrint e)
   show (EmptyMatch e) = printf "Empty match expression:\n%s" (prettyPrint e)
