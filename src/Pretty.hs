@@ -51,6 +51,7 @@ import qualified Data.Text.IO as T
 import qualified Data.Text as T
 import Data.Text (Text)
 
+
 import qualified Control.Monad.Reader as RM
 
 type PrettyM = ReaderT PParam (Writer Text)
@@ -227,10 +228,12 @@ instance (Pretty a, Pretty b) => Pretty (Map.Map a b) where
     x <- ask
     braces $ T.intercalate "," $ map (\(k, v) -> x `ppshow` k <> " => " <> x `ppshow` v) $ Map.assocs mp
 
-instance Pretty a => Pretty (a -> PrettyP, a) where
+instance Pretty (a -> PrettyP, a) where
   pprint (x, y) = x y
 
 instance Pretty Int
 instance Pretty Double
 instance Pretty Float
 instance Pretty Integer
+instance Pretty () where
+  pprint _ = pure ()

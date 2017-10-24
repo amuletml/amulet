@@ -6,7 +6,6 @@ module Backend.Compile
   , compileConstructors
   ) where
 
-import Control.Comonad
 import Control.Monad.Gen
 import Control.Monad
 
@@ -17,85 +16,101 @@ import qualified Data.Text as T
 import Data.Text (Text)
 import Data.Semigroup ((<>))
 
+import Pretty (uglyPrint)
+
 type Returner = Maybe (LuaExpr -> LuaStmt)
 
 alpha :: [Text]
-alpha = map (T.pack) ([1..] >>= flip replicateM ['a'..'z'])
+alpha = map T.pack ([1..] >>= flip replicateM ['a'..'z'])
 
-compileProgram :: [Toplevel a] -> LuaStmt
+compileProgram :: [Toplevel Typed] -> LuaStmt
 compileProgram = LuaDo . compileProg where
-  compileProg (ForeignVal n' s t:xs)
-    = let genCurried n (TyArr _ a) ags bd = LuaFunction [LuaName (alpha !! n)] [LuaReturn (genCurried (succ n) a (LuaRef (LuaName (alpha !! n)):ags) bd)]
+  compileProg (ForeignVal n' s t _:xs)
+    = let genCurried :: Int -> Type p -> [LuaExpr] -> LuaExpr -> LuaExpr
+          genCurried n (TyArr _ a _) ags bd
+            = LuaFunction [LuaName (alpha !! n)]
+                          [LuaReturn (genCurried (succ n) a (LuaRef (LuaName (alpha !! n)):ags) bd)]
           genCurried _ _ [] bd = bd
           genCurried _ _ ags bd = LuaCall bd (reverse ags)
-          (Name n) = n'
+          n = getName n'
        in LuaLocal [LuaName ("__" <> n)] [LuaBitE s]
         : LuaLocal [LuaName n] [genCurried 0 t [] (LuaRef (LuaName ("__" <> n)))]:compileProg xs
-  compileProg (ValStmt _ _:xs) = compileProg xs
-  compileProg (LetStmt vs:xs) = locals ns vs' ++ compileProg xs where
+  compileProg (ValStmt{}:xs) = compileProg xs
+  compileProg (LetStmt vs _:xs) = locals ns vs' ++ compileProg xs where
     (ns, vs') = unzip $ map compileLet vs
-  compileProg (TypeDecl _ _ cs:xs) = compileConstructors cs ++ compileProg xs
+  compileProg (TypeDecl _ _ cs _:xs) = compileConstructors cs ++ compileProg xs
   compileProg [] = [LuaCallS (LuaRef (LuaName "main")) []]
 
-compileConstructors :: [(Var, [Type])] -> [LuaStmt]
+compileConstructors :: [(Var Typed, [Type Typed])] -> [LuaStmt]
 compileConstructors ((a, []):xs) -- unit constructors, easy
   = LuaLocal [lowerName a] [LuaTable [(LuaNumber 1, LuaString cn)]]:compileConstructors xs where
-    (Name cn) = a
+    cn = getName a
 compileConstructors ((a, xs):ys) -- non-unit constructors, hard
   = LuaLocal [lowerName a] [vl]:compileConstructors ys where
-    (LuaReturn vl) = fn xs alpha
-    (Name cn) = a
+    vl = case fn xs alpha of
+           LuaReturn vl -> vl
+           _ -> undefined
+    cn = getName a
     mkField x n = (LuaNumber x, LuaRef (LuaName n))
+    fn :: [a] -> [Text] -> LuaStmt
     fn (_:ts) (a:as) = LuaReturn $ LuaFunction [LuaName a] [fn ts as]
     fn [] _ = LuaReturn $ LuaTable ((LuaNumber 1, LuaString cn):take (length xs) (zipWith mkField [2..] alpha))
     fn _ _ = error "absurd"
 compileConstructors [] = []
 
-compileLet :: (Var, Expr a) -> (LuaVar, LuaExpr)
+compileLet :: (Var Typed, Expr Typed) -> (LuaVar, LuaExpr)
 compileLet (n, e) = (lowerName n, compileExpr e)
 
-compileExpr :: Expr a -> LuaExpr
+compileExpr :: Expr Typed -> LuaExpr
 compileExpr (VarRef v _) = LuaRef (lowerName v)
+compileExpr (Hole v ann) = LuaCall (LuaRef (LuaName "error")) [LuaString msg] where
+  msg = "Deferred typed hole " <> uglyPrint v <> " (from " <> uglyPrint ann <> ")"
 compileExpr (App f x _) = LuaCall (compileExpr f) [compileExpr x]
-compileExpr (Fun (Capture v) e _) = LuaFunction [lowerName v] (compileStmt (Just LuaReturn) e)
-compileExpr (Fun Wildcard e _) = LuaFunction [LuaName "_"] (compileStmt (Just LuaReturn) e)
+compileExpr (Fun (Capture v _) e _) = LuaFunction [lowerName v] (compileStmt (Just LuaReturn) e)
+compileExpr (Fun (Wildcard _) e _) = LuaFunction [LuaName "_"] (compileStmt (Just LuaReturn) e)
 compileExpr f@(Fun k e _) = LuaFunction [LuaName "__arg__"] (compileStmt (Just LuaReturn)
-                                                              (Match (VarRef (Name "__arg__") (extract f)) [(k, e)] (extract f)))
+                                                              (Match (VarRef (TvName "__arg__" undefined) (annotation f)) [(k, e)] (annotation f)))
 compileExpr (Literal (LiInt x) _)       = LuaNumber (fromInteger x)
 compileExpr (Literal (LiStr str) _)     = LuaString str
 compileExpr (Literal (LiBool True) _)   = LuaTrue
 compileExpr (Literal (LiBool False) _)  = LuaFalse
 compileExpr (Literal LiUnit _)          = LuaNil -- evil!
-compileExpr s@(Let{}) = compileIife s
-compileExpr s@(If{}) = compileIife s
-compileExpr s@(Begin{}) = compileIife s
-compileExpr s@(Match{}) = compileIife s
-compileExpr (BinOp l (VarRef (Name o) _) r _) = LuaBinOp (compileExpr l) (remapOp o) (compileExpr r)
-compileExpr (BinOp{}) = error "absurd: never parsed"
+compileExpr s@Let{} = compileIife s
+compileExpr s@If{} = compileIife s
+compileExpr s@Begin{} = compileIife s
+compileExpr s@Match{} = compileIife s
+compileExpr (BinOp l (VarRef (TvName o _) _) r _) = LuaBinOp (compileExpr l) (remapOp o) (compileExpr r)
+compileExpr BinOp{} = error "absurd: never parsed"
 
-compileStmt :: Returner -> Expr a -> [LuaStmt]
-compileStmt r e@(VarRef{}) = pureReturn r $ compileExpr e
-compileStmt r e@(Literal{}) = pureReturn r $ compileExpr e
-compileStmt r e@(Fun{}) = pureReturn r $ compileExpr e
-compileStmt r e@(BinOp{}) = pureReturn r $ compileExpr e
+compileStmt :: Returner -> Expr Typed -> [LuaStmt]
+compileStmt r e@VarRef{} = pureReturn r $ compileExpr e
+compileStmt r e@Hole{} = pureReturn r $ compileExpr e
+compileStmt r e@Literal{} = pureReturn r $ compileExpr e
+compileStmt r e@Fun{} = pureReturn r $ compileExpr e
+compileStmt r e@BinOp{} = pureReturn r $ compileExpr e
 compileStmt r (Let k c _) = let (ns, vs) = unzip $ map compileLet k in
                               (locals ns vs ++ compileStmt r c)
 compileStmt r (If c t e _) = [LuaIf (compileExpr c) (compileStmt r t) (compileStmt r e)]
 compileStmt r (Begin xs _) = concatMap (compileStmt Nothing) (init xs) ++ compileStmt r (last xs)
 compileStmt r (Match s ps _) = runGen (compileMatch r s ps)
 compileStmt Nothing (App f x _) = [LuaCallS (compileExpr f) [compileExpr x]]
-compileStmt (Just r) e@(App{}) = [r (compileExpr e)]
+compileStmt (Just r) e@App{} = [r (compileExpr e)]
 
-lowerName :: Var -> LuaVar
-lowerName (Refresh a k) = case lowerName a of
-                            LuaName x -> LuaName (x <> T.pack (show k))
-                            _ -> error "absurd: no lowering to namespaces"
-lowerName (Name a) = LuaName a
+lowerName :: Var Typed -> LuaVar
+lowerName (TvRefresh a k)
+  = case lowerName a of
+      LuaName x -> LuaName (x <> T.pack (show k))
+      _ -> error "absurd: no lowering to namespaces"
+lowerName (TvName a _) = LuaName a
+
+getName :: Var Typed -> Text
+getName (TvRefresh a _) = getName a
+getName (TvName a _) = a
 
 iife :: [LuaStmt] -> LuaExpr
 iife b = LuaCall (LuaFunction [] b) []
 
-compileIife :: Expr a -> LuaExpr
+compileIife :: Expr Typed -> LuaExpr
 compileIife = iife . compileStmt (Just LuaReturn)
 
 locals :: [LuaVar] -> [LuaExpr] -> [LuaStmt]
@@ -124,27 +139,27 @@ foldAnd = foldl1 k where
     | r == LuaFalse || l == LuaFalse = LuaFalse
     | otherwise = LuaBinOp l "and" r
 
-patternTest :: Pattern -> LuaExpr ->  LuaExpr
-patternTest Wildcard  _ = LuaTrue
-patternTest Capture{} _ = LuaTrue
-patternTest (PType p _) t = patternTest p t
-patternTest (Destructure con ps) vr
+patternTest :: Pattern Typed -> LuaExpr ->  LuaExpr
+patternTest Wildcard{}    _ = LuaTrue
+patternTest Capture{}     _ = LuaTrue
+patternTest (PType p _ _) t = patternTest p t
+patternTest (Destructure con ps _) vr
   = foldAnd (table vr:tag con vr:zipWith3 innerTest ps (repeat vr) [2..]) where
-    innerTest p v k = patternTest p . LuaRef . LuaIndex v . LuaNumber . fromInteger $ k
+    innerTest p v = patternTest p . LuaRef . LuaIndex v . LuaNumber . fromInteger
     table ex = LuaBinOp (LuaCall (LuaRef (LuaName "type")) [ex]) "==" (LuaString "table")
-    tag (Name con) vr = LuaBinOp (LuaRef (LuaIndex vr (LuaNumber 1))) "==" (LuaString con)
+    tag (TvName con _) vr = LuaBinOp (LuaRef (LuaIndex vr (LuaNumber 1))) "==" (LuaString con)
     tag _ _ = error "absurd: no renaming"
 
-patternBindings :: Pattern -> LuaExpr -> [(LuaVar, LuaExpr)]
-patternBindings Wildcard  _ = []
-patternBindings (Capture (Name k)) v = [(LuaName k, v)]
-patternBindings (Capture _) _ = error "absurd: no renaming"
-patternBindings (PType p _) t = patternBindings p t
-patternBindings (Destructure _ ps) vr
+patternBindings :: Pattern Typed -> LuaExpr -> [(LuaVar, LuaExpr)]
+patternBindings Wildcard{}  _ = []
+patternBindings (Capture (TvName k _) _) v = [(LuaName k, v)]
+patternBindings (Capture _ _) _ = error "absurd: no renaming"
+patternBindings (PType p _ _) t = patternBindings p t
+patternBindings (Destructure _ ps _) vr
   = concat $ zipWith3 innerBind ps (repeat vr) [2..] where
-    innerBind p v k = patternBindings p . LuaRef . LuaIndex v . LuaNumber . fromInteger $ k
+    innerBind p v = patternBindings p . LuaRef . LuaIndex v . LuaNumber . fromInteger
 
-compileMatch :: Returner -> Expr a -> [(Pattern, Expr a)] -> Gen Int [LuaStmt]
+compileMatch :: Returner -> Expr Typed -> [(Pattern Typed, Expr Typed)] -> Gen Int [LuaStmt]
 compileMatch r ex ps = do
   x <- (LuaName . ("__" <>) . (alpha !!)) <$> gen -- matchee
   let gen ((p, c):ps) = ( patternTest p (LuaRef x)

@@ -1,4 +1,4 @@
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TupleSections, TypeFamilies #-}
 
 module Parser where
 
@@ -14,18 +14,19 @@ import Parser.Lexer
 import Data.Functor.Identity
 
 import Control.Monad
-import Control.Comonad
 import Syntax
 
-type Expr' = Expr Span
-type Toplevel' = Toplevel Span
+type Expr' = Expr Parsed
+type Toplevel' = Toplevel Parsed
+type Type' = Type Parsed
+type Pattern' = Pattern Parsed
 
 data BeginStmt
-  = BeginLet [(Var, Expr')]
+  = BeginLet [(Var Parsed, Expr')]
   | BeginRun Expr'
   deriving (Eq)
 
-bindGroup :: Parser [(Var, Expr')]
+bindGroup :: Parser [(Var Parsed, Expr')]
 bindGroup = sepBy1 decl (reserved "and") where
   decl = do
     x <- name
@@ -35,7 +36,7 @@ bindGroup = sepBy1 decl (reserved "and") where
     case ps of
       [] -> pure (x, bd)
       _ -> do
-        let fun' pt b = Fun pt b (extract bd)
+        let fun' pt b = Fun pt b (annotation bd)
         pure (x, foldr fun' bd ps)
 
 withPos :: Parser (Span -> a) -> Parser a
@@ -55,7 +56,14 @@ exprP' = parens exprP
      <|> matchExpr
      <|> beginExpr
      <|> withPos (VarRef <$> name)
+     <|> withPos (Hole <$> hole)
      <|> withPos (Literal <$> lit) where
+  hole = lexeme $ do
+    '_' <- char '_'
+    x <- optionMaybe lower
+    case x of
+      Just x' -> Name . T.pack . (x':) <$> many (Tok.identLetter style)
+      Nothing -> pure . Name . T.pack $ "_"
   funExpr = withPos $ do
     reserved "fun"
     x <- patternP
@@ -90,24 +98,29 @@ exprP' = parens exprP
       [x] -> do
         reservedOp "->"
         (,) x <$> exprP
-      (Destructure v _:xs) -> do
+      (Destructure v _ p:xs) -> do
         reservedOp "->"
-        (,) (Destructure v xs) <$> exprP
+        (,) (Destructure v xs p) <$> exprP
       _ -> mzero
 
-patternP :: Parser Pattern
-patternP = wildcard <|> capture <|> constructor <|> try pType <|> destructure where
-  wildcard = Wildcard <$ reservedOp "_"
-  capture = Capture <$> varName
-  varName = (Name <$> lowerIdent) <?> "variableName"
-  constructor = flip Destructure [] <$> constrName
-  destructure = parens $ do
+patternP :: Parser Pattern'
+patternP = wildcard
+       <|> capture
+       <|> constructor
+       <|> try pType
+       <|> destructure where
+  wildcard, constructor, destructure, pType, capture :: Parser Pattern'
+  wildcard = withPos (Wildcard <$ reservedOp "_")
+  capture = withPos (Capture <$> varName)
+  varName = (Name <$> lowerIdent) <?> "variable name"
+  constructor = withPos (flip Destructure [] <$> constrName)
+  destructure = withPos . parens $ do
     ps <- constrName
     Destructure ps <$> many1 patternP
   lowerIdent = lexeme $ do
     x <- lower
     T.pack . (x:) <$> many (Tok.identLetter style)
-  pType = parens $ do
+  pType = withPos . parens $ do
     x <- patternP
     reservedOp ":"
     PType x <$> typeP
@@ -122,7 +135,7 @@ exprP = exprOpP where
     let app' a b = App a b pos
     pure $ foldl app' hd tl
   exprOpP = buildExpressionParser table expr' <?> "expression"
-  bop x = binary x (\p a b -> BinOp a (VarRef (Name (T.pack x)) p) b p)
+  bop x = binary x (\p a b -> BinOp a (VarRef (Name (T.pack x)) p) b p :: Expr Parsed)
   table = [ [ bop "**" AssocRight ]
           , [ bop "*"  AssocLeft, bop "/" AssocLeft ]
           , [ bop "+"  AssocLeft, bop "-" AssocLeft ]
@@ -133,42 +146,51 @@ exprP = exprOpP where
           , [ bop "&&" AssocNone ]
           , [ bop "||" AssocNone ] ]
 
-typeP :: Parser Type
+typeP :: Parser Type'
 typeP = typeOpP where
   typeOpP = buildExpressionParser table type' <?> "type"
-  type' = foldl1 TyApp <$> many1 typeP'
-  table = [ [ binary "->" (const TyArr) AssocRight ]]
+  type' = do
+    (hd, tl, pos) <- withPos $ do
+      x <- typeP'
+      y' <- many typeP'
+      pure (x, y',)
+    let app' a b = TyApp a b pos
+    pure $ foldl app' hd tl
+
+  table :: [[ Operator T.Text () Identity (Type Parsed) ]]
+  table = [ [ binary "->" (\p a b -> TyArr a b p) AssocRight ]]
 
 binary :: String -> (Span -> a -> a -> a) -> Assoc -> Operator T.Text () Identity a
 binary n f a = flip Infix a $ do
-  pos <- withPos $ (id <$ reservedOp n)
+  pos <- withPos $ id <$ reservedOp n
   pure (f pos)
 
-typeP' :: Parser Type
+typeP' :: Parser Type'
 typeP' = parens typeP
-     <|> TyVar . T.pack <$> tyVar
+     <|> withPos (TyVar <$> tyVar)
      <|> tyCon <|> unitTyCon
      <|> tyForall where
-  tyForall = do
+  tyCon, unitTyCon, tyForall :: Parser Type'
+  tyForall = withPos $ do
     reserved "forall"
-    nms <- map (T.pack) <$> commaSep1 tyVar
+    nms <- commaSep1 tyVar
     _ <- dot
     cs <- parens . commaSep1 $ typeP
     reservedOp "=>"
     TyForall nms cs <$> typeP
-  tyCon = TyCon <$> name
-  unitTyCon = TyCon (Name (T.pack "unit")) <$ reserved "unit"
+  tyCon = withPos (TyCon <$> name)
+  unitTyCon = withPos (TyCon (Name (T.pack "unit")) <$ reserved "unit")
 
-tyVar :: Parser String
+tyVar :: Parser (Var Parsed)
 tyVar = lexeme $ do
   _ <- char '\''
   x <- Tok.identStart style
-  (x:) <$> many (Tok.identLetter style)
+  (Name . T.pack . (x:)) <$> many (Tok.identLetter style)
 
-name :: Parser Var
+name :: Parser (Var Parsed)
 name = Name . T.pack <$> identifier
 
-constrName :: Parser Var
+constrName :: Parser (Var Parsed)
 constrName = (Name <$> upperIdent) <?> "constructor name" where
   upperIdent = lexeme $ do
     x <- upper
@@ -184,33 +206,36 @@ lit = intLit <|> strLit <|> true <|> false <|> unit where
 
 toplevelP :: Parser Toplevel'
 toplevelP = letStmt <|> try foreignVal <|> valStmt <|> dataDecl where
-  letStmt = do
+  letStmt = withPos $ do
     reserved "let"
     LetStmt <$> bindGroup
-  valStmt = do
+  valStmt = withPos $ do
     reserved "val"
     x <- name
     _ <- colon
     ValStmt x <$> typeP
-  foreignVal = do
+  foreignVal = withPos $ do
     reserved "val"
     reserved "foreign"
     x <- name
     n <- T.pack <$> stringLiteral
     _ <- colon
     ForeignVal x n <$> typeP
-  dataDecl = do
+  dataDecl = withPos $ do
     reserved "type"
     x <- name
     xs <- many tyVar
     eq <- optionMaybe (reservedOp "=")
     case eq of
       Just _ -> do
+        first <- optionMaybe $ do
+          x <- constrName
+          (,) x <$> sepBy typeP (reservedOp "*")
         cs <- many $ do
           reservedOp "|"
           x <- constrName
           (,) x <$> sepBy typeP (reservedOp "*")
-        pure $ TypeDecl x xs cs
+        pure $ TypeDecl x xs (maybe cs (:cs) first)
       Nothing -> pure $ TypeDecl x xs []
 
 program :: Parser [Toplevel']

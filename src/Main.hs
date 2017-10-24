@@ -15,7 +15,7 @@ import Types.Infer
 import qualified Data.Text.IO as T
 import qualified Data.Text as T
 
-compileFromTo :: FilePath 
+compileFromTo :: FilePath
               -> T.Text
               -> (forall a. Pretty a => a -> IO ())
               -> IO ()
@@ -24,7 +24,7 @@ compileFromTo fp x emit =
     Right prg ->
       case inferProgram prg of
         Left e -> print e
-        Right _ ->
+        Right (prg, _) ->
           let out = compileProgram prg
            in emit out
     Left e -> print e
@@ -42,7 +42,7 @@ main = do
         Right prg -> do
           pPrint prg
           case inferProgram prg of
-            Left e -> print e
+            Left e -> pPrint e
             Right ts -> pPrint ts
         Left e -> print e
     [x, t] -> do
