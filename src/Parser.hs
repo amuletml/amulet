@@ -56,7 +56,14 @@ exprP' = parens exprP
      <|> matchExpr
      <|> beginExpr
      <|> withPos (VarRef <$> name)
+     <|> withPos (Hole <$> hole)
      <|> withPos (Literal <$> lit) where
+  hole = lexeme $ do
+    '_' <- char '_'
+    x <- optionMaybe lower
+    case x of
+      Just x' -> Name . T.pack . (x':) <$> many (Tok.identLetter style)
+      Nothing -> pure . Name . T.pack $ "_"
   funExpr = withPos $ do
     reserved "fun"
     x <- patternP

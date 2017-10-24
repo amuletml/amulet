@@ -16,10 +16,16 @@ import Syntax.Subst
 import Syntax
 
 import Types.Unify
+import Types.Holes
 
 -- Solve for the types of lets in a program
 inferProgram :: [Toplevel Parsed] -> Either TypeError ([Toplevel Typed], Env)
-inferProgram ct = fst <$> runInfer builtinsEnv (inferProg ct)
+inferProgram ct = fst <$> runInfer builtinsEnv (inferAndCheck ct) where
+  inferAndCheck prg = do
+    (prg', env) <- inferProg prg
+    case findHoles prg' of
+      xs@(_:_) -> throwError (FoundHole xs)
+      [] -> pure (prg', env)
 
 tyUnit, tyBool, tyInt, tyString :: Type Typed
 tyInt = TyCon (TvName "int" (TyStar internal)) internal
@@ -73,6 +79,9 @@ infer expr
       VarRef k a -> do
         x <- lookupTy k
         pure (VarRef (tag k x) a, x)
+      Hole v ann -> do
+       tv <- flip TyVar ann . flip TvName (TyStar ann) <$> fresh
+       pure (Hole (tag v tv) ann, tv)
       Literal c a -> case c of
                        LiInt _ -> pure (Literal c a, tyInt)
                        LiStr _ -> pure (Literal c a, tyString)
