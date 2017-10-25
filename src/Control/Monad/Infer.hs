@@ -75,7 +75,7 @@ data TypeError where
                 => Type p' -> Type p -> Type p -> TypeError
   NotPresent :: (Pretty (Var p), Pretty (Var p'))
              => Var p -> [(Var p', Type p')] -> TypeError
-  NoOverlap :: (Pretty (Var p), Eq (Var p)) => Type p -> Type p -> TypeError
+  NoOverlap :: (Pretty (Var p), Eq (Var p), Ord (Var p), p ~ Typed) => Type p -> Type p -> TypeError
   Note :: TypeError -> String -> TypeError
   CanNotInstance :: Pretty (Var p)
                  => Type p -> Type p -> Type p -> TypeError
@@ -160,13 +160,26 @@ instance Show TypeError where
   show (NoOverlap tb@(TyRows _ rb _) ta@(TyExactRows ra _))
     = printf "No overlap between exact record `%s` and polymorphic record `%s`\n %s"
         (prettyPrint ta) (prettyPrint tb) (missing ra rb) 
+  show (NoOverlap tb@(TyExactRows rb _) ta@(TyExactRows ra _))
+    = printf "No unification between exact records `%s` and `%s`\n %s"
+        (prettyPrint ta) (prettyPrint tb) (missing ra rb) 
   show (NoOverlap ta tb) = printf "\x1b[1;32minternal compiler error\x1b[0m: NoOverlap %s %s" (prettyPrint ta) (prettyPrint tb)
 
 
-missing :: (Eq a, Pretty a) => [(a, b)] -> [(a, b)] -> Text
-missing ra rb = "· Namely, the following fields are missing: " <> T.intercalate ", "
-                (map (prettyPrint . tvClr . fst)
-                (deleteFirstsBy ((==) `on` fst) rb ra))
+missing :: [(Var Typed, b)] -> [(Var Typed, b)] -> Text
+missing ra rb
+  | length ra < length rb
+  = "· Namely, the following fields are missing: " <> T.intercalate ", "
+       (map (prettyPrint . tvClr . fst)
+            (deleteFirstsBy (closeEnough `on` fst) rb ra))
+  | length ra > length rb
+  = "· Namely, the following fields should not be present: " <> T.intercalate ", "
+      (map (prettyPrint . tvClr . fst)
+           (deleteFirstsBy (closeEnough `on` fst) ra rb))
+  | length ra == length rb
+  = "· No fields match (or the compiler is *very* confused)"
+missing _ _ = undefined -- freaking GHC
+
 varType :: Var Typed -> Type Typed
 varType (TvName _ x) = x
 varType (TvRefresh v _) = varType v
