@@ -108,9 +108,9 @@ exprP' = try access
   recIns = withPos . braces $ do
     x <- exprP
     reserved "with"
-    RecordExt x <$> many1 row
+    RecordExt x <$> commaSep1 row
   rec = withPos $
-          Record <$> braces (many row)
+          Record <$> braces (commaSep row)
   row = do
     x <- name
     reservedOp "="
@@ -150,7 +150,7 @@ patternP = wildcard
     reservedOp ":"
     PType x <$> typeP
   record = withPos . braces $ do
-    rows <- many $ do
+    rows <- commaSep1 $ do
       x <- name
       reservedOp "="
       (x,) <$> patternP

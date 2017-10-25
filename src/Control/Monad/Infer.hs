@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleContexts, UndecidableInstances, GADTs #-}
-{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE StandaloneDeriving, OverloadedStrings #-}
 module Control.Monad.Infer
   ( module M
   , InferT, Infer
@@ -24,6 +24,7 @@ import qualified Data.Set as Set
 import Data.Span (internal)
 
 import Data.Text (Text)
+import Data.Function
 import Text.Printf (printf)
 import qualified Data.Text as T
 
@@ -72,7 +73,7 @@ data TypeError where
                 => Type p' -> Type p -> Type p -> TypeError
   NotPresent :: (Pretty (Var p), Pretty (Var p'))
              => Var p -> Type p' -> TypeError
-  NoOverlap :: (Pretty (Var p)) => Type p -> Type p -> TypeError
+  NoOverlap :: (Pretty (Var p), Eq (Var p)) => Type p -> Type p -> TypeError
   Note :: TypeError -> String -> TypeError
   CanNotInstance :: Pretty (Var p)
                  => Type p -> Type p -> Type p -> TypeError
@@ -123,7 +124,10 @@ instance Substitutable (Type p) => Substitutable (Constraint p) where
   apply s (ConUnify e a b) = ConUnify e (apply s a) (apply s b)
 
 instance Pretty (Var p) => Pretty (Constraint p) where
-  pprint (ConUnify e a b) = e <+> opClr " <=> " <+> a <+> opClr " ~ " <+> b
+  pprint (ConUnify e a b) = e
+                        <+> opClr (" <=> " :: String)
+                        <+> a
+                        <+> opClr (" ~ " :: String) <+> b
 
 instance Show TypeError where
   show (NotEqual a b) = printf "Type error: failed to unify `%s` with `%s`" (prettyPrint a) (prettyPrint b)
@@ -142,8 +146,13 @@ instance Show TypeError where
     prnt _ = undefined
   show (Note te m) = printf "%s\n · Note: %s" (show te) m
   show (CanNotInstance rho new rec) = printf "Can not instance hole `%s` (in record type %s) to type %s" (prettyPrint rho) (prettyPrint new) (prettyPrint rec)
-  show (NoOverlap ta tb) = printf "No overlap between records `%s` and `%s`"
-    (prettyPrint ta) (prettyPrint tb)
+  show (NoOverlap ta@(TyRows _ ra _) tb@(TyRows _ rb _))
+    = printf "No overlap between records `%s` and `%s`\n %s"
+        (prettyPrint ta) (prettyPrint tb) missing where
+          missing = "· Namely, the following fields are missing: " <> T.intercalate ", "
+                      (map (prettyPrint . tvClr . fst)
+                           (deleteFirstsBy ((==) `on` fst) rb ra))
+  show (NoOverlap ta tb) = printf "\x1b[1;32minternal compiler error\x1b[0m: NoOverlap %s %s" (prettyPrint ta) (prettyPrint tb)
 
 varType :: Var Typed -> Type Typed
 varType (TvName _ x) = x

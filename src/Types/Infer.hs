@@ -296,7 +296,8 @@ inferLetTy ks ((va, ve):xs) = extendMany ks $ do
   let r (TvName n t) = TvName n (apply x t)
       r (TvRefresh k a) = TvRefresh (r k) a
       ex = raiseE r id ve'
-  consFst (tag va vt, ex) $ inferLetTy (updateAlist (tag va vt) vt ks) xs
+  (vt', _) <- inferKind (raiseT eraseVarTy id vt)
+  consFst (tag va vt', ex) $ inferLetTy (updateAlist (tag va vt') vt' ks) xs
 
 -- Monomorphic so we can use "close enough" equality
 updateAlist :: Var Typed
