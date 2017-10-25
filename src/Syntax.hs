@@ -46,6 +46,7 @@ data Expr p
   -- Records
   | Record [(Var p, Expr p)] (Ann p) -- { foo = bar, baz = quux }
   | RecordExt (Expr p) [(Var p, Expr p)] (Ann p) -- { foo with baz = quux }
+  | Access (Expr p) (Var p) (Ann p) -- foo.bar
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Expr p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Expr p)
@@ -122,6 +123,8 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
   pprint (Hole v _) = pprint v -- A typed hole
   pprint (Record rows _) = braces $ interleave ", " $ map (\(n, v) -> n <+> opClr " = " <+> v) rows
   pprint (RecordExt var rows _) = braces $ var <+> kwClr " with " <+> (interleave ", " $ map (\(n, v) -> n <+> opClr " = " <+> v) rows)
+  pprint (Access x@VarRef{} f _) = x <+> opClr "." <+> f
+  pprint (Access e f _) = parens e <+> opClr "." <+> f
 
 instance (Pretty (Var p)) => Pretty (Pattern p, Expr p) where
   pprint (a, b) = opClr "| " <+> a <+> " -> " <+> b
@@ -187,6 +190,7 @@ instance Annotated Expr where
   annotation (BinOp _ _ _ p) = p
   annotation (Record _ p) = p
   annotation (RecordExt _ _ p) = p
+  annotation (Access _ _ p) = p
 
 instance Annotated Type where
   annotation (TyCon _ p) = p
@@ -225,6 +229,7 @@ raiseE vR aR =
       BinOp a b c an -> BinOp (eR a) (eR b) (eR c) (aR an)
       Record rows ann -> Record (map (vR *** eR) rows) (aR ann)
       RecordExt x rows ann -> RecordExt (eR x) (map (vR *** eR) rows) (aR ann)
+      Access ex v ann -> Access (eR ex) (vR v) (aR ann)
 
 raiseP :: (Var p -> Var p') -- How to raise variables
        -> (Ann p -> Ann p')

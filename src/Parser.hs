@@ -1,4 +1,4 @@
-{-# LANGUAGE TupleSections, TypeFamilies #-}
+{-# LANGUAGE TupleSections, TypeFamilies, ScopedTypeVariables #-}
 
 module Parser where
 
@@ -49,7 +49,8 @@ withPos k = do
     Just vl -> pure (k' vl)
 
 exprP' :: Parser Expr'
-exprP' = parens exprP
+exprP' = try access
+     <|> parens exprP
      <|> funExpr
      <|> letExpr
      <|> ifExpr
@@ -114,6 +115,16 @@ exprP' = parens exprP
     x <- name
     reservedOp "="
     (x, ) <$> exprP
+  access = withPos . lexeme $ do
+    (rec :: Expr Parsed) <- (parens exprP <* char '.') <|> withPos (do
+      x <- Tok.identStart style
+      xs <- many (Tok.identLetter style)
+      '.' <- char '.'
+      pure . VarRef . Name . T.pack $ (x:xs))
+    (key :: Var Parsed) <- do
+      x <- Tok.identStart style
+      Name . T.pack . (x:) <$> many (Tok.identLetter style)
+    pure $ Access rec key
 
 
 patternP :: Parser Pattern'
