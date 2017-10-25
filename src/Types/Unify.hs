@@ -73,8 +73,9 @@ unify tb@(TyRows _ brow _) ta@(TyExactRows arow _)
       xs -> mapM_ (uncurry unify) xs
 unify ta@(TyExactRows arow _) tb@(TyExactRows brow _)
   | overlaps <- overlap arow brow
-  = when (length overlaps /= length arow || length overlaps /= length brow)
-      $ throwError (NoOverlap ta tb)
+  = do when (length overlaps /= length arow || length overlaps /= length brow)
+         $ throwError (NoOverlap ta tb)
+       mapM_ (uncurry unify) overlaps
 
 unify x tp@(TyRows rho _ _) = throwError (Note (CanNotInstance rho tp x) isRec)
 unify tp@(TyRows rho _ _) x = throwError (Note (CanNotInstance rho tp x) isRec)
