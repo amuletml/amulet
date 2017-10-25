@@ -42,11 +42,9 @@ unify t@(TyForall vs _ ty _) t'@(TyForall vs' _ ty' _)
   | length vs /= length vs' = throwError (NotEqual t t')
   -- TODO: Technically we should make fresh variables and do ty[vs/f] ~ ty'[vs'/f]
   | otherwise = unify ty (apply (M.fromList (zip vs' (map (flip TyVar internal) vs))) ty')
-unify ta@(TyRows rho arow _) tb@(TyRows sigma brow _)
--- All types of arow must be present in brow with the same types
+unify (TyRows rho arow _) tb@(TyRows _ brow _)
   = let overlaps = overlap arow brow
-     in do when (length overlaps /= length arow) $ throwError (NoOverlap ta tb)
-           unify rho sigma
+     in do unify rho tb
            forM_ overlaps $ \(a, b) -> unify a b
            pure ()
 unify x tp@(TyRows rho _ _) = throwError (Note (CanNotInstance rho tp x) isRec)
