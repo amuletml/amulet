@@ -11,6 +11,7 @@ data LuaStmt
   | LuaRepeat [LuaStmt] LuaExpr
   | LuaIf LuaExpr [LuaStmt] [LuaStmt]
   | LuaFornum Text LuaExpr LuaExpr LuaExpr [LuaStmt]
+  | LuaFor [Text] [LuaExpr] [LuaStmt]
   | LuaLocal [LuaVar] [LuaExpr]
   | LuaReturn LuaExpr
   | LuaIfElse [(LuaExpr, [LuaStmt])]
@@ -74,6 +75,12 @@ instance Pretty LuaStmt where
   pprint (LuaFornum v s e i b) = do
     kwClr "for " <+> v <+> opClr " = "
     interleave ", " [s, e, i]
+    kwClr " do "
+    body 2 b *> newline
+    kwClr "end"
+  pprint (LuaFor vs es b) = do
+    kwClr "for " <+> interleave ", " vs <+> opClr " in "
+    interleave ", " es
     kwClr " do "
     body 2 b *> newline
     kwClr "end"
