@@ -258,11 +258,12 @@ inferProg (TypeDecl n tvs cs ann:prg) =
       mkk (_:xs) = arr star (mkk xs)
       mkt = foldr arr (foldl app (con (n `tag` star)) (map (var . flip tag star) tvs))
       n' = tag n (mkk tvs)
+      arisingFromConstructor = "Perhaps you're missing a * between two types of a constructor?"
    in extendKind (n', mkk tvs) $ do
       cs' <- forM cs (\(v, ty) -> do
                          (ty', _) <- unzip <$> mapM inferKind ty
                          pure (tag v (mkt ty'), ty'))
-        `catchError` \x -> throwError (ArisingFromT x (TyVar n' ann))
+        `catchError` \x -> throwError (Note (ArisingFromT x (TyVar n' ann)) arisingFromConstructor)
       extendMany (map (fmap mkt) cs') $
         consFst (TypeDecl n' (map (`tag` star) tvs) cs' ann) $
           inferProg prg
