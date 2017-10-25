@@ -25,7 +25,7 @@ alpha :: [Text]
 alpha = map T.pack ([1..] >>= flip replicateM ['a'..'z'])
 
 compileProgram :: [Toplevel Typed] -> LuaStmt
-compileProgram = LuaDo . compileProg where
+compileProgram = LuaDo . (extendDef:) . compileProg where
   compileProg (ForeignVal n' s t _:xs)
     = let genCurried :: Int -> Type p -> [LuaExpr] -> LuaExpr -> LuaExpr
           genCurried n (TyArr _ a _) ags bd
@@ -64,14 +64,17 @@ compileLet (n, e) = (lowerName n, compileExpr e)
 
 compileExpr :: Expr Typed -> LuaExpr
 compileExpr (VarRef v _) = LuaRef (lowerName v)
-compileExpr (Hole v ann) = LuaCall (LuaRef (LuaName "error")) [LuaString msg] where
+compileExpr (Hole v ann) = LuaCall (global "error") [LuaString msg] where
   msg = "Deferred typed hole " <> uglyPrint v <> " (from " <> uglyPrint ann <> ")"
 compileExpr (Access rec f _) = LuaRef (LuaIndex (compileExpr rec) (lowerKey f))
 compileExpr (App f x _) = LuaCall (compileExpr f) [compileExpr x]
 compileExpr (Fun (Capture v _) e _) = LuaFunction [lowerName v] (compileStmt (Just LuaReturn) e)
 compileExpr (Fun (Wildcard _) e _) = LuaFunction [LuaName "_"] (compileStmt (Just LuaReturn) e)
-compileExpr f@(Fun k e _) = LuaFunction [LuaName "__arg__"] (compileStmt (Just LuaReturn)
-                                                              (Match (VarRef (TvName "__arg__" undefined) (annotation f)) [(k, e)] (annotation f)))
+compileExpr f@(Fun k e _) = LuaFunction [LuaName "__arg__"]
+                              (compileStmt (Just LuaReturn)
+                                           (Match (VarRef (TvName "__arg__" undefined)
+                                                          (annotation f))
+                                                  [(k, e)] (annotation f)))
 compileExpr (Literal (LiInt x) _)       = LuaNumber (fromInteger x)
 compileExpr (Literal (LiStr str) _)     = LuaString str
 compileExpr (Literal (LiBool True) _)   = LuaTrue
@@ -81,7 +84,7 @@ compileExpr (Record rows _)             = LuaTable (map (lowerKey *** compileExp
 compileExpr (RecordExt rec exts _)
   = let rec' = compileExpr rec
         extend :: [(LuaExpr, LuaExpr)] -> LuaExpr -> LuaExpr
-        extend ((v, e):xs) rec = LuaCall (LuaRef (LuaIndex (LuaRef (LuaName "_G")) (LuaRef (LuaName "rawset")))) [extend xs rec, v, e]
+        extend ((v, e):xs) rec = LuaCall (global "extend") [extend xs rec, v, e]
         extend [] x = x
      in extend (map (lowerKey *** compileExpr) exts) rec'
 compileExpr s@Let{} = compileIife s
@@ -90,6 +93,9 @@ compileExpr s@Begin{} = compileIife s
 compileExpr s@Match{} = compileIife s
 compileExpr (BinOp l (VarRef (TvName o _) _) r _) = LuaBinOp (compileExpr l) (remapOp o) (compileExpr r)
 compileExpr BinOp{} = error "absurd: never parsed"
+
+global :: String -> LuaExpr
+global x = LuaRef (LuaIndex (LuaRef (LuaName "_G")) (LuaString (T.pack x)))
 
 compileStmt :: Returner -> Expr Typed -> [LuaStmt]
 compileStmt r e@VarRef{} = pureReturn r $ compileExpr e
@@ -202,3 +208,20 @@ compileMatch r ex ps = do
                         [LuaString "Pattern matching failure in match expression"]])
   pure $ compileStmt (Just $ LuaLocal [x] . (:[])) ex
        ++ [ LuaIfElse (gen ps) ]
+
+--- This is a hack, but we need this for compiling record extension
+extendDef :: LuaStmt
+extendDef = LuaAssign [ extend ]
+                      [ LuaFunction [ t, k, v ]
+                         [ LuaLocal [ out ] [ LuaTable [] ]
+                         , LuaFor [ "k_", "v_" ] [ LuaCall (global "pairs") [ LuaRef t ] ]
+                            [ LuaAssign [ LuaIndex (LuaRef out) (LuaRef k') ] [ LuaRef v' ] ]
+                         , LuaAssign [ LuaIndex (LuaRef out) (LuaRef k) ] [ LuaRef v ]
+                         , LuaReturn (LuaRef out) ] ]
+  where (LuaRef extend) = global "extend"
+        t = LuaName "t"
+        k = LuaName "k"
+        v = LuaName "v"
+        out = LuaName "out"
+        v' = LuaName "v_"
+        k' = LuaName "k_"
