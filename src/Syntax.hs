@@ -78,6 +78,7 @@ data Type p
   | TyApp (Type p) (Type p) (Ann p)
   | TyStar (Ann p) -- * :: *
   | TyRows (Type p) [(Var p, Type p)] (Ann p) -- { α | foo : int, bar : string }
+  | TyExactRows [(Var p, Type p)] (Ann p) -- { foo : int, bar : string }
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Type p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Type p)
@@ -122,7 +123,7 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
     body 2 bs *> newline
   pprint (Hole v _) = pprint v -- A typed hole
   pprint (Record rows _) = braces $ interleave ", " $ map (\(n, v) -> n <+> opClr " = " <+> v) rows
-  pprint (RecordExt var rows _) = braces $ var <+> kwClr " with " <+> (interleave ", " $ map (\(n, v) -> n <+> opClr " = " <+> v) rows)
+  pprint (RecordExt var rows _) = braces $ var <+> kwClr " with " <+> interleave ", " (map (\(n, v) -> n <+> opClr " = " <+> v) rows)
   pprint (Access x@VarRef{} f _) = x <+> opClr "." <+> f
   pprint (Access e f _) = parens e <+> opClr "." <+> f
 
@@ -149,12 +150,18 @@ instance Pretty Lit where
 
 instance (Pretty (Var p)) => Pretty (Type p) where
   pprint (TyCon v _) = typeClr v
-  pprint (TyVar v _) = opClr "'" <+> v
-  pprint (TyForall vs c v _) = kwClr "∀ " <+> interleave " " vs <+> opClr ". " <+> parens (interleave "," c) <+> opClr " => " <+> v
+  pprint (TyVar v _) = opClr "'" <+> tvClr v
+  pprint (TyForall vs [] v _)
+    = kwClr "∀ " <+> interleave " " (map (\x -> "'" <+> tvClr x) vs) <+> opClr ". " <+> v
+  pprint (TyForall vs c v _) = kwClr "∀ " <+> interleave " " (map (\x -> "'" <+> tvClr x) vs)
+                           <+> opClr ". " <+> parens (interleave "," c) <+> opClr " => " <+> v
 
   pprint (TyArr x@TyArr{} e _) = parens x <+> opClr " -> " <+> e
   pprint (TyArr x e _) = x <+> opClr " -> " <+> e
-  pprint (TyRows p rows _) = braces $ p <+> opClr " | " <+> prettyRows (rows) where
+  pprint (TyRows p rows _) = braces $ p <+> opClr " | " <+> prettyRows rows where
+    prettyRows = interleave ", " . map (\(x, t) -> x <+> opClr " : " <+> t)
+
+  pprint (TyExactRows rows _) = braces $ prettyRows rows where
     prettyRows = interleave ", " . map (\(x, t) -> x <+> opClr " : " <+> t)
 
   pprint (TyApp e x@TyApp{} _) = e <+> " " <+> parens x
@@ -195,6 +202,7 @@ instance Annotated Expr where
 instance Annotated Type where
   annotation (TyCon _ p) = p
   annotation (TyRows _ _ p) = p
+  annotation (TyExactRows _ p) = p
   annotation (TyVar _ p) = p
   annotation (TyForall _ _ _ p) = p
   annotation (TyArr _ _ p) = p
@@ -252,6 +260,7 @@ raiseT v a (TyForall n c t p) = TyForall (map v n)
 raiseT v a (TyArr x y p) = TyArr (raiseT v a x) (raiseT v a y) (a p)
 raiseT v a (TyApp x y p) = TyApp (raiseT v a x) (raiseT v a y) (a p)
 raiseT v a (TyRows rho rows p) = TyRows (raiseT v a rho) (map (v *** raiseT v a) rows) (a p)
+raiseT v a (TyExactRows rows p) = TyExactRows (map (v *** raiseT v a) rows) (a p)
 raiseT _ a (TyStar p) = TyStar (a p)
 
 --- }}}

@@ -20,6 +20,7 @@ import Types.Holes
 
 import Data.List
 
+
 -- Solve for the types of lets in a program
 inferProgram :: [Toplevel Parsed] -> Either TypeError ([Toplevel Typed], Env)
 inferProgram ct = fst <$> runInfer builtinsEnv (inferAndCheck ct) where
@@ -141,18 +142,11 @@ infer expr
         unify expr to (TyArr tl (TyArr tr tv a) a)
         pure (BinOp l' o' r' a, tv)
       Record rows a -> do
-        rho <- freshTV a
-        itps <- forM rows $ \(var', val) -> do
-          (val', typ) <- infer val
-          let var = tag var' typ
-          pure ((var, val'), (var, typ))
+        itps <- inferRows rows
         let (rows', rowts) = unzip itps
-        pure (Record rows' a, TyRows rho rowts a)
+        pure (Record rows' a, TyExactRows rowts a)
       RecordExt rec rows a -> do
-        itps <- forM rows $ \(var', val) -> do
-          (val', typ) <- infer val
-          let var = tag var' typ
-          pure ((var, val'), (var, typ))
+        itps <- inferRows rows
         let (rows', newTypes) = unzip itps
         (rec', rho) <- infer rec
         sigma <- freshTV a
@@ -163,6 +157,12 @@ infer expr
        (rec', tp) <- infer rec
        unify expr tp (TyRows rho [(tag key ktp, ktp)] a)
        pure (Access rec' (tag key ktp) a, ktp)
+
+inferRows :: [(Var Parsed, Expr Parsed)] -> Infer Typed [((Var Typed, Expr Typed), (Var Typed, Type Typed))]
+inferRows rows = forM rows $ \(var', val) -> do
+  (val', typ) <- infer val
+  let var = tag var' typ
+  pure ((var, val'), (var, typ))
 
 freshTV :: MonadGen Int m => Span -> m (Type Typed)
 freshTV a = flip TyVar a . flip TvName (TyStar a) <$> fresh
@@ -187,7 +187,7 @@ inferKind (TyArr a b ann) = do
   when (ka /= TyStar (annotation ka)) $ throwError (NotEqual ka (TyStar ann))
   when (kb /= TyStar (annotation kb)) $ throwError (NotEqual kb (TyStar ann))
   pure (TyArr a' b' ann, TyStar ann)
-inferKind (TyRows rho rows ann) = do
+inferKind (TyRows rho rows ann) =
   case rho of
     TyRows rho' rows' ann' -> inferKind (TyRows rho' (rows `union` rows') ann')
     _ -> do
@@ -196,6 +196,11 @@ inferKind (TyRows rho rows ann) = do
         (typ', _) <- inferKind typ
         pure (tag var typ', typ')
       pure (TyRows rho' ks ann, TyStar ann)
+inferKind (TyExactRows rows ann) = do
+  ks <- forM rows $ \(var, typ) -> do
+    (typ', _) <- inferKind typ
+    pure (tag var typ', typ')
+  pure (TyExactRows ks ann, TyStar ann)
 inferKind ap@(TyApp a b ann) = do
   (a', x) <- inferKind a
   case x of
