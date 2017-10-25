@@ -5,6 +5,7 @@ import Control.Monad.Except
 import Control.Monad.State
 import Control.Monad.Infer
 
+
 import Syntax.Subst
 import Syntax
 
@@ -12,9 +13,10 @@ import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 
 import Data.Span
+import Data.Function
 import Data.List
 
-type SolveM = StateT Subst (Except TypeError)
+type SolveM = GenT Int (StateT Subst (Except TypeError))
 
 bind :: Var Typed -> Type Typed -> SolveM ()
 bind var ty | raiseT id (const internal) ty == TyVar var internal = return ()
@@ -42,14 +44,34 @@ unify t@(TyForall vs _ ty _) t'@(TyForall vs' _ ty' _)
   | length vs /= length vs' = throwError (NotEqual t t')
   -- TODO: Technically we should make fresh variables and do ty[vs/f] ~ ty'[vs'/f]
   | otherwise = unify ty (apply (M.fromList (zip vs' (map (flip TyVar internal) vs))) ty')
-unify ta@(TyRows rho arow _) tb@(TyRows _ brow _)
-  = let overlaps = overlap arow brow
-     in do unify rho tb
-           if length overlaps == 0
-              then throwError (NoOverlap tb ta)
-              else pure ()
-           forM_ overlaps $ \(a, b) -> unify a b
-           pure ()
+unify (TyRows rho arow an) (TyRows sigma brow bn)
+  | overlaps <- overlap arow brow
+  , new <- unionBy ((==) `on` fst) arow brow
+  = do mapM_ (uncurry unify) overlaps
+       rho' <- freshT an
+       sigma' <- freshT an
+       unify rho (TyRows rho' new an)
+       unify sigma (TyRows sigma' new bn)
+       if length overlaps >= length new
+          then error ("overlaps " ++ show (length overlaps) ++ " new " ++ show (length new))
+          else pure ()
+    where freshT an = do x <- fresh
+                         pure (TyVar (TvName x (TyStar an)) an)
+          freshT :: Span -> SolveM (Type Typed)
+-- TODO: This is a bit hacky. We have a different type for "closed
+-- records" (literals) and "open records" (parameters), and must check
+-- that they line up manually here.
+unify ta@(TyExactRows arow _) tb@(TyRows _ brow _)
+  | overlaps <- overlap arow brow
+  = case overlaps of
+      [] -> throwError (NoOverlap ta tb)
+      _ -> pure ()
+unify tb@(TyRows _ brow _) ta@(TyExactRows arow _)
+  | overlaps <- overlap arow brow
+  = case overlaps of
+      [] -> throwError (NoOverlap ta tb)
+      _  -> pure ()
+
 unify x tp@(TyRows rho _ _) = throwError (Note (CanNotInstance rho tp x) isRec)
 unify tp@(TyRows rho _ _) x = throwError (Note (CanNotInstance rho tp x) isRec)
 unify a b = throwError (NotEqual a b)
@@ -70,11 +92,11 @@ smush (TvName v _) = TvName v internalTyVar
 smush (TvRefresh v k) = TvRefresh (smush v) k
 
 runSolve :: Subst -> SolveM b -> Either TypeError Subst
-runSolve s x = runExcept (execStateT x s)
+runSolve s x = runExcept (execStateT (runGenT x) s)
 
 solve :: Subst -> [Constraint Typed] -> Either TypeError Subst
 solve s [] = pure s
-solve s (ConUnify e a t:xs) = do
+solve s (ConUnify e a t:xs) =
   case runSolve s (unify a t) of
     Left err -> Left (ArisingFrom err e)
     Right s' -> solve (s' `compose` s) (apply s' xs)

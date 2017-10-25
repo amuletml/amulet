@@ -11,26 +11,28 @@ module Control.Monad.Infer
   )
   where
 
-import Control.Monad.Except as M
-import Control.Monad.Gen as M
-import Control.Monad.Identity
-import Control.Monad.Reader as M
 import Control.Monad.Writer.Strict as M hiding ((<>))
+import Control.Monad.Reader as M
+import Control.Monad.Except as M
+import Control.Monad.Identity
+import Control.Monad.Gen as M
 
-import Data.Semigroup
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
+import Data.Semigroup
 
 import Data.Span (internal)
 
-import Data.Text (Text)
-import Data.Function
-import Text.Printf (printf)
 import qualified Data.Text as T
+import Text.Printf (printf)
+import Data.Text (Text)
+
+import Data.Function
 
 import Pretty hiding (local, (<>))
-import Syntax
+
 import Syntax.Subst
+import Syntax
 
 type InferT p m = GenT Int (ReaderT Env (WriterT [Constraint p] (ExceptT TypeError m)))
 type Infer p = InferT p Identity
@@ -54,7 +56,7 @@ instance Semigroup Env where
 
 data Constraint p
   = ConUnify (Expr p) (Type p) (Type p)
-deriving instance (Show (Expr p), Show (Type p)) => Show (Constraint p)
+deriving instance (Show (Var p), Show (Expr p), Show (Type p)) => Show (Constraint p)
 
 data TypeError where
   NotEqual :: Pretty (Var p) => Type p -> Type p -> TypeError
@@ -72,7 +74,7 @@ data TypeError where
   ExpectedArrow :: (Pretty (Var p'), Pretty (Var p))
                 => Type p' -> Type p -> Type p -> TypeError
   NotPresent :: (Pretty (Var p), Pretty (Var p'))
-             => Var p -> Type p' -> TypeError
+             => Var p -> [(Var p', Type p')] -> TypeError
   NoOverlap :: (Pretty (Var p), Eq (Var p)) => Type p -> Type p -> TypeError
   Note :: TypeError -> String -> TypeError
   CanNotInstance :: Pretty (Var p)
@@ -129,6 +131,11 @@ instance Pretty (Var p) => Pretty (Constraint p) where
                         <+> a
                         <+> opClr (" ~ " :: String) <+> b
 
+prettyRows :: (Pretty (Var p)) => [(Var p, Type p)] -> PrettyP
+prettyRows = braces
+           . interleave (", " :: String)
+           . map (\(x, y) -> x <+> opClr (" : " :: String) <+> y)
+
 instance Show TypeError where
   show (NotEqual a b) = printf "Type error: failed to unify `%s` with `%s`" (prettyPrint a) (prettyPrint b)
   show (Occurs v t) = printf "Occurs check: Variable `%s` occurs in `%s`" (prettyPrint v) (prettyPrint t)
@@ -140,20 +147,26 @@ instance Show TypeError where
   show (ExpectedArrow ap k v)
     = printf "Kind error: In application '%s'\n · expected arrow kind, but got `%s` (kind of `%s`)"
       (prettyPrint ap) (prettyPrint k) (prettyPrint v)
-  show (NotPresent v r) = printf "Row type `%s` does not have element `%s`" (prettyPrint r) (prettyPrint v)
+  show (NotPresent v r) = printf "Row type `%s` does not have element `%s`" (prettyPrint (prettyRows r))
+                                                                            (prettyPrint v)
   show (FoundHole xs) = unlines $ map prnt xs where
     prnt (Hole v s) = printf "%s: Found typed hole `%s` (of type `%s`)" (prettyPrint s)  (prettyPrint v) (prettyPrint (varType v))
     prnt _ = undefined
   show (Note te m) = printf "%s\n · Note: %s" (show te) m
   show (CanNotInstance rho new rec) = printf "Can not instance hole `%s` (in record type %s) to type %s" (prettyPrint rho) (prettyPrint new) (prettyPrint rec)
-  show (NoOverlap ta@(TyRows _ ra _) tb@(TyRows _ rb _))
-    = printf "No overlap between records `%s` and `%s`\n %s"
-        (prettyPrint ta) (prettyPrint tb) missing where
-          missing = "· Namely, the following fields are missing: " <> T.intercalate ", "
-                      (map (prettyPrint . tvClr . fst)
-                           (deleteFirstsBy ((==) `on` fst) rb ra))
+  show (NoOverlap ta@(TyExactRows ra _) tb@(TyRows _ rb _))
+    = printf "No overlap between exact record `%s` and polymorphic record `%s`\n %s"
+        (prettyPrint ta) (prettyPrint tb) (missing ra rb) 
+  show (NoOverlap tb@(TyRows _ rb _) ta@(TyExactRows ra _))
+    = printf "No overlap between exact record `%s` and polymorphic record `%s`\n %s"
+        (prettyPrint ta) (prettyPrint tb) (missing ra rb) 
   show (NoOverlap ta tb) = printf "\x1b[1;32minternal compiler error\x1b[0m: NoOverlap %s %s" (prettyPrint ta) (prettyPrint tb)
 
+
+missing :: (Eq a, Pretty a) => [(a, b)] -> [(a, b)] -> Text
+missing ra rb = "· Namely, the following fields are missing: " <> T.intercalate ", "
+                (map (prettyPrint . tvClr . fst)
+                (deleteFirstsBy ((==) `on` fst) rb ra))
 varType :: Var Typed -> Type Typed
 varType (TvName _ x) = x
 varType (TvRefresh v _) = varType v

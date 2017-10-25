@@ -40,13 +40,13 @@ tag (Name v) t = TvName v t
 tag (Refresh k a) t = TvRefresh (tag k t) a
 
 test :: String -> IO ()
-test x = do
+test x =
   case parse program "<test>" (T.pack x) of
     Right prg ->
       case inferProgram prg of
         Left e -> print e
         Right (prg, env) -> do
-          _ <- forM (M.toList $ values env) $ \(k, t) -> do
+          _ <- forM (M.toList $ values env) $ \(k, t) ->
             T.putStrLn (prettyPrint k <> " : " <> prettyPrint t)
           let out = compileProgram prg
            in T.putStrLn (prettyPrint out)

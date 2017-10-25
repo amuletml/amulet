@@ -30,6 +30,7 @@ instance Substitutable (Type Typed) where
   ftv (TyApp a b _) = ftv a `S.union` ftv b
   ftv (TyArr a b _) = ftv a `S.union` ftv b
   ftv (TyRows rho rows _) = ftv rho `S.union` foldMap (ftv . snd) rows
+  ftv (TyExactRows rows _) = foldMap (ftv . snd) rows
 
   apply _ (TyCon a l) = TyCon a l
   apply _ (TyStar l) = TyStar l
@@ -39,6 +40,7 @@ instance Substitutable (Type Typed) where
   apply s (TyForall v cs t l) = TyForall v (map (apply s') cs) (apply s' t) l where
     s' = foldr M.delete s v
   apply s (TyRows rho rows ann) = TyRows (apply s rho) (map (second (apply s)) rows) ann
+  apply s (TyExactRows rows ann) = TyExactRows  (map (second (apply s)) rows) ann
 
 instance Substitutable a => Substitutable [a] where
   ftv = S.unions . map ftv
