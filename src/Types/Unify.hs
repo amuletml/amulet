@@ -74,7 +74,7 @@ solve s [] = pure s
 solve s (ConUnify e a t:xs) = do
   case runSolve s (unify a t) of
     Left err -> Left (ArisingFrom err e)
-    Right s' -> solve (traceShowId (s' `compose` s)) (apply s' xs)
+    Right s' -> solve (s' `compose` s) (apply s' xs)
 
 occurs :: Var Typed -> Type Typed -> Bool
 occurs _ (TyVar _ _) = False
