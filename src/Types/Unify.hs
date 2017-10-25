@@ -1,5 +1,5 @@
 {-# Language MultiWayIf, GADTs #-}
-module Types.Unify (solve, smush, overlap, closeEnough) where
+module Types.Unify (solve, smush, overlap) where
 
 import Control.Monad.Except
 import Control.Monad.State
@@ -65,12 +65,16 @@ unify ta@(TyExactRows arow _) tb@(TyRows _ brow _)
   | overlaps <- overlap arow brow
   = case overlaps of
       [] -> throwError (NoOverlap ta tb)
-      _ -> pure ()
+      xs -> mapM_ (uncurry unify) xs
 unify tb@(TyRows _ brow _) ta@(TyExactRows arow _)
   | overlaps <- overlap arow brow
   = case overlaps of
       [] -> throwError (NoOverlap ta tb)
-      _  -> pure ()
+      xs -> mapM_ (uncurry unify) xs
+unify ta@(TyExactRows arow _) tb@(TyExactRows brow _)
+  | overlaps <- overlap arow brow
+  = when (length overlaps /= length arow || length overlaps /= length brow)
+      $ throwError (NoOverlap ta tb)
 
 unify x tp@(TyRows rho _ _) = throwError (Note (CanNotInstance rho tp x) isRec)
 unify tp@(TyRows rho _ _) x = throwError (Note (CanNotInstance rho tp x) isRec)
@@ -105,8 +109,3 @@ occurs :: Var Typed -> Type Typed -> Bool
 occurs _ (TyVar _ _) = False
 occurs x e = x `S.member` ftv e
 
-closeEnough :: Var Typed -> Var Typed -> Bool
-closeEnough (TvName a _) (TvName b _) = a == b
-closeEnough (TvRefresh a b) (TvRefresh a' b')
-  = a `closeEnough` a' && b' >= b
-closeEnough _ _ = False
