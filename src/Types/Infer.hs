@@ -107,13 +107,12 @@ infer expr
       App e1 e2 a -> do
         (e1', t1) <- infer e1
         (e2', t2) <- infer e2
-        tv <- flip TyVar (annotation t1 <> annotation t2)
-            . flip TvName (TyStar (annotation t1 <> annotation t2)) <$> fresh
+        tv <- freshTV (annotation e1 <> annotation e2)
         unify expr t1 (TyArr t2 tv (annotation t1 <> annotation t2))
         pure (App e1' e2' a, tv)
       Let ns b ann -> do
         ks <- forM ns $ \(a, _) -> do
-          tv <- flip TyVar ann . flip TvName (TyStar ann) <$> fresh
+          tv <- freshTV ann
           pure (tag a tv, tv)
         extendMany ks $ do
           (ns', ts) <- inferLetTy ks ns
@@ -138,36 +137,30 @@ infer expr
         (l', tl) <- infer l
         (o', to) <- infer o
         (r', tr) <- infer r
-        tv <- flip TyVar a . flip TvName (TyStar a) <$> fresh
+        tv <- freshTV a
         unify expr to (TyArr tl (TyArr tr tv a) a)
         pure (BinOp l' o' r' a, tv)
       Record rows a -> do
+        rho <- freshTV a
         itps <- forM rows $ \(var', val) -> do
           (val', typ) <- infer val
           let var = tag var' typ
           pure ((var, val'), (var, typ))
         let (rows', rowts) = unzip itps
-        pure (Record rows' a, TyRows rowts a)
+        pure (Record rows' a, TyRows rho rowts a)
       RecordExt rec rows a -> do
         itps <- forM rows $ \(var', val) -> do
           (val', typ) <- infer val
           let var = tag var' typ
           pure ((var, val'), (var, typ))
-        (rec', TyRows rRows _) <- infer rec
-        let (rows', nRows) = unzip itps
-        let overlapping = overlap rRows nRows
-            newTypes = unionBy (\x y -> fst x == fst y) rRows nRows
-        forM_ overlapping $ \(a, b) -> unify expr a b
-        pure (RecordExt rec' rows' a, TyRows newTypes a)
-      RecordDel rec rows a -> do
-        (rec', rtp@(TyRows tp _)) <- infer rec
-        let rowMap = M.fromList (map (\(x, y) -> (eraseVarTy x, (x, y))) tp)
+        let (rows', newTypes) = unzip itps
+        (rec', rho) <- infer rec
+        sigma <- freshTV a
+        unify expr rho (TyRows sigma newTypes a)
+        pure (RecordExt rec' rows' a, TyRows sigma newTypes a)
 
-        forM_ rows $ \v -> when (M.notMember v rowMap) $ throwError (NotPresent v rtp)
-        let newRows = foldr (M.delete) rowMap rows
-            rows' = map (fst . (rowMap M.!)) rows
-        pure (RecordDel rec' rows' a, TyRows (M.elems newRows) a)
-
+freshTV :: MonadGen Int m => Span -> m (Type Typed)
+freshTV a = flip TyVar a . flip TvName (TyStar a) <$> fresh
 
 inferKind :: Type Parsed -> Infer a (Type Typed, Type Typed)
 inferKind (TyStar a) = pure (TyStar a, TyStar a)
@@ -189,11 +182,15 @@ inferKind (TyArr a b ann) = do
   when (ka /= TyStar (annotation ka)) $ throwError (NotEqual ka (TyStar ann))
   when (kb /= TyStar (annotation kb)) $ throwError (NotEqual kb (TyStar ann))
   pure (TyArr a' b' ann, TyStar ann)
-inferKind (TyRows rows ann) = do
-  ks <- forM rows $ \(var, typ) -> do
-    (typ', _) <- inferKind typ
-    pure (tag var typ', typ')
-  pure (TyRows ks ann, TyStar ann)
+inferKind (TyRows rho rows ann) = do
+  case rho of
+    TyRows rho' rows' ann' -> inferKind (TyRows rho' (rows `union` rows') ann')
+    _ -> do
+      (rho', _) <- inferKind rho
+      ks <- forM rows $ \(var, typ) -> do
+        (typ', _) <- inferKind typ
+        pure (tag var typ', typ')
+      pure (TyRows rho' ks ann, TyStar ann)
 inferKind ap@(TyApp a b ann) = do
   (a', x) <- inferKind a
   case x of
@@ -225,10 +222,11 @@ inferPattern unify (Destructure cns ps ann) = do
   zipWithM_ unify ptys tys
   pure (Destructure (tag cns pty) ps' ann, res, concat pvs)
 inferPattern unify (PRecord rows ann) = do
+  rho <- freshTV ann
   (rowps, rowts, caps) <- unzip3 <$> forM rows (\(var, pat) -> do
     (p', t, caps) <- inferPattern unify pat
     pure ((tag var t, p'), (tag var t, t), caps))
-  pure (PRecord rowps ann, TyRows rowts ann, concat caps)
+  pure (PRecord rowps ann, TyRows rho rowts ann, concat caps)
 
 inferPattern unify (PType p t ann) = do
   (p', pt, vs) <- inferPattern unify p

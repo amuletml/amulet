@@ -15,7 +15,7 @@ import Syntax
 import qualified Data.Text as T
 import Data.Text (Text)
 import Data.Semigroup ((<>))
-import Control.Arrow ((***), (&&&))
+import Control.Arrow ((***))
 
 import Pretty (uglyPrint)
 
@@ -83,12 +83,6 @@ compileExpr (RecordExt rec exts _)
         extend ((v, e):xs) rec = LuaCall (LuaRef (LuaIndex (LuaRef (LuaName "_G")) (LuaRef (LuaName "rawset")))) [extend xs rec, v, e]
         extend [] x = x
      in extend (map (lowerKey *** compileExpr) exts) rec'
-compileExpr (RecordDel rec dels _)
-  = let rec' = compileExpr rec
-        extend :: [(LuaExpr, LuaExpr)] -> LuaExpr -> LuaExpr
-        extend ((v, e):xs) rec = LuaCall (LuaRef (LuaIndex (LuaRef (LuaName "_G")) (LuaRef (LuaName "rawset")))) [extend xs rec, v, e]
-        extend [] x = x
-     in extend (map (lowerKey &&& const LuaNil) dels) rec'
 compileExpr s@Let{} = compileIife s
 compileExpr s@If{} = compileIife s
 compileExpr s@Begin{} = compileIife s
@@ -104,7 +98,6 @@ compileStmt r e@Fun{} = pureReturn r $ compileExpr e
 compileStmt r e@BinOp{} = pureReturn r $ compileExpr e
 compileStmt r e@Record{} = pureReturn r $ compileExpr e
 compileStmt r e@RecordExt{} = pureReturn r $ compileExpr e
-compileStmt r e@RecordDel{} = pureReturn r $ compileExpr e
 compileStmt r (Let k c _) = let (ns, vs) = unzip $ map compileLet k in
                               (locals ns vs ++ compileStmt r c)
 compileStmt r (If c t e _) = [LuaIf (compileExpr c) (compileStmt r t) (compileStmt r e)]

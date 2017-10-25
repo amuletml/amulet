@@ -73,6 +73,8 @@ data TypeError where
   NotPresent :: (Pretty (Var p), Pretty (Var p'))
              => Var p -> Type p' -> TypeError
   Note :: TypeError -> String -> TypeError
+  CanNotInstance :: Pretty (Var p)
+                 => Type p -> Type p -> Type p -> TypeError
 
 lookupTy :: (MonadError TypeError m, MonadReader Env m, MonadGen Int m) => Var Parsed -> m (Type Typed)
 lookupTy x = do
@@ -138,4 +140,5 @@ instance Show TypeError where
     prnt (Hole v s) = printf "%s: Found typed hole `%s`" (prettyPrint s) (prettyPrint v)
     prnt _ = undefined
   show (Note te m) = printf "%s\n · Note: %s" (show te) m
+  show (CanNotInstance rho new rec) = printf "Can not instance hole `%s` (in record type %s) to type %s" (prettyPrint rho) (prettyPrint new) (prettyPrint rec)
 
