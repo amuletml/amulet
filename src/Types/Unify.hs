@@ -22,6 +22,8 @@ bind var ty | raiseT id (const internal) ty == TyVar var internal = return ()
             | otherwise = modify (M.singleton var ty `compose`)
 
 unify :: Type Typed -> Type Typed -> SolveM ()
+unify x@TyVar{} (TyRows rho _ _) = unify x rho
+unify (TyRows rho _ _) x@TyVar{} = unify x rho
 unify (TyVar a _) b = bind a b
 unify a (TyVar b _) = bind b a
 unify (TyArr a b _) (TyArr a' b' _) = do
@@ -37,11 +39,17 @@ unify t@(TyForall vs _ ty _) t'@(TyForall vs' _ ty' _)
   | length vs /= length vs' = throwError (NotEqual t t')
   -- TODO: Technically we should make fresh variables and do ty[vs/f] ~ ty'[vs'/f]
   | otherwise = unify ty (apply (M.fromList (zip vs' (map (flip TyVar internal) vs))) ty')
-unify (TyRows arow _) (TyRows brow _)
+unify (TyRows rho arow _) (TyRows sigma brow _)
   = let overlaps = overlap arow brow
-     in do forM_ overlaps $ \(a, b) -> unify a b
+     in do unify rho sigma
+           forM_ overlaps $ \(a, b) -> unify a b
            pure ()
+unify x tp@(TyRows rho _ _) = throwError (Note (CanNotInstance rho tp x) isRec)
+unify tp@(TyRows rho _ _) x = throwError (Note (CanNotInstance rho tp x) isRec)
 unify a b = throwError (NotEqual a b)
+
+isRec :: String
+isRec = "A record type's hole can only be instanced to another record"
 
 overlap :: Typed ~ p => [(Var p, Type p)] -> [(Var p, Type p)] -> [(Type p, Type p)]
 overlap xs ys

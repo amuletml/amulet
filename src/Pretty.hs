@@ -192,7 +192,7 @@ local ac
 
 parens, braces, squares, angles :: Pretty a => a -> PrettyP
 parens  = delim @Text "(" ")"
-braces  = delim @Text "{" "}"
+braces  = delim @Text "{ " " }"
 squares = delim @Text "[" "]"
 angles  = delim @Text "<" ">"
 

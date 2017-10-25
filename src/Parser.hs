@@ -58,7 +58,6 @@ exprP' = parens exprP
      <|> withPos (VarRef <$> name)
      <|> withPos (Hole <$> hole)
      <|> withPos (Literal <$> lit)
-     <|> try recDel
      <|> try recIns
      <|> rec where
   hole = lexeme $ do
@@ -105,10 +104,6 @@ exprP' = parens exprP
         reservedOp "->"
         (,) (Destructure v xs p) <$> exprP
       _ -> mzero
-  recDel = withPos . braces $ do
-    x <- exprP
-    reserved "without"
-    RecordDel x <$> many1 name
   recIns = withPos . braces $ do
     x <- exprP
     reserved "with"
