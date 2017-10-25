@@ -278,4 +278,11 @@ eraseVarTy :: Var Typed -> Var Parsed
 eraseVarTy (TvName x _) = Name x
 eraseVarTy (TvRefresh k _) = eraseVarTy k
 
+closeEnough :: Var Typed -> Var Typed -> Bool
+closeEnough (TvName a _) (TvName b _) = a == b
+closeEnough (TvRefresh a b) (TvRefresh a' b')
+  = a `closeEnough` a' && b' >= b
+closeEnough _ _ = False
+
 --- vim: fdm=marker
+--
