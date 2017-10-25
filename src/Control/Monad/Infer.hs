@@ -72,6 +72,7 @@ data TypeError where
                 => Type p' -> Type p -> Type p -> TypeError
   NotPresent :: (Pretty (Var p), Pretty (Var p'))
              => Var p -> Type p' -> TypeError
+  NoOverlap :: (Pretty (Var p)) => Type p -> Type p -> TypeError
   Note :: TypeError -> String -> TypeError
   CanNotInstance :: Pretty (Var p)
                  => Type p -> Type p -> Type p -> TypeError
@@ -137,8 +138,13 @@ instance Show TypeError where
       (prettyPrint ap) (prettyPrint k) (prettyPrint v)
   show (NotPresent v r) = printf "Row type `%s` does not have element `%s`" (prettyPrint r) (prettyPrint v)
   show (FoundHole xs) = unlines $ map prnt xs where
-    prnt (Hole v s) = printf "%s: Found typed hole `%s`" (prettyPrint s) (prettyPrint v)
+    prnt (Hole v s) = printf "%s: Found typed hole `%s` (of type `%s`)" (prettyPrint s)  (prettyPrint v) (prettyPrint (varType v))
     prnt _ = undefined
   show (Note te m) = printf "%s\n · Note: %s" (show te) m
   show (CanNotInstance rho new rec) = printf "Can not instance hole `%s` (in record type %s) to type %s" (prettyPrint rho) (prettyPrint new) (prettyPrint rec)
+  show (NoOverlap ta tb) = printf "No overlap between records `%s` and `%s`"
+    (prettyPrint ta) (prettyPrint tb)
 
+varType :: Var Typed -> Type Typed
+varType (TvName _ x) = x
+varType (TvRefresh v _) = varType v

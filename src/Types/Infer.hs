@@ -19,6 +19,7 @@ import Types.Unify
 import Types.Holes
 
 import Data.List
+import Pretty (tracePretty)
 
 -- Solve for the types of lets in a program
 inferProgram :: [Toplevel Parsed] -> Either TypeError ([Toplevel Typed], Env)
@@ -158,6 +159,11 @@ infer expr
         sigma <- freshTV a
         unify expr rho (TyRows sigma newTypes a)
         pure (RecordExt rec' rows' a, TyRows sigma newTypes a)
+      Access rec key a -> do
+       (rho, ktp) <- (,) <$> freshTV a <*> freshTV a
+       (rec', tp) <- infer rec
+       unify expr tp (TyRows rho [(tag key ktp, ktp)] a)
+       pure (Access rec' (tag key ktp) a, ktp)
 
 freshTV :: MonadGen Int m => Span -> m (Type Typed)
 freshTV a = flip TyVar a . flip TvName (TyStar a) <$> fresh
@@ -273,6 +279,7 @@ inferProg [] = do
     x <- lookupTy (Name "main")
     b <- flip TyVar ann . flip TvName (TyStar ann) <$> fresh
     unify (VarRef (Name "main") ann) x (TyArr tyUnit b ann)
+  forM_ c $ \x -> tracePretty x (pure ())
   case solve mempty c of
     Left e -> throwError (Note e "main must be a function from unit to some type")
     Right _ -> ([],) <$> ask
@@ -285,6 +292,7 @@ inferLetTy :: (t ~ Typed, p ~ Parsed)
 inferLetTy ks [] = pure ([], ks)
 inferLetTy ks ((va, ve):xs) = extendMany ks $ do
   ((ve', ty), c) <- censor (const mempty) (listen (infer ve))
+  forM_ c $ \x -> tracePretty x (pure ())
   (x, vt) <- case solve mempty c of
                Left e -> throwError e
                Right x -> pure (x, closeOver (apply x ty))

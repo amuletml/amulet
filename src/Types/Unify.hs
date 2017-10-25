@@ -13,6 +13,7 @@ import qualified Data.Set as S
 
 import Data.Span
 import Data.List
+import Debug.Trace
 
 type SolveM = StateT Subst (Except TypeError)
 
@@ -39,9 +40,11 @@ unify t@(TyForall vs _ ty _) t'@(TyForall vs' _ ty' _)
   | length vs /= length vs' = throwError (NotEqual t t')
   -- TODO: Technically we should make fresh variables and do ty[vs/f] ~ ty'[vs'/f]
   | otherwise = unify ty (apply (M.fromList (zip vs' (map (flip TyVar internal) vs))) ty')
-unify (TyRows rho arow _) (TyRows sigma brow _)
+unify ta@(TyRows rho arow _) tb@(TyRows sigma brow _)
+-- All types of arow must be present in brow with the same types
   = let overlaps = overlap arow brow
-     in do unify rho sigma
+     in do when (length overlaps /= length arow) $ throwError (NoOverlap ta tb)
+           unify rho sigma
            forM_ overlaps $ \(a, b) -> unify a b
            pure ()
 unify x tp@(TyRows rho _ _) = throwError (Note (CanNotInstance rho tp x) isRec)
@@ -68,10 +71,10 @@ runSolve s x = runExcept (execStateT x s)
 
 solve :: Subst -> [Constraint Typed] -> Either TypeError Subst
 solve s [] = pure s
-solve s (ConUnify e a t:xs) =
+solve s (ConUnify e a t:xs) = do
   case runSolve s (unify a t) of
     Left err -> Left (ArisingFrom err e)
-    Right s' -> solve (s' `compose` s) (apply s' xs)
+    Right s' -> solve (traceShowId (s' `compose` s)) (apply s' xs)
 
 occurs :: Var Typed -> Type Typed -> Bool
 occurs _ (TyVar _ _) = False
