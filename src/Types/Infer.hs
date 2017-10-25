@@ -149,13 +149,11 @@ infer expr
         itps <- inferRows rows
         let (rows', newTypes) = unzip itps
         (rec', rho) <- infer rec
-        sigma <- freshTV a
-        unify expr rho (TyRows sigma newTypes a)
-        pure (RecordExt rec' rows' a, TyRows sigma newTypes a)
+        pure (RecordExt rec' rows' a, TyRows rho newTypes a)
       Access rec key a -> do
        (rho, ktp) <- (,) <$> freshTV a <*> freshTV a
        (rec', tp) <- infer rec
-       unify expr tp (TyRows rho [(tag key ktp, ktp)] a)
+       unify expr rho (TyRows tp [(tag key ktp, ktp)] a)
        pure (Access rec' (tag key ktp) a, ktp)
 
 inferRows :: [(Var Parsed, Expr Parsed)] -> Infer Typed [((Var Typed, Expr Typed), (Var Typed, Type Typed))]
@@ -189,7 +187,8 @@ inferKind (TyArr a b ann) = do
   pure (TyArr a' b' ann, TyStar ann)
 inferKind (TyRows rho rows ann) =
   case rho of
-    TyRows rho' rows' ann' -> inferKind (TyRows rho' (rows `union` rows') ann')
+    TyRows rho' rows' ann' -> inferKind (TyRows rho' (rows' `union` rows) ann')
+    TyExactRows rows' ann' -> inferKind (TyExactRows (rows' `union` rows) ann')
     _ -> do
       (rho', _) <- inferKind rho
       ks <- forM rows $ \(var, typ) -> do
