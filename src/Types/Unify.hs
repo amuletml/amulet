@@ -13,18 +13,20 @@ import qualified Data.Set as S
 
 import Data.Span
 import Data.List
-import Debug.Trace
 
 type SolveM = StateT Subst (Except TypeError)
 
 bind :: Var Typed -> Type Typed -> SolveM ()
 bind var ty | raiseT id (const internal) ty == TyVar var internal = return ()
             | occurs var ty = throwError (Occurs var ty)
-            | otherwise = modify (M.singleton var ty `compose`)
+            | otherwise = do
+                env <- get
+                -- Attempt to extend the environment, otherwise unify with existing type
+                case M.lookup var env of
+                  Nothing -> put (M.singleton var ty `compose` env)
+                  Just ty' -> unify ty ty'
 
 unify :: Type Typed -> Type Typed -> SolveM ()
-unify x@TyVar{} (TyRows rho _ _) = unify x rho
-unify (TyRows rho _ _) x@TyVar{} = unify x rho
 unify (TyVar a _) b = bind a b
 unify a (TyVar b _) = bind b a
 unify (TyArr a b _) (TyArr a' b' _) = do
