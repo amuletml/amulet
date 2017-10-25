@@ -200,7 +200,9 @@ typeP' :: Parser Type'
 typeP' = parens typeP
      <|> withPos (TyVar <$> tyVar)
      <|> tyCon <|> unitTyCon
-     <|> tyForall where
+     <|> tyForall
+     <|> try openRec
+     <|> closedRec where
   tyCon, unitTyCon, tyForall :: Parser Type'
   tyForall = withPos $ do
     reserved "forall"
@@ -211,6 +213,16 @@ typeP' = parens typeP
     TyForall nms cs <$> typeP
   tyCon = withPos (TyCon <$> name)
   unitTyCon = withPos (TyCon (Name (T.pack "unit")) <$ reserved "unit")
+  openRec = withPos . braces $ do
+    x <- withPos (TyVar <$> tyVar)
+    reservedOp "|"
+    TyRows x <$> commaSep1 tyRow
+  closedRec = withPos . braces $ TyExactRows <$> commaSep1 tyRow
+  tyRow = do
+    x <- name
+    reservedOp ":"
+    (x,) <$> typeP
+
 
 tyVar :: Parser (Var Parsed)
 tyVar = lexeme $ do
