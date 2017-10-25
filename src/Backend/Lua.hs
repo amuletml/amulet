@@ -104,6 +104,8 @@ instance Pretty LuaStmt where
 
 instance Pretty LuaVar where
   pprint (LuaName x) = pprint x
+  pprint (LuaIndex e@(LuaRef _) (LuaString k)) = e <+> opClr "." <+> k
+  pprint (LuaIndex e (LuaString k)) = parens e <+> opClr "." <+> k
   pprint (LuaIndex e k) = e <+> squares k
 
 instance Pretty LuaExpr where
