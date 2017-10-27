@@ -48,6 +48,12 @@ data Expr p
   | RecordExt (Expr p) [(Text, Expr p)] (Ann p) -- { foo with baz = quux }
   | Access (Expr p) Text (Ann p) -- foo.bar
 
+  -- Sections
+  | LeftSection (Expr p) (Expr p) (Ann p) -- (+ foo)
+  | RightSection (Expr p) (Expr p) (Ann p) -- (foo +)
+  | BothSection (Expr p) (Ann p) -- (+)
+  | AccessSection Text (Ann p)
+
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Expr p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Expr p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Expr p)
@@ -127,6 +133,11 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
   pprint (Access x@VarRef{} f _) = x <+> opClr "." <+> f
   pprint (Access e f _) = parens e <+> opClr "." <+> f
 
+  pprint (LeftSection op vl _) = parens $ opClr op <+> " " <+> vl
+  pprint (RightSection op vl _) = parens $ vl <+> " " <+> opClr op
+  pprint (BothSection op _) = parens $ opClr op
+  pprint (AccessSection k _) = parens $ opClr "." <+> k
+
 instance (Pretty (Var p)) => Pretty (Pattern p, Expr p) where
   pprint (a, b) = opClr "| " <+> a <+> " -> " <+> b
 
@@ -196,6 +207,10 @@ instance Annotated Expr where
   annotation (Record _ p) = p
   annotation (RecordExt _ _ p) = p
   annotation (Access _ _ p) = p
+  annotation (LeftSection _ _ p) = p
+  annotation (RightSection _ _ p) = p
+  annotation (BothSection _ p) = p
+  annotation (AccessSection _ p) = p
 
 instance Annotated Type where
   annotation (TyCon _ p) = p
@@ -236,6 +251,10 @@ raiseE vR aR =
       Record rows ann -> Record (map (second eR) rows) (aR ann)
       RecordExt x rows ann -> RecordExt (eR x) (map (second eR) rows) (aR ann)
       Access ex v ann -> Access (eR ex) v (aR ann)
+      LeftSection o v a -> LeftSection (eR o) (eR v) (aR a)
+      RightSection o v a -> LeftSection (eR o) (eR v) (aR a)
+      BothSection o a -> BothSection (eR o) (aR a)
+      AccessSection k a -> AccessSection k (aR a)
 
 raiseP :: (Var p -> Var p') -- How to raise variables
        -> (Ann p -> Ann p')

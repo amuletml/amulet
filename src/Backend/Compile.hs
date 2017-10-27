@@ -92,6 +92,19 @@ compileExpr s@If{} = compileIife s
 compileExpr s@Begin{} = compileIife s
 compileExpr s@Match{} = compileIife s
 compileExpr (BinOp l (VarRef (TvName o _) _) r _) = LuaBinOp (compileExpr l) (remapOp o) (compileExpr r)
+compileExpr (LeftSection op vl _)
+  | (VarRef (TvName o _) _) <- op
+  = LuaFunction [LuaName "_arg"] [LuaReturn (LuaBinOp (LuaRef (LuaName "_arg")) (remapOp o) (compileExpr vl))]
+  | otherwise = error "absurd: never parsed"
+compileExpr (RightSection vl op _)
+  | (VarRef (TvName o _) _) <- op
+  = LuaFunction [LuaName "_arg"] [LuaReturn (LuaBinOp (compileExpr vl) (remapOp o) (LuaRef (LuaName "_arg")))]
+  | otherwise = error "absurd: never parsed"
+compileExpr (BothSection op _)
+  | (VarRef (TvName o _) _) <- op
+  = LuaFunction [LuaName "a", LuaName "b"] [LuaReturn (LuaBinOp (LuaRef (LuaName "a")) (remapOp o) (LuaRef (LuaName "b")))]
+  | otherwise = error "absurd: never parsed"
+compileExpr (AccessSection k _) = LuaFunction [LuaName "_arg"] [LuaReturn (LuaRef (LuaIndex (LuaRef (LuaName "_arg")) (LuaString k)))]
 compileExpr BinOp{} = error "absurd: never parsed"
 
 global :: String -> LuaExpr
@@ -106,6 +119,10 @@ compileStmt r e@Fun{} = pureReturn r $ compileExpr e
 compileStmt r e@BinOp{} = pureReturn r $ compileExpr e
 compileStmt r e@Record{} = pureReturn r $ compileExpr e
 compileStmt r e@RecordExt{} = pureReturn r $ compileExpr e
+compileStmt r e@LeftSection{} = pureReturn r $ compileExpr e
+compileStmt r e@RightSection{} = pureReturn r $ compileExpr e
+compileStmt r e@BothSection{} = pureReturn r $ compileExpr e
+compileStmt r e@AccessSection{} = pureReturn r $ compileExpr e
 compileStmt r (Let k c _) = let (ns, vs) = unzip $ map compileLet k in
                               (locals ns vs ++ compileStmt r c)
 compileStmt r (If c t e _) = [LuaIf (compileExpr c) (compileStmt r t) (compileStmt r e)]
@@ -121,12 +138,6 @@ lowerName (TvRefresh a k)
       _ -> error "absurd: no lowering to namespaces"
 lowerName (TvName a _) = LuaName a
 
-lowerKey :: Var Typed -> LuaExpr
-lowerKey (TvRefresh a k)
-  = case lowerKey a of
-      LuaString x -> LuaString (x <> T.pack (show k))
-      _ -> error "absurd: no lowering to namespaces"
-lowerKey (TvName a _) = LuaString a
 
 getName :: Var Typed -> Text
 getName (TvRefresh a _) = getName a

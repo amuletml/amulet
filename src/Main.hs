@@ -61,7 +61,7 @@ main = do
       x' <- T.readFile x
       compileFromTo x x' ppr
     ["dump-bits", x] -> do
-      x' <- T.readFile x
+      x' <- readFile x
       test x'
     [x, t] -> do
       x' <- T.readFile x
