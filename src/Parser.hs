@@ -205,7 +205,7 @@ typeP' = parens typeP
      <|> closedRec where
   tyCon, unitTyCon, tyForall :: Parser Type'
   tyForall = withPos $ do
-    reserved "forall"
+    reserved "forall" <|> reserved "∀"
     nms <- commaSep1 tyVar
     _ <- dot
     TyForall nms <$> typeP
@@ -256,12 +256,14 @@ toplevelP = letStmt <|> try foreignVal <|> valStmt <|> dataDecl where
     _ <- colon
     ValStmt x <$> typeP
   foreignVal = withPos $ do
+    reserved "external"
     reserved "val"
-    reserved "foreign"
     x <- name
+    reservedOp ":"
+    ty <- typeP
+    reservedOp "="
     n <- T.pack <$> stringLiteral
-    _ <- colon
-    ForeignVal x n <$> typeP
+    pure $ ForeignVal x n ty
   dataDecl = withPos $ do
     reserved "type"
     x <- name

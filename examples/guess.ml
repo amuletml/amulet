@@ -1,16 +1,16 @@
-val foreign random "math.random" : int -> int -> int ;
-val foreign random_seed "math.randomseed" : int -> unit ;
+external val random : int -> int -> int = "math.random" ;
+external val random_seed : int -> unit  = "math.randomseed" ;
 
-val foreign print_endline "print" : string -> unit ;
-val foreign print "io.write" : string -> unit ;
-val foreign read "io.read" : string -> string ;
+external val print_endline : string -> unit = "print" ;
+external val print : string -> unit  = "io.write" ;
+external val read : string -> string  = "io.read" ;
 
-val foreign current_time "os.time" : unit -> int ;
+external val current_time : unit -> int  = "os.time" ;
 
-val foreign prim_int_of_string "tonumber" : string -> int ;
-val foreign string_of_int "tostring" : int -> string ;
+external val prim_int_of_string : string -> int  = "tonumber" ;
+external val string_of_int : int -> string  = "tostring" ;
 
-val foreign transmute "(function(a) return a end)" : 'a -> 'b ;
+external val transmute : 'a -> 'b  = "(function(a) return a end)" ;
 
 type option 'a =
   | Just 'a

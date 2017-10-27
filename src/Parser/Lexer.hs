@@ -25,7 +25,7 @@ style = Tok.LanguageDef
           , Tok.reservedOpNames = ops } where
 
   ops = ["->", "=", "∀", "=>", "|", "**", "*", "+", "^", "<", ">=", "==", "&&", "||", "/", "-", ">", "<=", "<>"]
-  words = ["forall", "let", "and", "if", "then", "else", "begin", "end", "in", "foreign", "val", "true", "false", "match", "with", "type", "unit", "with", "without"]
+  words = ["forall", "let", "and", "if", "then", "else", "begin", "end", "in", "external", "val", "true", "false", "match", "with", "type", "unit", "with", "without"]
 
 type Parser = Parsec T.Text ()
 
