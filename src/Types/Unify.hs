@@ -40,7 +40,7 @@ unify (TyApp a b _) (TyApp a' b' _) = do
 unify ta@(TyCon a _) tb@(TyCon b _)
   | smush a == smush b = pure ()
   | otherwise = throwError (NotEqual ta tb)
-unify t@(TyForall vs _ ty _) t'@(TyForall vs' _ ty' _)
+unify t@(TyForall vs ty _) t'@(TyForall vs' ty' _)
   | length vs /= length vs' = throwError (NotEqual t t')
   -- TODO: Technically we should make fresh variables and do ty[vs/f] ~ ty'[vs'/f]
   | otherwise = unify ty (apply (M.fromList (zip vs' (map (flip TyVar internal) vs))) ty')

@@ -208,9 +208,7 @@ typeP' = parens typeP
     reserved "forall"
     nms <- commaSep1 tyVar
     _ <- dot
-    cs <- parens . commaSep1 $ typeP
-    reservedOp "=>"
-    TyForall nms cs <$> typeP
+    TyForall nms <$> typeP
   tyCon = withPos (TyCon <$> name)
   unitTyCon = withPos (TyCon (Name (T.pack "unit")) <$ reserved "unit")
   openRec = withPos . braces $ do

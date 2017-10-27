@@ -115,7 +115,7 @@ alpha :: [Text]
 alpha = map T.pack $ [1..] >>= flip replicateM ['a'..'z']
 
 instantiate :: MonadGen Int m => Type Typed -> m (Type Typed)
-instantiate (TyForall vs _ ty _) = do
+instantiate (TyForall vs ty _) = do
   f <- map (flip TyVar internal)
         <$> mapM (const (flip TvName internalTyVar <$> fresh)) vs
   instantiate (apply (Map.fromList (zip vs f)) ty)
