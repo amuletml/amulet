@@ -10,7 +10,7 @@ import Pretty
 import Data.Text (Text, pack)
 import Data.Span
 
-import Control.Arrow ((***))
+import Control.Arrow ((***), second)
 
 data Parsed 
 data Typed
@@ -44,9 +44,9 @@ data Expr p
   | Hole (Var p) (Ann p)
 
   -- Records
-  | Record [(Var p, Expr p)] (Ann p) -- { foo = bar, baz = quux }
-  | RecordExt (Expr p) [(Var p, Expr p)] (Ann p) -- { foo with baz = quux }
-  | Access (Expr p) (Var p) (Ann p) -- foo.bar
+  | Record [(Text, Expr p)] (Ann p) -- { foo = bar, baz = quux }
+  | RecordExt (Expr p) [(Text, Expr p)] (Ann p) -- { foo with baz = quux }
+  | Access (Expr p) Text (Ann p) -- foo.bar
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Expr p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Expr p)
@@ -57,7 +57,7 @@ data Pattern p
   | Capture (Var p) (Ann p)
   | Destructure (Var p) [Pattern p] (Ann p)
   | PType (Pattern p) (Type p) (Ann p)
-  | PRecord [(Var p, Pattern p)] (Ann p)
+  | PRecord [(Text, Pattern p)] (Ann p)
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Pattern p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Pattern p)
@@ -77,8 +77,8 @@ data Type p
   | TyArr (Type p) (Type p) (Ann p)
   | TyApp (Type p) (Type p) (Ann p)
   | TyStar (Ann p) -- * :: *
-  | TyRows (Type p) [(Var p, Type p)] (Ann p) -- { α | foo : int, bar : string }
-  | TyExactRows [(Var p, Type p)] (Ann p) -- { foo : int, bar : string }
+  | TyRows (Type p) [(Text, Type p)] (Ann p) -- { α | foo : int, bar : string }
+  | TyExactRows [(Text, Type p)] (Ann p) -- { foo : int, bar : string }
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Type p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Type p)
@@ -233,9 +233,9 @@ raiseE vR aR =
       Literal l a -> Literal l (aR a)
       Match e cs a -> Match (eR e) (map (raiseP vR aR *** eR) cs) (aR a)
       BinOp a b c an -> BinOp (eR a) (eR b) (eR c) (aR an)
-      Record rows ann -> Record (map (vR *** eR) rows) (aR ann)
-      RecordExt x rows ann -> RecordExt (eR x) (map (vR *** eR) rows) (aR ann)
-      Access ex v ann -> Access (eR ex) (vR v) (aR ann)
+      Record rows ann -> Record (map (second eR) rows) (aR ann)
+      RecordExt x rows ann -> RecordExt (eR x) (map (second eR) rows) (aR ann)
+      Access ex v ann -> Access (eR ex) v (aR ann)
 
 raiseP :: (Var p -> Var p') -- How to raise variables
        -> (Ann p -> Ann p')
@@ -244,7 +244,7 @@ raiseP _ a (Wildcard p) = Wildcard (a p)
 raiseP v a (Capture n p) = Capture (v n) (a p)
 raiseP v a (Destructure c s p) = Destructure (v c) (map (raiseP v a) s) (a p)
 raiseP v a (PType i t p) = PType (raiseP v a i) (raiseT v a t) (a p)
-raiseP v a (PRecord rs p) = PRecord (map (v *** raiseP v a) rs) (a p)
+raiseP v a (PRecord rs p) = PRecord (map (second (raiseP v a)) rs) (a p)
 
 raiseT :: (Var p -> Var p') -- How to raise variables
        -> (Ann p -> Ann p')
@@ -256,8 +256,8 @@ raiseT v a (TyForall n t p) = TyForall (map v n)
                                        (a p)
 raiseT v a (TyArr x y p) = TyArr (raiseT v a x) (raiseT v a y) (a p)
 raiseT v a (TyApp x y p) = TyApp (raiseT v a x) (raiseT v a y) (a p)
-raiseT v a (TyRows rho rows p) = TyRows (raiseT v a rho) (map (v *** raiseT v a) rows) (a p)
-raiseT v a (TyExactRows rows p) = TyExactRows (map (v *** raiseT v a) rows) (a p)
+raiseT v a (TyRows rho rows p) = TyRows (raiseT v a rho) (map (second (raiseT v a)) rows) (a p)
+raiseT v a (TyExactRows rows p) = TyExactRows (map (second (raiseT v a)) rows) (a p)
 raiseT _ a (TyStar p) = TyStar (a p)
 
 --- }}}

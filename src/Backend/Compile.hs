@@ -66,7 +66,7 @@ compileExpr :: Expr Typed -> LuaExpr
 compileExpr (VarRef v _) = LuaRef (lowerName v)
 compileExpr (Hole v ann) = LuaCall (global "error") [LuaString msg] where
   msg = "Deferred typed hole " <> uglyPrint v <> " (from " <> uglyPrint ann <> ")"
-compileExpr (Access rec f _) = LuaRef (LuaIndex (compileExpr rec) (lowerKey f))
+compileExpr (Access rec f _) = LuaRef (LuaIndex (compileExpr rec) (LuaString f))
 compileExpr (App f x _) = LuaCall (compileExpr f) [compileExpr x]
 compileExpr (Fun (Capture v _) e _) = LuaFunction [lowerName v] (compileStmt (Just LuaReturn) e)
 compileExpr (Fun (Wildcard _) e _) = LuaFunction [LuaName "_"] (compileStmt (Just LuaReturn) e)
@@ -80,13 +80,13 @@ compileExpr (Literal (LiStr str) _)     = LuaString str
 compileExpr (Literal (LiBool True) _)   = LuaTrue
 compileExpr (Literal (LiBool False) _)  = LuaFalse
 compileExpr (Literal LiUnit _)          = LuaNil -- evil!
-compileExpr (Record rows _)             = LuaTable (map (lowerKey *** compileExpr) rows)
+compileExpr (Record rows _)             = LuaTable (map (LuaString *** compileExpr) rows)
 compileExpr (RecordExt rec exts _)
   = let rec' = compileExpr rec
         extend :: [(LuaExpr, LuaExpr)] -> LuaExpr -> LuaExpr
         extend ((v, e):xs) rec = LuaCall (global "extend") [extend xs rec, v, e]
         extend [] x = x
-     in extend (map (lowerKey *** compileExpr) exts) rec'
+     in extend (map (LuaString *** compileExpr) exts) rec'
 compileExpr s@Let{} = compileIife s
 compileExpr s@If{} = compileIife s
 compileExpr s@Begin{} = compileIife s
@@ -174,7 +174,7 @@ patternTest (Destructure con ps _) vr
     tag (TvName con _) vr = LuaBinOp (LuaRef (LuaIndex vr (LuaNumber 1))) "==" (LuaString con)
     tag _ _ = error "absurd: no renaming"
 patternTest (PRecord rs _) vr = foldAnd (table vr:map (test vr) rs) where
-  test vr (var', pat) = patternTest pat (LuaRef (LuaIndex vr (lowerKey var')))
+  test vr (var', pat) = patternTest pat (LuaRef (LuaIndex vr (LuaString var')))
 
 
 table :: LuaExpr -> LuaExpr
@@ -189,7 +189,7 @@ patternBindings (Destructure _ ps _) vr
   = concat $ zipWith3 innerBind ps (repeat vr) [2..] where
     innerBind p v = patternBindings p . LuaRef . LuaIndex v . LuaNumber . fromInteger
 patternBindings (PRecord rs _) vr = concatMap (index vr) rs where
-  index vr (var', pat) = patternBindings pat (LuaRef (LuaIndex vr (lowerKey var')))
+  index vr (var', pat) = patternBindings pat (LuaRef (LuaIndex vr (LuaString var')))
 
 compileMatch :: Returner -> Expr Typed -> [(Pattern Typed, Expr Typed)] -> Gen Int [LuaStmt]
 compileMatch r ex ps = do
