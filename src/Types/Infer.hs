@@ -39,8 +39,8 @@ tyUnit = TyCon (TvName "unit" (TyStar internal)) internal
 star :: Ann p ~ Span => Type p
 star = TyStar internal
 
-forall :: Ann p ~ Span => [Var p] -> [Type p] -> Type p -> Type p
-forall a b c = TyForall a b c internal
+forall :: Ann p ~ Span => [Var p] -> Type p -> Type p
+forall a c = TyForall a c internal
 
 app, arr :: Ann p ~ Span => Type p -> Type p -> Type p
 arr a b = TyArr a b internal
@@ -61,7 +61,7 @@ builtinsEnv = Env (M.fromList ops) (M.fromList tps) where
   stringOp = tyString `arr` (tyString `arr` tyString)
   intCmp = tyInt `arr` (tyInt `arr` tyBool)
 
-  cmp = forall [TvName "a" star] [] $ var (TvName "a" star) `arr` (var (TvName "a" star) `arr` tyBool)
+  cmp = forall [TvName "a" star] $ var (TvName "a" star) `arr` (var (TvName "a" star) `arr` tyBool)
   ops = [ op "+" intOp, op "-" intOp, op "*" intOp, op "/" intOp, op "**" intOp
         , op "^" stringOp
         , op "<" intCmp, op ">" intCmp, op ">=" intCmp, op "<=" intCmp
@@ -173,11 +173,10 @@ inferKind (TyVar v a) = do
 inferKind (TyCon v a) = do
   x <- lookupKind v `catchError` const (pure (TyStar a))
   pure (TyCon (tag v x) a, x)
-inferKind (TyForall vs c k a) = do
+inferKind (TyForall vs k a) = do
   (k, t') <- extendManyK (zip (map (`tag` TyStar a) vs) (repeat (TyStar a))) $
     inferKind k
-  c' <- map fst <$> mapM inferKind c
-  pure (TyForall (map (`tag` TyStar a) vs) c' k a, t')
+  pure (TyForall (map (`tag` TyStar a) vs) k a, t')
 inferKind (TyArr a b ann) = do
   (a', ka) <- inferKind a
   (b', kb) <- inferKind b
@@ -328,7 +327,7 @@ closeOver a = forall fv a where
   fv = S.toList . ftv $ a
   forall :: [Var p] -> Type p -> Type p
   forall [] a = a
-  forall vs a = TyForall vs [] a (annotation a)
+  forall vs a = TyForall vs a (annotation a)
 
 consFst :: Functor m => a -> m ([a], b) -> m ([a], b)
 consFst a = fmap (first (a:))

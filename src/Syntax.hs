@@ -73,7 +73,7 @@ data Lit
 data Type p
   = TyCon (Var p) (Ann p)
   | TyVar (Var p) (Ann p)
-  | TyForall [Var p] [Type p] (Type p) (Ann p) -- constraints
+  | TyForall [Var p] (Type p) (Ann p) -- constraints
   | TyArr (Type p) (Type p) (Ann p)
   | TyApp (Type p) (Type p) (Ann p)
   | TyStar (Ann p) -- * :: *
@@ -151,10 +151,8 @@ instance Pretty Lit where
 instance (Pretty (Var p)) => Pretty (Type p) where
   pprint (TyCon v _) = typeClr v
   pprint (TyVar v _) = opClr "'" <+> tvClr v
-  pprint (TyForall vs [] v _)
+  pprint (TyForall vs v _)
     = kwClr "∀ " <+> interleave " " (map (\x -> "'" <+> tvClr x) vs) <+> opClr ". " <+> v
-  pprint (TyForall vs c v _) = kwClr "∀ " <+> interleave " " (map (\x -> "'" <+> tvClr x) vs)
-                           <+> opClr ". " <+> parens (interleave "," c) <+> opClr " => " <+> v
 
   pprint (TyArr x@TyArr{} e _) = parens x <+> opClr " -> " <+> e
   pprint (TyArr x e _) = x <+> opClr " -> " <+> e
@@ -204,7 +202,7 @@ instance Annotated Type where
   annotation (TyRows _ _ p) = p
   annotation (TyExactRows _ p) = p
   annotation (TyVar _ p) = p
-  annotation (TyForall _ _ _ p) = p
+  annotation (TyForall _ _ p) = p
   annotation (TyArr _ _ p) = p
   annotation (TyApp _ _ p) = p
   annotation (TyStar p) = p
@@ -253,10 +251,9 @@ raiseT :: (Var p -> Var p') -- How to raise variables
        -> Type p -> Type p'
 raiseT v a (TyCon n p) = TyCon (v n) (a p)
 raiseT v a (TyVar n p) = TyVar (v n) (a p)
-raiseT v a (TyForall n c t p) = TyForall (map v n)
-                                     (map (raiseT v a) c)
-                                     (raiseT v a t)
-                                     (a p)
+raiseT v a (TyForall n t p) = TyForall (map v n)
+                                       (raiseT v a t)
+                                       (a p)
 raiseT v a (TyArr x y p) = TyArr (raiseT v a x) (raiseT v a y) (a p)
 raiseT v a (TyApp x y p) = TyApp (raiseT v a x) (raiseT v a y) (a p)
 raiseT v a (TyRows rho rows p) = TyRows (raiseT v a rho) (map (v *** raiseT v a) rows) (a p)
