@@ -204,7 +204,7 @@ compileMatch r ex ps = do
                         : gen ps
       gen [] = [err]
       err = ( LuaTrue
-            , [LuaCallS (LuaRef (LuaName "error"))
+            , [LuaCallS (global "error")
                         [LuaString "Pattern matching failure in match expression"]])
   pure $ compileStmt (Just $ LuaLocal [x] . (:[])) ex
        ++ [ LuaIfElse (gen ps) ]
