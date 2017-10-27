@@ -62,13 +62,7 @@ main = do
       compileFromTo x x' ppr
     ["dump-bits", x] -> do
       x' <- T.readFile x
-      case parse program x x' of
-        Right prg -> do
-          pPrint prg
-          case inferProgram prg of
-            Left e -> pPrint e
-            Right ts -> pPrint ts
-        Left e -> print e
+      test x'
     [x, t] -> do
       x' <- T.readFile x
       compileFromTo x x' $ T.writeFile t . uglyPrint
