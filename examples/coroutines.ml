@@ -1,19 +1,19 @@
 type coroutine 'a 'b;
 
-val foreign co_create "coroutine.create" : ('a -> 'b) -> coroutine 'a 'b;
-val foreign co_resume "coroutine.resume" : coroutine 'a 'b -> 'a -> 'b;
-val foreign co_yield "coroutine.yield" : 'b -> 'a;
-val foreign lua_version "_VERSION" : string;
+external val co_create : ('a -> 'b) -> coroutine 'a 'b = "coroutine.create" ;
+external val co_resume : coroutine 'a 'b -> 'a -> 'b = "coroutine.resume" ;
+external val co_yield : 'b -> 'a = "coroutine.yield" ;
+external val lua_version : string = "_VERSION" ;
 
-val foreign print "print" : string -> unit;
-val foreign write "io.write" : string -> unit;
-val foreign string_of_int "tostring" : int -> string;
-val foreign int_of_string "tonumber" : string -> int;
-val foreign read_stdin "io.read" : string -> string;
-val foreign exit "os.exit" : int -> unit;
+external val print : string -> unit = "print" ;
+external val write : string -> unit = "io.write" ;
+external val string_of_int : int -> string = "tostring" ;
+external val int_of_string : string -> int = "tonumber" ;
+external val read_stdin : string -> string = "io.read" ;
+external val exit : int -> unit = "os.exit" ;
 
 (* i'm impressed, but not surprised, that this works *)
-val foreign unsafe_coerce "(function(a) return a end)" : 'a -> 'b;
+external val unsafe_coerce : 'a -> 'b = "(function(a) return a end)" ;
 
 type option 'a =
   | Just 'a
