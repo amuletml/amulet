@@ -98,15 +98,19 @@ smush :: Var Typed -> Var Typed
 smush (TvName v _) = TvName v internalTyVar
 smush (TvRefresh v k) = TvRefresh (smush v) k
 
-runSolve :: Subst -> SolveM b -> Either TypeError Subst
-runSolve s x = runExcept (execStateT (runGenT x) s)
+runSolve :: Int -> Subst -> SolveM b -> Either TypeError (Int, Subst)
+runSolve i s x = runExcept (fix (runStateT (runGenTFrom i act) s)) where
+  act = (,) <$> gen <*> x
+  fix act = do
+    ((i, _), s) <- act
+    pure (i, s)
 
-solve :: Subst -> [Constraint Typed] -> Either TypeError Subst
-solve s [] = pure s
-solve s (ConUnify e a t:xs) =
-  case runSolve s (unify a t) of
+solve :: Int -> Subst -> [Constraint Typed] -> Either TypeError Subst
+solve _ s [] = pure s
+solve i s (ConUnify e a t:xs) =
+  case runSolve i s (unify a t) of
     Left err -> Left (ArisingFrom err e)
-    Right s' -> solve (s' `compose` s) (apply s' xs)
+    Right (i', s') -> solve i' (s' `compose` s) (apply s' xs)
 
 occurs :: Var Typed -> Type Typed -> Bool
 occurs _ (TyVar _ _) = False

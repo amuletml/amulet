@@ -153,7 +153,11 @@ instance Show TypeError where
     prnt (Hole v s) = printf "%s: Found typed hole `%s` (of type `%s`)" (prettyPrint s)  (prettyPrint v) (prettyPrint (varType v))
     prnt _ = undefined
   show (Note te m) = printf "%s\n · Note: %s" (show te) m
-  show (CanNotInstance rho new rec) = printf "Can not instance hole `%s` (in record type %s) to type %s" (prettyPrint rho) (prettyPrint new) (prettyPrint rec)
+  show (CanNotInstance rho new rec)
+    | prettyPrint rho == prettyPrint new
+    = printf "Can not instance hole of record type `%s` to type %s" (prettyPrint rec) (prettyPrint rho)
+    | otherwise
+    = printf "Can not instance hole `%s` (in record type %s) to type %s" (prettyPrint rho) (prettyPrint new) (prettyPrint rec)
   show (NoOverlap ta@(TyExactRows ra _) tb@(TyRows _ rb _))
     = printf "No overlap between exact record `%s` and polymorphic record `%s`\n %s"
         (prettyPrint ta) (prettyPrint tb) (missing ra rb) 

@@ -45,6 +45,10 @@ withPos k = do
 
 exprP' :: Parser Expr'
 exprP' = try access
+     <|> try rightSect
+     <|> try accessSect
+     <|> try leftSect
+     <|> try bothSect
      <|> parens exprP
      <|> funExpr
      <|> letExpr
@@ -120,7 +124,31 @@ exprP' = try access
       x <- Tok.identStart style
       T.pack . (x:) <$> many (Tok.identLetter style)
     pure $ Access rec key
+  accessSect = withPos . parens . lexeme $ do
+    '.' <- char '.'
+    x <- Tok.identStart style
+    AccessSection . T.pack . (x:) <$> many (Tok.identLetter style)
+  rightSect, leftSect, bothSect :: Parser Expr'
+  bothSect = withPos . parens . lexeme $ do
+    op <- withPos $ do
+      actual <- operator'
+      pure (VarRef (Name (T.pack actual)))
+    pure (BothSection op)
+  leftSect = withPos . parens $ do
+    op <- withPos $ do
+      actual <- operator'
+      pure (VarRef (Name (T.pack actual)))
+    x <- exprP'
+    pure (LeftSection op x)
+  rightSect = withPos . parens $ do
+    x <- exprP'
+    op <- withPos $ do
+      actual <- operator'
+      pure (VarRef (Name (T.pack actual)))
+    pure (RightSection x op)
 
+operator' :: Parser String
+operator' = lexeme ((:) <$> Tok.opStart style <*> many (Tok.opLetter style))
 
 patternP :: Parser Pattern'
 patternP = wildcard
