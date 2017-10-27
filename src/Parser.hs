@@ -21,11 +21,6 @@ type Toplevel' = Toplevel Parsed
 type Type' = Type Parsed
 type Pattern' = Pattern Parsed
 
-data BeginStmt
-  = BeginLet [(Var Parsed, Expr')]
-  | BeginRun Expr'
-  deriving (Eq)
-
 bindGroup :: Parser [(Var Parsed, Expr')]
 bindGroup = sepBy1 decl (reserved "and") where
   decl = do
@@ -112,18 +107,18 @@ exprP' = try access
   rec = withPos $
           Record <$> braces (commaSep row)
   row = do
-    x <- name
+    x <- identifier
     reservedOp "="
-    (x, ) <$> exprP
+    (T.pack x, ) <$> exprP
   access = withPos . lexeme $ do
     (rec :: Expr Parsed) <- (parens exprP <* char '.') <|> withPos (do
       x <- Tok.identStart style
       xs <- many (Tok.identLetter style)
       '.' <- char '.'
       pure . VarRef . Name . T.pack $ (x:xs))
-    (key :: Var Parsed) <- do
+    (key :: T.Text) <- do
       x <- Tok.identStart style
-      Name . T.pack . (x:) <$> many (Tok.identLetter style)
+      T.pack . (x:) <$> many (Tok.identLetter style)
     pure $ Access rec key
 
 
@@ -151,9 +146,9 @@ patternP = wildcard
     PType x <$> typeP
   record = withPos . braces $ do
     rows <- commaSep1 $ do
-      x <- name
+      x <- identifier
       reservedOp "="
-      (x,) <$> patternP
+      (T.pack x,) <$> patternP
     pure $ PRecord rows
 
 exprP :: Parser Expr'
@@ -217,9 +212,9 @@ typeP' = parens typeP
     TyRows x <$> commaSep1 tyRow
   closedRec = withPos . braces $ TyExactRows <$> commaSep1 tyRow
   tyRow = do
-    x <- name
+    x <- identifier
     reservedOp ":"
-    (x,) <$> typeP
+    (T.pack x,) <$> typeP
 
 
 tyVar :: Parser (Var Parsed)

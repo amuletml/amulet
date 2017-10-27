@@ -16,6 +16,8 @@ import Data.Span
 import Data.Function
 import Data.List
 
+import Data.Text (Text)
+
 type SolveM = GenT Int (StateT Subst (Except TypeError))
 
 bind :: Var Typed -> Type Typed -> SolveM ()
@@ -84,12 +86,12 @@ unify a b = throwError (NotEqual a b)
 isRec :: String
 isRec = "A record type's hole can only be instanced to another record"
 
-overlap :: Typed ~ p => [(Var p, Type p)] -> [(Var p, Type p)] -> [(Type p, Type p)]
+overlap :: Typed ~ p => [(Text, Type p)] -> [(Text, Type p)] -> [(Type p, Type p)]
 overlap xs ys
   | old <- sortOn fst xs
   , new <- sortOn fst ys
   , align <- zip old new
-  = let overlapping = takeWhile (\((a, _), (b, _)) -> a `closeEnough` b) align
+  = let overlapping = takeWhile (uncurry ((==) `on` fst)) align
      in map (\((_, t), (_, t')) -> (t, t')) overlapping
 
 smush :: Var Typed -> Var Typed

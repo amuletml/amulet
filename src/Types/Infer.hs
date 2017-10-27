@@ -153,14 +153,13 @@ infer expr
       Access rec key a -> do
        (rho, ktp) <- (,) <$> freshTV a <*> freshTV a
        (rec', tp) <- infer rec
-       unify expr rho (TyRows tp [(tag key ktp, ktp)] a)
-       pure (Access rec' (tag key ktp) a, ktp)
+       unify expr rho (TyRows tp [(key, ktp)] a)
+       pure (Access rec' key a, ktp)
 
-inferRows :: [(Var Parsed, Expr Parsed)] -> Infer Typed [((Var Typed, Expr Typed), (Var Typed, Type Typed))]
+inferRows :: [(T.Text, Expr Parsed)] -> Infer Typed [((T.Text, Expr Typed), (T.Text, Type Typed))]
 inferRows rows = forM rows $ \(var', val) -> do
   (val', typ) <- infer val
-  let var = tag var' typ
-  pure ((var, val'), (var, typ))
+  pure ((var', val'), (var', typ))
 
 freshTV :: MonadGen Int m => Span -> m (Type Typed)
 freshTV a = flip TyVar a . flip TvName (TyStar a) <$> fresh
@@ -192,12 +191,12 @@ inferKind (TyRows rho rows ann) =
       (rho', _) <- inferKind rho
       ks <- forM rows $ \(var, typ) -> do
         (typ', _) <- inferKind typ
-        pure (tag var typ', typ')
+        pure (var, typ')
       pure (TyRows rho' ks ann, TyStar ann)
 inferKind (TyExactRows rows ann) = do
   ks <- forM rows $ \(var, typ) -> do
     (typ', _) <- inferKind typ
-    pure (tag var typ', typ')
+    pure (var, typ')
   pure (TyExactRows ks ann, TyStar ann)
 inferKind ap@(TyApp a b ann) = do
   (a', x) <- inferKind a
@@ -233,7 +232,7 @@ inferPattern unify (PRecord rows ann) = do
   rho <- freshTV ann
   (rowps, rowts, caps) <- unzip3 <$> forM rows (\(var, pat) -> do
     (p', t, caps) <- inferPattern unify pat
-    pure ((tag var t, p'), (tag var t, t), caps))
+    pure ((var, p'), (var, t), caps))
   pure (PRecord rowps ann, TyRows rho rowts ann, concat caps)
 
 inferPattern unify (PType p t ann) = do

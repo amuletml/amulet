@@ -166,16 +166,16 @@ instance Show TypeError where
   show (NoOverlap ta tb) = printf "\x1b[1;32minternal compiler error\x1b[0m: NoOverlap %s %s" (prettyPrint ta) (prettyPrint tb)
 
 
-missing :: [(Var Typed, b)] -> [(Var Typed, b)] -> Text
+missing :: [(Text, b)] -> [(Text, b)] -> Text
 missing ra rb
   | length ra < length rb
   = "· Namely, the following fields are missing: " <> T.intercalate ", "
        (map (prettyPrint . tvClr . fst)
-            (deleteFirstsBy (closeEnough `on` fst) rb ra))
+            (deleteFirstsBy ((==) `on` fst) rb ra))
   | length ra > length rb
   = "· Namely, the following fields should not be present: " <> T.intercalate ", "
       (map (prettyPrint . tvClr . fst)
-           (deleteFirstsBy (closeEnough `on` fst) ra rb))
+           (deleteFirstsBy ((==) `on` fst) ra rb))
   | length ra == length rb
   = "· No fields match (or the compiler is *very* confused)"
 missing _ _ = undefined -- freaking GHC
