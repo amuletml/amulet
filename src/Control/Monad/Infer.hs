@@ -24,10 +24,7 @@ import Data.Semigroup
 import Data.Span (internal)
 
 import qualified Data.Text as T
-import Text.Printf (printf)
 import Data.Text (Text)
-
-import Data.Function
 
 import Pretty hiding (local, (<>))
 
@@ -62,20 +59,16 @@ data TypeError where
   NotEqual :: Pretty (Var p) => Type p -> Type p -> TypeError
   Occurs   :: Pretty (Var p) => Var p -> Type p -> TypeError
   NotInScope :: Var Parsed -> TypeError
-  EmptyMatch :: Pretty (Var p) => Expr p -> TypeError
+  EmptyMatch :: Pretty (Ann p) => Expr p -> TypeError
   EmptyBegin :: ( Pretty (Var p)
                 , Pretty (Ann p) )
              => Expr p -> TypeError
   FoundHole :: [Expr Typed] -> TypeError
-  ArisingFrom :: (Pretty (Ann p), Pretty (Var p))
-              => TypeError -> Expr p -> TypeError
-  ArisingFromT :: (Pretty (Ann p), Pretty (Var p))
-               => TypeError -> Type p -> TypeError
+  ArisingFrom :: (Annotated f, Pretty (f p), Pretty (Ann p), Pretty (Var p))
+              => TypeError -> f p -> TypeError
   ExpectedArrow :: (Pretty (Var p'), Pretty (Var p))
                 => Type p' -> Type p -> Type p -> TypeError
-  NotPresent :: (Pretty (Var p), Pretty (Var p'))
-             => Var p -> [(Var p', Type p')] -> TypeError
-  NoOverlap :: (Pretty (Var p), Eq (Var p), Ord (Var p), p ~ Typed) => Type p -> Type p -> TypeError
+  NoOverlap :: Type Typed -> Type Typed -> TypeError
   Note :: TypeError -> String -> TypeError
   CanNotInstance :: Pretty (Var p)
                  => Type p {- record type -}
@@ -134,58 +127,4 @@ instance Pretty (Var p) => Pretty (Constraint p) where
                         <+> a
                         <+> opClr (" ~ " :: String) <+> b
 
-prettyRows :: (Pretty (Var p)) => [(Var p, Type p)] -> PrettyP
-prettyRows = braces
-           . interleave (", " :: String)
-           . map (\(x, y) -> x <+> opClr (" : " :: String) <+> y)
 
-instance Show TypeError where
-  show (NotEqual a b) = printf "Type error: failed to unify `%s` with `%s`" (prettyPrint a) (prettyPrint b)
-  show (Occurs v t) = printf "Occurs check: Variable `%s` occurs in `%s`" (prettyPrint v) (prettyPrint t)
-  show (NotInScope e) = printf "Variable not in scope: `%s`" (prettyPrint e)
-  show (EmptyMatch e) = printf "Empty match expression:\n%s" (prettyPrint e)
-  show (EmptyBegin v) = printf "%s: Empty match expression" (prettyPrint (annotation v))
-  show (ArisingFrom t v) = printf "%s: %s\n · Arising from use of `%s`" (prettyPrint (annotation v)) (show t) (prettyPrint v)
-  show (ArisingFromT t v) = printf "%s: %s\n · Arising from type `%s`" (prettyPrint (annotation v)) (show t) (prettyPrint v)
-  show (ExpectedArrow ap k v)
-    = printf "Kind error: In application '%s'\n · expected arrow kind, but got `%s` (kind of `%s`)"
-      (prettyPrint ap) (prettyPrint k) (prettyPrint v)
-  show (NotPresent v r) = printf "Row type `%s` does not have element `%s`" (prettyPrint (prettyRows r))
-                                                                            (prettyPrint v)
-  show (FoundHole xs) = unlines $ map prnt xs where
-    prnt (Hole v s) = printf "%s: Found typed hole `%s` (of type `%s`)" (prettyPrint s)  (prettyPrint v) (prettyPrint (varType v))
-    prnt _ = undefined
-  show (Note te m) = printf "%s\n · Note: %s" (show te) m
-  show (CanNotInstance rec new)
-    = printf "Can not instance hole of record type `%s` to type %s" (prettyPrint rec) (prettyPrint new)
-  show (NoOverlap ta@(TyExactRows ra _) tb@(TyRows _ rb _))
-    = printf "No overlap between exact record `%s` and polymorphic record `%s`\n %s"
-        (prettyPrint ta) (prettyPrint tb) (missing ra rb) 
-  show (NoOverlap tb@(TyRows _ rb _) ta@(TyExactRows ra _))
-    = printf "No overlap between exact record `%s` and polymorphic record `%s`\n %s"
-        (prettyPrint ta) (prettyPrint tb) (missing ra rb) 
-  show (NoOverlap tb@(TyExactRows rb _) ta@(TyExactRows ra _))
-    = printf "No unification between exact records `%s` and `%s`\n %s"
-        (prettyPrint ta) (prettyPrint tb) (missing ra rb) 
-  show (NoOverlap ta tb) = printf "\x1b[1;32minternal compiler error\x1b[0m: NoOverlap %s %s" (prettyPrint ta) (prettyPrint tb)
-  show (Malformed t) = printf "The type `%s` was rejected by the well-formedness check\n  It is possible this is a bug."
-                              (prettyPrint t)
-
-
-missing :: [(Text, b)] -> [(Text, b)] -> Text
-missing ra rb
-  | length ra < length rb
-  = "· Namely, the following fields are missing: " <> T.intercalate ", "
-       (map (prettyPrint . tvClr . fst)
-            (deleteFirstsBy ((==) `on` fst) rb ra))
-  | length ra > length rb
-  = "· Namely, the following fields should not be present: " <> T.intercalate ", "
-      (map (prettyPrint . tvClr . fst)
-           (deleteFirstsBy ((==) `on` fst) ra rb))
-  | length ra == length rb
-  = "· No fields match (or the compiler is *very* confused)"
-missing _ _ = undefined -- freaking GHC
-
-varType :: Var Typed -> Type Typed
-varType (TvName _ x) = x
-varType (TvRefresh v _) = varType v
