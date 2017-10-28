@@ -81,6 +81,7 @@ data TypeError where
                  => Type p {- record type -}
                  -> Type p {- instance -}
                  -> TypeError
+  Malformed :: Pretty (Var p) => Type p -> TypeError
 
 lookupTy :: (MonadError TypeError m, MonadReader Env m, MonadGen Int m) => Var Parsed -> m (Type Typed)
 lookupTy x = do
@@ -167,6 +168,8 @@ instance Show TypeError where
     = printf "No unification between exact records `%s` and `%s`\n %s"
         (prettyPrint ta) (prettyPrint tb) (missing ra rb) 
   show (NoOverlap ta tb) = printf "\x1b[1;32minternal compiler error\x1b[0m: NoOverlap %s %s" (prettyPrint ta) (prettyPrint tb)
+  show (Malformed t) = printf "The type `%s` was rejected by the well-formedness check\n  It is possible this is a bug."
+                              (prettyPrint t)
 
 
 missing :: [(Text, b)] -> [(Text, b)] -> Text
