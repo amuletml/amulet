@@ -82,9 +82,10 @@ data Type p
   | TyForall [Var p] (Type p) (Ann p) -- constraints
   | TyArr (Type p) (Type p) (Ann p)
   | TyApp (Type p) (Type p) (Ann p)
-  | TyStar (Ann p) -- * :: *
   | TyRows (Type p) [(Text, Type p)] (Ann p) -- { α | foo : int, bar : string }
   | TyExactRows [(Text, Type p)] (Ann p) -- { foo : int, bar : string }
+
+  | TyStar (Ann p) -- * :: *
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Type p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Type p)
