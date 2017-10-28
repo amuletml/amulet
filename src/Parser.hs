@@ -235,7 +235,7 @@ typeP' = parens typeP
   tyCon = withPos (TyCon <$> name)
   unitTyCon = withPos (TyCon (Name (T.pack "unit")) <$ reserved "unit")
   openRec = withPos . braces $ do
-    x <- withPos (TyVar <$> tyVar)
+    x <- typeP
     reservedOp "|"
     TyRows x <$> commaSep1 tyRow
   closedRec = withPos . braces $ TyExactRows <$> commaSep1 tyRow
