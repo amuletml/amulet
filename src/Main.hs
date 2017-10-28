@@ -18,7 +18,7 @@ import qualified Data.Map as M
 
 import Control.Monad.Infer
 
-import Syntax
+import Errors
 
 compileFromTo :: FilePath
               -> T.Text
@@ -28,29 +28,24 @@ compileFromTo fp x emit =
   case parse program fp x of
     Right prg ->
       case inferProgram prg of
-        Left e -> print e
+        Left e -> report e x
         Right (prg, _) ->
           let out = compileProgram prg
            in emit out
     Left e -> print e
-
-tag :: Var Parsed -> Type Typed -> Var Typed
-tag (Name v) t = TvName v t
-tag (Refresh k a) t = TvRefresh (tag k t) a
 
 test :: String -> IO ()
 test x =
   case parse program "<test>" (T.pack x) of
     Right prg ->
       case inferProgram prg of
-        Left e -> print e
+        Left e -> report e (T.pack x)
         Right (prg, env) -> do
           _ <- forM (M.toList $ values env) $ \(k, t) ->
             T.putStrLn (prettyPrint k <> " : " <> prettyPrint t)
           let out = compileProgram prg
            in T.putStrLn (prettyPrint out)
     Left e -> print e
-
 
 main :: IO ()
 main = do

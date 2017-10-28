@@ -25,13 +25,14 @@ module Pretty
   , spcClr
   , greyOut
   , delim
-  , width
+  , width, width'
   , between
   , padRight
   , padRight'
+  , bullet
   , Pretty.local
   , parens, braces, squares, angles
-  , quotes, dquotes
+  , quotes, dquotes, verbatim
   , interleave
   , (<+>)
   , str
@@ -172,6 +173,9 @@ width ac = do st <- asks indent
               let xs = runPrinter (colourless { indent = st }) $ pprint ac
                in return $ T.length xs
 
+width' :: Pretty a => a -> PrettyM Int
+width' ac = pprint ac *> width ac
+
 between :: (Pretty a, Pretty b, Pretty c) => a -> b -> c -> PrettyP
 between a b c = pprint a >> pprint c >> pprint b
 
@@ -196,9 +200,10 @@ braces  = delim @Text "{ " " }"
 squares = delim @Text "[" "]"
 angles  = delim @Text "<" ">"
 
-quotes, dquotes :: Pretty a => a -> PrettyP
+verbatim, quotes, dquotes :: Pretty a => a -> PrettyP
 quotes  = delim @Text "'" "'"
 dquotes = delim @Text "\"" "\""
+verbatim = delim @Text "`" "`"
 
 interleave :: (Pretty a, Pretty b) => b -> [a] -> PrettyP
 interleave x xs = do
@@ -215,6 +220,9 @@ str = delim (greyOut @Text "\"") (greyOut @Text "\"") . strClr
 
 ppr :: Pretty a => a -> IO ()
 ppr = T.putStrLn . runPrinter defaults . pprint
+
+bullet :: Pretty a => a -> PrettyP
+bullet x = opClr @Text "· " <+> x
 
 instance Pretty PrettyP where pprint = id
 instance Pretty String where pprint = tell . T.pack
