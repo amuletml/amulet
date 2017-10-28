@@ -1,10 +1,11 @@
 {-# Language MultiWayIf, GADTs #-}
-module Types.Unify (solve, smush, overlap) where
+module Types.Unify (solve, smush, overlap, bind) where
 
 import Control.Monad.Except
 import Control.Monad.State
 import Control.Monad.Infer
 
+import Types.Wellformed
 
 import Syntax.Subst
 import Syntax
@@ -79,8 +80,8 @@ unify ta@(TyExactRows arow _) tb@(TyExactRows brow _)
          $ throwError (NoOverlap ta tb)
        mapM_ (uncurry unify) overlaps
 
-unify x tp@(TyRows rho _ _) = throwError (Note (CanNotInstance rho tp x) isRec)
-unify tp@(TyRows rho _ _) x = throwError (Note (CanNotInstance rho tp x) isRec)
+unify x tp@TyRows{} = throwError (Note (CanNotInstance tp x) isRec)
+unify tp@TyRows{} x = throwError (Note (CanNotInstance tp x) isRec)
 unify a b = throwError (NotEqual a b)
 
 isRec :: String
@@ -107,7 +108,10 @@ runSolve i s x = runExcept (fix (runStateT (runGenTFrom i act) s)) where
 
 solve :: Int -> Subst -> [Constraint Typed] -> Either TypeError Subst
 solve _ s [] = pure s
-solve i s (ConUnify e a t:xs) =
+solve i s (ConUnify e a t:xs) = do
+  case wellformed t of
+    Left err -> Left (Note (ArisingFrom err e) "The type was rejected in the wellformedness check;\n         It is possible this is a bug.")
+    Right () -> Right ()
   case runSolve i s (unify a t) of
     Left err -> Left (ArisingFrom err e)
     Right (i', s') -> solve i' (s' `compose` s) (apply s' xs)
