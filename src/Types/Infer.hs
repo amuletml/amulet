@@ -151,10 +151,11 @@ infer expr
         (rec', rho) <- infer rec
         pure (RecordExt rec' rows' a, TyRows rho newTypes a)
       Access rec key a -> do
-       (rho, ktp) <- (,) <$> freshTV a <*> freshTV a
+       rho <- freshTV a
+       ktp <- freshTV a
        (rec', tp) <- infer rec
-       let rows = (TyRows tp [(key, ktp)] a)
-       unify expr rho rows
+       let rows = (TyRows rho [(key, ktp)] a)
+       unify expr tp rows
        pure (Access rec' key a, ktp)
       -- Section handling is quite a hack: We generate an appropriate
       -- lambda and check that instead
@@ -252,7 +253,7 @@ inferPattern unify (PRecord rows ann) = do
 
 inferPattern unify (PType p t ann) = do
   (p', pt, vs) <- inferPattern unify p
-  (t', _) <- inferKind t `catchError` \x -> throwError (ArisingFromT x t)
+  (t', _) <- inferKind t `catchError` \x -> throwError (ArisingFrom x t)
   unify pt t'
   pure (PType p' t' ann, pt, vs)
 
@@ -267,7 +268,7 @@ inferProg (LetStmt ns ann:prg) = do
     extendMany ts $
       consFst (LetStmt ns' ann) $ inferProg prg
 inferProg (ValStmt v t ann:prg) = do
-  (t', _) <- inferKind t `catchError` \x -> throwError (ArisingFromT x t)
+  (t', _) <- inferKind t `catchError` \x -> throwError (ArisingFrom x t)
   extend (tag v t', closeOver t') $
     consFst (ValStmt (tag v t') t' ann) $ inferProg prg
 inferProg (ForeignVal v d t ann:prg) = do
@@ -285,17 +286,17 @@ inferProg (TypeDecl n tvs cs ann:prg) =
       cs' <- forM cs (\(v, ty) -> do
                          (ty', _) <- unzip <$> mapM inferKind ty
                          pure (tag v (mkt ty'), ty'))
-        `catchError` \x -> throwError (Note (ArisingFromT x (TyVar n' ann)) arisingFromConstructor)
+        `catchError` \x -> throwError (Note (ArisingFrom x (TyVar n' ann)) arisingFromConstructor)
       extendMany (map (fmap mkt) cs') $
         consFst (TypeDecl n' (map (`tag` star) tvs) cs' ann) $
           inferProg prg
 inferProg [] = do
   let ann = internal
-  x <- gen
   (_, c) <- censor (const mempty) . listen $ do
     x <- lookupTy (Name "main")
     b <- flip TyVar ann . flip TvName (TyStar ann) <$> fresh
     unify (VarRef (Name "main") ann) x (TyArr tyUnit b ann)
+  x <- gen
   case solve x mempty c of
     Left e -> throwError (Note e "main must be a function from unit to some type")
     Right _ -> ([],) <$> ask
@@ -307,8 +308,8 @@ inferLetTy :: (t ~ Typed, p ~ Parsed)
                       , [(Var t, Type t)])
 inferLetTy ks [] = pure ([], ks)
 inferLetTy ks ((va, ve):xs) = extendMany ks $ do
-  cur <- gen
   ((ve', ty), c) <- censor (const mempty) (listen (infer ve))
+  cur <- gen
   (x, vt) <- case solve cur mempty c of
                Left e -> throwError e
                Right x -> pure (x, closeOver (apply x ty))
