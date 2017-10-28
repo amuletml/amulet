@@ -5,7 +5,6 @@ import Parser
 import Text.Parsec
 import Backend.Compile
 
-import Text.Show.Pretty
 import Pretty
 
 import System.Environment
