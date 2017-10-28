@@ -15,13 +15,11 @@ import Control.Arrow (first)
 import Syntax.Subst
 import Syntax
 
+import Types.Wellformed
 import Types.Unify
 import Types.Holes
 
 import Data.List
-
-import Pretty (tracePretty)
-
 
 -- Solve for the types of lets in a program
 inferProgram :: [Toplevel Parsed] -> Either TypeError ([Toplevel Typed], Env)
@@ -156,11 +154,6 @@ infer expr
        (rho, ktp) <- (,) <$> freshTV a <*> freshTV a
        (rec', tp) <- infer rec
        let rows = (TyRows tp [(key, ktp)] a)
-       case tp of
-         TyRows{} -> pure ()
-         TyExactRows{} -> pure ()
-         TyVar{} -> pure ()
-         _ -> throwError (CanNotInstance tp rows tp)
        unify expr rho rows
        pure (Access rec' key a, ktp)
       -- Section handling is quite a hack: We generate an appropriate
@@ -203,7 +196,8 @@ inferKind (TyArr a b ann) = do
   when (ka /= TyStar (annotation ka)) $ throwError (NotEqual ka (TyStar ann))
   when (kb /= TyStar (annotation kb)) $ throwError (NotEqual kb (TyStar ann))
   pure (TyArr a' b' ann, TyStar ann)
-inferKind tp@(TyRows rho rows ann) =
+inferKind tp@(TyRows rho rows ann) = do
+  wellformed tp
   case rho of
     TyRows rho' rows' ann' -> inferKind (TyRows rho' (rows' `union` rows) ann')
     TyExactRows rows' ann' -> inferKind (TyExactRows (rows' `union` rows) ann')
@@ -213,7 +207,7 @@ inferKind tp@(TyRows rho rows ann) =
         (typ', _) <- inferKind typ
         pure (var, typ')
       pure (TyRows rho' ks ann, TyStar ann)
-    x -> throwError (CanNotInstance rho tp x)
+    _ -> error "wellformedness check rejects this"
 inferKind (TyExactRows rows ann) = do
   ks <- forM rows $ \(var, typ) -> do
     (typ', _) <- inferKind typ
@@ -315,7 +309,6 @@ inferLetTy ks [] = pure ([], ks)
 inferLetTy ks ((va, ve):xs) = extendMany ks $ do
   cur <- gen
   ((ve', ty), c) <- censor (const mempty) (listen (infer ve))
-  mapM_ (flip tracePretty (pure ())) c
   (x, vt) <- case solve cur mempty c of
                Left e -> throwError e
                Right x -> pure (x, closeOver (apply x ty))
