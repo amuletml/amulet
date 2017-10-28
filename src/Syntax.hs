@@ -154,7 +154,7 @@ instance (Pretty (Var p)) => Pretty (Pattern p) where
   pprint (PRecord rows _) = braces $ interleave ", " $ map (\(x, y) -> x <+> opClr " = " <+> y) rows
 
 instance Pretty Lit where
-  pprint (LiStr s) = strClr s
+  pprint (LiStr s) = str s
   pprint (LiInt s) = litClr s
   pprint (LiBool True) = litClr "true"
   pprint (LiBool False) = litClr "false"
