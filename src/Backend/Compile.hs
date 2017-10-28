@@ -102,7 +102,7 @@ compileExpr (RightSection vl op _)
   | otherwise = error "absurd: never parsed"
 compileExpr (BothSection op _)
   | (VarRef (TvName o _) _) <- op
-  = LuaFunction [LuaName "a", LuaName "b"] [LuaReturn (LuaBinOp (LuaRef (LuaName "a")) (remapOp o) (LuaRef (LuaName "b")))]
+  = LuaFunction [LuaName "_a", LuaName "_b"] [LuaReturn (LuaBinOp (LuaRef (LuaName "_a")) (remapOp o) (LuaRef (LuaName "_b")))]
   | otherwise = error "absurd: never parsed"
 compileExpr (AccessSection k _) = LuaFunction [LuaName "_arg"] [LuaReturn (LuaRef (LuaIndex (LuaRef (LuaName "_arg")) (LuaString k)))]
 compileExpr BinOp{} = error "absurd: never parsed"
