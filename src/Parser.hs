@@ -305,4 +305,4 @@ toplevelP = letStmt <|> try foreignVal <|> valStmt <|> dataDecl where
       Nothing -> pure $ TypeDecl x xs []
 
 program :: Parser [Toplevel']
-program = spaces *> semiSep1 toplevelP <* eof
+program = Tok.whiteSpace lexer *> semiSep1 toplevelP <* eof
