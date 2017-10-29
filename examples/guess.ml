@@ -19,7 +19,7 @@ type option 'a =
 
 let int_of_string str
   = let vl = prim_int_of_string str
-    in if transmute vl == unit then
+    in if transmute vl == () then
       Nothing
     else
       Just vl
@@ -28,20 +28,20 @@ let int_of_string str
 let read_line _ = read "*l"
 and main _ =
   begin
-    random_seed (current_time unit) ;
+    random_seed (current_time ()) ;
     let vl = random 1 10
     and loop _ = begin
       print "Guess a number between 1 and 10: " ;
-      let read = int_of_string (read_line unit)
+      let read = int_of_string (read_line ())
        in match read with
           | Just guess ->
               if vl == guess then
                 print_endline "You got it right!"
               else if vl > guess then begin
-                   print_endline "Too low!"; loop unit
+                   print_endline "Too low!"; loop ()
               end else if vl < guess then begin
-                   print_endline "Too high!"; loop unit
-              end else loop unit
+                   print_endline "Too high!"; loop ()
+              end else loop ()
           | Nothing -> print_endline "Bye"
-    end in loop unit
+    end in loop ()
   end

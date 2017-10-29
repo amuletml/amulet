@@ -168,6 +168,15 @@ infer expr
       AccessSection k a -> do
         var <- Name <$> fresh
         infer (Fun (Capture var a) (Access (VarRef var a) k a) a)
+      Tuple es an -> do
+        es' <- mapM infer es
+        case es' of
+          [] -> pure (Tuple [] an, tyUnit)
+          [(x', t)] -> pure (x', t)
+          ((x', t):xs) -> pure (Tuple (x':map fst xs) an, mkTupleType an t (map snd xs))
+
+mkTupleType :: Foldable t => Ann p -> Type p -> t (Type p) -> Type p
+mkTupleType an = foldl (\x y -> TyTuple x y an)
 
 inferRows :: [(T.Text, Expr Parsed)] -> Infer Typed [((T.Text, Expr Typed), (T.Text, Type Typed))]
 inferRows rows = forM rows $ \(var', val) -> do
@@ -222,6 +231,10 @@ inferKind ap@(TyApp a b ann) = do
       pure (TyApp a' b' ann, bd)
     _ -> throwError (ExpectedArrow ap x a')
   where crush = raiseT smush (const internal)
+inferKind (TyTuple a b an) = do
+  (a', _) <- inferKind a
+  (b', _) <- inferKind b
+  pure (TyTuple a' b' an, TyStar an)
 
 -- Returns: Type of the overall thing * type of captures
 inferPattern :: (Type Typed -> Type Typed -> Infer a ())
@@ -233,28 +246,35 @@ inferPattern _ (Wildcard ann) = do
 inferPattern _ (Capture v ann) = do
   x <- flip TyVar ann . flip TvName (TyStar ann) <$> fresh
   pure (Capture (tag v x) ann, x, [(tag v x, x)])
-inferPattern unify (Destructure cns ps ann) = do
-  pty <- lookupTy cns
-  let args :: Type p -> [Type p]
-      args (TyArr a b _) = a:args b
-      args k = [k]
-      tys = init (args pty)
-      res = last (args pty)
-  (ps', ptys, pvs) <- unzip3 <$> mapM (inferPattern unify) ps
-  zipWithM_ unify ptys tys
-  pure (Destructure (tag cns pty) ps' ann, res, concat pvs)
+inferPattern unify (Destructure cns ps ann)
+  | Nothing <- ps
+  = do
+    pty <- lookupTy cns
+    pure (Destructure (tag cns pty) Nothing ann, pty, [])
+  | Just p <- ps
+  = do
+    t@(TyArr tup res _) <- lookupTy cns
+    (p', pt, pb) <- inferPattern unify p
+    unify tup pt
+    pure (Destructure (tag cns t) (Just p') ann, res, pb)
 inferPattern unify (PRecord rows ann) = do
   rho <- freshTV ann
   (rowps, rowts, caps) <- unzip3 <$> forM rows (\(var, pat) -> do
     (p', t, caps) <- inferPattern unify pat
     pure ((var, p'), (var, t), caps))
   pure (PRecord rowps ann, TyRows rho rowts ann, concat caps)
-
 inferPattern unify (PType p t ann) = do
   (p', pt, vs) <- inferPattern unify p
   (t', _) <- inferKind t `catchError` \x -> throwError (ArisingFrom x t)
   unify pt t'
   pure (PType p' t' ann, pt, vs)
+inferPattern unify (PTuple elems ann)
+  | [] <- elems = pure (PTuple [] ann, tyUnit, [])
+  | [x] <- elems = inferPattern unify x
+  | otherwise = do
+    (ps, t:ts, cps) <- unzip3 <$> mapM (inferPattern unify) elems
+    pure (PTuple ps ann, mkTupleType ann t ts, concat cps)
+
 
 inferProg :: [Toplevel Parsed] -> Infer Typed ([Toplevel Typed], Env)
 inferProg (LetStmt ns ann:prg) = do
@@ -278,17 +298,22 @@ inferProg (TypeDecl n tvs cs ann:prg) =
   let mkk :: [a] -> Type Typed
       mkk [] = star
       mkk (_:xs) = arr star (mkk xs)
-      mkt = foldr arr (foldl app (con (n `tag` star)) (map (var . flip tag star) tvs))
+      retTy = foldl app (con (n `tag` star)) (map (var . flip tag star) tvs)
       n' = tag n (mkk tvs)
       arisingFromConstructor = "Perhaps you're missing a * between two types of a constructor?"
+      inferCon v (Just ty) = do
+        (ty', _) <- inferKind ty
+        pure (tag v (TyArr ty' retTy ann), TyArr ty' retTy ann)
+      inferCon v Nothing = pure (tag v retTy, retTy)
+      liftCon (v, t)
+        | t == retTy = (v, Nothing)
+        | otherwise = (v, Just t)
    in extendKind (n', mkk tvs) $ do
-      cs' <- forM cs (\(v, ty) -> do
-                         (ty', _) <- unzip <$> mapM inferKind ty
-                         pure (tag v (mkt ty'), ty'))
-        `catchError` \x -> throwError (Note (ArisingFrom x (TyVar n' ann)) arisingFromConstructor)
-      extendMany (map (fmap mkt) cs') $
-        consFst (TypeDecl n' (map (`tag` star) tvs) cs' ann) $
-          inferProg prg
+     cs' <- mapM (uncurry inferCon) cs
+               `catchError` \x -> throwError (Note (ArisingFrom x (TyVar n' ann)) arisingFromConstructor)
+     extendMany cs' $
+       consFst (TypeDecl n' (map (`tag` star) tvs) (map liftCon cs') ann) $
+         inferProg prg
 inferProg [] = do
   let ann = internal
   (_, c) <- censor (const mempty) . listen $ do
