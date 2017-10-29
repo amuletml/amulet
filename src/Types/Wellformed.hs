@@ -16,6 +16,7 @@ wellformed tp = case tp of
   TyForall _ t _ -> wellformed t
   TyArr a b _ -> wellformed a *> wellformed b
   TyApp a b _ -> wellformed a *> wellformed b
+  TyTuple a b _ -> wellformed a *> wellformed b
   TyRows rho rows _ -> do
     case rho of
       TyRows{} -> pure ()

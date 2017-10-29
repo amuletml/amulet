@@ -82,6 +82,9 @@ unify ta@(TyExactRows arow _) tb@(TyExactRows brow _)
 
 unify x tp@TyRows{} = throwError (Note (CanNotInstance tp x) isRec)
 unify tp@TyRows{} x = throwError (Note (CanNotInstance tp x) isRec)
+unify (TyTuple a b _) (TyTuple a' b' _) = do
+  unify a a'
+  unify b b'
 unify a b = throwError (NotEqual a b)
 
 isRec :: String

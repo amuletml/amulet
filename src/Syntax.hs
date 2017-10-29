@@ -64,7 +64,7 @@ deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Expr p)
 data Pattern p
   = Wildcard (Ann p)
   | Capture (Var p) (Ann p)
-  | Destructure (Var p) [Pattern p] (Ann p)
+  | Destructure (Var p) (Maybe (Pattern p)) (Ann p)
   | PType (Pattern p) (Type p) (Ann p)
   | PRecord [(Text, Pattern p)] (Ann p)
   | PTuple [Pattern p] (Ann p)
@@ -100,7 +100,7 @@ data Toplevel p
   = LetStmt [(Var p, Expr p)] (Ann p)
   | ValStmt (Var p) (Type p) (Ann p)
   | ForeignVal (Var p) Text (Type p) (Ann p)
-  | TypeDecl (Var p) [Var p] [(Var p, [Type p])] (Ann p)
+  | TypeDecl (Var p) [Var p] [(Var p, Maybe (Type p))] (Ann p)
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Toplevel p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Toplevel p)
@@ -155,8 +155,8 @@ instance (Pretty (Var p)) => Pretty (Expr p, Expr p) where
 instance (Pretty (Var p)) => Pretty (Pattern p) where
   pprint Wildcard{} = kwClr "_"
   pprint (Capture x _) = pprint x
-  pprint (Destructure x [] _) = pprint x
-  pprint (Destructure x xs _) = parens $ x <+> " " <+> interleave " " xs
+  pprint (Destructure x Nothing   _) = pprint x
+  pprint (Destructure x (Just xs) _) = parens $ x <+> " " <+> xs
   pprint (PType p x _) = parens $ p <+> opClr " : " <+> x
   pprint (PRecord rows _) = braces $ interleave ", " $ map (\(x, y) -> x <+> opClr " = " <+> y) rows
   pprint (PTuple ps _) = parens $ interleave ", " ps
@@ -184,7 +184,11 @@ instance (Pretty (Var p)) => Pretty (Type p) where
 
   pprint (TyApp e x@TyApp{} _) = e <+> " " <+> parens x
   pprint (TyApp x e _) = x <+> opClr " " <+> e
-  pprint (TyTuple a b _) = a <+> opClr " * " <+> b
+  pprint (TyTuple a b _)
+    | TyTuple{} <- a
+    = parens a <+> opClr " * " <+> b
+    | otherwise
+    = a <+> opClr " * " <+> b
   pprint TyStar{} = kwClr "Type"
 
 instance Pretty (Var Parsed) where
@@ -276,7 +280,11 @@ raiseP :: (Var p -> Var p') -- How to raise variables
        -> Pattern p -> Pattern p'
 raiseP _ a (Wildcard p) = Wildcard (a p)
 raiseP v a (Capture n p) = Capture (v n) (a p)
-raiseP v a (Destructure c s p) = Destructure (v c) (map (raiseP v a) s) (a p)
+raiseP v a (Destructure c s' p)
+  | Nothing <- s'
+  = Destructure (v c) Nothing (a p)
+  | Just s <- s'
+  = Destructure (v c) (Just (raiseP v a s)) (a p)
 raiseP v a (PType i t p) = PType (raiseP v a i) (raiseT v a t) (a p)
 raiseP v a (PRecord rs p) = PRecord (map (second (raiseP v a)) rs) (a p)
 raiseP v a (PTuple e p) = PTuple (map (raiseP v a) e) (a p)
