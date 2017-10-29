@@ -276,12 +276,11 @@ constrName = (Name <$> upperIdent) <?> "constructor name" where
     T.pack . (x:) <$> many (Tok.identLetter style)
 
 lit :: Parser Lit
-lit = intLit <|> strLit <|> true <|> false <|> unit where
+lit = intLit <|> strLit <|> true <|> false where
   intLit = LiInt <$> natural
   strLit = LiStr . T.pack <$> stringLiteral
   true = LiBool True <$ reserved "true"
   false = LiBool False <$ reserved "false"
-  unit = LiUnit <$ reserved "unit"
 
 toplevelP :: Parser Toplevel'
 toplevelP = letStmt <|> try foreignVal <|> valStmt <|> dataDecl where
