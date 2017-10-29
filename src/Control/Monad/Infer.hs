@@ -7,7 +7,8 @@ module Control.Monad.Infer
   , Constraint(..)
   , Env(..)
   , lookupTy, fresh, runInferT, runInfer, extend
-  , lookupKind, extendKind
+  , lookupKind, extendKind, extendMany, extendManyK
+  , difference
   )
   where
 
@@ -106,6 +107,13 @@ extend (v, t) = local (\x -> x { values = Map.insert (eraseVarTy v) t (values x)
 
 extendKind :: MonadReader Env m => (Var Typed, Type Typed) -> m a -> m a
 extendKind (v, t) = local (\x -> x { types = Map.insert (eraseVarTy v) t (types x) })
+extendMany :: MonadReader Env m => [(Var Typed, Type Typed)] -> m a -> m a
+extendMany ((v, t):xs) b = extend (v, t) $ extendMany xs b
+extendMany [] b = b
+
+extendManyK :: MonadReader Env m => [(Var Typed, Type Typed)] -> m a -> m a
+extendManyK ((v, t):xs) b = extendKind (v, t) $ extendManyK xs b
+extendManyK [] b = b
 
 alpha :: [Text]
 alpha = map T.pack $ [1..] >>= flip replicateM ['a'..'z']
@@ -116,6 +124,9 @@ instantiate (TyForall vs ty _) = do
         <$> mapM (const (flip TvName internalTyVar <$> fresh)) vs
   instantiate (apply (Map.fromList (zip vs f)) ty)
 instantiate ty = pure ty
+
+difference :: Env -> Env -> Env
+difference (Env ma mb) (Env ma' mb') = Env (ma Map.\\ ma') (mb Map.\\ mb')
 
 instance Substitutable (Type p) => Substitutable (Constraint p) where
   ftv (ConUnify _ a b) = ftv a `Set.union` ftv b

@@ -1,7 +1,7 @@
 {-# OPTIONS_GHC -Wno-missing-local-signatures #-}
 {-# LANGUAGE FlexibleContexts, OverloadedStrings, TupleSections, GADTs #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-module Types.Infer(inferProgram) where
+module Types.Infer (inferProgram, builtinsEnv) where
 
 import qualified Data.Map.Strict as M
 import qualified Data.Text as T
@@ -328,22 +328,21 @@ updateAlist n v (x@(n', _):xs)
   | otherwise = x:updateAlist n v xs
 updateAlist _ _ [] = []
 
-
-
-extendMany :: MonadReader Env m => [(Var Typed, Type Typed)] -> m a -> m a
-extendMany ((v, t):xs) b = extend (v, t) $ extendMany xs b
-extendMany [] b = b
-
-extendManyK :: MonadReader Env m => [(Var Typed, Type Typed)] -> m a -> m a
-extendManyK ((v, t):xs) b = extendKind (v, t) $ extendManyK xs b
-extendManyK [] b = b
-
 closeOver :: Type Typed -> Type Typed
-closeOver a = forall fv a where
-  fv = S.toList . ftv $ a
+closeOver a = forall (fv a) (improve a) where
+  fv = S.toList . ftv . improve
   forall :: [Var p] -> Type p -> Type p
   forall [] a = a
   forall vs a = TyForall vs a (annotation a)
+
+  improve :: Type Typed -> Type Typed
+  improve x
+    | vs <- S.toList (ftv x)
+    = runGenFrom (-1) $ do
+      fv <- forM vs $ \b -> do
+        v <- freshTV (annotation x)
+        pure (b, v)
+      pure (apply (M.fromList fv) x)
 
 consFst :: Functor m => a -> m ([a], b) -> m ([a], b)
 consFst a = fmap (first (a:))
