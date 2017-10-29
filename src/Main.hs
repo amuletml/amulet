@@ -35,16 +35,16 @@ compileFromTo fp x emit =
     Left e -> print e
 
 test :: String -> IO ()
-test x =
+test x = do
+  putStrLn "\x1b[1;32mProgram:\x1b[0m"
   case parse program "<test>" (T.pack x) of
     Right prg ->
       case inferProgram prg of
         Left e -> report e (T.pack x)
-        Right (prg, env) -> do
-          _ <- forM (M.toList $ values env) $ \(k, t) ->
+        Right (_, env) -> do
+          putStrLn (x <> "\x1b[1;32mType inference:\x1b[0m")
+          forM_ (M.toList $ values (difference env builtinsEnv)) $ \(k, t) ->
             T.putStrLn (prettyPrint k <> " : " <> prettyPrint t)
-          let out = compileProgram prg
-           in T.putStrLn (prettyPrint out)
     Left e -> print e
 
 main :: IO ()
@@ -54,7 +54,7 @@ main = do
     [x] -> do
       x' <- T.readFile x
       compileFromTo x x' ppr
-    ["dump-bits", x] -> do
+    ["test", x] -> do
       x' <- readFile x
       test x'
     [x, t] -> do
