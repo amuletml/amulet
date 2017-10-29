@@ -28,6 +28,7 @@ instance Substitutable (Type Typed) where
   ftv (TyVar v _) = S.singleton v
   ftv (TyForall vs t _) = ftv t S.\\ S.fromList vs
   ftv (TyApp a b _) = ftv a `S.union` ftv b
+  ftv (TyTuple a b _) = ftv a `S.union` ftv b
   ftv (TyArr a b _) = ftv a `S.union` ftv b
   ftv (TyRows rho rows _) = ftv rho `S.union` foldMap (ftv . snd) rows
   ftv (TyExactRows rows _) = foldMap (ftv . snd) rows
@@ -37,6 +38,7 @@ instance Substitutable (Type Typed) where
   apply s t@(TyVar v _) = M.findWithDefault t v s
   apply s (TyArr a b l) = TyArr (apply s a) (apply s b) l
   apply s (TyApp a b l) = TyApp (apply s a) (apply s b) l
+  apply s (TyTuple a b l) = TyTuple (apply s a) (apply s b) l
   apply s (TyForall v t l) = TyForall v (apply s' t) l where
     s' = foldr M.delete s v
   apply s (TyRows rho rows ann) = TyRows (apply s rho) (map (second (apply s)) rows) ann

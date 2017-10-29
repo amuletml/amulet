@@ -49,7 +49,7 @@ exprP' = try access
      <|> try accessSect
      <|> try leftSect
      <|> try bothSect
-     <|> parens exprP
+     <|> tuple
      <|> funExpr
      <|> letExpr
      <|> ifExpr
@@ -100,9 +100,9 @@ exprP' = try access
       [x] -> do
         reservedOp "->"
         (,) x <$> exprP
-      (Destructure v _ p:xs) -> do
+      [Destructure v Nothing p, xs] -> do
         reservedOp "->"
-        (,) (Destructure v xs p) <$> exprP
+        (,) (Destructure v (Just xs) p) <$> exprP
       _ -> mzero
   recIns = withPos . braces $ do
     x <- exprP
@@ -146,6 +146,12 @@ exprP' = try access
       actual <- operator'
       pure (VarRef (Name (T.pack actual)))
     pure (RightSection x op)
+  tuple = withPos . parens $ do
+    x <- commaSep exprP
+    pure $ case x of
+      [] -> Literal LiUnit
+      [x] -> const x
+      l -> Tuple l
 
 operator' :: Parser String
 operator' = lexeme ((:) <$> Tok.opStart style <*> many (Tok.opLetter style))
@@ -153,18 +159,20 @@ operator' = lexeme ((:) <$> Tok.opStart style <*> many (Tok.opLetter style))
 patternP :: Parser Pattern'
 patternP = wildcard
        <|> capture
-       <|> constructor
+       <|> try constructor
        <|> try pType
-       <|> destructure
-       <|> record where
+       <|> try destructure
+       <|> tuple
+       <|> record
+       where
   wildcard, constructor, destructure, pType, capture, record :: Parser Pattern'
   wildcard = withPos (Wildcard <$ reservedOp "_")
   capture = withPos (Capture <$> varName)
   varName = (Name <$> lowerIdent) <?> "variable name"
-  constructor = withPos (flip Destructure [] <$> constrName)
+  constructor = withPos (flip Destructure Nothing <$> constrName)
   destructure = withPos . parens $ do
     ps <- constrName
-    Destructure ps <$> many1 patternP
+    Destructure ps . Just <$> patternP
   lowerIdent = lexeme $ do
     x <- lower
     T.pack . (x:) <$> many (Tok.identLetter style)
@@ -178,6 +186,12 @@ patternP = wildcard
       reservedOp "="
       (T.pack x,) <$> patternP
     pure $ PRecord rows
+  tuple = withPos . parens $ do
+    x <- commaSep1 patternP
+    pure $ case x of
+      [] -> error "impossible; commaSep*1*"
+      [x] -> const x
+      xs -> PTuple xs
 
 exprP :: Parser Expr'
 exprP = exprOpP where
@@ -212,7 +226,8 @@ typeP = typeOpP where
     pure $ foldl app' hd tl
 
   table :: [[ Operator T.Text () Identity (Type Parsed) ]]
-  table = [ [ binary "->" (\p a b -> TyArr a b p) AssocRight ]]
+  table = [ [ binary "->" (\p a b -> TyArr a b p) AssocRight ] 
+          , [ binary "*" (\p a b -> TyTuple a b p) AssocRight ] ]
 
 binary :: String -> (Span -> a -> a -> a) -> Assoc -> Operator T.Text () Identity a
 binary n f a = flip Infix a $ do
@@ -261,12 +276,11 @@ constrName = (Name <$> upperIdent) <?> "constructor name" where
     T.pack . (x:) <$> many (Tok.identLetter style)
 
 lit :: Parser Lit
-lit = intLit <|> strLit <|> true <|> false <|> unit where
+lit = intLit <|> strLit <|> true <|> false where
   intLit = LiInt <$> natural
   strLit = LiStr . T.pack <$> stringLiteral
   true = LiBool True <$ reserved "true"
   false = LiBool False <$ reserved "false"
-  unit = LiUnit <$ reserved "unit"
 
 toplevelP :: Parser Toplevel'
 toplevelP = letStmt <|> try foreignVal <|> valStmt <|> dataDecl where
@@ -296,11 +310,11 @@ toplevelP = letStmt <|> try foreignVal <|> valStmt <|> dataDecl where
       Just _ -> do
         first <- optionMaybe $ do
           x <- constrName
-          (,) x <$> sepBy typeP (reservedOp "*")
+          (,) x <$> optionMaybe typeP
         cs <- many $ do
           reservedOp "|"
           x <- constrName
-          (,) x <$> sepBy typeP (reservedOp "*")
+          (,) x <$> optionMaybe typeP
         pure $ TypeDecl x xs (maybe cs (:cs) first)
       Nothing -> pure $ TypeDecl x xs []
 
