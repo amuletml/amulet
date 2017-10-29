@@ -101,12 +101,11 @@ missing ra rb
 missing _ _ = undefined -- freaking GHC
 
 diff :: (Eq a, Pretty a) => [(a, b)] -> [(a, b)] -> [PrettyP]
-diff ra rb = (map (tvClr . fst) (deleteFirstsBy ((==) `on` fst) rb ra)) 
+diff ra rb = map (tvClr . fst) (deleteFirstsBy ((==) `on` fst) rb ra) 
 
 varType :: Var Typed -> Type Typed
 varType (TvName _ x) = x
 varType (TvRefresh v _) = varType v
 
 report :: TypeError -> T.Text -> IO ()
-report err _ = ppr $ do
-  pprint err
+report err _ = ppr $ pprint err

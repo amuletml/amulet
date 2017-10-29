@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts, LambdaCase #-}
+{-# LANGUAGE FlexibleContexts #-}
 module Types.Wellformed (wellformed) where
 
 import Control.Monad.Except
