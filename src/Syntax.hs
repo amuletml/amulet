@@ -54,6 +54,9 @@ data Expr p
   | BothSection (Expr p) (Ann p) -- (+)
   | AccessSection Text (Ann p)
 
+  -- Tuple (see note [1])
+  | Tuple [Expr p] (Ann p)
+
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Expr p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Expr p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Expr p)
@@ -64,6 +67,7 @@ data Pattern p
   | Destructure (Var p) [Pattern p] (Ann p)
   | PType (Pattern p) (Type p) (Ann p)
   | PRecord [(Text, Pattern p)] (Ann p)
+  | PTuple [Pattern p] (Ann p)
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Pattern p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Pattern p)
@@ -84,6 +88,7 @@ data Type p
   | TyApp (Type p) (Type p) (Ann p)
   | TyRows (Type p) [(Text, Type p)] (Ann p) -- { α | foo : int, bar : string }
   | TyExactRows [(Text, Type p)] (Ann p) -- { foo : int, bar : string }
+  | TyTuple (Type p) (Type p) (Ann p) -- (see note [1])
 
   | TyStar (Ann p) -- * :: *
 
@@ -139,6 +144,8 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
   pprint (BothSection op _) = parens $ opClr op
   pprint (AccessSection k _) = parens $ opClr "." <+> k
 
+  pprint (Tuple es _) = parens $ interleave ", " es
+
 instance (Pretty (Var p)) => Pretty (Pattern p, Expr p) where
   pprint (a, b) = opClr "| " <+> a <+> " -> " <+> b
 
@@ -152,6 +159,7 @@ instance (Pretty (Var p)) => Pretty (Pattern p) where
   pprint (Destructure x xs _) = parens $ x <+> " " <+> interleave " " xs
   pprint (PType p x _) = parens $ p <+> opClr " : " <+> x
   pprint (PRecord rows _) = braces $ interleave ", " $ map (\(x, y) -> x <+> opClr " = " <+> y) rows
+  pprint (PTuple ps _) = parens $ interleave ", " ps
 
 instance Pretty Lit where
   pprint (LiStr s) = str s
@@ -176,6 +184,7 @@ instance (Pretty (Var p)) => Pretty (Type p) where
 
   pprint (TyApp e x@TyApp{} _) = e <+> " " <+> parens x
   pprint (TyApp x e _) = x <+> opClr " " <+> e
+  pprint (TyTuple a b _) = a <+> opClr " * " <+> b
   pprint TyStar{} = kwClr "Type"
 
 instance Pretty (Var Parsed) where
@@ -191,7 +200,7 @@ instance Pretty (Var Typed) where
 
 --- }}}
 
-class Annotated f where
+class Annotated f where -- {{{
   annotation :: f p -> Ann p
 
 instance Annotated Expr where
@@ -212,9 +221,11 @@ instance Annotated Expr where
   annotation (RightSection _ _ p) = p
   annotation (BothSection _ p) = p
   annotation (AccessSection _ p) = p
+  annotation (Tuple _ p) = p
 
 instance Annotated Type where
   annotation (TyCon _ p) = p
+  annotation (TyTuple _ _ p) = p
   annotation (TyRows _ _ p) = p
   annotation (TyExactRows _ p) = p
   annotation (TyVar _ p) = p
@@ -229,6 +240,8 @@ instance Annotated Pattern where
   annotation (Destructure _ _ p) = p
   annotation (PType _ _ p) = p
   annotation (PRecord _ p) = p
+  annotation (PTuple _ p) = p
+-- }}}
 
 --- Raising {{{
 
@@ -256,6 +269,7 @@ raiseE vR aR =
       RightSection o v a -> LeftSection (eR o) (eR v) (aR a)
       BothSection o a -> BothSection (eR o) (aR a)
       AccessSection k a -> AccessSection k (aR a)
+      Tuple es a -> Tuple (map eR es) (aR a)
 
 raiseP :: (Var p -> Var p') -- How to raise variables
        -> (Ann p -> Ann p')
@@ -265,6 +279,7 @@ raiseP v a (Capture n p) = Capture (v n) (a p)
 raiseP v a (Destructure c s p) = Destructure (v c) (map (raiseP v a) s) (a p)
 raiseP v a (PType i t p) = PType (raiseP v a i) (raiseT v a t) (a p)
 raiseP v a (PRecord rs p) = PRecord (map (second (raiseP v a)) rs) (a p)
+raiseP v a (PTuple e p) = PTuple (map (raiseP v a) e) (a p)
 
 raiseT :: (Var p -> Var p') -- How to raise variables
        -> (Ann p -> Ann p')
@@ -276,13 +291,15 @@ raiseT v a (TyForall n t p) = TyForall (map v n)
                                        (a p)
 raiseT v a (TyArr x y p) = TyArr (raiseT v a x) (raiseT v a y) (a p)
 raiseT v a (TyApp x y p) = TyApp (raiseT v a x) (raiseT v a y) (a p)
+raiseT v a (TyTuple x y p) = TyTuple (raiseT v a x) (raiseT v a y) (a p)
 raiseT v a (TyRows rho rows p) = TyRows (raiseT v a rho) (map (second (raiseT v a)) rows) (a p)
 raiseT v a (TyExactRows rows p) = TyExactRows (map (second (raiseT v a)) rows) (a p)
 raiseT _ a (TyStar p) = TyStar (a p)
 
 --- }}}
 
-class InternalTV p where
+
+class InternalTV p where -- {{{
   internalTyVar :: Type p
 
 instance InternalTV Parsed where
@@ -290,6 +307,8 @@ instance InternalTV Parsed where
 
 instance InternalTV Typed where
   internalTyVar = TyVar (TvName (pack "«internal»") (TyStar internal)) internal
+
+-- }}}
 
 eraseVarTy :: Var Typed -> Var Parsed
 eraseVarTy (TvName x _) = Name x
@@ -301,5 +320,10 @@ closeEnough (TvRefresh a b) (TvRefresh a' b')
   = a `closeEnough` a' && b' >= b
 closeEnough _ _ = False
 
+{- Note [1]: Tuple types vs tuple patterns/values
+
+    Tuple types only describe *pairs*, but patterns/values can have any
+    number of elements. We do this like Idris, in which (a, b, c) = (a,
+    (b, c)) -}
+
 --- vim: fdm=marker
---
