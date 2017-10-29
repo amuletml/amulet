@@ -42,7 +42,7 @@ let main _ =
      in inner (co_yield ())
   end
   and coro = co_create thrd
-  and loop (_ : ()) = begin
+  and loop (_ : unit) = begin
     write "enter number: ";
     let ln = read_stdin "*l"
     and num = parse_num ln
