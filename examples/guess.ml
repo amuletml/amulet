@@ -5,7 +5,7 @@ external val print_endline : string -> unit = "print" ;
 external val print : string -> unit  = "io.write" ;
 external val read : string -> string  = "io.read" ;
 
-external val current_time : () -> int  = "os.time" ;
+external val current_time : unit -> int  = "os.time" ;
 
 external val prim_int_of_string : string -> int  = "tonumber" ;
 external val string_of_int : int -> string  = "tostring" ;
