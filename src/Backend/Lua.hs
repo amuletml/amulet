@@ -80,8 +80,7 @@ instance Pretty LuaStmt where
     kwClr "end"
   pprint (LuaFor vs es b) = do
     kwClr "for " <+> interleave ", " vs <+> opClr " in "
-    interleave ", " es
-    kwClr " do "
+    interleave ", " es <+> kwClr " do "
     body 2 b *> newline
     kwClr "end"
   pprint (LuaLocal [n] [LuaFunction a b]) = do

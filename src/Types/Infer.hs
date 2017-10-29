@@ -151,12 +151,11 @@ infer expr
         (rec', rho) <- infer rec
         pure (RecordExt rec' rows' a, TyRows rho newTypes a)
       Access rec key a -> do
-       rho <- freshTV a
-       ktp <- freshTV a
-       (rec', tp) <- infer rec
-       let rows = (TyRows rho [(key, ktp)] a)
-       unify expr tp rows
-       pure (Access rec' key a, ktp)
+        (rho, ktp) <- (,) <$> freshTV a <*> freshTV a
+        (rec', tp) <- infer rec
+        let rows = TyRows rho [(key, ktp)] a
+        unify expr tp rows
+        pure (Access rec' key a, ktp)
       -- Section handling is quite a hack: We generate an appropriate
       -- lambda and check that instead
       BothSection op _ -> infer op
