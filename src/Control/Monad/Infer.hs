@@ -137,5 +137,3 @@ instance Pretty (Var p) => Pretty (Constraint p) where
                         <+> opClr (" <=> " :: String)
                         <+> a
                         <+> opClr (" ~ " :: String) <+> b
-
-
