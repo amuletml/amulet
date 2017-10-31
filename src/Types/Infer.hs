@@ -6,8 +6,11 @@ module Types.Infer (inferProgram, builtinsEnv) where
 import qualified Data.Map.Strict as M
 import qualified Data.Text as T
 import qualified Data.Set as S
-import Data.Span (internal, Span)
+
 import Data.Semigroup ((<>))
+
+import Data.Spanned
+import Data.Span (internal, Span)
 
 import Control.Monad.Infer
 import Control.Arrow (first)
@@ -347,7 +350,8 @@ updateAlist _ _ [] = []
 closeOver :: Type Typed -> Type Typed
 closeOver a = forall (fv a) (improve a) where
   fv = S.toList . ftv . improve
-  forall :: [Var p] -> Type p -> Type p
+  forall :: (Ann p ~ Span, Spanned (Type p))
+         => [Var p] -> Type p -> Type p
   forall [] a = a
   forall vs a = TyForall vs a (annotation a)
 

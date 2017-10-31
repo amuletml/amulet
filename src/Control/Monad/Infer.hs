@@ -22,6 +22,7 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Semigroup
 
+import Data.Spanned
 import Data.Span (internal)
 
 import qualified Data.Text as T
@@ -60,12 +61,13 @@ data TypeError where
   NotEqual :: Pretty (Var p) => Type p -> Type p -> TypeError
   Occurs   :: Pretty (Var p) => Var p -> Type p -> TypeError
   NotInScope :: Var Parsed -> TypeError
-  EmptyMatch :: Pretty (Ann p) => Expr p -> TypeError
-  EmptyBegin :: ( Pretty (Var p)
+  EmptyMatch :: (Spanned (Expr p), Pretty (Ann p)) => Expr p -> TypeError
+  EmptyBegin :: ( Spanned (Expr p)
+                , Pretty (Var p)
                 , Pretty (Ann p) )
              => Expr p -> TypeError
   FoundHole :: [Expr Typed] -> TypeError
-  ArisingFrom :: (Annotated f, Pretty (f p), Pretty (Ann p), Pretty (Var p))
+  ArisingFrom :: (Spanned (f p), Pretty (f p), Pretty (Ann p), Pretty (Var p))
               => TypeError -> f p -> TypeError
   ExpectedArrow :: (Pretty (Var p'), Pretty (Var p))
                 => Type p' -> Type p -> Type p -> TypeError

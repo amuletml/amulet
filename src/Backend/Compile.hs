@@ -16,6 +16,7 @@ import qualified Data.Text as T
 import Data.Text (Text)
 import Data.Semigroup ((<>))
 import Control.Arrow ((***))
+import Data.Spanned
 
 import Pretty (uglyPrint)
 
