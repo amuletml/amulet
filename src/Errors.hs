@@ -28,7 +28,7 @@ instance Pretty TypeError where
   pprint (ArisingFrom er ex) = do
     annotation ex <+> ": " <+> er
     block 1 . (newline <+>) $
-      bullet "Arising from use of " <+> ex
+      bullet "Arising from use of " <+> verbatim ex
   pprint (ExpectedArrow ap k v) = do
     "Kind error: In application " <+> verbatim ap
     block 1 . (newline <+>) $
@@ -45,7 +45,7 @@ instance Pretty TypeError where
           <+> " (of type " <+> verbatim (varType v) <+> ")"
     prnt _ = undefined
   pprint (Note te m) = do
-    te <+> newline
+    pprint te
     block 1 . (newline <+>) $
       bullet (opClr "Note: ") <+> m
   pprint (CanNotInstance rec new)
