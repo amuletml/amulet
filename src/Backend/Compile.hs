@@ -88,20 +88,11 @@ compileExpr s@If{} = compileIife s
 compileExpr s@Begin{} = compileIife s
 compileExpr s@Match{} = compileIife s
 compileExpr (BinOp l (VarRef (TvName o _) _) r _) = LuaBinOp (compileExpr l) (remapOp o) (compileExpr r)
-compileExpr (LeftSection op vl _)
-  | (VarRef (TvName o _) _) <- op
-  = LuaFunction [LuaName "_arg"] [LuaReturn (LuaBinOp (LuaRef (LuaName "_arg")) (remapOp o) (compileExpr vl))]
-  | otherwise = error "absurd: never parsed"
-compileExpr (RightSection vl op _)
-  | (VarRef (TvName o _) _) <- op
-  = LuaFunction [LuaName "_arg"] [LuaReturn (LuaBinOp (compileExpr vl) (remapOp o) (LuaRef (LuaName "_arg")))]
-  | otherwise = error "absurd: never parsed"
-compileExpr (BothSection op _)
-  | (VarRef (TvName o _) _) <- op
-  = LuaFunction [LuaName "_a", LuaName "_b"] [LuaReturn (LuaBinOp (LuaRef (LuaName "_a")) (remapOp o) (LuaRef (LuaName "_b")))]
-  | otherwise = error "absurd: never parsed"
-compileExpr (AccessSection k _) = LuaFunction [LuaName "_arg"] [LuaReturn (LuaRef (LuaIndex (LuaRef (LuaName "_arg")) (LuaString k)))]
 compileExpr BinOp{} = error "absurd: never parsed"
+compileExpr LeftSection{} = error "absurd: desugarer removes left sections"
+compileExpr RightSection{} = error "absurd: desugarer removes right sections"
+compileExpr BothSection{} = error "absurd: desugarer removes both-side sections"
+compileExpr AccessSection{} = error "absurd: desugarer removes access sections"
 
 global :: String -> LuaExpr
 global x = LuaRef (LuaIndex (LuaRef (LuaName "_G")) (LuaString (T.pack x)))
@@ -115,10 +106,6 @@ compileStmt r e@Fun{} = pureReturn r $ compileExpr e
 compileStmt r e@BinOp{} = pureReturn r $ compileExpr e
 compileStmt r e@Record{} = pureReturn r $ compileExpr e
 compileStmt r e@RecordExt{} = pureReturn r $ compileExpr e
-compileStmt r e@LeftSection{} = pureReturn r $ compileExpr e
-compileStmt r e@RightSection{} = pureReturn r $ compileExpr e
-compileStmt r e@BothSection{} = pureReturn r $ compileExpr e
-compileStmt r e@AccessSection{} = pureReturn r $ compileExpr e
 compileStmt r e@Tuple{} = pureReturn r $ compileExpr e
 compileStmt r (Let k c _) = let (ns, vs) = unzip $ map compileLet k in
                               (locals ns vs ++ compileStmt r c)
@@ -127,6 +114,12 @@ compileStmt r (Begin xs _) = concatMap (compileStmt Nothing) (init xs) ++ compil
 compileStmt r (Match s ps _) = runGen (compileMatch r s ps)
 compileStmt Nothing (App f x _) = [LuaCallS (compileExpr f) [compileExpr x]]
 compileStmt (Just r) e@App{} = [r (compileExpr e)]
+
+-- These are absurd.
+compileStmt r e@LeftSection{} = pureReturn r $ compileExpr e
+compileStmt r e@RightSection{} = pureReturn r $ compileExpr e
+compileStmt r e@BothSection{} = pureReturn r $ compileExpr e
+compileStmt r e@AccessSection{} = pureReturn r $ compileExpr e
 
 lowerName :: Var Typed -> LuaVar
 lowerName (TvRefresh a k)
