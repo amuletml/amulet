@@ -156,24 +156,16 @@ infer expr
         let rows = TyRows rho [(key, ktp)] a
         unify expr tp rows
         pure (Access rec' key a, ktp)
-      -- Section handling is quite a hack: We generate an appropriate
-      -- lambda and check that instead
-      BothSection op _ -> infer op
-      LeftSection op vl a -> do
-        var <- Name <$> fresh
-        infer (Fun (Capture var a) (BinOp (VarRef var a) op vl a) a)
-      RightSection vl op a -> do
-        var <- Name <$> fresh
-        infer (Fun (Capture var a) (BinOp vl op (VarRef var a) a) a)
-      AccessSection k a -> do
-        var <- Name <$> fresh
-        infer (Fun (Capture var a) (Access (VarRef var a) k a) a)
       Tuple es an -> do
         es' <- mapM infer es
         case es' of
           [] -> pure (Tuple [] an, tyUnit)
           [(x', t)] -> pure (x', t)
           ((x', t):xs) -> pure (Tuple (x':map fst xs) an, mkTupleType an t (map snd xs))
+      LeftSection{} -> error "desugarer removes right sections"
+      RightSection{} -> error "desugarer removes left sections"
+      BothSection{} -> error "desugarer removes both-side sections"
+      AccessSection{} -> error "desugarer removes access sections"
 
 mkTupleType :: Foldable t => Ann p -> Type p -> t (Type p) -> Type p
 mkTupleType an = foldl (\x y -> TyTuple x y an)
