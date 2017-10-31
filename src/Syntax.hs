@@ -2,30 +2,34 @@
 {-# LANGUAGE FlexibleInstances, FlexibleContexts, UndecidableInstances #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies, DataKinds #-}
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE LambdaCase, DeriveDataTypeable #-}
 module Syntax where
 
 import Pretty
 
 import Data.Text (Text, pack)
+import Data.Spanned
 import Data.Span
 
 import Control.Arrow ((***), second)
 
-data Parsed 
-data Typed
+import Data.Typeable
+import Data.Data
+
+data Parsed = Parsed Parsed deriving Data
+data Typed = Typed Typed deriving Data
 
 data family Var a
 
 data instance Var Parsed
   = Name Text
   | Refresh (Var Parsed) {-# UNPACK #-} !Int
-  deriving (Eq, Show, Ord)
+  deriving (Eq, Show, Ord, Data)
 
 data instance Var Typed
   = TvName Text (Type Typed)
   | TvRefresh (Var Typed) {-# UNPACK #-} !Int
-  deriving (Eq, Show, Ord)
+  deriving (Eq, Show, Ord, Data)
 
 type family Ann a :: * where
   Ann Parsed = Span
@@ -60,6 +64,7 @@ data Expr p
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Expr p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Expr p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Expr p)
+deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Expr p)
 
 data Pattern p
   = Wildcard (Ann p)
@@ -72,13 +77,14 @@ data Pattern p
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Pattern p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Pattern p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Pattern p)
+deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Pattern p)
 
 data Lit
   = LiInt Integer
   | LiStr Text
   | LiBool Bool
   | LiUnit
-  deriving (Eq, Show, Ord)
+  deriving (Eq, Show, Ord, Data, Typeable)
 
 data Type p
   = TyCon (Var p) (Ann p)
@@ -95,6 +101,7 @@ data Type p
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Type p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Type p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Type p)
+deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Type p)
 
 data Toplevel p
   = LetStmt [(Var p, Expr p)] (Ann p)
@@ -105,6 +112,7 @@ data Toplevel p
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Toplevel p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Toplevel p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Toplevel p)
+deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Toplevel p)
 
 --- Pretty-printing {{{
 
@@ -204,48 +212,10 @@ instance Pretty (Var Typed) where
 
 --- }}}
 
-class Annotated f where -- {{{
-  annotation :: f p -> Ann p
-
-instance Annotated Expr where
-  annotation (VarRef _ p) = p
-  annotation (Hole _ p) = p
-  annotation (Let _ _ p) = p
-  annotation (If _ _ _ p) = p
-  annotation (App _ _ p) = p
-  annotation (Fun _ _ p) = p
-  annotation (Begin _ p) = p
-  annotation (Literal _ p) = p
-  annotation (Match _ _ p) = p
-  annotation (BinOp _ _ _ p) = p
-  annotation (Record _ p) = p
-  annotation (RecordExt _ _ p) = p
-  annotation (Access _ _ p) = p
-  annotation (LeftSection _ _ p) = p
-  annotation (RightSection _ _ p) = p
-  annotation (BothSection _ p) = p
-  annotation (AccessSection _ p) = p
-  annotation (Tuple _ p) = p
-
-instance Annotated Type where
-  annotation (TyCon _ p) = p
-  annotation (TyTuple _ _ p) = p
-  annotation (TyRows _ _ p) = p
-  annotation (TyExactRows _ p) = p
-  annotation (TyVar _ p) = p
-  annotation (TyForall _ _ p) = p
-  annotation (TyArr _ _ p) = p
-  annotation (TyApp _ _ p) = p
-  annotation (TyStar p) = p
-
-instance Annotated Pattern where
-  annotation (Wildcard p) = p
-  annotation (Capture _ p) = p
-  annotation (Destructure _ _ p) = p
-  annotation (PType _ _ p) = p
-  annotation (PRecord _ p) = p
-  annotation (PTuple _ p) = p
--- }}}
+instance (Data (Var p), Data (Ann p), Data p) => Spanned (Expr p)
+instance (Data (Var p), Data (Ann p), Data p) => Spanned (Pattern p)
+instance (Data (Var p), Data (Ann p), Data p) => Spanned (Type p)
+instance (Data (Var p), Data (Ann p), Data p) => Spanned (Toplevel p)
 
 --- Raising {{{
 

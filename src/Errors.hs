@@ -7,6 +7,8 @@ import Control.Monad.Infer
 import qualified Data.Text as T
 import Data.Text (Text)
 
+import Data.Spanned
+
 import Data.Function
 
 import Syntax

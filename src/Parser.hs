@@ -5,6 +5,7 @@ module Parser where
 import qualified Text.Parsec.Token as Tok
 import Text.Parsec.Expr
 import Text.Parsec
+import Data.Spanned
 import Data.Span
 
 import qualified Data.Text as T
