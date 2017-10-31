@@ -16,6 +16,7 @@ import Control.Monad.Infer
 import Control.Arrow (first)
 
 import Syntax.Subst
+import Syntax.Raise
 import Syntax
 
 import Types.Wellformed
