@@ -310,11 +310,10 @@ inferProg [] = do
   let ann = internal
   (_, c) <- censor (const mempty) . listen $ do
     x <- lookupTy (Name "main")
-    b <- flip TyVar ann . flip TvName (TyStar ann) <$> fresh
-    unify (VarRef (Name "main") ann) x (TyArr tyUnit b ann)
+    unify (VarRef (Name "main") ann) x (TyArr tyUnit tyUnit ann)
   x <- gen
   case solve x mempty c of
-    Left e -> throwError (Note e "main must be a function from unit to some type")
+    Left e -> throwError (Note e "main must be a function from unit to unit")
     Right _ -> ([],) <$> ask
 
 inferLetTy :: (t ~ Typed, p ~ Parsed)
