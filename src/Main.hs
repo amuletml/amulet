@@ -1,15 +1,10 @@
 {-# LANGUAGE RankNTypes, OverloadedStrings #-}
 module Main where
 
-import Parser
 import Text.Parsec
-import Backend.Compile
-
-import Pretty
 
 import System.Environment
 
-import Types.Infer
 
 import qualified Data.Text.IO as T
 import qualified Data.Text as T
@@ -18,6 +13,14 @@ import qualified Data.Map as M
 
 import Control.Monad.Infer
 
+import Backend.Compile
+
+import Types.Infer
+
+import Syntax.Desugar
+
+import Parser
+import Pretty
 import Errors
 
 compileFromTo :: FilePath
@@ -27,7 +30,7 @@ compileFromTo :: FilePath
 compileFromTo fp x emit =
   case parse program fp x of
     Right prg ->
-      case inferProgram prg of
+      case inferProgram (desugarProgram prg) of
         Left e -> report e x
         Right (prg, _) ->
           let out = compileProgram prg
@@ -39,7 +42,7 @@ test x = do
   putStrLn "\x1b[1;32mProgram:\x1b[0m"
   case parse program "<test>" (T.pack x) of
     Right prg ->
-      case inferProgram prg of
+      case inferProgram (desugarProgram prg) of
         Left e -> report e (T.pack x)
         Right (_, env) -> do
           putStrLn (x <> "\x1b[1;32mType inference:\x1b[0m")
