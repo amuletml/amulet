@@ -8,6 +8,7 @@ import Control.Monad.Infer
 import Types.Wellformed
 
 import Syntax.Subst
+import Syntax.Raise
 import Syntax
 
 import qualified Data.Map.Strict as M
