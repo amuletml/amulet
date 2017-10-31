@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -funbox-strict-fields #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 
 module Data.Span
   ( Span(fileName)
@@ -12,12 +13,13 @@ import Pretty
 import Text.Parsec.Pos
 
 import Data.Semigroup
+import Data.Data
 
 data Span
   = Span { fileName :: SourceName
          , col1 :: !Column, line1 :: !Line
          , col2 :: !Column, line2 :: !Line }
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Data)
 
 internal :: Span
 internal = Span "<wired in>" 0 0 0 0
