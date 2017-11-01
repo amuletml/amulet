@@ -16,25 +16,25 @@ desugar :: MonadGen Int m
 desugar lower expr
   | perform <- \x -> maybeM (pure x) pure (lower x)
   , lo <- desugar lower
-  = case expr of
-      VarRef{} -> perform expr
-      Literal{} -> perform expr
-      Hole{} -> perform expr
-      AccessSection{} -> perform expr
-      Let bs e a -> perform =<< Let <$> desugarPair lower bs <*> lo e <*> pure a
-      If c t e a -> perform =<< If <$> lo c <*> lo t <*> lo e <*> pure a
-      App f x a -> perform =<< App <$> lo f <*> lo x <*> pure a
-      Fun p e a -> perform =<< Fun p <$> lo e <*> pure a
-      Begin es a -> perform =<< Begin <$> mapM lo es <*> pure a
-      Match e as an -> perform =<< Match <$> lo e <*> desugarPair lower as <*> pure an
-      BinOp l o r a -> perform =<< BinOp <$> lo l <*> lo o <*> lo r <*> pure a
-      Record rows a -> perform =<< Record <$> desugarPair lower rows <*> pure a
-      RecordExt b r a -> perform =<< RecordExt <$> lo b <*> desugarPair lower r <*> pure a
-      Access ex k a -> perform =<< Access <$> lo ex <*> pure k <*> pure a
-      LeftSection a b an -> perform =<< LeftSection <$> lo a <*> lo b <*> pure an
-      RightSection a b an -> perform =<< LeftSection <$> lo a <*> lo b <*> pure an
-      BothSection o an -> perform =<< BothSection <$> lo o <*> pure an
-      Tuple es an -> perform =<< Tuple <$> mapM lo es <*> pure an
+  = perform =<< case expr of
+      VarRef{} -> pure expr
+      Literal{} -> pure expr
+      Hole{} -> pure expr
+      AccessSection{} -> pure expr
+      Let bs e a -> Let <$> desugarPair lower bs <*> lo e <*> pure a
+      If c t e a -> If <$> lo c <*> lo t <*> lo e <*> pure a
+      App f x a -> App <$> lo f <*> lo x <*> pure a
+      Fun p e a -> Fun p <$> lo e <*> pure a
+      Begin es a -> Begin <$> mapM lo es <*> pure a
+      Match e as an -> Match <$> lo e <*> desugarPair lower as <*> pure an
+      BinOp l o r a -> BinOp <$> lo l <*> lo o <*> lo r <*> pure a
+      Record rows a -> Record <$> desugarPair lower rows <*> pure a
+      RecordExt b r a -> RecordExt <$> lo b <*> desugarPair lower r <*> pure a
+      Access ex k a -> Access <$> lo ex <*> pure k <*> pure a
+      LeftSection a b an -> LeftSection <$> lo a <*> lo b <*> pure an
+      RightSection a b an -> LeftSection <$> lo a <*> lo b <*> pure an
+      BothSection o an -> BothSection <$> lo o <*> pure an
+      Tuple es an -> Tuple <$> mapM lo es <*> pure an
 
 desugarPair :: MonadGen Int m
             => (Expr Parsed -> m (Maybe (Expr Parsed)))
@@ -43,11 +43,7 @@ desugarPair lower bg
   = forM bg $ \(var, expr) -> (,) var <$> desugar lower expr
 
 maybeM :: Monad m => m a -> (b -> m a) -> m (Maybe b) -> m a
-maybeM noth just val = do
-  val' <- val
-  case val' of
-    Nothing -> noth
-    Just x -> just x
+maybeM n j x = maybe n j =<< x
 
 desugarProgram :: [Toplevel Parsed] -> [Toplevel Parsed]
 desugarProgram = runGen . mapM desugarTop where
