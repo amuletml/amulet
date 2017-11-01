@@ -44,6 +44,7 @@ data Expr p
   | Match (Expr p) [(Pattern p, Expr p)] (Ann p)
   | BinOp (Expr p) (Expr p) (Expr p) (Ann p)
   | Hole (Var p) (Ann p)
+  | EHasType (Expr p) (Type p) (Ann p)
 
   -- Records
   | Record [(Text, Expr p)] (Ann p) -- { foo = bar, baz = quux }
@@ -95,6 +96,7 @@ data Type p
   | TyRows (Type p) [(Text, Type p)] (Ann p) -- { α | foo : int, bar : string }
   | TyExactRows [(Text, Type p)] (Ann p) -- { foo : int, bar : string }
   | TyTuple (Type p) (Type p) (Ann p) -- (see note [1])
+  | TyCons [GivenConstraint p] (Type p) (Ann p) -- (see note [2])
 
   | TyStar (Ann p) -- * :: *
 
@@ -108,13 +110,33 @@ data Toplevel p
   = LetStmt [(Var p, Expr p)] (Ann p)
   | ValStmt (Var p) (Type p) (Ann p)
   | ForeignVal (Var p) Text (Type p) (Ann p)
-  | TypeDecl (Var p) [Var p] [(Var p, Maybe (Type p))] (Ann p)
+  | TypeDecl (Var p) [Var p] [Constructor p] (Ann p)
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Toplevel p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Toplevel p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Toplevel p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Toplevel p)
 instance (Data (Var p), Data (Ann p), Data p) => Spanned (Toplevel p)
+
+data Constructor p
+  = UnitCon (Var p) (Ann p)
+  | ArgCon (Var p) (Type p) (Ann p)
+  | GADTCon (Var p) (Type p) (Ann p)
+
+deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Constructor p)
+deriving instance (Show (Var p), Show (Ann p)) => Show (Constructor p)
+deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Constructor p)
+deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Constructor p)
+instance (Data (Var p), Data (Ann p), Data p) => Spanned (Constructor p)
+
+data GivenConstraint p
+  = Equal (Type p) (Type p) (Ann p)
+
+deriving instance (Eq (Var p), Eq (Ann p)) => Eq (GivenConstraint p)
+deriving instance (Show (Var p), Show (Ann p)) => Show (GivenConstraint p)
+deriving instance (Ord (Var p), Ord (Ann p)) => Ord (GivenConstraint p)
+deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (GivenConstraint p)
+instance (Data (Var p), Data (Ann p), Data p) => Spanned (GivenConstraint p)
 
 --- Pretty-printing {{{
 
@@ -144,6 +166,7 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
     kwClr "match " <+> t <+> " with"
     body 2 bs *> newline
   pprint (Hole v _) = pprint v -- A typed hole
+  pprint (EHasType e t _) = parens $ e <+> opClr " : " <+> t
   pprint (Record rows _) = braces $ interleave ", " $ map (\(n, v) -> n <+> opClr " = " <+> v) rows
   pprint (RecordExt var rows _) = braces $ var <+> kwClr " with " <+> interleave ", " (map (\(n, v) -> n <+> opClr " = " <+> v) rows)
   pprint (Access x@VarRef{} f _) = x <+> opClr "." <+> f
@@ -180,6 +203,7 @@ instance Pretty Lit where
 
 instance (Pretty (Var p)) => Pretty (Type p) where
   pprint (TyCon v _) = typeClr v
+  pprint (TyCons cs v _) = parens (interleave ", " cs) <+> opClr " => " <+> v
   pprint (TyVar v _) = opClr "'" <+> tvClr v
   pprint (TyForall vs v _)
     = kwClr "∀ " <+> interleave " " (map (\x -> "'" <+> tvClr x) vs) <+> opClr ". " <+> v
@@ -200,6 +224,9 @@ instance (Pretty (Var p)) => Pretty (Type p) where
     | otherwise
     = a <+> opClr " * " <+> b
   pprint TyStar{} = kwClr "Type"
+
+instance Pretty (Type p) => Pretty (GivenConstraint p) where
+  pprint (Equal a b _) = a <+> opClr " ~ " <+> b
 
 instance Pretty (Var Parsed) where
   pprint (Name v) = pprint v

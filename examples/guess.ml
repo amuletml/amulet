@@ -13,7 +13,7 @@ external val string_of_int : int -> string  = "tostring" ;
 external val transmute : 'a -> 'b  = "(function(a) return a end)" ;
 
 type option 'a =
-  | Just 'a
+  | Just of 'a
   | Nothing
   ;
 

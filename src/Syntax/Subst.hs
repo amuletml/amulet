@@ -32,6 +32,7 @@ instance Substitutable (Type Typed) where
   ftv (TyArr a b _) = ftv a `S.union` ftv b
   ftv (TyRows rho rows _) = ftv rho `S.union` foldMap (ftv . snd) rows
   ftv (TyExactRows rows _) = foldMap (ftv . snd) rows
+  ftv (TyCons cs t _) = foldMap ftv cs `S.union` ftv t
 
   apply _ (TyCon a l) = TyCon a l
   apply _ (TyStar l) = TyStar l
@@ -43,10 +44,15 @@ instance Substitutable (Type Typed) where
     s' = foldr M.delete s v
   apply s (TyRows rho rows ann) = TyRows (apply s rho) (map (second (apply s)) rows) ann
   apply s (TyExactRows rows ann) = TyExactRows  (map (second (apply s)) rows) ann
+  apply s (TyCons cs t ann) = TyCons (map (apply s) cs) (apply s t) ann
 
 instance Substitutable a => Substitutable [a] where
-  ftv = S.unions . map ftv
+  ftv = foldMap ftv
   apply s = map (apply s)
+
+instance Substitutable (GivenConstraint Typed) where
+  ftv (Equal a b _) = ftv a `S.union` ftv b
+  apply s (Equal a b ann) = Equal (apply s a) (apply s b) ann
 
 compose :: Subst -> Subst -> Subst
 s1 `compose` s2 = M.map (apply s1) s2 `M.union` s1

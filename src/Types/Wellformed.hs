@@ -25,6 +25,10 @@ wellformed tp = case tp of
       _ -> throwError (CanNotInstance tp rho)
     mapM_ (wellformed . snd) rows
   TyExactRows rows _ -> mapM_ (wellformed . snd) rows
+  TyCons cs t _ -> mapM wellformedC cs *> wellformed t
+
+wellformedC :: (Pretty (Var p), MonadError TypeError m) => GivenConstraint p -> m ()
+wellformedC (Equal a b _) = wellformed a *> wellformed b
 
 {-
    Commentary:

@@ -81,6 +81,7 @@ instance Pretty TypeError where
     | otherwise
     =   "\x1b[1;32minternal compiler error\x1b[0m: NoOverlap "
     <+> interleave " " [ta, tb]
+  pprint (IllegalGADT t) = "The type " <+> verbatim t <+> " is illegal as a GADT constructor type"
 
 prettyRows :: Pretty (Var p) => [(T.Text, Type p)] -> PrettyP
 prettyRows = braces

@@ -43,14 +43,22 @@ compileProgram = LuaDo . (extendDef:) . compileProg where
   compileProg (TypeDecl _ _ cs _:xs) = compileConstructors cs ++ compileProg xs
   compileProg [] = [LuaCallS (LuaRef (LuaName "main")) []]
 
-compileConstructors :: [(Var Typed, Maybe (Type Typed))] -> [LuaStmt]
-compileConstructors ((a, Nothing):xs) -- unit constructors, easy
+compileConstructors :: [Constructor Typed] -> [LuaStmt]
+compileConstructors (UnitCon a _:xs) -- unit constructors, easy
   = LuaLocal [lowerName a] [LuaTable [(LuaNumber 1, LuaString cn)]]:compileConstructors xs where
     cn = getName a
-compileConstructors ((a, Just _):ys) -- non-unit constructors, hard
+compileConstructors (ArgCon a _ _:ys) -- non-unit constructors, hard
   = LuaLocal [lowerName a] [vl]:compileConstructors ys where
     vl = LuaFunction [LuaName "x"] [LuaReturn (LuaTable [(LuaNumber 1, LuaString cn), (LuaNumber 2, LuaRef (LuaName "x"))])]
     cn = getName a
+compileConstructors (GADTCon nm ty _:ys) -- GADT constructors, hardest - we have to figure out the representation from the type
+  | TyArr{} <- ty
+  = LuaLocal [lowerName nm] [vl]:compileConstructors ys
+  | otherwise
+  = LuaLocal [lowerName nm] [LuaTable [(LuaNumber 1, LuaString cn)]]:compileConstructors ys
+  where
+    vl = LuaFunction [LuaName "x"] [LuaReturn (LuaTable [(LuaNumber 1, LuaString cn), (LuaNumber 2, LuaRef (LuaName "x"))])]
+    cn = getName nm
 compileConstructors [] = []
 
 compileLet :: (Var Typed, Expr Typed) -> (LuaVar, LuaExpr)
@@ -58,6 +66,7 @@ compileLet (n, e) = (lowerName n, compileExpr e)
 
 compileExpr :: Expr Typed -> LuaExpr
 compileExpr (VarRef v _) = LuaRef (lowerName v)
+compileExpr (EHasType e _ _) = compileExpr e
 compileExpr (Hole v ann) = LuaCall (global "error") [LuaString msg] where
   msg = "Deferred typed hole " <> uglyPrint v <> " (from " <> uglyPrint ann <> ")"
 compileExpr (Access rec f _) = LuaRef (LuaIndex (compileExpr rec) (LuaString f))
@@ -108,6 +117,7 @@ compileStmt r e@BinOp{} = pureReturn r $ compileExpr e
 compileStmt r e@Record{} = pureReturn r $ compileExpr e
 compileStmt r e@RecordExt{} = pureReturn r $ compileExpr e
 compileStmt r e@Tuple{} = pureReturn r $ compileExpr e
+compileStmt r (EHasType e _ _) = compileStmt r e
 compileStmt r (Let k c _) = let (ns, vs) = unzip $ map compileLet k in
                               (locals ns vs ++ compileStmt r c)
 compileStmt r (If c t e _) = [LuaIf (compileExpr c) (compileStmt r t) (compileStmt r e)]

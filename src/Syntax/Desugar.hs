@@ -35,6 +35,7 @@ desugar lower expr
       RightSection a b an -> LeftSection <$> lo a <*> lo b <*> pure an
       BothSection o an -> BothSection <$> lo o <*> pure an
       Tuple es an -> Tuple <$> mapM lo es <*> pure an
+      EHasType e t a -> EHasType <$> lo e <*> pure t <*> pure a
 
 desugarPair :: MonadGen Int m
             => (Expr Parsed -> m (Maybe (Expr Parsed)))

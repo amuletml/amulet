@@ -166,6 +166,11 @@ infer expr
           [] -> pure (Tuple [] an, tyUnit)
           [(x', t)] -> pure (x', t)
           ((x', t):xs) -> pure (Tuple (x':map fst xs) an, mkTupleType an t (map snd xs))
+      EHasType e g an -> do
+        (e', t') <- infer e
+        (g', _) <- inferKind g
+        unify expr g' t'
+        pure (EHasType e' t' an, t')
       LeftSection{} -> error "desugarer removes right sections"
       RightSection{} -> error "desugarer removes left sections"
       BothSection{} -> error "desugarer removes both-side sections"
@@ -188,7 +193,7 @@ inferKind (TyVar v a) = do
   x <- lookupKind v `catchError` const (pure (TyStar a))
   pure (TyVar (tag v x) a, x)
 inferKind (TyCon v a) = do
-  x <- lookupKind v `catchError` const (pure (TyStar a))
+  x <- lookupKind v
   pure (TyCon (tag v x) a, x)
 inferKind (TyForall vs k a) = do
   (k, t') <- extendManyK (zip (map (`tag` TyStar a) vs) (repeat (TyStar a))) $
@@ -231,6 +236,13 @@ inferKind (TyTuple a b an) = do
   (a', _) <- inferKind a
   (b', _) <- inferKind b
   pure (TyTuple a' b' an, TyStar an)
+inferKind (TyCons cs b an) = do
+  cs' <- forM cs $ \(Equal ta tb an) -> do
+    (ta', _) <- inferKind ta
+    (tb', _) <- inferKind tb
+    pure (Equal ta' tb' an)
+  (b', k) <- inferKind b
+  pure (TyCons cs' b' an, k)
 
 -- Returns: Type of the overall thing * type of captures
 inferPattern :: (Type Typed -> Type Typed -> Infer a ())
@@ -249,10 +261,17 @@ inferPattern unify (Destructure cns ps ann)
     pure (Destructure (tag cns pty) Nothing ann, pty, [])
   | Just p <- ps
   = do
-    t@(TyArr tup res _) <- lookupTy cns
-    (p', pt, pb) <- inferPattern unify p
-    unify tup pt
-    pure (Destructure (tag cns t) (Just p') ann, res, pb)
+    t <- lookupTy cns
+    case t of
+      (TyArr tup res _) -> do
+        (p', pt, pb) <- inferPattern unify p
+        unify tup pt
+        pure (Destructure (tag cns t) (Just p') ann, res, pb)
+      (TyCons cs (TyArr tup res _) an) -> do
+        (p', pt, pb) <- inferPattern unify p
+        unify tup pt
+        pure (Destructure (tag cns t) (Just p') ann, (TyCons cs res an), pb)
+      _ -> undefined
 inferPattern unify (PRecord rows ann) = do
   rho <- freshTV ann
   (rowps, rowts, caps) <- unzip3 <$> forM rows (\(var, pat) -> do
@@ -270,7 +289,6 @@ inferPattern unify (PTuple elems ann)
   | otherwise = do
     (ps, t:ts, cps) <- unzip3 <$> mapM (inferPattern unify) elems
     pure (PTuple ps ann, mkTupleType ann t ts, concat cps)
-
 
 inferProg :: [Toplevel Parsed] -> Infer Typed ([Toplevel Typed], Env)
 inferProg (LetStmt ns ann:prg) = do
@@ -297,18 +315,11 @@ inferProg (TypeDecl n tvs cs ann:prg) =
       retTy = foldl app (con (n `tag` star)) (map (var . flip tag star) tvs)
       n' = tag n (mkk tvs)
       arisingFromConstructor = "Perhaps you're missing a * between two types of a constructor?"
-      inferCon v (Just ty) = do
-        (ty', _) <- inferKind ty
-        pure (tag v (TyArr ty' retTy ann), TyArr ty' retTy ann)
-      inferCon v Nothing = pure (tag v retTy, retTy)
-      liftCon (v, t)
-        | t == retTy = (v, Nothing)
-        | otherwise = (v, Just t)
    in extendKind (n', mkk tvs) $ do
-     cs' <- mapM (uncurry inferCon) cs
-               `catchError` \x -> throwError (Note (ArisingFrom x (TyVar n' ann)) arisingFromConstructor)
-     extendMany cs' $
-       consFst (TypeDecl n' (map (`tag` star) tvs) (map liftCon cs') ann) $
+     (ts, cs') <- unzip <$> mapM (inferCon retTy) cs
+                               `catchError` \x -> throwError (Note (ArisingFrom x (TyVar n' ann)) arisingFromConstructor)
+     extendMany ts $
+       consFst (TypeDecl n' (map (`tag` star) tvs) cs' ann) $
          inferProg prg
 inferProg [] = do
   let ann = internal
@@ -319,6 +330,48 @@ inferProg [] = do
   case solve x mempty c of
     Left e -> throwError (Note e "main must be a function from unit to unit")
     Right _ -> ([],) <$> ask
+
+inferCon :: Type Typed
+         -> Constructor Parsed
+         -> Infer Typed ( (Var Typed, Type Typed)
+                        , Constructor Typed)
+inferCon ret (ArgCon nm ty ann) = do
+  (ty', _) <- inferKind ty
+  pure ((tag nm (TyArr ty' ret ann), TyArr ty' ret ann), ArgCon (tag nm ty') ty' ann)
+inferCon ret (UnitCon nm ann) = pure ((tag nm ret, ret), UnitCon (tag nm ret) ann)
+inferCon ret (GADTCon nm ty ann) = do
+  res <- case ty of
+    x | x `instanceOf` ret -> pure x
+    TyArr _ b _ | b `instanceOf` ret -> pure b
+    x -> throwError (IllegalGADT x)
+  -- This is a game of matching up paramters of the return type with the
+  -- stated parameters, and introducing the proper constraints
+  let given = map (raiseT id (const internal)) (instanceArgs res)
+      assumed = instanceArgs ret
+  given' <- mapM (\x -> fst <$> inferKind x) given
+  (ty', _) <- inferKind ty
+  let cons = zipWith (\x y -> Equal x y ann) assumed given'
+      res' = foldl (\x y -> TyApp x y ann) (raiseT (flip tag star) id (instanceCon res)) assumed
+      ty'' = case ty' of
+               TyArr a _ p -> TyArr a res' p
+               _ -> res'
+      final = closeOver (TyCons cons ty'' ann)
+  pure ((tag nm final, final), GADTCon (tag nm final) final ann)
+
+instanceOf :: Type Parsed -> Type Typed -> Bool
+instanceOf (TyCon a _) (TyCon b _) = a == eraseVarTy b
+instanceOf (TyApp a _ _) (TyApp b _ _) = a `instanceOf` b
+instanceOf _ _ = False
+
+instanceArgs :: Type p -> [Type p]
+instanceArgs (TyCon _ _) = []
+instanceArgs (TyApp i b _) = instanceArgs i ++ [b]
+instanceArgs _ = undefined
+
+instanceCon :: Type p -> Type p
+instanceCon x@TyCon{} = x
+instanceCon (TyApp x _ _) = instanceCon x
+instanceCon _ = undefined
 
 inferLetTy :: (t ~ Typed, p ~ Parsed)
            => [(Var t, Type t)]
