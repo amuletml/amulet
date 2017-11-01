@@ -15,7 +15,7 @@ import Syntax
 import Pretty
 
 instance Pretty TypeError where
-  pprint (NotEqual a b) = 
+  pprint (NotEqual a b) =
     pprint "Type error: failed to unify "
        <+> verbatim a
        <+> " with " <+> verbatim b
@@ -80,7 +80,7 @@ instance Pretty TypeError where
     <+> block 1 (missing ra rb)
     | otherwise
     =   "\x1b[1;32minternal compiler error\x1b[0m: NoOverlap "
-    <+> interleave " " [ta, tb] 
+    <+> interleave " " [ta, tb]
 
 prettyRows :: Pretty (Var p) => [(T.Text, Type p)] -> PrettyP
 prettyRows = braces
@@ -103,7 +103,7 @@ missing ra rb
 missing _ _ = undefined -- freaking GHC
 
 diff :: (Eq a, Pretty a) => [(a, b)] -> [(a, b)] -> [PrettyP]
-diff ra rb = map (tvClr . fst) (deleteFirstsBy ((==) `on` fst) rb ra) 
+diff ra rb = map (tvClr . fst) (deleteFirstsBy ((==) `on` fst) rb ra)
 
 varType :: Var Typed -> Type Typed
 varType (TvName _ x) = x

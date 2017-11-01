@@ -17,7 +17,7 @@ findExprHoles (If c t e _)
   = concat [ findExprHoles c, findExprHoles t, findExprHoles e ]
 findExprHoles (BinOp c t e _)
   = concat [ findExprHoles c, findExprHoles t, findExprHoles e ]
-findExprHoles (App x y _) = findExprHoles x ++ findExprHoles y 
+findExprHoles (App x y _) = findExprHoles x ++ findExprHoles y
 findExprHoles (Fun _ y _) = findExprHoles y
 findExprHoles (Begin xs _) = concatMap findExprHoles xs
 findExprHoles (Match m vs _) = findExprHoles m ++ concatMap (findExprHoles . snd) vs

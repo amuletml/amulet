@@ -3,7 +3,7 @@ module Syntax.Desugar (desugarProgram) where
 
 import qualified Control.Monad.Infer as M
 import Control.Monad.Gen
-import Control.Monad 
+import Control.Monad
 
 import qualified Data.Text as T
 

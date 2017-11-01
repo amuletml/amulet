@@ -227,7 +227,7 @@ typeP = typeOpP where
     pure $ foldl app' hd tl
 
   table :: [[ Operator T.Text () Identity (Type Parsed) ]]
-  table = [ [ binary "->" (\p a b -> TyArr a b p) AssocRight ] 
+  table = [ [ binary "->" (\p a b -> TyArr a b p) AssocRight ]
           , [ binary "*" (\p a b -> TyTuple a b p) AssocRight ] ]
 
 binary :: String -> (Span -> a -> a -> a) -> Assoc -> Operator T.Text () Identity a

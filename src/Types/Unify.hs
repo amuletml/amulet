@@ -35,12 +35,8 @@ bind var ty | raiseT id (const internal) ty == TyVar var internal = return ()
 unify :: Type Typed -> Type Typed -> SolveM ()
 unify (TyVar a _) b = bind a b
 unify a (TyVar b _) = bind b a
-unify (TyArr a b _) (TyArr a' b' _) = do
-  unify a a'
-  unify b b'
-unify (TyApp a b _) (TyApp a' b' _) = do
-  unify a a'
-  unify b b'
+unify (TyArr a b _) (TyArr a' b' _) = unify a a' *> unify b b'
+unify (TyApp a b _) (TyApp a' b' _) = unify a a' *> unify b b'
 unify ta@(TyCon a _) tb@(TyCon b _)
   | smush a == smush b = pure ()
   | otherwise = throwError (NotEqual ta tb)
@@ -123,4 +119,3 @@ solve i s (ConUnify e a t:xs) = do
 occurs :: Var Typed -> Type Typed -> Bool
 occurs _ (TyVar _ _) = False
 occurs x e = x `S.member` ftv e
-
