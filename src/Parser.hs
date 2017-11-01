@@ -21,6 +21,7 @@ type Expr' = Expr Parsed
 type Toplevel' = Toplevel Parsed
 type Type' = Type Parsed
 type Pattern' = Pattern Parsed
+type Constructor' = Constructor Parsed
 
 bindGroup :: Parser [(Var Parsed, Expr')]
 bindGroup = sepBy1 decl (reserved "and") where
@@ -46,6 +47,7 @@ withPos k = do
 
 exprP' :: Parser Expr'
 exprP' = try access
+     <|> try eot
      <|> try rightSect
      <|> try accessSect
      <|> try leftSect
@@ -147,6 +149,10 @@ exprP' = try access
       actual <- operator'
       pure (VarRef (Name (T.pack actual)))
     pure (RightSection x op)
+  eot = withPos . parens $ do
+    x <- exprP
+    reservedOp ":"
+    EHasType x <$> typeP
   tuple = withPos . parens $ do
     x <- commaSep exprP
     pure $ case x of
@@ -227,8 +233,8 @@ typeP = typeOpP where
     pure $ foldl app' hd tl
 
   table :: [[ Operator T.Text () Identity (Type Parsed) ]]
-  table = [ [ binary "->" (\p a b -> TyArr a b p) AssocRight ]
-          , [ binary "*" (\p a b -> TyTuple a b p) AssocRight ] ]
+  table = [ [ binary "*" (\p a b -> TyTuple a b p) AssocRight ]
+          , [ binary "->" (\p a b -> TyArr a b p) AssocRight ] ]
 
 binary :: String -> (Span -> a -> a -> a) -> Assoc -> Operator T.Text () Identity a
 binary n f a = flip Infix a $ do
@@ -309,15 +315,25 @@ toplevelP = letStmt <|> try foreignVal <|> valStmt <|> dataDecl where
     eq <- optionMaybe (reservedOp "=")
     case eq of
       Just _ -> do
-        first <- optionMaybe $ do
-          x <- constrName
-          (,) x <$> optionMaybe typeP
+        first <- optionMaybe constructor
         cs <- many $ do
           reservedOp "|"
-          x <- constrName
-          (,) x <$> optionMaybe typeP
+          constructor
         pure $ TypeDecl x xs (maybe cs (:cs) first)
       Nothing -> pure $ TypeDecl x xs []
+
+constructor :: Parser Constructor'
+constructor = try gadt <|> try arg <|> unit where
+  unit = withPos (UnitCon <$> constrName)
+  gadt = withPos $ do
+    nm <- constrName
+    reservedOp ":"
+    GADTCon nm <$> typeP
+  arg = withPos $ do
+    nm <- constrName
+    reserved "of"
+    ArgCon nm <$> typeP
+
 
 program :: Parser [Toplevel']
 program = Tok.whiteSpace lexer *> semiSep1 toplevelP <* eof

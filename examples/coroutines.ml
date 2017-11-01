@@ -16,7 +16,7 @@ external val exit : int -> unit = "os.exit" ;
 external val unsafe_coerce : 'a -> 'b = "(function(a) return a end)" ;
 
 type option 'a =
-  | Just 'a
+  | Just of 'a
   | Nothing ;
 
 (* in case you didn't notice, this is a great big hack *)

@@ -55,7 +55,7 @@ instance Semigroup Env where
 
 data Constraint p
   = ConUnify (Expr p) (Type p) (Type p)
-deriving instance (Show (Var p), Show (Expr p), Show (Type p)) => Show (Constraint p)
+deriving instance (Show (Ann p), Show (Var p), Show (Expr p), Show (Type p)) => Show (Constraint p)
 
 data TypeError where
   NotEqual :: Pretty (Var p) => Type p -> Type p -> TypeError
@@ -78,6 +78,7 @@ data TypeError where
                  -> Type p {- instance -}
                  -> TypeError
   Malformed :: Pretty (Var p) => Type p -> TypeError
+  IllegalGADT :: Pretty (Var p) => Type p -> TypeError
 
 lookupTy :: (MonadError TypeError m, MonadReader Env m, MonadGen Int m) => Var Parsed -> m (Type Typed)
 lookupTy x = do
@@ -130,7 +131,7 @@ instantiate ty = pure ty
 difference :: Env -> Env -> Env
 difference (Env ma mb) (Env ma' mb') = Env (ma Map.\\ ma') (mb Map.\\ mb')
 
-instance Substitutable (Type p) => Substitutable (Constraint p) where
+instance (Substitutable (Type p), Substitutable (GivenConstraint p)) => Substitutable (Constraint p) where
   ftv (ConUnify _ a b) = ftv a `Set.union` ftv b
   apply s (ConUnify e a b) = ConUnify e (apply s a) (apply s b)
 
