@@ -26,7 +26,7 @@ bind :: Var Typed -> Type Typed -> SolveM ()
 bind var ty
   | raiseT id (const internal) ty == TyVar var internal = return ()
   | occurs var ty = throwError (Occurs var ty)
-  | TvName Rigid _ _ <- var = throwError (RigidBinding var ty)
+  | isRigid var = throwError (RigidBinding var ty)
   | otherwise = do
       env <- get
       -- Attempt to extend the environment, otherwise unify with existing type
