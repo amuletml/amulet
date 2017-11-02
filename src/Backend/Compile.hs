@@ -79,7 +79,7 @@ compileExpr (Fun (Capture v _) e _) = LuaFunction [lowerName v] (compileStmt (Ju
 compileExpr (Fun (Wildcard _) e _) = LuaFunction [LuaName "_"] (compileStmt (Just LuaReturn) e)
 compileExpr f@(Fun k e _) = LuaFunction [LuaName "__arg__"]
                               (compileStmt (Just LuaReturn)
-                                           (Match (VarRef (TvName "__arg__" undefined)
+                                           (Match (VarRef (TvName Flexible "__arg__" undefined)
                                                           (annotation f))
                                                   [(k, e)] (annotation f)))
 compileExpr (Tuple [] _) = LuaNil -- evil!
@@ -101,7 +101,7 @@ compileExpr s@Let{} = compileIife s
 compileExpr s@If{} = compileIife s
 compileExpr s@Begin{} = compileIife s
 compileExpr s@Match{} = compileIife s
-compileExpr (BinOp l (VarRef (TvName o _) _) r _) = LuaBinOp (compileExpr l) (remapOp o) (compileExpr r)
+compileExpr (BinOp l (VarRef (TvName _ o _) _) r _) = LuaBinOp (compileExpr l) (remapOp o) (compileExpr r)
 compileExpr BinOp{} = error "absurd: never parsed"
 compileExpr LeftSection{} = error "absurd: desugarer removes left sections"
 compileExpr RightSection{} = error "absurd: desugarer removes right sections"
@@ -141,12 +141,12 @@ lowerName (TvRefresh a k)
   = case lowerName a of
       LuaName x -> LuaName (x <> T.pack (show k))
       _ -> error "absurd: no lowering to namespaces"
-lowerName (TvName a _) = LuaName a
+lowerName (TvName _ a _) = LuaName a
 
 
 getName :: Var Typed -> Text
 getName (TvRefresh a _) = getName a
-getName (TvName a _) = a
+getName (TvName _ a _) = a
 
 iife :: [LuaStmt] -> LuaExpr
 iife b = LuaCall (LuaFunction [] b) []
@@ -199,7 +199,7 @@ patternTest (Destructure con p' _) vr
   = foldAnd [table vr, tag con vr ]
 
 tag :: Var Typed -> LuaExpr -> LuaExpr
-tag (TvName con _) vr = LuaBinOp (LuaRef (LuaIndex vr (LuaNumber 1))) "==" (LuaString con)
+tag (TvName _ con _) vr = LuaBinOp (LuaRef (LuaIndex vr (LuaNumber 1))) "==" (LuaString con)
 tag _ _ = error "absurd: no renaming"
 
 table :: LuaExpr -> LuaExpr
@@ -207,7 +207,7 @@ table ex = LuaBinOp (LuaCall (LuaRef (LuaName "type")) [ex]) "==" (LuaString "ta
 
 patternBindings :: Pattern Typed -> LuaExpr -> [(LuaVar, LuaExpr)]
 patternBindings Wildcard{}  _ = []
-patternBindings (Capture (TvName k _) _) v = [(LuaName k, v)]
+patternBindings (Capture (TvName _ k _) _) v = [(LuaName k, v)]
 patternBindings (Capture _ _) _ = error "absurd: no renaming"
 patternBindings (PType p _ _) t = patternBindings p t
 patternBindings (Destructure _ p' _) vr

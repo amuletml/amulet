@@ -23,7 +23,6 @@ import qualified Data.Set as Set
 import Data.Semigroup
 
 import Data.Spanned
-import Data.Span (internal)
 
 import qualified Data.Text as T
 import Data.Text (Text)
@@ -79,6 +78,7 @@ data TypeError where
                  -> TypeError
   Malformed :: Pretty (Var p) => Type p -> TypeError
   IllegalGADT :: Pretty (Var p) => Type p -> TypeError
+  RigidBinding :: Pretty (Var p) => Var p -> Type p -> TypeError
 
 lookupTy :: (MonadError TypeError m, MonadReader Env m, MonadGen Int m) => Var Parsed -> m (Type Typed)
 lookupTy x = do
@@ -121,10 +121,16 @@ extendManyK [] b = b
 alpha :: [Text]
 alpha = map T.pack $ [1..] >>= flip replicateM ['a'..'z']
 
-instantiate :: MonadGen Int m => Type Typed -> m (Type Typed)
-instantiate (TyForall vs ty _) = do
-  f <- map (flip TyVar internal)
-        <$> mapM (const (flip TvName internalTyVar <$> fresh)) vs
+instantiate :: (MonadError TypeError m, MonadGen Int m) => Type Typed -> m (Type Typed)
+instantiate typ@(TyForall vs ty _) = do
+  f <- forM vs $ \var -> do
+    new <- fresh
+    let ann = annotation ty
+        new' :: Type Typed
+        new' = TyVar (TvName Flexible new (TyStar ann)) ann
+    if isRigid var
+       then throwError (ArisingFrom (RigidBinding var new') typ)
+       else pure new'
   instantiate (apply (Map.fromList (zip vs f)) ty)
 instantiate ty = pure ty
 

@@ -25,9 +25,12 @@ data instance Var Parsed
   deriving (Eq, Show, Ord, Data)
 
 data instance Var Typed
-  = TvName Text (Type Typed)
+  = TvName Rigidity Text (Type Typed)
   | TvRefresh (Var Typed) {-# UNPACK #-} !Int
   deriving (Eq, Show, Ord, Data)
+
+-- Can we bind this in the constraint solver?
+data Rigidity = Rigid | Flexible deriving (Eq, Show, Ord, Data)
 
 type family Ann a :: * where
   Ann Parsed = Span
@@ -233,7 +236,7 @@ instance Pretty (Var Parsed) where
   pprint (Refresh v _) = pprint v
 
 instance Pretty (Var Typed) where
-  pprint (TvName v _) = pprint v
+  pprint (TvName _ v _) = pprint v
   -- pprint (TvName v t)
     -- | t == internalTyVar = pprint v
     -- | otherwise = parens $ v <+> opClr " : " <+> t
@@ -248,19 +251,25 @@ instance InternalTV Parsed where
   internalTyVar = TyVar (Name (pack "«internal»")) internal
 
 instance InternalTV Typed where
-  internalTyVar = TyVar (TvName (pack "«internal»") (TyStar internal)) internal
+  internalTyVar = TyVar (TvName Flexible (pack "«internal»") (TyStar internal)) internal
 
 -- }}}
 
 eraseVarTy :: Var Typed -> Var Parsed
-eraseVarTy (TvName x _) = Name x
+eraseVarTy (TvName _ x _) = Name x
 eraseVarTy (TvRefresh k _) = eraseVarTy k
 
 closeEnough :: Var Typed -> Var Typed -> Bool
-closeEnough (TvName a _) (TvName b _) = a == b
+closeEnough (TvName r a _) (TvName r' b _) = a == b && r == r'
 closeEnough (TvRefresh a b) (TvRefresh a' b')
   = a `closeEnough` a' && b' >= b
 closeEnough _ _ = False
+
+isRigid :: Var Typed -> Bool
+isRigid (TvName r _ _)
+  | Rigid <- r = True
+  | Flexible <- r = False
+isRigid (TvRefresh v _) = isRigid v
 
 {- Note [1]: Tuple types vs tuple patterns/values
 
