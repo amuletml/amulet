@@ -47,9 +47,9 @@ withPos k = do
 
 exprP' :: Parser Expr'
 exprP' = try access
+     <|> accessSect
      <|> try eot
      <|> try rightSect
-     <|> try accessSect
      <|> try leftSect
      <|> try bothSect
      <|> tuple
@@ -127,7 +127,7 @@ exprP' = try access
       x <- Tok.identStart style
       T.pack . (x:) <$> many (Tok.identLetter style)
     pure $ Access rec key
-  accessSect = withPos . parens . lexeme $ do
+  accessSect = withPos . lexeme $ do
     '.' <- char '.'
     x <- Tok.identStart style
     AccessSection . T.pack . (x:) <$> many (Tok.identLetter style)
@@ -345,4 +345,5 @@ constructor = try gadt <|> try arg <|> unit where
 
 
 program :: Parser [Toplevel']
-program = Tok.whiteSpace lexer *> semiSep1 toplevelP <* eof
+program = Tok.whiteSpace lexer *> toplevelP `sepBy1` toplevelSep <* eof where
+  toplevelSep = lexeme (char ';' *> char ';') <?> "top-level statement separator"
