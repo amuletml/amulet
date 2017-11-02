@@ -7,7 +7,7 @@ module Syntax where
 
 import Pretty
 
-import Data.Text (Text, pack)
+import Data.Text (Text)
 import Data.Spanned
 import Data.Span
 
@@ -243,15 +243,6 @@ instance Pretty (Var Typed) where
   pprint (TvRefresh v _) = pprint v
 
 --- }}}
-
-class InternalTV p where -- {{{
-  internalTyVar :: Type p
-
-instance InternalTV Parsed where
-  internalTyVar = TyVar (Name (pack "«internal»")) internal
-
-instance InternalTV Typed where
-  internalTyVar = TyVar (TvName Flexible (pack "«internal»") (TyStar internal)) internal
 
 -- }}}
 
