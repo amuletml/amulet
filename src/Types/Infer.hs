@@ -24,7 +24,7 @@ import Types.Unify
 import Types.Holes
 
 import Data.List
-import Debug.Trace(trace)
+import Debug.Trace(trace, traceShowId)
 
 -- Solve for the types of lets in a program
 inferProgram :: [Toplevel Parsed] -> Either TypeError ([Toplevel Typed], Env)
@@ -367,8 +367,12 @@ rigidify vs t = go (map getTv vs) t where
   getTv (TyVar (TvName _ v _) _) = v
   getTv _ = undefined
   go xs (TvName _ nm t)
-    | nm `notElem` xs = trace "rigid" (TvName Rigid nm t)
-    | otherwise = trace "flexible" (TvName Flexible nm t)
+    | nm `notElem` xs = trace "rigid" (traceShowId (TvName Rigid nm t))
+    | otherwise = trace "flexible" (traceShowId (TvName Flexible nm t))
+  -- Problem: Things are being rigidified when they shouldn't. E.g.:
+  -- type box 'a = Box : 'a -> box 'a
+  -- Leads to the introduction of a fresh type variable 'b(??) which is
+  -- rigid. What the fuck?
 
 instanceOf :: Type Parsed -> Type Typed -> Bool
 instanceOf (TyCon a _) (TyCon b _) = a == eraseVarTy b
