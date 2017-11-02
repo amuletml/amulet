@@ -1,7 +1,7 @@
 {-# OPTIONS_GHC -Wno-missing-local-signatures #-}
 {-# LANGUAGE FlexibleContexts, OverloadedStrings, TupleSections, GADTs #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-module Types.Infer (inferProgram, builtinsEnv) where
+module Types.Infer (inferProgram, builtinsEnv, inferCon) where
 
 import qualified Data.Map.Strict as M
 import qualified Data.Text as T
@@ -24,7 +24,6 @@ import Types.Unify
 import Types.Holes
 
 import Data.List
-import Debug.Trace(trace, traceShowId)
 
 -- Solve for the types of lets in a program
 inferProgram :: [Toplevel Parsed] -> Either TypeError ([Toplevel Typed], Env)
@@ -342,52 +341,43 @@ inferCon ret (ArgCon nm ty ann) = do
   (ty', _) <- inferKind ty
   pure ((tag nm (TyArr ty' ret ann), TyArr ty' ret ann), ArgCon (tag nm ty') ty' ann)
 inferCon ret (UnitCon nm ann) = pure ((tag nm ret, ret), UnitCon (tag nm ret) ann)
-inferCon ret (GADTCon nm ty ann) = do
-  res <- case ty of
-    x | x `instanceOf` ret -> pure x
-    TyArr _ b _ | b `instanceOf` ret -> pure b
-    x -> throwError (IllegalGADT x)
+inferCon ret (GADTCon nm ty ann) = extendManyK (mentionedTVs ret) $ do
+  (res, hole) <- case ty of
+                   x | x `instanceOf` ret -> pure (x, id)
+                   TyArr a b an | b `instanceOf` ret -> do
+                     (a', _) <- inferKind a
+                     pure (b, \t -> TyArr a' t an)
+                   x -> throwError (IllegalGADT x)
   -- This is a game of matching up paramters of the return type with the
   -- stated parameters, and introducing the proper constraints
-  let given = map (raiseT id (const internal)) (instanceArgs res)
-      assumed = instanceArgs ret
-  given' <- mapM (\x -> fst <$> inferKind x) given
-  (ty', _) <- inferKind ty
-  let cons = zipWith (\x y -> Equal x y ann) assumed given'
-      res' = foldl (\x y -> TyApp x y ann) (raiseT (flip tag star) id (instanceCon res)) assumed
-      ty'' = case ty' of
-               TyArr a _ p -> TyArr a res' p
-               _ -> res'
-      TyForall vars tp _ = closeOver (TyCons cons ty'' ann)
-      final = TyForall (map (rigidify assumed) vars) tp ann
-  pure ((tag nm final, final), GADTCon (tag nm final) final ann)
+  cons <- matchUp res ret
+  let TyForall vars resTp _ = closeOver (TyCons cons (raiseT smush id (hole ret)) ann)
+  vars' <- mapM rigidify vars
+  let tp = TyForall vars' resTp ann
+  pure ((tag nm tp, tp), GADTCon (tag nm tp) tp ann)
+  where mentionedTVs :: Type Typed -> [(Var Typed, Type Typed)]
+        mentionedTVs (TyApp r (TyVar v a) _) = (v, TyStar a):mentionedTVs r
+        mentionedTVs _ = []
 
-rigidify :: [Type Typed] -> Var Typed -> Var Typed
-rigidify vs t = go (map getTv vs) t where
-  getTv (TyVar (TvName _ v _) _) = v
-  getTv _ = undefined
-  go xs (TvName _ nm t)
-    | nm `notElem` xs = trace "rigid" (traceShowId (TvName Rigid nm t))
-    | otherwise = trace "flexible" (traceShowId (TvName Flexible nm t))
-  -- Problem: Things are being rigidified when they shouldn't. E.g.:
-  -- type box 'a = Box : 'a -> box 'a
-  -- Leads to the introduction of a fresh type variable 'b(??) which is
-  -- rigid. What the fuck?
+        matchUp :: Type Parsed -> Type Typed -> Infer Typed [GivenConstraint Typed]
+        matchUp (TyCon _ _)   (TyCon _ _)   = pure []
+        matchUp (TyApp i x _) (TyApp j y _) = do
+          (x', _) <- inferKind x
+          (:) <$> pure (Equal (raiseT smush id x') (raiseT smush id y) ann) <*> matchUp i j
+        matchUp _ _ = error "impossible because of how GADTs work"
+
+        rigidify v@(TvName _ nm an) = do
+          x <- asks types
+          case M.lookup (eraseVarTy v) x of
+            Just _ -> pure (TvName Flexible nm an)
+            Nothing -> pure (TvName Rigid nm an)
+        rigidify (TvRefresh var k) = flip TvRefresh k <$> rigidify var
 
 instanceOf :: Type Parsed -> Type Typed -> Bool
 instanceOf (TyCon a _) (TyCon b _) = a == eraseVarTy b
 instanceOf (TyApp a _ _) (TyApp b _ _) = a `instanceOf` b
 instanceOf _ _ = False
 
-instanceArgs :: Type p -> [Type p]
-instanceArgs (TyCon _ _) = []
-instanceArgs (TyApp i b _) = instanceArgs i ++ [b]
-instanceArgs _ = undefined
-
-instanceCon :: Type p -> Type p
-instanceCon x@TyCon{} = x
-instanceCon (TyApp x _ _) = instanceCon x
-instanceCon _ = undefined
 
 inferLetTy :: (t ~ Typed, p ~ Parsed)
            => [(Var t, Type t)]
@@ -427,12 +417,18 @@ closeOver a = forall (fv a) (improve a) where
 
   improve :: Type Typed -> Type Typed
   improve x
+    | TyCons cs tp an <- x
+    = case (filter (not . redundant) cs) of
+        [] -> improve tp
+        xs -> TyCons xs (improve tp) an
     | vs <- S.toList (ftv x)
     = runGenFrom (-1) $ do
       fv <- forM vs $ \b -> do
         v <- freshTV (annotation x)
         pure (b, v)
       pure (apply (M.fromList fv) x)
+
+  redundant (Equal a b _) = raiseT id (const internal) a == raiseT id (const internal) b
 
 consFst :: Functor m => a -> m ([a], b) -> m ([a], b)
 consFst a = fmap (first (a:))
