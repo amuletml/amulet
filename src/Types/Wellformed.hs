@@ -1,10 +1,18 @@
-{-# LANGUAGE FlexibleContexts #-}
-module Types.Wellformed (wellformed) where
+{-# LANGUAGE FlexibleContexts, TypeFamilies #-}
+module Types.Wellformed (wellformed, improve) where
 
 import Control.Monad.Except
 
 import Control.Monad.Infer
+import Syntax.Raise
+import Syntax.Subst
 import Syntax
+
+import Data.Spanned
+import Data.Span
+
+import qualified Data.Map.Strict as M
+import qualified Data.Set as S
 
 import Pretty(Pretty)
 
@@ -29,6 +37,20 @@ wellformed tp = case tp of
 
 wellformedC :: (Pretty (Var p), MonadError TypeError m) => GivenConstraint p -> m ()
 wellformedC (Equal a b _) = wellformed a *> wellformed b
+
+improve :: Type Typed -> Type Typed
+improve x
+  | TyCons cs tp an <- x
+  = case (filter (not . redundant) cs) of
+      [] -> improve tp
+      xs -> TyCons xs (improve tp) an
+  | vs <- S.toList (ftv x)
+  = runGenFrom (-1) $ do
+      fv <- forM vs $ \b -> do
+        v <- freshTV (annotation x)
+        pure (b, v)
+      pure (apply (M.fromList fv) x)
+  where redundant (Equal a b _) = raiseT id (const internal) a == raiseT id (const internal) b
 
 {-
    Commentary:

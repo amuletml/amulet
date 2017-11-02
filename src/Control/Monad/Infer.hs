@@ -8,7 +8,7 @@ module Control.Monad.Infer
   , Env(..)
   , lookupTy, fresh, runInferT, runInfer, extend
   , lookupKind, extendKind, extendMany, extendManyK
-  , difference
+  , difference, freshTV
   )
   where
 
@@ -23,6 +23,7 @@ import qualified Data.Set as Set
 import Data.Semigroup
 
 import Data.Spanned
+import Data.Span
 
 import qualified Data.Text as T
 import Data.Text (Text)
@@ -136,6 +137,11 @@ instantiate ty = pure ty
 
 difference :: Env -> Env -> Env
 difference (Env ma mb) (Env ma' mb') = Env (ma Map.\\ ma') (mb Map.\\ mb')
+
+freshTV :: MonadGen Int m => Span -> m (Type Typed)
+freshTV a = do
+  nm <- fresh
+  pure (TyVar (TvName Flexible nm (TyStar a)) a)
 
 instance (Substitutable (Type p), Substitutable (GivenConstraint p)) => Substitutable (Constraint p) where
   ftv (ConUnify _ a b) = ftv a `Set.union` ftv b
