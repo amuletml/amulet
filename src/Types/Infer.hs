@@ -24,6 +24,7 @@ import Types.Unify
 import Types.Holes
 
 import Data.List
+import Debug.Trace(trace)
 
 -- Solve for the types of lets in a program
 inferProgram :: [Toplevel Parsed] -> Either TypeError ([Toplevel Typed], Env)
@@ -35,10 +36,10 @@ inferProgram ct = fst <$> runInfer builtinsEnv (inferAndCheck ct) where
       [] -> pure (prg', env)
 
 tyUnit, tyBool, tyInt, tyString :: Type Typed
-tyInt = TyCon (TvName "int" (TyStar internal)) internal
-tyString = TyCon (TvName "string" (TyStar internal)) internal
-tyBool = TyCon (TvName "bool" (TyStar internal)) internal
-tyUnit = TyCon (TvName "unit" (TyStar internal)) internal
+tyInt = TyCon (TvName Rigid "int" (TyStar internal)) internal
+tyString = TyCon (TvName Rigid "string" (TyStar internal)) internal
+tyBool = TyCon (TvName Rigid "bool" (TyStar internal)) internal
+tyUnit = TyCon (TvName Rigid "unit" (TyStar internal)) internal
 
 star :: Ann p ~ Span => Type p
 star = TyStar internal
@@ -65,7 +66,7 @@ builtinsEnv = Env (M.fromList ops) (M.fromList tps) where
   stringOp = tyString `arr` (tyString `arr` tyString)
   intCmp = tyInt `arr` (tyInt `arr` tyBool)
 
-  cmp = forall [TvName "a" star] $ var (TvName "a" star) `arr` (var (TvName "a" star) `arr` tyBool)
+  cmp = forall [TvName Flexible "a" star] $ var (TvName Flexible "a" star) `arr` (var (TvName Flexible "a" star) `arr` tyBool)
   ops = [ op "+" intOp, op "-" intOp, op "*" intOp, op "/" intOp, op "**" intOp
         , op "^" stringOp
         , op "<" intCmp, op ">" intCmp, op ">=" intCmp, op "<=" intCmp
@@ -77,7 +78,7 @@ unify :: Expr Parsed -> Type Typed -> Type Typed -> Infer Typed ()
 unify e a b = tell [ConUnify (raiseE (`tag` internalTyVar) id e) a b]
 
 tag :: Var Parsed -> Type Typed -> Var Typed
-tag (Name v) t = TvName v t
+tag (Name v) t = TvName Flexible v t
 tag (Refresh k a) t = TvRefresh (tag k t) a
 
 infer :: Expr Parsed -> Infer Typed (Expr Typed, Type Typed)
@@ -87,8 +88,8 @@ infer expr
         x <- lookupTy k
         pure (VarRef (tag k x) a, x)
       Hole v ann -> do
-       tv <- flip TyVar ann . flip TvName (TyStar ann) <$> fresh
-       pure (Hole (tag v tv) ann, tv)
+        tv <- freshTV ann
+        pure (Hole (tag v tv) ann, tv)
       Literal c a -> case c of
                        LiInt _ -> pure (Literal c a, tyInt)
                        LiStr _ -> pure (Literal c a, tyString)
@@ -185,7 +186,9 @@ inferRows rows = forM rows $ \(var', val) -> do
   pure ((var', val'), (var', typ))
 
 freshTV :: MonadGen Int m => Span -> m (Type Typed)
-freshTV a = flip TyVar a . flip TvName (TyStar a) <$> fresh
+freshTV a = do
+  nm <- fresh
+  pure (TyVar (TvName Flexible nm (TyStar a)) a)
 
 inferKind :: Type Parsed -> Infer a (Type Typed, Type Typed)
 inferKind (TyStar a) = pure (TyStar a, TyStar a)
@@ -249,10 +252,10 @@ inferPattern :: (Type Typed -> Type Typed -> Infer a ())
              -> Pattern Parsed
              -> Infer a (Pattern Typed, Type Typed, [(Var Typed, Type Typed)])
 inferPattern _ (Wildcard ann) = do
-  x <- flip TyVar ann . flip TvName (TyStar ann) <$> fresh
+  x <- freshTV ann
   pure (Wildcard ann, x, [])
 inferPattern _ (Capture v ann) = do
-  x <- flip TyVar ann . flip TvName (TyStar ann) <$> fresh
+  x <- freshTV ann
   pure (Capture (tag v x) ann, x, [(tag v x, x)])
 inferPattern unify (Destructure cns ps ann)
   | Nothing <- ps
@@ -293,7 +296,7 @@ inferPattern unify (PTuple elems ann)
 inferProg :: [Toplevel Parsed] -> Infer Typed ([Toplevel Typed], Env)
 inferProg (LetStmt ns ann:prg) = do
   ks <- forM ns $ \(a, _) -> do
-    tv <- flip TyVar internal . flip TvName (TyStar internal) <$> fresh
+    tv <- freshTV ann
     vl <- lookupTy a `catchError` const (pure tv)
     pure (tag a tv, vl)
   extendMany ks $ do
@@ -355,8 +358,17 @@ inferCon ret (GADTCon nm ty ann) = do
       ty'' = case ty' of
                TyArr a _ p -> TyArr a res' p
                _ -> res'
-      final = closeOver (TyCons cons ty'' ann)
+      TyForall vars tp _ = closeOver (TyCons cons ty'' ann)
+      final = TyForall (map (rigidify assumed) vars) tp ann
   pure ((tag nm final, final), GADTCon (tag nm final) final ann)
+
+rigidify :: [Type Typed] -> Var Typed -> Var Typed
+rigidify vs t = go (map getTv vs) t where
+  getTv (TyVar (TvName _ v _) _) = v
+  getTv _ = undefined
+  go xs (TvName _ nm t)
+    | nm `notElem` xs = trace "rigid" (TvName Rigid nm t)
+    | otherwise = trace "flexible" (TvName Flexible nm t)
 
 instanceOf :: Type Parsed -> Type Typed -> Bool
 instanceOf (TyCon a _) (TyCon b _) = a == eraseVarTy b
@@ -385,7 +397,7 @@ inferLetTy ks ((va, ve):xs) = extendMany ks $ do
   (x, vt) <- case solve cur mempty c of
                Left e -> throwError e
                Right x -> pure (x, closeOver (apply x ty))
-  let r (TvName n t) = TvName n (apply x t)
+  let r (TvName r n t) = TvName r n (apply x t)
       r (TvRefresh k a) = TvRefresh (r k) a
       ex = raiseE r id ve'
   (vt', _) <- inferKind (raiseT eraseVarTy id vt)

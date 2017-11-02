@@ -23,14 +23,16 @@ import Data.Text (Text)
 type SolveM = GenT Int (StateT Subst (Except TypeError))
 
 bind :: Var Typed -> Type Typed -> SolveM ()
-bind var ty | raiseT id (const internal) ty == TyVar var internal = return ()
-            | occurs var ty = throwError (Occurs var ty)
-            | otherwise = do
-                env <- get
-                -- Attempt to extend the environment, otherwise unify with existing type
-                case M.lookup var env of
-                  Nothing -> put (M.singleton var ty `compose` env)
-                  Just ty' -> unify ty ty'
+bind var ty
+  | raiseT id (const internal) ty == TyVar var internal = return ()
+  | occurs var ty = throwError (Occurs var ty)
+  | TvName Rigid _ _ <- var = throwError (RigidBinding var ty)
+  | otherwise = do
+      env <- get
+      -- Attempt to extend the environment, otherwise unify with existing type
+      case M.lookup var env of
+        Nothing -> put (M.singleton var ty `compose` env)
+        Just ty' -> unify ty ty'
 
 unify :: Type Typed -> Type Typed -> SolveM ()
 unify (TyVar a _) b = bind a b
@@ -56,7 +58,7 @@ unify (TyRows rho arow an) (TyRows sigma brow bn)
           then error ("overlaps " ++ show (length overlaps) ++ " new " ++ show (length new))
           else pure ()
     where freshT an = do x <- fresh
-                         pure (TyVar (TvName x (TyStar an)) an)
+                         pure (TyVar (TvName Flexible x (TyStar an)) an)
           freshT :: Span -> SolveM (Type Typed)
 -- TODO: This is a bit hacky. We have a different type for "closed
 -- records" (literals) and "open records" (parameters), and must check
@@ -102,7 +104,7 @@ overlap xs ys
      in map (\((_, t), (_, t')) -> (t, t')) overlapping
 
 smush :: Var Typed -> Var Typed
-smush (TvName v _) = TvName v internalTyVar
+smush (TvName _ v _) = TvName Flexible v internalTyVar
 smush (TvRefresh v k) = TvRefresh (smush v) k
 
 runSolve :: Int -> Subst -> SolveM b -> Either TypeError (Int, Subst)
