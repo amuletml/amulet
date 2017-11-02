@@ -74,7 +74,7 @@ builtinsEnv = Env (M.fromList ops) (M.fromList tps) where
   tps = [ tp "int", tp "string", tp "bool", tp "unit" ]
 
 unify :: Expr Parsed -> Type Typed -> Type Typed -> Infer Typed ()
-unify e a b = tell [ConUnify (raiseE (`tag` internalTyVar) id e) a b]
+unify e a b = tell [ConUnify (raiseE (`tag` (TyStar (annotation a))) id e) a b]
 
 tag :: Var Parsed -> Type Typed -> Var Typed
 tag (Name v) t = TvName Flexible v t

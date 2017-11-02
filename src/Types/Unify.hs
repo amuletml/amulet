@@ -104,7 +104,7 @@ overlap xs ys
      in map (\((_, t), (_, t')) -> (t, t')) overlapping
 
 smush :: Var Typed -> Var Typed
-smush (TvName _ v _) = TvName Flexible v internalTyVar
+smush (TvName _ v _) = TvName Flexible v (TyStar internal)
 smush (TvRefresh v k) = TvRefresh (smush v) k
 
 runSolve :: Int -> Subst -> SolveM b -> Either TypeError (Int, Subst)
