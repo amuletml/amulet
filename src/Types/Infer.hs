@@ -184,10 +184,6 @@ inferRows rows = forM rows $ \(var', val) -> do
   (val', typ) <- infer val
   pure ((var', val'), (var', typ))
 
-freshTV :: MonadGen Int m => Span -> m (Type Typed)
-freshTV a = do
-  nm <- fresh
-  pure (TyVar (TvName Flexible nm (TyStar a)) a)
 
 inferKind :: Type Parsed -> Infer a (Type Typed, Type Typed)
 inferKind (TyStar a) = pure (TyStar a, TyStar a)
@@ -328,6 +324,7 @@ inferProg [] = do
   (_, c) <- censor (const mempty) . listen $ do
     x <- lookupTy (Name "main")
     unify (VarRef (Name "main") ann) x (TyArr tyUnit tyUnit ann)
+
   x <- gen
   case solve x mempty c of
     Left e -> throwError (Note e "main must be a function from unit to unit")
@@ -337,10 +334,13 @@ inferCon :: Type Typed
          -> Constructor Parsed
          -> Infer Typed ( (Var Typed, Type Typed)
                         , Constructor Typed)
-inferCon ret (ArgCon nm ty ann) = do
-  (ty', _) <- inferKind ty
-  pure ((tag nm (TyArr ty' ret ann), TyArr ty' ret ann), ArgCon (tag nm ty') ty' ann)
-inferCon ret (UnitCon nm ann) = pure ((tag nm ret, ret), UnitCon (tag nm ret) ann)
+inferCon ret (ArgCon nm t ann) = do
+  (ty', _) <- inferKind t
+  let res = closeOver . raiseT smush (const internal) $ TyArr ty' ret ann
+  pure ((tag nm res, res), ArgCon (tag nm res) ty' ann)
+inferCon ret' (UnitCon nm ann) = 
+  let ret = closeOver ret'
+   in pure ((tag nm ret, ret), UnitCon (tag nm ret) ann)
 inferCon ret (GADTCon nm ty ann) = extendManyK (mentionedTVs ret) $ do
   (res, hole) <- case ty of
                    x | x `instanceOf` ret -> pure (x, id)
@@ -415,20 +415,7 @@ closeOver a = forall (fv a) (improve a) where
   forall [] a = a
   forall vs a = TyForall vs a (annotation a)
 
-  improve :: Type Typed -> Type Typed
-  improve x
-    | TyCons cs tp an <- x
-    = case (filter (not . redundant) cs) of
-        [] -> improve tp
-        xs -> TyCons xs (improve tp) an
-    | vs <- S.toList (ftv x)
-    = runGenFrom (-1) $ do
-      fv <- forM vs $ \b -> do
-        v <- freshTV (annotation x)
-        pure (b, v)
-      pure (apply (M.fromList fv) x)
 
-  redundant (Equal a b _) = raiseT id (const internal) a == raiseT id (const internal) b
 
 consFst :: Functor m => a -> m ([a], b) -> m ([a], b)
 consFst a = fmap (first (a:))
