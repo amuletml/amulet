@@ -23,7 +23,6 @@ import qualified Data.Set as Set
 import Data.Semigroup
 
 import Data.Spanned
-import Data.Span (internal)
 
 import qualified Data.Text as T
 import Data.Text (Text)
@@ -55,7 +54,7 @@ instance Semigroup Env where
 
 data Constraint p
   = ConUnify (Expr p) (Type p) (Type p)
-deriving instance (Show (Var p), Show (Expr p), Show (Type p)) => Show (Constraint p)
+deriving instance (Show (Ann p), Show (Var p), Show (Expr p), Show (Type p)) => Show (Constraint p)
 
 data TypeError where
   NotEqual :: Pretty (Var p) => Type p -> Type p -> TypeError
@@ -78,6 +77,8 @@ data TypeError where
                  -> Type p {- instance -}
                  -> TypeError
   Malformed :: Pretty (Var p) => Type p -> TypeError
+  IllegalGADT :: Pretty (Var p) => Type p -> TypeError
+  RigidBinding :: Pretty (Var p) => Var p -> Type p -> TypeError
 
 lookupTy :: (MonadError TypeError m, MonadReader Env m, MonadGen Int m) => Var Parsed -> m (Type Typed)
 lookupTy x = do
@@ -120,17 +121,23 @@ extendManyK [] b = b
 alpha :: [Text]
 alpha = map T.pack $ [1..] >>= flip replicateM ['a'..'z']
 
-instantiate :: MonadGen Int m => Type Typed -> m (Type Typed)
-instantiate (TyForall vs ty _) = do
-  f <- map (flip TyVar internal)
-        <$> mapM (const (flip TvName internalTyVar <$> fresh)) vs
+instantiate :: (MonadError TypeError m, MonadGen Int m) => Type Typed -> m (Type Typed)
+instantiate typ@(TyForall vs ty _) = do
+  f <- forM vs $ \var -> do
+    new <- fresh
+    let ann = annotation ty
+        new' :: Type Typed
+        new' = TyVar (TvName Flexible new (TyStar ann)) ann
+    if isRigid var
+       then throwError (ArisingFrom (RigidBinding var new') typ)
+       else pure new'
   instantiate (apply (Map.fromList (zip vs f)) ty)
 instantiate ty = pure ty
 
 difference :: Env -> Env -> Env
 difference (Env ma mb) (Env ma' mb') = Env (ma Map.\\ ma') (mb Map.\\ mb')
 
-instance Substitutable (Type p) => Substitutable (Constraint p) where
+instance (Substitutable (Type p), Substitutable (GivenConstraint p)) => Substitutable (Constraint p) where
   ftv (ConUnify _ a b) = ftv a `Set.union` ftv b
   apply s (ConUnify e a b) = ConUnify e (apply s a) (apply s b)
 

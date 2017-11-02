@@ -43,14 +43,26 @@ compileProgram = LuaDo . (extendDef:) . compileProg where
   compileProg (TypeDecl _ _ cs _:xs) = compileConstructors cs ++ compileProg xs
   compileProg [] = [LuaCallS (LuaRef (LuaName "main")) []]
 
-compileConstructors :: [(Var Typed, Maybe (Type Typed))] -> [LuaStmt]
-compileConstructors ((a, Nothing):xs) -- unit constructors, easy
+compileConstructors :: [Constructor Typed] -> [LuaStmt]
+compileConstructors (UnitCon a _:xs) -- unit constructors, easy
   = LuaLocal [lowerName a] [LuaTable [(LuaNumber 1, LuaString cn)]]:compileConstructors xs where
     cn = getName a
-compileConstructors ((a, Just _):ys) -- non-unit constructors, hard
+compileConstructors (ArgCon a _ _:ys) -- non-unit constructors, hard
   = LuaLocal [lowerName a] [vl]:compileConstructors ys where
     vl = LuaFunction [LuaName "x"] [LuaReturn (LuaTable [(LuaNumber 1, LuaString cn), (LuaNumber 2, LuaRef (LuaName "x"))])]
     cn = getName a
+-- GADT constructors, hardest - we have to figure out the representation from the type
+compileConstructors (GADTCon nm ty _:ys)
+  | TyArr{} <- ty
+  = LuaLocal [lowerName nm] [vl]:compileConstructors ys
+  | TyCons _ TyArr{} _ <- ty
+  = LuaLocal [lowerName nm] [vl]:compileConstructors ys
+  | TyForall _ t _ <- ty = compileConstructors (GADTCon nm t undefined:ys)
+  | otherwise
+  = LuaLocal [lowerName nm] [LuaTable [(LuaNumber 1, LuaString cn)]]:compileConstructors ys
+  where
+    vl = LuaFunction [LuaName "x"] [LuaReturn (LuaTable [(LuaNumber 1, LuaString cn), (LuaNumber 2, LuaRef (LuaName "x"))])]
+    cn = getName nm
 compileConstructors [] = []
 
 compileLet :: (Var Typed, Expr Typed) -> (LuaVar, LuaExpr)
@@ -58,6 +70,7 @@ compileLet (n, e) = (lowerName n, compileExpr e)
 
 compileExpr :: Expr Typed -> LuaExpr
 compileExpr (VarRef v _) = LuaRef (lowerName v)
+compileExpr (EHasType e _ _) = compileExpr e
 compileExpr (Hole v ann) = LuaCall (global "error") [LuaString msg] where
   msg = "Deferred typed hole " <> uglyPrint v <> " (from " <> uglyPrint ann <> ")"
 compileExpr (Access rec f _) = LuaRef (LuaIndex (compileExpr rec) (LuaString f))
@@ -66,7 +79,7 @@ compileExpr (Fun (Capture v _) e _) = LuaFunction [lowerName v] (compileStmt (Ju
 compileExpr (Fun (Wildcard _) e _) = LuaFunction [LuaName "_"] (compileStmt (Just LuaReturn) e)
 compileExpr f@(Fun k e _) = LuaFunction [LuaName "__arg__"]
                               (compileStmt (Just LuaReturn)
-                                           (Match (VarRef (TvName "__arg__" undefined)
+                                           (Match (VarRef (TvName Flexible "__arg__" undefined)
                                                           (annotation f))
                                                   [(k, e)] (annotation f)))
 compileExpr (Tuple [] _) = LuaNil -- evil!
@@ -88,7 +101,7 @@ compileExpr s@Let{} = compileIife s
 compileExpr s@If{} = compileIife s
 compileExpr s@Begin{} = compileIife s
 compileExpr s@Match{} = compileIife s
-compileExpr (BinOp l (VarRef (TvName o _) _) r _) = LuaBinOp (compileExpr l) (remapOp o) (compileExpr r)
+compileExpr (BinOp l (VarRef (TvName _ o _) _) r _) = LuaBinOp (compileExpr l) (remapOp o) (compileExpr r)
 compileExpr BinOp{} = error "absurd: never parsed"
 compileExpr LeftSection{} = error "absurd: desugarer removes left sections"
 compileExpr RightSection{} = error "absurd: desugarer removes right sections"
@@ -108,6 +121,7 @@ compileStmt r e@BinOp{} = pureReturn r $ compileExpr e
 compileStmt r e@Record{} = pureReturn r $ compileExpr e
 compileStmt r e@RecordExt{} = pureReturn r $ compileExpr e
 compileStmt r e@Tuple{} = pureReturn r $ compileExpr e
+compileStmt r (EHasType e _ _) = compileStmt r e
 compileStmt r (Let k c _) = let (ns, vs) = unzip $ map compileLet k in
                               (locals ns vs ++ compileStmt r c)
 compileStmt r (If c t e _) = [LuaIf (compileExpr c) (compileStmt r t) (compileStmt r e)]
@@ -127,12 +141,12 @@ lowerName (TvRefresh a k)
   = case lowerName a of
       LuaName x -> LuaName (x <> T.pack (show k))
       _ -> error "absurd: no lowering to namespaces"
-lowerName (TvName a _) = LuaName a
+lowerName (TvName _ a _) = LuaName a
 
 
 getName :: Var Typed -> Text
 getName (TvRefresh a _) = getName a
-getName (TvName a _) = a
+getName (TvName _ a _) = a
 
 iife :: [LuaStmt] -> LuaExpr
 iife b = LuaCall (LuaFunction [] b) []
@@ -185,7 +199,7 @@ patternTest (Destructure con p' _) vr
   = foldAnd [table vr, tag con vr ]
 
 tag :: Var Typed -> LuaExpr -> LuaExpr
-tag (TvName con _) vr = LuaBinOp (LuaRef (LuaIndex vr (LuaNumber 1))) "==" (LuaString con)
+tag (TvName _ con _) vr = LuaBinOp (LuaRef (LuaIndex vr (LuaNumber 1))) "==" (LuaString con)
 tag _ _ = error "absurd: no renaming"
 
 table :: LuaExpr -> LuaExpr
@@ -193,7 +207,7 @@ table ex = LuaBinOp (LuaCall (LuaRef (LuaName "type")) [ex]) "==" (LuaString "ta
 
 patternBindings :: Pattern Typed -> LuaExpr -> [(LuaVar, LuaExpr)]
 patternBindings Wildcard{}  _ = []
-patternBindings (Capture (TvName k _) _) v = [(LuaName k, v)]
+patternBindings (Capture (TvName _ k _) _) v = [(LuaName k, v)]
 patternBindings (Capture _ _) _ = error "absurd: no renaming"
 patternBindings (PType p _ _) t = patternBindings p t
 patternBindings (Destructure _ p' _) vr
