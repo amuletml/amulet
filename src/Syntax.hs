@@ -7,7 +7,7 @@ module Syntax where
 
 import Pretty
 
-import Data.Text (Text, pack)
+import Data.Text (Text)
 import Data.Spanned
 import Data.Span
 
@@ -25,9 +25,12 @@ data instance Var Parsed
   deriving (Eq, Show, Ord, Data)
 
 data instance Var Typed
-  = TvName Text (Type Typed)
+  = TvName Rigidity Text (Type Typed)
   | TvRefresh (Var Typed) {-# UNPACK #-} !Int
   deriving (Eq, Show, Ord, Data)
+
+-- Can we bind this in the constraint solver?
+data Rigidity = Rigid | Flexible deriving (Eq, Show, Ord, Data)
 
 type family Ann a :: * where
   Ann Parsed = Span
@@ -44,6 +47,7 @@ data Expr p
   | Match (Expr p) [(Pattern p, Expr p)] (Ann p)
   | BinOp (Expr p) (Expr p) (Expr p) (Ann p)
   | Hole (Var p) (Ann p)
+  | EHasType (Expr p) (Type p) (Ann p)
 
   -- Records
   | Record [(Text, Expr p)] (Ann p) -- { foo = bar, baz = quux }
@@ -95,6 +99,7 @@ data Type p
   | TyRows (Type p) [(Text, Type p)] (Ann p) -- { α | foo : int, bar : string }
   | TyExactRows [(Text, Type p)] (Ann p) -- { foo : int, bar : string }
   | TyTuple (Type p) (Type p) (Ann p) -- (see note [1])
+  | TyCons [GivenConstraint p] (Type p) (Ann p) -- (see note [2])
 
   | TyStar (Ann p) -- * :: *
 
@@ -108,13 +113,33 @@ data Toplevel p
   = LetStmt [(Var p, Expr p)] (Ann p)
   | ValStmt (Var p) (Type p) (Ann p)
   | ForeignVal (Var p) Text (Type p) (Ann p)
-  | TypeDecl (Var p) [Var p] [(Var p, Maybe (Type p))] (Ann p)
+  | TypeDecl (Var p) [Var p] [Constructor p] (Ann p)
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Toplevel p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Toplevel p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Toplevel p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Toplevel p)
 instance (Data (Var p), Data (Ann p), Data p) => Spanned (Toplevel p)
+
+data Constructor p
+  = UnitCon (Var p) (Ann p)
+  | ArgCon (Var p) (Type p) (Ann p)
+  | GADTCon (Var p) (Type p) (Ann p)
+
+deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Constructor p)
+deriving instance (Show (Var p), Show (Ann p)) => Show (Constructor p)
+deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Constructor p)
+deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Constructor p)
+instance (Data (Var p), Data (Ann p), Data p) => Spanned (Constructor p)
+
+data GivenConstraint p
+  = Equal (Type p) (Type p) (Ann p)
+
+deriving instance (Eq (Var p), Eq (Ann p)) => Eq (GivenConstraint p)
+deriving instance (Show (Var p), Show (Ann p)) => Show (GivenConstraint p)
+deriving instance (Ord (Var p), Ord (Ann p)) => Ord (GivenConstraint p)
+deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (GivenConstraint p)
+instance (Data (Var p), Data (Ann p), Data p) => Spanned (GivenConstraint p)
 
 --- Pretty-printing {{{
 
@@ -144,6 +169,7 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
     kwClr "match " <+> t <+> " with"
     body 2 bs *> newline
   pprint (Hole v _) = pprint v -- A typed hole
+  pprint (EHasType e t _) = parens $ e <+> opClr " : " <+> t
   pprint (Record rows _) = braces $ interleave ", " $ map (\(n, v) -> n <+> opClr " = " <+> v) rows
   pprint (RecordExt var rows _) = braces $ var <+> kwClr " with " <+> interleave ", " (map (\(n, v) -> n <+> opClr " = " <+> v) rows)
   pprint (Access x@VarRef{} f _) = x <+> opClr "." <+> f
@@ -180,6 +206,7 @@ instance Pretty Lit where
 
 instance (Pretty (Var p)) => Pretty (Type p) where
   pprint (TyCon v _) = typeClr v
+  pprint (TyCons cs v _) = parens (interleave ", " cs) <+> opClr " => " <+> v
   pprint (TyVar v _) = opClr "'" <+> tvClr v
   pprint (TyForall vs v _)
     = kwClr "∀ " <+> interleave " " (map (\x -> "'" <+> tvClr x) vs) <+> opClr ". " <+> v
@@ -201,12 +228,15 @@ instance (Pretty (Var p)) => Pretty (Type p) where
     = a <+> opClr " * " <+> b
   pprint TyStar{} = kwClr "Type"
 
+instance Pretty (Type p) => Pretty (GivenConstraint p) where
+  pprint (Equal a b _) = a <+> opClr " ~ " <+> b
+
 instance Pretty (Var Parsed) where
   pprint (Name v) = pprint v
   pprint (Refresh v _) = pprint v
 
 instance Pretty (Var Typed) where
-  pprint (TvName v _) = pprint v
+  pprint (TvName _ v _) = pprint v
   -- pprint (TvName v t)
     -- | t == internalTyVar = pprint v
     -- | otherwise = parens $ v <+> opClr " : " <+> t
@@ -214,26 +244,23 @@ instance Pretty (Var Typed) where
 
 --- }}}
 
-class InternalTV p where -- {{{
-  internalTyVar :: Type p
-
-instance InternalTV Parsed where
-  internalTyVar = TyVar (Name (pack "«internal»")) internal
-
-instance InternalTV Typed where
-  internalTyVar = TyVar (TvName (pack "«internal»") (TyStar internal)) internal
-
 -- }}}
 
 eraseVarTy :: Var Typed -> Var Parsed
-eraseVarTy (TvName x _) = Name x
+eraseVarTy (TvName _ x _) = Name x
 eraseVarTy (TvRefresh k _) = eraseVarTy k
 
 closeEnough :: Var Typed -> Var Typed -> Bool
-closeEnough (TvName a _) (TvName b _) = a == b
+closeEnough (TvName r a _) (TvName r' b _) = a == b && r == r'
 closeEnough (TvRefresh a b) (TvRefresh a' b')
   = a `closeEnough` a' && b' >= b
 closeEnough _ _ = False
+
+isRigid :: Var Typed -> Bool
+isRigid (TvName r _ _)
+  | Rigid <- r = True
+  | Flexible <- r = False
+isRigid (TvRefresh v _) = isRigid v
 
 {- Note [1]: Tuple types vs tuple patterns/values
 

@@ -29,6 +29,7 @@ raiseE vR aR =
       BothSection o a -> BothSection (eR o) (aR a)
       AccessSection k a -> AccessSection k (aR a)
       Tuple es a -> Tuple (map eR es) (aR a)
+      EHasType e t a -> EHasType (eR e) (raiseT vR aR t) (aR a)
 
 raiseP :: (Var p -> Var p') -- How to raise variables
        -> (Ann p -> Ann p')
@@ -58,3 +59,5 @@ raiseT v a (TyTuple x y p) = TyTuple (raiseT v a x) (raiseT v a y) (a p)
 raiseT v a (TyRows rho rows p) = TyRows (raiseT v a rho) (map (second (raiseT v a)) rows) (a p)
 raiseT v a (TyExactRows rows p) = TyExactRows (map (second (raiseT v a)) rows) (a p)
 raiseT _ a (TyStar p) = TyStar (a p)
+raiseT v a (TyCons cs n p) = TyCons (map raiseCon cs) (raiseT v a n) (a p) where
+  raiseCon (Equal l r ann) = Equal (raiseT v a l) (raiseT v a r) (a ann)

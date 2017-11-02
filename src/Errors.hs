@@ -81,6 +81,10 @@ instance Pretty TypeError where
     | otherwise
     =   "\x1b[1;32minternal compiler error\x1b[0m: NoOverlap "
     <+> interleave " " [ta, tb]
+  pprint (IllegalGADT t) = "The type " <+> verbatim t <+> " is illegal as a GADT constructor type"
+  pprint (RigidBinding v t) = do
+    "Can not instance " <+> kwClr "rigid" <+> " type variable " <+> verbatim v <+> " to type " <+> verbatim t
+    body 1 [ bullet (opClr "Note: ") <+> "this would lead to type variable " <+> verbatim v <+> " escaping its scope" ]
 
 prettyRows :: Pretty (Var p) => [(T.Text, Type p)] -> PrettyP
 prettyRows = braces
@@ -106,7 +110,7 @@ diff :: (Eq a, Pretty a) => [(a, b)] -> [(a, b)] -> [PrettyP]
 diff ra rb = map (tvClr . fst) (deleteFirstsBy ((==) `on` fst) rb ra)
 
 varType :: Var Typed -> Type Typed
-varType (TvName _ x) = x
+varType (TvName _ _ x) = x
 varType (TvRefresh v _) = varType v
 
 report :: TypeError -> T.Text -> IO ()

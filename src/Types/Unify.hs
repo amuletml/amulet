@@ -23,14 +23,16 @@ import Data.Text (Text)
 type SolveM = GenT Int (StateT Subst (Except TypeError))
 
 bind :: Var Typed -> Type Typed -> SolveM ()
-bind var ty | raiseT id (const internal) ty == TyVar var internal = return ()
-            | occurs var ty = throwError (Occurs var ty)
-            | otherwise = do
-                env <- get
-                -- Attempt to extend the environment, otherwise unify with existing type
-                case M.lookup var env of
-                  Nothing -> put (M.singleton var ty `compose` env)
-                  Just ty' -> unify ty ty'
+bind var ty
+  | raiseT id (const internal) ty == TyVar var internal = return ()
+  | occurs var ty = throwError (Occurs var ty)
+  | isRigid var = throwError (RigidBinding var ty)
+  | otherwise = do
+      env <- get
+      -- Attempt to extend the environment, otherwise unify with existing type
+      case M.lookup var env of
+        Nothing -> put (M.singleton var ty `compose` env)
+        Just ty' -> unify ty ty'
 
 unify :: Type Typed -> Type Typed -> SolveM ()
 unify (TyVar a _) b = bind a b
@@ -56,7 +58,7 @@ unify (TyRows rho arow an) (TyRows sigma brow bn)
           then error ("overlaps " ++ show (length overlaps) ++ " new " ++ show (length new))
           else pure ()
     where freshT an = do x <- fresh
-                         pure (TyVar (TvName x (TyStar an)) an)
+                         pure (TyVar (TvName Flexible x (TyStar an)) an)
           freshT :: Span -> SolveM (Type Typed)
 -- TODO: This is a bit hacky. We have a different type for "closed
 -- records" (literals) and "open records" (parameters), and must check
@@ -82,6 +84,12 @@ unify tp@TyRows{} x = throwError (Note (CanNotInstance tp x) isRec)
 unify (TyTuple a b _) (TyTuple a' b' _) = do
   unify a a'
   unify b b'
+unify (TyCons cs t _) t' = do
+  forM_ cs $ \(Equal a b _) -> unify a b
+  unify t t'
+unify t' (TyCons cs t _) = do
+  forM_ cs $ \(Equal a b _) -> unify a b
+  unify t t'
 unify a b = throwError (NotEqual a b)
 
 isRec :: String
@@ -96,7 +104,7 @@ overlap xs ys
      in map (\((_, t), (_, t')) -> (t, t')) overlapping
 
 smush :: Var Typed -> Var Typed
-smush (TvName v _) = TvName v internalTyVar
+smush (TvName _ v _) = TvName Flexible v (TyStar internal)
 smush (TvRefresh v k) = TvRefresh (smush v) k
 
 runSolve :: Int -> Subst -> SolveM b -> Either TypeError (Int, Subst)
@@ -110,6 +118,9 @@ solve :: Int -> Subst -> [Constraint Typed] -> Either TypeError Subst
 solve _ s [] = pure s
 solve i s (ConUnify e a t:xs) = do
   case wellformed t of
+    Left err -> Left (Note (ArisingFrom err e) "The type was rejected in the wellformedness check;\n         It is possible this is a bug.")
+    Right () -> Right ()
+  case wellformed a of
     Left err -> Left (Note (ArisingFrom err e) "The type was rejected in the wellformedness check;\n         It is possible this is a bug.")
     Right () -> Right ()
   case runSolve i s (unify a t) of
