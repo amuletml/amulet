@@ -29,7 +29,7 @@ compileProgram :: [Toplevel Typed] -> LuaStmt
 compileProgram = LuaDo . (extendDef:) . compileProg where
   compileProg (ForeignVal n' s t _:xs)
     = let genCurried :: Int -> Type p -> [LuaExpr] -> LuaExpr -> LuaExpr
-          genCurried n (TyArr _ a _) ags bd
+          genCurried n (TyArr _ a) ags bd
             = LuaFunction [LuaName (alpha !! n)]
                           [LuaReturn (genCurried (succ n) a (LuaRef (LuaName (alpha !! n)):ags) bd)]
           genCurried _ _ [] bd = bd
@@ -55,9 +55,9 @@ compileConstructors (ArgCon a _ _:ys) -- non-unit constructors, hard
 compileConstructors (GADTCon nm ty _:ys)
   | TyArr{} <- ty
   = LuaLocal [lowerName nm] [vl]:compileConstructors ys
-  | TyCons _ TyArr{} _ <- ty
+  | TyCons _ TyArr{} <- ty
   = LuaLocal [lowerName nm] [vl]:compileConstructors ys
-  | TyForall _ t _ <- ty = compileConstructors (GADTCon nm t undefined:ys)
+  | TyForall _ t <- ty = compileConstructors (GADTCon nm t undefined:ys)
   | otherwise
   = LuaLocal [lowerName nm] [LuaTable [(LuaNumber 1, LuaString cn)]]:compileConstructors ys
   where

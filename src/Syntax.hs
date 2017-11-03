@@ -91,23 +91,22 @@ data Lit
   deriving (Eq, Show, Ord, Data, Typeable)
 
 data Type p
-  = TyCon (Var p) (Ann p)
+  = TyCon (Var p)
   | TyVar (Var p) 
-  | TyForall [Var p] (Type p) (Ann p)
-  | TyArr (Type p) (Type p) (Ann p)
-  | TyApp (Type p) (Type p) (Ann p)
-  | TyRows (Type p) [(Text, Type p)] (Ann p) -- { α | foo : int, bar : string }
-  | TyExactRows [(Text, Type p)] (Ann p) -- { foo : int, bar : string }
-  | TyTuple (Type p) (Type p) (Ann p) -- (see note [1])
-  | TyCons [GivenConstraint p] (Type p) (Ann p) -- (see note [2])
+  | TyForall [Var p] (Type p)
+  | TyArr (Type p) (Type p)
+  | TyApp (Type p) (Type p)
+  | TyRows (Type p) [(Text, Type p)]  -- { α | foo : int, bar : string }
+  | TyExactRows [(Text, Type p)] -- { foo : int, bar : string }
+  | TyTuple (Type p) (Type p) -- (see note [1])
+  | TyCons [GivenConstraint p] (Type p) -- (see note [2])
 
-  | TyStar (Ann p) -- * :: *
+  | TyStar -- * :: *
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Type p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Type p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Type p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Type p)
-instance (Data (Var p), Data (Ann p), Data p) => Spanned (Type p)
 
 data Toplevel p
   = LetStmt [(Var p, Expr p)] (Ann p)
@@ -205,23 +204,23 @@ instance Pretty Lit where
   pprint LiUnit = litClr "unit"
 
 instance (Pretty (Var p)) => Pretty (Type p) where
-  pprint (TyCon v _) = typeClr v
-  pprint (TyCons cs v _) = parens (interleave ", " cs) <+> opClr " => " <+> v
+  pprint (TyCon v) = typeClr v
+  pprint (TyCons cs v) = parens (interleave ", " cs) <+> opClr " => " <+> v
   pprint (TyVar v) = opClr "'" <+> tvClr v
-  pprint (TyForall vs v _)
+  pprint (TyForall vs v)
     = kwClr "∀ " <+> interleave " " (map (\x -> "'" <+> tvClr x) vs) <+> opClr ". " <+> v
 
-  pprint (TyArr x@TyArr{} e _) = parens x <+> opClr " -> " <+> e
-  pprint (TyArr x e _) = x <+> opClr " -> " <+> e
-  pprint (TyRows p rows _) = braces $ p <+> opClr " | " <+> prettyRows rows where
+  pprint (TyArr x@TyArr{} e) = parens x <+> opClr " -> " <+> e
+  pprint (TyArr x e) = x <+> opClr " -> " <+> e
+  pprint (TyRows p rows) = braces $ p <+> opClr " | " <+> prettyRows rows where
     prettyRows = interleave ", " . map (\(x, t) -> x <+> opClr " : " <+> t)
 
-  pprint (TyExactRows rows _) = braces $ prettyRows rows where
+  pprint (TyExactRows rows) = braces $ prettyRows rows where
     prettyRows = interleave ", " . map (\(x, t) -> x <+> opClr " : " <+> t)
 
-  pprint (TyApp e x@TyApp{} _) = e <+> " " <+> parens x
-  pprint (TyApp x e _) = x <+> opClr " " <+> e
-  pprint (TyTuple a b _)
+  pprint (TyApp e x@TyApp{}) = e <+> " " <+> parens x
+  pprint (TyApp x e) = x <+> opClr " " <+> e
+  pprint (TyTuple a b)
     | TyTuple{} <- a
     = parens a <+> opClr " * " <+> b
     | otherwise

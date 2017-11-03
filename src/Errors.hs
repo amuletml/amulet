@@ -51,7 +51,7 @@ instance Pretty TypeError where
     block 1 . (newline <+>) $
       bullet (opClr "Note: ") <+> m
   pprint (CanNotInstance rec new)
-    | (TyRows rho _ _) <- rec
+    | (TyRows rho _) <- rec
     , prettyPrint new == prettyPrint rho
     = pprint (Malformed rec)
     | otherwise
@@ -63,18 +63,18 @@ instance Pretty TypeError where
               <+> "This type was rejected by the well-formedness check."
            , bullet (opClr "Note: ") <+> "This might be a bug." ]
   pprint (NoOverlap ta tb)
-    | TyExactRows ra _ <- ta
-    , TyRows _ rb _ <- tb
+    | TyExactRows ra <- ta
+    , TyRows _ rb <- tb
     =   "No overlap between " <+> kwClr "exact" <+> " record " <+> verbatim ta
     <+> " and " <+> kwClr "polymorphic " <+> "record " <+> verbatim tb
     <+> block 1 (missing ra rb)
-    | TyExactRows rb _ <- tb
-    , TyRows _ ra _ <- ta
+    | TyExactRows rb <- tb
+    , TyRows _ ra <- ta
     =   "No overlap between " <+> kwClr "exact" <+> " record " <+> verbatim ta
     <+> " and " <+> kwClr "polymorphic " <+> "record " <+> verbatim tb
     <+> block 1 (missing ra rb)
-    | TyExactRows ra _ <- ta
-    , TyExactRows rb _ <- tb
+    | TyExactRows ra <- ta
+    , TyExactRows rb <- tb
     =   "No overlap between " <+> kwClr "exact" <+> " records " <+> verbatim ta
     <+> " and " <+> verbatim tb
     <+> block 1 (missing ra rb)

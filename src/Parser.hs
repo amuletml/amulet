@@ -225,16 +225,15 @@ typeP :: Parser Type'
 typeP = typeOpP where
   typeOpP = buildExpressionParser table type' <?> "type"
   type' = do
-    (hd, tl, pos) <- withPos $ do
+    (hd, tl) <- do
       x <- typeP'
       y' <- many typeP'
-      pure (x, y',)
-    let app' a b = TyApp a b pos
-    pure $ foldl app' hd tl
+      pure (x, y')
+    pure $ foldl TyApp hd tl
 
   table :: [[ Operator T.Text () Identity (Type Parsed) ]]
-  table = [ [ binary "*" (\p a b -> TyTuple a b p) AssocRight ]
-          , [ binary "->" (\p a b -> TyArr a b p) AssocRight ] ]
+  table = [ [ binary "*" (const TyTuple) AssocRight ]
+          , [ binary "->" (const TyArr) AssocRight ] ]
 
 binary :: String -> (Span -> a -> a -> a) -> Assoc -> Operator T.Text () Identity a
 binary n f a = flip Infix a $ do
@@ -249,23 +248,23 @@ typeP' = try constraints <|> parens typeP
      <|> try openRec
      <|> closedRec where
   tyCon, unitTyCon, tyForall :: Parser Type'
-  tyForall = withPos $ do
+  tyForall = do
     reserved "forall" <|> reserved "∀"
     nms <- commaSep1 tyVar
     _ <- dot
     TyForall nms <$> typeP
-  tyCon = withPos (TyCon <$> name)
-  unitTyCon = withPos (TyCon (Name (T.pack "unit")) <$ reserved "unit")
-  openRec = withPos . braces $ do
+  tyCon = (TyCon <$> name)
+  unitTyCon = (TyCon (Name (T.pack "unit")) <$ reserved "unit")
+  openRec = braces $ do
     x <- typeP
     reservedOp "|"
     TyRows x <$> commaSep1 tyRow
-  closedRec = withPos . braces $ TyExactRows <$> commaSep1 tyRow
+  closedRec = braces $ TyExactRows <$> commaSep1 tyRow
   tyRow = do
     x <- identifier
     reservedOp ":"
     (T.pack x,) <$> typeP
-  constraints = withPos $ do
+  constraints = do
     cs <- parens (commaSep1 constraint)
     reservedOp "=>"
     TyCons cs <$> typeP
