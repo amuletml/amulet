@@ -1,9 +1,9 @@
 type hide
-  = Hide : 'a -> hide ;
+  = Hide : 'a -> hide ;;
 
-let unhide (Hide x) = x ;
+let unhide (Hide x) = x ;;
 
-external val print : 'a -> unit = "print" ;
+external val print : 'a -> unit = "print" ;;
 
 let main _ =
   let i = unhide (Hide ())
