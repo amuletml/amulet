@@ -24,7 +24,7 @@ type SolveM = GenT Int (StateT Subst (Except TypeError))
 
 bind :: Var Typed -> Type Typed -> SolveM ()
 bind var ty
-  | raiseT id (const internal) ty == TyVar var internal = return ()
+  | raiseT id (const internal) ty == TyVar var = return ()
   | occurs var ty = throwError (Occurs var ty)
   | isRigid var = throwError (RigidBinding var ty)
   | otherwise = do
@@ -35,8 +35,8 @@ bind var ty
         Just ty' -> unify ty ty'
 
 unify :: Type Typed -> Type Typed -> SolveM ()
-unify (TyVar a _) b = bind a b
-unify a (TyVar b _) = bind b a
+unify (TyVar a) b = bind a b
+unify a (TyVar b) = bind b a
 unify (TyArr a b _) (TyArr a' b' _) = unify a a' *> unify b b'
 unify (TyApp a b _) (TyApp a' b' _) = unify a a' *> unify b b'
 unify ta@(TyCon a _) tb@(TyCon b _)
@@ -45,7 +45,7 @@ unify ta@(TyCon a _) tb@(TyCon b _)
 unify t@(TyForall vs ty _) t'@(TyForall vs' ty' _)
   | length vs /= length vs' = throwError (NotEqual t t')
   -- TODO: Technically we should make fresh variables and do ty[vs/f] ~ ty'[vs'/f]
-  | otherwise = unify ty (apply (M.fromList (zip vs' (map (flip TyVar internal) vs))) ty')
+  | otherwise = unify ty (apply (M.fromList (zip vs' (map TyVar vs))) ty')
 unify (TyRows rho arow an) (TyRows sigma brow bn)
   | overlaps <- overlap arow brow
   , new <- unionBy ((==) `on` fst) arow brow
@@ -58,7 +58,7 @@ unify (TyRows rho arow an) (TyRows sigma brow bn)
           then error ("overlaps " ++ show (length overlaps) ++ " new " ++ show (length new))
           else pure ()
     where freshT an = do x <- fresh
-                         pure (TyVar (TvName Flexible x (TyStar an)) an)
+                         pure (TyVar (TvName Flexible x (TyStar an)))
           freshT :: Span -> SolveM (Type Typed)
 -- TODO: This is a bit hacky. We have a different type for "closed
 -- records" (literals) and "open records" (parameters), and must check
@@ -128,5 +128,5 @@ solve i s (ConUnify e a t:xs) = do
     Right (i', s') -> solve i' (s' `compose` s) (apply s' xs)
 
 occurs :: Var Typed -> Type Typed -> Bool
-occurs _ (TyVar _ _) = False
+occurs _ (TyVar _) = False
 occurs x e = x `S.member` ftv e

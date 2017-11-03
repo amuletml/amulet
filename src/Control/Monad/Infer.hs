@@ -128,7 +128,7 @@ instantiate typ@(TyForall vs ty _) = do
     new <- fresh
     let ann = annotation ty
         new' :: Type Typed
-        new' = TyVar (TvName Flexible new (TyStar ann)) ann
+        new' = TyVar (TvName Flexible new (TyStar ann))
     if isRigid var
        then throwError (ArisingFrom (RigidBinding var new') typ)
        else pure new'
@@ -141,14 +141,12 @@ difference (Env ma mb) (Env ma' mb') = Env (ma Map.\\ ma') (mb Map.\\ mb')
 freshTV :: MonadGen Int m => Span -> m (Type Typed)
 freshTV a = do
   nm <- fresh
-  pure (TyVar (TvName Flexible nm (TyStar a)) a)
+  pure (TyVar (TvName Flexible nm (TyStar a)))
 
 instance (Substitutable (Type p), Substitutable (GivenConstraint p)) => Substitutable (Constraint p) where
   ftv (ConUnify _ a b) = ftv a `Set.union` ftv b
   apply s (ConUnify e a b) = ConUnify e (apply s a) (apply s b)
 
 instance Pretty (Var p) => Pretty (Constraint p) where
-  pprint (ConUnify e a b) = e
-                        <+> opClr (" <=> " :: String)
-                        <+> a
-                        <+> opClr (" ~ " :: String) <+> b
+  pprint (ConUnify _ a b) = a
+                        <+> opClr (" :=: " :: String) <+> b

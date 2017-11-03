@@ -25,7 +25,7 @@ class Substitutable a where
 instance Substitutable (Type Typed) where
   ftv TyCon{} = S.empty
   ftv TyStar{} = S.empty
-  ftv (TyVar v _) = S.singleton v
+  ftv (TyVar v) = S.singleton v
   ftv (TyForall vs t _) = ftv t S.\\ S.fromList vs
   ftv (TyApp a b _) = ftv a `S.union` ftv b
   ftv (TyTuple a b _) = ftv a `S.union` ftv b
@@ -36,7 +36,7 @@ instance Substitutable (Type Typed) where
 
   apply _ (TyCon a l) = TyCon a l
   apply _ (TyStar l) = TyStar l
-  apply s t@(TyVar v _) = M.findWithDefault t v s
+  apply s t@(TyVar v) = M.findWithDefault t v s
   apply s (TyArr a b l) = TyArr (apply s a) (apply s b) l
   apply s (TyApp a b l) = TyApp (apply s a) (apply s b) l
   apply s (TyTuple a b l) = TyTuple (apply s a) (apply s b) l

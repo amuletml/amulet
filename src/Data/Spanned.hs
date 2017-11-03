@@ -11,7 +11,7 @@ class Spanned a where
   annotation = get . gmapQ getSpan where
     get (Just x:_) = x
     get (Nothing:xs) = get xs
-    get [] = error "value does not have a Span, but it was stated Spanned"
+    get [] = internal
 
     getSpan d = case cast d of
                   Just x -> Just (x :: Span)

@@ -234,7 +234,7 @@ instance Pretty a => Pretty (ZipList a) where
 instance (Pretty a, Pretty b) => Pretty (Map.Map a b) where
   pprint mp = do
     x <- ask
-    braces $ T.intercalate "," $ map (\(k, v) -> x `ppshow` k <> " => " <> x `ppshow` v) $ Map.assocs mp
+    braces $ T.intercalate ", " $ map (\(k, v) -> x `ppshow` k <> " => " <> x `ppshow` v) $ Map.assocs mp
 
 instance Pretty (a -> PrettyP, a) where
   pprint (x, y) = x y
