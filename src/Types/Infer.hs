@@ -41,15 +41,15 @@ star :: Ann p ~ Span => Type p
 star = TyStar
 
 forall :: Ann p ~ Span => [Var p] -> Type p -> Type p
-forall a c = TyForall a c
+forall = TyForall
 
 app, arr :: Ann p ~ Span => Type p -> Type p -> Type p
-arr a b = TyArr a b
-app a b = TyApp a b
+arr = TyArr
+app = TyApp
 
 var, con :: Ann p ~ Span => Var p -> Type p
-var x = TyVar x 
-con x = TyCon x
+var = TyVar
+con = TyCon
 
 builtinsEnv :: Env
 builtinsEnv = Env (M.fromList ops) (M.fromList tps) where
@@ -87,10 +87,10 @@ infer expr
         tv <- freshTV
         pure (Hole (tag v tv) ann, tv)
       Literal c a -> case c of
-                       LiInt _ -> pure (Literal c a, tyInt)
-                       LiStr _ -> pure (Literal c a, tyString)
-                       LiBool _ -> pure (Literal c a, tyBool)
-                       LiUnit   -> pure (Literal c a, tyUnit)
+        LiInt _ -> pure (Literal c a, tyInt)
+        LiStr _ -> pure (Literal c a, tyString)
+        LiBool _ -> pure (Literal c a, tyBool)
+        LiUnit   -> pure (Literal c a, tyUnit)
       Fun p b a -> do
         (p', tc, ms) <- inferPattern (unify expr) p
         (b', tb) <- extendMany ms $ infer b
@@ -124,11 +124,11 @@ infer expr
       Match t ps a -> do
         (t', tt) <- infer t
         (ps', tbs) <- unzip <$> forM ps
-            (\ (p, e) ->
-               do (p', pt, ks) <- inferPattern (unify expr) p
-                  unify expr tt pt
-                  (e', ty) <- extendMany ks (infer e)
-                  pure ((p', e'), ty))
+            (\ (p, e) -> do
+              (p', pt, ks) <- inferPattern (unify expr) p
+              unify expr tt pt
+              (e', ty) <- extendMany ks (infer e)
+              pure ((p', e'), ty))
         ty <- case tbs of
                 [] -> throwError (EmptyMatch expr)
                 [x] -> pure x
@@ -178,7 +178,6 @@ inferRows :: [(T.Text, Expr Parsed)] -> Infer Typed [((T.Text, Expr Typed), (T.T
 inferRows rows = forM rows $ \(var', val) -> do
   (val', typ) <- infer val
   pure ((var', val'), (var', typ))
-
 
 inferKind :: Type Parsed -> Infer a (Type Typed, Type Typed)
 inferKind TyStar = pure (TyStar, TyStar)
@@ -247,23 +246,22 @@ inferPattern _ (Capture v ann) = do
   x <- freshTV
   pure (Capture (tag v x) ann, x, [(tag v x, x)])
 inferPattern unify (Destructure cns ps ann)
-  | Nothing <- ps
-  = do
+  | Nothing <- ps = do
     pty <- lookupTy cns
     pure (Destructure (tag cns pty) Nothing ann, pty, [])
-  | Just p <- ps
-  = do
-    t <- lookupTy cns
-    case t of
-      (TyArr tup res) -> do
-        (p', pt, pb) <- inferPattern unify p
-        unify tup pt
-        pure (Destructure (tag cns t) (Just p') ann, res, pb)
-      (TyCons cs (TyArr tup res)) -> do
-        (p', pt, pb) <- inferPattern unify p
-        unify tup pt
-        pure (Destructure (tag cns t) (Just p') ann, (TyCons cs res), pb)
-      _ -> undefined
+  | Just p <- ps = do
+    (tup, res, ct) <- constructorTy <$> lookupTy cns
+    (p', pt, pb) <- inferPattern unify p
+    unify tup pt
+    pure (Destructure (tag cns ct) (Just p') ann, res, pb)
+  where constructorTy :: Type Typed -> (Type Typed, Type Typed, Type Typed)
+        constructorTy t
+          | TyArr tup res <- t
+          = (tup, res, t)
+          | TyCons cs x <- t
+          , (tup', res,_ ) <- constructorTy x
+          = (tup', TyCons cs res, t)
+          | otherwise = undefined
 inferPattern unify (PRecord rows ann) = do
   rho <- freshTV
   (rowps, rowts, caps) <- unzip3 <$> forM rows (\(var, pat) -> do
@@ -335,12 +333,7 @@ inferCon ret' (UnitCon nm ann) =
   let ret = closeOver ret'
    in pure ((tag nm ret, ret), UnitCon (tag nm ret) ann)
 inferCon ret (GADTCon nm ty ann) = extendManyK (mentionedTVs ret) $ do
-  (res, hole) <- case ty of
-                   x | x `instanceOf` ret -> pure (x, id)
-                   TyArr a b | b `instanceOf` ret -> do
-                     (a', _) <- inferKind a
-                     pure (b, \t -> TyArr a' t)
-                   x -> throwError (IllegalGADT x)
+  (res, hole) <- gadtConTy ty
   -- This is a game of matching up paramters of the return type with the
   -- stated parameters, and introducing the proper constraints
   cons <- matchUp res ret
@@ -352,19 +345,32 @@ inferCon ret (GADTCon nm ty ann) = extendManyK (mentionedTVs ret) $ do
         mentionedTVs (TyApp r (TyVar v)) = (v, TyStar):mentionedTVs r
         mentionedTVs _ = []
 
-        matchUp :: Type Parsed -> Type Typed -> Infer Typed [GivenConstraint Typed]
+        matchUp :: Type Parsed -> Type Typed -> Infer a [GivenConstraint Typed]
         matchUp (TyCon _ )   (TyCon _ )  = pure []
         matchUp (TyApp i x ) (TyApp j y) = do
           (x', _) <- inferKind x
           (:) <$> pure (Equal (raiseT smush id x') (raiseT smush id y) ann) <*> matchUp i j
         matchUp _ _ = error "impossible because of how GADTs work"
 
+        rigidify :: Var Typed -> Infer Typed (Var Typed)
         rigidify v@(TvName _ nm an) = do
           x <- asks types
           case M.lookup (eraseVarTy v) x of
             Just _ -> pure (TvName Flexible nm an)
             Nothing -> pure (TvName Rigid nm an)
         rigidify (TvRefresh var k) = flip TvRefresh k <$> rigidify var
+
+        gadtConTy :: Type Parsed -> Infer a (Type Parsed, Type Typed -> Type Typed)
+        gadtConTy ty = case ty of 
+          TyArr a b -> do
+            (b, hole) <- gadtConTy b
+            (a', _) <- inferKind a
+            pure (b, TyArr a' . hole) 
+          TyForall vs t -> do
+            (t, hole) <- gadtConTy t
+            pure (t, TyForall (map (`tag` TyStar) vs) . hole)
+          x | x `instanceOf` ret -> pure (x, id)
+            | otherwise          -> throwError (IllegalGADT x)
 
 instanceOf :: Type Parsed -> Type Typed -> Bool
 instanceOf (TyCon a) (TyCon b) = a == eraseVarTy b

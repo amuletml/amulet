@@ -253,8 +253,8 @@ typeP' = try constraints <|> parens typeP
     nms <- commaSep1 tyVar
     _ <- dot
     TyForall nms <$> typeP
-  tyCon = (TyCon <$> name)
-  unitTyCon = (TyCon (Name (T.pack "unit")) <$ reserved "unit")
+  tyCon = TyCon <$> name
+  unitTyCon = TyCon (Name (T.pack "unit")) <$ reserved "unit"
   openRec = braces $ do
     x <- typeP
     reservedOp "|"

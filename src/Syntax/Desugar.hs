@@ -53,7 +53,7 @@ desugarProgram = runGen . mapM desugarTop where
 
 fresh :: MonadGen Int m => Ann Parsed -> m (Pattern Parsed, Expr Parsed)
 fresh an = do
-  var <- Name . (T.cons '_') <$> M.fresh
+  var <- Name . T.cons '_' <$> M.fresh
   pure (Capture var an, VarRef var an)
 
 defaults :: MonadGen Int m => Expr Parsed -> m (Maybe (Expr Parsed))

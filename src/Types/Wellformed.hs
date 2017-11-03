@@ -37,7 +37,7 @@ wellformedC (Equal a b _) = wellformed a *> wellformed b
 improve :: Type Typed -> Type Typed
 improve x
   | TyCons cs tp <- x
-  = case (filter (not . redundant) cs) of
+  = case filter (not . redundant) cs of
       [] -> improve tp
       xs -> TyCons xs (improve tp)
   | vs <- S.toList (ftv x)
@@ -51,7 +51,7 @@ improve x
 {-
    Commentary:
 
-   Surrender all hope, ye who enter here.
+   Abandon all hope, ye who enter here.
 
    Obviously, this module begs a bit of explaining. Since the kind
    inference engine in Types.Infer isn't usable in Type Typed, here we
