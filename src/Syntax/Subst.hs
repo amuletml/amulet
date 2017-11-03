@@ -26,25 +26,25 @@ instance Substitutable (Type Typed) where
   ftv TyCon{} = S.empty
   ftv TyStar{} = S.empty
   ftv (TyVar v) = S.singleton v
-  ftv (TyForall vs t _) = ftv t S.\\ S.fromList vs
-  ftv (TyApp a b _) = ftv a `S.union` ftv b
-  ftv (TyTuple a b _) = ftv a `S.union` ftv b
-  ftv (TyArr a b _) = ftv a `S.union` ftv b
-  ftv (TyRows rho rows _) = ftv rho `S.union` foldMap (ftv . snd) rows
-  ftv (TyExactRows rows _) = foldMap (ftv . snd) rows
-  ftv (TyCons cs t _) = foldMap ftv cs `S.union` ftv t
+  ftv (TyForall vs t) = ftv t S.\\ S.fromList vs
+  ftv (TyApp a b) = ftv a `S.union` ftv b
+  ftv (TyTuple a b) = ftv a `S.union` ftv b
+  ftv (TyArr a b) = ftv a `S.union` ftv b
+  ftv (TyRows rho rows) = ftv rho `S.union` foldMap (ftv . snd) rows
+  ftv (TyExactRows rows) = foldMap (ftv . snd) rows
+  ftv (TyCons cs t) = foldMap ftv cs `S.union` ftv t
 
-  apply _ (TyCon a l) = TyCon a l
-  apply _ (TyStar l) = TyStar l
+  apply _ (TyCon a) = TyCon a
+  apply _ TyStar = TyStar
   apply s t@(TyVar v) = M.findWithDefault t v s
-  apply s (TyArr a b l) = TyArr (apply s a) (apply s b) l
-  apply s (TyApp a b l) = TyApp (apply s a) (apply s b) l
-  apply s (TyTuple a b l) = TyTuple (apply s a) (apply s b) l
-  apply s (TyForall v t l) = TyForall v (apply s' t) l where
+  apply s (TyArr a b) = TyArr (apply s a) (apply s b)
+  apply s (TyApp a b) = TyApp (apply s a) (apply s b)
+  apply s (TyTuple a b) = TyTuple (apply s a) (apply s b)
+  apply s (TyForall v t) = TyForall v (apply s' t) where
     s' = foldr M.delete s v
-  apply s (TyRows rho rows ann) = TyRows (apply s rho) (map (second (apply s)) rows) ann
-  apply s (TyExactRows rows ann) = TyExactRows  (map (second (apply s)) rows) ann
-  apply s (TyCons cs t ann) = TyCons (map (apply s) cs) (apply s t) ann
+  apply s (TyRows rho rows) = TyRows (apply s rho) (map (second (apply s)) rows)
+  apply s (TyExactRows rows) = TyExactRows  (map (second (apply s)) rows)
+  apply s (TyCons cs t) = TyCons (map (apply s) cs) (apply s t)
 
 instance Substitutable a => Substitutable [a] where
   ftv = foldMap ftv
@@ -55,4 +55,4 @@ instance Substitutable (GivenConstraint Typed) where
   apply s (Equal a b ann) = Equal (apply s a) (apply s b) ann
 
 compose :: Subst -> Subst -> Subst
-s1 `compose` s2 = M.map (apply s1) s2 `M.union` s1
+s1 `compose` s2 = M.map (apply s1) s2 `M.union` M.map (apply s2) s1
