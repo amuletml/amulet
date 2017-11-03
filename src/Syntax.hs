@@ -2,7 +2,7 @@
 {-# LANGUAGE FlexibleInstances, FlexibleContexts, UndecidableInstances #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies, DataKinds #-}
-{-# LANGUAGE LambdaCase, DeriveDataTypeable #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 module Syntax where
 
 import Pretty
@@ -14,8 +14,8 @@ import Data.Span
 import Data.Typeable
 import Data.Data
 
-data Parsed = Parsed Parsed deriving Data
-data Typed = Typed Typed deriving Data
+newtype Parsed = Parsed Parsed deriving Data
+newtype Typed = Typed Typed deriving Data
 
 data family Var a
 
