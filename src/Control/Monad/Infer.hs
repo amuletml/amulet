@@ -23,7 +23,6 @@ import qualified Data.Set as Set
 import Data.Semigroup
 
 import Data.Spanned
-import Data.Span
 
 import qualified Data.Text as T
 import Data.Text (Text)
@@ -43,8 +42,8 @@ data Env
   deriving (Eq, Show, Ord)
 
 instance Substitutable Env where
-  ftv Env{ values = s } = ftv (Map.elems s)
-  apply s env@Env{ values = e} = env { values = Map.map (apply s) e}
+  ftv Env{ types = s } = ftv (Map.elems s)
+  apply s env@Env{ types = e} = env { types = Map.map (apply s) e}
 
 instance Monoid Env where
   mappend = (<>)
@@ -123,14 +122,13 @@ alpha :: [Text]
 alpha = map T.pack $ [1..] >>= flip replicateM ['a'..'z']
 
 instantiate :: (MonadError TypeError m, MonadGen Int m) => Type Typed -> m (Type Typed)
-instantiate typ@(TyForall vs ty _) = do
+instantiate (TyForall vs ty) = do
   f <- forM vs $ \var -> do
     new <- fresh
-    let ann = annotation ty
-        new' :: Type Typed
-        new' = TyVar (TvName Flexible new (TyStar ann))
+    let new' :: Type Typed
+        new' = TyVar (TvName Flexible new TyStar)
     if isRigid var
-       then throwError (ArisingFrom (RigidBinding var new') typ)
+       then throwError (RigidBinding var new')
        else pure new'
   instantiate (apply (Map.fromList (zip vs f)) ty)
 instantiate ty = pure ty
@@ -138,10 +136,10 @@ instantiate ty = pure ty
 difference :: Env -> Env -> Env
 difference (Env ma mb) (Env ma' mb') = Env (ma Map.\\ ma') (mb Map.\\ mb')
 
-freshTV :: MonadGen Int m => Span -> m (Type Typed)
-freshTV a = do
+freshTV :: MonadGen Int m => m (Type Typed)
+freshTV = do
   nm <- fresh
-  pure (TyVar (TvName Flexible nm (TyStar a)))
+  pure (TyVar (TvName Flexible nm TyStar))
 
 instance (Substitutable (Type p), Substitutable (GivenConstraint p)) => Substitutable (Constraint p) where
   ftv (ConUnify _ a b) = ftv a `Set.union` ftv b

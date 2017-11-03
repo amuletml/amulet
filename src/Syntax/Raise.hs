@@ -48,16 +48,14 @@ raiseP v a (PTuple e p) = PTuple (map (raiseP v a) e) (a p)
 raiseT :: (Var p -> Var p') -- How to raise variables
        -> (Ann p -> Ann p')
        -> Type p -> Type p'
-raiseT v a (TyCon n p) = TyCon (v n) (a p)
+raiseT v _ (TyCon n) = TyCon (v n)
 raiseT v _ (TyVar n) = TyVar (v n)
-raiseT v a (TyForall n t p) = TyForall (map v n)
-                                       (raiseT v a t)
-                                       (a p)
-raiseT v a (TyArr x y p) = TyArr (raiseT v a x) (raiseT v a y) (a p)
-raiseT v a (TyApp x y p) = TyApp (raiseT v a x) (raiseT v a y) (a p)
-raiseT v a (TyTuple x y p) = TyTuple (raiseT v a x) (raiseT v a y) (a p)
-raiseT v a (TyRows rho rows p) = TyRows (raiseT v a rho) (map (second (raiseT v a)) rows) (a p)
-raiseT v a (TyExactRows rows p) = TyExactRows (map (second (raiseT v a)) rows) (a p)
-raiseT _ a (TyStar p) = TyStar (a p)
-raiseT v a (TyCons cs n p) = TyCons (map raiseCon cs) (raiseT v a n) (a p) where
-  raiseCon (Equal l r ann) = Equal (raiseT v a l) (raiseT v a r) (a ann)
+raiseT v a (TyForall n t) = TyForall (map v n) (raiseT v a t)
+raiseT v a (TyArr x y) = TyArr (raiseT v a x) (raiseT v a y)
+raiseT v a (TyApp x y) = TyApp (raiseT v a x) (raiseT v a y)
+raiseT v a (TyTuple x y) = TyTuple (raiseT v a x) (raiseT v a y)
+raiseT v a (TyRows rho rows) = TyRows (raiseT v a rho) (map (second (raiseT v a)) rows)
+raiseT v a (TyExactRows rows) = TyExactRows (map (second (raiseT v a)) rows)
+raiseT _ _ TyStar = TyStar
+raiseT v a (TyCons cs n) = TyCons (map raiseCon cs) (raiseT v a n) where
+  raiseCon (Equal l r p) = Equal (raiseT v a l) (raiseT v a r) (a p)

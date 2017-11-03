@@ -37,43 +37,40 @@ bind var ty
 unify :: Type Typed -> Type Typed -> SolveM ()
 unify (TyVar a) b = bind a b
 unify a (TyVar b) = bind b a
-unify (TyArr a b _) (TyArr a' b' _) = unify a a' *> unify b b'
-unify (TyApp a b _) (TyApp a' b' _) = unify a a' *> unify b b'
-unify ta@(TyCon a _) tb@(TyCon b _)
+unify (TyArr a b) (TyArr a' b') = unify a a' *> unify b b'
+unify (TyApp a b) (TyApp a' b') = unify a a' *> unify b b'
+unify ta@(TyCon a) tb@(TyCon b)
   | smush a == smush b = pure ()
   | otherwise = throwError (NotEqual ta tb)
-unify t@(TyForall vs ty _) t'@(TyForall vs' ty' _)
+unify t@(TyForall vs ty) t'@(TyForall vs' ty')
   | length vs /= length vs' = throwError (NotEqual t t')
   -- TODO: Technically we should make fresh variables and do ty[vs/f] ~ ty'[vs'/f]
   | otherwise = unify ty (apply (M.fromList (zip vs' (map TyVar vs))) ty')
-unify (TyRows rho arow an) (TyRows sigma brow bn)
+unify (TyRows rho arow) (TyRows sigma brow)
   | overlaps <- overlap arow brow
   , new <- unionBy ((==) `on` fst) arow brow
   = do mapM_ (uncurry unify) overlaps
-       rho' <- freshT an
-       sigma' <- freshT an
-       unify rho (TyRows rho' new an)
-       unify sigma (TyRows sigma' new bn)
+       rho' <- freshTV
+       sigma' <- freshTV
+       unify rho (TyRows rho' new)
+       unify sigma (TyRows sigma' new)
        if length overlaps >= length new
           then error ("overlaps " ++ show (length overlaps) ++ " new " ++ show (length new))
           else pure ()
-    where freshT an = do x <- fresh
-                         pure (TyVar (TvName Flexible x (TyStar an)))
-          freshT :: Span -> SolveM (Type Typed)
 -- TODO: This is a bit hacky. We have a different type for "closed
 -- records" (literals) and "open records" (parameters), and must check
 -- that they line up manually here.
-unify ta@(TyExactRows arow _) tb@(TyRows _ brow _)
+unify ta@(TyExactRows arow) tb@(TyRows _ brow)
   | overlaps <- overlap arow brow
   = case overlaps of
       [] -> throwError (NoOverlap ta tb)
       xs -> mapM_ (uncurry unify) xs
-unify tb@(TyRows _ brow _) ta@(TyExactRows arow _)
+unify tb@(TyRows _ brow) ta@(TyExactRows arow)
   | overlaps <- overlap arow brow
   = case overlaps of
       [] -> throwError (NoOverlap ta tb)
       xs -> mapM_ (uncurry unify) xs
-unify ta@(TyExactRows arow _) tb@(TyExactRows brow _)
+unify ta@(TyExactRows arow) tb@(TyExactRows brow)
   | overlaps <- overlap arow brow
   = do when (length overlaps /= length arow || length overlaps /= length brow)
          $ throwError (NoOverlap ta tb)
@@ -81,13 +78,13 @@ unify ta@(TyExactRows arow _) tb@(TyExactRows brow _)
 
 unify x tp@TyRows{} = throwError (Note (CanNotInstance tp x) isRec)
 unify tp@TyRows{} x = throwError (Note (CanNotInstance tp x) isRec)
-unify (TyTuple a b _) (TyTuple a' b' _) = do
+unify (TyTuple a b) (TyTuple a' b') = do
   unify a a'
   unify b b'
-unify (TyCons cs t _) t' = do
+unify (TyCons cs t) t' = do
   forM_ cs $ \(Equal a b _) -> unify a b
   unify t t'
-unify t' (TyCons cs t _) = do
+unify t' (TyCons cs t) = do
   forM_ cs $ \(Equal a b _) -> unify a b
   unify t t'
 unify a b = throwError (NotEqual a b)
@@ -104,7 +101,7 @@ overlap xs ys
      in map (\((_, t), (_, t')) -> (t, t')) overlapping
 
 smush :: Var Typed -> Var Typed
-smush (TvName _ v _) = TvName Flexible v (TyStar internal)
+smush (TvName _ v _) = TvName Flexible v TyStar
 smush (TvRefresh v k) = TvRefresh (smush v) k
 
 runSolve :: Int -> Subst -> SolveM b -> Either TypeError (Int, Subst)
