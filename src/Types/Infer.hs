@@ -153,7 +153,7 @@ infer expr
         (rec', rho) <- infer rec
         pure (RecordExt rec' rows' a, TyRows rho newTypes)
       Access rec key a -> do
-        (rho, ktp) <- (,) <$> freshTV <*> freshTV 
+        (rho, ktp) <- (,) <$> freshTV <*> freshTV
         (rec', tp) <- infer rec
         let rows = TyRows rho [(key, ktp)]
         unify expr tp rows
@@ -329,7 +329,7 @@ inferCon ret (ArgCon nm t ann) = do
   (ty', _) <- inferKind t
   let res = closeOver $ TyArr ty' ret
   pure ((tag nm res, res), ArgCon (tag nm res) ty' ann)
-inferCon ret' (UnitCon nm ann) = 
+inferCon ret' (UnitCon nm ann) =
   let ret = closeOver ret'
    in pure ((tag nm ret, ret), UnitCon (tag nm ret) ann)
 inferCon ret (GADTCon nm ty ann) = extendManyK (mentionedTVs ret) $ do
@@ -361,11 +361,11 @@ inferCon ret (GADTCon nm ty ann) = extendManyK (mentionedTVs ret) $ do
         rigidify (TvRefresh var k) = flip TvRefresh k <$> rigidify var
 
         gadtConTy :: Type Parsed -> Infer a (Type Parsed, Type Typed -> Type Typed)
-        gadtConTy ty = case ty of 
+        gadtConTy ty = case ty of
           TyArr a b -> do
             (b, hole) <- gadtConTy b
             (a', _) <- inferKind a
-            pure (b, TyArr a' . hole) 
+            pure (b, TyArr a' . hole)
           TyForall vs t -> do
             (t, hole) <- gadtConTy t
             pure (t, TyForall (map (`tag` TyStar) vs) . hole)

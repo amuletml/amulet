@@ -92,7 +92,7 @@ data Lit
 
 data Type p
   = TyCon (Var p)
-  | TyVar (Var p) 
+  | TyVar (Var p)
   | TyForall [Var p] (Type p)
   | TyArr (Type p) (Type p)
   | TyApp (Type p) (Type p)
