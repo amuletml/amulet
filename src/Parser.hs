@@ -243,7 +243,7 @@ binary n f a = flip Infix a $ do
 
 typeP' :: Parser Type'
 typeP' = try constraints <|> parens typeP
-     <|> withPos (TyVar <$> tyVar)
+     <|> (TyVar <$> tyVar)
      <|> tyCon <|> unitTyCon
      <|> tyForall
      <|> try openRec

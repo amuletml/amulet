@@ -92,8 +92,8 @@ data Lit
 
 data Type p
   = TyCon (Var p) (Ann p)
-  | TyVar (Var p) (Ann p)
-  | TyForall [Var p] (Type p) (Ann p) -- constraints
+  | TyVar (Var p) 
+  | TyForall [Var p] (Type p) (Ann p)
   | TyArr (Type p) (Type p) (Ann p)
   | TyApp (Type p) (Type p) (Ann p)
   | TyRows (Type p) [(Text, Type p)] (Ann p) -- { α | foo : int, bar : string }
@@ -207,7 +207,7 @@ instance Pretty Lit where
 instance (Pretty (Var p)) => Pretty (Type p) where
   pprint (TyCon v _) = typeClr v
   pprint (TyCons cs v _) = parens (interleave ", " cs) <+> opClr " => " <+> v
-  pprint (TyVar v _) = opClr "'" <+> tvClr v
+  pprint (TyVar v) = opClr "'" <+> tvClr v
   pprint (TyForall vs v _)
     = kwClr "∀ " <+> interleave " " (map (\x -> "'" <+> tvClr x) vs) <+> opClr ". " <+> v
 

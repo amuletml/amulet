@@ -25,6 +25,8 @@ import Types.Holes
 
 import Data.List
 
+import Debug.Trace
+
 -- Solve for the types of lets in a program
 inferProgram :: [Toplevel Parsed] -> Either TypeError ([Toplevel Typed], Env)
 inferProgram ct = fst <$> runInfer builtinsEnv (inferAndCheck ct) where
@@ -51,7 +53,7 @@ arr a b = TyArr a b internal
 app a b = TyApp a b internal
 
 var, con :: Ann p ~ Span => Var p -> Type p
-var x = TyVar x internal
+var x = TyVar x 
 con x = TyCon x internal
 
 builtinsEnv :: Env
@@ -120,9 +122,10 @@ infer expr
           tv <- freshTV ann
           pure (tag a tv, tv)
         extendMany ks $ do
-          (ns', ts) <- inferLetTy ks ns
-          (b', ty) <- extendMany ts (infer b)
-          pure (Let ns' b' ann, ty)
+          (ns', ts) <- inferLetTy id ks ns
+          extendMany ts $ do
+            (b', ty) <- infer b
+            pure (Let ns' b' ann, ty)
       Match t ps a -> do
         (t', tt) <- infer t
         (ps', tbs) <- unzip <$> forM ps
@@ -187,9 +190,9 @@ inferRows rows = forM rows $ \(var', val) -> do
 
 inferKind :: Type Parsed -> Infer a (Type Typed, Type Typed)
 inferKind (TyStar a) = pure (TyStar a, TyStar a)
-inferKind (TyVar v a) = do
-  x <- lookupKind v `catchError` const (pure (TyStar a))
-  pure (TyVar (tag v x) a, x)
+inferKind (TyVar v) = do
+  x <- lookupKind v `catchError` const (pure (TyStar internal))
+  pure (TyVar (tag v x), x)
 inferKind (TyCon v a) = do
   x <- lookupKind v
   pure (TyCon (tag v x) a, x)
@@ -280,7 +283,7 @@ inferPattern unify (PType p t ann) = do
   (p', pt, vs) <- inferPattern unify p
   (t', _) <- inferKind t `catchError` \x -> throwError (ArisingFrom x t)
   unify pt t'
-  pure (PType p' t' ann, pt, vs)
+  pure (PType p' t' ann, t', vs)
 inferPattern unify (PTuple elems ann)
   | [] <- elems = pure (PTuple [] ann, tyUnit, [])
   | [x] <- elems = inferPattern unify x
@@ -295,7 +298,7 @@ inferProg (LetStmt ns ann:prg) = do
     vl <- lookupTy a `catchError` const (pure tv)
     pure (tag a tv, vl)
   extendMany ks $ do
-    (ns', ts) <- inferLetTy ks ns
+    (ns', ts) <- inferLetTy closeOver ks ns
     extendMany ts $
       consFst (LetStmt ns' ann) $ inferProg prg
 inferProg (ValStmt v t ann:prg) = do
@@ -315,7 +318,7 @@ inferProg (TypeDecl n tvs cs ann:prg) =
       arisingFromConstructor = "Perhaps you're missing a * between two types of a constructor?"
    in extendKind (n', mkk tvs) $ do
      (ts, cs') <- unzip <$> mapM (inferCon retTy) cs
-                               `catchError` \x -> throwError (Note (ArisingFrom x (TyVar n' ann)) arisingFromConstructor)
+                               `catchError` \x -> throwError (Note (ArisingFrom x (TyVar n')) arisingFromConstructor)
      extendMany ts $
        consFst (TypeDecl n' (map (`tag` star) tvs) cs' ann) $
          inferProg prg
@@ -324,7 +327,6 @@ inferProg [] = do
   (_, c) <- censor (const mempty) . listen $ do
     x <- lookupTy (Name "main")
     unify (VarRef (Name "main") ann) x (TyArr tyUnit tyUnit ann)
-
   x <- gen
   case solve x mempty c of
     Left e -> throwError (Note e "main must be a function from unit to unit")
@@ -356,7 +358,7 @@ inferCon ret (GADTCon nm ty ann) = extendManyK (mentionedTVs ret) $ do
   let tp = TyForall vars' resTp ann
   pure ((tag nm tp, tp), GADTCon (tag nm tp) tp ann)
   where mentionedTVs :: Type Typed -> [(Var Typed, Type Typed)]
-        mentionedTVs (TyApp r (TyVar v a) _) = (v, TyStar a):mentionedTVs r
+        mentionedTVs (TyApp r (TyVar v) _) = (v, TyStar internal):mentionedTVs r
         mentionedTVs _ = []
 
         matchUp :: Type Parsed -> Type Typed -> Infer Typed [GivenConstraint Typed]
@@ -380,13 +382,14 @@ instanceOf _ _ = False
 
 
 inferLetTy :: (t ~ Typed, p ~ Parsed)
-           => [(Var t, Type t)]
+           => (Type Typed -> Type Typed)
+           -> [(Var t, Type t)]
            -> [(Var p, Expr p)]
            -> Infer t ( [(Var t, Expr t)]
                       , [(Var t, Type t)])
-inferLetTy ks [] = pure ([], ks)
-inferLetTy ks ((va, ve):xs) = extendMany ks $ do
-  ((ve', ty), c) <- censor (const mempty) (listen (infer ve))
+inferLetTy _ ks [] = pure ([], ks)
+inferLetTy closeOver ks ((va, ve):xs) = extendMany ks $ do
+  ((ve', ty), c) <- listen (infer ve) -- See note [1]
   cur <- gen
   (x, vt) <- case solve cur mempty c of
                Left e -> throwError e
@@ -395,7 +398,7 @@ inferLetTy ks ((va, ve):xs) = extendMany ks $ do
       r (TvRefresh k a) = TvRefresh (r k) a
       ex = raiseE r id ve'
   (vt', _) <- inferKind (raiseT eraseVarTy id vt)
-  consFst (tag va vt', ex) $ inferLetTy (updateAlist (tag va vt') vt' ks) xs
+  consFst (tag va vt', ex) $ inferLetTy closeOver (updateAlist (tag va vt') vt' ks) xs
 
 -- Monomorphic so we can use "close enough" equality
 updateAlist :: Var Typed
@@ -408,7 +411,7 @@ updateAlist n v (x@(n', _):xs)
 updateAlist _ _ [] = []
 
 closeOver :: Type Typed -> Type Typed
-closeOver a = forall (fv a) (improve a) where
+closeOver a = forall (traceShowId (fv a)) (improve a) where
   fv = S.toList . ftv . improve
   forall :: (Ann p ~ Span, Spanned (Type p))
          => [Var p] -> Type p -> Type p
@@ -416,6 +419,36 @@ closeOver a = forall (fv a) (improve a) where
   forall vs a = TyForall vs a (annotation a)
 
 
-
 consFst :: Functor m => a -> m ([a], b) -> m ([a], b)
 consFst a = fmap (first (a:))
+
+{-
+  Commentary
+
+
+  Note [1]:
+    This used to be censor (const mempty) - but that leads us to a
+    problem (a real one!). Consider:
+
+      let map f
+        = let map_accum acc x
+          = match x with
+            | Cons (h, t) -> map_accum (Cons (f h, acc)) t
+            | Nil -> acc
+          in map_accum Nil ;;
+
+    The only way we learn of `f`'s type is inside the `let`. By
+    censoring it, we prevent the constraints that led to the
+    discovery of `f`'s type from arising - which means we can't find
+    it again! Thus, the function gets the rather strange type
+
+      val map : ∀ 'a 'b 'c. 'c -> list 'a -> list 'b
+
+    Instead of the correct
+
+      val map : V 'a 'b. ('a -> 'b) -> list 'a -> list 'b
+
+    By removing the censor, we allow the compiler to recover `'c` - which,
+    if you look under e.g. the ghci debugger, has a substitution!
+
+-}

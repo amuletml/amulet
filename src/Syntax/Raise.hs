@@ -49,7 +49,7 @@ raiseT :: (Var p -> Var p') -- How to raise variables
        -> (Ann p -> Ann p')
        -> Type p -> Type p'
 raiseT v a (TyCon n p) = TyCon (v n) (a p)
-raiseT v a (TyVar n p) = TyVar (v n) (a p)
+raiseT v _ (TyVar n) = TyVar (v n)
 raiseT v a (TyForall n t p) = TyForall (map v n)
                                        (raiseT v a t)
                                        (a p)
