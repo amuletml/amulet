@@ -1,23 +1,23 @@
-type coroutine 'a 'b;
+type coroutine 'a 'b ;;
 
-external val co_create : ('a -> 'b) -> coroutine 'a 'b = "coroutine.create" ;
-external val co_resume : coroutine 'a 'b -> 'a -> 'b = "coroutine.resume" ;
-external val co_yield : 'b -> 'a = "coroutine.yield" ;
-external val lua_version : string = "_VERSION" ;
+external val co_create : ('a -> 'b) -> coroutine 'a 'b = "coroutine.create" ;;
+external val co_resume : coroutine 'a 'b -> 'a -> 'b = "coroutine.resume" ;;
+external val co_yield : 'b -> 'a = "coroutine.yield" ;;
+external val lua_version : string = "_VERSION" ;;
 
-external val print : string -> unit = "print" ;
-external val write : string -> unit = "io.write" ;
-external val string_of_int : int -> string = "tostring" ;
-external val int_of_string : string -> int = "tonumber" ;
-external val read_stdin : string -> string = "io.read" ;
-external val exit : int -> unit = "os.exit" ;
+external val print : string -> unit = "print" ;;
+external val write : string -> unit = "io.write" ;;
+external val string_of_int : int -> string = "tostring" ;;
+external val int_of_string : string -> int = "tonumber" ;;
+external val read_stdin : string -> string = "io.read" ;;
+external val exit : int -> unit = "os.exit" ;;
 
 (* i'm impressed, but not surprised, that this works *)
-external val unsafe_coerce : 'a -> 'b = "(function(a) return a end)" ;
+external val unsafe_coerce : 'a -> 'b = "(function(a) return a end)" ;;
 
 type option 'a =
   | Just of 'a
-  | Nothing ;
+  | Nothing ;;
 
 (* in case you didn't notice, this is a great big hack *)
 let parse_num x
@@ -25,7 +25,7 @@ let parse_num x
     in if (unsafe_coerce number == ()) then 
        Nothing
      else
-       Just number ;
+       Just number ;;
 
 let main _ =
   let thrd _ = begin
