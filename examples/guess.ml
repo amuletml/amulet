@@ -1,29 +1,27 @@
-external val random : int -> int -> int = "math.random" ;
-external val random_seed : int -> unit  = "math.randomseed" ;
+external val random : int -> int -> int = "math.random" ;;
+external val random_seed : int -> unit  = "math.randomseed" ;;
 
-external val print_endline : string -> unit = "print" ;
-external val print : string -> unit  = "io.write" ;
-external val read : string -> string  = "io.read" ;
+external val print_endline : string -> unit = "print" ;;
+external val print : string -> unit  = "io.write" ;;
+external val read : string -> string  = "io.read" ;;
 
-external val current_time : unit -> int  = "os.time" ;
+external val current_time : unit -> int  = "os.time" ;;
 
-external val prim_int_of_string : string -> int  = "tonumber" ;
-external val string_of_int : int -> string  = "tostring" ;
+external val prim_int_of_string : string -> int  = "tonumber" ;;
+external val string_of_int : int -> string  = "tostring" ;;
 
-external val transmute : 'a -> 'b  = "(function(a) return a end)" ;
+external val transmute : 'a -> 'b  = "(function(a) return a end)" ;;
 
 type option 'a =
   | Just of 'a
-  | Nothing
-  ;
+  | Nothing ;;
 
 let int_of_string str
   = let vl = prim_int_of_string str
     in if transmute vl == () then
       Nothing
     else
-      Just vl
-;
+      Just vl ;;
 
 let read_line _ = read "*l"
 and main _ =
