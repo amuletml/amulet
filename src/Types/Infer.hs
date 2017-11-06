@@ -423,7 +423,7 @@ closeOver a = forall (fv a) a where
   forall vs a = TyForall vs a
 
 consFst :: Functor m => a -> m ([a], b) -> m ([a], b)
-consFst a = fmap (first (a:))
+consFst = fmap . first . (:)
 
 {-
   Commentary
