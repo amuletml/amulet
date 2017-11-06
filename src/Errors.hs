@@ -11,6 +11,10 @@ import Data.Spanned
 
 import Data.Function
 
+import qualified Control.Monad.Infer as I
+
+import qualified Syntax.Resolve as R
+import Syntax.Resolve
 import Syntax
 import Pretty
 
@@ -23,11 +27,11 @@ instance Pretty TypeError where
                     <+> verbatim v
                     <+> " occurs in "
                     <+> verbatim t
-  pprint (NotInScope e) = "Variable not in scope: "
-                      <+> verbatim e
-  pprint (EmptyMatch e) = annotation e <+> ": Empty match expression"
-  pprint (EmptyBegin e) = annotation e <+> ": Empty begin expression"
-  pprint (ArisingFrom er ex) = do
+  pprint (I.NotInScope e) = "Variable not in scope: "
+                         <+> verbatim e
+  pprint (I.EmptyMatch e) = annotation e <+> ": Empty match expression"
+  pprint (I.EmptyBegin e) = annotation e <+> ": Empty begin expression"
+  pprint (I.ArisingFrom er ex) = do
     annotation ex <+> ": " <+> er
     block 1 . (newline <+>) $
       bullet "Arising from use of " <+> verbatim ex
@@ -86,6 +90,20 @@ instance Pretty TypeError where
     "Can not instance " <+> kwClr "rigid" <+> " type variable " <+> verbatim v <+> " to type " <+> verbatim t
     body 1 [ bullet (opClr "Note: ") <+> "this would lead to type variable " <+> verbatim v <+> " escaping its scope" ]
 
+instance Pretty ResolveError where
+  pprint (R.NotInScope e) = "Variable not in scope: "
+                         <+> verbatim e
+  pprint (R.EmptyMatch e) = annotation e <+> ": Empty match expression"
+  pprint (R.EmptyBegin e) = annotation e <+> ": Empty begin expression"
+  pprint (R.ArisingFrom er ex) = do
+    annotation ex <+> ": " <+> er
+    block 1 . (newline <+>) $
+      bullet "Arising from use of " <+> verbatim ex
+  pprint (R.ArisingFromTop er top) = do
+    annotation top <+> ": " <+> er
+    block 1 . (newline <+>) $
+      bullet "Arising in " <+> verbatim top
+
 prettyRows :: Pretty (Var p) => [(T.Text, Type p)] -> PrettyP
 prettyRows = braces
            . interleave (", " :: String)
@@ -111,7 +129,6 @@ diff ra rb = map (tvClr . fst) (deleteFirstsBy ((==) `on` fst) rb ra)
 
 varType :: Var Typed -> Type Typed
 varType (TvName _ _ x) = x
-varType (TvRefresh v _) = varType v
 
-report :: TypeError -> T.Text -> IO ()
+report :: Pretty p => p -> T.Text -> IO ()
 report err _ = ppr $ pprint err

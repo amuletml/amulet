@@ -249,8 +249,8 @@ typeP' = try constraints <|> parens typeP
      <|> closedRec where
   tyCon, unitTyCon, tyForall :: Parser Type'
   tyForall = do
-    reserved "forall" <|> reserved "∀"
-    nms <- commaSep1 tyVar
+    reserved "forall" <|> reservedOp "∀"
+    nms <- many1 tyVar
     _ <- dot
     TyForall nms <$> typeP
   tyCon = TyCon <$> name

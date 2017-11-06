@@ -4,9 +4,8 @@
 module Types.Infer (inferProgram, builtinsEnv, inferCon) where
 
 import qualified Data.Map.Strict as M
-import qualified Data.Text as T
 import qualified Data.Set as S
-
+import qualified Data.Text as T
 import Data.Span (internal, Span)
 
 import Control.Monad.Infer
@@ -23,8 +22,8 @@ import Types.Holes
 import Data.List
 
 -- Solve for the types of lets in a program
-inferProgram :: [Toplevel Parsed] -> Either TypeError ([Toplevel Typed], Env)
-inferProgram ct = fst <$> runInfer builtinsEnv (inferAndCheck ct) where
+inferProgram :: MonadGen Int m => [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))
+inferProgram ct = fmap fst <$> runInfer builtinsEnv (inferAndCheck ct) where
   inferAndCheck prg = do
     (prg', env) <- inferProg prg
     case findHoles prg' of
@@ -32,10 +31,10 @@ inferProgram ct = fst <$> runInfer builtinsEnv (inferAndCheck ct) where
       [] -> pure (prg', env)
 
 tyUnit, tyBool, tyInt, tyString :: Type Typed
-tyInt = TyCon (TvName Rigid "int" TyStar)
-tyString = TyCon (TvName Rigid "string" TyStar)
-tyBool = TyCon (TvName Rigid "bool" TyStar)
-tyUnit = TyCon (TvName Rigid "unit" TyStar)
+tyInt = TyCon (TvName Rigid (TgInternal "int") TyStar)
+tyString = TyCon (TvName Rigid (TgInternal "string") TyStar)
+tyBool = TyCon (TvName Rigid (TgInternal "bool") TyStar)
+tyUnit = TyCon (TvName Rigid (TgInternal "unit") TyStar)
 
 star :: Ann p ~ Span => Type p
 star = TyStar
@@ -53,31 +52,31 @@ con = TyCon
 
 builtinsEnv :: Env
 builtinsEnv = Env (M.fromList ops) (M.fromList tps) where
-  op :: T.Text -> Type Typed -> (Var Parsed, Type Typed)
-  op x t = (Name x, t)
-  tp :: T.Text -> (Var Parsed, Type Typed)
-  tp x = (Name x, star)
+  op :: T.Text -> Type Typed -> (Var Resolved, Type Typed)
+  op x t = (ReName (TgInternal x), t)
+  tp :: T.Text -> (Var Resolved, Type Typed)
+  tp x = (ReName (TgInternal x), star)
 
   intOp = tyInt `arr` (tyInt `arr` tyInt)
   stringOp = tyString `arr` (tyString `arr` tyString)
   intCmp = tyInt `arr` (tyInt `arr` tyBool)
 
-  cmp = forall [TvName Flexible "a" star] $ var (TvName Flexible "a" star) `arr` (var (TvName Flexible "a" star) `arr` tyBool)
+  cmp = forall [name] $ var name `arr` (var name `arr` tyBool)
+    where name = TvName Flexible (TgInternal "a") star -- TODO: This should use TvName/TvFresh instead
   ops = [ op "+" intOp, op "-" intOp, op "*" intOp, op "/" intOp, op "**" intOp
         , op "^" stringOp
         , op "<" intCmp, op ">" intCmp, op ">=" intCmp, op "<=" intCmp
         , op "==" cmp, op "<>" cmp ]
-  tps :: [(Var Parsed, Type Typed)]
+  tps :: [(Var Resolved, Type Typed)]
   tps = [ tp "int", tp "string", tp "bool", tp "unit" ]
 
-unify :: Expr Parsed -> Type Typed -> Type Typed -> Infer Typed ()
+unify :: MonadInfer Typed m => Expr Resolved -> Type Typed -> Type Typed -> m ()
 unify e a b = tell [ConUnify (raiseE (`tag` TyStar) id e) a b]
 
-tag :: Var Parsed -> Type Typed -> Var Typed
-tag (Name v) t = TvName Flexible v t
-tag (Refresh k a) t = TvRefresh (tag k t) a
+tag :: Var Resolved -> Type Typed -> Var Typed
+tag (ReName v) = TvName Flexible v
 
-infer :: Expr Parsed -> Infer Typed (Expr Typed, Type Typed)
+infer :: MonadInfer Typed m => Expr Resolved -> m (Expr Typed, Type Typed)
 infer expr
   = case expr of
       VarRef k a -> do
@@ -168,18 +167,18 @@ infer expr
         (e', t') <- infer e
         (g', _) <- inferKind g
         unify expr g' t'
-        pure (EHasType e' t' an, t')
+        pure (EHasType e' t' an, g')
       LeftSection{} -> error "desugarer removes right sections"
       RightSection{} -> error "desugarer removes left sections"
       BothSection{} -> error "desugarer removes both-side sections"
       AccessSection{} -> error "desugarer removes access sections"
 
-inferRows :: [(T.Text, Expr Parsed)] -> Infer Typed [((T.Text, Expr Typed), (T.Text, Type Typed))]
+inferRows :: MonadInfer Typed m => [(T.Text, Expr Resolved)] -> m [((T.Text, Expr Typed), (T.Text, Type Typed))]
 inferRows rows = forM rows $ \(var', val) -> do
   (val', typ) <- infer val
   pure ((var', val'), (var', typ))
 
-inferKind :: Type Parsed -> Infer a (Type Typed, Type Typed)
+inferKind :: MonadInfer a m => Type Resolved -> m (Type Typed, Type Typed)
 inferKind TyStar = pure (TyStar, TyStar)
 inferKind (TyVar v) = do
   x <- lookupKind v `catchError` const (pure TyStar)
@@ -236,9 +235,10 @@ inferKind (TyCons cs b) = do
   pure (TyCons cs' b', k)
 
 -- Returns: Type of the overall thing * type of captures
-inferPattern :: (Type Typed -> Type Typed -> Infer a ())
-             -> Pattern Parsed
-             -> Infer a (Pattern Typed, Type Typed, [(Var Typed, Type Typed)])
+inferPattern :: MonadInfer a m
+             => (Type Typed -> Type Typed -> m ())
+             -> Pattern Resolved
+             -> m (Pattern Typed, Type Typed, [(Var Typed, Type Typed)])
 inferPattern _ (Wildcard ann) = do
   x <- freshTV
   pure (Wildcard ann, x, [])
@@ -280,7 +280,7 @@ inferPattern unify (PTuple elems ann)
     (ps, t:ts, cps) <- unzip3 <$> mapM (inferPattern unify) elems
     pure (PTuple ps ann, foldl TyTuple t ts, concat cps)
 
-inferProg :: [Toplevel Parsed] -> Infer Typed ([Toplevel Typed], Env)
+inferProg :: MonadInfer Typed m => [Toplevel Resolved] -> m ([Toplevel Typed], Env)
 inferProg (LetStmt ns ann:prg) = do
   ks <- forM ns $ \(a, _) -> do
     tv <- freshTV
@@ -313,18 +313,25 @@ inferProg (TypeDecl n tvs cs ann:prg) =
          inferProg prg
 inferProg [] = do
   let ann = internal
-  (_, c) <- listen $ do
-    x <- lookupTy (Name "main")
-    unify (VarRef (Name "main") ann) x (TyArr tyUnit tyUnit)
+      isMain (ReName (TgName x _)) = x == "main"
+      isMain _ = False
+      key (ReName (TgName k _)) = k
+      key _ = undefined
+  (_, c) <- censor (const mempty) . listen $ do
+    main <- head . sortOn key . filter isMain . M.keys <$> asks values -- Note [2]
+    x <- lookupTy main -- TODO: Actually look up the correct name
+    unify (VarRef main ann) x (TyArr tyUnit tyUnit)
   x <- gen
   case solve x mempty c of
-    Left e -> throwError (Note e "main must be a function from unit to unit")
+    Left e -> throwError (Note e "main must be a function from unit to some type")
     Right _ -> ([],) <$> ask
 
-inferCon :: Type Typed
-         -> Constructor Parsed
-         -> Infer Typed ( (Var Typed, Type Typed)
-                        , Constructor Typed)
+
+inferCon :: MonadInfer Typed m
+         => Type Typed
+         -> Constructor Resolved
+         -> m ( (Var Typed, Type Typed)
+              , Constructor Typed)
 inferCon ret (ArgCon nm t ann) = do
   (ty', _) <- inferKind t
   let res = closeOver $ TyArr ty' ret
@@ -345,22 +352,24 @@ inferCon ret (GADTCon nm ty ann) = extendManyK (mentionedTVs ret) $ do
         mentionedTVs (TyApp r (TyVar v)) = (v, TyStar):mentionedTVs r
         mentionedTVs _ = []
 
-        matchUp :: Type Parsed -> Type Typed -> Infer a [GivenConstraint Typed]
+        matchUp :: MonadInfer a m => Type Resolved
+                -> Type Typed -> m [GivenConstraint Typed]
         matchUp (TyCon _ )   (TyCon _ )  = pure []
         matchUp (TyApp i x ) (TyApp j y) = do
           (x', _) <- inferKind x
-          (:) <$> pure (Equal (raiseT smush id x') (raiseT smush id y) ann) <*> matchUp i j
+          (:) <$> pure (Equal x' y ann) <*> matchUp i j
         matchUp _ _ = error "impossible because of how GADTs work"
 
-        rigidify :: Var Typed -> Infer Typed (Var Typed)
+        rigidify :: MonadInfer Typed m => Var Typed -> m (Var Typed)
         rigidify v@(TvName _ nm an) = do
           x <- asks types
           case M.lookup (eraseVarTy v) x of
             Just _ -> pure (TvName Flexible nm an)
             Nothing -> pure (TvName Rigid nm an)
-        rigidify (TvRefresh var k) = flip TvRefresh k <$> rigidify var
 
-        gadtConTy :: Type Parsed -> Infer a (Type Parsed, Type Typed -> Type Typed)
+        gadtConTy :: MonadInfer a m => Type Resolved
+                  -> m ( Type Resolved
+                       , Type Typed -> Type Typed)
         gadtConTy ty = case ty of
           TyArr a b -> do
             (b, hole) <- gadtConTy b
@@ -372,27 +381,26 @@ inferCon ret (GADTCon nm ty ann) = extendManyK (mentionedTVs ret) $ do
           x | x `instanceOf` ret -> pure (x, id)
             | otherwise          -> throwError (IllegalGADT x)
 
-instanceOf :: Type Parsed -> Type Typed -> Bool
+instanceOf :: Type Resolved -> Type Typed -> Bool
 instanceOf (TyCon a) (TyCon b) = a == eraseVarTy b
 instanceOf (TyApp a _) (TyApp b _) = a `instanceOf` b
 instanceOf _ _ = False
 
 
-inferLetTy :: (t ~ Typed, p ~ Parsed)
+inferLetTy :: (MonadInfer Typed m)
            => (Type Typed -> Type Typed)
-           -> [(Var t, Type t)]
-           -> [(Var p, Expr p)]
-           -> Infer t ( [(Var t, Expr t)]
-                      , [(Var t, Type t)])
+           -> [(Var Typed, Type Typed)]
+           -> [(Var Resolved, Expr Resolved)]
+           -> m ( [(Var Typed, Expr Typed)]
+                , [(Var Typed, Type Typed)])
 inferLetTy _ ks [] = pure ([], ks)
 inferLetTy closeOver ks ((va, ve):xs) = extendMany ks $ do
   ((ve', ty), c) <- listen (infer ve) -- See note [1]
   cur <- gen
   (x, vt) <- case solve cur mempty c of
-               Left e -> throwError e
-               Right x -> pure (x, closeOver (apply x ty))
+    Left e -> throwError e
+    Right x -> pure (x, closeOver (apply x ty))
   let r (TvName r n t) = TvName r n (apply x t)
-      r (TvRefresh k a) = TvRefresh (r k) a
       ex = raiseE r id ve'
   (vt', _) <- inferKind (raiseT eraseVarTy id vt)
   consFst (tag va vt', ex) $ inferLetTy closeOver (updateAlist (tag va vt') vt' ks) xs
@@ -408,8 +416,8 @@ updateAlist n v (x@(n', _):xs)
 updateAlist _ _ [] = []
 
 closeOver :: Type Typed -> Type Typed
-closeOver a = forall (fv a) (improve a) where
-  fv = S.toList . ftv . improve
+closeOver a = forall (fv a) a where
+  fv = S.toList . ftv
   forall :: [Var p] -> Type p -> Type p
   forall [] a = a
   forall vs a = TyForall vs a
@@ -446,4 +454,9 @@ consFst a = fmap (first (a:))
     By removing the censor, we allow the compiler to recover `'c` - which,
     if you look under e.g. the ghci debugger, has a substitution!
 
+  Note [2]:
+    TODO: Since we don't have an unique `main` anymore, this code finds
+    the earliest main and type checks against that. This could be a
+    problem, which is why this is a TODO - Would finding the *latest*
+    defined `main` be better?
 -}

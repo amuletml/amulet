@@ -5,11 +5,10 @@ import Text.Parsec
 
 import System.Environment
 
-
-import qualified Data.Text.IO as T
-import qualified Data.Text as T
-
 import qualified Data.Map as M
+import qualified Data.Text as T
+import qualified Data.Text.IO as T
+import Control.Monad.Gen
 
 import Control.Monad.Infer
 
@@ -17,38 +16,56 @@ import Backend.Compile
 
 import Types.Infer
 
+import Syntax.Resolve
 import Syntax.Desugar
+import Syntax
 
+import Errors
 import Parser
 import Pretty
-import Errors
+
+data CompileResult = CSuccess ([Toplevel Typed], Env)
+                   | CParse   ParseError
+                   | CResolve ResolveError
+                   | CInfer   TypeError
+
+compile :: SourceName -> T.Text -> CompileResult
+compile name x =
+  case parse program name x of
+    Right parsed -> runGen $ do
+      desugared <- desugarProgram parsed
+      resolved <- resolveProgram desugared
+      case resolved of
+        Right resolved -> do
+          infered <- inferProgram resolved
+          case infered of
+            Right prg -> pure (CSuccess prg)
+            Left e -> pure (CInfer e)
+        Left e -> pure (CResolve e)
+    Left e -> CParse e
 
 compileFromTo :: FilePath
               -> T.Text
               -> (forall a. Pretty a => a -> IO ())
               -> IO ()
 compileFromTo fp x emit =
-  case parse program fp x of
-    Right prg ->
-      case inferProgram (desugarProgram prg) of
-        Left e -> report e x
-        Right (prg, _) ->
-          let out = compileProgram prg
-           in emit out
-    Left e -> print e
+  case compile fp x of
+    CSuccess (prg, env) -> emit (compileProgram env prg)
+    CParse e -> print e
+    CResolve e -> putStrLn "Resolution error" >> report e x
+    CInfer e -> putStrLn "Type error" >> report e x
 
 test :: String -> IO ()
 test x = do
   putStrLn "\x1b[1;32mProgram:\x1b[0m"
-  case parse program "<test>" (T.pack x) of
-    Right prg ->
-      case inferProgram (desugarProgram prg) of
-        Left e -> report e (T.pack x)
-        Right (_, env) -> do
-          putStrLn (x <> "\x1b[1;32mType inference:\x1b[0m")
-          forM_ (M.toList $ values (difference env builtinsEnv)) $ \(k, t) ->
-            T.putStrLn (prettyPrint k <> " : " <> prettyPrint t)
-    Left e -> print e
+  case compile "<test>" (T.pack x) of
+    CSuccess (_, env) -> do
+      putStrLn (x <> "\x1b[1;32mType inference:\x1b[0m")
+      forM_ (M.toList $ values (difference env builtinsEnv)) $ \(k, t) ->
+        T.putStrLn (prettyPrint k <> " : " <> prettyPrint t)
+    CParse e -> print e
+    CResolve e -> report e (T.pack x)
+    CInfer e -> report e (T.pack x)
 
 main :: IO ()
 main = do

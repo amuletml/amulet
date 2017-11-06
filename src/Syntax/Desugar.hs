@@ -1,7 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 module Syntax.Desugar (desugarProgram) where
 
-import qualified Control.Monad.Infer as M
 import Control.Monad.Gen
 import Control.Monad
 
@@ -46,14 +45,14 @@ desugarPair lower bg
 maybeM :: Monad m => m a -> (b -> m a) -> m (Maybe b) -> m a
 maybeM n j x = maybe n j =<< x
 
-desugarProgram :: [Toplevel Parsed] -> [Toplevel Parsed]
-desugarProgram = runGen . mapM desugarTop where
+desugarProgram :: MonadGen Int m => [Toplevel Parsed] -> m [Toplevel Parsed]
+desugarProgram = mapM desugarTop where
   desugarTop (LetStmt vs an) = LetStmt <$> desugarPair defaults vs <*> pure an
   desugarTop x = pure x
 
 fresh :: MonadGen Int m => Ann Parsed -> m (Pattern Parsed, Expr Parsed)
 fresh an = do
-  var <- Name . T.cons '_' <$> M.fresh
+  var <- Name . T.cons '_' . T.pack . show <$> gen
   pure (Capture var an, VarRef var an)
 
 defaults :: MonadGen Int m => Expr Parsed -> m (Maybe (Expr Parsed))

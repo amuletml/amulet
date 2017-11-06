@@ -20,7 +20,7 @@ import Data.List
 
 import Data.Text (Text)
 
-type SolveM = GenT Int (StateT Subst (Except TypeError))
+type SolveM = GenT Int (StateT (Subst Typed) (Except TypeError))
 
 bind :: Var Typed -> Type Typed -> SolveM ()
 bind var ty
@@ -32,7 +32,9 @@ bind var ty
       -- Attempt to extend the environment, otherwise unify with existing type
       case M.lookup var env of
         Nothing -> put (M.singleton var ty `compose` env)
-        Just ty' -> unify ty ty'
+        Just ty'
+          | ty == ty -> pure ()
+          | otherwise -> unify ty ty'
 
 unify :: Type Typed -> Type Typed -> SolveM ()
 unify (TyVar a) b = bind a b
@@ -94,24 +96,22 @@ isRec = "A record type's hole can only be instanced to another record"
 
 overlap :: Typed ~ p => [(Text, Type p)] -> [(Text, Type p)] -> [(Type p, Type p)]
 overlap xs ys
-  | old <- sortOn fst xs
-  , new <- sortOn fst ys
-  , align <- zip old new
-  = let overlapping = takeWhile (uncurry ((==) `on` fst)) align
-     in map (\((_, t), (_, t')) -> (t, t')) overlapping
+  | inter <- filter ((/=) 1 . length) $ groupBy ((==) `on` fst) (xs ++ ys)
+  = map get inter
+  where get [(_, a), (_, b)] = (a, b)
+        get _ = undefined
 
 smush :: Var Typed -> Var Typed
 smush (TvName _ v _) = TvName Flexible v TyStar
-smush (TvRefresh v k) = TvRefresh (smush v) k
 
-runSolve :: Int -> Subst -> SolveM b -> Either TypeError (Int, Subst)
+runSolve :: Int -> Subst Typed -> SolveM b -> Either TypeError (Int, Subst Typed)
 runSolve i s x = runExcept (fix (runStateT (runGenTFrom i act) s)) where
   act = (,) <$> gen <*> x
   fix act = do
     ((i, _), s) <- act
     pure (i, s)
 
-solve :: Int -> Subst -> [Constraint Typed] -> Either TypeError Subst
+solve :: Int -> Subst Typed -> [Constraint Typed] -> Either TypeError (Subst Typed)
 solve _ s [] = pure s
 solve i s (ConUnify e a t:xs) = do
   case wellformed t of
