@@ -1,5 +1,9 @@
-{-# LANGUAGE FlexibleInstances, FlexibleContexts, UndecidableInstances #-}
-
+{-# LANGUAGE FlexibleInstances
+  , FlexibleContexts
+  , UndecidableInstances
+  , MultiParamTypeClasses
+  , FunctionalDependencies
+  #-}
 module Syntax.Subst
   ( Subst
   , Substitutable
@@ -16,13 +20,13 @@ import Control.Arrow (second)
 
 import Syntax
 
-type Subst = M.Map (Var Typed) (Type Typed)
+type Subst p = M.Map (Var p) (Type p)
 
-class Substitutable a where
-  ftv :: a -> S.Set (Var Typed)
-  apply :: Subst -> a -> a
+class Substitutable p a | a -> p where
+  ftv :: a -> S.Set (Var p)
+  apply :: Subst p -> a -> a
 
-instance Substitutable (Type Typed) where
+instance Ord (Var p) => Substitutable p (Type p) where
   ftv TyCon{} = S.empty
   ftv TyStar{} = S.empty
   ftv (TyVar v) = S.singleton v
@@ -46,13 +50,13 @@ instance Substitutable (Type Typed) where
   apply s (TyExactRows rows) = TyExactRows  (map (second (apply s)) rows)
   apply s (TyCons cs t) = TyCons (map (apply s) cs) (apply s t)
 
-instance Substitutable a => Substitutable [a] where
+instance (Ord (Var p), Substitutable p a) => Substitutable p [a] where
   ftv = foldMap ftv
   apply s = map (apply s)
 
-instance Substitutable (GivenConstraint Typed) where
+instance Ord (Var p) => Substitutable p (GivenConstraint p) where
   ftv (Equal a b _) = ftv a `S.union` ftv b
   apply s (Equal a b ann) = Equal (apply s a) (apply s b) ann
 
-compose :: Subst -> Subst -> Subst
+compose :: Ord (Var p) => Subst p -> Subst p -> Subst p
 s1 `compose` s2 = M.map (apply s1) s2 `M.union` M.map (apply s2) s1

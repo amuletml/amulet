@@ -15,18 +15,38 @@ import Data.Typeable
 import Data.Data
 
 newtype Parsed = Parsed Parsed deriving Data
+newtype Resolved = Resolved Resolved deriving Data
 newtype Typed = Typed Typed deriving Data
 
 data family Var a
 
 data instance Var Parsed
   = Name Text
-  | Refresh (Var Parsed) {-# UNPACK #-} !Int
+  deriving (Eq, Show, Ord, Data)
+
+data TaggedName
+  = TgName Text {-# UNPACK #-} !Int
+  | TgInternal Text
+  deriving (Show, Data)
+
+instance Eq TaggedName where
+  (TgName _ a) == (TgName _ b) = a == b
+  (TgInternal a) == (TgInternal b) = a == b
+  _ == _ = False
+
+instance Ord TaggedName where
+  (TgName _ a) `compare` (TgName _ b) = a `compare` b
+  (TgInternal a) `compare` (TgInternal b) = a `compare` b
+
+  (TgName _ _) `compare` (TgInternal _) = GT
+  (TgInternal _) `compare` (TgName _ _) = LT
+
+data instance Var Resolved
+  = ReName TaggedName
   deriving (Eq, Show, Ord, Data)
 
 data instance Var Typed
-  = TvName Rigidity Text (Type Typed)
-  | TvRefresh (Var Typed) {-# UNPACK #-} !Int
+  = TvName Rigidity TaggedName (Type Typed)
   deriving (Eq, Show, Ord, Data)
 
 -- Can we bind this in the constraint solver?
@@ -34,6 +54,7 @@ data Rigidity = Rigid | Flexible deriving (Eq, Show, Ord, Data)
 
 type family Ann a :: * where
   Ann Parsed = Span
+  Ann Resolved = Span
   Ann Typed = Span
 
 data Expr p
@@ -227,39 +248,58 @@ instance (Pretty (Var p)) => Pretty (Type p) where
     = a <+> opClr " * " <+> b
   pprint TyStar{} = kwClr "Type"
 
+instance (Pretty (Var p)) => Pretty (Toplevel p) where
+  pprint (LetStmt vs _) = opClr "let " <+> interleave (newline <+> opClr "and ") (map pVars vs) where
+    pVars (v, e) = v <+> " = " <+> block 2 e
+  pprint (ValStmt v t _) = kwClr "val " <+> v <+> opClr " : " <+> t
+  pprint (ForeignVal v d ty _) = kwClr "foreign val " <+> v <+> opClr ": "
+                                 <+> ty <+> opClr " = " <+> str d
+  pprint (TypeDecl ty args ctors _) = do
+    kwClr "type " <+> ty
+    mapM_ (" '"<+>) args
+    opClr " = "
+    body 2 (map ("| "<+>) ctors)
+
+instance (Pretty (Var p)) => Pretty [Toplevel p] where
+  pprint = body 0 . map (<+> opClr " ;; ")
+
+instance (Pretty (Var p)) => Pretty (Constructor p) where
+  pprint (UnitCon p _) = pprint p
+  pprint (ArgCon p t _) = pprint p <+> kwClr " of " <+> t
+  pprint (GADTCon p t _) = pprint p <+> opClr " :: " <+> t
+
 instance Pretty (Type p) => Pretty (GivenConstraint p) where
   pprint (Equal a b _) = a <+> opClr " ~ " <+> b
 
 instance Pretty (Var Parsed) where
   pprint (Name v) = pprint v
-  pprint (Refresh v _) = pprint v
+
+instance Pretty TaggedName where
+  pprint (TgName v _) = pprint v
+  -- pprint (TgName v i) = pprint v <+> greyOut ("#" <+> i)
+  pprint (TgInternal v) = pprint v
+
+instance Pretty (Var Resolved) where
+  pprint (ReName v) = pprint v
 
 instance Pretty (Var Typed) where
   pprint (TvName _ v _) = pprint v
   -- pprint (TvName v t)
     -- | t == internalTyVar = pprint v
     -- | otherwise = parens $ v <+> opClr " : " <+> t
-  pprint (TvRefresh v _) = pprint v
-
---- }}}
 
 -- }}}
 
-eraseVarTy :: Var Typed -> Var Parsed
-eraseVarTy (TvName _ x _) = Name x
-eraseVarTy (TvRefresh k _) = eraseVarTy k
+eraseVarTy :: Var Typed -> Var Resolved
+eraseVarTy (TvName _ x _) = ReName x
 
 closeEnough :: Var Typed -> Var Typed -> Bool
 closeEnough (TvName r a _) (TvName r' b _) = a == b && r == r'
-closeEnough (TvRefresh a b) (TvRefresh a' b')
-  = a `closeEnough` a' && b' >= b
-closeEnough _ _ = False
 
 isRigid :: Var Typed -> Bool
 isRigid (TvName r _ _)
   | Rigid <- r = True
   | Flexible <- r = False
-isRigid (TvRefresh v _) = isRigid v
 
 {- Note [1]: Tuple types vs tuple patterns/values
 

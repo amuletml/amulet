@@ -1,12 +1,18 @@
-{-# LANGUAGE FlexibleContexts, UndecidableInstances, GADTs #-}
-{-# LANGUAGE StandaloneDeriving, OverloadedStrings #-}
+{-# LANGUAGE FlexibleContexts
+  , UndecidableInstances
+  , FlexibleInstances
+  , GADTs
+  , ConstraintKinds
+  , StandaloneDeriving
+  , MultiParamTypeClasses
+  , OverloadedStrings #-}
 module Control.Monad.Infer
   ( module M
-  , InferT, Infer
   , TypeError(..)
   , Constraint(..)
   , Env(..)
-  , lookupTy, fresh, runInferT, runInfer, extend
+  , MonadInfer
+  , lookupTy, fresh, freshFrom, runInfer, extend
   , lookupKind, extendKind, extendMany, extendManyK
   , difference, freshTV
   )
@@ -15,7 +21,6 @@ module Control.Monad.Infer
 import Control.Monad.Writer.Strict as M hiding ((<>))
 import Control.Monad.Reader as M
 import Control.Monad.Except as M
-import Control.Monad.Identity
 import Control.Monad.Gen as M
 
 import qualified Data.Map.Strict as Map
@@ -32,16 +37,15 @@ import Pretty hiding (local, (<>))
 import Syntax.Subst
 import Syntax
 
-type InferT p m = GenT Int (ReaderT Env (WriterT [Constraint p] (ExceptT TypeError m)))
-type Infer p = InferT p Identity
+type MonadInfer p m = (MonadError TypeError m, MonadReader Env m, MonadWriter [Constraint p] m, MonadGen Int m)
 
 data Env
-  = Env { values :: Map.Map (Var Parsed) (Type Typed)
-        , types  :: Map.Map (Var Parsed) (Type Typed)
+  = Env { values :: Map.Map (Var Resolved) (Type Typed)
+        , types  :: Map.Map (Var Resolved) (Type Typed)
         }
   deriving (Eq, Show, Ord)
 
-instance Substitutable Env where
+instance Substitutable Typed Env where
   ftv Env{ types = s } = ftv (Map.elems s)
   apply s env@Env{ types = e} = env { types = Map.map (apply s) e}
 
@@ -59,10 +63,9 @@ deriving instance (Show (Ann p), Show (Var p), Show (Expr p), Show (Type p)) => 
 data TypeError where
   NotEqual :: Pretty (Var p) => Type p -> Type p -> TypeError
   Occurs   :: Pretty (Var p) => Var p -> Type p -> TypeError
-  NotInScope :: Var Parsed -> TypeError
+  NotInScope :: Var Resolved -> TypeError
   EmptyMatch :: (Spanned (Expr p), Pretty (Ann p)) => Expr p -> TypeError
   EmptyBegin :: ( Spanned (Expr p)
-                , Pretty (Var p)
                 , Pretty (Ann p) )
              => Expr p -> TypeError
   FoundHole :: [Expr Typed] -> TypeError
@@ -80,30 +83,33 @@ data TypeError where
   IllegalGADT :: Pretty (Var p) => Type p -> TypeError
   RigidBinding :: Pretty (Var p) => Var p -> Type p -> TypeError
 
-lookupTy :: (MonadError TypeError m, MonadReader Env m, MonadGen Int m) => Var Parsed -> m (Type Typed)
+lookupTy :: (MonadError TypeError m, MonadReader Env m, MonadGen Int m) => Var Resolved -> m (Type Typed)
 lookupTy x = do
   rs <- asks (Map.lookup x . values)
   case rs of
     Just t -> instantiate t
     Nothing -> throwError (NotInScope x)
 
-lookupKind :: (MonadError TypeError m, MonadReader Env m) => Var Parsed -> m (Type Typed)
+lookupKind :: (MonadError TypeError m, MonadReader Env m) => Var Resolved -> m (Type Typed)
 lookupKind x = do
   rs <- asks (Map.lookup x . types)
   case rs of
     Just t -> pure t
     Nothing -> throwError (NotInScope x)
 
-runInfer :: Env -> Infer a b -> Either TypeError (b, [Constraint a])
-runInfer ct ac = runExcept (runWriterT (runReaderT (runGenT ac) ct))
+runInfer :: MonadGen Int m
+         => Env
+         -> ReaderT Env (WriterT [Constraint p] (ExceptT TypeError m)) a
+         -> m (Either TypeError (a, [Constraint p]))
+runInfer ct ac = runExceptT (runWriterT (runReaderT ac ct))
 
-runInferT :: Monad m => Env -> InferT a m b -> m (Either TypeError (b, [Constraint a]))
-runInferT ct ac = runExceptT (runWriterT (runReaderT (runGenT ac) ct))
-
-fresh :: MonadGen Int m => m Text
+fresh :: MonadGen Int m => m TaggedName
 fresh = do
   x <- gen
-  pure (alpha !! x)
+  pure (TgName (alpha !! x) x)
+
+freshFrom :: MonadGen Int m => Text -> m TaggedName
+freshFrom t = TgName t <$> gen
 
 extend :: MonadReader Env m => (Var Typed, Type Typed) -> m a -> m a
 extend (v, t) = local (\x -> x { values = Map.insert (eraseVarTy v) t (values x) })
@@ -141,7 +147,7 @@ freshTV = do
   nm <- fresh
   pure (TyVar (TvName Flexible nm TyStar))
 
-instance (Substitutable (Type p), Substitutable (GivenConstraint p)) => Substitutable (Constraint p) where
+instance (Ord (Var p), Substitutable p (Type p), Substitutable p (GivenConstraint p)) => Substitutable p (Constraint p) where
   ftv (ConUnify _ a b) = ftv a `Set.union` ftv b
   apply s (ConUnify e a b) = ConUnify e (apply s a) (apply s b)
 

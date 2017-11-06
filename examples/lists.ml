@@ -10,9 +10,8 @@ let reverse =
     match x with
       | Cons (h, t) -> reverse_accum (Cons (h, acc)) t
       | Nil -> acc
-  in reverse_accum Nil ;;
-
-let map f =
+  in reverse_accum Nil
+and map f =
   let map_accum acc x =
     match x with
       | Cons (h, t) -> map_accum (Cons (f h, acc)) t
