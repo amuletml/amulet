@@ -4,7 +4,7 @@ let
 
   inherit (nixpkgs) pkgs;
 
-  f = { mkDerivation, base, comonad, containers, monad-gen, mtl
+  f = { mkDerivation, base, syb, containers, monad-gen, mtl
       , parsec, stdenv, text, transformers, pretty-show
       }:
       mkDerivation {
@@ -14,7 +14,7 @@ let
         isLibrary = false;
         isExecutable = true;
         executableHaskellDepends = [
-          base comonad containers monad-gen mtl parsec text transformers
+          base syb containers monad-gen mtl parsec text transformers
           pretty-show # This is here for ghci prettiness
         ];
         homepage = "https://amulet.ml";

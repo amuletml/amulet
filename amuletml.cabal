@@ -14,13 +14,13 @@ cabal-version:       >=1.10
 executable amuletml
   main-is:             Main.hs
   build-depends:       mtl >= 2.2 && < 2.3
+                     , syb >= 0.7 && < 0.8
                      , base >= 4.9 && < 4.11
                      , text >= 1.2 && < 1.3
                      , parsec >= 3.1 && < 3.2
                      , monad-gen >= 0.3 && < 0.4
                      , containers >= 0.5 && < 0.6
                      , transformers >= 0.5 && < 0.6
-                     , comonad >= 5.0 && < 5.1
                      , pretty-show
   hs-source-dirs:      src
   default-language:    Haskell2010
