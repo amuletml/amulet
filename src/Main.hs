@@ -5,12 +5,13 @@ import Text.Parsec
 
 import System.Environment
 
-import qualified Data.Map as M
-import qualified Data.Text as T
 import qualified Data.Text.IO as T
-import Control.Monad.Gen
+import qualified Data.Text as T
+import qualified Data.Map as M
 
 import Control.Monad.Infer
+
+import Text.Show.Pretty
 
 import Backend.Compile
 
@@ -19,6 +20,8 @@ import Types.Infer
 import Syntax.Resolve
 import Syntax.Desugar
 import Syntax
+
+import Optimise.Collect
 
 import Errors
 import Parser
@@ -59,7 +62,9 @@ test :: String -> IO ()
 test x = do
   putStrLn "\x1b[1;32mProgram:\x1b[0m"
   case compile "<test>" (T.pack x) of
-    CSuccess (_, env) -> do
+    CSuccess (prog, env) -> do
+      let info = tally prog
+      pPrint info
       putStrLn (x <> "\x1b[1;32mType inference:\x1b[0m")
       forM_ (M.toList $ values (difference env builtinsEnv)) $ \(k, t) ->
         T.putStrLn (prettyPrint k <> " : " <> prettyPrint t)
