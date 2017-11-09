@@ -1,5 +1,3 @@
 import Text.Show.Pretty (ppShow, pPrint)
 :seti -XOverloadedStrings -XFlexibleContexts
 :set -interactive-print pPrint
-:set -isrc
-:load Main
