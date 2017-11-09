@@ -22,6 +22,7 @@ import Syntax.Desugar
 import Syntax
 
 import Optimise.Collect
+import Optimise.Usage
 
 import Errors
 import Parser
@@ -64,7 +65,7 @@ test x = do
   case compile "<test>" (T.pack x) of
     CSuccess (prog, env) -> do
       let info = tally prog
-      pPrint info
+      pPrint (countUsages info)
       putStrLn (x <> "\x1b[1;32mType inference:\x1b[0m")
       forM_ (M.toList $ values (difference env builtinsEnv)) $ \(k, t) ->
         T.putStrLn (prettyPrint k <> " : " <> prettyPrint t)

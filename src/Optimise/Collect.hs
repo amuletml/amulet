@@ -80,3 +80,6 @@ lookupInfo :: ( MonadPlus m
               , MonadReader (SymbolTable b) m)
            => Var Resolved -> m (SymInfo b)
 lookupInfo = flip illuminate pure
+
+updateInfo :: (a -> a) -> Var Resolved -> SymbolTable a -> SymbolTable a
+updateInfo k sym tab = M.update (\x -> Just (fmap k x)) sym tab
