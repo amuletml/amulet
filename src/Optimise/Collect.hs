@@ -85,28 +85,3 @@ lookupInfo = flip illuminate pure
 updateInfo :: (a -> a) -> Var Resolved -> SymbolTable a -> SymbolTable a
 updateInfo k sym tab = M.update (\x -> Just (fmap k x)) sym tab
 
-explode :: SymbolTable a -> [Toplevel Typed]
-explode xs = M.foldr bgToList [] $ execState (M.traverseWithKey ins xs) M.empty where
-  ins :: Var Resolved -> SymInfo a -> State (M.Map Int [(Var Resolved, SymInfo a)]) ()
-  ins k x = modify . flip M.alter (bindGroup x) $ \case
-    Just xs -> Just ((k, x):xs)
-    Nothing -> Just [(k, x)]
-  bgToList :: [(Var Resolved, SymInfo a)] -> [Toplevel Typed] -> [Toplevel Typed]
-  bgToList [] x = x
-  bgToList bg xs
-    | all nativeVal bg
-    = LetStmt (map toSyntaxBindGroup bg) (location (snd (head bg))):xs
-    | [(ReName v, ForeignValue{..})] <- bg
-    = ForeignVal (TvName Flexible v valType) valFrag valType location:xs
-    | [(ReName v, DataType{..})] <- bg
-    = TypeDecl (TvName Flexible v valKind) vars (M.foldrWithKey untallyCon [] constrs) location:xs
-    | otherwise = []
-    where toSyntaxBindGroup (ReName v, NativeValue{..}) = (TvName Flexible v valType, valDecl)
-          toSyntaxBindGroup _ = undefined
-
-  nativeVal (_, NativeValue{}) = True
-  nativeVal _ = False
-
-  untallyCon k (GadtConstr t _ s) xs = GADTCon k t s:xs
-  untallyCon k (AlgConstr t s) xs = ArgCon k t s:xs
-  untallyCon k (UnitConstr s) xs = UnitCon k s:xs

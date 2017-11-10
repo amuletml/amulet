@@ -11,7 +11,6 @@ import qualified Data.Map as M
 
 import Control.Monad.Infer
 
-import Text.Show.Pretty
 
 import Backend.Compile
 
@@ -20,9 +19,6 @@ import Types.Infer
 import Syntax.Resolve
 import Syntax.Desugar
 import Syntax
-
-import Optimise.Collect
-import Optimise.Usage
 
 import Errors
 import Parser
@@ -33,8 +29,6 @@ data CompileResult = CSuccess ([Toplevel Typed], Env)
                    | CResolve ResolveError
                    | CInfer   TypeError
 
-optimise :: [Toplevel Typed] -> [Toplevel Typed]
-optimise = explode . erase . countUsages . tally
 
 compile :: SourceName -> T.Text -> CompileResult
 compile name x =
@@ -46,7 +40,7 @@ compile name x =
         Right resolved -> do
           infered <- inferProgram resolved
           case infered of
-            Right (prg, env) -> pure (CSuccess (optimise prg, env))
+            Right x -> pure (CSuccess x)
             Left e -> pure (CInfer e)
         Left e -> pure (CResolve e)
     Left e -> CParse e
@@ -66,9 +60,7 @@ test :: String -> IO ()
 test x = do
   putStrLn "\x1b[1;32mProgram:\x1b[0m"
   case compile "<test>" (T.pack x) of
-    CSuccess (prog, env) -> do
-      let info = tally prog
-      pPrint (countUsages info)
+    CSuccess (_, env) -> do
       putStrLn (x <> "\x1b[1;32mType inference:\x1b[0m")
       forM_ (M.toList $ values (difference env builtinsEnv)) $ \(k, t) ->
         T.putStrLn (prettyPrint k <> " : " <> prettyPrint t)
