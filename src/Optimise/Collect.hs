@@ -10,8 +10,6 @@ import Data.Typeable
 
 import Data.Text (Text)
 
-import Control.Arrow
-
 import Data.Spanned
 import Data.Span
 
@@ -25,17 +23,17 @@ data SymInfo a
              , constrs :: M.Map (Var Typed) ConstrInfo
              , valKind :: Type Typed
              , location :: Span
-             , bindGroup :: Int 
+             , bindGroup :: Int
              , extra :: a }
   | NativeValue { valType :: Type Typed
                 , valDecl :: Expr Typed
                 , location :: Span
-                , bindGroup :: Int 
+                , bindGroup :: Int
                 , extra :: a }
   | ForeignValue { valType :: Type Typed
                  , valFrag :: Text
                  , location :: Span
-                 , bindGroup :: Int 
+                 , bindGroup :: Int
                  , extra :: a }
   deriving (Eq, Show, Ord, Data, Typeable, Spanned, Functor)
 
