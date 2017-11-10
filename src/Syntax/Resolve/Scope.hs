@@ -23,7 +23,8 @@ data Scope = Scope { varScope :: M.Map (Var Parsed) (Var Resolved)
 builtinScope :: Scope
 builtinScope = Scope
                { varScope = build [ "+", "-", "*", "/", "**", "^"
-                                  , "<", ">", ">=", "<=", "==", "<>" ]
+                                  , "<", ">", ">=", "<=", "==", "<>"
+                                  , "||", "&&" ]
                , tyScope = build [ "int", "string", "bool", "unit" ]
                }
   where build :: [T.Text] -> M.Map (Var Parsed) (Var Resolved)

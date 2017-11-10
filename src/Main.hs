@@ -33,6 +33,9 @@ data CompileResult = CSuccess ([Toplevel Typed], Env)
                    | CResolve ResolveError
                    | CInfer   TypeError
 
+optimise :: [Toplevel Typed] -> [Toplevel Typed]
+optimise = explode . erase . countUsages . tally
+
 compile :: SourceName -> T.Text -> CompileResult
 compile name x =
   case parse program name x of
@@ -43,7 +46,7 @@ compile name x =
         Right resolved -> do
           infered <- inferProgram resolved
           case infered of
-            Right prg -> pure (CSuccess prg)
+            Right (prg, env) -> pure (CSuccess (optimise prg, env))
             Left e -> pure (CInfer e)
         Left e -> pure (CResolve e)
     Left e -> CParse e
