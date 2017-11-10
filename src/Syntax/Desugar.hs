@@ -13,7 +13,10 @@ import Generics.SYB
 desugarProgram :: forall m. MonadGen Int m => [Toplevel Parsed] -> m [Toplevel Parsed]
 desugarProgram = everywhereM (mkM defaults) where
   defaults :: Expr Parsed -> m (Expr Parsed)
-  defaults (BothSection op _) = pure op
+  defaults (BothSection op an) = do
+    (ap, ar) <- fresh an
+    (bp, br) <- fresh an
+    pure (Fun ap (Fun bp (BinOp ar op br an) an) an)
   defaults (LeftSection op vl an) = do
     (cap, ref) <- fresh an
     pure (Fun cap (BinOp ref op vl an) an)
