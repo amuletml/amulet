@@ -57,6 +57,7 @@ builtinsEnv = Env (M.fromList ops) (M.fromList tps) where
   tp :: T.Text -> (Var Resolved, Type Typed)
   tp x = (ReName (TgInternal x), star)
 
+  boolOp = tyBool `arr` (tyBool `arr` tyBool)
   intOp = tyInt `arr` (tyInt `arr` tyInt)
   stringOp = tyString `arr` (tyString `arr` tyString)
   intCmp = tyInt `arr` (tyInt `arr` tyBool)
@@ -66,7 +67,8 @@ builtinsEnv = Env (M.fromList ops) (M.fromList tps) where
   ops = [ op "+" intOp, op "-" intOp, op "*" intOp, op "/" intOp, op "**" intOp
         , op "^" stringOp
         , op "<" intCmp, op ">" intCmp, op ">=" intCmp, op "<=" intCmp
-        , op "==" cmp, op "<>" cmp ]
+        , op "==" cmp, op "<>" cmp
+        , op "||" boolOp, op "&&" boolOp ]
   tps :: [(Var Resolved, Type Typed)]
   tps = [ tp "int", tp "string", tp "bool", tp "unit" ]
 

@@ -189,6 +189,8 @@ remapOp :: Text -> Text
 remapOp "^" = ".."
 remapOp "**" = "^"
 remapOp "<>" = "~="
+remapOp "||" = "or"
+remapOp "&&" = "and"
 remapOp x = x
 
 foldAnd :: [LuaExpr] -> LuaExpr

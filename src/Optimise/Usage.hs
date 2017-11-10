@@ -11,14 +11,12 @@ import Syntax
 
 import Control.Arrow
 
-import Pretty (tracePrettyId)
-
 countUsages :: SymbolTable a -> SymbolTable (Int, a)
 countUsages sym = M.foldrWithKey (\v i -> updateInfo (first (const i)) v)
                                  (fmap (fmap ((,) 0)) sym)
                                  usages where
   usages = execState (mapM_ cU sym) M.empty
-  cU (NativeValue _ e _ _) = everywhereM (mkM var) e where
+  cU (NativeValue _ e _ _ _) = everywhereM (mkM var) e where
     -- This one is needed V
     var :: Expr Typed -> State (M.Map (Var Resolved) Int) (Expr Typed)
     var x@(VarRef (TvName _ n _) _) = do
@@ -35,7 +33,7 @@ consume = updateInfo (first (const 1)) . ReName
 erase :: SymbolTable (Int, a) -> SymbolTable (Int, a)
 erase = M.filterWithKey drop where
   drop (ReName (TgName x _))
-    | tracePrettyId x == "main" = const True
+    | x == "main" = const True
     | otherwise = \case
         DataType{} -> True
         x -> (/= 0) . fst . extra $ x
