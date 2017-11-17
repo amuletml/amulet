@@ -21,6 +21,8 @@ import Types.Holes
 
 import Data.List
 
+import Debug.Trace (traceShowId)
+
 -- Solve for the types of lets in a program
 inferProgram :: MonadGen Int m => [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))
 inferProgram ct = fmap fst <$> runInfer builtinsEnv (inferAndCheck ct) where
@@ -346,7 +348,7 @@ inferCon ret (GADTCon nm ty ann) = extendManyK (mentionedTVs ret) $ do
   -- This is a game of matching up paramters of the return type with the
   -- stated parameters, and introducing the proper constraints
   cons <- matchUp res ret
-  let TyForall vars resTp = closeOver (TyCons cons (hole ret))
+  let TyForall vars resTp = traceShowId (closeOver (TyCons cons (hole ret)))
   vars' <- mapM rigidify vars
   let tp = TyForall vars' resTp
   pure ((tag nm tp, tp), GADTCon (tag nm tp) tp ann)
@@ -418,7 +420,7 @@ updateAlist n v (x@(n', _):xs)
 updateAlist _ _ [] = []
 
 closeOver :: Type Typed -> Type Typed
-closeOver a = forall (fv a) a where
+closeOver a = normType $ forall (fv a) a where
   fv = S.toList . ftv
   forall :: [Var p] -> Type p -> Type p
   forall [] a = a
