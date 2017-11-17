@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleContexts, TypeFamilies #-}
-module Types.Wellformed (wellformed, arity) where
+module Types.Wellformed (wellformed, arity, normType) where
 
 import Control.Monad.Except
 
@@ -7,6 +7,7 @@ import Control.Monad.Infer
 import Syntax
 
 import Pretty(Pretty)
+import Data.List (union)
 
 wellformed :: (Pretty (Var p), MonadError TypeError m) => Type p -> m ()
 wellformed tp = case tp of
@@ -35,6 +36,11 @@ arity (TyArr _ t) = 1 + arity t
 arity (TyForall _ t) = arity t
 arity (TyCons _ t) = arity t
 arity _ = 0
+
+normType :: Eq (Var p) => Type p -> Type p
+normType (TyCons cs (TyForall vs tp)) = TyForall vs (TyCons cs tp)
+normType (TyForall vs (TyForall vs' tp)) = TyForall (vs `union` vs') tp
+normType x = x
 
 {-
    Commentary:
