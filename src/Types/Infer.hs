@@ -1,7 +1,7 @@
 {-# OPTIONS_GHC -Wno-missing-local-signatures #-}
 {-# LANGUAGE FlexibleContexts, OverloadedStrings, TupleSections, GADTs #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-module Types.Infer (inferProgram, builtinsEnv, inferCon) where
+module Types.Infer (inferProgram, builtinsEnv, closeOver) where
 
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
