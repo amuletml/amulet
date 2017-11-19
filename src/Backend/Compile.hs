@@ -54,11 +54,10 @@ compileProgram ev = LuaDo . (extendDef:) . compileProg where
     (ns, vs') = unzip $ map compileLet vs
   compileProg (TypeDecl _ _ cs _:xs) = compileConstructors cs ++ compileProg xs
   compileProg [] = [LuaCallS (main ev) []] where
-    main = LuaRef . LuaName . getTaggedName . var . head . sortOn key . filter isMain . M.keys . values
-    var (ReName v) = v
-    isMain (ReName (TgName x _)) = x == "main"
+    main = LuaRef . LuaName . getTaggedName . head . sortOn key . filter isMain . M.keys . values
+    isMain (TgName x _) = x == "main"
     isMain _ = False
-    key (ReName (TgName k _)) = k
+    key (TgName k _) = k
     key _ = undefined
 
 compileConstructors :: [Constructor Typed] -> [LuaStmt]
@@ -163,7 +162,7 @@ lowerKey (TvName _ a _) = LuaString (getTaggedName a)
 getName :: Var Typed -> Text
 getName (TvName _ a _) = getTaggedName a
 
-getTaggedName :: TaggedName -> Text
+getTaggedName :: Var Resolved -> Text
 getTaggedName (TgName t i) = t <> T.pack (show i)
 getTaggedName (TgInternal t) = t
 

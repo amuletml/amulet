@@ -54,9 +54,9 @@ con = TyCon
 builtinsEnv :: Env
 builtinsEnv = Env (M.fromList ops) (M.fromList tps) where
   op :: T.Text -> Type Typed -> (Var Resolved, Type Typed)
-  op x t = (ReName (TgInternal x), t)
+  op x t = (TgInternal x, t)
   tp :: T.Text -> (Var Resolved, Type Typed)
-  tp x = (ReName (TgInternal x), star)
+  tp x = (TgInternal x, star)
 
   boolOp = tyBool `arr` (tyBool `arr` tyBool)
   intOp = tyInt `arr` (tyInt `arr` tyInt)
@@ -77,7 +77,7 @@ unify :: MonadInfer Typed m => Expr Resolved -> Type Typed -> Type Typed -> m ()
 unify e a b = tell [ConUnify (raiseE (`tag` TyStar) id e) a b]
 
 tag :: Var Resolved -> Type Typed -> Var Typed
-tag (ReName v) = TvName Flexible v
+tag v = TvName Flexible v
 
 infer :: MonadInfer Typed m => Expr Resolved -> m (Expr Typed, Type Typed)
 infer expr
@@ -316,9 +316,9 @@ inferProg (TypeDecl n tvs cs ann:prg) =
          inferProg prg
 inferProg [] = do
   let ann = internal
-      isMain (ReName (TgName x _)) = x == "main"
+      isMain (TgName x _) = x == "main"
       isMain _ = False
-      key (ReName (TgName k _)) = k
+      key (TgName k _) = k
       key _ = undefined
   (_, c) <- censor (const mempty) . listen $ do
     main <- head . sortOn key . filter isMain . M.keys <$> asks values -- Note [2]
@@ -409,12 +409,11 @@ inferLetTy closeOver ks ((va, ve):xs) = extendMany ks $ do
   consFst (tag va vt', ex) $ inferLetTy closeOver (updateAlist (tag va vt') vt' ks) xs
 
 -- Monomorphic so we can use "close enough" equality
-updateAlist :: Var Typed
-            -> b
-            -> [(Var Typed, b)] -> [(Var Typed, b)]
+updateAlist :: Eq a
+            => a -> b
+            -> [(a, b)] -> [(a, b)]
 updateAlist n v (x@(n', _):xs)
   | n == n' = (n, v):updateAlist n v xs
-  | n `closeEnough` n' = (n, v):updateAlist n v xs
   | otherwise = x:updateAlist n v xs
 updateAlist _ _ [] = []
 

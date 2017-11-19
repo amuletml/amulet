@@ -103,12 +103,12 @@ runInfer :: MonadGen Int m
          -> m (Either TypeError (a, [Constraint p]))
 runInfer ct ac = runExceptT (runWriterT (runReaderT ac ct))
 
-fresh :: MonadGen Int m => m TaggedName
+fresh :: MonadGen Int m => m (Var Resolved)
 fresh = do
   x <- gen
   pure (TgName (alpha !! x) x)
 
-freshFrom :: MonadGen Int m => Text -> m TaggedName
+freshFrom :: MonadGen Int m => Text -> m (Var Resolved)
 freshFrom t = TgName t <$> gen
 
 extend :: MonadReader Env m => (Var Typed, Type Typed) -> m a -> m a

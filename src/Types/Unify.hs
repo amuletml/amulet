@@ -1,5 +1,5 @@
 {-# Language MultiWayIf, GADTs #-}
-module Types.Unify (solve, smush, overlap, bind) where
+module Types.Unify (solve, overlap, bind) where
 
 import Control.Monad.Except
 import Control.Monad.State
@@ -42,7 +42,7 @@ unify a (TyVar b) = bind b a
 unify (TyArr a b) (TyArr a' b') = unify a a' *> unify b b'
 unify (TyApp a b) (TyApp a' b') = unify a a' *> unify b b'
 unify ta@(TyCon a) tb@(TyCon b)
-  | smush a == smush b = pure ()
+  | a == b = pure ()
   | otherwise = throwError (NotEqual ta tb)
 unify t@(TyForall vs ty) t'@(TyForall vs' ty')
   | length vs /= length vs' = throwError (NotEqual t t')
@@ -100,9 +100,6 @@ overlap xs ys
   = map get inter
   where get [(_, a), (_, b)] = (a, b)
         get _ = undefined
-
-smush :: Var Typed -> Var Typed
-smush (TvName _ v _) = TvName Flexible v TyStar
 
 runSolve :: Int -> Subst Typed -> SolveM b -> Either TypeError (Int, Subst Typed)
 runSolve i s x = runExcept (fix (runStateT (runGenTFrom i act) s)) where

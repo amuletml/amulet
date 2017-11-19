@@ -24,30 +24,35 @@ data instance Var Parsed
   = Name Text
   deriving (Eq, Show, Ord, Data)
 
-data TaggedName
+data instance Var Resolved
   = TgName Text {-# UNPACK #-} !Int
   | TgInternal Text
   deriving (Show, Data)
 
-instance Eq TaggedName where
+instance Eq (Var Resolved) where
   (TgName _ a) == (TgName _ b) = a == b
   (TgInternal a) == (TgInternal b) = a == b
   _ == _ = False
 
-instance Ord TaggedName where
+instance Ord (Var Resolved) where
   (TgName _ a) `compare` (TgName _ b) = a `compare` b
   (TgInternal a) `compare` (TgInternal b) = a `compare` b
 
   (TgName _ _) `compare` (TgInternal _) = GT
   (TgInternal _) `compare` (TgName _ _) = LT
 
-data instance Var Resolved
-  = ReName TaggedName
-  deriving (Eq, Show, Ord, Data)
-
 data instance Var Typed
-  = TvName Rigidity TaggedName (Type Typed)
-  deriving (Eq, Show, Ord, Data)
+  = TvName Rigidity (Var Resolved) (Type Typed)
+  deriving (Show, Data)
+
+instance Eq (Var Typed) where
+  TvName x v _ == TvName x' v' _ = x == x' && v == v'
+
+instance Ord (Var Typed) where
+  TvName x v _ `compare` TvName x' v' _
+    = case x `compare` x' of
+        EQ -> v `compare` v'
+        x -> x
 
 -- Can we bind this in the constraint solver?
 data Rigidity = Rigid | Flexible deriving (Eq, Show, Ord, Data)
@@ -274,13 +279,10 @@ instance Pretty (Type p) => Pretty (GivenConstraint p) where
 instance Pretty (Var Parsed) where
   pprint (Name v) = pprint v
 
-instance Pretty TaggedName where
+instance Pretty (Var Resolved) where
   pprint (TgName v _) = pprint v
   -- pprint (TgName v i) = pprint v <+> greyOut ("#" <+> i)
   pprint (TgInternal v) = pprint v
-
-instance Pretty (Var Resolved) where
-  pprint (ReName v) = pprint v
 
 instance Pretty (Var Typed) where
   pprint (TvName _ v _) = pprint v
@@ -291,10 +293,7 @@ instance Pretty (Var Typed) where
 -- }}}
 
 eraseVarTy :: Var Typed -> Var Resolved
-eraseVarTy (TvName _ x _) = ReName x
-
-closeEnough :: Var Typed -> Var Typed -> Bool
-closeEnough (TvName r a _) (TvName r' b _) = a == b && r == r'
+eraseVarTy (TvName _ x _) = x
 
 isRigid :: Var Typed -> Bool
 isRigid (TvName r _ _)
