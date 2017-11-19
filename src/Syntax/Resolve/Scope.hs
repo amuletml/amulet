@@ -28,11 +28,11 @@ builtinScope = Scope
                , tyScope = build [ "int", "string", "bool", "unit" ]
                }
   where build :: [T.Text] -> M.Map (Var Parsed) (Var Resolved)
-        build = foldr (\v -> M.insert (Name v) (ReName (TgInternal v))) M.empty
+        build = foldr (\v -> M.insert (Name v) (TgInternal v)) M.empty
 
 
 tagVar :: MonadGen Int m => Var Parsed -> m (Var Resolved)
-tagVar (Name n) = ReName . TgName n <$> gen
+tagVar (Name n) = TgName n <$> gen
 
 extend :: (MonadGen Int m, MonadReader Scope m) => (Var Parsed, Var Resolved) -> m a -> m a
 extend (v, v') =
