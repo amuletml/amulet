@@ -271,7 +271,7 @@ instance (Pretty (Var p)) => Pretty [Toplevel p] where
 instance (Pretty (Var p)) => Pretty (Constructor p) where
   pprint (UnitCon p _) = pprint p
   pprint (ArgCon p t _) = pprint p <+> kwClr " of " <+> t
-  pprint (GADTCon p t _) = pprint p <+> opClr " :: " <+> t
+  pprint (GADTCon p t _) = pprint p <+> opClr " : " <+> t
 
 instance Pretty (Type p) => Pretty (GivenConstraint p) where
   pprint (Equal a b _) = a <+> opClr " ~ " <+> b
