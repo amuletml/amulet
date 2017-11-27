@@ -74,7 +74,7 @@ data TypeError where
   ExpectedArrow :: (Pretty (Var p'), Pretty (Var p))
                 => Type p' -> Type p -> Type p -> TypeError
   NoOverlap :: Type Typed -> Type Typed -> TypeError
-  Note :: TypeError -> String -> TypeError
+  Note :: Pretty x => TypeError -> x -> TypeError
   CanNotInstance :: Pretty (Var p)
                  => Type p {- record type -}
                  -> Type p {- instance -}
@@ -87,7 +87,9 @@ lookupTy :: (MonadError TypeError m, MonadReader Env m, MonadGen Int m) => Var R
 lookupTy x = do
   rs <- asks (Map.lookup x . values)
   case rs of
-    Just t -> instantiate t
+    Just t -> instantiate t `catchError` \e ->
+      throwError (Note (Note e (("Arising from instancing of variable " :: Text) <+> verbatim x))
+                       (("Of type " :: Text) <+> verbatim t))
     Nothing -> throwError (NotInScope x)
 
 lookupKind :: (MonadError TypeError m, MonadReader Env m) => Var Resolved -> m (Type Typed)
