@@ -91,7 +91,7 @@ lookupTy x = do
   case rs of
     Just t -> instantiate t `catchError` \e ->
       throwError (Note (Note e (("Arising from instancing of variable " :: Text) <+> verbatim x))
-                       (("Of type " :: Text) <+> verbatim t))
+                       (verbatim x <+> (" has principal type " :: Text) <+> verbatim t))
     Nothing -> throwError (NotInScope x)
 
 lookupKind :: (MonadError TypeError m, MonadReader Env m) => Var Resolved -> m (Type Typed)
