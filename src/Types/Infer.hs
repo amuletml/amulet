@@ -23,6 +23,7 @@ import Data.List
 
 import Errors (rejectedExistential)
 
+import Pretty (tracePretty)
 
 -- Solve for the types of lets in a program
 inferProgram :: MonadGen Int m => [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))
@@ -256,6 +257,7 @@ inferPattern unify (Destructure cns ps ann)
     pure (Destructure (tag cns pty) Nothing ann, pty, [])
   | Just p <- ps = do
     (tup, res, ct) <- constructorTy <$> lookupTy cns
+    tup `tracePretty` res `tracePretty` ct `tracePretty` pure ()
     (p', pt, pb) <- inferPattern unify p
     unify tup pt
     pure (Destructure (tag cns ct) (Just p') ann, res, pb)
@@ -264,7 +266,7 @@ inferPattern unify (Destructure cns ps ann)
           | TyArr tup res <- t
           = (tup, res, t)
           | TyCons cs x <- t
-          , (tup', res,_ ) <- constructorTy x
+          , (tup', res, _) <- constructorTy x
           = (tup', TyCons cs res, t)
           | otherwise = undefined
 inferPattern unify (PRecord rows ann) = do
@@ -353,9 +355,7 @@ inferCon ret (GADTCon nm ty ann) = extendManyK (mentionedTVs ret) $ do
         = case cons of
            [] -> closeOver (hole ret)
            _ -> closeOver (TyCons cons (hole ret))
-  vars' <- case mentionedTVs ret of
-             [] -> pure vars
-             _  -> mapM rigidify vars
+  vars' <- mapM rigidify vars
   let tp = TyForall vars' resTp
   pure ((tag nm tp, tp), GADTCon (tag nm tp) tp ann)
   where mentionedTVs :: Type Typed -> [(Var Typed, Type Typed)]
