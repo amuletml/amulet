@@ -236,8 +236,11 @@ instance (Pretty (Var p)) => Pretty (Type p) where
   pprint (TyForall vs v)
     = kwClr "∀ " <+> interleave " " (map (\x -> "'" <+> tvClr x) vs) <+> opClr ". " <+> v
 
-  pprint (TyArr x@TyArr{} e) = parens x <+> opClr " -> " <+> e
-  pprint (TyArr x e) = x <+> opClr " -> " <+> e
+  pprint (TyArr x e)
+    | TyArr{} <- x = parens x <+> opClr " -> " <+> e
+    | TyForall{} <- x = parens x <+> opClr " -> " <+> e
+    | TyTuple{} <- x = parens x <+> opClr " -> " <+> e
+    | otherwise = x <+> opClr " -> " <+> e
   pprint (TyRows p rows) = braces $ p <+> opClr " | " <+> prettyRows rows where
     prettyRows = interleave ", " . map (\(x, t) -> x <+> opClr " : " <+> t)
 

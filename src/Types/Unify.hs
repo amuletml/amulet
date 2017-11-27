@@ -42,7 +42,10 @@ unify a (TyVar b) = bind b a
 unify (TyArr a b) (TyArr a' b') = unify a a' *> unify b b'
 unify (TyApp a b) (TyApp a' b') = unify a a' *> unify b b'
 unify ta@(TyCon a) tb@(TyCon b)
-  | a == b = pure ()
+  | TvName _ va _ <- a
+  , TvName _ vb _ <- b
+  , va == vb
+  = pure ()
   | otherwise = throwError (NotEqual ta tb)
 unify t@(TyForall vs ty) t'@(TyForall vs' ty')
   | length vs /= length vs' = throwError (NotEqual t t')
@@ -83,12 +86,14 @@ unify tp@TyRows{} x = throwError (Note (CanNotInstance tp x) isRec)
 unify (TyTuple a b) (TyTuple a' b') = do
   unify a a'
   unify b b'
+
 unify (TyCons cs t) t' = do
   forM_ cs $ \(Equal a b _) -> unify a b
   unify t t'
 unify t' (TyCons cs t) = do
   forM_ cs $ \(Equal a b _) -> unify a b
   unify t t'
+
 unify a b = throwError (NotEqual a b)
 
 isRec :: String
@@ -96,7 +101,7 @@ isRec = "A record type's hole can only be instanced to another record"
 
 overlap :: Typed ~ p => [(Text, Type p)] -> [(Text, Type p)] -> [(Type p, Type p)]
 overlap xs ys
-  | inter <- filter ((/=) 1 . length) $ groupBy ((==) `on` fst) (xs ++ ys)
+  | inter <- filter ((/=) 1 . length) $ groupBy ((==) `on` fst) (sortOn fst (xs ++ ys))
   = map get inter
   where get [(_, a), (_, b)] = (a, b)
         get _ = undefined

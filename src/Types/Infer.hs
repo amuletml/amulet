@@ -21,6 +21,8 @@ import Types.Holes
 
 import Data.List
 
+import Errors (rejectedExistential)
+
 
 -- Solve for the types of lets in a program
 inferProgram :: MonadGen Int m => [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))
@@ -307,10 +309,10 @@ inferProg (TypeDecl n tvs cs ann:prg) =
       mkk (_:xs) = arr star (mkk xs)
       retTy = foldl app (con (n `tag` star)) (map (var . flip tag star) tvs)
       n' = tag n (mkk tvs)
-      arisingFromConstructor = "Perhaps you're missing a * between two types of a constructor?"
    in extendKind (n', mkk tvs) $ do
-     (ts, cs') <- unzip <$> mapM (inferCon retTy) cs
-                               `catchError` \x -> throwError (Note x arisingFromConstructor)
+     (ts, cs') <- unzip <$> mapM (\con -> do
+       inferCon retTy con `catchError` \x -> throwError (ArisingFrom x con))
+                                 cs
      extendMany ts $
        consFst (TypeDecl n' (map (`tag` star) tvs) cs' ann) $
          inferProg prg
@@ -326,7 +328,7 @@ inferProg [] = do
     unify (VarRef main ann) x (TyArr tyUnit tyUnit)
   x <- gen
   case solve x mempty c of
-    Left e -> throwError (Note e "main must be a function from unit to some type")
+    Left e -> throwError (Note e ("main must be a function from unit to unit" :: T.Text))
     Right _ -> ([],) <$> ask
 
 
@@ -347,8 +349,13 @@ inferCon ret (GADTCon nm ty ann) = extendManyK (mentionedTVs ret) $ do
   -- This is a game of matching up paramters of the return type with the
   -- stated parameters, and introducing the proper constraints
   cons <- matchUp res ret
-  let TyForall vars resTp = closeOver (TyCons cons (hole ret))
-  vars' <- mapM rigidify vars
+  let TyForall vars resTp
+        = case cons of
+           [] -> closeOver (hole ret)
+           _ -> closeOver (TyCons cons (hole ret))
+  vars' <- case mentionedTVs ret of
+             [] -> pure vars
+             _  -> mapM rigidify vars
   let tp = TyForall vars' resTp
   pure ((tag nm tp, tp), GADTCon (tag nm tp) tp ann)
   where mentionedTVs :: Type Typed -> [(Var Typed, Type Typed)]
@@ -378,11 +385,13 @@ inferCon ret (GADTCon nm ty ann) = extendManyK (mentionedTVs ret) $ do
             (b, hole) <- gadtConTy b
             (a', _) <- inferKind a
             pure (b, TyArr a' . hole)
-          TyForall vs t -> do
-            (t, hole) <- gadtConTy t
-            pure (t, TyForall (map (`tag` TyStar) vs) . hole)
+          TyForall{} -> do
+            throwError (rejectedExistential ty (IllegalGADT ty))
+            -- (t, hole) <- gadtConTy t
+            -- pure (t, TyForall (map (`tag` TyStar) vs) . hole)
           x | x `instanceOf` ret -> pure (x, id)
             | otherwise          -> throwError (IllegalGADT x)
+
 
 instanceOf :: Type Resolved -> Type Typed -> Bool
 instanceOf (TyCon a) (TyCon b) = a == eraseVarTy b
