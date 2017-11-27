@@ -53,7 +53,11 @@ instance Pretty TypeError where
   pprint (Note te m) = do
     pprint te
     block 1 . (newline <+>) $
-      bullet (opClr "Note: ") <+> m
+      bullet (opClr "Note: ") <+> block 2 m
+  pprint (Suggestion te m) = do
+    pprint te
+    block 1 . (newline <+>) $
+      bullet (opClr "Suggestion: ") <+> block 4 m
   pprint (CanNotInstance rec new)
     | (TyRows rho _) <- rec
     , prettyPrint new == prettyPrint rho
@@ -132,3 +136,22 @@ varType (TvName _ _ x) = x
 
 report :: Pretty p => p -> T.Text -> IO ()
 report err _ = ppr $ pprint err
+
+-- Some errors:
+rejectedExistential :: Pretty (Var p) => Type p -> TypeError -> TypeError
+rejectedExistential ttp e = (Suggestion (Note (Note e rejected) explanation) fix) where
+  rejected, explanation :: String
+  rejected = "GADT-style data constructors with existential type variables are rejected"
+  explanation = "Our type system is not powerful enough to deal with the implications of existentials quite yet."
+
+  fix :: PrettyP
+  fix = body 0 [ pprint "Possible fix: rewriting the type so that all variables are universal:"
+               , case ttp of
+                   TyForall vs tp ->
+                     "Consider changing " <+> verbatim ttp <+> " into " <+> verbatim (replaceTail vs tp)
+                   _ -> error "rejectedExistentials only occur on types with existentials"
+               ]
+
+  replaceTail :: [Var p] -> Type p -> Type p
+  replaceTail ap (TyArr t cs) = TyArr t (replaceTail ap cs)
+  replaceTail ap x = foldl TyApp x (map TyVar ap)

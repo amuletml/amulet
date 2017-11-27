@@ -15,6 +15,7 @@ module Control.Monad.Infer
   , lookupTy, fresh, freshFrom, runInfer, extend
   , lookupKind, extendKind, extendMany, extendManyK
   , difference, freshTV
+  , instantiate
   )
   where
 
@@ -75,6 +76,7 @@ data TypeError where
                 => Type p' -> Type p -> Type p -> TypeError
   NoOverlap :: Type Typed -> Type Typed -> TypeError
   Note :: Pretty x => TypeError -> x -> TypeError
+  Suggestion :: Pretty x => TypeError -> x -> TypeError
   CanNotInstance :: Pretty (Var p)
                  => Type p {- record type -}
                  -> Type p {- instance -}

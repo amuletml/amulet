@@ -232,8 +232,8 @@ typeP = typeOpP where
     pure $ foldl TyApp hd tl
 
   table :: [[ Operator T.Text () Identity (Type Parsed) ]]
-  table = [ [ binary "*" (const TyTuple) AssocRight ]
-          , [ binary "->" (const TyArr) AssocRight ] ]
+  table = [ [ binary "->" (const TyArr)   AssocRight ]
+          , [ binary "*"  (const TyTuple) AssocRight ] ]
 
 binary :: String -> (Span -> a -> a -> a) -> Assoc -> Operator T.Text () Identity a
 binary n f a = flip Infix a $ do
