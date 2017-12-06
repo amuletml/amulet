@@ -68,7 +68,6 @@ resolveToplevel r = flip catchError (throwError . flip ArisingFromTop r)
        pure (TypeDecl v' vs' cs' a)
      where resolveCons (UnitCon v a) = UnitCon <$> lookupEx v <*> pure a
            resolveCons (ArgCon v t a) = ArgCon <$> lookupEx v <*> reType t <*> pure a
-           resolveCons (GADTCon v t a) = GADTCon <$> lookupEx v <*> reType t <*> pure a
 
            wrap x = TyForall (S.toList (ftv x)) x
 

@@ -21,8 +21,6 @@ import Types.Holes
 
 import Data.List
 
-import Errors (rejectedExistential)
-
 import Pretty (tracePretty)
 
 -- Solve for the types of lets in a program
@@ -346,58 +344,6 @@ inferCon ret (ArgCon nm t ann) = do
 inferCon ret' (UnitCon nm ann) =
   let ret = closeOver ret'
    in pure ((tag nm ret, ret), UnitCon (tag nm ret) ann)
-inferCon ret (GADTCon nm ty ann) = extendManyK (mentionedTVs ret) $ do
-  (res, hole) <- gadtConTy ty
-  -- This is a game of matching up paramters of the return type with the
-  -- stated parameters, and introducing the proper constraints
-  cons <- matchUp res ret
-  let TyForall vars resTp
-        = case cons of
-           [] -> closeOver (hole ret)
-           _ -> closeOver (TyCons cons (hole ret))
-  vars' <- mapM rigidify vars
-  let tp = TyForall vars' resTp
-  pure ((tag nm tp, tp), GADTCon (tag nm tp) tp ann)
-  where mentionedTVs :: Type Typed -> [(Var Typed, Type Typed)]
-        mentionedTVs (TyApp r (TyVar v)) = (v, TyStar):mentionedTVs r
-        mentionedTVs _ = []
-
-        matchUp :: MonadInfer a m => Type Resolved
-                -> Type Typed -> m [GivenConstraint Typed]
-        matchUp (TyCon _ )   (TyCon _ )  = pure []
-        matchUp (TyApp i x ) (TyApp j y) = do
-          (x', _) <- inferKind x
-          (:) <$> pure (Equal x' y ann) <*> matchUp i j
-        matchUp _ _ = error "impossible because of how GADTs work"
-
-        rigidify :: MonadInfer Typed m => Var Typed -> m (Var Typed)
-        rigidify v@(TvName _ nm an) = do
-          x <- asks types
-          case M.lookup (eraseVarTy v) x of
-            Just _ -> pure (TvName Flexible nm an)
-            Nothing -> pure (TvName Rigid nm an)
-
-        gadtConTy :: MonadInfer a m => Type Resolved
-                  -> m ( Type Resolved
-                       , Type Typed -> Type Typed)
-        gadtConTy ty = case ty of
-          TyArr a b -> do
-            (b, hole) <- gadtConTy b
-            (a', _) <- inferKind a
-            pure (b, TyArr a' . hole)
-          TyForall{} -> do
-            throwError (rejectedExistential ty (IllegalGADT ty))
-            -- (t, hole) <- gadtConTy t
-            -- pure (t, TyForall (map (`tag` TyStar) vs) . hole)
-          x | x `instanceOf` ret -> pure (x, id)
-            | otherwise          -> throwError (IllegalGADT x)
-
-
-instanceOf :: Type Resolved -> Type Typed -> Bool
-instanceOf (TyCon a) (TyCon b) = a == eraseVarTy b
-instanceOf (TyApp a _) (TyApp b _) = a `instanceOf` b
-instanceOf _ _ = False
-
 
 inferLetTy :: (MonadInfer Typed m)
            => (Type Typed -> Type Typed)

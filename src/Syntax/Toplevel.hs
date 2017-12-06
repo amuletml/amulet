@@ -12,7 +12,6 @@ extractVars (ForeignVal v _ _ _) = ([v], [])
 extractVars (TypeDecl v _ cs _) = (map extractCons cs, [v])
   where extractCons (UnitCon v _) = v
         extractCons (ArgCon v _ _) = v
-        extractCons (GADTCon v _ _) = v
 
 extractVarsN :: [Toplevel p] -> ([Var p], [Var p])
 extractVarsN ts =
