@@ -55,10 +55,9 @@ unify (TyRows rho arow) (TyRows sigma brow)
   | overlaps <- overlap arow brow
   , new <- unionBy ((==) `on` fst) arow brow
   = do mapM_ (uncurry unify) overlaps
-       rho' <- freshTV
-       sigma' <- freshTV
-       unify rho (TyRows rho' new)
-       unify sigma (TyRows sigma' new)
+       tau <- freshTV
+       unify rho (TyRows tau new)
+       unify sigma (TyRows tau new)
        if length overlaps >= length new
           then error ("overlaps " ++ show (length overlaps) ++ " new " ++ show (length new))
           else pure ()
