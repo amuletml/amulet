@@ -331,12 +331,8 @@ toplevelP = letStmt <|> try foreignVal <|> valStmt <|> dataDecl where
       Nothing -> pure $ TypeDecl x xs []
 
 constructor :: Parser Constructor'
-constructor = try gadt <|> try arg <|> unit where
+constructor = try arg <|> unit where
   unit = withPos (UnitCon <$> constrName)
-  gadt = withPos $ do
-    nm <- constrName
-    reservedOp ":"
-    GADTCon nm <$> typeP
   arg = withPos $ do
     nm <- constrName
     reserved "of"

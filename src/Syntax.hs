@@ -149,7 +149,6 @@ instance (Data (Var p), Data (Ann p), Data p) => Spanned (Toplevel p)
 data Constructor p
   = UnitCon (Var p) (Ann p)
   | ArgCon (Var p) (Type p) (Ann p)
-  | GADTCon (Var p) (Type p) (Ann p)
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Constructor p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Constructor p)
@@ -274,7 +273,6 @@ instance (Pretty (Var p)) => Pretty [Toplevel p] where
 instance (Pretty (Var p)) => Pretty (Constructor p) where
   pprint (UnitCon p _) = pprint p
   pprint (ArgCon p t _) = pprint p <+> kwClr " of " <+> t
-  pprint (GADTCon p t _) = pprint p <+> opClr " : " <+> t
 
 instance Pretty (Type p) => Pretty (GivenConstraint p) where
   pprint (Equal a b _) = a <+> opClr " ~ " <+> b

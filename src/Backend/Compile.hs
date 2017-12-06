@@ -69,17 +69,6 @@ compileConstructors (ArgCon a _ _:ys) -- non-unit constructors, hard
     vl = LuaFunction [LuaName "x"] [LuaReturn (LuaTable [(LuaNumber 1, LuaString cn), (LuaNumber 2, LuaRef (LuaName "x"))])]
     cn = getName a
 -- GADT constructors, hardest - we have to figure out the representation from the type
-compileConstructors (GADTCon nm ty _:ys)
-  | TyArr{} <- ty
-  = LuaLocal [lowerName nm] [vl]:compileConstructors ys
-  | TyCons _ TyArr{} <- ty
-  = LuaLocal [lowerName nm] [vl]:compileConstructors ys
-  | TyForall _ t <- ty = compileConstructors (GADTCon nm t undefined:ys)
-  | otherwise
-  = LuaLocal [lowerName nm] [LuaTable [(LuaNumber 1, LuaString cn)]]:compileConstructors ys
-  where
-    vl = LuaFunction [LuaName "x"] [LuaReturn (LuaTable [(LuaNumber 1, LuaString cn), (LuaNumber 2, LuaRef (LuaName "x"))])]
-    cn = getName nm
 compileConstructors [] = []
 
 compileLet :: (Var Typed, Expr Typed) -> (LuaVar, LuaExpr)
