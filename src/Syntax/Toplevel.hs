@@ -7,7 +7,6 @@ import Syntax
 
 extractVars :: Toplevel p -> ([Var p], [Var p])
 extractVars (LetStmt vs _) = (map fst vs, [])
-extractVars (ValStmt v _ _) = ([v], [])
 extractVars (ForeignVal v _ _ _) = ([v], [])
 extractVars (TypeDecl v _ cs _) = (map extractCons cs, [v])
   where extractCons (UnitCon v _) = v

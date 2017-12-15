@@ -136,7 +136,6 @@ deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Type
 
 data Toplevel p
   = LetStmt [(Var p, Expr p)] (Ann p)
-  | ValStmt (Var p) (Type p) (Ann p)
   | ForeignVal (Var p) Text (Type p) (Ann p)
   | TypeDecl (Var p) [Var p] [Constructor p] (Ann p)
 
@@ -258,7 +257,6 @@ instance (Pretty (Var p)) => Pretty (Type p) where
 instance (Pretty (Var p)) => Pretty (Toplevel p) where
   pprint (LetStmt vs _) = opClr "let " <+> interleave (newline <+> opClr "and ") (map pVars vs) where
     pVars (v, e) = v <+> " = " <+> block 2 e
-  pprint (ValStmt v t _) = kwClr "val " <+> v <+> opClr " : " <+> t
   pprint (ForeignVal v d ty _) = kwClr "foreign val " <+> v <+> opClr ": "
                                  <+> ty <+> opClr " = " <+> str d
   pprint (TypeDecl ty args ctors _) = do

@@ -28,8 +28,11 @@ bindGroup = sepBy1 decl (reserved "and") where
   decl = do
     x <- name
     ps <- many patternP
+    tp <- optionMaybe (colon *> typeP)
     reservedOp "="
-    bd <- exprP
+    bd <- case tp of
+      Nothing -> exprP
+      Just t -> withPos (Ascription <$> exprP <*> pure t)
     case ps of
       [] -> pure (x, bd)
       _ -> do
@@ -298,15 +301,10 @@ lit = intLit <|> strLit <|> true <|> false where
   false = LiBool False <$ reserved "false"
 
 toplevelP :: Parser Toplevel'
-toplevelP = letStmt <|> try foreignVal <|> valStmt <|> dataDecl where
+toplevelP = letStmt <|> try foreignVal <|> dataDecl where
   letStmt = withPos $ do
     reserved "let"
     LetStmt <$> bindGroup
-  valStmt = withPos $ do
-    reserved "val"
-    x <- name
-    _ <- colon
-    ValStmt x <$> typeP
   foreignVal = withPos $ do
     reserved "external"
     reserved "val"
