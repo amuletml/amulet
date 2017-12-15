@@ -295,10 +295,6 @@ inferProg (LetStmt ns ann:prg) = do
     (ns', ts) <- inferLetTy closeOver ks ns
     extendMany ts $
       consFst (LetStmt ns' ann) $ inferProg prg
-inferProg (ValStmt v t ann:prg) = do
-  (t', _) <- inferKind t
-  extend (tag v t', closeOver t') $
-    consFst (ValStmt (tag v t') t' ann) $ inferProg prg
 inferProg (ForeignVal v d t ann:prg) = do
   (t', _) <- inferKind t
   extend (tag v t', closeOver t') $

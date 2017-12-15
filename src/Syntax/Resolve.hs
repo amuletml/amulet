@@ -52,10 +52,6 @@ resolveToplevel r = flip catchError (throwError . flip ArisingFromTop r)
      LetStmt vs a -> LetStmt
                  <$> mapM (\(v, e) -> (,) <$> lookupEx v <*> reExpr e) vs
                  <*> pure a
-     ValStmt v t a -> ValStmt
-                  <$> lookupEx v
-                  <*> reType (wrap t)
-                  <*> pure a
      ForeignVal v t ty a -> ForeignVal
                         <$> lookupEx v
                         <*> pure t

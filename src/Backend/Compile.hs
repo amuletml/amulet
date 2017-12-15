@@ -49,7 +49,6 @@ compileProgram ev = LuaDo . (extendDef:) . compileProg where
         :compileProg xs
     | otherwise = LuaLocal [LuaName n] [LuaBitE s]:compileProg xs
     where n = getName n'
-  compileProg (ValStmt{}:xs) = compileProg xs
   compileProg (LetStmt vs _:xs) = locals ns vs' ++ compileProg xs where
     (ns, vs') = unzip $ map compileLet vs
   compileProg (TypeDecl _ _ cs _:xs) = compileConstructors cs ++ compileProg xs
