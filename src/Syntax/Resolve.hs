@@ -113,10 +113,10 @@ reExpr r@(Match e ps a) = do
   pure (Match e' ps' a)
 reExpr (BinOp l o r a) = BinOp <$> reExpr l <*> reExpr o <*> reExpr r <*> pure a
 reExpr (Hole v a) = Hole <$> tagVar v <*> pure a
-reExpr r@(EHasType e t a) = EHasType
-                        <$> reExpr e
-                        <*> catchError (reType t) (throwError . flip ArisingFrom r)
-                        <*> pure a
+reExpr r@(Ascription e t a) = Ascription
+                          <$> reExpr e
+                          <*> catchError (reType t) (throwError . flip ArisingFrom r)
+                          <*> pure a
 reExpr (Record fs a) = Record <$> mapM (mapM reExpr) fs <*> pure a
 reExpr (RecordExt e fs a) = RecordExt
                         <$> reExpr e

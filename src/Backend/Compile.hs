@@ -76,7 +76,7 @@ compileLet (n, e) = (lowerName n, compileExpr e)
 
 compileExpr :: Expr Typed -> LuaExpr
 compileExpr (VarRef v _) = LuaRef (lowerName v)
-compileExpr (EHasType e _ _) = compileExpr e
+compileExpr (Ascription e _ _) = compileExpr e
 compileExpr (Hole v ann) = LuaCall (global "error") [LuaString msg] where
   msg = "Deferred typed hole " <> uglyPrint v <> " (from " <> uglyPrint ann <> ")"
 compileExpr (Access rec f _) = LuaRef (LuaIndex (compileExpr rec) (LuaString f))
@@ -127,7 +127,7 @@ compileStmt r e@BinOp{} = pureReturn r $ compileExpr e
 compileStmt r e@Record{} = pureReturn r $ compileExpr e
 compileStmt r e@RecordExt{} = pureReturn r $ compileExpr e
 compileStmt r e@Tuple{} = pureReturn r $ compileExpr e
-compileStmt r (EHasType e _ _) = compileStmt r e
+compileStmt r (Ascription e _ _) = compileStmt r e
 compileStmt r (Let k c _) = let (ns, vs) = unzip $ map compileLet k in
                               (locals ns vs ++ compileStmt r c)
 compileStmt r (If c t e _) = [LuaIf (compileExpr c) (compileStmt r t) (compileStmt r e)]
