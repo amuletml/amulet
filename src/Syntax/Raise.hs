@@ -29,7 +29,7 @@ raiseE vR aR =
       BothSection o a -> BothSection (eR o) (aR a)
       AccessSection k a -> AccessSection k (aR a)
       Tuple es a -> Tuple (map eR es) (aR a)
-      EHasType e t a -> EHasType (eR e) (raiseT vR aR t) (aR a)
+      Ascription e t a -> Ascription (eR e) (raiseT vR aR t) (aR a)
 
 raiseP :: (Var p -> Var p') -- How to raise variables
        -> (Ann p -> Ann p')

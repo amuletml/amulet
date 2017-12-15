@@ -152,7 +152,7 @@ exprP' = try access
   eot = withPos . parens $ do
     x <- exprP
     reservedOp ":"
-    EHasType x <$> typeP
+    Ascription x <$> typeP
   tuple = withPos . parens $ do
     x <- commaSep exprP
     pure $ case x of

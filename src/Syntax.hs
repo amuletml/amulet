@@ -73,7 +73,7 @@ data Expr p
   | Match (Expr p) [(Pattern p, Expr p)] (Ann p)
   | BinOp (Expr p) (Expr p) (Expr p) (Ann p)
   | Hole (Var p) (Ann p)
-  | EHasType (Expr p) (Type p) (Ann p)
+  | Ascription (Expr p) (Type p) (Ann p)
 
   -- Records
   | Record [(Text, Expr p)] (Ann p) -- { foo = bar, baz = quux }
@@ -193,7 +193,7 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
     kwClr "match " <+> t <+> " with"
     body 2 bs *> newline
   pprint (Hole v _) = pprint v -- A typed hole
-  pprint (EHasType e t _) = parens $ e <+> opClr " : " <+> t
+  pprint (Ascription e t _) = parens $ e <+> opClr " : " <+> t
   pprint (Record rows _) = braces $ interleave ", " $ map (\(n, v) -> n <+> opClr " = " <+> v) rows
   pprint (RecordExt var rows _) = braces $ var <+> kwClr " with " <+> interleave ", " (map (\(n, v) -> n <+> opClr " = " <+> v) rows)
   pprint (Access x@VarRef{} f _) = x <+> opClr "." <+> f

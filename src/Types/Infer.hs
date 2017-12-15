@@ -167,11 +167,11 @@ infer expr
           [] -> pure (Tuple [] an, tyUnit)
           [(x', t)] -> pure (x', t)
           ((x', t):xs) -> pure (Tuple (x':map fst xs) an, foldl TyTuple t (map snd xs))
-      EHasType e g an -> do
+      Ascription e g an -> do
         (e', t') <- infer e
         (g', _) <- inferKind g
         unify expr g' t'
-        pure (EHasType e' t' an, g')
+        pure (Ascription e' t' an, g')
       LeftSection{} -> error "desugarer removes right sections"
       RightSection{} -> error "desugarer removes left sections"
       BothSection{} -> error "desugarer removes both-side sections"
