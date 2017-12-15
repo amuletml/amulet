@@ -42,13 +42,14 @@ instance Pretty TypeError where
          <+> k
          <+> parens " (kind of " <+> v <+> ")"
   pprint (FoundHole xs) = interleave newline (map prnt xs) where
+    prnt :: Expr Typed -> PrettyP
     prnt (Hole v s)
       | prettyPrint (verbatim v) == T.pack "`_`"
-      = s <+> ": Found typed hole of type " <+> verbatim (varType v)
+      = fst s <+> ": Found typed hole of type " <+> verbatim (snd s)
       | otherwise
-      = s <+> ": Found typed hole "
-          <+> verbatim v
-          <+> " (of type " <+> verbatim (varType v) <+> ")"
+      = fst s <+> ": Found typed hole "
+              <+> verbatim v
+              <+> " (of type " <+> verbatim (snd s) <+> ")"
     prnt _ = undefined
   pprint (Note te m) = do
     pprint te
@@ -130,9 +131,6 @@ missing _ _ = undefined -- freaking GHC
 
 diff :: (Eq a, Pretty a) => [(a, b)] -> [(a, b)] -> [PrettyP]
 diff ra rb = map (tvClr . fst) (deleteFirstsBy ((==) `on` fst) rb ra)
-
-varType :: Var Typed -> Type Typed
-varType (TvName _ _ x) = x
 
 report :: Pretty p => p -> T.Text -> IO ()
 report err _ = ppr $ pprint err

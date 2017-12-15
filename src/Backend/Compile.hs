@@ -84,9 +84,9 @@ compileExpr (Fun (Capture v _) e _) = LuaFunction [lowerName v] (compileStmt (Ju
 compileExpr (Fun (Wildcard _) e _) = LuaFunction [LuaName "_"] (compileStmt (Just LuaReturn) e)
 compileExpr f@(Fun k e _) = LuaFunction [LuaName "__arg__"]
                               (compileStmt (Just LuaReturn)
-                                           (Match (VarRef (TvName Flexible (TgInternal "__arg__") undefined)
-                                                          (annotation f))
-                                                  [(k, e)] (annotation f)))
+                                           (Match (VarRef (TvName (TgInternal "__arg__"))
+                                                          (annotation f, undefined))
+                                                  [(k, e)] (annotation f, undefined)))
 compileExpr (Tuple [] _) = LuaNil -- evil!
 compileExpr (Tuple [x] _) = compileExpr x -- the root of all evil!
 compileExpr (Tuple xs _) = LuaTable (zip (map LuaNumber [1..]) (map compileExpr xs))
@@ -106,7 +106,7 @@ compileExpr s@Let{} = compileIife s
 compileExpr s@If{} = compileIife s
 compileExpr s@Begin{} = compileIife s
 compileExpr s@Match{} = compileIife s
-compileExpr (BinOp l (VarRef (TvName _ (TgInternal o) _) _) r _) = LuaBinOp (compileExpr l) (remapOp o) (compileExpr r)
+compileExpr (BinOp l (VarRef (TvName (TgInternal o)) _) r _) = LuaBinOp (compileExpr l) (remapOp o) (compileExpr r)
 compileExpr BinOp{} = error "absurd: never parsed"
 compileExpr LeftSection{} = error "absurd: desugarer removes left sections"
 compileExpr RightSection{} = error "absurd: desugarer removes right sections"
@@ -142,13 +142,13 @@ compileStmt r e@BothSection{} = pureReturn r $ compileExpr e
 compileStmt r e@AccessSection{} = pureReturn r $ compileExpr e
 
 lowerName :: Var Typed -> LuaVar
-lowerName (TvName _ a _) = LuaName (getTaggedName a)
+lowerName = LuaName . getTaggedName . unTvName
 
 lowerKey :: Var Typed -> LuaExpr
-lowerKey (TvName _ a _) = LuaString (getTaggedName a)
+lowerKey = LuaString . getTaggedName . unTvName
 
 getName :: Var Typed -> Text
-getName (TvName _ a _) = getTaggedName a
+getName = getTaggedName . unTvName
 
 getTaggedName :: Var Resolved -> Text
 getTaggedName (TgName t i) = t <> T.pack (show i)
