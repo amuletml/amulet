@@ -8,13 +8,11 @@ import Control.Monad.Infer
 import Types.Wellformed
 
 import Syntax.Subst
-import Syntax.Raise
 import Syntax
 
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 
-import Data.Span
 import Data.Function
 import Data.List
 
@@ -24,9 +22,8 @@ type SolveM = GenT Int (StateT (Subst Typed) (Except TypeError))
 
 bind :: Var Typed -> Type Typed -> SolveM ()
 bind var ty
-  | raiseT id (const internal) ty == TyVar var = return ()
+  | ty == TyVar var = return ()
   | occurs var ty = throwError (Occurs var ty)
-  | isRigid var = throwError (RigidBinding var ty)
   | otherwise = do
       env <- get
       -- Attempt to extend the environment, otherwise unify with existing type
@@ -42,10 +39,7 @@ unify a (TyVar b) = bind b a
 unify (TyArr a b) (TyArr a' b') = unify a a' *> unify b b'
 unify (TyApp a b) (TyApp a' b') = unify a a' *> unify b b'
 unify ta@(TyCon a) tb@(TyCon b)
-  | TvName _ va _ <- a
-  , TvName _ vb _ <- b
-  , va == vb
-  = pure ()
+  | a == b = pure ()
   | otherwise = throwError (NotEqual ta tb)
 unify t@(TyForall vs ty) t'@(TyForall vs' ty')
   | length vs /= length vs' = throwError (NotEqual t t')

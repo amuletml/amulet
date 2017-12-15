@@ -42,25 +42,13 @@ instance Ord (Var Resolved) where
   (TgInternal _) `compare` (TgName _ _) = LT
 
 data instance Var Typed
-  = TvName Rigidity (Var Resolved) (Type Typed)
-  deriving (Show, Data)
-
-instance Eq (Var Typed) where
-  TvName x v _ == TvName x' v' _ = x == x' && v == v'
-
-instance Ord (Var Typed) where
-  TvName x v _ `compare` TvName x' v' _
-    = case x `compare` x' of
-        EQ -> v `compare` v'
-        x -> x
-
--- Can we bind this in the constraint solver?
-data Rigidity = Rigid | Flexible deriving (Eq, Show, Ord, Data)
+  = TvName (Var Resolved)
+  deriving (Show, Data, Eq, Ord)
 
 type family Ann a :: * where
   Ann Parsed = Span
   Ann Resolved = Span
-  Ann Typed = Span
+  Ann Typed = (Span, Type Typed)
 
 data Expr p
   = VarRef (Var p) (Ann p)
@@ -116,6 +104,7 @@ data Lit
   | LiUnit
   deriving (Eq, Show, Ord, Data, Typeable)
 
+type Kind p = Type p -- hack!
 data Type p
   = TyCon (Var p)
   | TyVar (Var p)
@@ -135,8 +124,8 @@ deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Type p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Type p)
 
 data Toplevel p
-  = LetStmt [(Var p, Expr p)] (Ann p)
-  | ForeignVal (Var p) Text (Type p) (Ann p)
+  = LetStmt [(Var p, Expr p)] (Ann p) -- TODO remove this
+  | ForeignVal (Var p) Text (Type p) (Ann p) -- TODO remove this too
   | TypeDecl (Var p) [Var p] [Constructor p] (Ann p)
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Toplevel p)
@@ -284,20 +273,18 @@ instance Pretty (Var Resolved) where
   pprint (TgInternal v) = pprint v
 
 instance Pretty (Var Typed) where
-  pprint (TvName _ v _) = pprint v
+  pprint (TvName v) = pprint v
   -- pprint (TvName v t)
     -- | t == internalTyVar = pprint v
     -- | otherwise = parens $ v <+> opClr " : " <+> t
+    --
+instance Pretty (Span, Type Typed) where
+  pprint (x, _) = pprint x
 
 -- }}}
 
-eraseVarTy :: Var Typed -> Var Resolved
-eraseVarTy (TvName _ x _) = x
-
-isRigid :: Var Typed -> Bool
-isRigid (TvName r _ _)
-  | Rigid <- r = True
-  | Flexible <- r = False
+unTvName :: Var Typed -> Var Resolved
+unTvName (TvName x) = x
 
 {- Note [1]: Tuple types vs tuple patterns/values
 

@@ -9,7 +9,7 @@ import qualified Data.Text as T
 import Data.Span (internal, Span)
 
 import Control.Monad.Infer
-import Control.Arrow (first)
+import Control.Arrow (first, (&&&))
 
 import Syntax.Subst
 import Syntax.Raise
@@ -33,22 +33,22 @@ inferProgram ct = fmap fst <$> runInfer builtinsEnv (inferAndCheck ct) where
       [] -> pure (prg', env)
 
 tyUnit, tyBool, tyInt, tyString :: Type Typed
-tyInt = TyCon (TvName Rigid (TgInternal "int") TyStar)
-tyString = TyCon (TvName Rigid (TgInternal "string") TyStar)
-tyBool = TyCon (TvName Rigid (TgInternal "bool") TyStar)
-tyUnit = TyCon (TvName Rigid (TgInternal "unit") TyStar)
+tyInt = TyCon (TvName (TgInternal "int"))
+tyString = TyCon (TvName (TgInternal "string"))
+tyBool = TyCon (TvName (TgInternal "bool"))
+tyUnit = TyCon (TvName (TgInternal "unit"))
 
-star :: Ann p ~ Span => Type p
+star :: Type p
 star = TyStar
 
-forall :: Ann p ~ Span => [Var p] -> Type p -> Type p
+forall :: [Var p] -> Type p -> Type p
 forall = TyForall
 
-app, arr :: Ann p ~ Span => Type p -> Type p -> Type p
+app, arr :: Type p -> Type p -> Type p
 arr = TyArr
 app = TyApp
 
-var, con :: Ann p ~ Span => Var p -> Type p
+var, con :: Var p -> Type p
 var = TyVar
 con = TyCon
 
@@ -65,7 +65,7 @@ builtinsEnv = Env (M.fromList ops) (M.fromList tps) where
   intCmp = tyInt `arr` (tyInt `arr` tyBool)
 
   cmp = forall [name] $ var name `arr` (var name `arr` tyBool)
-    where name = TvName Flexible (TgInternal "a") star -- TODO: This should use TvName/TvFresh instead
+    where name = TvName (TgInternal "a")-- TODO: This should use TvName/TvFresh instead
   ops = [ op "+" intOp, op "-" intOp, op "*" intOp, op "/" intOp, op "**" intOp
         , op "^" stringOp
         , op "<" intCmp, op ">" intCmp, op ">=" intCmp, op "<=" intCmp
@@ -75,55 +75,53 @@ builtinsEnv = Env (M.fromList ops) (M.fromList tps) where
   tps = [ tp "int", tp "string", tp "bool", tp "unit" ]
 
 unify :: MonadInfer Typed m => Expr Resolved -> Type Typed -> Type Typed -> m ()
-unify e a b = tell [ConUnify (raiseE (`tag` TyStar) id e) a b]
+unify e a b = tell [ConUnify (raiseE TvName (id &&& const TyStar) e) a b]
 
-tag :: Var Resolved -> Type Typed -> Var Typed
-tag v = TvName Flexible v
+itIs :: Monad m
+     => ((Span, Type Typed) -> f Typed)
+     -> Span -> Type Typed -> m (f Typed, Type Typed)
+itIs f a t = pure (f (a, t), t)
 
 infer :: MonadInfer Typed m => Expr Resolved -> m (Expr Typed, Type Typed)
 infer expr
   = case expr of
-      VarRef k a -> do
-        x <- lookupTy k
-        pure (VarRef (tag k x) a, x)
-      Hole v ann -> do
-        tv <- freshTV
-        pure (Hole (tag v tv) ann, tv)
+      VarRef k a -> itIs (VarRef (TvName k)) a =<< lookupTy k
+      Hole v ann -> itIs (Hole (TvName v)) ann =<< freshTV
       Literal c a -> case c of
-        LiInt _ -> pure (Literal c a, tyInt)
-        LiStr _ -> pure (Literal c a, tyString)
-        LiBool _ -> pure (Literal c a, tyBool)
-        LiUnit   -> pure (Literal c a, tyUnit)
+        LiStr _ -> pure (Literal c (a, tyString), tyString)
+        LiUnit  -> pure (Literal c (a, tyUnit), tyUnit)
+        LiBool _-> pure (Literal c (a, tyBool), tyBool)
+        LiInt _ -> pure (Literal c (a, tyInt), tyInt)
       Fun p b a -> do
         (p', tc, ms) <- inferPattern (unify expr) p
         (b', tb) <- extendMany ms $ infer b
-        pure (Fun p' b' a, TyArr tc tb)
+        pure (Fun p' b' (a, TyArr tc tb), TyArr tc tb)
       Begin [] _ -> throwError (EmptyBegin expr)
       Begin xs a -> do
         (xs', txs) <- unzip <$> mapM infer xs
-        pure (Begin xs' a, last txs)
+        pure (Begin xs' (a, last txs), last txs)
       If c t e a -> do
         (c', tc) <- infer c
         (t', tt) <- infer t
         (e', te) <- infer e
         unify c tyBool tc
         unify expr tt te
-        pure (If c' t' e' a, te)
+        pure (If c' t' e' (a, te), te)
       App e1 e2 a -> do
         (e1', t1) <- infer e1
         (e2', t2) <- infer e2
         tv <- freshTV
         unify expr t1 (TyArr t2 tv)
-        pure (App e1' e2' a, tv)
+        pure (App e1' e2' (a, tv), tv)
       Let ns b ann -> do
         ks <- forM ns $ \(a, _) -> do
           tv <- freshTV
-          pure (tag a tv, tv)
+          pure (TvName a, tv)
         extendMany ks $ do
           (ns', ts) <- inferLetTy id ks ns
           extendMany ts $ do
             (b', ty) <- infer b
-            pure (Let ns' b' ann, ty)
+            pure (Let ns' b' (ann, ty), ty)
       Match t ps a -> do
         (t', tt) <- infer t
         (ps', tbs) <- unzip <$> forM ps
@@ -138,62 +136,65 @@ infer expr
                 (ty:xs) -> do
                   mapM_ (unify expr ty) xs
                   pure ty
-        pure (Match t' ps' a, ty)
+        pure (Match t' ps' (a, ty), ty)
       BinOp l o r a -> do
         (l', tl) <- infer l
         (o', to) <- infer o
         (r', tr) <- infer r
         tv <- freshTV
         unify expr to (TyArr tl (TyArr tr tv))
-        pure (BinOp l' o' r' a, tv)
+        pure (BinOp l' o' r' (a, tv), tv)
       Record rows a -> do
         itps <- inferRows rows
         let (rows', rowts) = unzip itps
-        pure (Record rows' a, TyExactRows rowts)
+        itIs (Record rows') a (TyExactRows rowts)
+        -- pure (Record rows' (a, TyExactRows), TyExactRows rowts)
       RecordExt rec rows a -> do
         itps <- inferRows rows
         let (rows', newTypes) = unzip itps
         (rec', rho) <- infer rec
-        pure (RecordExt rec' rows' a, TyRows rho newTypes)
+        itIs (RecordExt rec' rows') a (TyRows rho newTypes)
       Access rec key a -> do
         (rho, ktp) <- (,) <$> freshTV <*> freshTV
         (rec', tp) <- infer rec
         let rows = TyRows rho [(key, ktp)]
         unify expr tp rows
-        pure (Access rec' key a, ktp)
+        itIs (Access rec' key) a ktp
       Tuple es an -> do
         es' <- mapM infer es
         case es' of
-          [] -> pure (Tuple [] an, tyUnit)
+          [] -> itIs (Tuple []) an tyUnit
           [(x', t)] -> pure (x', t)
-          ((x', t):xs) -> pure (Tuple (x':map fst xs) an, foldl TyTuple t (map snd xs))
+          ((x', t):xs) -> pure (Tuple (x':map fst xs) (an, t), foldl TyTuple t (map snd xs))
       Ascription e g an -> do
         (e', t') <- infer e
         (g', _) <- inferKind g
         unify expr g' t'
-        pure (Ascription e' t' an, g')
+        itIs (Ascription e' t') an g'
       LeftSection{} -> error "desugarer removes right sections"
       RightSection{} -> error "desugarer removes left sections"
       BothSection{} -> error "desugarer removes both-side sections"
       AccessSection{} -> error "desugarer removes access sections"
 
-inferRows :: MonadInfer Typed m => [(T.Text, Expr Resolved)] -> m [((T.Text, Expr Typed), (T.Text, Type Typed))]
+inferRows :: MonadInfer Typed m
+          => [(T.Text, Expr Resolved)] -> m [((T.Text, Expr Typed), (T.Text, Type Typed))]
 inferRows rows = forM rows $ \(var', val) -> do
   (val', typ) <- infer val
   pure ((var', val'), (var', typ))
 
-inferKind :: MonadInfer a m => Type Resolved -> m (Type Typed, Type Typed)
+inferKind :: MonadInfer Typed m
+          => Type Resolved -> m (Type Typed, Kind Typed)
 inferKind TyStar = pure (TyStar, TyStar)
 inferKind (TyVar v) = do
   x <- lookupKind v `catchError` const (pure TyStar)
-  pure (TyVar (tag v x), x)
+  pure (TyVar (TvName v), x)
 inferKind (TyCon v) = do
   x <- lookupKind v
-  pure (TyCon (tag v x), x)
+  pure (TyCon (TvName v), x)
 inferKind (TyForall vs k) = do
-  (k, t') <- extendManyK (zip (map (`tag` TyStar) vs) (repeat TyStar)) $
+  (k, t') <- extendManyK (zip (map TvName vs) (repeat TyStar)) $
     inferKind k
-  pure (TyForall (map (`tag` TyStar) vs) k, t')
+  pure (TyForall (map TvName vs) k, t')
 inferKind (TyArr a b) = do
   (a', ka) <- inferKind a
   (b', kb) <- inferKind b
@@ -233,32 +234,34 @@ inferKind (TyTuple a b) = do
 inferKind (TyCons cs b) = do
   cs' <- forM cs $ \(Equal ta tb an) -> do
     (ta', _) <- inferKind ta
-    (tb', _) <- inferKind tb
-    pure (Equal ta' tb' an)
+    (tb', k') <- inferKind tb
+    pure (Equal ta' tb' (an, k'))
   (b', k) <- inferKind b
   pure (TyCons cs' b', k)
 
--- Returns: Type of the overall thing * type of captures
-inferPattern :: MonadInfer a m
+inferPattern :: MonadInfer Typed m
              => (Type Typed -> Type Typed -> m ())
              -> Pattern Resolved
-             -> m (Pattern Typed, Type Typed, [(Var Typed, Type Typed)])
+             -> m ( Pattern Typed -- the pattern
+                  , Type Typed -- type of what the pattern matches
+                  , [(Var Typed, Type Typed)] -- captures
+                  )
 inferPattern _ (Wildcard ann) = do
   x <- freshTV
-  pure (Wildcard ann, x, [])
+  pure (Wildcard (ann, x), x, [])
 inferPattern _ (Capture v ann) = do
   x <- freshTV
-  pure (Capture (tag v x) ann, x, [(tag v x, x)])
+  pure (Capture (TvName v) (ann, x), x, [(TvName v, x)])
 inferPattern unify (Destructure cns ps ann)
   | Nothing <- ps = do
     pty <- lookupTy cns
-    pure (Destructure (tag cns pty) Nothing ann, pty, [])
+    pure (Destructure (TvName cns) Nothing (ann, pty), pty, [])
   | Just p <- ps = do
     (tup, res, ct) <- constructorTy <$> lookupTy cns
     tup `tracePretty` res `tracePretty` ct `tracePretty` pure ()
     (p', pt, pb) <- inferPattern unify p
     unify tup pt
-    pure (Destructure (tag cns ct) (Just p') ann, res, pb)
+    pure (Destructure (TvName cns) (Just p') (ann, res), res, pb)
   where constructorTy :: Type Typed -> (Type Typed, Type Typed, Type Typed)
         constructorTy t
           | TyArr tup res <- t
@@ -272,45 +275,47 @@ inferPattern unify (PRecord rows ann) = do
   (rowps, rowts, caps) <- unzip3 <$> forM rows (\(var, pat) -> do
     (p', t, caps) <- inferPattern unify pat
     pure ((var, p'), (var, t), caps))
-  pure (PRecord rowps ann, TyRows rho rowts, concat caps)
+  pure (PRecord rowps (ann, TyRows rho rowts), TyRows rho rowts, concat caps)
 inferPattern unify pat@(PType p t ann) = do
   (p', pt, vs) <- inferPattern unify p
   (t', _) <- inferKind t `catchError` \x -> throwError (ArisingFrom x pat)
   unify pt t'
-  pure (PType p' t' ann, t', vs)
+  pure (PType p' t' (ann, t'), t', vs)
 inferPattern unify (PTuple elems ann)
-  | [] <- elems = pure (PTuple [] ann, tyUnit, [])
+  | [] <- elems = pure (PTuple [] (ann, tyUnit), tyUnit, [])
   | [x] <- elems = inferPattern unify x
   | otherwise = do
     (ps, t:ts, cps) <- unzip3 <$> mapM (inferPattern unify) elems
-    pure (PTuple ps ann, foldl TyTuple t ts, concat cps)
+    pure (PTuple ps (ann, foldl TyTuple t ts), foldl TyTuple t ts, concat cps)
 
 inferProg :: MonadInfer Typed m => [Toplevel Resolved] -> m ([Toplevel Typed], Env)
 inferProg (LetStmt ns ann:prg) = do
   ks <- forM ns $ \(a, _) -> do
     tv <- freshTV
     vl <- lookupTy a `catchError` const (pure tv)
-    pure (tag a tv, vl)
+    pure (TvName a, vl)
   extendMany ks $ do
     (ns', ts) <- inferLetTy closeOver ks ns
     extendMany ts $
-      consFst (LetStmt ns' ann) $ inferProg prg
+      -- TODO: Refactor let statements so that they have an annotation
+      -- per binding group
+      consFst (LetStmt ns' (ann, snd (last ts)))
+        $ inferProg prg
 inferProg (ForeignVal v d t ann:prg) = do
   (t', _) <- inferKind t
-  extend (tag v t', closeOver t') $
-    consFst (ForeignVal (tag v t') d t' ann) $ inferProg prg
+  extend (TvName v, closeOver t') $
+    consFst (ForeignVal (TvName v) d t' (ann, t')) $ inferProg prg
 inferProg (TypeDecl n tvs cs ann:prg) =
   let mkk :: [a] -> Type Typed
       mkk [] = star
       mkk (_:xs) = arr star (mkk xs)
-      retTy = foldl app (con (n `tag` star)) (map (var . flip tag star) tvs)
-      n' = tag n (mkk tvs)
-   in extendKind (n', mkk tvs) $ do
+      retTy = foldl app (con (TvName n)) (map (var . TvName) tvs)
+   in extendKind (TvName n, mkk tvs) $ do
      (ts, cs') <- unzip <$> mapM (\con -> do
        inferCon retTy con `catchError` \x -> throwError (ArisingFrom x con))
                                  cs
      extendMany ts $
-       consFst (TypeDecl n' (map (`tag` star) tvs) cs' ann) $
+       consFst (TypeDecl (TvName n) (map TvName tvs) cs' (ann, retTy)) $
          inferProg prg
 inferProg [] = do
   let ann = internal
@@ -336,10 +341,10 @@ inferCon :: MonadInfer Typed m
 inferCon ret (ArgCon nm t ann) = do
   (ty', _) <- inferKind t
   let res = closeOver $ TyArr ty' ret
-  pure ((tag nm res, res), ArgCon (tag nm res) ty' ann)
+  pure ((TvName nm, res), ArgCon (TvName nm) ty' (ann, ty'))
 inferCon ret' (UnitCon nm ann) =
   let ret = closeOver ret'
-   in pure ((tag nm ret, ret), UnitCon (tag nm ret) ann)
+   in pure ((TvName nm, ret), UnitCon (TvName nm) (ann, ret'))
 
 inferLetTy :: (MonadInfer Typed m)
            => (Type Typed -> Type Typed)
@@ -354,10 +359,11 @@ inferLetTy closeOver ks ((va, ve):xs) = extendMany ks $ do
   (x, vt) <- case solve cur mempty c of
     Left e -> throwError e
     Right x -> pure (x, closeOver (apply x ty))
-  let r (TvName r n t) = TvName r n (apply x t)
-      ex = raiseE r id ve'
-  (vt', _) <- inferKind (raiseT eraseVarTy id vt)
-  consFst (tag va vt', ex) $ inferLetTy closeOver (updateAlist (tag va vt') vt' ks) xs
+  let r (a, t) = (a, apply x t)
+      ex = raiseE id r ve'
+  (vt', _) <- inferKind (raiseT unTvName fst vt)
+  consFst (TvName va, ex) $
+    inferLetTy closeOver (updateAlist (TvName va) vt' ks) xs
 
 -- Monomorphic so we can use "close enough" equality
 updateAlist :: Eq a

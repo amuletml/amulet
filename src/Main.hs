@@ -56,17 +56,18 @@ compileFromTo fp x emit =
     CResolve e -> putStrLn "Resolution error" >> report e x
     CInfer e -> putStrLn "Type error" >> report e x
 
-test :: String -> IO ()
+test :: String -> IO (Maybe [Toplevel Typed])
 test x = do
   putStrLn "\x1b[1;32mProgram:\x1b[0m"
   case compile "<test>" (T.pack x) of
-    CSuccess (_, env) -> do
+    CSuccess (prog, env) -> do
       putStrLn (x <> "\x1b[1;32mType inference:\x1b[0m")
       forM_ (M.toList $ values (difference env builtinsEnv)) $ \(k, t) ->
         T.putStrLn (prettyPrint k <> " : " <> prettyPrint t)
-    CParse e -> print e
-    CResolve e -> report e (T.pack x)
-    CInfer e -> report e (T.pack x)
+      pure (Just prog)
+    CParse e -> Nothing <$ print e
+    CResolve e -> Nothing <$ report e (T.pack x)
+    CInfer e -> Nothing <$ report e (T.pack x)
 
 main :: IO ()
 main = do
@@ -77,7 +78,8 @@ main = do
       compileFromTo x x' ppr
     ["test", x] -> do
       x' <- readFile x
-      test x'
+      _ <- test x'
+      pure ()
     [x, t] -> do
       x' <- T.readFile x
       compileFromTo x x' $ T.writeFile t . uglyPrint

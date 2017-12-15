@@ -59,7 +59,8 @@ instance Semigroup Env where
 
 data Constraint p
   = ConUnify (Expr p) (Type p) (Type p)
-deriving instance (Show (Ann p), Show (Var p), Show (Expr p), Show (Type p)) => Show (Constraint p)
+deriving instance (Show (Ann p), Show (Var p), Show (Expr p), Show (Type p))
+  => Show (Constraint p)
 
 data TypeError where
   NotEqual :: Pretty (Var p) => Type p -> Type p -> TypeError
@@ -116,10 +117,10 @@ freshFrom :: MonadGen Int m => Text -> m (Var Resolved)
 freshFrom t = TgName t <$> gen
 
 extend :: MonadReader Env m => (Var Typed, Type Typed) -> m a -> m a
-extend (v, t) = local (\x -> x { values = Map.insert (eraseVarTy v) t (values x) })
+extend (v, t) = local (\x -> x { values = Map.insert (unTvName v) t (values x) })
 
 extendKind :: MonadReader Env m => (Var Typed, Type Typed) -> m a -> m a
-extendKind (v, t) = local (\x -> x { types = Map.insert (eraseVarTy v) t (types x) })
+extendKind (v, t) = local (\x -> x { types = Map.insert (unTvName v) t (types x) })
 extendMany :: MonadReader Env m => [(Var Typed, Type Typed)] -> m a -> m a
 extendMany ((v, t):xs) b = extend (v, t) $ extendMany xs b
 extendMany [] b = b
@@ -133,13 +134,7 @@ alpha = map T.pack $ [1..] >>= flip replicateM ['a'..'z']
 
 instantiate :: (MonadError TypeError m, MonadGen Int m) => Type Typed -> m (Type Typed)
 instantiate (TyForall vs ty) = do
-  f <- forM vs $ \var -> do
-    new <- fresh
-    let new' :: Type Typed
-        new' = TyVar (TvName Flexible new TyStar)
-    if isRigid var
-       then throwError (RigidBinding var new')
-       else pure new'
+  f <- traverse (const freshTV) vs
   instantiate (apply (Map.fromList (zip vs f)) ty)
 instantiate ty = pure ty
 
@@ -147,9 +142,7 @@ difference :: Env -> Env -> Env
 difference (Env ma mb) (Env ma' mb') = Env (ma Map.\\ ma') (mb Map.\\ mb')
 
 freshTV :: MonadGen Int m => m (Type Typed)
-freshTV = do
-  nm <- fresh
-  pure (TyVar (TvName Flexible nm TyStar))
+freshTV = TyVar . TvName <$> fresh
 
 instance (Ord (Var p), Substitutable p (Type p), Substitutable p (GivenConstraint p)) => Substitutable p (Constraint p) where
   ftv (ConUnify _ a b) = ftv a `Set.union` ftv b
