@@ -114,7 +114,6 @@ compileStmt r (CotLet k c) = let (ns, vs) = unzip $ map compileLet k in
 compileStmt r (CotBegin xs x) = concatMap (compileStmt Nothing) xs ++ compileStmt r x
 compileStmt r (CotMatch s ps) = runGen (compileMatch r s ps)
 
-
 compileStmt Nothing e@CotApp{} = case compileExpr e of
                                      LuaCall f a -> [LuaCallS f a]
                                      expr -> [LuaLocal [LuaName "_"] [expr]]
@@ -198,17 +197,13 @@ patternBindings (CopRecord rs) vr = concatMap (index vr) rs where
 compileMatch :: Returner -> CoTerm -> [(CoPattern, CoType, CoTerm)] -> Gen Int [LuaStmt]
 compileMatch r ex ps = do
   x <- (LuaName . ("__" <>) . (alpha !!)) <$> gen -- matchee
-  let gen ((p, _, c):ps) = ( patternTest p (LuaRef x)
-                        , let pbs = patternBindings p (LuaRef x)
-                              (a, b) = unzip pbs
-                           in case a of
-                                [] -> []
-                                _ -> [LuaLocal a b]
-                          ++ compileStmt r c )
-                        : gen ps
-      gen [] = []
+  let gen (p, _, c) = ( patternTest p (LuaRef x)
+                      , case patternBindings p (LuaRef x) of
+                          [] -> []
+                          xs -> [uncurry LuaLocal (unzip xs)]
+                        ++ compileStmt r c )
   pure $ compileStmt (Just $ LuaLocal [x] . (:[])) ex
-       ++ [ LuaIfElse (gen ps) ]
+       ++ [ LuaIfElse (map gen ps) ]
 
 --- This is a hack, but we need this for compiling record extension
 extendDef :: LuaStmt

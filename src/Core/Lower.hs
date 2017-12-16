@@ -130,10 +130,11 @@ lowerExpr expr
       LiBool True -> ColTrue
       LiBool False -> ColFalse
       LiUnit -> ColUnit
-    Match ex cs _ -> do
+    Match ex cs an -> do
       cs' <- for cs $ \(pat, ex) ->
         (,,) <$> lowerPat pat <*> lowerType (getType pat) <*> lowerExpr ex
-      CotMatch <$> lowerExpr ex <*> pure cs'
+      fail <- patternMatchingFailure an
+      CotMatch <$> lowerExpr ex <*> pure (cs' ++ [fail])
     BinOp left op right _ -> do
       (left', op', right') <- (,,) <$> lowerExpr left
                                    <*> lowerExpr op
