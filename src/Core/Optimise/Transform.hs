@@ -15,7 +15,7 @@ data TransformPass
 
 instance Monoid TransformPass where
   mempty = TransformPass id id
-  mappend (TransformPass b a) (TransformPass b' a') = TransformPass (b' . b) (a' . a)
+  mappend (TransformPass b a) (TransformPass b' a') = TransformPass (b . b') (a . a')
 
 beforePass, afterPass :: (CoTerm -> CoTerm) -> TransformPass
 beforePass fn = TransformPass { before = fn, after = id }
