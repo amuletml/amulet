@@ -22,6 +22,7 @@ import Syntax
 
 import Core.Core
 import Core.Lower
+import Core.Optimise
 
 import Errors
 import Parser
@@ -56,7 +57,7 @@ compileFromTo :: FilePath
               -> IO ()
 compileFromTo fp x emit =
   case compile fp x of
-    CSuccess (_, core, env) -> emit (compileProgram env core)
+    CSuccess (_, core, env) -> emit (compileProgram env (optimise core))
     CParse e -> print e
     CResolve e -> putStrLn "Resolution error" >> report e x
     CInfer e -> putStrLn "Type error" >> report e x
@@ -71,6 +72,8 @@ test x = do
         T.putStrLn (prettyPrint k <> " : " <> prettyPrint t)
       putStrLn "\x1b[1;32mCore lowering:\x1b[0m"
       traverse_ ppr core
+      putStrLn "\x1b[1;32mOptimised:\x1b[0m"
+      traverse_ ppr (optimise core)
       pure (Just (core, env))
     CParse e -> Nothing <$ print e
     CResolve e -> Nothing <$ report e (T.pack x)
