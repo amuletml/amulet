@@ -2,11 +2,12 @@ module Syntax.Toplevel
   ( extractVars, extractVarsN
   ) where
 
-
 import Syntax
 
+import Data.Triple
+
 extractVars :: Toplevel p -> ([Var p], [Var p])
-extractVars (LetStmt vs _) = (map (\(x,_,_)->x) vs, [])
+extractVars (LetStmt vs _) = (map fst3 vs, [])
 extractVars (ForeignVal v _ _ _) = ([v], [])
 extractVars (TypeDecl v _ cs _) = (map extractCons cs, [v])
   where extractCons (UnitCon v _) = v

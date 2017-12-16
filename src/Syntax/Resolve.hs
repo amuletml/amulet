@@ -11,6 +11,7 @@ module Syntax.Resolve
 
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
+import Data.Triple
 
 import Control.Monad.Except
 import Control.Monad.Reader
@@ -20,7 +21,6 @@ import Syntax.Resolve.Scope
 import Syntax.Toplevel
 import Syntax.Subst
 import Syntax
-
 
 data ResolveError
   = NotInScope (Var Parsed)
@@ -86,7 +86,7 @@ reExpr r@(VarRef v a) = VarRef
                     <$> catchError (lookupEx v) (throwError . flip ArisingFrom r)
                     <*> pure a
 reExpr (Let vs c a) = do
-  let vars = map (\(x,_,_)->x) vs
+  let vars = map fst3 vs
   vars' <- traverse tagVar vars
   extendN (zip vars vars') $ Let <$> traverse (\(v, e, a) -> (,,) <$> lookupEx v
                                                                   <*> reExpr e
