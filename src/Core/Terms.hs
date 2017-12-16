@@ -24,7 +24,7 @@ mapTerm1 f (CotTyApp fn ag) = CotTyApp (f fn) ag
 
 -- Apply a function to all descendants in the provided expr.
 mapTerm :: (CoTerm -> CoTerm) -> CoTerm -> CoTerm
-mapTerm f = mapTerm1 (f . mapTerm f)
+mapTerm f = f . mapTerm1 (mapTerm f)
 
 substitute :: M.Map (Var Resolved) CoTerm -> CoTerm -> CoTerm
 substitute m = mapTerm subst
