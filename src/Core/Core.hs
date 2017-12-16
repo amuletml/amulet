@@ -132,7 +132,7 @@ instance Pretty CoLiteral where
 
 instance Pretty CoStmt where
   pprint (CosForeign v t e) = v <+> opClr " : " <+> t <+> kwClr " = foreign " <+> str e
-  pprint (CosLet vs) = kwClr "let " <+> pprLet vs
+  pprint (CosLet vs) = kwClr "let " <+> braces (pprLet vs)
   pprint (CosType v k cs) = kwClr "type "
                         <+> v <+> opClr " : "
                         <+> k <+> braces (pprCons cs)
