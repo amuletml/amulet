@@ -11,5 +11,5 @@ optimise = map optimiseStmt where
   optimiseStmt s = s
 
 optimiseTerm :: CoTerm -> CoTerm
-optimiseTerm = transformTerm (zipPass [dropBranches
+optimiseTerm = transformTerm (mconcat [dropBranches
                                       ])
