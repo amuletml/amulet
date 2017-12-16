@@ -25,4 +25,4 @@ second3 :: (b -> b') -> (a, b, c) -> (a, b', c)
 second3 f = trimap id f id
 
 third3 :: (c -> c') -> (a, b, c) -> (a, b, c')
-third3 f = trimap id id f
+third3 = trimap id id

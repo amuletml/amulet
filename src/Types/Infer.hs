@@ -318,9 +318,7 @@ inferProg main (LetStmt ns ann:prg) = do
            unify (VarRef var ann) t (TyArr tyUnit tyUnit)
            pure (TvName var, TyArr tyUnit tyUnit)
          else pure (TvName var, t)
-    extendMany ts' $ do
-      -- TODO: Refactor let statements so that they have an annotation
-      -- per binding group
+    extendMany ts' $
       consFst (LetStmt ns' (ann, snd (last ts)))
         $ inferProg main prg
 inferProg main (ForeignVal v d t ann:prg) = do
@@ -334,9 +332,8 @@ inferProg main (TypeDecl n tvs cs ann:prg) =
       mkk (_:xs) = arr star (mkk xs)
       retTy = foldl app (con (TvName n)) (map (var . TvName) tvs)
    in extendKind (TvName n, mkk tvs) $ do
-     (ts, cs') <- unzip <$> traverse (\con -> do
+     (ts, cs') <- unzip <$> for cs (\con ->
        inferCon retTy con `catchError` \x -> throwError (ArisingFrom x con))
-                                 cs
      extendMany ts $
        consFst (TypeDecl (TvName n) (map TvName tvs) cs' (ann, mkk tvs)) $
          inferProg main prg
