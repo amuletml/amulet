@@ -1,6 +1,6 @@
 {-# OPTIONS_GHC -Wno-missing-local-signatures #-}
 {-# LANGUAGE FlexibleContexts, OverloadedStrings, TupleSections, GADTs #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ScopedTypeVariables, ViewPatterns #-}
 module Types.Infer
   ( inferProgram
   , builtinsEnv
@@ -324,9 +324,10 @@ inferProg main (LetStmt ns ann:prg) = do
       consFst (LetStmt ns' (ann, snd (last ts)))
         $ inferProg main prg
 inferProg main (ForeignVal v d t ann:prg) = do
-  (t', _) <- inferKind t
-  extend (TvName v, closeOver t') $
-    consFst (ForeignVal (TvName v) d t' (ann, t')) $ inferProg main prg
+  (closeOver -> t', _) <- inferKind t
+  extend (TvName v, t') $
+    consFst (ForeignVal (TvName v) d t' (ann, t')) $
+      inferProg main prg
 inferProg main (TypeDecl n tvs cs ann:prg) =
   let mkk :: [a] -> Type Typed
       mkk [] = star
