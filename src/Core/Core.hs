@@ -75,16 +75,16 @@ instance Pretty CoTerm where
     | otherwise = f <+> " " <+> x
   pprint (CotLet xs e) = do
     kwClr "let " <+> braces (pprLet xs) <+> kwClr " in " <+> e
-  pprint (CotBegin xs e) = kwClr "begin" <+> interleave (opClr "; ") (xs ++ [e]) <+> kwClr "end"
+  pprint (CotBegin xs e) = kwClr "begin " <+> interleave (opClr "; ") (xs ++ [e]) <+> kwClr " end"
   pprint (CotLit l) = pprint l
-  pprint (CotMatch e ps) = kwClr "match " <+> e <+> braces (pprCases ps)
+  pprint (CotMatch e ps) = kwClr "match " <+> e <+> " " <+> braces (pprCases ps)
   pprint (CotTyApp f t) = f <+> opClr " @" <+> t
   pprint (CotExtend x rs) = braces $ x <+> opClr " | " <+> prettyRows rs where
-    prettyRows = interleave ", " . map (\(x, t, v) -> x <+> opClr " : "
-                                                        <+> t
-                                                        <+> opClr " = "
-                                                        <+> v)
-
+    prettyRows = interleave ", " . map (\(x, t, v) ->
+      x <+> opClr " : "
+        <+> t
+        <+> opClr " = "
+        <+> v)
 
 pprLet :: [(Var Resolved, CoType, CoTerm)] -> PrettyP
 pprLet xs = interleave (opClr "; ") (map one xs) where
@@ -133,6 +133,7 @@ instance Pretty CoLiteral where
 instance Pretty CoStmt where
   pprint (CosForeign v t e) = v <+> opClr " : " <+> t <+> kwClr " = foreign " <+> str e
   pprint (CosLet vs) = kwClr "let " <+> pprLet vs
-  pprint (CosType v k cs) = kwClr "type " <+> v <+> opClr " : "
-                                          <+> k <+> braces (pprCons cs)
+  pprint (CosType v k cs) = kwClr "type "
+                        <+> v <+> opClr " : "
+                        <+> k <+> braces (pprCons cs)
     where pprCons = interleave (opClr "; ") . map (\(x, t) -> x <+> opClr " : " <+> t)

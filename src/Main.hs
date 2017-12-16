@@ -8,6 +8,7 @@ import System.Environment
 import qualified Data.Text.IO as T
 import qualified Data.Text as T
 import qualified Data.Map as M
+import Data.Foldable
 
 import Control.Monad.Infer
 
@@ -66,11 +67,11 @@ test x = do
   case compile "<test>" (T.pack x) of
     CSuccess (prog, core, env) -> do
       putStrLn (x <> "\x1b[1;32mType inference:\x1b[0m")
-      forM_ (M.toList $ values (difference env builtinsEnv)) $ \(k, t) ->
+      for_ (M.toList $ values (difference env builtinsEnv)) $ \(k, t) ->
         T.putStrLn (prettyPrint k <> " : " <> prettyPrint t)
       putStrLn ("\x1b[1;32mCore lowering:\x1b[0m")
       print prog
-      mapM_ ppr core
+      traverse_ ppr core
       pure (Just (core, env))
     CParse e -> Nothing <$ print e
     CResolve e -> Nothing <$ report e (T.pack x)
