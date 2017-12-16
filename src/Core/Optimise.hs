@@ -1,15 +1,53 @@
 module Core.Optimise
-  ( optimise
+  ( mapTerm, mapTerm1
+  , substitute
+  , module Core.Core
+  , Var(..)
+  , TransformPass(..)
+  , beforePass, afterPass, transformTerm
   ) where
 
-import Core.Optimise.Transform
+import qualified Data.Map.Strict as M
+import Data.Maybe (fromMaybe)
+import Data.Text (Text)
+import Data.Generics (gmapT, mkT)
+import Data.Triple (third3)
+
 import Core.Core
+import Syntax
 
-optimise :: [CoStmt] -> [CoStmt]
-optimise = map optimiseStmt where
-  optimiseStmt (CosLet vs) = CosLet (map (\(v, t, e) -> (v, t, optimiseTerm e)) vs)
-  optimiseStmt s = s
+type TupleT a = [(a, CoType, CoTerm)] -> [(a, CoType, CoTerm)]
 
-optimiseTerm :: CoTerm -> CoTerm
-optimiseTerm = transformTerm (mconcat [dropBranches
-                                      ])
+-- Apply a function to each child in the provided expr. Note this does not
+-- apply to all descendants.
+mapTerm1 :: (CoTerm -> CoTerm) -> CoTerm -> CoTerm
+mapTerm1 f = gmapT (mkT (tupT :: TupleT (Var Resolved))) -- CotLet
+           . gmapT (mkT (tupT :: TupleT CoPattern))      -- CotMatch
+           . gmapT (mkT (tupT :: TupleT Text))           -- CotExtend
+           . gmapT (mkT (map f))                         -- CotBegin
+           . gmapT (mkT f) where
+  tupT = map (third3 f)
+
+
+-- Apply a function to all descendants in the provided expr.
+mapTerm :: (CoTerm -> CoTerm) -> CoTerm -> CoTerm
+mapTerm f = f . mapTerm1 (mapTerm f)
+
+substitute :: M.Map (Var Resolved) CoTerm -> CoTerm -> CoTerm
+substitute m = mapTerm subst
+  where subst e@(CotRef v _) = fromMaybe e (M.lookup v m)
+        subst e = e
+
+data TransformPass
+  = TransformPass { before :: CoTerm -> CoTerm
+                  , after :: CoTerm -> CoTerm }
+
+instance Monoid TransformPass where
+  mempty = TransformPass id id
+  mappend (TransformPass b a) (TransformPass b' a') = TransformPass (b . b') (a . a')
+beforePass, afterPass :: (CoTerm -> CoTerm) -> TransformPass
+beforePass fn = TransformPass { before = fn, after = id }
+afterPass  fn = TransformPass { before = id, after = fn }
+
+transformTerm :: TransformPass -> CoTerm -> CoTerm
+transformTerm pass = after pass . mapTerm1 (transformTerm pass) . before pass

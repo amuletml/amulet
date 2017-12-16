@@ -20,9 +20,9 @@ import Syntax.Resolve
 import Syntax.Desugar
 import Syntax
 
-import Core.Core
+import Core.Simplify
 import Core.Lower
-import Core.Optimise
+import Core.Core
 
 import Errors
 import Parser
