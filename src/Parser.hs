@@ -169,6 +169,7 @@ operator' = lexeme ((:) <$> Tok.opStart style <*> many (Tok.opLetter style))
 patternP :: Parser Pattern'
 patternP = wildcard
        <|> capture
+       <|> try notDestructure
        <|> try constructor
        <|> try pType
        <|> try destructure
@@ -180,6 +181,9 @@ patternP = wildcard
   capture = withPos (Capture <$> varName)
   varName = (Name <$> lowerIdent) <?> "variable name"
   constructor = withPos (flip Destructure Nothing <$> constrName)
+  notDestructure = withPos $ do
+    ps <- constrName
+    Destructure ps . Just <$> withPos (Wildcard <$ brackets (pure ()))
   destructure = withPos . parens $ do
     ps <- constrName
     Destructure ps . Just <$> patternP
