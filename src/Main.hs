@@ -56,7 +56,7 @@ compileFromTo :: FilePath
               -> IO ()
 compileFromTo fp x emit =
   case compile fp x of
-    CSuccess (prg, _, env) -> emit (compileProgram env prg)
+    CSuccess (_, core, env) -> emit (compileProgram env core)
     CParse e -> print e
     CResolve e -> putStrLn "Resolution error" >> report e x
     CInfer e -> putStrLn "Type error" >> report e x

@@ -5,6 +5,7 @@ import Pretty
 import Data.Foldable
 
 import Data.Text (Text)
+import qualified Data.Text as T
 
 data LuaStmt
   = LuaDo [LuaStmt]
@@ -77,12 +78,12 @@ instance Pretty LuaStmt where
   pprint (LuaFornum v s e i b) = do
     kwClr "for " <+> v <+> opClr " = "
     interleave ", " [s, e, i]
-    kwClr " do "
+    kwClr " do"
     body 2 b *> newline
     kwClr "end"
   pprint (LuaFor vs es b) = do
     kwClr "for " <+> interleave ", " vs <+> opClr " in "
-    interleave ", " es <+> kwClr " do "
+    interleave ", " es <+> kwClr " do"
     body 2 b *> newline
     kwClr "end"
   pprint (LuaLocal [n] [LuaFunction a b]) = do
@@ -105,8 +106,8 @@ instance Pretty LuaStmt where
 
 instance Pretty LuaVar where
   pprint (LuaName x) = pprint x
-  pprint (LuaIndex e@(LuaRef _) (LuaString k)) = e <+> opClr "." <+> k
-  pprint (LuaIndex e (LuaString k)) = parens e <+> opClr "." <+> k
+  pprint (LuaIndex e@(LuaRef _) (LuaString k)) | validKey k = e <+> opClr "." <+> k
+  pprint (LuaIndex e (LuaString k)) | validKey k = parens e <+> opClr "." <+> k
   pprint (LuaIndex e k) = e <+> squares k
 
 instance Pretty LuaExpr where
@@ -127,3 +128,11 @@ instance Pretty LuaExpr where
   pprint (LuaCall x@LuaFunction{} a) = parens x <+> parens (interleave ", " a)
   pprint (LuaCall x a) = x <+> parens (interleave ", " a)
   pprint (LuaBitE x) = pprint x
+
+validKey :: Text -> Bool
+validKey t = case T.uncons t of
+               Nothing -> False
+               Just (c, cs) -> start c && T.all rest cs
+  where
+    start c = (c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))
+    rest c = start c || (c >= '0' && c <= '9')
