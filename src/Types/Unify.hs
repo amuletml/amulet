@@ -10,8 +10,8 @@ import Types.Wellformed
 import Syntax.Subst
 import Syntax
 
-import qualified Data.Map.Strict as M
-import qualified Data.Set as S
+import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 
 import Data.Foldable
 import Data.Function
@@ -28,8 +28,8 @@ bind var ty
   | otherwise = do
       env <- get
       -- Attempt to extend the environment, otherwise unify with existing type
-      case M.lookup var env of
-        Nothing -> put (M.singleton var ty `compose` env)
+      case Map.lookup var env of
+        Nothing -> put (Map.singleton var ty `compose` env)
         Just ty'
           | ty == ty -> pure ()
           | otherwise -> unify ty ty'
@@ -45,7 +45,7 @@ unify ta@(TyCon a) tb@(TyCon b)
 unify t@(TyForall vs ty) t'@(TyForall vs' ty')
   | length vs /= length vs' = throwError (NotEqual t t')
   -- TODO: Technically we should make fresh variables and do ty[vs/f] ~ ty'[vs'/f]
-  | otherwise = unify ty (apply (M.fromList (zip vs' (map TyVar vs))) ty')
+  | otherwise = unify ty (apply (Map.fromList (zip vs' (map TyVar vs))) ty')
 unify (TyRows rho arow) (TyRows sigma brow)
   | overlaps <- overlap arow brow
   , new <- unionBy ((==) `on` fst) arow brow
@@ -115,4 +115,4 @@ solve i s (ConUnify e a t:xs) = do
 
 occurs :: Var Typed -> Type Typed -> Bool
 occurs _ (TyVar _) = False
-occurs x e = x `S.member` ftv e
+occurs x e = x `Set.member` ftv e

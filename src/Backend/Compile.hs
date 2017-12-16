@@ -17,7 +17,7 @@ import Syntax
 
 import Data.Semigroup ((<>))
 
-import qualified Data.Map.Strict as M
+import qualified Data.Map.Strict as Map
 
 import qualified Data.Text as T
 import Data.Text (Text)
@@ -48,7 +48,11 @@ compileProgram ev = LuaDo . (extendDef:) . compileProg where
     (ns, vs') = unzip $ map compileLet vs
   compileProg (CosType _ _ cs:xs) = map compileConstructor cs ++ compileProg xs
   compileProg [] = [LuaCallS (main ev) []] where
-    main = LuaRef . LuaName . getTaggedName . head . sortOn key . filter isMain . M.keys . values
+    main = LuaRef . LuaName . getTaggedName . head
+         . sortOn key
+         . filter isMain
+         . Map.keys
+         . values
     isMain (TgName x _) = x == "main"
     isMain _ = False
     key (TgName k _) = k
@@ -222,8 +226,8 @@ extendDef = LuaAssign [ extend ]
         v' = LuaName "v_"
         k' = LuaName "k_"
 
-ops :: M.Map Text Text
-ops = M.fromList [ ("+", "+")
+ops :: Map.Map Text Text
+ops = Map.fromList [ ("+", "+")
                  , ("-", "-")
                  , ("*", "*")
                  , ("/", "/")
@@ -239,8 +243,8 @@ ops = M.fromList [ ("+", "+")
                  , ("&&", "and") ]
 
 isBinOp :: Var Resolved -> Bool
-isBinOp (TgInternal v) = M.member v ops
+isBinOp (TgInternal v) = Map.member v ops
 isBinOp _ = False
 
 remapOp :: Text -> Text
-remapOp x = fromMaybe x (M.lookup x ops)
+remapOp x = fromMaybe x (Map.lookup x ops)

@@ -2,7 +2,7 @@ module Core.Optimise.Match
   ( dropBranches
   ) where
 
-import qualified Data.Map.Strict as M
+import qualified Data.Map.Strict as Map
 
 import Core.Optimise
 
@@ -14,7 +14,7 @@ dropBranches = beforePass pass where
     case reducePatterns ptrns of
       [(CopCapture v, ty, bod)] ->
         case e of
-          CotRef _ _ -> substitute (M.singleton v e) bod
+          CotRef _ _ -> substitute (Map.singleton v e) bod
           _ -> CotLet [(v, ty, e)] bod
       ptrns' -> CotMatch e ptrns'
   pass e = e
