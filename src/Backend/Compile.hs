@@ -177,7 +177,7 @@ foldAnd = foldl1 k where
 
 patternTest :: CoPattern -> LuaExpr ->  LuaExpr
 patternTest (CopCapture _) _    = LuaTrue
-patternTest (CopLit l)     vr   = (LuaBinOp (compileExpr (CotLit l)) "==" vr)
+patternTest (CopLit l)     vr   = LuaBinOp (compileExpr (CotLit l)) "==" vr
 patternTest (CopRecord rs) vr   = foldAnd (map test rs) where
   test (var', pat) = patternTest pat (LuaRef (LuaIndex vr (LuaString var')))
 patternTest (CopConstr con) vr  = foldAnd [tag con vr]
