@@ -50,7 +50,7 @@ resolveToplevel :: MonadResolve m => Toplevel Parsed -> m (Toplevel Resolved)
 resolveToplevel r = flip catchError (throwError . flip ArisingFromTop r)
   $ case r of
      LetStmt vs a -> LetStmt
-                 <$> traverse (\(v, e) -> (,) <$> lookupEx v <*> reExpr e) vs
+                 <$> traverse (\(v, e, a) -> (,,) <$> lookupEx v <*> reExpr e <*> pure a) vs
                  <*> pure a
      ForeignVal v t ty a -> ForeignVal
                         <$> lookupEx v
@@ -86,9 +86,12 @@ reExpr r@(VarRef v a) = VarRef
                     <$> catchError (lookupEx v) (throwError . flip ArisingFrom r)
                     <*> pure a
 reExpr (Let vs c a) = do
-  let vars = map fst vs
+  let vars = map (\(x,_,_)->x) vs
   vars' <- traverse tagVar vars
-  extendN (zip vars vars') $ Let <$> traverse (\(v, e) -> (,) <$> lookupEx v <*> reExpr e) vs
+  extendN (zip vars vars') $ Let <$> traverse (\(v, e, a) -> (,,) <$> lookupEx v
+                                                                  <*> reExpr e
+                                                                  <*> pure a)
+                                              vs
                                  <*> reExpr c
                                  <*> pure a
 reExpr (If c t b a) = If <$> reExpr c <*> reExpr t <*> reExpr b <*> pure a

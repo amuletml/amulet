@@ -5,14 +5,14 @@ module Types.Holes where
 import Syntax
 
 findHoles :: [Toplevel Typed] -> [Expr Typed]
-findHoles (LetStmt vs _:xs) = concatMap (findExprHoles . snd) vs ++ findHoles xs
+findHoles (LetStmt vs _:xs) = concatMap (findExprHoles . (\(_,y,_)->y)) vs ++ findHoles xs
 findHoles (_:xs) = findHoles xs
 findHoles [] = []
 
 findExprHoles :: Expr Typed -> [Expr Typed]
 findExprHoles x@Hole{} = [x]
 findExprHoles (Let vs e _)
-  = concatMap (findExprHoles . snd) vs ++ findExprHoles e
+  = concatMap (findExprHoles . (\(_,y,_)->y)) vs ++ findExprHoles e
 findExprHoles (If c t e _)
   = concat [ findExprHoles c, findExprHoles t, findExprHoles e ]
 findExprHoles (BinOp c t e _)

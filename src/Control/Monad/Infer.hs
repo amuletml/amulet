@@ -133,11 +133,10 @@ alpha :: [Text]
 alpha = map T.pack $ [1..] >>= flip replicateM ['a'..'z']
 
 instantiate :: (MonadError TypeError m, MonadGen Int m) => Type Typed -> m (Type Typed)
-instantiate forallty@(TyForall vs ty) = do
-  tracePretty forallty (pure ())
+instantiate (TyForall vs ty) = do
   f <- traverse (const freshTV) vs
-  instantiate (apply (tracePrettyId (Map.fromList (zip vs f))) ty)
-instantiate ty = pure (tracePrettyId ty)
+  instantiate (apply (Map.fromList (zip vs f)) ty)
+instantiate ty = pure ty
 
 difference :: Env -> Env -> Env
 difference (Env ma mb) (Env ma' mb') = Env (ma Map.\\ ma') (mb Map.\\ mb')
