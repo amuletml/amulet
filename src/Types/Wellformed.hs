@@ -6,8 +6,10 @@ import Control.Monad.Except
 import Control.Monad.Infer
 import Syntax
 
-import Pretty(Pretty)
+import Data.Foldable
 import Data.List (union)
+
+import Pretty(Pretty)
 
 wellformed :: (Pretty (Var p), MonadError TypeError m) => Type p -> m ()
 wellformed tp = case tp of
@@ -24,22 +26,17 @@ wellformed tp = case tp of
       TyExactRows{} -> pure ()
       TyVar{} -> pure ()
       _ -> throwError (CanNotInstance tp rho)
-    mapM_ (wellformed . snd) rows
-  TyExactRows rows -> mapM_ (wellformed . snd) rows
-  TyCons cs t -> mapM wellformedC cs *> wellformed t
-
-wellformedC :: (Pretty (Var p), MonadError TypeError m) => GivenConstraint p -> m ()
-wellformedC (Equal a b _) = wellformed a *> wellformed b
+    traverse_ (wellformed . snd) rows
+  TyExactRows rows -> traverse_ (wellformed . snd) rows
 
 arity :: Type p -> Int
 arity (TyArr _ t) = 1 + arity t
 arity (TyForall _ t) = arity t
-arity (TyCons _ t) = arity t
 arity _ = 0
 
 normType :: Eq (Var p) => Type p -> Type p
-normType (TyCons cs (TyForall vs tp)) = TyForall vs (TyCons cs tp)
-normType (TyForall vs (TyForall vs' tp)) = TyForall (vs `union` vs') tp
+normType (TyForall vs (TyForall vs' tp)) = TyForall (vs `union` vs') (normType tp)
+normType (TyForall [] tp) = normType tp
 normType x = x
 
 {-

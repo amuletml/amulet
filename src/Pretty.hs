@@ -48,10 +48,11 @@ import Data.Char as M
 import Data.List as M
 import Debug.Trace
 
+import Data.Foldable
+
 import qualified Data.Text.IO as T
 import qualified Data.Text as T
 import Data.Text (Text)
-
 
 import qualified Control.Monad.Reader as RM
 
@@ -136,7 +137,7 @@ indented x = newline *> pprint x
 
 body :: Pretty a => Int -> [a] -> PrettyP
 body _ [] = pure ()
-body k b = block k $ mapM_ indented b
+body k b = block k $ traverse_ indented b
 
 typeClr :: Pretty a => a -> PrettyP
 typeClr x = flip colour x =<< asks typeColour

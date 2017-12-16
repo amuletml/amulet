@@ -3,7 +3,6 @@ module Backend.Compile
   ( compileProgram
   , compileLet
   , compileExpr
-  , compileConstructors
   ) where
 
 import Control.Monad.Gen
@@ -12,31 +11,27 @@ import Control.Monad
 import Control.Monad.Infer
 
 import Backend.Lua
+import Core.Core
+import Core.Types
 import Syntax
 
-import Control.Arrow ((***))
-
 import Data.Semigroup ((<>))
-import Data.Spanned
 
 import qualified Data.Map.Strict as M
 
 import qualified Data.Text as T
 import Data.Text (Text)
-
-import Types.Wellformed (arity)
-
 import Data.List (sortOn)
-import Pretty (uglyPrint)
+import Data.Maybe (fromMaybe)
 
 type Returner = Maybe (LuaExpr -> LuaStmt)
 
 alpha :: [Text]
 alpha = map T.pack ([1..] >>= flip replicateM ['a'..'z'])
 
-compileProgram :: Env -> [Toplevel Typed] -> LuaStmt
+compileProgram :: Env -> [CoStmt] -> LuaStmt
 compileProgram ev = LuaDo . (extendDef:) . compileProg where
-  compileProg (ForeignVal n' s t _:xs)
+  compileProg (CosForeign n' t s:xs)
     | arity t > 1
     = let ags = map LuaName $ take (arity t) alpha
           mkF (a:ag) bd = LuaFunction [a] [LuaReturn (mkF ag bd)]
@@ -49,9 +44,9 @@ compileProgram ev = LuaDo . (extendDef:) . compileProg where
         :compileProg xs
     | otherwise = LuaLocal [LuaName n] [LuaBitE s]:compileProg xs
     where n = getName n'
-  compileProg (LetStmt vs _:xs) = locals ns vs' ++ compileProg xs where
+  compileProg (CosLet vs:xs) = locals ns vs' ++ compileProg xs where
     (ns, vs') = unzip $ map compileLet vs
-  compileProg (TypeDecl _ _ cs _:xs) = compileConstructors cs ++ compileProg xs
+  compileProg (CosType _ _ cs:xs) = map compileConstructor cs ++ compileProg xs
   compileProg [] = [LuaCallS (main ev) []] where
     main = LuaRef . LuaName . getTaggedName . head . sortOn key . filter isMain . M.keys . values
     isMain (TgName x _) = x == "main"
@@ -59,96 +54,92 @@ compileProgram ev = LuaDo . (extendDef:) . compileProg where
     key (TgName k _) = k
     key _ = undefined
 
-compileConstructors :: [Constructor Typed] -> [LuaStmt]
-compileConstructors (UnitCon a _:xs) -- unit constructors, easy
-  = LuaLocal [lowerName a] [LuaTable [(LuaNumber 1, LuaString cn)]]:compileConstructors xs where
-    cn = getName a
-compileConstructors (ArgCon a _ _:ys) -- non-unit constructors, hard
-  = LuaLocal [lowerName a] [vl]:compileConstructors ys where
+compileConstructor :: (Var Resolved, CoType) -> LuaStmt
+compileConstructor (var, ty) | arity ty == 0
+  = LuaLocal [lowerName var] [LuaTable [(LuaNumber 1, LuaString cn)]] where
+    cn = getName var
+compileConstructor (var, _) -- non-unit constructors, hard
+  = LuaLocal [lowerName var] [vl] where
     vl = LuaFunction [LuaName "x"] [LuaReturn (LuaTable [(LuaNumber 1, LuaString cn), (LuaNumber 2, LuaRef (LuaName "x"))])]
-    cn = getName a
--- GADT constructors, hardest - we have to figure out the representation from the type
-compileConstructors [] = []
+    cn = getName var
 
-compileLet :: (Var Typed, Expr Typed) -> (LuaVar, LuaExpr)
-compileLet (n, e) = (lowerName n, compileExpr e)
+compileLet :: (Var Resolved, CoType, CoTerm) -> (LuaVar, LuaExpr)
+compileLet (n, _, e) = (lowerName n, compileExpr e)
 
-compileExpr :: Expr Typed -> LuaExpr
-compileExpr (VarRef v _) = LuaRef (lowerName v)
-compileExpr (Ascription e _ _) = compileExpr e
-compileExpr (Hole v ann) = LuaCall (global "error") [LuaString msg] where
-  msg = "Deferred typed hole " <> uglyPrint v <> " (from " <> uglyPrint ann <> ")"
-compileExpr (Access rec f _) = LuaRef (LuaIndex (compileExpr rec) (LuaString f))
-compileExpr (App f x _) = LuaCall (compileExpr f) [compileExpr x]
-compileExpr (Fun (Capture v _) e _) = LuaFunction [lowerName v] (compileStmt (Just LuaReturn) e)
-compileExpr (Fun (Wildcard _) e _) = LuaFunction [LuaName "_"] (compileStmt (Just LuaReturn) e)
-compileExpr f@(Fun k e _) = LuaFunction [LuaName "__arg__"]
-                              (compileStmt (Just LuaReturn)
-                                           (Match (VarRef (TvName (TgInternal "__arg__"))
-                                                          (annotation f, undefined))
-                                                  [(k, e)] (annotation f, undefined)))
-compileExpr (Tuple [] _) = LuaNil -- evil!
-compileExpr (Tuple [x] _) = compileExpr x -- the root of all evil!
-compileExpr (Tuple xs _) = LuaTable (zip (map LuaNumber [1..]) (map compileExpr xs))
-compileExpr (Literal (LiInt x) _)       = LuaNumber (fromInteger x)
-compileExpr (Literal (LiStr str) _)     = LuaString str
-compileExpr (Literal (LiBool True) _)   = LuaTrue
-compileExpr (Literal (LiBool False) _)  = LuaFalse
-compileExpr (Literal LiUnit _)          = LuaNil -- evil!
-compileExpr (Record rows _)             = LuaTable (map (LuaString *** compileExpr) rows)
-compileExpr (RecordExt rec exts _)
-  = let rec' = compileExpr rec
-        extend :: [(LuaExpr, LuaExpr)] -> LuaExpr -> LuaExpr
-        extend ((v, e):xs) rec = LuaCall (global "extend") [extend xs rec, v, e]
-        extend [] x = x
-     in extend (map (LuaString *** compileExpr) exts) rec'
-compileExpr s@Let{} = compileIife s
-compileExpr s@If{} = compileIife s
-compileExpr s@Begin{} = compileIife s
-compileExpr s@Match{} = compileIife s
-compileExpr (BinOp l (VarRef (TvName (TgInternal o)) _) r _) = LuaBinOp (compileExpr l) (remapOp o) (compileExpr r)
-compileExpr BinOp{} = error "absurd: never parsed"
-compileExpr LeftSection{} = error "absurd: desugarer removes left sections"
-compileExpr RightSection{} = error "absurd: desugarer removes right sections"
-compileExpr BothSection{} = error "absurd: desugarer removes both-side sections"
-compileExpr AccessSection{} = error "absurd: desugarer removes access sections"
+compileExpr :: CoTerm -> LuaExpr
+
+-- First handle binary operators
+compileExpr (CotRef v _) | isBinOp v
+  = LuaFunction [left] [LuaReturn (LuaFunction
+                                    [right]
+                                    [LuaReturn (LuaBinOp (LuaRef left) (remapOp (getTaggedName v)) (LuaRef right))])]
+    where left  = LuaName "l"
+          right = LuaName "r"
+compileExpr (CotApp (CotApp (CotRef f _) left) right) | isBinOp f
+  = LuaBinOp (compileExpr left) (remapOp (getTaggedName f)) (compileExpr right)
+compileExpr (CotApp (CotRef f _) left) | isBinOp f
+  = LuaFunction [name] [LuaReturn (LuaBinOp (compileExpr left) (remapOp (getTaggedName f)) (LuaRef name))]
+    where name = LuaName "__r"
+
+compileExpr (CotRef v _) = LuaRef (lowerName v)
+compileExpr (CotLam Small (v, _) e) = LuaFunction [lowerName v] (compileStmt (Just LuaReturn) e)
+compileExpr (CotApp f x) = LuaCall (compileExpr f) [compileExpr x]
+compileExpr (CotLam Big _ e) = compileExpr e
+compileExpr (CotTyApp f _) = compileExpr f
+
+compileExpr (CotLit (ColInt x))   = LuaNumber (fromInteger x)
+compileExpr (CotLit (ColStr str)) = LuaString str
+compileExpr (CotLit ColTrue)      = LuaTrue
+compileExpr (CotLit ColFalse)     = LuaFalse
+compileExpr (CotLit ColUnit)      = LuaNil -- evil!
+compileExpr (CotLit ColRecNil)    = LuaTable []
+
+compileExpr (CotExtend (CotLit ColRecNil) fs)
+  = LuaTable (map (\(f, _, e) -> (LuaString f, compileExpr e)) fs)
+compileExpr s@CotExtend{} = compileIife s
+
+compileExpr s@CotLet{}    = compileIife s
+compileExpr s@CotBegin{}  = compileIife s
+compileExpr s@CotMatch{}  = compileIife s
 
 global :: String -> LuaExpr
 global x = LuaRef (LuaIndex (LuaRef (LuaName "_G")) (LuaString (T.pack x)))
 
-compileStmt :: Returner -> Expr Typed -> [LuaStmt]
-compileStmt r e@VarRef{} = pureReturn r $ compileExpr e
-compileStmt r e@Hole{} = pureReturn r $ compileExpr e
-compileStmt r e@Access{} = pureReturn r $ compileExpr e
-compileStmt r e@Literal{} = pureReturn r $ compileExpr e
-compileStmt r e@Fun{} = pureReturn r $ compileExpr e
-compileStmt r e@BinOp{} = pureReturn r $ compileExpr e
-compileStmt r e@Record{} = pureReturn r $ compileExpr e
-compileStmt r e@RecordExt{} = pureReturn r $ compileExpr e
-compileStmt r e@Tuple{} = pureReturn r $ compileExpr e
-compileStmt r (Ascription e _ _) = compileStmt r e
-compileStmt r (Let k c _) = let (ns, vs) = unzip $ map compileLet k in
+compileStmt :: Returner -> CoTerm -> [LuaStmt]
+compileStmt r e@CotRef{} = pureReturn r $ compileExpr e
+compileStmt r e@CotLam{} = pureReturn r $ compileExpr e
+compileStmt r e@CotLit{} = pureReturn r $ compileExpr e
+compileStmt r (CotLet k c) = let (ns, vs) = unzip $ map compileLet k in
                               (locals ns vs ++ compileStmt r c)
-compileStmt r (If c t e _) = [LuaIf (compileExpr c) (compileStmt r t) (compileStmt r e)]
-compileStmt r (Begin xs _) = concatMap (compileStmt Nothing) (init xs) ++ compileStmt r (last xs)
-compileStmt r (Match s ps _) = runGen (compileMatch r s ps)
-compileStmt Nothing (App f x _) = [LuaCallS (compileExpr f) [compileExpr x]]
-compileStmt (Just r) e@App{} = [r (compileExpr e)]
+compileStmt r (CotBegin xs x) = concatMap (compileStmt Nothing) xs ++ compileStmt r x
+compileStmt r (CotMatch s ps) = runGen (compileMatch r s ps)
 
--- These are absurd.
-compileStmt r e@LeftSection{} = pureReturn r $ compileExpr e
-compileStmt r e@RightSection{} = pureReturn r $ compileExpr e
-compileStmt r e@BothSection{} = pureReturn r $ compileExpr e
-compileStmt r e@AccessSection{} = pureReturn r $ compileExpr e
+compileStmt Nothing e@CotApp{} = case compileExpr e of
+                                     LuaCall f a -> [LuaCallS f a]
+                                     expr -> [LuaLocal [LuaName "_"] [expr]]
+compileStmt (Just r) e@CotApp{} = [r (compileExpr e)]
+compileStmt r (CotTyApp f _) = compileStmt r f
 
-lowerName :: Var Typed -> LuaVar
-lowerName = LuaName . getTaggedName . unTvName
+compileStmt r e@(CotExtend (CotLit ColRecNil) _) = dirtyReturn r (compileExpr e) -- TODO: Flatten if r is nothing?
+compileStmt r (CotExtend tbl exs) = [ LuaLocal [old, new] [compileExpr tbl, LuaTable []]
+                                    , LuaFor [k, v] [LuaCall (LuaRef pairs) [LuaRef old]]
+                                      [LuaAssign [LuaIndex (LuaRef new) (LuaRef (LuaName k))] [LuaRef (LuaName v)]] ] ++
+                                    map (\(f, _, e) -> LuaAssign [LuaIndex (LuaRef new) (LuaString f)] [compileExpr e]) exs ++
+                                    pureReturn r (LuaRef new)
+  where old = LuaName (T.pack "__o")
+        new = LuaName (T.pack "__n")
+        k = T.pack "k"
+        v = T.pack "v"
+        pairs = LuaName (T.pack "pairs")
 
-lowerKey :: Var Typed -> LuaExpr
-lowerKey = LuaString . getTaggedName . unTvName
+lowerName :: Var Resolved -> LuaVar
+lowerName = LuaName . getTaggedName
 
-getName :: Var Typed -> Text
-getName = getTaggedName . unTvName
+lowerKey :: Var Resolved -> LuaExpr
+lowerKey = LuaString . getTaggedName
+
+getName :: Var Resolved -> Text
+getName = getTaggedName
 
 getTaggedName :: Var Resolved -> Text
 getTaggedName (TgName t i) = t <> T.pack (show i)
@@ -157,7 +148,7 @@ getTaggedName (TgInternal t) = t
 iife :: [LuaStmt] -> LuaExpr
 iife b = LuaCall (LuaFunction [] b) []
 
-compileIife :: Expr Typed -> LuaExpr
+compileIife :: CoTerm -> LuaExpr
 compileIife = iife . compileStmt (Just LuaReturn)
 
 locals :: [LuaVar] -> [LuaExpr] -> [LuaStmt]
@@ -172,13 +163,9 @@ pureReturn :: Returner -> LuaExpr -> [LuaStmt]
 pureReturn Nothing _ = []
 pureReturn (Just r) e = [r e]
 
-remapOp :: Text -> Text
-remapOp "^" = ".."
-remapOp "**" = "^"
-remapOp "<>" = "~="
-remapOp "||" = "or"
-remapOp "&&" = "and"
-remapOp x = x
+dirtyReturn :: Returner -> LuaExpr -> [LuaStmt]
+dirtyReturn Nothing e = [LuaLocal [LuaName (T.pack "_")] [e]]
+dirtyReturn (Just r) e = [r e]
 
 foldAnd :: [LuaExpr] -> LuaExpr
 foldAnd = foldl1 k where
@@ -188,65 +175,35 @@ foldAnd = foldl1 k where
     | r == LuaFalse || l == LuaFalse = LuaFalse
     | otherwise = LuaBinOp l "and" r
 
-patternTest :: Pattern Typed -> LuaExpr ->  LuaExpr
-patternTest Wildcard{}    _ = LuaTrue
-patternTest Capture{}     _ = LuaTrue
-patternTest (PType p _ _) t = patternTest p t
-patternTest (PTuple ps _) vr
-  | [x] <- ps
-  = patternTest x vr
-  | otherwise
-  = foldAnd (table vr:zipWith3 innerTest ps (repeat vr) [1..]) where
-    innerTest p v = patternTest p . LuaRef . LuaIndex v . LuaNumber . fromInteger
-patternTest (PRecord rs _) vr = foldAnd (table vr:map (test vr) rs) where
-  test vr (var', pat) = patternTest pat (LuaRef (LuaIndex vr (LuaString var')))
-patternTest (Destructure con p' _) vr
-  | Just p <- p'
-  = foldAnd [table vr, tag con vr, patternTest p (LuaRef (LuaIndex vr (LuaNumber 2)))]
-  | Nothing <- p'
-  = foldAnd [table vr, tag con vr ]
+patternTest :: CoPattern -> LuaExpr ->  LuaExpr
+patternTest (CopCapture _) _    = LuaTrue
+patternTest (CopLit l)     vr   = LuaBinOp (compileExpr (CotLit l)) "==" vr
+patternTest (CopRecord rs) vr   = foldAnd (map test rs) where
+  test (var', pat) = patternTest pat (LuaRef (LuaIndex vr (LuaString var')))
+patternTest (CopConstr con) vr  = foldAnd [tag con vr]
+patternTest (CopDestr con p) vr = foldAnd [tag con vr, patternTest p (LuaRef (LuaIndex vr (LuaNumber 2)))]
 
-tag :: Var Typed -> LuaExpr -> LuaExpr
+tag :: Var Resolved -> LuaExpr -> LuaExpr
 tag con vr = LuaBinOp (LuaRef (LuaIndex vr (LuaNumber 1))) "==" (lowerKey con)
 
-table :: LuaExpr -> LuaExpr
-table ex = LuaBinOp (LuaCall (LuaRef (LuaName "type")) [ex]) "==" (LuaString "table")
-
-patternBindings :: Pattern Typed -> LuaExpr -> [(LuaVar, LuaExpr)]
-patternBindings Wildcard{}  _ = []
-patternBindings (Capture n _) v = [(lowerName n, v)]
-patternBindings (PType p _ _) t = patternBindings p t
-patternBindings (Destructure _ p' _) vr
-  | Nothing <- p'
-  = []
-  | Just p <- p'
-  = patternBindings p (LuaRef (LuaIndex vr (LuaNumber 2)))
-patternBindings (PRecord rs _) vr = concatMap (index vr) rs where
+patternBindings :: CoPattern -> LuaExpr -> [(LuaVar, LuaExpr)]
+patternBindings (CopLit _) _      = []
+patternBindings (CopCapture n) v  = [(lowerName n, v)]
+patternBindings (CopConstr _) _   = []
+patternBindings (CopDestr _ p) vr = patternBindings p (LuaRef (LuaIndex vr (LuaNumber 2)))
+patternBindings (CopRecord rs) vr = concatMap (index vr) rs where
   index vr (var', pat) = patternBindings pat (LuaRef (LuaIndex vr (LuaString var')))
-patternBindings (PTuple ps _) vr
-  | [x] <- ps
-  = patternBindings x vr
-  | otherwise
-  = concat $ zipWith3 innerBind ps (repeat vr) [1..] where
-    innerBind p v = patternBindings p . LuaRef . LuaIndex v . LuaNumber . fromInteger
 
-compileMatch :: Returner -> Expr Typed -> [(Pattern Typed, Expr Typed)] -> Gen Int [LuaStmt]
+compileMatch :: Returner -> CoTerm -> [(CoPattern, CoType, CoTerm)] -> Gen Int [LuaStmt]
 compileMatch r ex ps = do
   x <- (LuaName . ("__" <>) . (alpha !!)) <$> gen -- matchee
-  let gen ((p, c):ps) = ( patternTest p (LuaRef x)
-                        , let pbs = patternBindings p (LuaRef x)
-                              (a, b) = unzip pbs
-                           in case a of
-                                [] -> []
-                                _ -> [LuaLocal a b]
-                          ++ compileStmt r c )
-                        : gen ps
-      gen [] = [err]
-      err = ( LuaTrue
-            , [LuaCallS (global "error")
-                        [LuaString "Pattern matching failure in match expression"]])
+  let gen (p, _, c) = ( patternTest p (LuaRef x)
+                      , case patternBindings p (LuaRef x) of
+                          [] -> []
+                          xs -> [uncurry LuaLocal (unzip xs)]
+                        ++ compileStmt r c )
   pure $ compileStmt (Just $ LuaLocal [x] . (:[])) ex
-       ++ [ LuaIfElse (gen ps) ]
+       ++ [ LuaIfElse (map gen ps) ]
 
 --- This is a hack, but we need this for compiling record extension
 extendDef :: LuaStmt
@@ -264,3 +221,26 @@ extendDef = LuaAssign [ extend ]
         out = LuaName "out"
         v' = LuaName "v_"
         k' = LuaName "k_"
+
+ops :: M.Map Text Text
+ops = M.fromList [ ("+", "+")
+                 , ("-", "-")
+                 , ("*", "*")
+                 , ("/", "/")
+                 , ("**", "^")
+                 , ("^", "..")
+                 , ("<", "<")
+                 , (">", ">")
+                 , (">=", ">=")
+                 , ("<=", "<=")
+                 , ("==", "==")
+                 , ("<>", "~=")
+                 , ("||", "or")
+                 , ("&&", "and") ]
+
+isBinOp :: Var Resolved -> Bool
+isBinOp (TgInternal v) = M.member v ops
+isBinOp _ = False
+
+remapOp :: Text -> Text
+remapOp x = fromMaybe x (M.lookup x ops)

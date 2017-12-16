@@ -13,6 +13,7 @@ import Syntax
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 
+import Data.Foldable
 import Data.Function
 import Data.List
 
@@ -48,7 +49,7 @@ unify t@(TyForall vs ty) t'@(TyForall vs' ty')
 unify (TyRows rho arow) (TyRows sigma brow)
   | overlaps <- overlap arow brow
   , new <- unionBy ((==) `on` fst) arow brow
-  = do mapM_ (uncurry unify) overlaps
+  = do traverse_ (uncurry unify) overlaps
        tau <- freshTV
        unify rho (TyRows tau new)
        unify sigma (TyRows tau new)
@@ -62,30 +63,23 @@ unify ta@(TyExactRows arow) tb@(TyRows _ brow)
   | overlaps <- overlap arow brow
   = case overlaps of
       [] -> throwError (NoOverlap ta tb)
-      xs -> mapM_ (uncurry unify) xs
+      xs -> traverse_ (uncurry unify) xs
 unify tb@(TyRows _ brow) ta@(TyExactRows arow)
   | overlaps <- overlap arow brow
   = case overlaps of
       [] -> throwError (NoOverlap ta tb)
-      xs -> mapM_ (uncurry unify) xs
+      xs -> traverse_ (uncurry unify) xs
 unify ta@(TyExactRows arow) tb@(TyExactRows brow)
   | overlaps <- overlap arow brow
   = do when (length overlaps /= length arow || length overlaps /= length brow)
          $ throwError (NoOverlap ta tb)
-       mapM_ (uncurry unify) overlaps
+       traverse_ (uncurry unify) overlaps
 
 unify x tp@TyRows{} = throwError (Note (CanNotInstance tp x) isRec)
 unify tp@TyRows{} x = throwError (Note (CanNotInstance tp x) isRec)
 unify (TyTuple a b) (TyTuple a' b') = do
   unify a a'
   unify b b'
-
-unify (TyCons cs t) t' = do
-  forM_ cs $ \(Equal a b _) -> unify a b
-  unify t t'
-unify t' (TyCons cs t) = do
-  forM_ cs $ \(Equal a b _) -> unify a b
-  unify t t'
 
 unify a b = throwError (NotEqual a b)
 

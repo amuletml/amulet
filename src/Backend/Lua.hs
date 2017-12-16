@@ -2,7 +2,10 @@ module Backend.Lua where
 
 import Pretty
 
+import Data.Foldable
+
 import Data.Text (Text)
+import qualified Data.Text as T
 
 data LuaStmt
   = LuaDo [LuaStmt]
@@ -64,23 +67,27 @@ instance Pretty LuaStmt where
   pprint (LuaIfElse ((c,t):bs)) = do
     kwClr "if " <+> c <+> kwClr " then"
     body 2 t *> newline
-    case bs of
-      [] -> kwClr "end"
-      xs -> do
-        forM_ xs $ \(c, t) -> do
+    emitElse bs
+      where
+        emitElse [] = kwClr "end"
+        emitElse [(LuaTrue, b)] = do
+          kwClr "else"
+          body 2 b *> newline
+          kwClr "end"
+        emitElse ((c, b):xs) = do
           kwClr "elseif " <+> c <+> kwClr " then"
-          body 2 t *> newline
-        kwClr "end"
+          body 2 b *> newline
+          emitElse xs
   pprint (LuaIfElse []) = error "impossible"
   pprint (LuaFornum v s e i b) = do
     kwClr "for " <+> v <+> opClr " = "
     interleave ", " [s, e, i]
-    kwClr " do "
+    kwClr " do"
     body 2 b *> newline
     kwClr "end"
   pprint (LuaFor vs es b) = do
     kwClr "for " <+> interleave ", " vs <+> opClr " in "
-    interleave ", " es <+> kwClr " do "
+    interleave ", " es <+> kwClr " do"
     body 2 b *> newline
     kwClr "end"
   pprint (LuaLocal [n] [LuaFunction a b]) = do
@@ -103,8 +110,8 @@ instance Pretty LuaStmt where
 
 instance Pretty LuaVar where
   pprint (LuaName x) = pprint x
-  pprint (LuaIndex e@(LuaRef _) (LuaString k)) = e <+> opClr "." <+> k
-  pprint (LuaIndex e (LuaString k)) = parens e <+> opClr "." <+> k
+  pprint (LuaIndex e@(LuaRef _) (LuaString k)) | validKey k = e <+> opClr "." <+> k
+  pprint (LuaIndex e (LuaString k)) | validKey k = parens e <+> opClr "." <+> k
   pprint (LuaIndex e k) = e <+> squares k
 
 instance Pretty LuaExpr where
@@ -121,7 +128,15 @@ instance Pretty LuaExpr where
     body 2 b *> newline
     kwClr "end"
   pprint (LuaTable ps) = braces $
-    forM_ ps $ \(k, v) -> squares k <+> opClr " = " <+> v <+> ", "
+    for_ ps $ \(k, v) -> squares k <+> opClr " = " <+> v <+> ", "
   pprint (LuaCall x@LuaFunction{} a) = parens x <+> parens (interleave ", " a)
   pprint (LuaCall x a) = x <+> parens (interleave ", " a)
   pprint (LuaBitE x) = pprint x
+
+validKey :: Text -> Bool
+validKey t = case T.uncons t of
+               Nothing -> False
+               Just (c, cs) -> start c && T.all rest cs
+  where
+    start c = c == '_' || isAsciiUpper c || isAsciiLower c
+    rest c = start c || isDigit c

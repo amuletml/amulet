@@ -137,7 +137,7 @@ report err _ = ppr $ pprint err
 
 -- Some errors:
 rejectedExistential :: Pretty (Var p) => Type p -> TypeError -> TypeError
-rejectedExistential ttp e = (Suggestion (Note (Note e rejected) explanation) fix) where
+rejectedExistential ttp e = Suggestion (Note (Note e rejected) explanation) fix where
   rejected, explanation :: String
   rejected = "GADT-style data constructors with existential type variables are rejected"
   explanation = "Our type system is not powerful enough to deal with the implications of existentials quite yet."
