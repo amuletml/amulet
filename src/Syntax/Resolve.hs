@@ -128,8 +128,6 @@ reExpr (Tuple es a) = Tuple <$> mapM reExpr es <*> pure a
 
 reType :: MonadResolve m => Type Parsed -> m (Type Resolved)
 reType (TyCon v) = TyCon <$> lookupTy v
-reType (TyCons cs ty) = TyCons <$> mapM reCons cs <*> reType ty where
-  reCons (Equal ta tb a) = Equal <$> reType ta <*> reType tb <*> pure a
 reType (TyVar v) = TyVar <$> lookupTy v
 reType (TyForall vs ty) = do
   vs' <- mapM tagVar vs

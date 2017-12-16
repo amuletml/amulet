@@ -80,13 +80,6 @@ unify (TyTuple a b) (TyTuple a' b') = do
   unify a a'
   unify b b'
 
-unify (TyCons cs t) t' = do
-  forM_ cs $ \(Equal a b _) -> unify a b
-  unify t t'
-unify t' (TyCons cs t) = do
-  forM_ cs $ \(Equal a b _) -> unify a b
-  unify t t'
-
 unify a b = throwError (NotEqual a b)
 
 isRec :: String

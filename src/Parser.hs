@@ -244,7 +244,7 @@ binary n f a = flip Infix a $ do
   pure (f pos)
 
 typeP' :: Parser Type'
-typeP' = try constraints <|> parens typeP
+typeP' = parens typeP
      <|> (TyVar <$> tyVar)
      <|> tyCon <|> unitTyCon
      <|> tyForall
@@ -267,16 +267,6 @@ typeP' = try constraints <|> parens typeP
     x <- identifier
     reservedOp ":"
     (T.pack x,) <$> typeP
-  constraints = do
-    cs <- parens (commaSep1 constraint)
-    reservedOp "=>"
-    TyCons cs <$> typeP
-
-constraint :: Parser (GivenConstraint Parsed)
-constraint = withPos $ do
-  l <- typeP
-  reservedOp "~"
-  Equal l <$> typeP
 
 tyVar :: Parser (Var Parsed)
 tyVar = lexeme $ do

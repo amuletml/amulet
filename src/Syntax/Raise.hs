@@ -57,5 +57,3 @@ raiseT v a (TyTuple x y) = TyTuple (raiseT v a x) (raiseT v a y)
 raiseT v a (TyRows rho rows) = TyRows (raiseT v a rho) (map (second (raiseT v a)) rows)
 raiseT v a (TyExactRows rows) = TyExactRows (map (second (raiseT v a)) rows)
 raiseT _ _ TyStar = TyStar
-raiseT v a (TyCons cs n) = TyCons (map raiseCon cs) (raiseT v a n) where
-  raiseCon (Equal l r p) = Equal (raiseT v a l) (raiseT v a r) (a p)
