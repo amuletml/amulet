@@ -124,7 +124,7 @@ deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Type p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Type p)
 
 data Toplevel p
-  = LetStmt [(Var p, Expr p, Ann p)] (Ann p) -- TODO remove this
+  = LetStmt [(Var p, Expr p, Ann p)] (Ann p)
   | ForeignVal (Var p) Text (Type p) (Ann p) -- TODO remove this too
   | TypeDecl (Var p) [Var p] [Constructor p] (Ann p)
 

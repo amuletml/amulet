@@ -73,7 +73,7 @@ instance Pretty CoTerm where
     | CotLam{} <- x = f <+> " " <+> parens x
     | CotMatch{} <- x = f <+> " " <+> parens x
     | otherwise = f <+> " " <+> x
-  pprint (CotLet xs e) = do
+  pprint (CotLet xs e) =
     kwClr "let " <+> braces (pprLet xs) <+> kwClr " in " <+> e
   pprint (CotBegin xs e) = kwClr "begin " <+> interleave (opClr "; ") (xs ++ [e]) <+> kwClr " end"
   pprint (CotLit l) = pprint l

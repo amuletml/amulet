@@ -69,7 +69,7 @@ test x = do
       putStrLn (x <> "\x1b[1;32mType inference:\x1b[0m")
       for_ (M.toList $ values (difference env builtinsEnv)) $ \(k, t) ->
         T.putStrLn (prettyPrint k <> " : " <> prettyPrint t)
-      putStrLn ("\x1b[1;32mCore lowering:\x1b[0m")
+      putStrLn "\x1b[1;32mCore lowering:\x1b[0m"
       traverse_ ppr core
       pure (Just (core, env))
     CParse e -> Nothing <$ print e

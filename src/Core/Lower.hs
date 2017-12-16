@@ -145,11 +145,11 @@ lowerExpr expr
     Record xs _ -> case xs of
       [] -> pure (CotLit ColRecNil)
       xs -> do
-        xs' <- for xs $ \(label, ex) -> do
+        xs' <- for xs $ \(label, ex) ->
           (,,) <$> pure label <*> lowerType (getType ex) <*> lowerExpr ex
         pure (CotExtend (CotLit ColRecNil) xs')
     RecordExt e xs _ -> do
-      xs' <- for xs $ \(label, ex) -> do
+      xs' <- for xs $ \(label, ex) ->
         (,,) <$> pure label <*> lowerType (getType ex) <*> lowerExpr ex
       CotExtend <$> lowerExpr e <*> pure xs'
     Access ex key (_, t) -> do
@@ -209,7 +209,7 @@ lowerProg = traverse lowerTop where
   lowerTop (ForeignVal (TvName t) ex tp _) = do
     tp' <- lowerType tp
     pure $ CosForeign t tp' ex
-  lowerTop (LetStmt vs _) = do
+  lowerTop (LetStmt vs _) =
     CosLet <$> for vs (\(TvName v, ex, (_, ant)) -> do
       (k, _) <- makeBigLams ant
       (,,) <$> pure v <*> lowerType ant <*> (k <$> lowerExpr ex))
