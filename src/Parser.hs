@@ -1,5 +1,5 @@
 {-# LANGUAGE TupleSections, TypeFamilies, ScopedTypeVariables #-}
-
+{-# LANGUAGE RankNTypes #-}
 module Parser where
 
 import qualified Text.Parsec.Token as Tok
@@ -27,7 +27,7 @@ bindGroup :: Parser [(Var Parsed, Expr', Span)]
 bindGroup = sepBy1 decl (reserved "and") where
   decl = do
     x <- name
-    ps <- many patternP
+    ps <- many (patternP parens)
     tp <- optionMaybe (colon *> typeP)
     reservedOp "="
     bd <- case tp of
@@ -74,7 +74,7 @@ exprP' = try access
       Nothing -> pure . Name . T.pack $ "_"
   funExpr = withPos $ do
     reserved "fun"
-    x <- patternP
+    x <- (patternP parens)
     reservedOp "->"
     Fun x <$> exprP
   letExpr = withPos $ do
@@ -101,15 +101,9 @@ exprP' = try access
     Match x <$> many1 (arm <?> "match arm")
   arm = do
     reservedOp "|"
-    p <- many1 patternP
-    case p of
-      [x] -> do
-        reservedOp "->"
-        (,) x <$> exprP
-      [Destructure v Nothing p, xs] -> do
-        reservedOp "->"
-        (,) (Destructure v (Just xs) p) <$> exprP
-      _ -> mzero
+    p <- patternP id
+    reservedOp "->"
+    (,) p <$> exprP
   recIns = withPos . braces $ do
     x <- exprP
     reserved "with"
@@ -166,42 +160,35 @@ exprP' = try access
 operator' :: Parser String
 operator' = lexeme ((:) <$> Tok.opStart style <*> many (Tok.opLetter style))
 
-patternP :: Parser Pattern'
-patternP = wildcard
-       <|> capture
-       <|> try notDestructure
-       <|> try constructor
-       <|> try pType
-       <|> try destructure
-       <|> tuple
-       <|> record
-       where
-  wildcard, constructor, destructure, pType, capture, record :: Parser Pattern'
+patternP :: (forall a. Parser a -> Parser a) -> Parser Pattern'
+patternP cont = wildcard
+            <|> capture
+            <|> try destructure
+            <|> try pType
+            <|> tuple
+            <|> record where
+  wildcard, destructure, pType, capture, record :: Parser Pattern'
   wildcard = withPos (Wildcard <$ reservedOp "_")
   capture = withPos (Capture <$> varName)
   varName = (Name <$> lowerIdent) <?> "variable name"
-  constructor = withPos (flip Destructure Nothing <$> constrName)
-  notDestructure = withPos $ do
+  destructure = withPos . cont $ do
     ps <- constrName
-    Destructure ps . Just <$> withPos (Wildcard <$ brackets (pure ()))
-  destructure = withPos . parens $ do
-    ps <- constrName
-    Destructure ps . Just <$> patternP
+    Destructure ps <$> optionMaybe (patternP id)
   lowerIdent = lexeme $ do
     x <- lower
     T.pack . (x:) <$> many (Tok.identLetter style)
   pType = withPos . parens $ do
-    x <- patternP
+    x <- patternP id
     reservedOp ":"
     PType x <$> typeP
   record = withPos . braces $ do
     rows <- commaSep1 $ do
       x <- identifier
       reservedOp "="
-      (T.pack x,) <$> patternP
+      (T.pack x,) <$> patternP id
     pure $ PRecord rows
   tuple = withPos . parens $ do
-    x <- commaSep1 patternP
+    x <- commaSep1 (patternP id)
     pure $ case x of
       [] -> error "impossible; commaSep*1*"
       [x] -> const x
