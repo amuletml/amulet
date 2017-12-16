@@ -53,7 +53,7 @@ type family Ann a :: * where
 
 data Expr p
   = VarRef (Var p) (Ann p)
-  | Let [(Var p, Expr p)] (Expr p) (Ann p)
+  | Let [(Var p, Expr p, Ann p)] (Expr p) (Ann p)
   | If (Expr p) (Expr p) (Expr p) (Ann p)
   | App (Expr p) (Expr p) (Ann p)
   | Fun (Pattern p) (Expr p) (Ann p)
@@ -124,7 +124,7 @@ deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Type p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Type p)
 
 data Toplevel p
-  = LetStmt [(Var p, Expr p)] (Ann p) -- TODO remove this
+  = LetStmt [(Var p, Expr p, Ann p)] (Ann p) -- TODO remove this
   | ForeignVal (Var p) Text (Type p) (Ann p) -- TODO remove this too
   | TypeDecl (Var p) [Var p] [Constructor p] (Ann p)
 
@@ -149,9 +149,9 @@ instance (Data (Var p), Data (Ann p), Data p) => Spanned (Constructor p)
 instance (Pretty (Var p)) => Pretty (Expr p) where
   pprint (VarRef v _) = pprint v
   pprint (Let [] _ _) = error "absurd: never parsed"
-  pprint (Let ((n, v):xs) e _) = do
+  pprint (Let ((n, v, _):xs) e _) = do
     kwClr "let " <+> n <+> opClr " = " <+> v <+> newline
-    for_ xs $ \(n, v) ->
+    for_ xs $ \(n, v, _) ->
       kwClr "and " <+> n <+> opClr " = " <+> v <+> newline
     pprint e
   pprint (If c t e _) = do
@@ -235,7 +235,7 @@ instance (Pretty (Var p)) => Pretty (Type p) where
 
 instance (Pretty (Var p)) => Pretty (Toplevel p) where
   pprint (LetStmt vs _) = opClr "let " <+> interleave (newline <+> opClr "and ") (map pVars vs) where
-    pVars (v, e) = v <+> " = " <+> block 2 e
+    pVars (v, e, _) = v <+> " = " <+> block 2 e
   pprint (ForeignVal v d ty _) = kwClr "foreign val " <+> v <+> opClr ": "
                                  <+> ty <+> opClr " = " <+> str d
   pprint (TypeDecl ty args ctors _) = do

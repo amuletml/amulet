@@ -28,15 +28,15 @@ import Types.Holes
 
 import Data.Maybe
 import Data.List
-import Pretty (tracePrettyId)
+import Data.Triple
 
 findMain :: [Toplevel Resolved] -> [Var Resolved]
 findMain sts
   | [] <- sts
   = []
   | (LetStmt vs _:xs) <- sts
-  = if any isMain (map fst vs)
-       then fromJust (find isMain (map fst vs)):findMain xs
+  = if any isMain (map fst3 vs)
+       then fromJust (find isMain (map fst3 vs)):findMain xs
        else findMain xs
   | (ForeignVal{}:xs) <- sts = findMain xs
   | (TypeDecl{}:xs) <- sts = findMain xs
@@ -139,7 +139,7 @@ infer expr
         unify expr (TyArr t2 tv) t1
         pure (App e1' e2' (a, tv), tv)
       Let ns b ann -> do
-        ks <- forM ns $ \(a, _) -> do
+        ks <- forM ns $ \(a, _, _) -> do
           tv <- freshTV
           pure (TvName a, tv)
         extendMany ks $ do
@@ -305,7 +305,7 @@ inferProg :: MonadInfer Typed m
           => Var Resolved -- main
           -> [Toplevel Resolved] -> m ([Toplevel Typed], Env)
 inferProg main (LetStmt ns ann:prg) = do
-  ks <- forM ns $ \(a, _) -> do
+  ks <- forM ns $ \(a, _, _) -> do
     tv <- freshTV
     vl <- lookupTy a `catchError` const (pure tv)
     pure (TvName a, vl)
@@ -313,7 +313,7 @@ inferProg main (LetStmt ns ann:prg) = do
     (ns', ts) <- inferLetTy closeOver ks ns
                    `catchError` (throwError . flip ArisingFrom (LetStmt ns ann))
     ts' <- forM ts $ \(TvName var, t) ->
-      if tracePrettyId var == tracePrettyId main
+      if var == main
          then do
            unify (VarRef var ann) t (TyArr tyUnit tyUnit)
            pure (TvName var, TyArr tyUnit tyUnit)
@@ -358,20 +358,20 @@ inferCon ret' (UnitCon nm ann) =
 inferLetTy :: (MonadInfer Typed m)
            => (Type Typed -> Type Typed)
            -> [(Var Typed, Type Typed)]
-           -> [(Var Resolved, Expr Resolved)]
-           -> m ( [(Var Typed, Expr Typed)]
+           -> [(Var Resolved, Expr Resolved, Ann Resolved)]
+           -> m ( [(Var Typed, Expr Typed, Ann Typed)]
                 , [(Var Typed, Type Typed)])
 inferLetTy _ ks [] = pure ([], ks)
-inferLetTy closeOver ks ((va, ve):xs) = extendMany ks $ do
+inferLetTy closeOver ks ((va, ve, vann):xs) = extendMany ks $ do
   ((ve', ty), c) <- listen (infer ve) -- See note [1]
   cur <- gen
   (x, vt) <- case solve cur mempty c of
     Left e -> throwError e
     Right x -> pure (x, closeOver (apply x ty))
-  let r (a, t) = (a, closeOver (apply x t))
+  let r (a, t) = (a, apply x t)
       ex = raiseE id r ve'
   (vt', _) <- inferKind (raiseT unTvName fst vt)
-  consFst (TvName va, ex) $
+  consFst (TvName va, ex, (vann, vt)) $
     inferLetTy closeOver (updateAlist (TvName va) vt' ks) xs
 
 -- Monomorphic so we can use "close enough" equality

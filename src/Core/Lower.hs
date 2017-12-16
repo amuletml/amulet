@@ -9,7 +9,6 @@ module Core.Lower
   ) where
 
 
-
 import Control.Monad.Infer
 import Data.Traversable
 
@@ -52,16 +51,13 @@ makeInstances :: MonadLower m
               -> m CoTerm
 makeInstances (exp, var) t ty@(TyForall vs t') = do
   x <- gen
-  case solve x mempty [ConUnify exp t' t] of
-    Left _ -> CotRef var <$> lowerType t
-    Right _ -> do
-      let (Right sst) = solve x mempty [ConUnify exp t' t]
-          go ac t =
-            case Map.lookup t sst of
-              Just inst -> CotTyApp ac <$> lowerType inst
-              Nothing -> error "what?"
-      ty' <- lowerType ty
-      foldM go (CotRef var ty') vs
+  let (Right sst) = solve x mempty [ConUnify exp t' t]
+      go ac t =
+        case Map.lookup t sst of
+          Just inst -> CotTyApp ac <$> lowerType inst
+          Nothing -> error "what?"
+  ty' <- lowerType ty
+  foldM go (CotRef var ty') vs
 makeInstances (_, var) t _ = CotRef var <$> lowerType t
 
 makeBigLams :: MonadLower m
@@ -105,8 +101,11 @@ lowerExpr expr
         Just ty -> makeInstances (expr, p) exprT ty
         Nothing -> CotRef p <$> lowerType exprT
     Let vs t _ -> do
-      vs' <- for vs $ \(TvName var, ex) ->
-        (,,) <$> pure var <*> lowerType (getType ex) <*> lowerExpr ex
+      vs' <- for vs $ \(TvName var, ex, (_, ant)) -> do
+        (k, _) <- makeBigLams ant
+        (,,) <$> pure var
+             <*> lowerType ant
+             <*> (k <$> lowerExpr ex)
       CotLet vs' <$> lowerExpr t
     If c t e _ -> do
       t' <- lowerExpr t
@@ -210,8 +209,9 @@ lowerProg = traverse lowerTop where
     tp' <- lowerType tp
     pure $ CosForeign t tp' ex
   lowerTop (LetStmt vs _) = do
-    CosLet <$> for vs (\(TvName v, ex) ->
-      (,,) <$> pure v <*> lowerType (getType ex) <*> lowerExpr ex)
+    CosLet <$> for vs (\(TvName v, ex, (_, ant)) -> do
+      (k, _) <- makeBigLams ant
+      (,,) <$> pure v <*> lowerType ant <*> (k <$> lowerExpr ex))
   lowerTop (TypeDecl (TvName var) _ cons (_, kind))
     = CosType var <$> lowerType kind <*> do
         for cons $ \case

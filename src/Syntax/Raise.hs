@@ -10,10 +10,11 @@ raiseE :: forall p p'.
        -> Expr p -> Expr p'
 raiseE vR aR =
   let eR = raiseE vR aR
+      rv (a, b, c) = (vR a, eR b, aR c)
    in \case
       VarRef k a -> VarRef (vR k) (aR a)
       Hole k a -> Hole (vR k) (aR a)
-      Let bs b a -> Let (map (vR *** eR) bs) (eR b) (aR a)
+      Let bs b a -> Let (map rv bs) (eR b) (aR a)
       If a b c ann -> If (eR a) (eR b) (eR c) (aR ann)
       App a b ann -> App (eR a) (eR b) (aR ann)
       Fun p b a -> Fun (raiseP vR aR p) (eR b) (aR a)

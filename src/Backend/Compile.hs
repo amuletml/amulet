@@ -70,8 +70,8 @@ compileConstructors (ArgCon a _ _:ys) -- non-unit constructors, hard
 -- GADT constructors, hardest - we have to figure out the representation from the type
 compileConstructors [] = []
 
-compileLet :: (Var Typed, Expr Typed) -> (LuaVar, LuaExpr)
-compileLet (n, e) = (lowerName n, compileExpr e)
+compileLet :: (Var Typed, Expr Typed, Ann Typed) -> (LuaVar, LuaExpr)
+compileLet (n, e, _) = (lowerName n, compileExpr e)
 
 compileExpr :: Expr Typed -> LuaExpr
 compileExpr (VarRef v _) = LuaRef (lowerName v)
