@@ -55,7 +55,7 @@ instance Monoid Env where
   mempty = Env mempty mempty
 
 instance Semigroup Env where
-  Env a b <> Env a' b' = Env (a `mappend` a') (b `mappend` b')
+  Env a b <> Env a' b' = Env (a <> a') (b <> b')
 
 data Constraint p
   = ConUnify (Expr p) (Type p) (Type p)

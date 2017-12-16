@@ -7,7 +7,7 @@ module Core.Optimise
   , beforePass, afterPass, transformTerm
   ) where
 
-import qualified Data.Map.Strict as M
+import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Generics (gmapT, mkT)
@@ -33,9 +33,9 @@ mapTerm1 f = gmapT (mkT (tupT :: TupleT (Var Resolved))) -- CotLet
 mapTerm :: (CoTerm -> CoTerm) -> CoTerm -> CoTerm
 mapTerm f = f . mapTerm1 (mapTerm f)
 
-substitute :: M.Map (Var Resolved) CoTerm -> CoTerm -> CoTerm
+substitute :: Map.Map (Var Resolved) CoTerm -> CoTerm -> CoTerm
 substitute m = mapTerm subst
-  where subst e@(CotRef v _) = fromMaybe e (M.lookup v m)
+  where subst e@(CotRef v _) = fromMaybe e (Map.lookup v m)
         subst e = e
 
 data TransformPass

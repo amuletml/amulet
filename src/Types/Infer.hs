@@ -8,8 +8,8 @@ module Types.Infer
   , tyString, tyInt, tyBool, tyUnit
   ) where
 
-import qualified Data.Map.Strict as M
-import qualified Data.Set as S
+import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import qualified Data.Text as T
 import Data.Traversable
 import Data.Foldable
@@ -78,7 +78,7 @@ var = TyVar
 con = TyCon
 
 builtinsEnv :: Env
-builtinsEnv = Env (M.fromList ops) (M.fromList tps) where
+builtinsEnv = Env (Map.fromList ops) (Map.fromList tps) where
   op :: T.Text -> Type Typed -> (Var Resolved, Type Typed)
   op x t = (TgInternal x, t)
   tp :: T.Text -> (Var Resolved, Type Typed)
@@ -145,7 +145,7 @@ infer expr
         unify expr (TyArr t2 tv) t1
         pure (App e1' e2' (a, tv), tv)
       Let ns b ann -> do
-        ks <- forM ns $ \(a, _, _) -> do
+        ks <- for ns $ \(a, _, _) -> do
           tv <- freshTV
           pure (TvName a, tv)
         extendMany ks $ do
@@ -155,7 +155,7 @@ infer expr
             pure (Let ns' b' (ann, ty), ty)
       Match t ps a -> do
         (t', tt) <- infer t
-        (ps', tbs) <- unzip <$> forM ps
+        (ps', tbs) <- unzip <$> for ps
             (\ (p, e) -> do
               (p', pt, ks) <- inferPattern (unify expr) p
               unify expr tt pt
@@ -208,8 +208,9 @@ infer expr
       AccessSection{} -> error "desugarer removes access sections"
 
 inferRows :: MonadInfer Typed m
-          => [(T.Text, Expr Resolved)] -> m [((T.Text, Expr Typed), (T.Text, Type Typed))]
-inferRows rows = forM rows $ \(var', val) -> do
+          => [(T.Text, Expr Resolved)]
+          -> m [((T.Text, Expr Typed), (T.Text, Type Typed))]
+inferRows rows = for rows $ \(var', val) -> do
   (val', typ) <- infer val
   pure ((var', val'), (var', typ))
 
@@ -240,13 +241,13 @@ inferKind tp@(TyRows rho rows) = do
     TyExactRows rows' -> inferKind (TyExactRows (rows' `union` rows))
     TyVar{} -> do
       (rho', _) <- inferKind rho
-      ks <- forM rows $ \(var, typ) -> do
+      ks <- for rows $ \(var, typ) -> do
         (typ', _) <- inferKind typ
         pure (var, typ')
       pure (TyRows rho' ks, TyStar)
     _ -> error "wellformedness check rejects this"
 inferKind (TyExactRows rows) = do
-  ks <- forM rows $ \(var, typ) -> do
+  ks <- for rows $ \(var, typ) -> do
     (typ', _) <- inferKind typ
     pure (var, typ')
   pure (TyExactRows ks, TyStar)
@@ -291,7 +292,7 @@ inferPattern unify (Destructure cns ps ann)
           | otherwise = undefined
 inferPattern unify (PRecord rows ann) = do
   rho <- freshTV
-  (rowps, rowts, caps) <- unzip3 <$> forM rows (\(var, pat) -> do
+  (rowps, rowts, caps) <- unzip3 <$> for rows (\(var, pat) -> do
     (p', t, caps) <- inferPattern unify pat
     pure ((var, p'), (var, t), caps))
   pure (PRecord rowps (ann, TyRows rho rowts), TyRows rho rowts, concat caps)
@@ -311,14 +312,14 @@ inferProg :: MonadInfer Typed m
           => Var Resolved -- main
           -> [Toplevel Resolved] -> m ([Toplevel Typed], Env)
 inferProg main (LetStmt ns ann:prg) = do
-  ks <- forM ns $ \(a, _, _) -> do
+  ks <- for ns $ \(a, _, _) -> do
     tv <- freshTV
     vl <- lookupTy a `catchError` const (pure tv)
     pure (TvName a, vl)
   extendMany ks $ do
     (ns', ts) <- inferLetTy closeOver ks ns
                    `catchError` (throwError . flip ArisingFrom (LetStmt ns ann))
-    ts' <- forM ts $ \(TvName var, t) ->
+    ts' <- for ts $ \(TvName var, t) ->
       if var == main
          then do
            unify (VarRef var ann) t (TyArr tyUnit tyUnit)
@@ -389,7 +390,7 @@ updateAlist _ _ [] = []
 
 closeOver :: Type Typed -> Type Typed
 closeOver a = normType $ forall (fv a) a where
-  fv = S.toList . ftv
+  fv = Set.toList . ftv
   forall :: [Var p] -> Type p -> Type p
   forall [] a = a
   forall vs a = TyForall vs a

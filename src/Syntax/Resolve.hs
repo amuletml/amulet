@@ -9,13 +9,15 @@ module Syntax.Resolve
   , ResolveError(..)
   ) where
 
-import qualified Data.Map.Strict as M
-import qualified Data.Set as S
+import qualified Data.Map.Strict as Map
 import Data.Triple
 
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.Gen
+
+import Data.Traversable
+import Data.Foldable
 
 import Syntax.Resolve.Scope
 import Syntax.Toplevel
@@ -65,19 +67,19 @@ resolveToplevel r = flip catchError (throwError . flip ArisingFromTop r)
      where resolveCons (UnitCon v a) = UnitCon <$> lookupEx v <*> pure a
            resolveCons (ArgCon v t a) = ArgCon <$> lookupEx v <*> reType t <*> pure a
 
-           wrap x = TyForall (S.toList (ftv x)) x
+           wrap x = TyForall (toList (ftv x)) x
 
 lookupEx :: MonadResolve m => Var Parsed -> m (Var Resolved)
 lookupEx v = do
   env <- ask
-  case M.lookup v (varScope env) of
+  case Map.lookup v (varScope env) of
     Nothing -> throwError (NotInScope v)
     Just x -> pure x
 
 lookupTy :: MonadResolve m => Var Parsed -> m (Var Resolved)
 lookupTy v = do
   env <- ask
-  case M.lookup v (tyScope env) of
+  case Map.lookup v (tyScope env) of
     Nothing -> throwError (NotInScope v)
     Just x -> pure x
 
@@ -165,8 +167,8 @@ rePattern (Destructure v p a) = do
   pure (Destructure v' p' a, (v, v') : vs, ts)
 rePattern (PType p t a) = do
   (p', vs, ts) <- rePattern p
-  let fvs = S.toList (ftv t)
-  fresh <- forM fvs $ \x -> do
+  let fvs = toList (ftv t)
+  fresh <- for fvs $ \x -> do
     new <- tagVar x
     lookupTy x `catchError` const (pure new)
   t' <- extendTyN (zip fvs fresh) (reType t)
