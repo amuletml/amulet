@@ -23,7 +23,7 @@ type Type' = Type Parsed
 type Pattern' = Pattern Parsed
 type Constructor' = Constructor Parsed
 
-bindGroup :: Parser [(Var Parsed, Expr')]
+bindGroup :: Parser [(Var Parsed, Expr', Span)]
 bindGroup = sepBy1 decl (reserved "and") where
   decl = do
     x <- name
@@ -33,11 +33,11 @@ bindGroup = sepBy1 decl (reserved "and") where
     bd <- case tp of
       Nothing -> exprP
       Just t -> withPos (Ascription <$> exprP <*> pure t)
-    case ps of
-      [] -> pure (x, bd)
+    withPos $ case ps of
+      [] -> pure (x, bd,)
       _ -> do
         let fun' pt b = Fun pt b (annotation bd)
-        pure (x, foldr fun' bd ps)
+        pure (x, (foldr fun' bd ps),)
 
 withPos :: Parser (Span -> a) -> Parser a
 withPos k = do
@@ -244,7 +244,7 @@ binary n f a = flip Infix a $ do
   pure (f pos)
 
 typeP' :: Parser Type'
-typeP' = try constraints <|> parens typeP
+typeP' = parens typeP
      <|> (TyVar <$> tyVar)
      <|> tyCon <|> unitTyCon
      <|> tyForall
@@ -267,16 +267,6 @@ typeP' = try constraints <|> parens typeP
     x <- identifier
     reservedOp ":"
     (T.pack x,) <$> typeP
-  constraints = do
-    cs <- parens (commaSep1 constraint)
-    reservedOp "=>"
-    TyCons cs <$> typeP
-
-constraint :: Parser (GivenConstraint Parsed)
-constraint = withPos $ do
-  l <- typeP
-  reservedOp "~"
-  Equal l <$> typeP
 
 tyVar :: Parser (Var Parsed)
 tyVar = lexeme $ do

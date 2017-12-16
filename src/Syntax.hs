@@ -11,6 +11,7 @@ import Data.Text (Text)
 import Data.Spanned
 import Data.Span
 
+import Data.Foldable
 import Data.Typeable
 import Data.Data
 
@@ -52,7 +53,7 @@ type family Ann a :: * where
 
 data Expr p
   = VarRef (Var p) (Ann p)
-  | Let [(Var p, Expr p)] (Expr p) (Ann p)
+  | Let [(Var p, Expr p, Ann p)] (Expr p) (Ann p)
   | If (Expr p) (Expr p) (Expr p) (Ann p)
   | App (Expr p) (Expr p) (Ann p)
   | Fun (Pattern p) (Expr p) (Ann p)
@@ -114,7 +115,6 @@ data Type p
   | TyRows (Type p) [(Text, Type p)]  -- { α | foo : int, bar : string }
   | TyExactRows [(Text, Type p)] -- { foo : int, bar : string }
   | TyTuple (Type p) (Type p) -- (see note [1])
-  | TyCons [GivenConstraint p] (Type p) -- (see note [2])
 
   | TyStar -- * :: *
 
@@ -124,7 +124,7 @@ deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Type p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Type p)
 
 data Toplevel p
-  = LetStmt [(Var p, Expr p)] (Ann p) -- TODO remove this
+  = LetStmt [(Var p, Expr p, Ann p)] (Ann p)
   | ForeignVal (Var p) Text (Type p) (Ann p) -- TODO remove this too
   | TypeDecl (Var p) [Var p] [Constructor p] (Ann p)
 
@@ -144,23 +144,14 @@ deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Constructor p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Constructor p)
 instance (Data (Var p), Data (Ann p), Data p) => Spanned (Constructor p)
 
-data GivenConstraint p
-  = Equal (Type p) (Type p) (Ann p)
-
-deriving instance (Eq (Var p), Eq (Ann p)) => Eq (GivenConstraint p)
-deriving instance (Show (Var p), Show (Ann p)) => Show (GivenConstraint p)
-deriving instance (Ord (Var p), Ord (Ann p)) => Ord (GivenConstraint p)
-deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (GivenConstraint p)
-instance (Data (Var p), Data (Ann p), Data p) => Spanned (GivenConstraint p)
-
 --- Pretty-printing {{{
 
 instance (Pretty (Var p)) => Pretty (Expr p) where
   pprint (VarRef v _) = pprint v
   pprint (Let [] _ _) = error "absurd: never parsed"
-  pprint (Let ((n, v):xs) e _) = do
+  pprint (Let ((n, v, _):xs) e _) = do
     kwClr "let " <+> n <+> opClr " = " <+> v <+> newline
-    forM_ xs $ \(n, v) ->
+    for_ xs $ \(n, v, _) ->
       kwClr "and " <+> n <+> opClr " = " <+> v <+> newline
     pprint e
   pprint (If c t e _) = do
@@ -218,7 +209,6 @@ instance Pretty Lit where
 
 instance (Pretty (Var p)) => Pretty (Type p) where
   pprint (TyCon v) = typeClr v
-  pprint (TyCons cs v) = parens (interleave ", " cs) <+> opClr " => " <+> v
   pprint (TyVar v) = opClr "'" <+> tvClr v
   pprint (TyForall vs v)
     = kwClr "∀ " <+> interleave " " (map (\x -> "'" <+> tvClr x) vs) <+> opClr ". " <+> v
@@ -245,12 +235,12 @@ instance (Pretty (Var p)) => Pretty (Type p) where
 
 instance (Pretty (Var p)) => Pretty (Toplevel p) where
   pprint (LetStmt vs _) = opClr "let " <+> interleave (newline <+> opClr "and ") (map pVars vs) where
-    pVars (v, e) = v <+> " = " <+> block 2 e
+    pVars (v, e, _) = v <+> " = " <+> block 2 e
   pprint (ForeignVal v d ty _) = kwClr "foreign val " <+> v <+> opClr ": "
                                  <+> ty <+> opClr " = " <+> str d
   pprint (TypeDecl ty args ctors _) = do
     kwClr "type " <+> ty
-    mapM_ (" '"<+>) args
+    traverse_ (" '" <+>) args
     opClr " = "
     body 2 (map ("| "<+>) ctors)
 
@@ -260,9 +250,6 @@ instance (Pretty (Var p)) => Pretty [Toplevel p] where
 instance (Pretty (Var p)) => Pretty (Constructor p) where
   pprint (UnitCon p _) = pprint p
   pprint (ArgCon p t _) = pprint p <+> kwClr " of " <+> t
-
-instance Pretty (Type p) => Pretty (GivenConstraint p) where
-  pprint (Equal a b _) = a <+> opClr " ~ " <+> b
 
 instance Pretty (Var Parsed) where
   pprint (Name v) = pprint v
