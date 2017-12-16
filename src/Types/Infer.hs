@@ -107,6 +107,12 @@ itIs :: Monad m
      -> Span -> Type Typed -> m (f Typed, Type Typed)
 itIs f a t = pure (f (a, t), t)
 
+mkTT :: (Show (Var p), Show (Ann p)) => Type p -> [Type p] -> Type p
+mkTT x xs = TyTuple x (go xs) where
+  go [] = error $ "mkTT fucked up: " ++ show x ++ " " ++ show xs
+  go [x] = x
+  go (x:xs) = TyTuple x (go xs)
+
 infer :: MonadInfer Typed m => Expr Resolved -> m (Expr Typed, Type Typed)
 infer expr
   = case expr of
@@ -190,7 +196,7 @@ infer expr
         case es' of
           [] -> itIs (Tuple []) an tyUnit
           [(x', t)] -> pure (x', t)
-          ((x', t):xs) -> itIs (Tuple (x':map fst xs)) an (foldl TyTuple t (map snd xs))
+          ((x', t):xs) -> itIs (Tuple (x':map fst xs)) an (mkTT t (map snd xs))
       Ascription e g an -> do
         (e', t') <- infer e
         (g', _) <- inferKind g
@@ -299,7 +305,7 @@ inferPattern unify (PTuple elems ann)
   | [x] <- elems = inferPattern unify x
   | otherwise = do
     (ps, t:ts, cps) <- unzip3 <$> traverse (inferPattern unify) elems
-    pure (PTuple ps (ann, foldl TyTuple t ts), foldl TyTuple t ts, concat cps)
+    pure (PTuple ps (ann, mkTT t ts), mkTT t ts, concat cps)
 
 inferProg :: MonadInfer Typed m
           => Var Resolved -- main
