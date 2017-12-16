@@ -10,16 +10,16 @@ import Core.Core
 import Core.Terms
 
 data TransformPass = TransformPass
-                     { before :: (CoTerm -> CoTerm)
-                     , after :: (CoTerm -> CoTerm) }
+                     { before :: CoTerm -> CoTerm
+                     , after :: CoTerm -> CoTerm }
 
 beforePass, afterPass :: (CoTerm -> CoTerm) -> TransformPass
 beforePass fn = TransformPass { before = fn, after = id }
 afterPass  fn = TransformPass { before = id, after = fn }
 
 zipPass :: [TransformPass] -> TransformPass
-zipPass ps = TransformPass { before = foldr (.) id (map before ps)
-                           , after = foldr (.) id (map after ps) }
+zipPass ps = TransformPass { before = foldr ((.) . before) id ps
+                           , after = foldr ((.) . after) id ps }
 
 transformTerm :: TransformPass -> CoTerm -> CoTerm
 transformTerm pass = after pass . mapTerm1 (transformTerm pass) . before pass

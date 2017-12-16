@@ -138,5 +138,5 @@ validKey t = case T.uncons t of
                Nothing -> False
                Just (c, cs) -> start c && T.all rest cs
   where
-    start c = (c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))
-    rest c = start c || (c >= '0' && c <= '9')
+    start c = c == '_' || isAsciiUpper c || isAsciiLower c
+    rest c = start c || isDigit c
