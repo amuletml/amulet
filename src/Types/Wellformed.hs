@@ -26,20 +26,15 @@ wellformed tp = case tp of
       _ -> throwError (CanNotInstance tp rho)
     mapM_ (wellformed . snd) rows
   TyExactRows rows -> mapM_ (wellformed . snd) rows
-  TyCons cs t -> mapM wellformedC cs *> wellformed t
-
-wellformedC :: (Pretty (Var p), MonadError TypeError m) => GivenConstraint p -> m ()
-wellformedC (Equal a b _) = wellformed a *> wellformed b
 
 arity :: Type p -> Int
 arity (TyArr _ t) = 1 + arity t
 arity (TyForall _ t) = arity t
-arity (TyCons _ t) = arity t
 arity _ = 0
 
 normType :: Eq (Var p) => Type p -> Type p
-normType (TyCons cs (TyForall vs tp)) = TyForall vs (TyCons cs tp)
-normType (TyForall vs (TyForall vs' tp)) = TyForall (vs `union` vs') tp
+normType (TyForall vs (TyForall vs' tp)) = TyForall (vs `union` vs') (normType tp)
+normType (TyForall [] tp) = normType tp
 normType x = x
 
 {-

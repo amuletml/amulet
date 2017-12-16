@@ -11,7 +11,6 @@ import qualified Data.Map as M
 
 import Control.Monad.Infer
 
-
 import Backend.Compile
 
 import Types.Infer
@@ -20,11 +19,14 @@ import Syntax.Resolve
 import Syntax.Desugar
 import Syntax
 
+import Core.Core
+import Core.Lower
+
 import Errors
 import Parser
 import Pretty
 
-data CompileResult = CSuccess ([Toplevel Typed], Env)
+data CompileResult = CSuccess ([Toplevel Typed], [CoStmt], Env)
                    | CParse   ParseError
                    | CResolve ResolveError
                    | CInfer   TypeError
@@ -40,7 +42,9 @@ compile name x =
         Right resolved -> do
           infered <- inferProgram resolved
           case infered of
-            Right x -> pure (CSuccess x)
+            Right (prog, env) -> do
+              t <- runReaderT (lowerProg prog) env
+              pure (CSuccess (prog, t, env))
             Left e -> pure (CInfer e)
         Left e -> pure (CResolve e)
     Left e -> CParse e
@@ -51,20 +55,23 @@ compileFromTo :: FilePath
               -> IO ()
 compileFromTo fp x emit =
   case compile fp x of
-    CSuccess (prg, env) -> emit (compileProgram env prg)
+    CSuccess (prg, _, env) -> emit (compileProgram env prg)
     CParse e -> print e
     CResolve e -> putStrLn "Resolution error" >> report e x
     CInfer e -> putStrLn "Type error" >> report e x
 
-test :: String -> IO (Maybe [Toplevel Typed])
+test :: String -> IO (Maybe ([CoStmt], Env))
 test x = do
   putStrLn "\x1b[1;32mProgram:\x1b[0m"
   case compile "<test>" (T.pack x) of
-    CSuccess (prog, env) -> do
+    CSuccess (prog, core, env) -> do
       putStrLn (x <> "\x1b[1;32mType inference:\x1b[0m")
       forM_ (M.toList $ values (difference env builtinsEnv)) $ \(k, t) ->
         T.putStrLn (prettyPrint k <> " : " <> prettyPrint t)
-      pure (Just prog)
+      putStrLn ("\x1b[1;32mCore lowering:\x1b[0m")
+      print prog
+      mapM_ ppr core
+      pure (Just (core, env))
     CParse e -> Nothing <$ print e
     CResolve e -> Nothing <$ report e (T.pack x)
     CInfer e -> Nothing <$ report e (T.pack x)

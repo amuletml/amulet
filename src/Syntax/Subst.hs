@@ -36,7 +36,6 @@ instance Ord (Var p) => Substitutable p (Type p) where
   ftv (TyArr a b) = ftv a `S.union` ftv b
   ftv (TyRows rho rows) = ftv rho `S.union` foldMap (ftv . snd) rows
   ftv (TyExactRows rows) = foldMap (ftv . snd) rows
-  ftv (TyCons cs t) = foldMap ftv cs `S.union` ftv t
 
   apply _ (TyCon a) = TyCon a
   apply _ TyStar = TyStar
@@ -48,15 +47,10 @@ instance Ord (Var p) => Substitutable p (Type p) where
     s' = foldr M.delete s v
   apply s (TyRows rho rows) = TyRows (apply s rho) (map (second (apply s)) rows)
   apply s (TyExactRows rows) = TyExactRows  (map (second (apply s)) rows)
-  apply s (TyCons cs t) = TyCons (map (apply s) cs) (apply s t)
 
 instance (Ord (Var p), Substitutable p a) => Substitutable p [a] where
   ftv = foldMap ftv
   apply s = map (apply s)
-
-instance Ord (Var p) => Substitutable p (GivenConstraint p) where
-  ftv (Equal a b _) = ftv a `S.union` ftv b
-  apply s (Equal a b ann) = Equal (apply s a) (apply s b) ann
 
 compose :: Ord (Var p) => Subst p -> Subst p -> Subst p
 s1 `compose` s2 = M.map (apply s1) s2 `M.union` M.map (apply s2) s1

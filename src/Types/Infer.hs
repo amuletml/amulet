@@ -1,12 +1,17 @@
 {-# OPTIONS_GHC -Wno-missing-local-signatures #-}
 {-# LANGUAGE FlexibleContexts, OverloadedStrings, TupleSections, GADTs #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-module Types.Infer (inferProgram, builtinsEnv, closeOver) where
+module Types.Infer
+  ( inferProgram
+  , builtinsEnv
+  , closeOver
+  , tyString, tyInt, tyBool, tyUnit
+  ) where
 
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import qualified Data.Text as T
-import Data.Span (internal, Span)
+import Data.Span (Span)
 
 import Control.Monad.Infer
 import Control.Arrow (first, (&&&))
@@ -19,15 +24,33 @@ import Types.Wellformed
 import Types.Unify
 import Types.Holes
 
+import Data.Maybe
 import Data.List
+import Pretty (tracePrettyId)
 
-import Pretty (tracePretty)
+findMain :: [Toplevel Resolved] -> [Var Resolved]
+findMain sts
+  | [] <- sts
+  = []
+  | (LetStmt vs _:xs) <- sts
+  = if any isMain (map fst vs)
+       then fromJust (find isMain (map fst vs)):findMain xs
+       else findMain xs
+  | (ForeignVal{}:xs) <- sts = findMain xs
+  | (TypeDecl{}:xs) <- sts = findMain xs
+  where
+    isMain (TgName x _) = x == "main"
+    isMain _ = False
+
 
 -- Solve for the types of lets in a program
 inferProgram :: MonadGen Int m => [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))
 inferProgram ct = fmap fst <$> runInfer builtinsEnv (inferAndCheck ct) where
   inferAndCheck prg = do
-    (prg', env) <- inferProg prg
+    let key (TgName k _) = k
+        key _ = undefined
+        main = head . sortOn key . findMain $ prg-- Note [2]
+    (prg', env) <- inferProg main prg
     case findHoles prg' of
       xs@(_:_) -> throwError (FoundHole xs)
       [] -> pure (prg', env)
@@ -111,7 +134,7 @@ infer expr
         (e1', t1) <- infer e1
         (e2', t2) <- infer e2
         tv <- freshTV
-        unify expr t1 (TyArr t2 tv)
+        unify expr (TyArr t2 tv) t1
         pure (App e1' e2' (a, tv), tv)
       Let ns b ann -> do
         ks <- forM ns $ \(a, _) -> do
@@ -142,7 +165,7 @@ infer expr
         (o', to) <- infer o
         (r', tr) <- infer r
         tv <- freshTV
-        unify expr to (TyArr tl (TyArr tr tv))
+        unify expr (TyArr tl (TyArr tr tv)) to
         pure (BinOp l' o' r' (a, tv), tv)
       Record rows a -> do
         itps <- inferRows rows
@@ -165,11 +188,11 @@ infer expr
         case es' of
           [] -> itIs (Tuple []) an tyUnit
           [(x', t)] -> pure (x', t)
-          ((x', t):xs) -> pure (Tuple (x':map fst xs) (an, t), foldl TyTuple t (map snd xs))
+          ((x', t):xs) -> itIs (Tuple (x':map fst xs)) an (foldl TyTuple t (map snd xs))
       Ascription e g an -> do
         (e', t') <- infer e
         (g', _) <- inferKind g
-        unify expr g' t'
+        unify expr t' g'
         itIs (Ascription e' t') an g'
       LeftSection{} -> error "desugarer removes right sections"
       RightSection{} -> error "desugarer removes left sections"
@@ -231,13 +254,6 @@ inferKind (TyTuple a b) = do
   (a', _) <- inferKind a
   (b', _) <- inferKind b
   pure (TyTuple a' b', TyStar)
-inferKind (TyCons cs b) = do
-  cs' <- forM cs $ \(Equal ta tb an) -> do
-    (ta', _) <- inferKind ta
-    (tb', k') <- inferKind tb
-    pure (Equal ta' tb' (an, k'))
-  (b', k) <- inferKind b
-  pure (TyCons cs' b', k)
 
 inferPattern :: MonadInfer Typed m
              => (Type Typed -> Type Typed -> m ())
@@ -257,18 +273,13 @@ inferPattern unify (Destructure cns ps ann)
     pty <- lookupTy cns
     pure (Destructure (TvName cns) Nothing (ann, pty), pty, [])
   | Just p <- ps = do
-    (tup, res, ct) <- constructorTy <$> lookupTy cns
-    tup `tracePretty` res `tracePretty` ct `tracePretty` pure ()
+    (tup, res, _) <- constructorTy <$> lookupTy cns
     (p', pt, pb) <- inferPattern unify p
     unify tup pt
     pure (Destructure (TvName cns) (Just p') (ann, res), res, pb)
   where constructorTy :: Type Typed -> (Type Typed, Type Typed, Type Typed)
         constructorTy t
-          | TyArr tup res <- t
-          = (tup, res, t)
-          | TyCons cs x <- t
-          , (tup', res, _) <- constructorTy x
-          = (tup', TyCons cs res, t)
+          | TyArr tup res <- t = (tup, res, t)
           | otherwise = undefined
 inferPattern unify (PRecord rows ann) = do
   rho <- freshTV
@@ -288,24 +299,33 @@ inferPattern unify (PTuple elems ann)
     (ps, t:ts, cps) <- unzip3 <$> mapM (inferPattern unify) elems
     pure (PTuple ps (ann, foldl TyTuple t ts), foldl TyTuple t ts, concat cps)
 
-inferProg :: MonadInfer Typed m => [Toplevel Resolved] -> m ([Toplevel Typed], Env)
-inferProg (LetStmt ns ann:prg) = do
+inferProg :: MonadInfer Typed m
+          => Var Resolved -- main
+          -> [Toplevel Resolved] -> m ([Toplevel Typed], Env)
+inferProg main (LetStmt ns ann:prg) = do
   ks <- forM ns $ \(a, _) -> do
     tv <- freshTV
     vl <- lookupTy a `catchError` const (pure tv)
     pure (TvName a, vl)
   extendMany ks $ do
     (ns', ts) <- inferLetTy closeOver ks ns
-    extendMany ts $
+                   `catchError` (throwError . flip ArisingFrom (LetStmt ns ann))
+    ts' <- forM ts $ \(TvName var, t) ->
+      if tracePrettyId var == tracePrettyId main
+         then do
+           unify (VarRef var ann) t (TyArr tyUnit tyUnit)
+           pure (TvName var, TyArr tyUnit tyUnit)
+         else pure (TvName var, t)
+    extendMany ts' $ do
       -- TODO: Refactor let statements so that they have an annotation
       -- per binding group
       consFst (LetStmt ns' (ann, snd (last ts)))
-        $ inferProg prg
-inferProg (ForeignVal v d t ann:prg) = do
+        $ inferProg main prg
+inferProg main (ForeignVal v d t ann:prg) = do
   (t', _) <- inferKind t
   extend (TvName v, closeOver t') $
-    consFst (ForeignVal (TvName v) d t' (ann, t')) $ inferProg prg
-inferProg (TypeDecl n tvs cs ann:prg) =
+    consFst (ForeignVal (TvName v) d t' (ann, t')) $ inferProg main prg
+inferProg main (TypeDecl n tvs cs ann:prg) =
   let mkk :: [a] -> Type Typed
       mkk [] = star
       mkk (_:xs) = arr star (mkk xs)
@@ -315,22 +335,9 @@ inferProg (TypeDecl n tvs cs ann:prg) =
        inferCon retTy con `catchError` \x -> throwError (ArisingFrom x con))
                                  cs
      extendMany ts $
-       consFst (TypeDecl (TvName n) (map TvName tvs) cs' (ann, retTy)) $
-         inferProg prg
-inferProg [] = do
-  let ann = internal
-      isMain (TgName x _) = x == "main"
-      isMain _ = False
-      key (TgName k _) = k
-      key _ = undefined
-  (_, c) <- censor (const mempty) . listen $ do
-    main <- head . sortOn key . filter isMain . M.keys <$> asks values -- Note [2]
-    x <- lookupTy main -- TODO: Actually look up the correct name
-    unify (VarRef main ann) x (TyArr tyUnit tyUnit)
-  x <- gen
-  case solve x mempty c of
-    Left e -> throwError (Note e ("main must be a function from unit to unit" :: T.Text))
-    Right _ -> ([],) <$> ask
+       consFst (TypeDecl (TvName n) (map TvName tvs) cs' (ann, mkk tvs)) $
+         inferProg main prg
+inferProg _ [] = ([],) <$> ask
 
 
 inferCon :: MonadInfer Typed m
@@ -341,10 +348,10 @@ inferCon :: MonadInfer Typed m
 inferCon ret (ArgCon nm t ann) = do
   (ty', _) <- inferKind t
   let res = closeOver $ TyArr ty' ret
-  pure ((TvName nm, res), ArgCon (TvName nm) ty' (ann, ty'))
+  pure ((TvName nm, res), ArgCon (TvName nm) ty' (ann, res))
 inferCon ret' (UnitCon nm ann) =
   let ret = closeOver ret'
-   in pure ((TvName nm, ret), UnitCon (TvName nm) (ann, ret'))
+   in pure ((TvName nm, ret), UnitCon (TvName nm) (ann, ret))
 
 inferLetTy :: (MonadInfer Typed m)
            => (Type Typed -> Type Typed)
@@ -359,7 +366,7 @@ inferLetTy closeOver ks ((va, ve):xs) = extendMany ks $ do
   (x, vt) <- case solve cur mempty c of
     Left e -> throwError e
     Right x -> pure (x, closeOver (apply x ty))
-  let r (a, t) = (a, apply x t)
+  let r (a, t) = (a, closeOver (apply x t))
       ex = raiseE id r ve'
   (vt', _) <- inferKind (raiseT unTvName fst vt)
   consFst (TvName va, ex) $

@@ -133,10 +133,11 @@ alpha :: [Text]
 alpha = map T.pack $ [1..] >>= flip replicateM ['a'..'z']
 
 instantiate :: (MonadError TypeError m, MonadGen Int m) => Type Typed -> m (Type Typed)
-instantiate (TyForall vs ty) = do
+instantiate forallty@(TyForall vs ty) = do
+  tracePretty forallty (pure ())
   f <- traverse (const freshTV) vs
-  instantiate (apply (Map.fromList (zip vs f)) ty)
-instantiate ty = pure ty
+  instantiate (apply (tracePrettyId (Map.fromList (zip vs f))) ty)
+instantiate ty = pure (tracePrettyId ty)
 
 difference :: Env -> Env -> Env
 difference (Env ma mb) (Env ma' mb') = Env (ma Map.\\ ma') (mb Map.\\ mb')
@@ -144,7 +145,7 @@ difference (Env ma mb) (Env ma' mb') = Env (ma Map.\\ ma') (mb Map.\\ mb')
 freshTV :: MonadGen Int m => m (Type Typed)
 freshTV = TyVar . TvName <$> fresh
 
-instance (Ord (Var p), Substitutable p (Type p), Substitutable p (GivenConstraint p)) => Substitutable p (Constraint p) where
+instance (Ord (Var p), Substitutable p (Type p)) => Substitutable p (Constraint p) where
   ftv (ConUnify _ a b) = ftv a `Set.union` ftv b
   apply s (ConUnify e a b) = ConUnify e (apply s a) (apply s b)
 

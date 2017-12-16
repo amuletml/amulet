@@ -114,7 +114,6 @@ data Type p
   | TyRows (Type p) [(Text, Type p)]  -- { α | foo : int, bar : string }
   | TyExactRows [(Text, Type p)] -- { foo : int, bar : string }
   | TyTuple (Type p) (Type p) -- (see note [1])
-  | TyCons [GivenConstraint p] (Type p) -- (see note [2])
 
   | TyStar -- * :: *
 
@@ -143,15 +142,6 @@ deriving instance (Show (Var p), Show (Ann p)) => Show (Constructor p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Constructor p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Constructor p)
 instance (Data (Var p), Data (Ann p), Data p) => Spanned (Constructor p)
-
-data GivenConstraint p
-  = Equal (Type p) (Type p) (Ann p)
-
-deriving instance (Eq (Var p), Eq (Ann p)) => Eq (GivenConstraint p)
-deriving instance (Show (Var p), Show (Ann p)) => Show (GivenConstraint p)
-deriving instance (Ord (Var p), Ord (Ann p)) => Ord (GivenConstraint p)
-deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (GivenConstraint p)
-instance (Data (Var p), Data (Ann p), Data p) => Spanned (GivenConstraint p)
 
 --- Pretty-printing {{{
 
@@ -218,7 +208,6 @@ instance Pretty Lit where
 
 instance (Pretty (Var p)) => Pretty (Type p) where
   pprint (TyCon v) = typeClr v
-  pprint (TyCons cs v) = parens (interleave ", " cs) <+> opClr " => " <+> v
   pprint (TyVar v) = opClr "'" <+> tvClr v
   pprint (TyForall vs v)
     = kwClr "∀ " <+> interleave " " (map (\x -> "'" <+> tvClr x) vs) <+> opClr ". " <+> v
@@ -260,9 +249,6 @@ instance (Pretty (Var p)) => Pretty [Toplevel p] where
 instance (Pretty (Var p)) => Pretty (Constructor p) where
   pprint (UnitCon p _) = pprint p
   pprint (ArgCon p t _) = pprint p <+> kwClr " of " <+> t
-
-instance Pretty (Type p) => Pretty (GivenConstraint p) where
-  pprint (Equal a b _) = a <+> opClr " ~ " <+> b
 
 instance Pretty (Var Parsed) where
   pprint (Name v) = pprint v
