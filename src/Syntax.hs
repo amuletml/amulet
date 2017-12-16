@@ -11,6 +11,7 @@ import Data.Text (Text)
 import Data.Spanned
 import Data.Span
 
+import Data.Foldable
 import Data.Typeable
 import Data.Data
 
@@ -150,7 +151,7 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
   pprint (Let [] _ _) = error "absurd: never parsed"
   pprint (Let ((n, v):xs) e _) = do
     kwClr "let " <+> n <+> opClr " = " <+> v <+> newline
-    forM_ xs $ \(n, v) ->
+    for_ xs $ \(n, v) ->
       kwClr "and " <+> n <+> opClr " = " <+> v <+> newline
     pprint e
   pprint (If c t e _) = do
@@ -239,7 +240,7 @@ instance (Pretty (Var p)) => Pretty (Toplevel p) where
                                  <+> ty <+> opClr " = " <+> str d
   pprint (TypeDecl ty args ctors _) = do
     kwClr "type " <+> ty
-    mapM_ (" '"<+>) args
+    traverse_ (" '" <+>) args
     opClr " = "
     body 2 (map ("| "<+>) ctors)
 

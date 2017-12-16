@@ -2,6 +2,8 @@ module Backend.Lua where
 
 import Pretty
 
+import Data.Foldable
+
 import Data.Text (Text)
 
 data LuaStmt
@@ -67,7 +69,7 @@ instance Pretty LuaStmt where
     case bs of
       [] -> kwClr "end"
       xs -> do
-        forM_ xs $ \(c, t) -> do
+        for_ xs $ \(c, t) -> do
           kwClr "elseif " <+> c <+> kwClr " then"
           body 2 t *> newline
         kwClr "end"
@@ -121,7 +123,7 @@ instance Pretty LuaExpr where
     body 2 b *> newline
     kwClr "end"
   pprint (LuaTable ps) = braces $
-    forM_ ps $ \(k, v) -> squares k <+> opClr " = " <+> v <+> ", "
+    for_ ps $ \(k, v) -> squares k <+> opClr " = " <+> v <+> ", "
   pprint (LuaCall x@LuaFunction{} a) = parens x <+> parens (interleave ", " a)
   pprint (LuaCall x a) = x <+> parens (interleave ", " a)
   pprint (LuaBitE x) = pprint x

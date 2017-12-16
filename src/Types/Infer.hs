@@ -11,6 +11,8 @@ module Types.Infer
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import qualified Data.Text as T
+import Data.Traversable
+import Data.Foldable
 import Data.Span (Span)
 
 import Control.Monad.Infer
@@ -121,7 +123,7 @@ infer expr
         pure (Fun p' b' (a, TyArr tc tb), TyArr tc tb)
       Begin [] _ -> throwError (EmptyBegin expr)
       Begin xs a -> do
-        (xs', txs) <- unzip <$> mapM infer xs
+        (xs', txs) <- unzip <$> traverse infer xs
         pure (Begin xs' (a, last txs), last txs)
       If c t e a -> do
         (c', tc) <- infer c
@@ -157,7 +159,7 @@ infer expr
                 [] -> throwError (EmptyMatch expr)
                 [x] -> pure x
                 (ty:xs) -> do
-                  mapM_ (unify expr ty) xs
+                  traverse_ (unify expr ty) xs
                   pure ty
         pure (Match t' ps' (a, ty), ty)
       BinOp l o r a -> do
@@ -184,7 +186,7 @@ infer expr
         unify expr tp rows
         itIs (Access rec' key) a ktp
       Tuple es an -> do
-        es' <- mapM infer es
+        es' <- traverse infer es
         case es' of
           [] -> itIs (Tuple []) an tyUnit
           [(x', t)] -> pure (x', t)
@@ -296,7 +298,7 @@ inferPattern unify (PTuple elems ann)
   | [] <- elems = pure (PTuple [] (ann, tyUnit), tyUnit, [])
   | [x] <- elems = inferPattern unify x
   | otherwise = do
-    (ps, t:ts, cps) <- unzip3 <$> mapM (inferPattern unify) elems
+    (ps, t:ts, cps) <- unzip3 <$> traverse (inferPattern unify) elems
     pure (PTuple ps (ann, foldl TyTuple t ts), foldl TyTuple t ts, concat cps)
 
 inferProg :: MonadInfer Typed m
@@ -331,7 +333,7 @@ inferProg main (TypeDecl n tvs cs ann:prg) =
       mkk (_:xs) = arr star (mkk xs)
       retTy = foldl app (con (TvName n)) (map (var . TvName) tvs)
    in extendKind (TvName n, mkk tvs) $ do
-     (ts, cs') <- unzip <$> mapM (\con -> do
+     (ts, cs') <- unzip <$> traverse (\con -> do
        inferCon retTy con `catchError` \x -> throwError (ArisingFrom x con))
                                  cs
      extendMany ts $
