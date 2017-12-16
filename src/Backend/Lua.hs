@@ -67,13 +67,17 @@ instance Pretty LuaStmt where
   pprint (LuaIfElse ((c,t):bs)) = do
     kwClr "if " <+> c <+> kwClr " then"
     body 2 t *> newline
-    case bs of
-      [] -> kwClr "end"
-      xs -> do
-        for_ xs $ \(c, t) -> do
+    emitElse bs
+      where
+        emitElse [] = kwClr "end"
+        emitElse [(LuaTrue, b)] = do
+          kwClr "else"
+          body 2 b *> newline
+          kwClr "end"
+        emitElse ((c, b):xs) = do
           kwClr "elseif " <+> c <+> kwClr " then"
-          body 2 t *> newline
-        kwClr "end"
+          body 2 b *> newline
+          emitElse xs
   pprint (LuaIfElse []) = error "impossible"
   pprint (LuaFornum v s e i b) = do
     kwClr "for " <+> v <+> opClr " = "
