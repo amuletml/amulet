@@ -26,7 +26,7 @@ import Data.Span
 import Core.Core
 import Syntax
 
-import Pretty (prettyPrint)
+import Pretty (prettyPrint, tracePretty)
 
 type MonadLower m
   = ( MonadGen Int m
@@ -51,11 +51,13 @@ makeInstances :: MonadLower m
               -> m CoTerm
 makeInstances (exp, var) t ty@(TyForall vs t') = do
   x <- gen
+  t `tracePretty` ty `tracePretty` pure ()
   let (Right sst) = solve x mempty [ConUnify exp t' t]
       go ac t =
         case Map.lookup t sst of
           Just inst -> CotTyApp ac <$> lowerType inst
-          Nothing -> error "what?"
+          Nothing -> pure $ CotTyApp ac (CotyVar (unTvName t))
+          -- FIXME: Investigate safety of ^
   ty' <- lowerType ty
   foldM go (CotRef var ty') vs
 makeInstances (_, var) t _ = CotRef var <$> lowerType t
