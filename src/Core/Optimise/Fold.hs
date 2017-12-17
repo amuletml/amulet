@@ -59,13 +59,11 @@ foldExpr = afterPass pass where
       ("^", ColStr l, ColStr r)  -> str (l `Text.append` r)
 
       _ -> e
-
   pass e = pure e
 
   num = CotLit . ColInt
   str = CotLit . ColStr
   bool x = CotLit (if x then ColTrue else ColFalse)
-
 
 dropUselessLets :: TransformPass
 dropUselessLets = afterPass' go where
