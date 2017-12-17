@@ -9,7 +9,7 @@ import Core.Optimise
 -- Attempts to simplify match expression, dropping redundant branches and
 -- replacing matches with flat expressions where possible.
 dropBranches :: TransformPass
-dropBranches = beforePass pass where
+dropBranches = beforePass' pass where
   pass (CotMatch e ptrns) =
     case reducePatterns ptrns of
       [(CopCapture v, ty, bod)] ->
