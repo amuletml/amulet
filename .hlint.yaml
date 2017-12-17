@@ -5,7 +5,7 @@
     as: Map
 
 - error: {lhs: "mapM f xs", rhs: traverse f xs}
-- error: {lhs: "forM x f", rhs: for f x}
+- error: {lhs: "forM x f", rhs: for x f}
 - error: {lhs: "mapM_ f x", rhs: traverse_ f x}
 - error: {lhs: "forM_ x f", rhs: for_ x f}
 - warning: {lhs: "mappend x y", rhs: x <> y}
