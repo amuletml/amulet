@@ -65,15 +65,16 @@ compileFromTo fp x emit =
 
 test :: String -> IO (Maybe ([CoStmt], Env))
 test x = do
-  putStrLn "\x1b[1;32mProgram:\x1b[0m"
+  putStrLn "\x1b[1;32m(* Program: *)\x1b[0m"
   case compile "<test>" (T.pack x) of
     CSuccess (_, core, env) -> do
-      putStrLn (x <> "\x1b[1;32mType inference:\x1b[0m")
+      putStrLn x
+      putStrLn ("\x1b[1;32m(* Type inference: *)\x1b[0m")
       for_ (Map.toList $ values (difference env builtinsEnv)) $ \(k, t) ->
         T.putStrLn (prettyPrint k <> " : " <> prettyPrint t)
-      putStrLn "\x1b[1;32mCore lowering:\x1b[0m"
+      putStrLn "\x1b[1;32m(* Core lowering: *)\x1b[0m"
       traverse_ ppr core
-      putStrLn "\x1b[1;32mOptimised:\x1b[0m"
+      putStrLn "\x1b[1;32m(* Optimised: *)\x1b[0m"
       traverse_ ppr (optimise core)
       pure (Just (core, env))
     CParse e -> Nothing <$ print e
