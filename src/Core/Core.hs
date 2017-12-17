@@ -31,7 +31,7 @@ data CoPattern
   = CopCapture (Var Resolved)
   | CopConstr (Var Resolved)
   | CopDestr (Var Resolved) CoPattern
-  | CopRecord [(Text, CoPattern)]
+  | CopExtend CoPattern [(Text, CoPattern)]
 
   | CopLit CoLiteral
   deriving (Eq, Show, Ord, Data, Typeable)
@@ -100,8 +100,8 @@ instance Pretty CoPattern where
   pprint (CopCapture v) = pprint v
   pprint (CopConstr v) = pprint v
   pprint (CopDestr v p) = parens (v <+> " " <+> p)
-  pprint (CopRecord rs)
-    = braces $ interleave ", " $ map (\(x, y) -> x <+> opClr " = " <+> y) rs
+  pprint (CopExtend p rs)
+    = braces $ p <+> opClr " | " <+> interleave ", " (map (\(x, y) -> x <+> opClr " = " <+> y) rs)
   pprint (CopLit l) = pprint l
 
 instance Pretty CoType where
@@ -151,7 +151,7 @@ freeIn (CotMatch e bs) = freeIn e <> foldMap freeInBranch bs where
   freeInBranch (b, _, e) = Set.difference (freeIn e) (bound b)
   bound (CopCapture v) = Set.singleton v
   bound (CopDestr _ p) = bound p
-  bound (CopRecord ps) = foldMap (bound . snd) ps
+  bound (CopExtend p ps) = foldMap (bound . snd) ps `Set.union` bound p
   bound _ = Set.empty
 freeIn (CotLit _) = Set.empty
 freeIn (CotExtend c rs) = freeIn c <> foldMap (freeIn . thd3) rs

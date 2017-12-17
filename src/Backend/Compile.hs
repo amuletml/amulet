@@ -182,7 +182,7 @@ foldAnd = foldl1 k where
 patternTest :: CoPattern -> LuaExpr ->  LuaExpr
 patternTest (CopCapture _) _    = LuaTrue
 patternTest (CopLit l)     vr   = LuaBinOp (compileExpr (CotLit l)) "==" vr
-patternTest (CopRecord rs) vr   = foldAnd (map test rs) where
+patternTest (CopExtend p rs) vr = foldAnd (patternTest p vr : map test rs) where
   test (var', pat) = patternTest pat (LuaRef (LuaIndex vr (LuaString var')))
 patternTest (CopConstr con) vr  = foldAnd [tag con vr]
 patternTest (CopDestr con p) vr = foldAnd [tag con vr, patternTest p (LuaRef (LuaIndex vr (LuaNumber 2)))]
@@ -191,11 +191,11 @@ tag :: Var Resolved -> LuaExpr -> LuaExpr
 tag con vr = LuaBinOp (LuaRef (LuaIndex vr (LuaNumber 1))) "==" (lowerKey con)
 
 patternBindings :: CoPattern -> LuaExpr -> [(LuaVar, LuaExpr)]
-patternBindings (CopLit _) _      = []
-patternBindings (CopCapture n) v  = [(lowerName n, v)]
-patternBindings (CopConstr _) _   = []
-patternBindings (CopDestr _ p) vr = patternBindings p (LuaRef (LuaIndex vr (LuaNumber 2)))
-patternBindings (CopRecord rs) vr = concatMap (index vr) rs where
+patternBindings (CopLit _) _        = []
+patternBindings (CopCapture n) v    = [(lowerName n, v)]
+patternBindings (CopConstr _) _     = []
+patternBindings (CopDestr _ p) vr   = patternBindings p (LuaRef (LuaIndex vr (LuaNumber 2)))
+patternBindings (CopExtend p rs) vr = patternBindings p vr ++ concatMap (index vr) rs where
   index vr (var', pat) = patternBindings pat (LuaRef (LuaIndex vr (LuaString var')))
 
 compileMatch :: Returner -> CoTerm -> [(CoPattern, CoType, CoTerm)] -> Gen Int [LuaStmt]
