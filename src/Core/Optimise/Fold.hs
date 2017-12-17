@@ -6,11 +6,13 @@ module Core.Optimise.Fold
   ) where
 
 import qualified Data.Map.Strict as Map
-import qualified Data.Set as Set
 import qualified Data.Text as Text
 
+import Data.Foldable
+import Data.Function
 import Data.Triple
 import Data.Maybe
+import Data.List
 
 import Control.Monad.Reader
 
@@ -38,38 +40,41 @@ foldExpr = afterPass pass where
                            pure (if null es' then e else CotBegin es' e)
 
   pass e@(CotApp (CotApp (CotRef (TgInternal v) _) (CotLit ll)) (CotLit rl)) =
-    pure (case (v, ll, rl) of
-            ("+",  ColInt l, ColInt r) -> num (l + r)
-            ("-",  ColInt l, ColInt r) -> num (l - r)
-            ("*",  ColInt l, ColInt r) -> num (l * r)
-            ("/",  ColInt l, ColInt r) -> num (l `div` r)
-            ("**", ColInt l, ColInt r) -> num (l ^ r)
-            ("<" , ColInt l, ColInt r) -> bool (l < r)
-            (">",  ColInt l, ColInt r) -> bool (l > r)
-            (">=", ColInt l, ColInt r) -> bool (l >= r)
-            ("<=", ColInt l, ColInt r) -> bool (l <= r)
+    pure $ case (v, ll, rl) of
+      ("+",  ColInt l, ColInt r) -> num (l + r)
+      ("-",  ColInt l, ColInt r) -> num (l - r)
+      ("*",  ColInt l, ColInt r) -> num (l * r)
+      ("/",  ColInt l, ColInt r) -> num (l `div` r)
+      ("**", ColInt l, ColInt r) -> num (l ^ r)
+      ("<" , ColInt l, ColInt r) -> bool (l < r)
+      (">",  ColInt l, ColInt r) -> bool (l > r)
+      (">=", ColInt l, ColInt r) -> bool (l >= r)
+      ("<=", ColInt l, ColInt r) -> bool (l <= r)
 
-            ("&&", ColTrue, ColTrue)   -> bool True
-            ("&&", _, _)               -> bool False
-            ("||", ColFalse, ColFalse) -> bool False
-            ("||", _, _)               -> bool True
+      ("&&", ColTrue, ColTrue)   -> bool True
+      ("&&", _, _)               -> bool False
+      ("||", ColFalse, ColFalse) -> bool False
+      ("||", _, _)               -> bool True
 
-            ("^", ColStr l, ColStr r)  -> str (l `Text.append` r)
+      ("^", ColStr l, ColStr r)  -> str (l `Text.append` r)
 
-            _ -> e) where
-    num = CotLit . ColInt
-    str = CotLit . ColStr
-    bool x = CotLit (if x then ColTrue else ColFalse)
+      _ -> e
 
   pass e = pure e
+
+  num = CotLit . ColInt
+  str = CotLit . ColStr
+  bool x = CotLit (if x then ColTrue else ColFalse)
+
 
 dropUselessLets :: TransformPass
 dropUselessLets = afterPass' go where
   go (CotLet gr1 e)
-    | Set.null (Set.fromList (map fst3 gr1) `Set.intersection` freeIn e) =
-      case mapMaybe (keep . thd3) gr1 of
-        [] -> e
-        xs -> CotBegin xs e
+    | inter <- intersectBy ((==) `on` fst3) (sortOn fst3 gr1) (map (\x -> (x, undefined, undefined)) (toList (freeIn e)))
+    , diff <- deleteFirstsBy ((==) `on` fst3) gr1 inter
+    = case mapMaybe (keep . thd3) diff of
+        [] -> CotLet inter e
+        xs -> CotBegin xs (CotLet inter e)
     | otherwise = CotLet gr1 e
   go e = e
 
