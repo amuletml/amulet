@@ -1,11 +1,13 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 module Core.Core where
 
+import qualified Data.Set as Set
+import Data.Data (Data, Typeable)
 import Data.Text (Text)
+import Data.Triple
 
 import Syntax (Var(..), Resolved)
 
-import Data.Data (Data, Typeable)
 
 import Pretty
 
@@ -137,3 +139,21 @@ instance Pretty CoStmt where
                         <+> v <+> opClr " : "
                         <+> k <+> braces (pprCons cs)
     where pprCons = interleave (opClr "; ") . map (\(x, t) -> x <+> opClr " : " <+> t)
+
+
+freeIn :: CoTerm -> Set.Set (Var Resolved)
+freeIn (CotRef v _) = Set.singleton v
+freeIn (CotLam Small (v, _) e) = Set.delete v (freeIn e)
+freeIn (CotLam Big _ e) = freeIn e
+freeIn (CotApp f x) = freeIn f <> freeIn x
+freeIn (CotLet vs e) = Set.difference (freeIn e) (Set.fromList (map fst3 vs))
+freeIn (CotMatch e bs) = freeIn e <> foldMap freeInBranch bs where
+  freeInBranch (b, _, e) = Set.difference (freeIn e) (bound b)
+  bound (CopCapture v) = Set.singleton v
+  bound (CopDestr _ p) = bound p
+  bound (CopRecord ps) = foldMap (bound . snd) ps
+  bound _ = Set.empty
+freeIn (CotLit _) = Set.empty
+freeIn (CotExtend c rs) = freeIn c <> foldMap (freeIn . thd3) rs
+freeIn (CotTyApp f _) = freeIn f
+freeIn (CotBegin xs x) = foldMap freeIn xs <> freeIn x
