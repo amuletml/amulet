@@ -155,7 +155,8 @@ lowerExpr expr
       CotExtend <$> lowerExpr e <*> pure xs'
     Access ex key (_, t) -> do
       var <- fresh
-      let pat = CopRecord [(key, CopCapture var)]
+      rest <- fresh
+      let pat = CopExtend (CopCapture rest) [(key, CopCapture var)]
 
       ref <- CotRef var <$> lowerType t
       ext <- lowerType (getType ex)
@@ -197,13 +198,13 @@ lowerPat pat = case pat of
   Destructure (TvName p) Nothing _ -> pure $ CopConstr p
   Destructure (TvName p) (Just t) _ -> CopDestr p <$> lowerPat t
   PType p _ _ -> lowerPat p
-  PRecord xs _ -> CopRecord <$> do
+  PRecord xs _ -> CopExtend <$> (CopCapture <$> fresh) <*> do
     for xs $ \(label, pat) -> (,) label <$> lowerPat pat
   PTuple xs _ -> do
     let go :: MonadLower m => Int -> Pattern Typed -> m (T.Text, CoPattern)
         go k x = (,) <$> pure (T.pack (show k))
                      <*> lowerPat x
-    CopRecord <$> zipWithM go [1..] xs
+    CopExtend (CopLit ColRecNil) <$> zipWithM go [1..] xs
 
 lowerProg :: MonadLower m => [Toplevel Typed] -> m [CoStmt]
 lowerProg = traverse lowerTop where
