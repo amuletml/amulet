@@ -74,7 +74,7 @@ exprP' = try access
       Nothing -> pure . Name . T.pack $ "_"
   funExpr = withPos $ do
     reserved "fun"
-    x <- (patternP parens)
+    x <- patternP parens
     reservedOp "->"
     Fun x <$> exprP
   letExpr = withPos $ do
