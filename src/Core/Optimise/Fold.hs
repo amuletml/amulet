@@ -26,7 +26,7 @@ foldExpr = afterPass pass where
   pass (CotExtend e []) = pure e
 
   pass e@(CotRef v _) = do
-    env <- vars <$> ask
+    env <- asks vars
     case Map.lookup v env of
       Just d@(CotRef _ _) -> pure d
       Just d@(CotLit _) -> pure d

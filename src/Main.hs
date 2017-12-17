@@ -69,7 +69,7 @@ test x = do
   case compile "<test>" (T.pack x) of
     CSuccess (_, core, env) -> do
       putStrLn x
-      putStrLn ("\x1b[1;32m(* Type inference: *)\x1b[0m")
+      putStrLn "\x1b[1;32m(* Type inference: *)\x1b[0m"
       for_ (Map.toList $ values (difference env builtinsEnv)) $ \(k, t) ->
         T.putStrLn (prettyPrint k <> " : " <> prettyPrint t)
       putStrLn "\x1b[1;32m(* Core lowering: *)\x1b[0m"

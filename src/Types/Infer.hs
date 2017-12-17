@@ -344,7 +344,7 @@ inferProg main (TypeDecl n tvs cs ann:prg) =
      extendMany ts $
        consFst (TypeDecl (TvName n) (map TvName tvs) cs' (ann, mkk tvs)) $
          inferProg main prg
-inferProg _ [] = ([],) <$> ask
+inferProg _ [] = asks ([],)
 
 
 inferCon :: MonadInfer Typed m
