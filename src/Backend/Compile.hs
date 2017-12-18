@@ -180,12 +180,13 @@ foldAnd = foldl1 k where
     | otherwise = LuaBinOp l "and" r
 
 patternTest :: CoPattern -> LuaExpr ->  LuaExpr
-patternTest (CopCapture _) _    = LuaTrue
-patternTest (CopLit l)     vr   = LuaBinOp (compileExpr (CotLit l)) "==" vr
-patternTest (CopExtend p rs) vr = foldAnd (patternTest p vr : map test rs) where
+patternTest (CopCapture _) _     = LuaTrue
+patternTest (CopLit ColRecNil) _ = LuaTrue
+patternTest (CopLit l)     vr    = LuaBinOp (compileExpr (CotLit l)) "==" vr
+patternTest (CopExtend p rs) vr  = foldAnd (patternTest p vr : map test rs) where
   test (var', pat) = patternTest pat (LuaRef (LuaIndex vr (LuaString var')))
-patternTest (CopConstr con) vr  = foldAnd [tag con vr]
-patternTest (CopDestr con p) vr = foldAnd [tag con vr, patternTest p (LuaRef (LuaIndex vr (LuaNumber 2)))]
+patternTest (CopConstr con) vr   = foldAnd [tag con vr]
+patternTest (CopDestr con p) vr  = foldAnd [tag con vr, patternTest p (LuaRef (LuaIndex vr (LuaNumber 2)))]
 
 tag :: Var Resolved -> LuaExpr -> LuaExpr
 tag con vr = LuaBinOp (LuaRef (LuaIndex vr (LuaNumber 1))) "==" (lowerKey con)
