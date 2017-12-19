@@ -34,7 +34,7 @@ extend :: (Map.Map (Var Resolved) CoTerm -> Map.Map (Var Resolved) CoTerm) -> Sc
 extend f (Scope v c) = Scope (f v) c
 
 fuel :: Int
-fuel = 200
+fuel = 100
 
 peval :: [CoStmt] -> [CoStmt]
 peval xs = evalState (runReaderT (go xs) (Scope (mkEnv xs) (mkCS xs))) fuel where

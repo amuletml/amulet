@@ -11,8 +11,4 @@ optimise :: [CoStmt] -> [CoStmt]
 optimise = runTransform . transformStmts passes . peval where
   passes = mconcat [ dropBranches
                    , foldExpr
-                   , dropUselessLets
-
-                   , foldExpr
-                   , dropUselessLets
                    ]
