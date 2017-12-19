@@ -2,17 +2,10 @@
 
 module Core.Optimise.Fold
   ( foldExpr
-  , dropUselessLets
   ) where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
-
-import Data.Foldable
-import Data.Function
-import Data.Triple
-import Data.Maybe
-import Data.List
 
 import Control.Monad.Reader
 
@@ -64,18 +57,3 @@ foldExpr = afterPass pass where
   num = CotLit . ColInt
   str = CotLit . ColStr
   bool x = CotLit (if x then ColTrue else ColFalse)
-
-dropUselessLets :: TransformPass
-dropUselessLets = afterPass' go where
-  go (CotLet gr1 e)
-    | inter <- intersectBy ((==) `on` fst3) (sortOn fst3 gr1) (map (\x -> (x, undefined, undefined)) (toList (freeIn e)))
-    , diff <- deleteFirstsBy ((==) `on` fst3) gr1 inter
-    = case mapMaybe (keep . thd3) diff of
-        [] -> CotLet inter e
-        xs -> CotBegin xs (CotLet inter e)
-    | otherwise = CotLet gr1 e
-  go e = e
-
-  keep CotLit{} = Nothing
-  keep CotRef{} = Nothing
-  keep x = Just x
