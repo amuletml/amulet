@@ -2,18 +2,17 @@ module Core.Simplify
   ( optimise
   ) where
 
-import Core.Optimise.Inline
 import Core.Optimise.Match
 import Core.Optimise.Fold
+import Core.Optimise.Eval
 import Core.Optimise
 
 optimise :: [CoStmt] -> [CoStmt]
-optimise = runTransform . transformStmts
-  (mconcat [ dropBranches
-           , foldExpr
-           , dropUselessLets
-           , inlineOnce
+optimise = runTransform . transformStmts passes . peval where
+  passes = mconcat [ dropBranches
+                   , foldExpr
+                   , dropUselessLets
 
-           , foldExpr
-           , dropUselessLets
-           ])
+                   , foldExpr
+                   , dropUselessLets
+                   ]
