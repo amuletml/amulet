@@ -71,6 +71,7 @@ instance Pretty CoTerm where
   pprint (CotLam Small (v, t) c)
     = opClr "λ" <+> (v <+> opClr " : " <+> t) <+> opClr ". " <+> c
   pprint (CotApp f x)
+    | CotLam{} <- f = parens f <+> " " <+> parens x
     | CotApp{} <- x = f <+> " " <+> parens x
     | CotLam{} <- x = f <+> " " <+> parens x
     | CotMatch{} <- x = f <+> " " <+> parens x
