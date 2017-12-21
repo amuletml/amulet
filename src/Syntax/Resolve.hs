@@ -20,7 +20,6 @@ import Data.Traversable
 import Data.Foldable
 
 import Syntax.Resolve.Scope
-import Syntax.Toplevel
 import Syntax.Subst
 import Syntax
 
@@ -42,29 +41,39 @@ runResolve :: MonadGen Int m => ReaderT Scope (ExceptT ResolveError m) a -> m (E
 runResolve = runExceptT . flip runReaderT builtinScope
 
 resolveModule :: MonadResolve m => [Toplevel Parsed] -> m [Toplevel Resolved]
-resolveModule prgs = do
-  let (vs, tys) = extractVarsN prgs
-  vs' <- traverse tagVar vs
-  tys' <- traverse tagVar tys
-  extendN (zip vs vs') . extendTyN (zip tys tys') $ (lookupEx (Name "main") *> traverse resolveToplevel prgs)
-
-resolveToplevel :: MonadResolve m => Toplevel Parsed -> m (Toplevel Resolved)
-resolveToplevel r = flip catchError (throwError . flip ArisingFromTop r)
+resolveModule [] = pure []
+resolveModule (r:rs) = flip catchError (throwError . flip ArisingFromTop r)
   $ case r of
-     LetStmt vs -> LetStmt
-                 <$> traverse (\(v, e, a) -> (,,) <$> lookupEx v <*> reExpr e <*> pure a) vs
-     ForeignVal v t ty a -> ForeignVal
-                        <$> lookupEx v
-                        <*> pure t
-                        <*> reType (wrap ty)
-                        <*> pure a
-     TypeDecl v vs cs -> do
-       v' <- lookupTy v
-       vs' <- traverse tagVar vs
-       cs' <- extendTyN (zip vs vs') $ traverse resolveCons cs
-       pure (TypeDecl v' vs' cs')
+      LetStmt vs -> do
+        let vars = map fst3 vs
+        vars' <- traverse tagVar vars
+        extendN (zip vars vars') $ (:)
+          <$> (LetStmt
+                <$> traverse (\(v, e, a) -> (,,) <$> lookupEx v <*> reExpr e <*> pure a) vs
+                )
+          <*> resolveModule rs
+      ForeignVal v t ty a -> do
+        v' <- tagVar v
+        extend (v, v') $ (:)
+          <$> (ForeignVal
+               <$> lookupEx v
+                <*> pure t
+                <*> reType (wrap ty)
+                <*> pure a)
+          <*> resolveModule rs
+      TypeDecl t vs cs -> do
+        t'  <- tagVar t
+        vs' <- traverse tagVar vs
+        let c = map extractCons cs
+        c' <- traverse tagVar c
+        extendTy (t, t') $ extendN (zip c c') $ (:)
+          <$> (extendTyN (zip vs vs') $ TypeDecl t' vs' <$> traverse resolveCons cs)
+          <*> resolveModule rs
      where resolveCons (UnitCon v a) = UnitCon <$> lookupEx v <*> pure a
            resolveCons (ArgCon v t a) = ArgCon <$> lookupEx v <*> reType t <*> pure a
+
+           extractCons (UnitCon v _) = v
+           extractCons (ArgCon v _ _) = v
 
            wrap x = TyForall (toList (ftv x)) x
 
