@@ -14,10 +14,6 @@ import qualified Data.Text as T
 import Data.Traversable
 import Data.Span (Span)
 import Data.Foldable
-import Data.Spanned
-import Data.Triple
-import Data.Maybe
-import Data.List
 
 import Control.Monad.Infer
 import Control.Arrow (first, (&&&))
@@ -30,30 +26,11 @@ import Types.Wellformed
 import Types.Unify
 import Types.Holes
 
-
-findMain :: [Toplevel Resolved] -> [Var Resolved]
-findMain sts
-  | [] <- sts
-  = []
-  | (LetStmt vs:xs) <- sts
-  = if any isMain (map fst3 vs)
-       then fromJust (find isMain (map fst3 vs)):findMain xs
-       else findMain xs
-  | (ForeignVal{}:xs) <- sts = findMain xs
-  | (TypeDecl{}:xs) <- sts = findMain xs
-  where
-    isMain (TgName x _) = x == "main"
-    isMain _ = False
-
-
 -- Solve for the types of lets in a program
 inferProgram :: MonadGen Int m => [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))
 inferProgram ct = fmap fst <$> runInfer builtinsEnv (inferAndCheck ct) where
   inferAndCheck prg = do
-    let key (TgName k _) = k
-        key _ = undefined
-        main = head . sortOn key . findMain $ prg-- Note [2]
-    (prg', env) <- inferProg main prg
+    (prg', env) <- inferProg prg
     case findHoles prg' of
       xs@(_:_) -> throwError (FoundHole xs)
       [] -> pure (prg', env)
@@ -257,10 +234,8 @@ inferPattern unify (PTuple elems ann)
     pure (PTuple ps (ann, mkTT t ts), mkTT t ts, concat cps)
 
 inferProg :: MonadInfer Typed m
-          => Var Resolved -- main
-          -> [Toplevel Resolved] -> m ([Toplevel Typed], Env)
-inferProg main (st@(LetStmt ns):prg) = do
-  let ann = annotation st
+          => [Toplevel Resolved] -> m ([Toplevel Typed], Env)
+inferProg (LetStmt ns:prg) = do
   ks <- for ns $ \(a, _, _) -> do
     tv <- freshTV
     vl <- lookupTy a `catchError` const (pure tv)
@@ -268,29 +243,23 @@ inferProg main (st@(LetStmt ns):prg) = do
   extendMany ks $ do
     (ns', ts) <- inferLetTy closeOver ks ns
                    `catchError` (throwError . flip ArisingFrom (LetStmt ns))
-    ts' <- for ts $ \(TvName var, t) ->
-      if var == main
-         then do
-           unify (VarRef var ann) t (TyArr tyUnit tyUnit)
-           pure (TvName var, TyArr tyUnit tyUnit)
-         else pure (TvName var, t)
-    extendMany ts' $
+    extendMany ts $
       consFst (LetStmt ns')
-        $ inferProg main prg
-inferProg main (ForeignVal v d t ann:prg) = do
+        $ inferProg prg
+inferProg (ForeignVal v d t ann:prg) = do
   let t' = closeOver (raiseT TvName t)
   extend (TvName v, t') $
     consFst (ForeignVal (TvName v) d t' (ann, t')) $
-      inferProg main prg
-inferProg main (TypeDecl n tvs cs:prg) =
+      inferProg prg
+inferProg (TypeDecl n tvs cs:prg) =
   let retTy = foldl app (con (TvName n)) (map (var . TvName) tvs)
    in extendKind (TvName n) $ do
      (ts, cs') <- unzip <$> for cs (\con ->
        inferCon retTy con `catchError` \x -> throwError (ArisingFrom x con))
      extendMany ts $
        consFst (TypeDecl (TvName n) (map TvName tvs) cs') $
-         inferProg main prg
-inferProg _ [] = asks ([],)
+         inferProg prg
+inferProg [] = asks ([],)
 
 
 inferCon :: MonadInfer Typed m
