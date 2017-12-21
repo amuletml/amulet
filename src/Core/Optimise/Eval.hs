@@ -17,8 +17,12 @@ import Data.Triple
 import Data.Either
 import Data.List
 
-import Syntax (Var(..), Resolved)
+import Syntax (Var(..), Resolved, Lit(LiBool))
 import Core.Optimise
+
+import Generics.SYB
+
+import Pretty (tracePretty, tracePrettyId, (<+>))
 
 data Scope = Scope
   { variables :: Map.Map (Var Resolved) CoTerm
@@ -37,13 +41,16 @@ fuel :: Int
 fuel = 100
 
 peval :: [CoStmt] -> [CoStmt]
-peval xs = evalState (runReaderT (go xs) (Scope (mkEnv xs) (mkCS xs))) fuel where
-  go :: MonadEval m => [CoStmt] -> m [CoStmt]
-  go (CosLet vs:xs) = do
-    vs' <- traverse (third3A evaluate) vs
-    (:) (CosLet vs') <$> go xs
-  go (it:xs) = (:) it <$> go xs
-  go [] = pure []
+peval xs = go xs where
+  go :: [CoStmt] -> [CoStmt]
+  go (CosLet vs:xs)
+    = let vs' = map (third3 reduceOne) vs
+       in CosLet vs':go xs
+  go (it:xs) = it:go xs
+  go [] = []
+
+  reduceOne :: CoTerm -> CoTerm
+  reduceOne x = evalState (runReaderT (evaluate x) (Scope (mkEnv xs) (mkCS xs))) fuel
 
   mkEnv (CosLet vs:xs) = foldMap (\x -> Map.singleton (fst3 x) (thd3 x)) vs
              `Map.union` mkEnv xs
@@ -83,6 +90,7 @@ eval it = case it of
     vars <- for vs $ \(var, tp, ex) -> do
       ex' <- evaluate ex
       pr <- propagate ex'
+      tracePretty ("propagating " <+> ex <+> "? " <+> LiBool pr) $ pure ()
       pure $ if pr
          then Left (Map.singleton var ex')
          else Right (var, tp, ex')
@@ -90,7 +98,7 @@ eval it = case it of
         varsk = case keep of
           [] -> id
           _ -> fmap (CotLet keep)
-       in varsk (local (extend (Map.union (fold propag))) (evaluate e))
+       in evaluate =<< varsk (local (extend (Map.union (fold propag))) (evaluate e))
   CotMatch s b -> do
     term <- flip reduceBranches b =<< evaluate s
     case term of
@@ -113,12 +121,19 @@ type Branch = (CoPattern, CoType, CoTerm)
 
 -- Can we /safely/ propagate this without duplicating work?
 propagate :: MonadEval m => CoTerm -> m Bool
--- rationale: if the body is safely propagate-able, then it doesn't
--- matter if we evaluate it once or many times; propagating here gives
--- more inlining opportunities.
-propagate (CotLam _ _ b) = propagate b
 propagate CotLit{} = pure True
 propagate CotRef{} = pure True
+
+propagate (CotLam _ _ b) = propagate b
+propagate (CotTyApp x _) = propagate (tracePrettyId x)
+propagate (CotApp f x)
+  | CotRef v _ <- f = do
+    isCs <- asks (Set.member v . constructors)
+    tracePretty ("cotApp " <+> v <+> " was a constructor? " <+> LiBool isCs) $ pure ()
+    (isCs &&) <$> propagate x
+  | CotTyApp f' _ <- f = do
+    (&&) <$> propagate x <*> propagate (CotApp f' x)
+  | otherwise = pure False
 propagate _ = pure False
 
 reduceBranches :: MonadEval m => CoTerm -> [Branch] -> m CoTerm
@@ -126,10 +141,10 @@ reduceBranches ex = doIt where
   doIt xs = do
     x <- runExceptT (go xs)
     case x of
-      Left t -> evaluate =<< t
+      Left (env, term) -> local (extend (env `Map.union`)) (evaluate term)
       Right xs -> pure (CotMatch ex (simplify xs []))
 
-  go :: MonadEval m => [Branch] -> ExceptT (m CoTerm) m [Branch]
+  go :: MonadEval m => [Branch] -> ExceptT (Map.Map (Var Resolved) CoTerm, CoTerm) m [Branch]
   go ((pt, tp, cs):xs) = case ex of
     CotRef v _ -> do
       eval <- asks (Set.member v . constructors)
@@ -141,8 +156,8 @@ reduceBranches ex = doIt where
     _ -> go' tp pt ex cs xs
   go [] = pure []
 
-  go' tp pt ex cs xs = case match pt ex of
-    Just binds -> throwError (local (extend (Map.union binds)) (evaluate cs))
+  go' tp pt ex cs xs = case match pt (killTyApps ex) of
+    Just binds -> throwError (binds, cs)
     Nothing -> do
       cs' <- evaluate cs
       (:) (pt, tp, cs') <$> go xs
@@ -151,6 +166,13 @@ reduceBranches ex = doIt where
   simplify (it@(CopCapture{}, _, _):_) acc = reverse (it:acc)
   simplify (x:xs) acc = simplify xs (x:acc)
   simplify [] acc = reverse acc
+
+  -- We simplify terms like 'Foo @int 1' to Foo @
+  killTyApps :: CoTerm -> CoTerm
+  killTyApps = everywhere (mkT go) where
+    go (CotTyApp f _) = f
+    go x = x
+
 
 match :: CoPattern -> CoTerm -> Maybe (Map.Map (Var Resolved) CoTerm)
 match (CopCapture v) x = pure (Map.singleton v x)
