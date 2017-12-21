@@ -104,7 +104,7 @@ transformStmts pass (x@CosForeign{}:xs) = (x:) <$> transformStmts pass xs
 transformStmts pass (CosLet vars:xs) = do
   vars' <- extendVars vars (traverse (third3A (transformTerm pass)) vars)
   (CosLet vars':) <$> extendVars vars' (transformStmts pass xs)
-transformStmts pass (x@(CosType v _ cases):xs) =
+transformStmts pass (x@(CosType v cases):xs) =
   (x:) <$> local (\s -> s { cons = Map.insert v cases (cons s) }) (transformStmts pass xs)
 
 runTransform :: TransM a -> a

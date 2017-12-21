@@ -51,19 +51,18 @@ resolveModule prgs = do
 resolveToplevel :: MonadResolve m => Toplevel Parsed -> m (Toplevel Resolved)
 resolveToplevel r = flip catchError (throwError . flip ArisingFromTop r)
   $ case r of
-     LetStmt vs a -> LetStmt
+     LetStmt vs -> LetStmt
                  <$> traverse (\(v, e, a) -> (,,) <$> lookupEx v <*> reExpr e <*> pure a) vs
-                 <*> pure a
      ForeignVal v t ty a -> ForeignVal
                         <$> lookupEx v
                         <*> pure t
                         <*> reType (wrap ty)
                         <*> pure a
-     TypeDecl v vs cs a -> do
+     TypeDecl v vs cs -> do
        v' <- lookupTy v
        vs' <- traverse tagVar vs
        cs' <- extendTyN (zip vs vs') $ traverse resolveCons cs
-       pure (TypeDecl v' vs' cs' a)
+       pure (TypeDecl v' vs' cs')
      where resolveCons (UnitCon v a) = UnitCon <$> lookupEx v <*> pure a
            resolveCons (ArgCon v t a) = ArgCon <$> lookupEx v <*> reType t <*> pure a
 
@@ -140,7 +139,6 @@ reType (TyForall vs ty) = do
   pure (TyForall vs' ty')
 reType (TyArr l r) = TyArr <$> reType l <*> reType r
 reType (TyApp l r) = TyApp <$> reType l <*> reType r
-reType TyStar = pure TyStar
 reType (TyRows t r) = TyRows <$> reType t
                                <*> traverse (\(a, b) -> (a,) <$> reType b) r
 reType (TyExactRows r) = TyExactRows <$> traverse (\(a, b) -> (a,) <$> reType b) r

@@ -7,9 +7,9 @@ import Syntax
 import Data.Triple
 
 extractVars :: Toplevel p -> ([Var p], [Var p])
-extractVars (LetStmt vs _) = (map fst3 vs, [])
+extractVars (LetStmt vs) = (map fst3 vs, [])
 extractVars (ForeignVal v _ _ _) = ([v], [])
-extractVars (TypeDecl v _ cs _) = (map extractCons cs, [v])
+extractVars (TypeDecl v _ cs) = (map extractCons cs, [v])
   where extractCons (UnitCon v _) = v
         extractCons (ArgCon v _ _) = v
 

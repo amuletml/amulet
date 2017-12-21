@@ -35,12 +35,6 @@ instance Pretty TypeError where
     annotation ex <+> ": " <+> er
     block 1 . (newline <+>) $
       bullet "Arising from use of " <+> verbatim ex
-  pprint (ExpectedArrow ap k v) = do
-    "Kind error: In application " <+> verbatim ap
-    block 1 . (newline <+>) $
-      bullet "expected arrow kind, but got "
-         <+> k
-         <+> parens " (kind of " <+> v <+> ")"
   pprint (FoundHole xs) = interleave newline (map prnt xs) where
     prnt :: Expr Typed -> PrettyP
     prnt (Hole v s)
