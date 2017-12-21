@@ -18,10 +18,11 @@ import Syntax
 import Data.Semigroup ((<>))
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 
 import qualified Data.Text as T
 import Data.Text (Text)
-import Data.List (sortOn)
+import Data.List (sortOn, partition)
 import Data.Maybe (fromMaybe)
 
 type Returner = Maybe (LuaExpr -> LuaStmt)
@@ -44,8 +45,8 @@ compileProgram ev = LuaDo . (extendDef:) . compileProg where
         :compileProg xs
     | otherwise = LuaLocal [LuaName n] [LuaBitE s]:compileProg xs
     where n = getName n'
-  compileProg (CosLet vs:xs) = locals ns vs' ++ compileProg xs where
-    (ns, vs') = unzip $ map compileLet vs
+
+  compileProg (CosLet vs:xs) = compileLet (unzip3 vs) ++ compileProg xs where
   compileProg (CosType _ cs:xs) = map compileConstructor cs ++ compileProg xs
   compileProg [] = [LuaCallS (main ev) []] where
     main = LuaRef . LuaName . getTaggedName . head
@@ -66,9 +67,6 @@ compileConstructor (var, _) -- non-unit constructors, hard
   = LuaLocal [lowerName var] [vl] where
     vl = LuaFunction [LuaName "x"] [LuaReturn (LuaTable [(LuaNumber 1, LuaString cn), (LuaNumber 2, LuaRef (LuaName "x"))])]
     cn = getName var
-
-compileLet :: (Var Resolved, CoType, CoTerm) -> (LuaVar, LuaExpr)
-compileLet (n, _, e) = (lowerName n, compileExpr e)
 
 compileExpr :: CoTerm -> LuaExpr
 
@@ -113,8 +111,7 @@ compileStmt :: Returner -> CoTerm -> [LuaStmt]
 compileStmt r e@CotRef{} = pureReturn r $ compileExpr e
 compileStmt r e@CotLam{} = pureReturn r $ compileExpr e
 compileStmt r e@CotLit{} = pureReturn r $ compileExpr e
-compileStmt r (CotLet k c) = let (ns, vs) = unzip $ map compileLet k in
-                              (locals ns vs ++ compileStmt r c)
+compileStmt r (CotLet k c) = compileLet (unzip3 k) ++ compileStmt r c
 compileStmt r (CotBegin xs x) = concatMap (compileStmt Nothing) xs ++ compileStmt r x
 compileStmt r (CotMatch s ps) = runGen (compileMatch r s ps)
 
@@ -155,13 +152,23 @@ iife b = LuaCall (LuaFunction [] b) []
 compileIife :: CoTerm -> LuaExpr
 compileIife = iife . compileStmt (Just LuaReturn)
 
-locals :: [LuaVar] -> [LuaExpr] -> [LuaStmt]
-locals xs ys = preDef ++ locals' xs ys where
-  locals' (x:xs) (y:ys) = LuaAssign [x] [y]:locals' xs ys
-  locals' _ _ = []
-  preDef = case xs of
-             [] -> []
-             xs -> [LuaLocal xs []]
+compileLet :: ([Var Resolved], [CoType], [CoTerm]) -> [LuaStmt]
+compileLet (vs, _, es) = locals recs (assigns nonrecs) where
+  binds = zip vs es
+  (nonrecs, recs) = partition (uncurry recursive) binds
+
+  locals xs =
+    let (v, t) = unzip xs
+     in case v of
+       [] -> id
+       _ -> (++) (zipWith (\x y -> LuaLocal [lowerName x] [compileExpr y]) v t)
+  assigns xs = case xs of
+    [] -> []
+    xs -> LuaLocal (map (lowerName . fst) xs) []:map one xs
+  one (v, t) = LuaAssign [lowerName v] [compileExpr t]
+
+  recursive v term@CotLam{} = v `Set.member` freeIn term
+  recursive _ _ = False
 
 pureReturn :: Returner -> LuaExpr -> [LuaStmt]
 pureReturn Nothing _ = []
