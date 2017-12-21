@@ -28,7 +28,7 @@ data CoTerm
   deriving (Eq, Show, Ord, Data, Typeable)
 
 data CoPattern
-  = CopCapture (Var Resolved)
+  = CopCapture (Var Resolved) CoType
   | CopConstr (Var Resolved)
   | CopDestr (Var Resolved) CoPattern
   | CopExtend CoPattern [(Text, CoPattern)]
@@ -98,7 +98,7 @@ pprCases xs = interleave (opClr "; ") (map one xs) where
   one (a, b, c) = a <+> opClr " : " <+> b <+> opClr " -> " <+> c
 
 instance Pretty CoPattern where
-  pprint (CopCapture v) = pprint v
+  pprint (CopCapture v t) = parens (v <+> opClr " : " <+> t)
   pprint (CopConstr v) = pprint v
   pprint (CopDestr v p) = parens (v <+> " " <+> p)
   pprint (CopExtend p rs)
@@ -149,7 +149,7 @@ freeIn (CotApp f x) = freeIn f <> freeIn x
 freeIn (CotLet vs e) = Set.difference (freeIn e) (Set.fromList (map fst3 vs))
 freeIn (CotMatch e bs) = freeIn e <> foldMap freeInBranch bs where
   freeInBranch (b, _, e) = Set.difference (freeIn e) (bound b)
-  bound (CopCapture v) = Set.singleton v
+  bound (CopCapture v _) = Set.singleton v
   bound (CopDestr _ p) = bound p
   bound (CopExtend p ps) = foldMap (bound . snd) ps `Set.union` bound p
   bound _ = Set.empty

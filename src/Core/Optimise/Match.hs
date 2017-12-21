@@ -12,7 +12,7 @@ dropBranches :: TransformPass
 dropBranches = beforePass' pass where
   pass (CotMatch e ptrns) =
     case reducePatterns ptrns of
-      [(CopCapture v, ty, bod)] ->
+      [(CopCapture v _, ty, bod)] ->
         case e of
           CotRef _ _ -> substitute (Map.singleton v e) bod
           _ -> CotLet [(v, ty, e)] bod
@@ -20,5 +20,5 @@ dropBranches = beforePass' pass where
   pass e = e
 
   reducePatterns [] = []
-  reducePatterns (p@(CopCapture _, _, _):_) = [p]
+  reducePatterns (p@(CopCapture _ _, _, _):_) = [p]
   reducePatterns (p:xs) = p : reducePatterns xs
