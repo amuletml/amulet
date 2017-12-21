@@ -17,12 +17,11 @@ import Data.Triple
 import Data.Either
 import Data.List
 
-import Syntax (Var(..), Resolved, Lit(LiBool))
+import Syntax (Var(..), Resolved)
 import Core.Optimise
 
 import Generics.SYB
 
-import Pretty (tracePretty, tracePrettyId, (<+>))
 
 data Scope = Scope
   { variables :: Map.Map (Var Resolved) CoTerm
@@ -90,7 +89,6 @@ eval it = case it of
     vars <- for vs $ \(var, tp, ex) -> do
       ex' <- evaluate ex
       pr <- propagate ex'
-      tracePretty ("propagating " <+> ex <+> "? " <+> LiBool pr) $ pure ()
       pure $ if pr
          then Left (Map.singleton var ex')
          else Right (var, tp, ex')
@@ -125,11 +123,10 @@ propagate CotLit{} = pure True
 propagate CotRef{} = pure True
 
 propagate (CotLam _ _ b) = propagate b
-propagate (CotTyApp x _) = propagate (tracePrettyId x)
+propagate (CotTyApp x _) = propagate x
 propagate (CotApp f x)
   | CotRef v _ <- f = do
     isCs <- asks (Set.member v . constructors)
-    tracePretty ("cotApp " <+> v <+> " was a constructor? " <+> LiBool isCs) $ pure ()
     (isCs &&) <$> propagate x
   | CotTyApp f' _ <- f = do
     (&&) <$> propagate x <*> propagate (CotApp f' x)
