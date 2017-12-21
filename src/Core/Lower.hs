@@ -89,7 +89,8 @@ patternMatchingFailure (ex, tp) = do
       domain x = lowerType x
 
   err <- codomain tp
-  (,,) <$> pure cap <*> domain tp
+  dom <- domain tp
+  (,,) <$> pure (cap dom) <*> pure dom
        <*> pure (CotApp (CotTyApp errRef err)
                         (CotLit (ColStr (prettyPrint ex))))
 
@@ -156,10 +157,10 @@ lowerExpr expr
     Access ex key (_, t) -> do
       var <- fresh
       rest <- fresh
-      let pat = CopExtend (CopCapture rest) [(key, CopCapture var)]
-
-      ref <- CotRef var <$> lowerType t
+      t' <- lowerType t
       ext <- lowerType (getType ex)
+      let pat = CopExtend (CopCapture rest ext) [(key, CopCapture var t')]
+          ref = CotRef var t'
       CotMatch <$> lowerExpr ex <*> pure [(pat, ext, ref)]
     Tuple xs _ -> do
       let go :: MonadLower m => Int -> Expr Typed -> m (T.Text, CoType, CoTerm)
@@ -192,12 +193,12 @@ tup2Rec k b = do
 
 lowerPat :: MonadLower m => Pattern Typed -> m CoPattern
 lowerPat pat = case pat of
-  Capture (TvName x) _ -> pure $ CopCapture x
-  Wildcard _ -> CopCapture <$> fresh
+  Capture (TvName x) (_, t) -> CopCapture x <$> lowerType t
+  Wildcard (_, t) -> CopCapture <$> fresh <*> lowerType t
   Destructure (TvName p) Nothing _ -> pure $ CopConstr p
   Destructure (TvName p) (Just t) _ -> CopDestr p <$> lowerPat t
   PType p _ _ -> lowerPat p
-  PRecord xs _ -> CopExtend <$> (CopCapture <$> fresh) <*> do
+  PRecord xs (_, t) -> CopExtend <$> (CopCapture <$> fresh <*> lowerType t) <*> do
     for xs $ \(label, pat) -> (,) label <$> lowerPat pat
   PTuple xs _ -> do
     let go :: MonadLower m => Int -> Pattern Typed -> m (T.Text, CoPattern)

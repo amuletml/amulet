@@ -91,8 +91,8 @@ transformTerm pass = before pass >=> visit >=> after pass where
     e' <- transform e
     cases' <- for cases (\(p, t, bod) ->
                            (p, t,) <$> case p of
-                                         CopCapture v -> extendVars [(v, t, e)] (transform bod)
-                                         _ -> transform bod)
+                             CopCapture v _ -> extendVars [(v, t, e)] (transform bod)
+                             _ -> transform bod)
     pure (CotMatch e' cases')
   visit x = mapTerm1M (transformTerm pass) x
 

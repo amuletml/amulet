@@ -22,6 +22,7 @@ import Core.Optimise
 
 import Generics.SYB
 
+import Pretty (tracePretty, tracePrettyId, (<+>))
 
 data Scope = Scope
   { variables :: Map.Map (Var Resolved) CoTerm
@@ -37,7 +38,7 @@ extend :: (Map.Map (Var Resolved) CoTerm -> Map.Map (Var Resolved) CoTerm) -> Sc
 extend f (Scope v c) = Scope (f v) c
 
 fuel :: Int
-fuel = 100
+fuel = 250
 
 peval :: [CoStmt] -> [CoStmt]
 peval xs = go xs where
@@ -100,7 +101,7 @@ eval it = case it of
   CotMatch s b -> do
     term <- flip reduceBranches b =<< evaluate s
     case term of
-      CotMatch sc [(CopCapture v, tp, cs)] ->
+      CotMatch sc [(CopCapture v _, tp, cs)] ->
         evaluate (CotLet [(v, tp, sc)] cs)
       _ -> pure term
   CotTyApp f tp -> do
@@ -138,10 +139,10 @@ reduceBranches ex = doIt where
   doIt xs = do
     x <- runExceptT (go xs)
     case x of
-      Left (env, term) -> local (extend (env `Map.union`)) (evaluate term)
+      Left term -> evaluate (tracePrettyId term)
       Right xs -> pure (CotMatch ex (simplify xs []))
 
-  go :: MonadEval m => [Branch] -> ExceptT (Map.Map (Var Resolved) CoTerm, CoTerm) m [Branch]
+  go :: MonadEval m => [Branch] -> ExceptT (CoTerm) m [Branch]
   go ((pt, tp, cs):xs) = case ex of
     CotRef v _ -> do
       eval <- asks (Set.member v . constructors)
@@ -154,7 +155,7 @@ reduceBranches ex = doIt where
   go [] = pure []
 
   go' tp pt ex cs xs = case match pt (killTyApps ex) of
-    Just binds -> throwError (binds, cs)
+    Just binds -> throwError (CotLet (mkBinds binds) cs)
     Nothing -> do
       cs' <- evaluate cs
       (:) (pt, tp, cs') <$> go xs
@@ -170,9 +171,11 @@ reduceBranches ex = doIt where
     go (CotTyApp f _) = f
     go x = x
 
+  mkBinds :: Map.Map (Var Resolved) (CoType, CoTerm) -> [(Var Resolved, CoType, CoTerm)]
+  mkBinds = map (\(x, (y, z)) -> (x, y, z)) . Map.toList
 
-match :: CoPattern -> CoTerm -> Maybe (Map.Map (Var Resolved) CoTerm)
-match (CopCapture v) x = pure (Map.singleton v x)
+match :: CoPattern -> CoTerm -> Maybe (Map.Map (Var Resolved) (CoType, CoTerm))
+match (CopCapture v t) x = pure (Map.singleton v (t, x))
 match (CopConstr x) (CotRef v _)
   | x == v = pure Map.empty
   | otherwise = Nothing
