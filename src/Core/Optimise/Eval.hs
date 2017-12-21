@@ -22,8 +22,6 @@ import Core.Optimise
 
 import Generics.SYB
 
-import Pretty (tracePretty, tracePrettyId, (<+>))
-
 data Scope = Scope
   { variables :: Map.Map (Var Resolved) CoTerm
   , constructors :: Set.Set (Var Resolved)
@@ -139,7 +137,7 @@ reduceBranches ex = doIt where
   doIt xs = do
     x <- runExceptT (go xs)
     case x of
-      Left term -> evaluate (tracePrettyId term)
+      Left term -> evaluate term
       Right xs -> pure (CotMatch ex (simplify xs []))
 
   go :: MonadEval m => [Branch] -> ExceptT (CoTerm) m [Branch]
