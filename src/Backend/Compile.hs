@@ -46,7 +46,7 @@ compileProgram ev = LuaDo . (extendDef:) . compileProg where
     where n = getName n'
   compileProg (CosLet vs:xs) = locals ns vs' ++ compileProg xs where
     (ns, vs') = unzip $ map compileLet vs
-  compileProg (CosType _ _ cs:xs) = map compileConstructor cs ++ compileProg xs
+  compileProg (CosType _ cs:xs) = map compileConstructor cs ++ compileProg xs
   compileProg [] = [LuaCallS (main ev) []] where
     main = LuaRef . LuaName . getTaggedName . head
          . sortOn key

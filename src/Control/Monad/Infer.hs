@@ -13,7 +13,7 @@ module Control.Monad.Infer
   , Env(..)
   , MonadInfer
   , lookupTy, fresh, freshFrom, runInfer, extend
-  , lookupKind, extendKind, extendMany, extendManyK
+  , extendKind, extendMany, extendManyK
   , difference, freshTV
   , instantiate
   )
@@ -42,13 +42,9 @@ type MonadInfer p m = (MonadError TypeError m, MonadReader Env m, MonadWriter [C
 
 data Env
   = Env { values :: Map.Map (Var Resolved) (Type Typed)
-        , types  :: Map.Map (Var Resolved) (Type Typed)
+        , types  :: Set.Set (Var Resolved)
         }
   deriving (Eq, Show, Ord)
-
-instance Substitutable Typed Env where
-  ftv Env{ types = s } = ftv (Map.elems s)
-  apply s env@Env{ types = e} = env { types = Map.map (apply s) e}
 
 instance Monoid Env where
   mappend = (<>)
@@ -73,8 +69,6 @@ data TypeError where
   FoundHole :: [Expr Typed] -> TypeError
   ArisingFrom :: (Spanned (f p), Pretty (f p), Pretty (Ann p), Pretty (Var p))
               => TypeError -> f p -> TypeError
-  ExpectedArrow :: (Pretty (Var p'), Pretty (Var p))
-                => Type p' -> Type p -> Type p -> TypeError
   NoOverlap :: Type Typed -> Type Typed -> TypeError
   Note :: Pretty x => TypeError -> x -> TypeError
   Suggestion :: Pretty x => TypeError -> x -> TypeError
@@ -95,13 +89,6 @@ lookupTy x = do
                        (verbatim x <+> (" has principal type " :: Text) <+> verbatim t))
     Nothing -> throwError (NotInScope x)
 
-lookupKind :: (MonadError TypeError m, MonadReader Env m) => Var Resolved -> m (Type Typed)
-lookupKind x = do
-  rs <- asks (Map.lookup x . types)
-  case rs of
-    Just t -> pure t
-    Nothing -> throwError (NotInScope x)
-
 runInfer :: MonadGen Int m
          => Env
          -> ReaderT Env (WriterT [Constraint p] (ExceptT TypeError m)) a
@@ -119,14 +106,15 @@ freshFrom t = TgName t <$> gen
 extend :: MonadReader Env m => (Var Typed, Type Typed) -> m a -> m a
 extend (v, t) = local (\x -> x { values = Map.insert (unTvName v) t (values x) })
 
-extendKind :: MonadReader Env m => (Var Typed, Type Typed) -> m a -> m a
-extendKind (v, t) = local (\x -> x { types = Map.insert (unTvName v) t (types x) })
+extendKind :: MonadReader Env m => Var Typed -> m a -> m a
+extendKind v = local (\x -> x { types = Set.insert (unTvName v) (types x) })
+
 extendMany :: MonadReader Env m => [(Var Typed, Type Typed)] -> m a -> m a
 extendMany ((v, t):xs) b = extend (v, t) $ extendMany xs b
 extendMany [] b = b
 
-extendManyK :: MonadReader Env m => [(Var Typed, Type Typed)] -> m a -> m a
-extendManyK ((v, t):xs) b = extendKind (v, t) $ extendManyK xs b
+extendManyK :: MonadReader Env m => [Var Typed] -> m a -> m a
+extendManyK (v:xs) b = extendKind v $ extendManyK xs b
 extendManyK [] b = b
 
 alpha :: [Text]
@@ -139,7 +127,7 @@ instantiate (TyForall vs ty) = do
 instantiate ty = pure ty
 
 difference :: Env -> Env -> Env
-difference (Env ma mb) (Env ma' mb') = Env (ma Map.\\ ma') (mb Map.\\ mb')
+difference (Env ma mb) (Env ma' mb') = Env (ma Map.\\ ma') (mb Set.\\ mb')
 
 freshTV :: MonadGen Int m => m (Type Typed)
 freshTV = TyVar . TvName <$> fresh

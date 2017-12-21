@@ -30,7 +30,7 @@ raiseE vR aR =
       BothSection o a -> BothSection (eR o) (aR a)
       AccessSection k a -> AccessSection k (aR a)
       Tuple es a -> Tuple (map eR es) (aR a)
-      Ascription e t a -> Ascription (eR e) (raiseT vR aR t) (aR a)
+      Ascription e t a -> Ascription (eR e) (raiseT vR t) (aR a)
 
 raiseP :: (Var p -> Var p') -- How to raise variables
        -> (Ann p -> Ann p')
@@ -42,19 +42,17 @@ raiseP v a (Destructure c s' p)
   = Destructure (v c) Nothing (a p)
   | Just s <- s'
   = Destructure (v c) (Just (raiseP v a s)) (a p)
-raiseP v a (PType i t p) = PType (raiseP v a i) (raiseT v a t) (a p)
+raiseP v a (PType i t p) = PType (raiseP v a i) (raiseT v t) (a p)
 raiseP v a (PRecord rs p) = PRecord (map (second (raiseP v a)) rs) (a p)
 raiseP v a (PTuple e p) = PTuple (map (raiseP v a) e) (a p)
 
 raiseT :: (Var p -> Var p') -- How to raise variables
-       -> (Ann p -> Ann p')
        -> Type p -> Type p'
-raiseT v _ (TyCon n) = TyCon (v n)
-raiseT v _ (TyVar n) = TyVar (v n)
-raiseT v a (TyForall n t) = TyForall (map v n) (raiseT v a t)
-raiseT v a (TyArr x y) = TyArr (raiseT v a x) (raiseT v a y)
-raiseT v a (TyApp x y) = TyApp (raiseT v a x) (raiseT v a y)
-raiseT v a (TyTuple x y) = TyTuple (raiseT v a x) (raiseT v a y)
-raiseT v a (TyRows rho rows) = TyRows (raiseT v a rho) (map (second (raiseT v a)) rows)
-raiseT v a (TyExactRows rows) = TyExactRows (map (second (raiseT v a)) rows)
-raiseT _ _ TyStar = TyStar
+raiseT v (TyCon n) = TyCon (v n)
+raiseT v (TyVar n) = TyVar (v n)
+raiseT v (TyForall n t) = TyForall (map v n) (raiseT v t)
+raiseT v (TyArr x y) = TyArr (raiseT v x) (raiseT v y)
+raiseT v (TyApp x y) = TyApp (raiseT v x) (raiseT v y)
+raiseT v (TyTuple x y) = TyTuple (raiseT v x) (raiseT v y)
+raiseT v (TyRows rho rows) = TyRows (raiseT v rho) (map (second (raiseT v)) rows)
+raiseT v (TyExactRows rows) = TyExactRows (map (second (raiseT v)) rows)

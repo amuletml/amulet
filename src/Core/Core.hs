@@ -61,7 +61,7 @@ data Size
 data CoStmt
   = CosForeign (Var Resolved) CoType Text
   | CosLet [(Var Resolved, CoType, CoTerm)]
-  | CosType (Var Resolved) CoType [(Var Resolved, CoType)]
+  | CosType (Var Resolved) [(Var Resolved, CoType)]
   deriving (Eq, Show, Ord, Data, Typeable)
 
 instance Pretty CoTerm where
@@ -136,9 +136,8 @@ instance Pretty CoLiteral where
 instance Pretty CoStmt where
   pprint (CosForeign v t e) = v <+> opClr " : " <+> t <+> kwClr " = foreign " <+> str e
   pprint (CosLet vs) = kwClr "let " <+> braces (pprLet vs)
-  pprint (CosType v k cs) = kwClr "type "
-                        <+> v <+> opClr " : "
-                        <+> k <+> braces (pprCons cs)
+  pprint (CosType v cs) = kwClr "type "
+                        <+> v <+> " " <+> braces (pprCons cs)
     where pprCons = interleave (opClr "; ") . map (\(x, t) -> x <+> opClr " : " <+> t)
 
 

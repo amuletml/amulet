@@ -283,7 +283,7 @@ lit = intLit <|> strLit <|> true <|> false where
 
 toplevelP :: Parser Toplevel'
 toplevelP = letStmt <|> try foreignVal <|> dataDecl where
-  letStmt = withPos $ do
+  letStmt = do
     reserved "let"
     LetStmt <$> bindGroup
   foreignVal = withPos $ do
@@ -295,7 +295,7 @@ toplevelP = letStmt <|> try foreignVal <|> dataDecl where
     reservedOp "="
     n <- T.pack <$> stringLiteral
     pure $ ForeignVal x n ty
-  dataDecl = withPos $ do
+  dataDecl = do
     reserved "type"
     x <- name
     xs <- many tyVar

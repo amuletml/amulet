@@ -7,7 +7,7 @@ import Data.Triple
 import Syntax
 
 findHoles :: [Toplevel Typed] -> [Expr Typed]
-findHoles (LetStmt vs _:xs) = concatMap (findExprHoles . snd3) vs ++ findHoles xs
+findHoles (LetStmt vs:xs) = concatMap (findExprHoles . snd3) vs ++ findHoles xs
 findHoles (_:xs) = findHoles xs
 findHoles [] = []
 

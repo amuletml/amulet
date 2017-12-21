@@ -179,7 +179,6 @@ lowerType tt = case tt of
     for vs $ \(label, tp) -> (,) label <$> lowerType tp
   TyExactRows vs -> CotyExactRows <$> do
     for vs $ \(label, tp) -> (,) label <$> lowerType tp
-  TyStar -> pure CotyStar
   TyVar (TvName v) -> pure (CotyVar v)
   TyCon (TvName v) -> pure (CotyCon v)
 
@@ -211,12 +210,12 @@ lowerProg = traverse lowerTop where
   lowerTop (ForeignVal (TvName t) ex tp _) = do
     tp' <- lowerType tp
     pure $ CosForeign t tp' ex
-  lowerTop (LetStmt vs _) =
+  lowerTop (LetStmt vs) =
     CosLet <$> for vs (\(TvName v, ex, (_, ant)) -> do
       (k, _) <- makeBigLams ant
       (,,) <$> pure v <*> lowerType ant <*> (k <$> lowerExpr ex))
-  lowerTop (TypeDecl (TvName var) _ cons (_, kind))
-    = CosType var <$> lowerType kind <*> do
+  lowerTop (TypeDecl (TvName var) _ cons)
+    = CosType var <$> do
         for cons $ \case
           UnitCon (TvName p) (_, t) -> (,) p <$> lowerType t
           ArgCon (TvName p) _ (_, t) -> (,) p <$> lowerType t

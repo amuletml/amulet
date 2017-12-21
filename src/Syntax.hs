@@ -11,8 +11,11 @@ import Data.Text (Text)
 import Data.Spanned
 import Data.Span
 
+import Data.List.NonEmpty(NonEmpty ((:|)))
+import Data.Semigroup
 import Data.Foldable
 import Data.Typeable
+import Data.Triple
 import Data.Data
 
 newtype Parsed = Parsed Parsed deriving Data
@@ -116,23 +119,26 @@ data Type p
   | TyExactRows [(Text, Type p)] -- { foo : int, bar : string }
   | TyTuple (Type p) (Type p) -- (see note [1])
 
-  | TyStar -- * :: *
-
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Type p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Type p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Type p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Type p)
 
 data Toplevel p
-  = LetStmt [(Var p, Expr p, Ann p)] (Ann p)
-  | ForeignVal (Var p) Text (Type p) (Ann p) -- TODO remove this too
-  | TypeDecl (Var p) [Var p] [Constructor p] (Ann p)
+  = LetStmt [(Var p, Expr p, Ann p)]
+  | ForeignVal (Var p) Text (Type p) (Ann p)
+  | TypeDecl (Var p) [Var p] [Constructor p]
+
+instance (Spanned (Constructor p), Ann p ~ Span) => Spanned (Toplevel p) where
+  annotation (LetStmt ((_, _, x):vs)) = sconcat (x :| (map thd3 vs))
+  annotation (TypeDecl _ _ (x:xs)) = sconcat (annotation x :| map annotation xs)
+  annotation (ForeignVal _ _ _ x) = x
+  annotation _ = undefined
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Toplevel p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Toplevel p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Toplevel p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Toplevel p)
-instance (Data (Var p), Data (Ann p), Data p) => Spanned (Toplevel p)
 
 data Constructor p
   = UnitCon (Var p) (Ann p)
@@ -231,14 +237,13 @@ instance (Pretty (Var p)) => Pretty (Type p) where
     = parens a <+> opClr " * " <+> b
     | otherwise
     = a <+> opClr " * " <+> b
-  pprint TyStar{} = kwClr "Type"
 
 instance (Pretty (Var p)) => Pretty (Toplevel p) where
-  pprint (LetStmt vs _) = opClr "let " <+> interleave (newline <+> opClr "and ") (map pVars vs) where
+  pprint (LetStmt vs) = opClr "let " <+> interleave (newline <+> opClr "and ") (map pVars vs) where
     pVars (v, e, _) = v <+> " = " <+> block 2 e
   pprint (ForeignVal v d ty _) = kwClr "foreign val " <+> v <+> opClr ": "
-                                 <+> ty <+> opClr " = " <+> str d
-  pprint (TypeDecl ty args ctors _) = do
+                           <+> ty <+> opClr " = " <+> str d
+  pprint (TypeDecl ty args ctors) = do
     kwClr "type " <+> ty
     traverse_ (" '" <+>) args
     opClr " = "

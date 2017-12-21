@@ -50,7 +50,7 @@ peval xs = evalState (runReaderT (go xs) (Scope (mkEnv xs) (mkCS xs))) fuel wher
   mkEnv (_:xs) = mkEnv xs
   mkEnv [] = Map.empty
 
-  mkCS (CosType _ _ vs:xs) = Set.fromList (map fst vs) `Set.union` mkCS xs
+  mkCS (CosType _ vs:xs) = Set.fromList (map fst vs) `Set.union` mkCS xs
   mkCS (_:xs) = mkCS xs
   mkCS [] = Set.empty
 

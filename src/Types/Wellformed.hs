@@ -15,7 +15,6 @@ wellformed :: (Pretty (Var p), MonadError TypeError m) => Type p -> m ()
 wellformed tp = case tp of
   TyCon{} -> pure ()
   TyVar{} -> pure ()
-  TyStar{} -> pure ()
   TyForall _ t -> wellformed t
   TyArr a b -> wellformed a *> wellformed b
   TyApp a b -> wellformed a *> wellformed b
@@ -44,12 +43,10 @@ normType x = x
 
    Abandon all hope, ye who enter here.
 
-   Obviously, this module begs a bit of explaining. Since the kind
-   inference engine in Types.Infer isn't usable in Type Typed, here we
-   implement a very dumb wellformedness check that will reject
-   obviously-wrong types, such as { int | field : type}. Hopefully in
-   the future we alleviate the need for this module with a *proper* kind
-   system
+   FIXME: lmao no kinds. We need them. I removed the broken stuff we
+   called "kinds" so I could actually refactor things without GHC
+   complaining every 3 nanoseconds, so now the only way to make sure
+   types are well formed is through this module. Yay.
 
    Unfortunately, this is the best I can do right now.
 
