@@ -25,6 +25,7 @@ import Generics.SYB
 data Scope = Scope
   { variables :: Map.Map (Var Resolved) CoTerm
   , constructors :: Set.Set (Var Resolved)
+  , target :: Var Resolved
   }
 
 type MonadEval m
@@ -33,22 +34,22 @@ type MonadEval m
     )
 
 extend :: (Map.Map (Var Resolved) CoTerm -> Map.Map (Var Resolved) CoTerm) -> Scope -> Scope
-extend f (Scope v c) = Scope (f v) c
+extend f (Scope v c g) = Scope (f v) c g
 
 fuel :: Int
-fuel = 250
+fuel = 1000
 
 peval :: [CoStmt] -> [CoStmt]
 peval xs = go xs where
   go :: [CoStmt] -> [CoStmt]
   go (CosLet vs:xs)
-    = let vs' = map (third3 reduceOne) vs
+    = let vs' = map (\(x, t, y) -> (x, t, reduceOne y x)) vs
        in CosLet vs':go xs
   go (it:xs) = it:go xs
   go [] = []
 
-  reduceOne :: CoTerm -> CoTerm
-  reduceOne x = evalState (runReaderT (evaluate x) (Scope (mkEnv xs) (mkCS xs))) fuel
+  reduceOne :: CoTerm -> Var Resolved -> CoTerm
+  reduceOne x g = evalState (runReaderT (evaluate x) (Scope (mkEnv xs) (mkCS xs) g)) fuel
 
   mkEnv (CosLet vs:xs) = foldMap (\x -> Map.singleton (fst3 x) (thd3 x)) vs
              `Map.union` mkEnv xs
@@ -71,8 +72,14 @@ evaluate term = do
 eval :: MonadEval m => CoTerm -> m CoTerm
 eval it = case it of
   CotRef v _ -> do
-    val <- asks (Map.lookup v . variables)
-    maybe (pure it) evaluate val
+    x <- asks target
+    if v == x
+       then do
+         modify (const 0) -- halt! we only unroll if we inline
+         pure it
+        else do
+          val <- asks (Map.lookup v . variables)
+          maybe (pure it) evaluate val
   CotLam s a b -> CotLam s a <$> evaluate b
   CotApp f x -> do
     f' <- evaluate f
@@ -99,9 +106,10 @@ eval it = case it of
   CotMatch s b -> do
     term <- flip reduceBranches b =<< evaluate s
     case term of
-      CotMatch sc [(CopCapture v _, tp, cs)] ->
-        evaluate (CotLet [(v, tp, sc)] cs)
-      _ -> pure term
+      CotMatch sc [(CopCapture v _, tp, cs)] -> do
+        sc' <- evaluate sc
+        evaluate (CotLet [(v, tp, sc')] cs)
+      _ -> evaluate term
   CotTyApp f tp -> do
     f' <- evaluate f
     case f' of
@@ -152,11 +160,17 @@ reduceBranches ex = doIt where
     _ -> go' tp pt ex cs xs
   go [] = pure []
 
-  go' tp pt ex cs xs = case match pt (killTyApps ex) of
-    Just binds -> throwError (CotLet (mkBinds binds) cs)
-    Nothing -> do
-      cs' <- evaluate cs
-      (:) (pt, tp, cs') <$> go xs
+  go' tp pt ex cs xs = do
+    let pat = match pt (killTyApps ex)
+    case pat of
+      Just binds -> case xs of
+        [] -> do -- TODO: fix this
+          cs' <- evaluate cs
+          pure [(pt, tp, cs')] -- see note 1
+        _ -> throwError (CotLet (mkBinds binds) cs)
+      Nothing -> do
+        cs' <- evaluate cs
+        (:) (pt, tp, cs') <$> go xs
 
   simplify :: [Branch] -> [Branch] -> [Branch]
   simplify (it@(CopCapture{}, _, _):_) acc = reverse (it:acc)
@@ -189,3 +203,10 @@ match (CopExtend i ps) (CotExtend l rs) = do
     match p t
   pure (x <> fold inside)
 match _ _ = Nothing
+
+
+-- Note [1]:
+-- Since captures always match, we make sure here that this isn't the
+-- last case (i.e. the automatically generated non-exhaustive pattern
+-- error). If it *is* the last case, we don't exit, because that'd mean
+-- reducing the program into an error.
