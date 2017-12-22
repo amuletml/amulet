@@ -4,6 +4,7 @@ module Core.Optimise.Eval
   ) where
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Text as Text
 import qualified Data.Set as Set
 
 import Control.Monad.State.Strict
@@ -14,7 +15,7 @@ import Data.Traversable
 import Data.Semigroup
 import Data.Foldable
 import Data.Triple
-import Data.Either
+import Data.Maybe
 import Data.List
 
 import Syntax (Var(..), Resolved)
@@ -36,8 +37,10 @@ type MonadEval m
 extend :: (Map.Map (Var Resolved) CoTerm -> Map.Map (Var Resolved) CoTerm) -> Scope -> Scope
 extend f (Scope v c g) = Scope (f v) c g
 
+-- 100'000 is just enough to make `10` into a Peano natural, so that's
+-- what we use, for bragging rights
 fuel :: Int
-fuel = 1000
+fuel = 100000
 
 peval :: [CoStmt] -> [CoStmt]
 peval xs = go xs where
@@ -63,14 +66,16 @@ peval xs = go xs where
 evaluate :: MonadEval m => CoTerm -> m CoTerm
 evaluate term = do
   x <- get
-  if x >= 0
+  if x > 0
      then do
-       modify pred
-       eval term
-     else pure term
+       put (x - 1)
+       term' <- eval term
+       pure term'
+    else pure term
 
 eval :: MonadEval m => CoTerm -> m CoTerm
 eval it = case it of
+  _ | isBop (killTyApps it) -> bop (killTyApps it)
   CotRef v _ -> do
     x <- asks target
     if v == x
@@ -80,29 +85,27 @@ eval it = case it of
         else do
           val <- asks (Map.lookup v . variables)
           maybe (pure it) evaluate val
-  CotLam s a b -> CotLam s a <$> evaluate b
+  CotLam s a b -> pure (CotLam s a b)
   CotApp f x -> do
     f' <- evaluate f
     x' <- evaluate x
     case f' of
-      CotLam Small (arg, tp) bdy -> do
-        pr <- propagate x'
-        if pr
-           then evaluate (substitute (Map.singleton arg x') bdy)
-           else evaluate (CotLet [(arg, tp, x')] bdy)
+      CotLam Small (arg, tp) bdy ->
+        evaluate (CotLet [(arg, tp, x')] bdy)
       _ -> pure (CotApp f' x')
   CotLet vs e -> do
     vars <- for vs $ \(var, tp, ex) -> do
       ex' <- evaluate ex
       pr <- propagate ex'
-      pure $ if pr
-         then Left (Map.singleton var ex')
-         else Right (var, tp, ex')
-    let (propag, keep) = partitionEithers vars
-        varsk = case keep of
-          [] -> id
-          _ -> fmap (CotLet keep)
-       in evaluate =<< varsk (local (extend (Map.union (fold propag))) (evaluate e))
+      let map = if pr then Map.singleton var ex' else mempty
+          val = Just (var, tp, ex')
+      pure (map, val)
+    let (propag, keep) = unzip vars
+        varsk = case (catMaybes keep) of
+          [] -> evaluate
+          xs -> pure . CotLet xs
+    e' <- local (extend (Map.union (fold propag))) $ evaluate e
+    varsk e'
   CotMatch s b -> do
     term <- flip reduceBranches b =<< evaluate s
     case term of
@@ -166,7 +169,12 @@ reduceBranches ex = doIt where
       Just binds -> case xs of
         [] -> do -- TODO: fix this
           cs' <- evaluate cs
-          pure [(pt, tp, cs')] -- see note 1
+          case spine cs' of
+            Just (CotRef x _, _) ->
+              if x == TgInternal (Text.pack "error")
+                 then pure [(pt, tp, cs')] -- see note 1
+                 else throwError (CotLet (mkBinds binds) cs)
+            _ -> throwError (CotLet (mkBinds binds) cs)
         _ -> throwError (CotLet (mkBinds binds) cs)
       Nothing -> do
         cs' <- evaluate cs
@@ -177,14 +185,15 @@ reduceBranches ex = doIt where
   simplify (x:xs) acc = simplify xs (x:acc)
   simplify [] acc = reverse acc
 
-  -- We simplify terms like 'Foo @int 1' to Foo @
-  killTyApps :: CoTerm -> CoTerm
-  killTyApps = everywhere (mkT go) where
-    go (CotTyApp f _) = f
-    go x = x
 
   mkBinds :: Map.Map (Var Resolved) (CoType, CoTerm) -> [(Var Resolved, CoType, CoTerm)]
   mkBinds = map (\(x, (y, z)) -> (x, y, z)) . Map.toList
+
+-- We simplify terms like 'Foo @int 1' to Foo @
+killTyApps :: CoTerm -> CoTerm
+killTyApps = everywhere (mkT go) where
+  go (CotTyApp f _) = f
+  go x = x
 
 match :: CoPattern -> CoTerm -> Maybe (Map.Map (Var Resolved) (CoType, CoTerm))
 match (CopCapture v t) x = pure (Map.singleton v (t, x))
@@ -202,8 +211,53 @@ match (CopExtend i ps) (CotExtend l rs) = do
     guard (l == l')
     match p t
   pure (x <> fold inside)
+match (CopLit l) (CotLit l') = mempty <$ guard (l == l')
 match _ _ = Nothing
 
+isBop :: CoTerm -> Bool
+isBop (CotApp (CotApp (CotRef (TgInternal _) _) _) _) = True
+isBop _ = False
+
+bop :: MonadEval m => CoTerm -> m CoTerm
+bop (CotApp (CotApp (CotRef (TgInternal v) t) x) y) = do
+  x' <- evaluate x
+  y' <- evaluate y
+  case (x', y') of
+    (CotLit ll, CotLit rr) -> pure $ case (Text.unpack v, ll, rr) of
+      ("+",  ColInt l, ColInt r) -> num (l + r)
+      ("-",  ColInt l, ColInt r) -> num (l - r)
+      ("*",  ColInt l, ColInt r) -> num (l * r)
+      ("/",  ColInt l, ColInt r) -> num (l `div` r)
+      ("**", ColInt l, ColInt r) -> num (l ^ r)
+      ("<" , ColInt l, ColInt r) -> bool (l < r)
+      (">",  ColInt l, ColInt r) -> bool (l > r)
+      (">=", ColInt l, ColInt r) -> bool (l >= r)
+      ("<=", ColInt l, ColInt r) -> bool (l <= r)
+
+      ("&&", ColTrue, ColTrue)   -> bool True
+      ("&&", _, _)               -> bool False
+      ("||", ColFalse, ColFalse) -> bool False
+      ("||", _, _)               -> bool True
+
+      ("^", ColStr l, ColStr r)  -> str (l `Text.append` r)
+      ("==", _, _) -> bool (rr == ll)
+      ("<>", _, _) -> bool (ll /= rr)
+      _ -> reop t v x' y'
+    (_, _) -> pure $ reop t v x' y'
+  where
+    num = CotLit . ColInt
+    str = CotLit . ColStr
+    bool x = CotLit (if x then ColTrue else ColFalse)
+    reop t v l = CotApp (CotApp (CotRef (TgInternal v) t) l)
+bop x = pure x
+
+spine :: CoTerm -> Maybe (CoTerm, [CoTerm])
+spine (CotApp x y) = go x y where
+  go (CotApp f x) y = do
+    (a, as) <- go f x
+    pure (a, y:as)
+  go f x = Just (f, [x])
+spine _ = Nothing
 
 -- Note [1]:
 -- Since captures always match, we make sure here that this isn't the
