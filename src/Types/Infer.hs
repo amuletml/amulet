@@ -25,6 +25,7 @@ import Syntax
 import Types.Wellformed
 import Types.Unify
 import Types.Holes
+import Types.Kinds
 
 -- Solve for the types of lets in a program
 inferProgram :: MonadGen Int m => [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))
@@ -53,11 +54,11 @@ var = TyVar
 con = TyCon
 
 builtinsEnv :: Env
-builtinsEnv = Env (Map.fromList ops) (Set.fromList tps) where
+builtinsEnv = Env (Map.fromList ops) (Map.fromList tps) where
   op :: T.Text -> Type Typed -> (Var Resolved, Type Typed)
   op x t = (TgInternal x, t)
-  tp :: T.Text -> Var Resolved
-  tp = TgInternal
+  tp :: T.Text -> (Var Resolved, Kind Typed)
+  tp x = (TgInternal x, KiStar)
 
   boolOp = tyBool `arr` (tyBool `arr` tyBool)
   intOp = tyInt `arr` (tyInt `arr` tyInt)
@@ -71,7 +72,7 @@ builtinsEnv = Env (Map.fromList ops) (Set.fromList tps) where
         , op "<" intCmp, op ">" intCmp, op ">=" intCmp, op "<=" intCmp
         , op "==" cmp, op "<>" cmp
         , op "||" boolOp, op "&&" boolOp ]
-  tps :: [Var Resolved]
+  tps :: [(Var Resolved, Kind Typed)]
   tps = [ tp "int", tp "string", tp "bool", tp "unit" ]
 
 unify :: MonadInfer Typed m => Expr Resolved -> Type Typed -> Type Typed -> m ()
@@ -174,7 +175,7 @@ infer expr
           ((x', t):xs) -> itIs (Tuple (x':map fst xs)) an (mkTT t (map snd xs))
       Ascription e g an -> do
         (e', t') <- infer e
-        let g' = raiseT TvName g
+        (g', _) <- resolveKind g
         unify expr t' g'
         itIs (Ascription e' t') an g'
       LeftSection{} -> error "desugarer removes right sections"
@@ -223,7 +224,7 @@ inferPattern unify (PRecord rows ann) = do
   pure (PRecord rowps (ann, TyRows rho rowts), TyRows rho rowts, concat caps)
 inferPattern unify (PType p t ann) = do
   (p', pt, vs) <- inferPattern unify p
-  let t' = raiseT TvName t
+  (t', _) <- resolveKind t
   unify pt t'
   pure (PType p' t' (ann, t'), t', vs)
 inferPattern unify (PTuple elems ann)
@@ -247,13 +248,14 @@ inferProg (LetStmt ns:prg) = do
       consFst (LetStmt ns')
         $ inferProg prg
 inferProg (ForeignVal v d t ann:prg) = do
-  let t' = closeOver (raiseT TvName t)
+  (t', _) <- resolveKind t
   extend (TvName v, t') $
     consFst (ForeignVal (TvName v) d t' (ann, t')) $
       inferProg prg
-inferProg (TypeDecl n tvs cs:prg) =
+inferProg (TypeDecl n tvs cs:prg) = do
+  kind <- resolveTyDeclKind n tvs cs
   let retTy = foldl app (con (TvName n)) (map (var . TvName) tvs)
-   in extendKind (TvName n) $ do
+   in extendKind (TvName n, kind) $ do
      (ts, cs') <- unzip <$> for cs (\con ->
        inferCon retTy con `catchError` \x -> throwError (ArisingFrom x con))
      extendMany ts $
@@ -268,8 +270,8 @@ inferCon :: MonadInfer Typed m
          -> m ( (Var Typed, Type Typed)
               , Constructor Typed)
 inferCon ret (ArgCon nm t ann) = do
-  let ty' = raiseT TvName t
-      res = closeOver $ TyArr ty' ret
+  (ty', _) <- resolveKind t
+  let res = closeOver $ TyArr ty' ret
   pure ((TvName nm, res), ArgCon (TvName nm) ty' (ann, res))
 inferCon ret' (UnitCon nm ann) =
   let ret = closeOver ret'

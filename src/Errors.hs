@@ -23,6 +23,10 @@ instance Pretty TypeError where
     pprint "Type error: failed to unify "
        <+> verbatim a
        <+> " with " <+> verbatim b
+  pprint (KindsNotEqual a b) =
+    pprint "Kind error: failed to unify "
+       <+> verbatim a
+       <+> " with " <+> verbatim b
   pprint (Occurs v t) = "Occurs check: Variable "
                     <+> verbatim v
                     <+> " occurs in "

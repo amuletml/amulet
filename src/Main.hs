@@ -72,6 +72,9 @@ test x = do
       putStrLn "\x1b[1;32m(* Type inference: *)\x1b[0m"
       for_ (Map.toList $ values (difference env builtinsEnv)) $ \(k, t) ->
         T.putStrLn (prettyPrint k <> " : " <> prettyPrint t)
+      putStrLn "\x1b[1;32m(* Kind inference: *)\x1b[0m"
+      for_ (Map.toList $ types (difference env builtinsEnv)) $ \(k, t) ->
+        T.putStrLn (prettyPrint k <> " : " <> prettyPrint t)
       putStrLn "\x1b[1;32m(* Core lowering: *)\x1b[0m"
       traverse_ ppr core
       putStrLn "\x1b[1;32m(* Optimised: *)\x1b[0m"

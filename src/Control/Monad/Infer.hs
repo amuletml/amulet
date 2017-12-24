@@ -14,7 +14,7 @@ module Control.Monad.Infer
   , MonadInfer
   , lookupTy, fresh, freshFrom, runInfer, extend
   , extendKind, extendMany, extendManyK
-  , difference, freshTV
+  , difference, freshTV, freshKV
   , instantiate
   )
   where
@@ -42,7 +42,7 @@ type MonadInfer p m = (MonadError TypeError m, MonadReader Env m, MonadWriter [C
 
 data Env
   = Env { values :: Map.Map (Var Resolved) (Type Typed)
-        , types  :: Set.Set (Var Resolved)
+        , types  :: Map.Map (Var Resolved) (Kind Typed)
         }
   deriving (Eq, Show, Ord)
 
@@ -60,6 +60,7 @@ deriving instance (Show (Ann p), Show (Var p), Show (Expr p), Show (Type p))
 
 data TypeError where
   NotEqual :: Pretty (Var p) => Type p -> Type p -> TypeError
+  KindsNotEqual :: Pretty (Var p) => Kind p -> Kind p -> TypeError
   Occurs   :: Pretty (Var p) => Var p -> Type p -> TypeError
   NotInScope :: Var Resolved -> TypeError
   EmptyMatch :: (Spanned (Expr p), Pretty (Ann p)) => Expr p -> TypeError
@@ -106,14 +107,14 @@ freshFrom t = TgName t <$> gen
 extend :: MonadReader Env m => (Var Typed, Type Typed) -> m a -> m a
 extend (v, t) = local (\x -> x { values = Map.insert (unTvName v) t (values x) })
 
-extendKind :: MonadReader Env m => Var Typed -> m a -> m a
-extendKind v = local (\x -> x { types = Set.insert (unTvName v) (types x) })
+extendKind :: MonadReader Env m => (Var Typed, Kind Typed) -> m a -> m a
+extendKind (v, k) = local (\x -> x { types = Map.insert (unTvName v) k (types x) })
 
 extendMany :: MonadReader Env m => [(Var Typed, Type Typed)] -> m a -> m a
 extendMany ((v, t):xs) b = extend (v, t) $ extendMany xs b
 extendMany [] b = b
 
-extendManyK :: MonadReader Env m => [Var Typed] -> m a -> m a
+extendManyK :: MonadReader Env m => [(Var Typed, Kind Typed)] -> m a -> m a
 extendManyK (v:xs) b = extendKind v $ extendManyK xs b
 extendManyK [] b = b
 
@@ -127,10 +128,13 @@ instantiate (TyForall vs ty) = do
 instantiate ty = pure ty
 
 difference :: Env -> Env -> Env
-difference (Env ma mb) (Env ma' mb') = Env (ma Map.\\ ma') (mb Set.\\ mb')
+difference (Env ma mb) (Env ma' mb') = Env (ma Map.\\ ma') (mb Map.\\ mb')
 
 freshTV :: MonadGen Int m => m (Type Typed)
 freshTV = TyVar . TvName <$> fresh
+
+freshKV :: MonadGen Int m => m (Kind Typed)
+freshKV = KiVar . TvName <$> fresh
 
 instance (Ord (Var p), Substitutable p (Type p)) => Substitutable p (Constraint p) where
   ftv (ConUnify _ a b) = ftv a `Set.union` ftv b
