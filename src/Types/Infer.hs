@@ -226,7 +226,9 @@ inferPattern unify (PType p t ann) = do
   (p', pt, vs) <- inferPattern unify p
   (t', _) <- resolveKind t
   unify pt t'
-  pure (PType p' t' (ann, t'), t', vs)
+  case p' of
+    Capture v _ -> pure (PType p' t' (ann, t'), t', [(v, t')])
+    _ -> pure (PType p' t' (ann, t'), t', vs)
 inferPattern unify (PTuple elems ann)
   | [] <- elems = pure (PTuple [] (ann, tyUnit), tyUnit, [])
   | [x] <- elems = inferPattern unify x
