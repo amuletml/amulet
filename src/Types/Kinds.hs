@@ -2,6 +2,7 @@
 module Types.Kinds
   ( resolveTyDeclKind
   , resolveKind
+  , closeOverKind
   ) where
 
 import Control.Monad.Writer.Strict hiding ((<>))
@@ -10,7 +11,9 @@ import Control.Monad.Except
 import Control.Monad.Infer
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import Data.Traversable
+import Data.Semigroup
 import Data.Foldable
 
 import Types.Wellformed
@@ -37,7 +40,7 @@ solve ((x, t):xs) = do
 solve [] = pure mempty
 
 resolveTyDeclKind :: MonadSolve m => Var Resolved -> [Var Resolved] -> [Constructor Resolved] -> m (Kind Typed)
-resolveTyDeclKind tp vs cs = resolve $ do
+resolveTyDeclKind tp vs cs = fmap closeOverKind . resolve $ do
   ks <- replicateM (length vs) freshKV
   let kind = foldr KiArr KiStar ks
   extendKind (TvName tp, kind) $ do
@@ -74,7 +77,7 @@ inferKind tp = do
     TyCon x -> do
       ki <- asks (Map.lookup (unTvName x) . types)
       case ki of
-        Just ki' -> pure ki'
+        Just ki' -> instantiateKind ki'
         Nothing -> throwError (NotInScope (unTvName x))
     TyForall vs t -> do
       ks <- replicateM (length vs) freshKV
@@ -118,3 +121,22 @@ apply :: Map.Map (Var Typed) (Kind Typed) -> Kind Typed -> Kind Typed
 apply m t@(KiVar v) = Map.findWithDefault t v m
 apply m (KiArr a b) = KiArr (apply m a) (apply m b)
 apply _ x = x
+
+freeIn :: Ord (Var p) => Kind p -> Set.Set (Var p)
+freeIn (KiVar v) = Set.singleton v
+freeIn (KiArr a b) = freeIn a <> freeIn b
+freeIn (KiForall vs k) = freeIn k Set.\\ (Set.fromList vs)
+freeIn KiStar = mempty
+
+closeOverKind :: Ord (Var p) => Kind p -> Kind p
+closeOverKind = (flip forall) <*> fv where
+  fv = toList . freeIn
+  forall :: [Var p] -> Kind p -> Kind p
+  forall [] x = x
+  forall vs x = KiForall vs x
+
+instantiateKind :: MonadSolve m => Kind Typed -> KindT m (Kind Typed)
+instantiateKind (KiForall v x) = do
+  fkvs <- replicateM (length v) freshKV
+  pure (apply (Map.fromList (zip v fkvs)) x)
+instantiateKind x = pure x
