@@ -127,12 +127,12 @@ data Kind p
   = KiStar
   | KiArr (Kind p) (Kind p)
   | KiVar (Var p)
+  | KiForall [Var p] (Kind p)
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Kind p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Kind p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Kind p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Kind p)
-
 
 data Toplevel p
   = LetStmt [(Var p, Expr p, Ann p)]
@@ -254,6 +254,8 @@ instance Pretty (Var p) => Pretty (Kind p) where
     | KiArr{} <- a = parens a <+> opClr " -> " <+> b
     | otherwise = a <+> opClr " -> " <+> b
   pprint (KiVar v) = opClr "'" <+> tvClr v
+  pprint (KiForall vs v)
+    = kwClr "∀ " <+> interleave " " (map (\x -> "'" <+> tvClr x) vs) <+> opClr ". " <+> v
 
 instance (Pretty (Var p)) => Pretty (Toplevel p) where
   pprint (LetStmt vs) = opClr "let " <+> interleave (newline <+> opClr "and ") (map pVars vs) where
