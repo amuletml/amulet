@@ -78,8 +78,6 @@ data TypeError where
                  -> Type p {- instance -}
                  -> TypeError
   Malformed :: Pretty (Var p) => Type p -> TypeError
-  IllegalGADT :: Pretty (Var p) => Type p -> TypeError
-  RigidBinding :: Pretty (Var p) => Var p -> Type p -> TypeError
 
 lookupTy :: (MonadError TypeError m, MonadReader Env m, MonadGen Int m) => Var Resolved -> m (Type Typed)
 lookupTy x = do
