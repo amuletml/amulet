@@ -253,7 +253,7 @@ instance Pretty (Var p) => Pretty (Kind p) where
   pprint (KiArr a b)
     | KiArr{} <- a = parens a <+> opClr " -> " <+> b
     | otherwise = a <+> opClr " -> " <+> b
-  pprint (KiVar v) = pprint v
+  pprint (KiVar v) = opClr "'" <+> tvClr v
 
 instance (Pretty (Var p)) => Pretty (Toplevel p) where
   pprint (LetStmt vs) = opClr "let " <+> interleave (newline <+> opClr "and ") (map pVars vs) where
