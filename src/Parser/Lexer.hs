@@ -16,7 +16,7 @@ style = Tok.LanguageDef
           , Tok.commentEnd = "*)"
           , Tok.commentLine = ""
           , Tok.identStart = letter
-          , Tok.identLetter = letter <|> oneOf "_'"
+          , Tok.identLetter = letter <|> digit <|> oneOf "_'"
           , Tok.opStart = Tok.opLetter style
           , Tok.opLetter = oneOf ":!#$%&*+./<=>?@\\^|-~"
           , Tok.caseSensitive = True
