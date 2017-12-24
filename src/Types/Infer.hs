@@ -113,13 +113,13 @@ infer expr
         (e', te) <- infer e
         unify c tyBool tc
         unify expr tt te
-        pure (If c' t' e' (a, te), te)
+        itIs (If c' t' e') a te
       App e1 e2 a -> do
         (e1', t1) <- infer e1
         (e2', t2) <- infer e2
         tv <- freshTV
         unify expr (TyArr t2 tv) t1
-        pure (App e1' e2' (a, tv), tv)
+        itIs (App e1' e2') a tv
       Let ns b ann -> do
         ks <- for ns $ \(a, _, _) -> do
           tv <- freshTV
@@ -128,7 +128,7 @@ infer expr
           (ns', ts) <- inferLetTy id ks ns
           extendMany ts $ do
             (b', ty) <- infer b
-            pure (Let ns' b' (ann, ty), ty)
+            itIs (Let ns' b') ann ty
       Match t ps a -> do
         (t', tt) <- infer t
         (ps', tbs) <- unzip <$> for ps
@@ -143,19 +143,18 @@ infer expr
                 (ty:xs) -> do
                   traverse_ (unify expr ty) xs
                   pure ty
-        pure (Match t' ps' (a, ty), ty)
+        itIs (Match t' ps') a ty
       BinOp l o r a -> do
         (l', tl) <- infer l
         (o', to) <- infer o
         (r', tr) <- infer r
         tv <- freshTV
         unify expr (TyArr tl (TyArr tr tv)) to
-        pure (BinOp l' o' r' (a, tv), tv)
+        itIs (BinOp l' o' r') a tv
       Record rows a -> do
         itps <- inferRows rows
         let (rows', rowts) = unzip itps
         itIs (Record rows') a (TyExactRows rowts)
-        -- pure (Record rows' (a, TyExactRows), TyExactRows rowts)
       RecordExt rec rows a -> do
         itps <- inferRows rows
         let (rows', newTypes) = unzip itps
