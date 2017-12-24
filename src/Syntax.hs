@@ -108,7 +108,6 @@ data Lit
   | LiUnit
   deriving (Eq, Show, Ord, Data, Typeable)
 
-type Kind p = Type p -- hack!
 data Type p
   = TyCon (Var p)
   | TyVar (Var p)
@@ -123,6 +122,17 @@ deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Type p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Type p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Type p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Type p)
+
+data Kind p
+  = KiStar
+  | KiArr (Kind p) (Kind p)
+  | KiVar (Var p)
+
+deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Kind p)
+deriving instance (Show (Var p), Show (Ann p)) => Show (Kind p)
+deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Kind p)
+deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Kind p)
+
 
 data Toplevel p
   = LetStmt [(Var p, Expr p, Ann p)]
@@ -237,6 +247,13 @@ instance (Pretty (Var p)) => Pretty (Type p) where
     = parens a <+> opClr " * " <+> b
     | otherwise
     = a <+> opClr " * " <+> b
+
+instance Pretty (Var p) => Pretty (Kind p) where
+  pprint KiStar = kwClr "Type"
+  pprint (KiArr a b)
+    | KiArr{} <- a = parens a <+> opClr " -> " <+> b
+    | otherwise = a <+> opClr " -> " <+> b
+  pprint (KiVar v) = pprint v
 
 instance (Pretty (Var p)) => Pretty (Toplevel p) where
   pprint (LetStmt vs) = opClr "let " <+> interleave (newline <+> opClr "and ") (map pVars vs) where
