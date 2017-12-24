@@ -31,6 +31,7 @@ raiseE vR aR =
       AccessSection k a -> AccessSection k (aR a)
       Tuple es a -> Tuple (map eR es) (aR a)
       Ascription e t a -> Ascription (eR e) (raiseT vR t) (aR a)
+      TypeApp f x a -> TypeApp (eR f) (raiseT vR x) (aR a)
 
 raiseP :: (Var p -> Var p') -- How to raise variables
        -> (Ann p -> Ann p')

@@ -88,6 +88,9 @@ instance Pretty TypeError where
     | otherwise
     =   "\x1b[1;32minternal compiler error\x1b[0m: NoOverlap "
     <+> interleave " " [ta, tb]
+  pprint (IllegalTypeApp ex ta _)
+    = body 1 [ "Illegal type application " <+> verbatim ex
+             , bullet "because of type " <+> verbatim ta ]
 
 instance Pretty ResolveError where
   pprint (R.NotInScope e) = "Variable not in scope: "
