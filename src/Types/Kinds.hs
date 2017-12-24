@@ -57,6 +57,7 @@ resolveKind t =
 resolve :: MonadSolve m => KindT m (Kind Typed) -> m (Kind Typed)
 resolve k = do
   (kind, cs) <- runWriterT k
+  -- for_ cs $ \(a, b) -> tracePretty (a <+> " ~ " <+> b) (pure ())
   cs' <- for cs $ \(a, b) -> case unify a b of
     Just x -> pure x
     Nothing -> throwError (KindsNotEqual a b)
@@ -82,12 +83,12 @@ inferKind tp = do
       giveTp a
       giveTp b
       pure KiStar
-    TyApp a b -> do
+    TyApp t1 t2 -> do
       x <- freshKV
-      a' <- inferKind a
-      b' <- inferKind b
-      same a' (KiArr x b')
-      pure b'
+      k1 <- inferKind t1
+      k2 <- inferKind t2
+      same k1 (KiArr k2 x)
+      pure x
     TyRows rho x -> do
       giveTp rho
       for_ x $ \(_, t) -> giveTp t
