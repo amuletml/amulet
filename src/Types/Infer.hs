@@ -13,6 +13,7 @@ import qualified Data.Set as Set
 import qualified Data.Text as T
 import Data.Traversable
 import Data.Span (Span)
+import Data.Generics
 import Data.Foldable
 
 import Control.Monad.Infer
@@ -26,6 +27,8 @@ import Types.Wellformed
 import Types.Unify
 import Types.Holes
 import Types.Kinds
+
+import Pretty (prettyPrint, tracePrettyId)
 
 -- Solve for the types of lets in a program
 inferProgram :: MonadGen Int m => [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))
@@ -89,10 +92,26 @@ mkTT x xs = TyTuple x (go xs) where
   go [x] = x
   go (x:xs) = TyTuple x (go xs)
 
+mkTyApps :: Applicative f
+         => Expr Resolved
+         -> Map.Map (Var Typed) (Type Typed)
+         -> Type Typed
+         -> Type Typed
+         -> f (Expr Typed, Type Typed)
+mkTyApps (VarRef k a) mp ot@(TyForall vs _) nt = do
+  let insts (t:ts) (TyForall (_:vs) c) = (Endo (\x -> TypeApp x t (a, t))):insts ts (TyForall vs c)
+      insts _ _ = []
+  pure (appEndo (fold (insts (map (mp Map.!) vs) ot)) (VarRef (TvName k) (a, nt)), (tracePrettyId nt))
+mkTyApps _ _ _ _ = undefined
+
 infer :: MonadInfer Typed m => Expr Resolved -> m (Expr Typed, Type Typed)
 infer expr
   = case expr of
-      VarRef k a -> itIs (VarRef (TvName k)) a =<< lookupTy k
+      VarRef k a -> do
+        (inst, old, new) <- lookupTy' k
+        if Map.null inst
+           then itIs (VarRef (TvName k)) a new
+           else mkTyApps expr inst old new
       Hole v ann -> itIs (Hole (TvName v)) ann =<< freshTV
       Literal c a -> case c of
         LiStr _ -> pure (Literal c (a, tyString), tyString)
@@ -177,6 +196,18 @@ infer expr
         (g', _) <- resolveKind g
         unify expr t' g'
         itIs (Ascription e' t') an g'
+      TypeApp f x an -> do
+        (f', t) <- infer f
+        (x', _) <- resolveKind x
+        case f' of
+          VarRef v _ -> do
+            tp <- asks (Map.lookup (unTvName v) . values)
+            case tp of
+              Just (normType -> TyForall (v:vs) x) -> itIs (TypeApp f' x) an (normType (TyForall vs (apply (Map.singleton v x') x)))
+              Just tp -> throwError (IllegalTypeApp expr tp x')
+              Nothing -> throwError (NotInScope (unTvName v))
+          _ -> throwError (IllegalTypeApp expr t x')
+
       LeftSection{} -> error "desugarer removes right sections"
       RightSection{} -> error "desugarer removes left sections"
       BothSection{} -> error "desugarer removes both-side sections"
@@ -214,7 +245,7 @@ inferPattern unify (Destructure cns ps ann)
   where constructorTy :: Type Typed -> (Type Typed, Type Typed, Type Typed)
         constructorTy t
           | TyArr tup res <- t = (tup, res, t)
-          | otherwise = undefined
+          | otherwise = error (T.unpack (prettyPrint t))
 inferPattern unify (PRecord rows ann) = do
   rho <- freshTV
   (rowps, rowts, caps) <- unzip3 <$> for rows (\(var, pat) -> do
@@ -292,9 +323,15 @@ inferLetTy closeOver ks ((va, ve, vann):xs) = extendMany ks $ do
     Left e -> throwError e
     Right x -> pure (x, closeOver (apply x ty))
   let r (a, t) = (a, apply x t)
-      ex = raiseE id r ve'
+      ex = applyInExpr x (raiseE id r ve')
   consFst (TvName va, ex, (vann, vt)) $
     inferLetTy closeOver (updateAlist (TvName va) vt ks) xs
+
+applyInExpr :: Map.Map (Var Typed) (Type Typed) -> Expr Typed -> Expr Typed
+applyInExpr ss = everywhere (mkT go) where
+  go :: Expr Typed -> Expr Typed
+  go (TypeApp f t a) = TypeApp f (apply ss t) a
+  go x = x
 
 -- Monomorphic so we can use "close enough" equality
 updateAlist :: Eq a

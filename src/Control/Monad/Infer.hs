@@ -12,7 +12,7 @@ module Control.Monad.Infer
   , Constraint(..)
   , Env(..)
   , MonadInfer
-  , lookupTy, fresh, freshFrom, runInfer, extend
+  , lookupTy, lookupTy', fresh, freshFrom, runInfer, extend
   , extendKind, extendMany, extendManyK
   , difference, freshTV, freshKV
   , instantiate
@@ -26,12 +26,11 @@ import Control.Monad.Gen as M
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
-import Data.Semigroup
-
-import Data.Spanned
-
 import qualified Data.Text as T
 import Data.Text (Text)
+import Data.Semigroup
+import Data.Spanned
+import Data.Triple
 
 import Pretty hiding (local, (<>))
 
@@ -78,9 +77,20 @@ data TypeError where
                  -> Type p {- instance -}
                  -> TypeError
   Malformed :: Pretty (Var p) => Type p -> TypeError
+  IllegalTypeApp :: (Pretty (Var p), Pretty (Var p')) => Expr p -> Type p' -> Type p' -> TypeError
 
 lookupTy :: (MonadError TypeError m, MonadReader Env m, MonadGen Int m) => Var Resolved -> m (Type Typed)
 lookupTy x = do
+  rs <- asks (Map.lookup x . values)
+  case rs of
+    Just t -> fmap thd3 (instantiate t) `catchError` \e ->
+      throwError (Note (Note e (("Arising from instancing of variable " :: Text) <+> verbatim x))
+                       (verbatim x <+> (" has principal type " :: Text) <+> verbatim t))
+    Nothing -> throwError (NotInScope x)
+
+lookupTy' :: (MonadError TypeError m, MonadReader Env m, MonadGen Int m) => Var Resolved
+          -> m (Map.Map (Var Typed) (Type Typed), Type Typed, Type Typed)
+lookupTy' x = do
   rs <- asks (Map.lookup x . values)
   case rs of
     Just t -> instantiate t `catchError` \e ->
@@ -119,11 +129,13 @@ extendManyK [] b = b
 alpha :: [Text]
 alpha = map T.pack $ [1..] >>= flip replicateM ['a'..'z']
 
-instantiate :: (MonadError TypeError m, MonadGen Int m) => Type Typed -> m (Type Typed)
-instantiate (TyForall vs ty) = do
+instantiate :: (MonadError TypeError m, MonadGen Int m) => Type Typed -> m (Map.Map (Var Typed) (Type Typed), Type Typed, Type Typed)
+instantiate tp@(TyForall vs ty) = do
   f <- traverse (const freshTV) vs
-  instantiate (apply (Map.fromList (zip vs f)) ty)
-instantiate ty = pure ty
+  let map = Map.fromList (zip vs f)
+  (map', _, t) <- instantiate (apply map ty)
+  pure (map <> map', tp, t)
+instantiate ty = pure (mempty, ty, ty)
 
 difference :: Env -> Env -> Env
 difference (Env ma mb) (Env ma' mb') = Env (ma Map.\\ ma') (mb Map.\\ mb')

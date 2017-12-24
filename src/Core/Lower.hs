@@ -13,9 +13,7 @@ import Control.Monad.Infer
 import Data.Traversable
 
 import Types.Infer (tyString, tyInt, tyBool, tyUnit)
-import Types.Unify (solve)
 
-import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 
 import Data.Maybe
@@ -43,23 +41,6 @@ getType = snd . head . catMaybes . gmapQ get where
   get d = case cast d of
     Just x -> Just (x :: (Span, Type Typed))
     Nothing -> Nothing
-
-makeInstances :: MonadLower m
-              => (Expr Typed, Var Resolved)
-              -> Type Typed -- as inferred
-              -> Type Typed -- as typed
-              -> m CoTerm
-makeInstances (exp, var) t ty@(TyForall vs t') = do
-  x <- gen
-  let (Right sst) = solve x mempty [ConUnify exp t' t]
-      go ac t =
-        case Map.lookup t sst of
-          Just inst -> CotTyApp ac <$> lowerType inst
-          Nothing -> pure $ CotTyApp ac (CotyVar (unTvName t))
-          -- FIXME: Investigate safety of ^
-  ty' <- lowerType ty
-  foldM go (CotRef var ty') vs
-makeInstances (_, var) t _ = CotRef var <$> lowerType t
 
 makeBigLams :: MonadLower m
             => Type Typed
@@ -97,11 +78,7 @@ patternMatchingFailure (ex, tp) = do
 lowerExpr :: MonadLower m => Expr Typed -> m CoTerm
 lowerExpr expr
   | exprT <- getType expr = case expr of
-    VarRef (TvName p) _ -> do
-      Env{..} <- ask
-      case Map.lookup p values of
-        Just ty -> makeInstances (expr, p) exprT ty
-        Nothing -> CotRef p <$> lowerType exprT
+    VarRef (TvName p) _ -> CotRef p <$> lowerType exprT
     Let vs t _ -> do
       vs' <- for vs $ \(TvName var, ex, (_, ant)) -> do
         (k, _) <- makeBigLams ant
@@ -168,7 +145,8 @@ lowerExpr expr
                         <*> lowerType (getType x)
                         <*> lowerExpr x
       CotExtend (CotLit ColRecNil) <$> zipWithM go [1..] xs
-    x -> error $ "impossible lowering (desugarer removes): " ++ show x
+    TypeApp f x _ -> CotTyApp <$> lowerExpr f <*> lowerType x
+    x -> error $ "impossible lowering (desugarer removes): " ++ T.unpack (prettyPrint x)
 
 lowerType :: MonadLower m => Type Typed -> m CoType
 lowerType tt = case tt of

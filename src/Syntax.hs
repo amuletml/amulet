@@ -81,6 +81,9 @@ data Expr p
   -- Tuple (see note [1])
   | Tuple [Expr p] (Ann p)
 
+  -- Explicit type application
+  | TypeApp (Expr p) (Type p) (Ann p)
+
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Expr p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Expr p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Expr p)
@@ -200,6 +203,7 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
   pprint (AccessSection k _) = parens $ opClr "." <+> k
 
   pprint (Tuple es _) = parens $ interleave ", " es
+  pprint (TypeApp f x _) = f <+> opClr " @" <+> x
 
 instance (Pretty (Var p)) => Pretty (Pattern p, Expr p) where
   pprint (a, b) = opClr "| " <+> a <+> " -> " <+> b
