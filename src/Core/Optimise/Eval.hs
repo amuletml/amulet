@@ -37,10 +37,8 @@ type MonadEval m
 extend :: (Map.Map (Var Resolved) CoTerm -> Map.Map (Var Resolved) CoTerm) -> Scope -> Scope
 extend f (Scope v c g) = Scope (f v) c g
 
--- 100'000 is just enough to make `10` into a Peano natural, so that's
--- what we use, for bragging rights
 fuel :: Int
-fuel = 100000
+fuel = 100
 
 peval :: [CoStmt] -> [CoStmt]
 peval xs = go xs where
