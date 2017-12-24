@@ -8,7 +8,6 @@ import Control.Monad.Writer.Strict hiding ((<>))
 import Control.Monad.Reader
 import Control.Monad.Except
 import Control.Monad.Infer
-import Control.Monad.Gen
 
 import qualified Data.Map.Strict as Map
 import Data.Traversable
@@ -17,8 +16,6 @@ import Data.Foldable
 import Types.Wellformed
 import Syntax.Raise
 import Syntax
-
-import Pretty (tracePretty, tracePrettyId, (<+>))
 
 type Subst = Map.Map (Var Typed) (Kind Typed)
 
@@ -64,7 +61,7 @@ resolve k = do
     Just x -> pure x
     Nothing -> throwError (KindsNotEqual a b)
   subst <- solve (concat cs')
-  pure . tracePrettyId $ (apply (tracePrettyId subst) (tracePrettyId kind))
+  pure $ (apply subst kind)
 
 inferKind :: MonadSolve m => Type Typed -> KindT m (Kind Typed)
 inferKind tp = do
