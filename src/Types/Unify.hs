@@ -44,8 +44,10 @@ unify ta@(TyCon a) tb@(TyCon b)
   | otherwise = throwError (NotEqual ta tb)
 unify t@(TyForall vs ty) t'@(TyForall vs' ty')
   | length vs /= length vs' = throwError (NotEqual t t')
-  -- TODO: Technically we should make fresh variables and do ty[vs/f] ~ ty'[vs'/f]
-  | otherwise = unify ty (apply (Map.fromList (zip vs' (map TyVar vs))) ty')
+  | otherwise = do
+    fvs <- replicateM (length vs) freshTV
+    let subst = Map.fromList . flip zip fvs
+    unify (apply (subst vs) ty) (apply (subst vs') ty')
 unify (TyRows rho arow) (TyRows sigma brow)
   | overlaps <- overlap arow brow
   , new <- unionBy ((==) `on` fst) arow brow
