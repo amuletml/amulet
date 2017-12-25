@@ -28,7 +28,7 @@ import Types.Unify
 import Types.Holes
 import Types.Kinds
 
-import Pretty (prettyPrint, tracePrettyId)
+import Pretty (prettyPrint)
 
 -- Solve for the types of lets in a program
 inferProgram :: MonadGen Int m => [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))
@@ -101,7 +101,7 @@ mkTyApps :: Applicative f
 mkTyApps (VarRef k a) mp ot@(TyForall vs _) nt = do
   let insts (t:ts) (TyForall (_:vs) c) = insts ts (TyForall vs c) . \x -> TypeApp x t (a, t)
       insts _ _ = id
-  pure ((insts (map (mp Map.!) vs) ot) (VarRef (TvName k) (a, nt)), (tracePrettyId nt))
+  pure ((insts (map (mp Map.!) vs) ot) (VarRef (TvName k) (a, nt)), nt)
 mkTyApps _ _ _ _ = undefined
 
 infer :: MonadInfer Typed m => Expr Resolved -> m (Expr Typed, Type Typed)
