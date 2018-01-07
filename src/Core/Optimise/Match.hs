@@ -8,8 +8,8 @@ import Data.Monoid
 import Data.Maybe
 import Data.List
 
-import Core.Optimise
 import Syntax (Var, Resolved)
+import Core.Optimise
 
 -- Attempts to simplify match expression, dropping redundant branches and
 -- replacing matches with flat expressions where possible.

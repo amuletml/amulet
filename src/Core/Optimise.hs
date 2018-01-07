@@ -11,12 +11,11 @@ module Core.Optimise
   , beforePass', afterPass'
   , transformTerm, transformStmts, runTransform
 
-  , invent, abstract, abstract'
+  , invent, abstract, abstract', fresh
   , find, isCon
   ) where
 
 import qualified Data.Map.Strict as Map
-import qualified Data.Set as Set
 
 import Data.Traversable
 import Data.Generics (everywhereM, gmapM, mkM, Typeable)
@@ -67,7 +66,7 @@ substitute m = mapTerm subst
 data TransState
   = TransState { vars :: Map.Map (Var Resolved) CoTerm
                , types :: Map.Map (Var Resolved) [(Var Resolved, CoType)]
-               , cons :: Set.Set (Var Resolved) }
+               , cons :: Map.Map (Var Resolved) CoType }
   deriving (Show)
 
 type Trans = ReaderT TransState (Gen Int)
@@ -115,10 +114,12 @@ transformStmts pass (CosLet vars:xs) = do
   vars' <- extendVars vars (traverse (third3A (transformTerm pass)) vars)
   (CosLet vars':) <$> extendVars vars' (transformStmts pass xs)
 transformStmts pass (x@(CosType v cases):xs) =
-  (x:) <$> local (\s -> s { types = Map.insert v cases (types s), cons = Set.union (Set.fromList (map fst cases)) (cons s) }) (transformStmts pass xs)
+  (x:) <$> local (\s ->
+    s { types = Map.insert v cases (types s)
+      , cons = Map.union (Map.fromList cases) (cons s) }) (transformStmts pass xs)
 
 runTransform :: Trans a -> Gen Int a
-runTransform = flip runReaderT (TransState Map.empty Map.empty Set.empty)
+runTransform = flip runReaderT (TransState Map.empty Map.empty Map.empty)
 
 invent :: CoType -> Trans (Var Resolved, CoTerm)
 invent t = do
@@ -146,4 +147,4 @@ find :: Var Resolved -> Trans (Maybe CoTerm)
 find var = Map.lookup var <$> asks vars
 
 isCon :: Var Resolved -> Trans Bool
-isCon var = Set.member var <$> asks cons
+isCon var = Map.member var <$> asks cons
