@@ -14,7 +14,7 @@ import Core.Optimise
 --- Folds various trivial expressions
 foldExpr :: TransformPass
 foldExpr = afterPass pass where
-  pass :: CoTerm -> TransM CoTerm
+  pass :: CoTerm -> Trans CoTerm
   pass (CotLet [] e) = pure e
   pass (CotExtend e []) = pure e
 

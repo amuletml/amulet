@@ -6,21 +6,29 @@ module Core.Optimise
   , substitute
   , module Core.Core
   , Var(..)
-  , TransformPass(..), TransState(..), TransM
+  , TransformPass(..), TransState(..), Trans
   , beforePass, afterPass
   , beforePass', afterPass'
   , transformTerm, transformStmts, runTransform
+
+  , invent, abstract, abstract'
+  , find, isCon
   ) where
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
+
+import Data.Traversable
+import Data.Generics (everywhereM, gmapM, mkM, Typeable)
+import Data.Triple (third3A)
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
-import Data.Generics (gmapM, mkM, Typeable)
-import Data.Triple (third3A)
-import Data.Traversable
 
-import Control.Monad.Reader
 import Control.Monad.Identity
+import Control.Monad.Reader
+import Control.Monad.Writer
+import Control.Monad.Infer (fresh)
+import Control.Monad.Gen
 
 import Core.Core
 import Syntax
@@ -56,24 +64,26 @@ substitute m = mapTerm subst
   where subst e@(CotRef v _) = fromMaybe e (Map.lookup v m)
         subst e = e
 
-data TransState = TransState { vars :: Map.Map (Var Resolved) CoTerm
-                             , cons :: Map.Map (Var Resolved) [(Var Resolved, CoType)] }
-                deriving (Show)
+data TransState
+  = TransState { vars :: Map.Map (Var Resolved) CoTerm
+               , types :: Map.Map (Var Resolved) [(Var Resolved, CoType)]
+               , cons :: Set.Set (Var Resolved) }
+  deriving (Show)
 
-type TransM = Reader TransState
+type Trans = ReaderT TransState (Gen Int)
 
-extendVars :: [(Var Resolved, CoType, CoTerm)] -> TransM a -> TransM a
+extendVars :: [(Var Resolved, CoType, CoTerm)] -> Trans a -> Trans a
 extendVars vs = local (\s -> s { vars = foldr (\(v, _, e) m -> Map.insert v e m) (vars s) vs })
 
 data TransformPass
-  = TransformPass { before :: CoTerm -> TransM CoTerm
-                  , after :: CoTerm -> TransM CoTerm }
+  = TransformPass { before :: CoTerm -> Trans CoTerm
+                  , after :: CoTerm -> Trans CoTerm }
 
 instance Monoid TransformPass where
   mempty = TransformPass pure pure
   mappend (TransformPass b a) (TransformPass b' a') = TransformPass (b <=< b') (a <=< a')
 
-beforePass, afterPass :: (CoTerm -> TransM CoTerm) -> TransformPass
+beforePass, afterPass :: (CoTerm -> Trans CoTerm) -> TransformPass
 beforePass fn = TransformPass { before = fn, after = pure }
 afterPass  fn = TransformPass { before = pure, after = fn }
 
@@ -81,7 +91,7 @@ beforePass', afterPass' :: (CoTerm -> CoTerm) -> TransformPass
 beforePass' fn = TransformPass { before = pure . fn, after = pure }
 afterPass'  fn = TransformPass { before = pure, after = pure . fn }
 
-transformTerm :: TransformPass -> CoTerm -> TransM CoTerm
+transformTerm :: TransformPass -> CoTerm -> Trans CoTerm
 transformTerm pass = before pass >=> visit >=> after pass where
   visit (CotLet vars body) = do
     vars' <- extendVars vars (traverse (third3A transform) vars)
@@ -98,14 +108,42 @@ transformTerm pass = before pass >=> visit >=> after pass where
 
   transform = transformTerm pass
 
-transformStmts :: TransformPass -> [CoStmt] -> TransM [CoStmt]
+transformStmts :: TransformPass -> [CoStmt] -> Trans [CoStmt]
 transformStmts _ [] = pure []
 transformStmts pass (x@CosForeign{}:xs) = (x:) <$> transformStmts pass xs
 transformStmts pass (CosLet vars:xs) = do
   vars' <- extendVars vars (traverse (third3A (transformTerm pass)) vars)
   (CosLet vars':) <$> extendVars vars' (transformStmts pass xs)
 transformStmts pass (x@(CosType v cases):xs) =
-  (x:) <$> local (\s -> s { cons = Map.insert v cases (cons s) }) (transformStmts pass xs)
+  (x:) <$> local (\s -> s { types = Map.insert v cases (types s), cons = Set.union (Set.fromList (map fst cases)) (cons s) }) (transformStmts pass xs)
 
-runTransform :: TransM a -> a
-runTransform = flip runReader (TransState Map.empty Map.empty)
+runTransform :: Trans a -> Gen Int a
+runTransform = flip runReaderT (TransState Map.empty Map.empty Set.empty)
+
+invent :: CoType -> Trans (Var Resolved, CoTerm)
+invent t = do
+  x <- fresh
+  pure (x, CotRef x t)
+
+-- Rather magic, replaces everything matching the "predicate" by a
+-- `let`-bound variable.
+abstract :: (CoTerm -> Trans (Maybe CoType)) -> CoTerm -> Trans CoTerm
+abstract p = fmap (uncurry (flip CotLet)) . runWriterT . everywhereM (mkM go) where
+  go :: CoTerm -> WriterT [(Var Resolved, CoType, CoTerm)] Trans CoTerm
+  go term = do
+    t <- lift (p term)
+    case t of
+      Just tp -> do
+        (var, ref) <- lift $ invent tp
+        tell [(var, tp, term)]
+        pure ref
+      Nothing -> pure term
+
+abstract' :: (CoTerm -> Maybe CoType) -> CoTerm -> Trans CoTerm
+abstract' p = abstract (pure . p)
+
+find :: Var Resolved -> Trans (Maybe CoTerm)
+find var = Map.lookup var <$> asks vars
+
+isCon :: Var Resolved -> Trans Bool
+isCon var = Set.member var <$> asks cons

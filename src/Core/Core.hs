@@ -2,8 +2,9 @@
 module Core.Core where
 
 import qualified Data.Set as Set
+import Data.Generics
 import Data.Data (Data, Typeable)
-import Data.Text (Text)
+import Data.Text (Text, pack)
 import Data.Triple
 
 import Syntax (Var(..), Resolved)
@@ -157,3 +158,12 @@ freeIn (CotLit _) = Set.empty
 freeIn (CotExtend c rs) = freeIn c <> foldMap (freeIn . thd3) rs
 freeIn (CotTyApp f _) = freeIn f
 freeIn (CotBegin xs x) = foldMap freeIn xs <> freeIn x
+
+isError :: CoTerm -> Bool
+isError (CotApp (CotTyApp (CotRef (TgInternal n) _) _) _) = n == pack "error"
+isError _ = False
+
+stripTyApp :: CoTerm -> CoTerm
+stripTyApp = everywhere (mkT go) where
+  go (CotTyApp x _) = x
+  go x = x
