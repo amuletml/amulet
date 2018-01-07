@@ -14,8 +14,10 @@ import Data.List
 import Syntax (Var, Resolved)
 import Core.Optimise
 
+import Pretty (tracePrettyId, tracePretty, (<+>))
+
 trivialPropag :: TransformPass
-trivialPropag = afterPass' go where
+trivialPropag = beforePass' go where
   go (CotLet vs e) =
     let keep e@(v, _, t) = if trivial t then Left (Map.singleton v t)
                                         else Right e
@@ -27,18 +29,19 @@ trivialPropag = afterPass' go where
   go x = x
 
 constrPropag :: TransformPass
-constrPropag = afterPass go where
-  go (CotLet vs e) = do
+constrPropag = beforePass go where
+  go old@(CotLet vs e) = do
     (keep, subst) <- partitionEithers <$> for vs (\v -> do
       cl <- conLike (thd3 v)
       if cl
-         then do
+         then tracePretty ("propagating " <+> thd3 v) $ do
            (new, bind) <- splitCon (thd3 v) <$> fresh
            pure (Right (Map.singleton (fst3 v) new, bind))
          else pure (Left v))
     let (ss, ks) = unzip subst
         eqf3 = (==) `on` fst3
-    pure (CotLet (unionBy eqf3 keep ks) (substitute (mconcat ss) e))
+    let new = CotLet (unionBy eqf3 keep ks) (substitute (mconcat ss) e)
+    pure (tracePretty (old <+> " => " <+> new) new)
   go x = pure x
 
   conLike :: CoTerm -> Trans Bool
