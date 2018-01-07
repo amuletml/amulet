@@ -56,7 +56,7 @@ data CoType
 
 data Size
   = Big | Small
-  deriving (Eq, Show, Ord, Read, Data, Typeable)
+  deriving (Eq, Show, Ord, Data, Typeable)
 
 data CoStmt
   = CosForeign (Var Resolved) CoType Text
