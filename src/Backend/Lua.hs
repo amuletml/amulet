@@ -2,6 +2,8 @@ module Backend.Lua where
 
 import Pretty
 
+import Data.Foldable
+
 import Data.Text (Text)
 import qualified Data.Text as T
 
@@ -125,8 +127,8 @@ instance Pretty LuaExpr where
     kwClr "function " <+> parens (interleave ", " a)
     body 2 b *> newline
     kwClr "end"
-  pprint (LuaTable ps) = braces $ interleave ", " $
-    map (\(k, v) -> squares k <+> opClr " = " <+> v) ps
+  pprint (LuaTable ps) = braces $
+    for_ ps $ \(k, v) -> squares k <+> opClr " = " <+> v <+> ", "
   pprint (LuaCall x@LuaFunction{} a) = parens x <+> parens (interleave ", " a)
   pprint (LuaCall x a) = x <+> parens (interleave ", " a)
   pprint (LuaBitE x) = pprint x
