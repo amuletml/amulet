@@ -16,7 +16,7 @@ import Pretty (tracePrettyId)
 -- Attempts to simplify match expression, dropping redundant branches and
 -- replacing matches with flat expressions where possible.
 dropBranches :: TransformPass
-dropBranches = beforePass' pass where
+dropBranches = pass' pass where
   pass (CotMatch e ptrns) =
     case reducePatterns ptrns of
       [(CopCapture v _, ty, bod)] ->
@@ -31,7 +31,7 @@ dropBranches = beforePass' pass where
   reducePatterns (p:xs) = p : reducePatterns xs
 
 matchKnownConstr :: TransformPass
-matchKnownConstr = beforePass go where
+matchKnownConstr = pass go where
   go :: CoTerm -> Trans CoTerm
   go it@(CotMatch e ptrns) = do
     weCan <- canWe (tracePrettyId e)

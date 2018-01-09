@@ -15,7 +15,7 @@ import Syntax (Var, Resolved)
 import Core.Optimise
 
 trivialPropag :: TransformPass
-trivialPropag = beforePass' go where
+trivialPropag = pass' go where
   go (CotLet vs e) =
     let keep e@(v, _, t) = if trivial t then Left (Map.singleton v t)
                                         else Right e
@@ -27,7 +27,7 @@ trivialPropag = beforePass' go where
   go x = x
 
 constrPropag :: TransformPass
-constrPropag = beforePass go where
+constrPropag = pass go where
   go (CotLet vs e) = do
     (keep, subst) <- partitionEithers <$> for vs (\v -> do
       cl <- conLike (thd3 v)
