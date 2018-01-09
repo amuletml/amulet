@@ -9,8 +9,8 @@ import Core.Optimise
 
 import Control.Monad.Gen
 
-optimise :: [CoStmt] -> Gen Int [CoStmt]
-optimise = runTransform . transformStmts passes where
+optmOnce :: [CoStmt] -> Gen Int ([CoStmt], Integer)
+optmOnce = runTransform . transformStmts passes where
   passes = mconcat . concat . replicate 10 $
       [ dropBranches
       , foldExpr
@@ -18,3 +18,12 @@ optimise = runTransform . transformStmts passes where
       , constrPropag
       , matchKnownConstr
       ]
+
+optimise :: [CoStmt] -> Gen Int [CoStmt]
+optimise = go where
+  go :: [CoStmt] -> Gen Int [CoStmt]
+  go sts = do
+    (sts', changes) <- optmOnce sts
+    if changes == 0
+       then pure sts
+       else go sts'

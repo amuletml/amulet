@@ -1,15 +1,12 @@
-{-# LANGUAGE ConstraintKinds, ScopedTypeVariables, TupleSections #-}
-
+{-# LANGUAGE ConstraintKinds, ScopedTypeVariables, TupleSections, GeneralizedNewtypeDeriving, DerivingStrategies #-}
 module Core.Optimise
   ( mapTermM, mapTerm1M
   , mapTerm, mapTerm1
   , substitute
   , module Core.Core
   , Var(..)
-  , TransformPass(..), TransState(..), Trans
-  , beforePass, afterPass
-  , beforePass', afterPass'
-  , transformTerm, transformStmts, runTransform
+  , TransformPass, TransState(..), Trans
+  , pass, pass', transformTerm, transformStmts, runTransform
 
   , invent, abstract, abstract', fresh
   , find, isCon
@@ -25,15 +22,15 @@ import Data.Text (Text)
 
 import Control.Monad.Identity
 import Control.Monad.Reader
-import Control.Monad.Writer
+import Control.Monad.Writer hiding (pass)
 import Control.Monad.Infer (fresh)
+import Control.Monad.State
 import Control.Monad.Gen
 
 import Core.Core
 import Syntax
 
 type TupleT m a = [(a, CoType, CoTerm)] -> m [(a, CoType, CoTerm)]
-
 
 termT :: forall a m. (Typeable a, Monad m) => (CoTerm -> m CoTerm) -> a -> m a
 termT f = mkM f
@@ -69,29 +66,32 @@ data TransState
                , cons :: Map.Map (Var Resolved) CoType }
   deriving (Show)
 
-type Trans = ReaderT TransState (Gen Int)
+newtype Trans a = Trans { runTrans :: StateT Integer (ReaderT TransState (Gen Int)) a }
+  deriving newtype (Functor, Applicative, Monad, MonadReader TransState, MonadGen Int)
 
 extendVars :: [(Var Resolved, CoType, CoTerm)] -> Trans a -> Trans a
 extendVars vs = local (\s -> s { vars = foldr (\(v, _, e) m -> Map.insert v e m) (vars s) vs })
 
-data TransformPass
-  = TransformPass { before :: CoTerm -> Trans CoTerm
-                  , after :: CoTerm -> Trans CoTerm }
+newtype TransformPass = Pass { runPass :: CoTerm -> Trans CoTerm }
 
 instance Monoid TransformPass where
-  mempty = TransformPass pure pure
-  mappend (TransformPass b a) (TransformPass b' a') = TransformPass (b <=< b') (a <=< a')
+  mempty = Pass pure
+  mappend (Pass f) (Pass g) = Pass (f <=< g)
 
-beforePass, afterPass :: (CoTerm -> Trans CoTerm) -> TransformPass
-beforePass fn = TransformPass { before = fn, after = pure }
-afterPass  fn = TransformPass { before = pure, after = fn }
+pass' :: (CoTerm -> CoTerm) -> TransformPass
+pass' = pass . (pure .)
 
-beforePass', afterPass' :: (CoTerm -> CoTerm) -> TransformPass
-beforePass' fn = TransformPass { before = pure . fn, after = pure }
-afterPass'  fn = TransformPass { before = pure, after = pure . fn }
+pass :: (CoTerm -> Trans CoTerm) -> TransformPass
+pass f = Pass go where
+  go x = do
+    x' <- f x
+    when (x /= x') $ pmodify succ
+    pure x'
+  pmodify :: (Integer -> Integer) -> Trans ()
+  pmodify = Trans . modify
 
 transformTerm :: TransformPass -> CoTerm -> Trans CoTerm
-transformTerm pass = before pass >=> visit >=> after pass where
+transformTerm pass = visit <=< runPass pass where
   visit (CotLet vars body) = do
     vars' <- extendVars vars (traverse (third3A transform) vars)
     body' <- extendVars vars' (transform body)
@@ -118,8 +118,10 @@ transformStmts pass (x@(CosType v cases):xs) =
     s { types = Map.insert v cases (types s)
       , cons = Map.union (Map.fromList cases) (cons s) }) (transformStmts pass xs)
 
-runTransform :: Trans a -> Gen Int a
+runTransform :: Trans a -> Gen Int (a, Integer)
 runTransform = flip runReaderT (TransState Map.empty Map.empty Map.empty)
+             . flip runStateT 0
+             . runTrans
 
 invent :: CoType -> Trans (Var Resolved, CoTerm)
 invent t = do
