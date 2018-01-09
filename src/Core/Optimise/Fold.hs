@@ -2,14 +2,18 @@
 
 module Core.Optimise.Fold
   ( foldExpr
+  , dropUselessLet
   ) where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
+import qualified Data.Set as Set
+import Data.Triple
 
 import Control.Monad.Reader
 
 import Core.Optimise
+import Syntax (Var, Resolved)
 
 --- Folds various trivial expressions
 foldExpr :: TransformPass
@@ -58,3 +62,24 @@ foldExpr = pass go where
   num = CotLit . ColInt
   str = CotLit . ColStr
   bool x = CotLit (if x then ColTrue else ColFalse)
+
+dropUselessLet :: TransformPass
+dropUselessLet = pass' go where
+  go term@(CotLet vs e)
+    | isUseless vs e = e
+    | otherwise = term
+  go x = x
+
+  isUseless :: [(Var Resolved, CoType, CoTerm)] -> CoTerm -> Bool
+  isUseless vs e = null (Set.intersection (freeIn e) (Set.fromList (map fst3 vs)))
+                && all (pure . thd3) vs
+
+  pure CotLam{} = True
+  pure CotRef{} = True
+  pure CotLit{} = True
+  pure CotApp{} = False
+  pure (CotTyApp f _) = pure f
+  pure (CotLet vs e) = pure e && all (pure . thd3) vs
+  pure (CotBegin xs e) = all pure xs && pure e
+  pure (CotMatch e bs) = pure e && all (pure . thd3) bs
+  pure (CotExtend e rs) = pure e && all (pure . thd3) rs

@@ -2,7 +2,7 @@
 module Core.Optimise
   ( mapTermM, mapTerm1M
   , mapTerm, mapTerm1
-  , substitute
+  , substitute, substituteInTys
   , module Core.Core
   , Var(..)
   , TransformPass, TransState(..), Trans
@@ -15,7 +15,7 @@ module Core.Optimise
 import qualified Data.Map.Strict as Map
 
 import Data.Traversable
-import Data.Generics (everywhereM, gmapM, mkM, Typeable)
+import Data.Generics (everywhere, everywhereM, gmapM, mkM, mkT, Typeable)
 import Data.Triple (third3A)
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
@@ -59,6 +59,12 @@ substitute :: Map.Map (Var Resolved) CoTerm -> CoTerm -> CoTerm
 substitute m = mapTerm subst
   where subst e@(CotRef v _) = fromMaybe e (Map.lookup v m)
         subst e = e
+
+substituteInTys :: Map.Map (Var Resolved) CoType -> CoTerm -> CoTerm
+substituteInTys m = everywhere (mkT go) where
+  go :: CoType -> CoType
+  go t@(CotyVar v) = Map.findWithDefault t v m
+  go x = x
 
 data TransState
   = TransState { vars :: Map.Map (Var Resolved) CoTerm

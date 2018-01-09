@@ -3,6 +3,7 @@ module Core.Simplify
   ) where
 
 import Core.Optimise.Propagate
+import Core.Optimise.Inline
 import Core.Optimise.Match
 import Core.Optimise.Fold
 import Core.Optimise
@@ -17,6 +18,9 @@ optmOnce = runTransform . transformStmts passes where
       , trivialPropag
       , constrPropag
       , matchKnownConstr
+      , inlineVariable
+      , betaReduce
+      , dropUselessLet
       ]
 
 optimise :: [CoStmt] -> Gen Int [CoStmt]
@@ -25,5 +29,5 @@ optimise = go where
   go sts = do
     (sts', changes) <- optmOnce sts
     if changes == 0
-       then pure sts
-       else go sts'
+      then pure sts
+      else go sts'

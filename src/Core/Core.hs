@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveDataTypeable, FlexibleInstances #-}
 module Core.Core where
 
 import qualified Data.Set as Set
@@ -73,6 +73,7 @@ instance Pretty CoTerm where
     = opClr "λ" <+> (v <+> opClr " : " <+> t) <+> opClr ". " <+> c
   pprint (CotApp f x)
     | CotLam{} <- f = parens f <+> " " <+> parens x
+    | CotLet{} <- f = parens f <+> " " <+> x
     | CotApp{} <- x = f <+> " " <+> parens x
     | CotLam{} <- x = f <+> " " <+> parens x
     | CotMatch{} <- x = f <+> " " <+> parens x
@@ -140,6 +141,9 @@ instance Pretty CoStmt where
   pprint (CosType v cs) = kwClr "type "
                         <+> v <+> " " <+> braces (pprCons cs)
     where pprCons = interleave (opClr "; ") . map (\(x, t) -> x <+> opClr " : " <+> t)
+
+instance Pretty [CoStmt] where
+  pprint = interleave ";"
 
 
 freeIn :: CoTerm -> Set.Set (Var Resolved)
