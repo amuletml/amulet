@@ -1,7 +1,7 @@
 {-# LANGUAGE DeriveDataTypeable, FlexibleInstances #-}
 module Core.Core where
 
-import qualified Data.Set as Set
+import qualified Data.VarSet as VarSet
 import Data.Generics
 import Data.Data (Data, Typeable)
 import Data.Text (Text, pack)
@@ -146,19 +146,20 @@ instance Pretty [CoStmt] where
   pprint = interleave ";"
 
 
-freeIn :: CoTerm -> Set.Set (Var Resolved)
-freeIn (CotRef v _) = Set.singleton v
-freeIn (CotLam Small (v, _) e) = Set.delete v (freeIn e)
+freeIn :: CoTerm -> VarSet.Set
+freeIn (CotRef v _) = VarSet.singleton v
+freeIn (CotLam Small (v, _) e) = VarSet.delete v (freeIn e)
 freeIn (CotLam Big _ e) = freeIn e
 freeIn (CotApp f x) = freeIn f <> freeIn x
-freeIn (CotLet vs e) = Set.difference (freeIn e <> foldMap (freeIn . thd3) vs) (Set.fromList (map fst3 vs))
+freeIn (CotLet vs e) = VarSet.difference (freeIn e <> foldMap (freeIn . thd3) vs)
+                                         (VarSet.fromList (map fst3 vs))
 freeIn (CotMatch e bs) = freeIn e <> foldMap freeInBranch bs where
-  freeInBranch (b, _, e) = Set.difference (freeIn e) (bound b)
-  bound (CopCapture v _) = Set.singleton v
+  freeInBranch (b, _, e) = VarSet.difference (freeIn e) (bound b)
+  bound (CopCapture v _) = VarSet.singleton v
   bound (CopDestr _ p) = bound p
-  bound (CopExtend p ps) = foldMap (bound . snd) ps `Set.union` bound p
-  bound _ = Set.empty
-freeIn (CotLit _) = Set.empty
+  bound (CopExtend p ps) = foldMap (bound . snd) ps <> bound p
+  bound _ = mempty
+freeIn (CotLit _) = mempty
 freeIn (CotExtend c rs) = freeIn c <> foldMap (freeIn . thd3) rs
 freeIn (CotTyApp f _) = freeIn f
 freeIn (CotBegin xs x) = foldMap freeIn xs <> freeIn x

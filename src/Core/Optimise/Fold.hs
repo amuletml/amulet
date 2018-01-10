@@ -6,8 +6,8 @@ module Core.Optimise.Fold
   ) where
 
 import qualified Data.Map.Strict as Map
+import qualified Data.VarSet as VarSet
 import qualified Data.Text as Text
-import qualified Data.Set as Set
 import Data.Triple
 
 import Control.Monad.Reader
@@ -69,7 +69,7 @@ dropUselessLet = pass' go where
   go x = x
 
   isUseless :: CoTerm -> (Var Resolved, CoType, CoTerm) -> Bool
-  isUseless e (v, _, d) = not (Set.member v (freeIn e)) && pure d
+  isUseless e (v, _, d) = not (VarSet.member v (freeIn e)) && pure d
 
   pure CotLam{} = True
   pure CotRef{} = True
