@@ -7,7 +7,7 @@ module Pretty
   , Pretty(..)
   , runPrinter, runPrettyM
   , defaults, colourless
-  , prettyPrint, uglyPrint
+  , prettyPrint, uglyPrint, prettyShow
   , ppshow
   , tracePretty, tracePrettyId
   , colour
@@ -102,6 +102,9 @@ colourless = defaults { colours = False }
 
 prettyPrint :: Pretty a => a -> Text
 prettyPrint = runPrinter defaults . pprint
+
+prettyShow :: Pretty a => a -> String
+prettyShow = T.unpack . runPrinter defaults . pprint
 
 uglyPrint :: Pretty a => a -> Text
 uglyPrint = runPrinter colourless . pprint

@@ -16,6 +16,8 @@ import Data.Triple
 import Core.Optimise
 import Syntax (Resolved)
 
+import Pretty (tracePretty, (<+>))
+
 limit :: Int
 limit = 100
 
@@ -30,7 +32,7 @@ inlineVariable = pass go where
         cost <- score term
         if cost >= limit || recursive term v
            then pure it
-           else pure term
+           else tracePretty ("inlining " <+> it <+> " = " <+> term) $ pure term
       Nothing -> pure it
   go x = pure x
 
@@ -52,10 +54,15 @@ score = fmap getSum . execWriterT . go where
   go (CotRef v _) = do
     tell 5
     flip when (tell (negate 4)) =<< lift (isCon v)
-  go (CotLam s _ _) = do
+    tp <- lift (findForeign v)
+    case tp of
+      Just _ -> tell (Sum limit)
+      Nothing -> pure ()
+  go (CotLam s _ t) = do
     tell $ case s of
       Big -> 0
       Small -> 1
+    go t
   go (CotApp f x) = go f *> go x
   go (CotLet vs e) = do
     for_ vs $ \(_, _, x) -> do

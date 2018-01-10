@@ -9,12 +9,13 @@ module Core.Optimise
   , pass, pass', transformTerm, transformStmts, runTransform
 
   , invent, abstract, abstract', fresh
-  , find, isCon
+  , find, isCon, findForeign
   ) where
 
 import qualified Data.Map.Strict as Map
 
 import Data.Traversable
+import Data.Semigroup
 import Data.Generics (everywhere, everywhereM, gmapM, mkM, mkT, Typeable)
 import Data.Triple (third3A)
 import Data.Maybe (fromMaybe)
@@ -22,7 +23,7 @@ import Data.Text (Text)
 
 import Control.Monad.Identity
 import Control.Monad.Reader
-import Control.Monad.Writer hiding (pass)
+import Control.Monad.Writer hiding (pass, (<>))
 import Control.Monad.Infer (fresh)
 import Control.Monad.State
 import Control.Monad.Gen
@@ -69,8 +70,17 @@ substituteInTys m = everywhere (mkT go) where
 data TransState
   = TransState { vars :: Map.Map (Var Resolved) CoTerm
                , types :: Map.Map (Var Resolved) [(Var Resolved, CoType)]
-               , cons :: Map.Map (Var Resolved) CoType }
+               , cons :: Map.Map (Var Resolved) CoType
+               , foreigns :: Map.Map (Var Resolved) CoType }
   deriving (Show)
+
+instance Semigroup TransState where
+  TransState a b c d <> TransState a' b' c' d' =
+    TransState (a <> a') (b <> b') (c <> c') (d <> d')
+
+instance Monoid TransState where
+  mempty = TransState mempty mempty mempty mempty
+  mappend = (<>)
 
 newtype Trans a = Trans { runTrans :: StateT Integer (ReaderT TransState (Gen Int)) a }
   deriving newtype (Functor, Applicative, Monad, MonadReader TransState, MonadGen Int)
@@ -80,9 +90,12 @@ extendVars vs = local (\s -> s { vars = foldr (\(v, _, e) m -> Map.insert v e m)
 
 newtype TransformPass = Pass { runPass :: CoTerm -> Trans CoTerm }
 
+instance Semigroup TransformPass where
+  Pass f <> Pass g = Pass (f <=< g)
+
 instance Monoid TransformPass where
   mempty = Pass pure
-  mappend (Pass f) (Pass g) = Pass (f <=< g)
+  mappend = (<>)
 
 pass' :: (CoTerm -> CoTerm) -> TransformPass
 pass' = pass . (pure .)
@@ -115,7 +128,8 @@ transformTerm pass = visit <=< runPass pass where
 
 transformStmts :: TransformPass -> [CoStmt] -> Trans [CoStmt]
 transformStmts _ [] = pure []
-transformStmts pass (x@CosForeign{}:xs) = (x:) <$> transformStmts pass xs
+transformStmts pass (x@(CosForeign v t _):xs) =
+  (x:) <$> local (\s -> s { foreigns = Map.insert v t (foreigns s) }) (transformStmts pass xs)
 transformStmts pass (CosLet vars:xs) = do
   vars' <- extendVars vars (traverse (third3A (transformTerm pass)) vars)
   (CosLet vars':) <$> extendVars vars' (transformStmts pass xs)
@@ -125,7 +139,7 @@ transformStmts pass (x@(CosType v cases):xs) =
       , cons = Map.union (Map.fromList cases) (cons s) }) (transformStmts pass xs)
 
 runTransform :: Trans a -> Gen Int (a, Integer)
-runTransform = flip runReaderT (TransState Map.empty Map.empty Map.empty)
+runTransform = flip runReaderT mempty
              . flip runStateT 0
              . runTrans
 
@@ -156,3 +170,6 @@ find var = Map.lookup var <$> asks vars
 
 isCon :: Var Resolved -> Trans Bool
 isCon var = Map.member var <$> asks cons
+
+findForeign :: Var Resolved -> Trans (Maybe CoType)
+findForeign var = Map.lookup var <$> asks foreigns
