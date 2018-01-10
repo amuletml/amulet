@@ -77,15 +77,23 @@ compileExpr (CotRef v _) | isBinOp v
                                     [LuaReturn (LuaBinOp (LuaRef left) (remapOp (getTaggedName v)) (LuaRef right))])]
     where left  = LuaName "l"
           right = LuaName "r"
-compileExpr (CotApp (CotApp (CotRef f _) left) right) | isBinOp f
-  = LuaBinOp (compileExpr left) (remapOp (getTaggedName f)) (compileExpr right)
-compileExpr (CotApp (CotRef f _) left) | isBinOp f
-  = LuaFunction [name] [LuaReturn (LuaBinOp (compileExpr left) (remapOp (getTaggedName f)) (LuaRef name))]
+compileExpr (CotApp f e) =
+  case (unwrap f, e) of
+    ((CotApp (CotRef f _) left), right) | isBinOp f ->
+      LuaBinOp (compileExpr left) (remapOp (getTaggedName f)) (compileExpr right)
+    ((CotRef f _), left) | isBinOp f ->
+      LuaFunction [name] [LuaReturn (LuaBinOp (compileExpr left) (remapOp (getTaggedName f)) (LuaRef name))]
+    _ -> LuaCall (compileExpr f) [compileExpr e]
+
     where name = LuaName "__r"
+
+          -- Remove all CotTyApps from our application: only used for binary operations
+          unwrap (CotTyApp x _) = unwrap x
+          unwrap (CotApp f x) = CotApp (unwrap f) x
+          unwrap x = x
 
 compileExpr (CotRef v _) = LuaRef (lowerName v)
 compileExpr (CotLam Small (v, _) e) = LuaFunction [lowerName v] (compileStmt (Just LuaReturn) e)
-compileExpr (CotApp f x) = LuaCall (compileExpr f) [compileExpr x]
 compileExpr (CotLam Big _ e) = compileExpr e
 compileExpr (CotTyApp f _) = compileExpr f
 
