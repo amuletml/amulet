@@ -7,11 +7,14 @@ module Core.Optimise.Inline
 import Control.Monad.Writer hiding (pass)
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
+
 import Data.Foldable hiding (find)
 import Data.Generics
 import Data.Triple
 
 import Core.Optimise
+import Syntax (Resolved)
 
 limit :: Int
 limit = 100
@@ -25,7 +28,7 @@ inlineVariable = pass go where
     case def of
       Just term -> do
         cost <- score term
-        if cost >= limit
+        if cost >= limit || recursive term v
            then pure it
            else pure term
       Nothing -> pure it
@@ -68,3 +71,6 @@ score = fmap getSum . execWriterT . go where
   go (CotLit _) = tell 0
   go (CotExtend x rs) = go x *> for_ rs (third3A go)
   go (CotTyApp x t) = go x *> tell (Sum (gdepth t))
+
+recursive :: CoTerm -> Var Resolved -> Bool
+recursive e v = v `Set.member` freeIn e
