@@ -1,27 +1,36 @@
-external val print : 'a -> unit = "print" ;;
-external val tostring : 'a -> string = "tostring" ;;
+external val print : 'a -> unit = "print"    ;;
+external val write : string -> unit = "io.write" ;;
+external val string_of : 'a -> string = "tostring" ;;
+
+let compose f g x = f (g x) ;;
 
 type list 'a =
-  | Cons of 'a * list 'a
-  | Nil ;;
+  | Nil
+  | Cons of 'a * list 'a ;;
 
-let reverse =
-  let reverse_accum acc x =
-    match x with
-      | Cons (h, t) -> reverse_accum (Cons (h, acc)) t
-      | Nil -> acc
-  in reverse_accum Nil
-and map f =
-  let map_accum acc x =
-    match x with
-      | Cons (h, t) -> map_accum (Cons (f h, acc)) t
-      | Nil -> reverse acc
-  in map_accum Nil ;;
+let id x = x ;;
 
-let print_list ls =
-  match ls with
-    | Cons (h, t) -> begin print h; print_list t end
-    | Nil -> print "done" ;;
+let map (f : 'a -> 'b) (xs : list 'a) : list 'b =
+  let map_magic xs cont =
+    match xs with
+    | Nil -> cont Nil
+    | Cons (h, t) -> map_magic t (compose cont (fun x -> Cons (f h, x)))
+  in map_magic xs id ;;
+
+let print_list xs =
+  let inner xs k =
+    match xs with
+    | Cons (h, t) -> begin
+      write "Cons (";
+      write (string_of h);
+      write ", ";
+      inner t (compose k (fun _ -> write ")"))
+    end
+    | Nil -> begin
+      write "Nil)";
+      k ()
+    end
+  in inner xs (fun _ -> print "") ;;
 
 let range start stop =
   if start == stop then
