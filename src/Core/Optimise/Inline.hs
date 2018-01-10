@@ -30,12 +30,14 @@ inlineVariable = pass go where
     case def of
       Just term -> do
         cost <- score term
-        if cost >= limit || recursive term v
+        if not (isLambda term) || cost >= limit || recursive term v
            then pure it
            else tracePretty ("inlining " <+> it <+> " = " <+> term) $ pure term
       Nothing -> pure it
   go x = pure x
 
+  isLambda CotLam{} = True
+  isLambda _ = False
 
 betaReduce :: TransformPass
 betaReduce = pass go where
