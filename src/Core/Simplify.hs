@@ -20,7 +20,7 @@ optmOnce = runTransform . transformStmts passes where
       , matchKnownConstr
       , inlineVariable
       , betaReduce
-      -- , dropUselessLet
+      , dropUselessLet
       ]
 
 optimise :: [CoStmt] -> Gen Int [CoStmt]
