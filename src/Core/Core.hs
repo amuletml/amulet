@@ -1,9 +1,10 @@
-{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveDataTypeable, FlexibleInstances #-}
 module Core.Core where
 
 import qualified Data.Set as Set
+import Data.Generics
 import Data.Data (Data, Typeable)
-import Data.Text (Text)
+import Data.Text (Text, pack)
 import Data.Triple
 
 import Syntax (Var(..), Resolved)
@@ -56,7 +57,7 @@ data CoType
 
 data Size
   = Big | Small
-  deriving (Eq, Show, Ord, Read, Data, Typeable)
+  deriving (Eq, Show, Ord, Data, Typeable)
 
 data CoStmt
   = CosForeign (Var Resolved) CoType Text
@@ -72,6 +73,7 @@ instance Pretty CoTerm where
     = opClr "λ" <+> (v <+> opClr " : " <+> t) <+> opClr ". " <+> c
   pprint (CotApp f x)
     | CotLam{} <- f = parens f <+> " " <+> parens x
+    | CotLet{} <- f = parens f <+> " " <+> x
     | CotApp{} <- x = f <+> " " <+> parens x
     | CotLam{} <- x = f <+> " " <+> parens x
     | CotMatch{} <- x = f <+> " " <+> parens x
@@ -140,6 +142,9 @@ instance Pretty CoStmt where
                         <+> v <+> " " <+> braces (pprCons cs)
     where pprCons = interleave (opClr "; ") . map (\(x, t) -> x <+> opClr " : " <+> t)
 
+instance Pretty [CoStmt] where
+  pprint = interleave ";"
+
 
 freeIn :: CoTerm -> Set.Set (Var Resolved)
 freeIn (CotRef v _) = Set.singleton v
@@ -157,3 +162,12 @@ freeIn (CotLit _) = Set.empty
 freeIn (CotExtend c rs) = freeIn c <> foldMap (freeIn . thd3) rs
 freeIn (CotTyApp f _) = freeIn f
 freeIn (CotBegin xs x) = foldMap freeIn xs <> freeIn x
+
+isError :: CoTerm -> Bool
+isError (CotApp (CotTyApp (CotRef (TgInternal n) _) _) _) = n == pack "error"
+isError _ = False
+
+stripTyApp :: CoTerm -> CoTerm
+stripTyApp = everywhere (mkT go) where
+  go (CotTyApp x _) = x
+  go x = x

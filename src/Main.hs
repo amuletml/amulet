@@ -29,7 +29,7 @@ import Errors
 import Parser
 import Pretty
 
-data CompileResult = CSuccess ([Toplevel Typed], [CoStmt], Env)
+data CompileResult = CSuccess ([Toplevel Typed], [CoStmt], [CoStmt], Env)
                    | CParse   ParseError
                    | CResolve ResolveError
                    | CInfer   TypeError
@@ -46,8 +46,9 @@ compile name x =
           infered <- inferProgram resolved
           case infered of
             Right (prog, env) -> do
-              t <- runReaderT (lowerProg prog) env
-              pure (CSuccess (prog, t, env))
+              lower <- runReaderT (lowerProg prog) env
+              optm <- optimise lower
+              pure (CSuccess (prog, lower, optm, env))
             Left e -> pure (CInfer e)
         Left e -> pure (CResolve e)
     Left e -> CParse e
@@ -58,7 +59,7 @@ compileFromTo :: FilePath
               -> IO ()
 compileFromTo fp x emit =
   case compile fp x of
-    CSuccess (_, core, env) -> emit (compileProgram env (optimise core))
+    CSuccess (_, _, core, env) -> emit (compileProgram env core)
     CParse e -> print e
     CResolve e -> putStrLn "Resolution error" >> report e x
     CInfer e -> putStrLn "Type error" >> report e x
@@ -67,7 +68,7 @@ test :: String -> IO (Maybe ([CoStmt], Env))
 test x = do
   putStrLn "\x1b[1;32m(* Program: *)\x1b[0m"
   case compile "<test>" (T.pack x) of
-    CSuccess (_, core, env) -> do
+    CSuccess (_, core, optm, env) -> do
       putStrLn x
       putStrLn "\x1b[1;32m(* Type inference: *)\x1b[0m"
       for_ (Map.toList $ values (difference env builtinsEnv)) $ \(k, t) ->
@@ -78,7 +79,7 @@ test x = do
       putStrLn "\x1b[1;32m(* Core lowering: *)\x1b[0m"
       traverse_ ppr core
       putStrLn "\x1b[1;32m(* Optimised: *)\x1b[0m"
-      traverse_ ppr (optimise core)
+      traverse_ ppr optm
       pure (Just (core, env))
     CParse e -> Nothing <$ print e
     CResolve e -> Nothing <$ report e (T.pack x)
