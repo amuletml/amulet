@@ -38,9 +38,9 @@ cotyInt = runGenT (lowerType tyInt) mempty
 
 getType :: Data (f Typed) => f Typed -> Type Typed
 getType = snd . head . catMaybes . gmapQ get where
-  get d = case cast d of
-    Just x -> Just (x :: (Span, Type Typed))
-    Nothing -> Nothing
+  get d = fmap (`asTypeOf` (undefined :: (Span, Type Typed))) $ cast d
+  -- FIXME: Point-freeing this definition makes type inference broken.
+  -- Thanks, GHC.
 
 makeBigLams :: MonadLower m
             => Type Typed
