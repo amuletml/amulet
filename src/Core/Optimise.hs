@@ -16,35 +16,32 @@ import qualified Data.Map.Strict as Map
 
 import Data.Traversable
 import Data.Semigroup
-import Data.Generics (everywhere, everywhereM, gmapM, mkM, mkT, Typeable)
+import Data.Generics (everywhere, everywhereM, mkM, mkT)
 import Data.Triple (third3A)
 import Data.Maybe (fromMaybe)
-import Data.Text (Text)
 
 import Control.Monad.Identity
 import Control.Monad.Reader
 import Control.Monad.Writer hiding (pass, (<>))
 import Control.Monad.Infer (fresh)
-import Control.Monad.State
 import Control.Monad.Gen
 
 import Core.Core
 import Syntax
 
-type TupleT m a = [(a, CoType, CoTerm)] -> m [(a, CoType, CoTerm)]
-
-termT :: forall a m. (Typeable a, Monad m) => (CoTerm -> m CoTerm) -> a -> m a
-termT f = mkM f
-      >=> mkM (traverse f :: [CoTerm] -> m [CoTerm]) -- CotBegin
-      >=> mkM (tupT :: TupleT m (Var Resolved))      -- CotLet
-      >=> mkM (tupT :: TupleT m CoPattern)           -- CotMatch
-      >=> mkM (tupT :: TupleT m Text)                -- CotExtend
-  where tupT = traverse (third3A f)
-
 -- Apply a function to each child in the provided expr. Note this does not
 -- apply to all descendants.
 mapTerm1M :: Monad m => (CoTerm -> m CoTerm) -> CoTerm -> m CoTerm
-mapTerm1M f = gmapM (termT f)
+mapTerm1M f t = case t of
+  CotRef{} -> pure t
+  CotLit{} -> pure t
+  CotLam s v b -> CotLam s v <$> f b
+  CotApp g x -> CotApp <$> f g <*> f x
+  CotLet vs e -> CotLet <$> traverse (third3A f) vs <*> f e
+  CotMatch e bs -> CotMatch <$> f e <*> traverse (third3A f) bs
+  CotBegin es e -> CotBegin <$> traverse f es <*> f e
+  CotExtend t rs -> CotExtend <$> f t <*> traverse (third3A f) rs
+  CotTyApp e t -> CotTyApp <$> f e <*> pure t
 
 -- Apply a function to all descendants in the provided expr.
 mapTermM :: Monad m => (CoTerm -> m CoTerm) -> CoTerm -> m CoTerm
@@ -82,7 +79,7 @@ instance Monoid TransState where
   mempty = TransState mempty mempty mempty mempty
   mappend = (<>)
 
-newtype Trans a = Trans { runTrans :: StateT Integer (ReaderT TransState (Gen Int)) a }
+newtype Trans a = Trans { runTrans :: ReaderT TransState (Gen Int) a }
   deriving newtype (Functor, Applicative, Monad, MonadReader TransState, MonadGen Int)
 
 extendVars :: [(Var Resolved, CoType, CoTerm)] -> Trans a -> Trans a
@@ -91,23 +88,20 @@ extendVars vs = local (\s -> s { vars = foldr (\(v, _, e) m -> Map.insert v e m)
 newtype TransformPass = Pass { runPass :: CoTerm -> Trans CoTerm }
 
 instance Semigroup TransformPass where
-  Pass f <> Pass g = Pass (f <=< g)
+  Pass f <> Pass g = Pass (\x -> g x >>= f)
+  {-# INLINE [0] (<>) #-}
 
 instance Monoid TransformPass where
   mempty = Pass pure
   mappend = (<>)
 
+{-# INLINE [0] pass' #-}
 pass' :: (CoTerm -> CoTerm) -> TransformPass
-pass' = pass . (pure .)
+pass' = Pass . (pure .)
 
+{-# INLINE [0] pass #-}
 pass :: (CoTerm -> Trans CoTerm) -> TransformPass
-pass f = Pass go where
-  go x = do
-    x' <- f x
-    when (x /= x') $ pmodify succ
-    pure x'
-  pmodify :: (Integer -> Integer) -> Trans ()
-  pmodify = Trans . modify
+pass = Pass
 
 transformTerm :: TransformPass -> CoTerm -> Trans CoTerm
 transformTerm pass = visit <=< runPass pass where
@@ -138,9 +132,8 @@ transformStmts pass (x@(CosType v cases):xs) =
     s { types = Map.insert v cases (types s)
       , cons = Map.union (Map.fromList cases) (cons s) }) (transformStmts pass xs)
 
-runTransform :: Trans a -> Gen Int (a, Integer)
+runTransform :: Trans a -> Gen Int a
 runTransform = flip runReaderT mempty
-             . flip runStateT 0
              . runTrans
 
 invent :: CoType -> Trans (Var Resolved, CoTerm)

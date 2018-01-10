@@ -18,7 +18,7 @@ import Syntax
 import Data.Semigroup ((<>))
 
 import qualified Data.Map.Strict as Map
-import qualified Data.Set as Set
+import qualified Data.VarSet as VarSet
 
 import qualified Data.Text as T
 import Data.Text (Text)
@@ -175,7 +175,7 @@ compileLet (vs, _, es) = locals recs (assigns nonrecs) where
     xs -> LuaLocal (map (lowerName . fst) xs) []:map one xs
   one (v, t) = LuaAssign [lowerName v] [compileExpr t]
 
-  recursive v term@CotLam{} = v `Set.member` freeIn term
+  recursive v term@CotLam{} = v `VarSet.member` freeIn term
   recursive _ _ = False
 
 pureReturn :: Returner -> LuaExpr -> [LuaStmt]
