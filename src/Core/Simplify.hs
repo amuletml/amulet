@@ -20,14 +20,16 @@ optmOnce = runTransform . transformStmts passes where
       , matchKnownConstr
       , inlineVariable
       , betaReduce
-      , dropUselessLet
+      -- , dropUselessLet
       ]
 
 optimise :: [CoStmt] -> Gen Int [CoStmt]
-optimise = go where
-  go :: [CoStmt] -> Gen Int [CoStmt]
-  go sts = do
-    (sts', changes) <- optmOnce sts
-    if changes == 0
-      then pure sts
-      else go sts'
+optimise = go 10 where
+  go :: Integer -> [CoStmt] -> Gen Int [CoStmt]
+  go k sts
+    | k > 0 = do
+      (sts', changes) <- optmOnce sts
+      if changes == 0
+        then pure sts
+        else go (k - 1) sts'
+    | otherwise = pure sts

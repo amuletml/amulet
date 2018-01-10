@@ -15,6 +15,8 @@ import Control.Monad.Reader
 import Core.Optimise
 import Syntax (Var, Resolved)
 
+import Pretty (tracePretty)
+
 --- Folds various trivial expressions
 foldExpr :: TransformPass
 foldExpr = pass go where
@@ -65,14 +67,11 @@ foldExpr = pass go where
 
 dropUselessLet :: TransformPass
 dropUselessLet = pass' go where
-  go term@(CotLet vs e)
-    | isUseless vs e = e
-    | otherwise = term
+  go term@(CotLet vs e) = tracePretty term $ CotLet (filter (not . isUseless e) vs) e
   go x = x
 
-  isUseless :: [(Var Resolved, CoType, CoTerm)] -> CoTerm -> Bool
-  isUseless vs e = null (Set.intersection (freeIn e) (Set.fromList (map fst3 vs)))
-                && all (pure . thd3) vs
+  isUseless :: CoTerm -> (Var Resolved, CoType, CoTerm) -> Bool
+  isUseless e (v, _, d) = not (Set.member v (freeIn e)) && pure d
 
   pure CotLam{} = True
   pure CotRef{} = True
