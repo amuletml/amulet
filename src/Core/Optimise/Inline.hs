@@ -19,7 +19,7 @@ import Syntax (Resolved)
 import Pretty (tracePretty, (<+>))
 
 limit :: Int
-limit = 100
+limit = 500
 
 -- The "opposite" (dual?) of a propagation pass, inlining attempts to
 -- "pull in" the definition of a variable it considers cheap.
