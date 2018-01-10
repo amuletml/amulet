@@ -215,15 +215,20 @@ patternBindings (CopExtend p rs) vr = patternBindings p vr ++ concatMap (index v
   index vr (var', pat) = patternBindings pat (LuaRef (LuaIndex vr (LuaString var')))
 
 compileMatch :: Returner -> CoTerm -> [(CoPattern, CoType, CoTerm)] -> Gen Int [LuaStmt]
-compileMatch r ex ps = do
-  x <- (LuaName . ("__" <>) . (alpha !!)) <$> gen -- matchee
-  let gen (p, _, c) = ( patternTest p (LuaRef x)
-                      , case patternBindings p (LuaRef x) of
-                          [] -> []
-                          xs -> [uncurry LuaLocal (unzip xs)]
-                        ++ compileStmt r c )
-  pure $ compileStmt (Just $ LuaLocal [x] . (:[])) ex
-       ++ [ LuaIfElse (map gen ps) ]
+compileMatch r ex ps =
+  case ex of
+    (CotRef f _) -> pure $ genIf (lowerName f) ps
+    _ -> do
+      -- Cache the matchee in a temporary variable
+      x <- (LuaName . ("__" <>) . (alpha !!)) <$> gen
+      pure $ compileStmt (Just $ LuaLocal [x] . (:[])) ex ++ genIf x ps
+
+  where genBinding x (p, _, c) = ( patternTest p (LuaRef x)
+                                 , (case patternBindings p (LuaRef x) of
+                                      [] -> []
+                                      xs -> [uncurry LuaLocal (unzip xs)])
+                                   ++ compileStmt r c)
+        genIf x ps = [ LuaIfElse (map (genBinding x) ps) ]
 
 --- This is a hack, but we need this for compiling record extension
 extendDef :: LuaStmt
