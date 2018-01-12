@@ -79,35 +79,45 @@ import Text.Parsec.Pos (newPos)
 %%
 
 
-Expr : BaseExpr                  { $1 }
-     -- | Expr BaseExpr              { withPos2 $1 $2 $ App $1 $2 }
+Expr : Expr0     { $1 }
+     | Expr Atom { withPos2 $1 $2 $ App $1 $2 }
 
-BaseExpr :: { Expr Parsed }
-         : Lit                                    { withPos1 $1    $ Literal (getL $1) }
-         | Var                                    { withPos1 $1    $ VarRef (getL $1) }
-         | hole                                   { withPos1 $1    $ Hole (Name (getHole $1)) }
-         | '(' ExprList ')'                       { withPos2 $1 $3 $ tupleExpr $2 }
-         | '{' RecordList '}'                     { withPos2 $1 $3 $ Record $2 }
-         | '{' Expr with RecordList '}'           { withPos2 $1 $5 $ RecordExt $2 $4 }
-         | fun Pattern '->' Expr                  { withPos2 $1 $4 $ Fun $2 $4 }
-         | let Var '=' Expr in Expr               { withPos2 $1 $6 $ Let [(getL $2, $4, undefined)] $6 } -- TODO: Actual
-         | if Expr then Expr else Expr            { withPos2 $1 $6 $ If $2 $4 $6 }
+Expr0 :: { Expr Parsed }
+      : fun ArgP '->' Expr                     { withPos2 $1 $4 $ Fun $2 $4 }
+      | let BindGroup in Expr                  { withPos2 $1 $4 $ Let $2 $4 }
+      | if Expr then Expr else Expr            { withPos2 $1 $6 $ If $2 $4 $6 }
+      | Atom                                   { $1 }
+
+Atom :: { Expr Parsed }
+     : Var  { withPos1 $1 (VarRef  (getL $1)) }
+     | Lit  { withPos1 $1 (Literal (getL $1)) }
+     | hole { withPos1 $1 (Hole (Name (getHole $1))) }
+     | '(' List(Expr) ')'                     { withPos2 $1 $3 $ tupleExpr $2 }
+     | '{' Rows('=',Expr) '}'                 { withPos2 $1 $3 $ Record $2 }
+     | '{' Expr with Rows('=',Expr) '}'       { withPos2 $1 $5 $ RecordExt $2 $4 }
 
 Var :: { Located (Var Parsed) }
     : ident                { lPos1 $1 $ Name (getIdent $1) }
 
-ExprList :: { [Expr Parsed] }
-         : {- Empty -}       { [] }
-         | ExprList1          { $1 }
+BindGroup :: { [(Var Parsed, Expr Parsed, Ann Parsed)] }
+          : Binding { [$1] }
+          | BindGroup and Binding { $3 : $1 }
 
-ExprList1 :: { [Expr Parsed] }
-          : Expr               { [$1] }
-          | Expr ',' ExprList1  { $1 : $3 }
+Binding :: { (Var Parsed, Expr Parsed, Ann Parsed) }
+        : Var '=' Expr { (getL $1, $3, withPos2 $1 $3 id) }
 
-RecordList :: { [(T.Text, Expr p)] }
-           : {- Empty -}                   { [] }
-           | ident '=' Expr ',' RecordList { (getIdent $1, $3) : $5 }
-           | ident '=' Expr                { [(getIdent $1, $3)] }
+List(p)
+    : {- Empty -}       { [] }
+    | List1(p)          { $1 }
+
+List1(p)
+     : p              { [$1] }
+     | p ',' List1(p) { $1 : $3 }
+
+Rows(p, q)
+   : {- Empty -}                 { [] }
+   | ident p q ',' Rows(p,q) { (getIdent $1, $3) : $5 }
+   | ident p q               { [(getIdent $1, $3)] }
 
 Lit :: { Located Lit }
     : int                  { lPos1 $1 $ LiInt (getInt $1) }
@@ -115,8 +125,13 @@ Lit :: { Located Lit }
     | true                 { lPos1 $1 $ LiBool True }
     | false                { lPos1 $1 $ LiBool False }
 
-Pattern : Var              { withPos1 $1 $ Capture (getL $1) }
+Pattern :: { Pattern Parsed }
+        : Var              { withPos1 $1 $ Capture (getL $1) }
+        | '_'              { withPos1 $1 Wildcard }
 
+ArgP :: { Pattern Parsed }
+     : Var { withPos1 $1 $ Capture (getL $1) }
+     | '(' Pattern ')' { $2 }
 
 {
 
@@ -139,7 +154,6 @@ withPos1 s f = f (annotation s)
 withPos2 :: (Spanned a, Spanned b) => a -> b -> (Span -> c) -> c
 withPos2 s e f = f (mkSpanUnsafe (spanStart $ annotation s) (spanEnd $ annotation e))
 
-
 tupleExpr :: [Expr Parsed] -> Ann Parsed -> Expr Parsed
 tupleExpr []  a = Literal LiUnit a
 tupleExpr [x] a = x
@@ -150,5 +164,4 @@ getHole   (Token (TcHole x) _)       = x
 getInt    (Token (TcInteger x) _)    = x
 getString (Token (TcString  x) _)    = x
 getL      (L x _)                    = x
-
 }
