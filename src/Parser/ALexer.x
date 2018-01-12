@@ -31,6 +31,11 @@ $alpha=[a-zA-Z]  -- Alphabetic characters
 tokens :-
   <0> $white+;
 
+  <0> "(*"       { beginComment }
+  <comment> "(*" { beginComment }
+  <comment> "*)" { endComment }
+  <comment> .    ;
+
   <0> "->"     { constTok TcArrow }
   <0> "="      { constTok TcEqual }
   <0> "∀"      { constTok TcForall }
@@ -105,12 +110,16 @@ tokens :-
   <string> [^\\\"] { onStringM append }
 
 {
-data AlexUserState = AlexUserState { stringBuffer :: B.Builder, filePath :: String }
+data AlexUserState = AlexUserState { stringBuffer :: B.Builder
+                                   , filePath :: String
+                                   , commentDepth :: Int }
 
 data Token = Token !TokenClass !AlexPosn deriving Show
 
 alexInitUserState :: AlexUserState
-alexInitUserState = AlexUserState { stringBuffer = mempty, filePath = mempty }
+alexInitUserState = AlexUserState { stringBuffer = mempty
+                                  , filePath = mempty
+                                  , commentDepth = 0 }
 
 parseNum :: Num a => a -> ByteString -> a
 parseNum radix = Bsc.foldl' (\accum digit -> accum * radix + fromIntegral (digitToInt digit)) 0
@@ -133,6 +142,20 @@ endString (p,_,_,_) _ = do
   alexSetUserState $ s { stringBuffer = "" }
   alexSetStartCode 0
   return . flip Token p .  TcString . decodeUtf8 . Bs.concat . ByteString.toChunks . B.toLazyByteString . stringBuffer $ s
+
+beginComment, endComment :: AlexAction Token
+beginComment _ _ = do
+  s <- alexGetUserState
+  -- Increment the comment depth and set the mode to comments
+  alexSetUserState $ s { commentDepth = commentDepth s + 1 }
+  alexSetStartCode comment
+  alexMonadScan'
+endComment _ _ = do
+  s <- alexGetUserState
+  -- Decrement the comment depth and, if required, set the mode to normal
+  alexSetUserState $ s { commentDepth = commentDepth s - 1 }
+  if (commentDepth s) == 1 then alexSetStartCode 0 else pure ()
+  alexMonadScan'
 
 constTok :: TokenClass -> AlexAction Token
 constTok t (p,_,_,_) _ = return $! Token t p
@@ -166,6 +189,7 @@ lexInput fp text = runAlex text (setfp *> loop []) where
         case code of
           0 -> return (reverse buf)
           n | n == string -> alexGenericError p "expected closing '\"', got end of input"
+          n | n == comment -> alexGenericError p "expected closing '*)', got end of input"
           _ -> alexGenericError p "unexpected end of input"
       tok -> loop $! (tok : buf)
 
