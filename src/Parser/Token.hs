@@ -44,6 +44,7 @@ data TokenClass
   | TcUnit -- unit
   | TcOf -- of
 
+  | TcDot -- .
   | TcComma -- ,
   | TcSemicolon -- ;
   | TcTopSep -- ;;
@@ -55,6 +56,7 @@ data TokenClass
   | TcCSquare -- ]
 
   | TcIdentifier Text
+  | TcHole Text
   | TcInteger Integer
   | TcString Text
 
@@ -102,6 +104,7 @@ instance Show TokenClass where
   show TcUnit = "unit"
   show TcOf = "of"
 
+  show TcComma = "."
   show TcComma = ","
   show TcSemicolon = ";"
   show TcTopSep = ";;"
@@ -113,6 +116,7 @@ instance Show TokenClass where
   show TcCSquare = "]"
 
   show (TcIdentifier t) = unpack t
+  show (TcHole t) = unpack t
   show (TcString t) = show (unpack t)
   show (TcInteger i) = show i
 

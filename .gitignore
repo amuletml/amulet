@@ -4,3 +4,5 @@
 *.lua
 
 src/Parser/ALexer.hs
+src/Parser/HParser.hs
+src/Parser/HParser.info

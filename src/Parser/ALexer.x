@@ -3,20 +3,22 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Parser.ALexer
   ( Token(..)
-  , AlexPosn(..)
   , lexInput
   ) where
 
-import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString as Bs
-import qualified Data.ByteString.Lazy.Char8 as Bsc
+import qualified Data.ByteString.Builder as B
 import Data.ByteString.Lazy (ByteString)
+import qualified Data.ByteString.Lazy.Char8 as Bsc
+import Data.Span
+import Data.Spanned
 import Data.Text.Encoding
 
-import qualified Data.Text as T
-import Data.Semigroup
 import Data.Char (chr, digitToInt)
+import Data.Semigroup
+import qualified Data.Text as T
 
+import Text.Parsec.Pos
 import Text.Printf
 
 import Parser.Token
@@ -90,6 +92,7 @@ tokens :-
 
   <0> $digit+                          { onString $ TcInteger . parseNum 10 }
   <0> $alpha [$alpha $digit '_' '\'']* { lexTok TcIdentifier }
+  <0> '_' [$alpha $digit '_' '\'']*    { lexTok TcHole }
   <0> \"                               { begin string }
 
   <string> \" { endString }
@@ -114,12 +117,18 @@ data AlexUserState = AlexUserState { stringBuffer :: B.Builder
                                    , filePath :: String
                                    , commentDepth :: Int }
 
-data Token = Token !TokenClass !AlexPosn deriving Show
+data Token = Token !TokenClass !SourcePos deriving Show
+
+instance Spanned Token where
+  annotation (Token _ s) = mkSpan1 s
 
 alexInitUserState :: AlexUserState
 alexInitUserState = AlexUserState { stringBuffer = mempty
                                   , filePath = mempty
                                   , commentDepth = 0 }
+
+sourcePos :: AlexUserState -> AlexPosn -> SourcePos
+sourcePos (AlexUserState { filePath = f }) (AlexPn _ l c) = newPos f l c
 
 parseNum :: Num a => a -> ByteString -> a
 parseNum radix = Bsc.foldl' (\accum digit -> accum * radix + fromIntegral (digitToInt digit)) 0
@@ -141,7 +150,7 @@ endString (p,_,_,_) _ = do
   s <- alexGetUserState
   alexSetUserState $ s { stringBuffer = "" }
   alexSetStartCode 0
-  return . flip Token p .  TcString . decodeUtf8 . Bs.concat . ByteString.toChunks . B.toLazyByteString . stringBuffer $ s
+  return . flip Token (sourcePos s p) .  TcString . decodeUtf8 . Bs.concat . ByteString.toChunks . B.toLazyByteString . stringBuffer $ s
 
 beginComment, endComment :: AlexAction Token
 beginComment _ _ = do
@@ -158,14 +167,20 @@ endComment _ _ = do
   alexMonadScan'
 
 constTok :: TokenClass -> AlexAction Token
-constTok t (p,_,_,_) _ = return $! Token t p
+constTok t (p,_,_,_) _ = do
+  s <- alexGetUserState
+  return $! Token t (sourcePos s p)
 
 onString :: (ByteString -> TokenClass) -> AlexAction Token
-onString f (p, _, str, _) len = return $! Token (f (ByteString.take len str)) p
+onString f (p, _, str, _) len = do
+  s <- alexGetUserState
+  return $! Token (f (ByteString.take len str)) (sourcePos s p)
 
 lexTok :: (T.Text -> TokenClass) -> AlexAction Token
-lexTok k (p, _, str, _) len = return (Token (k str') p) where
-  str' = decodeUtf8 . Bs.concat . ByteString.toChunks . ByteString.take len $ str
+lexTok k (p, _, str, _) len = do
+  s <- alexGetUserState
+  return (Token (k str') (sourcePos s p)) where
+    str' = decodeUtf8 . Bs.concat . ByteString.toChunks . ByteString.take len $ str
 
 onStringM :: (ByteString -> AlexAction a) -> AlexAction a
 onStringM f p@(_, _, str, _) len = (f (ByteString.take len str)) p len
@@ -173,7 +188,8 @@ onStringM f p@(_, _, str, _) len = (f (ByteString.take len str)) p len
 alexEOF :: Alex Token
 alexEOF = do
   (p,_,_,_) <- alexGetInput
-  return $! Token TcEOF p
+  s <- alexGetUserState
+  return $! Token TcEOF (sourcePos s p)
 
 lexInput :: String -> ByteString -> Either String [Token]
 lexInput fp text = runAlex text (setfp *> loop []) where

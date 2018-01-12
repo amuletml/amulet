@@ -4,7 +4,8 @@
 module Data.Span
   ( Span(fileName)
   , internal
-  , mkSpan
+  , mkSpan, mkSpanUnsafe, mkSpan1
+  , newPos
   , spanStart
   , spanEnd
   ) where
@@ -32,6 +33,16 @@ mkSpan a b
               , col2 = sourceColumn b, line2 = sourceLine b }
   | otherwise = Nothing
 
+mkSpanUnsafe :: SourcePos -> SourcePos -> Span
+mkSpanUnsafe a b = Span { fileName = sourceName a
+                        , col1 = sourceColumn a, line1 = sourceLine a
+                        , col2 = sourceColumn b, line2 = sourceLine b }
+
+mkSpan1 :: SourcePos -> Span
+mkSpan1 a = Span { fileName = sourceName a
+                 , col1 = sourceColumn a, line1 = sourceLine a
+                 , col2 = sourceColumn a, line2 = sourceLine a }
+
 spanStart, spanEnd :: Span -> SourcePos
 spanStart Span { fileName = n, line1 = l, col1 = c } = newPos n l c
 spanEnd   Span { fileName = n, line2 = l, col2 = c } = newPos n l c
@@ -49,4 +60,3 @@ instance Semigroup Span where
     | x == internal = y
     | y == internal = x
     | otherwise = error $ "<> spans of different files: " ++ fa ++ ", " ++ fb
-
