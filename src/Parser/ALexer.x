@@ -1,14 +1,31 @@
 {
 {-# OPTIONS_GHC -Wwarn -Wno-unused-imports #-}
-module Parser.ALexer where
+{-# LANGUAGE OverloadedStrings #-}
+module Parser.ALexer
+  ( Token(..)
+  , AlexPosn(..)
+  , Alex(..)
+  , alexMonadScan'
+  , alexError'
+  ) where
+
+import qualified Data.ByteString.Builder as B
+import qualified Data.ByteString as Bs
+import Data.ByteString.Lazy (ByteString)
+import Data.Text.Encoding
+
+import qualified Data.Text.Read as TR
+import qualified Data.Text as T
+import Data.Semigroup
+import Data.Either
+import Data.Char (chr)
+
+import Text.Printf
 
 import Parser.Token
-import qualified Data.Text as T
-import Data.Char (chr)
-import Debug.Trace
 }
 
-%wrapper "monadUserState"
+%wrapper "monadUserState-bytestring"
 
 $digit=0-9       -- Digits
 $hex=[0-9A-Fa-f] -- Hexadecimal digits
@@ -38,8 +55,10 @@ tokens :-
   <0> "-"      { constTok TcSubtract }
   <0> "<>"     { constTok TcNotEqual }
   <0> "~"      { constTok TcTilde }
+  <0> \_       { constTok TcUnderscore }
 
   <0> "let"    { constTok TcLet }
+  <0> "fun"    { constTok TcFun }
   <0> "and"    { constTok TcAnd }
   <0> "if"     { constTok TcIf }
   <0> "then"   { constTok TcThen }
@@ -58,6 +77,7 @@ tokens :-
   <0> "of"     { constTok TcOf }
 
   <0> ","      { constTok TcComma }
+  <0> ";" ";"  { constTok TcTopSep }
   <0> ";"      { constTok TcSemicolon }
   <0> "("      { constTok TcOParen }
   <0> ")"      { constTok TcCParen }
@@ -66,8 +86,8 @@ tokens :-
   <0> "["      { constTok TcOSquare }
   <0> "]"      { constTok TcCSquare }
 
-  <0> $digit+                          { onString $ TcInteger . read }
-  <0> $alpha [$alpha $digit '_' '\'']* { onString $ TcIdentifier . T.pack }
+  <0> $digit+                          { lexTok $ TcInteger . either undefined fst . TR.decimal }
+  <0> $alpha [$alpha $digit '_' '\'']* { lexTok TcIdentifier }
   <0> \"                               { begin string }
 
   <string> \" { endString }
@@ -83,45 +103,93 @@ tokens :-
   <string> \\ \\ { appendChar '\\' }
   <string> \\ \" { appendChar '\"' }
 
-  <string> \\ x $hex+ { onStringM $ appendChar . chr . read . ('0':) . tail }
+  <string> \\ x $hex+ { onStringM $ undefined }
 
-  <string> [^\\\"] { onStringM $ appendChar . head }
+  <string> [^\\\"] { onStringM append }
 
 {
-data AlexUserState = AlexUserState { stringBuffer :: String }
+data AlexUserState = AlexUserState { stringBuffer :: B.Builder, filePath :: String }
+
+data Token = Token !TokenClass !AlexPosn deriving Show
 
 alexInitUserState :: AlexUserState
-alexInitUserState = AlexUserState { stringBuffer = "" }
+alexInitUserState = AlexUserState { stringBuffer = mempty, filePath = mempty }
 
-appendChar :: Char -> AlexAction TokenClass
+appendChar :: Char -> AlexAction Token
 appendChar c _ _ = do
   s <- alexGetUserState
-  alexSetUserState $ s { stringBuffer = c:stringBuffer s }
-  alexMonadScan -- Don't emit a token, just continue
+  alexSetUserState $ s { stringBuffer = stringBuffer s <> B.charUtf8 c }
+  alexMonadScan' -- Don't emit a token, just continue
 
-endString :: AlexAction TokenClass
+append :: ByteString -> AlexAction Token
+append c _ _ = do
+  s <- alexGetUserState
+  alexSetUserState $ s { stringBuffer = stringBuffer s <> B.lazyByteString c }
+  alexMonadScan' -- Don't emit a token, just continue
+
+endString :: AlexAction Token
 endString _ _ = do
   s <- alexGetUserState
   alexSetUserState $ s { stringBuffer = "" }
-  return $ TcString (T.pack (reverse (stringBuffer s)))
+  (p, _, _, i) <- alexGetInput
+  return . flip Token p .  TcString . decodeUtf8 . Bs.concat . ByteString.toChunks . B.toLazyByteString . stringBuffer $ s
 
-constTok :: TokenClass -> AlexAction TokenClass
-constTok t _ _ = return t
+constTok :: TokenClass -> AlexAction Token
+constTok t _ _ = do
+  (p,_,_,_) <- alexGetInput
+  return $! Token t p
 
-onString :: (String -> a) -> AlexAction a
-onString f (_, _, _, str) len = return (f (take len str))
+onString :: (ByteString -> a) -> AlexAction a
+onString f (_, _, str, _) len = return (f (ByteString.take len str))
 
-onStringM :: (String -> AlexAction a) -> AlexAction a
-onStringM f p@(_, _, _, str) len = (f (take len str)) p len
+lexTok :: (T.Text -> TokenClass) -> AlexAction Token
+lexTok k (p, _, str, _) len = return (Token (k str') p) where
+  str' = decodeUtf8 . Bs.concat . ByteString.toChunks . ByteString.take len $ str
 
-alexEOF :: Alex TokenClass
-alexEOF = return TcEOF
+onStringM :: (ByteString -> AlexAction a) -> AlexAction a
+onStringM f p@(_, _, str, _) len = (f (ByteString.take len str)) p len
 
-lex :: T.Text -> Either String [TokenClass]
-lex text = runAlex (T.unpack text) (loop []) where
+alexEOF :: Alex Token
+alexEOF = do
+  (p,_,_,_) <- alexGetInput
+  return $! Token TcEOF p
+
+lex :: String -> ByteString -> Either String [Token]
+lex fp text = runAlex text (setfp *> loop []) where
+  setfp = do
+    s <- alexGetUserState
+    alexSetUserState $ s { filePath = fp }
   loop buf = do
-    tok <- alexMonadScan
+    tok <- alexMonadScan'
     case tok of
-      TcEOF -> return (reverse buf)
+      Token TcEOF _ -> return (reverse buf)
       tok -> loop $! (tok : buf)
+
+alexGetUserState :: Alex AlexUserState
+alexGetUserState = Alex (\s -> pure (s, alex_ust s))
+
+alexSetUserState :: AlexUserState -> Alex ()
+alexSetUserState us = Alex (\s -> pure (s { alex_ust = us }, ()))
+
+alexError' :: AlexPosn -> ByteString -> Alex a
+alexError' (AlexPn off l c) bs = do
+  fp <- filePath <$> alexGetUserState
+  let t = decodeUtf8 . Bs.concat . ByteString.toChunks $ bs
+      ch = T.head t
+  alexError (printf "%s: lexical error at line %d, column %d: unexpected character '%c'" fp l c ch)
+
+alexMonadScan' :: Alex Token
+alexMonadScan' = do
+  inp <- alexGetInput
+  sc <- alexGetStartCode
+  case alexScan inp sc of
+    AlexEOF -> alexEOF
+    AlexError (p, c, bs, s) ->
+      alexError' p bs
+    AlexSkip  inp' len -> do
+      alexSetInput inp'
+      alexMonadScan'
+    AlexToken inp' len action -> do
+      alexSetInput inp'
+      action (ignorePendingBytes inp) (fromIntegral len)
 }

@@ -23,9 +23,11 @@ data TokenClass
   | TcSubtract -- -
   | TcNotEqual -- <>
   | TcTilde -- ~
+  | TcUnderscore -- _
 
   | TcLet -- let
   | TcAnd -- and
+  | TcFun -- fun
   | TcIf -- if
   | TcThen -- then
   | TcElse -- else
@@ -79,8 +81,10 @@ instance Show TokenClass where
   show TcSubtract = "-"
   show TcNotEqual = "<>"
   show TcTilde = "~"
+  show TcUnderscore = "_"
 
   show TcLet = "let"
+  show TcFun = "fun"
   show TcAnd = "and"
   show TcIf = "if"
   show TcThen = "then"
