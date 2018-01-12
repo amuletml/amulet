@@ -10,6 +10,7 @@ import qualified Data.Text as T
 import Text.Parsec.Pos (newPos)
 
 import Parser.ALexer
+import Parser.AWrapper
 import Parser.Token
 import Syntax
 
@@ -17,7 +18,7 @@ import Syntax
 
 %name parseInput Expr
 %tokentype { Token }
-%monad { Alex } { (>>=) } { return }
+%monad { Parser } { (>>=) } { return }
 %lexer { lexer } { Token TcEOF _ }
 %error { parseError }
 %errorhandlertype explist
@@ -147,15 +148,16 @@ ArgP :: { Pattern Parsed }
 {
 
 data Located a = L a Span
+
 instance Spanned (Located a) where
   annotation (L _ s) = s
 
-lexer :: (Token -> Alex a) -> Alex a
-lexer = (alexMonadScan' >>=)
+lexer :: (Token -> Parser a) -> Parser a
+lexer = (lexerScan >>=)
 
-parseError :: (Token, [String]) -> ParseM a
-parseError (Token s p, []) = Left $ "Unexpected " ++ show s ++ " at " ++ show p
-parseError (Token s p, xs) = Left $ "Unexpected " ++ show s ++ ", expected one of " ++ intercalate ", " xs ++ " at " ++ show p
+parseError :: (Token, [String]) -> Parser a
+parseError (Token s p, []) = failPos ("Unexpected " ++ show s) p
+parseError (Token s p, xs) = failPos ("Unexpected " ++ show s ++ ", expected one of " ++ intercalate ", " xs) p
 
 lPos1 :: Spanned a => a -> b -> Located b
 lPos1 s x = withPos1 s (L x)

@@ -28,6 +28,8 @@ import Core.Core
 import Errors
 import Parser
 import Pretty
+import Parser.ALexer
+import Parser.HParser
 
 data CompileResult = CSuccess ([Toplevel Typed], [CoStmt], [CoStmt], Env)
                    | CParse   ParseError
