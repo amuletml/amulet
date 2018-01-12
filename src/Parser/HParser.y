@@ -1,22 +1,26 @@
 {
 module Parser.HParser (parseInput) where
 
-import qualified Data.Text as T
-
+import Data.List (intercalate)
 import Data.Maybe (fromJust)
 import Data.Span
 import Data.Spanned
+import qualified Data.Text as T
+
+import Text.Parsec.Pos (newPos)
+
 import Parser.ALexer
 import Parser.Token
 import Syntax
-import Text.Parsec.Pos (newPos)
 
 }
 
 %name parseInput Expr
 %tokentype { Token }
-%monad { Either String } { (>>=) } { return }
+%monad { Alex } { (>>=) } { return }
+%lexer { lexer } { Token TcEOF _ }
 %error { parseError }
+%errorhandlertype explist
 
 %token
   '->'     { Token TcArrow _ }
@@ -146,8 +150,12 @@ data Located a = L a Span
 instance Spanned (Located a) where
   annotation (L _ s) = s
 
-parseError :: [Token] -> Either String a
-parseError x = Left ("Parse error: " ++ show x)
+lexer :: (Token -> Alex a) -> Alex a
+lexer = (alexMonadScan' >>=)
+
+parseError :: (Token, [String]) -> ParseM a
+parseError (Token s p, []) = Left $ "Unexpected " ++ show s ++ " at " ++ show p
+parseError (Token s p, xs) = Left $ "Unexpected " ++ show s ++ ", expected one of " ++ intercalate ", " xs ++ " at " ++ show p
 
 lPos1 :: Spanned a => a -> b -> Located b
 lPos1 s x = withPos1 s (L x)

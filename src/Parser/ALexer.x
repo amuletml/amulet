@@ -3,7 +3,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Parser.ALexer
   ( Token(..)
-  , lexInput
+  , Alex
+  , alexMonadScan', alexError
+  , lexInput, runLexer
   ) where
 
 import qualified Data.ByteString as Bs
@@ -26,11 +28,12 @@ import Parser.Token
 
 %wrapper "monadUserState-bytestring"
 
-$digit=0-9       -- Digits
-$hex=[0-9A-Fa-f] -- Hexadecimal digits
-$alpha=[a-zA-Z]  -- Alphabetic characters
-$upper = [A-Z]
-$lower = [a-z]
+$digit = [0-9]       -- Digits
+$hex   = [0-9A-Fa-f] -- Hexadecimal digits
+$upper = [A-Z]       -- Uppercase characters
+$lower = [a-z]       -- Lowercase characters
+
+$ident = [$digit $upper $lower '_' '\''] -- Valid identifier characters
 
 tokens :-
   <0> $white+;
@@ -93,12 +96,11 @@ tokens :-
   <0> "]"      { constTok TcCSquare }
 
   <0> $digit+                          { onString $ TcInteger . parseNum 10 }
-  <0> $lower [$alpha $digit '_' '\'']* { lexTok TcIdentifier }
-  <0> $upper [$alpha $digit '_' '\'']* { lexTok TcConIdent }
-  <0> '_' [$alpha $digit '_' '\'']+    { lexTok TcHole }
+  <0> $lower $ident*                   { lexTok TcIdentifier }
+  <0> $upper $ident*                   { lexTok TcConIdent }
+  <0> '_' $ident+                      { lexTok TcHole }
+  <0> \' $lower $ident* { lexTok TcTyVar }
   <0> \"                               { begin string }
-  <0> \' $lower [$alpha $digit '_' '\'']*
-      { lexTok TcTyVar }
 
   <string> \" { endString }
 
@@ -197,22 +199,18 @@ alexEOF = do
   return $! Token TcEOF (sourcePos s p)
 
 lexInput :: String -> ByteString -> Either String [Token]
-lexInput fp text = runAlex text (setfp *> loop []) where
-  setfp = do
-    s <- alexGetUserState
-    alexSetUserState $ s { filePath = fp }
+lexInput fp text = runLexer fp text (loop []) where
   loop buf = do
     tok <- alexMonadScan'
     case tok of
-      Token TcEOF _ -> do
-        code <- alexGetStartCode
-        (p, _, _, _) <- alexGetInput
-        case code of
-          0 -> return (reverse buf)
-          n | n == string -> alexGenericError p "expected closing '\"', got end of input"
-          n | n == comment -> alexGenericError p "expected closing '*)', got end of input"
-          _ -> alexGenericError p "unexpected end of input"
+      Token TcEOF _ -> return (reverse buf)
       tok -> loop $! (tok : buf)
+
+runLexer :: String -> ByteString -> Alex a -> Either String a
+runLexer fp text m = runAlex text (setfp *> m) where
+  setfp = do
+    s <- alexGetUserState
+    alexSetUserState $ s { filePath = fp }
 
 alexGetUserState :: Alex AlexUserState
 alexGetUserState = Alex (\s -> pure (s, alex_ust s))
@@ -236,7 +234,14 @@ alexMonadScan' = do
   inp <- alexGetInput
   sc <- alexGetStartCode
   case alexScan inp sc of
-    AlexEOF -> alexEOF
+    AlexEOF -> do
+      code <- alexGetStartCode
+      (p, _, _, _) <- alexGetInput
+      case code of
+        0 -> alexEOF
+        n | n == string -> alexGenericError p "expected closing '\"', got end of input"
+        n | n == comment -> alexGenericError p "expected closing '*)', got end of input"
+        _ -> alexGenericError p "unexpected end of input"
     AlexError (p, _, bs, _) ->
       alexCharError p bs
     AlexSkip  inp' _ -> do
