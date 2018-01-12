@@ -13,10 +13,8 @@ import qualified Data.ByteString.Lazy.Char8 as Bsc
 import Data.ByteString.Lazy (ByteString)
 import Data.Text.Encoding
 
-import qualified Data.Text.Read as TR
 import qualified Data.Text as T
 import Data.Semigroup
-import Data.Either
 import Data.Char (chr, digitToInt)
 
 import Text.Printf
@@ -85,7 +83,7 @@ tokens :-
   <0> "["      { constTok TcOSquare }
   <0> "]"      { constTok TcCSquare }
 
-  <0> $digit+                          { lexTok $ TcInteger . either undefined fst . TR.decimal }
+  <0> $digit+                          { onString $ TcInteger . parseNum 10 }
   <0> $alpha [$alpha $digit '_' '\'']* { lexTok TcIdentifier }
   <0> \"                               { begin string }
 
@@ -102,7 +100,7 @@ tokens :-
   <string> \\ \\ { appendChar '\\' }
   <string> \\ \" { appendChar '\"' }
 
-  <string> \\ x $hex+ { onStringM $ appendChar . chr . parseHex . Bsc.drop 2 }
+  <string> \\ x $hex+ { onStringM $ appendChar . chr . parseNum 16 . Bsc.drop 2 }
 
   <string> [^\\\"] { onStringM append }
 
@@ -114,8 +112,8 @@ data Token = Token !TokenClass !AlexPosn deriving Show
 alexInitUserState :: AlexUserState
 alexInitUserState = AlexUserState { stringBuffer = mempty, filePath = mempty }
 
-parseHex :: ByteString -> Int
-parseHex = Bsc.foldl' (\accum digit -> accum * 16 + fromIntegral (digitToInt digit)) 0
+parseNum :: Num a => a -> ByteString -> a
+parseNum radix = Bsc.foldl' (\accum digit -> accum * radix + fromIntegral (digitToInt digit)) 0
 
 appendChar :: Char -> AlexAction Token
 appendChar c _ _ = do
@@ -133,13 +131,14 @@ endString :: AlexAction Token
 endString (p,_,_,_) _ = do
   s <- alexGetUserState
   alexSetUserState $ s { stringBuffer = "" }
+  alexSetStartCode 0
   return . flip Token p .  TcString . decodeUtf8 . Bs.concat . ByteString.toChunks . B.toLazyByteString . stringBuffer $ s
 
 constTok :: TokenClass -> AlexAction Token
 constTok t (p,_,_,_) _ = return $! Token t p
 
-onString :: (ByteString -> a) -> AlexAction a
-onString f (_, _, str, _) len = return (f (ByteString.take len str))
+onString :: (ByteString -> TokenClass) -> AlexAction Token
+onString f (p, _, str, _) len = return $! Token (f (ByteString.take len str)) p
 
 lexTok :: (T.Text -> TokenClass) -> AlexAction Token
 lexTok k (p, _, str, _) len = return (Token (k str') p) where
@@ -161,7 +160,13 @@ lexInput fp text = runAlex text (setfp *> loop []) where
   loop buf = do
     tok <- alexMonadScan'
     case tok of
-      Token TcEOF _ -> return (reverse buf)
+      Token TcEOF _ -> do
+        code <- alexGetStartCode
+        (p, _, _, _) <- alexGetInput
+        case code of
+          0 -> return (reverse buf)
+          n | n == string -> alexGenericError p "expected closing '\"', got end of input"
+          _ -> alexGenericError p "unexpected end of input"
       tok -> loop $! (tok : buf)
 
 alexGetUserState :: Alex AlexUserState
@@ -170,12 +175,16 @@ alexGetUserState = Alex (\s -> pure (s, alex_ust s))
 alexSetUserState :: AlexUserState -> Alex ()
 alexSetUserState us = Alex (\s -> pure (s { alex_ust = us }, ()))
 
-alexError' :: AlexPosn -> ByteString -> Alex a
-alexError' (AlexPn _ l c) bs = do
-  fp <- filePath <$> alexGetUserState
+alexCharError :: AlexPosn -> ByteString -> Alex a
+alexCharError p bs =
   let t = decodeUtf8 . Bs.concat . ByteString.toChunks $ bs
       ch = T.head t
-  alexError (printf "%s: lexical error at line %d, column %d: unexpected character '%c'" fp l c ch)
+  in alexGenericError p (printf "unexpected character '%c'" ch)
+
+alexGenericError :: AlexPosn -> String -> Alex a
+alexGenericError (AlexPn _ l c) msg = do
+  fp <- filePath <$> alexGetUserState
+  alexError (printf "%s: lexical error at line %d, column %d: %s" fp l c msg)
 
 alexMonadScan' :: Alex Token
 alexMonadScan' = do
@@ -184,7 +193,7 @@ alexMonadScan' = do
   case alexScan inp sc of
     AlexEOF -> alexEOF
     AlexError (p, _, bs, _) ->
-      alexError' p bs
+      alexCharError p bs
     AlexSkip  inp' _ -> do
       alexSetInput inp'
       alexMonadScan'
