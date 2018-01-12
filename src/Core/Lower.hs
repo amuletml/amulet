@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts, ConstraintKinds, RecordWildCards, OverloadedStrings #-}
+{-# LANGUAGE FlexibleContexts, ConstraintKinds, OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
 module Core.Lower
   ( lowerExpr
@@ -38,7 +38,7 @@ cotyInt = runGenT (lowerType tyInt) mempty
 
 getType :: Data (f Typed) => f Typed -> Type Typed
 getType = snd . head . catMaybes . gmapQ get where
-  get d = fmap (`asTypeOf` (undefined :: (Span, Type Typed))) $ cast d
+  get d = (`asTypeOf` (undefined :: (Span, Type Typed))) <$> cast d
   -- FIXME: Point-freeing this definition makes type inference broken.
   -- Thanks, GHC.
 
