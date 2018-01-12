@@ -4,13 +4,12 @@
 module Parser.ALexer
   ( Token(..)
   , AlexPosn(..)
-  , Alex(..)
-  , alexMonadScan'
-  , alexError'
+  , lexInput
   ) where
 
 import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString as Bs
+import qualified Data.ByteString.Lazy.Char8 as Bsc
 import Data.ByteString.Lazy (ByteString)
 import Data.Text.Encoding
 
@@ -18,7 +17,7 @@ import qualified Data.Text.Read as TR
 import qualified Data.Text as T
 import Data.Semigroup
 import Data.Either
-import Data.Char (chr)
+import Data.Char (chr, digitToInt)
 
 import Text.Printf
 
@@ -103,7 +102,7 @@ tokens :-
   <string> \\ \\ { appendChar '\\' }
   <string> \\ \" { appendChar '\"' }
 
-  <string> \\ x $hex+ { onStringM $ undefined }
+  <string> \\ x $hex+ { onStringM $ appendChar . chr . parseHex . Bsc.drop 2 }
 
   <string> [^\\\"] { onStringM append }
 
@@ -114,6 +113,9 @@ data Token = Token !TokenClass !AlexPosn deriving Show
 
 alexInitUserState :: AlexUserState
 alexInitUserState = AlexUserState { stringBuffer = mempty, filePath = mempty }
+
+parseHex :: ByteString -> Int
+parseHex = Bsc.foldl' (\accum digit -> accum * 16 + fromIntegral (digitToInt digit)) 0
 
 appendChar :: Char -> AlexAction Token
 appendChar c _ _ = do
@@ -128,16 +130,13 @@ append c _ _ = do
   alexMonadScan' -- Don't emit a token, just continue
 
 endString :: AlexAction Token
-endString _ _ = do
+endString (p,_,_,_) _ = do
   s <- alexGetUserState
   alexSetUserState $ s { stringBuffer = "" }
-  (p, _, _, i) <- alexGetInput
   return . flip Token p .  TcString . decodeUtf8 . Bs.concat . ByteString.toChunks . B.toLazyByteString . stringBuffer $ s
 
 constTok :: TokenClass -> AlexAction Token
-constTok t _ _ = do
-  (p,_,_,_) <- alexGetInput
-  return $! Token t p
+constTok t (p,_,_,_) _ = return $! Token t p
 
 onString :: (ByteString -> a) -> AlexAction a
 onString f (_, _, str, _) len = return (f (ByteString.take len str))
@@ -154,8 +153,8 @@ alexEOF = do
   (p,_,_,_) <- alexGetInput
   return $! Token TcEOF p
 
-lex :: String -> ByteString -> Either String [Token]
-lex fp text = runAlex text (setfp *> loop []) where
+lexInput :: String -> ByteString -> Either String [Token]
+lexInput fp text = runAlex text (setfp *> loop []) where
   setfp = do
     s <- alexGetUserState
     alexSetUserState $ s { filePath = fp }
@@ -172,7 +171,7 @@ alexSetUserState :: AlexUserState -> Alex ()
 alexSetUserState us = Alex (\s -> pure (s { alex_ust = us }, ()))
 
 alexError' :: AlexPosn -> ByteString -> Alex a
-alexError' (AlexPn off l c) bs = do
+alexError' (AlexPn _ l c) bs = do
   fp <- filePath <$> alexGetUserState
   let t = decodeUtf8 . Bs.concat . ByteString.toChunks $ bs
       ch = T.head t
@@ -184,9 +183,9 @@ alexMonadScan' = do
   sc <- alexGetStartCode
   case alexScan inp sc of
     AlexEOF -> alexEOF
-    AlexError (p, c, bs, s) ->
+    AlexError (p, _, bs, _) ->
       alexError' p bs
-    AlexSkip  inp' len -> do
+    AlexSkip  inp' _ -> do
       alexSetInput inp'
       alexMonadScan'
     AlexToken inp' len action -> do
