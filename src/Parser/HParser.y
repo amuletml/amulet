@@ -72,6 +72,8 @@ import Text.Parsec.Pos (newPos)
   ']'      { Token TcCSquare _ }
 
   ident    { Token (TcIdentifier _) _ }
+  conid    { Token (TcConIdent _) _ }
+  tyvar    { Token (TcTyVar _) _ }
   hole     { Token (TcHole _) _ }
   int      { Token (TcInteger _) _ }
   string   { Token (TcString  _) _ }
@@ -97,7 +99,10 @@ Atom :: { Expr Parsed }
      | '{' Expr with Rows('=',Expr) '}'       { withPos2 $1 $5 $ RecordExt $2 $4 }
 
 Var :: { Located (Var Parsed) }
-    : ident                { lPos1 $1 $ Name (getIdent $1) }
+    : ident { lPos1 $1 $ Name (getIdent $1) }
+
+Con :: { Located (Var Parsed) }
+    : conid { lPos1 $1 $ Name (getIdent $1) }
 
 BindGroup :: { [(Var Parsed, Expr Parsed, Ann Parsed)] }
           : Binding { [$1] }
@@ -115,7 +120,7 @@ List1(p)
      | p ',' List1(p) { $1 : $3 }
 
 Rows(p, q)
-   : {- Empty -}                 { [] }
+   : {- Empty -}             { [] }
    | ident p q ',' Rows(p,q) { (getIdent $1, $3) : $5 }
    | ident p q               { [(getIdent $1, $3)] }
 
@@ -126,12 +131,14 @@ Lit :: { Located Lit }
     | false                { lPos1 $1 $ LiBool False }
 
 Pattern :: { Pattern Parsed }
-        : Var              { withPos1 $1 $ Capture (getL $1) }
-        | '_'              { withPos1 $1 Wildcard }
+        : ArgP           { $1 }
+        | Con Pattern    { withPos2 $1 $2 $ Destructure (getL $1) (Just $2) }
 
 ArgP :: { Pattern Parsed }
-     : Var { withPos1 $1 $ Capture (getL $1) }
-     | '(' Pattern ')' { $2 }
+     : Var                       { withPos1 $1 $ Capture (getL $1) }
+     | Con                       { withPos1 $1 $ Destructure (getL $1) Nothing }
+     | '{' Rows('=',Pattern) '}' { withPos2 $1 $3 $ PRecord $2 }
+     | '(' Pattern ')'           { $2 }
 
 {
 
@@ -160,6 +167,7 @@ tupleExpr [x] a = x
 tupleExpr xs  a = Tuple xs a
 
 getIdent  (Token (TcIdentifier x) _) = x
+getIdent  (Token (TcConIdent x) _) = x
 getHole   (Token (TcHole x) _)       = x
 getInt    (Token (TcInteger x) _)    = x
 getString (Token (TcString  x) _)    = x

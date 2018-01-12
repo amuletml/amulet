@@ -29,6 +29,8 @@ import Parser.Token
 $digit=0-9       -- Digits
 $hex=[0-9A-Fa-f] -- Hexadecimal digits
 $alpha=[a-zA-Z]  -- Alphabetic characters
+$upper = [A-Z]
+$lower = [a-z]
 
 tokens :-
   <0> $white+;
@@ -91,9 +93,12 @@ tokens :-
   <0> "]"      { constTok TcCSquare }
 
   <0> $digit+                          { onString $ TcInteger . parseNum 10 }
-  <0> $alpha [$alpha $digit '_' '\'']* { lexTok TcIdentifier }
-  <0> '_' [$alpha $digit '_' '\'']*    { lexTok TcHole }
+  <0> $lower [$alpha $digit '_' '\'']* { lexTok TcIdentifier }
+  <0> $upper [$alpha $digit '_' '\'']* { lexTok TcConIdent }
+  <0> '_' [$alpha $digit '_' '\'']+    { lexTok TcHole }
   <0> \"                               { begin string }
+  <0> \' $lower [$alpha $digit '_' '\'']*
+      { lexTok TcTyVar }
 
   <string> \" { endString }
 

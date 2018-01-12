@@ -56,6 +56,8 @@ data TokenClass
   | TcCSquare -- ]
 
   | TcIdentifier Text
+  | TcConIdent Text
+  | TcTyVar Text
   | TcHole Text
   | TcInteger Integer
   | TcString Text
@@ -105,7 +107,7 @@ instance Show TokenClass where
   show TcOf = "of"
 
   show TcComma = "."
-  show TcComma = ","
+  show TcDot = "."
   show TcSemicolon = ";"
   show TcTopSep = ";;"
   show TcOParen = "("
@@ -116,6 +118,8 @@ instance Show TokenClass where
   show TcCSquare = "]"
 
   show (TcIdentifier t) = unpack t
+  show (TcTyVar t) = '\'':unpack t
+  show (TcConIdent t) = unpack t
   show (TcHole t) = unpack t
   show (TcString t) = show (unpack t)
   show (TcInteger i) = show i
