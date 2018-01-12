@@ -123,8 +123,7 @@ extendMany ((v, t):xs) b = extend (v, t) $ extendMany xs b
 extendMany [] b = b
 
 extendManyK :: MonadReader Env m => [(Var Typed, Kind Typed)] -> m a -> m a
-extendManyK (v:xs) b = extendKind v $ extendManyK xs b
-extendManyK [] b = b
+extendManyK = flip (foldr extendKind)
 
 alpha :: [Text]
 alpha = map T.pack $ [1..] >>= flip replicateM ['a'..'z']

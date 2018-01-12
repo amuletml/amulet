@@ -8,6 +8,8 @@ import Data.Monoid
 import Data.Maybe
 import Data.List
 
+import Control.Monad
+
 import Syntax (Var, Resolved)
 import Core.Optimise
 
@@ -44,7 +46,7 @@ matchKnownConstr = pass go where
   canWe (CotTyApp x _) = canWe x
   canWe (CotExtend t xs) = do
     t' <- canWe t
-    xs' <- mapM (canWe . thd3) xs
+    xs' <- traverse (canWe . thd3) xs
     pure (t' && and xs')
   canWe _ = pure False
 
@@ -65,7 +67,7 @@ matchKnownConstr = pass go where
   match (CopExtend p xs) (CotExtend e ys) = match p e <> rows where
     xs' = sortOn fst xs
     ys' = sortOn fst (map (\(x, _, y) -> (x, y)) ys)
-    rows = fmap concat $ sequence (zipWith mr xs' ys')
+    rows = concat <$> zipWithM mr xs' ys'
     mr (t, p) (t', e)
       | t == t' = match p e
       | otherwise = Nothing

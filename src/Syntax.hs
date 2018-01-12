@@ -143,7 +143,7 @@ data Toplevel p
   | TypeDecl (Var p) [Var p] [Constructor p]
 
 instance (Spanned (Constructor p), Ann p ~ Span) => Spanned (Toplevel p) where
-  annotation (LetStmt ((_, _, x):vs)) = sconcat (x :| (map thd3 vs))
+  annotation (LetStmt ((_, _, x):vs)) = sconcat (x :| map thd3 vs)
   annotation (TypeDecl _ _ (x:xs)) = sconcat (annotation x :| map annotation xs)
   annotation (ForeignVal _ _ _ x) = x
   annotation _ = undefined

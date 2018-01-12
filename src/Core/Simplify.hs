@@ -12,7 +12,7 @@ import Control.Monad.Gen
 
 optmOnce :: [CoStmt] -> Gen Int [CoStmt]
 optmOnce = runTransform . transformStmts passes where
-  passes = mconcat $
+  passes = mconcat
       [ dropBranches
       , foldExpr
       , trivialPropag

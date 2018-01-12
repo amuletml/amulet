@@ -1,7 +1,6 @@
 {-# LANGUAGE FlexibleContexts
   , ConstraintKinds
-  , TupleSections
-  , OverloadedStrings #-}
+  , TupleSections #-}
 
 module Syntax.Resolve
   ( resolveProgram
@@ -67,7 +66,7 @@ resolveModule (r:rs) = flip catchError (throwError . flip ArisingFromTop r)
         let c = map extractCons cs
         c' <- traverse tagVar c
         extendTy (t, t') $ extendN (zip c c') $ (:)
-          <$> (extendTyN (zip vs vs') $ TypeDecl t' vs' <$> traverse resolveCons cs)
+          <$> extendTyN (zip vs vs') (TypeDecl t' vs' <$> traverse resolveCons cs)
           <*> resolveModule rs
      where resolveCons (UnitCon v a) = UnitCon <$> lookupEx v <*> pure a
            resolveCons (ArgCon v t a) = ArgCon <$> lookupEx v <*> reType t <*> pure a
