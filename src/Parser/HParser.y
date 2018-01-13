@@ -156,8 +156,9 @@ lexer :: (Token -> Parser a) -> Parser a
 lexer = (lexerScan >>=)
 
 parseError :: (Token, [String]) -> Parser a
-parseError (Token s p, []) = failPos ("Unexpected " ++ show s) p
-parseError (Token s p, xs) = failPos ("Unexpected " ++ show s ++ ", expected one of " ++ intercalate ", " xs) p
+parseError (Token s p, [])  = failPos ("Unexpected " ++ show s) p
+parseError (Token s p, [x]) = failPos ("Unexpected " ++ show s ++ ", expected " ++ x) p
+parseError (Token s p, xs)  = failPos ("Unexpected " ++ show s ++ ", expected one of " ++ intercalate ", " xs) p
 
 lPos1 :: Spanned a => a -> b -> Located b
 lPos1 s x = withPos1 s (L x)
