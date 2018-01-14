@@ -46,6 +46,7 @@ data TokenClass
 
   | TcDot -- .
   | TcComma -- ,
+  | TcColon -- :
   | TcSemicolon -- ;
   | TcTopSep -- ;;
   | TcOParen -- (
@@ -106,8 +107,9 @@ instance Show TokenClass where
   show TcUnit = "unit"
   show TcOf = "of"
 
-  show TcComma = "."
+  show TcComma = ","
   show TcDot = "."
+  show TcColon = ":"
   show TcSemicolon = ";"
   show TcTopSep = ";;"
   show TcOParen = "("

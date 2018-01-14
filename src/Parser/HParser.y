@@ -26,7 +26,6 @@ import Syntax
 %token
   '->'     { Token TcArrow _ }
   '='      { Token TcEqual _ }
-  '∀'      { Token TcForall _ }
   forall   { Token TcForall _ }
   '=>'     { Token TcImplies _ }
   '|'      { Token TcPipe _ }
@@ -67,6 +66,8 @@ import Syntax
   of       { Token TcOf _ }
 
   ','      { Token TcComma _ }
+  '.'      { Token TcDot _ }
+  ':'      { Token TcColon _ }
   ';;'     { Token TcTopSep _ }
   ';'      { Token TcSemicolon _ }
   '('      { Token TcOParen _ }
@@ -86,6 +87,7 @@ import Syntax
 %%
 
 
+
 Expr : Expr0     { $1 }
      | Expr Atom { withPos2 $1 $2 $ App $1 $2 }
 
@@ -93,15 +95,18 @@ Expr0 :: { Expr Parsed }
       : fun ArgP '->' Expr                     { withPos2 $1 $4 $ Fun $2 $4 }
       | let BindGroup in Expr                  { withPos2 $1 $4 $ Let $2 $4 }
       | if Expr then Expr else Expr            { withPos2 $1 $6 $ If $2 $4 $6 }
+      | match Expr with ListE1(Arm)            { withPos2 $1 $3 $ Match $2 $4 }
       | Atom                                   { $1 }
 
 Atom :: { Expr Parsed }
      : Var  { withPos1 $1 (VarRef  (getL $1)) }
      | Lit  { withPos1 $1 (Literal (getL $1)) }
      | hole { withPos1 $1 (Hole (Name (getHole $1))) }
-     | '(' List(Expr) ')'                     { withPos2 $1 $3 $ tupleExpr $2 }
-     | '{' Rows('=',Expr) '}'                 { withPos2 $1 $3 $ Record $2 }
+     | begin List1(Expr, ';') end             { withPos2 $1 $3 $ Begin $2 }
+     | '(' List(Expr, ',') ')'                { withPos2 $1 $3 $ tupleExpr $2 }
+     | '{' Rows('=', Expr) '}'                { withPos2 $1 $3 $ Record $2 }
      | '{' Expr with Rows('=',Expr) '}'       { withPos2 $1 $5 $ RecordExt $2 $4 }
+     | Atom ':' Type                          { withPos2 $1 $2 $ Ascription $1 $3 }
 
 Var :: { Located (Var Parsed) }
     : ident { lPos1 $1 $ Name (getIdent $1) }
@@ -116,13 +121,17 @@ BindGroup :: { [(Var Parsed, Expr Parsed, Ann Parsed)] }
 Binding :: { (Var Parsed, Expr Parsed, Ann Parsed) }
         : Var '=' Expr { (getL $1, $3, withPos2 $1 $3 id) }
 
-List(p)
+List(p, s)
     : {- Empty -}       { [] }
-    | List1(p)          { $1 }
+    | List1(p, s)       { $1 }
 
-List1(p)
-     : p              { [$1] }
-     | p ',' List1(p) { $1 : $3 }
+List1(p, s)
+     : p                { [$1] }
+     | p s List1(p, s)  { $1 : $3 }
+
+ListE1(p)
+     : p                { [$1] }
+     | p ListE1(p)      { $1 : $2 }
 
 Rows(p, q)
    : {- Empty -}             { [] }
@@ -140,11 +149,31 @@ Pattern :: { Pattern Parsed }
         | Con Pattern    { withPos2 $1 $2 $ Destructure (getL $1) (Just $2) }
 
 ArgP :: { Pattern Parsed }
-     : Var                       { withPos1 $1 $ Capture (getL $1) }
-     | Con                       { withPos1 $1 $ Destructure (getL $1) Nothing }
-     | '{' Rows('=',Pattern) '}' { withPos2 $1 $3 $ PRecord $2 }
-     | '(' Pattern ')'           { $2 }
+     : Var                        { withPos1 $1 $ Capture (getL $1) }
+     | Con                        { withPos1 $1 $ Destructure (getL $1) Nothing }
+     | '{' Rows('=',Pattern) '}'  { withPos2 $1 $3 $ PRecord $2 }
+     | '(' List(Pattern, ',') ')' { withPos2 $1 $3 $ tuplePattern $2 }
 
+Arm :: { (Pattern Parsed, Expr Parsed) }
+    : '|' Pattern '->' Expr       { ($2, $4) }
+
+
+Type :: { Type Parsed }
+     : TypeProd                                   { $1 }
+     | TypeProd '->' Type                         { TyArr $1 $3 }
+
+TypeProd :: { Type Parsed }
+         : TypeAtom                               { $1 }
+         | TypeAtom '*' TypeProd                  { TyTuple $1 $3 }
+
+TypeAtom :: { Type Parsed }
+         : ident                                  { TyVar (Name (getIdent $1)) }
+         | tyvar                                  { TyCon (Name (getIdent $1)) }
+         | forall ListE1(tyvar) '.' Type          { TyForall (map (Name . getIdent) $2) $4 }
+         | '(' ')'                                { TyCon (Name (T.pack "unit")) }
+         | '(' Type ')'                           { $2 }
+         | '{' Rows(':', Type) '}'                { TyExactRows $2 }
+         | '{' Type '|' Rows(':', Type) '}'       { TyRows $2 $4 }
 {
 
 data Located a = L a Span
@@ -177,8 +206,13 @@ tupleExpr []  a = Literal LiUnit a
 tupleExpr [x] a = x
 tupleExpr xs  a = Tuple xs a
 
+tuplePattern :: [Pattern Parsed] -> Ann Parsed -> Pattern Parsed
+tuplePattern [x] a = x
+tuplePattern xs a = PTuple xs a
+
 getIdent  (Token (TcIdentifier x) _) = x
 getIdent  (Token (TcConIdent x) _) = x
+getIdent  (Token (TcTyVar x) _) = x
 getHole   (Token (TcHole x) _)       = x
 getInt    (Token (TcInteger x) _)    = x
 getString (Token (TcString  x) _)    = x

@@ -82,6 +82,8 @@ tokens :-
   <0> "of"     { constTok TcOf }
 
   <0> ","      { constTok TcComma }
+  <0> "."      { constTok TcDot }
+  <0> ":"      { constTok TcColon }
   <0> ";" ";"  { constTok TcTopSep }
   <0> ";"      { constTok TcSemicolon }
   <0> "("      { constTok TcOParen }
