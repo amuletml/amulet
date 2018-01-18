@@ -31,7 +31,7 @@ bind var ty
       case Map.lookup var env of
         Nothing -> put (Map.singleton var ty `compose` env)
         Just ty'
-          | ty == ty -> pure ()
+          | ty' == ty -> pure ()
           | otherwise -> unify ty ty'
 
 unify :: Type Typed -> Type Typed -> SolveM ()
