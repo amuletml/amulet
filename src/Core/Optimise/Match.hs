@@ -1,5 +1,5 @@
 module Core.Optimise.Match
-  ( dropBranches, matchKnownConstr
+  ( dropBranches, matchKnownConstr, matchOfMatch, matchOfBottom
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -7,8 +7,6 @@ import Data.Triple
 import Data.Monoid
 import Data.Maybe
 import Data.List
-
-import Control.Monad
 
 import Syntax (Var, Resolved)
 import Core.Optimise
@@ -46,7 +44,7 @@ matchKnownConstr = pass go where
   canWe (CotTyApp x _) = canWe x
   canWe (CotExtend t xs) = do
     t' <- canWe t
-    xs' <- traverse (canWe . thd3) xs
+    xs' <- mapM (canWe . thd3) xs
     pure (t' && and xs')
   canWe _ = pure False
 
@@ -67,7 +65,7 @@ matchKnownConstr = pass go where
   match (CopExtend p xs) (CotExtend e ys) = match p e <> rows where
     xs' = sortOn fst xs
     ys' = sortOn fst (map (\(x, _, y) -> (x, y)) ys)
-    rows = concat <$> zipWithM mr xs' ys'
+    rows = fmap concat $ sequence (zipWith mr xs' ys')
     mr (t, p) (t', e)
       | t == t' = match p e
       | otherwise = Nothing
@@ -75,3 +73,24 @@ matchKnownConstr = pass go where
     | l == l' = Just []
     | otherwise = Nothing
   match _ _ = Nothing
+
+matchOfMatch :: TransformPass
+matchOfMatch = pass' go where
+  go (CotMatch (CotMatch ie ibs) obs) = CotMatch ie (map (push obs) ibs)
+  go x = x
+
+  push :: [(CoPattern, CoType, CoTerm)] -> (CoPattern, CoType, CoTerm) -> (CoPattern, CoType, CoTerm)
+  push x (p, t, e) = (p, t, CotMatch e x)
+
+matchOfBottom :: TransformPass
+matchOfBottom = pass' go where
+  go t@(CotMatch e cs)
+    | any (isError . thd3) cs && isError e =
+      let CotApp (CotTyApp err _) msg = e
+          CotApp (CotTyApp _ t) _ = maybe (error em) thd3 (Data.List.find (isError . thd3) cs)
+       in CotApp (CotTyApp err t) msg
+    | isError e = e
+    | otherwise = t
+  go x = x
+
+  em = "could not Data.List.find errorring branch even though it exists"

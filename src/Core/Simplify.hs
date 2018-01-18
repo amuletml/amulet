@@ -18,6 +18,8 @@ optmOnce = runTransform . transformStmts passes where
       , trivialPropag
       , constrPropag
       , matchKnownConstr
+      , matchOfMatch
+      , matchOfBottom
       , inlineVariable
       , betaReduce
       , dropUselessLet
