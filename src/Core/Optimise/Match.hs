@@ -11,9 +11,6 @@ import Data.List
 import Syntax (Var, Resolved)
 import Core.Optimise
 
-import Pretty (tracePrettyId)
-import Debug.Trace
-
 -- Attempts to simplify match expression, dropping redundant branches and
 -- replacing matches with flat expressions where possible.
 dropBranches :: TransformPass
@@ -35,8 +32,8 @@ matchKnownConstr :: TransformPass
 matchKnownConstr = pass go where
   go :: CoTerm -> Trans CoTerm
   go it@(CotMatch e ptrns) = do
-    weCan <- canWe (tracePrettyId e)
-    pure $ if traceShowId weCan
+    weCan <- canWe e
+    pure $ if weCan
               then fromMaybe it (doIt e ptrns)
               else it
   go x = pure x
@@ -54,7 +51,7 @@ matchKnownConstr = pass go where
 
   doIt :: CoTerm -> [(CoPattern, CoType, CoTerm)] -> Maybe CoTerm
   doIt x ((p, _, k):ps)
-    | Just binds <- match p (stripTyApp x) = Just (tracePrettyId (CotLet binds k))
+    | Just binds <- match p (stripTyApp x) = Just (CotLet binds k)
     | otherwise = doIt x ps
   doIt _ _ = Nothing
 
