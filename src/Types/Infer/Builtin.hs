@@ -52,10 +52,10 @@ subsumes e a b = do
 decompose :: ( Reasonable f p
              , MonadInfer Typed m )
           => f p
-          -> (Prism' (Type Typed) (Type Typed, Type Typed))
+          -> Prism' (Type Typed) (Type Typed, Type Typed)
           -> Type Typed
           -> m (Type Typed, Type Typed)
-decompose r p t = do
+decompose r p t =
   case t ^? p of
     Just ts -> pure ts
     Nothing -> do

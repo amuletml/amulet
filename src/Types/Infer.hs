@@ -37,12 +37,6 @@ inferProgram ct = fmap fst <$> runInfer builtinsEnv (inferAndCheck ct) where
       xs@(_:_) -> throwError (FoundHole xs)
       [] -> pure (prg', env)
 
-mkTT :: (Show (Var p), Show (Ann p)) => Type p -> [Type p] -> Type p
-mkTT x xs = TyTuple x (go xs) where
-  go [] = error $ "mkTT fucked up: " ++ show x ++ " " ++ show xs
-  go [x] = x
-  go (x:xs) = TyTuple x (go xs)
-
 mkTyApps :: Applicative f
          => Expr Resolved
          -> Map.Map (Var Typed) (Type Typed)

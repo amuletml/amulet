@@ -6,7 +6,7 @@
   , StandaloneDeriving
   , MultiParamTypeClasses
   , OverloadedStrings
-  , ConstraintKinds#-}
+  #-}
 module Control.Monad.Infer
   ( module M
   , TypeError(..)

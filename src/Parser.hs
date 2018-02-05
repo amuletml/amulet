@@ -263,7 +263,7 @@ tyVar :: Parser (Var Parsed)
 tyVar = lexeme $ do
   _ <- char '\''
   x <- Tok.identStart style
-  (Name . T.pack . (x:)) <$> many (Tok.identLetter style)
+  Name . T.pack . (x:) <$> many (Tok.identLetter style)
 
 name :: Parser (Var Parsed)
 name = Name . T.pack <$> identifier
