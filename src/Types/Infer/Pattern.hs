@@ -17,6 +17,13 @@ inferPattern :: MonadInfer Typed m
                   , Type Typed -- type of what the pattern matches
                   , [(Var Typed, Type Typed)] -- captures
                   )
+inferPattern pat@(PType p t ann) = do
+  (p', pt, vs) <- inferPattern p
+  (t', _) <- resolveKind t
+  _ <- unify pat pt t'
+  case p' of
+    Capture v _ -> pure (PType p' t' (ann, t'), t', [(v, t')])
+    _ -> pure (PType p' t' (ann, t'), t', vs)
 inferPattern p = do
   x <- freshTV
   (p', binds) <- checkPattern p x
@@ -65,8 +72,8 @@ checkPattern pt@(PTuple elems ann) ty =
         pure (PTuple ps (ann, ty), binds)
 checkPattern pt@(PType p t ann) ty = do
   (p', it, binds) <- inferPattern p
-  (nt, _) <- resolveKind t
-  _ <- subsumes pt it nt
-  _ <- unify pt nt ty
-  pure (PType p' nt (ann, ty), binds)
+  (t', _) <- resolveKind t
+  _ <- subsumes pt it t'
+  _ <- unify pt ty t'
+  pure (PType p' t' (ann, t'), binds)
 

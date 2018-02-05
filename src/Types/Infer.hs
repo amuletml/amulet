@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts, OverloadedStrings, TupleSections, GADTs #-}
+{-# LANGUAGE FlexibleContexts, TupleSections, GADTs #-}
 {-# LANGUAGE ScopedTypeVariables, ViewPatterns, RankNTypes #-}
 module Types.Infer
   ( inferProgram
@@ -51,11 +51,9 @@ mkTyApps _ _ _ _ = undefined
 
 check :: MonadInfer Typed m => Expr Resolved -> Type Typed -> m (Expr Typed)
 check expr@(VarRef k a) tp = do
-  (inst, old, new) <- lookupTy' k
-  it <- subsumes expr tp new
-  if Map.null inst
-     then pure (VarRef (TvName k) (a, it))
-     else fst <$> mkTyApps expr inst old new
+  (_, old, _) <- lookupTy' k
+  _ <- subsumes expr tp old
+  pure (VarRef (TvName k) (a, tp))
 check (Hole v a) t = pure (Hole (TvName v) (a, t))
 check expr@(Literal c a) t = do
   t' <- case c of
@@ -140,6 +138,11 @@ check ex@(TypeApp pf tx an) ty = do
 check x _ = error $ "desugarer should remove " ++ show x
 
 infer :: MonadInfer Typed m => Expr Resolved -> m (Expr Typed, Type Typed)
+infer expr@(VarRef k a) =  do
+  (inst, old, new) <- lookupTy' k
+  if Map.null inst
+     then pure (VarRef (TvName k) (a, new), new)
+     else mkTyApps expr inst old new
 infer ex = do
   x <- freshTV
   ex' <- check ex x
