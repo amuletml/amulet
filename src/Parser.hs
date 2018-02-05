@@ -163,21 +163,21 @@ operator' = lexeme ((:) <$> Tok.opStart style <*> many (Tok.opLetter style))
 patternP :: (forall a. Parser a -> Parser a) -> Parser Pattern'
 patternP cont = wildcard
             <|> capture
-            <|> try destructure
             <|> try pType
+            <|> try destructure
             <|> tuple
             <|> record where
   wildcard, destructure, pType, capture, record :: Parser Pattern'
-  wildcard = withPos (Wildcard <$ reservedOp "_")
-  capture = withPos (Capture <$> varName)
+  wildcard = withPos (Wildcard <$ reservedOp "_") <?> "wildcard pattern"
+  capture = withPos (Capture <$> varName) <?> "capturing pattern"
   varName = (Name <$> lowerIdent) <?> "variable name"
-  destructure = withPos . cont $ do
+  destructure = (<?> "destructuring") . withPos . cont $ do
     ps <- constrName
     Destructure ps <$> optionMaybe (patternP id)
   lowerIdent = lexeme $ do
     x <- lower
     T.pack . (x:) <$> many (Tok.identLetter style)
-  pType = withPos . parens $ do
+  pType = (<?> "typed pattern") . withPos . parens $ do
     x <- patternP id
     reservedOp ":"
     PType x <$> typeP
@@ -187,7 +187,7 @@ patternP cont = wildcard
       reservedOp "="
       (T.pack x,) <$> patternP id
     pure $ PRecord rows
-  tuple = withPos . parens $ do
+  tuple = (<?> "tuple pattern") . withPos . parens $ do
     x <- commaSep1 (patternP id)
     pure $ case x of
       [] -> error "impossible; commaSep*1*"

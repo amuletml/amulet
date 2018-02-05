@@ -5,17 +5,19 @@
   , ConstraintKinds
   , StandaloneDeriving
   , MultiParamTypeClasses
-  , OverloadedStrings #-}
+  , OverloadedStrings
+  , ConstraintKinds#-}
 module Control.Monad.Infer
   ( module M
   , TypeError(..)
   , Constraint(..)
   , Env(..)
   , MonadInfer
-  , lookupTy, lookupTy', fresh, freshFrom, runInfer, extend
+  , lookupTy, lookupTy', fresh, freshFrom, runInfer, extend, freeInScope
   , extendKind, extendMany, extendManyK
   , difference, freshTV, freshKV
   , instantiate
+  , SomeReason(..), Reasonable
   )
   where
 
@@ -53,9 +55,16 @@ instance Semigroup Env where
   Env a b <> Env a' b' = Env (a <> a') (b <> b')
 
 data Constraint p
-  = ConUnify (Expr p) (Type p) (Type p)
+  = ConUnify SomeReason (Type p) (Type p)
+  | ConSubsume SomeReason (Type p) (Type p)
 deriving instance (Show (Ann p), Show (Var p), Show (Expr p), Show (Type p))
   => Show (Constraint p)
+deriving instance (Eq (Ann p), Eq (Var p), Eq (Expr p), Eq (Type p))
+  => Eq (Constraint p)
+
+instance Eq (Constraint p) => Ord (Constraint p) where
+  compare ConUnify{} _ = GT
+  compare ConSubsume{} _ = LT
 
 data TypeError where
   NotEqual :: Pretty (Var p) => Type p -> Type p -> TypeError
@@ -67,8 +76,9 @@ data TypeError where
                 , Pretty (Ann p) )
              => Expr p -> TypeError
   FoundHole :: [Expr Typed] -> TypeError
-  ArisingFrom :: (Spanned (f p), Pretty (f p), Pretty (Ann p), Pretty (Var p))
-              => TypeError -> f p -> TypeError
+  EscapedSkolems :: [Var Typed] -> Type Typed -> Type Typed -> TypeError
+  ArisingFrom :: (Spanned a, Pretty a)
+              => TypeError -> a -> TypeError
   NoOverlap :: Type Typed -> Type Typed -> TypeError
   Note :: Pretty x => TypeError -> x -> TypeError
   Suggestion :: Pretty x => TypeError -> x -> TypeError
@@ -145,10 +155,44 @@ freshTV = TyVar . TvName <$> fresh
 freshKV :: MonadGen Int m => m (Kind Typed)
 freshKV = KiVar . TvName <$> fresh
 
+freeInScope :: Env -> Set.Set (Var Typed)
+freeInScope (Env vars _) = foldMap ftv vars
+
 instance (Ord (Var p), Substitutable p (Type p)) => Substitutable p (Constraint p) where
   ftv (ConUnify _ a b) = ftv a `Set.union` ftv b
+  ftv (ConSubsume _ a b) = ftv a `Set.union` ftv b
   apply s (ConUnify e a b) = ConUnify e (apply s a) (apply s b)
+  apply s (ConSubsume e a b) = ConSubsume e (apply s a) (apply s b)
 
 instance Pretty (Var p) => Pretty (Constraint p) where
-  pprint (ConUnify _ a b) = a
-                        <+> opClr (" :=: " :: String) <+> b
+  pprint (ConUnify _ a b) = a <+> opClr (" :=: " :: String) <+> b
+  pprint (ConSubsume _ a b) = a <+> opClr (" <= " :: String) <+> b
+
+data SomeReason where
+  BecauseOf :: ( Spanned (f p)
+               , Pretty (f p)
+               , Pretty (Ann p)
+               , Pretty (Var p)
+               , Show (f p)
+               )
+            => f p -> SomeReason
+
+instance Pretty SomeReason where
+  pprint (BecauseOf a) = pprint a
+
+instance Spanned SomeReason where
+  annotation (BecauseOf a) = annotation a
+
+instance Show SomeReason where
+  show (BecauseOf a) = show a
+
+instance Eq SomeReason where
+  BecauseOf _ == BecauseOf _ = False
+
+type Reasonable f p =
+  ( Spanned (f p)
+  , Pretty (f p)
+  , Pretty (Ann p)
+  , Pretty (Var p)
+  , Show (f p)
+  )
