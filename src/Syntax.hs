@@ -2,7 +2,7 @@
 {-# LANGUAGE FlexibleInstances, FlexibleContexts, UndecidableInstances #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies, DataKinds #-}
-{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveDataTypeable, TemplateHaskell #-}
 module Syntax where
 
 import Pretty
@@ -17,6 +17,8 @@ import Data.Foldable
 import Data.Typeable
 import Data.Triple
 import Data.Data
+
+import Control.Lens
 
 newtype Parsed = Parsed Parsed deriving Data
 newtype Resolved = Resolved Resolved deriving Data
@@ -83,6 +85,7 @@ data Expr p
 
   -- Explicit type application
   | TypeApp (Expr p) (Type p) (Ann p)
+
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Expr p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Expr p)
@@ -300,6 +303,10 @@ instance Pretty (Span, Type Typed) where
 
 unTvName :: Var Typed -> Var Resolved
 unTvName (TvName x) = x
+
+makePrisms ''Expr
+makePrisms ''Type
+
 
 {- Note [1]: Tuple types vs tuple patterns/values
 
