@@ -64,8 +64,7 @@ check expr@(Literal c a) t = do
   pure $ Literal c (a, t')
 check ex@(Fun p b a) ty = do
   (d, c) <- decompose ex _TyArr ty
-  (p', t, ms) <- inferPattern p
-  _ <- unify ex t d
+  (p', ms) <- checkPattern p d
   b' <- extendMany ms $ check b c
   pure (Fun p' b' (a, ty))
 check ex@(Begin [] _) _ = throwError (EmptyBegin ex)
@@ -88,11 +87,10 @@ check (If c t e an) ty = If <$> check c tyBool <*> check t ty <*> check e ty <*>
 check ex@(App f x a) ty = do
   (f', (c, d)) <- secondA (decompose ex _TyArr) =<< infer f
   App f' <$> check x c <*> fmap (a,) (unify ex d ty)
-check ex@(Match t ps a) ty = do
+check (Match t ps a) ty = do
   (t', tt) <- infer t
   ps' <- for ps $ \(p, e) -> do
-    (p', pt, ms) <- inferPattern p
-    _ <- unify ex pt tt
+    (p', ms) <- checkPattern p tt
     (,) <$> pure p' <*> extendMany ms (check e ty)
   pure (Match t' ps' (a, ty))
 check ex@(BinOp l o r a) ty = do
