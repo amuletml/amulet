@@ -35,7 +35,7 @@ difference = coerce Set.difference
 
 singleton :: Var Resolved -> Set
 singleton (TgName _ x) = coerce (Set.singleton x)
-singleton _ = coerce (Set.empty)
+singleton _ = coerce Set.empty
 
 delete :: Var Resolved -> Set -> Set
 delete (TgName _ x) set = coerce (Set.delete x (coerce set))
