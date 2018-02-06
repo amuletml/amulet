@@ -85,12 +85,19 @@ import Syntax
 %%
 
 Tops :: { [Toplevel Parsed] }
-     : Top                                     { [$1] }
-     | Top ';;' Tops                           { $1 : $3 }
+     : List1(Top, ';;')                        { $1 }
 
 Top :: { Toplevel Parsed }
     : let BindGroup                            { LetStmt $2 }
     | external val Var ':' Type '=' string     { withPos2 $1 $7 $ ForeignVal (getL $3) (getString $7) $5 }
+
+    | type Var ListE(TyVar)                          { TypeDecl (getL $2) $3 [] }
+    | type Var ListE(TyVar) '=' List1(Ctor, '|')     { TypeDecl (getL $2) $3 $5 }
+    | type Var ListE(TyVar) '=' '|' List1(Ctor, '|') { TypeDecl (getL $2) $3 $6 }
+
+Ctor :: { Constructor Parsed }
+     : conid                                   { withPos1 $1 $ UnitCon (Name (getIdent $1)) }
+     | conid of Type                           { withPos2 $1 $2 $ ArgCon (Name (getIdent $1)) $3 }
 
 Expr : Expr0     { $1 }
      | Expr Atom { withPos2 $1 $2 $ App $1 $2 }
@@ -118,6 +125,9 @@ Var :: { Located (Var Parsed) }
 Con :: { Located (Var Parsed) }
     : conid { lPos1 $1 $ Name (getIdent $1) }
 
+TyVar :: { Var Parsed }
+      : tyvar { Name (T.tail (getIdent $1)) }
+
 BindGroup :: { [(Var Parsed, Expr Parsed, Ann Parsed)] }
           : Binding { [$1] }
           | BindGroup and Binding { $3 : $1 }
@@ -132,6 +142,10 @@ List(p, s)
 List1(p, s)
      : p                { [$1] }
      | p s List1(p, s)  { $1 : $3 }
+
+ListE(p)
+     : {- Empty -}      { [] }
+     | ListE1(p)        { $1 }
 
 ListE1(p)
      : p                { [$1] }
@@ -167,12 +181,16 @@ Type :: { Type Parsed }
      | TypeProd '->' Type                         { TyArr $1 $3 }
 
 TypeProd :: { Type Parsed }
+         : TypeApp                                { $1 }
+         | TypeApp '*' TypeApp                    { TyTuple $1 $3 }
+
+TypeApp  :: { Type Parsed }
          : TypeAtom                               { $1 }
-         | TypeAtom '*' TypeProd                  { TyTuple $1 $3 }
+         | TypeApp TypeAtom                       { TyApp $1 $2 }
 
 TypeAtom :: { Type Parsed }
-         : ident                                  { TyVar (Name (getIdent $1)) }
-         | tyvar                                  { TyCon (Name (getIdent $1)) }
+         : Var                                    { TyCon (getL $1) }
+         | TyVar                                  { TyVar $1 }
          | forall ListE1(tyvar) '.' Type          { TyForall (map (Name . getIdent) $2) $4 }
          | '(' ')'                                { TyCon (Name (T.pack "unit")) }
          | '(' Type ')'                           { $2 }
