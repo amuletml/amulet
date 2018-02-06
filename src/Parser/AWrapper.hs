@@ -1,7 +1,8 @@
 {-# OPTIONS_GHC -funbox-strict-fields #-}
 
 module Parser.AWrapper
-  ( SourcePos(..)
+  ( SourceName
+  , SourcePos(..)
   , Token(..)
   , AlexInput(..)
   , PState(..)
@@ -34,7 +35,9 @@ import Parser.Token
 
 import Pretty
 
-data SourcePos = SourcePos { spFile :: String
+type SourceName = String
+
+data SourcePos = SourcePos { spFile :: SourceName
                            , spLine :: !Int
                            , spCol  :: !Int }
   deriving Show
@@ -141,7 +144,7 @@ getPos = P $ \s -> POK s (sPos s)
 
 type Action a = AlexInput -> Int64 -> Parser a
 
-runParser :: String -> B.ByteString -> Parser a -> ParseResult a
+runParser :: SourceName -> B.ByteString -> Parser a -> ParseResult a
 runParser file input m = unP m PState { stringBuffer = mempty
                                       , commentDepth = 0
 

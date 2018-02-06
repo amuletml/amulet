@@ -1,13 +1,14 @@
 {-# LANGUAGE RankNTypes, OverloadedStrings #-}
 module Main where
 
-import Text.Parsec
-
 import System.Environment
 
 import qualified Data.Text.IO as T
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
+import qualified Data.ByteString.Builder as B
 import qualified Data.Map as Map
+import Data.Span
 
 import Data.Foldable
 
@@ -26,21 +27,20 @@ import Core.Lower
 import Core.Core
 
 import Errors
-import Parser
 import Pretty
-import Parser.ALexer
 import Parser.HParser
+import Parser.AWrapper
 
 data CompileResult = CSuccess ([Toplevel Typed], [CoStmt], [CoStmt], Env)
-                   | CParse   ParseError
+                   | CParse   String Span
                    | CResolve ResolveError
                    | CInfer   TypeError
 
 
 compile :: SourceName -> T.Text -> CompileResult
 compile name x =
-  case parse program name x of
-    Right parsed -> runGen $ do
+  case runParser name (B.toLazyByteString $ T.encodeUtf8Builder x) parseInput of
+    POK _ parsed -> runGen $ do
       desugared <- desugarProgram parsed
       resolved <- resolveProgram desugared
       case resolved of
@@ -53,7 +53,7 @@ compile name x =
               pure (CSuccess (prog, lower, optm, env))
             Left e -> pure (CInfer e)
         Left e -> pure (CResolve e)
-    Left e -> CParse e
+    PFailed msg sp -> CParse msg sp
 
 compileFromTo :: FilePath
               -> T.Text
@@ -62,7 +62,7 @@ compileFromTo :: FilePath
 compileFromTo fp x emit =
   case compile fp x of
     CSuccess (_, _, core, env) -> emit (compileProgram env core)
-    CParse e -> print e
+    CParse e s -> putStrLn "Parse error" >> report (s <+> (": " :: String) <+> e) x
     CResolve e -> putStrLn "Resolution error" >> report e x
     CInfer e -> putStrLn "Type error" >> report e x
 
@@ -83,7 +83,7 @@ test x = do
       putStrLn "\x1b[1;32m(* Optimised: *)\x1b[0m"
       traverse_ ppr optm
       pure (Just (core, env))
-    CParse e -> Nothing <$ print e
+    CParse e s -> Nothing <$ report (s <+> (": " :: String) <+> e) (T.pack x)
     CResolve e -> Nothing <$ report e (T.pack x)
     CInfer e -> Nothing <$ report e (T.pack x)
 

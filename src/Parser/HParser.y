@@ -7,8 +7,6 @@ import Data.Span
 import Data.Spanned
 import qualified Data.Text as T
 
-import Text.Parsec.Pos (newPos)
-
 import Parser.ALexer
 import Parser.AWrapper
 import Parser.Token
@@ -16,7 +14,7 @@ import Syntax
 
 }
 
-%name parseInput Expr
+%name parseInput Tops
 %tokentype { Token }
 %monad { Parser } { (>>=) } { return }
 %lexer { lexer } { Token TcEOF _ }
@@ -86,7 +84,13 @@ import Syntax
 
 %%
 
+Tops :: { [Toplevel Parsed] }
+     : Top                                     { [$1] }
+     | Top ';;' Tops                           { $1 : $3 }
 
+Top :: { Toplevel Parsed }
+    : let BindGroup                            { LetStmt $2 }
+    | external val Var ':' Type '=' string     { withPos2 $1 $7 $ ForeignVal (getL $3) (getString $7) $5 }
 
 Expr : Expr0     { $1 }
      | Expr Atom { withPos2 $1 $2 $ App $1 $2 }
