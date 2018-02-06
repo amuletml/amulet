@@ -26,14 +26,25 @@ newtype Typed = Typed Typed deriving Data
 
 data family Var a
 
+class InModule v where
+  inModule :: v -> v -> v
+
 data instance Var Parsed
   = Name Text
+  | InModule Text (Var Parsed)
   deriving (Eq, Show, Ord, Data)
+
+instance InModule (Var Parsed) where
+  inModule (Name t) = InModule t
+  inModule (InModule t v) = InModule t . inModule v
 
 data instance Var Resolved
   = TgName Text {-# UNPACK #-} !Int
   | TgInternal Text
   deriving (Show, Data)
+
+instance InModule (Var Resolved) where
+  inModule = flip const
 
 instance Eq (Var Resolved) where
   (TgName _ a) == (TgName _ b) = a == b
@@ -50,6 +61,9 @@ instance Ord (Var Resolved) where
 data instance Var Typed
   = TvName (Var Resolved)
   deriving (Show, Data, Eq, Ord)
+
+instance InModule (Var Typed) where
+  inModule = flip const
 
 type family Ann a :: * where
   Ann Parsed = Span
@@ -144,6 +158,9 @@ data Toplevel p
   = LetStmt [(Var p, Expr p, Ann p)]
   | ForeignVal (Var p) Text (Type p) (Ann p)
   | TypeDecl (Var p) [Var p] [Constructor p]
+  | Module (Var p) [Toplevel p]
+  | Open { openName :: Var p
+         , openAs :: Maybe (Var p) }
 
 instance (Spanned (Constructor p), Ann p ~ Span) => Spanned (Toplevel p) where
   annotation (LetStmt ((_, _, x):vs)) = sconcat (x :| map thd3 vs)
