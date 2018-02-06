@@ -91,6 +91,12 @@ instance Pretty TypeError where
   pprint (IllegalTypeApp ex ta _)
     = body 1 [ "Illegal type application " <+> verbatim ex
              , bullet "because of type " <+> verbatim ta ]
+  pprint (EscapedSkolems esc left right) =
+    body 1 [ "Can not use type " <+> verbatim left <+> " as a stand-in for type " <+> verbatim right
+           , "because " <+> verbatim left <+> " is insufficiently polymorphic."
+           , pprint ""
+           , pprint "Namely, the following skolem type variables would escape:"
+           , "   " <+> interleave ", " esc ]
 
 instance Pretty ResolveError where
   pprint (R.NotInScope e) = "Variable not in scope: "

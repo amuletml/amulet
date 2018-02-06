@@ -88,7 +88,7 @@ extendVars vs = local (\s -> s { vars = foldr (\(v, _, e) m -> Map.insert v e m)
 newtype TransformPass = Pass { runPass :: CoTerm -> Trans CoTerm }
 
 instance Semigroup TransformPass where
-  Pass f <> Pass g = Pass (\x -> g x >>= f)
+  Pass f <> Pass g = Pass (g >=> f)
   {-# INLINE [0] (<>) #-}
 
 instance Monoid TransformPass where

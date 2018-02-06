@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts, ConstraintKinds, RecordWildCards, OverloadedStrings #-}
+{-# LANGUAGE FlexibleContexts, ConstraintKinds, OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
 module Core.Lower
   ( lowerExpr
@@ -38,7 +38,7 @@ cotyInt = runGenT (lowerType tyInt) mempty
 
 getType :: Data (f Typed) => f Typed -> Type Typed
 getType = snd . head . catMaybes . gmapQ get where
-  get d = fmap (`asTypeOf` (undefined :: (Span, Type Typed))) $ cast d
+  get d = (`asTypeOf` (undefined :: (Span, Type Typed))) <$> cast d
   -- FIXME: Point-freeing this definition makes type inference broken.
   -- Thanks, GHC.
 
@@ -58,20 +58,17 @@ errRef = CotRef (TgInternal "error")
                                      (CotyVar (TgInternal "a"))))
 
 patternMatchingFailure :: MonadLower m
-                       => (Span, Type Typed) -> m (CoPattern, CoType, CoTerm)
-patternMatchingFailure (ex, tp) = do
+                       => (Span, Type Typed) -> Type Typed -> m (CoPattern, CoType, CoTerm)
+patternMatchingFailure (ex, ot) it = do
   cap <- CopCapture <$> fresh
   let codomain (TyArr _ cd) = codomain cd
       codomain (TyForall _ t) = codomain t
       codomain x = lowerType x
 
-      domain (TyArr x _) = lowerType x
-      domain (TyForall _ t) = domain t
-      domain x = lowerType x
+  it' <- lowerType it
 
-  err <- codomain tp
-  dom <- domain tp
-  (,,) <$> pure (cap dom) <*> pure dom
+  err <- codomain ot
+  (,,) <$> pure (cap it') <*> pure it'
        <*> pure (CotApp (CotTyApp errRef err)
                         (CotLit (ColStr (prettyPrint ex))))
 
@@ -96,7 +93,7 @@ lowerExpr expr
     Fun p bd an -> do
       (k, CotyArr f _) <- makeBigLams exprT
       (x, bd', p') <- (,,) <$> fresh <*> lowerExpr bd <*> lowerPat p
-      fail <- patternMatchingFailure an
+      fail <- patternMatchingFailure an (getType p)
       pure . k $ CotLam Small (x, f)
                   $ CotMatch (CotRef x f) [ (p', f, bd'), fail ]
     Begin xs _ -> case xs of
@@ -111,7 +108,7 @@ lowerExpr expr
     Match ex cs an -> do
       cs' <- for cs $ \(pat, ex) ->
         (,,) <$> lowerPat pat <*> lowerType (getType pat) <*> lowerExpr ex
-      fail <- patternMatchingFailure an
+      fail <- patternMatchingFailure an (getType ex)
       CotMatch <$> lowerExpr ex <*> pure (cs' ++ [fail])
     BinOp left op right _ -> do
       (left', op', right') <- (,,) <$> lowerExpr left

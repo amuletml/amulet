@@ -4,9 +4,21 @@ let
 
   inherit (nixpkgs) pkgs;
 
-  f = { mkDerivation, alex, array, base, bytestring, containers
-      , happy, monad-gen, mtl, parsec, pretty-show, stdenv, syb, text
+  f = { mkDerivation, stdenv
+      , mtl
+      , syb
+      , text
+      , array
+      , bytestring
+      , base
+      , lens
+      , parsec
+      , monad-gen
+      , containers
       , transformers
+      , pretty-show
+      , alex
+      , happy
       }:
       mkDerivation {
         pname = "amuletml";
@@ -15,10 +27,9 @@ let
         isLibrary = false;
         isExecutable = true;
         executableHaskellDepends = [
-          mtl         syb        base
-          text        array      parsec
-          monad-gen   bytestring containers
-          pretty-show transformers
+          mtl syb text array bytestring base
+          lens parsec monad-gen containers transformers
+          pretty-show
         ];
         buildDepends = [ alex happy ];
         homepage = "https://amulet.ml";

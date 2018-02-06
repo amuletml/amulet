@@ -22,6 +22,7 @@ trivialPropag = pass' go where
         (ss, vs') = partitionEithers (map keep vs)
 
         trivial CotLit{} = True
+        trivial (CotExtend e rs) = trivial e && all (trivial . thd3) rs
         trivial _ = False
      in CotLet vs' (substitute (mconcat ss) e)
   go x = x

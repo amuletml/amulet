@@ -43,7 +43,7 @@ resolveTyDeclKind :: MonadSolve m => Var Resolved -> [Var Resolved] -> [Construc
 resolveTyDeclKind tp vs cs = fmap closeOverKind . resolve $ do
   ks <- replicateM (length vs) freshKV
   let kind = foldr KiArr KiStar ks
-  extendKind (TvName tp, kind) $ do
+  extendKind (TvName tp, kind) $
     extendManyK (zip (map TvName vs) ks) $ do
       for_ cs $ \case
         UnitCon{} -> pure ()
@@ -65,7 +65,7 @@ resolve k = do
     Just x -> pure x
     Nothing -> throwError (KindsNotEqual a b)
   subst <- solve (concat cs')
-  pure $ (apply subst kind)
+  pure $ apply subst kind
 
 inferKind :: MonadSolve m => Type Typed -> KindT m (Kind Typed)
 inferKind tp = do
@@ -125,11 +125,11 @@ apply _ x = x
 freeIn :: Ord (Var p) => Kind p -> Set.Set (Var p)
 freeIn (KiVar v) = Set.singleton v
 freeIn (KiArr a b) = freeIn a <> freeIn b
-freeIn (KiForall vs k) = freeIn k Set.\\ (Set.fromList vs)
+freeIn (KiForall vs k) = freeIn k Set.\\ Set.fromList vs
 freeIn KiStar = mempty
 
 closeOverKind :: Ord (Var p) => Kind p -> Kind p
-closeOverKind = (flip forall) <*> fv where
+closeOverKind = flip forall <*> fv where
   fv = toList . freeIn
   forall :: [Var p] -> Kind p -> Kind p
   forall [] x = x
