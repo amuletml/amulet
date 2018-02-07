@@ -149,7 +149,7 @@ instance (Spanned (Constructor p), Ann p ~ Span) => Spanned (Toplevel p) where
   annotation (LetStmt ((_, _, x):vs)) = sconcat (x :| map thd3 vs)
   annotation (TypeDecl _ _ (x:xs)) = sconcat (annotation x :| map annotation xs)
   annotation (ForeignVal _ _ _ x) = x
-  annotation _ = undefined
+  annotation _ = internal
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Toplevel p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Toplevel p)
