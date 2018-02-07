@@ -78,7 +78,6 @@ tokens :-
   <0> "match"  { constTok TcMatch }
   <0> "with"   { constTok TcWith }
   <0> "type"   { constTok TcType }
-  <0> "unit"   { constTok TcUnit }
   <0> "of"     { constTok TcOf }
 
   <0> ","      { constTok TcComma }
@@ -96,8 +95,9 @@ tokens :-
   <0> $digit+                          { onString $ TcInteger . parseNum 10 }
   <0> $lower $ident*                   { lexTok TcIdentifier }
   <0> $upper $ident*                   { lexTok TcConIdent }
-  <0> '_' $ident+                      { lexTok TcHole }
-  <0> \' $lower $ident*                { lexTok TcTyVar }
+  <0> \_ $ident+                       { lexTok TcHole }
+  <0> \. $ident+                       { lexTok (TcAccess . T.tail) }
+  <0> \' $lower $ident*                { lexTok (TcTyVar . T.tail) }
   <0> \"                               { beginString }
 
   <string> \" { endString }

@@ -60,7 +60,6 @@ import Syntax
   match    { Token TcMatch _ }
   with     { Token TcWith _ }
   type     { Token TcType _ }
-  unit     { Token TcUnit _ }
   of       { Token TcOf _ }
 
   ','      { Token TcComma _ }
@@ -77,10 +76,21 @@ import Syntax
 
   ident    { Token (TcIdentifier _) _ }
   conid    { Token (TcConIdent _) _ }
+  access   { Token (TcAccess _) _ }
   tyvar    { Token (TcTyVar _) _ }
   hole     { Token (TcHole _) _ }
   int      { Token (TcInteger _) _ }
   string   { Token (TcString  _) _ }
+
+%left '||'
+%left '&&'
+%nonassoc '==' '<>'
+%nonassoc '<=' '>='
+%nonassoc '<' '>'
+%left '^'
+%left '+' '-'
+%left '*' '/'
+%right '**'
 
 %%
 
@@ -99,25 +109,65 @@ Ctor :: { Constructor Parsed }
      : conid                                   { withPos1 $1 $ UnitCon (Name (getIdent $1)) }
      | conid of Type                           { withPos2 $1 $2 $ ArgCon (Name (getIdent $1)) $3 }
 
-Expr : Expr0     { $1 }
-     | Expr Atom { withPos2 $1 $2 $ App $1 $2 }
+Expr :: { Expr Parsed }
+     : ExprApp                                 { $1 }
+     | Expr '**' Expr                          { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "**") $3 }
+     | Expr '*' Expr                           { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "*") $3 }
+     | Expr '/' Expr                           { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "/") $3 }
+     | Expr '+' Expr                           { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "+") $3 }
+     | Expr '<' Expr                           { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "<") $3 }
+     | Expr '>' Expr                           { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE ">") $3 }
+     | Expr '<=' Expr                          { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "<=") $3 }
+     | Expr '>=' Expr                          { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE ">=") $3 }
+     | Expr '==' Expr                          { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "==") $3 }
+     | Expr '<>' Expr                          { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "<>") $3 }
+     | Expr '&&' Expr                          { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "&&") $3 }
+     | Expr '||' Expr                          { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "||") $3 }
+
+ExprApp :: { Expr Parsed }
+        : Expr0                                { $1 }
+        | ExprApp Atom                         { withPos2 $1 $2 $ App $1 $2 }
+        | ExprApp ':' Type                     { withPos2 $1 $2 $ Ascription $1 $3 }
+
 
 Expr0 :: { Expr Parsed }
-      : fun ArgP '->' Expr                     { withPos2 $1 $4 $ Fun $2 $4 }
+      : fun ListE1(ArgP) '->' Expr             { foldr (\x y -> withPos2 $1 $4 $ Fun x y) $4 $2 }
       | let BindGroup in Expr                  { withPos2 $1 $4 $ Let $2 $4 }
       | if Expr then Expr else Expr            { withPos2 $1 $6 $ If $2 $4 $6 }
       | match Expr with ListE1(Arm)            { withPos2 $1 $3 $ Match $2 $4 }
       | Atom                                   { $1 }
 
 Atom :: { Expr Parsed }
-     : Var  { withPos1 $1 (VarRef  (getL $1)) }
-     | Lit  { withPos1 $1 (Literal (getL $1)) }
-     | hole { withPos1 $1 (Hole (Name (getHole $1))) }
+     : Var                                    { withPos1 $1 (VarRef (getL $1)) }
+     | Con                                    { withPos1 $1 (VarRef (getL $1)) }
+     | Lit                                    { withPos1 $1 (Literal (getL $1)) }
+     | hole                                   { withPos1 $1 (Hole (Name (getHole $1))) }
      | begin List1(Expr, ';') end             { withPos2 $1 $3 $ Begin $2 }
      | '(' List(Expr, ',') ')'                { withPos2 $1 $3 $ tupleExpr $2 }
      | '{' Rows('=', Expr) '}'                { withPos2 $1 $3 $ Record $2 }
      | '{' Expr with Rows('=',Expr) '}'       { withPos2 $1 $5 $ RecordExt $2 $4 }
-     | Atom ':' Type                          { withPos2 $1 $2 $ Ascription $1 $3 }
+
+     | '(' access ')'                         { withPos2 $1 $3 $ AccessSection (getIdent $2) }
+     | Atom access                            { withPos2 $1 $2 $ Access $1 (getIdent $2) }
+     | '(' Operator ')'                       { withPos2 $1 $3 $ BothSection $2 }
+     | '(' ExprApp Operator ')'               { withPos2 $1 $4 $ RightSection $2 $3 }
+     | '(' Operator ExprApp ')'               { withPos2 $1 $4 $ LeftSection $2 $3 }
+
+Operator :: { Expr Parsed }
+         : '**'                               { withPos1 $1 $ varE "**" }
+         | '*'                                { withPos1 $1 $ varE "*" }
+         | '/'                                { withPos1 $1 $ varE "/" }
+         | '+'                                { withPos1 $1 $ varE "+" }
+         | '-'                                { withPos1 $1 $ varE "-" }
+         | '^'                                { withPos1 $1 $ varE "^" }
+         | '<'                                { withPos1 $1 $ varE "<" }
+         | '>'                                { withPos1 $1 $ varE ">" }
+         | '<='                               { withPos1 $1 $ varE "<=" }
+         | '>='                               { withPos1 $1 $ varE ">=" }
+         | '<>'                               { withPos1 $1 $ varE "<>" }
+         | '=='                               { withPos1 $1 $ varE "==" }
+         | '&&'                               { withPos1 $1 $ varE "&&" }
+         | '||'                               { withPos1 $1 $ varE "||" }
 
 Var :: { Located (Var Parsed) }
     : ident { lPos1 $1 $ Name (getIdent $1) }
@@ -126,14 +176,14 @@ Con :: { Located (Var Parsed) }
     : conid { lPos1 $1 $ Name (getIdent $1) }
 
 TyVar :: { Var Parsed }
-      : tyvar { Name (T.tail (getIdent $1)) }
+      : tyvar { Name (getIdent $1) }
 
 BindGroup :: { [(Var Parsed, Expr Parsed, Ann Parsed)] }
-          : Binding { [$1] }
-          | BindGroup and Binding { $3 : $1 }
+          : Binding                           { [$1] }
+          | BindGroup and Binding             { $3 : $1 }
 
 Binding :: { (Var Parsed, Expr Parsed, Ann Parsed) }
-        : Var '=' Expr { (getL $1, $3, withPos2 $1 $3 id) }
+        : Var ListE(ArgP) '=' Expr            { (getL $1, foldr (\x y -> withPos2 x $4 (Fun x y)) $4 $2, withPos2 $1 $4 id) }
 
 List(p, s)
     : {- Empty -}       { [] }
@@ -168,9 +218,11 @@ Pattern :: { Pattern Parsed }
 
 ArgP :: { Pattern Parsed }
      : Var                        { withPos1 $1 $ Capture (getL $1) }
+     | '_'                        { withPos1 $1 $ Wildcard }
      | Con                        { withPos1 $1 $ Destructure (getL $1) Nothing }
      | '{' Rows('=',Pattern) '}'  { withPos2 $1 $3 $ PRecord $2 }
      | '(' List(Pattern, ',') ')' { withPos2 $1 $3 $ tuplePattern $2 }
+     | ArgP ':' Type              { withPos2 $1 $2 $ PType $1 $3 }
 
 Arm :: { (Pattern Parsed, Expr Parsed) }
     : '|' Pattern '->' Expr       { ($2, $4) }
@@ -232,9 +284,13 @@ tuplePattern :: [Pattern Parsed] -> Ann Parsed -> Pattern Parsed
 tuplePattern [x] a = x
 tuplePattern xs a = PTuple xs a
 
+varE = VarRef . Name . T.pack
+
 getIdent  (Token (TcIdentifier x) _) = x
-getIdent  (Token (TcConIdent x) _) = x
-getIdent  (Token (TcTyVar x) _) = x
+getIdent  (Token (TcConIdent x) _)   = x
+getIdent  (Token (TcAccess x) _)     = x
+getIdent  (Token (TcTyVar x) _)      = x
+
 getHole   (Token (TcHole x) _)       = x
 getInt    (Token (TcInteger x) _)    = x
 getString (Token (TcString  x) _)    = x

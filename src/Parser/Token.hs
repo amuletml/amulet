@@ -41,7 +41,6 @@ data TokenClass
   | TcMatch -- match
   | TcWith -- with
   | TcType -- type
-  | TcUnit -- unit
   | TcOf -- of
 
   | TcDot -- .
@@ -59,6 +58,7 @@ data TokenClass
   | TcIdentifier Text
   | TcConIdent Text
   | TcTyVar Text
+  | TcAccess Text
   | TcHole Text
   | TcInteger Integer
   | TcString Text
@@ -104,7 +104,6 @@ instance Show TokenClass where
   show TcMatch = "match"
   show TcWith = "with"
   show TcType = "type"
-  show TcUnit = "unit"
   show TcOf = "of"
 
   show TcComma = ","
@@ -121,6 +120,7 @@ instance Show TokenClass where
 
   show (TcIdentifier t) = unpack t
   show (TcTyVar t) = '\'':unpack t
+  show (TcAccess t) = '.':unpack t
   show (TcConIdent t) = unpack t
   show (TcHole t) = unpack t
   show (TcString t) = show (unpack t)
