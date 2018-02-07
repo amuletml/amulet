@@ -106,11 +106,12 @@ solve :: Int -> Subst Typed -> [Constraint Typed] -> Either TypeError (Subst Typ
 solve _ s [] = pure s
 solve i s (ConUnify e a t:xs) = do
   case wellformed t of
-    Left err -> Left (Note (ArisingFrom err e) "The type was rejected in the wellformedness check;\n         It is possible this is a bug.")
+    Left err -> Left (Note (ArisingFrom err e) wellform)
     Right () -> Right ()
   case wellformed a of
-    Left err -> Left (Note (ArisingFrom err e) "The type was rejected in the wellformedness check;\n         It is possible this is a bug.")
+    Left err -> Left (Note (ArisingFrom err e) wellform)
     Right () -> Right ()
+
   case runSolve i s (unify a t) of
     Left err -> Left (ArisingFrom err e)
     Right (i', s') -> solve i' (s' `compose` s) (apply s' xs)
@@ -145,3 +146,6 @@ skolemise ty = pure ([], ty)
 occurs :: Var Typed -> Type Typed -> Bool
 occurs _ (TyVar _) = False
 occurs x e = x `Set.member` ftv e
+
+wellform :: String
+wellform = "The type was rejected in the wellformedness check;\n         It is possible this is a bug."
