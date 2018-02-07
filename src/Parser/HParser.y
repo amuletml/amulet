@@ -115,6 +115,8 @@ Expr :: { Expr Parsed }
      | Expr '*' Expr                           { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "*") $3 }
      | Expr '/' Expr                           { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "/") $3 }
      | Expr '+' Expr                           { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "+") $3 }
+     | Expr '-' Expr                           { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "-") $3 }
+     | Expr '^' Expr                           { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "^") $3 }
      | Expr '<' Expr                           { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "<") $3 }
      | Expr '>' Expr                           { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE ">") $3 }
      | Expr '<=' Expr                          { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "<=") $3 }
@@ -128,7 +130,6 @@ ExprApp :: { Expr Parsed }
         : Expr0                                { $1 }
         | ExprApp Atom                         { withPos2 $1 $2 $ App $1 $2 }
         | ExprApp ':' Type                     { withPos2 $1 $2 $ Ascription $1 $3 }
-
 
 Expr0 :: { Expr Parsed }
       : fun ListE1(ArgP) '->' Expr             { foldr (\x y -> withPos2 $1 $4 $ Fun x y) $4 $2 }
@@ -150,8 +151,8 @@ Atom :: { Expr Parsed }
      | '(' access ')'                         { withPos2 $1 $3 $ AccessSection (getIdent $2) }
      | Atom access                            { withPos2 $1 $2 $ Access $1 (getIdent $2) }
      | '(' Operator ')'                       { withPos2 $1 $3 $ BothSection $2 }
-     | '(' ExprApp Operator ')'               { withPos2 $1 $4 $ RightSection $2 $3 }
-     | '(' Operator ExprApp ')'               { withPos2 $1 $4 $ LeftSection $2 $3 }
+     | '(' Expr Operator ')'               { withPos2 $1 $4 $ RightSection $2 $3 }
+     | '(' Operator Expr ')'               { withPos2 $1 $4 $ LeftSection $2 $3 }
 
 Operator :: { Expr Parsed }
          : '**'                               { withPos1 $1 $ varE "**" }
