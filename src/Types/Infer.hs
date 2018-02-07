@@ -97,11 +97,12 @@ check ex@(BinOp l o r a) ty = do
   (el, to') <- decompose ex _TyArr to
   (er, d) <- decompose ex _TyArr to'
   BinOp <$> check l el <*> pure o' <*> check r er <*> fmap (a,) (unify ex d ty)
-check ex@(Ascription e ty an) given = do
-  (ty', _) <- resolveKind ty
-  e' <- check e ty'
-  _ <- subsumes ex ty' given
-  pure (Ascription e' ty' (an, ty'))
+check ex@(Ascription e ty an) ty' = do
+  (e', it) <- infer e
+  (nty, _) <- resolveKind ty
+  _ <- subsumes ex it nty
+  _ <- unify ex nty ty'
+  pure (Ascription e' nty (an, nty))
 check ex@(Record rows a) ty = do
   (rows', rowts) <- unzip <$> inferRows rows
   Record rows' . (a,) <$> unify ex ty (TyExactRows rowts)
