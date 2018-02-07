@@ -8,12 +8,12 @@ let
       , mtl
       , syb
       , text
-      , array
-      , bytestring
       , base
       , lens
+      , array
       , parsec
       , monad-gen
+      , bytestring
       , containers
       , transformers
       , pretty-show

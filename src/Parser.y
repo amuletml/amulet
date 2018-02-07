@@ -132,7 +132,7 @@ ExprApp :: { Expr Parsed }
         | ExprApp ':' Type                     { withPos2 $1 $2 $ Ascription $1 $3 }
 
 Expr0 :: { Expr Parsed }
-      : fun ListE1(ArgP) '->' Expr             { foldr (\x y -> withPos2 $1 $4 $ Fun x y) $4 $2 }
+      : fun ListE1(ArgP) '->' Expr             { foldr (\x y -> withPos2 x $4 $ Fun x y) $4 $2 }
       | let BindGroup in Expr                  { withPos2 $1 $4 $ Let $2 $4 }
       | if Expr then Expr else Expr            { withPos2 $1 $6 $ If $2 $4 $6 }
       | match Expr with ListE1(Arm)            { withPos2 $1 $3 $ Match $2 $4 }
@@ -185,6 +185,8 @@ BindGroup :: { [(Var Parsed, Expr Parsed, Ann Parsed)] }
 
 Binding :: { (Var Parsed, Expr Parsed, Ann Parsed) }
         : Var ListE(ArgP) '=' Expr            { (getL $1, foldr (\x y -> withPos2 x $4 (Fun x y)) $4 $2, withPos2 $1 $4 id) }
+        | Var ListE(ArgP) ':' Type '=' Expr   { (getL $1, withPos2 $1 $6 $ Ascription (foldr (\x y -> withPos2 x $6 (Fun x y)) $6 $2) $4, withPos2 $1 $6 id) }
+
 
 List(p, s)
     : {- Empty -}       { [] }
