@@ -13,7 +13,6 @@ import qualified Data.Text as T
 import Data.Traversable
 import Data.Generics
 import Data.Triple
-import Data.List (sort)
 
 import Control.Monad.Infer
 import Control.Arrow (first)
@@ -27,6 +26,8 @@ import Types.Wellformed
 import Types.Unify
 import Types.Holes
 import Types.Kinds
+
+import Pretty
 
 -- Solve for the types of lets in a program
 inferProgram :: MonadGen Int m => [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))
@@ -86,7 +87,7 @@ check (Let ns b an) t = do
 check (If c t e an) ty = If <$> check c tyBool <*> check t ty <*> check e ty <*> pure (an, ty)
 check ex@(App f x a) ty = do
   (f', (c, d)) <- secondA (decompose ex _TyArr) =<< infer f
-  App f' <$> check x c <*> fmap (a,) (unify ex d ty)
+  App f' <$> check x c <*> fmap (a,) (unify ex ty d)
 check (Match t ps a) ty = do
   (t', tt) <- infer t
   ps' <- for ps $ \(p, e) -> do
@@ -98,12 +99,11 @@ check ex@(BinOp l o r a) ty = do
   (el, to') <- decompose ex _TyArr to
   (er, d) <- decompose ex _TyArr to'
   BinOp <$> check l el <*> pure o' <*> check r er <*> fmap (a,) (unify ex d ty)
-check ex@(Ascription e ty an) ty' = do
-  (e', it) <- infer e
-  (nty, _) <- resolveKind ty
-  _ <- subsumes ex it nty
-  _ <- unify ex nty ty'
-  pure (Ascription e' nty (an, nty))
+check ex@(Ascription e ty an) given = do
+  (ty', _) <- resolveKind ty
+  e' <- check e ty'
+  _ <- subsumes ex ty' given
+  pure (Ascription e' ty' (an, ty'))
 check ex@(Record rows a) ty = do
   (rows', rowts) <- unzip <$> inferRows rows
   Record rows' . (a,) <$> unify ex ty (TyExactRows rowts)
@@ -138,9 +138,10 @@ check x _ = error $ "desugarer should remove " ++ show x
 infer :: MonadInfer Typed m => Expr Resolved -> m (Expr Typed, Type Typed)
 infer expr@(VarRef k a) =  do
   (inst, old, new) <- lookupTy' k
-  if Map.null inst
-     then pure (VarRef (TvName k) (a, new), new)
-     else mkTyApps expr inst old new
+  tracePretty ("instantiated " <+> old <+> " to " <+> new) $ do
+    if Map.null inst
+       then pure (VarRef (TvName k) (a, new), new)
+       else mkTyApps expr inst old new
 infer ex = do
   x <- freshTV
   ex' <- check ex x
@@ -204,8 +205,10 @@ inferLetTy :: (MonadInfer Typed m)
 inferLetTy _ ks [] = pure ([], ks)
 inferLetTy closeOver ks ((va, ve, vann):xs) = extendMany ks $ do
   ((ve', ty), c) <- listen (infer ve) -- See note [1]
+  tracePretty ("constraints for " <+> va <+> ": ") $
+    forM_ c (flip tracePretty (pure ()))
   cur <- gen
-  (x, vt) <- case solve cur mempty (sort c) of
+  (x, vt) <- case solve cur mempty c of
     Left e -> throwError e
     Right x -> pure (x, closeOver (apply x ty))
   let r (a, t) = (a, apply x t)
@@ -229,14 +232,24 @@ updateAlist n v (x@(n', _):xs)
 updateAlist _ _ [] = []
 
 closeOver :: Type Typed -> Type Typed
-closeOver a = normType $ forall (fv a) a where
+closeOver a = normType . renumber $ forall (fv a) a where
   fv = Set.toList . ftv
   forall :: [Var p] -> Type p -> Type p
   forall [] a = a
   forall vs a = TyForall vs a
 
+  renumber (TyForall vs c) = TyForall vs' (apply (Map.fromList (zip vs (map TyVar vs'))) c) where
+    vs' = zipWith fixup vs alpha
+    fixup x@(TvName TgInternal{}) _ = x
+    fixup (TvName (TgName _ i)) n = TvName (TgName n i)
+  renumber c = c
+
 consFst :: Functor m => a -> m ([a], b) -> m ([a], b)
 consFst = fmap . first . (:)
+
+alpha :: [T.Text]
+alpha = map T.pack $ [1..] >>= flip replicateM ['a'..'z']
+
 
 {-
   Commentary
