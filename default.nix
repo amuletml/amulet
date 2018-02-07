@@ -7,14 +7,17 @@ let
   f = { mkDerivation, stdenv
       , mtl
       , syb
-      , base
       , text
-      , parsec
-      , monad-gen
-      , containers
-      , pretty-show
-      , transformers
+      , base
       , lens
+      , array
+      , monad-gen
+      , bytestring
+      , containers
+      , transformers
+      , pretty-show
+      , alex
+      , happy
       }:
       mkDerivation {
         pname = "amuletml";
@@ -23,14 +26,19 @@ let
         isLibrary = false;
         isExecutable = true;
         executableHaskellDepends = [
-          base syb containers monad-gen mtl parsec text transformers
-          pretty-show lens # This is here for ghci prettiness
+          mtl syb text array bytestring base
+          lens monad-gen containers transformers
+          pretty-show
         ];
+        buildDepends = [ alex happy ];
         homepage = "https://amulet.ml";
         description = "A functional programming language";
         license = stdenv.lib.licenses.bsd3;
       };
 
   haskellPackages = pkgs.haskell.packages.${compiler};
+
   drv = haskellPackages.callPackage f {};
-in if pkgs.lib.inNixShell then drv.env else drv
+
+in
+  if pkgs.lib.inNixShell then drv.env else drv
