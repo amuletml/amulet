@@ -60,7 +60,6 @@ resolveKind t =
 resolve :: MonadSolve m => KindT m (Kind Typed) -> m (Kind Typed)
 resolve k = do
   (kind, cs) <- runWriterT k
-  -- for_ cs $ \(a, b) -> tracePretty (a <+> " ~ " <+> b) (pure ())
   cs' <- for cs $ \(a, b) -> case unify a b of
     Just x -> pure x
     Nothing -> throwError (KindsNotEqual a b)
@@ -111,6 +110,8 @@ same :: Monad m => Kind Typed -> Kind Typed -> KindT m ()
 same a b = tell [(a, b)]
 
 unify :: Kind Typed -> Kind Typed -> Maybe [(Var Typed, Kind Typed)]
+unify (KiVar v) (KiVar k)
+  | v == k = pure []
 unify (KiVar v) t = Just [(v, t)]
 unify t (KiVar v) = Just [(v, t)]
 unify (KiArr a b) (KiArr c d) = (++) <$> unify a c <*> unify b d
