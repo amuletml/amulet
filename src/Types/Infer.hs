@@ -27,8 +27,6 @@ import Types.Unify
 import Types.Holes
 import Types.Kinds
 
-import Pretty
-
 -- Solve for the types of lets in a program
 inferProgram :: MonadGen Int m => [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))
 inferProgram ct = fmap fst <$> runInfer builtinsEnv (inferAndCheck ct) where
@@ -64,10 +62,10 @@ check expr@(Literal c a) t = do
     LiInt{}  -> unify expr t tyInt
   pure $ Literal c (a, t')
 check ex@(Fun p b a) ty = do
-  (d, c) <- decompose ex _TyArr ty
-  (p', ms) <- checkPattern p d
-  b' <- extendMany ms $ check b c
-  pure (Fun p' b' (a, ty))
+  (dom, cod) <- decompose ex _TyArr ty
+  (p', pt, ms) <- inferPattern p
+  _ <- unify ex dom pt
+  Fun p' <$> extendMany ms (check b cod) <*> pure (a, ty)
 check ex@(Begin [] _) _ = throwError (EmptyBegin ex)
 check (Begin xs a) t = do
   let start = init xs
@@ -86,8 +84,8 @@ check (Let ns b an) t = do
       pure (Let ns' b' (an, t))
 check (If c t e an) ty = If <$> check c tyBool <*> check t ty <*> check e ty <*> pure (an, ty)
 check ex@(App f x a) ty = do
-  (f', (c, d)) <- secondA (decompose ex _TyArr) =<< infer f
-  App f' <$> check x c <*> fmap (a,) (unify ex ty d)
+  (f', (d, c)) <- secondA (decompose ex _TyArr) =<< infer f
+  App f' <$> check x d <*> fmap (a,) (unify ex ty c)
 check (Match t ps a) ty = do
   (t', tt) <- infer t
   ps' <- for ps $ \(p, e) -> do
@@ -138,10 +136,9 @@ check x _ = error $ "desugarer should remove " ++ show x
 infer :: MonadInfer Typed m => Expr Resolved -> m (Expr Typed, Type Typed)
 infer expr@(VarRef k a) =  do
   (inst, old, new) <- lookupTy' k
-  tracePretty ("instantiated " <+> old <+> " to " <+> new) $ do
-    if Map.null inst
-       then pure (VarRef (TvName k) (a, new), new)
-       else mkTyApps expr inst old new
+  if Map.null inst
+     then pure (VarRef (TvName k) (a, new), new)
+     else mkTyApps expr inst old new
 infer ex = do
   x <- freshTV
   ex' <- check ex x
@@ -205,8 +202,6 @@ inferLetTy :: (MonadInfer Typed m)
 inferLetTy _ ks [] = pure ([], ks)
 inferLetTy closeOver ks ((va, ve, vann):xs) = extendMany ks $ do
   ((ve', ty), c) <- listen (infer ve) -- See note [1]
-  tracePretty ("constraints for " <+> va <+> ": ") $
-    forM_ c (flip tracePretty (pure ()))
   cur <- gen
   (x, vt) <- case solve cur mempty c of
     Left e -> throwError e
@@ -232,24 +227,14 @@ updateAlist n v (x@(n', _):xs)
 updateAlist _ _ [] = []
 
 closeOver :: Type Typed -> Type Typed
-closeOver a = normType . renumber $ forall (fv a) a where
+closeOver a = normType $ forall (fv a) a where
   fv = Set.toList . ftv
   forall :: [Var p] -> Type p -> Type p
   forall [] a = a
   forall vs a = TyForall vs a
 
-  renumber (TyForall vs c) = TyForall vs' (apply (Map.fromList (zip vs (map TyVar vs'))) c) where
-    vs' = zipWith fixup vs alpha
-    fixup x@(TvName TgInternal{}) _ = x
-    fixup (TvName (TgName _ i)) n = TvName (TgName n i)
-  renumber c = c
-
 consFst :: Functor m => a -> m ([a], b) -> m ([a], b)
 consFst = fmap . first . (:)
-
-alpha :: [T.Text]
-alpha = map T.pack $ [1..] >>= flip replicateM ['a'..'z']
-
 
 {-
   Commentary
