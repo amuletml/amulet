@@ -10,21 +10,21 @@ module Core.Lower
 
 
 import Control.Monad.Infer
-import Data.Traversable
 
 import Types.Infer (tyString, tyInt, tyBool, tyUnit)
 
 import qualified Data.Text as T
-
+import Data.Traversable
+import Data.Function
 import Data.Maybe
 import Data.Data
-
 import Data.Span
+import Data.List
 
 import Core.Core
 import Syntax
 
-import Pretty (prettyPrint)
+import Pretty (prettyPrint, tracePretty)
 
 type MonadLower m
   = ( MonadGen Int m
@@ -108,7 +108,7 @@ lowerExpr expr
     Match ex cs an -> do
       cs' <- for cs $ \(pat, ex) ->
         (,,) <$> lowerPat pat <*> lowerType (getType pat) <*> lowerExpr ex
-      fail <- patternMatchingFailure an (getType ex)
+      fail <- patternMatchingFailure an (getType (fst (head cs)))
       CotMatch <$> lowerExpr ex <*> pure (cs' ++ [fail])
     BinOp left op right _ -> do
       (left', op', right') <- (,,) <$> lowerExpr left
@@ -133,7 +133,15 @@ lowerExpr expr
       rest <- fresh
       t' <- lowerType t
       ext <- lowerType (getType ex)
-      let pat = CopExtend (CopCapture rest ext) [(key, CopCapture var t')]
+      let realt = case ext of
+            CotyExactRows rs -> CotyExactRows (deleteBy ((==) `on` fst) (key, undefined) rs)
+            CotyRows rho rs -> CotyRows rho (deleteBy ((==) `on` fst) (key, undefined) rs)
+            _ -> error $ "not a record type " ++ T.unpack (prettyPrint ext)
+
+          fixup (CotyRows rho []) = rho
+          fixup x = x
+
+          pat = CopExtend (CopCapture rest (fixup realt)) [(key, CopCapture var t')]
           ref = CotRef var t'
       CotMatch <$> lowerExpr ex <*> pure [(pat, ext, ref)]
     Tuple xs _ -> do
@@ -173,8 +181,20 @@ lowerPat pat = case pat of
   Destructure (TvName p) Nothing _ -> pure $ CopConstr p
   Destructure (TvName p) (Just t) _ -> CopDestr p <$> lowerPat t
   PType p _ _ -> lowerPat p
-  PRecord xs (_, t) -> CopExtend <$> (CopCapture <$> fresh <*> lowerType t) <*> do
-    for xs $ \(label, pat) -> (,) label <$> lowerPat pat
+  PRecord xs (_, t) ->
+    let
+      lowerRow (label, pat) = (,) label <$> lowerPat pat
+      keys = map fst xs
+      realt tp = case tp of
+        CotyExactRows rs -> CotyExactRows (filter (not . flip elem keys . fst) rs)
+        CotyRows rho rs -> CotyRows rho (filter (not . flip elem keys . fst) rs)
+        _ -> error $ "not a record type " ++ T.unpack (prettyPrint tp)
+
+      fixup (CotyRows rho _) = rho
+      fixup x = x
+
+      tidy = fmap (fixup . realt) . lowerType
+     in CopExtend <$> (CopCapture <$> fresh <*> tidy t) <*> traverse lowerRow xs
   PTuple xs _ -> do
     let go :: MonadLower m => Int -> Pattern Typed -> m (T.Text, CoPattern)
         go k x = (,) <$> pure (T.pack (show k))
