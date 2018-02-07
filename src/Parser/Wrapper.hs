@@ -1,6 +1,6 @@
 {-# OPTIONS_GHC -funbox-strict-fields #-}
 
-module Parser.AWrapper
+module Parser.Wrapper
   ( SourceName
   , SourcePos(..)
   , Token(..)

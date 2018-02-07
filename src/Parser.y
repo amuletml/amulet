@@ -1,5 +1,5 @@
 {
-module Parser.HParser (parseInput) where
+module Parser (parseInput) where
 
 import Data.List (intercalate)
 import Data.Maybe (fromJust)
@@ -7,8 +7,8 @@ import Data.Span
 import Data.Spanned
 import qualified Data.Text as T
 
-import Parser.ALexer
-import Parser.AWrapper
+import Parser.Lexer
+import Parser.Wrapper
 import Parser.Token
 import Syntax
 

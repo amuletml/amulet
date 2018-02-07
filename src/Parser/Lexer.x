@@ -1,7 +1,7 @@
 {
 {-# OPTIONS_GHC -Wwarn -Wno-unused-imports #-}
 {-# LANGUAGE OverloadedStrings #-}
-module Parser.ALexer
+module Parser.Lexer
   ( lexerScan
   ) where
 
@@ -21,7 +21,7 @@ import qualified Data.Text as T
 import Text.Printf
 
 import Parser.Token
-import Parser.AWrapper
+import Parser.Wrapper
 }
 
 $digit = [0-9]       -- Digits

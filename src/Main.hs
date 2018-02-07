@@ -28,8 +28,8 @@ import Core.Core
 
 import Errors
 import Pretty
-import Parser.HParser
-import Parser.AWrapper
+import Parser
+import Parser.Wrapper
 
 data CompileResult = CSuccess ([Toplevel Typed], [CoStmt], [CoStmt], Env)
                    | CParse   String Span
