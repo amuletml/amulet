@@ -24,7 +24,9 @@ trivialPropag = pass' go where
         trivial CotLit{} = True
         trivial (CotExtend e rs) = trivial e && all (trivial . thd3) rs
         trivial _ = False
-     in CotLet vs' (substitute (mconcat ss) e)
+
+        subst = substitute (mconcat ss)
+     in CotLet (map (third3 subst) vs') (subst e)
   go x = x
 
 constrPropag :: TransformPass

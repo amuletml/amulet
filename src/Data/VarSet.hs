@@ -3,7 +3,7 @@ module Data.VarSet
   ( Set
   , fromList
   , member, insert
-  , difference, singleton, delete
+  , difference, union, singleton, delete
   , (<>), mempty
   ) where
 
@@ -32,6 +32,9 @@ member _ _ = False
 
 difference :: Set -> Set -> Set
 difference = coerce Set.difference
+
+union :: Set -> Set -> Set
+union = coerce Set.union
 
 singleton :: Var Resolved -> Set
 singleton (TgName _ x) = coerce (Set.singleton x)
