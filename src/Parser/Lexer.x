@@ -37,7 +37,7 @@ tokens :-
   <0> "(*"       { beginComment }
   <comment> "(*" { beginComment }
   <comment> "*)" { endComment }
-  <comment> .    ;
+  <comment> [.\n] ;
 
   <0> "->"     { constTok TcArrow }
   <0> "="      { constTok TcEqual }
