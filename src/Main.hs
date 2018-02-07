@@ -8,6 +8,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.ByteString.Builder as B
 import qualified Data.Map as Map
+import Data.Position
 import Data.Span
 
 import Data.Foldable

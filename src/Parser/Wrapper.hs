@@ -1,9 +1,7 @@
 {-# OPTIONS_GHC -funbox-strict-fields #-}
 
 module Parser.Wrapper
-  ( SourceName
-  , SourcePos(..)
-  , Token(..)
+  ( Token(..)
   , AlexInput(..)
   , PState(..)
   , ParseResult(..)
@@ -25,30 +23,19 @@ import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Internal as B (w2c)
 import qualified Data.ByteString.Lazy as B
 import Data.Span
+import Data.Position
 import Data.Int (Int64)
 import Data.Spanned
 import Data.Word (Word8)
-
-import Text.Parsec.Pos (newPos)
 
 import Parser.Token
 
 import Pretty
 
-type SourceName = String
-
-data SourcePos = SourcePos { spFile :: SourceName
-                           , spLine :: !Int
-                           , spCol  :: !Int }
-  deriving Show
-
 data Token = Token !TokenClass !SourcePos deriving Show
 
-mkSpan1' :: SourcePos -> Span
-mkSpan1' (SourcePos f l c) = mkSpan1 (newPos f l c)
-
 instance Spanned Token where
-  annotation (Token _ s) = mkSpan1' s
+  annotation (Token _ s) = mkSpan1 s
 
 data AlexInput = LI { liPos  :: !SourcePos
                     , liText :: !B.ByteString
@@ -104,15 +91,15 @@ instance Applicative Parser where
 
 instance Monad Parser where
   (P m) >>= k = P $ \s -> case m s of
-                            POK s' a -> unP (k a) s'
-                            PFailed err pos -> PFailed err pos
+    POK s' a -> unP (k a) s'
+    PFailed err pos -> PFailed err pos
   fail = MonadFail.fail
 
 instance MonadFail Parser where
-  fail msg = P $ \s -> PFailed msg (mkSpan1' (sPos s))
+  fail msg = P $ \s -> PFailed msg (mkSpan1 (sPos s))
 
 failPos :: String -> SourcePos -> Parser a
-failPos msg p = P $ \_ -> PFailed msg (mkSpan1' p)
+failPos msg p = P $ \_ -> PFailed msg (mkSpan1 p)
 
 failSpan :: String -> Span -> Parser a
 failSpan msg p = P $ \_ -> PFailed msg p

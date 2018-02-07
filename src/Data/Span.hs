@@ -5,16 +5,15 @@ module Data.Span
   ( Span(fileName)
   , internal
   , mkSpan, mkSpanUnsafe, mkSpan1
-  , newPos
   , spanStart
   , spanEnd
   ) where
 
 import Pretty
-import Text.Parsec.Pos
 
 import Data.Semigroup
 import Data.Data
+import Data.Position
 
 data Span
   = Span { fileName :: SourceName
@@ -27,25 +26,25 @@ internal = Span "<wired in>" 0 0 0 0
 
 mkSpan :: SourcePos -> SourcePos -> Maybe Span
 mkSpan a b
-  | sourceName a == sourceName b
-  = Just Span { fileName = sourceName a
-              , col1 = sourceColumn a, line1 = sourceLine a
-              , col2 = sourceColumn b, line2 = sourceLine b }
+  | spFile a == spFile b
+  = Just Span { fileName = spFile a
+              , col1 = spCol a, line1 = spLine a
+              , col2 = spCol b, line2 = spLine b }
   | otherwise = Nothing
 
 mkSpanUnsafe :: SourcePos -> SourcePos -> Span
-mkSpanUnsafe a b = Span { fileName = sourceName a
-                        , col1 = sourceColumn a, line1 = sourceLine a
-                        , col2 = sourceColumn b, line2 = sourceLine b }
+mkSpanUnsafe a b = Span { fileName = spFile a
+                        , col1 = spCol a, line1 = spLine a
+                        , col2 = spCol b, line2 = spLine b }
 
 mkSpan1 :: SourcePos -> Span
-mkSpan1 a = Span { fileName = sourceName a
-                 , col1 = sourceColumn a, line1 = sourceLine a
-                 , col2 = sourceColumn a, line2 = sourceLine a }
+mkSpan1 a = Span { fileName = spFile a
+                 , col1 = spCol a, line1 = spLine a
+                 , col2 = spCol a, line2 = spLine a }
 
 spanStart, spanEnd :: Span -> SourcePos
-spanStart Span { fileName = n, line1 = l, col1 = c } = newPos n l c
-spanEnd   Span { fileName = n, line2 = l, col2 = c } = newPos n l c
+spanStart Span { fileName = n, line1 = l, col1 = c } = SourcePos n l c
+spanEnd   Span { fileName = n, line2 = l, col2 = c } = SourcePos n l c
 
 instance Pretty Span where
   pprint Span { fileName = n

@@ -11,7 +11,6 @@ let
       , base
       , lens
       , array
-      , parsec
       , monad-gen
       , bytestring
       , containers
@@ -28,7 +27,7 @@ let
         isExecutable = true;
         executableHaskellDepends = [
           mtl syb text array bytestring base
-          lens parsec monad-gen containers transformers
+          lens monad-gen containers transformers
           pretty-show
         ];
         buildDepends = [ alex happy ];
