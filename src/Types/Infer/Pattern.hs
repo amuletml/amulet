@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts, OverloadedStrings, GADTs #-}
+{-# LANGUAGE FlexibleContexts, GADTs #-}
 {-# LANGUAGE ScopedTypeVariables, ViewPatterns, RankNTypes #-}
 module Types.Infer.Pattern where
 
@@ -44,8 +44,7 @@ checkPattern ex@(Destructure con ps ann) ty =
       _ <- unify ex pty ty
       pure (Destructure (TvName con) Nothing (ann, pty), [])
     Just p -> do
-      ty <- lookupTy con
-      (c, d) <- decompose ex _TyArr ty
+      (c, d) <- decompose ex _TyArr =<< lookupTy con
       (ps', b) <- checkPattern p c
       _ <- unify ex ty d
       pure (Destructure (TvName con) (Just ps') (ann, d), b)
