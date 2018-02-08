@@ -58,13 +58,10 @@ unify (TyRows rho arow) (TyRows sigma brow)
        if length overlaps >= length new
           then error ("overlaps " ++ show (length overlaps) ++ " new " ++ show (length new))
           else pure ()
--- TODO: This is a bit hacky. We have a different type for "closed
--- records" (literals) and "open records" (parameters), and must check
--- that they line up manually here.
-unify ta@(TyExactRows arow) tb@(TyRows _ brow)
+unify ta@(TyExactRows arow) tb@(TyRows rho brow)
   | overlaps <- overlap arow brow
   = case overlaps of
-      [] -> throwError (NoOverlap ta tb)
+      [] -> unify rho ta
       xs -> traverse_ (uncurry unify) xs
 unify tb@(TyRows _ brow) ta@(TyExactRows arow)
   | overlaps <- overlap arow brow
