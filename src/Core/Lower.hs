@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleContexts, ConstraintKinds, OverloadedStrings #-}
-{-# LANGUAGE LambdaCase, TypeFamilies #-}
+{-# LANGUAGE LambdaCase, TypeFamilies, ScopedTypeVariables #-}
 module Core.Lower
   ( lowerExpr
   , lowerType
@@ -19,10 +19,12 @@ import Data.Generics
 import Data.Maybe
 import Data.Span
 
+
+import Types.Wellformed
 import Core.Core
 import Syntax
 
-import Pretty (Pretty, prettyPrint)
+import Pretty (prettyPrint)
 
 type MonadLower m
   = ( MonadGen Int m
@@ -90,7 +92,7 @@ lowerExpr expr
     App f x _ -> CotApp <$> lowerExpr f <*> lowerExpr x
     Fun p bd an -> do
       (k, CotyArr f _) <- makeBigLams exprT
-      (x, (p', _, bd')) <- (,) <$> fresh <*> lowerArm p bd
+      (x, (p', _, bd')) <- (,) <$> fresh <*> (lowerArm p =<< lowerExpr bd)
       fail <- patternMatchingFailure an (getType p)
       pure . k $ CotLam Small (x, f)
                   $ CotMatch (CotRef x f) [ (p', f, bd'), fail ]
@@ -104,7 +106,7 @@ lowerExpr expr
       LiBool False -> ColFalse
       LiUnit -> ColUnit
     Match ex cs an -> do
-      cs' <- traverse (uncurry lowerArm) cs
+      cs' <- for cs $ \(pat, exp) -> lowerArm pat =<< lowerExpr exp
       fail <- patternMatchingFailure an (getType (fst (head cs)))
       CotMatch <$> lowerExpr ex <*> pure (cs' ++ [fail])
     BinOp left op right _ -> do
@@ -136,7 +138,7 @@ lowerExpr expr
     x -> error $ "impossible lowering (desugarer removes): " ++ T.unpack (prettyPrint x)
 
 lowerType :: MonadLower m => Type Typed -> m CoType
-lowerType tt = case tt of
+lowerType tt = case normType tt of
   t@TyTuple{} -> CotyExactRows <$> tup2Rec 1 t
   TyArr a b -> CotyArr <$> lowerType a <*> lowerType b
   TyForall vs b -> CotyForall (map unTvName vs) <$> lowerType b
@@ -156,18 +158,29 @@ tup2Rec k b = do
   b' <- lowerType b
   pure [(T.pack (show k), b')]
 
-lowerArm :: MonadLower m => Pattern Typed -> Expr Typed -> m (CoPattern, CoType, CoTerm)
+lowerArm :: forall m. MonadLower m => Pattern Typed -> CoTerm -> m (CoPattern, CoType, CoTerm)
 lowerArm pat body = case pat of
   Capture (TvName x) (_, t) -> do
     ty <- lowerType t
-    (,,) (CopCapture x ty) ty <$> lowerExpr body
+    pure (CopCapture x ty, ty, body)
   Wildcard a -> flip lowerArm body =<< flip Capture a . TvName <$> fresh
-  Destructure (TvName c) Nothing  (_, ty) -> (,,) (CopConstr c) <$> lowerType ty <*> lowerExpr body
+  Destructure (TvName c) Nothing  (_, ty) -> (,,) (CopConstr c) <$> lowerType ty <*> pure body
   Destructure (TvName c) (Just p) (_, ty) -> do
     (p', _, bd) <- lowerArm p body
     (,,) (CopDestr c p') <$> lowerType ty <*> pure bd
   PType p _ _ -> lowerArm p body
-  PRecord xs (_, t) -> pure (record xs t)
+  PRecord xs (_, t) -> do
+    var <- fresh
+    ty <- lowerType t
+    let rcref = CotRef var ty
+        rcpat = CopCapture var ty
+        go :: [(T.Text, Pattern Typed)] -> CoTerm -> m CoTerm
+        go ((l, p):xs) k = do
+          (p, ty, bdy) <- lowerArm p k
+          rest <- go xs bdy
+          pure $ CotMatch (CotAccess rcref l) [(p, ty, rest)]
+        go [] k = pure k
+    (,,) rcpat ty <$> go xs body
   PTuple xs a ->
     let mkR :: Int -> a -> (T.Text, a)
         mkR x = (,) (T.pack (show x))
@@ -188,5 +201,5 @@ lowerProg = traverse lowerTop where
           UnitCon (TvName p) (_, t) -> (,) p <$> lowerType t
           ArgCon (TvName p) _ (_, t) -> (,) p <$> lowerType t
 
-record :: (Ann p ~ (a1, b), Pretty (Var p)) => [(T.Text, Pattern p)] -> b -> a2
-record rs t = error (T.unpack (prettyPrint (PRecord rs (undefined, t))) ++ ": lowering for record patterns TODO")
+-- record :: (Ann p ~ (a1, b), Pretty (Var p)) => [(T.Text, Pattern p)] -> b -> a2
+-- record rs t = error (T.unpack (prettyPrint (PRecord rs (undefined, t))) ++ ": lowering for record patterns TODO")

@@ -101,7 +101,7 @@ pprCases xs = interleave (opClr "; ") (map one xs) where
   one (a, b, c) = a <+> opClr " : " <+> b <+> opClr " -> " <+> c
 
 instance Pretty CoPattern where
-  pprint (CopCapture v t) = parens (v <+> opClr " : " <+> t)
+  pprint (CopCapture v _) = pprint v
   pprint (CopConstr v) = pprint v
   pprint (CopDestr v p) = parens (v <+> " " <+> p)
   pprint (CopLit l) = pprint l
