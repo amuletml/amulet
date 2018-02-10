@@ -90,7 +90,9 @@ instance Pretty CoTerm where
         <+> t
         <+> opClr " = "
         <+> v)
-  pprint (CotAccess e k) = parens (pprint e) <+> opClr "." <+> k
+  pprint (CotAccess e k)
+    | CotRef{} <- e = e <+> opClr "." <+> k
+    | otherwise = parens e <+> opClr "." <+> k
 
 pprLet :: [(Var Resolved, CoType, CoTerm)] -> PrettyP
 pprLet xs = interleave newline (map one xs) where
