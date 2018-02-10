@@ -17,6 +17,8 @@ import Data.Foldable
 import Data.Function
 import Data.List
 
+import Pretty
+
 import Data.Text (Text)
 
 type SolveM = GenT Int (StateT (Subst Typed) (Except TypeError))
@@ -29,10 +31,10 @@ bind var ty
       env <- get
       -- Attempt to extend the environment, otherwise unify with existing type
       case Map.lookup var env of
-        Nothing -> put (Map.singleton var ty `compose` env)
+        Nothing -> put (Map.singleton var (normType ty) `compose` env)
         Just ty'
           | ty' == ty -> pure ()
-          | otherwise -> unify ty ty'
+          | otherwise -> unify (normType ty) (normType ty')
 
 unify :: Type Typed -> Type Typed -> SolveM ()
 unify (TyVar a) b = bind a b
@@ -48,16 +50,15 @@ unify t@(TyForall vs ty) t'@(TyForall vs' ty')
     fvs <- replicateM (length vs) freshTV
     let subst = Map.fromList . flip zip fvs
     unify (apply (subst vs) ty) (apply (subst vs') ty')
-unify (TyRows rho arow) (TyRows sigma brow)
+unify ta@(TyRows rho arow) tb@(TyRows sigma brow)
   | overlaps <- overlap arow brow
-  , new <- unionBy ((==) `on` fst) arow brow
-  = do traverse_ (uncurry unify) overlaps
-       tau <- freshTV
-       unify rho (TyRows tau new)
-       unify sigma (TyRows tau new)
-       if length overlaps >= length new
-          then error ("overlaps " ++ show (length overlaps) ++ " new " ++ show (length new))
-          else pure ()
+  , new <- unionBy ((==) `on` fst) (sortOn fst arow) (sortOn fst brow) =
+    tracePretty ta . tracePretty tb $ do
+      tau <- freshTV
+      traverse_ (uncurry unify) overlaps
+      unify rho (TyRows tau new)
+      unify sigma (TyRows tau new)
+      pure ()
 unify ta@(TyExactRows arow) (TyRows rho brow)
   | overlaps <- overlap arow brow
   = case overlaps of
@@ -109,11 +110,11 @@ solve i s (ConUnify e a t:xs) = do
     Left err -> Left (Note (ArisingFrom err e) wellform)
     Right () -> Right ()
 
-  case runSolve i s (unify a t) of
+  case runSolve i s (unify (normType a) (normType t)) of
     Left err -> Left (ArisingFrom err e)
     Right (i', s') -> solve i' (s' `compose` s) (apply s' xs)
 solve i s (ConSubsume e a b:xs) =
-  case runSolve i s (subsumes unify a b) of
+  case runSolve i s (subsumes unify (normType a) (normType b)) of
     Left err -> Left (ArisingFrom err e)
     Right (i', s') -> solve i' (s' `compose` s) (apply s' xs)
 
