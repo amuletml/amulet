@@ -206,11 +206,11 @@ inferLetTy closeOver ks ((va, ve, vann):xs) = extendMany ks $ do
   cur <- gen
   (x, vt) <- case solve cur mempty c of
     Left e -> throwError e
-    Right x -> pure (x, closeOver (apply x ty))
-  let r (a, t) = (a, apply x t)
+    Right x -> pure (x, closeOver (normType (apply x ty)))
+  let r (a, t) = (a, normType (apply x t))
       ex = applyInExpr x (raiseE id r ve')
   consFst (TvName va, ex, (vann, vt)) $
-    inferLetTy closeOver (updateAlist (TvName va) vt ks) xs
+    inferLetTy closeOver (updateAlist (TvName va) (normType vt) ks) xs
 
 applyInExpr :: Map.Map (Var Typed) (Type Typed) -> Expr Typed -> Expr Typed
 applyInExpr ss = everywhere (mkT go) where
