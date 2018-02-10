@@ -2,12 +2,14 @@
 module Types.Wellformed (wellformed, arity, normType) where
 
 import Control.Monad.Except
-
 import Control.Monad.Infer
-import Syntax
+import Control.Arrow
 
+import Data.Function
 import Data.Foldable
-import Data.List (union)
+import Data.List (union, unionBy)
+
+import Syntax
 
 import Pretty(Pretty)
 
@@ -36,6 +38,10 @@ arity _ = 0
 normType :: Eq (Var p) => Type p -> Type p
 normType (TyForall vs (TyForall vs' tp)) = TyForall (vs `union` vs') (normType tp)
 normType (TyForall [] tp) = normType tp
+normType (TyRows x rs')
+  | TyRows rho rs <- normType x = normType (TyRows rho (normRows (unionBy ((==) `on` fst) rs rs')))
+  | TyExactRows rs <- normType x = normType (TyExactRows (normRows (unionBy ((==) `on` fst) rs rs')))
+    where normRows = map (second normType)
 normType x = x
 
 {-

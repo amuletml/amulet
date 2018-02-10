@@ -15,7 +15,9 @@ import Pretty
 data CoTerm
   = CotRef (Var Resolved) CoType
   | CotLam Size (Var Resolved, CoType) CoTerm
+
   | CotApp CoTerm CoTerm -- removes a λ
+  | CotTyApp CoTerm CoType -- removes a Λ
 
   | CotLet [(Var Resolved, CoType, CoTerm)] CoTerm
   | CotMatch CoTerm [(CoPattern, CoType, CoTerm)]
@@ -24,15 +26,13 @@ data CoTerm
   | CotLit CoLiteral
 
   | CotExtend CoTerm [(Text, CoType, CoTerm)]
-
-  | CotTyApp CoTerm CoType -- removes a Λ
+  | CotAccess CoTerm Text
   deriving (Eq, Show, Ord, Data, Typeable)
 
 data CoPattern
   = CopCapture (Var Resolved) CoType
   | CopConstr (Var Resolved)
   | CopDestr (Var Resolved) CoPattern
-  | CopExtend CoPattern [(Text, CoPattern)]
 
   | CopLit CoLiteral
   deriving (Eq, Show, Ord, Data, Typeable)
@@ -68,9 +68,9 @@ data CoStmt
 instance Pretty CoTerm where
   pprint (CotRef v _) = pprint v
   pprint (CotLam Big (v, t) c)
-    = opClr "Λ" <+> (v <+> opClr " : " <+> t) <+> opClr ". " <+> c
+    = opClr "Λ" <+> parens (v <+> opClr " : " <+> t) <+> opClr ". " <+> c
   pprint (CotLam Small (v, t) c)
-    = opClr "λ" <+> (v <+> opClr " : " <+> t) <+> opClr ". " <+> c
+    = opClr "λ" <+> parens (v <+> opClr " : " <+> t) <+> opClr ". " <+> c
   pprint (CotApp f x)
     | CotLam{} <- f = parens f <+> " " <+> parens x
     | CotLet{} <- f = parens f <+> " " <+> x
@@ -79,10 +79,10 @@ instance Pretty CoTerm where
     | CotMatch{} <- x = f <+> " " <+> parens x
     | otherwise = f <+> " " <+> x
   pprint (CotLet xs e) =
-    kwClr "let " <+> braces (pprLet xs) <+> kwClr " in " <+> e
+    kwClr "let " <+> block 2 (braces (newline *> pprLet xs)) <+> kwClr " in " <+> e
   pprint (CotBegin xs e) = kwClr "begin " <+> interleave (opClr "; ") (xs ++ [e]) <+> kwClr " end"
   pprint (CotLit l) = pprint l
-  pprint (CotMatch e ps) = kwClr "match " <+> e <+> " " <+> braces (pprCases ps)
+  pprint (CotMatch e ps) = kwClr "match " <+> e <+> " " <+> block 2 (braces (newline *> pprCases ps))
   pprint (CotTyApp f t) = f <+> opClr " @" <+> t
   pprint (CotExtend x rs) = braces $ x <+> opClr " | " <+> prettyRows rs where
     prettyRows = interleave ", " . map (\(x, t, v) ->
@@ -90,21 +90,24 @@ instance Pretty CoTerm where
         <+> t
         <+> opClr " = "
         <+> v)
+  pprint (CotAccess e k)
+    | CotRef{} <- e = e <+> opClr "." <+> k
+    | otherwise = parens e <+> opClr "." <+> k
 
 pprLet :: [(Var Resolved, CoType, CoTerm)] -> PrettyP
-pprLet xs = interleave (opClr "; ") (map one xs) where
-  one (a, b, c) = a <+> opClr " : " <+> b <+> opClr " = " <+> c
+pprLet xs = interleave newline (map one xs) where
+  one (a, b, c) = do
+    a <+> opClr " : " <+> b <+> opClr " = "
+    block 2 (newline <* pprint c)
 
 pprCases :: [(CoPattern, CoType, CoTerm)] -> PrettyP
-pprCases xs = interleave (opClr "; ") (map one xs) where
+pprCases xs = interleave newline (map one xs) where
   one (a, b, c) = a <+> opClr " : " <+> b <+> opClr " -> " <+> c
 
 instance Pretty CoPattern where
-  pprint (CopCapture v t) = parens (v <+> opClr " : " <+> t)
+  pprint (CopCapture v _) = pprint v
   pprint (CopConstr v) = pprint v
   pprint (CopDestr v p) = parens (v <+> " " <+> p)
-  pprint (CopExtend p rs)
-    = braces $ p <+> opClr " | " <+> interleave ", " (map (\(x, y) -> x <+> opClr " = " <+> y) rs)
   pprint (CopLit l) = pprint l
 
 instance Pretty CoType where
@@ -157,12 +160,12 @@ freeIn (CotMatch e bs) = freeIn e <> foldMap freeInBranch bs where
   freeInBranch (b, _, e) = VarSet.difference (freeIn e) (bound b)
   bound (CopCapture v _) = VarSet.singleton v
   bound (CopDestr _ p) = bound p
-  bound (CopExtend p ps) = foldMap (bound . snd) ps <> bound p
   bound _ = mempty
 freeIn (CotLit _) = mempty
 freeIn (CotExtend c rs) = freeIn c <> foldMap (freeIn . thd3) rs
 freeIn (CotTyApp f _) = freeIn f
 freeIn (CotBegin xs x) = foldMap freeIn xs <> freeIn x
+freeIn (CotAccess e _) = freeIn e
 
 isError :: CoTerm -> Bool
 isError (CotApp (CotTyApp (CotRef (TgInternal n) _) _) _) = n == pack "error"

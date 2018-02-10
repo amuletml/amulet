@@ -96,6 +96,7 @@ compileExpr (CotRef v _) = LuaRef (lowerName v)
 compileExpr (CotLam Small (v, _) e) = LuaFunction [lowerName v] (compileStmt (Just LuaReturn) e)
 compileExpr (CotLam Big _ e) = compileExpr e
 compileExpr (CotTyApp f _) = compileExpr f
+compileExpr (CotAccess e k) = LuaRef (LuaIndex (compileExpr e) (LuaString k))
 
 compileExpr (CotLit (ColInt x))   = LuaNumber (fromInteger x)
 compileExpr (CotLit (ColStr str)) = LuaString str
@@ -117,6 +118,7 @@ global x = LuaRef (LuaIndex (LuaRef (LuaName "_G")) (LuaString (T.pack x)))
 
 compileStmt :: Returner -> CoTerm -> [LuaStmt]
 compileStmt r e@CotRef{} = pureReturn r $ compileExpr e
+compileStmt r e@CotAccess{} = pureReturn r $ compileExpr e
 compileStmt r e@CotLam{} = pureReturn r $ compileExpr e
 compileStmt r e@CotLit{} = pureReturn r $ compileExpr e
 compileStmt r (CotLet k c) = compileLet (unzip3 k) ++ compileStmt r c
@@ -198,8 +200,6 @@ patternTest :: CoPattern -> LuaExpr ->  LuaExpr
 patternTest (CopCapture _ _) _   = LuaTrue
 patternTest (CopLit ColRecNil) _ = LuaTrue
 patternTest (CopLit l)     vr    = LuaBinOp (compileExpr (CotLit l)) "==" vr
-patternTest (CopExtend p rs) vr  = foldAnd (patternTest p vr : map test rs) where
-  test (var', pat) = patternTest pat (LuaRef (LuaIndex vr (LuaString var')))
 patternTest (CopConstr con) vr   = foldAnd [tag con vr]
 patternTest (CopDestr con p) vr  = foldAnd [tag con vr, patternTest p (LuaRef (LuaIndex vr (LuaNumber 2)))]
 
@@ -211,8 +211,6 @@ patternBindings (CopLit _) _        = []
 patternBindings (CopCapture n _) v  = [(lowerName n, v)]
 patternBindings (CopConstr _) _     = []
 patternBindings (CopDestr _ p) vr   = patternBindings p (LuaRef (LuaIndex vr (LuaNumber 2)))
-patternBindings (CopExtend p rs) vr = patternBindings p vr ++ concatMap (index vr) rs where
-  index vr (var', pat) = patternBindings pat (LuaRef (LuaIndex vr (LuaString var')))
 
 compileMatch :: Returner -> CoTerm -> [(CoPattern, CoType, CoTerm)] -> Gen Int [LuaStmt]
 compileMatch r ex ps =
