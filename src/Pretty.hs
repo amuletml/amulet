@@ -119,21 +119,19 @@ tracePrettyId :: Pretty a => a -> a
 tracePrettyId x = tracePretty x x
 
 colour :: Pretty a => Text -> a -> PrettyP
-colour clr cmb
-  = do x <- asks colours
-       when x (tell clr)
-       y <- pprint cmb
-       when x $ tell "\x1b[0m"
-       return y
+colour clr cmb = do
+  x <- asks colours
+  when x (tell clr)
+  pprint cmb <* when x (tell "\x1b[0m")
 
 block :: Pretty a => Int -> a -> PrettyP
 block st ac = RM.local (\x -> x { indent = indent x + st }) $ pprint ac
 
 newline :: PrettyP
-newline
-  = do x <- asks indent
-       tell "\n"
-       tell $ T.replicate x " "
+newline = do
+  x <- asks indent
+  tell "\n"
+  tell $ T.replicate x " "
 
 indented :: Pretty a => a -> PrettyP
 indented x = newline *> pprint x
@@ -173,9 +171,10 @@ delim :: (Pretty a, Pretty b) => a -> a -> b -> PrettyP
 delim s e y = pprint s *> pprint y <* pprint e
 
 width :: Pretty a => a -> PrettyM Int
-width ac = do st <- asks indent
-              let xs = runPrinter (colourless { indent = st }) $ pprint ac
-               in return $ T.length xs
+width ac = do
+  st <- asks indent
+  let xs = runPrinter (colourless { indent = st }) $ pprint ac
+   in return $ T.length xs
 
 width' :: Pretty a => a -> PrettyM Int
 width' ac = pprint ac *> width ac
@@ -184,19 +183,19 @@ between :: (Pretty a, Pretty b, Pretty c) => a -> b -> c -> PrettyP
 between a b c = pprint a >> pprint c >> pprint b
 
 padRight :: Pretty a => a -> Int -> PrettyM Text
-padRight ac fl
-  = do ct <- ask
-       let xs = runPrinter ct $ pprint ac
-        in return $ xs <> T.replicate (fl - T.length xs) " "
+padRight ac fl = do
+  ct <- ask
+  let xs = runPrinter ct $ pprint ac
+   in return $ xs <> T.replicate (fl - T.length xs) " "
 
 padRight' :: Pretty a => a -> Int -> PrettyP
 padRight' ac fl = padRight ac fl >>= pprint
 
 local :: Pretty a => a -> PrettyM Text
-local ac
-  = do ct <- ask
-       let xs = runPrinter ct $ pprint ac
-        in return xs
+local ac = do
+  ct <- ask
+  let xs = runPrinter ct $ pprint ac
+   in return xs
 
 parens, braces, squares, angles :: Pretty a => a -> PrettyP
 parens  = delim @Text "(" ")"
