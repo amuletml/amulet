@@ -90,6 +90,7 @@ instance Pretty CoTerm where
         <+> t
         <+> opClr " = "
         <+> v)
+  pprint (CotAccess e k) = parens (pprint e) <+> opClr "." <+> k
 
 pprLet :: [(Var Resolved, CoType, CoTerm)] -> PrettyP
 pprLet xs = interleave (opClr "; ") (map one xs) where
@@ -160,6 +161,7 @@ freeIn (CotLit _) = mempty
 freeIn (CotExtend c rs) = freeIn c <> foldMap (freeIn . thd3) rs
 freeIn (CotTyApp f _) = freeIn f
 freeIn (CotBegin xs x) = foldMap freeIn xs <> freeIn x
+freeIn (CotAccess e _) = freeIn e
 
 isError :: CoTerm -> Bool
 isError (CotApp (CotTyApp (CotRef (TgInternal n) _) _) _) = n == pack "error"

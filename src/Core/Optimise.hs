@@ -42,6 +42,7 @@ mapTerm1M f t = case t of
   CotBegin es e -> CotBegin <$> traverse f es <*> f e
   CotExtend t rs -> CotExtend <$> f t <*> traverse (third3A f) rs
   CotTyApp e t -> CotTyApp <$> f e <*> pure t
+  CotAccess e k -> CotAccess <$> f e <*> pure k
 
 -- Apply a function to all descendants in the provided expr.
 mapTermM :: Monad m => (CoTerm -> m CoTerm) -> CoTerm -> m CoTerm

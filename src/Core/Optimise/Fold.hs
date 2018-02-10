@@ -94,6 +94,7 @@ dropUselessLet = pass' go where
   pure CotLit{} = True
   pure CotApp{} = False
   pure (CotTyApp f _) = pure f
+  pure (CotAccess f _) = pure f
   pure (CotLet vs e) = pure e && all (pure . thd3) vs
   pure (CotBegin xs e) = all pure xs && pure e
   pure (CotMatch e bs) = pure e && all (pure . thd3) bs

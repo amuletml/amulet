@@ -96,6 +96,7 @@ compileExpr (CotRef v _) = LuaRef (lowerName v)
 compileExpr (CotLam Small (v, _) e) = LuaFunction [lowerName v] (compileStmt (Just LuaReturn) e)
 compileExpr (CotLam Big _ e) = compileExpr e
 compileExpr (CotTyApp f _) = compileExpr f
+compileExpr (CotAccess e k) = LuaRef (LuaIndex (compileExpr e) (LuaString k))
 
 compileExpr (CotLit (ColInt x))   = LuaNumber (fromInteger x)
 compileExpr (CotLit (ColStr str)) = LuaString str
@@ -117,6 +118,7 @@ global x = LuaRef (LuaIndex (LuaRef (LuaName "_G")) (LuaString (T.pack x)))
 
 compileStmt :: Returner -> CoTerm -> [LuaStmt]
 compileStmt r e@CotRef{} = pureReturn r $ compileExpr e
+compileStmt r e@CotAccess{} = pureReturn r $ compileExpr e
 compileStmt r e@CotLam{} = pureReturn r $ compileExpr e
 compileStmt r e@CotLit{} = pureReturn r $ compileExpr e
 compileStmt r (CotLet k c) = compileLet (unzip3 k) ++ compileStmt r c

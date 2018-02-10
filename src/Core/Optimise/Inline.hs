@@ -66,7 +66,8 @@ score CotLit{} = pure 1
 score (CotBegin es e) = do
   es' <- sum <$> traverse score es
   (+) es' <$> score e
-score (CotTyApp t _) = (+ 1) <$> score t
+score (CotTyApp t _) = (subtract 1) <$> score t
+score (CotAccess e _) = (+ 5) <$> score e
 
 -- go :: CoTerm -> Trans Int
 -- go (CotRef v _) = do
