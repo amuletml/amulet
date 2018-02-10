@@ -68,9 +68,9 @@ data CoStmt
 instance Pretty CoTerm where
   pprint (CotRef v _) = pprint v
   pprint (CotLam Big (v, t) c)
-    = opClr "Λ" <+> (v <+> opClr " : " <+> t) <+> opClr ". " <+> c
+    = opClr "Λ" <+> parens (v <+> opClr " : " <+> t) <+> opClr ". " <+> c
   pprint (CotLam Small (v, t) c)
-    = opClr "λ" <+> (v <+> opClr " : " <+> t) <+> opClr ". " <+> c
+    = opClr "λ" <+> parens (v <+> opClr " : " <+> t) <+> opClr ". " <+> c
   pprint (CotApp f x)
     | CotLam{} <- f = parens f <+> " " <+> parens x
     | CotLet{} <- f = parens f <+> " " <+> x
