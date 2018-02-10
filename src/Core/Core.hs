@@ -68,9 +68,9 @@ data CoStmt
 instance Pretty CoTerm where
   pprint (CotRef v _) = pprint v
   pprint (CotLam Big (v, t) c)
-    = opClr "Λ" <+> (v <+> opClr " : " <+> t) <+> opClr ". " <+> c
+    = opClr "Λ" <+> parens (v <+> opClr " : " <+> t) <+> opClr ". " <+> c
   pprint (CotLam Small (v, t) c)
-    = opClr "λ" <+> (v <+> opClr " : " <+> t) <+> opClr ". " <+> c
+    = opClr "λ" <+> parens (v <+> opClr " : " <+> t) <+> opClr ". " <+> c
   pprint (CotApp f x)
     | CotLam{} <- f = parens f <+> " " <+> parens x
     | CotLet{} <- f = parens f <+> " " <+> x
@@ -79,10 +79,10 @@ instance Pretty CoTerm where
     | CotMatch{} <- x = f <+> " " <+> parens x
     | otherwise = f <+> " " <+> x
   pprint (CotLet xs e) =
-    kwClr "let " <+> braces (pprLet xs) <+> kwClr " in " <+> e
+    kwClr "let " <+> block 2 (braces (newline *> pprLet xs)) <+> kwClr " in " <+> e
   pprint (CotBegin xs e) = kwClr "begin " <+> interleave (opClr "; ") (xs ++ [e]) <+> kwClr " end"
   pprint (CotLit l) = pprint l
-  pprint (CotMatch e ps) = kwClr "match " <+> e <+> " " <+> braces (pprCases ps)
+  pprint (CotMatch e ps) = kwClr "match " <+> e <+> " " <+> block 2 (braces (newline *> pprCases ps))
   pprint (CotTyApp f t) = f <+> opClr " @" <+> t
   pprint (CotExtend x rs) = braces $ x <+> opClr " | " <+> prettyRows rs where
     prettyRows = interleave ", " . map (\(x, t, v) ->
@@ -92,11 +92,13 @@ instance Pretty CoTerm where
         <+> v)
 
 pprLet :: [(Var Resolved, CoType, CoTerm)] -> PrettyP
-pprLet xs = interleave (opClr "; ") (map one xs) where
-  one (a, b, c) = a <+> opClr " : " <+> b <+> opClr " = " <+> c
+pprLet xs = interleave newline (map one xs) where
+  one (a, b, c) = do
+    a <+> opClr " : " <+> b <+> opClr " = "
+    block 2 (newline <* pprint c)
 
 pprCases :: [(CoPattern, CoType, CoTerm)] -> PrettyP
-pprCases xs = interleave (opClr "; ") (map one xs) where
+pprCases xs = interleave newline (map one xs) where
   one (a, b, c) = a <+> opClr " : " <+> b <+> opClr " -> " <+> c
 
 instance Pretty CoPattern where
