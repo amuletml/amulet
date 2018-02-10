@@ -15,7 +15,9 @@ import Pretty
 data CoTerm
   = CotRef (Var Resolved) CoType
   | CotLam Size (Var Resolved, CoType) CoTerm
+
   | CotApp CoTerm CoTerm -- removes a λ
+  | CotTyApp CoTerm CoType -- removes a Λ
 
   | CotLet [(Var Resolved, CoType, CoTerm)] CoTerm
   | CotMatch CoTerm [(CoPattern, CoType, CoTerm)]
@@ -24,15 +26,13 @@ data CoTerm
   | CotLit CoLiteral
 
   | CotExtend CoTerm [(Text, CoType, CoTerm)]
-
-  | CotTyApp CoTerm CoType -- removes a Λ
+  | CotAccess CoTerm Text
   deriving (Eq, Show, Ord, Data, Typeable)
 
 data CoPattern
   = CopCapture (Var Resolved) CoType
   | CopConstr (Var Resolved)
   | CopDestr (Var Resolved) CoPattern
-  | CopExtend CoPattern [(Text, CoPattern)]
 
   | CopLit CoLiteral
   deriving (Eq, Show, Ord, Data, Typeable)
@@ -103,8 +103,6 @@ instance Pretty CoPattern where
   pprint (CopCapture v t) = parens (v <+> opClr " : " <+> t)
   pprint (CopConstr v) = pprint v
   pprint (CopDestr v p) = parens (v <+> " " <+> p)
-  pprint (CopExtend p rs)
-    = braces $ p <+> opClr " | " <+> interleave ", " (map (\(x, y) -> x <+> opClr " = " <+> y) rs)
   pprint (CopLit l) = pprint l
 
 instance Pretty CoType where
@@ -157,7 +155,6 @@ freeIn (CotMatch e bs) = freeIn e <> foldMap freeInBranch bs where
   freeInBranch (b, _, e) = VarSet.difference (freeIn e) (bound b)
   bound (CopCapture v _) = VarSet.singleton v
   bound (CopDestr _ p) = bound p
-  bound (CopExtend p ps) = foldMap (bound . snd) ps <> bound p
   bound _ = mempty
 freeIn (CotLit _) = mempty
 freeIn (CotExtend c rs) = freeIn c <> foldMap (freeIn . thd3) rs

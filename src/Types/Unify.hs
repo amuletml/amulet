@@ -58,7 +58,7 @@ unify (TyRows rho arow) (TyRows sigma brow)
        if length overlaps >= length new
           then error ("overlaps " ++ show (length overlaps) ++ " new " ++ show (length new))
           else pure ()
-unify ta@(TyExactRows arow) tb@(TyRows rho brow)
+unify ta@(TyExactRows arow) (TyRows rho brow)
   | overlaps <- overlap arow brow
   = case overlaps of
       [] -> unify rho ta

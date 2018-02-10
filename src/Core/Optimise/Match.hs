@@ -4,11 +4,8 @@ module Core.Optimise.Match
 
 import qualified Data.Map.Strict as Map
 import Data.Triple
-import Data.Monoid
 import Data.Maybe
 import Data.List
-
-import Control.Monad
 
 import Syntax (Var, Resolved)
 import Core.Optimise
@@ -65,13 +62,6 @@ matchKnownConstr = pass go where
   match (CopDestr v p) (CotApp (CotRef v' _) x)
     | v == v' = match p x
     | otherwise = Nothing
-  match (CopExtend p xs) (CotExtend e ys) = match p e <> rows where
-    xs' = sortOn fst xs
-    ys' = sortOn fst (map (\(x, _, y) -> (x, y)) ys)
-    rows = concat <$> zipWithM mr xs' ys'
-    mr (t, p) (t', e)
-      | t == t' = match p e
-      | otherwise = Nothing
   match (CopLit l) (CotLit l')
     | l == l' = Just []
     | otherwise = Nothing
