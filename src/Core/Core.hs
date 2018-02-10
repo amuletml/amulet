@@ -79,10 +79,10 @@ instance Pretty CoTerm where
     | CotMatch{} <- x = f <+> " " <+> parens x
     | otherwise = f <+> " " <+> x
   pprint (CotLet xs e) =
-    kwClr "let " <+> block 2 (braces (newline *> pprLet xs)) <+> kwClr " in " <+> e
+    kwClr "let " <+> braces (block 2 (newline *> pprLet xs) <* newline) <+> newline <+> kwClr " in " <+> e
   pprint (CotBegin xs e) = kwClr "begin " <+> interleave (opClr "; ") (xs ++ [e]) <+> kwClr " end"
   pprint (CotLit l) = pprint l
-  pprint (CotMatch e ps) = kwClr "match " <+> e <+> " " <+> block 2 (braces (newline *> pprCases ps))
+  pprint (CotMatch e ps) = kwClr "match " <+> e <+> " " <+> braces (block 2 (newline *> pprCases ps) <* newline)
   pprint (CotTyApp f t) = f <+> opClr " @" <+> t
   pprint (CotExtend x rs) = braces $ x <+> opClr " | " <+> prettyRows rs where
     prettyRows = interleave ", " . map (\(x, t, v) ->
@@ -139,7 +139,7 @@ instance Pretty CoLiteral where
 
 instance Pretty CoStmt where
   pprint (CosForeign v t e) = v <+> opClr " : " <+> t <+> kwClr " = foreign " <+> str e
-  pprint (CosLet vs) = kwClr "let " <+> braces (pprLet vs)
+  pprint (CosLet vs) = kwClr "let " <+> braces (block 2 (newline *> pprLet vs) <* newline)
   pprint (CosType v cs) = kwClr "type "
                         <+> v <+> " " <+> braces (pprCons cs)
     where pprCons = interleave (opClr "; ") . map (\(x, t) -> x <+> opClr " : " <+> t)
