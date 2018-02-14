@@ -301,6 +301,7 @@ instance (Pretty (Var p)) => Pretty (Constructor p) where
 
 instance Pretty (Var Parsed) where
   pprint (Name v) = pprint v
+  pprint (InModule t v) = t <+> "." <+> v
 
 instance Pretty (Var Resolved) where
   pprint (TgName v _) = pprint v

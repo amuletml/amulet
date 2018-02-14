@@ -22,10 +22,11 @@ import Control.Monad.Fail as MonadFail
 import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Internal as B (w2c)
 import qualified Data.ByteString.Lazy as B
-import Data.Span
-import Data.Position
 import Data.Int (Int64)
+import Data.Position
+import Data.Span
 import Data.Spanned
+import qualified Data.Text as T
 import Data.Word (Word8)
 
 import Parser.Token
@@ -43,6 +44,7 @@ data AlexInput = LI { liPos  :: !SourcePos
 
 data PState = PState { stringBuffer :: B.Builder -- Builder for string literals
                      , commentDepth :: Int -- Depth for current file
+                     , modulePrefix :: [T.Text] -- List of module prefixes (in reversed order)
 
                      , sPos  :: !SourcePos   -- Current source position
                      , sText :: B.ByteString -- Current input
@@ -134,6 +136,7 @@ type Action a = AlexInput -> Int64 -> Parser a
 runParser :: SourceName -> B.ByteString -> Parser a -> ParseResult a
 runParser file input m = unP m PState { stringBuffer = mempty
                                       , commentDepth = 0
+                                      , modulePrefix = []
 
                                       , sPos  = SourcePos file 1 1
                                       , sText = input
