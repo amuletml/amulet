@@ -29,6 +29,7 @@ import Control.Monad.Writer.Strict as M hiding ((<>))
 import Control.Monad.Reader as M
 import Control.Monad.Except as M
 import Control.Monad.Gen as M
+import Control.Lens
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
@@ -37,9 +38,6 @@ import Data.Text (Text)
 import Data.Semigroup
 import Data.Spanned
 import Data.Triple
-
-import Data.Map.Lens
-import Control.Lens
 
 import Pretty hiding (local, (<>))
 
