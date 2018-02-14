@@ -1,13 +1,13 @@
-{-# LANGUAGE FlexibleContexts, TypeFamilies #-}
+{-# LANGUAGE FlexibleContexts, TypeFamilies, ScopedTypeVariables #-}
 module Types.Wellformed (wellformed, arity, normType) where
 
 import Control.Monad.Except
-
 import Control.Monad.Infer
-import Syntax
 
 import Data.Foldable
-import Data.List (union)
+import Data.List (nub)
+
+import Syntax
 
 import Pretty(Pretty)
 
@@ -33,10 +33,17 @@ arity (TyArr _ t) = 1 + arity t
 arity (TyForall _ t) = arity t
 arity _ = 0
 
-normType :: Eq (Var p) => Type p -> Type p
-normType (TyForall vs (TyForall vs' tp)) = TyForall (vs `union` vs') (normType tp)
-normType (TyForall [] tp) = normType tp
-normType x = x
+-- Make a type into its equivalent in prenex normal form.
+normType :: forall p. Eq (Var p) => Type p -> Type p
+normType = uncurry collect . runWriter . spread where
+  collect t [] = t
+  collect t xs = TyForall (nub xs) t
+
+  spread :: Type p -> Writer [Var p] (Type p)
+  spread (TyForall vs t) = spread t <* tell vs
+  spread (TyArr a t) = TyArr a <$> spread t
+  spread x = pure x
+
 
 {-
    Commentary:

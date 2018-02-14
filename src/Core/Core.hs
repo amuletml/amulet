@@ -71,13 +71,7 @@ instance Pretty CoTerm where
     = opClr "Λ" <+> parens (v <+> opClr " : " <+> t) <+> opClr ". " <+> c
   pprint (CotLam Small (v, t) c)
     = opClr "λ" <+> parens (v <+> opClr " : " <+> t) <+> opClr ". " <+> c
-  pprint (CotApp f x)
-    | CotLam{} <- f = parens f <+> " " <+> parens x
-    | CotLet{} <- f = parens f <+> " " <+> x
-    | CotApp{} <- x = f <+> " " <+> parens x
-    | CotLam{} <- x = f <+> " " <+> parens x
-    | CotMatch{} <- x = f <+> " " <+> parens x
-    | otherwise = f <+> " " <+> x
+  pprint (CotApp f x) = parens f <+> " " <+> parens x
   pprint (CotLet xs e) =
     kwClr "let " <+> braces (block 2 (newline *> pprLet xs) <* newline) <+> newline <+> kwClr " in " <+> e
   pprint (CotBegin xs e) = kwClr "begin " <+> interleave (opClr "; ") (xs ++ [e]) <+> kwClr " end"

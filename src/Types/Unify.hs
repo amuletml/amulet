@@ -17,15 +17,12 @@ import Data.Foldable
 import Data.Function
 import Data.List
 
-import Pretty
-
 import Data.Text (Text)
 
 type SolveM = GenT Int (StateT (Subst Typed) (Except TypeError))
 
 bind :: Var Typed -> Type Typed -> SolveM ()
 bind var ty
-  | ty == TyVar var = return ()
   | occurs var ty = throwError (Occurs var ty)
   | otherwise = do
       env <- get
@@ -50,11 +47,10 @@ unify t@(TyForall vs ty) t'@(TyForall vs' ty')
     fvs <- replicateM (length vs) freshTV
     let subst = Map.fromList . flip zip fvs
     unify (apply (subst vs) ty) (apply (subst vs') ty')
-unify ta@(TyRows rho arow) tb@(TyRows sigma brow)
+unify (TyRows rho arow) (TyRows sigma brow)
   | overlaps <- overlap arow brow
-  , new <- deleteFirstsBy ((==) `on` fst) (sortOn fst arow) (sortOn fst brow)
-  =
-    tracePretty ta . tracePretty tb $ do
+  , new <- deleteFirstsBy ((==) `on` fst) (sortOn fst arow) (sortOn fst brow) =
+    do
       tau <- freshTV
       traverse_ (uncurry unify) overlaps
       case new of
