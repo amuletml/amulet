@@ -53,7 +53,7 @@ compileProgram ev = LuaDo . (extendDef:) . compileProg where
          . sortOn key
          . filter isMain
          . Map.keys
-         . values
+         . _values
     isMain (TgName x _) = x == "main"
     isMain _ = False
     key (TgName k _) = k

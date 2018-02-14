@@ -10,6 +10,8 @@ import Control.Monad.Reader
 import Control.Monad.Except
 import Control.Monad.Infer
 
+import Control.Lens
+
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Traversable
@@ -71,10 +73,10 @@ inferKind tp = do
   wellformed tp
   case tp of
     TyVar x -> do
-      ki <- asks (Map.lookup (unTvName x) . types)
+      ki <- view (types . at (unTvName x))
       maybe freshKV pure ki
     TyCon x -> do
-      ki <- asks (Map.lookup (unTvName x) . types)
+      ki <- view (types . at (unTvName x))
       case ki of
         Just ki' -> instantiateKind ki'
         Nothing -> throwError (NotInScope (unTvName x))

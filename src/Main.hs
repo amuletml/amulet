@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, OverloadedStrings #-}
+{-# LANGUAGE RankNTypes, OverloadedStrings, ScopedTypeVariables #-}
 module Main where
 
 import System.Environment
@@ -14,6 +14,7 @@ import Data.Span
 import Data.Foldable
 
 import Control.Monad.Infer
+import Control.Lens
 
 import Backend.Compile
 
@@ -74,10 +75,10 @@ test x = do
     CSuccess (_, core, optm, env) -> do
       putStrLn x
       putStrLn "\x1b[1;32m(* Type inference: *)\x1b[0m"
-      for_ (Map.toList $ values (difference env builtinsEnv)) $ \(k, t) ->
+      ifor_ (difference env builtinsEnv ^. values) . curry $ \(k :: Var Resolved, t :: Type Typed) ->
         T.putStrLn (prettyPrint k <> " : " <> prettyPrint t)
       putStrLn "\x1b[1;32m(* Kind inference: *)\x1b[0m"
-      for_ (Map.toList $ types (difference env builtinsEnv)) $ \(k, t) ->
+      ifor_ (difference env builtinsEnv ^. types) . curry $ \(k, t) ->
         T.putStrLn (prettyPrint k <> " : " <> prettyPrint t)
       putStrLn "\x1b[1;32m(* Core lowering: *)\x1b[0m"
       traverse_ ppr core

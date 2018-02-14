@@ -16,6 +16,8 @@ import Data.Triple
 
 import Control.Monad.Infer
 import Control.Arrow (first)
+import Control.Lens
+
 import Syntax.Subst
 import Syntax.Raise
 import Syntax
@@ -125,7 +127,7 @@ check ex@(TypeApp pf tx an) ty = do
   (pf', tp) <- infer pf
   at <- case pf' of
     VarRef var _ -> do
-      tp <- asks (Map.lookup (unTvName var) . values)
+      tp <- view (values . at (unTvName var))
       case tp of
         Just (normType -> TyForall (v:vs) x) ->
           unify ex ty (normType (TyForall vs (apply (Map.singleton v tx') x)))
