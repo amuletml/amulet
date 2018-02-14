@@ -286,8 +286,8 @@ instance Pretty (Var Parsed) where
   pprint (Name v) = pprint v
 
 instance Pretty (Var Resolved) where
-  -- pprint (TgName v _) = pprint v
-  pprint (TgName v i) = pprint v <+> "#" <+> i
+  pprint (TgName v _) = pprint v
+  -- pprint (TgName v i) = pprint v <+> "#" <+> i
   pprint (TgInternal v) = pprint v
 
 instance Pretty (Var Typed) where
