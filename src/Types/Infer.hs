@@ -202,8 +202,8 @@ inferProg (Module name body:prg) = do
   (body', env) <- inferProg body
 
   let (vars, tys) = extractToplevels body
-      vars' = map (\x -> (TvName x, env ^?! values . at x . non undefined)) vars
-      tys' = map (\x -> (TvName x, env ^?! types . at x . non undefined)) tys
+      vars' = map (\x -> (TvName x, env ^. values . at x . non undefined)) vars
+      tys' = map (\x -> (TvName x, env ^. types . at x . non undefined)) tys
 
   extendMany vars' $ extendManyK tys' $
     consFst (Module (TvName name) body') $
