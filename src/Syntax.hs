@@ -292,6 +292,11 @@ instance (Pretty (Var p)) => Pretty (Toplevel p) where
     opClr " = "
     body 2 (map ("| "<+>) ctors)
 
+  pprint (Open m Nothing) = kwClr "open " <+> m
+  pprint (Open m (Just a)) = kwClr "open " <+> m <+> " as " <+> a
+
+  pprint (Module m bod) = kwClr "module " <+> m <+> " = " <+> body 2 bod <+> kwClr "end"
+
 instance (Pretty (Var p)) => Pretty [Toplevel p] where
   pprint = body 0 . map (<+> opClr " ;; ")
 

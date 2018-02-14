@@ -101,6 +101,7 @@ instance Pretty TypeError where
 instance Pretty ResolveError where
   pprint (R.NotInScope e) = "Variable not in scope: "
                          <+> verbatim e
+  pprint (R.NoSuchModule e) = "Cannot find module: " <+> verbatim e
   pprint (R.EmptyMatch e) = annotation e <+> ": Empty match expression"
   pprint (R.EmptyBegin e) = annotation e <+> ": Empty begin expression"
   pprint (R.ArisingFrom er ex) = do

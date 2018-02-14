@@ -13,12 +13,14 @@ import qualified Data.Text as T
 import Data.Traversable
 import Data.Generics
 import Data.Triple
+import Data.Maybe
 
 import Control.Monad.Infer
 import Control.Arrow (first)
-import Syntax.Subst
-import Syntax.Raise
 import Syntax
+import Syntax.Raise
+import Syntax.Resolve.Toplevel
+import Syntax.Subst
 
 import Types.Infer.Pattern
 import Types.Infer.Builtin
@@ -194,6 +196,18 @@ inferProg (TypeDecl n tvs cs:prg) = do
      extendMany ts $
        consFst (TypeDecl (TvName n) (map TvName tvs) cs') $
          inferProg prg
+inferProg (Open _ _:prg) = inferProg prg
+inferProg (Module name body:prg) = do
+  (body', env) <- inferProg body
+
+  let (vars, tys) = extractToplevels body
+  let vars' = map (\x -> (TvName x, fromJust $ Map.lookup x (values env))) vars
+  let tys' = map (\x -> (TvName x, fromJust $ Map.lookup x (types env))) tys
+
+  extendMany vars' $ extendManyK tys' $
+    consFst (Module (TvName name) body') $
+    inferProg prg
+
 inferProg [] = asks ([],)
 
 inferCon :: MonadInfer Typed m

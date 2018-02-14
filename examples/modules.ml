@@ -8,4 +8,4 @@ module Option =
                 | Nothing -> Nothing
 end
 ;;
-let x = Option.Nothing
+let main _ = Option.Nothing
