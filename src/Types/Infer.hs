@@ -17,10 +17,12 @@ import Data.Maybe
 
 import Control.Monad.Infer
 import Control.Arrow (first)
-import Syntax
-import Syntax.Raise
+import Control.Lens
+
 import Syntax.Resolve.Toplevel
 import Syntax.Subst
+import Syntax.Raise
+import Syntax
 
 import Types.Infer.Pattern
 import Types.Infer.Builtin
@@ -127,7 +129,7 @@ check ex@(TypeApp pf tx an) ty = do
   (pf', tp) <- infer pf
   at <- case pf' of
     VarRef var _ -> do
-      tp <- asks (Map.lookup (unTvName var) . values)
+      tp <- view (values . at (unTvName var))
       case tp of
         Just (normType -> TyForall (v:vs) x) ->
           unify ex ty (normType (TyForall vs (apply (Map.singleton v tx') x)))
@@ -201,8 +203,8 @@ inferProg (Module name body:prg) = do
   (body', env) <- inferProg body
 
   let (vars, tys) = extractToplevels body
-  let vars' = map (\x -> (TvName x, fromJust $ Map.lookup x (values env))) vars
-  let tys' = map (\x -> (TvName x, fromJust $ Map.lookup x (types env))) tys
+      vars' = map (\x -> (TvName x, env ^?! values . at x & fromJust)) vars
+      tys' = map (\x -> (TvName x, env ^?! types . at x & fromJust)) tys
 
   extendMany vars' $ extendManyK tys' $
     consFst (Module (TvName name) body') $
