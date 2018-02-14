@@ -48,23 +48,25 @@ mkTyApps (VarRef k a) mp ot@(TyForall vs _) nt = do
   pure (insts (map (mp Map.!) vs) ot (VarRef (TvName k) (a, nt)), nt)
 mkTyApps _ _ _ _ = undefined
 
+correct :: Type Typed -> Expr Typed -> Expr Typed
+correct ty = gmapT (mkT go) where
+  go :: Ann Typed -> Ann Typed
+  go (a, _) = (a, ty)
+
 check :: MonadInfer Typed m => Expr Resolved -> Type Typed -> m (Expr Typed)
+check e ty@(TyForall vs t) = do -- This is rule Decl∀L from [Complete and Easy]
+  vs' <- traverse (const freshKV) vs
+  e' <- extendManyK (zip vs vs') $
+    check e t
+  pure (correct ty e')
 check expr@(VarRef k a) tp = do
   (_, old, _) <- lookupTy' k
   _ <- subsumes expr tp old
   pure (VarRef (TvName k) (a, tp))
 check (Hole v a) t = pure (Hole (TvName v) (a, t))
-check expr@(Literal c a) t = do
-  t' <- case c of
-    LiStr{}  -> unify expr t tyString
-    LiUnit{} -> unify expr t tyUnit
-    LiBool{} -> unify expr t tyBool
-    LiInt{}  -> unify expr t tyInt
-  pure $ Literal c (a, t')
 check ex@(Fun p b a) ty = do
   (dom, cod) <- decompose ex _TyArr ty
-  (p', pt, ms) <- inferPattern p
-  _ <- unify ex dom pt
+  (p', ms) <- checkPattern p dom
   Fun p' <$> extendMany ms (check b cod) <*> pure (a, ty)
 check ex@(Begin [] _) _ = throwError (EmptyBegin ex)
 check (Begin xs a) t = do
@@ -78,7 +80,7 @@ check (Let ns b an) t = do
     tv <- freshTV
     pure (TvName a, tv)
   extendMany ks $ do
-    (ns', ts) <- inferLetTy id ks ns
+    (ns', ts) <- inferLetTy id ks (reverse ns)
     extendMany ts $ do
       b' <- check b t
       pure (Let ns' b' (an, t))
@@ -97,12 +99,6 @@ check ex@(BinOp l o r a) ty = do
   (el, to') <- decompose ex _TyArr to
   (er, d) <- decompose ex _TyArr to'
   BinOp <$> check l el <*> pure o' <*> check r er <*> fmap (a,) (unify ex d ty)
-check ex@(Ascription e ty an) ty' = do
-  (e', it) <- infer e
-  (nty, _) <- resolveKind ty
-  _ <- subsumes ex it nty
-  _ <- unify ex nty ty'
-  pure (Ascription e' nty (an, nty))
 check ex@(Record rows a) ty = do
   (rows', rowts) <- unzip <$> inferRows rows
   Record rows' . (a,) <$> unify ex ty (TyExactRows rowts)
@@ -113,6 +109,11 @@ check ex@(RecordExt rec rows a) ty = do
 check (Access rc key a) ty = do
   rho <- freshTV
   Access <$> check rc (TyRows rho [(key, ty)]) <*> pure key <*> pure (a, ty)
+check expr@(Ascription e ty an) gty = do
+  (ty', _) <- resolveKind ty
+  e' <- check e ty'
+  _ <- subsumes expr ty' gty
+  pure (Ascription (correct gty e') ty' (an, gty))
 check ex@(Tuple es an) ty = Tuple <$> go es ty <*> pure (an, ty) where
   go [] _ = error "not a tuple"
   go [x] t = (:[]) <$> check x t
@@ -132,14 +133,28 @@ check ex@(TypeApp pf tx an) ty = do
         Nothing -> throwError (NotInScope (unTvName var))
     _ -> throwError (IllegalTypeApp ex tp tx')
   pure (TypeApp pf' tx' (an, at))
-check x _ = error $ "desugarer should remove " ++ show x
+check e ty = do
+  (e', t) <- infer e
+  _ <- subsumes e ty t
+  pure e'
+-- [Complete and Easy]: See https://www.cl.cam.ac.uk/~nk480/bidir.pdf
 
 infer :: MonadInfer Typed m => Expr Resolved -> m (Expr Typed, Type Typed)
-infer expr@(VarRef k a) =  do
+infer expr@(VarRef k a) = do
   (inst, old, new) <- lookupTy' k
   if Map.null inst
      then pure (VarRef (TvName k) (a, new), new)
      else mkTyApps expr inst old new
+infer (Fun p e an) = do
+  (p', dom, ms) <- inferPattern p
+  (e', cod) <- extendMany ms $ infer e
+  pure (Fun p' e' (an, TyArr dom cod), TyArr dom cod)
+infer (Literal l an) = pure (Literal l (an, ty), ty) where
+  ty = case l of
+    LiInt{} -> tyInt
+    LiStr{} -> tyString
+    LiBool{} -> tyBool
+    LiUnit{} -> tyUnit
 infer ex = do
   x <- freshTV
   ex' <- check ex x
@@ -160,7 +175,7 @@ inferProg (LetStmt ns:prg) = do
     vl <- lookupTy a `catchError` const (pure tv)
     pure (TvName a, vl)
   extendMany ks $ do
-    (ns', ts) <- inferLetTy closeOver ks ns
+    (ns', ts) <- inferLetTy closeOver ks (reverse ns)
                    `catchError` (throwError . flip ArisingFrom (LetStmt ns))
     extendMany ts $
       consFst (LetStmt ns')
@@ -202,7 +217,7 @@ inferLetTy :: (MonadInfer Typed m)
                 , [(Var Typed, Type Typed)])
 inferLetTy _ ks [] = pure ([], ks)
 inferLetTy closeOver ks ((va, ve, vann):xs) = extendMany ks $ do
-  ((ve', ty), c) <- listen (infer ve) -- See note [1]
+  ((ve', ty), c) <- listen (infer ve) -- See note [Freedom of the press]
   cur <- gen
   (x, vt) <- case solve cur mempty c of
     Left e -> throwError e
@@ -210,7 +225,7 @@ inferLetTy closeOver ks ((va, ve, vann):xs) = extendMany ks $ do
   let r (a, t) = (a, normType (apply x t))
       ex = applyInExpr x (raiseE id r ve')
   consFst (TvName va, ex, (vann, vt)) $
-    inferLetTy closeOver (updateAlist (TvName va) (normType vt) ks) xs
+    inferLetTy closeOver (updateAlist (TvName va) vt ks) xs
 
 applyInExpr :: Map.Map (Var Typed) (Type Typed) -> Expr Typed -> Expr Typed
 applyInExpr ss = everywhere (mkT go) where
@@ -238,10 +253,7 @@ consFst :: Functor m => a -> m ([a], b) -> m ([a], b)
 consFst = fmap . first . (:)
 
 {-
-  Commentary
-
-
-  Note [1]:
+  Note [Freedom of the press]:
     This used to be censor (const mempty) - but that leads us to a
     problem (a real one!). Consider:
 
@@ -265,10 +277,4 @@ consFst = fmap . first . (:)
 
     By removing the censor, we allow the compiler to recover `'c` - which,
     if you look under e.g. the ghci debugger, has a substitution!
-
-  Note [2]:
-    TODO: Since we don't have an unique `main` anymore, this code finds
-    the earliest main and type checks against that. This could be a
-    problem, which is why this is a TODO - Would finding the *latest*
-    defined `main` be better?
 -}

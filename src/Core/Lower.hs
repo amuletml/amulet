@@ -16,15 +16,16 @@ import Types.Infer (tyString, tyInt, tyBool, tyUnit)
 import qualified Data.Text as T
 import Data.Traversable
 import Data.Function
+import Data.Generics
 import Data.Maybe
-import Data.Data
 import Data.Span
 import Data.List
 
 import Core.Core
+
 import Syntax
 
-import Pretty (prettyPrint, tracePretty)
+import Pretty (prettyPrint)
 
 type MonadLower m
   = ( MonadGen Int m

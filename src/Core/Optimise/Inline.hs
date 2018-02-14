@@ -6,10 +6,11 @@ module Core.Optimise.Inline
 
 import qualified Data.Map.Strict as Map
 import qualified Data.VarSet as VarSet
-
 import Data.Triple
 
 import Core.Optimise
+
+
 import Syntax (Resolved)
 
 limit :: Int
