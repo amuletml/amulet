@@ -13,7 +13,6 @@ import qualified Data.Text as T
 import Data.Traversable
 import Data.Generics
 import Data.Triple
-import Data.Maybe
 
 import Control.Monad.Infer
 import Control.Arrow (first)
@@ -203,8 +202,8 @@ inferProg (Module name body:prg) = do
   (body', env) <- inferProg body
 
   let (vars, tys) = extractToplevels body
-      vars' = map (\x -> (TvName x, env ^?! values . at x & fromJust)) vars
-      tys' = map (\x -> (TvName x, env ^?! types . at x & fromJust)) tys
+      vars' = map (\x -> (TvName x, env ^?! values . at x . non undefined)) vars
+      tys' = map (\x -> (TvName x, env ^?! types . at x . non undefined)) tys
 
   extendMany vars' $ extendManyK tys' $
     consFst (Module (TvName name) body') $
