@@ -82,7 +82,10 @@ data TypeError where
                 , Pretty (Ann p) )
              => Expr p -> TypeError
   FoundHole :: [Expr Typed] -> TypeError
-  EscapedSkolems :: [Var Typed] -> Type Typed -> Type Typed -> TypeError
+
+  EscapedSkolems :: [Var Typed] -> Type Typed -> TypeError
+  SkolBinding :: Type Typed -> Type Typed -> TypeError
+
   ArisingFrom :: (Spanned a, Pretty a)
               => TypeError -> a -> TypeError
   NoOverlap :: Type Typed -> Type Typed -> TypeError

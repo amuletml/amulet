@@ -124,6 +124,8 @@ data Type p
   | TyExactRows [(Text, Type p)] -- { foo : int, bar : string }
   | TyTuple (Type p) (Type p) -- (see note [1])
 
+  | TySkol (Var p)
+
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Type p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Type p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Type p)
@@ -233,6 +235,7 @@ instance Pretty Lit where
 instance (Pretty (Var p)) => Pretty (Type p) where
   pprint (TyCon v) = typeClr v
   pprint (TyVar v) = opClr "'" <+> tvClr v
+  pprint (TySkol v) = kwClr v
   pprint (TyForall vs v)
     = kwClr "∀ " <+> interleave " " (map (\x -> "'" <+> tvClr x) vs) <+> opClr ". " <+> v
 
