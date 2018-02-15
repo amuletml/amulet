@@ -29,9 +29,6 @@ import Types.Unify
 import Types.Holes
 import Types.Kinds
 
-import Pretty
-import Data.Foldable
-
 -- Solve for the types of lets in a program
 inferProgram :: MonadGen Int m => [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))
 inferProgram ct = fmap fst <$> runInfer builtinsEnv (inferAndCheck ct) where
@@ -223,7 +220,6 @@ inferLetTy closeOver ks ((va, ve, vann):xs) = extendMany ks $ do
   ((ve', ty), c) <- listen (infer ve) -- See note [Freedom of the press]
   cur <- gen
 
-  for_ c (flip tracePretty (pure ()))
   (x, vt) <- case solve cur mempty c of
     Left e -> throwError e
     Right x -> pure (x, closeOver (normType (apply x ty)))

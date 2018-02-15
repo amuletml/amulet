@@ -19,8 +19,6 @@ import Data.List
 
 import Data.Text (Text)
 
-import Pretty
-
 type SolveM = GenT Int (StateT (Subst Typed) (Except TypeError))
 
 bind :: Var Typed -> Type Typed -> SolveM ()
@@ -142,8 +140,7 @@ subsumes k a b = k a b
 skolemise :: MonadGen Int m => Type Typed -> m (Type Typed)
 skolemise (TyForall tvs t) = do
   sks <- traverse (const freshSkol) tvs
-  let ty' = apply (Map.fromList (zip tvs sks)) t
-  tracePretty (TyForall tvs t <+> " skol " <+> ty') $ skolemise ty'
+  skolemise (apply (Map.fromList (zip tvs sks)) t)
 skolemise (TyArr c d) = TyArr c <$> skolemise d
 skolemise ty = pure ty
 
