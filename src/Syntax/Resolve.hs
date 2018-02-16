@@ -9,7 +9,6 @@ module Syntax.Resolve
   ) where
 
 import qualified Data.Map.Strict as Map
-import qualified Data.Text as T
 import Data.Triple
 
 import Control.Monad.Except
@@ -17,6 +16,7 @@ import Control.Monad.Reader
 import Control.Monad.Gen
 
 import Data.Traversable
+import Data.Semigroup
 import Data.Foldable
 
 import Syntax.Resolve.Scope
@@ -82,7 +82,7 @@ resolveModule (r:rs) = flip catchError (throwError . flip ArisingFromTop r)
         let (vars, tys) = extractToplevels body
         let (vars', tys') = extractToplevels body'
 
-        extendN (modZip name vars vars') $ extendTyN (modZip name tys tys') $ (:)
+        extendN (modZip name name' vars vars') $ extendTyN (modZip name name' tys tys') $ (:)
           <$> pure (Module name' body')
           <*> resolveModule rs
      where resolveCons (UnitCon v a) = UnitCon <$> lookupEx v <*> pure a
@@ -93,17 +93,7 @@ resolveModule (r:rs) = flip catchError (throwError . flip ArisingFromTop r)
 
            wrap x = TyForall (toList (ftv x)) x
 
-           modZip name v v' = zip (map (modP name) v) (map (modR name) v')
-
-           modP (Name v) = InModule v
-           modP (InModule m v) = InModule m . modP v
-
-           modR _ x@(TgInternal _) = x
-           modR m (TgName v i) = TgName (T.intercalate (T.pack ".") (modParts m [v])) i
-
-           modParts (Name v) xs = v:xs
-           modParts (InModule m v) xs = m:modParts v xs
-
+           modZip name name' v v' = zip (map (name<>) v) (map (name'<>) v')
 
 lookupEx :: MonadResolve m => Var Parsed -> m (Var Resolved)
 lookupEx v = do

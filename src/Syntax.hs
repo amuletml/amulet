@@ -5,9 +5,10 @@
 {-# LANGUAGE DeriveDataTypeable, TemplateHaskell #-}
 module Syntax where
 
-import Pretty
+import Pretty hiding ((<>))
 
 import Data.Text (Text)
+import qualified Data.Text as T
 import Data.Spanned
 import Data.Span
 
@@ -26,25 +27,24 @@ newtype Typed = Typed Typed deriving Data
 
 data family Var a
 
-class InModule v where
-  inModule :: v -> v -> v
-
 data instance Var Parsed
   = Name Text
   | InModule Text (Var Parsed)
   deriving (Eq, Show, Ord, Data)
 
-instance InModule (Var Parsed) where
-  inModule (Name t) = InModule t
-  inModule (InModule t v) = InModule t . inModule v
+instance Semigroup (Var Parsed) where
+  (Name t) <> v = InModule t v
+  (InModule m n) <> v = InModule m (n <> v)
 
 data instance Var Resolved
   = TgName Text {-# UNPACK #-} !Int
   | TgInternal Text
   deriving (Show, Data)
 
-instance InModule (Var Resolved) where
-  inModule = flip const
+instance Semigroup (Var Resolved) where
+  _ <> x@(TgInternal _) = x
+  (TgInternal _) <> _ = error "Nonsensical module"
+  (TgName x _) <> (TgName y i) = TgName (T.concat [x, T.pack ".", y]) i
 
 instance Eq (Var Resolved) where
   (TgName _ a) == (TgName _ b) = a == b
@@ -62,8 +62,8 @@ data instance Var Typed
   = TvName (Var Resolved)
   deriving (Show, Data, Eq, Ord)
 
-instance InModule (Var Typed) where
-  inModule = flip const
+instance Semigroup (Var Typed) where
+  (TvName x) <> (TvName y) = TvName (x <> y)
 
 type family Ann a :: * where
   Ann Parsed = Span
