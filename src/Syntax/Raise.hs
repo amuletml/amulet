@@ -50,6 +50,7 @@ raiseP v a (PTuple e p) = PTuple (map (raiseP v a) e) (a p)
 raiseT :: (Var p -> Var p') -- How to raise variables
        -> Type p -> Type p'
 raiseT v (TyCon n) = TyCon (v n)
+raiseT v (TySkol n) = TySkol (v n)
 raiseT v (TyVar n) = TyVar (v n)
 raiseT v (TyForall n t) = TyForall (map v n) (raiseT v t)
 raiseT v (TyArr x y) = TyArr (raiseT v x) (raiseT v y)

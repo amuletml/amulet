@@ -29,6 +29,7 @@ import Types.Unify
 import Types.Holes
 import Types.Kinds
 
+
 -- Solve for the types of lets in a program
 inferProgram :: MonadGen Int m => [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))
 inferProgram ct = fmap fst <$> runInfer builtinsEnv (inferAndCheck ct) where
@@ -56,15 +57,13 @@ correct ty = gmapT (mkT go) where
   go (a, _) = (a, ty)
 
 check :: MonadInfer Typed m => Expr Resolved -> Type Typed -> m (Expr Typed)
-check e ty@(TyForall vs t) = do -- This is rule Decl∀L from [Complete and Easy]
-  vs' <- traverse (const freshKV) vs
-  e' <- extendManyK (zip vs vs') $
-    check e t
-  pure (correct ty e')
 check expr@(VarRef k a) tp = do
   (_, old, _) <- lookupTy' k
-  _ <- subsumes expr tp old
+  _ <- subsumes expr old tp
   pure (VarRef (TvName k) (a, tp))
+check e ty@TyForall{} = do -- This is rule Decl∀L from [Complete and Easy]
+  e' <- check e =<< skolemise ty -- gotta be polymorphic - don't allow instantiation
+  pure (correct ty e')
 check (Hole v a) t = pure (Hole (TvName v) (a, t))
 check ex@(Fun p b a) ty = do
   (dom, cod) <- decompose ex _TyArr ty
@@ -221,11 +220,17 @@ inferLetTy _ ks [] = pure ([], ks)
 inferLetTy closeOver ks ((va, ve, vann):xs) = extendMany ks $ do
   ((ve', ty), c) <- listen (infer ve) -- See note [Freedom of the press]
   cur <- gen
+
   (x, vt) <- case solve cur mempty c of
     Left e -> throwError e
     Right x -> pure (x, closeOver (normType (apply x ty)))
+
   let r (a, t) = (a, normType (apply x t))
       ex = applyInExpr x (raiseE id r ve')
+
+  unless (null (skols vt)) $
+    throwError (EscapedSkolems (Set.toList (skols vt)) vt)
+
   consFst (TvName va, ex, (vann, vt)) $
     inferLetTy closeOver (updateAlist (TvName va) vt ks) xs
 

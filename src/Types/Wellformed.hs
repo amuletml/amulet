@@ -1,10 +1,12 @@
 {-# LANGUAGE FlexibleContexts, TypeFamilies, ScopedTypeVariables #-}
-module Types.Wellformed (wellformed, arity, normType) where
+module Types.Wellformed (wellformed, arity, normType, skols) where
 
 import Control.Monad.Except
 import Control.Monad.Infer
 
+import qualified Data.Set as Set
 import Data.Foldable
+import Data.Generics
 import Data.List (nub)
 
 import Syntax
@@ -15,6 +17,7 @@ wellformed :: (Pretty (Var p), MonadError TypeError m) => Type p -> m ()
 wellformed tp = case tp of
   TyCon{} -> pure ()
   TyVar{} -> pure ()
+  TySkol{} -> pure ()
   TyForall _ t -> wellformed t
   TyArr a b -> wellformed a *> wellformed b
   TyApp a b -> wellformed a *> wellformed b
@@ -43,6 +46,12 @@ normType = uncurry collect . runWriter . spread where
   spread (TyForall vs t) = spread t <* tell vs
   spread (TyArr a t) = TyArr a <$> spread t
   spread x = pure x
+
+skols :: (Ord (Var p), Data p, Data (Ann p), Data (Var p))
+      => Type p -> Set.Set (Var p)
+skols = everything mappend (mkQ mempty go) where
+  go (TySkol v) = Set.singleton v
+  go _ = Set.empty
 
 
 {-
