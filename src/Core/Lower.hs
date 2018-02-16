@@ -16,8 +16,6 @@ import Types.Infer (tyString, tyInt, tyBool, tyUnit)
 import qualified Data.Text as T
 import Data.Traversable
 import Data.Function
-import Data.Generics
-import Data.Maybe
 import Data.Span
 import Data.List
 
@@ -36,12 +34,6 @@ cotyString = runGenT (lowerType tyString) mempty
 cotyUnit = runGenT (lowerType tyUnit) mempty
 cotyBool = runGenT (lowerType tyBool) mempty
 cotyInt = runGenT (lowerType tyInt) mempty
-
-getType :: Data (f Typed) => f Typed -> Type Typed
-getType = snd . head . catMaybes . gmapQ get where
-  get d = (`asTypeOf` (undefined :: (Span, Type Typed))) <$> cast d
-  -- FIXME: Point-freeing this definition makes type inference broken.
-  -- Thanks, GHC.
 
 makeBigLams :: MonadLower m
             => Type Typed

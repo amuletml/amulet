@@ -16,6 +16,7 @@ import Data.Semigroup
 import Data.Foldable
 import Data.Typeable
 import Data.Triple
+import Data.Maybe
 import Data.Data
 
 import Control.Lens
@@ -306,6 +307,12 @@ instance Pretty (Span, Type Typed) where
 
 unTvName :: Var Typed -> Var Resolved
 unTvName (TvName x) = x
+
+getType :: Data (f Typed) => f Typed -> Type Typed
+getType = snd . head . catMaybes . gmapQ get where
+  get d = (`asTypeOf` (undefined :: (Span, Type Typed))) <$> cast d
+  -- FIXME: Point-freeing this definition makes type inference broken.
+  -- Thanks, GHC.
 
 makePrisms ''Expr
 makePrisms ''Type
