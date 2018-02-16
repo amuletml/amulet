@@ -196,6 +196,7 @@ lowerPat pat = case pat of
 
       tidy = fmap (fixup . realt) . lowerType
      in CopExtend <$> (CopCapture <$> fresh <*> tidy t) <*> traverse lowerRow xs
+  PTuple [] _ -> pure . CopLit $ ColUnit
   PTuple xs _ -> do
     let go :: MonadLower m => Int -> Pattern Typed -> m (T.Text, CoPattern)
         go k x = (,) <$> pure (T.pack (show k))
