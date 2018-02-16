@@ -1,4 +1,4 @@
-{-# LANGUAGE ConstraintKinds, ScopedTypeVariables, TupleSections, GeneralizedNewtypeDeriving, DerivingStrategies #-}
+{-# LANGUAGE ConstraintKinds, ScopedTypeVariables, TupleSections, GeneralizedNewtypeDeriving, DerivingStrategies, BangPatterns #-}
 module Core.Optimise
   ( mapTermM, mapTerm1M
   , mapTerm, mapTerm1
@@ -20,14 +20,20 @@ import Data.Generics (everywhere, everywhereM, mkM, mkT)
 import Data.Triple (third3A)
 import Data.Maybe (fromMaybe)
 
-import Control.Monad.Identity
-import Control.Monad.Reader
 import Control.Monad.Writer hiding (pass, (<>))
 import Control.Monad.Infer (fresh)
+import Control.Monad.State.Strict
+import Control.Monad.Trans.Maybe
+import Control.Monad.Identity
+import Control.Monad.Reader
+import Control.Applicative
 import Control.Monad.Gen
 
 import Core.Core
 import Syntax
+
+fuel :: Int
+fuel = 5000
 
 -- Apply a function to each child in the provided expr. Note this does not
 -- apply to all descendants.
@@ -79,8 +85,8 @@ instance Monoid TransState where
   mempty = TransState mempty mempty mempty mempty
   mappend = (<>)
 
-newtype Trans a = Trans { runTrans :: ReaderT TransState (Gen Int) a }
-  deriving newtype (Functor, Applicative, Monad, MonadReader TransState, MonadGen Int)
+newtype Trans a = Trans { runTrans :: MaybeT (StateT Int (ReaderT TransState (Gen Int))) a }
+  deriving newtype (Functor, Applicative, Monad, MonadReader TransState, MonadGen Int, MonadState Int, Alternative)
 
 extendVars :: [(Var Resolved, CoType, CoTerm)] -> Trans a -> Trans a
 extendVars vs = local (\s -> s { vars = foldr (\(v, _, e) m -> Map.insert v e m) (vars s) vs })
@@ -97,11 +103,17 @@ instance Monoid TransformPass where
 
 {-# INLINE [0] pass' #-}
 pass' :: (CoTerm -> CoTerm) -> TransformPass
-pass' = Pass . (pure .)
+pass' = pass . (pure .)
 
 {-# INLINE [0] pass #-}
 pass :: (CoTerm -> Trans CoTerm) -> TransformPass
-pass = Pass
+pass f = Pass $ \term -> do
+  !x <- get
+  if x >= 0
+     then do
+       modify pred
+       f term
+     else empty
 
 transformTerm :: TransformPass -> CoTerm -> Trans CoTerm
 transformTerm pass = visit <=< runPass pass where
@@ -132,8 +144,10 @@ transformStmts pass (x@(CosType v cases):xs) =
     s { types = Map.insert v cases (types s)
       , cons = Map.union (Map.fromList cases) (cons s) }) (transformStmts pass xs)
 
-runTransform :: Trans a -> Gen Int a
+runTransform :: Trans a -> Gen Int (Maybe a)
 runTransform = flip runReaderT mempty
+             . flip evalStateT fuel
+             . runMaybeT
              . runTrans
 
 invent :: CoType -> Trans (Var Resolved, CoTerm)

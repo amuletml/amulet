@@ -11,7 +11,7 @@ import Core.Optimise
 import Control.Monad.Gen
 
 optmOnce :: [CoStmt] -> Gen Int [CoStmt]
-optmOnce = runTransform . transformStmts passes where
+optmOnce t = fmap (maybe t id) . runTransform . transformStmts passes $ t where
   passes = mconcat
       [ dropBranches
       , foldExpr
