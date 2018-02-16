@@ -29,6 +29,7 @@ class Substitutable p a | a -> p where
 
 instance Ord (Var p) => Substitutable p (Type p) where
   ftv TyCon{} = mempty
+  ftv TySkol{} = mempty
   ftv (TyVar v) = Set.singleton v
   ftv (TyForall vs t) = ftv t Set.\\ Set.fromList vs
   ftv (TyApp a b) = ftv a <> ftv b
@@ -38,6 +39,7 @@ instance Ord (Var p) => Substitutable p (Type p) where
   ftv (TyExactRows rows) = foldMap (ftv . snd) rows
 
   apply _ (TyCon a) = TyCon a
+  apply _ (TySkol a) = TySkol a
   apply s t@(TyVar v) = Map.findWithDefault t v s
   apply s (TyArr a b) = TyArr (apply s a) (apply s b)
   apply s (TyApp a b) = TyApp (apply s a) (apply s b)

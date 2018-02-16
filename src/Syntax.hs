@@ -16,6 +16,7 @@ import Data.Semigroup
 import Data.Foldable
 import Data.Typeable
 import Data.Triple
+import Data.Maybe
 import Data.Data
 
 import Control.Lens
@@ -123,6 +124,8 @@ data Type p
   | TyRows (Type p) [(Text, Type p)]  -- { α | foo : int, bar : string }
   | TyExactRows [(Text, Type p)] -- { foo : int, bar : string }
   | TyTuple (Type p) (Type p) -- (see note [1])
+
+  | TySkol (Var p)
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Type p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Type p)
@@ -233,6 +236,7 @@ instance Pretty Lit where
 instance (Pretty (Var p)) => Pretty (Type p) where
   pprint (TyCon v) = typeClr v
   pprint (TyVar v) = opClr "'" <+> tvClr v
+  pprint (TySkol v) = kwClr v
   pprint (TyForall vs v)
     = kwClr "∀ " <+> interleave " " (map (\x -> "'" <+> tvClr x) vs) <+> opClr ". " <+> v
 
@@ -303,6 +307,12 @@ instance Pretty (Span, Type Typed) where
 
 unTvName :: Var Typed -> Var Resolved
 unTvName (TvName x) = x
+
+getType :: Data (f Typed) => f Typed -> Type Typed
+getType = snd . head . catMaybes . gmapQ get where
+  get d = (`asTypeOf` (undefined :: (Span, Type Typed))) <$> cast d
+  -- FIXME: Point-freeing this definition makes type inference broken.
+  -- Thanks, GHC.
 
 makePrisms ''Expr
 makePrisms ''Type

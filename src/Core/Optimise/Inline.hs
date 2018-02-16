@@ -42,7 +42,7 @@ betaReduce = pass go where
       pure . CotLet [(var', tp, ex)] .  substitute (Map.singleton var ref) $ body
     CotTyApp (CotLam Big (var, _) body) tp ->
       pure $ substituteInTys (Map.singleton var tp) body
-    CotTyApp body@CotLam{} tp -> pure body -- TODO: This really shouldn't happen but it does
+    CotTyApp body@CotLam{} _ -> pure body -- TODO: This really shouldn't happen but it does
     -- We need it to generate better code in the rank-N case
     _ -> pure term
 
