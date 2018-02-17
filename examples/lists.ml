@@ -10,12 +10,12 @@ type list 'a =
 
 let id x = x ;;
 
-let map (f : 'a -> 'b) (xs : list 'a) : list 'b =
-  let map_magic xs cont =
+let map f =
+  let go cont xs =
     match xs with
     | Nil -> cont Nil
-    | Cons (h, t) -> map_magic t (compose cont (fun x -> Cons (f h, x)))
-  in map_magic xs id ;;
+    | Cons (h, t) -> go (compose cont (fun x -> Cons (f h, x))) t
+  in go id ;;
 
 let print_list xs =
   let inner xs k =

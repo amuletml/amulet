@@ -110,11 +110,6 @@ check ex@(RecordExt rec rows a) ty = do
 check (Access rc key a) ty = do
   rho <- freshTV
   Access <$> check rc (TyRows rho [(key, ty)]) <*> pure key <*> pure (a, ty)
-check expr@(Ascription e ty an) gty = do
-  (ty', _) <- resolveKind ty
-  e' <- check e ty'
-  _ <- subsumes expr ty' gty
-  pure (Ascription (correct gty e') ty' (an, gty))
 check ex@(Tuple es an) ty = Tuple <$> go es ty <*> pure (an, ty) where
   go [] _ = error "not a tuple"
   go [x] t = (:[]) <$> check x t
@@ -156,6 +151,11 @@ infer (Literal l an) = pure (Literal l (an, ty), ty) where
     LiStr{} -> tyString
     LiBool{} -> tyBool
     LiUnit{} -> tyUnit
+infer expr@(Ascription e ty an) = do
+  (ty', _) <- resolveKind ty
+  (e', et) <- infer e
+  _ <- subsumes expr ty' et
+  pure (Ascription (correct ty' e') ty' (an, ty'), ty')
 infer ex = do
   x <- freshTV
   ex' <- check ex x
