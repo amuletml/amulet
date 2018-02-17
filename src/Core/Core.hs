@@ -77,7 +77,7 @@ instance Pretty CoTerm where
   pprint (CotBegin xs e) = kwClr "begin " <+> interleave (opClr "; ") (xs ++ [e]) <+> kwClr " end"
   pprint (CotLit l) = pprint l
   pprint (CotMatch e ps) = kwClr "match " <+> e <+> " " <+> braces (block 2 (newline *> pprCases ps) <* newline)
-  pprint (CotTyApp f t) = f <+> opClr " @" <+> t
+  pprint (CotTyApp f t) = f <+> opClr " @" <+> verbatim t
   pprint (CotExtend x rs) = braces $ x <+> opClr " | " <+> prettyRows rs where
     prettyRows = interleave ", " . map (\(x, t, v) ->
       x <+> opClr " : "
