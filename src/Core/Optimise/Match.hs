@@ -49,6 +49,7 @@ matchKnownConstr = pass go where
     xs' <- traverse (canWe . thd3) xs
     pure (t' && and xs')
   canWe CotLit{} = pure True
+  canWe CotLam{} = pure True
   canWe _ = pure False
 
   doIt :: CoTerm -> [(CoPattern, CoType, CoTerm)] -> Maybe CoTerm
@@ -58,6 +59,7 @@ matchKnownConstr = pass go where
   doIt _ _ = Nothing
 
   match :: CoPattern -> CoTerm -> Maybe [(Var Resolved, CoType, CoTerm)]
+  match p (CotLam Big _ t) = match p t
   match (CopCapture v t) x = Just [(v, t, x)]
   match (CopConstr v) (CotRef v' _)
     | v == v' = Just []
