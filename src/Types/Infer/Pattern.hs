@@ -20,7 +20,7 @@ inferPattern :: MonadInfer Typed m
 inferPattern pat@(PType p t ann) = do
   (p', pt, vs) <- inferPattern p
   (t', _) <- resolveKind t
-  _ <- subsumes pat pt t'
+  _ <- subsumes pat t' pt
   case p' of
     Capture v _ -> pure (PType p' t' (ann, t'), t', [(v, t')])
     _ -> pure (PType p' t' (ann, t'), t', vs)
