@@ -20,6 +20,7 @@ import Control.Lens
 
 import Syntax.Subst
 import Syntax.Raise
+import Syntax.Let
 import Syntax
 
 import Types.Infer.Pattern
@@ -28,7 +29,6 @@ import Types.Wellformed
 import Types.Unify
 import Types.Holes
 import Types.Kinds
-
 
 -- Solve for the types of lets in a program
 inferProgram :: MonadGen Int m => [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))
@@ -81,7 +81,7 @@ check (Let ns b an) t = do
     tv <- freshTV
     pure (TvName a, tv)
   extendMany ks $ do
-    (ns', ts) <- inferLetTy id ks (reverse ns)
+    (ns', ts) <- inferLetTy id ks (depOrder ns)
     extendMany ts $ do
       b' <- check b t
       pure (Let ns' b' (an, t))
@@ -176,7 +176,7 @@ inferProg (LetStmt ns:prg) = do
     vl <- lookupTy a `catchError` const (pure tv)
     pure (TvName a, vl)
   extendMany ks $ do
-    (ns', ts) <- inferLetTy closeOver ks (reverse ns)
+    (ns', ts) <- inferLetTy closeOver ks (depOrder ns)
                    `catchError` (throwError . flip ArisingFrom (LetStmt ns))
     extendMany ts $
       consFst (LetStmt ns')
