@@ -191,17 +191,19 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
   pretty (VarRef v _) = pretty v
   pretty (Let [] _ _) = error "absurd: never parsed"
   pretty (Let ((n, v, _):xs) e _) =
-    let prettyBind (n, v, _) = string "and" <+> pretty n <+> equals <+> align (pretty v)
-     in align $ string "let" <+> pretty n <+> equals <+> align (pretty v)
-            <$> vsep (map prettyBind xs)
-            <$> string "in" <+> pretty e
+    let prettyBind (n, v, _) = string "and" <+> pretty n <+> nest 2 (equals </> pretty v)
+     in align $ string "let" <+> pretty n <+> nest 2 (equals </> pretty v)
+            <$> case xs of
+              [] -> string "in" <+> pretty e
+              _ -> vsep (map prettyBind xs) <$> string "in" <+> pretty e
   pretty (If c t e _) = string "if" <+> pretty c
                     <$> indent 2 (vsep [ string "then" <+> pretty t
                                        , string "else" <+> pretty e
                                        ])
   pretty (App c (e@App{}) _) = pretty c <+> parens (pretty e)
+  pretty (App c (e@Fun{}) _) = pretty c <+> parens (pretty e)
   pretty (App f x _) = pretty f <+> pretty x
-  pretty (Fun v e _) = string "fun" <+> pretty v <+> string "->" <+> pretty e
+  pretty (Fun v e _) = string "fun" <+> pretty v <+> nest 2 (string "->" </> pretty e)
   pretty (Begin e _) =
     vsep [ string "begin", indent 2 (vsep (punctuate semi (map pretty e))), string "end" ]
   pretty (Literal l _) = pretty l
@@ -281,8 +283,8 @@ instance Pretty (Var p) => Pretty (Kind p) where
 instance (Pretty (Var p)) => Pretty (Toplevel p) where
   pretty (LetStmt []) = error "absurd!"
   pretty (LetStmt ((n, v, _):xs)) =
-    let prettyBind (n, v, _) = string "and" <+> pretty n <+> equals <+> align (pretty v)
-     in align $ string "let" <+> pretty n <+> equals <+> align (pretty v)
+    let prettyBind (n, v, _) = string "and" <+> pretty n <+> nest 2 (equals </> pretty v)
+     in align $ string "let" <+> pretty n <+> nest 2 (equals </> pretty v)
             <$> vsep (map prettyBind xs)
   pretty (ForeignVal v d ty _) = text "foreign val" <+> pretty v <+> colon <+> pretty ty <+> equals <+> dquotes (text (T.unpack d))
   pretty (TypeDecl ty args ctors) = text "type" <+> pretty ty
@@ -291,7 +293,7 @@ instance (Pretty (Var p)) => Pretty (Toplevel p) where
                                 <$> vsep (map ((char '|' <+>) . pretty) ctors)
 
 instance (Pretty (Var p)) => Pretty [Toplevel p] where
-  pretty = vsep . map pretty
+  pretty = vcat . map pretty
 
 instance (Pretty (Var p)) => Pretty (Constructor p) where
   pretty (UnitCon p _) = pretty p

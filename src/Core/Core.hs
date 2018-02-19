@@ -67,12 +67,20 @@ data CoStmt
 instance Pretty CoTerm where
   pretty (CotRef v _) = pretty v
   pretty (CotLam Big (v, t) c)
-    = char 'Λ' <+> parens (pretty v <+> colon <+> pretty t) <> dot <+> pretty c
+    = char 'Λ' <+> parens (pretty v <+> colon <+> pretty t) <> nest 2 (dot </> pretty c)
   pretty (CotLam Small (v, t) c)
-    = char 'λ' <+> parens (pretty v <+> colon <+> pretty t) <> dot <+> pretty c
-  pretty (CotApp f x) = parens (pretty f) <+> parens (pretty x)
-  pretty (CotLet xs e) = text "let" </> pprLet xs </> (text "in" <+> pretty e)
-  pretty (CotBegin e _) = text "begin" <+> braces (indent 2 (hsep (punctuate semi (map pretty e))))
+    = char 'λ' <+> parens (pretty v <+> colon <+> pretty t) <> nest 2 (dot </> pretty c)
+  pretty (CotApp f x) = f' <+> x' where
+    f' = case f of
+      CotLam{} -> parens (pretty f)
+      _ -> pretty f
+    x' = case x of
+      CotLam{} -> parens (pretty x)
+      CotApp{} -> parens (pretty x)
+      _ -> pretty x
+
+  pretty (CotLet xs e) = text "let" <+> pprLet xs </> (text "in" <+> pretty e)
+  pretty (CotBegin e _) = text "begin" <+> pprBegin e
   pretty (CotLit l) = pretty l
   pretty (CotMatch e ps) = text "match" <+> pretty e <+> pprCases ps
   pretty (CotTyApp f t) = pretty f <+> char '@' <> squotes (pretty t)
@@ -81,12 +89,18 @@ instance Pretty CoTerm where
       text (unpack x) <+> colon <+> pretty t <+> equals <+> pretty v)
 
 pprLet :: [(Var Resolved, CoType, CoTerm)] -> Doc
-pprLet xs = semiBraces (map one xs) where
-  one (a, b, c) = pretty a <+> colon <+> pretty b <+> equals </> indent 2 (pretty c)
+pprLet = braces' . vsep . map (indent 2) . punctuate semi . map one where
+  one (a, b, c) = pretty a <+> colon <+> pretty b <+> nest 2 (equals </> pretty c)
+
+pprBegin :: [CoTerm] -> Doc
+pprBegin = braces' . vsep . map (indent 2) . punctuate semi . map pretty
 
 pprCases :: [(CoPattern, CoType, CoTerm)] -> Doc
-pprCases xs = semiBraces (map one xs) where
+pprCases = braces' . vsep . map (indent 2) . punctuate semi . map one where
   one (a, b, c) = pretty a <+> colon <+> pretty b <+> text "->" <+> pretty c
+
+braces' :: Doc -> Doc
+braces' = enclose (lbrace <> linebreak) (linebreak <> rbrace)
 
 instance Pretty CoPattern where
   pretty (CopCapture v t) = parens (pretty v <+> colon <+> pretty t)
@@ -133,7 +147,7 @@ instance Pretty CoStmt where
     pprCons = map (\(x, t) -> pretty x <+> colon <+> pretty t)
 
 instance Pretty [CoStmt] where
-  pretty = vsep . map pretty
+  pretty = vcat . map pretty
 
 freeIn :: CoTerm -> VarSet.Set
 freeIn (CotRef v _) = VarSet.singleton v

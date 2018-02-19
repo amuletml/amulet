@@ -71,18 +71,18 @@ test :: String -> IO (Maybe ([CoStmt], Env))
 test x = do
   putStrLn "\x1b[1;32m(* Program: *)\x1b[0m"
   case compile "<test>" (T.pack x) of
-    CSuccess (_, core, optm, env) -> do
-      putStrLn x
+    CSuccess (ast, core, optm, env) -> do
+      putDoc (pretty ast) *> putStrLn ""
       putStrLn "\x1b[1;32m(* Type inference: *)\x1b[0m"
       ifor_ (difference env builtinsEnv ^. values) . curry $ \(k :: Var Resolved, t :: Type Typed) ->
-        putDoc (pretty k <> colon <> pretty t)
+        putDoc (pretty k <+> colon <+> pretty t) *> putStrLn ";"
       putStrLn "\x1b[1;32m(* Kind inference: *)\x1b[0m"
       ifor_ (difference env builtinsEnv ^. types) . curry $ \(k, t) ->
-        putDoc (pretty k <> colon <> pretty t)
+        putDoc (pretty k <+> colon <+> pretty t) *> putStrLn ";"
       putStrLn "\x1b[1;32m(* Core lowering: *)\x1b[0m"
-      traverse_ (putDoc . pretty) core
+      putDoc (pretty core) *> putStrLn ""
       putStrLn "\x1b[1;32m(* Optimised: *)\x1b[0m"
-      traverse_ (putDoc . pretty) optm
+      putDoc (pretty optm) *> putStrLn ""
       pure (Just (core, env))
     CParse e s -> Nothing <$ report (pretty s <> colon <+> pretty e) (T.pack x)
     CResolve e -> Nothing <$ report e (T.pack x)
