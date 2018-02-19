@@ -151,10 +151,9 @@ infer (Literal l an) = pure (Literal l (an, ty), ty) where
     LiStr{} -> tyString
     LiBool{} -> tyBool
     LiUnit{} -> tyUnit
-infer expr@(Ascription e ty an) = do
+infer (Ascription e ty an) = do
   (ty', _) <- resolveKind ty
-  (e', et) <- infer e
-  _ <- subsumes expr ty' et
+  e' <- check e ty'
   pure (Ascription (correct ty' e') ty' (an, ty'), ty')
 infer ex = do
   x <- freshTV
