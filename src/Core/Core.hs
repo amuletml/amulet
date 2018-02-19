@@ -80,7 +80,7 @@ instance Pretty CoTerm where
       _ -> pretty x
 
   pretty (CotLet xs e) = text "let" <+> pprLet xs </> (text "in" <+> pretty e)
-  pretty (CotBegin e _) = text "begin" <+> pprBegin e
+  pretty (CotBegin e _) = text "begin" <+> pprBegin (map pretty e)
   pretty (CotLit l) = pretty l
   pretty (CotMatch e ps) = text "match" <+> pretty e <+> pprCases ps
   pretty (CotTyApp f t) = pretty f <+> char '@' <> squotes (pretty t)
@@ -92,8 +92,8 @@ pprLet :: [(Var Resolved, CoType, CoTerm)] -> Doc
 pprLet = braces' . vsep . map (indent 2) . punctuate semi . map one where
   one (a, b, c) = pretty a <+> colon <+> pretty b <+> nest 2 (equals </> pretty c)
 
-pprBegin :: [CoTerm] -> Doc
-pprBegin = braces' . vsep . map (indent 2) . punctuate semi . map pretty
+pprBegin :: [Doc] -> Doc
+pprBegin = braces' . vsep . map (indent 2) . punctuate semi
 
 pprCases :: [(CoPattern, CoType, CoTerm)] -> Doc
 pprCases = braces' . vsep . map (indent 2) . punctuate semi . map one where
@@ -141,14 +141,16 @@ instance Pretty CoLiteral where
   pretty (ColStr s) = dquotes (text (unpack s))
 
 instance Pretty CoStmt where
-  pretty (CosForeign v t e) = pretty v <+> colon <+> pretty t <+> equals <+> text "foreign"
+  pretty (CosForeign v t _) = pretty v <+> colon <+> pretty t <+> equals <+> text "foreign"
   pretty (CosLet vs) = text "let" <+> pprLet vs
-  pretty (CosType v cs) = text "type" <+> pretty v <+> semiBraces (pprCons cs) where
-    pprCons = map (\(x, t) -> pretty x <+> colon <+> pretty t)
+  pretty (CosType v cs) = text "type" <+> pretty v <+> pprBegin (map pprCons cs) where
+    pprCons (x, t) = pretty x <+> colon <+> pretty t
 
 instance Pretty [CoStmt] where
   pretty = vcat . map pretty
 
+{-# ANN freeIn "HLint: ignore" #-}
+-- Rationale: can't use <> because of Doc. Ughr.
 freeIn :: CoTerm -> VarSet.Set
 freeIn (CotRef v _) = VarSet.singleton v
 freeIn (CotLam Small (v, _) e) = VarSet.delete v (freeIn e)

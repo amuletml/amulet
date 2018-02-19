@@ -10,8 +10,6 @@ import qualified Data.Text as T
 import Data.Position
 import Data.Span
 
-import Data.Foldable
-
 import Control.Monad.Infer
 import Control.Lens
 

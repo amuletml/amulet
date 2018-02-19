@@ -41,7 +41,9 @@ data LuaExpr
   | LuaBitE Text
   deriving (Eq, Show, Ord)
 
+body :: [LuaStmt] -> Doc
 body = indent 2 . vsep . map pretty
+text :: Text -> Doc
 text = string . T.unpack
 
 instance Pretty LuaStmt where

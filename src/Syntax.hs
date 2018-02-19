@@ -15,7 +15,6 @@ import Data.Span
 
 import Data.List.NonEmpty(NonEmpty ((:|)))
 import Data.Semigroup (sconcat)
-import Data.Foldable
 import Data.Typeable
 import Data.Triple
 import Data.Maybe
