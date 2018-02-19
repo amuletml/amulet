@@ -5,14 +5,16 @@
 {-# LANGUAGE DeriveDataTypeable, TemplateHaskell #-}
 module Syntax where
 
-import Pretty
+import Prelude hiding ((<$>))
+import Text.PrettyPrint.Leijen
 
+import qualified Data.Text as T
 import Data.Text (Text)
 import Data.Spanned
 import Data.Span
 
 import Data.List.NonEmpty(NonEmpty ((:|)))
-import Data.Semigroup
+import Data.Semigroup (sconcat)
 import Data.Foldable
 import Data.Typeable
 import Data.Triple
@@ -186,136 +188,134 @@ instance (Data (Var p), Data (Ann p), Data p) => Spanned (Constructor p)
 --- Pretty-printing {{{
 
 instance (Pretty (Var p)) => Pretty (Expr p) where
-  pprint (VarRef v _) = pprint v
-  pprint (Let [] _ _) = error "absurd: never parsed"
-  pprint (Let ((n, v, _):xs) e _) = do
-    kwClr "let " <+> n <+> opClr " = " <+> v <+> newline
-    for_ xs $ \(n, v, _) ->
-      kwClr "and " <+> n <+> opClr " = " <+> v <+> newline
-    pprint e
-  pprint (If c t e _) = do
-    kwClr "if " <+> c <+> newline
-    block 2 $ do
-      kwClr "then " <+> t <+> newline
-      kwClr "else " <+> e
-  pprint (App c (e@App{}) _) = c <+> " " <+> parens e
-  pprint (App f x _) = f <+> " " <+> x
-  pprint (Fun v e _) = kwClr "fun " <+> v <+> opClr " -> " <+> e
-  pprint (Begin e _) = do
-    kwClr "begin "
-    body 2 e *> newline
-    kwClr "end"
-  pprint (Literal l _) = pprint l
-  pprint (BinOp l o r _) = parens (pprint l <+> " " <+> pprint o <+> " " <+> pprint r)
-  pprint (Match t bs _) = do
-    kwClr "match " <+> t <+> " with"
-    body 2 bs *> newline
-  pprint (Hole v _) = pprint v -- A typed hole
-  pprint (Ascription e t _) = parens $ e <+> opClr " : " <+> t
-  pprint (Record rows _) = braces $ interleave ", " $ map (\(n, v) -> n <+> opClr " = " <+> v) rows
-  pprint (RecordExt var rows _) = braces $ var <+> kwClr " with " <+> interleave ", " (map (\(n, v) -> n <+> opClr " = " <+> v) rows)
-  pprint (Access x@VarRef{} f _) = x <+> opClr "." <+> f
-  pprint (Access e f _) = parens e <+> opClr "." <+> f
+  pretty (VarRef v _) = pretty v
+  pretty (Let [] _ _) = error "absurd: never parsed"
+  pretty (Let ((n, v, _):xs) e _) =
+    let prettyBind (n, v, _) = string "and" <+> pretty n <+> equals <+> align (pretty v)
+     in align $ string "let" <+> pretty n <+> equals <+> align (pretty v)
+            <$> vsep (map prettyBind xs)
+            <$> string "in" <+> pretty e
+  pretty (If c t e _) = string "if" <+> pretty c
+                    <$> indent 2 (vsep [ string "then" <+> pretty t
+                                       , string "else" <+> pretty e
+                                       ])
+  pretty (App c (e@App{}) _) = pretty c <+> parens (pretty e)
+  pretty (App f x _) = pretty f <+> pretty x
+  pretty (Fun v e _) = string "fun" <+> pretty v <+> string "->" <+> pretty e
+  pretty (Begin e _) =
+    vsep [ string "begin", indent 2 (vsep (punctuate semi (map pretty e))), string "end" ]
+  pretty (Literal l _) = pretty l
+  pretty (BinOp l o r _) = parens (pretty l <+> pretty o <+> pretty r)
+  pretty (Match t bs _) = vsep ((string "match" <+> pretty t <+> string "with"):prettyMatches bs)
+  pretty (Hole v _) = pretty v -- A typed hole
+  pretty (Ascription e t _) = parens $ pretty e <+> colon <+> pretty t
+  pretty (Record rows _) = record (map (\(n, v) -> text (T.unpack n) <+> equals <+> pretty v) rows)
+  pretty (RecordExt var rows _) = braces $ pretty var <> text "with" <> hsep (punctuate comma (prettyRows rows))
+  pretty (Access x@VarRef{} f _) = pretty x <> dot <> text (T.unpack f)
+  pretty (Access e f _) = parens (pretty e) <> dot <> text (T.unpack f)
 
-  pprint (LeftSection op vl _) = parens $ opClr op <+> " " <+> vl
-  pprint (RightSection op vl _) = parens $ vl <+> " " <+> opClr op
-  pprint (BothSection op _) = parens $ opClr op
-  pprint (AccessSection k _) = parens $ opClr "." <+> k
+  pretty (LeftSection op vl _) = parens $ pretty op <+> pretty vl
+  pretty (RightSection op vl _) = parens $ pretty vl <+> pretty op
+  pretty (BothSection op _) = parens $ pretty op
+  pretty (AccessSection k _) = parens $ dot <> text (T.unpack k)
 
-  pprint (Tuple es _) = parens $ interleave ", " es
-  pprint (TypeApp f x _) = f <+> opClr " @" <+> x
+  pretty (Tuple es _) = tupled (map pretty es)
+  pretty (TypeApp f x _) = pretty f <+> text "@" <> pretty x
 
-instance (Pretty (Var p)) => Pretty (Pattern p, Expr p) where
-  pprint (a, b) = opClr "| " <+> a <+> " -> " <+> b
+prettyMatches :: (Pretty (Pattern p), Pretty (Expr p)) => [(Pattern p, Expr p)] -> [Doc]
+prettyMatches = map (\(a, b) -> char '|' <+> pretty a <+> string "->" <+> pretty b)
 
-instance (Pretty (Var p)) => Pretty (Expr p, Expr p) where
-  pprint (a, b) = opClr "| " <+> a <+> " -> " <+> b
+prettyRows :: Pretty x => [(Text, x)] -> [Doc]
+prettyRows = map (\(n, v) -> text (T.unpack n) <+> equals <+> pretty v)
 
 instance (Pretty (Var p)) => Pretty (Pattern p) where
-  pprint Wildcard{} = kwClr "_"
-  pprint (Capture x _) = pprint x
-  pprint (Destructure x Nothing   _) = pprint x
-  pprint (Destructure x (Just xs) _) = parens $ x <+> " " <+> xs
-  pprint (PType p x _) = parens $ p <+> opClr " : " <+> x
-  pprint (PRecord rows _) = braces $ interleave ", " $ map (\(x, y) -> x <+> opClr " = " <+> y) rows
-  pprint (PTuple ps _) = parens $ interleave ", " ps
+  pretty Wildcard{} = char '_'
+  pretty (Capture x _) = pretty x
+  pretty (Destructure x Nothing   _) = pretty x
+  pretty (Destructure x (Just xs) _) = parens $ pretty x <+> pretty xs
+  pretty (PType p x _) = parens $ pretty p <+> colon <+> pretty x
+  pretty (PRecord rows _) = record (prettyRows rows)
+  pretty (PTuple ps _) = tupled (map pretty ps)
 
 instance Pretty Lit where
-  pprint (LiStr s) = str s
-  pprint (LiInt s) = litClr s
-  pprint (LiBool True) = litClr "true"
-  pprint (LiBool False) = litClr "false"
-  pprint LiUnit = litClr "unit"
+  pretty (LiStr s) = dquotes (text (T.unpack s))
+  pretty (LiInt s) = integer s
+  pretty (LiBool True) = text "true"
+  pretty (LiBool False) = text "false"
+  pretty LiUnit = text "unit"
 
 instance (Pretty (Var p)) => Pretty (Type p) where
-  pprint (TyCon v) = typeClr v
-  pprint (TyVar v) = "'" <+> tvClr v
-  pprint (TySkol (Skolem v _ _)) = kwClr v
-  pprint (TyForall vs v)
-    = kwClr "∀ " <+> interleave " " (map (\x -> "'" <+> tvClr x) vs) <+> opClr ". " <+> v
+  pretty (TyCon v) = pretty v
+  pretty (TyVar v) = squote <> pretty v
+  pretty (TySkol (Skolem v _ _)) = dquote <> pretty v
+  pretty (TyForall vs v)
+    = text "forall" <+> hsep (map ((squote <>) . pretty) vs) <> dot <+> pretty v
 
-  pprint (TyArr x e)
-    | TyArr{} <- x = parens x <+> opClr " -> " <+> e
-    | TyForall{} <- x = parens x <+> opClr " -> " <+> e
-    | TyTuple{} <- x = parens x <+> opClr " -> " <+> e
-    | otherwise = x <+> opClr " -> " <+> e
-  pprint (TyRows p rows) = braces $ p <+> opClr " | " <+> prettyRows rows where
-    prettyRows = interleave ", " . map (\(x, t) -> x <+> opClr " : " <+> t)
+  pretty (TyArr x e)
+    | TyArr{} <- x = parens (pretty x) <+> text "->" <+> pretty e
+    | TyForall{} <- x = parens (pretty x) <+> text "->" <+> pretty e
+    | TyTuple{} <- x = parens (pretty x) <+> text "->" <+> pretty e
+    | otherwise = pretty x <+> text "->" <+> pretty x
 
-  pprint (TyExactRows rows) = braces $ prettyRows rows where
-    prettyRows = interleave ", " . map (\(x, t) -> x <+> opClr " : " <+> t)
+  pretty (TyRows p rows) = braces $ pretty p <+> char '|' <+> hsep (punctuate comma (prettyRows rows)) 
+  pretty (TyExactRows rows) = record (prettyRows rows)
 
-  pprint (TyApp e x@TyApp{}) = e <+> " " <+> parens x
-  pprint (TyApp x e) = x <+> opClr " " <+> e
-  pprint (TyTuple a b)
+  pretty (TyApp e x@TyApp{}) = pretty e <+> parens (pretty x)
+  pretty (TyApp x e) = pretty x <+> pretty e
+  pretty (TyTuple a b)
     | TyTuple{} <- a
-    = parens a <+> opClr " * " <+> b
+    = parens (pretty a) <+> char '*' <+> pretty b
     | otherwise
-    = a <+> opClr " * " <+> b
+    = pretty a <+> char '*' <+> pretty b
 
 instance Pretty (Var p) => Pretty (Kind p) where
-  pprint KiStar = kwClr "Type"
-  pprint (KiArr a b)
-    | KiArr{} <- a = parens a <+> opClr " -> " <+> b
-    | otherwise = a <+> opClr " -> " <+> b
-  pprint (KiVar v) = opClr "'" <+> tvClr v
-  pprint (KiForall vs v)
-    = kwClr "∀ " <+> interleave " " (map (\x -> "'" <+> tvClr x) vs) <+> opClr ". " <+> v
+  pretty KiStar = text "Type"
+  pretty (KiArr a b)
+    | KiArr{} <- a = parens (pretty a) <+> text "->" <+> pretty b
+    | otherwise = pretty a <+> text "->" <+> pretty b
+
+  pretty (KiVar v) = squote <> pretty v
+  pretty (KiForall vs v)
+    = text "forall" <+> hsep (map ((squote <>) . pretty) vs) <> dot <+> pretty v
 
 instance (Pretty (Var p)) => Pretty (Toplevel p) where
-  pprint (LetStmt vs) = opClr "let " <+> interleave (newline <+> opClr "and ") (map pVars vs) where
-    pVars (v, e, _) = v <+> " = " <+> block 2 e
-  pprint (ForeignVal v d ty _) = kwClr "foreign val " <+> v <+> opClr ": "
-                           <+> ty <+> opClr " = " <+> str d
-  pprint (TypeDecl ty args ctors) = do
-    kwClr "type " <+> ty
-    traverse_ (" '" <+>) args
-    opClr " = "
-    body 2 (map ("| "<+>) ctors)
+  pretty (LetStmt []) = error "absurd!"
+  pretty (LetStmt ((n, v, _):xs)) =
+    let prettyBind (n, v, _) = string "and" <+> pretty n <+> equals <+> align (pretty v)
+     in align $ string "let" <+> pretty n <+> equals <+> align (pretty v)
+            <$> vsep (map prettyBind xs)
+  pretty (ForeignVal v d ty _) = text "foreign val" <+> pretty v <+> colon <+> pretty ty <+> equals <+> dquotes (text (T.unpack d))
+  pretty (TypeDecl ty args ctors) = text "type" <+> pretty ty
+                                <+> hsep (map ((squote <>) . pretty) args)
+                                <+> equals
+                                <$> vsep (map ((char '|' <+>) . pretty) ctors)
 
 instance (Pretty (Var p)) => Pretty [Toplevel p] where
-  pprint = body 0 . map (<+> opClr " ;; ")
+  pretty = vsep . map pretty
 
 instance (Pretty (Var p)) => Pretty (Constructor p) where
-  pprint (UnitCon p _) = pprint p
-  pprint (ArgCon p t _) = pprint p <+> kwClr " of " <+> t
+  pretty (UnitCon p _) = pretty p
+  pretty (ArgCon p t _) = pretty p <+> text "of" <+> pretty t
 
 instance Pretty (Var Parsed) where
-  pprint (Name v) = pprint v
+  pretty (Name v) = text (T.unpack v)
 
 instance Pretty (Var Resolved) where
-  pprint (TgName v _) = pprint v
-  -- pprint (TgName v i) = pprint v <+> "#" <+> i
-  pprint (TgInternal v) = pprint v
+  pretty (TgName v _) = text (T.unpack v)
+  -- pretty (TgName v i) = pretty v <+> "#" <+> i
+  pretty (TgInternal v) = text (T.unpack v)
 
 instance Pretty (Var Typed) where
-  pprint (TvName v) = pprint v
-  -- pprint (TvName v t)
-    -- | t == internalTyVar = pprint v
+  pretty (TvName v) = pretty v
+  -- pretty (TvName v t)
+    -- | t == internalTyVar = pretty v
     -- | otherwise = parens $ v <+> opClr " : " <+> t
     --
 instance Pretty (Span, Type Typed) where
-  pprint (x, _) = pprint x
+  pretty (x, _) = pretty x
+
+record :: [Doc] -> Doc
+record = encloseSep lbrace rbrace comma
 
 -- }}}
 
@@ -324,7 +324,7 @@ unTvName (TvName x) = x
 
 getType :: Data (f Typed) => f Typed -> Type Typed
 getType = snd . head . catMaybes . gmapQ get where
-  get d = (`asTypeOf` (undefined :: (Span, Type Typed))) <$> cast d
+  get d = fmap (`asTypeOf` (undefined :: (Span, Type Typed))) (cast d)
   -- FIXME: Point-freeing this definition makes type inference broken.
   -- Thanks, GHC.
 

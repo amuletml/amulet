@@ -27,8 +27,8 @@ import Core.Simplify
 import Core.Lower
 import Core.Core
 
+import Text.PrettyPrint.Leijen
 import Errors
-import Pretty
 import Parser
 import Parser.Wrapper
 
@@ -63,7 +63,7 @@ compileFromTo :: FilePath
 compileFromTo fp x emit =
   case compile fp x of
     CSuccess (_, _, core, env) -> emit (compileProgram env core)
-    CParse e s -> putStrLn "Parse error" >> report (s <+> (": " :: String) <+> e) x
+    CParse e s -> putStrLn "Parse error" >> report (pretty s <> colon <+> pretty e) x
     CResolve e -> putStrLn "Resolution error" >> report e x
     CInfer e -> putStrLn "Type error" >> report e x
 
@@ -75,16 +75,16 @@ test x = do
       putStrLn x
       putStrLn "\x1b[1;32m(* Type inference: *)\x1b[0m"
       ifor_ (difference env builtinsEnv ^. values) . curry $ \(k :: Var Resolved, t :: Type Typed) ->
-        T.putStrLn (prettyPrint k <> " : " <> prettyPrint t)
+        putDoc (pretty k <> colon <> pretty t)
       putStrLn "\x1b[1;32m(* Kind inference: *)\x1b[0m"
       ifor_ (difference env builtinsEnv ^. types) . curry $ \(k, t) ->
-        T.putStrLn (prettyPrint k <> " : " <> prettyPrint t)
+        putDoc (pretty k <> colon <> pretty t)
       putStrLn "\x1b[1;32m(* Core lowering: *)\x1b[0m"
-      traverse_ ppr core
+      traverse_ (putDoc . pretty) core
       putStrLn "\x1b[1;32m(* Optimised: *)\x1b[0m"
-      traverse_ ppr optm
+      traverse_ (putDoc . pretty) optm
       pure (Just (core, env))
-    CParse e s -> Nothing <$ report (s <+> (": " :: String) <+> e) (T.pack x)
+    CParse e s -> Nothing <$ report (pretty s <> colon <+> pretty e) (T.pack x)
     CResolve e -> Nothing <$ report e (T.pack x)
     CInfer e -> Nothing <$ report e (T.pack x)
 
@@ -94,14 +94,14 @@ main = do
   case ags of
     [x] -> do
       x' <- T.readFile x
-      compileFromTo x x' ppr
+      compileFromTo x x' (putDoc . pretty)
     ["test", x] -> do
       x' <- readFile x
       _ <- test x'
       pure ()
     [x, t] -> do
       x' <- T.readFile x
-      compileFromTo x x' $ T.writeFile t . uglyPrint
+      compileFromTo x x' $ T.writeFile t . T.pack . show . pretty
     [] -> error "REPL not implemented yet"
     _ -> do
       putStrLn "usage: amulet from.ml to.lua"

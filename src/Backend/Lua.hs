@@ -1,9 +1,12 @@
 module Backend.Lua where
 
-import Pretty
+import Prelude hiding ((<$>))
 
-import Data.Text (Text)
+import Text.PrettyPrint.Leijen hiding (text)
+
 import qualified Data.Text as T
+import Data.Text (Text)
+import Data.Char
 
 data LuaStmt
   = LuaDo [LuaStmt]
@@ -38,98 +41,107 @@ data LuaExpr
   | LuaBitE Text
   deriving (Eq, Show, Ord)
 
+body = indent 2 . vsep . map pretty
+text = string . T.unpack
+
 instance Pretty LuaStmt where
-  pprint (LuaDo xs) = do
-    kwClr "do"
-    body 2 xs *> newline
-    kwClr "end"
-  pprint (LuaAssign ns xs) = interleave ", " ns <+> opClr " = " <+> interleave ", " xs
-  pprint (LuaWhile c t) = do
-    kwClr "while " <+> c <+> kwClr " do"
-    body 2 t *> newline
-    kwClr "end"
-  pprint (LuaRepeat t c) = do
-    kwClr "repeat"
-    body 2 t *> newline
-    kwClr "until " <+> c
-  pprint (LuaIf c t []) = do
-    kwClr "if " <+> c <+> kwClr " then"
-    body 2 t *> newline
-    kwClr "end"
-  pprint (LuaIf c t e) = do
-    kwClr "if " <+> c <+> kwClr " then"
-    body 2 t *> newline
-    kwClr "else"
-    body 2 e *> newline
-    kwClr "end"
-  pprint (LuaIfElse ((c,t):bs)) = do
-    kwClr "if " <+> c <+> kwClr " then"
-    body 2 t *> newline
-    emitElse bs
-      where
-        emitElse [] = kwClr "end"
-        emitElse [(LuaTrue, b)] = do
-          kwClr "else"
-          body 2 b *> newline
-          kwClr "end"
-        emitElse ((c, b):xs) = do
-          kwClr "elseif " <+> c <+> kwClr " then"
-          body 2 b *> newline
-          emitElse xs
-  pprint (LuaIfElse []) = error "impossible"
-  pprint (LuaFornum v s e i b) = do
-    kwClr "for " <+> v <+> opClr " = "
-    interleave ", " [s, e, i]
-    kwClr " do"
-    body 2 b *> newline
-    kwClr "end"
-  pprint (LuaFor vs es b) = do
-    kwClr "for " <+> interleave ", " vs <+> opClr " in "
-    interleave ", " es <+> kwClr " do"
-    body 2 b *> newline
-    kwClr "end"
-  pprint (LuaLocal [n] [LuaFunction a b]) = do
-    kwClr "local function " <+> n <+> parens (interleave ", " a)
-    body 2 b *> newline
-    kwClr "end"
-  pprint (LuaLocal vs []) = do
-    kwClr "local "
-    interleave ", " vs
-  pprint (LuaLocal vs xs) = do
-    kwClr "local "
-    interleave ", " vs
-    opClr " = "
-    interleave ", " xs
-  pprint (LuaBit x) = pprint x
-  pprint LuaBreak = kwClr "break"
-  pprint (LuaReturn v) = kwClr "return " <+> v
-  pprint (LuaCallS x@LuaFunction{} a) = parens x <+> parens (interleave ", " a) <+> ";"
-  pprint (LuaCallS x a) = x <+> parens (interleave ", " a)
+  pretty (LuaDo xs) =
+    vsep [ string "do"
+         , body xs
+         , string "end"
+         ]
+  pretty (LuaAssign ns xs) = hsep (punctuate comma (map pretty ns)) <+> equals <+> hsep (punctuate comma (map pretty xs))
+  pretty (LuaWhile c t) =
+    vsep [ string "while" <+> pretty c <+> string "do"
+         , body t
+         , string "end"
+         ]
+  pretty (LuaRepeat t c) =
+    vsep [ string "repeat"
+         , body t
+         , string "until" <+> pretty c
+         ]
+  pretty (LuaIf c t []) =
+    vsep [ string "if" <+> pretty c <+> string "then"
+         , body t
+         , string "end"
+         ]
+  pretty (LuaIf c t e) =
+    vsep [ string "if" <+> pretty c <+> string "then"
+         , body t
+         , string "else"
+         , body e
+         , string "end"
+         ]
+  pretty (LuaIfElse ((c,t):bs)) =
+    let pprintElse [] = string "end"
+        pprintElse [(LuaTrue, b)] =
+          vsep [ string "else"
+               , body b
+               , string "end"
+               ]
+        pprintElse ((c, b):xs) =
+          vsep [ string "elseif" <+> pretty c <+> string "then"
+               , body b
+               ]
+            <$> pprintElse xs
+     in vsep [ string "if" <+> pretty c <+> string "then"
+             , body t
+             ]
+        <$> pprintElse bs
+  pretty (LuaIfElse []) = error "impossible"
+  pretty (LuaFornum v s e i b) =
+    vsep [ string "for" <+> text v <+> equals
+       <+> pretty s <+> comma <+> pretty e <+> comma <+> pretty i 
+         , body b
+         , string "end"
+         ]
+  pretty (LuaFor vs es b) =
+    vsep [ string "for" <+> hsep (punctuate comma (map text vs))
+       <+> equals <+> hsep (punctuate comma (map pretty es))
+         , body b
+         , string "end"
+         ]
+  pretty (LuaLocal [n] [LuaFunction a b]) =
+    vsep [ string "local function" <+> pretty n <+> tupled (map pretty a)
+         , body b
+         , string "end"
+         ]
+  pretty (LuaLocal vs []) = string "local" <+> hsep (punctuate comma (map pretty vs))
+  pretty (LuaLocal vs xs) = string "local" <+> hsep (punctuate comma (map pretty vs)) <+> equals <+> hsep (punctuate comma (map pretty vs))
+  pretty (LuaBit x) = text x
+  pretty LuaBreak = string "break"
+  pretty (LuaReturn v) = string "return" <+> pretty v
+  pretty (LuaCallS x@LuaFunction{} a) = parens (pretty x) <> tupled (map pretty a) <> semi
+  pretty (LuaCallS x a) = pretty x <> tupled (map pretty a)
 
 instance Pretty LuaVar where
-  pprint (LuaName x) = pprint x
-  pprint (LuaIndex e@(LuaRef _) (LuaString k)) | validKey k = e <+> opClr "." <+> k
-  pprint (LuaIndex e (LuaString k)) | validKey k = parens e <+> opClr "." <+> k
-  pprint (LuaIndex e k) = e <+> squares k
+  pretty (LuaName x) = text x
+  pretty (LuaIndex e@(LuaRef _) (LuaString k))
+    | validKey k = pretty e <> dot <> text k
+  pretty (LuaIndex e (LuaString k))
+    | validKey k = parens (pretty e) <> dot <> text k
+  pretty (LuaIndex e k) = pretty e <> brackets (pretty k)
 
 instance Pretty LuaExpr where
-  pprint LuaTrue = kwClr "true"
-  pprint LuaFalse = kwClr "false"
-  pprint LuaDots = opClr "..."
-  pprint LuaNil = litClr "nil"
-  pprint (LuaString k) = str k
-  pprint (LuaNumber d) = litClr d
-  pprint (LuaBinOp l o r) = l <+> " " <+> opClr o <+> " " <+> r
-  pprint (LuaRef x) = pprint x
-  pprint (LuaFunction a b) = do
-    kwClr "function " <+> parens (interleave ", " a)
-    body 2 b *> newline
-    kwClr "end"
-  pprint (LuaTable ps) = braces $ interleave ", " $
-    map (\(k, v) -> squares k <+> opClr " = " <+> v) ps
-  pprint (LuaCall x@LuaFunction{} a) = parens x <+> parens (interleave ", " a)
-  pprint (LuaCall x a) = x <+> parens (interleave ", " a)
-  pprint (LuaBitE x) = pprint x
+  pretty LuaTrue = string "true"
+  pretty LuaFalse = string "false"
+  pretty LuaDots = string "..."
+  pretty LuaNil = string "nil"
+  pretty (LuaString k) = dquotes (text k)
+  pretty (LuaNumber d) = pretty d
+  pretty (LuaBinOp l o r) = pretty l <+> text o <+> pretty r
+  pretty (LuaRef x) = pretty x
+  pretty (LuaFunction a b) =
+    vsep [ string "function" <+> tupled (map pretty a)
+         , body b
+         , string "end"
+         ]
+  pretty (LuaTable ps) = encloseSep lbrace rbrace comma $
+    map (\(k, v) -> brackets (pretty k) <+> equals <+> pretty v) ps
+  pretty (LuaCall x@LuaFunction{} a) = parens (pretty x) <> tupled (map pretty a)
+  pretty (LuaCall x a) = pretty x <> tupled (map pretty a)
+  pretty (LuaBitE x) = text x
 
 validKey :: Text -> Bool
 validKey t = case T.uncons t of

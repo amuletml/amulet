@@ -2,10 +2,12 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
 module Errors where
 
+import Prelude hiding ((<$>))
 import Control.Monad.Infer
 
 import qualified Data.Text as T
 import Data.Text (Text)
+import Data.List
 
 import Data.Spanned
 
@@ -13,150 +15,89 @@ import Data.Function
 
 import qualified Control.Monad.Infer as I
 
+import Text.PrettyPrint.Leijen
 import qualified Syntax.Resolve as R
 import Syntax.Resolve
 import Syntax
-import Pretty
+
+verbatim :: Pretty a => a -> Doc
+verbatim = enclose (char '`') (char '`') . pretty
+
+bullet :: Doc -> Doc
+bullet = (char '·' <+>)
 
 instance Pretty TypeError where
-  pprint (NotEqual a b) =
-    pprint "Type error: failed to unify "
-       <+> verbatim a
-       <+> " with " <+> verbatim b
-  pprint (KindsNotEqual a b) =
-    pprint "Kind error: failed to unify "
-       <+> verbatim a
-       <+> " with " <+> verbatim b
-  pprint (Occurs v t) = "Occurs check: Variable "
-                    <+> verbatim v
-                    <+> " occurs in "
-                    <+> verbatim t
-  pprint (I.NotInScope e) = "Variable not in scope: "
-                         <+> verbatim e
-  pprint (I.EmptyMatch e) = annotation e <+> ": Empty match expression"
-  pprint (I.EmptyBegin e) = annotation e <+> ": Empty begin expression"
-  pprint (I.ArisingFrom er ex) = do
-    annotation ex <+> ": " <+> er
-    block 1 . (newline <+>) $
-      bullet "Arising from use of " <+> verbatim ex
-  pprint (FoundHole xs) = interleave newline (map prnt xs) where
-    prnt :: Expr Typed -> PrettyP
+  pretty (NotEqual a b) = text "Type error: failed to" <+> align (text "unify" <+> verbatim a </> text " with " <+> verbatim b)
+  pretty (KindsNotEqual a b) = text "Kind error: failed to" <+> align (text "unify" <+> verbatim a </> text " with " <+> verbatim b)
+  pretty (Occurs v t) = text "Occurs check: Variable" <+> align (verbatim v </> text "occurs in" <+> verbatim t)
+  pretty (I.NotInScope e) = text "Variable not in scope:" <+> verbatim e
+  pretty (I.EmptyMatch e) = pretty (annotation e) <> text ": Empty match expression"
+  pretty (I.EmptyBegin e) = pretty (annotation e) <> text ": Empty begin expression"
+  pretty (I.ArisingFrom er ex) = pretty (annotation ex) <> colon </> indent 2 (pretty er <$> indent 2 (nest 4 (bullet (text "Arising from use of") </> pretty ex)))
+  pretty (FoundHole xs) = hsep (map prnt xs) where
+    prnt :: Expr Typed -> Doc
     prnt (Hole v s)
-      | prettyPrint (verbatim v) == T.pack "`_`"
-      = fst s <+> ": Found typed hole of type " <+> verbatim (snd s)
-      | otherwise
-      = fst s <+> ": Found typed hole "
-              <+> verbatim v
-              <+> " (of type " <+> verbatim (snd s) <+> ")"
+      = pretty (fst s) <> text ": Found typed hole" <+> verbatim v <+> parens (text "of type " <+> verbatim (snd s))
     prnt _ = undefined
-  pprint (Note te m) = do
-    pprint te
-    block 1 . (newline <+>) $
-      bullet (opClr "Note: ") <+> block 2 m
-  pprint (Suggestion te m) = do
-    pprint te
-    block 1 . (newline <+>) $
-      bullet (opClr "Suggestion: ") <+> block 4 m
-  pprint (CanNotInstance rec new)
-    | (TyRows rho _) <- rec
-    , prettyPrint new == prettyPrint rho
-    = pprint (Malformed rec)
-    | otherwise
-    =   "Can not instance hole of record type " <+> verbatim rec
-    <+> " to type " <+> verbatim new
-  pprint (Malformed tp) = do
-    "The type " <+> verbatim tp <+> " is malformed."
-    body 1 [ bullet (opClr "Note: ")
-              <+> "This type was rejected by the well-formedness check."
-           , bullet (opClr "Note: ") <+> "This might be a bug." ]
-  pprint (NoOverlap ta tb)
+  pretty (Note te m) = pretty te <+> indent 2 (bullet (text "Note: ") <+> align (pretty m))
+  pretty (Suggestion te m) = pretty te <+> indent 2 (bullet (text "Suggestion: ") <+> align (pretty m))
+  pretty (CanNotInstance rec new) = text "Can not instance hole of record type" <+> align (verbatim rec </> text " to type " <+> verbatim new)
+  pretty (Malformed tp) = text "The type" <+> verbatim tp <+> text "is malformed."
+  pretty (NoOverlap ta tb)
     | TyExactRows ra <- ta
     , TyRows _ rb <- tb
-    =   "No overlap between " <+> kwClr "exact" <+> " record " <+> verbatim ta
-    <+> " and " <+> kwClr "polymorphic " <+> "record " <+> verbatim tb
-    <+> block 1 (missing ra rb)
-    | TyExactRows rb <- tb
-    , TyRows _ ra <- ta
-    =   "No overlap between " <+> kwClr "exact" <+> " record " <+> verbatim ta
-    <+> " and " <+> kwClr "polymorphic " <+> "record " <+> verbatim tb
-    <+> block 1 (missing ra rb)
+    =   text "No overlap between exact record" </> (verbatim ta <+> text "and polymorphic record" <+> verbatim tb)
+    <$> indent 1 (missing ra rb)
+    | TyExactRows ra <- tb
+    , TyRows _ rb <- ta
+    =   text "No overlap between exact record" </> (verbatim ta <+> text "and polymorphic record" <+> verbatim tb)
+    <$> indent 1 (missing ra rb)
     | TyExactRows ra <- ta
     , TyExactRows rb <- tb
-    =   "No overlap between " <+> kwClr "exact" <+> " records " <+> verbatim ta
-    <+> " and " <+> verbatim tb
-    <+> block 1 (missing ra rb)
+    =   text "No overlap between extact records " </> (verbatim ta <+> text "and" <+> verbatim tb)
+    <+> indent 1 (missing ra rb)
     | otherwise
-    =   "\x1b[1;32minternal compiler error\x1b[0m: NoOverlap "
-    <+> interleave " " [ta, tb]
-  pprint (IllegalTypeApp ex ta _)
-    = body 1 [ "Illegal type application " <+> verbatim ex
-             , bullet "because of type " <+> verbatim ta ]
-  pprint (EscapedSkolems esc _) =
+    = text "\x1b[1;32minternal compiler error\x1b[0m: NoOverlap" <+> verbatim ta <+> verbatim tb
+  pretty (IllegalTypeApp ex ta _)
+    = hsep [ text "Illegal type application " <+> verbatim ex
+           , indent 2 (bullet (text "because of type ") <+> verbatim ta)
+           ]
+  pretty (EscapedSkolems esc _) =
     case esc of
       [Skolem var u ty] ->
-        body 1 [ "Skolem type constant " <+> kwClr var <+> " has escaped its scope of " <+> verbatim ty
-               , bullet (opClr ("Note: ")) <+> kwClr var <+> " stands for the type variable '" <+> tvClr u
-               ]
+        text "Skolem type constant "
+        </> verbatim var <+> text "has escaped its scope of" <+> verbatim ty
+            <+> bullet (text "Note: ") <+> verbatim var <+> text "stands for the type variable" <+> pretty (TyVar u)
       _ -> error (show esc)
 
-  pprint (SkolBinding (Skolem _ x _) (TySkol (Skolem _ y _))) = pprint (NotEqual (TyVar x) (TyVar y))
-  pprint (SkolBinding (Skolem a _ _) b) = "Can not unify skolem type constant " <+> a <+> " with type " <+> verbatim b 
+  pretty (SkolBinding (Skolem _ x _) (TySkol (Skolem _ y _))) = pretty (NotEqual (TyVar x) (TyVar y))
+  pretty (SkolBinding (Skolem a _ _) b) = text "Can not unify skolem type constant" <+> verbatim a <+> text "with type" <+> verbatim b 
 
 instance Pretty ResolveError where
-  pprint (R.NotInScope e) = "Variable not in scope: "
-                         <+> verbatim e
-  pprint (R.EmptyMatch e) = annotation e <+> ": Empty match expression"
-  pprint (R.EmptyBegin e) = annotation e <+> ": Empty begin expression"
-  pprint (R.ArisingFrom er ex) = do
-    annotation ex <+> ": " <+> er
-    block 1 . (newline <+>) $
-      bullet "Arising from use of " <+> verbatim ex
-  pprint (R.ArisingFromTop er top) = do
-    annotation top <+> ": " <+> er
-    block 1 . (newline <+>) $
-      bullet "Arising in " <+> verbatim top
+  pretty (R.NotInScope e) = text "Variable not in scope:" <> verbatim e
+  pretty (R.EmptyMatch e) = pretty (annotation e) <> text ": Empty match expression"
+  pretty (R.EmptyBegin e) = pretty (annotation e) <> text ": Empty begin expression"
+  pretty (R.ArisingFrom er ex) = pretty (annotation ex) <> colon <+> pretty er <$> indent 2 (bullet (text "Arising from use of ") <+> verbatim ex)
+  pretty (R.ArisingFromTop er ex) = pretty (annotation ex) <> colon <+> pretty er <$> indent 2 (bullet (text "Arising in") <+> verbatim ex)
 
-prettyRows :: Pretty (Var p) => [(T.Text, Type p)] -> PrettyP
-prettyRows = braces
-           . interleave (", " :: String)
-           . map (\(x, y) -> x <+> opClr (" : " :: String) <+> y)
+prettyRows :: Pretty (Var p) => [(T.Text, Type p)] -> Doc
+prettyRows = braces . hsep . punctuate comma . map (\(x, y) -> text (T.unpack x) <+> colon <+> pretty y)
 
 
-missing :: [(Text, b)] -> [(Text, b)] -> PrettyP
+missing :: [(Text, b)] -> [(Text, b)] -> Doc
 missing ra rb
   | length ra < length rb
-  = body 1 [ bullet "Namely, the following fields are missing: "
-                <+> interleave ", " (diff ra rb)]
+  =  bullet (text "Namely, the following fields are missing:") <+> hsep (punctuate comma (diff ra rb))
   | length ra > length rb
-  = body 1 [ bullet "Namely, the following fields should not be present: "
-                <+> interleave ", " (diff ra rb)]
+  =  bullet (text "Namely, the following fields should not be present:") <+> hsep (punctuate comma (diff ra rb))
   | length ra == length rb
-  = body 1 [ bullet (kwClr "Note: ") <+> "No fields match"
-           , bullet "The following fields are missing: "
-                <+> interleave ", " (diff ra rb)]
+  = indent 2 . hsep $  [ bullet (text "Note: no fields match")
+                       , bullet (text "The following fields are missing:")
+                         <+> hsep (punctuate comma (diff ra rb))]
 missing _ _ = undefined -- freaking GHC
 
-diff :: (Eq a, Pretty a) => [(a, b)] -> [(a, b)] -> [PrettyP]
-diff ra rb = map (tvClr . fst) (deleteFirstsBy ((==) `on` fst) rb ra)
+diff :: [(Text, b)] -> [(Text, b)] -> [Doc]
+diff ra rb = map ((squote <>) . text . T.unpack . fst) (deleteFirstsBy ((==) `on` fst) rb ra)
 
 report :: Pretty p => p -> T.Text -> IO ()
-report err _ = ppr $ pprint err
-
--- Some errors:
-rejectedExistential :: Pretty (Var p) => Type p -> TypeError -> TypeError
-rejectedExistential ttp e = Suggestion (Note (Note e rejected) explanation) fix where
-  rejected, explanation :: String
-  rejected = "GADT-style data constructors with existential type variables are rejected"
-  explanation = "Our type system is not powerful enough to deal with the implications of existentials quite yet."
-
-  fix :: PrettyP
-  fix = body 0 [ pprint "Possible fix: rewriting the type so that all variables are universal:"
-               , case ttp of
-                   TyForall vs tp ->
-                     "Consider changing " <+> verbatim ttp <+> " into " <+> verbatim (replaceTail vs tp)
-                   _ -> error "rejectedExistentials only occur on types with existentials"
-               ]
-
-  replaceTail :: [Var p] -> Type p -> Type p
-  replaceTail ap (TyArr t cs) = TyArr t (replaceTail ap cs)
-  replaceTail ap x = foldl TyApp x (map TyVar ap)
+report err _ = putDoc (pretty err)
