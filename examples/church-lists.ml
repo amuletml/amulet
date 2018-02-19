@@ -10,6 +10,6 @@ and nil =
   ChurchList (fun k z -> z) ;;
 
 let printList l =
-  unList l (fun x k () -> begin print x; k () end) (fun _ -> print "nil") ;;
+  unList l (fun x k () -> begin print x; k () end) (fun _ -> print "nil") () ;;
 
 let main = printList (cons "foo" (cons "bar" nil))
