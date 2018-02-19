@@ -8,14 +8,14 @@ import Data.Graph
 
 import Syntax
 
-depOrder :: Ord (Var p) => [(Var p, Expr p, Ann p)] -> [(Var p, Expr p, Ann p)]
+depOrder :: (Show (Var p), Show (Ann p), Ord (Var p)) => [(Var p, Expr p, Ann p)] -> [(Var p, Expr p, Ann p)]
 depOrder = flatten . stronglyConnComp . build where
   flatten = concatMap $ \case
     AcyclicSCC x -> pure x
     CyclicSCC x -> x
   build = map (\it@(var, ex, _) -> (it, var, Set.toList (var `Set.delete` freeIn ex)))
 
-freeIn :: Ord (Var p) => Expr p -> Set.Set (Var p)
+freeIn :: (Show (Var p), Show (Ann p), Ord (Var p)) => Expr p -> Set.Set (Var p)
 freeIn (Ascription e _ _) = freeIn e
 freeIn (RecordExt e rs _) = freeIn e <> foldMap (freeIn . snd) rs
 freeIn (BinOp a b c _)    = freeIn a <> freeIn b <> freeIn c
@@ -31,7 +31,8 @@ freeIn (Match t ps _)     = freeIn t <> foldMap freeInBranch ps where
 freeIn Literal{}          = mempty
 freeIn Hole{}             = mempty
 freeIn (If a b c _)       = freeIn a <> freeIn b <> freeIn c
-freeIn _ = undefined
+freeIn (Tuple es _)       = foldMap freeIn es
+freeIn x = error (show x)
 
 bound :: Ord (Var p) => Pattern p -> Set.Set (Var p)
 bound (Destructure _ x _) = maybe mempty bound x
