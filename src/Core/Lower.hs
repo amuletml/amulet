@@ -23,7 +23,7 @@ import Core.Core
 
 import Syntax
 
-import Pretty (prettyPrint)
+import Text.PrettyPrint.Leijen (pretty)
 
 type MonadLower m
   = ( MonadGen Int m
@@ -63,7 +63,7 @@ patternMatchingFailure (ex, ot) it = do
   err <- codomain ot
   (,,) <$> pure (cap it') <*> pure it'
        <*> pure (CotApp (CotTyApp errRef err)
-                        (CotLit (ColStr (prettyPrint ex))))
+                        (CotLit (ColStr (T.pack (show (pretty ex))))))
 
 lowerExpr :: MonadLower m => Expr Typed -> m CoTerm
 lowerExpr expr
@@ -129,7 +129,7 @@ lowerExpr expr
       let realt = case ext of
             CotyExactRows rs -> CotyExactRows (deleteBy ((==) `on` fst) (key, undefined) rs)
             CotyRows rho rs -> CotyRows rho (deleteBy ((==) `on` fst) (key, undefined) rs)
-            _ -> error $ "not a record type " ++ T.unpack (prettyPrint ext)
+            _ -> error $ "not a record type " ++ show (pretty ex)
 
           fixup (CotyRows rho []) = rho
           fixup x = x
@@ -144,7 +144,7 @@ lowerExpr expr
                         <*> lowerExpr x
       CotExtend (CotLit ColRecNil) <$> zipWithM go [1..] xs
     TypeApp f x _ -> CotTyApp <$> lowerExpr f <*> lowerType x
-    x -> error $ "impossible lowering (desugarer removes): " ++ T.unpack (prettyPrint x)
+    x -> error $ "impossible lowering (desugarer removes): " ++ show (pretty x)
 
 lowerType :: MonadLower m => Type Typed -> m CoType
 lowerType tt = case tt of
@@ -182,7 +182,7 @@ lowerPat pat = case pat of
       realt tp = case tp of
         CotyExactRows rs -> CotyExactRows (filter (not . flip elem keys . fst) rs)
         CotyRows rho rs -> CotyRows rho (filter (not . flip elem keys . fst) rs)
-        _ -> error $ "not a record type " ++ T.unpack (prettyPrint tp)
+        _ -> error $ "not a record type " ++ show (pretty tp)
 
       fixup (CotyRows rho _) = rho
       fixup x = x

@@ -39,7 +39,7 @@ import Data.Semigroup
 import Data.Spanned
 import Data.Triple
 
-import Pretty hiding (local, (<>))
+import Text.PrettyPrint.Leijen hiding ((<>), (<$>))
 
 import Syntax.Subst
 import Syntax
@@ -106,8 +106,8 @@ instance (Ord (Var p), Substitutable p (Type p)) => Substitutable p (Constraint 
   apply s (ConSubsume e a b) = ConSubsume e (apply s a) (apply s b)
 
 instance Pretty (Var p) => Pretty (Constraint p) where
-  pprint (ConUnify _ a b) = a <+> opClr (" :=: " :: String) <+> b
-  pprint (ConSubsume _ a b) = a <+> opClr (" <= " :: String) <+> b
+  pretty (ConUnify _ a b) = pretty a <+> char '~' <+> pretty b
+  pretty (ConSubsume _ a b) = pretty a <+> text "<=" <+> pretty b
 
 data SomeReason where
   BecauseOf :: ( Spanned (f p)
@@ -119,7 +119,7 @@ data SomeReason where
             => f p -> SomeReason
 
 instance Pretty SomeReason where
-  pprint (BecauseOf a) = pprint a
+  pretty (BecauseOf a) = pretty a
 
 instance Spanned SomeReason where
   annotation (BecauseOf a) = annotation a
@@ -146,8 +146,8 @@ lookupTy x = do
   rs <- view (values . at x)
   case rs of
     Just t -> fmap thd3 (instantiate t) `catchError` \e ->
-      throwError (Note (Note e (("Arising from instancing of variable " :: Text) <+> verbatim x))
-                       (verbatim x <+> (" has principal type " :: Text) <+> verbatim t))
+      throwError (Note (Note e (text "Arising from instancing of variable" <+> pretty x))
+                       (pretty x <+> text "has principal type" <+> pretty t))
     Nothing -> throwError (NotInScope x)
 
 lookupTy' :: (MonadError TypeError m, MonadReader Env m, MonadGen Int m) => Var Resolved
@@ -156,8 +156,8 @@ lookupTy' x = do
   rs <- view (values . at x)
   case rs of
     Just t -> instantiate t `catchError` \e ->
-      throwError (Note (Note e (("Arising from instancing of variable " :: Text) <+> verbatim x))
-                       (verbatim x <+> (" has principal type " :: Text) <+> verbatim t))
+      throwError (Note (Note e (text "Arising from instancing of variable" <+> pretty x))
+                       (pretty x <+> text "has principal type" <+> pretty t))
     Nothing -> throwError (NotInScope x)
 
 runInfer :: MonadGen Int m
