@@ -38,10 +38,10 @@ unify :: Type Typed -> Type Typed -> SolveM ()
 unify (TyVar a) b = bind a b
 unify a (TyVar b) = bind b a
 
-unify (TySkol x) (TySkol y)
+unify (TySkol x ) (TySkol y)
   | x == y = pure ()
-unify t@TySkol{} b = throwError $ SkolBinding t b
-unify b t@TySkol{} = throwError $ SkolBinding t b
+unify (TySkol t) b = throwError $ SkolBinding t b
+unify b (TySkol t) = throwError $ SkolBinding t b
 
 unify (TyArr a b) (TyArr a' b') = unify a a' *> unify b b'
 unify (TyApp a b) (TyApp a' b') = unify a a' *> unify b b'
@@ -139,14 +139,16 @@ subsumes k t1@TyForall{} t2 = do
 subsumes k a b = k a b
 
 skolemise :: MonadGen Int m => Type Typed -> m (Type Typed)
-skolemise (TyForall tvs t) = do
-  sks <- traverse (const freshSkol) tvs
+skolemise ty@(TyForall tvs t) = do
+  sks <- traverse (freshSkol ty) tvs
   skolemise (apply (Map.fromList (zip tvs sks)) t)
 skolemise (TyArr c d) = TyArr c <$> skolemise d
 skolemise ty = pure ty
 
-freshSkol :: MonadGen Int m => m (Type Typed)
-freshSkol = TySkol . TvName <$> fresh
+freshSkol :: MonadGen Int m => Type Typed -> Var Typed -> m (Type Typed)
+freshSkol ty u = do
+  var <- TvName <$> fresh
+  pure (TySkol (Skolem var u ty))
 
 occurs :: Var Typed -> Type Typed -> Bool
 occurs _ (TyVar _) = False

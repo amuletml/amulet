@@ -39,7 +39,7 @@ instance Ord (Var p) => Substitutable p (Type p) where
   ftv (TyExactRows rows) = foldMap (ftv . snd) rows
 
   apply _ (TyCon a) = TyCon a
-  apply _ (TySkol a) = TySkol a
+  apply _ (TySkol x) = TySkol x
   apply s t@(TyVar v) = Map.findWithDefault t v s
   apply s (TyArr a b) = TyArr (apply s a) (apply s b)
   apply s (TyApp a b) = TyApp (apply s a) (apply s b)

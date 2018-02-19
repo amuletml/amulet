@@ -158,7 +158,7 @@ lowerType tt = case tt of
     for vs $ \(label, tp) -> (,) label <$> lowerType tp
   TyVar (TvName v) -> pure (CotyVar v)
   TyCon (TvName v) -> pure (CotyCon v)
-  TySkol (TvName v) -> pure (CotyCon v)
+  TySkol (Skolem (TvName v) _ _) -> pure (CotyCon v)
 
 tup2Rec :: MonadLower m => Int -> Type Typed -> m [(T.Text, CoType)]
 tup2Rec k (TyTuple a b) = do

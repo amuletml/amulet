@@ -1,5 +1,5 @@
-{-# LANGUAGE FlexibleContexts, TypeFamilies, ScopedTypeVariables #-}
-module Types.Wellformed (wellformed, arity, normType, skols) where
+{-# LANGUAGE FlexibleContexts, TypeFamilies, ScopedTypeVariables, UndecidableInstances #-}
+module Types.Wellformed (wellformed, arity, normType, skols, Skolem(..)) where
 
 import Control.Monad.Except
 import Control.Monad.Infer
@@ -47,10 +47,11 @@ normType = uncurry collect . runWriter . spread where
   spread (TyArr a t) = TyArr a <$> spread t
   spread x = pure x
 
-skols :: (Ord (Var p), Data p, Data (Ann p), Data (Var p))
-      => Type p -> Set.Set (Var p)
+
+skols :: (Ord (Ann p), Ord (Var p), Data p, Data (Ann p), Data (Var p))
+      => Type p -> Set.Set (Skolem p)
 skols = everything mappend (mkQ mempty go) where
-  go (TySkol v) = Set.singleton v
+  go (TySkol s) = Set.singleton s
   go _ = Set.empty
 
 
