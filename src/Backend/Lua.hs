@@ -91,14 +91,15 @@ instance Pretty LuaStmt where
         <$> pprintElse bs
   pretty (LuaIfElse []) = error "impossible"
   pretty (LuaFornum v s e i b) =
-    vsep [ string "for" <+> text v <+> equals
+    vsep [ string "for" <+> text v <+> equals <+> string "do"
        <+> pretty s <+> comma <+> pretty e <+> comma <+> pretty i 
          , body b
          , string "end"
          ]
   pretty (LuaFor vs es b) =
     vsep [ string "for" <+> hsep (punctuate comma (map text vs))
-       <+> equals <+> hsep (punctuate comma (map pretty es))
+       <+> string "in" <+> hsep (punctuate comma (map pretty es))
+       <+> string "do"
          , body b
          , string "end"
          ]
@@ -108,7 +109,8 @@ instance Pretty LuaStmt where
          , string "end"
          ]
   pretty (LuaLocal vs []) = string "local" <+> hsep (punctuate comma (map pretty vs))
-  pretty (LuaLocal vs xs) = string "local" <+> hsep (punctuate comma (map pretty vs)) <+> equals <+> hsep (punctuate comma (map pretty vs))
+  pretty (LuaLocal vs xs) = string "local" <+> hsep (punctuate comma (map pretty vs))
+                        <+> equals <+> hsep (punctuate comma (map pretty xs))
   pretty (LuaBit x) = text x
   pretty LuaBreak = string "break"
   pretty (LuaReturn v) = string "return" <+> pretty v
