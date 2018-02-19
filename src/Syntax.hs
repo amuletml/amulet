@@ -125,7 +125,21 @@ data Type p
   | TyExactRows [(Text, Type p)] -- { foo : int, bar : string }
   | TyTuple (Type p) (Type p) -- (see note [1])
 
-  | TySkol (Var p)
+  | TySkol (Skolem p)
+
+data Skolem p
+  = Skolem (Var p) -- the constant itself
+           (Var p) -- what variable this skolemises
+           (Type p) -- the type this was generated for
+
+deriving instance (Show (Var p), Show (Ann p)) => Show (Skolem p)
+deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Skolem p)
+
+instance Eq (Var p) => Eq (Skolem p) where
+  Skolem v _ _  == Skolem v' _ _ = v == v'
+
+instance Ord (Var p) => Ord (Skolem p) where
+  Skolem v _ _ `compare` Skolem v' _ _ = v `compare` v'
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Type p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Type p)
@@ -235,8 +249,8 @@ instance Pretty Lit where
 
 instance (Pretty (Var p)) => Pretty (Type p) where
   pprint (TyCon v) = typeClr v
-  pprint (TyVar v) = opClr "'" <+> tvClr v
-  pprint (TySkol v) = kwClr v
+  pprint (TyVar v) = "'" <+> tvClr v
+  pprint (TySkol (Skolem v _ _)) = kwClr v
   pprint (TyForall vs v)
     = kwClr "∀ " <+> interleave " " (map (\x -> "'" <+> tvClr x) vs) <+> opClr ". " <+> v
 

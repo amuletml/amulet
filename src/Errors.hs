@@ -91,14 +91,16 @@ instance Pretty TypeError where
   pprint (IllegalTypeApp ex ta _)
     = body 1 [ "Illegal type application " <+> verbatim ex
              , bullet "because of type " <+> verbatim ta ]
-  pprint (EscapedSkolems esc ty) =
-    body 1 [ "Illegal type " <+> verbatim ty <+> "; "
-           , case esc of
-               [x] -> "since skolem type constant " <+> x <+> " has escaped "
-               _ -> "since skolem type constants " <+> interleave ", " esc <+> " have escaped "
-           ]
-  pprint (SkolBinding a b)
-    = "Can not unify skolem type constant " <+> a <+> " with type " <+> verbatim b
+  pprint (EscapedSkolems esc _) =
+    case esc of
+      [Skolem var u ty] ->
+        body 1 [ "Skolem type constant " <+> kwClr var <+> " has escaped its scope of " <+> verbatim ty
+               , bullet (opClr ("Note: ")) <+> kwClr var <+> " stands for the type variable '" <+> tvClr u
+               ]
+      _ -> error (show esc)
+
+  pprint (SkolBinding (Skolem _ x _) (TySkol (Skolem _ y _))) = pprint (NotEqual (TyVar x) (TyVar y))
+  pprint (SkolBinding (Skolem a _ _) b) = "Can not unify skolem type constant " <+> a <+> " with type " <+> verbatim b 
 
 instance Pretty ResolveError where
   pprint (R.NotInScope e) = "Variable not in scope: "

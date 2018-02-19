@@ -75,7 +75,7 @@ inferKind tp = do
     TyVar x -> do
       ki <- view (types . at (unTvName x))
       maybe freshKV pure ki
-    TySkol x -> do
+    TySkol (Skolem x _ _) -> do
       ki <- view (types . at (unTvName x))
       maybe freshKV pure ki
     TyCon x -> do
