@@ -12,6 +12,7 @@ let
       , lens
       , array
       , monad-gen
+      , wl-pprint
       , bytestring
       , containers
       , transformers
@@ -27,8 +28,8 @@ let
         isExecutable = true;
         executableHaskellDepends = [
           mtl syb text array bytestring base
-          lens monad-gen containers transformers
-          pretty-show
+          lens monad-gen wl-pprint containers
+          transformers pretty-show
         ];
         buildDepends = [ alex happy ];
         homepage = "https://amulet.ml";
