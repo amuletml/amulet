@@ -39,7 +39,7 @@ import Data.Semigroup
 import Data.Spanned
 import Data.Triple
 
-import Text.PrettyPrint.Leijen hiding ((<>), (<$>))
+import Pretty hiding ((<>), (<$>))
 
 import Syntax.Subst
 import Syntax
@@ -107,7 +107,7 @@ instance (Ord (Var p), Substitutable p (Type p)) => Substitutable p (Constraint 
 
 instance Pretty (Var p) => Pretty (Constraint p) where
   pretty (ConUnify _ a b) = pretty a <+> char '~' <+> pretty b
-  pretty (ConSubsume _ a b) = pretty a <+> text "<=" <+> pretty b
+  pretty (ConSubsume _ a b) = pretty a <+> string "<=" <+> pretty b
 
 data SomeReason where
   BecauseOf :: ( Spanned (f p)
@@ -146,8 +146,8 @@ lookupTy x = do
   rs <- view (values . at x)
   case rs of
     Just t -> fmap thd3 (instantiate t) `catchError` \e ->
-      throwError (Note (Note e (text "Arising from instancing of variable" <+> pretty x))
-                       (pretty x <+> text "has principal type" <+> pretty t))
+      throwError (Note (Note e (string "Arising from instancing of variable" <+> pretty x))
+                       (pretty x <+> string "has principal type" <+> pretty t))
     Nothing -> throwError (NotInScope x)
 
 lookupTy' :: (MonadError TypeError m, MonadReader Env m, MonadGen Int m) => Var Resolved
@@ -156,8 +156,8 @@ lookupTy' x = do
   rs <- view (values . at x)
   case rs of
     Just t -> instantiate t `catchError` \e ->
-      throwError (Note (Note e (text "Arising from instancing of variable" <+> pretty x))
-                       (pretty x <+> text "has principal type" <+> pretty t))
+      throwError (Note (Note e (string "Arising from instancing of variable" <+> pretty x))
+                       (pretty x <+> string "has principal type" <+> pretty t))
     Nothing -> throwError (NotInScope x)
 
 runInfer :: MonadGen Int m

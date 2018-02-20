@@ -25,7 +25,7 @@ import Core.Simplify
 import Core.Lower
 import Core.Core
 
-import Text.PrettyPrint.Leijen
+import Pretty
 import Errors
 import Parser
 import Parser.Wrapper
@@ -70,17 +70,17 @@ test x = do
   putStrLn "\x1b[1;32m(* Program: *)\x1b[0m"
   case compile "<test>" (T.pack x) of
     CSuccess (ast, core, optm, env) -> do
-      putDoc (pretty ast) *> putStrLn ""
+      putDoc (pretty ast)
       putStrLn "\x1b[1;32m(* Type inference: *)\x1b[0m"
       ifor_ (difference env builtinsEnv ^. values) . curry $ \(k :: Var Resolved, t :: Type Typed) ->
-        putDoc (pretty k <+> colon <+> pretty t) *> putStrLn ";"
+        putDoc (pretty k <+> colon <+> pretty t)
       putStrLn "\x1b[1;32m(* Kind inference: *)\x1b[0m"
       ifor_ (difference env builtinsEnv ^. types) . curry $ \(k, t) ->
-        putDoc (pretty k <+> colon <+> pretty t) *> putStrLn ";"
+        putDoc (pretty k <+> colon <+> pretty t)
       putStrLn "\x1b[1;32m(* Core lowering: *)\x1b[0m"
-      putDoc (pretty core) *> putStrLn ""
+      putDoc (pretty core)
       putStrLn "\x1b[1;32m(* Optimised: *)\x1b[0m"
-      putDoc (pretty optm) *> putStrLn ""
+      putDoc (pretty optm)
       pure (Just (core, env))
     CParse e s -> Nothing <$ report (pretty s <> colon <+> pretty e) (T.pack x)
     CResolve e -> Nothing <$ report e (T.pack x)

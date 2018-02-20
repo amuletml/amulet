@@ -23,7 +23,7 @@ import Core.Core
 
 import Syntax
 
-import Text.PrettyPrint.Leijen (pretty)
+import Pretty (pretty)
 
 type MonadLower m
   = ( MonadGen Int m
