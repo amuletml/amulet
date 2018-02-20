@@ -78,10 +78,6 @@ data TypeError where
   KindsNotEqual :: Pretty (Var p) => Kind p -> Kind p -> TypeError
   Occurs   :: Pretty (Var p) => Var p -> Type p -> TypeError
   NotInScope :: Var Resolved -> TypeError
-  EmptyMatch :: (Spanned (Expr p), Pretty (Ann p)) => Expr p -> TypeError
-  EmptyBegin :: ( Spanned (Expr p)
-                , Pretty (Ann p) )
-             => Expr p -> TypeError
   FoundHole :: [Expr Typed] -> TypeError
 
   EscapedSkolems :: [Skolem Typed] -> Type Typed -> TypeError
@@ -98,7 +94,6 @@ data TypeError where
                  -> TypeError
   Malformed :: Pretty (Var p) => Type p -> TypeError
   IllegalTypeApp :: (Pretty (Var p), Pretty (Var p')) => Expr p -> Type p' -> Type p' -> TypeError
-
 
 instance (Ord (Var p), Substitutable p (Type p)) => Substitutable p (Constraint p) where
   ftv (ConUnify _ a b) = ftv a `Set.union` ftv b

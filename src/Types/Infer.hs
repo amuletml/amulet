@@ -70,7 +70,7 @@ check ex@(Fun p b a) ty = do
   (dom, cod) <- decompose ex _TyArr ty
   (p', ms) <- checkPattern p dom
   Fun p' <$> extendMany ms (check b cod) <*> pure (a, ty)
-check ex@(Begin [] _) _ = throwError (EmptyBegin ex)
+check (Begin [] _) _ = error "impossible"
 check (Begin xs a) t = do
   let start = init xs
       end = last xs

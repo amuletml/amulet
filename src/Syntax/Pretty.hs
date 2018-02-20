@@ -32,7 +32,7 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
   pretty (Begin e _) =
     vsep [ string "begin", indent 2 (vsep (punctuate semi (map pretty e))), string "end" ]
   pretty (Literal l _) = pretty l
-  pretty (BinOp l o r _) = parens (pretty l <+> pretty o <+> pretty r)
+  pretty (BinOp l o r _) = pretty l <+> pretty o <+> pretty r
   pretty (Match t bs _) = vsep ((string "match" <+> pretty t <+> string "with"):prettyMatches bs)
   pretty (Hole v _) = pretty v -- A typed hole
   pretty (Ascription e t _) = parens $ pretty e <+> colon <+> pretty t
@@ -69,7 +69,7 @@ instance Pretty Lit where
   pretty (LiInt s) = integer s
   pretty (LiBool True) = text "true"
   pretty (LiBool False) = text "false"
-  pretty LiUnit = text "unit"
+  pretty LiUnit = parens empty
 
 instance (Pretty (Var p)) => Pretty (Type p) where
   pretty (TyCon v) = pretty v

@@ -31,9 +31,10 @@ instance Pretty TypeError where
   pretty (KindsNotEqual a b) = text "Kind error: failed to" <+> align (text "unify" <+> verbatim a </> text "with" <+> verbatim b)
   pretty (Occurs v t) = text "Occurs check: Variable" <+> align (verbatim v </> text "occurs in" <+> verbatim t)
   pretty (I.NotInScope e) = text "Variable not in scope:" <+> verbatim e
-  pretty (I.EmptyMatch e) = pretty (annotation e) <> text ": Empty match expression"
-  pretty (I.EmptyBegin e) = pretty (annotation e) <> text ": Empty begin expression"
-  pretty (I.ArisingFrom er ex) = pretty (annotation ex) <> colon </> pretty er <$> indent 2 (nest 4 (bullet (text "Arising from use of") </> pretty ex))
+  pretty (I.ArisingFrom er ex) = pretty (annotation ex) <> colon
+                             </> pretty er
+                             <$> indent 2 (nest 4 (bullet (text "Arising from use of")
+                                               </> pretty ex))
   pretty (FoundHole xs) = hsep (map prnt xs) where
     prnt :: Expr Typed -> Doc
     prnt (Hole v s)
@@ -101,4 +102,4 @@ diff :: [(Text, b)] -> [(Text, b)] -> [Doc]
 diff ra rb = map ((squote <>) . text . T.unpack . fst) (deleteFirstsBy ((==) `on` fst) rb ra)
 
 report :: Pretty p => p -> T.Text -> IO ()
-report err _ = putDoc (pretty err)
+report err _ = putDoc (pretty err) *> putStr "\n"
