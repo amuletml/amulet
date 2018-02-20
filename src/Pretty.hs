@@ -1,9 +1,11 @@
+{-# OPTIONS_GHC -Wno-orphans #-}
 {-# LANGUAGE FlexibleInstances #-}
 module Pretty
   ( module Text.PrettyPrint.Annotated.Leijen
   , Style
   , Pretty(..)
   , Doc
+  , (<>), (<#>), (<##>)
   , putDoc, putDocWithoutColour, hPutDoc
   , render
   , text
@@ -15,7 +17,8 @@ module Pretty
 
 
 import qualified Text.PrettyPrint.Annotated.Leijen as P
-import Text.PrettyPrint.Annotated.Leijen hiding (text, hPutDoc, putDoc, Doc, equals, colon, pipe)
+import Text.PrettyPrint.Annotated.Leijen hiding (text, hPutDoc, putDoc, Doc, equals, colon, pipe, (<>), (<$>), (<$$>))
+import Data.Semigroup
 
 import System.IO (hPutStrLn, Handle, stdout)
 
@@ -23,6 +26,13 @@ import qualified Data.Text as T
 import Data.Text (Text)
 
 type Doc = P.Doc Style
+
+instance Semigroup (P.Doc a) where
+  (<>) = (P.<>)
+
+instance Monoid (P.Doc a) where
+  mempty = P.empty
+  mappend = (P.<>)
 
 class Pretty a where
   pretty :: a -> Doc
@@ -41,6 +51,13 @@ data Style
 
   | Operator
   deriving (Eq, Show, Ord)
+
+infixr 5 <#>,<##>
+
+-- Alias various definitions so we're not masking existing definitions
+(<#>), (<##>) :: P.Doc a -> P.Doc a -> P.Doc a
+(<#>) = (P.<$>)
+(<##>) = (P.<$$>)
 
 text :: Text -> Doc
 text = string . T.unpack

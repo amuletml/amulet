@@ -1,7 +1,5 @@
 module Backend.Lua where
 
-import Prelude hiding ((<$>))
-
 import Pretty
 
 import qualified Data.Text as T
@@ -84,15 +82,15 @@ instance Pretty LuaStmt where
           vsep [ string "elseif" <+> pretty c <+> string "then"
                , body b
                ]
-            <$> pprintElse xs
+            <#> pprintElse xs
      in vsep [ string "if" <+> pretty c <+> string "then"
              , body t
              ]
-        <$> pprintElse bs
+        <#> pprintElse bs
   pretty (LuaIfElse []) = error "impossible"
   pretty (LuaFornum v s e i b) =
     vsep [ string "for" <+> text v <+> equals <+> string "do"
-       <+> pretty s <+> comma <+> pretty e <+> comma <+> pretty i 
+       <+> pretty s <+> comma <+> pretty e <+> comma <+> pretty i
          , body b
          , string "end"
          ]

@@ -39,7 +39,7 @@ import Data.Semigroup
 import Data.Spanned
 import Data.Triple
 
-import Pretty hiding ((<>), (<$>))
+import Pretty
 
 import Syntax.Subst
 import Syntax
