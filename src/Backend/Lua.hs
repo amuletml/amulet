@@ -2,7 +2,7 @@ module Backend.Lua where
 
 import Prelude hiding ((<$>))
 
-import Text.PrettyPrint.Leijen hiding (text)
+import Pretty
 
 import qualified Data.Text as T
 import Data.Text (Text)
@@ -43,8 +43,6 @@ data LuaExpr
 
 body :: [LuaStmt] -> Doc
 body = indent 2 . vsep . map pretty
-text :: Text -> Doc
-text = string . T.unpack
 
 instance Pretty LuaStmt where
   pretty (LuaDo xs) =
