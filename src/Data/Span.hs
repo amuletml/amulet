@@ -11,8 +11,7 @@ module Data.Span
 
 import Pretty
 
-import qualified Data.Semigroup as S
-import Data.Semigroup hiding ((<>))
+import Data.Semigroup
 import Data.Data
 import Data.Position
 

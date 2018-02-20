@@ -5,10 +5,8 @@
 {-# LANGUAGE DeriveDataTypeable, TemplateHaskell #-}
 module Syntax where
 
-import Prelude hiding ((<$>))
 import Pretty
 
-import qualified Data.Text as T
 import Data.Text (Text)
 import Data.Spanned
 import Data.Span
@@ -192,11 +190,11 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
   pretty (Let ((n, v, _):xs) e _) =
     let prettyBind (n, v, _) = keyword "and" <+> pretty n <+> nest 2 (equals </> pretty v)
      in align $ keyword "let" <+> pretty n <+> nest 2 (equals </> pretty v)
-            <$> case xs of
+            <#> case xs of
               [] -> keyword "in" <+> pretty e
-              _ -> vsep (map prettyBind xs) <$> keyword "in" <+> pretty e
+              _ -> vsep (map prettyBind xs) <#> keyword "in" <+> pretty e
   pretty (If c t e _) = keyword "if" <+> pretty c
-                    <$> indent 2 (vsep [ keyword "then" <+> pretty t
+                    <#> indent 2 (vsep [ keyword "then" <+> pretty t
                                        , keyword "else" <+> pretty e
                                        ])
   pretty (App c (e@App{}) _) = pretty c <+> parens (pretty e)
@@ -284,12 +282,12 @@ instance (Pretty (Var p)) => Pretty (Toplevel p) where
   pretty (LetStmt ((n, v, _):xs)) =
     let prettyBind (n, v, _) = keyword "and" <+> pretty n <+> nest 2 (equals </> pretty v)
      in align $ keyword "let" <+> pretty n <+> nest 2 (equals </> pretty v)
-            <$> vsep (map prettyBind xs)
+            <#> vsep (map prettyBind xs)
   pretty (ForeignVal v d ty _) = keyword "foreign val" <+> pretty v <+> colon <+> pretty ty <+> equals <+> dquotes (text d)
   pretty (TypeDecl ty args ctors) = keyword "type" <+> pretty ty
                                 <+> hsep (map ((squote <>) . pretty) args)
                                 <+> equals
-                                <$> vsep (map ((pipe <+>) . pretty) ctors)
+                                <#> vsep (map ((pipe <+>) . pretty) ctors)
 
 instance (Pretty (Var p)) => Pretty [Toplevel p] where
   pretty = vcat . map pretty
