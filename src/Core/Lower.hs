@@ -16,16 +16,15 @@ import Types.Infer (tyString, tyInt, tyBool, tyUnit)
 import qualified Data.Text as T
 import Data.Traversable
 import Data.Function
-import Data.Generics
-import Data.Maybe
 import Data.Span
 import Data.List
 
+import Core.Pretty()
 import Core.Core
 
 import Syntax
 
-import Pretty (prettyPrint)
+import Text.PrettyPrint.Leijen (pretty)
 
 type MonadLower m
   = ( MonadGen Int m
@@ -36,12 +35,6 @@ cotyString = runGenT (lowerType tyString) mempty
 cotyUnit = runGenT (lowerType tyUnit) mempty
 cotyBool = runGenT (lowerType tyBool) mempty
 cotyInt = runGenT (lowerType tyInt) mempty
-
-getType :: Data (f Typed) => f Typed -> Type Typed
-getType = snd . head . catMaybes . gmapQ get where
-  get d = (`asTypeOf` (undefined :: (Span, Type Typed))) <$> cast d
-  -- FIXME: Point-freeing this definition makes type inference broken.
-  -- Thanks, GHC.
 
 makeBigLams :: MonadLower m
             => Type Typed
@@ -71,7 +64,7 @@ patternMatchingFailure (ex, ot) it = do
   err <- codomain ot
   (,,) <$> pure (cap it') <*> pure it'
        <*> pure (CotApp (CotTyApp errRef err)
-                        (CotLit (ColStr (prettyPrint ex))))
+                        (CotLit (ColStr (T.pack (show (pretty ex))))))
 
 lowerExpr :: MonadLower m => Expr Typed -> m CoTerm
 lowerExpr expr
@@ -137,7 +130,7 @@ lowerExpr expr
       let realt = case ext of
             CotyExactRows rs -> CotyExactRows (deleteBy ((==) `on` fst) (key, undefined) rs)
             CotyRows rho rs -> CotyRows rho (deleteBy ((==) `on` fst) (key, undefined) rs)
-            _ -> error $ "not a record type " ++ T.unpack (prettyPrint ext)
+            _ -> error $ "not a record type " ++ show (pretty ex)
 
           fixup (CotyRows rho []) = rho
           fixup x = x
@@ -152,7 +145,7 @@ lowerExpr expr
                         <*> lowerExpr x
       CotExtend (CotLit ColRecNil) <$> zipWithM go [1..] xs
     TypeApp f x _ -> CotTyApp <$> lowerExpr f <*> lowerType x
-    x -> error $ "impossible lowering (desugarer removes): " ++ T.unpack (prettyPrint x)
+    x -> error $ "impossible lowering (desugarer removes): " ++ show (pretty x)
 
 lowerType :: MonadLower m => Type Typed -> m CoType
 lowerType tt = case tt of
@@ -166,6 +159,7 @@ lowerType tt = case tt of
     for vs $ \(label, tp) -> (,) label <$> lowerType tp
   TyVar (TvName v) -> pure (CotyVar v)
   TyCon (TvName v) -> pure (CotyCon v)
+  TySkol (Skolem (TvName v) _ _) -> pure (CotyCon v)
 
 tup2Rec :: MonadLower m => Int -> Type Typed -> m [(T.Text, CoType)]
 tup2Rec k (TyTuple a b) = do
@@ -189,13 +183,14 @@ lowerPat pat = case pat of
       realt tp = case tp of
         CotyExactRows rs -> CotyExactRows (filter (not . flip elem keys . fst) rs)
         CotyRows rho rs -> CotyRows rho (filter (not . flip elem keys . fst) rs)
-        _ -> error $ "not a record type " ++ T.unpack (prettyPrint tp)
+        _ -> error $ "not a record type " ++ show (pretty tp)
 
       fixup (CotyRows rho _) = rho
       fixup x = x
 
       tidy = fmap (fixup . realt) . lowerType
      in CopExtend <$> (CopCapture <$> fresh <*> tidy t) <*> traverse lowerRow xs
+  PTuple [] _ -> pure . CopLit $ ColUnit
   PTuple xs _ -> do
     let go :: MonadLower m => Int -> Pattern Typed -> m (T.Text, CoPattern)
         go k x = (,) <$> pure (T.pack (show k))

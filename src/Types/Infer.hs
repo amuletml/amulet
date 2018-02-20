@@ -21,6 +21,7 @@ import Control.Lens
 import Syntax.Resolve.Toplevel
 import Syntax.Subst
 import Syntax.Raise
+import Syntax.Let
 import Syntax
 
 import Types.Infer.Pattern
@@ -57,15 +58,13 @@ correct ty = gmapT (mkT go) where
   go (a, _) = (a, ty)
 
 check :: MonadInfer Typed m => Expr Resolved -> Type Typed -> m (Expr Typed)
-check e ty@(TyForall vs t) = do -- This is rule Decl∀L from [Complete and Easy]
-  vs' <- traverse (const freshKV) vs
-  e' <- extendManyK (zip vs vs') $
-    check e t
-  pure (correct ty e')
 check expr@(VarRef k a) tp = do
   (_, old, _) <- lookupTy' k
-  _ <- subsumes expr tp old
+  _ <- subsumes expr old tp
   pure (VarRef (TvName k) (a, tp))
+check e ty@TyForall{} = do -- This is rule Decl∀L from [Complete and Easy]
+  e' <- check e =<< skolemise ty -- gotta be polymorphic - don't allow instantiation
+  pure (correct ty e')
 check (Hole v a) t = pure (Hole (TvName v) (a, t))
 check ex@(Fun p b a) ty = do
   (dom, cod) <- decompose ex _TyArr ty
@@ -83,7 +82,7 @@ check (Let ns b an) t = do
     tv <- freshTV
     pure (TvName a, tv)
   extendMany ks $ do
-    (ns', ts) <- inferLetTy id ks (reverse ns)
+    (ns', ts) <- inferLetTy id ks (depOrder ns)
     extendMany ts $ do
       b' <- check b t
       pure (Let ns' b' (an, t))
@@ -112,11 +111,6 @@ check ex@(RecordExt rec rows a) ty = do
 check (Access rc key a) ty = do
   rho <- freshTV
   Access <$> check rc (TyRows rho [(key, ty)]) <*> pure key <*> pure (a, ty)
-check expr@(Ascription e ty an) gty = do
-  (ty', _) <- resolveKind ty
-  e' <- check e ty'
-  _ <- subsumes expr ty' gty
-  pure (Ascription (correct gty e') ty' (an, gty))
 check ex@(Tuple es an) ty = Tuple <$> go es ty <*> pure (an, ty) where
   go [] _ = error "not a tuple"
   go [x] t = (:[]) <$> check x t
@@ -158,6 +152,10 @@ infer (Literal l an) = pure (Literal l (an, ty), ty) where
     LiStr{} -> tyString
     LiBool{} -> tyBool
     LiUnit{} -> tyUnit
+infer (Ascription e ty an) = do
+  (ty', _) <- resolveKind ty
+  e' <- check e ty'
+  pure (Ascription (correct ty' e') ty' (an, ty'), ty')
 infer ex = do
   x <- freshTV
   ex' <- check ex x
@@ -178,7 +176,7 @@ inferProg (LetStmt ns:prg) = do
     vl <- lookupTy a `catchError` const (pure tv)
     pure (TvName a, vl)
   extendMany ks $ do
-    (ns', ts) <- inferLetTy closeOver ks (reverse ns)
+    (ns', ts) <- inferLetTy closeOver ks (depOrder ns)
                    `catchError` (throwError . flip ArisingFrom (LetStmt ns))
     extendMany ts $
       consFst (LetStmt ns')
@@ -234,11 +232,17 @@ inferLetTy _ ks [] = pure ([], ks)
 inferLetTy closeOver ks ((va, ve, vann):xs) = extendMany ks $ do
   ((ve', ty), c) <- listen (infer ve) -- See note [Freedom of the press]
   cur <- gen
+
   (x, vt) <- case solve cur mempty c of
     Left e -> throwError e
     Right x -> pure (x, closeOver (normType (apply x ty)))
+
   let r (a, t) = (a, normType (apply x t))
       ex = applyInExpr x (raiseE id r ve')
+
+  unless (null (skols vt)) $
+    throwError (EscapedSkolems (Set.toList (skols vt)) vt)
+
   consFst (TvName va, ex, (vann, vt)) $
     inferLetTy closeOver (updateAlist (TvName va) vt ks) xs
 

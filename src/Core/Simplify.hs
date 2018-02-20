@@ -10,8 +10,10 @@ import Core.Optimise
 
 import Control.Monad.Gen
 
+import Data.Maybe
+
 optmOnce :: [CoStmt] -> Gen Int [CoStmt]
-optmOnce = runTransform . transformStmts passes where
+optmOnce t = fmap (fromMaybe t) . runTransform . transformStmts passes $ t where
   passes = mconcat
       [ dropBranches
       , foldExpr

@@ -161,6 +161,7 @@ reExpr (TypeApp f x a) = TypeApp <$> reExpr f <*> reType x <*> pure a
 reType :: MonadResolve m => Type Parsed -> m (Type Resolved)
 reType (TyCon v) = TyCon <$> lookupTy v
 reType (TyVar v) = TyVar <$> lookupTy v
+reType v@TySkol{} = error ("impossible! resolving skol " ++ show v)
 reType (TyForall vs ty) = do
   vs' <- traverse tagVar vs
   ty' <- extendTyN (zip vs vs') $ reType ty

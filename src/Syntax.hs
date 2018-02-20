@@ -5,18 +5,16 @@
 {-# LANGUAGE DeriveDataTypeable, TemplateHaskell #-}
 module Syntax where
 
-import Pretty hiding ((<>))
-
-import Data.Text (Text)
 import qualified Data.Text as T
+import Data.Text (Text)
 import Data.Spanned
 import Data.Span
 
 import Data.List.NonEmpty(NonEmpty ((:|)))
-import Data.Semigroup
-import Data.Foldable
+import Data.Semigroup (sconcat, Semigroup(..))
 import Data.Typeable
 import Data.Triple
+import Data.Maybe
 import Data.Data
 
 import Control.Lens
@@ -138,6 +136,22 @@ data Type p
   | TyExactRows [(Text, Type p)] -- { foo : int, bar : string }
   | TyTuple (Type p) (Type p) -- (see note [1])
 
+  | TySkol (Skolem p)
+
+data Skolem p
+  = Skolem (Var p) -- the constant itself
+           (Var p) -- what variable this skolemises
+           (Type p) -- the type this was generated for
+
+deriving instance (Show (Var p), Show (Ann p)) => Show (Skolem p)
+deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Skolem p)
+
+instance Eq (Var p) => Eq (Skolem p) where
+  Skolem v _ _  == Skolem v' _ _ = v == v'
+
+instance Ord (Var p) => Ord (Skolem p) where
+  Skolem v _ _ `compare` Skolem v' _ _ = v `compare` v'
+
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Type p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Type p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Type p)
@@ -183,149 +197,17 @@ deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Constructor p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Constructor p)
 instance (Data (Var p), Data (Ann p), Data p) => Spanned (Constructor p)
 
---- Pretty-printing {{{
-
-instance (Pretty (Var p)) => Pretty (Expr p) where
-  pprint (VarRef v _) = pprint v
-  pprint (Let [] _ _) = error "absurd: never parsed"
-  pprint (Let ((n, v, _):xs) e _) = do
-    kwClr "let " <+> n <+> opClr " = " <+> v <+> newline
-    for_ xs $ \(n, v, _) ->
-      kwClr "and " <+> n <+> opClr " = " <+> v <+> newline
-    pprint e
-  pprint (If c t e _) = do
-    kwClr "if " <+> c <+> newline
-    block 2 $ do
-      kwClr "then " <+> t <+> newline
-      kwClr "else " <+> e
-  pprint (App c (e@App{}) _) = c <+> " " <+> parens e
-  pprint (App f x _) = f <+> " " <+> x
-  pprint (Fun v e _) = kwClr "fun " <+> v <+> opClr " -> " <+> e
-  pprint (Begin e _) = do
-    kwClr "begin "
-    body 2 e *> newline
-    kwClr "end"
-  pprint (Literal l _) = pprint l
-  pprint (BinOp l o r _) = parens (pprint l <+> " " <+> pprint o <+> " " <+> pprint r)
-  pprint (Match t bs _) = do
-    kwClr "match " <+> t <+> " with"
-    body 2 bs *> newline
-  pprint (Hole v _) = pprint v -- A typed hole
-  pprint (Ascription e t _) = parens $ e <+> opClr " : " <+> t
-  pprint (Record rows _) = braces $ interleave ", " $ map (\(n, v) -> n <+> opClr " = " <+> v) rows
-  pprint (RecordExt var rows _) = braces $ var <+> kwClr " with " <+> interleave ", " (map (\(n, v) -> n <+> opClr " = " <+> v) rows)
-  pprint (Access x@VarRef{} f _) = x <+> opClr "." <+> f
-  pprint (Access e f _) = parens e <+> opClr "." <+> f
-
-  pprint (LeftSection op vl _) = parens $ opClr op <+> " " <+> vl
-  pprint (RightSection op vl _) = parens $ vl <+> " " <+> opClr op
-  pprint (BothSection op _) = parens $ opClr op
-  pprint (AccessSection k _) = parens $ opClr "." <+> k
-
-  pprint (Tuple es _) = parens $ interleave ", " es
-  pprint (TypeApp f x _) = f <+> opClr " @" <+> x
-
-instance (Pretty (Var p)) => Pretty (Pattern p, Expr p) where
-  pprint (a, b) = opClr "| " <+> a <+> " -> " <+> b
-
-instance (Pretty (Var p)) => Pretty (Expr p, Expr p) where
-  pprint (a, b) = opClr "| " <+> a <+> " -> " <+> b
-
-instance (Pretty (Var p)) => Pretty (Pattern p) where
-  pprint Wildcard{} = kwClr "_"
-  pprint (Capture x _) = pprint x
-  pprint (Destructure x Nothing   _) = pprint x
-  pprint (Destructure x (Just xs) _) = parens $ x <+> " " <+> xs
-  pprint (PType p x _) = parens $ p <+> opClr " : " <+> x
-  pprint (PRecord rows _) = braces $ interleave ", " $ map (\(x, y) -> x <+> opClr " = " <+> y) rows
-  pprint (PTuple ps _) = parens $ interleave ", " ps
-
-instance Pretty Lit where
-  pprint (LiStr s) = str s
-  pprint (LiInt s) = litClr s
-  pprint (LiBool True) = litClr "true"
-  pprint (LiBool False) = litClr "false"
-  pprint LiUnit = litClr "unit"
-
-instance (Pretty (Var p)) => Pretty (Type p) where
-  pprint (TyCon v) = typeClr v
-  pprint (TyVar v) = opClr "'" <+> tvClr v
-  pprint (TyForall vs v)
-    = kwClr "∀ " <+> interleave " " (map (\x -> "'" <+> tvClr x) vs) <+> opClr ". " <+> v
-
-  pprint (TyArr x e)
-    | TyArr{} <- x = parens x <+> opClr " -> " <+> e
-    | TyForall{} <- x = parens x <+> opClr " -> " <+> e
-    | TyTuple{} <- x = parens x <+> opClr " -> " <+> e
-    | otherwise = x <+> opClr " -> " <+> e
-  pprint (TyRows p rows) = braces $ p <+> opClr " | " <+> prettyRows rows where
-    prettyRows = interleave ", " . map (\(x, t) -> x <+> opClr " : " <+> t)
-
-  pprint (TyExactRows rows) = braces $ prettyRows rows where
-    prettyRows = interleave ", " . map (\(x, t) -> x <+> opClr " : " <+> t)
-
-  pprint (TyApp e x@TyApp{}) = e <+> " " <+> parens x
-  pprint (TyApp x e) = x <+> opClr " " <+> e
-  pprint (TyTuple a b)
-    | TyTuple{} <- a
-    = parens a <+> opClr " * " <+> b
-    | otherwise
-    = a <+> opClr " * " <+> b
-
-instance Pretty (Var p) => Pretty (Kind p) where
-  pprint KiStar = kwClr "Type"
-  pprint (KiArr a b)
-    | KiArr{} <- a = parens a <+> opClr " -> " <+> b
-    | otherwise = a <+> opClr " -> " <+> b
-  pprint (KiVar v) = opClr "'" <+> tvClr v
-  pprint (KiForall vs v)
-    = kwClr "∀ " <+> interleave " " (map (\x -> "'" <+> tvClr x) vs) <+> opClr ". " <+> v
-
-instance (Pretty (Var p)) => Pretty (Toplevel p) where
-  pprint (LetStmt vs) = opClr "let " <+> interleave (newline <+> opClr "and ") (map pVars vs) where
-    pVars (v, e, _) = v <+> " = " <+> block 2 e
-  pprint (ForeignVal v d ty _) = kwClr "foreign val " <+> v <+> opClr ": "
-                           <+> ty <+> opClr " = " <+> str d
-  pprint (TypeDecl ty args ctors) = do
-    kwClr "type " <+> ty
-    traverse_ (" '" <+>) args
-    opClr " = "
-    body 2 (map ("| "<+>) ctors)
-
-  pprint (Open m Nothing) = kwClr "open " <+> m
-  pprint (Open m (Just a)) = kwClr "open " <+> m <+> " as " <+> a
-
-  pprint (Module m bod) = kwClr "module " <+> m <+> " = " <+> body 2 bod <+> kwClr "end"
-
-instance (Pretty (Var p)) => Pretty [Toplevel p] where
-  pprint = body 0 . map (<+> opClr " ;; ")
-
-instance (Pretty (Var p)) => Pretty (Constructor p) where
-  pprint (UnitCon p _) = pprint p
-  pprint (ArgCon p t _) = pprint p <+> kwClr " of " <+> t
-
-instance Pretty (Var Parsed) where
-  pprint (Name v) = pprint v
-  pprint (InModule t v) = t <+> "." <+> v
-
-instance Pretty (Var Resolved) where
-  pprint (TgName v _) = pprint v
-  -- pprint (TgName v i) = pprint v <+> "#" <+> i
-  pprint (TgInternal v) = pprint v
-
-instance Pretty (Var Typed) where
-  pprint (TvName v) = pprint v
-  -- pprint (TvName v t)
-    -- | t == internalTyVar = pprint v
-    -- | otherwise = parens $ v <+> opClr " : " <+> t
-    --
-instance Pretty (Span, Type Typed) where
-  pprint (x, _) = pprint x
 
 -- }}}
 
 unTvName :: Var Typed -> Var Resolved
 unTvName (TvName x) = x
+
+getType :: Data (f Typed) => f Typed -> Type Typed
+getType = snd . head . catMaybes . gmapQ get where
+  get d = fmap (`asTypeOf` (undefined :: (Span, Type Typed))) (cast d)
+  -- FIXME: Point-freeing this definition makes type inference broken.
+  -- Thanks, GHC.
 
 makePrisms ''Expr
 makePrisms ''Type

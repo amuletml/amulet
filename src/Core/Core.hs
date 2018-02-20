@@ -1,16 +1,14 @@
 {-# LANGUAGE DeriveDataTypeable, FlexibleInstances #-}
 module Core.Core where
 
+
 import qualified Data.VarSet as VarSet
-import Data.Generics
+import Data.Generics hiding (empty)
 import Data.Data (Data, Typeable)
 import Data.Text (Text, pack)
 import Data.Triple
 
 import Syntax (Var(..), Resolved)
-
-
-import Pretty
 
 data CoTerm
   = CotRef (Var Resolved) CoType
@@ -65,100 +63,26 @@ data CoStmt
   | CosType (Var Resolved) [(Var Resolved, CoType)]
   deriving (Eq, Show, Ord, Data, Typeable)
 
-instance Pretty CoTerm where
-  pprint (CotRef v _) = pprint v
-  pprint (CotLam Big (v, t) c)
-    = opClr "Λ" <+> parens (v <+> opClr " : " <+> t) <+> opClr ". " <+> c
-  pprint (CotLam Small (v, t) c)
-    = opClr "λ" <+> parens (v <+> opClr " : " <+> t) <+> opClr ". " <+> c
-  pprint (CotApp f x) = parens f <+> " " <+> parens x
-  pprint (CotLet xs e) =
-    kwClr "let " <+> braces (block 2 (newline *> pprLet xs) <* newline) <+> newline <+> kwClr " in " <+> e
-  pprint (CotBegin xs e) = kwClr "begin " <+> interleave (opClr "; ") (xs ++ [e]) <+> kwClr " end"
-  pprint (CotLit l) = pprint l
-  pprint (CotMatch e ps) = kwClr "match " <+> e <+> " " <+> braces (block 2 (newline *> pprCases ps) <* newline)
-  pprint (CotTyApp f t) = f <+> opClr " @" <+> t
-  pprint (CotExtend x rs) = braces $ x <+> opClr " | " <+> prettyRows rs where
-    prettyRows = interleave ", " . map (\(x, t, v) ->
-      x <+> opClr " : "
-        <+> t
-        <+> opClr " = "
-        <+> v)
 
-pprLet :: [(Var Resolved, CoType, CoTerm)] -> PrettyP
-pprLet xs = interleave newline (map one xs) where
-  one (a, b, c) = do
-    a <+> opClr " : " <+> b <+> opClr " = "
-    block 2 (newline <* pprint c)
-
-pprCases :: [(CoPattern, CoType, CoTerm)] -> PrettyP
-pprCases xs = interleave newline (map one xs) where
-  one (a, b, c) = a <+> opClr " : " <+> b <+> opClr " -> " <+> c
-
-instance Pretty CoPattern where
-  pprint (CopCapture v t) = parens (v <+> opClr " : " <+> t)
-  pprint (CopConstr v) = pprint v
-  pprint (CopDestr v p) = parens (v <+> " " <+> p)
-  pprint (CopExtend p rs)
-    = braces $ p <+> opClr " | " <+> interleave ", " (map (\(x, y) -> x <+> opClr " = " <+> y) rs)
-  pprint (CopLit l) = pprint l
-
-instance Pretty CoType where
-  pprint (CotyCon v) = typeClr v
-  pprint (CotyVar v) = opClr "'" <+> tvClr v
-  pprint (CotyForall vs v)
-    = kwClr "∀ " <+> interleave " " (map (\x -> "'" <+> tvClr x) vs) <+> opClr ". " <+> v
-
-  pprint (CotyArr x e)
-    | CotyArr{} <- x = parens x <+> opClr " -> " <+> e
-    | CotyForall{} <- x = parens x <+> opClr " -> " <+> e
-    | otherwise = x <+> opClr " -> " <+> e
-  pprint (CotyRows p rows) = braces $ p <+> opClr " | " <+> prettyRows rows where
-    prettyRows = interleave ", " . map (\(x, t) -> x <+> opClr " : " <+> t)
-
-  pprint (CotyExactRows rows) = braces $ prettyRows rows where
-    prettyRows = interleave ", " . map (\(x, t) -> x <+> opClr " : " <+> t)
-
-  pprint (CotyApp e x@CotyApp{}) = e <+> " " <+> parens x
-  pprint (CotyApp x e) = x <+> opClr " " <+> e
-  pprint CotyStar = kwClr "*"
-
-instance Pretty CoLiteral where
-  pprint ColFalse = kwClr "false"
-  pprint ColTrue = kwClr "true"
-  pprint ColUnit = kwClr "unit"
-  pprint ColRecNil = kwClr "{}"
-  pprint (ColInt l) = pprint l
-  pprint (ColStr s) = str s
-
-instance Pretty CoStmt where
-  pprint (CosForeign v t e) = v <+> opClr " : " <+> t <+> kwClr " = foreign " <+> str e
-  pprint (CosLet vs) = kwClr "let " <+> braces (block 2 (newline *> pprLet vs) <* newline)
-  pprint (CosType v cs) = kwClr "type "
-                        <+> v <+> " " <+> braces (pprCons cs)
-    where pprCons = interleave (opClr "; ") . map (\(x, t) -> x <+> opClr " : " <+> t)
-
-instance Pretty [CoStmt] where
-  pprint = interleave ";"
-
-
+{-# ANN freeIn "HLint: ignore" #-}
+-- Rationale: can't use <> because of Doc. Ughr.
 freeIn :: CoTerm -> VarSet.Set
 freeIn (CotRef v _) = VarSet.singleton v
 freeIn (CotLam Small (v, _) e) = VarSet.delete v (freeIn e)
 freeIn (CotLam Big _ e) = freeIn e
-freeIn (CotApp f x) = freeIn f <> freeIn x
-freeIn (CotLet vs e) = VarSet.difference (freeIn e <> foldMap (freeIn . thd3) vs)
+freeIn (CotApp f x) = freeIn f `mappend` freeIn x
+freeIn (CotLet vs e) = VarSet.difference (freeIn e `mappend` foldMap (freeIn . thd3) vs)
                                          (VarSet.fromList (map fst3 vs))
-freeIn (CotMatch e bs) = freeIn e <> foldMap freeInBranch bs where
+freeIn (CotMatch e bs) = freeIn e `mappend` foldMap freeInBranch bs where
   freeInBranch (b, _, e) = VarSet.difference (freeIn e) (bound b)
   bound (CopCapture v _) = VarSet.singleton v
   bound (CopDestr _ p) = bound p
-  bound (CopExtend p ps) = foldMap (bound . snd) ps <> bound p
+  bound (CopExtend p ps) = foldMap (bound . snd) ps `mappend` bound p
   bound _ = mempty
 freeIn (CotLit _) = mempty
-freeIn (CotExtend c rs) = freeIn c <> foldMap (freeIn . thd3) rs
+freeIn (CotExtend c rs) = freeIn c `mappend` foldMap (freeIn . thd3) rs
 freeIn (CotTyApp f _) = freeIn f
-freeIn (CotBegin xs x) = foldMap freeIn xs <> freeIn x
+freeIn (CotBegin xs x) = foldMap freeIn xs `mappend` freeIn x
 
 isError :: CoTerm -> Bool
 isError (CotApp (CotTyApp (CotRef (TgInternal n) _) _) _) = n == pack "error"

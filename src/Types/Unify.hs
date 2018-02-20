@@ -1,5 +1,5 @@
 {-# Language MultiWayIf, GADTs, FlexibleContexts #-}
-module Types.Unify (solve, overlap, bind) where
+module Types.Unify (solve, overlap, bind, skolemise) where
 
 import Control.Monad.Except
 import Control.Monad.State
@@ -24,6 +24,7 @@ type SolveM = GenT Int (StateT (Subst Typed) (Except TypeError))
 bind :: Var Typed -> Type Typed -> SolveM ()
 bind var ty
   | occurs var ty = throwError (Occurs var ty)
+  | TyVar var == ty = pure ()
   | otherwise = do
       env <- get
       -- Attempt to extend the environment, otherwise unify with existing type
@@ -36,6 +37,12 @@ bind var ty
 unify :: Type Typed -> Type Typed -> SolveM ()
 unify (TyVar a) b = bind a b
 unify a (TyVar b) = bind b a
+
+unify (TySkol x ) (TySkol y)
+  | x == y = pure ()
+unify (TySkol t) b = throwError $ SkolBinding t b
+unify b (TySkol t) = throwError $ SkolBinding t b
+
 unify (TyArr a b) (TyArr a' b') = unify a a' *> unify b b'
 unify (TyApp a b) (TyApp a' b') = unify a a' *> unify b b'
 unify ta@(TyCon a) tb@(TyCon b)
@@ -120,28 +127,28 @@ solve i s (ConSubsume e a b:xs) =
     Left err -> Left (ArisingFrom err e)
     Right (i', s') -> solve i' (s' `compose` s) (apply s' xs)
 
-subsumes :: (MonadGen Int m, MonadError TypeError m) => (Type Typed -> Type Typed -> m b) -> Type Typed -> Type Typed -> m b
+subsumes :: (MonadGen Int m, MonadError TypeError m)
+         => (Type Typed -> Type Typed -> m b)
+         -> Type Typed -> Type Typed -> m b
 subsumes k t1 t2@TyForall{} = do
-  (skols, t2') <- skolemise t2
-  let skols' = map (\(TyVar v) -> v) skols
-      escaped = filter (`elem` skols') . Set.toList $ ftv t1
-   in unless (null escaped) $
-        throwError (EscapedSkolems escaped t1 t2)
+  t2' <- skolemise t2
   subsumes k t1 t2'
 subsumes k t1@TyForall{} t2 = do
   (_, _, t1') <- instantiate t1
   subsumes k t1' t2
 subsumes k a b = k a b
 
-skolemise :: MonadGen Int m => Type Typed -> m ([Type Typed], Type Typed)
-skolemise (TyForall tvs t) = do
-  sks <- traverse (const freshTV) tvs
-  (sks', ty') <- skolemise (apply (Map.fromList (zip tvs sks)) t)
-  pure (sks ++ sks', ty')
-skolemise (TyArr c d) = do
-  (sks, d') <- skolemise d
-  return (sks, TyArr c d')
-skolemise ty = pure ([], ty)
+skolemise :: MonadGen Int m => Type Typed -> m (Type Typed)
+skolemise ty@(TyForall tvs t) = do
+  sks <- traverse (freshSkol ty) tvs
+  skolemise (apply (Map.fromList (zip tvs sks)) t)
+skolemise (TyArr c d) = TyArr c <$> skolemise d
+skolemise ty = pure ty
+
+freshSkol :: MonadGen Int m => Type Typed -> Var Typed -> m (Type Typed)
+freshSkol ty u = do
+  var <- TvName <$> fresh
+  pure (TySkol (Skolem var u ty))
 
 occurs :: Var Typed -> Type Typed -> Bool
 occurs _ (TyVar _) = False
