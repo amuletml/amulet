@@ -16,7 +16,7 @@ tyBool = TyCon (TvName (TgInternal "bool"))
 tyUnit = TyCon (TvName (TgInternal "unit"))
 
 builtinsEnv :: Env
-builtinsEnv = Env (Map.fromList ops) (Map.fromList tps) where
+builtinsEnv = Env (Map.fromList ops) (Map.fromList tps) mempty where
   op :: T.Text -> Type Typed -> (Var Resolved, Type Typed)
   op x t = (TgInternal x, t)
   tp :: T.Text -> (Var Resolved, Kind Typed)

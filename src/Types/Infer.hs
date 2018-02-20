@@ -11,11 +11,12 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import Data.Traversable
+import Data.Semigroup
 import Data.Generics
 import Data.Triple
 
 import Control.Monad.Infer
-import Control.Arrow (first)
+import Control.Arrow (first, (***))
 import Control.Lens
 
 import Syntax.Resolve.Toplevel
@@ -30,6 +31,8 @@ import Types.Wellformed
 import Types.Unify
 import Types.Holes
 import Types.Kinds
+
+import Debug.Trace
 
 -- Solve for the types of lets in a program
 inferProgram :: MonadGen Int m => [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))
@@ -196,7 +199,19 @@ inferProg (TypeDecl n tvs cs:prg) = do
      extendMany ts $
        consFst (TypeDecl (TvName n) (map TvName tvs) cs') $
          inferProg prg
-inferProg (Open _ _:prg) = inferProg prg
+inferProg (Open mod pre:prg) = do
+  env <- ask
+  traceShow env $ pure ()
+  mod <- view (modules . at mod . non undefined)
+  let prefix =
+        case pre of
+          Just x -> undefined -- TODO squid please I don't understand this
+          Nothing -> id
+      vars' = mod ^. values & Map.toList & map (prefix *** id) & Map.fromList
+      tys' = mod ^. types & Map.toList & map (prefix *** id) & Map.fromList
+      mods' = mod ^. modules & Map.toList & map (prefix *** id) & Map.fromList
+
+  local (Env vars' tys' mods' <>) $ inferProg prg
 inferProg (Module name body:prg) = do
   (body', env) <- inferProg body
 
@@ -204,7 +219,7 @@ inferProg (Module name body:prg) = do
       vars' = map (\x -> (TvName x, env ^. values . at x . non undefined)) vars
       tys' = map (\x -> (TvName x, env ^. types . at x . non undefined)) tys
 
-  extendMany vars' $ extendManyK tys' $
+  extendMany vars' . extendModule (TvName name, env) . extendManyK tys' $
     consFst (Module (TvName name) body') $
     inferProg prg
 
