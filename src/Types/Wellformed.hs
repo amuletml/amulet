@@ -7,7 +7,8 @@ import Control.Monad.Infer
 import qualified Data.Set as Set
 import Data.Foldable
 import Data.Generics
-import Data.List (nub)
+import Data.Function
+import Data.List (nub, unionBy)
 
 import Syntax
 
@@ -38,7 +39,7 @@ arity _ = 0
 
 -- Make a type into its equivalent in prenex normal form.
 normType :: forall p. Eq (Var p) => Type p -> Type p
-normType = uncurry collect . runWriter . spread where
+normType = flatten . uncurry collect . runWriter . spread where
   collect t [] = t
   collect t xs = TyForall (nub xs) t
 
@@ -47,6 +48,16 @@ normType = uncurry collect . runWriter . spread where
   spread (TyArr a t) = TyArr a <$> spread t
   spread x = pure x
 
+  flatten (TyRows r rs) =
+    case r of
+      TyRows r' rs' -> flatten (TyRows r' (unionBy ((==) `on` fst) rs rs'))
+      TyExactRows rs' -> flatten (TyExactRows (unionBy ((==) `on` fst) rs rs'))
+      _ -> TyRows r rs
+  flatten (TyForall vs t) = TyForall vs (flatten t)
+  flatten (TyArr a b) = TyArr (flatten a) (flatten b)
+  flatten (TyApp a b) = TyApp (flatten a) (flatten b)
+  flatten (TyTuple a b) = TyTuple (flatten a) (flatten b)
+  flatten t = t
 
 skols :: (Ord (Ann p), Ord (Var p), Data p, Data (Ann p), Data (Var p))
       => Type p -> Set.Set (Skolem p)

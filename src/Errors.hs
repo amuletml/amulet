@@ -47,16 +47,13 @@ instance Pretty TypeError where
   pretty (NoOverlap ta tb)
     | TyExactRows ra <- ta
     , TyRows _ rb <- tb
-    =   text "No overlap between exact record" </> (verbatim ta <+> text "and polymorphic record" <+> verbatim tb)
-    <$> indent 1 (missing ra rb)
-    | TyExactRows ra <- tb
-    , TyRows _ rb <- ta
-    =   text "No overlap between exact record" </> (verbatim ta <+> text "and polymorphic record" <+> verbatim tb)
-    <$> indent 1 (missing ra rb)
-    | TyExactRows ra <- ta
-    , TyExactRows rb <- tb
-    =   text "No overlap between extact records " </> (verbatim ta <+> text "and" <+> verbatim tb)
-    <+> indent 1 (missing ra rb)
+    =   text "No overla" <> align (text "p between exact record" <+> verbatim ta </> text "and polymorphic record" <+> verbatim tb)
+    <$> indent 2 (missing ra rb)
+
+    | TyExactRows{} <- tb, TyRows{} <- ta = pretty (NoOverlap ta tb)
+    | TyExactRows ra <- ta, TyExactRows rb <- tb
+    =   text "No overlap between" <+> align (text "exact records" <+> verbatim ta <+> text "and" <+> verbatim tb)
+    <+> indent 2 (missing ra rb)
     | otherwise
     = text "\x1b[1;32minternal compiler error\x1b[0m: NoOverlap" <+> verbatim ta <+> verbatim tb
   pretty (IllegalTypeApp ex ta _)
@@ -93,13 +90,12 @@ missing ra rb
   | length ra > length rb
   =  bullet (text "Namely, the following fields should not be present:") <+> hsep (punctuate comma (diff ra rb))
   | length ra == length rb
-  = indent 2 . hsep $  [ bullet (text "Note: no fields match")
-                       , bullet (text "The following fields are missing:")
-                         <+> hsep (punctuate comma (diff ra rb))]
+  = vsep $ [ bullet (text "Note: no fields match.")
+           , bullet (text "The following fields are missing:") <+> hsep (punctuate comma (diff ra rb))]
 missing _ _ = undefined -- freaking GHC
 
 diff :: [(Text, b)] -> [(Text, b)] -> [Doc]
-diff ra rb = map ((squote <>) . text . T.unpack . fst) (deleteFirstsBy ((==) `on` fst) rb ra)
+diff ra rb = map (text . T.unpack . fst) (deleteFirstsBy ((==) `on` fst) rb ra)
 
 report :: Pretty p => p -> T.Text -> IO ()
 report err _ = putDoc (pretty err) *> putStr "\n"

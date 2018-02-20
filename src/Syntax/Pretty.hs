@@ -37,7 +37,7 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
   pretty (Hole v _) = pretty v -- A typed hole
   pretty (Ascription e t _) = parens $ pretty e <+> colon <+> pretty t
   pretty (Record rows _) = record (map (\(n, v) -> text (T.unpack n) <+> equals <+> pretty v) rows)
-  pretty (RecordExt var rows _) = braces $ pretty var <> text "with" <> hsep (punctuate comma (prettyRows rows))
+  pretty (RecordExt var rows _) = braces $ pretty var <> text "with" <> hsep (punctuate comma (prettyRows equals rows))
   pretty (Access x@VarRef{} f _) = pretty x <> dot <> text (T.unpack f)
   pretty (Access e f _) = parens (pretty e) <> dot <> text (T.unpack f)
 
@@ -52,8 +52,8 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
 prettyMatches :: Pretty (Var p) => [(Pattern p, Expr p)] -> [Doc]
 prettyMatches = map (\(a, b) -> char '|' <+> pretty a <+> string "->" <+> pretty b)
 
-prettyRows :: Pretty x => [(Text, x)] -> [Doc]
-prettyRows = map (\(n, v) -> text (T.unpack n) <+> equals <+> pretty v)
+prettyRows :: Pretty x => Doc -> [(Text, x)] -> [Doc]
+prettyRows d = map (\(n, v) -> text (T.unpack n) <+> d <+> pretty v)
 
 instance (Pretty (Var p)) => Pretty (Pattern p) where
   pretty Wildcard{} = char '_'
@@ -61,7 +61,7 @@ instance (Pretty (Var p)) => Pretty (Pattern p) where
   pretty (Destructure x Nothing   _) = pretty x
   pretty (Destructure x (Just xs) _) = parens $ pretty x <+> pretty xs
   pretty (PType p x _) = parens $ pretty p <+> colon <+> pretty x
-  pretty (PRecord rows _) = record (prettyRows rows)
+  pretty (PRecord rows _) = record (prettyRows equals rows)
   pretty (PTuple ps _) = tupled (map pretty ps)
 
 instance Pretty Lit where
@@ -84,8 +84,8 @@ instance (Pretty (Var p)) => Pretty (Type p) where
     | TyTuple{} <- x = parens (pretty x) <+> text "->" <+> pretty e
     | otherwise = pretty x <+> text "->" <+> pretty e
 
-  pretty (TyRows p rows) = braces $ pretty p <+> char '|' <+> hsep (punctuate comma (prettyRows rows)) 
-  pretty (TyExactRows rows) = record (prettyRows rows)
+  pretty (TyRows p rows) = braces $ pretty p <+> char '|' <+> hsep (punctuate comma (prettyRows colon rows))
+  pretty (TyExactRows rows) = record (prettyRows colon rows)
 
   pretty (TyApp e x@TyApp{}) = pretty e <+> parens (pretty x)
   pretty (TyApp x e) = pretty x <+> pretty e

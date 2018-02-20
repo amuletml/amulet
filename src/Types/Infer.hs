@@ -103,11 +103,11 @@ check ex@(BinOp l o r a) ty = do
   BinOp <$> check l el <*> pure o' <*> check r er <*> fmap (a,) (unify ex d ty)
 check ex@(Record rows a) ty = do
   (rows', rowts) <- unzip <$> inferRows rows
-  Record rows' . (a,) <$> unify ex ty (TyExactRows rowts)
+  Record rows' . (a,) <$> unify ex (TyExactRows rowts) ty
 check ex@(RecordExt rec rows a) ty = do
   (rec', rho) <- infer rec
   (rows', newts) <- unzip <$> inferRows rows
-  RecordExt rec' rows' . (a,) <$> unify ex ty (TyRows rho newts)
+  RecordExt rec' rows' . (a,) <$> unify ex (TyRows rho newts) ty
 check (Access rc key a) ty = do
   rho <- freshTV
   Access <$> check rc (TyRows rho [(key, ty)]) <*> pure key <*> pure (a, ty)
@@ -235,7 +235,7 @@ inferLetTy closeOver ks ((va, ve, vann):xs) = extendMany ks $ do
 
   (x, vt) <- case solve cur mempty c of
     Left e -> throwError e
-    Right x -> pure (x, closeOver (normType (apply x ty)))
+    Right x -> pure (x, normType (closeOver (apply x ty)))
 
   let r (a, t) = (a, normType (apply x t))
       ex = applyInExpr x (raiseE id r ve')
