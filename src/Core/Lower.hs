@@ -19,12 +19,11 @@ import Data.Function
 import Data.Span
 import Data.List
 
-import Core.Pretty()
 import Core.Core
 
 import Syntax
 
-import Text.PrettyPrint.Leijen (pretty)
+import Pretty (pretty)
 
 type MonadLower m
   = ( MonadGen Int m

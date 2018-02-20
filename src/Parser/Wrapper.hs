@@ -31,7 +31,7 @@ import Data.Word (Word8)
 
 import Parser.Token
 
-import Text.PrettyPrint.Leijen
+import Pretty
 
 data Token = Token !TokenClass !SourcePos deriving Show
 
@@ -80,7 +80,7 @@ instance Show a => Show (ParseResult a) where
 
 instance Pretty a => Pretty (ParseResult a) where
   pretty (POK _ s) = pretty s
-  pretty (PFailed msg pos) = pretty pos <> colon <+> text msg
+  pretty (PFailed msg pos) = pretty pos <> colon <+> string msg
 
 newtype Parser a = P { unP :: PState -> ParseResult a }
 

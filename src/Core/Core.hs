@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveDataTypeable, FlexibleInstances #-}
 module Core.Core where
 
+import Pretty
 
 import qualified Data.VarSet as VarSet
 import Data.Generics hiding (empty)
@@ -63,6 +64,89 @@ data CoStmt
   | CosType (Var Resolved) [(Var Resolved, CoType)]
   deriving (Eq, Show, Ord, Data, Typeable)
 
+instance Pretty CoTerm where
+  pretty (CotRef v _) = pretty v
+  pretty (CotLam Big (v, t) c)
+    = soperator (char 'Λ') <+> parens (pretty v <+> colon <+> pretty t) <> nest 2 (dot </> pretty c)
+  pretty (CotLam Small (v, t) c)
+    = soperator (char 'λ') <+> parens (pretty v <+> colon <+> pretty t) <> nest 2 (dot </> pretty c)
+  pretty (CotApp f x) = f' <+> x' where
+    f' = case f of
+      CotLam{} -> parens (pretty f)
+      _ -> pretty f
+    x' = case x of
+      CotLam{} -> parens (pretty x)
+      CotApp{} -> parens (pretty x)
+      _ -> pretty x
+
+  pretty (CotLet xs e) = keyword "let" <+> pprLet xs </> (keyword "in" <+> pretty e)
+  pretty (CotBegin e x) = keyword "begin" <+> pprBegin (map pretty (e ++ [x]))
+  pretty (CotLit l) = pretty l
+  pretty (CotMatch e ps) = keyword "match" <+> pretty e <+> pprCases ps
+  pretty (CotTyApp f t) = pretty f <+> soperator (char '@') <> squotes (pretty t)
+  pretty (CotExtend x rs) = braces $ pretty x <+> pipe <+> prettyRows rs where
+    prettyRows = hsep . punctuate comma . map (\(x, t, v) -> text x <+> colon <+> pretty t <+> equals <+> pretty v)
+
+pprLet :: [(Var Resolved, CoType, CoTerm)] -> Doc
+pprLet = braces' . vsep . map (indent 2) . punctuate semi . map one where
+  one (a, b, c) = pretty a <+> colon <+> pretty b <+> nest 2 (equals </> pretty c)
+
+pprBegin :: [Doc] -> Doc
+pprBegin = braces' . vsep . map (indent 2) . punctuate semi
+
+pprCases :: [(CoPattern, CoType, CoTerm)] -> Doc
+pprCases = braces' . vsep . map (indent 2) . punctuate semi . map one where
+  one (a, b, c) = pretty a <+> colon <+> pretty b <+> arrow <+> pretty c
+
+braces' :: Doc -> Doc
+braces' = enclose (lbrace <> linebreak) (linebreak <> rbrace)
+
+instance Pretty CoPattern where
+  pretty (CopCapture v t) = parens (pretty v <+> colon <+> pretty t)
+  pretty (CopConstr v) = pretty v
+  pretty (CopDestr v p) = parens (pretty v <+> pretty p)
+  pretty (CopExtend p rs) = braces $ pretty p <+> pipe <+> prettyRows rs where
+    prettyRows = hsep . punctuate comma . map (\(x, v) ->
+      text x <+> equals <+> pretty v)
+  pretty (CopLit l) = pretty l
+
+instance Pretty CoType where
+  pretty (CotyCon v) = stypeCon (pretty v)
+  pretty (CotyVar v) = stypeVar (squote <> pretty v)
+  pretty (CotyForall vs v)
+    = skeyword (char '∀') <+> hsep (map (stypeVar . (squote <>) . pretty) vs) <> dot <+> pretty v
+
+  pretty (CotyArr x e)
+    | CotyArr{} <- x = parens (pretty x) <+> arrow <+> pretty e
+    | CotyForall{} <- x = parens (pretty x) <+> arrow <+> pretty e
+    | otherwise = pretty x <+> arrow <+> pretty e
+
+  pretty (CotyRows p rows) = braces $ pretty p <+> pipe <+> prettyRows rows where
+    prettyRows = hsep . punctuate comma . map (\(x, t) -> text x <+> colon <+> pretty t)
+
+  pretty (CotyExactRows rows) = braces $ prettyRows rows where
+    prettyRows = hsep . punctuate comma . map (\(x, t) -> text x <+> colon <+> pretty t)
+
+  pretty (CotyApp e x@CotyApp{}) = pretty e <+> parens (pretty x)
+  pretty (CotyApp x e) = pretty x <+> pretty e
+  pretty CotyStar = prod
+
+instance Pretty CoLiteral where
+  pretty ColFalse = sliteral (string "false")
+  pretty ColTrue = sliteral (string "true")
+  pretty ColUnit = sliteral (string "unit")
+  pretty ColRecNil = sliteral (braces empty)
+  pretty (ColInt l) = sliteral (integer l)
+  pretty (ColStr s) = sstring (dquotes (text s))
+
+instance Pretty CoStmt where
+  pretty (CosForeign v t _) = pretty v <+> colon <+> pretty t <+> equals <+> keyword "foreign"
+  pretty (CosLet vs) = keyword "let" <+> pprLet vs
+  pretty (CosType v cs) = keyword "type" <+> pretty v <+> pprBegin (map pprCons cs) where
+    pprCons (x, t) = pretty x <+> colon <+> pretty t
+
+instance Pretty [CoStmt] where
+  pretty = vcat . map pretty
 
 {-# ANN freeIn "HLint: ignore" #-}
 -- Rationale: can't use <> because of Doc. Ughr.

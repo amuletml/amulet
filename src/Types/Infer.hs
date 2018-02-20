@@ -87,9 +87,6 @@ check (Let ns b an) t = do
       b' <- check b t
       pure (Let ns' b' (an, t))
 check (If c t e an) ty = If <$> check c tyBool <*> check t ty <*> check e ty <*> pure (an, ty)
-check ex@(App f x a) ty = do
-  (f', (d, c)) <- secondA (decompose ex _TyArr) =<< infer f
-  App f' <$> check x d <*> fmap (a,) (unify ex ty c)
 check (Match t ps a) ty = do
   (t', tt) <- infer t
   ps' <- for ps $ \(p, e) -> do
@@ -156,6 +153,10 @@ infer (Ascription e ty an) = do
   (ty', _) <- resolveKind ty
   e' <- check e ty'
   pure (Ascription (correct ty' e') ty' (an, ty'), ty')
+infer ex@(App f x a) = do
+  (f', (d, c)) <- secondA (decompose ex _TyArr) =<< infer f
+  x' <- check x d
+  pure (App f' x' (a, c), c)
 infer ex = do
   x <- freshTV
   ex' <- check ex x

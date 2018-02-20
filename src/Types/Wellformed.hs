@@ -12,7 +12,7 @@ import Data.List (nub, unionBy)
 
 import Syntax
 
-import Text.PrettyPrint.Leijen (Pretty)
+import Pretty (Pretty)
 
 wellformed :: (Pretty (Var p), MonadError TypeError m) => Type p -> m ()
 wellformed tp = case tp of
