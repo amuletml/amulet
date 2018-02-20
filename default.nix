@@ -12,11 +12,11 @@ let
       , lens
       , array
       , monad-gen
-      , wl-pprint
       , bytestring
       , containers
       , transformers
       , pretty-show
+      , annotated-wl-pprint
       , alex
       , happy
       }:
@@ -28,7 +28,7 @@ let
         isExecutable = true;
         executableHaskellDepends = [
           mtl syb text array bytestring base
-          lens monad-gen wl-pprint containers
+          lens monad-gen annotated-wl-pprint containers
           transformers pretty-show
         ];
         buildDepends = [ alex happy ];
