@@ -30,8 +30,6 @@ import Types.Unify
 import Types.Holes
 import Types.Kinds
 
-import Debug.Trace
-
 -- Solve for the types of lets in a program
 inferProgram :: MonadGen Int m => [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))
 inferProgram ct = fmap fst <$> runInfer builtinsEnv (inferAndCheck ct) where
@@ -63,7 +61,7 @@ check expr@(VarRef k a) tp = do
   (_, old, _) <- lookupTy' k
   _ <- subsumes expr old tp
   pure (VarRef (TvName k) (a, tp))
-check e ty@TyForall{} = traceShow e $ do -- This is rule Decl∀L from [Complete and Easy]
+check e ty@TyForall{} = do -- This is rule Decl∀L from [Complete and Easy]
   e' <- check e =<< skolemise ty -- gotta be polymorphic - don't allow instantiation
   pure (correct ty e')
 check (Hole v a) t = pure (Hole (TvName v) (a, t))
