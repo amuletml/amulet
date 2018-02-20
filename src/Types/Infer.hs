@@ -30,6 +30,8 @@ import Types.Unify
 import Types.Holes
 import Types.Kinds
 
+import Debug.Trace
+
 -- Solve for the types of lets in a program
 inferProgram :: MonadGen Int m => [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))
 inferProgram ct = fmap fst <$> runInfer builtinsEnv (inferAndCheck ct) where
@@ -61,7 +63,7 @@ check expr@(VarRef k a) tp = do
   (_, old, _) <- lookupTy' k
   _ <- subsumes expr old tp
   pure (VarRef (TvName k) (a, tp))
-check e ty@TyForall{} = do -- This is rule Decl∀L from [Complete and Easy]
+check e ty@TyForall{} = traceShow e $ do -- This is rule Decl∀L from [Complete and Easy]
   e' <- check e =<< skolemise ty -- gotta be polymorphic - don't allow instantiation
   pure (correct ty e')
 check (Hole v a) t = pure (Hole (TvName v) (a, t))
@@ -86,9 +88,6 @@ check (Let ns b an) t = do
       b' <- check b t
       pure (Let ns' b' (an, t))
 check (If c t e an) ty = If <$> check c tyBool <*> check t ty <*> check e ty <*> pure (an, ty)
-check ex@(App f x a) ty = do
-  (f', (d, c)) <- secondA (decompose ex _TyArr) =<< infer f
-  App f' <$> check x d <*> fmap (a,) (unify ex ty c)
 check (Match t ps a) ty = do
   (t', tt) <- infer t
   ps' <- for ps $ \(p, e) -> do
@@ -155,6 +154,10 @@ infer (Ascription e ty an) = do
   (ty', _) <- resolveKind ty
   e' <- check e ty'
   pure (Ascription (correct ty' e') ty' (an, ty'), ty')
+infer ex@(App f x a) = do
+  (f', (d, c)) <- secondA (decompose ex _TyArr) =<< infer f
+  x' <- check x d
+  pure (App f' x' (a, c), c)
 infer ex = do
   x <- freshTV
   ex' <- check ex x
