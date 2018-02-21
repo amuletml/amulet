@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleContexts, ConstraintKinds, OverloadedStrings #-}
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE LambdaCase, TupleSections #-}
 module Core.Lower
   ( lowerExpr
   , lowerType
@@ -104,7 +104,7 @@ lowerAnyway (Record xs _) = case xs of
     pure (CotExtend (CotLit ColRecNil) xs')
 lowerAnyway (RecordExt e xs _) = do
   xs' <- for xs $ \(label, ex) ->
-    (,,) <$> pure label <*> lowerType (getType ex) <*> lowerExpr ex
+    (label,,) <$> lowerType (getType ex) <*> lowerExpr ex
   CotExtend <$> lowerExpr e <*> pure xs'
 lowerAnyway (Literal l _) = pure . CotLit $ case l of
   LiInt i -> ColInt i
