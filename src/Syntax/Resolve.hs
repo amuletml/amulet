@@ -15,6 +15,7 @@ import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Gen
+import Control.Applicative
 
 import Data.Traversable
 import Data.Semigroup
@@ -75,9 +76,9 @@ resolveModule (r:rs) = flip catchError (throwError . wrapError)
           <*> resolveModule rs
 
       Open name as -> do
-        fullName <- foldl (flip InModule) name <$> asks modStack
+        stack <- asks modStack
         (ModuleScope modules) <- get
-        case Map.lookup fullName modules of
+        case lookupModule name modules stack of
           Nothing -> throwError $ NoSuchModule name
           Just (name', Scope vars tys _) ->
             let prefix = case as of
@@ -90,7 +91,7 @@ resolveModule (r:rs) = flip catchError (throwError . wrapError)
 
       Module name body -> do
         fullName <- foldl (flip InModule) name <$> asks modStack
-        body' <- resolveModule body
+        body' <- extendM name $ resolveModule body
 
         let (vars, tys) = extractToplevels body
         let (vars', tys') = extractToplevels body'
@@ -99,7 +100,6 @@ resolveModule (r:rs) = flip catchError (throwError . wrapError)
         (name', scope) <- case Map.lookup fullName modules of
                              Just env -> pure env
                              Nothing -> (,emptyScope) <$> tagModule fullName
-
 
         let scope' = scope { varScope = foldr (uncurry Map.insert) (varScope scope) (zip vars (map SVar vars'))
                            , tyScope  = foldr (uncurry Map.insert) (tyScope scope) (zip tys (map SVar tys')) }
@@ -122,6 +122,9 @@ resolveModule (r:rs) = flip catchError (throwError . wrapError)
            wrapError e@(ArisingFromTop _ _) = e
            wrapError e = ArisingFromTop e r
 
+           lookupModule n m [] = Map.lookup n m
+           lookupModule n m x@(_:xs) = Map.lookup (foldl (flip InModule) n x) m
+                                       <|> lookupModule n m xs
 
 lookupVar :: MonadResolve m => (Var Parsed -> ResolveError) -> Var Parsed -> Map.Map (Var Parsed) ScopeVariable -> m (Var Resolved)
 lookupVar err v m = case Map.lookup v m of

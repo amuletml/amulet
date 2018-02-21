@@ -16,8 +16,10 @@ module Option.Helpers = begin
 end ;;
 
 module Option = begin
-  open Option.Helpers
-end ;;
+  open Option.Helpers ;;
+  open Helpers
+end
+;;
 
 open Option.Helpers as O ;;
 

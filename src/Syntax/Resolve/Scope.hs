@@ -9,6 +9,7 @@ module Syntax.Resolve.Scope
   , tagVar, tagModule
   , extend, extendN
   , extendTy, extendTyN
+  , extendM
   ) where
 
 import qualified Data.Text as T
@@ -82,18 +83,7 @@ extendTyN :: (MonadGen Int m, MonadReader Scope m) => [(Var Parsed, Var Resolved
 extendTyN vs =
   local (\x -> x { tyScope = insertN (tyScope x) vs })
 
--- extendM :: (MonadGen Int m, MonadReader Scope m) => (Var Parsed, Scope) -> m a -> m a
--- extendM (v, env) = local (\x -> x { modScope = extendModule (modScope x) v }) where
---   extendModule mods (Name n) =
---     Map.insert n <$> (case Map.lookup n mods of
---                         Nothing -> (,env) <$> tagVar (Name n)
---                         Just (v', env') -> pure (v', env `update` env')) <*> pure mods
---   extendModule mods (InModule m n) =
---     let scope = Map.findWithDefault emptyScope m mods
---     in Map.insert m (scope { modScope = extendModule (modScope scope) n }) mods
-
-
--- update :: Scope -> Scope -> Scope
--- (Scope v t m) `update` (Scope v' t' m') = Scope (v `Map.union` v')
---                                                 (t `Map.union` t')
---                                                 (Map.unionWith update m m')
+extendM :: MonadReader Scope m => Var Parsed -> m a -> m a
+extendM m = local (\x -> x { modStack = extend m (modStack x) }) where
+  extend (Name n) xs = n:xs
+  extend (InModule m n) xs = m:extend n xs
