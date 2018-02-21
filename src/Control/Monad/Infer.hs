@@ -15,13 +15,13 @@ module Control.Monad.Infer
   , Env(..)
   , MonadInfer
   , lookupTy, lookupTy', fresh, freshFrom, runInfer, extend, freeInScope
-  , extendKind, extendMany, extendManyK, extendModule
+  , extendKind, extendMany, extendManyK
   , difference, freshTV, freshKV
   , instantiate
   , SomeReason(..), Reasonable
 
   -- lenses:
-  , values, types, modules
+  , values, types
   )
   where
 
@@ -49,17 +49,16 @@ type MonadInfer p m = (MonadError TypeError m, MonadReader Env m, MonadWriter [C
 data Env
   = Env { _values  :: Map.Map (Var Resolved) (Type Typed)
         , _types   :: Map.Map (Var Resolved) (Kind Typed)
-        , _modules :: Map.Map (Var Resolved) Env
         }
   deriving (Eq, Show, Ord)
 
 
 instance Monoid Env where
   mappend = (<>)
-  mempty = Env mempty mempty mempty
+  mempty = Env mempty mempty
 
 instance Semigroup Env where
-  Env a b c <> Env a' b' c' = Env (a <> a') (b <> b') (c <> c')
+  Env a b<> Env a' b' = Env (a <> a') (b <> b')
 
 data Constraint p
   = ConUnify SomeReason (Type p) (Type p)
@@ -176,9 +175,6 @@ extend (v, t) = local (values . at (unTvName v) .~ Just t)
 extendKind :: MonadReader Env m => (Var Typed, Kind Typed) -> m a -> m a
 extendKind (v, k) = local (types . at (unTvName v) .~ Just k)
 
-extendModule :: MonadReader Env m => (Var Typed, Env) -> m a -> m a
-extendModule (v, k) = local (modules . at (unTvName v) .~ Just k)
-
 extendMany :: MonadReader Env m => [(Var Typed, Type Typed)] -> m a -> m a
 extendMany ((v, t):xs) b = extend (v, t) $ extendMany xs b
 extendMany [] b = b
@@ -198,7 +194,7 @@ instantiate tp@(TyForall vs ty) = do
 instantiate ty = pure (mempty, ty, ty)
 
 difference :: Env -> Env -> Env
-difference (Env ma mb mc) (Env ma' mb' mc') = Env (ma Map.\\ ma') (mb Map.\\ mb') (mc Map.\\ mc')
+difference (Env ma mb) (Env ma' mb') = Env (ma Map.\\ ma') (mb Map.\\ mb')
 
 freshTV :: MonadGen Int m => m (Type Typed)
 freshTV = TyVar . TvName <$> fresh
@@ -207,4 +203,4 @@ freshKV :: MonadGen Int m => m (Kind Typed)
 freshKV = KiVar . TvName <$> fresh
 
 freeInScope :: Env -> Set.Set (Var Typed)
-freeInScope (Env vars _ _) = foldMap ftv vars
+freeInScope (Env vars _) = foldMap ftv vars

@@ -11,7 +11,6 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import Data.Traversable
-import Data.Semigroup
 import Data.Generics
 import Data.Triple
 
@@ -197,20 +196,9 @@ inferProg (TypeDecl n tvs cs:prg) = do
      extendMany ts $
        consFst (TypeDecl (TvName n) (map TvName tvs) cs') $
          inferProg prg
-inferProg (Open mod pre:prg) = do
-  mod' <- view (modules . at mod . non undefined)
-  let prefix =
-        case pre of
-          Nothing -> id
-          Just x -> prefixWith x
-      vars' = mod' ^. values & Map.toList & map (first prefix) & Map.fromList
-      tys' = mod' ^. types & Map.toList & map (first prefix) & Map.fromList
-      mods' = mod' ^. modules & Map.toList & map (first prefix) & Map.fromList
-
-  local (Env vars' tys' mods' <>) $ inferProg prg
-
-  where prefixWith x (TgName y i)     = TgName (T.concat [x, T.singleton '.', y]) i
-        prefixWith _ y@(TgInternal _) = y
+inferProg (Open mod pre:prg) =
+  -- Currently open doesn't need to do anything as we'll be in scope anyway
+  consFst (Open (TvName mod) pre) $ inferProg prg
 inferProg (Module name body:prg) = do
   (body', env) <- inferProg body
 
@@ -218,7 +206,7 @@ inferProg (Module name body:prg) = do
       vars' = map (\x -> (TvName x, env ^. values . at x . non undefined)) vars
       tys' = map (\x -> (TvName x, env ^. types . at x . non undefined)) tys
 
-  extendMany vars' . extendModule (TvName name, env) . extendManyK tys' $
+  extendMany vars' . extendManyK tys' $
     consFst (Module (TvName name) body') $
     inferProg prg
 
