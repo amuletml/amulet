@@ -79,6 +79,9 @@ tokens :-
   <0> "with"   { constTok TcWith }
   <0> "type"   { constTok TcType }
   <0> "of"     { constTok TcOf }
+  <0> "module" { constTok TcModule }
+  <0> "open"   { constTok TcOpen }
+  <0> "as"     { constTok TcAs }
 
   <0> ","      { constTok TcComma }
   <0> "."      { constTok TcDot }
@@ -93,11 +96,17 @@ tokens :-
   <0> "]"      { constTok TcCSquare }
 
   <0> $digit+                          { onString $ TcInteger . parseNum 10 }
-  <0> $lower $ident*                   { lexTok TcIdentifier }
-  <0> $upper $ident*                   { lexTok TcConIdent }
+  <0> $upper $ident* \.                { beginModule }
+  <0> $lower $ident*                   { lexTok $ TcIdentifier }
+  <0> $upper $ident*                   { lexTok $ TcConIdent }
   <0> \_ $ident+                       { lexTok TcHole }
-  <0> \. $ident+                       { lexTok (TcAccess . T.tail) }
+  <0> \. $lower $ident*                { lexTok (TcAccess . T.tail) }
   <0> \' $lower $ident*                { lexTok (TcTyVar . T.tail) }
+
+  <modP> $upper $ident* \.             { pushModule }
+  <modP> $lower $ident*                { endModule TcIdentifierQual }
+  <modP> $upper $ident*                { endModule TcConIdentQual }
+
   <0> \"                               { beginString }
 
   <string> \" { endString }
@@ -156,6 +165,24 @@ endComment _ _ = do
   setState $ s { commentDepth = commentDepth s - 1 }
   if commentDepth s == 1 then setStartCode 0 else pure ()
   lexerScan
+
+beginModule, pushModule :: Action Token
+beginModule (LI _ str _) len = do
+  s <- getState
+  setState $ s { modulePrefix = [ decodeUtf8 . Bs.concat . L.toChunks . L.take (pred len) $ str] }
+  setStartCode modP
+  lexerScan
+pushModule (LI _ str _) len = do
+  s <- getState
+  setState $ s { modulePrefix = (decodeUtf8 . Bs.concat . L.toChunks . L.take (pred len) $ str) : modulePrefix s }
+  lexerScan
+
+endModule :: ([T.Text] -> T.Text -> TokenClass) -> Action Token
+endModule t (LI p str _) len = do
+  s <- getState
+  setState $ s { modulePrefix = [] }
+  setStartCode 0
+  return . flip Token p .  t (modulePrefix s) . decodeUtf8 . Bs.concat . L.toChunks . L.take len $ str
 
 constTok :: TokenClass -> Action Token
 constTok t (LI p _ _) _ = return $! Token t p

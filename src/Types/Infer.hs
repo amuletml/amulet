@@ -18,6 +18,7 @@ import Control.Monad.Infer
 import Control.Arrow (first)
 import Control.Lens
 
+import Syntax.Resolve.Toplevel
 import Syntax.Subst
 import Syntax.Raise
 import Syntax.Let
@@ -69,7 +70,7 @@ check ex@(Fun p b a) ty = do
   (dom, cod) <- decompose ex _TyArr ty
   (p', ms) <- checkPattern p dom
   Fun p' <$> extendMany ms (check b cod) <*> pure (a, ty)
-check ex@(Begin [] _) _ = throwError (EmptyBegin ex)
+check (Begin [] _) _ = error "impossible"
 check (Begin xs a) t = do
   let start = init xs
       end = last xs
@@ -99,11 +100,11 @@ check ex@(BinOp l o r a) ty = do
   BinOp <$> check l el <*> pure o' <*> check r er <*> fmap (a,) (unify ex d ty)
 check ex@(Record rows a) ty = do
   (rows', rowts) <- unzip <$> inferRows rows
-  Record rows' . (a,) <$> unify ex ty (TyExactRows rowts)
+  Record rows' . (a,) <$> unify ex (TyExactRows rowts) ty
 check ex@(RecordExt rec rows a) ty = do
   (rec', rho) <- infer rec
   (rows', newts) <- unzip <$> inferRows rows
-  RecordExt rec' rows' . (a,) <$> unify ex ty (TyRows rho newts)
+  RecordExt rec' rows' . (a,) <$> unify ex (TyRows rho newts) ty
 check (Access rc key a) ty = do
   rho <- freshTV
   Access <$> check rc (TyRows rho [(key, ty)]) <*> pure key <*> pure (a, ty)
@@ -195,6 +196,20 @@ inferProg (TypeDecl n tvs cs:prg) = do
      extendMany ts $
        consFst (TypeDecl (TvName n) (map TvName tvs) cs') $
          inferProg prg
+inferProg (Open mod pre:prg) =
+  -- Currently open doesn't need to do anything as we'll be in scope anyway
+  consFst (Open (TvName mod) pre) $ inferProg prg
+inferProg (Module name body:prg) = do
+  (body', env) <- inferProg body
+
+  let (vars, tys) = extractToplevels body
+      vars' = map (\x -> (TvName x, env ^. values . at x . non undefined)) vars
+      tys' = map (\x -> (TvName x, env ^. types . at x . non undefined)) tys
+
+  extendMany vars' . extendManyK tys' $
+    consFst (Module (TvName name) body') $
+    inferProg prg
+
 inferProg [] = asks ([],)
 
 inferCon :: MonadInfer Typed m
@@ -223,7 +238,7 @@ inferLetTy closeOver ks ((va, ve, vann):xs) = extendMany ks $ do
 
   (x, vt) <- case solve cur mempty c of
     Left e -> throwError e
-    Right x -> pure (x, closeOver (normType (apply x ty)))
+    Right x -> pure (x, normType (closeOver (apply x ty)))
 
   let r (a, t) = (a, normType (apply x t))
       ex = applyInExpr x (raiseE id r ve')

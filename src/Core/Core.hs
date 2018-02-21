@@ -6,7 +6,7 @@ import Pretty
 import qualified Data.VarSet as VarSet
 import Data.Generics hiding (empty)
 import Data.Data (Data, Typeable)
-import Data.Text (Text, pack, unpack)
+import Data.Text (Text, pack)
 import Data.Triple
 
 import Syntax (Var(..), Resolved)
@@ -107,7 +107,7 @@ instance Pretty CoPattern where
   pretty (CopDestr v p) = parens (pretty v <+> pretty p)
   pretty (CopExtend p rs) = braces $ pretty p <+> pipe <+> prettyRows rs where
     prettyRows = hsep . punctuate comma . map (\(x, v) ->
-      string (unpack x) <+> equals <+> pretty v)
+      text x <+> equals <+> pretty v)
   pretty (CopLit l) = pretty l
 
 instance Pretty CoType where
@@ -122,10 +122,10 @@ instance Pretty CoType where
     | otherwise = pretty x <+> arrow <+> pretty e
 
   pretty (CotyRows p rows) = braces $ pretty p <+> pipe <+> prettyRows rows where
-    prettyRows = hsep . punctuate comma . map (\(x, t) -> string (unpack x) <+> colon <+> pretty t)
+    prettyRows = hsep . punctuate comma . map (\(x, t) -> text x <+> colon <+> pretty t)
 
   pretty (CotyExactRows rows) = braces $ prettyRows rows where
-    prettyRows = hsep . punctuate comma . map (\(x, t) -> string (unpack x) <+> colon <+> pretty t)
+    prettyRows = hsep . punctuate comma . map (\(x, t) -> text x <+> colon <+> pretty t)
 
   pretty (CotyApp e x@CotyApp{}) = pretty e <+> parens (pretty x)
   pretty (CotyApp x e) = pretty x <+> pretty e

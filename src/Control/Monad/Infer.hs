@@ -47,8 +47,8 @@ import Syntax
 type MonadInfer p m = (MonadError TypeError m, MonadReader Env m, MonadWriter [Constraint p] m, MonadGen Int m)
 
 data Env
-  = Env { _values :: Map.Map (Var Resolved) (Type Typed)
-        , _types  :: Map.Map (Var Resolved) (Kind Typed)
+  = Env { _values  :: Map.Map (Var Resolved) (Type Typed)
+        , _types   :: Map.Map (Var Resolved) (Kind Typed)
         }
   deriving (Eq, Show, Ord)
 
@@ -58,7 +58,7 @@ instance Monoid Env where
   mempty = Env mempty mempty
 
 instance Semigroup Env where
-  Env a b <> Env a' b' = Env (a <> a') (b <> b')
+  Env a b<> Env a' b' = Env (a <> a') (b <> b')
 
 data Constraint p
   = ConUnify SomeReason (Type p) (Type p)
@@ -77,10 +77,6 @@ data TypeError where
   KindsNotEqual :: Pretty (Var p) => Kind p -> Kind p -> TypeError
   Occurs   :: Pretty (Var p) => Var p -> Type p -> TypeError
   NotInScope :: Var Resolved -> TypeError
-  EmptyMatch :: (Spanned (Expr p), Pretty (Ann p)) => Expr p -> TypeError
-  EmptyBegin :: ( Spanned (Expr p)
-                , Pretty (Ann p) )
-             => Expr p -> TypeError
   FoundHole :: [Expr Typed] -> TypeError
 
   EscapedSkolems :: [Skolem Typed] -> Type Typed -> TypeError
@@ -97,7 +93,6 @@ data TypeError where
                  -> TypeError
   Malformed :: Pretty (Var p) => Type p -> TypeError
   IllegalTypeApp :: (Pretty (Var p), Pretty (Var p')) => Expr p -> Type p' -> Type p' -> TypeError
-
 
 instance (Ord (Var p), Substitutable p (Type p)) => Substitutable p (Constraint p) where
   ftv (ConUnify _ a b) = ftv a `Set.union` ftv b

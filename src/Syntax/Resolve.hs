@@ -13,17 +13,22 @@ import Data.Triple
 
 import Control.Monad.Except
 import Control.Monad.Reader
+import Control.Monad.State
 import Control.Monad.Gen
+import Control.Applicative
 
 import Data.Traversable
+import Data.Semigroup
 import Data.Foldable
 
 import Syntax.Resolve.Scope
+import Syntax.Resolve.Toplevel
 import Syntax.Subst
 import Syntax
 
 data ResolveError
   = NotInScope (Var Parsed)
+  | NoSuchModule (Var Parsed)
   | Ambiguous (Var Parsed) [Var Resolved]
   | EmptyMatch (Expr Parsed)
   | EmptyBegin (Expr Parsed)
@@ -32,13 +37,13 @@ data ResolveError
   | ArisingFromTop ResolveError (Toplevel Parsed)
   deriving (Eq, Ord, Show)
 
-type MonadResolve m = (MonadError ResolveError m, MonadReader Scope m, MonadGen Int m)
+type MonadResolve m = (MonadError ResolveError m, MonadReader Scope m, MonadGen Int m, MonadState ModuleScope m)
 
 resolveProgram :: MonadGen Int m => [Toplevel Parsed] -> m (Either ResolveError [Toplevel Resolved])
 resolveProgram = runResolve . resolveModule
 
-runResolve :: MonadGen Int m => ReaderT Scope (ExceptT ResolveError m) a -> m (Either ResolveError a)
-runResolve = runExceptT . flip runReaderT builtinScope
+runResolve :: MonadGen Int m => StateT ModuleScope (ReaderT Scope (ExceptT ResolveError m)) a -> m (Either ResolveError a)
+runResolve = runExceptT . flip runReaderT builtinScope . flip evalStateT emptyModules
 
 resolveModule :: MonadResolve m => [Toplevel Parsed] -> m [Toplevel Resolved]
 resolveModule [] = pure []
@@ -69,6 +74,41 @@ resolveModule (r:rs) = flip catchError (throwError . wrapError)
         extendTy (t, t') $ extendN (zip c c') $ (:)
           <$> extendTyN (zip vs vs') (TypeDecl t' vs' <$> traverse resolveCons (zip cs c'))
           <*> resolveModule rs
+
+      Open name as -> do
+        stack <- asks modStack
+        (ModuleScope modules) <- get
+        case lookupModule name modules stack of
+          Nothing -> throwError $ NoSuchModule name
+          Just (name', Scope vars tys _) ->
+            let prefix = case as of
+                           Nothing -> id
+                           Just v -> InModule v
+            in
+              local (\s -> s { varScope = Map.mapKeys prefix vars `Map.union` varScope s
+                             , tyScope  = Map.mapKeys prefix tys  `Map.union` tyScope s })
+              $ (Open name' as:) <$> resolveModule rs
+
+      Module name body -> do
+        fullName <- foldl (flip InModule) name <$> asks modStack
+        body' <- extendM name $ resolveModule body
+
+        let (vars, tys) = extractToplevels body
+        let (vars', tys') = extractToplevels body'
+
+        (ModuleScope modules) <- get
+        (name', scope) <- case Map.lookup fullName modules of
+                             Just env -> pure env
+                             Nothing -> (,emptyScope) <$> tagModule fullName
+
+        let scope' = scope { varScope = foldr (uncurry Map.insert) (varScope scope) (zip vars (map SVar vars'))
+                           , tyScope  = foldr (uncurry Map.insert) (tyScope scope) (zip tys (map SVar tys')) }
+        put $ ModuleScope $ Map.insert fullName (name', scope') modules
+
+        extendN (modZip name name' vars vars') $ extendTyN (modZip name name' tys tys') $ (:)
+          <$> pure (Module name' body')
+          <*> resolveModule rs
+
      where resolveCons (UnitCon _ a, v') = pure $ UnitCon v' a
            resolveCons (ArgCon _ t a, v') = ArgCon v' <$> reType t <*> pure a
 
@@ -77,20 +117,26 @@ resolveModule (r:rs) = flip catchError (throwError . wrapError)
 
            wrap x = TyForall (toList (ftv x)) x
 
+           modZip name name' v v' = zip (map (name<>) v) (map (name'<>) v')
+
            wrapError e@(ArisingFromTop _ _) = e
            wrapError e = ArisingFromTop e r
 
-lookupVar :: MonadResolve m => Var Parsed -> Map.Map (Var Parsed) ScopeVariable -> m (Var Resolved)
-lookupVar v m = case Map.lookup v m of
-    Nothing -> throwError (NotInScope v)
+           lookupModule n m [] = Map.lookup n m
+           lookupModule n m x@(_:xs) = Map.lookup (foldl (flip InModule) n x) m
+                                       <|> lookupModule n m xs
+
+lookupVar :: MonadResolve m => (Var Parsed -> ResolveError) -> Var Parsed -> Map.Map (Var Parsed) ScopeVariable -> m (Var Resolved)
+lookupVar err v m = case Map.lookup v m of
+    Nothing -> throwError (err v)
     Just (SVar x) -> pure x
     Just (SAmbiguous vs) -> throwError (Ambiguous v vs)
 
 lookupEx :: MonadResolve m => Var Parsed -> m (Var Resolved)
-lookupEx v = asks varScope >>= lookupVar v
+lookupEx v = asks varScope >>= lookupVar NotInScope v
 
 lookupTy :: MonadResolve m => Var Parsed -> m (Var Resolved)
-lookupTy v = asks tyScope >>= lookupVar v
+lookupTy v = asks tyScope >>= lookupVar NotInScope v
 
 reExpr :: MonadResolve m => Expr Parsed -> m (Expr Resolved)
 reExpr r@(VarRef v a) = VarRef
