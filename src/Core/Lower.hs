@@ -15,9 +15,7 @@ import Types.Infer (tyString, tyInt, tyBool, tyUnit)
 
 import qualified Data.Text as T
 import Data.Traversable
-import Data.Function
 import Data.Span
-import Data.List
 
 import Core.Core
 
@@ -50,101 +48,78 @@ errRef = CotRef (TgInternal "error")
                             (CotyArr cotyString
                                      (CotyVar (TgInternal "a"))))
 
-patternMatchingFailure :: MonadLower m
-                       => (Span, Type Typed) -> Type Typed -> m (CoPattern, CoType, CoTerm)
-patternMatchingFailure (ex, ot) it = do
-  cap <- CopCapture <$> fresh
-  let codomain (TyArr _ cd) = codomain cd
-      codomain (TyForall _ t) = codomain t
-      codomain x = lowerType x
-
-  it' <- lowerType it
-
-  err <- codomain ot
-  (,,) <$> pure (cap it') <*> pure it'
-       <*> pure (CotApp (CotTyApp errRef err)
-                        (CotLit (ColStr (T.pack (show (pretty ex))))))
+patternMatchingFail :: MonadLower m => Span -> CoType -> m (CoPattern, CoType, CoTerm)
+patternMatchingFail w t = do
+  var <- fresh
+  let err = CotLit (ColStr (T.pack ("Pattern matching failure at " ++ show (pretty w))))
+  pure (CopCapture var t, t, CotApp (CotTyApp errRef t) err)
 
 lowerExpr :: MonadLower m => Expr Typed -> m CoTerm
-lowerExpr expr
-  | exprT <- getType expr = case expr of
-    VarRef (TvName p) _ -> CotRef p <$> lowerType exprT
-    Let vs t _ -> do
-      vs' <- for vs $ \(TvName var, ex, (_, ant)) -> do
-        (k, _) <- makeBigLams ant
-        (,,) <$> pure var
-             <*> lowerType ant
-             <*> (k <$> lowerExpr ex)
-      CotLet vs' <$> lowerExpr t
-    If c t e _ -> do
-      t' <- lowerExpr t
-      e' <- lowerExpr e
-      let tc = (CopLit ColTrue, cotyBool, t')
-          te = (CopLit ColFalse, cotyBool, e')
-      CotMatch <$> lowerExpr c <*> pure [tc, te]
-    App f x _ -> CotApp <$> lowerExpr f <*> lowerExpr x
-    Fun p bd an -> do
-      (k, CotyArr f _) <- makeBigLams exprT
-      (x, bd', p') <- (,,) <$> fresh <*> lowerExpr bd <*> lowerPat p
-      fail <- patternMatchingFailure an (getType p)
-      pure . k $ CotLam Small (x, f)
-                  $ CotMatch (CotRef x f) [ (p', f, bd'), fail ]
-    Begin xs _ -> case xs of
-      [x] -> lowerExpr x
-      _ -> CotBegin <$> traverse lowerExpr (init xs) <*> lowerExpr (last xs)
-    Literal l _ -> pure . CotLit $ case l of
-      LiInt i -> ColInt i
-      LiStr t -> ColStr t
-      LiBool True -> ColTrue
-      LiBool False -> ColFalse
-      LiUnit -> ColUnit
-    Match ex cs an -> do
-      cs' <- for cs $ \(pat, ex) ->
-        (,,) <$> lowerPat pat <*> lowerType (getType pat) <*> lowerExpr ex
-      fail <- patternMatchingFailure an (getType (fst (head cs)))
-      CotMatch <$> lowerExpr ex <*> pure (cs' ++ [fail])
-    BinOp left op right _ -> do
-      (left', op', right') <- (,,) <$> lowerExpr left
-                                   <*> lowerExpr op
-                                   <*> lowerExpr right
-      pure (CotApp (CotApp op' left') right')
-    Hole{} -> error "hole finder prevents these from getting lowered"
-    Ascription e _ _ -> lowerExpr e
+lowerExpr e = lowerAt e =<< lowerType (getType e)
 
-    Record xs _ -> case xs of
-      [] -> pure (CotLit ColRecNil)
-      xs -> do
-        xs' <- for xs $ \(label, ex) ->
-          (,,) <$> pure label <*> lowerType (getType ex) <*> lowerExpr ex
-        pure (CotExtend (CotLit ColRecNil) xs')
-    RecordExt e xs _ -> do
-      xs' <- for xs $ \(label, ex) ->
-        (,,) <$> pure label <*> lowerType (getType ex) <*> lowerExpr ex
-      CotExtend <$> lowerExpr e <*> pure xs'
-    Access ex key (_, t) -> do
-      var <- fresh
-      rest <- fresh
-      t' <- lowerType t
-      ext <- lowerType (getType ex)
-      let realt = case ext of
-            CotyExactRows rs -> CotyExactRows (deleteBy ((==) `on` fst) (key, undefined) rs)
-            CotyRows rho rs -> CotyRows rho (deleteBy ((==) `on` fst) (key, undefined) rs)
-            _ -> error $ "not a record type " ++ show (pretty ex)
+lowerAt :: MonadLower m => Expr Typed -> CoType -> m CoTerm
+lowerAt e (CotyForall vs b) = flip (foldr (\x -> CotLam Big (x, CotyStar))) vs <$> lowerAt e b
+lowerAt (VarRef (TvName p) _) ty = pure (CotRef p ty)
+lowerAt (Let vs t _) ty = do
+  vs' <- for vs $ \(TvName var, ex, (_, ty)) -> do
+    ty' <- lowerType ty
+    (,,) var <$> pure ty' <*> lowerAt ex ty'
+  CotLet vs' <$> lowerAt t ty
+lowerAt (If c t e _) ty = do
+  (c', t', e') <- (,,) <$> lowerAt c cotyBool <*> lowerAt t ty <*> lowerAt e ty
+  let tc = (CopLit ColTrue, cotyBool, t')
+      te = (CopLit ColFalse, cotyBool, e')
+  pure (CotMatch c' [tc, te])
+lowerAt (App f x _) _ = -- type ignored, ughr
+  CotApp <$> lowerExpr f <*> lowerExpr x
+lowerAt (Fun p bd an) (CotyArr a b) =
+  let operational (PType p _ _) = operational p
+      operational p = p
+   in case operational p of
+        Capture (TvName v) _ -> CotLam Small (v, a) <$> lowerAt bd b
+        _ -> do
+          (p', bd') <- (,) <$> lowerPat p <*> lowerAt bd b
+          arg <- fresh
+          fail <- patternMatchingFail (fst an) a
+          pure (CotLam Small (arg, a) (CotMatch (CotRef arg a) [ (p', a, bd'), fail ]))
+lowerAt (Begin [x] _) t = lowerAt x t
+lowerAt (Begin xs _) t = CotBegin <$> traverse lowerExpr (init xs) <*> lowerAt (last xs) t
+lowerAt (Match ex cs an) ty = do
+  mt <- lowerType (getType ex)
+  cs' <- for cs $ \(pat, ex) ->
+    (,,) <$> lowerPat pat <*> pure mt <*> lowerAt ex ty
+  fail <- patternMatchingFail (fst an) mt
+  CotMatch <$> lowerAt ex mt <*> pure (cs' ++ [fail])
+lowerAt (BinOp left op right a) t = lowerAt (App (App op left a) right a) t
+lowerAt Hole{} _ = error "holes can't be lowered"
+lowerAt (Ascription e t _) _ = lowerAt e =<< lowerType t
+lowerAt e _ = lowerAnyway e
 
-          fixup (CotyRows rho []) = rho
-          fixup x = x
-
-          pat = CopExtend (CopCapture rest (fixup realt)) [(key, CopCapture var t')]
-          ref = CotRef var t'
-      CotMatch <$> lowerExpr ex <*> pure [(pat, ext, ref)]
-    Tuple xs _ -> do
-      let go :: MonadLower m => Int -> Expr Typed -> m (T.Text, CoType, CoTerm)
-          go k x = (,,) <$> pure (T.pack (show k))
-                        <*> lowerType (getType x)
-                        <*> lowerExpr x
-      CotExtend (CotLit ColRecNil) <$> zipWithM go [1..] xs
-    TypeApp f x _ -> CotTyApp <$> lowerExpr f <*> lowerType x
-    x -> error $ "impossible lowering (desugarer removes): " ++ show (pretty x)
+lowerAnyway :: MonadLower m => Expr Typed -> m CoTerm
+lowerAnyway (Record xs _) = case xs of
+  [] -> pure (CotLit ColRecNil)
+  xs -> do
+    xs' <- for xs $ \(label, ex) ->
+      (,,) <$> pure label <*> lowerType (getType ex) <*> lowerExpr ex
+    pure (CotExtend (CotLit ColRecNil) xs')
+lowerAnyway (RecordExt e xs _) = do
+  xs' <- for xs $ \(label, ex) ->
+    (,,) <$> pure label <*> lowerType (getType ex) <*> lowerExpr ex
+  CotExtend <$> lowerExpr e <*> pure xs'
+lowerAnyway (Literal l _) = pure . CotLit $ case l of
+  LiInt i -> ColInt i
+  LiStr t -> ColStr t
+  LiBool True -> ColTrue
+  LiBool False -> ColFalse
+  LiUnit -> ColUnit
+lowerAnyway (TypeApp f x _) = CotTyApp <$> lowerExpr f <*> lowerType x
+lowerAnyway (Tuple xs _) = do
+  let go :: MonadLower m => Int -> Expr Typed -> m (T.Text, CoType, CoTerm)
+      go k x = (,,) <$> pure (T.pack (show k))
+                    <*> lowerType (getType x)
+                    <*> lowerExpr x
+  CotExtend (CotLit ColRecNil) <$> zipWithM go [1..] xs
+lowerAnyway e = error ("can't lower " ++ show e ++ " without type")
 
 lowerType :: MonadLower m => Type Typed -> m CoType
 lowerType tt = case tt of
