@@ -205,13 +205,16 @@ inferProg (Open mod pre:prg) = do
   mod' <- view (modules . at mod . non undefined)
   let prefix =
         case pre of
-          Just x -> (x<>)
           Nothing -> id
+          Just x -> prefixWith x
       vars' = mod' ^. values & Map.toList & map (first prefix) & Map.fromList
       tys' = mod' ^. types & Map.toList & map (first prefix) & Map.fromList
       mods' = mod' ^. modules & Map.toList & map (first prefix) & Map.fromList
 
   local (Env vars' tys' mods' <>) $ inferProg prg
+
+  where prefixWith x (TgName y i)     = TgName (T.concat [x, T.singleton '.', y]) i
+        prefixWith _ y@(TgInternal _) = y
 inferProg (Module name body:prg) = do
   (body', env) <- inferProg body
 

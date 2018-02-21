@@ -176,7 +176,7 @@ data Toplevel p
   | TypeDecl (Var p) [Var p] [Constructor p]
   | Module (Var p) [Toplevel p]
   | Open { openName :: Var p
-         , openAs :: Maybe (Var p) }
+         , openAs :: Maybe T.Text }
 
 instance (Spanned (Constructor p), Ann p ~ Span) => Spanned (Toplevel p) where
   annotation (LetStmt ((_, _, x):vs)) = sconcat (x :| map thd3 vs)
@@ -307,7 +307,7 @@ instance (Pretty (Var p)) => Pretty (Toplevel p) where
                                 <#> vsep (map ((pipe <+>) . pretty) ctors)
 
   pretty (Open m Nothing) = keyword "open" <+> pretty m
-  pretty (Open m (Just a)) = keyword "open" <+> pretty m <+> keyword "as" <+> pretty a
+  pretty (Open m (Just a)) = keyword "open" <+> pretty m <+> keyword "as" <+> text a
 
   pretty (Module m bod) =
     vsep [ keyword "module" <+> pretty m <+> equals <+> keyword "begin"

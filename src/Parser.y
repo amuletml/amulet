@@ -112,7 +112,7 @@ Top :: { Toplevel Parsed }
 
     | module Con '=' Tops end                  { Module (getL $2) $4 }
     | open Con                                 { Open (getL $2) Nothing }
-    | open Con as conid                        { Open (getL $2) (Just (getName $4)) }
+    | open Con as conid                        { Open (getL $2) (Just (getIdent $4)) }
 
 Ctor :: { Constructor Parsed }
      : conid                                   { withPos1 $1 $ UnitCon (getName $1) }

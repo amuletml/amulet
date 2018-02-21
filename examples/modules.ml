@@ -4,7 +4,7 @@ module Option =
     | Nothing ;;
 
   let map f m = match m with
-                | Just x -> f x
+                | Just x -> Just (f x)
                 | Nothing -> Nothing
 end
 ;;
@@ -16,6 +16,6 @@ module Option.Helpers =
 end
 ;;
 
-open Options.Helpers as O ;;
+open Option.Helpers as O ;;
 
 let main _ = O.fmap (fun x -> x + 1) Option.Nothing
