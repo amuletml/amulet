@@ -1,6 +1,5 @@
 {-# LANGUAGE FlexibleContexts
   , ConstraintKinds
-  , LambdaCase
   , TupleSections #-}
 
 module Syntax.Resolve
@@ -25,6 +24,7 @@ import Syntax
 
 data ResolveError
   = NotInScope (Var Parsed)
+  | Ambiguous (Var Parsed) [Var Resolved]
   | EmptyMatch (Expr Parsed)
   | EmptyBegin (Expr Parsed)
 
@@ -49,7 +49,7 @@ resolveModule (r:rs) = flip catchError (throwError . wrapError)
         vars' <- traverse tagVar vars
         extendN (zip vars vars') $ (:)
           <$> (LetStmt
-                <$> traverse (\(v, e, a) -> (,,) <$> lookupEx v <*> reExpr e <*> pure a) vs
+                <$> traverse (\((_, e, a), v') -> (v',,a) <$> reExpr e) (zip vs vars')
                 )
           <*> resolveModule rs
       ForeignVal v t ty a -> do
@@ -67,10 +67,10 @@ resolveModule (r:rs) = flip catchError (throwError . wrapError)
         let c = map extractCons cs
         c' <- traverse tagVar c
         extendTy (t, t') $ extendN (zip c c') $ (:)
-          <$> extendTyN (zip vs vs') (TypeDecl t' vs' <$> traverse resolveCons cs)
+          <$> extendTyN (zip vs vs') (TypeDecl t' vs' <$> traverse resolveCons (zip cs c'))
           <*> resolveModule rs
-     where resolveCons (UnitCon v a) = UnitCon <$> lookupEx v <*> pure a
-           resolveCons (ArgCon v t a) = ArgCon <$> lookupEx v <*> reType t <*> pure a
+     where resolveCons (UnitCon _ a, v') = pure $ UnitCon v' a
+           resolveCons (ArgCon _ t a, v') = ArgCon v' <$> reType t <*> pure a
 
            extractCons (UnitCon v _) = v
            extractCons (ArgCon v _ _) = v
@@ -80,19 +80,17 @@ resolveModule (r:rs) = flip catchError (throwError . wrapError)
            wrapError e@(ArisingFromTop _ _) = e
            wrapError e = ArisingFromTop e r
 
-lookupEx :: MonadResolve m => Var Parsed -> m (Var Resolved)
-lookupEx v = do
-  env <- ask
-  case Map.lookup v (varScope env) of
+lookupVar :: MonadResolve m => Var Parsed -> Map.Map (Var Parsed) ScopeVariable -> m (Var Resolved)
+lookupVar v m = case Map.lookup v m of
     Nothing -> throwError (NotInScope v)
-    Just x -> pure x
+    Just (SVar x) -> pure x
+    Just (SAmbiguous vs) -> throwError (Ambiguous v vs)
+
+lookupEx :: MonadResolve m => Var Parsed -> m (Var Resolved)
+lookupEx v = asks varScope >>= lookupVar v
 
 lookupTy :: MonadResolve m => Var Parsed -> m (Var Resolved)
-lookupTy v = do
-  env <- ask
-  case Map.lookup v (tyScope env) of
-    Nothing -> throwError (NotInScope v)
-    Just x -> pure x
+lookupTy v = asks tyScope >>= lookupVar v
 
 reExpr :: MonadResolve m => Expr Parsed -> m (Expr Resolved)
 reExpr r@(VarRef v a) = VarRef
@@ -101,10 +99,8 @@ reExpr r@(VarRef v a) = VarRef
 reExpr (Let vs c a) = do
   let vars = map fst3 vs
   vars' <- traverse tagVar vars
-  extendN (zip vars vars') $ Let <$> traverse (\(v, e, a) -> (,,) <$> lookupEx v
-                                                                  <*> reExpr e
-                                                                  <*> pure a)
-                                              vs
+  extendN (zip vars vars') $ Let <$> traverse (\((_, e, a), v') -> (v',,a) <$> reExpr e)
+                                              (zip vs vars')
                                  <*> reExpr c
                                  <*> pure a
 reExpr (If c t b a) = If <$> reExpr c <*> reExpr t <*> reExpr b <*> pure a
