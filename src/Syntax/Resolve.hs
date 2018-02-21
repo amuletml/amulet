@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleContexts
   , ConstraintKinds
+  , LambdaCase
   , TupleSections #-}
 
 module Syntax.Resolve
@@ -41,7 +42,7 @@ runResolve = runExceptT . flip runReaderT builtinScope
 
 resolveModule :: MonadResolve m => [Toplevel Parsed] -> m [Toplevel Resolved]
 resolveModule [] = pure []
-resolveModule (r:rs) = flip catchError (throwError . flip ArisingFromTop r)
+resolveModule (r:rs) = flip catchError (throwError . wrapError)
   $ case r of
       LetStmt vs -> do
         let vars = map fst3 vs
@@ -75,6 +76,9 @@ resolveModule (r:rs) = flip catchError (throwError . flip ArisingFromTop r)
            extractCons (ArgCon v _ _) = v
 
            wrap x = TyForall (toList (ftv x)) x
+
+           wrapError e@(ArisingFromTop _ _) = e
+           wrapError e = ArisingFromTop e r
 
 lookupEx :: MonadResolve m => Var Parsed -> m (Var Resolved)
 lookupEx v = do
