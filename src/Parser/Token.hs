@@ -42,6 +42,9 @@ data TokenClass
   | TcWith -- with
   | TcType -- type
   | TcOf -- of
+  | TcModule -- module
+  | TcOpen -- open
+  | TcAs -- as
 
   | TcDot -- .
   | TcComma -- ,
@@ -57,6 +60,8 @@ data TokenClass
 
   | TcIdentifier Text
   | TcConIdent Text
+  | TcIdentifierQual [Text] Text
+  | TcConIdentQual [Text] Text
   | TcTyVar Text
   | TcAccess Text
   | TcHole Text
@@ -105,6 +110,9 @@ instance Show TokenClass where
   show TcWith = "with"
   show TcType = "type"
   show TcOf = "of"
+  show TcModule = "module"
+  show TcOpen = "open"
+  show TcAs = "as"
 
   show TcComma = ","
   show TcDot = "."
@@ -119,9 +127,11 @@ instance Show TokenClass where
   show TcCSquare = "]"
 
   show (TcIdentifier t) = unpack t
+  show (TcConIdent t) = unpack t
+  show (TcIdentifierQual ms t) = concatMap (\m -> unpack m ++ ['.']) (reverse ms) ++ unpack t
+  show (TcConIdentQual ms t) = concatMap (\m -> unpack m ++ ['.']) (reverse ms) ++ unpack t
   show (TcTyVar t) = '\'':unpack t
   show (TcAccess t) = '.':unpack t
-  show (TcConIdent t) = unpack t
   show (TcHole t) = unpack t
   show (TcString t) = show (unpack t)
   show (TcInteger i) = show i

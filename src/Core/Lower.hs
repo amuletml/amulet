@@ -172,16 +172,20 @@ lowerPat pat = case pat of
     CopExtend (CopLit ColRecNil) <$> zipWithM go [1..] xs
 
 lowerProg :: MonadLower m => [Toplevel Typed] -> m [CoStmt]
-lowerProg = traverse lowerTop where
-  lowerTop (ForeignVal (TvName t) ex tp _) = do
-    tp' <- lowerType tp
-    pure $ CosForeign t tp' ex
-  lowerTop (LetStmt vs) =
-    CosLet <$> for vs (\(TvName v, ex, (_, ant)) -> do
-      (k, _) <- makeBigLams ant
-      (,,) <$> pure v <*> lowerType ant <*> (k <$> lowerExpr ex))
-  lowerTop (TypeDecl (TvName var) _ cons)
-    = CosType var <$> do
-        for cons $ \case
-          UnitCon (TvName p) (_, t) -> (,) p <$> lowerType t
-          ArgCon (TvName p) _ (_, t) -> (,) p <$> lowerType t
+lowerProg [] = pure []
+lowerProg (ForeignVal (TvName t) ex tp _:prg) = do
+  tp' <- lowerType tp
+  (CosForeign t tp' ex:) <$> lowerProg prg
+lowerProg (LetStmt vs:prg) =
+  (:) <$> (CosLet <$> for vs (\(TvName v, ex, (_, ant)) -> do
+                                 (k, _) <- makeBigLams ant
+                                 (v,,) <$> lowerType ant <*> (k <$> lowerExpr ex)))
+      <*> lowerProg prg
+lowerProg (TypeDecl (TvName var) _ cons:prg) =
+  (:) <$> (CosType var <$> do
+              for cons $ \case
+                UnitCon (TvName p) (_, t) -> (,) p <$> lowerType t
+                ArgCon (TvName p) _ (_, t) -> (,) p <$> lowerType t)
+      <*> lowerProg prg
+lowerProg (Open _ _:prg) = lowerProg prg
+lowerProg (Module _ b:prg) = (++) <$> lowerProg b <*> lowerProg prg

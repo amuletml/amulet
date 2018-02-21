@@ -7,12 +7,13 @@ module Syntax where
 
 import Pretty
 
+import qualified Data.Text as T
 import Data.Text (Text)
 import Data.Spanned
 import Data.Span
 
 import Data.List.NonEmpty(NonEmpty ((:|)))
-import Data.Semigroup (sconcat)
+import Data.Semigroup (sconcat, Semigroup(..))
 import Data.Typeable
 import Data.Triple
 import Data.Maybe
@@ -28,12 +29,22 @@ data family Var a
 
 data instance Var Parsed
   = Name Text
+  | InModule Text (Var Parsed)
   deriving (Eq, Show, Ord, Data)
+
+instance Semigroup (Var Parsed) where
+  (Name t) <> v = InModule t v
+  (InModule m n) <> v = InModule m (n <> v)
 
 data instance Var Resolved
   = TgName Text {-# UNPACK #-} !Int
   | TgInternal Text
   deriving (Show, Data)
+
+instance Semigroup (Var Resolved) where
+  _ <> x@(TgInternal _) = x
+  (TgInternal _) <> _ = error "Nonsensical module"
+  (TgName x _) <> (TgName y i) = TgName (T.concat [x, T.pack ".", y]) i
 
 instance Eq (Var Resolved) where
   (TgName _ a) == (TgName _ b) = a == b
@@ -50,6 +61,9 @@ instance Ord (Var Resolved) where
 data instance Var Typed
   = TvName (Var Resolved)
   deriving (Show, Data, Eq, Ord)
+
+instance Semigroup (Var Typed) where
+  (TvName x) <> (TvName y) = TvName (x <> y)
 
 type family Ann a :: * where
   Ann Parsed = Span
@@ -160,6 +174,9 @@ data Toplevel p
   = LetStmt [(Var p, Expr p, Ann p)]
   | ForeignVal (Var p) Text (Type p) (Ann p)
   | TypeDecl (Var p) [Var p] [Constructor p]
+  | Module (Var p) [Toplevel p]
+  | Open { openName :: Var p
+         , openAs :: Maybe T.Text }
 
 instance (Spanned (Constructor p), Ann p ~ Span) => Spanned (Toplevel p) where
   annotation (LetStmt ((_, _, x):vs)) = sconcat (x :| map thd3 vs)
@@ -289,6 +306,17 @@ instance (Pretty (Var p)) => Pretty (Toplevel p) where
                                 <+> equals
                                 <#> vsep (map ((pipe <+>) . pretty) ctors)
 
+  pretty (Open m Nothing) = keyword "open" <+> pretty m
+  pretty (Open m (Just a)) = keyword "open" <+> pretty m <+> keyword "as" <+> text a
+
+  pretty (Module m bod) =
+    vsep [ keyword "module" <+> pretty m <+> equals <+> keyword "begin"
+         , indent 2 (align (pretty bod))
+         , keyword "end"
+         ]
+
+
+
 instance (Pretty (Var p)) => Pretty [Toplevel p] where
   pretty = vcat . map pretty
 
@@ -298,6 +326,7 @@ instance (Pretty (Var p)) => Pretty (Constructor p) where
 
 instance Pretty (Var Parsed) where
   pretty (Name v) = text v
+  pretty (InModule t v) = text t <> dot <> pretty v
 
 instance Pretty (Var Resolved) where
   pretty (TgName v _) = text v

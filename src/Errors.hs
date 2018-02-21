@@ -30,8 +30,6 @@ instance Pretty TypeError where
   pretty (KindsNotEqual a b) = string "Kind error: failed to" <+> align (string "unify" <+> verbatim a </> string "with" <+> verbatim b)
   pretty (Occurs v t) = string "Occurs check: Variable" <+> align (verbatim v </> string "occurs in" <+> verbatim t)
   pretty (I.NotInScope e) = string "Variable not in scope:" <+> verbatim e
-  pretty (I.EmptyMatch e) = pretty (annotation e) <> string ": Empty match expression"
-  pretty (I.EmptyBegin e) = pretty (annotation e) <> string ": Empty begin expression"
   pretty (I.ArisingFrom er ex) = pretty (annotation ex) <> colon </> pretty er <#> indent 2 (nest 4 (bullet (string "Arising from use of") </> pretty ex))
   pretty (FoundHole xs) = hsep (map prnt xs) where
     prnt :: Expr Typed -> Doc
@@ -74,6 +72,7 @@ instance Pretty TypeError where
 
 instance Pretty ResolveError where
   pretty (R.NotInScope e) = string "Variable not in scope:" <> verbatim e
+  pretty (R.NoSuchModule e) = string "Module not in scope:" <> verbatim e
   pretty (R.Ambiguous v _) = string "Ambiguous reference to variable:" <> verbatim v
   pretty (R.EmptyMatch e) = pretty (annotation e) <> string ": Empty match expression"
   pretty (R.EmptyBegin e) = pretty (annotation e) <> string ": Empty begin expression"
@@ -100,4 +99,4 @@ diff :: [(Text, b)] -> [(Text, b)] -> [Doc]
 diff ra rb = map ((squote <>) . string . T.unpack . fst) (deleteFirstsBy ((==) `on` fst) rb ra)
 
 report :: Pretty p => p -> T.Text -> IO ()
-report err _ = putDoc (pretty err)
+report err _ = putDoc (pretty err) *> putStr "\n"

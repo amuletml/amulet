@@ -56,23 +56,15 @@ unify t@(TyForall vs ty) t'@(TyForall vs' ty')
     unify (apply (subst vs) ty) (apply (subst vs') ty')
 unify (TyRows rho arow) (TyRows sigma brow)
   | overlaps <- overlap arow brow
-  , new <- deleteFirstsBy ((==) `on` fst) (sortOn fst arow) (sortOn fst brow) =
+  , rhoNew <- deleteFirstsBy ((==) `on` fst) (sortOn fst arow) (sortOn fst brow)
+  , sigmaNew <- deleteFirstsBy ((==) `on` fst) (sortOn fst brow) (sortOn fst arow) =
     do
       tau <- freshTV
       traverse_ (uncurry unify) overlaps
-      case new of
-        [] -> do
-          unify rho tau
-          unify sigma tau
-        _ -> do
-          unify rho (TyRows tau new)
-          unify sigma (TyRows tau new)
+      unify rho (TyRows tau sigmaNew) -- yes
+      unify sigma (TyRows tau rhoNew) -- it's backwards
       pure ()
-unify ta@(TyExactRows arow) (TyRows rho brow)
-  | overlaps <- overlap arow brow
-  = case overlaps of
-      [] -> unify rho ta
-      xs -> traverse_ (uncurry unify) xs
+unify ta@TyExactRows{} tb@TyRows{} = unify tb ta
 unify tb@(TyRows _ brow) ta@(TyExactRows arow)
   | overlaps <- overlap arow brow
   = case overlaps of
