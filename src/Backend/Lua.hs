@@ -44,74 +44,74 @@ body = indent 2 . vsep . map pretty
 
 instance Pretty LuaStmt where
   pretty (LuaDo xs) =
-    vsep [ string "do"
+    vsep [ keyword "do"
          , body xs
-         , string "end"
+         , keyword "end"
          ]
   pretty (LuaAssign ns xs) = hsep (punctuate comma (map pretty ns)) <+> equals <+> hsep (punctuate comma (map pretty xs))
   pretty (LuaWhile c t) =
-    vsep [ string "while" <+> pretty c <+> string "do"
+    vsep [ keyword "while" <+> pretty c <+> keyword "do"
          , body t
-         , string "end"
+         , keyword "end"
          ]
   pretty (LuaRepeat t c) =
-    vsep [ string "repeat"
+    vsep [ keyword "repeat"
          , body t
-         , string "until" <+> pretty c
+         , keyword "until" <+> pretty c
          ]
   pretty (LuaIf c t []) =
-    vsep [ string "if" <+> pretty c <+> string "then"
+    vsep [ keyword "if" <+> pretty c <+> keyword "then"
          , body t
-         , string "end"
+         , keyword "end"
          ]
   pretty (LuaIf c t e) =
-    vsep [ string "if" <+> pretty c <+> string "then"
+    vsep [ keyword "if" <+> pretty c <+> keyword "then"
          , body t
-         , string "else"
+         , keyword "else"
          , body e
-         , string "end"
+         , keyword "end"
          ]
   pretty (LuaIfElse ((c,t):bs)) =
-    let pprintElse [] = string "end"
+    let pprintElse [] = keyword "end"
         pprintElse [(LuaTrue, b)] =
-          vsep [ string "else"
+          vsep [ keyword "else"
                , body b
-               , string "end"
+               , keyword "end"
                ]
         pprintElse ((c, b):xs) =
-          vsep [ string "elseif" <+> pretty c <+> string "then"
+          vsep [ keyword "elseif" <+> pretty c <+> keyword "then"
                , body b
                ]
             <#> pprintElse xs
-     in vsep [ string "if" <+> pretty c <+> string "then"
+     in vsep [ keyword "if" <+> pretty c <+> keyword "then"
              , body t
              ]
         <#> pprintElse bs
   pretty (LuaIfElse []) = error "impossible"
   pretty (LuaFornum v s e i b) =
-    vsep [ string "for" <+> text v <+> equals <+> string "do"
+    vsep [ keyword "for" <+> text v <+> equals <+> keyword "do"
        <+> pretty s <+> comma <+> pretty e <+> comma <+> pretty i
          , body b
-         , string "end"
+         , keyword "end"
          ]
   pretty (LuaFor vs es b) =
-    vsep [ string "for" <+> hsep (punctuate comma (map text vs))
-       <+> string "in" <+> hsep (punctuate comma (map pretty es))
-       <+> string "do"
+    vsep [ keyword "for" <+> hsep (punctuate comma (map text vs))
+       <+> keyword "in" <+> hsep (punctuate comma (map pretty es))
+       <+> keyword "do"
          , body b
-         , string "end"
+         , keyword "end"
          ]
   pretty (LuaLocal [n] [LuaFunction a b]) =
-    vsep [ string "local function" <+> pretty n <+> tupled (map pretty a)
+    vsep [ keyword "local function" <+> pretty n <+> tupled (map pretty a)
          , body b
-         , string "end"
+         , keyword "end"
          ]
-  pretty (LuaLocal vs []) = string "local" <+> hsep (punctuate comma (map pretty vs))
-  pretty (LuaLocal vs xs) = string "local" <+> hsep (punctuate comma (map pretty vs))
+  pretty (LuaLocal vs []) = keyword "local" <+> hsep (punctuate comma (map pretty vs))
+  pretty (LuaLocal vs xs) = keyword "local" <+> hsep (punctuate comma (map pretty vs))
                         <+> equals <+> hsep (punctuate comma (map pretty xs))
   pretty (LuaBit x) = text x
-  pretty LuaBreak = string "break"
-  pretty (LuaReturn v) = string "return" <+> pretty v
+  pretty LuaBreak = keyword "break"
+  pretty (LuaReturn v) = keyword "return" <+> pretty v
   pretty (LuaCallS x@LuaFunction{} a) = parens (pretty x) <> tupled (map pretty a) <> semi
   pretty (LuaCallS x a) = pretty x <> tupled (map pretty a)
 
@@ -124,18 +124,18 @@ instance Pretty LuaVar where
   pretty (LuaIndex e k) = pretty e <> brackets (pretty k)
 
 instance Pretty LuaExpr where
-  pretty LuaTrue = string "true"
-  pretty LuaFalse = string "false"
-  pretty LuaDots = string "..."
-  pretty LuaNil = string "nil"
-  pretty (LuaString k) = dquotes (text k)
-  pretty (LuaNumber d) = pretty d
+  pretty LuaTrue = sliteral (string "true")
+  pretty LuaFalse = sliteral (string "false")
+  pretty LuaDots = sliteral (string "...")
+  pretty LuaNil = sliteral (string "nil")
+  pretty (LuaString k) = sstring (dquotes (text k))
+  pretty (LuaNumber d) = sliteral (pretty d)
   pretty (LuaBinOp l o r) = pretty l <+> text o <+> pretty r
   pretty (LuaRef x) = pretty x
   pretty (LuaFunction a b) =
-    vsep [ string "function" <+> tupled (map pretty a)
+    vsep [ keyword "function" <+> tupled (map pretty a)
          , body b
-         , string "end"
+         , keyword "end"
          ]
   pretty (LuaTable ps) = encloseSep lbrace rbrace comma $
     map (\(k, v) -> brackets (pretty k) <+> equals <+> pretty v) ps

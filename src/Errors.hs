@@ -73,6 +73,7 @@ instance Pretty TypeError where
 instance Pretty ResolveError where
   pretty (R.NotInScope e) = string "Variable not in scope:" <> verbatim e
   pretty (R.NoSuchModule e) = string "Module not in scope:" <> verbatim e
+  pretty (R.Ambiguous v _) = string "Ambiguous reference to variable:" <> verbatim v
   pretty (R.EmptyMatch e) = pretty (annotation e) <> string ": Empty match expression"
   pretty (R.EmptyBegin e) = pretty (annotation e) <> string ": Empty begin expression"
   pretty (R.ArisingFrom er ex) = pretty (annotation ex) <> colon <+> pretty er <#> indent 2 (bullet (string "Arising from use of ") <+> verbatim ex)
