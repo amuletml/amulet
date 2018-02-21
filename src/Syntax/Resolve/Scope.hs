@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, LambdaCase #-}
 {-# LANGUAGE FlexibleContexts #-}
 
 module Syntax.Resolve.Scope
@@ -12,7 +12,7 @@ module Syntax.Resolve.Scope
 import qualified Data.Text as T
 import qualified Data.Map as Map
 import Data.List
-import Control.Arrow
+import Data.Function
 import Control.Monad.Gen
 import Control.Monad.Reader
 
@@ -42,20 +42,13 @@ builtinScope = Scope
 tagVar :: MonadGen Int m => Var Parsed -> m (Var Resolved)
 tagVar (Name n) = TgName n <$> gen
 
-insertN :: [(Var Parsed, Var Resolved)] -> Map.Map (Var Parsed) ScopeVariable -> Map.Map (Var Parsed) ScopeVariable
-insertN vs scope = let vs' = nub (map fst vs)
-                   in if length vs == length vs'
-                      -- If we have no duplicates then insert as normal
-                      then foldr (uncurry Map.insert . second SVar) scope vs
-                      -- If we do have duplicates then group them together
-                      else foldr (\(v, _) -> case map snd $ filter ((==v) . fst) vs of
-                                               [v'] -> Map.insert v (SVar v')
-                                               vs -> Map.insert v (SAmbiguous vs)) scope vs
-
-  -- case Map.lookup v scope of
-                   --    Nothing -> Map.insert v (SVar v') scope
-                   --    Just (SVar x) -> Map.insert v (SAmbiguous [v', x]) scope
-                   --    Just (SAmbiguous xs) -> Map.insert v (SAmbiguous (v':xs)) scope
+insertN :: Map.Map (Var Parsed) ScopeVariable -> [(Var Parsed, Var Resolved)] -> Map.Map (Var Parsed) ScopeVariable
+insertN scope = foldr (\case
+                          [(v, v')] -> Map.insert v (SVar v')
+                          vs@((v,_):_) -> Map.insert v (SAmbiguous (map snd vs))
+                          [] -> undefined) scope
+                . groupBy ((==) `on` fst)
+                . sortOn fst
 
 extend :: (MonadGen Int m, MonadReader Scope m) => (Var Parsed, Var Resolved) -> m a -> m a
 extend (v, v') =
@@ -63,7 +56,7 @@ extend (v, v') =
 
 extendN :: (MonadGen Int m, MonadReader Scope m) => [(Var Parsed, Var Resolved)] -> m a -> m a
 extendN vs =
-  local (\x -> x { varScope = insertN vs (varScope x) })
+  local (\x -> x { varScope = insertN (varScope x) vs })
 
 extendTy :: (MonadGen Int m, MonadReader Scope m) => (Var Parsed, Var Resolved) -> m a -> m a
 extendTy (v, v') =
@@ -71,4 +64,4 @@ extendTy (v, v') =
 
 extendTyN :: (MonadGen Int m, MonadReader Scope m) => [(Var Parsed, Var Resolved)] -> m a -> m a
 extendTyN vs =
-  local (\x -> x { tyScope = insertN vs (tyScope x) })
+  local (\x -> x { tyScope = insertN (tyScope x) vs })
