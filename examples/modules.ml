@@ -8,4 +8,14 @@ module Option =
                 | Nothing -> Nothing
 end
 ;;
-let main _ = Option.Nothing
+
+module Option.Helpers =
+  open Option ;;
+
+  let fmap = map
+end
+;;
+
+open Options.Helpers as O ;;
+
+let main _ = O.fmap (fun x -> x + 1) Option.Nothing

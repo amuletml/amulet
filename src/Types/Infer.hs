@@ -16,7 +16,7 @@ import Data.Generics
 import Data.Triple
 
 import Control.Monad.Infer
-import Control.Arrow (first, (***))
+import Control.Arrow (first)
 import Control.Lens
 
 import Syntax.Resolve.Toplevel
@@ -202,14 +202,14 @@ inferProg (TypeDecl n tvs cs:prg) = do
 inferProg (Open mod pre:prg) = do
   env <- ask
   traceShow env $ pure ()
-  mod <- view (modules . at mod . non undefined)
+  mod' <- view (modules . at mod . non undefined)
   let prefix =
         case pre of
-          Just x -> undefined -- TODO squid please I don't understand this
+          Just x -> (x<>)
           Nothing -> id
-      vars' = mod ^. values & Map.toList & map (prefix *** id) & Map.fromList
-      tys' = mod ^. types & Map.toList & map (prefix *** id) & Map.fromList
-      mods' = mod ^. modules & Map.toList & map (prefix *** id) & Map.fromList
+      vars' = mod' ^. values & Map.toList & map (first prefix) & Map.fromList
+      tys' = mod' ^. types & Map.toList & map (first prefix) & Map.fromList
+      mods' = mod' ^. modules & Map.toList & map (first prefix) & Map.fromList
 
   local (Env vars' tys' mods' <>) $ inferProg prg
 inferProg (Module name body:prg) = do
