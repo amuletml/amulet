@@ -1,4 +1,4 @@
-module Option =
+module Option = begin
   type option 'a =
     | Just of 'a
     | Nothing ;;
@@ -9,13 +9,13 @@ module Option =
     | Nothing -> Nothing
 end ;;
 
-module Option.Helpers =
+module Option.Helpers = begin
   open Option ;;
 
   let fmap = map
 end ;;
 
-module Option =
+module Option = begin
   open Option.Helpers
 end ;;
 
