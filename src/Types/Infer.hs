@@ -32,8 +32,6 @@ import Types.Unify
 import Types.Holes
 import Types.Kinds
 
-import Debug.Trace
-
 -- Solve for the types of lets in a program
 inferProgram :: MonadGen Int m => [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))
 inferProgram ct = fmap fst <$> runInfer builtinsEnv (inferAndCheck ct) where
@@ -200,8 +198,6 @@ inferProg (TypeDecl n tvs cs:prg) = do
        consFst (TypeDecl (TvName n) (map TvName tvs) cs') $
          inferProg prg
 inferProg (Open mod pre:prg) = do
-  env <- ask
-  traceShow env $ pure ()
   mod' <- view (modules . at mod . non undefined)
   let prefix =
         case pre of
