@@ -92,7 +92,7 @@ lowerAt (Match ex cs an) ty = do
   CotMatch <$> lowerAt ex mt <*> pure (cs' ++ [fail])
 lowerAt (BinOp left op right a) t = lowerAt (App (App op left a) right a) t
 lowerAt Hole{} _ = error "holes can't be lowered"
-lowerAt (Ascription e t _) _ = lowerAt e =<< lowerType t
+lowerAt (Ascription e _ _) t = lowerAt e t
 lowerAt e _ = lowerAnyway e
 
 lowerAnyway :: MonadLower m => Expr Typed -> m CoTerm
