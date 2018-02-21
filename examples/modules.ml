@@ -3,23 +3,21 @@ module Option =
     | Just of 'a
     | Nothing ;;
 
-  let map f m = match m with
-                | Just x -> Just (f x)
-                | Nothing -> Nothing
-end
-;;
+  let map f m =
+    match m with
+    | Just x -> Just (f x)
+    | Nothing -> Nothing
+end ;;
 
 module Option.Helpers =
   open Option ;;
 
   let fmap = map
-end
-;;
+end ;;
 
 module Option =
   open Option.Helpers
-end
-;;
+end ;;
 
 open Option.Helpers as O ;;
 

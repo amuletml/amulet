@@ -110,7 +110,7 @@ Top :: { Toplevel Parsed }
     | type ident ListE(TyVar) '=' List1(Ctor, '|')     { TypeDecl (getName $2) $3 $5 }
     | type ident ListE(TyVar) '=' '|' List1(Ctor, '|') { TypeDecl (getName $2) $3 $6 }
 
-    | module Con '=' Tops end                  { Module (getL $2) $4 }
+    | module Con '=' begin Tops end            { Module (getL $2) $5 }
     | open Con                                 { Open (getL $2) Nothing }
     | open Con as conid                        { Open (getL $2) (Just (getIdent $4)) }
 
