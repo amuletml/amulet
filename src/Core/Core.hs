@@ -64,26 +64,26 @@ data CoStmt
   | CosType (Var Resolved) [(Var Resolved, CoType)]
   deriving (Eq, Show, Ord, Data, Typeable)
 
+parenArg :: CoTerm -> Doc
+parenArg f = case f of
+  CotLam{} -> parens (pretty f)
+  CotLet{} -> parens (pretty f)
+  CotMatch{} -> parens (pretty f)
+  _ -> pretty f
+
 instance Pretty CoTerm where
   pretty (CotRef v _) = pretty v
   pretty (CotLam Big (v, t) c)
     = soperator (char 'Λ') <+> parens (pretty v <+> colon <+> pretty t) <> nest 2 (dot </> pretty c)
   pretty (CotLam Small (v, t) c)
     = soperator (char 'λ') <+> parens (pretty v <+> colon <+> pretty t) <> nest 2 (dot </> pretty c)
-  pretty (CotApp f x) = f' <+> x' where
-    f' = case f of
-      CotLam{} -> parens (pretty f)
-      _ -> pretty f
-    x' = case x of
-      CotLam{} -> parens (pretty x)
-      CotApp{} -> parens (pretty x)
-      _ -> pretty x
+  pretty (CotApp f x) = parenArg f <+> parenArg x
+  pretty (CotTyApp f t) = parenArg f <+> soperator (char '@') <> pretty t
 
   pretty (CotLet xs e) = keyword "let" <+> pprLet xs </> (keyword "in" <+> pretty e)
   pretty (CotBegin e x) = keyword "begin" <+> pprBegin (map pretty (e ++ [x]))
   pretty (CotLit l) = pretty l
   pretty (CotMatch e ps) = keyword "match" <+> pretty e <+> pprCases ps
-  pretty (CotTyApp f t) = pretty f <+> soperator (char '@') <> squotes (pretty t)
   pretty (CotExtend x rs) = braces $ pretty x <+> pipe <+> prettyRows rs where
     prettyRows = hsep . punctuate comma . map (\(x, t, v) -> text x <+> colon <+> pretty t <+> equals <+> pretty v)
 
