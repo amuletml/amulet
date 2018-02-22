@@ -31,6 +31,8 @@ import Types.Unify
 import Types.Holes
 import Types.Kinds
 
+import Debug.Trace
+
 -- Solve for the types of lets in a program
 inferProgram :: MonadGen Int m => [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))
 inferProgram ct = fmap fst <$> runInfer builtinsEnv (inferAndCheck ct) where
@@ -67,7 +69,7 @@ check e ty@TyForall{} = do -- This is rule Decl∀L from [Complete and Easy]
   pure (correct ty e')
 check (Hole v a) t = pure (Hole (TvName v) (a, t))
 check ex@(Fun p b a) ty = do
-  (dom, cod) <- decompose ex _TyArr ty
+  (dom, cod, _) <- decompose ex _TyArr ty
   (p', ms) <- checkPattern p dom
   Fun p' <$> extendMany ms (check b cod) <*> pure (a, ty)
 check (Begin [] _) _ = error "impossible"
@@ -93,11 +95,6 @@ check (Match t ps a) ty = do
     (p', ms) <- checkPattern p tt
     (,) <$> pure p' <*> extendMany ms (check e ty)
   pure (Match t' ps' (a, ty))
-check ex@(BinOp l o r a) ty = do
-  (o', to) <- infer o
-  (el, to') <- decompose ex _TyArr to
-  (er, d) <- decompose ex _TyArr to'
-  BinOp <$> check l el <*> pure o' <*> check r er <*> fmap (a,) (unify ex d ty)
 check ex@(Record rows a) ty = do
   (rows', rowts) <- unzip <$> inferRows rows
   Record rows' . (a,) <$> unify ex (TyExactRows rowts) ty
@@ -112,7 +109,7 @@ check ex@(Tuple es an) ty = Tuple <$> go es ty <*> pure (an, ty) where
   go [] _ = error "not a tuple"
   go [x] t = (:[]) <$> check x t
   go (x:xs) t = do
-    (left, right) <- decompose ex _TyTuple t
+    (left, right, _) <- decompose ex _TyTuple t
     (:) <$> check x left <*> go xs right
 check ex@(TypeApp pf tx an) ty = do
   (tx', _) <- resolveKind tx
@@ -154,9 +151,10 @@ infer (Ascription e ty an) = do
   e' <- check e ty'
   pure (Ascription (correct ty' e') ty' (an, ty'), ty')
 infer ex@(App f x a) = do
-  (f', (d, c)) <- secondA (decompose ex _TyArr) =<< infer f
+  (f', (d, c, k)) <- secondA (decompose ex _TyArr) =<< infer f
   x' <- check x d
-  pure (App f' x' (a, c), c)
+  pure (App (k f') x' (a, c), c)
+infer ex@(BinOp l o r _) = error "infer binop todo (again)" ex l o r
 infer ex = do
   x <- freshTV
   ex' <- check ex x
@@ -242,6 +240,8 @@ inferLetTy closeOver ks ((va, ve, vann):xs) = extendMany ks $ do
 
   let r (a, t) = (a, normType (apply x t))
       ex = applyInExpr x (raiseE id r ve')
+
+  traceShow x $ pure ()
 
   unless (null (skols vt)) $
     throwError (EscapedSkolems (Set.toList (skols vt)) vt)

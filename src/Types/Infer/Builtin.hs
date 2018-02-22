@@ -3,9 +3,12 @@ module Types.Infer.Builtin where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
+import Data.Spanned
 
 import Control.Monad.Infer
 import Control.Lens
+
+import Types.Wellformed
 
 import Syntax
 
@@ -54,11 +57,18 @@ decompose :: ( Reasonable f p
           => f p
           -> Prism' (Type Typed) (Type Typed, Type Typed)
           -> Type Typed
-          -> m (Type Typed, Type Typed)
+          -> m (Type Typed, Type Typed, Expr Typed -> Expr Typed)
+decompose r p ty@TyForall{} = do
+  (s, _, t) <- instantiate ty
+  (a, b, k) <- decompose r p t
+  let new (TyForall (x:xs) t) = \e -> TypeApp e (s Map.! x) (annotation r, normType (TyForall xs t))
+      new (TyForall [] _) = id
+      new _ = error "impossible instantiation in definitely-polymorphic decomposition"
+  pure (a, b, new ty . k)
 decompose r p t =
   case t ^? p of
-    Just ts -> pure ts
+    Just (a, b) -> pure (a, b, id)
     Nothing -> do
       (a, b) <- (,) <$> freshTV <*> freshTV
-      _ <- unify r t (p # (a, b))
-      pure (a, b)
+      _ <- subsumes r t (p # (a, b))
+      pure (a, b, id)
