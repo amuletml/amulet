@@ -44,7 +44,7 @@ checkPattern ex@(Destructure con ps ann) ty =
       _ <- unify ex pty ty
       pure (Destructure (TvName con) Nothing (ann, pty), [])
     Just p -> do
-      (c, d) <- decompose ex _TyArr =<< lookupTy con
+      (c, d, _) <- decompose ex _TyArr =<< lookupTy con
       (ps', b) <- checkPattern p c
       _ <- unify ex ty d
       pure (Destructure (TvName con) (Just ps') (ann, d), b)
@@ -58,7 +58,7 @@ checkPattern pt@(PRecord rows ann) ty = do
 checkPattern pt@(PTuple elems ann) ty =
   let go [x] t = (:[]) <$> checkPattern x t
       go (x:xs) t = do
-        (left, right) <- decompose pt _TyTuple t
+        (left, right, _) <- decompose pt _TyTuple t
         (:) <$> checkPattern x left <*> go xs right
       go [] _ = error "malformed tuple in checkPattern"
     in case elems of
