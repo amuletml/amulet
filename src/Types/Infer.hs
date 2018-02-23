@@ -31,8 +31,6 @@ import Types.Unify
 import Types.Holes
 import Types.Kinds
 
-import Debug.Trace
-
 -- Solve for the types of lets in a program
 inferProgram :: MonadGen Int m => [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))
 inferProgram ct = fmap fst <$> runInfer builtinsEnv (inferAndCheck ct) where
@@ -154,7 +152,11 @@ infer ex@(App f x a) = do
   (f', (d, c, k)) <- secondA (decompose ex _TyArr) =<< infer f
   x' <- check x d
   pure (App (k f') x' (a, c), c)
-infer ex@(BinOp l o r _) = error "infer binop todo (again)" ex l o r
+infer ex@(BinOp l o r a) = do
+  (o', (ld, c, k1)) <- secondA (decompose ex _TyArr) =<< infer o
+  (rd, c, k2) <- decompose ex _TyArr c
+  (l', r') <- (,) <$> check l ld <*> check r rd
+  pure (App (k2 (App (k1 o') l' (a, TyArr ld (TyArr rd c)))) r' (a, c), c)
 infer ex = do
   x <- freshTV
   ex' <- check ex x
@@ -240,8 +242,6 @@ inferLetTy closeOver ks ((va, ve, vann):xs) = extendMany ks $ do
 
   let r (a, t) = (a, normType (apply x t))
       ex = applyInExpr x (raiseE id r ve')
-
-  traceShow x $ pure ()
 
   unless (null (skols vt)) $
     throwError (EscapedSkolems (Set.toList (skols vt)) vt)
