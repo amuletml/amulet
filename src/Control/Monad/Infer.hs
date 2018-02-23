@@ -41,8 +41,8 @@ import Data.Triple
 
 import Pretty
 
+import Syntax.Pretty
 import Syntax.Subst
-import Syntax
 
 type MonadInfer p m = (MonadError TypeError m, MonadReader Env m, MonadWriter [Constraint p] m, MonadGen Int m)
 

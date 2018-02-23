@@ -9,7 +9,7 @@ import Data.Data (Data, Typeable)
 import Data.Text (Text, pack)
 import Data.Triple
 
-import Syntax (Var(..), Resolved)
+import Syntax.Pretty (Var(..), Resolved)
 
 data CoTerm
   = CotRef (Var Resolved) CoType
@@ -64,13 +64,18 @@ data CoStmt
   | CosType (Var Resolved) [(Var Resolved, CoType)]
   deriving (Eq, Show, Ord, Data, Typeable)
 
-parenArg :: CoTerm -> Doc
-parenArg f = case f of
+parenFun :: CoTerm -> Doc
+parenFun f = case f of
   CotLam{} -> parens (pretty f)
   CotLet{} -> parens (pretty f)
   CotMatch{} -> parens (pretty f)
   CotApp{} -> parens (pretty f)
   _ -> pretty f
+
+parenArg :: CoTerm -> Doc
+parenArg f = case f of
+  CotTyApp{} -> parens (pretty f)
+  _ -> parenFun f
 
 instance Pretty CoTerm where
   pretty (CotRef v _) = pretty v
@@ -78,8 +83,8 @@ instance Pretty CoTerm where
     = soperator (char 'Λ') <+> parens (pretty v <+> colon <+> pretty t) <> nest 2 (dot </> pretty c)
   pretty (CotLam Small (v, t) c)
     = soperator (char 'λ') <+> parens (pretty v <+> colon <+> pretty t) <> nest 2 (dot </> pretty c)
-  pretty (CotApp f x) = parenArg f <+> parenArg x
-  pretty (CotTyApp f t) = parenArg f <+> soperator (char '@') <> pretty t
+  pretty (CotApp f x) = parenFun f <+> parenArg x
+  pretty (CotTyApp f t) = parenFun f <+> soperator (char '@') <> pretty t
 
   pretty (CotLet xs e) = keyword "let" <+> pprLet xs </> (keyword "in" <+> pretty e)
   pretty (CotBegin e x) = keyword "begin" <+> pprBegin (map pretty (e ++ [x]))
@@ -97,13 +102,13 @@ pprBegin = braces' . vsep . map (indent 2) . punctuate semi
 
 pprCases :: [(CoPattern, CoType, CoTerm)] -> Doc
 pprCases = braces' . vsep . map (indent 2) . punctuate semi . map one where
-  one (a, b, c) = pretty a <+> colon <+> pretty b <+> arrow <+> pretty c
+  one (a, b, c) = pretty a <+> colon <+> pretty b <+> nest 2 (arrow </> pretty c)
 
 braces' :: Doc -> Doc
 braces' = enclose (lbrace <> linebreak) (linebreak <> rbrace)
 
 instance Pretty CoPattern where
-  pretty (CopCapture v t) = parens (pretty v <+> colon <+> pretty t)
+  pretty (CopCapture v _) = pretty v
   pretty (CopConstr v) = pretty v
   pretty (CopDestr v p) = parens (pretty v <+> pretty p)
   pretty (CopExtend p rs) = braces $ pretty p <+> pipe <+> prettyRows rs where
