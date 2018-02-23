@@ -2,16 +2,13 @@
 module Core.Optimise.Inline
   ( inlineVariable
   , betaReduce
-  , monomorphise
   ) where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.VarSet as VarSet
 import Data.Triple
-import Data.Maybe
 
 import Core.Optimise
-import Core.Types
 import Syntax (Resolved)
 
 limit :: Int
@@ -44,15 +41,6 @@ betaReduce = pass go where
     CotTyApp (CotLam Big (var, _) body) tp ->
       pure $ substituteInTys (Map.singleton var tp) body
     _ -> pure term
-
-monomorphise :: TransformPass
-monomorphise = pass' go where
-  go it@(CotApp (CotLam Big _ f) x) = fromMaybe it $ do
-    CotyArr t _ <- approximateType f
-    t' <- approximateType x
-    _ <- t `unify` t'
-    pure (CotApp f x)
-  go x = x
 
 score :: CoTerm -> Trans Int
 score (CotRef v _) = do

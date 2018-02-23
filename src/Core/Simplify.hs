@@ -25,7 +25,6 @@ optmOnce t = fmap (fromMaybe t) . runTransform . transformStmts passes $ t where
       , inlineVariable
       , betaReduce
       , dropUselessLet
-      , monomorphise
       ]
 
 optimise :: [CoStmt] -> Gen Int [CoStmt]
