@@ -69,6 +69,7 @@ parenArg f = case f of
   CotLam{} -> parens (pretty f)
   CotLet{} -> parens (pretty f)
   CotMatch{} -> parens (pretty f)
+  CotApp{} -> parens (pretty f)
   _ -> pretty f
 
 instance Pretty CoTerm where

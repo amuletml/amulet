@@ -80,7 +80,7 @@ lowerAt (Fun p bd an) (CotyArr a b) =
         _ -> do
           (p', bd') <- (,) <$> lowerPat p <*> lowerAt bd b
           arg <- fresh
-          fail <- patternMatchingFail (fst an) a
+          fail <- patternMatchingFail (fst an) b
           pure (CotLam Small (arg, a) (CotMatch (CotRef arg a) [ (p', a, bd'), fail ]))
 lowerAt (Begin [x] _) t = lowerAt x t
 lowerAt (Begin xs _) t = CotBegin <$> traverse lowerExpr (init xs) <*> lowerAt (last xs) t
@@ -88,7 +88,7 @@ lowerAt (Match ex cs an) ty = do
   mt <- lowerType (getType ex)
   cs' <- for cs $ \(pat, ex) ->
     (,,) <$> lowerPat pat <*> pure mt <*> lowerAt ex ty
-  fail <- patternMatchingFail (fst an) mt
+  fail <- patternMatchingFail (fst an) ty
   CotMatch <$> lowerAt ex mt <*> pure (cs' ++ [fail])
 lowerAt (BinOp left op right a) t = lowerAt (App (App op left a) right a) t
 lowerAt Hole{} _ = error "holes can't be lowered"
