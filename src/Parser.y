@@ -196,7 +196,7 @@ BindGroup :: { [(Var Parsed, Expr Parsed, Ann Parsed)] }
 
 Binding :: { (Var Parsed, Expr Parsed, Ann Parsed) }
         : ident ListE(ArgP) '=' Expr          { (getName $1, foldr (\x y -> withPos2 x $4 (Fun x y)) $4 $2, withPos2 $1 $4 id) }
-        | ident ListE(ArgP) ':' Type '=' Expr { (getName $1, withPos2 $1 $6 $ Ascription (foldr (\x y -> withPos2 x $6 (Fun x y)) $6 $2) $4, withPos2 $1 $6 id) }
+        | ident ListE(ArgP) ':' Type '=' Expr { (getName $1, (foldr (\x y -> withPos2 x $6 (Fun x y)) (Ascription $6 $4 (withPos2 $1 $6 id)) $2), withPos2 $1 $6 id) }
 
 
 List(p, s)
