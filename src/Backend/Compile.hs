@@ -109,7 +109,6 @@ compileExpr (CotExtend (CotLit ColRecNil) fs)
 compileExpr s@CotExtend{} = compileIife s
 
 compileExpr s@CotLet{}    = compileIife s
-compileExpr s@CotBegin{}  = compileIife s
 compileExpr s@CotMatch{}  = compileIife s
 
 global :: String -> LuaExpr
@@ -120,7 +119,6 @@ compileStmt r e@CotRef{} = pureReturn r $ compileExpr e
 compileStmt r e@CotLam{} = pureReturn r $ compileExpr e
 compileStmt r e@CotLit{} = pureReturn r $ compileExpr e
 compileStmt r (CotLet k c) = compileLet (unzip3 k) ++ compileStmt r c
-compileStmt r (CotBegin xs x) = concatMap (compileStmt Nothing) xs ++ compileStmt r x
 compileStmt r (CotMatch s ps) = runGen (compileMatch r s ps)
 
 compileStmt Nothing e@CotApp{} = case compileExpr e of

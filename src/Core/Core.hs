@@ -18,7 +18,6 @@ data CoTerm
 
   | CotLet [(Var Resolved, CoType, CoTerm)] CoTerm
   | CotMatch CoTerm [(CoPattern, CoType, CoTerm)]
-  | CotBegin [CoTerm] CoTerm
 
   | CotLit CoLiteral
 
@@ -87,7 +86,6 @@ instance Pretty CoTerm where
   pretty (CotTyApp f t) = parenFun f <+> soperator (char '@') <> pretty t
 
   pretty (CotLet xs e) = keyword "let" <+> pprLet xs </> (keyword "in" <+> pretty e)
-  pretty (CotBegin e x) = keyword "begin" <+> pprBegin (map pretty (e ++ [x]))
   pretty (CotLit l) = pretty l
   pretty (CotMatch e ps) = keyword "match" <+> pretty e <+> pprCases ps
   pretty (CotExtend x rs) = braces $ pretty x <+> pipe <+> prettyRows rs where
@@ -172,7 +170,6 @@ freeIn (CotMatch e bs) = freeIn e `mappend` foldMap freeInBranch bs where
 freeIn (CotLit _) = mempty
 freeIn (CotExtend c rs) = freeIn c `mappend` foldMap (freeIn . thd3) rs
 freeIn (CotTyApp f _) = freeIn f
-freeIn (CotBegin xs x) = foldMap freeIn xs `mappend` freeIn x
 
 isError :: CoTerm -> Bool
 isError (CotApp (CotTyApp (CotRef (TgInternal n) _) _) _) = n == pack "error"

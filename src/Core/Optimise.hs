@@ -45,7 +45,6 @@ mapTerm1M f t = case t of
   CotApp g x -> CotApp <$> f g <*> f x
   CotLet vs e -> CotLet <$> traverse (third3A f) vs <*> f e
   CotMatch e bs -> CotMatch <$> f e <*> traverse (third3A f) bs
-  CotBegin es e -> CotBegin <$> traverse f es <*> f e
   CotExtend t rs -> CotExtend <$> f t <*> traverse (third3A f) rs
   CotTyApp e t -> CotTyApp <$> f e <*> pure t
 

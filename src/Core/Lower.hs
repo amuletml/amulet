@@ -83,7 +83,9 @@ lowerAt (Fun p bd an) (CotyArr a b) =
           fail <- patternMatchingFail (fst an) b
           pure (CotLam Small (arg, a) (CotMatch (CotRef arg a) [ (p', a, bd'), fail ]))
 lowerAt (Begin [x] _) t = lowerAt x t
-lowerAt (Begin xs _) t = CotBegin <$> traverse lowerExpr (init xs) <*> lowerAt (last xs) t
+lowerAt (Begin xs _) t =
+  let bind e = (,,) <$> fresh <*> lowerType (getType e) <*> lowerExpr e
+   in CotLet <$> traverse bind (init xs) <*> lowerAt (last xs) t
 lowerAt (Match ex cs an) ty = do
   mt <- lowerType (getType ex)
   cs' <- for cs $ \(pat, ex) ->

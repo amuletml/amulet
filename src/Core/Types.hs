@@ -36,7 +36,6 @@ approximateType (CotLet _ e) = approximateType e
 approximateType (CotMatch _ xs) = case xs of
   ((_, _, t):_) -> approximateType t
   [] -> error "impossible approximateType empty match"
-approximateType (CotBegin _ t) = approximateType t
 approximateType (CotLit l) = pure $ case l of
   ColInt{} -> cotyInt
   ColStr{} -> cotyString

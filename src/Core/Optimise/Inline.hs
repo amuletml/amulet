@@ -62,9 +62,6 @@ score (CotExtend e rs) = do
   rs' <- sum <$> traverse (score . thd3) rs
   (+) rs' <$> score e
 score CotLit{} = pure 1
-score (CotBegin es e) = do
-  es' <- sum <$> traverse score es
-  (+) es' <$> score e
 score (CotTyApp t _) = (+ 1) <$> score t
 
 recursive :: CoTerm -> Var Resolved -> Bool
