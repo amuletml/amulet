@@ -58,10 +58,6 @@ correct ty = gmapT (mkT go) where
   go (a, _) = (a, ty)
 
 check :: MonadInfer Typed m => Expr Resolved -> Type Typed -> m (Expr Typed)
-check expr@(VarRef k a) tp = do
-  (_, old, _) <- lookupTy' k
-  _ <- subsumes expr old tp
-  pure (VarRef (TvName k) (a, tp))
 check e ty@TyForall{} = do -- This is rule Decl∀L from [Complete and Easy]
   e' <- check e =<< skolemise ty -- gotta be polymorphic - don't allow instantiation
   pure (correct ty e')
