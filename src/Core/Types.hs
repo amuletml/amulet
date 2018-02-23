@@ -27,7 +27,7 @@ arity _ = 0
 
 approximateType :: CoTerm -> Maybe CoType
 approximateType (CotRef _ t) = pure t
-approximateType (CotLam Big (v, _) f) = CotyForall [v] <$> approximateType f
+approximateType (CotLam Big (v, _) f) = CotyForall v <$> approximateType f
 approximateType (CotLam Small (_, t) f) = CotyArr t <$> approximateType f
 approximateType (CotApp f _) = do
   CotyArr _ d <- approximateType f
@@ -46,11 +46,11 @@ approximateType (CotLit l) = pure $ case l of
   ColRecNil -> CotyExactRows []
 approximateType (CotExtend e rs) = CotyRows <$> approximateType e <*> traverse (\(x, _, t) -> (x,) <$> approximateType t) rs
 approximateType (CotTyApp f at) = do
-  CotyForall (v:vs) t <- approximateType f
+  CotyForall v t <- approximateType f
   let replace = everywhere (mkT go)
       go (CotyVar v') | v == v' = at
       go x = x
-  pure (CotyForall vs (replace t))
+  pure (replace t)
 
 unify :: CoType -> CoType -> Maybe (Map.Map (Var Resolved) CoType)
 unify a b = execStateT (unify' a b) mempty
@@ -70,9 +70,7 @@ unify' (CotyRows t ts) (CotyRows t' ts') = do
   pure (mgu_t <> fold ts)
 unify' (CotyExactRows ts) (CotyExactRows ts') = fold <$> for (zip (sortOn fst ts) (sortOn fst ts')) (\((_, t), (_, t')) -> unify' t t')
 unify' (CotyForall vs t) (CotyForall vs' t') = unify' t (replace vs vs' t') where
-  replace (x:xs) (y:ys) t = replaceOne (CotyVar y) x (replace xs ys t)
-  replace _ _ t = t
-
+  replace f t = replaceOne (CotyVar t) f
   replaceOne at var = everywhere (mkT (go var)) where
     go v (CotyVar v') | v == v' = at
     go _ x = x
