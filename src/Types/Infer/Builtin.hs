@@ -61,7 +61,8 @@ decompose :: ( Reasonable f p
 decompose r p ty@TyForall{} = do
   (s, _, t) <- instantiate ty
   (a, b, k) <- decompose r p t
-  let new (TyForall (x:xs) t) = \e -> TypeApp e (s Map.! x) (annotation r, normType (TyForall xs t))
+  let new (TyForall (x:xs) t) = new (TyForall xs t) . 
+        \e -> TypeApp e (s Map.! x) (annotation r, normType t)
       new (TyForall [] _) = id
       new _ = error "impossible instantiation in definitely-polymorphic decomposition"
   pure (a, b, new ty . k)
