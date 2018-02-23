@@ -180,3 +180,4 @@ isCon var = Map.member var <$> asks cons
 
 findForeign :: Var Resolved -> Trans (Maybe CoType)
 findForeign var = Map.lookup var <$> asks foreigns
+

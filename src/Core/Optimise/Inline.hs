@@ -2,15 +2,16 @@
 module Core.Optimise.Inline
   ( inlineVariable
   , betaReduce
+  , monomorphise
   ) where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.VarSet as VarSet
 import Data.Triple
+import Data.Maybe
 
 import Core.Optimise
-
-
+import Core.Types
 import Syntax (Resolved)
 
 limit :: Int
@@ -44,6 +45,15 @@ betaReduce = pass go where
       pure $ substituteInTys (Map.singleton var tp) body
     _ -> pure term
 
+monomorphise :: TransformPass
+monomorphise = pass' go where
+  go it@(CotApp (CotLam Big _ f) x) = fromMaybe it $ do
+    CotyArr t _ <- approximateType f
+    t' <- approximateType x
+    _ <- t `unify` t'
+    pure (CotApp f x)
+  go x = x
+
 score :: CoTerm -> Trans Int
 score (CotRef v _) = do
   x <- isCon v
@@ -68,35 +78,6 @@ score (CotBegin es e) = do
   es' <- sum <$> traverse score es
   (+) es' <$> score e
 score (CotTyApp t _) = (+ 1) <$> score t
-
--- go :: CoTerm -> Trans Int
--- go (CotRef v _) = do
---   tell 5
---   flip when (tell (negate 4)) =<< lift (isCon v)
---   tp <- lift (findForeign v)
---     case tp of
---       Just _ -> tell (Sum limit)
---       Nothing -> pure ()
---   go (CotLam s _ t) = do
---     tell $ case s of
---       Big -> 0
---       Small -> 1
---     go t
---   go (CotApp f x) = go f *> go x
---   go (CotLet vs e) = do
---     for_ vs $ \(_, _, x) -> do
---       tell 1
---       go x
---     go e
---   go (CotMatch e ms) = do
---     for_ ms $ \(p, _, x) -> do
---       tell (Sum (gdepth p))
---       go x
---     go e
---   go (CotBegin xs x) = for_ xs go *> go x
---   go (CotLit _) = tell 0
---   go (CotExtend x rs) = go x *> for_ rs (third3A go)
---   go (CotTyApp x t) = go x *> tell (Sum (gdepth t))
 
 recursive :: CoTerm -> Var Resolved -> Bool
 recursive e v = v `VarSet.member` freeIn e
