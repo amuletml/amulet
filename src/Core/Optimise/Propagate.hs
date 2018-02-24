@@ -3,7 +3,6 @@ module Core.Optimise.Propagate
   , constrPropag
   ) where
 
-
 import qualified Data.Map.Strict as Map
 import Data.Traversable
 import Data.Function
@@ -53,7 +52,9 @@ constrPropag = pass go where
     CotApp (CotRef x _) _ -> isCon x
     _ -> pure False
 
-  splitCon :: CoTerm (Var Resolved) -> Var Resolved -> (CoTerm (Var Resolved), (Var Resolved, CoType (Var Resolved), CoTerm (Var Resolved)))
+  splitCon :: CoTerm (Var Resolved)
+           -> Var Resolved
+           -> (CoTerm (Var Resolved), (Var Resolved, CoType (Var Resolved), CoTerm (Var Resolved)))
   splitCon (CotApp con ca) v
     | tp <- findConstrTy con
     , CotyArr arg _ <- tp
@@ -64,3 +65,4 @@ constrPropag = pass go where
       findConstrTy t = error $ "splitCon unwind " ++ show t
 
   splitCon t _ = error $ "splitCon " ++ show t
+

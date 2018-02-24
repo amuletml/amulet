@@ -27,6 +27,7 @@ optmOnce t = fmap (fromMaybe t) . runTransform . transformStmts passes $ t where
       , inlineVariable
       , betaReduce
       , dropUselessLet
+      , complexSafePropag
       ]
 
 optimise :: [CoStmt (Var Resolved)] -> Gen Int [CoStmt (Var Resolved)]
