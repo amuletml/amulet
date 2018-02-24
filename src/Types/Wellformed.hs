@@ -40,8 +40,9 @@ arity _ = 0
 -- Make a type into its equivalent in prenex normal form.
 normType :: forall p. Eq (Var p) => Type p -> Type p
 normType = flatten . uncurry collect . runWriter . spread where
-  collect t [] = t
-  collect t xs = TyForall (nub xs) t
+  collect t xs = case nub xs of
+    [] -> t
+    xs -> TyForall xs t
 
   spread :: Type p -> Writer [Var p] (Type p)
   spread (TyForall vs t) = spread t <* tell vs

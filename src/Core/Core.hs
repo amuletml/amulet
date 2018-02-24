@@ -45,7 +45,7 @@ data CoLiteral
 data CoType a
   = CotyCon a
   | CotyVar a
-  | CotyForall [a] (CoType a)
+  | CotyForall a (CoType a)
   | CotyArr (CoType a) (CoType a)
   | CotyApp (CoType a) (CoType a)
   | CotyRows (CoType a) [(Text, CoType a)]
@@ -118,7 +118,7 @@ instance Pretty a => Pretty (CoType a) where
   pretty (CotyCon v) = stypeCon (pretty v)
   pretty (CotyVar v) = stypeVar (squote <> pretty v)
   pretty (CotyForall vs v)
-    = skeyword (char '∀') <+> hsep (map (stypeVar . (squote <>) . pretty) vs) <> dot <+> pretty v
+    = skeyword (char '∀') <+> stypeVar (pretty vs) <> dot <+> pretty v
 
   pretty (CotyArr x e)
     | CotyArr{} <- x = parens (pretty x) <+> arrow <+> pretty e

@@ -50,7 +50,7 @@ makeBigLams t = (,) id <$> lowerType t
 
 errRef :: CoTerm
 errRef = CotRef (TgInternal "error")
-                (CotyForall [TgInternal "a"]
+                (CotyForall (TgInternal "a")
                             (CotyArr cotyString
                                      (CotyVar (TgInternal "a"))))
 
@@ -64,7 +64,8 @@ lowerExpr :: MonadLower m => Expr Typed -> m CoTerm
 lowerExpr e = lowerAt e =<< lowerType (getType e)
 
 lowerAt :: MonadLower m => Expr Typed -> CoType -> m CoTerm
-lowerAt e (CotyForall vs b) = flip (foldr (\x -> CotLam Big (x, CotyStar))) vs <$> lowerAt e b
+lowerAt (Ascription e _ _) t = lowerAt e t
+lowerAt e (CotyForall vs b) = CotLam Big (vs, CotyStar) <$> lowerAt e b
 lowerAt (VarRef (TvName p) _) ty = pure (CotRef p ty)
 lowerAt (Let vs t _) ty = do
   vs' <- for vs $ \(TvName var, ex, (_, ty)) -> do
@@ -100,7 +101,6 @@ lowerAt (Match ex cs an) ty = do
   CotMatch <$> lowerAt ex mt <*> pure (cs' ++ [fail])
 lowerAt (BinOp left op right a) t = lowerAt (App (App op left a) right a) t
 lowerAt Hole{} _ = error "holes can't be lowered"
-lowerAt (Ascription e _ _) t = lowerAt e t
 lowerAt e _ = lowerAnyway e
 
 lowerAnyway :: MonadLower m => Expr Typed -> m CoTerm
@@ -133,7 +133,9 @@ lowerType :: MonadLower m => Type Typed -> m CoType
 lowerType tt = case tt of
   t@TyTuple{} -> CotyExactRows <$> tup2Rec 1 t
   TyArr a b -> CotyArr <$> lowerType a <*> lowerType b
-  TyForall vs b -> CotyForall (map unTvName vs) <$> lowerType b
+  TyForall vs b -> do
+    b' <- lowerType b
+    pure (foldr CotyForall b' (map unTvName vs))
   TyApp a b -> CotyApp <$> lowerType a <*> lowerType b
   TyRows rho vs -> CotyRows <$> lowerType rho <*> do
     for vs $ \(label, tp) -> (,) label <$> lowerType tp
