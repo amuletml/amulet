@@ -12,7 +12,6 @@ import Core.Core hiding (CoTerm, CoPattern, CoType, CoStmt)
 import qualified Data.Map.Strict as Map
 import qualified Data.VarSet as VarSet
 import Data.VarSet (IsVar(..))
-import Data.Triple
 import Data.List
 
 import Control.Monad.Infer
@@ -43,8 +42,12 @@ tagOccurence env sts = fst (go sts) where
   go (CosLet vs:prg) =
     let (prg', free) = go prg
         vs' = tagBindings vs free
-     in (CosLet vs':prg', foldMap (freeIn . thd3) vs <> free)
-  go (t':prg) = first (fmap (flip OccursVar False) t':) (go prg)
+        free' = foldMap (\(v, _, e) -> toVar v `VarSet.delete` freeIn e) vs <> free
+     in (CosLet vs':prg', free')
+  go (CosForeign v t c:prg) =
+    let (prg', free) = go prg
+     in (CosForeign (depends v free) (convert t) c:prg', toVar v `VarSet.delete` free)
+  go (t':prg) = first (fmap (flip OccursVar True) t':) (go prg)
   go [] = ([], VarSet.singleton (main env))
 
   main = toVar . head

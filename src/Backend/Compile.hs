@@ -36,6 +36,7 @@ compileProgram :: forall a. Occurs a => Env -> [CoStmt a] -> LuaStmt
 compileProgram ev = LuaDo . (extendDef:) . compileProg where
   compileProg :: [CoStmt a] -> [LuaStmt]
   compileProg (CosForeign n' t s:xs)
+    | not (doesItOccur n') = compileProg xs
     | arity t > 1
     = let ags = map LuaName $ take (arity t) alpha
           mkF (a:ag) bd = LuaFunction [a] [LuaReturn (mkF ag bd)]
