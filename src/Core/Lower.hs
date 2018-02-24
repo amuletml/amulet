@@ -17,7 +17,8 @@ import qualified Data.Text as T
 import Data.Traversable
 import Data.Span
 
-import Core.Core
+import qualified Core.Core as C
+import Core.Core hiding (CoTerm, CoStmt, CoType, CoPattern)
 
 import Syntax
 
@@ -26,6 +27,11 @@ import Pretty (pretty)
 type MonadLower m
   = ( MonadGen Int m
     , MonadReader Env m )
+
+type CoTerm = C.CoTerm (Var Resolved)
+type CoType = C.CoType (Var Resolved)
+type CoPattern = C.CoPattern (Var Resolved)
+type CoStmt = C.CoStmt (Var Resolved)
 
 cotyString, cotyUnit, cotyBool, cotyInt :: CoType
 cotyString = runGenT (lowerType tyString) mempty

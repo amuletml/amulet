@@ -12,12 +12,13 @@ import Data.Triple
 
 import Control.Monad.Reader
 
+import Syntax (Resolved, Var(..))
 import Core.Optimise
 
 --- Folds various trivial expressions
 foldExpr :: TransformPass
 foldExpr = pass go where
-  go :: CoTerm -> Trans CoTerm
+  go :: CoTerm (Var Resolved) -> Trans (CoTerm (Var Resolved))
   go (CotLet [] e) = pure e
   go (CotExtend e []) = pure e
 

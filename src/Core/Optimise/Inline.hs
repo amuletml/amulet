@@ -42,7 +42,7 @@ betaReduce = pass go where
       pure $ substituteInTys (Map.singleton var tp) body
     _ -> pure term
 
-score :: CoTerm -> Trans Int
+score :: CoTerm (Var Resolved)  -> Trans Int
 score (CotRef v _) = do
   x <- isCon v
   if x
@@ -64,5 +64,5 @@ score (CotExtend e rs) = do
 score CotLit{} = pure 1
 score (CotTyApp t _) = (+ 1) <$> score t
 
-recursive :: CoTerm -> Var Resolved -> Bool
+recursive :: VarSet.IsVar a => CoTerm a -> Var Resolved -> Bool
 recursive e v = v `VarSet.member` freeIn e

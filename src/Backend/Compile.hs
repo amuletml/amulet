@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, ScopedTypeVariables, FlexibleContexts #-}
 module Backend.Compile
   ( compileProgram
   , compileLet
@@ -11,6 +11,7 @@ import Control.Monad
 import Control.Monad.Infer
 
 import Backend.Lua
+import Core.Occurrence
 import Core.Core
 import Core.Types
 import Syntax
@@ -19,6 +20,7 @@ import Data.Semigroup ((<>))
 
 import qualified Data.Map.Strict as Map
 import qualified Data.VarSet as VarSet
+import Data.VarSet (IsVar(..))
 
 import qualified Data.Text as T
 import Data.Text (Text)
@@ -30,8 +32,9 @@ type Returner = Maybe (LuaExpr -> LuaStmt)
 alpha :: [Text]
 alpha = map T.pack ([1..] >>= flip replicateM ['a'..'z'])
 
-compileProgram :: Env -> [CoStmt] -> LuaStmt
+compileProgram :: forall a. Occurs a => Env -> [CoStmt a] -> LuaStmt
 compileProgram ev = LuaDo . (extendDef:) . compileProg where
+  compileProg :: [CoStmt a] -> [LuaStmt]
   compileProg (CosForeign n' t s:xs)
     | arity t > 1
     = let ags = map LuaName $ take (arity t) alpha
@@ -46,10 +49,10 @@ compileProgram ev = LuaDo . (extendDef:) . compileProg where
     | otherwise = LuaLocal [LuaName n] [LuaBitE s]:compileProg xs
     where n = getName n'
 
-  compileProg (CosLet vs:xs) = compileLet (unzip3 vs) ++ compileProg xs where
+  compileProg (CosLet vs:xs) = compileLet (unzip3 vs) ++ compileProg xs
   compileProg (CosType _ cs:xs) = map compileConstructor cs ++ compileProg xs
   compileProg [] = [LuaCallS (main ev) []] where
-    main = LuaRef . LuaName . getTaggedName . head
+    main = LuaRef . LuaName . getTaggedName . toVar . head
          . sortOn key
          . filter isMain
          . Map.keys
@@ -59,7 +62,7 @@ compileProgram ev = LuaDo . (extendDef:) . compileProg where
     key (TgName k _) = k
     key _ = undefined
 
-compileConstructor :: (Var Resolved, CoType) -> LuaStmt
+compileConstructor :: Occurs a => (a, CoType a) -> LuaStmt
 compileConstructor (var, ty) | arity ty == 0
   = LuaLocal [lowerName var] [LuaTable [(LuaNumber 1, LuaString cn)]] where
     cn = getName var
@@ -68,21 +71,21 @@ compileConstructor (var, _) -- non-unit constructors, hard
     vl = LuaFunction [LuaName "x"] [LuaReturn (LuaTable [(LuaNumber 1, LuaString cn), (LuaNumber 2, LuaRef (LuaName "x"))])]
     cn = getName var
 
-compileExpr :: CoTerm -> LuaExpr
+compileExpr :: Occurs a => CoTerm a -> LuaExpr
 
 -- First handle binary operators
 compileExpr (CotRef v _) | isBinOp v
   = LuaFunction [left] [LuaReturn (LuaFunction
                                     [right]
-                                    [LuaReturn (LuaBinOp (LuaRef left) (remapOp (getTaggedName v)) (LuaRef right))])]
+                                    [LuaReturn (LuaBinOp (LuaRef left) (remapOp (getTaggedName (toVar v))) (LuaRef right))])]
     where left  = LuaName "l"
           right = LuaName "r"
 compileExpr (CotApp f e) =
   case (unwrap f, e) of
-    ((CotApp (CotRef f _) left), right) | isBinOp f ->
-      LuaBinOp (compileExpr left) (remapOp (getTaggedName f)) (compileExpr right)
-    ((CotRef f _), left) | isBinOp f ->
-      LuaFunction [name] [LuaReturn (LuaBinOp (compileExpr left) (remapOp (getTaggedName f)) (LuaRef name))]
+    (CotApp (CotRef f _) left, right) | isBinOp f ->
+      LuaBinOp (compileExpr left) (remapOp (getTaggedName (toVar f))) (compileExpr right)
+    (CotRef f _, left) | isBinOp f ->
+      LuaFunction [name] [LuaReturn (LuaBinOp (compileExpr left) (remapOp (getTaggedName (toVar f))) (LuaRef name))]
     _ -> LuaCall (compileExpr f) [compileExpr e]
 
     where name = LuaName "__r"
@@ -114,7 +117,7 @@ compileExpr s@CotMatch{}  = compileIife s
 global :: String -> LuaExpr
 global x = LuaRef (LuaIndex (LuaRef (LuaName "_G")) (LuaString (T.pack x)))
 
-compileStmt :: Returner -> CoTerm -> [LuaStmt]
+compileStmt :: Occurs a => Returner -> CoTerm a -> [LuaStmt]
 compileStmt r e@CotRef{} = pureReturn r $ compileExpr e
 compileStmt r e@CotLam{} = pureReturn r $ compileExpr e
 compileStmt r e@CotLit{} = pureReturn r $ compileExpr e
@@ -139,14 +142,14 @@ compileStmt r (CotExtend tbl exs) = [ LuaLocal [old, new] [compileExpr tbl, LuaT
         v = T.pack "v"
         pairs = LuaName (T.pack "pairs")
 
-lowerName :: Var Resolved -> LuaVar
-lowerName = LuaName . getTaggedName
+lowerName :: Occurs a => a -> LuaVar
+lowerName = LuaName . getTaggedName . toVar
 
-lowerKey :: Var Resolved -> LuaExpr
-lowerKey = LuaString . getTaggedName
+lowerKey :: Occurs a => a -> LuaExpr
+lowerKey = LuaString . getTaggedName . toVar
 
-getName :: Var Resolved -> Text
-getName = getTaggedName
+getName :: Occurs a => a -> Text
+getName = getTaggedName . toVar
 
 getTaggedName :: Var Resolved -> Text
 getTaggedName (TgName t i) = t <> T.pack (show i)
@@ -155,25 +158,31 @@ getTaggedName (TgInternal t) = t
 iife :: [LuaStmt] -> LuaExpr
 iife b = LuaCall (LuaFunction [] b) []
 
-compileIife :: CoTerm -> LuaExpr
+compileIife :: Occurs a => CoTerm a -> LuaExpr
 compileIife = iife . compileStmt (Just LuaReturn)
 
-compileLet :: ([Var Resolved], [CoType], [CoTerm]) -> [LuaStmt]
+compileLet :: forall a. Occurs a => ([a], [CoType a], [CoTerm a]) -> [LuaStmt]
 compileLet (vs, _, es) = locals recs (assigns nonrecs) where
   binds = zip vs es
   (nonrecs, recs) = partition (uncurry recursive) binds
 
+  locals :: [(a, CoTerm a)] -> [LuaStmt] -> [LuaStmt]
   locals xs =
     let (v, t) = unzip xs
+        bind v e
+          | doesItOccur v = [LuaLocal [lowerName v] [compileExpr e]]
+          | otherwise = compileStmt Nothing e
      in case v of
        [] -> id
-       _ -> (++) (zipWith (\x y -> LuaLocal [lowerName x] [compileExpr y]) v t)
+       _ -> (++) (concat (zipWith bind v t))
+
+  assigns :: [(a, CoTerm a)] -> [LuaStmt]
   assigns xs = case xs of
     [] -> []
     xs -> LuaLocal (map (lowerName . fst) xs) []:map one xs
   one (v, t) = LuaAssign [lowerName v] [compileExpr t]
 
-  recursive v term@CotLam{} = v `VarSet.member` freeIn term
+  recursive v term@CotLam{} = toVar v `VarSet.member` freeIn term
   recursive _ _ = False
 
 pureReturn :: Returner -> LuaExpr -> [LuaStmt]
@@ -192,19 +201,19 @@ foldAnd = foldl1 k where
     | r == LuaFalse || l == LuaFalse = LuaFalse
     | otherwise = LuaBinOp l "and" r
 
-patternTest :: CoPattern -> LuaExpr ->  LuaExpr
+patternTest :: forall a. Occurs a => CoPattern a -> LuaExpr ->  LuaExpr
 patternTest (CopCapture _ _) _   = LuaTrue
 patternTest (CopLit ColRecNil) _ = LuaTrue
-patternTest (CopLit l)     vr    = LuaBinOp (compileExpr (CotLit l)) "==" vr
+patternTest (CopLit l)     vr    = LuaBinOp (compileExpr (CotLit l :: CoTerm a)) "==" vr
 patternTest (CopExtend p rs) vr  = foldAnd (patternTest p vr : map test rs) where
   test (var', pat) = patternTest pat (LuaRef (LuaIndex vr (LuaString var')))
 patternTest (CopConstr con) vr   = foldAnd [tag con vr]
 patternTest (CopDestr con p) vr  = foldAnd [tag con vr, patternTest p (LuaRef (LuaIndex vr (LuaNumber 2)))]
 
-tag :: Var Resolved -> LuaExpr -> LuaExpr
+tag :: Occurs a => a -> LuaExpr -> LuaExpr
 tag con vr = LuaBinOp (LuaRef (LuaIndex vr (LuaNumber 1))) "==" (lowerKey con)
 
-patternBindings :: CoPattern -> LuaExpr -> [(LuaVar, LuaExpr)]
+patternBindings :: Occurs a => CoPattern a -> LuaExpr -> [(LuaVar, LuaExpr)]
 patternBindings (CopLit _) _        = []
 patternBindings (CopCapture n _) v  = [(lowerName n, v)]
 patternBindings (CopConstr _) _     = []
@@ -212,13 +221,13 @@ patternBindings (CopDestr _ p) vr   = patternBindings p (LuaRef (LuaIndex vr (Lu
 patternBindings (CopExtend p rs) vr = patternBindings p vr ++ concatMap (index vr) rs where
   index vr (var', pat) = patternBindings pat (LuaRef (LuaIndex vr (LuaString var')))
 
-compileMatch :: Returner -> CoTerm -> [(CoPattern, CoType, CoTerm)] -> Gen Int [LuaStmt]
+compileMatch :: Occurs a => Returner -> CoTerm a -> [(CoPattern a, CoType a, CoTerm a)] -> Gen Int [LuaStmt]
 compileMatch r ex ps =
   case ex of
     (CotRef f _) -> pure $ genIf (lowerName f) ps
     _ -> do
       -- Cache the matchee in a temporary variable
-      x <- (LuaName . ("__" <>) . (alpha !!)) <$> gen
+      x <- LuaName . ("__" <>) . (alpha !!) <$> gen
       pure $ compileStmt (Just $ LuaLocal [x] . (:[])) ex ++ genIf x ps
 
   where genBinding x (p, _, c) = ( patternTest p (LuaRef x)
@@ -261,8 +270,8 @@ ops = Map.fromList [ ("+", "+")
                  , ("||", "or")
                  , ("&&", "and") ]
 
-isBinOp :: Var Resolved -> Bool
-isBinOp (TgInternal v) = Map.member v ops
+isBinOp :: Occurs a => a -> Bool
+isBinOp x | TgInternal v <- toVar x = Map.member v ops
 isBinOp _ = False
 
 remapOp :: Text -> Text

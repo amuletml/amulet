@@ -32,7 +32,7 @@ dropBranches = pass' pass where
 
 matchKnownConstr :: TransformPass
 matchKnownConstr = pass go where
-  go :: CoTerm -> Trans CoTerm
+  go :: CoTerm (Var Resolved) -> Trans (CoTerm (Var Resolved))
   go it@(CotMatch e ptrns) = do
     weCan <- canWe e
     pure $ if weCan
@@ -40,7 +40,7 @@ matchKnownConstr = pass go where
               else it
   go x = pure x
 
-  canWe :: CoTerm -> Trans Bool
+  canWe :: CoTerm (Var Resolved) -> Trans Bool
   canWe (CotRef v _) = isCon v
   canWe (CotApp f _) = canWe f
   canWe (CotTyApp x _) = canWe x
@@ -52,13 +52,13 @@ matchKnownConstr = pass go where
   canWe CotLam{} = pure True
   canWe _ = pure False
 
-  doIt :: CoTerm -> [(CoPattern, CoType, CoTerm)] -> Maybe CoTerm
+  doIt :: CoTerm (Var Resolved) -> [(CoPattern (Var Resolved), CoType (Var Resolved), CoTerm (Var Resolved))] -> Maybe (CoTerm (Var Resolved))
   doIt x ((p, _, k):ps)
     | Just binds <- match p (stripTyApp x) = Just (CotLet binds k)
     | otherwise = doIt x ps
   doIt _ _ = Nothing
 
-  match :: CoPattern -> CoTerm -> Maybe [(Var Resolved, CoType, CoTerm)]
+  match :: CoPattern (Var Resolved) -> CoTerm (Var Resolved) -> Maybe [(Var Resolved, CoType (Var Resolved), CoTerm (Var Resolved))]
   match p (CotLam Big _ t) = match p t
   match (CopCapture v t) x = Just [(v, t, x)]
   match (CopConstr v) (CotRef v' _)
@@ -84,7 +84,9 @@ matchOfMatch = pass' go where
   go (CotMatch (CotMatch ie ibs) obs) = CotMatch ie (map (push obs) ibs)
   go x = x
 
-  push :: [(CoPattern, CoType, CoTerm)] -> (CoPattern, CoType, CoTerm) -> (CoPattern, CoType, CoTerm)
+  push :: [(CoPattern (Var Resolved), CoType (Var Resolved), CoTerm (Var Resolved))]
+       -> (CoPattern (Var Resolved), CoType (Var Resolved), CoTerm (Var Resolved))
+       -> (CoPattern (Var Resolved), CoType (Var Resolved), CoTerm (Var Resolved))
   push x (p, t, e) = (p, t, CotMatch e x)
 
 matchOfBottom :: TransformPass
