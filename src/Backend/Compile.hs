@@ -215,7 +215,9 @@ tag con vr = LuaBinOp (LuaRef (LuaIndex vr (LuaNumber 1))) "==" (lowerKey con)
 
 patternBindings :: Occurs a => CoPattern a -> LuaExpr -> [(LuaVar, LuaExpr)]
 patternBindings (CopLit _) _        = []
-patternBindings (CopCapture n _) v  = [(lowerName n, v)]
+patternBindings (CopCapture n _) v
+  | doesItOccur n = [(lowerName n, v)]
+  | otherwise = []
 patternBindings (CopConstr _) _     = []
 patternBindings (CopDestr _ p) vr   = patternBindings p (LuaRef (LuaIndex vr (LuaNumber 2)))
 patternBindings (CopExtend p rs) vr = patternBindings p vr ++ concatMap (index vr) rs where
