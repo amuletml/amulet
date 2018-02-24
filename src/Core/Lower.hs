@@ -17,7 +17,8 @@ import qualified Data.Text as T
 import Data.Traversable
 import Data.Span
 
-import Core.Core
+import qualified Core.Core as C
+import Core.Core hiding (CoTerm, CoStmt, CoType, CoPattern)
 
 import Syntax
 
@@ -26,6 +27,11 @@ import Pretty (pretty)
 type MonadLower m
   = ( MonadGen Int m
     , MonadReader Env m )
+
+type CoTerm = C.CoTerm (Var Resolved)
+type CoType = C.CoType (Var Resolved)
+type CoPattern = C.CoPattern (Var Resolved)
+type CoStmt = C.CoStmt (Var Resolved)
 
 cotyString, cotyUnit, cotyBool, cotyInt :: CoType
 cotyString = runGenT (lowerType tyString) mempty
@@ -84,7 +90,9 @@ lowerAt (Fun p bd an) (CotyArr a b) =
           fail <- patternMatchingFail (fst an) b
           pure (CotLam Small (arg, a) (CotMatch (CotRef arg a) [ (p', a, bd'), fail ]))
 lowerAt (Begin [x] _) t = lowerAt x t
-lowerAt (Begin xs _) t = CotBegin <$> traverse lowerExpr (init xs) <*> lowerAt (last xs) t
+lowerAt (Begin xs _) t =
+  let bind e = (,,) <$> fresh <*> lowerType (getType e) <*> lowerExpr e
+   in CotLet <$> traverse bind (init xs) <*> lowerAt (last xs) t
 lowerAt (Match ex cs an) ty = do
   mt <- lowerType (getType ex)
   cs' <- for cs $ \(pat, ex) ->

@@ -10,9 +10,11 @@ import Core.Optimise
 
 import Control.Monad.Gen
 
+import Syntax (Var(..), Resolved)
+
 import Data.Maybe
 
-optmOnce :: [CoStmt] -> Gen Int [CoStmt]
+optmOnce :: [CoStmt (Var Resolved)] -> Gen Int [CoStmt (Var Resolved)]
 optmOnce t = fmap (fromMaybe t) . runTransform . transformStmts passes $ t where
   passes = mconcat
       [ dropBranches
@@ -27,9 +29,9 @@ optmOnce t = fmap (fromMaybe t) . runTransform . transformStmts passes $ t where
       , dropUselessLet
       ]
 
-optimise :: [CoStmt] -> Gen Int [CoStmt]
+optimise :: [CoStmt (Var Resolved)] -> Gen Int [CoStmt (Var Resolved)]
 optimise = go 25 where
-  go :: Integer -> [CoStmt] -> Gen Int [CoStmt]
+  go :: Integer -> [CoStmt (Var Resolved)] -> Gen Int [CoStmt (Var Resolved)]
   go k sts
     | k > 0 = go (k - 1) =<< optmOnce sts
     | otherwise = pure sts

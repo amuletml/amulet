@@ -12,12 +12,13 @@ import Data.Triple
 
 import Control.Monad.Reader
 
+import Syntax (Resolved, Var(..))
 import Core.Optimise
 
 --- Folds various trivial expressions
 foldExpr :: TransformPass
 foldExpr = pass go where
-  go :: CoTerm -> Trans CoTerm
+  go :: CoTerm (Var Resolved) -> Trans (CoTerm (Var Resolved))
   go (CotLet [] e) = pure e
   go (CotExtend e []) = pure e
 
@@ -27,14 +28,6 @@ foldExpr = pass go where
       Just d@(CotRef _ _) -> pure d
       Just d@(CotLit _) -> pure d
       _ -> pure e
-
-  go (CotBegin es e) =
-    let es' = foldr (\c r -> case c of
-                        CotBegin xs x -> xs ++ x:r
-                        CotLit _ -> r
-                        CotRef _ _ -> r
-                        x -> x:r) [] es
-     in pure (if null es' then e else CotBegin es' e)
 
   go e@(CotApp (CotApp (CotRef (TgInternal v) _) (CotLit ll)) (CotLit rl)) =
     pure $ case (v, ll, rl) of
@@ -95,6 +88,5 @@ dropUselessLet = pass' go where
   pure CotApp{} = False
   pure (CotTyApp f _) = pure f
   pure (CotLet vs e) = pure e && all (pure . thd3) vs
-  pure (CotBegin xs e) = all pure xs && pure e
   pure (CotMatch e bs) = pure e && all (pure . thd3) bs
   pure (CotExtend e rs) = pure e && all (pure . thd3) rs

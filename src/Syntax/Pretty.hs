@@ -94,7 +94,7 @@ instance (Pretty (Var p)) => Pretty (Type p) where
     | TyTuple{} <- x = parens (pretty x) <+> arrow <+> pretty e
     | otherwise = pretty x <+> arrow <+> pretty e
 
-  pretty (TyRows p rows) = braces $ pretty p <+> soperator (pipe) <+> hsep (punctuate comma (prettyRows rows)) 
+  pretty (TyRows p rows) = braces $ pretty p <+> soperator pipe <+> hsep (punctuate comma (prettyRows rows)) 
   pretty (TyExactRows rows) = record (prettyRows rows)
 
   pretty (TyApp e x@TyApp{}) = pretty e <+> parens (pretty x)

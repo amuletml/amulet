@@ -1,10 +1,11 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, DerivingStrategies #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, DerivingStrategies, FlexibleInstances #-}
 module Data.VarSet
   ( Set
   , fromList
   , member, insert
   , difference, union, singleton, delete
   , (<>), mempty
+  , IsVar(..)
   ) where
 
 import qualified Data.IntSet as Set
@@ -43,3 +44,9 @@ singleton _ = coerce Set.empty
 delete :: Var Resolved -> Set -> Set
 delete (TgName _ x) set = coerce (Set.delete x (coerce set))
 delete _ set = set
+
+class IsVar a where
+  toVar :: a -> Var Resolved
+
+instance IsVar (Var Resolved) where
+  toVar = id

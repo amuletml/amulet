@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, LambdaCase, TupleSections #-}
+{-# LANGUAGE OverloadedStrings, LambdaCase #-}
 {-# LANGUAGE FlexibleContexts #-}
 
 module Syntax.Resolve.Scope
