@@ -52,13 +52,20 @@ matchKnownConstr = pass go where
   canWe CotLam{} = pure True
   canWe _ = pure False
 
-  doIt :: CoTerm (Var Resolved) -> [(CoPattern (Var Resolved), CoType (Var Resolved), CoTerm (Var Resolved))] -> Maybe (CoTerm (Var Resolved))
+  doIt :: CoTerm (Var Resolved)
+       -> [(CoPattern (Var Resolved), CoType (Var Resolved), CoTerm (Var Resolved))]
+       -> Maybe (CoTerm (Var Resolved))
   doIt x ((p, _, k):ps)
-    | Just binds <- match p (stripTyApp x) = Just (CotLet binds k)
+    | Just binds <- match p (stripTyApp x) = 
+      if not (isError k)
+         then Just (CotLet binds k)
+         else Nothing
     | otherwise = doIt x ps
   doIt _ _ = Nothing
 
-  match :: CoPattern (Var Resolved) -> CoTerm (Var Resolved) -> Maybe [(Var Resolved, CoType (Var Resolved), CoTerm (Var Resolved))]
+  match :: CoPattern (Var Resolved)
+        -> CoTerm (Var Resolved)
+        -> Maybe [(Var Resolved, CoType (Var Resolved), CoTerm (Var Resolved))]
   match p (CotLam Big _ t) = match p t
   match (CopCapture v t) x = Just [(v, t, x)]
   match (CopConstr v) (CotRef v' _)

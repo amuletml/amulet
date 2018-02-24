@@ -2,14 +2,22 @@
 module Core.Optimise.Inline
   ( inlineVariable
   , betaReduce
+  , complexSafePropag
   ) where
 
+import qualified Data.Map.Merge.Strict as Map
 import qualified Data.Map.Strict as Map
 import qualified Data.VarSet as VarSet
+import Data.Generics
 import Data.Triple
+import Data.Either
+import Data.Maybe
 
 import Core.Optimise
 import Syntax (Resolved)
+
+import Debug.Trace
+import Pretty (pretty)
 
 limit :: Int
 limit = 500
@@ -42,6 +50,29 @@ betaReduce = pass go where
       pure $ substituteInTys (Map.singleton var tp) body
     _ -> pure term
 
+complexSafePropag :: TransformPass
+complexSafePropag = pass go where
+  go :: CoTerm (Var Resolved) -> Trans (CoTerm (Var Resolved))
+  go (CotLet vs e) =
+    let uses = countUses e
+        classify (v, t, e) = do
+          cost <- score e
+          pure $ if fromMaybe 0 (Map.lookup v uses) == 1 && cost < limit && not (recursiveLam e v)
+                    then traceShow (pretty e) $ Left (Map.singleton v e)
+                    else Right (v, t, e)
+     in do
+       (propag, keep) <- partitionEithers <$> (traverse classify vs)
+       pure $ CotLet keep (substitute (mconcat propag) e)
+  go x = pure x
+
+  countUses = everything combine (mkQ mempty go) where
+    go :: CoTerm (Var Resolved) -> Map.Map (Var Resolved) Integer
+    go (CotRef v _) = Map.singleton v 1
+    go _ = mempty
+
+    combine :: Map.Map (Var Resolved) Integer -> Map.Map (Var Resolved) Integer -> Map.Map (Var Resolved) Integer
+    combine = Map.merge Map.preserveMissing Map.preserveMissing (Map.zipWithMatched (const (+)))
+
 score :: CoTerm (Var Resolved)  -> Trans Int
 score (CotRef v _) = do
   x <- isCon v
@@ -66,3 +97,7 @@ score (CotTyApp t _) = (+ 1) <$> score t
 
 recursive :: VarSet.IsVar a => CoTerm a -> Var Resolved -> Bool
 recursive e v = v `VarSet.member` freeIn e
+
+recursiveLam :: VarSet.IsVar a => CoTerm a -> Var Resolved -> Bool
+recursiveLam (CotLam _ _ e) v = v `VarSet.member` freeIn e
+recursiveLam _ _ = False
