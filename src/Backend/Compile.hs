@@ -229,9 +229,12 @@ compileMatch r ex ps =
   case ex of
     (CotRef f _) -> pure $ genIf (lowerName f) ps
     _ -> do
-      -- Cache the matchee in a temporary variable
+      -- Cache the matchee in a temporary variable. We attempt to detect the
+      -- trivial `local x = expr` case, otherwise we pre-declare the variable.
       x <- LuaName . ("__" <>) . (alpha !!) <$> gen
-      pure $ compileStmt (Just $ LuaLocal [x] . (:[])) ex ++ genIf x ps
+      pure $ case compileStmt (Just $ LuaAssign [x] . pure) ex of
+               [LuaAssign [x'] [bod]] | x == x' -> LuaLocal [x] [bod] : genIf x ps
+               bod -> LuaLocal [x] [] : bod ++ genIf x ps
 
   where genBinding x (p, _, c) = ( patternTest p (LuaRef x)
                                  , (case patternBindings p (LuaRef x) of
