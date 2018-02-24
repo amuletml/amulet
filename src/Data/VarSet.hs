@@ -10,10 +10,12 @@ module Data.VarSet
 
 import qualified Data.IntSet as Set
 
-import Syntax (Var(..), Resolved)
+import Syntax.Pretty (Var(..), Resolved)
 
 import Data.Semigroup
 import Data.Coerce
+
+import Pretty(Pretty)
 
 newtype Set
   = Set Set.IntSet
@@ -45,7 +47,7 @@ delete :: Var Resolved -> Set -> Set
 delete (TgName _ x) set = coerce (Set.delete x (coerce set))
 delete _ set = set
 
-class IsVar a where
+class (Eq a, Ord a, Pretty a, Show a) => IsVar a where
   toVar :: a -> Var Resolved
 
 instance IsVar (Var Resolved) where
