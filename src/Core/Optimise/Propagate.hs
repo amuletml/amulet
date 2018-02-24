@@ -17,12 +17,16 @@ import Core.Optimise
 trivialPropag :: TransformPass
 trivialPropag = pass' go where
   go (CotLet vs e) =
-    let keep e@(v, _, t) = if trivial t then Left (Map.singleton v t)
-                                        else Right e
+    let keep e@(v, _, t) =
+          if trivial t
+             then Left (Map.singleton v t)
+             else Right e
         (ss, vs') = partitionEithers (map keep vs)
 
-        trivial CotLit{} = True
         trivial (CotExtend e rs) = trivial e && all (trivial . thd3) rs
+        trivial CotLit{} = True
+        trivial CotRef{} = True
+        trivial (CotTyApp t _) = trivial t
         trivial _ = False
 
         subst = substitute (mconcat ss)
