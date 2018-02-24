@@ -44,12 +44,12 @@ constrPropag = pass go where
     pure $ CotLet (unionBy eqf3 keep ks) (substitute (mconcat ss) e)
   go x = pure x
 
-  conLike :: CoTerm -> Trans Bool
+  conLike :: CoTerm (Var Resolved) -> Trans Bool
   conLike x = case stripTyApp x of
     CotApp (CotRef x _) _ -> isCon x
     _ -> pure False
 
-  splitCon :: CoTerm -> Var Resolved -> (CoTerm, (Var Resolved, CoType, CoTerm))
+  splitCon :: CoTerm (Var Resolved) -> Var Resolved -> (CoTerm (Var Resolved), (Var Resolved, CoType (Var Resolved), CoTerm (Var Resolved)))
   splitCon (CotApp con ca) v
     | tp <- findConstrTy con
     , CotyArr arg _ <- tp

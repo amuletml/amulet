@@ -21,6 +21,7 @@ import Syntax.Resolve
 import Syntax.Desugar
 import Syntax
 
+import Core.Occurrence
 import Core.Simplify
 import Core.Lower
 import Core.Core
@@ -30,13 +31,16 @@ import Errors
 import Parser
 import Parser.Wrapper
 
-data CompileResult = CSuccess ([Toplevel Typed], [CoStmt], [CoStmt], Env)
-                   | CParse   String Span
-                   | CResolve ResolveError
-                   | CInfer   TypeError
+import Text.Show.Pretty
+
+data CompileResult a
+  = CSuccess ([Toplevel Typed], [CoStmt (Var Resolved)], [CoStmt a], Env)
+  | CParse   String Span
+  | CResolve ResolveError
+  | CInfer   TypeError
 
 
-compile :: SourceName -> T.Text -> CompileResult
+compile :: SourceName -> T.Text -> CompileResult (OccursVar (Var Resolved))
 compile name x =
   case runParser name (B.toLazyByteString $ T.encodeUtf8Builder x) parseInput of
     POK _ parsed -> runGen $ do
@@ -49,7 +53,7 @@ compile name x =
             Right (prog, env) -> do
               lower <- runReaderT (lowerProg prog) env
               optm <- optimise lower
-              pure (CSuccess (prog, lower, optm, env))
+              pure (CSuccess (prog, lower, tagOccurence env optm, env))
             Left e -> pure (CInfer e)
         Left e -> pure (CResolve e)
     PFailed msg sp -> CParse msg sp
@@ -65,7 +69,7 @@ compileFromTo fp x emit =
     CResolve e -> putStrLn "Resolution error" >> report e x
     CInfer e -> putStrLn "Type error" >> report e x
 
-test :: String -> IO (Maybe ([CoStmt], Env))
+test :: String -> IO (Maybe ([CoStmt (Var Resolved)], Env))
 test x = do
   putStrLn "\x1b[1;32m(* Program: *)\x1b[0m"
   case compile "<test>" (T.pack x) of
@@ -80,6 +84,7 @@ test x = do
       putStrLn "\x1b[1;32m(* Core lowering: *)\x1b[0m"
       putDoc (pretty core)
       putStrLn "\x1b[1;32m(* Optimised: *)\x1b[0m"
+      pPrint optm
       putDoc (pretty optm)
       pure (Just (core, env))
     CParse e s -> Nothing <$ report (pretty s <> colon <+> pretty e) (T.pack x)

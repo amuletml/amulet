@@ -69,7 +69,7 @@ putDocWithoutColour :: Doc -> IO ()
 putDocWithoutColour = putStrLn . displayDecorated (flip const) . renderPretty 0.4 100
 
 hPutDoc :: Handle -> Doc -> IO ()
-hPutDoc h = hPutStrLn h . displayDecorated decorate . renderPretty 0.4 100 where
+hPutDoc h = hPutStrLn h . displayDecorated decorate . renderPretty 0.4 100
 
 render :: Doc -> String
 render = displayDecorated decorate . renderPretty 0.4 100

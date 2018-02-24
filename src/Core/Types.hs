@@ -20,12 +20,12 @@ import Data.List
 
 import Syntax (Var, Resolved)
 
-arity :: CoType -> Int
+arity :: CoType a -> Int
 arity (CotyArr _ t) = 1 + arity t
 arity (CotyForall _ t) = arity t
 arity _ = 0
 
-approximateType :: CoTerm -> Maybe CoType
+approximateType :: CoTerm (Var Resolved) -> Maybe (CoType (Var Resolved))
 approximateType (CotRef _ t) = pure t
 approximateType (CotLam Big (v, _) f) = CotyForall v <$> approximateType f
 approximateType (CotLam Small (_, t) f) = CotyArr t <$> approximateType f
@@ -36,7 +36,6 @@ approximateType (CotLet _ e) = approximateType e
 approximateType (CotMatch _ xs) = case xs of
   ((_, _, t):_) -> approximateType t
   [] -> error "impossible approximateType empty match"
-approximateType (CotBegin _ t) = approximateType t
 approximateType (CotLit l) = pure $ case l of
   ColInt{} -> cotyInt
   ColStr{} -> cotyString
@@ -52,10 +51,10 @@ approximateType (CotTyApp f at) = do
       go x = x
   pure (replace t)
 
-unify :: CoType -> CoType -> Maybe (Map.Map (Var Resolved) CoType)
+unify :: (Ord a, Data a) => CoType a -> CoType a -> Maybe (Map.Map a (CoType a))
 unify a b = execStateT (unify' a b) mempty
 
-unify' :: CoType -> CoType -> StateT (Map.Map (Var Resolved) CoType) Maybe ()
+unify' :: (Ord a, Data a) => CoType a -> CoType a -> StateT (Map.Map a (CoType a)) Maybe ()
 unify' (CotyVar v) t = do
   x <- gets (Map.lookup v)
   case x of
