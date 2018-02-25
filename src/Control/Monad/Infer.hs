@@ -76,9 +76,12 @@ data TypeError where
   NotEqual :: Pretty (Var p) => Type p -> Type p -> TypeError
   KindsNotEqual :: Pretty (Var p) => Kind p -> Kind p -> TypeError
   Occurs :: Pretty (Var p) => Var p -> Type p -> TypeError
-  Impredicative :: Pretty (Var p) => Var p -> Type p -> TypeError
+
   NotInScope :: Var Resolved -> TypeError
   FoundHole :: [Expr Typed] -> TypeError
+
+  Impredicative :: Pretty (Var p) => Var p -> Type p -> TypeError
+  ImpredicativeApp :: Pretty (Var p) => Type p -> Type p -> TypeError
 
   EscapedSkolems :: [Skolem Typed] -> Type Typed -> TypeError
   SkolBinding :: Skolem Typed -> Type Typed -> TypeError

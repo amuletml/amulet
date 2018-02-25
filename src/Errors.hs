@@ -60,11 +60,20 @@ instance Pretty TypeError where
     <#> missing ra rb
     | otherwise
     = string "\x1b[1;32minternal compiler error\x1b[0m: NoOverlap" <+> verbatim ta <+> verbatim tb
+
   pretty (Impredicative v t)
     = vsep [ string "Illegal instantiation of type variable" <+> stypeVar (pretty v)
-         </> indent 16 (string "with polymorphic type" <+> verbatim t)
+           , indent 16 (string "with polymorphic type" <+> verbatim t)
            , string "Note:" <+> string "doing so would constitute" <+> stypeCon (string "impredicative polymorphism")
            ]
+  pretty (ImpredicativeApp tf tx)
+    = vsep [ string "Illegal use of polymorphic type" <+> verbatim tx
+           , indent 2 $ string "as argument to the type function" <+> verbatim tf
+           , string "Note:" <+> string "instantiating a type variable"
+           <+> nest 2 (parens (string "the argument to" <+> verbatim tf)
+                   </> string "with a polymorphic type constitutes" <+> stypeCon (string "impredicative polymorphism"))
+           ]
+
   pretty (IllegalTypeApp ex ta _)
     = vsep [ string "Illegal type application" <+> verbatim ex
            , bullet (string "because of type ") <+> verbatim ta
@@ -121,7 +130,7 @@ reportI err file
                               $ T.pack "\x1b[1;34m"
                               <> T.justifyRight linePad ' ' before <> spaceC <> pipeC
                               <> T.pack "\x1b[0m"
-                              <> body
+                              <> spaceC <> body
      in do
        putDoc (pretty (I.ArisingFrom err' reason))
 
