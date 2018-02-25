@@ -71,7 +71,6 @@ instance Pretty a => Pretty (CoAtom a) where
     = soperator (char 'Λ') <+> parens (pretty v <+> colon <+> pretty t) <> nest 2 (dot </> pretty c)
   pretty (CoaLam Small (v, t) c)
     = soperator (char 'λ') <+> parens (pretty v <+> colon <+> pretty t) <> nest 2 (dot </> pretty c)
-
   pretty (CoaLit l) = pretty l
 
 instance Pretty a => Pretty (CoTerm a) where
@@ -79,14 +78,17 @@ instance Pretty a => Pretty (CoTerm a) where
   pretty (CotApp f x) = pretty f <+> pretty x
   pretty (CotTyApp f t) = pretty f <+> soperator (char '@') <> pretty t
 
+  pretty (CotLet [x] e) = keyword "let" <+> braces (space <> pprLet1 x <> space) <+> keyword "in" <#> pretty e
   pretty (CotLet xs e) = keyword "let" <+> pprLet xs </> (keyword "in" <+> pretty e)
   pretty (CotMatch e ps) = keyword "match" <+> pretty e <+> pprCases ps
   pretty (CotExtend x rs) = braces $ pretty x <+> pipe <+> prettyRows rs where
     prettyRows = hsep . punctuate comma . map (\(x, t, v) -> text x <+> colon <+> pretty t <+> equals <+> pretty v)
 
 pprLet :: Pretty a => [(a, CoType a, CoTerm a)] -> Doc
-pprLet = braces' . vsep . map (indent 2) . punctuate semi . map one where
-  one (a, b, c) = pretty a <+> colon <+> pretty b <+> nest 2 (equals </> pretty c)
+pprLet = braces' . vsep . map (indent 2) . punctuate semi . map pprLet1
+
+pprLet1 :: Pretty a => (a, CoType a, CoTerm a) -> Doc
+pprLet1 (a, b, c) = pretty a <+> colon <+> pretty b <+> nest 2 (equals </> pretty c)
 
 pprBegin :: [Doc] -> Doc
 pprBegin = braces' . vsep . map (indent 2) . punctuate semi
