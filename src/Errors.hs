@@ -113,7 +113,7 @@ reportI err file
         linePad = length (show endLine) + 1
         putLine before body = T.putStrLn
                               $ T.pack "\x1b[1;34m"
-                              <> T.replicate (linePad - T.length before) spaceC <> before <> T.singleton ' ' <> pipeC
+                              <> T.justifyRight linePad ' ' before <> spaceC <> pipeC
                               <> T.pack "\x1b[0m"
                               <> body
      in do
