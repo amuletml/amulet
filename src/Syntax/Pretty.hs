@@ -94,7 +94,7 @@ instance (Pretty (Var p)) => Pretty (Type p) where
     | TyTuple{} <- x = parens (pretty x) <+> arrow <+> pretty e
     | otherwise = pretty x <+> arrow <+> pretty e
 
-  pretty (TyRows p rows) = braces $ pretty p <+> soperator pipe <+> hsep (punctuate comma (prettyRows colon rows)) 
+  pretty (TyRows p rows) = enclose (lbrace <> space) (space <> rbrace)  $ pretty p <+> soperator pipe <+> hsep (punctuate comma (prettyRows colon rows)) 
   pretty (TyExactRows rows) = record (prettyRows colon rows)
 
   pretty (TyApp e x@TyApp{}) = pretty e <+> parens (pretty x)
@@ -162,7 +162,7 @@ instance Pretty (Span, Type Typed) where
   pretty (x, _) = pretty x
 
 record :: [Doc] -> Doc
-record = braces . hsep . punctuate comma
+record = enclose (lbrace <> space) (space <> rbrace) . hsep . punctuate comma
 
 prettyOneBinding :: Pretty (Var p) => Var p -> Expr p -> Doc
 prettyOneBinding n v = hsep (pretty n:map pretty args) <> sig <+> nest 2 (equals </> pretty rest') where

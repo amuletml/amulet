@@ -66,7 +66,7 @@ compileFromTo fp x emit =
     CSuccess (_, _, core, env) -> emit (compileProgram env core)
     CParse e s -> putStrLn "Parse error" >> report (pretty s <> colon <+> pretty e) x
     CResolve e -> putStrLn "Resolution error" >> report e x
-    CInfer e -> putStrLn "Type error" >> report e x
+    CInfer e -> putStrLn "Type error" >> reportI e x
 
 test :: String -> IO (Maybe ([CoStmt (Var Resolved)], Env))
 test x = do
@@ -89,7 +89,7 @@ test x = do
       pure (Just (core, env))
     CParse e s -> Nothing <$ report (pretty s <> colon <+> pretty e) (T.pack x)
     CResolve e -> Nothing <$ report e (T.pack x)
-    CInfer e -> Nothing <$ report e (T.pack x)
+    CInfer e -> Nothing <$ reportI e (T.pack x)
 
 main :: IO ()
 main = do
