@@ -88,7 +88,7 @@ prettyRows = braces . hsep . punctuate comma . map (\(x, y) -> string (T.unpack 
 missing :: [(Text, b)] -> [(Text, b)] -> Doc
 missing ra rb
   | length ra < length rb
-  =  indent 2 $ bullet (string "Namely, the following fields are missing:") <+> hsep (punctuate comma (diff ra rb))
+  =  indent 2 $ bullet (string "Namely, the following fields are missing:") <+> hsep (punctuate comma (diff rb ra))
   | length ra > length rb
   =  indent 2 $ bullet (string "Namely, the following fields should not be present:") <+> hsep (punctuate comma (diff ra rb))
   | length ra == length rb
