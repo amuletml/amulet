@@ -4,26 +4,28 @@ module Core.Core where
 import Pretty
 
 import qualified Data.VarSet as VarSet
-import Data.Generics hiding (empty)
 import Data.Data (Data, Typeable)
 import Data.Text (Text, pack)
 import Data.Triple
 
-import Syntax.Pretty (Var(..), Resolved)
+import Syntax
+
+data CoAtom a
+  = CoaRef a (CoType a)
+  | CoaLam Size (a, CoType a) (CoTerm a)
+  | CoaLit CoLiteral
+  deriving (Eq, Show, Ord, Data, Typeable, Functor)
 
 data CoTerm a
-  = CotRef a (CoType a)
-  | CotLam Size (a, CoType a) (CoTerm a)
-  | CotApp (CoTerm a) (CoTerm a) -- removes a λ
+  = CotAtom (CoAtom a)
+  | CotApp (CoAtom a) (CoAtom a) -- removes a λ
 
   | CotLet [(a, CoType a, CoTerm a)] (CoTerm a)
-  | CotMatch (CoTerm a) [(CoPattern a, CoType a, CoTerm a)]
+  | CotMatch (CoAtom a) [(CoPattern a, CoType a, CoTerm a)]
 
-  | CotLit CoLiteral
+  | CotExtend (CoAtom a) [(Text, CoType a, CoAtom a)]
 
-  | CotExtend (CoTerm a) [(Text, CoType a, CoTerm a)]
-
-  | CotTyApp (CoTerm a) (CoType a) -- removes a Λ
+  | CotTyApp (CoAtom a) (CoType a) -- removes a Λ
   deriving (Eq, Show, Ord, Data, Typeable, Functor)
 
 data CoPattern a
@@ -63,37 +65,30 @@ data CoStmt a
   | CosType a [(a, CoType a)]
   deriving (Eq, Show, Ord, Data, Typeable, Functor)
 
-parenFun :: Pretty a => CoTerm a -> Doc
-parenFun f = case f of
-  CotLam{} -> parens (pretty f)
-  CotLet{} -> parens (pretty f)
-  CotMatch{} -> parens (pretty f)
-  CotApp{} -> parens (pretty f)
-  _ -> pretty f
-
-parenArg :: Pretty a => CoTerm a -> Doc
-parenArg f = case f of
-  CotTyApp{} -> parens (pretty f)
-  _ -> parenFun f
+instance Pretty a => Pretty (CoAtom a) where
+  pretty (CoaRef v _) = pretty v
+  pretty (CoaLam Big (v, t) c)
+    = soperator (char 'Λ') <+> parens (pretty v <+> colon <+> pretty t) <> nest 2 (dot </> pretty c)
+  pretty (CoaLam Small (v, t) c)
+    = soperator (char 'λ') <+> parens (pretty v <+> colon <+> pretty t) <> nest 2 (dot </> pretty c)
+  pretty (CoaLit l) = pretty l
 
 instance Pretty a => Pretty (CoTerm a) where
-  pretty (CotRef v _) = pretty v
-  pretty (CotLam Big (v, t) c)
-    = soperator (char 'Λ') <+> parens (pretty v <+> colon <+> pretty t) <> nest 2 (dot </> pretty c)
-  pretty (CotLam Small (v, t) c)
-    = soperator (char 'λ') <+> parens (pretty v <+> colon <+> pretty t) <> nest 2 (dot </> pretty c)
-  pretty (CotApp f x) = parenFun f <+> parenArg x
-  pretty (CotTyApp f t) = parenFun f <+> soperator (char '@') <> pretty t
+  pretty (CotAtom a) = pretty a
+  pretty (CotApp f x) = pretty f <+> pretty x
+  pretty (CotTyApp f t) = pretty f <+> soperator (char '@') <> pretty t
 
+  pretty (CotLet [x] e) = keyword "let" <+> braces (space <> pprLet1 x <> space) <+> keyword "in" <#> pretty e
   pretty (CotLet xs e) = keyword "let" <+> pprLet xs </> (keyword "in" <+> pretty e)
-  pretty (CotLit l) = pretty l
   pretty (CotMatch e ps) = keyword "match" <+> pretty e <+> pprCases ps
   pretty (CotExtend x rs) = braces $ pretty x <+> pipe <+> prettyRows rs where
     prettyRows = hsep . punctuate comma . map (\(x, t, v) -> text x <+> colon <+> pretty t <+> equals <+> pretty v)
 
 pprLet :: Pretty a => [(a, CoType a, CoTerm a)] -> Doc
-pprLet = braces' . vsep . map (indent 2) . punctuate semi . map one where
-  one (a, b, c) = pretty a <+> colon <+> pretty b <+> nest 2 (equals </> pretty c)
+pprLet = braces' . vsep . map (indent 2) . punctuate semi . map pprLet1
+
+pprLet1 :: Pretty a => (a, CoType a, CoTerm a) -> Doc
+pprLet1 (a, b, c) = pretty a <+> colon <+> pretty b <+> nest 2 (equals </> pretty c)
 
 pprBegin :: [Doc] -> Doc
 pprBegin = braces' . vsep . map (indent 2) . punctuate semi
@@ -152,31 +147,26 @@ instance Pretty a => Pretty (CoStmt a) where
 instance Pretty a => Pretty [CoStmt a] where
   pretty = vcat . map pretty
 
-{-# ANN freeIn "HLint: ignore" #-}
--- Rationale: can't use <> because of Doc. Ughr.
+freeInAtom :: VarSet.IsVar a => CoAtom a -> VarSet.Set
+freeInAtom (CoaRef v _) = VarSet.singleton (VarSet.toVar v)
+freeInAtom (CoaLam Small (v, _) e) = VarSet.delete (VarSet.toVar v) (freeIn e)
+freeInAtom (CoaLam Big _ e) = freeIn e
+freeInAtom (CoaLit _) = mempty
+
 freeIn :: VarSet.IsVar a => CoTerm a -> VarSet.Set
-freeIn (CotRef v _) = VarSet.singleton (VarSet.toVar v)
-freeIn (CotLam Small (v, _) e) = VarSet.delete (VarSet.toVar v) (freeIn e)
-freeIn (CotLam Big _ e) = freeIn e
-freeIn (CotApp f x) = freeIn f `mappend` freeIn x
-freeIn (CotLet vs e) = VarSet.difference (freeIn e `mappend` foldMap (freeIn . thd3) vs)
+freeIn (CotAtom a) = freeInAtom a
+freeIn (CotApp f x) = freeInAtom f <> freeInAtom x
+freeIn (CotLet vs e) = VarSet.difference (freeIn e <> foldMap (freeIn . thd3) vs)
                                          (VarSet.fromList (map (VarSet.toVar . fst3) vs))
-freeIn (CotMatch e bs) = freeIn e `mappend` foldMap freeInBranch bs where
+freeIn (CotMatch e bs) = freeInAtom e <> foldMap freeInBranch bs where
   freeInBranch (b, _, e) = VarSet.difference (freeIn e) (bound b)
   bound (CopCapture v _) = VarSet.singleton (VarSet.toVar v)
   bound (CopDestr _ p) = bound p
-  bound (CopExtend p ps) = foldMap (bound . snd) ps `mappend` bound p
+  bound (CopExtend p ps) = foldMap (bound . snd) ps <> bound p
   bound _ = mempty
-freeIn (CotLit _) = mempty
-freeIn (CotExtend c rs) = freeIn c `mappend` foldMap (freeIn . thd3) rs
-freeIn (CotTyApp f _) = freeIn f
+freeIn (CotExtend c rs) = freeInAtom c <> foldMap (freeInAtom . thd3) rs
+freeIn (CotTyApp f _) = freeInAtom f
 
-isError :: CoTerm (Var Resolved) -> Bool
-isError (CotApp (CotTyApp (CotRef (TgInternal n) _) _) _) = n == pack "error"
+isError :: CoAtom (Var Resolved) -> Bool
+isError (CoaRef (TgInternal n) _) = n == pack "error"
 isError _ = False
-
-stripTyApp :: forall a. (Typeable a, Data a) => CoTerm a -> CoTerm a
-stripTyApp = everywhere (mkT go) where
-  go :: CoTerm a -> CoTerm a
-  go (CotTyApp x _) = x
-  go x = x

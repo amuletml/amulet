@@ -20,7 +20,7 @@ import Data.Span
 import Data.List
 
 import qualified Core.Core as C
-import Core.Core hiding (CoTerm, CoStmt, CoType, CoPattern)
+import Core.Core hiding (CoAtom, CoTerm, CoStmt, CoType, CoPattern)
 
 import Syntax
 
@@ -30,6 +30,7 @@ type MonadLower m
   = ( MonadGen Int m
     , MonadReader Env m )
 
+type CoAtom = C.CoAtom (Var Resolved)
 type CoTerm = C.CoTerm (Var Resolved)
 type CoType = C.CoType (Var Resolved)
 type CoPattern = C.CoPattern (Var Resolved)
@@ -45,13 +46,13 @@ makeBigLams :: MonadLower m
             => Type Typed
             -> m (CoTerm -> CoTerm, CoType)
 makeBigLams (TyForall vs t) = do
-  let biglam (TvName x:xs) = CotLam Big (x, CotyStar) . biglam xs
+  let biglam (TvName x:xs) = CotAtom . CoaLam Big (x, CotyStar) . biglam xs
       biglam [] = id
   (,) (biglam vs) <$> lowerType t
 makeBigLams t = (,) id <$> lowerType t
 
-errRef :: CoTerm
-errRef = CotRef (TgInternal "error")
+errRef :: CoAtom
+errRef = CoaRef (TgInternal "error")
                 (CotyForall (TgInternal "a")
                             (CotyArr cotyString
                                      (CotyVar (TgInternal "a"))))
@@ -59,16 +60,40 @@ errRef = CotRef (TgInternal "error")
 patternMatchingFail :: MonadLower m => Span -> CoType -> m (CoPattern, CoType, CoTerm)
 patternMatchingFail w t = do
   var <- fresh
-  let err = CotLit (ColStr (T.pack ("Pattern matching failure at " ++ show (pretty w))))
-  pure (CopCapture var t, t, CotApp (CotTyApp errRef t) err)
+  tyApp <- fresh
+  let err = CoaLit (ColStr (T.pack ("Pattern matching failure at " ++ show (pretty w))))
+      errTy = CotyArr cotyString t
+  pure (CopCapture var t, t, CotLet [(tyApp, errTy, CotTyApp errRef t)]
+                             (CotApp (CoaRef tyApp errTy) err))
+
+onAtom :: MonadLower m => CoTerm -> CoType -> (CoAtom -> CoTerm) -> m CoTerm
+onAtom (CotAtom a) _ f = pure (f a)
+onAtom x           t f = (\v -> CotLet [(v, t, x)] (f (CoaRef v t))) <$> fresh
+
+onAtomM :: MonadLower m => CoTerm -> CoType -> (CoAtom -> m CoTerm) -> m CoTerm
+onAtomM (CotAtom a) _ f = f a
+onAtomM x           t f = (\v -> CotLet [(v, t, x)] <$> f (CoaRef v t)) =<< fresh
+
+onAtoms :: MonadLower m => [(CoTerm, CoType)] -> ([CoAtom] -> CoTerm) -> m CoTerm
+onAtoms = accum [] where
+  accum as [] f = pure (f (reverse as))
+  accum as ((CotAtom a,_):xs) f = accum (a:as) xs f
+  accum as ((x,tx):xs) f = do
+    v <- fresh
+    CotLet [(v, tx, x)] <$> accum (CoaRef v tx:as) xs f
 
 lowerExpr :: MonadLower m => Expr Typed -> m CoTerm
 lowerExpr e = lowerAt e =<< lowerType (getType e)
 
+lowerBoth :: MonadLower m => Expr Typed -> m (CoTerm, CoType)
+lowerBoth e = do
+  t <- lowerType (getType e)
+  (,t) <$> lowerAt e t
+
 lowerAt :: MonadLower m => Expr Typed -> CoType -> m CoTerm
 lowerAt (Ascription e _ _) t = lowerAt e t
-lowerAt e (CotyForall vs b) = CotLam Big (vs, CotyStar) <$> lowerAt e b
-lowerAt (VarRef (TvName p) _) ty = pure (CotRef p ty)
+lowerAt e (CotyForall vs b) = CotAtom . CoaLam Big (vs, CotyStar) <$> lowerAt e b
+lowerAt (VarRef (TvName p) _) ty = pure (CotAtom (CoaRef p ty))
 lowerAt (Let vs t _) ty = do
   vs' <- for vs $ \(TvName var, ex, (_, ty)) -> do
     ty' <- lowerType ty
@@ -78,17 +103,17 @@ lowerAt (If c t e _) ty = do
   (c', t', e') <- (,,) <$> lowerAt c cotyBool <*> lowerAt t ty <*> lowerAt e ty
   let tc = (CopLit ColTrue, cotyBool, t')
       te = (CopLit ColFalse, cotyBool, e')
-  pure (CotMatch c' [tc, te])
+  onAtom c' cotyBool (flip CotMatch [tc, te])
 lowerAt (Fun p bd an) (CotyArr a b) =
   let operational (PType p _ _) = operational p
       operational p = p
    in case operational p of
-        Capture (TvName v) _ -> CotLam Small (v, a) <$> lowerAt bd b
+        Capture (TvName v) _ -> CotAtom . CoaLam Small (v, a) <$> lowerAt bd b
         _ -> do
           (p', bd') <- (,) <$> lowerPat p <*> lowerAt bd b
           arg <- fresh
           fail <- patternMatchingFail (fst an) b
-          pure (CotLam Small (arg, a) (CotMatch (CotRef arg a) [ (p', a, bd'), fail ]))
+          pure (CotAtom (CoaLam Small (arg, a) (CotMatch (CoaRef arg a) [ (p', a, bd'), fail ])))
 lowerAt (Begin [x] _) t = lowerAt x t
 lowerAt (Begin xs _) t =
   let bind e = (,,) <$> fresh <*> lowerType (getType e) <*> lowerExpr e
@@ -98,9 +123,12 @@ lowerAt (Match ex cs an) ty = do
   cs' <- for cs $ \(pat, ex) ->
     (,,) <$> lowerPat pat <*> pure mt <*> lowerAt ex ty
   fail <- patternMatchingFail (fst an) ty
-  CotMatch <$> lowerAt ex mt <*> pure (cs' ++ [fail])
+  ex' <- lowerAt ex mt
+
+  onAtom ex' mt (flip CotMatch (cs' ++ [fail]))
 lowerAt (Access r k _) ty = do
   rt <- lowerType (getType r)
+  r' <- lowerAt r rt
   (iv, var) <- (,) <$> fresh <*> fresh
   let cotyRows t [] = t
       cotyRows t xs = CotyRows t xs
@@ -110,37 +138,46 @@ lowerAt (Access r k _) ty = do
           CotyExactRows rs -> CotyExactRows (deleteBy ((==) `on` fst) (k, undefined) rs)
           _ -> error ("not a row type " ++ show rt)
       match = ( CopExtend (CopCapture iv inner) [ (k, CopCapture var ty) ]
-              , rt, CotRef var ty )
-  flip CotMatch [match] <$> lowerAt r rt
+              , rt, CotAtom (CoaRef var ty ))
+  onAtom r' rt (flip CotMatch [match])
+
 lowerAt (BinOp left op right a) t = lowerAt (App (App op left a) right a) t
 lowerAt Hole{} _ = error "holes can't be lowered"
 lowerAt e _ = lowerAnyway e
 
 lowerAnyway :: MonadLower m => Expr Typed -> m CoTerm
 lowerAnyway (Record xs _) = case xs of
-  [] -> pure (CotLit ColRecNil)
+  [] -> pure (CotAtom (CoaLit ColRecNil))
   xs -> do
-    xs' <- for xs $ \(label, ex) ->
-      (,,) <$> pure label <*> lowerType (getType ex) <*> lowerExpr ex
-    pure (CotExtend (CotLit ColRecNil) xs')
+    xs' <- traverse (lowerBoth . snd) xs
+    onAtoms xs' (CotExtend (CoaLit ColRecNil) . zipWith3 build xs xs')
+  where build (name, _) (_, ty) atom = (name, ty, atom)
 lowerAnyway (RecordExt e xs _) = do
-  xs' <- for xs $ \(label, ex) ->
-    (label,,) <$> lowerType (getType ex) <*> lowerExpr ex
-  CotExtend <$> lowerExpr e <*> pure xs'
-lowerAnyway (Literal l _) = pure . CotLit $ case l of
+  (e', et) <- lowerBoth e
+  xs' <- traverse (lowerBoth . snd) xs
+  onAtomM e' et $ \e'' ->
+    onAtoms xs' (CotExtend e'' . zipWith3 build xs xs')
+  where build (name, _) (_, ty) atom = (name, ty, atom)
+
+lowerAnyway (Literal l _) = pure . CotAtom . CoaLit $ case l of
   LiInt i -> ColInt i
   LiStr t -> ColStr t
   LiBool True -> ColTrue
   LiBool False -> ColFalse
   LiUnit -> ColUnit
-lowerAnyway (App f x _) = CotApp <$> lowerExpr f <*> lowerExpr x
-lowerAnyway (TypeApp f x _) = CotTyApp <$> lowerExpr f <*> lowerType x
-lowerAnyway (Tuple xs _) = 
-  let go :: MonadLower m => Int -> Expr Typed -> m (T.Text, CoType, CoTerm)
-      go k x = (,,) <$> pure (T.pack (show k))
-                    <*> lowerType (getType x)
-                    <*> lowerExpr x
-   in CotExtend (CotLit ColRecNil) <$> zipWithM go [1..] xs
+lowerAnyway (App f x _) = do
+  (f', tf) <- lowerBoth f
+  (x', tx) <- lowerBoth x
+  onAtomM f' tf $ onAtom x' tx . CotApp
+
+lowerAnyway (TypeApp f x _) = do
+  (f', tf) <- lowerBoth f
+  x' <- lowerType x
+  onAtom f' tf (flip CotTyApp x')
+lowerAnyway (Tuple xs _) = do
+  xs' <- traverse lowerBoth xs
+  onAtoms xs' (CotExtend (CoaLit ColRecNil) . zipWith3 build [1..] xs')
+  where build num (_, ty) atom = (T.pack (show (num :: Int)), ty, atom)
 lowerAnyway e = error ("can't lower " ++ show e ++ " without type")
 
 lowerType :: MonadLower m => Type Typed -> m CoType
