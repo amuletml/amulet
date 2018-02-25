@@ -84,8 +84,9 @@ test x = do
       putStrLn "\x1b[1;32m(* Core lowering: *)\x1b[0m"
       putDoc (pretty core)
       putStrLn "\x1b[1;32m(* Optimised: *)\x1b[0m"
-      pPrint optm
       putDoc (pretty optm)
+      putStrLn "\x1b[1;32m(* Compiled: *)\x1b[0m"
+      putDoc (pretty (compileProgram env optm))
       pure (Just (core, env))
     CParse e s -> Nothing <$ report (pretty s <> colon <+> pretty e) (T.pack x)
     CResolve e -> Nothing <$ report e (T.pack x)
