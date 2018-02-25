@@ -86,7 +86,7 @@ instance Pretty TypeError where
       _ -> error (show esc)
 
   pretty (SkolBinding (Skolem _ x _) (TySkol (Skolem _ y _))) = pretty (NotEqual (TyVar x) (TyVar y))
-  pretty (SkolBinding (Skolem a _ _) b) = string "Can not unify skolem type constant" <+> verbatim a <+> string "with type" <+> verbatim b
+  pretty (SkolBinding (Skolem a _ _) b) = string "Can not unify skolem type constant" <+> stypeSkol (pretty a) <+> string "with type" <+> verbatim b
 
 instance Pretty ResolveError where
   pretty (R.NotInScope e) = string "Variable not in scope:" <> verbatim e

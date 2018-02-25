@@ -123,7 +123,9 @@ instance (Pretty (Var p)) => Pretty (Toplevel p) where
   pretty (LetStmt ((n, v, _):xs)) =
     let prettyBind (n, v, _) = keyword "and" <+> prettyOneBinding n v
      in align $ keyword "let" <+> prettyOneBinding n v
-            <#> vsep (map prettyBind xs)
+             <> case xs of
+                  [] -> empty
+                  _ -> line <> vsep (map prettyBind xs)
   pretty (ForeignVal v d ty _) = keyword "foreign val" <+> pretty v <+> colon <+> pretty ty <+> equals <+> dquotes (text d)
   pretty (TypeDecl ty args ctors) = keyword "type" <+> pretty ty
                                 <+> hsep (map ((squote <>) . pretty) args)
