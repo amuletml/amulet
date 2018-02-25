@@ -296,7 +296,9 @@ tupleExpr [x] a = x
 tupleExpr xs  a = Tuple xs a
 
 tuplePattern :: [Pattern Parsed] -> Ann Parsed -> Pattern Parsed
-tuplePattern [x] a = x
+tuplePattern [x] a = case x of
+  PType x t _ -> PType x t a
+  _ -> x
 tuplePattern xs a = PTuple xs a
 
 varE = VarRef . Name . T.pack

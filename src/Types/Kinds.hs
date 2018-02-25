@@ -95,6 +95,9 @@ inferKind tp = do
       k1 <- inferKind t1
       k2 <- inferKind t2
       same k1 (KiArr k2 x)
+      case t2 of
+        TyForall{} -> throwError (ImpredicativeApp t1 t2)
+        _ -> pure ()
       pure x
     TyRows rho x -> do
       giveTp rho
