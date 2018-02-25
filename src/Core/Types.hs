@@ -25,27 +25,30 @@ arity (CotyArr _ t) = 1 + arity t
 arity (CotyForall _ t) = arity t
 arity _ = 0
 
-approximateType :: CoTerm (Var Resolved) -> Maybe (CoType (Var Resolved))
-approximateType (CotRef _ t) = pure t
-approximateType (CotLam Big (v, _) f) = CotyForall v <$> approximateType f
-approximateType (CotLam Small (_, t) f) = CotyArr t <$> approximateType f
-approximateType (CotApp f _) = do
-  CotyArr _ d <- approximateType f
-  pure d
-approximateType (CotLet _ e) = approximateType e
-approximateType (CotMatch _ xs) = case xs of
-  ((_, _, t):_) -> approximateType t
-  [] -> error "impossible approximateType empty match"
-approximateType (CotLit l) = pure $ case l of
+approximateAtomType :: CoAtom (Var Resolved) -> Maybe (CoType (Var Resolved))
+approximateAtomType (CoaRef _ t) = pure t
+approximateAtomType (CoaLam Big (v, _) f) = CotyForall v <$> approximateType f
+approximateAtomType (CoaLam Small (_, t) f) = CotyArr t <$> approximateType f
+approximateAtomType (CoaLit l) = pure $ case l of
   ColInt{} -> cotyInt
   ColStr{} -> cotyString
   ColTrue -> cotyBool
   ColFalse -> cotyBool
   ColUnit -> cotyUnit
   ColRecNil -> CotyExactRows []
-approximateType (CotExtend e rs) = CotyRows <$> approximateType e <*> traverse (\(x, _, t) -> (x,) <$> approximateType t) rs
+
+approximateType :: CoTerm (Var Resolved) -> Maybe (CoType (Var Resolved))
+approximateType (CotAtom a) = approximateAtomType a
+approximateType (CotApp f _) = do
+  CotyArr _ d <- approximateAtomType f
+  pure d
+approximateType (CotLet _ e) = approximateType e
+approximateType (CotMatch _ xs) = case xs of
+  ((_, _, t):_) -> approximateType t
+  [] -> error "impossible approximateType empty match"
+approximateType (CotExtend e rs) = CotyRows <$> approximateAtomType e <*> traverse (\(x, _, t) -> (x,) <$> approximateAtomType t) rs
 approximateType (CotTyApp f at) = do
-  CotyForall v t <- approximateType f
+  CotyForall v t <- approximateAtomType f
   let replace = everywhere (mkT go)
       go (CotyVar v') | v == v' = at
       go x = x

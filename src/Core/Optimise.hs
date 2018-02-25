@@ -37,32 +37,44 @@ import Syntax
 fuel :: Int
 fuel = 5000
 
+mapAtom1M :: Monad m
+          => (CoAtom a -> m (CoAtom a))
+          -> (CoTerm a -> m (CoTerm a))
+          -> CoAtom a -> m (CoAtom a)
+mapAtom1M  _ g t = case t of
+  CoaRef{} -> pure t
+  CoaLit{} -> pure t
+  CoaLam s v b -> CoaLam s v <$> g b
+
 -- Apply a function to each child in the provided expr. Note this does not
 -- apply to all descendants.
-mapTerm1M :: Monad m => (CoTerm a -> m (CoTerm a)) -> CoTerm a -> m (CoTerm a)
-mapTerm1M f t = case t of
-  CotRef{} -> pure t
-  CotLit{} -> pure t
-  CotLam s v b -> CotLam s v <$> f b
-  CotApp g x -> CotApp <$> f g <*> f x
-  CotLet vs e -> CotLet <$> traverse (third3A f) vs <*> f e
-  CotMatch e bs -> CotMatch <$> f e <*> traverse (third3A f) bs
+mapTerm1M :: Monad m
+          => (CoAtom a -> m (CoAtom a))
+          -> (CoTerm a -> m (CoTerm a))
+          -> CoTerm a -> m (CoTerm a)
+mapTerm1M f g t = case t of
+  CotAtom a -> CotAtom <$> mapAtom1M f g a
+  CotApp fn x  -> CotApp <$> f fn <*> f x
+  CotLet vs e -> CotLet <$> traverse (third3A g) vs <*> g e
+  CotMatch e bs -> CotMatch <$> f e <*> traverse (third3A g) bs
   CotExtend t rs -> CotExtend <$> f t <*> traverse (third3A f) rs
   CotTyApp e t -> CotTyApp <$> f e <*> pure t
 
 -- Apply a function to all descendants in the provided expr.
 mapTermM :: Monad m => (CoTerm a -> m (CoTerm a)) -> CoTerm a -> m (CoTerm a)
-mapTermM f = f <=< mapTerm1M (mapTermM f)
+mapTermM f = mapTerm' where
+  mapAtom' = mapAtom1M mapAtom' mapTerm'
+  mapTerm' = f <=< mapTerm1M mapAtom' mapTerm'
 
 mapTerm1 :: (CoTerm a -> CoTerm a) -> CoTerm a -> CoTerm a
-mapTerm1 f = runIdentity . mapTerm1M (pure . f)
+mapTerm1 f = runIdentity . mapTerm1M pure (pure . f)
 
-mapTerm :: (CoTerm a -> CoTerm a) -> CoTerm a -> CoTerm a 
+mapTerm :: (CoTerm a -> CoTerm a) -> CoTerm a -> CoTerm a
 mapTerm f = runIdentity . mapTermM (pure . f)
 
 substitute :: Ord a => Map.Map a (CoTerm a) -> CoTerm a -> CoTerm a
 substitute m = mapTerm subst
-  where subst e@(CotRef v _) = fromMaybe e (Map.lookup v m)
+  where subst e@(CotAtom (CoaRef v _)) = fromMaybe e (Map.lookup v m)
         subst e = e
 
 substituteInTys :: forall a. (Data a, Typeable a, Ord a, IsVar a) => Map.Map (Var Resolved) (CoType a) -> CoTerm a -> CoTerm a
@@ -123,13 +135,12 @@ transformTerm pass = visit <=< runPass pass where
     body' <- extendVars vars' (transform body)
     pure (CotLet vars' body')
   visit (CotMatch e cases) = do
-    e' <- transform e
     cases' <- for cases (\(p, t, bod) ->
                            (p, t,) <$> case p of
-                             CopCapture v _ -> extendVars [(v, t, e)] (transform bod)
+                             CopCapture v _ -> extendVars [(v, t, CotAtom e)] (transform bod)
                              _ -> transform bod)
-    pure (CotMatch e' cases')
-  visit x = mapTerm1M (transformTerm pass) x
+    pure (CotMatch e cases')
+  visit x = mapTerm1M pure (transformTerm pass) x
 
   transform = transformTerm pass
 
@@ -154,7 +165,7 @@ runTransform = flip runReaderT mempty
 invent :: CoType (Var Resolved) -> Trans (Var Resolved, CoTerm (Var Resolved))
 invent t = do
   x <- fresh
-  pure (x, CotRef x t)
+  pure (x, CotAtom (CoaRef x t))
 
 -- Rather magic, replaces everything matching the "predicate" by a
 -- `let`-bound variable.
@@ -181,4 +192,3 @@ isCon var = Map.member var <$> asks cons
 
 findForeign :: Var Resolved -> Trans (Maybe (CoType (Var Resolved)))
 findForeign var = Map.lookup var <$> asks foreigns
-

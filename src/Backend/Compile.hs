@@ -1,12 +1,9 @@
-{-# LANGUAGE OverloadedStrings, ScopedTypeVariables, FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings, ScopedTypeVariables, FlexibleContexts, TupleSections #-}
+{-# LANGUAGE DeriveFunctor #-}
+
 module Backend.Compile
   ( compileProgram
-  , compileLet
-  , compileExpr
   ) where
-
-import Control.Monad.Gen
-import Control.Monad
 
 import Control.Monad.Infer
 
@@ -22,14 +19,15 @@ import Data.Semigroup ((<>))
 
 import qualified Data.Map.Strict as Map
 import qualified Data.VarSet as VarSet
-import Data.VarSet (IsVar(..))
-
 import qualified Data.Text as T
+import Data.Foldable
+import Data.VarSet (IsVar(..))
 import Data.Text (Text)
 import Data.List (sortOn, partition, uncons)
 import Data.Maybe (fromMaybe, maybeToList)
+import Data.Triple
 
-type Returner = Maybe (LuaExpr -> LuaStmt)
+type Returner = LuaExpr -> LuaStmt
 
 alpha :: [Text]
 alpha = map T.pack ([1..] >>= flip replicateM ['a'..'z'])
@@ -84,76 +82,134 @@ compileConstructor (var, _) -- non-unit constructors, hard
     vl = LuaFunction [LuaName "x"] [LuaReturn (LuaTable [(LuaNumber 1, LuaString cn), (LuaNumber 2, LuaRef (LuaName "x"))])]
     cn = getName var
 
-compileExpr :: Occurs a => CoTerm a -> LuaExpr
+type VarStack v = [(v, CoTerm v, LuaExpr)]
 
--- First handle binary operators
-compileExpr (CotRef v _) | isBinOp v
-  = LuaFunction [left] [LuaReturn (LuaFunction
-                                    [right]
-                                    [LuaReturn (LuaBinOp (LuaRef left) (remapOp (getTaggedName (toVar v))) (LuaRef right))])]
+newtype ExprContext v a = EC {
+  unEC :: VarStack v
+       -> (VarStack v -> a -> ([LuaStmt], VarStack v))
+       -> ([LuaStmt], VarStack v)
+  } deriving (Functor)
+
+instance Applicative (ExprContext v) where
+  pure a = EC $ \xs next -> next xs a
+  (<*>) = ap
+
+instance Monad (ExprContext v) where
+  return a = EC $ \xs next -> next xs a
+  x >>= f = EC $ \xs next -> unEC x xs (\xs' y -> unEC (f y) xs' next)
+
+compileLit :: CoLiteral -> LuaExpr
+compileLit (ColInt x)   = LuaNumber (fromInteger x)
+compileLit (ColStr str) = LuaString str
+compileLit ColTrue      = LuaTrue
+compileLit ColFalse     = LuaFalse
+compileLit ColUnit      = LuaNil -- evil!
+compileLit ColRecNil    = LuaTable []
+
+compileAtom' :: Occurs a => CoAtom a -> ExprContext a (LuaExpr, Maybe (CoTerm a))
+compileAtom' (CoaLit l) = pure (compileLit l, Nothing)
+compileAtom' (CoaLam Small (v, _) e) = do
+  flushStmt [] ()
+  pure (LuaFunction [lowerName v] (compileStmt LuaReturn e), Nothing)
+compileAtom' (CoaLam Big _ e) = (,Nothing) <$> compileTerm e
+
+compileAtom' (CoaRef v _) | isBinOp v
+  = pure (LuaFunction
+           [left]
+           [LuaReturn (LuaFunction
+                        [right]
+                        [LuaReturn (LuaBinOp (LuaRef left) (remapOp (getName v)) (LuaRef right))])],
+           Nothing)
     where left  = LuaName "l"
           right = LuaName "r"
-compileExpr (CotApp f e) =
-  case (unwrap f, e) of
-    (CotApp (CotRef f _) left, right) | isBinOp f ->
-      LuaBinOp (compileExpr left) (remapOp (getTaggedName (toVar f))) (compileExpr right)
-    (CotRef f _, left) | isBinOp f ->
-      LuaFunction [name] [LuaReturn (LuaBinOp (compileExpr left) (remapOp (getTaggedName (toVar f))) (LuaRef name))]
-    _ -> LuaCall (compileExpr f) [compileExpr e]
 
-    where name = LuaName "__r"
+compileAtom' (CoaRef v _) = EC
+  $ \xs next -> case span ((/= toVar v) . toVar . fst3) xs of
+             -- -- If the variable is not in the scope then skip
+             (_, []) -> next xs (LuaRef (lowerName v), Nothing)
+             (before, (_, e, e'):xs') -> let (stmts, xs'') = next xs' (e', Just e)
+                                         in (foldr mkLet stmts before, xs'')
+  where mkLet (v, _, b) stmts = LuaLocal [lowerName v] [b] : stmts
 
-          -- Remove all CotTyApps from our application: only used for binary operations
-          unwrap (CotTyApp x _) = unwrap x
-          unwrap (CotApp f x) = CotApp (unwrap f) x
-          unwrap x = x
+compileAtom :: Occurs a => CoAtom a -> ExprContext a LuaExpr
+compileAtom a = fst <$> compileAtom' a
 
-compileExpr (CotRef v _) = LuaRef (lowerName v)
-compileExpr (CotLam Small (v, _) e) = LuaFunction [lowerName v] (compileStmt (Just LuaReturn) e)
-compileExpr (CotLam Big _ e) = compileExpr e
-compileExpr (CotTyApp f _) = compileExpr f
+flushStmt :: Occurs a => [LuaStmt] -> b -> ExprContext a b
+flushStmt extra e = EC $ \xs next -> let (stmts, xs') = next [] e
+                                     in (foldr mkLet (extra ++ stmts) xs, xs')
+  where mkLet (v, _, b) stmts = LuaLocal [lowerName v] [b] : stmts
 
-compileExpr (CotLit (ColInt x))   = LuaNumber (fromInteger x)
-compileExpr (CotLit (ColStr str)) = LuaString str
-compileExpr (CotLit ColTrue)      = LuaTrue
-compileExpr (CotLit ColFalse)     = LuaFalse
-compileExpr (CotLit ColUnit)      = LuaNil -- evil!
-compileExpr (CotLit ColRecNil)    = LuaTable []
+compileTerm :: Occurs a => CoTerm a -> ExprContext a LuaExpr
+compileTerm (CotAtom a) = compileAtom a
 
-compileExpr (CotExtend (CotLit ColRecNil) fs)
-  = LuaTable (map (\(f, _, e) -> (LuaString f, compileExpr e)) fs)
-compileExpr s@CotExtend{} = compileIife s
+compileTerm (CotApp f e) = do
+  e' <- compileAtom e
+  f' <- compileAtom' f
+  pure $ case f' of
+    (LuaCall _ [l], Just (CotApp (CoaRef v _) _)) | isBinOp v -> LuaBinOp l (remapOp (getName v)) e'
+    (fl', _) -> LuaCall fl' [e']
 
-compileExpr s@CotLet{}    = compileIife s
-compileExpr s@CotMatch{}  = compileIife s
+compileTerm (CotTyApp f _) = compileAtom f
 
-global :: String -> LuaExpr
-global x = LuaRef (LuaIndex (LuaRef (LuaName "_G")) (LuaString (T.pack x)))
+compileTerm (CotExtend (CoaLit ColRecNil) fs) = do
+  fs' <- foldrM compileRow [] fs
+  pure (LuaTable fs')
+  where compileRow (f, _, e) es = (:es) . (LuaString f,) <$> compileAtom e
+compileTerm (CotExtend tbl exs) = do
+  exs' <- foldrM compileRow [] exs
+  tbl' <- compileAtom tbl
 
-compileStmt :: Occurs a => Returner -> CoTerm a -> [LuaStmt]
-compileStmt r e@CotRef{} = pureReturn r $ compileExpr e
-compileStmt r e@CotLam{} = pureReturn r $ compileExpr e
-compileStmt r e@CotLit{} = pureReturn r $ compileExpr e
-compileStmt r (CotLet k c) = compileLet (unzip3 k) ++ compileStmt r c
-compileStmt r (CotMatch s ps) = runGen (compileMatch r s ps)
+  flushStmt ([ LuaLocal [old, new] [tbl', LuaTable []]
+             , LuaFor [k, v] [LuaCall (LuaRef pairs) [LuaRef old]]
+               [LuaAssign [LuaIndex (LuaRef new) (LuaRef (LuaName k))] [LuaRef (LuaName v)]] ] ++ exs')
+            (LuaRef new)
 
-compileStmt Nothing e@CotApp{} = case compileExpr e of
-                                     LuaCall f a -> [LuaCallS f a]
-                                     expr -> [LuaLocal [LuaName "_"] [expr]]
-compileStmt (Just r) e@CotApp{} = [r (compileExpr e)]
-compileStmt r (CotTyApp f _) = compileStmt r f
-
-compileStmt r e@(CotExtend (CotLit ColRecNil) _) = dirtyReturn r (compileExpr e) -- TODO: Flatten if r is nothing?
-compileStmt r (CotExtend tbl exs) = [ LuaLocal [old, new] [compileExpr tbl, LuaTable []]
-                                    , LuaFor [k, v] [LuaCall (LuaRef pairs) [LuaRef old]]
-                                      [LuaAssign [LuaIndex (LuaRef new) (LuaRef (LuaName k))] [LuaRef (LuaName v)]] ] ++
-                                    map (\(f, _, e) -> LuaAssign [LuaIndex (LuaRef new) (LuaString f)] [compileExpr e]) exs ++
-                                    pureReturn r (LuaRef new)
   where old = LuaName (T.pack "__o")
         new = LuaName (T.pack "__n")
         k = T.pack "k"
         v = T.pack "v"
         pairs = LuaName (T.pack "pairs")
+
+        compileRow (f, _, e) es = (:es) . LuaAssign [LuaIndex (LuaRef new) (LuaString f)] . pure <$> compileAtom e
+
+compileTerm (CotLet [(x, _, e)] body) | usedWhen x == 1 && not (isMultiMatch e) &&
+                                        toVar x `VarSet.notMember` freeIn e = do
+  -- If we've got a let binding which is only used once then push it onto the stack
+  e' <- compileTerm e
+  EC $ \xs next -> next ((x, e, e'):xs) ()
+  compileTerm body
+
+compileTerm (CotLet [(x, _, e)] body) | not (isMultiMatch e) = do
+  -- If we've got a let binding which doesn't branch, then we can emit it as a normal
+  -- local Technically this isn't correct (as recursive functions won't work), but the
+  -- pretty printer sorts this out.
+  e' <- compileTerm e
+  flushStmt [ LuaLocal [lowerName x] [e'] ] ()
+  compileTerm body
+
+compileTerm (CotLet bs body) = do
+  -- Otherwise predeclare all variables and emit the bindings
+  flushStmt [ LuaLocal (map (lowerName . fst3) bs) [] ] ()
+  traverse_ compileLet bs
+  compileTerm body
+  where compileLet (v, _, e) = flushStmt (compileStmt (LuaAssign [lowerName v] . pure) e) ()
+
+compileTerm m@(CotMatch test [(CopExtend (CopCapture e _) [(f, CopCapture v _)], _, body)])
+  | usedWhen e == 0 && usedWhen v == 1 = do
+      test' <- compileAtom test
+      EC $ \xs next -> next ((v, m, LuaRef (LuaIndex test' (LuaString f))):xs) ()
+      compileTerm body
+
+compileTerm (CotMatch test branches) = do
+  flushStmt [] ()
+  test' <- compileAtom test
+  compileMatch test' branches
+
+global :: String -> LuaExpr
+global x = LuaRef (LuaIndex (LuaRef (LuaName "_G")) (LuaString (T.pack x)))
+
+compileStmt :: Occurs a => Returner -> CoTerm a -> [LuaStmt]
+compileStmt r term = fst (unEC (compileTerm term) [] (\xs x -> ([r x], xs)))
 
 lowerName :: Occurs a => a -> LuaVar
 lowerName = LuaName . getTaggedName . toVar
@@ -169,10 +225,8 @@ getTaggedName (TgName t i) = t <> T.pack (show i)
 getTaggedName (TgInternal t) = t
 
 iife :: [LuaStmt] -> LuaExpr
+iife [LuaReturn v] = v
 iife b = LuaCall (LuaFunction [] b) []
-
-compileIife :: Occurs a => CoTerm a -> LuaExpr
-compileIife = iife . compileStmt (Just LuaReturn)
 
 compileLet :: forall a. Occurs a => ([a], [CoType a], [CoTerm a]) -> [LuaStmt]
 compileLet (vs, _, es) = locals recs (assigns nonrecs) where
@@ -182,9 +236,7 @@ compileLet (vs, _, es) = locals recs (assigns nonrecs) where
   locals :: [(a, CoTerm a)] -> [LuaStmt] -> [LuaStmt]
   locals xs =
     let (v, t) = unzip xs
-        bind v e
-          | doesItOccur v = [LuaLocal [lowerName v] [compileExpr e]]
-          | otherwise = compileStmt Nothing e
+        bind v e = [LuaLocal [lowerName v] [iife (compileStmt LuaReturn e)]]
      in case v of
        [] -> id
        _ -> (++) (concat (zipWith bind v t))
@@ -192,19 +244,11 @@ compileLet (vs, _, es) = locals recs (assigns nonrecs) where
   assigns :: [(a, CoTerm a)] -> [LuaStmt]
   assigns xs = case xs of
     [] -> []
-    xs -> LuaLocal (map (lowerName . fst) xs) []:map one xs
-  one (v, t) = LuaAssign [lowerName v] [compileExpr t]
+    xs -> LuaLocal (map (lowerName . fst) xs) []:concatMap one xs
+  one (v, t) = compileStmt (LuaAssign [lowerName v] . pure) t
 
-  recursive v term@CotLam{} = toVar v `VarSet.member` freeIn term
+  recursive v (CotAtom term@CoaLam{}) = toVar v `VarSet.member` freeInAtom term
   recursive _ _ = False
-
-pureReturn :: Returner -> LuaExpr -> [LuaStmt]
-pureReturn Nothing _ = []
-pureReturn (Just r) e = [r e]
-
-dirtyReturn :: Returner -> LuaExpr -> [LuaStmt]
-dirtyReturn Nothing e = [LuaLocal [LuaName (T.pack "_")] [e]]
-dirtyReturn (Just r) e = [r e]
 
 foldAnd :: [LuaExpr] -> LuaExpr
 foldAnd = foldl1 k where
@@ -217,7 +261,7 @@ foldAnd = foldl1 k where
 patternTest :: forall a. Occurs a => CoPattern a -> LuaExpr ->  LuaExpr
 patternTest (CopCapture _ _) _   = LuaTrue
 patternTest (CopLit ColRecNil) _ = LuaTrue
-patternTest (CopLit l)     vr    = LuaBinOp (compileExpr (CotLit l :: CoTerm a)) "==" vr
+patternTest (CopLit l)     vr    = LuaBinOp (compileLit l) "==" vr
 patternTest (CopExtend p rs) vr  = foldAnd (patternTest p vr : map test rs) where
   test (var', pat) = patternTest pat (LuaRef (LuaIndex vr (LuaString var')))
 patternTest (CopConstr con) vr   = foldAnd [tag con vr]
@@ -236,24 +280,16 @@ patternBindings (CopDestr _ p) vr   = patternBindings p (LuaRef (LuaIndex vr (Lu
 patternBindings (CopExtend p rs) vr = patternBindings p vr ++ concatMap (index vr) rs where
   index vr (var', pat) = patternBindings pat (LuaRef (LuaIndex vr (LuaString var')))
 
-compileMatch :: Occurs a => Returner -> CoTerm a -> [(CoPattern a, CoType a, CoTerm a)] -> Gen Int [LuaStmt]
-compileMatch r ex ps =
-  case ex of
-    (CotRef f _) -> pure $ genIf (lowerName f) ps
-    _ -> do
-      -- Cache the matchee in a temporary variable. We attempt to detect the
-      -- trivial `local x = expr` case, otherwise we pre-declare the variable.
-      x <- LuaName . ("__" <>) . (alpha !!) <$> gen
-      pure $ case compileStmt (Just $ LuaAssign [x] . pure) ex of
-               [LuaAssign [x'] [bod]] | x == x' -> LuaLocal [x] [bod] : genIf x ps
-               bod -> LuaLocal [x] [] : bod ++ genIf x ps
-
-  where genBinding x (p, _, c) = ( patternTest p (LuaRef x)
-                                 , (case patternBindings p (LuaRef x) of
-                                      [] -> []
-                                      xs -> [uncurry LuaLocal (unzip xs)])
-                                   ++ compileStmt r c)
-        genIf x ps = [ LuaIfElse (map (genBinding x) ps) ]
+compileMatch :: Occurs a => LuaExpr -> [(CoPattern a, CoType a, CoTerm a)] -> ExprContext a LuaExpr
+compileMatch ex ps = EC $ \xs next -> (genIf next, xs)
+  where genBinding next x (p, _, c) = ( patternTest p x
+                                      , (case patternBindings p x of
+                                           [] -> []
+                                           xs -> [uncurry LuaLocal (unzip xs)])
+                                        ++ fst (unEC (compileTerm c) [] next))
+        genIf next = case map (genBinding next ex) ps of
+                       [(LuaTrue, e)] -> e
+                       xs -> [LuaIfElse xs]
 
 --- This is a hack, but we need this for compiling record extension
 extendDef :: LuaStmt
@@ -294,3 +330,7 @@ isBinOp _ = False
 
 remapOp :: Text -> Text
 remapOp x = fromMaybe x (Map.lookup x ops)
+
+isMultiMatch :: CoTerm a -> Bool
+isMultiMatch (CotMatch _ (_:_:_)) = True
+isMultiMatch _ = False

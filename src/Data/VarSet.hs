@@ -2,7 +2,7 @@
 module Data.VarSet
   ( Set
   , fromList
-  , member, insert
+  , member, notMember, insert
   , difference, union, singleton, delete
   , (<>), mempty
   , IsVar(..)
@@ -14,6 +14,7 @@ import Syntax.Pretty (Var(..), Resolved)
 
 import Data.Semigroup
 import Data.Coerce
+import Data.Data
 
 import Pretty(Pretty)
 
@@ -33,6 +34,10 @@ member :: Var Resolved -> Set -> Bool
 member (TgName _ x) set = Set.member x (coerce set)
 member _ _ = False
 
+notMember :: Var Resolved -> Set -> Bool
+notMember (TgName _ x) set = Set.notMember x (coerce set)
+notMember _ _ = True
+
 difference :: Set -> Set -> Set
 difference = coerce Set.difference
 
@@ -47,7 +52,7 @@ delete :: Var Resolved -> Set -> Set
 delete (TgName _ x) set = coerce (Set.delete x (coerce set))
 delete _ set = set
 
-class (Eq a, Ord a, Pretty a, Show a) => IsVar a where
+class (Data a, Eq a, Ord a, Pretty a, Show a) => IsVar a where
   toVar :: a -> Var Resolved
 
 instance IsVar (Var Resolved) where
