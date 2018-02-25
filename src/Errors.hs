@@ -7,6 +7,7 @@ import Control.Monad.Infer
 import qualified Data.Text.IO as T
 import qualified Data.Text as T
 import Data.Function
+import Data.Foldable
 import Data.Position
 import Data.Spanned
 import Data.Span
@@ -106,18 +107,30 @@ report err _ = putDoc (pretty err)
 reportI :: I.TypeError -> T.Text -> IO ()
 reportI err file
   | (err', Just (reason, loc)) <- innermostError err =
-    let line = T.lines file !! (spLine (spanStart loc) - 1)
-        SourcePos{ spCol = start } = spanStart loc
-        SourcePos{ spCol = end } = spanEnd loc
-        over = T.replicate (start - 1) (T.singleton ' ') <> T.replicate (end - start + 1) (T.pack "~")
-        linum = T.pack (show (spLine (spanStart loc)))
-        prefix = T.pack "\x1b[1;34m" <> T.replicate (T.length linum + 1 ) (T.singleton ' ') <> T.singleton '|' <> T.singleton ' ' <> T.pack "\x1b[0m"
-        linumP = T.pack "\x1b[1;34m" <> linum <> T.singleton ' ' <> T.singleton '|' <> T.singleton ' ' <> T.pack "\x1b[0m"
+    let SourcePos{ spLine = startLine, spCol = start } = spanStart loc
+        SourcePos{ spLine = endLine, spCol = end } = spanEnd loc
+        lines = drop (startLine - 1) (T.lines file)
+        linePad = length (show endLine) + 1
+        putLine before body = T.putStrLn
+                              $ T.pack "\x1b[1;34m"
+                              <> T.replicate (linePad - T.length before) spaceC <> before <> T.singleton ' ' <> pipeC
+                              <> T.pack "\x1b[0m"
+                              <> body
      in do
        putDoc (pretty (I.ArisingFrom err' reason))
-       T.putStrLn prefix
-       T.putStrLn (linumP <> line)
-       T.putStrLn (prefix <> over)
+
+       putLine T.empty T.empty
+       traverse_ (uncurry (putLine . T.pack . show)) (zip [startLine..] (take (endLine - startLine + 1) lines))
+       if startLine == endLine
+       then putLine T.empty (T.replicate (start - 1) spaceC <> T.replicate (end - start + 1) underC)
+       else putLine T.empty T.empty
+
+  where
+    pipeC = T.singleton '│'
+    underC = T.singleton '~'
+    spaceC = T.singleton ' '
+
+
 reportI err _ = putDoc (pretty err)
 
 innermostError :: TypeError -> (TypeError, Maybe (SomeReason, Span))
