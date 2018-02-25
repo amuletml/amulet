@@ -97,8 +97,11 @@ instance (Pretty (Var p)) => Pretty (Type p) where
   pretty (TyRows p rows) = enclose (lbrace <> space) (space <> rbrace)  $ pretty p <+> soperator pipe <+> hsep (punctuate comma (prettyRows colon rows)) 
   pretty (TyExactRows rows) = record (prettyRows colon rows)
 
-  pretty (TyApp e x@TyApp{}) = pretty e <+> parens (pretty x)
-  pretty (TyApp x e) = pretty x <+> pretty e
+  pretty (TyApp x e) = pretty x <+> parenTyArg e (pretty e) where
+    parenTyArg TyApp{} = parens
+    parenTyArg TyForall{} = parens
+    parenTyArg TyArr{} = parens
+    parenTyArg _ = id
   pretty (TyTuple a b)
     | TyTuple{} <- a
     = parens (pretty a) <+> prod <+> pretty b
