@@ -75,7 +75,8 @@ instance Eq (Constraint p) => Ord (Constraint p) where
 data TypeError where
   NotEqual :: Pretty (Var p) => Type p -> Type p -> TypeError
   KindsNotEqual :: Pretty (Var p) => Kind p -> Kind p -> TypeError
-  Occurs   :: Pretty (Var p) => Var p -> Type p -> TypeError
+  Occurs :: Pretty (Var p) => Var p -> Type p -> TypeError
+  Impredicative :: Pretty (Var p) => Var p -> Type p -> TypeError
   NotInScope :: Var Resolved -> TypeError
   FoundHole :: [Expr Typed] -> TypeError
 

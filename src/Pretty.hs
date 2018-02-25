@@ -80,7 +80,7 @@ decorate Literal s  = "\x1b[1;33m" ++ s ++ "\x1b[0m"
 decorate String s   = "\x1b[32m" ++ s ++ "\x1b[0m"
 decorate TypeCon s  = "\x1b[34m" ++ s ++ "\x1b[0m"
 decorate TypeVar s  = "\x1b[33m" ++ s ++ "\x1b[0m"
-decorate TypeSkol s = "\x1b[35m" ++ s ++ "\x1b[0m"
+decorate TypeSkol s = "\x1b[31m" ++ s ++ "\x1b[0m"
 decorate Operator s = "\x1b[35m" ++ s ++ "\x1b[0m"
 
 instance Pretty Double where
