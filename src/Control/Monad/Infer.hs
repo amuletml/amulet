@@ -105,13 +105,7 @@ instance Pretty (Var p) => Pretty (Constraint p) where
   pretty (ConSubsume _ a b) = pretty a <+> string "<=" <+> pretty b
 
 data SomeReason where
-  BecauseOf :: ( Spanned (f p)
-               , Pretty (f p)
-               , Pretty (Ann p)
-               , Pretty (Var p)
-               , Show (f p)
-               )
-            => f p -> SomeReason
+  BecauseOf :: (Spanned a, Pretty a) => a -> SomeReason
 
 instance Pretty SomeReason where
   pretty (BecauseOf a) = pretty a
@@ -120,7 +114,7 @@ instance Spanned SomeReason where
   annotation (BecauseOf a) = annotation a
 
 instance Show SomeReason where
-  show (BecauseOf a) = show a
+  show (BecauseOf _) = "reason"
 
 instance Eq SomeReason where
   BecauseOf _ == BecauseOf _ = False

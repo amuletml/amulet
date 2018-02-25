@@ -1,18 +1,21 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, NamedFieldPuns #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 module Errors where
 
 import Control.Monad.Infer
 
+import qualified Data.Text.IO as T
 import qualified Data.Text as T
+import Data.Function
+import Data.Position
+import Data.Spanned
+import Data.Span
 import Data.Text (Text)
 import Data.List
 
-import Data.Spanned
-
-import Data.Function
-
 import qualified Control.Monad.Infer as I
+import Control.Applicative
+import Control.Arrow (second)
 
 import Pretty
 import qualified Syntax.Resolve as R
@@ -43,28 +46,27 @@ instance Pretty TypeError where
   pretty (NoOverlap ta tb)
     | TyExactRows ra <- ta
     , TyRows _ rb <- tb
-    =   string "No overlap between exact record" </> (verbatim ta <+> string "and polymorphic record" <+> verbatim tb)
-    <#> indent 1 (missing ra rb)
-    | TyExactRows ra <- tb
-    , TyRows _ rb <- ta
-    =   string "No overlap between exact record" </> (verbatim ta <+> string "and polymorphic record" <+> verbatim tb)
-    <#> indent 1 (missing ra rb)
+    =   string "No overlap between exact record" <+> nest 9 (verbatim ta </> string "and polymorphic record" <+> verbatim tb)
+    <#> missing ra rb
+    | TyExactRows rb <- tb
+    , TyRows _ ra <- ta
+    =   string "No overlap between polymorphic record" <+> nest 21 (verbatim ta </> string "and exact record" <+> verbatim tb)
+    <#> missing ra rb
     | TyExactRows ra <- ta
     , TyExactRows rb <- tb
-    =   string "No overlap between extact records " </> (verbatim ta <+> string "and" <+> verbatim tb)
-    <+> indent 1 (missing ra rb)
+    =  string "No overlap between exact records" <+> nest 29 (verbatim ta </> string "and" <+> verbatim tb)
+    <#> missing ra rb
     | otherwise
     = string "\x1b[1;32minternal compiler error\x1b[0m: NoOverlap" <+> verbatim ta <+> verbatim tb
   pretty (IllegalTypeApp ex ta _)
-    = hsep [ string "Illegal type application " <+> verbatim ex
+    = vsep [ string "Illegal type application " <+> verbatim ex
            , indent 2 (bullet (string "because of type ") <+> verbatim ta)
            ]
   pretty (EscapedSkolems esc _) =
     case esc of
       [Skolem var u ty] ->
-        string "Skolem type constant "
-        </> verbatim var <+> string "has escaped its scope of" <+> verbatim ty
-            <+> bullet (string "Note: ") <+> verbatim var <+> string "stands for the type variable" <+> pretty (TyVar u)
+        string "Skolem type constant" <+> verbatim var <+> string "has escaped its scope of" <+> verbatim ty
+            <#> indent 2 ( bullet (string "Note:") <+> verbatim var <+> string "stands for the type variable" <+> pretty (TyVar u) )
       _ -> error (show esc)
 
   pretty (SkolBinding (Skolem _ x _) (TySkol (Skolem _ y _))) = pretty (NotEqual (TyVar x) (TyVar y))
@@ -86,17 +88,38 @@ prettyRows = braces . hsep . punctuate comma . map (\(x, y) -> string (T.unpack 
 missing :: [(Text, b)] -> [(Text, b)] -> Doc
 missing ra rb
   | length ra < length rb
-  =  bullet (string "Namely, the following fields are missing:") <+> hsep (punctuate comma (diff ra rb))
+  =  indent 2 $ bullet (string "Namely, the following fields are missing:") <+> hsep (punctuate comma (diff ra rb))
   | length ra > length rb
-  =  bullet (string "Namely, the following fields should not be present:") <+> hsep (punctuate comma (diff ra rb))
+  =  indent 2 $ bullet (string "Namely, the following fields should not be present:") <+> hsep (punctuate comma (diff ra rb))
   | length ra == length rb
-  = indent 2 . hsep $  [ bullet (string "Note: no fields match")
+  = indent 2 . vsep $  [ bullet (string "Note: no fields match")
                        , bullet (string "The following fields are missing:")
                          <+> hsep (punctuate comma (diff ra rb))]
 missing _ _ = undefined -- freaking GHC
 
 diff :: [(Text, b)] -> [(Text, b)] -> [Doc]
-diff ra rb = map ((squote <>) . string . T.unpack . fst) (deleteFirstsBy ((==) `on` fst) rb ra)
+diff ra rb = map (stypeVar . string . T.unpack . fst) (deleteFirstsBy ((==) `on` fst) rb ra)
 
 report :: Pretty p => p -> T.Text -> IO ()
-report err _ = putDoc (pretty err) *> putStr "\n"
+report err _ = putDoc (pretty err)
+
+reportI :: I.TypeError -> T.Text -> IO ()
+reportI err file
+  | (err', Just (reason, loc)) <- innermostError err =
+    let line = T.lines file !! (spLine (spanStart loc) - 1)
+        SourcePos{ spCol = start } = spanStart loc
+        SourcePos{ spCol = end } = spanEnd loc
+        over = T.replicate (start - 1) (T.singleton ' ') <> T.replicate (end - start + 1) (T.pack "~")
+        linum = T.pack (show (spLine (spanStart loc)))
+        prefix = T.pack "\x1b[1;34m" <> T.replicate (T.length linum + 1 ) (T.singleton ' ') <> T.singleton '|' <> T.singleton ' ' <> T.pack "\x1b[0m"
+        linumP = T.pack "\x1b[1;34m" <> linum <> T.singleton ' ' <> T.singleton '|' <> T.singleton ' ' <> T.pack "\x1b[0m"
+     in do
+       putDoc (pretty (I.ArisingFrom err' reason))
+       T.putStrLn prefix
+       T.putStrLn (linumP <> line)
+       T.putStrLn (prefix <> over)
+reportI err _ = putDoc (pretty err)
+
+innermostError :: TypeError -> (TypeError, Maybe (SomeReason, Span))
+innermostError (I.ArisingFrom err p) = second (<|> Just (BecauseOf p, annotation p)) $ innermostError err
+innermostError err = (err, Nothing)

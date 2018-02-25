@@ -69,7 +69,7 @@ unify tb@(TyRows rho brow) ta@(TyExactRows arow)
   | overlaps <- overlap arow brow
   , rhoNew <- deleteFirstsBy ((==) `on` fst) (sortOn fst arow) (sortOn fst brow)
   = case overlaps of
-      [] -> throwError (NoOverlap ta tb)
+      [] -> throwError (NoOverlap tb ta)
       xs -> do
         traverse_ (uncurry unify) xs
         unify rho (TyExactRows rhoNew)
