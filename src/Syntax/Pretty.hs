@@ -162,7 +162,7 @@ instance Pretty (Span, Type Typed) where
   pretty (x, _) = pretty x
 
 record :: [Doc] -> Doc
-record = encloseSep lbrace rbrace comma
+record = braces . hsep . punctuate comma
 
 prettyOneBinding :: Pretty (Var p) => Var p -> Expr p -> Doc
 prettyOneBinding n v = hsep (pretty n:map pretty args) <> sig <+> nest 2 (equals </> pretty rest') where
