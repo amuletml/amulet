@@ -65,11 +65,14 @@ unify (TyRows rho arow) (TyRows sigma brow)
       unify sigma (TyRows tau rhoNew) -- it's backwards
       pure ()
 unify ta@TyExactRows{} tb@TyRows{} = unify tb ta
-unify tb@(TyRows _ brow) ta@(TyExactRows arow)
+unify tb@(TyRows rho brow) ta@(TyExactRows arow)
   | overlaps <- overlap arow brow
+  , rhoNew <- deleteFirstsBy ((==) `on` fst) (sortOn fst arow) (sortOn fst brow)
   = case overlaps of
       [] -> throwError (NoOverlap ta tb)
-      xs -> traverse_ (uncurry unify) xs
+      xs -> do
+        traverse_ (uncurry unify) xs
+        unify rho (TyExactRows rhoNew)
 unify ta@(TyExactRows arow) tb@(TyExactRows brow)
   | overlaps <- overlap arow brow
   = do when (length overlaps /= length arow || length overlaps /= length brow)

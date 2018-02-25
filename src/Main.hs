@@ -31,7 +31,6 @@ import Errors
 import Parser
 import Parser.Wrapper
 
-import Text.Show.Pretty
 
 data CompileResult a
   = CSuccess ([Toplevel Typed], [CoStmt (Var Resolved)], [CoStmt a], Env)
