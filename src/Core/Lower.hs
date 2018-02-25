@@ -15,7 +15,9 @@ import Types.Infer (tyString, tyInt, tyBool, tyUnit)
 
 import qualified Data.Text as T
 import Data.Traversable
+import Data.Function
 import Data.Span
+import Data.List
 
 import qualified Core.Core as C
 import Core.Core hiding (CoTerm, CoStmt, CoType, CoPattern)
@@ -77,8 +79,6 @@ lowerAt (If c t e _) ty = do
   let tc = (CopLit ColTrue, cotyBool, t')
       te = (CopLit ColFalse, cotyBool, e')
   pure (CotMatch c' [tc, te])
-lowerAt (App f x _) _ = -- type ignored, ughr
-  CotApp <$> lowerExpr f <*> lowerExpr x
 lowerAt (Fun p bd an) (CotyArr a b) =
   let operational (PType p _ _) = operational p
       operational p = p
@@ -99,6 +99,19 @@ lowerAt (Match ex cs an) ty = do
     (,,) <$> lowerPat pat <*> pure mt <*> lowerAt ex ty
   fail <- patternMatchingFail (fst an) ty
   CotMatch <$> lowerAt ex mt <*> pure (cs' ++ [fail])
+lowerAt (Access r k _) ty = do
+  rt <- lowerType (getType r)
+  (iv, var) <- (,) <$> fresh <*> fresh
+  let cotyRows t [] = t
+      cotyRows t xs = CotyRows t xs
+      inner =
+        case rt of
+          CotyRows t rs -> cotyRows t (deleteBy ((==) `on` fst) (k, undefined) rs)
+          CotyExactRows rs -> CotyExactRows (deleteBy ((==) `on` fst) (k, undefined) rs)
+          _ -> error ("not a row type " ++ show rt)
+      match = ( CopExtend (CopCapture iv inner) [ (k, CopCapture var ty) ]
+              , rt, CotRef var ty )
+  flip CotMatch [match] <$> lowerAt r rt
 lowerAt (BinOp left op right a) t = lowerAt (App (App op left a) right a) t
 lowerAt Hole{} _ = error "holes can't be lowered"
 lowerAt e _ = lowerAnyway e
@@ -120,13 +133,14 @@ lowerAnyway (Literal l _) = pure . CotLit $ case l of
   LiBool True -> ColTrue
   LiBool False -> ColFalse
   LiUnit -> ColUnit
+lowerAnyway (App f x _) = CotApp <$> lowerExpr f <*> lowerExpr x
 lowerAnyway (TypeApp f x _) = CotTyApp <$> lowerExpr f <*> lowerType x
-lowerAnyway (Tuple xs _) = do
+lowerAnyway (Tuple xs _) = 
   let go :: MonadLower m => Int -> Expr Typed -> m (T.Text, CoType, CoTerm)
       go k x = (,,) <$> pure (T.pack (show k))
                     <*> lowerType (getType x)
                     <*> lowerExpr x
-  CotExtend (CotLit ColRecNil) <$> zipWithM go [1..] xs
+   in CotExtend (CotLit ColRecNil) <$> zipWithM go [1..] xs
 lowerAnyway e = error ("can't lower " ++ show e ++ " without type")
 
 lowerType :: MonadLower m => Type Typed -> m CoType
