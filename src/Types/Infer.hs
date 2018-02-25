@@ -140,8 +140,8 @@ infer (Literal l an) = pure (Literal l (an, ty), ty) where
     LiStr{} -> tyString
     LiBool{} -> tyBool
     LiUnit{} -> tyUnit
-infer (Ascription e ty an) = do
-  (ty', _) <- resolveKind ty
+infer ex@(Ascription e ty an) = do
+  (ty', _) <- resolveKind ty `catchError` \e -> throwError (ArisingFrom e ex)
   e' <- check e ty'
   pure (Ascription (correct ty' e') ty' (an, ty'), ty')
 infer ex@(App f x a) = do
