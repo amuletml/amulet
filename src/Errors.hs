@@ -29,8 +29,8 @@ bullet :: Doc -> Doc
 bullet = (char '·' <+>)
 
 instance Pretty TypeError where
-  pretty (NotEqual a b) = string "Type error: failed to" <+> align (string "unify" <+> verbatim a </> string "with" <+> verbatim b)
-  pretty (KindsNotEqual a b) = string "Kind error: failed to" <+> align (string "unify" <+> verbatim a </> string "with" <+> verbatim b)
+  pretty (NotEqual a b) = string "Type error: failed to" <+> align (string "unify" <+> verbatim a </> string " with" <+> verbatim b)
+  pretty (KindsNotEqual a b) = string "Kind error: failed to" <+> align (string "unify" <+> verbatim a </> string " with" <+> verbatim b)
   pretty (Occurs v t) = string "Occurs check: Variable" <+> align (verbatim v </> string "occurs in" <+> verbatim t)
   pretty (I.NotInScope e) = string "Variable not in scope:" <+> verbatim e
   pretty (I.ArisingFrom er ex) = pretty (annotation ex) <> colon </> pretty er <#> indent 2 (nest 4 (bullet (string "Arising from use of") </> pretty ex))
