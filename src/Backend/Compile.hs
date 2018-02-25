@@ -16,6 +16,8 @@ import Core.Core
 import Core.Types
 import Syntax
 
+import qualified Types.Wellformed as W
+
 import Data.Semigroup ((<>))
 
 import qualified Data.Map.Strict as Map
@@ -24,8 +26,8 @@ import Data.VarSet (IsVar(..))
 
 import qualified Data.Text as T
 import Data.Text (Text)
-import Data.List (sortOn, partition)
-import Data.Maybe (fromMaybe)
+import Data.List (sortOn, partition, uncons)
+import Data.Maybe (fromMaybe, maybeToList)
 
 type Returner = Maybe (LuaExpr -> LuaStmt)
 
@@ -52,16 +54,26 @@ compileProgram ev = LuaDo . (extendDef:) . compileProg where
 
   compileProg (CosLet vs:xs) = compileLet (unzip3 vs) ++ compileProg xs
   compileProg (CosType _ cs:xs) = map compileConstructor cs ++ compileProg xs
-  compileProg [] = [LuaCallS (main ev) []] where
-    main = LuaRef . LuaName . getTaggedName . toVar . head
-         . sortOn key
-         . filter isMain
-         . Map.keys
-         . _values
-    isMain (TgName x _) = x == "main"
-    isMain _ = False
-    key (TgName k _) = k
-    key _ = undefined
+  compileProg [] =
+    let main = fmap (toVar . fst) . uncons
+             . sortOn key
+             . filter isMain
+             . Map.keys
+             . _values
+        isMain (TgName x _) = x == "main"
+        isMain _ = False
+        key (TgName k _) = k
+        key _ = undefined
+     in case main ev of
+       Just ref ->
+         let go 0 _ = Nothing
+             go 1 it = Just (LuaCallS it [])
+             go n it = do
+               LuaCallS e _ <- go (n - 1) it
+               pure $ LuaCallS (LuaCall e []) []
+             ar = W.arity (_values ev Map.! ref)
+          in maybeToList (go ar (LuaRef (LuaName (getTaggedName ref))))
+       Nothing -> []
 
 compileConstructor :: Occurs a => (a, CoType a) -> LuaStmt
 compileConstructor (var, ty) | arity ty == 0
