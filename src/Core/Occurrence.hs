@@ -7,7 +7,7 @@ module Core.Occurrence
 
 
 import qualified Core.Core as C
-import Core.Core hiding (CoTerm, CoPattern, CoType, CoStmt)
+import Core.Core hiding (CoAtom, CoTerm, CoPattern, CoType, CoStmt)
 
 import qualified Data.Map.Strict as Map
 import qualified Data.VarSet as VarSet
@@ -20,6 +20,7 @@ import Control.Arrow
 import Syntax (Var(..))
 import Pretty
 
+type CoAtom a = C.CoAtom (OccursVar a)
 type CoTerm a = C.CoTerm (OccursVar a)
 type CoType a = C.CoType (OccursVar a)
 type CoStmt a = C.CoStmt (OccursVar a)
@@ -67,17 +68,20 @@ tagBindings vs ss =
       attach v = OccursVar v (toVar v `VarSet.member` free)
    in map (\(v, t, e) -> (attach v, fmap attach t, tagTerm e)) vs
 
+tagAtom :: IsVar a => C.CoAtom a -> CoAtom a
+tagAtom (CoaRef v t) = CoaRef (depends v mempty) (convert t)
+tagAtom (CoaLam Small (v, t) e) = CoaLam Small (depends v (freeIn e), convert t) (tagTerm e)
+tagAtom (CoaLam Big (v, t) b) = CoaLam Big (OccursVar v True, convert t) (tagTerm b)
+tagAtom (CoaLit l) = CoaLit l
+
 tagTerm :: IsVar a => C.CoTerm a -> CoTerm a
 tagTerm (CotLet vs e) = CotLet (tagBindings vs (freeIn e)) (tagTerm e)
-tagTerm (CotRef v t) = CotRef (depends v mempty) (convert t)
-tagTerm (CotLam Small (v, t) e) = CotLam Small (depends v (freeIn e), convert t) (tagTerm e)
-tagTerm (CotLam Big (v, t) b) = CotLam Big (OccursVar v True, convert t) (tagTerm b)
-tagTerm (CotApp f x) = CotApp (tagTerm f) (tagTerm x)
-tagTerm (CotMatch e bs) = CotMatch (tagTerm e) (map tagArm bs) where
+tagTerm (CotAtom a) = CotAtom (tagAtom a)
+tagTerm (CotApp f x) = CotApp (tagAtom f) (tagAtom x)
+tagTerm (CotMatch e bs) = CotMatch (tagAtom e) (map tagArm bs) where
   tagArm (p, t, e) = (fmap (flip depends (freeIn e)) p, convert t, tagTerm e)
-tagTerm (CotLit l) = CotLit l
-tagTerm (CotExtend l rs) = CotExtend (tagTerm l) (map (\(r, t, e) -> (r, convert t, tagTerm e)) rs)
-tagTerm (CotTyApp f x) = CotTyApp (tagTerm f) (convert x)
+tagTerm (CotExtend l rs) = CotExtend (tagAtom l) (map (\(r, t, e) -> (r, convert t, tagAtom e)) rs)
+tagTerm (CotTyApp f x) = CotTyApp (tagAtom f) (convert x)
 
 depends :: IsVar a => a -> VarSet.Set -> OccursVar a
 depends v ss = OccursVar v (toVar v `VarSet.member` ss)

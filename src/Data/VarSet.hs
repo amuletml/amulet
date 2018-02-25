@@ -2,7 +2,7 @@
 module Data.VarSet
   ( Set
   , fromList
-  , member, insert
+  , member, notMember, insert
   , difference, union, singleton, delete
   , (<>), mempty
   , IsVar(..)
@@ -32,6 +32,10 @@ fromList = foldr insert mempty
 member :: Var Resolved -> Set -> Bool
 member (TgName _ x) set = Set.member x (coerce set)
 member _ _ = False
+
+notMember :: Var Resolved -> Set -> Bool
+notMember (TgName _ x) set = Set.notMember x (coerce set)
+notMember _ _ = True
 
 difference :: Set -> Set -> Set
 difference = coerce Set.difference

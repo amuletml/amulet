@@ -84,46 +84,33 @@ compileConstructor (var, _) -- non-unit constructors, hard
     vl = LuaFunction [LuaName "x"] [LuaReturn (LuaTable [(LuaNumber 1, LuaString cn), (LuaNumber 2, LuaRef (LuaName "x"))])]
     cn = getName var
 
-compileExpr :: Occurs a => CoTerm a -> LuaExpr
-
--- First handle binary operators
-compileExpr (CotRef v _) | isBinOp v
+compileAtom :: Occurs a => CoAtom a -> LuaExpr
+compileAtom (CoaRef v _) | isBinOp v
   = LuaFunction [left] [LuaReturn (LuaFunction
                                     [right]
                                     [LuaReturn (LuaBinOp (LuaRef left) (remapOp (getTaggedName (toVar v))) (LuaRef right))])]
     where left  = LuaName "l"
           right = LuaName "r"
-compileExpr (CotApp f e) =
-  case (unwrap f, e) of
-    (CotApp (CotRef f _) left, right) | isBinOp f ->
-      LuaBinOp (compileExpr left) (remapOp (getTaggedName (toVar f))) (compileExpr right)
-    (CotRef f _, left) | isBinOp f ->
-      LuaFunction [name] [LuaReturn (LuaBinOp (compileExpr left) (remapOp (getTaggedName (toVar f))) (LuaRef name))]
-    _ -> LuaCall (compileExpr f) [compileExpr e]
 
-    where name = LuaName "__r"
+compileAtom (CoaRef v _) = LuaRef (lowerName v)
+compileAtom (CoaLam Small (v, _) e) = LuaFunction [lowerName v] (compileStmt (Just LuaReturn) e)
+compileAtom (CoaLam Big _ e) = compileExpr e
 
-          -- Remove all CotTyApps from our application: only used for binary operations
-          unwrap (CotTyApp x _) = unwrap x
-          unwrap (CotApp f x) = CotApp (unwrap f) x
-          unwrap x = x
+compileAtom (CoaLit (ColInt x))   = LuaNumber (fromInteger x)
+compileAtom (CoaLit (ColStr str)) = LuaString str
+compileAtom (CoaLit ColTrue)      = LuaTrue
+compileAtom (CoaLit ColFalse)     = LuaFalse
+compileAtom (CoaLit ColUnit)      = LuaNil -- evil!
+compileAtom (CoaLit ColRecNil)    = LuaTable []
 
-compileExpr (CotRef v _) = LuaRef (lowerName v)
-compileExpr (CotLam Small (v, _) e) = LuaFunction [lowerName v] (compileStmt (Just LuaReturn) e)
-compileExpr (CotLam Big _ e) = compileExpr e
-compileExpr (CotTyApp f _) = compileExpr f
+compileExpr :: Occurs a => CoTerm a -> LuaExpr
+compileExpr (CotAtom a) = compileAtom a
+compileExpr (CotApp f e) = LuaCall (compileAtom f) [compileAtom e]
+compileExpr (CotTyApp f _) = compileAtom f
+compileExpr (CotExtend (CoaLit ColRecNil) fs)
+  = LuaTable (map (\(f, _, e) -> (LuaString f, compileAtom e)) fs)
 
-compileExpr (CotLit (ColInt x))   = LuaNumber (fromInteger x)
-compileExpr (CotLit (ColStr str)) = LuaString str
-compileExpr (CotLit ColTrue)      = LuaTrue
-compileExpr (CotLit ColFalse)     = LuaFalse
-compileExpr (CotLit ColUnit)      = LuaNil -- evil!
-compileExpr (CotLit ColRecNil)    = LuaTable []
-
-compileExpr (CotExtend (CotLit ColRecNil) fs)
-  = LuaTable (map (\(f, _, e) -> (LuaString f, compileExpr e)) fs)
 compileExpr s@CotExtend{} = compileIife s
-
 compileExpr s@CotLet{}    = compileIife s
 compileExpr s@CotMatch{}  = compileIife s
 
@@ -131,9 +118,7 @@ global :: String -> LuaExpr
 global x = LuaRef (LuaIndex (LuaRef (LuaName "_G")) (LuaString (T.pack x)))
 
 compileStmt :: Occurs a => Returner -> CoTerm a -> [LuaStmt]
-compileStmt r e@CotRef{} = pureReturn r $ compileExpr e
-compileStmt r e@CotLam{} = pureReturn r $ compileExpr e
-compileStmt r e@CotLit{} = pureReturn r $ compileExpr e
+compileStmt r (CotAtom a) = pureReturn r $ compileAtom a
 compileStmt r (CotLet k c) = compileLet (unzip3 k) ++ compileStmt r c
 compileStmt r (CotMatch s ps) = runGen (compileMatch r s ps)
 
@@ -141,13 +126,13 @@ compileStmt Nothing e@CotApp{} = case compileExpr e of
                                      LuaCall f a -> [LuaCallS f a]
                                      expr -> [LuaLocal [LuaName "_"] [expr]]
 compileStmt (Just r) e@CotApp{} = [r (compileExpr e)]
-compileStmt r (CotTyApp f _) = compileStmt r f
+compileStmt r (CotTyApp f _) = pureReturn r $ compileAtom f
 
-compileStmt r e@(CotExtend (CotLit ColRecNil) _) = dirtyReturn r (compileExpr e) -- TODO: Flatten if r is nothing?
-compileStmt r (CotExtend tbl exs) = [ LuaLocal [old, new] [compileExpr tbl, LuaTable []]
+compileStmt r e@(CotExtend (CoaLit ColRecNil) _) = dirtyReturn r (compileExpr e) -- TODO: Flatten if r is nothing?
+compileStmt r (CotExtend tbl exs) = [ LuaLocal [old, new] [compileAtom tbl, LuaTable []]
                                     , LuaFor [k, v] [LuaCall (LuaRef pairs) [LuaRef old]]
                                       [LuaAssign [LuaIndex (LuaRef new) (LuaRef (LuaName k))] [LuaRef (LuaName v)]] ] ++
-                                    map (\(f, _, e) -> LuaAssign [LuaIndex (LuaRef new) (LuaString f)] [compileExpr e]) exs ++
+                                    map (\(f, _, e) -> LuaAssign [LuaIndex (LuaRef new) (LuaString f)] [compileAtom e]) exs ++
                                     pureReturn r (LuaRef new)
   where old = LuaName (T.pack "__o")
         new = LuaName (T.pack "__n")
@@ -195,7 +180,7 @@ compileLet (vs, _, es) = locals recs (assigns nonrecs) where
     xs -> LuaLocal (map (lowerName . fst) xs) []:map one xs
   one (v, t) = LuaAssign [lowerName v] [compileExpr t]
 
-  recursive v term@CotLam{} = toVar v `VarSet.member` freeIn term
+  recursive v (CotAtom term@CoaLam{}) = toVar v `VarSet.member` freeInAtom term
   recursive _ _ = False
 
 pureReturn :: Returner -> LuaExpr -> [LuaStmt]
@@ -217,7 +202,7 @@ foldAnd = foldl1 k where
 patternTest :: forall a. Occurs a => CoPattern a -> LuaExpr ->  LuaExpr
 patternTest (CopCapture _ _) _   = LuaTrue
 patternTest (CopLit ColRecNil) _ = LuaTrue
-patternTest (CopLit l)     vr    = LuaBinOp (compileExpr (CotLit l :: CoTerm a)) "==" vr
+patternTest (CopLit l)     vr    = LuaBinOp (compileAtom (CoaLit l :: CoAtom a)) "==" vr
 patternTest (CopExtend p rs) vr  = foldAnd (patternTest p vr : map test rs) where
   test (var', pat) = patternTest pat (LuaRef (LuaIndex vr (LuaString var')))
 patternTest (CopConstr con) vr   = foldAnd [tag con vr]
@@ -236,20 +221,12 @@ patternBindings (CopDestr _ p) vr   = patternBindings p (LuaRef (LuaIndex vr (Lu
 patternBindings (CopExtend p rs) vr = patternBindings p vr ++ concatMap (index vr) rs where
   index vr (var', pat) = patternBindings pat (LuaRef (LuaIndex vr (LuaString var')))
 
-compileMatch :: Occurs a => Returner -> CoTerm a -> [(CoPattern a, CoType a, CoTerm a)] -> Gen Int [LuaStmt]
-compileMatch r ex ps =
-  case ex of
-    (CotRef f _) -> pure $ genIf (lowerName f) ps
-    _ -> do
-      -- Cache the matchee in a temporary variable. We attempt to detect the
-      -- trivial `local x = expr` case, otherwise we pre-declare the variable.
-      x <- LuaName . ("__" <>) . (alpha !!) <$> gen
-      pure $ case compileStmt (Just $ LuaAssign [x] . pure) ex of
-               [LuaAssign [x'] [bod]] | x == x' -> LuaLocal [x] [bod] : genIf x ps
-               bod -> LuaLocal [x] [] : bod ++ genIf x ps
+compileMatch :: Occurs a => Returner -> CoAtom a -> [(CoPattern a, CoType a, CoTerm a)] -> Gen Int [LuaStmt]
+compileMatch r ex ps = pure $ genIf (compileAtom ex) ps
 
-  where genBinding x (p, _, c) = ( patternTest p (LuaRef x)
-                                 , (case patternBindings p (LuaRef x) of
+
+  where genBinding x (p, _, c) = ( patternTest p x
+                                 , (case patternBindings p x of
                                       [] -> []
                                       xs -> [uncurry LuaLocal (unzip xs)])
                                    ++ compileStmt r c)
