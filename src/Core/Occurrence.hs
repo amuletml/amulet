@@ -48,9 +48,9 @@ tagOccurence env sts = fst (go sts) where
     let (prg', free) = go prg
      in (CosForeign (depends v free) (convert t) c:prg', toVar v `VarSet.delete` free)
   go (t':prg) = first (fmap (flip OccursVar True) t':) (go prg)
-  go [] = ([], VarSet.singleton (main env))
+  go [] = ([], maybe mempty VarSet.singleton (main env))
 
-  main = toVar . head
+  main = fmap (toVar . fst) . uncons
        . sortOn key
        . filter isMain
        . Map.keys
