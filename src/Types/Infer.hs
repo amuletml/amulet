@@ -31,9 +31,6 @@ import Types.Unify
 import Types.Holes
 import Types.Kinds
 
-import Pretty (pretty, vsep)
-import Debug.Trace
-
 -- Solve for the types of lets in a program
 inferProgram :: MonadGen Int m => [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))
 inferProgram ct = fmap fst <$> runInfer builtinsEnv (inferAndCheck ct) where
