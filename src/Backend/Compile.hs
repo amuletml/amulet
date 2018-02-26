@@ -6,9 +6,6 @@ module Backend.Compile
   , compileLet
   ) where
 
-import Control.Monad.Gen
-import Control.Monad
-
 import Control.Monad.Infer
 
 import Backend.Lua
@@ -187,7 +184,7 @@ compileTerm (CotLet bs body) = do
 compileTerm (CotMatch test branches) = do
   flushStmt [] ()
   test' <- compileAtom test
-  pure $ iife $ runGen $ compileMatch (Just LuaReturn) test' branches
+  compileMatch test' branches
 
 global :: String -> LuaExpr
 global x = LuaRef (LuaIndex (LuaRef (LuaName "_G")) (LuaString (T.pack x)))
@@ -274,14 +271,13 @@ patternBindings (CopDestr _ p) vr   = patternBindings p (LuaRef (LuaIndex vr (Lu
 patternBindings (CopExtend p rs) vr = patternBindings p vr ++ concatMap (index vr) rs where
   index vr (var', pat) = patternBindings pat (LuaRef (LuaIndex vr (LuaString var')))
 
-compileMatch :: Occurs a => Returner -> LuaExpr -> [(CoPattern a, CoType a, CoTerm a)] -> Gen Int [LuaStmt]
-compileMatch r ex ps = pure $ genIf ex ps
-  where genBinding x (p, _, c) = ( patternTest p x
-                                 , (case patternBindings p x of
-                                      [] -> []
-                                      xs -> [uncurry LuaLocal (unzip xs)])
-                                   ++ compileStmt r c)
-        genIf x ps = [ LuaIfElse (map (genBinding x) ps) ]
+compileMatch :: Occurs a => LuaExpr -> [(CoPattern a, CoType a, CoTerm a)] -> ExprContext a LuaExpr
+compileMatch ex ps = EC $ \xs next -> ([LuaIfElse (map (genBinding next ex) ps)], xs)
+  where genBinding next x (p, _, c) = ( patternTest p x
+                                      , (case patternBindings p x of
+                                           [] -> []
+                                           xs -> [uncurry LuaLocal (unzip xs)])
+                                        ++ fst (unEC (compileTerm c) [] next))
 
 --- This is a hack, but we need this for compiling record extension
 extendDef :: LuaStmt
