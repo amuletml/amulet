@@ -31,6 +31,9 @@ import Types.Unify
 import Types.Holes
 import Types.Kinds
 
+import Pretty (pretty, vsep)
+import Debug.Trace
+
 -- Solve for the types of lets in a program
 inferProgram :: MonadGen Int m => [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))
 inferProgram ct = fmap fst <$> runInfer builtinsEnv (inferAndCheck ct) where
@@ -62,10 +65,10 @@ check e ty@TyForall{} = do -- This is rule Decl∀L from [Complete and Easy]
   e' <- check e =<< skolemise ty -- gotta be polymorphic - don't allow instantiation
   pure (correct ty e')
 check (Hole v a) t = pure (Hole (TvName v) (a, t))
-check ex@(Fun p b a) ty = do
-  (dom, cod, _) <- decompose ex _TyArr ty
-  (p', ms) <- checkPattern p dom
-  Fun p' <$> extendMany ms (check b cod) <*> pure (a, ty)
+-- check ex@(Fun p b a) ty = do
+--   (dom, cod, _) <- decompose ex _TyArr ty
+--   (p', ms) <- checkPattern p dom
+--   Fun p' <$> extendMany ms (check b cod) <*> pure (a, ty)
 check (Begin [] _) _ = error "impossible"
 check (Begin xs a) t = do
   let start = init xs
@@ -229,7 +232,8 @@ inferLetTy :: (MonadInfer Typed m)
                 , [(Var Typed, Type Typed)])
 inferLetTy _ ks [] = pure ([], ks)
 inferLetTy closeOver ks ((va, ve, vann):xs) = extendMany ks $ do
-  ((ve', ty), c) <- listen (infer ve) -- See note [Freedom of the press]
+  ty <- maybe freshTV pure (TvName va `lookup` ks)
+  (ve', c) <- listen (check ve ty) -- See note [Freedom of the press]
   cur <- gen
 
   (x, vt) <- case solve cur mempty c of
