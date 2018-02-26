@@ -37,6 +37,7 @@ data OccursVar v
 
 instance IsVar a => IsVar (OccursVar a) where
   toVar = toVar . underlying
+  fromVar = flip OccursVar 1 . fromVar
 
 instance Pretty a => Pretty (OccursVar a) where
   pretty = pretty . underlying

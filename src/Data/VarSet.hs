@@ -54,6 +54,8 @@ delete _ set = set
 
 class (Data a, Eq a, Ord a, Pretty a, Show a) => IsVar a where
   toVar :: a -> Var Resolved
+  fromVar :: Var Resolved -> a
 
 instance IsVar (Var Resolved) where
   toVar = id
+  fromVar = id
