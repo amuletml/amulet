@@ -2,36 +2,26 @@ module Core.Simplify
   ( optimise
   ) where
 
--- import Core.Optimise.Propagate
--- import Core.Optimise.Inline
--- import Core.Optimise.Match
-import Core.Optimise.Fold
+import Core.Optimise.Inline
+import Core.Optimise.Reduce
 import Core.Optimise
 
 import Control.Monad.Gen
 
 import Syntax (Var(..), Resolved)
 
-import Data.Maybe
-
 optmOnce :: [CoStmt (Var Resolved)] -> Gen Int [CoStmt (Var Resolved)]
-optmOnce t = fmap (fromMaybe t) . runTransform . transformStmts passes $ t where
-  passes = mconcat
-           [ foldExpr
-           , dropUselessLet
+optmOnce = pure . passes where
+  passes = foldr (.) id
+           [ id
+           , reduceTermPass
+           -- , inlineVariablePass
            ]
-      -- [ dropBranches
-      -- , foldExpr
-      -- , trivialPropag
-      -- , constrPropag
-      -- , matchKnownConstr
+           -- , dropUselessLet
+           -- ]
+      -- , inlineVariablePass
       -- , matchOfMatch
       -- , matchOfBottom
-      -- , inlineVariable
-      -- , betaReduce
-      -- , dropUselessLet
-      -- -- , complexSafePropag
-      -- ]
 
 optimise :: [CoStmt (Var Resolved)] -> Gen Int [CoStmt (Var Resolved)]
 optimise = go 25 where

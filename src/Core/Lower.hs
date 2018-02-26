@@ -1,21 +1,22 @@
 {-# LANGUAGE FlexibleContexts, ConstraintKinds, OverloadedStrings #-}
 {-# LANGUAGE LambdaCase, TupleSections #-}
 module Core.Lower
-  ( lowerExpr
+  ( lowerExprTerm
   , lowerType
   , lowerPat
   , lowerProg
   , cotyString, cotyInt, cotyBool, cotyUnit
   ) where
 
-
 import Control.Monad.Infer
+import Control.Monad.Cont
 
 import Types.Infer (tyString, tyInt, tyBool, tyUnit)
 
 import qualified Data.Text as T
 import Data.Traversable
 import Data.Function
+import Data.Foldable
 import Data.Span
 import Data.List
 
@@ -26,30 +27,30 @@ import Syntax
 
 import Pretty (pretty)
 
-type MonadLower m
-  = ( MonadGen Int m
-    , MonadReader Env m )
-
 type CoAtom = C.CoAtom (Var Resolved)
 type CoTerm = C.CoTerm (Var Resolved)
 type CoType = C.CoType (Var Resolved)
 type CoPattern = C.CoPattern (Var Resolved)
 type CoStmt = C.CoStmt (Var Resolved)
 
-cotyString, cotyUnit, cotyBool, cotyInt :: CoType
-cotyString = runGenT (lowerType tyString) mempty
-cotyUnit = runGenT (lowerType tyUnit) mempty
-cotyBool = runGenT (lowerType tyBool) mempty
-cotyInt = runGenT (lowerType tyInt) mempty
+type Lower = ContT CoTerm
 
-makeBigLams :: MonadLower m
-            => Type Typed
-            -> m (CoTerm -> CoTerm, CoType)
-makeBigLams (TyForall vs t) = do
+type MonadLower m
+  = ( MonadGen Int m
+    , MonadReader Env m )
+
+cotyString, cotyUnit, cotyBool, cotyInt :: CoType
+cotyString = lowerType tyString
+cotyUnit = lowerType tyUnit
+cotyBool = lowerType tyBool
+cotyInt = lowerType tyInt
+
+makeBigLams :: Type Typed -> CoTerm -> CoTerm
+makeBigLams (TyForall vs _) =
   let biglam (TvName x:xs) = CotAtom . CoaLam Big (x, CotyStar) . biglam xs
       biglam [] = id
-  (,) (biglam vs) <$> lowerType t
-makeBigLams t = (,) id <$> lowerType t
+  in biglam vs
+makeBigLams _ = id
 
 errRef :: CoAtom
 errRef = CoaRef (TgInternal "error")
@@ -66,69 +67,69 @@ patternMatchingFail w t = do
   pure (CopCapture var t, t, CotLet [(tyApp, errTy, CotTyApp errRef t)]
                              (CotApp (CoaRef tyApp errTy) err))
 
-onAtom :: MonadLower m => CoTerm -> CoType -> (CoAtom -> CoTerm) -> m CoTerm
-onAtom (CotAtom a) _ f = pure (f a)
-onAtom x           t f = (\v -> CotLet [(v, t, x)] (f (CoaRef v t))) <$> fresh
+lowerAtAtom :: MonadLower m => Expr Typed -> CoType -> Lower m CoAtom
+lowerAtAtom x t = do x' <- lowerAt x t
+                     case x' of
+                       CotAtom a -> pure a
+                       x' -> ContT $ \k ->
+                         fresh >>= \v -> CotLet [(v, t, x')] <$> k (CoaRef v t)
 
-onAtomM :: MonadLower m => CoTerm -> CoType -> (CoAtom -> m CoTerm) -> m CoTerm
-onAtomM (CotAtom a) _ f = f a
-onAtomM x           t f = (\v -> CotLet [(v, t, x)] <$> f (CoaRef v t)) =<< fresh
+lowerAtTerm :: MonadLower m => Expr Typed -> CoType -> m CoTerm
+lowerAtTerm x t = runContT (lowerAt x t) pure
 
-onAtoms :: MonadLower m => [(CoTerm, CoType)] -> ([CoAtom] -> CoTerm) -> m CoTerm
-onAtoms = accum [] where
-  accum as [] f = pure (f (reverse as))
-  accum as ((CotAtom a,_):xs) f = accum (a:as) xs f
-  accum as ((x,tx):xs) f = do
-    v <- fresh
-    CotLet [(v, tx, x)] <$> accum (CoaRef v tx:as) xs f
+lowerExprAtom :: MonadLower m => Expr Typed -> Lower m CoAtom
+lowerExprAtom e = lowerAtAtom e (lowerType (getType e))
 
-lowerExpr :: MonadLower m => Expr Typed -> m CoTerm
-lowerExpr e = lowerAt e =<< lowerType (getType e)
+lowerExprTerm :: MonadLower m => Expr Typed -> m CoTerm
+lowerExprTerm e = lowerAtTerm e (lowerType (getType e))
 
-lowerBoth :: MonadLower m => Expr Typed -> m (CoTerm, CoType)
-lowerBoth e = do
-  t <- lowerType (getType e)
-  (,t) <$> lowerAt e t
+lowerBothAtom :: MonadLower m => Expr Typed -> Lower m (CoAtom, CoType)
+lowerBothAtom e = let t = lowerType (getType e)
+                  in (,t) <$> lowerAtAtom e t
 
-lowerAt :: MonadLower m => Expr Typed -> CoType -> m CoTerm
+lowerBothTerm :: MonadLower m => Expr Typed -> m (CoTerm, CoType)
+lowerBothTerm e = let t = lowerType (getType e)
+                  in (,t) <$> lowerAtTerm e t
+
+lowerAt :: MonadLower m => Expr Typed -> CoType -> Lower m CoTerm
 lowerAt (Ascription e _ _) t = lowerAt e t
-lowerAt e (CotyForall vs b) = CotAtom . CoaLam Big (vs, CotyStar) <$> lowerAt e b
+lowerAt e (CotyForall vs b) = CotAtom . CoaLam Big (vs, CotyStar) <$> lowerAtTerm e b
 lowerAt (VarRef (TvName p) _) ty = pure (CotAtom (CoaRef p ty))
 lowerAt (Let vs t _) ty = do
   vs' <- for vs $ \(TvName var, ex, (_, ty)) -> do
-    ty' <- lowerType ty
-    (,,) var <$> pure ty' <*> lowerAt ex ty'
-  CotLet vs' <$> lowerAt t ty
+    let ty' = lowerType ty
+    (var,ty',) <$> lowerAtTerm ex ty'
+  CotLet vs' <$> lowerAtTerm t ty
 lowerAt (If c t e _) ty = do
-  (c', t', e') <- (,,) <$> lowerAt c cotyBool <*> lowerAt t ty <*> lowerAt e ty
+  c' <- lowerAtAtom c cotyBool
+  t' <- lowerAtTerm t ty
+  e' <- lowerAtTerm e ty
   let tc = (CopLit ColTrue, cotyBool, t')
       te = (CopLit ColFalse, cotyBool, e')
-  onAtom c' cotyBool (flip CotMatch [tc, te])
+  pure $ CotMatch c' [tc, te]
 lowerAt (Fun p bd an) (CotyArr a b) =
   let operational (PType p _ _) = operational p
       operational p = p
    in case operational p of
-        Capture (TvName v) _ -> CotAtom . CoaLam Small (v, a) <$> lowerAt bd b
+        Capture (TvName v) _ -> CotAtom . CoaLam Small (v, a) <$> lowerAtTerm bd b
         _ -> do
-          (p', bd') <- (,) <$> lowerPat p <*> lowerAt bd b
+          (p', bd') <- (,) <$> lowerPat p <*> lowerAtTerm bd b
           arg <- fresh
           fail <- patternMatchingFail (fst an) b
           pure (CotAtom (CoaLam Small (arg, a) (CotMatch (CoaRef arg a) [ (p', a, bd'), fail ])))
 lowerAt (Begin [x] _) t = lowerAt x t
-lowerAt (Begin xs _) t =
-  let bind e = (,,) <$> fresh <*> lowerType (getType e) <*> lowerExpr e
-   in CotLet <$> traverse bind (init xs) <*> lowerAt (last xs) t
+lowerAt (Begin xs _) t = lowerAtTerm (last xs) t >>= flip (foldrM bind) (init xs) where
+  bind e r = flip CotLet r . pure <$> (build <$> fresh <*> lowerBothTerm e)
+  build a (b, c) = (a, c, b)
 lowerAt (Match ex cs an) ty = do
-  mt <- lowerType (getType ex)
+  (ex', mt) <- lowerBothAtom ex
   cs' <- for cs $ \(pat, ex) ->
-    (,,) <$> lowerPat pat <*> pure mt <*> lowerAt ex ty
+    (,mt,) <$> lowerPat pat <*> lowerAtTerm ex ty
   fail <- patternMatchingFail (fst an) ty
-  ex' <- lowerAt ex mt
 
-  onAtom ex' mt (flip CotMatch (cs' ++ [fail]))
+  pure $ CotMatch ex' (cs' ++ [fail])
 lowerAt (Access r k _) ty = do
-  rt <- lowerType (getType r)
-  r' <- lowerAt r rt
+  (r', rt) <- lowerBothAtom r
   (iv, var) <- (,) <$> fresh <*> fresh
   let cotyRows t [] = t
       cotyRows t xs = CotyRows t xs
@@ -139,25 +140,24 @@ lowerAt (Access r k _) ty = do
           _ -> error ("not a row type " ++ show rt)
       match = ( CopExtend (CopCapture iv inner) [ (k, CopCapture var ty) ]
               , rt, CotAtom (CoaRef var ty ))
-  onAtom r' rt (flip CotMatch [match])
+  pure $ CotMatch r' [match]
 
 lowerAt (BinOp left op right a) t = lowerAt (App (App op left a) right a) t
 lowerAt Hole{} _ = error "holes can't be lowered"
 lowerAt e _ = lowerAnyway e
 
-lowerAnyway :: MonadLower m => Expr Typed -> m CoTerm
+lowerAnyway :: MonadLower m => Expr Typed -> Lower m CoTerm
 lowerAnyway (Record xs _) = case xs of
   [] -> pure (CotAtom (CoaLit ColRecNil))
   xs -> do
-    xs' <- traverse (lowerBoth . snd) xs
-    onAtoms xs' (CotExtend (CoaLit ColRecNil) . zipWith3 build xs xs')
-  where build (name, _) (_, ty) atom = (name, ty, atom)
+    xs' <- traverse (lowerBothAtom . snd) xs
+    pure $ CotExtend (CoaLit ColRecNil) (zipWith build xs xs')
+  where build (name, _) (atom, ty) = (name, ty, atom)
 lowerAnyway (RecordExt e xs _) = do
-  (e', et) <- lowerBoth e
-  xs' <- traverse (lowerBoth . snd) xs
-  onAtomM e' et $ \e'' ->
-    onAtoms xs' (CotExtend e'' . zipWith3 build xs xs')
-  where build (name, _) (_, ty) atom = (name, ty, atom)
+  e' <- lowerExprAtom e
+  xs' <- traverse (lowerBothAtom . snd) xs
+  pure $ CotExtend e' (zipWith build xs xs')
+  where build (name, _) (atom, ty) = (name, ty, atom)
 
 lowerAnyway (Literal l _) = pure . CotAtom . CoaLit $ case l of
   LiInt i -> ColInt i
@@ -165,49 +165,34 @@ lowerAnyway (Literal l _) = pure . CotAtom . CoaLit $ case l of
   LiBool True -> ColTrue
   LiBool False -> ColFalse
   LiUnit -> ColUnit
-lowerAnyway (App f x _) = do
-  (f', tf) <- lowerBoth f
-  (x', tx) <- lowerBoth x
-  onAtomM f' tf $ onAtom x' tx . CotApp
+lowerAnyway (App f x _) = CotApp <$> (lowerExprAtom f) <*> lowerExprAtom x
 
-lowerAnyway (TypeApp f x _) = do
-  (f', tf) <- lowerBoth f
-  x' <- lowerType x
-  onAtom f' tf (flip CotTyApp x')
+lowerAnyway (TypeApp f x _) = flip CotTyApp (lowerType x) <$> lowerExprAtom f
 lowerAnyway (Tuple xs _) = do
-  xs' <- traverse lowerBoth xs
-  onAtoms xs' (CotExtend (CoaLit ColRecNil) . zipWith3 build [1..] xs')
-  where build num (_, ty) atom = (T.pack (show (num :: Int)), ty, atom)
+  xs' <- traverse lowerBothAtom xs
+  pure $ CotExtend (CoaLit ColRecNil) (zipWith build [1..] xs')
+  where build num (atom, ty) = (T.pack (show (num :: Int)), ty, atom)
 lowerAnyway e = error ("can't lower " ++ show e ++ " without type")
 
-lowerType :: MonadLower m => Type Typed -> m CoType
-lowerType tt = case tt of
-  t@TyTuple{} -> CotyExactRows <$> tup2Rec 1 t
-  TyArr a b -> CotyArr <$> lowerType a <*> lowerType b
-  TyForall vs b -> do
-    b' <- lowerType b
-    pure (foldr CotyForall b' (map unTvName vs))
-  TyApp a b -> CotyApp <$> lowerType a <*> lowerType b
-  TyRows rho vs -> CotyRows <$> lowerType rho <*> do
-    for vs $ \(label, tp) -> (,) label <$> lowerType tp
-  TyExactRows vs -> CotyExactRows <$> do
-    for vs $ \(label, tp) -> (,) label <$> lowerType tp
-  TyVar (TvName v) -> pure (CotyVar v)
-  TyCon (TvName v) -> pure (CotyCon v)
-  TySkol (Skolem _ (TvName v) _) -> pure (CotyVar v)
+lowerType :: Type Typed -> CoType
+lowerType t@TyTuple{} = CotyExactRows (tup2Rec 1 t)
+lowerType (TyArr a b) = CotyArr (lowerType a) (lowerType b)
+lowerType (TyForall vs b) = foldr (CotyForall . unTvName) (lowerType b) vs
+lowerType (TyApp a b) = CotyApp (lowerType a) (lowerType b)
+lowerType (TyRows rho vs) = CotyRows (lowerType rho) (map (fmap lowerType) vs)
+lowerType (TyExactRows vs) = CotyExactRows (map (fmap lowerType) vs)
+lowerType (TyVar (TvName v)) = CotyVar v
+lowerType (TyCon (TvName v)) = CotyCon v
+lowerType (TySkol (Skolem _ (TvName v) _)) = CotyVar v
 
-tup2Rec :: MonadLower m => Int -> Type Typed -> m [(T.Text, CoType)]
-tup2Rec k (TyTuple a b) = do
-  a' <- lowerType a
-  (:) (T.pack (show k), a') <$> tup2Rec (succ k) b
-tup2Rec k b = do
-  b' <- lowerType b
-  pure [(T.pack (show k), b')]
+tup2Rec :: Int -> Type Typed -> [(T.Text, CoType)]
+tup2Rec k (TyTuple a b) = (T.pack (show k), lowerType a) : tup2Rec (succ k) b
+tup2Rec k b = [(T.pack (show k), lowerType b)]
 
 lowerPat :: MonadLower m => Pattern Typed -> m CoPattern
 lowerPat pat = case pat of
-  Capture (TvName x) (_, t) -> CopCapture x <$> lowerType t
-  Wildcard (_, t) -> CopCapture <$> fresh <*> lowerType t
+  Capture (TvName x) (_, t) -> pure $ CopCapture x (lowerType t)
+  Wildcard (_, t) -> CopCapture <$> fresh <*> pure (lowerType t)
   Destructure (TvName p) Nothing _ -> pure $ CopConstr p
   Destructure (TvName p) (Just t) _ -> CopDestr p <$> lowerPat t
   PType p _ _ -> lowerPat p
@@ -223,8 +208,8 @@ lowerPat pat = case pat of
       fixup (CotyRows rho _) = rho
       fixup x = x
 
-      tidy = fmap (fixup . realt) . lowerType
-     in CopExtend <$> (CopCapture <$> fresh <*> tidy t) <*> traverse lowerRow xs
+      tidy = fixup . realt . lowerType
+     in CopExtend <$> (CopCapture <$> fresh <*> pure (tidy t)) <*> traverse lowerRow xs
   PTuple [] _ -> pure . CopLit $ ColUnit
   PTuple xs _ -> do
     let go :: MonadLower m => Int -> Pattern Typed -> m (T.Text, CoPattern)
@@ -235,18 +220,14 @@ lowerPat pat = case pat of
 lowerProg :: MonadLower m => [Toplevel Typed] -> m [CoStmt]
 lowerProg [] = pure []
 lowerProg (ForeignVal (TvName t) ex tp _:prg) = do
-  tp' <- lowerType tp
-  (CosForeign t tp' ex:) <$> lowerProg prg
+  (CosForeign t (lowerType tp) ex:) <$> lowerProg prg
 lowerProg (LetStmt vs:prg) =
-  (:) <$> (CosLet <$> for vs (\(TvName v, ex, (_, ant)) -> do
-                                 (k, _) <- makeBigLams ant
-                                 (v,,) <$> lowerType ant <*> (k <$> lowerExpr ex)))
+  (:) <$> (CosLet <$> for vs (\(TvName v, ex, (_, ant)) -> (v, lowerType ant, ) . (makeBigLams ant) <$> lowerExprTerm ex))
       <*> lowerProg prg
 lowerProg (TypeDecl (TvName var) _ cons:prg) =
-  (:) <$> (CosType var <$> do
-              for cons $ \case
-                UnitCon (TvName p) (_, t) -> (,) p <$> lowerType t
-                ArgCon (TvName p) _ (_, t) -> (,) p <$> lowerType t)
-      <*> lowerProg prg
+  (:) (CosType var (map (\case
+                            UnitCon (TvName p) (_, t) -> (p, lowerType t)
+                            ArgCon (TvName p) _ (_, t) -> (p, lowerType t)) cons))
+      <$> lowerProg prg
 lowerProg (Open _ _:prg) = lowerProg prg
 lowerProg (Module _ b:prg) = (++) <$> lowerProg b <*> lowerProg prg

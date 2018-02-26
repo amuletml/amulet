@@ -172,20 +172,30 @@ compileTerm (CotExtend tbl exs) = do
 
         compileRow (f, _, e) es = (:es) . LuaAssign [LuaIndex (LuaRef new) (LuaString f)] . pure <$> compileAtom e
 
-compileTerm (CotLet [(x, _, e)] body) | usedWhen x == 1 && not (isMultiMatch e) &&
-                                        toVar x `VarSet.notMember` freeIn e = do
-  -- If we've got a let binding which is only used once then push it onto the stack
-  e' <- compileTerm e
-  EC $ \xs next -> next ((x, e, e'):xs) ()
-  compileTerm body
+compileTerm (CotLet [(x, _, e)] body)
+  | usedWhen x == 1 && not (isMultiMatch e) && toVar x `VarSet.notMember` freeIn e = do
+      -- If we've got a let binding which is only used once then push it onto the stack
+      e' <- compileTerm e
+      EC $ \xs next -> next ((x, e, e'):xs) ()
+      compileTerm body
 
-compileTerm (CotLet [(x, _, e)] body) | not (isMultiMatch e) = do
-  -- If we've got a let binding which doesn't branch, then we can emit it as a normal
-  -- local Technically this isn't correct (as recursive functions won't work), but the
-  -- pretty printer sorts this out.
-  e' <- compileTerm e
-  flushStmt [ LuaLocal [lowerName x] [e'] ] ()
-  compileTerm body
+  | usedWhen x == 0 && not (isMultiMatch e) = do
+      e' <- compileTerm e
+      flushStmt (asStmt e') ()
+      compileTerm body
+
+  | not (isMultiMatch e) = do
+      -- If we've got a let binding which doesn't branch, then we can emit it as a normal
+      -- local Technically this isn't correct (as recursive functions won't work), but the
+      -- pretty printer sorts this out.
+      e' <- compileTerm e
+      flushStmt [ LuaLocal [lowerName x] [e'] ] ()
+      compileTerm body
+
+  where asStmt (LuaTable fs) = concatMap (asStmt . snd) fs
+        asStmt (LuaBinOp a _ b) = asStmt a ++ asStmt b
+        asStmt (LuaCall f e) = [ LuaCallS f e ]
+        asStmt _ = []
 
 compileTerm (CotLet bs body) = do
   -- Otherwise predeclare all variables and emit the bindings

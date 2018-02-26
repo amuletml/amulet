@@ -16,20 +16,19 @@ import Data.Traversable
 import Data.Semigroup
 import Data.Generics
 import Data.Foldable
+import Data.VarSet
 import Data.List
-
-import Syntax (Var, Resolved)
 
 arity :: CoType a -> Int
 arity (CotyArr _ t) = 1 + arity t
 arity (CotyForall _ t) = arity t
 arity _ = 0
 
-approximateAtomType :: CoAtom (Var Resolved) -> Maybe (CoType (Var Resolved))
+approximateAtomType :: IsVar a => CoAtom a -> Maybe (CoType a)
 approximateAtomType (CoaRef _ t) = pure t
 approximateAtomType (CoaLam Big (v, _) f) = CotyForall v <$> approximateType f
 approximateAtomType (CoaLam Small (_, t) f) = CotyArr t <$> approximateType f
-approximateAtomType (CoaLit l) = pure $ case l of
+approximateAtomType (CoaLit l) = pure . fmap fromVar $ case l of
   ColInt{} -> cotyInt
   ColStr{} -> cotyString
   ColTrue -> cotyBool
@@ -37,7 +36,7 @@ approximateAtomType (CoaLit l) = pure $ case l of
   ColUnit -> cotyUnit
   ColRecNil -> CotyExactRows []
 
-approximateType :: CoTerm (Var Resolved) -> Maybe (CoType (Var Resolved))
+approximateType :: IsVar a => CoTerm a -> Maybe (CoType a)
 approximateType (CotAtom a) = approximateAtomType a
 approximateType (CotApp f _) = do
   CotyArr _ d <- approximateAtomType f
