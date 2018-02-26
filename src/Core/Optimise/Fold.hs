@@ -28,6 +28,10 @@ foldExpr = pass go where
   go (CotLet [(x, xt, CotLet [(y, yt, yval)] xval)] rest) | x `VarSet.notMember`freeIn yval
     = go $ CotLet [(y, yt, yval)] $ CotLet [(x, xt, xval)] rest
 
+  -- Trivial matches
+  go (CotMatch t ((CopCapture v _, ty, body):_))
+    = go $ CotLet [(v, ty, CotAtom t)] body
+
   -- Reduce directly called functions to lambdas
   go (CotApp (CoaLam Small (var, ty) body) ex) = go $ CotLet [(var, ty, CotAtom ex)] body
   go (CotTyApp (CoaLam Big (var, _) body) tp) = go (substituteInTys (Map.singleton var tp) body)
@@ -36,7 +40,7 @@ foldExpr = pass go where
     env <- asks vars
     case Map.lookup v env of
       Just d@(CotAtom CoaRef{}) -> go d
-      Just d@(CotAtom(CoaLit _)) -> pure d
+      Just d@(CotAtom CoaLit{}) -> pure d
       _ -> pure e
 
   go e@(CotApp (CoaRef f1 _) (CoaLit r1)) = do
