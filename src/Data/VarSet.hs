@@ -14,6 +14,7 @@ import Syntax.Pretty (Var(..), Resolved)
 
 import Data.Semigroup
 import Data.Coerce
+import Data.Data
 
 import Pretty(Pretty)
 
@@ -51,7 +52,7 @@ delete :: Var Resolved -> Set -> Set
 delete (TgName _ x) set = coerce (Set.delete x (coerce set))
 delete _ set = set
 
-class (Eq a, Ord a, Pretty a, Show a) => IsVar a where
+class (Data a, Eq a, Ord a, Pretty a, Show a) => IsVar a where
   toVar :: a -> Var Resolved
 
 instance IsVar (Var Resolved) where
