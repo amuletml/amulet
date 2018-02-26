@@ -6,6 +6,7 @@ module Core.Simplify
 -- import Core.Optimise.Inline
 -- import Core.Optimise.Match
 import Core.Optimise.Fold
+import Core.Optimise.Reduce
 import Core.Optimise
 
 import Control.Monad.Gen
@@ -17,7 +18,7 @@ import Data.Maybe
 optmOnce :: [CoStmt (Var Resolved)] -> Gen Int [CoStmt (Var Resolved)]
 optmOnce t = fmap (fromMaybe t) . runTransform . transformStmts passes $ t where
   passes = mconcat
-           [ foldExpr
+           [ reduceTermPass
            , dropUselessLet
            ]
       -- [ dropBranches

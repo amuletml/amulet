@@ -9,7 +9,7 @@ module Core.Optimise
   , pass, pass', transformTerm, transformStmts, runTransform
 
   , invent, abstract, abstract', fresh
-  , find, isCon, findForeign
+  , find, isCon, isCon', findForeign
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -53,7 +53,7 @@ mapTerm1M :: Monad m
           -> (CoTerm a -> m (CoTerm a))
           -> CoTerm a -> m (CoTerm a)
 mapTerm1M f g t = case t of
-  CotAtom a -> CotAtom <$> mapAtom1M f g a
+  CotAtom a -> CotAtom <$> f a
   CotApp fn x  -> CotApp <$> f fn <*> f x
   CotLet vs e -> CotLet <$> traverse (third3A g) vs <*> g e
   CotMatch e bs -> CotMatch <$> f e <*> traverse (third3A g) bs
@@ -72,10 +72,13 @@ mapTerm1 f = runIdentity . mapTerm1M pure (pure . f)
 mapTerm :: (CoTerm a -> CoTerm a) -> CoTerm a -> CoTerm a
 mapTerm f = runIdentity . mapTermM (pure . f)
 
-substitute :: Ord a => Map.Map a (CoTerm a) -> CoTerm a -> CoTerm a
-substitute m = mapTerm subst
-  where subst e@(CotAtom (CoaRef v _)) = fromMaybe e (Map.lookup v m)
+substitute :: Ord a => Map.Map a (CoAtom a) -> CoTerm a -> CoTerm a
+substitute m = runIdentity . mapTerm'
+  where subst e@(CoaRef v _) = fromMaybe e (Map.lookup v m)
         subst e = e
+
+        mapAtom' e = subst <$> mapAtom1M mapAtom' mapTerm' e
+        mapTerm' = mapTerm1M mapAtom' mapTerm'
 
 substituteInTys :: forall a. (Data a, Typeable a, Ord a, IsVar a) => Map.Map (Var Resolved) (CoType a) -> CoTerm a -> CoTerm a
 substituteInTys m = everywhere (mkT go) where
@@ -189,6 +192,9 @@ find var = Map.lookup var <$> asks vars
 
 isCon :: Var Resolved -> Trans Bool
 isCon var = Map.member var <$> asks cons
+
+isCon' :: TransState -> Var Resolved -> Bool
+isCon' s var = Map.member var (cons s)
 
 findForeign :: Var Resolved -> Trans (Maybe (CoType (Var Resolved)))
 findForeign var = Map.lookup var <$> asks foreigns

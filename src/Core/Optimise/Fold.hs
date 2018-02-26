@@ -1,77 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Core.Optimise.Fold
-  ( foldExpr
-  , dropUselessLet
+  ( dropUselessLet
   ) where
 
-import qualified Data.Map.Strict as Map
 import qualified Data.VarSet as VarSet
-import qualified Data.Text as Text
 import Data.Triple
 
-import Control.Monad.Reader
-
-import Syntax (Resolved, Var(..))
 import Core.Optimise
-
---- Folds various trivial expressions
-foldExpr :: TransformPass
-foldExpr = pass go where
-  go :: CoTerm (Var Resolved) -> Trans (CoTerm (Var Resolved))
-
-  -- Empty expressions
-  go (CotLet [] e) = pure e
-  go (CotExtend e []) = pure (CotAtom e)
-
-  -- Commuting conversion
-  go (CotLet [(x, xt, CotLet [(y, yt, yval)] xval)] rest) | x `VarSet.notMember`freeIn yval
-    = go $ CotLet [(y, yt, yval)] $ CotLet [(x, xt, xval)] rest
-
-  -- Trivial matches
-  go (CotMatch t ((CopCapture v _, ty, body):_))
-    = go $ CotLet [(v, ty, CotAtom t)] body
-
-  -- Reduce directly called functions to lambdas
-  go (CotApp (CoaLam Small (var, ty) body) ex) = go $ CotLet [(var, ty, CotAtom ex)] body
-  go (CotTyApp (CoaLam Big (var, _) body) tp) = go (substituteInTys (Map.singleton var tp) body)
-
-  go e@(CotAtom(CoaRef v _)) = do
-    env <- asks vars
-    case Map.lookup v env of
-      Just d@(CotAtom CoaRef{}) -> go d
-      Just d@(CotAtom CoaLit{}) -> pure d
-      _ -> pure e
-
-  go e@(CotApp (CoaRef f1 _) (CoaLit r1)) = do
-    env <- asks vars
-    pure $ case Map.lookup f1 env of
-             Just (CotApp (CoaRef (TgInternal v) _) (CoaLit l1)) ->
-               case (v, l1, r1) of
-                 ("+",  ColInt l, ColInt r) -> num (l + r)
-                 ("-",  ColInt l, ColInt r) -> num (l - r)
-                 ("*",  ColInt l, ColInt r) -> num (l * r)
-                 ("/",  ColInt l, ColInt r) -> num (l `div` r)
-                 ("**", ColInt l, ColInt r) -> num (l ^ r)
-                 ("<" , ColInt l, ColInt r) -> bool (l < r)
-                 (">",  ColInt l, ColInt r) -> bool (l > r)
-                 (">=", ColInt l, ColInt r) -> bool (l >= r)
-                 ("<=", ColInt l, ColInt r) -> bool (l <= r)
-
-                 ("&&", ColTrue, ColTrue)   -> bool True
-                 ("&&", _, _)               -> bool False
-                 ("||", ColFalse, ColFalse) -> bool False
-                 ("||", _, _)               -> bool True
-
-                 ("^", ColStr l, ColStr r)  -> str (l `Text.append` r)
-
-                 _ -> e
-             _ -> e
-  go e = pure e
-
-  num = CotAtom . CoaLit . ColInt
-  str = CotAtom . CoaLit . ColStr
-  bool x = CotAtom (CoaLit (if x then ColTrue else ColFalse))
 
 dropUselessLet :: TransformPass
 dropUselessLet = pass' go where
