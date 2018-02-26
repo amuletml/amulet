@@ -16,6 +16,7 @@ import Types.Infer (tyString, tyInt, tyBool, tyUnit)
 import qualified Data.Text as T
 import Data.Traversable
 import Data.Function
+import Data.Foldable
 import Data.Span
 import Data.List
 
@@ -115,9 +116,10 @@ lowerAt (Fun p bd an) (CotyArr a b) =
           fail <- patternMatchingFail (fst an) b
           pure (CotAtom (CoaLam Small (arg, a) (CotMatch (CoaRef arg a) [ (p', a, bd'), fail ])))
 lowerAt (Begin [x] _) t = lowerAt x t
-lowerAt (Begin xs _) t =
-  let bind e = (,,) <$> fresh <*> lowerType (getType e) <*> lowerExpr e
-   in CotLet <$> traverse bind (init xs) <*> lowerAt (last xs) t
+lowerAt (Begin xs _) t = lowerAt (last xs) t >>= flip (foldrM bind) (init xs) where
+  bind e r = flip CotLet r . pure <$> ((,,) <$> fresh
+                                            <*> lowerType (getType e)
+                                            <*> lowerExpr e)
 lowerAt (Match ex cs an) ty = do
   mt <- lowerType (getType ex)
   cs' <- for cs $ \(pat, ex) ->
