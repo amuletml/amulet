@@ -1,8 +1,9 @@
-{-# LANGUAGE OverloadedStrings, ScopedTypeVariables, FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings, ScopedTypeVariables, FlexibleContexts, TupleSections #-}
+{-# LANGUAGE DeriveFunctor #-}
+
 module Backend.Compile
   ( compileProgram
   , compileLet
-  , compileExpr
   ) where
 
 import Control.Monad.Gen
@@ -22,12 +23,13 @@ import Data.Semigroup ((<>))
 
 import qualified Data.Map.Strict as Map
 import qualified Data.VarSet as VarSet
-import Data.VarSet (IsVar(..))
-
 import qualified Data.Text as T
+import Data.Foldable
+import Data.VarSet (IsVar(..))
 import Data.Text (Text)
 import Data.List (sortOn, partition, uncons)
 import Data.Maybe (fromMaybe, maybeToList)
+import Data.Triple
 
 type Returner = Maybe (LuaExpr -> LuaStmt)
 
@@ -84,61 +86,114 @@ compileConstructor (var, _) -- non-unit constructors, hard
     vl = LuaFunction [LuaName "x"] [LuaReturn (LuaTable [(LuaNumber 1, LuaString cn), (LuaNumber 2, LuaRef (LuaName "x"))])]
     cn = getName var
 
-compileAtom :: Occurs a => CoAtom a -> LuaExpr
-compileAtom (CoaRef v _) | isBinOp v
-  = LuaFunction [left] [LuaReturn (LuaFunction
-                                    [right]
-                                    [LuaReturn (LuaBinOp (LuaRef left) (remapOp (getTaggedName (toVar v))) (LuaRef right))])]
+type VarStack v = [(v, CoTerm v, LuaExpr)]
+
+newtype ExprContext v a = EC {
+  unEC :: VarStack v
+       -> (VarStack v -> a -> ([LuaStmt], VarStack v))
+       -> ([LuaStmt], VarStack v)
+  } deriving (Functor)
+
+instance Applicative (ExprContext v) where
+  pure a = EC $ \xs next -> next xs a
+  (<*>) = ap
+
+instance Monad (ExprContext v) where
+  return a = EC $ \xs next -> next xs a
+  x >>= f = EC $ \xs next -> unEC x xs (\xs' y -> unEC (f y) xs' next)
+
+compileLit :: CoLiteral -> LuaExpr
+compileLit (ColInt x)   = LuaNumber (fromInteger x)
+compileLit (ColStr str) = LuaString str
+compileLit ColTrue      = LuaTrue
+compileLit ColFalse     = LuaFalse
+compileLit ColUnit      = LuaNil -- evil!
+compileLit ColRecNil    = LuaTable []
+
+compileAtom' :: Occurs a => CoAtom a -> ExprContext a (LuaExpr, Maybe (CoTerm a))
+compileAtom' (CoaLit l) = pure (compileLit l, Nothing)
+compileAtom' (CoaLam Small (v, _) e) = do
+  flushStmt [] ()
+  pure (LuaFunction [lowerName v] (compileStmt (Just LuaReturn) e), Nothing)
+compileAtom' (CoaLam Big _ e) = (,Nothing) <$> compileTerm e
+
+compileAtom' (CoaRef v _) | isBinOp v
+  = pure (LuaFunction
+           [left]
+           [LuaReturn (LuaFunction
+                        [right]
+                        [LuaReturn (LuaBinOp (LuaRef left) (remapOp (getName v)) (LuaRef right))])],
+           Nothing)
     where left  = LuaName "l"
           right = LuaName "r"
 
-compileAtom (CoaRef v _) = LuaRef (lowerName v)
-compileAtom (CoaLam Small (v, _) e) = LuaFunction [lowerName v] (compileStmt (Just LuaReturn) e)
-compileAtom (CoaLam Big _ e) = compileExpr e
+compileAtom' (CoaRef v _) = EC
+  $ \xs next -> case span ((/= toVar v) . toVar . fst3) xs of
+             -- -- If the variable is not in the scope then skip
+             (_, []) -> next xs (LuaRef (lowerName v), Nothing)
+             (before, (_, e, e'):xs') -> let (stmts, xs'') = next xs' (e', Just e)
+                                         in (foldr mkLet stmts before, xs'')
+  where mkLet (v, _, b) stmts = LuaLocal [lowerName v] [b] : stmts
 
-compileAtom (CoaLit (ColInt x))   = LuaNumber (fromInteger x)
-compileAtom (CoaLit (ColStr str)) = LuaString str
-compileAtom (CoaLit ColTrue)      = LuaTrue
-compileAtom (CoaLit ColFalse)     = LuaFalse
-compileAtom (CoaLit ColUnit)      = LuaNil -- evil!
-compileAtom (CoaLit ColRecNil)    = LuaTable []
+compileAtom :: Occurs a => CoAtom a -> ExprContext a LuaExpr
+compileAtom a = fst <$> compileAtom' a
 
-compileExpr :: Occurs a => CoTerm a -> LuaExpr
-compileExpr (CotAtom a) = compileAtom a
-compileExpr (CotApp f e) = LuaCall (compileAtom f) [compileAtom e]
-compileExpr (CotTyApp f _) = compileAtom f
-compileExpr (CotExtend (CoaLit ColRecNil) fs)
-  = LuaTable (map (\(f, _, e) -> (LuaString f, compileAtom e)) fs)
+flushStmt :: Occurs a => [LuaStmt] -> b -> ExprContext a b
+flushStmt extra e = EC $ \xs next -> let (stmts, xs') = next xs e
+                                     in (foldr mkLet (extra ++ stmts) xs', [])
+  where mkLet (v, _, b) stmts = LuaLocal [lowerName v] [b] : stmts
 
-compileExpr s@CotExtend{} = compileIife s
-compileExpr s@CotLet{}    = compileIife s
-compileExpr s@CotMatch{}  = compileIife s
+compileTerm :: Occurs a => CoTerm a -> ExprContext a LuaExpr
+compileTerm (CotAtom a) = compileAtom a
+compileTerm (CotApp f e) = do
+  e' <- compileAtom e
+  f' <- compileAtom' f
+  pure $ case f' of
+    (LuaCall _ [l], Just (CotApp (CoaRef v _) _)) | isBinOp v -> LuaBinOp l (remapOp (getName v)) e'
+    (fl', _) -> LuaCall fl' [e']
+compileTerm (CotTyApp f _) = compileAtom f
+compileTerm (CotExtend (CoaLit ColRecNil) fs) = do
+  fs' <- foldrM compileRow [] fs
+  pure (LuaTable fs')
+  where compileRow (f, _, e) es = (:es) . (LuaString f,) <$> compileAtom e
+compileTerm (CotExtend tbl exs) = do
+  exs' <- foldrM compileRow [] exs
+  tbl' <- compileAtom tbl
 
-global :: String -> LuaExpr
-global x = LuaRef (LuaIndex (LuaRef (LuaName "_G")) (LuaString (T.pack x)))
+  flushStmt ([ LuaLocal [old, new] [tbl', LuaTable []]
+             , LuaFor [k, v] [LuaCall (LuaRef pairs) [LuaRef old]]
+               [LuaAssign [LuaIndex (LuaRef new) (LuaRef (LuaName k))] [LuaRef (LuaName v)]] ] ++ exs')
+            (LuaRef new)
 
-compileStmt :: Occurs a => Returner -> CoTerm a -> [LuaStmt]
-compileStmt r (CotAtom a) = pureReturn r $ compileAtom a
-compileStmt r (CotLet k c) = compileLet (unzip3 k) ++ compileStmt r c
-compileStmt r (CotMatch s ps) = runGen (compileMatch r s ps)
-
-compileStmt Nothing e@CotApp{} = case compileExpr e of
-                                     LuaCall f a -> [LuaCallS f a]
-                                     expr -> [LuaLocal [LuaName "_"] [expr]]
-compileStmt (Just r) e@CotApp{} = [r (compileExpr e)]
-compileStmt r (CotTyApp f _) = pureReturn r $ compileAtom f
-
-compileStmt r e@(CotExtend (CoaLit ColRecNil) _) = dirtyReturn r (compileExpr e) -- TODO: Flatten if r is nothing?
-compileStmt r (CotExtend tbl exs) = [ LuaLocal [old, new] [compileAtom tbl, LuaTable []]
-                                    , LuaFor [k, v] [LuaCall (LuaRef pairs) [LuaRef old]]
-                                      [LuaAssign [LuaIndex (LuaRef new) (LuaRef (LuaName k))] [LuaRef (LuaName v)]] ] ++
-                                    map (\(f, _, e) -> LuaAssign [LuaIndex (LuaRef new) (LuaString f)] [compileAtom e]) exs ++
-                                    pureReturn r (LuaRef new)
   where old = LuaName (T.pack "__o")
         new = LuaName (T.pack "__n")
         k = T.pack "k"
         v = T.pack "v"
         pairs = LuaName (T.pack "pairs")
+
+        compileRow (f, _, e) es = (:es) . LuaAssign [LuaIndex (LuaRef new) (LuaString f)] . pure <$> compileAtom e
+
+compileTerm (CotLet [(x, _, e)] body) | usedWhen x == 1 && toVar x `VarSet.notMember` freeIn e = do
+  e' <- compileTerm e
+  EC $ \xs next -> next ((x, e, e'):xs) ()
+  compileTerm body
+
+compileTerm (CotLet bs body) = do
+  bs' <- foldrM compileLet [] bs
+  flushStmt [ uncurry LuaLocal (unzip bs')] ()
+  compileTerm body
+  where compileLet (v, _, e) xs  = (:xs) . (lowerName v,) <$> compileTerm e
+
+compileTerm (CotMatch test branches) = do
+  flushStmt [] ()
+  test' <- compileAtom test
+  pure $ iife $ runGen $ compileMatch (Just LuaReturn) test' branches
+
+global :: String -> LuaExpr
+global x = LuaRef (LuaIndex (LuaRef (LuaName "_G")) (LuaString (T.pack x)))
+
+compileStmt :: Occurs a => Returner -> CoTerm a -> [LuaStmt]
+compileStmt r term = fst (unEC (compileTerm term) [] (\xs x -> (dirtyReturn r x, xs)))
 
 lowerName :: Occurs a => a -> LuaVar
 lowerName = LuaName . getTaggedName . toVar
@@ -154,10 +209,8 @@ getTaggedName (TgName t i) = t <> T.pack (show i)
 getTaggedName (TgInternal t) = t
 
 iife :: [LuaStmt] -> LuaExpr
+iife [LuaReturn v] = v
 iife b = LuaCall (LuaFunction [] b) []
-
-compileIife :: Occurs a => CoTerm a -> LuaExpr
-compileIife = iife . compileStmt (Just LuaReturn)
 
 compileLet :: forall a. Occurs a => ([a], [CoType a], [CoTerm a]) -> [LuaStmt]
 compileLet (vs, _, es) = locals recs (assigns nonrecs) where
@@ -168,7 +221,7 @@ compileLet (vs, _, es) = locals recs (assigns nonrecs) where
   locals xs =
     let (v, t) = unzip xs
         bind v e
-          | doesItOccur v = [LuaLocal [lowerName v] [compileExpr e]]
+          | doesItOccur v = [LuaLocal [lowerName v] [iife (compileStmt (Just LuaReturn) e)]]
           | otherwise = compileStmt Nothing e
      in case v of
        [] -> id
@@ -177,8 +230,8 @@ compileLet (vs, _, es) = locals recs (assigns nonrecs) where
   assigns :: [(a, CoTerm a)] -> [LuaStmt]
   assigns xs = case xs of
     [] -> []
-    xs -> LuaLocal (map (lowerName . fst) xs) []:map one xs
-  one (v, t) = LuaAssign [lowerName v] [compileExpr t]
+    xs -> LuaLocal (map (lowerName . fst) xs) []:concatMap one xs
+  one (v, t) = compileStmt (Just (LuaAssign [lowerName v] . pure)) t
 
   recursive v (CotAtom term@CoaLam{}) = toVar v `VarSet.member` freeInAtom term
   recursive _ _ = False
@@ -202,7 +255,7 @@ foldAnd = foldl1 k where
 patternTest :: forall a. Occurs a => CoPattern a -> LuaExpr ->  LuaExpr
 patternTest (CopCapture _ _) _   = LuaTrue
 patternTest (CopLit ColRecNil) _ = LuaTrue
-patternTest (CopLit l)     vr    = LuaBinOp (compileAtom (CoaLit l :: CoAtom a)) "==" vr
+patternTest (CopLit l)     vr    = LuaBinOp (compileLit l) "==" vr
 patternTest (CopExtend p rs) vr  = foldAnd (patternTest p vr : map test rs) where
   test (var', pat) = patternTest pat (LuaRef (LuaIndex vr (LuaString var')))
 patternTest (CopConstr con) vr   = foldAnd [tag con vr]
@@ -221,10 +274,8 @@ patternBindings (CopDestr _ p) vr   = patternBindings p (LuaRef (LuaIndex vr (Lu
 patternBindings (CopExtend p rs) vr = patternBindings p vr ++ concatMap (index vr) rs where
   index vr (var', pat) = patternBindings pat (LuaRef (LuaIndex vr (LuaString var')))
 
-compileMatch :: Occurs a => Returner -> CoAtom a -> [(CoPattern a, CoType a, CoTerm a)] -> Gen Int [LuaStmt]
-compileMatch r ex ps = pure $ genIf (compileAtom ex) ps
-
-
+compileMatch :: Occurs a => Returner -> LuaExpr -> [(CoPattern a, CoType a, CoTerm a)] -> Gen Int [LuaStmt]
+compileMatch r ex ps = pure $ genIf ex ps
   where genBinding x (p, _, c) = ( patternTest p x
                                  , (case patternBindings p x of
                                       [] -> []
