@@ -58,14 +58,14 @@ reduceTerm s (CotTyApp (CoaLam Big (var, _) body) tp) = reduceTerm s (substitute
 
 -- Inline variable references
 reduceTerm s e@(CotAtom(CoaRef v _)) =
-  case Map.lookup v (vars s) of
+  case lookupVar s v of
     Just d@(CotAtom CoaRef{}) -> reduceTerm s d
     Just d@(CotAtom CoaLit{}) -> d
     _ -> e
 
 -- Constant fold
 reduceTerm s e@(CotApp (CoaRef f1 _) (CoaLit r1)) =
-  case Map.lookup f1 (vars s) of
+  case lookupVar s f1 of
     Just (CotApp (CoaRef v _) (CoaLit l1)) | TgInternal n <- toVar v  ->
       case (n, l1, r1) of
         ("+",  ColInt l, ColInt r) -> num (l + r)
@@ -120,8 +120,8 @@ extract (PatternUnknown s) = s
 extract (PatternPartial s) = s
 extract (PatternComplete s) = s
 
-simplifyRecord :: Ord a => Scope a -> CoAtom a -> [(T.Text, CoType a, CoAtom a)]
-simplifyRecord s (CoaRef v _) = case Map.lookup v (vars s) of
+simplifyRecord :: IsVar a => Scope a -> CoAtom a -> [(T.Text, CoType a, CoAtom a)]
+simplifyRecord s (CoaRef v _) = case lookupVar s v of
                                   Just (CotAtom r) -> simplifyRecord s r
                                   Just (CotExtend r fs) -> fs ++ simplifyRecord s r
                                   _ -> []

@@ -4,7 +4,6 @@ module Core.Optimise.Inline
   , inlineVariablePass
   ) where
 
-import qualified Data.Map.Strict as Map
 import qualified Data.VarSet as VarSet
 import Data.VarSet (IsVar(..))
 import Data.Triple
@@ -25,12 +24,12 @@ inlineVariablePass = transformStmts inlineVariable (const id) mempty
 -- "pull in" the definition of a variable it considers cheap.
 inlineVariable :: IsVar a => Transform CoTerm a
 inlineVariable s x@(CotApp (CoaRef v _) a)
-  | Just (CotAtom f@(CoaLam Small _ _)) <- Map.lookup v (vars s) =
+  | Just (CotAtom f@(CoaLam Small _ _)) <- lookupVar s v =
       let cost = scoreAtom s f
       in if cost < limit && not (recursive f v)
          then CotApp f a else x
 inlineVariable s x@(CotTyApp (CoaRef v _) t)
-  | Just (CotAtom f@(CoaLam Big _ _)) <- Map.lookup v (vars s) =
+  | Just (CotAtom f@(CoaLam Big _ _)) <- lookupVar s v=
       let cost = scoreAtom s f
       in if cost < limit && not (recursive f v)
          then CotTyApp f t else x
