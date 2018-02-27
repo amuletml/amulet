@@ -20,11 +20,18 @@ import Core.Optimise.Transform
 reduceTermPass :: IsVar a => [CoStmt a] -> [CoStmt a]
 reduceTermPass = transformStmts reduceTerm reduceAtom mempty
 
-reduceAtom :: Ord a => Transform CoAtom a
+reduceAtom :: IsVar a => Transform CoAtom a
 
--- Eta conversion
+-- Eta conversion (function case)
 reduceAtom _ (CoaLam Small (var, _) (CotApp r (CoaRef var' _))) | var == var' = r
 reduceAtom _ (CoaLam Small (var, _) (CotApp r (CoaRef var' _))) | var == var' = r
+
+-- Beta reduction (let case)
+reduceAtom s a@(CoaRef v _) =
+  case lookupVar s v of
+    Just (CotAtom d@CoaRef{}) -> reduceAtom s d
+    Just (CotAtom d@CoaLit{}) -> d
+    _ -> a
 
 reduceAtom _ e = e
 
@@ -35,7 +42,7 @@ reduceTerm _ (CotLet [] e) = e
 reduceTerm _ (CotExtend e []) = CotAtom e
 
 -- Commuting conversion
-reduceTerm s (CotLet [(x, xt, CotLet [(y, yt, yval)] xval)] rest) | toVar x `VarSet.notMember`freeIn yval
+reduceTerm s (CotLet [(x, xt, CotLet [(y, yt, yval)] xval)] rest) | toVar x `VarSet.notMember` freeIn yval
   = reduceTerm s $ CotLet [(y, yt, yval)] $ reduceTerm s (CotLet [(x, xt, xval)] rest)
 
 -- Trivial matches
@@ -52,16 +59,13 @@ reduceTerm s (CotMatch t bs) =
                              PatternPartial subst -> Right [(p, ty, substitute subst body)]
                              PatternComplete subst -> Left (p, ty, substitute subst body)
 
--- Beta reduction
+-- Beta reduction (function case)
 reduceTerm s (CotApp (CoaLam Small (var, ty) body) ex) = reduceTerm s $ CotLet [(var, ty, CotAtom ex)] body
 reduceTerm s (CotTyApp (CoaLam Big (var, _) body) tp) = reduceTerm s (substituteInTys (Map.singleton var tp) body)
 
--- Inline variable references
-reduceTerm s e@(CotAtom(CoaRef v _)) =
-  case lookupVar s v of
-    Just d@(CotAtom CoaRef{}) -> reduceTerm s d
-    Just d@(CotAtom CoaLit{}) -> d
-    _ -> e
+-- Eta reduction (let case)
+reduceTerm _ (CotLet [(v, _, term)] (CotAtom (CoaRef v' _))) | v == v' && toVar v `VarSet.notMember` freeIn term
+  = term
 
 -- Constant fold
 reduceTerm s e@(CotApp (CoaRef f1 _) (CoaLit r1)) =
