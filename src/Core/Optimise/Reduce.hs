@@ -23,8 +23,10 @@ reduceTermPass = transformStmts reduceTerm reduceAtom mempty
 reduceAtom :: IsVar a => Transform CoAtom a
 
 -- Eta conversion (function case)
-reduceAtom _ (CoaLam Small (var, _) (CotApp r (CoaRef var' _))) | var == var' = r
-reduceAtom _ (CoaLam Small (var, _) (CotApp r (CoaRef var' _))) | var == var' = r
+reduceAtom _ (CoaLam Small (var, _) (CotApp r (CoaRef var' _)))
+  | var == var' = r
+reduceAtom _ (CoaLam Big (var, _) (CotTyApp r (CotyVar var')))
+  | var == var' = r
 
 -- Beta reduction (let case)
 reduceAtom s a@(CoaRef v _) =
@@ -42,8 +44,9 @@ reduceTerm _ (CotLet [] e) = e
 reduceTerm _ (CotExtend e []) = CotAtom e
 
 -- Commuting conversion
-reduceTerm s (CotLet [(x, xt, CotLet [(y, yt, yval)] xval)] rest) | toVar x `VarSet.notMember` freeIn yval
-  = reduceTerm s $ CotLet [(y, yt, yval)] $ reduceTerm s (CotLet [(x, xt, xval)] rest)
+reduceTerm s (CotLet [(x, xt, CotLet [(y, yt, yval)] xval)] rest)
+  | toVar x `VarSet.notMember` freeIn yval =
+    reduceTerm s $ CotLet [(y, yt, yval)] $ reduceTerm s (CotLet [(x, xt, xval)] rest)
 
 -- Trivial matches
 reduceTerm s (CotMatch t ((CopCapture v _, ty, body):_)) = reduceTerm s $ CotLet [(v, ty, CotAtom t)] body
@@ -54,18 +57,20 @@ reduceTerm s (CotMatch t bs) =
 
   where foldCases [] = Right []
         foldCases ((p, ty, body):xs) = case reducePattern s t p of
-                             PatternFail -> foldCases xs
-                             PatternUnknown subst -> Right ((p, ty, substitute subst body) : either pure id (foldCases xs))
-                             PatternPartial subst -> Right [(p, ty, substitute subst body)]
-                             PatternComplete subst -> Left (p, ty, substitute subst body)
+          PatternFail -> foldCases xs
+          PatternUnknown subst -> Right ((p, ty, substitute subst body) : either pure id (foldCases xs))
+          PatternPartial subst -> Right [(p, ty, substitute subst body)]
+          PatternComplete subst -> Left (p, ty, substitute subst body)
 
 -- Beta reduction (function case)
-reduceTerm s (CotApp (CoaLam Small (var, ty) body) ex) = reduceTerm s $ CotLet [(var, ty, CotAtom ex)] body
-reduceTerm s (CotTyApp (CoaLam Big (var, _) body) tp) = reduceTerm s (substituteInTys (Map.singleton var tp) body)
+reduceTerm s (CotApp (CoaLam Small (var, ty) body) ex)
+  = reduceTerm s $ CotLet [(var, ty, CotAtom ex)] body
+reduceTerm s (CotTyApp (CoaLam Big (var, _) body) tp)
+  = reduceTerm s (substituteInTys (Map.singleton var tp) body)
 
 -- Eta reduction (let case)
-reduceTerm _ (CotLet [(v, _, term)] (CotAtom (CoaRef v' _))) | v == v' && toVar v `VarSet.notMember` freeIn term
-  = term
+reduceTerm _ (CotLet [(v, _, term)] (CotAtom (CoaRef v' _)))
+  | v == v' && toVar v `VarSet.notMember` freeIn term = term
 
 -- Constant fold
 reduceTerm s e@(CotApp (CoaRef f1 _) (CoaLit r1)) =
@@ -125,10 +130,11 @@ extract (PatternPartial s) = s
 extract (PatternComplete s) = s
 
 simplifyRecord :: IsVar a => Scope a -> CoAtom a -> [(T.Text, CoType a, CoAtom a)]
-simplifyRecord s (CoaRef v _) = case lookupVar s v of
-                                  Just (CotAtom r) -> simplifyRecord s r
-                                  Just (CotExtend r fs) -> fs ++ simplifyRecord s r
-                                  _ -> []
+simplifyRecord s (CoaRef v _) =
+  case lookupVar s v of
+    Just (CotAtom r) -> simplifyRecord s r
+    Just (CotExtend r fs) -> fs ++ simplifyRecord s r
+    _ -> []
 simplifyRecord _ _ = []
 
 reducePattern :: IsVar a => Scope a -> CoAtom a -> CoPattern a -> PatternResult a
@@ -138,30 +144,34 @@ reducePattern _ term (CopCapture a _) = PatternComplete (Map.singleton a term)
 
 -- Literals are relatively easy to accept/reject
 reducePattern _ _ (CopLit ColRecNil) = PatternComplete Map.empty
-reducePattern _ (CoaLit l') (CopLit l) | l == l'   = PatternComplete Map.empty
-                                       | otherwise = PatternFail
+reducePattern _ (CoaLit l') (CopLit l)
+  | l == l'   = PatternComplete Map.empty
+  | otherwise = PatternFail
 
 -- If we're matching against a known constructor it is easy to accept or reject
-reducePattern s (CoaRef v _) (CopConstr c) | simplifyVar s v == c = PatternComplete Map.empty
+reducePattern s (CoaRef v _) (CopConstr c)
+  | simplifyVar s v == c = PatternComplete Map.empty
 
-                                           | isCon s (simplifyVar s v) = PatternFail
-                                           | Just (CotApp (CoaRef c' _) _) <- simplifyTerm s v
-                                           , isCon s (simplifyVar s c') = PatternFail
+  | isCon s (simplifyVar s v) = PatternFail
+  | Just (CotApp (CoaRef c' _) _) <- simplifyTerm s v
+  , isCon s (simplifyVar s c') = PatternFail
 
-reducePattern s (CoaRef v _) (CopDestr c a) | Just (CotApp (CoaRef c' _) a') <- simplifyTerm s v
-                                            , simplifyVar s c' == c = reducePattern s a' a
+reducePattern s (CoaRef v _) (CopDestr c a)
+  | Just (CotApp (CoaRef c' _) a') <- simplifyTerm s v
+  , simplifyVar s c' == c = reducePattern s a' a
 
-                                            | isCon s (simplifyVar s v) = PatternFail
-                                            | Just (CotApp (CoaRef c' _) _) <- simplifyTerm s v
-                                            , isCon s (simplifyVar s c') = PatternFail
+  | isCon s (simplifyVar s v) = PatternFail
+  | Just (CotApp (CoaRef c' _) _) <- simplifyTerm s v
+  , isCon s (simplifyVar s c') = PatternFail
 
 -- Attempt to reduce the field
 reducePattern s e (CopExtend rest fs) = foldr ((<>) . handle) (reducePattern s e rest) fs where
-  handle (f, p) = case find ((==f) . fst3) fs' of
-                    Nothing -> if allMatching p
-                               then PatternPartial mempty
-                               else PatternUnknown mempty
-                    Just (_, _, e) -> reducePattern s e p
+  handle (f, p) =
+    case find ((==f) . fst3) fs' of
+      Nothing -> if allMatching p
+                    then PatternPartial mempty
+                    else PatternUnknown mempty
+      Just (_, _, e) -> reducePattern s e p
 
   fs' = simplifyRecord s e
 
