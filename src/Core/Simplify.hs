@@ -12,7 +12,7 @@ import Syntax (Var(..), Resolved)
 
 optmOnce :: [CoStmt (Var Resolved)] -> Gen Int [CoStmt (Var Resolved)]
 optmOnce = pure . passes where
-  passes = foldl (.) id $ reverse
+  passes = mconcat $ reverse
            [ id
            , reduceTermPass
            , inlineVariablePass

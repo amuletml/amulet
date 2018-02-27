@@ -165,7 +165,7 @@ lowerAnyway (Literal l _) = pure . CotAtom . CoaLit $ case l of
   LiBool True -> ColTrue
   LiBool False -> ColFalse
   LiUnit -> ColUnit
-lowerAnyway (App f x _) = CotApp <$> (lowerExprAtom f) <*> lowerExprAtom x
+lowerAnyway (App f x _) = CotApp <$> lowerExprAtom f <*> lowerExprAtom x
 
 lowerAnyway (TypeApp f x _) = flip CotTyApp (lowerType x) <$> lowerExprAtom f
 lowerAnyway (Tuple xs _) = do
@@ -219,10 +219,10 @@ lowerPat pat = case pat of
 
 lowerProg :: MonadLower m => [Toplevel Typed] -> m [CoStmt]
 lowerProg [] = pure []
-lowerProg (ForeignVal (TvName t) ex tp _:prg) = do
+lowerProg (ForeignVal (TvName t) ex tp _:prg) =
   (CosForeign t (lowerType tp) ex:) <$> lowerProg prg
 lowerProg (LetStmt vs:prg) =
-  (:) <$> (CosLet <$> for vs (\(TvName v, ex, (_, ant)) -> (v, lowerType ant, ) . (makeBigLams ant) <$> lowerExprTerm ex))
+  (:) <$> (CosLet <$> for vs (\(TvName v, ex, (_, ant)) -> (v,lowerType ant,) . makeBigLams ant <$> lowerExprTerm ex))
       <*> lowerProg prg
 lowerProg (TypeDecl (TvName var) _ cons:prg) =
   (:) (CosType var (map (\case
