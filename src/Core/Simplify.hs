@@ -12,16 +12,11 @@ import Syntax (Var(..), Resolved)
 
 optmOnce :: [CoStmt (Var Resolved)] -> Gen Int [CoStmt (Var Resolved)]
 optmOnce = pure . passes where
-  passes = mconcat $ reverse
+  passes = foldr (.) id $ reverse
            [ id
            , reduceTermPass
            , inlineVariablePass
            ]
-           -- , dropUselessLet
-           -- ]
-      -- , inlineVariablePass
-      -- , matchOfMatch
-      -- , matchOfBottom
 
 optimise :: [CoStmt (Var Resolved)] -> Gen Int [CoStmt (Var Resolved)]
 optimise = go 25 where
