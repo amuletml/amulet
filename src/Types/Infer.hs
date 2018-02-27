@@ -13,6 +13,8 @@ import qualified Data.Text as T
 import Data.Traversable
 import Data.Generics
 import Data.Triple
+import Data.Graph
+import Data.Span
 
 import Control.Monad.Infer
 import Control.Arrow (first)
@@ -79,14 +81,10 @@ check (Begin xs a) t = do
   end' <- check end t
   pure (Begin (start' ++ [end']) (a, t))
 check (Let ns b an) t = do
-  ks <- for ns $ \(a, _, _) -> do
-    tv <- freshTV
-    pure (TvName a, tv)
-  extendMany ks $ do
-    (ns', ts) <- inferLetTy id ks (depOrder ns)
-    extendMany ts $ do
-      b' <- check b t
-      pure (Let ns' b' (an, t))
+  (ns', ts) <- inferLetTy id ns
+  extendMany ts $ do
+    b' <- check b t
+    pure (Let ns' b' (an, t))
 check (If c t e an) ty = If <$> check c tyBool <*> check t ty <*> check e ty <*> pure (an, ty)
 check (Match t ps a) ty = do
   (t', tt) <- infer t
@@ -173,16 +171,11 @@ inferRows rows = for rows $ \(var', val) -> do
 inferProg :: MonadInfer Typed m
           => [Toplevel Resolved] -> m ([Toplevel Typed], Env)
 inferProg (LetStmt ns:prg) = do
-  ks <- for ns $ \(a, _, _) -> do
-    tv <- freshTV
-    vl <- lookupTy a `catchError` const (pure tv)
-    pure (TvName a, vl)
-  extendMany ks $ do
-    (ns', ts) <- inferLetTy closeOver ks (depOrder ns)
+  (ns', ts) <- inferLetTy closeOver ns
                    `catchError` (throwError . flip ArisingFrom (LetStmt ns))
-    extendMany ts $
-      consFst (LetStmt ns')
-        $ inferProg prg
+  extendMany ts $
+    consFst (LetStmt ns') $
+      inferProg prg
 inferProg (ForeignVal v d t ann:prg) = do
   (t', _) <- resolveKind t
   extend (TvName v, t') $
@@ -226,45 +219,68 @@ inferCon ret' (UnitCon nm ann) =
   let ret = closeOver ret'
    in pure ((TvName nm, ret), UnitCon (TvName nm) (ann, ret))
 
-inferLetTy :: (MonadInfer Typed m)
+inferLetTy :: forall m. MonadInfer Typed m
            => (Type Typed -> Type Typed)
-           -> [(Var Typed, Type Typed)]
            -> [(Var Resolved, Expr Resolved, Ann Resolved)]
            -> m ( [(Var Typed, Expr Typed, Ann Typed)]
-                , [(Var Typed, Type Typed)])
-inferLetTy _ ks [] = pure ([], ks)
-inferLetTy closeOver ks ((va, ve, vann):xs) = extendMany ks $ do
-  ty <- maybe freshTV pure (TvName va `lookup` ks)
-  (ve', c) <- listen (check ve ty) -- See note [Freedom of the press]
-  cur <- gen
+                , [(Var Typed, Type Typed)]
+                )
+inferLetTy closeOver vs =
+  let sccs = depOrder vs
+      figureOut :: Type Typed -> [Constraint Typed] -> m (Type Typed, Expr Typed -> Expr Typed)
+      figureOut ty cs = do
+        cur <- gen
+        (x, vt) <- case solve cur mempty cs of
+          Right x -> pure (x, normType (closeOver (apply x ty)))
+          Left e -> throwError e
+        unless (null (skols vt)) $
+          throwError (EscapedSkolems (Set.toList (skols vt)) vt)
+        pure (vt, applyInExpr x . raiseE id (\(a, t) -> (a, normType (apply x t))))
 
-  (x, vt) <- case solve cur mempty c of
-    Left e -> throwError e
-    Right x -> pure (x, normType (closeOver (apply x ty)))
+      tcOne :: SCC (Var Resolved, Expr Resolved, Ann Resolved)
+            -> m ( [(Var Typed, Expr Typed, Ann Typed)]
+                 , [(Var Typed, Type Typed)] )
 
-  let r (a, t) = (a, normType (apply x t))
-      ex = applyInExpr x (raiseE id r ve')
+      tcOne (AcyclicSCC (var, exp, ann)) = do
+        tv <- freshTV
+        ((exp', ty), cs) <- listen . extend (TvName var, tv) $ do
+          (exp', ty) <- infer exp
+          _ <- unify exp tv ty
+          pure (exp', ty)
+        (tp, k) <- figureOut ty cs
+        pure ( [(TvName var, k exp', (ann, tp))], [(TvName var, tp)] )
 
-  unless (null (skols vt)) $
-    throwError (EscapedSkolems (Set.toList (skols vt)) vt)
-
-  consFst (TvName va, ex, (vann, vt)) $
-    inferLetTy closeOver (updateAlist (TvName va) vt ks) xs
+      tcOne (CyclicSCC vars) = do
+        tvs <- traverse (\x -> (TvName (fst3 x),) <$> freshTV) vs
+        (vs, cs) <- listen . extendMany tvs $
+          for (zip tvs vars) $ \((_, tyvar), (var, exp, ann)) -> do
+            (exp', ty) <- infer exp
+            _ <- unify exp tyvar ty
+            pure (TvName var, exp', ann, ty)
+        cur <- gen
+        solution <- case solve cur mempty cs of
+          Right x -> pure x
+          Left e -> throwError e
+        let solveOne :: (Var Typed, Expr Typed, Span, Type Typed)
+                     -> m ((Var Typed, Expr Typed, Ann Typed), (Var Typed, Type Typed))
+            solveOne (var, exp, ann, ty) =
+              let figure = apply solution
+                  ty' = closeOver (figure ty)
+               in do
+                  unless (null (skols ty')) $
+                    throwError (EscapedSkolems (Set.toList (skols ty')) ty')
+                  pure ( (var, applyInExpr solution (raiseE id (\(a, t) -> (a, normType (figure t))) exp), (ann, ty'))
+                       , (var, ty') )
+         in fmap unzip . traverse solveOne $ vs
+   in do
+     (vs', binds) <- unzip <$> traverse tcOne sccs
+     pure (concat vs', concat binds)
 
 applyInExpr :: Map.Map (Var Typed) (Type Typed) -> Expr Typed -> Expr Typed
 applyInExpr ss = everywhere (mkT go) where
   go :: Expr Typed -> Expr Typed
   go (TypeApp f t a) = TypeApp f (apply ss t) a
   go x = x
-
--- Monomorphic so we can use "close enough" equality
-updateAlist :: Eq a
-            => a -> b
-            -> [(a, b)] -> [(a, b)]
-updateAlist n v (x@(n', _):xs)
-  | n == n' = (n, v):updateAlist n v xs
-  | otherwise = x:updateAlist n v xs
-updateAlist _ _ [] = []
 
 closeOver :: Type Typed -> Type Typed
 closeOver a = normType $ forall (fv a) a where

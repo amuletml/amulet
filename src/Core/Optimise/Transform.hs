@@ -70,7 +70,7 @@ transformOver ft fa = transT where
 
 transformStmts :: IsVar a => Transform CoTerm a -> Transform CoAtom a -> Scope a -> [CoStmt a] -> [CoStmt a]
 transformStmts _  _  _ [] = []
-transformStmts ft fa s (CosForeign{}:xs) = transformStmts ft fa s xs
+transformStmts ft fa s (x@CosForeign{}:xs) = x:transformStmts ft fa s xs
 transformStmts ft fa s (CosLet vars:xs) =
   let vars' = map (third3 (transformOver ft fa (extendVars vars s))) vars
       xs' = transformStmts ft fa (extendVars vars' s) xs

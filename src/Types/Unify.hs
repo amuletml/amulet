@@ -25,7 +25,7 @@ bind :: Var Typed -> Type Typed -> SolveM ()
 bind var ty
   | occurs var ty = throwError (Occurs var ty)
   | TyVar var == ty = pure ()
-  -- | TyForall{} <- ty = throwError (Impredicative var ty)
+  | TyForall{} <- ty = throwError (Impredicative var ty)
   | otherwise = do
       env <- get
       -- Attempt to extend the environment, otherwise unify with existing type
