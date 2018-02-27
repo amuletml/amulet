@@ -8,7 +8,7 @@ module Core.Optimise
 
 import qualified Data.Map.Strict as Map
 
-import Data.Generics (everywhere, everywhereM, mkM, mkT)
+import Data.Generics (everywhere, mkT)
 import Data.VarSet (IsVar(..))
 
 import Control.Monad.Infer (fresh)

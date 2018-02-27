@@ -25,7 +25,7 @@ reduceAtom :: IsVar a => Transform CoAtom a
 -- Eta conversion (function case)
 reduceAtom _ (CoaLam Small (var, _) (CotApp r (CoaRef var' _)))
   | var == var' = r
-reduceAtom _ (CoaLam Small (var, _) (CotApp r (CoaRef var' _)))
+reduceAtom _ (CoaLam Big (var, _) (CotTyApp r (CotyVar var')))
   | var == var' = r
 
 -- Beta reduction (let case)
