@@ -2,9 +2,7 @@ module Core.Simplify
   ( optimise
   ) where
 
--- import Core.Optimise.Inline
--- import Core.Optimise.Match
--- import Core.Optimise.Fold
+import Core.Optimise.Inline
 import Core.Optimise.Reduce
 import Core.Optimise
 
@@ -14,8 +12,9 @@ import Syntax (Var(..), Resolved)
 
 optmOnce :: [CoStmt (Var Resolved)] -> Gen Int [CoStmt (Var Resolved)]
 optmOnce = pure . passes where
-  passes = mconcat
+  passes = foldr (.) id
            [ reduceTermPass
+           , inlineVariablePass
            ]
            -- , dropUselessLet
            -- ]
