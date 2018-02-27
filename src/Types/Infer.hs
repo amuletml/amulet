@@ -46,10 +46,12 @@ mkTyApps :: Applicative f
          -> Type Typed
          -> Type Typed
          -> f (Expr Typed, Type Typed)
-mkTyApps (VarRef k a) mp ot@(TyForall vs _) nt = do
-  let insts (t:ts) (TyForall (_:vs) c) = insts ts (TyForall vs c) . \x -> TypeApp x t (a, t)
-      insts _ _ = id
-  pure (insts (map (mp Map.!) vs) ot (VarRef (TvName k) (a, nt)), nt)
+mkTyApps (VarRef k a) mp (TyForall vs c) _ = pure (insts vs) where
+  insts []     = (VarRef (TvName k) (a, c), c)
+  insts (x:xs) = let (e, ty) = insts xs
+                     s = mp Map.! x
+                     ty' = apply (Map.singleton x s) ty
+                 in (TypeApp e s (a, ty'), ty')
 mkTyApps _ _ _ _ = undefined
 
 correct :: Type Typed -> Expr Typed -> Expr Typed
