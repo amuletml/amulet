@@ -143,8 +143,9 @@ transformTerm pass = visit <=< runPass pass where
                              CopCapture v _ -> extendVars [(v, t, CotAtom e)] (transform bod)
                              _ -> transform bod)
     pure (CotMatch e cases')
-  visit x = mapTerm1M pure (transformTerm pass) x
+  visit x = mapTerm1M transformAtom transform x
 
+  transformAtom = mapAtom1M transformAtom transform
   transform = transformTerm pass
 
 transformStmts :: TransformPass -> [CoStmt (Var Resolved)] -> Trans [CoStmt (Var Resolved)]

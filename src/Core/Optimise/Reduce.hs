@@ -25,6 +25,9 @@ type CoTerm = Co.CoTerm (Var Resolved)
 type CoPattern = Co.CoPattern (Var Resolved)
 type CoType = Co.CoType (Var Resolved)
 
+reduceTermPass :: TransformPass
+reduceTermPass = pass (\e -> asks (`reduceTerm` e))
+
 reduceAtom :: TransState -> CoAtom -> CoAtom
 
 -- Eta conversion
@@ -39,7 +42,7 @@ reduceTerm :: TransState -> CoTerm -> CoTerm
 reduceTerm _ (CotLet [] e) = e
 reduceTerm _ (CotExtend e []) = CotAtom e
 
-  -- Commuting conversion
+-- Commuting conversion
 reduceTerm s (CotLet [(x, xt, CotLet [(y, yt, yval)] xval)] rest) | x `VarSet.notMember`freeIn yval
   = reduceTerm s $ CotLet [(y, yt, yval)] $ CotLet [(x, xt, xval)] rest
 
@@ -97,9 +100,6 @@ reduceTerm s e@(CotApp (CoaRef f1 _) (CoaLit r1)) =
         bool x = CotAtom (CoaLit (if x then ColTrue else ColFalse))
 
 reduceTerm _ e = e
-
-reduceTermPass :: TransformPass
-reduceTermPass = pass (\e -> asks (`reduceTerm` e))
 
 type Subst = Map.Map (Var Resolved) CoAtom
 
@@ -180,7 +180,6 @@ reducePattern s e (CopExtend rest fs) = foldr ((<>) . handle) (reducePattern s e
   fs' = simplifyRecord s e
 
 reducePattern _ _ _ = PatternUnknown Map.empty
-
 
 allMatching :: CoPattern -> Bool
 allMatching (CopLit ColRecNil) = True
