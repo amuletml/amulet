@@ -95,7 +95,6 @@ instance Applicative (ExprContext v) where
   (<*>) = ap
 
 instance Monad (ExprContext v) where
-  return a = EC $ \xs next -> next xs a
   x >>= f = EC $ \xs next -> unEC x xs (\xs' y -> unEC (f y) xs' next)
 
 compileLit :: CoLiteral -> LuaExpr
