@@ -1,4 +1,3 @@
-{-# LANGUAGE ConstraintKinds, ScopedTypeVariables, TupleSections, GeneralizedNewtypeDeriving, DerivingStrategies, BangPatterns #-}
 module Core.Optimise
   ( substitute, substituteInTys
   , module Core.Core

@@ -2,6 +2,7 @@ module Core.Simplify
   ( optimise
   ) where
 
+import Core.Optimise.DeadCode
 import Core.Optimise.Inline
 import Core.Optimise.Reduce
 import Core.Optimise
@@ -16,6 +17,7 @@ optmOnce = pure . passes where
            [ id
            , reduceTermPass
            , inlineVariablePass
+           , deadCodePass
            ]
 
 optimise :: [CoStmt (Var Resolved)] -> Gen Int [CoStmt (Var Resolved)]
