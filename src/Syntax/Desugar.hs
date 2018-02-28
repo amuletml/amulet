@@ -20,7 +20,7 @@ desugarProgram = everywhereM (mkM defaults) where
   defaults (LeftSection op vl an) = do
     (cap, ref) <- fresh an
     pure (Fun cap (BinOp ref op vl an) an)
-  defaults (RightSection op vl an) = do
+  defaults (RightSection vl op an) = do
     (cap, ref) <- fresh an
     pure (Fun cap (BinOp vl op ref an) an)
   defaults (AccessSection key an) = do
