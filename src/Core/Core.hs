@@ -160,11 +160,7 @@ freeIn (CotApp f x) = freeInAtom f <> freeInAtom x
 freeIn (CotLet vs e) = VarSet.difference (freeIn e <> foldMap (freeIn . thd3) vs)
                                          (VarSet.fromList (map (VarSet.toVar . fst3) vs))
 freeIn (CotMatch e bs) = freeInAtom e <> foldMap freeInBranch bs where
-  freeInBranch (b, _, e) = VarSet.difference (freeIn e) (bound b)
-  bound (CopCapture v _) = VarSet.singleton (VarSet.toVar v)
-  bound (CopDestr _ p) = bound p
-  bound (CopExtend p ps) = foldMap (bound . snd) ps <> bound p
-  bound _ = mempty
+  freeInBranch (b, _, e) = VarSet.difference (freeIn e) (patternVars b)
 freeIn (CotExtend c rs) = freeInAtom c <> foldMap (freeInAtom . thd3) rs
 freeIn (CotTyApp f _) = freeInAtom f
 
@@ -184,3 +180,10 @@ occursInTerm v (CotExtend e fs) = occursInAtom v e || any (occursInAtom v . thd3
 isError :: CoAtom (Var Resolved) -> Bool
 isError (CoaRef (TgInternal n) _) = n == pack "error"
 isError _ = False
+
+patternVars :: VarSet.IsVar a => CoPattern a -> VarSet.Set
+patternVars (CopCapture v _) = VarSet.singleton (VarSet.toVar v)
+patternVars (CopDestr _ p) = patternVars p
+patternVars (CopExtend p ps) = foldMap (patternVars . snd) ps <> patternVars p
+patternVars CopConstr{} = mempty
+patternVars CopLit{} = mempty

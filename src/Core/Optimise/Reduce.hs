@@ -144,6 +144,7 @@ reducePattern _ term (CopCapture a _) = PatternComplete (Map.singleton a term)
 
 -- Literals are relatively easy to accept/reject
 reducePattern _ _ (CopLit ColRecNil) = PatternComplete Map.empty
+reducePattern _ _ (CopLit ColUnit) = PatternComplete Map.empty
 reducePattern _ (CoaLit l') (CopLit l)
   | l == l'   = PatternComplete Map.empty
   | otherwise = PatternFail
@@ -179,6 +180,7 @@ reducePattern _ _ _ = PatternUnknown Map.empty
 
 allMatching :: CoPattern a -> Bool
 allMatching (CopLit ColRecNil) = True
+allMatching (CopLit ColUnit) = True
 allMatching (CopCapture _ _) = True
 allMatching (CopExtend r fs) = allMatching r && all (allMatching . snd) fs
 allMatching _ = False
