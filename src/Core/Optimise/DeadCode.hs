@@ -24,10 +24,11 @@ deadCodePass = snd . freeS (DeadScope mempty) Nothing where
   freeS _ (Just m) [] = (VarSet.singleton (toVar m), mempty)
   freeS _ Nothing  [] = (mempty, mempty)
 
-  freeS s m (x@(CosForeign v _ _):xs) = let (fxs, xs') = freeS s m xs
-                                    in if toVar v `VarSet.member` fxs
-                                       then (toVar v `VarSet.delete` fxs, x:xs')
-                                       else (fxs, xs')
+  freeS s m (x@(CosForeign v _ _):xs) =
+    let (fxs, xs') = freeS s m xs
+     in if toVar v `VarSet.member` fxs
+           then (toVar v `VarSet.delete` fxs, x:xs')
+           else (fxs, xs')
   freeS s m (CosLet vs:xs) =
     let m' = find (\x -> case toVar x of
                            TgName "main" _ -> True
@@ -47,8 +48,9 @@ deadCodePass = snd . freeS (DeadScope mempty) Nothing where
   freeA :: IsVar a => DeadScope -> CoAtom a -> (VarSet.Set, CoAtom a)
   freeA _ t@(CoaRef v _)= (VarSet.singleton (toVar v), t)
   freeA _ t@CoaLit{} = (mempty, t)
-  freeA s (CoaLam t a@(v, _) b) = let (fb, b') = freeT s b
-                                  in (toVar v `VarSet.delete` fb, CoaLam t a b')
+  freeA s (CoaLam t a@(v, _) b) =
+    let (fb, b') = freeT s b
+     in (toVar v `VarSet.delete` fb, CoaLam t a b')
 
   freeT :: IsVar a => DeadScope -> CoTerm a -> (VarSet.Set, CoTerm a)
   freeT s (CotAtom a) = CotAtom <$> freeA s a
@@ -62,7 +64,8 @@ deadCodePass = snd . freeS (DeadScope mempty) Nothing where
       -- If we've no bindings, just return the primary expression
       (f, [], b') -> (f, b')
       -- If we're of the form `let x = y in x`, simplify to `y`.
-      (f, [(v, _, b')], CotAtom(CoaRef v' _)) | v == v' -> (f, b')
+      (f, [(v, _, b')], CotAtom(CoaRef v' _))
+        | v == v' -> (f, b')
       -- Otherwise emit as normal
       (f, vs', b') -> (f , CotLet vs' b')
 
@@ -72,10 +75,10 @@ deadCodePass = snd . freeS (DeadScope mempty) Nothing where
         pbs = map (patternVars . fst3) bs
 
         matchFree = mconcat (zipWith VarSet.difference fbs pbs)
-
     in case (pbs, fbs,  bs') of
          -- If we've got a single pattern match with nothing captured, then inline
-         ([pb], [fb], [(_, _, b)]) | VarSet.isEmpty (VarSet.intersection pb fb) ->(matchFree, b)
+         ([pb], [fb], [(_, _, b)])
+           | VarSet.isEmpty (VarSet.intersection pb fb) -> (matchFree, b)
          -- Otherwise assume everything is used
          _ -> (ft <> matchFree, CotMatch t' bs')
 
@@ -86,8 +89,10 @@ deadCodePass = snd . freeS (DeadScope mempty) Nothing where
   -- Compute the number of arguments which can be passed to a function before
   -- it becomes "impure".
   atomArity s (CoaRef r _)
-    | TgInternal n <- toVar r = fromMaybe 0 (Map.lookup n opArity)
-    | otherwise               = fromMaybe 0 (VarMap.lookup (toVar r) (pureArity s))
+    | TgInternal n <- toVar r
+    = fromMaybe 0 (Map.lookup n opArity)
+    | otherwise
+    = fromMaybe 0 (VarMap.lookup (toVar r) (pureArity s))
   atomArity s (CoaLam _ _ (CotAtom a)) = 1 + atomArity s a
   atomArity _ _ = 0
 
@@ -108,8 +113,9 @@ deadCodePass = snd . freeS (DeadScope mempty) Nothing where
                              _ -> p) (pureArity s) vs
     }
 
-  maybeInsert v a m | a > 0     = VarMap.insert (toVar v) a m
-                    | otherwise = m
+  maybeInsert v a m
+    | a > 0     = VarMap.insert (toVar v) a m
+    | otherwise = m
 
   buildFrees :: IsVar a => DeadScope -> VarSet.Set -> [(VarSet.Set, (a, CoType a, CoTerm a))]
             -> Bool -> [(VarSet.Set, (a, CoType a, CoTerm a))] -> VarSet.Set
