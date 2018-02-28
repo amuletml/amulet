@@ -17,7 +17,7 @@ import Data.Graph
 import Data.Span
 
 import Control.Monad.Infer
-import Control.Arrow (first)
+import Control.Arrow (first, (***))
 import Control.Lens
 
 import Syntax.Resolve.Toplevel
@@ -32,6 +32,8 @@ import Types.Wellformed
 import Types.Unify
 import Types.Holes
 import Types.Kinds
+
+import Debug.Trace
 
 -- Solve for the types of lets in a program
 inferProgram :: MonadGen Int m => [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))
@@ -238,7 +240,7 @@ inferLetTy closeOver vs =
             -> m ( [(Var Typed, Expr Typed, Ann Typed)]
                  , [(Var Typed, Type Typed)] )
 
-      tcOne (AcyclicSCC (var, exp, ann)) = do
+      tcOne tx@(AcyclicSCC (var, exp, ann)) = traceShow tx $ do
         tv <- freshTV
         ((exp', ty), cs) <- listen . extend (TvName var, tv) $ do
           (exp', ty) <- infer exp
@@ -247,7 +249,7 @@ inferLetTy closeOver vs =
         (tp, k) <- figureOut ty cs
         pure ( [(TvName var, k exp', (ann, tp))], [(TvName var, tp)] )
 
-      tcOne (CyclicSCC vars) = do
+      tcOne tx@(CyclicSCC vars) = traceShow tx $ do
         tvs <- traverse (\x -> (TvName (fst3 x),) <$> freshTV) vs
         (vs, cs) <- listen . extendMany tvs $
           for (zip tvs vars) $ \((_, tyvar), (var, exp, ann)) -> do
@@ -269,9 +271,13 @@ inferLetTy closeOver vs =
                   pure ( (var, applyInExpr solution (raiseE id (\(a, t) -> (a, normType (figure t))) exp), (ann, ty'))
                        , (var, ty') )
          in fmap unzip . traverse solveOne $ vs
-   in do
-     (vs', binds) <- unzip <$> traverse tcOne sccs
-     pure (concat vs', concat binds)
+
+      tc :: [SCC (Var Resolved, Expr Resolved, Ann Resolved)] -> m ( [(Var Typed, Expr Typed, Ann Typed)] , [(Var Typed, Type Typed)] )
+      tc (s:cs) = do
+        (vs', binds) <- tcOne s
+        fmap ((vs' ++) *** (binds ++)) . extendMany binds $ tc cs
+      tc [] = pure ([], [])
+   in tc sccs
 
 applyInExpr :: Map.Map (Var Typed) (Type Typed) -> Expr Typed -> Expr Typed
 applyInExpr ss = everywhere (mkT go) where
