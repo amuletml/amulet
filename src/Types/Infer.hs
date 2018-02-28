@@ -33,8 +33,6 @@ import Types.Unify
 import Types.Holes
 import Types.Kinds
 
-import Debug.Trace
-
 -- Solve for the types of lets in a program
 inferProgram :: MonadGen Int m => [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))
 inferProgram ct = fmap fst <$> runInfer builtinsEnv (inferAndCheck ct) where
@@ -240,7 +238,7 @@ inferLetTy closeOver vs =
             -> m ( [(Var Typed, Expr Typed, Ann Typed)]
                  , [(Var Typed, Type Typed)] )
 
-      tcOne tx@(AcyclicSCC (var, exp, ann)) = traceShow tx $ do
+      tcOne (AcyclicSCC (var, exp, ann)) = do
         tv <- freshTV
         ((exp', ty), cs) <- listen . extend (TvName var, tv) $ do
           (exp', ty) <- infer exp
@@ -249,7 +247,7 @@ inferLetTy closeOver vs =
         (tp, k) <- figureOut ty cs
         pure ( [(TvName var, k exp', (ann, tp))], [(TvName var, tp)] )
 
-      tcOne tx@(CyclicSCC vars) = traceShow tx $ do
+      tcOne (CyclicSCC vars) = do
         tvs <- traverse (\x -> (TvName (fst3 x),) <$> freshTV) vs
         (vs, cs) <- listen . extendMany tvs $
           for (zip tvs vars) $ \((_, tyvar), (var, exp, ann)) -> do
