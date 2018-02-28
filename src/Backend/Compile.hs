@@ -106,9 +106,7 @@ compileLit ColRecNil    = LuaTable []
 
 compileAtom' :: Occurs a => CoAtom a -> ExprContext a (LuaExpr, Maybe (CoTerm a))
 compileAtom' (CoaLit l) = pure (compileLit l, Nothing)
-compileAtom' (CoaLam Small (v, _) e) = do
-  flushStmt [] ()
-  pure (LuaFunction [lowerName v] (compileStmt LuaReturn e), Nothing)
+compileAtom' (CoaLam Small (v, _) e) = pure (LuaFunction [lowerName v] (compileStmt LuaReturn e), Nothing)
 compileAtom' (CoaLam Big _ e) = (,Nothing) <$> compileTerm e
 
 compileAtom' (CoaRef v _) | isBinOp v
@@ -217,8 +215,8 @@ global :: String -> LuaExpr
 global x = LuaRef (LuaIndex (LuaRef (LuaName "_G")) (LuaString (T.pack x)))
 
 compileStmt :: Occurs a => Returner -> CoTerm a -> [LuaStmt]
-compileStmt r term = fst (unEC (compileTerm term) [] (\xs x -> ([r x], xs)))
-
+compileStmt r term = fst (unEC (compileTerm term) [] (\xs x -> (foldr mkLet [r x] xs, [])))
+  where mkLet (v, _, b) stmts = LuaLocal [lowerName v] [b] : stmts
 lowerName :: Occurs a => a -> LuaVar
 lowerName = LuaName . getTaggedName . toVar
 
