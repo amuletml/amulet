@@ -4,6 +4,7 @@ module Core.Core where
 import Pretty
 
 import qualified Data.VarSet as VarSet
+import Data.VarSet (IsVar(..))
 import Data.Data (Data, Typeable)
 import Data.Text (Text, pack)
 import Data.Triple
@@ -147,13 +148,13 @@ instance Pretty a => Pretty (CoStmt a) where
 instance Pretty a => Pretty [CoStmt a] where
   pretty = vcat . map pretty
 
-freeInAtom :: VarSet.IsVar a => CoAtom a -> VarSet.Set
+freeInAtom :: IsVar a => CoAtom a -> VarSet.Set
 freeInAtom (CoaRef v _) = VarSet.singleton (VarSet.toVar v)
 freeInAtom (CoaLam Small (v, _) e) = VarSet.delete (VarSet.toVar v) (freeIn e)
 freeInAtom (CoaLam Big _ e) = freeIn e
 freeInAtom (CoaLit _) = mempty
 
-freeIn :: VarSet.IsVar a => CoTerm a -> VarSet.Set
+freeIn :: IsVar a => CoTerm a -> VarSet.Set
 freeIn (CotAtom a) = freeInAtom a
 freeIn (CotApp f x) = freeInAtom f <> freeInAtom x
 freeIn (CotLet vs e) = VarSet.difference (freeIn e <> foldMap (freeIn . thd3) vs)
@@ -166,6 +167,19 @@ freeIn (CotMatch e bs) = freeInAtom e <> foldMap freeInBranch bs where
   bound _ = mempty
 freeIn (CotExtend c rs) = freeInAtom c <> foldMap (freeInAtom . thd3) rs
 freeIn (CotTyApp f _) = freeInAtom f
+
+occursInAtom :: IsVar a => a -> CoAtom a -> Bool
+occursInAtom v (CoaRef v' _) = toVar v == toVar v'
+occursInAtom _ (CoaLit _) = False
+occursInAtom v (CoaLam _ _ b) = occursInTerm v b
+
+occursInTerm :: IsVar a => a -> CoTerm a -> Bool
+occursInTerm v (CotAtom a) = occursInAtom v a
+occursInTerm v (CotApp f x) = occursInAtom v f || occursInAtom v x
+occursInTerm v (CotTyApp f _) = occursInAtom v f
+occursInTerm v (CotLet vs e) = any (occursInTerm v . thd3) vs || occursInTerm v e
+occursInTerm v (CotMatch e bs) = occursInAtom v e || any (occursInTerm v . thd3) bs
+occursInTerm v (CotExtend e fs) = occursInAtom v e || any (occursInAtom v . thd3) fs
 
 isError :: CoAtom (Var Resolved) -> Bool
 isError (CoaRef (TgInternal n) _) = n == pack "error"

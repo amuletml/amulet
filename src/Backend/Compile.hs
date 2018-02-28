@@ -18,7 +18,6 @@ import qualified Types.Wellformed as W
 import Data.Semigroup ((<>))
 
 import qualified Data.Map.Strict as Map
-import qualified Data.VarSet as VarSet
 import qualified Data.Text as T
 import Data.Foldable
 import Data.VarSet (IsVar(..))
@@ -172,7 +171,7 @@ compileTerm (CotExtend tbl exs) = do
         compileRow (f, _, e) es = (:es) . LuaAssign [LuaIndex (LuaRef new) (LuaString f)] . pure <$> compileAtom e
 
 compileTerm (CotLet [(x, _, e)] body)
-  | usedWhen x == 1 && not (isMultiMatch e) && toVar x `VarSet.notMember` freeIn e = do
+  | usedWhen x == 1 && not (isMultiMatch e) && not (occursInTerm x e) = do
       -- If we've got a let binding which is only used once then push it onto the stack
       e' <- compileTerm e
       EC $ \xs next -> next ((x, e, e'):xs) ()
@@ -256,7 +255,7 @@ compileLet (vs, _, es) = locals recs (assigns nonrecs) where
     xs -> LuaLocal (map (lowerName . fst) xs) []:concatMap one xs
   one (v, t) = compileStmt (LuaAssign [lowerName v] . pure) t
 
-  recursive v (CotAtom term@CoaLam{}) = toVar v `VarSet.member` freeInAtom term
+  recursive v (CotAtom term@CoaLam{}) = occursInAtom v term
   recursive _ _ = False
 
 foldAnd :: [LuaExpr] -> LuaExpr
