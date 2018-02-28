@@ -1,19 +1,21 @@
 {-# LANGUAGE OverloadedStrings, TupleSections #-}
 module Core.Optimise.DeadCode ( deadCodePass ) where
 
+import qualified Data.VarMap as VarMap
 import qualified Data.VarSet as VarSet
-import qualified Data.Set as Set
+import qualified Data.Map as Map
 import Data.VarSet (IsVar(..))
 import Data.Text (Text)
-import Data.List
 import Data.Semigroup
 import Data.Triple
+import Data.Maybe
+import Data.List
 
 import Control.Applicative
 
 import Core.Optimise
 
-newtype DeadScope = DeadScope { pureFun :: VarSet.Set }
+newtype DeadScope = DeadScope { pureArity :: VarMap.Map Int }
   deriving (Show)
 
 deadCodePass :: IsVar a => [CoStmt a] -> [CoStmt a]
@@ -38,7 +40,8 @@ deadCodePass = snd . freeS (DeadScope mempty) Nothing where
          (f, vs', xs') -> (f, CosLet vs':xs')
 
   freeS s m (x@(CosType _ cases):xs) =
-    let s' = s { pureFun = foldr (VarSet.insert . toVar . fst) (pureFun s) cases }
+    let s' = s { pureArity = foldr (\(v, ty) p -> VarMap.insert (toVar v) (1 + typeArity ty) p)
+                             (pureArity s) cases }
     in (x:) <$> freeS s' m xs
 
   freeA :: IsVar a => DeadScope -> CoAtom a -> (VarSet.Set, CoAtom a)
@@ -76,27 +79,37 @@ deadCodePass = snd . freeS (DeadScope mempty) Nothing where
          -- Otherwise assume everything is used
          _ -> (ft <> matchFree, CotMatch t' bs')
 
-  -- Binary operators can be applied once
-  isPureFun _ (TgInternal name) | name `Set.member` ops = True
-  -- Type constructors can be applied to
-  isPureFun s r | let x = r `VarSet.member` pureFun s in x = True
-  isPureFun _ _ = False
+  typeArity :: CoType a -> Int
+  typeArity (CotyForall _ ty) = 1 + typeArity ty
+  typeArity _ = 0
+
+  -- Compute the number of arguments which can be passed to a function before
+  -- it becomes "impure".
+  atomArity s (CoaRef r _)
+    | TgInternal n <- toVar r = fromMaybe 0 (Map.lookup n opArity)
+    | otherwise               = fromMaybe 0 (VarMap.lookup (toVar r) (pureArity s))
+  atomArity s (CoaLam _ _ (CotAtom a)) = 1 + atomArity s a
+  atomArity _ _ = 0
 
   isPure _ CotAtom{}   = True
   isPure _ CotExtend{} = True
   isPure _ CotTyApp{}  = True
   isPure s (CotLet vs e) = isPure s e && all (isPure s . thd3) vs
   isPure s (CotMatch _ bs) = all (isPure s . thd3) bs
-  isPure s (CotApp (CoaRef r _) _) = isPureFun s (toVar r)
-  isPure _ (CotApp _ _) = False
+  isPure s (CotApp f _) = atomArity s f > 0
 
   extendPureFuns :: IsVar a => DeadScope -> [(a, CoType a, CoTerm a)] -> DeadScope
   extendPureFuns s vs = s
-    { pureFun = foldr (\(v, _, e) p ->
-                         case e of
-                           CotTyApp (CoaRef f _) _ | isPureFun s (toVar f) -> VarSet.insert (toVar v) p
-                           _ -> p) (pureFun s) vs
+    { pureArity = foldr (\(v, _, e) p ->
+                           case e of
+                             CotAtom  a   -> maybeInsert v (atomArity s a) p
+                             CotTyApp a _ -> maybeInsert v (atomArity s a - 1) p
+                             CotApp   a _ -> maybeInsert v (atomArity s a - 1) p
+                             _ -> p) (pureArity s) vs
     }
+
+  maybeInsert v a m | a > 0     = VarMap.insert (toVar v) a m
+                    | otherwise = m
 
   buildFrees :: IsVar a => DeadScope -> VarSet.Set -> [(VarSet.Set, (a, CoType a, CoTerm a))]
             -> Bool -> [(VarSet.Set, (a, CoType a, CoTerm a))] -> VarSet.Set
@@ -117,8 +130,20 @@ deadCodePass = snd . freeS (DeadScope mempty) Nothing where
         vs' = filter ((`VarSet.member` letFree) . toVar . fst3) (map snd binds)
     in (termFree, vs', rest)
 
-ops :: Set.Set Text
-ops = Set.fromList [ "+",  "-",  "*",  "/"
-                   , "**", "^",  "<",  ">"
-                   , ">=", "<=", "==", "<>"
-                   , "||", "&&" ]
+-- Dead code is always free
+opArity :: Map.Map Text Int
+opArity = Map.fromList
+    [ ( "+",  2 )
+    , ( "-",  2 )
+    , ( "*",  2 )
+    , ( "/",  2 )
+    , ( "^",  2 )
+    , ( "<",  2 )
+    , ( ">",  2 )
+    , ( ">=", 2 )
+    , ( "<=", 2 )
+    , ( "==", 3 )
+    , ( "<>", 3 )
+    , ( "||", 2 )
+    , ( "&&", 2 )
+    ]
