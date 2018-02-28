@@ -41,10 +41,12 @@ inlineVariablePass = transS (InlineScope mempty mempty) where
                           in case f' of
                                CoaRef r _ | Just (CoaLam Small (v, t) b, score) <- VarMap.lookup (toVar r) (scores s)
                                           , score <= limit -> CotLet [(v, t, CotAtom a')] b
+                               CoaLam Small (v, t) b -> CotLet [(v, t, CotAtom a')] b
                                _ -> CotApp f' a'
   transT s (CotTyApp f t) = case transA s f of
                               CoaRef r _ | Just (CoaLam Big (v, _) b, score) <- VarMap.lookup (toVar r) (scores s)
-                                         , score <= limit -> substituteInTys (Map.singleton v t) b
+                                        , score <= limit -> substituteInTys (Map.singleton v t) b
+                              CoaLam Big (v, _) b -> substituteInTys (Map.singleton v t) b
                               f' -> CotTyApp f' t
   transT s (CotExtend t rs) = CotExtend (transA s t) (map (third3 (transA s)) rs)
   transT s (CotLet vars body) =
