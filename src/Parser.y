@@ -103,7 +103,7 @@ Tops :: { [Toplevel Parsed] }
      : List1(Top, ';;')                        { $1 }
 
 Top :: { Toplevel Parsed }
-    : let BindGroup                            { LetStmt $2 }
+    : let BindGroup                            { LetStmt (reverse $2) }
     | external val ident':' Type '=' string    { withPos2 $1 $7 $ ForeignVal (getName $3) (getString $7) $5 }
 
     | type ident ListE(TyVar)                          { TypeDecl (getName $2) $3 [] }
@@ -142,7 +142,7 @@ ExprApp :: { Expr Parsed }
 
 Expr0 :: { Expr Parsed }
       : fun ListE1(ArgP) '->' Expr             { foldr (\x y -> withPos2 x $4 $ Fun x y) $4 $2 }
-      | let BindGroup in Expr                  { withPos2 $1 $4 $ Let $2 $4 }
+      | let BindGroup in Expr                  { withPos2 $1 $4 $ Let (reverse $2) $4 }
       | if Expr then Expr else Expr            { withPos2 $1 $6 $ If $2 $4 $6 }
       | match Expr with ListE1(Arm)            { withPos2 $1 $3 $ Match $2 $4 }
       | Atom                                   { $1 }
