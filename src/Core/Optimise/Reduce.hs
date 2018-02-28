@@ -45,7 +45,7 @@ reduceTerm _ (CotExtend e []) = CotAtom e
 
 -- Commuting conversion
 reduceTerm s (CotLet [(x, xt, CotLet [(y, yt, yval)] xval)] rest)
-  | toVar x `VarSet.notMember` freeIn yval =
+  | not (occursInTerm x yval) =
     reduceTerm s $ CotLet [(y, yt, yval)] $ reduceTerm s (CotLet [(x, xt, xval)] rest)
 
 -- Trivial matches
@@ -70,7 +70,7 @@ reduceTerm s (CotTyApp (CoaLam Big (var, _) body) tp)
 
 -- Eta reduction (let case)
 reduceTerm _ (CotLet [(v, _, term)] (CotAtom (CoaRef v' _)))
-  | v == v' && toVar v `VarSet.notMember` freeIn term = term
+  | v == v' && not (occursInTerm v term) = term
 
 -- Constant fold
 reduceTerm s e@(CotApp (CoaRef f1 _) (CoaLit r1)) =

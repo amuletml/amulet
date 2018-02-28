@@ -59,7 +59,7 @@ inlineVariablePass = transS (InlineScope mempty mempty) where
   extendVars vs s = s
     { scores = foldr (\(v, _, e) m ->
                         case e of
-                          CotAtom a | isLambda a && toVar v `VarSet.notMember` freeIn e
+                          CotAtom a | isLambda a && not (occursInTerm v e)
                                       -> VarMap.insert (toVar v) (a, scoreTerm s e) m
                           _ -> m) (scores s) vs
     -- , vars = foldr (\(v, _, e) m -> VarMap.insert (toVar v) e m) (vars s) vs
