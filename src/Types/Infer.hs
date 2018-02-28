@@ -33,9 +33,6 @@ import Types.Unify
 import Types.Holes
 import Types.Kinds
 
-import Pretty (pretty, vsep)
-import Debug.Trace
-
 -- Solve for the types of lets in a program
 inferProgram :: MonadGen Int m => [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))
 inferProgram ct = fmap fst <$> runInfer builtinsEnv (inferAndCheck ct) where
@@ -51,7 +48,7 @@ mkTyApps :: Applicative f
          -> Type Typed
          -> Type Typed
          -> f (Expr Typed, Type Typed)
-mkTyApps (VarRef k a) mp (TyForall vs c) _ = pure (insts vs) where
+mkTyApps (VarRef k a) mp (TyForall vs c) _ = pure (insts (reverse vs)) where
   insts []     = (VarRef (TvName k) (a, c), c)
   insts (x:xs) = let (e, ty) = insts xs
                      s = mp Map.! x
