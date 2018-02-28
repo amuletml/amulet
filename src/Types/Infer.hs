@@ -152,7 +152,7 @@ infer ex@(BinOp l o r a) = do
   (o', (ld, c, k1)) <- secondA (decompose ex _TyArr) =<< infer o
   (rd, c, k2) <- decompose ex _TyArr c
   (l', r') <- (,) <$> check l ld <*> check r rd
-  pure (App (k2 (App (k1 o') l' (a, TyArr ld (TyArr rd c)))) r' (a, c), c)
+  pure (App (k2 (App (k1 o') l' (a, TyArr rd c))) r' (a, c), c)
 infer ex = do
   x <- freshTV
   ex' <- check ex x
