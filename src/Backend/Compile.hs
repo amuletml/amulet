@@ -32,7 +32,7 @@ alpha :: [Text]
 alpha = map T.pack ([1..] >>= flip replicateM ['a'..'z'])
 
 compileProgram :: forall a. Occurs a => Env -> [CoStmt a] -> LuaStmt
-compileProgram ev = LuaDo . (extendDef:) . compileProg where
+compileProgram ev = LuaDo . compileProg where
   compileProg :: [CoStmt a] -> [LuaStmt]
   compileProg (CosForeign n' t s:xs)
     | not (doesItOccur n') = compileProg xs
@@ -211,9 +211,6 @@ compileTerm (CotMatch test branches) = do
   test' <- compileAtom test
   compileMatch test' branches
 
-global :: String -> LuaExpr
-global x = LuaRef (LuaIndex (LuaRef (LuaName "_G")) (LuaString (T.pack x)))
-
 compileStmt :: Occurs a => Returner -> CoTerm a -> [LuaStmt]
 compileStmt r term = fst (unEC (compileTerm term) [] (\xs x -> (foldr mkLet [r x] xs, [])))
   where mkLet (v, _, b) stmts = LuaLocal [lowerName v] [b] : stmts
@@ -296,23 +293,6 @@ compileMatch ex ps = EC $ \xs next -> (genIf next, xs)
         genIf next = case map (genBinding next ex) ps of
                        [(LuaTrue, e)] -> e
                        xs -> [LuaIfElse xs]
-
---- This is a hack, but we need this for compiling record extension
-extendDef :: LuaStmt
-extendDef = LuaAssign [ extend ]
-                      [ LuaFunction [ t, k, v ]
-                         [ LuaLocal [ out ] [ LuaTable [] ]
-                         , LuaFor [ "k_", "v_" ] [ LuaCall (global "pairs") [ LuaRef t ] ]
-                            [ LuaAssign [ LuaIndex (LuaRef out) (LuaRef k') ] [ LuaRef v' ] ]
-                         , LuaAssign [ LuaIndex (LuaRef out) (LuaRef k) ] [ LuaRef v ]
-                         , LuaReturn (LuaRef out) ] ]
-  where (LuaRef extend) = global "extend"
-        t = LuaName "t"
-        k = LuaName "k"
-        v = LuaName "v"
-        out = LuaName "out"
-        v' = LuaName "v_"
-        k' = LuaName "k_"
 
 ops :: Map.Map Text Text
 ops = Map.fromList [ ("+", "+")
