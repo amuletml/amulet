@@ -36,18 +36,22 @@ inlineVariablePass = transS (InlineScope mempty mempty) where
 
   transT :: IsVar a => InlineScope a -> CoTerm a -> CoTerm a
   transT s (CotAtom a) = CotAtom (transA s a)
-  transT s (CotApp f a) = let f' = transA s f
-                              a' = transA s a
-                          in case f' of
-                               CoaRef r _ | Just (CoaLam Small (v, t) b, score) <- VarMap.lookup (toVar r) (scores s)
-                                          , score <= limit -> CotLet [(v, t, CotAtom a')] b
-                               CoaLam Small (v, t) b -> CotLet [(v, t, CotAtom a')] b
-                               _ -> CotApp f' a'
-  transT s (CotTyApp f t) = case transA s f of
-                              CoaRef r _ | Just (CoaLam Big (v, _) b, score) <- VarMap.lookup (toVar r) (scores s)
-                                        , score <= limit -> substituteInTys (Map.singleton v t) b
-                              CoaLam Big (v, _) b -> substituteInTys (Map.singleton v t) b
-                              f' -> CotTyApp f' t
+  transT s (CotApp f a) =
+    let f' = transA s f
+        a' = transA s a
+     in case f' of
+         CoaRef r _
+           | Just (CoaLam Small (v, t) b, score) <- VarMap.lookup (toVar r) (scores s)
+           , score <= limit -> CotLet [(v, t, CotAtom a')] b
+         CoaLam Small (v, t) b -> CotLet [(v, t, CotAtom a')] b
+         _ -> CotApp f' a'
+  transT s (CotTyApp f t) =
+    case transA s f of
+      CoaRef r _
+        | Just (CoaLam Big (v, _) b, score) <- VarMap.lookup (toVar r) (scores s)
+        , score <= limit -> substituteInTys (Map.singleton v t) b
+      CoaLam Big (v, _) b -> substituteInTys (Map.singleton v t) b
+      f' -> CotTyApp f' t
   transT s (CotExtend t rs) = CotExtend (transA s t) (map (third3 (transA s)) rs)
   transT s (CotLet vars body) =
     let vars' = map (third3 (transT s)) vars
@@ -61,8 +65,9 @@ inlineVariablePass = transS (InlineScope mempty mempty) where
   extendVars vs s = s
     { scores = foldr (\(v, _, e) m ->
                         case e of
-                          CotAtom a | isLambda a && not (occursInTerm v e)
-                                      -> VarMap.insert (toVar v) (a, scoreTerm s e) m
+                          CotAtom a
+                            | isLambda a && not (occursInTerm v e)
+                            -> VarMap.insert (toVar v) (a, scoreTerm s e) m
                           _ -> m) (scores s) vs
     -- , vars = foldr (\(v, _, e) m -> VarMap.insert (toVar v) e m) (vars s) vs
     }
