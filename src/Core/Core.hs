@@ -187,3 +187,10 @@ patternVars (CopDestr _ p) = patternVars p
 patternVars (CopExtend p ps) = foldMap (patternVars . snd) ps <> patternVars p
 patternVars CopConstr{} = mempty
 patternVars CopLit{} = mempty
+
+patternVarsA :: (Monoid (m a), Applicative m) => CoPattern a -> m a
+patternVarsA (CopCapture v _) =  pure v
+patternVarsA (CopDestr _ p) = patternVarsA p
+patternVarsA (CopExtend p ps) = mconcat (patternVarsA p : map (patternVarsA . snd) ps)
+patternVarsA CopConstr{} = mempty
+patternVarsA CopLit{} = mempty
