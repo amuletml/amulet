@@ -24,12 +24,12 @@ reduceAtom :: IsVar a => Transform CoAtom a
 
 -- Eta conversion (function case)
 reduceAtom _ (CoaLam Small (var, _) (CotApp r (CoaRef var' _)))
-  | var == var' = r
+  | var == var' = {-# SCC "Reduce.eta_term" #-} r
 reduceAtom _ (CoaLam Big (var, _) (CotTyApp r (CotyVar var')))
-  | var == var' = r
+  | var == var' = {-# SCC "Reduce.eta_type" #-} r
 
 -- Beta reduction (let case)
-reduceAtom s a@(CoaRef v _) =
+reduceAtom s a@(CoaRef v _) = {-# SCC "Reduce.beta_let" #-}
   case lookupVar s v of
     Just (CotAtom d@CoaRef{}) -> reduceAtom s d
     Just (CotAtom d@CoaLit{}) -> d
@@ -40,17 +40,18 @@ reduceAtom _ e = e
 reduceTerm :: IsVar a => Transform CoTerm a
 
 -- Empty expressions
-reduceTerm _ (CotLet [] e) = e
-reduceTerm _ (CotExtend e []) = CotAtom e
+reduceTerm _ (CotLet [] e) = {-# SCC "Reduce.empty_let" #-} e
+reduceTerm _ (CotExtend e []) = {-# SCC "Reduce.empty_extend" #-} CotAtom e
 
 -- Commuting conversion
 reduceTerm s (CotLet [(x, xt, CotLet [(y, yt, yval)] xval)] rest)
-  | not (occursInTerm x yval) =
+  | not (occursInTerm x yval) = {-# SCC "Reduce.commute_let" #-}
     reduceTerm s $ CotLet [(y, yt, yval)] $ reduceTerm s (CotLet [(x, xt, xval)] rest)
 
 -- Trivial matches
-reduceTerm s (CotMatch t ((CopCapture v _, ty, body):_)) = reduceTerm s $ CotLet [(v, ty, CotAtom t)] body
-reduceTerm s (CotMatch t bs) =
+reduceTerm s (CotMatch t ((CopCapture v _, ty, body):_)) = {-# SCC "Reduce.trivial_match" #-}
+  reduceTerm s $ CotLet [(v, ty, CotAtom t)] body
+reduceTerm s (CotMatch t bs) = {-# SCC "Reduce.fold_cases" #-}
   case foldCases bs of
     Left  (_, _, b) -> b
     Right bs' -> CotMatch t bs'
@@ -63,17 +64,17 @@ reduceTerm s (CotMatch t bs) =
           PatternComplete subst -> Left (p, ty, substitute subst body)
 
 -- Beta reduction (function case)
-reduceTerm s (CotApp (CoaLam Small (var, ty) body) ex)
-  = reduceTerm s $ CotLet [(var, ty, CotAtom ex)] body
-reduceTerm s (CotTyApp (CoaLam Big (var, _) body) tp)
-  = reduceTerm s (substituteInTys (Map.singleton var tp) body)
+reduceTerm s (CotApp (CoaLam Small (var, ty) body) ex) = {-# SCC "Reduce.beta_function" #-}
+  reduceTerm s $ CotLet [(var, ty, CotAtom ex)] body
+reduceTerm s (CotTyApp (CoaLam Big (var, _) body) tp) = {-# SCC "Reduce.beta_type_function" #-}
+  reduceTerm s (substituteInTys (Map.singleton var tp) body)
 
 -- Eta reduction (let case)
 reduceTerm _ (CotLet [(v, _, term)] (CotAtom (CoaRef v' _)))
-  | v == v' && not (occursInTerm v term) = term
+  | v == v' && not (occursInTerm v term) = {-# SCC "Reduce.eta_let" #-} term
 
 -- Constant fold
-reduceTerm s e@(CotApp (CoaRef f1 _) (CoaLit r1)) =
+reduceTerm s e@(CotApp (CoaRef f1 _) (CoaLit r1)) = {-# SCC "Reduce.constant_fold" #-}
   case lookupVar s f1 of
     Just (CotApp (CoaRef v _) (CoaLit l1)) | TgInternal n <- toVar v  ->
       case (n, l1, r1) of
