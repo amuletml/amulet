@@ -113,7 +113,17 @@ reduceTerm s (CotMatch t ((CopCapture v _, ty, body):_)) = {-# SCC "Reduce.trivi
 reduceTerm s (CotMatch t bs) = {-# SCC "Reduce.fold_cases" #-}
   case foldCases bs of
     Left  (_, _, b) -> b
-    Right bs' -> CotMatch t bs'
+    Right bs' ->
+      case last bs' of
+        -- If we were really smart, we could strip _all_ cases which are shadowed by
+        -- another. For now, simply detect the case `error @a "Nope"`
+        (CopCapture _ _, _, CotLet [(tyApp, _, CotTyApp (CoaRef err _) _)]
+                            (CotApp (CoaRef tyApp' _) (CoaLit _)))
+          | TgInternal "error" <- toVar err
+          , toVar tyApp == toVar tyApp'
+          , isComplete s (map fst3 (init bs'))
+          -> CotMatch t (init bs')
+        _ -> CotMatch t bs'
 
   where foldCases [] = Right []
         foldCases ((p, ty, body):xs) = case reducePattern s t p of
@@ -242,3 +252,59 @@ reducePattern s e (CopExtend rest fs) = foldr ((<>) . handle) (reducePattern s e
   allMatching _ = False
 
 reducePattern _ _ _ = PatternUnknown Map.empty
+
+isComplete :: IsVar a => Scope a -> [CoPattern a] -> Bool
+isComplete s = isComplete' where
+  isComplete' :: IsVar a => [CoPattern a] -> Bool
+  isComplete' [] = False
+  -- Trivial always-true captures
+  isComplete' (CopCapture{}:_) = True
+  isComplete' (CopLit ColUnit:_) = True
+  isComplete' (CopLit ColRecNil:_) = True
+
+  isComplete' (CopLit (ColInt _):xs) = isComplete' xs
+  isComplete' (CopLit (ColStr _):xs) = isComplete' xs
+  isComplete' (CopLit ColTrue:xs)    = hasBool ColTrue  xs
+  isComplete' (CopLit ColFalse:xs)   = hasBool ColFalse xs
+
+  -- Trivial, always-true captures
+  isComplete' xs@(CopDestr v _:_)    = hasSumTy (buildSumTy v) xs
+  isComplete' xs@(CopConstr v:_)     = hasSumTy (buildSumTy v) xs
+
+  -- Skip record types for now
+  isComplete' xs@(CopExtend{}:_) = hasRecord Map.empty xs
+
+  hasBool _ [] = False
+  hasBool _ (CopCapture _ _:_) = True
+  hasBool l (CopLit l':_) | l /= l' = True
+  hasBool p (_:xs) = hasBool p xs
+
+  buildSumTy v =
+    let Just ty = VarMap.lookup (toVar v) (cons s)
+        Just cases = VarMap.lookup (toVar (unwrapTy ty)) (types s)
+    in foldr (\(a, _) m -> Map.insert (toVar a) (Just []) m) Map.empty cases
+
+  -- Oh goodness, this is horrible. This attempts to extract
+  -- the type name from a constructor's type
+  unwrapTy (CotyForall _ t) = unwrapTy t
+  unwrapTy (CotyArr _ t) = unwrapTy t
+  unwrapTy (CotyApp t _) = unwrapTy t
+  unwrapTy (CotyCon v) = v
+  unwrapTy ty = error (show ty)
+
+  hasSumTy m [] = Map.foldr (\ps r -> r && maybe True isComplete' ps) True m
+  hasSumTy _ (CopCapture{}:_) = True
+  hasSumTy m (CopConstr v:xs) = hasSumTy (Map.insert (toVar v) Nothing m) xs
+  hasSumTy m (CopDestr v b:xs) = hasSumTy (Map.adjust (\(Just ps) -> Just (b:ps)) (toVar v) m) xs
+  hasSumTy m (_:xs) = hasSumTy m xs
+
+  hasRecord :: IsVar a => Map.Map T.Text [CoPattern a] -> [CoPattern a] -> Bool
+  hasRecord m [] = Map.foldr (\ps r -> r && isComplete' ps) True m
+  hasRecord _ (CopCapture{}:_) = True
+  hasRecord m (e@CopExtend{}:xs) =
+    let m' = foldr (\(f, p) r -> Map.insertWith (++) f [p] r) m (flattenExtend e)
+    in hasRecord m' xs
+  hasRecord m (_:xs) = hasRecord m xs
+
+  flattenExtend (CopExtend p fs) = flattenExtend p ++ fs
+  flattenExtend _ = []

@@ -200,10 +200,19 @@ compileTerm (CotLet bs body) = do
   compileTerm body
   where compileLet (v, _, e) = flushStmt (compileStmt (LuaAssign [lowerName v] . pure) e) ()
 
-compileTerm m@(CotMatch test [(CopExtend (CopCapture e _) [(f, CopCapture v _)], _, body)])
-  | usedWhen e == 0 && usedWhen v == 1 = do
+compileTerm m@(CotMatch test [(p, _, body)])
+  | [v] <- filter doesItOccur (patternVarsA p)
+  , usedWhen v == 1
+  = do
       test' <- compileAtom test
-      EC $ \xs next -> next ((v, m, LuaRef (LuaIndex test' (LuaString f))):xs) ()
+      let [(_, bind)] = patternBindings p test'
+      EC $ \xs next -> next ((v, m, bind):xs) ()
+      compileTerm body
+  | otherwise
+  = do
+      flushStmt [] ()
+      test' <- compileAtom test
+      flushStmt [uncurry LuaLocal (unzip (patternBindings p test'))] ()
       compileTerm body
 
 compileTerm (CotMatch test branches) = do
