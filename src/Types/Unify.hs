@@ -30,7 +30,7 @@ bind var ty
       env <- get
       -- Attempt to extend the environment, otherwise unify with existing type
       case Map.lookup var env of
-        Nothing -> put (Map.singleton var (normType ty) `compose` env)
+        Nothing -> put (env `compose` Map.singleton var (normType ty))
         Just ty'
           | ty' == ty -> pure ()
           | otherwise -> unify (normType ty) (normType ty')
@@ -117,11 +117,11 @@ solve i s (ConUnify e a t:xs) = do
 
   case runSolve i s (unify (normType a) (normType t)) of
     Left err -> Left (ArisingFrom err e)
-    Right (i', s') -> solve i' (s' `compose` s) (apply s' xs)
+    Right (i', s') -> solve i' s' (apply s' xs)
 solve i s (ConSubsume e a b:xs) =
   case runSolve i s (subsumes unify (normType a) (normType b)) of
     Left err -> Left (ArisingFrom err e)
-    Right (i', s') -> solve i' (s' `compose` s) (apply s' xs)
+    Right (i', s') -> solve i' s' (apply s' xs)
 
 subsumes :: (MonadGen Int m, MonadError TypeError m)
          => (Type Typed -> Type Typed -> m b)
