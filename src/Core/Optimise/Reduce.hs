@@ -1,26 +1,85 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Core.Optimise.Reduce
-  ( reduceTermPass
+  ( Scope(..)
+  , reducePass
   , reduceTerm
   , reduceAtom
   ) where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.VarSet as VarSet
+import qualified Data.VarMap as VarMap
 import qualified Data.Text as T
 import Data.VarSet (toVar,IsVar)
 import Data.Semigroup
 import Data.Triple
 import Data.List
 
+import Control.Arrow
+
 import Core.Optimise
-import Core.Optimise.Transform
 
-reduceTermPass :: IsVar a => [CoStmt a] -> [CoStmt a]
-reduceTermPass = transformStmts reduceTerm reduceAtom mempty
+data Scope a = Scope { vars :: VarMap.Map (CoTerm a)
+                     , types :: VarMap.Map [(a, CoType a)]
+                     , cons :: VarMap.Map (CoType a) }
+  deriving (Show)
 
-reduceAtom :: IsVar a => Transform CoAtom a
+isCon :: IsVar a => Scope a -> a -> Bool
+isCon s var = VarMap.member (toVar var) (cons s)
+
+lookupVar :: IsVar a => Scope a -> a -> Maybe (CoTerm a)
+lookupVar s v = VarMap.lookup (toVar v) (vars s)
+
+lookupRawVar :: IsVar a => Scope a -> a -> a
+lookupRawVar s v = case VarMap.lookup (toVar v) (vars s) of
+                  Just (CotTyApp (CoaRef v' _) _) -> lookupRawVar s v'
+                  Just (CotAtom (CoaRef v' _)) -> lookupRawVar s v'
+                  _ -> v
+
+lookupRawTerm :: IsVar a => Scope a -> a -> Maybe (CoTerm a)
+lookupRawTerm s v = VarMap.lookup (toVar (lookupRawVar s v)) (vars s)
+
+extendVars :: IsVar a => [(a, CoType a, CoTerm a)] -> Scope a -> Scope a
+extendVars vs s = s { vars = foldr (\(v, _, e) m -> VarMap.insert (toVar v) e m) (vars s) vs }
+
+transformOver :: IsVar a => Scope a -> CoTerm a -> CoTerm a
+transformOver = transT where
+  mapA _ t@CoaRef{} = t
+  mapA _ t@CoaLit{} = t
+  mapA s (CoaLam t v b) = CoaLam t v (transT s b)
+
+  transA s = reduceAtom s . mapA s
+
+  mapT s (CotAtom a) = CotAtom (transA s a)
+  mapT s (CotApp f a) = CotApp (transA s f) (transA s a)
+  mapT s (CotTyApp f t) = CotTyApp (transA s f) t
+  mapT s (CotExtend t rs) = CotExtend (transA s t) (map (third3 (transA s)) rs)
+  mapT s (CotLet vars body) =
+    let vars' = map (third3 (transT (extendVars vars s))) vars
+        body' = transT (extendVars vars' s) body
+    in CotLet vars' body'
+  mapT s (CotMatch test branches) =
+    let test' = transA s test
+        branches' = map (third3 (transT s)) branches
+    in CotMatch test' branches'
+
+  transT s = reduceTerm s . mapT s
+
+reducePass :: IsVar a => [CoStmt a] -> [CoStmt a]
+reducePass = reduceStmts (Scope mempty mempty mempty) where
+  reduceStmts _ [] = []
+  reduceStmts s (x@CosForeign{}:xs) = x:reduceStmts s xs
+  reduceStmts s (CosLet vars:xs) =
+    let vars' = map (third3 (transformOver (extendVars vars s))) vars
+        xs' = reduceStmts (extendVars vars' s) xs
+    in CosLet vars':xs'
+  reduceStmts s (x@(CosType v cases):xs) =
+    let s' = s { types = VarMap.insert (toVar v) cases (types s)
+               , cons = VarMap.union (VarMap.fromList (map (first toVar) cases)) (cons s) }
+    in x:reduceStmts s' xs
+
+reduceAtom :: IsVar a => Scope a -> CoAtom a -> CoAtom a
 
 -- Eta conversion (function case)
 reduceAtom _ (CoaLam Small (var, _) (CotApp r (CoaRef var' _)))
@@ -37,7 +96,7 @@ reduceAtom s a@(CoaRef v _) = {-# SCC "Reduce.beta_let" #-}
 
 reduceAtom _ e = e
 
-reduceTerm :: IsVar a => Transform CoTerm a
+reduceTerm :: IsVar a => Scope a -> CoTerm a -> CoTerm a
 
 -- Empty expressions
 reduceTerm _ (CotLet [] e) = {-# SCC "Reduce.empty_let" #-} e
@@ -130,14 +189,6 @@ extract (PatternUnknown s) = s
 extract (PatternPartial s) = s
 extract (PatternComplete s) = s
 
-simplifyRecord :: IsVar a => Scope a -> CoAtom a -> [(T.Text, CoType a, CoAtom a)]
-simplifyRecord s (CoaRef v _) =
-  case lookupVar s v of
-    Just (CotAtom r) -> simplifyRecord s r
-    Just (CotExtend r fs) -> fs ++ simplifyRecord s r
-    _ -> []
-simplifyRecord _ _ = []
-
 reducePattern :: IsVar a => Scope a -> CoAtom a -> CoPattern a -> PatternResult a
 
 -- A capture always yield a complete pattern
@@ -152,19 +203,19 @@ reducePattern _ (CoaLit l') (CopLit l)
 
 -- If we're matching against a known constructor it is easy to accept or reject
 reducePattern s (CoaRef v _) (CopConstr c)
-  | simplifyVar s v == c = PatternComplete Map.empty
+  | lookupRawVar s v == c = PatternComplete Map.empty
 
-  | isCon s (simplifyVar s v) = PatternFail
-  | Just (CotApp (CoaRef c' _) _) <- simplifyTerm s v
-  , isCon s (simplifyVar s c') = PatternFail
+  | isCon s (lookupRawVar s v) = PatternFail
+  | Just (CotApp (CoaRef c' _) _) <- lookupRawTerm s v
+  , isCon s (lookupRawVar s c') = PatternFail
 
 reducePattern s (CoaRef v _) (CopDestr c a)
-  | Just (CotApp (CoaRef c' _) a') <- simplifyTerm s v
-  , simplifyVar s c' == c = reducePattern s a' a
+  | Just (CotApp (CoaRef c' _) a') <- lookupRawTerm s v
+  , lookupRawVar s c' == c = reducePattern s a' a
 
-  | isCon s (simplifyVar s v) = PatternFail
-  | Just (CotApp (CoaRef c' _) _) <- simplifyTerm s v
-  , isCon s (simplifyVar s c') = PatternFail
+  | isCon s (lookupRawVar s v) = PatternFail
+  | Just (CotApp (CoaRef c' _) _) <- lookupRawTerm s v
+  , isCon s (lookupRawVar s c') = PatternFail
 
 -- Attempt to reduce the field
 reducePattern s e (CopExtend rest fs) = foldr ((<>) . handle) (reducePattern s e rest) fs where
@@ -175,13 +226,19 @@ reducePattern s e (CopExtend rest fs) = foldr ((<>) . handle) (reducePattern s e
                     else PatternUnknown mempty
       Just (_, _, e) -> reducePattern s e p
 
-  fs' = simplifyRecord s e
+  fs' = simplifyRecord e
+
+  simplifyRecord (CoaRef v _) =
+    case lookupVar s v of
+      Just (CotAtom r) -> simplifyRecord r
+      Just (CotExtend r fs) -> fs ++ simplifyRecord r
+      _ -> []
+  simplifyRecord _ = []
+
+  allMatching (CopLit ColRecNil) = True
+  allMatching (CopLit ColUnit) = True
+  allMatching (CopCapture _ _) = True
+  allMatching (CopExtend r fs) = allMatching r && all (allMatching . snd) fs
+  allMatching _ = False
 
 reducePattern _ _ _ = PatternUnknown Map.empty
-
-allMatching :: CoPattern a -> Bool
-allMatching (CopLit ColRecNil) = True
-allMatching (CopLit ColUnit) = True
-allMatching (CopCapture _ _) = True
-allMatching (CopExtend r fs) = allMatching r && all (allMatching . snd) fs
-allMatching _ = False
