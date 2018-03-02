@@ -15,7 +15,7 @@ optmOnce :: [CoStmt (Var Resolved)] -> Gen Int [CoStmt (Var Resolved)]
 optmOnce = pure . passes where
   passes = foldr (.) id $ reverse
            [ id
-           , reduceTermPass
+           , reducePass
            , inlineVariablePass
            , deadCodePass
            ]
