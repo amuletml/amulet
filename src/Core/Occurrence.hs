@@ -15,6 +15,7 @@ import Data.VarSet (IsVar(..))
 import Data.Generics
 import Data.Maybe
 import Data.List
+import Data.Triple
 
 import Control.Monad.Infer
 import Control.Arrow
@@ -103,8 +104,18 @@ instance IsVar a => Occurs (OccursVar a) where
 doesItOccur :: Occurs a => a -> Bool
 doesItOccur = (>= 1) . usedWhen
 
-countUsages :: (Data (f a), Data a, IsVar a) => f a -> OccursMap
-countUsages = everything merge (mkQ mempty go) where
-  merge = Map.merge Map.preserveMissing Map.preserveMissing (Map.zipWithMatched (const (+)))
-  go (CoaRef v _) = Map.singleton v 1
-  go _ = mempty
+countUsages :: forall a. IsVar a => C.CoTerm a -> OccursMap
+countUsages = term where
+  term (CotAtom a) = atom a
+  term (CotApp f x) = atom f # atom x
+  term (CotLet vs e) = foldr (#) mempty (map (term . thd3) vs) # term e
+  term (CotMatch e vs) = atom e # foldr (#) mempty (map (term . thd3) vs)
+  term (CotExtend e rs) = atom e # foldr (#) mempty (map (atom . thd3) rs)
+  term (CotTyApp f _) = atom f
+
+  atom (CoaRef v _) = Map.singleton (toVar v) 1
+  atom (CoaLam _ _ b) = term b
+  atom CoaLit{} = mempty
+
+  (#) :: OccursMap -> OccursMap -> OccursMap
+  (#) = Map.merge Map.preserveMissing Map.preserveMissing (Map.zipWithMatched (const (+)))
