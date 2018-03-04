@@ -7,6 +7,7 @@ import qualified Data.Text as T
 
 import Syntax
 
+import Data.Foldable
 import Data.Triple
 
 desugarProgram :: forall m. MonadGen Int m => [Toplevel Parsed] -> m [Toplevel Parsed]
@@ -49,9 +50,26 @@ desugarProgram = traverse statement where
     expr (Fun cap (Access ref k a) a)
 
   expr (Tuple es a) = Tuple <$> traverse expr es <*> pure a
+  expr (TupleSection es a) = do
+    es' <- traverse (traverse expr) es
+    (body, tuple) <- foldrM (buildTuple a) (id, []) es'
+    pure (body (Tuple tuple a))
+
+  buildTuple :: MonadGen Int m
+             => Ann Parsed
+             -> (Maybe (Expr Parsed))
+             -> (Expr Parsed -> Expr Parsed, [Expr Parsed])
+             -> m (Expr Parsed -> Expr Parsed, [Expr Parsed])
+  buildTuple a Nothing (wrapper, tuple) = do
+    (p, v) <- fresh a
+    pure (\x -> wrapper (Fun p x a), v:tuple)
+  buildTuple _ (Just e@VarRef{}) (wrapper, tuple) = pure (wrapper, e:tuple)
+  buildTuple _ (Just e@Literal{}) (wrapper, tuple) = pure (wrapper, e:tuple)
+  buildTuple a (Just e) (wrapper, tuple) = do
+    (Capture v _, ref) <- fresh a
+    pure (\x -> Let [(v, e, a)] (wrapper x) a, ref:tuple)
 
 fresh :: MonadGen Int m => Ann Parsed -> m (Pattern Parsed, Expr Parsed)
 fresh an = do
   var <- Name . T.cons '_' . T.pack . show <$> gen
   pure (Capture var an, VarRef var an)
-
