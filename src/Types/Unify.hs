@@ -39,7 +39,7 @@ unify :: Type Typed -> Type Typed -> SolveM ()
 unify (TyVar a) b = bind a b
 unify a (TyVar b) = bind b a
 
-unify (TySkol x ) (TySkol y)
+unify (TySkol x) (TySkol y)
   | x == y = pure ()
 unify (TySkol t) b = throwError $ SkolBinding t b
 unify b (TySkol t) = throwError $ SkolBinding t b
