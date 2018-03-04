@@ -16,6 +16,7 @@ import Data.Triple
 import Data.Graph
 import Data.Span
 
+import Control.Monad.State
 import Control.Monad.Infer
 import Control.Arrow (first, (***))
 import Control.Lens
@@ -65,63 +66,59 @@ check :: MonadInfer Typed m => Expr Resolved -> Type Typed -> m (Expr Typed)
 check e ty@TyForall{} = do -- This is rule Decl∀L from [Complete and Easy]
   e' <- check e =<< skolemise ty -- gotta be polymorphic - don't allow instantiation
   pure (correct ty e')
+
 check (Hole v a) t = pure (Hole (TvName v) (a, t))
--- check ex@(Fun p b a) ty = do
---   (dom, cod, _) <- decompose ex _TyArr ty
---   (p', ms) <- checkPattern p dom
---   Fun p' <$> extendMany ms (check b cod) <*> pure (a, ty)
-check (Begin [] _) _ = error "impossible"
+
+check (Begin [] _) _ = error "impossible: check empty Begin"
 check (Begin xs a) t = do
   let start = init xs
       end = last xs
   start' <- traverse (fmap fst . infer) start
   end' <- check end t
   pure (Begin (start' ++ [end']) (a, t))
+
 check (Let ns b an) t = do
   (ns', ts) <- inferLetTy id ns
   extendMany ts $ do
     b' <- check b t
     pure (Let ns' b' (an, t))
+
 check (If c t e an) ty = If <$> check c tyBool <*> check t ty <*> check e ty <*> pure (an, ty)
+
 check (Match t ps a) ty = do
   (t', tt) <- infer t
   ps' <- for ps $ \(p, e) -> do
     (p', ms) <- checkPattern p tt
     (,) <$> pure p' <*> extendMany ms (check e ty)
   pure (Match t' ps' (a, ty))
+
 check ex@(Record rows a) ty = do
   (rows', rowts) <- unzip <$> inferRows rows
   Record rows' . (a,) <$> unify ex (TyExactRows rowts) ty
+
 check ex@(RecordExt rec rows a) ty = do
   (rec', rho) <- infer rec
   (rows', newts) <- unzip <$> inferRows rows
   RecordExt rec' rows' . (a,) <$> unify ex (TyRows rho newts) ty
+
 check (Access rc key a) ty = do
   rho <- freshTV
   Access <$> check rc (TyRows rho [(key, ty)]) <*> pure key <*> pure (a, ty)
+
 check ex@(Tuple es an) ty = Tuple <$> go es ty <*> pure (an, ty) where
   go [] _ = error "not a tuple"
   go [x] t = (:[]) <$> check x t
   go (x:xs) t = do
     (left, right, _) <- decompose ex _TyTuple t
     (:) <$> check x left <*> go xs right
-check ex@(TypeApp pf tx an) ty = do
-  (tx', _) <- resolveKind tx
-  (pf', tp) <- infer pf
-  at <- case pf' of
-    VarRef var _ -> do
-      tp <- view (values . at (unTvName var))
-      case tp of
-        Just (normType -> TyForall (v:vs) x) ->
-          unify ex ty (normType (TyForall vs (apply (Map.singleton v tx') x)))
-        Just tp -> throwError (IllegalTypeApp ex tp tx')
-        Nothing -> throwError (NotInScope (unTvName var))
-    _ -> throwError (IllegalTypeApp ex tp tx')
-  pure (TypeApp pf' tx' (an, at))
+
+check TypeApp{} _ = error "impossible: check TypeApp"
+
 check e ty = do
   (e', t) <- infer e
   _ <- subsumes e ty t
   pure e'
+
 -- [Complete and Easy]: See https://www.cl.cam.ac.uk/~nk480/bidir.pdf
 
 infer :: MonadInfer Typed m => Expr Resolved -> m (Expr Typed, Type Typed)
@@ -130,29 +127,35 @@ infer expr@(VarRef k a) = do
   if Map.null inst
      then pure (VarRef (TvName k) (a, new), new)
      else mkTyApps expr inst old new
+
 infer (Fun p e an) = do
   (p', dom, ms) <- inferPattern p
   (e', cod) <- extendMany ms $ infer e
   pure (Fun p' e' (an, TyArr dom cod), TyArr dom cod)
+
 infer (Literal l an) = pure (Literal l (an, ty), ty) where
   ty = case l of
     LiInt{} -> tyInt
     LiStr{} -> tyString
     LiBool{} -> tyBool
     LiUnit{} -> tyUnit
+
 infer ex@(Ascription e ty an) = do
   (ty', _) <- resolveKind ty `catchError` \e -> throwError (ArisingFrom e ex)
   e' <- check e ty'
   pure (Ascription (correct ty' e') ty' (an, ty'), ty')
+
 infer ex@(App f x a) = do
   (f', (d, c, k)) <- secondA (decompose ex _TyArr) =<< infer f
   x' <- check x d
   pure (App (k f') x' (a, c), c)
+
 infer ex@(BinOp l o r a) = do
   (o', (ld, c, k1)) <- secondA (decompose ex _TyArr) =<< infer o
   (rd, c, k2) <- decompose ex _TyArr c
   (l', r') <- (,) <$> check l ld <*> check r rd
   pure (App (k2 (App (k1 o') l' (a, TyArr rd c))) r' (a, c), c)
+
 infer ex = do
   x <- freshTV
   ex' <- check ex x
@@ -175,8 +178,9 @@ inferProg (LetStmt ns:prg) = do
       inferProg prg
 inferProg (ForeignVal v d t ann:prg) = do
   (t', _) <- resolveKind t
-  extend (TvName v, t') $
-    consFst (ForeignVal (TvName v) d t' (ann, t')) $
+  let t'' = normType (closeOver t')
+  extend (TvName v, t'') $
+    consFst (ForeignVal (TvName v) d t'' (ann, t'')) $
       inferProg prg
 inferProg (TypeDecl n tvs cs:prg) = do
   kind <- resolveTyDeclKind n tvs cs
@@ -216,6 +220,19 @@ inferCon ret' (UnitCon nm ann) =
   let ret = closeOver ret'
    in pure ((TvName nm, ret), UnitCon (TvName nm) (ann, ret))
 
+data Origin
+  = Supplied -- the programmer supplied this type
+  | Guessed -- the compiler invented this type
+
+-- For polymorphic recursion, mostly
+approxType :: MonadInfer Typed m => Expr Resolved -> StateT Origin m (Type Typed)
+approxType (Fun (PType _ t _) e _) = TyArr . fst <$> resolveKind t <*> approxType e
+approxType (Ascription _ t _) = fst <$> resolveKind t
+approxType (Fun _ e _) = TyArr <$> freshTV <*> approxType e
+approxType _ = do
+  put Guessed
+  lift freshTV
+
 inferLetTy :: forall m. MonadInfer Typed m
            => (Type Typed -> Type Typed)
            -> [(Var Resolved, Expr Resolved, Ann Resolved)]
@@ -224,6 +241,11 @@ inferLetTy :: forall m. MonadInfer Typed m
                 )
 inferLetTy closeOver vs =
   let sccs = depOrder vs
+
+      wasGuessed :: Origin -> Bool
+      wasGuessed Guessed = True
+      wasGuessed _ = False
+
       figureOut :: Type Typed -> [Constraint Typed] -> m (Type Typed, Expr Typed -> Expr Typed)
       figureOut ty cs = do
         cur <- gen
@@ -234,26 +256,42 @@ inferLetTy closeOver vs =
           throwError (EscapedSkolems (Set.toList (skols vt)) vt)
         pure (vt, applyInExpr x . raiseE id (\(a, t) -> (a, normType (apply x t))))
 
+      approximate :: (Var Resolved, Expr Resolved, Span) -> m (Origin, (Var Typed, Type Typed))
+      approximate (v, e, _) = do
+        (ty, st) <- runStateT (approxType e) Supplied
+        pure (st, (TvName v, if not (wasGuessed st) then closeOver ty else ty))
+
       tcOne :: SCC (Var Resolved, Expr Resolved, Ann Resolved)
             -> m ( [(Var Typed, Expr Typed, Ann Typed)]
                  , [(Var Typed, Type Typed)] )
 
-      tcOne (AcyclicSCC (var, exp, ann)) = do
-        tv <- freshTV
-        ((exp', ty), cs) <- listen . extend (TvName var, tv) $ do
-          (exp', ty) <- infer exp
-          _ <- unify exp tv ty
-          pure (exp', ty)
+      tcOne (AcyclicSCC decl@(var, exp, ann)) = do
+        (origin, tv) <- approximate decl
+        ((exp', ty), cs) <- listen . extend tv $ do
+          case origin of
+            Supplied -> do
+              (exp', ity) <- infer exp
+              _ <- subsumes exp (snd tv) ity -- Shouldn't matter, but probably will
+              pure (exp', snd tv)
+            Guessed -> do
+              (exp', ty) <- infer exp
+              _ <- unify exp (snd tv) ty
+              pure (exp', ty)
         (tp, k) <- figureOut ty cs
         pure ( [(TvName var, k exp', (ann, tp))], [(TvName var, tp)] )
 
       tcOne (CyclicSCC vars) = do
-        tvs <- traverse (\x -> (TvName (fst3 x),) <$> freshTV) vs
+        (origins, tvs) <- unzip <$> traverse approximate vars
         (vs, cs) <- listen . extendMany tvs $
-          for (zip tvs vars) $ \((_, tyvar), (var, exp, ann)) -> do
-            (exp', ty) <- infer exp
-            _ <- unify exp tyvar ty
-            pure (TvName var, exp', ann, ty)
+          ifor (zip tvs vars) $ \i ((_, tyvar), (var, exp, ann)) -> do
+            case origins !! i of
+              Supplied -> do
+                (exp', ty) <- infer exp
+                pure (TvName var, exp', ann, ty)
+              Guessed -> do
+                (exp', ty) <- infer exp
+                _ <- unify exp tyvar ty
+                pure (TvName var, exp', ann, ty)
         cur <- gen
         solution <- case solve cur mempty cs of
           Right x -> pure x
