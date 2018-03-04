@@ -124,16 +124,14 @@ compileAtom' (CoaRef v _) = EC
              -- -- If the variable is not in the scope then skip
              (_, []) -> next xs (LuaRef (lowerName v), Nothing)
              (before, (_, e, e'):xs') -> let (stmts, xs'') = next xs' (e', Just e)
-                                         in (foldr mkLet stmts before, xs'')
-  where mkLet (v, _, b) stmts = LuaLocal [lowerName v] [b] : stmts
+                                         in (mkLets stmts before, xs'')
 
 compileAtom :: Occurs a => CoAtom a -> ExprContext a LuaExpr
 compileAtom a = fst <$> compileAtom' a
 
 flushStmt :: Occurs a => [LuaStmt] -> b -> ExprContext a b
 flushStmt extra e = EC $ \xs next -> let (stmts, xs') = next [] e
-                                     in (foldr mkLet (extra ++ stmts) xs, xs')
-  where mkLet (v, _, b) stmts = LuaLocal [lowerName v] [b] : stmts
+                                     in (mkLets (extra ++ stmts) xs, xs')
 
 compileTerm :: Occurs a => CoTerm a -> ExprContext a LuaExpr
 compileTerm (CotAtom a) = compileAtom a
@@ -221,8 +219,7 @@ compileTerm (CotMatch test branches) = do
   compileMatch test' branches
 
 compileStmt :: Occurs a => Returner -> CoTerm a -> [LuaStmt]
-compileStmt r term = fst (unEC (compileTerm term) [] (\xs x -> (foldr mkLet [r x] xs, [])))
-  where mkLet (v, _, b) stmts = LuaLocal [lowerName v] [b] : stmts
+compileStmt r term = fst (unEC (compileTerm term) [] (\xs x -> (mkLets [r x] xs, [])))
 lowerName :: Occurs a => a -> LuaVar
 lowerName = LuaName . getTaggedName . toVar
 
@@ -261,6 +258,9 @@ compileLet (vs, _, es) = locals recs (assigns nonrecs) where
 
   recursive v (CotAtom term@CoaLam{}) = occursInAtom v term
   recursive _ _ = False
+
+mkLets :: Occurs a => [LuaStmt] -> [(a, b, LuaExpr)] -> [LuaStmt]
+mkLets = foldl (\stmts (v, _, b) -> LuaLocal [lowerName v] [b] : stmts)
 
 foldAnd :: [LuaExpr] -> LuaExpr
 foldAnd = foldl1 k where
