@@ -57,6 +57,7 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
   pretty (AccessSection k _) = parens $ dot <> text k
 
   pretty (Tuple es _) = parens (hsep (punctuate comma (map pretty es)))
+  pretty (TupleSection es _) = parens (hsep (punctuate comma (map (maybe (string "") pretty) es)))
   pretty (TypeApp f x _) = parenFun f <+> soperator (char '@') <> pretty x
 
 prettyMatches :: (Pretty (Var p)) => [(Pattern p, Expr p)] -> [Doc]

@@ -94,6 +94,7 @@ data Expr p
 
   -- Tuple (see note [1])
   | Tuple [Expr p] (Ann p)
+  | TupleSection [Maybe (Expr p)] (Ann p)
 
   -- Explicit type application
   | TypeApp (Expr p) (Type p) (Ann p)
