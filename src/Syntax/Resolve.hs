@@ -183,6 +183,7 @@ reExpr (BothSection o a) = BothSection <$> reExpr o <*> pure a
 reExpr (AccessSection t a) = pure (AccessSection t a)
 
 reExpr (Tuple es a) = Tuple <$> traverse reExpr es <*> pure a
+reExpr (TupleSection es a) = TupleSection <$> traverse (traverse reExpr) es <*> pure a
 reExpr (TypeApp f x a) = TypeApp <$> reExpr f <*> reType x <*> pure a
 
 reType :: MonadResolve m => Type Parsed -> m (Type Resolved)

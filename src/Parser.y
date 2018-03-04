@@ -2,7 +2,7 @@
 module Parser (parseInput) where
 
 import Data.List (intercalate)
-import Data.Maybe (fromJust)
+import Data.Maybe (fromJust, isJust)
 import Data.Span
 import Data.Spanned
 import qualified Data.Text as T
@@ -153,15 +153,11 @@ Atom :: { Expr Parsed }
      | Lit                                    { withPos1 $1 (Literal (getL $1)) }
      | hole                                   { withPos1 $1 (Hole (Name (getHole $1))) }
      | begin List1(Expr, ';') end             { withPos2 $1 $3 $ Begin $2 }
-     | '(' List(Expr, ',') ')'                { withPos2 $1 $3 $ tupleExpr $2 }
+     | '(' List(Section, ',') ')'             { withPos2 $1 $3 $ tupleExpr $2 }
      | '{' Rows('=', Expr) '}'                { withPos2 $1 $3 $ Record $2 }
      | '{' Expr with Rows('=',Expr) '}'       { withPos2 $1 $5 $ RecordExt $2 $4 }
 
-     | '(' access ')'                         { withPos2 $1 $3 $ AccessSection (getIdent $2) }
      | Atom access                            { withPos2 $1 $2 $ Access $1 (getIdent $2) }
-     | '(' Operator ')'                       { withPos2 $1 $3 $ BothSection $2 }
-     | '(' Expr Operator ')'               { withPos2 $1 $4 $ RightSection $2 $3 }
-     | '(' Operator Expr ')'               { withPos2 $1 $4 $ LeftSection $2 $3 }
 
 Operator :: { Expr Parsed }
          : '**'                               { withPos1 $1 $ varE "**" }
@@ -178,6 +174,14 @@ Operator :: { Expr Parsed }
          | '=='                               { withPos1 $1 $ varE "==" }
          | '&&'                               { withPos1 $1 $ varE "&&" }
          | '||'                               { withPos1 $1 $ varE "||" }
+
+Section :: { Maybe (Expr Parsed) }
+        :                                     { Nothing }
+        | Expr                                { Just $1 }
+        | access                              { Just $ withPos1 $1 $ AccessSection (getIdent $1) }
+        | Operator                            { Just $ withPos1 $1 $ BothSection $1 }
+        | Expr Operator                       { Just $ withPos2 $1 $2 $ RightSection $1 $2 }
+        | Operator Expr                       { Just $ withPos2 $1 $2 $ LeftSection $1 $2 }
 
 Var :: { Located (Var Parsed) }
     : ident { lPos1 $1 $ getName $1 }
@@ -290,10 +294,11 @@ withPos1 s f = f (annotation s)
 withPos2 :: (Spanned a, Spanned b) => a -> b -> (Span -> c) -> c
 withPos2 s e f = f (mkSpanUnsafe (spanStart $ annotation s) (spanEnd $ annotation e))
 
-tupleExpr :: [Expr Parsed] -> Ann Parsed -> Expr Parsed
+tupleExpr :: [Maybe (Expr Parsed)] -> Ann Parsed -> Expr Parsed
 tupleExpr []  a = Literal LiUnit a
-tupleExpr [x] a = x
-tupleExpr xs  a = Tuple xs a
+tupleExpr [Just x] a = x
+tupleExpr xs a | all isJust xs = Tuple (map fromJust xs) a
+tupleExpr xs a = TupleSection xs a
 
 tuplePattern :: [Pattern Parsed] -> Ann Parsed -> Pattern Parsed
 tuplePattern [x] a = case x of
