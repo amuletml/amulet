@@ -56,11 +56,11 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
   pretty (BothSection op _) = parens $ pretty op
   pretty (AccessSection k _) = parens $ dot <> text k
 
-  pretty (Tuple es _) = tupled (map pretty es)
+  pretty (Tuple es _) = parens (hsep (punctuate comma (map pretty es)))
   pretty (TypeApp f x _) = parenFun f <+> soperator (char '@') <> pretty x
 
 prettyMatches :: (Pretty (Var p)) => [(Pattern p, Expr p)] -> [Doc]
-prettyMatches = map (\(a, b) -> pipe <+> pretty a <+> arrow <+> pretty b)
+prettyMatches = map (\(a, b) -> pipe <+> nest 4 (pretty a <+> arrow </> pretty b))
 
 prettyRows :: Pretty x => Doc -> [(Text, x)] -> [Doc]
 prettyRows sep = map (\(n, v) -> text n <+> sep <+> pretty v)
@@ -72,7 +72,7 @@ instance (Pretty (Var p)) => Pretty (Pattern p) where
   pretty (Destructure x (Just xs) _) = parens $ stypeCon (pretty x) <+> pretty xs
   pretty (PType p x _) = parens $ pretty p <+> colon <+> pretty x
   pretty (PRecord rows _) = record (prettyRows equals rows)
-  pretty (PTuple ps _) = tupled (map pretty ps)
+  pretty (PTuple ps _) = parens (hsep (punctuate comma (map pretty ps)))
 
 instance Pretty Lit where
   pretty (LiStr s) = sstring (dquotes (text s))
