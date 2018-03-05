@@ -15,21 +15,21 @@ import Core.Optimise
 
 matchOfMatch :: TransformPass
 matchOfMatch = pass' go where
-  go (CotMatch (CotMatch ie ibs) obs) = CotMatch ie (map (push obs) ibs)
+  go (Match (Match ie ibs) obs) = Match ie (map (push obs) ibs)
   go x = x
 
-  push :: [(CoPattern (Var Resolved), CoType (Var Resolved), CoTerm (Var Resolved))]
-       -> (CoPattern (Var Resolved), CoType (Var Resolved), CoTerm (Var Resolved))
-       -> (CoPattern (Var Resolved), CoType (Var Resolved), CoTerm (Var Resolved))
-  push x (p, t, e) = (p, t, CotMatch e x)
+  push :: [(Pattern (Var Resolved), Type (Var Resolved), Term (Var Resolved))]
+       -> (Pattern (Var Resolved), Type (Var Resolved), Term (Var Resolved))
+       -> (Pattern (Var Resolved), Type (Var Resolved), Term (Var Resolved))
+  push x (p, t, e) = (p, t, Match e x)
 
 matchOfBottom :: TransformPass
 matchOfBottom = pass' go where
-  go t@(CotMatch e cs)
+  go t@(Match e cs)
     | any (isError . thd3) cs && isError e =
-      let CotApp (CotTyApp err _) msg = e
-          CotApp (CotTyApp _ t) _ = maybe (error em) thd3 (Data.List.find (isError . thd3) cs)
-       in CotApp (CotTyApp err t) msg
+      let App (TyApp err _) msg = e
+          App (TyApp _ t) _ = maybe (error em) thd3 (Data.List.find (isError . thd3) cs)
+       in App (TyApp err t) msg
     | isError e = e
     | otherwise = t
   go x = x
