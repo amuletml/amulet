@@ -1,5 +1,5 @@
 module Core.Optimise
-  ( substitute, substituteInTys
+  ( substitute, substituteInTys, substituteInCo
   , module Core.Core
   , Var(..)
   , fresh
@@ -48,6 +48,21 @@ substituteInTys m = term where
   atom (Ref v t) = Ref v (gotype t)
   atom (Lam s (v, t) b) = Lam s (v, gotype t) (term b)
   atom x@Lit{} = x
+
+  gotype x@(VarTy v) = Map.findWithDefault x v m
+  gotype x@ConTy{} = x
+  gotype (ForallTy v t) = ForallTy v (gotype t)
+  gotype (ArrTy a b) = ArrTy (gotype a) (gotype b)
+  gotype (AppTy f x) = AppTy (gotype f) (gotype x)
+  gotype (RowsTy v rs) = RowsTy (gotype v) (map (second gotype) rs)
+  gotype (ExactRowsTy rs) = ExactRowsTy (map (second gotype) rs)
+  gotype StarTy = StarTy
+
+substituteInCo :: IsVar a => Map.Map a (Type a) -> Coercion a -> Coercion a
+substituteInCo m = coercion where
+  coercion (SameRepr t t') = SameRepr (gotype t) (gotype t')
+  coercion (Domain c) = Domain (coercion c)
+  coercion (Codomain c) = Codomain (coercion c)
 
   gotype x@(VarTy v) = Map.findWithDefault x v m
   gotype x@ConTy{} = x
