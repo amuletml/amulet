@@ -44,6 +44,7 @@ substituteInTys m = term where
   coercion (SameRepr t t') = SameRepr (gotype t) (gotype t')
   coercion (Domain c) = Domain (coercion c)
   coercion (Codomain c) = Codomain (coercion c)
+  coercion (Symmetry c) = Symmetry (coercion c)
 
   atom (Ref v t) = Ref v (gotype t)
   atom (Lam s (v, t) b) = Lam s (v, gotype t) (term b)
@@ -63,6 +64,7 @@ substituteInCo m = coercion where
   coercion (SameRepr t t') = SameRepr (gotype t) (gotype t')
   coercion (Domain c) = Domain (coercion c)
   coercion (Codomain c) = Codomain (coercion c)
+  coercion (Symmetry c) = Symmetry (coercion c)
 
   gotype x@(VarTy v) = Map.findWithDefault x v m
   gotype x@ConTy{} = x

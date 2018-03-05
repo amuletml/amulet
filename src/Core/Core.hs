@@ -43,6 +43,7 @@ data Coercion a
   = SameRepr (Type a) (Type a)
   | Domain (Coercion a)
   | Codomain (Coercion a)
+  | Symmetry (Coercion a)
   deriving (Eq, Show, Ord, Data, Typeable, Functor)
 
 data Literal
@@ -95,8 +96,9 @@ instance Pretty a => Pretty (Term a) where
 
 instance Pretty a => Pretty (Coercion a) where
   pretty (SameRepr a b) = pretty a <+> soperator (char '~') <+> pretty b
-  pretty (Domain f) = keyword "dom" <+> pretty f
-  pretty (Codomain f) = keyword "cod" <+> pretty f
+  pretty (Domain f) = keyword "dom" <+> parens (pretty f)
+  pretty (Codomain f) = keyword "cod" <+> parens (pretty f)
+  pretty (Symmetry f) = keyword "sym" <+> parens (pretty f)
 
 pprLet :: Pretty a => [(a, Type a, Term a)] -> Doc
 pprLet = braces' . vsep . map (indent 2) . punctuate semi . map pprLet1
@@ -209,3 +211,15 @@ patternVarsA (Destr _ p) = patternVarsA p
 patternVarsA (PatExtend p ps) = mconcat (patternVarsA p : map (patternVarsA . snd) ps)
 patternVarsA Constr{} = mempty
 patternVarsA PatLit{} = mempty
+
+relates :: Coercion a -> Maybe (Type a, Type a)
+relates (SameRepr a b) = Just (a, b)
+relates (Symmetry x) = do
+  (a, b) <- relates x
+  pure (b, a)
+relates (Domain x) = do
+  (ArrTy a _, ArrTy b _) <- relates x
+  pure (a, b)
+relates (Codomain x) = do
+  (ArrTy _ a, ArrTy _ b) <- relates x
+  pure (a, b)

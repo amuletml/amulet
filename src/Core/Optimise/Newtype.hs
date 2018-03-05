@@ -32,10 +32,10 @@ isNewtype _ = Nothing
 
 newtypeMatch :: IsVar a => V.Map (Coercion a) -> [(Pattern a, Type a, Term a)] -> Maybe (Coercion a, (Pattern a, Type a, Term a))
 newtypeMatch m (it@(Destr c _, ty, _):xs)
-  | Just (SameRepr dom cod) <- V.lookup (toVar c) m =
+  | Just phi@(SameRepr _ cod) <- V.lookup (toVar c) m =
     case unify ty cod of
-      Just map -> pure (substituteInCo map (SameRepr cod dom), it)
-      Nothing -> pure (SameRepr cod dom, it)
+      Just map -> pure (substituteInCo map (Symmetry phi), it)
+      Nothing -> pure (Symmetry phi, it)
   | otherwise = newtypeMatch m xs
 newtypeMatch m (_:xs) = newtypeMatch m xs
 newtypeMatch _ [] = Nothing
@@ -66,7 +66,7 @@ goBinding m vs = traverse (third3A goTerm) vs where
   goTerm (Match a x) = case newtypeMatch m x of
     Just (phi, (Destr _ p, _, bd)) -> do
       var <- fresh
-      let SameRepr _ castCodomain = phi
+      let Just (_, castCodomain) = relates phi
       bd <- goTerm (Match (Ref (fromVar var) castCodomain) [(p, castCodomain, bd)])
       pure $ Let [(fromVar var, castCodomain, Cast a phi)] bd
     _ -> Match <$> goAtom a <*> traverse (third3A goTerm) x
