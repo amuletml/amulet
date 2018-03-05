@@ -54,6 +54,7 @@ transformOver = transT where
   mapT s (Atom a) = Atom (transA s a)
   mapT s (App f a) = App (transA s f) (transA s a)
   mapT s (TyApp f t) = TyApp (transA s f) t
+  mapT s (Cast f t) = Cast (transA s f) t
   mapT s (Extend t rs) = Extend (transA s t) (map (third3 (transA s)) rs)
   mapT s (Let vars body) =
     let vars' = map (third3 (transT (extendVars vars s))) vars

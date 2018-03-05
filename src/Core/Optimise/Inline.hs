@@ -45,6 +45,7 @@ inlineVariablePass = transS (InlineScope mempty mempty) where
            , score <= limit -> Let [(v, t, Atom a')] b
          Lam Small (v, t) b -> Let [(v, t, Atom a')] b
          _ -> App f' a'
+  transT s (Cast f t) = Cast (transA s f) t
   transT s (TyApp f t) =
     case transA s f of
       Ref r _
@@ -89,3 +90,4 @@ scoreTerm s (Let vs e) = sum (map (scoreTerm s . thd3) vs) + scoreTerm s e
 scoreTerm s (Match e bs) = scoreAtom s e + sum (map (scoreTerm s . thd3) bs)
 scoreTerm s (Extend e rs) = scoreAtom s e + sum (map (scoreAtom s . thd3) rs)
 scoreTerm s (TyApp t _) = scoreAtom s t
+scoreTerm s (Cast t _) = scoreAtom s t

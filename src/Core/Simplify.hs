@@ -3,6 +3,7 @@ module Core.Simplify
   ) where
 
 import Core.Optimise.DeadCode
+import Core.Optimise.Newtype
 import Core.Optimise.Inline
 import Core.Optimise.Reduce
 import Core.Optimise
@@ -18,6 +19,7 @@ optmOnce = pure . passes where
            , reducePass
            , inlineVariablePass
            , deadCodePass
+           , killNewtypePass
            ]
 
 optimise :: [Stmt (Var Resolved)] -> Gen Int [Stmt (Var Resolved)]

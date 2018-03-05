@@ -25,6 +25,7 @@ substitute m = term where
   term (Match x vs) = Match (atom x) (map (third3 term) vs)
   term (Extend e rs) = Extend (atom e) (map (third3 atom) rs)
   term (TyApp f t) = TyApp (atom f) t
+  term (Cast f t) = Cast (atom f) t
 
   atom x@(Ref v _) = Map.findWithDefault x v m
   atom (Lam s v b) = Lam s v (term b)
@@ -38,6 +39,11 @@ substituteInTys m = term where
   term (Match x vs) = Match (atom x) (map (\(v, t, e) -> (v, gotype t, term e)) vs)
   term (Extend e rs) = Extend (atom e) (map (third3 atom) rs)
   term (TyApp f t) = TyApp (atom f) (gotype t)
+  term (Cast f t) = Cast (atom f) (coercion t)
+
+  coercion (SameRepr t t') = SameRepr (gotype t) (gotype t')
+  coercion (Domain c) = Domain (coercion c)
+  coercion (Codomain c) = Codomain (coercion c)
 
   atom (Ref v t) = Ref v (gotype t)
   atom (Lam s (v, t) b) = Lam s (v, gotype t) (term b)

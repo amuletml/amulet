@@ -36,8 +36,17 @@ approximateAtomType (Lit l) = pure . fmap fromVar $ case l of
   Unit -> cotyUnit
   RecNil -> ExactRowsTy []
 
+doCast :: IsVar a => Coercion a -> Type a -> Maybe (Type a)
+doCast (SameRepr t t') i = case unify t i of
+  Just _ -> pure t'
+  _ -> Nothing
+doCast (Domain c) (ArrTy x t) = ArrTy <$> doCast c x <*> pure t
+doCast (Codomain c) (ArrTy t x) = ArrTy t <$> doCast c x
+doCast _ _ = Nothing
+
 approximateType :: IsVar a => Term a -> Maybe (Type a)
 approximateType (Atom a) = approximateAtomType a
+approximateType (Cast t phi) = doCast phi =<< approximateAtomType t
 approximateType (App f _) = do
   ArrTy _ d <- approximateAtomType f
   pure d

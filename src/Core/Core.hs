@@ -27,6 +27,7 @@ data Term a
   | Extend (Atom a) [(Text, Type a, Atom a)]
 
   | TyApp (Atom a) (Type a) -- removes a Λ
+  | Cast (Atom a) (Coercion a)
   deriving (Eq, Show, Ord, Data, Typeable, Functor)
 
 data Pattern a
@@ -36,6 +37,12 @@ data Pattern a
   | PatExtend (Pattern a) [(Text, Pattern a)]
 
   | PatLit Literal
+  deriving (Eq, Show, Ord, Data, Typeable, Functor)
+
+data Coercion a
+  = SameRepr (Type a) (Type a)
+  | Domain (Coercion a)
+  | Codomain (Coercion a)
   deriving (Eq, Show, Ord, Data, Typeable, Functor)
 
 data Literal
@@ -84,6 +91,12 @@ instance Pretty a => Pretty (Term a) where
   pretty (Match e ps) = keyword "match" <+> pretty e <+> pprCases ps
   pretty (Extend x rs) = braces $ pretty x <+> pipe <+> prettyRows rs where
     prettyRows = hsep . punctuate comma . map (\(x, t, v) -> text x <+> colon <+> pretty t <+> equals <+> pretty v)
+  pretty (Cast a phi) = parens $ pretty a <+> soperator (string "|>") <+> pretty phi
+
+instance Pretty a => Pretty (Coercion a) where
+  pretty (SameRepr a b) = pretty a <+> soperator (char '~') <+> pretty b
+  pretty (Domain f) = keyword "dom" <+> pretty f
+  pretty (Codomain f) = keyword "cod" <+> pretty f
 
 pprLet :: Pretty a => [(a, Type a, Term a)] -> Doc
 pprLet = braces' . vsep . map (indent 2) . punctuate semi . map pprLet1
@@ -163,6 +176,7 @@ freeIn (Match e bs) = freeInAtom e <> foldMap freeInBranch bs where
   freeInBranch (b, _, e) = VarSet.difference (freeIn e) (patternVars b)
 freeIn (Extend c rs) = freeInAtom c <> foldMap (freeInAtom . thd3) rs
 freeIn (TyApp f _) = freeInAtom f
+freeIn (Cast f _) = freeInAtom f
 
 occursInAtom :: IsVar a => a -> Atom a -> Bool
 occursInAtom v (Ref v' _) = toVar v == toVar v'
@@ -173,6 +187,7 @@ occursInTerm :: IsVar a => a -> Term a -> Bool
 occursInTerm v (Atom a) = occursInAtom v a
 occursInTerm v (App f x) = occursInAtom v f || occursInAtom v x
 occursInTerm v (TyApp f _) = occursInAtom v f
+occursInTerm v (Cast f _) = occursInAtom v f
 occursInTerm v (Let vs e) = any (occursInTerm v . thd3) vs || occursInTerm v e
 occursInTerm v (Match e bs) = occursInAtom v e || any (occursInTerm v . thd3) bs
 occursInTerm v (Extend e fs) = occursInAtom v e || any (occursInAtom v . thd3) fs
