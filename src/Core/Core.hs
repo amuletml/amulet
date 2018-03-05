@@ -9,188 +9,188 @@ import Data.Data (Data, Typeable)
 import Data.Text (Text, pack)
 import Data.Triple
 
-import Syntax
+import Syntax (Var(..), Resolved)
 
-data CoAtom a
-  = CoaRef a (CoType a)
-  | CoaLam Size (a, CoType a) (CoTerm a)
-  | CoaLit CoLiteral
+data Atom a
+  = Ref a (Type a)
+  | Lam Size (a, Type a) (Term a)
+  | Lit Literal
   deriving (Eq, Show, Ord, Data, Typeable, Functor)
 
-data CoTerm a
-  = CotAtom (CoAtom a)
-  | CotApp (CoAtom a) (CoAtom a) -- removes a λ
+data Term a
+  = Atom (Atom a)
+  | App (Atom a) (Atom a) -- removes a λ
 
-  | CotLet [(a, CoType a, CoTerm a)] (CoTerm a)
-  | CotMatch (CoAtom a) [(CoPattern a, CoType a, CoTerm a)]
+  | Let [(a, Type a, Term a)] (Term a)
+  | Match (Atom a) [(Pattern a, Type a, Term a)]
 
-  | CotExtend (CoAtom a) [(Text, CoType a, CoAtom a)]
+  | Extend (Atom a) [(Text, Type a, Atom a)]
 
-  | CotTyApp (CoAtom a) (CoType a) -- removes a Λ
+  | TyApp (Atom a) (Type a) -- removes a Λ
   deriving (Eq, Show, Ord, Data, Typeable, Functor)
 
-data CoPattern a
-  = CopCapture a (CoType a)
-  | CopConstr a
-  | CopDestr a (CoPattern a)
-  | CopExtend (CoPattern a) [(Text, CoPattern a)]
+data Pattern a
+  = Capture a (Type a)
+  | Constr a
+  | Destr a (Pattern a)
+  | PatExtend (Pattern a) [(Text, Pattern a)]
 
-  | CopLit CoLiteral
+  | PatLit Literal
   deriving (Eq, Show, Ord, Data, Typeable, Functor)
 
-data CoLiteral
-  = ColInt Integer
-  | ColStr Text
-  | ColTrue | ColFalse
-  | ColUnit | ColRecNil
+data Literal
+  = Int Integer
+  | Str Text
+  | LitTrue | LitFalse
+  | Unit | RecNil
   deriving (Eq, Show, Ord, Data, Typeable)
 
-data CoType a
-  = CotyCon a
-  | CotyVar a
-  | CotyForall a (CoType a)
-  | CotyArr (CoType a) (CoType a)
-  | CotyApp (CoType a) (CoType a)
-  | CotyRows (CoType a) [(Text, CoType a)]
-  | CotyExactRows [(Text, CoType a)]
-  | CotyStar -- * :: *
+data Type a
+  = ConTy a
+  | VarTy a
+  | ForallTy a (Type a)
+  | ArrTy (Type a) (Type a)
+  | AppTy (Type a) (Type a)
+  | RowsTy (Type a) [(Text, Type a)]
+  | ExactRowsTy [(Text, Type a)]
+  | StarTy -- * :: *
   deriving (Eq, Show, Ord, Data, Typeable, Functor)
 
 data Size
   = Big | Small
   deriving (Eq, Show, Ord, Data, Typeable)
 
-data CoStmt a
-  = CosForeign a (CoType a) Text
-  | CosLet [(a, CoType a, CoTerm a)]
-  | CosType a [(a, CoType a)]
+data Stmt a
+  = Foreign a (Type a) Text
+  | StmtLet [(a, Type a, Term a)]
+  | Type a [(a, Type a)]
   deriving (Eq, Show, Ord, Data, Typeable, Functor)
 
-instance Pretty a => Pretty (CoAtom a) where
-  pretty (CoaRef v _) = pretty v
-  pretty (CoaLam Big (v, t) c)
+instance Pretty a => Pretty (Atom a) where
+  pretty (Ref v _) = pretty v
+  pretty (Lam Big (v, t) c)
     = soperator (char 'Λ') <+> parens (pretty v <+> colon <+> pretty t) <> nest 2 (dot </> pretty c)
-  pretty (CoaLam Small (v, t) c)
+  pretty (Lam Small (v, t) c)
     = soperator (char 'λ') <+> parens (pretty v <+> colon <+> pretty t) <> nest 2 (dot </> pretty c)
-  pretty (CoaLit l) = pretty l
+  pretty (Lit l) = pretty l
 
-instance Pretty a => Pretty (CoTerm a) where
-  pretty (CotAtom a) = pretty a
-  pretty (CotApp f x) = pretty f <+> pretty x
-  pretty (CotTyApp f t) = pretty f <+> soperator (char '@') <> pretty t
+instance Pretty a => Pretty (Term a) where
+  pretty (Atom a) = pretty a
+  pretty (App f x) = pretty f <+> pretty x
+  pretty (TyApp f t) = pretty f <+> soperator (char '@') <> pretty t
 
-  pretty (CotLet [x] e) = keyword "let" <+> braces (space <> pprLet1 x <> space) <+> keyword "in" <#> pretty e
-  pretty (CotLet xs e) = keyword "let" <+> pprLet xs </> (keyword "in" <+> pretty e)
-  pretty (CotMatch e ps) = keyword "match" <+> pretty e <+> pprCases ps
-  pretty (CotExtend x rs) = braces $ pretty x <+> pipe <+> prettyRows rs where
+  pretty (Let [x] e) = keyword "let" <+> braces (space <> pprLet1 x <> space) <+> keyword "in" <#> pretty e
+  pretty (Let xs e) = keyword "let" <+> pprLet xs </> (keyword "in" <+> pretty e)
+  pretty (Match e ps) = keyword "match" <+> pretty e <+> pprCases ps
+  pretty (Extend x rs) = braces $ pretty x <+> pipe <+> prettyRows rs where
     prettyRows = hsep . punctuate comma . map (\(x, t, v) -> text x <+> colon <+> pretty t <+> equals <+> pretty v)
 
-pprLet :: Pretty a => [(a, CoType a, CoTerm a)] -> Doc
+pprLet :: Pretty a => [(a, Type a, Term a)] -> Doc
 pprLet = braces' . vsep . map (indent 2) . punctuate semi . map pprLet1
 
-pprLet1 :: Pretty a => (a, CoType a, CoTerm a) -> Doc
+pprLet1 :: Pretty a => (a, Type a, Term a) -> Doc
 pprLet1 (a, b, c) = pretty a <+> colon <+> pretty b <+> nest 2 (equals </> pretty c)
 
 pprBegin :: [Doc] -> Doc
 pprBegin = braces' . vsep . map (indent 2) . punctuate semi
 
-pprCases :: Pretty a => [(CoPattern a, CoType a, CoTerm a)] -> Doc
+pprCases :: Pretty a => [(Pattern a, Type a, Term a)] -> Doc
 pprCases = braces' . vsep . map (indent 2) . punctuate semi . map one where
   one (a, b, c) = pretty a <+> colon <+> pretty b <+> nest 2 (arrow </> pretty c)
 
 braces' :: Doc -> Doc
 braces' = enclose (lbrace <> linebreak) (linebreak <> rbrace)
 
-instance Pretty a => Pretty (CoPattern a) where
-  pretty (CopCapture v _) = pretty v
-  pretty (CopConstr v) = pretty v
-  pretty (CopDestr v p) = parens (pretty v <+> pretty p)
-  pretty (CopExtend p rs) = braces $ pretty p <+> pipe <+> prettyRows rs where
+instance Pretty a => Pretty (Pattern a) where
+  pretty (Capture v _) = pretty v
+  pretty (Constr v) = pretty v
+  pretty (Destr v p) = parens (pretty v <+> pretty p)
+  pretty (PatExtend p rs) = braces $ pretty p <+> pipe <+> prettyRows rs where
     prettyRows = hsep . punctuate comma . map (\(x, v) ->
       text x <+> equals <+> pretty v)
-  pretty (CopLit l) = pretty l
+  pretty (PatLit l) = pretty l
 
-instance Pretty a => Pretty (CoType a) where
-  pretty (CotyCon v) = stypeCon (pretty v)
-  pretty (CotyVar v) = stypeVar (squote <> pretty v)
-  pretty (CotyForall vs v)
+instance Pretty a => Pretty (Type a) where
+  pretty (ConTy v) = stypeCon (pretty v)
+  pretty (VarTy v) = stypeVar (squote <> pretty v)
+  pretty (ForallTy vs v)
     = skeyword (char '∀') <+> stypeVar (pretty vs) <> dot <+> pretty v
 
-  pretty (CotyArr x e)
-    | CotyArr{} <- x = parens (pretty x) <+> arrow <+> pretty e
-    | CotyForall{} <- x = parens (pretty x) <+> arrow <+> pretty e
+  pretty (ArrTy x e)
+    | ArrTy{} <- x = parens (pretty x) <+> arrow <+> pretty e
+    | ForallTy{} <- x = parens (pretty x) <+> arrow <+> pretty e
     | otherwise = pretty x <+> arrow <+> pretty e
 
-  pretty (CotyRows p rows) = braces $ pretty p <+> pipe <+> prettyRows rows where
+  pretty (RowsTy p rows) = braces $ pretty p <+> pipe <+> prettyRows rows where
     prettyRows = hsep . punctuate comma . map (\(x, t) -> text x <+> colon <+> pretty t)
 
-  pretty (CotyExactRows rows) = braces $ prettyRows rows where
+  pretty (ExactRowsTy rows) = braces $ prettyRows rows where
     prettyRows = hsep . punctuate comma . map (\(x, t) -> text x <+> colon <+> pretty t)
 
-  pretty (CotyApp e x@CotyApp{}) = pretty e <+> parens (pretty x)
-  pretty (CotyApp x e) = pretty x <+> pretty e
-  pretty CotyStar = prod
+  pretty (AppTy e x@AppTy{}) = pretty e <+> parens (pretty x)
+  pretty (AppTy x e) = pretty x <+> pretty e
+  pretty StarTy = prod
 
-instance Pretty CoLiteral where
-  pretty ColFalse = sliteral (string "false")
-  pretty ColTrue = sliteral (string "true")
-  pretty ColUnit = sliteral (string "unit")
-  pretty ColRecNil = sliteral (braces empty)
-  pretty (ColInt l) = sliteral (integer l)
-  pretty (ColStr s) = sstring (dquotes (text s))
+instance Pretty Literal where
+  pretty LitFalse = sliteral (string "false")
+  pretty LitTrue = sliteral (string "true")
+  pretty Unit = sliteral (string "unit")
+  pretty RecNil = sliteral (braces empty)
+  pretty (Int l) = sliteral (integer l)
+  pretty (Str s) = sstring (dquotes (text s))
 
-instance Pretty a => Pretty (CoStmt a) where
-  pretty (CosForeign v t _) = pretty v <+> colon <+> pretty t <+> equals <+> keyword "foreign"
-  pretty (CosLet vs) = keyword "let" <+> pprLet vs
-  pretty (CosType v cs) = keyword "type" <+> pretty v <+> pprBegin (map pprCons cs) where
+instance Pretty a => Pretty (Stmt a) where
+  pretty (Foreign v t _) = pretty v <+> colon <+> pretty t <+> equals <+> keyword "foreign"
+  pretty (StmtLet vs) = keyword "let" <+> pprLet vs
+  pretty (Type v cs) = keyword "type" <+> pretty v <+> pprBegin (map pprCons cs) where
     pprCons (x, t) = pretty x <+> colon <+> pretty t
 
-instance Pretty a => Pretty [CoStmt a] where
+instance Pretty a => Pretty [Stmt a] where
   pretty = vcat . map pretty
 
-freeInAtom :: IsVar a => CoAtom a -> VarSet.Set
-freeInAtom (CoaRef v _) = VarSet.singleton (VarSet.toVar v)
-freeInAtom (CoaLam Small (v, _) e) = VarSet.delete (VarSet.toVar v) (freeIn e)
-freeInAtom (CoaLam Big _ e) = freeIn e
-freeInAtom (CoaLit _) = mempty
+freeInAtom :: IsVar a => Atom a -> VarSet.Set
+freeInAtom (Ref v _) = VarSet.singleton (VarSet.toVar v)
+freeInAtom (Lam Small (v, _) e) = VarSet.delete (VarSet.toVar v) (freeIn e)
+freeInAtom (Lam Big _ e) = freeIn e
+freeInAtom (Lit _) = mempty
 
-freeIn :: IsVar a => CoTerm a -> VarSet.Set
-freeIn (CotAtom a) = freeInAtom a
-freeIn (CotApp f x) = freeInAtom f <> freeInAtom x
-freeIn (CotLet vs e) = VarSet.difference (freeIn e <> foldMap (freeIn . thd3) vs)
+freeIn :: IsVar a => Term a -> VarSet.Set
+freeIn (Atom a) = freeInAtom a
+freeIn (App f x) = freeInAtom f <> freeInAtom x
+freeIn (Let vs e) = VarSet.difference (freeIn e <> foldMap (freeIn . thd3) vs)
                                          (VarSet.fromList (map (VarSet.toVar . fst3) vs))
-freeIn (CotMatch e bs) = freeInAtom e <> foldMap freeInBranch bs where
+freeIn (Match e bs) = freeInAtom e <> foldMap freeInBranch bs where
   freeInBranch (b, _, e) = VarSet.difference (freeIn e) (patternVars b)
-freeIn (CotExtend c rs) = freeInAtom c <> foldMap (freeInAtom . thd3) rs
-freeIn (CotTyApp f _) = freeInAtom f
+freeIn (Extend c rs) = freeInAtom c <> foldMap (freeInAtom . thd3) rs
+freeIn (TyApp f _) = freeInAtom f
 
-occursInAtom :: IsVar a => a -> CoAtom a -> Bool
-occursInAtom v (CoaRef v' _) = toVar v == toVar v'
-occursInAtom _ (CoaLit _) = False
-occursInAtom v (CoaLam _ _ b) = occursInTerm v b
+occursInAtom :: IsVar a => a -> Atom a -> Bool
+occursInAtom v (Ref v' _) = toVar v == toVar v'
+occursInAtom _ (Lit _) = False
+occursInAtom v (Lam _ _ b) = occursInTerm v b
 
-occursInTerm :: IsVar a => a -> CoTerm a -> Bool
-occursInTerm v (CotAtom a) = occursInAtom v a
-occursInTerm v (CotApp f x) = occursInAtom v f || occursInAtom v x
-occursInTerm v (CotTyApp f _) = occursInAtom v f
-occursInTerm v (CotLet vs e) = any (occursInTerm v . thd3) vs || occursInTerm v e
-occursInTerm v (CotMatch e bs) = occursInAtom v e || any (occursInTerm v . thd3) bs
-occursInTerm v (CotExtend e fs) = occursInAtom v e || any (occursInAtom v . thd3) fs
+occursInTerm :: IsVar a => a -> Term a -> Bool
+occursInTerm v (Atom a) = occursInAtom v a
+occursInTerm v (App f x) = occursInAtom v f || occursInAtom v x
+occursInTerm v (TyApp f _) = occursInAtom v f
+occursInTerm v (Let vs e) = any (occursInTerm v . thd3) vs || occursInTerm v e
+occursInTerm v (Match e bs) = occursInAtom v e || any (occursInTerm v . thd3) bs
+occursInTerm v (Extend e fs) = occursInAtom v e || any (occursInAtom v . thd3) fs
 
-isError :: CoAtom (Var Resolved) -> Bool
-isError (CoaRef (TgInternal n) _) = n == pack "error"
+isError :: Atom (Var Resolved) -> Bool
+isError (Ref (TgInternal n) _) = n == pack "error"
 isError _ = False
 
-patternVars :: VarSet.IsVar a => CoPattern a -> VarSet.Set
-patternVars (CopCapture v _) = VarSet.singleton (VarSet.toVar v)
-patternVars (CopDestr _ p) = patternVars p
-patternVars (CopExtend p ps) = foldMap (patternVars . snd) ps <> patternVars p
-patternVars CopConstr{} = mempty
-patternVars CopLit{} = mempty
+patternVars :: VarSet.IsVar a => Pattern a -> VarSet.Set
+patternVars (Capture v _) = VarSet.singleton (VarSet.toVar v)
+patternVars (Destr _ p) = patternVars p
+patternVars (PatExtend p ps) = foldMap (patternVars . snd) ps <> patternVars p
+patternVars Constr{} = mempty
+patternVars PatLit{} = mempty
 
-patternVarsA :: (Monoid (m a), Applicative m) => CoPattern a -> m a
-patternVarsA (CopCapture v _) =  pure v
-patternVarsA (CopDestr _ p) = patternVarsA p
-patternVarsA (CopExtend p ps) = mconcat (patternVarsA p : map (patternVarsA . snd) ps)
-patternVarsA CopConstr{} = mempty
-patternVarsA CopLit{} = mempty
+patternVarsA :: (Monoid (m a), Applicative m) => Pattern a -> m a
+patternVarsA (Capture v _) =  pure v
+patternVarsA (Destr _ p) = patternVarsA p
+patternVarsA (PatExtend p ps) = mconcat (patternVarsA p : map (patternVarsA . snd) ps)
+patternVarsA Constr{} = mempty
+patternVarsA PatLit{} = mempty

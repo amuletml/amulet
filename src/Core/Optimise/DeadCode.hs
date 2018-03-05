@@ -18,18 +18,18 @@ import Core.Optimise
 newtype DeadScope = DeadScope { pureArity :: VarMap.Map Int }
   deriving (Show)
 
-deadCodePass :: IsVar a => [CoStmt a] -> [CoStmt a]
+deadCodePass :: IsVar a => [Stmt a] -> [Stmt a]
 deadCodePass = snd . freeS (DeadScope mempty) Nothing where
-  freeS :: IsVar a => DeadScope -> Maybe a -> [CoStmt a] -> (VarSet.Set, [CoStmt a])
+  freeS :: IsVar a => DeadScope -> Maybe a -> [Stmt a] -> (VarSet.Set, [Stmt a])
   freeS _ (Just m) [] = (VarSet.singleton (toVar m), mempty)
   freeS _ Nothing  [] = (mempty, mempty)
 
-  freeS s m (x@(CosForeign v _ _):xs) =
+  freeS s m (x@(Foreign v _ _):xs) =
     let (fxs, xs') = freeS s m xs
      in if toVar v `VarSet.member` fxs
            then (toVar v `VarSet.delete` fxs, x:xs')
            else (fxs, xs')
-  freeS s m (CosLet vs:xs) =
+  freeS s m (StmtLet vs:xs) =
     let m' = find (\x -> case toVar x of
                            TgName "main" _ -> True
                            _ -> False) (map fst3 vs)
@@ -38,38 +38,38 @@ deadCodePass = snd . freeS (DeadScope mempty) Nothing where
          -- If we've no bindings, just return the primary expression
          (f, [], xs') -> (f, xs')
          -- Otherwise emit as normal
-         (f, vs', xs') -> (f, CosLet vs':xs')
+         (f, vs', xs') -> (f, StmtLet vs':xs')
 
-  freeS s m (x@(CosType _ cases):xs) =
+  freeS s m (x@(Type _ cases):xs) =
     let s' = s { pureArity = foldr (\(v, ty) p -> VarMap.insert (toVar v) (1 + typeArity ty) p)
                              (pureArity s) cases }
     in (x:) <$> freeS s' m xs
 
-  freeA :: IsVar a => DeadScope -> CoAtom a -> (VarSet.Set, CoAtom a)
-  freeA _ t@(CoaRef v _)= (VarSet.singleton (toVar v), t)
-  freeA _ t@CoaLit{} = (mempty, t)
-  freeA s (CoaLam t a@(v, _) b) =
+  freeA :: IsVar a => DeadScope -> Atom a -> (VarSet.Set, Atom a)
+  freeA _ t@(Ref v _)= (VarSet.singleton (toVar v), t)
+  freeA _ t@Lit{} = (mempty, t)
+  freeA s (Lam t a@(v, _) b) =
     let (fb, b') = freeT s b
-     in (toVar v `VarSet.delete` fb, CoaLam t a b')
+     in (toVar v `VarSet.delete` fb, Lam t a b')
 
-  freeT :: IsVar a => DeadScope -> CoTerm a -> (VarSet.Set, CoTerm a)
-  freeT s (CotAtom a) = CotAtom <$> freeA s a
-  freeT s (CotApp f a) = CotApp <$> freeA s f <*> freeA s a
-  freeT s (CotTyApp f t) = CotTyApp <$> freeA s f <*> pure t
-  freeT s (CotExtend t rs) = CotExtend <$> freeA s t <*> traverse (third3A (freeA s)) rs
+  freeT :: IsVar a => DeadScope -> Term a -> (VarSet.Set, Term a)
+  freeT s (Atom a) = Atom <$> freeA s a
+  freeT s (App f a) = App <$> freeA s f <*> freeA s a
+  freeT s (TyApp f t) = TyApp <$> freeA s f <*> pure t
+  freeT s (Extend t rs) = Extend <$> freeA s t <*> traverse (third3A (freeA s)) rs
 
-  freeT s (CotLet vs b) =
+  freeT s (Let vs b) =
     let s' = extendPureFuns s vs in
     case uncurry (buildLet s' vs) (freeT s' b) of
       -- If we've no bindings, just return the primary expression
       (f, [], b') -> (f, b')
       -- If we're of the form `let x = y in x`, simplify to `y`.
-      (f, [(v, _, b')], CotAtom(CoaRef v' _))
+      (f, [(v, _, b')], Atom(Ref v' _))
         | v == v' -> (f, b')
       -- Otherwise emit as normal
-      (f, vs', b') -> (f , CotLet vs' b')
+      (f, vs', b') -> (f , Let vs' b')
 
-  freeT s (CotMatch t bs) =
+  freeT s (Match t bs) =
     let (ft, t') = freeA s t
         (fbs, bs') = unzip $ map (\(p,t,b) -> (p,t,) <$> freeT s b) bs
         pbs = map (patternVars . fst3) bs
@@ -80,36 +80,36 @@ deadCodePass = snd . freeS (DeadScope mempty) Nothing where
          ([pb], [fb], [(_, _, b)])
            | VarSet.isEmpty (VarSet.intersection pb fb) -> (matchFree, b)
          -- Otherwise assume everything is used
-         _ -> (ft <> matchFree, CotMatch t' bs')
+         _ -> (ft <> matchFree, Match t' bs')
 
-  typeArity :: CoType a -> Int
-  typeArity (CotyForall _ ty) = 1 + typeArity ty
+  typeArity :: Type a -> Int
+  typeArity (ForallTy _ ty) = 1 + typeArity ty
   typeArity _ = 0
 
   -- Compute the number of arguments which can be passed to a function before
   -- it becomes "impure".
-  atomArity s (CoaRef r _)
+  atomArity s (Ref r _)
     | TgInternal n <- toVar r
     = fromMaybe 0 (Map.lookup n opArity)
     | otherwise
     = fromMaybe 0 (VarMap.lookup (toVar r) (pureArity s))
-  atomArity s (CoaLam _ _ (CotAtom a)) = 1 + atomArity s a
+  atomArity s (Lam _ _ (Atom a)) = 1 + atomArity s a
   atomArity _ _ = 0
 
-  isPure _ CotAtom{}   = True
-  isPure _ CotExtend{} = True
-  isPure _ CotTyApp{}  = True
-  isPure s (CotLet vs e) = isPure s e && all (isPure s . thd3) vs
-  isPure s (CotMatch _ bs) = all (isPure s . thd3) bs
-  isPure s (CotApp f _) = atomArity s f > 0
+  isPure _ Atom{}   = True
+  isPure _ Extend{} = True
+  isPure _ TyApp{}  = True
+  isPure s (Let vs e) = isPure s e && all (isPure s . thd3) vs
+  isPure s (Match _ bs) = all (isPure s . thd3) bs
+  isPure s (App f _) = atomArity s f > 0
 
-  extendPureFuns :: IsVar a => DeadScope -> [(a, CoType a, CoTerm a)] -> DeadScope
+  extendPureFuns :: IsVar a => DeadScope -> [(a, Type a, Term a)] -> DeadScope
   extendPureFuns s vs = s
     { pureArity = foldr (\(v, _, e) p ->
                            case e of
-                             CotAtom  a   -> maybeInsert v (atomArity s a) p
-                             CotTyApp a _ -> maybeInsert v (atomArity s a - 1) p
-                             CotApp   a _ -> maybeInsert v (atomArity s a - 1) p
+                             Atom  a   -> maybeInsert v (atomArity s a) p
+                             TyApp a _ -> maybeInsert v (atomArity s a - 1) p
+                             App   a _ -> maybeInsert v (atomArity s a - 1) p
                              _ -> p) (pureArity s) vs
     }
 
@@ -117,8 +117,8 @@ deadCodePass = snd . freeS (DeadScope mempty) Nothing where
     | a > 0     = VarMap.insert (toVar v) a m
     | otherwise = m
 
-  buildFrees :: IsVar a => DeadScope -> VarSet.Set -> [(VarSet.Set, (a, CoType a, CoTerm a))]
-            -> Bool -> [(VarSet.Set, (a, CoType a, CoTerm a))] -> VarSet.Set
+  buildFrees :: IsVar a => DeadScope -> VarSet.Set -> [(VarSet.Set, (a, Type a, Term a))]
+            -> Bool -> [(VarSet.Set, (a, Type a, Term a))] -> VarSet.Set
   buildFrees s free [] True rest = buildFrees s free rest False []
   buildFrees _ free [] False _   = free
   buildFrees s free (b@(fs, (v, _, d)):bs) change rest
