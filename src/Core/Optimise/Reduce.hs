@@ -19,6 +19,7 @@ import Data.List
 import Control.Arrow
 
 import Core.Optimise
+import Core.Types
 
 data Scope a = Scope { vars :: VarMap.Map (Term a)
                      , types :: VarMap.Map [(a, Type a)]
@@ -142,6 +143,15 @@ reduceTerm s (TyApp (Lam Big (var, _) body) tp) = {-# SCC "Reduce.beta_type_func
 -- Eta reduction (let case)
 reduceTerm _ (Let [(v, _, term)] (Atom (Ref v' _)))
   | v == v' && not (occursInTerm v term) = {-# SCC "Reduce.eta_let" #-} term
+
+-- Coercion reduction
+reduceTerm s (Cast (Ref v _) c)
+  | Just (Cast a c') <- lookupVar s v
+  , Just (l, r) <- relates c
+  , Just (l', r') <- relates c'
+  , Just uni <- unify r l'
+  , Just _ <- unifyWith uni l r'
+  = Atom a
 
 -- Constant fold
 reduceTerm s e@(App (Ref f1 _) (Lit r1)) = {-# SCC "Reduce.constant_fold" #-}

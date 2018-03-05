@@ -2,7 +2,7 @@
 module Core.Types
   ( arity
   , approximateType
-  , unify
+  , unify, unifyWith
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -54,15 +54,20 @@ approximateType (TyApp f at) = do
       go x = x
   pure (replace t)
 
-unify :: (Ord a, Data a) => Type a -> Type a -> Maybe (Map.Map a (Type a))
-unify a b = execStateT (unify' a b) mempty
+unify :: IsVar a => Type a -> Type a -> Maybe (Map.Map a (Type a))
+unify = unifyWith mempty
 
-unify' :: (Ord a, Data a) => Type a -> Type a -> StateT (Map.Map a (Type a)) Maybe ()
-unify' (VarTy v) t = do
-  x <- gets (Map.lookup v)
-  case x of
-    Just t' -> unify' t t'
-    Nothing -> modify (Map.insert v t)
+unifyWith :: IsVar a => Map.Map a (Type a) -> Type a -> Type a -> Maybe (Map.Map a (Type a))
+unifyWith m a b = execStateT (unify' a b) m
+
+unify' :: IsVar a => Type a -> Type a -> StateT (Map.Map a (Type a)) Maybe ()
+unify' t'@(VarTy v) t
+  | t' == t = pure ()
+  | otherwise = do
+      x <- gets (Map.lookup v)
+      case x of
+        Just t' -> unify' t t'
+        Nothing -> modify (Map.insert v t)
 unify' t (VarTy v) = unify' (VarTy v) t
 unify' (ConTy v) (ConTy v') = mempty <$ guard (v == v')
 unify' (ArrTy a b) (ArrTy a' b') = liftA2 (<>) (unify' a a') (unify' b b')
