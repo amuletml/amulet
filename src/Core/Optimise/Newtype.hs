@@ -9,7 +9,6 @@ import Data.Triple
 
 import Core.Optimise
 import Core.Types
-import Core.Core
 
 killNewtypePass :: forall a. IsVar a => [Stmt a] -> Gen Int [Stmt a]
 killNewtypePass = go mempty where
