@@ -9,17 +9,18 @@ import Core.Optimise.Reduce
 import Core.Optimise
 
 import Control.Monad.Gen
+import Control.Monad
 
 import Syntax (Var(..), Resolved)
 
 optmOnce :: [Stmt (Var Resolved)] -> Gen Int [Stmt (Var Resolved)]
-optmOnce = pure . passes where
+optmOnce = pure . passes <=< killNewtypePass where
   passes = foldr (.) id $ reverse
            [ id
            , reducePass
            , inlineVariablePass
            , deadCodePass
-           , killNewtypePass
+           , reducePass
            ]
 
 optimise :: [Stmt (Var Resolved)] -> Gen Int [Stmt (Var Resolved)]
