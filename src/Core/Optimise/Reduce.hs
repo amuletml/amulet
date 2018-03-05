@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, ScopedTypeVariables #-}
 
 module Core.Optimise.Reduce
   ( Scope(..)
@@ -20,110 +20,110 @@ import Control.Arrow
 
 import Core.Optimise
 
-data Scope a = Scope { vars :: VarMap.Map (CoTerm a)
-                     , types :: VarMap.Map [(a, CoType a)]
-                     , cons :: VarMap.Map (CoType a) }
+data Scope a = Scope { vars :: VarMap.Map (Term a)
+                     , types :: VarMap.Map [(a, Type a)]
+                     , cons :: VarMap.Map (Type a) }
   deriving (Show)
 
 isCon :: IsVar a => Scope a -> a -> Bool
 isCon s var = VarMap.member (toVar var) (cons s)
 
-lookupVar :: IsVar a => Scope a -> a -> Maybe (CoTerm a)
+lookupVar :: IsVar a => Scope a -> a -> Maybe (Term a)
 lookupVar s v = VarMap.lookup (toVar v) (vars s)
 
 lookupRawVar :: IsVar a => Scope a -> a -> a
 lookupRawVar s v = case VarMap.lookup (toVar v) (vars s) of
-                  Just (CotTyApp (CoaRef v' _) _) -> lookupRawVar s v'
-                  Just (CotAtom (CoaRef v' _)) -> lookupRawVar s v'
+                  Just (TyApp (Ref v' _) _) -> lookupRawVar s v'
+                  Just (Atom (Ref v' _)) -> lookupRawVar s v'
                   _ -> v
 
-lookupRawTerm :: IsVar a => Scope a -> a -> Maybe (CoTerm a)
+lookupRawTerm :: IsVar a => Scope a -> a -> Maybe (Term a)
 lookupRawTerm s v = VarMap.lookup (toVar (lookupRawVar s v)) (vars s)
 
-extendVars :: IsVar a => [(a, CoType a, CoTerm a)] -> Scope a -> Scope a
+extendVars :: IsVar a => [(a, Type a, Term a)] -> Scope a -> Scope a
 extendVars vs s = s { vars = foldr (\(v, _, e) m -> VarMap.insert (toVar v) e m) (vars s) vs }
 
-transformOver :: IsVar a => Scope a -> CoTerm a -> CoTerm a
+transformOver :: IsVar a => Scope a -> Term a -> Term a
 transformOver = transT where
-  mapA _ t@CoaRef{} = t
-  mapA _ t@CoaLit{} = t
-  mapA s (CoaLam t v b) = CoaLam t v (transT s b)
+  mapA _ t@Ref{} = t
+  mapA _ t@Lit{} = t
+  mapA s (Lam t v b) = Lam t v (transT s b)
 
   transA s = reduceAtom s . mapA s
 
-  mapT s (CotAtom a) = CotAtom (transA s a)
-  mapT s (CotApp f a) = CotApp (transA s f) (transA s a)
-  mapT s (CotTyApp f t) = CotTyApp (transA s f) t
-  mapT s (CotExtend t rs) = CotExtend (transA s t) (map (third3 (transA s)) rs)
-  mapT s (CotLet vars body) =
+  mapT s (Atom a) = Atom (transA s a)
+  mapT s (App f a) = App (transA s f) (transA s a)
+  mapT s (TyApp f t) = TyApp (transA s f) t
+  mapT s (Extend t rs) = Extend (transA s t) (map (third3 (transA s)) rs)
+  mapT s (Let vars body) =
     let vars' = map (third3 (transT (extendVars vars s))) vars
         body' = transT (extendVars vars' s) body
-    in CotLet vars' body'
-  mapT s (CotMatch test branches) =
+    in Let vars' body'
+  mapT s (Match test branches) =
     let test' = transA s test
         branches' = map (third3 (transT s)) branches
-    in CotMatch test' branches'
+    in Match test' branches'
 
   transT s = reduceTerm s . mapT s
 
-reducePass :: IsVar a => [CoStmt a] -> [CoStmt a]
+reducePass :: IsVar a => [Stmt a] -> [Stmt a]
 reducePass = reduceStmts (Scope mempty mempty mempty) where
   reduceStmts _ [] = []
-  reduceStmts s (x@CosForeign{}:xs) = x:reduceStmts s xs
-  reduceStmts s (CosLet vars:xs) =
+  reduceStmts s (x@Foreign{}:xs) = x:reduceStmts s xs
+  reduceStmts s (StmtLet vars:xs) =
     let vars' = map (third3 (transformOver (extendVars vars s))) vars
         xs' = reduceStmts (extendVars vars' s) xs
-    in CosLet vars':xs'
-  reduceStmts s (x@(CosType v cases):xs) =
+    in StmtLet vars':xs'
+  reduceStmts s (x@(Type v cases):xs) =
     let s' = s { types = VarMap.insert (toVar v) cases (types s)
                , cons = VarMap.union (VarMap.fromList (map (first toVar) cases)) (cons s) }
     in x:reduceStmts s' xs
 
-reduceAtom :: IsVar a => Scope a -> CoAtom a -> CoAtom a
+reduceAtom :: IsVar a => Scope a -> Atom a -> Atom a
 
 -- Eta conversion (function case)
-reduceAtom _ (CoaLam Small (var, _) (CotApp r (CoaRef var' _)))
+reduceAtom _ (Lam Small (var, _) (App r (Ref var' _)))
   | var == var' = {-# SCC "Reduce.eta_term" #-} r
-reduceAtom _ (CoaLam Big (var, _) (CotTyApp r (CotyVar var')))
+reduceAtom _ (Lam Big (var, _) (TyApp r (VarTy var')))
   | var == var' = {-# SCC "Reduce.eta_type" #-} r
 
 -- Beta reduction (let case)
-reduceAtom s a@(CoaRef v _) = {-# SCC "Reduce.beta_let" #-}
+reduceAtom s a@(Ref v _) = {-# SCC "Reduce.beta_let" #-}
   case lookupVar s v of
-    Just (CotAtom d@CoaRef{}) -> reduceAtom s d
-    Just (CotAtom d@CoaLit{}) -> d
+    Just (Atom d@Ref{}) -> reduceAtom s d
+    Just (Atom d@Lit{}) -> d
     _ -> a
 
 reduceAtom _ e = e
 
-reduceTerm :: IsVar a => Scope a -> CoTerm a -> CoTerm a
+reduceTerm :: IsVar a => Scope a -> Term a -> Term a
 
 -- Empty expressions
-reduceTerm _ (CotLet [] e) = {-# SCC "Reduce.empty_let" #-} e
-reduceTerm _ (CotExtend e []) = {-# SCC "Reduce.empty_extend" #-} CotAtom e
+reduceTerm _ (Let [] e) = {-# SCC "Reduce.empty_let" #-} e
+reduceTerm _ (Extend e []) = {-# SCC "Reduce.empty_extend" #-} Atom e
 
 -- Commuting conversion
-reduceTerm s (CotLet [(x, xt, CotLet [(y, yt, yval)] xval)] rest)
+reduceTerm s (Let [(x, xt, Let [(y, yt, yval)] xval)] rest)
   | not (occursInTerm x yval) = {-# SCC "Reduce.commute_let" #-}
-    reduceTerm s $ CotLet [(y, yt, yval)] $ reduceTerm s (CotLet [(x, xt, xval)] rest)
+    reduceTerm s $ Let [(y, yt, yval)] $ reduceTerm s (Let [(x, xt, xval)] rest)
 
 -- Trivial matches
-reduceTerm s (CotMatch t ((CopCapture v _, ty, body):_)) = {-# SCC "Reduce.trivial_match" #-}
-  reduceTerm s $ CotLet [(v, ty, CotAtom t)] body
-reduceTerm s (CotMatch t bs) = {-# SCC "Reduce.fold_cases" #-}
+reduceTerm s (Match t ((Capture v _, ty, body):_)) = {-# SCC "Reduce.trivial_match" #-}
+  reduceTerm s $ Let [(v, ty, Atom t)] body
+reduceTerm s (Match t bs) = {-# SCC "Reduce.fold_cases" #-}
   case foldCases bs of
     Left  (_, _, b) -> b
     Right bs' ->
       case last bs' of
         -- If we were really smart, we could strip _all_ cases which are shadowed by
         -- another. For now, simply detect the case `error @a "Nope"`
-        (CopCapture _ _, _, CotLet [(tyApp, _, CotTyApp (CoaRef err _) _)]
-                            (CotApp (CoaRef tyApp' _) (CoaLit _)))
+        (Capture _ _, _, Let [(tyApp, _, TyApp (Ref err _) _)]
+                            (App (Ref tyApp' _) (Lit _)))
           | TgInternal "error" <- toVar err
           , toVar tyApp == toVar tyApp'
           , isComplete s (map fst3 (init bs'))
-          -> CotMatch t (init bs')
-        _ -> CotMatch t bs'
+          -> Match t (init bs')
+        _ -> Match t bs'
 
   where foldCases [] = Right []
         foldCases ((p, ty, body):xs) = case reducePattern s t p of
@@ -133,46 +133,46 @@ reduceTerm s (CotMatch t bs) = {-# SCC "Reduce.fold_cases" #-}
           PatternComplete subst -> Left (p, ty, substitute subst body)
 
 -- Beta reduction (function case)
-reduceTerm s (CotApp (CoaLam Small (var, ty) body) ex) = {-# SCC "Reduce.beta_function" #-}
-  reduceTerm s $ CotLet [(var, ty, CotAtom ex)] body
-reduceTerm s (CotTyApp (CoaLam Big (var, _) body) tp) = {-# SCC "Reduce.beta_type_function" #-}
+reduceTerm s (App (Lam Small (var, ty) body) ex) = {-# SCC "Reduce.beta_function" #-}
+  reduceTerm s $ Let [(var, ty, Atom ex)] body
+reduceTerm s (TyApp (Lam Big (var, _) body) tp) = {-# SCC "Reduce.beta_type_function" #-}
   reduceTerm s (substituteInTys (Map.singleton var tp) body)
 
 -- Eta reduction (let case)
-reduceTerm _ (CotLet [(v, _, term)] (CotAtom (CoaRef v' _)))
+reduceTerm _ (Let [(v, _, term)] (Atom (Ref v' _)))
   | v == v' && not (occursInTerm v term) = {-# SCC "Reduce.eta_let" #-} term
 
 -- Constant fold
-reduceTerm s e@(CotApp (CoaRef f1 _) (CoaLit r1)) = {-# SCC "Reduce.constant_fold" #-}
+reduceTerm s e@(App (Ref f1 _) (Lit r1)) = {-# SCC "Reduce.constant_fold" #-}
   case lookupVar s f1 of
-    Just (CotApp (CoaRef v _) (CoaLit l1)) | TgInternal n <- toVar v  ->
+    Just (App (Ref v _) (Lit l1)) | TgInternal n <- toVar v  ->
       case (n, l1, r1) of
-        ("+",  ColInt l, ColInt r) -> num (l + r)
-        ("-",  ColInt l, ColInt r) -> num (l - r)
-        ("*",  ColInt l, ColInt r) -> num (l * r)
-        ("/",  ColInt l, ColInt r) -> num (l `div` r)
-        ("**", ColInt l, ColInt r) -> num (l ^ r)
-        ("<" , ColInt l, ColInt r) -> bool (l < r)
-        (">",  ColInt l, ColInt r) -> bool (l > r)
-        (">=", ColInt l, ColInt r) -> bool (l >= r)
-        ("<=", ColInt l, ColInt r) -> bool (l <= r)
+        ("+",  Int l, Int r) -> num (l + r)
+        ("-",  Int l, Int r) -> num (l - r)
+        ("*",  Int l, Int r) -> num (l * r)
+        ("/",  Int l, Int r) -> num (l `div` r)
+        ("**", Int l, Int r) -> num (l ^ r)
+        ("<" , Int l, Int r) -> bool (l < r)
+        (">",  Int l, Int r) -> bool (l > r)
+        (">=", Int l, Int r) -> bool (l >= r)
+        ("<=", Int l, Int r) -> bool (l <= r)
 
-        ("&&", ColTrue, ColTrue)   -> bool True
+        ("&&", LitTrue, LitTrue)   -> bool True
         ("&&", _, _)               -> bool False
-        ("||", ColFalse, ColFalse) -> bool False
+        ("||", LitFalse, LitFalse) -> bool False
         ("||", _, _)               -> bool True
 
-        ("^", ColStr l, ColStr r)  -> str (l `T.append` r)
+        ("^", Str l, Str r)  -> str (l `T.append` r)
 
         _ -> e
     _ -> e
-  where num = CotAtom . CoaLit . ColInt
-        str = CotAtom . CoaLit . ColStr
-        bool x = CotAtom (CoaLit (if x then ColTrue else ColFalse))
+  where num = Atom . Lit . Int
+        str = Atom . Lit . Str
+        bool x = Atom (Lit (if x then LitTrue else LitFalse))
 
 reduceTerm _ e = e
 
-type Subst a = Map.Map a (CoAtom a)
+type Subst a = Map.Map a (Atom a)
 
 data PatternResult a
   = PatternFail
@@ -199,36 +199,37 @@ extract (PatternUnknown s) = s
 extract (PatternPartial s) = s
 extract (PatternComplete s) = s
 
-reducePattern :: IsVar a => Scope a -> CoAtom a -> CoPattern a -> PatternResult a
+reducePattern :: forall a. IsVar a => Scope a -> Atom a -> Pattern a -> PatternResult a
 
 -- A capture always yield a complete pattern
-reducePattern _ term (CopCapture a _) = PatternComplete (Map.singleton a term)
+reducePattern _ term (Capture a _) = PatternComplete (Map.singleton a term)
 
 -- Literals are relatively easy to accept/reject
-reducePattern _ _ (CopLit ColRecNil) = PatternComplete Map.empty
-reducePattern _ _ (CopLit ColUnit) = PatternComplete Map.empty
-reducePattern _ (CoaLit l') (CopLit l)
+reducePattern _ _ (PatLit RecNil) = PatternComplete Map.empty
+reducePattern _ _ (PatLit Unit) = PatternComplete Map.empty
+reducePattern _ (Lit l') (PatLit l)
   | l == l'   = PatternComplete Map.empty
   | otherwise = PatternFail
 
 -- If we're matching against a known constructor it is easy to accept or reject
-reducePattern s (CoaRef v _) (CopConstr c)
+reducePattern s (Ref v _) (Constr c)
   | lookupRawVar s v == c = PatternComplete Map.empty
 
   | isCon s (lookupRawVar s v) = PatternFail
-  | Just (CotApp (CoaRef c' _) _) <- lookupRawTerm s v
+  | Just (App (Ref c' _) _) <- lookupRawTerm s v
   , isCon s (lookupRawVar s c') = PatternFail
 
-reducePattern s (CoaRef v _) (CopDestr c a)
-  | Just (CotApp (CoaRef c' _) a') <- lookupRawTerm s v
+reducePattern s (Ref v _) (Destr c a)
+  | Just (App (Ref c' _) a') <- lookupRawTerm s v
   , lookupRawVar s c' == c = reducePattern s a' a
 
   | isCon s (lookupRawVar s v) = PatternFail
-  | Just (CotApp (CoaRef c' _) _) <- lookupRawTerm s v
+  | Just (App (Ref c' _) _) <- lookupRawTerm s v
   , isCon s (lookupRawVar s c') = PatternFail
 
 -- Attempt to reduce the field
-reducePattern s e (CopExtend rest fs) = foldr ((<>) . handle) (reducePattern s e rest) fs where
+reducePattern s e (PatExtend rest fs) = foldr ((<>) . handle) (reducePattern s e rest) fs where
+  handle :: (T.Text, Pattern a) -> PatternResult a
   handle (f, p) =
     case find ((==f) . fst3) fs' of
       Nothing -> if allMatching p
@@ -238,45 +239,45 @@ reducePattern s e (CopExtend rest fs) = foldr ((<>) . handle) (reducePattern s e
 
   fs' = simplifyRecord e
 
-  simplifyRecord (CoaRef v _) =
+  simplifyRecord (Ref v _) =
     case lookupVar s v of
-      Just (CotAtom r) -> simplifyRecord r
-      Just (CotExtend r fs) -> fs ++ simplifyRecord r
+      Just (Atom r) -> simplifyRecord r
+      Just (Extend r fs) -> fs ++ simplifyRecord r
       _ -> []
   simplifyRecord _ = []
 
-  allMatching (CopLit ColRecNil) = True
-  allMatching (CopLit ColUnit) = True
-  allMatching (CopCapture _ _) = True
-  allMatching (CopExtend r fs) = allMatching r && all (allMatching . snd) fs
+  allMatching (PatLit RecNil) = True
+  allMatching (PatLit Unit) = True
+  allMatching (Capture _ _) = True
+  allMatching (PatExtend r fs) = allMatching r && all (allMatching . snd) fs
   allMatching _ = False
 
 reducePattern _ _ _ = PatternUnknown Map.empty
 
-isComplete :: IsVar a => Scope a -> [CoPattern a] -> Bool
+isComplete :: IsVar a => Scope a -> [Pattern a] -> Bool
 isComplete s = isComplete' where
-  isComplete' :: IsVar a => [CoPattern a] -> Bool
+  isComplete' :: IsVar a => [Pattern a] -> Bool
   isComplete' [] = False
   -- Trivial always-true captures
-  isComplete' (CopCapture{}:_) = True
-  isComplete' (CopLit ColUnit:_) = True
-  isComplete' (CopLit ColRecNil:_) = True
+  isComplete' (Capture{}:_) = True
+  isComplete' (PatLit Unit:_) = True
+  isComplete' (PatLit RecNil:_) = True
 
-  isComplete' (CopLit (ColInt _):xs) = isComplete' xs
-  isComplete' (CopLit (ColStr _):xs) = isComplete' xs
-  isComplete' (CopLit ColTrue:xs)    = hasBool ColTrue  xs
-  isComplete' (CopLit ColFalse:xs)   = hasBool ColFalse xs
+  isComplete' (PatLit (Int _):xs) = isComplete' xs
+  isComplete' (PatLit (Str _):xs) = isComplete' xs
+  isComplete' (PatLit LitTrue:xs)    = hasBool LitTrue  xs
+  isComplete' (PatLit LitFalse:xs)   = hasBool LitFalse xs
 
   -- Trivial, always-true captures
-  isComplete' xs@(CopDestr v _:_)    = hasSumTy (buildSumTy v) xs
-  isComplete' xs@(CopConstr v:_)     = hasSumTy (buildSumTy v) xs
+  isComplete' xs@(Destr v _:_)    = hasSumTy (buildSumTy v) xs
+  isComplete' xs@(Constr v:_)     = hasSumTy (buildSumTy v) xs
 
   -- Skip record types for now
-  isComplete' xs@(CopExtend{}:_) = hasRecord Map.empty xs
+  isComplete' xs@(PatExtend{}:_) = hasRecord Map.empty xs
 
   hasBool _ [] = False
-  hasBool _ (CopCapture _ _:_) = True
-  hasBool l (CopLit l':_) | l /= l' = True
+  hasBool _ (Capture _ _:_) = True
+  hasBool l (PatLit l':_) | l /= l' = True
   hasBool p (_:xs) = hasBool p xs
 
   buildSumTy v =
@@ -286,25 +287,25 @@ isComplete s = isComplete' where
 
   -- Oh goodness, this is horrible. This attempts to extract
   -- the type name from a constructor's type
-  unwrapTy (CotyForall _ t) = unwrapTy t
-  unwrapTy (CotyArr _ t) = unwrapTy t
-  unwrapTy (CotyApp t _) = unwrapTy t
-  unwrapTy (CotyCon v) = v
+  unwrapTy (ForallTy _ t) = unwrapTy t
+  unwrapTy (ArrTy _ t) = unwrapTy t
+  unwrapTy (AppTy t _) = unwrapTy t
+  unwrapTy (ConTy v) = v
   unwrapTy ty = error (show ty)
 
   hasSumTy m [] = Map.foldr (\ps r -> r && maybe True isComplete' ps) True m
-  hasSumTy _ (CopCapture{}:_) = True
-  hasSumTy m (CopConstr v:xs) = hasSumTy (Map.insert (toVar v) Nothing m) xs
-  hasSumTy m (CopDestr v b:xs) = hasSumTy (Map.adjust (\(Just ps) -> Just (b:ps)) (toVar v) m) xs
+  hasSumTy _ (Capture{}:_) = True
+  hasSumTy m (Constr v:xs) = hasSumTy (Map.insert (toVar v) Nothing m) xs
+  hasSumTy m (Destr v b:xs) = hasSumTy (Map.adjust (\(Just ps) -> Just (b:ps)) (toVar v) m) xs
   hasSumTy m (_:xs) = hasSumTy m xs
 
-  hasRecord :: IsVar a => Map.Map T.Text [CoPattern a] -> [CoPattern a] -> Bool
+  hasRecord :: IsVar a => Map.Map T.Text [Pattern a] -> [Pattern a] -> Bool
   hasRecord m [] = Map.foldr (\ps r -> r && isComplete' ps) True m
-  hasRecord _ (CopCapture{}:_) = True
-  hasRecord m (e@CopExtend{}:xs) =
+  hasRecord _ (Capture{}:_) = True
+  hasRecord m (e@PatExtend{}:xs) =
     let m' = foldr (\(f, p) r -> Map.insertWith (++) f [p] r) m (flattenExtend e)
     in hasRecord m' xs
   hasRecord m (_:xs) = hasRecord m xs
 
-  flattenExtend (CopExtend p fs) = flattenExtend p ++ fs
+  flattenExtend (PatExtend p fs) = flattenExtend p ++ fs
   flattenExtend _ = []
