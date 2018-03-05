@@ -15,39 +15,39 @@ import Control.Arrow (second)
 import Data.Triple
 
 import Core.Core
-import Syntax
+import Syntax (Var(..))
 
-substitute :: IsVar a => Map.Map a (CoAtom a) -> CoTerm a -> CoTerm a
+substitute :: IsVar a => Map.Map a (Atom a) -> Term a -> Term a
 substitute m = term where
-  term (CotAtom a) = CotAtom (atom a)
-  term (CotApp f x) = CotApp (atom f) (atom x)
-  term (CotLet vs x) = CotLet (map (third3 term) vs) (term x)
-  term (CotMatch x vs) = CotMatch (atom x) (map (third3 term) vs)
-  term (CotExtend e rs) = CotExtend (atom e) (map (third3 atom) rs)
-  term (CotTyApp f t) = CotTyApp (atom f) t
+  term (Atom a) = Atom (atom a)
+  term (App f x) = App (atom f) (atom x)
+  term (Let vs x) = Let (map (third3 term) vs) (term x)
+  term (Match x vs) = Match (atom x) (map (third3 term) vs)
+  term (Extend e rs) = Extend (atom e) (map (third3 atom) rs)
+  term (TyApp f t) = TyApp (atom f) t
 
-  atom x@(CoaRef v _) = Map.findWithDefault x v m
-  atom (CoaLam s v b) = CoaLam s v (term b)
-  atom x@CoaLit{} = x
+  atom x@(Ref v _) = Map.findWithDefault x v m
+  atom (Lam s v b) = Lam s v (term b)
+  atom x@Lit{} = x
 
-substituteInTys :: IsVar a => Map.Map a (CoType a) -> CoTerm a -> CoTerm a
+substituteInTys :: IsVar a => Map.Map a (Type a) -> Term a -> Term a
 substituteInTys m = term where
-  term (CotAtom a) = CotAtom (atom a)
-  term (CotApp f x) = CotApp (atom f) (atom x)
-  term (CotLet vs x) = CotLet (map (\(v, t, e) -> (v, gotype t, term e)) vs) (term x)
-  term (CotMatch x vs) = CotMatch (atom x) (map (\(v, t, e) -> (v, gotype t, term e)) vs)
-  term (CotExtend e rs) = CotExtend (atom e) (map (third3 atom) rs)
-  term (CotTyApp f t) = CotTyApp (atom f) (gotype t)
+  term (Atom a) = Atom (atom a)
+  term (App f x) = App (atom f) (atom x)
+  term (Let vs x) = Let (map (\(v, t, e) -> (v, gotype t, term e)) vs) (term x)
+  term (Match x vs) = Match (atom x) (map (\(v, t, e) -> (v, gotype t, term e)) vs)
+  term (Extend e rs) = Extend (atom e) (map (third3 atom) rs)
+  term (TyApp f t) = TyApp (atom f) (gotype t)
 
-  atom (CoaRef v t) = CoaRef v (gotype t)
-  atom (CoaLam s (v, t) b) = CoaLam s (v, gotype t) (term b)
-  atom x@CoaLit{} = x
+  atom (Ref v t) = Ref v (gotype t)
+  atom (Lam s (v, t) b) = Lam s (v, gotype t) (term b)
+  atom x@Lit{} = x
 
-  gotype x@(CotyVar v) = Map.findWithDefault x v m
-  gotype x@CotyCon{} = x
-  gotype (CotyForall v t) = CotyForall v (gotype t)
-  gotype (CotyArr a b) = CotyArr (gotype a) (gotype b)
-  gotype (CotyApp f x) = CotyApp (gotype f) (gotype x)
-  gotype (CotyRows v rs) = CotyRows (gotype v) (map (second gotype) rs)
-  gotype (CotyExactRows rs) = CotyExactRows (map (second gotype) rs)
-  gotype CotyStar = CotyStar
+  gotype x@(VarTy v) = Map.findWithDefault x v m
+  gotype x@ConTy{} = x
+  gotype (ForallTy v t) = ForallTy v (gotype t)
+  gotype (ArrTy a b) = ArrTy (gotype a) (gotype b)
+  gotype (AppTy f x) = AppTy (gotype f) (gotype x)
+  gotype (RowsTy v rs) = RowsTy (gotype v) (map (second gotype) rs)
+  gotype (ExactRowsTy rs) = ExactRowsTy (map (second gotype) rs)
+  gotype StarTy = StarTy

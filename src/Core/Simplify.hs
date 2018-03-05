@@ -11,7 +11,7 @@ import Control.Monad.Gen
 
 import Syntax (Var(..), Resolved)
 
-optmOnce :: [CoStmt (Var Resolved)] -> Gen Int [CoStmt (Var Resolved)]
+optmOnce :: [Stmt (Var Resolved)] -> Gen Int [Stmt (Var Resolved)]
 optmOnce = pure . passes where
   passes = foldr (.) id $ reverse
            [ id
@@ -20,9 +20,9 @@ optmOnce = pure . passes where
            , deadCodePass
            ]
 
-optimise :: [CoStmt (Var Resolved)] -> Gen Int [CoStmt (Var Resolved)]
+optimise :: [Stmt (Var Resolved)] -> Gen Int [Stmt (Var Resolved)]
 optimise = go 25 where
-  go :: Integer -> [CoStmt (Var Resolved)] -> Gen Int [CoStmt (Var Resolved)]
+  go :: Integer -> [Stmt (Var Resolved)] -> Gen Int [Stmt (Var Resolved)]
   go k sts
     | k > 0 = go (k - 1) =<< optmOnce sts
     | otherwise = pure sts

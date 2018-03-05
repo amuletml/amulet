@@ -24,7 +24,7 @@ import Syntax
 import Core.Occurrence
 import Core.Simplify
 import Core.Lower
-import Core.Core
+import Core.Core (Stmt(..))
 
 import Pretty
 import Errors
@@ -33,7 +33,7 @@ import Parser.Wrapper
 
 
 data CompileResult a
-  = CSuccess ([Toplevel Typed], [CoStmt (Var Resolved)], [CoStmt a], Env)
+  = CSuccess ([Toplevel Typed], [Stmt (Var Resolved)], [Stmt a], Env)
   | CParse   String Span
   | CResolve ResolveError
   | CInfer   TypeError
@@ -68,7 +68,7 @@ compileFromTo fp x emit =
     CResolve e -> putStrLn "Resolution error" >> reportR e x
     CInfer e -> putStrLn "Type error" >> reportI e x
 
-test :: String -> IO (Maybe ([CoStmt (Var Resolved)], Env))
+test :: String -> IO (Maybe ([Stmt (Var Resolved)], Env))
 test x = do
   putStrLn "\x1b[1;32m(* Program: *)\x1b[0m"
   case compile "<test>" (T.pack x) of

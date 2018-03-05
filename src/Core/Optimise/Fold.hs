@@ -11,7 +11,7 @@ import Core.Optimise
 
 dropUselessLet :: TransformPass
 dropUselessLet = pass' go where
-  go (CotLet vs e) =
+  go (Let vs e) =
     -- First filter our definitions to only include ones
     -- which are referenced
     let keep = buildKeep (freeIn e) vs False []
@@ -20,9 +20,9 @@ dropUselessLet = pass' go where
       -- If we've no bindings, just return the primary expression
       ([], e) -> e
       -- If we're of the form `let x = y in x`, simplify to `y`.
-      ([(v, _, d)], CotAtom(CoaRef r _)) | v == r -> d
+      ([(v, _, d)], Atom(Ref r _)) | v == r -> d
       -- Otherwise emit the full binding
-      (vs', e) -> CotLet vs' e
+      (vs', e) -> Let vs' e
 
   go x = x
 
@@ -36,9 +36,9 @@ dropUselessLet = pass' go where
     then buildKeep (keep `VarSet.union` freeIn d `VarSet.union` VarSet.singleton v) bs True rest
     else buildKeep keep bs change (b:rest)
 
-  isPure CotAtom{} = True
-  isPure CotApp{} = False
-  isPure CotTyApp{} = True
-  isPure CotExtend{} = True
-  isPure (CotLet vs e) = isPure e && all (isPure . thd3) vs
-  isPure (CotMatch _ bs) = all (isPure . thd3) bs
+  isPure Atom{} = True
+  isPure App{} = False
+  isPure TyApp{} = True
+  isPure Extend{} = True
+  isPure (Let vs e) = isPure e && all (isPure . thd3) vs
+  isPure (Match _ bs) = all (isPure . thd3) bs
