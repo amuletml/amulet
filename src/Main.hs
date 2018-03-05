@@ -64,8 +64,8 @@ compileFromTo :: FilePath
 compileFromTo fp x emit =
   case compile fp x of
     CSuccess (_, _, core, env) -> emit (compileProgram env core)
-    CParse e s -> putStrLn "Parse error" >> report (pretty s <> colon <+> pretty e) x
-    CResolve e -> putStrLn "Resolution error" >> report e x
+    CParse e s -> putStrLn "Parse error" >> reportP e s x
+    CResolve e -> putStrLn "Resolution error" >> reportR e x
     CInfer e -> putStrLn "Type error" >> reportI e x
 
 test :: String -> IO (Maybe ([CoStmt (Var Resolved)], Env))
@@ -87,8 +87,8 @@ test x = do
       putStrLn "\x1b[1;32m(* Compiled: *)\x1b[0m"
       putDoc (pretty (compileProgram env optm))
       pure (Just (core, env))
-    CParse e s -> Nothing <$ report (pretty s <> colon <+> pretty e) (T.pack x)
-    CResolve e -> Nothing <$ report e (T.pack x)
+    CParse e s -> Nothing <$ reportP e s (T.pack x)
+    CResolve e -> Nothing <$ reportR e (T.pack x)
     CInfer e -> Nothing <$ reportI e (T.pack x)
 
 main :: IO ()
