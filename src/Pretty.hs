@@ -6,7 +6,7 @@ module Pretty
   , Pretty(..)
   , Doc
   , (<>), (<#>), (<##>)
-  , putDoc, putDocWithoutour, hPutDoc
+  , putDoc, putDocWithoutColour, hPutDoc
   , render
   , text
   , skeyword, sliteral, sstring, stypeCon, stypeVar, stypeSkol, soperator
@@ -65,8 +65,8 @@ text = string . T.unpack
 putDoc :: Doc -> IO ()
 putDoc = hPutDoc stdout
 
-putDocWithoutour :: Doc -> IO ()
-putDocWithoutour = putStrLn . displayDecorated (flip const) . renderPretty 0.4 100
+putDocWithoutColour :: Doc -> IO ()
+putDocWithoutColour = putStrLn . displayDecorated (flip const) . renderPretty 0.4 100
 
 hPutDoc :: Handle -> Doc -> IO ()
 hPutDoc h = hPutStrLn h . displayDecorated decorate . renderPretty 0.4 100
