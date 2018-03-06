@@ -40,7 +40,7 @@ let
         ];
 
         libraryToolDepends = [ alex' happy' ];
-        buildDepends = [ alex' happy' ];
+        buildDepends = [ alex' happy' pkgs.cabal-install ];
 
         homepage = "https://amulet.ml";
         description = "A functional programming language";
