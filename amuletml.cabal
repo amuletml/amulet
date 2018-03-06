@@ -8,10 +8,27 @@ author:              hydraz, squiddev
 maintainer:          urn@semi.works
 category:            Development
 build-type:          Simple
-cabal-version:       >=1.10
+cabal-version:       >=2.0
 
-executable amuletml
+
+executable amc
   main-is:             Main.hs
+  hs-source-dirs:      compiler
+  build-depends:       mtl >= 2.2 && < 2.3
+                     , text >= 1.2 && < 1.3
+                     , base >= 4.9 && < 4.11
+                     , lens >= 4.15 && < 4.16
+                     , amulet
+                     , monad-gen >= 0.3 && < 0.4
+                     , bytestring >= 0.10.8.2 && < 0.11
+                     , pretty-show
+
+  default-extensions:  PackageImports
+  default-language:    Haskell2010
+
+  ghc-options: -Wextra -Wall -Wno-name-shadowing -Wno-implicit-prelude
+
+library amulet
   build-depends:       mtl >= 2.2 && < 2.3
                      , syb >= 0.7 && < 0.8
                      , text >= 1.2 && < 1.3
@@ -24,9 +41,56 @@ executable amuletml
                      , transformers >= 0.5 && < 0.6
                      , annotated-wl-pprint >= 0.7 && < 0.8
                      , pretty-show
-  other-modules:       Parser, Parser.Lexer
+
   hs-source-dirs:      src
   default-language:    Haskell2010
-  default-extensions:  DataKinds
-  ghc-options: -Wextra -Wall -Wno-name-shadowing -Wno-missing-home-modules
+  ghc-options: -Wextra -Wall -Wno-name-shadowing
                -Wno-implicit-prelude -Wno-missing-import-lists
+
+  exposed-modules:     Parser
+                     , Parser.Lexer
+                     , Parser.Token
+                     , Parser.Wrapper
+                     -- the AST
+                     , Syntax
+                     , Syntax.Let
+                     , Syntax.Raise
+                     , Syntax.Subst
+                     , Syntax.Pretty
+                     , Syntax.Desugar
+                     -- Renamer
+                     , Syntax.Resolve
+                     , Syntax.Resolve.Scope
+                     , Syntax.Resolve.Toplevel
+                     -- TC
+                     , Types.Holes
+                     , Types.Infer
+                     , Types.Kinds
+                     , Types.Unify
+                     , Types.Wellformed
+                     , Types.Infer.Builtin
+                     , Types.Infer.Pattern
+                     -- Data
+                     , Data.Span
+                     , Data.VarMap
+                     , Data.VarSet
+                     , Data.Triple
+                     , Data.Position
+                     , Data.Spanned
+                     -- Core
+                     , Core.Core
+                     , Core.Lower
+                     , Core.Types
+                     , Core.Optimise
+                     , Core.Simplify
+                     , Core.Occurrence
+                     , Core.Optimise.Reduce
+                     , Core.Optimise.Inline
+                     , Core.Optimise.Newtype
+                     , Core.Optimise.DeadCode
+                     -- Backend
+                     , Backend.Lua
+                     , Backend.Compile
+                     -- Infra
+                     , Pretty
+                     , Control.Monad.Infer

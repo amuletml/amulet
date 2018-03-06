@@ -2,7 +2,7 @@
 
 let
 
-  inherit (nixpkgs) pkgs;
+  inherit (nixpkgs) pkgs haskell;
 
   f = { mkDerivation, stdenv
       , mtl
@@ -20,18 +20,28 @@ let
       , alex
       , happy
       }:
-      mkDerivation {
+      let alex' = haskell.lib.dontCheck alex;
+          happy' = haskell.lib.dontCheck happy;
+      in mkDerivation {
         pname = "amuletml";
         version = "0.1.0.0";
         src = ./.;
+
         isLibrary = false;
         isExecutable = true;
-        executableHaskellDepends = [
-          mtl syb text array bytestring base
-          lens monad-gen annotated-wl-pprint containers
-          transformers pretty-show
+
+        libraryHaskellDepends = [
+          annotated-wl-pprint array base bytestring containers lens monad-gen
+          mtl pretty-show syb text transformers
         ];
-        buildDepends = [ alex happy ];
+
+        executableHaskellDepends = [
+          mtl text base lens monad-gen bytestring containers pretty-show
+        ];
+
+        libraryToolDepends = [ alex' happy' ];
+        buildDepends = [ alex' happy' pkgs.cabal-install ];
+
         homepage = "https://amulet.ml";
         description = "A functional programming language";
         license = stdenv.lib.licenses.bsd3;
