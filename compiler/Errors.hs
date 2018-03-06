@@ -1,8 +1,6 @@
 {-# LANGUAGE FlexibleContexts, NamedFieldPuns #-}
-{-# OPTIONS_GHC -Wno-orphans #-}
+{-# OPTIONS_GHC -Wno-orphans -Wno-missing-import-lists #-}
 module Errors where
-
-import Control.Monad.Infer
 
 import qualified Data.Text.IO as T
 import qualified Data.Text as T
@@ -18,10 +16,13 @@ import qualified Control.Monad.Infer as I
 import Control.Applicative
 import Control.Arrow (second)
 
-import Pretty
-import qualified Syntax.Resolve as R
-import Syntax.Resolve
-import Syntax
+import "amuletml" Control.Monad.Infer
+
+import qualified "amuletml" Syntax.Resolve as R
+import "amuletml" Syntax.Resolve
+import "amuletml" Syntax
+
+import "amuletml" Pretty
 
 verbatim :: Pretty a => a -> Doc
 verbatim = enclose (char '`') (char '`') . pretty

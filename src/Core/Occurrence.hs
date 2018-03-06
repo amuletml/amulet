@@ -2,7 +2,7 @@
 module Core.Occurrence
   ( OccursVar(..)
   , Occurs(..)
-  , tagOccurence, doesItOccur
+  , tagOccurrence, doesItOccur
   ) where
 
 
@@ -42,8 +42,8 @@ instance IsVar a => IsVar (OccursVar a) where
 instance Pretty a => Pretty (OccursVar a) where
   pretty = pretty . underlying
 
-tagOccurence :: forall a. IsVar a => Env -> [C.Stmt a] -> [OccStmt a]
-tagOccurence env sts = fst (go sts) where
+tagOccurrence :: forall a. IsVar a => Env -> [C.Stmt a] -> [OccStmt a]
+tagOccurrence env sts = fst (go sts) where
   go :: [C.Stmt a] -> ([OccStmt a], OccursMap)
   go (StmtLet vs:prg) =
     let (prg', free) = go prg
