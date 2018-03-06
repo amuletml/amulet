@@ -1,35 +1,40 @@
 {-# LANGUAGE RankNTypes, OverloadedStrings, ScopedTypeVariables #-}
 module Main where
 
-import System.Environment
+import System.Environment (getArgs)
 
 import qualified Data.ByteString.Builder as B
 import qualified Data.Text.Encoding as T
 import qualified Data.Text.IO as T
 import qualified Data.Text as T
-import Data.Position
-import Data.Span
 
-import Control.Monad.Infer
-import Control.Lens
+import Control.Monad.Reader (runReaderT)
+import Control.Monad.Gen (runGen)
+import Control.Lens (ifor_, (^.))
 
-import Backend.Compile
+import "amuletml" Data.Position (SourceName)
+import "amuletml" Data.Span (Span)
 
-import Types.Infer
+import "amuletml" Control.Monad.Infer (Env, TypeError, difference, values, types)
+import "amuletml" Backend.Compile (compileProgram)
 
-import Syntax.Resolve
-import Syntax.Desugar
-import Syntax
+import "amuletml" Types.Infer (inferProgram, builtinsEnv)
 
-import Core.Occurrence
-import Core.Simplify
-import Core.Lower
-import Core.Core (Stmt(..))
+import "amuletml" Syntax.Resolve (ResolveError, resolveProgram)
+import "amuletml" Syntax.Desugar (desugarProgram)
+import "amuletml" Syntax (Toplevel, Typed, Var, Resolved, Type)
 
-import Pretty
-import Errors
-import Parser
-import Parser.Wrapper
+import "amuletml" Core.Occurrence (OccursVar, tagOccurrence)
+import "amuletml" Core.Simplify (optimise)
+import "amuletml" Core.Lower (lowerProg)
+import "amuletml" Core.Core (Stmt)
+
+import "amuletml" Pretty (Pretty(pretty), putDoc, (<+>), colon)
+
+import "amuletml" Parser.Wrapper (ParseResult(POK, PFailed), runParser)
+import "amuletml" Parser (parseInput)
+
+import Errors (reportP, reportR, reportI)
 
 
 data CompileResult a
@@ -52,7 +57,7 @@ compile name x =
             Right (prog, env) -> do
               lower <- runReaderT (lowerProg prog) env
               optm <- optimise lower
-              pure (CSuccess (prog, lower, tagOccurence env optm, env))
+              pure (CSuccess (prog, lower, tagOccurrence env optm, env))
             Left e -> pure (CInfer e)
         Left e -> pure (CResolve e)
     PFailed msg sp -> CParse msg sp
