@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleContexts, ScopedTypeVariables, PackageImports #-}
 module Syntax.Desugar (desugarProgram) where
 
-import "monad-gen" Control.Monad.Gen
+import Control.Monad.Gen
 
 import qualified Data.Text as T
 

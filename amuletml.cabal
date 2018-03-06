@@ -21,13 +21,10 @@ executable amc
                      , amulet
                      , monad-gen >= 0.3 && < 0.4
                      , bytestring >= 0.10.8.2 && < 0.11
-                     , containers >= 0.5 && < 0.6
                      , pretty-show
 
   default-extensions:  PackageImports
   default-language:    Haskell2010
-
-  other-modules:       Errors 
 
   ghc-options: -Wextra -Wall -Wno-name-shadowing -Wno-implicit-prelude
 

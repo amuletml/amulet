@@ -13,6 +13,7 @@ module Pretty
 
   , arrow, equals, colon, prod, pipe
   , keyword
+  , verbatim, bullet
   ) where
 
 
@@ -124,3 +125,9 @@ pipe = soperator (char '|')
 
 keyword :: String -> Doc
 keyword = skeyword . string
+
+verbatim :: Pretty a => a -> Doc
+verbatim = enclose (char '`') (char '`') . pretty
+
+bullet :: Doc -> Doc
+bullet = (char '·' <+>)
