@@ -56,6 +56,7 @@ deadCodePass = snd . freeS (DeadScope mempty) Nothing where
   freeT s (Atom a) = Atom <$> freeA s a
   freeT s (App f a) = App <$> freeA s f <*> freeA s a
   freeT s (TyApp f t) = TyApp <$> freeA s f <*> pure t
+  freeT s (Cast f t) = Cast <$> freeA s f <*> pure t
   freeT s (Extend t rs) = Extend <$> freeA s t <*> traverse (third3A (freeA s)) rs
 
   freeT s (Let vs b) =
@@ -99,6 +100,7 @@ deadCodePass = snd . freeS (DeadScope mempty) Nothing where
   isPure _ Atom{}   = True
   isPure _ Extend{} = True
   isPure _ TyApp{}  = True
+  isPure _ Cast{}  = True
   isPure s (Let vs e) = isPure s e && all (isPure s . thd3) vs
   isPure s (Match _ bs) = all (isPure s . thd3) bs
   isPure s (App f _) = atomArity s f > 0

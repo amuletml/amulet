@@ -3,21 +3,28 @@ module Core.Simplify
   ) where
 
 import Core.Optimise.DeadCode
+import Core.Optimise.Newtype
 import Core.Optimise.Inline
 import Core.Optimise.Reduce
 import Core.Optimise
 
 import Control.Monad.Gen
+import Control.Monad
 
 import Syntax (Var(..), Resolved)
 
 optmOnce :: [Stmt (Var Resolved)] -> Gen Int [Stmt (Var Resolved)]
-optmOnce = pure . passes where
-  passes = foldr (.) id $ reverse
-           [ id
-           , reducePass
+optmOnce = passes where
+  passes = foldr1 (>=>)
+           [ pure
+
+           , pure . reducePass
            , inlineVariablePass
-           , deadCodePass
+
+           , pure . deadCodePass
+           , killNewtypePass
+
+           , pure . reducePass
            ]
 
 optimise :: [Stmt (Var Resolved)] -> Gen Int [Stmt (Var Resolved)]
