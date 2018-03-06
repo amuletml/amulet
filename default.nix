@@ -26,15 +26,22 @@ let
         pname = "amuletml";
         version = "0.1.0.0";
         src = ./.;
+
         isLibrary = false;
         isExecutable = true;
+
         libraryHaskellDepends = [
           annotated-wl-pprint array base bytestring containers lens monad-gen
           mtl pretty-show syb text transformers
         ];
-        executableHaskellDepends = [ base bytestring lens text ];
+
+        executableHaskellDepends = [
+          mtl text base lens monad-gen bytestring containers pretty-show
+        ];
+
         libraryToolDepends = [ alex' happy' ];
         buildDepends = [ alex' happy' ];
+
         homepage = "https://amulet.ml";
         description = "A functional programming language";
         license = stdenv.lib.licenses.bsd3;
