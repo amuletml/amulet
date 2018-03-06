@@ -16,3 +16,5 @@ class Spanned a where
     getSpan d = case cast d of
                   Just x -> Just (x :: Span)
                   Nothing -> Nothing
+
+instance Spanned Span
