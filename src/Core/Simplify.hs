@@ -14,13 +14,17 @@ import Control.Monad
 import Syntax (Var(..), Resolved)
 
 optmOnce :: [Stmt (Var Resolved)] -> Gen Int [Stmt (Var Resolved)]
-optmOnce = pure . passes <=< killNewtypePass where
-  passes = foldr (.) id $ reverse
-           [ id
-           , reducePass
+optmOnce = passes where
+  passes = foldr1 (>=>)
+           [ pure
+
+           , pure . reducePass
            , inlineVariablePass
-           , deadCodePass
-           , reducePass
+
+           , pure . deadCodePass
+           , killNewtypePass
+
+           , pure . reducePass
            ]
 
 optimise :: [Stmt (Var Resolved)] -> Gen Int [Stmt (Var Resolved)]
