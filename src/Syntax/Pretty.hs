@@ -154,8 +154,7 @@ instance Pretty (Var Parsed) where
   pretty (InModule t v) = text t <> dot <> pretty v
 
 instance Pretty (Var Resolved) where
-  pretty (TgName v _) = text v
-  -- pretty (TgName v i) = pretty v <+> "#" <+> i
+  pretty (TgName v i) = text v <> scomment (string "#" <> string (show i))
   pretty (TgInternal v) = text v
 
 instance Pretty (Var Typed) where
