@@ -87,6 +87,7 @@ tagOccTerm (Match e bs) = Match (tagOccAtom e) (map tagArm bs) where
   tagArm (p, t, e) = (fmap (flip depends (countUsages e)) p, convert t, tagOccTerm e)
 tagOccTerm (Extend l rs) = Extend (tagOccAtom l) (map (\(r, t, e) -> (r, convert t, tagOccAtom e)) rs)
 tagOccTerm (TyApp f x) = TyApp (tagOccAtom f) (convert x)
+tagOccTerm (Cast f x) = Cast (tagOccAtom f) (convert x)
 
 depends :: IsVar a => a -> OccursMap -> OccursVar a
 depends v ss = OccursVar v (fromMaybe 0 (toVar v `Map.lookup` ss))
@@ -111,6 +112,7 @@ countUsages = term where
   term (Match e vs) = atom e # foldr (#) mempty (map (term . thd3) vs)
   term (Extend e rs) = atom e # foldr (#) mempty (map (atom . thd3) rs)
   term (TyApp f _) = atom f
+  term (Cast f _) = atom f
 
   atom (Ref v _) = Map.singleton (toVar v) 1
   atom (Lam _ _ b) = term b

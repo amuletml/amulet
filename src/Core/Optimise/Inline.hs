@@ -1,7 +1,9 @@
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ScopedTypeVariables, FlexibleContexts #-}
 module Core.Optimise.Inline
   ( inlineVariablePass
   ) where
+
+import Control.Monad.Gen
 
 import qualified Data.VarMap as VarMap
 import qualified Data.VarSet as VarSet
@@ -15,52 +17,52 @@ limit :: Int
 limit = 500
 
 data InlineScope a = InlineScope { scores :: VarMap.Map (Atom a, Int)
-                                 -- , vars :: VarMap.Map (Term a)
                                  , cons :: VarSet.Set }
 
-inlineVariablePass :: IsVar a => [Stmt a] -> [Stmt a]
+inlineVariablePass :: (MonadGen Int m, IsVar a) => [Stmt a] -> m [Stmt a]
 inlineVariablePass = transS (InlineScope mempty mempty) where
-  transS _ [] = []
-  transS s (x@Foreign{}:xs) = x:transS s xs
-  transS s (StmtLet vars:xs) =
-    let vars' = map (third3 (transT s)) vars
-        xs' = transS (extendVars vars' s) xs
-    in StmtLet vars':xs'
+  transS _ [] = pure []
+  transS s (x@Foreign{}:xs) = (x:) <$> transS s xs
+  transS s (StmtLet vars:xs) = do
+    vars' <- traverse (third3A (transT s)) vars
+    xs' <- transS (extendVars vars' s) xs
+    pure (StmtLet vars':xs')
   transS s (x@(Type _ cases):xs) =
     let s' = s { cons = VarSet.fromList (map (toVar . fst) cases) `VarSet.union` cons s }
-    in x:transS s' xs
+    in (x:) <$> transS s' xs
 
-  transA _ t@Ref{} = t
-  transA _ t@Lit{} = t
-  transA s (Lam t v b) = Lam t v (transT s b)
+  transA _ t@Ref{} = pure t
+  transA _ t@Lit{} = pure t
+  transA s (Lam t v b) = Lam t v <$> transT s b
 
-  transT :: IsVar a => InlineScope a -> Term a -> Term a
-  transT s (Atom a) = Atom (transA s a)
-  transT s (App f a) =
-    let f' = transA s f
-        a' = transA s a
-     in case f' of
-         Ref r _
-           | Just (Lam Small (v, t) b, score) <- VarMap.lookup (toVar r) (scores s)
-           , score <= limit -> Let [(v, t, Atom a')] b
-         Lam Small (v, t) b -> Let [(v, t, Atom a')] b
-         _ -> App f' a'
-  transT s (TyApp f t) =
-    case transA s f of
+  transT :: (MonadGen Int m, IsVar a) => InlineScope a -> Term a -> m (Term a)
+  transT s (Atom a) = Atom <$> transA s a
+  transT s (App f a) = do
+    f' <- transA s f
+    a' <- transA s a
+    case f' of
+      Ref r _
+        | Just (Lam Small (v, t) b, score) <- VarMap.lookup (toVar r) (scores s)
+        , score <= limit -> refresh$ Let [(v, t, Atom a')] b
+      Lam Small (v, t) b -> pure $ Let [(v, t, Atom a')] b
+      _ -> pure (App f' a')
+  transT s (Cast f t) = flip Cast t <$> transA s f
+  transT s (TyApp f t) = do
+    f' <- transA s f
+    case f' of
       Ref r _
         | Just (Lam Big (v, _) b, score) <- VarMap.lookup (toVar r) (scores s)
-        , score <= limit -> substituteInTys (Map.singleton v t) b
-      Lam Big (v, _) b -> substituteInTys (Map.singleton v t) b
-      f' -> TyApp f' t
-  transT s (Extend t rs) = Extend (transA s t) (map (third3 (transA s)) rs)
-  transT s (Let vars body) =
-    let vars' = map (third3 (transT s)) vars
-        body' = transT (extendVars vars' s) body
-    in Let vars' body'
-  transT s (Match test branches) =
-    let test' = transA s test
-        branches' = map (third3 (transT s)) branches
-    in Match test' branches'
+        , score <= limit -> refresh $ substituteInTys (Map.singleton v t) b
+      Lam Big (v, _) b -> pure $ substituteInTys (Map.singleton v t) b
+      f' -> pure $ TyApp f' t
+  transT s (Extend t rs) = Extend <$> transA s t
+                                  <*> traverse (third3A (transA s)) rs
+  transT s (Let vars body) = do
+    vars' <- traverse (third3A (transT s)) vars
+    body' <- transT (extendVars vars' s) body
+    pure (Let vars' body')
+  transT s (Match test branches) = Match <$> transA s test
+                                         <*> traverse (third3A (transT s)) branches
 
   extendVars vs s = s
     { scores = foldr (\(v, _, e) m ->
@@ -69,7 +71,6 @@ inlineVariablePass = transS (InlineScope mempty mempty) where
                             | isLambda a && not (occursInTerm v e)
                             -> VarMap.insert (toVar v) (a, scoreTerm s e) m
                           _ -> m) (scores s) vs
-    -- , vars = foldr (\(v, _, e) m -> VarMap.insert (toVar v) e m) (vars s) vs
     }
 
   isLambda (Lam Small _ _) = True
@@ -89,3 +90,4 @@ scoreTerm s (Let vs e) = sum (map (scoreTerm s . thd3) vs) + scoreTerm s e
 scoreTerm s (Match e bs) = scoreAtom s e + sum (map (scoreTerm s . thd3) bs)
 scoreTerm s (Extend e rs) = scoreAtom s e + sum (map (scoreAtom s . thd3) rs)
 scoreTerm s (TyApp t _) = scoreAtom s t
+scoreTerm s (Cast t _) = scoreAtom s t

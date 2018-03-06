@@ -144,6 +144,7 @@ compileTerm (App f e) = do
     (fl', _) -> LuaCall fl' [e']
 
 compileTerm (TyApp f _) = compileAtom f
+compileTerm (Cast f _) = compileAtom f
 
 compileTerm (Extend (Lit RecNil) fs) = do
   fs' <- foldrM compileRow [] fs
