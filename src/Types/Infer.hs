@@ -5,6 +5,8 @@ module Types.Infer
   , builtinsEnv
   , closeOver
   , tyString, tyInt, tyBool, tyUnit
+
+  , infer, check
   ) where
 
 import qualified Data.Map.Strict as Map
