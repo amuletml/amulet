@@ -119,7 +119,7 @@ genBadExpr = Gen.small $ do
        vs <- traverse (\x -> (x,,internal) <$> (genCorrectExpr =<< genType)) =<< Gen.list (Range.linear 1 5) genVar
        bad <- genVar
        arm <- genCorrectExpr =<< genType
-       pure (Let (vs ++ [(bad, be, internal)]) arm internal)
+       Let <$> Gen.shuffle ((bad, be, internal):vs) <*> pure arm <*> pure internal
     ]
 
 genVeryBadExpr :: (MonadGen m, Alternative m) => m (Expr Resolved)
