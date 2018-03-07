@@ -6,6 +6,7 @@ import qualified "amuletml" Control.Monad.Infer as MonadInfer
 
 import "amuletml" Types.Infer.Builtin
 import "amuletml" Types.Infer (inferProgram, closeOver, infer, check)
+import qualified "amuletml" Types.Infer as Infer
 import "amuletml" Types.Unify (solve)
 
 import "amuletml" Syntax.Raise
@@ -45,19 +46,19 @@ prop_generatedChecks = property $ do
   ty <- forAll genType
   ex <- forAll (genCorrectExpr ty)
   let var = TgInternal "main"
-      tys = MonadGen.runGen (inferProgram [LetStmt [(var, (Ascription ex (raiseT unTvName ty) internal), internal)]])
-  case tys of
+      res = checkExpr ex ty
+  case res of
     Left e -> footnote (show (pretty e)) *> failure
-    Right (_, x) -> eqTypes ty (x ^. values . at var . non undefined)
+    Right () -> pure ()
 
 prop_findsErrors :: Property
 prop_findsErrors = property $ do
   ex <- forAll genBadExpr
   let var = TgInternal "main"
-      tys = MonadGen.runGen (inferProgram [LetStmt [(var, ex, internal)]])
+      tys = inferExpr ex
   case tys of
     Left e -> success
-    Right (_, x) -> footnote ("Found type " ++ show (x ^. values . at var . non undefined) ++ " for " ++ show (pretty ex)) *> failure
+    Right t -> footnote ("Found type " ++ show (pretty t) ++ " for " ++ show (pretty ex)) *> failure
 
 inferExpr :: Expr Resolved -> Either TypeError (Type Typed)
 inferExpr e = go . MonadGen.runGen $ MonadInfer.runInfer builtinsEnv (infer e) where
@@ -65,6 +66,13 @@ inferExpr e = go . MonadGen.runGen $ MonadInfer.runInfer builtinsEnv (infer e) w
   go (Right ((e, t), cs)) = case solve 1 mempty cs of
     Left e -> Left e
     Right x -> pure (apply x t)
+
+checkExpr :: Expr Resolved -> Type Typed -> Either TypeError ()
+checkExpr e t = go . MonadGen.runGen $ MonadInfer.runInfer builtinsEnv (Infer.check e t) where
+  go (Left e) = Left e
+  go (Right (e, cs)) = case solve 1 mempty cs of
+    Left e -> Left e
+    Right x -> pure ()
 
 eqTypes :: (Monad m, MonadPlus m) => Type Typed -> Type Typed -> PropertyT m ()
 eqTypes a b =
@@ -79,4 +87,4 @@ eqTypes a b =
        Right c -> pure ()
 
 tests :: IO Bool
-tests = checkSequential $$(discover)
+tests = checkParallel $$(discover)
