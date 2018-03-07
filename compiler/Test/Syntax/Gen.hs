@@ -65,7 +65,7 @@ genCorrectExpr = flip runReaderT mempty . go where
 
   expr (TyArr d c) = do
     var <- genVar
-    Fun (Capture var internal) <$> local (insert var d) (go c) <*> pure internal
+    Fun (PType (Capture var internal) (raiseT unTvName d) internal) <$> local (insert var d) (go c) <*> pure internal
 
   expr (TyTuple a b) = do
     a' <- go a
