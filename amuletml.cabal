@@ -44,9 +44,10 @@ test-suite hedgehog-tests
                      , containers >= 0.5 && < 0.6
   other-modules:       Test.Syntax.Gen
                      , Test.Types.Infer
+                     , Test.Types.Util
   default-extensions:  PackageImports
-
-
+  ghc-options:         -Wextra -Wall -Wno-name-shadowing
+                       -Wno-implicit-prelude -Wno-missing-import-lists
 
 library amulet
   build-depends:       mtl >= 2.2 && < 2.3
