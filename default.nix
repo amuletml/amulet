@@ -1,7 +1,13 @@
-{ nixpkgs ? import <nixpkgs> {}, compiler ? "ghc822" }:
+let
+  rev = "7a04c2ca296c0698f1c7d5c17be7f931f77691f7";
+  pkgs = builtins.fetchTarball {
+    url = "https://github.com/NixOS/nixpkgs/archive/${rev}.tar.gz";
+    sha256 = "18d8gxzbc3vwlr68ppxg575wlf28bxgck0mbhms1bf1l225gw5dk";
+  };
+  nixpkgs = import pkgs { config = {}; };
+in { compiler ? "ghc822" }:
 
 let
-
   inherit (nixpkgs) pkgs haskell;
 
   f = { mkDerivation, stdenv
