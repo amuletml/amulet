@@ -4,7 +4,23 @@ let
     url = "https://github.com/NixOS/nixpkgs/archive/${rev}.tar.gz";
     sha256 = "18d8gxzbc3vwlr68ppxg575wlf28bxgck0mbhms1bf1l225gw5dk";
   };
-  nixpkgs = import pkgs { config = {}; };
+  nixpkgs = import pkgs {
+    config = {
+      packageOverrides = pkgs_: with pkgs_; {
+        haskell = haskell // {
+          packages = haskell.packages // {
+            ghc822-profiling = haskell.packages.ghc822.override {
+              overrides = self: super: {
+                mkDerivation = args: super.mkDerivation (args // {
+                  enableLibraryProfiling = true;
+                });
+              };
+            };
+          };
+        };
+      };
+    };
+  };
 in { compiler ? "ghc822" }:
 
 let
