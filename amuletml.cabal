@@ -23,10 +23,31 @@ executable amc
                      , bytestring >= 0.10.8.2 && < 0.11
                      , pretty-show
 
+  other-modules:       Errors
   default-extensions:  PackageImports
   default-language:    Haskell2010
 
   ghc-options: -Wextra -Wall -Wno-name-shadowing -Wno-implicit-prelude
+
+test-suite hedgehog-tests
+  type:                exitcode-stdio-1.0
+  main-is:             Test.hs
+  hs-source-dirs:      compiler
+  default-language:    Haskell2010
+  build-depends:       mtl >= 2.2 && < 2.3
+                     , text >= 1.2 && < 1.3
+                     , base >= 4.9 && < 4.11
+                     , lens >= 4.15 && < 4.16
+                     , amulet
+                     , hedgehog >= 0.5 && < 0.6
+                     , monad-gen >= 0.3 && < 0.4
+                     , containers >= 0.5 && < 0.6
+  other-modules:       Test.Syntax.Gen
+                     , Test.Types.Infer
+                     , Test.Types.Util
+  default-extensions:  PackageImports
+  ghc-options:         -Wextra -Wall -Wno-name-shadowing
+                       -Wno-implicit-prelude -Wno-missing-import-lists
 
 library amulet
   build-depends:       mtl >= 2.2 && < 2.3

@@ -11,6 +11,7 @@ let
       , base
       , lens
       , array
+      , hedgehog
       , monad-gen
       , bytestring
       , containers
@@ -37,6 +38,10 @@ let
 
         executableHaskellDepends = [
           mtl text base lens monad-gen bytestring containers pretty-show
+        ];
+
+        testHaskellDepends = [
+          base bytestring hedgehog lens monad-gen mtl pretty-show text
         ];
 
         libraryToolDepends = [ alex' happy' ];
