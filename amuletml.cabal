@@ -44,6 +44,9 @@ test-suite hedgehog-tests
                      , containers >= 0.5 && < 0.6
   other-modules:       Test.Syntax.Gen
                      , Test.Types.Infer
+  default-extensions:  PackageImports
+
+
 
 library amulet
   build-depends:       mtl >= 2.2 && < 2.3

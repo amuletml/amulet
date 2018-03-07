@@ -1,4 +1,4 @@
-module Test where
+module Main where
 
 import System.IO (BufferMode(..), hSetBuffering, stdout, stderr)
 import System.Exit (exitFailure)
