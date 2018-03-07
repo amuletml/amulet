@@ -1,7 +1,6 @@
 {-# LANGUAGE PackageImports, ScopedTypeVariables #-}
 module Test.Syntax.Gen ( genType, genCorrectExpr, genBadExpr ) where
 
-import "amuletml" Control.Monad.Infer (Env, values, types)
 import "amuletml" Types.Infer.Builtin (tyUnit, tyBool, tyInt, tyString)
 
 import "amuletml" Syntax.Raise
@@ -10,7 +9,9 @@ import "amuletml" Syntax
 import qualified Data.Map.Strict as Map
 import Data.Semigroup
 import Data.Maybe
+import Data.Text (unpack)
 import Data.Span
+import Data.Char
 
 import Control.Monad.Reader
 import Control.Applicative
@@ -19,22 +20,25 @@ import qualified Hedgehog.Range as Range
 import qualified Hedgehog.Gen as Gen
 import Hedgehog hiding (Var) -- fuck you
 
+import Test.Types.Util
+
 import Pretty (pretty)
 
 genVar :: MonadGen m => m (Var Resolved)
 genVar = do
   t <- Gen.text (Range.linear 1 25) Gen.lower
-  c <- Gen.int (Range.linear 0 (10^6))
-  pure (TgName t c)
+  let alphaIndex (c:cs) = alphaIndex cs + (ord c - 97)
+      alphaIndex [] = 0
+  pure (TgName t (alphaIndex (unpack t)))
 
 genType :: MonadGen m => m (Type Typed)
 genType =
   Gen.recursive Gen.choice
-   [ Gen.element [ tyUnit, tyBool, tyInt, tyString ]
-   ]
-   [ TyArr <$> genType <*> genType
-   , TyTuple <$> genType <*> genType
-   ]
+    [ Gen.element [ tyUnit, tyBool, tyInt, tyString ]
+    ]
+    [ TyArr <$> genType <*> genType
+    , TyTuple <$> genType <*> genType
+    ]
 
 genCorrectExpr :: forall m. (MonadGen m, Alternative m) => Type Typed -> m (Expr Resolved) -- yes, resolved
 genCorrectExpr = flip runReaderT mempty . go where
@@ -50,7 +54,7 @@ genCorrectExpr = flip runReaderT mempty . go where
     ]
 
   expr x
-    | x == tyInt = Literal . LiInt <$> Gen.integral (Range.linear 0 (10^6)) <*> pure internal
+    | x == tyInt = Literal . LiInt <$> Gen.integral (Range.linear 0 1000) <*> pure internal
     | x == tyString = Literal . LiStr <$> Gen.text (Range.linear 1 100) Gen.alpha <*> pure internal
     | x == tyUnit = pure (Literal LiUnit internal)
     | x == tyBool = Literal . LiBool <$> Gen.bool <*> pure internal
@@ -64,7 +68,7 @@ genCorrectExpr = flip runReaderT mempty . go where
     b' <- go b
     pure (Tuple [a', b'] internal)
 
-  expr (TyVar t) = ref (TyVar t)
+  expr e = ref e
 
   insert :: Var Resolved -> Type Typed -> Map.Map (Type Typed) [Expr Resolved] -> Map.Map (Type Typed) [Expr Resolved]
   insert v t = Map.insertWith (<>) t [VarRef v internal] . fmap (filter (/= VarRef v internal))
@@ -95,9 +99,7 @@ genProbablyKnownType = do
 
 genBadExpr :: (MonadGen m, Alternative m) => m (Expr Resolved)
 genBadExpr = Gen.small $ do
-  be <- Gen.choice [ genBadApp
-                   , genBadMatch
-                   ]
+  be <- genVeryBadExpr
   Gen.recursive Gen.choice
     [ Gen.constant be ]
     [ do tg <- genType
@@ -107,25 +109,35 @@ genBadExpr = Gen.small $ do
          Gen.constant (App ea be internal)
     ]
 
-genBadApp :: (MonadGen m, Alternative m) => m (Expr Resolved)
-genBadApp = do
-  let notArr TyArr{} = False
-      notArr _ = True
-  t <- Gen.filter notArr genType
-  f <- genCorrectExpr t
-  x <- genCorrectExpr =<< genType
-  pure (App f x internal)
+genVeryBadExpr :: (MonadGen m, Alternative m) => m (Expr Resolved)
+genVeryBadExpr = Gen.choice [ genBadApp, genBadMatch ] where
+  genBadApp, genBadMatch :: (MonadGen m, Alternative m) => m (Expr Resolved)
+  genBadApp = do
+    let notArr TyArr{} = False
+        notArr _ = True
+    t <- Gen.filter notArr genType
+    f <- genCorrectExpr t
+    x <- genCorrectExpr =<< genType
+    pure (App f x internal)
 
-genBadMatch :: (MonadGen m, Alternative m) => m (Expr Resolved)
-genBadMatch = do
-  (a, b, c) <- (,,) <$> genType <*> genType <*> genType
-  guard (a /= b)
-  guard (b /= c)
-  overall <- genType
+  genBadMatch = Gen.choice 
+    [ do -- patterns disagree with scrutinee
+       (a, b, c) <- (,,) <$> genType <*> genType <*> genType
+       guard (a `disjoint` b)
+       guard (b `disjoint` c)
+       overall <- genType
 
-  one <- (,) <$> genCorrectPattern a <*> genCorrectExpr overall
-  two <- (,) <$> genCorrectPattern c <*> genCorrectExpr overall
-  Match <$> genCorrectExpr b <*> pure [one, two] <*> pure internal
+       branches <- Gen.list (Range.linear 1 5) ((,) <$> genCorrectPattern a <*> genCorrectExpr overall)
+       Match <$> genCorrectExpr b <*> pure branches <*> pure internal
+    , do -- branches disagree
+       a <- genType
+       ts <- Gen.list (Range.linear 2 5) genType
+       let ack [] = True
+           ack (x:xs) = all (disjoint x) xs
+       guard (ack ts)
+       branches <- traverse (\t -> (,) <$> genCorrectPattern a <*> genCorrectExpr t) ts
+       Match <$> genCorrectExpr a <*> pure branches <*> pure internal
+    ]
 
 genCorrectPattern :: MonadGen m => Type Typed -> m (Pattern Resolved)
 genCorrectPattern want = case want of
