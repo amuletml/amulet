@@ -1,6 +1,8 @@
 {
 module Parser (parseInput) where
 
+import Control.Arrow (second)
+
 import Data.List (intercalate)
 import Data.Maybe (fromJust, isJust)
 import Data.Span
@@ -104,11 +106,11 @@ Tops :: { [Toplevel Parsed] }
 
 Top :: { Toplevel Parsed }
     : let BindGroup                            { LetStmt (reverse $2) }
-    | external val ident':' Type '=' string    { withPos2 $1 $7 $ ForeignVal (getName $3) (getString $7) $5 }
+    | external val ident ':' Type '=' string    { withPos2 $1 $7 $ ForeignVal (getName $3) (getString $7) (getL $5) }
 
-    | type ident ListE(TyVar)                          { TypeDecl (getName $2) $3 [] }
-    | type ident ListE(TyVar) '=' List1(Ctor, '|')     { TypeDecl (getName $2) $3 $5 }
-    | type ident ListE(TyVar) '=' '|' List1(Ctor, '|') { TypeDecl (getName $2) $3 $6 }
+    | type ident ListE(TyVar)                          { TypeDecl (getName $2) (map getL $3) [] }
+    | type ident ListE(TyVar) '=' List1(Ctor, '|')     { TypeDecl (getName $2) (map getL $3) $5 }
+    | type ident ListE(TyVar) '=' '|' List1(Ctor, '|') { TypeDecl (getName $2) (map getL $3) $6 }
 
     | module Con '=' begin Tops end            { Module (getL $2) $5 }
     | open Con                                 { Open (getL $2) Nothing }
@@ -116,7 +118,8 @@ Top :: { Toplevel Parsed }
 
 Ctor :: { Constructor Parsed }
      : conid                                   { withPos1 $1 $ UnitCon (getName $1) }
-     | conid of Type                           { withPos2 $1 $2 $ ArgCon (getName $1) $3 }
+     | conid of Type                           { withPos2 $1 $3 $ ArgCon (getName $1) (getL $3) }
+     | conid ':' Type                          { withPos2 $1 $3 $ GeneralisedCon (getName $1) (getL $3) }
 
 Expr :: { Expr Parsed }
      : ExprApp                                 { $1 }
@@ -138,7 +141,7 @@ Expr :: { Expr Parsed }
 ExprApp :: { Expr Parsed }
         : Expr0                                { $1 }
         | ExprApp Atom                         { withPos2 $1 $2 $ App $1 $2 }
-        | ExprApp ':' Type                     { withPos2 $1 $2 $ Ascription $1 $3 }
+        | ExprApp ':' Type                     { withPos2 $1 $3 $ Ascription $1 (getL $3) }
 
 Expr0 :: { Expr Parsed }
       : fun ListE1(ArgP) '->' Expr             { foldr (\x y -> withPos2 x $4 $ Fun x y) $4 $2 }
@@ -191,8 +194,8 @@ Con :: { Located (Var Parsed) }
     : conid { lPos1 $1 $ getName $1 }
     | qconid { lPos1 $1 $ getName $1 }
 
-TyVar :: { Var Parsed }
-      : tyvar { Name (getIdent $1) }
+TyVar :: { Located (Var Parsed) }
+      : tyvar { lPos1 $1 $ Name (getIdent $1) }
 
 BindGroup :: { [(Var Parsed, Expr Parsed, Ann Parsed)] }
           : Binding                           { [$1] }
@@ -200,8 +203,7 @@ BindGroup :: { [(Var Parsed, Expr Parsed, Ann Parsed)] }
 
 Binding :: { (Var Parsed, Expr Parsed, Ann Parsed) }
         : ident ListE(ArgP) '=' Expr          { (getName $1, foldr (\x y -> withPos2 x $4 (Fun x y)) $4 $2, withPos2 $1 $4 id) }
-        | ident ListE(ArgP) ':' Type '=' Expr { (getName $1, (foldr (\x y -> withPos2 x $6 (Fun x y)) (Ascription $6 $4 (withPos2 $1 $6 id)) $2), withPos2 $1 $6 id) }
-
+        | ident ListE(ArgP) ':' Type '=' Expr { (getName $1, (foldr (\x y -> withPos2 x $6 (Fun x y)) (Ascription $6 (getL $4) (withPos2 $1 $6 id)) $2), withPos2 $1 $6 id) }
 
 List(p, s)
     : {- Empty -}       { [] }
@@ -230,11 +232,10 @@ Lit :: { Located Lit }
     | true                 { lPos1 $1 $ LiBool True }
     | false                { lPos1 $1 $ LiBool False }
 
-
 Pattern :: { Pattern Parsed }
         : ArgP             { $1 }
         | Con Pattern      { withPos2 $1 $2 $ Destructure (getL $1) (Just $2) }
-        | ArgP ':' Type    { withPos2 $1 $2 $ PType $1 $3 }
+        | ArgP ':' Type    { withPos2 $1 $3 $ PType $1 (getL $3) }
 
 ArgP :: { Pattern Parsed }
      : ident                      { withPos1 $1 $ Capture (getName $1) }
@@ -247,26 +248,26 @@ Arm :: { (Pattern Parsed, Expr Parsed) }
     : '|' Pattern '->' Expr       { ($2, $4) }
 
 
-Type :: { Type Parsed }
+Type :: { Located (Type Parsed) }
      : TypeProd                                   { $1 }
-     | TypeProd '->' Type                         { TyArr $1 $3 }
+     | TypeProd '->' Type                         { lPos2 $1 $3 $ TyArr (getL $1) (getL $3) }
 
-TypeProd :: { Type Parsed }
+TypeProd :: { Located (Type Parsed) }
          : TypeApp                                { $1 }
-         | TypeApp '*' TypeApp                    { TyTuple $1 $3 }
+         | TypeApp '*' TypeApp                    { lPos2 $1 $3 $ TyTuple (getL $1) (getL $3) }
 
-TypeApp  :: { Type Parsed }
+TypeApp  :: { Located (Type Parsed) }
          : TypeAtom                               { $1 }
-         | TypeApp TypeAtom                       { TyApp $1 $2 }
+         | TypeApp TypeAtom                       { lPos2 $1 $2 $ TyApp (getL $1) (getL $2) }
 
-TypeAtom :: { Type Parsed }
-         : Var                                    { TyCon (getL $1) }
-         | TyVar                                  { TyVar $1 }
-         | forall ListE1(tyvar) '.' Type          { TyForall (map getName $2) $4 }
-         | '(' ')'                                { TyCon (Name (T.pack "unit")) }
-         | '(' Type ')'                           { $2 }
-         | '{' Rows(':', Type) '}'                { TyExactRows $2 }
-         | '{' Type '|' Rows(':', Type) '}'       { TyRows $2 $4 }
+TypeAtom :: { Located (Type Parsed) }
+         : Var                                    { lPos1 $1 $ TyCon (getL $1) }
+         | TyVar                                  { lPos1 $1 $ TyVar (getL $1) }
+         | forall ListE1(tyvar) '.' Type          { lPos2 $1 $4 $ TyForall (map getName $2) (getL $4) }
+         | '(' ')'                                { lPos2 $1 $2 $ TyCon (Name (T.pack "unit")) }
+         | '(' Type ')'                           { lPos2 $1 $3 (getL $2) }
+         | '{' Rows(':', Type) '}'                { lPos2 $1 $3 $ TyExactRows (map (second getL) $2) }
+         | '{' Type '|' Rows(':', Type) '}'       { lPos2 $1 $5 $ TyRows (getL $2) (map (second getL) $4) }
 {
 
 data Located a = L a Span

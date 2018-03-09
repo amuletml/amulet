@@ -29,6 +29,7 @@ import Syntax.Raise
 import Syntax.Let
 import Syntax
 
+import Types.Infer.Constructor
 import Types.Infer.Pattern
 import Types.Infer.Builtin
 import Types.Wellformed
@@ -87,11 +88,11 @@ check (Let ns b an) t = do
 
 check (If c t e an) ty = If <$> check c tyBool <*> check t ty <*> check e ty <*> pure (an, ty)
 
-check (Match t ps a) ty = do
+check ex@(Match t ps a) ty = do
   (t', tt) <- infer t
   ps' <- for ps $ \(p, e) -> do
-    (p', ms) <- checkPattern p tt
-    (,) <$> pure p' <*> extendMany ms (check e ty)
+    (p', ms, cs) <- checkPattern p tt
+    (,) <$> pure p' <*> implies ex cs (extendMany ms (check e ty))
   pure (Match t' ps' (a, ty))
 
 check ex@(Record rows a) ty = do
@@ -131,7 +132,7 @@ infer expr@(VarRef k a) = do
      else mkTyApps expr inst old new
 
 infer (Fun p e an) = do
-  (p', dom, ms) <- inferPattern p
+  (p', dom, ms, _) <- inferPattern p
   (e', cod) <- extendMany ms $ infer e
   pure (Fun p' e' (an, TyArr dom cod), TyArr dom cod)
 
@@ -157,6 +158,18 @@ infer ex@(BinOp l o r a) = do
   (rd, c, k2) <- decompose ex _TyArr c
   (l', r') <- (,) <$> check l ld <*> check r rd
   pure (App (k2 (App (k1 o') l' (a, TyArr rd c))) r' (a, c), c)
+
+infer ex@(Match t ps a) = do
+  (t', tt) <- infer t
+  ps' <- for ps $ \(p, e) -> do
+    (p', ms, _) <- checkPattern p tt
+    (e', ty) <- extendMany ms (infer e)
+    pure (p', e', ty)
+  let (_, _, t) = head ps'
+  ps' <- for ps' $ \(p, e, t') -> do
+    _ <- unify ex t t'
+    pure (p, e)
+  pure (Match t' ps' (a, t), t)
 
 infer ex = do
   x <- freshTV
@@ -209,18 +222,6 @@ inferProg (Module name body:prg) = do
 
 inferProg [] = asks ([],)
 
-inferCon :: MonadInfer Typed m
-         => Type Typed
-         -> Constructor Resolved
-         -> m ( (Var Typed, Type Typed)
-              , Constructor Typed)
-inferCon ret (ArgCon nm t ann) = do
-  (ty', _) <- resolveKind t
-  let res = closeOver $ TyArr ty' ret
-  pure ((TvName nm, res), ArgCon (TvName nm) ty' (ann, res))
-inferCon ret' (UnitCon nm ann) =
-  let ret = closeOver ret'
-   in pure ((TvName nm, ret), UnitCon (TvName nm) (ann, ret))
 
 data Origin
   = Supplied -- the programmer supplied this type
@@ -323,12 +324,6 @@ applyInExpr ss = everywhere (mkT go) where
   go (TypeApp f t a) = TypeApp f (apply ss t) a
   go x = x
 
-closeOver :: Type Typed -> Type Typed
-closeOver a = normType $ forall (fv a) a where
-  fv = Set.toList . ftv
-  forall :: [Var p] -> Type p -> Type p
-  forall [] a = a
-  forall vs a = TyForall vs a
 
 consFst :: Functor m => a -> m ([a], b) -> m ([a], b)
 consFst = fmap . first . (:)

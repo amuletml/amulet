@@ -91,6 +91,7 @@ library amulet
                      , Types.Wellformed
                      , Types.Infer.Builtin
                      , Types.Infer.Pattern
+                     , Types.Infer.Constructor
                      -- Data
                      , Data.Span
                      , Data.VarMap

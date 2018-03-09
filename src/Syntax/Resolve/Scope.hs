@@ -9,6 +9,7 @@ module Syntax.Resolve.Scope
   , tagVar, tagModule
   , extend, extendN
   , extendTy, extendTyN
+  , extendTyvar, extendTyvarN
   , extendM
   ) where
 
@@ -26,9 +27,10 @@ data ScopeVariable
   | SAmbiguous [Var Resolved]
   deriving (Eq, Ord, Show)
 
-data Scope = Scope { varScope :: Map.Map (Var Parsed) ScopeVariable
-                   , tyScope  :: Map.Map (Var Parsed) ScopeVariable
-                   , modStack :: [T.Text]
+data Scope = Scope { varScope    :: Map.Map (Var Parsed) ScopeVariable
+                   , tyScope     :: Map.Map (Var Parsed) ScopeVariable
+                   , tyvarScope  :: Map.Map (Var Parsed) ScopeVariable
+                   , modStack    :: [T.Text]
                    }
 
 newtype ModuleScope = ModuleScope (Map.Map (Var Parsed) (Var Resolved, Scope))
@@ -39,13 +41,14 @@ builtinScope = Scope
                                   , "<", ">", ">=", "<=", "==", "<>"
                                   , "||", "&&" ]
                , tyScope  =  build [ "int", "string", "bool", "unit" ]
+               , tyvarScope = mempty
                , modStack = []
                }
   where build :: [T.Text] -> Map.Map (Var Parsed) ScopeVariable
         build = foldr (\v -> Map.insert (Name v) (SVar (TgInternal v))) mempty
 
 emptyScope :: Scope
-emptyScope = Scope mempty mempty mempty
+emptyScope = Scope mempty mempty mempty mempty
 
 emptyModules :: ModuleScope
 emptyModules = ModuleScope mempty
@@ -82,6 +85,14 @@ extendTy (v, v') =
 extendTyN :: (MonadGen Int m, MonadReader Scope m) => [(Var Parsed, Var Resolved)] -> m a -> m a
 extendTyN vs =
   local (\x -> x { tyScope = insertN (tyScope x) vs })
+
+extendTyvar :: (MonadGen Int m, MonadReader Scope m) => (Var Parsed, Var Resolved) -> m a -> m a
+extendTyvar (v, v') =
+  local (\x -> x { tyvarScope = Map.insert v (SVar v') (tyvarScope x) })
+
+extendTyvarN :: (MonadGen Int m, MonadReader Scope m) => [(Var Parsed, Var Resolved)] -> m a -> m a
+extendTyvarN vs =
+  local (\x -> x { tyvarScope = insertN (tyvarScope x) vs })
 
 extendM :: MonadReader Scope m => Var Parsed -> m a -> m a
 extendM m = local (\x -> x { modStack = extend m (modStack x) }) where
