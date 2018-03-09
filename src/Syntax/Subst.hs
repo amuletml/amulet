@@ -37,6 +37,7 @@ instance Ord (Var p) => Substitutable p (Type p) where
   ftv (TyArr a b) = ftv a <> ftv b
   ftv (TyRows rho rows) = ftv rho <> foldMap (ftv . snd) rows
   ftv (TyExactRows rows) = foldMap (ftv . snd) rows
+  ftv (TyWithConstraints eq b) = foldMap (\(a, b) -> ftv a <> ftv b) eq <> ftv b
 
   apply _ (TyCon a) = TyCon a
   apply _ (TySkol x) = TySkol x
@@ -48,6 +49,7 @@ instance Ord (Var p) => Substitutable p (Type p) where
     s' = foldr Map.delete s v
   apply s (TyRows rho rows) = TyRows (apply s rho) (map (second (apply s)) rows)
   apply s (TyExactRows rows) = TyExactRows  (map (second (apply s)) rows)
+  apply s (TyWithConstraints eq b) = TyWithConstraints (map (\(a, b) -> (apply s a, apply s b)) eq) (apply s b)
 
 instance (Ord (Var p), Substitutable p a) => Substitutable p [a] where
   ftv = foldMap ftv

@@ -186,6 +186,7 @@ lowerType (S.TyExactRows vs) = ExactRowsTy (map (fmap lowerType) vs)
 lowerType (S.TyVar (TvName v)) = VarTy v
 lowerType (S.TyCon (TvName v)) = ConTy v
 lowerType (S.TySkol (Skolem _ (TvName v) _)) = VarTy v
+lowerType (S.TyWithConstraints _ t) = lowerType t
 
 tup2Rec :: Int -> S.Type Typed -> [(T.Text, Type)]
 tup2Rec k (S.TyTuple a b) = (T.pack (show k), lowerType a) : tup2Rec (succ k) b
@@ -228,8 +229,10 @@ lowerProg (LetStmt vs:prg) =
       <*> lowerProg prg
 lowerProg (TypeDecl (TvName var) _ cons:prg) =
   (:) (C.Type var (map (\case
-                            UnitCon (TvName p) (_, t) -> (p, lowerType t)
-                            ArgCon (TvName p) _ (_, t) -> (p, lowerType t)) cons))
+                           UnitCon (TvName p) (_, t) -> (p, lowerType t)
+                           ArgCon (TvName p) _ (_, t) -> (p, lowerType t)
+                           GeneralisedCon (TvName p) t _ -> (p, lowerType t))
+                       cons))
       <$> lowerProg prg
 lowerProg (Open _ _:prg) = lowerProg prg
 lowerProg (Module _ b:prg) = (++) <$> lowerProg b <*> lowerProg prg

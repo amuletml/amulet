@@ -2,6 +2,7 @@
 module Types.Infer.Builtin where
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import qualified Data.Text as T
 import Data.Spanned
 
@@ -10,6 +11,7 @@ import Control.Lens
 
 import Types.Wellformed
 
+import Syntax.Subst
 import Syntax
 
 tyUnit, tyBool, tyInt, tyString :: Type Typed
@@ -52,6 +54,29 @@ subsumes e a b = do
   tell [ConSubsume (BecauseOf e) a b]
   pure b
 
+implies :: ( Reasonable f p
+           , MonadInfer Typed m
+           )
+        => f p
+        -> [(Type Typed, Type Typed)]
+        -> m a
+        -> m a
+implies e cs k =
+  let eqToCon (a, b) = ConUnify (BecauseOf e) a b
+      eqToCons = map eqToCon
+      wrap :: [Constraint Typed] -> [Constraint Typed]
+      wrap = (:[]) . ConImplies (BecauseOf e) (eqToCons cs)
+   in censor wrap k
+
+leakEqualities :: ( Reasonable f p
+                  , MonadInfer Typed m
+                  )
+               => f p
+               -> [(Type Typed, Type Typed)]
+               -> m ()
+leakEqualities r ((a, b):xs) = unify r a b *> leakEqualities r xs
+leakEqualities _ [] = pure ()
+
 decompose :: ( Reasonable f p
              , MonadInfer Typed m )
           => f p
@@ -73,3 +98,10 @@ decompose r p t =
       (a, b) <- (,) <$> freshTV <*> freshTV
       _ <- subsumes r t (p # (a, b))
       pure (a, b, id)
+
+closeOver :: Type Typed -> Type Typed
+closeOver a = normType $ forall (fv a) a where
+  fv = Set.toList . ftv
+  forall :: [Var p] -> Type p -> Type p
+  forall [] a = a
+  forall vs a = TyForall vs a

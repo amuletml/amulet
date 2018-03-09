@@ -123,9 +123,11 @@ resolveModule (r:rs) = flip catchError (throwError . wrapError)
 
      where resolveCons (UnitCon _ a, v') = pure $ UnitCon v' a
            resolveCons (ArgCon _ t a, v') = ArgCon v' <$> reType t <*> pure a
+           resolveCons (GeneralisedCon _ t a, v') = GeneralisedCon v' <$> reType t <*> pure a
 
            extractCons (UnitCon v _) = v
            extractCons (ArgCon v _ _) = v
+           extractCons (GeneralisedCon v _ _) = v
 
            wrap x = TyForall (toList (ftv x)) x
 
@@ -202,6 +204,7 @@ reType :: MonadResolve m => Type Parsed -> m (Type Resolved)
 reType (TyCon v) = TyCon <$> lookupTy v
 reType (TyVar v) = TyVar <$> lookupTy v
 reType v@TySkol{} = error ("impossible! resolving skol " ++ show v)
+reType v@TyWithConstraints{} = error ("impossible! resolving withcons " ++ show v)
 reType (TyForall vs ty) = do
   vs' <- traverse tagVar vs
   ty' <- extendTyN (zip vs vs') $ reType ty

@@ -50,6 +50,7 @@ resolveTyDeclKind tp vs cs = fmap closeOverKind . resolve $ do
       for_ cs $ \case
         UnitCon{} -> pure ()
         ArgCon _ t _ -> giveTp (raiseT TvName t)
+        GeneralisedCon _ t _ -> giveTp (raiseT TvName t)
       pure kind
 
 resolveKind :: MonadSolve m => Type Resolved -> m (Type Typed, Kind Typed)
@@ -108,6 +109,11 @@ inferKind tp = do
       giveTp a
       giveTp b
       pure KiStar
+    TyWithConstraints eq b -> do
+      for_ eq $ \(a, b) -> do
+        _ <- inferKind a
+        () <$ inferKind b
+      inferKind b
 
 giveTp :: MonadSolve m => Type Typed -> KindT m ()
 giveTp x = do

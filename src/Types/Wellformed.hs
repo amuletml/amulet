@@ -31,6 +31,9 @@ wellformed tp = case tp of
       _ -> throwError (CanNotInstance tp rho)
     traverse_ (wellformed . snd) rows
   TyExactRows rows -> traverse_ (wellformed . snd) rows
+  TyWithConstraints eqs b -> do
+    for_ eqs $ \(a, b) -> wellformed a *> wellformed b
+    wellformed b
 
 arity :: Type p -> Int
 arity (TyArr _ t) = 1 + arity t

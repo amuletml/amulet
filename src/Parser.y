@@ -117,6 +117,7 @@ Top :: { Toplevel Parsed }
 Ctor :: { Constructor Parsed }
      : conid                                   { withPos1 $1 $ UnitCon (getName $1) }
      | conid of Type                           { withPos2 $1 $2 $ ArgCon (getName $1) $3 }
+     | conid ':' Type                          { withPos2 $1 $2 $ GeneralisedCon (getName $1) $3 }
 
 Expr :: { Expr Parsed }
      : ExprApp                                 { $1 }
