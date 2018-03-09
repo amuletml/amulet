@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleInstances, GADTs #-}
 module Pretty
   ( module Text.PrettyPrint.Annotated.Leijen
   , Style
@@ -96,7 +96,7 @@ decorateDetailed st s = decorate st s
 instance Pretty Double where
   pretty = double
 
-instance Pretty (P.Doc Style) where
+instance a ~ Style => Pretty (P.Doc a) where
   pretty = id
 
 instance Pretty Char where
