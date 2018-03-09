@@ -64,7 +64,10 @@ gadtConShape (_, t) ty = flip Note msg' . flip Note msg . getErr where
   msg = string "The type"
     <+> verbatim ty
     <+> string "is not an instance of the type being declared"
-  msg' = string "It must end in an application like" <+> verbatim t
+  msg' = case t of
+    TyApp{} -> string "It must end in an application like" <+> verbatim t
+    TyCon{} -> string "It must end in a reference to" <+> pretty t
+    _ -> error "malformed"
 
 getErr :: TypeError -> TypeError
 getErr (ArisingFrom e _) = getErr e
