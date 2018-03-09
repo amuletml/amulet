@@ -17,8 +17,6 @@ import Types.Unify (freshSkol)
 import Syntax.Subst
 import Syntax
 
-import Debug.Trace
-
 inferPattern :: MonadInfer Typed m
              => Pattern Resolved
              -> m ( Pattern Typed -- the pattern
@@ -59,7 +57,7 @@ checkPattern ex@(Destructure con ps ann) ty =
       pure (Destructure (TvName con) Nothing (ann, pty), [], cs)
     Just p ->
       let go cs t = do
-            (c, d, _) <- decompose ex _TyArr (traceShowId t)
+            (c, d, _) <- decompose ex _TyArr t
             (ps', b, cs') <- checkPattern p c
             _ <- unify ex ty d
             pure (Destructure (TvName con) (Just ps') (ann, d), b, cs ++ cs')

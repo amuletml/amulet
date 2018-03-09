@@ -84,7 +84,7 @@ resolveModule (r:rs) = flip catchError (throwError . wrapError)
         let c = map extractCons cs
         c' <- traverse tagVar c
         extendTy (t, t') $ extendN (zip c c') $ (:)
-          <$> extendTyN (zip vs vs') (TypeDecl t' vs' <$> traverse resolveCons (zip cs c'))
+          <$> TypeDecl t' vs' <$> traverse (resolveCons (zip vs vs')) (zip cs c')
           <*> resolveModule rs
 
       Open name as -> do
@@ -121,9 +121,9 @@ resolveModule (r:rs) = flip catchError (throwError . wrapError)
           <$> pure (Module name' body')
           <*> resolveModule rs
 
-     where resolveCons (UnitCon _ a, v') = pure $ UnitCon v' a
-           resolveCons (ArgCon _ t a, v') = ArgCon v' <$> reType t <*> pure a
-           resolveCons (GeneralisedCon _ t a, v') = GeneralisedCon v' <$> reType t <*> pure a
+     where resolveCons _ (UnitCon _ a, v') = pure $ UnitCon v' a
+           resolveCons vs (ArgCon _ t a, v') = ArgCon v' <$> extendTyN vs (reType t) <*> pure a
+           resolveCons _  (GeneralisedCon _ t a, v') = GeneralisedCon v' <$> reType t <*> pure a
 
            extractCons (UnitCon v _) = v
            extractCons (ArgCon v _ _) = v

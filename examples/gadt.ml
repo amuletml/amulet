@@ -1,7 +1,7 @@
 type term 'a =
   | Lit : int -> term int
-  | Fun : forall 'c 'b. ('c -> 'b) -> term ('c -> 'b)
-  | App : forall 'c 'b. term ('c -> 'b) * term 'c -> term 'b
+  | Fun : forall 'a 'b. ('a -> 'b) -> term ('a -> 'b)
+  | App : forall 'a 'b. term ('a -> 'b) * term 'a -> term 'b
 ;;
 
 let eval (x : term 'a) : 'a =
