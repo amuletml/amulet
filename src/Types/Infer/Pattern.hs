@@ -1,17 +1,23 @@
 {-# LANGUAGE FlexibleContexts, GADTs #-}
-{-# LANGUAGE ScopedTypeVariables, ViewPatterns, RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables, ViewPatterns, RankNTypes, TupleSections #-}
 module Types.Infer.Pattern where
+
+import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
+
+import Control.Monad.Infer
 
 import Data.Traversable
 import Data.List
 
-import Control.Monad.Infer
-
-import Syntax
-
 import Types.Infer.Builtin
 import Types.Kinds
+import Types.Unify (freshSkol)
 
+import Syntax.Subst
+import Syntax
+
+import Debug.Trace
 
 inferPattern :: MonadInfer Typed m
              => Pattern Resolved
@@ -53,12 +59,12 @@ checkPattern ex@(Destructure con ps ann) ty =
       pure (Destructure (TvName con) Nothing (ann, pty), [], cs)
     Just p ->
       let go cs t = do
-            (c, d, _) <- decompose ex _TyArr t
+            (c, d, _) <- decompose ex _TyArr (traceShowId t)
             (ps', b, cs') <- checkPattern p c
             _ <- unify ex ty d
             pure (Destructure (TvName con) (Just ps') (ann, d), b, cs ++ cs')
       in do
-        t <- lookupTy con
+        t <- skolGadt =<< lookupTy con
         case t of
           TyWithConstraints cs ty -> go cs ty
           _ -> go [] t
@@ -90,3 +96,15 @@ checkPattern pt@(PType p t ann) ty = do
   _ <- unify pt ty t'
   pure (PType p' t' (ann, t'), binds, cs)
 
+skolGadt :: MonadInfer Typed m => Type Typed -> m (Type Typed)
+skolGadt ty =
+  let result (TyForall _ t) = result t
+      result (TyWithConstraints _ t) = result t
+      result (TyArr _ t) = result t
+      result t = t
+
+      mentioned = ftv (result ty)
+   in do
+     vs <- for (Set.toList (ftv ty `Set.difference` mentioned)) $ \v -> do
+       (v,) <$> freshSkol ty v
+     pure $ apply (Map.fromList vs) ty

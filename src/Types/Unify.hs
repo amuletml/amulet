@@ -1,5 +1,5 @@
 {-# Language MultiWayIf, GADTs, FlexibleContexts #-}
-module Types.Unify (solve, overlap, bind, skolemise) where
+module Types.Unify (solve, overlap, bind, skolemise, freshSkol) where
 
 import Control.Monad.Except
 import Control.Monad.State
