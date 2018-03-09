@@ -92,7 +92,7 @@ resolveModule (r:rs) = flip catchError (throwError . wrapError)
         (ModuleScope modules) <- get
         case lookupModule name modules stack of
           Nothing -> throwError $ NoSuchModule name
-          Just (name', Scope vars tys _) ->
+          Just (name', Scope vars tys _ _) ->
             let prefix = case as of
                            Nothing -> id
                            Just v -> InModule v
@@ -122,8 +122,12 @@ resolveModule (r:rs) = flip catchError (throwError . wrapError)
           <*> resolveModule rs
 
      where resolveCons _ (UnitCon _ a, v') = pure $ UnitCon v' a
-           resolveCons vs (ArgCon _ t a, v') = ArgCon v' <$> extendTyN vs (reType t) <*> pure a
-           resolveCons _  (GeneralisedCon _ t a, v') = GeneralisedCon v' <$> reType t <*> pure a
+           resolveCons vs (ArgCon _ t a, v') = ArgCon v' <$> extendTyvarN vs (reType t) <*> pure a
+           resolveCons _  (GeneralisedCon _ t a, v') = do
+             let fvs = toList (ftv t)
+             fresh <- traverse tagVar fvs
+             t' <- extendTyvarN (zip fvs fresh) (reType t)
+             pure (GeneralisedCon v' t' a)
 
            extractCons (UnitCon v _) = v
            extractCons (ArgCon v _ _) = v
@@ -152,6 +156,9 @@ lookupEx v = asks varScope >>= lookupVar NotInScope v
 lookupTy :: MonadResolve m => Var Parsed -> m (Var Resolved)
 lookupTy v = asks tyScope >>= lookupVar NotInScope v
 
+lookupTyvar :: MonadResolve m => Var Parsed -> m (Var Resolved)
+lookupTyvar v = asks tyvarScope >>= lookupVar NotInScope v
+
 reExpr :: MonadResolve m => Expr Parsed -> m (Expr Resolved)
 reExpr r@(VarRef v a) = VarRef
                     <$> catchError (lookupEx v) (throwError . flip ArisingFrom r)
@@ -167,7 +174,7 @@ reExpr (If c t b a) = If <$> reExpr c <*> reExpr t <*> reExpr b <*> pure a
 reExpr (App f p a) = App <$> reExpr f <*> reExpr p <*> pure a
 reExpr (Fun p e a) = do
   (p', vs, ts) <- rePattern p
-  extendTyN ts . extendN vs $ Fun p' <$> reExpr e <*> pure a
+  extendTyvarN ts . extendN vs $ Fun p' <$> reExpr e <*> pure a
 reExpr r@(Begin [] _) = throwError (EmptyBegin r)
 reExpr (Begin es a) = Begin <$> traverse reExpr es <*> pure a
 reExpr (Literal l a) = pure (Literal l a)
@@ -176,7 +183,7 @@ reExpr r@(Match e ps a) = do
   e' <- reExpr e
   ps' <- traverse (\(p, b) -> do
                   (p', vs, ts) <- catchError (rePattern p) (throwError . flip ArisingFrom r)
-                  (p',) <$> extendTyN ts (extendN vs (reExpr b)))
+                  (p',) <$> extendTyvarN ts (extendN vs (reExpr b)))
               ps
   pure (Match e' ps' a)
 reExpr (BinOp l o r a) = BinOp <$> reExpr l <*> reExpr o <*> reExpr r <*> pure a
@@ -202,12 +209,12 @@ reExpr (TypeApp f x a) = TypeApp <$> reExpr f <*> reType x <*> pure a
 
 reType :: MonadResolve m => Type Parsed -> m (Type Resolved)
 reType (TyCon v) = TyCon <$> lookupTy v
-reType (TyVar v) = TyVar <$> lookupTy v
+reType (TyVar v) = TyVar <$> lookupTyvar v
 reType v@TySkol{} = error ("impossible! resolving skol " ++ show v)
 reType v@TyWithConstraints{} = error ("impossible! resolving withcons " ++ show v)
 reType (TyForall vs ty) = do
   vs' <- traverse tagVar vs
-  ty' <- extendTyN (zip vs vs') $ reType ty
+  ty' <- extendTyvarN (zip vs vs') $ reType ty
   pure (TyForall vs' ty')
 reType (TyArr l r) = TyArr <$> reType l <*> reType r
 reType (TyApp l r) = TyApp <$> reType l <*> reType r
@@ -238,10 +245,8 @@ rePattern (Destructure v p a) = do
 rePattern (PType p t a) = do
   (p', vs, ts) <- rePattern p
   let fvs = toList (ftv t)
-  fresh <- for fvs $ \x -> do
-    new <- tagVar x
-    lookupTy x `catchError` const (pure new)
-  t' <- extendTyN (zip fvs fresh) (reType t)
+  fresh <- for fvs $ \x -> lookupTyvar x `catchError` const (tagVar x)
+  t' <- extendTyvarN (zip fvs fresh) (reType t)
   pure (PType p' t' a, vs, zip fvs fresh ++ ts)
 rePattern (PRecord f a) = do
   (f', vss, tss) <- unzip3 <$> traverse (\(n, p) -> do
