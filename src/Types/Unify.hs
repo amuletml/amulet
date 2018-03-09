@@ -1,5 +1,5 @@
 {-# Language MultiWayIf, GADTs, FlexibleContexts #-}
-module Types.Unify (solve, overlap, bind, skolemise) where
+module Types.Unify (solve, overlap, bind, skolemise, freshSkol) where
 
 import Control.Monad.Except
 import Control.Monad.State
@@ -43,6 +43,11 @@ unify (TySkol x) (TySkol y)
   | x == y = pure ()
 unify (TySkol t) b = throwError $ SkolBinding t b
 unify b (TySkol t) = throwError $ SkolBinding t b
+
+unify (TyWithConstraints cs a) t = do
+  for_ cs $ \(a, b) -> unify a b
+  unify a t
+unify t x@TyWithConstraints{} = unify x t
 
 unify (TyArr a b) (TyArr a' b') = unify a a' *> unify b b'
 unify (TyApp a b) (TyApp a' b') = unify a a' *> unify b b'
@@ -122,6 +127,15 @@ solve i s (ConSubsume e a b:xs) =
   case runSolve i s (subsumes unify (normType a) (normType b)) of
     Left err -> Left (ArisingFrom err e)
     Right (i', s') -> solve i' s' (apply s' xs)
+solve i s (ConImplies reason cs ts:_) =
+  case solve i s cs of
+    Left e -> Left (ArisingFrom e reason)
+    Right ss -> case solve i ss ts of
+      Left e -> Left (ArisingFrom e reason)
+      Right ss' -> Right $
+        let strip = ftv cs
+         in Map.filterWithKey (\k _ -> k `Set.notMember` strip) ss'
+
 
 subsumes :: (MonadGen Int m, MonadError TypeError m)
          => (Type Typed -> Type Typed -> m b)

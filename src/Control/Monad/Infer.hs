@@ -65,14 +65,13 @@ instance Semigroup Env where
 data Constraint p
   = ConUnify SomeReason (Type p) (Type p)
   | ConSubsume SomeReason (Type p) (Type p)
+  | ConImplies SomeReason [Constraint p] [Constraint p]
+
 deriving instance (Show (Ann p), Show (Var p), Show (Expr p), Show (Type p))
   => Show (Constraint p)
+
 deriving instance (Eq (Ann p), Eq (Var p), Eq (Expr p), Eq (Type p))
   => Eq (Constraint p)
-
-instance Eq (Constraint p) => Ord (Constraint p) where
-  compare ConUnify{} _ = GT
-  compare ConSubsume{} _ = LT
 
 data TypeError where
   NotEqual :: Pretty (Var p) => Type p -> Type p -> TypeError
@@ -103,12 +102,16 @@ data TypeError where
 instance (Ord (Var p), Substitutable p (Type p)) => Substitutable p (Constraint p) where
   ftv (ConUnify _ a b) = ftv a `Set.union` ftv b
   ftv (ConSubsume _ a b) = ftv a `Set.union` ftv b
+  ftv (ConImplies _ a b) = ftv a `Set.union` ftv b
+
   apply s (ConUnify e a b) = ConUnify e (apply s a) (apply s b)
   apply s (ConSubsume e a b) = ConSubsume e (apply s a) (apply s b)
+  apply s (ConImplies e a b) = ConImplies e (apply s a) (apply s b)
 
 instance Pretty (Var p) => Pretty (Constraint p) where
-  pretty (ConUnify _ a b) = pretty a <+> char '~' <+> pretty b
-  pretty (ConSubsume _ a b) = pretty a <+> string "<=" <+> pretty b
+  pretty (ConUnify _ a b) = pretty a <+> soperator (char '~') <+> pretty b
+  pretty (ConSubsume _ a b) = pretty a <+> soperator (string "<=") <+> pretty b
+  pretty (ConImplies _ a b) = pretty a <+> soperator (char '⊃') <+> pretty b
 
 data SomeReason where
   BecauseOf :: (Spanned a, Pretty a) => a -> SomeReason
@@ -217,8 +220,8 @@ instance Pretty TypeError where
     prnt (Hole v s)
       = pretty (fst s) <> string ": Found typed hole" <+> verbatim v <+> parens (string "of type " <+> verbatim (snd s))
     prnt _ = undefined
-  pretty (Note te m) = pretty te <#> bullet (string "Note: ") <+> align (pretty m)
-  pretty (Suggestion te m) = pretty te <#> bullet (string "Suggestion: ") <+> align (pretty m)
+  pretty (Note te m) = pretty te <#> bullet (string "Note:") <+> align (pretty m)
+  pretty (Suggestion te m) = pretty te <#> bullet (string "Suggestion:") <+> align (pretty m)
   pretty (CanNotInstance rec new) = string "Can not instance hole of record type" <+> align (verbatim rec </> string " to type " <+> verbatim new)
   pretty (Malformed tp) = string "The type" <+> verbatim tp <+> string "is malformed."
   pretty (NoOverlap ta tb)

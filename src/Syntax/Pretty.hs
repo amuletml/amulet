@@ -103,11 +103,15 @@ instance (Pretty (Var p)) => Pretty (Type p) where
     parenTyArg TyForall{} = parens
     parenTyArg TyArr{} = parens
     parenTyArg _ = id
+
   pretty (TyTuple a b)
     | TyTuple{} <- a
     = parens (pretty a) <+> prod <+> pretty b
     | otherwise
     = pretty a <+> prod <+> pretty b
+
+  pretty (TyWithConstraints a b) = parens (hsep (punctuate comma (map prettyEq a))) <+> soperator (char '⊃') <+> pretty b where
+    prettyEq (a, b) = pretty a <+> soperator (char '~') <+> pretty b
 
 instance Pretty (Var p) => Pretty (Kind p) where
   pretty KiStar = stypeCon (string "Type")
@@ -148,6 +152,7 @@ instance (Pretty (Var p)) => Pretty [Toplevel p] where
 instance (Pretty (Var p)) => Pretty (Constructor p) where
   pretty (UnitCon p _) = pretty p
   pretty (ArgCon p t _) = pretty p <+> keyword "of" <+> pretty t
+  pretty (GeneralisedCon p t _) = pretty p <+> colon <+> pretty t
 
 instance Pretty (Var Parsed) where
   pretty (Name v) = text v

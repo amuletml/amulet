@@ -137,7 +137,9 @@ data Type p
   | TyExactRows [(Text, Type p)] -- { foo : int, bar : string }
   | TyTuple (Type p) (Type p) -- (see note [1])
 
+  -- Used internally:
   | TySkol (Skolem p)
+  | TyWithConstraints [(Type p, Type p)] (Type p)
 
 data Skolem p
   = Skolem (Var p) -- the constant itself
@@ -190,7 +192,10 @@ deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Topl
 
 data Constructor p
   = UnitCon (Var p) (Ann p)
+  -- In ArgCon, the Type p is the type of the (sole) argument
   | ArgCon (Var p) (Type p) (Ann p)
+  -- In GeneralisedCon, the Type p is the type of the overall thing
+  | GeneralisedCon (Var p) (Type p) (Ann p)
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Constructor p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Constructor p)

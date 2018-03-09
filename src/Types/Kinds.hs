@@ -5,7 +5,7 @@ module Types.Kinds
   , closeOverKind
   ) where
 
-import Control.Monad.Writer.Strict hiding ((<>))
+import Control.Monad.State.Strict
 import Control.Monad.Reader
 import Control.Monad.Except
 import Control.Monad.Infer
@@ -14,7 +14,6 @@ import Control.Lens
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
-import Data.Traversable
 import Data.Semigroup
 import Data.Foldable
 
@@ -24,22 +23,13 @@ import Syntax
 
 type Subst = Map.Map (Var Typed) (Kind Typed)
 
-type KindT m = WriterT [(Kind Typed, Kind Typed)] m
+type KindT m = StateT Subst m
 
 type MonadSolve m
   = ( MonadReader Env m
     , MonadError TypeError m
-    , MonadGen Int m)
-
-solve :: MonadSolve m => [(Var Typed, Kind Typed)] -> m Subst
-solve ((x, t):xs) = do
-  xs' <- solve xs
-  case Map.lookup x xs' of
-    Just t' -> case unify t t' of
-      Just new -> solve (xs ++ new)
-      Nothing -> throwError (KindsNotEqual t t')
-    Nothing -> pure $ Map.insert x (apply xs' t) (fmap (apply (Map.singleton x t)) xs')
-solve [] = pure mempty
+    , MonadGen Int m
+    )
 
 resolveTyDeclKind :: MonadSolve m => Var Resolved -> [Var Resolved] -> [Constructor Resolved] -> m (Kind Typed)
 resolveTyDeclKind tp vs cs = fmap closeOverKind . resolve $ do
@@ -50,6 +40,7 @@ resolveTyDeclKind tp vs cs = fmap closeOverKind . resolve $ do
       for_ cs $ \case
         UnitCon{} -> pure ()
         ArgCon _ t _ -> giveTp (raiseT TvName t)
+        GeneralisedCon _ t _ -> giveTp (raiseT TvName t)
       pure kind
 
 resolveKind :: MonadSolve m => Type Resolved -> m (Type Typed, Kind Typed)
@@ -61,11 +52,7 @@ resolveKind t =
 
 resolve :: MonadSolve m => KindT m (Kind Typed) -> m (Kind Typed)
 resolve k = do
-  (kind, cs) <- runWriterT k
-  cs' <- for cs $ \(a, b) -> case unify a b of
-    Just x -> pure x
-    Nothing -> throwError (KindsNotEqual a b)
-  subst <- solve (concat cs')
+  (kind, subst) <- runStateT k mempty
   pure $ apply subst kind
 
 inferKind :: MonadSolve m => Type Typed -> KindT m (Kind Typed)
@@ -94,7 +81,7 @@ inferKind tp = do
       x <- freshKV
       k1 <- inferKind t1
       k2 <- inferKind t2
-      same k1 (KiArr k2 x)
+      unify k1 (KiArr k2 x)
       case t2 of
         TyForall{} -> throwError (ImpredicativeApp t1 t2)
         _ -> pure ()
@@ -108,23 +95,32 @@ inferKind tp = do
       giveTp a
       giveTp b
       pure KiStar
+    TyWithConstraints eq b -> do
+      for_ eq $ \(a, b) -> do
+        _ <- inferKind a
+        () <$ inferKind b
+      inferKind b
 
 giveTp :: MonadSolve m => Type Typed -> KindT m ()
 giveTp x = do
   x' <- inferKind x
-  same x' KiStar
+  unify x' KiStar
 
-same :: Monad m => Kind Typed -> Kind Typed -> KindT m ()
-same a b = tell [(a, b)]
-
-unify :: Kind Typed -> Kind Typed -> Maybe [(Var Typed, Kind Typed)]
+unify :: (MonadState Subst m, MonadError TypeError m) => Kind Typed -> Kind Typed -> m ()
 unify (KiVar v) (KiVar k)
-  | v == k = pure []
-unify (KiVar v) t = Just [(v, t)]
-unify t (KiVar v) = Just [(v, t)]
-unify (KiArr a b) (KiArr c d) = (++) <$> unify a c <*> unify b d
-unify KiStar KiStar = Just []
-unify _ _ = Nothing
+  | v == k = pure ()
+unify (KiVar v) t = bind v t
+unify t (KiVar v) = bind v t
+unify (KiArr a b) (KiArr c d) = unify a c *> unify b d
+unify KiStar KiStar = pure ()
+unify x y = throwError (KindsNotEqual x y)
+
+bind :: (MonadState Subst m, MonadError TypeError m) => Var Typed -> Kind Typed -> m ()
+bind v t = do
+  x <- get
+  case Map.lookup v x of
+    Just t' -> unify t t'
+    Nothing -> modify (Map.insert v t . fmap (apply (Map.singleton v t)))
 
 apply :: Map.Map (Var Typed) (Kind Typed) -> Kind Typed -> Kind Typed
 apply m t@(KiVar v) = Map.findWithDefault t v m
