@@ -220,8 +220,8 @@ instance Pretty TypeError where
     prnt (Hole v s)
       = pretty (fst s) <> string ": Found typed hole" <+> verbatim v <+> parens (string "of type " <+> verbatim (snd s))
     prnt _ = undefined
-  pretty (Note te m) = pretty te <#> bullet (string "Note: ") <+> align (pretty m)
-  pretty (Suggestion te m) = pretty te <#> bullet (string "Suggestion: ") <+> align (pretty m)
+  pretty (Note te m) = pretty te <#> bullet (string "Note:") <+> align (pretty m)
+  pretty (Suggestion te m) = pretty te <#> bullet (string "Suggestion:") <+> align (pretty m)
   pretty (CanNotInstance rec new) = string "Can not instance hole of record type" <+> align (verbatim rec </> string " to type " <+> verbatim new)
   pretty (Malformed tp) = string "The type" <+> verbatim tp <+> string "is malformed."
   pretty (NoOverlap ta tb)
