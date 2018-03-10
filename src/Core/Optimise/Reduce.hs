@@ -154,29 +154,56 @@ reduceTerm s (Cast (Ref v _) c)
   = Atom a
 
 -- Constant fold
-reduceTerm s e@(App (Ref f1 _) (Lit r1)) = {-# SCC "Reduce.constant_fold" #-}
-  case lookupVar s f1 of
-    Just (App (Ref v _) (Lit l1)) | TgInternal n <- toVar v  ->
-      case (n, l1, r1) of
-        ("+",  Int l, Int r) -> num (l + r)
-        ("-",  Int l, Int r) -> num (l - r)
-        ("*",  Int l, Int r) -> num (l * r)
-        ("/",  Int l, Int r) -> num (l `div` r)
-        ("**", Int l, Int r) -> num (l ^ r)
-        ("<" , Int l, Int r) -> bool (l < r)
-        (">",  Int l, Int r) -> bool (l > r)
-        (">=", Int l, Int r) -> bool (l >= r)
-        ("<=", Int l, Int r) -> bool (l <= r)
+reduceTerm s e@(App (Ref f1 _) r1)
+  | Just (App (Ref v _) l1) <- lookupVar s f1
+  , TgInternal n <- toVar v
+  = case (n, l1, r1) of
+      -- Primitive integer reductions
+      ("+",  Lit (Int l), Lit (Int r)) -> num (l + r)
+      ("-",  Lit (Int l), Lit (Int r)) -> num (l - r)
+      ("*",  Lit (Int l), Lit (Int r)) -> num (l * r)
+      ("/",  Lit (Int l), Lit (Int r)) -> num (l `div` r)
+      ("**", Lit (Int l), Lit (Int r)) -> num (l ^ r)
+      ("<" , Lit (Int l), Lit (Int r)) -> bool (l < r)
+      (">",  Lit (Int l), Lit (Int r)) -> bool (l > r)
+      (">=", Lit (Int l), Lit (Int r)) -> bool (l >= r)
+      ("<=", Lit (Int l), Lit (Int r)) -> bool (l <= r)
 
-        ("&&", LitTrue, LitTrue)   -> bool True
-        ("&&", _, _)               -> bool False
-        ("||", LitFalse, LitFalse) -> bool False
-        ("||", _, _)               -> bool True
+      -- Partial integer reductions
+      ("+",  x, Lit (Int 0)) -> Atom x
+      ("+",  Lit (Int 0), x) -> Atom x
+      ("-",  Lit (Int 0), x) -> Atom x
+      ("*",  x, Lit (Int 1)) -> Atom x
+      ("*",  Lit (Int 1), x) -> Atom x
+      ("*",  _, Lit (Int 0)) -> num 0
+      ("*",  Lit (Int 0), _) -> num 0
+      ("/",  x, Lit (Int 1)) -> Atom x
 
-        ("^", Str l, Str r)  -> str (l `T.append` r)
+      -- Primitive boolean reductions
+      ("&&", Lit LitTrue,  Lit LitTrue)   -> bool True
+      ("&&", Lit _,        Lit _)         -> bool False
+      ("||", Lit LitFalse, Lit LitFalse)  -> bool False
+      ("||", Lit _,        Lit _)         -> bool True
 
-        _ -> e
-    _ -> e
+      -- Partial boolean reductions
+      ("&&", _, Lit LitFalse)  -> bool False
+      ("&&", Lit LitFalse,  _) -> bool False
+      ("&&", x, Lit LitTrue)   -> Atom x
+      ("&&", Lit LitTrue,  x)  -> Atom x
+      ("||", _, Lit LitTrue)   -> bool True
+      ("||", Lit LitTrue,  _)  -> bool True
+      ("||", x, Lit LitFalse)  -> Atom x
+      ("||", Lit LitFalse,  x) -> Atom x
+
+
+      -- Primitive string reductions
+      ("^", Lit (Str l), Lit (Str r))  -> str (l `T.append` r)
+
+      -- Partial string reductions
+      ("^", x, Lit (Str "")) -> Atom x
+      ("^", Lit (Str ""), x) -> Atom x
+
+      _ -> e
   where num = Atom . Lit . Int
         str = Atom . Lit . Str
         bool x = Atom (Lit (if x then LitTrue else LitFalse))
