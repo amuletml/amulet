@@ -142,8 +142,10 @@ instance Pretty a => Pretty (Type a) where
   pretty (ExactRowsTy rows) = braces $ prettyRows rows where
     prettyRows = hsep . punctuate comma . map (\(x, t) -> text x <+> colon <+> pretty t)
 
-  pretty (AppTy e x@AppTy{}) = pretty e <+> parens (pretty x)
-  pretty (AppTy x e) = pretty x <+> pretty e
+  pretty (AppTy e x) = pretty e <+> k x (pretty x) where
+    k AppTy{} = parens
+    k ArrTy{} = parens
+    k _ = id
   pretty StarTy = prod
 
 instance Pretty Literal where
