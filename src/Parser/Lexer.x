@@ -62,6 +62,12 @@ tokens :-
   <0> "~"      { constTok TcTilde }
   <0> \_       { constTok TcUnderscore }
 
+  <0> "**."    { constTok TcDoubleStarFloat }
+  <0> "*."     { constTok TcStarFloat }
+  <0> "+."     { constTok TcAddFloat }
+  <0> "/."     { constTok TcDivideFloat }
+  <0> "-."     { constTok TcSubtractFloat }
+
   <0> "let"    { constTok TcLet }
   <0> "fun"    { constTok TcFun }
   <0> "and"    { constTok TcAnd }

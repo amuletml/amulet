@@ -4,7 +4,7 @@ module Types.Infer
   ( inferProgram
   , builtinsEnv
   , closeOver
-  , tyString, tyInt, tyBool, tyUnit
+  , tyString, tyInt, tyBool, tyUnit, tyFloat
 
   , infer, check
   ) where
@@ -142,6 +142,7 @@ infer (Literal l an) = pure (Literal l (an, ty), ty) where
     LiStr{} -> tyString
     LiBool{} -> tyBool
     LiUnit{} -> tyUnit
+    LiFloat{} -> tyFloat
 
 infer ex@(Ascription e ty an) = do
   (ty', _) <- resolveKind ty `catchError` \e -> throwError (ArisingFrom e ex)

@@ -46,6 +46,12 @@ import Syntax
   '~'      { Token TcTilde _ }
   '_'      { Token TcUnderscore _ }
 
+  '**.'    { Token TcDoubleStarFloat _ }
+  '*.'     { Token TcStarFloat _ }
+  '+.'     { Token TcAddFloat _ }
+  '-.'     { Token TcSubtractFloat _ }
+  '/.'     { Token TcDivideFloat _ }
+
   let      { Token TcLet _ }
   fun      { Token TcFun _ }
   and      { Token TcAnd _ }
@@ -95,9 +101,9 @@ import Syntax
 %nonassoc '<=' '>='
 %nonassoc '<' '>'
 %left '^'
-%left '+' '-'
-%left '*' '/'
-%right '**'
+%left '+' '-' '+.' '-.'
+%left '*' '/' '*.' '/.'
+%right '**' '**.'
 
 %%
 
@@ -124,10 +130,15 @@ Ctor :: { Constructor Parsed }
 Expr :: { Expr Parsed }
      : ExprApp                                 { $1 }
      | Expr '**' Expr                          { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "**") $3 }
+     | Expr '**.' Expr                         { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "**.") $3 }
      | Expr '*' Expr                           { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "*") $3 }
+     | Expr '*.' Expr                          { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "*.") $3 }
      | Expr '/' Expr                           { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "/") $3 }
+     | Expr '/.' Expr                          { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "/.") $3 }
      | Expr '+' Expr                           { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "+") $3 }
+     | Expr '+.' Expr                          { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "+.") $3 }
      | Expr '-' Expr                           { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "-") $3 }
+     | Expr '-.' Expr                          { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "-.") $3 }
      | Expr '^' Expr                           { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "^") $3 }
      | Expr '<' Expr                           { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "<") $3 }
      | Expr '>' Expr                           { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE ">") $3 }

@@ -11,6 +11,9 @@ data TokenClass
   | TcDoubleStar -- **
   | TcStar -- *
   | TcAdd -- +
+  | TcDoubleStarFloat -- **.
+  | TcStarFloat -- *.
+  | TcAddFloat -- +.
   | TcConcat -- ^
   | TcLt -- <
   | TcLte -- <=
@@ -20,7 +23,9 @@ data TokenClass
   | TcAndAnd -- &&
   | TcOrOr -- ||
   | TcDivide -- /
+  | TcDivideFloat -- /.
   | TcSubtract -- -
+  | TcSubtractFloat -- -.
   | TcNotEqual -- <>
   | TcTilde -- ~
   | TcUnderscore -- _
@@ -92,6 +97,12 @@ instance Show TokenClass where
   show TcNotEqual = "<>"
   show TcTilde = "~"
   show TcUnderscore = "_"
+
+  show TcAddFloat = "+."
+  show TcSubtractFloat = "-."
+  show TcStarFloat = "*."
+  show TcDoubleStarFloat = "**."
+  show TcDivideFloat = "/."
 
   show TcLet = "let"
   show TcFun = "fun"

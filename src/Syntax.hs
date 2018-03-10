@@ -121,7 +121,8 @@ deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Patt
 instance (Data (Var p), Data (Ann p), Data p) => Spanned (Pattern p)
 
 data Lit
-  = LiInt Integer
+  = LiFloat Double
+  | LiInt Integer
   | LiStr Text
   | LiBool Bool
   | LiUnit

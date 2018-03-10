@@ -5,13 +5,13 @@ module Core.Lower
   , lowerType
   , lowerPat
   , lowerProg
-  , cotyString, cotyInt, cotyBool, cotyUnit
+  , cotyString, cotyInt, cotyBool, cotyUnit, cotyFloat
   ) where
 
 import Control.Monad.Infer
 import Control.Monad.Cont
 
-import Types.Infer (tyString, tyInt, tyBool, tyUnit)
+import Types.Infer (tyString, tyInt, tyBool, tyUnit, tyFloat)
 
 import qualified Data.Text as T
 import Data.Traversable
@@ -41,11 +41,12 @@ type MonadLower m
   = ( MonadGen Int m
     , MonadReader Env m )
 
-cotyString, cotyUnit, cotyBool, cotyInt :: Type
+cotyString, cotyUnit, cotyBool, cotyInt, cotyFloat :: Type
 cotyString = lowerType tyString
 cotyUnit = lowerType tyUnit
 cotyBool = lowerType tyBool
 cotyInt = lowerType tyInt
+cotyFloat = lowerType tyFloat
 
 makeBigLams :: S.Type Typed -> Term -> Term
 makeBigLams (S.TyForall vs _) =
@@ -162,6 +163,7 @@ lowerAnyway (RecordExt e xs _) = do
   where build (name, _) (atom, ty) = (name, ty, atom)
 
 lowerAnyway (Literal l _) = pure . Atom . Lit $ case l of
+  LiFloat d -> Float d
   LiInt i -> Int i
   LiStr t -> Str t
   LiBool True -> LitTrue
