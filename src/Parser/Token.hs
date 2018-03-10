@@ -11,6 +11,9 @@ data TokenClass
   | TcDoubleStar -- **
   | TcStar -- *
   | TcAdd -- +
+  | TcDoubleStarFloat -- **.
+  | TcStarFloat -- *.
+  | TcAddFloat -- +.
   | TcConcat -- ^
   | TcLt -- <
   | TcLte -- <=
@@ -20,7 +23,9 @@ data TokenClass
   | TcAndAnd -- &&
   | TcOrOr -- ||
   | TcDivide -- /
+  | TcDivideFloat -- /.
   | TcSubtract -- -
+  | TcSubtractFloat -- -.
   | TcNotEqual -- <>
   | TcTilde -- ~
   | TcUnderscore -- _
@@ -66,6 +71,7 @@ data TokenClass
   | TcAccess Text
   | TcHole Text
   | TcInteger Integer
+  | TcFloat Double
   | TcString Text
 
   | TcEOF
@@ -92,6 +98,12 @@ instance Show TokenClass where
   show TcNotEqual = "<>"
   show TcTilde = "~"
   show TcUnderscore = "_"
+
+  show TcAddFloat = "+."
+  show TcSubtractFloat = "-."
+  show TcStarFloat = "*."
+  show TcDoubleStarFloat = "**."
+  show TcDivideFloat = "/."
 
   show TcLet = "let"
   show TcFun = "fun"
@@ -135,5 +147,6 @@ instance Show TokenClass where
   show (TcHole t) = unpack t
   show (TcString t) = show (unpack t)
   show (TcInteger i) = show i
+  show (TcFloat i) = show i
 
   show TcEOF = "<eof>"

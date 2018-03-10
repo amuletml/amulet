@@ -30,6 +30,7 @@ approximateAtomType (Lam Big (v, _) f) = ForallTy v <$> approximateType f
 approximateAtomType (Lam Small (_, t) f) = ArrTy t <$> approximateType f
 approximateAtomType (Lit l) = pure . fmap fromVar $ case l of
   Int{} -> cotyInt
+  Float{} -> cotyFloat
   Str{} -> cotyString
   LitTrue -> cotyBool
   LitFalse -> cotyBool

@@ -49,6 +49,7 @@ data Coercion a
 data Literal
   = Int Integer
   | Str Text
+  | Float Double
   | LitTrue | LitFalse
   | Unit | RecNil
   deriving (Eq, Show, Ord, Data, Typeable)
@@ -153,6 +154,7 @@ instance Pretty Literal where
   pretty LitTrue = sliteral (string "true")
   pretty Unit = sliteral (string "unit")
   pretty RecNil = sliteral (braces empty)
+  pretty (Float l) = sliteral (double l)
   pretty (Int l) = sliteral (integer l)
   pretty (Str s) = sstring (dquotes (text s))
 
