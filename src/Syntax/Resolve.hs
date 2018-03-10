@@ -41,9 +41,9 @@ data ResolveError
   deriving (Eq, Ord, Show)
 
 instance Pretty ResolveError where
-  pretty (NotInScope e) = string "Variable not in scope:" <> verbatim e
-  pretty (NoSuchModule e) = string "Module not in scope:" <> verbatim e
-  pretty (Ambiguous v _) = string "Ambiguous reference to variable:" <> verbatim v
+  pretty (NotInScope e) = string "Variable not in scope:" <+> verbatim e
+  pretty (NoSuchModule e) = string "Module not in scope:" <+> verbatim e
+  pretty (Ambiguous v _) = string "Ambiguous reference to variable:" <+> verbatim v
   pretty (EmptyMatch e) = pretty (annotation e) <> string ": Empty match expression"
   pretty (EmptyBegin e) = pretty (annotation e) <> string ": Empty begin expression"
   pretty (ArisingFrom er ex) = pretty (annotation ex) <> colon <+> pretty er <#> indent 2 (bullet (string "Arising from use of ") <+> verbatim ex)

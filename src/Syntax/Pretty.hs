@@ -78,6 +78,7 @@ instance (Pretty (Var p)) => Pretty (Pattern p) where
 instance Pretty Lit where
   pretty (LiStr s) = sstring (dquotes (text s))
   pretty (LiInt s) = sliteral (integer s)
+  pretty (LiFloat s) = sliteral (double s)
   pretty (LiBool True) = sliteral (string "true")
   pretty (LiBool False) = sliteral (string "false")
   pretty LiUnit = sliteral (parens empty)

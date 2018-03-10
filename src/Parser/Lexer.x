@@ -10,13 +10,13 @@ import qualified Data.ByteString.Builder as B
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as L
 import qualified Data.ByteString.Lazy.Char8 as Bsc
-import Data.Span
-import Data.Spanned
+import qualified Data.Text.Read as R
+import qualified Data.Text as T
 import Data.Text.Encoding
-
 import Data.Char (chr, digitToInt)
 import Data.Semigroup
-import qualified Data.Text as T
+import Data.Span
+import Data.Spanned
 
 import Text.Printf
 
@@ -62,6 +62,12 @@ tokens :-
   <0> "~"      { constTok TcTilde }
   <0> \_       { constTok TcUnderscore }
 
+  <0> "**."    { constTok TcDoubleStarFloat }
+  <0> "*."     { constTok TcStarFloat }
+  <0> "+."     { constTok TcAddFloat }
+  <0> "/."     { constTok TcDivideFloat }
+  <0> "-."     { constTok TcSubtractFloat }
+
   <0> "let"    { constTok TcLet }
   <0> "fun"    { constTok TcFun }
   <0> "and"    { constTok TcAnd }
@@ -96,6 +102,9 @@ tokens :-
   <0> "]"      { constTok TcCSquare }
 
   <0> $digit+                          { onString $ TcInteger . parseNum 10 }
+  <0> $digit+ \. $digit+               { onString $ TcFloat . parseDouble }
+  <0> $digit+ \. $digit+ [Ee] $digit+  { onString $ TcFloat . parseDouble }
+  <0> $digit+ \. $digit+ [Ee] [\+\-] $digit+ { onString $ TcFloat . parseDouble }
   <0> $upper $ident* \.                { beginModule }
   <0> $lower $ident*                   { lexTok $ TcIdentifier }
   <0> $upper $ident*                   { lexTok $ TcConIdent }
@@ -129,6 +138,11 @@ tokens :-
 {
 parseNum :: Num a => a -> ByteString -> a
 parseNum radix = Bsc.foldl' (\accum digit -> accum * radix + fromIntegral (digitToInt digit)) 0
+
+parseDouble :: ByteString -> Double
+parseDouble t = case (R.double . decodeUtf8 . Bs.concat . L.toChunks) t of
+                  Right (x, t) | T.null t -> x
+                  _ -> error "Cannot parse float"
 
 appendChar :: Char -> Action Token
 appendChar c _ _ = do

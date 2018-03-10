@@ -14,11 +14,12 @@ import Types.Wellformed
 import Syntax.Subst
 import Syntax
 
-tyUnit, tyBool, tyInt, tyString :: Type Typed
+tyUnit, tyBool, tyInt, tyString, tyFloat :: Type Typed
 tyInt = TyCon (TvName (TgInternal "int"))
 tyString = TyCon (TvName (TgInternal "string"))
 tyBool = TyCon (TvName (TgInternal "bool"))
 tyUnit = TyCon (TvName (TgInternal "unit"))
+tyFloat = TyCon (TvName (TgInternal "float"))
 
 builtinsEnv :: Env
 builtinsEnv = Env (Map.fromList ops) (Map.fromList tps) where
@@ -29,14 +30,18 @@ builtinsEnv = Env (Map.fromList ops) (Map.fromList tps) where
 
   boolOp = tyBool `TyArr` (tyBool `TyArr` tyBool)
   intOp = tyInt `TyArr` (tyInt `TyArr` tyInt)
+  floatOp = tyFloat `TyArr` (tyFloat `TyArr` tyFloat)
   stringOp = tyString `TyArr` (tyString `TyArr` tyString)
   intCmp = tyInt `TyArr` (tyInt `TyArr` tyBool)
+  floatCmp = tyInt `TyArr` (tyInt `TyArr` tyBool)
 
   cmp = TyForall [name] $ TyVar name `TyArr` (TyVar name `TyArr` tyBool)
     where name = TvName (TgInternal "a")-- TODO: This should use TvName/TvFresh instead
   ops = [ op "+" intOp, op "-" intOp, op "*" intOp, op "/" intOp, op "**" intOp
+        , op "+." floatOp, op "-." floatOp, op "*." floatOp, op "/." floatOp, op "**." floatOp
         , op "^" stringOp
         , op "<" intCmp, op ">" intCmp, op ">=" intCmp, op "<=" intCmp
+        , op "<." floatCmp, op ">." floatCmp, op ">=." floatCmp, op "<=." floatCmp
         , op "==" cmp, op "<>" cmp
         , op "||" boolOp, op "&&" boolOp ]
   tps :: [(Var Resolved, Kind Typed)]

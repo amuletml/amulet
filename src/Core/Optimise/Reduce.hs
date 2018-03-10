@@ -276,6 +276,7 @@ isComplete s = isComplete' where
 
   isComplete' (PatLit (Int _):xs) = isComplete' xs
   isComplete' (PatLit (Str _):xs) = isComplete' xs
+  isComplete' (PatLit (Float _):xs) = isComplete' xs
   isComplete' (PatLit LitTrue:xs)    = hasBool LitTrue  xs
   isComplete' (PatLit LitFalse:xs)   = hasBool LitFalse xs
 

@@ -98,6 +98,7 @@ instance Monad (ExprContext v) where
 
 compileLit :: Literal -> LuaExpr
 compileLit (Int x)   = LuaNumber (fromInteger x)
+compileLit (Float x) = LuaNumber x
 compileLit (Str str) = LuaString str
 compileLit LitTrue   = LuaTrue
 compileLit LitFalse  = LuaFalse
@@ -305,20 +306,21 @@ compileMatch ex ps = EC $ \xs next -> (genIf next, xs)
                        xs -> [LuaIfElse xs]
 
 ops :: Map.Map Text Text
-ops = Map.fromList [ ("+", "+")
-                 , ("-", "-")
-                 , ("*", "*")
-                 , ("/", "/")
-                 , ("**", "^")
-                 , ("^", "..")
-                 , ("<", "<")
-                 , (">", ">")
-                 , (">=", ">=")
-                 , ("<=", "<=")
-                 , ("==", "==")
-                 , ("<>", "~=")
-                 , ("||", "or")
-                 , ("&&", "and") ]
+ops = Map.fromList
+  [ ("+", "+"), ("+.", "+")
+  , ("-", "-"), ("-.", "-")
+  , ("*", "*"), ("*.", "*")
+  , ("/", "/"), ("/.", "/")
+  , ("**", "^"), ("**.", "^")
+  , ("^", "..")
+  , ("<", "<")
+  , (">", ">")
+  , (">=", ">=")
+  , ("<=", "<=")
+  , ("==", "==")
+  , ("<>", "~=")
+  , ("||", "or")
+  , ("&&", "and") ]
 
 isBinOp :: Occurs a => a -> Bool
 isBinOp x | TgInternal v <- toVar x = Map.member v ops

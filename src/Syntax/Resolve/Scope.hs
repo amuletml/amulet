@@ -38,6 +38,7 @@ newtype ModuleScope = ModuleScope (Map.Map (Var Parsed) (Var Resolved, Scope))
 builtinScope :: Scope
 builtinScope = Scope
                { varScope = build [ "+", "-", "*", "/", "**", "^"
+                                  , "+.", "-.", "*.", "/.", "**.", "^."
                                   , "<", ">", ">=", "<=", "==", "<>"
                                   , "||", "&&" ]
                , tyScope  =  build [ "int", "string", "bool", "unit" ]

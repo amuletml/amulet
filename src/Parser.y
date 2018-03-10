@@ -46,6 +46,12 @@ import Syntax
   '~'      { Token TcTilde _ }
   '_'      { Token TcUnderscore _ }
 
+  '**.'    { Token TcDoubleStarFloat _ }
+  '*.'     { Token TcStarFloat _ }
+  '+.'     { Token TcAddFloat _ }
+  '-.'     { Token TcSubtractFloat _ }
+  '/.'     { Token TcDivideFloat _ }
+
   let      { Token TcLet _ }
   fun      { Token TcFun _ }
   and      { Token TcAnd _ }
@@ -87,6 +93,7 @@ import Syntax
   tyvar    { Token (TcTyVar _) _ }
   hole     { Token (TcHole _) _ }
   int      { Token (TcInteger _) _ }
+  float    { Token (TcFloat _) _ }
   string   { Token (TcString  _) _ }
 
 %left '||'
@@ -95,9 +102,9 @@ import Syntax
 %nonassoc '<=' '>='
 %nonassoc '<' '>'
 %left '^'
-%left '+' '-'
-%left '*' '/'
-%right '**'
+%left '+' '-' '+.' '-.'
+%left '*' '/' '*.' '/.'
+%right '**' '**.'
 
 %%
 
@@ -124,10 +131,15 @@ Ctor :: { Constructor Parsed }
 Expr :: { Expr Parsed }
      : ExprApp                                 { $1 }
      | Expr '**' Expr                          { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "**") $3 }
+     | Expr '**.' Expr                         { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "**.") $3 }
      | Expr '*' Expr                           { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "*") $3 }
+     | Expr '*.' Expr                          { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "*.") $3 }
      | Expr '/' Expr                           { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "/") $3 }
+     | Expr '/.' Expr                          { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "/.") $3 }
      | Expr '+' Expr                           { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "+") $3 }
+     | Expr '+.' Expr                          { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "+.") $3 }
      | Expr '-' Expr                           { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "-") $3 }
+     | Expr '-.' Expr                          { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "-.") $3 }
      | Expr '^' Expr                           { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "^") $3 }
      | Expr '<' Expr                           { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "<") $3 }
      | Expr '>' Expr                           { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE ">") $3 }
@@ -228,6 +240,7 @@ Rows(p, q)
 
 Lit :: { Located Lit }
     : int                  { lPos1 $1 $ LiInt (getInt $1) }
+    | float                { lPos1 $1 $ LiFloat (getFloat $1) }
     | string               { lPos1 $1 $ LiStr (getString $1) }
     | true                 { lPos1 $1 $ LiBool True }
     | false                { lPos1 $1 $ LiBool False }
@@ -322,6 +335,7 @@ getName (Token (TcTyVar x) _)             = Name x
 
 getHole   (Token (TcHole x) _)       = x
 getInt    (Token (TcInteger x) _)    = x
+getFloat  (Token (TcFloat x) _)      = x
 getString (Token (TcString  x) _)    = x
 getL      (L x _)                    = x
 }
