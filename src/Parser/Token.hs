@@ -71,6 +71,7 @@ data TokenClass
   | TcAccess Text
   | TcHole Text
   | TcInteger Integer
+  | TcFloat Double
   | TcString Text
 
   | TcEOF
@@ -146,5 +147,6 @@ instance Show TokenClass where
   show (TcHole t) = unpack t
   show (TcString t) = show (unpack t)
   show (TcInteger i) = show i
+  show (TcFloat i) = show i
 
   show TcEOF = "<eof>"
