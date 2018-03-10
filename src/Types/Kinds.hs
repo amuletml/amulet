@@ -72,7 +72,10 @@ inferKind tp = do
         Nothing -> throwError (NotInScope (unTvName x))
     TyForall vs t -> do
       ks <- replicateM (length vs) freshKV
-      extendManyK (zip vs ks) $ inferKind t
+      extendManyK (zip vs ks) $ do
+        k <- inferKind t
+        unify k KiStar
+        pure k
     TyArr a b -> do
       giveTp a
       giveTp b
