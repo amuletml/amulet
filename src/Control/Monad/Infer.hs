@@ -265,7 +265,10 @@ instance Pretty TypeError where
       _ -> error (show esc)
 
   pretty (SkolBinding (Skolem _ x _) (TySkol (Skolem _ y _))) = pretty (NotEqual (TyVar x) (TyVar y))
-  pretty (SkolBinding (Skolem a _ _) b) = string "Can not unify skolem type constant" <+> stypeSkol (pretty a) <+> string "with type" <+> verbatim b
+  pretty (SkolBinding (Skolem a v _) b) =
+    vsep [ string "Can not unify skolem type constant" <+> stypeSkol (pretty a) <+> string "with type" <+> verbatim b
+         , string "Note: the constant" <+> stypeSkol (pretty a) <+> "stands for type variable" <+> stypeVar (pretty v)
+         ]
 
 missing :: [(Text, b)] -> [(Text, b)] -> Doc
 missing ra rb

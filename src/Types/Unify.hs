@@ -127,14 +127,12 @@ solve i s (ConSubsume e a b:xs) =
   case runSolve i s (subsumes unify (normType a) (normType b)) of
     Left err -> Left (ArisingFrom err e)
     Right (i', s') -> solve i' s' (apply s' xs)
-solve i s (ConImplies reason cs ts:_) =
+solve i s (ConImplies reason cs ts:css) =
   case solve i s cs of
     Left e -> Left (ArisingFrom e reason)
     Right ss -> case solve i ss ts of
       Left e -> Left (ArisingFrom e reason)
-      Right ss' -> Right $
-        let strip = ftv cs
-         in Map.filterWithKey (\k _ -> k `Set.notMember` strip) ss'
+      Right _ -> solve i s css
 
 
 subsumes :: (MonadGen Int m, MonadError TypeError m)
