@@ -159,15 +159,16 @@ infer ex@(BinOp l o r a) = do
   (l', r') <- (,) <$> check l ld <*> check r rd
   pure (App (k2 (App (k1 o') l' (a, TyArr rd c))) r' (a, c), c)
 
-infer ex@(Match t ps a) = do
+infer (Match t ps a) = do
   (t', tt) <- infer t
   ps' <- for ps $ \(p, e) -> do
-    (p', ms, _) <- checkPattern p tt
-    (e', ty) <- extendMany ms (infer e)
-    pure (p', e', ty)
-  let (_, _, t) = head ps'
-  ps' <- for ps' $ \(p, e, t') -> do
-    _ <- unify ex t t'
+    (p', ms, cs) <- checkPattern p tt
+    implies p cs $ do
+      (e', ty) <- extendMany ms (infer e)
+      pure (p', e', ty, e)
+  let (_, _, t, _) = head ps'
+  ps' <- for ps' $ \(p, e, t', blame) -> do
+    _ <- unify blame t t' -- TODO: the blame can also come from the pattern.
     pure (p, e)
   pure (Match t' ps' (a, t), t)
 
