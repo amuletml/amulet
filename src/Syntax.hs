@@ -142,9 +142,10 @@ data Type p
   | TyWithConstraints [(Type p, Type p)] (Type p)
 
 data Skolem p
-  = Skolem (Var p) -- the constant itself
-           (Var p) -- what variable this skolemises
-           (Type p) -- the type this was generated for
+  = Skolem { _skolIdent :: Var p -- the constant itself
+           , _skolVar :: Var p -- what variable this skolemises
+           , _skolScope :: Type p -- the type this was generated for
+           }
 
 deriving instance (Show (Var p), Show (Ann p)) => Show (Skolem p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Skolem p)
@@ -203,11 +204,6 @@ deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Constructor p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Constructor p)
 instance (Data (Var p), Data (Ann p), Data p) => Spanned (Constructor p)
 
---- Pretty-printing {{{
-
-
--- }}}
-
 unTvName :: Var Typed -> Var Resolved
 unTvName (TvName x) = x
 
@@ -219,6 +215,11 @@ getType = snd . head . catMaybes . gmapQ get where
 
 makePrisms ''Expr
 makePrisms ''Type
+makePrisms ''Pattern
+makePrisms ''Toplevel
+makePrisms ''Constructor
+makePrisms ''Lit
+makeLenses ''Skolem
 
 
 {- Note [1]: Tuple types vs tuple patterns/values
