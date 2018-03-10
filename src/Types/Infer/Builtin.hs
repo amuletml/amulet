@@ -66,6 +66,7 @@ implies :: ( Reasonable f p
         -> [(Type Typed, Type Typed)]
         -> m a
         -> m a
+implies _ [] k = k
 implies e cs k =
   let eqToCon (a, b) = ConUnify (BecauseOf e) a b
       eqToCons = map eqToCon
