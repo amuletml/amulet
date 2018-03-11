@@ -63,7 +63,7 @@ transformOver = transT where
   mapT s (Let (One var) body) =
     let var' = third3 (transT (extendVar var s)) var
         body' = transT (extendVar var' s) body
-     in Let (One var) body'
+     in Let (One var') body'
   mapT s (Let (Many vars) body) =
     let vars' = map (third3 (transT (extendVars vars s))) vars
         body' = transT (extendVars vars' s) body
