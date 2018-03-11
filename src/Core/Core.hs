@@ -95,7 +95,7 @@ instance Pretty a => Pretty (Term a) where
   pretty (TyApp f t) = pretty f <+> soperator (char '@') <> pretty t
 
   pretty (Let (One x) e) = keyword "let" <+> braces (space <> pprLet1 x <> space) <+> keyword "in" <#> pretty e
-  pretty (Let (Many xs) e) = keyword "let" <+> pprLet xs </> (keyword "in" <+> pretty e)
+  pretty (Let (Many xs) e) = keyword "let rec" <+> pprLet xs </> (keyword "in" <+> pretty e)
   pretty (Match e ps) = keyword "match" <+> pretty e <+> pprCases ps
   pretty (Extend x rs) = braces $ pretty x <+> pipe <+> prettyRows rs where
     prettyRows = hsep . punctuate comma . map (\(x, t, v) -> text x <+> colon <+> pretty t <+> equals <+> pretty v)

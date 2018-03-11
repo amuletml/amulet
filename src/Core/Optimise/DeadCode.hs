@@ -71,9 +71,6 @@ deadCodePass = snd . freeS (DeadScope mempty) Nothing where
     case uncurry (buildLet s' vs) (freeT s' b) of
       -- If we've no bindings, just return the primary expression
       (f, [], b') -> (f, b')
-      -- If we're of the form `let x = y in x`, simplify to `y`.
-      (f, [(v, _, b')], Atom(Ref v' _))
-        | v == v' -> (f, b')
       -- Otherwise emit as normal
       (f, vs', b') -> (f , Let (Many vs') b')
 

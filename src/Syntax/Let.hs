@@ -12,7 +12,7 @@ depOrder :: (Show (Var p), Show (Ann p), Ord (Var p))
          => [(Var p, Expr p, Ann p)]
          -> [SCC (Var p, Expr p, Ann p)]
 depOrder = stronglyConnComp . build where
-  build = map (\it@(var, ex, _) -> (it, var, Set.toList (var `Set.delete` freeIn ex)))
+  build = map (\it@(var, ex, _) -> (it, var, Set.toList (freeIn ex)))
 
 freeIn :: (Show (Var p), Show (Ann p), Ord (Var p)) => Expr p -> Set.Set (Var p)
 freeIn (Ascription e _ _) = freeIn e
