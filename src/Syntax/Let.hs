@@ -31,6 +31,7 @@ freeIn Literal{}          = mempty
 freeIn Hole{}             = mempty
 freeIn (If a b c _)       = freeIn a <> freeIn b <> freeIn c
 freeIn (Tuple es _)       = foldMap freeIn es
+freeIn (TypeApp f _ _)    = freeIn f
 freeIn x = error (show x)
 
 bound :: Ord (Var p) => Pattern p -> Set.Set (Var p)
