@@ -17,6 +17,7 @@ import qualified Data.Text as T
 import Data.Traversable
 import Data.Function
 import Data.Foldable
+import Data.Graph
 import Data.Span
 import Data.List
 
@@ -25,6 +26,7 @@ import Core.Core hiding (Atom, Term, Stmt, Type, Pattern)
 import Core.Core (pattern Atom)
 
 import qualified Syntax as S
+import Syntax.Let
 import Syntax (Var(..), Resolved, Typed, Expr(..), Pattern(..), Lit(..), Skolem(..), Toplevel(..), Constructor(..))
 
 import Pretty (pretty)
@@ -99,10 +101,19 @@ lowerAt (Ascription e _ _) t = lowerAt e t
 lowerAt e (ForallTy vs b) = Atom . Lam (TypeArgument vs StarTy) <$> lowerAtTerm e b
 lowerAt (VarRef (TvName p) _) ty = pure (Atom (Ref p ty))
 lowerAt (S.Let vs t _) ty = do
-  vs' <- for vs $ \(TvName var, ex, (_, ty)) -> do
-    let ty' = lowerType ty
-    (var,ty',) <$> lowerAtTerm ex ty'
-  C.Let (Many vs') <$> lowerAtTerm t ty -- TODO scc these
+  let sccs = depOrder vs
+      lowerScc (CyclicSCC vs) = CyclicSCC <$> do
+        for vs $ \(TvName var, ex, (_, ty)) -> do
+          let ty' = lowerType ty
+          (var,ty',) <$> lowerAtTerm ex ty'
+      lowerScc (AcyclicSCC (TvName var, ex, (_, ty))) = AcyclicSCC <$> do
+        let ty' = lowerType ty
+        (var, ty',) <$> lowerAtTerm ex ty'
+      foldScc (AcyclicSCC v) = C.Let (One v)
+      foldScc (CyclicSCC vs) = C.Let (Many vs)
+  vs' <- traverse lowerScc sccs
+  let k = foldr (.) id (map foldScc vs')
+  k <$> lowerAtTerm t ty -- TODO scc these
 lowerAt (S.If c t e _) ty = do
   c' <- lowerAtAtom c cotyBool
   t' <- lowerAtTerm t ty
