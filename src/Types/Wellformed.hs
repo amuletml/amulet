@@ -3,13 +3,16 @@ module Types.Wellformed (wellformed, arity, normType, skols, Skolem(..)) where
 
 import Control.Monad.Except
 import Control.Monad.Infer
+import Control.Arrow
 
+import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Foldable
 import Data.Generics
 import Data.Function
-import Data.List (nub, unionBy)
+import Data.List (unionBy)
 
+import Syntax.Subst
 import Syntax
 
 import Pretty (Pretty)
@@ -41,14 +44,14 @@ arity (TyForall _ t) = arity t
 arity _ = 0
 
 -- Make a type into its equivalent in prenex normal form.
-normType :: forall p. Eq (Var p) => Type p -> Type p
-normType = flatten . uncurry collect . runWriter . spread where
-  collect t xs = case nub xs of
+normType :: forall p. Ord (Var p) => Type p -> Type p
+normType = flatten . uncurry collect . runWriter . spread . applyCons where
+  collect t xs = case Set.toList (xs `Set.intersection` ftv t) of
     [] -> t
     xs -> TyForall xs t
 
-  spread :: Type p -> Writer [Var p] (Type p)
-  spread (TyForall vs t) = spread t <* tell vs
+  spread :: Type p -> Writer (Set.Set (Var p)) (Type p)
+  spread (TyForall vs t) = spread t <* tell (Set.fromList vs)
   spread (TyArr a t) = TyArr a <$> spread t
   spread x = pure x
 
@@ -68,6 +71,22 @@ skols :: (Ord (Ann p), Ord (Var p), Data p, Data (Ann p), Data (Var p))
 skols = everything mappend (mkQ mempty go) where
   go (TySkol s) = Set.singleton s
   go _ = Set.empty
+
+applyCons :: Ord (Var p) => Type p -> Type p
+applyCons x@TyCon{} = x
+applyCons x@TyVar{} = x
+applyCons x@TySkol{} = x
+applyCons (TyForall vs t) = TyForall vs (applyCons t)
+applyCons (TyArr a b) = TyArr (applyCons a) (applyCons b)
+applyCons (TyApp a b) = TyApp (applyCons a) (applyCons b)
+applyCons (TyRows r rs) = TyRows (applyCons r) (map (second applyCons) rs)
+applyCons (TyExactRows rs) = TyExactRows (map (second applyCons) rs)
+applyCons (TyTuple a b) = TyTuple (applyCons a) (applyCons b)
+applyCons (TyWithConstraints cs a) =
+  let eq (TyVar a, t) = Map.singleton a t
+      eq _ = Map.empty
+      eqs = foldMap eq cs
+   in apply eqs a
 
 
 {-

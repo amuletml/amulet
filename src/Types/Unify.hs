@@ -12,12 +12,15 @@ import Syntax
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
-
+import Data.Semigroup
 import Data.Foldable
 import Data.Function
 import Data.List
 
 import Data.Text (Text)
+
+import Debug.Trace
+import Pretty
 
 type SolveM = GenT Int (StateT (Subst Typed) (Except TypeError))
 
@@ -127,13 +130,19 @@ solve i s (ConSubsume e a b:xs) =
   case runSolve i s (subsumes unify (normType a) (normType b)) of
     Left err -> Left (ArisingFrom err e)
     Right (i', s') -> solve i' s' (apply s' xs)
-solve i s (ConImplies reason cs ts:css) =
+
+solve i s (c@(ConImplies reason not cs ts):css) = trace (render (pretty c)) $ 
   case solve i s cs of
     Left e -> Left (ArisingFrom e reason)
-    Right ss -> case solve i ss ts of
+    Right ss -> case solve i (s `compose` ss) ts of
       Left e -> Left (ArisingFrom e reason)
-      Right _ -> solve i s css
+      Right ss' ->
+        let noTouchy = Map.filterWithKey (\k _ -> k `Set.notMember` ftv not)
+            mustTouch = Map.filterWithKey (\k t -> isTyVar t && k `Set.member` traceShowId (Set.fromList (Map.keys s) <> foldMap ftv s))
 
+            isTyVar TyVar{} = True
+            isTyVar _ = False
+         in solve i (s `compose` noTouchy (ss <> ss') `compose` traceShowId (mustTouch ss)) css
 
 subsumes :: (MonadGen Int m, MonadError TypeError m)
          => (Type Typed -> Type Typed -> m b)

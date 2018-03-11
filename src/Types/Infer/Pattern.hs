@@ -45,7 +45,7 @@ checkPattern :: MonadInfer Typed m
                   )
 checkPattern (Wildcard ann) ty = pure (Wildcard (ann, ty), [], [])
 checkPattern (Capture v ann) ty = pure (Capture (TvName v) (ann, ty), [(TvName v, ty)], [])
-checkPattern ex@(Destructure con ps ann) ty =
+checkPattern ex@(Destructure con ps ann) target =
   case ps of
     Nothing -> do
       pty <- lookupTy con
@@ -53,13 +53,13 @@ checkPattern ex@(Destructure con ps ann) ty =
             case pty of
               TyWithConstraints cs ty -> (cs, ty)
               _ -> ([], pty)
-      _ <- unify ex pty ty
-      pure (Destructure (TvName con) Nothing (ann, pty), [], cs)
+      _ <- unify ex ty target
+      pure (Destructure (TvName con) Nothing (ann, ty), [], cs)
     Just p ->
       let go cs t = do
             (c, d, _) <- decompose ex _TyArr t
             (ps', b, cs') <- checkPattern p c
-            _ <- unify ex ty d
+            _ <- unify ex d target
             pure (Destructure (TvName con) (Just ps') (ann, d), b, cs ++ cs')
       in do
         t <- skolGadt =<< lookupTy con
@@ -101,8 +101,17 @@ skolGadt ty =
       result (TyArr _ t) = result t
       result t = t
 
+      related (TyWithConstraints cs _) = cs
+      related _ = []
+
       mentioned = ftv (result ty)
+      free (TyVar v, t)
+        | v `Set.member` mentioned = [(v, t)]
+        | otherwise = []
+      free _ = []
+      freed = concatMap free (related ty)
+      fugitives = mentioned `Set.union` (foldMap (ftv . snd) freed)
    in do
-     vs <- for (Set.toList (ftv ty `Set.difference` mentioned)) $ \v -> do
+     vs <- for (Set.toList (ftv ty `Set.difference` fugitives)) $ \v -> do
        (v,) <$> freshSkol ty v
      pure $ apply (Map.fromList vs) ty

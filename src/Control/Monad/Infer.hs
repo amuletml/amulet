@@ -65,7 +65,7 @@ instance Semigroup Env where
 data Constraint p
   = ConUnify SomeReason (Type p) (Type p)
   | ConSubsume SomeReason (Type p) (Type p)
-  | ConImplies SomeReason [Constraint p] [Constraint p]
+  | ConImplies SomeReason (Type p) [Constraint p] [Constraint p]
 
 deriving instance (Show (Ann p), Show (Var p), Show (Expr p), Show (Type p))
   => Show (Constraint p)
@@ -102,16 +102,16 @@ data TypeError where
 instance (Ord (Var p), Substitutable p (Type p)) => Substitutable p (Constraint p) where
   ftv (ConUnify _ a b) = ftv a `Set.union` ftv b
   ftv (ConSubsume _ a b) = ftv a `Set.union` ftv b
-  ftv (ConImplies _ a b) = ftv a `Set.union` ftv b
+  ftv (ConImplies _ t a b) = ftv a `Set.union` ftv b `Set.union` ftv t
 
   apply s (ConUnify e a b) = ConUnify e (apply s a) (apply s b)
   apply s (ConSubsume e a b) = ConSubsume e (apply s a) (apply s b)
-  apply s (ConImplies e a b) = ConImplies e (apply s a) (apply s b)
+  apply s (ConImplies e t a b) = ConImplies e t (apply s a) b
 
 instance Pretty (Var p) => Pretty (Constraint p) where
   pretty (ConUnify _ a b) = pretty a <+> soperator (char '~') <+> pretty b
   pretty (ConSubsume _ a b) = pretty a <+> soperator (string "<=") <+> pretty b
-  pretty (ConImplies _ a b) = pretty a <+> soperator (char '⊃') <+> pretty b
+  pretty (ConImplies _ t a b) = brackets (pretty t) <+> hsep (punctuate comma (map pretty a)) <+> soperator (char '⊃') <+> pretty b
 
 data SomeReason where
   BecauseOf :: (Spanned a, Pretty a) => a -> SomeReason
@@ -257,12 +257,14 @@ instance Pretty TypeError where
     = vsep [ string "Illegal type application" <+> verbatim ex
            , bullet (string "because of type ") <+> verbatim ta
            ]
-  pretty (EscapedSkolems esc _) =
-    case esc of
-      [Skolem var u ty] ->
-        string "Skolem type constant" <+> stypeSkol (pretty var) <+> string "has escaped its scope of" <+> verbatim ty
-            <#> bullet (string "Note:") <+> stypeSkol (pretty var) <+> string "stands for the type variable" <+> pretty (TyVar u)
-      _ -> error (show esc)
+  pretty (EscapedSkolems esc t) =
+    vsep [ case esc of
+            [Skolem var u ty] ->
+              string "Skolem type constant" <+> stypeSkol (pretty var) <+> string "has escaped its scope of" <+> verbatim ty
+                  <#> bullet (string "Note:") <+> stypeSkol (pretty var) <+> string "stands for the type variable" <+> pretty (TyVar u)
+            _ -> foldr (<#>) empty (map (pretty . flip EscapedSkolems t . pure) esc)
+         , string "Note: in type" <+> verbatim t
+         ]
 
   pretty (SkolBinding (Skolem _ x _) (TySkol (Skolem _ y _))) = pretty (NotEqual (TyVar x) (TyVar y))
   pretty (SkolBinding (Skolem a v _) b) =
