@@ -58,6 +58,14 @@ deadCodePass = snd . freeS (DeadScope mempty) Nothing where
   freeT s (TyApp f t) = TyApp <$> freeA s f <*> pure t
   freeT s (Cast f t) = Cast <$> freeA s f <*> pure t
   freeT s (Extend t rs) = Extend <$> freeA s t <*> traverse (third3A (freeA s)) rs
+  freeT s (Let (One vs@(v, ty, e)) b) =
+    let s' = extendPureFuns s [vs]
+        (fe, e') = freeT s e
+        (fb, b') = freeT s' b
+    in if isPure s' e' && toVar v `VarSet.notMember` fb
+       then (fb, b')
+       else (fe <> fb, Let (One (v, ty, e')) b')
+
   freeT s (Let (Many vs) b) =
     let s' = extendPureFuns s vs in
     case uncurry (buildLet s' vs) (freeT s' b) of
