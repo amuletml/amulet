@@ -13,21 +13,31 @@ import Syntax (Var(..), Resolved)
 
 data Atom a
   = Ref a (Type a)
-  | Lam Size (a, Type a) (Term a)
+  | Lam (Argument a) (Term a)
   | Lit Literal
+  deriving (Eq, Show, Ord, Data, Typeable, Functor)
+
+data Argument a
+  = TermArgument a (Type a)
+  | TypeArgument a (Type a) -- TODO kinds
   deriving (Eq, Show, Ord, Data, Typeable, Functor)
 
 data Term a
   = Atom (Atom a)
   | App (Atom a) (Atom a) -- removes a λ
 
-  | Let [(a, Type a, Term a)] (Term a)
+  | Let (Binding a) (Term a)
   | Match (Atom a) [(Pattern a, Type a, Term a)]
 
   | Extend (Atom a) [(Text, Type a, Atom a)]
 
   | TyApp (Atom a) (Type a) -- removes a Λ
   | Cast (Atom a) (Coercion a)
+  deriving (Eq, Show, Ord, Data, Typeable, Functor)
+
+data Binding a
+  = One (a, Type a, Term a) -- uncurried for convenience
+  | Many [(a, Type a, Term a)]
   deriving (Eq, Show, Ord, Data, Typeable, Functor)
 
 data Pattern a
@@ -65,10 +75,6 @@ data Type a
   | StarTy -- * :: *
   deriving (Eq, Show, Ord, Data, Typeable, Functor)
 
-data Size
-  = Big | Small
-  deriving (Eq, Show, Ord, Data, Typeable)
-
 data Stmt a
   = Foreign a (Type a) Text
   | StmtLet [(a, Type a, Term a)]
@@ -77,9 +83,9 @@ data Stmt a
 
 instance Pretty a => Pretty (Atom a) where
   pretty (Ref v _) = pretty v
-  pretty (Lam Big (v, t) c)
+  pretty (Lam (TypeArgument v t) c)
     = soperator (char 'Λ') <+> parens (pretty v <+> colon <+> pretty t) <> nest 2 (dot </> pretty c)
-  pretty (Lam Small (v, t) c)
+  pretty (Lam (TermArgument v t) c)
     = soperator (char 'λ') <+> parens (pretty v <+> colon <+> pretty t) <> nest 2 (dot </> pretty c)
   pretty (Lit l) = pretty l
 
@@ -88,8 +94,8 @@ instance Pretty a => Pretty (Term a) where
   pretty (App f x) = pretty f <+> pretty x
   pretty (TyApp f t) = pretty f <+> soperator (char '@') <> pretty t
 
-  pretty (Let [x] e) = keyword "let" <+> braces (space <> pprLet1 x <> space) <+> keyword "in" <#> pretty e
-  pretty (Let xs e) = keyword "let" <+> pprLet xs </> (keyword "in" <+> pretty e)
+  pretty (Let (One x) e) = keyword "let" <+> braces (space <> pprLet1 x <> space) <+> keyword "in" <#> pretty e
+  pretty (Let (Many xs) e) = keyword "let rec" <+> pprLet xs </> (keyword "in" <+> pretty e)
   pretty (Match e ps) = keyword "match" <+> pretty e <+> pprCases ps
   pretty (Extend x rs) = braces $ pretty x <+> pipe <+> prettyRows rs where
     prettyRows = hsep . punctuate comma . map (\(x, t, v) -> text x <+> colon <+> pretty t <+> equals <+> pretty v)
@@ -169,15 +175,15 @@ instance Pretty a => Pretty [Stmt a] where
 
 freeInAtom :: IsVar a => Atom a -> VarSet.Set
 freeInAtom (Ref v _) = VarSet.singleton (VarSet.toVar v)
-freeInAtom (Lam Small (v, _) e) = VarSet.delete (VarSet.toVar v) (freeIn e)
-freeInAtom (Lam Big _ e) = freeIn e
+freeInAtom (Lam (TermArgument v _) e) = VarSet.delete (VarSet.toVar v) (freeIn e)
+freeInAtom (Lam TypeArgument{} e) = freeIn e
 freeInAtom (Lit _) = mempty
 
 freeIn :: IsVar a => Term a -> VarSet.Set
 freeIn (Atom a) = freeInAtom a
 freeIn (App f x) = freeInAtom f <> freeInAtom x
-freeIn (Let vs e) = VarSet.difference (freeIn e <> foldMap (freeIn . thd3) vs)
-                                         (VarSet.fromList (map (VarSet.toVar . fst3) vs))
+freeIn (Let (One v) e) = VarSet.difference (freeIn e <> freeIn (thd3 v)) (VarSet.singleton (toVar (fst3 v)))
+freeIn (Let (Many vs) e) = VarSet.difference (freeIn e <> foldMap (freeIn . thd3) vs) (VarSet.fromList (map (VarSet.toVar . fst3) vs))
 freeIn (Match e bs) = freeInAtom e <> foldMap freeInBranch bs where
   freeInBranch (b, _, e) = VarSet.difference (freeIn e) (patternVars b)
 freeIn (Extend c rs) = freeInAtom c <> foldMap (freeInAtom . thd3) rs
@@ -187,14 +193,15 @@ freeIn (Cast f _) = freeInAtom f
 occursInAtom :: IsVar a => a -> Atom a -> Bool
 occursInAtom v (Ref v' _) = toVar v == toVar v'
 occursInAtom _ (Lit _) = False
-occursInAtom v (Lam _ _ b) = occursInTerm v b
+occursInAtom v (Lam _ b) = occursInTerm v b
 
 occursInTerm :: IsVar a => a -> Term a -> Bool
 occursInTerm v (Atom a) = occursInAtom v a
 occursInTerm v (App f x) = occursInAtom v f || occursInAtom v x
 occursInTerm v (TyApp f _) = occursInAtom v f
 occursInTerm v (Cast f _) = occursInAtom v f
-occursInTerm v (Let vs e) = any (occursInTerm v . thd3) vs || occursInTerm v e
+occursInTerm v (Let (One va) e) = occursInTerm v (thd3 va) || occursInTerm v e
+occursInTerm v (Let (Many vs) e) = any (occursInTerm v . thd3) vs || occursInTerm v e
 occursInTerm v (Match e bs) = occursInAtom v e || any (occursInTerm v . thd3) bs
 occursInTerm v (Extend e fs) = occursInAtom v e || any (occursInAtom v . thd3) fs
 

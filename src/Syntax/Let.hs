@@ -12,7 +12,7 @@ depOrder :: (Show (Var p), Show (Ann p), Ord (Var p))
          => [(Var p, Expr p, Ann p)]
          -> [SCC (Var p, Expr p, Ann p)]
 depOrder = stronglyConnComp . build where
-  build = map (\it@(var, ex, _) -> (it, var, Set.toList (var `Set.delete` freeIn ex)))
+  build = map (\it@(var, ex, _) -> (it, var, Set.toList (freeIn ex)))
 
 freeIn :: (Show (Var p), Show (Ann p), Ord (Var p)) => Expr p -> Set.Set (Var p)
 freeIn (Ascription e _ _) = freeIn e
@@ -31,6 +31,7 @@ freeIn Literal{}          = mempty
 freeIn Hole{}             = mempty
 freeIn (If a b c _)       = freeIn a <> freeIn b <> freeIn c
 freeIn (Tuple es _)       = foldMap freeIn es
+freeIn (TypeApp f _ _)    = freeIn f
 freeIn x = error (show x)
 
 bound :: Ord (Var p) => Pattern p -> Set.Set (Var p)
