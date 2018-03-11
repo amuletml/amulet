@@ -69,8 +69,7 @@ tagOccurrence env sts = fst (go sts) where
 tagBindings :: forall a. IsVar a => [(a, C.Type a, C.Term a)] -> OccursMap -> [(OccursVar a, OccType a, OccTerm a)]
 tagBindings vs ss =
   let free = foldMap (\(v, _, e) -> toVar v `Map.delete` countUsages e) vs <> ss
-      attach :: a -> OccursVar a
-      attach v = OccursVar v (fromMaybe 0 (toVar v `Map.lookup` free))
+      attach = flip depends free
    in map (\(v, t, e) -> (attach v, fmap attach t, tagOccTerm e)) vs
 
 tagOccAtom :: IsVar a => C.Atom a -> OccAtom a
@@ -80,6 +79,11 @@ tagOccAtom (Lam (TypeArgument v t) b) = Lam (TypeArgument (OccursVar v 1) (conve
 tagOccAtom (Lit l) = Lit l
 
 tagOccTerm :: IsVar a => C.Term a -> OccTerm a
+tagOccTerm (Let (One v) e) = Let (One (go v (countUsages e))) (tagOccTerm e) where
+  go (v, t, e) ss =
+    let free = toVar v `Map.delete` countUsages e <> ss
+        attach = flip depends free
+     in (attach v, fmap attach t, tagOccTerm e)
 tagOccTerm (Let (Many vs) e) = Let (Many (tagBindings vs (countUsages e))) (tagOccTerm e)
 tagOccTerm (Atom a) = Atom (tagOccAtom a)
 tagOccTerm (App f x) = App (tagOccAtom f) (tagOccAtom x)
