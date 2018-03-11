@@ -76,8 +76,8 @@ inlineVariablePass = transS (InlineScope mempty mempty) where
   extendVars :: IsVar a => [(a, Type a, Term a)] -> InlineScope a -> InlineScope a
   extendVars vs s = foldr extendVar s vs
 
-  isLambda (Lam TypeArgument{} _) = True
-  isLambda (Lam TermArgument{} (Atom b)) = isLambda b
+  isLambda (Lam TermArgument{} _) = True
+  isLambda (Lam TypeArgument{} (Atom b)) = isLambda b
   isLambda _ = False
 
 scoreAtom :: IsVar a => InlineScope a -> Atom a -> Int
