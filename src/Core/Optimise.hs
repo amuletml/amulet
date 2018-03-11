@@ -1,9 +1,11 @@
+{-# OPTIONS_GHC -Wno-partial-type-signatures #-}
 {-# LANGUAGE FlexibleContexts, TupleSections, PartialTypeSignatures #-}
 module Core.Optimise
   ( substitute, substituteInTys, substituteInCo
   , module Core.Core
   , Var(..)
   , refresh, fresh, freshFrom
+  , argVar
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -25,21 +27,23 @@ substitute :: IsVar a => Map.Map a (Atom a) -> Term a -> Term a
 substitute m = term where
   term (Atom a) = Atom (atom a)
   term (App f x) = App (atom f) (atom x)
-  term (Let vs x) = Let (map (third3 term) vs) (term x)
+  term (Let (One v) x) = Let (One (third3 term v)) (term x)
+  term (Let (Many vs) x) = Let (Many (map (third3 term) vs)) (term x)
   term (Match x vs) = Match (atom x) (map (third3 term) vs)
   term (Extend e rs) = Extend (atom e) (map (third3 atom) rs)
   term (TyApp f t) = TyApp (atom f) t
   term (Cast f t) = Cast (atom f) t
 
   atom x@(Ref v _) = Map.findWithDefault x v m
-  atom (Lam s v b) = Lam s v (term b)
+  atom (Lam v b) = Lam v (term b)
   atom x@Lit{} = x
 
 substituteInTys :: IsVar a => Map.Map a (Type a) -> Term a -> Term a
 substituteInTys m = term where
   term (Atom a) = Atom (atom a)
   term (App f x) = App (atom f) (atom x)
-  term (Let vs x) = Let (map (\(v, t, e) -> (v, gotype t, term e)) vs) (term x)
+  term (Let (One (v, t, e)) x) = Let (One (v, gotype t, term e)) x
+  term (Let (Many vs) x) = Let (Many (map (\(v, t, e) -> (v, gotype t, term e)) vs)) (term x)
   term (Match x vs) = Match (atom x) (map (\(v, t, e) -> (v, gotype t, term e)) vs)
   term (Extend e rs) = Extend (atom e) (map (third3 atom) rs)
   term (TyApp f t) = TyApp (atom f) (gotype t)
@@ -51,7 +55,9 @@ substituteInTys m = term where
   coercion (Symmetry c) = Symmetry (coercion c)
 
   atom (Ref v t) = Ref v (gotype t)
-  atom (Lam s (v, t) b) = Lam s (v, gotype t) (term b)
+  atom (Lam arg b) = Lam (go arg) (term b) where
+    go (TermArgument v t) = TermArgument v (gotype t)
+    go (TypeArgument v t) = TypeArgument v (gotype t)
   atom x@Lit{} = x
 
   gotype x@(VarTy v) = Map.findWithDefault x v m
@@ -88,23 +94,37 @@ refresh = refreshTerm mempty where
       Just x -> pure (Ref x ty)
       Nothing -> pure a
   refreshAtom _ a@Lit{} = pure a
-  refreshAtom s (Lam size (v, ty) b) = do
-    let TgName name _ = toVar v
-    v' <- fromVar <$> freshFrom name
-    Lam size (v', ty) <$> refreshTerm (VarMap.insert (toVar v) v' s) b
+  refreshAtom s (Lam arg b) = do
+    (arg', v') <- refreshArg arg
+    Lam arg' <$> refreshTerm (VarMap.insert (argVar arg) v' s) b
 
+  refreshArg :: (MonadGen Int m, IsVar a) => Argument a -> m (Argument a, a)
+  refreshArg (TermArgument n ty) = do
+    let TgName name _ = toVar n
+    v' <- fromVar <$> freshFrom name
+    pure (TermArgument v' ty, v')
+  refreshArg (TypeArgument n ty) = do
+    let TgName name _ = toVar n
+    v' <- fromVar <$> freshFrom name
+    pure (TypeArgument v' ty, v')
 
   refreshTerm :: (MonadGen Int m, IsVar a) => VarMap.Map a -> Term a -> m (Term a)
   refreshTerm s (Atom a) = Atom <$> refreshAtom s a
   refreshTerm s (App f x) = App <$> refreshAtom s f <*> refreshAtom s x
   refreshTerm s (TyApp f ty) = TyApp <$> refreshAtom s f <*> pure (refreshType s ty)
-  refreshTerm s (Let vs b) = do
+  refreshTerm s (Let (One (v, ty, e)) b) = do
+    let TgName name _ = toVar v
+    v' <- fromVar <$> freshFrom name
+    let s' = VarMap.insert (toVar v) v' s
+    e' <- refreshTerm s' e
+    Let (One (v', ty, e')) <$> refreshTerm s' b
+  refreshTerm s (Let (Many vs) b) = do
     s' <- foldrM (\(v, _, _) m -> do
                      let TgName name _ = toVar v
                      v' <- fromVar <$> freshFrom name
                      pure (VarMap.insert (toVar v) v' m)) s vs
     vs' <- traverse (\(v, ty, e) -> (fromJust (VarMap.lookup (toVar v) s'), ty,) <$> refreshTerm s' e) vs
-    Let vs' <$> refreshTerm s' b
+    Let (Many vs') <$> refreshTerm s' b
   refreshTerm s (Match e branches) = Match <$> refreshAtom s e
                                             <*> traverse refreshBranch branches where
     refreshBranch (test, ty, branch) = do
@@ -138,3 +158,7 @@ refresh = refreshTerm mempty where
   refreshCoercion s (Domain c) = Domain (refreshCoercion s c)
   refreshCoercion s (Codomain c) = Codomain (refreshCoercion s c)
   refreshCoercion s (Symmetry c) = Symmetry (refreshCoercion s c)
+
+argVar :: IsVar a => Argument a -> Var _
+argVar (TermArgument v _) = toVar v
+argVar (TypeArgument v _) = toVar v

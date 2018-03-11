@@ -48,9 +48,9 @@ deadCodePass = snd . freeS (DeadScope mempty) Nothing where
   freeA :: IsVar a => DeadScope -> Atom a -> (VarSet.Set, Atom a)
   freeA _ t@(Ref v _)= (VarSet.singleton (toVar v), t)
   freeA _ t@Lit{} = (mempty, t)
-  freeA s (Lam t a@(v, _) b) =
+  freeA s (Lam a b) =
     let (fb, b') = freeT s b
-     in (toVar v `VarSet.delete` fb, Lam t a b')
+     in (argVar a `VarSet.delete` fb, Lam a b')
 
   freeT :: IsVar a => DeadScope -> Term a -> (VarSet.Set, Term a)
   freeT s (Atom a) = Atom <$> freeA s a
@@ -58,8 +58,7 @@ deadCodePass = snd . freeS (DeadScope mempty) Nothing where
   freeT s (TyApp f t) = TyApp <$> freeA s f <*> pure t
   freeT s (Cast f t) = Cast <$> freeA s f <*> pure t
   freeT s (Extend t rs) = Extend <$> freeA s t <*> traverse (third3A (freeA s)) rs
-
-  freeT s (Let vs b) =
+  freeT s (Let (Many vs) b) =
     let s' = extendPureFuns s vs in
     case uncurry (buildLet s' vs) (freeT s' b) of
       -- If we've no bindings, just return the primary expression
@@ -68,7 +67,7 @@ deadCodePass = snd . freeS (DeadScope mempty) Nothing where
       (f, [(v, _, b')], Atom(Ref v' _))
         | v == v' -> (f, b')
       -- Otherwise emit as normal
-      (f, vs', b') -> (f , Let vs' b')
+      (f, vs', b') -> (f , Let (Many vs') b')
 
   freeT s (Match t bs) =
     let (ft, t') = freeA s t
@@ -94,14 +93,15 @@ deadCodePass = snd . freeS (DeadScope mempty) Nothing where
     = fromMaybe 0 (Map.lookup n opArity)
     | otherwise
     = fromMaybe 0 (VarMap.lookup (toVar r) (pureArity s))
-  atomArity s (Lam _ _ (Atom a)) = 1 + atomArity s a
+  atomArity s (Lam _ (Atom a)) = 1 + atomArity s a
   atomArity _ _ = 0
 
   isPure _ Atom{}   = True
   isPure _ Extend{} = True
   isPure _ TyApp{}  = True
   isPure _ Cast{}  = True
-  isPure s (Let vs e) = isPure s e && all (isPure s . thd3) vs
+  isPure s (Let (One v) e) = isPure s e && isPure s (thd3 v)
+  isPure s (Let (Many vs) e) = isPure s e && all (isPure s . thd3) vs
   isPure s (Match _ bs) = all (isPure s . thd3) bs
   isPure s (App f _) = atomArity s f > 0
 

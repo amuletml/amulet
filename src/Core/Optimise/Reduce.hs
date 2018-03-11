@@ -41,14 +41,17 @@ lookupRawVar s v = case VarMap.lookup (toVar v) (vars s) of
 lookupRawTerm :: IsVar a => Scope a -> a -> Maybe (Term a)
 lookupRawTerm s v = VarMap.lookup (toVar (lookupRawVar s v)) (vars s)
 
+extendVar :: IsVar a => (a, Type a, Term a) -> Scope a -> Scope a
+extendVar (v, _, e) s = s { vars = VarMap.insert (toVar v) e (vars s) }
+
 extendVars :: IsVar a => [(a, Type a, Term a)] -> Scope a -> Scope a
-extendVars vs s = s { vars = foldr (\(v, _, e) m -> VarMap.insert (toVar v) e m) (vars s) vs }
+extendVars vs s = foldr extendVar s vs
 
 transformOver :: IsVar a => Scope a -> Term a -> Term a
 transformOver = transT where
   mapA _ t@Ref{} = t
   mapA _ t@Lit{} = t
-  mapA s (Lam t v b) = Lam t v (transT s b)
+  mapA s (Lam v b) = Lam v (transT s b)
 
   transA s = reduceAtom s . mapA s
 
@@ -57,10 +60,14 @@ transformOver = transT where
   mapT s (TyApp f t) = TyApp (transA s f) t
   mapT s (Cast f t) = Cast (transA s f) t
   mapT s (Extend t rs) = Extend (transA s t) (map (third3 (transA s)) rs)
-  mapT s (Let vars body) =
+  mapT s (Let (One var) body) =
+    let var' = third3 (transT (extendVar var s)) var
+        body' = transT (extendVar var' s) body
+     in Let (One var) body'
+  mapT s (Let (Many vars) body) =
     let vars' = map (third3 (transT (extendVars vars s))) vars
         body' = transT (extendVars vars' s) body
-    in Let vars' body'
+     in Let (Many vars') body'
   mapT s (Match test branches) =
     let test' = transA s test
         branches' = map (third3 (transT s)) branches
@@ -84,9 +91,9 @@ reducePass = reduceStmts (Scope mempty mempty mempty) where
 reduceAtom :: IsVar a => Scope a -> Atom a -> Atom a
 
 -- Eta conversion (function case)
-reduceAtom _ (Lam Small (var, _) (App r (Ref var' _)))
+reduceAtom _ (Lam (TermArgument var _) (App r (Ref var' _)))
   | var == var' = {-# SCC "Reduce.eta_term" #-} r
-reduceAtom _ (Lam Big (var, _) (TyApp r (VarTy var')))
+reduceAtom _ (Lam (TypeArgument var _) (TyApp r (VarTy var')))
   | var == var' = {-# SCC "Reduce.eta_type" #-} r
 
 -- Beta reduction (let case)
@@ -101,17 +108,16 @@ reduceAtom _ e = e
 reduceTerm :: IsVar a => Scope a -> Term a -> Term a
 
 -- Empty expressions
-reduceTerm _ (Let [] e) = {-# SCC "Reduce.empty_let" #-} e
 reduceTerm _ (Extend e []) = {-# SCC "Reduce.empty_extend" #-} Atom e
 
 -- Commuting conversion
-reduceTerm s (Let [(x, xt, Let [(y, yt, yval)] xval)] rest)
+reduceTerm s (Let (One (x, xt, Let (One (y, yt, yval)) xval)) rest)
   | not (occursInTerm x yval) = {-# SCC "Reduce.commute_let" #-}
-    reduceTerm s $ Let [(y, yt, yval)] $ reduceTerm s (Let [(x, xt, xval)] rest)
+    reduceTerm s $ Let (One (y, yt, yval)) $ reduceTerm s (Let (One (x, xt, xval)) rest)
 
 -- Trivial matches
 reduceTerm s (Match t ((Capture v _, ty, body):_)) = {-# SCC "Reduce.trivial_match" #-}
-  reduceTerm s $ Let [(v, ty, Atom t)] body
+  reduceTerm s $ Let (One (v, ty, Atom t)) body
 reduceTerm s (Match t bs) = {-# SCC "Reduce.fold_cases" #-}
   case foldCases bs of
     Left  (_, _, b) -> b
@@ -119,7 +125,7 @@ reduceTerm s (Match t bs) = {-# SCC "Reduce.fold_cases" #-}
       case last bs' of
         -- If we were really smart, we could strip _all_ cases which are shadowed by
         -- another. For now, simply detect the case `error @a "Nope"`
-        (Capture _ _, _, Let [(tyApp, _, TyApp (Ref err _) _)]
+        (Capture _ _, _, Let (One (tyApp, _, TyApp (Ref err _) _))
                             (App (Ref tyApp' _) (Lit _)))
           | TgInternal "error" <- toVar err
           , toVar tyApp == toVar tyApp'
@@ -135,13 +141,13 @@ reduceTerm s (Match t bs) = {-# SCC "Reduce.fold_cases" #-}
           PatternComplete subst -> Left (p, ty, substitute subst body)
 
 -- Beta reduction (function case)
-reduceTerm s (App (Lam Small (var, ty) body) ex) = {-# SCC "Reduce.beta_function" #-}
-  reduceTerm s $ Let [(var, ty, Atom ex)] body
-reduceTerm s (TyApp (Lam Big (var, _) body) tp) = {-# SCC "Reduce.beta_type_function" #-}
+reduceTerm s (App (Lam (TermArgument var ty) body) ex) = {-# SCC "Reduce.beta_function" #-}
+  reduceTerm s $ Let (One (var, ty, Atom ex)) body
+reduceTerm s (TyApp (Lam (TypeArgument var _) body) tp) = {-# SCC "Reduce.beta_type_function" #-}
   reduceTerm s (substituteInTys (Map.singleton var tp) body)
 
 -- Eta reduction (let case)
-reduceTerm _ (Let [(v, _, term)] (Atom (Ref v' _)))
+reduceTerm _ (Let (One (v, _, term)) (Atom (Ref v' _)))
   | v == v' && not (occursInTerm v term) = {-# SCC "Reduce.eta_let" #-} term
 
 -- Coercion reduction
