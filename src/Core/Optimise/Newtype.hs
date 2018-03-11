@@ -43,12 +43,12 @@ newtypeCo :: IsVar a => (a, Type a) -> (Type a, Type a) -> Gen Int (Stmt a, Coer
 newtypeCo (cn, tp) (dom, cod) = do
   var <- fresh
   let con = [(cn, tp, Atom (wrap tp (work phi)))]
-      wrap (ForallTy v t) e = Lam Big (v, StarTy) (Atom (wrap t e))
+      wrap (ForallTy v t) e = Lam (TypeArgument v StarTy) (Atom (wrap t e))
       wrap _ e = e
 
       phi = SameRepr dom cod
 
-      work c = Lam Small (fromVar var, dom) (Cast (Ref (fromVar var) dom) c)
+      work c = Lam (TermArgument (fromVar var) dom) (Cast (Ref (fromVar var) dom) c)
   pure (StmtLet con, phi)
 
 
@@ -58,7 +58,10 @@ goBinding m vs = traverse (third3A goTerm) vs where
   goTerm :: Term a -> Gen Int (Term a)
   goTerm (Atom x) = Atom <$> goAtom x
   goTerm (App f x) = App <$> goAtom f <*> goAtom x
-  goTerm (Let vs e) = Let <$> goBinding m vs <*> (goTerm e)
+  goTerm (Let (Many vs) e) = Let . Many <$> goBinding m vs <*> (goTerm e)
+  goTerm (Let (One (v, t, e)) b) = do
+    e' <- goTerm e
+    Let (One (v, t, e')) <$> goTerm b
   goTerm (Extend a as) = Extend <$> goAtom a <*> traverse (third3A goAtom) as
   goTerm (TyApp f t) = TyApp <$> goAtom f <*> pure t
   goTerm (Cast f t) = Cast <$> goAtom f <*> pure t
@@ -67,8 +70,8 @@ goBinding m vs = traverse (third3A goTerm) vs where
       var <- fresh
       let Just (_, castCodomain) = relates phi
       bd <- goTerm (Match (Ref (fromVar var) castCodomain) [(p, castCodomain, bd)])
-      pure $ Let [(fromVar var, castCodomain, Cast a phi)] bd
+      pure $ Let (One (fromVar var, castCodomain, Cast a phi)) bd
     _ -> Match <$> goAtom a <*> traverse (third3A goTerm) x
 
-  goAtom (Lam s v e) = Lam s v <$> goTerm e
+  goAtom (Lam arg e) = Lam arg <$> goTerm e
   goAtom x = pure x

@@ -17,6 +17,7 @@ import qualified Data.Text as T
 import Data.Traversable
 import Data.Function
 import Data.Foldable
+import Data.Graph
 import Data.Span
 import Data.List
 
@@ -25,6 +26,7 @@ import Core.Core hiding (Atom, Term, Stmt, Type, Pattern)
 import Core.Core (pattern Atom)
 
 import qualified Syntax as S
+import Syntax.Let
 import Syntax (Var(..), Resolved, Typed, Expr(..), Pattern(..), Lit(..), Skolem(..), Toplevel(..), Constructor(..))
 
 import Pretty (pretty)
@@ -50,7 +52,7 @@ cotyFloat = lowerType tyFloat
 
 makeBigLams :: S.Type Typed -> Term -> Term
 makeBigLams (S.TyForall vs _) =
-  let biglam (TvName x:xs) = Atom . Lam Big (x, StarTy) . biglam xs
+  let biglam (TvName x:xs) = Atom . Lam (TypeArgument x StarTy) . biglam xs
       biglam [] = id
   in biglam vs
 makeBigLams _ = id
@@ -67,7 +69,7 @@ patternMatchingFail w t = do
   tyApp <- fresh
   let err = Lit (Str (T.pack ("Pattern matching failure at " ++ show (pretty w))))
       errTy = ArrTy cotyString t
-  pure (C.Capture var t, t, C.Let [(tyApp, errTy, C.TyApp errRef t)]
+  pure (C.Capture var t, t, C.Let (One (tyApp, errTy, C.TyApp errRef t))
                              (C.App (C.Ref tyApp errTy) err))
 
 lowerAtAtom :: MonadLower m => Expr Typed -> Type -> Lower m Atom
@@ -75,7 +77,7 @@ lowerAtAtom x t = do x' <- lowerAt x t
                      case x' of
                        C.Atom a -> pure a
                        x' -> ContT $ \k ->
-                         fresh >>= \v -> C.Let [(v, t, x')] <$> k (C.Ref v t)
+                         fresh >>= \v -> C.Let (One (v, t, x')) <$> k (C.Ref v t)
 
 lowerAtTerm :: MonadLower m => Expr Typed -> Type -> m Term
 lowerAtTerm x t = runContT (lowerAt x t) pure
@@ -96,13 +98,22 @@ lowerBothTerm e = let t = lowerType (S.getType e)
 
 lowerAt :: MonadLower m => Expr Typed -> Type -> Lower m Term
 lowerAt (Ascription e _ _) t = lowerAt e t
-lowerAt e (ForallTy vs b) = Atom . Lam Big (vs, StarTy) <$> lowerAtTerm e b
+lowerAt e (ForallTy vs b) = Atom . Lam (TypeArgument vs StarTy) <$> lowerAtTerm e b
 lowerAt (VarRef (TvName p) _) ty = pure (Atom (Ref p ty))
 lowerAt (S.Let vs t _) ty = do
-  vs' <- for vs $ \(TvName var, ex, (_, ty)) -> do
-    let ty' = lowerType ty
-    (var,ty',) <$> lowerAtTerm ex ty'
-  C.Let vs' <$> lowerAtTerm t ty
+  let sccs = depOrder vs
+      lowerScc (CyclicSCC vs) = CyclicSCC <$> do
+        for vs $ \(TvName var, ex, (_, ty)) -> do
+          let ty' = lowerType ty
+          (var,ty',) <$> lowerAtTerm ex ty'
+      lowerScc (AcyclicSCC (TvName var, ex, (_, ty))) = AcyclicSCC <$> do
+        let ty' = lowerType ty
+        (var, ty',) <$> lowerAtTerm ex ty'
+      foldScc (AcyclicSCC v) = C.Let (One v)
+      foldScc (CyclicSCC vs) = C.Let (Many vs)
+  vs' <- traverse lowerScc sccs
+  let k = foldr (.) id (map foldScc vs')
+  k <$> lowerAtTerm t ty -- TODO scc these
 lowerAt (S.If c t e _) ty = do
   c' <- lowerAtAtom c cotyBool
   t' <- lowerAtTerm t ty
@@ -114,15 +125,15 @@ lowerAt (Fun p bd an) (ArrTy a b) =
   let operational (PType p _ _) = operational p
       operational p = p
    in case operational p of
-        S.Capture (TvName v) _ -> Atom . Lam Small (v, a) <$> lowerAtTerm bd b
+        S.Capture (TvName v) _ -> Atom . Lam (TermArgument v a) <$> lowerAtTerm bd b
         _ -> do
           (p', bd') <- (,) <$> lowerPat p <*> lowerAtTerm bd b
           arg <- fresh
           fail <- patternMatchingFail (fst an) b
-          pure (Atom (Lam Small (arg, a) (C.Match (Ref arg a) [ (p', a, bd'), fail ])))
+          pure (Atom (Lam (TermArgument arg a) (C.Match (Ref arg a) [ (p', a, bd'), fail ])))
 lowerAt (Begin [x] _) t = lowerAt x t
 lowerAt (Begin xs _) t = lowerAtTerm (last xs) t >>= flip (foldrM bind) (init xs) where
-  bind e r = flip C.Let r . pure <$> (build <$> fresh <*> lowerBothTerm e)
+  bind e r = flip C.Let r . One <$> (build <$> fresh <*> lowerBothTerm e)
   build a (b, c) = (a, c, b)
 lowerAt (S.Match ex cs an) ty = do
   (ex', mt) <- lowerBothAtom ex

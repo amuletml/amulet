@@ -107,8 +107,8 @@ compileLit RecNil    = LuaTable []
 
 compileAtom' :: Occurs a => Atom a -> ExprContext a (LuaExpr, Maybe (Term a))
 compileAtom' (Lit l) = pure (compileLit l, Nothing)
-compileAtom' (Lam Small (v, _) e) = pure (LuaFunction [lowerName v] (compileStmt LuaReturn e), Nothing)
-compileAtom' (Lam Big _ e) = (,Nothing) <$> compileTerm e
+compileAtom' (Lam (TermArgument v _) e) = pure (LuaFunction [lowerName v] (compileStmt LuaReturn e), Nothing)
+compileAtom' (Lam TypeArgument{} e) = (,Nothing) <$> compileTerm e
 
 compileAtom' (Ref v _) | isBinOp v
   = pure (LuaFunction
@@ -168,8 +168,8 @@ compileTerm (Extend tbl exs) = do
 
         compileRow (f, _, e) es = (:es) . LuaAssign [LuaIndex (LuaRef new) (LuaString f)] . pure <$> compileAtom e
 
-compileTerm (Let [(x, _, e)] body)
-  | usedWhen x == 1 && not (isMultiMatch e) && not (occursInTerm x e) = do
+compileTerm (Let (One (x, _, e)) body)
+  | usedWhen x == 1 && not (isMultiMatch e) = do
       -- If we've got a let binding which is only used once then push it onto the stack
       e' <- compileTerm e
       EC $ \xs next -> next ((x, e, e'):xs) ()
@@ -182,18 +182,21 @@ compileTerm (Let [(x, _, e)] body)
 
   | not (isMultiMatch e) = do
       -- If we've got a let binding which doesn't branch, then we can emit it as a normal
-      -- local Technically this isn't correct (as recursive functions won't work), but the
-      -- pretty printer sorts this out.
+      -- local.
       e' <- compileTerm e
       flushStmt [ LuaLocal [lowerName x] [e'] ] ()
       compileTerm body
+  | otherwise = do
+    flushStmt [ LuaLocal [lowerName x] [] ] ()
+    flushStmt (compileStmt (LuaAssign [lowerName x] . pure) e) ()
+    compileTerm body
 
   where asStmt (LuaTable fs) = concatMap (asStmt . snd) fs
         asStmt (LuaBinOp a _ b) = asStmt a ++ asStmt b
         asStmt (LuaCall f e) = [ LuaCallS f e ]
         asStmt _ = []
 
-compileTerm (Let bs body) = do
+compileTerm (Let (Many bs) body) = do
   -- Otherwise predeclare all variables and emit the bindings
   flushStmt [ LuaLocal (map (lowerName . fst3) bs) [] ] ()
   traverse_ compileLet bs

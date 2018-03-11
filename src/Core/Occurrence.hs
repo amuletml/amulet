@@ -69,18 +69,22 @@ tagOccurrence env sts = fst (go sts) where
 tagBindings :: forall a. IsVar a => [(a, C.Type a, C.Term a)] -> OccursMap -> [(OccursVar a, OccType a, OccTerm a)]
 tagBindings vs ss =
   let free = foldMap (\(v, _, e) -> toVar v `Map.delete` countUsages e) vs <> ss
-      attach :: a -> OccursVar a
-      attach v = OccursVar v (fromMaybe 0 (toVar v `Map.lookup` free))
+      attach = flip depends free
    in map (\(v, t, e) -> (attach v, fmap attach t, tagOccTerm e)) vs
 
 tagOccAtom :: IsVar a => C.Atom a -> OccAtom a
 tagOccAtom (Ref v t) = Ref (depends v mempty) (convert t)
-tagOccAtom (Lam Small (v, t) e) = Lam Small (depends v (countUsages e), convert t) (tagOccTerm e)
-tagOccAtom (Lam Big (v, t) b) = Lam Big (OccursVar v 1, convert t) (tagOccTerm b)
+tagOccAtom (Lam (TermArgument v t) e) = Lam (TermArgument (depends v (countUsages e)) (convert t)) (tagOccTerm e)
+tagOccAtom (Lam (TypeArgument v t) b) = Lam (TypeArgument (OccursVar v 1) (convert t)) (tagOccTerm b)
 tagOccAtom (Lit l) = Lit l
 
 tagOccTerm :: IsVar a => C.Term a -> OccTerm a
-tagOccTerm (Let vs e) = Let (tagBindings vs (countUsages e)) (tagOccTerm e)
+tagOccTerm (Let (One v) e) = Let (One (go v (countUsages e))) (tagOccTerm e) where
+  go (v, t, e) ss =
+    let free = toVar v `Map.delete` countUsages e <> ss
+        attach = flip depends free
+     in (attach v, fmap attach t, tagOccTerm e)
+tagOccTerm (Let (Many vs) e) = Let (Many (tagBindings vs (countUsages e))) (tagOccTerm e)
 tagOccTerm (Atom a) = Atom (tagOccAtom a)
 tagOccTerm (App f x) = App (tagOccAtom f) (tagOccAtom x)
 tagOccTerm (Match e bs) = Match (tagOccAtom e) (map tagArm bs) where
@@ -108,14 +112,15 @@ countUsages :: forall a. IsVar a => C.Term a -> OccursMap
 countUsages = term where
   term (Atom a) = atom a
   term (App f x) = atom f # atom x
-  term (Let vs e) = foldr (#) mempty (map (term . thd3) vs) # term e
+  term (Let (One v) e) = term (thd3 v) # term e
+  term (Let (Many vs) e) = foldr (#) mempty (map (term . thd3) vs) # term e
   term (Match e vs) = atom e # foldr (#) mempty (map (term . thd3) vs)
   term (Extend e rs) = atom e # foldr (#) mempty (map (atom . thd3) rs)
   term (TyApp f _) = atom f
   term (Cast f _) = atom f
 
   atom (Ref v _) = Map.singleton (toVar v) 1
-  atom (Lam _ _ b) = term b
+  atom (Lam _ b) = term b
   atom Lit{} = mempty
 
   (#) :: OccursMap -> OccursMap -> OccursMap
