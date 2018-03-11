@@ -92,7 +92,7 @@ check ex@(Match t ps a) ty = do
   (t', tt) <- infer t
   ps' <- for ps $ \(p, e) -> do
     (p', ms, cs) <- checkPattern p tt
-    (,) <$> pure p' <*> implies ex cs (extendMany ms (check e ty))
+    (,) <$> pure p' <*> implies ex ty cs (extendMany ms (check e ty))
   pure (Match t' ps' (a, ty))
 
 check ex@(Record rows a) ty = do
@@ -132,7 +132,8 @@ infer expr@(VarRef k a) = do
      else mkTyApps expr inst old new
 
 infer (Fun p e an) = do
-  (p', dom, ms, _) <- inferPattern p
+  (p', dom, ms, cs) <- inferPattern p
+  leakEqualities p cs
   (e', cod) <- extendMany ms $ infer e
   pure (Fun p' e' (an, TyArr dom cod), TyArr dom cod)
 
@@ -160,13 +161,13 @@ infer ex@(BinOp l o r a) = do
   (l', r') <- (,) <$> check l ld <*> check r rd
   pure (App (k2 (App (k1 o') l' (a, TyArr rd c))) r' (a, c), c)
 
-infer (Match t ps a) = do
+infer ex@(Match t ps a) = do
   (t', tt) <- infer t
   ps' <- for ps $ \(p, e) -> do
     (p', ms, cs) <- checkPattern p tt
-    implies p cs $ do
-      (e', ty) <- extendMany ms (infer e)
-      pure (p', e', ty, e)
+    leakEqualities ex cs
+    (e', ty) <- extendMany ms (infer e)
+    pure (p', e', ty, e)
   let (_, _, t, _) = head ps'
   ps' <- for ps' $ \(p, e, t', blame) -> do
     _ <- unify blame t t' -- TODO: the blame can also come from the pattern.

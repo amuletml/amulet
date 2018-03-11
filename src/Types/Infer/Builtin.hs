@@ -63,15 +63,15 @@ implies :: ( Reasonable f p
            , MonadInfer Typed m
            )
         => f p
-        -> [(Type Typed, Type Typed)]
+        -> Type Typed -> [(Type Typed, Type Typed)]
         -> m a
         -> m a
-implies _ [] k = k
-implies e cs k =
+implies _ _ [] k = k
+implies e t cs k =
   let eqToCon (a, b) = ConUnify (BecauseOf e) a b
       eqToCons = map eqToCon
       wrap :: [Constraint Typed] -> [Constraint Typed]
-      wrap = (:[]) . ConImplies (BecauseOf e) (eqToCons cs)
+      wrap = (:[]) . ConImplies (BecauseOf e) t (eqToCons cs)
    in censor wrap k
 
 leakEqualities :: ( Reasonable f p
