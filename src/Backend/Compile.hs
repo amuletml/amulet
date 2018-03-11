@@ -169,7 +169,7 @@ compileTerm (Extend tbl exs) = do
         compileRow (f, _, e) es = (:es) . LuaAssign [LuaIndex (LuaRef new) (LuaString f)] . pure <$> compileAtom e
 
 compileTerm (Let (One (x, _, e)) body)
-  | usedWhen x == 1 && not (isMultiMatch e) && not (occursInTerm x e) = do
+  | usedWhen x == 1 && not (isMultiMatch e) = do
       -- If we've got a let binding which is only used once then push it onto the stack
       e' <- compileTerm e
       EC $ \xs next -> next ((x, e, e'):xs) ()
@@ -182,8 +182,7 @@ compileTerm (Let (One (x, _, e)) body)
 
   | not (isMultiMatch e) = do
       -- If we've got a let binding which doesn't branch, then we can emit it as a normal
-      -- local Technically this isn't correct (as recursive functions won't work), but the
-      -- pretty printer sorts this out.
+      -- local.
       e' <- compileTerm e
       flushStmt [ LuaLocal [lowerName x] [e'] ] ()
       compileTerm body

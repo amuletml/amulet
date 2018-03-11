@@ -148,7 +148,7 @@ reduceTerm s (TyApp (Lam (TypeArgument var _) body) tp) = {-# SCC "Reduce.beta_t
 
 -- Eta reduction (let case)
 reduceTerm _ (Let (One (v, _, term)) (Atom (Ref v' _)))
-  | v == v' && not (occursInTerm v term) = {-# SCC "Reduce.eta_let" #-} term
+  | v == v' = {-# SCC "Reduce.eta_let" #-} term
 
 -- Coercion reduction
 reduceTerm s (Cast (Ref v _) c)
