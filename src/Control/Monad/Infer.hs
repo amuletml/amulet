@@ -106,7 +106,7 @@ instance (Ord (Var p), Substitutable p (Type p)) => Substitutable p (Constraint 
 
   apply s (ConUnify e a b) = ConUnify e (apply s a) (apply s b)
   apply s (ConSubsume e a b) = ConSubsume e (apply s a) (apply s b)
-  apply _ (ConImplies e t a b) = ConImplies e t a b
+  apply s (ConImplies e t a b) = ConImplies e (apply s t) a b
 
 instance Pretty (Var p) => Pretty (Constraint p) where
   pretty (ConUnify _ a b) = pretty a <+> soperator (char '~') <+> pretty b
