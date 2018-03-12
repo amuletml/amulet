@@ -19,9 +19,6 @@ import Data.List
 
 import Data.Text (Text)
 
-import Debug.Trace
-import Pretty
-
 type SolveM = GenT Int (StateT (Subst Typed) (Except TypeError))
 
 bind :: Var Typed -> Type Typed -> SolveM ()
@@ -130,19 +127,22 @@ solve i s (ConSubsume e a b:xs) =
   case runSolve i s (subsumes unify (normType a) (normType b)) of
     Left err -> Left (ArisingFrom err e)
     Right (i', s') -> solve i' s' (apply s' xs)
-
-solve i s (c@(ConImplies reason not cs ts):css) = trace (render (pretty c)) $ 
+solve i s (ConImplies reason not cs ts:css) =
   case solve i s cs of
     Left e -> Left (ArisingFrom e reason)
     Right ss -> case solve i (s `compose` ss) ts of
       Left e -> Left (ArisingFrom e reason)
       Right ss' ->
         let noTouchy = Map.filterWithKey (\k _ -> k `Set.notMember` ftv not)
-            mustTouch = Map.filterWithKey (\k t -> isTyVar t && k `Set.member` traceShowId (Set.fromList (Map.keys s) <> foldMap ftv s))
+            mustTouch = Map.filterWithKey (\k t -> isTyVar t
+                                                      && k `Set.member` (Set.fromList (Map.keys s) <> foldMap ftv s))
 
             isTyVar TyVar{} = True
             isTyVar _ = False
-         in solve i (s `compose` noTouchy (ss <> ss') `compose` traceShowId (mustTouch ss)) css
+
+            ssl = mustTouch ss
+            ssk = Map.filterWithKey (\_ t -> isTyVar t) $ noTouchy (ss <> ss')
+         in solve i (s `compose` ssk <> ssl) css
 
 subsumes :: (MonadGen Int m, MonadError TypeError m)
          => (Type Typed -> Type Typed -> m b)

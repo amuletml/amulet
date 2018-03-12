@@ -106,12 +106,14 @@ instance (Ord (Var p), Substitutable p (Type p)) => Substitutable p (Constraint 
 
   apply s (ConUnify e a b) = ConUnify e (apply s a) (apply s b)
   apply s (ConSubsume e a b) = ConSubsume e (apply s a) (apply s b)
-  apply s (ConImplies e t a b) = ConImplies e t (apply s a) b
+  apply _ (ConImplies e t a b) = ConImplies e t a b
 
 instance Pretty (Var p) => Pretty (Constraint p) where
   pretty (ConUnify _ a b) = pretty a <+> soperator (char '~') <+> pretty b
   pretty (ConSubsume _ a b) = pretty a <+> soperator (string "<=") <+> pretty b
-  pretty (ConImplies _ t a b) = brackets (pretty t) <+> hsep (punctuate comma (map pretty a)) <+> soperator (char '⊃') <+> pretty b
+  pretty (ConImplies _ t a b) = brackets (pretty t) <+> hsep (punctuate comma (map pretty a))
+                            <+> soperator (char '⊃')
+                            <+> hsep (punctuate comma (map pretty b))
 
 data SomeReason where
   BecauseOf :: (Spanned a, Pretty a) => a -> SomeReason

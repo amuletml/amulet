@@ -37,6 +37,9 @@ import Types.Unify
 import Types.Holes
 import Types.Kinds
 
+import Pretty
+import Debug.Trace
+
 -- Solve for the types of lets in a program
 inferProgram :: MonadGen Int m => [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))
 inferProgram ct = fmap fst <$> runInfer builtinsEnv (inferAndCheck ct) where
@@ -299,6 +302,9 @@ inferLetTy closeOver vs =
                 _ <- unify exp tyvar ty
                 pure (TvName var, exp', ann, ty)
         cur <- gen
+        trace "Constraints:" (pure ())
+        _ <- traverse (flip trace (pure ()) . render . pretty) cs
+        trace "Start solving:" (pure ())
         solution <- case solve cur mempty cs of
           Right x -> pure x
           Left e -> throwError e
