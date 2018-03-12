@@ -113,7 +113,7 @@ instance Pretty (Var p) => Pretty (Constraint p) where
   pretty (ConSubsume _ a b) = pretty a <+> soperator (string "<=") <+> pretty b
   pretty (ConImplies _ t a b) = brackets (pretty t) <+> hsep (punctuate comma (map pretty a))
                             <+> soperator (char '⊃')
-                            <+> hsep (punctuate comma (map pretty b))
+                            <#> indent 2 (vsep (punctuate comma (map pretty b)))
 
 data SomeReason where
   BecauseOf :: (Spanned a, Pretty a) => a -> SomeReason
