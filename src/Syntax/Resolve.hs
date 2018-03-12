@@ -233,7 +233,7 @@ rePattern (Capture v a) = do
   pure (Capture v' a, [(v, v')], [])
 rePattern (Destructure v Nothing a) = do
   v' <- lookupEx v
-  pure (Destructure v' Nothing a, [(v, v')], [])
+  pure (Destructure v' Nothing a, [], [])
 rePattern (Destructure v p a) = do
   v' <- lookupEx v
   (p', vs, ts) <- case p of
@@ -241,7 +241,7 @@ rePattern (Destructure v p a) = do
     Just pat -> do
       (p', vs, ts) <- rePattern pat
       pure (Just p', vs, ts)
-  pure (Destructure v' p' a, (v, v') : vs, ts)
+  pure (Destructure v' p' a, vs, ts)
 rePattern (PType p t a) = do
   (p', vs, ts) <- rePattern p
   let fvs = toList (ftv t)
