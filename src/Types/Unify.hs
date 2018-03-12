@@ -127,7 +127,7 @@ solve i s (ConSubsume e a b:xs) =
   case runSolve i s (subsumes unify (normType a) (normType b)) of
     Left err -> Left (ArisingFrom err e)
     Right (i', s') -> solve i' s' (apply s' xs)
-solve i s (ConImplies reason not cs ts:css) = 
+solve i s (ConImplies reason not cs ts:css) =
   case solve i s cs of
     Left e -> Left (ArisingFrom e reason)
     Right ss -> case solve i (s `compose` ss) (apply (s `compose` ss) ts) of
@@ -137,6 +137,7 @@ solve i s (ConImplies reason not cs ts:css) =
             noTouchy = Map.foldrWithKey correct Map.empty 
 
             correct k (TyVar t) map
+              | k `Set.member` vars && t `Set.notMember` vars = Map.insert t (TyVar k) map
               | k `Set.member` vars = map
               | t `Set.member` vars = map
               | otherwise = Map.insert k (TyVar t) map
