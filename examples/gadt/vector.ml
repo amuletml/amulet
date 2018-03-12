@@ -26,9 +26,7 @@ let eq_vect eq_elt (x : vect 'n 'a) (y : vect 'n 'a) : bool =
   | (Cons (xh, xt), Cons (yh, yt)) -> eq_elt xh yh && eq_vect eq_elt xt yt
   | (Nil, Nil) -> true ;;
 
-let cons = Cons
-and nil = Nil
-and zip_vect (x : vect 'n 'a) (y : vect 'n 'b) : vect 'n ('a * 'b) =
+let zip_vect (x : vect 'n 'a) (y : vect 'n 'b) : vect 'n ('a * 'b) =
   match (x, y) with
-  | (Cons (xh, xt), Cons (yh, yt)) -> cons ((xh, yh), zip_vect xt yt)
-  | (Nil, Nil) -> nil
+  | (Cons (xh, xt), Cons (yh, yt)) -> Cons ((xh, yh), zip_vect xt yt)
+  | (Nil, Nil) -> Nil
