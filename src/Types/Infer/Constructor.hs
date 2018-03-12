@@ -2,6 +2,7 @@
 module Types.Infer.Constructor (inferCon) where
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 
 import Control.Monad.Infer
 
@@ -9,6 +10,7 @@ import Types.Infer.Builtin
 import Types.Unify
 import Types.Kinds
 
+import Syntax.Subst
 import Syntax
 
 import Pretty
@@ -46,13 +48,21 @@ inferCon ret c@(GeneralisedCon nm cty ann) = do
           pure ret
         Left e -> throwError e
 
+
+
+  (cty, cons) <- runWriterT (generalise cty)
+  let overall = closeOverGadt cons cty
+   in pure ((TvName nm, overall), GeneralisedCon (TvName nm) overall (ann, overall))
+
+closeOverGadt :: Ord (Var p) => [(Type p, Type p)] -> Type p -> Type p
+closeOverGadt cons cty =
+  let fv = ftv cty `Set.union` foldMap (\(x, y) -> ftv x `Set.union` ftv y) cons
       pushCons [] t = t
       pushCons c (TyForall v t) = TyForall v (pushCons c t)
       pushCons c t = TyWithConstraints c t
-
-  (cty, cons) <- runWriterT (generalise cty)
-  let overall = pushCons cons (closeOver cty)
-   in pure ((TvName nm, overall), GeneralisedCon (TvName nm) cty (ann, overall))
+   in if Set.null fv
+         then pushCons cons cty
+         else pushCons cons (TyForall (Set.toList fv) cty)
 
 gadtConShape :: (Type Typed, Type Typed) -> Type Typed -> TypeError -> TypeError
 gadtConShape (t, _) (TyArr c d) = fix . flip Note (string "Generalised constructors can not be curried") . getErr where

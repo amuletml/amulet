@@ -16,4 +16,7 @@ let fold (f : 'a -> 'z -> 'z) (xs : vect 'n 'a) (z : 'z) : 'z =
   | Cons (x, xs) -> f x (fold f xs z) ;;
 
 let it'sNil Nil = Nil ;;
-let it'sCons (Cons x) = Cons x
+let it'sCons (Cons x) = Cons x ;;
+
+let head (Cons (x, _)) = x
+and tail (Cons (_, xs)) = xs

@@ -127,22 +127,26 @@ solve i s (ConSubsume e a b:xs) =
   case runSolve i s (subsumes unify (normType a) (normType b)) of
     Left err -> Left (ArisingFrom err e)
     Right (i', s') -> solve i' s' (apply s' xs)
-solve i s (ConImplies reason not cs ts:css) =
+solve i s (ConImplies reason not cs ts:css) = 
   case solve i s cs of
     Left e -> Left (ArisingFrom e reason)
-    Right ss -> case solve i (s `compose` ss) ts of
+    Right ss -> case solve i (s `compose` ss) (apply (s `compose` ss) ts) of
       Left e -> Left (ArisingFrom e reason)
       Right ss' ->
-        let noTouchy = Map.filterWithKey (\k _ -> k `Set.notMember` ftv not)
-            mustTouch = Map.filterWithKey (\k t -> isTyVar t
-                                                      && k `Set.member` (Set.fromList (Map.keys s) <> foldMap ftv s))
+        let vars = ftv (apply s not)
+            noTouchy = Map.foldrWithKey correct Map.empty 
 
-            isTyVar TyVar{} = True
-            isTyVar _ = False
+            correct k (TyVar t) map
+              | k `Set.member` vars = map
+              | t `Set.member` vars = map
+              | otherwise = Map.insert k (TyVar t) map
+            correct v t map
+              | v `Set.member` vars = map
+              | otherwise = Map.insert v t map
 
-            ssl = mustTouch ss
-            ssk = Map.filterWithKey (\_ t -> isTyVar t) $ noTouchy (ss <> ss')
-         in solve i (s `compose` ssk <> ssl) css
+            ssk = noTouchy (ss <> ss')
+            news = (s `compose` ssk)
+         in solve i news (apply news css)
 
 subsumes :: (MonadGen Int m, MonadError TypeError m)
          => (Type Typed -> Type Typed -> m b)
