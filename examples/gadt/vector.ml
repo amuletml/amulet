@@ -19,4 +19,16 @@ let it'sNil Nil = Nil ;;
 let it'sCons (Cons x) = Cons x ;;
 
 let head (Cons (x, _)) = x
-and tail (Cons (_, xs)) = xs
+and tail (Cons (_, xs)) = xs ;;
+
+let eq_vect eq_elt (x : vect 'n 'a) (y : vect 'n 'a) : bool =
+  match (x, y) with
+  | (Cons (xh, xt), Cons (yh, yt)) -> eq_elt xh yh && eq_vect eq_elt xt yt
+  | (Nil, Nil) -> true ;;
+
+let cons = Cons
+and nil = Nil
+and zip_vect (x : vect 'n 'a) (y : vect 'n 'b) : vect 'n ('a * 'b) =
+  match (x, y) with
+  | (Cons (xh, xt), Cons (yh, yt)) -> cons ((xh, yh), zip_vect xt yt)
+  | (Nil, Nil) -> nil
