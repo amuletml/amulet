@@ -103,6 +103,7 @@ instance (Pretty (Var p)) => Pretty (Type p) where
     parenTyArg TyApp{} = parens
     parenTyArg TyForall{} = parens
     parenTyArg TyArr{} = parens
+    parenTyArg TyTuple{} = parens
     parenTyArg _ = id
 
   pretty (TyTuple a b)
