@@ -2,12 +2,16 @@
 {-# LANGUAGE FlexibleContexts, UndecidableInstances, FlexibleInstances #-}
 module Syntax.Pretty
   ( module Syntax
+  , tidyPrettyType
   ) where
 
-import Control.Arrow (first)
+import Control.Arrow (first, second)
+
+import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Data.Span
 
+import Syntax.Subst
 import Syntax
 import Pretty
 
@@ -186,3 +190,22 @@ prettyOneBinding n v = hsep (pretty n:map pretty args) <> sig <+> nest 2 (equals
 
   takeLambdas (Fun p x _) = first (p:) . takeLambdas $ x
   takeLambdas x = ([], x)
+
+tidyPrettyType :: (Pretty (Var p), Ord (Var p)) => Type p -> Doc
+tidyPrettyType = pretty . applyCons
+
+applyCons :: Ord (Var p) => Type p -> Type p
+applyCons x@TyCon{} = x
+applyCons x@TyVar{} = x
+applyCons x@TySkol{} = x
+applyCons (TyForall vs t) = TyForall vs (applyCons t)
+applyCons (TyArr a b) = TyArr (applyCons a) (applyCons b)
+applyCons (TyApp a b) = TyApp (applyCons a) (applyCons b)
+applyCons (TyRows r rs) = TyRows (applyCons r) (map (second applyCons) rs)
+applyCons (TyExactRows rs) = TyExactRows (map (second applyCons) rs)
+applyCons (TyTuple a b) = TyTuple (applyCons a) (applyCons b)
+applyCons (TyWithConstraints cs a) =
+  let eq (TyVar a, t) = Map.singleton a t
+      eq _ = Map.empty
+      eqs = foldMap eq cs
+   in apply eqs a
