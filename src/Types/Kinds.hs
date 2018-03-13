@@ -17,6 +17,7 @@ import qualified Data.Set as Set
 import Data.Semigroup
 import Data.Foldable
 
+import qualified Types.Unify as U
 import Types.Wellformed
 import Syntax.Raise
 import Syntax
@@ -40,7 +41,7 @@ resolveTyDeclKind tp vs cs = fmap closeOverKind . resolve $ do
       for_ cs $ \case
         UnitCon{} -> pure ()
         ArgCon _ t _ -> giveTp (raiseT TvName t)
-        GeneralisedCon _ t _ -> giveTp (raiseT TvName t)
+        c@(GeneralisedCon _ t _) -> inferGadtConKind c t (foldl TyApp (TyCon tp) (map TyVar vs))
       pure kind
 
 resolveKind :: MonadSolve m => Type Resolved -> m (Type Typed, Kind Typed)
@@ -122,8 +123,8 @@ bind :: (MonadState Subst m, MonadError TypeError m) => Var Typed -> Kind Typed 
 bind v t = do
   x <- get
   case Map.lookup v x of
-    Just t' -> unify t t'
-    Nothing -> modify (Map.insert v t . fmap (apply (Map.singleton v t)))
+    Just t' -> unify t' t
+    Nothing -> put (Map.singleton v t <> fmap (apply (Map.singleton v t)) x)
 
 apply :: Map.Map (Var Typed) (Kind Typed) -> Kind Typed -> Kind Typed
 apply m t@(KiVar v) = Map.findWithDefault t v m
@@ -148,3 +149,21 @@ instantiateKind (KiForall v x) = do
   fkvs <- replicateM (length v) freshKV
   pure (apply (Map.fromList (zip v fkvs)) x)
 instantiateKind x = pure x
+
+inferGadtConKind :: MonadSolve m => Constructor Resolved -> Type Resolved -> Type Resolved -> KindT m ()
+inferGadtConKind c t ret' =
+  let t' = raiseT TvName t
+      ret = raiseT TvName ret'
+      generalise (TyForall v t) = TyForall v <$> generalise t
+      generalise (TyArr a t) = TyArr a <$> generalise t
+      generalise ty = case U.solve 1 mempty [ConUnify (BecauseOf c) ret ty] of
+        Right x -> do
+          for_ (Map.toAscList x) $ \(a, b) -> do
+            giveTp (TyVar a)
+            giveTp b
+          pure ret
+        Left e -> throwError e
+     in do
+       giveTp t'
+       _ <- generalise t'
+       pure ()

@@ -134,6 +134,7 @@ instance (Pretty (Var p)) => Pretty (Toplevel p) where
                   [] -> empty
                   _ -> line <> vsep (map prettyBind xs)
   pretty (ForeignVal v d ty _) = keyword "foreign val" <+> pretty v <+> colon <+> pretty ty <+> equals <+> dquotes (text d)
+  pretty (TypeDecl ty args []) = keyword "type" <+> pretty ty <+> hsep (map ((squote <>) . pretty) args)
   pretty (TypeDecl ty args ctors) = keyword "type" <+> pretty ty
                                 <+> hsep (map ((squote <>) . pretty) args)
                                 <+> equals
