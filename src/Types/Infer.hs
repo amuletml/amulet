@@ -133,9 +133,9 @@ infer expr@(VarRef k a) = do
 
 infer (Fun p e an) = do
   (p', dom, ms, cs) <- inferPattern p
-  leakEqualities p cs
-  (e', cod) <- extendMany ms $ infer e
-  pure (Fun p' e' (an, TyArr dom cod), TyArr dom cod)
+  implies (Arm p e) dom cs $ do
+    (e', cod) <- extendMany ms $ infer e
+    pure (Fun p' e' (an, TyArr dom cod), TyArr dom cod)
 
 infer (Literal l an) = pure (Literal l (an, ty), ty) where
   ty = case l of
