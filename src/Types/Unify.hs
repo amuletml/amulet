@@ -1,4 +1,4 @@
-{-# Language MultiWayIf, GADTs, FlexibleContexts #-}
+{-# Language MultiWayIf, GADTs, FlexibleContexts, ScopedTypeVariables #-}
 module Types.Unify (solve, overlap, bind, skolemise, freshSkol) where
 
 import Control.Monad.Except
@@ -139,13 +139,27 @@ doSolve (ConImplies because not cs ts:xs) = do
         | t `Set.member` not' = Map.insert k (TyVar t) m
       leak _ _ m = m
   do
-    ((), sub) <- local (const mempty) $ capture (doSolve cs')
+    let go = lift (doSolve cs')
+              `catchError` \e -> case realErr e of
+              SkolBinding (Skolem v _ _) t -> do
+                tell (Set.singleton v)
+                lift (bind v t)
+              _ -> throwError e
+        go :: WriterT (Set.Set (Var Typed)) SolveM ()
+
+    (((), skol), sub) <- local (const mempty) . capture . runWriterT $ go
 
     let after = Map.foldrWithKey leak before sub
 
     local (Set.union not') $ do
       put sub
       doSolve (map (apply sub) ts')
+        `catchError` \e -> case realErr e of
+          SkolBinding (Skolem v _ _) t ->
+            if v `Set.member` skol
+               then bind v t
+               else throwError e
+          _ -> throwError e
       put after
 
     doSolve xs
@@ -185,3 +199,7 @@ capture m = do
   st <- get
   put x
   pure (r, st)
+
+realErr :: TypeError -> TypeError
+realErr (ArisingFrom e _) = realErr e
+realErr t = t
