@@ -284,8 +284,7 @@ inferLetTy closeOver vs =
         ((exp', ty), cs) <- listen . extend tv $ do
           case origin of
             Supplied -> do
-              (exp', ity) <- infer exp
-              _ <- subsumes exp (snd tv) ity -- Shouldn't matter, but probably will
+              exp' <- check exp (snd tv)
               pure (exp', snd tv)
             Guessed -> do
               (exp', ty) <- infer exp
@@ -300,8 +299,8 @@ inferLetTy closeOver vs =
           ifor (zip tvs vars) $ \i ((_, tyvar), (var, exp, ann)) -> do
             case origins !! i of
               Supplied -> do
-                (exp', ty) <- infer exp
-                pure (TvName var, exp', ann, ty)
+                exp' <- check exp tyvar
+                pure (TvName var, exp', ann, tyvar)
               Guessed -> do
                 (exp', ty) <- infer exp
                 _ <- unify exp tyvar ty
