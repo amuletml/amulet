@@ -26,7 +26,11 @@ let eq_vect eq_elt (x : vect 'n 'a) (y : vect 'n 'a) : bool =
   | (Cons (xh, xt), Cons (yh, yt)) -> eq_elt xh yh && eq_vect eq_elt xt yt
   | (Nil, Nil) -> true ;;
 
-let zip_vect (x : vect 'n 'a) (y : vect 'n 'b) : vect 'n ('a * 'b) =
-  match (x, y) with
-  | (Cons (xh, xt), Cons (yh, yt)) -> Cons ((xh, yh), zip_vect xt yt)
-  | (Nil, Nil) -> Nil
+type lte 'a 'b =
+  | LteZero : lte z 'a
+  | LteSucc : lte 'a 'b -> lte (s 'a) (s 'b) ;;
+
+let zip_vect (x : vect 'n 'a) (y : vect 'm 'b) (prf : lte 'n 'm) : vect 'n ('a * 'b) =
+  match (x, y, prf) with
+  | (Cons (xh, xt), Cons (yh, yt), LteSucc p) -> Cons ((xh, yh), zip_vect xt yt p)
+  | (Nil, Nil, LteZero) -> Nil
