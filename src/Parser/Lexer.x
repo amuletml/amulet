@@ -105,16 +105,22 @@ tokens :-
   <0> $digit+ \. $digit+               { onString $ TcFloat . parseDouble }
   <0> $digit+ \. $digit+ [Ee] $digit+  { onString $ TcFloat . parseDouble }
   <0> $digit+ \. $digit+ [Ee] [\+\-] $digit+ { onString $ TcFloat . parseDouble }
-  <0> $upper $ident* \.                { beginModule }
+
+  <0> $upper $ident* \.                { beginModule}
   <0> $lower $ident*                   { lexTok $ TcIdentifier }
   <0> $upper $ident*                   { lexTok $ TcConIdent }
-  <0> \_ $ident+                       { lexTok TcHole }
-  <0> \. $lower $ident*                { lexTok (TcAccess . T.tail) }
-  <0> \' $lower $ident*                { lexTok (TcTyVar . T.tail) }
-
   <modP> $upper $ident* \.             { pushModule }
   <modP> $lower $ident*                { endModule TcIdentifierQual }
   <modP> $upper $ident*                { endModule TcConIdentQual }
+
+  <0> \` $lower $ident* \`             { lexTok $ TcOpIdent . T.init . T.tail }
+  <0> \` $upper $ident* \.             { beginModuleOp }
+  <modOp> $upper $ident* \.            { pushModule }
+  <modOp> $lower $ident* \`            { endModuleOp TcOpIdentQual }
+
+  <0> \_ $ident+                       { lexTok TcHole }
+  <0> \. $lower $ident*                { lexTok (TcAccess . T.tail) }
+  <0> \' $lower $ident*                { lexTok (TcTyVar . T.tail) }
 
   <0> \"                               { beginString }
 
@@ -180,23 +186,29 @@ endComment _ _ = do
   if commentDepth s == 1 then setStartCode 0 else pure ()
   lexerScan
 
-beginModule, pushModule :: Action Token
+beginModule, beginModuleOp, pushModule :: Action Token
 beginModule (LI _ str _) len = do
   s <- getState
   setState $ s { modulePrefix = [ decodeUtf8 . Bs.concat . L.toChunks . L.take (pred len) $ str] }
   setStartCode modP
+  lexerScan
+beginModuleOp (LI _ str _) len = do
+  s <- getState
+  setState $ s { modulePrefix = [ T.init $ decodeUtf8 . Bs.concat . L.toChunks . L.take (pred len) $ str] }
+  setStartCode modOp
   lexerScan
 pushModule (LI _ str _) len = do
   s <- getState
   setState $ s { modulePrefix = (decodeUtf8 . Bs.concat . L.toChunks . L.take (pred len) $ str) : modulePrefix s }
   lexerScan
 
-endModule :: ([T.Text] -> T.Text -> TokenClass) -> Action Token
+endModule, endModuleOp :: ([T.Text] -> T.Text -> TokenClass) -> Action Token
 endModule t (LI p str _) len = do
   s <- getState
   setState $ s { modulePrefix = [] }
   setStartCode 0
   return . flip Token p .  t (modulePrefix s) . decodeUtf8 . Bs.concat . L.toChunks . L.take len $ str
+endModuleOp f = endModule (\xs x -> f xs (T.tail x))
 
 constTok :: TokenClass -> Action Token
 constTok t (LI p _ _) _ = return $! Token t p
