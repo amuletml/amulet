@@ -86,8 +86,10 @@ import Syntax
   ']'      { Token TcCSquare _ }
 
   ident    { Token (TcIdentifier _) _ }
+  opid     { Token (TcOpIdent _) _ }
   conid    { Token (TcConIdent _) _ }
   qident   { Token (TcIdentifierQual _ _) _ }
+  qopid    { Token (TcOpIdentQual _ _) _ }
   qconid   { Token (TcConIdentQual _ _) _ }
   access   { Token (TcAccess _) _ }
   tyvar    { Token (TcTyVar _) _ }
@@ -105,6 +107,7 @@ import Syntax
 %left '+' '-' '+.' '-.'
 %left '*' '/' '*.' '/.'
 %right '**' '**.'
+%left opid qopid
 
 %%
 
@@ -149,6 +152,8 @@ Expr :: { Expr Parsed }
      | Expr '<>' Expr                          { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "<>") $3 }
      | Expr '&&' Expr                          { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "&&") $3 }
      | Expr '||' Expr                          { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "||") $3 }
+     | Expr opid Expr                          { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ VarRef (getName $2)) $3 }
+     | Expr qopid Expr                         { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ VarRef (getName $2)) $3 }
 
 ExprApp :: { Expr Parsed }
         : Expr0                                { $1 }
@@ -189,6 +194,8 @@ Operator :: { Expr Parsed }
          | '=='                               { withPos1 $1 $ varE "==" }
          | '&&'                               { withPos1 $1 $ varE "&&" }
          | '||'                               { withPos1 $1 $ varE "||" }
+         | opid                               { withPos1 $1 $ VarRef (getName $1) }
+         | qopid                              { withPos1 $1 $ VarRef (getName $1) }
 
 Section :: { Maybe (Expr Parsed) }
         :                                     { Nothing }
@@ -323,13 +330,16 @@ tuplePattern xs a = PTuple xs a
 varE = VarRef . Name . T.pack
 
 getIdent  (Token (TcIdentifier x) _) = x
+getIdent  (Token (TcOpIdent x) _)    = x
 getIdent  (Token (TcConIdent x) _)   = x
 getIdent  (Token (TcAccess x) _)     = x
 getIdent  (Token (TcTyVar x) _)      = x
 
 getName (Token (TcIdentifier x) _)        = Name x
+getName (Token (TcOpIdent x) _)           = Name x
 getName (Token (TcConIdent x) _)          = Name x
 getName (Token (TcIdentifierQual ms x) _) = foldl (flip InModule) (Name x) ms
+getName (Token (TcOpIdentQual ms x) _)    = foldl (flip InModule) (Name x) ms
 getName (Token (TcConIdentQual ms x) _)   = foldl (flip InModule) (Name x) ms
 getName (Token (TcTyVar x) _)             = Name x
 
