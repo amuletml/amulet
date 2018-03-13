@@ -21,10 +21,12 @@ let it'sCons (Cons x) = Cons x ;;
 let head (Cons (x, _)) = x
 and tail (Cons (_, xs)) = xs ;;
 
-let eq_vect eq_elt (x : vect 'n 'a) (y : vect 'n 'a) : bool =
-  match (x, y) with
-  | (Cons (xh, xt), Cons (yh, yt)) -> eq_elt xh yh && eq_vect eq_elt xt yt
-  | (Nil, Nil) -> true ;;
+type eq 'a 'b = Refl : eq 'a 'a ;;
+
+let eq_vect (eq_elt : 'a -> 'a -> bool) (x : vect 'n 'a) (y : vect 'm 'a) (eq : eq 'n 'm) : bool =
+  match (x, y, eq) with
+  | (Cons (xh, xt), Cons (yh, yt), Refl) -> eq_elt xh yh && eq_vect eq_elt xt yt Refl
+  | (Nil, Nil, Refl) -> true ;;
 
 type lte 'a 'b =
   | LteZero : lte z 'a
