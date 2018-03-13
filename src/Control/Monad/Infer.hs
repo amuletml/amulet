@@ -108,7 +108,7 @@ instance (Ord (Var p), Substitutable p (Type p)) => Substitutable p (Constraint 
 
   apply s (ConUnify e a b) = ConUnify e (apply s a) (apply s b)
   apply s (ConSubsume e a b) = ConSubsume e (apply s a) (apply s b)
-  apply s (ConImplies e t a b) = ConImplies e (apply s t) a b
+  apply s (ConImplies e t a b) = ConImplies e (apply s t) (apply s a) (apply s b)
 
 instance Pretty (Var p) => Pretty (Constraint p) where
   pretty (ConUnify _ a b) = pretty a <+> soperator (char '~') <+> pretty b
@@ -197,10 +197,10 @@ instance Pretty TypeError where
   pretty (NotInScope e) = string "Variable not in scope:" <+> verbatim e
   pretty (ArisingFrom er ex) = pretty (annotation ex) <> colon <+> stypeSkol (string "error")
     <#> indent 2 (pretty er <#> nest 4 (bullet (string "Arising from use of" <+> blameOf ex) </> pretty ex))
-  pretty (FoundHole xs) = hsep (map prnt xs) where
+  pretty (FoundHole xs) = vsep (map prnt xs) where
     prnt :: Expr Typed -> Doc
     prnt (Hole v s)
-      = pretty (fst s) <> string ": Found typed hole" <+> verbatim v <+> parens (string "of type " <+> verbatim (snd s))
+      = pretty (fst s) <> string ": Found typed hole" <+> verbatim v <+> parens (string "of type" <+> verbatim (snd s))
     prnt _ = undefined
   pretty (Note te m) = pretty te <#> bullet (string "Note:") <+> align (pretty m)
   pretty (Suggestion te m) = pretty te <#> bullet (string "Suggestion:") <+> align (pretty m)
@@ -248,7 +248,7 @@ instance Pretty TypeError where
          , string "Note: in type" <+> verbatim t
          ]
 
-  pretty (SkolBinding (Skolem _ x _) (TySkol (Skolem _ y _))) = pretty (NotEqual (TyVar x) (TyVar y))
+  pretty (SkolBinding (Skolem _ x s) (TySkol (Skolem _ y s'))) = pretty (NotEqual (TyVar x) (TyVar y)) <#> pretty (NotEqual s s')
   pretty (SkolBinding (Skolem a v _) b) =
     vsep [ string "Can not unify skolem type constant" <+> stypeSkol (pretty a) <+> string "with type" <+> verbatim b
          , string "Note: the constant" <+> stypeSkol (pretty a) <+> "stands for type variable" <+> stypeVar (pretty v)

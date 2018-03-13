@@ -167,6 +167,7 @@ Atom :: { Expr Parsed }
      | Con                                    { withPos1 $1 (VarRef (getL $1)) }
      | Lit                                    { withPos1 $1 (Literal (getL $1)) }
      | hole                                   { withPos1 $1 (Hole (Name (getHole $1))) }
+     | '_'                                    { withPos1 $1 (Hole (Name (T.singleton '_'))) }
      | begin List1(Expr, ';') end             { withPos2 $1 $3 $ Begin $2 }
      | '(' List(Section, ',') ')'             { withPos2 $1 $3 $ tupleExpr $2 }
      | '{' Rows('=', Expr) '}'                { withPos2 $1 $3 $ Record $2 }

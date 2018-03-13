@@ -37,6 +37,7 @@ import Types.Unify
 import Types.Holes
 import Types.Kinds
 
+
 -- Solve for the types of lets in a program
 inferProgram :: MonadGen Int m => [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))
 inferProgram ct = fmap fst <$> runInfer builtinsEnv (inferAndCheck ct) where
@@ -86,6 +87,13 @@ check (Let ns b an) t = do
     b' <- check b t
     pure (Let ns' b' (an, t))
 
+check ex@(Fun p e an) ty = do
+  (dom, cod, _) <- decompose ex _TyArr ty
+  (p', vs, cs) <- checkPattern p dom
+  implies (Arm p e) dom cs $ do
+    e' <- extendMany vs $ check e cod
+    pure (Fun p' e' (an, ty))
+
 check (If c t e an) ty = If <$> check c tyBool <*> check t ty <*> check e ty <*> pure (an, ty)
 
 check (Match t ps a) ty = do
@@ -133,9 +141,9 @@ infer expr@(VarRef k a) = do
 
 infer (Fun p e an) = do
   (p', dom, ms, cs) <- inferPattern p
-  implies (Arm p e) dom cs $ do
-    (e', cod) <- extendMany ms $ infer e
-    pure (Fun p' e' (an, TyArr dom cod), TyArr dom cod)
+  _ <- leakEqualities (Arm p e) cs
+  (e', cod) <- extendMany ms $ infer e
+  pure (Fun p' e' (an, TyArr dom cod), TyArr dom cod)
 
 infer (Literal l an) = pure (Literal l (an, ty), ty) where
   ty = case l of
@@ -255,7 +263,7 @@ inferLetTy closeOver vs =
       figureOut :: Type Typed -> [Constraint Typed] -> m (Type Typed, Expr Typed -> Expr Typed)
       figureOut ty cs = do
         cur <- gen
-        (x, vt) <- case solve cur mempty cs of
+        (x, vt) <- case solve cur cs of
           Right x -> pure (x, normType (closeOver (apply x ty)))
           Left e -> throwError e
         unless (null (skols vt)) $
@@ -299,7 +307,7 @@ inferLetTy closeOver vs =
                 _ <- unify exp tyvar ty
                 pure (TvName var, exp', ann, ty)
         cur <- gen
-        solution <- case solve cur mempty cs of
+        solution <- case solve cur cs of
           Right x -> pure x
           Left e -> throwError e
         let solveOne :: (Var Typed, Expr Typed, Span, Type Typed)

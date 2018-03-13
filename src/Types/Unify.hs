@@ -12,14 +12,13 @@ import Syntax
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
-import Data.Semigroup
 import Data.Foldable
 import Data.Function
 import Data.List
 
 import Data.Text (Text)
 
-type SolveM = GenT Int (StateT (Subst Typed) (Except TypeError))
+type SolveM = GenT Int (StateT (Subst Typed) (ReaderT (Set.Set (Var Typed)) (Except TypeError)))
 
 bind :: Var Typed -> Type Typed -> SolveM ()
 bind var ty
@@ -28,9 +27,12 @@ bind var ty
   | TyForall{} <- ty = throwError (Impredicative var ty)
   | otherwise = do
       env <- get
+      can <- asks (Set.notMember var)
       -- Attempt to extend the environment, otherwise unify with existing type
       case Map.lookup var env of
-        Nothing -> put (env `compose` Map.singleton var (normType ty))
+        Nothing -> if can
+                      then put (env `compose` Map.singleton var (normType ty))
+                      else throwError (NotEqual (TyVar var) ty)
         Just ty'
           | ty' == ty -> pure ()
           | otherwise -> unify (normType ty) (normType ty')
@@ -104,50 +106,50 @@ overlap xs ys
         get _ = undefined
 
 runSolve :: Int -> Subst Typed -> SolveM b -> Either TypeError (Int, Subst Typed)
-runSolve i s x = runExcept (fix (runStateT (runGenTFrom i act) s)) where
+runSolve i s x = runExcept (fix (runReaderT (runStateT (runGenTFrom i act) s) mempty)) where
   act = (,) <$> gen <*> x
   fix act = do
     ((i, _), s) <- act
     pure (i, s)
 
-solve :: Int -> Subst Typed -> [Constraint Typed] -> Either TypeError (Subst Typed)
-solve _ s [] = pure s
-solve i s (ConUnify e a t:xs) = do
-  case wellformed t of
-    Left err -> Left (Note (ArisingFrom err e) wellform)
-    Right () -> Right ()
-  case wellformed a of
-    Left err -> Left (Note (ArisingFrom err e) wellform)
-    Right () -> Right ()
+solve :: Int -> [Constraint Typed] -> Either TypeError (Subst Typed)
+solve i cs = snd <$> runSolve i mempty (doSolve cs)
 
-  case runSolve i s (unify (normType a) (normType t)) of
-    Left err -> Left (ArisingFrom err e)
-    Right (i', s') -> solve i' s' (apply s' xs)
-solve i s (ConSubsume e a b:xs) = do
-  case runSolve i s (subsumes unify (normType a) (normType b)) of
-    Left err -> Left (ArisingFrom err e)
-    Right (i', s') -> solve i' s' (apply s' xs)
-solve i s (ConImplies reason not cs ts:css) =
-  case solve i s (apply s cs) of
-    Left e -> Left (ArisingFrom e reason)
-    Right ss -> case solve i (s `compose` ss) (apply (s `compose` ss) ts) of
-      Left e -> Left (ArisingFrom e reason)
-      Right ss' ->
-        let vars = ftv (apply s not)
-            noTouchy = Map.foldrWithKey correct Map.empty 
+doSolve :: [Constraint Typed] -> SolveM ()
+doSolve [] = pure ()
+doSolve (ConUnify because a b:xs) = do
+  sub <- get
+  do
+    unify (apply sub a) (apply sub b)
+    doSolve xs
+  `catchError` \e -> throwError (ArisingFrom e because)
+doSolve (ConSubsume because a b:xs) = do
+  sub <- get
+  do
+    subsumes unify (apply sub a) (apply sub b)
+    doSolve xs
+  `catchError` \e -> throwError (ArisingFrom e because)
+doSolve (ConImplies because not cs ts:xs) = do
+  before <- get
+  let not' = ftv (apply before not)
+      cs' = apply before cs
+      ts' = apply before ts
 
-            correct k (TyVar t) map
-              | k `Set.member` vars && t `Set.notMember` vars = Map.insert t (TyVar k) map
-              | k `Set.member` vars = map
-              | t `Set.member` vars = map
-              | otherwise = Map.insert k (TyVar t) map
-            correct v t map
-              | v `Set.member` vars = map
-              | otherwise = Map.insert v t map
+      leak t (TyVar k) m
+        | t `Set.member` not' = Map.insert k (TyVar t) m
+      leak _ _ m = m
+  do
+    ((), sub) <- local (const mempty) $ capture (doSolve cs')
 
-            ssk = noTouchy (ss <> ss')
-            news = (s `compose` ssk)
-         in solve i news (apply news css)
+    let after = Map.foldrWithKey leak before sub
+
+    local (Set.union not') $ do
+      put sub
+      doSolve (map (apply sub) ts')
+      put after
+
+    doSolve xs
+  `catchError` \e -> throwError (ArisingFrom e because)
 
 subsumes :: (MonadGen Int m, MonadError TypeError m)
          => (Type Typed -> Type Typed -> m b)
@@ -176,5 +178,10 @@ occurs :: Var Typed -> Type Typed -> Bool
 occurs _ (TyVar _) = False
 occurs x e = x `Set.member` ftv e
 
-wellform :: String
-wellform = "The type was rejected in the wellformedness check;\n         It is possible this is a bug."
+capture :: MonadState b m => m a -> m (a, b)
+capture m = do
+  x <- get
+  r <- m
+  st <- get
+  put x
+  pure (r, st)
