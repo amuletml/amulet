@@ -116,3 +116,4 @@ library amulet
                      -- Infra
                      , Pretty
                      , Control.Monad.Infer
+                     , Control.Monad.Infer.Error

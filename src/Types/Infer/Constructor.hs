@@ -15,7 +15,6 @@ import Syntax
 
 import Pretty
 
-
 inferCon :: MonadInfer Typed m
          => Type Typed
          -> Constructor Resolved

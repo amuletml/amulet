@@ -13,7 +13,6 @@ import Control.Applicative
 import Control.Arrow (second)
 
 import qualified "amuletml" Control.Monad.Infer as I
-import "amuletml" Control.Monad.Infer
 
 import qualified "amuletml" Syntax.Resolve as R
 
@@ -27,7 +26,7 @@ reportI err file
   | (err', Just (reason, loc)) <- innermostError err
   = reportP (I.ArisingFrom err' reason) loc file
   where
-    innermostError (I.ArisingFrom err p) = second (<|> Just (BecauseOf p, annotation p)) $ innermostError err
+    innermostError (I.ArisingFrom err p) = second (<|> Just (p, annotation p)) $ innermostError err
     innermostError err = (err, Nothing)
 reportI err _ = putDoc (pretty err)
 

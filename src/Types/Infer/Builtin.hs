@@ -1,11 +1,15 @@
-{-# LANGUAGE OverloadedStrings, FlexibleContexts, RankNTypes #-}
+{-# LANGUAGE OverloadedStrings, FlexibleContexts, RankNTypes, StandaloneDeriving, GADTs, UndecidableInstances #-}
+{-# LANGUAGE DeriveDataTypeable, FlexibleInstances, MultiParamTypeClasses #-}
 module Types.Infer.Builtin where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Data.Text as T
+import Data.Semigroup
 import Data.Spanned
+import Data.Data
 
+import Control.Monad.Infer.Error
 import Control.Monad.Infer
 import Control.Lens
 
@@ -13,6 +17,8 @@ import Types.Wellformed
 
 import Syntax.Subst
 import Syntax
+
+import Pretty
 
 tyUnit, tyBool, tyInt, tyString, tyFloat :: Type Typed
 tyInt = TyCon (TvName (TgInternal "int"))
@@ -111,3 +117,25 @@ closeOver a = normType $ forall (fv a) a where
   forall :: [Var p] -> Type p -> Type p
   forall [] a = a
   forall vs a = TyForall vs a
+
+-- A representation of an individual 'match' arm, for blaming type
+-- errors on:
+
+data Arm p
+  = Arm { armPat :: Pattern p
+        , armExp :: Expr p
+        }
+
+deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Arm p)
+deriving instance (Show (Var p), Show (Ann p)) => Show (Arm p)
+deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Arm p)
+deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Arm p)
+
+instance (Spanned (Expr p), Spanned (Pattern p)) => Spanned (Arm p) where
+  annotation (Arm p e) = annotation p <> annotation e
+
+instance Pretty (Var p) => Pretty (Arm p) where
+  pretty (Arm p e) = pipe <+> pretty p <+> arrow <+> pretty e
+
+instance (Pretty (Var p), Reasonable Pattern p, Reasonable Expr p) => Reasonable Arm p where
+  blame _ = string "the pattern-matching clause"
