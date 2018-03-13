@@ -88,11 +88,11 @@ check (Let ns b an) t = do
 
 check (If c t e an) ty = If <$> check c tyBool <*> check t ty <*> check e ty <*> pure (an, ty)
 
-check ex@(Match t ps a) ty = do
+check (Match t ps a) ty = do
   (t', tt) <- infer t
   ps' <- for ps $ \(p, e) -> do
     (p', ms, cs) <- checkPattern p tt
-    (,) <$> pure p' <*> implies ex tt cs (extendMany ms (check e ty))
+    (,) <$> pure p' <*> implies (Arm p e) tt cs (extendMany ms (check e ty))
   pure (Match t' ps' (a, ty))
 
 check ex@(Record rows a) ty = do
@@ -146,7 +146,7 @@ infer (Literal l an) = pure (Literal l (an, ty), ty) where
     LiFloat{} -> tyFloat
 
 infer ex@(Ascription e ty an) = do
-  (ty', _) <- resolveKind ty `catchError` \e -> throwError (ArisingFrom e ex)
+  (ty', _) <- resolveKind ty `catchError` \e -> throwError (ArisingFrom e (BecauseOf ex))
   e' <- check e ty'
   pure (Ascription (correct ty' e') ty' (an, ty'), ty')
 
@@ -167,7 +167,7 @@ infer ex@(Match t ps a) = do
     (p', ms, cs) <- checkPattern p tt
     leakEqualities ex cs
     (e', ty) <- extendMany ms (infer e)
-    pure (p', e', ty, e)
+    pure (p', e', ty, Arm p e)
   let (_, _, t, _) = head ps'
   ps' <- for ps' $ \(p, e, t', blame) -> do
     _ <- unify blame t t' -- TODO: the blame can also come from the pattern.
@@ -190,7 +190,7 @@ inferProg :: MonadInfer Typed m
           => [Toplevel Resolved] -> m ([Toplevel Typed], Env)
 inferProg (LetStmt ns:prg) = do
   (ns', ts) <- inferLetTy closeOver ns
-                   `catchError` (throwError . flip ArisingFrom (LetStmt ns))
+                   `catchError` (throwError . flip ArisingFrom (BecauseOf (LetStmt ns)))
   extendMany ts $
     consFst (LetStmt ns') $
       inferProg prg
@@ -205,7 +205,7 @@ inferProg (TypeDecl n tvs cs:prg) = do
   let retTy = foldl TyApp (TyCon (TvName n)) (map (TyVar . TvName) tvs)
    in extendKind (TvName n, kind) $ do
      (ts, cs') <- unzip <$> for cs (\con ->
-       inferCon retTy con `catchError` \x -> throwError (ArisingFrom x con))
+       inferCon retTy con `catchError` \x -> throwError (ArisingFrom x (BecauseOf con)))
      extendMany ts $
        consFst (TypeDecl (TvName n) (map TvName tvs) cs') $
          inferProg prg

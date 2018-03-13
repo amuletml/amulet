@@ -7,6 +7,7 @@
   , MultiParamTypeClasses
   , OverloadedStrings
   , TemplateHaskell
+  , ScopedTypeVariables
   #-}
 module Control.Monad.Infer
   ( module M
@@ -26,6 +27,7 @@ module Control.Monad.Infer
   where
 
 import Control.Monad.Writer.Strict as M hiding ((<>))
+import Control.Monad.Infer.Error
 import Control.Monad.Reader as M
 import Control.Monad.Except as M
 import Control.Monad.Gen as M
@@ -87,8 +89,8 @@ data TypeError where
   EscapedSkolems :: [Skolem Typed] -> Type Typed -> TypeError
   SkolBinding :: Skolem Typed -> Type Typed -> TypeError
 
-  ArisingFrom :: (Spanned a, Pretty a)
-              => TypeError -> a -> TypeError
+  ArisingFrom :: TypeError -> SomeReason -> TypeError
+
   NoOverlap :: Type Typed -> Type Typed -> TypeError
   Note :: Pretty x => TypeError -> x -> TypeError
   Suggestion :: Pretty x => TypeError -> x -> TypeError
@@ -115,28 +117,6 @@ instance Pretty (Var p) => Pretty (Constraint p) where
                             <+> soperator (char '⊃')
                             <#> indent 2 (vsep (punctuate comma (map pretty b)))
 
-data SomeReason where
-  BecauseOf :: (Spanned a, Pretty a) => a -> SomeReason
-
-instance Pretty SomeReason where
-  pretty (BecauseOf a) = pretty a
-
-instance Spanned SomeReason where
-  annotation (BecauseOf a) = annotation a
-
-instance Show SomeReason where
-  show (BecauseOf _) = "reason"
-
-instance Eq SomeReason where
-  BecauseOf _ == BecauseOf _ = False
-
-type Reasonable f p =
-  ( Spanned (f p)
-  , Pretty (f p)
-  , Pretty (Ann p)
-  , Pretty (Var p)
-  , Show (f p)
-  )
 
 makeLenses ''Env -- this has to be down here
 -- *shakes fist* grr templatehaskell
@@ -216,7 +196,7 @@ instance Pretty TypeError where
   pretty (Occurs v t) = string "Occurs check:" <+> align (string "Type variable" <+> verbatim (stypeVar (pretty v)) </> indent 4 (string "occurs in" <+> verbatim t))
   pretty (NotInScope e) = string "Variable not in scope:" <+> verbatim e
   pretty (ArisingFrom er ex) = pretty (annotation ex) <> colon <+> stypeSkol (string "error")
-    <#> indent 2 (pretty er <#> nest 4 (bullet (string "Arising from use of") </> pretty ex))
+    <#> indent 2 (pretty er <#> nest 4 (bullet (string "Arising from use of" <+> blameOf ex) </> pretty ex))
   pretty (FoundHole xs) = hsep (map prnt xs) where
     prnt :: Expr Typed -> Doc
     prnt (Hole v s)
