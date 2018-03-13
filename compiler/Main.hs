@@ -96,6 +96,23 @@ test x = do
     CResolve e -> Nothing <$ reportR e (T.pack x)
     CInfer e -> Nothing <$ reportI e (T.pack x)
 
+testTc :: String -> IO (Maybe ([Stmt (Var Resolved)], Env))
+testTc x = do
+  putStrLn "\x1b[1;32m(* Program: *)\x1b[0m"
+  case compile "<test>" (T.pack x) of
+    CSuccess (ast, core, _, env) -> do
+      putDoc (pretty ast)
+      putStrLn "\x1b[1;32m(* Type inference: *)\x1b[0m"
+      ifor_ (difference env builtinsEnv ^. values) . curry $ \(k :: Var Resolved, t :: Type Typed) ->
+        putDoc (pretty k <+> colon <+> pretty t)
+      putStrLn "\x1b[1;32m(* Kind inference: *)\x1b[0m"
+      ifor_ (difference env builtinsEnv ^. types) . curry $ \(k, t) ->
+        putDoc (pretty k <+> colon <+> pretty t)
+      pure (Just (core, env))
+    CParse e s -> Nothing <$ reportP e s (T.pack x)
+    CResolve e -> Nothing <$ reportR e (T.pack x)
+    CInfer e -> Nothing <$ reportI e (T.pack x)
+
 main :: IO ()
 main = do
   ags <- getArgs
@@ -106,6 +123,10 @@ main = do
     ["test", x] -> do
       x' <- readFile x
       _ <- test x'
+      pure ()
+    ["test-tc", x] -> do
+      x' <- readFile x
+      _ <- testTc x'
       pure ()
     [x, t] -> do
       x' <- T.readFile x
