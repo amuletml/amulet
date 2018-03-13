@@ -48,7 +48,7 @@ checkPattern (Capture v ann) ty = pure (Capture (TvName v) (ann, ty), [(TvName v
 checkPattern ex@(Destructure con ps ann) target =
   case ps of
     Nothing -> do
-      pty <- lookupTy con
+      pty <- skolGadt =<< lookupTy con
       let (cs, ty) =
             case pty of
               TyWithConstraints cs ty -> (cs, ty)

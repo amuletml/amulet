@@ -35,19 +35,17 @@ inferCon ret c@(GeneralisedCon nm cty ann) = do
       result t = t
 
   (cty, _) <- resolveKind cty
-  case solve 1 mempty [ConUnify (BecauseOf c) (result cty) ret] of
+  case solve 1 [ConUnify (BecauseOf c) (result cty) ret] of
     Left e -> throwError (gadtConShape (cty, ret) (result cty) e)
     Right _ -> pure ()
 
   let generalise (TyForall v t) = TyForall v <$> generalise t
       generalise (TyArr a t) = TyArr a <$> generalise t
-      generalise ty = case solve 1 mempty [ConUnify (BecauseOf c) ret ty] of
+      generalise ty = case solve 1 [ConUnify (BecauseOf c) ret ty] of
         Right x -> do
           tell (map (\(x, y) -> (TyVar x, y)) (Map.toAscList x))
           pure ret
         Left e -> throwError e
-
-
 
   (cty, cons) <- runWriterT (generalise cty)
   let overall = closeOverGadt cons cty

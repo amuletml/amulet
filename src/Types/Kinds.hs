@@ -156,7 +156,7 @@ inferGadtConKind c t ret' =
       ret = raiseT TvName ret'
       generalise (TyForall v t) = TyForall v <$> generalise t
       generalise (TyArr a t) = TyArr a <$> generalise t
-      generalise ty = case U.solve 1 mempty [ConUnify (BecauseOf c) ret ty] of
+      generalise ty = case U.solve 1 [ConUnify (BecauseOf c) ret ty] of
         Right x -> do
           for_ (Map.toAscList x) $ \(a, b) -> do
             giveTp (TyVar a)
