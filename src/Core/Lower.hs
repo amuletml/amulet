@@ -127,7 +127,7 @@ lowerAt (Fun p bd an) (ArrTy a b) =
    in case operational p of
         S.Capture (TvName v) _ -> Atom . Lam (TermArgument v a) <$> lowerAtTerm bd b
         _ -> do
-          (p', bd') <- (,) <$> lowerPat p <*> lowerAtTerm bd b
+          (p', bd') <- lowerPat p =<< lowerAtTerm bd b
           arg <- fresh
           fail <- patternMatchingFail (fst an) b
           pure (Atom (Lam (TermArgument arg a) (C.Match (Ref arg a) [ (p', a, bd'), fail ])))
@@ -137,8 +137,9 @@ lowerAt (Begin xs _) t = lowerAtTerm (last xs) t >>= flip (foldrM bind) (init xs
   build a (b, c) = (a, c, b)
 lowerAt (S.Match ex cs an) ty = do
   (ex', mt) <- lowerBothAtom ex
-  cs' <- for cs $ \(pat, ex) ->
-    (,mt,) <$> lowerPat pat <*> lowerAtTerm ex ty
+  cs' <- for cs $ \(pat, ex) -> do
+    (p, bd) <- lowerPat pat =<< lowerAtTerm ex ty
+    pure (p, mt, bd)
   fail <- patternMatchingFail (fst an) ty
 
   pure $ C.Match ex' (cs' ++ [fail])
@@ -205,16 +206,20 @@ tup2Rec :: Int -> S.Type Typed -> [(T.Text, Type)]
 tup2Rec k (S.TyTuple a b) = (T.pack (show k), lowerType a) : tup2Rec (succ k) b
 tup2Rec k b = [(T.pack (show k), lowerType b)]
 
-lowerPat :: MonadLower m => Pattern Typed -> m Pat
-lowerPat pat = case pat of
-  S.Capture (TvName x) (_, t) -> pure $ C.Capture x (lowerType t)
-  Wildcard (_, t) -> C.Capture <$> fresh <*> pure (lowerType t)
-  Destructure (TvName p) Nothing _ -> pure $ Constr p
-  Destructure (TvName p) (Just t) _ -> Destr p <$> lowerPat t
-  PType p _ _ -> lowerPat p
+lowerPat :: MonadLower m => Pattern Typed -> Term -> m (Pat, Term)
+lowerPat pat k = case pat of
+  S.Capture (TvName x) (_, t) -> pure (C.Capture x (lowerType t), k)
+  Wildcard (_, t) -> do
+    var <- fresh
+    pure (C.Capture var (lowerType t), k)
+  Destructure (TvName p) Nothing _ -> pure (Constr p, k)
+  Destructure (TvName p) (Just t) _ -> do
+    (t', _) <- lowerPat t k
+    pure (Destr p t', k)
+  PType p _ _ -> lowerPat p k
   PRecord xs (_, t) ->
     let
-      lowerRow (label, pat) = (,) label <$> lowerPat pat
+      lowerRow (label, pat) = (,) label . fst <$> lowerPat pat k
       keys = map fst xs
       realt tp = case tp of
         ExactRowsTy rs -> ExactRowsTy (filter (not . flip elem keys . fst) rs)
@@ -225,13 +230,23 @@ lowerPat pat = case pat of
       fixup x = x
 
       tidy = fixup . realt . lowerType
-     in PatExtend <$> (C.Capture <$> fresh <*> pure (tidy t)) <*> traverse lowerRow xs
-  PTuple [] _ -> pure . PatLit $ Unit
+     in do
+       pat <- PatExtend <$> (C.Capture <$> fresh <*> pure (tidy t)) <*> traverse lowerRow xs
+       pure (pat, k)
+  PTuple [] _ -> pure (PatLit Unit, k)
   PTuple xs _ -> do
-    let go :: MonadLower m => Int -> Pattern Typed -> m (T.Text, Pat)
+    let bd = k
+        go :: MonadLower m => Int -> Pattern Typed -> m (T.Text, Pat)
         go k x = (,) <$> pure (T.pack (show k))
-                     <*> lowerPat x
-    PatExtend (PatLit RecNil) <$> zipWithM go [1..] xs
+                     <*> (fst <$> lowerPat x bd)
+    pat <- PatExtend (PatLit RecNil) <$> zipWithM go [1..] xs
+    pure (pat, k)
+  PAs p (TvName v) (_, t) -> do
+    (p', k') <- lowerPat p k
+    let ty = lowerType t
+        pat = C.Capture v ty
+        bd = C.Match (Ref v ty) [ (p', ty, k') ]
+    pure (pat, bd)
 
 lowerProg :: MonadLower m => [Toplevel Typed] -> m [Stmt]
 lowerProg [] = pure []

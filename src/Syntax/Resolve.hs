@@ -228,6 +228,10 @@ rePattern :: MonadResolve m
           -> m (Pattern Resolved, [(Var Parsed, Var Resolved)]
                                 , [(Var Parsed, Var Resolved)])
 rePattern (Wildcard a) = pure (Wildcard a, [], [])
+rePattern (PAs p v a) = do
+  v' <- tagVar v
+  (p', vs, ts) <- rePattern p
+  pure (PAs p' v' a, (v, v'):vs, ts)
 rePattern (Capture v a) = do
   v' <- tagVar v
   pure (Capture v' a, [(v, v')], [])

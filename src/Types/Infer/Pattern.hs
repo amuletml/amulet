@@ -45,6 +45,9 @@ checkPattern :: MonadInfer Typed m
                   )
 checkPattern (Wildcard ann) ty = pure (Wildcard (ann, ty), [], [])
 checkPattern (Capture v ann) ty = pure (Capture (TvName v) (ann, ty), [(TvName v, ty)], [])
+checkPattern (PAs p v ann) ty = do
+  (p', b, cs) <- checkPattern p ty
+  pure (PAs p' (TvName v) (ann, ty), (TvName v, ty):b, cs)
 checkPattern ex@(Destructure con ps ann) target =
   case ps of
     Nothing -> do

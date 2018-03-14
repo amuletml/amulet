@@ -78,6 +78,7 @@ instance (Pretty (Var p)) => Pretty (Pattern p) where
   pretty (PType p x _) = parens $ pretty p <+> colon <+> pretty x
   pretty (PRecord rows _) = record (prettyRows equals rows)
   pretty (PTuple ps _) = parens (hsep (punctuate comma (map pretty ps)))
+  pretty (PAs p v _) = pretty p <+> keyword "as" <+> pretty v
 
 instance Pretty Lit where
   pretty (LiStr s) = sstring (dquotes (text s))
