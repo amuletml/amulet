@@ -20,12 +20,12 @@ parenFun f = case f of
   Fun{} -> parens (pretty f)
   Let{} -> parens (pretty f)
   Match{} -> parens (pretty f)
-  App{} -> parens (pretty f)
   _ -> pretty f
 
 parenArg :: Pretty (Var p) => Expr p -> Doc
 parenArg f = case f of
   TypeApp{} -> parens (pretty f)
+  App{} -> parens (pretty f)
   _ -> parenFun f
 
 instance (Pretty (Var p)) => Pretty (Expr p) where
