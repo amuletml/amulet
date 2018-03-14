@@ -25,7 +25,7 @@ import "amuletml" Syntax.Desugar (desugarProgram)
 import "amuletml" Syntax.Pretty (tidyPrettyType)
 import "amuletml" Syntax (Toplevel, Typed, Var, Resolved, Type)
 
-import "amuletml" Core.Occurrence (OccursVar, tagOccurrence)
+import "amuletml" Core.Occurrence (OccursVar, tagOccursVar)
 import "amuletml" Core.Simplify (optimise)
 import "amuletml" Core.Lower (lowerProg)
 import "amuletml" Core.Core (Stmt)
@@ -58,7 +58,7 @@ compile name x =
             Right (prog, env) -> do
               lower <- runReaderT (lowerProg prog) env
               optm <- optimise lower
-              pure (CSuccess (prog, lower, tagOccurrence env optm, env))
+              pure (CSuccess (prog, lower, tagOccursVar optm, env))
             Left e -> pure (CInfer e)
         Left e -> pure (CResolve e)
     PFailed msg sp -> CParse msg sp

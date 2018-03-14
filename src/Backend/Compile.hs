@@ -169,13 +169,13 @@ compileTerm (Extend tbl exs) = do
         compileRow (f, _, e) es = (:es) . LuaAssign [LuaIndex (LuaRef new) (LuaString f)] . pure <$> compileAtom e
 
 compileTerm (Let (One (x, _, e)) body)
-  | usedWhen x == 1 && not (isMultiMatch e) = do
+  | usedWhen x == Once && not (isMultiMatch e) = do
       -- If we've got a let binding which is only used once then push it onto the stack
       e' <- compileTerm e
       EC $ \xs next -> next ((x, e, e'):xs) ()
       compileTerm body
 
-  | usedWhen x == 0 && not (isMultiMatch e) = do
+  | usedWhen x == Dead && not (isMultiMatch e) = do
       e' <- compileTerm e
       flushStmt (asStmt e') ()
       compileTerm body
@@ -205,7 +205,7 @@ compileTerm (Let (Many bs) body) = do
 
 compileTerm m@(Match test [(p, _, body)])
   | [v] <- filter doesItOccur (patternVarsA p)
-  , usedWhen v == 1
+  , usedWhen v == Once
   = do
       test' <- compileAtom test
       let [(_, bind)] = patternBindings p test'
