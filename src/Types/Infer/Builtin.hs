@@ -28,7 +28,7 @@ tyUnit = TyCon (TvName (TgInternal "unit"))
 tyFloat = TyCon (TvName (TgInternal "float"))
 
 builtinsEnv :: Env
-builtinsEnv = Env (Map.fromList ops) (Map.fromList tps) where
+builtinsEnv = Env (Map.fromList ops) (Map.fromList tps) mempty where
   op :: T.Text -> Type Typed -> (Var Resolved, Type Typed)
   op x t = (TgInternal x, t)
   tp :: T.Text -> (Var Resolved, Kind Typed)
