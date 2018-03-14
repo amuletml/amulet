@@ -264,14 +264,14 @@ inferLetTy closeOver vs =
       wasGuessed Guessed = True
       wasGuessed _ = False
 
-      figureOut :: Type Typed -> [Constraint Typed] -> m (Type Typed, Expr Typed -> Expr Typed)
-      figureOut ty cs = do
+      figureOut :: SomeReason -> Type Typed -> [Constraint Typed] -> m (Type Typed, Expr Typed -> Expr Typed)
+      figureOut blame ty cs = do
         cur <- gen
         (x, vt) <- case solve cur cs of
           Right x -> pure (x, normType (closeOver (apply x ty)))
-          Left e -> throwError e
+          Left e -> throwError (ArisingFrom e blame)
         unless (null (skols vt)) $
-          throwError (EscapedSkolems (Set.toList (skols vt)) vt)
+          throwError (ArisingFrom (EscapedSkolems (Set.toList (skols vt)) vt) blame)
         pure (closeOver vt, applyInExpr x . raiseE id (\(a, t) -> (a, normType (apply x t))))
 
       generalise :: Type Typed -> m (Type Typed)
@@ -304,7 +304,7 @@ inferLetTy closeOver vs =
               (exp', ty) <- infer exp
               _ <- unify exp (snd tv) ty
               pure (exp', ty)
-        (tp, k) <- figureOut ty cs
+        (tp, k) <- figureOut (BecauseOf exp) ty cs
         pure ( [(TvName var, k exp', (ann, tp))], [(TvName var, tp)] )
 
       tcOne (CyclicSCC vars) = do
@@ -330,7 +330,7 @@ inferLetTy closeOver vs =
                   ty' = closeOver (figure ty)
                in do
                   unless (null (skols ty')) $
-                    throwError (EscapedSkolems (Set.toList (skols ty')) ty')
+                    throwError (ArisingFrom (EscapedSkolems (Set.toList (skols ty')) ty') (BecauseOf exp))
                   pure ( (var, applyInExpr solution (raiseE id (\(a, t) -> (a, normType (figure t))) exp), (ann, ty'))
                        , (var, ty') )
          in fmap unzip . traverse solveOne $ vs
