@@ -2,126 +2,182 @@
 module Core.Occurrence
   ( OccursVar(..)
   , Occurs(..)
-  , tagOccurrence, doesItOccur
+  , Occurrence(..)
+  , tagOccursVar, tagOccursMap
+  , tagOccurStmt, tagOccurTerm
+  , doesItOccur
   ) where
 
 
 import Core.Core as C
 
-import qualified Data.Map.Merge.Strict as Map
-import qualified Data.Map.Strict as Map
+import qualified Data.VarMap as VarMap
 import Data.VarSet (IsVar(..))
+import Data.Semigroup
 import Data.Generics
-import Data.Maybe
-import Data.List
 import Data.Triple
 
-import Control.Monad.Infer
-import Control.Arrow
-
-import Syntax (Var(..), Resolved)
 import Pretty
 
-type OccAtom a = C.Atom (OccursVar a)
-type OccTerm a = C.Term (OccursVar a)
-type OccType a = C.Type (OccursVar a)
-type OccStmt a = C.Stmt (OccursVar a)
+data Occurrence = Dead | Once | OnceLambda | Multi | MultiLambda
+  deriving (Show, Eq, Ord, Data)
 
-type OccursMap = Map.Map (Var Resolved) Int
+defOcc :: Occurrence
+defOcc = MultiLambda
+
+escapeLambda :: Occurrence -> Occurrence
+escapeLambda Once = OnceLambda
+escapeLambda Multi = MultiLambda
+escapeLambda x = x
+
+instance Semigroup Occurrence where
+  x <> Dead = x
+  Dead <> x = x
+
+  Once <> Once = Multi
+  Once <> Multi = Multi
+  Multi <> Once = Multi
+  Multi <> Multi = Multi
+
+  _ <> _ = MultiLambda
+
+type OccursMap = VarMap.Map Occurrence
 
 data OccursVar v
   = OccursVar { underlying :: v
-              , used :: !Int
+              , used :: !Occurrence
               }
   deriving (Eq, Show, Ord, Data)
 
 instance IsVar a => IsVar (OccursVar a) where
   toVar = toVar . underlying
-  fromVar = flip OccursVar 1 . fromVar
+  fromVar = flip OccursVar MultiLambda . fromVar
 
 instance Pretty a => Pretty (OccursVar a) where
   pretty = pretty . underlying
 
-tagOccurrence :: forall a. IsVar a => Env -> [C.Stmt a] -> [OccStmt a]
-tagOccurrence env sts = fst (go sts) where
-  go :: [C.Stmt a] -> ([OccStmt a], OccursMap)
-  go (StmtLet vs:prg) =
-    let (prg', free) = go prg
-        vs' = tagBindings vs free
-        free' = foldMap (\(v, _, e) -> toVar v `Map.delete` countUsages e) vs <> free
-     in (StmtLet vs':prg', free')
-  go (Foreign v t c:prg) =
-    let (prg', free) = go prg
-     in (Foreign (depends v free) (convert t) c:prg', toVar v `Map.delete` free)
-  go (t':prg) = first (convert t':) (go prg)
-  go [] = ([], maybe mempty (flip Map.singleton 1) (main env))
+tagOccursVar :: IsVar a => [AnnStmt b a] -> [AnnStmt b (OccursVar a)]
+tagOccursVar = snd . tagOccurStmt const OccursVar
 
-  main = fmap (toVar . fst) . uncons
-       . sortOn key
-       . filter isMain
-       . Map.keys
-       . _values
-  isMain (TgName x _) = x == "main"
-  isMain _ = False
-  key (TgName k _) = k
-  key _ = undefined
+tagOccursMap :: IsVar a => [AnnStmt b a] -> [AnnStmt OccursMap a]
+tagOccursMap = snd . tagOccurStmt (flip const) const
 
-tagBindings :: forall a. IsVar a => [(a, C.Type a, C.Term a)] -> OccursMap -> [(OccursVar a, OccType a, OccTerm a)]
-tagBindings vs ss =
-  let free = foldMap (\(v, _, e) -> toVar v `Map.delete` countUsages e) vs <> ss
-      attach = flip depends free
-   in map (\(v, t, e) -> (attach v, fmap attach t, tagOccTerm e)) vs
+tagOccurStmt :: forall a a' b b'. (IsVar a, IsVar a')
+             => (b -> OccursMap -> b')
+             -> (a -> Occurrence -> a')
+             -> [AnnStmt b a] -> (OccursMap, [AnnStmt b' a'])
+tagOccurStmt ann var = tagStmt where
+  conv = fmap (`var` defOcc)
 
-tagOccAtom :: IsVar a => C.Atom a -> OccAtom a
-tagOccAtom (Ref v t) = Ref (depends v mempty) (convert t)
-tagOccAtom (Lam (TermArgument v t) e) = Lam (TermArgument (depends v (countUsages e)) (convert t)) (tagOccTerm e)
-tagOccAtom (Lam (TypeArgument v t) b) = Lam (TypeArgument (OccursVar v 1) (convert t)) (tagOccTerm b)
-tagOccAtom (Lit l) = Lit l
+  var' v m = case VarMap.lookup (toVar v) m of
+               Nothing -> var v Dead
+               Just x -> var v x
 
-tagOccTerm :: IsVar a => C.Term a -> OccTerm a
-tagOccTerm (Let (One v) e) = Let (One (go v (countUsages e))) (tagOccTerm e) where
-  go (v, t, e) ss =
-    let free = toVar v `Map.delete` countUsages e <> ss
-        attach = flip depends free
-     in (attach v, fmap attach t, tagOccTerm e)
-tagOccTerm (Let (Many vs) e) = Let (Many (tagBindings vs (countUsages e))) (tagOccTerm e)
-tagOccTerm (Atom a) = Atom (tagOccAtom a)
-tagOccTerm (App f x) = App (tagOccAtom f) (tagOccAtom x)
-tagOccTerm (Match e bs) = Match (tagOccAtom e) (map tagArm bs) where
-  tagArm (p, t, e) = (fmap (flip depends (countUsages e)) p, convert t, tagOccTerm e)
-tagOccTerm (Extend l rs) = Extend (tagOccAtom l) (map (\(r, t, e) -> (r, convert t, tagOccAtom e)) rs)
-tagOccTerm (TyApp f x) = TyApp (tagOccAtom f) (convert x)
-tagOccTerm (Cast f x) = Cast (tagOccAtom f) (convert x)
+  tagStmt :: [AnnStmt b a] -> (OccursMap, [AnnStmt b' a'])
+  tagStmt [] = (mempty, [])
+  tagStmt (Foreign v ty txt:xs) =
+    let (fv, xs') = tagStmt xs
+    in ( toVar v `VarMap.delete` fv
+       , Foreign (var' v fv) (conv ty) txt:xs')
+  tagStmt (Type v tys:xs) =
+    let (fv, xs') = tagStmt xs
+    in ( fv
+       , Type (var v defOcc) (map (tagCons fv) tys):xs') where
+      tagCons fv (cons, ty) = (var' cons fv, conv ty)
+  tagStmt (StmtLet vs:xs) =
+    let (fvxs, xs') = tagStmt xs
+        (fvvs, vs') = unzip (map (tagOccurTerm ann var . thd3) vs)
 
-depends :: IsVar a => a -> OccursMap -> OccursVar a
-depends v ss = OccursVar v (fromMaybe 0 (toVar v `Map.lookup` ss))
+        fvs = occConcat (fvxs : fvvs)
+        fv = foldr (VarMap.delete . toVar . fst3) fvs vs
+    in (fv, StmtLet (zipWith (\(v, ty, _) e -> (var' v fvs, conv ty, e)) vs vs'):xs')
 
-convert :: Functor f => f a -> f (OccursVar a)
-convert = fmap (flip OccursVar 1)
+tagOccurTerm :: forall a a' b b' . (IsVar a, IsVar a')
+             => (b -> OccursMap -> b')
+             -> (a -> Occurrence -> a')
+             -> AnnTerm b a -> (OccursMap, AnnTerm b' a')
+tagOccurTerm ann var = tagTerm where
+  conv :: Functor f => f a -> f a'
+  conv = fmap (`var` defOcc)
+
+  var' v m = case VarMap.lookup (toVar v) m of
+               Nothing -> var v Dead
+               Just x -> var v x
+
+  tagAtom (Lit l) = (mempty, Lit l)
+  tagAtom (Ref a ty) = (VarMap.singleton (toVar a) Once
+                       , Ref (var a defOcc) (conv ty))
+  tagAtom (Lam (TermArgument arg ty) bod) =
+    let (fv, bod') = tagTerm bod
+    in (VarMap.map escapeLambda (VarMap.delete (toVar arg) fv)
+       , Lam (TermArgument (var' arg fv) (conv ty)) bod')
+  tagAtom (Lam (TypeArgument arg ty) bod) =
+    let (fv, bod') = tagTerm bod
+    in (VarMap.map escapeLambda fv
+       , Lam (TypeArgument (var arg MultiLambda) (conv ty)) bod')
+
+  tagTerm (AnnAtom an a) =
+    let (fv, a') = tagAtom a
+    in (fv, AnnAtom (ann an fv) a')
+
+  tagTerm (AnnApp an f x) =
+    let (fvf, f') = tagAtom f
+        (fvx, x') = tagAtom x
+        fv = fvf # fvx
+    in (fv, AnnApp (ann an fv) f' x')
+
+  tagTerm (AnnLet an (One (v, ty, e)) r) =
+    let (fve, e') = tagTerm e
+        (fvr, r') = tagTerm r
+        fv = fve # VarMap.delete (toVar v) fvr
+    in (fv, AnnLet (ann an fv) (One (var' v fvr, conv ty, e')) r')
+  tagTerm (AnnLet an (Many vs) r) =
+    let (fvvs, vs') = unzip (map (tagTerm . thd3) vs)
+        (fvr, r') = tagTerm r
+
+        fvs = occConcat (fvr : fvvs)
+        fv = foldr (VarMap.delete . toVar . fst3) fvs vs
+    in (fv, AnnLet (ann an fv) (Many (zipWith (\(v, ty, _) e -> (var' v fvs, conv ty, e)) vs vs')) r')
+
+  tagTerm (AnnMatch an t bs) =
+    let (fvt, t') = tagAtom t
+        (ftbs, bs') = unzip (map tagPtrn bs)
+        fv = occConcat (fvt : ftbs)
+    in (fv, AnnMatch (ann an fv) t' bs') where
+      tagPtrn (p, ty, b) =
+        let (fvb, b') = tagTerm b
+            p' = flip var' fvb <$> p
+            pv = patternVarsA p :: [a]
+        in (foldr (VarMap.delete . toVar) fvb pv, (p', conv ty, b'))
+
+  tagTerm (AnnExtend an f fs) =
+    let (fvf, f') = tagAtom f
+        (fvfs, fs') = unzip (map (\(n, ty, a) ->
+                                     let (fva, a') = tagAtom a
+                                     in (fva, (n, conv ty, a'))) fs)
+        fv = occConcat (fvf : fvfs)
+    in (fv, AnnExtend (ann an fv) f' fs')
+
+  tagTerm (AnnTyApp an f ty) =
+    let (fv, f') = tagAtom f
+    in (fv, AnnTyApp (ann an fv) f' (conv ty))
+
+  tagTerm (AnnCast an x co) =
+    let (fv, x') = tagAtom x
+    in (fv, AnnCast (ann an fv) x' (conv co))
 
 class IsVar a => Occurs a where
-  usedWhen :: a -> Int
+  usedWhen :: a -> Occurrence
 
 instance IsVar a => Occurs (OccursVar a) where
   usedWhen = used
 
 doesItOccur :: Occurs a => a -> Bool
-doesItOccur = (>= 1) . usedWhen
+doesItOccur = (/= Dead) . usedWhen
 
-countUsages :: forall a. IsVar a => C.Term a -> OccursMap
-countUsages = term where
-  term (Atom a) = atom a
-  term (App f x) = atom f # atom x
-  term (Let (One v) e) = term (thd3 v) # term e
-  term (Let (Many vs) e) = foldr (#) mempty (map (term . thd3) vs) # term e
-  term (Match e vs) = atom e # foldr (#) mempty (map (term . thd3) vs)
-  term (Extend e rs) = atom e # foldr (#) mempty (map (atom . thd3) rs)
-  term (TyApp f _) = atom f
-  term (Cast f _) = atom f
+(#) :: OccursMap -> OccursMap -> OccursMap
+(#) = VarMap.unionSemigroup
 
-  atom (Ref v _) = Map.singleton (toVar v) 1
-  atom (Lam _ b) = term b
-  atom Lit{} = mempty
-
-  (#) :: OccursMap -> OccursMap -> OccursMap
-  (#) = Map.merge Map.preserveMissing Map.preserveMissing (Map.zipWithMatched (const (+)))
+occConcat :: [OccursMap] -> OccursMap
+occConcat [] = mempty
+occConcat (x:xs) = foldr (#) x xs
