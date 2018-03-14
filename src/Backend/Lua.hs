@@ -137,7 +137,7 @@ instance Pretty LuaExpr where
          , body b
          , keyword "end"
          ]
-  pretty (LuaTable ps) = encloseSep lbrace rbrace comma $
+  pretty (LuaTable ps) = enclose (lbrace <> line) (line <> rbrace) . indent 2 . vsep . punctuate comma $
     map (\(k, v) -> brackets (pretty k) <+> equals <+> pretty v) ps
   pretty (LuaCall x@LuaFunction{} a) = parens (pretty x) <> tupled (map pretty a)
   pretty (LuaCall x a) = pretty x <> tupled (map pretty a)
