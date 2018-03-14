@@ -155,6 +155,10 @@ doSolve (ConImplies because not cs ts:xs) = do
       put sub
       doSolve (map (apply sub) ts')
         `catchError` \e -> case realErr e of
+          SkolBinding (Skolem v _ _) (TySkol x@(Skolem t _ _)) ->
+            if | t `Set.member` skol -> bind v (TySkol x)
+               | v `Set.member` skol -> bind v (TySkol x)
+               | otherwise -> throwError e
           SkolBinding (Skolem v _ _) t ->
             if v `Set.member` skol
                then bind v t

@@ -37,7 +37,6 @@ import Types.Unify
 import Types.Holes
 import Types.Kinds
 
-
 -- Solve for the types of lets in a program
 inferProgram :: MonadGen Int m => [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))
 inferProgram ct = fmap fst <$> runInfer builtinsEnv (inferAndCheck ct) where
@@ -237,6 +236,7 @@ inferProg [] = asks ([],)
 data Origin
   = Supplied -- the programmer supplied this type
   | Guessed -- the compiler invented this type
+  deriving Show
 
 -- For polymorphic recursion, mostly
 approxType :: MonadInfer Typed m => Expr Resolved -> StateT Origin m (Type Typed)
@@ -268,12 +268,22 @@ inferLetTy closeOver vs =
           Left e -> throwError e
         unless (null (skols vt)) $
           throwError (EscapedSkolems (Set.toList (skols vt)) vt)
-        pure (vt, applyInExpr x . raiseE id (\(a, t) -> (a, normType (apply x t))))
+        pure (closeOver vt, applyInExpr x . raiseE id (\(a, t) -> (a, normType (apply x t))))
+
+      generalise :: Type Typed -> m (Type Typed)
+      generalise ty =
+        let fv = ftv ty
+         in do
+           env <- asks (foldMap ftv . _values)
+           pure $ case Set.toList (fv `Set.difference` env) of
+             [] -> ty
+             vs -> TyForall vs ty
 
       approximate :: (Var Resolved, Expr Resolved, Span) -> m (Origin, (Var Typed, Type Typed))
       approximate (v, e, _) = do
         (ty, st) <- runStateT (approxType e) Supplied
-        pure (st, (TvName v, if not (wasGuessed st) then closeOver ty else ty))
+        ty' <- generalise ty
+        pure (st, (TvName v, if not (wasGuessed st) then ty' else ty))
 
       tcOne :: SCC (Var Resolved, Expr Resolved, Ann Resolved)
             -> m ( [(Var Typed, Expr Typed, Ann Typed)]

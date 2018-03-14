@@ -248,10 +248,12 @@ instance Pretty TypeError where
          , string "Note: in type" <+> verbatim t
          ]
 
-  pretty (SkolBinding (Skolem _ x s) (TySkol (Skolem _ y s'))) = pretty (NotEqual (TyVar x) (TyVar y)) <#> pretty (NotEqual s s')
   pretty (SkolBinding (Skolem a v _) b) =
     vsep [ string "Can not unify skolem type constant" <+> stypeSkol (pretty a) <+> string "with type" <+> verbatim b
-         , string "Note: the constant" <+> stypeSkol (pretty a) <+> "stands for type variable" <+> stypeVar (pretty v)
+         , string "Note: the constant" <+> stypeSkol (pretty a) <+> "stands for the type variable" <+> stypeVar (pretty v)
+         , case b of
+             TySkol (Skolem a v _) -> indent 5 (string "while the constant" <+> stypeSkol (pretty a) <+> "stands for the type variable" <+> stypeVar (pretty v))
+             _ -> empty
          ]
 
 missing :: [(Text, b)] -> [(Text, b)] -> Doc
