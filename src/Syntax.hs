@@ -158,6 +158,7 @@ data Pattern p
   = Wildcard (Ann p)
   | Capture (Var p) (Ann p)
   | Destructure (Var p) (Maybe (Pattern p)) (Ann p)
+  | PAs (Pattern p) (Var p) (Ann p)
   | PType (Pattern p) (Type p) (Ann p)
   | PRecord [(Text, Pattern p)] (Ann p)
   | PTuple [Pattern p] (Ann p)

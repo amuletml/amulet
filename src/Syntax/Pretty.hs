@@ -114,6 +114,7 @@ instance (Pretty (Var p)) => Pretty (Pattern p) where
   pretty (Capture x _) = pretty x
   pretty (Destructure x Nothing   _) = stypeCon (pretty x)
   pretty (Destructure x (Just xs) _) = parens $ stypeCon (pretty x) <+> pretty xs
+  pretty (PAs p v _) = pretty p <+> keyword "as" <+> pretty v
   pretty (PType p x _) = parens $ pretty p <+> colon <+> pretty x
   pretty (PRecord rows _) = record (prettyRows equals rows)
   pretty (PTuple ps _) = parens (hsep (punctuate comma (map pretty ps)))

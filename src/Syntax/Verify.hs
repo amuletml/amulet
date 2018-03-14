@@ -208,6 +208,7 @@ unguardedVars x = error (show x)
 
 bindingSites :: Pattern Typed -> Set.Set BindingSite
 bindingSites (Capture v (s, t)) = Set.singleton (BindingSite v s t)
+bindingSites (PAs p v (s, t)) = Set.insert (BindingSite v s t) (bindingSites p)
 bindingSites Wildcard{} = mempty
 bindingSites PLiteral{} = mempty
 bindingSites (Destructure _ p _) = foldMap bindingSites p
