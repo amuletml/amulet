@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable, FlexibleInstances, ScopedTypeVariables, DeriveFunctor #-}
+{-# LANGUAGE PatternSynonyms #-}
 module Core.Core where
 
 import Pretty
@@ -11,34 +12,63 @@ import Data.Triple
 
 import Syntax (Var(..), Resolved)
 
-data Atom a
+data AnnAtom b a
   = Ref a (Type a)
-  | Lam (Argument a) (Term a)
+  | Lam (Argument a) (AnnTerm b a)
   | Lit Literal
   deriving (Eq, Show, Ord, Data, Typeable, Functor)
+
+type Atom = AnnAtom ()
 
 data Argument a
   = TermArgument a (Type a)
   | TypeArgument a (Type a) -- TODO kinds
   deriving (Eq, Show, Ord, Data, Typeable, Functor)
 
-data Term a
-  = Atom (Atom a)
-  | App (Atom a) (Atom a) -- removes a λ
+data AnnTerm b a
+  = AnnAtom b (AnnAtom b a)
+  | AnnApp b (AnnAtom b a) (AnnAtom b a) -- removes a λ
 
-  | Let (Binding a) (Term a)
-  | Match (Atom a) [(Pattern a, Type a, Term a)]
+  | AnnLet b (AnnBinding b a) (AnnTerm b a)
+  | AnnMatch b (AnnAtom b a) [(Pattern a, Type a, AnnTerm b a)]
 
-  | Extend (Atom a) [(Text, Type a, Atom a)]
+  | AnnExtend b (AnnAtom b a) [(Text, Type a, AnnAtom b a)]
 
-  | TyApp (Atom a) (Type a) -- removes a Λ
-  | Cast (Atom a) (Coercion a)
+  | AnnTyApp b (AnnAtom b a) (Type a) -- removes a Λ
+  | AnnCast b (AnnAtom b a) (Coercion a)
   deriving (Eq, Show, Ord, Data, Typeable, Functor)
 
-data Binding a
-  = One (a, Type a, Term a) -- uncurried for convenience
-  | Many [(a, Type a, Term a)]
+type Term = AnnTerm ()
+
+{-# COMPLETE Atom, App, Let, Match, Extend, TyApp, Cast #-}
+
+pattern Atom :: Atom a -> Term a
+pattern Atom a = AnnAtom () a
+
+pattern App :: Atom a -> Atom a -> Term a
+pattern App f x = AnnApp () f x
+
+pattern Let :: Binding a -> Term a -> Term a
+pattern Let b r = AnnLet () b r
+
+pattern Match :: Atom a -> [(Pattern a, Type a, Term a)] -> Term a
+pattern Match t b = AnnMatch () t b
+
+pattern Extend :: Atom a -> [(Text, Type a, Atom a)] -> Term a
+pattern Extend f fs = AnnExtend () f fs
+
+pattern TyApp :: Atom a -> Type a -> Term a
+pattern TyApp f x = AnnTyApp () f x
+
+pattern Cast :: AnnAtom () a -> Coercion a -> Term a
+pattern Cast a ty = AnnCast () a ty
+
+data AnnBinding b a
+  = One (a, Type a, AnnTerm b a) -- uncurried for convenience
+  | Many [(a, Type a, AnnTerm b a)]
   deriving (Eq, Show, Ord, Data, Typeable, Functor)
+
+type Binding = AnnBinding ()
 
 data Pattern a
   = Capture a (Type a)
@@ -75,11 +105,13 @@ data Type a
   | StarTy -- * :: *
   deriving (Eq, Show, Ord, Data, Typeable, Functor)
 
-data Stmt a
+data AnnStmt b a
   = Foreign a (Type a) Text
-  | StmtLet [(a, Type a, Term a)]
+  | StmtLet [(a, Type a, AnnTerm b a)]
   | Type a [(a, Type a)]
   deriving (Eq, Show, Ord, Data, Typeable, Functor)
+
+type Stmt = AnnStmt ()
 
 instance Pretty a => Pretty (Atom a) where
   pretty (Ref v _) = pretty v
