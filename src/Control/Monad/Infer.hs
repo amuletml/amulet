@@ -22,7 +22,7 @@ module Control.Monad.Infer
   , SomeReason(..), Reasonable
 
   -- lenses:
-  , values, types
+  , values, types, typeVars
   )
   where
 
@@ -53,16 +53,17 @@ type MonadInfer p m = (MonadError TypeError m, MonadReader Env m, MonadWriter [C
 data Env
   = Env { _values  :: Map.Map (Var Resolved) (Type Typed)
         , _types   :: Map.Map (Var Resolved) (Kind Typed)
+        , _typeVars :: Set.Set (Var Resolved)
         }
   deriving (Eq, Show, Ord)
 
 
 instance Monoid Env where
   mappend = (<>)
-  mempty = Env mempty mempty
+  mempty = Env mempty mempty mempty
 
 instance Semigroup Env where
-  Env a b<> Env a' b' = Env (a <> a') (b <> b')
+  Env a b c <> Env a' b' c' = Env (a <> a') (b <> b') (c <> c')
 
 data Constraint p
   = ConUnify SomeReason (Type p) (Type p)
@@ -179,7 +180,7 @@ instantiate tp@(TyForall vs ty) = do
 instantiate ty = pure (mempty, ty, ty)
 
 difference :: Env -> Env -> Env
-difference (Env ma mb) (Env ma' mb') = Env (ma Map.\\ ma') (mb Map.\\ mb')
+difference (Env ma mb mc) (Env ma' mb' mc') = Env (ma Map.\\ ma') (mb Map.\\ mb') (mc Set.\\ mc')
 
 freshTV :: MonadGen Int m => m (Type Typed)
 freshTV = TyVar . TvName <$> fresh
@@ -188,13 +189,13 @@ freshKV :: MonadGen Int m => m (Kind Typed)
 freshKV = KiVar . TvName <$> fresh
 
 freeInScope :: Env -> Set.Set (Var Typed)
-freeInScope (Env vars _) = foldMap ftv vars
+freeInScope (Env vars _ _) = foldMap ftv vars
 
 instance Pretty TypeError where
-  pretty (NotEqual a b) = string "Type error: failed to" <+> align (string "unify" <+> verbatim a </> string " with" <+> verbatim b)
-  pretty (KindsNotEqual a b) = string "Kind error: failed to" <+> align (string "unify" <+> verbatim a </> string " with" <+> verbatim b)
-  pretty (Occurs v t) = string "Occurs check:" <+> align (string "Type variable" <+> verbatim (stypeVar (pretty v)) </> indent 4 (string "occurs in" <+> verbatim t))
-  pretty (NotInScope e) = string "Variable not in scope:" <+> verbatim e
+  pretty (NotEqual a b) = string "Type error: failed to" <+> align (string "unify" <+> pretty a </> string " with" <+> pretty b)
+  pretty (KindsNotEqual a b) = string "Kind error: failed to" <+> align (string "unify" <+> pretty a </> string " with" <+> pretty b)
+  pretty (Occurs v t) = string "Occurs check:" <+> string "The type variable" <+> stypeVar (pretty v) </> indent 4 (string "occurs in the type" <+> pretty t)
+  pretty (NotInScope e) = string "Variable not in scope:" <+> pretty e
   pretty (ArisingFrom er ex) = pretty (annotation ex) <> colon <+> stypeSkol (string "error")
     <#> indent 2 (pretty er <#> nest 4 (bullet (string "Arising from use of" <+> blameOf ex) </> pretty ex))
   pretty (FoundHole xs) = vsep (map prnt xs) where

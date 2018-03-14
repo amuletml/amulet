@@ -94,6 +94,14 @@ checkPattern pt@(PType p t ann) ty = do
   _ <- unify pt ty t'
   pure (PType p' t' (ann, t'), binds, cs)
 
+boundTvs :: Ord (Var p) => Pattern p -> Set.Set (Var p)
+boundTvs Wildcard{} = mempty
+boundTvs Capture{} = mempty
+boundTvs (Destructure _ p _) = maybe mempty boundTvs p
+boundTvs (PType _ t _) = ftv t
+boundTvs (PRecord ps _) = foldMap (boundTvs . snd) ps
+boundTvs (PTuple ps _) = foldMap boundTvs ps
+
 skolGadt :: MonadInfer Typed m => Type Typed -> m (Type Typed)
 skolGadt ty =
   let result (TyForall _ t) = result t

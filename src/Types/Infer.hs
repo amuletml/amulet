@@ -89,8 +89,9 @@ check (Let ns b an) t = do
 check ex@(Fun p e an) ty = do
   (dom, cod, _) <- decompose ex _TyArr ty
   (p', vs, cs) <- checkPattern p dom
+  let tvs = boundTvs p
   implies (Arm p e) dom cs $ do
-    e' <- extendMany vs $ check e cod
+    e' <- local (typeVars %~ Set.union tvs) $ extendMany vs $ check e cod
     pure (Fun p' e' (an, ty))
 
 check (If c t e an) ty = If <$> check c tyBool <*> check t ty <*> check e ty <*> pure (an, ty)
@@ -99,7 +100,8 @@ check (Match t ps a) ty = do
   (t', tt) <- infer t
   ps' <- for ps $ \(p, e) -> do
     (p', ms, cs) <- checkPattern p tt
-    (,) <$> pure p' <*> implies (Arm p e) tt cs (extendMany ms (check e ty))
+    let tvs = boundTvs p
+    (,) <$> pure p' <*> implies (Arm p e) tt cs (local (typeVars %~ Set.union tvs) (extendMany ms (check e ty)))
   pure (Match t' ps' (a, ty))
 
 check ex@(Record rows a) ty = do
@@ -140,8 +142,9 @@ infer expr@(VarRef k a) = do
 
 infer (Fun p e an) = do
   (p', dom, ms, cs) <- inferPattern p
+  let tvs = boundTvs p
   _ <- leakEqualities (Arm p e) cs
-  (e', cod) <- extendMany ms $ infer e
+  (e', cod) <- local (typeVars %~ Set.union tvs) . extendMany ms $ infer e
   pure (Fun p' e' (an, TyArr dom cod), TyArr dom cod)
 
 infer (Literal l an) = pure (Literal l (an, ty), ty) where
@@ -172,8 +175,9 @@ infer ex@(Match t ps a) = do
   (t', tt) <- infer t
   ps' <- for ps $ \(p, e) -> do
     (p', ms, cs) <- checkPattern p tt
+    let tvs = boundTvs p
     leakEqualities ex cs
-    (e', ty) <- extendMany ms (infer e)
+    (e', ty) <- local (typeVars %~ Set.union tvs) $ extendMany ms (infer e)
     pure (p', e', ty, Arm p e)
   let (_, _, t, _) = head ps'
   ps' <- for ps' $ \(p, e, t', blame) -> do
@@ -274,7 +278,7 @@ inferLetTy closeOver vs =
       generalise ty =
         let fv = ftv ty
          in do
-           env <- asks (foldMap ftv . _values)
+           env <- Set.map TvName <$> view typeVars
            pure $ case Set.toList (fv `Set.difference` env) of
              [] -> ty
              vs -> TyForall vs ty
