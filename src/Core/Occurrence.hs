@@ -41,6 +41,10 @@ instance Semigroup Occurrence where
 
   _ <> _ = MultiLambda
 
+instance Monoid Occurrence where
+  mempty = Dead
+  mappend = (<>)
+
 type OccursMap = VarMap.Map Occurrence
 
 data OccursVar v
