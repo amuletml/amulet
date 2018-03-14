@@ -27,24 +27,32 @@ bind var ty
   | TyForall{} <- ty = throwError (Impredicative var ty)
   | otherwise = do
       env <- get
-      can <- asks (Set.notMember var)
+      noTouch <- ask
       -- Attempt to extend the environment, otherwise unify with existing type
       case Map.lookup var env of
-        Nothing -> if can
-                      then put (env `compose` Map.singleton var (normType ty))
-                      else throwError (NotEqual (TyVar var) ty)
+        Nothing ->
+          if | var `Set.notMember` noTouch -> put (env `compose` Map.singleton var (normType ty))
+             | var `Set.member` noTouch, TyVar v <- ty, v `Set.notMember` noTouch -> put (env `compose` Map.singleton v (TyVar var))
+             | otherwise -> throwError (NotEqual (TyVar var) ty)
         Just ty'
           | ty' == ty -> pure ()
           | otherwise -> unify (normType ty) (normType ty')
 
 unify :: Type Typed -> Type Typed -> SolveM ()
+unify (TySkol x) (TySkol y)
+  | x == y = pure ()
+unify (TySkol t@(Skolem sv _ _)) b = do
+  sub <- get
+  case Map.lookup sv sub of
+    Just t -> unify t b
+    Nothing -> case b of
+      TyVar v -> bind v (TySkol t)
+      _ -> throwError $ SkolBinding t b
+unify b (TySkol t) = unify (TySkol t) b
+
 unify (TyVar a) b = bind a b
 unify a (TyVar b) = bind b a
 
-unify (TySkol x) (TySkol y)
-  | x == y = pure ()
-unify (TySkol t) b = throwError $ SkolBinding t b
-unify b (TySkol t) = throwError $ SkolBinding t b
 
 unify (TyWithConstraints cs a) t = do
   for_ cs $ \(a, b) -> unify a b
@@ -139,31 +147,20 @@ doSolve (ConImplies because not cs ts:xs) = do
         | t `Set.member` not' = Map.insert k (TyVar t) m
       leak _ _ m = m
   do
-    let go = lift (doSolve cs')
+    let go = doSolve cs'
               `catchError` \e -> case realErr e of
               SkolBinding (Skolem v _ _) t -> do
-                tell (Set.singleton v)
-                lift (bind v t)
+                unify (TyVar v) t
               _ -> throwError e
-        go :: WriterT (Set.Set (Var Typed)) SolveM ()
+        go :: SolveM ()
 
-    (((), skol), sub) <- local (const mempty) . capture . runWriterT $ go
+    ((), sub) <- local (const mempty) . capture $ go
 
     let after = Map.foldrWithKey leak before sub
 
     local (Set.union not') $ do
       put sub
       doSolve (map (apply sub) ts')
-        `catchError` \e -> case realErr e of
-          SkolBinding (Skolem v _ _) (TySkol x@(Skolem t _ _)) ->
-            if | t `Set.member` skol -> bind v (TySkol x)
-               | v `Set.member` skol -> bind v (TySkol x)
-               | otherwise -> throwError e
-          SkolBinding (Skolem v _ _) t ->
-            if v `Set.member` skol
-               then bind v t
-               else throwError e
-          _ -> throwError e
       put after
 
     doSolve xs
