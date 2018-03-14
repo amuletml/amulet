@@ -254,8 +254,12 @@ Lit :: { Located Lit }
     | false                { lPos1 $1 $ LiBool False }
 
 Pattern :: { Pattern Parsed }
+        : PatComp as Var   { withPos2 $1 $3 $ PAs $1 (getL $3) }
+        | PatComp          { $1 }
+
+PatComp :: { Pattern Parsed }
         : ArgP             { $1 }
-        | Con Pattern      { withPos2 $1 $2 $ Destructure (getL $1) (Just $2) }
+        | Con PatComp      { withPos2 $1 $2 $ Destructure (getL $1) (Just $2) }
         | ArgP ':' Type    { withPos2 $1 $3 $ PType $1 (getL $3) }
 
 ArgP :: { Pattern Parsed }

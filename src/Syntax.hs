@@ -113,6 +113,7 @@ data Pattern p
   | PType (Pattern p) (Type p) (Ann p)
   | PRecord [(Text, Pattern p)] (Ann p)
   | PTuple [Pattern p] (Ann p)
+  | PAs (Pattern p) (Var p) (Ann p)
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Pattern p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Pattern p)
@@ -141,7 +142,7 @@ data Type p
   -- Used internally:
   | TySkol (Skolem p)
   | TyWithConstraints [(Type p, Type p)] (Type p)
-
+ 
 data Skolem p
   = Skolem { _skolIdent :: Var p -- the constant itself
            , _skolVar :: Var p -- what variable this skolemises

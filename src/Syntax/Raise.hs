@@ -47,6 +47,7 @@ raiseP v a (Destructure c s' p)
 raiseP v a (PType i t p) = PType (raiseP v a i) (raiseT v t) (a p)
 raiseP v a (PRecord rs p) = PRecord (map (second (raiseP v a)) rs) (a p)
 raiseP v a (PTuple e p) = PTuple (map (raiseP v a) e) (a p)
+raiseP v a (PAs p v' a') = PAs (raiseP v a p) (v v') (a a')
 
 raiseT :: (Var p -> Var p') -- How to raise variables
        -> Type p -> Type p'

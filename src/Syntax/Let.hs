@@ -36,6 +36,7 @@ freeIn x = error (show x)
 
 bound :: Ord (Var p) => Pattern p -> Set.Set (Var p)
 bound (Destructure _ x _) = maybe mempty bound x
+bound (PAs p v _)         = Set.insert v (bound p)
 bound (PRecord vs _)      = foldMap (bound . snd) vs
 bound (PTuple ps _)       = foldMap bound ps
 bound (Capture p _)       = Set.singleton p
