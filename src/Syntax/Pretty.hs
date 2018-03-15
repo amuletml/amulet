@@ -6,6 +6,7 @@ module Syntax.Pretty
   ) where
 
 import Control.Arrow (first, second)
+import Control.Lens
 
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
@@ -20,12 +21,12 @@ parenFun f = case f of
   Fun{} -> parens (pretty f)
   Let{} -> parens (pretty f)
   Match{} -> parens (pretty f)
-  App{} -> parens (pretty f)
   _ -> pretty f
 
 parenArg :: Pretty (Var p) => Expr p -> Doc
 parenArg f = case f of
   TypeApp{} -> parens (pretty f)
+  App{} -> parens (pretty f)
   _ -> parenFun f
 
 instance (Pretty (Var p)) => Pretty (Expr p) where
@@ -90,7 +91,7 @@ instance Pretty Lit where
 instance (Pretty (Var p)) => Pretty (Type p) where
   pretty (TyCon v) = stypeCon (pretty v)
   pretty (TyVar v) = stypeVar (squote <> pretty v)
-  pretty (TySkol (Skolem v _ _)) = stypeSkol (pretty v)
+  pretty (TySkol v) = stypeSkol (pretty (v ^. skolIdent))
   pretty (TyForall vs v)
     = keyword "forall" <+> hsep (map (stypeVar . (squote <>) . pretty) vs) <> dot <+> pretty v
 

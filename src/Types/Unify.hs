@@ -41,7 +41,7 @@ bind var ty
 unify :: Type Typed -> Type Typed -> SolveM ()
 unify (TySkol x) (TySkol y)
   | x == y = pure ()
-unify (TySkol t@(Skolem sv _ _)) b = do
+unify (TySkol t@(Skolem sv _ _ _)) b = do
   sub <- get
   case Map.lookup sv sub of
     Just t -> unify t b
@@ -149,7 +149,7 @@ doSolve (ConImplies because not cs ts:xs) = do
   do
     let go = doSolve cs'
               `catchError` \e -> case realErr e of
-              SkolBinding (Skolem v _ _) t -> do
+              SkolBinding (Skolem v _ _ _) t -> do
                 unify (TyVar v) t
               _ -> throwError e
         go :: SolveM ()
@@ -166,28 +166,28 @@ doSolve (ConImplies because not cs ts:xs) = do
     doSolve xs
   `catchError` \e -> throwError (ArisingFrom e because)
 
-subsumes :: (MonadGen Int m, MonadError TypeError m)
-         => (Type Typed -> Type Typed -> m b)
-         -> Type Typed -> Type Typed -> m b
+subsumes :: (Type Typed -> Type Typed -> SolveM b)
+         -> Type Typed -> Type Typed -> SolveM b
 subsumes k t1 t2@TyForall{} = do
-  t2' <- skolemise t2
+  sub <- get
+  t2' <- skolemise (BySubsumption (apply sub t1) (apply sub t2)) t2
   subsumes k t1 t2'
 subsumes k t1@TyForall{} t2 = do
   (_, _, t1') <- instantiate t1
   subsumes k t1' t2
 subsumes k a b = k a b
 
-skolemise :: MonadGen Int m => Type Typed -> m (Type Typed)
-skolemise ty@(TyForall tvs t) = do
-  sks <- traverse (freshSkol ty) tvs
-  skolemise (apply (Map.fromList (zip tvs sks)) t)
-skolemise (TyArr c d) = TyArr c <$> skolemise d
-skolemise ty = pure ty
+skolemise :: MonadGen Int m => SkolemMotive Typed -> Type Typed -> m (Type Typed)
+skolemise motive ty@(TyForall tvs t) = do
+  sks <- traverse (freshSkol motive ty) tvs
+  skolemise motive (apply (Map.fromList (zip tvs sks)) t)
+skolemise motive (TyArr c d) = TyArr c <$> skolemise motive d
+skolemise _ ty = pure ty
 
-freshSkol :: MonadGen Int m => Type Typed -> Var Typed -> m (Type Typed)
-freshSkol ty u = do
+freshSkol :: MonadGen Int m => SkolemMotive Typed -> Type Typed -> Var Typed -> m (Type Typed)
+freshSkol m ty u = do
   var <- TvName <$> fresh
-  pure (TySkol (Skolem var u ty))
+  pure (TySkol (Skolem var u ty m))
 
 occurs :: Var Typed -> Type Typed -> Bool
 occurs _ (TyVar _) = False

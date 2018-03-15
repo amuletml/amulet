@@ -198,7 +198,7 @@ lowerType (S.TyRows rho vs) = RowsTy (lowerType rho) (map (fmap lowerType) vs)
 lowerType (S.TyExactRows vs) = ExactRowsTy (map (fmap lowerType) vs)
 lowerType (S.TyVar (TvName v)) = VarTy v
 lowerType (S.TyCon (TvName v)) = ConTy v
-lowerType (S.TySkol (Skolem _ (TvName v) _)) = VarTy v
+lowerType (S.TySkol (Skolem _ (TvName v) _ _)) = VarTy v
 lowerType (S.TyWithConstraints _ t) = lowerType t
 
 tup2Rec :: Int -> S.Type Typed -> [(T.Text, Type)]

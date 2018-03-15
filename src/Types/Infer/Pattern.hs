@@ -48,7 +48,7 @@ checkPattern (Capture v ann) ty = pure (Capture (TvName v) (ann, ty), [(TvName v
 checkPattern ex@(Destructure con ps ann) target =
   case ps of
     Nothing -> do
-      pty <- skolGadt =<< lookupTy con
+      pty <- skolGadt con =<< lookupTy con
       let (cs, ty) =
             case pty of
               TyWithConstraints cs ty -> (cs, ty)
@@ -62,7 +62,7 @@ checkPattern ex@(Destructure con ps ann) target =
             _ <- unify ex d target
             pure (Destructure (TvName con) (Just ps') (ann, d), b, cs ++ cs')
       in do
-        t <- skolGadt =<< lookupTy con
+        t <- skolGadt con =<< lookupTy con
         case t of
           TyWithConstraints cs ty -> go cs ty
           _ -> go [] t
@@ -102,8 +102,8 @@ boundTvs (PType _ t _) = ftv t
 boundTvs (PRecord ps _) = foldMap (boundTvs . snd) ps
 boundTvs (PTuple ps _) = foldMap boundTvs ps
 
-skolGadt :: MonadInfer Typed m => Type Typed -> m (Type Typed)
-skolGadt ty =
+skolGadt :: MonadInfer Typed m => Var Resolved -> Type Typed -> m (Type Typed)
+skolGadt var ty =
   let result (TyForall _ t) = result t
       result (TyWithConstraints _ t) = result t
       result (TyArr _ t) = result t
@@ -121,5 +121,5 @@ skolGadt ty =
       fugitives = mentioned `Set.union` (foldMap (ftv . snd) freed)
    in do
      vs <- for (Set.toList (ftv ty `Set.difference` fugitives)) $ \v -> do
-       (v,) <$> freshSkol ty v
+       (v,) <$> freshSkol (ByExistential (TvName var) ty) ty v
      pure $ apply (Map.fromList vs) ty
