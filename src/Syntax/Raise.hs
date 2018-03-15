@@ -51,7 +51,10 @@ raiseP v a (PTuple e p) = PTuple (map (raiseP v a) e) (a p)
 raiseT :: (Var p -> Var p') -- How to raise variables
        -> Type p -> Type p'
 raiseT v (TyCon n) = TyCon (v n)
-raiseT v (TySkol (Skolem n u t)) = TySkol (Skolem (v n) (v u) (raiseT v t))
+raiseT v (TySkol (Skolem n u t m)) = TySkol (Skolem (v n) (v u) (raiseT v t) (motive m)) where
+  motive (BySubsumption a b) = BySubsumption (raiseT v a) (raiseT v b)
+  motive ByAscription = ByAscription
+  motive (ByExistential a t) = ByExistential (v a) (raiseT v t)
 raiseT v (TyVar n) = TyVar (v n)
 raiseT v (TyForall n t) = TyForall (map v n) (raiseT v t)
 raiseT v (TyArr x y) = TyArr (raiseT v x) (raiseT v y)
