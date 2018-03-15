@@ -2,10 +2,10 @@
 module Core.Occurrence
   ( OccursVar(..)
   , Occurs(..)
-  , Occurrence(..)
+  , Occurrence(..), OccursMap
   , tagOccursVar, tagOccursMap
   , tagOccurStmt, tagOccurTerm
-  , doesItOccur
+  , doesItOccur, occurrenceIn
   ) where
 
 
@@ -72,10 +72,7 @@ tagOccurStmt :: forall a a' b b'. (IsVar a, IsVar a')
              -> [AnnStmt b a] -> (OccursMap, [AnnStmt b' a'])
 tagOccurStmt ann var = tagStmt where
   conv = fmap (`var` defOcc)
-
-  var' v m = case VarMap.lookup (toVar v) m of
-               Nothing -> var v Dead
-               Just x -> var v x
+  var' v = var v . occurrenceIn v
 
   tagStmt :: [AnnStmt b a] -> (OccursMap, [AnnStmt b' a'])
   tagStmt [] = (mempty, [])
@@ -104,9 +101,7 @@ tagOccurTerm ann var = tagTerm where
   conv :: Functor f => f a -> f a'
   conv = fmap (`var` defOcc)
 
-  var' v m = case VarMap.lookup (toVar v) m of
-               Nothing -> var v Dead
-               Just x -> var v x
+  var' v = var v . occurrenceIn v
 
   tagAtom (Lit l) = (mempty, Lit l)
   tagAtom (Ref a ty) = (VarMap.singleton (toVar a) Once
@@ -185,3 +180,8 @@ doesItOccur = (/= Dead) . usedWhen
 occConcat :: [OccursMap] -> OccursMap
 occConcat [] = mempty
 occConcat (x:xs) = foldr (#) x xs
+
+occurrenceIn :: IsVar a => a -> OccursMap -> Occurrence
+occurrenceIn v m = case VarMap.lookup (toVar v) m of
+                    Nothing -> Dead
+                    Just x -> x

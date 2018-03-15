@@ -6,7 +6,10 @@ import Core.Optimise.DeadCode
 import Core.Optimise.Newtype
 import Core.Optimise.Inline
 import Core.Optimise.Reduce
+import Core.Optimise.Sinking
 import Core.Optimise
+
+import Core.Free
 
 import Control.Monad.Gen
 import Control.Monad
@@ -23,6 +26,7 @@ optmOnce = passes where
 
            , pure . deadCodePass
            , killNewtypePass
+           , pure . sinkingPass . tagFreeSet
 
            , pure . reducePass
            ]

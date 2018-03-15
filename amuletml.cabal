@@ -101,6 +101,7 @@ library amulet
                      , Data.Spanned
                      -- Core
                      , Core.Core
+                     , Core.Free
                      , Core.Lower
                      , Core.Types
                      , Core.Optimise
@@ -108,6 +109,7 @@ library amulet
                      , Core.Occurrence
                      , Core.Optimise.Reduce
                      , Core.Optimise.Inline
+                     , Core.Optimise.Sinking
                      , Core.Optimise.Newtype
                      , Core.Optimise.DeadCode
                      -- Backend

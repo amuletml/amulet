@@ -205,22 +205,22 @@ instance Pretty a => Pretty (Stmt a) where
 instance Pretty a => Pretty [Stmt a] where
   pretty = vcat . map pretty
 
-freeInAtom :: IsVar a => Atom a -> VarSet.Set
+freeInAtom :: IsVar a => AnnAtom b a -> VarSet.Set
 freeInAtom (Ref v _) = VarSet.singleton (VarSet.toVar v)
 freeInAtom (Lam (TermArgument v _) e) = VarSet.delete (VarSet.toVar v) (freeIn e)
 freeInAtom (Lam TypeArgument{} e) = freeIn e
 freeInAtom (Lit _) = mempty
 
-freeIn :: IsVar a => Term a -> VarSet.Set
-freeIn (Atom a) = freeInAtom a
-freeIn (App f x) = freeInAtom f <> freeInAtom x
-freeIn (Let (One v) e) = VarSet.difference (freeIn e <> freeIn (thd3 v)) (VarSet.singleton (toVar (fst3 v)))
-freeIn (Let (Many vs) e) = VarSet.difference (freeIn e <> foldMap (freeIn . thd3) vs) (VarSet.fromList (map (VarSet.toVar . fst3) vs))
-freeIn (Match e bs) = freeInAtom e <> foldMap freeInBranch bs where
+freeIn :: IsVar a => AnnTerm b a -> VarSet.Set
+freeIn (AnnAtom _ a) = freeInAtom a
+freeIn (AnnApp _ f x) = freeInAtom f <> freeInAtom x
+freeIn (AnnLet _ (One v) e) = VarSet.difference (freeIn e <> freeIn (thd3 v)) (VarSet.singleton (toVar (fst3 v)))
+freeIn (AnnLet _ (Many vs) e) = VarSet.difference (freeIn e <> foldMap (freeIn . thd3) vs) (VarSet.fromList (map (VarSet.toVar . fst3) vs))
+freeIn (AnnMatch _ e bs) = freeInAtom e <> foldMap freeInBranch bs where
   freeInBranch (b, _, e) = VarSet.difference (freeIn e) (patternVars b)
-freeIn (Extend c rs) = freeInAtom c <> foldMap (freeInAtom . thd3) rs
-freeIn (TyApp f _) = freeInAtom f
-freeIn (Cast f _) = freeInAtom f
+freeIn (AnnExtend _ c rs) = freeInAtom c <> foldMap (freeInAtom . thd3) rs
+freeIn (AnnTyApp _ f _) = freeInAtom f
+freeIn (AnnCast _ f _) = freeInAtom f
 
 occursInAtom :: IsVar a => a -> Atom a -> Bool
 occursInAtom v (Ref v' _) = toVar v == toVar v'
@@ -266,3 +266,12 @@ relates (Domain x) = do
 relates (Codomain x) = do
   (ArrTy _ a, ArrTy _ b) <- relates x
   pure (a, b)
+
+extractAnn :: AnnTerm b a -> b
+extractAnn (AnnAtom b _)     = b
+extractAnn (AnnApp b _ _)    = b
+extractAnn (AnnLet b _ _)    = b
+extractAnn (AnnMatch b _ _)  = b
+extractAnn (AnnExtend b _ _) = b
+extractAnn (AnnTyApp b _ _)  = b
+extractAnn (AnnCast b _ _)   = b
