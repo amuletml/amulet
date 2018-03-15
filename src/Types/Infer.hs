@@ -37,6 +37,8 @@ import Types.Unify
 import Types.Holes
 import Types.Kinds
 
+import Pretty
+
 -- Solve for the types of lets in a program
 inferProgram :: MonadGen Int m => [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))
 inferProgram ct = fmap fst <$> runInfer builtinsEnv (inferAndCheck ct) where
@@ -67,8 +69,8 @@ correct ty = gmapT (mkT go) where
 
 check :: MonadInfer Typed m => Expr Resolved -> Type Typed -> m (Expr Typed)
 check e ty@TyForall{} = do -- This is rule Decl∀L from [Complete and Easy]
-  e' <- check e =<< skolemise ty -- gotta be polymorphic - don't allow instantiation
-  pure (correct ty e')
+  e <- check e =<< skolemise ByAscription ty -- gotta be polymorphic - don't allow instantiation
+  pure (correct ty e)
 
 check (Hole v a) t = pure (Hole (TvName v) (a, t))
 
@@ -76,53 +78,53 @@ check (Begin [] _) _ = error "impossible: check empty Begin"
 check (Begin xs a) t = do
   let start = init xs
       end = last xs
-  start' <- traverse (fmap fst . infer) start
-  end' <- check end t
-  pure (Begin (start' ++ [end']) (a, t))
+  start <- traverse (fmap fst . infer) start
+  end <- check end t
+  pure (Begin (start ++ [end]) (a, t))
 
 check (Let ns b an) t = do
-  (ns', ts) <- inferLetTy id ns
+  (ns, ts) <- inferLetTy id ns
   extendMany ts $ do
-    b' <- check b t
-    pure (Let ns' b' (an, t))
+    b <- check b t
+    pure (Let ns b (an, t))
 
-check ex@(Fun p e an) ty = do
+check ex@(Fun pat e an) ty = let tvs = boundTvs pat in do
   (dom, cod, _) <- decompose ex _TyArr ty
-  (p', vs, cs) <- checkPattern p dom
-  let tvs = boundTvs p
-  implies (Arm p e) dom cs $ do
-    e' <- local (typeVars %~ Set.union tvs) $ extendMany vs $ check e cod
-    pure (Fun p' e' (an, ty))
+  (p, vs, cs) <- checkPattern pat dom
+  implies (Arm pat e) dom cs $ do
+    e <- local (typeVars %~ Set.union tvs) . extendMany vs $ check e cod
+    pure (Fun p e (an, ty))
 
 check (If c t e an) ty = If <$> check c tyBool <*> check t ty <*> check e ty <*> pure (an, ty)
 
 check (Match t ps a) ty = do
-  (t', tt) <- infer t
-  ps' <- for ps $ \(p, e) -> do
+  (t, tt) <- infer t
+  ps <- for ps $ \(p, e) -> let tvs = boundTvs p in do
     (p', ms, cs) <- checkPattern p tt
-    let tvs = boundTvs p
-    (,) <$> pure p' <*> implies (Arm p e) tt cs (local (typeVars %~ Set.union tvs) (extendMany ms (check e ty)))
-  pure (Match t' ps' (a, ty))
-
-check ex@(Record rows a) ty = do
-  (rows', rowts) <- unzip <$> inferRows rows
-  Record rows' . (a,) <$> unify ex (TyExactRows rowts) ty
-
-check ex@(RecordExt rec rows a) ty = do
-  (rec', rho) <- infer rec
-  (rows', newts) <- unzip <$> inferRows rows
-  RecordExt rec' rows' . (a,) <$> unify ex (TyRows rho newts) ty
+    (p',) <$> implies (Arm p e) tt cs
+      (local (typeVars %~ Set.union tvs)
+        (extendMany ms (check e ty)))
+  pure (Match t ps (a, ty))
 
 check (Access rc key a) ty = do
   rho <- freshTV
   Access <$> check rc (TyRows rho [(key, ty)]) <*> pure key <*> pure (a, ty)
 
+-- Tuple is an introduction form, so it really should be inferring, but
+-- this is a lot more elegant.
 check ex@(Tuple es an) ty = Tuple <$> go es ty <*> pure (an, ty) where
   go [] _ = error "not a tuple"
   go [x] t = (:[]) <$> check x t
   go (x:xs) t = do
     (left, right, _) <- decompose ex _TyTuple t
     (:) <$> check x left <*> go xs right
+
+-- This is _very_ annoying, but we need it for nested ascriptions
+check ex@(Ascription e ty an) goal = do
+  (ty, _) <- resolveKind ty
+  e' <- check e ty
+  _ <- subsumes ex ty goal
+  pure (Ascription e' ty (an, goal))
 
 check TypeApp{} _ = error "impossible: check TypeApp"
 
@@ -140,12 +142,12 @@ infer expr@(VarRef k a) = do
      then pure (VarRef (TvName k) (a, new), new)
      else mkTyApps expr inst old new
 
-infer (Fun p e an) = do
-  (p', dom, ms, cs) <- inferPattern p
+infer (Fun p e an) = let blame = Arm p e in do
+  (p, dom, ms, cs) <- inferPattern p
   let tvs = boundTvs p
-  _ <- leakEqualities (Arm p e) cs
-  (e', cod) <- local (typeVars %~ Set.union tvs) . extendMany ms $ infer e
-  pure (Fun p' e' (an, TyArr dom cod), TyArr dom cod)
+  _ <- leakEqualities blame cs
+  (e, cod) <- local (typeVars %~ Set.union (Set.map unTvName tvs)) . extendMany ms $ infer e
+  pure (Fun p e (an, TyArr dom cod), TyArr dom cod)
 
 infer (Literal l an) = pure (Literal l (an, ty), ty) where
   ty = case l of
@@ -156,20 +158,20 @@ infer (Literal l an) = pure (Literal l (an, ty), ty) where
     LiFloat{} -> tyFloat
 
 infer ex@(Ascription e ty an) = do
-  (ty', _) <- resolveKind ty `catchError` \e -> throwError (ArisingFrom e (BecauseOf ex))
-  e' <- check e ty'
-  pure (Ascription (correct ty' e') ty' (an, ty'), ty')
+  (ty, _) <- resolveKind ty `catchError` \e -> throwError (ArisingFrom e (BecauseOf ex))
+  e <- check e ty
+  pure (Ascription (correct ty e) ty (an, ty), ty)
 
 infer ex@(App f x a) = do
-  (f', (d, c, k)) <- secondA (decompose ex _TyArr) =<< infer f
-  x' <- check x d
-  pure (App (k f') x' (a, c), c)
+  (f, (d, c, k)) <- secondA (decompose ex _TyArr) =<< infer f
+  x <- check x d
+  pure (App (k f) x (a, c), c)
 
 infer ex@(BinOp l o r a) = do
-  (o', (ld, c, k1)) <- secondA (decompose ex _TyArr) =<< infer o
+  (o, (ld, c, k1)) <- secondA (decompose ex _TyArr) =<< infer o
   (rd, c, k2) <- decompose ex _TyArr c
-  (l', r') <- (,) <$> check l ld <*> check r rd
-  pure (App (k2 (App (k1 o') l' (a, TyArr rd c))) r' (a, c), c)
+  (l, r) <- (,) <$> check l ld <*> check r rd
+  pure (App (k2 (App (k1 o) l (a, TyArr rd c))) r (a, c), c)
 
 infer ex@(Match t ps a) = do
   (t', tt) <- infer t
@@ -184,6 +186,17 @@ infer ex@(Match t ps a) = do
     _ <- unify blame t t' -- TODO: the blame can also come from the pattern.
     pure (p, e)
   pure (Match t' ps' (a, t), t)
+
+infer (Record rows a) = do
+  (rows, rowts) <- unzip <$> inferRows rows
+  let ty = TyExactRows rowts
+   in pure (Record rows (a, ty), ty)
+
+infer (RecordExt rec rows a) = do
+  (rec, rho) <- infer rec
+  (rows, newts) <- unzip <$> inferRows rows
+  let ty = TyRows rho newts
+   in pure (RecordExt rec rows (a, ty), ty)
 
 infer ex = do
   x <- freshTV
@@ -246,7 +259,9 @@ data Origin
 approxType :: MonadInfer Typed m => Expr Resolved -> StateT Origin m (Type Typed)
 approxType (Fun (PType _ t _) e _) = TyArr . fst <$> resolveKind t <*> approxType e
 approxType (Ascription _ t _) = fst <$> resolveKind t
-approxType (Fun _ e _) = TyArr <$> freshTV <*> approxType e
+approxType (Fun _ e _) = do
+  put Guessed
+  TyArr <$> freshTV <*> approxType e
 approxType _ = do
   put Guessed
   lift freshTV
@@ -264,14 +279,17 @@ inferLetTy closeOver vs =
       wasGuessed Guessed = True
       wasGuessed _ = False
 
-      figureOut :: SomeReason -> Type Typed -> [Constraint Typed] -> m (Type Typed, Expr Typed -> Expr Typed)
+      blameSkol :: TypeError -> (Var Resolved, SomeReason) -> TypeError
+      blameSkol e (v, r) = ArisingFrom (Note e (string "in the inferred type for" <+> pretty v)) r
+
+      figureOut :: (Var Resolved, SomeReason) -> Type Typed -> [Constraint Typed] -> m (Type Typed, Expr Typed -> Expr Typed)
       figureOut blame ty cs = do
         cur <- gen
         (x, vt) <- case solve cur cs of
           Right x -> pure (x, normType (closeOver (apply x ty)))
-          Left e -> throwError (ArisingFrom e blame)
+          Left e -> throwError (ArisingFrom e (snd blame))
         unless (null (skols vt)) $
-          throwError (ArisingFrom (EscapedSkolems (Set.toList (skols vt)) vt) blame)
+          throwError (blameSkol (EscapedSkolems (Set.toList (skols vt)) vt) blame)
         pure (closeOver vt, applyInExpr x . raiseE id (\(a, t) -> (a, normType (apply x t))))
 
       generalise :: Type Typed -> m (Type Typed)
@@ -304,7 +322,7 @@ inferLetTy closeOver vs =
               (exp', ty) <- infer exp
               _ <- unify exp (snd tv) ty
               pure (exp', ty)
-        (tp, k) <- figureOut (BecauseOf exp) ty cs
+        (tp, k) <- figureOut (var, BecauseOf exp) ty cs
         pure ( [(TvName var, k exp', (ann, tp))], [(TvName var, tp)] )
 
       tcOne (CyclicSCC vars) = do
@@ -330,7 +348,7 @@ inferLetTy closeOver vs =
                   ty' = closeOver (figure ty)
                in do
                   unless (null (skols ty')) $
-                    throwError (ArisingFrom (EscapedSkolems (Set.toList (skols ty')) ty') (BecauseOf exp))
+                    throwError (blameSkol (EscapedSkolems (Set.toList (skols ty')) ty') (unTvName var, BecauseOf exp))
                   pure ( (var, applyInExpr solution (raiseE id (\(a, t) -> (a, normType (figure t))) exp), (ann, ty'))
                        , (var, ty') )
          in fmap unzip . traverse solveOne $ vs

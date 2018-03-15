@@ -8,6 +8,7 @@
   , OverloadedStrings
   , TemplateHaskell
   , ScopedTypeVariables
+  , RecordWildCards
   #-}
 module Control.Monad.Infer
   ( module M
@@ -226,12 +227,12 @@ instance Pretty TypeError where
   pretty (Impredicative v t)
     = vsep [ string "Illegal instantiation of type variable" <+> stypeVar (pretty v)
            , indent 16 (string "with polymorphic type" <+> verbatim t)
-           , string "Note:" <+> string "doing so would constitute" <+> stypeCon (string "impredicative polymorphism")
+           , bullet (string "Note:") <+> string "doing so would constitute" <+> stypeCon (string "impredicative polymorphism")
            ]
   pretty (ImpredicativeApp tf tx)
     = vsep [ string "Illegal use of polymorphic type" <+> verbatim tx
            , indent 2 $ string "as argument to the type function" <+> verbatim tf
-           , string "Note:" <+> string "instantiating a type variable"
+           , bullet (string "Note:") <+> string "instantiating a type variable"
            <+> nest 2 (parens (string "the argument to" <+> verbatim tf)
                    </> string "with a polymorphic type constitutes" <+> stypeCon (string "impredicative polymorphism"))
            ]
@@ -242,20 +243,30 @@ instance Pretty TypeError where
            ]
   pretty (EscapedSkolems esc t) =
     vsep [ case esc of
-            [Skolem var u ty] ->
-              string "Skolem type constant" <+> stypeSkol (pretty var) <+> string "has escaped its scope of" <+> verbatim ty
-                  <#> bullet (string "Note:") <+> stypeSkol (pretty var) <+> string "stands for the type variable" <+> pretty (TyVar u)
+            [Skolem{..}] ->
+              let skol = stypeVar (pretty _skolVar) in
+              string "Rigid type variable" <+> skol <+> string "has escaped its scope of" <+> pretty _skolScope
+                  <#> bullet (string "Note: the variable") <+> skol <+> string "was rigidified because"
+                        <+> nest 8 (prettyMotive _skolMotive <> comma)
+                  <#> indent 8 (string "and is represented by constant" <+> stypeSkol (pretty _skolIdent)) 
             _ -> foldr (<#>) empty (map (pretty . flip EscapedSkolems t . pure) esc)
-         , string "Note: in type" <+> verbatim t
+         , empty -- a line break
+         , bullet (string "Note: in type") <+> verbatim t
          ]
 
-  pretty (SkolBinding (Skolem a v _) b) =
-    vsep [ string "Can not unify skolem type constant" <+> stypeSkol (pretty a) <+> string "with type" <+> verbatim b
-         , string "Note: the constant" <+> stypeSkol (pretty a) <+> "stands for the type variable" <+> stypeVar (pretty v)
+  pretty (SkolBinding (Skolem _ v _ m) b) =
+    vsep [ string "Can not unify rigid type variable" <+> skol <+> string "with" <+> whatIs b
+         , bullet (string "Note: the variable") <+> skol <+> string "was rigidified because" <+> prettyMotive m
          , case b of
-             TySkol (Skolem a v _) -> indent 5 (string "while the constant" <+> stypeSkol (pretty a) <+> "stands for the type variable" <+> stypeVar (pretty v))
+             TySkol (Skolem _ v _ m) ->
+               vsep [ bullet (string "Note: the rigid type variable") <+> stypeVar (pretty v) <> comma <+> string "in turn" <> comma
+                    , indent 8 (string "was rigidified because") <+> prettyMotive m
+                    ]
              _ -> empty
          ]
+    where whatIs (TySkol (Skolem _ v _ _)) = string "the rigid type variable" <+> stypeVar (pretty v)
+          whatIs t = string "the type" <+> pretty t
+          skol = stypeVar (pretty v)
 
 missing :: [(Text, b)] -> [(Text, b)] -> Doc
 missing ra rb
@@ -271,3 +282,8 @@ missing _ _ = undefined -- freaking GHC
 
 diff :: [(Text, b)] -> [(Text, b)] -> [Doc]
 diff ra rb = map (stypeVar . string . T.unpack . fst) (deleteFirstsBy ((==) `on` fst) rb ra)
+
+prettyMotive :: SkolemMotive Typed -> Doc
+prettyMotive ByAscription = string "of a type ascription"
+prettyMotive (BySubsumption t1 t2) = string "of a subsumption constraint relating" <+> pretty t1 <+> string "with" <+> pretty t2
+prettyMotive (ByExistential v t) = string "it is an existential" <> comma <#> string "bound by the type of" <+> pretty v <> comma <+> pretty t

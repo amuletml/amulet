@@ -6,6 +6,7 @@ module Syntax.Pretty
   ) where
 
 import Control.Arrow (first, second)
+import Control.Lens
 
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
@@ -90,7 +91,7 @@ instance Pretty Lit where
 instance (Pretty (Var p)) => Pretty (Type p) where
   pretty (TyCon v) = stypeCon (pretty v)
   pretty (TyVar v) = stypeVar (squote <> pretty v)
-  pretty (TySkol (Skolem v _ _)) = stypeSkol (pretty v)
+  pretty (TySkol v) = stypeSkol (pretty (v ^. skolIdent))
   pretty (TyForall vs v)
     = keyword "forall" <+> hsep (map (stypeVar . (squote <>) . pretty) vs) <> dot <+> pretty v
 

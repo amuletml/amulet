@@ -146,16 +146,26 @@ data Skolem p
   = Skolem { _skolIdent :: Var p -- the constant itself
            , _skolVar :: Var p -- what variable this skolemises
            , _skolScope :: Type p -- the type this was generated for
+           , _skolMotive :: SkolemMotive p
            }
 
 deriving instance (Show (Var p), Show (Ann p)) => Show (Skolem p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Skolem p)
 
+data SkolemMotive p
+  = ByAscription
+  | BySubsumption (Type p) (Type p)
+  | ByExistential (Var p) (Type p)
+
+deriving instance (Show (Var p), Show (Ann p)) => Show (SkolemMotive p)
+deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (SkolemMotive p)
+
+
 instance Eq (Var p) => Eq (Skolem p) where
-  Skolem v _ _  == Skolem v' _ _ = v == v'
+  Skolem v _ _ _ == Skolem v' _ _ _ = v == v'
 
 instance Ord (Var p) => Ord (Skolem p) where
-  Skolem v _ _ `compare` Skolem v' _ _ = v `compare` v'
+  Skolem v _ _ _ `compare` Skolem v' _ _ _ = v `compare` v'
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Type p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Type p)
