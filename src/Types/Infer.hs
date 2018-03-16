@@ -34,19 +34,13 @@ import Types.Infer.Pattern
 import Types.Infer.Builtin
 import Types.Wellformed
 import Types.Unify
-import Types.Holes
 import Types.Kinds
 
 import Pretty
 
 -- Solve for the types of lets in a program
 inferProgram :: MonadGen Int m => [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))
-inferProgram ct = fmap fst <$> runInfer builtinsEnv (inferAndCheck ct) where
-  inferAndCheck prg = do
-    (prg', env) <- inferProg prg
-    case findHoles prg' of
-      xs@(_:_) -> throwError (FoundHole xs)
-      [] -> pure (prg', env)
+inferProgram ct = fmap fst <$> runInfer builtinsEnv (inferProg ct) where
 
 mkTyApps :: Applicative f
          => Expr Resolved
@@ -72,7 +66,9 @@ check e ty@TyForall{} = do -- This is rule Decl∀L from [Complete and Easy]
   e <- check e =<< skolemise ByAscription ty -- gotta be polymorphic - don't allow instantiation
   pure (correct ty e)
 
-check (Hole v a) t = pure (Hole (TvName v) (a, t))
+check (Hole v a) t = do
+  tell [ConFail (TvName v) t]
+  pure (Hole (TvName v) (a, t))
 
 check (Begin [] _) _ = error "impossible: check empty Begin"
 check (Begin xs a) t = do
