@@ -70,6 +70,7 @@ data Constraint p
   = ConUnify SomeReason (Type p) (Type p)
   | ConSubsume SomeReason (Type p) (Type p)
   | ConImplies SomeReason (Type p) [Constraint p] [Constraint p]
+  | ConFail (Var p) (Type p) -- for holes. I hate it.
 
 deriving instance (Show (Ann p), Show (Var p), Show (Expr p), Show (Type p))
   => Show (Constraint p)
@@ -83,7 +84,7 @@ data TypeError where
   Occurs :: Pretty (Var p) => Var p -> Type p -> TypeError
 
   NotInScope :: Var Resolved -> TypeError
-  FoundHole :: [Expr Typed] -> TypeError
+  FoundHole :: Var Typed -> Type Typed -> TypeError
 
   Impredicative :: Pretty (Var p) => Var p -> Type p -> TypeError
   ImpredicativeApp :: Pretty (Var p) => Type p -> Type p -> TypeError
@@ -107,10 +108,12 @@ instance (Ord (Var p), Substitutable p (Type p)) => Substitutable p (Constraint 
   ftv (ConUnify _ a b) = ftv a `Set.union` ftv b
   ftv (ConSubsume _ a b) = ftv a `Set.union` ftv b
   ftv (ConImplies _ t a b) = ftv a `Set.union` ftv b `Set.union` ftv t
+  ftv (ConFail _ t) = ftv t
 
   apply s (ConUnify e a b) = ConUnify e (apply s a) (apply s b)
   apply s (ConSubsume e a b) = ConSubsume e (apply s a) (apply s b)
   apply s (ConImplies e t a b) = ConImplies e (apply s t) (apply s a) (apply s b)
+  apply s (ConFail e t) = ConFail e (apply s t)
 
 instance Pretty (Var p) => Pretty (Constraint p) where
   pretty (ConUnify _ a b) = pretty a <+> soperator (char '~') <+> pretty b
@@ -118,6 +121,7 @@ instance Pretty (Var p) => Pretty (Constraint p) where
   pretty (ConImplies _ t a b) = brackets (pretty t) <+> hsep (punctuate comma (map pretty a))
                             <+> soperator (char '⊃')
                             <#> indent 2 (vsep (punctuate comma (map pretty b)))
+  pretty ConFail{} = string "fail"
 
 
 makeLenses ''Env -- this has to be down here
@@ -199,11 +203,8 @@ instance Pretty TypeError where
   pretty (NotInScope e) = string "Variable not in scope:" <+> pretty e
   pretty (ArisingFrom er ex) = pretty (annotation ex) <> colon <+> stypeSkol (string "error")
     <#> indent 2 (pretty er <#> nest 4 (bullet (string "Arising from use of" <+> blameOf ex) </> pretty ex))
-  pretty (FoundHole xs) = vsep (map prnt xs) where
-    prnt :: Expr Typed -> Doc
-    prnt (Hole v s)
-      = pretty (fst s) <> string ": Found typed hole" <+> verbatim v <+> parens (string "of type" <+> verbatim (snd s))
-    prnt _ = undefined
+  pretty (FoundHole e s) = string "Found typed hole" <+> pretty e <+> "of type" <+> pretty s
+
   pretty (Note te m) = pretty te <#> bullet (string "Note:") <+> align (pretty m)
   pretty (Suggestion te m) = pretty te <#> bullet (string "Suggestion:") <+> align (pretty m)
   pretty (CanNotInstance rec new) = string "Can not instance hole of record type" <+> align (verbatim rec </> string " to type " <+> verbatim new)
