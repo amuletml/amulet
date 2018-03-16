@@ -4,6 +4,7 @@ module Types.Unify (solve, overlap, bind, skolemise, freshSkol) where
 import Control.Monad.Except
 import Control.Monad.State
 import Control.Monad.Infer
+import Control.Lens
 
 import Types.Wellformed
 
@@ -14,8 +15,8 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Foldable
 import Data.Function
+import Data.Generics
 import Data.List
-
 import Data.Text (Text)
 
 type SolveM = GenT Int (StateT (Subst Typed) (ReaderT (Set.Set (Var Typed)) (Except TypeError)))
@@ -127,16 +128,14 @@ doSolve :: [Constraint Typed] -> SolveM ()
 doSolve [] = pure ()
 doSolve (ConUnify because a b:xs) = do
   sub <- get
-  do
-    unify (apply sub a) (apply sub b)
-    doSolve xs
-  `catchError` \e -> throwError (ArisingFrom e because)
+  unify (apply sub a) (apply sub b)
+    `catchError` \e -> throwError (ArisingFrom e because)
+  doSolve xs
 doSolve (ConSubsume because a b:xs) = do
   sub <- get
-  do
-    subsumes unify (apply sub a) (apply sub b)
-    doSolve xs
-  `catchError` \e -> throwError (ArisingFrom e because)
+  subsumes unify (apply sub a) (apply sub b)
+    `catchError` \e -> throwError (ArisingFrom e because)
+  doSolve xs
 doSolve (ConImplies because not cs ts:xs) = do
   before <- get
   let not' = ftv (apply before not)
@@ -151,7 +150,7 @@ doSolve (ConImplies because not cs ts:xs) = do
               `catchError` \e -> case realErr e of
               SkolBinding (Skolem v _ _ _) t -> do
                 unify (TyVar v) t
-              _ -> throwError e
+              _ -> throwError (ArisingFrom e because)
         go :: SolveM ()
 
     ((), sub) <- local (const mempty) . capture $ go
@@ -161,10 +160,20 @@ doSolve (ConImplies because not cs ts:xs) = do
     local (Set.union not') $ do
       put sub
       doSolve (map (apply sub) ts')
+        `catchError` \e -> throwError (ArisingFrom e because)
       put after
 
     doSolve xs
-  `catchError` \e -> throwError (ArisingFrom e because)
+doSolve (ConFail v t:cs) = do
+  doSolve cs
+  sub <- get
+  let unskolemise x@(TySkol v) = case sub ^. at (v ^. skolVar) of
+        Just t | t == TySkol v -> TyVar (v ^. skolVar)
+        _ -> x
+      unskolemise x = x
+      go :: Type Typed -> Type Typed
+      go = everywhere (mkT unskolemise)
+  throwError (FoundHole v (go (apply sub t)))
 
 subsumes :: (Type Typed -> Type Typed -> SolveM b)
          -> Type Typed -> Type Typed -> SolveM b
