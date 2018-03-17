@@ -39,8 +39,8 @@ import Types.Kinds
 import Pretty
 
 -- Solve for the types of lets in a program
-inferProgram :: MonadGen Int m => [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))
-inferProgram ct = fmap fst <$> runInfer builtinsEnv (inferProg ct)
+inferProgram :: MonadGen Int m => Env -> [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))
+inferProgram env ct = fmap fst <$> runInfer env (inferProg ct)
 
 mkTyApps :: Applicative f
          => Expr Resolved
