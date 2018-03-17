@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts, BangPatterns #-}
+{-# LANGUAGE FlexibleContexts #-}
 module Types.Infer.Constructor (inferCon) where
 
 import qualified Data.Map.Strict as Map
