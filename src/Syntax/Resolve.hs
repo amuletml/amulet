@@ -51,11 +51,11 @@ instance Pretty ResolveError where
 
 type MonadResolve m = (MonadError ResolveError m, MonadReader Scope m, MonadGen Int m, MonadState ModuleScope m)
 
-resolveProgram :: MonadGen Int m => [Toplevel Parsed] -> m (Either ResolveError [Toplevel Resolved])
-resolveProgram = runResolve . resolveModule
+resolveProgram :: MonadGen Int m => Scope -> ModuleScope -> [Toplevel Parsed] -> m (Either ResolveError ([Toplevel Resolved], ModuleScope))
+resolveProgram scope modules = runResolve scope modules . resolveModule
 
-runResolve :: MonadGen Int m => StateT ModuleScope (ReaderT Scope (ExceptT ResolveError m)) a -> m (Either ResolveError a)
-runResolve = runExceptT . flip runReaderT builtinScope . flip evalStateT emptyModules
+runResolve :: MonadGen Int m => Scope -> ModuleScope -> StateT ModuleScope (ReaderT Scope (ExceptT ResolveError m)) a -> m (Either ResolveError (a, ModuleScope))
+runResolve scope modules = runExceptT . flip runReaderT scope . flip runStateT modules
 
 resolveModule :: MonadResolve m => [Toplevel Parsed] -> m [Toplevel Resolved]
 resolveModule [] = pure []

@@ -11,6 +11,7 @@ module Syntax.Resolve.Scope
   , extendTy, extendTyN
   , extendTyvar, extendTyvarN
   , extendM
+  , insertN
   ) where
 
 import qualified Data.Text as T

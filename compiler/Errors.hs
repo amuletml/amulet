@@ -7,6 +7,7 @@ import qualified Data.Text as T
 import Data.Foldable
 import Data.Position
 import Data.Spanned
+import Data.Maybe
 import Data.Span
 
 import Control.Applicative
@@ -18,32 +19,35 @@ import qualified "amuletml" Syntax.Resolve as R
 
 import "amuletml" Pretty
 
-report :: Pretty p => p -> T.Text -> IO ()
+type FileMap = [(SourceName, T.Text)]
+
+report :: Pretty p => p -> FileMap -> IO ()
 report err _ = putDoc (pretty err)
 
-reportI :: I.TypeError -> T.Text -> IO ()
-reportI err file
+reportI :: I.TypeError -> FileMap -> IO ()
+reportI err files
   | (err', Just (reason, loc)) <- innermostError err
-  = reportP (I.ArisingFrom err' reason) loc file
+  = reportP (I.ArisingFrom err' reason) loc files
   where
     innermostError (I.ArisingFrom err p) = second (<|> Just (p, annotation p)) $ innermostError err
     innermostError err = (err, Nothing)
 reportI err _ = putDoc (pretty err)
 
-reportR :: R.ResolveError -> T.Text -> IO ()
-reportR err file
+reportR :: R.ResolveError -> FileMap -> IO ()
+reportR err files
   | Just (err', loc) <- innermostError err
-  = reportP err' loc file
+  = reportP err' loc files
   where
     innermostError e@(R.ArisingFrom err p) = innermostError err <|> Just (e, annotation p)
     innermostError e@(R.ArisingFromTop err p) = innermostError err <|> Just (e, annotation p)
     innermostError _ = Nothing
 reportR err _ = putDoc (pretty err)
 
-reportP :: Pretty a => a -> Span -> T.Text -> IO ()
-reportP err loc file =
+reportP :: Pretty a => a -> Span -> FileMap -> IO ()
+reportP err loc files =
   let SourcePos{ spLine = startLine, spCol = start } = spanStart loc
       SourcePos{ spLine = endLine, spCol = end } = spanEnd loc
+      file = fromMaybe T.empty (snd <$> (find ((==fileName loc) . fst) files))
       lines = drop (startLine - 1) (T.lines file)
       linePad = length (show endLine) + 1
       putLine before body = T.putStrLn
