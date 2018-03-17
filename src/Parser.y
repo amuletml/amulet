@@ -7,6 +7,8 @@ import Data.List (intercalate)
 import Data.Maybe (fromJust, isJust)
 import Data.Span
 import Data.Spanned
+import Data.Semigroup
+import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.Text as T
 
 import Parser.Lexer
@@ -164,7 +166,8 @@ Expr0 :: { Expr Parsed }
       : fun ListE1(ArgP) '->' Expr             { foldr (\x y -> withPos2 x $4 $ Fun x y) $4 $2 }
       | let BindGroup in Expr                  { withPos2 $1 $4 $ Let (reverse $2) $4 }
       | if Expr then Expr else Expr            { withPos2 $1 $6 $ If $2 $4 $6 }
-      | match Expr with ListE1(Arm)            { withPos2 $1 $3 $ Match $2 $4 }
+      | match List1(Expr, ',') with ListE1(Arm)
+        { withPos2 $1 $3 $ Match (completeTuple Tuple $2) $4 }
       | Atom                                   { $1 }
 
 Atom :: { Expr Parsed }
@@ -266,7 +269,7 @@ ArgP :: { Pattern Parsed }
      | '(' List(Pattern, ',') ')' { withPos2 $1 $3 $ tuplePattern $2 }
 
 Arm :: { (Pattern Parsed, Expr Parsed) }
-    : '|' Pattern '->' Expr       { ($2, $4) }
+    : '|' List1(Pattern, ',') '->' Expr       { (completeTuple PTuple $2, $4) }
 
 
 Type :: { Located (Type Parsed) }
@@ -321,6 +324,10 @@ tupleExpr []  a = Literal LiUnit a
 tupleExpr [Just x] a = x
 tupleExpr xs a | all isJust xs = Tuple (map fromJust xs) a
 tupleExpr xs a = TupleSection xs a
+
+completeTuple :: Spanned (f Parsed) => ([f Parsed] -> Span -> f Parsed) -> [f Parsed] -> f Parsed
+completeTuple _ [x] = x
+completeTuple k (x:xs) = k (x:xs) (sconcat (annotation x :| map annotation xs))
 
 tuplePattern :: [Pattern Parsed] -> Ann Parsed -> Pattern Parsed
 tuplePattern [x] a = case x of
