@@ -96,7 +96,7 @@ sinkTerm s (AnnCast _ f co) = flushBinds (sinkable s) (Cast (sinkAtom (nullBinds
 
 flushBinds :: [Sinkable a] -> Term a -> Term a
 flushBinds [] t = t
-flushBinds (si@Sinkable{}:xs) t = Let (One (sBind si)) (flushBinds xs t)
+flushBinds (si@Sinkable{}:xs) t = flushBinds xs (Let (One (sBind si)) t)
 
 nullBinds :: SinkState a -> SinkState a
 nullBinds s = s { sinkable = [] }
