@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts, LambdaCase #-}
+{-# LANGUAGE FlexibleContexts #-}
 module Syntax.Let where
 
 import qualified Data.Set as Set

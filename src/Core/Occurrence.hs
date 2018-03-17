@@ -1,4 +1,4 @@
-{-# LANGUAGE ScopedTypeVariables, OverloadedStrings, DeriveDataTypeable, ExplicitNamespaces #-}
+{-# LANGUAGE ScopedTypeVariables, DeriveDataTypeable, ExplicitNamespaces #-}
 module Core.Occurrence
   ( OccursVar(..)
   , Occurs(..)
@@ -16,6 +16,7 @@ import Data.VarSet (IsVar(..))
 import Data.Semigroup
 import Data.Generics
 import Data.Triple
+import Data.Maybe
 
 import Pretty
 
@@ -182,6 +183,4 @@ occConcat [] = mempty
 occConcat (x:xs) = foldr (#) x xs
 
 occurrenceIn :: IsVar a => a -> OccursMap -> Occurrence
-occurrenceIn v m = case VarMap.lookup (toVar v) m of
-                    Nothing -> Dead
-                    Just x -> x
+occurrenceIn v m = fromMaybe Dead $ VarMap.lookup (toVar v) m

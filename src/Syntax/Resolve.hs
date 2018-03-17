@@ -84,7 +84,7 @@ resolveModule (r:rs) = flip catchError (throwError . wrapError)
         let c = map extractCons cs
         c' <- traverse tagVar c
         extendTy (t, t') $ extendN (zip c c') $ (:)
-          <$> TypeDecl t' vs' <$> traverse (resolveCons (zip vs vs')) (zip cs c')
+          . TypeDecl t' vs' <$> traverse (resolveCons (zip vs vs')) (zip cs c')
           <*> resolveModule rs
 
       Open name as -> do

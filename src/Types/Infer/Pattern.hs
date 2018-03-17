@@ -118,8 +118,8 @@ skolGadt var ty =
         | otherwise = []
       free _ = []
       freed = concatMap free (related ty)
-      fugitives = mentioned `Set.union` (foldMap (ftv . snd) freed)
+      fugitives = mentioned `Set.union` foldMap (ftv . snd) freed
    in do
-     vs <- for (Set.toList (ftv ty `Set.difference` fugitives)) $ \v -> do
+     vs <- for (Set.toList (ftv ty `Set.difference` fugitives)) $ \v ->
        (v,) <$> freshSkol (ByExistential (TvName var) ty) ty v
      pure $ apply (Map.fromList vs) ty

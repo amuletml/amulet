@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts, ScopedTypeVariables, PackageImports #-}
+{-# LANGUAGE FlexibleContexts, ScopedTypeVariables #-}
 module Syntax.Desugar (desugarProgram) where
 
 import Control.Monad.Gen
@@ -57,7 +57,7 @@ desugarProgram = traverse statement where
 
   buildTuple :: MonadGen Int m
              => Ann Parsed
-             -> (Maybe (Expr Parsed))
+             -> Maybe (Expr Parsed)
              -> (Expr Parsed -> Expr Parsed, [Expr Parsed])
              -> m (Expr Parsed -> Expr Parsed, [Expr Parsed])
   buildTuple a Nothing (wrapper, tuple) = do

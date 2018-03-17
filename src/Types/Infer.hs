@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleContexts, TupleSections, GADTs #-}
-{-# LANGUAGE ScopedTypeVariables, ViewPatterns, RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables, RankNTypes #-}
 module Types.Infer
   ( inferProgram
   , builtinsEnv
@@ -309,7 +309,7 @@ inferLetTy closeOver vs =
 
       tcOne (AcyclicSCC decl@(var, exp, ann)) = do
         (origin, tv) <- approximate decl
-        ((exp', ty), cs) <- listen . extend tv $ do
+        ((exp', ty), cs) <- listen . extend tv $
           case origin of
             Supplied -> do
               exp' <- check exp (snd tv)
@@ -324,7 +324,7 @@ inferLetTy closeOver vs =
       tcOne (CyclicSCC vars) = do
         (origins, tvs) <- unzip <$> traverse approximate vars
         (vs, cs) <- listen . extendMany tvs $
-          ifor (zip tvs vars) $ \i ((_, tyvar), (var, exp, ann)) -> do
+          ifor (zip tvs vars) $ \i ((_, tyvar), (var, exp, ann)) ->
             case origins !! i of
               Supplied -> do
                 exp' <- check exp tyvar

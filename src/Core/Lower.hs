@@ -112,7 +112,7 @@ lowerAt (S.Let vs t _) ty = do
       foldScc (AcyclicSCC v) = C.Let (One v)
       foldScc (CyclicSCC vs) = C.Let (Many vs)
   vs' <- traverse lowerScc sccs
-  let k = foldr (.) id (map foldScc vs')
+  let k = foldr ((.) . foldScc) id vs'
   k <$> lowerAtTerm t ty -- TODO scc these
 lowerAt (S.If c t e _) ty = do
   c' <- lowerAtAtom c cotyBool
