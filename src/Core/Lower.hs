@@ -29,8 +29,6 @@ import qualified Syntax as S
 import Syntax.Let
 import Syntax (Var(..), Resolved, Typed, Expr(..), Pattern(..), Lit(..), Skolem(..), Toplevel(..), Constructor(..))
 
-import Debug.Trace
-
 import Pretty (pretty)
 
 type Atom = C.Atom (Var Resolved)
@@ -141,7 +139,7 @@ lowerAt (S.Match ex cs an) ty = do
   (ex', mt) <- lowerBothAtom ex
   cs' <- for cs $ \(pat, ex) ->
     (,mt,) <$> lowerPat pat <*> lowerAtTerm ex ty
-  fail <- patternMatchingFail (fst an) (traceShowId (lowerType (S.getType (fst (head cs))))) ty
+  fail <- patternMatchingFail (fst an) (lowerType (S.getType (fst (head cs)))) ty
 
   pure $ C.Match ex' (cs' ++ [fail])
 lowerAt (Access r k _) ty = do
