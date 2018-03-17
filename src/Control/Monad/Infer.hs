@@ -250,7 +250,7 @@ instance Pretty TypeError where
                   <#> bullet (string "Note: the variable") <+> skol <+> string "was rigidified because"
                         <+> nest 8 (prettyMotive _skolMotive <> comma)
                   <#> indent 8 (string "and is represented by constant" <+> stypeSkol (pretty _skolIdent)) 
-            _ -> foldr (<#>) empty (map (pretty . flip EscapedSkolems t . pure) esc)
+            _ -> foldr ((<#>) . pretty . flip EscapedSkolems t . pure) empty esc
          , empty -- a line break
          , bullet (string "Note: in type") <+> verbatim t
          ]
@@ -276,8 +276,8 @@ missing ra rb
   | length ra > length rb
   =  bullet (string "Namely, the following fields should not be present:") <+> hsep (punctuate comma (diff ra rb))
   | length ra == length rb
-  = vsep $ [ bullet (string "Note: no fields match")
-           , bullet (string "The following fields are missing:")
+  = vsep [ bullet (string "Note: no fields match")
+         , bullet (string "The following fields are missing:")
             <+> hsep (punctuate comma (diff ra rb))]
 missing _ _ = undefined -- freaking GHC
 

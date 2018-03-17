@@ -1,4 +1,4 @@
-{-# LANGUAGE ScopedTypeVariables, OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Core.Optimise.Newtype (killNewtypePass) where
 
 import Control.Monad.Infer (Gen, fresh)
@@ -53,12 +53,12 @@ newtypeCo (cn, tp) (dom, cod) = do
 
 
 goBinding :: forall a. IsVar a => V.Map (Coercion a) -> [(a, Type a, Term a)] -> Gen Int [(a, Type a, Term a)]
-goBinding m vs = traverse (third3A goTerm) vs where
+goBinding m = traverse (third3A goTerm) where
 
   goTerm :: Term a -> Gen Int (Term a)
   goTerm (Atom x) = Atom <$> goAtom x
   goTerm (App f x) = App <$> goAtom f <*> goAtom x
-  goTerm (Let (Many vs) e) = Let . Many <$> goBinding m vs <*> (goTerm e)
+  goTerm (Let (Many vs) e) = Let . Many <$> goBinding m vs <*> goTerm e
   goTerm (Let (One (v, t, e)) b) = do
     e' <- goTerm e
     Let (One (v, t, e')) <$> goTerm b

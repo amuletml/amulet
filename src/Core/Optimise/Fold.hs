@@ -1,5 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 module Core.Optimise.Fold
   ( dropUselessLet
   ) where

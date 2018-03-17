@@ -55,9 +55,8 @@ unify (TyVar a) b = bind a b
 unify a (TyVar b) = bind b a
 
 
-unify (TyWithConstraints cs a) t = do
-  for_ cs $ \(a, b) -> unify a b
-  unify a t
+unify (TyWithConstraints cs a) t = traverse_ (uncurry unify) cs *> unify a t
+
 unify t x@TyWithConstraints{} = unify x t
 
 unify (TyArr a b) (TyArr a' b') = unify a a' *> unify b b'
@@ -148,8 +147,7 @@ doSolve (ConImplies because not cs ts:xs) = do
   do
     let go = doSolve cs'
               `catchError` \e -> case realErr e of
-              SkolBinding (Skolem v _ _ _) t -> do
-                unify (TyVar v) t
+              SkolBinding (Skolem v _ _ _) t -> unify (TyVar v) t
               _ -> throwError (ArisingFrom e because)
         go :: SolveM ()
 
