@@ -326,6 +326,7 @@ tupleExpr xs a | all isJust xs = Tuple (map fromJust xs) a
 tupleExpr xs a = TupleSection xs a
 
 completeTuple :: Spanned (f Parsed) => ([f Parsed] -> Span -> f Parsed) -> [f Parsed] -> f Parsed
+completeTuple _ [x] = x
 completeTuple k (x:xs) = k (x:xs) (sconcat (annotation x :| map annotation xs))
 
 tuplePattern :: [Pattern Parsed] -> Ann Parsed -> Pattern Parsed
