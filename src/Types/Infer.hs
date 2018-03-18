@@ -53,7 +53,7 @@ mkTyApps (VarRef k a) mp (TyForall vs c) _ = pure (insts (reverse vs)) where
   insts (x:xs) = let (e, ty) = insts xs
                      s = mp Map.! x
                      ty' = apply (Map.singleton x s) ty
-                 in (TypeApp e s (a, ty'), ty')
+                  in (TypeApp e s (a, ty'), ty')
 mkTyApps _ _ _ _ = undefined
 
 correct :: Type Typed -> Expr Typed -> Expr Typed
@@ -106,14 +106,6 @@ check (Access rc key a) ty = do
   rho <- freshTV
   Access <$> check rc (TyRows rho [(key, ty)]) <*> pure key <*> pure (a, ty)
 
--- Tuple is an introduction form, so it really should be inferring, but
--- this is a lot more elegant.
-check ex@(Tuple es an) ty = Tuple <$> go es ty <*> pure (an, ty) where
-  go [] _ = error "not a tuple"
-  go [x] t = (:[]) <$> check x t
-  go (x:xs) t = do
-    (left, right, _) <- decompose ex _TyTuple t
-    (:) <$> check x left <*> go xs right
 
 -- This is _very_ annoying, but we need it for nested ascriptions
 check ex@(Ascription e ty an) goal = do
@@ -171,17 +163,13 @@ infer ex@(BinOp l o r a) = do
 
 infer ex@(Match t ps a) = do
   (t', tt) <- infer t
-  ps' <- for ps $ \(p, e) -> do
+  ty <- freshTV
+  ps' <- for ps $ \(p, e) -> let tvs = boundTvs p in do
     (p', ms, cs) <- checkPattern p tt
-    let tvs = boundTvs p
     leakEqualities ex cs
-    (e', ty) <- local (typeVars %~ Set.union tvs) $ extendMany ms (infer e)
-    pure (p', e', ty, Arm p e)
-  let (_, _, t, _) = head ps'
-  ps' <- for ps' $ \(p, e, t', blame) -> do
-    _ <- unify blame t t' -- TODO: the blame can also come from the pattern.
-    pure (p, e)
-  pure (Match t' ps' (a, t), t)
+    e' <- local (typeVars %~ Set.union tvs) $ extendMany ms (check e ty)
+    pure (p', e')
+  pure (Match t' ps' (a, ty), ty)
 
 infer (Record rows a) = do
   (rows, rowts) <- unzip <$> inferRows rows
@@ -193,6 +181,17 @@ infer (RecordExt rec rows a) = do
   (rows, newts) <- unzip <$> inferRows rows
   let ty = TyRows rho newts
    in pure (RecordExt rec rows (a, ty), ty)
+
+infer (Tuple xs an) =
+  let go [x] = first (:[]) <$> infer x
+      go (x:xs) = do
+        (x', t) <- infer x
+        (xs, t') <- go xs
+        pure (x':xs, TyTuple t t')
+      go [] = error "wot in tarnation"
+   in do
+     (ex, t) <- go xs
+     pure (Tuple ex (an, t), t)
 
 infer ex = do
   x <- freshTV
@@ -236,8 +235,8 @@ inferProg (Module name body:prg) = do
   (body', env) <- inferProg body
 
   let (vars, tys) = extractToplevels body
-      vars' = map (\x -> (TvName x, env ^. values . at x . non undefined)) vars
-      tys' = map (\x -> (TvName x, env ^. types . at x . non undefined)) tys
+      vars' = map (\x -> (TvName x, env ^. values . at x . non (error ("value: " ++ show x)))) vars
+      tys' = map (\x -> (TvName x, env ^. types . at x . non (error ("type: " ++ show x)))) tys
 
   extendMany vars' . extendManyK tys' $
     consFst (Module (TvName name) body') $
