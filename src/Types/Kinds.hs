@@ -19,6 +19,7 @@ import Data.Foldable
 
 import qualified Types.Unify as U
 import Types.Wellformed
+import Syntax.Subst (ftv)
 import Syntax.Raise
 import Syntax
 
@@ -85,11 +86,12 @@ inferKind tp = do
       x <- freshKV
       k1 <- inferKind t1
       k2 <- inferKind t2
-      unify k1 (KiArr k2 x)
+      unify (KiArr k2 x) k1
       case t2 of
         TyForall{} -> throwError (ImpredicativeApp t1 t2)
         _ -> pure ()
-      pure x
+      sub <- get
+      pure (apply sub x)
     TyRows rho x -> do
       giveTp rho
       for_ x $ \(_, t) -> giveTp t
@@ -154,16 +156,24 @@ inferGadtConKind :: MonadSolve m => Constructor Resolved -> Type Resolved -> Typ
 inferGadtConKind c t ret' =
   let t' = raiseT TvName t
       ret = raiseT TvName ret'
+
       generalise (TyForall v t) = TyForall v <$> generalise t
       generalise (TyArr a t) = TyArr a <$> generalise t
       generalise ty = case U.solve 1 [ConUnify (BecauseOf c) ret ty] of
         Right x -> do
-          for_ (Map.toAscList x) $ \(a, b) -> do
-            giveTp (TyVar a)
-            giveTp b
+          tell x
           pure ret
         Left e -> throwError e
+
      in do
-       giveTp t'
-       _ <- generalise t'
-       pure ()
+       (ty, cs) <- runWriterT (generalise t')
+       let vs = (ftv ty <> foldMap ftv cs <> Set.fromList (Map.keys cs)) `Set.difference` ftv ret
+
+       ks <- replicateM (length vs) freshKV
+       extendManyK (zip (Set.toList vs) ks) $ do
+         ifor_ cs $ \(TvName a) b -> do
+           k <- maybe freshKV pure =<< view (types . at a)
+           k' <- inferKind b
+           unify k k'
+         giveTp ty
+         pure ()
