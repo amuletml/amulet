@@ -6,6 +6,8 @@ module Backend.Compile
   ) where
 
 import Control.Monad.Infer
+import Control.Monad.State
+import Control.Monad.Cont
 
 import Backend.Lua
 import Core.Occurrence
@@ -83,18 +85,7 @@ compileConstructor (var, _) -- non-unit constructors, hard
 
 type VarStack v = [(v, Term v, LuaExpr)]
 
-newtype ExprContext v a = EC {
-  unEC :: VarStack v
-       -> (VarStack v -> a -> ([LuaStmt], VarStack v))
-       -> ([LuaStmt], VarStack v)
-  } deriving (Functor)
-
-instance Applicative (ExprContext v) where
-  pure a = EC $ \xs next -> next xs a
-  (<*>) = ap
-
-instance Monad (ExprContext v) where
-  x >>= f = EC $ \xs next -> unEC x xs (\xs' y -> unEC (f y) xs' next)
+type ExprContext v a = ContT [LuaStmt] (State (VarStack v)) a
 
 compileLit :: Literal -> LuaExpr
 compileLit (Int x)   = LuaNumber (fromInteger x)
@@ -120,19 +111,24 @@ compileAtom' (Ref v _) | isBinOp v
     where left  = LuaName "l"
           right = LuaName "r"
 
-compileAtom' (Ref v _) = EC
-  $ \xs next -> case span ((/= toVar v) . toVar . fst3) xs of
+compileAtom' (Ref v _) = ContT $ \next -> do
+  xs <- get
+  case span ((/= toVar v) . toVar . fst3) xs of
              -- -- If the variable is not in the scope then skip
-             (_, []) -> next xs (LuaRef (lowerName v), Nothing)
-             (before, (_, e, e'):xs') -> let (stmts, xs'') = next xs' (e', Just e)
-                                         in (mkLets stmts before, xs'')
+             (_, []) -> next (LuaRef (lowerName v), Nothing)
+             (before, (_, e, e'):xs') -> do
+               put xs'
+               flip mkLets before <$> next (e', Just e)
 
 compileAtom :: Occurs a => Atom a -> ExprContext a LuaExpr
 compileAtom a = fst <$> compileAtom' a
 
-flushStmt :: Occurs a => [LuaStmt] -> b -> ExprContext a b
-flushStmt extra e = EC $ \xs next -> let (stmts, xs') = next [] e
-                                     in (mkLets (extra ++ stmts) xs, xs')
+flushStmt :: Occurs a => [LuaStmt] -> ExprContext a ()
+flushStmt extra = ContT $ \next -> do
+  xs <- get
+  put []
+  stmts <- next ()
+  pure (mkLets (extra ++ stmts) xs)
 
 compileTerm :: Occurs a => Term a -> ExprContext a LuaExpr
 compileTerm (Atom a) = compileAtom a
@@ -158,7 +154,7 @@ compileTerm (Extend tbl exs) = do
   flushStmt ([ LuaLocal [old, new] [tbl', LuaTable []]
              , LuaFor [k, v] [LuaCall (LuaRef pairs) [LuaRef old]]
                [LuaAssign [LuaIndex (LuaRef new) (LuaRef (LuaName k))] [LuaRef (LuaName v)]] ] ++ exs')
-            (LuaRef new)
+  pure (LuaRef new)
 
   where old = LuaName (T.pack "__o")
         new = LuaName (T.pack "__n")
@@ -172,23 +168,23 @@ compileTerm (Let (One (x, _, e)) body)
   | usedWhen x == Once && not (isMultiMatch e) = do
       -- If we've got a let binding which is only used once then push it onto the stack
       e' <- compileTerm e
-      EC $ \xs next -> next ((x, e, e'):xs) ()
+      modify ((x, e, e'):)
       compileTerm body
 
   | usedWhen x == Dead && not (isMultiMatch e) = do
       e' <- compileTerm e
-      flushStmt (asStmt e') ()
+      flushStmt (asStmt e')
       compileTerm body
 
   | not (isMultiMatch e) = do
       -- If we've got a let binding which doesn't branch, then we can emit it as a normal
       -- local.
       e' <- compileTerm e
-      flushStmt [ LuaLocal [lowerName x] [e'] ] ()
+      flushStmt [ LuaLocal [lowerName x] [e'] ]
       compileTerm body
   | otherwise = do
-    flushStmt [ LuaLocal [lowerName x] [] ] ()
-    flushStmt (compileStmt (LuaAssign [lowerName x] . pure) e) ()
+    flushStmt [ LuaLocal [lowerName x] [] ]
+    flushStmt (compileStmt (LuaAssign [lowerName x] . pure) e)
     compileTerm body
 
   where asStmt (LuaTable fs) = concatMap (asStmt . snd) fs
@@ -198,10 +194,10 @@ compileTerm (Let (One (x, _, e)) body)
 
 compileTerm (Let (Many bs) body) = do
   -- Otherwise predeclare all variables and emit the bindings
-  flushStmt [ LuaLocal (map (lowerName . fst3) bs) [] ] ()
+  flushStmt [ LuaLocal (map (lowerName . fst3) bs) [] ]
   traverse_ compileLet bs
   compileTerm body
-  where compileLet (v, _, e) = flushStmt (compileStmt (LuaAssign [lowerName v] . pure) e) ()
+  where compileLet (v, _, e) = flushStmt (compileStmt (LuaAssign [lowerName v] . pure) e)
 
 compileTerm m@(Match test [(p, _, body)])
   | [v] <- filter doesItOccur (patternVarsA p)
@@ -209,22 +205,23 @@ compileTerm m@(Match test [(p, _, body)])
   = do
       test' <- compileAtom test
       let [(_, bind)] = patternBindings p test'
-      EC $ \xs next -> next ((v, m, bind):xs) ()
+      modify ((v, m, bind):)
       compileTerm body
   | otherwise
   = do
-      flushStmt [] ()
+      flushStmt []
       test' <- compileAtom test
-      flushStmt [uncurry LuaLocal (unzip (patternBindings p test'))] ()
+      flushStmt [uncurry LuaLocal (unzip (patternBindings p test'))]
       compileTerm body
 
 compileTerm (Match test branches) = do
-  flushStmt [] ()
+  flushStmt []
   test' <- compileAtom test
   compileMatch test' branches
 
 compileStmt :: Occurs a => Returner -> Term a -> [LuaStmt]
-compileStmt r term = fst (unEC (compileTerm term) [] (\xs x -> (mkLets [r x] xs, [])))
+compileStmt r term = evalState (runContT (compileTerm term) (\x -> mkLets [r x] <$> get)) []
+
 lowerName :: Occurs a => a -> LuaVar
 lowerName = LuaName . getTaggedName . toVar
 
@@ -298,12 +295,12 @@ patternBindings (PatExtend p rs) vr = patternBindings p vr ++ concatMap (index v
   index vr (var', pat) = patternBindings pat (LuaRef (LuaIndex vr (LuaString var')))
 
 compileMatch :: Occurs a => LuaExpr -> [(Pattern a, Type a, Term a)] -> ExprContext a LuaExpr
-compileMatch ex ps = EC $ \xs next -> (genIf next, xs)
+compileMatch ex ps = ContT $ \next -> pure (genIf next)
   where genBinding next x (p, _, c) = ( patternTest p x
                                       , (case patternBindings p x of
                                            [] -> []
                                            xs -> [uncurry LuaLocal (unzip xs)])
-                                        ++ fst (unEC (compileTerm c) [] next))
+                                        ++ evalState (runContT (compileTerm c) next) [] )
         genIf next = case map (genBinding next ex) ps of
                        [(LuaTrue, e)] -> e
                        xs -> [LuaIfElse xs]
