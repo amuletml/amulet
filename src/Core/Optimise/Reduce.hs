@@ -32,10 +32,25 @@ isCon s var = VarMap.member (toVar var) (cons s)
 lookupVar :: IsVar a => Scope a -> a -> Maybe (Term a)
 lookupVar s v = VarMap.lookup (toVar v) (vars s)
 
+lookupBaseVar :: IsVar a => Scope a -> a -> Maybe (Term a)
+lookupBaseVar s v = lookup v v where
+  lookup u v = case (var u, var v) of
+                 (Just (Atom (Ref u' _)), Just (Atom (Ref v' _)))
+                   | Just e@(Atom (Ref v'' _)) <- var v' ->
+                     if u' == v''
+                     then Just (smallest v'' e)
+                     else lookup u' v''
+                 (_, t) -> t
+
+  smallest v e = case var v of
+                   Just e'@(Atom (Ref v' _)) | v' < v -> e'
+                   _ -> e
+
+  var = flip VarMap.lookup (vars s) . toVar
+
 lookupRawVar :: IsVar a => Scope a -> a -> a
-lookupRawVar s v = case VarMap.lookup (toVar v) (vars s) of
+lookupRawVar s v = case lookupBaseVar s v of
                   Just (TyApp (Ref v' _) _) -> lookupRawVar s v'
-                  Just (Atom (Ref v' _)) -> lookupRawVar s v'
                   _ -> v
 
 lookupRawTerm :: IsVar a => Scope a -> a -> Maybe (Term a)
@@ -98,8 +113,8 @@ reduceAtom _ (Lam (TypeArgument var _) (TyApp r (VarTy var')))
 
 -- Beta reduction (let case)
 reduceAtom s a@(Ref v _) = {-# SCC "Reduce.beta_let" #-}
-  case lookupVar s v of
-    Just (Atom d@Ref{}) -> reduceAtom s d
+  case lookupBaseVar s v of
+    Just (Atom d@Ref{}) -> d
     Just (Atom d@Lit{}) -> d
     _ -> a
 
