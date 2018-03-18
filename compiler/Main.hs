@@ -128,7 +128,7 @@ testTc fs = do
       putDoc (pretty ast)
       putStrLn "\x1b[1;32m(* Type inference: *)\x1b[0m"
       ifor_ (difference env builtinsEnv ^. values) . curry $ \(k :: Var Resolved, t :: Type Typed) ->
-        putDoc (pretty k <+> colon <+> tidyPrettyType t)
+        putDoc (pretty k <+> colon <+> pretty t)
       putStrLn "\x1b[1;32m(* Kind inference: *)\x1b[0m"
       ifor_ (difference env builtinsEnv ^. types) . curry $ \(k, t) ->
         putDoc (pretty k <+> colon <+> pretty t)
