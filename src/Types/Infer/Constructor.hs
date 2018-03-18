@@ -3,6 +3,7 @@ module Types.Infer.Constructor (inferCon) where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
+import Data.Either
 
 import Control.Monad.Infer
 
@@ -48,7 +49,8 @@ inferCon ret c@(GeneralisedCon nm cty ann) = do
         Left e -> throwError e
 
   (cty, cons) <- runWriterT (generalise cty)
-  let overall = closeOverGadt cons cty
+  let (sub, keep) = partitionEithers (map (uncurry simplify) cons)
+      overall = closeOverGadt keep (apply (mconcat sub) cty)
    in pure ((TvName nm, overall), GeneralisedCon (TvName nm) overall (ann, overall))
 
 closeOverGadt :: Ord (Var p) => [(Type p, Type p)] -> Type p -> Type p
@@ -79,3 +81,9 @@ gadtConShape (_, t) ty = flip Note msg' . flip Note msg . getErr where
 getErr :: TypeError -> TypeError
 getErr (ArisingFrom e _) = getErr e
 getErr x = x
+
+-- A bit of a hack for better aesthetics
+simplify :: Type Typed -> Type Typed -> Either (Map.Map (Var Typed) (Type Typed)) (Type Typed, Type Typed)
+simplify (TyVar v@(TvName (TgName x _))) b@(TyVar (TvName (TgName y _)))
+  | x == y = Left (Map.singleton v b)
+simplify x y = Right (x, y)
