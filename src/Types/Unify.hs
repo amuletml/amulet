@@ -43,8 +43,8 @@ unify :: Type Typed -> Type Typed -> SolveM ()
 unify (TySkol x) (TySkol y)
   | x == y = pure ()
 unify (TySkol t@(Skolem sv _ _ _)) b = do
-  sub <- get
-  case Map.lookup sv sub of
+  sub <- use (at sv)
+  case sub of
     Just t -> unify t b
     Nothing -> case b of
       TyVar v -> bind v (TySkol t)
