@@ -17,7 +17,7 @@ extractToplevel (TypeDecl v _ c) = (map ctor c, [v]) where
   ctor (GeneralisedCon v _ _) = v
 extractToplevel (Open _ _) = ([], [])
 extractToplevel (Module v xs) = let (vs, ts) = extractToplevels xs
-                                in (v : map (v<>) vs, map (v<>) ts)
+                                in (map (v<>) vs, map (v<>) ts)
 
 extractToplevels :: Semigroup (Var p) => [Toplevel p] -> ([Var p], [Var p])
 extractToplevels [] = ([], [])
