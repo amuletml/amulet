@@ -153,7 +153,7 @@ deriving instance (Show (Var p), Show (Ann p)) => Show (Skolem p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Skolem p)
 
 data SkolemMotive p
-  = ByAscription
+  = ByAscription (Type p)
   | BySubsumption (Type p) (Type p)
   | ByExistential (Var p) (Type p)
 

@@ -63,7 +63,7 @@ correct ty = gmapT (mkT go) where
 
 check :: MonadInfer Typed m => Expr Resolved -> Type Typed -> m (Expr Typed)
 check e ty@TyForall{} = do -- This is rule Decl∀L from [Complete and Easy]
-  e <- check e =<< skolemise ByAscription ty -- gotta be polymorphic - don't allow instantiation
+  e <- check e =<< skolemise (ByAscription ty) ty -- gotta be polymorphic - don't allow instantiation
   pure (correct ty e)
 
 check (Hole v a) t = do
