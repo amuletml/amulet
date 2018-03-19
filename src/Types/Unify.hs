@@ -1,4 +1,4 @@
-{-# Language MultiWayIf, GADTs, FlexibleContexts, ScopedTypeVariables #-}
+{-# Language MultiWayIf, GADTs, FlexibleContexts, ScopedTypeVariables, TemplateHaskell #-}
 module Types.Unify (solve, overlap, bind, skolemise, freshSkol) where
 
 import Control.Monad.Except
@@ -19,7 +19,10 @@ import Data.Generics
 import Data.List
 import Data.Text (Text)
 
-type SolveM = GenT Int (StateT (Subst Typed) (ReaderT (Set.Set (Var Typed)) (Except TypeError)))
+data SolveState = SolveState { _bindSkol :: Bool, _don'tTouch :: Set.Set (Var Typed) } deriving (Eq, Show, Ord)
+makeLenses ''SolveState
+
+type SolveM = GenT Int (StateT (Subst Typed) (ReaderT SolveState (Except TypeError)))
 
 bind :: Var Typed -> Type Typed -> SolveM ()
 bind var ty
@@ -28,7 +31,7 @@ bind var ty
   | TyForall{} <- ty = throwError (Impredicative var ty)
   | otherwise = do
       env <- get
-      noTouch <- ask
+      noTouch <- view don'tTouch
       -- Attempt to extend the environment, otherwise unify with existing type
       case Map.lookup var env of
         Nothing ->
@@ -48,7 +51,11 @@ unify (TySkol t@(Skolem sv _ _ _)) b = do
     Just t -> unify t b
     Nothing -> case b of
       TyVar v -> bind v (TySkol t)
-      _ -> throwError $ SkolBinding t b
+      _ -> do
+        canWe <- view bindSkol
+        if canWe
+           then bind sv b
+           else throwError $ SkolBinding t b
 unify b (TySkol t) = unify (TySkol t) b
 
 unify (TyVar a) b = bind a b
@@ -114,7 +121,7 @@ overlap xs ys
         get _ = undefined
 
 runSolve :: Int -> Subst Typed -> SolveM b -> Either TypeError (Int, Subst Typed)
-runSolve i s x = runExcept (fix (runReaderT (runStateT (runGenTFrom i act) s) mempty)) where
+runSolve i s x = runExcept (fix (runReaderT (runStateT (runGenTFrom i act) s) (SolveState False mempty))) where
   act = (,) <$> gen <*> x
   fix act = do
     ((i, _), s) <- act
@@ -145,17 +152,13 @@ doSolve (ConImplies because not cs ts:xs) = do
         | t `Set.member` not' = Map.insert k (TyVar t) m
       leak _ _ m = m
   do
-    let go = doSolve cs'
-              `catchError` \e -> case realErr e of
-              SkolBinding (Skolem v _ _ _) t -> unify (TyVar v) t
-              _ -> throwError (ArisingFrom e because)
-        go :: SolveM ()
+    let go = local (bindSkol .~ True) $ doSolve cs'
 
-    ((), sub) <- local (const mempty) . capture $ go
+    ((), sub) <- local (don'tTouch .~ mempty) . capture $ go
 
     let after = Map.foldrWithKey leak before sub
 
-    local (Set.union not') $ do
+    local (don'tTouch %~ Set.union not') $ do
       put sub
       doSolve (map (apply sub) ts')
         `catchError` \e -> throwError (ArisingFrom e because)
@@ -207,7 +210,3 @@ capture m = do
   st <- get
   put x
   pure (r, st)
-
-realErr :: TypeError -> TypeError
-realErr (ArisingFrom e _) = realErr e
-realErr t = t
