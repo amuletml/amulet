@@ -255,9 +255,10 @@ instance Pretty TypeError where
          , bullet (string "Note: in type") <+> verbatim t
          ]
 
-  pretty (SkolBinding (Skolem _ v _ m) b) =
+  pretty (SkolBinding (Skolem k v _ m) b) =
     vsep [ string "Can not unify rigid type variable" <+> skol <+> string "with" <+> whatIs b
          , bullet (string "Note: the variable") <+> skol <+> string "was rigidified because" <+> prettyMotive m
+         , indent 8 (string "and is represented by the constant") <+> stypeSkol (pretty k)
          , case b of
              TySkol (Skolem _ v _ m) ->
                vsep [ bullet (string "Note: the rigid type variable") <+> stypeVar (pretty v) <> comma <+> string "in turn" <> comma
@@ -285,6 +286,6 @@ diff :: [(Text, b)] -> [(Text, b)] -> [Doc]
 diff ra rb = map (stypeVar . string . T.unpack . fst) (deleteFirstsBy ((==) `on` fst) rb ra)
 
 prettyMotive :: SkolemMotive Typed -> Doc
-prettyMotive ByAscription = string "of a type ascription"
+prettyMotive (ByAscription t) = string "of a type ascription" <#> string "against the type" <+> pretty t
 prettyMotive (BySubsumption t1 t2) = string "of a subsumption constraint relating" <+> pretty t1 <+> string "with" <+> pretty t2
 prettyMotive (ByExistential v t) = string "it is an existential" <> comma <#> string "bound by the type of" <+> pretty v <> comma <+> pretty t
