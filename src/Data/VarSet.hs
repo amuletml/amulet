@@ -1,7 +1,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, DerivingStrategies, FlexibleInstances #-}
 module Data.VarSet
   ( Set
-  , fromList
+  , fromList, toList
   , member, notMember, insert
   , difference, union, intersection, singleton, delete
   , (<>), mempty, isEmpty
@@ -9,6 +9,7 @@ module Data.VarSet
   ) where
 
 import qualified Data.IntSet as Set
+import qualified Data.Text as T
 
 import Syntax.Pretty (Var(..), Resolved)
 
@@ -29,6 +30,9 @@ insert _ x = x
 
 fromList :: [Var Resolved] -> Set
 fromList = foldr insert mempty
+
+toList :: Set -> [Var Resolved]
+toList (Set s) = map (TgName (T.singleton '?')) (Set.toList s)
 
 member :: Var Resolved -> Set -> Bool
 member (TgName _ x) set = Set.member x (coerce set)

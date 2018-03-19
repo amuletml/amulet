@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedStrings, ScopedTypeVariables, FlexibleContexts, TupleSections #-}
-{-# LANGUAGE DeriveFunctor #-}
 
 module Backend.Compile
   ( compileProgram
@@ -8,6 +7,7 @@ module Backend.Compile
 import Control.Monad.Infer
 import Control.Monad.State
 import Control.Monad.Cont
+import Control.Arrow
 
 import Backend.Lua
 import Core.Occurrence
@@ -20,6 +20,7 @@ import qualified Types.Wellformed as W
 import Data.Semigroup ((<>))
 
 import qualified Data.Map.Strict as Map
+import qualified Data.VarSet as VarSet
 import qualified Data.Text as T
 import Data.Foldable
 import Data.VarSet (IsVar(..))
@@ -27,32 +28,70 @@ import Data.Triple
 import Data.Maybe (fromMaybe, maybeToList)
 import Data.List (sortOn, partition, uncons)
 import Data.Text (Text)
+import Data.Graph
+import Data.Char
 
 type Returner = LuaExpr -> LuaStmt
+
+data VarScope = VarScope { toLua :: Map.Map (Var Resolved) Text
+                         , fromLua :: Map.Map Text (Var Resolved) }
+  deriving (Show)
+
+pushVar :: IsVar a => a -> VarScope -> (Text, VarScope)
+pushVar v s = escapeVar (toVar v) where
+  escapeVar (TgInternal t) = (t, s)
+  escapeVar v@(TgName name _) =
+    case Map.lookup v (toLua s) of
+      Just _ -> error "Variable already declared"
+      Nothing ->
+        let Just (t, ts) = T.uncons name
+            esc = if isAlpha t && T.all (\x -> x == '_' || isAlphaNum x) ts
+                  then name
+                  else T.filter isAlphaNum name
+        in pushFirst Nothing esc
+
+  pushFirst :: Maybe Int -> Text -> (Text, VarScope)
+  pushFirst prefix esc =
+    let esc' = esc <> maybe T.empty (T.pack . show) prefix
+    in case Map.lookup esc' (fromLua s) of
+         Nothing -> ( esc'
+                    , s { fromLua = Map.insert esc' (toVar v) (fromLua s)
+                        , toLua = Map.insert (toVar v) esc' (toLua s) })
+         Just _ -> pushFirst (Just (maybe 0 (+1) prefix)) esc
+
+getVar :: IsVar a => a -> VarScope -> Text
+getVar v s = case toVar v of
+               TgInternal t -> t
+               v@TgName{} -> fromMaybe (error ("Cannot find " ++ show v)) (Map.lookup v (toLua s))
 
 alpha :: [Text]
 alpha = map T.pack ([1..] >>= flip replicateM ['a'..'z'])
 
 compileProgram :: forall a. Occurs a => Env -> [Stmt a] -> LuaStmt
-compileProgram ev = LuaDo . compileProg where
-  compileProg :: [Stmt a] -> [LuaStmt]
+compileProgram ev = LuaDo . flip evalState (VarScope mempty mempty) . compileProg where
+  compileProg :: MonadState VarScope m => [Stmt a] -> m [LuaStmt]
   compileProg (Foreign n' t s:xs)
-    | not (doesItOccur n') = compileProg xs
-    | arity t > 1
-    = let ags = map LuaName $ take (arity t) alpha
-          mkF (a:ag) bd = LuaFunction [a] [LuaReturn (mkF ag bd)]
-          mkF [] bd = bd
-       in LuaLocal [LuaName ("__" <> n)] [LuaBitE s]
-        : LuaLocal [LuaName n]
-            [mkF ags
-              (LuaCall (LuaRef (LuaName ("__" <> n)))
-                            (map LuaRef ags))]
-        :compileProg xs
-    | otherwise = LuaLocal [LuaName n] [LuaBitE s]:compileProg xs
-    where n = getName n'
+    | arity t > 1 = do
+        n <- state (pushVar n')
+        let ags = map LuaName $ take (arity t) alpha
+            mkF (a:ag) bd = LuaFunction [a] [LuaReturn (mkF ag bd)]
+            mkF [] bd = bd
 
-  compileProg (StmtLet vs:xs) = compileLet (unzip3 vs) ++ compileProg xs
-  compileProg (Type _ cs:xs) = map compileConstructor cs ++ compileProg xs
+        xs' <- compileProg xs
+
+        pure $ LuaLocal [LuaName (T.cons '_' n)] [LuaBitE s]
+             : LuaLocal [LuaName n]
+                [mkF ags
+                  (LuaCall (LuaRef (LuaName (T.cons '_' n)))
+                    (map LuaRef ags))]
+             : xs'
+
+    | otherwise = do
+        n <- state (pushVar n')
+        (:) (LuaLocal [LuaName n] [LuaBitE s]) <$> compileProg xs
+
+  compileProg (StmtLet vs:xs) = (++) <$> compileLet (unzip3 vs) <*> compileProg xs
+  compileProg (Type _ cs:xs) = (++) <$> traverse compileConstructor cs <*> compileProg xs
   compileProg [] =
     let main = fmap (toVar . fst) . uncons
              . sortOn key
@@ -64,28 +103,56 @@ compileProgram ev = LuaDo . compileProg where
         key (TgName k _) = k
         key _ = undefined
      in case main ev of
-       Just ref ->
+       Just ref -> do
+         ref' <- gets (getVar ref)
          let go 0 _ = Nothing
              go 1 it = Just (LuaCallS it [])
              go n it = do
                LuaCallS e _ <- go (n - 1) it
                pure $ LuaCallS (LuaCall e []) []
              ar = W.arity (_values ev Map.! ref)
-          in maybeToList (go ar (LuaRef (LuaName (getTaggedName ref))))
-       Nothing -> []
+          in pure (maybeToList (go ar (LuaRef (LuaName ref'))))
+       Nothing -> pure []
 
-compileConstructor :: Occurs a => (a, Type a) -> LuaStmt
-compileConstructor (var, ty) | arity ty == 0
-  = LuaLocal [lowerName var] [LuaTable [(LuaNumber 1, LuaString cn)]] where
-    cn = getName var
-compileConstructor (var, _) -- non-unit constructors, hard
-  = LuaLocal [lowerName var] [vl] where
-    vl = LuaFunction [LuaName "x"] [LuaReturn (LuaTable [(LuaNumber 1, LuaString cn), (LuaNumber 2, LuaRef (LuaName "x"))])]
-    cn = getName var
+  compileConstructor :: (MonadState VarScope m, Occurs a) => (a, Type a) -> m LuaStmt
+  compileConstructor (var, ty)
+    | arity ty == 0 = do
+        var' <- state (pushVar var)
+        pure $ LuaLocal [LuaName var'] [LuaTable [(LuaNumber 1, LuaString var')]]
+    | otherwise = do
+        var' <- state (pushVar var)
+        pure $ LuaLocal [LuaName var'] [LuaFunction
+                                         [LuaName "x"]
+                                        [LuaReturn (LuaTable [(LuaNumber 1, LuaString var')
+                                                             , (LuaNumber 2, LuaRef (LuaName "x"))])]]
+
+  compileLet :: (MonadState VarScope m, Occurs a) => ([a], [Type a], [Term a]) -> m [LuaStmt]
+  compileLet (vs, _, es) = concat <$> traverse compileBind (stronglyConnComp (zipWith letDeps vs es))
+
+  letDeps v e = ((v, e), toVar v, VarSet.toList (freeIn e))
+
+  compileBind (AcyclicSCC (v, e)) = do
+    v' <- state (pushVar v)
+    s <- get
+    pure [LuaLocal [LuaName v'] [iife (compileStmt s LuaReturn e)]]
+  compileBind (CyclicSCC bs) = do
+    bs' <- traverse (firstA (state . pushVar)) bs
+    s <- get
+    pure $ LuaLocal (map (LuaName . fst) bs') []
+         : concatMap (\(v, e) -> compileStmt s (LuaAssign [LuaName v] . pure) e) bs'
 
 type VarStack v = [(v, Term v, LuaExpr)]
 
-type ExprContext v a = ContT [LuaStmt] (State (VarStack v)) a
+type ExprContext v a = ContT [LuaStmt] (State (VarStack v, VarScope)) a
+
+getStack :: MonadState (VarStack a, VarScope) m => m (VarStack a)
+getStack = gets fst
+
+putStack :: MonadState (VarStack a, VarScope) m => VarStack a -> m ()
+putStack s = modify (\(_, b) -> (s, b))
+
+pushScope :: IsVar a => MonadState (VarStack a, VarScope) m => a -> m Text
+pushScope v = state (\(a, s) -> let (v', s') = pushVar v s in (v', (a, s')))
 
 compileLit :: Literal -> LuaExpr
 compileLit (Int x)   = LuaNumber (fromInteger x)
@@ -98,7 +165,9 @@ compileLit RecNil    = LuaTable []
 
 compileAtom' :: Occurs a => Atom a -> ExprContext a (LuaExpr, Maybe (Term a))
 compileAtom' (Lit l) = pure (compileLit l, Nothing)
-compileAtom' (Lam (TermArgument v _) e) = pure (LuaFunction [lowerName v] (compileStmt LuaReturn e), Nothing)
+compileAtom' (Lam (TermArgument v _) e) = do
+  (v', s) <- gets (pushVar v . snd) -- Note this doesn't modify the scope, only extends it
+  pure (LuaFunction [LuaName v'] (compileStmt s LuaReturn e), Nothing)
 compileAtom' (Lam TypeArgument{} e) = (,Nothing) <$> compileTerm e
 
 compileAtom' (Ref v _) | isBinOp v
@@ -106,38 +175,41 @@ compileAtom' (Ref v _) | isBinOp v
            [left]
            [LuaReturn (LuaFunction
                         [right]
-                        [LuaReturn (LuaBinOp (LuaRef left) (remapOp (getName v)) (LuaRef right))])],
+                        [LuaReturn (LuaBinOp (LuaRef left) (remapOp' v) (LuaRef right))])],
            Nothing)
     where left  = LuaName "l"
           right = LuaName "r"
 
 compileAtom' (Ref v _) = ContT $ \next -> do
-  xs <- get
+  xs <- getStack
   case span ((/= toVar v) . toVar . fst3) xs of
              -- -- If the variable is not in the scope then skip
-             (_, []) -> next (LuaRef (lowerName v), Nothing)
+             (_, []) -> do v' <- gets (getVar v . snd)
+                           next (LuaRef (LuaName v'), Nothing)
+             -- Otherwise push all needed bindings and then continue
              (before, (_, e, e'):xs') -> do
-               put xs'
-               flip mkLets before <$> next (e', Just e)
+               putStack xs'
+               flip mkLets <$> traverse (first3A pushScope) before
+                           <*> next (e', Just e)
 
 compileAtom :: Occurs a => Atom a -> ExprContext a LuaExpr
 compileAtom a = fst <$> compileAtom' a
 
 flushStmt :: Occurs a => [LuaStmt] -> ExprContext a ()
 flushStmt extra = ContT $ \next -> do
-  xs <- get
-  put []
+  xs <- getStack >>= traverse (first3A pushScope)
+  putStack []
   stmts <- next ()
   pure (mkLets (extra ++ stmts) xs)
 
-compileTerm :: Occurs a => Term a -> ExprContext a LuaExpr
+compileTerm :: forall a. Occurs a => Term a -> ExprContext a LuaExpr
 compileTerm (Atom a) = compileAtom a
 
 compileTerm (App f e) = do
   e' <- compileAtom e
   f' <- compileAtom' f
   pure $ case f' of
-    (LuaCall _ [l], Just (App (Ref v _) _)) | isBinOp v -> LuaBinOp l (remapOp (getName v)) e'
+    (LuaCall _ [l], Just (App (Ref v _) _)) | isBinOp v -> LuaBinOp l (remapOp' v) e'
     (fl', _) -> LuaCall fl' [e']
 
 compileTerm (TyApp f _) = compileAtom f
@@ -168,7 +240,7 @@ compileTerm (Let (One (x, _, e)) body)
   | usedWhen x == Once && not (isMultiMatch e) = do
       -- If we've got a let binding which is only used once then push it onto the stack
       e' <- compileTerm e
-      modify ((x, e, e'):)
+      modify (first ((x, e, e'):))
       compileTerm body
 
   | usedWhen x == Dead && not (isMultiMatch e) = do
@@ -179,12 +251,15 @@ compileTerm (Let (One (x, _, e)) body)
   | not (isMultiMatch e) = do
       -- If we've got a let binding which doesn't branch, then we can emit it as a normal
       -- local.
+      x' <- pushScope x
       e' <- compileTerm e
-      flushStmt [ LuaLocal [lowerName x] [e'] ]
+      flushStmt [ LuaLocal [LuaName x'] [e'] ]
       compileTerm body
   | otherwise = do
-    flushStmt [ LuaLocal [lowerName x] [] ]
-    flushStmt (compileStmt (LuaAssign [lowerName x] . pure) e)
+    -- TODO: Handle match generation here, so we don't do kuldges with scope extension or anything
+    x' <- pushScope x
+    flushStmt [ LuaLocal [LuaName x'] [] ]
+    flushStmt (compileStmt undefined (LuaAssign [LuaName x'] . pure) e)
     compileTerm body
 
   where asStmt (LuaTable fs) = concatMap (asStmt . snd) fs
@@ -194,75 +269,55 @@ compileTerm (Let (One (x, _, e)) body)
 
 compileTerm (Let (Many bs) body) = do
   -- Otherwise predeclare all variables and emit the bindings
-  flushStmt [ LuaLocal (map (lowerName . fst3) bs) [] ]
+  bs' <- traverse ((LuaName<$>) . pushScope . fst3) bs
+  flushStmt [ LuaLocal bs' [] ]
   traverse_ compileLet bs
   compileTerm body
-  where compileLet (v, _, e) = flushStmt (compileStmt (LuaAssign [lowerName v] . pure) e)
+  where compileLet (v, _, e) = do
+          s <- gets snd
+          flushStmt (compileStmt s (LuaAssign [LuaName (getVar v s)] . pure) e)
 
 compileTerm m@(Match test [(p, _, body)])
-  | [v] <- filter doesItOccur (patternVarsA p)
-  , usedWhen v == Once
+  | all (\x -> usedWhen x == Once || usedWhen x == Dead) (patternVarsA p :: [a])
   = do
       test' <- compileAtom test
-      let [(_, bind)] = patternBindings p test'
-      modify ((v, m, bind):)
+      -- Just push the bindings onto the stack
+      modify (first (withMatch (patternBindings p test')++))
+
       compileTerm body
   | otherwise
   = do
       flushStmt []
       test' <- compileAtom test
-      flushStmt [uncurry LuaLocal (unzip (patternBindings p test'))]
+
+      let (once, multi) = partition ((==Once) . usedWhen . fst) (patternBindings p test')
+
+      -- Declare any variable used multiple times (or hoisted into a lambda)
+      multi' <- traverse (firstA ((LuaName<$>) . pushScope)) multi
+      flushStmt [uncurry LuaLocal (unzip multi')]
+
+      -- Push any variable used once onto the stack
+      modify (first (withMatch once++))
+
       compileTerm body
 
-compileTerm (Match test branches) = do
+  where withMatch = map (\(v, b) -> (v,m,b))
+
+compileTerm m@(Match test branches) = do
   flushStmt []
   test' <- compileAtom test
-  compileMatch test' branches
+  compileMatch m test' branches
 
-compileStmt :: Occurs a => Returner -> Term a -> [LuaStmt]
-compileStmt r term = evalState (runContT (compileTerm term) (\x -> mkLets [r x] <$> get)) []
-
-lowerName :: Occurs a => a -> LuaVar
-lowerName = LuaName . getTaggedName . toVar
-
-lowerKey :: Occurs a => a -> LuaExpr
-lowerKey = LuaString . getTaggedName . toVar
-
-getName :: Occurs a => a -> Text
-getName = getTaggedName . toVar
-
-getTaggedName :: Var Resolved -> Text
-getTaggedName (TgName t i) = t <> T.pack (show i)
-getTaggedName (TgInternal t) = t
+compileStmt :: Occurs a => VarScope -> Returner -> Term a -> [LuaStmt]
+compileStmt s r term = evalState (runContT (compileTerm term) finish) ([], s) where
+  finish x = mkLets [r x] <$> (traverse (first3A pushScope) =<< getStack)
 
 iife :: [LuaStmt] -> LuaExpr
 iife [LuaReturn v] = v
 iife b = LuaCall (LuaFunction [] b) []
 
-compileLet :: forall a. Occurs a => ([a], [Type a], [Term a]) -> [LuaStmt]
-compileLet (vs, _, es) = locals recs (assigns nonrecs) where
-  binds = zip vs es
-  (nonrecs, recs) = partition (uncurry recursive) binds
-
-  locals :: [(a, Term a)] -> [LuaStmt] -> [LuaStmt]
-  locals xs =
-    let (v, t) = unzip xs
-        bind v e = [LuaLocal [lowerName v] [iife (compileStmt LuaReturn e)]]
-     in case v of
-       [] -> id
-       _ -> (++) (concat (zipWith bind v t))
-
-  assigns :: [(a, Term a)] -> [LuaStmt]
-  assigns xs = case xs of
-    [] -> []
-    xs -> LuaLocal (map (lowerName . fst) xs) []:concatMap one xs
-  one (v, t) = compileStmt (LuaAssign [lowerName v] . pure) t
-
-  recursive v (Atom term@Lam{}) = occursInAtom v term
-  recursive _ _ = False
-
-mkLets :: Occurs a => [LuaStmt] -> [(a, b, LuaExpr)] -> [LuaStmt]
-mkLets = foldl (\stmts (v, _, b) -> LuaLocal [lowerName v] [b] : stmts)
+mkLets :: [LuaStmt] -> [(Text, b, LuaExpr)] -> [LuaStmt]
+mkLets = foldl (\stmts (v, _, b) -> LuaLocal [LuaName v] [b] : stmts)
 
 foldAnd :: [LuaExpr] -> LuaExpr
 foldAnd = foldl1 k where
@@ -272,38 +327,41 @@ foldAnd = foldl1 k where
     | r == LuaFalse || l == LuaFalse = LuaFalse
     | otherwise = LuaBinOp l "and" r
 
-patternTest :: forall a. Occurs a => Pattern a -> LuaExpr ->  LuaExpr
-patternTest (Capture _ _) _      = LuaTrue
-patternTest (PatLit RecNil) _    = LuaTrue
-patternTest (PatLit l)  vr       = LuaBinOp (compileLit l) "==" vr
-patternTest (PatExtend p rs) vr  = foldAnd (patternTest p vr : map test rs) where
-  test (var', pat) = patternTest pat (LuaRef (LuaIndex vr (LuaString var')))
-patternTest (Constr con) vr      = foldAnd [tag con vr]
-patternTest (Destr con p) vr     = foldAnd [tag con vr, patternTest p (LuaRef (LuaIndex vr (LuaNumber 2)))]
+patternTest :: forall a. Occurs a => VarScope -> Pattern a -> LuaExpr ->  LuaExpr
+patternTest _ (Capture _ _) _      = LuaTrue
+patternTest _ (PatLit RecNil) _    = LuaTrue
+patternTest _ (PatLit l)  vr       = LuaBinOp (compileLit l) "==" vr
+patternTest s (PatExtend p rs) vr  = foldAnd (patternTest s p vr : map test rs) where
+  test (var', pat) = patternTest s pat (LuaRef (LuaIndex vr (LuaString var')))
+patternTest s (Constr con) vr      = foldAnd [tag s con vr]
+patternTest s (Destr con p) vr     = foldAnd [tag s con vr, patternTest s p (LuaRef (LuaIndex vr (LuaNumber 2)))]
 
-tag :: Occurs a => a -> LuaExpr -> LuaExpr
-tag con vr = LuaBinOp (LuaRef (LuaIndex vr (LuaNumber 1))) "==" (lowerKey con)
+tag :: Occurs a => VarScope -> a -> LuaExpr -> LuaExpr
+tag scp con vr = LuaBinOp (LuaRef (LuaIndex vr (LuaNumber 1))) "==" (LuaString (getVar con scp))
 
-patternBindings :: Occurs a => Pattern a -> LuaExpr -> [(LuaVar, LuaExpr)]
+patternBindings :: Occurs a => Pattern a -> LuaExpr -> [(a, LuaExpr)]
 patternBindings (PatLit _) _     = []
 patternBindings (Capture n _) v
-  | doesItOccur n = [(lowerName n, v)]
+  | doesItOccur n = [(n, v)]
   | otherwise = []
 patternBindings (Constr _) _     = []
 patternBindings (Destr _ p) vr   = patternBindings p (LuaRef (LuaIndex vr (LuaNumber 2)))
 patternBindings (PatExtend p rs) vr = patternBindings p vr ++ concatMap (index vr) rs where
   index vr (var', pat) = patternBindings pat (LuaRef (LuaIndex vr (LuaString var')))
 
-compileMatch :: Occurs a => LuaExpr -> [(Pattern a, Type a, Term a)] -> ExprContext a LuaExpr
-compileMatch ex ps = ContT $ \next -> pure (genIf next)
-  where genBinding next x (p, _, c) = ( patternTest p x
-                                      , (case patternBindings p x of
-                                           [] -> []
-                                           xs -> [uncurry LuaLocal (unzip xs)])
-                                        ++ evalState (runContT (compileTerm c) next) [] )
-        genIf next = case map (genBinding next ex) ps of
-                       [(LuaTrue, e)] -> e
-                       xs -> [LuaIfElse xs]
+compileMatch :: Occurs a => Term a -> LuaExpr -> [(Pattern a, Type a, Term a)] -> ExprContext a LuaExpr
+compileMatch match test ps = ContT $ \next ->  gets (pure . genIf next . snd)
+  where genBinding next s (p, _, c) =
+          ( patternTest s p test
+          , let (once, multi) = partition ((==Once) . usedWhen . fst) (patternBindings p test)
+                (s', multi') = foldl (\(s, vs) (v, e) -> let (v', s') = pushVar v s in (s', (LuaName v', e): vs)) (s, []) multi
+            in (case multi' of
+                  [] -> []
+                  _ -> [uncurry LuaLocal (unzip multi')])
+               ++ evalState (runContT (compileTerm c) next) (withMatch once, s') )
+        genIf next s = LuaIfElse $ map (genBinding next s) ps
+
+        withMatch = map (\(v, b) -> (v, match, b))
 
 ops :: Map.Map Text Text
 ops = Map.fromList
@@ -328,6 +386,9 @@ isBinOp _ = False
 
 remapOp :: Text -> Text
 remapOp x = fromMaybe x (Map.lookup x ops)
+
+remapOp' :: IsVar a => a -> Text
+remapOp' v = let TgInternal v' = toVar v in remapOp v'
 
 isMultiMatch :: Term a -> Bool
 isMultiMatch (Match _ (_:_:_)) = True
