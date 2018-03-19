@@ -2,6 +2,10 @@ type z ;;
 type s 'a ;;
 
 external val print : 'a -> unit = "print" ;;
+external val any_to_string : 'a -> string = "tostring" ;;
+external val io_write : string -> unit = "io.write" ;;
+external val error : string -> 'a = "error" ;;
+external val repeat_string : string -> int -> string = "string.rep" ;;
 
 type vect 'n 'a =
   | Nil : vect z 'a
@@ -12,6 +16,15 @@ type eq 'a 'b = Refl : eq 'a 'a ;;
 type lte 'a 'b =
   | LteZero : lte z 'a
   | LteSucc : lte 'a 'b -> lte (s 'a) (s 'b) ;;
+
+type nat 'n =
+  | Z : nat z
+  | S : nat 'k -> nat (s 'k) ;;
+
+type some_nat =
+  | SomeNat : nat 'n -> some_nat ;;
+
+type maybe 'a = Some of 'a | None ;;
 
 (* uses supplied type signature *)
 let map (f : 'a -> 'b) (xs : vect 'n 'a) : vect 'n 'b =
@@ -46,22 +59,58 @@ let zip_vect (x : vect 'n 'a) (y : vect 'm 'b) (prf : lte 'n 'm) : vect 'n ('a *
 let trim v x k =
   map (fun (x, _) -> x) (zip_vect v x k) ;;
 
-(* vect 'n 'a -> unit *)
-let print_vect v =
-  fold (fun x k () -> begin print x; k () end) (fun () -> print "nil") v () ;;
+(* uses supplied type *)
+let replicate (n : nat 'n) (x : 'a) : vect 'n 'a =
+  let go : forall 'n. nat 'n -> vect 'n 'a = fun l ->
+    match l with
+    | Z -> Nil
+    | S k -> Cons (x, go k)
+  in go n ;;
+
+(* rank n: forall 'b. (forall 'n. nat 'n -> 'b) -> int -> 'b *)
+let with_natural (k : forall 'n. nat 'n -> 'b) i =
+  let go n =
+    if n == 0 then
+      SomeNat Z
+    else
+      match go (n - 1) with
+      | SomeNat x -> SomeNat (S x)
+  in match go i with
+  | SomeNat n -> k n ;;
+
+(* uses supplied type *)
+let decide_lte (x : nat 'n) (y : nat 'm) : maybe (lte 'n 'm) =
+  match x, y with
+  | Z, y -> Some LteZero
+  | S k, Z -> None
+  | S k, S n ->
+      match decide_lte k n with
+      | Some p -> Some (LteSucc p)
+      | None -> None
+;;
+
+(* forall 'n . nat 'n -> unit *)
+let ppr_nat n : unit =
+  match n with
+  | Z -> print "Z"
+  | S k -> begin
+    io_write "S ";
+    ppr_nat k
+  end ;;
 
 (* unit *)
 let main =
   (* vect (s (s (s z))) int *)
-  let foo = trim (Cons (1, Cons (2, Cons (3, Nil))))
-                 (Cons (1, Cons (2, Cons (3, Cons (4, Nil)))))
-                 (LteSucc (LteSucc (LteSucc LteZero)))
+  let foo n =
+    match decide_lte (S (S (S Z))) n with
+    | Some x -> trim (replicate (S (S (S Z))) 2) (replicate n 1) x
+    | None -> error "oh no"
   (* uses supplied type *)
-  and go (x : vect 'n 'a) : unit =
+  and go (x : vect 'n 'a) (i : int) : unit =
     match x with
-    | Nil -> print "Nil"
+    | Nil -> print ("Nil" ^ repeat_string ")" i)
     | Cons (a, xs) -> begin
-      print a;
-      go xs
+      io_write ("Cons (" ^ any_to_string a ^ ", ");
+      go xs (i + 1)
     end
-  in go foo
+  in with_natural (fun x -> go (foo x) 0) 123
