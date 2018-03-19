@@ -29,6 +29,7 @@ data TokenClass
   | TcNotEqual -- <>
   | TcTilde -- ~
   | TcUnderscore -- _
+  | TcAtAt -- @@
 
   | TcLet -- let
   | TcAnd -- and
@@ -100,6 +101,7 @@ instance Show TokenClass where
   show TcNotEqual = "<>"
   show TcTilde = "~"
   show TcUnderscore = "_"
+  show TcAtAt = "@@"
 
   show TcAddFloat = "+."
   show TcSubtractFloat = "-."

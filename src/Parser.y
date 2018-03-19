@@ -47,6 +47,7 @@ import Syntax
   '<>'     { Token TcNotEqual _ }
   '~'      { Token TcTilde _ }
   '_'      { Token TcUnderscore _ }
+  '@@'     { Token TcAtAt _ }
 
   '**.'    { Token TcDoubleStarFloat _ }
   '*.'     { Token TcStarFloat _ }
@@ -110,6 +111,7 @@ import Syntax
 %left '*' '/' '*.' '/.'
 %right '**' '**.'
 %left opid qopid
+%right '@@'
 
 %%
 
@@ -156,6 +158,7 @@ Expr :: { Expr Parsed }
      | Expr '||' Expr                          { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "||") $3 }
      | Expr opid Expr                          { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ VarRef (getName $2)) $3 }
      | Expr qopid Expr                         { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ VarRef (getName $2)) $3 }
+     | Expr '@@' Expr                          { withPos2 $1 $3 $ App $1 $3 }
 
 ExprApp :: { Expr Parsed }
         : Expr0                                { $1 }
