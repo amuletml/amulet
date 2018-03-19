@@ -124,7 +124,7 @@ instance Pretty a => Pretty (Atom a) where
 instance Pretty a => Pretty (Term a) where
   pretty (Atom a) = pretty a
   pretty (App f x) = pretty f <+> pretty x
-  pretty (TyApp f t) = pretty f <+> soperator (char '@') <> pretty t
+  pretty (TyApp f t) = pretty f <+> braces (pretty t)
 
   pretty (Let (One x) e) = keyword "let" <+> braces (space <> pprLet1 x <> space) <+> keyword "in" <#> pretty e
   pretty (Let (Many xs) e) = keyword "let rec" <+> pprLet xs </> (keyword "in" <+> pretty e)
