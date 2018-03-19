@@ -60,6 +60,7 @@ tokens :-
   <0> "-"      { constTok TcSubtract }
   <0> "<>"     { constTok TcNotEqual }
   <0> "~"      { constTok TcTilde }
+  <0> "@@"     { constTok TcAtAt }
   <0> \_       { constTok TcUnderscore }
 
   <0> "**."    { constTok TcDoubleStarFloat }
