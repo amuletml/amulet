@@ -126,7 +126,7 @@ instance Pretty (Var p) => Pretty (Kind p) where
     | KiArr{} <- a = parens (pretty a) <+> arrow <+> pretty b
     | otherwise = pretty a <+> arrow <+> pretty b
 
-  pretty (KiVar v) = squote <> pretty v
+  pretty (KiVar v) = stypeVar (squote <> pretty v)
   pretty (KiForall vs v)
     = keyword "forall" <+> hsep (map ((squote <>) . pretty) vs) <> dot <+> pretty v
 
