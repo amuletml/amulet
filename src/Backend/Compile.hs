@@ -259,7 +259,8 @@ compileTerm (Let (One (x, _, e)) body)
     -- TODO: Handle match generation here, so we don't do kuldges with scope extension or anything
     x' <- pushScope x
     flushStmt [ LuaLocal [LuaName x'] [] ]
-    flushStmt (compileStmt undefined (LuaAssign [LuaName x'] . pure) e)
+    s <- gets snd
+    flushStmt (compileStmt s (LuaAssign [LuaName x'] . pure) e)
     compileTerm body
 
   where asStmt (LuaTable fs) = concatMap (asStmt . snd) fs
