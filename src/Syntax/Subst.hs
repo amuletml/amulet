@@ -51,6 +51,13 @@ instance Ord (Var p) => Substitutable p (Type p) where
   apply s (TyExactRows rows) = TyExactRows  (map (second (apply s)) rows)
   apply s (TyWithConstraints eq b) = TyWithConstraints (map (\(a, b) -> (apply s a, apply s b)) eq) (apply s b)
 
+instance Ord (Var p) => Substitutable p (Coercion p) where
+  ftv VarCo{} = mempty
+  ftv (ReflCo t t') = ftv t <> ftv t'
+
+  apply _ x@VarCo{} = x
+  apply s (ReflCo t t') = ReflCo (apply s t) (apply s t')
+
 instance (Ord (Var p), Substitutable p a) => Substitutable p [a] where
   ftv = foldMap ftv
   apply s = map (apply s)

@@ -190,6 +190,13 @@ lowerAnyway (Literal l _) = pure . Atom . Lit $ case l of
 lowerAnyway (S.App f x _) = C.App <$> lowerExprAtom f <*> lowerExprAtom x
 
 lowerAnyway (TypeApp f x _) = flip TyApp (lowerType x) <$> lowerExprAtom f
+lowerAnyway (S.Cast e c _) =
+  let
+  co (S.VarCo (TvName x)) = CoercionVar x
+  co (S.ReflCo t t') = SameRepr (lowerType t) (lowerType t')
+  in do
+    (e, _) <- lowerBothAtom e
+    pure (C.Cast e (co c))
 
 lowerAnyway e = error ("can't lower " ++ show e ++ " without type")
 

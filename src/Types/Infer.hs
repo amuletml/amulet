@@ -14,6 +14,7 @@ import qualified Data.Set as Set
 import qualified Data.Text as T
 import Data.Traversable
 import Data.Generics
+import Data.Spanned
 import Data.Triple
 import Data.Graph
 import Data.Span
@@ -110,16 +111,16 @@ check (Access rc key a) ty = do
 -- This is _very_ annoying, but we need it for nested ascriptions
 check ex@(Ascription e ty an) goal = do
   (ty, _) <- resolveKind ty
-  e' <- check e ty
-  _ <- subsumes ex ty goal
-  pure (Ascription e' ty (an, goal))
+  e <- check e ty
+  (_, c) <- subsumes ex ty goal
+  pure (Ascription (Cast e c (an, ty)) ty (an, goal))
 
 check TypeApp{} _ = error "impossible: check TypeApp"
 
 check e ty = do
   (e', t) <- infer e
-  _ <- subsumes e ty t
-  pure e'
+  (_, c) <- subsumes e ty t
+  pure (Cast e' c (annotation e, ty))
 
 -- [Complete and Easy]: See https://www.cl.cam.ac.uk/~nk480/bidir.pdf
 
@@ -280,12 +281,12 @@ inferLetTy closeOver vs =
       figureOut :: (Var Resolved, SomeReason) -> Type Typed -> [Constraint Typed] -> m (Type Typed, Expr Typed -> Expr Typed)
       figureOut blame ty cs = do
         cur <- gen
-        (x, vt) <- case solve cur cs of
-          Right x -> pure (x, normType (closeOver (apply x ty)))
+        (x, co, vt) <- case solve cur cs of
+          Right (x, co) -> pure (x, co, normType (closeOver (apply x ty)))
           Left e -> throwError (ArisingFrom e (snd blame))
         unless (null (skols vt)) $
           throwError (blameSkol (EscapedSkolems (Set.toList (skols vt)) vt) blame)
-        pure (closeOver vt, applyInExpr x . raiseE id (\(a, t) -> (a, normType (apply x t))))
+        pure (closeOver vt, applyInCo x co . applyInExpr x . raiseE id (\(a, t) -> (a, normType (apply x t))))
 
       generalise :: Type Typed -> m (Type Typed)
       generalise ty =
@@ -333,7 +334,7 @@ inferLetTy closeOver vs =
                 _ <- unify exp tyvar ty
                 pure (TvName var, exp', ann, ty)
         cur <- gen
-        solution <- case solve cur cs of
+        (solution, cs) <- case solve cur cs of
           Right x -> pure x
           Left e -> throwError e
         let solveOne :: (Var Typed, Expr Typed, Span, Type Typed)
@@ -344,7 +345,7 @@ inferLetTy closeOver vs =
                in do
                   unless (null (skols ty')) $
                     throwError (blameSkol (EscapedSkolems (Set.toList (skols ty')) ty') (unTvName var, BecauseOf exp))
-                  pure ( (var, applyInExpr solution (raiseE id (\(a, t) -> (a, normType (figure t))) exp), (ann, ty'))
+                  pure ( (var, applyInCo solution cs . applyInExpr solution $ (raiseE id (\(a, t) -> (a, normType (figure t))) exp), (ann, ty'))
                        , (var, ty') )
          in fmap unzip . traverse solveOne $ vs
 
@@ -361,6 +362,11 @@ applyInExpr ss = everywhere (mkT go) where
   go (TypeApp f t a) = TypeApp f (apply ss t) a
   go x = x
 
+applyInCo :: Subst Typed -> Map.Map (Var Typed) (Coercion Typed) -> Expr Typed -> Expr Typed
+applyInCo ss cs = everywhere (mkT go) where
+  go :: Coercion Typed -> Coercion Typed
+  go x@(VarCo v) = Map.findWithDefault x v cs
+  go (ReflCo t t') = ReflCo (apply ss t) (apply ss t')
 
 consFst :: Functor m => a -> m ([a], b) -> m ([a], b)
 consFst = fmap . first . (:)

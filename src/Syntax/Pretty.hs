@@ -64,6 +64,7 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
   pretty (Tuple es _) = parens (hsep (punctuate comma (map pretty es)))
   pretty (TupleSection es _) = parens (hsep (punctuate comma (map (maybe (string "") pretty) es)))
   pretty (TypeApp f x _) = parenFun f <+> soperator (char '@') <> pretty x
+  pretty (Cast e _ _) = enclose (char '<') (char '>') (pretty e)
 
 prettyMatches :: (Pretty (Var p)) => [(Pattern p, Expr p)] -> [Doc]
 prettyMatches = map (\(a, b) -> pipe <+> nest 4 (pretty a <+> arrow </> pretty b))

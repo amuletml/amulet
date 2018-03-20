@@ -174,6 +174,9 @@ reduceTerm s (Cast (Ref v _) c)
   , Just _ <- unifyWith uni l r'
   = Atom a
 
+reduceTerm s (Cast a (SameRepr t t'))
+  | t == t' = Atom a
+
 -- Constant fold
 reduceTerm s e@(App (Ref f1 _) r1)
   | Just (App (Ref v _) l1) <- lookupVar s f1
