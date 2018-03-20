@@ -67,8 +67,8 @@ instance Semigroup Env where
   Env a b c <> Env a' b' c' = Env (a <> a') (b <> b') (c <> c')
 
 data Constraint p
-  = ConUnify SomeReason (Type p) (Type p)
-  | ConSubsume SomeReason (Type p) (Type p)
+  = ConUnify   SomeReason (Var p) (Type p) (Type p)
+  | ConSubsume SomeReason (Var p) (Type p) (Type p)
   | ConImplies SomeReason (Type p) [Constraint p] [Constraint p]
   | ConFail (Var p) (Type p) -- for holes. I hate it.
 
@@ -105,19 +105,19 @@ data TypeError where
   IllegalTypeApp :: (Pretty (Var p), Pretty (Var p')) => Expr p -> Type p' -> Type p' -> TypeError
 
 instance (Ord (Var p), Substitutable p (Type p)) => Substitutable p (Constraint p) where
-  ftv (ConUnify _ a b) = ftv a `Set.union` ftv b
-  ftv (ConSubsume _ a b) = ftv a `Set.union` ftv b
+  ftv (ConUnify _ _ a b) = ftv a `Set.union` ftv b
+  ftv (ConSubsume _ _ a b) = ftv a `Set.union` ftv b
   ftv (ConImplies _ t a b) = ftv a `Set.union` ftv b `Set.union` ftv t
   ftv (ConFail _ t) = ftv t
 
-  apply s (ConUnify e a b) = ConUnify e (apply s a) (apply s b)
-  apply s (ConSubsume e a b) = ConSubsume e (apply s a) (apply s b)
+  apply s (ConUnify e v a b) = ConUnify e v (apply s a) (apply s b)
+  apply s (ConSubsume e v a b) = ConSubsume e v (apply s a) (apply s b)
   apply s (ConImplies e t a b) = ConImplies e (apply s t) (apply s a) (apply s b)
   apply s (ConFail e t) = ConFail e (apply s t)
 
 instance Pretty (Var p) => Pretty (Constraint p) where
-  pretty (ConUnify _ a b) = pretty a <+> soperator (char '~') <+> pretty b
-  pretty (ConSubsume _ a b) = pretty a <+> soperator (string "<=") <+> pretty b
+  pretty (ConUnify _ _ a b) = pretty a <+> soperator (char '~') <+> pretty b
+  pretty (ConSubsume _ _ a b) = pretty a <+> soperator (string "<=") <+> pretty b
   pretty (ConImplies _ t a b) = brackets (pretty t) <+> hsep (punctuate comma (map pretty a))
                             <+> soperator (char '⊃')
                             <#> indent 2 (vsep (punctuate comma (map pretty b)))

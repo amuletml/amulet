@@ -29,6 +29,7 @@ findExprHoles (RecordExt e rs _) = findExprHoles e ++ concatMap (findExprHoles .
 findExprHoles (Access e _ _) = findExprHoles e
 findExprHoles (Tuple es _) = concatMap findExprHoles es
 findExprHoles (TypeApp e _ _) = findExprHoles e
+findExprHoles (Cast e _ _) = findExprHoles e
 
 findExprHoles LeftSection{} = error "impossible (desugar)"
 findExprHoles RightSection{} = error "impossible (desugar)"

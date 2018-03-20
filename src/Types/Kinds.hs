@@ -153,14 +153,15 @@ instantiateKind (KiForall v x) = do
 instantiateKind x = pure x
 
 inferGadtConKind :: MonadSolve m => Constructor Resolved -> Type Resolved -> Type Resolved -> KindT m ()
-inferGadtConKind c t ret' =
+inferGadtConKind c t ret' = do
+  var <- fresh
   let t' = raiseT TvName t
       ret = raiseT TvName ret'
 
       generalise (TyForall v t) = TyForall v <$> generalise t
       generalise (TyArr a t) = TyArr a <$> generalise t
-      generalise ty = case U.solve 1 [ConUnify (BecauseOf c) ret ty] of
-        Right x -> do
+      generalise ty = case U.solve 1 [ConUnify (BecauseOf c) (TvName var) ret ty] of
+        Right (x, _) -> do
           tell x
           pure ret
         Left e -> throwError e

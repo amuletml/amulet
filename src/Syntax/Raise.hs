@@ -33,6 +33,7 @@ raiseE vR aR =
       Ascription e t a -> Ascription (eR e) (raiseT vR t) (aR a)
       TypeApp f x a -> TypeApp (eR f) (raiseT vR x) (aR a)
       TupleSection es a -> TupleSection (fmap eR <$> es) (aR a)
+      Cast e c a -> Cast (eR e) (raiseCo vR c) (aR a)
 
 raiseP :: (Var p -> Var p') -- How to raise variables
        -> (Ann p -> Ann p')
@@ -63,3 +64,9 @@ raiseT v (TyTuple x y) = TyTuple (raiseT v x) (raiseT v y)
 raiseT v (TyRows rho rows) = TyRows (raiseT v rho) (map (second (raiseT v)) rows)
 raiseT v (TyExactRows rows) = TyExactRows (map (second (raiseT v)) rows)
 raiseT v (TyWithConstraints eq a) = TyWithConstraints (map (\(a, b) -> (raiseT v a, raiseT v b)) eq) (raiseT v a)
+
+raiseCo :: (Var p -> Var p') -> Coercion p -> Coercion p'
+raiseCo v (VarCo a) = VarCo (v a)
+raiseCo v (ReflCo t t') = ReflCo (raiseT v t) (raiseT v t')
+raiseCo v (CompCo c c') = CompCo (raiseCo v c) (raiseCo v c')
+raiseCo v _ = undefined

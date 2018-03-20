@@ -174,6 +174,11 @@ reduceTerm s (Cast (Ref v _) c)
   , Just _ <- unifyWith uni l r'
   = Atom a
 
+reduceTerm _ (Cast a co) =
+  case foldCo co of
+    Nothing -> Atom a
+    Just co' -> Cast a co'
+
 -- Constant fold
 reduceTerm s e@(App (Ref f1 _) r1)
   | Just (App (Ref v _) l1) <- lookupVar s f1
@@ -369,3 +374,18 @@ isComplete s = isComplete' where
 
   flattenExtend (PatExtend p fs) = flattenExtend p ++ fs
   flattenExtend _ = []
+
+foldCo :: IsVar a => Coercion a -> Maybe (Coercion a)
+foldCo (Composition b t) = do
+  b <- foldCo b
+  case b of
+    SameRepr s s' | s == s' -> foldCo t
+    SameRepr (VarTy v) ty -> foldCo (substituteInCo (Map.singleton v ty) t)
+    _ -> Composition b <$> foldCo t
+foldCo (SameRepr t t')
+  | t == t' = Nothing
+  | otherwise = Just (SameRepr t t')
+foldCo (Domain c) = Domain <$> foldCo c
+foldCo (Codomain c) = Codomain <$> foldCo c
+foldCo (Symmetry c) = Symmetry <$> foldCo c
+foldCo x@CoercionVar{} = pure x

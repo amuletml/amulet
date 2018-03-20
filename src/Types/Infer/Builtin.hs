@@ -57,13 +57,15 @@ unify, subsumes :: ( Reasonable f p
                    , MonadInfer Typed m )
                 => f p
                 -> Type Typed
-                -> Type Typed -> m (Type Typed)
+                -> Type Typed -> m (Type Typed, Coercion Typed)
 unify e a b = do
-  tell [ConUnify (BecauseOf e) a b]
-  pure b
+  x <- TvName <$> fresh
+  tell [ConUnify (BecauseOf e) x a b]
+  pure (b, VarCo x)
 subsumes e a b = do
-  tell [ConSubsume (BecauseOf e) a b]
-  pure b
+  x <- TvName <$> fresh
+  tell [ConSubsume (BecauseOf e) x a b]
+  pure (b, VarCo x)
 
 implies :: ( Reasonable f p
            , MonadInfer Typed m
@@ -73,9 +75,11 @@ implies :: ( Reasonable f p
         -> m a
         -> m a
 implies _ _ [] k = k
-implies e t cs k =
-  let eqToCon (a, b) = ConUnify (BecauseOf e) a b
-      eqToCons = map eqToCon
+implies e t cs k = do
+  vs <- replicateM (length cs) fresh
+  let eqToCon v (a, b) = ConUnify (BecauseOf e) (TvName v) a b
+      eqToCons = zipWith eqToCon vs
+
       wrap :: [Constraint Typed] -> [Constraint Typed]
       wrap = (:[]) . ConImplies (BecauseOf e) t (eqToCons cs)
    in censor wrap k
