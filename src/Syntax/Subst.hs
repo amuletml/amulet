@@ -54,9 +54,11 @@ instance Ord (Var p) => Substitutable p (Type p) where
 instance Ord (Var p) => Substitutable p (Coercion p) where
   ftv VarCo{} = mempty
   ftv (ReflCo t t') = ftv t <> ftv t'
+  ftv (TransCo c c') = ftv c <> ftv c'
 
   apply _ x@VarCo{} = x
   apply s (ReflCo t t') = ReflCo (apply s t) (apply s t')
+  apply s (TransCo t t') = TransCo (apply s t) (apply s t')
 
 instance (Ord (Var p), Substitutable p a) => Substitutable p [a] where
   ftv = foldMap ftv

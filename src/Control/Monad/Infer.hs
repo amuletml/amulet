@@ -116,8 +116,8 @@ instance (Ord (Var p), Substitutable p (Type p)) => Substitutable p (Constraint 
   apply s (ConFail e t) = ConFail e (apply s t)
 
 instance Pretty (Var p) => Pretty (Constraint p) where
-  pretty (ConUnify _ v a b) = pretty a <+> soperator (char '~') <+> pretty b
-  pretty (ConSubsume _ v a b) = pretty a <+> soperator (string "<=") <+> pretty b
+  pretty (ConUnify _ _ a b) = pretty a <+> soperator (char '~') <+> pretty b
+  pretty (ConSubsume _ _ a b) = pretty a <+> soperator (string "<=") <+> pretty b
   pretty (ConImplies _ t a b) = brackets (pretty t) <+> hsep (punctuate comma (map pretty a))
                             <+> soperator (char '⊃')
                             <#> indent 2 (vsep (punctuate comma (map pretty b)))

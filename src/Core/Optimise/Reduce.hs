@@ -174,7 +174,7 @@ reduceTerm s (Cast (Ref v _) c)
   , Just _ <- unifyWith uni l r'
   = Atom a
 
-reduceTerm s (Cast a (SameRepr t t'))
+reduceTerm _ (Cast a (SameRepr t t'))
   | t == t' = Atom a
 
 -- Constant fold

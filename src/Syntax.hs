@@ -100,7 +100,6 @@ data Expr p
   | TypeApp (Expr p) (Type p) (Ann p)
   | Cast (Expr p) (Coercion p) (Ann p)
 
-
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Expr p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Expr p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Expr p)
@@ -175,6 +174,7 @@ deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Type
 data Coercion p
   = VarCo (Var p)
   | ReflCo (Type p) (Type p)
+  | TransCo (Coercion p) (Coercion p)
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Coercion p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Coercion p)

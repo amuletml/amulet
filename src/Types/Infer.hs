@@ -367,6 +367,7 @@ applyInCo ss cs = everywhere (mkT go) where
   go :: Coercion Typed -> Coercion Typed
   go x@(VarCo v) = Map.findWithDefault x v cs
   go (ReflCo t t') = ReflCo (apply ss t) (apply ss t')
+  go (TransCo c c') = TransCo (go c) (go c')
 
 consFst :: Functor m => a -> m ([a], b) -> m ([a], b)
 consFst = fmap . first . (:)
