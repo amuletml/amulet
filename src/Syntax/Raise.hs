@@ -69,4 +69,3 @@ raiseCo :: (Var p -> Var p') -> Coercion p -> Coercion p'
 raiseCo v (VarCo a) = VarCo (v a)
 raiseCo v (ReflCo t t') = ReflCo (raiseT v t) (raiseT v t')
 raiseCo v (CompCo c c') = CompCo (raiseCo v c) (raiseCo v c')
-raiseCo v _ = undefined
