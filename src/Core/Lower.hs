@@ -194,7 +194,7 @@ lowerAnyway (S.Cast e c _) =
   let
   co (S.VarCo (TvName x)) = CoercionVar x
   co (S.ReflCo t t') = SameRepr (lowerType t) (lowerType t')
-  co (S.CompCo c c') = Transitivity (co c) (co c')
+  co (S.CompCo c c') = Composition (co c) (co c')
   in do
     (e, _) <- lowerBothAtom e
     pure (C.Cast e (co c))

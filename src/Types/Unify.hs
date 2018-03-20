@@ -148,7 +148,7 @@ doSolve (ConSubsume because v a b:xs) = do
   subsumes unify (apply sub a) (apply sub b)
     `catchError` \e -> throwError (ArisingFrom e because)
 
-  solveCoSubst . at v .= Just (coercionOf (apply sub a) (apply sub b))
+  solveCoSubst . at v .= Just (coercionOf (apply sub b) (apply sub a))
   doSolve xs
 doSolve (ConImplies because not cs ts:xs) = do
   before <- use solveTySubst
@@ -223,5 +223,6 @@ capture m = do
 coercionOf :: Type Typed -> Type Typed -> Coercion Typed
 coercionOf (TyWithConstraints cs a) b =
   foldr CompCo (coercionOf a b) (map (uncurry ReflCo) cs)
-coercionOf b a@TyWithConstraints{} = coercionOf a b
+coercionOf b (TyWithConstraints cs a) =
+  foldr CompCo (coercionOf b a) (map (uncurry ReflCo) cs)
 coercionOf a b = ReflCo a b
