@@ -53,6 +53,8 @@ substituteInTys m = term where
   coercion (Domain c) = Domain (coercion c)
   coercion (Codomain c) = Codomain (coercion c)
   coercion (Symmetry c) = Symmetry (coercion c)
+  coercion (Composition c c') = Composition (coercion c) (coercion c')
+  coercion (CoercionVar x) = CoercionVar x
 
   atom (Ref v t) = Ref v (gotype t)
   atom (Lam arg b) = Lam (go arg) (term b) where
@@ -75,6 +77,8 @@ substituteInCo m = coercion where
   coercion (Domain c) = Domain (coercion c)
   coercion (Codomain c) = Codomain (coercion c)
   coercion (Symmetry c) = Symmetry (coercion c)
+  coercion (Composition c c') = Composition (coercion c) (coercion c')
+  coercion (CoercionVar x) = CoercionVar x
 
   gotype x@(VarTy v) = Map.findWithDefault x v m
   gotype x@ConTy{} = x
@@ -158,6 +162,8 @@ refresh = refreshTerm mempty where
   refreshCoercion s (Domain c) = Domain (refreshCoercion s c)
   refreshCoercion s (Codomain c) = Codomain (refreshCoercion s c)
   refreshCoercion s (Symmetry c) = Symmetry (refreshCoercion s c)
+  refreshCoercion s (Composition c c') = Composition (refreshCoercion s c) (refreshCoercion s c')
+  refreshCoercion s x@(CoercionVar v) = maybe x CoercionVar (VarMap.lookup (toVar v) s)
 
 argVar :: IsVar a => Argument a -> Var _
 argVar (TermArgument v _) = toVar v

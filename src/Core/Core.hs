@@ -84,6 +84,8 @@ data Coercion a
   | Domain (Coercion a)
   | Codomain (Coercion a)
   | Symmetry (Coercion a)
+  | Composition (Coercion a) (Coercion a)
+  | CoercionVar a
   deriving (Eq, Show, Ord, Data, Typeable, Functor)
 
 data Literal
@@ -138,6 +140,8 @@ instance Pretty a => Pretty (Coercion a) where
   pretty (Domain f) = keyword "dom" <+> parens (pretty f)
   pretty (Codomain f) = keyword "cod" <+> parens (pretty f)
   pretty (Symmetry f) = keyword "sym" <+> parens (pretty f)
+  pretty (Composition c c') = pretty c <+> soperator (char ';') <+> pretty c'
+  pretty (CoercionVar x) = pretty x
 
 pprLet :: Pretty a => [(a, Type a, Term a)] -> Doc
 pprLet = braces' . vsep . map (indent 2) . punctuate semi . map pprLet1
@@ -257,6 +261,11 @@ patternVarsA PatLit{} = mempty
 
 relates :: Coercion a -> Maybe (Type a, Type a)
 relates (SameRepr a b) = Just (a, b)
+relates (Composition c c') = do
+  (a, _) <- relates c
+  (_, c) <- relates c'
+  pure (a, c)
+relates (CoercionVar _) = Nothing
 relates (Symmetry x) = do
   (a, b) <- relates x
   pure (b, a)

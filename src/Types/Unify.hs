@@ -19,10 +19,12 @@ import Data.Generics
 import Data.List
 import Data.Text (Text)
 
-data SolveState = SolveState { _bindSkol :: Bool, _don'tTouch :: Set.Set (Var Typed) } deriving (Eq, Show, Ord)
+data SolveScope = SolveScope { _bindSkol :: Bool, _don'tTouch :: Set.Set (Var Typed) } deriving (Eq, Show, Ord)
+data SolveState = SolveState { _solveTySubst :: Subst Typed, _solveCoSubst :: Map.Map (Var Typed) (Coercion Typed) } deriving (Eq, Show, Ord)
 makeLenses ''SolveState
+makeLenses ''SolveScope
 
-type SolveM = GenT Int (StateT (Subst Typed) (ReaderT SolveState (Except TypeError)))
+type SolveM = GenT Int (StateT SolveState (ReaderT SolveScope (Except TypeError)))
 
 bind :: Var Typed -> Type Typed -> SolveM ()
 bind var ty
@@ -30,23 +32,25 @@ bind var ty
   | TyVar var == ty = pure ()
   | TyForall{} <- ty = throwError (Impredicative var ty)
   | otherwise = do
-      env <- get
+      env <- use solveTySubst
       noTouch <- view don'tTouch
       -- Attempt to extend the environment, otherwise unify with existing type
       case Map.lookup var env of
         Nothing ->
-          if | var `Set.notMember` noTouch -> put (env `compose` Map.singleton var (normType ty))
-             | var `Set.member` noTouch, TyVar v <- ty, v `Set.notMember` noTouch -> put (env `compose` Map.singleton v (TyVar var))
+          if | var `Set.notMember` noTouch -> solveTySubst .= (env `compose` Map.singleton var (normType ty))
+             | var `Set.member` noTouch, TyVar v <- ty, v `Set.notMember` noTouch -> solveTySubst .= (env `compose` Map.singleton v (TyVar var))
              | otherwise -> throwError (NotEqual (TyVar var) ty)
         Just ty'
           | ty' == ty -> pure ()
           | otherwise -> unify (normType ty) (normType ty')
+      sub <- use solveTySubst
+      solveCoSubst %= fmap (apply sub)
 
 unify :: Type Typed -> Type Typed -> SolveM ()
 unify (TySkol x) (TySkol y)
   | x == y = pure ()
 unify (TySkol t@(Skolem sv _ _ _)) b = do
-  sub <- use (at sv)
+  sub <- use (solveTySubst . at sv)
   case sub of
     Just t -> unify t b
     Nothing -> case b of
@@ -120,30 +124,34 @@ overlap xs ys
   where get [(_, a), (_, b)] = (a, b)
         get _ = undefined
 
-runSolve :: Int -> Subst Typed -> SolveM b -> Either TypeError (Int, Subst Typed)
-runSolve i s x = runExcept (fix (runReaderT (runStateT (runGenTFrom i act) s) (SolveState False mempty))) where
+runSolve :: Int -> Subst Typed -> SolveM b -> Either TypeError (Int, (Subst Typed, Map.Map (Var Typed) (Coercion Typed)))
+runSolve i s x = runExcept (fix (runReaderT (runStateT (runGenTFrom i act) (SolveState s mempty)) (SolveScope False mempty))) where
   act = (,) <$> gen <*> x
   fix act = do
     ((i, _), s) <- act
-    pure (i, s)
+    pure (i, (s ^. solveTySubst, s ^. solveCoSubst))
 
-solve :: Int -> [Constraint Typed] -> Either TypeError (Subst Typed)
+solve :: Int -> [Constraint Typed] -> Either TypeError (Subst Typed, Map.Map (Var Typed) (Coercion Typed))
 solve i cs = snd <$> runSolve i mempty (doSolve cs)
 
 doSolve :: [Constraint Typed] -> SolveM ()
 doSolve [] = pure ()
-doSolve (ConUnify because a b:xs) = do
-  sub <- get
+doSolve (ConUnify because v a b:xs) = do
+  sub <- use solveTySubst
   unify (apply sub a) (apply sub b)
     `catchError` \e -> throwError (ArisingFrom e because)
+
+  solveCoSubst . at v .= Just (coercionOf (apply sub a) (apply sub b))
   doSolve xs
-doSolve (ConSubsume because a b:xs) = do
-  sub <- get
+doSolve (ConSubsume because v a b:xs) = do
+  sub <- use solveTySubst
   subsumes unify (apply sub a) (apply sub b)
     `catchError` \e -> throwError (ArisingFrom e because)
+
+  solveCoSubst . at v .= Just (coercionOf (apply sub b) (apply sub a))
   doSolve xs
 doSolve (ConImplies because not cs ts:xs) = do
-  before <- get
+  before <- use solveTySubst
   let not' = ftv (apply before not)
       cs' = apply before cs
       ts' = apply before ts
@@ -156,18 +164,19 @@ doSolve (ConImplies because not cs ts:xs) = do
 
     ((), sub) <- local (don'tTouch .~ mempty) . capture $ go
 
-    let after = Map.foldrWithKey leak before sub
+    let sub' = sub ^. solveTySubst
+        after = Map.foldrWithKey leak before sub'
 
     local (don'tTouch %~ Set.union not') $ do
-      put sub
-      doSolve (map (apply sub) ts')
+      solveTySubst .= sub'
+      doSolve (map (apply sub') ts')
         `catchError` \e -> throwError (ArisingFrom e because)
-      put after
+      solveTySubst .= after
 
     doSolve xs
 doSolve (ConFail v t:cs) = do
   doSolve cs
-  sub <- get
+  sub <- use solveTySubst
   let unskolemise x@(TySkol v) = case sub ^. at (v ^. skolVar) of
         Just t | t == TySkol v -> TyVar (v ^. skolVar)
         _ -> x
@@ -179,7 +188,7 @@ doSolve (ConFail v t:cs) = do
 subsumes :: (Type Typed -> Type Typed -> SolveM b)
          -> Type Typed -> Type Typed -> SolveM b
 subsumes k t1 t2@TyForall{} = do
-  sub <- get
+  sub <- use solveTySubst
   t2' <- skolemise (BySubsumption (apply sub t1) (apply sub t2)) t2
   subsumes k t1 t2'
 subsumes k t1@TyForall{} t2 = do
@@ -210,3 +219,10 @@ capture m = do
   st <- get
   put x
   pure (r, st)
+
+coercionOf :: Type Typed -> Type Typed -> Coercion Typed
+coercionOf (TyWithConstraints cs a) b =
+  foldr CompCo (coercionOf a b) (map (uncurry ReflCo) cs)
+coercionOf b (TyWithConstraints cs a) =
+  foldr CompCo (coercionOf b a) (map (uncurry ReflCo) cs)
+coercionOf a b = ReflCo a b

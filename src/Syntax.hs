@@ -98,7 +98,7 @@ data Expr p
 
   -- Explicit type application
   | TypeApp (Expr p) (Type p) (Ann p)
-
+  | Cast (Expr p) (Coercion p) (Ann p)
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Expr p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Expr p)
@@ -160,7 +160,6 @@ data SkolemMotive p
 deriving instance (Show (Var p), Show (Ann p)) => Show (SkolemMotive p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (SkolemMotive p)
 
-
 instance Eq (Var p) => Eq (Skolem p) where
   Skolem v _ _ _ == Skolem v' _ _ _ = v == v'
 
@@ -171,6 +170,16 @@ deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Type p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Type p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Type p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Type p)
+
+data Coercion p
+  = VarCo (Var p)
+  | ReflCo (Type p) (Type p)
+  | CompCo (Coercion p) (Coercion p)
+
+deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Coercion p)
+deriving instance (Show (Var p), Show (Ann p)) => Show (Coercion p)
+deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Coercion p)
+deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Coercion p)
 
 data Kind p
   = KiStar
