@@ -25,6 +25,7 @@ import Control.Arrow (first, (***))
 import Control.Lens
 
 import Syntax.Resolve.Toplevel
+import Syntax.Transform
 import Syntax.Subst
 import Syntax.Raise
 import Syntax.Let
@@ -357,13 +358,13 @@ inferLetTy closeOver vs =
    in tc sccs
 
 applyInExpr :: Map.Map (Var Typed) (Type Typed) -> Expr Typed -> Expr Typed
-applyInExpr ss = everywhere (mkT go) where
+applyInExpr ss = transformExpr go where
   go :: Expr Typed -> Expr Typed
   go (TypeApp f t a) = TypeApp f (apply ss t) a
   go x = x
 
 applyInCo :: Subst Typed -> Map.Map (Var Typed) (Coercion Typed) -> Expr Typed -> Expr Typed
-applyInCo ss cs = everywhere (mkT go) where
+applyInCo ss cs = transformExprTyped id go id where
   go :: Coercion Typed -> Coercion Typed
   go x@(VarCo v) = Map.findWithDefault x v cs
   go (ReflCo t t') = ReflCo (apply ss t) (apply ss t')

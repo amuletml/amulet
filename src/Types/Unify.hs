@@ -8,6 +8,7 @@ import Control.Lens
 
 import Types.Wellformed
 
+import Syntax.Transform
 import Syntax.Subst
 import Syntax
 
@@ -15,7 +16,6 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Foldable
 import Data.Function
-import Data.Generics
 import Data.List
 import Data.Text (Text)
 
@@ -182,7 +182,7 @@ doSolve (ConFail v t:cs) = do
         _ -> x
       unskolemise x = x
       go :: Type Typed -> Type Typed
-      go = everywhere (mkT unskolemise)
+      go = transformType unskolemise
   throwError (FoundHole v (go (apply sub t)))
 
 subsumes :: (Type Typed -> Type Typed -> SolveM b)

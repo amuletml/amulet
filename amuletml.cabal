@@ -79,6 +79,7 @@ library amulet
                      , Syntax.Subst
                      , Syntax.Pretty
                      , Syntax.Desugar
+                     , Syntax.Transform
                      -- Renamer
                      , Syntax.Resolve
                      , Syntax.Resolve.Scope
