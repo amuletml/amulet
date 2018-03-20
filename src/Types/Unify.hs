@@ -140,13 +140,15 @@ doSolve (ConUnify because v a b:xs) = do
   sub <- use solveTySubst
   unify (apply sub a) (apply sub b)
     `catchError` \e -> throwError (ArisingFrom e because)
-  solveCoSubst . at v .= Just (ReflCo a (apply sub b))
+
+  solveCoSubst . at v .= Just (coercionOf (apply sub a) (apply sub b))
   doSolve xs
 doSolve (ConSubsume because v a b:xs) = do
   sub <- use solveTySubst
   subsumes unify (apply sub a) (apply sub b)
     `catchError` \e -> throwError (ArisingFrom e because)
-  solveCoSubst . at v .= Just (ReflCo a (apply sub b))
+
+  solveCoSubst . at v .= Just (coercionOf (apply sub a) (apply sub b))
   doSolve xs
 doSolve (ConImplies because not cs ts:xs) = do
   before <- use solveTySubst
@@ -217,3 +219,9 @@ capture m = do
   st <- get
   put x
   pure (r, st)
+
+coercionOf :: Type Typed -> Type Typed -> Coercion Typed
+coercionOf (TyWithConstraints cs a) b =
+  foldr CompCo (coercionOf a b) (map (uncurry ReflCo) cs)
+coercionOf b a@TyWithConstraints{} = coercionOf a b
+coercionOf a b = ReflCo a b

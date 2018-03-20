@@ -67,7 +67,7 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
   pretty (Cast e c _) = parens (pretty e <+> soperator (string "|>") <+> pprCo c) where
     pprCo (VarCo x) = stypeSkol (pretty x)
     pprCo (ReflCo t t') = pretty t <+> soperator (char '~') <+> pretty t'
-    pprCo (TransCo c c') = pprCo c <+> soperator (char ';') <+> pprCo c'
+    pprCo (CompCo c c') = pprCo c <+> soperator (char ';') <+> pprCo c'
 
 prettyMatches :: (Pretty (Var p)) => [(Pattern p, Expr p)] -> [Doc]
 prettyMatches = map (\(a, b) -> pipe <+> nest 4 (pretty a <+> arrow </> pretty b))
