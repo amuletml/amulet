@@ -14,9 +14,9 @@ import Core.Core as C
 import qualified Data.VarMap as VarMap
 import Data.VarSet (IsVar(..))
 import Data.Semigroup
-import Data.Generics
 import Data.Triple
 import Data.Maybe
+import Data.Data
 
 import Pretty
 
