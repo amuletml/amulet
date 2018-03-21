@@ -8,7 +8,7 @@ import Control.Arrow
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Foldable
-import Data.Generics
+import Data.Semigroup
 import Data.Function
 import Data.List (unionBy)
 
@@ -66,11 +66,17 @@ normType = flatten . uncurry collect . runWriter . spread . applyCons where
   flatten (TyTuple a b) = TyTuple (flatten a) (flatten b)
   flatten t = t
 
-skols :: (Ord (Ann p), Ord (Var p), Data p, Data (Ann p), Data (Var p))
-      => Type p -> Set.Set (Skolem p)
-skols = everything mappend (mkQ mempty go) where
-  go (TySkol s) = Set.singleton s
-  go _ = Set.empty
+skols :: Ord (Var p) => Type p -> Set.Set (Skolem p)
+skols TyCon{} = mempty
+skols TyVar{} = mempty
+skols (TySkol x) = Set.singleton x
+skols (TyForall vs t) = skols t
+skols (TyArr a b) = skols a <> skols b
+skols (TyApp a b) = skols a <> skols b
+skols (TyRows r rs) = skols r <> foldMap (skols . snd) rs
+skols (TyExactRows rs) = foldMap (skols . snd) rs
+skols (TyTuple a b) = skols a <> skols b
+skols (TyWithConstraints cs a) = foldMap (\(x, y) -> skols x <> skols y) cs <> skols a
 
 applyCons :: Ord (Var p) => Type p -> Type p
 applyCons x@TyCon{} = x
