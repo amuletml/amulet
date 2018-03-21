@@ -52,7 +52,7 @@ builtinsEnv = Env (Map.fromList ops) (Map.fromList tps) mempty where
         , op "==" cmp, op "<>" cmp
         , op "||" boolOp, op "&&" boolOp ]
   tps :: [(Var Resolved, Kind Typed)]
-  tps = [ tp "int", tp "string", tp "bool", tp "unit" ]
+  tps = [ tp "int", tp "string", tp "bool", tp "unit", tp "float" ]
 
 unify, subsumes :: ( Reasonable f p
                    , MonadInfer Typed m )
