@@ -9,12 +9,13 @@ import qualified Data.Map.Strict as Map
 import Core.Lower
 import Core.Core
 
+import Control.Lens
+
 import Control.Monad.State
 import Control.Applicative
 
 import Data.Traversable
 import Data.Semigroup
-import Data.Generics
 import Data.Foldable
 import Data.VarSet
 import Data.List
@@ -50,7 +51,7 @@ approximateType (Match _ xs) = case xs of
 approximateType (Extend e rs) = RowsTy <$> approximateAtomType e <*> traverse (\(x, _, t) -> (x,) <$> approximateAtomType t) rs
 approximateType (TyApp f at) = do
   ForallTy v t <- approximateAtomType f
-  let replace = everywhere (mkT go)
+  let replace = transform go
       go (VarTy v') | v == v' = at
       go x = x
   pure (replace t)
@@ -79,7 +80,7 @@ unify' (RowsTy t ts) (RowsTy t' ts') = do
 unify' (ExactRowsTy ts) (ExactRowsTy ts') = fold <$> for (zip (sortOn fst ts) (sortOn fst ts')) (\((_, t), (_, t')) -> unify' t t')
 unify' (ForallTy vs t) (ForallTy vs' t') = unify' t (replace vs vs' t') where
   replace f t = replaceOne (VarTy t) f
-  replaceOne at var = everywhere (mkT (go var)) where
+  replaceOne at var = transform (go var) where
     go v (VarTy v') | v == v' = at
     go _ x = x
 unify' (AppTy f t) (AppTy f' t') = liftA2 (<>) (unify' f f') (unify' t t')

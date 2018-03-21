@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveDataTypeable, FlexibleInstances, ScopedTypeVariables, DeriveFunctor #-}
+{-# LANGUAGE FlexibleInstances, ScopedTypeVariables, DeriveFunctor, DeriveGeneric #-}
 {-# LANGUAGE PatternSynonyms #-}
 module Core.Core where
 
@@ -6,9 +6,12 @@ import Pretty
 
 import qualified Data.VarSet as VarSet
 import Data.VarSet (IsVar(..))
-import Data.Data (Data, Typeable)
 import Data.Text (Text, pack)
 import Data.Triple
+
+import Control.Lens.Plated
+
+import GHC.Generics
 
 import Syntax (Var(..), Resolved)
 
@@ -16,14 +19,14 @@ data AnnAtom b a
   = Ref a (Type a)
   | Lam (Argument a) (AnnTerm b a)
   | Lit Literal
-  deriving (Eq, Show, Ord, Data, Typeable, Functor)
+  deriving (Eq, Show, Ord, Functor, Generic)
 
 type Atom = AnnAtom ()
 
 data Argument a
   = TermArgument a (Type a)
   | TypeArgument a (Type a) -- TODO kinds
-  deriving (Eq, Show, Ord, Data, Typeable, Functor)
+  deriving (Eq, Show, Ord, Functor, Generic)
 
 data AnnTerm b a
   = AnnAtom b (AnnAtom b a)
@@ -36,7 +39,7 @@ data AnnTerm b a
 
   | AnnTyApp b (AnnAtom b a) (Type a) -- removes a Λ
   | AnnCast b (AnnAtom b a) (Coercion a)
-  deriving (Eq, Show, Ord, Data, Typeable, Functor)
+  deriving (Eq, Show, Ord, Functor, Generic)
 
 type Term = AnnTerm ()
 
@@ -66,7 +69,7 @@ pattern Cast a ty = AnnCast () a ty
 data AnnBinding b a
   = One (a, Type a, AnnTerm b a) -- uncurried for convenience
   | Many [(a, Type a, AnnTerm b a)]
-  deriving (Eq, Show, Ord, Data, Typeable, Functor)
+  deriving (Eq, Show, Ord, Functor, Generic)
 
 type Binding = AnnBinding ()
 
@@ -77,7 +80,7 @@ data Pattern a
   | PatExtend (Pattern a) [(Text, Pattern a)]
 
   | PatLit Literal
-  deriving (Eq, Show, Ord, Data, Typeable, Functor)
+  deriving (Eq, Show, Ord, Functor, Generic)
 
 data Coercion a
   = SameRepr (Type a) (Type a)
@@ -86,7 +89,7 @@ data Coercion a
   | Symmetry (Coercion a)
   | Composition (Coercion a) (Coercion a)
   | CoercionVar a
-  deriving (Eq, Show, Ord, Data, Typeable, Functor)
+  deriving (Eq, Show, Ord, Functor, Generic)
 
 data Literal
   = Int Integer
@@ -94,7 +97,7 @@ data Literal
   | Float Double
   | LitTrue | LitFalse
   | Unit | RecNil
-  deriving (Eq, Show, Ord, Data, Typeable)
+  deriving (Eq, Show, Ord)
 
 data Type a
   = ConTy a
@@ -105,13 +108,13 @@ data Type a
   | RowsTy (Type a) [(Text, Type a)]
   | ExactRowsTy [(Text, Type a)]
   | StarTy -- * :: *
-  deriving (Eq, Show, Ord, Data, Typeable, Functor)
+  deriving (Eq, Show, Ord, Functor, Generic)
 
 data AnnStmt b a
   = Foreign a (Type a) Text
   | StmtLet [(a, Type a, AnnTerm b a)]
   | Type a [(a, Type a)]
-  deriving (Eq, Show, Ord, Data, Typeable, Functor)
+  deriving (Eq, Show, Ord, Functor, Generic)
 
 type Stmt = AnnStmt ()
 
@@ -284,3 +287,24 @@ extractAnn (AnnMatch b _ _)  = b
 extractAnn (AnnExtend b _ _) = b
 extractAnn (AnnTyApp b _ _)  = b
 extractAnn (AnnCast b _ _)   = b
+
+instance Plated (AnnAtom b a) where
+  plate = gplate
+
+instance Plated (AnnTerm b a) where
+  plate = gplate
+
+instance Plated (AnnBinding b a) where
+  plate = gplate
+
+instance Plated (Pattern a) where
+  plate = gplate
+
+instance Plated (Coercion a) where
+  plate = gplate
+
+instance Plated (Type a) where
+  plate = gplate
+
+instance Plated (AnnStmt b a) where
+  plate = gplate
