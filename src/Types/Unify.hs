@@ -4,7 +4,7 @@ module Types.Unify (solve, overlap, bind, skolemise, freshSkol) where
 import Control.Monad.Except
 import Control.Monad.State
 import Control.Monad.Infer
-import Control.Lens
+import Control.Lens hiding (Empty)
 
 import Types.Wellformed
 
@@ -13,7 +13,9 @@ import Syntax.Subst
 import Syntax
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
+import Data.Sequence (Seq ((:<|), Empty))
 import Data.Foldable
 import Data.Function
 import Data.List
@@ -131,26 +133,26 @@ runSolve i s x = runExcept (fix (runReaderT (runStateT (runGenTFrom i act) (Solv
     ((i, _), s) <- act
     pure (i, (s ^. solveTySubst, s ^. solveCoSubst))
 
-solve :: Int -> [Constraint Typed] -> Either TypeError (Subst Typed, Map.Map (Var Typed) (Coercion Typed))
+solve :: Int -> Seq.Seq (Constraint Typed) -> Either TypeError (Subst Typed, Map.Map (Var Typed) (Coercion Typed))
 solve i cs = snd <$> runSolve i mempty (doSolve cs)
 
-doSolve :: [Constraint Typed] -> SolveM ()
-doSolve [] = pure ()
-doSolve (ConUnify because v a b:xs) = do
+doSolve :: Seq.Seq (Constraint Typed) -> SolveM ()
+doSolve Empty = pure ()
+doSolve (ConUnify because v a b :<| xs) = do
   sub <- use solveTySubst
   unify (apply sub a) (apply sub b)
     `catchError` \e -> throwError (ArisingFrom e because)
 
   solveCoSubst . at v .= Just (coercionOf (apply sub a) (apply sub b))
   doSolve xs
-doSolve (ConSubsume because v a b:xs) = do
+doSolve (ConSubsume because v a b :<| xs) = do
   sub <- use solveTySubst
   subsumes unify (apply sub a) (apply sub b)
     `catchError` \e -> throwError (ArisingFrom e because)
 
   solveCoSubst . at v .= Just (coercionOf (apply sub b) (apply sub a))
   doSolve xs
-doSolve (ConImplies because not cs ts:xs) = do
+doSolve (ConImplies because not cs ts :<| xs) = do
   before <- use solveTySubst
   let not' = ftv (apply before not)
       cs' = apply before cs
@@ -169,12 +171,12 @@ doSolve (ConImplies because not cs ts:xs) = do
 
     local (don'tTouch %~ Set.union not') $ do
       solveTySubst .= sub'
-      doSolve (map (apply sub') ts')
+      doSolve (fmap (apply sub') ts')
         `catchError` \e -> throwError (ArisingFrom e because)
       solveTySubst .= after
 
     doSolve xs
-doSolve (ConFail v t:cs) = do
+doSolve (ConFail v t :<| cs) = do
   doSolve cs
   sub <- use solveTySubst
   let unskolemise x@(TySkol v) = case sub ^. at (v ^. skolVar) of

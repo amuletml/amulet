@@ -14,6 +14,7 @@ module Syntax.Subst
   where
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
 import Data.Semigroup
 
@@ -63,6 +64,10 @@ instance Ord (Var p) => Substitutable p (Coercion p) where
 instance (Ord (Var p), Substitutable p a) => Substitutable p [a] where
   ftv = foldMap ftv
   apply s = map (apply s)
+
+instance (Ord (Var p), Substitutable p a) => Substitutable p (Seq.Seq a) where
+  ftv = foldMap ftv
+  apply s = fmap (apply s)
 
 compose :: Ord (Var p) => Subst p -> Subst p -> Subst p
 s1 `compose` s2 = fmap (apply s1) s2 <> fmap (apply s2) s1

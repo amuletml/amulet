@@ -3,6 +3,7 @@
 module Types.Infer.Builtin where
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import Data.Semigroup
@@ -60,11 +61,11 @@ unify, subsumes :: ( Reasonable f p
                 -> Type Typed -> m (Type Typed, Coercion Typed)
 unify e a b = do
   x <- TvName <$> fresh
-  tell [ConUnify (BecauseOf e) x a b]
+  tell (Seq.singleton (ConUnify (BecauseOf e) x a b))
   pure (b, VarCo x)
 subsumes e a b = do
   x <- TvName <$> fresh
-  tell [ConSubsume (BecauseOf e) x a b]
+  tell (Seq.singleton (ConSubsume (BecauseOf e) x a b))
   pure (b, VarCo x)
 
 implies :: ( Reasonable f p
@@ -80,8 +81,8 @@ implies e t cs k = do
   let eqToCon v (a, b) = ConUnify (BecauseOf e) (TvName v) a b
       eqToCons = zipWith eqToCon vs
 
-      wrap :: [Constraint Typed] -> [Constraint Typed]
-      wrap = (:[]) . ConImplies (BecauseOf e) t (eqToCons cs)
+      wrap :: Seq.Seq (Constraint Typed) -> Seq.Seq (Constraint Typed)
+      wrap = Seq.singleton . ConImplies (BecauseOf e) t (Seq.fromList (eqToCons cs))
    in censor wrap k
 
 leakEqualities :: ( Reasonable f p
