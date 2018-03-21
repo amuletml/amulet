@@ -9,8 +9,8 @@ import Control.Monad.Infer
 import Control.Lens
 
 import Data.Traversable
+import Data.Semigroup
 import Data.List
-import Data.Data
 
 import Types.Infer.Builtin
 import Types.Wellformed
@@ -97,10 +97,17 @@ checkPattern pt@(PType p t ann) ty = do
   _ <- unify pt ty t'
   pure (PType p' t' (ann, t'), binds, cs)
 
-boundTvs :: forall p. Ord (Var p) => [(Var p, Type p)] -> Set.Set (Var p)
-boundTvs vs = foldMap (go . snd) vs where
+boundTvs :: forall p. Ord (Var p) => Pattern p -> [(Var p, Type p)] -> Set.Set (Var p)
+boundTvs p vs = pat p <> foldMap (go . snd) vs where
   go :: Type p -> Set.Set (Var p)
   go x = ftv x `Set.union` Set.map (^. skolIdent) (skols x)
+
+  pat Wildcard{} = mempty
+  pat Capture{} = mempty
+  pat (Destructure _ p _) = maybe mempty pat p
+  pat (PType _ t _) = ftv t
+  pat (PRecord ps _) = foldMap (pat . snd) ps
+  pat (PTuple ps _) = foldMap pat ps
 
 skolGadt :: MonadInfer Typed m => Var Resolved -> Type Typed -> m (Type Typed)
 skolGadt var ty =
