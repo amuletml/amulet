@@ -284,8 +284,6 @@ inferLetTy closeOver vs =
           Right (x, co) -> pure (x, co, normType (closeOver (apply x ty)))
           Left e -> throwError (ArisingFrom e (snd blame))
         skolCheck (TvName (fst blame)) (snd blame) vt
-        unless (null (skols vt)) $
-          throwError (blameSkol (EscapedSkolems (Set.toList (skols vt)) vt) blame)
         pure (closeOver vt, applyInCo x co . applyInExpr x . raiseE id (\(a, t) -> (a, normType (apply x t))))
 
       generalise :: Type Typed -> m (Type Typed)
