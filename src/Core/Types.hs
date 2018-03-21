@@ -81,12 +81,9 @@ unify' (RowsTy t ts) (RowsTy t' ts') = do
   ts <- for (zip (sortOn fst ts) (sortOn fst ts')) $ \((_, t), (_, t')) -> unify' t t'
   pure (mgu_t <> fold ts)
 unify' (ExactRowsTy ts) (ExactRowsTy ts') = fold <$> for (zip (sortOn fst ts) (sortOn fst ts')) (\((_, t), (_, t')) -> unify' t t')
-unify' (ForallTy (Relevant v) c t) (ForallTy (Relevant v') c' t') = liftA2 (<>) (unify' c c') (unify' t (replace v v' t')) where
-  replace f t = replaceOne (VarTy t) f
-  replaceOne at var = transform (go var) where
-    go v (VarTy v') | v == v' = at
-    go _ x = x
+unify' (ForallTy (Relevant v) c t) (ForallTy (Relevant v') c' t') = liftA2 (<>) (unify' c c') (unify' t (replaceTy v' (VarTy v) t'))
 unify' (AppTy f t) (AppTy f' t') = liftA2 (<>) (unify' f f') (unify' t t')
+unify' StarTy StarTy = pure ()
 unify' _ _ = lift Nothing
 
 replaceTy :: IsVar a => a -> Type a -> Type a -> Type a
