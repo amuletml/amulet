@@ -133,9 +133,7 @@ lookupTy :: (MonadError TypeError m, MonadReader Env m, MonadGen Int m) => Var R
 lookupTy x = do
   rs <- view (values . at x)
   case rs of
-    Just t -> fmap thd3 (instantiate t) `catchError` \e ->
-      throwError (Note (Note e (string "Arising from instancing of variable" <+> pretty x))
-                       (pretty x <+> string "has principal type" <+> pretty t))
+    Just t -> thd3 <$> instantiate t
     Nothing -> throwError (NotInScope x)
 
 lookupTy' :: (MonadError TypeError m, MonadReader Env m, MonadGen Int m) => Var Resolved
@@ -143,9 +141,7 @@ lookupTy' :: (MonadError TypeError m, MonadReader Env m, MonadGen Int m) => Var 
 lookupTy' x = do
   rs <- view (values . at x)
   case rs of
-    Just t -> instantiate t `catchError` \e ->
-      throwError (Note (Note e (string "Arising from instancing of variable" <+> pretty x))
-                       (pretty x <+> string "has principal type" <+> pretty t))
+    Just t -> instantiate t
     Nothing -> throwError (NotInScope x)
 
 runInfer :: MonadGen Int m
@@ -178,7 +174,7 @@ extendManyK = flip (foldr extendKind)
 alpha :: [Text]
 alpha = map T.pack $ [1..] >>= flip replicateM ['a'..'z']
 
-instantiate :: (MonadError TypeError m, MonadGen Int m) => Type Typed -> m (Map.Map (Var Typed) (Type Typed), Type Typed, Type Typed)
+instantiate :: MonadGen Int m => Type Typed -> m (Map.Map (Var Typed) (Type Typed), Type Typed, Type Typed)
 instantiate tp@(TyForall vs ty) = do
   f <- traverse (const freshTV) vs
   let map = Map.fromList (zip vs f)
