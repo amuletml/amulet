@@ -35,10 +35,12 @@ import Control.Monad.Gen as M
 import Control.Lens
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import Data.Semigroup hiding (diff)
 import Data.Function
+import Data.Foldable
 import Data.Spanned
 import Data.Triple
 import Data.Text (Text)
@@ -49,7 +51,7 @@ import Pretty
 import Syntax.Pretty
 import Syntax.Subst
 
-type MonadInfer p m = (MonadError TypeError m, MonadReader Env m, MonadWriter [Constraint p] m, MonadGen Int m)
+type MonadInfer p m = (MonadError TypeError m, MonadReader Env m, MonadWriter (Seq.Seq (Constraint p)) m, MonadGen Int m)
 
 data Env
   = Env { _values  :: Map.Map (Var Resolved) (Type Typed)
@@ -69,7 +71,7 @@ instance Semigroup Env where
 data Constraint p
   = ConUnify   SomeReason (Var p) (Type p) (Type p)
   | ConSubsume SomeReason (Var p) (Type p) (Type p)
-  | ConImplies SomeReason (Type p) [Constraint p] [Constraint p]
+  | ConImplies SomeReason (Type p) (Seq.Seq (Constraint p)) (Seq.Seq (Constraint p))
   | ConFail (Var p) (Type p) -- for holes. I hate it.
 
 deriving instance (Show (Ann p), Show (Var p), Show (Expr p), Show (Type p))
@@ -118,9 +120,9 @@ instance (Ord (Var p), Substitutable p (Type p)) => Substitutable p (Constraint 
 instance Pretty (Var p) => Pretty (Constraint p) where
   pretty (ConUnify _ _ a b) = pretty a <+> soperator (char '~') <+> pretty b
   pretty (ConSubsume _ _ a b) = pretty a <+> soperator (string "<=") <+> pretty b
-  pretty (ConImplies _ t a b) = brackets (pretty t) <+> hsep (punctuate comma (map pretty a))
+  pretty (ConImplies _ t a b) = brackets (pretty t) <+> hsep (punctuate comma (toList (fmap pretty a)))
                             <+> soperator (char '⊃')
-                            <#> indent 2 (vsep (punctuate comma (map pretty b)))
+                            <#> indent 2 (vsep (punctuate comma (toList (fmap pretty b))))
   pretty ConFail{} = string "fail"
 
 
@@ -148,8 +150,8 @@ lookupTy' x = do
 
 runInfer :: MonadGen Int m
          => Env
-         -> ReaderT Env (WriterT [Constraint p] (ExceptT TypeError m)) a
-         -> m (Either TypeError (a, [Constraint p]))
+         -> ReaderT Env (WriterT (Seq.Seq (Constraint p)) (ExceptT TypeError m)) a
+         -> m (Either TypeError (a, (Seq.Seq (Constraint p))))
 runInfer ct ac = runExceptT (runWriterT (runReaderT ac ct))
 
 fresh :: MonadGen Int m => m (Var Resolved)

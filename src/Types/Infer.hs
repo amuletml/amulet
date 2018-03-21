@@ -10,8 +10,9 @@ module Types.Infer
   ) where
 
 import qualified Data.Map.Strict as Map
-import qualified Data.Set as Set
+import qualified Data.Sequence as Seq
 import qualified Data.Text as T
+import qualified Data.Set as Set
 import Data.Traversable
 import Data.Spanned
 import Data.Triple
@@ -63,7 +64,7 @@ check e ty@TyForall{} = do -- This is rule Decl∀L from [Complete and Easy]
   pure (correct ty e)
 
 check (Hole v a) t = do
-  tell [ConFail (TvName v) t]
+  tell (Seq.singleton (ConFail (TvName v) t))
   pure (Hole (TvName v) (a, t))
 
 check (Begin [] _) _ = error "impossible: check empty Begin"
@@ -276,7 +277,7 @@ inferLetTy closeOver vs =
       blameSkol :: TypeError -> (Var Resolved, SomeReason) -> TypeError
       blameSkol e (v, r) = ArisingFrom (Note e (string "in the inferred type for" <+> pretty v)) r
 
-      figureOut :: (Var Resolved, SomeReason) -> Type Typed -> [Constraint Typed] -> m (Type Typed, Expr Typed -> Expr Typed)
+      figureOut :: (Var Resolved, SomeReason) -> Type Typed -> Seq.Seq (Constraint Typed) -> m (Type Typed, Expr Typed -> Expr Typed)
       figureOut blame ty cs = do
         cur <- gen
         (x, co, vt) <- case solve cur cs of

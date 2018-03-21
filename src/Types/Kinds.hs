@@ -13,6 +13,7 @@ import Control.Monad.Infer
 import Control.Lens
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
 import Data.Semigroup
 import Data.Foldable
@@ -160,7 +161,7 @@ inferGadtConKind c t ret' = do
 
       generalise (TyForall v t) = TyForall v <$> generalise t
       generalise (TyArr a t) = TyArr a <$> generalise t
-      generalise ty = case U.solve 1 [ConUnify (BecauseOf c) (TvName var) ret ty] of
+      generalise ty = case U.solve 1 (Seq.singleton (ConUnify (BecauseOf c) (TvName var) ret ty)) of
         Right (x, _) -> do
           tell x
           pure ret

@@ -2,6 +2,7 @@
 module Types.Infer.Constructor (inferCon) where
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
 import Data.Either
 
@@ -37,13 +38,13 @@ inferCon ret c@(GeneralisedCon nm cty ann) = do
 
   (cty, _) <- resolveKind cty
   var <- TvName <$> fresh
-  case solve 1 [ConUnify (BecauseOf c) var (result cty) ret] of
+  case solve 1 (Seq.singleton (ConUnify (BecauseOf c) var (result cty) ret)) of
     Left e -> throwError (gadtConShape (cty, ret) (result cty) e)
     Right _ -> pure ()
 
   let generalise (TyForall v t) = TyForall v <$> generalise t
       generalise (TyArr a t) = TyArr a <$> generalise t
-      generalise ty = case solve 1 [ConUnify (BecauseOf c) var ret ty] of
+      generalise ty = case solve 1 (Seq.singleton (ConUnify (BecauseOf c) var ret ty)) of
         Right (x, _) -> do
           tell (map (\(x, y) -> (TyVar x, y)) (Map.toAscList x))
           pure ret
