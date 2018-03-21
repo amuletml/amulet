@@ -83,7 +83,7 @@ check (Let ns b an) t = do
 check ex@(Fun pat e an) ty = do
   (dom, cod, _) <- decompose ex _TyArr ty
   (p, vs, cs) <- checkPattern pat dom
-  let tvs = Set.map unTvName (boundTvs vs)
+  let tvs = Set.map unTvName (boundTvs p vs)
   implies (Arm pat e) dom cs $ do
     e <- local (typeVars %~ Set.union tvs) . extendMany vs $ check e cod
     pure (Fun p e (an, ty))
@@ -94,7 +94,7 @@ check (Match t ps a) ty = do
   (t, tt) <- infer t
   ps <- for ps $ \(p, e) -> do
     (p', ms, cs) <- checkPattern p tt
-    let tvs = Set.map unTvName (boundTvs ms)
+    let tvs = Set.map unTvName (boundTvs p' ms)
     (p',) <$> implies (Arm p e) tt cs
       (local (typeVars %~ Set.union tvs)
         (extendMany ms (check e ty)))
@@ -130,7 +130,7 @@ infer expr@(VarRef k a) = do
 
 infer (Fun p e an) = let blame = Arm p e in do
   (p, dom, ms, cs) <- inferPattern p
-  let tvs = boundTvs ms
+  let tvs = boundTvs p ms
   _ <- leakEqualities blame cs
   (e, cod) <- local (typeVars %~ Set.union (Set.map unTvName tvs)) . extendMany ms $ infer e
   pure (Fun p e (an, TyArr dom cod), TyArr dom cod)
@@ -164,7 +164,7 @@ infer ex@(Match t ps a) = do
   ty <- freshTV
   ps' <- for ps $ \(p, e) -> do
     (p', ms, cs) <- checkPattern p tt
-    let tvs = Set.map unTvName (boundTvs ms)
+    let tvs = Set.map unTvName (boundTvs p' ms)
     leakEqualities ex cs
     e' <- local (typeVars %~ Set.union tvs) $ extendMany ms (check e ty)
     pure (p', e')
