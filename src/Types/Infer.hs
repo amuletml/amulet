@@ -86,9 +86,10 @@ check (Let ns b an) t = do
     b <- check b t
     pure (Let ns b (an, t))
 
-check ex@(Fun pat e an) ty = let tvs = boundTvs pat in do
+check ex@(Fun pat e an) ty = do
   (dom, cod, _) <- decompose ex _TyArr ty
   (p, vs, cs) <- checkPattern pat dom
+  let tvs = Set.map unTvName (boundTvs vs)
   implies (Arm pat e) dom cs $ do
     e <- local (typeVars %~ Set.union tvs) . extendMany vs $ check e cod
     pure (Fun p e (an, ty))
@@ -97,8 +98,9 @@ check (If c t e an) ty = If <$> check c tyBool <*> check t ty <*> check e ty <*>
 
 check (Match t ps a) ty = do
   (t, tt) <- infer t
-  ps <- for ps $ \(p, e) -> let tvs = boundTvs p in do
+  ps <- for ps $ \(p, e) -> do
     (p', ms, cs) <- checkPattern p tt
+    let tvs = Set.map unTvName (boundTvs ms)
     (p',) <$> implies (Arm p e) tt cs
       (local (typeVars %~ Set.union tvs)
         (extendMany ms (check e ty)))
@@ -134,7 +136,7 @@ infer expr@(VarRef k a) = do
 
 infer (Fun p e an) = let blame = Arm p e in do
   (p, dom, ms, cs) <- inferPattern p
-  let tvs = boundTvs p
+  let tvs = boundTvs ms
   _ <- leakEqualities blame cs
   (e, cod) <- local (typeVars %~ Set.union (Set.map unTvName tvs)) . extendMany ms $ infer e
   pure (Fun p e (an, TyArr dom cod), TyArr dom cod)
@@ -166,8 +168,9 @@ infer ex@(BinOp l o r a) = do
 infer ex@(Match t ps a) = do
   (t', tt) <- infer t
   ty <- freshTV
-  ps' <- for ps $ \(p, e) -> let tvs = boundTvs p in do
+  ps' <- for ps $ \(p, e) -> do
     (p', ms, cs) <- checkPattern p tt
+    let tvs = Set.map unTvName (boundTvs ms)
     leakEqualities ex cs
     e' <- local (typeVars %~ Set.union tvs) $ extendMany ms (check e ty)
     pure (p', e')
@@ -285,6 +288,7 @@ inferLetTy closeOver vs =
         (x, co, vt) <- case solve cur cs of
           Right (x, co) -> pure (x, co, normType (closeOver (apply x ty)))
           Left e -> throwError (ArisingFrom e (snd blame))
+        skolCheck (TvName (fst blame)) (snd blame) vt
         unless (null (skols vt)) $
           throwError (blameSkol (EscapedSkolems (Set.toList (skols vt)) vt) blame)
         pure (closeOver vt, applyInCo x co . applyInExpr x . raiseE id (\(a, t) -> (a, normType (apply x t))))
@@ -303,6 +307,13 @@ inferLetTy closeOver vs =
         (ty, st) <- runStateT (approxType e) Supplied
         ty' <- generalise ty
         pure (st, (TvName v, if not (wasGuessed st) then ty' else ty))
+
+      skolCheck :: Var Typed -> SomeReason -> Type Typed -> m ()
+      skolCheck var exp ty = do
+        env <- view typeVars
+        let sks = Set.map (^. skolIdent . to unTvName) (skols ty)
+        unless (null (sks `Set.difference` env)) $
+          throwError (blameSkol (EscapedSkolems (Set.toList (skols ty)) ty) (unTvName var, exp))
 
       tcOne :: SCC (Var Resolved, Expr Resolved, Ann Resolved)
             -> m ( [(Var Typed, Expr Typed, Ann Typed)]
@@ -344,8 +355,7 @@ inferLetTy closeOver vs =
               let figure = apply solution
                   ty' = closeOver (figure ty)
                in do
-                  unless (null (skols ty')) $
-                    throwError (blameSkol (EscapedSkolems (Set.toList (skols ty')) ty') (unTvName var, BecauseOf exp))
+                  skolCheck var (BecauseOf exp) ty'
                   pure ( (var, applyInCo solution cs . applyInExpr solution $ (raiseE id (\(a, t) -> (a, normType (figure t))) exp), (ann, ty'))
                        , (var, ty') )
          in fmap unzip . traverse solveOne $ vs

@@ -6,11 +6,14 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 
 import Control.Monad.Infer
+import Control.Lens
 
 import Data.Traversable
 import Data.List
+import Data.Data
 
 import Types.Infer.Builtin
+import Types.Wellformed
 import Types.Kinds
 import Types.Unify (freshSkol)
 
@@ -94,13 +97,10 @@ checkPattern pt@(PType p t ann) ty = do
   _ <- unify pt ty t'
   pure (PType p' t' (ann, t'), binds, cs)
 
-boundTvs :: Ord (Var p) => Pattern p -> Set.Set (Var p)
-boundTvs Wildcard{} = mempty
-boundTvs Capture{} = mempty
-boundTvs (Destructure _ p _) = maybe mempty boundTvs p
-boundTvs (PType _ t _) = ftv t
-boundTvs (PRecord ps _) = foldMap (boundTvs . snd) ps
-boundTvs (PTuple ps _) = foldMap boundTvs ps
+boundTvs :: forall p. Ord (Var p) => [(Var p, Type p)] -> Set.Set (Var p)
+boundTvs vs = foldMap (go . snd) vs where
+  go :: Type p -> Set.Set (Var p)
+  go x = ftv x `Set.union` Set.map (^. skolIdent) (skols x)
 
 skolGadt :: MonadInfer Typed m => Var Resolved -> Type Typed -> m (Type Typed)
 skolGadt var ty =
