@@ -121,3 +121,31 @@ transformExprTyped fe fc ft = goE where
   goA (s, ty) = (s, goT ty)
 
   goP = transP
+
+correct :: Type Typed -> Expr Typed -> Expr Typed
+correct ty (VarRef v a) = VarRef v (fst a, ty)
+correct ty (Let vs r a) = Let vs r (fst a, ty)
+correct ty (If c t f a) = If c t f (fst a, ty)
+correct ty (App f x a) = App f x (fst a, ty)
+correct ty (Fun p b a) = Fun p b (fst a, ty)
+correct ty (Begin es a) = Begin es (fst a, ty)
+correct ty (Literal l a) = Literal l (fst a, ty)
+correct ty (Match e bs a) = Match e bs (fst a, ty)
+correct ty (BinOp l o r a) = BinOp l o r (fst a, ty)
+correct ty (Hole v a) = Hole v (fst a, ty)
+correct ty (Ascription e t a) = Ascription e t (fst a, ty)
+
+correct ty (Record fs a) = Record fs (fst a, ty)
+correct ty (RecordExt f fs a) = RecordExt f fs (fst a, ty)
+correct ty (Access e f a) = Access e f (fst a, ty)
+
+correct ty (LeftSection o r a) = LeftSection o r (fst a, ty)
+correct ty (RightSection l o a) = RightSection l o (fst a, ty)
+correct ty (BothSection o a) = BothSection o (fst a, ty)
+correct ty (AccessSection t a) = AccessSection t (fst a, ty)
+
+correct ty (Tuple es a) = Tuple es (fst a, ty)
+correct ty (TupleSection es a) = TupleSection es (fst a, ty)
+
+correct ty (TypeApp e t a) = TypeApp e t (fst a, ty)
+correct ty (Cast e c a) = Cast e c (fst a, ty)

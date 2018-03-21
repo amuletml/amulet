@@ -13,7 +13,6 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import Data.Traversable
-import Data.Generics
 import Data.Spanned
 import Data.Triple
 import Data.Graph
@@ -57,11 +56,6 @@ mkTyApps (VarRef k a) mp (TyForall vs c) _ = pure (insts (reverse vs)) where
                      ty' = apply (Map.singleton x s) ty
                   in (TypeApp e s (a, ty'), ty')
 mkTyApps _ _ _ _ = undefined
-
-correct :: Type Typed -> Expr Typed -> Expr Typed
-correct ty = gmapT (mkT go) where
-  go :: Ann Typed -> Ann Typed
-  go (a, _) = (a, ty)
 
 check :: MonadInfer Typed m => Expr Resolved -> Type Typed -> m (Expr Typed)
 check e ty@TyForall{} = do -- This is rule Decl∀L from [Complete and Easy]
