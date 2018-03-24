@@ -27,6 +27,12 @@ desugarProgram = traverse statement where
   expr (Fun p b a) = Fun p <$> expr b <*> pure a
   expr (Begin es a) = Begin <$> traverse expr es <*> pure a
   expr (Match e bs a) = Match <$> expr e <*> traverse (secondA expr) bs <*> pure a
+  expr (Function [(p, b)] a) = Fun p <$> expr b <*> pure a
+  expr (Function bs a) = do
+    (cap, rhs) <- fresh a
+    Fun cap <$>
+      (Match <$> expr rhs <*> traverse (secondA expr) bs <*> pure a)
+      <*> pure a
   expr (BinOp l o r a) = BinOp <$> expr l <*> expr o <*> expr r <*> pure a
   expr (Ascription e t a) = Ascription <$> expr e <*> pure t <*> pure a
   expr (Record rs a) = Record <$> traverse (secondA expr) rs <*> pure a

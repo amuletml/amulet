@@ -84,6 +84,7 @@ tokens :-
   <0> "false"  { constTok TcFalse }
   <0> "match"  { constTok TcMatch }
   <0> "with"   { constTok TcWith }
+  <0> "function" { constTok TcFunction }
   <0> "type"   { constTok TcType }
   <0> "of"     { constTok TcOf }
   <0> "module" { constTok TcModule }

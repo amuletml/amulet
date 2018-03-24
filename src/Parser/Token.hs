@@ -45,6 +45,7 @@ data TokenClass
   | TcTrue -- true
   | TcFalse -- false
   | TcMatch -- match
+  | TcFunction -- function
   | TcWith -- with
   | TcType -- type
   | TcOf -- of
@@ -124,6 +125,7 @@ instance Show TokenClass where
   show TcFalse = "false"
   show TcMatch = "match"
   show TcWith = "with"
+  show TcFunction = "function"
   show TcType = "type"
   show TcOf = "of"
   show TcModule = "module"

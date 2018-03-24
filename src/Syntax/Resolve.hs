@@ -186,6 +186,11 @@ reExpr r@(Match e ps a) = do
                   (p',) <$> extendTyvarN ts (extendN vs (reExpr b)))
               ps
   pure (Match e' ps' a)
+reExpr r@(Function [] _) = throwError (EmptyMatch r)
+reExpr r@(Function ps a) =
+  flip Function a <$> for ps (\(p, b) -> do
+    (p', vs, ts) <- catchError (rePattern p) (throwError . flip ArisingFrom r)
+    (p',) <$> extendTyvarN ts (extendN vs (reExpr b)))
 reExpr (BinOp l o r a) = BinOp <$> reExpr l <*> reExpr o <*> reExpr r <*> pure a
 reExpr (Hole v a) = Hole <$> tagVar v <*> pure a
 reExpr r@(Ascription e t a) = Ascription

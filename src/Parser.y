@@ -70,6 +70,7 @@ import Syntax
   false    { Token TcFalse _ }
   match    { Token TcMatch _ }
   with     { Token TcWith _ }
+  function { Token TcFunction _ }
   type     { Token TcType _ }
   of       { Token TcOf _ }
   module   { Token TcModule _ }
@@ -172,6 +173,7 @@ Expr0 :: { Expr Parsed }
       | if Expr then Expr else Expr            { withPos2 $1 $6 $ If $2 $4 $6 }
       | match List1(Expr, ',') with ListE1(Arm)
         { withPos2 $1 $3 $ Match (completeTuple Tuple $2) $4 }
+      | function ListE1(Arm)                   { withPos1 $1 $ Function $2 }
       | Atom                                   { $1 }
 
 Atom :: { Expr Parsed }

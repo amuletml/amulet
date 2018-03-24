@@ -23,6 +23,7 @@ findExprHoles (App x y _) = findExprHoles x ++ findExprHoles y
 findExprHoles (Fun _ y _) = findExprHoles y
 findExprHoles (Begin xs _) = concatMap findExprHoles xs
 findExprHoles (Match m vs _) = findExprHoles m ++ concatMap (findExprHoles . snd) vs
+findExprHoles (Function vs _) = concatMap (findExprHoles . snd) vs
 findExprHoles (Ascription e _ _) = findExprHoles e
 findExprHoles (Record rs _) = concatMap (findExprHoles . snd) rs
 findExprHoles (RecordExt e rs _) = findExprHoles e ++ concatMap (findExprHoles . snd) rs

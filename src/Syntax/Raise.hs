@@ -21,6 +21,7 @@ raiseE vR aR =
       Begin bs an -> Begin (map eR bs) (aR an)
       Literal l a -> Literal l (aR a)
       Match e cs a -> Match (eR e) (map (raiseP vR aR *** eR) cs) (aR a)
+      Function bs a -> Function (map (raiseP vR aR *** eR) bs) (aR a)
       BinOp a b c an -> BinOp (eR a) (eR b) (eR c) (aR an)
       Record rows ann -> Record (map (second eR) rows) (aR ann)
       RecordExt x rows ann -> RecordExt (eR x) (map (second eR) rows) (aR ann)
