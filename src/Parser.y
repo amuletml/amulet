@@ -113,6 +113,7 @@ import Syntax
 %left opid qopid
 %right '@@'
 
+%expect 118
 %%
 
 Tops :: { [Toplevel Parsed] }
@@ -180,7 +181,7 @@ Atom :: { Expr Parsed }
      | hole                                   { withPos1 $1 (Hole (Name (getHole $1))) }
      | '_'                                    { withPos1 $1 (Hole (Name (T.singleton '_'))) }
      | begin List1(Expr, ';') end             { withPos2 $1 $3 $ Begin $2 }
-     | '(' List(Section, ',') ')'             { withPos2 $1 $3 $ tupleExpr $2 }
+     | '(' SectionList ')'                    { withPos2 $1 $3 $ tupleExpr $2 }
      | '{' Rows('=', Expr) '}'                { withPos2 $1 $3 $ Record $2 }
      | '{' Expr with Rows('=',Expr) '}'       { withPos2 $1 $5 $ RecordExt $2 $4 }
 
@@ -204,13 +205,18 @@ Operator :: { Expr Parsed }
          | opid                               { withPos1 $1 $ VarRef (getName $1) }
          | qopid                              { withPos1 $1 $ VarRef (getName $1) }
 
-Section :: { Maybe (Expr Parsed) }
-        :                                     { Nothing }
-        | Expr                                { Just $1 }
-        | access                              { Just $ withPos1 $1 $ AccessSection (getIdent $1) }
-        | Operator                            { Just $ withPos1 $1 $ BothSection $1 }
-        | Expr Operator                       { Just $ withPos2 $1 $2 $ RightSection $1 $2 }
-        | Operator Expr                       { Just $ withPos2 $1 $2 $ LeftSection $1 $2 }
+Section :: { Expr Parsed }
+        : Expr                                { $1 }
+        | access                              { withPos1 $1 $ AccessSection (getIdent $1) }
+        | Operator                            { withPos1 $1 $ BothSection $1 }
+        | Expr Operator                       { withPos2 $1 $2 $ RightSection $1 $2 }
+        | Operator Expr                       { withPos2 $1 $2 $ LeftSection $1 $2 }
+
+SectionList :: { [Maybe (Expr Parsed)] }
+  :                                           { [] }
+  | Section                                   { [Just $1] }
+  | ',' SectionList                           { Nothing : $2 }
+  | Section ',' SectionList                   { Just $1 : $3 }
 
 Var :: { Located (Var Parsed) }
     : ident { lPos1 $1 $ getName $1 }
