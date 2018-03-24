@@ -66,14 +66,14 @@ compile (file:files) = runGen $ do
     go (Right (tops, scope, modScope, env)) (name, file) =
       case runParser name (B.toLazyByteString $ T.encodeUtf8Builder file) parseInput of
         POK _ parsed -> do
-          desugared <- desugarProgram parsed
-          resolved <- resolveProgram scope modScope desugared
+          resolved <- resolveProgram scope modScope parsed
           case resolved of
             Right (resolved, modScope') -> do
-              infered <- inferProgram env resolved
+              desugared <- desugarProgram resolved
+              infered <- inferProgram env desugared
               case infered of
                 Right (prog, env') ->
-                  let (var, tys) = extractToplevels desugared
+                  let (var, tys) = extractToplevels parsed
                       (var', tys') = extractToplevels resolved
                   in pure $ Right (tops ++ prog
                                   , scope { RS.varScope = RS.insertN (RS.varScope scope) (zip var var')

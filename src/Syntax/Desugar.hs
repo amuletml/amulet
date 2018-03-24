@@ -2,15 +2,16 @@
 module Syntax.Desugar (desugarProgram) where
 
 import Control.Monad.Gen
+import Control.Monad
 
 import qualified Data.Text as T
-
-import Syntax
-
 import Data.Foldable
 import Data.Triple
 
-desugarProgram :: forall m. MonadGen Int m => [Toplevel Parsed] -> m [Toplevel Parsed]
+import Syntax
+
+
+desugarProgram :: forall m. MonadGen Int m => [Toplevel Resolved] -> m [Toplevel Resolved]
 desugarProgram = traverse statement where
   statement (LetStmt vs) = LetStmt <$> traverse (second3A expr) vs
   statement (Module v ss) = Module v <$> traverse statement ss
@@ -63,10 +64,10 @@ desugarProgram = traverse statement where
     pure (body (Tuple tuple a))
 
   buildTuple :: MonadGen Int m
-             => Ann Parsed
-             -> Maybe (Expr Parsed)
-             -> (Expr Parsed -> Expr Parsed, [Expr Parsed])
-             -> m (Expr Parsed -> Expr Parsed, [Expr Parsed])
+             => Ann Resolved
+             -> Maybe (Expr Resolved)
+             -> (Expr Resolved -> Expr Resolved, [Expr Resolved])
+             -> m (Expr Resolved -> Expr Resolved, [Expr Resolved])
   buildTuple a Nothing (wrapper, tuple) = do
     (p, v) <- fresh a
     pure (\x -> wrapper (Fun p x a), v:tuple)
@@ -76,7 +77,12 @@ desugarProgram = traverse statement where
     (Capture v _, ref) <- fresh a
     pure (\x -> Let [(v, e, a)] (wrapper x) a, ref:tuple)
 
-fresh :: MonadGen Int m => Ann Parsed -> m (Pattern Parsed, Expr Parsed)
+fresh :: MonadGen Int m => Ann Resolved -> m (Pattern Resolved, Expr Resolved)
 fresh an = do
-  var <- Name . T.cons '_' . T.pack . show <$> gen
+  x <- gen
+  let var = TgName (alpha !! x) x
   pure (Capture var an, VarRef var an)
+
+alpha :: [T.Text]
+alpha = map T.pack $ [1..] >>= flip replicateM ['a'..'z']
+
