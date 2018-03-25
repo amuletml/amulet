@@ -41,7 +41,8 @@ builtinScope = Scope
                { varScope = build [ "+", "-", "*", "/", "**", "^"
                                   , "+.", "-.", "*.", "/.", "**.", "^."
                                   , "<", ">", ">=", "<=", "==", "<>"
-                                  , "||", "&&" ]
+                                  , "||", "&&"
+                                  , "@@" ]
                , tyScope  =  build [ "int", "string", "bool", "unit", "float" ]
                , tyvarScope = mempty
                , modStack = []

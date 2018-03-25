@@ -1,16 +1,16 @@
-{-# LANGUAGE FlexibleContexts, ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleContexts, ScopedTypeVariables, OverloadedStrings #-}
 module Syntax.Desugar (desugarProgram) where
 
 import Control.Monad.Gen
+import Control.Monad
 
 import qualified Data.Text as T
-
-import Syntax
-
 import Data.Foldable
 import Data.Triple
 
-desugarProgram :: forall m. MonadGen Int m => [Toplevel Parsed] -> m [Toplevel Parsed]
+import Syntax
+
+desugarProgram :: forall m. MonadGen Int m => [Toplevel Resolved] -> m [Toplevel Resolved]
 desugarProgram = traverse statement where
   statement (LetStmt vs) = LetStmt <$> traverse (second3A expr) vs
   statement (Module v ss) = Module v <$> traverse statement ss
@@ -27,6 +27,14 @@ desugarProgram = traverse statement where
   expr (Fun p b a) = Fun p <$> expr b <*> pure a
   expr (Begin es a) = Begin <$> traverse expr es <*> pure a
   expr (Match e bs a) = Match <$> expr e <*> traverse (secondA expr) bs <*> pure a
+  expr (Function [(p, b)] a) = Fun p <$> expr b <*> pure a
+  expr (Function bs a) = do
+    (cap, rhs) <- fresh a
+    Fun cap <$>
+      (Match <$> expr rhs <*> traverse (secondA expr) bs <*> pure a)
+      <*> pure a
+  -- Special case @@ so we can work on skolem variables
+  expr (BinOp l (VarRef (TgInternal "@@") _) r a) = App <$> expr l <*> expr r <*> pure a
   expr (BinOp l o r a) = BinOp <$> expr l <*> expr o <*> expr r <*> pure a
   expr (Ascription e t a) = Ascription <$> expr e <*> pure t <*> pure a
   expr (Record rs a) = Record <$> traverse (secondA expr) rs <*> pure a
@@ -50,27 +58,37 @@ desugarProgram = traverse statement where
     (cap, ref) <- fresh a
     expr (Fun cap (Access ref k a) a)
 
+  expr (Parens e _) = expr e
+
   expr (Tuple es a) = Tuple <$> traverse expr es <*> pure a
   expr (TupleSection es a) = do
     es' <- traverse (traverse expr) es
-    (body, tuple) <- foldrM (buildTuple a) (id, []) es'
-    pure (body (Tuple tuple a))
+    (args, binds, tuple) <- foldrM (buildTuple a) ([], [], []) es'
+    pure $ foldf (\(v, e) r -> Let [(v, e, a)] r a) binds
+         $ foldf (\v e -> Fun v e a) args
+         $ Tuple tuple a
 
   buildTuple :: MonadGen Int m
-             => Ann Parsed
-             -> Maybe (Expr Parsed)
-             -> (Expr Parsed -> Expr Parsed, [Expr Parsed])
-             -> m (Expr Parsed -> Expr Parsed, [Expr Parsed])
-  buildTuple a Nothing (wrapper, tuple) = do
+             => Ann Resolved
+             -> Maybe (Expr Resolved)
+             -> ([Pattern Resolved], [(Var Resolved, Expr Resolved)], [Expr Resolved])
+             -> m ([Pattern Resolved], [(Var Resolved, Expr Resolved)], [Expr Resolved])
+  buildTuple a Nothing (as, vs, tuple) = do
     (p, v) <- fresh a
-    pure (\x -> wrapper (Fun p x a), v:tuple)
-  buildTuple _ (Just e@VarRef{}) (wrapper, tuple) = pure (wrapper, e:tuple)
-  buildTuple _ (Just e@Literal{}) (wrapper, tuple) = pure (wrapper, e:tuple)
-  buildTuple a (Just e) (wrapper, tuple) = do
+    pure (p:as, vs, v:tuple)
+  buildTuple _ (Just e@VarRef{}) (as, vs, tuple) = pure (as, vs, e:tuple)
+  buildTuple _ (Just e@Literal{}) (as, vs, tuple) = pure (as, vs, e:tuple)
+  buildTuple a (Just e) (as, vs, tuple) = do
     (Capture v _, ref) <- fresh a
-    pure (\x -> Let [(v, e, a)] (wrapper x) a, ref:tuple)
+    pure (as, (v, e):vs, ref:tuple)
 
-fresh :: MonadGen Int m => Ann Parsed -> m (Pattern Parsed, Expr Parsed)
+  foldf f xs v = foldr f v xs
+
+fresh :: MonadGen Int m => Ann Resolved -> m (Pattern Resolved, Expr Resolved)
 fresh an = do
-  var <- Name . T.cons '_' . T.pack . show <$> gen
+  x <- gen
+  let var = TgName (alpha !! x) x
   pure (Capture var an, VarRef var an)
+
+alpha :: [T.Text]
+alpha = map T.pack $ [1..] >>= flip replicateM ['a'..'z']

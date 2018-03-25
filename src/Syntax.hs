@@ -77,6 +77,7 @@ data Expr p
   | Begin [Expr p] (Ann p)
   | Literal Lit (Ann p)
   | Match (Expr p) [(Pattern p, Expr p)] (Ann p)
+  | Function [(Pattern p, Expr p)] (Ann p)
   | BinOp (Expr p) (Expr p) (Expr p) (Ann p)
   | Hole (Var p) (Ann p)
   | Ascription (Expr p) (Type p) (Ann p)
@@ -91,6 +92,7 @@ data Expr p
   | RightSection (Expr p) (Expr p) (Ann p) -- (foo +)
   | BothSection (Expr p) (Ann p) -- (+)
   | AccessSection Text (Ann p)
+  | Parens (Expr p) (Ann p) -- (xyz), just useful for resetting precedence
 
   -- Tuple (see note [1])
   | Tuple [Expr p] (Ann p)
