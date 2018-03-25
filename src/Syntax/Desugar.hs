@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts, ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleContexts, ScopedTypeVariables, OverloadedStrings #-}
 module Syntax.Desugar (desugarProgram) where
 
 import Control.Monad.Gen
@@ -33,6 +33,8 @@ desugarProgram = traverse statement where
     Fun cap <$>
       (Match <$> expr rhs <*> traverse (secondA expr) bs <*> pure a)
       <*> pure a
+  -- Special case @@ so we can work on skolem variables
+  expr (BinOp l (VarRef (TgInternal "@@") _) r a) = App <$> expr l <*> expr r <*> pure a
   expr (BinOp l o r a) = BinOp <$> expr l <*> expr o <*> expr r <*> pure a
   expr (Ascription e t a) = Ascription <$> expr e <*> pure t <*> pure a
   expr (Record rs a) = Record <$> traverse (secondA expr) rs <*> pure a
