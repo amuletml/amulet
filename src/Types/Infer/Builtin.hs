@@ -21,12 +21,13 @@ import Syntax
 
 import Pretty
 
-tyUnit, tyBool, tyInt, tyString, tyFloat :: Type Typed
+tyUnit, tyBool, tyInt, tyString, tyFloat, tyAny :: Type Typed
 tyInt = TyCon (TvName (TgInternal "int"))
 tyString = TyCon (TvName (TgInternal "string"))
 tyBool = TyCon (TvName (TgInternal "bool"))
 tyUnit = TyCon (TvName (TgInternal "unit"))
 tyFloat = TyCon (TvName (TgInternal "float"))
+tyAny = TyCon (TvName (TgInternal "any"))
 
 builtinsEnv :: Env
 builtinsEnv = Env (Map.fromList ops) (Map.fromList tps) mempty where

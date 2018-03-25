@@ -1,7 +1,7 @@
 {-# OPTIONS_GHC -Wno-partial-type-signatures #-}
 {-# LANGUAGE FlexibleContexts, TupleSections, PartialTypeSignatures #-}
 module Core.Optimise
-  ( substitute, substituteInTys, substituteInCo
+  ( substitute, substituteInTys, substituteInType, substituteInCo
   , module Core.Core
   , Var(..)
   , refresh, fresh, freshFrom
@@ -62,6 +62,10 @@ substituteInTys m = term where
     go (TypeArgument v t) = TypeArgument v (gotype t)
   atom x@Lit{} = x
 
+  gotype = substituteInType m
+
+substituteInType :: IsVar a => Map.Map a (Type a) -> Type a -> Type a
+substituteInType m = gotype where
   gotype x@(VarTy v) = Map.findWithDefault x v m
   gotype x@ConTy{} = x
   gotype (ForallTy v t) = ForallTy v (gotype t)
@@ -80,37 +84,31 @@ substituteInCo m = coercion where
   coercion (Composition c c') = Composition (coercion c) (coercion c')
   coercion (CoercionVar x) = CoercionVar x
 
-  gotype x@(VarTy v) = Map.findWithDefault x v m
-  gotype x@ConTy{} = x
-  gotype (ForallTy v t) = ForallTy v (gotype t)
-  gotype (ArrTy a b) = ArrTy (gotype a) (gotype b)
-  gotype (AppTy f x) = AppTy (gotype f) (gotype x)
-  gotype (RowsTy v rs) = RowsTy (gotype v) (map (second gotype) rs)
-  gotype (ExactRowsTy rs) = ExactRowsTy (map (second gotype) rs)
-  gotype StarTy = StarTy
-
+  gotype = substituteInType m
 
 refresh :: (MonadGen Int m, IsVar a) => Term a -> m (Term a)
 refresh = refreshTerm mempty where
   refreshAtom :: (MonadGen Int m, IsVar a) => VarMap.Map a -> Atom a -> m (Atom a)
-  refreshAtom s a@(Ref v ty) =
-    case VarMap.lookup (toVar v) s of
-      Just x -> pure (Ref x ty)
-      Nothing -> pure a
+  refreshAtom s (Ref v ty) =
+    let v' = fromMaybe v (VarMap.lookup (toVar v) s)
+        ty' = refreshType s ty
+    in pure (Ref v' ty')
   refreshAtom _ a@Lit{} = pure a
   refreshAtom s (Lam arg b) = do
-    (arg', v') <- refreshArg arg
+    (arg', v') <- refreshArg s arg
     Lam arg' <$> refreshTerm (VarMap.insert (argVar arg) v' s) b
 
-  refreshArg :: (MonadGen Int m, IsVar a) => Argument a -> m (Argument a, a)
-  refreshArg (TermArgument n ty) = do
+  refreshArg :: (MonadGen Int m, IsVar a) => VarMap.Map a -> Argument a -> m (Argument a, a)
+  refreshArg s (TermArgument n ty) = do
     let TgName name _ = toVar n
+        ty' = refreshType s ty
     v' <- fromVar <$> freshFrom name
-    pure (TermArgument v' ty, v')
-  refreshArg (TypeArgument n ty) = do
+    pure (TermArgument v' ty', v')
+  refreshArg s (TypeArgument n ty) = do
     let TgName name _ = toVar n
+        ty' = refreshType s ty
     v' <- fromVar <$> freshFrom name
-    pure (TypeArgument v' ty, v')
+    pure (TypeArgument v' ty', v')
 
   refreshTerm :: (MonadGen Int m, IsVar a) => VarMap.Map a -> Term a -> m (Term a)
   refreshTerm s (Atom a) = Atom <$> refreshAtom s a

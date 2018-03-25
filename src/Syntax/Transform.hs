@@ -38,6 +38,7 @@ transformCoercion fc ft = goC where
   transC (VarCo c) = VarCo c
   transC (ReflCo l r) = ReflCo (goT l) (goT r)
   transC (CompCo l r) = CompCo (goC l) (goC r)
+  transC (SymCo c) = SymCo (goC c)
 
   goT = transformType ft . ft
   goC = transC . fc

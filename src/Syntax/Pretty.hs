@@ -70,6 +70,7 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
     pprCo (VarCo x) = stypeSkol (pretty x)
     pprCo (ReflCo t t') = pretty t <+> soperator (char '~') <+> pretty t'
     pprCo (CompCo c c') = pprCo c <+> soperator (char ';') <+> pprCo c'
+    pprCo (SymCo x) = keyword "sym" <+> pprCo x
 
 prettyMatches :: (Pretty (Var p)) => [(Pattern p, Expr p)] -> [Doc]
 prettyMatches = map (\(a, b) -> pipe <+> nest 4 (pretty a <+> arrow </> pretty b))

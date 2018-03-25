@@ -5,6 +5,7 @@ module Core.Core where
 import Pretty
 
 import qualified Data.VarSet as VarSet
+import qualified Data.Set as Set
 import Data.VarSet (IsVar(..))
 import Data.Text (Text, pack)
 import Data.Triple
@@ -119,7 +120,7 @@ data AnnStmt b a
 type Stmt = AnnStmt ()
 
 instance Pretty a => Pretty (Atom a) where
-  pretty (Ref v _) = pretty v
+  pretty (Ref v ty) = pretty v <> scomment (string ":[" <> pretty ty <> string "]")
   pretty (Lam (TypeArgument v t) c)
     = soperator (char 'Λ') <+> parens (pretty v <+> colon <+> pretty t) <> nest 2 (dot </> pretty c)
   pretty (Lam (TermArgument v t) c)
@@ -163,7 +164,7 @@ braces' :: Doc -> Doc
 braces' = enclose (lbrace <> linebreak) (linebreak <> rbrace)
 
 instance Pretty a => Pretty (Pattern a) where
-  pretty (Capture v _) = pretty v
+  pretty (Capture v ty) = pretty v <> scomment (string ":[" <> pretty ty <> string "]")
   pretty (Constr v) = pretty v
   pretty (Destr v p) = parens (pretty v <+> pretty p)
   pretty (PatExtend p rs) = braces $ pretty p <+> pipe <+> prettyRows rs where
@@ -228,6 +229,16 @@ freeIn (AnnMatch _ e bs) = freeInAtom e <> foldMap freeInBranch bs where
 freeIn (AnnExtend _ c rs) = freeInAtom c <> foldMap (freeInAtom . thd3) rs
 freeIn (AnnTyApp _ f _) = freeInAtom f
 freeIn (AnnCast _ f _) = freeInAtom f
+
+freeInTy :: Ord a => Type a -> Set.Set a
+freeInTy (VarTy v) = Set.singleton v
+freeInTy (ForallTy v t) = v `Set.delete` freeInTy t
+freeInTy (ArrTy a b) = freeInTy a <> freeInTy b
+freeInTy (AppTy a b) = freeInTy a <> freeInTy b
+freeInTy (RowsTy c rs) = foldMap (freeInTy . snd) rs <> freeInTy c
+freeInTy (ExactRowsTy rs) = foldMap (freeInTy . snd) rs
+freeInTy ConTy{} = mempty
+freeInTy StarTy = mempty
 
 occursInAtom :: IsVar a => a -> Atom a -> Bool
 occursInAtom v (Ref v' _) = toVar v == toVar v'
