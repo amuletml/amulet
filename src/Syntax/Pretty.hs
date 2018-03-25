@@ -49,6 +49,7 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
   pretty (Literal l _) = pretty l
   pretty (BinOp l o r _) = parens (pretty l <+> pretty o <+> pretty r)
   pretty (Match t bs _) = vsep ((keyword "match" <+> pretty t <+> keyword "with"):prettyMatches bs)
+  pretty (Function bs _) = vsep (keyword "function":prettyMatches bs)
   pretty (Hole v _) = pretty v -- A typed hole
   pretty (Ascription e t _) = parens $ pretty e <+> colon <+> pretty t
   pretty (Record rows _) = record (map (\(n, v) -> text n <+> equals <+> pretty v) rows)
@@ -60,6 +61,7 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
   pretty (RightSection op vl _) = parens $ pretty vl <+> pretty op
   pretty (BothSection op _) = parens $ pretty op
   pretty (AccessSection k _) = parens $ dot <> text k
+  pretty (Parens e _) = parens $ pretty e
 
   pretty (Tuple es _) = parens (hsep (punctuate comma (map pretty es)))
   pretty (TupleSection es _) = parens (hsep (punctuate comma (map (maybe (string "") pretty) es)))

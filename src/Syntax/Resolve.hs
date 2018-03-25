@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleContexts
   , ConstraintKinds
+  , OverloadedStrings
   , TupleSections #-}
 
 module Syntax.Resolve
@@ -9,6 +10,7 @@ module Syntax.Resolve
   ) where
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Text as T
 import Data.Triple
 
 import Control.Monad.Except
@@ -21,6 +23,7 @@ import Data.Traversable
 import Data.Semigroup
 import Data.Foldable
 import Data.Spanned
+import Data.Span
 
 import Syntax.Resolve.Scope
 import Syntax.Resolve.Toplevel
@@ -186,7 +189,44 @@ reExpr r@(Match e ps a) = do
                   (p',) <$> extendTyvarN ts (extendN vs (reExpr b)))
               ps
   pure (Match e' ps' a)
-reExpr (BinOp l o r a) = BinOp <$> reExpr l <*> reExpr o <*> reExpr r <*> pure a
+reExpr r@(Function [] _) = throwError (EmptyMatch r)
+reExpr r@(Function ps a) =
+  flip Function a <$> for ps (\(p, b) -> do
+    (p', vs, ts) <- catchError (rePattern p) (throwError . flip ArisingFrom r)
+    (p',) <$> extendTyvarN ts (extendN vs (reExpr b)))
+reExpr o@BinOp{} = do
+  (es, os) <- reOp [] [] o
+  let ([x], []) = popUntil es os 0 AssocLeft
+  pure x
+    where
+      reOp :: MonadResolve m
+           => [Expr Resolved]
+           -> [(Expr Resolved, Int)]
+           -> Expr Parsed
+           -> m ([Expr Resolved], [(Expr Resolved, Int)])
+      reOp es ops (BinOp l o@VarRef{} r _) = do
+        (es', ops') <- reOp es ops l
+
+        o'@(VarRef op _) <- reExpr o
+        let (opre, oass) = varPrecedence op
+
+        let (es'', ops'') = popUntil es' ops' opre oass
+        reOp es'' ((o', opre):ops'') r
+      reOp _ _ BinOp{} = error "BinOp with non-name operator"
+      reOp es ops e = (,ops) . (:es) <$> reExpr e
+
+      popUntil :: [Expr Resolved]
+               -> [(Expr Resolved, Int)]
+               -> Int -> Associativity
+               -> ([Expr Resolved], [(Expr Resolved, Int)])
+      popUntil es ((sop, spre):os) opre assoc
+        | (assoc == AssocLeft && spre >= opre) || (assoc == AssocRight && spre > opre)
+        = let (right:left:es') = es
+          in popUntil ( BinOp left sop right
+                              (mkSpanUnsafe (spanStart (annotation left)) (spanEnd (annotation right)))
+                        : es' ) os opre assoc
+      popUntil es os _ _ = (es, os)
+
 reExpr (Hole v a) = Hole <$> tagVar v <*> pure a
 reExpr r@(Ascription e t a) = Ascription
                           <$> reExpr e
@@ -202,6 +242,7 @@ reExpr (LeftSection o r a) = LeftSection <$> reExpr o <*> reExpr r <*> pure a
 reExpr (RightSection l o a) = RightSection <$> reExpr l <*> reExpr o <*> pure a
 reExpr (BothSection o a) = BothSection <$> reExpr o <*> pure a
 reExpr (AccessSection t a) = pure (AccessSection t a)
+reExpr (Parens e a) = flip Parens a <$> reExpr e
 
 reExpr (Tuple es a) = Tuple <$> traverse reExpr es <*> pure a
 reExpr (TupleSection es a) = TupleSection <$> traverse (traverse reExpr) es <*> pure a
@@ -258,3 +299,39 @@ rePattern (PRecord f a) = do
 rePattern (PTuple ps a) = do
   (ps', vss, tss) <- unzip3 <$> traverse rePattern ps
   pure (PTuple ps' a, concat vss, concat tss)
+
+data Associativity = AssocLeft | AssocRight
+  deriving (Eq, Show)
+
+varPrecedence :: Var Resolved -> (Int, Associativity)
+varPrecedence (TgName n _) = precedence n
+varPrecedence (TgInternal n) = precedence n
+
+precedence :: T.Text -> (Int, Associativity)
+precedence t
+  | T.isPrefixOf "**" t = (10, AssocRight)
+
+  | T.isPrefixOf "*" t = (9, AssocLeft)
+  | T.isPrefixOf "/" t = (9, AssocLeft)
+  | T.isPrefixOf "%" t = (9, AssocLeft)
+
+  | T.isPrefixOf "+" t = (8, AssocLeft)
+  | T.isPrefixOf "-" t = (8, AssocLeft)
+
+  | T.isPrefixOf "::" t = (7, AssocRight)
+
+  | T.isPrefixOf "@" t = (6, AssocRight)
+  | T.isPrefixOf "^" t = (6, AssocRight)
+
+  | T.isPrefixOf "=" t = (5, AssocLeft)
+  | T.isPrefixOf "!" t = (5, AssocLeft)
+  | T.isPrefixOf "<" t = (5, AssocLeft)
+  | T.isPrefixOf ">" t = (5, AssocLeft)
+
+  | T.isPrefixOf "&&" t = (4, AssocLeft)
+  | T.isPrefixOf "||" t = (3, AssocLeft)
+
+  | T.isPrefixOf "&" t = (5, AssocLeft)
+  | T.isPrefixOf "|" t = (5, AssocLeft)
+
+  | otherwise = (11, AssocLeft)
