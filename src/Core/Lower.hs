@@ -50,13 +50,6 @@ cotyBool = lowerType tyBool
 cotyInt = lowerType tyInt
 cotyFloat = lowerType tyFloat
 
-makeBigLams :: S.Type Typed -> Term -> Term
-makeBigLams (S.TyForall vs _) =
-  let biglam (TvName x:xs) = Atom . Lam (TypeArgument x StarTy) . biglam xs
-      biglam [] = id
-  in biglam vs
-makeBigLams _ = id
-
 errRef :: Atom
 errRef = Ref (TgInternal "error")
                 (ForallTy (TgInternal "a")
@@ -98,8 +91,12 @@ lowerBothTerm e = let t = lowerType (S.getType e)
 
 lowerAt :: MonadLower m => Expr Typed -> Type -> Lower m Term
 lowerAt (Ascription e _ _) t = lowerAt e t
-lowerAt e (ForallTy vs b) = Atom . Lam (TypeArgument vs StarTy) <$> lowerAtTerm e b
+
 lowerAt (VarRef (TvName p) _) ty = pure (Atom (Ref p ty))
+lowerAt (TypeApp f x _) _ = flip TyApp (lowerType x) <$> lowerExprAtom f
+
+lowerAt e (ForallTy vs b) = Atom . Lam (TypeArgument vs StarTy) <$> lowerAtTerm e b
+
 lowerAt (S.Let vs t _) ty = do
   let sccs = depOrder vs
       lowerScc (CyclicSCC vs) = CyclicSCC <$> do
@@ -195,11 +192,20 @@ lowerAnyway (S.Cast e c _) =
   co (S.VarCo (TvName x)) = CoercionVar x
   co (S.ReflCo t t') = SameRepr (lowerType t) (lowerType t')
   co (S.CompCo c c') = Composition (co c) (co c')
+  co (S.SymCo c) = Symmetry (co c)
   in do
     (e, _) <- lowerBothAtom e
     pure (C.Cast e (co c))
 
 lowerAnyway e = error ("can't lower " ++ show e ++ " without type")
+
+lowerBigLams :: MonadLower m => S.Type Typed -> S.Expr Typed -> m Term
+lowerBigLams (S.TyForall vs ty) ex =
+  let biglam (TvName x:xs) = Atom . Lam (TypeArgument x StarTy) . biglam xs
+      biglam [] = id
+  in biglam vs <$> lowerBigLams ty ex
+lowerBigLams ty ex = lowerAtTerm ex (lowerType ty)
+
 
 lowerType :: S.Type Typed -> Type
 lowerType t@S.TyTuple{} = go t where
@@ -251,7 +257,7 @@ lowerProg [] = pure []
 lowerProg (ForeignVal (TvName t) ex tp _:prg) =
   (Foreign t (lowerType tp) ex:) <$> lowerProg prg
 lowerProg (LetStmt vs:prg) =
-  (:) <$> (StmtLet <$> for vs (\(TvName v, ex, (_, ant)) -> (v,lowerType ant,) . makeBigLams ant <$> lowerExprTerm ex))
+  (:) <$> (StmtLet <$> for vs (\(TvName v, ex, (_, ant)) -> (v,lowerType ant,) <$> lowerBigLams ant ex))
       <*> lowerProg prg
 lowerProg (TypeDecl (TvName var) _ cons:prg) =
   (:) (C.Type var (map (\case

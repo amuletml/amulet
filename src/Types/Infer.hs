@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleContexts, TupleSections, GADTs #-}
-{-# LANGUAGE ScopedTypeVariables, RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables, RankNTypes, LambdaCase #-}
 module Types.Infer
   ( inferProgram
   , builtinsEnv
@@ -27,7 +27,6 @@ import Control.Lens
 import Syntax.Resolve.Toplevel
 import Syntax.Transform
 import Syntax.Subst
-import Syntax.Raise
 import Syntax.Let
 import Syntax
 
@@ -50,12 +49,15 @@ mkTyApps :: Applicative f
          -> Type Typed
          -> Type Typed
          -> f (Expr Typed, Type Typed)
-mkTyApps (VarRef k a) mp (TyForall vs c) _ = pure (insts (reverse vs)) where
+mkTyApps (VarRef k a) mp c@(TyForall vs _) _ = pure (insts (reverse vs)) where
   insts []     = (VarRef (TvName k) (a, c), c)
-  insts (x:xs) = let (e, ty) = insts xs
+  insts (x:xs) = let (e, TyForall (_:vs) ty) = insts xs
                      s = mp Map.! x
-                     ty' = apply (Map.singleton x s) ty
-                  in (TypeApp e s (a, ty'), ty')
+                     ty' = forall vs (apply (Map.singleton x s) ty)
+                 in (TypeApp e s (a, ty'), ty')
+
+  forall [] ty = ty
+  forall vs ty = TyForall vs ty
 mkTyApps _ _ _ _ = undefined
 
 check :: MonadInfer Typed m => Expr Resolved -> Type Typed -> m (Expr Typed)
@@ -284,7 +286,7 @@ inferLetTy closeOver vs =
           Right (x, co) -> pure (x, co, normType (closeOver (apply x ty)))
           Left e -> throwError (ArisingFrom e (snd blame))
         skolCheck (TvName (fst blame)) (snd blame) vt
-        pure (closeOver vt, applyInCo x co . applyInExpr x . raiseE id (\(a, t) -> (a, normType (apply x t))))
+        pure (closeOver vt, solveEx x co)
 
       generalise :: Type Typed -> m (Type Typed)
       generalise ty =
@@ -321,13 +323,14 @@ inferLetTy closeOver vs =
               pure (exp', snd tv)
             Guessed -> do
               (exp', ty) <- infer exp
-              _ <- unify exp (snd tv) ty
+              _ <- unify exp ty (snd tv)
               pure (exp', ty)
         (tp, k) <- figureOut (var, BecauseOf exp) ty cs
         pure ( [(TvName var, k exp', (ann, tp))], [(TvName var, tp)] )
 
       tcOne (CyclicSCC vars) = do
         (origins, tvs) <- unzip <$> traverse approximate vars
+
         (vs, cs) <- listen . extendMany tvs $
           ifor (zip tvs vars) $ \i ((_, tyvar), (var, exp, ann)) ->
             case origins !! i of
@@ -336,8 +339,9 @@ inferLetTy closeOver vs =
                 pure (TvName var, exp', ann, tyvar)
               Guessed -> do
                 (exp', ty) <- infer exp
-                _ <- unify exp tyvar ty
+                _ <- unify exp ty tyvar
                 pure (TvName var, exp', ann, ty)
+
         cur <- gen
         (solution, cs) <- case solve cur cs of
           Right x -> pure x
@@ -349,7 +353,7 @@ inferLetTy closeOver vs =
                   ty' = closeOver (figure ty)
                in do
                   skolCheck var (BecauseOf exp) ty'
-                  pure ( (var, applyInCo solution cs . applyInExpr solution $ (raiseE id (\(a, t) -> (a, normType (figure t))) exp), (ann, ty'))
+                  pure ( (var, solveEx solution cs exp, (ann, ty'))
                        , (var, ty') )
          in fmap unzip . traverse solveOne $ vs
 
@@ -360,18 +364,17 @@ inferLetTy closeOver vs =
       tc [] = pure ([], [])
    in tc sccs
 
-applyInExpr :: Map.Map (Var Typed) (Type Typed) -> Expr Typed -> Expr Typed
-applyInExpr ss = transformExpr go where
-  go :: Expr Typed -> Expr Typed
-  go (TypeApp f t a) = TypeApp f (apply ss t) a
-  go x = x
+solveEx :: Subst Typed -> Map.Map (Var Typed) (Coercion Typed) -> Expr Typed -> Expr Typed
+solveEx ss cs = transformExprTyped go' go (normType . apply ss) where
+  go' :: Expr Typed -> Expr Typed
+  go' (TypeApp f t a) = TypeApp f (apply ss t) a
+  go' x = x
 
-applyInCo :: Subst Typed -> Map.Map (Var Typed) (Coercion Typed) -> Expr Typed -> Expr Typed
-applyInCo ss cs = transformExprTyped id go id where
   go :: Coercion Typed -> Coercion Typed
   go x@(VarCo v) = Map.findWithDefault x v cs
   go (ReflCo t t') = ReflCo (apply ss t) (apply ss t')
   go (CompCo c c') = CompCo (go c) (go c')
+  go (SymCo x) = SymCo (go x)
 
 consFst :: Functor m => a -> m ([a], b) -> m ([a], b)
 consFst = fmap . first . (:)

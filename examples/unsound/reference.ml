@@ -29,9 +29,9 @@ end ;;
  * many other languages. For instance:
  *)
 
-external val coerce : 'a -> 'b ;;
+external val coerce : 'a -> 'b = "(function(x) return x end)" ;;
 
-let main' = print ((coerce 1) ()) ;;
+let main' = print ((coerce 1) ())
 
 (* Nothing we can do to stop this. Since mutation is not a language
  * feature, I am not introducing any ugly workarounds into the type

@@ -15,14 +15,23 @@ import Syntax
 import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
+import Data.Semigroup
 import Data.Sequence (Seq ((:<|), Empty))
 import Data.Foldable
 import Data.Function
 import Data.List
 import Data.Text (Text)
 
-data SolveScope = SolveScope { _bindSkol :: Bool, _don'tTouch :: Set.Set (Var Typed) } deriving (Eq, Show, Ord)
-data SolveState = SolveState { _solveTySubst :: Subst Typed, _solveCoSubst :: Map.Map (Var Typed) (Coercion Typed) } deriving (Eq, Show, Ord)
+data SolveScope
+  = SolveScope { _bindSkol :: Bool
+               , _don'tTouch :: Set.Set (Var Typed)
+               , _don'tCoerce :: Set.Set (Var Typed) }
+  deriving (Eq, Show, Ord)
+data SolveState
+  = SolveState { _solveTySubst :: Subst Typed
+               , _solveCoSubst :: Map.Map (Var Typed) (Coercion Typed)
+               }
+  deriving (Eq, Show, Ord)
 makeLenses ''SolveState
 makeLenses ''SolveScope
 
@@ -66,7 +75,6 @@ unify b (TySkol t) = unify (TySkol t) b
 
 unify (TyVar a) b = bind a b
 unify a (TyVar b) = bind b a
-
 
 unify (TyWithConstraints cs a) t = traverse_ (uncurry unify) cs *> unify a t
 
@@ -127,11 +135,13 @@ overlap xs ys
         get _ = undefined
 
 runSolve :: Int -> Subst Typed -> SolveM b -> Either TypeError (Int, (Subst Typed, Map.Map (Var Typed) (Coercion Typed)))
-runSolve i s x = runExcept (fix (runReaderT (runStateT (runGenTFrom i act) (SolveState s mempty)) (SolveScope False mempty))) where
+runSolve i s x = runExcept (fix (runReaderT (runStateT (runGenTFrom i act) (SolveState s mempty)) emptyScope)) where
   act = (,) <$> gen <*> x
   fix act = do
     ((i, _), s) <- act
-    pure (i, (s ^. solveTySubst, s ^. solveCoSubst))
+    let ss = s ^. solveTySubst
+     in pure (i, (fmap (apply ss) ss, s ^. solveCoSubst))
+  emptyScope = SolveScope False mempty mempty
 
 solve :: Int -> Seq.Seq (Constraint Typed) -> Either TypeError (Subst Typed, Map.Map (Var Typed) (Coercion Typed))
 solve i cs = snd <$> runSolve i mempty (doSolve cs)
@@ -140,39 +150,55 @@ doSolve :: Seq.Seq (Constraint Typed) -> SolveM ()
 doSolve Empty = pure ()
 doSolve (ConUnify because v a b :<| xs) = do
   sub <- use solveTySubst
+  untouchTv <- view don'tTouch
+  untouchInCo <- view don'tCoerce
+  solveCoSubst . at v .= Just (coercionOf (canTouch (untouchInCo <> untouchTv) sub) b a)
+
   unify (apply sub a) (apply sub b)
     `catchError` \e -> throwError (ArisingFrom e because)
 
-  solveCoSubst . at v .= Just (coercionOf (apply sub a) (apply sub b))
   doSolve xs
 doSolve (ConSubsume because v a b :<| xs) = do
   sub <- use solveTySubst
+
+  untouchTv <- view don'tTouch
+  untouchInCo <- view don'tCoerce
+  solveCoSubst . at v .= Just (coercionOf (canTouch (untouchInCo <> untouchTv) sub) b a)
+
   subsumes unify (apply sub a) (apply sub b)
     `catchError` \e -> throwError (ArisingFrom e because)
 
-  solveCoSubst . at v .= Just (coercionOf (apply sub b) (apply sub a))
   doSolve xs
 doSolve (ConImplies because not cs ts :<| xs) = do
   before <- use solveTySubst
+  coercions <- use solveCoSubst
   let not' = ftv (apply before not)
       cs' = apply before cs
       ts' = apply before ts
 
-      leak t (TyVar k) m
-        | t `Set.member` not' = Map.insert k (TyVar t) m
-      leak _ _ m = m
+      leak ass v ty m
+        | null (ftv ty `Set.intersection` ass)
+        , v `Set.notMember` ass
+        = Map.insert v ty m
+        | otherwise = m
   do
     let go = local (bindSkol .~ True) $ doSolve cs'
 
     ((), sub) <- local (don'tTouch .~ mempty) . capture $ go
 
     let sub' = sub ^. solveTySubst
-        after = Map.foldrWithKey leak before sub'
+        assum = Set.fromList (Map.keys sub')
+        -- after = Map.foldrWithKey leak before sub'
+    solveCoSubst .= coercions
 
-    local (don'tTouch %~ Set.union not') $ do
+    local (don'tTouch %~ Set.union not') . local (don'tCoerce %~ Set.union assum) $ do
       solveTySubst .= sub'
       doSolve (fmap (apply sub') ts')
         `catchError` \e -> throwError (ArisingFrom e because)
+
+      con <- use solveTySubst
+
+      let after = Map.foldrWithKey (leak assum) before con
       solveTySubst .= after
 
     doSolve xs
@@ -222,9 +248,16 @@ capture m = do
   put x
   pure (r, st)
 
-coercionOf :: Type Typed -> Type Typed -> Coercion Typed
-coercionOf (TyWithConstraints cs a) b =
-  foldr CompCo (coercionOf a b) (map (uncurry ReflCo) cs)
-coercionOf b (TyWithConstraints cs a) =
-  foldr CompCo (coercionOf b a) (map (uncurry ReflCo) cs)
-coercionOf a b = ReflCo a b
+canTouch :: Set.Set (Var Typed) -> Subst Typed -> Subst Typed
+canTouch xs = Map.filterWithKey (\k _ -> k `Set.notMember` xs)
+
+coercionOf :: Subst Typed -> Type Typed -> Type Typed -> Coercion Typed
+coercionOf sub (TyWithConstraints cs a) b =
+  let mkSub (TyVar a, b) = Map.singleton a b
+      mkSub _ = mempty
+   in coercionOf sub a (apply (foldMap mkSub cs) b)
+coercionOf sub b (TyWithConstraints cs a) =
+  let mkSub (TyVar a, b) = Map.singleton a b
+      mkSub _ = mempty
+   in coercionOf sub (apply (foldMap mkSub cs) b) a
+coercionOf sub a b = ReflCo (apply sub a) (apply sub b)

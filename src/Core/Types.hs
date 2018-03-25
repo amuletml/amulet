@@ -2,7 +2,7 @@
 module Core.Types
   ( arity
   , approximateType
-  , unify, unifyWith
+  , unify, unifyWith, unifyClosed
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -17,7 +17,8 @@ import Control.Applicative
 import Data.Traversable
 import Data.Semigroup
 import Data.Foldable
-import Data.VarSet
+import Data.VarSet(IsVar(..))
+import Data.Maybe
 import Data.List
 
 arity :: Type a -> Int
@@ -85,3 +86,18 @@ unify' (ForallTy vs t) (ForallTy vs' t') = unify' t (replace vs vs' t') where
     go _ x = x
 unify' (AppTy f t) (AppTy f' t') = liftA2 (<>) (unify' f f') (unify' t t')
 unify' _ _ = lift Nothing
+
+
+unifyClosed :: IsVar a => Type a -> Type a -> Bool
+unifyClosed = go mempty where
+  go _ (ConTy a) (ConTy b) = a == b
+  go s (VarTy a) (VarTy b) = fromMaybe a (Map.lookup a s) == b
+  go s (ForallTy v ty) (ForallTy v' ty')
+    | v == v' = go s ty ty'
+    | otherwise = go (Map.insert v v' s) ty ty'
+  go s (ArrTy a r) (ArrTy a' r') = go s a a' && go s r r'
+  go s (AppTy f x) (AppTy f' x') = go s f f' && go s x x'
+  go s (RowsTy f ts) (RowsTy f' ts') = go s f f' && and (zipWith (\(_, t) (_, t') -> t == t' && go s t t') (sortOn fst ts) (sortOn fst ts'))
+  go s (ExactRowsTy ts) (ExactRowsTy ts') = and (zipWith (\(_, t) (_, t') -> t == t' && go s t t') (sortOn fst ts) (sortOn fst ts'))
+  go _ StarTy StarTy = True
+  go _ _ _ = False

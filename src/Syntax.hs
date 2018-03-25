@@ -177,6 +177,7 @@ data Coercion p
   = VarCo (Var p)
   | ReflCo (Type p) (Type p)
   | CompCo (Coercion p) (Coercion p)
+  | SymCo (Coercion p)
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Coercion p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Coercion p)
