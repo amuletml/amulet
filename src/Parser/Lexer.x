@@ -31,6 +31,11 @@ $lower = [a-z]       -- Lowercase characters
 
 $ident = [$digit $upper $lower '_' '\''] -- Valid identifier characters
 
+-- Valid symbol characters. We're slightly more fluent with what we allow
+-- in non-head positions
+$symbol_head = [\: \! \# \$ \% \& \* \+ \. \/ \< \= \> \? \@ \\ \^ \| \- \~]
+$symbol_tail = [$symbol_head \[ \]]
+
 tokens :-
   <0> $white+;
 
@@ -45,29 +50,9 @@ tokens :-
   <0> "forall" { constTok TcForall }
   <0> "=>"     { constTok TcImplies }
   <0> "|"      { constTok TcPipe }
-  <0> "**"     { constTok TcDoubleStar }
   <0> "*"      { constTok TcStar }
-  <0> "+"      { constTok TcAdd }
-  <0> "^"      { constTok TcConcat }
-  <0> "<"      { constTok TcLt }
-  <0> "<="     { constTok TcLte }
-  <0> ">"      { constTok TcGt }
-  <0> ">="     { constTok TcGte }
-  <0> "=="     { constTok TcEqEq }
-  <0> "&&"     { constTok TcAndAnd }
-  <0> "||"     { constTok TcOrOr }
-  <0> "/"      { constTok TcDivide }
-  <0> "-"      { constTok TcSubtract }
-  <0> "<>"     { constTok TcNotEqual }
   <0> "~"      { constTok TcTilde }
-  <0> "@@"     { constTok TcAtAt }
   <0> \_       { constTok TcUnderscore }
-
-  <0> "**."    { constTok TcDoubleStarFloat }
-  <0> "*."     { constTok TcStarFloat }
-  <0> "+."     { constTok TcAddFloat }
-  <0> "/."     { constTok TcDivideFloat }
-  <0> "-."     { constTok TcSubtractFloat }
 
   <0> "let"    { constTok TcLet }
   <0> "fun"    { constTok TcFun }
@@ -115,6 +100,7 @@ tokens :-
   <modP> $lower $ident*                { endModule TcIdentifierQual }
   <modP> $upper $ident*                { endModule TcConIdentQual }
 
+  <0> $symbol_head $symbol_tail*       { lexTok $ TcOp }
   <0> \` $lower $ident* \`             { lexTok $ TcOpIdent . T.init . T.tail }
   <0> \` $upper $ident* \.             { beginModuleOp }
   <modOp> $upper $ident* \.            { pushModule }

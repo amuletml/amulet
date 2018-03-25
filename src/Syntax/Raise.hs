@@ -30,6 +30,7 @@ raiseE vR aR =
       RightSection o v a -> LeftSection (eR o) (eR v) (aR a)
       BothSection o a -> BothSection (eR o) (aR a)
       AccessSection k a -> AccessSection k (aR a)
+      Parens e a -> Parens (eR e) (aR a)
       Tuple es a -> Tuple (map eR es) (aR a)
       Ascription e t a -> Ascription (eR e) (raiseT vR t) (aR a)
       TypeApp f x a -> TypeApp (eR f) (raiseT vR x) (aR a)

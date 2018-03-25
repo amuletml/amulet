@@ -67,6 +67,7 @@ transformExpr fe = goE where
   transE (RightSection l o a) = RightSection (goE l) (goE o) a
   transE (BothSection o a) = BothSection (goE o) a
   transE (AccessSection t a) = AccessSection t a
+  transE (Parens e a) = Parens (goE e) a
 
   transE (Tuple es a) = Tuple (map goE es) a
   transE (TupleSection es a) = TupleSection (map (goE<$>) es) a
@@ -103,6 +104,7 @@ transformExprTyped fe fc ft = goE where
   transE (RightSection l o a) = RightSection (goE l) (goE o) (goA a)
   transE (BothSection o a) = BothSection (goE o) (goA a)
   transE (AccessSection t a) = AccessSection t (goA a)
+  transE (Parens e a) = Parens (goE e) (goA a)
 
   transE (Tuple es a) = Tuple (map goE es) (goA a)
   transE (TupleSection es a) = TupleSection (map (goE<$>) es) (goA a)
@@ -146,6 +148,7 @@ correct ty (LeftSection o r a) = LeftSection o r (fst a, ty)
 correct ty (RightSection l o a) = RightSection l o (fst a, ty)
 correct ty (BothSection o a) = BothSection o (fst a, ty)
 correct ty (AccessSection t a) = AccessSection t (fst a, ty)
+correct ty (Parens e a) = Parens e (fst a, ty)
 
 correct ty (Tuple es a) = Tuple es (fst a, ty)
 correct ty (TupleSection es a) = TupleSection es (fst a, ty)

@@ -31,29 +31,9 @@ import Syntax
   forall   { Token TcForall _ }
   '=>'     { Token TcImplies _ }
   '|'      { Token TcPipe _ }
-  '**'     { Token TcDoubleStar _ }
   '*'      { Token TcStar _ }
-  '+'      { Token TcAdd _ }
-  '^'      { Token TcConcat _ }
-  '<'      { Token TcLt _ }
-  '<='     { Token TcLte _ }
-  '>'      { Token TcGt _ }
-  '>='     { Token TcGte _ }
-  '=='     { Token TcEqEq _ }
-  '&&'     { Token TcAndAnd _ }
-  '||'     { Token TcOrOr _ }
-  '/'      { Token TcDivide _ }
-  '-'      { Token TcSubtract _ }
-  '<>'     { Token TcNotEqual _ }
   '~'      { Token TcTilde _ }
   '_'      { Token TcUnderscore _ }
-  '@@'     { Token TcAtAt _ }
-
-  '**.'    { Token TcDoubleStarFloat _ }
-  '*.'     { Token TcStarFloat _ }
-  '+.'     { Token TcAddFloat _ }
-  '-.'     { Token TcSubtractFloat _ }
-  '/.'     { Token TcDivideFloat _ }
 
   let      { Token TcLet _ }
   fun      { Token TcFun _ }
@@ -89,6 +69,7 @@ import Syntax
   '['      { Token TcOSquare _ }
   ']'      { Token TcCSquare _ }
 
+  op       { Token (TcOp _) _ }
   ident    { Token (TcIdentifier _) _ }
   opid     { Token (TcOpIdent _) _ }
   conid    { Token (TcConIdent _) _ }
@@ -102,19 +83,8 @@ import Syntax
   float    { Token (TcFloat _) _ }
   string   { Token (TcString  _) _ }
 
-%left '||'
-%left '&&'
-%nonassoc '==' '<>'
-%nonassoc '<=' '>='
-%nonassoc '<' '>'
-%left '^'
-%left '+' '-' '+.' '-.'
-%left '*' '/' '*.' '/.'
-%right '**' '**.'
-%left opid qopid
-%right '@@'
+%expect 67
 
-%expect 118
 %%
 
 Tops :: { [Toplevel Parsed] }
@@ -139,28 +109,7 @@ Ctor :: { Constructor Parsed }
 
 Expr :: { Expr Parsed }
      : ExprApp                                 { $1 }
-     | Expr '**' Expr                          { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "**") $3 }
-     | Expr '**.' Expr                         { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "**.") $3 }
-     | Expr '*' Expr                           { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "*") $3 }
-     | Expr '*.' Expr                          { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "*.") $3 }
-     | Expr '/' Expr                           { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "/") $3 }
-     | Expr '/.' Expr                          { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "/.") $3 }
-     | Expr '+' Expr                           { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "+") $3 }
-     | Expr '+.' Expr                          { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "+.") $3 }
-     | Expr '-' Expr                           { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "-") $3 }
-     | Expr '-.' Expr                          { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "-.") $3 }
-     | Expr '^' Expr                           { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "^") $3 }
-     | Expr '<' Expr                           { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "<") $3 }
-     | Expr '>' Expr                           { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE ">") $3 }
-     | Expr '<=' Expr                          { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "<=") $3 }
-     | Expr '>=' Expr                          { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE ">=") $3 }
-     | Expr '==' Expr                          { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "==") $3 }
-     | Expr '<>' Expr                          { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "<>") $3 }
-     | Expr '&&' Expr                          { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "&&") $3 }
-     | Expr '||' Expr                          { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ varE "||") $3 }
-     | Expr opid Expr                          { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ VarRef (getName $2)) $3 }
-     | Expr qopid Expr                         { withPos2 $1 $3 $ BinOp $1 (withPos1 $2 $ VarRef (getName $2)) $3 }
-     | Expr '@@' Expr                          { withPos2 $1 $3 $ App $1 $3 }
+     | Expr Operator ExprApp                   { withPos2 $1 $3 $ BinOp $1 $2 $3 }
 
 ExprApp :: { Expr Parsed }
         : Expr0                                { $1 }
@@ -183,27 +132,18 @@ Atom :: { Expr Parsed }
      | hole                                   { withPos1 $1 (Hole (Name (getHole $1))) }
      | '_'                                    { withPos1 $1 (Hole (Name (T.singleton '_'))) }
      | begin List1(Expr, ';') end             { withPos2 $1 $3 $ Begin $2 }
-     | '(' SectionList ')'                    { withPos2 $1 $3 $ tupleExpr $2 }
+     | '(' ')'                                { withPos2 $1 $2 $ Literal LiUnit  }
+     | '(' Section ')'                        { $2 }
+     | '(' List1(NullSection, ',') ')'        { withPos2 $1 $3 $ tupleExpr $2 }
      | '{' Rows('=', Expr) '}'                { withPos2 $1 $3 $ Record $2 }
      | '{' Expr with Rows('=',Expr) '}'       { withPos2 $1 $5 $ RecordExt $2 $4 }
 
      | Atom access                            { withPos2 $1 $2 $ Access $1 (getIdent $2) }
 
 Operator :: { Expr Parsed }
-         : '**'                               { withPos1 $1 $ varE "**" }
-         | '*'                                { withPos1 $1 $ varE "*" }
-         | '/'                                { withPos1 $1 $ varE "/" }
-         | '+'                                { withPos1 $1 $ varE "+" }
-         | '-'                                { withPos1 $1 $ varE "-" }
-         | '^'                                { withPos1 $1 $ varE "^" }
-         | '<'                                { withPos1 $1 $ varE "<" }
-         | '>'                                { withPos1 $1 $ varE ">" }
-         | '<='                               { withPos1 $1 $ varE "<=" }
-         | '>='                               { withPos1 $1 $ varE ">=" }
-         | '<>'                               { withPos1 $1 $ varE "<>" }
-         | '=='                               { withPos1 $1 $ varE "==" }
-         | '&&'                               { withPos1 $1 $ varE "&&" }
-         | '||'                               { withPos1 $1 $ varE "||" }
+         : '*'                                { withPos1 $1 $ varE "*" }
+         | '~'                                { withPos1 $1 $ varE "~" }
+         | op                                 { withPos1 $1 $ VarRef (getName $1) }
          | opid                               { withPos1 $1 $ VarRef (getName $1) }
          | qopid                              { withPos1 $1 $ VarRef (getName $1) }
 
@@ -214,19 +154,17 @@ Section :: { Expr Parsed }
         | Expr Operator                       { withPos2 $1 $2 $ RightSection $1 $2 }
         | Operator Expr                       { withPos2 $1 $2 $ LeftSection $1 $2 }
 
-SectionList :: { [Maybe (Expr Parsed)] }
-  :                                           { [] }
-  | Section                                   { [Just $1] }
-  | ',' SectionList                           { Nothing : $2 }
-  | Section ',' SectionList                   { Just $1 : $3 }
+NullSection :: { Maybe (Expr Parsed) }
+  :                                           { Nothing }
+  | Section                                   { Just $1 }
 
 Var :: { Located (Var Parsed) }
-    : ident { lPos1 $1 $ getName $1 }
+    : ident  { lPos1 $1 $ getName $1 }
     | qident { lPos1 $1 $ getName $1 }
 
 Con :: { Located (Var Parsed) }
-    : conid { lPos1 $1 $ getName $1 }
-    | qconid { lPos1 $1 $ getName $1 }
+    : conid      { lPos1 $1 $ getName $1 }
+    | qconid     { lPos1 $1 $ getName $1 }
 
 TyVar :: { Located (Var Parsed) }
       : tyvar { lPos1 $1 $ Name (getIdent $1) }
@@ -236,8 +174,12 @@ BindGroup :: { [(Var Parsed, Expr Parsed, Ann Parsed)] }
           | BindGroup and Binding             { $3 : $1 }
 
 Binding :: { (Var Parsed, Expr Parsed, Ann Parsed) }
-        : ident ListE(ArgP) '=' Expr          { (getName $1, foldr (\x y -> withPos2 x $4 (Fun x y)) $4 $2, withPos2 $1 $4 id) }
-        | ident ListE(ArgP) ':' Type '=' Expr { (getName $1, (foldr (\x y -> withPos2 x $6 (Fun x y)) (Ascription $6 (getL $4) (withPos2 $1 $6 id)) $2), withPos2 $1 $6 id) }
+        : BindName ListE(ArgP) '=' Expr        { (getL $1, foldr (\x y -> withPos2 x $4 (Fun x y)) $4 $2, withPos2 $1 $4 id) }
+        | BindName ListE(ArgP) ':' Type '=' Expr { (getL $1, (foldr (\x y -> withPos2 x $6 (Fun x y)) (Ascription $6 (getL $4) (withPos2 $1 $6 id)) $2), withPos2 $1 $6 id) }
+
+BindName :: { Located (Var Parsed) }
+     : ident                                   { lPos1 $1 $ getName $1 }
+     | '(' op ')'                              { lPos2 $1 $3 $ getName $2 }
 
 List(p, s)
     : {- Empty -}       { [] }
@@ -331,10 +273,8 @@ withPos2 :: (Spanned a, Spanned b) => a -> b -> (Span -> c) -> c
 withPos2 s e f = f (mkSpanUnsafe (spanStart $ annotation s) (spanEnd $ annotation e))
 
 tupleExpr :: [Maybe (Expr Parsed)] -> Ann Parsed -> Expr Parsed
-tupleExpr []  a = Literal LiUnit a
-tupleExpr [Just x] a = x
-tupleExpr xs a | all isJust xs = Tuple (map fromJust xs) a
-tupleExpr xs a = TupleSection xs a
+tupleExpr xs | all isJust xs = Tuple (map fromJust xs)
+             | otherwise = TupleSection xs
 
 completeTuple :: Spanned (f Parsed) => ([f Parsed] -> Span -> f Parsed) -> [f Parsed] -> f Parsed
 completeTuple _ [x] = x
@@ -348,12 +288,14 @@ tuplePattern xs a = PTuple xs a
 
 varE = VarRef . Name . T.pack
 
+getIdent  (Token (TcOp x) _)         = x
 getIdent  (Token (TcIdentifier x) _) = x
 getIdent  (Token (TcOpIdent x) _)    = x
 getIdent  (Token (TcConIdent x) _)   = x
 getIdent  (Token (TcAccess x) _)     = x
 getIdent  (Token (TcTyVar x) _)      = x
 
+getName (Token (TcOp x) _)                = Name x
 getName (Token (TcIdentifier x) _)        = Name x
 getName (Token (TcOpIdent x) _)           = Name x
 getName (Token (TcConIdent x) _)          = Name x

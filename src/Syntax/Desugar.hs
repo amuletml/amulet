@@ -57,6 +57,8 @@ desugarProgram = traverse statement where
     (cap, ref) <- fresh a
     expr (Fun cap (Access ref k a) a)
 
+  expr (Parens e _) = expr e
+
   expr (Tuple es a) = Tuple <$> traverse expr es <*> pure a
   expr (TupleSection es a) = do
     es' <- traverse (traverse expr) es
@@ -85,4 +87,3 @@ fresh an = do
 
 alpha :: [T.Text]
 alpha = map T.pack $ [1..] >>= flip replicateM ['a'..'z']
-

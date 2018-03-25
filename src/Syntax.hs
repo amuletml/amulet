@@ -92,6 +92,7 @@ data Expr p
   | RightSection (Expr p) (Expr p) (Ann p) -- (foo +)
   | BothSection (Expr p) (Ann p) -- (+)
   | AccessSection Text (Ann p)
+  | Parens (Expr p) (Ann p) -- (xyz), just useful for resetting precedence
 
   -- Tuple (see note [1])
   | Tuple [Expr p] (Ann p)

@@ -8,28 +8,9 @@ data TokenClass
   | TcForall -- forall
   | TcImplies -- =>
   | TcPipe -- |
-  | TcDoubleStar -- **
   | TcStar -- *
-  | TcAdd -- +
-  | TcDoubleStarFloat -- **.
-  | TcStarFloat -- *.
-  | TcAddFloat -- +.
-  | TcConcat -- ^
-  | TcLt -- <
-  | TcLte -- <=
-  | TcGt -- >
-  | TcGte -- >=
-  | TcEqEq -- ==
-  | TcAndAnd -- &&
-  | TcOrOr -- ||
-  | TcDivide -- /
-  | TcDivideFloat -- /.
-  | TcSubtract -- -
-  | TcSubtractFloat -- -.
-  | TcNotEqual -- <>
   | TcTilde -- ~
   | TcUnderscore -- _
-  | TcAtAt -- @@
 
   | TcLet -- let
   | TcAnd -- and
@@ -65,6 +46,7 @@ data TokenClass
   | TcOSquare -- [
   | TcCSquare -- ]
 
+  | TcOp Text
   | TcIdentifier Text
   | TcOpIdent Text
   | TcConIdent Text
@@ -86,29 +68,9 @@ instance Show TokenClass where
   show TcForall = "forall"
   show TcImplies = "=>"
   show TcPipe = "|"
-  show TcDoubleStar = "**"
   show TcStar = "*"
-  show TcAdd = "+"
-  show TcConcat = "^"
-  show TcLt = "<"
-  show TcLte = "<="
-  show TcGt = ">"
-  show TcGte = ">="
-  show TcEqEq = "=="
-  show TcAndAnd = "&&"
-  show TcOrOr = "||"
-  show TcDivide = "/"
-  show TcSubtract = "-"
-  show TcNotEqual = "<>"
   show TcTilde = "~"
   show TcUnderscore = "_"
-  show TcAtAt = "@@"
-
-  show TcAddFloat = "+."
-  show TcSubtractFloat = "-."
-  show TcStarFloat = "*."
-  show TcDoubleStarFloat = "**."
-  show TcDivideFloat = "/."
 
   show TcLet = "let"
   show TcFun = "fun"
@@ -144,6 +106,7 @@ instance Show TokenClass where
   show TcOSquare = "["
   show TcCSquare = "]"
 
+  show (TcOp t) = unpack t
   show (TcIdentifier t) = unpack t
   show (TcOpIdent t) = "`" ++ unpack t ++ "`"
   show (TcConIdent t) = unpack t

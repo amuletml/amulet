@@ -61,6 +61,7 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
   pretty (RightSection op vl _) = parens $ pretty vl <+> pretty op
   pretty (BothSection op _) = parens $ pretty op
   pretty (AccessSection k _) = parens $ dot <> text k
+  pretty (Parens e _) = parens $ pretty e
 
   pretty (Tuple es _) = parens (hsep (punctuate comma (map pretty es)))
   pretty (TupleSection es _) = parens (hsep (punctuate comma (map (maybe (string "") pretty) es)))

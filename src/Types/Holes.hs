@@ -36,6 +36,7 @@ findExprHoles LeftSection{} = error "impossible (desugar)"
 findExprHoles RightSection{} = error "impossible (desugar)"
 findExprHoles BothSection{} = error "impossible (desugar)"
 findExprHoles AccessSection{} = error "impossible (desugar)"
+findExprHoles Parens{} = error "impossible (desugar)"
 findExprHoles TupleSection{} = error "impossible (desugar)"
 findExprHoles VarRef{} = []
 findExprHoles Literal{} = []
