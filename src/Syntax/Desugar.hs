@@ -10,7 +10,6 @@ import Data.Triple
 
 import Syntax
 
-
 desugarProgram :: forall m. MonadGen Int m => [Toplevel Resolved] -> m [Toplevel Resolved]
 desugarProgram = traverse statement where
   statement (LetStmt vs) = LetStmt <$> traverse (second3A expr) vs
@@ -62,22 +61,26 @@ desugarProgram = traverse statement where
   expr (Tuple es a) = Tuple <$> traverse expr es <*> pure a
   expr (TupleSection es a) = do
     es' <- traverse (traverse expr) es
-    (body, tuple) <- foldrM (buildTuple a) (id, []) es'
-    pure (body (Tuple tuple a))
+    (args, binds, tuple) <- foldrM (buildTuple a) ([], [], []) es'
+    pure $ foldf (\(v, e) r -> Let [(v, e, a)] r a) binds
+         $ foldf (\v e -> Fun v e a) args
+         $ Tuple tuple a
 
   buildTuple :: MonadGen Int m
              => Ann Resolved
              -> Maybe (Expr Resolved)
-             -> (Expr Resolved -> Expr Resolved, [Expr Resolved])
-             -> m (Expr Resolved -> Expr Resolved, [Expr Resolved])
-  buildTuple a Nothing (wrapper, tuple) = do
+             -> ([Pattern Resolved], [(Var Resolved, Expr Resolved)], [Expr Resolved])
+             -> m ([Pattern Resolved], [(Var Resolved, Expr Resolved)], [Expr Resolved])
+  buildTuple a Nothing (as, vs, tuple) = do
     (p, v) <- fresh a
-    pure (\x -> wrapper (Fun p x a), v:tuple)
-  buildTuple _ (Just e@VarRef{}) (wrapper, tuple) = pure (wrapper, e:tuple)
-  buildTuple _ (Just e@Literal{}) (wrapper, tuple) = pure (wrapper, e:tuple)
-  buildTuple a (Just e) (wrapper, tuple) = do
+    pure (p:as, vs, v:tuple)
+  buildTuple _ (Just e@VarRef{}) (as, vs, tuple) = pure (as, vs, e:tuple)
+  buildTuple _ (Just e@Literal{}) (as, vs, tuple) = pure (as, vs, e:tuple)
+  buildTuple a (Just e) (as, vs, tuple) = do
     (Capture v _, ref) <- fresh a
-    pure (\x -> Let [(v, e, a)] (wrapper x) a, ref:tuple)
+    pure (as, (v, e):vs, ref:tuple)
+
+  foldf f xs v = foldr f v xs
 
 fresh :: MonadGen Int m => Ann Resolved -> m (Pattern Resolved, Expr Resolved)
 fresh an = do
