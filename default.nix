@@ -66,7 +66,7 @@ let
           base bytestring hedgehog lens monad-gen mtl pretty-show text
         ];
 
-        libraryToolDepends = if ci then [] else [ alex' happy' ];
+        libraryToolDepends = if ci then [ alex happy ] else [ alex' happy' ];
         buildDepends = libraryToolDepends ++ [ pkgs.cabal-install ];
 
         homepage = "https://amulet.ml";
