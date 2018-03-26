@@ -15,4 +15,3 @@ main = do
   results <- sequence [ Types.tests ]
 
   unless (and results) exitFailure
-
