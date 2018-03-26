@@ -21,7 +21,7 @@ let
       };
     };
   };
-in { compiler ? "ghc822" }:
+in { compiler ? "ghc822", ci ? false }:
 
 let
   inherit (nixpkgs) pkgs haskell;
@@ -45,7 +45,7 @@ let
       }:
       let alex' = haskell.lib.dontCheck alex;
           happy' = haskell.lib.dontCheck happy;
-      in mkDerivation {
+      in mkDerivation rec {
         pname = "amuletml";
         version = "0.1.0.0";
         src = ./.;
@@ -66,8 +66,8 @@ let
           base bytestring hedgehog lens monad-gen mtl pretty-show text
         ];
 
-        libraryToolDepends = [ alex' happy' ];
-        buildDepends = [ alex' happy' pkgs.cabal-install ];
+        libraryToolDepends = if ci then [] else [ alex' happy' ];
+        buildDepends = libraryToolDepends ++ [ pkgs.cabal-install ];
 
         homepage = "https://amulet.ml";
         description = "A functional programming language";
