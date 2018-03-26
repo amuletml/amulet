@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleContexts, TupleSections, GADTs #-}
-{-# LANGUAGE ScopedTypeVariables, RankNTypes, LambdaCase #-}
+{-# LANGUAGE ScopedTypeVariables, RankNTypes #-}
 module Types.Infer
   ( inferProgram
   , builtinsEnv

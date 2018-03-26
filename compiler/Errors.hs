@@ -7,7 +7,6 @@ import qualified Data.Text as T
 import Data.Foldable
 import Data.Position
 import Data.Spanned
-import Data.Maybe
 import Data.Span
 
 import Control.Applicative
@@ -47,7 +46,7 @@ reportP :: Pretty a => a -> Span -> FileMap -> IO ()
 reportP err loc files =
   let SourcePos{ spLine = startLine, spCol = start } = spanStart loc
       SourcePos{ spLine = endLine, spCol = end } = spanEnd loc
-      file = fromMaybe T.empty (snd <$> (find ((==fileName loc) . fst) files))
+      file = maybe T.empty snd (find ((==fileName loc) . fst) files)
       lines = drop (startLine - 1) (T.lines file)
       linePad = length (show endLine) + 1
       putLine before body = T.putStrLn

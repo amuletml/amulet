@@ -147,7 +147,7 @@ lookupTy' x = do
 runInfer :: MonadGen Int m
          => Env
          -> ReaderT Env (WriterT (Seq.Seq (Constraint p)) (ExceptT TypeError m)) a
-         -> m (Either TypeError (a, (Seq.Seq (Constraint p))))
+         -> m (Either TypeError (a, Seq.Seq (Constraint p)))
 runInfer ct ac = runExceptT (runWriterT (runReaderT ac ct))
 
 fresh :: MonadGen Int m => m (Var Resolved)
@@ -159,10 +159,10 @@ freshFrom :: MonadGen Int m => Text -> m (Var Resolved)
 freshFrom t = TgName t <$> gen
 
 extend :: MonadReader Env m => (Var Typed, Type Typed) -> m a -> m a
-extend (v, t) = local (values . at (unTvName v) .~ Just t)
+extend (v, t) = local (values . at (unTvName v) ?~ t)
 
 extendKind :: MonadReader Env m => (Var Typed, Kind Typed) -> m a -> m a
-extendKind (v, k) = local (types . at (unTvName v) .~ Just k)
+extendKind (v, k) = local (types . at (unTvName v) ?~ k)
 
 extendMany :: MonadReader Env m => [(Var Typed, Type Typed)] -> m a -> m a
 extendMany ((v, t):xs) b = extend (v, t) $ extendMany xs b
