@@ -1,0 +1,6 @@
+language: nix
+install: true
+script:
+  - nix-shell . --run "cabal new-configure --enable-tests"
+  - nix-shell . --run "cabal new-build amuletml:amc"
+  - nix-shell . --run "cabal new-test amuletml:hedgehog-tests"
