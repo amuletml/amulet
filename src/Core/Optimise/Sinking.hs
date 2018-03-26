@@ -6,6 +6,7 @@ import Data.VarSet (IsVar(..))
 import Data.Triple
 
 import Core.Optimise
+import qualified Core.Arity as A
 
 data Sinkable a = Sinkable { sBind  :: (a, Type a, Term a)
                            , sFree  :: VarSet.Set
@@ -13,8 +14,9 @@ data Sinkable a = Sinkable { sBind  :: (a, Type a, Term a)
   deriving (Show)
 
 data SinkState a = SinkState { sinkable :: [Sinkable a]
-                             , ctors :: VarSet.Set }
+                             , arity :: A.ArityScope }
   deriving (Show)
+
 
 {-
 The allocation sinking pass (also referred to as float-in or lambda dropping)
@@ -38,16 +40,17 @@ to include partially applied functions (like the DCE pass does).
 -}
 
 sinkingPass :: IsVar a => [AnnStmt VarSet.Set a] -> [Stmt a]
-sinkingPass = sinkStmts (SinkState [] mempty)
+sinkingPass = sinkStmts (SinkState [] A.emptyScope)
 
 sinkStmts :: IsVar a => SinkState a -> [AnnStmt VarSet.Set a] -> [Stmt a]
 sinkStmts _ [] = []
 sinkStmts s (Foreign v ty bod:xs) = Foreign v ty bod:sinkStmts s xs
 sinkStmts s (StmtLet vars:xs) =
   let vars' = map (third3 (sinkTerm s)) vars
-  in StmtLet vars':sinkStmts s xs
+      s' = s { arity = A.extendPureFuns (arity s) vars }
+  in StmtLet vars':sinkStmts s' xs
 sinkStmts s (Type v cases:xs) =
-  let s' = s { ctors = VarSet.union (VarSet.fromList (map (toVar . fst) cases)) (ctors s) }
+  let s' = s { arity = A.extendPureCtors (arity s) cases }
   in Type v cases:sinkStmts s' xs
 
 sinkAtom :: IsVar a => SinkState a -> AnnAtom VarSet.Set a -> Atom a
@@ -60,26 +63,29 @@ sinkTerm s (AnnAtom _ a) = flushBinds (sinkable s) (Atom (sinkAtom (nullBinds s)
 sinkTerm s (AnnApp _ f x) = flushBinds (sinkable s) (App (sinkAtom s' f) (sinkAtom s' x))
   where s' = nullBinds s
 
-sinkTerm s (AnnLet _ (One (v, ty, e)) r)
+sinkTerm s (AnnLet _ (One b@(v, ty, e)) r)
   -- If we're pure, add it to the sink set
-  | isPure s e
+  | A.isPure (arity s) e
   = let e' = sinkTerm (nullBinds s) e
         s' = s { sinkable = Sinkable { sBind = (v, ty, e')
                                      , sBound = VarSet.singleton (toVar v)
-                                     , sFree = extractAnn e } : sinkable s }
+                                     , sFree = extractAnn e } : sinkable s
+               , arity = A.extendPureFuns (arity s) [b] }
     in sinkTerm s' r
 
   -- Otherwise, partition into sinkable/nonsinkable
   | otherwise
   = let (fs, [rs, es]) = partitionBinds (sinkable s) [extractAnn r, extractAnn e]
-        e' = sinkTerm (s { sinkable = es }) e
-        r' = sinkTerm (s { sinkable = rs }) r
+        a' = A.extendPureFuns (arity s) [b]
+        e' = sinkTerm (s { sinkable = es, arity = a' }) e
+        r' = sinkTerm (s { sinkable = rs, arity = a' }) r
     in flushBinds fs (Let (One (v, ty, e')) r')
 
 sinkTerm s (AnnLet _ (Many vs) r) =
   let (fs, rs:vss) = partitionBinds (sinkable s) (extractAnn r : map (extractAnn . thd3) vs)
-      vs' = zipWith (\fv -> third3 (sinkTerm (s { sinkable = fv }))) vss vs
-      r'  = sinkTerm (s { sinkable = rs }) r
+      a' = A.extendPureFuns (arity s) vs
+      vs' = zipWith (\fv -> third3 (sinkTerm (s { sinkable = fv, arity = a' }))) vss vs
+      r'  = sinkTerm (s { sinkable = rs, arity = a' }) r
   in flushBinds fs (Let (Many vs') r')
 
 sinkTerm s (AnnMatch _ t bs) =
@@ -126,12 +132,3 @@ partitionBinds sink free = go sink (mempty, []) (map (,[]) free) where
   insertMaybe si bind True = insertSink si bind
 
   occursIn si = not . VarSet.isEmpty . VarSet.intersection (sBound si) . fst
-
-
-isPure :: IsVar a => SinkState a -> AnnTerm b a -> Bool
-isPure _ AnnAtom{}   = True
-isPure _ AnnExtend{} = True
-isPure _ AnnTyApp{}  = True
-isPure _ AnnCast{}   = True
-isPure s (AnnApp _ (Ref f _) _) | toVar f `VarSet.member` ctors s = True
-isPure _ _ = False

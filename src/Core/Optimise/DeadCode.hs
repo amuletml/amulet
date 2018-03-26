@@ -1,26 +1,20 @@
 {-# LANGUAGE OverloadedStrings, TupleSections #-}
 module Core.Optimise.DeadCode ( deadCodePass ) where
 
-import qualified Data.VarMap as VarMap
 import qualified Data.VarSet as VarSet
-import qualified Data.Map as Map
 import Data.VarSet (IsVar(..))
-import Data.Text (Text)
 import Data.Semigroup
 import Data.Triple
-import Data.Maybe
 import Data.List
 
 import Control.Applicative
 
 import Core.Optimise
-
-newtype DeadScope = DeadScope { pureArity :: VarMap.Map Int }
-  deriving (Show)
+import Core.Arity
 
 deadCodePass :: IsVar a => [Stmt a] -> [Stmt a]
-deadCodePass = snd . freeS (DeadScope mempty) Nothing where
-  freeS :: IsVar a => DeadScope -> Maybe a -> [Stmt a] -> (VarSet.Set, [Stmt a])
+deadCodePass = snd . freeS emptyScope Nothing where
+  freeS :: IsVar a => ArityScope -> Maybe a -> [Stmt a] -> (VarSet.Set, [Stmt a])
   freeS _ (Just m) [] = (VarSet.singleton (toVar m), mempty)
   freeS _ Nothing  [] = (mempty, mempty)
 
@@ -41,18 +35,17 @@ deadCodePass = snd . freeS (DeadScope mempty) Nothing where
          (f, vs', xs') -> (f, StmtLet vs':xs')
 
   freeS s m (x@(Type _ cases):xs) =
-    let s' = s { pureArity = foldr (\(v, ty) p -> VarMap.insert (toVar v) (1 + typeArity ty) p)
-                             (pureArity s) cases }
+    let s' = extendPureCtors s cases
     in (x:) <$> freeS s' m xs
 
-  freeA :: IsVar a => DeadScope -> Atom a -> (VarSet.Set, Atom a)
+  freeA :: IsVar a => ArityScope -> Atom a -> (VarSet.Set, Atom a)
   freeA _ t@(Ref v _)= (VarSet.singleton (toVar v), t)
   freeA _ t@Lit{} = (mempty, t)
   freeA s (Lam a b) =
     let (fb, b') = freeT s b
      in (argVar a `VarSet.delete` fb, Lam a b')
 
-  freeT :: IsVar a => DeadScope -> Term a -> (VarSet.Set, Term a)
+  freeT :: IsVar a => ArityScope -> Term a -> (VarSet.Set, Term a)
   freeT s (Atom a) = Atom <$> freeA s a
   freeT s (App f a) = App <$> freeA s f <*> freeA s a
   freeT s (TyApp f t) = TyApp <$> freeA s f <*> pure t
@@ -87,44 +80,7 @@ deadCodePass = snd . freeS (DeadScope mempty) Nothing where
          -- Otherwise assume everything is used
          _ -> (ft <> matchFree, Match t' bs')
 
-  typeArity :: Type a -> Int
-  typeArity (ForallTy _ ty) = 1 + typeArity ty
-  typeArity _ = 0
-
-  -- Compute the number of arguments which can be passed to a function before
-  -- it becomes "impure".
-  atomArity s (Ref r _)
-    | TgInternal n <- toVar r
-    = fromMaybe 0 (Map.lookup n opArity)
-    | otherwise
-    = fromMaybe 0 (VarMap.lookup (toVar r) (pureArity s))
-  atomArity s (Lam _ (Atom a)) = 1 + atomArity s a
-  atomArity _ _ = 0
-
-  isPure _ Atom{}   = True
-  isPure _ Extend{} = True
-  isPure _ TyApp{}  = True
-  isPure _ Cast{}  = True
-  isPure s (Let (One v) e) = isPure s e && isPure s (thd3 v)
-  isPure s (Let (Many vs) e) = isPure s e && all (isPure s . thd3) vs
-  isPure s (Match _ bs) = all (isPure s . thd3) bs
-  isPure s (App f _) = atomArity s f > 0
-
-  extendPureFuns :: IsVar a => DeadScope -> [(a, Type a, Term a)] -> DeadScope
-  extendPureFuns s vs = s
-    { pureArity = foldr (\(v, _, e) p ->
-                           case e of
-                             Atom  a   -> maybeInsert v (atomArity s a) p
-                             TyApp a _ -> maybeInsert v (atomArity s a - 1) p
-                             App   a _ -> maybeInsert v (atomArity s a - 1) p
-                             _ -> p) (pureArity s) vs
-    }
-
-  maybeInsert v a m
-    | a > 0     = VarMap.insert (toVar v) a m
-    | otherwise = m
-
-  buildFrees :: IsVar a => DeadScope -> VarSet.Set -> [(VarSet.Set, (a, Type a, Term a))]
+  buildFrees :: IsVar a => ArityScope -> VarSet.Set -> [(VarSet.Set, (a, Type a, Term a))]
             -> Bool -> [(VarSet.Set, (a, Type a, Term a))] -> VarSet.Set
   buildFrees s free [] True rest = buildFrees s free rest False []
   buildFrees _ free [] False _   = free
@@ -142,22 +98,3 @@ deadCodePass = snd . freeS (DeadScope mempty) Nothing where
         termFree = foldr (VarSet.delete . toVar . fst3 . snd) letFree binds
         vs' = filter ((`VarSet.member` letFree) . toVar . fst3) (map snd binds)
     in (termFree, vs', rest)
-
--- Dead code is always free
-opArity :: Map.Map Text Int
-opArity = Map.fromList
-    [ ("+",  2), ("+.",  2)
-    , ("-",  2), ("-.",  2)
-    , ("*",  2), ("*.",  2)
-    , ("/",  2), ("/.",  2)
-    , ("**", 2), ("**.", 2)
-    , ("^",  2)
-    , ("<",  2)
-    , (">",  2)
-    , (">=", 2)
-    , ("<=", 2)
-    , ("==", 3)
-    , ("<>", 3)
-    , ("||", 2)
-    , ("&&", 2)
-    ]

@@ -103,6 +103,7 @@ library amulet
                      -- Core
                      , Core.Core
                      , Core.Free
+                     , Core.Arity
                      , Core.Lower
                      , Core.Types
                      , Core.Optimise
