@@ -38,6 +38,8 @@ import Types.Unify
 import Types.Kinds
 
 import Pretty
+import Debug.Trace
+import Text.Show.Pretty (ppShow)
 
 -- Solve for the types of lets in a program
 inferProgram :: MonadGen Int m => Env -> [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))
@@ -285,6 +287,7 @@ inferLetTy closeOver vs =
         (x, co, vt) <- case solve cur cs of
           Right (x, co) -> pure (x, co, normType (closeOver (apply x ty)))
           Left e -> throwError (ArisingFrom e (snd blame))
+        -- trace (ppShow x) pure ()
         skolCheck (TvName (fst blame)) (snd blame) vt
         pure (closeOver vt, solveEx x co)
 

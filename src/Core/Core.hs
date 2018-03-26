@@ -14,6 +14,8 @@ import Control.Lens.Plated
 
 import GHC.Generics
 
+import Debug.Trace
+
 import Syntax (Var(..), Resolved)
 
 data AnnAtom b a
@@ -282,12 +284,14 @@ patternVarsA (PatExtend p ps) = mconcat (patternVarsA p : map (patternVarsA . sn
 patternVarsA Constr{} = mempty
 patternVarsA PatLit{} = mempty
 
-relates :: Coercion a -> Maybe (Type a, Type a)
+relates :: Show a => Coercion a -> Maybe (Type a, Type a)
 relates (SameRepr a b) = Just (a, b)
 relates (CoercionVar _) = Nothing
-relates (Application f _) = do
-  (ArrTy _ c, ArrTy _ d) <- relates f
-  pure (c, d)
+relates (Application f x) = do
+  (f, g) <- relates f
+  (x, y) <- relates x
+  pure (AppTy f x, AppTy g y)
+
 relates (Arrow x y) = do
   (a, b) <- relates x
   (c, d) <- relates y

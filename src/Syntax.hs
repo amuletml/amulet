@@ -177,7 +177,7 @@ data Coercion p
   = VarCo (Var p)
   | ReflCo (Type p) -- <T> : T ~ T
   | SymCo (Coercion p) -- sym (X : T ~ S) : S ~ T
-  | AppCo (Coercion p) (Coercion p) -- (f : (A -> B) ~ (C -> D)) (x : A ~ C) : B ~ D
+  | AppCo (Coercion p) (Coercion p) -- (f : B ~ D) (x : A ~ C) : B A ~ D C
   | ArrCo (Coercion p) (Coercion p) -- (x : S ~ T) -> (y : S' ~ T') : (S -> S') ~ (T -> T')
   | ProdCo (Coercion p) (Coercion p) -- (x : S ~ T, y : S' ~ T') : (S, S') ~ (T, T')
   | ExactRowsCo [(Text, Coercion p)] -- { x : A ~ B } : { x : A } ~ { x : B }

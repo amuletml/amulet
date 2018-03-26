@@ -21,6 +21,10 @@ import Data.Function
 import Data.List
 import Data.Text (Text)
 
+import Debug.Trace
+import Text.Show.Pretty
+import Pretty
+
 data SolveScope
   = SolveScope { _bindSkol :: Bool
                , _don'tTouch :: Set.Set (Var Typed)
@@ -41,6 +45,9 @@ bind var ty
   | occurs var ty = throwError (Occurs var ty)
   | TyVar var == ty = pure (ReflCo ty)
   | TyForall{} <- ty = throwError (Impredicative var ty)
+  | TyWithConstraints cs ty <- ty = do
+    traverse_ (uncurry unify) (map (join (trace . ppShow)) cs)
+    bind var ty
   | otherwise = do
       env <- use solveTySubst
       noTouch <- view don'tTouch
@@ -78,7 +85,7 @@ unify (TyVar a) b = bind a b
 unify a (TyVar b) = SymCo <$> bind b a
 
 unify (TyWithConstraints cs a) t = do
-  cons <- traverse (uncurry unify) cs
+  cons <- traverse (uncurry unify) (map (join (trace . ppShow)) cs)
   unify a t
 
 unify t x@TyWithConstraints{} = SymCo <$> unify x t
@@ -157,6 +164,7 @@ doSolve Empty = pure ()
 doSolve (ConUnify because v a b :<| xs) = do
   sub <- use solveTySubst
 
+  trace (render (pretty (ConUnify because v a b))) pure ()
   co <- unify (apply sub a) (apply sub b)
     `catchError` \e -> throwError (ArisingFrom e because)
   solveCoSubst . at v .= Just co
@@ -165,6 +173,7 @@ doSolve (ConUnify because v a b :<| xs) = do
 doSolve (ConSubsume because v a b :<| xs) = do
   sub <- use solveTySubst
 
+  trace (render (pretty (ConSubsume because v a b))) pure ()
   co <- subsumes unify (apply sub a) (apply sub b)
     `catchError` \e -> throwError (ArisingFrom e because)
   solveCoSubst . at v .= Just co
