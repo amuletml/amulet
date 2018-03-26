@@ -38,8 +38,6 @@ import Types.Unify
 import Types.Kinds
 
 import Pretty
-import Debug.Trace
-import Text.Show.Pretty (ppShow)
 
 -- Solve for the types of lets in a program
 inferProgram :: MonadGen Int m => Env -> [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))

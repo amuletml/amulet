@@ -16,10 +16,10 @@ end ;;
 
 let s_is_k (x : 'a) : Equality.t (s 'a) (k 'a) = unsafe_coerce Equality.Refl
 
-and s_to_k (S x) = Equality.subst (s_is_k x) (S x)
-and k_to_s (K x) = Equality.subst (Equality.sym (s_is_k x)) (K x)
+(* and s_to_k (S x) = Equality.subst (s_is_k x) (S x) *)
+(* and k_to_s (K x) = Equality.subst (Equality.sym (s_is_k x)) (K x) *)
 
-and k_to_s_to_k x = s_to_k (k_to_s x)
-and s_to_k_to_s x = k_to_s (s_to_k x) ;;
+(* and k_to_s_to_k x = s_to_k (k_to_s x) *)
+(* and s_to_k_to_s x = k_to_s (s_to_k x) ;; *)
 
-let main = print (s_to_k (S 1))
+(* let main = print (s_to_k (S 1)) *)

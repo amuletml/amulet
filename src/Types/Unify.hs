@@ -21,10 +21,6 @@ import Data.Function
 import Data.List
 import Data.Text (Text)
 
-import Debug.Trace
-import Text.Show.Pretty
-import Pretty
-
 data SolveScope
   = SolveScope { _bindSkol :: Bool
                , _don'tTouch :: Set.Set (Var Typed)
@@ -46,7 +42,7 @@ bind var ty
   | TyVar var == ty = pure (ReflCo ty)
   | TyForall{} <- ty = throwError (Impredicative var ty)
   | TyWithConstraints cs ty <- ty = do
-    traverse_ (uncurry unify) (map (join (trace . ppShow)) cs)
+    traverse_ (uncurry unify) cs
     bind var ty
   | otherwise = do
       env <- use solveTySubst
@@ -85,7 +81,7 @@ unify (TyVar a) b = bind a b
 unify a (TyVar b) = SymCo <$> bind b a
 
 unify (TyWithConstraints cs a) t = do
-  cons <- traverse (uncurry unify) (map (join (trace . ppShow)) cs)
+  traverse_ (uncurry unify) cs
   unify a t
 
 unify t x@TyWithConstraints{} = SymCo <$> unify x t
@@ -109,10 +105,10 @@ unify (TyRows rho arow) (TyRows sigma brow)
   , sigmaNew <- deleteFirstsBy ((==) `on` fst) (sortOn fst brow) (sortOn fst arow) =
     do
       tau <- freshTV
-      cs <- traverse (uncurry unify) overlaps
+      cs <- traverse unifRow overlaps
       co <- unify rho (TyRows tau sigmaNew) -- yes
       _ <- unify sigma (TyRows tau rhoNew) -- it's backwards
-      pure (RowsCo co (zip (map fst arow) cs))
+      pure (RowsCo co cs)
 
 unify ta@TyExactRows{} tb@TyRows{} = unify tb ta
 unify tb@(TyRows rho brow) ta@(TyExactRows arow)
@@ -121,14 +117,16 @@ unify tb@(TyRows rho brow) ta@(TyExactRows arow)
   = case overlaps of
       [] -> throwError (NoOverlap tb ta)
       xs -> do
-        traverse_ (uncurry unify) xs
-        unify rho (TyExactRows rhoNew)
+        cs <- traverse unifRow xs
+        co <- unify rho (TyExactRows rhoNew)
+        pure (RowsCo co cs)
+
 unify ta@(TyExactRows arow) tb@(TyExactRows brow)
   | overlaps <- overlap arow brow
   = do when (length overlaps /= length arow || length overlaps /= length brow)
          $ throwError (NoOverlap ta tb)
-       cs <- traverse (uncurry unify) overlaps
-       pure (ExactRowsCo (zip (map fst arow) cs))
+       cs <- traverse unifRow overlaps
+       pure (ExactRowsCo cs)
 
 unify x tp@TyRows{} = throwError (Note (CanNotInstance tp x) isRec)
 unify tp@TyRows{} x = throwError (Note (CanNotInstance tp x) isRec)
@@ -140,12 +138,17 @@ unify a b = throwError (NotEqual a b)
 isRec :: String
 isRec = "A record type's hole can only be instanced to another record"
 
-overlap :: Typed ~ p => [(Text, Type p)] -> [(Text, Type p)] -> [(Type p, Type p)]
+overlap :: Typed ~ p => [(Text, Type p)] -> [(Text, Type p)] -> [(Text, Type p, Type p)]
 overlap xs ys
   | inter <- filter ((/=) 1 . length) $ groupBy ((==) `on` fst) (sortOn fst (xs ++ ys))
   = map get inter
-  where get [(_, a), (_, b)] = (a, b)
+  where get [(t, a), (_, b)] = (t, a, b)
         get _ = undefined
+
+unifRow :: (Text, Type Typed, Type Typed) -> SolveM (Text, Coercion Typed)
+unifRow (t, a, b) = do
+  co <- unify a b
+  pure (t, co)
 
 runSolve :: Int -> Subst Typed -> SolveM b -> Either TypeError (Int, (Subst Typed, Map.Map (Var Typed) (Coercion Typed)))
 runSolve i s x = runExcept (fix (runReaderT (runStateT (runGenTFrom i act) (SolveState s mempty)) emptyScope)) where
@@ -164,7 +167,6 @@ doSolve Empty = pure ()
 doSolve (ConUnify because v a b :<| xs) = do
   sub <- use solveTySubst
 
-  trace (render (pretty (ConUnify because v a b))) pure ()
   co <- unify (apply sub a) (apply sub b)
     `catchError` \e -> throwError (ArisingFrom e because)
   solveCoSubst . at v .= Just co
@@ -173,7 +175,6 @@ doSolve (ConUnify because v a b :<| xs) = do
 doSolve (ConSubsume because v a b :<| xs) = do
   sub <- use solveTySubst
 
-  trace (render (pretty (ConSubsume because v a b))) pure ()
   co <- subsumes unify (apply sub a) (apply sub b)
     `catchError` \e -> throwError (ArisingFrom e because)
   solveCoSubst . at v .= Just co

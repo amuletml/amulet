@@ -14,8 +14,6 @@ import Control.Lens.Plated
 
 import GHC.Generics
 
-import Debug.Trace
-
 import Syntax (Var(..), Resolved)
 
 data AnnAtom b a
@@ -151,8 +149,8 @@ instance Pretty a => Pretty (Coercion a) where
   pretty (SameRepr a b) = pretty a <+> soperator (char '~') <+> pretty b
   pretty (Application c c') = pretty c <+> pretty c'
   pretty (Arrow c c') = pretty c <+> arrow <+> pretty c'
-  pretty (Record r s) = error "todo"
-  pretty (ExactRecord _) = error "todo"
+  pretty (Record r s) = enclose (lbrace <> space) (space <> rbrace) (pretty r <+> hsep (punctuate comma (map pprCoRow s)))
+  pretty (ExactRecord r) = enclose (lbrace <> space) (space <> rbrace) (hsep (punctuate comma (map pprCoRow r)))
   pretty (Domain f) = keyword "dom" <+> parens (pretty f)
   pretty (Codomain f) = keyword "cod" <+> parens (pretty f)
   pretty (Symmetry f) = keyword "sym" <+> parens (pretty f)
@@ -170,6 +168,9 @@ pprBegin = braces' . vsep . map (indent 2) . punctuate semi
 pprCases :: Pretty a => [(Pattern a, Type a, Term a)] -> Doc
 pprCases = braces' . vsep . map (indent 2) . punctuate semi . map one where
   one (a, b, c) = pretty a <+> colon <+> pretty b <+> nest 2 (arrow </> pretty c)
+
+pprCoRow :: Pretty a => (Text, Coercion a) -> Doc
+pprCoRow (a, b) = text a <+> equals <+> pretty b
 
 braces' :: Doc -> Doc
 braces' = enclose (lbrace <> linebreak) (linebreak <> rbrace)
