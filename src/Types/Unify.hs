@@ -15,7 +15,6 @@ import Syntax
 import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
-import Data.Semigroup
 import Data.Sequence (Seq ((:<|), Empty))
 import Data.Foldable
 import Data.Function
@@ -37,33 +36,35 @@ makeLenses ''SolveScope
 
 type SolveM = GenT Int (StateT SolveState (ReaderT SolveScope (Except TypeError)))
 
-bind :: Var Typed -> Type Typed -> SolveM ()
+bind :: Var Typed -> Type Typed -> SolveM (Coercion Typed)
 bind var ty
   | occurs var ty = throwError (Occurs var ty)
-  | TyVar var == ty = pure ()
+  | TyVar var == ty = pure (ReflCo ty)
   | TyForall{} <- ty = throwError (Impredicative var ty)
   | otherwise = do
       env <- use solveTySubst
       noTouch <- view don'tTouch
       -- Attempt to extend the environment, otherwise unify with existing type
       case Map.lookup var env of
-        Nothing ->
+        Nothing -> do
           if | var `Set.notMember` noTouch -> solveTySubst .= (env `compose` Map.singleton var (normType ty))
              | var `Set.member` noTouch, TyVar v <- ty, v `Set.notMember` noTouch -> solveTySubst .= (env `compose` Map.singleton v (TyVar var))
              | otherwise -> throwError (NotEqual (TyVar var) ty)
+          pure (AssumedCo (TyVar var) ty)
         Just ty'
-          | ty' == ty -> pure ()
+          | ty' == ty -> pure (ReflCo ty')
           | otherwise -> unify (normType ty) (normType ty')
-      sub <- use solveTySubst
-      solveCoSubst %= fmap (apply sub)
 
-unify :: Type Typed -> Type Typed -> SolveM ()
+unify :: Type Typed -> Type Typed -> SolveM (Coercion Typed)
 unify (TySkol x) (TySkol y)
-  | x == y = pure ()
+  | x == y = pure (ReflCo (TySkol y))
+
 unify (TySkol t@(Skolem sv _ _ _)) b = do
   sub <- use (solveTySubst . at sv)
   case sub of
-    Just t -> unify t b
+    Just ty -> do
+      _ <- unify b ty
+      pure (AssumedCo ty (TySkol t))
     Nothing -> case b of
       TyVar v -> bind v (TySkol t)
       _ -> do
@@ -74,17 +75,21 @@ unify (TySkol t@(Skolem sv _ _ _)) b = do
 unify b (TySkol t) = unify (TySkol t) b
 
 unify (TyVar a) b = bind a b
-unify a (TyVar b) = bind b a
+unify a (TyVar b) = SymCo <$> bind b a
 
-unify (TyWithConstraints cs a) t = traverse_ (uncurry unify) cs *> unify a t
+unify (TyWithConstraints cs a) t = do
+  cons <- traverse (uncurry unify) cs
+  unify a t
 
-unify t x@TyWithConstraints{} = unify x t
+unify t x@TyWithConstraints{} = SymCo <$> unify x t
 
-unify (TyArr a b) (TyArr a' b') = unify a a' *> unify b b'
-unify (TyApp a b) (TyApp a' b') = unify a a' *> unify b b'
+unify (TyArr a b) (TyArr a' b') = ArrCo <$> unify a a' <*> unify b b'
+unify (TyApp a b) (TyApp a' b') = AppCo <$> unify a a' <*> unify b b'
+
 unify ta@(TyCon a) tb@(TyCon b)
-  | a == b = pure ()
+  | a == b = pure (ReflCo tb)
   | otherwise = throwError (NotEqual ta tb)
+
 unify t@(TyForall vs ty) t'@(TyForall vs' ty')
   | length vs /= length vs' = throwError (NotEqual t t')
   | otherwise = do
@@ -97,10 +102,11 @@ unify (TyRows rho arow) (TyRows sigma brow)
   , sigmaNew <- deleteFirstsBy ((==) `on` fst) (sortOn fst brow) (sortOn fst arow) =
     do
       tau <- freshTV
-      traverse_ (uncurry unify) overlaps
-      unify rho (TyRows tau sigmaNew) -- yes
-      unify sigma (TyRows tau rhoNew) -- it's backwards
-      pure ()
+      cs <- traverse (uncurry unify) overlaps
+      co <- unify rho (TyRows tau sigmaNew) -- yes
+      _ <- unify sigma (TyRows tau rhoNew) -- it's backwards
+      pure (RowsCo co (zip (map fst arow) cs))
+
 unify ta@TyExactRows{} tb@TyRows{} = unify tb ta
 unify tb@(TyRows rho brow) ta@(TyExactRows arow)
   | overlaps <- overlap arow brow
@@ -114,13 +120,13 @@ unify ta@(TyExactRows arow) tb@(TyExactRows brow)
   | overlaps <- overlap arow brow
   = do when (length overlaps /= length arow || length overlaps /= length brow)
          $ throwError (NoOverlap ta tb)
-       traverse_ (uncurry unify) overlaps
+       cs <- traverse (uncurry unify) overlaps
+       pure (ExactRowsCo (zip (map fst arow) cs))
 
 unify x tp@TyRows{} = throwError (Note (CanNotInstance tp x) isRec)
 unify tp@TyRows{} x = throwError (Note (CanNotInstance tp x) isRec)
 unify (TyTuple a b) (TyTuple a' b') = do
-  unify a a'
-  unify b b'
+  ProdCo <$> unify a a' <*> unify b b'
 
 unify a b = throwError (NotEqual a b)
 
@@ -150,23 +156,18 @@ doSolve :: Seq.Seq (Constraint Typed) -> SolveM ()
 doSolve Empty = pure ()
 doSolve (ConUnify because v a b :<| xs) = do
   sub <- use solveTySubst
-  untouchTv <- view don'tTouch
-  untouchInCo <- view don'tCoerce
-  solveCoSubst . at v .= Just (coercionOf (canTouch (untouchInCo <> untouchTv) sub) b a)
 
-  unify (apply sub a) (apply sub b)
+  co <- unify (apply sub a) (apply sub b)
     `catchError` \e -> throwError (ArisingFrom e because)
+  solveCoSubst . at v .= Just co
 
   doSolve xs
 doSolve (ConSubsume because v a b :<| xs) = do
   sub <- use solveTySubst
 
-  untouchTv <- view don'tTouch
-  untouchInCo <- view don'tCoerce
-  solveCoSubst . at v .= Just (coercionOf (canTouch (untouchInCo <> untouchTv) sub) b a)
-
-  subsumes unify (apply sub a) (apply sub b)
+  co <- subsumes unify (apply sub a) (apply sub b)
     `catchError` \e -> throwError (ArisingFrom e because)
+  solveCoSubst . at v .= Just co
 
   doSolve xs
 doSolve (ConImplies because not cs ts :<| xs) = do
@@ -247,17 +248,3 @@ capture m = do
   st <- get
   put x
   pure (r, st)
-
-canTouch :: Set.Set (Var Typed) -> Subst Typed -> Subst Typed
-canTouch xs = Map.filterWithKey (\k _ -> k `Set.notMember` xs)
-
-coercionOf :: Subst Typed -> Type Typed -> Type Typed -> Coercion Typed
-coercionOf sub (TyWithConstraints cs a) b =
-  let mkSub (TyVar a, b) = Map.singleton a b
-      mkSub _ = mempty
-   in coercionOf sub a (apply (foldMap mkSub cs) b)
-coercionOf sub b (TyWithConstraints cs a) =
-  let mkSub (TyVar a, b) = Map.singleton a b
-      mkSub _ = mempty
-   in coercionOf sub (apply (foldMap mkSub cs) b) a
-coercionOf sub a b = ReflCo (apply sub a) (apply sub b)

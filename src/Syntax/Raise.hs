@@ -69,6 +69,11 @@ raiseT v (TyWithConstraints eq a) = TyWithConstraints (map (\(a, b) -> (raiseT v
 
 raiseCo :: (Var p -> Var p') -> Coercion p -> Coercion p'
 raiseCo v (VarCo a) = VarCo (v a)
-raiseCo v (ReflCo t t') = ReflCo (raiseT v t) (raiseT v t')
-raiseCo v (CompCo c c') = CompCo (raiseCo v c) (raiseCo v c')
+raiseCo v (ReflCo t) = ReflCo (raiseT v t)
+raiseCo v (AssumedCo t t') = AssumedCo (raiseT v t) (raiseT v t')
 raiseCo v (SymCo x) = SymCo (raiseCo v x)
+raiseCo v (AppCo f x) = AppCo (raiseCo v f) (raiseCo v x)
+raiseCo v (ArrCo f x) = ArrCo (raiseCo v f) (raiseCo v x)
+raiseCo v (ProdCo f x) = ProdCo (raiseCo v f) (raiseCo v x)
+raiseCo v (ExactRowsCo rs) = ExactRowsCo (map (second (raiseCo v)) rs)
+raiseCo v (RowsCo c rs) = RowsCo (raiseCo v c) (map (second (raiseCo v)) rs)

@@ -85,11 +85,17 @@ data Pattern a
 
 data Coercion a
   = SameRepr (Type a) (Type a)
+  | Symmetry (Coercion a)
+
+  | Application (Coercion a) (Coercion a) -- AppCo
+  | Arrow (Coercion a) (Coercion a)
+  | ExactRecord [(Text, Coercion a)]
+  | Record (Coercion a) [(Text, Coercion a)]
+
+  | CoercionVar a
+
   | Domain (Coercion a)
   | Codomain (Coercion a)
-  | Symmetry (Coercion a)
-  | Composition (Coercion a) (Coercion a)
-  | CoercionVar a
   deriving (Eq, Show, Ord, Functor, Generic)
 
 data Literal
@@ -141,10 +147,13 @@ instance Pretty a => Pretty (Term a) where
 
 instance Pretty a => Pretty (Coercion a) where
   pretty (SameRepr a b) = pretty a <+> soperator (char '~') <+> pretty b
+  pretty (Application c c') = pretty c <+> pretty c'
+  pretty (Arrow c c') = pretty c <+> arrow <+> pretty c'
+  pretty (Record r s) = error "todo"
+  pretty (ExactRecord _) = error "todo"
   pretty (Domain f) = keyword "dom" <+> parens (pretty f)
   pretty (Codomain f) = keyword "cod" <+> parens (pretty f)
   pretty (Symmetry f) = keyword "sym" <+> parens (pretty f)
-  pretty (Composition c c') = pretty c <+> soperator (char ';') <+> pretty c'
   pretty (CoercionVar x) = pretty x
 
 pprLet :: Pretty a => [(a, Type a, Term a)] -> Doc
@@ -275,11 +284,29 @@ patternVarsA PatLit{} = mempty
 
 relates :: Coercion a -> Maybe (Type a, Type a)
 relates (SameRepr a b) = Just (a, b)
-relates (Composition c c') = do
-  (a, _) <- relates c
-  (_, c) <- relates c'
-  pure (a, c)
 relates (CoercionVar _) = Nothing
+relates (Application f _) = do
+  (ArrTy _ c, ArrTy _ d) <- relates f
+  pure (c, d)
+relates (Arrow x y) = do
+  (a, b) <- relates x
+  (c, d) <- relates y
+  pure (ArrTy a c, ArrTy b d)
+relates (ExactRecord rs) = do
+  let go (t, c) = do
+        (a, b) <- relates c
+        pure ((t, a), (t, b))
+  (a, b) <- unzip <$> traverse go rs
+  pure (ExactRowsTy a, ExactRowsTy b)
+
+relates (Record c rs) = do
+  (p, p') <- relates c
+  let go (t, c) = do
+        (a, b) <- relates c
+        pure ((t, a), (t, b))
+  (a, b) <- unzip <$> traverse go rs
+  pure (RowsTy p a, RowsTy p' b)
+
 relates (Symmetry x) = do
   (a, b) <- relates x
   pure (b, a)

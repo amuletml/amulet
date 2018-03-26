@@ -53,7 +53,10 @@ substituteInTys m = term where
   coercion (Domain c) = Domain (coercion c)
   coercion (Codomain c) = Codomain (coercion c)
   coercion (Symmetry c) = Symmetry (coercion c)
-  coercion (Composition c c') = Composition (coercion c) (coercion c')
+  coercion (Application f x) = Application (coercion f) (coercion x)
+  coercion (Arrow f x) = Arrow (coercion f) (coercion x)
+  coercion (ExactRecord rs) = ExactRecord (map (second coercion) rs)
+  coercion (Record c rs) = Record (coercion c) (map (second coercion) rs)
   coercion (CoercionVar x) = CoercionVar x
 
   atom (Ref v t) = Ref v (gotype t)
@@ -81,7 +84,10 @@ substituteInCo m = coercion where
   coercion (Domain c) = Domain (coercion c)
   coercion (Codomain c) = Codomain (coercion c)
   coercion (Symmetry c) = Symmetry (coercion c)
-  coercion (Composition c c') = Composition (coercion c) (coercion c')
+  coercion (Application f x) = Application (coercion f) (coercion x)
+  coercion (Arrow f x) = Arrow (coercion f) (coercion x)
+  coercion (ExactRecord rs) = ExactRecord (map (second coercion) rs)
+  coercion (Record c rs) = Record (coercion c) (map (second coercion) rs)
   coercion (CoercionVar x) = CoercionVar x
 
   gotype = substituteInType m
@@ -160,7 +166,10 @@ refresh = refreshTerm mempty where
   refreshCoercion s (Domain c) = Domain (refreshCoercion s c)
   refreshCoercion s (Codomain c) = Codomain (refreshCoercion s c)
   refreshCoercion s (Symmetry c) = Symmetry (refreshCoercion s c)
-  refreshCoercion s (Composition c c') = Composition (refreshCoercion s c) (refreshCoercion s c')
+  refreshCoercion s (Application f x) = Application (refreshCoercion s f) (refreshCoercion s x)
+  refreshCoercion s (ExactRecord rs) = ExactRecord (map (second (refreshCoercion s)) rs)
+  refreshCoercion s (Record c rs) = Record (refreshCoercion s c) (map (second (refreshCoercion s)) rs)
+  refreshCoercion s (Arrow f x) = Arrow (refreshCoercion s f) (refreshCoercion s x)
   refreshCoercion s x@(CoercionVar v) = maybe x CoercionVar (VarMap.lookup (toVar v) s)
 
 argVar :: IsVar a => Argument a -> Var _

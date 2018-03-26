@@ -36,8 +36,13 @@ transformCoercion
   -> Coercion p -> Coercion p
 transformCoercion fc ft = goC where
   transC (VarCo c) = VarCo c
-  transC (ReflCo l r) = ReflCo (goT l) (goT r)
-  transC (CompCo l r) = CompCo (goC l) (goC r)
+  transC (ReflCo l) = ReflCo (goT l)
+  transC (AssumedCo l r) = AssumedCo (goT l) (goT r)
+  transC (AppCo f x) = AppCo (goC f) (goC x)
+  transC (ArrCo f x) = AppCo (goC f) (goC x)
+  transC (ProdCo f x) = AppCo (goC f) (goC x)
+  transC (ExactRowsCo rs) = ExactRowsCo (map (second goC) rs)
+  transC (RowsCo c rs) = RowsCo (goC c) (map (second goC) rs)
   transC (SymCo c) = SymCo (goC c)
 
   goT = transformType ft . ft
