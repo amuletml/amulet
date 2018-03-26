@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, FlexibleContexts #-}
+{-# LANGUAGE TemplateHaskell, OverloadedStrings, FlexibleContexts #-}
 module Test.Types.Infer where
 
 import Control.Monad
@@ -34,4 +34,4 @@ prop_findsErrors = property $ do
     Right t -> footnote ("Found type " ++ show (pretty t) ++ " for " ++ show (pretty ex)) *> failure
 
 tests :: IO Bool
-tests = checkParallel $$ discover
+tests = checkParallel $$(discover)
