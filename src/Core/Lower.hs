@@ -10,6 +10,7 @@ module Core.Lower
 
 import Control.Monad.Infer
 import Control.Monad.Cont
+import Control.Arrow
 
 import Types.Infer (tyString, tyInt, tyBool, tyUnit, tyFloat)
 
@@ -165,7 +166,7 @@ lowerAt (Tuple (x:xs) _) (ExactRowsTy [(_, a), (_, b)]) = do
 lowerAt e _ = lowerAnyway e
 
 lowerAnyway :: MonadLower m => Expr Typed -> Lower m Term
-lowerAnyway (Record xs _) = case xs of
+lowerAnyway (S.Record xs _) = case xs of
   [] -> pure (Atom (Lit RecNil))
   xs -> do
     xs' <- traverse (lowerBothAtom . snd) xs
@@ -190,9 +191,14 @@ lowerAnyway (TypeApp f x _) = flip TyApp (lowerType x) <$> lowerExprAtom f
 lowerAnyway (S.Cast e c _) =
   let
   co (S.VarCo (TvName x)) = CoercionVar x
-  co (S.ReflCo t t') = SameRepr (lowerType t) (lowerType t')
-  co (S.CompCo c c') = Composition (co c) (co c')
+  co (S.ReflCo t) = SameRepr (lowerType t) (lowerType t)
+  co (S.AssumedCo t t') = SameRepr (lowerType t) (lowerType t')
   co (S.SymCo c) = Symmetry (co c)
+  co (S.AppCo a b) = Application (co a) (co b)
+  co (S.ArrCo a b) = Arrow (co a) (co b)
+  co (S.ProdCo a b) = ExactRecord [("1", co a), ("2", co b)]
+  co (S.RowsCo c rs) = C.Record (co c) (map (second co) rs)
+  co (S.ExactRowsCo rs) = C.ExactRecord (map (second co) rs)
   in do
     (e, _) <- lowerBothAtom e
     pure (C.Cast e (co c))

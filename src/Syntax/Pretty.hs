@@ -68,9 +68,14 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
   pretty (TypeApp f x _) = parenFun f <+> soperator (char '@') <> braces (pretty x)
   pretty (Cast e c _) = parens (pretty e <+> soperator (string "|>") <+> pprCo c) where
     pprCo (VarCo x) = stypeSkol (pretty x)
-    pprCo (ReflCo t t') = pretty t <+> soperator (char '~') <+> pretty t'
-    pprCo (CompCo c c') = pprCo c <+> soperator (char ';') <+> pprCo c'
+    pprCo (ReflCo t) = enclose (char '<') (char '>') (pretty t)
+    pprCo (AssumedCo a b) = enclose (char '<') (char '>') (pretty a <> comma <+> pretty b)
     pprCo (SymCo x) = keyword "sym" <+> pprCo x
+    pprCo (AppCo f x) = pprCo f <+> pprCo x
+    pprCo (ArrCo f x) = pprCo f <+> arrow <+> pprCo x
+    pprCo (ProdCo f x) = pprCo f <+> prod <+> pprCo x
+    pprCo (ExactRowsCo rs) = record (map (\(n, v) -> text n <+> colon <+> pprCo v) rs)
+    pprCo (RowsCo c rs) = enclose (lbrace <> space) (space <> rbrace) (pprCo c <+> pipe <+> hsep (punctuate comma (map (\(n, v) -> text n <+> colon <+> pprCo v) rs)))
 
 prettyMatches :: (Pretty (Var p)) => [(Pattern p, Expr p)] -> [Doc]
 prettyMatches = map (\(a, b) -> pipe <+> nest 4 (pretty a <+> arrow </> pretty b))
