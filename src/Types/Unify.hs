@@ -75,7 +75,7 @@ unify (TySkol t@(Skolem sv _ _ _)) b = do
         if canWe
            then bind sv b
            else throwError $ SkolBinding t b
-unify b (TySkol t) = unify (TySkol t) b
+unify b (TySkol t) = SymCo <$> unify (TySkol t) b
 
 unify (TyVar a) b = bind a b
 unify a (TyVar b) = SymCo <$> bind b a
@@ -84,7 +84,9 @@ unify (TyWithConstraints cs a) t = do
   traverse_ (uncurry unify) cs
   unify a t
 
-unify t x@TyWithConstraints{} = SymCo <$> unify x t
+unify t (TyWithConstraints cs ty) = do
+  traverse_ (uncurry unify) cs
+  unify t ty
 
 unify (TyArr a b) (TyArr a' b') = ArrCo <$> unify a a' <*> unify b b'
 unify (TyApp a b) (TyApp a' b') = AppCo <$> unify a a' <*> unify b b'
