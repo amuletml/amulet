@@ -285,6 +285,7 @@ inferLetTy closeOver vs =
         (x, co, vt) <- case solve cur cs of
           Right (x, co) -> pure (x, co, normType (closeOver (apply x ty)))
           Left e -> throwError (ArisingFrom e (snd blame))
+        -- trace (ppShow x) pure ()
         skolCheck (TvName (fst blame)) (snd blame) vt
         pure (closeOver vt, solveEx x co)
 
@@ -371,10 +372,9 @@ solveEx ss cs = transformExprTyped go' go (normType . apply ss) where
   go' x = x
 
   go :: Coercion Typed -> Coercion Typed
-  go x@(VarCo v) = Map.findWithDefault x v cs
-  go (ReflCo t t') = ReflCo (apply ss t) (apply ss t')
-  go (CompCo c c') = CompCo (go c) (go c')
-  go (SymCo x) = SymCo (go x)
+  go t@(VarCo x) = Map.findWithDefault t x cs
+  go x = x
+
 
 consFst :: Functor m => a -> m ([a], b) -> m ([a], b)
 consFst = fmap . first . (:)

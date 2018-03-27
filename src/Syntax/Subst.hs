@@ -54,14 +54,24 @@ instance Ord (Var p) => Substitutable p (Type p) where
 
 instance Ord (Var p) => Substitutable p (Coercion p) where
   ftv VarCo{} = mempty
-  ftv (ReflCo t t') = ftv t <> ftv t'
-  ftv (CompCo c c') = ftv c <> ftv c'
+  ftv (ReflCo t) = ftv t
+  ftv (AssumedCo t t') = ftv t <> ftv t'
   ftv (SymCo c) = ftv c
+  ftv (AppCo f x) = ftv f <> ftv x
+  ftv (ArrCo f x) = ftv f <> ftv x
+  ftv (ProdCo f x) = ftv f <> ftv x
+  ftv (ExactRowsCo rs) = foldMap (ftv . snd) rs
+  ftv (RowsCo c rs) = ftv c <> foldMap (ftv . snd) rs
 
   apply _ x@VarCo{} = x
-  apply s (ReflCo t t') = ReflCo (apply s t) (apply s t')
-  apply s (CompCo t t') = CompCo (apply s t) (apply s t')
+  apply s (ReflCo t) = ReflCo (apply s t)
+  apply s (AssumedCo t t') = AssumedCo (apply s t) (apply s t')
   apply s (SymCo x) = SymCo (apply s x)
+  apply s (AppCo f x) = AppCo (apply s f) (apply s x)
+  apply s (ArrCo f x) = ArrCo (apply s f) (apply s x)
+  apply s (ProdCo f x) = ProdCo (apply s f) (apply s x)
+  apply s (ExactRowsCo rs) = ExactRowsCo (map (second (apply s)) rs)
+  apply s (RowsCo c rs) = RowsCo (apply s c) (map (second (apply s)) rs)
 
 instance (Ord (Var p), Substitutable p a) => Substitutable p [a] where
   ftv = foldMap ftv
