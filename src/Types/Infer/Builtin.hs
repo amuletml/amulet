@@ -145,3 +145,8 @@ instance Pretty (Var p) => Pretty (Arm p) where
 
 instance (Pretty (Var p), Reasonable Pattern p, Reasonable Expr p) => Reasonable Arm p where
   blame _ = string "the pattern-matching clause"
+
+gadtConResult :: Type p -> Type p
+gadtConResult (TyForall _ t) = gadtConResult t
+gadtConResult (TyArr _ t) = t
+gadtConResult t = t

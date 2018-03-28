@@ -9,13 +9,12 @@ import Data.Either
 import Control.Monad.Infer
 
 import Types.Infer.Builtin
+import Types.Infer.Errors
 import Types.Unify
 import Types.Kinds
 
 import Syntax.Subst
 import Syntax
-
-import Pretty
 
 inferCon :: MonadInfer Typed m
          => Type Typed
@@ -32,14 +31,11 @@ inferCon ret' (UnitCon nm ann) =
    in pure ((TvName nm, ret), UnitCon (TvName nm) (ann, ret))
 
 inferCon ret c@(GeneralisedCon nm cty ann) = do
-  let result (TyForall _ t) = result t
-      result (TyArr _ t) = t
-      result t = t
 
   (cty, _) <- resolveKind cty
   var <- TvName <$> fresh
-  case solve 1 (Seq.singleton (ConUnify (BecauseOf c) var (result cty) ret)) of
-    Left e -> throwError (gadtConShape (cty, ret) (result cty) e)
+  case solve 1 (Seq.singleton (ConUnify (BecauseOf c) var (gadtConResult cty) ret)) of
+    Left e -> throwError (gadtConShape (cty, ret) (gadtConResult cty) e)
     Right _ -> pure ()
 
   let generalise (TyForall v t) = TyForall v <$> generalise t
@@ -65,24 +61,6 @@ closeOverGadt cons cty =
          then pushCons cons cty
          else pushCons cons (TyForall (Set.toList fv) cty)
 
-gadtConShape :: (Type Typed, Type Typed) -> Type Typed -> TypeError -> TypeError
-gadtConShape (t, _) (TyArr c d) = fix . flip Note (string "Generalised constructors can not be curried") . getErr where
-  fix = case t of
-    TyArr x _ -> flip Suggestion (string "Perhaps use a tuple:" <+> verbatim (TyArr (TyTuple x c) d))
-    TyForall vs (TyArr x _) -> flip Suggestion (string "Perhaps use a tuple:" <+> verbatim (TyForall vs (TyArr (TyTuple x c) d)))
-    _ -> id
-gadtConShape (_, t) ty = flip Note msg' . flip Note msg . getErr where
-  msg = string "The type"
-    <+> verbatim ty
-    <+> string "is not an instance of the type being declared"
-  msg' = case t of
-    TyApp{} -> string "It must end in an application like" <+> verbatim t
-    TyCon{} -> string "It must end in a reference to" <+> pretty t
-    _ -> error "malformed"
-
-getErr :: TypeError -> TypeError
-getErr (ArisingFrom e _) = getErr e
-getErr x = x
 
 -- A bit of a hack for better aesthetics
 simplify :: Type Typed -> Type Typed -> Either (Map.Map (Var Typed) (Type Typed)) (Type Typed, Type Typed)
