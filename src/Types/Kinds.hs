@@ -19,6 +19,8 @@ import Data.Semigroup
 import Data.Foldable
 
 import qualified Types.Unify as U
+import Types.Infer.Builtin (gadtConResult)
+import Types.Infer.Errors
 import Types.Wellformed
 import Syntax.Subst (ftv)
 import Syntax.Raise
@@ -165,7 +167,7 @@ inferGadtConKind c t ret' = do
         Right (x, _) -> do
           tell x
           pure ret
-        Left e -> throwError e
+        Left e -> throwError (gadtConShape (ty, ret) (gadtConResult ty) e)
 
      in do
        (ty, cs) <- runWriterT (generalise t')
@@ -179,3 +181,4 @@ inferGadtConKind c t ret' = do
            unify k k'
          giveTp ty
          pure ()
+
