@@ -50,8 +50,12 @@ pushVar v s = escapeVar (toVar v) where
         let Just (t, ts) = T.uncons name
             esc = if isAlpha t && T.all (\x -> x == '_' || isAlphaNum x) ts
                   then name
-                  else T.filter isAlphaNum name
+                  else T.concatMap escapeChar name
         in pushFirst Nothing esc
+
+  escapeChar c = if isAlpha c
+                 then T.singleton c
+                      else fromMaybe T.empty (Map.lookup c chars)
 
   pushFirst :: Maybe Int -> Text -> (Text, VarScope)
   pushFirst prefix esc =
@@ -383,6 +387,31 @@ ops = Map.fromList
   , ("<>", "~=")
   , ("||", "or")
   , ("&&", "and") ]
+
+chars :: Map.Map Char Text
+chars = Map.fromList
+  [ (':', "_colon")
+  , ('!', "_bang")
+  , ('#', "_pound")
+  , ('$', "_dollar")
+  , ('%', "_percent")
+  , ('&', "_amp")
+  , ('*', "_star")
+  , ('+', "_plus")
+  , ('.', "_dot")
+  , ('/', "_divide")
+  , ('<', "_less")
+  , ('=', "_equals")
+  , ('>', "_greater")
+  , ('?', "_ask")
+  , ('@', "_at")
+  , ('\\', "_slash")
+  , ('^', "_hat")
+  , ('|', "_bar")
+  , ('-', "_minus")
+  , ('~', "_tilde")
+  , ('[', "_lbrack")
+  , (']', "_rbrack ") ]
 
 isBinOp :: Occurs a => a -> Bool
 isBinOp x | TgInternal v <- toVar x = Map.member v ops
