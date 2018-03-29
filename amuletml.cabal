@@ -76,6 +76,7 @@ library amulet
                      , Syntax
                      , Syntax.Let
                      , Syntax.Raise
+                     , Syntax.Types
                      , Syntax.Subst
                      , Syntax.Pretty
                      , Syntax.Desugar
@@ -90,6 +91,7 @@ library amulet
                      , Types.Kinds
                      , Types.Unify
                      , Types.Wellformed
+                     , Types.Infer.Errors
                      , Types.Infer.Builtin
                      , Types.Infer.Pattern
                      , Types.Infer.Constructor

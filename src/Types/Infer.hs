@@ -21,12 +21,13 @@ import Data.Span
 
 import Control.Monad.State
 import Control.Monad.Infer
-import Control.Arrow (first, (***))
+import Control.Arrow (first, second, (***))
 import Control.Lens
 
 import Syntax.Resolve.Toplevel
 import Syntax.Transform
 import Syntax.Subst
+import Syntax.Types
 import Syntax.Let
 import Syntax
 
@@ -79,7 +80,7 @@ check (Begin xs a) t = do
 
 check (Let ns b an) t = do
   (ns, ts) <- inferLetTy id ns
-  extendMany ts $ do
+  local (values %~ focus ts) $ do
     b <- check b t
     pure (Let ns b (an, t))
 
@@ -88,7 +89,9 @@ check ex@(Fun pat e an) ty = do
   (p, vs, cs) <- checkPattern pat dom
   let tvs = Set.map unTvName (boundTvs p vs)
   implies (Arm pat e) dom cs $ do
-    e <- local (typeVars %~ Set.union tvs) . extendMany vs $ check e cod
+    e <- local (typeVars %~ Set.union tvs) $
+      local (values %~ focus vs) $
+        check e cod
     pure (Fun p e (an, ty))
 
 check (If c t e an) ty = If <$> check c tyBool <*> check t ty <*> check e ty <*> pure (an, ty)
@@ -100,7 +103,7 @@ check (Match t ps a) ty = do
     let tvs = Set.map unTvName (boundTvs p' ms)
     (p',) <$> implies (Arm p e) tt cs
       (local (typeVars %~ Set.union tvs)
-        (extendMany ms (check e ty)))
+        (local (values %~ focus ms) (check e ty)))
   pure (Match t ps (a, ty))
 
 check (Access rc key a) ty = do
@@ -135,7 +138,8 @@ infer (Fun p e an) = let blame = Arm p e in do
   (p, dom, ms, cs) <- inferPattern p
   let tvs = boundTvs p ms
   _ <- leakEqualities blame cs
-  (e, cod) <- local (typeVars %~ Set.union (Set.map unTvName tvs)) . extendMany ms $ infer e
+  (e, cod) <- local (typeVars %~ Set.union (Set.map unTvName tvs)) $
+    local (values %~ focus ms) $ infer e
   pure (Fun p e (an, TyArr dom cod), TyArr dom cod)
 
 infer (Literal l an) = pure (Literal l (an, ty), ty) where
@@ -169,7 +173,9 @@ infer ex@(Match t ps a) = do
     (p', ms, cs) <- checkPattern p tt
     let tvs = Set.map unTvName (boundTvs p' ms)
     leakEqualities ex cs
-    e' <- local (typeVars %~ Set.union tvs) $ extendMany ms (check e ty)
+    e' <- local (typeVars %~ Set.union tvs) $
+      local (values %~ focus ms) $
+        check e ty
     pure (p', e')
   pure (Match t' ps' (a, ty), ty)
 
@@ -212,13 +218,13 @@ inferProg :: MonadInfer Typed m
 inferProg (LetStmt ns:prg) = do
   (ns', ts) <- inferLetTy closeOver ns
                    `catchError` (throwError . flip ArisingFrom (BecauseOf (LetStmt ns)))
-  extendMany ts $
+  local (values %~ focus ts) $
     consFst (LetStmt ns') $
       inferProg prg
 inferProg (ForeignVal v d t ann:prg) = do
   (t', _) <- resolveKind t
   let t'' = normType (closeOver t')
-  extend (TvName v, t'') $
+  local (values %~ focus (one v t'')) $
     consFst (ForeignVal (TvName v) d t'' (ann, t'')) $
       inferProg prg
 inferProg (TypeDecl n tvs cs:prg) = do
@@ -227,7 +233,7 @@ inferProg (TypeDecl n tvs cs:prg) = do
    in extendKind (TvName n, kind) $ do
      (ts, cs') <- unzip <$> for cs (\con ->
        inferCon retTy con `catchError` \x -> throwError (ArisingFrom x (BecauseOf con)))
-     extendMany ts $
+     local (values %~ focus (teleFromList ts)) $
        consFst (TypeDecl (TvName n) (map TvName tvs) cs') $
          inferProg prg
 inferProg (Open mod pre:prg) =
@@ -240,7 +246,7 @@ inferProg (Module name body:prg) = do
       vars' = map (\x -> (TvName x, env ^. values . at x . non (error ("value: " ++ show x)))) vars
       tys' = map (\x -> (TvName x, env ^. types . at x . non (error ("type: " ++ show x)))) tys
 
-  extendMany vars' . extendManyK tys' $
+  local (values %~ focus (teleFromList vars')) . extendManyK tys' $
     consFst (Module (TvName name) body') $
     inferProg prg
 
@@ -267,7 +273,7 @@ inferLetTy :: forall m. MonadInfer Typed m
            => (Type Typed -> Type Typed)
            -> [(Var Resolved, Expr Resolved, Ann Resolved)]
            -> m ( [(Var Typed, Expr Typed, Ann Typed)]
-                , [(Var Typed, Type Typed)]
+                , Telescope Typed
                 )
 inferLetTy closeOver vs =
   let sccs = depOrder vs
@@ -298,7 +304,8 @@ inferLetTy closeOver vs =
              [] -> ty
              vs -> TyForall vs ty
 
-      approximate :: (Var Resolved, Expr Resolved, Span) -> m (Origin, (Var Typed, Type Typed))
+      approximate :: (Var Resolved, Expr Resolved, Span)
+                  -> m (Origin, (Var Typed, Type Typed))
       approximate (v, e, _) = do
         (ty, st) <- runStateT (approxType e) Supplied
         ty' <- generalise ty
@@ -313,11 +320,11 @@ inferLetTy closeOver vs =
 
       tcOne :: SCC (Var Resolved, Expr Resolved, Ann Resolved)
             -> m ( [(Var Typed, Expr Typed, Ann Typed)]
-                 , [(Var Typed, Type Typed)] )
+                 , Telescope Typed )
 
       tcOne (AcyclicSCC decl@(var, exp, ann)) = do
         (origin, tv) <- approximate decl
-        ((exp', ty), cs) <- listen . extend tv $
+        ((exp', ty), cs) <- listen . local (values %~ focus (uncurry one tv)) $
           case origin of
             Supplied -> do
               exp' <- check exp (snd tv)
@@ -327,12 +334,12 @@ inferLetTy closeOver vs =
               _ <- unify exp ty (snd tv)
               pure (exp', ty)
         (tp, k) <- figureOut (var, BecauseOf exp) ty cs
-        pure ( [(TvName var, k exp', (ann, tp))], [(TvName var, tp)] )
+        pure ( [(TvName var, k exp', (ann, tp))], one var tp )
 
       tcOne (CyclicSCC vars) = do
         (origins, tvs) <- unzip <$> traverse approximate vars
 
-        (vs, cs) <- listen . extendMany tvs $
+        (vs, cs) <- listen . local (values %~ focus (teleFromList tvs)) $
           ifor (zip tvs vars) $ \i ((_, tyvar), (var, exp, ann)) ->
             case origins !! i of
               Supplied -> do
@@ -348,21 +355,23 @@ inferLetTy closeOver vs =
           Right x -> pure x
           Left e -> throwError e
         let solveOne :: (Var Typed, Expr Typed, Span, Type Typed)
-                     -> m ((Var Typed, Expr Typed, Ann Typed), (Var Typed, Type Typed))
+                     -> m ((Var Typed, Expr Typed, Ann Typed), Telescope Typed)
             solveOne (var, exp, ann, ty) =
               let figure = apply solution
                   ty' = closeOver (figure ty)
                in do
                   skolCheck var (BecauseOf exp) ty'
                   pure ( (var, solveEx solution cs exp, (ann, ty'))
-                       , (var, ty') )
-         in fmap unzip . traverse solveOne $ vs
+                       , one var ty )
+            squish = fmap (second mconcat . unzip)
+         in squish . traverse solveOne $ vs
 
-      tc :: [SCC (Var Resolved, Expr Resolved, Ann Resolved)] -> m ( [(Var Typed, Expr Typed, Ann Typed)] , [(Var Typed, Type Typed)] )
+      tc :: [SCC (Var Resolved, Expr Resolved, Ann Resolved)]
+         -> m ( [(Var Typed, Expr Typed, Ann Typed)] , Telescope Typed )
       tc (s:cs) = do
         (vs', binds) <- tcOne s
-        fmap ((vs' ++) *** (binds ++)) . extendMany binds $ tc cs
-      tc [] = pure ([], [])
+        fmap ((vs' ++) *** (binds <>)) . local (values %~ focus binds) $ tc cs
+      tc [] = pure ([], mempty)
    in tc sccs
 
 solveEx :: Subst Typed -> Map.Map (Var Typed) (Coercion Typed) -> Expr Typed -> Expr Typed

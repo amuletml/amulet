@@ -17,6 +17,7 @@ import Types.Wellformed
 import Types.Kinds
 import Types.Unify (freshSkol)
 
+import Syntax.Types
 import Syntax.Subst
 import Syntax
 
@@ -24,15 +25,16 @@ inferPattern :: MonadInfer Typed m
              => Pattern Resolved
              -> m ( Pattern Typed -- the pattern
                   , Type Typed -- type of what the pattern matches
-                  , [(Var Typed, Type Typed)] -- captures
+                  , Telescope Typed -- captures
                   , [(Type Typed, Type Typed)] -- constraints
                   )
 inferPattern pat@(PType p t ann) = do
   (p', pt, vs, cs) <- inferPattern p
-  (t', _) <- resolveKind t `catchError` \x -> throwError (ArisingFrom x (BecauseOf pat))
+  (t', _) <- resolveKind t `catchError` \x ->
+              throwError (ArisingFrom x (BecauseOf pat))
   _ <- subsumes pat t' pt
   case p' of
-    Capture v _ -> pure (PType p' t' (ann, t'), t', [(v, t')], cs)
+    Capture v _ -> pure (PType p' t' (ann, t'), t', one v t', cs)
     _ -> pure (PType p' t' (ann, t'), t', vs, cs)
 inferPattern p = do
   x <- freshTV
@@ -43,11 +45,11 @@ checkPattern :: MonadInfer Typed m
              => Pattern Resolved
              -> Type Typed
              -> m ( Pattern Typed
-                  , [(Var Typed, Type Typed)]
+                  , Telescope Typed
                   , [(Type Typed, Type Typed)]
                   )
-checkPattern (Wildcard ann) ty = pure (Wildcard (ann, ty), [], [])
-checkPattern (Capture v ann) ty = pure (Capture (TvName v) (ann, ty), [(TvName v, ty)], [])
+checkPattern (Wildcard ann) ty = pure (Wildcard (ann, ty), mempty, [])
+checkPattern (Capture v ann) ty = pure (Capture (TvName v) (ann, ty), one v ty, [])
 checkPattern ex@(Destructure con ps ann) target =
   case ps of
     Nothing -> do
@@ -57,7 +59,7 @@ checkPattern ex@(Destructure con ps ann) target =
               TyWithConstraints cs ty -> (cs, ty)
               _ -> ([], pty)
       _ <- unify ex ty target
-      pure (Destructure (TvName con) Nothing (ann, ty), [], cs)
+      pure (Destructure (TvName con) Nothing (ann, ty), mempty, cs)
     Just p ->
       let go cs t = do
             (c, d, _) <- decompose ex _TyArr t
@@ -75,7 +77,7 @@ checkPattern pt@(PRecord rows ann) ty = do
     (p', t, caps, cs) <- inferPattern pat
     pure ((var, p'), (var, t), caps, cs))
   _ <- unify pt ty (TyRows rho rowts)
-  pure (PRecord rowps (ann, TyRows rho rowts), concat caps, concat cons)
+  pure (PRecord rowps (ann, TyRows rho rowts), mconcat caps, concat cons)
 checkPattern pt@(PTuple elems ann) ty =
   let go [x] t = (:[]) <$> checkPattern x t
       go (x:xs) t = do
@@ -85,10 +87,10 @@ checkPattern pt@(PTuple elems ann) ty =
     in case elems of
       [] -> do
         _ <- unify pt ty tyUnit
-        pure (PTuple [] (ann, tyUnit), [], [])
+        pure (PTuple [] (ann, tyUnit), mempty, [])
       [x] -> checkPattern x ty
       xs -> do
-        (ps, concat -> binds, concat -> cons) <- unzip3 <$> go xs ty
+        (ps, mconcat -> binds, concat -> cons) <- unzip3 <$> go xs ty
         pure (PTuple ps (ann, ty), binds, cons)
 checkPattern pt@(PType p t ann) ty = do
   (p', it, binds, cs) <- inferPattern p
@@ -97,8 +99,9 @@ checkPattern pt@(PType p t ann) ty = do
   _ <- unify pt ty t'
   pure (PType p' t' (ann, t'), binds, cs)
 
-boundTvs :: forall p. Ord (Var p) => Pattern p -> [(Var p, Type p)] -> Set.Set (Var p)
-boundTvs p vs = pat p <> foldMap (go . snd) vs where
+boundTvs :: forall p. Ord (Var p)
+         => Pattern p -> Telescope p -> Set.Set (Var p)
+boundTvs p vs = pat p <> foldTele go vs where
   go :: Type p -> Set.Set (Var p)
   go x = ftv x `Set.union` Set.map (^. skolIdent) (skols x)
 
