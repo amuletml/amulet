@@ -26,6 +26,8 @@ import Syntax.Subst (ftv)
 import Syntax.Raise
 import Syntax
 
+import Debug.Trace
+
 type Subst = Map.Map (Var Typed) (Kind Typed)
 
 type KindT m = StateT Subst m
@@ -44,7 +46,7 @@ resolveTyDeclKind tp vs cs = fmap closeOverKind . resolve $ do
     extendManyK (zip (map TvName vs) ks) $ do
       for_ cs $ \case
         UnitCon{} -> pure ()
-        ArgCon _ t _ -> giveTp (raiseT TvName t)
+        ArgCon _ t _ -> traceShow t giveTp (raiseT TvName t)
         c@(GeneralisedCon _ t _) -> inferGadtConKind c t (foldl TyApp (TyCon tp) (map TyVar vs))
       pure kind
 
@@ -128,7 +130,9 @@ bind :: (MonadState Subst m, MonadError TypeError m) => Var Typed -> Kind Typed 
 bind v t = do
   x <- get
   case Map.lookup v x of
-    Just t' -> unify t' t
+    Just t' -> if t' == KiVar v
+                  then put (Map.singleton v t <> fmap (apply (Map.singleton v t)) x)
+                  else unify t t'
     Nothing -> put (Map.singleton v t <> fmap (apply (Map.singleton v t)) x)
 
 apply :: Map.Map (Var Typed) (Kind Typed) -> Kind Typed -> Kind Typed
