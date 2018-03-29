@@ -291,7 +291,6 @@ inferLetTy closeOver vs =
         (x, co, vt) <- case solve cur cs of
           Right (x, co) -> pure (x, co, normType (closeOver (apply x ty)))
           Left e -> throwError (ArisingFrom e (snd blame))
-        -- trace (ppShow x) pure ()
         skolCheck (TvName (fst blame)) (snd blame) vt
         pure (closeOver vt, solveEx x co)
 
@@ -356,12 +355,12 @@ inferLetTy closeOver vs =
           Left e -> throwError e
         let solveOne :: (Var Typed, Expr Typed, Span, Type Typed)
                      -> m ((Var Typed, Expr Typed, Ann Typed), Telescope Typed)
-            solveOne (var, exp, ann, ty) =
+            solveOne (var, exp, ann, given) =
               let figure = apply solution
-                  ty' = closeOver (figure ty)
+                  ty = closeOver (figure given)
                in do
-                  skolCheck var (BecauseOf exp) ty'
-                  pure ( (var, solveEx solution cs exp, (ann, ty'))
+                  skolCheck var (BecauseOf exp) ty
+                  pure ( (var, solveEx solution cs exp, (ann, ty))
                        , one var ty )
             squish = fmap (second mconcat . unzip)
          in squish . traverse solveOne $ vs
