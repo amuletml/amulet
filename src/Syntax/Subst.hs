@@ -32,22 +32,20 @@ instance Ord (Var p) => Substitutable p (Type p) where
   ftv TyCon{} = mempty
   ftv TySkol{} = mempty
   ftv (TyVar v) = Set.singleton v
-  ftv (TyForall vs t) = ftv t Set.\\ Set.fromList vs
   ftv (TyApp a b) = ftv a <> ftv b
   ftv (TyTuple a b) = ftv a <> ftv b
-  ftv (TyArr a b) = ftv a <> ftv b
   ftv (TyRows rho rows) = ftv rho <> foldMap (ftv . snd) rows
   ftv (TyExactRows rows) = foldMap (ftv . snd) rows
   ftv (TyWithConstraints eq b) = foldMap (\(a, b) -> ftv a <> ftv b) eq <> ftv b
+  ftv (TyPi binder t) = ftv binder <> (ftv t Set.\\ bound binder)
 
   apply _ (TyCon a) = TyCon a
   apply _ (TySkol x) = TySkol x
   apply s t@(TyVar v) = Map.findWithDefault t v s
-  apply s (TyArr a b) = TyArr (apply s a) (apply s b)
   apply s (TyApp a b) = TyApp (apply s a) (apply s b)
   apply s (TyTuple a b) = TyTuple (apply s a) (apply s b)
-  apply s (TyForall v t) = TyForall v (apply s' t) where
-    s' = foldr Map.delete s v
+  apply s (TyPi binder t) = TyPi (apply s binder) (apply s' t) where
+    s' = foldr Map.delete s (Set.toList (bound binder))
   apply s (TyRows rho rows) = TyRows (apply s rho) (map (second (apply s)) rows)
   apply s (TyExactRows rows) = TyExactRows  (map (second (apply s)) rows)
   apply s (TyWithConstraints eq b) = TyWithConstraints (map (\(a, b) -> (apply s a, apply s b)) eq) (apply s b)
@@ -80,6 +78,17 @@ instance (Ord (Var p), Substitutable p a) => Substitutable p [a] where
 instance (Ord (Var p), Substitutable p a) => Substitutable p (Seq.Seq a) where
   ftv = foldMap ftv
   apply s = fmap (apply s)
+
+instance Ord (Var p) => Substitutable p (TyBinder p) where
+  ftv (Anon t) = ftv t
+  ftv Implicit{} = Set.empty
+
+  apply s (Anon t) = Anon (apply s t)
+  apply _ (Implicit v) = Implicit v
+
+bound :: Ord (Var p) => TyBinder p -> Set.Set (Var p)
+bound Anon{} = Set.empty
+bound (Implicit v) = Set.singleton v
 
 compose :: Ord (Var p) => Subst p -> Subst p -> Subst p
 s1 `compose` s2 = fmap (apply s1) s2 <> fmap (apply s2) s1

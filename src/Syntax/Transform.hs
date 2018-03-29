@@ -12,8 +12,7 @@ transformType
 transformType ft = goT where
   transT (TyCon v) = TyCon v
   transT (TyVar v) = TyVar v
-  transT (TyForall vs ty) = TyForall vs (goT ty)
-  transT (TyArr x r) = TyArr (goT x) (goT r)
+  transT (TyPi x r) = TyPi (transB x) (goT r)
   transT (TyApp f x) = TyApp (goT f) (goT x)
   transT (TyRows f fs) = TyRows (goT f) (map (second goT) fs)
   transT (TyExactRows fs) = TyExactRows (map (second goT) fs)
@@ -26,6 +25,9 @@ transformType ft = goT where
   transM (ByAscription ty) = ByAscription (goT ty)
   transM (BySubsumption l r) = BySubsumption (goT l) (goT r)
   transM (ByExistential v ty) = ByExistential v (goT ty)
+
+  transB (Anon t) = Anon (transT t)
+  transB (Implicit x) = Implicit x
 
   goT = transT . ft
 

@@ -2,7 +2,6 @@
 {-# LANGUAGE DeriveDataTypeable, FlexibleInstances, MultiParamTypeClasses #-}
 module Types.Infer.Builtin where
 
-import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
 import qualified Data.Text as T
@@ -44,7 +43,7 @@ builtinsEnv = envOf (scopeFromList ops) (scopeFromList tps) where
   intCmp = tyInt `TyArr` (tyInt `TyArr` tyBool)
   floatCmp = tyInt `TyArr` (tyInt `TyArr` tyBool)
 
-  cmp = TyForall [name] $ TyVar name `TyArr` (TyVar name `TyArr` tyBool)
+  cmp = TyForall name $ TyVar name `TyArr` (TyVar name `TyArr` tyBool)
     where name = TvName (TgInternal "a")-- TODO: This should use TvName/TvFresh instead
   ops = [ op "+" intOp, op "-" intOp, op "*" intOp, op "/" intOp, op "**" intOp
         , op "+." floatOp, op "-." floatOp, op "*." floatOp, op "/." floatOp, op "**." floatOp
@@ -103,13 +102,12 @@ decompose :: ( Reasonable f p
           -> Type Typed
           -> m (Type Typed, Type Typed, Expr Typed -> Expr Typed)
 decompose r p ty@TyForall{} = do
-  (s, _, t) <- instantiate ty
+  (k', _, t) <- instantiate ty
   (a, b, k) <- decompose r p t
-  let new (TyForall (x:xs) t) = new (TyForall xs t) . 
-        \e -> TypeApp e (s Map.! x) (annotation r, normType t)
-      new (TyForall [] _) = id
-      new _ = error "impossible instantiation in definitely-polymorphic decomposition"
-  pure (a, b, new ty . k)
+  let cont = case k' of
+        Just k -> k
+        Nothing -> id
+  pure (a, b, cont . k)
 decompose r p t =
   case t ^? p of
     Just (a, b) -> pure (a, b, id)
@@ -123,7 +121,7 @@ closeOver a = normType $ forall (fv a) a where
   fv = Set.toList . ftv
   forall :: [Var p] -> Type p -> Type p
   forall [] a = a
-  forall vs a = TyForall vs a
+  forall vs a = foldr TyForall a vs
 
 -- A representation of an individual 'match' arm, for blaming type
 -- errors on:

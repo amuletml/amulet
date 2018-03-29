@@ -77,13 +77,13 @@ inferKind tp = do
       case ki of
         Just ki' -> instantiateKind ki'
         Nothing -> throwError (NotInScope (unTvName x))
-    TyForall vs t -> do
-      ks <- replicateM (length vs) freshKV
-      extendManyK (zip vs ks) $ do
+    TyPi (Implicit v) t -> do
+      k <- freshKV
+      extendManyK [(v, k)] $ do
         k <- inferKind t
         unify k KiStar
         pure k
-    TyArr a b -> do
+    TyPi (Anon a) b -> do
       giveTp a
       giveTp b
       pure KiStar

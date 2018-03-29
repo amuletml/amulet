@@ -1,5 +1,5 @@
 {-# LANGUAGE LambdaCase, ScopedTypeVariables #-}
-module Syntax.Raise (raiseE, raiseP, raiseT) where
+module Syntax.Raise (raiseE, raiseP, raiseT, raiseCo) where
 
 import Control.Arrow
 import Syntax
@@ -59,13 +59,14 @@ raiseT v (TySkol (Skolem n u t m)) = TySkol (Skolem (v n) (v u) (raiseT v t) (mo
   motive (ByAscription t) = ByAscription (raiseT v t)
   motive (ByExistential a t) = ByExistential (v a) (raiseT v t)
 raiseT v (TyVar n) = TyVar (v n)
-raiseT v (TyForall n t) = TyForall (map v n) (raiseT v t)
-raiseT v (TyArr x y) = TyArr (raiseT v x) (raiseT v y)
 raiseT v (TyApp x y) = TyApp (raiseT v x) (raiseT v y)
 raiseT v (TyTuple x y) = TyTuple (raiseT v x) (raiseT v y)
 raiseT v (TyRows rho rows) = TyRows (raiseT v rho) (map (second (raiseT v)) rows)
 raiseT v (TyExactRows rows) = TyExactRows (map (second (raiseT v)) rows)
 raiseT v (TyWithConstraints eq a) = TyWithConstraints (map (\(a, b) -> (raiseT v a, raiseT v b)) eq) (raiseT v a)
+raiseT v (TyPi binder t) = TyPi (go binder) (raiseT v t) where
+  go (Anon t) = Anon (raiseT v t)
+  go (Implicit var) = Implicit (v var)
 
 raiseCo :: (Var p -> Var p') -> Coercion p -> Coercion p'
 raiseCo v (VarCo a) = VarCo (v a)

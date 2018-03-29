@@ -44,23 +44,6 @@ import Pretty
 inferProgram :: MonadGen Int m => Env -> [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))
 inferProgram env ct = fmap fst <$> runInfer env (inferProg ct)
 
-mkTyApps :: Applicative f
-         => Expr Resolved
-         -> Map.Map (Var Typed) (Type Typed)
-         -> Type Typed
-         -> Type Typed
-         -> f (Expr Typed, Type Typed)
-mkTyApps (VarRef k a) mp c@(TyForall vs _) _ = pure (insts (reverse vs)) where
-  insts []     = (VarRef (TvName k) (a, c), c)
-  insts (x:xs) = let (e, TyForall (_:vs) ty) = insts xs
-                     s = mp Map.! x
-                     ty' = forall vs (apply (Map.singleton x s) ty)
-                 in (TypeApp e s (a, ty'), ty')
-
-  forall [] ty = ty
-  forall vs ty = TyForall vs ty
-mkTyApps _ _ _ _ = undefined
-
 check :: MonadInfer Typed m => Expr Resolved -> Type Typed -> m (Expr Typed)
 check e ty@TyForall{} = do -- This is rule Decl∀L from [Complete and Easy]
   e <- check e =<< skolemise (ByAscription ty) ty -- gotta be polymorphic - don't allow instantiation
@@ -128,11 +111,11 @@ check e ty = do
 -- [Complete and Easy]: See https://www.cl.cam.ac.uk/~nk480/bidir.pdf
 
 infer :: MonadInfer Typed m => Expr Resolved -> m (Expr Typed, Type Typed)
-infer expr@(VarRef k a) = do
-  (inst, old, new) <- lookupTy' k
-  if Map.null inst
-     then pure (VarRef (TvName k) (a, new), new)
-     else mkTyApps expr inst old new
+infer (VarRef k a) = do
+  (cont, _, new) <- lookupTy' k
+  case cont of
+    Nothing -> pure (VarRef (TvName k) (a, new), new)
+    Just cont -> pure (cont (VarRef (TvName k) (a, new)), new)
 
 infer (Fun p e an) = let blame = Arm p e in do
   (p, dom, ms, cs) <- inferPattern p
@@ -301,7 +284,7 @@ inferLetTy closeOver vs =
            env <- Set.map TvName <$> view typeVars
            pure $ case Set.toList (fv `Set.difference` env) of
              [] -> ty
-             vs -> TyForall vs ty
+             vs -> foldr TyForall ty vs
 
       approximate :: (Var Resolved, Expr Resolved, Span)
                   -> m (Origin, (Var Typed, Type Typed))

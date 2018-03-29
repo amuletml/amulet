@@ -3,6 +3,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies, DataKinds #-}
 {-# LANGUAGE DeriveDataTypeable, TemplateHaskell #-}
+{-# LANGUAGE PatternSynonyms #-}
 module Syntax where
 
 import qualified Data.Text as T
@@ -133,9 +134,8 @@ data Lit
 data Type p
   = TyCon (Var p)
   | TyVar (Var p)
-  | TyForall [Var p] (Type p)
-  | TyArr (Type p) (Type p)
   | TyApp (Type p) (Type p)
+  | TyPi (TyBinder p) (Type p) -- arrow, pi or forall
   | TyRows (Type p) [(Text, Type p)]  -- { α | foo : int, bar : string }
   | TyExactRows [(Text, Type p)] -- { foo : int, bar : string }
   | TyTuple (Type p) (Type p) -- (see note [1])
@@ -143,6 +143,15 @@ data Type p
   -- Used internally:
   | TySkol (Skolem p)
   | TyWithConstraints [(Type p, Type p)] (Type p)
+
+data TyBinder p
+  = Anon { _tyBinderType :: (Type p) } -- a function type
+  | Implicit  { _tyBinderVar :: Var p } -- a forall type
+
+deriving instance (Data p, Typeable p, Data (Var p)) => Data (TyBinder p)
+deriving instance Show (Var p) => Show (TyBinder p)
+deriving instance Ord (Var p) => Ord (TyBinder p)
+deriving instance Eq (Var p) => Eq (TyBinder p)
 
 data Skolem p
   = Skolem { _skolIdent :: Var p -- the constant itself
@@ -232,6 +241,15 @@ deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Constructor p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Constructor p)
 instance (Data (Var p), Data (Ann p), Data p) => Spanned (Constructor p)
 
+pattern TyArr :: Type p -> Type p -> Type p
+pattern TyArr t t' <- TyPi (Anon t) t' where
+  TyArr t ty = TyPi (Anon t) ty
+
+pattern TyForall :: Var p -> Type p -> Type p
+pattern TyForall v t' <- TyPi (Implicit v) t' where
+  TyForall v ty = TyPi (Implicit v) ty
+
+
 unTvName :: Var Typed -> Var Resolved
 unTvName (TvName x) = x
 
@@ -248,6 +266,17 @@ makePrisms ''Toplevel
 makePrisms ''Constructor
 makePrisms ''Lit
 makeLenses ''Skolem
+makeLenses ''TyBinder
+
+_TyArr :: Prism' (Type p) (Type p, Type p)
+_TyArr = prism (uncurry (TyPi . Anon)) go where
+  go (TyArr a b) = Right (a, b)
+  go x = Left x
+
+_TyForall :: Prism' (Type p) (Var p, Type p)
+_TyForall = prism (uncurry (TyPi . Implicit)) go where
+  go (TyForall a b) = Right (a, b)
+  go x = Left x
 
 
 {- Note [1]: Tuple types vs tuple patterns/values

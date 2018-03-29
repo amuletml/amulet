@@ -104,22 +104,15 @@ instance (Pretty (Var p)) => Pretty (Type p) where
   pretty (TyCon v) = stypeCon (pretty v)
   pretty (TyVar v) = stypeVar (squote <> pretty v)
   pretty (TySkol v) = stypeSkol (pretty (v ^. skolIdent))
-  pretty (TyForall vs v)
-    = keyword "forall" <+> hsep (map (stypeVar . (squote <>) . pretty) vs) <> dot <+> pretty v
 
-  pretty (TyArr x e)
-    | TyArr{} <- x = parens (pretty x) <+> arrow <+> pretty e
-    | TyForall{} <- x = parens (pretty x) <+> arrow <+> pretty e
-    | TyTuple{} <- x = parens (pretty x) <+> arrow <+> pretty e
-    | otherwise = pretty x <+> arrow <+> pretty e
+  pretty (TyPi x e) = pretty x <+> arrow <+> pretty e
 
   pretty (TyRows p rows) = enclose (lbrace <> space) (space <> rbrace)  $ pretty p <+> soperator pipe <+> hsep (punctuate comma (prettyRows colon rows)) 
   pretty (TyExactRows rows) = record (prettyRows colon rows)
 
   pretty (TyApp x e) = pretty x <+> parenTyArg e (pretty e) where
     parenTyArg TyApp{} = parens
-    parenTyArg TyForall{} = parens
-    parenTyArg TyArr{} = parens
+    parenTyArg TyPi{} = parens
     parenTyArg TyTuple{} = parens
     parenTyArg _ = id
 
@@ -131,6 +124,13 @@ instance (Pretty (Var p)) => Pretty (Type p) where
 
   pretty (TyWithConstraints a b) = parens (hsep (punctuate comma (map prettyEq a))) <+> soperator (char '⊃') <+> pretty b where
     prettyEq (a, b) = pretty a <+> soperator (char '~') <+> pretty b
+
+instance Pretty (Var p) => Pretty (TyBinder p) where
+  pretty (Anon t) = k t (pretty t) where
+    k TyPi{} = parens
+    k TyTuple{} = parens
+    k _ = id
+  pretty (Implicit v) = keyword "forall" <+> braces (pretty v)
 
 instance Pretty (Var p) => Pretty (Kind p) where
   pretty KiStar = stypeCon (string "Type")
@@ -211,8 +211,9 @@ applyCons :: Ord (Var p) => Type p -> Type p
 applyCons x@TyCon{} = x
 applyCons x@TyVar{} = x
 applyCons x@TySkol{} = x
-applyCons (TyForall vs t) = TyForall vs (applyCons t)
-applyCons (TyArr a b) = TyArr (applyCons a) (applyCons b)
+applyCons (TyPi a b) = TyPi (go a) (applyCons b) where
+  go (Anon t) = Anon (applyCons t)
+  go (Implicit t) = Implicit t
 applyCons (TyApp a b) = TyApp (applyCons a) (applyCons b)
 applyCons (TyRows r rs) = TyRows (applyCons r) (map (second applyCons) rs)
 applyCons (TyExactRows rs) = TyExactRows (map (second applyCons) rs)

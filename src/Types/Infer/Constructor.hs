@@ -57,9 +57,11 @@ closeOverGadt cons cty =
       pushCons [] t = t
       pushCons c (TyForall v t) = TyForall v (pushCons c t)
       pushCons c t = TyWithConstraints c t
+
+      forall xs t = foldr TyPi t (map Implicit xs)
    in if Set.null fv
          then pushCons cons cty
-         else pushCons cons (TyForall (Set.toList fv) cty)
+         else pushCons cons (forall (Set.toList fv) cty)
 
 
 -- A bit of a hack for better aesthetics

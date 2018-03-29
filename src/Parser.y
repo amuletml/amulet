@@ -227,7 +227,7 @@ Arm :: { (Pattern Parsed, Expr Parsed) }
 
 Type :: { Located (Type Parsed) }
      : TypeProd                                   { $1 }
-     | TypeProd '->' Type                         { lPos2 $1 $3 $ TyArr (getL $1) (getL $3) }
+     | TypeProd '->' Type                         { lPos2 $1 $3 $ TyPi (Anon (getL $1)) (getL $3) }
 
 TypeProd :: { Located (Type Parsed) }
          : TypeApp                                { $1 }
@@ -240,7 +240,8 @@ TypeApp  :: { Located (Type Parsed) }
 TypeAtom :: { Located (Type Parsed) }
          : Var                                    { lPos1 $1 $ TyCon (getL $1) }
          | TyVar                                  { lPos1 $1 $ TyVar (getL $1) }
-         | forall ListE1(tyvar) '.' Type          { lPos2 $1 $4 $ TyForall (map getName $2) (getL $4) }
+         | forall ListE1(tyvar) '.' Type
+           { lPos2 $1 $4 $ forallTy (map getName $2) (getL $4) }
          | '(' ')'                                { lPos2 $1 $2 $ TyCon (Name (T.pack "unit")) }
          | '(' Type ')'                           { lPos2 $1 $3 (getL $2) }
          | '{' Rows(':', Type) '}'                { lPos2 $1 $3 $ TyExactRows (map (second getL) $2) }
@@ -309,4 +310,6 @@ getInt    (Token (TcInteger x) _)    = x
 getFloat  (Token (TcFloat x) _)      = x
 getString (Token (TcString  x) _)    = x
 getL      (L x _)                    = x
+
+forallTy vs t = foldr TyPi t (map Implicit vs)
 }

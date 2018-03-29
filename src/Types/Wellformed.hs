@@ -22,8 +22,10 @@ wellformed tp = case tp of
   TyCon{} -> pure ()
   TyVar{} -> pure ()
   TySkol{} -> pure ()
-  TyForall _ t -> wellformed t
-  TyArr a b -> wellformed a *> wellformed b
+  TyPi a b ->
+    case a of
+      Implicit _ -> wellformed b
+      Anon a -> wellformed a *> wellformed b
   TyApp a b -> wellformed a *> wellformed b
   TyTuple a b -> wellformed a *> wellformed b
   TyRows rho rows -> do
@@ -48,10 +50,10 @@ normType :: forall p. Ord (Var p) => Type p -> Type p
 normType = flatten . uncurry collect . runWriter . spread . applyCons where
   collect t xs = case Set.toList (xs `Set.intersection` ftv t) of
     [] -> t
-    xs -> TyForall xs t
+    xs -> foldr TyForall t xs
 
   spread :: Type p -> Writer (Set.Set (Var p)) (Type p)
-  spread (TyForall vs t) = spread t <* tell (Set.fromList vs)
+  spread (TyForall vs t) = spread t <* tell (Set.singleton vs)
   spread (TyArr a t) = TyArr a <$> spread t
   spread x = pure x
 
@@ -70,9 +72,10 @@ skols :: Ord (Var p) => Type p -> Set.Set (Skolem p)
 skols TyCon{} = mempty
 skols TyVar{} = mempty
 skols (TySkol x) = Set.singleton x
-skols (TyForall _ t) = skols t
-skols (TyArr a b) = skols a <> skols b
 skols (TyApp a b) = skols a <> skols b
+skols (TyPi b t)
+  | Implicit{} <- b = skols t
+  | Anon a <- b = skols a <> skols t
 skols (TyRows r rs) = skols r <> foldMap (skols . snd) rs
 skols (TyExactRows rs) = foldMap (skols . snd) rs
 skols (TyTuple a b) = skols a <> skols b
@@ -82,8 +85,9 @@ applyCons :: Ord (Var p) => Type p -> Type p
 applyCons x@TyCon{} = x
 applyCons x@TyVar{} = x
 applyCons x@TySkol{} = x
-applyCons (TyForall vs t) = TyForall vs (applyCons t)
-applyCons (TyArr a b) = TyArr (applyCons a) (applyCons b)
+applyCons (TyPi vs b)
+  | Implicit{} <- vs = TyPi vs (applyCons b)
+  | Anon t <- vs = TyArr (applyCons t) (applyCons b)
 applyCons (TyApp a b) = TyApp (applyCons a) (applyCons b)
 applyCons (TyRows r rs) = TyRows (applyCons r) (map (second applyCons) rs)
 applyCons (TyExactRows rs) = TyExactRows (map (second applyCons) rs)

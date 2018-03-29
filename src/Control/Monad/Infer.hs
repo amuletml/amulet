@@ -120,7 +120,7 @@ lookupTy x = do
     Nothing -> throwError (NotInScope x)
 
 lookupTy' :: (MonadError TypeError m, MonadReader Env m, MonadGen Int m) => Var Resolved
-          -> m (Map.Map (Var Typed) (Type Typed), Type Typed, Type Typed)
+          -> m (Maybe (Expr Typed -> Expr Typed), Type Typed, Type Typed)
 lookupTy' x = do
   rs <- view (values . at x)
   case rs of
@@ -150,13 +150,22 @@ extendManyK = flip (foldr extendKind)
 alpha :: [Text]
 alpha = map T.pack $ [1..] >>= flip replicateM ['a'..'z']
 
-instantiate :: MonadGen Int m => Type Typed -> m (Map.Map (Var Typed) (Type Typed), Type Typed, Type Typed)
-instantiate tp@(TyForall vs ty) = do
-  f <- traverse (const freshTV) vs
-  let map = Map.fromList (zip vs f)
-  (map', _, t) <- instantiate (apply map ty)
-  pure (map <> map', tp, t)
-instantiate ty = pure (mempty, ty, ty)
+instantiate :: MonadGen Int m
+            => Type Typed
+            -> m ( Maybe (Expr Typed -> Expr Typed)
+                 , Type Typed
+                 , Type Typed)
+instantiate tp@(TyPi (Implicit v) ty) = do
+  var <- freshTV
+  let map = Map.singleton v var
+
+      squish f (Just x) = Just (x . f)
+      squish f _ = Just f
+
+      appThisTy e = TypeApp e var (annotation e, tp)
+  (k, _, t) <- instantiate (apply map ty)
+  pure (squish appThisTy k, tp, t)
+instantiate ty = pure (Nothing, ty, ty)
 
 freshTV :: MonadGen Int m => m (Type Typed)
 freshTV = TyVar . TvName <$> fresh
