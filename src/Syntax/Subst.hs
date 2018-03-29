@@ -60,6 +60,7 @@ instance Ord (Var p) => Substitutable p (Coercion p) where
   ftv (ProdCo f x) = ftv f <> ftv x
   ftv (ExactRowsCo rs) = foldMap (ftv . snd) rs
   ftv (RowsCo c rs) = ftv c <> foldMap (ftv . snd) rs
+  ftv (ForallCo v cs) = v `Set.delete` ftv cs
 
   apply _ x@VarCo{} = x
   apply s (ReflCo t) = ReflCo (apply s t)
@@ -70,6 +71,8 @@ instance Ord (Var p) => Substitutable p (Coercion p) where
   apply s (ProdCo f x) = ProdCo (apply s f) (apply s x)
   apply s (ExactRowsCo rs) = ExactRowsCo (map (second (apply s)) rs)
   apply s (RowsCo c rs) = RowsCo (apply s c) (map (second (apply s)) rs)
+  apply s (ForallCo v cs) = ForallCo v (apply s' cs) where
+    s' = Map.delete v s
 
 instance (Ord (Var p), Substitutable p a) => Substitutable p [a] where
   ftv = foldMap ftv

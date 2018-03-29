@@ -98,7 +98,9 @@ unify ta@(TyCon a) tb@(TyCon b)
 unify (TyForall v ty) (TyForall v' ty')
   | otherwise = do
     fresh <- freshTV
-    unify (apply (Map.singleton v fresh) ty) (apply (Map.singleton v' fresh) ty')
+    let (TyVar tv) = fresh
+    ForallCo tv <$>
+      unify (apply (Map.singleton v fresh) ty) (apply (Map.singleton v' fresh) ty')
 
 unify (TyRows rho arow) (TyRows sigma brow)
   | overlaps <- overlap arow brow

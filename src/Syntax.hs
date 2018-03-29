@@ -192,6 +192,7 @@ data Coercion p
   | ExactRowsCo [(Text, Coercion p)] -- { x : A ~ B } : { x : A } ~ { x : B }
   | RowsCo (Coercion p) [(Text, Coercion p)] -- { x : A ~ B | f : S ~ T } : { A | f : S } ~ { B | f : T }
   | AssumedCo (Type p) (Type p) -- <A, B> : A ~ B
+  | ForallCo (Var p) (Coercion p) -- (forall v. phi : a ~ b) : forall v. a ~ forall v. b
 
 deriving instance Eq (Var p) => Eq (Coercion p)
 deriving instance Show (Var p) => Show (Coercion p)

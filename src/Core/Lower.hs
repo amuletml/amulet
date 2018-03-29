@@ -199,6 +199,7 @@ lowerAnyway (S.Cast e c _) =
   co (S.ProdCo a b) = ExactRecord [("1", co a), ("2", co b)]
   co (S.RowsCo c rs) = C.Record (co c) (map (second co) rs)
   co (S.ExactRowsCo rs) = C.ExactRecord (map (second co) rs)
+  co (S.ForallCo (TvName v) rs) = C.Quantified v (co rs)
   in do
     (e, _) <- lowerBothAtom e
     pure (C.Cast e (co c))
