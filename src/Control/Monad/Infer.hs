@@ -14,12 +14,12 @@ module Control.Monad.Infer
   ( module M
   , TypeError(..)
   , Constraint(..)
-  , Env(..)
+  , Env
   , MonadInfer
-  , lookupTy, lookupTy', fresh, freshFrom, runInfer, extend, freeInScope
-  , extendKind, extendMany, extendManyK
+  , lookupTy, lookupTy', fresh, freshFrom, runInfer, freeInEnv
   , difference, freshTV, freshKV
   , instantiate
+  , extendKind, extendManyK
   , SomeReason(..), Reasonable
 
   -- lenses:
@@ -49,24 +49,10 @@ import Data.List
 import Pretty
 
 import Syntax.Pretty
+import Syntax.Types
 import Syntax.Subst
 
 type MonadInfer p m = (MonadError TypeError m, MonadReader Env m, MonadWriter (Seq.Seq (Constraint p)) m, MonadGen Int m)
-
-data Env
-  = Env { _values  :: Map.Map (Var Resolved) (Type Typed)
-        , _types   :: Map.Map (Var Resolved) (Kind Typed)
-        , _typeVars :: Set.Set (Var Resolved)
-        }
-  deriving (Eq, Show, Ord)
-
-
-instance Monoid Env where
-  mappend = (<>)
-  mempty = Env mempty mempty mempty
-
-instance Semigroup Env where
-  Env a b c <> Env a' b' c' = Env (a <> a') (b <> b') (c <> c')
 
 data Constraint p
   = ConUnify   SomeReason (Var p) (Type p) (Type p)
@@ -126,9 +112,6 @@ instance Pretty (Var p) => Pretty (Constraint p) where
   pretty ConFail{} = string "fail"
 
 
-makeLenses ''Env -- this has to be down here
--- *shakes fist* grr templatehaskell
-
 lookupTy :: (MonadError TypeError m, MonadReader Env m, MonadGen Int m) => Var Resolved -> m (Type Typed)
 lookupTy x = do
   rs <- view (values . at x)
@@ -158,15 +141,8 @@ fresh = do
 freshFrom :: MonadGen Int m => Text -> m (Var Resolved)
 freshFrom t = TgName t <$> gen
 
-extend :: MonadReader Env m => (Var Typed, Type Typed) -> m a -> m a
-extend (v, t) = local (values . at (unTvName v) ?~ t)
-
 extendKind :: MonadReader Env m => (Var Typed, Kind Typed) -> m a -> m a
 extendKind (v, k) = local (types . at (unTvName v) ?~ k)
-
-extendMany :: MonadReader Env m => [(Var Typed, Type Typed)] -> m a -> m a
-extendMany ((v, t):xs) b = extend (v, t) $ extendMany xs b
-extendMany [] b = b
 
 extendManyK :: MonadReader Env m => [(Var Typed, Kind Typed)] -> m a -> m a
 extendManyK = flip (foldr extendKind)
@@ -182,17 +158,11 @@ instantiate tp@(TyForall vs ty) = do
   pure (map <> map', tp, t)
 instantiate ty = pure (mempty, ty, ty)
 
-difference :: Env -> Env -> Env
-difference (Env ma mb mc) (Env ma' mb' mc') = Env (ma Map.\\ ma') (mb Map.\\ mb') (mc Set.\\ mc')
-
 freshTV :: MonadGen Int m => m (Type Typed)
 freshTV = TyVar . TvName <$> fresh
 
 freshKV :: MonadGen Int m => m (Kind Typed)
 freshKV = KiVar . TvName <$> fresh
-
-freeInScope :: Env -> Set.Set (Var Typed)
-freeInScope (Env vars _ _) = foldMap ftv vars
 
 instance Pretty TypeError where
   pretty (NotEqual a b) = string "Type error: failed to" <+> align (string "unify" <+> pretty a </> string " with" <+> pretty b)
@@ -200,7 +170,7 @@ instance Pretty TypeError where
   pretty (Occurs v t) = string "Occurs check:" <+> string "The type variable" <+> stypeVar (pretty v) </> indent 4 (string "occurs in the type" <+> pretty t)
   pretty (NotInScope e) = string "Variable not in scope:" <+> pretty e
   pretty (ArisingFrom er ex) = pretty (annotation ex) <> colon <+> stypeSkol (string "error")
-    <#> indent 2 (pretty er <#> nest 4 (bullet (string "Arising from use of" <+> blameOf ex) </> pretty ex))
+    <#> indent 2 (pretty er <#> empty <#> nest 4 (bullet (string "Arising from use of" <+> blameOf ex) </> pretty ex))
   pretty (FoundHole e s) = string "Found typed hole" <+> pretty e <+> "of type" <+> pretty s
 
   pretty (Note te m) = pretty te <#> bullet (string "Note:") <+> align (pretty m)

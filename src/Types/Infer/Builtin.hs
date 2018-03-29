@@ -16,6 +16,7 @@ import Control.Lens
 
 import Types.Wellformed
 
+import Syntax.Types
 import Syntax.Subst
 import Syntax
 
@@ -30,7 +31,7 @@ tyFloat = TyCon (TvName (TgInternal "float"))
 tyAny = TyCon (TvName (TgInternal "any"))
 
 builtinsEnv :: Env
-builtinsEnv = Env (Map.fromList ops) (Map.fromList tps) mempty where
+builtinsEnv = envOf (scopeFromList ops) (scopeFromList tps) where
   op :: T.Text -> Type Typed -> (Var Resolved, Type Typed)
   op x t = (TgInternal x, t)
   tp :: T.Text -> (Var Resolved, Kind Typed)

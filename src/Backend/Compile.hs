@@ -8,11 +8,14 @@ import Control.Monad.Infer
 import Control.Monad.State
 import Control.Monad.Cont
 import Control.Arrow
+import Control.Lens hiding (uncons)
 
 import Backend.Lua
 import Core.Occurrence
 import Core.Core
 import Core.Types
+
+import Syntax.Types
 import Syntax (Var(..), Resolved)
 
 import qualified Types.Wellformed as W
@@ -96,8 +99,8 @@ compileProgram ev = LuaDo . flip evalState (VarScope mempty mempty) . compilePro
     let main = fmap (toVar . fst) . uncons
              . sortOn key
              . filter isMain
-             . Map.keys
-             . _values
+             . namesInScope
+             . view values
         isMain (TgName x _) = x == "main"
         isMain _ = False
         key (TgName k _) = k
@@ -110,7 +113,7 @@ compileProgram ev = LuaDo . flip evalState (VarScope mempty mempty) . compilePro
              go n it = do
                LuaCallS e _ <- go (n - 1) it
                pure $ LuaCallS (LuaCall e []) []
-             ar = W.arity (_values ev Map.! ref)
+             ar = W.arity (ev ^. values . at ref . non undefined)
           in pure (maybeToList (go ar (LuaRef (LuaName ref'))))
        Nothing -> pure []
 

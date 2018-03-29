@@ -14,32 +14,33 @@ import Data.Foldable
 
 import Control.Monad.Reader (runReaderT)
 import Control.Monad.Gen (runGen)
-import Control.Lens (ifor_, (^.))
+import Control.Lens (ifor_, (^.), to)
 
-import "amuletml" Data.Position (SourceName)
-import "amuletml" Data.Span (Span)
+import Data.Position (SourceName)
+import Data.Span (Span)
 
-import "amuletml" Control.Monad.Infer (Env, TypeError, difference, values, types)
-import "amuletml" Backend.Compile (compileProgram)
+import Control.Monad.Infer (Env, TypeError, difference, values, types)
+import Backend.Compile (compileProgram)
 
-import "amuletml" Types.Infer (inferProgram, builtinsEnv)
+import Types.Infer (inferProgram, builtinsEnv)
 
-import "amuletml" Syntax.Resolve (ResolveError, resolveProgram)
-import qualified "amuletml" Syntax.Resolve.Scope as RS
-import "amuletml" Syntax.Resolve.Toplevel (extractToplevels)
-import "amuletml" Syntax.Desugar (desugarProgram)
-import "amuletml" Syntax.Pretty (tidyPrettyType)
-import "amuletml" Syntax (Toplevel, Typed, Var, Resolved, Type)
+import Syntax.Resolve (ResolveError, resolveProgram)
+import qualified Syntax.Resolve.Scope as RS
+import Syntax.Resolve.Toplevel (extractToplevels)
+import Syntax.Types
+import Syntax.Desugar (desugarProgram)
+import Syntax.Pretty (tidyPrettyType)
+import Syntax (Toplevel, Typed, Var, Resolved, Type)
 
-import "amuletml" Core.Occurrence (OccursVar, tagOccursVar)
-import "amuletml" Core.Simplify (optimise)
-import "amuletml" Core.Lower (lowerProg)
-import "amuletml" Core.Core (Stmt)
+import Core.Occurrence (OccursVar, tagOccursVar)
+import Core.Simplify (optimise)
+import Core.Lower (lowerProg)
+import Core.Core (Stmt)
 
-import "amuletml" Pretty (Pretty(pretty), putDoc, (<+>), colon)
+import Pretty (Pretty(pretty), putDoc, (<+>), colon)
 
-import "amuletml" Parser.Wrapper (ParseResult(POK, PFailed), runParser)
-import "amuletml" Parser (parseInput)
+import Parser.Wrapper (ParseResult(POK, PFailed), runParser)
+import Parser (parseInput)
 
 import Errors (reportP, reportR, reportI)
 
@@ -104,10 +105,10 @@ test fs = do
     CSuccess (ast, core, optm, env) -> do
       putDoc (pretty ast)
       putStrLn "\x1b[1;32m(* Type inference: *)\x1b[0m"
-      ifor_ (difference env builtinsEnv ^. values) . curry $ \(k :: Var Resolved, t :: Type Typed) ->
+      ifor_ (difference env builtinsEnv ^. values . to toMap) . curry $ \(k :: Var Resolved, t :: Type Typed) ->
         putDoc (pretty k <+> colon <+> tidyPrettyType t)
       putStrLn "\x1b[1;32m(* Kind inference: *)\x1b[0m"
-      ifor_ (difference env builtinsEnv ^. types) . curry $ \(k, t) ->
+      ifor_ (difference env builtinsEnv ^. types ^. to toMap) . curry $ \(k :: Var Resolved, t) ->
         putDoc (pretty k <+> colon <+> pretty t)
       putStrLn "\x1b[1;32m(* Core lowering: *)\x1b[0m"
       putDoc (pretty core)
@@ -127,10 +128,10 @@ testTc fs = do
     CSuccess (ast, core, _, env) -> do
       putDoc (pretty ast)
       putStrLn "\x1b[1;32m(* Type inference: *)\x1b[0m"
-      ifor_ (difference env builtinsEnv ^. values) . curry $ \(k :: Var Resolved, t :: Type Typed) ->
+      ifor_ (difference env builtinsEnv ^. values . to toMap) . curry $ \(k :: Var Resolved, t :: Type Typed) ->
         putDoc (pretty k <+> colon <+> pretty t)
       putStrLn "\x1b[1;32m(* Kind inference: *)\x1b[0m"
-      ifor_ (difference env builtinsEnv ^. types) . curry $ \(k, t) ->
+      ifor_ (difference env builtinsEnv ^. types . to toMap) . curry $ \(k :: Var Resolved, t) ->
         putDoc (pretty k <+> colon <+> pretty t)
       pure (Just (core, env))
     CParse e s -> Nothing <$ reportP e s fs

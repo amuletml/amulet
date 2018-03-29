@@ -151,16 +151,16 @@ data Skolem p
            , _skolMotive :: SkolemMotive p
            }
 
-deriving instance (Show (Var p), Show (Ann p)) => Show (Skolem p)
-deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Skolem p)
+deriving instance Show (Var p) => Show (Skolem p)
+deriving instance (Data p, Typeable p, Data (Var p)) => Data (Skolem p)
 
 data SkolemMotive p
   = ByAscription (Type p)
   | BySubsumption (Type p) (Type p)
   | ByExistential (Var p) (Type p)
 
-deriving instance (Show (Var p), Show (Ann p)) => Show (SkolemMotive p)
-deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (SkolemMotive p)
+deriving instance Show (Var p) => Show (SkolemMotive p)
+deriving instance (Data p, Typeable p, Data (Var p)) => Data (SkolemMotive p)
 
 instance Eq (Var p) => Eq (Skolem p) where
   Skolem v _ _ _ == Skolem v' _ _ _ = v == v'
@@ -168,10 +168,10 @@ instance Eq (Var p) => Eq (Skolem p) where
 instance Ord (Var p) => Ord (Skolem p) where
   Skolem v _ _ _ `compare` Skolem v' _ _ _ = v `compare` v'
 
-deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Type p)
-deriving instance (Show (Var p), Show (Ann p)) => Show (Type p)
-deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Type p)
-deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Type p)
+deriving instance Eq (Var p) => Eq (Type p)
+deriving instance Show (Var p) => Show (Type p)
+deriving instance Ord (Var p) => Ord (Type p)
+deriving instance (Data p, Typeable p, Data (Var p)) => Data (Type p)
 
 data Coercion p
   = VarCo (Var p)
@@ -184,10 +184,10 @@ data Coercion p
   | RowsCo (Coercion p) [(Text, Coercion p)] -- { x : A ~ B | f : S ~ T } : { A | f : S } ~ { B | f : T }
   | AssumedCo (Type p) (Type p) -- <A, B> : A ~ B
 
-deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Coercion p)
-deriving instance (Show (Var p), Show (Ann p)) => Show (Coercion p)
-deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Coercion p)
-deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Coercion p)
+deriving instance Eq (Var p) => Eq (Coercion p)
+deriving instance Show (Var p) => Show (Coercion p)
+deriving instance Ord (Var p) => Ord (Coercion p)
+deriving instance (Data p, Typeable p, Data (Var p)) => Data (Coercion p)
 
 data Kind p
   = KiStar
@@ -195,10 +195,10 @@ data Kind p
   | KiVar (Var p)
   | KiForall [Var p] (Kind p)
 
-deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Kind p)
-deriving instance (Show (Var p), Show (Ann p)) => Show (Kind p)
-deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Kind p)
-deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Kind p)
+deriving instance Eq (Var p) => Eq (Kind p)
+deriving instance Show (Var p) => Show (Kind p)
+deriving instance Ord (Var p) => Ord (Kind p)
+deriving instance (Data p, Typeable p, Data (Var p)) => Data (Kind p)
 
 data Toplevel p
   = LetStmt [(Var p, Expr p, Ann p)]
