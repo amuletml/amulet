@@ -42,3 +42,4 @@ bound (PTuple ps _)       = foldMap bound ps
 bound (Capture p _)       = Set.singleton p
 bound (PType p _ _)       = bound p
 bound Wildcard{}          = mempty
+bound PLiteral{}          = mempty

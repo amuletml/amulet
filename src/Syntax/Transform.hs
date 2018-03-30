@@ -124,6 +124,7 @@ transformExprTyped fe fc ft = goE where
   transP (PType p t a) = PType (goP p) (goT t) (goA a)
   transP (PRecord fs a) = PRecord (map (second goP) fs) (goA a)
   transP (PTuple ps a) = PTuple (map goP ps) (goA a)
+  transP (PLiteral l a) = PLiteral l (goA a)
 
   goE = transE . fe
   goT = transformType ft

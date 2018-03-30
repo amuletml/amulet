@@ -125,6 +125,13 @@ closeOver a = normType $ forall (fv a) a where
   forall [] a = a
   forall vs a = TyForall vs a
 
+litTy :: Lit -> Type Typed
+litTy LiInt{} = tyInt
+litTy LiStr{} = tyString
+litTy LiBool{} = tyBool
+litTy LiUnit{} = tyUnit
+litTy LiFloat{} = tyFloat
+
 -- A representation of an individual 'match' arm, for blaming type
 -- errors on:
 
