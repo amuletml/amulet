@@ -282,6 +282,7 @@ completeTuple _ [x] = x
 completeTuple k (x:xs) = k (x:xs) (sconcat (annotation x :| map annotation xs))
 
 tuplePattern :: [Pattern Parsed] -> Ann Parsed -> Pattern Parsed
+tuplePattern [] a = PLiteral LiUnit a
 tuplePattern [x] a = case x of
   PType x t _ -> PType x t a
   _ -> x

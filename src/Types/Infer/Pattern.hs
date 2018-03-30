@@ -36,6 +36,23 @@ inferPattern pat@(PType p t ann) = do
   case p' of
     Capture v _ -> pure (PType p' t' (ann, t'), t', one v t', cs)
     _ -> pure (PType p' t' (ann, t'), t', vs, cs)
+inferPattern (PRecord rows ann) = do
+  rho <- freshTV
+  (rowps, rowts, caps, cons) <- unzip4 <$> for rows (\(var, pat) -> do
+    (p', t, caps, cs) <- inferPattern pat
+    pure ((var, p'), (var, t), caps, cs))
+  let ty = TyRows rho rowts
+  pure (PRecord rowps (ann, ty), ty, mconcat caps, concat cons)
+inferPattern (PTuple elems ann) =
+  case elems of
+    [] -> pure (PLiteral LiUnit (ann, tyUnit), tyUnit, mempty, [])
+    [x] -> inferPattern x
+    xs -> do
+      (ps, ts, mconcat -> binds, concat -> cons) <- unzip4 <$> traverse inferPattern xs
+      let ty = foldr1 TyTuple ts
+      pure (PTuple ps (ann, ty), ty, binds, cons)
+inferPattern (PLiteral l ann) = pure (PLiteral l (ann, t), t, mempty, [])
+  where t = litTy l
 inferPattern p = do
   x <- freshTV
   (p', vs, cs) <- checkPattern p x
@@ -78,29 +95,16 @@ checkPattern pt@(PRecord rows ann) ty = do
     pure ((var, p'), (var, t), caps, cs))
   _ <- unify pt ty (TyRows rho rowts)
   pure (PRecord rowps (ann, TyRows rho rowts), mconcat caps, concat cons)
-checkPattern pt@(PTuple elems ann) ty =
-  let go [x] t = (:[]) <$> checkPattern x t
-      go (x:xs) t = do
-        (left, right, _) <- decompose pt _TyTuple t
-        (:) <$> checkPattern x left <*> go xs right
-      go [] _ = error "malformed tuple in checkPattern"
-    in case elems of
-      [] -> do
-        _ <- unify pt ty tyUnit
-        pure (PTuple [] (ann, tyUnit), mempty, [])
-      [x] -> checkPattern x ty
-      xs -> do
-        (ps, mconcat -> binds, concat -> cons) <- unzip3 <$> go xs ty
-        pure (PTuple ps (ann, ty), binds, cons)
 checkPattern pt@(PType p t ann) ty = do
   (p', it, binds, cs) <- inferPattern p
   (t', _) <- resolveKind t
   _ <- subsumes pt t' it
   _ <- unify pt ty t'
   pure (PType p' t' (ann, t'), binds, cs)
-checkPattern pt@(PLiteral l ann) ty = do
-  _ <- unify pt ty (litTy l)
-  pure (PLiteral l (ann, ty), mempty, [])
+checkPattern pt ty = do
+  (p, ty', binds, cs) <- inferPattern pt
+  _ <- subsumes pt ty ty'
+  pure (p, binds, cs)
 
 boundTvs :: forall p. Ord (Var p)
          => Pattern p -> Telescope p -> Set.Set (Var p)
