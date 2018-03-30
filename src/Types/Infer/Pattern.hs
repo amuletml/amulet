@@ -98,6 +98,9 @@ checkPattern pt@(PType p t ann) ty = do
   _ <- subsumes pt t' it
   _ <- unify pt ty t'
   pure (PType p' t' (ann, t'), binds, cs)
+checkPattern pt@(PLiteral l ann) ty = do
+  _ <- unify pt ty (litTy l)
+  pure (PLiteral l (ann, ty), mempty, [])
 
 boundTvs :: forall p. Ord (Var p)
          => Pattern p -> Telescope p -> Set.Set (Var p)
@@ -111,6 +114,7 @@ boundTvs p vs = pat p <> foldTele go vs where
   pat (PType _ t _) = ftv t
   pat (PRecord ps _) = foldMap (pat . snd) ps
   pat (PTuple ps _) = foldMap pat ps
+  pat PLiteral{} = mempty
 
 skolGadt :: MonadInfer Typed m => Var Resolved -> Type Typed -> m (Type Typed)
 skolGadt var ty =

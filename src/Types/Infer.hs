@@ -143,12 +143,7 @@ infer (Fun p e an) = let blame = Arm p e in do
   pure (Fun p e (an, TyArr dom cod), TyArr dom cod)
 
 infer (Literal l an) = pure (Literal l (an, ty), ty) where
-  ty = case l of
-    LiInt{} -> tyInt
-    LiStr{} -> tyString
-    LiBool{} -> tyBool
-    LiUnit{} -> tyUnit
-    LiFloat{} -> tyFloat
+  ty = litTy l
 
 infer ex@(Ascription e ty an) = do
   (ty, _) <- resolveKind ty `catchError` \e -> throwError (ArisingFrom e (BecauseOf ex))

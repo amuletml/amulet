@@ -220,6 +220,7 @@ ArgP :: { Pattern Parsed }
      | Con                        { withPos1 $1 $ Destructure (getL $1) Nothing }
      | '{' Rows('=',Pattern) '}'  { withPos2 $1 $3 $ PRecord $2 }
      | '(' List(Pattern, ',') ')' { withPos2 $1 $3 $ tuplePattern $2 }
+     | Lit                        { withPos1 $1 (PLiteral (getL $1)) }
 
 Arm :: { (Pattern Parsed, Expr Parsed) }
     : '|' List1(Pattern, ',') '->' Expr       { (completeTuple PTuple $2, $4) }
