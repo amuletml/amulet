@@ -178,13 +178,7 @@ lowerAnyway (RecordExt e xs _) = do
   pure $ Extend e' (zipWith build xs xs')
   where build (name, _) (atom, ty) = (name, ty, atom)
 
-lowerAnyway (Literal l _) = pure . Atom . Lit $ case l of
-  LiFloat d -> Float d
-  LiInt i -> Int i
-  LiStr t -> Str t
-  LiBool True -> LitTrue
-  LiBool False -> LitFalse
-  LiUnit -> Unit
+lowerAnyway (Literal l _) = pure . Atom . Lit $ lowerLiteral l
 lowerAnyway (S.App f x _) = C.App <$> lowerExprAtom f <*> lowerExprAtom x
 
 lowerAnyway (TypeApp f x _) = flip TyApp (lowerType x) <$> lowerExprAtom f
@@ -204,6 +198,14 @@ lowerAnyway (S.Cast e c _) =
     pure (C.Cast e (co c))
 
 lowerAnyway e = error ("can't lower " ++ show e ++ " without type")
+
+lowerLiteral :: Lit -> Literal
+lowerLiteral (LiFloat d) = Float d
+lowerLiteral (LiInt i) = Int i
+lowerLiteral (LiStr t) = Str t
+lowerLiteral (LiBool True) = LitTrue
+lowerLiteral (LiBool False) = LitFalse
+lowerLiteral LiUnit = Unit
 
 lowerBigLams :: MonadLower m => S.Type Typed -> S.Expr Typed -> m Term
 lowerBigLams (S.TyForall vs ty) ex =
@@ -257,6 +259,7 @@ lowerPat pat = case pat of
           xs <- go xs
           pure (PatExtend (PatLit RecNil) [("1", x), ("2", xs)])
      in go xs
+  PLiteral l _ -> pure . PatLit $ lowerLiteral l
 
 lowerProg :: MonadLower m => [Toplevel Typed] -> m [Stmt]
 lowerProg [] = pure []
