@@ -158,10 +158,6 @@ tagOccurTerm ann var = tagTerm where
         fv = occConcat (fvf : fvfs)
     in (fv, AnnExtend (ann an fv) f' fs')
 
-  tagTerm (AnnTyApp an f ty) =
-    let (fv, f') = tagAtom f
-    in (fv, AnnTyApp (ann an fv) f' (conv ty))
-
   tagTerm (AnnCast an x co) =
     let (fv, x') = tagAtom x
     in (fv, AnnCast (ann an fv) x' (conv co))

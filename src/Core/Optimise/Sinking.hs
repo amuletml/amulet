@@ -97,7 +97,6 @@ sinkTerm s (AnnMatch _ t bs) =
 sinkTerm s (AnnExtend _ f fs) = flushBinds (sinkable s) (Extend (sinkAtom s' f) (map (third3 (sinkAtom s')) fs))
   where s' = nullBinds s
 
-sinkTerm s (AnnTyApp _ f ty) = flushBinds (sinkable s) (TyApp (sinkAtom (nullBinds s) f) ty)
 sinkTerm s (AnnCast _ f co) = flushBinds (sinkable s) (Cast (sinkAtom (nullBinds s) f) co)
 
 flushBinds :: [Sinkable a] -> Term a -> Term a
