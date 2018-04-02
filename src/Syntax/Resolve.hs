@@ -264,6 +264,7 @@ reType (TyRows t r) = TyRows <$> reType t
                                <*> traverse (\(a, b) -> (a,) <$> reType b) r
 reType (TyExactRows r) = TyExactRows <$> traverse (\(a, b) -> (a,) <$> reType b) r
 reType (TyTuple ta tb) = TyTuple <$> reType ta <*> reType tb
+reType (TyUniverse k) = pure (TyUniverse k)
 
 rePattern :: MonadResolve m
           => Pattern Parsed

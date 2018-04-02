@@ -226,6 +226,7 @@ lowerType (S.TyVar (TvName v)) = VarTy v
 lowerType (S.TyCon (TvName v)) = ConTy v
 lowerType (S.TySkol (Skolem _ (TvName v) _ _)) = VarTy v
 lowerType (S.TyWithConstraints _ t) = lowerType t
+lowerType (S.TyUniverse _) = StarTy
 
 lowerPat :: MonadLower m => Pattern Typed -> m Pat
 lowerPat pat = case pat of

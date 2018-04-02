@@ -26,11 +26,13 @@ data SolveScope
                , _don'tTouch :: Set.Set (Var Typed)
                , _don'tCoerce :: Set.Set (Var Typed) }
   deriving (Eq, Show, Ord)
+
 data SolveState
   = SolveState { _solveTySubst :: Subst Typed
                , _solveCoSubst :: Map.Map (Var Typed) (Coercion Typed)
                }
   deriving (Eq, Show, Ord)
+
 makeLenses ''SolveState
 makeLenses ''SolveScope
 
@@ -136,6 +138,8 @@ unify tp@TyRows{} x = throwError (Note (CanNotInstance tp x) isRec)
 unify (TyTuple a b) (TyTuple a' b') = do
   ProdCo <$> unify a a' <*> unify b b'
 
+unify (TyUniverse a) (TyUniverse b)
+  | a == b = pure . ReflCo $ TyUniverse a
 unify a b = throwError (NotEqual a b)
 
 isRec :: String
@@ -227,8 +231,8 @@ doSolve (ConFail v t :<| cs) = do
       go = transformType unskolemise
   throwError (FoundHole v (go (apply sub t)))
 
-subsumes :: (Type Typed -> Type Typed -> SolveM b)
-         -> Type Typed -> Type Typed -> SolveM b
+subsumes :: (Type Typed -> Type Typed -> SolveM (Coercion Typed))
+         -> Type Typed -> Type Typed -> SolveM (Coercion Typed)
 subsumes k t1 t2@TyForall{} = do
   sub <- use solveTySubst
   t2' <- skolemise (BySubsumption (apply sub t1) (apply sub t2)) t2
@@ -236,6 +240,8 @@ subsumes k t1 t2@TyForall{} = do
 subsumes k t1@TyForall{} t2 = do
   (_, _, t1') <- instantiate t1
   subsumes k t1' t2
+subsumes _ (TyUniverse a) (TyUniverse b)
+  | a <= b = pure $ AssumedCo (TyUniverse a) (TyUniverse b)
 subsumes k a b = k a b
 
 skolemise :: MonadGen Int m => SkolemMotive Typed -> Type Typed -> m (Type Typed)

@@ -22,7 +22,7 @@ inferCon :: MonadInfer Typed m
          -> m ( (Var Typed, Type Typed)
               , Constructor Typed)
 inferCon ret (ArgCon nm t ann) = do
-  (ty', _) <- resolveKind t
+  ty' <- resolveKind t
   let res = closeOver $ TyArr ty' ret
   pure ((TvName nm, res), ArgCon (TvName nm) ty' (ann, res))
 
@@ -32,7 +32,7 @@ inferCon ret' (UnitCon nm ann) =
 
 inferCon ret c@(GeneralisedCon nm cty ann) = do
 
-  (cty, _) <- resolveKind cty
+  cty <- resolveKind cty
   var <- TvName <$> fresh
   case solve 1 (Seq.singleton (ConUnify (BecauseOf c) var (gadtConResult cty) ret)) of
     Left e -> throwError (gadtConShape (cty, ret) (gadtConResult cty) e)

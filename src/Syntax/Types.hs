@@ -67,7 +67,7 @@ instance Ord (Var p) => At (Scope p f) where
 
 data Env
   = Env { _values   :: Scope Resolved (Type Typed)
-        , _types    :: Scope Resolved (Kind Typed)
+        , _types    :: Scope Resolved (Type Typed)
         , _typeVars :: Set.Set (Var Resolved)
         }
   deriving (Eq, Show, Ord)
@@ -90,7 +90,7 @@ difference (Env ma mb mc) (Env ma' mb' mc') = Env (ma \\ ma') (mb \\ mb') (mc Se
 freeInEnv :: Env -> Set.Set (Var Typed)
 freeInEnv (Env vars _ _) = foldMap ftv vars
 
-envOf :: Scope Resolved (Type Typed) -> Scope Resolved (Kind Typed) -> Env
+envOf :: Scope Resolved (Type Typed) -> Scope Resolved (Type Typed) -> Env
 envOf a b = Env a b mempty
 
 scopeFromList :: Ord (Var p) => [(Var p, f)] -> Scope p f

@@ -17,7 +17,7 @@ module Control.Monad.Infer
   , Env
   , MonadInfer
   , lookupTy, lookupTy', fresh, freshFrom, runInfer, freeInEnv
-  , difference, freshTV, freshKV
+  , difference, freshTV
   , instantiate
   , extendKind, extendManyK
   , SomeReason(..), Reasonable
@@ -68,7 +68,6 @@ deriving instance (Eq (Ann p), Eq (Var p), Eq (Expr p), Eq (Type p))
 
 data TypeError where
   NotEqual :: Pretty (Var p) => Type p -> Type p -> TypeError
-  KindsNotEqual :: Pretty (Var p) => Kind p -> Kind p -> TypeError
   Occurs :: Pretty (Var p) => Var p -> Type p -> TypeError
 
   NotInScope :: Var Resolved -> TypeError
@@ -141,10 +140,10 @@ fresh = do
 freshFrom :: MonadGen Int m => Text -> m (Var Resolved)
 freshFrom t = TgName t <$> gen
 
-extendKind :: MonadReader Env m => (Var Typed, Kind Typed) -> m a -> m a
+extendKind :: MonadReader Env m => (Var Typed, Type Typed) -> m a -> m a
 extendKind (v, k) = local (types . at (unTvName v) ?~ k)
 
-extendManyK :: MonadReader Env m => [(Var Typed, Kind Typed)] -> m a -> m a
+extendManyK :: MonadReader Env m => [(Var Typed, Type Typed)] -> m a -> m a
 extendManyK = flip (foldr extendKind)
 
 alpha :: [Text]
@@ -170,12 +169,8 @@ instantiate ty = pure (Nothing, ty, ty)
 freshTV :: MonadGen Int m => m (Type Typed)
 freshTV = TyVar . TvName <$> fresh
 
-freshKV :: MonadGen Int m => m (Kind Typed)
-freshKV = KiVar . TvName <$> fresh
-
 instance Pretty TypeError where
   pretty (NotEqual a b) = string "Type error: failed to" <+> align (string "unify" <+> pretty a </> string " with" <+> pretty b)
-  pretty (KindsNotEqual a b) = string "Kind error: failed to" <+> align (string "unify" <+> pretty a </> string " with" <+> pretty b)
   pretty (Occurs v t) = string "Occurs check:" <+> string "The type variable" <+> stypeVar (pretty v) </> indent 4 (string "occurs in the type" <+> pretty t)
   pretty (NotInScope e) = string "Variable not in scope:" <+> pretty e
   pretty (ArisingFrom er ex) = pretty (annotation ex) <> colon <+> stypeSkol (string "error")

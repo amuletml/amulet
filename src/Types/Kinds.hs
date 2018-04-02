@@ -1,188 +1,181 @@
-{-# LANGUAGE ConstraintKinds, FlexibleContexts, LambdaCase #-}
-module Types.Kinds
-  ( resolveTyDeclKind
-  , resolveKind
-  , closeOverKind
-  ) where
+{-# LANGUAGE ConstraintKinds, FlexibleContexts #-}
+module Types.Kinds (resolveKind, resolveTyDeclKind) where
 
-import Control.Monad.State.Strict
-import Control.Monad.Reader
-import Control.Monad.Except
 import Control.Monad.Infer
-
 import Control.Lens
 
-import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
-import qualified Data.Set as Set
-import Data.Semigroup
+import Data.Traversable
 import Data.Foldable
+import Data.Triple
 
-import qualified Types.Unify as U
-import Types.Infer.Builtin (gadtConResult)
+import Types.Wellformed (wellformed)
+import Types.Infer.Builtin
 import Types.Infer.Errors
-import Types.Wellformed
-import Syntax.Subst (ftv)
+import Types.Unify (solve)
+
+import Syntax.Subst
 import Syntax.Raise
 import Syntax
 
 import Debug.Trace
+import Pretty
 
-type Subst = Map.Map (Var Typed) (Kind Typed)
+type KindT m = WriterT (Seq.Seq (Constraint Typed)) m
 
-type KindT m = StateT Subst m
+type MonadKind m =
+  ( MonadError TypeError m
+  , MonadReader Env m
+  , MonadGen Int m
+  )
 
-type MonadSolve m
-  = ( MonadReader Env m
-    , MonadError TypeError m
-    , MonadGen Int m
-    )
+type Kind = Type
 
-resolveTyDeclKind :: MonadSolve m => Var Resolved -> [Var Resolved] -> [Constructor Resolved] -> m (Kind Typed)
-resolveTyDeclKind tp vs cs = fmap closeOverKind . resolve $ do
-  ks <- replicateM (length vs) freshKV
-  let kind = foldr KiArr KiStar ks
-  extendKind (TvName tp, kind) $
-    extendManyK (zip (map TvName vs) ks) $ do
-      for_ cs $ \case
-        UnitCon{} -> pure ()
-        ArgCon _ t _ -> traceShow t giveTp (raiseT TvName t)
-        c@(GeneralisedCon _ t _) -> inferGadtConKind c t (foldl TyApp (TyCon tp) (map TyVar vs))
-      pure kind
+resolveKind :: MonadKind m => Type Resolved -> m (Type Typed)
+resolveKind t = do
+  wellformed t
+  (ty, cs) <- runWriterT (checkKind t (TyUniverse 0))
+  x <- gen
 
-resolveKind :: MonadSolve m => Type Resolved -> m (Type Typed, Kind Typed)
-resolveKind t =
-  let t' = raiseT TvName t
-   in do
-     kind <- resolve (inferKind t')
-     pure (t', kind)
+  sub <- case solve x cs of
+    Left e -> throwError e
+    Right (x, _) -> pure x
 
-resolve :: MonadSolve m => KindT m (Kind Typed) -> m (Kind Typed)
-resolve k = do
-  (kind, subst) <- runStateT k mempty
-  pure $ apply subst kind
+  pure (apply sub ty)
 
-inferKind :: MonadSolve m => Type Typed -> KindT m (Kind Typed)
-inferKind tp = do
-  wellformed tp
-  case tp of
-    TyVar x -> do
-      ki <- view (types . at (unTvName x))
-      maybe freshKV pure ki
-    TySkol (Skolem x _ _ _) -> do
-      ki <- view (types . at (unTvName x))
-      maybe freshKV pure ki
-    TyCon x -> do
-      ki <- view (types . at (unTvName x))
-      case ki of
-        Just ki' -> instantiateKind ki'
-        Nothing -> throwError (NotInScope (unTvName x))
-    TyPi (Implicit v) t -> do
-      k <- freshKV
-      extendManyK [(v, k)] $ do
-        k <- inferKind t
-        unify k KiStar
-        pure k
-    TyPi (Anon a) b -> do
-      giveTp a
-      giveTp b
-      pure KiStar
-    TyApp t1 t2 -> do
-      x <- freshKV
-      k1 <- inferKind t1
-      k2 <- inferKind t2
-      unify (KiArr k2 x) k1
-      case t2 of
-        TyForall{} -> throwError (ImpredicativeApp t1 t2)
-        _ -> pure ()
-      sub <- get
-      pure (apply sub x)
-    TyRows rho x -> do
-      giveTp rho
-      for_ x $ \(_, t) -> giveTp t
-      pure KiStar
-    TyExactRows x -> KiStar <$ for_ x (\(_, t) -> giveTp t)
-    TyTuple a b -> do
-      giveTp a
-      giveTp b
-      pure KiStar
-    TyWithConstraints eq b -> do
-      for_ eq $ \(a, b) -> do
-        _ <- inferKind a
-        () <$ inferKind b
-      inferKind b
+resolveTyDeclKind :: MonadKind m
+                  => Var Resolved -> [Var Resolved]
+                  -> [Constructor Resolved]
+                  -> m (Type Typed)
+resolveTyDeclKind tycon args cons = solveForKind $ do
+  ks <- replicateM (length args) freshTV
+  let kind = foldr TyArr (TyUniverse 0) ks
 
-giveTp :: MonadSolve m => Type Typed -> KindT m ()
-giveTp x = do
-  x' <- inferKind x
-  unify x' KiStar
+  extendManyK ((TvName tycon, kind):zip (map TvName args) ks) $ do
+    for_ cons $ \c -> case c of
+      UnitCon{} -> pure ()
+      ArgCon _ t _ -> () <$ checkKind t (TyUniverse 0)
+      GeneralisedCon _ t _ -> inferGadtConKind t tycon (map TvName args)
+    pure kind
 
-unify :: (MonadState Subst m, MonadError TypeError m) => Kind Typed -> Kind Typed -> m ()
-unify (KiVar v) (KiVar k)
-  | v == k = pure ()
-unify (KiVar v) t = bind v t
-unify t (KiVar v) = bind v t
-unify (KiArr a b) (KiArr c d) = unify a c *> unify b d
-unify KiStar KiStar = pure ()
-unify x y = throwError (KindsNotEqual x y)
 
-bind :: (MonadState Subst m, MonadError TypeError m) => Var Typed -> Kind Typed -> m ()
-bind v t = do
-  x <- get
-  case Map.lookup v x of
-    Just t' -> if t' == KiVar v
-                  then put (Map.singleton v t <> fmap (apply (Map.singleton v t)) x)
-                  else unify t t'
-    Nothing -> put (Map.singleton v t <> fmap (apply (Map.singleton v t)) x)
 
-apply :: Map.Map (Var Typed) (Kind Typed) -> Kind Typed -> Kind Typed
-apply m t@(KiVar v) = Map.findWithDefault t v m
-apply m (KiArr a b) = KiArr (apply m a) (apply m b)
-apply _ x = x
+solveForKind :: ( Substitutable Typed b
+                , MonadError TypeError m
+                , MonadGen Int m)
+             => WriterT (Seq.Seq (Constraint Typed)) m b -> m b
+-- this type courtesy of GHC
+solveForKind k = do
+  (kind, cs) <- runWriterT k
+  x <- gen
+  for_ cs (flip trace (pure ()) . render . pretty)
+  case solve x cs of
+    Left e -> throwError e
+    Right (x, _) -> pure (apply x kind)
 
-freeIn :: Ord (Var p) => Kind p -> Set.Set (Var p)
-freeIn (KiVar v) = Set.singleton v
-freeIn (KiArr a b) = freeIn a <> freeIn b
-freeIn (KiForall vs k) = freeIn k Set.\\ Set.fromList vs
-freeIn KiStar = mempty
+inferKind :: MonadKind m => Type Resolved -> KindT m (Type Typed, Kind Typed)
+inferKind (TyCon v) = do
+  x <- view (types . at v)
+  case x of
+    Nothing -> throwError (NotInScope v)
+    Just k -> pure (TyCon (TvName v), k)
 
-closeOverKind :: Ord (Var p) => Kind p -> Kind p
-closeOverKind = flip forall <*> fv where
-  fv = toList . freeIn
-  forall :: [Var p] -> Kind p -> Kind p
-  forall [] x = x
-  forall vs x = KiForall vs x
+inferKind (TyVar v) = do
+  k <- maybe freshTV pure =<< view (types . at v)
+  pure (TyVar (TvName v), k)
 
-instantiateKind :: MonadSolve m => Kind Typed -> KindT m (Kind Typed)
-instantiateKind (KiForall v x) = do
-  fkvs <- replicateM (length v) freshKV
-  pure (apply (Map.fromList (zip v fkvs)) x)
-instantiateKind x = pure x
+inferKind (TySkol sk) = do
+  k <- maybe freshTV pure =<< view (types . at (sk ^. skolIdent))
+  pure (raiseT TvName (TySkol sk), k)
 
-inferGadtConKind :: MonadSolve m => Constructor Resolved -> Type Resolved -> Type Resolved -> KindT m ()
-inferGadtConKind c t ret' = do
-  var <- fresh
-  let t' = raiseT TvName t
-      ret = raiseT TvName ret'
+inferKind ty@(TyApp f x) = do
+  (f, (d, c, _)) <- secondA (decompose ty _TyArr) =<< inferKind f
+  x <- checkKind x d
+  pure (TyApp f x, c)
 
-      generalise (TyForall v t) = TyForall v <$> generalise t
-      generalise (TyArr a t) = TyArr a <$> generalise t
-      generalise ty = case U.solve 1 (Seq.singleton (ConUnify (BecauseOf c) (TvName var) ret ty)) of
-        Right (x, _) -> do
-          tell x
-          pure ret
-        Left e -> throwError (gadtConShape (ty, ret) (gadtConResult ty) e)
+inferKind ty@(TyRows p rs) = do
+  (p, k) <- secondA (isType ty) =<< inferKind p
+  rs <- for rs $ \(row, ty) -> do
+    ty <- checkKind ty k
+    pure (row, ty)
+  pure (TyRows p rs, k)
 
-     in do
-       (ty, cs) <- runWriterT (generalise t')
-       let vs = (ftv ty <> foldMap ftv cs <> Set.fromList (Map.keys cs)) `Set.difference` ftv ret
+inferKind ty@(TyTuple a b) = do
+  (a, k) <- secondA (isType ty) =<< inferKind a
+  b <- checkKind b k
+  pure (TyTuple a b, k)
 
-       ks <- replicateM (length vs) freshKV
-       extendManyK (zip (Set.toList vs) ks) $ do
-         ifor_ cs $ \(TvName a) b -> do
-           k <- maybe freshKV pure =<< view (types . at a)
-           k' <- inferKind b
-           unify k k'
-         giveTp ty
-         pure ()
+inferKind (TyUniverse x) = pure (TyUniverse x, TyUniverse (x + 1))
+inferKind (TyWithConstraints cs a) = do
+  cs <- for cs $ \(a, b) -> do
+    (a, k) <- inferKind a
+    b <- checkKind b k
+    pure (a, b)
+  (a, k) <- inferKind a
+  pure (TyWithConstraints cs a, k)
 
+inferKind t = do
+  x <- freshTV
+  t <- checkKind t x
+  pure (t, x)
+
+checkKind :: MonadKind m
+          => Type Resolved -> Kind Typed -> KindT m (Type Typed)
+checkKind (TyExactRows rs) k = do
+  rs <- for rs $ \(row, ty) -> do
+    ty <- checkKind ty k
+    pure (row, ty)
+  pure (TyExactRows rs)
+
+checkKind pitype@(TyPi a b) ek = do
+  _ <- isType pitype ek
+  case a of
+    Anon t -> do
+      (a, ik) <- inferKind t
+      b <- checkKind b ek
+      _ <- subsumes pitype ik ek -- ik <= ek
+      pure $ TyArr a b
+    Implicit v -> do
+      x <- freshTV
+      b <- extendKind (TvName v, x) $
+        checkKind b ek
+      let bind = Implicit (TvName v)
+      pure $ TyPi bind b
+
+checkKind ty u = do
+  (t, k) <- inferKind ty
+  _ <- subsumes ty k u -- k <= u
+  pure t
+
+inferGadtConKind :: MonadKind m
+                 => Type Resolved
+                 -> Var Resolved
+                 -> [Var Typed]
+                 -> KindT m ()
+inferGadtConKind typ tycon args = inferKind typ *> go (reverse (spine (gadtConResult typ))) where
+  spine :: Type Resolved -> [Type Resolved]
+  spine (TyApp f x) = x:spine f
+  spine x = [x]
+
+  go (hd:apps)
+    | TyCon hd <- hd, hd == tycon =
+      let fv = map TvName $ toList (foldMap ftv apps)
+       in do
+         fresh <- replicateM (length fv) freshTV
+         extendManyK (zip fv fresh) $ do
+           for_ (zip args apps) $ \(var, arg) -> do
+             (ty, k) <- inferKind arg
+             trace (render (pretty ty <+> colon <+> pretty k)) pure ()
+             checkKind (TyVar (unTvName var)) k
+           pure ()
+  go _ = do
+    (tp, _) <- inferKind typ
+    throwError $ gadtConShape
+      (tp, foldl TyApp (TyCon (TvName tycon)) (map TyVar args))
+      (gadtConResult tp)
+      (Malformed tp)
+
+isType :: MonadKind m => Type Resolved -> Kind Typed -> KindT m (Kind Typed)
+isType blame t = do
+  _ <- subsumes blame (TyUniverse 0) t
+  pure t

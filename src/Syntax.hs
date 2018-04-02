@@ -144,14 +144,21 @@ data Type p
   | TySkol (Skolem p)
   | TyWithConstraints [(Type p, Type p)] (Type p)
 
+  -- Dependent type stuff
+  | TyUniverse Int
+
 data TyBinder p
   = Anon { _tyBinderType :: (Type p) } -- a function type
   | Implicit  { _tyBinderVar :: Var p } -- a forall type
+
+instance Spanned (Type p) where
+  annotation _ = internal
 
 deriving instance (Data p, Typeable p, Data (Var p)) => Data (TyBinder p)
 deriving instance Show (Var p) => Show (TyBinder p)
 deriving instance Ord (Var p) => Ord (TyBinder p)
 deriving instance Eq (Var p) => Eq (TyBinder p)
+
 
 data Skolem p
   = Skolem { _skolIdent :: Var p -- the constant itself
@@ -198,17 +205,6 @@ deriving instance Eq (Var p) => Eq (Coercion p)
 deriving instance Show (Var p) => Show (Coercion p)
 deriving instance Ord (Var p) => Ord (Coercion p)
 deriving instance (Data p, Typeable p, Data (Var p)) => Data (Coercion p)
-
-data Kind p
-  = KiStar
-  | KiArr (Kind p) (Kind p)
-  | KiVar (Var p)
-  | KiForall [Var p] (Kind p)
-
-deriving instance Eq (Var p) => Eq (Kind p)
-deriving instance Show (Var p) => Show (Kind p)
-deriving instance Ord (Var p) => Ord (Kind p)
-deriving instance (Data p, Typeable p, Data (Var p)) => Data (Kind p)
 
 data Toplevel p
   = LetStmt [(Var p, Expr p, Ann p)]

@@ -20,6 +20,7 @@ transformType ft = goT where
 
   transT (TySkol (Skolem i v ty m)) = TySkol (Skolem i v (goT ty) (transM m))
   transT (TyWithConstraints cons ty) = TyWithConstraints (map (goT***goT) cons) (goT ty)
+  transT (TyUniverse k) = TyUniverse k
 
 
   transM (ByAscription ty) = ByAscription (goT ty)

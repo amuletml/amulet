@@ -96,7 +96,7 @@ check (Access rc key a) ty = do
 
 -- This is _very_ annoying, but we need it for nested ascriptions
 check ex@(Ascription e ty an) goal = do
-  (ty, _) <- resolveKind ty
+  ty <- resolveKind ty
   e <- check e ty
   (_, c) <- subsumes ex ty goal
   pure (Ascription (Cast e c (an, ty)) ty (an, goal))
@@ -134,7 +134,7 @@ infer (Literal l an) = pure (Literal l (an, ty), ty) where
     LiFloat{} -> tyFloat
 
 infer ex@(Ascription e ty an) = do
-  (ty, _) <- resolveKind ty `catchError` \e -> throwError (ArisingFrom e (BecauseOf ex))
+  ty <- resolveKind ty `catchError` \e -> throwError (ArisingFrom e (BecauseOf ex))
   e <- check e ty
   pure (Ascription (correct ty e) ty (an, ty), ty)
 
@@ -205,7 +205,7 @@ inferProg (LetStmt ns:prg) = do
     consFst (LetStmt ns') $
       inferProg prg
 inferProg (ForeignVal v d t ann:prg) = do
-  (t', _) <- resolveKind t
+  t' <- resolveKind t
   let t'' = normType (closeOver t')
   local (values %~ focus (one v t'')) $
     consFst (ForeignVal (TvName v) d t'' (ann, t'')) $
@@ -243,8 +243,8 @@ data Origin
 
 -- For polymorphic recursion, mostly
 approxType :: MonadInfer Typed m => Expr Resolved -> StateT Origin m (Type Typed)
-approxType (Fun (PType _ t _) e _) = TyArr . fst <$> resolveKind t <*> approxType e
-approxType (Ascription _ t _) = fst <$> resolveKind t
+approxType (Fun (PType _ t _) e _) = TyArr <$> resolveKind t <*> approxType e
+approxType (Ascription _ t _) = resolveKind t
 approxType (Fun _ e _) = do
   put Guessed
   TyArr <$> freshTV <*> approxType e

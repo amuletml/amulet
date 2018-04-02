@@ -2,7 +2,7 @@
 {-# LANGUAGE FlexibleContexts, UndecidableInstances, FlexibleInstances #-}
 module Syntax.Pretty
   ( module Syntax
-  , tidyPrettyType
+  , tidyPrettyType, applyCons
   ) where
 
 import Control.Arrow (first, second)
@@ -126,22 +126,14 @@ instance (Pretty (Var p)) => Pretty (Type p) where
   pretty (TyWithConstraints a b) = parens (hsep (punctuate comma (map prettyEq a))) <+> soperator (char '⊃') <+> pretty b where
     prettyEq (a, b) = pretty a <+> soperator (char '~') <+> pretty b
 
+  pretty (TyUniverse k) = keyword "Set" <+> int k
+
 instance Pretty (Var p) => Pretty (TyBinder p) where
   pretty (Anon t) = k t (pretty t) where
     k TyPi{} = parens
     k TyTuple{} = parens
     k _ = id
   pretty (Implicit v) = keyword "forall" <+> braces (pretty v)
-
-instance Pretty (Var p) => Pretty (Kind p) where
-  pretty KiStar = stypeCon (string "Type")
-  pretty (KiArr a b)
-    | KiArr{} <- a = parens (pretty a) <+> arrow <+> pretty b
-    | otherwise = pretty a <+> arrow <+> pretty b
-
-  pretty (KiVar v) = stypeVar (squote <> pretty v)
-  pretty (KiForall vs v)
-    = keyword "forall" <+> hsep (map ((squote <>) . pretty) vs) <> dot <+> pretty v
 
 instance (Pretty (Var p)) => Pretty (Toplevel p) where
   pretty (LetStmt []) = error "absurd!"
@@ -212,6 +204,7 @@ applyCons :: Ord (Var p) => Type p -> Type p
 applyCons x@TyCon{} = x
 applyCons x@TyVar{} = x
 applyCons x@TySkol{} = x
+applyCons x@TyUniverse{} = x
 applyCons (TyPi a b) = TyPi (go a) (applyCons b) where
   go (Anon t) = Anon (applyCons t)
   go (Implicit t) = Implicit t

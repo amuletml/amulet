@@ -33,8 +33,8 @@ builtinsEnv :: Env
 builtinsEnv = envOf (scopeFromList ops) (scopeFromList tps) where
   op :: T.Text -> Type Typed -> (Var Resolved, Type Typed)
   op x t = (TgInternal x, t)
-  tp :: T.Text -> (Var Resolved, Kind Typed)
-  tp x = (TgInternal x, KiStar)
+  tp :: T.Text -> (Var Resolved, Type Typed)
+  tp x = (TgInternal x, TyUniverse 0)
 
   boolOp = tyBool `TyArr` (tyBool `TyArr` tyBool)
   intOp = tyInt `TyArr` (tyInt `TyArr` tyInt)
@@ -52,7 +52,7 @@ builtinsEnv = envOf (scopeFromList ops) (scopeFromList tps) where
         , op "<." floatCmp, op ">." floatCmp, op ">=." floatCmp, op "<=." floatCmp
         , op "==" cmp, op "<>" cmp
         , op "||" boolOp, op "&&" boolOp ]
-  tps :: [(Var Resolved, Kind Typed)]
+  tps :: [(Var Resolved, Type Typed)]
   tps = [ tp "int", tp "string", tp "bool", tp "unit", tp "float" ]
 
 unify, subsumes :: ( Reasonable f p
