@@ -30,8 +30,7 @@ inferPattern :: MonadInfer Typed m
                   )
 inferPattern pat@(PType p t ann) = do
   (p', pt, vs, cs) <- inferPattern p
-  t' <- resolveKind t `catchError` \x ->
-          throwError (ArisingFrom x (BecauseOf pat))
+  t' <- resolveKind (BecauseOf pat) t
   _ <- subsumes pat t' pt
   case p' of
     Capture v _ -> pure (PType p' t' (ann, t'), t', one v t', cs)
@@ -94,7 +93,7 @@ checkPattern pt@(PTuple elems ann) ty =
         pure (PTuple ps (ann, ty), binds, cons)
 checkPattern pt@(PType p t ann) ty = do
   (p', it, binds, cs) <- inferPattern p
-  t' <- resolveKind t
+  t' <- resolveKind (BecauseOf pt) t
   _ <- subsumes pt t' it
   _ <- unify pt ty t'
   pure (PType p' t' (ann, t'), binds, cs)
@@ -114,7 +113,7 @@ boundTvs p vs = pat p <> foldTele go vs where
 
 skolGadt :: MonadInfer Typed m => Var Resolved -> Type Typed -> m (Type Typed)
 skolGadt var ty =
-  let result (TyForall _ t) = result t
+  let result (TyForall _ _ t) = result t
       result (TyWithConstraints _ t) = result t
       result (TyArr _ t) = result t
       result t = t

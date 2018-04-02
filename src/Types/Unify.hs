@@ -97,12 +97,14 @@ unify ta@(TyCon a) tb@(TyCon b)
   | a == b = pure (ReflCo tb)
   | otherwise = throwError (NotEqual ta tb)
 
-unify (TyForall v ty) (TyForall v' ty')
+unify (TyForall v Nothing ty) (TyForall v' Nothing ty')
   | otherwise = do
     fresh <- freshTV
     let (TyVar tv) = fresh
     ForallCo tv <$>
       unify (apply (Map.singleton v fresh) ty) (apply (Map.singleton v' fresh) ty')
+unify (TyForall v (Just k) ty) (TyForall v' (Just k') ty') =
+  unify k k' *> unify (TyForall v Nothing ty) (TyForall v' Nothing ty')
 
 unify (TyRows rho arow) (TyRows sigma brow)
   | overlaps <- overlap arow brow
@@ -245,7 +247,7 @@ subsumes _ (TyUniverse a) (TyUniverse b)
 subsumes k a b = k a b
 
 skolemise :: MonadGen Int m => SkolemMotive Typed -> Type Typed -> m (Type Typed)
-skolemise motive ty@(TyForall tv t) = do
+skolemise motive ty@(TyForall tv _ t) = do
   sk <- freshSkol motive ty tv
   skolemise motive (apply (Map.singleton tv sk) t)
 skolemise motive (TyArr c d) = TyArr c <$> skolemise motive d

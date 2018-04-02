@@ -148,8 +148,8 @@ data Type p
   | TyUniverse Int
 
 data TyBinder p
-  = Anon { _tyBinderType :: (Type p) } -- a function type
-  | Implicit  { _tyBinderVar :: Var p } -- a forall type
+  = Anon { _tyBinderType :: Type p } -- a function type
+  | Implicit { _tyBinderVar :: Var p, _tyBinderArg :: Maybe (Type p) } -- a forall type
 
 instance Spanned (Type p) where
   annotation _ = internal
@@ -242,9 +242,9 @@ pattern TyArr :: Type p -> Type p -> Type p
 pattern TyArr t t' <- TyPi (Anon t) t' where
   TyArr t ty = TyPi (Anon t) ty
 
-pattern TyForall :: Var p -> Type p -> Type p
-pattern TyForall v t' <- TyPi (Implicit v) t' where
-  TyForall v ty = TyPi (Implicit v) ty
+pattern TyForall :: Var p -> Maybe (Type p) -> Type p -> Type p
+pattern TyForall v k t' <- TyPi (Implicit v k) t' where
+  TyForall v k ty = TyPi (Implicit v k) ty
 
 
 unTvName :: Var Typed -> Var Resolved
@@ -268,11 +268,6 @@ makeLenses ''TyBinder
 _TyArr :: Prism' (Type p) (Type p, Type p)
 _TyArr = prism (uncurry (TyPi . Anon)) go where
   go (TyArr a b) = Right (a, b)
-  go x = Left x
-
-_TyForall :: Prism' (Type p) (Var p, Type p)
-_TyForall = prism (uncurry (TyPi . Implicit)) go where
-  go (TyForall a b) = Right (a, b)
   go x = Left x
 
 

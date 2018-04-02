@@ -207,8 +207,10 @@ lowerAnyway (S.Cast e c _) =
 lowerAnyway e = error ("can't lower " ++ show e ++ " without type")
 
 lowerBigLams :: MonadLower m => S.Type Typed -> S.Expr Typed -> m Term
-lowerBigLams (S.TyForall (TvName v) ty) ex =
-   Atom . Lam (TypeArgument v StarTy) <$> lowerBigLams ty ex
+lowerBigLams (S.TyForall (TvName v) (Just k) ty) ex =
+  Atom . Lam (TypeArgument v (lowerType k)) <$> lowerBigLams ty ex
+lowerBigLams (S.TyForall (TvName v) Nothing ty) ex =
+  Atom . Lam (TypeArgument v StarTy) <$> lowerBigLams ty ex
 lowerBigLams ty ex = lowerAtTerm ex (lowerType ty)
 
 
@@ -217,7 +219,7 @@ lowerType t@S.TyTuple{} = go t where
   go (S.TyTuple a b) = ExactRowsTy [("1", lowerType a), ("2", lowerType b)]
   go x = lowerType x
 lowerType (S.TyPi bind b)
-  | S.Implicit v <- bind = ForallTy (S.unTvName v) (lowerType b)
+  | S.Implicit v _ <- bind = ForallTy (S.unTvName v) (lowerType b)
   | S.Anon a <- bind = ArrTy (lowerType a) (lowerType b)
 lowerType (S.TyApp a b) = AppTy (lowerType a) (lowerType b)
 lowerType (S.TyRows rho vs) = RowsTy (lowerType rho) (map (fmap lowerType) vs)

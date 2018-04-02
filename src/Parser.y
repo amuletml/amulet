@@ -311,5 +311,5 @@ getFloat  (Token (TcFloat x) _)      = x
 getString (Token (TcString  x) _)    = x
 getL      (L x _)                    = x
 
-forallTy vs t = foldr TyPi t (map Implicit vs)
+forallTy vs t = foldr TyPi t (map (flip Implicit Nothing) vs)
 }

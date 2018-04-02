@@ -154,7 +154,7 @@ instantiate :: MonadGen Int m
             -> m ( Maybe (Expr Typed -> Expr Typed)
                  , Type Typed
                  , Type Typed)
-instantiate tp@(TyPi (Implicit v) ty) = do
+instantiate tp@(TyPi (Implicit v _) ty) = do
   var <- freshTV
   let map = Map.singleton v var
 

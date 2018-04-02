@@ -136,7 +136,7 @@ resolveModule (r:rs) = flip catchError (throwError . wrapError)
            extractCons (ArgCon v _ _) = v
            extractCons (GeneralisedCon v _ _) = v
 
-           wrap x = foldr TyPi x (map Implicit (toList (ftv x)))
+           wrap x = foldr TyPi x (map (flip Implicit Nothing) (toList (ftv x)))
 
            modZip name name' v v' = zip (map (name<>) v) (map (name'<>) v')
 
@@ -254,10 +254,11 @@ reType (TyCon v) = TyCon <$> lookupTy v
 reType (TyVar v) = TyVar <$> lookupTyvar v
 reType v@TySkol{} = error ("impossible! resolving skol " ++ show v)
 reType v@TyWithConstraints{} = error ("impossible! resolving withcons " ++ show v)
-reType (TyPi (Implicit v) ty) = do
+reType (TyPi (Implicit v k) ty) = do
   v' <- tagVar v
   ty' <- extendTyvar (v, v') $ reType ty
-  pure (TyPi (Implicit v') ty')
+  k <- traverse reType k
+  pure (TyPi (Implicit v' k) ty')
 reType (TyPi (Anon l) r) = TyPi . Anon <$> reType l <*> reType r
 reType (TyApp l r) = TyApp <$> reType l <*> reType r
 reType (TyRows t r) = TyRows <$> reType t

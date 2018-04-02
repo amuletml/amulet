@@ -3,7 +3,6 @@
 module Types.Infer.Builtin where
 
 import qualified Data.Sequence as Seq
-import qualified Data.Set as Set
 import qualified Data.Text as T
 import Data.Semigroup
 import Data.Spanned
@@ -13,10 +12,7 @@ import Control.Monad.Infer.Error
 import Control.Monad.Infer
 import Control.Lens
 
-import Types.Wellformed
-
 import Syntax.Types
-import Syntax.Subst
 import Syntax
 
 import Pretty
@@ -43,7 +39,7 @@ builtinsEnv = envOf (scopeFromList ops) (scopeFromList tps) where
   intCmp = tyInt `TyArr` (tyInt `TyArr` tyBool)
   floatCmp = tyInt `TyArr` (tyInt `TyArr` tyBool)
 
-  cmp = TyForall name $ TyVar name `TyArr` (TyVar name `TyArr` tyBool)
+  cmp = TyForall name (Just (TyUniverse 0)) $ TyVar name `TyArr` (TyVar name `TyArr` tyBool)
     where name = TvName (TgInternal "a")-- TODO: This should use TvName/TvFresh instead
   ops = [ op "+" intOp, op "-" intOp, op "*" intOp, op "/" intOp, op "**" intOp
         , op "+." floatOp, op "-." floatOp, op "*." floatOp, op "/." floatOp, op "**." floatOp
@@ -116,12 +112,6 @@ decompose r p t =
       _ <- subsumes r t (p # (a, b))
       pure (a, b, id)
 
-closeOver :: Type Typed -> Type Typed
-closeOver a = normType $ forall (fv a) a where
-  fv = Set.toList . ftv
-  forall :: [Var p] -> Type p -> Type p
-  forall [] a = a
-  forall vs a = foldr TyForall a vs
 
 -- A representation of an individual 'match' arm, for blaming type
 -- errors on:
@@ -146,6 +136,6 @@ instance (Pretty (Var p), Reasonable Pattern p, Reasonable Expr p) => Reasonable
   blame _ = string "the pattern-matching clause"
 
 gadtConResult :: Type p -> Type p
-gadtConResult (TyForall _ t) = gadtConResult t
+gadtConResult (TyForall _ _ t) = gadtConResult t
 gadtConResult (TyArr _ t) = t
 gadtConResult t = t

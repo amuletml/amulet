@@ -106,7 +106,7 @@ instance (Pretty (Var p)) => Pretty (Type p) where
   pretty (TyVar v) = stypeVar (squote <> pretty v)
   pretty (TySkol v) = stypeSkol (pretty (v ^. skolIdent))
 
-  pretty (TyPi x e) = pretty x <+> arrow <+> pretty e
+  pretty (TyPi x e) = pretty x <+> pretty e
 
   pretty (TyRows p rows) = enclose (lbrace <> space) (space <> rbrace)  $ pretty p <+> soperator pipe <+> hsep (punctuate comma (prettyRows colon rows)) 
   pretty (TyExactRows rows) = record (prettyRows colon rows)
@@ -126,14 +126,16 @@ instance (Pretty (Var p)) => Pretty (Type p) where
   pretty (TyWithConstraints a b) = parens (hsep (punctuate comma (map prettyEq a))) <+> soperator (char '⊃') <+> pretty b where
     prettyEq (a, b) = pretty a <+> soperator (char '~') <+> pretty b
 
-  pretty (TyUniverse k) = keyword "Set" <+> int k
+  pretty (TyUniverse 0) = stypeCon (string "type")
+  pretty (TyUniverse k) = stypeCon (string "set") <+> int k
 
 instance Pretty (Var p) => Pretty (TyBinder p) where
-  pretty (Anon t) = k t (pretty t) where
+  pretty (Anon t) = k t (pretty t) <+> arrow where
     k TyPi{} = parens
     k TyTuple{} = parens
     k _ = id
-  pretty (Implicit v) = keyword "forall" <+> braces (pretty v)
+  pretty (Implicit v (Just k)) = braces (stypeVar (squote <> pretty v) <+> colon <+> pretty k) <+> arrow
+  pretty (Implicit v Nothing)  = stypeVar (squote <> pretty v) <> dot
 
 instance (Pretty (Var p)) => Pretty (Toplevel p) where
   pretty (LetStmt []) = error "absurd!"
@@ -207,7 +209,7 @@ applyCons x@TySkol{} = x
 applyCons x@TyUniverse{} = x
 applyCons (TyPi a b) = TyPi (go a) (applyCons b) where
   go (Anon t) = Anon (applyCons t)
-  go (Implicit t) = Implicit t
+  go (Implicit t k) = Implicit t (fmap applyCons k)
 applyCons (TyApp a b) = TyApp (applyCons a) (applyCons b)
 applyCons (TyRows r rs) = TyRows (applyCons r) (map (second applyCons) rs)
 applyCons (TyExactRows rs) = TyExactRows (map (second applyCons) rs)
