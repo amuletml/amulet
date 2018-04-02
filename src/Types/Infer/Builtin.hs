@@ -2,22 +2,18 @@
 {-# LANGUAGE DeriveDataTypeable, FlexibleInstances, MultiParamTypeClasses #-}
 module Types.Infer.Builtin where
 
-import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
-import qualified Data.Set as Set
 import qualified Data.Text as T
 import Data.Semigroup
 import Data.Spanned
+import Data.Maybe
 import Data.Data
 
 import Control.Monad.Infer.Error
 import Control.Monad.Infer
 import Control.Lens
 
-import Types.Wellformed
-
 import Syntax.Types
-import Syntax.Subst
 import Syntax
 
 import Pretty
@@ -34,8 +30,8 @@ builtinsEnv :: Env
 builtinsEnv = envOf (scopeFromList ops) (scopeFromList tps) where
   op :: T.Text -> Type Typed -> (Var Resolved, Type Typed)
   op x t = (TgInternal x, t)
-  tp :: T.Text -> (Var Resolved, Kind Typed)
-  tp x = (TgInternal x, KiStar)
+  tp :: T.Text -> (Var Resolved, Type Typed)
+  tp x = (TgInternal x, TyUniverse 0)
 
   boolOp = tyBool `TyArr` (tyBool `TyArr` tyBool)
   intOp = tyInt `TyArr` (tyInt `TyArr` tyInt)
@@ -44,7 +40,7 @@ builtinsEnv = envOf (scopeFromList ops) (scopeFromList tps) where
   intCmp = tyInt `TyArr` (tyInt `TyArr` tyBool)
   floatCmp = tyInt `TyArr` (tyInt `TyArr` tyBool)
 
-  cmp = TyForall [name] $ TyVar name `TyArr` (TyVar name `TyArr` tyBool)
+  cmp = TyForall name (Just (TyUniverse 0)) $ TyVar name `TyArr` (TyVar name `TyArr` tyBool)
     where name = TvName (TgInternal "a")-- TODO: This should use TvName/TvFresh instead
   ops = [ op "+" intOp, op "-" intOp, op "*" intOp, op "/" intOp, op "**" intOp
         , op "+." floatOp, op "-." floatOp, op "*." floatOp, op "/." floatOp, op "**." floatOp
@@ -53,7 +49,7 @@ builtinsEnv = envOf (scopeFromList ops) (scopeFromList tps) where
         , op "<." floatCmp, op ">." floatCmp, op ">=." floatCmp, op "<=." floatCmp
         , op "==" cmp, op "<>" cmp
         , op "||" boolOp, op "&&" boolOp ]
-  tps :: [(Var Resolved, Kind Typed)]
+  tps :: [(Var Resolved, Type Typed)]
   tps = [ tp "int", tp "string", tp "bool", tp "unit", tp "float" ]
 
 unify, subsumes :: ( Reasonable f p
@@ -103,13 +99,10 @@ decompose :: ( Reasonable f p
           -> Type Typed
           -> m (Type Typed, Type Typed, Expr Typed -> Expr Typed)
 decompose r p ty@TyForall{} = do
-  (s, _, t) <- instantiate ty
+  (k', _, t) <- instantiate ty
   (a, b, k) <- decompose r p t
-  let new (TyForall (x:xs) t) = new (TyForall xs t) . 
-        \e -> TypeApp e (s Map.! x) (annotation r, normType t)
-      new (TyForall [] _) = id
-      new _ = error "impossible instantiation in definitely-polymorphic decomposition"
-  pure (a, b, new ty . k)
+  let cont = fromMaybe id k'
+  pure (a, b, cont . k)
 decompose r p t =
   case t ^? p of
     Just (a, b) -> pure (a, b, id)
@@ -118,12 +111,6 @@ decompose r p t =
       _ <- subsumes r t (p # (a, b))
       pure (a, b, id)
 
-closeOver :: Type Typed -> Type Typed
-closeOver a = normType $ forall (fv a) a where
-  fv = Set.toList . ftv
-  forall :: [Var p] -> Type p -> Type p
-  forall [] a = a
-  forall vs a = TyForall vs a
 
 litTy :: Lit -> Type Typed
 litTy LiInt{} = tyInt
@@ -155,6 +142,6 @@ instance (Pretty (Var p), Reasonable Pattern p, Reasonable Expr p) => Reasonable
   blame _ = string "the pattern-matching clause"
 
 gadtConResult :: Type p -> Type p
-gadtConResult (TyForall _ t) = gadtConResult t
+gadtConResult (TyForall _ _ t) = gadtConResult t
 gadtConResult (TyArr _ t) = t
 gadtConResult t = t

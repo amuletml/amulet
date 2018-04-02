@@ -31,23 +31,23 @@ class Substitutable p a | a -> p where
 instance Ord (Var p) => Substitutable p (Type p) where
   ftv TyCon{} = mempty
   ftv TySkol{} = mempty
+  ftv TyUniverse{} = mempty
   ftv (TyVar v) = Set.singleton v
-  ftv (TyForall vs t) = ftv t Set.\\ Set.fromList vs
   ftv (TyApp a b) = ftv a <> ftv b
   ftv (TyTuple a b) = ftv a <> ftv b
-  ftv (TyArr a b) = ftv a <> ftv b
   ftv (TyRows rho rows) = ftv rho <> foldMap (ftv . snd) rows
   ftv (TyExactRows rows) = foldMap (ftv . snd) rows
   ftv (TyWithConstraints eq b) = foldMap (\(a, b) -> ftv a <> ftv b) eq <> ftv b
+  ftv (TyPi binder t) = ftv binder <> (ftv t Set.\\ bound binder)
 
   apply _ (TyCon a) = TyCon a
   apply _ (TySkol x) = TySkol x
+  apply _ (TyUniverse x) = TyUniverse x
   apply s t@(TyVar v) = Map.findWithDefault t v s
-  apply s (TyArr a b) = TyArr (apply s a) (apply s b)
   apply s (TyApp a b) = TyApp (apply s a) (apply s b)
   apply s (TyTuple a b) = TyTuple (apply s a) (apply s b)
-  apply s (TyForall v t) = TyForall v (apply s' t) where
-    s' = foldr Map.delete s v
+  apply s (TyPi binder t) = TyPi (apply s binder) (apply s' t) where
+    s' = foldr Map.delete s (Set.toList (bound binder))
   apply s (TyRows rho rows) = TyRows (apply s rho) (map (second (apply s)) rows)
   apply s (TyExactRows rows) = TyExactRows  (map (second (apply s)) rows)
   apply s (TyWithConstraints eq b) = TyWithConstraints (map (\(a, b) -> (apply s a, apply s b)) eq) (apply s b)
@@ -62,6 +62,7 @@ instance Ord (Var p) => Substitutable p (Coercion p) where
   ftv (ProdCo f x) = ftv f <> ftv x
   ftv (ExactRowsCo rs) = foldMap (ftv . snd) rs
   ftv (RowsCo c rs) = ftv c <> foldMap (ftv . snd) rs
+  ftv (ForallCo v cs) = v `Set.delete` ftv cs
 
   apply _ x@VarCo{} = x
   apply s (ReflCo t) = ReflCo (apply s t)
@@ -72,6 +73,8 @@ instance Ord (Var p) => Substitutable p (Coercion p) where
   apply s (ProdCo f x) = ProdCo (apply s f) (apply s x)
   apply s (ExactRowsCo rs) = ExactRowsCo (map (second (apply s)) rs)
   apply s (RowsCo c rs) = RowsCo (apply s c) (map (second (apply s)) rs)
+  apply s (ForallCo v cs) = ForallCo v (apply s' cs) where
+    s' = Map.delete v s
 
 instance (Ord (Var p), Substitutable p a) => Substitutable p [a] where
   ftv = foldMap ftv
@@ -80,6 +83,17 @@ instance (Ord (Var p), Substitutable p a) => Substitutable p [a] where
 instance (Ord (Var p), Substitutable p a) => Substitutable p (Seq.Seq a) where
   ftv = foldMap ftv
   apply s = fmap (apply s)
+
+instance Ord (Var p) => Substitutable p (TyBinder p) where
+  ftv (Anon t) = ftv t
+  ftv (Implicit _ k) = maybe mempty ftv k
+
+  apply s (Anon t) = Anon (apply s t)
+  apply s (Implicit v k) = Implicit v (fmap (apply s) k)
+
+bound :: Ord (Var p) => TyBinder p -> Set.Set (Var p)
+bound Anon{} = Set.empty
+bound (Implicit v _) = Set.singleton v
 
 compose :: Ord (Var p) => Subst p -> Subst p -> Subst p
 s1 `compose` s2 = fmap (apply s1) s2 <> fmap (apply s2) s1

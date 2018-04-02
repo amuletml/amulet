@@ -58,6 +58,7 @@ substituteInTys m = term where
   coercion (ExactRecord rs) = ExactRecord (map (second coercion) rs)
   coercion (Record c rs) = Record (coercion c) (map (second coercion) rs)
   coercion (CoercionVar x) = CoercionVar x
+  coercion (Quantified v c) = Quantified v (coercion c)
 
   atom (Ref v t) = Ref v (gotype t)
   atom (Lam arg b) = Lam (go arg) (term b) where
@@ -89,6 +90,7 @@ substituteInCo m = coercion where
   coercion (ExactRecord rs) = ExactRecord (map (second coercion) rs)
   coercion (Record c rs) = Record (coercion c) (map (second coercion) rs)
   coercion (CoercionVar x) = CoercionVar x
+  coercion (Quantified v c) = Quantified v (coercion c)
 
   gotype = substituteInType m
 
@@ -171,6 +173,7 @@ refresh = refreshTerm mempty where
   refreshCoercion s (Record c rs) = Record (refreshCoercion s c) (map (second (refreshCoercion s)) rs)
   refreshCoercion s (Arrow f x) = Arrow (refreshCoercion s f) (refreshCoercion s x)
   refreshCoercion s x@(CoercionVar v) = maybe x CoercionVar (VarMap.lookup (toVar v) s)
+  refreshCoercion s (Quantified v c) = Quantified v (refreshCoercion s c)
 
 argVar :: IsVar a => Argument a -> Var _
 argVar (TermArgument v _) = toVar v

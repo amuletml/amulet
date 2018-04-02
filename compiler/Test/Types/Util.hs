@@ -35,7 +35,7 @@ checkExpr e t = go . MonadGen.runGen $ MonadInfer.runInfer builtinsEnv (check e 
 
 equivalent, disjoint :: Type Typed -> Type Typed -> Bool
 equivalent a b =
-  let noPoly (TyForall _ t) = noPoly t
+  let noPoly (TyForall _ _ t) = noPoly t
       noPoly t = t
 
       a' = noPoly a

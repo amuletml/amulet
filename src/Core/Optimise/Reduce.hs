@@ -382,6 +382,7 @@ foldCo (SameRepr t t')
 
 foldCo (Application c c') = Application <$> foldCo c <*> foldCo c'
 foldCo (Arrow c c') = Arrow <$> foldCo c <*> foldCo c'
+foldCo (Quantified v c) = Quantified v <$> foldCo c
 foldCo (ExactRecord rs) = ExactRecord <$> traverse (secondA foldCo) rs
 foldCo (Record c rs) = Record <$> foldCo c <*> traverse (secondA foldCo) rs
 
