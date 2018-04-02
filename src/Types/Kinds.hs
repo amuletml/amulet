@@ -3,6 +3,7 @@ module Types.Kinds (resolveKind, resolveTyDeclKind, annotateKind, closeOver) whe
 
 import Control.Monad.State.Strict
 import Control.Monad.Infer
+import Control.Applicative
 import Control.Lens
 
 import qualified Data.Sequence as Seq
@@ -19,8 +20,8 @@ import Syntax.Subst
 import Syntax.Raise
 import Syntax
 
-import Debug.Trace
 import Pretty
+import Debug.Trace
 
 type KindT m = StateT SomeReason (WriterT (Seq.Seq (Constraint Typed)) m)
 
@@ -67,9 +68,6 @@ resolveTyDeclKind reason tycon args cons = solveForKind reason $ do
   ks <- replicateM (length args) freshTV
   let kind = foldr TyArr TyType ks
 
-
-  trace (show (zip (map TvName args) ks)) pure ()
-
   extendManyK ((TvName tycon, kind):zip (map TvName args) ks) $ do
     for_ cons $ \case
       UnitCon{} -> pure ()
@@ -82,10 +80,9 @@ solveForKind reason k = do
   ((kind, _), cs) <- runWriterT (runStateT k reason)
   x <- gen
 
-  traverse_ (flip trace (pure ()) . render . pretty) cs
   case solve x cs of
     Left e -> throwError e
-    Right (x, _) -> trace (show x) closeOver reason (apply x kind)
+    Right (x, _) -> closeOver reason (apply x kind)
 
 inferKind :: MonadKind m => Type Resolved -> KindT m (Type Typed, Kind Typed)
 inferKind (TyCon v) = do
@@ -98,7 +95,9 @@ inferKind (TyPromotedCon v) = do
   x <- view (values . at v)
   case x of
     Nothing -> throwError (NotInScope v)
-    Just k -> pure (TyPromotedCon (TvName v), k)
+    Just k -> case promotable (traceShowId k) of
+      Nothing -> pure (TyPromotedCon (TvName v), k)
+      Just err -> throwError (NotPromotable (TvName v) k err)
 
 inferKind (TyVar v) = do
   k <- maybe freshTV pure =<< view (types . at v)
@@ -148,7 +147,6 @@ checkKind (TyTuple a b) ek = do
 
 checkKind (TyPi binder b) ek = do
   reason <- get
-  trace (render (pretty (TyPi binder b) <+> string " <=k " <+> pretty ek)) pure ()
   -- _ <- isType ek
   case binder of
     Anon t -> TyArr <$> checkKind t ek <*> checkKind b ek
@@ -188,7 +186,7 @@ inferGadtConKind typ tycon args = go typ (reverse (spine (gadtConResult typ))) w
        in do
          fresh <- replicateM (length fv) freshTV
          extendManyK (zip fv fresh) $ do
-           ty' <- checkKind ty TyType
+           _ <- checkKind ty TyType
            for_ (zip args apps) $ \(var, arg) -> do
              (_, k) <- inferKind arg
              checkKind (TyVar (unTvName var)) k
@@ -212,3 +210,17 @@ closeOver r a = fmap normType . annotateKind r $ forall (fv a) a where
   forall :: [Var p] -> Type p -> Type p
   forall [] a = a
   forall vs a = foldr (flip TyForall Nothing) a vs
+
+promotable :: Type Typed -> Maybe Doc
+promotable TyWithConstraints{} = Just (string "mentions constraints")
+promotable TyTuple{} = Just (string "mentions a tuple")
+promotable TyRows{} = Just (string "mentions a tuple")
+promotable TyExactRows{} = Just (string "mentions a tuple")
+promotable (TyApp a b) = promotable a <|> promotable b
+promotable (TyPi (Implicit _ a) b) = join (traverse promotable a) <|> promotable b
+promotable (TyPi (Anon a) b) = promotable a <|> promotable b
+promotable TyCon{} = Nothing
+promotable TyVar{} = Nothing
+promotable TySkol{} = Nothing
+promotable TyPromotedCon{} = Nothing
+promotable TyType{} = Nothing

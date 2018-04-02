@@ -81,13 +81,18 @@ data TypeError where
   ArisingFrom :: TypeError -> SomeReason -> TypeError
 
   NoOverlap :: Type Typed -> Type Typed -> TypeError
+
   Note :: Pretty x => TypeError -> x -> TypeError
   Suggestion :: Pretty x => TypeError -> x -> TypeError
+
   CanNotInstance :: Pretty (Var p)
                  => Type p {- record type -}
                  -> Type p {- instance -}
                  -> TypeError
+
   Malformed :: Pretty (Var p) => Type p -> TypeError
+  NotPromotable :: Pretty (Var p) => Var p -> Type p -> Doc -> TypeError
+
   IllegalTypeApp :: (Pretty (Var p), Pretty (Var p')) => Expr p -> Type p' -> Type p' -> TypeError
 
 instance (Ord (Var p), Substitutable p (Type p)) => Substitutable p (Constraint p) where
@@ -225,6 +230,14 @@ instance Pretty TypeError where
          , empty -- a line break
          , bullet (string "Note: in type") <+> verbatim t
          ]
+
+  pretty (NotPromotable c x err) =
+    vsep [ string "The constructor" <+> pretty c <+> string "can not be used as a type"
+         , string "Note: because its kind,"
+         , indent 2 (pretty x)
+         , err
+         ]
+    -- TODO needs polishing
 
   pretty (SkolBinding (Skolem k v _ m) b) =
     vsep [ string "Can not unify rigid type variable" <+> skol <+> string "with" <+> whatIs b
