@@ -97,6 +97,10 @@ unify ta@(TyCon a) tb@(TyCon b)
   | a == b = pure (ReflCo tb)
   | otherwise = throwError (NotEqual ta tb)
 
+unify ta@(TyPromotedCon a) tb@(TyPromotedCon b)
+  | a == b = pure (ReflCo tb)
+  | otherwise = throwError (NotEqual ta tb)
+
 unify (TyForall v Nothing ty) (TyForall v' Nothing ty') = do
   fresh <- freshTV
   let (TyVar tv) = fresh
@@ -140,8 +144,7 @@ unify tp@TyRows{} x = throwError (Note (CanNotInstance tp x) isRec)
 unify (TyTuple a b) (TyTuple a' b') = do
   ProdCo <$> unify a a' <*> unify b b'
 
-unify (TyUniverse a) (TyUniverse b)
-  | a == b = pure . ReflCo $ TyUniverse a
+unify TyType TyType = pure (ReflCo TyType)
 unify a b = throwError (NotEqual a b)
 
 isRec :: String
@@ -242,8 +245,6 @@ subsumes k t1 t2@TyForall{} = do
 subsumes k t1@TyForall{} t2 = do
   (_, _, t1') <- instantiate t1
   subsumes k t1' t2
-subsumes _ (TyUniverse a) (TyUniverse b)
-  | a <= b = pure $ AssumedCo (TyUniverse a) (TyUniverse b)
 subsumes k a b = k a b
 
 skolemise :: MonadGen Int m => SkolemMotive Typed -> Type Typed -> m (Type Typed)

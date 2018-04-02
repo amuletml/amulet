@@ -38,7 +38,6 @@ import Types.Wellformed
 import Types.Unify
 import Types.Kinds
 
-import Debug.Trace
 import Pretty
 
 -- Solve for the types of lets in a program
@@ -201,12 +200,11 @@ inferProg (stmt@(LetStmt ns):prg) = do
     consFst (LetStmt ns') $
       inferProg prg
 inferProg (st@(ForeignVal v d t ann):prg) = do
-  t' <- closeOver (BecauseOf st) =<< resolveKind (BecauseOf st) t
+  t' <- resolveKind (BecauseOf st) t
   local (values %~ focus (one v t')) $
     consFst (ForeignVal (TvName v) d t' (ann, t')) $
       inferProg prg
 inferProg (decl@(TypeDecl n tvs cs):prg) = do
-  trace "getting kind" pure ()
   kind <- resolveTyDeclKind (BecauseOf decl) n tvs cs
   let retTy = foldl TyApp (TyCon (TvName n)) (map (TyVar . TvName) tvs)
    in extendKind (TvName n, kind) $ do
