@@ -16,9 +16,6 @@ import Types.Kinds
 import Syntax.Subst
 import Syntax
 
-import Debug.Trace
-import Pretty
-
 inferCon :: MonadInfer Typed m
          => Type Typed
          -> Constructor Resolved
@@ -61,7 +58,8 @@ closeOverGadt r cons cty =
       pushCons c (TyForall v k t) = TyForall v k (pushCons c t)
       pushCons c t = TyWithConstraints c t
 
-      forall xs t = foldr TyPi t (map (flip Implicit Nothing) xs)
+      forall [] t = t
+      forall xs t = foldr (TyPi . flip Implicit Nothing) t xs
    in annotateKind r $ if Set.null fv
          then pushCons cons cty
          else pushCons cons (forall (Set.toList fv) cty)

@@ -6,6 +6,7 @@ import qualified Data.Sequence as Seq
 import qualified Data.Text as T
 import Data.Semigroup
 import Data.Spanned
+import Data.Maybe
 import Data.Data
 
 import Control.Monad.Infer.Error
@@ -100,9 +101,7 @@ decompose :: ( Reasonable f p
 decompose r p ty@TyForall{} = do
   (k', _, t) <- instantiate ty
   (a, b, k) <- decompose r p t
-  let cont = case k' of
-        Just k -> k
-        Nothing -> id
+  let cont = fromMaybe id k'
   pure (a, b, cont . k)
 decompose r p t =
   case t ^? p of

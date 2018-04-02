@@ -136,7 +136,7 @@ resolveModule (r:rs) = flip catchError (throwError . wrapError)
            extractCons (ArgCon v _ _) = v
            extractCons (GeneralisedCon v _ _) = v
 
-           wrap x = foldr TyPi x (map (flip Implicit Nothing) (toList (ftv x)))
+           wrap x = foldr (TyPi . flip Implicit Nothing) x (toList (ftv x))
 
            modZip name name' v v' = zip (map (name<>) v) (map (name'<>) v')
 

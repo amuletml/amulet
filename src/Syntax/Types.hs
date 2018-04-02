@@ -100,7 +100,7 @@ namesInScope :: Scope p f -> [Var p]
 namesInScope (Scope m) = Map.keys m
 
 focus :: Telescope t -> Scope Resolved (Type t) -> Scope Resolved (Type t)
-focus m s = Scope (getScope s <> getTele m) where
+focus m s = Scope (getScope s <> getTele m)
 
 class Degrade r where
   degrade :: Var r -> Var Resolved

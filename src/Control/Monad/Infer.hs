@@ -6,7 +6,6 @@
   , StandaloneDeriving
   , MultiParamTypeClasses
   , OverloadedStrings
-  , TemplateHaskell
   , ScopedTypeVariables
   , RecordWildCards
   #-}

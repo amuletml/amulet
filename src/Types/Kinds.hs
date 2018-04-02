@@ -1,4 +1,4 @@
-{-# LANGUAGE ConstraintKinds, FlexibleContexts #-}
+{-# LANGUAGE ConstraintKinds, FlexibleContexts, LambdaCase #-}
 module Types.Kinds (resolveKind, resolveTyDeclKind, annotateKind, closeOver) where
 
 import Control.Monad.State.Strict
@@ -19,9 +19,6 @@ import Syntax.Subst
 import Syntax.Raise
 import Syntax
 
-import Debug.Trace
-import Pretty
-
 type KindT m = StateT SomeReason (WriterT (Seq.Seq (Constraint Typed)) m)
 
 type MonadKind m =
@@ -41,7 +38,6 @@ resolveKind reason otp = do
                      in runWriterT (runStateT (cont otp) reason)
   x <- gen
 
-  for_ cs (flip trace (pure ()) . render . pretty)
   sub <- case solve x cs of
     Left e -> throwError e
     Right (x, _) -> pure x
@@ -50,12 +46,9 @@ resolveKind reason otp = do
 
 annotateKind :: MonadKind m => SomeReason -> Type Typed -> m (Type Typed)
 annotateKind r ty = do
-  trace (render (pretty ty)) pure ()
-  ((ty, ki), cs) <- runWriterT (runStateT (fst <$> inferKind (raiseT unTvName ty)) r)
-  trace (render (pretty ty)) pure ()
+  ((ty, _), cs) <- runWriterT (runStateT (fst <$> inferKind (raiseT unTvName ty)) r)
   x <- gen
 
-  for_ cs (flip trace (pure ()) . render . pretty)
   sub <- case solve x cs of
     Left e -> throwError e
     Right (x, _) -> pure x
@@ -72,19 +65,15 @@ resolveTyDeclKind reason tycon args cons = solveForKind reason $ do
   let kind = foldr TyArr (TyUniverse 0) ks
 
   extendManyK ((TvName tycon, kind):zip (map TvName args) ks) $ do
-    for_ cons $ \c -> case c of
+    for_ cons $ \case
       UnitCon{} -> pure ()
-      ArgCon _ t _ -> do
-        trace (render (string "t is" <+> pretty t)) pure ()
-        () <$ checkKind t (TyUniverse 0)
+      ArgCon _ t _ -> () <$ checkKind t (TyUniverse 0)
       GeneralisedCon _ t _ -> inferGadtConKind t tycon (map TvName args)
-    trace (render (pretty kind)) pure ()
     pure kind
 
 solveForKind :: MonadKind m => SomeReason -> KindT m (Type Typed) -> m (Type Typed)
 solveForKind reason k = do
   ((kind, _), cs) <- runWriterT (runStateT k reason)
-  trace ("solving the kind " ++ render (pretty kind)) pure ()
   x <- gen
   case solve x cs of
     Left e -> throwError e
@@ -190,7 +179,7 @@ inferGadtConKind typ tycon args = inferKind typ *> go (reverse (spine (gadtConRe
          fresh <- replicateM (length fv) freshTV
          extendManyK (zip fv fresh) $ do
            for_ (zip args apps) $ \(var, arg) -> do
-             (ty, k) <- inferKind arg
+             (_, k) <- inferKind arg
              checkKind (TyVar (unTvName var)) k
            pure ()
   go _ = do

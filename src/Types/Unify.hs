@@ -97,12 +97,12 @@ unify ta@(TyCon a) tb@(TyCon b)
   | a == b = pure (ReflCo tb)
   | otherwise = throwError (NotEqual ta tb)
 
-unify (TyForall v Nothing ty) (TyForall v' Nothing ty')
-  | otherwise = do
-    fresh <- freshTV
-    let (TyVar tv) = fresh
-    ForallCo tv <$>
-      unify (apply (Map.singleton v fresh) ty) (apply (Map.singleton v' fresh) ty')
+unify (TyForall v Nothing ty) (TyForall v' Nothing ty') = do
+  fresh <- freshTV
+  let (TyVar tv) = fresh
+  ForallCo tv <$>
+    unify (apply (Map.singleton v fresh) ty) (apply (Map.singleton v' fresh) ty')
+
 unify (TyForall v (Just k) ty) (TyForall v' (Just k') ty') =
   unify k k' *> unify (TyForall v Nothing ty) (TyForall v' Nothing ty')
 
