@@ -3,6 +3,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies, DataKinds #-}
 {-# LANGUAGE DeriveDataTypeable, TemplateHaskell #-}
+{-# LANGUAGE PatternSynonyms #-}
 module Syntax where
 
 import qualified Data.Text as T
@@ -134,9 +135,8 @@ data Lit
 data Type p
   = TyCon (Var p)
   | TyVar (Var p)
-  | TyForall [Var p] (Type p)
-  | TyArr (Type p) (Type p)
   | TyApp (Type p) (Type p)
+  | TyPi (TyBinder p) (Type p) -- arrow, pi or forall
   | TyRows (Type p) [(Text, Type p)]  -- { α | foo : int, bar : string }
   | TyExactRows [(Text, Type p)] -- { foo : int, bar : string }
   | TyTuple (Type p) (Type p) -- (see note [1])
@@ -144,6 +144,22 @@ data Type p
   -- Used internally:
   | TySkol (Skolem p)
   | TyWithConstraints [(Type p, Type p)] (Type p)
+
+  -- Dependent type stuff
+  | TyUniverse Int
+
+data TyBinder p
+  = Anon { _tyBinderType :: Type p } -- a function type
+  | Implicit { _tyBinderVar :: Var p, _tyBinderArg :: Maybe (Type p) } -- a forall type
+
+instance Spanned (Type p) where
+  annotation _ = internal
+
+deriving instance (Data p, Typeable p, Data (Var p)) => Data (TyBinder p)
+deriving instance Show (Var p) => Show (TyBinder p)
+deriving instance Ord (Var p) => Ord (TyBinder p)
+deriving instance Eq (Var p) => Eq (TyBinder p)
+
 
 data Skolem p
   = Skolem { _skolIdent :: Var p -- the constant itself
@@ -184,22 +200,12 @@ data Coercion p
   | ExactRowsCo [(Text, Coercion p)] -- { x : A ~ B } : { x : A } ~ { x : B }
   | RowsCo (Coercion p) [(Text, Coercion p)] -- { x : A ~ B | f : S ~ T } : { A | f : S } ~ { B | f : T }
   | AssumedCo (Type p) (Type p) -- <A, B> : A ~ B
+  | ForallCo (Var p) (Coercion p) -- (forall v. phi : a ~ b) : forall v. a ~ forall v. b
 
 deriving instance Eq (Var p) => Eq (Coercion p)
 deriving instance Show (Var p) => Show (Coercion p)
 deriving instance Ord (Var p) => Ord (Coercion p)
 deriving instance (Data p, Typeable p, Data (Var p)) => Data (Coercion p)
-
-data Kind p
-  = KiStar
-  | KiArr (Kind p) (Kind p)
-  | KiVar (Var p)
-  | KiForall [Var p] (Kind p)
-
-deriving instance Eq (Var p) => Eq (Kind p)
-deriving instance Show (Var p) => Show (Kind p)
-deriving instance Ord (Var p) => Ord (Kind p)
-deriving instance (Data p, Typeable p, Data (Var p)) => Data (Kind p)
 
 data Toplevel p
   = LetStmt [(Var p, Expr p, Ann p)]
@@ -233,6 +239,15 @@ deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Constructor p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Constructor p)
 instance (Data (Var p), Data (Ann p), Data p) => Spanned (Constructor p)
 
+pattern TyArr :: Type p -> Type p -> Type p
+pattern TyArr t t' <- TyPi (Anon t) t' where
+  TyArr t ty = TyPi (Anon t) ty
+
+pattern TyForall :: Var p -> Maybe (Type p) -> Type p -> Type p
+pattern TyForall v k t' <- TyPi (Implicit v k) t' where
+  TyForall v k ty = TyPi (Implicit v k) ty
+
+
 unTvName :: Var Typed -> Var Resolved
 unTvName (TvName x) = x
 
@@ -249,6 +264,12 @@ makePrisms ''Toplevel
 makePrisms ''Constructor
 makePrisms ''Lit
 makeLenses ''Skolem
+makeLenses ''TyBinder
+
+_TyArr :: Prism' (Type p) (Type p, Type p)
+_TyArr = prism (uncurry (TyPi . Anon)) go where
+  go (TyArr a b) = Right (a, b)
+  go x = Left x
 
 
 {- Note [1]: Tuple types vs tuple patterns/values

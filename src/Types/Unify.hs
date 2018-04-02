@@ -26,11 +26,13 @@ data SolveScope
                , _don'tTouch :: Set.Set (Var Typed)
                , _don'tCoerce :: Set.Set (Var Typed) }
   deriving (Eq, Show, Ord)
+
 data SolveState
   = SolveState { _solveTySubst :: Subst Typed
                , _solveCoSubst :: Map.Map (Var Typed) (Coercion Typed)
                }
   deriving (Eq, Show, Ord)
+
 makeLenses ''SolveState
 makeLenses ''SolveScope
 
@@ -95,12 +97,15 @@ unify ta@(TyCon a) tb@(TyCon b)
   | a == b = pure (ReflCo tb)
   | otherwise = throwError (NotEqual ta tb)
 
-unify t@(TyForall vs ty) t'@(TyForall vs' ty')
-  | length vs /= length vs' = throwError (NotEqual t t')
-  | otherwise = do
-    fvs <- replicateM (length vs) freshTV
-    let subst = Map.fromList . flip zip fvs
-    unify (apply (subst vs) ty) (apply (subst vs') ty')
+unify (TyForall v Nothing ty) (TyForall v' Nothing ty') = do
+  fresh <- freshTV
+  let (TyVar tv) = fresh
+  ForallCo tv <$>
+    unify (apply (Map.singleton v fresh) ty) (apply (Map.singleton v' fresh) ty')
+
+unify (TyForall v (Just k) ty) (TyForall v' (Just k') ty') =
+  unify k k' *> unify (TyForall v Nothing ty) (TyForall v' Nothing ty')
+
 unify (TyRows rho arow) (TyRows sigma brow)
   | overlaps <- overlap arow brow
   , rhoNew <- deleteFirstsBy ((==) `on` fst) (sortOn fst arow) (sortOn fst brow)
@@ -135,6 +140,8 @@ unify tp@TyRows{} x = throwError (Note (CanNotInstance tp x) isRec)
 unify (TyTuple a b) (TyTuple a' b') = do
   ProdCo <$> unify a a' <*> unify b b'
 
+unify (TyUniverse a) (TyUniverse b)
+  | a == b = pure . ReflCo $ TyUniverse a
 unify a b = throwError (NotEqual a b)
 
 isRec :: String
@@ -226,8 +233,8 @@ doSolve (ConFail v t :<| cs) = do
       go = transformType unskolemise
   throwError (FoundHole v (go (apply sub t)))
 
-subsumes :: (Type Typed -> Type Typed -> SolveM b)
-         -> Type Typed -> Type Typed -> SolveM b
+subsumes :: (Type Typed -> Type Typed -> SolveM (Coercion Typed))
+         -> Type Typed -> Type Typed -> SolveM (Coercion Typed)
 subsumes k t1 t2@TyForall{} = do
   sub <- use solveTySubst
   t2' <- skolemise (BySubsumption (apply sub t1) (apply sub t2)) t2
@@ -235,12 +242,14 @@ subsumes k t1 t2@TyForall{} = do
 subsumes k t1@TyForall{} t2 = do
   (_, _, t1') <- instantiate t1
   subsumes k t1' t2
+subsumes _ (TyUniverse a) (TyUniverse b)
+  | a <= b = pure $ AssumedCo (TyUniverse a) (TyUniverse b)
 subsumes k a b = k a b
 
 skolemise :: MonadGen Int m => SkolemMotive Typed -> Type Typed -> m (Type Typed)
-skolemise motive ty@(TyForall tvs t) = do
-  sks <- traverse (freshSkol motive ty) tvs
-  skolemise motive (apply (Map.fromList (zip tvs sks)) t)
+skolemise motive ty@(TyForall tv _ t) = do
+  sk <- freshSkol motive ty tv
+  skolemise motive (apply (Map.singleton tv sk) t)
 skolemise motive (TyArr c d) = TyArr c <$> skolemise motive d
 skolemise _ ty = pure ty
 

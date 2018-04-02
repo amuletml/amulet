@@ -136,7 +136,7 @@ resolveModule (r:rs) = flip catchError (throwError . wrapError)
            extractCons (ArgCon v _ _) = v
            extractCons (GeneralisedCon v _ _) = v
 
-           wrap x = TyForall (toList (ftv x)) x
+           wrap x = foldr (TyPi . flip Implicit Nothing) x (toList (ftv x))
 
            modZip name name' v v' = zip (map (name<>) v) (map (name'<>) v')
 
@@ -254,16 +254,18 @@ reType (TyCon v) = TyCon <$> lookupTy v
 reType (TyVar v) = TyVar <$> lookupTyvar v
 reType v@TySkol{} = error ("impossible! resolving skol " ++ show v)
 reType v@TyWithConstraints{} = error ("impossible! resolving withcons " ++ show v)
-reType (TyForall vs ty) = do
-  vs' <- traverse tagVar vs
-  ty' <- extendTyvarN (zip vs vs') $ reType ty
-  pure (TyForall vs' ty')
-reType (TyArr l r) = TyArr <$> reType l <*> reType r
+reType (TyPi (Implicit v k) ty) = do
+  v' <- tagVar v
+  ty' <- extendTyvar (v, v') $ reType ty
+  k <- traverse reType k
+  pure (TyPi (Implicit v' k) ty')
+reType (TyPi (Anon l) r) = TyPi . Anon <$> reType l <*> reType r
 reType (TyApp l r) = TyApp <$> reType l <*> reType r
 reType (TyRows t r) = TyRows <$> reType t
                                <*> traverse (\(a, b) -> (a,) <$> reType b) r
 reType (TyExactRows r) = TyExactRows <$> traverse (\(a, b) -> (a,) <$> reType b) r
 reType (TyTuple ta tb) = TyTuple <$> reType ta <*> reType tb
+reType (TyUniverse k) = pure (TyUniverse k)
 
 rePattern :: MonadResolve m
           => Pattern Parsed

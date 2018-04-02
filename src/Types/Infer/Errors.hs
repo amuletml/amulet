@@ -10,7 +10,7 @@ gadtConShape :: (Type Typed, Type Typed) -> Type Typed -> TypeError -> TypeError
 gadtConShape (t, _) (TyArr c d) oerr = k . fix . flip Note (string "Generalised constructors can not be curried") $ err where
   fix = case t of
     TyArr x _ -> flip Suggestion (string "Perhaps use a tuple:" <+> verbatim (TyArr (TyTuple x c) d))
-    TyForall vs (TyArr x _) -> flip Suggestion (string "Perhaps use a tuple:" <+> verbatim (TyForall vs (TyArr (TyTuple x c) d)))
+    TyForall v k (TyArr x _) -> flip Suggestion (string "Perhaps use a tuple:" <+> verbatim (TyForall v k (TyArr (TyTuple x c) d)))
     _ -> id
   (err, k) = getErr oerr
 gadtConShape (_, t) ty oerr = k . fix . flip Note (itShouldBe <#> itIs) . flip Note msg $ err where

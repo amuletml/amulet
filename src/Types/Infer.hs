@@ -38,28 +38,12 @@ import Types.Wellformed
 import Types.Unify
 import Types.Kinds
 
+import Debug.Trace
 import Pretty
 
 -- Solve for the types of lets in a program
 inferProgram :: MonadGen Int m => Env -> [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))
 inferProgram env ct = fmap fst <$> runInfer env (inferProg ct)
-
-mkTyApps :: Applicative f
-         => Expr Resolved
-         -> Map.Map (Var Typed) (Type Typed)
-         -> Type Typed
-         -> Type Typed
-         -> f (Expr Typed, Type Typed)
-mkTyApps (VarRef k a) mp c@(TyForall vs _) _ = pure (insts (reverse vs)) where
-  insts []     = (VarRef (TvName k) (a, c), c)
-  insts (x:xs) = let (e, TyForall (_:vs) ty) = insts xs
-                     s = mp Map.! x
-                     ty' = forall vs (apply (Map.singleton x s) ty)
-                 in (TypeApp e s (a, ty'), ty')
-
-  forall [] ty = ty
-  forall vs ty = TyForall vs ty
-mkTyApps _ _ _ _ = undefined
 
 check :: MonadInfer Typed m => Expr Resolved -> Type Typed -> m (Expr Typed)
 check e ty@TyForall{} = do -- This is rule Decl∀L from [Complete and Easy]
@@ -78,8 +62,8 @@ check (Begin xs a) t = do
   end <- check end t
   pure (Begin (start ++ [end]) (a, t))
 
-check (Let ns b an) t = do
-  (ns, ts) <- inferLetTy id ns
+check ex@(Let ns b an) t = do
+  (ns, ts) <- inferLetTy (annotateKind (BecauseOf ex)) ns
   local (values %~ focus ts) $ do
     b <- check b t
     pure (Let ns b (an, t))
@@ -113,7 +97,7 @@ check (Access rc key a) ty = do
 
 -- This is _very_ annoying, but we need it for nested ascriptions
 check ex@(Ascription e ty an) goal = do
-  (ty, _) <- resolveKind ty
+  ty <- resolveKind (BecauseOf ex) ty
   e <- check e ty
   (_, c) <- subsumes ex ty goal
   pure (Ascription (Cast e c (an, ty)) ty (an, goal))
@@ -128,11 +112,11 @@ check e ty = do
 -- [Complete and Easy]: See https://www.cl.cam.ac.uk/~nk480/bidir.pdf
 
 infer :: MonadInfer Typed m => Expr Resolved -> m (Expr Typed, Type Typed)
-infer expr@(VarRef k a) = do
-  (inst, old, new) <- lookupTy' k
-  if Map.null inst
-     then pure (VarRef (TvName k) (a, new), new)
-     else mkTyApps expr inst old new
+infer (VarRef k a) = do
+  (cont, _, new) <- lookupTy' k
+  case cont of
+    Nothing -> pure (VarRef (TvName k) (a, new), new)
+    Just cont -> pure (cont (VarRef (TvName k) (a, new)), new)
 
 infer (Fun p e an) = let blame = Arm p e in do
   (p, dom, ms, cs) <- inferPattern p
@@ -146,7 +130,7 @@ infer (Literal l an) = pure (Literal l (an, ty), ty) where
   ty = litTy l
 
 infer ex@(Ascription e ty an) = do
-  (ty, _) <- resolveKind ty `catchError` \e -> throwError (ArisingFrom e (BecauseOf ex))
+  ty <- resolveKind (BecauseOf ex) ty
   e <- check e ty
   pure (Ascription (correct ty e) ty (an, ty), ty)
 
@@ -210,20 +194,20 @@ inferRows rows = for rows $ \(var', val) -> do
 
 inferProg :: MonadInfer Typed m
           => [Toplevel Resolved] -> m ([Toplevel Typed], Env)
-inferProg (LetStmt ns:prg) = do
-  (ns', ts) <- inferLetTy closeOver ns
-                   `catchError` (throwError . flip ArisingFrom (BecauseOf (LetStmt ns)))
+inferProg (stmt@(LetStmt ns):prg) = do
+  (ns', ts) <- inferLetTy (closeOver (BecauseOf stmt)) ns
+                   `catchError` (throwError . flip ArisingFrom (BecauseOf stmt))
   local (values %~ focus ts) $
     consFst (LetStmt ns') $
       inferProg prg
-inferProg (ForeignVal v d t ann:prg) = do
-  (t', _) <- resolveKind t
-  let t'' = normType (closeOver t')
-  local (values %~ focus (one v t'')) $
-    consFst (ForeignVal (TvName v) d t'' (ann, t'')) $
+inferProg (st@(ForeignVal v d t ann):prg) = do
+  t' <- closeOver (BecauseOf st) =<< resolveKind (BecauseOf st) t
+  local (values %~ focus (one v t')) $
+    consFst (ForeignVal (TvName v) d t' (ann, t')) $
       inferProg prg
-inferProg (TypeDecl n tvs cs:prg) = do
-  kind <- resolveTyDeclKind n tvs cs
+inferProg (decl@(TypeDecl n tvs cs):prg) = do
+  trace "getting kind" pure ()
+  kind <- resolveTyDeclKind (BecauseOf decl) n tvs cs
   let retTy = foldl TyApp (TyCon (TvName n)) (map (TyVar . TvName) tvs)
    in extendKind (TvName n, kind) $ do
      (ts, cs') <- unzip <$> for cs (\con ->
@@ -255,8 +239,8 @@ data Origin
 
 -- For polymorphic recursion, mostly
 approxType :: MonadInfer Typed m => Expr Resolved -> StateT Origin m (Type Typed)
-approxType (Fun (PType _ t _) e _) = TyArr . fst <$> resolveKind t <*> approxType e
-approxType (Ascription _ t _) = fst <$> resolveKind t
+approxType (Fun r@(PType _ t _) e _) = TyArr <$> resolveKind (BecauseOf r) t <*> approxType e
+approxType r@(Ascription _ t _) = resolveKind (BecauseOf r) t
 approxType (Fun _ e _) = do
   put Guessed
   TyArr <$> freshTV <*> approxType e
@@ -265,7 +249,7 @@ approxType _ = do
   lift freshTV
 
 inferLetTy :: forall m. MonadInfer Typed m
-           => (Type Typed -> Type Typed)
+           => (Type Typed -> m (Type Typed))
            -> [(Var Resolved, Expr Resolved, Ann Resolved)]
            -> m ( [(Var Typed, Expr Typed, Ann Typed)]
                 , Telescope Typed
@@ -284,25 +268,27 @@ inferLetTy closeOver vs =
       figureOut blame ty cs = do
         cur <- gen
         (x, co, vt) <- case solve cur cs of
-          Right (x, co) -> pure (x, co, normType (closeOver (apply x ty)))
+          Right (x, co) -> do
+            ty' <- closeOver (apply x ty)
+            pure (x, co, normType ty')
           Left e -> throwError (ArisingFrom e (snd blame))
         skolCheck (TvName (fst blame)) (snd blame) vt
-        pure (closeOver vt, solveEx x co)
+        pure (vt, solveEx x co)
 
-      generalise :: Type Typed -> m (Type Typed)
-      generalise ty =
+      generalise :: SomeReason -> Type Typed -> m (Type Typed)
+      generalise r ty =
         let fv = ftv ty
          in do
            env <- Set.map TvName <$> view typeVars
-           pure $ case Set.toList (fv `Set.difference` env) of
-             [] -> ty
-             vs -> TyForall vs ty
+           case Set.toList (fv `Set.difference` env) of
+             [] -> pure ty
+             vs -> annotateKind r $ foldr (flip TyForall Nothing) ty vs
 
       approximate :: (Var Resolved, Expr Resolved, Span)
                   -> m (Origin, (Var Typed, Type Typed))
       approximate (v, e, _) = do
         (ty, st) <- runStateT (approxType e) Supplied
-        ty' <- generalise ty
+        ty' <- generalise (BecauseOf e) ty
         pure (st, (TvName v, if not (wasGuessed st) then ty' else ty))
 
       skolCheck :: Var Typed -> SomeReason -> Type Typed -> m ()
@@ -352,8 +338,8 @@ inferLetTy closeOver vs =
                      -> m ((Var Typed, Expr Typed, Ann Typed), Telescope Typed)
             solveOne (var, exp, ann, given) =
               let figure = apply solution
-                  ty = closeOver (figure given)
                in do
+                  ty <- closeOver (figure given)
                   skolCheck var (BecauseOf exp) ty
                   pure ( (var, solveEx solution cs exp, (ann, ty))
                        , one var ty )
@@ -381,6 +367,7 @@ solveEx ss cs = transformExprTyped go' go (normType . apply ss) where
 
 consFst :: Functor m => a -> m ([a], b) -> m ([a], b)
 consFst = fmap . first . (:)
+
 
 {-
   Note [Freedom of the press]:

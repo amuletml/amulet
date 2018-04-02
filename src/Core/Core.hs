@@ -89,6 +89,7 @@ data Coercion a
 
   | Application (Coercion a) (Coercion a) -- AppCo
   | Arrow (Coercion a) (Coercion a)
+  | Quantified a (Coercion a)
   | ExactRecord [(Text, Coercion a)]
   | Record (Coercion a) [(Text, Coercion a)]
 
@@ -154,6 +155,7 @@ instance Pretty a => Pretty (Coercion a) where
   pretty (Domain f) = keyword "dom" <+> parens (pretty f)
   pretty (Codomain f) = keyword "cod" <+> parens (pretty f)
   pretty (Symmetry f) = keyword "sym" <+> parens (pretty f)
+  pretty (Quantified v c) = keyword "∀" <> pretty v <> dot <+> pretty c
   pretty (CoercionVar x) = pretty x
 
 pprLet :: Pretty a => [(a, Type a, Term a)] -> Doc
@@ -321,6 +323,9 @@ relates (Domain x) = do
 relates (Codomain x) = do
   (ArrTy _ a, ArrTy _ b) <- relates x
   pure (a, b)
+relates (Quantified v c) = do
+  (a, b) <- relates c
+  pure (ForallTy v a, ForallTy v b)
 
 extractAnn :: AnnTerm b a -> b
 extractAnn (AnnAtom b _)     = b

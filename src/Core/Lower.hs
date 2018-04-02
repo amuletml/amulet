@@ -193,6 +193,7 @@ lowerAnyway (S.Cast e c _) =
   co (S.ProdCo a b) = ExactRecord [("1", co a), ("2", co b)]
   co (S.RowsCo c rs) = C.Record (co c) (map (second co) rs)
   co (S.ExactRowsCo rs) = C.ExactRecord (map (second co) rs)
+  co (S.ForallCo (TvName v) rs) = C.Quantified v (co rs)
   in do
     (e, _) <- lowerBothAtom e
     pure (C.Cast e (co c))
@@ -208,10 +209,10 @@ lowerLiteral (LiBool False) = LitFalse
 lowerLiteral LiUnit = Unit
 
 lowerBigLams :: MonadLower m => S.Type Typed -> S.Expr Typed -> m Term
-lowerBigLams (S.TyForall vs ty) ex =
-  let biglam (TvName x:xs) = Atom . Lam (TypeArgument x StarTy) . biglam xs
-      biglam [] = id
-  in biglam vs <$> lowerBigLams ty ex
+lowerBigLams (S.TyForall (TvName v) (Just k) ty) ex =
+  Atom . Lam (TypeArgument v (lowerType k)) <$> lowerBigLams ty ex
+lowerBigLams (S.TyForall (TvName v) Nothing ty) ex =
+  Atom . Lam (TypeArgument v StarTy) <$> lowerBigLams ty ex
 lowerBigLams ty ex = lowerAtTerm ex (lowerType ty)
 
 
@@ -219,8 +220,9 @@ lowerType :: S.Type Typed -> Type
 lowerType t@S.TyTuple{} = go t where
   go (S.TyTuple a b) = ExactRowsTy [("1", lowerType a), ("2", lowerType b)]
   go x = lowerType x
-lowerType (S.TyArr a b) = ArrTy (lowerType a) (lowerType b)
-lowerType (S.TyForall vs b) = foldr (ForallTy . S.unTvName) (lowerType b) vs
+lowerType (S.TyPi bind b)
+  | S.Implicit v _ <- bind = ForallTy (S.unTvName v) (lowerType b)
+  | S.Anon a <- bind = ArrTy (lowerType a) (lowerType b)
 lowerType (S.TyApp a b) = AppTy (lowerType a) (lowerType b)
 lowerType (S.TyRows rho vs) = RowsTy (lowerType rho) (map (fmap lowerType) vs)
 lowerType (S.TyExactRows vs) = ExactRowsTy (map (fmap lowerType) vs)
@@ -228,6 +230,7 @@ lowerType (S.TyVar (TvName v)) = VarTy v
 lowerType (S.TyCon (TvName v)) = ConTy v
 lowerType (S.TySkol (Skolem _ (TvName v) _ _)) = VarTy v
 lowerType (S.TyWithConstraints _ t) = lowerType t
+lowerType (S.TyUniverse _) = StarTy
 
 lowerPat :: MonadLower m => Pattern Typed -> m Pat
 lowerPat pat = case pat of

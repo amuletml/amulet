@@ -2,7 +2,7 @@
 {-# LANGUAGE FlexibleContexts, UndecidableInstances, FlexibleInstances #-}
 module Syntax.Pretty
   ( module Syntax
-  , tidyPrettyType
+  , tidyPrettyType, applyCons
   ) where
 
 import Control.Arrow (first, second)
@@ -76,6 +76,7 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
     pprCo (ProdCo f x) = pprCo f <+> prod <+> pprCo x
     pprCo (ExactRowsCo rs) = record (map (\(n, v) -> text n <+> colon <+> pprCo v) rs)
     pprCo (RowsCo c rs) = enclose (lbrace <> space) (space <> rbrace) (pprCo c <+> pipe <+> hsep (punctuate comma (map (\(n, v) -> text n <+> colon <+> pprCo v) rs)))
+    pprCo (ForallCo v cs) = keyword "∀" <> pretty v <> dot <+> pprCo cs
 
 prettyMatches :: (Pretty (Var p)) => [(Pattern p, Expr p)] -> [Doc]
 prettyMatches = map (\(a, b) -> pipe <+> nest 4 (pretty a <+> arrow </> pretty b))
@@ -105,22 +106,15 @@ instance (Pretty (Var p)) => Pretty (Type p) where
   pretty (TyCon v) = stypeCon (pretty v)
   pretty (TyVar v) = stypeVar (squote <> pretty v)
   pretty (TySkol v) = stypeSkol (pretty (v ^. skolIdent))
-  pretty (TyForall vs v)
-    = keyword "forall" <+> hsep (map (stypeVar . (squote <>) . pretty) vs) <> dot <+> pretty v
 
-  pretty (TyArr x e)
-    | TyArr{} <- x = parens (pretty x) <+> arrow <+> pretty e
-    | TyForall{} <- x = parens (pretty x) <+> arrow <+> pretty e
-    | TyTuple{} <- x = parens (pretty x) <+> arrow <+> pretty e
-    | otherwise = pretty x <+> arrow <+> pretty e
+  pretty (TyPi x e) = pretty x <+> pretty e
 
   pretty (TyRows p rows) = enclose (lbrace <> space) (space <> rbrace)  $ pretty p <+> soperator pipe <+> hsep (punctuate comma (prettyRows colon rows)) 
   pretty (TyExactRows rows) = record (prettyRows colon rows)
 
   pretty (TyApp x e) = pretty x <+> parenTyArg e (pretty e) where
     parenTyArg TyApp{} = parens
-    parenTyArg TyForall{} = parens
-    parenTyArg TyArr{} = parens
+    parenTyArg TyPi{} = parens
     parenTyArg TyTuple{} = parens
     parenTyArg _ = id
 
@@ -133,15 +127,16 @@ instance (Pretty (Var p)) => Pretty (Type p) where
   pretty (TyWithConstraints a b) = parens (hsep (punctuate comma (map prettyEq a))) <+> soperator (char '⊃') <+> pretty b where
     prettyEq (a, b) = pretty a <+> soperator (char '~') <+> pretty b
 
-instance Pretty (Var p) => Pretty (Kind p) where
-  pretty KiStar = stypeCon (string "Type")
-  pretty (KiArr a b)
-    | KiArr{} <- a = parens (pretty a) <+> arrow <+> pretty b
-    | otherwise = pretty a <+> arrow <+> pretty b
+  pretty (TyUniverse 0) = stypeCon (string "type")
+  pretty (TyUniverse k) = stypeCon (string "set") <+> int k
 
-  pretty (KiVar v) = stypeVar (squote <> pretty v)
-  pretty (KiForall vs v)
-    = keyword "forall" <+> hsep (map ((squote <>) . pretty) vs) <> dot <+> pretty v
+instance Pretty (Var p) => Pretty (TyBinder p) where
+  pretty (Anon t) = k t (pretty t) <+> arrow where
+    k TyPi{} = parens
+    k TyTuple{} = parens
+    k _ = id
+  pretty (Implicit v (Just k)) = braces (stypeVar (squote <> pretty v) <+> colon <+> pretty k) <+> arrow
+  pretty (Implicit v Nothing)  = stypeVar (squote <> pretty v) <> dot
 
 instance (Pretty (Var p)) => Pretty (Toplevel p) where
   pretty (LetStmt []) = error "absurd!"
@@ -212,8 +207,10 @@ applyCons :: Ord (Var p) => Type p -> Type p
 applyCons x@TyCon{} = x
 applyCons x@TyVar{} = x
 applyCons x@TySkol{} = x
-applyCons (TyForall vs t) = TyForall vs (applyCons t)
-applyCons (TyArr a b) = TyArr (applyCons a) (applyCons b)
+applyCons x@TyUniverse{} = x
+applyCons (TyPi a b) = TyPi (go a) (applyCons b) where
+  go (Anon t) = Anon (applyCons t)
+  go (Implicit t k) = Implicit t (fmap applyCons k)
 applyCons (TyApp a b) = TyApp (applyCons a) (applyCons b)
 applyCons (TyRows r rs) = TyRows (applyCons r) (map (second applyCons) rs)
 applyCons (TyExactRows rs) = TyExactRows (map (second applyCons) rs)

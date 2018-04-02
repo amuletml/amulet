@@ -12,8 +12,7 @@ transformType
 transformType ft = goT where
   transT (TyCon v) = TyCon v
   transT (TyVar v) = TyVar v
-  transT (TyForall vs ty) = TyForall vs (goT ty)
-  transT (TyArr x r) = TyArr (goT x) (goT r)
+  transT (TyPi x r) = TyPi (transB x) (goT r)
   transT (TyApp f x) = TyApp (goT f) (goT x)
   transT (TyRows f fs) = TyRows (goT f) (map (second goT) fs)
   transT (TyExactRows fs) = TyExactRows (map (second goT) fs)
@@ -21,11 +20,15 @@ transformType ft = goT where
 
   transT (TySkol (Skolem i v ty m)) = TySkol (Skolem i v (goT ty) (transM m))
   transT (TyWithConstraints cons ty) = TyWithConstraints (map (goT***goT) cons) (goT ty)
+  transT (TyUniverse k) = TyUniverse k
 
 
   transM (ByAscription ty) = ByAscription (goT ty)
   transM (BySubsumption l r) = BySubsumption (goT l) (goT r)
   transM (ByExistential v ty) = ByExistential v (goT ty)
+
+  transB (Anon t) = Anon (transT t)
+  transB (Implicit x k) = Implicit x (fmap goT k)
 
   goT = transT . ft
 
@@ -44,6 +47,7 @@ transformCoercion fc ft = goC where
   transC (ExactRowsCo rs) = ExactRowsCo (map (second goC) rs)
   transC (RowsCo c rs) = RowsCo (goC c) (map (second goC) rs)
   transC (SymCo c) = SymCo (goC c)
+  transC (ForallCo v c) = ForallCo v (goC c)
 
   goT = transformType ft . ft
   goC = transC . fc
