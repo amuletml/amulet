@@ -104,6 +104,7 @@ instance Pretty Lit where
 
 instance (Pretty (Var p)) => Pretty (Type p) where
   pretty (TyCon v) = stypeCon (pretty v)
+  pretty (TyPromotedCon v) = stypeCon (pretty v)
   pretty (TyVar v) = stypeVar (squote <> pretty v)
   pretty (TySkol v) = stypeSkol (pretty (v ^. skolIdent))
 
@@ -127,15 +128,14 @@ instance (Pretty (Var p)) => Pretty (Type p) where
   pretty (TyWithConstraints a b) = parens (hsep (punctuate comma (map prettyEq a))) <+> soperator (char '⊃') <+> pretty b where
     prettyEq (a, b) = pretty a <+> soperator (char '~') <+> pretty b
 
-  pretty (TyUniverse 0) = stypeCon (string "type")
-  pretty (TyUniverse k) = stypeCon (string "set") <+> int k
+  pretty TyType = stypeCon (string "type")
 
 instance Pretty (Var p) => Pretty (TyBinder p) where
   pretty (Anon t) = k t (pretty t) <+> arrow where
     k TyPi{} = parens
     k TyTuple{} = parens
     k _ = id
-  pretty (Implicit v (Just k)) = braces (stypeVar (squote <> pretty v) <+> colon <+> pretty k) <+> arrow
+  pretty (Implicit v (Just k)) = braces (stypeVar (squote <> pretty v) <+> colon <+> pretty k) <> dot
   pretty (Implicit v Nothing)  = stypeVar (squote <> pretty v) <> dot
 
 instance (Pretty (Var p)) => Pretty (Toplevel p) where
@@ -151,7 +151,7 @@ instance (Pretty (Var p)) => Pretty (Toplevel p) where
   pretty (TypeDecl ty args ctors) = keyword "type" <+> pretty ty
                                 <+> hsep (map ((squote <>) . pretty) args)
                                 <+> equals
-                                <#> vsep (map ((pipe <+>) . pretty) ctors)
+                                <#> indent 2 (vsep (map ((pipe <+>) . pretty) ctors))
 
   pretty (Open m Nothing) = keyword "open" <+> pretty m
   pretty (Open m (Just a)) = keyword "open" <+> pretty m <+> keyword "as" <+> text a
@@ -207,7 +207,8 @@ applyCons :: Ord (Var p) => Type p -> Type p
 applyCons x@TyCon{} = x
 applyCons x@TyVar{} = x
 applyCons x@TySkol{} = x
-applyCons x@TyUniverse{} = x
+applyCons x@TyPromotedCon{} = x
+applyCons x@TyType{} = x
 applyCons (TyPi a b) = TyPi (go a) (applyCons b) where
   go (Anon t) = Anon (applyCons t)
   go (Implicit t k) = Implicit t (fmap applyCons k)

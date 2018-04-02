@@ -55,6 +55,7 @@ raiseP _ a (PLiteral l p) = PLiteral l (a p)
 raiseT :: (Var p -> Var p') -- How to raise variables
        -> Type p -> Type p'
 raiseT v (TyCon n) = TyCon (v n)
+raiseT v (TyPromotedCon n) = TyPromotedCon (v n)
 raiseT v (TySkol (Skolem n u t m)) = TySkol (Skolem (v n) (v u) (raiseT v t) (motive m)) where
   motive (BySubsumption a b) = BySubsumption (raiseT v a) (raiseT v b)
   motive (ByAscription t) = ByAscription (raiseT v t)
@@ -68,7 +69,7 @@ raiseT v (TyWithConstraints eq a) = TyWithConstraints (map (\(a, b) -> (raiseT v
 raiseT v (TyPi binder t) = TyPi (go binder) (raiseT v t) where
   go (Anon t) = Anon (raiseT v t)
   go (Implicit var k) = Implicit (v var) (fmap (raiseT v) k)
-raiseT _ (TyUniverse k) = TyUniverse k
+raiseT _ TyType = TyType
 
 raiseCo :: (Var p -> Var p') -> Coercion p -> Coercion p'
 raiseCo v (VarCo a) = VarCo (v a)

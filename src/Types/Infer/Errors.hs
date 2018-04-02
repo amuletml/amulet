@@ -4,8 +4,6 @@ import Control.Monad.Infer
 import Syntax
 import Pretty
 
-import Debug.Trace
-
 gadtConShape :: (Type Typed, Type Typed) -> Type Typed -> TypeError -> TypeError
 gadtConShape (t, _) (TyArr c d) oerr = k . fix . flip Note (string "Generalised constructors can not be curried") $ err where
   fix = case t of
@@ -36,7 +34,7 @@ gadtConShape (_, t) ty oerr = k . fix . flip Note (itShouldBe <#> itIs) . flip N
       TyCon v':_ | v == v' -> flip Suggestion (string "did you mean to saturate it with respect to universals,"
                                            <#> string "as in" <+> pretty t <> char '?')
       [TyCon v'] | v /= v' -> flip Suggestion (string "did you mean to use" <+> pretty v' <+> string "instead of" <+> pretty v <> char '?')
-      xs -> traceShow xs
+      _ -> id
     TyApp{} -> case (spine ty, spine t) of
       (TyCon v':xs, TyCon v:_) | v /= v' ->
         flip Suggestion (string "did you mean" <+> pretty (rewind v xs) </> string "instead of" <+> pretty ty <> char '?')
@@ -55,4 +53,4 @@ spine = go [] where
   go acc t = t:acc
 
 rewind :: Var Typed -> [Type Typed] -> Type Typed
-rewind x = foldl TyApp (TyCon x) . traceShowId 
+rewind x = foldl TyApp (TyCon x)

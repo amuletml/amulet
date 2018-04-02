@@ -31,7 +31,7 @@ builtinsEnv = envOf (scopeFromList ops) (scopeFromList tps) where
   op :: T.Text -> Type Typed -> (Var Resolved, Type Typed)
   op x t = (TgInternal x, t)
   tp :: T.Text -> (Var Resolved, Type Typed)
-  tp x = (TgInternal x, TyUniverse 0)
+  tp x = (TgInternal x, TyType)
 
   boolOp = tyBool `TyArr` (tyBool `TyArr` tyBool)
   intOp = tyInt `TyArr` (tyInt `TyArr` tyInt)
@@ -40,7 +40,7 @@ builtinsEnv = envOf (scopeFromList ops) (scopeFromList tps) where
   intCmp = tyInt `TyArr` (tyInt `TyArr` tyBool)
   floatCmp = tyInt `TyArr` (tyInt `TyArr` tyBool)
 
-  cmp = TyForall name (Just (TyUniverse 0)) $ TyVar name `TyArr` (TyVar name `TyArr` tyBool)
+  cmp = TyForall name (Just TyType) $ TyVar name `TyArr` (TyVar name `TyArr` tyBool)
     where name = TvName (TgInternal "a")-- TODO: This should use TvName/TvFresh instead
   ops = [ op "+" intOp, op "-" intOp, op "*" intOp, op "/" intOp, op "**" intOp
         , op "+." floatOp, op "-." floatOp, op "*." floatOp, op "/." floatOp, op "**." floatOp

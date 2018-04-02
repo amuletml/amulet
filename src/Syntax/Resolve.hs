@@ -252,6 +252,7 @@ reExpr Cast{} = error "resolve cast"
 reType :: MonadResolve m => Type Parsed -> m (Type Resolved)
 reType (TyCon v) = TyCon <$> lookupTy v
 reType (TyVar v) = TyVar <$> lookupTyvar v
+reType (TyPromotedCon v) = TyPromotedCon <$> lookupEx v
 reType v@TySkol{} = error ("impossible! resolving skol " ++ show v)
 reType v@TyWithConstraints{} = error ("impossible! resolving withcons " ++ show v)
 reType (TyPi (Implicit v k) ty) = do
@@ -265,7 +266,7 @@ reType (TyRows t r) = TyRows <$> reType t
                                <*> traverse (\(a, b) -> (a,) <$> reType b) r
 reType (TyExactRows r) = TyExactRows <$> traverse (\(a, b) -> (a,) <$> reType b) r
 reType (TyTuple ta tb) = TyTuple <$> reType ta <*> reType tb
-reType (TyUniverse k) = pure (TyUniverse k)
+reType TyType = pure TyType
 
 rePattern :: MonadResolve m
           => Pattern Parsed
