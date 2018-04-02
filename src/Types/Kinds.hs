@@ -19,6 +19,9 @@ import Syntax.Subst
 import Syntax.Raise
 import Syntax
 
+import Debug.Trace
+import Pretty
+
 type KindT m = StateT SomeReason (WriterT (Seq.Seq (Constraint Typed)) m)
 
 type MonadKind m =
@@ -62,12 +65,15 @@ resolveTyDeclKind :: MonadKind m
                   -> m (Type Typed)
 resolveTyDeclKind reason tycon args cons = solveForKind reason $ do
   ks <- replicateM (length args) freshTV
-  let kind = foldr TyArr (TyUniverse 0) ks
+  let kind = foldr TyArr TyType ks
+
+
+  trace (show (zip (map TvName args) ks)) pure ()
 
   extendManyK ((TvName tycon, kind):zip (map TvName args) ks) $ do
     for_ cons $ \case
       UnitCon{} -> pure ()
-      ArgCon _ t _ -> () <$ checkKind t (TyUniverse 0)
+      ArgCon _ t _ -> () <$ checkKind t TyType
       GeneralisedCon _ t _ -> inferGadtConKind t tycon (map TvName args)
     pure kind
 
@@ -75,9 +81,11 @@ solveForKind :: MonadKind m => SomeReason -> KindT m (Type Typed) -> m (Type Typ
 solveForKind reason k = do
   ((kind, _), cs) <- runWriterT (runStateT k reason)
   x <- gen
+
+  traverse_ (flip trace (pure ()) . render . pretty) cs
   case solve x cs of
     Left e -> throwError e
-    Right (x, _) -> closeOver reason (apply x kind)
+    Right (x, _) -> trace (show x) closeOver reason (apply x kind)
 
 inferKind :: MonadKind m => Type Resolved -> KindT m (Type Typed, Kind Typed)
 inferKind (TyCon v) = do
@@ -85,6 +93,12 @@ inferKind (TyCon v) = do
   case x of
     Nothing -> throwError (NotInScope v)
     Just k -> pure (TyCon (TvName v), k)
+
+inferKind (TyPromotedCon v) = do
+  x <- view (values . at v)
+  case x of
+    Nothing -> throwError (NotInScope v)
+    Just k -> pure (TyPromotedCon (TvName v), k)
 
 inferKind (TyVar v) = do
   k <- maybe freshTV pure =<< view (types . at v)
@@ -107,12 +121,7 @@ inferKind (TyRows p rs) = do
     pure (row, ty)
   pure (TyRows p rs, k)
 
-inferKind (TyTuple a b) = do
-  (a, k) <- secondA isType =<< inferKind a
-  b <- checkKind b k
-  pure (TyTuple a b, k)
-
-inferKind (TyUniverse x) = pure (TyUniverse x, TyUniverse (x + 1))
+inferKind TyType = pure (TyType, TyType)
 inferKind (TyWithConstraints cs a) = do
   cs <- for cs $ \(a, b) -> do
     (a, k) <- inferKind a
@@ -134,17 +143,18 @@ checkKind (TyExactRows rs) k = do
     pure (row, ty)
   pure (TyExactRows rs)
 
+checkKind (TyTuple a b) ek = do
+  TyTuple <$> checkKind a ek <*> checkKind b ek
+
 checkKind (TyPi binder b) ek = do
   reason <- get
+  trace (render (pretty (TyPi binder b) <+> string " <=k " <+> pretty ek)) pure ()
   -- _ <- isType ek
   case binder of
-    Anon t -> do
-      (a, ik) <- inferKind t
-      b <- checkKind b ek
-      _ <- subsumes (Const reason) ik ek -- ik <= ek
-      pure $ TyArr a b
+    Anon t -> TyArr <$> checkKind t ek <*> checkKind b ek
     Implicit v (Just arg) -> do
-      (arg, _) <- inferKind arg
+      (arg, kind) <- inferKind arg
+      _ <- subsumes (Const reason) ek kind
       b <- extendKind (TvName v, arg) $
         checkKind b ek
       let bind = Implicit (TvName v) (Just arg)
@@ -167,23 +177,24 @@ inferGadtConKind :: MonadKind m
                  -> Var Resolved
                  -> [Var Typed]
                  -> KindT m ()
-inferGadtConKind typ tycon args = inferKind typ *> go (reverse (spine (gadtConResult typ))) where
+inferGadtConKind typ tycon args = go typ (reverse (spine (gadtConResult typ))) where
   spine :: Type Resolved -> [Type Resolved]
   spine (TyApp f x) = x:spine f
   spine x = [x]
 
-  go (hd:apps)
+  go ty (hd:apps)
     | TyCon hd <- hd, hd == tycon =
       let fv = map TvName $ toList (foldMap ftv apps)
        in do
          fresh <- replicateM (length fv) freshTV
          extendManyK (zip fv fresh) $ do
+           ty' <- checkKind ty TyType
            for_ (zip args apps) $ \(var, arg) -> do
              (_, k) <- inferKind arg
              checkKind (TyVar (unTvName var)) k
            pure ()
-  go _ = do
-    (tp, _) <- inferKind typ
+  go _ _ = do
+    tp <- checkKind typ TyType
     throwError $ gadtConShape
       (tp, foldl TyApp (TyCon (TvName tycon)) (map TyVar args))
       (gadtConResult tp)
@@ -192,7 +203,7 @@ inferGadtConKind typ tycon args = inferKind typ *> go (reverse (spine (gadtConRe
 isType :: MonadKind m => Kind Typed -> KindT m (Kind Typed)
 isType t = do
   blame <- get
-  _ <- subsumes (Const blame) (TyUniverse 0) t
+  _ <- unify (Const blame) TyType t
   pure t
 
 closeOver :: MonadKind m => SomeReason -> Type Typed -> m (Type Typed)

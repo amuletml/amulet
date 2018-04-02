@@ -201,7 +201,7 @@ inferProg (stmt@(LetStmt ns):prg) = do
     consFst (LetStmt ns') $
       inferProg prg
 inferProg (st@(ForeignVal v d t ann):prg) = do
-  t' <- closeOver (BecauseOf st) =<< resolveKind (BecauseOf st) t
+  t' <- resolveKind (BecauseOf st) t
   local (values %~ focus (one v t')) $
     consFst (ForeignVal (TvName v) d t' (ann, t')) $
       inferProg prg

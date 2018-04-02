@@ -1,25 +1,24 @@
-type z ;;
-type s 'a ;;
-
 external val print : 'a -> unit = "print" ;;
 external val any_to_string : 'a -> string = "tostring" ;;
 external val io_write : string -> unit = "io.write" ;;
 external val error : string -> 'a = "error" ;;
 external val repeat_string : string -> int -> string = "string.rep" ;;
 
+type natural = Z | S of natural ;;
+
 type vect 'n 'a =
-  | Nil : vect z 'a
-  | Cons : 'a * vect 'k 'a -> vect (s 'k) 'a ;;
+  | Nil : vect Z 'a
+  | Cons : 'a * vect 'k 'a -> vect (S 'k) 'a ;;
 
 type eq 'a 'b = Refl : eq 'a 'a ;;
 
 type lte 'a 'b =
-  | LteZero : lte z 'a
-  | LteSucc : lte 'a 'b -> lte (s 'a) (s 'b) ;;
+  | LteZero : lte Z 'a
+  | LteSucc : lte 'a 'b -> lte (S 'a) (S 'b) ;;
 
 type nat 'n =
-  | Z : nat z
-  | S : nat 'k -> nat (s 'k) ;;
+  | Zero : nat Z
+  | Succ : nat 'k -> nat (S 'k) ;;
 
 type some_nat =
   | SomeNat : nat 'n -> some_nat ;;
@@ -63,27 +62,27 @@ let trim v x k =
 let replicate (n : nat 'n) (x : 'a) : vect 'n 'a =
   let go : forall 'n. nat 'n -> vect 'n 'a = fun l ->
     match l with
-    | Z -> Nil
-    | S k -> Cons (x, go k)
+    | Zero -> Nil
+    | Succ k -> Cons (x, go k)
   in go n ;;
 
 (* rank n: forall 'b. (forall 'n. nat 'n -> 'b) -> int -> 'b *)
 let with_natural (k : forall 'n. nat 'n -> 'b) i =
   let go n =
     if n == 0 then
-      SomeNat Z
+      SomeNat Zero
     else
       match go (n - 1) with
-      | SomeNat x -> SomeNat (S x)
+      | SomeNat x -> SomeNat (Succ x)
   in match go i with
   | SomeNat n -> k n ;;
 
 (* uses supplied type *)
 let decide_lte (x : nat 'n) (y : nat 'm) : maybe (lte 'n 'm) =
   match x, y with
-  | Z, y -> Some LteZero
-  | S k, Z -> None
-  | S k, S n ->
+  | Zero, y -> Some LteZero
+  | Succ k, Zero -> None
+  | Succ k, Succ n ->
       match decide_lte k n with
       | Some p -> Some (LteSucc p)
       | None -> None
@@ -92,9 +91,9 @@ let decide_lte (x : nat 'n) (y : nat 'm) : maybe (lte 'n 'm) =
 (* forall 'n . nat 'n -> unit *)
 let ppr_nat n : unit =
   match n with
-  | Z -> print "Z"
-  | S k -> begin
-    io_write "S ";
+  | Zero -> print "Zero"
+  | Succ k -> begin
+    io_write "Succ ";
     ppr_nat k
   end ;;
 
@@ -102,8 +101,9 @@ let ppr_nat n : unit =
 let main =
   (* vect (s (s (s z))) int *)
   let foo n =
-    match decide_lte (S (S (S Z))) n with
-    | Some x -> trim (replicate (S (S (S Z))) 2) (replicate n 1) x
+    match decide_lte (Succ (Succ (Succ Zero))) n with
+    | Some x -> trim (replicate (Succ (Succ (Succ Zero))) 2)
+                     (replicate n 1) x
     | None -> error "oh no"
   (* uses supplied type *)
   and go (x : vect 'n 'a) (i : int) : unit =

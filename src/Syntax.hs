@@ -135,6 +135,7 @@ data Lit
 data Type p
   = TyCon (Var p)
   | TyVar (Var p)
+  | TyPromotedCon (Var p)
   | TyApp (Type p) (Type p)
   | TyPi (TyBinder p) (Type p) -- arrow, pi or forall
   | TyRows (Type p) [(Text, Type p)]  -- { α | foo : int, bar : string }
@@ -146,7 +147,7 @@ data Type p
   | TyWithConstraints [(Type p, Type p)] (Type p)
 
   -- Dependent type stuff
-  | TyUniverse Int
+  | TyType -- yeah, type : type, fight me
 
 data TyBinder p
   = Anon { _tyBinderType :: Type p } -- a function type

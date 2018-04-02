@@ -83,7 +83,7 @@ import Syntax
   float    { Token (TcFloat _) _ }
   string   { Token (TcString  _) _ }
 
-%expect 67
+%expect 71
 
 %%
 
@@ -241,6 +241,8 @@ TypeApp  :: { Located (Type Parsed) }
 TypeAtom :: { Located (Type Parsed) }
          : Var                                    { lPos1 $1 $ TyCon (getL $1) }
          | TyVar                                  { lPos1 $1 $ TyVar (getL $1) }
+         | Con
+           { lPos1 $1 $ TyPromotedCon (getL $1) }
          | forall ListE1(tyvar) '.' Type
            { lPos2 $1 $4 $ forallTy (map getName $2) (getL $4) }
          | '(' ')'                                { lPos2 $1 $2 $ TyCon (Name (T.pack "unit")) }

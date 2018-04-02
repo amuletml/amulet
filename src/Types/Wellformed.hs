@@ -19,6 +19,8 @@ wellformed tp = case tp of
   TyCon{} -> pure ()
   TyVar{} -> pure ()
   TySkol{} -> pure ()
+  TyType{} -> pure ()
+  TyPromotedCon{} -> pure ()
   TyPi a b ->
     case a of
       Implicit{} -> wellformed b
@@ -36,7 +38,6 @@ wellformed tp = case tp of
   TyWithConstraints eqs b -> do
     for_ eqs $ \(a, b) -> wellformed a *> wellformed b
     wellformed b
-  TyUniverse{} -> pure ()
 
 arity :: Type p -> Int
 arity (TyArr _ t) = 1 + arity t
@@ -69,7 +70,8 @@ normType = flatten . uncurry collect . runWriter . spread . applyCons where
 skols :: Ord (Var p) => Type p -> Set.Set (Skolem p)
 skols TyCon{} = mempty
 skols TyVar{} = mempty
-skols TyUniverse{} = mempty
+skols TyType{} = mempty
+skols TyPromotedCon{} = mempty
 skols (TySkol x) = Set.singleton x
 skols (TyApp a b) = skols a <> skols b
 skols (TyPi b t)

@@ -12,6 +12,7 @@ transformType
 transformType ft = goT where
   transT (TyCon v) = TyCon v
   transT (TyVar v) = TyVar v
+  transT (TyPromotedCon v) = TyPromotedCon v
   transT (TyPi x r) = TyPi (transB x) (goT r)
   transT (TyApp f x) = TyApp (goT f) (goT x)
   transT (TyRows f fs) = TyRows (goT f) (map (second goT) fs)
@@ -20,7 +21,7 @@ transformType ft = goT where
 
   transT (TySkol (Skolem i v ty m)) = TySkol (Skolem i v (goT ty) (transM m))
   transT (TyWithConstraints cons ty) = TyWithConstraints (map (goT***goT) cons) (goT ty)
-  transT (TyUniverse k) = TyUniverse k
+  transT TyType = TyType
 
 
   transM (ByAscription ty) = ByAscription (goT ty)
