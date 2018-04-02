@@ -37,7 +37,6 @@ atomArity _ _ = 0
 isPure :: IsVar a => ArityScope -> AnnTerm b a -> Bool
 isPure _ AnnAtom{}   = True
 isPure _ AnnExtend{} = True
-isPure _ AnnTyApp{}  = True
 isPure _ AnnCast{}  = True
 isPure s (AnnLet _ (One v) e) = isPure s e && isPure s (thd3 v)
 isPure s (AnnLet _ (Many vs) e) = isPure s e && all (isPure s . thd3) vs
@@ -49,7 +48,6 @@ extendPureFuns s vs = s
   { pureArity = foldr (\(v, _, e) p ->
                          case e of
                            AnnAtom  _ a   -> maybeInsert v (atomArity s a) p
-                           AnnTyApp _ a _ -> maybeInsert v (atomArity s a - 1) p
                            AnnApp   _ a _ -> maybeInsert v (atomArity s a - 1) p
                            _ -> p) (pureArity s) vs
   }
@@ -64,7 +62,7 @@ extendPureCtors s cts = s {
 
   where
     typeArity :: Type a -> Int
-    typeArity (ForallTy _ ty) = 1 + typeArity ty
+    typeArity (ForallTy _ _ ty) = 1 + typeArity ty
     typeArity _ = 0
 
 

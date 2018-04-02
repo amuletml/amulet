@@ -76,7 +76,7 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
     pprCo (ProdCo f x) = pprCo f <+> prod <+> pprCo x
     pprCo (ExactRowsCo rs) = record (map (\(n, v) -> text n <+> colon <+> pprCo v) rs)
     pprCo (RowsCo c rs) = enclose (lbrace <> space) (space <> rbrace) (pprCo c <+> pipe <+> hsep (punctuate comma (map (\(n, v) -> text n <+> colon <+> pprCo v) rs)))
-    pprCo (ForallCo v cs) = keyword "∀" <> pretty v <> dot <+> pprCo cs
+    pprCo (ForallCo v c cs) = keyword "∀" <> parens (pretty v <+> colon <+> pprCo c) <> dot <+> pprCo cs
 
 prettyMatches :: (Pretty (Var p)) => [(Pattern p, Expr p)] -> [Doc]
 prettyMatches = map (\(a, b) -> pipe <+> nest 4 (pretty a <+> arrow </> pretty b))

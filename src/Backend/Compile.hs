@@ -176,6 +176,7 @@ compileAtom' (Lam (TermArgument v _) e) = do
   (v', s) <- gets (pushVar v . snd) -- Note this doesn't modify the scope, only extends it
   pure (LuaFunction [LuaName v'] (compileStmt s LuaReturn e), Nothing)
 compileAtom' (Lam TypeArgument{} e) = (,Nothing) <$> compileTerm e
+compileAtom' (AType _) = pure (LuaNil, Nothing)
 
 compileAtom' (Ref v _) | isBinOp v
   = pure (LuaFunction

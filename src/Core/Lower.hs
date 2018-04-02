@@ -53,16 +53,16 @@ cotyFloat = lowerType tyFloat
 
 errRef :: Atom
 errRef = Ref (TgInternal "error")
-                (ForallTy (TgInternal "a")
-                            (ArrTy cotyString
-                                     (VarTy (TgInternal "a"))))
+                (ForallTy (Relevant (TgInternal "a")) StarTy
+                          (ForallTy Irrelevant cotyString
+                                 (VarTy (TgInternal "a"))))
 
 patternMatchingFail :: MonadLower m => Span -> Type -> Type -> m (Pat, Type, Term)
 patternMatchingFail w p t = do
   var <- fresh
   tyApp <- fresh
   let err = Lit (Str (T.pack ("Pattern matching failure at " ++ show (pretty w))))
-      errTy = ArrTy cotyString t
+      errTy = ForallTy Irrelevant cotyString t
   pure (C.Capture var p, p, C.Let (One (tyApp, errTy, C.TyApp errRef t))
                              (C.App (C.Ref tyApp errTy) err))
 
@@ -96,7 +96,7 @@ lowerAt (Ascription e _ _) t = lowerAt e t
 lowerAt (VarRef (TvName p) _) ty = pure (Atom (Ref p ty))
 lowerAt (TypeApp f x _) _ = flip TyApp (lowerType x) <$> lowerExprAtom f
 
-lowerAt e (ForallTy vs b) = Atom . Lam (TypeArgument vs StarTy) <$> lowerAtTerm e b
+lowerAt e (ForallTy (Relevant v) c b) = Atom . Lam (TypeArgument v c) <$> lowerAtTerm e b
 
 lowerAt (S.Let vs t _) ty = do
   let sccs = depOrder vs
@@ -119,7 +119,7 @@ lowerAt (S.If c t e _) ty = do
   let tc = (PatLit LitTrue, cotyBool, t')
       te = (PatLit LitFalse, cotyBool, e')
   pure $ C.Match c' [tc, te]
-lowerAt (Fun p bd an) (ArrTy a b) =
+lowerAt (Fun p bd an) (ForallTy Irrelevant a b) =
   let operational (PType p _ _) = operational p
       operational p = p
    in case operational p of
@@ -189,11 +189,11 @@ lowerAnyway (S.Cast e c _) =
   co (S.AssumedCo t t') = SameRepr (lowerType t) (lowerType t')
   co (S.SymCo c) = Symmetry (co c)
   co (S.AppCo a b) = Application (co a) (co b)
-  co (S.ArrCo a b) = Arrow (co a) (co b)
+  co (S.ArrCo a b) = Quantified Irrelevant (co a) (co b)
   co (S.ProdCo a b) = ExactRecord [("1", co a), ("2", co b)]
   co (S.RowsCo c rs) = C.Record (co c) (map (second co) rs)
   co (S.ExactRowsCo rs) = C.ExactRecord (map (second co) rs)
-  co (S.ForallCo (TvName v) rs) = C.Quantified v (co rs)
+  co (S.ForallCo (TvName v) cd rs) = C.Quantified (Relevant v) (co cd) (co rs)
   in do
     (e, _) <- lowerBothAtom e
     pure (C.Cast e (co c))
@@ -221,8 +221,9 @@ lowerType t@S.TyTuple{} = go t where
   go (S.TyTuple a b) = ExactRowsTy [("1", lowerType a), ("2", lowerType b)]
   go x = lowerType x
 lowerType (S.TyPi bind b)
-  | S.Implicit v _ <- bind = ForallTy (S.unTvName v) (lowerType b)
-  | S.Anon a <- bind = ArrTy (lowerType a) (lowerType b)
+  | S.Implicit v Nothing <- bind = ForallTy (Relevant (S.unTvName v)) StarTy (lowerType b)
+  | S.Implicit v (Just c) <- bind = ForallTy (Relevant (S.unTvName v)) (lowerType c) (lowerType b)
+  | S.Anon a <- bind = ForallTy Irrelevant (lowerType a) (lowerType b)
 lowerType (S.TyApp a b) = AppTy (lowerType a) (lowerType b)
 lowerType (S.TyRows rho vs) = RowsTy (lowerType rho) (map (fmap lowerType) vs)
 lowerType (S.TyExactRows vs) = ExactRowsTy (map (fmap lowerType) vs)
