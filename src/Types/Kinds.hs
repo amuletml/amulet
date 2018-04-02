@@ -21,7 +21,6 @@ import Syntax.Raise
 import Syntax
 
 import Pretty
-import Debug.Trace
 
 type KindT m = StateT SomeReason (WriterT (Seq.Seq (Constraint Typed)) m)
 
@@ -95,7 +94,7 @@ inferKind (TyPromotedCon v) = do
   x <- view (values . at v)
   case x of
     Nothing -> throwError (NotInScope v)
-    Just k -> case promotable (traceShowId k) of
+    Just k -> case promoteOrError k of
       Nothing -> pure (TyPromotedCon (TvName v), k)
       Just err -> throwError (NotPromotable (TvName v) k err)
 
@@ -211,16 +210,16 @@ closeOver r a = fmap normType . annotateKind r $ forall (fv a) a where
   forall [] a = a
   forall vs a = foldr (flip TyForall Nothing) a vs
 
-promotable :: Type Typed -> Maybe Doc
-promotable TyWithConstraints{} = Just (string "mentions constraints")
-promotable TyTuple{} = Just (string "mentions a tuple")
-promotable TyRows{} = Just (string "mentions a tuple")
-promotable TyExactRows{} = Just (string "mentions a tuple")
-promotable (TyApp a b) = promotable a <|> promotable b
-promotable (TyPi (Implicit _ a) b) = join (traverse promotable a) <|> promotable b
-promotable (TyPi (Anon a) b) = promotable a <|> promotable b
-promotable TyCon{} = Nothing
-promotable TyVar{} = Nothing
-promotable TySkol{} = Nothing
-promotable TyPromotedCon{} = Nothing
-promotable TyType{} = Nothing
+promoteOrError :: Type Typed -> Maybe Doc
+promoteOrError TyWithConstraints{} = Just (string "mentions constraints")
+promoteOrError TyTuple{} = Just (string "mentions a tuple")
+promoteOrError TyRows{} = Just (string "mentions a tuple")
+promoteOrError TyExactRows{} = Just (string "mentions a tuple")
+promoteOrError (TyApp a b) = promoteOrError a <|> promoteOrError b
+promoteOrError (TyPi (Implicit _ a) b) = join (traverse promoteOrError a) <|> promoteOrError b
+promoteOrError (TyPi (Anon a) b) = promoteOrError a <|> promoteOrError b
+promoteOrError TyCon{} = Nothing
+promoteOrError TyVar{} = Nothing
+promoteOrError TySkol{} = Nothing
+promoteOrError TyPromotedCon{} = Nothing
+promoteOrError TyType{} = Nothing
