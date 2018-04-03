@@ -4,10 +4,10 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
 module Syntax.Types
-  ( Telescope, one, foldTele, teleFromList
+  ( Telescope, one, foldTele, teleFromList, boundByTele
   , Scope, namesInScope
   , Env, freeInEnv, difference, envOf, scopeFromList, toMap
-  , values, types, typeVars
+  , values, types, typeVars, relevantVars
 
   , focus
   ) where
@@ -66,9 +66,10 @@ instance Ord (Var p) => At (Scope p f) where
   at k f (Scope m) = Scope <$> at k f m
 
 data Env
-  = Env { _values   :: Scope Resolved (Type Typed)
-        , _types    :: Scope Resolved (Type Typed)
-        , _typeVars :: Set.Set (Var Resolved)
+  = Env { _values       :: Scope Resolved (Type Typed)
+        , _types        :: Scope Resolved (Type Typed)
+        , _relevantVars :: Scope Resolved (Type Typed)
+        , _typeVars     :: Set.Set (Var Resolved)
         }
   deriving (Eq, Show, Ord)
 
@@ -79,19 +80,19 @@ Scope x \\ Scope y = Scope (x Map.\\ y)
 
 instance Monoid Env where
   mappend = (<>)
-  mempty = Env mempty mempty mempty
+  mempty = Env mempty mempty mempty mempty
 
 instance Semigroup Env where
-  Env a b c <> Env a' b' c' = Env (a <> a') (b <> b') (c <> c')
+  Env a b c d <> Env a' b' c' d' = Env (a <> a') (b <> b') (c <> c') (d <> d')
 
 difference :: Env -> Env -> Env
-difference (Env ma mb mc) (Env ma' mb' mc') = Env (ma \\ ma') (mb \\ mb') (mc Set.\\ mc')
+difference (Env ma mb mc md) (Env ma' mb' mc' md') = Env (ma \\ ma') (mb \\ mb') (mc \\ mc') (md Set.\\ md')
 
 freeInEnv :: Env -> Set.Set (Var Typed)
-freeInEnv (Env vars _ _) = foldMap ftv vars
+freeInEnv = foldMap ftv . view values
 
 envOf :: Scope Resolved (Type Typed) -> Scope Resolved (Type Typed) -> Env
-envOf a b = Env a b mempty
+envOf a b = Env a b mempty mempty
 
 scopeFromList :: Ord (Var p) => [(Var p, f)] -> Scope p f
 scopeFromList = Scope . Map.fromList
@@ -117,6 +118,9 @@ foldTele f x = foldMap f (getTele x)
 teleFromList :: Degrade p
              => [(Var p, Type p)] -> Telescope p
 teleFromList = Telescope . Map.fromList . map (first degrade)
+
+boundByTele :: Telescope p -> Set.Set (Var Resolved)
+boundByTele = Set.fromList . Map.keys . getTele
 
 toMap :: Scope p f -> Map.Map (Var p) f
 toMap = getScope

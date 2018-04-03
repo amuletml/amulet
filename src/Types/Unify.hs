@@ -91,6 +91,11 @@ unify t (TyWithConstraints cs ty) = do
   unify t ty
 
 unify (TyArr a b) (TyArr a' b') = ArrCo <$> unify a a' <*> unify b b'
+unify (TyPi (Dependent v k) b) (TyPi (Dependent v' k') b') = do
+  fresh <- freshTV
+  let TyVar tv = fresh
+  _ <- unify k k'
+  ForallCo tv <$> unify (apply (Map.singleton v fresh) b) (apply (Map.singleton v' fresh) b')
 unify (TyApp a b) (TyApp a' b') = AppCo <$> unify a a' <*> unify b b'
 
 unify ta@(TyCon a) tb@(TyCon b)

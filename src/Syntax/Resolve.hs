@@ -260,6 +260,11 @@ reType (TyPi (Implicit v k) ty) = do
   ty' <- extendTyvar (v, v') $ reType ty
   k <- traverse reType k
   pure (TyPi (Implicit v' k) ty')
+reType (TyPi (Dependent v k) ty) = do
+  v' <- tagVar v
+  ty <- extendTyvar (v, v') $ reType ty
+  k <- reType k
+  pure (TyPi (Dependent v' k) ty)
 reType (TyPi (Anon l) r) = TyPi . Anon <$> reType l <*> reType r
 reType (TyApp l r) = TyApp <$> reType l <*> reType r
 reType (TyRows t r) = TyRows <$> reType t

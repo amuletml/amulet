@@ -222,6 +222,7 @@ lowerType t@S.TyTuple{} = go t where
   go x = lowerType x
 lowerType (S.TyPi bind b)
   | S.Implicit v _ <- bind = ForallTy (S.unTvName v) (lowerType b)
+  | S.Dependent _ k <- bind = ArrTy (lowerType k) (lowerType b) -- TODO
   | S.Anon a <- bind = ArrTy (lowerType a) (lowerType b)
 lowerType (S.TyApp a b) = AppTy (lowerType a) (lowerType b)
 lowerType (S.TyRows rho vs) = RowsTy (lowerType rho) (map (fmap lowerType) vs)

@@ -21,10 +21,12 @@ wellformed tp = case tp of
   TySkol{} -> pure ()
   TyType{} -> pure ()
   TyPromotedCon{} -> pure ()
-  TyPi a b ->
+  TyPi a b -> do
     case a of
-      Implicit{} -> wellformed b
-      Anon a -> wellformed a *> wellformed b
+      Implicit _ k -> traverse_ wellformed k
+      Dependent _ k -> wellformed k
+      Anon a -> wellformed a 
+    wellformed b
   TyApp a b -> wellformed a *> wellformed b
   TyTuple a b -> wellformed a *> wellformed b
   TyRows rho rows -> do
@@ -76,6 +78,7 @@ skols (TySkol x) = Set.singleton x
 skols (TyApp a b) = skols a <> skols b
 skols (TyPi b t)
   | Implicit _ k <- b = skols t <> foldMap skols k
+  | Dependent _ k <- b = skols t <> skols k
   | Anon a <- b = skols a <> skols t
 skols (TyRows r rs) = skols r <> foldMap (skols . snd) rs
 skols (TyExactRows rs) = foldMap (skols . snd) rs

@@ -34,6 +34,7 @@ import Syntax
 import Types.Infer.Constructor
 import Types.Infer.Pattern
 import Types.Infer.Builtin
+import Types.Infer.Promote
 import Types.Wellformed
 import Types.Unify
 import Types.Kinds
@@ -44,7 +45,7 @@ import Pretty
 inferProgram :: MonadGen Int m => Env -> [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))
 inferProgram env ct = fmap fst <$> runInfer env (inferProg ct)
 
-check :: MonadInfer Typed m => Expr Resolved -> Type Typed -> m (Expr Typed)
+check :: forall m. MonadInfer Typed m => Expr Resolved -> Type Typed -> m (Expr Typed)
 check e ty@TyForall{} = do -- This is rule Decl∀L from [Complete and Easy]
   e <- check e =<< skolemise (ByAscription ty) ty -- gotta be polymorphic - don't allow instantiation
   pure (correct ty e)
@@ -68,12 +69,19 @@ check ex@(Let ns b an) t = do
     pure (Let ns b (an, t))
 
 check ex@(Fun pat e an) ty = do
-  (dom, cod, _) <- decompose ex _TyArr ty
-  (p, vs, cs) <- checkPattern pat dom
+  (dom, cod, _) <- quantifier ex ty
+  let domain = _tyBinderType dom
+
+  (p, vs, cs) <- checkPattern pat domain
   let tvs = Set.map unTvName (boundTvs p vs)
-  implies (Arm pat e) dom cs $ do
-    e <- local (typeVars %~ Set.union tvs) $
-      local (values %~ focus vs) $
+
+  var <- pure $ case (dom, Set.toList (boundByTele vs)) of
+    (Dependent v _, [var]) -> one var (TyVar v)
+    (_, _) -> mempty
+
+  implies (Arm pat e) domain cs $ do
+    e <- local (typeVars %~ Set.union tvs) . local (values %~ focus vs) $
+      local (relevantVars %~ focus var) $
         check e cod
     pure (Fun p e (an, ty))
 
@@ -81,18 +89,32 @@ check (If c t e an) ty = If <$> check c tyBool <*> check t ty <*> check e ty <*>
 
 check (Match t ps a) ty = do
   (t, tt) <- infer t
+
+  let refine :: Pattern Resolved -> Expr Resolved -> m a -> m a
+      refine p e k = do
+        case t of
+          VarRef (TvName v) _ -> do
+            ty <- view (relevantVars . at v)
+            case ty of
+              Just ty -> do
+                pat <- liftType (BecauseOf p) =<< promotePat p
+                implies (Arm p e) tt [(ty, pat)] k
+              _ -> k
+          _ -> k
+
   ps <- for ps $ \(p, e) -> do
     (p', ms, cs) <- checkPattern p tt
     let tvs = Set.map unTvName (boundTvs p' ms)
-    (p',) <$> implies (Arm p e) tt cs
-      (local (typeVars %~ Set.union tvs)
-        (local (values %~ focus ms) (check e ty)))
+
+    bd <- implies (Arm p e) tt cs . refine p e $
+      local (typeVars %~ Set.union tvs) $
+        local (values %~ focus ms) (check e ty)
+    pure (p', bd)
   pure (Match t ps (a, ty))
 
 check (Access rc key a) ty = do
   rho <- freshTV
   Access <$> check rc (TyRows rho [(key, ty)]) <*> pure key <*> pure (a, ty)
-
 
 -- This is _very_ annoying, but we need it for nested ascriptions
 check ex@(Ascription e ty an) goal = do
@@ -134,9 +156,16 @@ infer ex@(Ascription e ty an) = do
   pure (Ascription (correct ty e) ty (an, ty), ty)
 
 infer ex@(App f x a) = do
-  (f, (d, c, k)) <- secondA (decompose ex _TyArr) =<< infer f
-  x <- check x d
-  pure (App (k f) x (a, c), c)
+  (f, (dom, c, k)) <- secondA (quantifier ex) =<< infer f
+  case dom of
+    Dependent v ty -> do
+      tyarg <- flip (checkAgainstKind (BecauseOf ex)) ty =<< promote x
+      arg <- check x ty
+      pure (App (k f) arg (a, apply (Map.singleton v tyarg) c), apply (Map.singleton v tyarg) c)
+    Anon d -> do
+      x <- check x d
+      pure (App (k f) x (a, c), c)
+    Implicit{} -> error "invalid implicit quantification in App"
 
 infer ex@(BinOp l o r a) = do
   (o, (ld, c, k1)) <- secondA (decompose ex _TyArr) =<< infer o

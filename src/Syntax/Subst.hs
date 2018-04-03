@@ -89,13 +89,16 @@ instance (Ord (Var p), Substitutable p a) => Substitutable p (Seq.Seq a) where
 instance Ord (Var p) => Substitutable p (TyBinder p) where
   ftv (Anon t) = ftv t
   ftv (Implicit _ k) = maybe mempty ftv k
+  ftv (Dependent _ k) = ftv k
 
   apply s (Anon t) = Anon (apply s t)
   apply s (Implicit v k) = Implicit v (fmap (apply s) k)
+  apply s (Dependent v k) = Dependent v (apply s k)
 
 bound :: Ord (Var p) => TyBinder p -> Set.Set (Var p)
 bound Anon{} = Set.empty
 bound (Implicit v _) = Set.singleton v
+bound (Dependent v _) = Set.singleton v
 
 compose :: Ord (Var p) => Subst p -> Subst p -> Subst p
 s1 `compose` s2 = fmap (apply s1) s2 <> fmap (apply s2) s1

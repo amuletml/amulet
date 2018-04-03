@@ -69,6 +69,7 @@ raiseT v (TyWithConstraints eq a) = TyWithConstraints (map (\(a, b) -> (raiseT v
 raiseT v (TyPi binder t) = TyPi (go binder) (raiseT v t) where
   go (Anon t) = Anon (raiseT v t)
   go (Implicit var k) = Implicit (v var) (fmap (raiseT v) k)
+  go (Dependent var k) = Dependent (v var) (raiseT v k)
 raiseT _ TyType = TyType
 
 raiseCo :: (Var p -> Var p') -> Coercion p -> Coercion p'

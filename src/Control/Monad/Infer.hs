@@ -92,6 +92,7 @@ data TypeError where
 
   Malformed :: Pretty (Var p) => Type p -> TypeError
   NotPromotable :: Pretty (Var p) => Var p -> Type p -> Doc -> TypeError
+  NotPromotable' :: Pretty (f p) => f p -> Doc -> TypeError
 
   IllegalTypeApp :: (Pretty (Var p), Pretty (Var p')) => Expr p -> Type p' -> Type p' -> TypeError
 
@@ -236,6 +237,11 @@ instance Pretty TypeError where
          , string "Note: because its kind,"
          , indent 2 (pretty x)
          , err
+         ]
+  pretty (NotPromotable' ex err) =
+    vsep [ string "The expression" <+> pretty ex <+> string "can not be used as a type"
+         , string "because it contains a" <+> skeyword err
+         , string "which is not in the type grammar"
          ]
     -- TODO needs polishing
 

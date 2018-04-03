@@ -151,6 +151,7 @@ data Type p
 
 data TyBinder p
   = Anon { _tyBinderType :: Type p } -- a function type
+  | Dependent { _tyBinderVar :: Var p, _tyBinderType :: Type p }
   | Implicit { _tyBinderVar :: Var p, _tyBinderArg :: Maybe (Type p) } -- a forall type
 
 instance Spanned (Type p) where

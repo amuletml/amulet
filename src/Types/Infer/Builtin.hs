@@ -111,6 +111,19 @@ decompose r p t =
       _ <- subsumes r t (p # (a, b))
       pure (a, b, id)
 
+quantifier :: (Reasonable f p, MonadInfer Typed m)
+           => f p
+           -> Type Typed
+           -> m (TyBinder Typed, Type Typed, Expr Typed -> Expr Typed)
+quantifier r ty@TyForall{} = do
+  (k', _, t) <- instantiate ty
+  (a, b, k) <- quantifier r t
+  pure (a, b, fromMaybe id k' . k)
+quantifier _ (TyPi x b) = pure (x, b, id)
+quantifier r t = do
+  (a, b) <- (,) <$> freshTV <*> freshTV
+  _ <- subsumes r t (TyPi (Anon a) b)
+  pure (Anon a, b, id)
 
 litTy :: Lit -> Type Typed
 litTy LiInt{} = tyInt

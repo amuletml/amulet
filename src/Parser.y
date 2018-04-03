@@ -228,6 +228,8 @@ Arm :: { (Pattern Parsed, Expr Parsed) }
 
 Type :: { Located (Type Parsed) }
      : TypeProd                                   { $1 }
+     | '(' TyVar ':' Type ')' '->' Type
+       { lPos2 $1 $7 $ TyPi (Dependent (getL $2) (getL $4)) (getL $7) }
      | TypeProd '->' Type                         { lPos2 $1 $3 $ TyPi (Anon (getL $1)) (getL $3) }
 
 TypeProd :: { Located (Type Parsed) }

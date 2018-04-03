@@ -135,6 +135,7 @@ instance Pretty (Var p) => Pretty (TyBinder p) where
     k TyPi{} = parens
     k TyTuple{} = parens
     k _ = id
+  pretty (Dependent v k) = parens (stypeVar (squote <> pretty v) <+> colon <+> pretty k) <+> arrow
   pretty (Implicit v (Just k)) = braces (stypeVar (squote <> pretty v) <+> colon <+> pretty k) <> dot
   pretty (Implicit v Nothing)  = stypeVar (squote <> pretty v) <> dot
 
@@ -212,6 +213,7 @@ applyCons x@TyType{} = x
 applyCons (TyPi a b) = TyPi (go a) (applyCons b) where
   go (Anon t) = Anon (applyCons t)
   go (Implicit t k) = Implicit t (fmap applyCons k)
+  go (Dependent v k) = Dependent v (applyCons k)
 applyCons (TyApp a b) = TyApp (applyCons a) (applyCons b)
 applyCons (TyRows r rs) = TyRows (applyCons r) (map (second applyCons) rs)
 applyCons (TyExactRows rs) = TyExactRows (map (second applyCons) rs)
