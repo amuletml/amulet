@@ -260,13 +260,12 @@ instance Pretty TypeError where
     vsep [ string "Can not unify rigid type variable" <+> skol <+> string "with" <+> whatIs b
          , bullet (string "Note: the variable") <+> skol <+> string "was rigidified because" <+> prettyMotive m
          , indent 8 (string "and is represented by the constant") <+> stypeSkol (pretty k)
-         , case b of
+         ] <> case b of
              TySkol (Skolem _ v _ m) ->
-               vsep [ bullet (string "Note: the rigid type variable") <+> stypeVar (pretty v) <> comma <+> string "in turn" <> comma
+               empty <#> vsep [ bullet (string "Note: the rigid type variable") <+> stypeVar (pretty v) <> comma <+> string "in turn" <> comma
                     , indent 8 (string "was rigidified because") <+> prettyMotive m
                     ]
              _ -> empty
-         ]
     where whatIs (TySkol (Skolem _ v _ _)) = string "the rigid type variable" <+> stypeVar (pretty v)
           whatIs t = string "the type" <+> pretty t
           skol = stypeVar (pretty v)
@@ -290,3 +289,4 @@ prettyMotive :: SkolemMotive Typed -> Doc
 prettyMotive (ByAscription t) = string "of a type ascription" <#> string "against the type" <+> pretty t
 prettyMotive (BySubsumption t1 t2) = string "of a subsumption constraint relating" <+> pretty t1 <+> string "with" <+> pretty t2
 prettyMotive (ByExistential v t) = string "it is an existential" <> comma <#> string "bound by the type of" <+> pretty v <> comma <+> pretty t
+prettyMotive (ByDependency v t) = string "it is a dependent parameter" <> comma <#> string "bound by the quantifier" <+> verbatim (Dependent v t)

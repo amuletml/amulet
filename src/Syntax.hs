@@ -177,6 +177,7 @@ data SkolemMotive p
   = ByAscription (Type p)
   | BySubsumption (Type p) (Type p)
   | ByExistential (Var p) (Type p)
+  | ByDependency (Var p) (Type p)
 
 deriving instance (Data p, Data (Ann p), Data (Var p)) => Data (SkolemMotive p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (SkolemMotive p)

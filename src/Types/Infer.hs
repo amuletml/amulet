@@ -18,6 +18,7 @@ import Data.Spanned
 import Data.Triple
 import Data.Graph
 import Data.Span
+import Data.List
 
 import Control.Monad.State
 import Control.Monad.Infer
@@ -395,23 +396,38 @@ inferFunTy vs = do
           (quantifiers, bodyTy) = quants t
 
       clauses <- for _fnClauses $ \cls@Clause{..} -> do
-        let checkPatQuantifier p (Dependent var ty) = do
+        let checkPatQuantifier p (Dependent depvar ty) = do
               (p', vs, cs) <- checkPattern p ty
               typat <- liftType (BecauseOf cls) =<< promotePat p
                 `catchError` \e -> throwError (ArisingFrom e (BecauseOf cls))
-              pure (p', vs, implies cls ty cs . implies cls ty [(TyVar var, typat)])
+
+              relevant <- for (Map.toList . toMap . flip focus mempty $ vs) $
+                \(key, _) -> (key,) <$> freshSkol (ByDependency depvar ty) t (TvName key)
+
+              let sub = Map.fromList (map (first TvName) relevant)
+                  vs' = mapTele (apply sub) vs
+
+              skol <- freshSkol (ByAscription t) t depvar
+
+              pure ( p'
+                   , vs'
+                   , local (relevantTVs %~ mappend (scopeFromList relevant))
+                   . implies cls ty cs
+                   . implies cls ty [(skol, apply sub typat)]
+                   , Map.singleton depvar skol)
             checkPatQuantifier p (Anon ty) = do
               (p', vs, cs) <- checkPattern p ty
-              pure (p', vs, implies cls ty cs)
+              pure (p', vs, implies cls ty cs, mempty)
             checkPatQuantifier _ Implicit{} = error "impossible: checkPatQuantifier implicit parameters"
 
         when (length quantifiers /= length _clausePat || length quantifiers == 0) $
           throwError (ArisingFrom (WrongShape cls (t, length quantifiers)) (BecauseOf cls))
 
-        (ps, vss, css) <- unzip3 <$> traverse (uncurry checkPatQuantifier) (zip _clausePat quantifiers)
+        (ps, vss, css, rigid) <- unzip4 <$> traverse (uncurry checkPatQuantifier) (zip _clausePat quantifiers)
         let implication = foldr (.) id css
             scope = foldMap focus vss
-        body <- local (values %~ scope) . implication $ check _clauseBody bodyTy
+            map = mconcat rigid
+        body <- local (values %~ scope) . implication $ check _clauseBody (apply map bodyTy)
         pure (Clause (TvName _clauseName) ps body (_clauseSpan, ty))
       pure (FunDecl (TvName _fnVar) clauses ty (_fnSpan, ty))
 

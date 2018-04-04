@@ -26,6 +26,7 @@ transformType ft = goT where
   transM (ByAscription ty) = ByAscription (goT ty)
   transM (BySubsumption l r) = BySubsumption (goT l) (goT r)
   transM (ByExistential v ty) = ByExistential v (goT ty)
+  transM (ByDependency v ty) = ByDependency v (goT ty)
 
   transB (Anon t) = Anon (transT t)
   transB (Implicit x k) = Implicit x (fmap goT k)

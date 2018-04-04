@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 module Types.Infer.Promote where
 
+import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 
 import Control.Monad.Infer
@@ -12,6 +13,8 @@ import Syntax.Types
 
 import Pretty
 
+import Debug.Trace
+
 promote :: MonadInfer Typed m => Expr Typed -> m (Type Typed)
 promote ex = do
   x <- isValue ex
@@ -22,13 +25,15 @@ promote ex = do
 go :: MonadReader Env m => Expr Typed -> m (Type Typed)
 go (Cast e _ _) = go e
 go var@(VarRef v _) = do
-  x <- view constructors
-  if unTvName v `Set.member` x
-     then pure (TyTerm var)
-     else pure (TyVar v)
+  sk <- view (relevantTVs . at (unTvName v))
+  traceShow sk pure ()
+  flip (flip maybe pure) sk $ do
+    x <- view constructors
+    if unTvName v `Set.member` x
+       then pure (TyTerm var)
+       else pure (TyVar v) 
 go (App f x _) = TyApp <$> go f <*> go x
 go xs = pure (TyTerm xs)
-
 
 promotePat :: MonadInfer Typed m => Pattern Resolved -> m (Type Resolved)
 promotePat (Capture v _) = pure (TyVar v)
@@ -37,34 +42,29 @@ promotePat (Destructure f (Just p) an) = TyApp (TyTerm (VarRef f an)) <$> promot
 promotePat Wildcard{} = TyVar <$> fresh
 promotePat x = throwError (NotPromotable x (string "this too is wip"))
 
-
-isValue, isConcrete :: MonadReader Env m => Expr Typed -> m Bool
-isValue VarRef{} = pure True
-isValue x = isConcrete x
-
-isConcrete (Fun _ e _) = isConcrete e
-isConcrete (Tuple es _) = and <$> traverse isConcrete es
-isConcrete (VarRef v _) = do
-  x <- view constructors
-  pure (unTvName v `Set.member` x)
-isConcrete (TypeApp f _ _) = isConcrete f
-isConcrete Literal{} = pure True
-isConcrete (App f x _) = liftA2 (&&) (isConcrete f) (isValue x)
-isConcrete (Record rs _) = and <$> traverse (isConcrete . snd) rs
-isConcrete (RecordExt x rs _) = liftA2 (&&) (and <$> traverse (isValue . snd) rs) (isValue x)
-isConcrete Let{} = pure False
-isConcrete If{} = pure False
-isConcrete Begin{} = pure False
-isConcrete Match{} = pure False
-isConcrete Function{} = pure False
-isConcrete BinOp{} = pure False
-isConcrete Hole{} = pure True
-isConcrete Ascription{} = pure False
-isConcrete Access{} = pure False
-isConcrete LeftSection{} = pure False
-isConcrete RightSection{} = pure False
-isConcrete BothSection{} = pure False
-isConcrete AccessSection{} = pure False
-isConcrete (Parens e _) = isConcrete e
-isConcrete TupleSection{} = pure False
-isConcrete (Cast e _ _) = isConcrete e
+isValue :: MonadReader Env m => Expr Typed -> m Bool
+isValue (Fun _ e _) = isValue e
+isValue (Tuple es _) = and <$> traverse isValue es
+isValue (VarRef v _) = liftA2 (||) (fmap (v' `inScope`) (view relevantTVs)) (fmap (v' `Set.member`) (view constructors)) where
+  v' = unTvName v
+isValue (TypeApp f _ _) = isValue f
+isValue Literal{} = pure True
+isValue (App f x _) = liftA2 (&&) (isValue f) (isValue x)
+isValue (Record rs _) = and <$> traverse (isValue . snd) rs
+isValue (RecordExt x rs _) = liftA2 (&&) (and <$> traverse (isValue . snd) rs) (isValue x)
+isValue Let{} = pure False
+isValue If{} = pure False
+isValue Begin{} = pure False
+isValue Match{} = pure False
+isValue Function{} = pure False
+isValue BinOp{} = pure False
+isValue Hole{} = pure True
+isValue Ascription{} = pure False
+isValue Access{} = pure False
+isValue LeftSection{} = pure False
+isValue RightSection{} = pure False
+isValue BothSection{} = pure False
+isValue AccessSection{} = pure False
+isValue (Parens e _) = isValue e
+isValue TupleSection{} = pure False
+isValue (Cast e _ _) = isValue e
