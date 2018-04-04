@@ -4,6 +4,7 @@ module Types.Unify (solve, overlap, bind, skolemise, freshSkol) where
 
 import Control.Monad.Except
 import Control.Monad.State
+import Control.Applicative
 import Control.Monad.Infer
 import Control.Lens hiding (Empty)
 
@@ -22,6 +23,10 @@ import Data.Foldable
 import Data.Function
 import Data.List
 import Data.Text (Text)
+
+import Pretty
+import Debug.Trace
+import Text.Show.Pretty hiding (Tuple)
 
 data SolveScope
   = SolveScope { _bindSkol :: Bool
@@ -65,8 +70,19 @@ bind var ty
 unify :: Type Typed -> Type Typed -> SolveM (Coercion Typed)
 unify (TySkol x) (TySkol y)
   | x == y = pure (ReflCo (TySkol y))
+  | otherwise = do
+    sub <- use solveTySubst
+    let assumption = sub ^. at (x ^. skolIdent) <|> sub ^. at (y ^. skolIdent)
+    case assumption of
+      Just{} -> pure (AssumedCo (TySkol x) (TySkol y))
+      Nothing -> do
+        canWe <- view bindSkol
+        if canWe
+           then bind (x ^. skolIdent) (TySkol y)
+           else throwError $ SkolBinding x (TySkol y)
 
 unify (TySkol t@(Skolem sv _ _ _)) b = do
+  x <- use solveTySubst
   sub <- use (solveTySubst . at sv)
   case sub of
     Just ty -> do
@@ -208,6 +224,7 @@ doSolve (ConImplies because not cs ts :<| xs) = do
         , v `Set.notMember` ass
         = Map.insert v ty m
         | otherwise = m
+
   do
     let go = local (bindSkol .~ True) $ doSolve cs'
 
