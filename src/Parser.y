@@ -83,7 +83,7 @@ import Syntax
   float    { Token (TcFloat _) _ }
   string   { Token (TcString  _) _ }
 
-%expect 81
+%expect 83
 
 %%
 
@@ -257,6 +257,7 @@ TypeApp  :: { Located (Type Parsed) }
 TypeAtom :: { Located (Type Parsed) }
          : Var                                    { lPos1 $1 $ TyCon (getL $1) }
          | TyVar                                  { lPos1 $1 $ TyVar (getL $1) }
+         | type                                   { lPos1 $1 TyType }
          | Con
            { lPos1 $1 $ TyTerm (withPos1 $1 (VarRef (getL $1))) }
          | Lit { lPos1 $1 (TyTerm (withPos1 $1 (Literal (getL $1)))) }
