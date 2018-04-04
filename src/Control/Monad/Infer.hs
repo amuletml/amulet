@@ -92,8 +92,7 @@ data TypeError where
 
   Malformed :: Pretty (Var p) => Type p -> TypeError
 
-  NotPromotable :: Pretty (Var p) => Var p -> Type p -> Doc -> TypeError
-  NotPromotable' :: Pretty (f p) => f p -> Doc -> TypeError
+  NotPromotable :: Pretty (f p) => f p -> Doc -> TypeError
 
   WrongShape :: (Pretty (Var p), Pretty (Var p')) => Clause p -> (Type p', Int) -> TypeError
 
@@ -178,7 +177,7 @@ freshTV :: MonadGen Int m => m (Type Typed)
 freshTV = TyVar . TvName <$> fresh
 
 instance Pretty TypeError where
-  pretty (NotEqual a b) = string "Type error: failed to" <+> align (string "unify" <+> pretty a </> string " with" <+> pretty b)
+  pretty (NotEqual a b) = string "Type error: failed to" <+> align (string "unify" <+> pretty a </> string "with" <+> pretty b)
   pretty (Occurs v t) = string "Occurs check:" <+> string "The type variable" <+> stypeVar (pretty v) </> indent 4 (string "occurs in the type" <+> pretty t)
   pretty (NotInScope e) = string "Variable not in scope:" <+> pretty e
   pretty (ArisingFrom er ex) = pretty (annotation ex) <> colon <+> stypeSkol (string "error")
@@ -235,16 +234,12 @@ instance Pretty TypeError where
          , bullet (string "Note: in type") <+> verbatim t
          ]
 
-  pretty (NotPromotable c x err) =
-    vsep [ string "The constructor" <+> pretty c <+> string "can not be used as a type"
-         , string "Note: because its kind,"
-         , indent 2 (pretty x)
-         , err
-         ]
-  pretty (NotPromotable' ex err) =
-    vsep [ string "The expression" <+> pretty ex <+> string "can not be used as a type"
-         , string "because it contains a" <+> skeyword err
-         , string "which is not in the type grammar"
+  pretty (NotPromotable ex err) =
+    vsep [ string "The expression" <+> pretty ex
+         , indent 4 (string "can not be used as a type")
+         , empty
+         , bullet (string "Note:") <+> string "because it" <+> stypeSkol err
+         , bullet "Note: arguments to dependent functions must be promotable"
          ]
     -- TODO needs polishing
 
@@ -258,6 +253,7 @@ instance Pretty TypeError where
     | funarity /= arity =
       vsep [ string "Expected a clause with" <+> keyword "exactly" <+> int arity <+> string "arguments"
            , string "but this equation for" <+> pretty _clauseName <+> "only has" <+> int funarity ]
+    | otherwise = undefined
     where funarity = length _clausePat
 
   pretty (SkolBinding (Skolem k v _ m) b) =

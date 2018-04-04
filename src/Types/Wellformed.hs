@@ -12,8 +12,6 @@ import Data.List (unionBy)
 
 import Syntax.Pretty
 
-import Pretty (Pretty)
-
 import Types.Infer.Promote
 
 wellformed :: (MonadError TypeError m, MonadReader Env m) => Type Typed -> m ()

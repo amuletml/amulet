@@ -403,6 +403,7 @@ inferFunTy vs = do
             checkPatQuantifier p (Anon ty) = do
               (p', vs, cs) <- checkPattern p ty
               pure (p', vs, implies cls ty cs)
+            checkPatQuantifier _ Implicit{} = error "impossible: checkPatQuantifier implicit parameters"
 
         when (length quantifiers /= length _clausePat || length quantifiers == 0) $
           throwError (ArisingFrom (WrongShape cls (t, length quantifiers)) (BecauseOf cls))

@@ -16,7 +16,7 @@ promote :: MonadInfer Typed m => Expr Typed -> m (Type Typed)
 promote ex = do
   x <- isValue ex
   if not x
-     then throwError (NotPromotable' ex (string "is not a value"))
+     then throwError (NotPromotable ex (string "is not a value"))
      else go ex
 
 go :: MonadReader Env m => Expr Typed -> m (Type Typed)
@@ -35,7 +35,7 @@ promotePat (Capture v _) = pure (TyVar v)
 promotePat (Destructure f Nothing an) = pure (TyTerm (VarRef f an))
 promotePat (Destructure f (Just p) an) = TyApp (TyTerm (VarRef f an)) <$> promotePat p
 promotePat Wildcard{} = TyVar <$> fresh
-promotePat x = throwError (NotPromotable' x (string "this too is wip"))
+promotePat x = throwError (NotPromotable x (string "this too is wip"))
 
 
 isValue, isConcrete :: MonadReader Env m => Expr Typed -> m Bool
