@@ -13,6 +13,7 @@ import Control.Monad.Infer
 import Control.Applicative
 import Control.Lens
 
+import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import Data.Traversable
 import Data.Foldable
@@ -122,9 +123,16 @@ inferKind (TySkol sk) = do
 
 inferKind (TyApp f x) = do
   reason <- get
-  (f, (d, c, _)) <- secondA (decompose (Const reason) _TyArr) =<< inferKind f
-  x <- checkKind x d
-  pure (TyApp f x, c)
+  (f, (dom, c, _)) <- secondA (quantifier (Const reason)) =<< inferKind f
+
+  case dom of
+    Dependent v ty -> do
+      x <- checkKind x ty
+      pure (TyApp f x, apply (Map.singleton v x) c)
+    Anon d -> do
+      x <- checkKind x d
+      pure (TyApp f x, c)
+    Implicit{} -> error "inferKind TyApp: visible argument to implicit quantifier"
 
 inferKind (TyRows p rs) = do
   (p, k) <- secondA isType =<< inferKind p
