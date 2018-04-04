@@ -18,7 +18,6 @@ import Data.Spanned
 import Data.Triple
 import Data.Graph
 import Data.Span
-import Data.List
 
 import Control.Monad.State
 import Control.Monad.Infer
@@ -423,11 +422,17 @@ inferFunTy vs = do
         when (length quantifiers /= length _clausePat || length quantifiers == 0) $
           throwError (ArisingFrom (WrongShape cls (t, length quantifiers)) (BecauseOf cls))
 
-        (ps, vss, css, rigid) <- unzip4 <$> traverse (uncurry checkPatQuantifier) (zip _clausePat quantifiers)
+        let go (p:ps) (q:qs) mp = do
+              (p', vs, cs, m) <- checkPatQuantifier p (apply mp q)
+              (ps, vss, css, ms) <- go ps qs (m <> mp)
+              pure (p':ps, vs:vss, cs:css, m <> ms)
+            go _ _ mp = pure ([], [], [], mp)
+
+        (ps, vss, css, rigid) <- go _clausePat quantifiers mempty
         let implication = foldr (.) id css
             scope = foldMap focus vss
-            map = mconcat rigid
-        body <- local (values %~ scope) . implication $ check _clauseBody (apply map bodyTy)
+
+        body <- local (values %~ scope) . implication $ check _clauseBody (apply rigid bodyTy)
         pure (Clause (TvName _clauseName) ps body (_clauseSpan, ty))
       pure (FunDecl (TvName _fnVar) clauses ty (_fnSpan, ty))
 

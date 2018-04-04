@@ -13,8 +13,6 @@ import Syntax.Types
 
 import Pretty
 
-import Debug.Trace
-
 promote :: MonadInfer Typed m => Expr Typed -> m (Type Typed)
 promote ex = do
   x <- isValue ex
@@ -26,7 +24,6 @@ go :: MonadReader Env m => Expr Typed -> m (Type Typed)
 go (Cast e _ _) = go e
 go var@(VarRef v _) = do
   sk <- view (relevantTVs . at (unTvName v))
-  traceShow sk pure ()
   flip (flip maybe pure) sk $ do
     x <- view constructors
     if unTvName v `Set.member` x

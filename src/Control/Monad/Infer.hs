@@ -261,10 +261,12 @@ instance Pretty TypeError where
          , bullet (string "Note: the variable") <+> skol <+> string "was rigidified because" <+> prettyMotive m
          , indent 8 (string "and is represented by the constant") <+> stypeSkol (pretty k)
          ] <> case b of
-             TySkol (Skolem _ v _ m) ->
-               empty <#> vsep [ bullet (string "Note: the rigid type variable") <+> stypeVar (pretty v) <> comma <+> string "in turn" <> comma
-                    , indent 8 (string "was rigidified because") <+> prettyMotive m
-                    ]
+             TySkol (Skolem k v _ m) ->
+               empty <#>
+                 vsep [ bullet (string "Note: the rigid type variable") <+> stypeVar (pretty v) <> comma <+> string "in turn" <> comma
+                      , indent 8 (string "was rigidified because") <+> prettyMotive m
+                      , indent 8 (string "and is represented by the constant") <+> stypeSkol (pretty k)
+                      ]
              _ -> empty
     where whatIs (TySkol (Skolem _ v _ _)) = string "the rigid type variable" <+> stypeVar (pretty v)
           whatIs t = string "the type" <+> pretty t
