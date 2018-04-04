@@ -24,10 +24,6 @@ import Data.Function
 import Data.List
 import Data.Text (Text)
 
-import Pretty
-import Debug.Trace
-import Text.Show.Pretty hiding (Tuple)
-
 data SolveScope
   = SolveScope { _bindSkol :: Bool
                , _don'tTouch :: Set.Set (Var Typed)
@@ -82,7 +78,6 @@ unify (TySkol x) (TySkol y)
            else throwError $ SkolBinding x (TySkol y)
 
 unify (TySkol t@(Skolem sv _ _ _)) b = do
-  x <- use solveTySubst
   sub <- use (solveTySubst . at sv)
   case sub of
     Just ty -> do
