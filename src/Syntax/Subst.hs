@@ -30,7 +30,6 @@ class Substitutable p a | a -> p where
 
 instance Ord (Var p) => Substitutable p (Type p) where
   ftv TyCon{} = mempty
-  ftv TyPromotedCon{} = mempty
   ftv TySkol{} = mempty
   ftv TyType{} = mempty
   ftv (TyVar v) = Set.singleton v
@@ -40,10 +39,11 @@ instance Ord (Var p) => Substitutable p (Type p) where
   ftv (TyExactRows rows) = foldMap (ftv . snd) rows
   ftv (TyWithConstraints eq b) = foldMap (\(a, b) -> ftv a <> ftv b) eq <> ftv b
   ftv (TyPi binder t) = ftv binder <> (ftv t Set.\\ bound binder)
+  ftv TyTerm{} = mempty
 
   apply _ (TyCon a) = TyCon a
-  apply _ (TyPromotedCon a) = TyPromotedCon a
   apply _ (TySkol x) = TySkol x
+  apply _ (TyTerm t) = TyTerm t -- TODO
   apply _ TyType = TyType
   apply s t@(TyVar v) = Map.findWithDefault t v s
   apply s (TyApp a b) = TyApp (apply s a) (apply s b)

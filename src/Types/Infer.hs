@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleContexts, TupleSections, GADTs #-}
-{-# LANGUAGE ScopedTypeVariables, RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables, RankNTypes, RecordWildCards #-}
 module Types.Infer
   ( inferProgram
   , builtinsEnv
@@ -31,13 +31,13 @@ import Syntax.Types
 import Syntax.Let
 import Syntax
 
+import {-# SOURCE #-} Types.Kinds
 import Types.Infer.Constructor
 import Types.Infer.Pattern
 import Types.Infer.Builtin
 import Types.Infer.Promote
 import Types.Wellformed
 import Types.Unify
-import Types.Kinds
 
 import Pretty
 
@@ -75,14 +75,9 @@ check ex@(Fun pat e an) ty = do
   (p, vs, cs) <- checkPattern pat domain
   let tvs = Set.map unTvName (boundTvs p vs)
 
-  var <- pure $ case (dom, Set.toList (boundByTele vs)) of
-    (Dependent v _, [var]) -> one var (TyVar v)
-    (_, _) -> mempty
-
   implies (Arm pat e) domain cs $ do
     e <- local (typeVars %~ Set.union tvs) . local (values %~ focus vs) $
-      local (relevantVars %~ focus var) $
-        check e cod
+      check e cod
     pure (Fun p e (an, ty))
 
 check (If c t e an) ty = If <$> check c tyBool <*> check t ty <*> check e ty <*> pure (an, ty)
@@ -90,23 +85,11 @@ check (If c t e an) ty = If <$> check c tyBool <*> check t ty <*> check e ty <*>
 check (Match t ps a) ty = do
   (t, tt) <- infer t
 
-  let refine :: Pattern Resolved -> Expr Resolved -> m a -> m a
-      refine p e k = do
-        case t of
-          VarRef (TvName v) _ -> do
-            ty <- view (relevantVars . at v)
-            case ty of
-              Just ty -> do
-                pat <- liftType (BecauseOf p) =<< promotePat p
-                implies (Arm p e) tt [(ty, pat)] k
-              _ -> k
-          _ -> k
-
   ps <- for ps $ \(p, e) -> do
     (p', ms, cs) <- checkPattern p tt
     let tvs = Set.map unTvName (boundTvs p' ms)
 
-    bd <- implies (Arm p e) tt cs . refine p e $
+    bd <- implies (Arm p e) tt cs $
       local (typeVars %~ Set.union tvs) $
         local (values %~ focus ms) (check e ty)
     pure (p', bd)
@@ -159,8 +142,9 @@ infer ex@(App f x a) = do
   (f, (dom, c, k)) <- secondA (quantifier ex) =<< infer f
   case dom of
     Dependent v ty -> do
-      tyarg <- flip (checkAgainstKind (BecauseOf ex)) ty =<< promote x
       arg <- check x ty
+      tyarg <- promote arg
+        `catchError` \e -> throwError (ArisingFrom e (BecauseOf ex))
       pure (App (k f) arg (a, apply (Map.singleton v tyarg) c), apply (Map.singleton v tyarg) c)
     Anon d -> do
       x <- check x d
@@ -228,6 +212,9 @@ inferProg (stmt@(LetStmt ns):prg) = do
   local (values %~ focus ts) $
     consFst (LetStmt ns') $
       inferProg prg
+inferProg (FunStmt vs:prg) = do
+  (ns, ts) <- inferFunTy vs
+  local (values %~ focus ts) . consFst (FunStmt ns) $ inferProg prg
 inferProg (st@(ForeignVal v d t ann):prg) = do
   t' <- resolveKind (BecauseOf st) t
   local (values %~ focus (one v t')) $
@@ -239,7 +226,7 @@ inferProg (decl@(TypeDecl n tvs cs):prg) = do
    in extendKind (TvName n, kind) $ do
      (ts, cs') <- unzip <$> for cs (\con ->
        inferCon retTy con `catchError` \x -> throwError (ArisingFrom x (BecauseOf con)))
-     local (values %~ focus (teleFromList ts)) $
+     local (values %~ focus (teleFromList ts)) . local (constructors %~ Set.union (Set.fromList (map (unTvName . fst) ts))) $
        consFst (TypeDecl (TvName n) (map TvName tvs) cs') $
          inferProg prg
 inferProg (Open mod pre:prg) =
@@ -257,12 +244,6 @@ inferProg (Module name body:prg) = do
     inferProg prg
 
 inferProg [] = asks ([],)
-
-
-data Origin
-  = Supplied -- the programmer supplied this type
-  | Guessed -- the compiler invented this type
-  deriving Show
 
 -- For polymorphic recursion, mostly
 approxType :: MonadInfer Typed m => Expr Resolved -> StateT Origin m (Type Typed)
@@ -391,34 +372,57 @@ solveEx ss cs = transformExprTyped go' go (normType . apply ss) where
   go t@(VarCo x) = Map.findWithDefault t x cs
   go x = x
 
+solvePat :: Subst Typed -> Pattern Typed -> Pattern Typed
+solvePat ss = transformPatternTyped go' (normType . apply ss) where
+  go' :: Pattern Typed -> Pattern Typed
+  go' (PType p t a) = PType p (apply ss t) a
+  go' x = x
+
+inferFunTy :: MonadInfer Typed m => [Function Resolved] -> m ([Function Typed], Telescope Typed)
+inferFunTy vs = do
+  vars <- for vs $ \x@FunDecl{..} -> do
+    ty <- resolveKind (BecauseOf x) _fnTypeAnn
+    pure (TvName _fnVar, ty)
+
+  let tele = teleFromList vars
+
+  (vars, cs) <- listen . local (values %~ focus tele) $
+    for (zip vs vars) . uncurry $ \FunDecl{..} (_, ty) -> do
+      t <- skolemise (ByAscription ty) ty
+      let quants (TyPi x t) = first (x:) $ quants t
+          quants ty = ([], ty)
+
+          (quantifiers, bodyTy) = quants t
+
+      clauses <- for _fnClauses $ \cls@Clause{..} -> do
+        let checkPatQuantifier p (Dependent var ty) = do
+              (p', vs, cs) <- checkPattern p ty
+              typat <- liftType (BecauseOf cls) =<< promotePat p
+                `catchError` \e -> throwError (ArisingFrom e (BecauseOf cls))
+              pure (p', vs, implies cls ty cs . implies cls ty [(TyVar var, typat)])
+            checkPatQuantifier p (Anon ty) = do
+              (p', vs, cs) <- checkPattern p ty
+              pure (p', vs, implies cls ty cs)
+
+        when (length quantifiers /= length _clausePat || length quantifiers == 0) $
+          throwError (ArisingFrom (WrongShape cls (t, length quantifiers)) (BecauseOf cls))
+
+        (ps, vss, css) <- unzip3 <$> traverse (uncurry checkPatQuantifier) (zip _clausePat quantifiers)
+        let implication = foldr (.) id css
+            scope = foldMap focus vss
+        body <- local (values %~ scope) . implication $ check _clauseBody bodyTy
+        pure (Clause (TvName _clauseName) ps body (_clauseSpan, ty))
+      pure (FunDecl (TvName _fnVar) clauses ty (_fnSpan, ty))
+
+  cur <- gen
+  (sol, cos) <- case solve cur cs of
+    Right x -> pure x
+    Left e -> throwError e
+
+  let fixClause Clause{..} = Clause _clauseName (map (solvePat sol) _clausePat) (solveEx sol cos _clauseBody) _clauseSpan
+      fixFunction FunDecl{..} = FunDecl _fnVar (map fixClause _fnClauses) (apply sol _fnTypeAnn) _fnSpan
+
+  pure (map fixFunction vars, tele)
 
 consFst :: Functor m => a -> m ([a], b) -> m ([a], b)
 consFst = fmap . first . (:)
-
-
-{-
-  Note [Freedom of the press]:
-    This used to be censor (const mempty) - but that leads us to a
-    problem (a real one!). Consider:
-
-      let map f
-        = let map_accum acc x
-          = match x with
-            | Cons (h, t) -> map_accum (Cons (f h, acc)) t
-            | Nil -> acc
-          in map_accum Nil ;;
-
-    The only way we learn of `f`'s type is inside the `let`. By
-    censoring it, we prevent the constraints that led to the
-    discovery of `f`'s type from arising - which means we can't find
-    it again! Thus, the function gets the rather strange type
-
-      val map : ∀ 'a 'b 'c. 'c -> list 'a -> list 'b
-
-    Instead of the correct
-
-      val map : V 'a 'b. ('a -> 'b) -> list 'a -> list 'b
-
-    By removing the censor, we allow the compiler to recover `'c` - which,
-    if you look under e.g. the ghci debugger, has a substitution!
--}

@@ -4,10 +4,11 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
 module Syntax.Types
-  ( Telescope, one, foldTele, teleFromList, boundByTele
+  ( Telescope, one, foldTele, teleFromList
   , Scope, namesInScope
   , Env, freeInEnv, difference, envOf, scopeFromList, toMap
-  , values, types, typeVars, relevantVars
+  , values, types, typeVars, constructors
+  , Origin(..)
 
   , focus
   ) where
@@ -28,8 +29,8 @@ newtype Telescope p =
   Telescope { getTele :: Map.Map (Var Resolved) (Type p) }
   deriving newtype (Semigroup, Monoid)
 
-deriving instance Ord (Var p) => Ord (Telescope p)
-deriving instance Ord (Var p) => Eq (Telescope p)
+deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Telescope p)
+deriving instance (Ord (Ann p), Ord (Var p)) => Eq (Telescope p)
 
 type instance Index (Telescope p) = Var Resolved
 type instance IxValue (Telescope p) = Type p
@@ -48,13 +49,13 @@ deriving instance (Ord (Var p), Ord f) => Eq (Scope p f)
 deriving instance Ord (Var p) => Semigroup (Scope p f)
 deriving instance Ord (Var p) => Monoid (Scope p f)
 
-instance Ord (Var p) => Traversable (Scope p) where
+instance (Ord (Var p), Ord (Ann p)) => Traversable (Scope p) where
   traverse f (Scope m) = Scope <$> traverse f m
 
 instance Ord (Var p) => Foldable (Scope p) where
   foldMap f (Scope m) = foldMap f m
 
-instance Ord (Var p) => Functor (Scope p) where
+instance (Ord (Var p), Ord (Ann p)) => Functor (Scope p) where
   fmap f (Scope m) = Scope (fmap f m)
 
 type instance Index (Scope p f) = Var p
@@ -68,8 +69,8 @@ instance Ord (Var p) => At (Scope p f) where
 data Env
   = Env { _values       :: Scope Resolved (Type Typed)
         , _types        :: Scope Resolved (Type Typed)
-        , _relevantVars :: Scope Resolved (Type Typed)
         , _typeVars     :: Set.Set (Var Resolved)
+        , _constructors :: Set.Set (Var Resolved)
         }
   deriving (Eq, Show, Ord)
 
@@ -86,7 +87,7 @@ instance Semigroup Env where
   Env a b c d <> Env a' b' c' d' = Env (a <> a') (b <> b') (c <> c') (d <> d')
 
 difference :: Env -> Env -> Env
-difference (Env ma mb mc md) (Env ma' mb' mc' md') = Env (ma \\ ma') (mb \\ mb') (mc \\ mc') (md Set.\\ md')
+difference (Env ma mb mc md) (Env ma' mb' mc' md') = Env (ma \\ ma') (mb \\ mb') (mc Set.\\ mc') (md Set.\\ md')
 
 freeInEnv :: Env -> Set.Set (Var Typed)
 freeInEnv = foldMap ftv . view values
@@ -119,8 +120,10 @@ teleFromList :: Degrade p
              => [(Var p, Type p)] -> Telescope p
 teleFromList = Telescope . Map.fromList . map (first degrade)
 
-boundByTele :: Telescope p -> Set.Set (Var Resolved)
-boundByTele = Set.fromList . Map.keys . getTele
-
 toMap :: Scope p f -> Map.Map (Var p) f
 toMap = getScope
+
+data Origin
+  = Supplied -- the programmer supplied this type
+  | Guessed -- the compiler invented this type
+  deriving Show

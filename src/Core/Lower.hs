@@ -229,7 +229,6 @@ lowerType (S.TyRows rho vs) = RowsTy (lowerType rho) (map (fmap lowerType) vs)
 lowerType (S.TyExactRows vs) = ExactRowsTy (map (fmap lowerType) vs)
 lowerType (S.TyVar (TvName v)) = VarTy v
 lowerType (S.TyCon (TvName v)) = ConTy v
-lowerType (S.TyPromotedCon (TvName v)) = ConTy v
 lowerType (S.TySkol (Skolem _ (TvName v) _ _)) = VarTy v
 lowerType (S.TyWithConstraints _ t) = lowerType t
 lowerType S.TyType = StarTy
@@ -273,6 +272,7 @@ lowerProg (ForeignVal (TvName t) ex tp _:prg) =
 lowerProg (LetStmt vs:prg) =
   (:) <$> (StmtLet <$> for vs (\(TvName v, ex, (_, ant)) -> (v,lowerType ant,) <$> lowerBigLams ant ex))
       <*> lowerProg prg
+lowerProg (FunStmt vs:prg) = lowerProg prg
 lowerProg (TypeDecl (TvName var) _ cons:prg) =
   (:) (C.Type var (map (\case
                            UnitCon (TvName p) (_, t) -> (p, lowerType t)

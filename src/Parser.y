@@ -91,12 +91,14 @@ Tops :: { [Toplevel Parsed] }
      : List1(Top, ';;')                        { $1 }
 
 Top :: { Toplevel Parsed }
-    : let BindGroup                            { LetStmt (reverse $2) }
+    : let BindGroup                             { LetStmt (reverse $2) }
+    | fun FuncGroup                             { FunStmt (reverse $2) }
     | external val ident ':' Type '=' string    { withPos2 $1 $7 $ ForeignVal (getName $3) (getString $7) (getL $5) }
 
     | type ident ListE(TyVar)                          { TypeDecl (getName $2) (map getL $3) [] }
     | type ident ListE(TyVar) '=' List1(Ctor, '|')     { TypeDecl (getName $2) (map getL $3) $5 }
     | type ident ListE(TyVar) '=' '|' List1(Ctor, '|') { TypeDecl (getName $2) (map getL $3) $6 }
+
 
     | module Con '=' begin Tops end            { Module (getL $2) $5 }
     | open Con                                 { Open (getL $2) Nothing }
@@ -174,8 +176,20 @@ BindGroup :: { [(Var Parsed, Expr Parsed, Ann Parsed)] }
           | BindGroup and Binding             { $3 : $1 }
 
 Binding :: { (Var Parsed, Expr Parsed, Ann Parsed) }
-        : BindName ListE(ArgP) '=' Expr        { (getL $1, foldr (\x y -> withPos2 x $4 (Fun x y)) $4 $2, withPos2 $1 $4 id) }
-        | BindName ListE(ArgP) ':' Type '=' Expr { (getL $1, (foldr (\x y -> withPos2 x $6 (Fun x y)) (Ascription $6 (getL $4) (withPos2 $1 $6 id)) $2), withPos2 $1 $6 id) }
+        : BindName ListE(ArgP) '=' Expr
+          { (getL $1, foldr (\x y -> withPos2 x $4 (Fun x y)) $4 $2, withPos2 $1 $4 id) }
+        | BindName ListE(ArgP) ':' Type '=' Expr
+          { (getL $1, (foldr (\x y -> withPos2 x $6 (Fun x y)) (Ascription $6 (getL $4) (withPos2 $1 $6 id)) $2), withPos2 $1 $6 id) }
+
+FuncGroup :: { [Function Parsed] }
+          : FunctionDecl               { [$1] }
+          | FuncGroup and FunctionDecl { $3 : $1 }
+
+FunctionDecl :: { Function Parsed }
+             : BindName ':' Type ListE1(Clause) { withPos2 $1 (foldr1 (<>) (map annotation $4)) (FunDecl (getL $1) $4 (getL $3)) }
+
+Clause :: { Clause Parsed }
+       : '|' BindName ListE1(ArgP) '=' Expr { withPos2 $1 $5 $ Clause (getL $2) $3 $5 }
 
 BindName :: { Located (Var Parsed) }
      : ident                                   { lPos1 $1 $ getName $1 }
@@ -244,7 +258,7 @@ TypeAtom :: { Located (Type Parsed) }
          : Var                                    { lPos1 $1 $ TyCon (getL $1) }
          | TyVar                                  { lPos1 $1 $ TyVar (getL $1) }
          | Con
-           { lPos1 $1 $ TyPromotedCon (getL $1) }
+           { lPos1 $1 $ TyTerm (withPos1 $1 (VarRef (getL $1))) }
          | forall ListE1(tyvar) '.' Type
            { lPos2 $1 $4 $ forallTy (map getName $2) (getL $4) }
          | '(' ')'                                { lPos2 $1 $2 $ TyCon (Name (T.pack "unit")) }

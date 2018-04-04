@@ -22,12 +22,11 @@ import Types.Wellformed (wellformed, normType)
 import Types.Infer.Builtin
 import Types.Infer.Errors
 import Types.Unify (solve)
+import Types.Infer
 
 import Syntax.Subst
 import Syntax.Raise
 import Syntax
-
-import Pretty
 
 type KindT m = StateT SomeReason (WriterT (Seq.Seq (Constraint Typed)) m)
 
@@ -41,7 +40,6 @@ type Kind = Type
 
 resolveKind :: MonadKind m => SomeReason -> Type Resolved -> m (Type Typed)
 resolveKind reason otp = do
-  wellformed otp
   ((ty, _), cs) <- let cont t = do
                         (t, _) <- secondA isType =<< inferKind t
                         pure t
@@ -52,7 +50,9 @@ resolveKind reason otp = do
     Left e -> throwError e
     Right (x, _) -> pure x
 
-  pure (apply sub ty)
+  let t = apply sub ty
+  wellformed t
+  pure t
 
 getKind :: MonadKind m => SomeReason -> Type Resolved -> m (Kind Typed)
 getKind r t = solveK pure r (snd <$> inferKind t)
@@ -68,7 +68,7 @@ checkAgainstKind r t k = do
 
 annotateKind :: MonadKind m => SomeReason -> Type Typed -> m (Type Typed)
 annotateKind r ty = do
-  ((ty, _), cs) <- runWriterT (runStateT (fst <$> inferKind (raiseT unTvName ty)) r)
+  ((ty, _), cs) <- runWriterT (runStateT (fst <$> inferKind (raiseT unTvName fst ty)) r)
   x <- gen
 
   sub <- case solve x cs of
@@ -112,21 +112,13 @@ inferKind (TyCon v) = do
     Nothing -> throwError (NotInScope v)
     Just k -> pure (TyCon (TvName v), k)
 
-inferKind (TyPromotedCon v) = do
-  x <- view (values . at v)
-  case x of
-    Nothing -> throwError (NotInScope v)
-    Just k -> case promoteOrError k of
-      Nothing -> pure (TyPromotedCon (TvName v), k)
-      Just err -> throwError (NotPromotable (TvName v) k err)
-
 inferKind (TyVar v) = do
   k <- maybe freshTV pure =<< view (types . at v)
   pure (TyVar (TvName v), k)
 
 inferKind (TySkol sk) = do
   k <- maybe freshTV pure =<< view (types . at (sk ^. skolIdent))
-  pure (raiseT TvName (TySkol sk), k)
+  pure (raiseT TvName (\x -> (x, k)) (TySkol sk), k)
 
 inferKind (TyApp f x) = do
   reason <- get
@@ -149,6 +141,10 @@ inferKind (TyWithConstraints cs a) = do
     pure (a, b)
   (a, k) <- inferKind a
   pure (TyWithConstraints cs a, k)
+
+inferKind (TyTerm x) = do
+  (ex, ty) <- infer x
+  pure (TyTerm ex, ty)
 
 inferKind t = do
   x <- freshTV
@@ -240,18 +236,3 @@ closeOver r a = fmap normType . annotateKind r $ forall (fv a) a where
   forall :: [Var p] -> Type p -> Type p
   forall [] a = a
   forall vs a = foldr (flip TyForall Nothing) a vs
-
-promoteOrError :: Type Typed -> Maybe Doc
-promoteOrError TyWithConstraints{} = Just (string "mentions constraints")
-promoteOrError TyTuple{} = Just (string "mentions a tuple")
-promoteOrError TyRows{} = Just (string "mentions a tuple")
-promoteOrError TyExactRows{} = Just (string "mentions a tuple")
-promoteOrError (TyApp a b) = promoteOrError a <|> promoteOrError b
-promoteOrError (TyPi (Implicit _ a) b) = join (traverse promoteOrError a) <|> promoteOrError b
-promoteOrError (TyPi (Dependent _ a) b) = promoteOrError a <|> promoteOrError b
-promoteOrError (TyPi (Anon a) b) = promoteOrError a <|> promoteOrError b
-promoteOrError TyCon{} = Nothing
-promoteOrError TyVar{} = Nothing
-promoteOrError TySkol{} = Nothing
-promoteOrError TyPromotedCon{} = Nothing
-promoteOrError TyType{} = Nothing

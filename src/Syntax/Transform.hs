@@ -12,7 +12,6 @@ transformType
 transformType ft = goT where
   transT (TyCon v) = TyCon v
   transT (TyVar v) = TyVar v
-  transT (TyPromotedCon v) = TyPromotedCon v
   transT (TyPi x r) = TyPi (transB x) (goT r)
   transT (TyApp f x) = TyApp (goT f) (goT x)
   transT (TyRows f fs) = TyRows (goT f) (map (second goT) fs)
@@ -21,6 +20,7 @@ transformType ft = goT where
 
   transT (TySkol (Skolem i v ty m)) = TySkol (Skolem i v (goT ty) (transM m))
   transT (TyWithConstraints cons ty) = TyWithConstraints (map (goT***goT) cons) (goT ty)
+  transT (TyTerm t) = TyTerm t
   transT TyType = TyType
 
   transM (ByAscription ty) = ByAscription (goT ty)
@@ -123,6 +123,20 @@ transformExprTyped fe fc ft = goE where
   transE (TypeApp e t a) = TypeApp (goE e) (goT t) (goA a)
   transE (Cast e c a) = Cast (goE e) (goC c) (goA a)
 
+
+
+  goE = transE . fe
+  goT = transformType ft
+  goC = transformCoercion fc ft
+  goA (s, ty) = (s, goT ty)
+
+  goP = transformPatternTyped id ft
+
+transformPatternTyped
+  :: (Pattern Typed -> Pattern Typed)
+  -> (Type Typed -> Type Typed)
+  -> Pattern Typed -> Pattern Typed
+transformPatternTyped fp ft = goP where
   transP (Wildcard a) = Wildcard (goA a)
   transP (Capture v a) = Capture v (goA a)
   transP (Destructure v p a) = Destructure v (goP <$> p) (goA a)
@@ -131,12 +145,9 @@ transformExprTyped fe fc ft = goE where
   transP (PTuple ps a) = PTuple (map goP ps) (goA a)
   transP (PLiteral l a) = PLiteral l (goA a)
 
-  goE = transE . fe
-  goT = transformType ft
-  goC = transformCoercion fc ft
   goA (s, ty) = (s, goT ty)
-
-  goP = transP
+  goT = transformType ft
+  goP = transP . fp
 
 correct :: Type Typed -> Expr Typed -> Expr Typed
 correct ty (VarRef v a) = VarRef v (fst a, ty)

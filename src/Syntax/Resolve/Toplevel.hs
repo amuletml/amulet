@@ -3,6 +3,8 @@ module Syntax.Resolve.Toplevel
   ( extractToplevel, extractToplevels
   ) where
 
+import Control.Lens
+
 import Syntax
 
 import Data.Semigroup
@@ -15,6 +17,7 @@ extractToplevel (TypeDecl v _ c) = (map ctor c, [v]) where
   ctor (UnitCon v _) = v
   ctor (ArgCon v _ _) = v
   ctor (GeneralisedCon v _ _) = v
+extractToplevel (FunStmt v) = (map (^. fnVar) v, [])
 extractToplevel (Open _ _) = ([], [])
 extractToplevel (Module v xs) = let (vs, ts) = extractToplevels xs
                                 in (map (v<>) vs, map (v<>) ts)

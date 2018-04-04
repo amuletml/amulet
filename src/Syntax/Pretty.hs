@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
-{-# LANGUAGE FlexibleContexts, UndecidableInstances, FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts, UndecidableInstances, FlexibleInstances, RecordWildCards #-}
 module Syntax.Pretty
   ( module Syntax
   , tidyPrettyType, applyCons
@@ -104,7 +104,6 @@ instance Pretty Lit where
 
 instance (Pretty (Var p)) => Pretty (Type p) where
   pretty (TyCon v) = stypeCon (pretty v)
-  pretty (TyPromotedCon v) = stypeCon (pretty v)
   pretty (TyVar v) = stypeVar (squote <> pretty v)
   pretty (TySkol v) = stypeSkol (pretty (v ^. skolIdent))
 
@@ -129,6 +128,7 @@ instance (Pretty (Var p)) => Pretty (Type p) where
     prettyEq (a, b) = pretty a <+> soperator (char '~') <+> pretty b
 
   pretty TyType = stypeCon (string "type")
+  pretty (TyTerm x) = pretty x
 
 instance Pretty (Var p) => Pretty (TyBinder p) where
   pretty (Anon t) = k t (pretty t) <+> arrow where
@@ -141,12 +141,14 @@ instance Pretty (Var p) => Pretty (TyBinder p) where
 
 instance (Pretty (Var p)) => Pretty (Toplevel p) where
   pretty (LetStmt []) = error "absurd!"
+  pretty (FunStmt []) = error "absurd!"
   pretty (LetStmt ((n, v, _):xs)) =
     let prettyBind (n, v, _) = keyword "and" <+> prettyOneBinding n v
      in align $ keyword "let" <+> prettyOneBinding n v
              <> case xs of
                   [] -> empty
                   _ -> line <> vsep (map prettyBind xs)
+  pretty (FunStmt (x:xs)) = keyword "fun" <+> pretty x <#> vsep (punctuate (keyword "and") (map pretty xs))
   pretty (ForeignVal v d ty _) = keyword "foreign val" <+> pretty v <+> colon <+> pretty ty <+> equals <+> dquotes (text d)
   pretty (TypeDecl ty args []) = keyword "type" <+> pretty ty <+> hsep (map ((squote <>) . pretty) args)
   pretty (TypeDecl ty args ctors) = keyword "type" <+> pretty ty
@@ -162,6 +164,12 @@ instance (Pretty (Var p)) => Pretty (Toplevel p) where
          , indent 2 (align (pretty bod))
          , keyword "end"
          ]
+
+instance Pretty (Var p) => Pretty (Function p) where
+  pretty FunDecl{..} = pretty _fnVar <+> colon <+> pretty _fnTypeAnn <#> indent 2 (vsep (map pretty _fnClauses)) where
+
+instance Pretty (Var p) => Pretty (Clause p) where
+  pretty Clause{..} = pipe <+> pretty _clauseName <+> hsep (map pretty _clausePat) <+> equals <+> pretty _clauseBody
 
 instance (Pretty (Var p)) => Pretty [Toplevel p] where
   pretty = vcat . map pretty
@@ -208,7 +216,6 @@ applyCons :: Ord (Var p) => Type p -> Type p
 applyCons x@TyCon{} = x
 applyCons x@TyVar{} = x
 applyCons x@TySkol{} = x
-applyCons x@TyPromotedCon{} = x
 applyCons x@TyType{} = x
 applyCons (TyPi a b) = TyPi (go a) (applyCons b) where
   go (Anon t) = Anon (applyCons t)
@@ -218,6 +225,7 @@ applyCons (TyApp a b) = TyApp (applyCons a) (applyCons b)
 applyCons (TyRows r rs) = TyRows (applyCons r) (map (second applyCons) rs)
 applyCons (TyExactRows rs) = TyExactRows (map (second applyCons) rs)
 applyCons (TyTuple a b) = TyTuple (applyCons a) (applyCons b)
+applyCons (TyTerm x) = TyTerm x
 applyCons (TyWithConstraints cs a) =
   let eq (TyVar a, t) = Map.singleton a t
       eq _ = Map.empty

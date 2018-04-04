@@ -91,8 +91,11 @@ data TypeError where
                  -> TypeError
 
   Malformed :: Pretty (Var p) => Type p -> TypeError
+
   NotPromotable :: Pretty (Var p) => Var p -> Type p -> Doc -> TypeError
   NotPromotable' :: Pretty (f p) => f p -> Doc -> TypeError
+
+  WrongShape :: (Pretty (Var p), Pretty (Var p')) => Clause p -> (Type p', Int) -> TypeError
 
   IllegalTypeApp :: (Pretty (Var p), Pretty (Var p')) => Expr p -> Type p' -> Type p' -> TypeError
 
@@ -244,6 +247,18 @@ instance Pretty TypeError where
          , string "which is not in the type grammar"
          ]
     -- TODO needs polishing
+
+  pretty (WrongShape Clause{..} (ty, arity))
+    | arity == 0 =
+      vsep [ string "Expected a function type, but" <+> pretty ty <+> "has no visible quantifiers"
+           , bullet (string "Note:") <+> keyword "fun" <+> string "bindings can be only used for functions"
+           , empty
+           , align $ bullet (string "Perhaps a let is more appropriate,")
+                 <#> indent 2 (string "or the type is written incorrectly?") ]
+    | funarity /= arity =
+      vsep [ string "Expected a clause with" <+> keyword "exactly" <+> int arity <+> string "arguments"
+           , string "but this equation for" <+> pretty _clauseName <+> "only has" <+> int funarity ]
+    where funarity = length _clausePat
 
   pretty (SkolBinding (Skolem k v _ m) b) =
     vsep [ string "Can not unify rigid type variable" <+> skol <+> string "with" <+> whatIs b
