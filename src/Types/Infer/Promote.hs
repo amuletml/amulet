@@ -19,7 +19,7 @@ promote ex = do
      then throwError (NotPromotable ex (string "is not a value"))
      else go ex
 
-go :: MonadReader Env m => Expr Typed -> m (Type Typed)
+go :: (MonadReader Env m, MonadGen Int m) => Expr Typed -> m (Type Typed)
 go (Cast e _ _) = go e
 go var@(VarRef v _) = do
   sk <- view (relevantTVs . at (unTvName v))
@@ -29,6 +29,7 @@ go var@(VarRef v _) = do
        then pure (TyTerm var)
        else pure (TyVar v) 
 go (App f x _) = TyApp <$> go f <*> go x
+go Hole{} = freshTV
 go xs = pure (TyTerm xs)
 
 promotePat :: MonadInfer Typed m => Pattern Resolved -> m (Type Resolved)
