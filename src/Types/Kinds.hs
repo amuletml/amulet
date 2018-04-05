@@ -198,6 +198,8 @@ checkKind (TyPi binder b) ek = do
       let bind = Implicit (TvName v) (Just x)
       pure $ TyPi bind b
 
+checkKind (TyTerm e) k = TyTerm <$> check e k
+
 checkKind ty u = do
   reason <- get
   (t, k) <- inferKind ty

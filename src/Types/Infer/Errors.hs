@@ -1,7 +1,17 @@
+{-# LANGUAGE ViewPatterns #-}
 module Types.Infer.Errors where
 
+import qualified Data.Set as Set
+
 import Control.Monad.Infer
-import Syntax
+import Control.Lens
+
+import Types.Wellformed -- skols
+
+import Syntax.Transform
+import Syntax.Subst
+import Syntax.Pretty
+
 import Pretty
 
 gadtConShape :: (Type Typed, Type Typed) -> Type Typed -> TypeError -> TypeError
@@ -54,3 +64,38 @@ spine = go [] where
 
 rewind :: Var Typed -> [Type Typed] -> Type Typed
 rewind x = foldl TyApp (TyCon x)
+
+foundHole :: Var Typed -> Type Typed -> Subst Typed -> TypeError
+foundHole hole ht sub = helpMaybe (FoundHole hole ty) where
+  unskolemise x@(TySkol v) = case sub ^. at (v ^. skolIdent) of
+    Just t -> cleanup t
+    _ -> TyVar (v ^. skolVar)
+  unskolemise x = x
+
+  go :: Type Typed -> Type Typed
+  go = transformType unskolemise
+
+  ty = go ht
+  skolvars = Set.toList (skols ty)
+
+  helpMaybe
+    | null skolvars = id
+    | otherwise = \e -> Note e help
+
+  help :: Doc
+  help =
+    let oneEquality (view skolIdent -> x) =
+          case sub ^. at x of
+            Just ty -> pure (pretty x <+> soperator (char '~') <+> pretty (cleanup ty))
+            Nothing -> []
+        oneEquality :: Skolem Typed -> [Doc]
+     in string "The following equalities might be relevant:"
+        <#> vsep (map bullet (concatMap oneEquality skolvars))
+
+cleanup :: Type Typed -> Type Typed
+cleanup = transformType fixit where
+  fixit (TyTerm x) = TyTerm (transformExprTyped go id cleanup x) where
+    go (TypeApp f _ _) = go f
+    go (Cast e _ _) = go e
+    go x = x
+  fixit x = x

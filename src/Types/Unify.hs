@@ -8,9 +8,9 @@ import Control.Applicative
 import Control.Monad.Infer
 import Control.Lens hiding (Empty)
 
+import Types.Infer.Errors
 import Types.Wellformed
 
-import Syntax.Transform
 import Syntax.Subst
 import Syntax
 
@@ -244,13 +244,7 @@ doSolve (ConImplies because not cs ts :<| xs) = do
 doSolve (ConFail v t :<| cs) = do
   doSolve cs
   sub <- use solveTySubst
-  let unskolemise x@(TySkol v) = case sub ^. at (v ^. skolVar) of
-        Just t | t == TySkol v -> TyVar (v ^. skolVar)
-        _ -> x
-      unskolemise x = x
-      go :: Type Typed -> Type Typed
-      go = transformType unskolemise
-  throwError (FoundHole v (go (apply sub t)))
+  throwError (foundHole v (apply sub t) sub)
 
 subsumes :: (Type Typed -> Type Typed -> SolveM (Coercion Typed))
          -> Type Typed -> Type Typed -> SolveM (Coercion Typed)
@@ -321,6 +315,8 @@ unifyTerm x@(RecordExt a rs _) y@(RecordExt b rs' _)
       (ra,) <$> unifyTerm a b
 
 unifyTerm (Cast e _ _) (Cast e' _ _) = unifyTerm e e'
+unifyTerm (Cast e _ _) y = unifyTerm e y
+unifyTerm y (Cast e _ _) = unifyTerm y e
 
 unifyTerm a b = throwError (NotEqual (TyTerm a) (TyTerm b))
 
