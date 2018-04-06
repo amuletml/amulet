@@ -32,7 +32,7 @@ data SolveScope
 
 data SolveState
   = SolveState { _solveTySubst :: Subst Typed
-               , _solveCoSubst :: Map.Map (Var Typed) (Coercion Typed)
+               , _solveCoSubst :: Map.Map (Var Typed) (Wrapper Typed)
                }
   deriving (Eq, Show, Ord)
 
@@ -177,7 +177,7 @@ unifRow (t, a, b) = do
   co <- unify a b
   pure (t, co)
 
-runSolve :: Int -> Subst Typed -> SolveM b -> Either TypeError (Int, (Subst Typed, Map.Map (Var Typed) (Coercion Typed)))
+runSolve :: Int -> Subst Typed -> SolveM b -> Either TypeError (Int, (Subst Typed, Map.Map (Var Typed) (Wrapper Typed)))
 runSolve i s x = runExcept (fix (runReaderT (runStateT (runGenTFrom i act) (SolveState s mempty)) emptyScope)) where
   act = (,) <$> gen <*> x
   fix act = do
@@ -186,7 +186,7 @@ runSolve i s x = runExcept (fix (runReaderT (runStateT (runGenTFrom i act) (Solv
      in pure (i, (fmap (apply ss) ss, s ^. solveCoSubst))
   emptyScope = SolveScope False mempty mempty
 
-solve :: Int -> Seq.Seq (Constraint Typed) -> Either TypeError (Subst Typed, Map.Map (Var Typed) (Coercion Typed))
+solve :: Int -> Seq.Seq (Constraint Typed) -> Either TypeError (Subst Typed, Map.Map (Var Typed) (Wrapper Typed))
 solve i cs = snd <$> runSolve i mempty (doSolve cs)
 
 doSolve :: Seq.Seq (Constraint Typed) -> SolveM ()
@@ -196,7 +196,7 @@ doSolve (ConUnify because v a b :<| xs) = do
 
   co <- unify (apply sub a) (apply sub b)
     `catchError` \e -> throwError (ArisingFrom e because)
-  solveCoSubst . at v .= Just co
+  solveCoSubst . at v .= Just (Cast co)
 
   doSolve xs
 doSolve (ConSubsume because v a b :<| xs) = do
@@ -247,22 +247,25 @@ doSolve (ConFail v t :<| cs) = do
   throwError (foundHole v (apply sub t) sub)
 
 subsumes :: (Type Typed -> Type Typed -> SolveM (Coercion Typed))
-         -> Type Typed -> Type Typed -> SolveM (Coercion Typed)
+         -> Type Typed -> Type Typed -> SolveM (Wrapper Typed)
 subsumes k t1 t2@TyForall{} = do
   sub <- use solveTySubst
-  t2' <- skolemise (BySubsumption (apply sub t1) (apply sub t2)) t2
-  subsumes k t1 t2'
+  (c, t2') <- skolemise (BySubsumption (apply sub t1) (apply sub t2)) t2
+  (Syntax.:>) c <$> subsumes k t1 t2'
 subsumes k t1@TyForall{} t2 = do
   (_, _, t1') <- instantiate t1
   subsumes k t1' t2
-subsumes k a b = k a b
+subsumes k a b = Cast <$> k a b
 
-skolemise :: MonadGen Int m => SkolemMotive Typed -> Type Typed -> m (Type Typed)
+skolemise :: MonadGen Int m => SkolemMotive Typed -> Type Typed -> m (Wrapper Typed, Type Typed)
 skolemise motive ty@(TyForall tv _ t) = do
   sk <- freshSkol motive ty tv
-  skolemise motive (apply (Map.singleton tv sk) t)
-skolemise motive (TyArr c d) = TyArr c <$> skolemise motive d
-skolemise _ ty = pure ty
+  (wrap, ty) <- skolemise motive (apply (Map.singleton tv sk) t)
+  pure (TypeLam tv Syntax.:> wrap, ty)
+skolemise motive (TyArr c d) = do
+  (wrap, ty) <- skolemise motive d
+  pure (wrap, TyArr c ty)
+skolemise _ ty = pure (IdWrap, ty)
 
 freshSkol :: MonadGen Int m => SkolemMotive Typed -> Type Typed -> Var Typed -> m (Type Typed)
 freshSkol m ty u = do
@@ -294,7 +297,8 @@ unifyTerm (Tuple (x:xs) a) (Tuple (y:ys) b) = do
   cx <- unifyTerm (Tuple xs a) (Tuple ys b)
   ProdCo <$> unifyTerm x y <*> pure cx
 
-unifyTerm (TypeApp f x _) (TypeApp f' x' _) = AppCo <$> unifyTerm f f' <*> unify x x'
+unifyTerm (ExprWrapper (TypeApp x) f _) (ExprWrapper (TypeApp x') f' _) = AppCo <$> unifyTerm f f' <*> unify x x'
+
 unifyTerm x@(Record rs _) y@(Record rs' _)
   | rs <- sortOn fst rs, rs' <- sortOn fst rs' = do
     when (length rs /= length rs') $
@@ -314,9 +318,6 @@ unifyTerm x@(RecordExt a rs _) y@(RecordExt b rs' _)
         throwError (NotEqual (TyTerm x) (TyTerm y))
       (ra,) <$> unifyTerm a b
 
-unifyTerm (Cast e _ _) (Cast e' _ _) = unifyTerm e e'
-unifyTerm (Cast e _ _) y = unifyTerm e y
-unifyTerm y (Cast e _ _) = unifyTerm y e
-
+unifyTerm (ExprWrapper Cast{} e _) (ExprWrapper Cast{} e' _) = unifyTerm e e'
 unifyTerm a b = throwError (NotEqual (TyTerm a) (TyTerm b))
 

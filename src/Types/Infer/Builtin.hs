@@ -56,15 +56,15 @@ unify, subsumes :: ( Reasonable f p
                    , MonadInfer Typed m )
                 => f p
                 -> Type Typed
-                -> Type Typed -> m (Type Typed, Coercion Typed)
+                -> Type Typed -> m (Type Typed, Wrapper Typed)
 unify e a b = do
   x <- TvName <$> fresh
   tell (Seq.singleton (ConUnify (BecauseOf e) x a b))
-  pure (b, VarCo x)
+  pure (b, WrapVar x)
 subsumes e a b = do
   x <- TvName <$> fresh
   tell (Seq.singleton (ConSubsume (BecauseOf e) x a b))
-  pure (b, VarCo x)
+  pure (b, WrapVar x)
 
 implies :: ( Reasonable f p
            , MonadInfer Typed m

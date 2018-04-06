@@ -168,7 +168,7 @@ instantiate tp@(TyPi (Implicit v _) ty) = do
       squish f (Just x) = Just (x . f)
       squish f _ = Just f
 
-      appThisTy e = TypeApp e var (annotation e, tp)
+      appThisTy e = ExprWrapper (TypeApp var) e (annotation e, tp)
   (k, _, t) <- instantiate (apply map ty)
   pure (squish appThisTy k, tp, t)
 instantiate ty = pure (Nothing, ty, ty)
@@ -261,7 +261,7 @@ instance Pretty TypeError where
          , bullet (string "Note: the variable") <+> skol <+> string "was rigidified because" <+> prettyMotive m
          , indent 8 (string "and is represented by the constant") <+> stypeSkol (pretty k)
          ] <> case b of
-             TySkol (Skolem k v _ m) ->
+             TySkol (Skolem _ v _ m) ->
                empty <#>
                  vsep [ bullet (string "Note: the rigid type variable") <+> stypeVar (pretty v) <> comma <+> string "in turn" <> comma
                       , indent 8 (string "was rigidified because") <+> prettyMotive m

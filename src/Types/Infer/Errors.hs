@@ -67,7 +67,7 @@ rewind x = foldl TyApp (TyCon x)
 
 foundHole :: Var Typed -> Type Typed -> Subst Typed -> TypeError
 foundHole hole ht sub = helpMaybe (FoundHole hole ty) where
-  unskolemise x@(TySkol v) = case sub ^. at (v ^. skolIdent) of
+  unskolemise (TySkol v) = case sub ^. at (v ^. skolIdent) of
     Just t -> cleanup t
     _ -> TyVar (v ^. skolVar)
   unskolemise x = x
@@ -95,7 +95,6 @@ foundHole hole ht sub = helpMaybe (FoundHole hole ty) where
 cleanup :: Type Typed -> Type Typed
 cleanup = transformType fixit where
   fixit (TyTerm x) = TyTerm (transformExprTyped go id cleanup x) where
-    go (TypeApp f _ _) = go f
-    go (Cast e _ _) = go e
+    go (ExprWrapper _ e _) = go e
     go x = x
   fixit x = x

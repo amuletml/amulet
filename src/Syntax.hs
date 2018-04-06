@@ -99,15 +99,29 @@ data Expr p
   | Tuple [Expr p] (Ann p)
   | TupleSection [Maybe (Expr p)] (Ann p)
 
-  -- Explicit type application
-  | TypeApp (Expr p) (Type p) (Ann p)
-  | Cast (Expr p) (Coercion p) (Ann p)
+  | ExprWrapper (Wrapper p) (Expr p) (Ann p)
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Expr p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Expr p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Expr p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Expr p)
 instance (Data (Var p), Data (Ann p), Data p) => Spanned (Expr p)
+
+data Wrapper p
+  = TypeApp (Type p)
+  | Cast (Coercion p)
+  | TypeLam (Var p)
+  | (:>) (Wrapper p) (Wrapper p)
+  | WrapVar (Var p) -- Unsolved wrapper variable
+  | IdWrap
+
+infixr 5 :>
+
+deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Wrapper p)
+deriving instance (Show (Var p), Show (Ann p)) => Show (Wrapper p)
+deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Wrapper p)
+deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Wrapper p)
+instance (Data (Var p), Data (Ann p), Data p) => Spanned (Wrapper p)
 
 data Pattern p
   = Wildcard (Ann p)
@@ -183,7 +197,6 @@ deriving instance (Data p, Data (Ann p), Data (Var p)) => Data (SkolemMotive p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (SkolemMotive p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (SkolemMotive p)
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (SkolemMotive p)
-
 
 instance Eq (Var p) => Eq (Skolem p) where
   Skolem v _ _ _ == Skolem v' _ _ _ = v == v'

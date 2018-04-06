@@ -20,6 +20,7 @@ import Data.Foldable
 import Data.Triple
 
 import Types.Wellformed (wellformed, normType)
+import Types.Infer.Promote
 import Types.Infer.Builtin
 import Types.Infer.Errors
 import Types.Unify (solve)
@@ -152,7 +153,8 @@ inferKind (TyWithConstraints cs a) = do
 
 inferKind (TyTerm x) = do
   (ex, ty) <- infer x
-  pure (TyTerm ex, ty)
+  ex <- promote ex
+  pure (ex, ty)
 
 inferKind t = do
   x <- freshTV
@@ -197,8 +199,6 @@ checkKind (TyPi binder b) ek = do
         checkKind b ek
       let bind = Implicit (TvName v) (Just x)
       pure $ TyPi bind b
-
-checkKind (TyTerm e) k = TyTerm <$> check e k
 
 checkKind ty u = do
   reason <- get

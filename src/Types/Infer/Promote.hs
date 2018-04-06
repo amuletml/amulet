@@ -20,14 +20,6 @@ promote ex = do
      else go ex
 
 go :: (MonadReader Env m, MonadGen Int m) => Expr Typed -> m (Type Typed)
-go (Cast e _ _) = go e
-go var@(VarRef v _) = do
-  sk <- view (relevantTVs . at (unTvName v))
-  flip (flip maybe pure) sk $ do
-    x <- view constructors
-    if unTvName v `Set.member` x
-       then pure (TyTerm var)
-       else pure (TyVar v) 
 go (App f x _) = TyApp <$> go f <*> go x
 go Hole{} = freshTV
 go xs = pure (TyTerm xs)
@@ -44,7 +36,6 @@ isValue (Fun _ e _) = isValue e
 isValue (Tuple es _) = and <$> traverse isValue es
 isValue (VarRef v _) = liftA2 (||) (fmap (v' `inScope`) (view relevantTVs)) (fmap (v' `Set.member`) (view constructors)) where
   v' = unTvName v
-isValue (TypeApp f _ _) = isValue f
 isValue Literal{} = pure True
 isValue (App f x _) = liftA2 (&&) (isValue f) (isValue x)
 isValue (Record rs _) = and <$> traverse (isValue . snd) rs
@@ -64,4 +55,4 @@ isValue BothSection{} = pure False
 isValue AccessSection{} = pure False
 isValue (Parens e _) = isValue e
 isValue TupleSection{} = pure False
-isValue (Cast e _ _) = isValue e
+isValue (ExprWrapper _ e _) = isValue e

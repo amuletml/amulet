@@ -263,8 +263,7 @@ reExpr (Parens e a) = flip Parens a <$> reExpr e
 
 reExpr (Tuple es a) = Tuple <$> traverse reExpr es <*> pure a
 reExpr (TupleSection es a) = TupleSection <$> traverse (traverse reExpr) es <*> pure a
-reExpr (TypeApp f x a) = TypeApp <$> reExpr f <*> reType x <*> pure a
-reExpr Cast{} = error "resolve cast"
+reExpr ExprWrapper{} = error "resolve cast"
 
 reType :: MonadResolve m => Type Parsed -> m (Type Resolved)
 reType (TyCon v) = TyCon <$> lookupTy v

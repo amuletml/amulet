@@ -39,6 +39,7 @@ import Types.Infer.Promote
 import Types.Wellformed
 import Types.Unify
 
+import Debug.Trace
 import Pretty
 
 -- Solve for the types of lets in a program
@@ -47,8 +48,9 @@ inferProgram env ct = fmap fst <$> runInfer env (inferProg ct)
 
 check :: forall m. MonadInfer Typed m => Expr Resolved -> Type Typed -> m (Expr Typed)
 check e ty@TyForall{} = do -- This is rule Decl∀L from [Complete and Easy]
-  e <- check e =<< skolemise (ByAscription ty) ty -- gotta be polymorphic - don't allow instantiation
-  pure (correct ty e)
+  (wrap, e) <- secondA (check e) =<< skolemise (ByAscription ty) ty -- gotta be polymorphic - don't allow instantiation
+  trace (render (pretty ty) ++ " leads to " ++ show wrap) pure ()
+  pure (ExprWrapper wrap e (annotation e, ty))
 
 check (Hole v a) t = do
   tell (Seq.singleton (ConFail (TvName v) t))
@@ -104,14 +106,12 @@ check ex@(Ascription e ty an) goal = do
   ty <- resolveKind (BecauseOf ex) ty
   e <- check e ty
   (_, c) <- subsumes ex ty goal
-  pure (Ascription (Cast e c (an, ty)) ty (an, goal))
-
-check TypeApp{} _ = error "impossible: check TypeApp"
+  pure (Ascription (ExprWrapper c e (an, ty)) ty (an, goal))
 
 check e ty = do
   (e', t) <- infer e
   (_, c) <- subsumes e ty t
-  pure (Cast e' c (annotation e, ty))
+  pure (ExprWrapper c e' (annotation e, t))
 
 -- [Complete and Easy]: See https://www.cl.cam.ac.uk/~nk480/bidir.pdf
 
@@ -315,7 +315,9 @@ inferLetTy closeOver vs =
         ((exp', ty), cs) <- listen . local (values %~ focus (uncurry one tv)) $
           case origin of
             Supplied -> do
-              exp' <- check exp (snd tv)
+              let exp' (Ascription e _ _) = exp' e
+                  exp' e = e
+              exp' <- check (exp' exp) (trace (render (pretty (snd tv))) snd tv)
               pure (exp', snd tv)
             Guessed -> do
               (exp', ty) <- infer exp
@@ -331,8 +333,10 @@ inferLetTy closeOver vs =
           ifor (zip tvs vars) $ \i ((_, tyvar), (var, exp, ann)) ->
             case origins !! i of
               Supplied -> do
-                exp' <- check exp tyvar
-                pure (TvName var, exp', ann, tyvar)
+                let exp' (Ascription e _ _) = exp' e
+                    exp' e = e
+                exp <- check (exp' exp) tyvar
+                pure (TvName var, exp, ann, tyvar)
               Guessed -> do
                 (exp', ty) <- infer exp
                 _ <- unify exp ty tyvar
@@ -362,15 +366,21 @@ inferLetTy closeOver vs =
       tc [] = pure ([], mempty)
    in tc sccs
 
-solveEx :: Subst Typed -> Map.Map (Var Typed) (Coercion Typed) -> Expr Typed -> Expr Typed
-solveEx ss cs = transformExprTyped go' go (normType . apply ss) where
-  go' :: Expr Typed -> Expr Typed
-  go' (TypeApp f t a) = TypeApp f (apply ss t) a
-  go' x = x
-
-  go :: Coercion Typed -> Coercion Typed
-  go t@(VarCo x) = Map.findWithDefault t x cs
+solveEx :: Subst Typed -> Map.Map (Var Typed) (Wrapper Typed) -> Expr Typed -> Expr Typed
+solveEx ss cs = transformExprTyped go id goType where
+  go :: Expr Typed -> Expr Typed
+  go (ExprWrapper w e a) = ExprWrapper (goWrap w) (solveEx ss cs e) a
   go x = x
+
+  goWrap (TypeApp t) = TypeApp (goType t)
+  goWrap (Cast c) = Cast c
+  goWrap (TypeLam l) = TypeLam l
+  goWrap (x Syntax.:> y) = goWrap x Syntax.:> goWrap y
+  goWrap (WrapVar v) = goWrap $ Map.findWithDefault err v cs where
+    err = error $ "Unsolved wrapper variable " ++ show v ++ ". This is a bug"
+  goWrap IdWrap = IdWrap
+
+  goType x = apply ss x
 
 solvePat :: Subst Typed -> Pattern Typed -> Pattern Typed
 solvePat ss = transformPatternTyped go' (normType . apply ss) where
@@ -388,7 +398,7 @@ inferFunTy vs = do
 
   (vars, cs) <- listen . local (values %~ focus tele) $
     for (zip vs vars) . uncurry $ \FunDecl{..} (_, ty) -> do
-      t <- skolemise (ByAscription ty) ty
+      (_, t) <- skolemise (ByAscription ty) ty
       let quants (TyPi x t) = first (x:) $ quants t
           quants ty = ([], ty)
 

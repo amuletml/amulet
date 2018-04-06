@@ -33,9 +33,16 @@ raiseE vR aR =
       Parens e a -> Parens (eR e) (aR a)
       Tuple es a -> Tuple (map eR es) (aR a)
       Ascription e t a -> Ascription (eR e) (raiseT vR aR t) (aR a)
-      TypeApp f x a -> TypeApp (eR f) (raiseT vR aR x) (aR a)
       TupleSection es a -> TupleSection (fmap eR <$> es) (aR a)
-      Cast e c a -> Cast (eR e) (raiseCo vR aR c) (aR a)
+      ExprWrapper w e a -> ExprWrapper (raiseWrapper vR aR  w) (eR e) (aR a)
+
+raiseWrapper :: (Var p -> Var p') -> (Ann p -> Ann p') -> Wrapper p -> Wrapper p'
+raiseWrapper v a (Cast co) = Cast (raiseCo v a co)
+raiseWrapper v a (TypeApp ty) = TypeApp (raiseT v a ty)
+raiseWrapper v _ (TypeLam var) = TypeLam (v var)
+raiseWrapper v a (x :> y) = raiseWrapper v a x :> raiseWrapper v a y
+raiseWrapper v _ (WrapVar var) = WrapVar (v var)
+raiseWrapper _ _ IdWrap = IdWrap
 
 raiseP :: (Var p -> Var p') -- How to raise variables
        -> (Ann p -> Ann p')
