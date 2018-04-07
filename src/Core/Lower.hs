@@ -10,11 +10,14 @@ module Core.Lower
 import Control.Monad.Infer
 import Control.Monad.Cont
 import Control.Arrow
+import Control.Lens
 
+import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import Data.Traversable
 import Data.Function
 import Data.Foldable
+import Data.Maybe
 import Data.Graph
 import Data.Span
 import Data.List
@@ -22,6 +25,7 @@ import Data.List
 import qualified Core.Core as C
 import qualified Core.Builtin as C
 import Core.Core hiding (Atom, Term, Stmt, Type, Pattern)
+import Core.Types (unify, replaceTy)
 import Core.Core (pattern Atom)
 
 import qualified Syntax as S
@@ -84,7 +88,27 @@ lowerBothTerm e = let t = lowerType (S.getType e)
 lowerAt :: MonadLower m => Expr Typed -> Type -> Lower m Term
 lowerAt (Ascription e _ _) t = lowerAt e t
 
-lowerAt (VarRef (TvName p) _) ty = pure (Atom (Ref p ty))
+lowerAt (VarRef (TvName p) _) ty = do
+  pty <- view (values . at p)
+  case pty of
+    -- If we've got a type which is different to our expected one
+    -- then we attempt to unify
+    Just fty | fty' <- lowerType fty
+             , fty' /= ty ->
+      let addApps ty' vars
+            | Just subst <- unify ty' ty
+            = foldrM (\tyvar (prev, ForallTy _ prevTy) -> do
+                         let tyuni = fromMaybe (VarTy tyvar) (Map.lookup tyvar subst)
+                             newTy = replaceTy tyvar tyuni prevTy
+                         ftv <- fresh
+                         ContT $ \k ->
+                           C.Let (One (ftv, newTy, TyApp prev tyuni)) <$> k (C.Ref ftv newTy, newTy)
+                         ) (C.Ref p fty', fty') vars
+          addApps (ForallTy v ty') vars = addApps ty' (v:vars)
+          addApps _ _ = undefined
+      in runContT (addApps fty' []) (pure . Atom . fst)
+
+    _ -> pure (Atom (Ref p ty))
 lowerAt (TypeApp f x _) _ = flip TyApp (lowerType x) <$> lowerExprAtom f
 
 lowerAt e (ForallTy vs b) = Atom . Lam (TypeArgument vs StarTy) <$> lowerAtTerm e b
