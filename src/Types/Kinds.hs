@@ -69,7 +69,7 @@ checkAgainstKind r t k = do
 
 annotateKind :: MonadKind m => SomeReason -> Type Typed -> m (Type Typed)
 annotateKind r ty = do
-  ((ty, _), cs) <- runWriterT (runStateT (fst <$> inferKind (raiseT unTvName fst ty)) r)
+  ((ty, _), cs) <- runWriterT (runStateT (checkKind (raiseT unTvName fst ty) TyType) r)
   x <- gen
 
   sub <- case solve x cs of

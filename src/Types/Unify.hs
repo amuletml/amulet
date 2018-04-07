@@ -51,10 +51,11 @@ bind var ty
   | otherwise = do
       env <- use solveTySubst
       noTouch <- view don'tTouch
+      ty <- pure (apply env ty) -- shadowing
       -- Attempt to extend the environment, otherwise unify with existing type
       case Map.lookup var env of
         Nothing -> do
-          if | var `Set.notMember` noTouch -> solveTySubst .= (env `compose` Map.singleton var (normType ty))
+          if | var `Set.notMember` noTouch -> solveTySubst .= env `compose` Map.singleton var ty
              | var `Set.member` noTouch, TyVar v <- ty, v `Set.notMember` noTouch -> solveTySubst .= (env `compose` Map.singleton v (TyVar var))
              | otherwise -> throwError (NotEqual (TyVar var) ty)
           pure (AssumedCo (TyVar var) ty)
