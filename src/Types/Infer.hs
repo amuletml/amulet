@@ -112,10 +112,10 @@ check e ty = do
 
 infer :: MonadInfer Typed m => Expr Resolved -> m (Expr Typed, Type Typed)
 infer (VarRef k a) = do
-  (cont, _, new) <- lookupTy' k
+  (cont, old, new) <- lookupTy' k
   case cont of
     Nothing -> pure (VarRef (TvName k) (a, new), new)
-    Just cont -> pure (cont (VarRef (TvName k) (a, new)), new)
+    Just cont -> pure (cont (VarRef (TvName k) (a, old)), new)
 
 infer (Fun p e an) = let blame = Arm p e in do
   (p, dom, ms, cs) <- inferPattern p
