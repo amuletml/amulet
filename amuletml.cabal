@@ -93,7 +93,6 @@ library amulet
                      , Types.Infer.Errors
                      , Types.Infer.Builtin
                      , Types.Infer.Pattern
-                     , Types.Infer.Promote
                      , Types.Infer.Constructor
                      -- Data
                      , Data.Span

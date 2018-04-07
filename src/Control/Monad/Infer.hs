@@ -54,8 +54,8 @@ import Syntax.Subst
 type MonadInfer p m = (MonadError TypeError m, MonadReader Env m, MonadWriter (Seq.Seq (Constraint p)) m, MonadGen Int m)
 
 data Constraint p
-  = ConUnify   SomeReason (Var p) (Type p) (Type p)
-  | ConSubsume SomeReason (Var p) (Type p) (Type p)
+  = ConUnify   SomeReason (Var p)  (Type p) (Type p)
+  | ConSubsume SomeReason (Var p)  (Type p) (Type p)
   | ConImplies SomeReason (Type p) (Seq.Seq (Constraint p)) (Seq.Seq (Constraint p))
   | ConFail (Var p) (Type p) -- for holes. I hate it.
 
@@ -92,7 +92,7 @@ data TypeError where
 
   Malformed :: Pretty (Var p) => Type p -> TypeError
 
-  NotPromotable :: Pretty (f p) => f p -> Doc -> TypeError
+  NotPromotable :: Pretty (Var p) => Var p -> Type p -> Doc -> TypeError
 
   WrongShape :: (Pretty (Var p), Pretty (Var p')) => Clause p -> (Type p', Int) -> TypeError
 
@@ -234,14 +234,12 @@ instance Pretty TypeError where
          , bullet (string "Note: in type") <+> verbatim t
          ]
 
-  pretty (NotPromotable ex err) =
-    vsep [ string "The expression" <+> pretty ex
-         , indent 4 (string "can not be used as a type")
-         , empty
-         , bullet (string "Note:") <+> string "because it" <+> stypeSkol err
-         , bullet "Note: arguments to dependent functions must be promotable"
+  pretty (NotPromotable c x err) =
+    vsep [ string "The constructor" <+> pretty c <+> string "can not be used as a type"
+         , string "Note: because its kind,"
+         , indent 2 (pretty x)
+         , err
          ]
-    -- TODO needs polishing
 
   pretty (WrongShape Clause{..} (ty, arity))
     | arity == 0 =
@@ -291,4 +289,3 @@ prettyMotive :: SkolemMotive Typed -> Doc
 prettyMotive (ByAscription t) = string "of a type ascription" <#> string "against the type" <+> pretty t
 prettyMotive (BySubsumption t1 t2) = string "of a subsumption constraint relating" <+> pretty t1 <+> string "with" <+> pretty t2
 prettyMotive (ByExistential v t) = string "it is an existential" <> comma <#> string "bound by the type of" <+> pretty v <> comma <+> pretty t
-prettyMotive (ByDependency v t) = string "it is a dependent parameter" <> comma <#> string "bound by the quantifier" <+> verbatim (Dependent v t)

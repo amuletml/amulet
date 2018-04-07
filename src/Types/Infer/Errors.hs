@@ -68,7 +68,7 @@ rewind x = foldl TyApp (TyCon x)
 foundHole :: Var Typed -> Type Typed -> Subst Typed -> TypeError
 foundHole hole ht sub = helpMaybe (FoundHole hole ty) where
   unskolemise (TySkol v) = case sub ^. at (v ^. skolIdent) of
-    Just t -> cleanup t
+    Just t -> t
     _ -> TyVar (v ^. skolVar)
   unskolemise x = x
 
@@ -86,15 +86,8 @@ foundHole hole ht sub = helpMaybe (FoundHole hole ty) where
   help =
     let oneEquality (view skolIdent -> x) =
           case sub ^. at x of
-            Just ty -> pure (pretty x <+> soperator (char '~') <+> pretty (cleanup ty))
+            Just ty -> pure (pretty x <+> soperator (char '~') <+> pretty ty)
             Nothing -> []
         oneEquality :: Skolem Typed -> [Doc]
      in string "The following equalities might be relevant:"
         <#> vsep (map bullet (concatMap oneEquality skolvars))
-
-cleanup :: Type Typed -> Type Typed
-cleanup = transformType fixit where
-  fixit (TyTerm x) = TyTerm (transformExprTyped go id cleanup x) where
-    go (ExprWrapper _ e _) = go e
-    go x = x
-  fixit x = x

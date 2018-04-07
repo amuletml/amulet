@@ -111,6 +111,7 @@ instance Pretty Lit where
 
 instance (Pretty (Var p)) => Pretty (Type p) where
   pretty (TyCon v) = stypeCon (pretty v)
+  pretty (TyPromotedCon v) = stypeCon (pretty v)
   pretty (TyVar v) = stypeVar (squote <> pretty v)
   pretty (TySkol v) = stypeSkol (pretty (v ^. skolIdent))
 
@@ -123,7 +124,6 @@ instance (Pretty (Var p)) => Pretty (Type p) where
     parenTyArg TyApp{} = parens
     parenTyArg TyPi{} = parens
     parenTyArg TyTuple{} = parens
-    parenTyArg TyTerm{} = parens
     parenTyArg _ = id
 
   pretty (TyTuple a b)
@@ -136,14 +136,12 @@ instance (Pretty (Var p)) => Pretty (Type p) where
     prettyEq (a, b) = pretty a <+> soperator (char '~') <+> pretty b
 
   pretty TyType = stypeCon (string "type")
-  pretty (TyTerm x) = pretty x
 
 instance Pretty (Var p) => Pretty (TyBinder p) where
   pretty (Anon t) = k t (pretty t) <+> arrow where
     k TyPi{} = parens
     k TyTuple{} = parens
     k _ = id
-  pretty (Dependent v k) = parens (stypeVar (squote <> pretty v) <+> colon <+> pretty k) <+> arrow
   pretty (Implicit v (Just k)) = braces (stypeVar (squote <> pretty v) <+> colon <+> pretty k) <> dot
   pretty (Implicit v Nothing)  = stypeVar (squote <> pretty v) <> dot
 
@@ -225,15 +223,14 @@ applyCons x@TyCon{} = x
 applyCons x@TyVar{} = x
 applyCons x@TySkol{} = x
 applyCons x@TyType{} = x
+applyCons x@TyPromotedCon{} = x
 applyCons (TyPi a b) = TyPi (go a) (applyCons b) where
   go (Anon t) = Anon (applyCons t)
   go (Implicit t k) = Implicit t (fmap applyCons k)
-  go (Dependent v k) = Dependent v (applyCons k)
 applyCons (TyApp a b) = TyApp (applyCons a) (applyCons b)
 applyCons (TyRows r rs) = TyRows (applyCons r) (map (second applyCons) rs)
 applyCons (TyExactRows rs) = TyExactRows (map (second applyCons) rs)
 applyCons (TyTuple a b) = TyTuple (applyCons a) (applyCons b)
-applyCons (TyTerm x) = TyTerm x
 applyCons (TyWithConstraints cs a) =
   let eq (TyVar a, t) = Map.singleton a t
       eq _ = Map.empty

@@ -12,18 +12,16 @@ import Data.List (unionBy)
 
 import Syntax.Pretty
 
-import Types.Infer.Promote
-
 wellformed :: (MonadError TypeError m, MonadReader Env m) => Type Typed -> m ()
 wellformed tp = case tp of
   TyCon{} -> pure ()
   TyVar{} -> pure ()
   TySkol{} -> pure ()
   TyType{} -> pure ()
+  TyPromotedCon{} -> pure ()
   TyPi a b -> do
     case a of
       Implicit _ k -> traverse_ wellformed k
-      Dependent _ k -> wellformed k
       Anon a -> wellformed a 
     wellformed b
   TyApp a b -> wellformed a *> wellformed b
@@ -39,9 +37,6 @@ wellformed tp = case tp of
   TyWithConstraints eqs b -> do
     for_ eqs $ \(a, b) -> wellformed a *> wellformed b
     wellformed b
-  TyTerm t -> do
-    isV <- isValue t
-    unless isV $ throwError (Malformed tp)
 
 arity :: Type p -> Int
 arity (TyArr _ t) = 1 + arity t
@@ -75,12 +70,11 @@ skols :: Ord (Var p) => Type p -> Set.Set (Skolem p)
 skols TyCon{}  = mempty
 skols TyVar{}  = mempty
 skols TyType{} = mempty
-skols TyTerm{} = mempty
+skols TyPromotedCon{}  = mempty
 skols (TySkol x) = Set.singleton x
 skols (TyApp a b) = skols a <> skols b
 skols (TyPi b t)
   | Implicit _ k <- b = skols t <> foldMap skols k
-  | Dependent _ k <- b = skols t <> skols k
   | Anon a <- b = skols a <> skols t
 skols (TyRows r rs) = skols r <> foldMap (skols . snd) rs
 skols (TyExactRows rs) = foldMap (skols . snd) rs

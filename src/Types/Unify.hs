@@ -17,7 +17,6 @@ import Syntax
 import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
-import Data.Traversable
 import Data.Sequence (Seq ((:<|), Empty))
 import Data.Foldable
 import Data.Function
@@ -77,6 +76,10 @@ unify (TySkol x) (TySkol y)
            then bind (x ^. skolIdent) (TySkol y)
            else throwError $ SkolBinding x (TySkol y)
 
+unify ta@(TyPromotedCon a) tb@(TyPromotedCon b)
+  | a == b = pure (ReflCo tb)
+  | otherwise = throwError (NotEqual ta tb)
+
 unify (TySkol t@(Skolem sv _ _ _)) b = do
   sub <- use (solveTySubst . at sv)
   case sub of
@@ -104,11 +107,6 @@ unify t (TyWithConstraints cs ty) = do
   unify t ty
 
 unify (TyArr a b) (TyArr a' b') = ArrCo <$> unify a a' <*> unify b b'
-unify (TyPi (Dependent v k) b) (TyPi (Dependent v' k') b') = do
-  fresh <- freshTV
-  let TyVar tv = fresh
-  _ <- unify k k'
-  ForallCo tv <$> unify (apply (Map.singleton v fresh) b) (apply (Map.singleton v' fresh) b')
 unify (TyApp a b) (TyApp a' b') = AppCo <$> unify a a' <*> unify b b'
 
 unify ta@(TyCon a) tb@(TyCon b)
@@ -158,7 +156,6 @@ unify tp@TyRows{} x = throwError (Note (CanNotInstance tp x) isRec)
 unify (TyTuple a b) (TyTuple a' b') = do
   ProdCo <$> unify a a' <*> unify b b'
 
-unify (TyTerm a) (TyTerm b) = unifyTerm a b
 unify TyType TyType = pure (ReflCo TyType)
 unify a b = throwError (NotEqual a b)
 
@@ -283,41 +280,4 @@ capture m = do
   st <- get
   put x
   pure (r, st)
-
-unifyTerm :: Expr Typed -> Expr Typed -> SolveM (Coercion Typed)
-unifyTerm a@(VarRef v _) (VarRef v' _)
-  | v == v' = pure (ReflCo (TyTerm a))
-unifyTerm x@(Literal l _) (Literal l' _)
-  | l == l' = pure (ReflCo (TyTerm x))
-
-unifyTerm (App f x _) (App f' x' _) = AppCo <$> unifyTerm f f' <*> unifyTerm x x'
-
-unifyTerm (Tuple [x] _) (Tuple [x'] _) = unifyTerm x x'
-unifyTerm (Tuple (x:xs) a) (Tuple (y:ys) b) = do
-  cx <- unifyTerm (Tuple xs a) (Tuple ys b)
-  ProdCo <$> unifyTerm x y <*> pure cx
-
-unifyTerm (ExprWrapper (TypeApp x) f _) (ExprWrapper (TypeApp x') f' _) = AppCo <$> unifyTerm f f' <*> unify x x'
-
-unifyTerm x@(Record rs _) y@(Record rs' _)
-  | rs <- sortOn fst rs, rs' <- sortOn fst rs' = do
-    when (length rs /= length rs') $
-      throwError (NotEqual (TyTerm x) (TyTerm y))
-    fmap ExactRowsCo . for (zip rs rs') $ \((ra, a), (rb, b)) -> do
-      when (ra /= rb) $ 
-        throwError (NotEqual (TyTerm x) (TyTerm y))
-      (ra,) <$> unifyTerm a b
-
-unifyTerm x@(RecordExt a rs _) y@(RecordExt b rs' _)
-  | rs <- sortOn fst rs, rs' <- sortOn fst rs' = do
-    c <- unifyTerm a b
-    when (length rs /= length rs') $
-      throwError (NotEqual (TyTerm x) (TyTerm y))
-    fmap (RowsCo c) . for (zip rs rs') $ \((ra, a), (rb, b)) -> do
-      when (ra /= rb) $ 
-        throwError (NotEqual (TyTerm x) (TyTerm y))
-      (ra,) <$> unifyTerm a b
-
-unifyTerm (ExprWrapper Cast{} e _) (ExprWrapper Cast{} e' _) = unifyTerm e e'
-unifyTerm a b = throwError (NotEqual (TyTerm a) (TyTerm b))
 

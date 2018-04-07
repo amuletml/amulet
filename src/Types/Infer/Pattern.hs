@@ -12,7 +12,7 @@ import Data.Traversable
 import Data.Semigroup
 import Data.List
 
-import {-# SOURCE #-} Types.Kinds
+import Types.Kinds
 import Types.Infer.Builtin
 import Types.Wellformed
 import Types.Unify (freshSkol)

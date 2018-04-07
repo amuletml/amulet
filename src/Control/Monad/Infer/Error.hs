@@ -41,9 +41,6 @@ instance (Data p, Data (Ann p), Data (Var p), Pretty (Var p)) => Reasonable Clau
 instance (Data p, Data (Ann p), Data (Var p), Pretty (Var p)) => Reasonable Constructor p where
   blame _ = string "the constructor"
 
-instance (Data p, Data (Ann p), Data (Var p), Pretty (Var p)) => Reasonable Type p where
-  blame _ = string "the type"
-
 instance (Ann p ~ Span, Data p, Data (Ann p), Data (Var p), Pretty (Var p)) => Reasonable Toplevel p where
   blame _ = string "the declaration"
 

@@ -63,11 +63,11 @@ raiseT :: (Var p -> Var p') -- How to raise variables
        -> (Ann p -> Ann p')
        -> Type p -> Type p'
 raiseT v _ (TyCon n) = TyCon (v n)
+raiseT v _ (TyPromotedCon n) = TyPromotedCon (v n)
 raiseT v f (TySkol (Skolem n u t m)) = TySkol (Skolem (v n) (v u) (raiseT v f t) (motive m)) where
   motive (BySubsumption a b) = BySubsumption (raiseT v f a) (raiseT v f b)
   motive (ByAscription t) = ByAscription (raiseT v f t)
   motive (ByExistential a t) = ByExistential (v a) (raiseT v f t)
-  motive (ByDependency a t) = ByDependency (v a) (raiseT v f t)
 raiseT v _ (TyVar n) = TyVar (v n)
 raiseT v a (TyApp x y) = TyApp (raiseT v a x) (raiseT v a y)
 raiseT v a (TyTuple x y) = TyTuple (raiseT v a x) (raiseT v a y)
@@ -77,9 +77,7 @@ raiseT v f (TyWithConstraints eq a) = TyWithConstraints (map (\(a, b) -> (raiseT
 raiseT v a (TyPi binder t) = TyPi (go binder) (raiseT v a t) where
   go (Anon t) = Anon (raiseT v a t)
   go (Implicit var k) = Implicit (v var) (fmap (raiseT v a) k)
-  go (Dependent var k) = Dependent (v var) (raiseT v a k)
 raiseT _ _ TyType = TyType
-raiseT v x (TyTerm t) = TyTerm (raiseE v x t)
 
 raiseCo :: (Var p -> Var p') -> (Ann p -> Ann p') -> Coercion p -> Coercion p'
 raiseCo v _ (VarCo a) = VarCo (v a)

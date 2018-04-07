@@ -31,11 +31,10 @@ import Syntax.Types
 import Syntax.Let
 import Syntax
 
-import {-# SOURCE #-} Types.Kinds
+import Types.Kinds
 import Types.Infer.Constructor
 import Types.Infer.Pattern
 import Types.Infer.Builtin
-import Types.Infer.Promote
 import Types.Wellformed
 import Types.Unify
 
@@ -117,10 +116,10 @@ check e ty = do
 
 infer :: MonadInfer Typed m => Expr Resolved -> m (Expr Typed, Type Typed)
 infer (VarRef k a) = do
-  (cont, _, new) <- lookupTy' k
+  (cont, old, new) <- lookupTy' k
   case cont of
     Nothing -> pure (VarRef (TvName k) (a, new), new)
-    Just cont -> pure (cont (VarRef (TvName k) (a, new)), new)
+    Just cont -> pure (cont (VarRef (TvName k) (a, old)), new)
 
 infer (Fun p e an) = let blame = Arm p e in do
   (p, dom, ms, cs) <- inferPattern p
@@ -141,11 +140,6 @@ infer ex@(Ascription e ty an) = do
 infer ex@(App f x a) = do
   (f, (dom, c, k)) <- secondA (quantifier ex) =<< infer f
   case dom of
-    Dependent v ty -> do
-      arg <- check x ty
-      tyarg <- promote arg
-        `catchError` \e -> throwError (ArisingFrom e (BecauseOf ex))
-      pure (App (k f) arg (a, apply (Map.singleton v tyarg) c), apply (Map.singleton v tyarg) c)
     Anon d -> do
       x <- check x d
       pure (App (k f) x (a, c), c)
@@ -405,26 +399,7 @@ inferFunTy vs = do
           (quantifiers, bodyTy) = quants t
 
       clauses <- for _fnClauses $ \cls@Clause{..} -> do
-        let checkPatQuantifier p (Dependent depvar ty) = do
-              (p', vs, cs) <- checkPattern p ty
-              typat <- liftType (BecauseOf cls) =<< promotePat p
-                `catchError` \e -> throwError (ArisingFrom e (BecauseOf cls))
-
-              relevant <- for (Map.toList . toMap . flip focus mempty $ vs) $
-                \(key, _) -> (key,) <$> freshSkol (ByDependency depvar ty) t (TvName key)
-
-              let sub = Map.fromList (map (first TvName) relevant)
-                  vs' = mapTele (apply sub) vs
-
-              skol <- freshSkol (ByAscription t) t depvar
-
-              pure ( p'
-                   , vs'
-                   , local (relevantTVs %~ mappend (scopeFromList relevant))
-                   . implies cls ty cs
-                   . implies cls ty [(skol, apply sub typat)]
-                   , Map.singleton depvar skol)
-            checkPatQuantifier p (Anon ty) = do
+        let checkPatQuantifier p (Anon ty) = do
               (p', vs, cs) <- checkPattern p ty
               pure (p', vs, implies cls ty cs, mempty)
             checkPatQuantifier _ Implicit{} = error "impossible: checkPatQuantifier implicit parameters"

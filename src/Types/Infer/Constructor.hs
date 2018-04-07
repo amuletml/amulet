@@ -8,7 +8,7 @@ import Data.Either
 
 import Control.Monad.Infer
 
-import {-# SOURCE #-} Types.Kinds
+import Types.Kinds
 import Types.Infer.Builtin
 import Types.Infer.Errors
 import Types.Unify

@@ -268,6 +268,7 @@ reExpr ExprWrapper{} = error "resolve cast"
 reType :: MonadResolve m => Type Parsed -> m (Type Resolved)
 reType (TyCon v) = TyCon <$> lookupTy v
 reType (TyVar v) = TyVar <$> lookupTyvar v
+reType (TyPromotedCon v) = TyPromotedCon <$> lookupEx v
 reType v@TySkol{} = error ("impossible! resolving skol " ++ show v)
 reType v@TyWithConstraints{} = error ("impossible! resolving withcons " ++ show v)
 reType (TyPi (Implicit v k) ty) = do
@@ -275,18 +276,12 @@ reType (TyPi (Implicit v k) ty) = do
   ty' <- extendTyvar (v, v') $ reType ty
   k <- traverse reType k
   pure (TyPi (Implicit v' k) ty')
-reType (TyPi (Dependent v k) ty) = do
-  v' <- tagVar v
-  ty <- extendTyvar (v, v') $ reType ty
-  k <- reType k
-  pure (TyPi (Dependent v' k) ty)
 reType (TyPi (Anon l) r) = TyPi . Anon <$> reType l <*> reType r
 reType (TyApp l r) = TyApp <$> reType l <*> reType r
 reType (TyRows t r) = TyRows <$> reType t
                                <*> traverse (\(a, b) -> (a,) <$> reType b) r
 reType (TyExactRows r) = TyExactRows <$> traverse (\(a, b) -> (a,) <$> reType b) r
 reType (TyTuple ta tb) = TyTuple <$> reType ta <*> reType tb
-reType (TyTerm ex) = TyTerm <$> reExpr ex
 reType TyType = pure TyType
 
 rePattern :: MonadResolve m
