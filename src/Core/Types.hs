@@ -3,10 +3,11 @@ module Core.Types
   ( arity
   , approximateType
   , unify, unifyWith, unifyClosed
+  , replaceTy
   ) where
 
 import qualified Data.Map.Strict as Map
-import Core.Lower
+import Core.Builtin
 import Core.Core
 
 import Control.Lens
@@ -31,12 +32,12 @@ approximateAtomType (Ref _ t) = pure t
 approximateAtomType (Lam (TypeArgument v _) f) = ForallTy v <$> approximateType f
 approximateAtomType (Lam (TermArgument _ t) f) = ArrTy t <$> approximateType f
 approximateAtomType (Lit l) = pure . fmap fromVar $ case l of
-  Int{} -> cotyInt
-  Float{} -> cotyFloat
-  Str{} -> cotyString
-  LitTrue -> cotyBool
-  LitFalse -> cotyBool
-  Unit -> cotyUnit
+  Int{} -> tyInt
+  Float{} -> tyFloat
+  Str{} -> tyString
+  LitTrue -> tyBool
+  LitFalse -> tyBool
+  Unit -> tyUnit
   RecNil -> ExactRowsTy []
 
 approximateType :: IsVar a => Term a -> Maybe (Type a)
@@ -79,14 +80,14 @@ unify' (RowsTy t ts) (RowsTy t' ts') = do
   ts <- for (zip (sortOn fst ts) (sortOn fst ts')) $ \((_, t), (_, t')) -> unify' t t'
   pure (mgu_t <> fold ts)
 unify' (ExactRowsTy ts) (ExactRowsTy ts') = fold <$> for (zip (sortOn fst ts) (sortOn fst ts')) (\((_, t), (_, t')) -> unify' t t')
-unify' (ForallTy vs t) (ForallTy vs' t') = unify' t (replace vs vs' t') where
-  replace f t = replaceOne (VarTy t) f
-  replaceOne at var = transform (go var) where
-    go v (VarTy v') | v == v' = at
-    go _ x = x
+unify' (ForallTy vs t) (ForallTy vs' t') = unify' t (replaceTy vs (VarTy vs') t')
 unify' (AppTy f t) (AppTy f' t') = liftA2 (<>) (unify' f f') (unify' t t')
 unify' _ _ = lift Nothing
 
+replaceTy :: IsVar a => a -> Type a -> Type a -> Type a
+replaceTy var at = transform (go var) where
+  go v (VarTy v') | v == v' = at
+  go _ x = x
 
 unifyClosed :: IsVar a => Type a -> Type a -> Bool
 unifyClosed = go mempty where

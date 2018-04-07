@@ -5,14 +5,11 @@ module Core.Lower
   , lowerType
   , lowerPat
   , lowerProg
-  , cotyString, cotyInt, cotyBool, cotyUnit, cotyFloat
   ) where
 
 import Control.Monad.Infer
 import Control.Monad.Cont
 import Control.Arrow
-
-import Types.Infer (tyString, tyInt, tyBool, tyUnit, tyFloat)
 
 import qualified Data.Text as T
 import Data.Traversable
@@ -23,6 +20,7 @@ import Data.Span
 import Data.List
 
 import qualified Core.Core as C
+import qualified Core.Builtin as C
 import Core.Core hiding (Atom, Term, Stmt, Type, Pattern)
 import Core.Core (pattern Atom)
 
@@ -44,17 +42,10 @@ type MonadLower m
   = ( MonadGen Int m
     , MonadReader Env m )
 
-cotyString, cotyUnit, cotyBool, cotyInt, cotyFloat :: Type
-cotyString = lowerType tyString
-cotyUnit = lowerType tyUnit
-cotyBool = lowerType tyBool
-cotyInt = lowerType tyInt
-cotyFloat = lowerType tyFloat
-
 errRef :: Atom
 errRef = Ref (TgInternal "error")
                 (ForallTy (TgInternal "a")
-                            (ArrTy cotyString
+                            (ArrTy C.tyString
                                      (VarTy (TgInternal "a"))))
 
 patternMatchingFail :: MonadLower m => Span -> Type -> Type -> m (Pat, Type, Term)
@@ -62,7 +53,7 @@ patternMatchingFail w p t = do
   var <- fresh
   tyApp <- fresh
   let err = Lit (Str (T.pack ("Pattern matching failure at " ++ show (pretty w))))
-      errTy = ArrTy cotyString t
+      errTy = ArrTy C.tyString t
   pure (C.Capture var p, p, C.Let (One (tyApp, errTy, C.TyApp errRef t))
                              (C.App (C.Ref tyApp errTy) err))
 
@@ -113,11 +104,11 @@ lowerAt (S.Let vs t _) ty = do
   let k = foldr ((.) . foldScc) id vs'
   k <$> lowerAtTerm t ty -- TODO scc these
 lowerAt (S.If c t e _) ty = do
-  c' <- lowerAtAtom c cotyBool
+  c' <- lowerAtAtom c C.tyBool
   t' <- lowerAtTerm t ty
   e' <- lowerAtTerm e ty
-  let tc = (PatLit LitTrue, cotyBool, t')
-      te = (PatLit LitFalse, cotyBool, e')
+  let tc = (PatLit LitTrue, C.tyBool, t')
+      te = (PatLit LitFalse, C.tyBool, e')
   pure $ C.Match c' [tc, te]
 lowerAt (Fun p bd an) (ArrTy a b) =
   let operational (PType p _ _) = operational p

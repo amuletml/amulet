@@ -108,6 +108,7 @@ library amulet
                      , Core.Arity
                      , Core.Lower
                      , Core.Types
+                     , Core.Builtin
                      , Core.Optimise
                      , Core.Simplify
                      , Core.Occurrence
