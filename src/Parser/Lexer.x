@@ -2,7 +2,7 @@
 {-# OPTIONS_GHC -Wwarn -Wno-unused-imports #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Parser.Lexer
-  ( lexerScan
+  ( lexerScan, lexerContextScan
   ) where
 
 import qualified Data.ByteString as Bs
@@ -15,11 +15,15 @@ import qualified Data.Text as T
 import Data.Text.Encoding
 import Data.Char (chr, digitToInt)
 import Data.Span
+import Data.Semigroup
+import Data.Position
 import Data.Spanned
+import Data.Span
 
 import Text.Printf
 
 import Parser.Token
+import Parser.Context
 import Parser.Wrapper
 }
 
@@ -226,6 +230,19 @@ lexInput fp text = runParser fp text (loop []) where
       Token TcEOF _ -> return (reverse buf)
       tok -> loop $! (tok : buf)
 
+lexerContextScan :: Parser Token
+lexerContextScan = do
+  s <- getState
+  go (pending s) (context s)
+    where
+      go Done cs  = do
+        tok <- lexerScan
+        uncurry go (handleContext tok cs)
+      go (Working tok) cs = uncurry go (handleContext tok cs)
+      go (Result tok toks) cs = do
+        mapState (\s -> s { pending = toks, context = cs })
+        pure tok
+
 lexerScan :: Parser Token
 lexerScan = do
   inp <- getInput
@@ -248,4 +265,5 @@ lexerScan = do
     AlexToken inp' len action -> do
       setInput inp'
       action inp (fromIntegral len)
+
 }

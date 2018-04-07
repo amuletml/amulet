@@ -84,12 +84,22 @@ import Syntax
   float    { Token (TcFloat _) _ }
   string   { Token (TcString  _) _ }
 
-%expect 79
+  '$begin' { Token TcVBegin _ }
+  '$end'   { Token TcVEnd _ }
+  '$in'    { Token TcVIn _ }
+  '$sep'   { Token TcVSep _ }
+
+
+%expect 60
 
 %%
 
 Tops :: { [Toplevel Parsed] }
-     : List1(Top, ';;')                        { $1 }
+     : List1(Top, TopSep)                      { $1 }
+
+TopSep :: { () }
+    : ';;'   { () }
+    | '$sep' { () }
 
 Top :: { Toplevel Parsed }
     : let BindGroup                             { LetStmt (reverse $2) }
@@ -122,12 +132,12 @@ ExprApp :: { Expr Parsed }
 
 Expr0 :: { Expr Parsed }
       : fun ListE1(ArgP) '->' Expr             { foldr (\x y -> withPos2 x $4 $ Fun x y) $4 $2 }
-      | let BindGroup in Expr                  { withPos2 $1 $4 $ Let (reverse $2) $4 }
-      | let open Con in Expr                   { withPos2 $1 $5 $ OpenIn (getL $3) $5 }
-      | if Expr then Expr else Expr            { withPos2 $1 $6 $ If $2 $4 $6 }
-      | match List1(Expr, ',') with ListE1(Arm)
+      | let BindGroup ExprIn ExprBlock '$end'  { withPos2 $1 $4 $ Let (reverse $2) $4 }
+      | let open Con ExprIn ExprBlock '$end'   { withPos2 $1 $5 $ OpenIn (getL $3) $5 }
+      | if Expr then Expr else Expr '$end'     { withPos2 $1 $6 $ If $2 $4 $6 }
+      | match List1(Expr, ',') with ListE1(Arm) '$end'
         { withPos2 $1 $3 $ Match (completeTuple Tuple $2) $4 }
-      | function ListE1(Arm)                   { withPos1 $1 $ Function $2 }
+      | function ListE1(Arm) '$end'            { withPos1 $1 $ Function $2 }
       | Atom                                   { $1 }
 
 Atom :: { Expr Parsed }
@@ -136,7 +146,8 @@ Atom :: { Expr Parsed }
      | Lit                                    { withPos1 $1 (Literal (getL $1)) }
      | hole                                   { withPos1 $1 (Hole (Name (getHole $1))) }
      | '_'                                    { withPos1 $1 (Hole (Name (T.singleton '_'))) }
-     | begin List1(Expr, ';') end             { withPos2 $1 $3 $ Begin $2 }
+     | begin List1(Expr, ExprSep) end         { withPos2 $1 $3 $ Begin $2 }
+     | '$begin' List1(Expr, ExprSep) '$end'   { withPos2 $1 $3 $ Begin $2 }
      | qdotid Atom                            { withPos2 $1 $2 $ OpenIn (getName $1) $2 }
      | '(' ')'                                { withPos2 $1 $2 $ Literal LiUnit }
      | '(' Section ')'                        { $2 }
@@ -146,6 +157,17 @@ Atom :: { Expr Parsed }
 
      | Atom access                            { withPos2 $1 $2 $ Access $1 (getIdent $2) }
 
+ExprBlock :: { Expr Parsed }
+          : List1(Expr, ExprSep)              { completeTuple Begin $1 }
+
+ExprSep :: { () }
+        : ';'    { () }
+        | '$sep' { () }
+
+
+ExprIn :: { () }
+        : in    { () }
+        | '$in' { () }
 Operator :: { Expr Parsed }
          : '*'                                { withPos1 $1 $ varE "*" }
          | '~'                                { withPos1 $1 $ varE "~" }
@@ -275,7 +297,7 @@ instance Spanned (Located a) where
   annotation (L _ s) = s
 
 lexer :: (Token -> Parser a) -> Parser a
-lexer = (lexerScan >>=)
+lexer = (lexerContextScan >>=)
 
 parseError :: (Token, [String]) -> Parser a
 parseError (Token s p, [])  = failPos ("Unexpected " ++ show s) p

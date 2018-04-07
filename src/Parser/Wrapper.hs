@@ -11,7 +11,7 @@ module Parser.Wrapper
   , failPos, failSpan
   , getStartCode, setStartCode
   , getInput, setInput
-  , getState, setState
+  , getState, setState, mapState
   , getPos
   , runParser, runLexer
   ) where
@@ -25,31 +25,29 @@ import qualified Data.ByteString.Lazy as B
 import Data.Int (Int64)
 import Data.Position
 import Data.Span
-import Data.Spanned
 import qualified Data.Text as T
 import Data.Word (Word8)
 
 import Parser.Token
+import Parser.Context
 
 import Pretty
 
-data Token = Token !TokenClass !SourcePos deriving Show
-
-instance Spanned Token where
-  annotation (Token _ s) = mkSpan1 s
 
 data AlexInput = LI { liPos  :: !SourcePos
                     , liText :: !B.ByteString
                     , liPrev :: !Char }
 
-data PState = PState { stringBuffer :: B.Builder -- Builder for string literals
-                     , commentDepth :: Int -- Depth for current file
-                     , modulePrefix :: [T.Text] -- List of module prefixes (in reversed order)
+data PState = PState { stringBuffer :: B.Builder   -- Builder for string literals
+                     , commentDepth :: Int         -- Depth for current file
+                     , modulePrefix :: [T.Text]    -- List of module prefixes (in reversed order)
+                     , context :: [Context]
+                     , pending :: PendingState
 
                      , sPos  :: !SourcePos   -- Current source position
                      , sText :: B.ByteString -- Current input
                      , sPrev :: !Char        -- Character before the input
-                     , sMode :: !Int        -- Current startcode
+                     , sMode :: !Int         -- Current startcode
                      }
 
 alexInputPrevChar :: AlexInput -> Char
@@ -128,6 +126,9 @@ getState = P $ \s -> POK s s
 setState :: PState -> Parser ()
 setState s = P $ \_ -> POK s ()
 
+mapState :: (PState -> PState) -> Parser ()
+mapState f = P (flip POK () . f)
+
 getPos :: Parser SourcePos
 getPos = P $ \s -> POK s (sPos s)
 
@@ -137,6 +138,8 @@ runParser :: SourceName -> B.ByteString -> Parser a -> ParseResult a
 runParser file input m = unP m PState { stringBuffer = mempty
                                       , commentDepth = 0
                                       , modulePrefix = []
+                                      , context = defaultContext
+                                      , pending = Done
 
                                       , sPos  = SourcePos file 1 1
                                       , sText = input
