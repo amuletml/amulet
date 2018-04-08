@@ -57,7 +57,7 @@ patternMatchingFail w p t = do
   tyApp <- fresh
   let err = Lit (Str (T.pack ("Pattern matching failure at " ++ show (pretty w))))
       errTy = ForallTy Irrelevant C.tyString t
-  pure (C.Capture var p, p, C.Let (One (tyApp, errTy, C.TyApp errRef t))
+  pure (C.Capture var p, p, C.Let (One BindValue (tyApp, errTy, C.TyApp errRef t))
                              (C.App (C.Ref tyApp errTy) err))
 
 lowerAtAtom :: MonadLower m => Expr Typed -> Type -> Lower m Atom
@@ -65,7 +65,7 @@ lowerAtAtom x t = do x' <- lowerAt x t
                      case x' of
                        C.Atom a -> pure a
                        x' -> ContT $ \k ->
-                         fresh >>= \v -> C.Let (One (v, t, x')) <$> k (C.Ref v t)
+                         fresh >>= \v -> C.Let (One BindValue (v, t, x')) <$> k (C.Ref v t)
 
 lowerAtTerm :: MonadLower m => Expr Typed -> Type -> m Term
 lowerAtTerm x t = runContT (lowerAt x t) pure
@@ -86,7 +86,6 @@ lowerBothTerm e = let t = lowerType (S.getType e)
 
 lowerAt :: MonadLower m => Expr Typed -> Type -> Lower m Term
 lowerAt (Ascription e _ _) t = lowerAt e t
-
 lowerAt (S.Let vs t _) ty = do
   let sccs = depOrder vs
       lowerScc (CyclicSCC vs) = CyclicSCC <$> do
@@ -96,8 +95,8 @@ lowerAt (S.Let vs t _) ty = do
       lowerScc (AcyclicSCC (TvName var, ex, (_, ty))) = AcyclicSCC <$> do
         let ty' = lowerType ty
         (var, ty',) <$> lowerAtTerm ex ty'
-      foldScc (AcyclicSCC v) = C.Let (One v)
-      foldScc (CyclicSCC vs) = C.Let (Many vs)
+      foldScc (AcyclicSCC v) = C.Let (One BindValue v)
+      foldScc (CyclicSCC vs) = C.Let (Many BindValue vs)
   vs' <- traverse lowerScc sccs
   let k = foldr ((.) . foldScc) id vs'
   k <$> lowerAtTerm t ty -- TODO scc these
@@ -120,7 +119,7 @@ lowerAt (Fun p bd an) (ForallTy Irrelevant a b) =
           pure (Atom (Lam (TermArgument arg a) (C.Match (Ref arg a) [ (p', a, bd'), fail ])))
 lowerAt (Begin [x] _) t = lowerAt x t
 lowerAt (Begin xs _) t = lowerAtTerm (last xs) t >>= flip (foldrM bind) (init xs) where
-  bind e r = flip C.Let r . One <$> (build <$> fresh <*> lowerBothTerm e)
+  bind e r = flip C.Let r . One BindValue <$> (build <$> fresh <*> lowerBothTerm e)
   build a (b, c) = (a, c, b)
 lowerAt (S.Match ex cs an) ty = do
   (ex', mt) <- lowerBothAtom ex
@@ -202,7 +201,7 @@ lowerAnyway (S.VarRef (TvName v) (_, ty)) = do
                              newTy = replaceTy tyvar tyuni prevTy
                          ftv <- fresh
                          ContT $ \k ->
-                           C.Let (One (ftv, newTy, TyApp prev tyuni)) <$> k (C.Ref ftv newTy, newTy)
+                           C.Let (One BindValue (ftv, newTy, TyApp prev tyuni)) <$> k (C.Ref ftv newTy, newTy)
                          ) (C.Ref v fty, fty) vars
           -- Otherwise just add our variable to the stripped list
           addApps (ForallTy (Relevant a) _ ty') vars = addApps ty' (a:vars)

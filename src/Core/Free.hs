@@ -76,18 +76,18 @@ tagFreeTerm ann var = tagTerm where
         fv = fvf <> fvx
     in (fv, AnnApp (ann an fv) f' x')
 
-  tagTerm (AnnLet an (One (v, ty, e)) r) =
+  tagTerm (AnnLet an (One k (v, ty, e)) r) =
     let (fve, e') = tagTerm e
         (fvr, r') = tagTerm r
         fv = fve <> VarSet.delete (toVar v) fvr
-    in (fv, AnnLet (ann an fv) (One (var' v fvr, conv ty, e')) r')
-  tagTerm (AnnLet an (Many vs) r) =
+    in (fv, AnnLet (ann an fv) (One k (var' v fvr, conv ty, e')) r')
+  tagTerm (AnnLet an (Many k vs) r) =
     let (fvvs, vs') = unzip (map (tagTerm . thd3) vs)
         (fvr, r') = tagTerm r
 
         fvs = mconcat (fvr : fvvs)
         fv = foldr (VarSet.delete . toVar . fst3) fvs vs
-    in (fv, AnnLet (ann an fv) (Many (zipWith (\(v, ty, _) e -> (var' v fvs, conv ty, e)) vs vs')) r')
+    in (fv, AnnLet (ann an fv) (Many k (zipWith (\(v, ty, _) e -> (var' v fvs, conv ty, e)) vs vs')) r')
 
   tagTerm (AnnMatch an t bs) =
     let (fvt, t') = tagAtom t

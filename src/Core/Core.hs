@@ -67,9 +67,12 @@ pattern TyApp f x = AnnTyApp () f x
 pattern Cast :: AnnAtom () a -> Coercion a -> Term a
 pattern Cast a ty = AnnCast () a ty
 
+data BindingKind = BindValue | BindJoin
+  deriving (Eq, Show, Ord)
+
 data AnnBinding b a
-  = One (a, Type a, AnnTerm b a) -- uncurried for convenience
-  | Many [(a, Type a, AnnTerm b a)]
+  = One BindingKind (a, Type a, AnnTerm b a) -- uncurried for convenience
+  | Many BindingKind [(a, Type a, AnnTerm b a)]
   deriving (Eq, Show, Ord, Functor, Generic)
 
 type Binding = AnnBinding ()
@@ -140,8 +143,10 @@ instance Pretty a => Pretty (Term a) where
   pretty (App f x) = pretty f <+> pretty x
   pretty (TyApp f t) = pretty f <+> braces (pretty t)
 
-  pretty (Let (One x) e) = keyword "let" <+> braces (space <> pprLet1 x <> space) <+> keyword "in" <#> pretty e
-  pretty (Let (Many xs) e) = keyword "let rec" <+> pprLet xs </> (keyword "in" <+> pretty e)
+  pretty (Let (One BindValue x) e) = keyword "let" <+> braces (space <> pprLet1 x <> space) <+> keyword "in" <#> pretty e
+  pretty (Let (One BindJoin x) e) = keyword "let join" <+> braces (space <> pprLet1 x <> space) <+> keyword "in" <#> pretty e
+  pretty (Let (Many BindValue xs) e) = keyword "let rec" <+> pprLet xs </> (keyword "in" <+> pretty e)
+  pretty (Let (Many BindJoin xs) e) = keyword "let rec join" <+> pprLet xs </> (keyword "in" <+> pretty e)
   pretty (Match e ps) = keyword "match" <+> pretty e <+> pprCases ps
   pretty (Extend x rs) = braces $ pretty x <+> pipe <+> prettyRows rs where
     prettyRows = hsep . punctuate comma . map (\(x, t, v) -> text x <+> colon <+> pretty t <+> equals <+> pretty v)
@@ -236,8 +241,8 @@ freeInAtom (Lit _) = mempty
 freeIn :: IsVar a => AnnTerm b a -> VarSet.Set
 freeIn (AnnAtom _ a) = freeInAtom a
 freeIn (AnnApp _ f x) = freeInAtom f <> freeInAtom x
-freeIn (AnnLet _ (One v) e) = VarSet.difference (freeIn e <> freeIn (thd3 v)) (VarSet.singleton (toVar (fst3 v)))
-freeIn (AnnLet _ (Many vs) e) = VarSet.difference (freeIn e <> foldMap (freeIn . thd3) vs) (VarSet.fromList (map (VarSet.toVar . fst3) vs))
+freeIn (AnnLet _ (One _ v) e) = VarSet.difference (freeIn e <> freeIn (thd3 v)) (VarSet.singleton (toVar (fst3 v)))
+freeIn (AnnLet _ (Many _ vs) e) = VarSet.difference (freeIn e <> foldMap (freeIn . thd3) vs) (VarSet.fromList (map (VarSet.toVar . fst3) vs))
 freeIn (AnnMatch _ e bs) = freeInAtom e <> foldMap freeInBranch bs where
   freeInBranch (b, _, e) = VarSet.difference (freeIn e) (patternVars b)
 freeIn (AnnExtend _ c rs) = freeInAtom c <> foldMap (freeInAtom . thd3) rs
@@ -264,8 +269,8 @@ occursInTerm v (Atom a) = occursInAtom v a
 occursInTerm v (App f x) = occursInAtom v f || occursInAtom v x
 occursInTerm v (TyApp f _) = occursInAtom v f
 occursInTerm v (Cast f _) = occursInAtom v f
-occursInTerm v (Let (One va) e) = occursInTerm v (thd3 va) || occursInTerm v e
-occursInTerm v (Let (Many vs) e) = any (occursInTerm v . thd3) vs || occursInTerm v e
+occursInTerm v (Let (One _ va) e) = occursInTerm v (thd3 va) || occursInTerm v e
+occursInTerm v (Let (Many _ vs) e) = any (occursInTerm v . thd3) vs || occursInTerm v e
 occursInTerm v (Match e bs) = occursInAtom v e || any (occursInTerm v . thd3) bs
 occursInTerm v (Extend e fs) = occursInAtom v e || any (occursInAtom v . thd3) fs
 

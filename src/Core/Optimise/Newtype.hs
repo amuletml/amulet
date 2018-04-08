@@ -58,10 +58,10 @@ goBinding m = traverse (third3A goTerm) where
   goTerm :: Term a -> Gen Int (Term a)
   goTerm (Atom x) = Atom <$> goAtom x
   goTerm (App f x) = App <$> goAtom f <*> goAtom x
-  goTerm (Let (Many vs) e) = Let . Many <$> goBinding m vs <*> goTerm e
-  goTerm (Let (One (v, t, e)) b) = do
+  goTerm (Let (Many k vs) e) = Let . Many k <$> goBinding m vs <*> goTerm e
+  goTerm (Let (One k (v, t, e)) b) = do
     e' <- goTerm e
-    Let (One (v, t, e')) <$> goTerm b
+    Let (One k (v, t, e')) <$> goTerm b
   goTerm (Extend a as) = Extend <$> goAtom a <*> traverse (third3A goAtom) as
   goTerm (TyApp f t) = TyApp <$> goAtom f <*> pure t
   goTerm (Cast f t) = Cast <$> goAtom f <*> pure t
@@ -70,7 +70,7 @@ goBinding m = traverse (third3A goTerm) where
       var <- fresh
       let Just (_, castCodomain) = relates phi
       bd <- goTerm (Match (Ref (fromVar var) castCodomain) [(p, castCodomain, bd)])
-      pure $ Let (One (fromVar var, castCodomain, Cast a phi)) bd
+      pure $ Let (One BindValue (fromVar var, castCodomain, Cast a phi)) bd
     _ -> Match <$> goAtom a <*> traverse (third3A goTerm) x
 
   goAtom (Lam arg e) = Lam arg <$> goTerm e

@@ -27,8 +27,8 @@ substitute :: IsVar a => Map.Map a (Atom a) -> Term a -> Term a
 substitute m = term where
   term (Atom a) = Atom (atom a)
   term (App f x) = App (atom f) (atom x)
-  term (Let (One v) x) = Let (One (third3 term v)) (term x)
-  term (Let (Many vs) x) = Let (Many (map (third3 term) vs)) (term x)
+  term (Let (One k v) x) = Let (One k (third3 term v)) (term x)
+  term (Let (Many k vs) x) = Let (Many k (map (third3 term) vs)) (term x)
   term (Match x vs) = Match (atom x) (map (third3 term) vs)
   term (Extend e rs) = Extend (atom e) (map (third3 atom) rs)
   term (TyApp f t) = TyApp (atom f) t
@@ -42,8 +42,8 @@ substituteInTys :: IsVar a => Map.Map a (Type a) -> Term a -> Term a
 substituteInTys m = term where
   term (Atom a) = Atom (atom a)
   term (App f x) = App (atom f) (atom x)
-  term (Let (One (v, t, e)) x) = Let (One (v, gotype t, term e)) x
-  term (Let (Many vs) x) = Let (Many (map (\(v, t, e) -> (v, gotype t, term e)) vs)) (term x)
+  term (Let (One k (v, t, e)) x) = Let (One k (v, gotype t, term e)) x
+  term (Let (Many k vs) x) = Let (Many k (map (\(v, t, e) -> (v, gotype t, term e)) vs)) (term x)
   term (Match x vs) = Match (atom x) (map (\(v, t, e) -> (v, gotype t, term e)) vs)
   term (Extend e rs) = Extend (atom e) (map (third3 atom) rs)
   term (TyApp f t) = TyApp (atom f) (gotype t)
@@ -119,19 +119,19 @@ refresh = refreshTerm mempty where
   refreshTerm s (Atom a) = Atom <$> refreshAtom s a
   refreshTerm s (App f x) = App <$> refreshAtom s f <*> refreshAtom s x
   refreshTerm s (TyApp f ty) = TyApp <$> refreshAtom s f <*> pure (refreshType s ty)
-  refreshTerm s (Let (One (v, ty, e)) b) = do
+  refreshTerm s (Let (One k (v, ty, e)) b) = do
     let TgName name _ = toVar v
     v' <- fromVar <$> freshFrom name
     let s' = VarMap.insert (toVar v) v' s
     e' <- refreshTerm s' e
-    Let (One (v', ty, e')) <$> refreshTerm s' b
-  refreshTerm s (Let (Many vs) b) = do
+    Let (One k (v', ty, e')) <$> refreshTerm s' b
+  refreshTerm s (Let (Many k vs) b) = do
     s' <- foldrM (\(v, _, _) m -> do
                      let TgName name _ = toVar v
                      v' <- fromVar <$> freshFrom name
                      pure (VarMap.insert (toVar v) v' m)) s vs
     vs' <- traverse (\(v, ty, e) -> (fromJust (VarMap.lookup (toVar v) s'), ty,) <$> refreshTerm s' e) vs
-    Let (Many vs') <$> refreshTerm s' b
+    Let (Many k vs') <$> refreshTerm s' b
   refreshTerm s (Match e branches) = Match <$> refreshAtom s e
                                             <*> traverse refreshBranch branches where
     refreshBranch (test, ty, branch) = do

@@ -75,14 +75,14 @@ transformOver = transT where
   mapT s (TyApp f t) = TyApp (transA s f) t
   mapT s (Cast f t) = Cast (transA s f) t
   mapT s (Extend t rs) = Extend (transA s t) (map (third3 (transA s)) rs)
-  mapT s (Let (One var) body) =
+  mapT s (Let (One k var) body) =
     let var' = third3 (transT (extendVar var s)) var
         body' = transT (extendVar var' s) body
-     in Let (One var') body'
-  mapT s (Let (Many vars) body) =
+     in Let (One k var') body'
+  mapT s (Let (Many k vars) body) =
     let vars' = map (third3 (transT (extendVars vars s))) vars
         body' = transT (extendVars vars' s) body
-     in Let (Many vars') body'
+     in Let (Many k vars') body'
   mapT s (Match test branches) =
     let test' = transA s test
         branches' = map (third3 (transT s)) branches
@@ -126,17 +126,17 @@ reduceTerm :: IsVar a => Scope a -> Term a -> Term a
 reduceTerm _ (Extend e []) = {-# SCC "Reduce.empty_extend" #-} Atom e
 
 -- Let Commuting conversion
-reduceTerm s (Let (One (x, xt, Let (One (y, yt, yval)) xval)) rest)
+reduceTerm s (Let (One xk (x, xt, Let (One yk (y, yt, yval)) xval)) rest)
   | not (occursInTerm x yval) = {-# SCC "Reduce.commute_let" #-}
-    reduceTerm s $ Let (One (y, yt, yval)) $ reduceTerm s (Let (One (x, xt, xval)) rest)
+    reduceTerm s $ Let (One yk (y, yt, yval)) $ reduceTerm s (Let (One xk (x, xt, xval)) rest)
 
 -- Match commuting conversion (trivial case)
-reduceTerm _ (Let (One (v, vt, Match t [(p, pt, b)])) r) =
-  Match t [(p, pt, appendBody b v vt r)]
+reduceTerm _ (Let (One k (v, vt, Match t [(p, pt, b)])) r) =
+  Match t [(p, pt, appendBody b k v vt r)]
 
 -- Trivial matches
 reduceTerm s (Match t ((Capture v _, ty, body):_)) = {-# SCC "Reduce.trivial_match" #-}
-  reduceTerm s $ Let (One (v, ty, Atom t)) body
+  reduceTerm s $ Let (One BindValue (v, ty, Atom t)) body
 reduceTerm s (Match t bs) = {-# SCC "Reduce.fold_cases" #-}
   case foldCases bs of
     Left  (_, _, b) -> b
@@ -144,8 +144,8 @@ reduceTerm s (Match t bs) = {-# SCC "Reduce.fold_cases" #-}
       case last bs' of
         -- If we were really smart, we could strip _all_ cases which are shadowed by
         -- another. For now, simply detect the case `error @a "Nope"`
-        (Capture _ _, _, Let (One (tyApp, _, TyApp (Ref err _) _))
-                            (App (Ref tyApp' _) (Lit _)))
+        (Capture _ _, _, Let (One BindValue (tyApp, _, TyApp (Ref err _) _))
+                         (App (Ref tyApp' _) (Lit _)))
           | TgInternal "error" <- toVar err
           , toVar tyApp == toVar tyApp'
           , isComplete s (map fst3 (init bs'))
@@ -161,12 +161,12 @@ reduceTerm s (Match t bs) = {-# SCC "Reduce.fold_cases" #-}
 
 -- Beta reduction (function case)
 reduceTerm s (App (Lam (TermArgument var ty) body) ex) = {-# SCC "Reduce.beta_function" #-}
-  reduceTerm s $ Let (One (var, ty, Atom ex)) body
+  reduceTerm s $ Let (One BindValue (var, ty, Atom ex)) body
 reduceTerm s (TyApp (Lam (TypeArgument var _) body) tp) = {-# SCC "Reduce.beta_type_function" #-}
   reduceTerm s (substituteInTys (Map.singleton var tp) body)
 
 -- Eta reduction (let case)
-reduceTerm _ (Let (One (v, _, term)) (Atom (Ref v' _)))
+reduceTerm _ (Let (One _ (v, _, term)) (Atom (Ref v' _)))
   | v == v' = {-# SCC "Reduce.eta_let" #-} term
 
 -- Coercion reduction
@@ -394,6 +394,6 @@ foldCo (Symmetry c) = Symmetry <$> foldCo c
 
 foldCo x@CoercionVar{} = pure x
 
-appendBody :: Term a -> a -> Type a -> Term a -> Term a
-appendBody (Let bind b) v ty r = Let bind (appendBody b v ty r)
-appendBody b v ty r = Let (One (v, ty, b)) r
+appendBody :: Term a -> BindingKind -> a -> Type a -> Term a -> Term a
+appendBody (Let bind b) k v ty r = Let bind (appendBody b k v ty r)
+appendBody b k v ty r = Let (One k (v, ty, b)) r
