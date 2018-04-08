@@ -116,6 +116,7 @@ library amulet
                      , Core.Optimise.Sinking
                      , Core.Optimise.Newtype
                      , Core.Optimise.DeadCode
+                     , Core.Optimise.JoinPoint
                      -- Backend
                      , Backend.Lua
                      , Backend.Compile

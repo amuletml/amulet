@@ -2,6 +2,7 @@ module Core.Simplify
   ( optimise
   ) where
 
+import Core.Optimise.JoinPoint
 import Core.Optimise.DeadCode
 import Core.Optimise.Newtype
 import Core.Optimise.Inline
@@ -22,6 +23,7 @@ optmOnce = passes where
            [ pure
 
            , pure . reducePass
+           , joinPointPass
            , inlineVariablePass
 
            , pure . deadCodePass
