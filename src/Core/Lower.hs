@@ -5,25 +5,27 @@ module Core.Lower
   , lowerType
   , lowerPat
   , lowerProg
-  , cotyString, cotyInt, cotyBool, cotyUnit, cotyFloat
   ) where
 
 import Control.Monad.Infer
 import Control.Monad.Cont
 import Control.Arrow
+import Control.Lens
 
-import Types.Infer (tyString, tyInt, tyBool, tyUnit, tyFloat)
-
+import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import Data.Traversable
 import Data.Function
 import Data.Foldable
+import Data.Maybe
 import Data.Graph
 import Data.Span
 import Data.List
 
 import qualified Core.Core as C
+import qualified Core.Builtin as C
 import Core.Core hiding (Atom, Term, Stmt, Type, Pattern)
+import Core.Types (unify, replaceTy)
 import Core.Core (pattern Atom)
 
 import qualified Syntax as S
@@ -44,17 +46,10 @@ type MonadLower m
   = ( MonadGen Int m
     , MonadReader Env m )
 
-cotyString, cotyUnit, cotyBool, cotyInt, cotyFloat :: Type
-cotyString = lowerType tyString
-cotyUnit = lowerType tyUnit
-cotyBool = lowerType tyBool
-cotyInt = lowerType tyInt
-cotyFloat = lowerType tyFloat
-
 errRef :: Atom
 errRef = Ref (TgInternal "error")
                 (ForallTy (TgInternal "a")
-                            (ArrTy cotyString
+                            (ArrTy C.tyString
                                      (VarTy (TgInternal "a"))))
 
 patternMatchingFail :: MonadLower m => Span -> Type -> Type -> m (Pat, Type, Term)
@@ -62,7 +57,7 @@ patternMatchingFail w p t = do
   var <- fresh
   tyApp <- fresh
   let err = Lit (Str (T.pack ("Pattern matching failure at " ++ show (pretty w))))
-      errTy = ArrTy cotyString t
+      errTy = ArrTy C.tyString t
   pure (C.Capture var p, p, C.Let (One (tyApp, errTy, C.TyApp errRef t))
                              (C.App (C.Ref tyApp errTy) err))
 
@@ -93,7 +88,27 @@ lowerBothTerm e = let t = lowerType (S.getType e)
 lowerAt :: MonadLower m => Expr Typed -> Type -> Lower m Term
 lowerAt (Ascription e _ _) t = lowerAt e t
 
-lowerAt (VarRef (TvName p) _) ty = pure (Atom (Ref p ty))
+lowerAt (VarRef (TvName p) _) ty = do
+  pty <- view (values . at p)
+  case pty of
+    -- If we've got a type which is different to our expected one
+    -- then we attempt to unify
+    Just fty | fty' <- lowerType fty
+             , fty' /= ty ->
+      let addApps ty' vars
+            | Just subst <- unify ty' ty
+            = foldrM (\tyvar (prev, ForallTy _ prevTy) -> do
+                         let tyuni = fromMaybe (VarTy tyvar) (Map.lookup tyvar subst)
+                             newTy = replaceTy tyvar tyuni prevTy
+                         ftv <- fresh
+                         ContT $ \k ->
+                           C.Let (One (ftv, newTy, TyApp prev tyuni)) <$> k (C.Ref ftv newTy, newTy)
+                         ) (C.Ref p fty', fty') vars
+          addApps (ForallTy v ty') vars = addApps ty' (v:vars)
+          addApps _ _ = undefined
+      in runContT (addApps fty' []) (pure . Atom . fst)
+
+    _ -> pure (Atom (Ref p ty))
 
 lowerAt (S.Let vs t _) ty = do
   let sccs = depOrder vs
@@ -110,11 +125,11 @@ lowerAt (S.Let vs t _) ty = do
   let k = foldr ((.) . foldScc) id vs'
   k <$> lowerAtTerm t ty -- TODO scc these
 lowerAt (S.If c t e _) ty = do
-  c' <- lowerAtAtom c cotyBool
+  c' <- lowerAtAtom c C.tyBool
   t' <- lowerAtTerm t ty
   e' <- lowerAtTerm e ty
-  let tc = (PatLit LitTrue, cotyBool, t')
-      te = (PatLit LitFalse, cotyBool, e')
+  let tc = (PatLit LitTrue, C.tyBool, t')
+      te = (PatLit LitFalse, C.tyBool, e')
   pure $ C.Match c' [tc, te]
 lowerAt (Fun p bd an) (ArrTy a b) =
   let operational (PType p _ _) = operational p
