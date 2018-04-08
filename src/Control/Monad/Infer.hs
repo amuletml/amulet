@@ -168,10 +168,10 @@ instantiate tp@(TyPi (Implicit v _) ty) = do
       squish f (Just x) = Just (x . f)
       squish f _ = Just f
 
-      appThisTy e = ExprWrapper (TypeApp var) e (annotation e, tp)
+      appThisTy e = ExprWrapper (TypeApp var) e (annotation e, apply map ty)
   (k, _, t) <- instantiate (apply map ty)
   pure (squish appThisTy k, tp, t)
-instantiate ty = pure (Nothing, ty, ty)
+instantiate ty = pure (Just id, ty, ty)
 
 freshTV :: MonadGen Int m => m (Type Typed)
 freshTV = TyVar . TvName <$> fresh

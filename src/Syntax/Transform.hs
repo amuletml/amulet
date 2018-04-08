@@ -118,7 +118,7 @@ transformExprTyped fe fc ft = goE where
   transE (Tuple es a) = Tuple (map goE es) (goA a)
   transE (TupleSection es a) = TupleSection (map (goE<$>) es) (goA a)
 
-  transE (ExprWrapper w e a) = ExprWrapper (goW w) e a
+  transE (ExprWrapper w e a) = ExprWrapper (goW w) (goE e) (goA a)
 
   goW (Cast c) = Cast (goC c)
   goW (TypeApp t) = TypeApp (goT t)

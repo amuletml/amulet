@@ -30,8 +30,7 @@ import qualified Syntax as S
 import Syntax.Let
 import Syntax (Var(..), Resolved, Typed, Expr(..), Pattern(..), Lit(..), Skolem(..), Toplevel(..), Constructor(..))
 
-import Pretty (pretty, render)
-import Debug.Trace
+import Pretty (pretty)
 
 type Atom = C.Atom (Var Resolved)
 type Term = C.Term (Var Resolved)
@@ -188,7 +187,7 @@ lowerAt (ExprWrapper wrap e an) ty =
     co (S.ExactRowsCo rs) = C.ExactRecord (map (second co) rs)
     co (S.ForallCo (TvName v) rs) = C.Quantified v (co rs)
 
-lowerAt e ty = trace ("falling back for " ++ render (pretty e) ++ " : " ++ render (pretty ty)) $ lowerAnyway e
+lowerAt e _ = lowerAnyway e
 
 lowerAnyway :: MonadLower m => Expr Typed -> Lower m Term
 lowerAnyway (S.Record xs _) = case xs of

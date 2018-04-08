@@ -38,7 +38,6 @@ import Types.Infer.Builtin
 import Types.Wellformed
 import Types.Unify
 
-import Debug.Trace
 import Pretty
 
 -- Solve for the types of lets in a program
@@ -48,7 +47,6 @@ inferProgram env ct = fmap fst <$> runInfer env (inferProg ct)
 check :: forall m. MonadInfer Typed m => Expr Resolved -> Type Typed -> m (Expr Typed)
 check e ty@TyForall{} = do -- This is rule Decl∀L from [Complete and Easy]
   (wrap, e) <- secondA (check e) =<< skolemise (ByAscription ty) ty -- gotta be polymorphic - don't allow instantiation
-  trace (render (pretty ty) ++ " leads to " ++ show wrap) pure ()
   pure (ExprWrapper wrap e (annotation e, ty))
 
 check (Hole v a) t = do
@@ -311,7 +309,7 @@ inferLetTy closeOver vs =
             Supplied -> do
               let exp' (Ascription e _ _) = exp' e
                   exp' e = e
-              exp' <- check (exp' exp) (trace (render (pretty (snd tv))) snd tv)
+              exp' <- check (exp' exp) (snd tv)
               pure (exp', snd tv)
             Guessed -> do
               (exp', ty) <- infer exp
@@ -374,7 +372,7 @@ solveEx ss cs = transformExprTyped go id goType where
     err = error $ "Unsolved wrapper variable " ++ show v ++ ". This is a bug"
   goWrap IdWrap = IdWrap
 
-  goType x = apply ss x
+  goType = apply ss
 
 solvePat :: Subst Typed -> Pattern Typed -> Pattern Typed
 solvePat ss = transformPatternTyped go' (normType . apply ss) where
