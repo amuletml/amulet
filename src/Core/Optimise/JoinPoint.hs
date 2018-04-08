@@ -35,7 +35,7 @@ joinPointPass = traverse transS where
 
       where pushJoin j ty (Let bind r) = Let bind <$> pushJoin j ty r
             pushJoin j ty (Match t bs) = Match t  <$> traverse (pushBody j ty) bs
-            pushJoin j _   (Atom a) = pure $ App j a
+            pushJoin j _  (Atom a)     = pure $ App j a
             pushJoin j ty e = do
               v <- fromVar <$> fresh
               pure $ Let (One BindValue (v, ty, e)) (App j (Ref v ty))
@@ -48,5 +48,5 @@ joinPointPass = traverse transS where
     vs' <- traverse (third3A transT) vs
     Let (Many k vs') <$> transT r
   transT (Extend t rs) = Extend <$> transA t <*> traverse (third3A transA) rs
-  transT (Match t bs) = Match <$> transA t <*> traverse goArm bs where
-    goArm x@Arm { armBody = bd } = (\it -> x { armBody = it }) <$> transT bd
+  transT (Match t bs) = Match <$> transA t <*> traverse goBody bs where
+    goBody arm = (\x -> arm { armBody = x }) <$> transT (armBody arm)
