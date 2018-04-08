@@ -125,10 +125,14 @@ reduceTerm :: IsVar a => Scope a -> Term a -> Term a
 -- Empty expressions
 reduceTerm _ (Extend e []) = {-# SCC "Reduce.empty_extend" #-} Atom e
 
--- Commuting conversion
+-- Let Commuting conversion
 reduceTerm s (Let (One (x, xt, Let (One (y, yt, yval)) xval)) rest)
   | not (occursInTerm x yval) = {-# SCC "Reduce.commute_let" #-}
     reduceTerm s $ Let (One (y, yt, yval)) $ reduceTerm s (Let (One (x, xt, xval)) rest)
+
+-- Match commuting conversion (trivial case)
+reduceTerm _ (Let (One (v, vt, Match t [(p, pt, b)])) r) =
+  Match t [(p, pt, appendBody b v vt r)]
 
 -- Trivial matches
 reduceTerm s (Match t ((Capture v _, ty, body):_)) = {-# SCC "Reduce.trivial_match" #-}
@@ -391,3 +395,7 @@ foldCo (Codomain c) = Codomain <$> foldCo c
 foldCo (Symmetry c) = Symmetry <$> foldCo c
 
 foldCo x@CoercionVar{} = pure x
+
+appendBody :: Term a -> a -> Type a -> Term a -> Term a
+appendBody (Let bind b) v ty r = Let bind (appendBody b v ty r)
+appendBody b v ty r = Let (One (v, ty, b)) r
