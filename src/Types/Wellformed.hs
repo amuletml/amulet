@@ -12,19 +12,18 @@ import Data.List (unionBy)
 
 import Syntax.Pretty
 
-import Pretty (Pretty)
-
-wellformed :: (Pretty (Var p), MonadError TypeError m) => Type p -> m ()
+wellformed :: (MonadError TypeError m, MonadReader Env m) => Type Typed -> m ()
 wellformed tp = case tp of
   TyCon{} -> pure ()
   TyVar{} -> pure ()
   TySkol{} -> pure ()
   TyType{} -> pure ()
   TyPromotedCon{} -> pure ()
-  TyPi a b ->
+  TyPi a b -> do
     case a of
-      Implicit{} -> wellformed b
-      Anon a -> wellformed a *> wellformed b
+      Implicit _ k -> traverse_ wellformed k
+      Anon a -> wellformed a 
+    wellformed b
   TyApp a b -> wellformed a *> wellformed b
   TyTuple a b -> wellformed a *> wellformed b
   TyRows rho rows -> do
@@ -45,7 +44,7 @@ arity (TyForall _ _ t) = arity t
 arity _ = 0
 
 -- Make a type into its equivalent in prenex normal form.
-normType :: forall p. Ord (Var p) => Type p -> Type p
+normType :: forall p. (Ord (Ann p), Ord (Var p)) => Type p -> Type p
 normType = flatten . uncurry collect . runWriter . spread . applyCons where
   collect t xs = case Set.toList xs of
     [] -> t
@@ -68,10 +67,10 @@ normType = flatten . uncurry collect . runWriter . spread . applyCons where
   flatten t = t
 
 skols :: Ord (Var p) => Type p -> Set.Set (Skolem p)
-skols TyCon{} = mempty
-skols TyVar{} = mempty
+skols TyCon{}  = mempty
+skols TyVar{}  = mempty
 skols TyType{} = mempty
-skols TyPromotedCon{} = mempty
+skols TyPromotedCon{}  = mempty
 skols (TySkol x) = Set.singleton x
 skols (TyApp a b) = skols a <> skols b
 skols (TyPi b t)
@@ -82,21 +81,3 @@ skols (TyExactRows rs) = foldMap (skols . snd) rs
 skols (TyTuple a b) = skols a <> skols b
 skols (TyWithConstraints cs a) = foldMap (\(x, y) -> skols x <> skols y) cs <> skols a
 
-{-
-   Commentary:
-
-   Abandon all hope, ye who enter here.
-
-   FIXME: lmao no kinds. We need them. I removed the broken stuff we
-   called "kinds" so I could actually refactor things without GHC
-   complaining every 3 nanoseconds, so now the only way to make sure
-   types are well formed is through this module. Yay.
-
-   Unfortunately, this is the best I can do right now.
-
-
-   Checks we peform:
-    [1] Polymorphic record types' holes may only be instanced to
-    something "row-y", i.e. an exact record, another polymorphic record,
-    or a type variable. All other instancings are malformed.
-     -}

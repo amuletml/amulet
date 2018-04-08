@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
-{-# LANGUAGE FlexibleContexts, UndecidableInstances, FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts, UndecidableInstances, FlexibleInstances, RecordWildCards #-}
 module Syntax.Pretty
   ( module Syntax
   , tidyPrettyType, applyCons
@@ -25,7 +25,7 @@ parenFun f = case f of
 
 parenArg :: Pretty (Var p) => Expr p -> Doc
 parenArg f = case f of
-  TypeApp{} -> parens (pretty f)
+  ExprWrapper{} -> parens (pretty f)
   App{} -> parens (pretty f)
   _ -> parenFun f
 
@@ -43,7 +43,7 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
                                        , keyword "else" <+> pretty e
                                        ])
   pretty (App f x _) = parenFun f <+> parenArg x
-  pretty (Fun v e _) = keyword "fun" <+> pretty v <+> nest 2 (arrow </> pretty e)
+  pretty (Fun v e _) = keyword "fun" <+> pretty v <+> arrow <+> pretty e
   pretty (Begin e _) =
     vsep [ keyword "begin", indent 2 (vsep (punctuate semi (map pretty e))), keyword "end" ]
   pretty (Literal l _) = pretty l
@@ -65,18 +65,25 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
 
   pretty (Tuple es _) = parens (hsep (punctuate comma (map pretty es)))
   pretty (TupleSection es _) = parens (hsep (punctuate comma (map (maybe (string "") pretty) es)))
-  pretty (TypeApp f x _) = parenFun f <+> soperator (char '@') <> braces (pretty x)
-  pretty (Cast e c _) = parens (pretty e <+> soperator (string "|>") <+> pprCo c) where
-    pprCo (VarCo x) = stypeSkol (pretty x)
-    pprCo (ReflCo t) = enclose (char '<') (char '>') (pretty t)
-    pprCo (AssumedCo a b) = enclose (char '<') (char '>') (pretty a <> comma <+> pretty b)
-    pprCo (SymCo x) = keyword "sym" <+> pprCo x
-    pprCo (AppCo f x) = pprCo f <+> pprCo x
-    pprCo (ArrCo f x) = pprCo f <+> arrow <+> pprCo x
-    pprCo (ProdCo f x) = pprCo f <+> prod <+> pprCo x
-    pprCo (ExactRowsCo rs) = record (map (\(n, v) -> text n <+> colon <+> pprCo v) rs)
-    pprCo (RowsCo c rs) = enclose (lbrace <> space) (space <> rbrace) (pprCo c <+> pipe <+> hsep (punctuate comma (map (\(n, v) -> text n <+> colon <+> pprCo v) rs)))
-    pprCo (ForallCo v cs) = keyword "∀" <> pretty v <> dot <+> pprCo cs
+  pretty (ExprWrapper wrap ex _) = go wrap ex where
+    go (TypeLam v) ex = soperator (char 'Λ') <> pretty v <> dot <+> pretty ex
+    go (Cast c) ex = parens (pretty ex <+> soperator (string "|>") <+> pretty c)
+    go (TypeApp t) ex = pretty ex <+> braces (pretty t)
+    go (wr Syntax.:> wi) ex = go wr (ExprWrapper wi ex undefined)
+    go (WrapVar v) ex = pretty ex <+> soperator (char '_') <> pretty v
+    go IdWrap ex = pretty ex
+
+instance Pretty (Var p) => Pretty (Coercion p) where
+  pretty (VarCo x) = stypeSkol (pretty x)
+  pretty (ReflCo t) = enclose (char '<') (char '>') (pretty t)
+  pretty (AssumedCo a b) = enclose (char '<') (char '>') (pretty a <> comma <+> pretty b)
+  pretty (SymCo x) = keyword "sym" <+> pretty x
+  pretty (AppCo f x) = pretty f <+> pretty x
+  pretty (ArrCo f x) = pretty f <+> arrow <+> pretty x
+  pretty (ProdCo f x) = pretty f <+> prod <+> pretty x
+  pretty (ExactRowsCo rs) = record (map (\(n, v) -> text n <+> colon <+> pretty v) rs)
+  pretty (RowsCo c rs) = enclose (lbrace <> space) (space <> rbrace) (pretty c <+> pipe <+> hsep (punctuate comma (map (\(n, v) -> text n <+> colon <+> pretty v) rs)))
+  pretty (ForallCo v cs) = keyword "∀" <> pretty v <> dot <+> pretty cs
 
 prettyMatches :: (Pretty (Var p)) => [(Pattern p, Expr p)] -> [Doc]
 prettyMatches = map (\(a, b) -> pipe <+> nest 4 (pretty a <+> arrow </> pretty b))
@@ -140,12 +147,14 @@ instance Pretty (Var p) => Pretty (TyBinder p) where
 
 instance (Pretty (Var p)) => Pretty (Toplevel p) where
   pretty (LetStmt []) = error "absurd!"
+  pretty (FunStmt []) = error "absurd!"
   pretty (LetStmt ((n, v, _):xs)) =
     let prettyBind (n, v, _) = keyword "and" <+> prettyOneBinding n v
      in align $ keyword "let" <+> prettyOneBinding n v
              <> case xs of
                   [] -> empty
                   _ -> line <> vsep (map prettyBind xs)
+  pretty (FunStmt (x:xs)) = keyword "fun" <+> pretty x <#> vsep (punctuate (keyword "and") (map pretty xs))
   pretty (ForeignVal v d ty _) = keyword "foreign val" <+> pretty v <+> colon <+> pretty ty <+> equals <+> dquotes (text d)
   pretty (TypeDecl ty args []) = keyword "type" <+> pretty ty <+> hsep (map ((squote <>) . pretty) args)
   pretty (TypeDecl ty args ctors) = keyword "type" <+> pretty ty
@@ -161,6 +170,12 @@ instance (Pretty (Var p)) => Pretty (Toplevel p) where
          , indent 2 (align (pretty bod))
          , keyword "end"
          ]
+
+instance Pretty (Var p) => Pretty (Function p) where
+  pretty FunDecl{..} = pretty _fnVar <+> colon <+> pretty _fnTypeAnn <#> indent 2 (vsep (map pretty _fnClauses)) where
+
+instance Pretty (Var p) => Pretty (Clause p) where
+  pretty Clause{..} = pipe <+> pretty _clauseName <+> hsep (map pretty _clausePat) <+> equals <+> pretty _clauseBody
 
 instance (Pretty (Var p)) => Pretty [Toplevel p] where
   pretty = vcat . map pretty
@@ -207,8 +222,8 @@ applyCons :: Ord (Var p) => Type p -> Type p
 applyCons x@TyCon{} = x
 applyCons x@TyVar{} = x
 applyCons x@TySkol{} = x
-applyCons x@TyPromotedCon{} = x
 applyCons x@TyType{} = x
+applyCons x@TyPromotedCon{} = x
 applyCons (TyPi a b) = TyPi (go a) (applyCons b) where
   go (Anon t) = Anon (applyCons t)
   go (Implicit t k) = Implicit t (fmap applyCons k)

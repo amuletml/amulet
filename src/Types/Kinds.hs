@@ -1,5 +1,12 @@
 {-# LANGUAGE ConstraintKinds, FlexibleContexts, LambdaCase #-}
-module Types.Kinds (resolveKind, resolveTyDeclKind, annotateKind, closeOver) where
+module Types.Kinds
+  ( resolveKind
+  , resolveTyDeclKind
+  , annotateKind
+  , closeOver
+  , checkAgainstKind, getKind, liftType
+  )
+  where
 
 import Control.Monad.State.Strict
 import Control.Monad.Infer
@@ -34,7 +41,6 @@ type Kind = Type
 
 resolveKind :: MonadKind m => SomeReason -> Type Resolved -> m (Type Typed)
 resolveKind reason otp = do
-  wellformed otp
   ((ty, _), cs) <- let cont t = do
                         (t, _) <- secondA isType =<< inferKind t
                         pure t
@@ -45,11 +51,25 @@ resolveKind reason otp = do
     Left e -> throwError e
     Right (x, _) -> pure x
 
-  pure (apply sub ty)
+  let t = apply sub ty
+  wellformed t
+  pure t
+
+getKind :: MonadKind m => SomeReason -> Type Resolved -> m (Kind Typed)
+getKind r t = solveK pure r (snd <$> inferKind t)
+
+liftType :: MonadKind m => SomeReason -> Type Resolved -> m (Type Typed)
+liftType r t = solveK pure r (fst <$> inferKind t)
+
+checkAgainstKind :: MonadInfer Typed m => SomeReason -> Type Resolved -> Type Typed -> m (Type Typed)
+checkAgainstKind r t k = do
+  ((k, _), x) <- runWriterT (runStateT (checkKind t k) r)
+  tell x
+  pure k
 
 annotateKind :: MonadKind m => SomeReason -> Type Typed -> m (Type Typed)
 annotateKind r ty = do
-  ((ty, _), cs) <- runWriterT (runStateT (fst <$> inferKind (raiseT unTvName ty)) r)
+  ((ty, _), cs) <- runWriterT (runStateT (checkKind (raiseT unTvName fst ty) TyType) r)
   x <- gen
 
   sub <- case solve x cs of
@@ -75,13 +95,16 @@ resolveTyDeclKind reason tycon args cons = solveForKind reason $ do
     pure kind
 
 solveForKind :: MonadKind m => SomeReason -> KindT m (Type Typed) -> m (Type Typed)
-solveForKind reason k = do
+solveForKind reason k = solveK (closeOver reason) reason k
+
+solveK :: MonadKind m => (Type Typed -> m (Type Typed)) -> SomeReason -> KindT m (Type Typed) -> m (Type Typed)
+solveK cont reason k = do
   ((kind, _), cs) <- runWriterT (runStateT k reason)
   x <- gen
 
   case solve x cs of
     Left e -> throwError e
-    Right (x, _) -> closeOver reason (apply x kind)
+    Right (x, _) -> cont (apply x kind)
 
 inferKind :: MonadKind m => Type Resolved -> KindT m (Type Typed, Kind Typed)
 inferKind (TyCon v) = do
@@ -104,13 +127,17 @@ inferKind (TyVar v) = do
 
 inferKind (TySkol sk) = do
   k <- maybe freshTV pure =<< view (types . at (sk ^. skolIdent))
-  pure (raiseT TvName (TySkol sk), k)
+  pure (raiseT TvName (\x -> (x, k)) (TySkol sk), k)
 
 inferKind (TyApp f x) = do
   reason <- get
-  (f, (d, c, _)) <- secondA (decompose (Const reason) _TyArr) =<< inferKind f
-  x <- checkKind x d
-  pure (TyApp f x, c)
+  (f, (dom, c, _)) <- secondA (quantifier (Const reason)) =<< inferKind f
+
+  case dom of
+    Anon d -> do
+      x <- checkKind x d
+      pure (TyApp f x, c)
+    Implicit{} -> error "inferKind TyApp: visible argument to implicit quantifier"
 
 inferKind (TyRows p rs) = do
   (p, k) <- secondA isType =<< inferKind p
@@ -149,6 +176,7 @@ checkKind (TyPi binder b) ek = do
   -- _ <- isType ek
   case binder of
     Anon t -> TyArr <$> checkKind t ek <*> checkKind b ek
+
     Implicit v (Just arg) -> do
       (arg, kind) <- inferKind arg
       _ <- subsumes (Const reason) ek kind
@@ -156,6 +184,7 @@ checkKind (TyPi binder b) ek = do
         checkKind b ek
       let bind = Implicit (TvName v) (Just arg)
       pure $ TyPi bind b
+
     Implicit v Nothing -> do
       x <- freshTV
       b <- extendKind (TvName v, x) $
