@@ -109,9 +109,6 @@ lowerAt (VarRef (TvName p) _) ty = do
       in runContT (addApps fty' []) (pure . Atom . fst)
 
     _ -> pure (Atom (Ref p ty))
-lowerAt (TypeApp f x _) _ = flip TyApp (lowerType x) <$> lowerExprAtom f
-
-lowerAt e (ForallTy vs b) = Atom . Lam (TypeArgument vs StarTy) <$> lowerAtTerm e b
 
 lowerAt (S.Let vs t _) ty = do
   let sccs = depOrder vs
@@ -178,6 +175,33 @@ lowerAt (Tuple (x:xs) _) (ExactRowsTy [(_, a), (_, b)]) = do
   xs <- lowerAtAtom (Tuple xs undefined) b
   pure (Extend (Lit RecNil) [("1", a, x), ("2", b, xs)])
 
+lowerAt (ExprWrapper wrap e an) ty =
+  case wrap of
+    S.Cast c -> do
+      ex' <- lowerAtAtom e ty
+      pure (C.Cast ex' (co c))
+    S.TypeApp t -> do
+      ex' <- lowerAtAtom e ty
+      pure (C.TyApp ex' (lowerType t))
+    S.TypeLam (TvName v) ->
+      let ty' (ForallTy _ t) = t
+          ty' x = x
+       in Atom . Lam (TypeArgument v StarTy) <$> lowerAtTerm e (ty' ty)
+    ws S.:> wy -> lowerAt (ExprWrapper ws (ExprWrapper wy e an) an) ty
+    S.WrapVar v -> error $ "Unsolved wrapper variable " ++ show v ++ ". This is a bug"
+    S.IdWrap -> lowerAt e ty
+  where
+    co (S.VarCo (TvName x)) = CoercionVar x
+    co (S.ReflCo t) = SameRepr (lowerType t) (lowerType t)
+    co (S.AssumedCo t t') = SameRepr (lowerType t) (lowerType t')
+    co (S.SymCo c) = Symmetry (co c)
+    co (S.AppCo a b) = Application (co a) (co b)
+    co (S.ArrCo a b) = Arrow (co a) (co b)
+    co (S.ProdCo a b) = ExactRecord [("1", co a), ("2", co b)]
+    co (S.RowsCo c rs) = C.Record (co c) (map (second co) rs)
+    co (S.ExactRowsCo rs) = C.ExactRecord (map (second co) rs)
+    co (S.ForallCo (TvName v) rs) = C.Quantified v (co rs)
+
 lowerAt e _ = lowerAnyway e
 
 lowerAnyway :: MonadLower m => Expr Typed -> Lower m Term
@@ -196,23 +220,6 @@ lowerAnyway (RecordExt e xs _) = do
 lowerAnyway (Literal l _) = pure . Atom . Lit $ lowerLiteral l
 lowerAnyway (S.App f x _) = C.App <$> lowerExprAtom f <*> lowerExprAtom x
 
-lowerAnyway (TypeApp f x _) = flip TyApp (lowerType x) <$> lowerExprAtom f
-lowerAnyway (S.Cast e c _) =
-  let
-  co (S.VarCo (TvName x)) = CoercionVar x
-  co (S.ReflCo t) = SameRepr (lowerType t) (lowerType t)
-  co (S.AssumedCo t t') = SameRepr (lowerType t) (lowerType t')
-  co (S.SymCo c) = Symmetry (co c)
-  co (S.AppCo a b) = Application (co a) (co b)
-  co (S.ArrCo a b) = Arrow (co a) (co b)
-  co (S.ProdCo a b) = ExactRecord [("1", co a), ("2", co b)]
-  co (S.RowsCo c rs) = C.Record (co c) (map (second co) rs)
-  co (S.ExactRowsCo rs) = C.ExactRecord (map (second co) rs)
-  co (S.ForallCo (TvName v) rs) = C.Quantified v (co rs)
-  in do
-    (e, _) <- lowerBothAtom e
-    pure (C.Cast e (co c))
-
 lowerAnyway e = error ("can't lower " ++ show e ++ " without type")
 
 lowerLiteral :: Lit -> Literal
@@ -222,14 +229,6 @@ lowerLiteral (LiStr t) = Str t
 lowerLiteral (LiBool True) = LitTrue
 lowerLiteral (LiBool False) = LitFalse
 lowerLiteral LiUnit = Unit
-
-lowerBigLams :: MonadLower m => S.Type Typed -> S.Expr Typed -> m Term
-lowerBigLams (S.TyForall (TvName v) (Just k) ty) ex =
-  Atom . Lam (TypeArgument v (lowerType k)) <$> lowerBigLams ty ex
-lowerBigLams (S.TyForall (TvName v) Nothing ty) ex =
-  Atom . Lam (TypeArgument v StarTy) <$> lowerBigLams ty ex
-lowerBigLams ty ex = lowerAtTerm ex (lowerType ty)
-
 
 lowerType :: S.Type Typed -> Type
 lowerType t@S.TyTuple{} = go t where
@@ -243,7 +242,7 @@ lowerType (S.TyRows rho vs) = RowsTy (lowerType rho) (map (fmap lowerType) vs)
 lowerType (S.TyExactRows vs) = ExactRowsTy (map (fmap lowerType) vs)
 lowerType (S.TyVar (TvName v)) = VarTy v
 lowerType (S.TyCon (TvName v)) = ConTy v
-lowerType (S.TyPromotedCon (TvName v)) = ConTy v
+lowerType (S.TyPromotedCon (TvName v)) = ConTy v -- TODO this is in the wrong scope
 lowerType (S.TySkol (Skolem _ (TvName v) _ _)) = VarTy v
 lowerType (S.TyWithConstraints _ t) = lowerType t
 lowerType S.TyType = StarTy
@@ -285,8 +284,9 @@ lowerProg [] = pure []
 lowerProg (ForeignVal (TvName t) ex tp _:prg) =
   (Foreign t (lowerType tp) ex:) <$> lowerProg prg
 lowerProg (LetStmt vs:prg) =
-  (:) <$> (StmtLet <$> for vs (\(TvName v, ex, (_, ant)) -> (v,lowerType ant,) <$> lowerBigLams ant ex))
+  (:) <$> (StmtLet <$> for vs (\(TvName v, ex, (_, ant)) -> (v,lowerType ant,) <$> lowerExprTerm ex))
       <*> lowerProg prg
+lowerProg (FunStmt vs:prg) = lowerProg prg
 lowerProg (TypeDecl (TvName var) _ cons:prg) =
   (:) (C.Type var (map (\case
                            UnitCon (TvName p) (_, t) -> (p, lowerType t)

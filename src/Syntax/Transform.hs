@@ -23,7 +23,6 @@ transformType ft = goT where
   transT (TyWithConstraints cons ty) = TyWithConstraints (map (goT***goT) cons) (goT ty)
   transT TyType = TyType
 
-
   transM (ByAscription ty) = ByAscription (goT ty)
   transM (BySubsumption l r) = BySubsumption (goT l) (goT r)
   transM (ByExistential v ty) = ByExistential v (goT ty)
@@ -54,7 +53,7 @@ transformCoercion fc ft = goC where
   goC = transC . fc
 
 transformExpr
-  :: (Expr p -> Expr p )
+  :: (Expr p -> Expr p)
   -> Expr p -> Expr p
 transformExpr fe = goE where
   transE (VarRef v a) = VarRef v a
@@ -83,8 +82,7 @@ transformExpr fe = goE where
   transE (Tuple es a) = Tuple (map goE es) a
   transE (TupleSection es a) = TupleSection (map (goE<$>) es) a
 
-  transE (TypeApp e t a) = TypeApp (goE e) t a
-  transE (Cast e c a) = Cast (goE e) c a
+  transE (ExprWrapper w e a) = ExprWrapper w (goE e) a
 
   goE = transE . fe
 
@@ -120,9 +118,27 @@ transformExprTyped fe fc ft = goE where
   transE (Tuple es a) = Tuple (map goE es) (goA a)
   transE (TupleSection es a) = TupleSection (map (goE<$>) es) (goA a)
 
-  transE (TypeApp e t a) = TypeApp (goE e) (goT t) (goA a)
-  transE (Cast e c a) = Cast (goE e) (goC c) (goA a)
+  transE (ExprWrapper w e a) = ExprWrapper (goW w) (goE e) (goA a)
 
+  goW (Cast c) = Cast (goC c)
+  goW (TypeApp t) = TypeApp (goT t)
+  goW (x :> y) = goW x :> goW y
+  goW x@TypeLam{} = x
+  goW x@WrapVar{} = x
+  goW IdWrap = IdWrap
+
+  goE = transE . fe
+  goT = transformType ft
+  goC = transformCoercion fc ft
+  goA (s, ty) = (s, goT ty)
+
+  goP = transformPatternTyped id ft
+
+transformPatternTyped
+  :: (Pattern Typed -> Pattern Typed)
+  -> (Type Typed -> Type Typed)
+  -> Pattern Typed -> Pattern Typed
+transformPatternTyped fp ft = goP where
   transP (Wildcard a) = Wildcard (goA a)
   transP (Capture v a) = Capture v (goA a)
   transP (Destructure v p a) = Destructure v (goP <$> p) (goA a)
@@ -131,12 +147,9 @@ transformExprTyped fe fc ft = goE where
   transP (PTuple ps a) = PTuple (map goP ps) (goA a)
   transP (PLiteral l a) = PLiteral l (goA a)
 
-  goE = transE . fe
-  goT = transformType ft
-  goC = transformCoercion fc ft
   goA (s, ty) = (s, goT ty)
-
-  goP = transP
+  goT = transformType ft
+  goP = transP . fp
 
 correct :: Type Typed -> Expr Typed -> Expr Typed
 correct ty (VarRef v a) = VarRef v (fst a, ty)
@@ -164,6 +177,4 @@ correct ty (Parens e a) = Parens e (fst a, ty)
 
 correct ty (Tuple es a) = Tuple es (fst a, ty)
 correct ty (TupleSection es a) = TupleSection es (fst a, ty)
-
-correct ty (TypeApp e t a) = TypeApp e t (fst a, ty)
-correct ty (Cast e c a) = Cast e c (fst a, ty)
+correct ty (ExprWrapper w e a) = ExprWrapper w e (fst a, ty)

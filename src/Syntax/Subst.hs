@@ -42,8 +42,8 @@ instance Ord (Var p) => Substitutable p (Type p) where
   ftv (TyPi binder t) = ftv binder <> (ftv t Set.\\ bound binder)
 
   apply _ (TyCon a) = TyCon a
-  apply _ (TyPromotedCon a) = TyPromotedCon a
   apply _ (TySkol x) = TySkol x
+  apply _ (TyPromotedCon x) = TyPromotedCon x
   apply _ TyType = TyType
   apply s t@(TyVar v) = Map.findWithDefault t v s
   apply s (TyApp a b) = TyApp (apply s a) (apply s b)

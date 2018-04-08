@@ -99,15 +99,29 @@ data Expr p
   | Tuple [Expr p] (Ann p)
   | TupleSection [Maybe (Expr p)] (Ann p)
 
-  -- Explicit type application
-  | TypeApp (Expr p) (Type p) (Ann p)
-  | Cast (Expr p) (Coercion p) (Ann p)
+  | ExprWrapper (Wrapper p) (Expr p) (Ann p)
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Expr p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Expr p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Expr p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Expr p)
 instance (Data (Var p), Data (Ann p), Data p) => Spanned (Expr p)
+
+data Wrapper p
+  = TypeApp (Type p)
+  | Cast (Coercion p)
+  | TypeLam (Var p)
+  | (:>) (Wrapper p) (Wrapper p)
+  | WrapVar (Var p) -- Unsolved wrapper variable
+  | IdWrap
+
+infixr 5 :>
+
+deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Wrapper p)
+deriving instance (Show (Var p), Show (Ann p)) => Show (Wrapper p)
+deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Wrapper p)
+deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Wrapper p)
+instance (Data (Var p), Data (Ann p), Data p) => Spanned (Wrapper p)
 
 data Pattern p
   = Wildcard (Ann p)
@@ -151,16 +165,13 @@ data Type p
 
 data TyBinder p
   = Anon { _tyBinderType :: Type p } -- a function type
-  | Implicit { _tyBinderVar :: Var p, _tyBinderArg :: Maybe (Type p) } -- a forall type
+  | Implicit { _tyBinderVar :: Var p
+             , _tyBinderArg :: Maybe (Type p) } -- a forall type
 
-instance Spanned (Type p) where
-  annotation _ = internal
-
-deriving instance (Data p, Typeable p, Data (Var p)) => Data (TyBinder p)
+deriving instance (Data p, Data (Var p)) => Data (TyBinder p)
 deriving instance Show (Var p) => Show (TyBinder p)
 deriving instance Ord (Var p) => Ord (TyBinder p)
 deriving instance Eq (Var p) => Eq (TyBinder p)
-
 
 data Skolem p
   = Skolem { _skolIdent :: Var p -- the constant itself
@@ -169,16 +180,18 @@ data Skolem p
            , _skolMotive :: SkolemMotive p
            }
 
+deriving instance (Data p, Data (Var p)) => Data (Skolem p)
 deriving instance Show (Var p) => Show (Skolem p)
-deriving instance (Data p, Typeable p, Data (Var p)) => Data (Skolem p)
 
 data SkolemMotive p
   = ByAscription (Type p)
   | BySubsumption (Type p) (Type p)
   | ByExistential (Var p) (Type p)
 
+deriving instance (Data p, Data (Var p)) => Data (SkolemMotive p)
 deriving instance Show (Var p) => Show (SkolemMotive p)
-deriving instance (Data p, Typeable p, Data (Var p)) => Data (SkolemMotive p)
+deriving instance Ord (Var p) => Ord (SkolemMotive p)
+deriving instance Eq (Var p) => Eq (SkolemMotive p)
 
 instance Eq (Var p) => Eq (Skolem p) where
   Skolem v _ _ _ == Skolem v' _ _ _ = v == v'
@@ -186,10 +199,10 @@ instance Eq (Var p) => Eq (Skolem p) where
 instance Ord (Var p) => Ord (Skolem p) where
   Skolem v _ _ _ `compare` Skolem v' _ _ _ = v `compare` v'
 
-deriving instance Eq (Var p) => Eq (Type p)
+deriving instance (Data p, Data (Var p)) => Data (Type p)
 deriving instance Show (Var p) => Show (Type p)
 deriving instance Ord (Var p) => Ord (Type p)
-deriving instance (Data p, Typeable p, Data (Var p)) => Data (Type p)
+deriving instance Eq (Var p) => Eq (Type p)
 
 data Coercion p
   = VarCo (Var p)
@@ -203,24 +216,43 @@ data Coercion p
   | AssumedCo (Type p) (Type p) -- <A, B> : A ~ B
   | ForallCo (Var p) (Coercion p) -- (forall v. phi : a ~ b) : forall v. a ~ forall v. b
 
-deriving instance Eq (Var p) => Eq (Coercion p)
+deriving instance (Data p, Data (Var p)) => Data (Coercion p)
 deriving instance Show (Var p) => Show (Coercion p)
 deriving instance Ord (Var p) => Ord (Coercion p)
-deriving instance (Data p, Typeable p, Data (Var p)) => Data (Coercion p)
+deriving instance Eq (Var p) => Eq (Coercion p)
 
 data Toplevel p
   = LetStmt [(Var p, Expr p, Ann p)]
   | ForeignVal (Var p) Text (Type p) (Ann p)
   | TypeDecl (Var p) [Var p] [Constructor p]
   | Module (Var p) [Toplevel p]
+  | FunStmt [Function p]
   | Open { openName :: Var p
          , openAs :: Maybe T.Text }
 
-instance (Spanned (Constructor p), Ann p ~ Span) => Spanned (Toplevel p) where
-  annotation (LetStmt ((_, _, x):vs)) = sconcat (x :| map thd3 vs)
-  annotation (TypeDecl _ _ (x:xs)) = sconcat (annotation x :| map annotation xs)
-  annotation (ForeignVal _ _ _ x) = x
-  annotation _ = internal
+data Function p
+  = FunDecl { _fnVar :: Var p
+            , _fnClauses :: [Clause p]
+            , _fnTypeAnn :: Type p
+            , _fnSpan :: Ann p }
+
+deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Function p)
+deriving instance (Show (Var p), Show (Ann p)) => Show (Function p)
+deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Function p)
+deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Function p)
+instance (Data (Var p), Data (Ann p), Data p) => Spanned (Function p)
+
+data Clause p
+  = Clause { _clauseName :: Var p
+           , _clausePat :: [Pattern p]
+           , _clauseBody :: Expr p 
+           , _clauseSpan :: Ann p }
+
+deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Clause p)
+deriving instance (Show (Var p), Show (Ann p)) => Show (Clause p)
+deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Clause p)
+deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Clause p)
+instance (Data (Var p), Data (Ann p), Data p) => Spanned (Clause p)
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Toplevel p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Toplevel p)
@@ -264,8 +296,19 @@ makePrisms ''Pattern
 makePrisms ''Toplevel
 makePrisms ''Constructor
 makePrisms ''Lit
+
 makeLenses ''Skolem
 makeLenses ''TyBinder
+makeLenses ''Function
+makeLenses ''Clause
+
+instance (Spanned (Constructor p), Ann p ~ Span) => Spanned (Toplevel p) where
+  annotation (LetStmt ((_, _, x):vs)) = sconcat (x :| map thd3 vs)
+  annotation (TypeDecl _ _ (x:xs)) = sconcat (annotation x :| map annotation xs)
+  annotation (ForeignVal _ _ _ x) = x
+  annotation (FunStmt (x:xs)) = sconcat ((x ^. fnSpan) :| map (^. fnSpan) xs)
+  annotation _ = internal
+
 
 _TyArr :: Prism' (Type p) (Type p, Type p)
 _TyArr = prism (uncurry (TyPi . Anon)) go where

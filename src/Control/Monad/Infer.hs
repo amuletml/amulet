@@ -54,8 +54,8 @@ import Syntax.Subst
 type MonadInfer p m = (MonadError TypeError m, MonadReader Env m, MonadWriter (Seq.Seq (Constraint p)) m, MonadGen Int m)
 
 data Constraint p
-  = ConUnify   SomeReason (Var p) (Type p) (Type p)
-  | ConSubsume SomeReason (Var p) (Type p) (Type p)
+  = ConUnify   SomeReason (Var p)  (Type p) (Type p)
+  | ConSubsume SomeReason (Var p)  (Type p) (Type p)
   | ConImplies SomeReason (Type p) (Seq.Seq (Constraint p)) (Seq.Seq (Constraint p))
   | ConFail (Var p) (Type p) -- for holes. I hate it.
 
@@ -91,7 +91,10 @@ data TypeError where
                  -> TypeError
 
   Malformed :: Pretty (Var p) => Type p -> TypeError
+
   NotPromotable :: Pretty (Var p) => Var p -> Type p -> Doc -> TypeError
+
+  WrongShape :: (Pretty (Var p), Pretty (Var p')) => Clause p -> (Type p', Int) -> TypeError
 
   IllegalTypeApp :: (Pretty (Var p), Pretty (Var p')) => Expr p -> Type p' -> Type p' -> TypeError
 
@@ -165,16 +168,16 @@ instantiate tp@(TyPi (Implicit v _) ty) = do
       squish f (Just x) = Just (x . f)
       squish f _ = Just f
 
-      appThisTy e = TypeApp e var (annotation e, tp)
+      appThisTy e = ExprWrapper (TypeApp var) e (annotation e, apply map ty)
   (k, _, t) <- instantiate (apply map ty)
   pure (squish appThisTy k, tp, t)
-instantiate ty = pure (Nothing, ty, ty)
+instantiate ty = pure (Just id, ty, ty)
 
 freshTV :: MonadGen Int m => m (Type Typed)
 freshTV = TyVar . TvName <$> fresh
 
 instance Pretty TypeError where
-  pretty (NotEqual a b) = string "Type error: failed to" <+> align (string "unify" <+> pretty a </> string " with" <+> pretty b)
+  pretty (NotEqual a b) = string "Type error: failed to" <+> align (string "unify" <+> pretty a </> string "with" <+> pretty b)
   pretty (Occurs v t) = string "Occurs check:" <+> string "The type variable" <+> stypeVar (pretty v) </> indent 4 (string "occurs in the type" <+> pretty t)
   pretty (NotInScope e) = string "Variable not in scope:" <+> pretty e
   pretty (ArisingFrom er ex) = pretty (annotation ex) <> colon <+> stypeSkol (string "error")
@@ -237,19 +240,32 @@ instance Pretty TypeError where
          , indent 2 (pretty x)
          , err
          ]
-    -- TODO needs polishing
+
+  pretty (WrongShape Clause{..} (ty, arity))
+    | arity == 0 =
+      vsep [ string "Expected a function type, but" <+> pretty ty <+> "has no visible quantifiers"
+           , bullet (string "Note:") <+> keyword "fun" <+> string "bindings can be only used for functions"
+           , empty
+           , align $ bullet (string "Perhaps a let is more appropriate,")
+                 <#> indent 2 (string "or the type is written incorrectly?") ]
+    | funarity /= arity =
+      vsep [ string "Expected a clause with" <+> keyword "exactly" <+> int arity <+> string "arguments"
+           , string "but this equation for" <+> pretty _clauseName <+> "only has" <+> int funarity ]
+    | otherwise = undefined
+    where funarity = length _clausePat
 
   pretty (SkolBinding (Skolem k v _ m) b) =
     vsep [ string "Can not unify rigid type variable" <+> skol <+> string "with" <+> whatIs b
          , bullet (string "Note: the variable") <+> skol <+> string "was rigidified because" <+> prettyMotive m
          , indent 8 (string "and is represented by the constant") <+> stypeSkol (pretty k)
-         , case b of
+         ] <> case b of
              TySkol (Skolem _ v _ m) ->
-               vsep [ bullet (string "Note: the rigid type variable") <+> stypeVar (pretty v) <> comma <+> string "in turn" <> comma
-                    , indent 8 (string "was rigidified because") <+> prettyMotive m
-                    ]
+               empty <#>
+                 vsep [ bullet (string "Note: the rigid type variable") <+> stypeVar (pretty v) <> comma <+> string "in turn" <> comma
+                      , indent 8 (string "was rigidified because") <+> prettyMotive m
+                      , indent 8 (string "and is represented by the constant") <+> stypeSkol (pretty k)
+                      ]
              _ -> empty
-         ]
     where whatIs (TySkol (Skolem _ v _ _)) = string "the rigid type variable" <+> stypeVar (pretty v)
           whatIs t = string "the type" <+> pretty t
           skol = stypeVar (pretty v)

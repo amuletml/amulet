@@ -86,7 +86,6 @@ library amulet
                      , Syntax.Resolve.Scope
                      , Syntax.Resolve.Toplevel
                      -- TC
-                     , Types.Holes
                      , Types.Infer
                      , Types.Kinds
                      , Types.Unify

@@ -65,7 +65,7 @@ genCorrectExpr = flip runReaderT mempty . go where
 
   expr (TyArr d c) = do
     var <- genVar
-    Fun (PType (Capture var internal) (raiseT unTvName d) internal) <$> local (insert var d) (go c) <*> pure internal
+    Fun (PType (Capture var internal) (raiseT unTvName fst d) internal) <$> local (insert var d) (go c) <*> pure internal
 
   expr (TyTuple a b) = do
     a' <- go a
@@ -172,4 +172,4 @@ genCorrectPattern want = case want of
     p <- Gen.choice [ Capture <$> genVar <*> pure internal
                     , Gen.constant (Wildcard internal)
                     ]
-    pure (PType p (raiseT unTvName want) internal)
+    pure (PType p (raiseT unTvName fst want) internal)

@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleContexts, TupleSections, GADTs #-}
-{-# LANGUAGE ScopedTypeVariables, RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables, RankNTypes, RecordWildCards #-}
 module Types.Infer
   ( inferProgram
   , builtinsEnv
@@ -31,12 +31,12 @@ import Syntax.Types
 import Syntax.Let
 import Syntax
 
+import Types.Kinds
 import Types.Infer.Constructor
 import Types.Infer.Pattern
 import Types.Infer.Builtin
 import Types.Wellformed
 import Types.Unify
-import Types.Kinds
 
 import Pretty
 
@@ -44,10 +44,10 @@ import Pretty
 inferProgram :: MonadGen Int m => Env -> [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))
 inferProgram env ct = fmap fst <$> runInfer env (inferProg ct)
 
-check :: MonadInfer Typed m => Expr Resolved -> Type Typed -> m (Expr Typed)
+check :: forall m. MonadInfer Typed m => Expr Resolved -> Type Typed -> m (Expr Typed)
 check e ty@TyForall{} = do -- This is rule Decl∀L from [Complete and Easy]
-  e <- check e =<< skolemise (ByAscription ty) ty -- gotta be polymorphic - don't allow instantiation
-  pure (correct ty e)
+  (wrap, e) <- secondA (check e) =<< skolemise (ByAscription ty) ty -- gotta be polymorphic - don't allow instantiation
+  pure (ExprWrapper wrap e (annotation e, ty))
 
 check (Hole v a) t = do
   tell (Seq.singleton (ConFail (TvName v) t))
@@ -68,45 +68,47 @@ check ex@(Let ns b an) t = do
     pure (Let ns b (an, t))
 
 check ex@(Fun pat e an) ty = do
-  (dom, cod, _) <- decompose ex _TyArr ty
-  (p, vs, cs) <- checkPattern pat dom
+  (dom, cod, _) <- quantifier ex ty
+  let domain = _tyBinderType dom
+
+  (p, vs, cs) <- checkPattern pat domain
   let tvs = Set.map unTvName (boundTvs p vs)
-  implies (Arm pat e) dom cs $ do
-    e <- local (typeVars %~ Set.union tvs) $
-      local (values %~ focus vs) $
-        check e cod
+
+  implies (Arm pat e) domain cs $ do
+    e <- local (typeVars %~ Set.union tvs) . local (values %~ focus vs) $
+      check e cod
     pure (Fun p e (an, ty))
 
 check (If c t e an) ty = If <$> check c tyBool <*> check t ty <*> check e ty <*> pure (an, ty)
 
 check (Match t ps a) ty = do
   (t, tt) <- infer t
+
   ps <- for ps $ \(p, e) -> do
     (p', ms, cs) <- checkPattern p tt
     let tvs = Set.map unTvName (boundTvs p' ms)
-    (p',) <$> implies (Arm p e) tt cs
-      (local (typeVars %~ Set.union tvs)
-        (local (values %~ focus ms) (check e ty)))
+
+    bd <- implies (Arm p e) tt cs $
+      local (typeVars %~ Set.union tvs) $
+        local (values %~ focus ms) (check e ty)
+    pure (p', bd)
   pure (Match t ps (a, ty))
 
 check (Access rc key a) ty = do
   rho <- freshTV
   Access <$> check rc (TyRows rho [(key, ty)]) <*> pure key <*> pure (a, ty)
 
-
 -- This is _very_ annoying, but we need it for nested ascriptions
 check ex@(Ascription e ty an) goal = do
   ty <- resolveKind (BecauseOf ex) ty
   e <- check e ty
   (_, c) <- subsumes ex ty goal
-  pure (Ascription (Cast e c (an, ty)) ty (an, goal))
-
-check TypeApp{} _ = error "impossible: check TypeApp"
+  pure (Ascription (ExprWrapper c e (an, ty)) ty (an, goal))
 
 check e ty = do
   (e', t) <- infer e
   (_, c) <- subsumes e ty t
-  pure (Cast e' c (annotation e, ty))
+  pure (ExprWrapper c e' (annotation e, t))
 
 -- [Complete and Easy]: See https://www.cl.cam.ac.uk/~nk480/bidir.pdf
 
@@ -134,9 +136,12 @@ infer ex@(Ascription e ty an) = do
   pure (Ascription (correct ty e) ty (an, ty), ty)
 
 infer ex@(App f x a) = do
-  (f, (d, c, k)) <- secondA (decompose ex _TyArr) =<< infer f
-  x <- check x d
-  pure (App (k f) x (a, c), c)
+  (f, (dom, c, k)) <- secondA (quantifier ex) =<< infer f
+  case dom of
+    Anon d -> do
+      x <- check x d
+      pure (App (k f) x (a, c), c)
+    Implicit{} -> error "invalid implicit quantification in App"
 
 infer ex@(BinOp l o r a) = do
   (o, (ld, c, k1)) <- secondA (decompose ex _TyArr) =<< infer o
@@ -199,6 +204,9 @@ inferProg (stmt@(LetStmt ns):prg) = do
   local (values %~ focus ts) $
     consFst (LetStmt ns') $
       inferProg prg
+inferProg (FunStmt vs:prg) = do
+  (ns, ts) <- inferFunTy vs
+  local (values %~ focus ts) . consFst (FunStmt ns) $ inferProg prg
 inferProg (st@(ForeignVal v d t ann):prg) = do
   t' <- resolveKind (BecauseOf st) t
   local (values %~ focus (one v t')) $
@@ -210,7 +218,7 @@ inferProg (decl@(TypeDecl n tvs cs):prg) = do
    in extendKind (TvName n, kind) $ do
      (ts, cs') <- unzip <$> for cs (\con ->
        inferCon retTy con `catchError` \x -> throwError (ArisingFrom x (BecauseOf con)))
-     local (values %~ focus (teleFromList ts)) $
+     local (values %~ focus (teleFromList ts)) . local (constructors %~ Set.union (Set.fromList (map (unTvName . fst) ts))) $
        consFst (TypeDecl (TvName n) (map TvName tvs) cs') $
          inferProg prg
 inferProg (Open mod pre:prg) =
@@ -228,12 +236,6 @@ inferProg (Module name body:prg) = do
     inferProg prg
 
 inferProg [] = asks ([],)
-
-
-data Origin
-  = Supplied -- the programmer supplied this type
-  | Guessed -- the compiler invented this type
-  deriving Show
 
 -- For polymorphic recursion, mostly
 approxType :: MonadInfer Typed m => Expr Resolved -> StateT Origin m (Type Typed)
@@ -305,7 +307,9 @@ inferLetTy closeOver vs =
         ((exp', ty), cs) <- listen . local (values %~ focus (uncurry one tv)) $
           case origin of
             Supplied -> do
-              exp' <- check exp (snd tv)
+              let exp' (Ascription e _ _) = exp' e
+                  exp' e = e
+              exp' <- check (exp' exp) (snd tv)
               pure (exp', snd tv)
             Guessed -> do
               (exp', ty) <- infer exp
@@ -321,8 +325,10 @@ inferLetTy closeOver vs =
           ifor (zip tvs vars) $ \i ((_, tyvar), (var, exp, ann)) ->
             case origins !! i of
               Supplied -> do
-                exp' <- check exp tyvar
-                pure (TvName var, exp', ann, tyvar)
+                let exp' (Ascription e _ _) = exp' e
+                    exp' e = e
+                exp <- check (exp' exp) tyvar
+                pure (TvName var, exp, ann, tyvar)
               Guessed -> do
                 (exp', ty) <- infer exp
                 _ <- unify exp ty tyvar
@@ -352,44 +358,76 @@ inferLetTy closeOver vs =
       tc [] = pure ([], mempty)
    in tc sccs
 
-solveEx :: Subst Typed -> Map.Map (Var Typed) (Coercion Typed) -> Expr Typed -> Expr Typed
-solveEx ss cs = transformExprTyped go' go (normType . apply ss) where
-  go' :: Expr Typed -> Expr Typed
-  go' (TypeApp f t a) = TypeApp f (apply ss t) a
-  go' x = x
-
-  go :: Coercion Typed -> Coercion Typed
-  go t@(VarCo x) = Map.findWithDefault t x cs
+solveEx :: Subst Typed -> Map.Map (Var Typed) (Wrapper Typed) -> Expr Typed -> Expr Typed
+solveEx ss cs = transformExprTyped go id goType where
+  go :: Expr Typed -> Expr Typed
+  go (ExprWrapper w e a) = ExprWrapper (goWrap w) (solveEx ss cs e) a
   go x = x
 
+  goWrap (TypeApp t) = TypeApp (goType t)
+  goWrap (Cast c) = Cast c
+  goWrap (TypeLam l) = TypeLam l
+  goWrap (x Syntax.:> y) = goWrap x Syntax.:> goWrap y
+  goWrap (WrapVar v) = goWrap $ Map.findWithDefault err v cs where
+    err = error $ "Unsolved wrapper variable " ++ show v ++ ". This is a bug"
+  goWrap IdWrap = IdWrap
+
+  goType = apply ss
+
+solvePat :: Subst Typed -> Pattern Typed -> Pattern Typed
+solvePat ss = transformPatternTyped go' (normType . apply ss) where
+  go' :: Pattern Typed -> Pattern Typed
+  go' (PType p t a) = PType p (apply ss t) a
+  go' x = x
+
+inferFunTy :: MonadInfer Typed m => [Function Resolved] -> m ([Function Typed], Telescope Typed)
+inferFunTy vs = do
+  vars <- for vs $ \x@FunDecl{..} -> do
+    ty <- resolveKind (BecauseOf x) _fnTypeAnn
+    pure (TvName _fnVar, ty)
+
+  let tele = teleFromList vars
+
+  (vars, cs) <- listen . local (values %~ focus tele) $
+    for (zip vs vars) . uncurry $ \FunDecl{..} (_, ty) -> do
+      (_, t) <- skolemise (ByAscription ty) ty
+      let quants (TyPi x t) = first (x:) $ quants t
+          quants ty = ([], ty)
+
+          (quantifiers, bodyTy) = quants t
+
+      clauses <- for _fnClauses $ \cls@Clause{..} -> do
+        let checkPatQuantifier p (Anon ty) = do
+              (p', vs, cs) <- checkPattern p ty
+              pure (p', vs, implies cls ty cs, mempty)
+            checkPatQuantifier _ Implicit{} = error "impossible: checkPatQuantifier implicit parameters"
+
+        when (length quantifiers /= length _clausePat || length quantifiers == 0) $
+          throwError (ArisingFrom (WrongShape cls (t, length quantifiers)) (BecauseOf cls))
+
+        let go (p:ps) (q:qs) mp = do
+              (p', vs, cs, m) <- checkPatQuantifier p (apply mp q)
+              (ps, vss, css, ms) <- go ps qs (m <> mp)
+              pure (p':ps, vs:vss, cs:css, m <> ms)
+            go _ _ mp = pure ([], [], [], mp)
+
+        (ps, vss, css, rigid) <- go _clausePat quantifiers mempty
+        let implication = foldr (.) id css
+            scope = foldMap focus vss
+
+        body <- local (values %~ scope) . implication $ check _clauseBody (apply rigid bodyTy)
+        pure (Clause (TvName _clauseName) ps body (_clauseSpan, ty))
+      pure (FunDecl (TvName _fnVar) clauses ty (_fnSpan, ty))
+
+  cur <- gen
+  (sol, cos) <- case solve cur cs of
+    Right x -> pure x
+    Left e -> throwError e
+
+  let fixClause Clause{..} = Clause _clauseName (map (solvePat sol) _clausePat) (solveEx sol cos _clauseBody) _clauseSpan
+      fixFunction FunDecl{..} = FunDecl _fnVar (map fixClause _fnClauses) (apply sol _fnTypeAnn) _fnSpan
+
+  pure (map fixFunction vars, tele)
 
 consFst :: Functor m => a -> m ([a], b) -> m ([a], b)
 consFst = fmap . first . (:)
-
-
-{-
-  Note [Freedom of the press]:
-    This used to be censor (const mempty) - but that leads us to a
-    problem (a real one!). Consider:
-
-      let map f
-        = let map_accum acc x
-          = match x with
-            | Cons (h, t) -> map_accum (Cons (f h, acc)) t
-            | Nil -> acc
-          in map_accum Nil ;;
-
-    The only way we learn of `f`'s type is inside the `let`. By
-    censoring it, we prevent the constraints that led to the
-    discovery of `f`'s type from arising - which means we can't find
-    it again! Thus, the function gets the rather strange type
-
-      val map : ∀ 'a 'b 'c. 'c -> list 'a -> list 'b
-
-    Instead of the correct
-
-      val map : V 'a 'b. ('a -> 'b) -> list 'a -> list 'b
-
-    By removing the censor, we allow the compiler to recover `'c` - which,
-    if you look under e.g. the ghci debugger, has a substitution!
--}

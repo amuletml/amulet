@@ -8,10 +8,10 @@ import Data.Either
 
 import Control.Monad.Infer
 
+import Types.Kinds
 import Types.Infer.Builtin
 import Types.Infer.Errors
 import Types.Unify
-import Types.Kinds
 
 import Syntax.Subst
 import Syntax

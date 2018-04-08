@@ -1,14 +1,16 @@
-{-# Language MultiWayIf, GADTs, FlexibleContexts, ScopedTypeVariables, TemplateHaskell #-}
+{-# LANGUAGE MultiWayIf, GADTs, FlexibleContexts, ScopedTypeVariables, TemplateHaskell #-}
+{-# LANGUAGE TupleSections #-}
 module Types.Unify (solve, overlap, bind, skolemise, freshSkol) where
 
 import Control.Monad.Except
 import Control.Monad.State
+import Control.Applicative
 import Control.Monad.Infer
 import Control.Lens hiding (Empty)
 
+import Types.Infer.Errors
 import Types.Wellformed
 
-import Syntax.Transform
 import Syntax.Subst
 import Syntax
 
@@ -29,7 +31,7 @@ data SolveScope
 
 data SolveState
   = SolveState { _solveTySubst :: Subst Typed
-               , _solveCoSubst :: Map.Map (Var Typed) (Coercion Typed)
+               , _solveCoSubst :: Map.Map (Var Typed) (Wrapper Typed)
                }
   deriving (Eq, Show, Ord)
 
@@ -49,10 +51,11 @@ bind var ty
   | otherwise = do
       env <- use solveTySubst
       noTouch <- view don'tTouch
+      ty <- pure (apply env ty) -- shadowing
       -- Attempt to extend the environment, otherwise unify with existing type
       case Map.lookup var env of
         Nothing -> do
-          if | var `Set.notMember` noTouch -> solveTySubst .= (env `compose` Map.singleton var (normType ty))
+          if | var `Set.notMember` noTouch -> solveTySubst .= env `compose` Map.singleton var ty
              | var `Set.member` noTouch, TyVar v <- ty, v `Set.notMember` noTouch -> solveTySubst .= (env `compose` Map.singleton v (TyVar var))
              | otherwise -> throwError (NotEqual (TyVar var) ty)
           pure (AssumedCo (TyVar var) ty)
@@ -63,6 +66,20 @@ bind var ty
 unify :: Type Typed -> Type Typed -> SolveM (Coercion Typed)
 unify (TySkol x) (TySkol y)
   | x == y = pure (ReflCo (TySkol y))
+  | otherwise = do
+    sub <- use solveTySubst
+    let assumption = sub ^. at (x ^. skolIdent) <|> sub ^. at (y ^. skolIdent)
+    case assumption of
+      Just{} -> pure (AssumedCo (TySkol x) (TySkol y))
+      Nothing -> do
+        canWe <- view bindSkol
+        if canWe
+           then bind (x ^. skolIdent) (TySkol y)
+           else throwError $ SkolBinding x (TySkol y)
+
+unify ta@(TyPromotedCon a) tb@(TyPromotedCon b)
+  | a == b = pure (ReflCo tb)
+  | otherwise = throwError (NotEqual ta tb)
 
 unify (TySkol t@(Skolem sv _ _ _)) b = do
   sub <- use (solveTySubst . at sv)
@@ -94,10 +111,6 @@ unify (TyArr a b) (TyArr a' b') = ArrCo <$> unify a a' <*> unify b b'
 unify (TyApp a b) (TyApp a' b') = AppCo <$> unify a a' <*> unify b b'
 
 unify ta@(TyCon a) tb@(TyCon b)
-  | a == b = pure (ReflCo tb)
-  | otherwise = throwError (NotEqual ta tb)
-
-unify ta@(TyPromotedCon a) tb@(TyPromotedCon b)
   | a == b = pure (ReflCo tb)
   | otherwise = throwError (NotEqual ta tb)
 
@@ -162,7 +175,7 @@ unifRow (t, a, b) = do
   co <- unify a b
   pure (t, co)
 
-runSolve :: Int -> Subst Typed -> SolveM b -> Either TypeError (Int, (Subst Typed, Map.Map (Var Typed) (Coercion Typed)))
+runSolve :: Int -> Subst Typed -> SolveM b -> Either TypeError (Int, (Subst Typed, Map.Map (Var Typed) (Wrapper Typed)))
 runSolve i s x = runExcept (fix (runReaderT (runStateT (runGenTFrom i act) (SolveState s mempty)) emptyScope)) where
   act = (,) <$> gen <*> x
   fix act = do
@@ -171,7 +184,7 @@ runSolve i s x = runExcept (fix (runReaderT (runStateT (runGenTFrom i act) (Solv
      in pure (i, (fmap (apply ss) ss, s ^. solveCoSubst))
   emptyScope = SolveScope False mempty mempty
 
-solve :: Int -> Seq.Seq (Constraint Typed) -> Either TypeError (Subst Typed, Map.Map (Var Typed) (Coercion Typed))
+solve :: Int -> Seq.Seq (Constraint Typed) -> Either TypeError (Subst Typed, Map.Map (Var Typed) (Wrapper Typed))
 solve i cs = snd <$> runSolve i mempty (doSolve cs)
 
 doSolve :: Seq.Seq (Constraint Typed) -> SolveM ()
@@ -181,7 +194,7 @@ doSolve (ConUnify because v a b :<| xs) = do
 
   co <- unify (apply sub a) (apply sub b)
     `catchError` \e -> throwError (ArisingFrom e because)
-  solveCoSubst . at v .= Just co
+  solveCoSubst . at v .= Just (Cast co)
 
   doSolve xs
 doSolve (ConSubsume because v a b :<| xs) = do
@@ -204,6 +217,7 @@ doSolve (ConImplies because not cs ts :<| xs) = do
         , v `Set.notMember` ass
         = Map.insert v ty m
         | otherwise = m
+
   do
     let go = local (bindSkol .~ True) $ doSolve cs'
 
@@ -228,31 +242,28 @@ doSolve (ConImplies because not cs ts :<| xs) = do
 doSolve (ConFail v t :<| cs) = do
   doSolve cs
   sub <- use solveTySubst
-  let unskolemise x@(TySkol v) = case sub ^. at (v ^. skolVar) of
-        Just t | t == TySkol v -> TyVar (v ^. skolVar)
-        _ -> x
-      unskolemise x = x
-      go :: Type Typed -> Type Typed
-      go = transformType unskolemise
-  throwError (FoundHole v (go (apply sub t)))
+  throwError (foundHole v (apply sub t) sub)
 
 subsumes :: (Type Typed -> Type Typed -> SolveM (Coercion Typed))
-         -> Type Typed -> Type Typed -> SolveM (Coercion Typed)
+         -> Type Typed -> Type Typed -> SolveM (Wrapper Typed)
 subsumes k t1 t2@TyForall{} = do
   sub <- use solveTySubst
-  t2' <- skolemise (BySubsumption (apply sub t1) (apply sub t2)) t2
-  subsumes k t1 t2'
+  (c, t2') <- skolemise (BySubsumption (apply sub t1) (apply sub t2)) t2
+  (Syntax.:>) c <$> subsumes k t1 t2'
 subsumes k t1@TyForall{} t2 = do
   (_, _, t1') <- instantiate t1
   subsumes k t1' t2
-subsumes k a b = k a b
+subsumes k a b = Cast <$> k a b
 
-skolemise :: MonadGen Int m => SkolemMotive Typed -> Type Typed -> m (Type Typed)
+skolemise :: MonadGen Int m => SkolemMotive Typed -> Type Typed -> m (Wrapper Typed, Type Typed)
 skolemise motive ty@(TyForall tv _ t) = do
   sk <- freshSkol motive ty tv
-  skolemise motive (apply (Map.singleton tv sk) t)
-skolemise motive (TyArr c d) = TyArr c <$> skolemise motive d
-skolemise _ ty = pure ty
+  (wrap, ty) <- skolemise motive (apply (Map.singleton tv sk) t)
+  pure (TypeLam tv Syntax.:> wrap, ty)
+skolemise motive (TyArr c d) = do
+  (wrap, ty) <- skolemise motive d
+  pure (wrap, TyArr c ty)
+skolemise _ ty = pure (IdWrap, ty)
 
 freshSkol :: MonadGen Int m => SkolemMotive Typed -> Type Typed -> Var Typed -> m (Type Typed)
 freshSkol m ty u = do
@@ -270,3 +281,4 @@ capture m = do
   st <- get
   put x
   pure (r, st)
+

@@ -1,6 +1,8 @@
 {-# LANGUAGE FlexibleContexts
   , ConstraintKinds
   , OverloadedStrings
+  , LambdaCase
+  , RecordWildCards
   , TupleSections #-}
 
 module Syntax.Resolve
@@ -15,9 +17,10 @@ import Data.Triple
 
 import Control.Monad.Except
 import Control.Monad.Reader
+import Control.Applicative
 import Control.Monad.State
 import Control.Monad.Gen
-import Control.Applicative
+import Control.Lens
 
 import Data.Traversable
 import Data.Semigroup
@@ -72,6 +75,20 @@ resolveModule (r:rs) = flip catchError (throwError . wrapError)
                 <$> traverse (\((_, e, a), v') -> (v',,a) <$> reExpr e) (zip vs vars')
                 )
           <*> resolveModule rs
+      FunStmt vs -> do
+        let vars = map (^. fnVar) vs
+        vars' <- traverse tagVar vars
+        extendN (zip vars vars') $ do
+          vs <- for (zip vs vars') . uncurry $ \FunDecl{..} var -> do
+            cs <- for _fnClauses $ \Clause{..} -> do
+              v <- lookupEx _clauseName
+              when (v /= var) (throwError (NotInScope _clauseName))
+              (ps, vars, tyvars) <- unzip3 <$> traverse rePattern _clausePat
+              extendN (concat vars) . extendTyvarN (concat tyvars) $
+                Clause v ps <$> reExpr _clauseBody <*> pure _clauseSpan
+            ty <- reType _fnTypeAnn
+            pure (FunDecl var cs ty _fnSpan)
+          (:) (FunStmt vs) <$> resolveModule rs
       ForeignVal v t ty a -> do
         v' <- tagVar v
         extend (v, v') $ (:)
@@ -246,8 +263,7 @@ reExpr (Parens e a) = flip Parens a <$> reExpr e
 
 reExpr (Tuple es a) = Tuple <$> traverse reExpr es <*> pure a
 reExpr (TupleSection es a) = TupleSection <$> traverse (traverse reExpr) es <*> pure a
-reExpr (TypeApp f x a) = TypeApp <$> reExpr f <*> reType x <*> pure a
-reExpr Cast{} = error "resolve cast"
+reExpr ExprWrapper{} = error "resolve cast"
 
 reType :: MonadResolve m => Type Parsed -> m (Type Resolved)
 reType (TyCon v) = TyCon <$> lookupTy v

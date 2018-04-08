@@ -35,14 +35,17 @@ instance (Spanned (Pattern p), Pretty (Var p)) => Reasonable Pattern p where
 instance (Spanned (Expr p), Pretty (Var p)) => Reasonable Expr p where
   blame _ = string "the expression"
 
+instance (Data p, Data (Ann p), Data (Var p), Pretty (Var p)) => Reasonable Clause p where
+  blame _ = string "the clause"
+
 instance (Data p, Data (Ann p), Data (Var p), Pretty (Var p)) => Reasonable Constructor p where
   blame _ = string "the constructor"
 
-instance (Data p, Data (Ann p), Data (Var p), Pretty (Var p)) => Reasonable Type p where
-  blame _ = string "the type"
-
 instance (Ann p ~ Span, Data p, Data (Ann p), Data (Var p), Pretty (Var p)) => Reasonable Toplevel p where
   blame _ = string "the declaration"
+
+instance (Ann p ~ Span, Data p, Data (Ann p), Data (Var p), Pretty (Var p)) => Reasonable Function p where
+  blame _ = string "the function declaration"
 
 instance Reasonable (Const SomeReason) p where
   blame = blameOf . getConst
