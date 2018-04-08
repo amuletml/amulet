@@ -145,7 +145,7 @@ reduceTerm s (Match t bs) = {-# SCC "Reduce.fold_cases" #-}
         -- If we were really smart, we could strip _all_ cases which are shadowed by
         -- another. For now, simply detect the case `error @a "Nope"`
         Arm { armPtrn = Capture _ _
-            , armBody = Let (One _ (tyApp, _, TyApp (Ref err _) _))
+            , armBody = Let (One BindValue (tyApp, _, TyApp (Ref err _) _))
                         (App (Ref tyApp' _) (Lit _)) }
           | TgInternal "error" <- toVar err
           , toVar tyApp == toVar tyApp'
