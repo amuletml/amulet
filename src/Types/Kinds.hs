@@ -69,7 +69,7 @@ checkAgainstKind r t k = do
 
 annotateKind :: MonadKind m => SomeReason -> Type Typed -> m (Type Typed)
 annotateKind r ty = do
-  ((ty, _), cs) <- runWriterT (runStateT (checkKind (raiseT unTvName fst ty) TyType) r)
+  ((ty, _), cs) <- runWriterT (runStateT (checkKind (raiseT unTvName ty) TyType) r)
   x <- gen
 
   sub <- case solve x cs of
@@ -127,7 +127,7 @@ inferKind (TyVar v) = do
 
 inferKind (TySkol sk) = do
   k <- maybe freshTV pure =<< view (types . at (sk ^. skolIdent))
-  pure (raiseT TvName (\x -> (x, k)) (TySkol sk), k)
+  pure (raiseT TvName (TySkol sk), k)
 
 inferKind (TyApp f x) = do
   reason <- get

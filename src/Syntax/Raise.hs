@@ -32,17 +32,17 @@ raiseE vR aR =
       AccessSection k a -> AccessSection k (aR a)
       Parens e a -> Parens (eR e) (aR a)
       Tuple es a -> Tuple (map eR es) (aR a)
-      Ascription e t a -> Ascription (eR e) (raiseT vR aR t) (aR a)
+      Ascription e t a -> Ascription (eR e) (raiseT vR t) (aR a)
       TupleSection es a -> TupleSection (fmap eR <$> es) (aR a)
-      ExprWrapper w e a -> ExprWrapper (raiseWrapper vR aR  w) (eR e) (aR a)
+      ExprWrapper w e a -> ExprWrapper (raiseWrapper vR w) (eR e) (aR a)
 
-raiseWrapper :: (Var p -> Var p') -> (Ann p -> Ann p') -> Wrapper p -> Wrapper p'
-raiseWrapper v a (Cast co) = Cast (raiseCo v a co)
-raiseWrapper v a (TypeApp ty) = TypeApp (raiseT v a ty)
-raiseWrapper v _ (TypeLam var) = TypeLam (v var)
-raiseWrapper v a (x :> y) = raiseWrapper v a x :> raiseWrapper v a y
-raiseWrapper v _ (WrapVar var) = WrapVar (v var)
-raiseWrapper _ _ IdWrap = IdWrap
+raiseWrapper :: (Var p -> Var p') -> Wrapper p -> Wrapper p'
+raiseWrapper v (Cast co) = Cast (raiseCo v co)
+raiseWrapper v (TypeApp ty) = TypeApp (raiseT v ty)
+raiseWrapper v (TypeLam var) = TypeLam (v var)
+raiseWrapper v (x :> y) = raiseWrapper v x :> raiseWrapper v y
+raiseWrapper v (WrapVar var) = WrapVar (v var)
+raiseWrapper _ IdWrap = IdWrap
 
 raiseP :: (Var p -> Var p') -- How to raise variables
        -> (Ann p -> Ann p')
@@ -54,39 +54,38 @@ raiseP v a (Destructure c s' p)
   = Destructure (v c) Nothing (a p)
   | Just s <- s'
   = Destructure (v c) (Just (raiseP v a s)) (a p)
-raiseP v a (PType i t p) = PType (raiseP v a i) (raiseT v a t) (a p)
+raiseP v a (PType i t p) = PType (raiseP v a i) (raiseT v t) (a p)
 raiseP v a (PRecord rs p) = PRecord (map (second (raiseP v a)) rs) (a p)
 raiseP v a (PTuple e p) = PTuple (map (raiseP v a) e) (a p)
 raiseP _ a (PLiteral l p) = PLiteral l (a p)
 
 raiseT :: (Var p -> Var p') -- How to raise variables
-       -> (Ann p -> Ann p')
        -> Type p -> Type p'
-raiseT v _ (TyCon n) = TyCon (v n)
-raiseT v _ (TyPromotedCon n) = TyPromotedCon (v n)
-raiseT v f (TySkol (Skolem n u t m)) = TySkol (Skolem (v n) (v u) (raiseT v f t) (motive m)) where
-  motive (BySubsumption a b) = BySubsumption (raiseT v f a) (raiseT v f b)
-  motive (ByAscription t) = ByAscription (raiseT v f t)
-  motive (ByExistential a t) = ByExistential (v a) (raiseT v f t)
-raiseT v _ (TyVar n) = TyVar (v n)
-raiseT v a (TyApp x y) = TyApp (raiseT v a x) (raiseT v a y)
-raiseT v a (TyTuple x y) = TyTuple (raiseT v a x) (raiseT v a y)
-raiseT v a (TyRows rho rows) = TyRows (raiseT v a rho) (map (second (raiseT v a)) rows)
-raiseT v a (TyExactRows rows) = TyExactRows (map (second (raiseT v a)) rows)
-raiseT v f (TyWithConstraints eq a) = TyWithConstraints (map (\(a, b) -> (raiseT v f a, raiseT v f b)) eq) (raiseT v f a)
-raiseT v a (TyPi binder t) = TyPi (go binder) (raiseT v a t) where
-  go (Anon t) = Anon (raiseT v a t)
-  go (Implicit var k) = Implicit (v var) (fmap (raiseT v a) k)
-raiseT _ _ TyType = TyType
+raiseT v (TyCon n) = TyCon (v n)
+raiseT v (TyPromotedCon n) = TyPromotedCon (v n)
+raiseT v (TySkol (Skolem n u t m)) = TySkol (Skolem (v n) (v u) (raiseT v t) (motive m)) where
+  motive (BySubsumption a b) = BySubsumption (raiseT v a) (raiseT v b)
+  motive (ByAscription t) = ByAscription (raiseT v t)
+  motive (ByExistential a t) = ByExistential (v a) (raiseT v t)
+raiseT v (TyVar n) = TyVar (v n)
+raiseT v (TyApp x y) = TyApp (raiseT v x) (raiseT v y)
+raiseT v (TyTuple x y) = TyTuple (raiseT v x) (raiseT v y)
+raiseT v (TyRows rho rows) = TyRows (raiseT v rho) (map (second (raiseT v)) rows)
+raiseT v (TyExactRows rows) = TyExactRows (map (second (raiseT v)) rows)
+raiseT v (TyWithConstraints eq a) = TyWithConstraints (map (\(a, b) -> (raiseT v a, raiseT v b)) eq) (raiseT v a)
+raiseT v (TyPi binder t) = TyPi (go binder) (raiseT v t) where
+  go (Anon t) = Anon (raiseT v t)
+  go (Implicit var k) = Implicit (v var) (fmap (raiseT v) k)
+raiseT _ TyType = TyType
 
-raiseCo :: (Var p -> Var p') -> (Ann p -> Ann p') -> Coercion p -> Coercion p'
-raiseCo v _ (VarCo a) = VarCo (v a)
-raiseCo v a (ReflCo t) = ReflCo (raiseT v a t)
-raiseCo v a (AssumedCo t t') = AssumedCo (raiseT v a t) (raiseT v a t')
-raiseCo v a (SymCo x) = SymCo (raiseCo v a x)
-raiseCo v a (AppCo f x) = AppCo (raiseCo v a f) (raiseCo v a x)
-raiseCo v a (ArrCo f x) = ArrCo (raiseCo v a f) (raiseCo v a x)
-raiseCo v a (ProdCo f x) = ProdCo (raiseCo v a f) (raiseCo v a x)
-raiseCo v a (ExactRowsCo rs) = ExactRowsCo (map (second (raiseCo v a)) rs)
-raiseCo v a (RowsCo c rs) = RowsCo (raiseCo v a c) (map (second (raiseCo v a)) rs)
-raiseCo v a (ForallCo va c) = ForallCo (v va) (raiseCo v a c)
+raiseCo :: (Var p -> Var p') -> Coercion p -> Coercion p'
+raiseCo v (VarCo a) = VarCo (v a)
+raiseCo v (ReflCo t) = ReflCo (raiseT v t)
+raiseCo v (AssumedCo t t') = AssumedCo (raiseT v t) (raiseT v t')
+raiseCo v (SymCo x) = SymCo (raiseCo v x)
+raiseCo v (AppCo f x) = AppCo (raiseCo v f) (raiseCo v x)
+raiseCo v (ArrCo f x) = ArrCo (raiseCo v f) (raiseCo v x)
+raiseCo v (ProdCo f x) = ProdCo (raiseCo v f) (raiseCo v x)
+raiseCo v (ExactRowsCo rs) = ExactRowsCo (map (second (raiseCo v)) rs)
+raiseCo v (RowsCo c rs) = RowsCo (raiseCo v c) (map (second (raiseCo v)) rs)
+raiseCo v (ForallCo va c' c) = ForallCo (v va) (raiseCo v c') (raiseCo v c)

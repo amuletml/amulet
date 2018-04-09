@@ -94,10 +94,10 @@ sinkTerm s (AnnMatch _ t bs) =
       bs' = zipWith (\fv -> third3 (sinkTerm (s { sinkable = fv }))) bss bs
   in flushBinds fs $ flushBinds ts $ Match t' bs'
 
+sinkTerm s (AnnTyApp _ f ty) = flushBinds (sinkable s) (TyApp (sinkAtom (nullBinds s) f) ty)
 sinkTerm s (AnnExtend _ f fs) = flushBinds (sinkable s) (Extend (sinkAtom s' f) (map (third3 (sinkAtom s')) fs))
   where s' = nullBinds s
 
-sinkTerm s (AnnTyApp _ f ty) = flushBinds (sinkable s) (TyApp (sinkAtom (nullBinds s) f) ty)
 sinkTerm s (AnnCast _ f co) = flushBinds (sinkable s) (Cast (sinkAtom (nullBinds s) f) co)
 
 flushBinds :: [Sinkable a] -> Term a -> Term a

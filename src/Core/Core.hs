@@ -87,9 +87,8 @@ data Coercion a
   = SameRepr (Type a) (Type a)
   | Symmetry (Coercion a)
 
-  | Application (Coercion a) (Coercion a) -- AppCo
-  | Arrow (Coercion a) (Coercion a)
-  | Quantified a (Coercion a)
+  | Application (Coercion a) (Coercion a)
+  | Quantified (BoundTv a) (Coercion a) (Coercion a)
   | ExactRecord [(Text, Coercion a)]
   | Record (Coercion a) [(Text, Coercion a)]
 
@@ -110,12 +109,14 @@ data Literal
 data Type a
   = ConTy a
   | VarTy a
-  | ForallTy a (Type a)
-  | ArrTy (Type a) (Type a)
+  | ForallTy (BoundTv a) (Type a) (Type a)
   | AppTy (Type a) (Type a)
   | RowsTy (Type a) [(Text, Type a)]
   | ExactRowsTy [(Text, Type a)]
   | StarTy -- * :: *
+  deriving (Eq, Show, Ord, Functor, Generic)
+
+data BoundTv a = Irrelevant | Relevant a
   deriving (Eq, Show, Ord, Functor, Generic)
 
 data AnnStmt b a
@@ -149,13 +150,13 @@ instance Pretty a => Pretty (Term a) where
 instance Pretty a => Pretty (Coercion a) where
   pretty (SameRepr a b) = pretty a <+> soperator (char '~') <+> pretty b
   pretty (Application c c') = pretty c <+> pretty c'
-  pretty (Arrow c c') = pretty c <+> arrow <+> pretty c'
   pretty (Record r s) = enclose (lbrace <> space) (space <> rbrace) (pretty r <+> hsep (punctuate comma (map pprCoRow s)))
   pretty (ExactRecord r) = enclose (lbrace <> space) (space <> rbrace) (hsep (punctuate comma (map pprCoRow r)))
   pretty (Domain f) = keyword "dom" <+> parens (pretty f)
   pretty (Codomain f) = keyword "cod" <+> parens (pretty f)
   pretty (Symmetry f) = keyword "sym" <+> parens (pretty f)
-  pretty (Quantified v c) = keyword "∀" <> pretty v <> dot <+> pretty c
+  pretty (Quantified (Relevant v) dom c) = keyword "∀" <> (pretty v <+> colon <+> pretty dom) <> dot <+> pretty c
+  pretty (Quantified Irrelevant dom c) = pretty dom <+> arrow <+> pretty c
   pretty (CoercionVar x) = pretty x
 
 pprLet :: Pretty a => [(a, Type a, Term a)] -> Doc
@@ -189,11 +190,10 @@ instance Pretty a => Pretty (Pattern a) where
 instance Pretty a => Pretty (Type a) where
   pretty (ConTy v) = stypeCon (pretty v)
   pretty (VarTy v) = stypeVar (squote <> pretty v)
-  pretty (ForallTy vs v)
-    = skeyword (char '∀') <+> stypeVar (pretty vs) <> dot <+> pretty v
+  pretty (ForallTy (Relevant vs) c v)
+    = skeyword (char '∀') <+> parens (stypeVar (pretty vs) <+> colon <+> pretty c) <> dot <+> pretty v
 
-  pretty (ArrTy x e)
-    | ArrTy{} <- x = parens (pretty x) <+> arrow <+> pretty e
+  pretty (ForallTy Irrelevant x e)
     | ForallTy{} <- x = parens (pretty x) <+> arrow <+> pretty e
     | otherwise = pretty x <+> arrow <+> pretty e
 
@@ -205,7 +205,7 @@ instance Pretty a => Pretty (Type a) where
 
   pretty (AppTy e x) = pretty e <+> k x (pretty x) where
     k AppTy{} = parens
-    k ArrTy{} = parens
+    k ForallTy{} = parens
     k _ = id
   pretty StarTy = prod
 
@@ -246,8 +246,8 @@ freeIn (AnnCast _ f _) = freeInAtom f
 
 freeInTy :: Ord a => Type a -> Set.Set a
 freeInTy (VarTy v) = Set.singleton v
-freeInTy (ForallTy v t) = v `Set.delete` freeInTy t
-freeInTy (ArrTy a b) = freeInTy a <> freeInTy b
+freeInTy (ForallTy (Relevant v) a b) = freeInTy a <> (v `Set.delete` freeInTy b)
+freeInTy (ForallTy Irrelevant a b) = freeInTy a <> freeInTy b
 freeInTy (AppTy a b) = freeInTy a <> freeInTy b
 freeInTy (RowsTy c rs) = foldMap (freeInTy . snd) rs <> freeInTy c
 freeInTy (ExactRowsTy rs) = foldMap (freeInTy . snd) rs
@@ -295,10 +295,6 @@ relates (Application f x) = do
   (x, y) <- relates x
   pure (AppTy f x, AppTy g y)
 
-relates (Arrow x y) = do
-  (a, b) <- relates x
-  (c, d) <- relates y
-  pure (ArrTy a c, ArrTy b d)
 relates (ExactRecord rs) = do
   let go (t, c) = do
         (a, b) <- relates c
@@ -318,14 +314,15 @@ relates (Symmetry x) = do
   (a, b) <- relates x
   pure (b, a)
 relates (Domain x) = do
-  (ArrTy a _, ArrTy b _) <- relates x
+  (ForallTy _ a _, ForallTy _ b _) <- relates x
   pure (a, b)
 relates (Codomain x) = do
-  (ArrTy _ a, ArrTy _ b) <- relates x
+  (ForallTy _ _ a, ForallTy _ _ b) <- relates x
   pure (a, b)
-relates (Quantified v c) = do
+relates (Quantified v co c) = do
   (a, b) <- relates c
-  pure (ForallTy v a, ForallTy v b)
+  (c, d) <- relates co
+  pure (ForallTy v c a, ForallTy v d b)
 
 extractAnn :: AnnTerm b a -> b
 extractAnn (AnnAtom b _)     = b

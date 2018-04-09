@@ -25,8 +25,8 @@ killNewtypePass = go mempty where
   go _ [] = pure []
 
 isNewtype :: Type a -> Maybe (Type a, Type a)
-isNewtype (ForallTy _ t) = isNewtype t
-isNewtype (ArrTy from to) = Just (from, to)
+isNewtype (ForallTy Irrelevant from to) = Just (from, to)
+isNewtype (ForallTy _ _ t) = isNewtype t
 isNewtype _ = Nothing
 
 newtypeMatch :: IsVar a => V.Map (Coercion a) -> [(Pattern a, Type a, Term a)] -> Maybe (Coercion a, (Pattern a, Type a, Term a))
@@ -43,7 +43,7 @@ newtypeCo :: IsVar a => (a, Type a) -> (Type a, Type a) -> Gen Int (Stmt a, Coer
 newtypeCo (cn, tp) (dom, cod) = do
   var <- fresh
   let con = [(cn, tp, Atom (wrap tp (work phi)))]
-      wrap (ForallTy v t) e = Lam (TypeArgument v StarTy) (Atom (wrap t e))
+      wrap (ForallTy (Relevant v) c t) e = Lam (TypeArgument v c) (Atom (wrap t e))
       wrap _ e = e
 
       phi = SameRepr dom cod

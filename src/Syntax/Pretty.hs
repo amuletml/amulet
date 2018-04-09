@@ -83,7 +83,7 @@ instance Pretty (Var p) => Pretty (Coercion p) where
   pretty (ProdCo f x) = pretty f <+> prod <+> pretty x
   pretty (ExactRowsCo rs) = record (map (\(n, v) -> text n <+> colon <+> pretty v) rs)
   pretty (RowsCo c rs) = enclose (lbrace <> space) (space <> rbrace) (pretty c <+> pipe <+> hsep (punctuate comma (map (\(n, v) -> text n <+> colon <+> pretty v) rs)))
-  pretty (ForallCo v cs) = keyword "∀" <> pretty v <> dot <+> pretty cs
+  pretty (ForallCo v c cs) = keyword "∀" <> parens (pretty v <+> colon <+> pretty c) <> dot <+> pretty cs
 
 prettyMatches :: (Pretty (Var p)) => [(Pattern p, Expr p)] -> [Doc]
 prettyMatches = map (\(a, b) -> pipe <+> nest 4 (pretty a <+> arrow </> pretty b))
