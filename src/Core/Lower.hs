@@ -83,7 +83,6 @@ lowerBothTerm e = let t = lowerType (S.getType e)
 
 lowerAt :: MonadLower m => Expr Typed -> Type -> Lower m Term
 lowerAt (Ascription e _ _) t = lowerAt e t
-lowerAt (VarRef (TvName p) _) ty = pure (Atom (Ref p ty))
 
 lowerAt (S.Let vs t _) ty = do
   let sccs = depOrder vs
@@ -157,7 +156,7 @@ lowerAt (ExprWrapper wrap e an) ty =
       ex' <- lowerAtAtom e ty
       pure (C.Cast ex' (co c))
     S.TypeApp t -> do
-      ex' <- lowerAtAtom e ty
+      ex' <- lowerAtAtom e (lowerType (S.getType e))
       pure (C.TyApp ex' (lowerType t))
     S.TypeLam (TvName v) ->
       let ty' (ForallTy _ k t) = (k, t)
@@ -182,6 +181,7 @@ lowerAt (ExprWrapper wrap e an) ty =
 lowerAt e _ = lowerAnyway e
 
 lowerAnyway :: MonadLower m => Expr Typed -> Lower m Term
+lowerAnyway (S.VarRef (TvName v) (_, ty)) = pure (Atom (Ref v (lowerType ty)))
 lowerAnyway (S.Record xs _) = case xs of
   [] -> pure (Atom (Lit RecNil))
   xs -> do
@@ -277,9 +277,22 @@ lowerProg (Module _ b:prg) = (++) <$> lowerProg b <*> lowerProg prg
 
 
 lowerPolyBind :: MonadLower m => Var Resolved -> Type -> Expr Typed -> m Term
-lowerPolyBind var ty ex = go ty ex where
+lowerPolyBind var ty ex = if needed ex ty then go ty ex else lowerExprTerm ex where
   go (ForallTy (Relevant v) kind ty) ex = Atom . Lam (TypeArgument v kind) <$> go ty ex
   go ty ex = do
-    term <- lowerAtTerm ex ty
+    term <- lowerExprTerm ex
     pure (C.Let (One (var, ty, term)) (Atom (Ref var ty)))
 
+  needed ex ty | countLams ex == 0, countForalls ty /= 0 = True
+    | otherwise = False -- trust tc
+
+  countLams :: Expr Typed -> Integer
+  countLams (ExprWrapper wrp _ _) = go wrp 0 where
+    go S.TypeLam{} ac = ac + 1
+    go (S.TypeLam{} S.:> xs) ac = go xs (ac + 1)
+    go _ ac = ac
+  countLams _ = 0
+
+  countForalls :: Type -> Integer
+  countForalls (ForallTy Relevant{} _ t) = 1 + countForalls t
+  countForalls _ = 0

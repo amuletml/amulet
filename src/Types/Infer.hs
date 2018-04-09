@@ -40,9 +40,6 @@ import Types.Unify
 
 import Pretty
 
-import Text.Show.Pretty (ppShow)
-import Debug.Trace
-
 -- Solve for the types of lets in a program
 inferProgram :: MonadGen Int m => Env -> [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))
 inferProgram env ct = fmap fst <$> runInfer env (inferProg ct)
@@ -319,7 +316,6 @@ inferLetTy closeOver vs =
               _ <- unify exp ty (snd tv)
               pure (exp', ty)
         (tp, k) <- figureOut (var, BecauseOf exp) ty cs
-        trace (ppShow (k exp')) pure ()
         pure ( [(TvName var, k exp', (ann, tp))], one var tp )
 
       tcOne (CyclicSCC vars) = do
