@@ -24,6 +24,7 @@ import Data.Semigroup ((<>))
 
 import qualified Data.Map.Strict as Map
 import qualified Data.VarSet as VarSet
+import qualified Data.Set as Set
 import qualified Data.Text as T
 import Data.Foldable
 import Data.VarSet (IsVar(..))
@@ -49,13 +50,13 @@ pushVar v s = escapeVar (toVar v) where
       Nothing ->
         let Just (t, ts) = T.uncons name
             esc = if isAlpha t && T.all (\x -> x == '_' || isAlphaNum x) ts
-                  then name
-                  else T.concatMap escapeChar name
+                     then (if name `Set.member` luaKeywords then T.cons '_' else id) name
+                     else T.concatMap escapeChar name
         in pushFirst Nothing esc
 
   escapeChar c = if isAlpha c
-                 then T.singleton c
-                      else fromMaybe T.empty (Map.lookup c chars)
+                    then T.singleton c
+                    else fromMaybe T.empty (Map.lookup c chars)
 
   pushFirst :: Maybe Int -> Text -> (Text, VarScope)
   pushFirst prefix esc =
@@ -426,3 +427,6 @@ remapOp' v = let TgInternal v' = toVar v in remapOp v'
 isMultiMatch :: Term a -> Bool
 isMultiMatch (Match _ (_:_:_)) = True
 isMultiMatch _ = False
+
+luaKeywords :: Set.Set Text
+luaKeywords = Set.fromList [ "and", "break", "do", "else", "elseif", "end", "false", "for", "function",  "if", "in", "local", "nil", "not", "or", "repeat", "return", "then", "true", "until", "while" ]
