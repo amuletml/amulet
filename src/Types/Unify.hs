@@ -117,11 +117,17 @@ unify ta@(TyCon a) tb@(TyCon b)
 unify (TyForall v Nothing ty) (TyForall v' Nothing ty') = do
   fresh <- freshTV
   let (TyVar tv) = fresh
-  ForallCo tv <$>
+
+  ForallCo tv (ReflCo TyType) <$>
     unify (apply (Map.singleton v fresh) ty) (apply (Map.singleton v' fresh) ty')
 
-unify (TyForall v (Just k) ty) (TyForall v' (Just k') ty') =
-  unify k k' *> unify (TyForall v Nothing ty) (TyForall v' Nothing ty')
+unify (TyForall v (Just k) ty) (TyForall v' (Just k') ty') = do
+  c <- unify k k'
+  fresh <- freshTV
+  let (TyVar tv) = fresh
+
+  ForallCo tv c <$>
+    unify (apply (Map.singleton v fresh) ty) (apply (Map.singleton v' fresh) ty')
 
 unify (TyRows rho arow) (TyRows sigma brow)
   | overlaps <- overlap arow brow

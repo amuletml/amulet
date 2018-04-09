@@ -40,6 +40,9 @@ import Types.Unify
 
 import Pretty
 
+import Text.Show.Pretty (ppShow)
+import Debug.Trace
+
 -- Solve for the types of lets in a program
 inferProgram :: MonadGen Int m => Env -> [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))
 inferProgram env ct = fmap fst <$> runInfer env (inferProg ct)
@@ -116,7 +119,7 @@ infer :: MonadInfer Typed m => Expr Resolved -> m (Expr Typed, Type Typed)
 infer (VarRef k a) = do
   (cont, old, new) <- lookupTy' k
   case cont of
-    Nothing -> pure (VarRef (TvName k) (a, new), new)
+    Nothing -> pure (VarRef (TvName k) (a, old), old)
     Just cont -> pure (cont (VarRef (TvName k) (a, old)), new)
 
 infer (Fun p e an) = let blame = Arm p e in do
@@ -316,6 +319,7 @@ inferLetTy closeOver vs =
               _ <- unify exp ty (snd tv)
               pure (exp', ty)
         (tp, k) <- figureOut (var, BecauseOf exp) ty cs
+        trace (ppShow (k exp')) pure ()
         pure ( [(TvName var, k exp', (ann, tp))], one var tp )
 
       tcOne (CyclicSCC vars) = do
@@ -365,7 +369,10 @@ solveEx ss cs = transformExprTyped go id goType where
   go x = x
 
   goWrap (TypeApp t) = TypeApp (goType t)
-  goWrap (Cast c) = Cast c
+  goWrap (Cast c) = case c of
+    ReflCo{} -> IdWrap
+    AssumedCo a b | a == b -> IdWrap
+    _ -> Cast c
   goWrap (TypeLam l) = TypeLam l
   goWrap (x Syntax.:> y) = goWrap x Syntax.:> goWrap y
   goWrap (WrapVar v) = goWrap $ Map.findWithDefault err v cs where

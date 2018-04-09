@@ -25,14 +25,15 @@ builtinVarList :: (IsVar a, IsVar b) => [(a, Type b)]
 builtinVarList = vars where
   op x t = (fromVar (TgInternal x), t)
 
-  boolOp = tyBool `ArrTy` (tyBool `ArrTy` tyBool)
-  intOp = tyInt `ArrTy` (tyInt `ArrTy` tyInt)
-  floatOp = tyFloat `ArrTy` (tyFloat `ArrTy` tyFloat)
-  stringOp = tyString `ArrTy` (tyString `ArrTy` tyString)
-  intCmp = tyInt `ArrTy` (tyInt `ArrTy` tyBool)
-  floatCmp = tyInt `ArrTy` (tyInt `ArrTy` tyBool)
+  arrTy = ForallTy Irrelevant
+  boolOp = ForallTy Irrelevant tyBool (ForallTy Irrelevant tyBool tyBool)
+  intOp = tyInt `arrTy` (tyInt `arrTy` tyInt)
+  floatOp = tyFloat `arrTy` (tyFloat `arrTy` tyFloat)
+  stringOp = tyString `arrTy` (tyString `arrTy` tyString)
+  intCmp = tyInt `arrTy` (tyInt `arrTy` tyBool)
+  floatCmp = tyInt `arrTy` (tyInt `arrTy` tyBool)
 
-  cmp = ForallTy name $ VarTy name `ArrTy` (VarTy name `ArrTy` tyBool)
+  cmp = ForallTy (Relevant name) StarTy $ VarTy name `arrTy` (VarTy name `arrTy` tyBool)
 
   name = fromVar (TgInternal "a")
 
@@ -44,5 +45,5 @@ builtinVarList = vars where
          , op "==" cmp, op "<>" cmp
          , op "||" boolOp, op "&&" boolOp
 
-        , (fromVar (TgInternal "error"), ForallTy name $ tyString `ArrTy` VarTy name)
+         , (fromVar (TgInternal "error"), ForallTy (Relevant name) StarTy $ tyString `arrTy` VarTy name)
         ]

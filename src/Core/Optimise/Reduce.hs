@@ -356,8 +356,7 @@ isComplete s = isComplete' where
 
   -- Oh goodness, this is horrible. This attempts to extract
   -- the type name from a constructor's type
-  unwrapTy (ForallTy _ t) = unwrapTy t
-  unwrapTy (ArrTy _ t) = unwrapTy t
+  unwrapTy (ForallTy _ _ t) = unwrapTy t
   unwrapTy (AppTy t _) = unwrapTy t
   unwrapTy (ConTy v) = v
   unwrapTy ty = error (show ty)
@@ -385,8 +384,7 @@ foldCo (SameRepr t t')
   | otherwise = Just (SameRepr t t')
 
 foldCo (Application c c') = Application <$> foldCo c <*> foldCo c'
-foldCo (Arrow c c') = Arrow <$> foldCo c <*> foldCo c'
-foldCo (Quantified v c) = Quantified v <$> foldCo c
+foldCo (Quantified v c c') = Quantified v <$> foldCo c <*> foldCo c'
 foldCo (ExactRecord rs) = ExactRecord <$> traverse (secondA foldCo) rs
 foldCo (Record c rs) = Record <$> foldCo c <*> traverse (secondA foldCo) rs
 

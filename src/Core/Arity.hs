@@ -49,7 +49,6 @@ extendPureFuns s vs = s
   { pureArity = foldr (\(v, _, e) p ->
                          case e of
                            AnnAtom  _ a   -> maybeInsert v (atomArity s a) p
-                           AnnTyApp _ a _ -> maybeInsert v (atomArity s a - 1) p
                            AnnApp   _ a _ -> maybeInsert v (atomArity s a - 1) p
                            _ -> p) (pureArity s) vs
   }
@@ -64,7 +63,7 @@ extendPureCtors s cts = s {
 
   where
     typeArity :: Type a -> Int
-    typeArity (ForallTy _ ty) = 1 + typeArity ty
+    typeArity (ForallTy _ _ ty) = 1 + typeArity ty
     typeArity _ = 0
 
 

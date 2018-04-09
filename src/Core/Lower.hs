@@ -10,14 +10,11 @@ module Core.Lower
 import Control.Monad.Infer
 import Control.Monad.Cont
 import Control.Arrow
-import Control.Lens
 
-import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import Data.Traversable
 import Data.Function
 import Data.Foldable
-import Data.Maybe
 import Data.Graph
 import Data.Span
 import Data.List
@@ -25,7 +22,6 @@ import Data.List
 import qualified Core.Core as C
 import qualified Core.Builtin as C
 import Core.Core hiding (Atom, Term, Stmt, Type, Pattern)
-import Core.Types (unify, replaceTy)
 import Core.Core (pattern Atom)
 
 import qualified Syntax as S
@@ -48,16 +44,16 @@ type MonadLower m
 
 errRef :: Atom
 errRef = Ref (TgInternal "error")
-                (ForallTy (TgInternal "a")
-                            (ArrTy C.tyString
-                                     (VarTy (TgInternal "a"))))
+                (ForallTy (Relevant (TgInternal "a")) StarTy
+                          (ForallTy Irrelevant C.tyString
+                                 (VarTy (TgInternal "a"))))
 
 patternMatchingFail :: MonadLower m => Span -> Type -> Type -> m (Pat, Type, Term)
 patternMatchingFail w p t = do
   var <- fresh
   tyApp <- fresh
   let err = Lit (Str (T.pack ("Pattern matching failure at " ++ show (pretty w))))
-      errTy = ArrTy C.tyString t
+      errTy = ForallTy Irrelevant C.tyString t
   pure (C.Capture var p, p, C.Let (One (tyApp, errTy, C.TyApp errRef t))
                              (C.App (C.Ref tyApp errTy) err))
 
@@ -87,28 +83,7 @@ lowerBothTerm e = let t = lowerType (S.getType e)
 
 lowerAt :: MonadLower m => Expr Typed -> Type -> Lower m Term
 lowerAt (Ascription e _ _) t = lowerAt e t
-
-lowerAt (VarRef (TvName p) _) ty = do
-  pty <- view (values . at p)
-  case pty of
-    -- If we've got a type which is different to our expected one
-    -- then we attempt to unify
-    Just fty | fty' <- lowerType fty
-             , fty' /= ty ->
-      let addApps ty' vars
-            | Just subst <- unify ty' ty
-            = foldrM (\tyvar (prev, ForallTy _ prevTy) -> do
-                         let tyuni = fromMaybe (VarTy tyvar) (Map.lookup tyvar subst)
-                             newTy = replaceTy tyvar tyuni prevTy
-                         ftv <- fresh
-                         ContT $ \k ->
-                           C.Let (One (ftv, newTy, TyApp prev tyuni)) <$> k (C.Ref ftv newTy, newTy)
-                         ) (C.Ref p fty', fty') vars
-          addApps (ForallTy v ty') vars = addApps ty' (v:vars)
-          addApps _ _ = undefined
-      in runContT (addApps fty' []) (pure . Atom . fst)
-
-    _ -> pure (Atom (Ref p ty))
+lowerAt (VarRef (TvName p) _) ty = pure (Atom (Ref p ty))
 
 lowerAt (S.Let vs t _) ty = do
   let sccs = depOrder vs
@@ -131,7 +106,7 @@ lowerAt (S.If c t e _) ty = do
   let tc = (PatLit LitTrue, C.tyBool, t')
       te = (PatLit LitFalse, C.tyBool, e')
   pure $ C.Match c' [tc, te]
-lowerAt (Fun p bd an) (ArrTy a b) =
+lowerAt (Fun p bd an) (ForallTy Irrelevant a b) =
   let operational (PType p _ _) = operational p
       operational p = p
    in case operational p of
@@ -177,6 +152,7 @@ lowerAt (Tuple (x:xs) _) (ExactRowsTy [(_, a), (_, b)]) = do
 
 lowerAt (ExprWrapper wrap e an) ty =
   case wrap of
+    S.Cast S.ReflCo{} -> lowerAt e ty
     S.Cast c -> do
       ex' <- lowerAtAtom e ty
       pure (C.Cast ex' (co c))
@@ -184,9 +160,10 @@ lowerAt (ExprWrapper wrap e an) ty =
       ex' <- lowerAtAtom e ty
       pure (C.TyApp ex' (lowerType t))
     S.TypeLam (TvName v) ->
-      let ty' (ForallTy _ t) = t
-          ty' x = x
-       in Atom . Lam (TypeArgument v StarTy) <$> lowerAtTerm e (ty' ty)
+      let ty' (ForallTy _ k t) = (k, t)
+          ty' x = (StarTy, x)
+          (kind, inner) = ty' ty
+       in Atom . Lam (TypeArgument v kind) <$> lowerAtTerm e inner
     ws S.:> wy -> lowerAt (ExprWrapper ws (ExprWrapper wy e an) an) ty
     S.WrapVar v -> error $ "Unsolved wrapper variable " ++ show v ++ ". This is a bug"
     S.IdWrap -> lowerAt e ty
@@ -196,11 +173,11 @@ lowerAt (ExprWrapper wrap e an) ty =
     co (S.AssumedCo t t') = SameRepr (lowerType t) (lowerType t')
     co (S.SymCo c) = Symmetry (co c)
     co (S.AppCo a b) = Application (co a) (co b)
-    co (S.ArrCo a b) = Arrow (co a) (co b)
+    co (S.ArrCo a b) = C.Quantified Irrelevant (co a) (co b)
     co (S.ProdCo a b) = ExactRecord [("1", co a), ("2", co b)]
     co (S.RowsCo c rs) = C.Record (co c) (map (second co) rs)
     co (S.ExactRowsCo rs) = C.ExactRecord (map (second co) rs)
-    co (S.ForallCo (TvName v) rs) = C.Quantified v (co rs)
+    co (S.ForallCo (TvName v) cd rs) = C.Quantified (Relevant v) (co cd) (co rs)
 
 lowerAt e _ = lowerAnyway e
 
@@ -235,8 +212,9 @@ lowerType t@S.TyTuple{} = go t where
   go (S.TyTuple a b) = ExactRowsTy [("1", lowerType a), ("2", lowerType b)]
   go x = lowerType x
 lowerType (S.TyPi bind b)
-  | S.Implicit v _ <- bind = ForallTy (S.unTvName v) (lowerType b)
-  | S.Anon a <- bind = ArrTy (lowerType a) (lowerType b)
+  | S.Implicit v Nothing <- bind = ForallTy (Relevant (S.unTvName v)) StarTy (lowerType b)
+  | S.Implicit v (Just c) <- bind = ForallTy (Relevant (S.unTvName v)) (lowerType c) (lowerType b)
+  | S.Anon a <- bind = ForallTy Irrelevant (lowerType a) (lowerType b)
 lowerType (S.TyApp a b) = AppTy (lowerType a) (lowerType b)
 lowerType (S.TyRows rho vs) = RowsTy (lowerType rho) (map (fmap lowerType) vs)
 lowerType (S.TyExactRows vs) = ExactRowsTy (map (fmap lowerType) vs)
@@ -284,7 +262,7 @@ lowerProg [] = pure []
 lowerProg (ForeignVal (TvName t) ex tp _:prg) =
   (Foreign t (lowerType tp) ex:) <$> lowerProg prg
 lowerProg (LetStmt vs:prg) =
-  (:) <$> (StmtLet <$> for vs (\(TvName v, ex, (_, ant)) -> (v,lowerType ant,) <$> lowerExprTerm ex))
+  (:) <$> (StmtLet <$> for vs (\(TvName v, ex, (_, ant)) -> (v,lowerType ant,) <$> lowerPolyBind v (lowerType ant) ex))
       <*> lowerProg prg
 lowerProg (FunStmt vs:prg) = lowerProg prg
 lowerProg (TypeDecl (TvName var) _ cons:prg) =
@@ -296,3 +274,12 @@ lowerProg (TypeDecl (TvName var) _ cons:prg) =
       <$> lowerProg prg
 lowerProg (Open _ _:prg) = lowerProg prg
 lowerProg (Module _ b:prg) = (++) <$> lowerProg b <*> lowerProg prg
+
+
+lowerPolyBind :: MonadLower m => Var Resolved -> Type -> Expr Typed -> m Term
+lowerPolyBind var ty ex = go ty ex where
+  go (ForallTy (Relevant v) kind ty) ex = Atom . Lam (TypeArgument v kind) <$> go ty ex
+  go ty ex = do
+    term <- lowerAtTerm ex ty
+    pure (C.Let (One (var, ty, term)) (Atom (Ref var ty)))
+
