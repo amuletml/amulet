@@ -233,7 +233,7 @@ isType t = do
   pure t
 
 closeOver :: MonadKind m => SomeReason -> Type Typed -> m (Type Typed)
-closeOver r a = fmap normType . annotateKind r $ forall (fv a) a where
+closeOver r a = annotateKind r $ forall (fv a) a where
   fv = toList . ftv
   forall :: [Var p] -> Type p -> Type p
   forall [] a = a

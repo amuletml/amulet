@@ -270,7 +270,7 @@ inferLetTy closeOver vs =
         (x, co, vt) <- case solve cur cs of
           Right (x, co) -> do
             ty' <- closeOver (apply x ty)
-            pure (x, co, normType ty')
+            pure (x, co, ty')
           Left e -> throwError (ArisingFrom e (snd blame))
         skolCheck (TvName (fst blame)) (snd blame) vt
         pure (vt, solveEx x co)
