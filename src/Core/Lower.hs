@@ -29,6 +29,7 @@ import Syntax.Let
 import Syntax (Var(..), Resolved, Typed, Expr(..), Pattern(..), Lit(..), Skolem(..), Toplevel(..), Constructor(..))
 
 import Pretty (pretty)
+import Debug.Trace
 
 type Atom = C.Atom (Var Resolved)
 type Term = C.Term (Var Resolved)
@@ -277,14 +278,20 @@ lowerProg (Module _ b:prg) = (++) <$> lowerProg b <*> lowerProg prg
 
 
 lowerPolyBind :: MonadLower m => Var Resolved -> Type -> Expr Typed -> m Term
-lowerPolyBind var ty ex = if needed ex ty then go ty ex else lowerExprTerm ex where
-  go (ForallTy (Relevant v) kind ty) ex = Atom . Lam (TypeArgument v kind) <$> go ty ex
-  go ty ex = do
+lowerPolyBind var ty ex = doIt (needed ex ty) (go ty ex) (lowerExprTerm ex) where
+  go ty ex 0 = do
     term <- lowerExprTerm ex
-    pure (C.Let (One (var, ty, term)) (Atom (Ref var ty)))
+    pure (C.Let (Many [(var, ty, term)]) (Atom (Ref var ty)))
+  go (ForallTy (Relevant v) kind ty) ex n
+    | n >= 1 = Atom . Lam (TypeArgument v kind) <$> go ty ex (n - 1)
 
-  needed ex ty | countLams ex == 0, countForalls ty /= 0 = True
-    | otherwise = False -- trust tc
+  needed ex ty
+    | countForalls ty > countLams ex = Just (countForalls ty - countLams ex)
+    | otherwise = Nothing -- trust tc
+
+  doIt x a b = case x of
+    Just n -> a n
+    Nothing -> b
 
   countLams :: Expr Typed -> Integer
   countLams (ExprWrapper wrp _ _) = go wrp 0 where
