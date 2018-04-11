@@ -57,7 +57,7 @@ compile (file:files) = runGen $ do
   files' <- foldlM go file' files
   case files' of
     Right (prg, _, _, env) -> do
-      lower <- runReaderT (lowerProg prg) env
+      lower <- runReaderT (lowerProg prg) mempty
       optm <- optimise lower
       pure (CSuccess (prg, lower, tagOccursVar optm, env))
 
