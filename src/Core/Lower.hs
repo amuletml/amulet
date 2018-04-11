@@ -11,10 +11,12 @@ import Control.Monad.Infer
 import Control.Monad.Cont
 import Control.Arrow
 
+import qualified Data.Map as Map
 import qualified Data.Text as T
 import Data.Traversable
 import Data.Function
 import Data.Foldable
+import Data.Maybe
 import Data.Graph
 import Data.Span
 import Data.List
@@ -23,13 +25,13 @@ import qualified Core.Core as C
 import qualified Core.Builtin as C
 import Core.Core hiding (Atom, Term, Stmt, Type, Pattern)
 import Core.Core (pattern Atom)
+import Core.Types (unify, replaceTy)
 
 import qualified Syntax as S
 import Syntax.Let
 import Syntax (Var(..), Resolved, Typed, Expr(..), Pattern(..), Lit(..), Skolem(..), Toplevel(..), Constructor(..))
 
 import Pretty (pretty)
-import Debug.Trace
 
 type Atom = C.Atom (Var Resolved)
 type Term = C.Term (Var Resolved)
@@ -41,7 +43,7 @@ type Lower = ContT Term
 
 type MonadLower m
   = ( MonadGen Int m
-    , MonadReader Env m )
+    , MonadReader (Map.Map (Var Resolved) (C.Type (Var Resolved))) m )
 
 errRef :: Atom
 errRef = Ref (TgInternal "error")
@@ -182,7 +184,32 @@ lowerAt (ExprWrapper wrap e an) ty =
 lowerAt e _ = lowerAnyway e
 
 lowerAnyway :: MonadLower m => Expr Typed -> Lower m Term
-lowerAnyway (S.VarRef (TvName v) (_, ty)) = pure (Atom (Ref v (lowerType ty)))
+lowerAnyway (S.VarRef (TvName v) (_, ty)) = do
+  let lty = lowerType ty
+  env <- ask
+  case Map.lookup v env of
+    -- If we've got a type which is different to our expected one then we strip
+    -- off one forall and attempt to unify. Once we've found our unified type,
+    -- we generate the appropriate type applications.
+    Just fty | fty /= lty ->
+      let addApps ty' vars
+            | Just subst <- unify ty' lty
+            -- If unification is successful, loop through each stripped variable
+            -- and generate the appropriate tyapp. Yep, this is a fold and
+            -- continuation in the same bit of code. I'm sorry.
+            = foldrM (\tyvar (prev, ForallTy (Relevant _) _ prevTy) -> do
+                         let tyuni = fromMaybe (VarTy tyvar) (Map.lookup tyvar subst)
+                             newTy = replaceTy tyvar tyuni prevTy
+                         ftv <- fresh
+                         ContT $ \k ->
+                           C.Let (One (ftv, newTy, TyApp prev tyuni)) <$> k (C.Ref ftv newTy, newTy)
+                         ) (C.Ref v fty, fty) vars
+          -- Otherwise just add our variable to the stripped list
+          addApps (ForallTy (Relevant a) _ ty') vars = addApps ty' (a:vars)
+          addApps _ _ = error "impossible"
+      in runContT (addApps fty []) (pure . Atom . fst)
+
+    _ -> pure (Atom (Ref v lty))
 lowerAnyway (S.Record xs _) = case xs of
   [] -> pure (Atom (Lit RecNil))
   xs -> do
@@ -262,8 +289,9 @@ lowerProg :: MonadLower m => [Toplevel Typed] -> m [Stmt]
 lowerProg [] = pure []
 lowerProg (ForeignVal (TvName t) ex tp _:prg) =
   (Foreign t (lowerType tp) ex:) <$> lowerProg prg
-lowerProg (LetStmt vs:prg) =
-  (:) <$> (StmtLet <$> for vs (\(TvName v, ex, (_, ant)) -> (v,lowerType ant,) <$> lowerPolyBind v (lowerType ant) ex))
+lowerProg (LetStmt vs:prg) = do
+  let env' = Map.fromList (map (\(TvName v, _, (_, ant)) -> (v, lowerType ant)) vs)
+  (:) <$> local (const env') (StmtLet <$> for vs (\(TvName v, ex, (_, ant)) -> (v,lowerType ant,) <$> lowerPolyBind (lowerType ant) ex))
       <*> lowerProg prg
 lowerProg (FunStmt vs:prg) = lowerProg prg
 lowerProg (TypeDecl (TvName var) _ cons:prg) =
@@ -277,13 +305,12 @@ lowerProg (Open _ _:prg) = lowerProg prg
 lowerProg (Module _ b:prg) = (++) <$> lowerProg b <*> lowerProg prg
 
 
-lowerPolyBind :: MonadLower m => Var Resolved -> Type -> Expr Typed -> m Term
-lowerPolyBind var ty ex = doIt (needed ex ty) (go ty ex) (lowerExprTerm ex) where
-  go ty ex 0 = do
-    term <- lowerExprTerm ex
-    pure (C.Let (Many [(var, ty, term)]) (Atom (Ref var ty)))
+lowerPolyBind :: MonadLower m => Type -> Expr Typed -> m Term
+lowerPolyBind ty ex = doIt (needed ex ty) (go ty ex) (lowerExprTerm ex) where
+  go _ ex 0 = lowerExprTerm ex
   go (ForallTy (Relevant v) kind ty) ex n
     | n >= 1 = Atom . Lam (TypeArgument v kind) <$> go ty ex (n - 1)
+  go _ _ _ = error "impossible"
 
   needed ex ty
     | countForalls ty > countLams ex = Just (countForalls ty - countLams ex)
