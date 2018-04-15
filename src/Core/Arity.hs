@@ -39,8 +39,8 @@ isPure _ AnnAtom{}   = True
 isPure _ AnnExtend{} = True
 isPure _ AnnTyApp{}  = True
 isPure _ AnnCast{}  = True
-isPure s (AnnLet _ (One v) e) = isPure s e && isPure s (thd3 v)
-isPure s (AnnLet _ (Many vs) e) = isPure s e && all (isPure s . thd3) vs
+isPure s (AnnLet _ (One _ v) e) = isPure s e && isPure s (thd3 v)
+isPure s (AnnLet _ (Many _ vs) e) = isPure s e && all (isPure s . thd3) vs
 isPure s (AnnMatch _ _ bs) = all (isPure s . thd3) bs
 isPure s (AnnApp _ f _) = atomArity s f > 0
 
