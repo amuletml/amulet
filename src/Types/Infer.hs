@@ -369,7 +369,7 @@ solveEx ss cs = transformExprTyped go id goType where
     ReflCo{} -> IdWrap
     AssumedCo a b | a == b -> IdWrap
     _ -> Cast c
-  goWrap (TypeLam l) = TypeLam l
+  goWrap (TypeLam l t) = TypeLam l (goType t)
   goWrap (x Syntax.:> y) = goWrap x Syntax.:> goWrap y
   goWrap (WrapVar v) = goWrap $ Map.findWithDefault err v cs where
     err = error $ "Unsolved wrapper variable " ++ show v ++ ". This is a bug"

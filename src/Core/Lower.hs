@@ -160,10 +160,13 @@ lowerAt (ExprWrapper wrap e an) ty =
     S.TypeApp t -> do
       ex' <- lowerAtAtom e (lowerType (S.getType e))
       pure (C.TyApp ex' (lowerType t))
-    S.TypeLam (TvName v) ->
-      let ty' (ForallTy _ k t) = (k, t)
-          ty' x = (StarTy, x)
-          (kind, inner) = ty' ty
+    S.TypeLam (TvName v) k ->
+      let ty' (ForallTy _ _ t) = t
+          ty' x = x
+          inner = ty' ty
+          kind = case lowerType k of
+            VarTy{} -> StarTy
+            x -> x
        in Atom . Lam (TypeArgument v kind) <$> lowerAtTerm e inner
     ws S.:> wy -> lowerAt (ExprWrapper ws (ExprWrapper wy e an) an) ty
     S.WrapVar v -> error $ "Unsolved wrapper variable " ++ show v ++ ". This is a bug"
