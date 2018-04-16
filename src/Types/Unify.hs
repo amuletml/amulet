@@ -60,8 +60,8 @@ bind var ty
              | otherwise -> throwError (NotEqual (TyVar var) ty)
           pure (AssumedCo (TyVar var) ty)
         Just ty'
-          | ty' == ty -> pure (ReflCo ty')
-          | otherwise -> unify (normType ty) (normType ty')
+          | ty' == ty -> pure (ReflCo (apply env ty'))
+          | otherwise -> unify ty (apply env ty')
 
 unify :: Type Typed -> Type Typed -> SolveM (Coercion Typed)
 unify (TySkol x) (TySkol y)
@@ -262,13 +262,13 @@ subsumes k t1@TyForall{} t2 = do
 subsumes k a b = Cast <$> k a b
 
 skolemise :: MonadGen Int m => SkolemMotive Typed -> Type Typed -> m (Wrapper Typed, Type Typed)
-skolemise motive ty@(TyForall tv _ t) = do
+skolemise motive ty@(TyForall tv k t) = do
   sk <- freshSkol motive ty tv
   (wrap, ty) <- skolemise motive (apply (Map.singleton tv sk) t)
-  pure (TypeLam tv Syntax.:> wrap, ty)
-skolemise motive (TyArr c d) = do
-  (wrap, ty) <- skolemise motive d
-  pure (wrap, TyArr c ty)
+  kind <- case k of
+    Nothing -> freshTV
+    Just x -> pure x
+  pure (TypeLam tv kind Syntax.:> wrap, ty)
 skolemise _ ty = pure (IdWrap, ty)
 
 freshSkol :: MonadGen Int m => SkolemMotive Typed -> Type Typed -> Var Typed -> m (Type Typed)

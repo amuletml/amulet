@@ -25,7 +25,9 @@ parenFun f = case f of
 
 parenArg :: Pretty (Var p) => Expr p -> Doc
 parenArg f = case f of
-  ExprWrapper{} -> parens (pretty f)
+  ExprWrapper w _ _ -> case w of
+    IdWrap -> pretty f
+    _ -> parens (pretty f)
   App{} -> parens (pretty f)
   _ -> parenFun f
 
@@ -66,7 +68,7 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
   pretty (Tuple es _) = parens (hsep (punctuate comma (map pretty es)))
   pretty (TupleSection es _) = parens (hsep (punctuate comma (map (maybe (string "") pretty) es)))
   pretty (ExprWrapper wrap ex _) = go wrap ex where
-    go (TypeLam v) ex = soperator (char 'Λ') <> pretty v <> dot <+> pretty ex
+    go (TypeLam v t) ex = keyword "fun" <+> braces (pretty v <+> colon <+> pretty t) <> dot <+> pretty ex
     go (Cast c) ex = parens (pretty ex <+> soperator (string "|>") <+> pretty c)
     go (TypeApp t) ex = pretty ex <+> braces (pretty t)
     go (wr Syntax.:> wi) ex = go wr (ExprWrapper wi ex undefined)
