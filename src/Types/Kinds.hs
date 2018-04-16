@@ -18,7 +18,7 @@ import Data.Traversable
 import Data.Foldable
 import Data.Triple
 
-import Types.Wellformed (wellformed, normType)
+import Types.Wellformed (wellformed)
 import Types.Infer.Builtin
 import Types.Infer.Errors
 import Types.Unify (solve)

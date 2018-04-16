@@ -29,6 +29,7 @@ newtype Telescope p =
   Telescope { getTele :: Map.Map (Var Resolved) (Type p) }
   deriving newtype (Semigroup, Monoid)
 
+deriving instance (Show (Ann p), Show (Var p)) => Show (Telescope p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Telescope p)
 deriving instance (Ord (Ann p), Ord (Var p)) => Eq (Telescope p)
 

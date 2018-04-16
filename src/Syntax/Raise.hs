@@ -39,7 +39,7 @@ raiseE vR aR =
 raiseWrapper :: (Var p -> Var p') -> Wrapper p -> Wrapper p'
 raiseWrapper v (Cast co) = Cast (raiseCo v co)
 raiseWrapper v (TypeApp ty) = TypeApp (raiseT v ty)
-raiseWrapper v (TypeLam var) = TypeLam (v var)
+raiseWrapper v (TypeLam var t) = TypeLam (v var) (raiseT v t)
 raiseWrapper v (x :> y) = raiseWrapper v x :> raiseWrapper v y
 raiseWrapper v (WrapVar var) = WrapVar (v var)
 raiseWrapper _ IdWrap = IdWrap
