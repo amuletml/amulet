@@ -114,8 +114,7 @@ reduceAtom _ (Lam (TypeArgument var _) (TyApp r (VarTy var')))
 -- Beta reduction (let case)
 reduceAtom s a@(Ref v _) = {-# SCC "Reduce.beta_let" #-}
   case lookupBaseVar s v of
-    Just (Atom d@Ref{}) -> d
-    Just (Atom d@Lit{}) -> d
+    Just (Atom d) | trivialAtom d -> d
     _ -> a
 
 reduceAtom _ e = e
@@ -397,3 +396,9 @@ foldCo x@CoercionVar{} = pure x
 appendBody :: Term a -> a -> Type a -> Term a -> Term a
 appendBody (Let bind b) v ty r = Let bind (appendBody b v ty r)
 appendBody b v ty r = Let (One (v, ty, b)) r
+
+trivialAtom :: Atom a -> Bool
+trivialAtom Ref{} = True
+trivialAtom (Lit (Str t)) = T.length t <= 8
+trivialAtom (Lit _) = True
+trivialAtom (Lam _ _) = False
