@@ -125,6 +125,13 @@ quantifier r t = do
   _ <- subsumes r t (TyPi (Anon a) b)
   pure (Anon a, b, id)
 
+discharge :: (Reasonable f p, MonadInfer Typed m)
+          => f p
+          -> Type Typed
+          -> m (Type Typed)
+discharge r (TyWithConstraints cs tau) = leakEqualities r cs *> discharge r tau
+discharge _ t = pure t
+
 litTy :: Lit -> Type Typed
 litTy LiInt{} = tyInt
 litTy LiStr{} = tyString
