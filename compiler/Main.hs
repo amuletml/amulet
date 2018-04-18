@@ -39,8 +39,9 @@ import Core.Core (Stmt)
 
 import Pretty (Pretty(pretty), putDoc, (<+>), colon)
 
-import Parser.Wrapper (ParseResult(POK, PFailed), runParser)
+import Parser.Wrapper (ParseResult(POK, PFailed), Token(..), runParser, runLexer)
 import Parser (parseInput)
+import Parser.Lexer (lexerScan)
 
 import Errors (reportP, reportR, reportI)
 
@@ -121,6 +122,12 @@ test fs = do
     CResolve e -> Nothing <$ reportR e fs
     CInfer e -> Nothing <$ reportI e fs
 
+testLexer :: [(FilePath, T.Text)] -> IO ()
+testLexer fs = for_ fs $ \(name, file) ->
+  case runLexer name (B.toLazyByteString $ T.encodeUtf8Builder file) lexerScan of
+    POK _ toks -> print (map (\(Token t _) -> t) toks)
+    PFailed msg _ -> print msg
+
 testTc :: [(FilePath, T.Text)] -> IO (Maybe ([Stmt (Var Resolved)], Env))
 testTc fs = do
   putStrLn "\x1b[1;32m(* Program: *)\x1b[0m"
@@ -138,7 +145,7 @@ testTc fs = do
     CResolve e -> Nothing <$ reportR e fs
     CInfer e -> Nothing <$ reportI e fs
 
-data CompilerOption = Test | TestTc | Out String
+data CompilerOption = Test | TestTc | TestLex | Out String
   deriving (Show)
 
 flags :: [OptDescr CompilerOption]
@@ -146,6 +153,8 @@ flags = [ Option ['t'] ["test"] (NoArg Test)
           "Provides additional debug information on the output"
         , Option [] ["test-tc"] (NoArg TestTc)
           "Provides additional type check information on the output"
+        , Option [] ["test-lex"] (NoArg TestLex)
+          "Simply prints the result of lexing the file"
         , Option ['o'] ["out"]  (ReqArg Out "OUT")
           "Writes the generated Lua to a specific file."
         ]
@@ -171,6 +180,11 @@ main = do
     ([TestTc], files, []) -> do
       files' <- traverse T.readFile files
       _ <- testTc (zip files files')
+      pure ()
+
+    ([TestLex], files, []) -> do
+      files' <- traverse T.readFile files
+      _ <- testLexer (zip files files')
       pure ()
 
     ([Out o], files, []) -> do

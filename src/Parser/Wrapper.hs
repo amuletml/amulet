@@ -13,7 +13,7 @@ module Parser.Wrapper
   , getInput, setInput
   , getState, setState
   , getPos
-  , runParser
+  , runParser, runLexer
   ) where
 
 import Control.Monad
@@ -142,3 +142,11 @@ runParser file input m = unP m PState { stringBuffer = mempty
                                       , sText = input
                                       , sPrev = '\n'
                                       , sMode = 0 }
+
+runLexer :: SourceName -> B.ByteString -> Parser Token -> ParseResult [Token]
+runLexer file input m = runParser file input gather where
+  gather = do
+    t <- m
+    case t of
+      Token TcEOF _ -> return [t]
+      _   -> (t:) <$> gather
