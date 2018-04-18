@@ -114,7 +114,7 @@ check e ty = do
 
 infer :: MonadInfer Typed m => Expr Resolved -> m (Expr Typed, Type Typed)
 infer (VarRef k a) = do
-  (cont, old, new) <- lookupTy' k
+  (cont, old, new) <- third3A (discharge (VarRef k a)) =<< lookupTy' k
   case cont of
     Nothing -> pure (VarRef (TvName k) (a, old), old)
     Just cont -> pure (cont (VarRef (TvName k) (a, old)), new)

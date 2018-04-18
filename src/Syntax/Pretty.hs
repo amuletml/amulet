@@ -25,8 +25,8 @@ parenFun f = case f of
 
 parenArg :: Pretty (Var p) => Expr p -> Doc
 parenArg f = case f of
-  ExprWrapper w _ _ -> case w of
-    IdWrap -> pretty f
+  ExprWrapper w ex _ -> case w of
+    IdWrap -> parenArg ex
     _ -> parens (pretty f)
   App{} -> parens (pretty f)
   _ -> parenFun f
@@ -36,7 +36,7 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
   pretty (Let [] _ _) = error "absurd: never parsed"
   pretty (Let ((n, v, _):xs) e _) =
     let prettyBind (n, v, _) = keyword "and" <+> prettyOneBinding n v
-     in align $ keyword "let" <+> prettyOneBinding n v
+     in keyword "let" <+> prettyOneBinding n v
             <#> case xs of
               [] -> keyword "in" <+> pretty e
               _ -> vsep (map prettyBind xs) <#> keyword "in" <+> pretty e
@@ -152,7 +152,7 @@ instance (Pretty (Var p)) => Pretty (Toplevel p) where
   pretty (FunStmt []) = error "absurd!"
   pretty (LetStmt ((n, v, _):xs)) =
     let prettyBind (n, v, _) = keyword "and" <+> prettyOneBinding n v
-     in align $ keyword "let" <+> prettyOneBinding n v
+     in keyword "let" <+> prettyOneBinding n v
              <> case xs of
                   [] -> empty
                   _ -> line <> vsep (map prettyBind xs)
