@@ -250,8 +250,13 @@ subsumes k t1 t2@TyForall{} = do
   (c, t2') <- skolemise (BySubsumption (apply sub t1) (apply sub t2)) t2
   (Syntax.:>) c <$> subsumes k t1 t2'
 subsumes k t1@TyForall{} t2 = do
-  (_, _, t1') <- instantiate t1
-  subsumes k t1' t2
+  (cont, _, t1') <- instantiate t1
+  wrap <- case cont of
+    Just f -> case f undefined of
+      ExprWrapper w _ _ -> pure w
+      _ -> error "what"
+    Nothing -> pure IdWrap
+  (Syntax.:>) wrap <$> subsumes k t1' t2
 subsumes k a b = Cast <$> k a b
 
 skolemise :: MonadGen Int m => SkolemMotive Typed -> Type Typed -> m (Wrapper Typed, Type Typed)
