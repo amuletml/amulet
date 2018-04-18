@@ -17,6 +17,7 @@ import Syntax
 import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
+import Data.Semigroup
 import Data.Sequence (Seq ((:<|), Empty))
 import Data.Foldable
 import Data.Function
@@ -26,11 +27,12 @@ import Data.Text (Text)
 data SolveScope
   = SolveScope { _bindSkol :: Bool
                , _don'tTouch :: Set.Set (Var Typed)
-               , _don'tCoerce :: Set.Set (Var Typed) }
+               }
   deriving (Eq, Show, Ord)
 
 data SolveState
   = SolveState { _solveTySubst :: Subst Typed
+               , _solveAssumptions :: Subst Typed
                , _solveCoSubst :: Map.Map (Var Typed) (Wrapper Typed)
                }
   deriving (Eq, Show, Ord)
@@ -67,14 +69,16 @@ unify :: Type Typed -> Type Typed -> SolveM (Coercion Typed)
 unify (TySkol x) (TySkol y)
   | x == y = pure (ReflCo (TySkol y))
   | otherwise = do
-    sub <- use solveTySubst
+    sub <- use solveAssumptions
     let assumption = sub ^. at (x ^. skolIdent) <|> sub ^. at (y ^. skolIdent)
     case assumption of
       Just{} -> pure (AssumedCo (TySkol x) (TySkol y))
       Nothing -> do
         canWe <- view bindSkol
         if canWe
-           then bind (x ^. skolIdent) (TySkol y)
+           then do
+             solveAssumptions . at (x ^. skolIdent) ?= TySkol y
+             pure (AssumedCo (TySkol x) (TySkol y))
            else throwError $ SkolBinding x (TySkol y)
 
 unify ta@(TyPromotedCon a) tb@(TyPromotedCon b)
@@ -82,7 +86,9 @@ unify ta@(TyPromotedCon a) tb@(TyPromotedCon b)
   | otherwise = throwError (NotEqual ta tb)
 
 unify (TySkol t@(Skolem sv _ _ _)) b = do
-  sub <- use (solveTySubst . at sv)
+  sub <- use (solveAssumptions . at sv)
+  -- flip traceShow (pure ()) =<< use solveAssumptions
+  -- traceShow (sv, sub) pure ()
   case sub of
     Just ty -> do
       _ <- unify b ty
@@ -92,7 +98,9 @@ unify (TySkol t@(Skolem sv _ _ _)) b = do
       _ -> do
         canWe <- view bindSkol
         if canWe
-           then bind sv b
+           then do
+             solveAssumptions . at sv ?= b
+             pure (AssumedCo (TySkol t) b)
            else throwError $ SkolBinding t b
 unify b (TySkol t) = SymCo <$> unify (TySkol t) b
 
@@ -174,13 +182,13 @@ unifRow (t, a, b) = do
   pure (t, co)
 
 runSolve :: Int -> Subst Typed -> SolveM b -> Either TypeError (Int, (Subst Typed, Map.Map (Var Typed) (Wrapper Typed)))
-runSolve i s x = runExcept (fix (runReaderT (runStateT (runGenTFrom i act) (SolveState s mempty)) emptyScope)) where
+runSolve i s x = runExcept (fix (runReaderT (runStateT (runGenTFrom i act) (SolveState s mempty mempty)) emptyScope)) where
   act = (,) <$> gen <*> x
   fix act = do
     ((i, _), s) <- act
     let ss = s ^. solveTySubst
      in pure (i, (fmap (apply ss) ss, s ^. solveCoSubst))
-  emptyScope = SolveScope False mempty mempty
+  emptyScope = SolveScope False mempty
 
 solve :: Int -> Seq.Seq (Constraint Typed) -> Either TypeError (Subst Typed, Map.Map (Var Typed) (Wrapper Typed))
 solve i cs = snd <$> runSolve i mempty (doSolve cs)
@@ -190,6 +198,7 @@ doSolve Empty = pure ()
 doSolve (ConUnify because v a b :<| xs) = do
   sub <- use solveTySubst
 
+  -- trace (render (pretty (ConUnify because v (apply sub a) (apply sub b)))) pure ()
   co <- unify (apply sub a) (apply sub b)
     `catchError` \e -> throwError (ArisingFrom e because)
   solveCoSubst . at v .= Just (Cast co)
@@ -198,6 +207,8 @@ doSolve (ConUnify because v a b :<| xs) = do
 doSolve (ConSubsume because v a b :<| xs) = do
   sub <- use solveTySubst
 
+  -- trace (render (pretty (ConSubsume because v (apply sub a) (apply sub b)))) pure ()
+
   co <- subsumes unify (apply sub a) (apply sub b)
     `catchError` \e -> throwError (ArisingFrom e because)
   solveCoSubst . at v .= Just co
@@ -205,36 +216,26 @@ doSolve (ConSubsume because v a b :<| xs) = do
   doSolve xs
 doSolve (ConImplies because not cs ts :<| xs) = do
   before <- use solveTySubst
-  coercions <- use solveCoSubst
-  let not' = ftv (apply before not)
+  assump <- use solveAssumptions
+  -- trace ("before: " ++ ppShow before) pure ()
+  let not' = ftv (apply before not) <> ftv not
       cs' = apply before cs
       ts' = apply before ts
-
-      leak ass v ty m
-        | null (ftv ty `Set.intersection` ass)
-        , v `Set.notMember` ass
-        = Map.insert v ty m
-        | otherwise = m
-
   do
     let go = local (bindSkol .~ True) $ doSolve cs'
-
     ((), sub) <- local (don'tTouch .~ mempty) . capture $ go
 
-    let sub' = sub ^. solveTySubst
-        assum = Set.fromList (Map.keys sub')
-        -- after = Map.foldrWithKey leak before sub'
-    solveCoSubst .= coercions
+    solveAssumptions .= sub ^. solveAssumptions
 
-    local (don'tTouch %~ Set.union not') . local (don'tCoerce %~ Set.union assum) $ do
-      solveTySubst .= sub'
-      doSolve (fmap (apply sub') ts')
+    local (don'tTouch %~ Set.union not') $ do
+      doSolve (fmap (apply (sub ^. solveTySubst)) ts')
         `catchError` \e -> throwError (ArisingFrom e because)
 
-      con <- use solveTySubst
+    let leaky = Map.filterWithKey (\k _ -> k `Set.notMember` assumptionBound) (sub ^. solveTySubst)
+        assumptionBound = not'
 
-      let after = Map.foldrWithKey (leak assum) before con
-      solveTySubst .= after
+    solveTySubst %= Map.union leaky
+    solveAssumptions .= assump
 
     doSolve xs
 doSolve (ConFail v t :<| cs) = do
