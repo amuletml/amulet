@@ -177,10 +177,8 @@ reduceTerm s (Cast (Ref v _) c)
   , Just _ <- unifyWith uni l r'
   = Atom a
 
-reduceTerm _ (Cast a co) =
-  case foldCo co of
-    Nothing -> Atom a
-    Just co' -> Cast a co'
+reduceTerm _ (Cast a co) | redundantCo co = Atom a
+                         | otherwise = Cast a co
 
 -- Constant fold
 reduceTerm s e@(App (Ref f1 _) r1)
@@ -377,21 +375,16 @@ isComplete s = isComplete' where
   flattenExtend (PatExtend p fs) = flattenExtend p ++ fs
   flattenExtend _ = []
 
-foldCo :: IsVar a => Coercion a -> Maybe (Coercion a)
-foldCo (SameRepr t t')
-  | t == t' = Nothing
-  | otherwise = Just (SameRepr t t')
-
-foldCo (Application c c') = Application <$> foldCo c <*> foldCo c'
-foldCo (Quantified v c c') = Quantified v <$> foldCo c <*> foldCo c'
-foldCo (ExactRecord rs) = ExactRecord <$> traverse (secondA foldCo) rs
-foldCo (Record c rs) = Record <$> foldCo c <*> traverse (secondA foldCo) rs
-
-foldCo (Domain c) = Domain <$> foldCo c
-foldCo (Codomain c) = Codomain <$> foldCo c
-foldCo (Symmetry c) = Symmetry <$> foldCo c
-
-foldCo x@CoercionVar{} = pure x
+redundantCo :: IsVar a => Coercion a -> Bool
+redundantCo (SameRepr t t') = t == t'
+redundantCo (Application c c') = redundantCo c && redundantCo c'
+redundantCo (Quantified _ c c') = redundantCo c && redundantCo c'
+redundantCo (ExactRecord rs) = all (redundantCo . snd) rs
+redundantCo (Record c rs) = redundantCo c && all (redundantCo . snd) rs
+redundantCo (Domain c) = redundantCo c
+redundantCo (Codomain c) = redundantCo c
+redundantCo (Symmetry c) = redundantCo c
+redundantCo CoercionVar{} = False
 
 appendBody :: Term a -> a -> Type a -> Term a -> Term a
 appendBody (Let bind b) v ty r = Let bind (appendBody b v ty r)
