@@ -31,7 +31,8 @@ optmOnce = passes where
            -- , inlineVariablePass
 
            , pure . deadCodePass
-           -- , killNewtypePass
+           , killNewtypePass
+
            , pure . sinkingPass . tagFreeSet
 
            , pure . reducePass

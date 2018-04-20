@@ -2,6 +2,7 @@
 module Core.Optimise.Newtype (killNewtypePass) where
 
 import Control.Monad.Infer (Gen, fresh)
+import Control.Monad
 
 import qualified Data.VarMap as V
 import Data.VarSet (IsVar(..))
@@ -24,9 +25,12 @@ killNewtypePass = go mempty where
     (StmtLet vs':) <$> go m xs
   go _ [] = pure []
 
-isNewtype :: Type a -> Maybe (Type a, Type a)
+isNewtype :: IsVar a => Type a -> Maybe (Type a, Type a)
 isNewtype (ForallTy Irrelevant from to) = Just (from, to)
-isNewtype (ForallTy _ _ t) = isNewtype t
+isNewtype (ForallTy (Relevant var) _ t) = do
+  (from, to) <- isNewtype t
+  guard (var `occursInTy` to)
+  pure (from, to)
 isNewtype _ = Nothing
 
 newtypeMatch :: IsVar a => V.Map (Coercion a) -> [(Pattern a, Type a, Term a)] -> Maybe (Coercion a, (Pattern a, Type a, Term a))

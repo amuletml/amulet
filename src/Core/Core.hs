@@ -269,6 +269,17 @@ occursInTerm v (Let (Many vs) e) = any (occursInTerm v . thd3) vs || occursInTer
 occursInTerm v (Match e bs) = occursInAtom v e || any (occursInTerm v . thd3) bs
 occursInTerm v (Extend e fs) = occursInAtom v e || any (occursInAtom v . thd3) fs
 
+occursInTy :: IsVar a => a -> Type a -> Bool
+occursInTy _ (ConTy _) = False
+occursInTy v (VarTy v') = toVar v == toVar v'
+occursInTy v (ForallTy b k t)
+  | Relevant v /= b = occursInTy v k || occursInTy v t
+  | otherwise = occursInTy v k
+occursInTy v (AppTy a b) = occursInTy v a || occursInTy v b
+occursInTy v (RowsTy t rs) = occursInTy v t || any (occursInTy v . snd) rs
+occursInTy v (ExactRowsTy rs) = any (occursInTy v . snd) rs
+occursInTy _ StarTy = False
+
 isError :: Atom (Var Resolved) -> Bool
 isError (Ref (TgInternal n) _) = n == pack "error"
 isError _ = False
