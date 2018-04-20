@@ -162,7 +162,9 @@ instantiate :: MonadGen Int m
                  , Type Typed
                  , Type Typed)
 instantiate tp@(TyPi (Implicit v _) ty) = do
-  var <- freshTV
+  var <- TyVar . TvName <$> case (unTvName v) of
+    TgInternal n -> TgName n <$> gen
+    TgName n _ -> TgName n <$> gen
   let map = Map.singleton v var
 
       squish f (Just x) = Just (x . f)
