@@ -24,6 +24,9 @@ import Data.Function
 import Data.List
 import Data.Text (Text)
 
+import Debug.Trace
+import Pretty
+
 data SolveScope
   = SolveScope { _bindSkol :: Bool
                , _don'tTouch :: Set.Set (Var Typed)
@@ -52,18 +55,21 @@ bind var ty
     bind var ty
   | otherwise = do
       env <- use solveTySubst
+      assum <- use solveAssumptions
       noTouch <- view don'tTouch
       ty <- pure (apply env ty) -- shadowing
-      -- Attempt to extend the environment, otherwise unify with existing type
-      case Map.lookup var env of
-        Nothing -> do
-          if | var `Set.notMember` noTouch -> solveTySubst .= env `compose` Map.singleton var ty
-             | var `Set.member` noTouch, TyVar v <- ty, v `Set.notMember` noTouch -> solveTySubst .= (env `compose` Map.singleton v (TyVar var))
-             | otherwise -> throwError (NotEqual (TyVar var) ty)
-          pure (AssumedCo (TyVar var) ty)
-        Just ty'
-          | ty' == ty -> pure (ReflCo (apply env ty'))
-          | otherwise -> unify ty (apply env ty')
+      if (var `Set.member` noTouch && var `Map.member` assum)
+         then unify ty (apply env (assum Map.! var))
+         else -- Attempt to extend the environment, otherwise unify with existing type
+            case Map.lookup var env of
+              Nothing -> do
+                if | var `Set.notMember` noTouch -> solveTySubst .= env `compose` Map.singleton var ty
+                   | var `Set.member` noTouch, TyVar v <- ty, v `Set.notMember` noTouch -> solveTySubst .= (env `compose` Map.singleton v (TyVar var))
+                   | otherwise -> throwError (NotEqual (TyVar var) ty)
+                pure (AssumedCo (TyVar var) ty)
+              Just ty'
+                | ty' == ty -> pure (ReflCo (apply env ty'))
+                | otherwise -> unify ty (apply env ty')
 
 unify :: Type Typed -> Type Typed -> SolveM (Coercion Typed)
 unify (TySkol x) (TySkol y)
@@ -217,15 +223,15 @@ doSolve (ConSubsume because v a b :<| xs) = do
 doSolve (ConImplies because not cs ts :<| xs) = do
   before <- use solveTySubst
   assump <- use solveAssumptions
-  -- trace ("before: " ++ ppShow before) pure ()
   let not' = ftv (apply before not) <> ftv not
       cs' = apply before cs
       ts' = apply before ts
+  trace (render (pretty (ConImplies because (apply before not) cs' ts'))) pure ()
   do
-    let go = local (bindSkol .~ True) $ doSolve cs'
-    ((), sub) <- local (don'tTouch .~ mempty) . capture $ go
+    let go = local (bindSkol .~ True) . local (don'tTouch .~ mempty) $ doSolve cs'
+    ((), sub) <- capture $ go
 
-    solveAssumptions .= sub ^. solveAssumptions
+    solveAssumptions .= (sub ^. solveAssumptions <> sub ^. solveTySubst)
 
     local (don'tTouch %~ Set.union not') $ do
       doSolve (fmap (apply (sub ^. solveTySubst)) ts')
