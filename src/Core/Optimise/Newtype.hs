@@ -36,12 +36,17 @@ isNewtype _ = Nothing
 newtypeMatch :: IsVar a => V.Map (Coercion a) -> [(Pattern a, Type a, Term a)] -> Maybe (Coercion a, (Pattern a, Type a, Term a))
 newtypeMatch m (it@(Destr c _, ty, _):xs)
   | Just phi@(SameRepr _ cod) <- V.lookup (toVar c) m =
-    case unify ty cod of
+    case unify cod ty of
       Just map -> pure (substituteInCo map (Symmetry phi), it)
-      Nothing -> pure (Symmetry phi, it)
+      Nothing -> error $ "failed to match newtype-constructor types " ++ show cod ++ " and " ++ show ty
   | otherwise = newtypeMatch m xs
 newtypeMatch m (_:xs) = newtypeMatch m xs
 newtypeMatch _ [] = Nothing
+
+-- Note: (again) the order of parameters to unify matters! The
+-- substitution is always in terms of the *first* parameter. Here, the
+-- results were backwards, so the solution wasn't being applied properly
+-- and the generated code was wrong.
 
 newtypeCo :: IsVar a => (a, Type a) -> (Type a, Type a) -> Gen Int (Stmt a, Coercion a)
 newtypeCo (cn, tp) (dom, cod) = do
