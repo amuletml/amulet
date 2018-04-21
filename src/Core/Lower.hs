@@ -165,10 +165,7 @@ lowerAt (ExprWrapper wrap e an) ty =
       let ty' (ForallTy _ _ t) = t
           ty' x = x
           inner = ty' ty
-          kind = case lowerType k of
-            VarTy{} -> StarTy
-            x -> x
-       in Atom . Lam (TypeArgument v kind) <$> lowerAtTerm e inner
+       in Atom . Lam (TypeArgument v (lowerType k)) <$> lowerAtTerm e inner
     ws S.:> wy -> lowerAt (ExprWrapper ws (ExprWrapper wy e an) an) ty
     S.WrapVar v -> error $ "Unsolved wrapper variable " ++ show v ++ ". This is a bug"
     S.IdWrap -> lowerAt e ty
