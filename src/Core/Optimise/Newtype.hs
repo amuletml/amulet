@@ -27,9 +27,9 @@ killNewtypePass = go mempty where
 
 isNewtype :: IsVar a => Type a -> Maybe (Type a, Type a)
 isNewtype (ForallTy Irrelevant from to) = Just (from, to)
-isNewtype (ForallTy (Relevant var) _ t) = do
+isNewtype (ForallTy (Relevant var) k t) = do
   (from, to) <- isNewtype t
-  guard (var `occursInTy` to)
+  guard (var `occursInTy` to || k == StarTy)
   pure (from, to)
 isNewtype _ = Nothing
 
