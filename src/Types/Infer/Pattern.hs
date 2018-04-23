@@ -102,7 +102,7 @@ checkPattern pt@(PType p t ann) ty = do
   pure (PType p' t' (ann, t'), binds, cs)
 checkPattern pt ty = do
   (p, ty', binds, cs) <- inferPattern pt
-  _ <- subsumes pt ty ty'
+  _ <- unify pt ty ty'
   pure (p, binds, cs)
 
 boundTvs :: forall p. Ord (Var p)
