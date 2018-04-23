@@ -76,6 +76,7 @@ import Syntax
   qident   { Token (TcIdentifierQual _ _) _ }
   qopid    { Token (TcOpIdentQual _ _) _ }
   qconid   { Token (TcConIdentQual _ _) _ }
+  qdotid   { Token (TcDotQual _) _ }
   access   { Token (TcAccess _) _ }
   tyvar    { Token (TcTyVar _) _ }
   hole     { Token (TcHole _) _ }
@@ -83,7 +84,7 @@ import Syntax
   float    { Token (TcFloat _) _ }
   string   { Token (TcString  _) _ }
 
-%expect 71
+%expect 74
 
 %%
 
@@ -100,9 +101,10 @@ Top :: { Toplevel Parsed }
     | type ident ListE(TyVar) '=' '|' List1(Ctor, '|') { TypeDecl (getName $2) (map getL $3) $6 }
 
 
-    | module Con '=' begin Tops end            { Module (getL $2) $5 }
+    | module qconid '=' begin Tops end         { Module (getName $2) $5 }
+    | module conid '=' begin Tops end          { Module (getName $2) $5 }
+    | module conid '=' Con                     { Open (getL $4) (Just (getIdent $2)) }
     | open Con                                 { Open (getL $2) Nothing }
-    | open Con as conid                        { Open (getL $2) (Just (getIdent $4)) }
 
 Ctor :: { Constructor Parsed }
      : conid                                   { withPos1 $1 $ UnitCon (getName $1) }
@@ -134,7 +136,8 @@ Atom :: { Expr Parsed }
      | hole                                   { withPos1 $1 (Hole (Name (getHole $1))) }
      | '_'                                    { withPos1 $1 (Hole (Name (T.singleton '_'))) }
      | begin List1(Expr, ';') end             { withPos2 $1 $3 $ Begin $2 }
-     | '(' ')'                                { withPos2 $1 $2 $ Literal LiUnit  }
+     | qdotid Atom                            { withPos2 $1 $2 $ OpenIn (getName $1) $2 }
+     | '(' ')'                                { withPos2 $1 $2 $ Literal LiUnit }
      | '(' Section ')'                        { $2 }
      | '(' List1(NullSection, ',') ')'        { withPos2 $1 $3 $ tupleExpr $2 }
      | '{' Rows('=', Expr) '}'                { withPos2 $1 $3 $ Record $2 }
@@ -321,6 +324,7 @@ getName (Token (TcConIdent x) _)          = Name x
 getName (Token (TcIdentifierQual ms x) _) = foldl (flip InModule) (Name x) ms
 getName (Token (TcOpIdentQual ms x) _)    = foldl (flip InModule) (Name x) ms
 getName (Token (TcConIdentQual ms x) _)   = foldl (flip InModule) (Name x) ms
+getName (Token (TcDotQual ms) _)          = foldl (flip InModule) (Name (last ms)) (init ms)
 getName (Token (TcTyVar x) _)             = Name x
 
 getHole   (Token (TcHole x) _)       = x

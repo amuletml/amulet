@@ -53,6 +53,7 @@ data TokenClass
   | TcIdentifierQual [Text] Text
   | TcOpIdentQual [Text] Text
   | TcConIdentQual [Text] Text
+  | TcDotQual [Text]
   | TcTyVar Text
   | TcAccess Text
   | TcHole Text
@@ -113,6 +114,7 @@ instance Show TokenClass where
   show (TcIdentifierQual ms t) = concatMap (\m -> unpack m ++ ['.']) (reverse ms) ++ unpack t
   show (TcConIdentQual ms t) = concatMap (\m -> unpack m ++ ['.']) (reverse ms) ++ unpack t
   show (TcOpIdentQual ms t) = "`" ++ concatMap (\m -> unpack m ++ ['.']) (reverse ms) ++ unpack t ++ "`"
+  show (TcDotQual ms) = concatMap (\m -> unpack m ++ ['.']) ms
   show (TcTyVar t) = '\'':unpack t
   show (TcAccess t) = '.':unpack t
   show (TcHole t) = unpack t

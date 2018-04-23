@@ -34,6 +34,7 @@ raiseE vR aR =
       Tuple es a -> Tuple (map eR es) (aR a)
       Ascription e t a -> Ascription (eR e) (raiseT vR t) (aR a)
       TupleSection es a -> TupleSection (fmap eR <$> es) (aR a)
+      OpenIn n e a -> OpenIn (vR n) (eR e) (aR a)
       ExprWrapper w e a -> ExprWrapper (raiseWrapper vR w) (eR e) (aR a)
 
 raiseWrapper :: (Var p -> Var p') -> Wrapper p -> Wrapper p'
