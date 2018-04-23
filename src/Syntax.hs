@@ -99,6 +99,9 @@ data Expr p
   | Tuple [Expr p] (Ann p)
   | TupleSection [Maybe (Expr p)] (Ann p)
 
+  -- Module
+  | OpenIn (Var p) (Expr p) (Ann p)
+
   | ExprWrapper (Wrapper p) (Expr p) (Ann p)
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Expr p)

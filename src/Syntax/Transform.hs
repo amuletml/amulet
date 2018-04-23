@@ -82,6 +82,8 @@ transformExpr fe = goE where
   transE (Tuple es a) = Tuple (map goE es) a
   transE (TupleSection es a) = TupleSection (map (goE<$>) es) a
 
+  transE (OpenIn n e a) = OpenIn n (goE e) a
+
   transE (ExprWrapper w e a) = ExprWrapper w (goE e) a
 
   goE = transE . fe
@@ -117,6 +119,8 @@ transformExprTyped fe fc ft = goE where
 
   transE (Tuple es a) = Tuple (map goE es) (goA a)
   transE (TupleSection es a) = TupleSection (map (goE<$>) es) (goA a)
+
+  transE (OpenIn n e a) = OpenIn n (goE e) (goA a)
 
   transE (ExprWrapper w e a) = ExprWrapper (goW w) (goE e) (goA a)
 
@@ -177,4 +181,7 @@ correct ty (Parens e a) = Parens e (fst a, ty)
 
 correct ty (Tuple es a) = Tuple es (fst a, ty)
 correct ty (TupleSection es a) = TupleSection es (fst a, ty)
+
+correct ty (OpenIn n e a) = OpenIn n e (fst a, ty)
+
 correct ty (ExprWrapper w e a) = ExprWrapper w e (fst a, ty)

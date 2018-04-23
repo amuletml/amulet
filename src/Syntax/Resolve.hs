@@ -107,19 +107,7 @@ resolveModule (r:rs) = flip catchError (throwError . wrapError)
           . TypeDecl t' vs' <$> traverse (resolveCons (zip vs vs')) (zip cs c')
           <*> resolveModule rs
 
-      Open name as -> do
-        stack <- asks modStack
-        (ModuleScope modules) <- get
-        case lookupModule name modules stack of
-          Nothing -> throwError $ NoSuchModule name
-          Just (name', Scope vars tys _ _) ->
-            let prefix = case as of
-                           Nothing -> id
-                           Just v -> InModule v
-            in
-              local (\s -> s { varScope = Map.mapKeys prefix vars `Map.union` varScope s
-                             , tyScope  = Map.mapKeys prefix tys  `Map.union` tyScope s })
-              $ (Open name' as:) <$> resolveModule rs
+      Open name as -> resolveOpen name as (\name' -> (Open name' as:) <$> resolveModule rs)
 
       Module name body -> do
         fullName <- foldl (flip InModule) name <$> asks modStack
@@ -159,10 +147,6 @@ resolveModule (r:rs) = flip catchError (throwError . wrapError)
 
            wrapError e@(ArisingFromTop _ _) = e
            wrapError e = ArisingFromTop e r
-
-           lookupModule n m [] = Map.lookup n m
-           lookupModule n m x@(_:xs) = Map.lookup (foldl (flip InModule) n x) m
-                                       <|> lookupModule n m xs
 
 lookupVar :: MonadResolve m => (Var Parsed -> ResolveError) -> Var Parsed -> Map.Map (Var Parsed) ScopeVariable -> m (Var Resolved)
 lookupVar err v m = case Map.lookup v m of
@@ -263,6 +247,9 @@ reExpr (Parens e a) = flip Parens a <$> reExpr e
 
 reExpr (Tuple es a) = Tuple <$> traverse reExpr es <*> pure a
 reExpr (TupleSection es a) = TupleSection <$> traverse (traverse reExpr) es <*> pure a
+
+reExpr (OpenIn m e a) = resolveOpen m Nothing (\m' -> (OpenIn m' <$> reExpr e <*> pure a))
+
 reExpr ExprWrapper{} = error "resolve cast"
 
 reType :: MonadResolve m => Type Parsed -> m (Type Resolved)
@@ -355,3 +342,22 @@ precedence t
   | T.isPrefixOf "|" t = (5, AssocLeft)
 
   | otherwise = (11, AssocLeft)
+
+resolveOpen :: MonadResolve m => Var Parsed -> Maybe T.Text -> (Var Resolved -> m a) -> m a
+resolveOpen name as m = do
+  stack <- asks modStack
+  (ModuleScope modules) <- get
+  case lookupModule name modules stack of
+    Nothing -> throwError $ NoSuchModule name
+    Just (name', Scope vars tys _ _) ->
+      let prefix = case as of
+                     Nothing -> id
+                     Just v -> InModule v
+      in
+        local (\s -> s { varScope = Map.mapKeys prefix vars `Map.union` varScope s
+                       , tyScope  = Map.mapKeys prefix tys  `Map.union` tyScope s }) (m name')
+
+  where
+    lookupModule n m [] = Map.lookup n m
+    lookupModule n m x@(_:xs) = Map.lookup (foldl (flip InModule) n x) m
+                                <|> lookupModule n m xs

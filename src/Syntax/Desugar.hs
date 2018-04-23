@@ -67,6 +67,8 @@ desugarProgram = traverse statement where
          $ foldf (\v e -> Fun v e a) args
          $ Tuple tuple a
 
+  expr (OpenIn _ e _) = expr e
+
   buildTuple :: MonadGen Int m
              => Ann Resolved
              -> Maybe (Expr Resolved)
