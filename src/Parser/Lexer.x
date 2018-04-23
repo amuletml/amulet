@@ -93,12 +93,13 @@ tokens :-
   <0> $digit+ \. $digit+ [Ee] $digit+  { onString $ TcFloat . parseDouble }
   <0> $digit+ \. $digit+ [Ee] [\+\-] $digit+ { onString $ TcFloat . parseDouble }
 
-  <0> $upper $ident* \.                { beginModule}
+  <0> $upper $ident* \.                { beginModule }
   <0> $lower $ident*                   { lexTok $ TcIdentifier }
   <0> $upper $ident*                   { lexTok $ TcConIdent }
   <modP> $upper $ident* \.             { pushModule }
   <modP> $lower $ident*                { endModule TcIdentifierQual }
   <modP> $upper $ident*                { endModule TcConIdentQual }
+  <modP> ()                            { endModuleNull TcDotQual }
 
   <0> $symbol_head $symbol_tail*       { lexTok $ TcOp }
   <0> \` $lower $ident* \`             { lexTok $ TcOpIdent . T.init . T.tail }
@@ -197,6 +198,13 @@ endModule t (LI p str _) len = do
   setStartCode 0
   return . flip Token p .  t (modulePrefix s) . decodeUtf8 . Bs.concat . L.toChunks . L.take len $ str
 endModuleOp f = endModule (\xs x -> f xs (T.tail x))
+
+endModuleNull :: ([T.Text] -> TokenClass) -> Action Token
+endModuleNull t (LI p _ _) _ = do
+  s <- getState
+  setState $ s { modulePrefix = [] }
+  setStartCode 0
+  return (Token (t (modulePrefix s)) p)
 
 constTok :: TokenClass -> Action Token
 constTok t (LI p _ _) _ = return $! Token t p
