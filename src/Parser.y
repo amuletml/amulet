@@ -84,7 +84,7 @@ import Syntax
   float    { Token (TcFloat _) _ }
   string   { Token (TcString  _) _ }
 
-%expect 74
+%expect 79
 
 %%
 
@@ -123,6 +123,7 @@ ExprApp :: { Expr Parsed }
 Expr0 :: { Expr Parsed }
       : fun ListE1(ArgP) '->' Expr             { foldr (\x y -> withPos2 x $4 $ Fun x y) $4 $2 }
       | let BindGroup in Expr                  { withPos2 $1 $4 $ Let (reverse $2) $4 }
+      | let open Con in Expr                   { withPos2 $1 $5 $ OpenIn (getL $3) $5 }
       | if Expr then Expr else Expr            { withPos2 $1 $6 $ If $2 $4 $6 }
       | match List1(Expr, ',') with ListE1(Arm)
         { withPos2 $1 $3 $ Match (completeTuple Tuple $2) $4 }
