@@ -79,6 +79,7 @@ data AnnArm b a = Arm
   , armTy   :: Type a
   , armBody :: AnnTerm b a
   , armVars :: [(a, Type a)]
+  , armTyvars :: [(a, Type a)]
   }
   deriving (Eq, Show, Ord, Functor, Generic)
 
@@ -180,7 +181,7 @@ pprBegin = braces' . vsep . map (indent 2) . punctuate semi
 
 pprArms :: Pretty a => [Arm a] -> Doc
 pprArms = braces' . vsep . map (indent 2) . punctuate semi . map one where
-  one (Arm a b c _) = pretty a <+> colon <+> pretty b <+> nest 2 (arrow </> pretty c)
+  one (Arm a b c _ _) = pretty a <+> colon <+> pretty b <+> nest 2 (arrow </> pretty c)
 
 pprCoRow :: Pretty a => (Text, Coercion a) -> Doc
 pprCoRow (a, b) = text a <+> equals <+> pretty b

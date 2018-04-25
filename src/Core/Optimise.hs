@@ -150,17 +150,25 @@ refresh = refreshTerm mempty where
     Let (Many vs') <$> refreshTerm s' b
   refreshTerm s (Match e branches) = Match <$> refreshAtom s e
                                            <*> traverse refreshArm branches where
-    refreshArm (Arm{ armVars = vs, armPtrn = test, armBody = branch, armTy = ty }) = do
-      s' <- foldrM (\(v, _) m -> do
-                       let TgName name _ = toVar v
-                       v' <- fromVar <$> freshFrom name
-                       pure (VarMap.insert (toVar v) v' m)) s vs
+    refreshArm :: (MonadGen Int m) => Arm _ -> m (Arm _)
+    refreshArm (a@Arm{ armPtrn = test, armBody = branch }) = do
+      s' <- refreshVs (armTyvars a) s >>= refreshVs (armVars a)
       branch' <- refreshTerm s' branch
       pure Arm { armPtrn = refreshPattern s' test
-               , armTy = refreshType s' ty
+               , armTy = refreshType s' (armTy a)
                , armBody = branch'
-               , armVars = map (\(v, ty) -> (fromJust (VarMap.lookup (toVar v) s'), refreshType s' ty)) vs
+               , armVars = map (\(v, ty) -> (fromJust (VarMap.lookup (toVar v) s'), refreshType s' ty)) (armVars a)
+               , armTyvars = map (\(v, ty) -> (fromJust (VarMap.lookup (toVar v) s'), refreshType s' ty)) (armTyvars a)
                }
+
+    refreshVs :: (MonadGen Int m, IsVar a) => [(a, Type a)] -> VarMap.Map a -> m (VarMap.Map a)
+    refreshVs = flip (foldrM refreshV)
+
+    refreshV :: (MonadGen Int m, IsVar a) => (a, Type a) -> VarMap.Map a -> m (VarMap.Map a)
+    refreshV (v, _) m = do
+      let TgName name _ = toVar v
+      v' <- fromVar <$> freshFrom name
+      pure (VarMap.insert (toVar v) v' m)
 
   refreshTerm s (Extend e bs) = Extend <$> refreshAtom s e <*> traverse (third3A (refreshAtom s)) bs
   refreshTerm s (Cast e c) = Cast <$> refreshAtom s e <*> pure (refreshCoercion s c)

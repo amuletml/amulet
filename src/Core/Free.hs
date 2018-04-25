@@ -102,6 +102,7 @@ tagFreeTerm ann var = tagTerm where
                  , armTy = conv (armTy a)
                  , armBody = b'
                  , armVars = map (\(v, ty) -> (var' v fvb, conv ty)) pv
+                 , armTyvars = map (\(v, ty) -> (var v True, conv ty)) (armTyvars a)
                  })
 
   tagTerm (AnnExtend an f fs) =
