@@ -24,9 +24,6 @@ import Data.Function
 import Data.List
 import Data.Text (Text)
 
-import Debug.Trace
-import Pretty
-
 data SolveScope
   = SolveScope { _bindSkol :: Bool
                , _don'tTouch :: Set.Set (Var Typed)
@@ -226,7 +223,7 @@ doSolve (ConImplies because not cs ts :<| xs) = do
   let not' = ftv (apply before not) <> ftv not
       cs' = apply before cs
       ts' = apply before ts
-  trace (render (pretty (ConImplies because (apply before not) cs' ts'))) pure ()
+  -- trace (render (pretty (ConImplies because (apply before not) cs' ts'))) pure ()
   do
     let go = local (bindSkol .~ True) . local (don'tTouch .~ mempty) $ doSolve cs'
     ((), sub) <- capture $ go
