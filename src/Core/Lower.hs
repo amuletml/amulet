@@ -131,7 +131,6 @@ lowerAt (Fun p bd an) (ForallTy Irrelevant a b) =
         _ -> do
           p' <- lowerPat p
           ts <- patternTyvars p
-          traceShow ts (pure ())
           bd' <- lowerAtTerm bd b
           arg <- fresh
           fail <- patternMatchingFail (fst an) (lowerType (S.getType p)) b
@@ -147,7 +146,6 @@ lowerAt (S.Match ex cs an) ty = do
   cs' <- for cs $ \(pat, ex) -> do
     p' <- lowerPat pat
     ts <- patternTyvars pat
-    traceShow ts (pure ())
     ex' <- lowerAtTerm ex ty
     pure C.Arm { armPtrn = p', armTy = mt, armBody = ex'
                , armVars = patternVars p', armTyvars = ts }
@@ -285,9 +283,6 @@ lowerPat (S.Capture (TvName x) (_, t)) = pure (C.Capture x (lowerType t))
 lowerPat (Wildcard (_, t)) = C.Capture <$> fresh <*> pure( lowerType t)
 lowerPat (Destructure (TvName p) Nothing _) = pure (Constr p)
 lowerPat (Destructure (TvName p) (Just t) _) = Destr p <$> lowerPat t
-    -- Just e <- asks (Map.lookup p . ctors)
-    -- traceShow (pretty p, pretty t, pretty e, pretty ty) (pure ())
-
 lowerPat (PType p _ _) = lowerPat p
 lowerPat (PRecord xs (_, t)) =
   let
@@ -374,7 +369,7 @@ patternTyvars = asks . flip (go . ctors)
     go _ (S.Capture _ _) = []
     go _ (Wildcard _) = []
     go _ (Destructure _ Nothing _) = []
-    go s (Destructure (TvName p) (Just t) (_, pty)) =
+    go s x@(Destructure (TvName p) (Just t) (_, pty)) =
       let pty' = lowerType pty
           tty' = lowerType (S.getType t)
 
@@ -388,9 +383,12 @@ patternTyvars = asks . flip (go . ctors)
 
     rootType fs (ForallTy Irrelevant f c) =
       let skolem = Map.restrictKeys fs (Set.difference (freeInTy f) (freeInTy c))
-      in traceShow (skolem) (skolem, f, c)
+      in (skolem, f, c)
     rootType fs (ForallTy (Relevant v) f r) = rootType (Map.insert v f fs) r
     rootType _ _ = error "impossible constructor"
 
-    extS sk (v, VarTy t) = (t,) <$> Map.lookup v sk
-    extS _ (_, t) = error ("must replace skolem tyvar with tyvar " ++ show (pretty t))
+    extS sk (v, t) = case Map.lookup v sk of
+                       Nothing -> Nothing
+                       Just k -> case t of
+                                   VarTy t' -> Just (t', k)
+                                   _ -> error ("must replace skolem tyvar with tyvar " ++ show (pretty t))
