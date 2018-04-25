@@ -23,7 +23,7 @@ import Data.List
 
 import qualified Core.Core as C
 import qualified Core.Builtin as C
-import Core.Core hiding (Atom, Term, Stmt, Type, Pattern)
+import Core.Core hiding (Atom, Term, Stmt, Type, Pattern, Arm)
 import Core.Core (pattern Atom)
 import Core.Types (unify, replaceTy)
 
@@ -38,6 +38,7 @@ type Term = C.Term (Var Resolved)
 type Type = C.Type (Var Resolved)
 type Pat = C.Pattern (Var Resolved)
 type Stmt = C.Stmt (Var Resolved)
+type Arm = C.Arm (Var Resolved)
 
 type Lower = ContT Term
 
@@ -51,14 +52,17 @@ errRef = Ref (TgInternal "error")
                           (ForallTy Irrelevant C.tyString
                                  (VarTy (TgInternal "a"))))
 
-patternMatchingFail :: MonadLower m => Span -> Type -> Type -> m (Pat, Type, Term)
+patternMatchingFail :: MonadLower m => Span -> Type -> Type -> m Arm
 patternMatchingFail w p t = do
   var <- fresh
   tyApp <- fresh
   let err = Lit (Str (T.pack ("Pattern matching failure at " ++ show (pretty w))))
       errTy = ForallTy Irrelevant C.tyString t
-  pure (C.Capture var p, p, C.Let (One (tyApp, errTy, C.TyApp errRef t))
-                             (C.App (C.Ref tyApp errTy) err))
+  pure C.Arm { armPtrn = C.Capture var p, armTy = p
+             , armBody = C.Let (One (tyApp, errTy, C.TyApp errRef t))
+               (C.App (C.Ref tyApp errTy) err)
+             , armVars = [(var, p)]
+             }
 
 lowerAtAtom :: MonadLower m => Expr Typed -> Type -> Lower m Atom
 lowerAtAtom x t = do x' <- lowerAt x t
@@ -105,8 +109,8 @@ lowerAt (S.If c t e _) ty = do
   c' <- lowerAtAtom c C.tyBool
   t' <- lowerAtTerm t ty
   e' <- lowerAtTerm e ty
-  let tc = (PatLit LitTrue, C.tyBool, t')
-      te = (PatLit LitFalse, C.tyBool, e')
+  let tc = C.Arm (PatLit LitTrue) C.tyBool t' []
+      te = C.Arm (PatLit LitFalse)  C.tyBool e' []
   pure $ C.Match c' [tc, te]
 lowerAt (Fun p bd an) (ForallTy Irrelevant a b) =
   let operational (PType p _ _) = operational p
@@ -114,18 +118,23 @@ lowerAt (Fun p bd an) (ForallTy Irrelevant a b) =
    in case operational p of
         S.Capture (TvName v) _ -> Atom . Lam (TermArgument v a) <$> lowerAtTerm bd b
         _ -> do
-          (p', bd') <- (,) <$> lowerPat p <*> lowerAtTerm bd b
+          (vs, p') <- lowerPat p
+          bd' <- lowerAtTerm bd b
           arg <- fresh
           fail <- patternMatchingFail (fst an) (lowerType (S.getType p)) b
-          pure (Atom (Lam (TermArgument arg a) (C.Match (Ref arg a) [ (p', a, bd'), fail ])))
+          pure (Atom (Lam (TermArgument arg a) (C.Match (Ref arg a) [ C.Arm { armPtrn = p', armTy = a
+                                                                            , armBody = bd', armVars = vs }, fail ])))
 lowerAt (Begin [x] _) t = lowerAt x t
 lowerAt (Begin xs _) t = lowerAtTerm (last xs) t >>= flip (foldrM bind) (init xs) where
   bind e r = flip C.Let r . One <$> (build <$> fresh <*> lowerBothTerm e)
   build a (b, c) = (a, c, b)
 lowerAt (S.Match ex cs an) ty = do
   (ex', mt) <- lowerBothAtom ex
-  cs' <- for cs $ \(pat, ex) ->
-    (,mt,) <$> lowerPat pat <*> lowerAtTerm ex ty
+  cs' <- for cs $ \(pat, ex) -> do
+    (vs, p) <- lowerPat pat
+    ex' <- lowerAtTerm ex ty
+    pure C.Arm { armPtrn = p, armTy = mt
+               , armBody = ex', armVars = vs }
   fail <- patternMatchingFail (fst an) (lowerType (S.getType (fst (head cs)))) ty
 
   pure $ C.Match ex' (cs' ++ [fail])
@@ -139,8 +148,10 @@ lowerAt (Access r k _) ty = do
           RowsTy t rs -> cotyRows t (deleteBy ((==) `on` fst) (k, undefined) rs)
           ExactRowsTy rs -> ExactRowsTy (deleteBy ((==) `on` fst) (k, undefined) rs)
           _ -> error ("not a row type " ++ show rt)
-      match = ( PatExtend (C.Capture iv inner) [ (k, C.Capture var ty) ]
-              , rt, Atom (Ref var ty ))
+      match = C.Arm { armPtrn = PatExtend (C.Capture iv inner) [ (k, C.Capture var ty) ]
+                    , armTy = rt, armBody = Atom (Ref var ty )
+                    , armVars = [(iv, inner), (var, ty)]
+                    }
   pure $ C.Match r' [match]
 
 lowerAt (BinOp left op right a) t = lowerAt (S.App (S.App op left a) right a) t
@@ -253,16 +264,21 @@ lowerType (S.TySkol (Skolem _ (TvName v) _ _)) = VarTy v
 lowerType (S.TyWithConstraints _ t) = lowerType t
 lowerType S.TyType = StarTy
 
-lowerPat :: MonadLower m => Pattern Typed -> m Pat
+lowerPat :: MonadLower m => Pattern Typed -> m ([(Var Resolved, Type)], Pat)
 lowerPat pat = case pat of
-  S.Capture (TvName x) (_, t) -> pure $ C.Capture x (lowerType t)
-  Wildcard (_, t) -> C.Capture <$> fresh <*> pure (lowerType t)
-  Destructure (TvName p) Nothing _ -> pure $ Constr p
-  Destructure (TvName p) (Just t) _ -> Destr p <$> lowerPat t
+  S.Capture (TvName x) (_, t) ->
+    let t' = lowerType t
+    in pure ([(x, t')], C.Capture x (lowerType t))
+  Wildcard (_, t) -> do
+    let t' = lowerType t
+    x <- fresh
+    pure ([(x, t')], C.Capture x (lowerType t))
+  Destructure (TvName p) Nothing _ -> pure $ ([], Constr p)
+  Destructure (TvName p) (Just t) _ -> fmap (Destr p) <$> lowerPat t
   PType p _ _ -> lowerPat p
   PRecord xs (_, t) ->
     let
-      lowerRow (label, pat) = (,) label <$> lowerPat pat
+      lowerRow (label, pat) = fmap (label,) <$> lowerPat pat
       keys = map fst xs
       realt tp = case tp of
         ExactRowsTy rs -> ExactRowsTy (filter (not . flip elem keys . fst) rs)
@@ -273,17 +289,22 @@ lowerPat pat = case pat of
       fixup x = x
 
       tidy = fixup . realt . lowerType
-     in PatExtend <$> (C.Capture <$> fresh <*> pure (tidy t)) <*> traverse lowerRow xs
-  PTuple [] _ -> pure . PatLit $ Unit
+     in do
+      x <- fresh
+      let t' = tidy t
+      (vs, xs') <- unzip <$> traverse lowerRow xs
+      pure ((x, t') : concat vs, PatExtend (C.Capture x t') xs')
+
+  PTuple [] _ -> pure ([], PatLit Unit)
   PTuple xs _ ->
     let go [x] = lowerPat x
         go [] = error "no"
         go (x:xs) = do
-          x <- lowerPat x
-          xs <- go xs
-          pure (PatExtend (PatLit RecNil) [("1", x), ("2", xs)])
+          (v, x') <- lowerPat x
+          (vs, xs') <- go xs
+          pure (v ++ vs, PatExtend (PatLit RecNil) [("1", x'), ("2", xs')])
      in go xs
-  PLiteral l _ -> pure . PatLit $ lowerLiteral l
+  PLiteral l _ -> pure ([], PatLit (lowerLiteral l))
 
 lowerProg :: MonadLower m => [Toplevel Typed] -> m [Stmt]
 lowerProg [] = pure []

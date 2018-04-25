@@ -85,7 +85,7 @@ transformOver = transT where
      in Let (Many vars') body'
   mapT s (Match test branches) =
     let test' = transA s test
-        branches' = map (third3 (transT s)) branches
+        branches' = map (mapArmBody (transT s)) branches
     in Match test' branches'
 
   transT s = reduceTerm s . mapT s
@@ -130,33 +130,34 @@ reduceTerm s (Let (One (x, xt, Let (One (y, yt, yval)) xval)) rest)
     reduceTerm s $ Let (One (y, yt, yval)) $ reduceTerm s (Let (One (x, xt, xval)) rest)
 
 -- Match commuting conversion (trivial case)
-reduceTerm _ (Let (One (v, vt, Match t [(p, pt, b)])) r) =
-  Match t [(p, pt, appendBody b v vt r)]
+reduceTerm _ (Let (One (v, vt, Match t [a@Arm { armBody = b }])) r) =
+  Match t [a { armBody = appendBody b v vt r }]
 
 -- Trivial matches
-reduceTerm s (Match t ((Capture v _, ty, body):_)) = {-# SCC "Reduce.trivial_match" #-}
+reduceTerm s (Match t (Arm { armPtrn = Capture v _, armTy = ty, armBody = body }:_)) = {-# SCC "Reduce.trivial_match" #-}
   reduceTerm s $ Let (One (v, ty, Atom t)) body
 reduceTerm s (Match t bs) = {-# SCC "Reduce.fold_cases" #-}
   case foldCases bs of
-    Left  (_, _, b) -> b
+    Left  (Arm { armBody = b }) -> b
     Right bs' ->
       case last bs' of
         -- If we were really smart, we could strip _all_ cases which are shadowed by
         -- another. For now, simply detect the case `error @a "Nope"`
-        (Capture _ _, _, Let (One (tyApp, _, TyApp (Ref err _) _))
-                            (App (Ref tyApp' _) (Lit _)))
+        Arm { armPtrn = Capture _ _
+            , armBody = Let (One (tyApp, _, TyApp (Ref err _) _))
+                        (App (Ref tyApp' _) (Lit _)) }
           | TgInternal "error" <- toVar err
           , toVar tyApp == toVar tyApp'
-          , isComplete s (map fst3 (init bs'))
+          , isComplete s (map armPtrn (init bs'))
           -> Match t (init bs')
         _ -> Match t bs'
 
   where foldCases [] = Right []
-        foldCases ((p, ty, body):xs) = case reducePattern s t p of
+        foldCases (a@Arm { armPtrn = p, armBody = body }:xs) = case reducePattern s t p of
           PatternFail -> foldCases xs
-          PatternUnknown subst -> Right ((p, ty, substitute subst body) : either pure id (foldCases xs))
-          PatternPartial subst -> Right [(p, ty, substitute subst body)]
-          PatternComplete subst -> Left (p, ty, substitute subst body)
+          PatternUnknown subst -> Right (a { armBody = substitute subst body } : either pure id (foldCases xs))
+          PatternPartial subst -> Right [a { armBody = substitute subst body }]
+          PatternComplete subst -> Left a { armBody = substitute subst body }
 
 -- Beta reduction (function case)
 reduceTerm s (App (Lam (TermArgument var ty) body) ex) = {-# SCC "Reduce.beta_function" #-}

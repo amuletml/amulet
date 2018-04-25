@@ -27,6 +27,7 @@ data CoreError a = TypeMismatch (Type a) (Type a)
                  | forall b. Pretty b => ArisingIn (CoreError a) b
                  | NoSuchVar a
                  | InvalidCoercion (Coercion a)
+                 | PatternMismatch [(a, Type a)] [(a, Type a)]
 
 data Scope a = Scope { vars :: Map.Map a (Type a)
                      , types :: Set.Set a
@@ -41,6 +42,8 @@ instance Pretty a => Pretty (CoreError a) where
   pretty (ArisingIn e c) = pretty e </> text "arising in " <+> pretty c
   pretty (NoSuchVar a) = text "No such variable " <+> pretty a
   pretty (InvalidCoercion a) = text "Illegal coercion" <+> pretty a
+  pretty (PatternMismatch l r) = text "Expected vars" <+> pVs l </> text "     got vars" <+> pVs r
+    where pVs = hsep . punctuate comma . map (\(v, ty) -> pretty v <+> colon <+> pretty ty)
 
   prettyList = vsep . map pretty
 
@@ -125,7 +128,11 @@ checkTerm s t@(Let (Many vs) r) = do
 
 checkTerm s t@(Match e bs) = flip withContext t $ do
   tye <- checkAtom s e
-  (ty:tys) <- for bs $ \(p, ty, r) -> do
+  (ty:tys) <- for bs $ \Arm { armPtrn = p, armTy = ty, armBody = r, armVars = vs } -> do
+    if vs /= patternVars p
+    then tell [ArisingIn (PatternMismatch (patternVars p) vs) t]
+    else pure ()
+
     pVars <- checkPattern ty p `withContext` p
     if ty `apart` tye
     then throwError (TypeMismatch ty tye)
@@ -301,3 +308,10 @@ uni, apart, uniOpen :: IsVar a => Type a -> Type a -> Bool
 uni = unifyClosed
 apart a b = not (uniOpen a b)
 uniOpen a b = isJust (unify a b)
+
+patternVars :: Pattern a -> [(a, Type a)]
+patternVars (Capture v ty) = [(v, ty)]
+patternVars (Destr _ p) = patternVars p
+patternVars (PatExtend p ps) = patternVars p ++ concatMap (patternVars . snd) ps
+patternVars Constr{} = []
+patternVars PatLit{} = []

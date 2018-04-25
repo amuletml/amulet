@@ -33,8 +33,8 @@ isNewtype (ForallTy (Relevant var) k t) = do
   pure (from, to)
 isNewtype _ = Nothing
 
-newtypeMatch :: IsVar a => V.Map (Coercion a) -> [(Pattern a, Type a, Term a)] -> Maybe (Coercion a, (Pattern a, Type a, Term a))
-newtypeMatch m (it@(Destr c _, ty, _):xs)
+newtypeMatch :: IsVar a => V.Map (Coercion a) -> [Arm a] -> Maybe (Coercion a, Arm a)
+newtypeMatch m (it@Arm { armPtrn = Destr c _, armTy = ty }:xs)
   | Just phi@(SameRepr _ cod) <- V.lookup (toVar c) m =
     case unify cod ty of
       Just map -> pure (substituteInCo map (Symmetry phi), it)
@@ -75,12 +75,13 @@ goBinding m = traverse (third3A goTerm) where
   goTerm (TyApp f t) = TyApp <$> goAtom f <*> pure t
   goTerm (Cast f t) = Cast <$> goAtom f <*> pure t
   goTerm (Match a x) = case newtypeMatch m x of
-    Just (phi, (Destr _ p, _, bd)) -> do
+    Just (phi, Arm { armPtrn = Destr _ p, armBody = bd, armVars = vs }) -> do
       var <- fresh
       let Just (_, castCodomain) = relates phi
-      bd <- goTerm (Match (Ref (fromVar var) castCodomain) [(p, castCodomain, bd)])
-      pure $ Let (One (fromVar var, castCodomain, Cast a phi)) bd
-    _ -> Match <$> goAtom a <*> traverse (third3A goTerm) x
+      bd' <- goTerm (Match (Ref (fromVar var) castCodomain) [Arm { armPtrn = p, armTy = castCodomain
+                                                                 , armBody = bd, armVars = vs }])
+      pure $ Let (One (fromVar var, castCodomain, Cast a phi)) bd'
+    _ -> Match <$> goAtom a <*> traverse (fmapArmBody goTerm) x
 
   goAtom (Lam arg e) = Lam arg <$> goTerm e
   goAtom x = pure x

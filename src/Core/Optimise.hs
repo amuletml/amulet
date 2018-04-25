@@ -29,7 +29,7 @@ substitute m = term where
   term (App f x) = App (atom f) (atom x)
   term (Let (One v) x) = Let (One (third3 term v)) (term x)
   term (Let (Many vs) x) = Let (Many (map (third3 term) vs)) (term x)
-  term (Match x vs) = Match (atom x) (map (third3 term) vs)
+  term (Match x vs) = Match (atom x) (map arm vs)
   term (Extend e rs) = Extend (atom e) (map (third3 atom) rs)
   term (TyApp f t) = TyApp (atom f) t
   term (Cast f t) = Cast (atom f) t
@@ -38,13 +38,15 @@ substitute m = term where
   atom (Lam v b) = Lam v (term b)
   atom x@Lit{} = x
 
+  arm = mapArmBody term
+
 substituteInTys :: IsVar a => Map.Map a (Type a) -> Term a -> Term a
 substituteInTys m = term where
   term (Atom a) = Atom (atom a)
   term (App f x) = App (atom f) (atom x)
   term (Let (One (v, t, e)) x) = Let (One (v, gotype t, term e)) (term x)
   term (Let (Many vs) x) = Let (Many (map (\(v, t, e) -> (v, gotype t, term e)) vs)) (term x)
-  term (Match x vs) = Match (atom x) (map (\(v, t, e) -> (v, gotype t, term e)) vs)
+  term (Match x vs) = Match (atom x) (map arm vs)
   term (Extend e rs) = Extend (atom e) (map (third3 atom) rs)
   term (TyApp f t) = TyApp (atom f) (gotype t)
   term (Cast f t) = Cast (atom f) (coercion t)
@@ -64,6 +66,18 @@ substituteInTys m = term where
     go (TermArgument v t) = TermArgument v (gotype t)
     go (TypeArgument v t) = TypeArgument v (gotype t)
   atom x@Lit{} = x
+
+  arm a@Arm{} = a { armPtrn = ptrn (armPtrn a)
+                  , armTy = gotype (armTy a)
+                  , armBody = term (armBody a)
+                  , armVars = map (second gotype) (armVars a)
+                  }
+
+  ptrn (Capture a ty) = Capture a (gotype ty)
+  ptrn (Constr a) = Constr a
+  ptrn (Destr a p) = Destr a (ptrn p)
+  ptrn (PatExtend f fs) = PatExtend (ptrn f) (map (second ptrn) fs)
+  ptrn l@PatLit{} = l
 
   gotype = substituteInType m
 
@@ -135,13 +149,19 @@ refresh = refreshTerm mempty where
     vs' <- traverse (\(v, ty, e) -> (fromJust (VarMap.lookup (toVar v) s'), ty,) <$> refreshTerm s' e) vs
     Let (Many vs') <$> refreshTerm s' b
   refreshTerm s (Match e branches) = Match <$> refreshAtom s e
-                                            <*> traverse refreshBranch branches where
-    refreshBranch (test, ty, branch) = do
-      s' <- foldrM (\v m -> do
+                                           <*> traverse refreshArm branches where
+    refreshArm (Arm{ armVars = vs, armPtrn = test, armBody = branch, armTy = ty }) = do
+      s' <- foldrM (\(v, _) m -> do
                        let TgName name _ = toVar v
                        v' <- fromVar <$> freshFrom name
-                       pure (VarMap.insert (toVar v) v' m)) s (patternVarsA test `asTypeOf` [])
-      (refreshPattern s' test, refreshType s' ty,) <$> refreshTerm s' branch
+                       pure (VarMap.insert (toVar v) v' m)) s vs
+      branch' <- refreshTerm s' branch
+      pure Arm { armPtrn = refreshPattern s' test
+               , armTy = refreshType s' ty
+               , armBody = branch'
+               , armVars = map (\(v, ty) -> (fromJust (VarMap.lookup (toVar v) s'), refreshType s' ty)) vs
+               }
+
   refreshTerm s (Extend e bs) = Extend <$> refreshAtom s e <*> traverse (third3A (refreshAtom s)) bs
   refreshTerm s (Cast e c) = Cast <$> refreshAtom s e <*> pure (refreshCoercion s c)
 

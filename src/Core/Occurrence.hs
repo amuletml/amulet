@@ -144,11 +144,15 @@ tagOccurTerm ann var = tagTerm where
         (ftbs, bs') = unzip (map tagPtrn bs)
         fv = occConcat (fvt : ftbs)
     in (fv, AnnMatch (ann an fv) t' bs') where
-      tagPtrn (p, ty, b) =
+      tagPtrn (a@Arm { armPtrn = p, armBody = b, armVars = pv }) =
         let (fvb, b') = tagTerm b
             p' = flip var' fvb <$> p
-            pv = patternVarsA p :: [a]
-        in (foldr (VarMap.delete . toVar) fvb pv, (p', conv ty, b'))
+        in (foldr (VarMap.delete . toVar . fst) fvb pv
+           , Arm { armPtrn = p'
+                 , armTy = conv (armTy a)
+                 , armBody = b'
+                 , armVars = map (\(v, ty) -> (var' v fvb, conv ty)) pv
+                 })
 
   tagTerm (AnnExtend an f fs) =
     let (fvf, f') = tagAtom f

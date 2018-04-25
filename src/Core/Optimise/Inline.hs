@@ -66,7 +66,7 @@ inlineVariablePass = transS (InlineScope mempty mempty) where
     body' <- transT (extendVars vars' s) body
     pure (Let (Many vars') body')
   transT s (Match test branches) = Match <$> transA s test
-                                         <*> traverse (third3A (transT s)) branches
+                                         <*> traverse (fmapArmBody (transT s)) branches
 
   extendVar :: IsVar a => (a, Type a, Term a) -> InlineScope a -> InlineScope a
   extendVar (v, _, e) s = s
@@ -91,7 +91,7 @@ scoreTerm s (Atom a) = scoreAtom s a
 scoreTerm s (App f x) = scoreAtom s f + scoreAtom s x + 2
 scoreTerm s (Let (One v) e) = scoreTerm s (thd3 v) + scoreTerm s e
 scoreTerm s (Let (Many vs) e) = sum (map (scoreTerm s . thd3) vs) + scoreTerm s e
-scoreTerm s (Match e bs) = scoreAtom s e + sum (map (scoreTerm s . thd3) bs)
+scoreTerm s (Match e bs) = scoreAtom s e + sum (map (scoreTerm s . armBody) bs)
 scoreTerm s (Extend e rs) = scoreAtom s e + sum (map (scoreAtom s . thd3) rs)
 scoreTerm s (TyApp t _) = scoreAtom s t
 scoreTerm s (Cast t _) = scoreAtom s t
