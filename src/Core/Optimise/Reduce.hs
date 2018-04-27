@@ -155,9 +155,29 @@ reduceTerm s (Match t bs) = {-# SCC "Reduce.fold_cases" #-}
   where foldCases [] = Right []
         foldCases (a@Arm { armPtrn = p, armBody = body }:xs) = case reducePattern s t p of
           PatternFail -> foldCases xs
-          PatternUnknown subst -> Right (a { armBody = substitute subst body } : either pure id (foldCases xs))
-          PatternPartial subst -> Right [a { armBody = substitute subst body }]
-          PatternComplete subst -> Left a { armBody = substitute subst body }
+          PatternUnknown subst -> Right (substArm a subst body:either pure id (foldCases xs))
+          PatternPartial subst -> Right [substArm a subst body]
+          PatternComplete subst -> Left (substArm a subst body)
+
+        substArm a@Arm{armTyvars = []} subst body
+          -- In the trivial case we can do a plain old substitution
+          = a { armBody = substitute subst body }
+        substArm a@Arm{armTyvars = ts, armVars = vs} subst body
+          -- Otherwise we look up types and attempt to unify them.
+          = let Just tySubst = Map.foldrWithKey (foldVar vs) (Just mempty) subst
+            in a { armVars = map (second (substituteInType tySubst)) vs
+                 -- Substitute tyvars and remove those which have been remapped
+                 , armTyvars = map (second (substituteInType tySubst)) $ filter (not . flip Map.member tySubst . fst) ts
+                 -- Substitute atoms and tyvars
+                 , armBody = substituteInTys tySubst $ substitute subst body
+                 }
+
+        foldVar :: IsVar a => [(a, Type a)] -> a -> Atom a -> Maybe (Map.Map a (Type a)) -> Maybe (Map.Map a (Type a))
+        foldVar _ _ _ Nothing = Nothing
+        foldVar vs v a (Just sol) = do
+          vty <- snd <$> find ((==v) . fst) vs
+          aty <- approximateAtomType a
+          unifyWith sol vty aty
 
 -- Beta reduction (function case)
 reduceTerm s (App (Lam (TermArgument var ty) body) ex) = {-# SCC "Reduce.beta_function" #-}

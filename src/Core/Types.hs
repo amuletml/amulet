@@ -1,7 +1,7 @@
 {-# LANGUAGE TupleSections #-}
 module Core.Types
   ( arity
-  , approximateType
+  , approximateType, approximateAtomType
   , unify, unifyWith, unifyClosed
   , replaceTy
   ) where
