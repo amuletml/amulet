@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleContexts, OverloadedStrings, ExistentialQuantification, ScopedTypeVariables #-}
 module Core.Lint
-  ( runLint, emptyScope
+  ( runLint, runLintOK, emptyScope
   , checkStmt, checkTerm, checkAtom, checkType
   ) where
 
@@ -61,6 +61,11 @@ runLint m a =
                                        prettyList es' <#>
                                        string "for term" <#>
                                        pretty a
+
+runLintOK :: IsVar a => ExceptT (CoreError a) (Writer [CoreError a]) () -> Bool
+runLintOK m = case runWriter (runExceptT m) of
+                     (Right _, []) -> True
+                     _ -> False
 
 checkStmt :: (IsVar a, MonadError (CoreError a) m, MonadWriter [CoreError a] m)
           => Scope a
@@ -306,7 +311,7 @@ litTy RecNil = ExactRowsTy []
 
 uni, apart, uniOpen :: IsVar a => Type a -> Type a -> Bool
 uni = unifyClosed
-apart a b = not (uniOpen a b)
+apart a b = not (uni a b)
 uniOpen a b = isJust (unify a b)
 
 patternVars :: Pattern a -> [(a, Type a)]

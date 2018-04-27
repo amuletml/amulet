@@ -45,9 +45,9 @@ substituteInTys m = term where
   term (Atom a) = Atom (atom a)
   term (App f x) = App (atom f) (atom x)
   term (Let (One (v, t, e)) x) = Let (One (v, gotype t, term e)) (term x)
-  term (Let (Many vs) x) = Let (Many (map (\(v, t, e) -> (v, gotype t, term e)) vs)) (term x)
+  term (Let (Many vs) x) = Let (Many (map (trimap id gotype term) vs)) (term x)
   term (Match x vs) = Match (atom x) (map arm vs)
-  term (Extend e rs) = Extend (atom e) (map (third3 atom) rs)
+  term (Extend e rs) = Extend (atom e) (map (trimap id gotype atom) rs)
   term (TyApp f t) = TyApp (atom f) (gotype t)
   term (Cast f t) = Cast (atom f) (coercion t)
 
@@ -140,13 +140,13 @@ refresh = refreshTerm mempty where
     v' <- fromVar <$> freshFrom name
     let s' = VarMap.insert (toVar v) v' s
     e' <- refreshTerm s' e
-    Let (One (v', ty, e')) <$> refreshTerm s' b
+    Let (One (v', refreshType s' ty, e')) <$> refreshTerm s' b
   refreshTerm s (Let (Many vs) b) = do
     s' <- foldrM (\(v, _, _) m -> do
                      let TgName name _ = toVar v
                      v' <- fromVar <$> freshFrom name
                      pure (VarMap.insert (toVar v) v' m)) s vs
-    vs' <- traverse (\(v, ty, e) -> (fromJust (VarMap.lookup (toVar v) s'), ty,) <$> refreshTerm s' e) vs
+    vs' <- traverse (trimapA (pure . get s') (pure . refreshType s') (refreshTerm s')) vs
     Let (Many vs') <$> refreshTerm s' b
   refreshTerm s (Match e branches) = Match <$> refreshAtom s e
                                            <*> traverse refreshArm branches where
@@ -157,8 +157,8 @@ refresh = refreshTerm mempty where
       pure Arm { armPtrn = refreshPattern s' test
                , armTy = refreshType s' (armTy a)
                , armBody = branch'
-               , armVars = map (\(v, ty) -> (fromJust (VarMap.lookup (toVar v) s'), refreshType s' ty)) (armVars a)
-               , armTyvars = map (\(v, ty) -> (fromJust (VarMap.lookup (toVar v) s'), refreshType s' ty)) (armTyvars a)
+               , armVars = map (\(v, ty) -> (get s' v, refreshType s' ty)) (armVars a)
+               , armTyvars = map (\(v, ty) -> (get s' v, refreshType s' ty)) (armTyvars a)
                }
 
     refreshVs :: (MonadGen Int m, IsVar a) => [(a, Type a)] -> VarMap.Map a -> m (VarMap.Map a)
@@ -170,11 +170,11 @@ refresh = refreshTerm mempty where
       v' <- fromVar <$> freshFrom name
       pure (VarMap.insert (toVar v) v' m)
 
-  refreshTerm s (Extend e bs) = Extend <$> refreshAtom s e <*> traverse (third3A (refreshAtom s)) bs
+  refreshTerm s (Extend e bs) = Extend <$> refreshAtom s e <*> traverse (trimapA pure (pure . refreshType s) (refreshAtom s)) bs
   refreshTerm s (Cast e c) = Cast <$> refreshAtom s e <*> pure (refreshCoercion s c)
 
   refreshPattern :: IsVar a => VarMap.Map a -> Pattern a -> Pattern a
-  refreshPattern s (Capture v ty) = Capture (fromJust (VarMap.lookup (toVar v) s)) (refreshType s ty)
+  refreshPattern s (Capture v ty) = Capture (get s v) (refreshType s ty)
   refreshPattern _ p@Constr{} = p
   refreshPattern s (Destr c p) = Destr c (refreshPattern s p)
   refreshPattern s (PatExtend p fs) = PatExtend (refreshPattern s p) (map (second (refreshPattern s)) fs)
@@ -199,6 +199,8 @@ refresh = refreshTerm mempty where
   refreshCoercion s (Record c rs) = Record (refreshCoercion s c) (map (second (refreshCoercion s)) rs)
   refreshCoercion s x@(CoercionVar v) = maybe x CoercionVar (VarMap.lookup (toVar v) s)
   refreshCoercion s (Quantified v a c) = Quantified v (refreshCoercion s a) (refreshCoercion s c)
+
+  get s v = fromJust (VarMap.lookup (toVar v) s)
 
 argVar :: IsVar a => Argument a -> Var _
 argVar (TermArgument v _) = toVar v
