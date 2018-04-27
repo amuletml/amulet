@@ -133,7 +133,7 @@ lowerAt (Fun p bd an) (ForallTy Irrelevant a b) =
           ts <- patternTyvars p
           bd' <- lowerAtTerm bd b
           arg <- fresh
-          fail <- patternMatchingFail (fst an) (lowerType (S.getType p)) b
+          fail <- patternMatchingFail (fst an) a b
           pure (Atom (Lam (TermArgument arg a) (C.Match (Ref arg a) [ C.Arm { armPtrn = p', armTy = a, armBody = bd'
                                                                             , armVars = patternVars p', armTyvars = ts }
                                                                     , fail ])))
@@ -149,7 +149,7 @@ lowerAt (S.Match ex cs an) ty = do
     ex' <- lowerAtTerm ex ty
     pure C.Arm { armPtrn = p', armTy = mt, armBody = ex'
                , armVars = patternVars p', armTyvars = ts }
-  fail <- patternMatchingFail (fst an) (lowerType (S.getType (fst (head cs)))) ty
+  fail <- patternMatchingFail (fst an) mt ty
 
   pure $ C.Match ex' (cs' ++ [fail])
 lowerAt (Access r k _) ty = do
