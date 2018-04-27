@@ -181,7 +181,7 @@ lowerAt (ExprWrapper wrap e an) ty =
   case wrap of
     S.Cast S.ReflCo{} -> lowerAt e ty
     S.Cast c -> do
-      ex' <- lowerAtAtom e ty
+      ex' <- lowerExprAtom e
       pure (C.Cast ex' (co c))
     S.TypeApp t -> do
       ex' <- lowerAtAtom e (lowerType (S.getType e))
