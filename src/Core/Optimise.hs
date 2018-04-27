@@ -1,5 +1,6 @@
 {-# OPTIONS_GHC -Wno-partial-type-signatures #-}
 {-# LANGUAGE FlexibleContexts, TupleSections, PartialTypeSignatures #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Core.Optimise
   ( substitute, substituteInTys, substituteInType, substituteInCo
   , module Core.Core
@@ -40,46 +41,50 @@ substitute m = term where
 
   arm = mapArmBody term
 
-substituteInTys :: IsVar a => Map.Map a (Type a) -> Term a -> Term a
-substituteInTys m = term where
-  term (Atom a) = Atom (atom a)
-  term (App f x) = App (atom f) (atom x)
-  term (Let (One (v, t, e)) x) = Let (One (v, gotype t, term e)) (term x)
-  term (Let (Many vs) x) = Let (Many (map (trimap id gotype term) vs)) (term x)
-  term (Match x vs) = Match (atom x) (map arm vs)
-  term (Extend e rs) = Extend (atom e) (map (trimap id gotype atom) rs)
-  term (TyApp f t) = TyApp (atom f) (gotype t)
-  term (Cast f t) = Cast (atom f) (coercion t)
+substituteInTys :: forall a. IsVar a => Map.Map a (Type a) -> Term a -> Term a
+substituteInTys = term where
+  term :: Map.Map a (Type a) -> Term a -> Term a
+  term m (Atom a) = Atom (atom m a)
+  term m (App f x) = App (atom m f) (atom m x)
+  term m (Let (One (v, t, e)) x) = Let (One (v, gotype m t, term m e)) (term m x)
+  term m (Let (Many vs) x) = Let (Many (map (trimap id (gotype m) (term m)) vs)) (term m x)
+  term m (Match x vs) = Match (atom m x) (map (arm m) vs)
+  term m (Extend e rs) = Extend (atom m e) (map (trimap id (gotype m) (atom m)) rs)
+  term m (TyApp f t) = TyApp (atom m f) (gotype m t)
+  term m (Cast f t) = Cast (atom m f) (coercion m t)
 
-  coercion (SameRepr t t') = SameRepr (gotype t) (gotype t')
-  coercion (Domain c) = Domain (coercion c)
-  coercion (Codomain c) = Codomain (coercion c)
-  coercion (Symmetry c) = Symmetry (coercion c)
-  coercion (Application f x) = Application (coercion f) (coercion x)
-  coercion (ExactRecord rs) = ExactRecord (map (second coercion) rs)
-  coercion (Record c rs) = Record (coercion c) (map (second coercion) rs)
-  coercion (CoercionVar x) = CoercionVar x
-  coercion (Quantified v co c) = Quantified v (coercion co) (coercion c)
+  coercion m (SameRepr t t') = SameRepr (gotype m t) (gotype m t')
+  coercion m (Domain c) = Domain (coercion m c)
+  coercion m (Codomain c) = Codomain (coercion m c)
+  coercion m (Symmetry c) = Symmetry (coercion m c)
+  coercion m (Application f x) = Application (coercion m f) (coercion m x)
+  coercion m (ExactRecord rs) = ExactRecord (map (second (coercion m)) rs)
+  coercion m (Record c rs) = Record (coercion m c) (map (second (coercion m)) rs)
+  coercion _ (CoercionVar x) = CoercionVar x
+  coercion m (Quantified v co c) = Quantified v (coercion m co) (coercion m c)
 
-  atom (Ref v t) = Ref v (gotype t)
-  atom (Lam arg b) = Lam (go arg) (term b) where
-    go (TermArgument v t) = TermArgument v (gotype t)
-    go (TypeArgument v t) = TypeArgument v (gotype t)
-  atom x@Lit{} = x
+  atom m (Ref v t) = Ref v (gotype m t)
+  atom m (Lam arg b) = Lam (go arg) (term (delete m) b) where
+    go (TermArgument v t) = TermArgument v (gotype m t)
+    go (TypeArgument v t) = TypeArgument v (gotype m t)
+    delete = case arg of
+      TypeArgument v _ -> Map.delete v
+      _ -> id
+  atom _ x@Lit{} = x
 
-  arm a@Arm{} = a { armPtrn = ptrn (armPtrn a)
-                  , armTy = gotype (armTy a)
-                  , armBody = term (armBody a)
-                  , armVars = map (second gotype) (armVars a)
-                  }
+  arm m a@Arm{} = a { armPtrn = ptrn m (armPtrn a)
+                    , armTy = gotype m (armTy a)
+                    , armBody = term (flip (foldr Map.delete) (map fst (armTyvars a)) m) (armBody a)
+                    , armVars = map (second (gotype m)) (armVars a)
+                    }
 
-  ptrn (Capture a ty) = Capture a (gotype ty)
-  ptrn (Constr a) = Constr a
-  ptrn (Destr a p) = Destr a (ptrn p)
-  ptrn (PatExtend f fs) = PatExtend (ptrn f) (map (second ptrn) fs)
-  ptrn l@PatLit{} = l
+  ptrn m (Capture a ty) = Capture a (gotype m ty)
+  ptrn _ (Constr a) = Constr a
+  ptrn m (Destr a p) = Destr a (ptrn m p)
+  ptrn m (PatExtend f fs) = PatExtend (ptrn m f) (map (second (ptrn m)) fs)
+  ptrn _ l@PatLit{} = l
 
-  gotype = substituteInType m
+  gotype m = substituteInType m
 
 substituteInType :: IsVar a => Map.Map a (Type a) -> Type a -> Type a
 substituteInType = gotype where
