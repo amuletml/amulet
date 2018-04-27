@@ -183,7 +183,10 @@ refresh = refreshTerm mempty where
   refreshType :: IsVar a => VarMap.Map a -> Type a -> Type a
   refreshType s x@(VarTy v) = maybe x VarTy (VarMap.lookup (toVar v) s)
   refreshType _ x@ConTy{} = x
-  refreshType s (ForallTy v c t) = ForallTy v (refreshType s c) (refreshType s t)
+  refreshType s (ForallTy Irrelevant c t) = ForallTy Irrelevant (refreshType s c) (refreshType s t)
+  refreshType s (ForallTy b@(Relevant v) c t) =
+    let s' = VarMap.delete (toVar v) s
+    in ForallTy b (refreshType s c) (refreshType s' t)
   refreshType s (AppTy f x) = AppTy (refreshType s f) (refreshType s x)
   refreshType s (RowsTy v rs) = RowsTy (refreshType s v) (map (second (refreshType s)) rs)
   refreshType s (ExactRowsTy rs) = ExactRowsTy (map (second (refreshType s)) rs)
