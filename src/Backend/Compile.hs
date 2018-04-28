@@ -286,8 +286,8 @@ compileTerm (Let (Many bs) body) = do
           s <- gets snd
           flushStmt (compileStmt s (LuaAssign [LuaName (getVar v s)] . pure) e)
 
-compileTerm m@(Match test [(p, _, body)])
-  | all (\x -> usedWhen x == Once || usedWhen x == Dead) (patternVarsA p :: [a])
+compileTerm m@(Match test [Arm { armPtrn = p, armBody = body, armVars = vs}])
+  | all (\(x, _) -> usedWhen x == Once || usedWhen x == Dead) vs
   = do
       test' <- compileAtom test
       -- Just push the bindings onto the stack
@@ -358,9 +358,9 @@ patternBindings (Destr _ p) vr   = patternBindings p (LuaRef (LuaIndex vr (LuaNu
 patternBindings (PatExtend p rs) vr = patternBindings p vr ++ concatMap (index vr) rs where
   index vr (var', pat) = patternBindings pat (LuaRef (LuaIndex vr (LuaString var')))
 
-compileMatch :: Occurs a => Term a -> LuaExpr -> [(Pattern a, Type a, Term a)] -> ExprContext a LuaExpr
+compileMatch :: Occurs a => Term a -> LuaExpr -> [Arm a] -> ExprContext a LuaExpr
 compileMatch match test ps = ContT $ \next ->  gets (pure . genIf next . snd)
-  where genBinding next s (p, _, c) =
+  where genBinding next s Arm { armPtrn = p, armBody = c } =
           ( patternTest s p test
           , let (once, multi) = partition ((==Once) . usedWhen . fst) (patternBindings p test)
                 (s', multi') = foldl (\(s, vs) (v, e) -> let (v', s') = pushVar v s in (s', (LuaName v', e): vs)) (s, []) multi

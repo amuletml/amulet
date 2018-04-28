@@ -85,7 +85,7 @@ transformOver = transT where
      in Let (Many vars') body'
   mapT s (Match test branches) =
     let test' = transA s test
-        branches' = map (third3 (transT s)) branches
+        branches' = map (mapArmBody (transT s)) branches
     in Match test' branches'
 
   transT s = reduceTerm s . mapT s
@@ -130,33 +130,54 @@ reduceTerm s (Let (One (x, xt, Let (One (y, yt, yval)) xval)) rest)
     reduceTerm s $ Let (One (y, yt, yval)) $ reduceTerm s (Let (One (x, xt, xval)) rest)
 
 -- Match commuting conversion (trivial case)
-reduceTerm _ (Let (One (v, vt, Match t [(p, pt, b)])) r) =
-  Match t [(p, pt, appendBody b v vt r)]
+reduceTerm _ (Let (One (v, vt, Match t [a@Arm { armBody = b }])) r) =
+  Match t [a { armBody = appendBody b v vt r }]
 
 -- Trivial matches
-reduceTerm s (Match t ((Capture v _, ty, body):_)) = {-# SCC "Reduce.trivial_match" #-}
+reduceTerm s (Match t (Arm { armPtrn = Capture v _, armTy = ty, armBody = body }:_)) = {-# SCC "Reduce.trivial_match" #-}
   reduceTerm s $ Let (One (v, ty, Atom t)) body
 reduceTerm s (Match t bs) = {-# SCC "Reduce.fold_cases" #-}
   case foldCases bs of
-    Left  (_, _, b) -> b
+    Left  (Arm { armBody = b }) -> b
     Right bs' ->
       case last bs' of
         -- If we were really smart, we could strip _all_ cases which are shadowed by
         -- another. For now, simply detect the case `error @a "Nope"`
-        (Capture _ _, _, Let (One (tyApp, _, TyApp (Ref err _) _))
-                            (App (Ref tyApp' _) (Lit _)))
+        Arm { armPtrn = Capture _ _
+            , armBody = Let (One (tyApp, _, TyApp (Ref err _) _))
+                        (App (Ref tyApp' _) (Lit _)) }
           | TgInternal "error" <- toVar err
           , toVar tyApp == toVar tyApp'
-          , isComplete s (map fst3 (init bs'))
+          , isComplete s (map armPtrn (init bs'))
           -> Match t (init bs')
         _ -> Match t bs'
 
   where foldCases [] = Right []
-        foldCases ((p, ty, body):xs) = case reducePattern s t p of
+        foldCases (a@Arm { armPtrn = p, armBody = body }:xs) = case reducePattern s t p of
           PatternFail -> foldCases xs
-          PatternUnknown subst -> Right ((p, ty, substitute subst body) : either pure id (foldCases xs))
-          PatternPartial subst -> Right [(p, ty, substitute subst body)]
-          PatternComplete subst -> Left (p, ty, substitute subst body)
+          PatternUnknown subst -> Right (substArm a subst body:either pure id (foldCases xs))
+          PatternPartial subst -> Right [substArm a subst body]
+          PatternComplete subst -> Left (substArm a subst body)
+
+        substArm a@Arm{armTyvars = []} subst body
+          -- In the trivial case we can do a plain old substitution
+          = a { armBody = substitute subst body }
+        substArm a@Arm{armTyvars = ts, armVars = vs} subst body
+          -- Otherwise we look up types and attempt to unify them.
+          = let Just tySubst = Map.foldrWithKey (foldVar vs) (Just mempty) subst
+            in a { armVars = map (second (substituteInType tySubst)) vs
+                 -- Substitute tyvars and remove those which have been remapped
+                 , armTyvars = map (second (substituteInType tySubst)) $ filter (not . flip Map.member tySubst . fst) ts
+                 -- Substitute atoms and tyvars
+                 , armBody = substituteInTys tySubst $ substitute subst body
+                 }
+
+        foldVar :: IsVar a => [(a, Type a)] -> a -> Atom a -> Maybe (Map.Map a (Type a)) -> Maybe (Map.Map a (Type a))
+        foldVar _ _ _ Nothing = Nothing
+        foldVar vs v a (Just sol) = do
+          vty <- snd <$> find ((==v) . fst) vs
+          aty <- approximateAtomType a
+          unifyWith sol vty aty
 
 -- Beta reduction (function case)
 reduceTerm s (App (Lam (TermArgument var ty) body) ex) = {-# SCC "Reduce.beta_function" #-}
@@ -177,10 +198,8 @@ reduceTerm s (Cast (Ref v _) c)
   , Just _ <- unifyWith uni l r'
   = Atom a
 
-reduceTerm _ (Cast a co) =
-  case foldCo co of
-    Nothing -> Atom a
-    Just co' -> Cast a co'
+reduceTerm _ (Cast a co) | redundantCo co = Atom a
+                         | otherwise = Cast a co
 
 -- Constant fold
 reduceTerm s e@(App (Ref f1 _) r1)
@@ -377,21 +396,16 @@ isComplete s = isComplete' where
   flattenExtend (PatExtend p fs) = flattenExtend p ++ fs
   flattenExtend _ = []
 
-foldCo :: IsVar a => Coercion a -> Maybe (Coercion a)
-foldCo (SameRepr t t')
-  | t == t' = Nothing
-  | otherwise = Just (SameRepr t t')
-
-foldCo (Application c c') = Application <$> foldCo c <*> foldCo c'
-foldCo (Quantified v c c') = Quantified v <$> foldCo c <*> foldCo c'
-foldCo (ExactRecord rs) = ExactRecord <$> traverse (secondA foldCo) rs
-foldCo (Record c rs) = Record <$> foldCo c <*> traverse (secondA foldCo) rs
-
-foldCo (Domain c) = Domain <$> foldCo c
-foldCo (Codomain c) = Codomain <$> foldCo c
-foldCo (Symmetry c) = Symmetry <$> foldCo c
-
-foldCo x@CoercionVar{} = pure x
+redundantCo :: IsVar a => Coercion a -> Bool
+redundantCo (SameRepr t t') = t == t'
+redundantCo (Application c c') = redundantCo c && redundantCo c'
+redundantCo (Quantified _ c c') = redundantCo c && redundantCo c'
+redundantCo (ExactRecord rs) = all (redundantCo . snd) rs
+redundantCo (Record c rs) = redundantCo c && all (redundantCo . snd) rs
+redundantCo (Domain c) = redundantCo c
+redundantCo (Codomain c) = redundantCo c
+redundantCo (Symmetry c) = redundantCo c
+redundantCo CoercionVar{} = False
 
 appendBody :: Term a -> a -> Type a -> Term a -> Term a
 appendBody (Let bind b) v ty r = Let bind (appendBody b v ty r)

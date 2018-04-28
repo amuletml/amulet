@@ -103,6 +103,7 @@ library amulet
                      , Data.Spanned
                      -- Core
                      , Core.Core
+                     , Core.Lint
                      , Core.Free
                      , Core.Arity
                      , Core.Lower

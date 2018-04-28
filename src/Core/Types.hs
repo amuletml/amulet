@@ -1,7 +1,7 @@
 {-# LANGUAGE TupleSections #-}
 module Core.Types
   ( arity
-  , approximateType
+  , approximateType, approximateAtomType
   , unify, unifyWith, unifyClosed
   , replaceTy
   ) where
@@ -49,7 +49,7 @@ approximateType (App f _) = do
   pure d
 approximateType (Let _ e) = approximateType e
 approximateType (Match _ xs) = case xs of
-  ((_, _, t):_) -> approximateType t
+  (Arm { armBody = b }:_) -> approximateType b
   [] -> error "impossible approximateType empty match"
 approximateType (Extend e rs) = RowsTy <$> approximateAtomType e <*> traverse (\(x, _, t) -> (x,) <$> approximateAtomType t) rs
 approximateType (TyApp f at) = do
@@ -81,12 +81,9 @@ unify' (RowsTy t ts) (RowsTy t' ts') = do
   ts <- for (zip (sortOn fst ts) (sortOn fst ts')) $ \((_, t), (_, t')) -> unify' t t'
   pure (mgu_t <> fold ts)
 unify' (ExactRowsTy ts) (ExactRowsTy ts') = fold <$> for (zip (sortOn fst ts) (sortOn fst ts')) (\((_, t), (_, t')) -> unify' t t')
-unify' (ForallTy (Relevant v) c t) (ForallTy (Relevant v') c' t') = liftA2 (<>) (unify' c c') (unify' t (replace v v' t')) where
-  replace f t = replaceOne (VarTy t) f
-  replaceOne at var = transform (go var) where
-    go v (VarTy v') | v == v' = at
-    go _ x = x
+unify' (ForallTy (Relevant v) c t) (ForallTy (Relevant v') c' t') = liftA2 (<>) (unify' c c') (unify' t (replaceTy v' (VarTy v) t'))
 unify' (AppTy f t) (AppTy f' t') = liftA2 (<>) (unify' f f') (unify' t t')
+unify' StarTy StarTy = pure ()
 unify' _ _ = lift Nothing
 
 replaceTy :: IsVar a => a -> Type a -> Type a -> Type a
@@ -103,7 +100,7 @@ unifyClosed = go mempty where
     | otherwise = go (Map.insert v v' s) ty ty' && go s c c'
   go s (ForallTy Irrelevant a r) (ForallTy Irrelevant a' r') = go s a a' && go s r r'
   go s (AppTy f x) (AppTy f' x') = go s f f' && go s x x'
-  go s (RowsTy f ts) (RowsTy f' ts') = go s f f' && and (zipWith (\(_, t) (_, t') -> t == t' && go s t t') (sortOn fst ts) (sortOn fst ts'))
-  go s (ExactRowsTy ts) (ExactRowsTy ts') = and (zipWith (\(_, t) (_, t') -> t == t' && go s t t') (sortOn fst ts) (sortOn fst ts'))
+  go s (RowsTy f ts) (RowsTy f' ts') = go s f f' && and (zipWith (\(l, t) (l', t') -> l == l' && go s t t') (sortOn fst ts) (sortOn fst ts'))
+  go s (ExactRowsTy ts) (ExactRowsTy ts') = and (zipWith (\(l, t) (l', t') -> l == l' && go s t t') (sortOn fst ts) (sortOn fst ts'))
   go _ StarTy StarTy = True
   go _ _ _ = False

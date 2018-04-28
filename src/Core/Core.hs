@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleInstances, ScopedTypeVariables, DeriveFunctor, DeriveGeneric #-}
+{-# LANGUAGE FlexibleInstances, FlexibleContexts, ScopedTypeVariables, DeriveFunctor, DeriveGeneric #-}
 {-# LANGUAGE PatternSynonyms #-}
 module Core.Core where
 
@@ -34,7 +34,7 @@ data AnnTerm b a
   | AnnApp b (AnnAtom b a) (AnnAtom b a) -- removes a λ
 
   | AnnLet b (AnnBinding b a) (AnnTerm b a)
-  | AnnMatch b (AnnAtom b a) [(Pattern a, Type a, AnnTerm b a)]
+  | AnnMatch b (AnnAtom b a) [AnnArm b a]
 
   | AnnExtend b (AnnAtom b a) [(Text, Type a, AnnAtom b a)]
 
@@ -55,7 +55,7 @@ pattern App f x = AnnApp () f x
 pattern Let :: Binding a -> Term a -> Term a
 pattern Let b r = AnnLet () b r
 
-pattern Match :: Atom a -> [(Pattern a, Type a, Term a)] -> Term a
+pattern Match :: Atom a -> [Arm a] -> Term a
 pattern Match t b = AnnMatch () t b
 
 pattern Extend :: Atom a -> [(Text, Type a, Atom a)] -> Term a
@@ -73,6 +73,17 @@ data AnnBinding b a
   deriving (Eq, Show, Ord, Functor, Generic)
 
 type Binding = AnnBinding ()
+
+data AnnArm b a = Arm
+  { armPtrn :: Pattern a
+  , armTy   :: Type a
+  , armBody :: AnnTerm b a
+  , armVars :: [(a, Type a)]
+  , armTyvars :: [(a, Type a)]
+  }
+  deriving (Eq, Show, Ord, Functor, Generic)
+
+type Arm = AnnArm ()
 
 data Pattern a
   = Capture a (Type a)
@@ -142,7 +153,7 @@ instance Pretty a => Pretty (Term a) where
 
   pretty (Let (One x) e) = keyword "let" <+> braces (space <> pprLet1 x <> space) <+> keyword "in" <#> pretty e
   pretty (Let (Many xs) e) = keyword "let rec" <+> pprLet xs </> (keyword "in" <+> pretty e)
-  pretty (Match e ps) = keyword "match" <+> pretty e <+> pprCases ps
+  pretty (Match e ps) = keyword "match" <+> pretty e <+> pprArms ps
   pretty (Extend x rs) = braces $ pretty x <+> pipe <+> prettyRows rs where
     prettyRows = hsep . punctuate comma . map (\(x, t, v) -> text x <+> colon <+> pretty t <+> equals <+> pretty v)
   pretty (Cast a phi) = parens $ pretty a <+> soperator (string "|>") <+> pretty phi
@@ -168,9 +179,10 @@ pprLet1 (a, b, c) = pretty a <+> colon <+> pretty b <+> nest 2 (equals </> prett
 pprBegin :: [Doc] -> Doc
 pprBegin = braces' . vsep . map (indent 2) . punctuate semi
 
-pprCases :: Pretty a => [(Pattern a, Type a, Term a)] -> Doc
-pprCases = braces' . vsep . map (indent 2) . punctuate semi . map one where
-  one (a, b, c) = pretty a <+> colon <+> pretty b <+> nest 2 (arrow </> pretty c)
+pprArms :: Pretty a => [Arm a] -> Doc
+pprArms = braces' . vsep . map (indent 2) . punctuate semi . map one where
+  one (Arm a b c _ ts) = pretty a <+> brackets (hsep (punctuate comma (map pprTv ts))) <+> colon <+> pretty b <+> nest 2 (arrow </> pretty c)
+  pprTv (a, t) = stypeVar (squote <> pretty a) <+> colon <+> pretty t
 
 pprCoRow :: Pretty a => (Text, Coercion a) -> Doc
 pprCoRow (a, b) = text a <+> equals <+> pretty b
@@ -239,7 +251,7 @@ freeIn (AnnApp _ f x) = freeInAtom f <> freeInAtom x
 freeIn (AnnLet _ (One v) e) = VarSet.difference (freeIn e <> freeIn (thd3 v)) (VarSet.singleton (toVar (fst3 v)))
 freeIn (AnnLet _ (Many vs) e) = VarSet.difference (freeIn e <> foldMap (freeIn . thd3) vs) (VarSet.fromList (map (VarSet.toVar . fst3) vs))
 freeIn (AnnMatch _ e bs) = freeInAtom e <> foldMap freeInBranch bs where
-  freeInBranch (b, _, e) = VarSet.difference (freeIn e) (patternVars b)
+  freeInBranch Arm { armVars = v, armBody = e } = foldr (VarSet.delete . toVar . fst) (freeIn e) v
 freeIn (AnnExtend _ c rs) = freeInAtom c <> foldMap (freeInAtom . thd3) rs
 freeIn (AnnTyApp _ f _) = freeInAtom f
 freeIn (AnnCast _ f _) = freeInAtom f
@@ -266,26 +278,23 @@ occursInTerm v (TyApp f _) = occursInAtom v f
 occursInTerm v (Cast f _) = occursInAtom v f
 occursInTerm v (Let (One va) e) = occursInTerm v (thd3 va) || occursInTerm v e
 occursInTerm v (Let (Many vs) e) = any (occursInTerm v . thd3) vs || occursInTerm v e
-occursInTerm v (Match e bs) = occursInAtom v e || any (occursInTerm v . thd3) bs
+occursInTerm v (Match e bs) = occursInAtom v e || any (occursInTerm v . armBody) bs
 occursInTerm v (Extend e fs) = occursInAtom v e || any (occursInAtom v . thd3) fs
+
+occursInTy :: IsVar a => a -> Type a -> Bool
+occursInTy _ (ConTy _) = False
+occursInTy v (VarTy v') = toVar v == toVar v'
+occursInTy v (ForallTy b k t)
+  | Relevant v /= b = occursInTy v k || occursInTy v t
+  | otherwise = occursInTy v k
+occursInTy v (AppTy a b) = occursInTy v a || occursInTy v b
+occursInTy v (RowsTy t rs) = occursInTy v t || any (occursInTy v . snd) rs
+occursInTy v (ExactRowsTy rs) = any (occursInTy v . snd) rs
+occursInTy _ StarTy = False
 
 isError :: Atom (Var Resolved) -> Bool
 isError (Ref (TgInternal n) _) = n == pack "error"
 isError _ = False
-
-patternVars :: VarSet.IsVar a => Pattern a -> VarSet.Set
-patternVars (Capture v _) = VarSet.singleton (VarSet.toVar v)
-patternVars (Destr _ p) = patternVars p
-patternVars (PatExtend p ps) = foldMap (patternVars . snd) ps <> patternVars p
-patternVars Constr{} = mempty
-patternVars PatLit{} = mempty
-
-patternVarsA :: (Monoid (m a), Applicative m) => Pattern a -> m a
-patternVarsA (Capture v _) =  pure v
-patternVarsA (Destr _ p) = patternVarsA p
-patternVarsA (PatExtend p ps) = mconcat (patternVarsA p : map (patternVarsA . snd) ps)
-patternVarsA Constr{} = mempty
-patternVarsA PatLit{} = mempty
 
 relates :: Show a => Coercion a -> Maybe (Type a, Type a)
 relates (SameRepr a b) = Just (a, b)
@@ -332,6 +341,12 @@ extractAnn (AnnMatch b _ _)  = b
 extractAnn (AnnExtend b _ _) = b
 extractAnn (AnnTyApp b _ _)  = b
 extractAnn (AnnCast b _ _)   = b
+
+mapArmBody :: (AnnTerm b a -> AnnTerm c a) -> AnnArm b a -> AnnArm c a
+mapArmBody f a = a { armBody = f (armBody a) }
+
+fmapArmBody :: Functor f => (AnnTerm b a -> f (AnnTerm c a)) -> AnnArm b a -> f (AnnArm c a)
+fmapArmBody f a = (\b -> a { armBody = b}) <$> f (armBody a)
 
 instance Plated (AnnAtom b a) where
   plate = gplate

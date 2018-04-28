@@ -89,9 +89,9 @@ sinkTerm s (AnnLet _ (Many vs) r) =
   in flushBinds fs (Let (Many vs') r')
 
 sinkTerm s (AnnMatch _ t bs) =
-  let (fs, ts:bss) = partitionBinds (sinkable s) (freeInAtom t : map (extractAnn . thd3) bs)
+  let (fs, ts:bss) = partitionBinds (sinkable s) (freeInAtom t : map (extractAnn . armBody) bs)
       t' = sinkAtom (nullBinds s) t
-      bs' = zipWith (\fv -> third3 (sinkTerm (s { sinkable = fv }))) bss bs
+      bs' = zipWith (\fv -> mapArmBody (sinkTerm (s { sinkable = fv }))) bss bs
   in flushBinds fs $ flushBinds ts $ Match t' bs'
 
 sinkTerm s (AnnTyApp _ f ty) = flushBinds (sinkable s) (TyApp (sinkAtom (nullBinds s) f) ty)

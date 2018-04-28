@@ -12,7 +12,6 @@ import qualified Data.Text.IO as T
 import qualified Data.Text as T
 import Data.Foldable
 
-import Control.Monad.Reader (runReaderT)
 import Control.Monad.Gen (runGen)
 import Control.Lens (ifor_, (^.), to)
 
@@ -34,7 +33,7 @@ import Syntax (Toplevel, Typed, Var, Resolved, Type)
 
 import Core.Occurrence (OccursVar, tagOccursVar)
 import Core.Simplify (optimise)
-import Core.Lower (lowerProg)
+import Core.Lower (runLowerT, lowerProg)
 import Core.Core (Stmt)
 
 import Pretty (Pretty(pretty), putDoc, (<+>), colon)
@@ -58,7 +57,7 @@ compile (file:files) = runGen $ do
   files' <- foldlM go file' files
   case files' of
     Right (prg, _, _, env) -> do
-      lower <- runReaderT (lowerProg prg) mempty
+      lower <- runLowerT (lowerProg prg)
       optm <- optimise lower
       pure (CSuccess (prg, lower, tagOccursVar optm, env))
 
