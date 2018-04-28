@@ -39,7 +39,10 @@ raiseE vR aR =
 raiseWrapper :: (Var p -> Var p') -> Wrapper p -> Wrapper p'
 raiseWrapper v (Cast co) = Cast (raiseCo v co)
 raiseWrapper v (TypeApp ty) = TypeApp (raiseT v ty)
-raiseWrapper v (TypeLam var t) = TypeLam (v var) (raiseT v t)
+raiseWrapper v (TypeLam (Skolem n u s m) t) = TypeLam (Skolem (v n) (v u) (raiseT v s) (motive m)) (raiseT v t) where
+  motive (BySubsumption a b) = BySubsumption (raiseT v a) (raiseT v b)
+  motive (ByAscription t) = ByAscription (raiseT v t)
+  motive (ByExistential a t) = ByExistential (v a) (raiseT v t)
 raiseWrapper v (x :> y) = raiseWrapper v x :> raiseWrapper v y
 raiseWrapper v (WrapVar var) = WrapVar (v var)
 raiseWrapper _ IdWrap = IdWrap

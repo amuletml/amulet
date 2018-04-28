@@ -25,6 +25,7 @@ import Data.List
 
 import qualified Core.Core as C
 import qualified Core.Builtin as C
+import Core.Optimise (substituteInType)
 import Core.Core hiding (Atom, Term, Stmt, Type, Pattern, Arm)
 import Core.Core (pattern Atom)
 import Core.Types (unify, replaceTy)
@@ -33,7 +34,7 @@ import qualified Syntax as S
 import Syntax.Let
 import Syntax (Var(..), Resolved, Typed, Expr(..), Pattern(..), Lit(..), Skolem(..), Toplevel(..), Constructor(..))
 
-import Pretty (pretty)
+import Pretty (pretty, render, renderDetailed)
 import Debug.Trace
 
 type Atom = C.Atom (Var Resolved)
@@ -123,7 +124,8 @@ lowerAt (S.If c t e _) ty = do
   let tc = C.Arm (PatLit LitTrue) C.tyBool t' [] []
       te = C.Arm (PatLit LitFalse)  C.tyBool e' [] []
   pure $ C.Match c' [tc, te]
-lowerAt (Fun p bd an) (ForallTy Irrelevant a b) =
+lowerAt (Fun p bd an) (ForallTy Irrelevant a b) = do
+  trace (renderDetailed (pretty (ForallTy Irrelevant a b))) pure ()
   let operational (PType p _ _) = operational p
       operational p = p
    in case operational p of
@@ -186,11 +188,12 @@ lowerAt (ExprWrapper wrap e an) ty =
     S.TypeApp t -> do
       ex' <- lowerAtAtom e (lowerType (S.getType e))
       pure (C.TyApp ex' (lowerType t))
-    S.TypeLam (TvName v) k ->
-      let ty' (ForallTy _ _ t) = t
+    S.TypeLam (Skolem (TvName (TgName _ id)) (TvName (TgName n _)) _ _) k ->
+      let ty' (ForallTy (Relevant v) _ t) = substituteInType (traceShowId (Map.singleton v (VarTy var))) t
           ty' x = x
-          inner = ty' ty
-       in Atom . Lam (TypeArgument v (lowerType k)) <$> lowerAtTerm e inner
+          var = TgName n id
+          inner = trace (renderDetailed (pretty (ty' ty))) ty' ty
+       in Atom . Lam (TypeArgument var (lowerType k)) <$> lowerAtTerm e inner
     ws S.:> wy -> lowerAt (ExprWrapper ws (ExprWrapper wy e an) an) ty
     S.WrapVar v -> error $ "Unsolved wrapper variable " ++ show v ++ ". This is a bug"
     S.IdWrap -> lowerAt e ty
@@ -274,7 +277,7 @@ lowerType (S.TyExactRows vs) = ExactRowsTy (map (fmap lowerType) vs)
 lowerType (S.TyVar (TvName v)) = VarTy v
 lowerType (S.TyCon (TvName v)) = ConTy v
 lowerType (S.TyPromotedCon (TvName v)) = ConTy v -- TODO this is in the wrong scope
-lowerType (S.TySkol (Skolem _ (TvName v) _ _)) = VarTy v
+lowerType (S.TySkol (Skolem (TvName (TgName _ id)) (TvName (TgName n _)) _ _)) = VarTy (TgName n id)
 lowerType (S.TyWithConstraints _ t) = lowerType t
 lowerType S.TyType = StarTy
 

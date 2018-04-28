@@ -128,7 +128,7 @@ transformExprTyped fe fc ft = goE where
   goW IdWrap = IdWrap
 
   goE = transE . fe
-  goT = transformType ft
+  goT = ft
   goC = transformCoercion fc ft
   goA (s, ty) = (s, goT ty)
 

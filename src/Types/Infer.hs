@@ -38,6 +38,8 @@ import Types.Infer.Builtin
 import Types.Wellformed
 import Types.Unify
 
+import Debug.Trace
+import Text.Show.Pretty (ppShow)
 import Pretty
 
 -- Solve for the types of lets in a program
@@ -115,6 +117,7 @@ check e ty = do
 infer :: MonadInfer Typed m => Expr Resolved -> m (Expr Typed, Type Typed)
 infer (VarRef k a) = do
   (cont, old, new) <- third3A (discharge (VarRef k a)) =<< lookupTy' k
+  trace ("looked up " ++ render (pretty k) ++ " at " ++ render (pretty new)) pure ()
   case cont of
     Nothing -> pure (VarRef (TvName k) (a, old), old)
     Just cont -> pure (cont (VarRef (TvName k) (a, old)), new)
@@ -273,7 +276,7 @@ inferLetTy closeOver vs =
             pure (x, co, ty')
           Left e -> throwError (ArisingFrom e (snd blame))
         skolCheck (TvName (fst blame)) (snd blame) vt
-        pure (vt, solveEx x co)
+        pure (vt, solveEx vt x co)
 
       generalise :: SomeReason -> Type Typed -> m (Type Typed)
       generalise r ty =
@@ -335,9 +338,11 @@ inferLetTy closeOver vs =
                 pure (TvName var, exp', ann, ty)
 
         cur <- gen
+        _ <- traverse (flip trace (pure ()) . render . pretty) cs
         (solution, cs) <- case solve cur cs of
           Right x -> pure x
           Left e -> throwError e
+        trace (ppShow solution) pure ()
         let solveOne :: (Var Typed, Expr Typed, Span, Type Typed)
                      -> m ((Var Typed, Expr Typed, Ann Typed), Telescope Typed)
             solveOne (var, exp, ann, given) =
@@ -345,7 +350,7 @@ inferLetTy closeOver vs =
                in do
                   ty <- closeOver (figure given)
                   skolCheck var (BecauseOf exp) ty
-                  pure ( (var, solveEx solution cs exp, (ann, ty))
+                  pure ( (var, solveEx ty solution cs exp, (ann, ty))
                        , one var ty )
             squish = fmap (second mconcat . unzip)
          in squish . traverse solveOne $ vs
@@ -358,10 +363,13 @@ inferLetTy closeOver vs =
       tc [] = pure ([], mempty)
    in tc sccs
 
-solveEx :: Subst Typed -> Map.Map (Var Typed) (Wrapper Typed) -> Expr Typed -> Expr Typed
-solveEx ss cs = transformExprTyped go id goType where
+solveEx :: Type Typed -> Subst Typed -> Map.Map (Var Typed) (Wrapper Typed) -> Expr Typed -> Expr Typed
+solveEx ty ss cs = transformExprTyped go id goType where
+  boundByType (TyPi (Implicit v _) t) = Set.insert v (boundByType t)
+  boundByType t = Set.empty
+
   go :: Expr Typed -> Expr Typed
-  go (ExprWrapper w e a) = ExprWrapper (goWrap w) (solveEx ss cs e) a
+  go (ExprWrapper w e a) = ExprWrapper (goWrap w) (solveEx ty ss cs e) a
   go x = x
 
   goWrap (TypeApp t) = TypeApp (goType t)
@@ -427,8 +435,8 @@ inferFunTy vs = do
     Right x -> pure x
     Left e -> throwError e
 
-  let fixClause Clause{..} = Clause _clauseName (map (solvePat sol) _clausePat) (solveEx sol cos _clauseBody) _clauseSpan
-      fixFunction FunDecl{..} = FunDecl _fnVar (map fixClause _fnClauses) (apply sol _fnTypeAnn) _fnSpan
+  let fixClause tau Clause{..} = Clause _clauseName (map (solvePat sol) _clausePat) (solveEx tau sol cos _clauseBody) _clauseSpan
+      fixFunction FunDecl{..} = FunDecl _fnVar (map (fixClause (apply sol _fnTypeAnn)) _fnClauses) (apply sol _fnTypeAnn) _fnSpan
 
   pure (map fixFunction vars, tele)
 

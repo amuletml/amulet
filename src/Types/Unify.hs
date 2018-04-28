@@ -24,6 +24,9 @@ import Data.Function
 import Data.List
 import Data.Text (Text)
 
+import Debug.Trace
+import Pretty
+
 data SolveScope
   = SolveScope { _bindSkol :: Bool
                , _don'tTouch :: Set.Set (Var Typed)
@@ -257,6 +260,7 @@ subsumes k t1@TyForall{} t2 = do
   wrap <- case cont of
     Just f -> case f undefined of
       ExprWrapper w _ _ -> pure w
+      Ascription (ExprWrapper w _ _) _ _ -> pure w
       _ -> error "what"
     Nothing -> pure IdWrap
   (Syntax.:>) wrap <$> subsumes k t1' t2
@@ -266,10 +270,13 @@ skolemise :: MonadGen Int m => SkolemMotive Typed -> Type Typed -> m (Wrapper Ty
 skolemise motive ty@(TyForall tv k t) = do
   sk <- freshSkol motive ty tv
   (wrap, ty) <- skolemise motive (apply (Map.singleton tv sk) t)
+  trace (renderDetailed (pretty (apply (Map.singleton tv sk) t))) pure ()
   kind <- case k of
     Nothing -> freshTV
     Just x -> pure x
-  pure (TypeLam tv kind Syntax.:> wrap, ty)
+  let getSkol (TySkol s) = s
+      getSkol _ = error "not a skolem from freshSkol"
+  pure (TypeLam (getSkol sk) kind Syntax.:> wrap, ty)
 skolemise _ ty = pure (IdWrap, ty)
 
 freshSkol :: MonadGen Int m => SkolemMotive Typed -> Type Typed -> Var Typed -> m (Type Typed)

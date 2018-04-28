@@ -26,16 +26,8 @@ optmOnce :: [Stmt (Var Resolved)] -> Gen Int [Stmt (Var Resolved)]
 optmOnce = passes where
   passes = foldr1 (>=>) $ linted
            [ pure
-
-           , pure . reducePass
-           , inlineVariablePass
-
-           , pure . deadCodePass
-           , killNewtypePass
-
-           , pure . sinkingPass . tagFreeSet
-
-           , pure . reducePass
+           -- , pure . reducePass
+           -- , (pure . deadCodePass) <=< inlineVariablePass
            , pure
            ]
 

@@ -41,18 +41,21 @@ instance Ord (Var p) => Substitutable p (Type p) where
   ftv (TyWithConstraints eq b) = foldMap (\(a, b) -> ftv a <> ftv b) eq <> ftv b
   ftv (TyPi binder t) = ftv binder <> (ftv t Set.\\ bound binder)
 
-  apply _ (TyCon a) = TyCon a
-  apply _ (TySkol x) = TySkol x
-  apply _ (TyPromotedCon x) = TyPromotedCon x
-  apply _ TyType = TyType
-  apply s t@(TyVar v) = Map.findWithDefault t v s
-  apply s (TyApp a b) = TyApp (apply s a) (apply s b)
-  apply s (TyTuple a b) = TyTuple (apply s a) (apply s b)
-  apply s (TyPi binder t) = TyPi (apply s binder) (apply s' t) where
-    s' = foldr Map.delete s (Set.toList (bound binder))
-  apply s (TyRows rho rows) = TyRows (apply s rho) (map (second (apply s)) rows)
-  apply s (TyExactRows rows) = TyExactRows  (map (second (apply s)) rows)
-  apply s (TyWithConstraints eq b) = TyWithConstraints (map (\(a, b) -> (apply s a, apply s b)) eq) (apply s b)
+  apply = applyT mempty where
+    applyT _ _ (TyCon a) = TyCon a
+    applyT _ _ (TySkol x) = TySkol x
+    applyT _ _ (TyPromotedCon x) = TyPromotedCon x
+    applyT _ _ TyType = TyType
+    applyT vars s t@(TyVar v) = if v `Set.member` vars
+                                   then t
+                                   else Map.findWithDefault t v s
+    applyT vars s (TyApp a b) = TyApp (applyT vars s a) (applyT vars s b)
+    applyT vars s (TyTuple a b) = TyTuple (applyT vars s a) (applyT vars s b)
+    applyT vars s (TyPi binder t) = TyPi (apply s binder) (applyT (vars <> bound binder) s' t) where
+      s' = foldr Map.delete s (Set.toList (bound binder))
+    applyT vars s (TyRows rho rows) = TyRows (applyT vars s rho) (map (second (applyT vars s)) rows)
+    applyT vars s (TyExactRows rows) = TyExactRows  (map (second (applyT vars s)) rows)
+    applyT vars s (TyWithConstraints eq b) = TyWithConstraints (map (\(a, b) -> (applyT vars s a, applyT vars s b)) eq) (applyT vars s b)
 
 instance Ord (Var p) => Substitutable p (Coercion p) where
   ftv VarCo{} = mempty
