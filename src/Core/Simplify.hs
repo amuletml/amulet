@@ -4,8 +4,8 @@ module Core.Simplify
 
 import Data.List
 
+-- import Core.Optimise.Newtype
 import Core.Optimise.DeadCode
-import Core.Optimise.Newtype
 import Core.Optimise.Inline
 import Core.Optimise.Reduce
 import Core.Optimise.Sinking

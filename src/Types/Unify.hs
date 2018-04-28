@@ -90,8 +90,6 @@ unify ta@(TyPromotedCon a) tb@(TyPromotedCon b)
 
 unify (TySkol t@(Skolem sv _ _ _)) b = do
   sub <- use (solveAssumptions . at sv)
-  -- flip traceShow (pure ()) =<< use solveAssumptions
-  -- traceShow (sv, sub) pure ()
   case sub of
     Just ty -> do
       _ <- unify b ty
@@ -201,7 +199,6 @@ doSolve Empty = pure ()
 doSolve (ConUnify because v a b :<| xs) = do
   sub <- use solveTySubst
 
-  -- trace (render (pretty (ConUnify because v (apply sub a) (apply sub b)))) pure ()
   co <- unify (apply sub a) (apply sub b)
     `catchError` \e -> throwError (ArisingFrom e because)
   solveCoSubst . at v .= Just (Cast co)
@@ -210,7 +207,6 @@ doSolve (ConUnify because v a b :<| xs) = do
 doSolve (ConSubsume because v a b :<| xs) = do
   sub <- use solveTySubst
 
-  -- trace (render (pretty (ConSubsume because v (apply sub a) (apply sub b)))) pure ()
 
   co <- subsumes unify (apply sub a) (apply sub b)
     `catchError` \e -> throwError (ArisingFrom e because)
@@ -223,7 +219,6 @@ doSolve (ConImplies because not cs ts :<| xs) = do
   let not' = ftv (apply before not) <> ftv not
       cs' = apply before cs
       ts' = apply before ts
-  -- trace (render (pretty (ConImplies because (apply before not) cs' ts'))) pure ()
   do
     let go = local (bindSkol .~ True) . local (don'tTouch .~ mempty) $ doSolve cs'
     ((), sub) <- capture $ go
