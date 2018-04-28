@@ -34,8 +34,7 @@ import qualified Syntax as S
 import Syntax.Let
 import Syntax (Var(..), Resolved, Typed, Expr(..), Pattern(..), Lit(..), Skolem(..), Toplevel(..), Constructor(..))
 
-import Pretty (pretty, render, renderDetailed)
-import Debug.Trace
+import Pretty (pretty)
 
 type Atom = C.Atom (Var Resolved)
 type Term = C.Term (Var Resolved)
@@ -124,8 +123,7 @@ lowerAt (S.If c t e _) ty = do
   let tc = C.Arm (PatLit LitTrue) C.tyBool t' [] []
       te = C.Arm (PatLit LitFalse)  C.tyBool e' [] []
   pure $ C.Match c' [tc, te]
-lowerAt (Fun p bd an) (ForallTy Irrelevant a b) = do
-  trace (renderDetailed (pretty (ForallTy Irrelevant a b))) pure ()
+lowerAt (Fun p bd an) (ForallTy Irrelevant a b) =
   let operational (PType p _ _) = operational p
       operational p = p
    in case operational p of
@@ -189,11 +187,11 @@ lowerAt (ExprWrapper wrap e an) ty =
       ex' <- lowerAtAtom e (lowerType (S.getType e))
       pure (C.TyApp ex' (lowerType t))
     S.TypeLam (Skolem (TvName (TgName _ id)) (TvName (TgName n _)) _ _) k ->
-      let ty' (ForallTy (Relevant v) _ t) = substituteInType (traceShowId (Map.singleton v (VarTy var))) t
+      let ty' (ForallTy (Relevant v) _ t) = substituteInType (Map.singleton v (VarTy var)) t
           ty' x = x
           var = TgName n id
-          inner = trace (renderDetailed (pretty (ty' ty))) ty' ty
-       in Atom . Lam (TypeArgument var (lowerType k)) <$> lowerAtTerm e inner
+       in Atom . Lam (TypeArgument var (lowerType k)) <$> lowerAtTerm e (ty' ty)
+    S.TypeLam _ _ -> error "impossible lowerAt TypeLam"
     ws S.:> wy -> lowerAt (ExprWrapper ws (ExprWrapper wy e an) an) ty
     S.WrapVar v -> error $ "Unsolved wrapper variable " ++ show v ++ ". This is a bug"
     S.IdWrap -> lowerAt e ty
@@ -278,6 +276,7 @@ lowerType (S.TyVar (TvName v)) = VarTy v
 lowerType (S.TyCon (TvName v)) = ConTy v
 lowerType (S.TyPromotedCon (TvName v)) = ConTy v -- TODO this is in the wrong scope
 lowerType (S.TySkol (Skolem (TvName (TgName _ id)) (TvName (TgName n _)) _ _)) = VarTy (TgName n id)
+lowerType (S.TySkol _) = error "impossible lowerType TySkol"
 lowerType (S.TyWithConstraints _ t) = lowerType t
 lowerType S.TyType = StarTy
 
@@ -372,11 +371,10 @@ patternTyvars = asks . flip (go . ctors)
     go _ (S.Capture _ _) = []
     go _ (Wildcard _) = []
     go _ (Destructure _ Nothing _) = []
-    go s x@(Destructure (TvName p) (Just t) (_, pty)) =
-      let pty' = lowerType pty
-          tty' = lowerType (S.getType t)
+    go s (Destructure (TvName p) (Just t) (_, _)) =
+      let tty' = lowerType (S.getType t)
 
-          Just (skolm, ctty, cpty) = rootType mempty <$> Map.lookup p s
+          Just (skolm, ctty, _) = rootType mempty <$> Map.lookup p s
           Just uni =  unify ctty tty'
       in mapMaybe (extS skolm) (Map.toList uni) ++ go s t
     go s (PType p _ _) = go s p

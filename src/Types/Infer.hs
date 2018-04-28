@@ -38,8 +38,6 @@ import Types.Infer.Builtin
 import Types.Wellformed
 import Types.Unify
 
-import Debug.Trace
-import Text.Show.Pretty (ppShow)
 import Pretty
 
 -- Solve for the types of lets in a program
@@ -117,7 +115,6 @@ check e ty = do
 infer :: MonadInfer Typed m => Expr Resolved -> m (Expr Typed, Type Typed)
 infer (VarRef k a) = do
   (cont, old, new) <- third3A (discharge (VarRef k a)) =<< lookupTy' k
-  trace ("looked up " ++ render (pretty k) ++ " at " ++ render (pretty new)) pure ()
   case cont of
     Nothing -> pure (VarRef (TvName k) (a, old), old)
     Just cont -> pure (cont (VarRef (TvName k) (a, old)), new)
@@ -338,11 +335,9 @@ inferLetTy closeOver vs =
                 pure (TvName var, exp', ann, ty)
 
         cur <- gen
-        _ <- traverse (flip trace (pure ()) . render . pretty) cs
         (solution, cs) <- case solve cur cs of
           Right x -> pure x
           Left e -> throwError e
-        trace (ppShow solution) pure ()
         let solveOne :: (Var Typed, Expr Typed, Span, Type Typed)
                      -> m ((Var Typed, Expr Typed, Ann Typed), Telescope Typed)
             solveOne (var, exp, ann, given) =
@@ -365,9 +360,6 @@ inferLetTy closeOver vs =
 
 solveEx :: Type Typed -> Subst Typed -> Map.Map (Var Typed) (Wrapper Typed) -> Expr Typed -> Expr Typed
 solveEx ty ss cs = transformExprTyped go id goType where
-  boundByType (TyPi (Implicit v _) t) = Set.insert v (boundByType t)
-  boundByType t = Set.empty
-
   go :: Expr Typed -> Expr Typed
   go (ExprWrapper w e a) = ExprWrapper (goWrap w) (solveEx ty ss cs e) a
   go x = x

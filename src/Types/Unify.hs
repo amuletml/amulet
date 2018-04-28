@@ -24,9 +24,6 @@ import Data.Function
 import Data.List
 import Data.Text (Text)
 
-import Debug.Trace
-import Pretty
-
 data SolveScope
   = SolveScope { _bindSkol :: Bool
                , _don'tTouch :: Set.Set (Var Typed)
@@ -270,7 +267,6 @@ skolemise :: MonadGen Int m => SkolemMotive Typed -> Type Typed -> m (Wrapper Ty
 skolemise motive ty@(TyForall tv k t) = do
   sk <- freshSkol motive ty tv
   (wrap, ty) <- skolemise motive (apply (Map.singleton tv sk) t)
-  trace (renderDetailed (pretty (apply (Map.singleton tv sk) t))) pure ()
   kind <- case k of
     Nothing -> freshTV
     Just x -> pure x

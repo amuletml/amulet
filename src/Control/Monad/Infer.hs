@@ -45,7 +45,6 @@ import Data.Triple
 import Data.Text (Text)
 import Data.List
 
-import Debug.Trace
 import Pretty
 
 import Syntax.Pretty
@@ -169,9 +168,8 @@ instantiate tp@(TyPi (Implicit v _) ty) = do
       squish f (Just x) = Just (x . f)
       squish f _ = Just f
 
-      appThisTy e = Ascription (ExprWrapper (TypeApp var) e (annotation e, apply map ty)) (apply map ty) (annotation e, apply map ty)
+      appThisTy e = ExprWrapper (TypeApp var) e (annotation e, apply map ty)
   (k, _, t) <- instantiate (apply map ty)
-  trace ("applied " ++ renderDetailed (pretty v) ++ " away as " ++ render (pretty var)) pure ()
   pure (squish appThisTy k, tp, t)
 instantiate ty = pure (Just id, ty, ty)
 
