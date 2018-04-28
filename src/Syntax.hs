@@ -113,7 +113,7 @@ instance (Data (Var p), Data (Ann p), Data p) => Spanned (Expr p)
 data Wrapper p
   = TypeApp (Type p)
   | Cast (Coercion p)
-  | TypeLam (Var p) (Type p)
+  | TypeLam (Skolem p) (Type p)
   | (:>) (Wrapper p) (Wrapper p)
   | WrapVar (Var p) -- Unsolved wrapper variable
   | IdWrap

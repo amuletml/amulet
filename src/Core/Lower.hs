@@ -1,7 +1,8 @@
 {-# LANGUAGE FlexibleContexts, ConstraintKinds, OverloadedStrings #-}
 {-# LANGUAGE LambdaCase, TupleSections, ExplicitNamespaces, PatternSynonyms #-}
 module Core.Lower
-  ( lowerExprTerm
+  ( runLowerT
+  , lowerExprTerm
   , lowerType
   , lowerPat
   , lowerProg
@@ -12,6 +13,7 @@ import Control.Monad.Cont
 import Control.Arrow
 
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 import qualified Data.Text as T
 import Data.Traversable
 import Data.Function
@@ -23,7 +25,8 @@ import Data.List
 
 import qualified Core.Core as C
 import qualified Core.Builtin as C
-import Core.Core hiding (Atom, Term, Stmt, Type, Pattern)
+import Core.Optimise (substituteInType)
+import Core.Core hiding (Atom, Term, Stmt, Type, Pattern, Arm)
 import Core.Core (pattern Atom)
 import Core.Types (unify, replaceTy)
 
@@ -38,12 +41,21 @@ type Term = C.Term (Var Resolved)
 type Type = C.Type (Var Resolved)
 type Pat = C.Pattern (Var Resolved)
 type Stmt = C.Stmt (Var Resolved)
+type Arm = C.Arm (Var Resolved)
 
 type Lower = ContT Term
 
+data LowerState = LS { vars :: Map.Map (Var Resolved) (C.Type (Var Resolved))
+                     , ctors :: Map.Map (Var Resolved) (C.Type (Var Resolved))
+                     }
+  deriving (Eq, Show)
+
 type MonadLower m
   = ( MonadGen Int m
-    , MonadReader (Map.Map (Var Resolved) (C.Type (Var Resolved))) m )
+    , MonadReader LowerState m )
+
+runLowerT :: MonadGen Int m => ReaderT LowerState m a -> m a
+runLowerT = flip runReaderT (LS mempty mempty)
 
 errRef :: Atom
 errRef = Ref (TgInternal "error")
@@ -51,14 +63,17 @@ errRef = Ref (TgInternal "error")
                           (ForallTy Irrelevant C.tyString
                                  (VarTy (TgInternal "a"))))
 
-patternMatchingFail :: MonadLower m => Span -> Type -> Type -> m (Pat, Type, Term)
+patternMatchingFail :: MonadLower m => Span -> Type -> Type -> m Arm
 patternMatchingFail w p t = do
   var <- fresh
   tyApp <- fresh
   let err = Lit (Str (T.pack ("Pattern matching failure at " ++ show (pretty w))))
       errTy = ForallTy Irrelevant C.tyString t
-  pure (C.Capture var p, p, C.Let (One (tyApp, errTy, C.TyApp errRef t))
-                             (C.App (C.Ref tyApp errTy) err))
+  pure C.Arm { armPtrn = C.Capture var p, armTy = p
+             , armBody = C.Let (One (tyApp, errTy, C.TyApp errRef t))
+               (C.App (C.Ref tyApp errTy) err)
+             , armVars = [(var, p)], armTyvars = []
+             }
 
 lowerAtAtom :: MonadLower m => Expr Typed -> Type -> Lower m Atom
 lowerAtAtom x t = do x' <- lowerAt x t
@@ -105,8 +120,8 @@ lowerAt (S.If c t e _) ty = do
   c' <- lowerAtAtom c C.tyBool
   t' <- lowerAtTerm t ty
   e' <- lowerAtTerm e ty
-  let tc = (PatLit LitTrue, C.tyBool, t')
-      te = (PatLit LitFalse, C.tyBool, e')
+  let tc = C.Arm (PatLit LitTrue) C.tyBool t' [] []
+      te = C.Arm (PatLit LitFalse)  C.tyBool e' [] []
   pure $ C.Match c' [tc, te]
 lowerAt (Fun p bd an) (ForallTy Irrelevant a b) =
   let operational (PType p _ _) = operational p
@@ -114,19 +129,27 @@ lowerAt (Fun p bd an) (ForallTy Irrelevant a b) =
    in case operational p of
         S.Capture (TvName v) _ -> Atom . Lam (TermArgument v a) <$> lowerAtTerm bd b
         _ -> do
-          (p', bd') <- (,) <$> lowerPat p <*> lowerAtTerm bd b
+          p' <- lowerPat p
+          ts <- patternTyvars p
+          bd' <- lowerAtTerm bd b
           arg <- fresh
-          fail <- patternMatchingFail (fst an) (lowerType (S.getType p)) b
-          pure (Atom (Lam (TermArgument arg a) (C.Match (Ref arg a) [ (p', a, bd'), fail ])))
+          fail <- patternMatchingFail (fst an) a b
+          pure (Atom (Lam (TermArgument arg a) (C.Match (Ref arg a) [ C.Arm { armPtrn = p', armTy = a, armBody = bd'
+                                                                            , armVars = patternVars p', armTyvars = ts }
+                                                                    , fail ])))
 lowerAt (Begin [x] _) t = lowerAt x t
 lowerAt (Begin xs _) t = lowerAtTerm (last xs) t >>= flip (foldrM bind) (init xs) where
   bind e r = flip C.Let r . One <$> (build <$> fresh <*> lowerBothTerm e)
   build a (b, c) = (a, c, b)
 lowerAt (S.Match ex cs an) ty = do
   (ex', mt) <- lowerBothAtom ex
-  cs' <- for cs $ \(pat, ex) ->
-    (,mt,) <$> lowerPat pat <*> lowerAtTerm ex ty
-  fail <- patternMatchingFail (fst an) (lowerType (S.getType (fst (head cs)))) ty
+  cs' <- for cs $ \(pat, ex) -> do
+    p' <- lowerPat pat
+    ts <- patternTyvars pat
+    ex' <- lowerAtTerm ex ty
+    pure C.Arm { armPtrn = p', armTy = mt, armBody = ex'
+               , armVars = patternVars p', armTyvars = ts }
+  fail <- patternMatchingFail (fst an) mt ty
 
   pure $ C.Match ex' (cs' ++ [fail])
 lowerAt (Access r k _) ty = do
@@ -139,8 +162,10 @@ lowerAt (Access r k _) ty = do
           RowsTy t rs -> cotyRows t (deleteBy ((==) `on` fst) (k, undefined) rs)
           ExactRowsTy rs -> ExactRowsTy (deleteBy ((==) `on` fst) (k, undefined) rs)
           _ -> error ("not a row type " ++ show rt)
-      match = ( PatExtend (C.Capture iv inner) [ (k, C.Capture var ty) ]
-              , rt, Atom (Ref var ty ))
+      match = C.Arm { armPtrn = PatExtend (C.Capture iv inner) [ (k, C.Capture var ty) ]
+                    , armTy = rt, armBody = Atom (Ref var ty )
+                    , armVars = [(iv, inner), (var, ty)], armTyvars = []
+                    }
   pure $ C.Match r' [match]
 
 lowerAt (BinOp left op right a) t = lowerAt (S.App (S.App op left a) right a) t
@@ -156,19 +181,17 @@ lowerAt (ExprWrapper wrap e an) ty =
   case wrap of
     S.Cast S.ReflCo{} -> lowerAt e ty
     S.Cast c -> do
-      ex' <- lowerAtAtom e ty
+      ex' <- lowerExprAtom e
       pure (C.Cast ex' (co c))
     S.TypeApp t -> do
       ex' <- lowerAtAtom e (lowerType (S.getType e))
       pure (C.TyApp ex' (lowerType t))
-    S.TypeLam (TvName v) k ->
-      let ty' (ForallTy _ _ t) = t
+    S.TypeLam (Skolem (TvName (TgName _ id)) (TvName (TgName n _)) _ _) k ->
+      let ty' (ForallTy (Relevant v) _ t) = substituteInType (Map.singleton v (VarTy var)) t
           ty' x = x
-          inner = ty' ty
-          kind = case lowerType k of
-            VarTy{} -> StarTy
-            x -> x
-       in Atom . Lam (TypeArgument v kind) <$> lowerAtTerm e inner
+          var = TgName n id
+       in Atom . Lam (TypeArgument var (lowerType k)) <$> lowerAtTerm e (ty' ty)
+    S.TypeLam _ _ -> error "impossible lowerAt TypeLam"
     ws S.:> wy -> lowerAt (ExprWrapper ws (ExprWrapper wy e an) an) ty
     S.WrapVar v -> error $ "Unsolved wrapper variable " ++ show v ++ ". This is a bug"
     S.IdWrap -> lowerAt e ty
@@ -189,7 +212,7 @@ lowerAt e _ = lowerAnyway e
 lowerAnyway :: MonadLower m => Expr Typed -> Lower m Term
 lowerAnyway (S.VarRef (TvName v) (_, ty)) = do
   let lty = lowerType ty
-  env <- ask
+  env <- asks vars
   case Map.lookup v env of
     -- If we've got a type which is different to our expected one then we strip
     -- off one forall and attempt to unify. Once we've found our unified type,
@@ -252,41 +275,42 @@ lowerType (S.TyExactRows vs) = ExactRowsTy (map (fmap lowerType) vs)
 lowerType (S.TyVar (TvName v)) = VarTy v
 lowerType (S.TyCon (TvName v)) = ConTy v
 lowerType (S.TyPromotedCon (TvName v)) = ConTy v -- TODO this is in the wrong scope
-lowerType (S.TySkol (Skolem _ (TvName v) _ _)) = VarTy v
+lowerType (S.TySkol (Skolem (TvName (TgName _ id)) (TvName (TgName n _)) _ _)) = VarTy (TgName n id)
+lowerType (S.TySkol _) = error "impossible lowerType TySkol"
 lowerType (S.TyWithConstraints _ t) = lowerType t
 lowerType S.TyType = StarTy
 
 lowerPat :: MonadLower m => Pattern Typed -> m Pat
-lowerPat pat = case pat of
-  S.Capture (TvName x) (_, t) -> pure $ C.Capture x (lowerType t)
-  Wildcard (_, t) -> C.Capture <$> fresh <*> pure (lowerType t)
-  Destructure (TvName p) Nothing _ -> pure $ Constr p
-  Destructure (TvName p) (Just t) _ -> Destr p <$> lowerPat t
-  PType p _ _ -> lowerPat p
-  PRecord xs (_, t) ->
-    let
-      lowerRow (label, pat) = (,) label <$> lowerPat pat
-      keys = map fst xs
-      realt tp = case tp of
-        ExactRowsTy rs -> ExactRowsTy (filter (not . flip elem keys . fst) rs)
-        RowsTy rho rs -> RowsTy rho (filter (not . flip elem keys . fst) rs)
-        _ -> error $ "not a record type " ++ show (pretty tp)
+lowerPat (S.Capture (TvName x) (_, t)) = pure (C.Capture x (lowerType t))
+lowerPat (Wildcard (_, t)) = C.Capture <$> fresh <*> pure( lowerType t)
+lowerPat (Destructure (TvName p) Nothing _) = pure (Constr p)
+lowerPat (Destructure (TvName p) (Just t) _) = Destr p <$> lowerPat t
+lowerPat (PType p _ _) = lowerPat p
+lowerPat (PRecord xs (_, t)) =
+  let
+    lowerRow (label, pat) = (label,) <$> lowerPat pat
+    keys = map fst xs
+    realt tp = case tp of
+      ExactRowsTy rs -> ExactRowsTy (filter (not . flip elem keys . fst) rs)
+      RowsTy rho rs -> RowsTy rho (filter (not . flip elem keys . fst) rs)
+      _ -> error $ "not a record type " ++ show (pretty tp)
 
-      fixup (RowsTy rho _) = rho
-      fixup x = x
+    fixup (RowsTy rho _) = rho
+    fixup x = x
 
-      tidy = fixup . realt . lowerType
-     in PatExtend <$> (C.Capture <$> fresh <*> pure (tidy t)) <*> traverse lowerRow xs
-  PTuple [] _ -> pure . PatLit $ Unit
-  PTuple xs _ ->
-    let go [x] = lowerPat x
-        go [] = error "no"
-        go (x:xs) = do
-          x <- lowerPat x
-          xs <- go xs
-          pure (PatExtend (PatLit RecNil) [("1", x), ("2", xs)])
-     in go xs
-  PLiteral l _ -> pure . PatLit $ lowerLiteral l
+    tidy = fixup . realt . lowerType
+  in PatExtend <$> (C.Capture <$> fresh <*> pure (tidy t)) <*> traverse lowerRow xs
+
+lowerPat (PTuple [] _) = pure (PatLit Unit)
+lowerPat (PTuple xs _) =
+  let go [x] = lowerPat x
+      go [] = error "no"
+      go (x:xs) = do
+        x' <- lowerPat x
+        xs' <- go xs
+        pure (PatExtend (PatLit RecNil) [("1", x'), ("2", xs')])
+   in go xs
+lowerPat (PLiteral l _) = pure (PatLit (lowerLiteral l))
 
 lowerProg :: MonadLower m => [Toplevel Typed] -> m [Stmt]
 lowerProg [] = pure []
@@ -294,16 +318,16 @@ lowerProg (ForeignVal (TvName t) ex tp _:prg) =
   (Foreign t (lowerType tp) ex:) <$> lowerProg prg
 lowerProg (LetStmt vs:prg) = do
   let env' = Map.fromList (map (\(TvName v, _, (_, ant)) -> (v, lowerType ant)) vs)
-  (:) <$> local (const env') (StmtLet <$> for vs (\(TvName v, ex, (_, ant)) -> (v,lowerType ant,) <$> lowerPolyBind (lowerType ant) ex))
+  (:) <$> local (\s -> s { vars = env' }) (StmtLet <$> for vs (\(TvName v, ex, (_, ant)) -> (v,lowerType ant,) <$> lowerPolyBind (lowerType ant) ex))
       <*> lowerProg prg
 lowerProg (FunStmt vs:prg) = lowerProg prg
-lowerProg (TypeDecl (TvName var) _ cons:prg) =
-  (:) (C.Type var (map (\case
-                           UnitCon (TvName p) (_, t) -> (p, lowerType t)
-                           ArgCon (TvName p) _ (_, t) -> (p, lowerType t)
-                           GeneralisedCon (TvName p) t _ -> (p, lowerType t))
-                       cons))
-      <$> lowerProg prg
+lowerProg (TypeDecl (TvName var) _ cons:prg) = do
+  let cons' = map (\case
+                       UnitCon (TvName p) (_, t) -> (p, lowerType t)
+                       ArgCon (TvName p) _ (_, t) -> (p, lowerType t)
+                       GeneralisedCon (TvName p) t _ -> (p, lowerType t))
+                cons
+  (C.Type var cons':) <$> local (\s -> s { ctors = Map.union (Map.fromList cons') (ctors s) }) (lowerProg prg)
 lowerProg (Open _ _:prg) = lowerProg prg
 lowerProg (Module _ b:prg) = (++) <$> lowerProg b <*> lowerProg prg
 
@@ -333,3 +357,39 @@ lowerPolyBind ty ex = doIt (needed ex ty) (go ty ex) (lowerExprTerm ex) where
   countForalls :: Type -> Integer
   countForalls (ForallTy Relevant{} _ t) = 1 + countForalls t
   countForalls _ = 0
+
+patternVars :: Pat -> [(Var Resolved, Type)]
+patternVars (C.Capture v ty) = [(v, ty)]
+patternVars (Destr _ p) = patternVars p
+patternVars (PatExtend p ps) = patternVars p ++ concatMap (patternVars . snd) ps
+patternVars Constr{} = []
+patternVars PatLit{} = []
+
+patternTyvars :: MonadLower m => Pattern Typed -> m [(Var Resolved, Type)]
+patternTyvars = asks . flip (go . ctors)
+  where
+    go _ (S.Capture _ _) = []
+    go _ (Wildcard _) = []
+    go _ (Destructure _ Nothing _) = []
+    go s (Destructure (TvName p) (Just t) (_, _)) =
+      let tty' = lowerType (S.getType t)
+
+          Just (skolm, ctty, _) = rootType mempty <$> Map.lookup p s
+          Just uni =  unify ctty tty'
+      in mapMaybe (extS skolm) (Map.toList uni) ++ go s t
+    go s (PType p _ _) = go s p
+    go s (PRecord xs _) = concatMap (go s . snd) xs
+    go s (PTuple xs _) = concatMap (go s) xs
+    go _ (PLiteral _ _) = []
+
+    rootType fs (ForallTy Irrelevant f c) =
+      let skolem = Map.restrictKeys fs (Set.difference (freeInTy f) (freeInTy c))
+      in (skolem, f, c)
+    rootType fs (ForallTy (Relevant v) f r) = rootType (Map.insert v f fs) r
+    rootType _ _ = error "impossible constructor"
+
+    extS sk (v, t) = case Map.lookup v sk of
+                       Nothing -> Nothing
+                       Just k -> case t of
+                                   VarTy t' -> Just (t', k)
+                                   _ -> error ("must replace skolem tyvar with tyvar " ++ show (pretty t))

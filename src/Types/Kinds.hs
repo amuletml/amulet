@@ -11,9 +11,11 @@ module Types.Kinds
 import Control.Monad.State.Strict
 import Control.Monad.Infer
 import Control.Applicative
+import Control.Arrow
 import Control.Lens
 
 import qualified Data.Sequence as Seq
+import qualified Data.Set as Set
 import Data.Traversable
 import Data.Foldable
 import Data.Triple
@@ -233,11 +235,23 @@ isType t = do
   pure t
 
 closeOver :: MonadKind m => SomeReason -> Type Typed -> m (Type Typed)
-closeOver r a = annotateKind r $ forall (fv a) a where
-  fv = toList . ftv
+closeOver r a = kindVars <$> annotateKind r (forall (toList freevars) a) where
+  freevars = ftv a
   forall :: [Var p] -> Type p -> Type p
   forall [] a = a
   forall vs a = foldr (flip TyForall Nothing) a vs
+
+  kindVars = squish . second toList . runWriter . split where
+    squish (x, []) = x
+    squish (x, vs) = foldr (flip TyForall (Just TyType)) x vs
+
+    split (TyForall v (Just t@(TyVar x)) ty)
+      | v `Set.member` freevars = do
+        tell (Set.singleton x)
+        TyForall v (Just t) <$> split ty
+      | otherwise = TyForall v (Just t) <$> split ty
+    split t = pure t
+
 
 promoteOrError :: Type Typed -> Maybe Doc
 promoteOrError TyWithConstraints{} = Just (string "mentions constraints")

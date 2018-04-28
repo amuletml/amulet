@@ -71,7 +71,7 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
   pretty (OpenIn v e _) = pretty v <+> string "." <+> parens (pretty e)
 
   pretty (ExprWrapper wrap ex _) = go wrap ex where
-    go (TypeLam v t) ex = keyword "fun" <+> braces (pretty v <+> colon <+> pretty t) <> dot <+> pretty ex
+    go (TypeLam v t) ex = keyword "fun" <+> braces (pretty (TySkol v) <+> colon <+> pretty t) <> dot <+> pretty ex
     go (Cast c) ex = parens (pretty ex <+> soperator (string "|>") <+> pretty c)
     go (TypeApp t) ex = pretty ex <+> braces (pretty t)
     go (wr Syntax.:> wi) ex = go wr (ExprWrapper wi ex undefined)
@@ -220,10 +220,10 @@ prettyOneBinding n v = hsep (pretty n:map pretty args) <> sig <+> nest 2 (equals
   takeLambdas (Fun p x _) = first (p:) . takeLambdas $ x
   takeLambdas x = ([], x)
 
-tidyPrettyType :: (Pretty (Var p), Ord (Var p)) => Type p -> Doc
+tidyPrettyType :: (Show (Var p), Pretty (Var p), Ord (Var p)) => Type p -> Doc
 tidyPrettyType = pretty . applyCons
 
-applyCons :: Ord (Var p) => Type p -> Type p
+applyCons :: (Show (Var p), Ord (Var p)) => Type p -> Type p
 applyCons x@TyCon{} = x
 applyCons x@TyVar{} = x
 applyCons x@TySkol{} = x

@@ -41,7 +41,7 @@ isPure _ AnnTyApp{}  = True
 isPure _ AnnCast{}  = True
 isPure s (AnnLet _ (One v) e) = isPure s e && isPure s (thd3 v)
 isPure s (AnnLet _ (Many vs) e) = isPure s e && all (isPure s . thd3) vs
-isPure s (AnnMatch _ _ bs) = all (isPure s . thd3) bs
+isPure s (AnnMatch _ _ bs) = all (isPure s . armBody) bs
 isPure s (AnnApp _ f _) = atomArity s f > 0
 
 extendPureFuns :: IsVar a => ArityScope -> [(a, Type a, AnnTerm b a)] -> ArityScope
