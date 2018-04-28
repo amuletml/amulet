@@ -69,14 +69,14 @@ deadCodePass = snd . freeS emptyScope Nothing where
 
   freeT s (Match t bs) =
     let (ft, t') = freeA s t
-        (fbs, bs') = unzip $ map (\(p,t,b) -> (p,t,) <$> freeT s b) bs
-        pbs = map (patternVars . fst3) bs
+        (fbs, bs') = unzip $ map (fmapArmBody (freeT s)) bs
+        pbs = map (VarSet.fromList . map (toVar . fst) . armVars) bs
 
         matchFree = mconcat (zipWith VarSet.difference fbs pbs)
     in case (pbs, fbs,  bs') of
          -- If we've got a single pattern match with nothing captured, then inline
-         ([pb], [fb], [(_, _, b)])
-           | VarSet.isEmpty (VarSet.intersection pb fb) -> (matchFree, b)
+         ([pb], [fb], [b])
+           | VarSet.isEmpty (VarSet.intersection pb fb) -> (matchFree, armBody b)
          -- Otherwise assume everything is used
          _ -> (ft <> matchFree, Match t' bs')
 

@@ -102,10 +102,10 @@ checkPattern pt@(PType p t ann) ty = do
   pure (PType p' t' (ann, t'), binds, cs)
 checkPattern pt ty = do
   (p, ty', binds, cs) <- inferPattern pt
-  _ <- subsumes pt ty ty'
+  _ <- unify pt ty ty'
   pure (p, binds, cs)
 
-boundTvs :: forall p. Ord (Var p)
+boundTvs :: forall p. (Show (Var p), Ord (Var p))
          => Pattern p -> Telescope p -> Set.Set (Var p)
 boundTvs p vs = pat p <> foldTele go vs where
   go :: Type p -> Set.Set (Var p)

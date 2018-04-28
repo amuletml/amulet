@@ -1,5 +1,6 @@
 {-# OPTIONS_GHC -Wno-partial-type-signatures #-}
 {-# LANGUAGE FlexibleContexts, TupleSections, PartialTypeSignatures #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Core.Optimise
   ( substitute, substituteInTys, substituteInType, substituteInCo
   , module Core.Core
@@ -29,7 +30,7 @@ substitute m = term where
   term (App f x) = App (atom f) (atom x)
   term (Let (One k v) x) = Let (One k (third3 term v)) (term x)
   term (Let (Many k vs) x) = Let (Many k (map (third3 term) vs)) (term x)
-  term (Match x vs) = Match (atom x) (map (third3 term) vs)
+  term (Match x vs) = Match (atom x) (map arm vs)
   term (Extend e rs) = Extend (atom e) (map (third3 atom) rs)
   term (TyApp f t) = TyApp (atom f) t
   term (Cast f t) = Cast (atom f) t
@@ -38,44 +39,64 @@ substitute m = term where
   atom (Lam v b) = Lam v (term b)
   atom x@Lit{} = x
 
-substituteInTys :: IsVar a => Map.Map a (Type a) -> Term a -> Term a
-substituteInTys m = term where
-  term (Atom a) = Atom (atom a)
-  term (App f x) = App (atom f) (atom x)
-  term (Let (One k (v, t, e)) x) = Let (One k (v, gotype t, term e)) x
-  term (Let (Many k vs) x) = Let (Many k (map (\(v, t, e) -> (v, gotype t, term e)) vs)) (term x)
-  term (Match x vs) = Match (atom x) (map (\(v, t, e) -> (v, gotype t, term e)) vs)
-  term (Extend e rs) = Extend (atom e) (map (third3 atom) rs)
-  term (TyApp f t) = TyApp (atom f) (gotype t)
-  term (Cast f t) = Cast (atom f) (coercion t)
+  arm a = a { armBody = term (armBody a) }
 
-  coercion (SameRepr t t') = SameRepr (gotype t) (gotype t')
-  coercion (Domain c) = Domain (coercion c)
-  coercion (Codomain c) = Codomain (coercion c)
-  coercion (Symmetry c) = Symmetry (coercion c)
-  coercion (Application f x) = Application (coercion f) (coercion x)
-  coercion (ExactRecord rs) = ExactRecord (map (second coercion) rs)
-  coercion (Record c rs) = Record (coercion c) (map (second coercion) rs)
-  coercion (CoercionVar x) = CoercionVar x
-  coercion (Quantified v co c) = Quantified v (coercion co) (coercion c)
+substituteInTys :: forall a. IsVar a => Map.Map a (Type a) -> Term a -> Term a
+substituteInTys = term where
+  term :: Map.Map a (Type a) -> Term a -> Term a
+  term m (Atom a) = Atom (atom m a)
+  term m (App f x) = App (atom m f) (atom m x)
+  term m (Let (One k (v, t, e)) x) = Let (One k (v, gotype m t, term m e)) (term m x)
+  term m (Let (Many k vs) x) = Let (Many k (map (\(v, t, e) -> (v, gotype m t, term m e)) vs)) (term m x)
+  term m (Match x vs) = Match (atom m x) (map (arm m) vs)
+  term m (Extend e rs) = Extend (atom m e) (map (trimap id (gotype m) (atom m)) rs)
+  term m (TyApp f t) = TyApp (atom m f) (gotype m t)
+  term m (Cast f t) = Cast (atom m f) (coercion m t)
 
-  atom (Ref v t) = Ref v (gotype t)
-  atom (Lam arg b) = Lam (go arg) (term b) where
-    go (TermArgument v t) = TermArgument v (gotype t)
-    go (TypeArgument v t) = TypeArgument v (gotype t)
-  atom x@Lit{} = x
+  coercion m (SameRepr t t') = SameRepr (gotype m t) (gotype m t')
+  coercion m (Domain c) = Domain (coercion m c)
+  coercion m (Codomain c) = Codomain (coercion m c)
+  coercion m (Symmetry c) = Symmetry (coercion m c)
+  coercion m (Application f x) = Application (coercion m f) (coercion m x)
+  coercion m (ExactRecord rs) = ExactRecord (map (second (coercion m)) rs)
+  coercion m (Record c rs) = Record (coercion m c) (map (second (coercion m)) rs)
+  coercion _ (CoercionVar x) = CoercionVar x
+  coercion m (Quantified v co c) = Quantified v (coercion m co) (coercion m c)
 
-  gotype = substituteInType m
+  atom m (Ref v t) = Ref v (gotype m t)
+  atom m (Lam arg b) = Lam (go arg) (term (delete m) b) where
+    go (TermArgument v t) = TermArgument v (gotype m t)
+    go (TypeArgument v t) = TypeArgument v (gotype m t)
+    delete = case arg of
+      TypeArgument v _ -> Map.delete v
+      _ -> id
+  atom _ x@Lit{} = x
+
+  arm m a@Arm{} = a { armPtrn = ptrn m (armPtrn a)
+                    , armTy = gotype m (armTy a)
+                    , armBody = term (flip (foldr Map.delete) (map fst (armTyvars a)) m) (armBody a)
+                    , armVars = map (second (gotype m)) (armVars a)
+                    }
+
+  ptrn m (Capture a ty) = Capture a (gotype m ty)
+  ptrn _ (Constr a) = Constr a
+  ptrn m (Destr a p) = Destr a (ptrn m p)
+  ptrn m (PatExtend f fs) = PatExtend (ptrn m f) (map (second (ptrn m)) fs)
+  ptrn _ l@PatLit{} = l
+
+  gotype m = substituteInType m
 
 substituteInType :: IsVar a => Map.Map a (Type a) -> Type a -> Type a
-substituteInType m = gotype where
-  gotype x@(VarTy v) = Map.findWithDefault x v m
-  gotype x@ConTy{} = x
-  gotype (ForallTy v c t) = ForallTy v (gotype c) (gotype t)
-  gotype (AppTy f x) = AppTy (gotype f) (gotype x)
-  gotype (RowsTy v rs) = RowsTy (gotype v) (map (second gotype) rs)
-  gotype (ExactRowsTy rs) = ExactRowsTy (map (second gotype) rs)
-  gotype StarTy = StarTy
+substituteInType = gotype where
+  gotype m x@(VarTy v) = Map.findWithDefault x v m
+  gotype _ x@ConTy{} = x
+  gotype m (ForallTy v c t) = ForallTy v (gotype m c) (gotype (remove v m) t) where
+    remove (Relevant var) m = Map.delete var m
+    remove Irrelevant m = m
+  gotype m (AppTy f x) = AppTy (gotype m f) (gotype m x)
+  gotype m (RowsTy v rs) = RowsTy (gotype m v) (map (second (gotype m)) rs)
+  gotype m (ExactRowsTy rs) = ExactRowsTy (map (second (gotype m)) rs)
+  gotype _ StarTy = StarTy
 
 substituteInCo :: IsVar a => Map.Map a (Type a) -> Coercion a -> Coercion a
 substituteInCo m = coercion where
@@ -124,27 +145,41 @@ refresh = refreshTerm mempty where
     v' <- fromVar <$> freshFrom name
     let s' = VarMap.insert (toVar v) v' s
     e' <- refreshTerm s' e
-    Let (One k (v', ty, e')) <$> refreshTerm s' b
+    Let (One k (v', refreshType s' ty, e')) <$> refreshTerm s' b
   refreshTerm s (Let (Many k vs) b) = do
     s' <- foldrM (\(v, _, _) m -> do
                      let TgName name _ = toVar v
                      v' <- fromVar <$> freshFrom name
                      pure (VarMap.insert (toVar v) v' m)) s vs
-    vs' <- traverse (\(v, ty, e) -> (fromJust (VarMap.lookup (toVar v) s'), ty,) <$> refreshTerm s' e) vs
+    vs' <- traverse (trimapA (pure . get s') (pure . refreshType s') (refreshTerm s')) vs
     Let (Many k vs') <$> refreshTerm s' b
   refreshTerm s (Match e branches) = Match <$> refreshAtom s e
-                                            <*> traverse refreshBranch branches where
-    refreshBranch (test, ty, branch) = do
-      s' <- foldrM (\v m -> do
-                       let TgName name _ = toVar v
-                       v' <- fromVar <$> freshFrom name
-                       pure (VarMap.insert (toVar v) v' m)) s (patternVarsA test `asTypeOf` [])
-      (refreshPattern s' test, refreshType s' ty,) <$> refreshTerm s' branch
-  refreshTerm s (Extend e bs) = Extend <$> refreshAtom s e <*> traverse (third3A (refreshAtom s)) bs
+                                           <*> traverse refreshArm branches where
+    refreshArm :: (MonadGen Int m) => Arm _ -> m (Arm _)
+    refreshArm (a@Arm{ armPtrn = test, armBody = branch }) = do
+      s' <- refreshVs (armTyvars a) s >>= refreshVs (armVars a)
+      branch' <- refreshTerm s' branch
+      pure Arm { armPtrn = refreshPattern s' test
+               , armTy = refreshType s' (armTy a)
+               , armBody = branch'
+               , armVars = map (\(v, ty) -> (get s' v, refreshType s' ty)) (armVars a)
+               , armTyvars = map (\(v, ty) -> (get s' v, refreshType s' ty)) (armTyvars a)
+               }
+
+    refreshVs :: (MonadGen Int m, IsVar a) => [(a, Type a)] -> VarMap.Map a -> m (VarMap.Map a)
+    refreshVs = flip (foldrM refreshV)
+
+    refreshV :: (MonadGen Int m, IsVar a) => (a, Type a) -> VarMap.Map a -> m (VarMap.Map a)
+    refreshV (v, _) m = do
+      let TgName name _ = toVar v
+      v' <- fromVar <$> freshFrom name
+      pure (VarMap.insert (toVar v) v' m)
+
+  refreshTerm s (Extend e bs) = Extend <$> refreshAtom s e <*> traverse (trimapA pure (pure . refreshType s) (refreshAtom s)) bs
   refreshTerm s (Cast e c) = Cast <$> refreshAtom s e <*> pure (refreshCoercion s c)
 
   refreshPattern :: IsVar a => VarMap.Map a -> Pattern a -> Pattern a
-  refreshPattern s (Capture v ty) = Capture (fromJust (VarMap.lookup (toVar v) s)) (refreshType s ty)
+  refreshPattern s (Capture v ty) = Capture (get s v) (refreshType s ty)
   refreshPattern _ p@Constr{} = p
   refreshPattern s (Destr c p) = Destr c (refreshPattern s p)
   refreshPattern s (PatExtend p fs) = PatExtend (refreshPattern s p) (map (second (refreshPattern s)) fs)
@@ -153,7 +188,10 @@ refresh = refreshTerm mempty where
   refreshType :: IsVar a => VarMap.Map a -> Type a -> Type a
   refreshType s x@(VarTy v) = maybe x VarTy (VarMap.lookup (toVar v) s)
   refreshType _ x@ConTy{} = x
-  refreshType s (ForallTy v c t) = ForallTy v (refreshType s c) (refreshType s t)
+  refreshType s (ForallTy Irrelevant c t) = ForallTy Irrelevant (refreshType s c) (refreshType s t)
+  refreshType s (ForallTy b@(Relevant v) c t) =
+    let s' = VarMap.delete (toVar v) s
+    in ForallTy b (refreshType s c) (refreshType s' t)
   refreshType s (AppTy f x) = AppTy (refreshType s f) (refreshType s x)
   refreshType s (RowsTy v rs) = RowsTy (refreshType s v) (map (second (refreshType s)) rs)
   refreshType s (ExactRowsTy rs) = ExactRowsTy (map (second (refreshType s)) rs)
@@ -169,6 +207,8 @@ refresh = refreshTerm mempty where
   refreshCoercion s (Record c rs) = Record (refreshCoercion s c) (map (second (refreshCoercion s)) rs)
   refreshCoercion s x@(CoercionVar v) = maybe x CoercionVar (VarMap.lookup (toVar v) s)
   refreshCoercion s (Quantified v a c) = Quantified v (refreshCoercion s a) (refreshCoercion s c)
+
+  get s v = fromJust (VarMap.lookup (toVar v) s)
 
 argVar :: IsVar a => Argument a -> Var _
 argVar (TermArgument v _) = toVar v

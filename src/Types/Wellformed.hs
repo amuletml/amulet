@@ -44,7 +44,7 @@ arity (TyForall _ _ t) = arity t
 arity _ = 0
 
 -- Make a type into its equivalent in prenex normal form.
-normType :: forall p. (Ord (Ann p), Ord (Var p)) => Type p -> Type p
+normType :: forall p. (Ord (Ann p), Ord (Var p), Show (Var p)) => Type p -> Type p
 normType = flatten . uncurry collect . runWriter . spread . applyCons where
   collect t xs = case Set.toList xs of
     [] -> t
