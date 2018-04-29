@@ -74,14 +74,14 @@ transformOver = transT where
   mapT s (TyApp f t) = TyApp (transA s f) t
   mapT s (Cast f t) = Cast (transA s f) t
   mapT s (Extend t rs) = Extend (transA s t) (map (third3 (transA s)) rs)
-  mapT s (Let (One var) body) =
+  mapT s (Let k (One var) body) =
     let var' = third3 (transT (extendVar var s)) var
         body' = transT (extendVar var' s) body
-     in Let (One var') body'
-  mapT s (Let (Many vars) body) =
+     in Let k (One var') body'
+  mapT s (Let k (Many vars) body) =
     let vars' = map (third3 (transT (extendVars vars s))) vars
         body' = transT (extendVars vars' s) body
-     in Let (Many vars') body'
+     in Let k (Many vars') body'
   mapT s (Match test branches) =
     let test' = transA s test
         branches' = map (armBody %~ transT s) branches
@@ -124,7 +124,7 @@ reduceTerm :: forall a. IsVar a => Scope a -> Term a -> Term a
 reduceTerm _ (Extend e []) = {-# SCC "Reduce.empty_extend" #-} Atom e
 
 -- Let of bottom conversion
-reduceTerm _ (Let (One (v, _, TyApp (Ref var errort) _)) (Let (One (_, _, App (Ref v' _) msg)) cont))
+reduceTerm _ (Let ValueBind (One (v, _, TyApp (Ref var errort) _)) (Let _ (One (_, _, App (Ref v' _) msg)) cont))
   | v == v'
   , isError var = {-# SCC "Reduce.let_bottom" #-}
     let Just ty = approximateType cont
@@ -132,21 +132,20 @@ reduceTerm _ (Let (One (v, _, TyApp (Ref var errort) _)) (Let (One (_, _, App (R
 
         newerr = TyApp (Ref var errort) ty
         errapp = App (Ref v errTy) msg
-     in Let (One (v, errTy, newerr)) errapp
+     in Let ValueBind (One (v, errTy, newerr)) errapp
 
 -- Let Commuting conversion
-reduceTerm s (Let (One (x, xt, Let (One (y, yt, yval)) xval)) rest) =
-  {-# SCC "Reduce.commute_let" #-}
-  reduceTerm s $ Let (One (y, yt, yval)) $ reduceTerm s (Let (One (x, xt, xval)) rest)
+
+reduceTerm s (Let xk (One (x, xt, Let yk (One (y, yt, yval)) xval)) rest) = {-# SCC "Reduce.commute_let" #-}
+  reduceTerm s $ Let yk (One (y, yt, yval)) $ reduceTerm s (Let xk (One (x, xt, xval)) rest)
 
 -- Match commuting conversion (trivial case)
-reduceTerm _ (Let (One (v, vt, Match t [a])) r) =
-  {-# SCC "Reduce.commute_match" #-}
-  Match t [a & armBody %~ appendBody v vt r]
+reduceTerm _ (Let k (One (v, vt, Match t [a])) r) = {-# SCC "Reduce.commute_match" #-}
+  Match t [a & armBody %~ appendBody k v vt r]
 
 -- Trivial matches
 reduceTerm s (Match t (Arm { _armPtrn = Capture v _, _armTy = ty, _armBody = body }:_)) = {-# SCC "Reduce.trivial_match" #-}
-  reduceTerm s $ Let (One (v, ty, Atom t)) body
+  reduceTerm s $ Let ValueBind (One (v, ty, Atom t)) body
 reduceTerm s (Match t bs) = {-# SCC "Reduce.fold_cases" #-}
   case foldCases bs of
     Left  Arm { _armBody = b } -> b
@@ -155,7 +154,7 @@ reduceTerm s (Match t bs) = {-# SCC "Reduce.fold_cases" #-}
         -- If we were really smart, we could strip _all_ cases which are shadowed by
         -- another. For now, simply detect the case `error @a "Nope"`
         Arm { _armPtrn = Capture _ _
-            , _armBody = Let (One (tyApp, _, TyApp (Ref err _) _))
+            , _armBody = Let ValueBind (One (tyApp, _, TyApp (Ref err _) _))
                         (App (Ref tyApp' _) (Lit _)) }
           | isError err
           , toVar tyApp == toVar tyApp'
@@ -193,12 +192,13 @@ reduceTerm s (Match t bs) = {-# SCC "Reduce.fold_cases" #-}
 
 -- Beta reduction (function case)
 reduceTerm s (App (Lam (TermArgument var ty) body) ex) = {-# SCC "Reduce.beta_function" #-}
-  reduceTerm s $ Let (One (var, ty, Atom ex)) body
+  reduceTerm s $ Let ValueBind (One (var, ty, Atom ex)) body
+
 reduceTerm s (TyApp (Lam (TypeArgument var _) body) tp) = {-# SCC "Reduce.beta_type_function" #-}
   reduceTerm s (substituteInTys (VarMap.singleton (toVar var) tp) body)
 
 -- Eta reduction (let case)
-reduceTerm _ (Let (One (v, _, term)) (Atom (Ref v' _)))
+reduceTerm _ (Let _ (One (v, _, term)) (Atom (Ref v' _)))
   | v == v' = {-# SCC "Reduce.eta_let" #-} term
 
 -- Coercion reduction
@@ -410,13 +410,20 @@ isComplete s = isComplete' where
   flattenExtend _ = []
 
 redundantCo :: IsVar a => Coercion a -> Bool
-redundantCo c
-  | Just (a, b) <- relates c = a == b
-  | otherwise = False
+redundantCo (SameRepr t t') = t == t'
+redundantCo (Application c c') = redundantCo c && redundantCo c'
+redundantCo (Quantified _ c c') = redundantCo c && redundantCo c'
+redundantCo (ExactRecord rs) = all (redundantCo . snd) rs
+redundantCo (Record c rs) = redundantCo c && all (redundantCo . snd) rs
+redundantCo (Domain c) = redundantCo c
+redundantCo (Codomain c) = redundantCo c
+redundantCo (Symmetry c) = redundantCo c
+redundantCo CoercionVar{} = False
+redundantCo Projection{} = False
 
-appendBody :: a -> Type a -> Term a -> Term a -> Term a
-appendBody v ty r (Let bind b) = Let bind (appendBody v ty r b)
-appendBody v ty r b = Let (One (v, ty, b)) r
+appendBody :: BindingKind -> a -> Type a -> Term a -> Term a -> Term a
+appendBody k v ty r (Let k' bind b) = Let k' bind (appendBody k v ty r b)
+appendBody k v ty r b = Let k (One (v, ty, b)) r
 
 trivialAtom :: Atom a -> Bool
 trivialAtom Ref{} = True

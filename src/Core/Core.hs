@@ -29,11 +29,14 @@ data Argument a
   | TypeArgument a (Type a) -- TODO kinds
   deriving (Eq, Show, Ord, Functor, Generic)
 
+data BindingKind = ValueBind | JoinBind
+  deriving (Eq, Show, Ord)
+
 data AnnTerm b a
   = AnnAtom b (AnnAtom b a)
   | AnnApp b (AnnAtom b a) (AnnAtom b a) -- removes a λ
 
-  | AnnLet b (AnnBinding b a) (AnnTerm b a)
+  | AnnLet b BindingKind (AnnBinding b a) (AnnTerm b a)
   | AnnMatch b (AnnAtom b a) [AnnArm b a]
 
   | AnnExtend b (AnnAtom b a) [(Text, Type a, AnnAtom b a)]
@@ -52,8 +55,8 @@ pattern Atom a = AnnAtom () a
 pattern App :: Atom a -> Atom a -> Term a
 pattern App f x = AnnApp () f x
 
-pattern Let :: Binding a -> Term a -> Term a
-pattern Let b r = AnnLet () b r
+pattern Let :: BindingKind -> Binding a -> Term a -> Term a
+pattern Let k b r = AnnLet () k b r
 
 pattern Match :: Atom a -> [Arm a] -> Term a
 pattern Match t b = AnnMatch () t b
@@ -160,8 +163,12 @@ instance Pretty a => Pretty (Term a) where
   pretty (App f x) = pretty f <+> pretty x
   pretty (TyApp f t) = pretty f <+> braces (pretty t)
 
-  pretty (Let (One x) e) = keyword "let" <+> braces (space <> pprLet1 x <> space) <+> keyword "in" <#> pretty e
-  pretty (Let (Many xs) e) = keyword "let rec" <+> pprLet xs </> (keyword "in" <+> pretty e)
+  pretty (Let k (One x) e) = kw k <+> braces (space <> pprLet1 x <> space) <+> keyword "in" <#> pretty e where
+    kw ValueBind = keyword "let"
+    kw JoinBind  = keyword "join"
+  pretty (Let k (Many xs) e) = kw k <+> keyword "rec" <+> pprLet xs </> (keyword "in" <+> pretty e) where
+    kw ValueBind = keyword "let"
+    kw JoinBind  = keyword "join"
   pretty (Match e ps) = keyword "match" <+> pretty e <+> pprArms ps
   pretty (Extend x rs) = braces $ pretty x <+> pipe <+> prettyRows rs where
     prettyRows = hsep . punctuate comma . map (\(x, t, v) -> text x <+> colon <+> pretty t <+> equals <+> pretty v)
@@ -170,7 +177,7 @@ instance Pretty a => Pretty (Term a) where
 instance Pretty a => Pretty (Coercion a) where
   pretty (SameRepr a b) = pretty a <+> soperator (char '~') <+> pretty b
   pretty (Application c c') = pretty c <+> pretty c'
-  pretty (Record r s) = enclose (lbrace <> space) (space <> rbrace) (pretty r <+> hsep (punctuate comma (map pprCoRow s)))
+  pretty (Record r s) = enclose (lbrace <> space) (space <> rbrace) (pretty r <+> pipe <+> hsep (punctuate comma (map pprCoRow s)))
   pretty (ExactRecord r) = enclose (lbrace <> space) (space <> rbrace) (hsep (punctuate comma (map pprCoRow r)))
   pretty (Projection rs rs') = enclose (lbrace <> space) (space <> rbrace) (hsep (punctuate comma (map pprCoRow rs)) <+> keyword "with" <+> hsep (punctuate comma (map pprCoRow rs')))
   pretty (Domain f) = keyword "dom" <+> parens (pretty f)
@@ -258,8 +265,8 @@ freeInAtom (Lit _) = mempty
 freeIn :: IsVar a => AnnTerm b a -> VarSet.Set
 freeIn (AnnAtom _ a) = freeInAtom a
 freeIn (AnnApp _ f x) = freeInAtom f <> freeInAtom x
-freeIn (AnnLet _ (One v) e) = VarSet.difference (freeIn e <> freeIn (thd3 v)) (VarSet.singleton (toVar (fst3 v)))
-freeIn (AnnLet _ (Many vs) e) = VarSet.difference (freeIn e <> foldMap (freeIn . thd3) vs) (VarSet.fromList (map (toVar . fst3) vs))
+freeIn (AnnLet _ _ (One v) e) = VarSet.difference (freeIn e <> freeIn (thd3 v)) (VarSet.singleton (toVar (fst3 v)))
+freeIn (AnnLet _ _ (Many vs) e) = VarSet.difference (freeIn e <> foldMap (freeIn . thd3) vs) (VarSet.fromList (map (toVar . fst3) vs))
 freeIn (AnnMatch _ e bs) = freeInAtom e <> foldMap freeInBranch bs where
   freeInBranch x = foldr (VarSet.delete . toVar . fst) (freeIn (x ^. armBody)) (x ^. armVars)
 freeIn (AnnExtend _ c rs) = freeInAtom c <> foldMap (freeInAtom . thd3) rs
@@ -286,8 +293,8 @@ occursInTerm v (Atom a) = occursInAtom v a
 occursInTerm v (App f x) = occursInAtom v f || occursInAtom v x
 occursInTerm v (TyApp f _) = occursInAtom v f
 occursInTerm v (Cast f _) = occursInAtom v f
-occursInTerm v (Let (One va) e) = occursInTerm v (thd3 va) || occursInTerm v e
-occursInTerm v (Let (Many vs) e) = any (occursInTerm v . thd3) vs || occursInTerm v e
+occursInTerm v (Let _ (One va) e) = occursInTerm v (thd3 va) || occursInTerm v e
+occursInTerm v (Let _ (Many vs) e) = any (occursInTerm v . thd3) vs || occursInTerm v e
 occursInTerm v (Match e bs) = occursInAtom v e || any (occursInTerm v . view armBody) bs
 occursInTerm v (Extend e fs) = occursInAtom v e || any (occursInAtom v . thd3) fs
 
@@ -352,7 +359,7 @@ relates (Quantified v co c) = do
 extractAnn :: AnnTerm b a -> b
 extractAnn (AnnAtom b _)     = b
 extractAnn (AnnApp b _ _)    = b
-extractAnn (AnnLet b _ _)    = b
+extractAnn (AnnLet b _ _ _)  = b
 extractAnn (AnnMatch b _ _)  = b
 extractAnn (AnnExtend b _ _) = b
 extractAnn (AnnTyApp b _ _)  = b

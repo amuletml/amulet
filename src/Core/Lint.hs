@@ -21,6 +21,7 @@ import Data.List
 import Core.Optimise
 import Core.Builtin
 import Core.Types
+import Core.Arity (lamArity')
 import Pretty hiding ((<>))
 
 data CoreError a
@@ -171,21 +172,31 @@ checkTerm s (App f x) = do
   case f' of
     ForallTy Irrelevant a r | a `uni` x' -> pure r
     _ -> throwError (TypeMismatch (ForallTy Irrelevant x' unknownTyvar) f')
-checkTerm s t@(Let (One (v, ty, e)) r) = do
+checkTerm s t@(Let k (One (v, ty, e)) r) = do
   tryContext t $ do
-    -- Ensure type is valid and we're declaring a value
-    unless (varInfo v == ValueVar) (throwError (InfoIllegal v ValueVar (varInfo v)))
+    -- Ensure type is valid and we're declaring the appropriate variable
+    case k of
+      ValueBind | ValueVar <- varInfo v -> pure ()
+                | otherwise -> throwError (InfoIllegal v ValueVar (varInfo v))
+      JoinBind | JoinVar a <- varInfo v
+               , a == lamArity' e -> pure ()
+               | otherwise -> throwError (InfoIllegal v (JoinVar (lamArity' e)) (varInfo v))
     checkType s ty
 
     ty' <- checkTerm s e
     if ty `apart` ty' then throwError (TypeMismatch ty ty') else pure ()
 
   checkTerm (s { vars = insertVar v ty (vars s) }) r
-checkTerm s t@(Let (Many vs) r) = do
+checkTerm s t@(Let k (Many vs) r) = do
   let s' = s { vars = foldr (\(v, t, _) -> insertVar v t) (vars s) vs }
   for_ vs $ \(v, ty, e) -> tryContext t $ do
     -- Ensure type is valid and we're declaring a value
-    unless (varInfo v == ValueVar) (throwError (InfoIllegal v ValueVar (varInfo v)))
+    case k of
+      ValueBind | ValueVar <- varInfo v -> pure ()
+                | otherwise -> throwError (InfoIllegal v ValueVar (varInfo v))
+      JoinBind | JoinVar a <- varInfo v
+               , a == lamArity' e -> pure ()
+               | otherwise -> throwError (InfoIllegal v (JoinVar (lamArity' e)) (varInfo v))
     checkType s ty
 
     ty' <- checkTerm s' e

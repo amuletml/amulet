@@ -10,6 +10,7 @@ import Core.Optimise
 import qualified Core.Arity as A
 
 data Sinkable a = Sinkable { sBind  :: (a, Type a, Term a)
+                           , sKind :: BindingKind
                            , sFree  :: VarSet.Set
                            , sBound :: VarSet.Set }
   deriving (Show)
@@ -64,11 +65,12 @@ sinkTerm s (AnnAtom _ a) = flushBinds (sinkable s) (Atom (sinkAtom (nullBinds s)
 sinkTerm s (AnnApp _ f x) = flushBinds (sinkable s) (App (sinkAtom s' f) (sinkAtom s' x))
   where s' = nullBinds s
 
-sinkTerm s (AnnLet _ (One b@(v, ty, e)) r)
+sinkTerm s (AnnLet _ k (One b@(v, ty, e)) r)
   -- If we're pure, add it to the sink set
   | A.isPure (arity s) e
   = let e' = sinkTerm (nullBinds s) e
         s' = s { sinkable = Sinkable { sBind = (v, ty, e')
+                                     , sKind = k
                                      , sBound = VarSet.singleton (toVar v)
                                      , sFree = extractAnn e } : sinkable s
                , arity = A.extendPureFuns (arity s) [b] }
@@ -80,14 +82,14 @@ sinkTerm s (AnnLet _ (One b@(v, ty, e)) r)
         a' = A.extendPureFuns (arity s) [b]
         e' = sinkTerm (s { sinkable = es, arity = a' }) e
         r' = sinkTerm (s { sinkable = rs, arity = a' }) r
-    in flushBinds fs (Let (One (v, ty, e')) r')
+     in flushBinds fs (Let k (One (v, ty, e')) r')
 
-sinkTerm s (AnnLet _ (Many vs) r) =
+sinkTerm s (AnnLet _ k (Many vs) r) =
   let (fs, rs:vss) = partitionBinds (sinkable s) (extractAnn r : map (extractAnn . thd3) vs)
       a' = A.extendPureFuns (arity s) vs
       vs' = zipWith (\fv -> third3 (sinkTerm (s { sinkable = fv, arity = a' }))) vss vs
       r'  = sinkTerm (s { sinkable = rs, arity = a' }) r
-  in flushBinds fs (Let (Many vs') r')
+   in flushBinds fs (Let k (Many vs') r')
 
 sinkTerm s (AnnMatch _ t bs) =
   let (fs, ts:bss) = partitionBinds (sinkable s) (freeInAtom t : map (extractAnn . view armBody) bs)
@@ -103,7 +105,7 @@ sinkTerm s (AnnCast _ f co) = flushBinds (sinkable s) (Cast (sinkAtom (nullBinds
 
 flushBinds :: [Sinkable a] -> Term a -> Term a
 flushBinds [] t = t
-flushBinds (si@Sinkable{}:xs) t = flushBinds xs (Let (One (sBind si)) t)
+flushBinds (si@Sinkable{}:xs) t = flushBinds xs (Let (sKind si) (One (sBind si)) t)
 
 nullBinds :: SinkState a -> SinkState a
 nullBinds s = s { sinkable = [] }

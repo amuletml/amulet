@@ -27,6 +27,7 @@ data VarInfo
   | TypeConVar
   | TypeVar
   | CastVar
+  | JoinVar {-# UNPACK #-} !Int
   deriving (Eq, Show, Ord, Generic, Data)
 
 makeLenses ''CoVar
@@ -51,6 +52,7 @@ isValueInfo, isTypeInfo :: VarInfo -> Bool
 
 isValueInfo ValueVar = True
 isValueInfo DataConVar = True
+isValueInfo (JoinVar _) = True
 isValueInfo _ = False
 
 isTypeInfo TypeConVar = True

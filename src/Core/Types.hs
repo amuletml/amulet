@@ -46,7 +46,7 @@ approximateType (Cast _ phi) = snd <$> relates phi
 approximateType (App f _) = do
   ForallTy _ _ d <- approximateAtomType f
   pure d
-approximateType (Let _ e) = approximateType e
+approximateType (Let _ _ e) = approximateType e
 approximateType (Match _ xs) = case xs of
   (x:_) -> approximateType (x ^. armBody)
   [] -> error "impossible approximateType empty match"
