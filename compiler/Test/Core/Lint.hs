@@ -119,5 +119,6 @@ files =
   , "pipe.ml"
   , "polymorphic-recursion.ml"
   -- , "skolems.ml"
+  , "stream.ml"
   , "unsound/reference.ml"
   ]
