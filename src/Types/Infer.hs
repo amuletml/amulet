@@ -108,7 +108,7 @@ check ex@(Ascription e ty an) goal = do
 check e ty = do
   (e', t) <- infer e
   (_, c) <- subsumes e ty t
-  pure (ExprWrapper c e' (annotation e, t))
+  pure (ExprWrapper c e' (annotation e, ty))
 
 -- [Complete and Easy]: See https://www.cl.cam.ac.uk/~nk480/bidir.pdf
 
