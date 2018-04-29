@@ -177,8 +177,9 @@ library amulet
                      , Core.Optimise.Reduce
                      , Core.Optimise.Inline
                      , Core.Optimise.Sinking
-                     , Core.Optimise.DeadCode
                      , Core.Optimise.Newtype
+                     , Core.Optimise.Joinify
+                     , Core.Optimise.DeadCode
                      -- Backend
                      , Backend.Lua
                      , Backend.Lua.Emit

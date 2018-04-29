@@ -6,9 +6,10 @@ import Data.List
 
 import Core.Optimise.Newtype
 import Core.Optimise.DeadCode
+import Core.Optimise.Sinking
+import Core.Optimise.Joinify
 import Core.Optimise.Inline
 import Core.Optimise.Reduce
-import Core.Optimise.Sinking
 import Core.Optimise
 
 import Core.Free
@@ -29,6 +30,7 @@ optmOnce = passes <=< killNewtypePass where
            , inlineVariablePass
 
            , pure . deadCodePass
+           , matchJoinPass
 
            , pure . sinkingPass . tagFreeSet
 
