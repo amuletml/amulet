@@ -48,8 +48,9 @@ extendPureFuns :: IsVar a => ArityScope -> [(a, Type a, AnnTerm b a)] -> AritySc
 extendPureFuns s vs = s
   { pureArity = foldr (\(v, _, e) p ->
                          case e of
-                           AnnAtom  _ a   -> maybeInsert v (atomArity s a) p
-                           AnnApp   _ a _ -> maybeInsert v (atomArity s a - 1) p
+                           AnnAtom  _ a    -> maybeInsert v (atomArity s a) p
+                           AnnApp   _ a _  -> maybeInsert v (atomArity s a - 1) p
+                           AnnTyApp  _ a _ -> maybeInsert v (atomArity s a - 1) p
                            _ -> p) (pureArity s) vs
   }
   where
