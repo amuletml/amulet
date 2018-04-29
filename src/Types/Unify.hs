@@ -24,6 +24,9 @@ import Data.Function
 import Data.List
 import Data.Text (Text)
 
+import Pretty
+import Debug.Trace
+
 data SolveScope
   = SolveScope { _bindSkol :: Bool
                , _don'tTouch :: Set.Set (Var Typed)
@@ -142,6 +145,7 @@ unify (TyRows rho arow) (TyRows sigma brow)
       pure (RowsCo co cs)
 
 unify ta@TyExactRows{} tb@TyRows{} = unify tb ta
+
 unify tb@(TyRows rho brow) ta@(TyExactRows arow)
   | overlaps <- overlap arow brow
   , rhoNew <- deleteFirstsBy ((==) `on` fst) (sortOn fst arow) (sortOn fst brow)
@@ -149,8 +153,9 @@ unify tb@(TyRows rho brow) ta@(TyExactRows arow)
       [] -> throwError (NoOverlap tb ta)
       xs -> do
         cs <- traverse unifRow xs
-        co <- unify rho (TyExactRows rhoNew)
-        pure (RowsCo co cs)
+        _ <- unify rho (TyExactRows rhoNew)
+        trace (render (pretty (ProjCo rhoNew cs))) pure ()
+        pure (ProjCo rhoNew cs)
 
 unify ta@(TyExactRows arow) tb@(TyExactRows brow)
   | overlaps <- overlap arow brow

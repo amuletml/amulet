@@ -216,6 +216,7 @@ data Coercion p
   | ProdCo (Coercion p) (Coercion p) -- (x : S ~ T, y : S' ~ T') : (S, S') ~ (T, T')
   | ExactRowsCo [(Text, Coercion p)] -- { x : A ~ B } : { x : A } ~ { x : B }
   | RowsCo (Coercion p) [(Text, Coercion p)] -- { x : A ~ B | f : S ~ T } : { A | f : S } ~ { B | f : T }
+  | ProjCo [(Text, Type p)] [(Text, Coercion p)] -- { x : A ~ B | y : S ~ T } : { x : A, y : S } ~ { x : B | y : T }
   | AssumedCo (Type p) (Type p) -- <A, B> : A ~ B
   | ForallCo (Var p) (Coercion p) (Coercion p) -- (forall (v : x : c ~ d). phi : a ~ b) : forall (v : c). a ~ forall (v : d). b
 

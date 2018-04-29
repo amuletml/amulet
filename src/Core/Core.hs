@@ -6,9 +6,11 @@ import Pretty
 
 import qualified Data.VarSet as VarSet
 import qualified Data.Set as Set
+import Data.Function
 import Data.VarSet (IsVar(..))
-import Data.Text (Text, pack)
 import Data.Triple
+import Data.Text (Text, pack)
+import Data.List
 
 import Control.Lens.Plated
 
@@ -102,6 +104,7 @@ data Coercion a
   | Quantified (BoundTv a) (Coercion a) (Coercion a)
   | ExactRecord [(Text, Coercion a)]
   | Record (Coercion a) [(Text, Coercion a)]
+  | Projection [(Text, Coercion a)] [(Text, Coercion a)]
 
   | CoercionVar a
 
@@ -163,6 +166,7 @@ instance Pretty a => Pretty (Coercion a) where
   pretty (Application c c') = pretty c <+> pretty c'
   pretty (Record r s) = enclose (lbrace <> space) (space <> rbrace) (pretty r <+> hsep (punctuate comma (map pprCoRow s)))
   pretty (ExactRecord r) = enclose (lbrace <> space) (space <> rbrace) (hsep (punctuate comma (map pprCoRow r)))
+  pretty (Projection rs rs') = enclose (lbrace <> space) (space <> rbrace) (hsep (punctuate comma (map pprCoRow rs)) <+> keyword "with" <+> hsep (punctuate comma (map pprCoRow rs')))
   pretty (Domain f) = keyword "dom" <+> parens (pretty f)
   pretty (Codomain f) = keyword "cod" <+> parens (pretty f)
   pretty (Symmetry f) = keyword "sym" <+> parens (pretty f)
@@ -318,6 +322,16 @@ relates (Record c rs) = do
         pure ((t, a), (t, b))
   (a, b) <- unzip <$> traverse go rs
   pure (RowsTy p a, RowsTy p' b)
+
+relates (Projection rs rs') = do
+  let go (t, c) = do
+        (a, b) <- relates c
+        pure ((t, a), (t, b))
+  (as, bs) <- unzip <$> traverse go rs
+  (ss, ts) <- unzip <$> traverse go rs'
+  let first = unionBy ((==) `on` fst) as ss
+
+  pure (ExactRowsTy first, RowsTy (ExactRowsTy bs) ts)
 
 relates (Symmetry x) = do
   (a, b) <- relates x

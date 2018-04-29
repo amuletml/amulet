@@ -60,6 +60,7 @@ substituteInTys = term where
   coercion m (Application f x) = Application (coercion m f) (coercion m x)
   coercion m (ExactRecord rs) = ExactRecord (map (second (coercion m)) rs)
   coercion m (Record c rs) = Record (coercion m c) (map (second (coercion m)) rs)
+  coercion m (Projection rs rs') = Projection (map (second (coercion m)) rs) (map (second (coercion m)) rs')
   coercion _ (CoercionVar x) = CoercionVar x
   coercion m (Quantified v co c) = Quantified v (coercion m co) (coercion m c)
 
@@ -107,6 +108,7 @@ substituteInCo m = coercion where
   coercion (Application f x) = Application (coercion f) (coercion x)
   coercion (ExactRecord rs) = ExactRecord (map (second coercion) rs)
   coercion (Record c rs) = Record (coercion c) (map (second coercion) rs)
+  coercion (Projection rs rs') = Projection (map (second coercion) rs) (map (second coercion) rs')
   coercion (CoercionVar x) = CoercionVar x
   coercion (Quantified v a c) = Quantified v (coercion a) (coercion c)
 
@@ -205,6 +207,7 @@ refresh = refreshTerm mempty where
   refreshCoercion s (Application f x) = Application (refreshCoercion s f) (refreshCoercion s x)
   refreshCoercion s (ExactRecord rs) = ExactRecord (map (second (refreshCoercion s)) rs)
   refreshCoercion s (Record c rs) = Record (refreshCoercion s c) (map (second (refreshCoercion s)) rs)
+  refreshCoercion s (Projection rs rs') = Projection (map (second (refreshCoercion s)) rs) (map (second (refreshCoercion s)) rs')
   refreshCoercion s x@(CoercionVar v) = maybe x CoercionVar (VarMap.lookup (toVar v) s)
   refreshCoercion s (Quantified v a c) = Quantified v (refreshCoercion s a) (refreshCoercion s c)
 
