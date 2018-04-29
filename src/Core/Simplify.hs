@@ -20,7 +20,7 @@ import Control.Monad
 import Syntax (Var(..), Resolved)
 
 lintPasses :: Bool
-lintPasses = True
+lintPasses = False
 
 optmOnce :: [Stmt (Var Resolved)] -> Gen Int [Stmt (Var Resolved)]
 optmOnce = passes where
@@ -48,5 +48,5 @@ optimise :: [Stmt (Var Resolved)] -> Gen Int [Stmt (Var Resolved)]
 optimise = go 25 where
   go :: Integer -> [Stmt (Var Resolved)] -> Gen Int [Stmt (Var Resolved)]
   go k sts
-    | k > 0 = go (k - 1) =<< optmOnce sts
+    | k > 0 = go (k - 1) . (runLint =<< checkStmt emptyScope) =<< optmOnce sts
     | otherwise = pure sts
