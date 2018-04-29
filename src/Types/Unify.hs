@@ -24,9 +24,6 @@ import Data.Function
 import Data.List
 import Data.Text (Text)
 
-import Pretty
-import Debug.Trace
-
 data SolveScope
   = SolveScope { _bindSkol :: Bool
                , _don'tTouch :: Set.Set (Var Typed)
@@ -154,7 +151,6 @@ unify tb@(TyRows rho brow) ta@(TyExactRows arow)
       xs -> do
         cs <- traverse unifRow xs
         _ <- unify rho (TyExactRows rhoNew)
-        trace (render (pretty (ProjCo rhoNew cs))) pure ()
         pure (ProjCo rhoNew cs)
 
 unify ta@(TyExactRows arow) tb@(TyExactRows brow)
