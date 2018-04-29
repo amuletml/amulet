@@ -406,6 +406,7 @@ redundantCo (Domain c) = redundantCo c
 redundantCo (Codomain c) = redundantCo c
 redundantCo (Symmetry c) = redundantCo c
 redundantCo CoercionVar{} = False
+redundantCo Projection{} = False
 
 appendBody :: Term a -> a -> Type a -> Term a -> Term a
 appendBody (Let bind b) v ty r = Let bind (appendBody b v ty r)

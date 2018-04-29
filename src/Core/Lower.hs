@@ -205,7 +205,9 @@ lowerAt (ExprWrapper wrap e an) ty =
     co (S.ProdCo a b) = ExactRecord [("1", co a), ("2", co b)]
     co (S.RowsCo c rs) = C.Record (co c) (map (second co) rs)
     co (S.ExactRowsCo rs) = C.ExactRecord (map (second co) rs)
+    co (S.ProjCo rs rs') = Projection (map (second mkReflexive) rs) (map (second co) rs')
     co (S.ForallCo (TvName v) cd rs) = C.Quantified (Relevant v) (co cd) (co rs)
+    mkReflexive = join SameRepr . lowerType
 
 lowerAt e _ = lowerAnyway e
 

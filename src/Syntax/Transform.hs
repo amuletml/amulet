@@ -46,6 +46,7 @@ transformCoercion fc ft = goC where
   transC (ProdCo f x) = ProdCo (goC f) (goC x)
   transC (ExactRowsCo rs) = ExactRowsCo (map (second goC) rs)
   transC (RowsCo c rs) = RowsCo (goC c) (map (second goC) rs)
+  transC (ProjCo rs rs') = ProjCo (map (second goT) rs) (map (second goC) rs')
   transC (SymCo c) = SymCo (goC c)
   transC (ForallCo v a c) = ForallCo v (goC a) (goC c)
 

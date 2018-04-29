@@ -20,7 +20,7 @@ import Control.Monad
 import Syntax (Var(..), Resolved)
 
 lintPasses :: Bool
-lintPasses = False
+lintPasses = True
 
 optmOnce :: [Stmt (Var Resolved)] -> Gen Int [Stmt (Var Resolved)]
 optmOnce = passes where

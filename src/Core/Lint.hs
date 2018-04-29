@@ -172,20 +172,22 @@ checkTerm s t@(Match e bs) = flip withContext t $ do
                   -- TODO: Do we need Relevant as well?
                   -> checkPattern (substituteInType s x) p
                   | otherwise -> throwError (TypeMismatch (ForallTy Irrelevant unknownTyvar ty') (inst ty))
-      checkPattern ty' (PatExtend f fs) = do
-        fields <- checkFields ty'
-        v <- checkPattern ty' f
+      checkPattern ty@(RowsTy ext ts) (PatExtend f fs) = do
+        v <- checkPattern ext f
         vs <- for fs $ \(t, p) ->
-          case find ((==t) . fst) fields of
-            Nothing -> throwError (TypeMismatch (ExactRowsTy [(t, unknownTyvar)]) ty')
+          case find ((==t) . fst) ts of
+            Nothing -> throwError (TypeMismatch (RowsTy ext [(t, unknownTyvar)]) ty)
             Just (_, ty) -> checkPattern ty p
 
         pure (mconcat (v:vs))
 
-      checkFields VarTy{} = pure []
-      checkFields (ExactRowsTy fs) = pure fs
-      checkFields (RowsTy f fs) = (fs++) <$> checkFields f
-      checkFields ty = throwError (TypeMismatch (ExactRowsTy []) ty)
+      checkPattern ty@(ExactRowsTy ts) (PatExtend (PatLit RecNil) fs) =
+        fmap mconcat . for fs $ \(t, p) ->
+          case find ((==t) . fst) ts of
+            Nothing -> throwError (TypeMismatch (ExactRowsTy [(t, unknownTyvar)]) ty)
+            Just (_, ty) -> checkPattern ty p
+
+      checkPattern t p@PatExtend{} = error ("extend pattern " ++ show p ++ " for type " ++ show t)
 
       inst (ForallTy (Relevant _) _ t) = inst t
       inst t = t
@@ -235,6 +237,15 @@ checkTerm s t@(Cast x co) = do
         pure ((t, a), (t, b))
       (a, b) <- checkCo c
       pure (RowsTy a as, RowsTy b bs)
+    checkCo (Projection rs rs') = do
+      (as, bs) <- fmap unzip . for rs $ \(t, c) -> do
+        (a, b) <- checkCo c
+        pure ((t, a), (t, b))
+      (ss, ts) <- fmap unzip . for rs' $ \(t, c) -> do
+        (a, b) <- checkCo c
+        pure ((t, a), (t, b))
+      let first = unionBy ((==) `on` fst) as ss
+      pure (ExactRowsTy first, RowsTy (ExactRowsTy bs) ts)
     checkCo co@CoercionVar{} = throwError (InvalidCoercion co)
     checkCo (Symmetry x) = do
       (a,  b) <- checkCo x
