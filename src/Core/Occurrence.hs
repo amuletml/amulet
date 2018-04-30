@@ -9,6 +9,8 @@ module Core.Occurrence
   ) where
 
 
+import Control.Lens hiding ((#))
+
 import Core.Core as C
 
 import qualified Data.VarMap as VarMap
@@ -143,15 +145,15 @@ tagOccurTerm ann var = tagTerm where
         (ftbs, bs') = unzip (map tagPtrn bs)
         fv = occConcat (fvt : ftbs)
     in (fv, AnnMatch (ann an fv) t' bs') where
-      tagPtrn (a@Arm { armPtrn = p, armBody = b, armVars = pv }) =
+      tagPtrn (a@Arm { _armPtrn = p, _armBody = b, _armVars = pv }) =
         let (fvb, b') = tagTerm b
             p' = flip var' fvb <$> p
         in (foldr (VarMap.delete . toVar . fst) fvb pv
-           , Arm { armPtrn = p'
-                 , armTy = conv (armTy a)
-                 , armBody = b'
-                 , armVars = map (\(v, ty) -> (var' v fvb, conv ty)) pv
-                 , armTyvars = map (\(v, ty) -> (var v defOcc, conv ty)) (armTyvars a)
+           , Arm { _armPtrn = p'
+                 , _armTy = conv (a ^. armTy)
+                 , _armBody = b'
+                 , _armVars = map (\(v, ty) -> (var' v fvb, conv ty)) pv
+                 , _armTyvars = map (\(v, ty) -> (var v defOcc, conv ty)) (a ^. armTyvars)
                  })
 
   tagTerm (AnnExtend an f fs) =

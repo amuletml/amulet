@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleInstances, FlexibleContexts, ScopedTypeVariables, DeriveFunctor, DeriveGeneric #-}
-{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE PatternSynonyms, TemplateHaskell #-}
 module Core.Core where
 
 import Pretty
@@ -12,7 +12,7 @@ import Data.Triple
 import Data.Text (Text, pack)
 import Data.List
 
-import Control.Lens.Plated
+import Control.Lens
 
 import GHC.Generics
 
@@ -77,11 +77,11 @@ data AnnBinding b a
 type Binding = AnnBinding ()
 
 data AnnArm b a = Arm
-  { armPtrn :: Pattern a
-  , armTy   :: Type a
-  , armBody :: AnnTerm b a
-  , armVars :: [(a, Type a)]
-  , armTyvars :: [(a, Type a)]
+  { _armPtrn :: Pattern a
+  , _armTy   :: Type a
+  , _armBody :: AnnTerm b a
+  , _armVars :: [(a, Type a)]
+  , _armTyvars :: [(a, Type a)]
   }
   deriving (Eq, Show, Ord, Functor, Generic)
 
@@ -138,6 +138,8 @@ data AnnStmt b a
   | StmtLet [(a, Type a, AnnTerm b a)]
   | Type a [(a, Type a)]
   deriving (Eq, Show, Ord, Functor, Generic)
+
+makeLenses ''AnnArm
 
 type Stmt = AnnStmt ()
 
@@ -255,7 +257,7 @@ freeIn (AnnApp _ f x) = freeInAtom f <> freeInAtom x
 freeIn (AnnLet _ (One v) e) = VarSet.difference (freeIn e <> freeIn (thd3 v)) (VarSet.singleton (toVar (fst3 v)))
 freeIn (AnnLet _ (Many vs) e) = VarSet.difference (freeIn e <> foldMap (freeIn . thd3) vs) (VarSet.fromList (map (VarSet.toVar . fst3) vs))
 freeIn (AnnMatch _ e bs) = freeInAtom e <> foldMap freeInBranch bs where
-  freeInBranch Arm { armVars = v, armBody = e } = foldr (VarSet.delete . toVar . fst) (freeIn e) v
+  freeInBranch x = foldr (VarSet.delete . toVar . fst) (freeIn (x ^. armBody)) (x ^. armVars)
 freeIn (AnnExtend _ c rs) = freeInAtom c <> foldMap (freeInAtom . thd3) rs
 freeIn (AnnTyApp _ f _) = freeInAtom f
 freeIn (AnnCast _ f _) = freeInAtom f
@@ -282,7 +284,7 @@ occursInTerm v (TyApp f _) = occursInAtom v f
 occursInTerm v (Cast f _) = occursInAtom v f
 occursInTerm v (Let (One va) e) = occursInTerm v (thd3 va) || occursInTerm v e
 occursInTerm v (Let (Many vs) e) = any (occursInTerm v . thd3) vs || occursInTerm v e
-occursInTerm v (Match e bs) = occursInAtom v e || any (occursInTerm v . armBody) bs
+occursInTerm v (Match e bs) = occursInAtom v e || any (occursInTerm v . view armBody) bs
 occursInTerm v (Extend e fs) = occursInAtom v e || any (occursInAtom v . thd3) fs
 
 occursInTy :: IsVar a => a -> Type a -> Bool
@@ -356,11 +358,6 @@ extractAnn (AnnExtend b _ _) = b
 extractAnn (AnnTyApp b _ _)  = b
 extractAnn (AnnCast b _ _)   = b
 
-mapArmBody :: (AnnTerm b a -> AnnTerm c a) -> AnnArm b a -> AnnArm c a
-mapArmBody f a = a { armBody = f (armBody a) }
-
-fmapArmBody :: Functor f => (AnnTerm b a -> f (AnnTerm c a)) -> AnnArm b a -> f (AnnArm c a)
-fmapArmBody f a = (\b -> a { armBody = b}) <$> f (armBody a)
 
 instance Plated (AnnAtom b a) where
   plate = gplate

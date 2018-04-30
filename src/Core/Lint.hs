@@ -24,11 +24,12 @@ import Core.Types
 import Syntax (Var(..))
 import Pretty hiding ((<>))
 
-data CoreError a = TypeMismatch (Type a) (Type a)
-                 | forall b. Pretty b => ArisingIn (CoreError a) b
-                 | NoSuchVar a
-                 | InvalidCoercion (Coercion a)
-                 | PatternMismatch [(a, Type a)] [(a, Type a)]
+data CoreError a
+  = TypeMismatch (Type a) (Type a)
+  | forall b. Pretty b => ArisingIn (CoreError a) b
+  | NoSuchVar a
+  | InvalidCoercion (Coercion a)
+  | PatternMismatch [(a, Type a)] [(a, Type a)]
 
 data Scope a = Scope { vars :: Map.Map a (Type a)
                      , types :: Set.Set a
@@ -135,7 +136,7 @@ checkTerm s t@(Let (Many vs) r) = do
 
 checkTerm s t@(Match e bs) = flip withContext t $ do
   tye <- checkAtom s e
-  (ty:tys) <- for bs $ \Arm { armPtrn = p, armTy = ty, armBody = r, armVars = vs } -> do
+  (ty:tys) <- for bs $ \Arm { _armPtrn = p, _armTy = ty, _armBody = r, _armVars = vs } -> do
     if vs /= patternVars p
     then tell [ArisingIn (PatternMismatch (patternVars p) vs) t]
     else pure ()

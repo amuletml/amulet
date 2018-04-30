@@ -14,6 +14,7 @@ import Data.VarSet (toVar,IsVar)
 import Data.Triple
 import Data.List
 
+import Control.Lens hiding (cons)
 import Control.Arrow
 
 import Core.Optimise
@@ -83,7 +84,7 @@ transformOver = transT where
      in Let (Many vars') body'
   mapT s (Match test branches) =
     let test' = transA s test
-        branches' = map (mapArmBody (transT s)) branches
+        branches' = map (armBody %~ transT s) branches
     in Match test' branches'
 
   transT s = reduceTerm s . mapT s
@@ -128,46 +129,46 @@ reduceTerm s (Let (One (x, xt, Let (One (y, yt, yval)) xval)) rest)
     reduceTerm s $ Let (One (y, yt, yval)) $ reduceTerm s (Let (One (x, xt, xval)) rest)
 
 -- Match commuting conversion (trivial case)
-reduceTerm _ (Let (One (v, vt, Match t [a@Arm { armBody = b }])) r) =
-  Match t [a { armBody = appendBody b v vt r }]
+reduceTerm _ (Let (One (v, vt, Match t [a])) r) =
+  Match t [a & armBody %~ appendBody v vt r]
 
 -- Trivial matches
-reduceTerm s (Match t (Arm { armPtrn = Capture v _, armTy = ty, armBody = body }:_)) = {-# SCC "Reduce.trivial_match" #-}
+reduceTerm s (Match t (Arm { _armPtrn = Capture v _, _armTy = ty, _armBody = body }:_)) = {-# SCC "Reduce.trivial_match" #-}
   reduceTerm s $ Let (One (v, ty, Atom t)) body
 reduceTerm s (Match t bs) = {-# SCC "Reduce.fold_cases" #-}
   case foldCases bs of
-    Left  (Arm { armBody = b }) -> b
+    Left  (Arm { _armBody = b }) -> b
     Right bs' ->
       case last bs' of
         -- If we were really smart, we could strip _all_ cases which are shadowed by
         -- another. For now, simply detect the case `error @a "Nope"`
-        Arm { armPtrn = Capture _ _
-            , armBody = Let (One (tyApp, _, TyApp (Ref err _) _))
+        Arm { _armPtrn = Capture _ _
+            , _armBody = Let (One (tyApp, _, TyApp (Ref err _) _))
                         (App (Ref tyApp' _) (Lit _)) }
           | TgInternal "error" <- toVar err
           , toVar tyApp == toVar tyApp'
-          , isComplete s (map armPtrn (init bs'))
+          , isComplete s ((init bs) ^.. each . armPtrn)
           -> Match t (init bs')
         _ -> Match t bs'
 
   where foldCases [] = Right []
-        foldCases (a@Arm { armPtrn = p, armBody = body }:xs) = case reducePattern s t p of
+        foldCases (a@Arm { _armPtrn = p, _armBody = body }:xs) = case reducePattern s t p of
           PatternFail -> foldCases xs
           PatternUnknown subst -> Right (substArm a subst body:either pure id (foldCases xs))
           PatternPartial subst -> Right [substArm a subst body]
           PatternComplete subst -> Left (substArm a subst body)
 
-        substArm a@Arm{armTyvars = []} subst body
+        substArm a@Arm{_armTyvars = []} subst body
           -- In the trivial case we can do a plain old substitution
-          = a { armBody = substitute subst body }
-        substArm a@Arm{armTyvars = ts, armVars = vs} subst body
+          = a & armBody .~ substitute subst body
+        substArm a@Arm{_armTyvars = ts, _armVars = vs} subst body
           -- Otherwise we look up types and attempt to unify them.
           = let Just tySubst = Map.foldrWithKey (foldVar vs) (Just mempty) subst
-            in a { armVars = map (second (substituteInType tySubst)) vs
+            in a { _armVars = map (second (substituteInType tySubst)) vs
                  -- Substitute tyvars and remove those which have been remapped
-                 , armTyvars = map (second (substituteInType tySubst)) $ filter (not . flip Map.member tySubst . fst) ts
+                 , _armTyvars = map (second (substituteInType tySubst)) $ filter (not . flip Map.member tySubst . fst) ts
                  -- Substitute atoms and tyvars
-                 , armBody = substituteInTys tySubst $ substitute subst body
+                 , _armBody = substituteInTys tySubst $ substitute subst body
                  }
 
         foldVar :: IsVar a => [(a, Type a)] -> a -> Atom a -> Maybe (Map.Map a (Type a)) -> Maybe (Map.Map a (Type a))
@@ -406,9 +407,9 @@ redundantCo (Symmetry c) = redundantCo c
 redundantCo CoercionVar{} = False
 redundantCo Projection{} = False
 
-appendBody :: Term a -> a -> Type a -> Term a -> Term a
-appendBody (Let bind b) v ty r = Let bind (appendBody b v ty r)
-appendBody b v ty r = Let (One (v, ty, b)) r
+appendBody :: a -> Type a -> Term a -> Term a -> Term a
+appendBody v ty r (Let bind b) = Let bind (appendBody v ty r b)
+appendBody v ty r b = Let (One (v, ty, b)) r
 
 trivialAtom :: Atom a -> Bool
 trivialAtom Ref{} = True

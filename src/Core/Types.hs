@@ -48,7 +48,7 @@ approximateType (App f _) = do
   pure d
 approximateType (Let _ e) = approximateType e
 approximateType (Match _ xs) = case xs of
-  (Arm { armBody = b }:_) -> approximateType b
+  (x:_) -> approximateType (x ^. armBody)
   [] -> error "impossible approximateType empty match"
 approximateType (Extend e rs) = RowsTy <$> approximateAtomType e <*> traverse (\(x, _, t) -> (x,) <$> approximateAtomType t) rs
 approximateType (TyApp f at) = do
