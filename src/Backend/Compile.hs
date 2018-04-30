@@ -284,7 +284,7 @@ compileTerm (Let (Many bs) body) = do
           s <- gets snd
           flushStmt (compileStmt s (LuaAssign [LuaName (getVar v s)] . pure) e)
 
-compileTerm m@(Match test [Arm { armPtrn = p, armBody = body, armVars = vs}])
+compileTerm m@(Match test [Arm { _armPtrn = p, _armBody = body, _armVars = vs}])
   | all (\(x, _) -> usedWhen x == Once || usedWhen x == Dead) vs
   = do
       test' <- compileAtom test
@@ -358,7 +358,7 @@ patternBindings (PatExtend p rs) vr = patternBindings p vr ++ concatMap (index v
 
 compileMatch :: Occurs a => Term a -> LuaExpr -> [Arm a] -> ExprContext a LuaExpr
 compileMatch match test ps = ContT $ \next ->  gets (pure . genIf next . snd)
-  where genBinding next s Arm { armPtrn = p, armBody = c } =
+  where genBinding next s Arm { _armPtrn = p, _armBody = c } =
           ( patternTest s p test
           , let (once, multi) = partition ((==Once) . usedWhen . fst) (patternBindings p test)
                 (s', multi') = foldl (\(s, vs) (v, e) -> let (v', s') = pushVar v s in (s', (LuaName v', e): vs)) (s, []) multi
@@ -369,8 +369,8 @@ compileMatch match test ps = ContT $ \next ->  gets (pure . genIf next . snd)
 
         genIf next s =
           case ps of
-            (ifs@Arm { armPtrn = PatLit LitTrue } :
-             els@Arm { armPtrn = PatLit LitFalse } :_) ->
+            (ifs@Arm { _armPtrn = PatLit LitTrue } :
+             els@Arm { _armPtrn = PatLit LitFalse } :_) ->
               LuaIfElse [ (test, snd (genBinding next s ifs))
                         , (LuaTrue, snd (genBinding next s els)) ]
 

@@ -69,10 +69,10 @@ patternMatchingFail w p t = do
   tyApp <- fresh
   let err = Lit (Str (T.pack ("Pattern matching failure at " ++ show (pretty w))))
       errTy = ForallTy Irrelevant C.tyString t
-  pure C.Arm { armPtrn = C.Capture var p, armTy = p
-             , armBody = C.Let (One (tyApp, errTy, C.TyApp errRef t))
+  pure C.Arm { _armPtrn = C.Capture var p, _armTy = p
+             , _armBody = C.Let (One (tyApp, errTy, C.TyApp errRef t))
                (C.App (C.Ref tyApp errTy) err)
-             , armVars = [(var, p)], armTyvars = []
+             , _armVars = [(var, p)], _armTyvars = []
              }
 
 lowerAtAtom :: MonadLower m => Expr Typed -> Type -> Lower m Atom
@@ -134,8 +134,8 @@ lowerAt (Fun p bd an) (ForallTy Irrelevant a b) =
           bd' <- lowerAtTerm bd b
           arg <- fresh
           fail <- patternMatchingFail (fst an) a b
-          pure (Atom (Lam (TermArgument arg a) (C.Match (Ref arg a) [ C.Arm { armPtrn = p', armTy = a, armBody = bd'
-                                                                            , armVars = patternVars p', armTyvars = ts }
+          pure (Atom (Lam (TermArgument arg a) (C.Match (Ref arg a) [ C.Arm { _armPtrn = p', _armTy = a, _armBody = bd'
+                                                                            , _armVars = patternVars p', _armTyvars = ts }
                                                                     , fail ])))
 lowerAt (Begin [x] _) t = lowerAt x t
 lowerAt (Begin xs _) t = lowerAtTerm (last xs) t >>= flip (foldrM bind) (init xs) where
@@ -147,8 +147,8 @@ lowerAt (S.Match ex cs an) ty = do
     p' <- lowerPat pat
     ts <- patternTyvars pat
     ex' <- lowerAtTerm ex ty
-    pure C.Arm { armPtrn = p', armTy = mt, armBody = ex'
-               , armVars = patternVars p', armTyvars = ts }
+    pure C.Arm { _armPtrn = p', _armTy = mt, _armBody = ex'
+               , _armVars = patternVars p', _armTyvars = ts }
   fail <- patternMatchingFail (fst an) mt ty
 
   pure $ C.Match ex' (cs' ++ [fail])
@@ -162,9 +162,9 @@ lowerAt (Access r k _) ty = do
           RowsTy t rs -> cotyRows t (deleteBy ((==) `on` fst) (k, undefined) rs)
           ExactRowsTy rs -> ExactRowsTy (deleteBy ((==) `on` fst) (k, undefined) rs)
           _ -> error ("not a row type " ++ show rt)
-      match = C.Arm { armPtrn = PatExtend (C.Capture iv inner) [ (k, C.Capture var ty) ]
-                    , armTy = rt, armBody = Atom (Ref var ty )
-                    , armVars = [(iv, inner), (var, ty)], armTyvars = []
+      match = C.Arm { _armPtrn = PatExtend (C.Capture iv inner) [ (k, C.Capture var ty) ]
+                    , _armTy = rt, _armBody = Atom (Ref var ty )
+                    , _armVars = [(iv, inner), (var, ty)], _armTyvars = []
                     }
   pure $ C.Match r' [match]
 

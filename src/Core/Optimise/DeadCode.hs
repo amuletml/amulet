@@ -7,6 +7,7 @@ import Data.Triple
 import Data.List
 
 import Control.Applicative
+import Control.Lens
 
 import Core.Optimise
 import Core.Arity
@@ -68,14 +69,14 @@ deadCodePass = snd . freeS emptyScope Nothing where
 
   freeT s (Match t bs) =
     let (ft, t') = freeA s t
-        (fbs, bs') = unzip $ map (fmapArmBody (freeT s)) bs
-        pbs = map (VarSet.fromList . map (toVar . fst) . armVars) bs
+        (fbs, bs') = unzip $ map (armBody %%~ (freeT s)) bs
+        pbs = map (VarSet.fromList . map (toVar . fst) . view armVars) bs
 
         matchFree = mconcat (zipWith VarSet.difference fbs pbs)
     in case (pbs, fbs,  bs') of
          -- If we've got a single pattern match with nothing captured, then inline
          ([pb], [fb], [b])
-           | VarSet.isEmpty (VarSet.intersection pb fb) -> (matchFree, armBody b)
+           | VarSet.isEmpty (VarSet.intersection pb fb) -> (matchFree, b ^. armBody)
          -- Otherwise assume everything is used
          _ -> (ft <> matchFree, Match t' bs')
 

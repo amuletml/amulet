@@ -3,6 +3,7 @@ module Core.Optimise.Newtype (killNewtypePass) where
 
 import Control.Monad.Infer (Gen, fresh)
 import Control.Monad
+import Control.Lens
 
 import qualified Data.VarMap as V
 import Data.VarSet (IsVar(..))
@@ -34,7 +35,7 @@ isNewtype (ForallTy (Relevant var) k t) = do
 isNewtype _ = Nothing
 
 newtypeMatch :: IsVar a => V.Map (Coercion a) -> [Arm a] -> Maybe (Coercion a, Arm a)
-newtypeMatch m (it@Arm { armPtrn = Destr c _, armTy = ty }:xs)
+newtypeMatch m (it@Arm { _armPtrn = Destr c _, _armTy = ty }:xs)
   | Just phi@(SameRepr _ cod) <- V.lookup (toVar c) m =
     case unify cod ty of
       Just map -> pure (substituteInCo map (Symmetry phi), it)
@@ -75,13 +76,13 @@ goBinding m = traverse (third3A goTerm) where
   goTerm (TyApp f t) = TyApp <$> goAtom f <*> pure t
   goTerm (Cast f t) = Cast <$> goAtom f <*> pure t
   goTerm (Match a x) = case newtypeMatch m x of
-    Just (phi, Arm { armPtrn = Destr _ p, armBody = bd, armVars = vs, armTyvars = tvs }) -> do
+    Just (phi, Arm { _armPtrn = Destr _ p, _armBody = bd, _armVars = vs, _armTyvars = tvs }) -> do
       var <- fresh
       let Just (_, castCodomain) = relates phi
-      bd' <- goTerm (Match (Ref (fromVar var) castCodomain) [Arm { armPtrn = p, armTy = castCodomain
-                                                                 , armBody = bd, armVars = vs, armTyvars = tvs }])
+      bd' <- goTerm (Match (Ref (fromVar var) castCodomain) [Arm { _armPtrn = p, _armTy = castCodomain
+                                                                 , _armBody = bd, _armVars = vs, _armTyvars = tvs }])
       pure $ Let (One (fromVar var, castCodomain, Cast a phi)) bd'
-    _ -> Match <$> goAtom a <*> traverse (fmapArmBody goTerm) x
+    _ -> Match <$> goAtom a <*> traverse (armBody %%~ goTerm) x
 
   goAtom (Lam arg e) = Lam arg <$> goTerm e
   goAtom x = pure x

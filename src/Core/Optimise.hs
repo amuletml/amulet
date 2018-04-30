@@ -16,6 +16,7 @@ import Data.VarSet (IsVar(..))
 import Control.Monad.Infer (fresh, freshFrom)
 import Control.Arrow (second)
 import Control.Monad.Gen
+import Control.Lens
 
 import Data.Foldable
 import Data.Triple
@@ -39,7 +40,7 @@ substitute m = term where
   atom (Lam v b) = Lam v (term b)
   atom x@Lit{} = x
 
-  arm = mapArmBody term
+  arm = armBody %~ term
 
 substituteInTys :: forall a. IsVar a => Map.Map a (Type a) -> Term a -> Term a
 substituteInTys = term where
@@ -73,11 +74,12 @@ substituteInTys = term where
       _ -> id
   atom _ x@Lit{} = x
 
-  arm m a@Arm{} = a { armPtrn = ptrn m (armPtrn a)
-                    , armTy = gotype m (armTy a)
-                    , armBody = term (flip (foldr Map.delete) (map fst (armTyvars a)) m) (armBody a)
-                    , armVars = map (second (gotype m)) (armVars a)
-                    }
+  arm m a@Arm{} =
+    a { _armPtrn = ptrn m (a ^. armPtrn)
+      , _armTy = gotype m (a ^. armTy)
+      , _armBody = term (flip (foldr Map.delete) (a ^.. armTyvars . each . _1) m) (a ^. armBody)
+      , _armVars = map (second (gotype m)) (a ^. armVars)
+      }
 
   ptrn m (Capture a ty) = Capture a (gotype m ty)
   ptrn _ (Constr a) = Constr a
@@ -158,14 +160,14 @@ refresh = refreshTerm mempty where
   refreshTerm s (Match e branches) = Match <$> refreshAtom s e
                                            <*> traverse refreshArm branches where
     refreshArm :: (MonadGen Int m) => Arm _ -> m (Arm _)
-    refreshArm (a@Arm{ armPtrn = test, armBody = branch }) = do
-      s' <- refreshVs (armTyvars a) s >>= refreshVs (armVars a)
+    refreshArm (a@Arm{ _armPtrn = test, _armBody = branch }) = do
+      s' <- refreshVs (a ^. armTyvars) s >>= refreshVs (a ^. armVars)
       branch' <- refreshTerm s' branch
-      pure Arm { armPtrn = refreshPattern s' test
-               , armTy = refreshType s' (armTy a)
-               , armBody = branch'
-               , armVars = map (\(v, ty) -> (get s' v, refreshType s' ty)) (armVars a)
-               , armTyvars = map (\(v, ty) -> (get s' v, refreshType s' ty)) (armTyvars a)
+      pure Arm { _armPtrn = refreshPattern s' test
+               , _armTy = refreshType s' (a ^. armTy)
+               , _armBody = branch'
+               , _armVars = map (\(v, ty) -> (get s' v, refreshType s' ty)) (a ^. armVars)
+               , _armTyvars = map (\(v, ty) -> (get s' v, refreshType s' ty)) (a ^. armTyvars)
                }
 
     refreshVs :: (MonadGen Int m, IsVar a) => [(a, Type a)] -> VarMap.Map a -> m (VarMap.Map a)
