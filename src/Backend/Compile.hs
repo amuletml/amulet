@@ -368,7 +368,15 @@ compileMatch match test ps = ContT $ \next ->  gets (pure . genIf next . snd)
                   [] -> []
                   _ -> [uncurry LuaLocal (unzip multi')])
                ++ evalState (runContT (compileTerm c) next) (withMatch once, s') )
-        genIf next s = LuaIfElse $ map (genBinding next s) ps
+
+        genIf next s =
+          case ps of
+            (ifs@Arm { armPtrn = PatLit LitTrue } :
+             els@Arm { armPtrn = PatLit LitFalse } :_) ->
+              LuaIfElse [ (test, snd (genBinding next s ifs))
+                        , (LuaTrue, snd (genBinding next s els)) ]
+
+            _ -> LuaIfElse $ map (genBinding next s) ps
 
         withMatch = map (\(v, b) -> (v, match, b))
 
