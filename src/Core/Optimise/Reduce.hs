@@ -17,6 +17,7 @@ import Data.List
 import Control.Lens hiding (cons)
 import Control.Arrow
 
+import Core.Builtin
 import Core.Optimise
 import Core.Types
 
@@ -123,6 +124,17 @@ reduceTerm :: IsVar a => Scope a -> Term a -> Term a
 -- Empty expressions
 reduceTerm _ (Extend e []) = {-# SCC "Reduce.empty_extend" #-} Atom e
 
+-- Let of bottom conversion
+reduceTerm _ (Let (One (v, _, TyApp (Ref var errort) _)) (Let (One (_, _, App (Ref v' _) msg)) cont))
+  | v == v'
+  , TgInternal "error" <- toVar var = {-# SCC "Reduce.let_bottom" #-}
+    let Just ty = approximateType cont
+        errTy = ForallTy Irrelevant tyString ty
+
+        newerr = TyApp (Ref var errort) ty
+        errapp = App (Ref v errTy) msg
+     in Let (One (v, errTy, newerr)) errapp
+
 -- Let Commuting conversion
 reduceTerm s (Let (One (x, xt, Let (One (y, yt, yval)) xval)) rest)
   | not (occursInTerm x yval) = {-# SCC "Reduce.commute_let" #-}
@@ -137,7 +149,7 @@ reduceTerm s (Match t (Arm { _armPtrn = Capture v _, _armTy = ty, _armBody = bod
   reduceTerm s $ Let (One (v, ty, Atom t)) body
 reduceTerm s (Match t bs) = {-# SCC "Reduce.fold_cases" #-}
   case foldCases bs of
-    Left  (Arm { _armBody = b }) -> b
+    Left  Arm { _armBody = b } -> b
     Right bs' ->
       case last bs' of
         -- If we were really smart, we could strip _all_ cases which are shadowed by
@@ -147,7 +159,7 @@ reduceTerm s (Match t bs) = {-# SCC "Reduce.fold_cases" #-}
                         (App (Ref tyApp' _) (Lit _)) }
           | TgInternal "error" <- toVar err
           , toVar tyApp == toVar tyApp'
-          , isComplete s ((init bs) ^.. each . armPtrn)
+          , isComplete s (init bs ^.. each . armPtrn)
           -> Match t (init bs')
         _ -> Match t bs'
 
