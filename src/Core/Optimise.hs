@@ -74,12 +74,10 @@ substituteInTys = term where
       _ -> id
   atom _ x@Lit{} = x
 
-  arm m a@Arm{} =
-    a { _armPtrn = ptrn m (a ^. armPtrn)
-      , _armTy = gotype m (a ^. armTy)
-      , _armBody = term (flip (foldr Map.delete) (a ^.. armTyvars . each . _1) m) (a ^. armBody)
-      , _armVars = map (second (gotype m)) (a ^. armVars)
-      }
+  arm m a = a & armPtrn %~ ptrn m
+              & armTy %~ gotype m
+              & armBody %~ term m
+              & armVars %~ map (_2 %~ gotype m)
 
   ptrn m (Capture a ty) = Capture a (gotype m ty)
   ptrn _ (Constr a) = Constr a
@@ -157,27 +155,36 @@ refresh = refreshTerm mempty where
                      pure (VarMap.insert (toVar v) v' m)) s vs
     vs' <- traverse (trimapA (pure . get s') (pure . refreshType s') (refreshTerm s')) vs
     Let (Many vs') <$> refreshTerm s' b
-  refreshTerm s (Match e branches) = Match <$> refreshAtom s e
-                                           <*> traverse refreshArm branches where
-    refreshArm :: (MonadGen Int m) => Arm _ -> m (Arm _)
-    refreshArm (a@Arm{ _armPtrn = test, _armBody = branch }) = do
+  refreshTerm s (Match e branches) = Match <$> refreshAtom s e <*> refreshArms s branches where
+    refreshArm :: (IsVar a, MonadGen Int m) => VarMap.Map a -> Arm a -> m (Arm a, VarMap.Map a)
+    refreshArm s (a@Arm{ _armPtrn = test, _armBody = branch }) = do
       s' <- refreshVs (a ^. armTyvars) s >>= refreshVs (a ^. armVars)
       branch' <- refreshTerm s' branch
-      pure Arm { _armPtrn = refreshPattern s' test
-               , _armTy = refreshType s' (a ^. armTy)
-               , _armBody = branch'
-               , _armVars = map (\(v, ty) -> (get s' v, refreshType s' ty)) (a ^. armVars)
-               , _armTyvars = map (\(v, ty) -> (get s' v, refreshType s' ty)) (a ^. armTyvars)
-               }
+      pure ( Arm { _armPtrn = refreshPattern s' test
+                 , _armTy = refreshType s' (a ^. armTy)
+                 , _armBody = branch'
+                 , _armVars = map (\(v, ty) -> (get s' v, refreshType s' ty)) (a ^. armVars)
+                 , _armTyvars = map (\(v, ty) -> (get s' v, refreshType s' ty)) (a ^. armTyvars)
+                 }
+           , s' )
+
+    refreshArms :: (IsVar a, MonadGen Int m) => VarMap.Map a -> [Arm a] -> m [Arm a]
+    refreshArms s (a:as) = do
+      (a', s) <- refreshArm s a
+      (a':) <$> refreshArms s as
+    refreshArms _ [] = pure []
 
     refreshVs :: (MonadGen Int m, IsVar a) => [(a, Type a)] -> VarMap.Map a -> m (VarMap.Map a)
     refreshVs = flip (foldrM refreshV)
 
     refreshV :: (MonadGen Int m, IsVar a) => (a, Type a) -> VarMap.Map a -> m (VarMap.Map a)
-    refreshV (v, _) m = do
-      let TgName name _ = toVar v
-      v' <- fromVar <$> freshFrom name
-      pure (VarMap.insert (toVar v) v' m)
+    refreshV (v, _) m =
+      case VarMap.lookup (toVar v) m of
+        Just{} -> pure m
+        Nothing -> do
+          let TgName name _ = toVar v
+          v' <- fromVar <$> freshFrom name
+          pure (VarMap.insert (toVar v) v' m)
 
   refreshTerm s (Extend e bs) = Extend <$> refreshAtom s e <*> traverse (trimapA pure (pure . refreshType s) (refreshAtom s)) bs
   refreshTerm s (Cast e c) = Cast <$> refreshAtom s e <*> pure (refreshCoercion s c)
