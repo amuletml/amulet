@@ -209,8 +209,9 @@ reduceTerm s (Cast (Ref v _) c)
   , Just _ <- unifyWith uni l r'
   = Atom a
 
-reduceTerm _ (Cast a co) | redundantCo co = Atom a
-                         | otherwise = Cast a co
+reduceTerm _ (Cast a co)
+  | redundantCo co = Atom a
+  | otherwise = Cast a (squishCoercion co)
 
 -- Constant fold
 reduceTerm s e@(App (Ref f1 _) r1)
@@ -408,16 +409,9 @@ isComplete s = isComplete' where
   flattenExtend _ = []
 
 redundantCo :: IsVar a => Coercion a -> Bool
-redundantCo (SameRepr t t') = t == t'
-redundantCo (Application c c') = redundantCo c && redundantCo c'
-redundantCo (Quantified _ c c') = redundantCo c && redundantCo c'
-redundantCo (ExactRecord rs) = all (redundantCo . snd) rs
-redundantCo (Record c rs) = redundantCo c && all (redundantCo . snd) rs
-redundantCo (Domain c) = redundantCo c
-redundantCo (Codomain c) = redundantCo c
-redundantCo (Symmetry c) = redundantCo c
-redundantCo CoercionVar{} = False
-redundantCo Projection{} = False
+redundantCo c
+  | Just (a, b) <- relates c = a == b
+  | otherwise = False
 
 appendBody :: a -> Type a -> Term a -> Term a -> Term a
 appendBody v ty r (Let bind b) = Let bind (appendBody v ty r b)
@@ -428,3 +422,4 @@ trivialAtom Ref{} = True
 trivialAtom (Lit (Str t)) = T.length t <= 8
 trivialAtom (Lit _) = True
 trivialAtom (Lam _ _) = False
+
