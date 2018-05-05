@@ -29,22 +29,29 @@ executable amc
 
   ghc-options: -Wextra -Wall -Wno-name-shadowing -Wno-implicit-prelude
 
-test-suite hedgehog-tests
+test-suite tests
   type:                exitcode-stdio-1.0
   main-is:             Test.hs
   hs-source-dirs:      compiler
-  default-language:    Haskell2010
   build-depends:       mtl >= 2.2 && < 2.3
                      , text >= 1.2 && < 1.3
                      , base >= 4.9 && < 4.11
                      , lens >= 4.15 && < 4.16
+                     , HUnit >= 1.6 && < 1.7
+                     , tasty >= 1.0 && < 1.1
                      , amulet
                      , hedgehog >= 0.5 && < 0.6
                      , monad-gen >= 0.3 && < 0.4
+                     , bytestring >= 0.10.8.2 && < 0.11
                      , containers >= 0.5 && < 0.6
-  other-modules:       Test.Syntax.Gen
+                     , tasty-hunit >= 0.10 && < 0.11
+                     , tasty-hedgehog >= 0.2 && < 0.3
+  other-modules:       Test.Util
+                     , Test.Core.Lint
+                     , Test.Syntax.Gen
                      , Test.Types.Infer
                      , Test.Types.Util
+  default-language:    Haskell2010
   default-extensions:  PackageImports
   ghc-options:         -Wextra -Wall -Wno-name-shadowing
                        -Wno-implicit-prelude -Wno-missing-import-lists

@@ -33,5 +33,5 @@ prop_findsErrors = property $ do
     Left _ -> success
     Right t -> footnote ("Found type " ++ show (pretty t) ++ " for " ++ show (pretty ex)) *> failure
 
-tests :: IO Bool
-tests = checkParallel $$(discover)
+tests :: Group
+tests = $$(discover)

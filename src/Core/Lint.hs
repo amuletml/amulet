@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts, OverloadedStrings, ExistentialQuantification, ScopedTypeVariables #-}
 module Core.Lint
-  ( runLint, runLintOK, emptyScope
+  ( CoreError
+  , runLint, runLintOK, emptyScope
   , checkStmt, checkTerm, checkAtom, checkType
   ) where
 
@@ -62,10 +63,11 @@ runLint m a =
                                        string "for term" <#>
                                        pretty a
 
-runLintOK :: IsVar a => ExceptT (CoreError a) (Writer [CoreError a]) () -> Bool
+runLintOK :: IsVar a => ExceptT (CoreError a) (Writer [CoreError a]) () -> Either [CoreError a] ()
 runLintOK m = case runWriter (runExceptT m) of
-                     (Right _, []) -> True
-                     _ -> False
+                     (Right _, []) -> Right ()
+                     (Right _, es) -> Left es
+                     (Left e, es) -> Left (es ++ [e])
 
 checkStmt :: (IsVar a, MonadError (CoreError a) m, MonadWriter [CoreError a] m)
           => Scope a

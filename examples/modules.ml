@@ -21,6 +21,6 @@ module Option = begin
 end
 ;;
 
-open Option.Helpers as O ;;
+module O = Option.Helpers ;;
 
 let main _ = O.fmap (fun x -> x + 1) Option.Nothing
