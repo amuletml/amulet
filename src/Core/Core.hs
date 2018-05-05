@@ -9,6 +9,7 @@ import qualified Data.Set as Set
 import Data.Function
 import Data.VarSet (IsVar(..))
 import Data.Triple
+import Data.Maybe
 import Data.Text (Text, pack)
 import Data.List
 
@@ -140,6 +141,12 @@ data AnnStmt b a
   deriving (Eq, Show, Ord, Functor, Generic)
 
 makeLenses ''AnnArm
+makePrisms ''AnnStmt
+makePrisms ''AnnAtom
+makePrisms ''AnnTerm
+makePrisms ''Type
+makePrisms ''Literal
+makePrisms ''Coercion
 
 type Stmt = AnnStmt ()
 
@@ -302,7 +309,7 @@ isError :: Atom (Var Resolved) -> Bool
 isError (Ref (TgInternal n) _) = n == pack "error"
 isError _ = False
 
-relates :: Show a => Coercion a -> Maybe (Type a, Type a)
+relates :: Coercion a -> Maybe (Type a, Type a)
 relates (SameRepr a b) = Just (a, b)
 relates (CoercionVar _) = Nothing
 relates (Application f x) = do
@@ -379,3 +386,18 @@ instance Plated (Type a) where
 
 instance Plated (AnnStmt b a) where
   plate = gplate
+
+squishCoercion :: Coercion a -> Coercion a
+squishCoercion (Application c d)
+  | SameRepr t s <- squishCoercion c, SameRepr x y <- squishCoercion d =
+    SameRepr (AppTy t x) (AppTy s y)
+squishCoercion (Symmetry co)
+  | Just (a, b) <- relates co =
+    SameRepr a b
+squishCoercion (ExactRecord rs)
+  | all (isJust . (^? _SameRepr) . view _2) rs =
+    let co (t, SameRepr a b) = ((t, a), (t, b))
+        co (t, _) = error ("impossible coercion for " ++ show t ++ " because of guard")
+        (as, bs) = unzip (map co rs)
+     in SameRepr (ExactRowsTy as) (ExactRowsTy bs)
+squishCoercion x = x

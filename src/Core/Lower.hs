@@ -182,7 +182,7 @@ lowerAt (ExprWrapper wrap e an) ty =
     S.Cast S.ReflCo{} -> lowerAt e ty
     S.Cast c -> do
       ex' <- lowerExprAtom e
-      pure (C.Cast ex' (co c))
+      pure (C.Cast ex' (squishCoercion (co c)))
     S.TypeApp t -> do
       ex' <- lowerAtAtom e (lowerType (S.getType e))
       pure (C.TyApp ex' (lowerType t))
