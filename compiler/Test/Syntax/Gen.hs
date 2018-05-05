@@ -7,7 +7,6 @@ import "amuletml" Syntax.Raise
 import "amuletml" Syntax
 
 import qualified Data.Map.Strict as Map
-import Data.Semigroup
 import Data.Maybe
 import Data.Text (unpack)
 import Data.Span

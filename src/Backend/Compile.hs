@@ -20,8 +20,6 @@ import Syntax (Var(..), Resolved)
 
 import qualified Types.Wellformed as W
 
-import Data.Semigroup ((<>))
-
 import qualified Data.Map.Strict as Map
 import qualified Data.VarSet as VarSet
 import qualified Data.Set as Set

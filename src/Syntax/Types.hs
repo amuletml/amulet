@@ -16,7 +16,6 @@ module Syntax.Types
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 
-import Data.Semigroup
 
 import Control.Arrow
 import Control.Lens

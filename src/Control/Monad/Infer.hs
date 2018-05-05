@@ -37,7 +37,6 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
 import qualified Data.Text as T
-import Data.Semigroup hiding (diff)
 import Data.Function
 import Data.Foldable
 import Data.Spanned

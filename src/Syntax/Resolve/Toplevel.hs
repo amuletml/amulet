@@ -7,7 +7,6 @@ import Control.Lens
 
 import Syntax
 
-import Data.Semigroup
 import Data.Triple
 
 extractToplevel :: Semigroup (Var p) => Toplevel p -> ([Var p], [Var p])

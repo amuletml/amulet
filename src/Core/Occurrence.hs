@@ -13,7 +13,6 @@ import Core.Core as C
 
 import qualified Data.VarMap as VarMap
 import Data.VarSet (IsVar(..))
-import Data.Semigroup
 import Data.Triple
 import Data.Maybe
 import Data.Data

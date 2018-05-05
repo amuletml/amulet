@@ -13,7 +13,6 @@ import qualified Data.Text as T
 
 import Syntax.Pretty (Var(..), Resolved)
 
-import Data.Semigroup
 import Data.Coerce
 import Data.Data
 

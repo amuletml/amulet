@@ -3,7 +3,6 @@ module Core.Optimise.DeadCode ( deadCodePass ) where
 
 import qualified Data.VarSet as VarSet
 import Data.VarSet (IsVar(..))
-import Data.Semigroup
 import Data.Triple
 import Data.List
 

@@ -8,7 +8,6 @@ import Core.Core as C
 
 import qualified Data.VarSet as VarSet
 import Data.VarSet (IsVar(..))
-import Data.Semigroup
 import Data.Triple
 
 freeSet :: IsVar a => [AnnStmt b a] -> VarSet.Set

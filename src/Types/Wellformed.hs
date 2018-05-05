@@ -6,7 +6,6 @@ import Control.Monad.Infer
 
 import qualified Data.Set as Set
 import Data.Foldable
-import Data.Semigroup
 import Data.Function
 import Data.List (unionBy)
 
