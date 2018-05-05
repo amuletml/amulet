@@ -1,15 +1,15 @@
 let
-  rev = "120b013e0c082d58a5712cde0a7371ae8b25a601";
+  rev = "cd960b965f2587efbe41061a4dfa10fc72a28781";
   pkgs = builtins.fetchTarball {
     url = "https://github.com/NixOS/nixpkgs/archive/${rev}.tar.gz";
-    sha256 = "0hk4y2vkgm1qadpsm4b0q1vxq889jhxzjx3ragybrlwwg54mzp4f";
+    sha256 = "0k2pk3y54kh2lz8yaj2438sqclayhsc0b2w262qb6iwyafby8pr0";
   };
   nixpkgs = import pkgs {
     config = {
       packageOverrides = pkgs_: with pkgs_; {
         haskell = haskell // {
           packages = haskell.packages // {
-            ghc822-profiling = haskell.packages.ghc822.override {
+            ghc842-profiling = haskell.packages.ghc842.override {
               overrides = self: super: {
                 mkDerivation = args: super.mkDerivation (args // {
                   enableLibraryProfiling = true;
@@ -21,7 +21,7 @@ let
       };
     };
   };
-in { compiler ? "ghc822", ci ? false }:
+in { compiler ? "ghc842", ci ? false }:
 
 let
   inherit (nixpkgs) pkgs haskell;
@@ -43,7 +43,7 @@ let
       , pretty-show
       , annotated-wl-pprint
       , tasty-hunit
-      , tasty-hedgehog
+      , tasty-hedgehog_0_2_0_0
       , alex
       , happy
       }:
@@ -68,7 +68,7 @@ let
 
         testHaskellDepends = [
           base bytestring hedgehog HUnit lens monad-gen mtl pretty-show
-          tasty tasty-hedgehog tasty-hunit text
+          tasty tasty-hedgehog_0_2_0_0 tasty-hunit text
         ];
 
         libraryToolDepends = if ci then [ alex happy ] else [ alex' happy' ];

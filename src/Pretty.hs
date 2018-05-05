@@ -19,7 +19,6 @@ module Pretty
 
 import qualified Text.PrettyPrint.Annotated.Leijen as P
 import Text.PrettyPrint.Annotated.Leijen hiding (text, hPutDoc, putDoc, Doc, equals, colon, pipe, (<>), (<$>), (<$$>))
-import Data.Semigroup
 
 import System.IO (hPutStrLn, Handle, stdout)
 

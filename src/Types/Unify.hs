@@ -17,7 +17,6 @@ import Syntax
 import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
-import Data.Semigroup
 import Data.Sequence (Seq ((:<|), Empty))
 import Data.Foldable
 import Data.Function

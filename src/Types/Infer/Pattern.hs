@@ -9,7 +9,6 @@ import Control.Monad.Infer
 import Control.Lens
 
 import Data.Traversable
-import Data.Semigroup
 import Data.List
 
 import Types.Kinds

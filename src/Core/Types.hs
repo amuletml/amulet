@@ -16,7 +16,6 @@ import Control.Monad.State
 import Control.Applicative
 
 import Data.Traversable
-import Data.Semigroup
 import Data.Foldable
 import Data.VarSet(IsVar(..))
 import Data.Maybe

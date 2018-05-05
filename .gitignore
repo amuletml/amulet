@@ -9,4 +9,6 @@ src/Parser/Lexer.hs
 src/Parser.hs
 src/Parser.info
 
-cabal.project.local
+cabal.project.local*
+.ghc*
+

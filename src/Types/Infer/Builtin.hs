@@ -4,7 +4,6 @@ module Types.Infer.Builtin where
 
 import qualified Data.Sequence as Seq
 import qualified Data.Text as T
-import Data.Semigroup
 import Data.Spanned
 import Data.Maybe
 import Data.Data

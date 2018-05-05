@@ -23,7 +23,6 @@ import Control.Monad.Gen
 import Control.Lens
 
 import Data.Traversable
-import Data.Semigroup
 import Data.Foldable
 import Data.Spanned
 import Data.Span

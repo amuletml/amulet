@@ -14,7 +14,6 @@ import qualified Data.Text.Read as R
 import qualified Data.Text as T
 import Data.Text.Encoding
 import Data.Char (chr, digitToInt)
-import Data.Semigroup
 import Data.Span
 import Data.Spanned
 

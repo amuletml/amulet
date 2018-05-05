@@ -8,11 +8,9 @@ module Core.Optimise.Reduce
   ) where
 
 import qualified Data.Map.Strict as Map
-import qualified Data.VarSet as VarSet
 import qualified Data.VarMap as VarMap
 import qualified Data.Text as T
 import Data.VarSet (toVar,IsVar)
-import Data.Semigroup
 import Data.Triple
 import Data.List
 

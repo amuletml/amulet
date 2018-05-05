@@ -11,7 +11,6 @@ module Data.Span
 
 import Pretty
 
-import Data.Semigroup
 import Data.Data
 import Data.Position
 

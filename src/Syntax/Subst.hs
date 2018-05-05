@@ -16,7 +16,6 @@ module Syntax.Subst
 import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
-import Data.Semigroup
 
 import Control.Arrow (second)
 

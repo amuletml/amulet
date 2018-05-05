@@ -359,7 +359,7 @@ inferLetTy closeOver vs =
    in tc sccs
 
 solveEx :: Type Typed -> Subst Typed -> Map.Map (Var Typed) (Wrapper Typed) -> Expr Typed -> Expr Typed
-solveEx ty ss cs = transformExprTyped go id goType where
+solveEx _ ss cs = transformExprTyped go id goType where
   go :: Expr Typed -> Expr Typed
   go (ExprWrapper w e a) = ExprWrapper (goWrap w) (solveEx ty ss cs e) a
   go x = x

@@ -14,7 +14,6 @@ import Prelude hiding (lookup, map)
 
 import Syntax.Pretty (Var(..), Resolved)
 
-import Data.Semigroup
 import Data.Coerce
 
 newtype Map a

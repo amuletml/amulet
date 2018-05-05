@@ -2,7 +2,6 @@
 module Syntax.Let where
 
 import qualified Data.Set as Set
-import Data.Semigroup
 import Data.Triple
 import Data.Graph
 
