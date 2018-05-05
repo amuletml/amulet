@@ -1,17 +1,14 @@
 module Main where
 
-import System.IO (BufferMode(..), hSetBuffering, stdout, stderr)
-import System.Exit (exitFailure)
+import Test.Tasty
 
-import Control.Monad (unless)
-
+import Test.Util
 import qualified Test.Types.Infer as Types
+import qualified Test.Core.Lint as CLint
+
+tests :: TestTree
+tests = testGroup "Tests" [ hedgehog Types.tests
+                          , CLint.tests ]
 
 main :: IO ()
-main = do
-  hSetBuffering stdout LineBuffering
-  hSetBuffering stderr LineBuffering
-
-  results <- sequence [ Types.tests ]
-
-  unless (and results) exitFailure
+main = defaultMain tests

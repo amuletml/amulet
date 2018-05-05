@@ -33,6 +33,8 @@ let
       , base
       , lens
       , array
+      , HUnit
+      , tasty
       , hedgehog
       , monad-gen
       , bytestring
@@ -40,6 +42,8 @@ let
       , transformers
       , pretty-show
       , annotated-wl-pprint
+      , tasty-hunit
+      , tasty-hedgehog
       , alex
       , happy
       }:
@@ -63,7 +67,8 @@ let
         ];
 
         testHaskellDepends = [
-          base bytestring hedgehog lens monad-gen mtl pretty-show text
+          base bytestring hedgehog HUnit lens monad-gen mtl pretty-show
+          tasty tasty-hedgehog tasty-hunit text
         ];
 
         libraryToolDepends = if ci then [ alex happy ] else [ alex' happy' ];
