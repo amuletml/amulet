@@ -8,7 +8,6 @@ import Control.Monad.Gen
 
 import qualified Data.VarMap as VarMap
 import qualified Data.VarSet as VarSet
-import Data.VarSet (IsVar(..))
 import Data.Triple
 
 import Core.Optimise

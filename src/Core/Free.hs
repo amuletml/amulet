@@ -7,9 +7,9 @@ module Core.Free
 import Control.Lens
 
 import Core.Core as C
+import Core.Var
 
 import qualified Data.VarSet as VarSet
-import Data.VarSet (IsVar(..))
 import Data.Triple
 
 freeSet :: IsVar a => [AnnStmt b a] -> VarSet.Set

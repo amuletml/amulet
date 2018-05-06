@@ -26,7 +26,6 @@ import qualified Data.VarSet as VarSet
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import Data.Foldable
-import Data.VarSet (IsVar(..))
 import Data.Triple
 import Data.Maybe (fromMaybe, maybeToList)
 import Data.List (sortOn, partition, uncons)

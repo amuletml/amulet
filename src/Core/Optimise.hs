@@ -15,7 +15,6 @@ import Control.Lens
 
 import qualified Data.VarMap as VarMap
 import qualified Data.Text as T
-import Data.VarSet (IsVar(..))
 import Data.Foldable
 import Data.Triple
 import Data.Maybe

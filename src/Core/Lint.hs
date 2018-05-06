@@ -10,7 +10,6 @@ import Control.Monad.Except
 
 import qualified Data.VarMap as VarMap
 import qualified Data.VarSet as VarSet
-import Data.VarSet (IsVar(..))
 import Data.Traversable
 import Data.Foldable
 import Data.Function

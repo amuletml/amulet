@@ -9,6 +9,7 @@ module Core.Types
 import qualified Data.VarMap as VarMap
 import Core.Builtin
 import Core.Core
+import Core.Var
 
 import Control.Lens
 
@@ -17,7 +18,6 @@ import Control.Applicative
 
 import Data.Traversable
 import Data.Foldable
-import Data.VarSet(IsVar(..))
 import Data.Maybe
 import Data.List
 

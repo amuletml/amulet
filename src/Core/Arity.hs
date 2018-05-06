@@ -9,12 +9,12 @@ module Core.Arity
 import Control.Lens
 
 import qualified Data.VarMap as VarMap
-import Data.VarSet (IsVar(..))
 import Data.Triple
 import Data.Maybe
 
 import Core.Builtin
 import Core.Core
+import Core.Var
 
 newtype ArityScope = ArityScope { pureArity :: VarMap.Map Int }
   deriving (Show)

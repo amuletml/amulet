@@ -10,7 +10,6 @@ module Core.Optimise.Reduce
 import qualified Data.Map.Strict as Map
 import qualified Data.VarMap as VarMap
 import qualified Data.Text as T
-import Data.VarSet (IsVar(..))
 import Data.Triple
 import Data.List
 

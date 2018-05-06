@@ -6,11 +6,11 @@ import Pretty
 
 import qualified Data.VarSet as VarSet
 import Data.Function
-import Data.VarSet (IsVar(..))
 import Data.Triple
 import Data.Maybe
 import Data.Text (Text)
 import Data.List
+import Core.Var
 
 import Control.Lens
 
@@ -250,8 +250,8 @@ instance Pretty a => Pretty [Stmt a] where
   pretty = vcat . map pretty
 
 freeInAtom :: IsVar a => AnnAtom b a -> VarSet.Set
-freeInAtom (Ref v _) = VarSet.singleton (VarSet.toVar v)
-freeInAtom (Lam (TermArgument v _) e) = VarSet.delete (VarSet.toVar v) (freeIn e)
+freeInAtom (Ref v _) = VarSet.singleton (toVar v)
+freeInAtom (Lam (TermArgument v _) e) = VarSet.delete (toVar v) (freeIn e)
 freeInAtom (Lam TypeArgument{} e) = freeIn e
 freeInAtom (Lit _) = mempty
 
@@ -259,7 +259,7 @@ freeIn :: IsVar a => AnnTerm b a -> VarSet.Set
 freeIn (AnnAtom _ a) = freeInAtom a
 freeIn (AnnApp _ f x) = freeInAtom f <> freeInAtom x
 freeIn (AnnLet _ (One v) e) = VarSet.difference (freeIn e <> freeIn (thd3 v)) (VarSet.singleton (toVar (fst3 v)))
-freeIn (AnnLet _ (Many vs) e) = VarSet.difference (freeIn e <> foldMap (freeIn . thd3) vs) (VarSet.fromList (map (VarSet.toVar . fst3) vs))
+freeIn (AnnLet _ (Many vs) e) = VarSet.difference (freeIn e <> foldMap (freeIn . thd3) vs) (VarSet.fromList (map (toVar . fst3) vs))
 freeIn (AnnMatch _ e bs) = freeInAtom e <> foldMap freeInBranch bs where
   freeInBranch x = foldr (VarSet.delete . toVar . fst) (freeIn (x ^. armBody)) (x ^. armVars)
 freeIn (AnnExtend _ c rs) = freeInAtom c <> foldMap (freeInAtom . thd3) rs

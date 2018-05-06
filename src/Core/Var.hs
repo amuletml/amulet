@@ -23,9 +23,10 @@ instance Ord CoVar where
 
 data VarInfo
   = ValueVar
+  | DataConVar
+  | TypeConVar
   | TypeVar
-  | TyvarVar
-  | CoeVar
+  | CastVar
   deriving (Eq, Show, Ord, Generic, Data)
 
 makeLenses ''CoVar
@@ -34,3 +35,11 @@ makePrisms ''VarInfo
 
 instance Pretty CoVar where
   pretty (CoVar i v _) = text v <> scomment (string "#" <> string (show i))
+
+class (Eq a, Ord a, Pretty a, Show a) => IsVar a where
+  toVar :: a -> CoVar
+  fromVar :: CoVar -> a
+
+instance IsVar CoVar where
+  toVar = id
+  fromVar = id

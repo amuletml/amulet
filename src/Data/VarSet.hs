@@ -5,7 +5,6 @@ module Data.VarSet
   , member, notMember, insert
   , difference, union, intersection, singleton, delete
   , (<>), mempty, isEmpty
-  , IsVar(..)
   ) where
 
 import qualified Data.IntSet as Set
@@ -14,9 +13,6 @@ import qualified Data.Text as T
 import Core.Var
 
 import Data.Coerce
-import Data.Data
-
-import Pretty(Pretty)
 
 newtype Set
   = Set Set.IntSet
@@ -55,11 +51,3 @@ delete (CoVar x _ _) set = coerce (Set.delete x (coerce set))
 
 isEmpty :: Set -> Bool
 isEmpty = coerce Set.null
-
-class (Data a, Eq a, Ord a, Pretty a, Show a) => IsVar a where
-  toVar :: a -> CoVar
-  fromVar :: CoVar -> a
-
-instance IsVar CoVar where
-  toVar = id
-  fromVar = id

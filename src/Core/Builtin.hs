@@ -1,18 +1,17 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Core.Builtin where
 
-import Data.VarSet (IsVar(..))
 import Data.Text ()
 
 import Core.Core
 import Core.Var
 
 vBool, vInt, vString, vFloat, vUnit :: CoVar
-vBool   = CoVar (-1) "bool" TypeVar
-vInt    = CoVar (-2) "int" TypeVar
-vString = CoVar (-3) "string" TypeVar
-vFloat  = CoVar (-4) "float" TypeVar
-vUnit   = CoVar (-5) "unit" TypeVar
+vBool   = CoVar (-1) "bool" TypeConVar
+vInt    = CoVar (-2) "int" TypeConVar
+vString = CoVar (-3) "string" TypeConVar
+vFloat  = CoVar (-4) "float" TypeConVar
+vUnit   = CoVar (-5) "unit" TypeConVar
 
 tyBool, tyInt, tyString, tyFloat, tyUnit :: IsVar a => Type a
 tyBool   = ConTy $ fromVar vBool
@@ -70,8 +69,8 @@ vError :: CoVar
 vError = CoVar (-29) "error" ValueVar
 
 tyvarA, tyvarB :: CoVar
-tyvarA = CoVar (-30) "a" TyvarVar
-tyvarB = CoVar (-31) "b" TyvarVar
+tyvarA = CoVar (-30) "a" TypeVar
+tyvarB = CoVar (-31) "b" TypeVar
 
 builtinVarList :: (IsVar a, IsVar b) => [(a, Type b)]
 builtinVarList = vars where

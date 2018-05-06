@@ -192,7 +192,7 @@ lowerAt (ExprWrapper wrap e an) ty =
     S.TypeLam (Skolem (TvName (TgName _ id)) (TvName (TgName n _)) _ _) k ->
       let ty' (ForallTy (Relevant v) _ t) = substituteInType (VarMap.singleton v (VarTy var)) t
           ty' x = x
-          var = CoVar id n TyvarVar
+          var = CoVar id n TypeVar
        in Atom . Lam (TypeArgument var (lowerType k)) <$> lowerAtTerm e (ty' ty)
     S.TypeLam _ _ -> error "impossible lowerAt TypeLam"
     ws S.:> wy -> lowerAt (ExprWrapper ws (ExprWrapper wy e an) an) ty
@@ -280,7 +280,7 @@ lowerType (S.TyExactRows vs) = ExactRowsTy (map (fmap lowerType) vs)
 lowerType (S.TyVar (TvName v)) = VarTy (mkTyvar v)
 lowerType (S.TyCon (TvName v)) = ConTy (mkType v)
 lowerType (S.TyPromotedCon (TvName v)) = ConTy (mkVal v) -- TODO this is in the wrong scope
-lowerType (S.TySkol (Skolem (TvName (TgName _ id)) (TvName (TgName n _)) _ _)) = VarTy (CoVar id n TyvarVar)
+lowerType (S.TySkol (Skolem (TvName (TgName _ id)) (TvName (TgName n _)) _ _)) = VarTy (CoVar id n TypeVar)
 lowerType (S.TySkol _) = error "impossible lowerType TySkol"
 lowerType (S.TyWithConstraints _ t) = lowerType t
 lowerType S.TyType = StarTy
@@ -328,9 +328,9 @@ lowerProg (LetStmt vs:prg) = do
 lowerProg (FunStmt vs:prg) = lowerProg prg
 lowerProg (TypeDecl (TvName var) _ cons:prg) = do
   let cons' = map (\case
-                       UnitCon (TvName p) (_, t) -> (p, mkVal p, lowerType t)
-                       ArgCon (TvName p) _ (_, t) -> (p, mkVal p, lowerType t)
-                       GeneralisedCon (TvName p) t _ -> (p, mkVal p, lowerType t))
+                       UnitCon (TvName p) (_, t) -> (p, mkCon p, lowerType t)
+                       ArgCon (TvName p) _ (_, t) -> (p, mkCon p, lowerType t)
+                       GeneralisedCon (TvName p) t _ -> (p, mkCon p, lowerType t))
                 cons
       ccons = map (\(_, a, b) -> (a, b)) cons'
       scons = map (\(a, _, b) -> (a, b)) cons'
@@ -403,11 +403,12 @@ patternTyvars = asks . flip (go . ctors)
                                    VarTy t' -> Just (t', k)
                                    _ -> error ("must replace skolem tyvar with tyvar " ++ show (pretty t))
 
-mkTyvar, mkVal, mkType, mkCo :: Var Resolved-> CoVar
-mkTyvar = mkVar TyvarVar
+mkTyvar, mkVal, mkType, mkCo, mkCon :: Var Resolved-> CoVar
+mkTyvar = mkVar TypeConVar
 mkVal = mkVar ValueVar
 mkType = mkVar TypeVar
-mkCo = mkVar CoeVar
+mkCo = mkVar CastVar
+mkCon = mkVar DataConVar
 
 mkVar :: VarInfo -> Var Resolved -> CoVar
 mkVar k (TgName t i) = CoVar i t k

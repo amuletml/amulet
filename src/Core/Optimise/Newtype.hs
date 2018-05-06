@@ -6,7 +6,6 @@ import Control.Monad
 import Control.Lens
 
 import qualified Data.VarMap as V
-import Data.VarSet (IsVar(..))
 import Data.Triple
 
 import Core.Optimise
