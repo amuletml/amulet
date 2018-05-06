@@ -218,6 +218,10 @@ lowerAnyway :: MonadLower m => Expr Typed -> Lower m Term
 lowerAnyway (S.VarRef (TvName v) (_, ty)) = do
   let lty = lowerType ty
   env <- asks vars
+
+  ctor <- asks (Map.member v . ctors)
+  let kind = if ctor then ValueVar else DataConVar
+
   case Map.lookup v env of
     -- If we've got a type which is different to our expected one then we strip
     -- off one forall and attempt to unify. Once we've found our unified type,
@@ -234,7 +238,7 @@ lowerAnyway (S.VarRef (TvName v) (_, ty)) = do
                          ftv <- fresh ValueVar
                          ContT $ \k ->
                            C.Let (One (ftv, newTy, TyApp prev tyuni)) <$> k (C.Ref ftv newTy, newTy)
-                         ) (C.Ref (mkVal v) fty, fty) vars
+                         ) (C.Ref (mkVar kind v) fty, fty) vars
           -- Otherwise just add our variable to the stripped list
           addApps (ForallTy (Relevant a) _ ty') vars = addApps ty' (a:vars)
           addApps _ _ = error "impossible"
@@ -279,7 +283,7 @@ lowerType (S.TyRows rho vs) = RowsTy (lowerType rho) (map (fmap lowerType) vs)
 lowerType (S.TyExactRows vs) = ExactRowsTy (map (fmap lowerType) vs)
 lowerType (S.TyVar (TvName v)) = VarTy (mkTyvar v)
 lowerType (S.TyCon (TvName v)) = ConTy (mkType v)
-lowerType (S.TyPromotedCon (TvName v)) = ConTy (mkVal v) -- TODO this is in the wrong scope
+lowerType (S.TyPromotedCon (TvName v)) = ConTy (mkCon v) -- TODO this is in the wrong scope
 lowerType (S.TySkol (Skolem (TvName (TgName _ id)) (TvName (TgName n _)) _ _)) = VarTy (CoVar id n TypeVar)
 lowerType (S.TySkol _) = error "impossible lowerType TySkol"
 lowerType (S.TyWithConstraints _ t) = lowerType t
@@ -288,8 +292,8 @@ lowerType S.TyType = StarTy
 lowerPat :: MonadLower m => Pattern Typed -> m Pat
 lowerPat (S.Capture (TvName x) (_, t)) = pure (C.Capture (mkVal x) (lowerType t))
 lowerPat (Wildcard (_, t)) = C.Capture <$> fresh ValueVar <*> pure( lowerType t)
-lowerPat (Destructure (TvName p) Nothing _) = pure (Constr (mkVal p))
-lowerPat (Destructure (TvName p) (Just t) _) = Destr (mkVal p) <$> lowerPat t
+lowerPat (Destructure (TvName p) Nothing _) = pure (Constr (mkCon p))
+lowerPat (Destructure (TvName p) (Just t) _) = Destr (mkCon p) <$> lowerPat t
 lowerPat (PType p _ _) = lowerPat p
 lowerPat (PRecord xs (_, t)) =
   let
