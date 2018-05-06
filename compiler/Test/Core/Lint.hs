@@ -27,6 +27,7 @@ import Syntax (Var, Resolved)
 
 import Core.Lower (runLowerT, lowerProg)
 import Core.Core (Stmt)
+import Core.Simplify
 import Core.Lint
 
 import Pretty (pretty, render)
@@ -77,20 +78,30 @@ compile (file:files) = do
     go x _ = pure x
 
 
-
-testLintLower :: String -> Assertion
-testLintLower file = do
+testLint :: ([Stmt (Var Resolved)] -> Gen Int [Stmt (Var Resolved)]) -> String -> Assertion
+testLint f file = do
   contents <- T.readFile ("examples/" ++ file)
-  case runGen (compile [(file, contents)]) of
-    CSuccess i -> case runLintOK (checkStmt emptyScope i) of
-                    Right _ -> pure ()
-                    Left es -> assertFailure ("Core lint failed: " ++ render (pretty es))
-    CParse e s -> assertFailure ("Parse error: " ++ e ++ " at " ++ render (pretty s))
-    CResolve e -> assertFailure ("Resolution error: " ++ render (pretty e))
-    CInfer e -> assertFailure ("Type error: " ++ render (pretty e))
+  runGen $ do
+    s <- compile [(file, contents)]
+    case s of
+      CSuccess c -> do
+        c' <- f c
+        case runLintOK (checkStmt emptyScope c') of
+          Right _ -> pure $ pure ()
+          Left es -> pure $ assertFailure $ "Core lint failed: " ++ render (pretty es)
+      CParse e s -> pure $ assertFailure $ "Parse error: " ++ e ++ " at " ++ render (pretty s)
+      CResolve e -> pure $ assertFailure $ "Resolution error: " ++ render (pretty e)
+      CInfer e -> pure $ assertFailure $ "Type error: " ++ render (pretty e)
+
+testLintLower, testLintSimplify :: String -> Assertion
+testLintLower = testLint pure
+testLintSimplify = testLint optimise
 
 tests :: TestTree
-tests = testGroup "Test.Core.Lint" (map (ap testCase testLintLower) files)
+tests = testGroup "Test.Core.Lint"
+        [ testGroup "Lower" (map (ap testCase testLintLower) files)
+        , testGroup "Simplify" (map (ap testCase testLintSimplify) files)
+        ]
 
 files :: [String]
 files =
