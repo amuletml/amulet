@@ -25,7 +25,7 @@ deadCodePass = snd . freeS emptyScope Nothing where
            else (fxs, xs')
   freeS s m (StmtLet vs:xs) =
     let m' = find (\x -> case toVar x of
-                           TgName "main" _ -> True
+                           CoVar _ "main" _ -> True
                            _ -> False) (map fst3 vs)
         s' = extendPureFuns s vs
     in case uncurry (buildLet s' vs) (freeS s' (m <|> m') xs) of

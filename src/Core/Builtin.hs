@@ -4,26 +4,78 @@ module Core.Builtin where
 import Data.VarSet (IsVar(..))
 import Data.Text ()
 
-import Syntax (Var(..))
 import Core.Core
+import Core.Var
+
+vBool, vInt, vString, vFloat, vUnit :: CoVar
+vBool   = CoVar (-1) "bool" TypeVar
+vInt    = CoVar (-2) "int" TypeVar
+vString = CoVar (-3) "string" TypeVar
+vFloat  = CoVar (-4) "float" TypeVar
+vUnit   = CoVar (-5) "unit" TypeVar
 
 tyBool, tyInt, tyString, tyFloat, tyUnit :: IsVar a => Type a
-tyBool = ConTy $ fromVar $ TgInternal "bool"
-tyInt = ConTy $ fromVar $ TgInternal "int"
-tyString = ConTy $ fromVar $ TgInternal "string"
-tyUnit = ConTy $ fromVar $ TgInternal "unit"
-tyFloat = ConTy $ fromVar $ TgInternal "float"
+tyBool   = ConTy $ fromVar vBool
+tyInt    = ConTy $ fromVar vInt
+tyString = ConTy $ fromVar vString
+tyUnit   = ConTy $ fromVar vUnit
+tyFloat  = ConTy $ fromVar vFloat
 
 builtinTyList :: IsVar a => [a]
-builtinTyList = map (fromVar . TgInternal) [ "int"
-                                           , "bool"
-                                           , "string"
-                                           , "float"
-                                           , "unit" ]
+builtinTyList = [ fromVar vBool
+                , fromVar vInt
+                , fromVar vString
+                , fromVar vUnit
+                , fromVar vFloat
+                ]
+
+vOpAdd, vOpSub, vOpMul, vOpDiv, vOpExp :: CoVar
+vOpAdd = CoVar (-6) "+" ValueVar
+vOpSub = CoVar (-7) "-" ValueVar
+vOpMul = CoVar (-8) "*" ValueVar
+vOpDiv = CoVar (-9) "/" ValueVar
+vOpExp = CoVar (-10) "**" ValueVar
+
+vOpLt, vOpGt, vOpLe, vOpGe :: CoVar
+vOpLt = CoVar (-11) "<" ValueVar
+vOpGt = CoVar (-12) ">" ValueVar
+vOpLe = CoVar (-13) "<=" ValueVar
+vOpGe = CoVar (-14) ">=" ValueVar
+
+vOpAddF, vOpSubF, vOpMulF, vOpDivF, vOpExpF :: CoVar
+vOpAddF = CoVar (-15) "+." ValueVar
+vOpSubF = CoVar (-16) "-." ValueVar
+vOpMulF = CoVar (-17) "*." ValueVar
+vOpDivF = CoVar (-18) "/." ValueVar
+vOpExpF = CoVar (-19) "**." ValueVar
+
+vOpLtF, vOpGtF, vOpLeF, vOpGeF :: CoVar
+vOpLtF = CoVar (-20) "<." ValueVar
+vOpGtF = CoVar (-21) ">." ValueVar
+vOpLeF = CoVar (-22) "<=." ValueVar
+vOpGeF = CoVar (-23) ">=." ValueVar
+
+vOpConcat :: CoVar
+vOpConcat = CoVar (-24) "^" ValueVar
+
+vOpEq, vOpNe :: CoVar
+vOpEq = CoVar (-25) "==" ValueVar
+vOpNe = CoVar (-26) "<>" ValueVar
+
+vOpAnd, vOpOr :: CoVar
+vOpAnd = CoVar (-27) "||" ValueVar
+vOpOr  = CoVar (-28) "&&" ValueVar
+
+vError :: CoVar
+vError = CoVar (-29) "error" ValueVar
+
+tyvarA, tyvarB :: CoVar
+tyvarA = CoVar (-30) "a" TyvarVar
+tyvarB = CoVar (-31) "b" TyvarVar
 
 builtinVarList :: (IsVar a, IsVar b) => [(a, Type b)]
 builtinVarList = vars where
-  op x t = (fromVar (TgInternal x), t)
+  op x t = (fromVar x, t)
 
   arrTy = ForallTy Irrelevant
   boolOp = ForallTy Irrelevant tyBool (ForallTy Irrelevant tyBool tyBool)
@@ -35,15 +87,21 @@ builtinVarList = vars where
 
   cmp = ForallTy (Relevant name) StarTy $ VarTy name `arrTy` (VarTy name `arrTy` tyBool)
 
-  name = fromVar (TgInternal "a")
+  name= fromVar tyvarA
 
-  vars = [ op "+" intOp, op "-" intOp, op "*" intOp, op "/" intOp, op "**" intOp
-         , op "+." floatOp, op "-." floatOp, op "*." floatOp, op "/." floatOp, op "**." floatOp
-         , op "^" stringOp
-         , op "<" intCmp, op ">" intCmp, op ">=" intCmp, op "<=" intCmp
-         , op "<." floatCmp, op ">." floatCmp, op ">=." floatCmp, op "<=." floatCmp
-         , op "==" cmp, op "<>" cmp
-         , op "||" boolOp, op "&&" boolOp
+  vars = [ op vOpAdd intOp, op vOpSub intOp, op vOpMul intOp, op vOpDiv intOp, op vOpExp intOp
+         , op vOpLt intCmp, op vOpGt intCmp, op vOpLe intCmp, op vOpGe intCmp
 
-         , (fromVar (TgInternal "error"), ForallTy (Relevant name) StarTy $ tyString `arrTy` VarTy name)
+         , op vOpAddF floatOp, op vOpSubF floatOp, op vOpMulF floatOp, op vOpDivF floatOp, op vOpExpF floatOp
+         , op vOpLtF floatCmp, op vOpGtF floatCmp, op vOpLeF floatCmp, op vOpGeF floatCmp
+
+         , op vOpConcat stringOp
+
+         , op vOpEq cmp, op vOpNe cmp
+         , op vOpOr boolOp, op vOpAnd boolOp
+
+         , (fromVar vError, ForallTy (Relevant name) StarTy $ tyString `arrTy` VarTy name)
         ]
+
+isError :: IsVar a => a -> Bool
+isError = (==vError) . toVar

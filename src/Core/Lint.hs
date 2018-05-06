@@ -8,8 +8,8 @@ module Core.Lint
 import Control.Monad.Writer
 import Control.Monad.Except
 
-import qualified Data.Map as Map
-import qualified Data.Set as Set
+import qualified Data.VarMap as VarMap
+import qualified Data.VarSet as VarSet
 import Data.VarSet (IsVar(..))
 import Data.Traversable
 import Data.Foldable
@@ -21,7 +21,6 @@ import Data.List
 import Core.Optimise
 import Core.Builtin
 import Core.Types
-import Syntax (Var(..))
 import Pretty hiding ((<>))
 
 data CoreError a
@@ -31,13 +30,13 @@ data CoreError a
   | InvalidCoercion (Coercion a)
   | PatternMismatch [(a, Type a)] [(a, Type a)]
 
-data Scope a = Scope { vars :: Map.Map a (Type a)
-                     , types :: Set.Set a
-                     , tyVars :: Set.Set a }
+data Scope a = Scope { vars :: VarMap.Map (Type a)
+                     , types :: VarSet.Set
+                     , tyVars :: VarSet.Set }
   deriving (Show)
 
 emptyScope :: IsVar a => Scope a
-emptyScope = Scope (Map.fromList builtinVarList) (Set.fromList builtinTyList) mempty
+emptyScope = Scope (VarMap.fromList builtinVarList) (VarSet.fromList builtinTyList) mempty
 
 instance Pretty a => Pretty (CoreError a) where
   pretty (TypeMismatch l r) = text "Expected type" <+> pretty l </> text "     got type" <+> pretty r
@@ -75,17 +74,17 @@ checkStmt :: (IsVar a, MonadError (CoreError a) m, MonadWriter [CoreError a] m)
           -> [Stmt a]
           -> m ()
 checkStmt _ [] = pure ()
-checkStmt s (Foreign v ty _:xs) = checkStmt (s { vars = Map.insert v ty (vars s) }) xs
+checkStmt s (Foreign v ty _:xs) = checkStmt (s { vars = VarMap.insert (toVar v) ty (vars s) }) xs
 checkStmt s t@(StmtLet vs:xs) = do
-  let s' = s { vars = foldr (\(v, t, _) -> Map.insert v t) (vars s) vs }
+  let s' = s { vars = foldr (\(v, t, _) -> VarMap.insert (toVar v) t) (vars s) vs }
   for_ vs $ \(_, ty, e) -> tryContext t $ do
     ty' <- checkTerm s' e
     if ty `apart` ty' then throwError (TypeMismatch ty ty') else pure ()
 
   checkStmt s' xs
 checkStmt s t@(Type v ctors:xs) = do
-  let s' = s { vars = foldr (uncurry Map.insert) (vars s) ctors
-             , types = foldr Set.insert (types s) (v : map fst ctors)}
+  let s' = s { vars = foldr (uncurry (VarMap.insert . toVar)) (vars s) ctors
+             , types = foldr VarSet.insert (types s) (toVar v : map (toVar . fst) ctors)}
   for_ ctors $ \(_, x) -> checkType s' x `withContext` t
 
   checkStmt s' xs
@@ -95,18 +94,18 @@ checkAtom :: (IsVar a, MonadError (CoreError a) m, MonadWriter [CoreError a] m)
          -> Atom a
          -> m (Type a)
 checkAtom s a@(Ref v ty) =
-  case Map.lookup v (vars s) of
+  case VarMap.lookup (toVar v) (vars s) of
     Nothing -> throwError (NoSuchVar v)
     Just ty' | ty `apart` ty' -> throwError (TypeMismatch ty' ty) `withContext` a
              | otherwise -> pure ty
 checkAtom _ (Lit l) = pure (litTy l)
 checkAtom s l@(Lam (TermArgument a ty) bod) = do
   checkType s ty
-  bty <- checkTerm (s { vars = Map.insert a ty (vars s) }) bod `withContext` l
+  bty <- checkTerm (s { vars = VarMap.insert (toVar a) ty (vars s) }) bod `withContext` l
   pure (ForallTy Irrelevant ty bty)
 checkAtom s l@(Lam (TypeArgument a ty) bod) = do
   checkType s ty
-  bty <- checkTerm (s { tyVars = Set.insert a (tyVars s) }) bod `withContext` l
+  bty <- checkTerm (s { tyVars = VarSet.insert (toVar a) (tyVars s) }) bod `withContext` l
   pure (ForallTy (Relevant a) ty bty)
 
 checkTerm :: forall a m. (IsVar a, MonadError (CoreError a) m, MonadWriter [CoreError a] m)
@@ -125,9 +124,9 @@ checkTerm s t@(Let (One (v, ty, e)) r) = do
     ty' <- checkTerm s e
     if ty `apart` ty' then throwError (TypeMismatch ty ty') else pure ()
 
-  checkTerm (s { vars = Map.insert v ty (vars s) }) r
+  checkTerm (s { vars = VarMap.insert (toVar v) ty (vars s) }) r
 checkTerm s t@(Let (Many vs) r) = do
-  let s' = s { vars = foldr (\(v, t, _) -> Map.insert v t) (vars s) vs }
+  let s' = s { vars = foldr (\(v, t, _) -> VarMap.insert (toVar v) t) (vars s) vs }
   for_ vs $ \(_, ty, e) -> tryContext t $ do
     ty' <- checkTerm s' e
     if ty `apart` ty' then throwError (TypeMismatch ty ty') else pure ()
@@ -144,16 +143,16 @@ checkTerm s t@(Match e bs) = flip withContext t $ do
     pVars <- checkPattern ty p `withContext` p
     if ty `apart` tye
     then throwError (TypeMismatch ty tye)
-    else checkTerm (s { vars = Map.union pVars (vars s), tyVars = tyVars s <> foldMap freeInTy pVars }) r
+    else checkTerm (s { vars = VarMap.union pVars (vars s), tyVars = tyVars s <> foldMap freeInTy pVars }) r
 
   -- Ensure all types are consistent
   foldrM (\ty ty' -> if ty `apart` ty'
                      then throwError (TypeMismatch ty ty')
                      else pure ty') ty tys
     where
-      checkPattern :: Type a -> Pattern a -> m (Map.Map a (Type a))
+      checkPattern :: Type a -> Pattern a -> m (VarMap.Map (Type a))
       checkPattern ty' (Capture a ty)
-        | Just{} <- ty `unify` ty' = pure (Map.singleton a ty)
+        | Just{} <- ty `unify` ty' = pure (VarMap.singleton (toVar a) ty)
         | otherwise = throwError (TypeMismatch ty ty')
       checkPattern (RowsTy _ _) (PatLit RecNil) = pure mempty
       checkPattern (ExactRowsTy _) (PatLit RecNil) = pure mempty
@@ -163,12 +162,12 @@ checkTerm s t@(Match e bs) = flip withContext t $ do
         then throwError (TypeMismatch ty ty')
         else pure mempty
       checkPattern ty' (Constr a) =
-        case Map.lookup a (vars s) of
+        case VarMap.lookup (toVar a) (vars s) of
           Nothing -> throwError (NoSuchVar a)
           Just ty | inst ty `uniOpen` ty' -> pure mempty
                   | otherwise -> throwError (TypeMismatch ty' (inst ty))
       checkPattern ty' (Destr a p) =
-        case Map.lookup a (vars s) of
+        case VarMap.lookup (toVar a) (vars s) of
           Nothing -> throwError (NoSuchVar a)
           Just ty | ForallTy Irrelevant x r <- inst ty
                   , Just s <- r `unify` ty'
@@ -210,7 +209,7 @@ checkTerm s t@(TyApp f x) = do
   f' <- checkAtom s f
   checkType s x `withContext` t
   case f' of
-    ForallTy (Relevant a) _ ty -> pure (substituteInType (Map.singleton a x) ty)
+    ForallTy (Relevant a) _ ty -> pure (substituteInType (VarMap.singleton (toVar a) x) ty)
     _ -> throwError (TypeMismatch (ForallTy (Relevant unknownVar) unknownTyvar unknownTyvar) f') `withContext` t
 
 checkTerm s t@(Cast x co) = do
@@ -283,13 +282,13 @@ checkType :: (IsVar a, MonadError (CoreError a) m)
          => Scope a
          -> Type a
          -> m ()
-checkType s (ConTy v) = if v `Set.member` types s
+checkType s (ConTy v) = if toVar v `VarSet.member` types s
                        then pure ()
                        else throwError (NoSuchVar v)
 checkType _ (VarTy _) = pure ()
 checkType s (ForallTy Irrelevant a r) = checkType s a >> checkType s r
 checkType s (ForallTy (Relevant vs) c v) =
-  let s' = s { tyVars = Set.insert vs (tyVars s) }
+  let s' = s { tyVars = VarSet.insert (toVar vs) (tyVars s) }
   in checkType s' c >> checkType s' v
 checkType s (AppTy f x) = checkType s f >> checkType s x
 checkType s (RowsTy f fs) = checkType s f >> traverse_ (checkType s . snd) fs
@@ -297,7 +296,7 @@ checkType s (ExactRowsTy fs) = traverse_ (checkType s . snd) fs
 checkType _ StarTy = pure ()
 
 unknownVar :: IsVar a => a
-unknownVar = fromVar (TgInternal "?")
+unknownVar = fromVar (CoVar (-100) "?" ValueVar)
 
 unknownTyvar :: IsVar a => Type a
 unknownTyvar = VarTy unknownVar

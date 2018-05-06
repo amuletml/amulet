@@ -10,7 +10,7 @@ module Core.Optimise.Reduce
 import qualified Data.Map.Strict as Map
 import qualified Data.VarMap as VarMap
 import qualified Data.Text as T
-import Data.VarSet (toVar,IsVar)
+import Data.VarSet (IsVar(..))
 import Data.Triple
 import Data.List
 
@@ -119,7 +119,7 @@ reduceAtom s a@(Ref v _) = {-# SCC "Reduce.beta_let" #-}
 
 reduceAtom _ e = e
 
-reduceTerm :: IsVar a => Scope a -> Term a -> Term a
+reduceTerm :: forall a. IsVar a => Scope a -> Term a -> Term a
 
 -- Empty expressions
 reduceTerm _ (Extend e []) = {-# SCC "Reduce.empty_extend" #-} Atom e
@@ -127,7 +127,7 @@ reduceTerm _ (Extend e []) = {-# SCC "Reduce.empty_extend" #-} Atom e
 -- Let of bottom conversion
 reduceTerm _ (Let (One (v, _, TyApp (Ref var errort) _)) (Let (One (_, _, App (Ref v' _) msg)) cont))
   | v == v'
-  , TgInternal "error" <- toVar var = {-# SCC "Reduce.let_bottom" #-}
+  , isError var = {-# SCC "Reduce.let_bottom" #-}
     let Just ty = approximateType cont
         errTy = ForallTy Irrelevant tyString ty
 
@@ -157,7 +157,7 @@ reduceTerm s (Match t bs) = {-# SCC "Reduce.fold_cases" #-}
         Arm { _armPtrn = Capture _ _
             , _armBody = Let (One (tyApp, _, TyApp (Ref err _) _))
                         (App (Ref tyApp' _) (Lit _)) }
-          | TgInternal "error" <- toVar err
+          | isError err
           , toVar tyApp == toVar tyApp'
           , isComplete s (init bs ^.. each . armPtrn)
           -> Match t (init bs')
@@ -170,20 +170,21 @@ reduceTerm s (Match t bs) = {-# SCC "Reduce.fold_cases" #-}
           PatternPartial subst -> Right [substArm a subst body]
           PatternComplete subst -> Left (substArm a subst body)
 
+        substArm :: Arm a -> Subst a -> Term a -> Arm a
         substArm a@Arm{_armTyvars = []} subst body
           -- In the trivial case we can do a plain old substitution
           = a & armBody .~ substitute subst body
         substArm a@Arm{_armTyvars = ts, _armVars = vs} subst body
           -- Otherwise we look up types and attempt to unify them.
-          = let Just tySubst = Map.foldrWithKey (foldVar vs) (Just mempty) subst
+          = let Just tySubst = VarMap.foldrWithKey (foldVar vs . fromVar) (Just mempty) (subst :: VarMap.Map (Atom a))
             in a { _armVars = map (second (substituteInType tySubst)) vs
                  -- Substitute tyvars and remove those which have been remapped
-                 , _armTyvars = map (second (substituteInType tySubst)) $ filter (not . flip Map.member tySubst . fst) ts
+                 , _armTyvars = map (second (substituteInType tySubst)) $ filter (not . flip VarMap.member tySubst . toVar . fst) ts
                  -- Substitute atoms and tyvars
                  , _armBody = substituteInTys tySubst $ substitute subst body
                  }
 
-        foldVar :: IsVar a => [(a, Type a)] -> a -> Atom a -> Maybe (Map.Map a (Type a)) -> Maybe (Map.Map a (Type a))
+        foldVar :: [(a, Type a)] -> a -> Atom a -> Maybe (VarMap.Map (Type a)) -> Maybe (VarMap.Map (Type a))
         foldVar _ _ _ Nothing = Nothing
         foldVar vs v a (Just sol) = do
           vty <- snd <$> find ((==v) . fst) vs
@@ -194,7 +195,7 @@ reduceTerm s (Match t bs) = {-# SCC "Reduce.fold_cases" #-}
 reduceTerm s (App (Lam (TermArgument var ty) body) ex) = {-# SCC "Reduce.beta_function" #-}
   reduceTerm s $ Let (One (var, ty, Atom ex)) body
 reduceTerm s (TyApp (Lam (TypeArgument var _) body) tp) = {-# SCC "Reduce.beta_type_function" #-}
-  reduceTerm s (substituteInTys (Map.singleton var tp) body)
+  reduceTerm s (substituteInTys (VarMap.singleton (toVar var) tp) body)
 
 -- Eta reduction (let case)
 reduceTerm _ (Let (One (v, _, term)) (Atom (Ref v' _)))
@@ -216,52 +217,52 @@ reduceTerm _ (Cast a co)
 -- Constant fold
 reduceTerm s e@(App (Ref f1 _) r1)
   | Just (App (Ref v _) l1) <- lookupVar s f1
-  , TgInternal n <- toVar v
-  = case (n, l1, r1) of
+  , n <- toVar v
+  = case (l1, r1) of
       -- Primitive integer reductions
-      ("+",  Lit (Int l), Lit (Int r)) -> num (l + r)
-      ("-",  Lit (Int l), Lit (Int r)) -> num (l - r)
-      ("*",  Lit (Int l), Lit (Int r)) -> num (l * r)
-      ("/",  Lit (Int l), Lit (Int r)) -> num (l `div` r)
-      ("**", Lit (Int l), Lit (Int r)) -> num (l ^ r)
-      ("<" , Lit (Int l), Lit (Int r)) -> bool (l < r)
-      (">",  Lit (Int l), Lit (Int r)) -> bool (l > r)
-      (">=", Lit (Int l), Lit (Int r)) -> bool (l >= r)
-      ("<=", Lit (Int l), Lit (Int r)) -> bool (l <= r)
+      (Lit (Int l), Lit (Int r)) | n == vOpAdd -> num (l + r)
+      (Lit (Int l), Lit (Int r)) | n == vOpSub -> num (l - r)
+      (Lit (Int l), Lit (Int r)) | n == vOpMul -> num (l * r)
+      (Lit (Int l), Lit (Int r)) | n == vOpDiv -> num (l `div` r)
+      (Lit (Int l), Lit (Int r)) | n == vOpExp -> num (l ^ r)
+      (Lit (Int l), Lit (Int r)) | n == vOpLt -> bool (l < r)
+      (Lit (Int l), Lit (Int r)) | n == vOpGt -> bool (l > r)
+      (Lit (Int l), Lit (Int r)) | n == vOpLe -> bool (l <= r)
+      (Lit (Int l), Lit (Int r)) | n == vOpGe -> bool (l >= r)
 
       -- Partial integer reductions
-      ("+",  x, Lit (Int 0)) -> Atom x
-      ("+",  Lit (Int 0), x) -> Atom x
-      ("-",  Lit (Int 0), x) -> Atom x
-      ("*",  x, Lit (Int 1)) -> Atom x
-      ("*",  Lit (Int 1), x) -> Atom x
-      ("*",  _, Lit (Int 0)) -> num 0
-      ("*",  Lit (Int 0), _) -> num 0
-      ("/",  x, Lit (Int 1)) -> Atom x
+      (x, Lit (Int 0)) | n == vOpAdd -> Atom x
+      (Lit (Int 0), x) | n == vOpAdd -> Atom x
+      (Lit (Int 0), x) | n == vOpSub -> Atom x
+      (x, Lit (Int 1)) | n == vOpMul -> Atom x
+      (Lit (Int 1), x) | n == vOpMul -> Atom x
+      (_, Lit (Int 0)) | n == vOpMul -> num 0
+      (Lit (Int 0), _) | n == vOpMul -> num 0
+      (x, Lit (Int 1)) | n == vOpDiv -> Atom x
 
       -- Primitive boolean reductions
-      ("&&", Lit LitTrue,  Lit LitTrue)   -> bool True
-      ("&&", Lit _,        Lit _)         -> bool False
-      ("||", Lit LitFalse, Lit LitFalse)  -> bool False
-      ("||", Lit _,        Lit _)         -> bool True
+      (Lit LitTrue,  Lit LitTrue)  | n == vOpAnd -> bool True
+      (Lit _,        Lit _)        | n == vOpAnd -> bool False
+      (Lit LitFalse, Lit LitFalse) | n == vOpOr  -> bool False
+      (Lit _,        Lit _)        | n == vOpOr  -> bool True
 
       -- Partial boolean reductions
-      ("&&", _, Lit LitFalse)  -> bool False
-      ("&&", Lit LitFalse,  _) -> bool False
-      ("&&", x, Lit LitTrue)   -> Atom x
-      ("&&", Lit LitTrue,  x)  -> Atom x
-      ("||", _, Lit LitTrue)   -> bool True
-      ("||", Lit LitTrue,  _)  -> bool True
-      ("||", x, Lit LitFalse)  -> Atom x
-      ("||", Lit LitFalse,  x) -> Atom x
+      (_, Lit LitFalse)  | n == vOpAnd -> bool False
+      (Lit LitFalse,  _) | n == vOpAnd -> bool False
+      (x, Lit LitTrue)   | n == vOpAnd -> Atom x
+      (Lit LitTrue,  x)  | n == vOpAnd -> Atom x
+      (_, Lit LitTrue)   | n == vOpOr  -> bool True
+      (Lit LitTrue,  _)  | n == vOpOr  -> bool True
+      (x, Lit LitFalse)  | n == vOpOr  -> Atom x
+      (Lit LitFalse,  x) | n == vOpOr  -> Atom x
 
 
       -- Primitive string reductions
-      ("^", Lit (Str l), Lit (Str r))  -> str (l `T.append` r)
+      (Lit (Str l), Lit (Str r))  | n == vOpConcat -> str (l `T.append` r)
 
       -- Partial string reductions
-      ("^", x, Lit (Str "")) -> Atom x
-      ("^", Lit (Str ""), x) -> Atom x
+      (x, Lit (Str "")) | n == vOpConcat -> Atom x
+      (Lit (Str ""), x) | n == vOpConcat -> Atom x
 
       _ -> e
   where num = Atom . Lit . Int
@@ -270,7 +271,7 @@ reduceTerm s e@(App (Ref f1 _) r1)
 
 reduceTerm _ e = e
 
-type Subst a = Map.Map a (Atom a)
+type Subst a = VarMap.Map (Atom a)
 
 data PatternResult a
   = PatternFail
@@ -300,18 +301,18 @@ extract (PatternComplete s) = s
 reducePattern :: forall a. IsVar a => Scope a -> Atom a -> Pattern a -> PatternResult a
 
 -- A capture always yield a complete pattern
-reducePattern _ term (Capture a _) = PatternComplete (Map.singleton a term)
+reducePattern _ term (Capture a _) = PatternComplete (VarMap.singleton (toVar a) term)
 
 -- Literals are relatively easy to accept/reject
-reducePattern _ _ (PatLit RecNil) = PatternComplete Map.empty
-reducePattern _ _ (PatLit Unit) = PatternComplete Map.empty
+reducePattern _ _ (PatLit RecNil) = PatternComplete mempty
+reducePattern _ _ (PatLit Unit) = PatternComplete mempty
 reducePattern _ (Lit l') (PatLit l)
-  | l == l'   = PatternComplete Map.empty
+  | l == l'   = PatternComplete mempty
   | otherwise = PatternFail
 
 -- If we're matching against a known constructor it is easy to accept or reject
 reducePattern s (Ref v _) (Constr c)
-  | lookupRawVar s v == c = PatternComplete Map.empty
+  | lookupRawVar s v == c = PatternComplete mempty
 
   | isCon s (lookupRawVar s v) = PatternFail
   | Just (App (Ref c' _) _) <- lookupRawTerm s v
@@ -350,7 +351,7 @@ reducePattern s e (PatExtend rest fs) = foldr ((<>) . handle) (reducePattern s e
   allMatching (PatExtend r fs) = allMatching r && all (allMatching . snd) fs
   allMatching _ = False
 
-reducePattern _ _ _ = PatternUnknown Map.empty
+reducePattern _ _ _ = PatternUnknown mempty
 
 isComplete :: IsVar a => Scope a -> [Pattern a] -> Bool
 isComplete s = isComplete' where
@@ -422,4 +423,3 @@ trivialAtom Ref{} = True
 trivialAtom (Lit (Str t)) = T.length t <= 8
 trivialAtom (Lit _) = True
 trivialAtom (Lam _ _) = False
-

@@ -109,6 +109,7 @@ library amulet
                      , Data.Position
                      , Data.Spanned
                      -- Core
+                     , Core.Var
                      , Core.Core
                      , Core.Lint
                      , Core.Free

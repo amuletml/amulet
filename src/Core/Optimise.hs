@@ -1,31 +1,29 @@
-{-# OPTIONS_GHC -Wno-partial-type-signatures #-}
-{-# LANGUAGE FlexibleContexts, TupleSections, PartialTypeSignatures #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module Core.Optimise
   ( substitute, substituteInTys, substituteInType, substituteInCo
   , module Core.Core
-  , Var(..)
-  , refresh, fresh, freshFrom
+  , module Core.Var
+  , refresh, fresh, freshFrom, freshFrom'
   , argVar
   ) where
 
-import qualified Data.Map.Strict as Map
-import qualified Data.VarMap as VarMap
-import Data.VarSet (IsVar(..))
-
-import Control.Monad.Infer (fresh, freshFrom)
 import Control.Arrow (second)
 import Control.Monad.Gen
+import Control.Monad
 import Control.Lens
 
+import qualified Data.VarMap as VarMap
+import qualified Data.Text as T
+import Data.VarSet (IsVar(..))
 import Data.Foldable
 import Data.Triple
 import Data.Maybe
 
 import Core.Core
-import Syntax (Var(..))
+import Core.Var
 
-substitute :: IsVar a => Map.Map a (Atom a) -> Term a -> Term a
+substitute :: IsVar a => VarMap.Map (Atom a) -> Term a -> Term a
 substitute m = term where
   term (Atom a) = Atom (atom a)
   term (App f x) = App (atom f) (atom x)
@@ -36,15 +34,15 @@ substitute m = term where
   term (TyApp f t) = TyApp (atom f) t
   term (Cast f t) = Cast (atom f) t
 
-  atom x@(Ref v _) = Map.findWithDefault x v m
+  atom x@(Ref v _) = VarMap.findWithDefault x (toVar v) m
   atom (Lam v b) = Lam v (term b)
   atom x@Lit{} = x
 
   arm = armBody %~ term
 
-substituteInTys :: forall a. IsVar a => Map.Map a (Type a) -> Term a -> Term a
+substituteInTys :: forall a. IsVar a => VarMap.Map (Type a) -> Term a -> Term a
 substituteInTys = term where
-  term :: Map.Map a (Type a) -> Term a -> Term a
+  term :: VarMap.Map (Type a) -> Term a -> Term a
   term m (Atom a) = Atom (atom m a)
   term m (App f x) = App (atom m f) (atom m x)
   term m (Let (One (v, t, e)) x) = Let (One (v, gotype m t, term m e)) (term m x)
@@ -70,7 +68,7 @@ substituteInTys = term where
     go (TermArgument v t) = TermArgument v (gotype m t)
     go (TypeArgument v t) = TypeArgument v (gotype m t)
     delete = case arg of
-      TypeArgument v _ -> Map.delete v
+      TypeArgument v _ -> VarMap.delete (toVar v)
       _ -> id
   atom _ x@Lit{} = x
 
@@ -87,19 +85,19 @@ substituteInTys = term where
 
   gotype m = substituteInType m
 
-substituteInType :: IsVar a => Map.Map a (Type a) -> Type a -> Type a
+substituteInType :: IsVar a => VarMap.Map (Type a) -> Type a -> Type a
 substituteInType = gotype where
-  gotype m x@(VarTy v) = Map.findWithDefault x v m
+  gotype m x@(VarTy v) = VarMap.findWithDefault x (toVar v) m
   gotype _ x@ConTy{} = x
   gotype m (ForallTy v c t) = ForallTy v (gotype m c) (gotype (remove v m) t) where
-    remove (Relevant var) m = Map.delete var m
+    remove (Relevant var) m = VarMap.delete (toVar var) m
     remove Irrelevant m = m
   gotype m (AppTy f x) = AppTy (gotype m f) (gotype m x)
   gotype m (RowsTy v rs) = RowsTy (gotype m v) (map (second (gotype m)) rs)
   gotype m (ExactRowsTy rs) = ExactRowsTy (map (second (gotype m)) rs)
   gotype _ StarTy = StarTy
 
-substituteInCo :: IsVar a => Map.Map a (Type a) -> Coercion a -> Coercion a
+substituteInCo :: IsVar a => VarMap.Map (Type a) -> Coercion a -> Coercion a
 substituteInCo m = coercion where
   coercion (SameRepr t t') = SameRepr (gotype t) (gotype t')
   coercion (Domain c) = Domain (coercion c)
@@ -128,14 +126,12 @@ refresh = refreshTerm mempty where
 
   refreshArg :: (MonadGen Int m, IsVar a) => VarMap.Map a -> Argument a -> m (Argument a, a)
   refreshArg s (TermArgument n ty) = do
-    let TgName name _ = toVar n
-        ty' = refreshType s ty
-    v' <- fromVar <$> freshFrom name
+    let ty' = refreshType s ty
+    v' <- freshFrom' n
     pure (TermArgument v' ty', v')
   refreshArg s (TypeArgument n ty) = do
-    let TgName name _ = toVar n
-        ty' = refreshType s ty
-    v' <- fromVar <$> freshFrom name
+    let ty' = refreshType s ty
+    v' <- freshFrom' n
     pure (TypeArgument v' ty', v')
 
   refreshTerm :: (MonadGen Int m, IsVar a) => VarMap.Map a -> Term a -> m (Term a)
@@ -143,15 +139,13 @@ refresh = refreshTerm mempty where
   refreshTerm s (App f x) = App <$> refreshAtom s f <*> refreshAtom s x
   refreshTerm s (TyApp f ty) = TyApp <$> refreshAtom s f <*> pure (refreshType s ty)
   refreshTerm s (Let (One (v, ty, e)) b) = do
-    let TgName name _ = toVar v
-    v' <- fromVar <$> freshFrom name
+    v' <- freshFrom' v
     let s' = VarMap.insert (toVar v) v' s
     e' <- refreshTerm s' e
     Let (One (v', refreshType s' ty, e')) <$> refreshTerm s' b
   refreshTerm s (Let (Many vs) b) = do
     s' <- foldrM (\(v, _, _) m -> do
-                     let TgName name _ = toVar v
-                     v' <- fromVar <$> freshFrom name
+                     v' <- freshFrom' v
                      pure (VarMap.insert (toVar v) v' m)) s vs
     vs' <- traverse (trimapA (pure . get s') (pure . refreshType s') (refreshTerm s')) vs
     Let (Many vs') <$> refreshTerm s' b
@@ -182,8 +176,7 @@ refresh = refreshTerm mempty where
       case VarMap.lookup (toVar v) m of
         Just{} -> pure m
         Nothing -> do
-          let TgName name _ = toVar v
-          v' <- fromVar <$> freshFrom name
+          v' <- freshFrom' v
           pure (VarMap.insert (toVar v) v' m)
 
   refreshTerm s (Extend e bs) = Extend <$> refreshAtom s e <*> traverse (trimapA pure (pure . refreshType s) (refreshAtom s)) bs
@@ -222,6 +215,20 @@ refresh = refreshTerm mempty where
 
   get s v = fromJust (VarMap.lookup (toVar v) s)
 
-argVar :: IsVar a => Argument a -> Var _
+argVar :: IsVar a => Argument a -> CoVar
 argVar (TermArgument v _) = toVar v
 argVar (TypeArgument v _) = toVar v
+
+freshFrom :: MonadGen Int m => CoVar -> m CoVar
+freshFrom (CoVar _ name dat) = do
+  x <- gen
+  pure (CoVar x name dat)
+
+freshFrom' :: (MonadGen Int m, IsVar a) => a -> m a
+freshFrom' x = fromVar <$> freshFrom (toVar x)
+
+fresh :: MonadGen Int m => VarInfo -> m CoVar
+fresh k = do
+  x <- gen
+  pure (CoVar x (alpha !! x) k)
+  where alpha = map T.pack $ [1..] >>= flip replicateM ['a'..'z']

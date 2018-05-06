@@ -23,12 +23,12 @@ import Syntax.Resolve (ResolveError, resolveProgram)
 import qualified Syntax.Resolve.Scope as RS
 import Syntax.Resolve.Toplevel (extractToplevels)
 import Syntax.Desugar (desugarProgram)
-import Syntax (Var, Resolved)
 
 import Core.Lower (runLowerT, lowerProg)
 import Core.Core (Stmt)
 import Core.Simplify
 import Core.Lint
+import Core.Var
 
 import Pretty (pretty, render)
 
@@ -39,7 +39,7 @@ import Test.Tasty
 import Test.Tasty.HUnit
 
 data CompileResult
-  = CSuccess [Stmt (Var Resolved)]
+  = CSuccess [Stmt CoVar]
   | CParse   String Span
   | CResolve ResolveError
   | CInfer   TypeError
@@ -78,7 +78,7 @@ compile (file:files) = do
     go x _ = pure x
 
 
-testLint :: ([Stmt (Var Resolved)] -> Gen Int [Stmt (Var Resolved)]) -> String -> Assertion
+testLint :: ([Stmt CoVar] -> Gen Int [Stmt CoVar]) -> String -> Assertion
 testLint f file = do
   contents <- T.readFile ("examples/" ++ file)
   runGen $ do
