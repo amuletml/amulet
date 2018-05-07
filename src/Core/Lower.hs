@@ -220,7 +220,7 @@ lowerAnyway (S.VarRef (TvName v) (_, ty)) = do
   env <- asks vars
 
   ctor <- asks (Map.member v . ctors)
-  let kind = if ctor then ValueVar else DataConVar
+  let kind = if ctor then DataConVar else ValueVar
 
   case Map.lookup v env of
     -- If we've got a type which is different to our expected one then we strip
@@ -244,7 +244,7 @@ lowerAnyway (S.VarRef (TvName v) (_, ty)) = do
           addApps _ _ = error "impossible"
       in runContT (addApps fty []) (pure . Atom . fst)
 
-    _ -> pure (Atom (Ref (mkVal v) lty))
+    _ -> pure (Atom (Ref (mkVar kind v) lty))
 lowerAnyway (S.Record xs _) = case xs of
   [] -> pure (Atom (Lit RecNil))
   xs -> do
@@ -329,7 +329,7 @@ lowerProg (LetStmt vs:prg) = do
   let env' = Map.fromList (map (\(TvName v, _, (_, ant)) -> (v, lowerType ant)) vs)
   (:) <$> local (\s -> s { vars = env' }) (StmtLet <$> for vs (\(TvName v, ex, (_, ant)) -> (mkVal v,lowerType ant,) <$> lowerPolyBind (lowerType ant) ex))
       <*> lowerProg prg
-lowerProg (FunStmt vs:prg) = lowerProg prg
+lowerProg (FunStmt _:prg) = lowerProg prg
 lowerProg (TypeDecl (TvName var) _ cons:prg) = do
   let cons' = map (\case
                        UnitCon (TvName p) (_, t) -> (p, mkCon p, lowerType t)
@@ -341,7 +341,7 @@ lowerProg (TypeDecl (TvName var) _ cons:prg) = do
 
   (C.Type (mkType var) ccons:) <$> local (\s -> s { ctors = Map.union (Map.fromList scons) (ctors s) }) (lowerProg prg)
 lowerProg (Open _ _:prg) = lowerProg prg
-lowerProg (Module _ b:prg) = (++) <$> lowerProg b <*> lowerProg prg
+lowerProg (Module _ b:prg) = lowerProg (b ++prg)
 
 
 lowerPolyBind :: MonadLower m => Type -> Expr Typed -> m Term
@@ -408,9 +408,9 @@ patternTyvars = asks . flip (go . ctors)
                                    _ -> error ("must replace skolem tyvar with tyvar " ++ show (pretty t))
 
 mkTyvar, mkVal, mkType, mkCo, mkCon :: Var Resolved-> CoVar
-mkTyvar = mkVar TypeConVar
+mkTyvar = mkVar TypeVar
 mkVal = mkVar ValueVar
-mkType = mkVar TypeVar
+mkType = mkVar TypeConVar
 mkCo = mkVar CastVar
 mkCon = mkVar DataConVar
 

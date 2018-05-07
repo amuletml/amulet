@@ -40,6 +40,19 @@ class (Eq a, Ord a, Pretty a, Show a) => IsVar a where
   toVar :: a -> CoVar
   fromVar :: CoVar -> a
 
+  varInfo :: a -> VarInfo
+  varInfo = view covarInfo . toVar
+
 instance IsVar CoVar where
   toVar = id
   fromVar = id
+
+isValueInfo, isTypeInfo :: VarInfo -> Bool
+
+isValueInfo ValueVar = True
+isValueInfo DataConVar = True
+isValueInfo _ = False
+
+isTypeInfo TypeConVar = True
+isTypeInfo DataConVar = True
+isTypeInfo _ = False
