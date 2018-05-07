@@ -111,12 +111,12 @@ gatherJoinPass = snd . goT mempty True mempty where
   goT u True a (App (Ref f fty) x)
     | Just n <- VarMap.lookup (toVar f) a
     , toVar f `VarSet.notMember` u
-    = let a'= if n > 1 then VarMap.insert (toVar f) 1 a else a
+    = let a'= if n /= 1 then VarMap.delete (toVar f) a else a
       in AnnApp Preserve (Ref f fty) <$> goA u a' x
   goT u True a (TyApp (Ref f fty) x)
     | Just n <- VarMap.lookup (toVar f) a
     , toVar f `VarSet.notMember` u
-    = let a'= if n > 1 then VarMap.insert (toVar f) 1 a else a
+    = let a'= if n /= 1 then VarMap.delete (toVar f) a else a
       in (a', AnnTyApp Preserve (Ref f fty) x)
 
   -- If we're visiting an application of a candidate which is used in a tail position
@@ -132,8 +132,7 @@ gatherJoinPass = snd . goT mempty True mempty where
           varr = maybe 0 (+1) (VarMap.lookup (toVar v) ca')
           a'' = VarMap.delete (toVar v) $
                 case VarMap.lookup (toVar f) ca' of
-                  Just i | varr == 0 -> VarMap.delete (toVar f) ca'
-                         | i > varr -> VarMap.insert (toVar f) varr ca'
+                  Just i | varr /= i -> VarMap.delete (toVar f) ca'
                   _ -> ca'
       in traceShow (string "Mapping" <+> pretty v <+> string (show varr) <+> string "=" <+> pretty f <+> string " => " <+> string (show (VarMap.lookup (toVar f) a'')))
         (a'', AnnLet Preserve ValueBind (One (v, vty, AnnApp Preserve (Ref f fty) x')) r')
@@ -148,8 +147,7 @@ gatherJoinPass = snd . goT mempty True mempty where
           varr = maybe 0 (+1) (VarMap.lookup (toVar v) ca')
           a' = VarMap.delete (toVar v) $
                 case VarMap.lookup (toVar f) ca' of
-                  Just i | varr == 0 -> VarMap.delete (toVar f) ca'
-                         | i > varr -> VarMap.insert (toVar f) varr ca'
+                  Just i | varr /= i -> VarMap.delete (toVar f) ca'
                   _ -> ca'
       in traceShow (string "Mapping" <+> pretty v <+> string (show varr) <+> string "=" <+> pretty f <+> string " => " <+> string (show (VarMap.lookup (toVar f) a')))
          (a', AnnLet Preserve ValueBind (One (v, vty, AnnTyApp Preserve (Ref f fty) x)) r')
@@ -158,7 +156,7 @@ gatherJoinPass = snd . goT mempty True mempty where
   goT u True a (Let ValueBind (One (v, ty, e)) r) | isLam e =
     let (a', e') = goT u False a e
         -- And visit the remaining nodes with this definition's arity
-        ca = VarMap.insert (toVar v) (lamArity' e) a'
+        ca = traceShow (pretty v, lamArity' e) $ VarMap.insert (toVar v) (lamArity' e) a'
         (ca', r') = goT u True ca r
         -- If we've still got something in scope, then we can convert it.
         arr = case VarMap.lookup (toVar v) ca' of
@@ -169,13 +167,13 @@ gatherJoinPass = snd . goT mempty True mempty where
 
   -- Recursive definitions in the tail position which are lambdas are candidates
   goT u True a (Let ValueBind (Many vs) r) | all (isLam . thd3) vs =
-    let ca = foldr (\(v, _, e) -> VarMap.insert (toVar v) (lamArity' e)) a vs
+    let ca = traceShow (map (pretty. fst3) vs, map (lamArity' . thd3) vs) $ foldr (\(v, _, e) -> VarMap.insert (toVar v) (lamArity' e)) a vs
         (ca', vs') = foldr (go3 (goLam . flip (goT u))) (ca, []) vs
         (ca'', r') = goT u True ca' r
         -- If we've still got something in scope, then we can convert it.
         arr = case traverse (flip VarMap.lookup ca'' . toVar . fst3) vs of
                 Nothing -> Preserve
-                Just x -> JoinMany x
+                Just x -> traceShow (string "Promoting", map (pretty . fst3) vs, x) $ JoinMany x
     in ( foldr (VarMap.delete . toVar . fst3) ca'' vs
        ,  AnnLet arr ValueBind (Many vs') r')
 

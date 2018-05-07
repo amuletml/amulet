@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, DeriveDataTypeable, TemplateHaskell #-}
+{-# LANGUAGE DeriveGeneric, DeriveDataTypeable, TemplateHaskell, OverloadedStrings #-}
 
 module Core.Var where
 
@@ -35,7 +35,15 @@ makePrisms ''VarInfo
 
 
 instance Pretty CoVar where
-  pretty (CoVar i v _) = text v <> scomment (string "#" <> string (show i))
+  pretty (CoVar i v k) = text v <> scomment (string "#" <> pretty k <> string (show i))
+
+instance Pretty VarInfo where
+  pretty ValueVar = text "v"
+  pretty DataConVar = text "D"
+  pretty TypeConVar = text "t"
+  pretty TypeVar = text "'t"
+  pretty CastVar = text "c"
+  pretty (JoinVar i) = text "j" <> brackets (string (show i))
 
 class (Eq a, Ord a, Pretty a, Show a) => IsVar a where
   toVar :: a -> CoVar
