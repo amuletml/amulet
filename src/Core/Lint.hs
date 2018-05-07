@@ -21,7 +21,7 @@ import Data.List
 import Core.Optimise
 import Core.Builtin
 import Core.Types
-import Core.Arity (lamArity')
+import Core.Arity (lamArity, lamArity')
 import Pretty hiding ((<>))
 
 data CoreError a
@@ -36,6 +36,9 @@ data CoreError a
 data Scope a = Scope { vars :: VarMap.Map (Type a, VarInfo)
                      , types :: VarMap.Map VarInfo
                      , tyVars :: VarSet.Set }
+  deriving (Show)
+
+data Context = Vanilla | Tail
   deriving (Show)
 
 emptyScope :: IsVar a => Scope a
@@ -110,7 +113,7 @@ checkStmt s t@(StmtLet vs:xs) = do
     -- And the type is well formed
     checkType s ty
     -- And the definition matches the expected type
-    ty' <- checkTerm s' e
+    ty' <- checkTerm Tail s' e
     if ty `apart` ty' then throwError (TypeMismatch ty ty') else pure ()
 
   checkStmt s' xs
@@ -150,7 +153,7 @@ checkAtom s l@(Lam (TermArgument a ty) bod) = do
     unless (varInfo a == ValueVar) (throwError (InfoIllegal a ValueVar (varInfo a)))
     checkType s ty
 
-  bty <- checkTerm (s { vars = insertVar a ty (vars s) }) bod `withContext` l
+  bty <- checkTerm Tail (s { vars = insertVar a ty (vars s) }) bod `withContext` l
   pure (ForallTy Irrelevant ty bty)
 checkAtom s l@(Lam (TypeArgument a ty) bod) = do
   tryContext l $ do
@@ -158,21 +161,82 @@ checkAtom s l@(Lam (TypeArgument a ty) bod) = do
     unless (varInfo a == TypeVar) (throwError (InfoIllegal a TypeVar (varInfo a)))
     checkType s ty
 
-  bty <- checkTerm (s { tyVars = VarSet.insert (toVar a) (tyVars s) }) bod `withContext` l
+  bty <- checkTerm Tail (s { tyVars = VarSet.insert (toVar a) (tyVars s) }) bod `withContext` l
   pure (ForallTy (Relevant a) ty bty)
 
+checkJoinAtom :: (IsVar a, MonadError (CoreError a) m, MonadWriter [CoreError a] m)
+              => Scope a
+              -> Atom a
+              -> m (Type a)
+checkJoinAtom s a@(Ref v ty) =
+  case VarMap.lookup (toVar v) (vars s) of
+    Nothing -> throwError (NoSuchVar v)
+    Just (ty', inf')
+      -- Ensure the types line up
+      | ty `apart` ty' -> throwError (TypeMismatch ty' ty) `withContext` a
+      -- Ensure the variable info lines up, and it's a valid variable
+      | inf' /= varInfo v -> throwError (InfoMismatch v inf' (varInfo v))
+      | not (isJoinInfo inf') -> throwError (InfoIllegal v (JoinVar (-1)) inf')
+      | otherwise -> pure ty
+checkJoinAtom _ _ = throwError (InfoIllegal unknownVar (JoinVar (-1)) ValueVar)
+
+
 checkTerm :: forall a m. (IsVar a, MonadError (CoreError a) m, MonadWriter [CoreError a] m)
-         => Scope a
-         -> Term a
-         -> m (Type a)
-checkTerm s (Atom a) = checkAtom s a
-checkTerm s (App f x) = do
+          => Context
+          ->  Scope a
+          -> Term a
+          -> m (Type a)
+
+-- If we're in a tail position, verify the join point has arity 1
+checkTerm Tail s (App fa@(Ref f _) x)
+  | CoVar _ _ (JoinVar a) <- toVar f = do
+      -- The arity in a tail position must be 1
+      unless (a == 1) (throwError (InfoMismatch f (JoinVar 1) (JoinVar a)))
+
+      f' <- checkJoinAtom s fa
+      x' <- checkAtom s x
+      case f' of
+        ForallTy Irrelevant a r | a `uni` x' -> pure r
+        _ -> throwError (TypeMismatch (ForallTy Irrelevant x' unknownTyvar) f')
+checkTerm c s t@(Let JoinBind (One (v, ty, e)) r)
+  | CoVar _ _ (JoinVar a) <- toVar v
+  = do
+      tryContext t $ do
+        checkType s ty
+
+        (ty', ea) <- case e of
+          Atom at@(Ref f _)
+            | CoVar _ _ (JoinVar a') <- toVar f -> (,a') <$> checkJoinAtom s at
+          Atom at@Lam{} -> (,lamArity at) <$> checkAtom s at
+          App fa@(Ref f _) x
+            | CoVar _ _ (JoinVar a') <- toVar f -> do
+                f' <- checkJoinAtom s fa
+                x' <- checkAtom s x
+                case f' of
+                  ForallTy Irrelevant a r | a `uni` x' -> pure (r, a' - 1)
+                  _ -> throwError (TypeMismatch (ForallTy Irrelevant x' unknownTyvar) f')
+          TyApp fa@(Ref f _) x
+            | CoVar _ _ (JoinVar a') <- toVar f -> do
+                f' <- checkJoinAtom s fa
+                checkType s x `withContext` t
+                case f' of
+                  ForallTy (Relevant a) _ ty -> pure (substituteInType (VarMap.singleton (toVar a) x) ty, a' - 1)
+                  _ -> throwError (TypeMismatch (ForallTy (Relevant unknownVar) unknownTyvar unknownTyvar) f') `withContext` t
+          _ -> throwError (InfoIllegal v (JoinVar (-1)) (JoinVar a))
+
+        unless (a == ea) (throwError (InfoMismatch v (JoinVar ea) (JoinVar a)))
+        if ty `apart` ty' then throwError (TypeMismatch ty ty') else pure ()
+
+      checkTerm c (s { vars = insertVar v ty (vars s) }) r
+
+checkTerm _ s (Atom a) = checkAtom s a
+checkTerm _ s (App f x) = do
   f' <- checkAtom s f
   x' <- checkAtom s x
   case f' of
     ForallTy Irrelevant a r | a `uni` x' -> pure r
     _ -> throwError (TypeMismatch (ForallTy Irrelevant x' unknownTyvar) f')
-checkTerm s t@(Let k (One (v, ty, e)) r) = do
+checkTerm c s t@(Let k (One (v, ty, e)) r) = do
   tryContext t $ do
     -- Ensure type is valid and we're declaring the appropriate variable
     case k of
@@ -183,11 +247,11 @@ checkTerm s t@(Let k (One (v, ty, e)) r) = do
                | otherwise -> throwError (InfoIllegal v (JoinVar (lamArity' e)) (varInfo v))
     checkType s ty
 
-    ty' <- checkTerm s e
+    ty' <- checkTerm Vanilla s e
     if ty `apart` ty' then throwError (TypeMismatch ty ty') else pure ()
 
-  checkTerm (s { vars = insertVar v ty (vars s) }) r
-checkTerm s t@(Let k (Many vs) r) = do
+  checkTerm c (s { vars = insertVar v ty (vars s) }) r
+checkTerm c s t@(Let k (Many vs) r) = do
   let s' = s { vars = foldr (\(v, t, _) -> insertVar v t) (vars s) vs }
   for_ vs $ \(v, ty, e) -> tryContext t $ do
     -- Ensure type is valid and we're declaring a value
@@ -199,12 +263,12 @@ checkTerm s t@(Let k (Many vs) r) = do
                | otherwise -> throwError (InfoIllegal v (JoinVar (lamArity' e)) (varInfo v))
     checkType s ty
 
-    ty' <- checkTerm s' e
+    ty' <- checkTerm Vanilla s' e
     if ty `apart` ty' then throwError (TypeMismatch ty ty') else pure ()
 
-  checkTerm s' r
+  checkTerm c s' r
 
-checkTerm s t@(Match e bs) = flip withContext t $ do
+checkTerm c s t@(Match e bs) = flip withContext t $ do
   tye <- checkAtom s e
   (ty:tys) <- for bs $ \Arm { _armPtrn = p, _armTy = ty, _armBody = r, _armVars = vs } -> do
     if vs /= patternVars p
@@ -214,7 +278,7 @@ checkTerm s t@(Match e bs) = flip withContext t $ do
     pVars <- checkPattern ty p `withContext` p
     if ty `apart` tye
     then throwError (TypeMismatch ty tye)
-    else checkTerm (s { vars = VarMap.union pVars (vars s), tyVars = tyVars s <> foldMap (freeInTy . fst) pVars }) r
+    else checkTerm c (s { vars = VarMap.union pVars (vars s), tyVars = tyVars s <> foldMap (freeInTy . fst) pVars }) r
 
   -- Ensure all types are consistent
   foldrM (\ty ty' -> if ty `apart` ty'
@@ -276,7 +340,7 @@ checkTerm s t@(Match e bs) = flip withContext t $ do
       inst (ForallTy (Relevant _) _ t) = inst t
       inst t = t
 
-checkTerm s t@(Extend f fs) = do
+checkTerm _ s t@(Extend f fs) = do
   tyf' <- checkAtom s f
   for_ fs $ \(_, ty, v) -> tryContext t $ do
     ty' <- checkAtom s v
@@ -287,14 +351,14 @@ checkTerm s t@(Extend f fs) = do
     RowsTy f' fs' -> pure $ RowsTy f' $ nubBy (on (==) fst) $ map (\(f, ty, _) -> (f, ty)) fs ++ fs'
     _ -> throwError (TypeMismatch (ExactRowsTy []) tyf') `withContext` t
 
-checkTerm s t@(TyApp f x) = do
+checkTerm _ s t@(TyApp f x) = do
   f' <- checkAtom s f
   checkType s x `withContext` t
   case f' of
     ForallTy (Relevant a) _ ty -> pure (substituteInType (VarMap.singleton (toVar a) x) ty)
     _ -> throwError (TypeMismatch (ForallTy (Relevant unknownVar) unknownTyvar unknownTyvar) f') `withContext` t
 
-checkTerm s t@(Cast x co) = do
+checkTerm _ s t@(Cast x co) = do
   ty <- checkAtom s x
 
   (from, to) <- checkCo co

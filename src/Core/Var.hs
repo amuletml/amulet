@@ -48,12 +48,14 @@ instance IsVar CoVar where
   toVar = id
   fromVar = id
 
-isValueInfo, isTypeInfo :: VarInfo -> Bool
+isValueInfo, isJoinInfo, isTypeInfo :: VarInfo -> Bool
 
 isValueInfo ValueVar = True
 isValueInfo DataConVar = True
-isValueInfo (JoinVar _) = True
 isValueInfo _ = False
+
+isJoinInfo (JoinVar _) = True
+isJoinInfo _ = False
 
 isTypeInfo TypeConVar = True
 isTypeInfo DataConVar = True
