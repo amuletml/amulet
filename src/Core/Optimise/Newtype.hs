@@ -1,12 +1,11 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Core.Optimise.Newtype (killNewtypePass) where
 
-import Control.Monad.Infer (Gen, fresh)
+import Control.Monad.Gen
 import Control.Monad
 import Control.Lens
 
 import qualified Data.VarMap as V
-import Data.VarSet (IsVar(..))
 import Data.Triple
 
 import Core.Optimise
@@ -51,7 +50,7 @@ newtypeMatch _ [] = Nothing
 
 newtypeCo :: IsVar a => (a, Type a) -> (Type a, Type a) -> Gen Int (Stmt a, Coercion a)
 newtypeCo (cn, tp) (dom, cod) = do
-  var <- fresh
+  var <- fresh ValueVar
   let con = [(cn, tp, Atom (wrap tp (work phi)))]
       wrap (ForallTy (Relevant v) c t) e = Lam (TypeArgument v c) (Atom (wrap t e))
       wrap _ e = e
@@ -77,7 +76,7 @@ goBinding m = traverse (third3A goTerm) where
   goTerm (Cast f t) = Cast <$> goAtom f <*> pure t
   goTerm (Match a x) = case newtypeMatch m x of
     Just (phi, Arm { _armPtrn = Destr _ p, _armBody = bd, _armVars = vs, _armTyvars = tvs }) -> do
-      var <- fresh
+      var <- fresh ValueVar
       let Just (_, castCodomain) = relates phi
       bd' <- goTerm (Match (Ref (fromVar var) castCodomain) [Arm { _armPtrn = p, _armTy = castCodomain
                                                                  , _armBody = bd, _armVars = vs, _armTyvars = tvs }])

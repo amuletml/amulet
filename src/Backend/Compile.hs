@@ -4,7 +4,6 @@ module Backend.Compile
   ( compileProgram
   ) where
 
-import Control.Monad.Infer
 import Control.Monad.State
 import Control.Monad.Cont
 import Control.Arrow
@@ -12,11 +11,13 @@ import Control.Lens hiding (uncons)
 
 import Backend.Lua
 import Core.Occurrence
-import Core.Core
+import Core.Builtin
 import Core.Types
+import Core.Core
+import Core.Var
 
 import Syntax.Types
-import Syntax (Var(..), Resolved)
+import Syntax (Var(..))
 
 import qualified Types.Wellformed as W
 
@@ -25,7 +26,6 @@ import qualified Data.VarSet as VarSet
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import Data.Foldable
-import Data.VarSet (IsVar(..))
 import Data.Triple
 import Data.Maybe (fromMaybe, maybeToList)
 import Data.List (sortOn, partition, uncons)
@@ -35,14 +35,13 @@ import Data.Char
 
 type Returner = LuaExpr -> LuaStmt
 
-data VarScope = VarScope { toLua :: Map.Map (Var Resolved) Text
-                         , fromLua :: Map.Map Text (Var Resolved) }
+data VarScope = VarScope { toLua :: Map.Map CoVar Text
+                         , fromLua :: Map.Map Text CoVar }
   deriving (Show)
 
 pushVar :: IsVar a => a -> VarScope -> (Text, VarScope)
 pushVar v s = escapeVar (toVar v) where
-  escapeVar (TgInternal t) = (t, s)
-  escapeVar v@(TgName name _) =
+  escapeVar v@(CoVar _ name _) =
     case Map.lookup v (toLua s) of
       Just _ -> error "Variable already declared"
       Nothing ->
@@ -66,9 +65,7 @@ pushVar v s = escapeVar (toVar v) where
          Just _ -> pushFirst (Just (maybe 0 (+1) prefix)) esc
 
 getVar :: IsVar a => a -> VarScope -> Text
-getVar v s = case toVar v of
-               TgInternal t -> t
-               v@TgName{} -> fromMaybe (error ("Cannot find " ++ show v)) (Map.lookup v (toLua s))
+getVar v s = fromMaybe (error ("Cannot find " ++ show v)) (Map.lookup (toVar v) (toLua s))
 
 alpha :: [Text]
 alpha = map T.pack ([1..] >>= flip replicateM ['a'..'z'])
@@ -99,7 +96,7 @@ compileProgram ev = LuaDo . flip evalState (VarScope mempty mempty) . compilePro
   compileProg (StmtLet vs:xs) = (++) <$> compileLet (unzip3 vs) <*> compileProg xs
   compileProg (Type _ cs:xs) = (++) <$> traverse compileConstructor cs <*> compileProg xs
   compileProg [] =
-    let main = fmap (toVar . fst) . uncons
+    let main = fmap fst . uncons
              . sortOn key
              . filter isMain
              . namesInScope
@@ -109,8 +106,8 @@ compileProgram ev = LuaDo . flip evalState (VarScope mempty mempty) . compilePro
         key (TgName k _) = k
         key _ = undefined
      in case main ev of
-       Just ref -> do
-         ref' <- gets (getVar ref)
+       Just ref@(TgName n i) -> do
+         ref' <- gets (getVar (CoVar i n ValueVar))
          let go 0 _ = Nothing
              go 1 it = Just (LuaCallS it [])
              go n it = do
@@ -118,7 +115,7 @@ compileProgram ev = LuaDo . flip evalState (VarScope mempty mempty) . compilePro
                pure $ LuaCallS (LuaCall e []) []
              ar = W.arity (ev ^. values . at ref . non undefined)
           in pure (maybeToList (go ar (LuaRef (LuaName ref'))))
-       Nothing -> pure []
+       _ -> pure []
 
   compileConstructor :: (MonadState VarScope m, Occurs a) => (a, Type a) -> m LuaStmt
   compileConstructor (var, ty)
@@ -181,7 +178,7 @@ compileAtom' (Ref v _) | isBinOp v
            [left]
            [LuaReturn (LuaFunction
                         [right]
-                        [LuaReturn (LuaBinOp (LuaRef left) (remapOp' v) (LuaRef right))])],
+                        [LuaReturn (LuaBinOp (LuaRef left) (remapOp v) (LuaRef right))])],
            Nothing)
     where left  = LuaName "l"
           right = LuaName "r"
@@ -215,7 +212,7 @@ compileTerm (App f e) = do
   e' <- compileAtom e
   f' <- compileAtom' f
   pure $ case f' of
-    (LuaCall _ [l], Just (App (Ref v _) _)) | isBinOp v -> LuaBinOp l (remapOp' v) e'
+    (LuaCall _ [l], Just (App (Ref v _) _)) | isBinOp v -> LuaBinOp l (remapOp v) e'
     (fl', _) -> LuaCall fl' [e']
 
 compileTerm (TyApp f _) = compileAtom f
@@ -378,22 +375,24 @@ compileMatch match test ps = ContT $ \next ->  gets (pure . genIf next . snd)
 
         withMatch = map (\(v, b) -> (v, match, b))
 
-ops :: Map.Map Text Text
+ops :: Map.Map CoVar Text
 ops = Map.fromList
-  [ ("+", "+"), ("+.", "+")
-  , ("-", "-"), ("-.", "-")
-  , ("*", "*"), ("*.", "*")
-  , ("/", "/"), ("/.", "/")
-  , ("**", "^"), ("**.", "^")
-  , ("^", "..")
-  , ("<", "<")
-  , (">", ">")
-  , (">=", ">=")
-  , ("<=", "<=")
-  , ("==", "==")
-  , ("<>", "~=")
-  , ("||", "or")
-  , ("&&", "and") ]
+  [ (vOpAdd, "+"),  (vOpAddF, "+")
+  , (vOpSub, "-"),  (vOpSubF, "-")
+  , (vOpMul, "*"),  (vOpMulF, "*")
+  , (vOpDiv, "/"),  (vOpDivF, "/")
+  , (vOpExp, "^"),  (vOpExpF, "^")
+  , (vOpLt,  "<"),  (vOpLtF,  "<")
+  , (vOpGt,  ">"),  (vOpGtF,  "<")
+  , (vOpLe,  "<="), (vOpLeF,  "<=")
+  , (vOpGe,  ">="), (vOpGeF,  ">=")
+
+  , (vOpConcat, "..")
+
+  , (vOpEq, "==")
+  , (vOpNe, "~=")
+  , (vOpOr, "or")
+  , (vOpAnd, "and") ]
 
 chars :: Map.Map Char Text
 chars = Map.fromList
@@ -420,15 +419,11 @@ chars = Map.fromList
   , ('[', "_lbrack")
   , (']', "_rbrack ") ]
 
-isBinOp :: Occurs a => a -> Bool
-isBinOp x | TgInternal v <- toVar x = Map.member v ops
-isBinOp _ = False
+isBinOp :: IsVar a => a -> Bool
+isBinOp v = Map.member (toVar v) ops
 
-remapOp :: Text -> Text
-remapOp x = fromMaybe x (Map.lookup x ops)
-
-remapOp' :: IsVar a => a -> Text
-remapOp' v = let TgInternal v' = toVar v in remapOp v'
+remapOp :: IsVar a => a -> Text
+remapOp v | v'@(CoVar _ n _) <- toVar v = fromMaybe n (Map.lookup v' ops)
 
 isMultiMatch :: Term a -> Bool
 isMultiMatch (Match _ (_:_:_)) = True

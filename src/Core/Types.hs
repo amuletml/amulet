@@ -6,9 +6,10 @@ module Core.Types
   , replaceTy
   ) where
 
-import qualified Data.Map.Strict as Map
+import qualified Data.VarMap as VarMap
 import Core.Builtin
 import Core.Core
+import Core.Var
 
 import Control.Lens
 
@@ -17,7 +18,6 @@ import Control.Applicative
 
 import Data.Traversable
 import Data.Foldable
-import Data.VarSet(IsVar(..))
 import Data.Maybe
 import Data.List
 
@@ -58,20 +58,20 @@ approximateType (TyApp f at) = do
       go x = x
   pure (replace t)
 
-unify :: IsVar a => Type a -> Type a -> Maybe (Map.Map a (Type a))
+unify :: IsVar a => Type a -> Type a -> Maybe (VarMap.Map (Type a))
 unify = unifyWith mempty
 
-unifyWith :: IsVar a => Map.Map a (Type a) -> Type a -> Type a -> Maybe (Map.Map a (Type a))
+unifyWith :: IsVar a => VarMap.Map (Type a) -> Type a -> Type a -> Maybe (VarMap.Map (Type a))
 unifyWith m a b = execStateT (unify' a b) m
 
-unify' :: IsVar a => Type a -> Type a -> StateT (Map.Map a (Type a)) Maybe ()
+unify' :: IsVar a => Type a -> Type a -> StateT (VarMap.Map (Type a)) Maybe ()
 unify' t'@(VarTy v) t
   | t' == t = pure ()
   | otherwise = do
-      x <- gets (Map.lookup v)
+      x <- gets (VarMap.lookup (toVar v))
       case x of
         Just t' -> unify' t t'
-        Nothing -> modify (Map.insert v t)
+        Nothing -> modify (VarMap.insert (toVar v) t)
 unify' t (VarTy v) = unify' (VarTy v) t
 unify' (ConTy v) (ConTy v') = mempty <$ guard (v == v')
 unify' (ForallTy Irrelevant a b) (ForallTy Irrelevant a' b') = liftA2 (<>) (unify' a a') (unify' b b')
@@ -93,10 +93,10 @@ replaceTy var at = transform (go var) where
 unifyClosed :: IsVar a => Type a -> Type a -> Bool
 unifyClosed = go mempty where
   go _ (ConTy a) (ConTy b) = a == b
-  go s (VarTy a) (VarTy b) = fromMaybe a (Map.lookup a s) == b
+  go s (VarTy a) (VarTy b) = fromMaybe a (VarMap.lookup (toVar a) s) == b
   go s (ForallTy (Relevant v) c ty) (ForallTy (Relevant v') c' ty')
     | v == v' = go s c c' && go s ty ty'
-    | otherwise = go (Map.insert v v' s) ty ty' && go s c c'
+    | otherwise = go (VarMap.insert (toVar v) v' s) ty ty' && go s c c'
   go s (ForallTy Irrelevant a r) (ForallTy Irrelevant a' r') = go s a a' && go s r r'
   go s (AppTy f x) (AppTy f' x') = go s f f' && go s x x'
   go s (RowsTy f ts) (RowsTy f' ts') = go s f f' && and (zipWith (\(l, t) (l', t') -> l == l' && go s t t') (sortOn fst ts) (sortOn fst ts'))

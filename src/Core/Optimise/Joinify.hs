@@ -4,7 +4,6 @@ module Core.Optimise.Joinify where
 import Control.Monad.Gen
 import Control.Lens
 
-import Data.VarSet (IsVar(..))
 import Data.Triple
 
 import Core.Optimise

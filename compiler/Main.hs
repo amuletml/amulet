@@ -35,6 +35,7 @@ import Core.Occurrence (OccursVar, tagOccursVar)
 import Core.Simplify (optimise)
 import Core.Lower (runLowerT, lowerProg)
 import Core.Core (Stmt)
+import Core.Var (CoVar)
 
 import Pretty (Pretty(pretty), putDoc, (<+>), colon)
 
@@ -45,12 +46,12 @@ import Parser.Lexer (lexerScan)
 import Errors (reportP, reportR, reportI)
 
 data CompileResult a
-  = CSuccess ([Toplevel Typed], [Stmt (Var Resolved)], [Stmt a], Env)
+  = CSuccess ([Toplevel Typed], [Stmt CoVar], [Stmt a], Env)
   | CParse   String Span
   | CResolve ResolveError
   | CInfer   TypeError
 
-compile :: [(SourceName, T.Text)] -> CompileResult (OccursVar (Var Resolved))
+compile :: [(SourceName, T.Text)] -> CompileResult (OccursVar CoVar)
 compile [] = error "Cannot compile empty input"
 compile (file:files) = runGen $ do
   file' <- go (Right ([], RS.builtinScope, RS.emptyModules, builtinsEnv)) file
@@ -98,7 +99,7 @@ compileFromTo fs emit =
     CResolve e -> putStrLn "Resolution error" >> reportR e fs
     CInfer e -> putStrLn "Type error" >> reportI e fs
 
-test :: [(FilePath, T.Text)] -> IO (Maybe ([Stmt (Var Resolved)], Env))
+test :: [(FilePath, T.Text)] -> IO (Maybe ([Stmt CoVar], Env))
 test fs = do
   putStrLn "\x1b[1;32m(* Program: *)\x1b[0m"
   case compile fs of
@@ -127,7 +128,7 @@ testLexer fs = for_ fs $ \(name, file) ->
     POK _ toks -> print (map (\(Token t _) -> t) toks)
     PFailed msg _ -> print msg
 
-testTc :: [(FilePath, T.Text)] -> IO (Maybe ([Stmt (Var Resolved)], Env))
+testTc :: [(FilePath, T.Text)] -> IO (Maybe ([Stmt CoVar], Env))
 testTc fs = do
   putStrLn "\x1b[1;32m(* Program: *)\x1b[0m"
   case compile fs of

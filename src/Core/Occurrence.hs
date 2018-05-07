@@ -12,9 +12,9 @@ module Core.Occurrence
 import Control.Lens hiding ((#))
 
 import Core.Core as C
+import Core.Var
 
 import qualified Data.VarMap as VarMap
-import Data.VarSet (IsVar(..))
 import Data.Triple
 import Data.Maybe
 import Data.Data

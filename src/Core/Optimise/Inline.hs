@@ -8,8 +8,6 @@ import Control.Monad.Gen
 
 import qualified Data.VarMap as VarMap
 import qualified Data.VarSet as VarSet
-import qualified Data.Map.Strict as Map
-import Data.VarSet (IsVar(..))
 import Data.Triple
 
 import Core.Optimise
@@ -53,8 +51,8 @@ inlineVariablePass = transS (InlineScope mempty mempty) where
     case f' of
       Ref r _
         | Just (Lam (TypeArgument v _) b, score) <- VarMap.lookup (toVar r) (scores s)
-        , score <= limit -> refresh $ substituteInTys (Map.singleton v t) b
-      Lam (TypeArgument v _) b -> pure $ substituteInTys (Map.singleton v t) b
+        , score <= limit -> refresh $ substituteInTys (VarMap.singleton (toVar v) t) b
+      Lam (TypeArgument v _) b -> pure $ substituteInTys (VarMap.singleton (toVar v) t) b
       f' -> pure $ TyApp f' t
   transT s (Extend t rs) = Extend <$> transA s t
                                   <*> traverse (third3A (transA s)) rs
