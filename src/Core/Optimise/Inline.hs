@@ -59,7 +59,10 @@ inlineVariablePass = transS (InlineScope mempty mempty) where
   transT s (Let k (One var) body) = do
     var' <- third3A (transT s) var
     body' <- transT (extendVar var s) body
-    pure (Let k (One var') body')
+    pure $ case var' of
+      (v, ty, Let ek ev eb) -> 
+        Let ek ev (Let k (One (v, ty, eb)) body)
+      _ -> Let k (One var') body'
   transT s (Let k (Many vars) body) = do
     vars' <- traverse (third3A (transT s)) vars
     body' <- transT (extendVars vars' s) body

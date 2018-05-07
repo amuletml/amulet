@@ -3,8 +3,8 @@ module Data.VarMap
   ( Map
   , fromList, toList
   , lookup, member, findWithDefault
-  , insert, delete
-  , map, singleton, union, unionSemigroup
+  , insert, insertWith, delete
+  , map, singleton, union, unionSemigroup, unionOn
   , foldrWithKey
   , (<>), mempty
   ) where
@@ -27,6 +27,9 @@ newtype Map a
 
 insert :: CoVar -> a -> Map a -> Map a
 insert (CoVar x _ _) v (Map k) = Map (Map.insert x v k)
+
+insertWith :: (a -> a -> a) -> CoVar -> a -> Map a -> Map a
+insertWith f (CoVar x _ _) v (Map k) = Map (Map.insertWith f x v k)
 
 delete :: CoVar -> Map a -> Map a
 delete (CoVar x _ _) (Map k) = Map (Map.delete x k)
@@ -56,7 +59,10 @@ singleton :: CoVar -> a ->  Map a
 singleton (CoVar x _ _) v = coerce (Map.singleton x v)
 
 unionSemigroup :: Semigroup a => Map a -> Map a -> Map a
-unionSemigroup (Map l) (Map r) = Map (Map.merge Map.preserveMissing Map.preserveMissing (Map.zipWithMatched (const (<>))) l r)
+unionSemigroup  = unionOn (<>)
+
+unionOn :: (a -> a -> a) -> Map a -> Map a -> Map a
+unionOn f (Map l) (Map r) = Map (Map.merge Map.preserveMissing Map.preserveMissing (Map.zipWithMatched (const f)) l r)
 
 foldrWithKey :: (CoVar -> a -> b -> b) -> b -> Map a -> b
 foldrWithKey f b (Map m) = Map.foldrWithKey (f . create) b m

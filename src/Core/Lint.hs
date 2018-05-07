@@ -198,33 +198,45 @@ checkTerm Tail s (App fa@(Ref f _) x)
       case f' of
         ForallTy Irrelevant a r | a `uni` x' -> pure r
         _ -> throwError (TypeMismatch (ForallTy Irrelevant x' unknownTyvar) f')
+
+checkTerm Tail s t@(TyApp fa@(Ref f _) x)
+  | CoVar _ _ (JoinVar a) <- toVar f = do
+      -- The arity in a tail position must be 1
+      unless (a == 1) (throwError (InfoMismatch f (JoinVar 1) (JoinVar a)))
+
+      f' <- checkJoinAtom s fa
+      checkType s x `withContext` t
+      case f' of
+        ForallTy (Relevant a) _ ty -> pure (substituteInType (VarMap.singleton (toVar a) x) ty)
+        _ -> throwError (TypeMismatch (ForallTy (Relevant unknownVar) unknownTyvar unknownTyvar) f') `withContext` t
+
 checkTerm c s t@(Let JoinBind (One (v, ty, e)) r)
   | CoVar _ _ (JoinVar a) <- toVar v
   = do
       tryContext t $ do
         checkType s ty
 
-        (ty', ea) <- case e of
+        (ty', op, ea) <- case e of
           Atom at@(Ref f _)
-            | CoVar _ _ (JoinVar a') <- toVar f -> (,a') <$> checkJoinAtom s at
-          Atom at@Lam{} -> (,lamArity at) <$> checkAtom s at
+            | CoVar _ _ (JoinVar a') <- toVar f -> (,(==),a') <$> checkJoinAtom s at
+          Atom at@Lam{} -> (,(<=),lamArity at) <$> checkAtom s at
           App fa@(Ref f _) x
             | CoVar _ _ (JoinVar a') <- toVar f -> do
                 f' <- checkJoinAtom s fa
                 x' <- checkAtom s x
                 case f' of
-                  ForallTy Irrelevant a r | a `uni` x' -> pure (r, a' - 1)
+                  ForallTy Irrelevant a r | a `uni` x' -> pure (r, (==), a' - 1)
                   _ -> throwError (TypeMismatch (ForallTy Irrelevant x' unknownTyvar) f')
           TyApp fa@(Ref f _) x
             | CoVar _ _ (JoinVar a') <- toVar f -> do
                 f' <- checkJoinAtom s fa
                 checkType s x `withContext` t
                 case f' of
-                  ForallTy (Relevant a) _ ty -> pure (substituteInType (VarMap.singleton (toVar a) x) ty, a' - 1)
+                  ForallTy (Relevant a) _ ty -> pure (substituteInType (VarMap.singleton (toVar a) x) ty, (==), a' - 1)
                   _ -> throwError (TypeMismatch (ForallTy (Relevant unknownVar) unknownTyvar unknownTyvar) f') `withContext` t
           _ -> throwError (InfoIllegal v (JoinVar (-1)) (JoinVar a))
 
-        unless (a == ea) (throwError (InfoMismatch v (JoinVar ea) (JoinVar a)))
+        unless (a `op` ea) (throwError (InfoMismatch v (JoinVar ea) (JoinVar a)))
         if ty `apart` ty' then throwError (TypeMismatch ty ty') else pure ()
 
       checkTerm c (s { vars = insertVar v ty (vars s) }) r
@@ -243,7 +255,7 @@ checkTerm c s t@(Let k (One (v, ty, e)) r) = do
       ValueBind | ValueVar <- varInfo v -> pure ()
                 | otherwise -> throwError (InfoIllegal v ValueVar (varInfo v))
       JoinBind | JoinVar a <- varInfo v
-               , a == lamArity' e -> pure ()
+               , a <= lamArity' e -> pure ()
                | otherwise -> throwError (InfoIllegal v (JoinVar (lamArity' e)) (varInfo v))
     checkType s ty
 
@@ -259,7 +271,7 @@ checkTerm c s t@(Let k (Many vs) r) = do
       ValueBind | ValueVar <- varInfo v -> pure ()
                 | otherwise -> throwError (InfoIllegal v ValueVar (varInfo v))
       JoinBind | JoinVar a <- varInfo v
-               , a == lamArity' e -> pure ()
+               , a <= lamArity' e -> pure ()
                | otherwise -> throwError (InfoIllegal v (JoinVar (lamArity' e)) (varInfo v))
     checkType s ty
 

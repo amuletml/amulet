@@ -27,7 +27,7 @@ arity (ForallTy Irrelevant _ t) = 1 + arity t
 arity _ = 0
 -- TODO Squid pls
 
-approximateAtomType :: IsVar a => Atom a -> Maybe (Type a)
+approximateAtomType :: IsVar a => AnnAtom b a -> Maybe (Type a)
 approximateAtomType (Ref _ t) = pure t
 approximateAtomType (Lam (TypeArgument v k) f) = ForallTy (Relevant v) k <$> approximateType f
 approximateAtomType (Lam (TermArgument _ t) f) = ForallTy Irrelevant t <$> approximateType f
@@ -40,18 +40,18 @@ approximateAtomType (Lit l) = pure . fmap fromVar $ case l of
   Unit -> tyUnit
   RecNil -> ExactRowsTy []
 
-approximateType :: IsVar a => Term a -> Maybe (Type a)
-approximateType (Atom a) = approximateAtomType a
-approximateType (Cast _ phi) = snd <$> relates phi
-approximateType (App f _) = do
+approximateType :: IsVar a => AnnTerm b a -> Maybe (Type a)
+approximateType (AnnAtom _ a) = approximateAtomType a
+approximateType (AnnCast _ _ phi) = snd <$> relates phi
+approximateType (AnnApp _ f _) = do
   ForallTy _ _ d <- approximateAtomType f
   pure d
-approximateType (Let _ _ e) = approximateType e
-approximateType (Match _ xs) = case xs of
+approximateType (AnnLet _ _ _ e) = approximateType e
+approximateType (AnnMatch _ _ xs) = case xs of
   (x:_) -> approximateType (x ^. armBody)
   [] -> error "impossible approximateType empty match"
-approximateType (Extend e rs) = RowsTy <$> approximateAtomType e <*> traverse (\(x, _, t) -> (x,) <$> approximateAtomType t) rs
-approximateType (TyApp f at) = do
+approximateType (AnnExtend _ e rs) = RowsTy <$> approximateAtomType e <*> traverse (\(x, _, t) -> (x,) <$> approximateAtomType t) rs
+approximateType (AnnTyApp _ f at) = do
   ForallTy (Relevant v) _ t <- approximateAtomType f
   let replace = transform go
       go (VarTy v') | v == v' = at
