@@ -67,11 +67,16 @@ pushVar v s = escapeVar (toVar v) where
 getVar :: IsVar a => a -> VarScope -> Text
 getVar v s = fromMaybe (error ("Cannot find " ++ show v)) (Map.lookup (toVar v) (toLua s))
 
+defaultScope :: VarScope
+defaultScope
+  = snd . pushVar vError
+  $ VarScope mempty mempty
+
 alpha :: [Text]
 alpha = map T.pack ([1..] >>= flip replicateM ['a'..'z'])
 
 compileProgram :: forall a. Occurs a => Env -> [Stmt a] -> LuaStmt
-compileProgram ev = LuaDo . flip evalState (VarScope mempty mempty) . compileProg where
+compileProgram ev = LuaDo . flip evalState defaultScope . compileProg where
   compileProg :: MonadState VarScope m => [Stmt a] -> m [LuaStmt]
   compileProg (Foreign n' t s:xs)
     | arity t > 1 = do

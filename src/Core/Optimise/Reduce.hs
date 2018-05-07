@@ -135,12 +135,13 @@ reduceTerm _ (Let (One (v, _, TyApp (Ref var errort) _)) (Let (One (_, _, App (R
      in Let (One (v, errTy, newerr)) errapp
 
 -- Let Commuting conversion
-reduceTerm s (Let (One (x, xt, Let (One (y, yt, yval)) xval)) rest)
-  | not (occursInTerm x yval) = {-# SCC "Reduce.commute_let" #-}
-    reduceTerm s $ Let (One (y, yt, yval)) $ reduceTerm s (Let (One (x, xt, xval)) rest)
+reduceTerm s (Let (One (x, xt, Let (One (y, yt, yval)) xval)) rest) =
+  {-# SCC "Reduce.commute_let" #-}
+  reduceTerm s $ Let (One (y, yt, yval)) $ reduceTerm s (Let (One (x, xt, xval)) rest)
 
 -- Match commuting conversion (trivial case)
 reduceTerm _ (Let (One (v, vt, Match t [a])) r) =
+  {-# SCC "Reduce.commute_match" #-}
   Match t [a & armBody %~ appendBody v vt r]
 
 -- Trivial matches
