@@ -5,19 +5,16 @@ module Core.Core where
 import Pretty
 
 import qualified Data.VarSet as VarSet
-import qualified Data.Set as Set
 import Data.Function
-import Data.VarSet (IsVar(..))
 import Data.Triple
 import Data.Maybe
-import Data.Text (Text, pack)
+import Data.Text (Text)
 import Data.List
+import Core.Var
 
 import Control.Lens
 
 import GHC.Generics
-
-import Syntax (Var(..), Resolved)
 
 data AnnAtom b a
   = Ref a (Type a)
@@ -253,8 +250,8 @@ instance Pretty a => Pretty [Stmt a] where
   pretty = vcat . map pretty
 
 freeInAtom :: IsVar a => AnnAtom b a -> VarSet.Set
-freeInAtom (Ref v _) = VarSet.singleton (VarSet.toVar v)
-freeInAtom (Lam (TermArgument v _) e) = VarSet.delete (VarSet.toVar v) (freeIn e)
+freeInAtom (Ref v _) = VarSet.singleton (toVar v)
+freeInAtom (Lam (TermArgument v _) e) = VarSet.delete (toVar v) (freeIn e)
 freeInAtom (Lam TypeArgument{} e) = freeIn e
 freeInAtom (Lit _) = mempty
 
@@ -262,16 +259,16 @@ freeIn :: IsVar a => AnnTerm b a -> VarSet.Set
 freeIn (AnnAtom _ a) = freeInAtom a
 freeIn (AnnApp _ f x) = freeInAtom f <> freeInAtom x
 freeIn (AnnLet _ (One v) e) = VarSet.difference (freeIn e <> freeIn (thd3 v)) (VarSet.singleton (toVar (fst3 v)))
-freeIn (AnnLet _ (Many vs) e) = VarSet.difference (freeIn e <> foldMap (freeIn . thd3) vs) (VarSet.fromList (map (VarSet.toVar . fst3) vs))
+freeIn (AnnLet _ (Many vs) e) = VarSet.difference (freeIn e <> foldMap (freeIn . thd3) vs) (VarSet.fromList (map (toVar . fst3) vs))
 freeIn (AnnMatch _ e bs) = freeInAtom e <> foldMap freeInBranch bs where
   freeInBranch x = foldr (VarSet.delete . toVar . fst) (freeIn (x ^. armBody)) (x ^. armVars)
 freeIn (AnnExtend _ c rs) = freeInAtom c <> foldMap (freeInAtom . thd3) rs
 freeIn (AnnTyApp _ f _) = freeInAtom f
 freeIn (AnnCast _ f _) = freeInAtom f
 
-freeInTy :: Ord a => Type a -> Set.Set a
-freeInTy (VarTy v) = Set.singleton v
-freeInTy (ForallTy (Relevant v) a b) = freeInTy a <> (v `Set.delete` freeInTy b)
+freeInTy :: IsVar a => Type a -> VarSet.Set
+freeInTy (VarTy v) = VarSet.singleton (toVar v)
+freeInTy (ForallTy (Relevant v) a b) = freeInTy a <> (toVar v `VarSet.delete` freeInTy b)
 freeInTy (ForallTy Irrelevant a b) = freeInTy a <> freeInTy b
 freeInTy (AppTy a b) = freeInTy a <> freeInTy b
 freeInTy (RowsTy c rs) = foldMap (freeInTy . snd) rs <> freeInTy c
@@ -304,10 +301,6 @@ occursInTy v (AppTy a b) = occursInTy v a || occursInTy v b
 occursInTy v (RowsTy t rs) = occursInTy v t || any (occursInTy v . snd) rs
 occursInTy v (ExactRowsTy rs) = any (occursInTy v . snd) rs
 occursInTy _ StarTy = False
-
-isError :: Atom (Var Resolved) -> Bool
-isError (Ref (TgInternal n) _) = n == pack "error"
-isError _ = False
 
 relates :: Coercion a -> Maybe (Type a, Type a)
 relates (SameRepr a b) = Just (a, b)

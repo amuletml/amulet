@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module Core.Arity
   ( ArityScope
   , emptyScope
@@ -10,29 +9,23 @@ module Core.Arity
 import Control.Lens
 
 import qualified Data.VarMap as VarMap
-import qualified Data.Map as Map
-import Data.VarSet (IsVar(..))
-import Data.Text (Text)
 import Data.Triple
 import Data.Maybe
 
+import Core.Builtin
 import Core.Core
-import Syntax(Var(..))
+import Core.Var
 
 newtype ArityScope = ArityScope { pureArity :: VarMap.Map Int }
   deriving (Show)
 
 emptyScope :: ArityScope
-emptyScope = ArityScope mempty
+emptyScope = ArityScope opArity
 
 -- Compute the number of arguments which can be passed to a function before
 -- it becomes "impure".
 atomArity :: IsVar a => ArityScope -> AnnAtom b a -> Int
-atomArity s (Ref r _)
-  | TgInternal n <- toVar r
-  = fromMaybe 0 (Map.lookup n opArity)
-  | otherwise
-  = fromMaybe 0 (VarMap.lookup (toVar r) (pureArity s))
+atomArity s (Ref r _) = fromMaybe 0 (VarMap.lookup (toVar r) (pureArity s))
 atomArity s (Lam _ (AnnAtom _ a)) = 1 + atomArity s a
 atomArity _ _ = 0
 
@@ -71,20 +64,22 @@ extendPureCtors s cts = s {
 
 
 -- Various built-in functions with a predetermined arity
-opArity :: Map.Map Text Int
-opArity = Map.fromList
-    [ ("+",  2), ("+.",  2)
-    , ("-",  2), ("-.",  2)
-    , ("*",  2), ("*.",  2)
-    , ("/",  2), ("/.",  2)
-    , ("**", 2), ("**.", 2)
-    , ("^",  2)
-    , ("<",  2)
-    , (">",  2)
-    , (">=", 2)
-    , ("<=", 2)
-    , ("==", 3)
-    , ("<>", 3)
-    , ("||", 2)
-    , ("&&", 2)
+opArity :: VarMap.Map Int
+opArity = VarMap.fromList
+    [ (vOpAdd, 2), (vOpAddF, 2)
+    , (vOpSub, 2), (vOpSubF, 2)
+    , (vOpMul, 2), (vOpMulF, 2)
+    , (vOpDiv, 2), (vOpDivF, 2)
+    , (vOpExp, 2), (vOpExpF, 2)
+    , (vOpLt,  2), (vOpLtF,  2)
+    , (vOpGt,  2), (vOpGtF,  2)
+    , (vOpLe,  2), (vOpLeF,  2)
+    , (vOpGe,  2), (vOpGeF,  2)
+
+    , (vOpConcat,  2)
+
+    , (vOpEq, 3)
+    , (vOpNe, 3)
+    , (vOpOr, 2)
+    , (vOpAnd, 2)
     ]

@@ -4,7 +4,6 @@ module Core.Optimise.Sinking (sinkingPass) where
 import Control.Lens
 
 import qualified Data.VarSet as VarSet
-import Data.VarSet (IsVar(..))
 import Data.Triple
 
 import Core.Optimise

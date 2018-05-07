@@ -17,12 +17,10 @@ import Core.Lint
 import Control.Monad.Gen
 import Control.Monad
 
-import Syntax (Var(..), Resolved)
-
 lintPasses :: Bool
 lintPasses = True
 
-optmOnce :: [Stmt (Var Resolved)] -> Gen Int [Stmt (Var Resolved)]
+optmOnce :: [Stmt CoVar] -> Gen Int [Stmt CoVar]
 optmOnce = passes where
   passes = foldr1 (>=>) $ linted
            [ pure
@@ -44,9 +42,9 @@ optmOnce = passes where
     = intersperse (pure . (runLint =<< checkStmt emptyScope))
     | otherwise = id
 
-optimise :: [Stmt (Var Resolved)] -> Gen Int [Stmt (Var Resolved)]
+optimise :: [Stmt CoVar] -> Gen Int [Stmt CoVar]
 optimise = go 25 where
-  go :: Integer -> [Stmt (Var Resolved)] -> Gen Int [Stmt (Var Resolved)]
+  go :: Integer -> [Stmt CoVar] -> Gen Int [Stmt CoVar]
   go k sts
     | k > 0 = go (k - 1) . (runLint =<< checkStmt emptyScope) =<< optmOnce sts
     | otherwise = pure sts
