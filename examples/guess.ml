@@ -17,8 +17,8 @@ type option 'a =
   | Nothing ;;
 
 let int_of_string str
-  = let vl = prim_int_of_string str
-    in if transmute vl == () then
+  = let vl = prim_int_of_string str in
+    if transmute vl == () then
       Nothing
     else
       Just vl ;;

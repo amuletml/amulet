@@ -90,7 +90,7 @@ import Syntax
   '$sep'   { Token TcVSep _ }
 
 
-%expect 60
+%expect 21
 
 %%
 
@@ -131,12 +131,13 @@ ExprApp :: { Expr Parsed }
         | ExprApp ':' Type                     { withPos2 $1 $3 $ Ascription $1 (getL $3) }
 
 Expr0 :: { Expr Parsed }
-      : fun ListE1(ArgP) '->' Expr             { foldr (\x y -> withPos2 x $4 $ Fun x y) $4 $2 }
+      : fun ListE1(ArgP) '->' ExprBlock '$end' { foldr (\x y -> withPos2 x $4 $ Fun x y) $4 $2 }
       | let BindGroup ExprIn ExprBlock '$end'  { withPos2 $1 $4 $ Let (reverse $2) $4 }
       | let open Con ExprIn ExprBlock '$end'   { withPos2 $1 $5 $ OpenIn (getL $3) $5 }
-      | if Expr then Expr else Expr '$end'     { withPos2 $1 $6 $ If $2 $4 $6 }
+      | if Expr then ExprBlock else ExprBlock '$end'
+          { withPos2 $1 $6 $ If $2 $4 $6 }
       | match List1(Expr, ',') with ListE1(Arm) '$end'
-        { withPos2 $1 $3 $ Match (completeTuple Tuple $2) $4 }
+          { withPos2 $1 $3 $ Match (completeTuple Tuple $2) $4 }
       | function ListE1(Arm) '$end'            { withPos1 $1 $ Function $2 }
       | Atom                                   { $1 }
 
@@ -263,7 +264,7 @@ ArgP :: { Pattern Parsed }
      | Lit                        { withPos1 $1 (PLiteral (getL $1)) }
 
 Arm :: { (Pattern Parsed, Expr Parsed) }
-    : '|' List1(Pattern, ',') '->' Expr       { (completeTuple PTuple $2, $4) }
+    : '|' List1(Pattern, ',') '->' ExprBlock  { (completeTuple PTuple $2, $4) }
 
 
 Type :: { Located (Type Parsed) }

@@ -35,6 +35,11 @@ data Context
   | CtxMatchEmptyArms
   | CtxMatchArms SourcePos
 
+  | CtxFun SourcePos
+
+  | CtxIf SourcePos | CtxThen SourcePos
+  | CtxElseUnresolved SourcePos | CtxElse SourcePos
+
   deriving (Show, Eq)
 
 data PendingState
@@ -66,9 +71,9 @@ handleContextBlock needsSep  tok@(Token tk tp) c = -- traceShow =<< (\(t, c') ->
     -- If this token may pop some parent context, then pop
     -- as many contexts as possible
     (_, ck:cks)
-      | canTerminate tk
-      , not (terminates tk ck)
-      , any (terminates tk) cks
+      | case tk of
+          TcTopSep -> not (terminates tk c)
+          _ -> canTerminate tk && not (terminates tk c) && multiAny (terminates tk) cks
       -> case insertFor ck of
           Nothing -> handleContext tok cks
           Just x -> (Result (Token x tp) (Working tok), cks)
@@ -115,13 +120,34 @@ handleContextBlock needsSep  tok@(Token tk tp) c = -- traceShow =<< (\(t, c') ->
 
     -- Offside rule for statement lets: just pop the context
     (_, CtxStmtLet offside:cks)
-      | tk == TcTopSep || (if tk == TcAnd then spCol tp + 1 else spCol tp) <= spCol offside
+      | (if tk == TcAnd then spCol tp + 1 else spCol tp) <= spCol offside
       -> handleContext tok cks
     -- Offside rule for expression lets: push an in and replace the context with a new block
     (_, CtxLet offside:cks)
       | (if tk == TcAnd then spCol tp + 1 else spCol tp) <= spCol offside
       -> ( Result (Token TcVIn tp) $ Working tok
          , CtxEmptyBlock (Just TcVEnd):cks )
+
+    -- Offside rule for ifs
+    (_, CtxIf offside:ck)
+      | (if isIfContinue tk then spCol tp + 1 else spCol tp) <= spCol offside
+      -> ( Result (Token TcVEnd tp) (Working tok)
+         , ck )
+    (_, CtxThen offside:ck)
+      | spCol tp <= spCol offside
+      -> handleContext tok ck
+    (_, CtxElse offside:ck)
+      | spCol tp <= spCol offside
+      -> handleContext tok ck
+
+    -- We process `else if` as a single token.
+    (TcIf, CtxElseUnresolved offside:ck) | spLine tp == spLine offside
+      -> ( Result tok Done
+         , CtxEmptyBlock Nothing : CtxIf offside:ck )
+    (_, CtxElseUnresolved _:ck)
+      -> handleContext tok
+           (CtxEmptyBlock Nothing : CtxElse tp:ck)
+
 
     -- let ... ~~> Push an let context
     (TcLet, _) ->
@@ -164,8 +190,27 @@ handleContextBlock needsSep  tok@(Token tk tp) c = -- traceShow =<< (\(t, c') ->
 
     -- | ... -> ~~> Push a new begin context
     (TcArrow, CtxMatchArms _:_) ->
-      ( Result tok (Result (Token TcVBegin tp) Done)
-      , CtxEmptyBlock (Just TcVEnd):c )
+      ( Result tok Done
+      , CtxEmptyBlock Nothing:c )
+
+    -- fun ~~> Push a fun context
+    (TcFun, _) -> (Result tok Done, CtxFun tp : c)
+    -- fun ... -> ~~> Pop function and push block
+    (TcArrow, CtxFun _:ck) ->
+      ( Result tok Done
+      , CtxEmptyBlock (Just TcVEnd):ck )
+
+    -- if ~~> Push a if context
+    (TcIf, _) -> (Result tok Done, CtxIf tp : c)
+    -- if ~~> Push a then context and a block
+    (TcThen, _) -> ( Result tok Done
+                   , CtxEmptyBlock Nothing : CtxThen tp : c)
+    (TcElse, _) -> ( Result tok Done
+                   , CtxElseUnresolved tp :
+                     case c of
+                       CtxThen{}:ck -> ck
+                       ck -> ck )
+
 
     -- begin ... ~~> CtxEmptyBlock : CtxBracket(end)
     (TcBegin, _) -> (Result tok Done, CtxEmptyBlock Nothing:CtxBracket TcEnd:c)
@@ -190,24 +235,39 @@ insertFor (CtxBlock _ _ t) = t
 insertFor CtxLet{} = Just TcVIn
 insertFor CtxStmtLet{} = Nothing
 insertFor CtxMatchArms{} = Just TcVEnd
+insertFor CtxIf{} = Just TcVEnd
 insertFor _ = Nothing
 
 canTerminate :: TokenClass -> Bool
 canTerminate TcIn = True
-canTerminate TcTopSep = True
 canTerminate TcCParen = True
 canTerminate TcCBrace = True
 canTerminate TcCSquare = True
 canTerminate TcEnd = True
+canTerminate TcElse = True
 canTerminate _ = False
 
-terminates :: TokenClass -> Context -> Bool
-terminates TcIn CtxLet{} = True
-terminates TcTopSep CtxStmtLet{} = True
-terminates t (CtxBracket t')  = t == t'
+terminates :: TokenClass -> [Context] -> Bool
+-- Some expression terminators
+terminates TcIn (CtxLet{}:_) = True
+terminates TcElse (CtxThen{}:_) = True
+terminates t (CtxBracket t':_)  = t == t'
+-- Block level terminators
+terminates TcTopSep (CtxBlock{}:ck) = isToplevel ck
+terminates TcSemicolon (CtxBlock{}:ck) = not (isToplevel ck)
+
 terminates _ _ = False
 
 isToplevel :: [Context] -> Bool
 isToplevel [] = True
 isToplevel (CtxBlock{}:cks) = isToplevel cks
 isToplevel _ = False
+
+isIfContinue :: TokenClass -> Bool
+isIfContinue TcThen = True
+isIfContinue TcElse = True
+isIfContinue _ = False
+
+multiAny :: ([a] -> Bool) -> [a] -> Bool
+multiAny _ [] = False
+multiAny f x@(_:xs) = f x || multiAny f xs
