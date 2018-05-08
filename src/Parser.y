@@ -113,6 +113,7 @@ Top :: { Toplevel Parsed }
 
     | module qconid '=' begin Tops end         { Module (getName $2) $5 }
     | module conid '=' begin Tops end          { Module (getName $2) $5 }
+    | module conid '=' '$begin' Tops '$end'    { Module (getName $2) $5 }
     | module conid '=' Con                     { Open (getL $4) (Just (getIdent $2)) }
     | open Con                                 { Open (getL $2) Nothing }
 

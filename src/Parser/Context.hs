@@ -37,8 +37,17 @@ data Context
 
   | CtxFun SourcePos
 
+  -- The if context spans the entire if block. then spans from `then` to the
+  -- `else` keword.
   | CtxIf SourcePos | CtxThen SourcePos
+  -- else unresolved marks an else block which has not yet seen a token. This is
+  -- used in order to merge `else if`.
   | CtxElseUnresolved SourcePos | CtxElse SourcePos
+
+  -- Anything between a module and the =, then the actual contents of the module
+  | CtxModuleHead SourcePos
+  | CtxModuleBodyUnresolved SourcePos SourcePos
+  | CtxModuleBody SourcePos
 
   deriving (Show, Eq)
 
@@ -148,6 +157,27 @@ handleContextBlock needsSep  tok@(Token tk tp) c = -- traceShow =<< (\(t, c') ->
       -> handleContext tok
            (CtxEmptyBlock Nothing : CtxElse tp:ck)
 
+    -- Offside rule for modules
+    (TcEnd, CtxModuleBody offside:ck)
+      | spCol tp == spCol offside
+      -> (Result tok Done, ck)
+    (_, CtxModuleBody offside:ck)
+      | spCol tp <= spCol offside
+      -> handleContext tok ck
+
+    -- We need to determine if we need to insert a begin or not
+    -- If we're followed by a constructor, assume it's a module import
+    (TcConIdent{}, CtxModuleBodyUnresolved{}:ck) -> (Result tok Done, ck)
+    (TcConIdentQual{}, CtxModuleBodyUnresolved{}:ck) -> (Result tok Done, ck)
+    -- Handle explicit begins
+    (TcBegin, CtxModuleBodyUnresolved mod eq:ck)
+      | spLine tp == spLine eq || spCol tp == spCol mod
+      -> ( Result tok Done
+         , CtxEmptyBlock Nothing : CtxModuleBody mod:ck )
+    -- Otherwise assume it's an implicit begin
+    (_, CtxModuleBodyUnresolved mod eq:ck)
+      -> (Result (Token TcVBegin eq) (Working tok)
+         , CtxEmptyBlock (Just TcVEnd) : CtxModuleBody mod :ck)
 
     -- let ... ~~> Push an let context
     (TcLet, _) ->
@@ -194,23 +224,26 @@ handleContextBlock needsSep  tok@(Token tk tp) c = -- traceShow =<< (\(t, c') ->
       , CtxEmptyBlock Nothing:c )
 
     -- fun ~~> Push a fun context
-    (TcFun, _) -> (Result tok Done, CtxFun tp : c)
+    (TcFun, _) -> (Result tok Done, CtxFun tp:c)
     -- fun ... -> ~~> Pop function and push block
     (TcArrow, CtxFun _:ck) ->
       ( Result tok Done
       , CtxEmptyBlock (Just TcVEnd):ck )
 
     -- if ~~> Push a if context
-    (TcIf, _) -> (Result tok Done, CtxIf tp : c)
+    (TcIf, _) -> (Result tok Done, CtxIf tp:c)
     -- if ~~> Push a then context and a block
     (TcThen, _) -> ( Result tok Done
-                   , CtxEmptyBlock Nothing : CtxThen tp : c)
+                   , CtxEmptyBlock Nothing : CtxThen tp:c)
     (TcElse, _) -> ( Result tok Done
                    , CtxElseUnresolved tp :
                      case c of
                        CtxThen{}:ck -> ck
                        ck -> ck )
 
+    (TcModule, _) -> (Result tok Done, CtxModuleHead tp:c)
+    (TcEqual, CtxModuleHead mod:ck) -> ( Result tok Done
+                                       , CtxModuleBodyUnresolved mod tp:ck)
 
     -- begin ... ~~> CtxEmptyBlock : CtxBracket(end)
     (TcBegin, _) -> (Result tok Done, CtxEmptyBlock Nothing:CtxBracket TcEnd:c)
@@ -252,6 +285,8 @@ terminates :: TokenClass -> [Context] -> Bool
 terminates TcIn (CtxLet{}:_) = True
 terminates TcElse (CtxThen{}:_) = True
 terminates t (CtxBracket t':_)  = t == t'
+-- Toplevel terminators
+terminates TcEnd (CtxModuleBody{}:_) = True
 -- Block level terminators
 terminates TcTopSep (CtxBlock{}:ck) = isToplevel ck
 terminates TcSemicolon (CtxBlock{}:ck) = not (isToplevel ck)
@@ -260,6 +295,7 @@ terminates _ _ = False
 
 isToplevel :: [Context] -> Bool
 isToplevel [] = True
+isToplevel (CtxModuleBody{}:_) = True
 isToplevel (CtxBlock{}:cks) = isToplevel cks
 isToplevel _ = False
 
