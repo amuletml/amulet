@@ -33,6 +33,7 @@ let
       , base
       , lens
       , array
+      , Diff
       , HUnit
       , tasty
       , hedgehog
@@ -67,7 +68,7 @@ let
         ];
 
         testHaskellDepends = [
-          base bytestring hedgehog HUnit lens monad-gen mtl pretty-show
+          base bytestring Diff hedgehog HUnit lens monad-gen mtl pretty-show
           tasty tasty-hedgehog_0_2_0_0 tasty-hunit text
         ];
 

@@ -24,6 +24,7 @@ import Parser.Error
 import Parser.Token
 import Parser.Context
 import Parser.Wrapper
+
 }
 
 $digit = [0-9]       -- Digits
@@ -153,20 +154,22 @@ append c _ _ = do
   lexerScan -- Don't emit a token, just continue
 
 beginString, endString :: Action Token
-beginString _ _ = do
+beginString (LI p _ _) _ = do
+  mapState $ \s -> s { tokenStart = p }
   setStartCode string
   lexerScan
-endString (LI p _ _) _ = do
+endString _ _ = do
   s <- getState
   setState $ s { stringBuffer = "" }
   setStartCode 0
-  return . flip Token p .  TcString . decodeUtf8 . Bs.concat . L.toChunks . B.toLazyByteString . stringBuffer $ s
+  return . flip Token (tokenStart s) .  TcString . decodeUtf8 . Bs.concat . L.toChunks . B.toLazyByteString . stringBuffer $ s
 
 beginComment, endComment :: Action Token
-beginComment _ _ = do
+beginComment (LI p _ _) _ = do
   s <- getState
   -- Increment the comment depth and set the mode to comments
-  setState $ s { commentDepth = commentDepth s + 1 }
+  setState $ s { commentDepth = commentDepth s + 1
+               , tokenStart = if commentDepth s == 0 then p else tokenStart s }
   setStartCode comment
   lexerScan
 endComment _ _ = do
@@ -177,14 +180,16 @@ endComment _ _ = do
   lexerScan
 
 beginModule, beginModuleOp, pushModule :: Action Token
-beginModule (LI _ str _) len = do
+beginModule (LI p str _) len = do
   s <- getState
-  setState $ s { modulePrefix = [ decodeUtf8 . Bs.concat . L.toChunks . L.take (pred len) $ str] }
+  setState $ s { modulePrefix = [ decodeUtf8 . Bs.concat . L.toChunks . L.take (pred len) $ str]
+               , tokenStart = p }
   setStartCode modP
   lexerScan
-beginModuleOp (LI _ str _) len = do
+beginModuleOp (LI p str _) len = do
   s <- getState
-  setState $ s { modulePrefix = [ T.init $ decodeUtf8 . Bs.concat . L.toChunks . L.take (pred len) $ str] }
+  setState $ s { modulePrefix = [ T.tail $ decodeUtf8 . Bs.concat . L.toChunks . L.take (pred len) $ str]
+               , tokenStart = p }
   setStartCode modOp
   lexerScan
 pushModule (LI _ str _) len = do
@@ -193,19 +198,19 @@ pushModule (LI _ str _) len = do
   lexerScan
 
 endModule, endModuleOp :: ([T.Text] -> T.Text -> TokenClass) -> Action Token
-endModule t (LI p str _) len = do
+endModule t (LI _ str _) len = do
   s <- getState
   setState $ s { modulePrefix = [] }
   setStartCode 0
-  return . flip Token p .  t (modulePrefix s) . decodeUtf8 . Bs.concat . L.toChunks . L.take len $ str
-endModuleOp f = endModule (\xs x -> f xs (T.tail x))
+  return . flip Token (tokenStart s) .  t (modulePrefix s) . decodeUtf8 . Bs.concat . L.toChunks . L.take len $ str
+endModuleOp f = endModule (\xs x -> f xs (T.init x))
 
 endModuleNull :: ([T.Text] -> TokenClass) -> Action Token
-endModuleNull t (LI p _ _) _ = do
+endModuleNull t (LI _ _ _) _ = do
   s <- getState
   setState $ s { modulePrefix = [] }
   setStartCode 0
-  return (Token (t (modulePrefix s)) p)
+  return (Token (t (modulePrefix s)) (tokenStart s))
 
 constTok :: TokenClass -> Action Token
 constTok t (LI p _ _) _ = return $! Token t p
