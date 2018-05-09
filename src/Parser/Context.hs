@@ -252,10 +252,7 @@ handleContextBlock needsSep  tok@(Token tk tp) c =
       , CtxEmptyBlock Nothing : CtxThen tp:c)
     (TcElse, _) -> pure
       ( Result tok Done
-      , CtxElseUnresolved tp :
-        case c of
-          CtxThen{}:ck -> ck
-          ck -> ck )
+      , CtxElseUnresolved tp : c )
 
     (TcModule, _) -> pure (Result tok Done, CtxModuleHead tp:c)
     (TcEqual, CtxModuleHead mod:ck) -> pure
@@ -302,7 +299,7 @@ canTerminate _ = False
 terminates :: TokenClass -> [Context] -> Bool
 -- Some expression terminators
 terminates TcIn (CtxLet{}:_) = True
-terminates TcElse (CtxThen{}:_) = True
+terminates TcElse (CtxIf{}:_) = True
 terminates t (CtxBracket t':_)  = t == t'
 -- Toplevel terminators
 terminates TcEnd (CtxModuleBody{}:_) = True

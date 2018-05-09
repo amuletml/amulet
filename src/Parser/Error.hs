@@ -18,7 +18,6 @@ data ParseError
   -- Various warnings
   | UnindentIn SourcePos SourcePos
   | UnindentContext SourcePos SourcePos
-  | MisalignedArm SourcePos SourcePos
   deriving (Show)
 
 instance Pretty ParseError where
@@ -27,12 +26,12 @@ instance Pretty ParseError where
   pretty (UnexpectedCharacter _ c) = string "Unexpected character" <+> shown c
   pretty (UnexpectedEnd _) = string "Unexpected end of input"
 
-  pretty (UnexpectedToken (Token s _) []) = string "Unexpected" <+> shown s
-  pretty (UnexpectedToken (Token s _) [x]) = string "Unexpected" <+> shown s <> string ", expected" <+> string x
-  pretty (UnexpectedToken (Token s _) xs) = string "Unexpected" <+> shown s <> string ", expected one of" <+> hsep (punctuate comma (map string xs))
+  pretty (UnexpectedToken (Token s _) []) = string "Unexpected" <+> string (friendlyName s)
+  pretty (UnexpectedToken (Token s _) [x]) = string "Unexpected" <+> string (friendlyName s) <> string ", expected" <+> string x
+  pretty (UnexpectedToken (Token s _) xs) = string "Unexpected" <+> string (friendlyName s) <> string ", expected one of" <+> hsep (punctuate comma (map string xs))
 
   pretty (UnindentIn _ p) = string "The in is misaligned with the corresponding 'let'" <+> parens (string "located at" <+> shown (spLine p) <> colon <> shown (spCol p))
-  pretty (MisalignedArm _ _) = string "This match arm is misaligned with other arms in the pattern"
+  pretty (UnindentContext _ p) = string "Possible incorrect indentation" </> string "This token is outside the context started at" <+> shown (spLine p) <> colon <> shown (spCol p)
 
 instance Spanned ParseError where
   annotation (Failure p _) = mkSpan1 p
@@ -44,4 +43,3 @@ instance Spanned ParseError where
 
   annotation (UnindentIn p _) = mkSpan1 p
   annotation (UnindentContext p _) = mkSpan1 p
-  annotation (MisalignedArm p _) = mkSpan1 p

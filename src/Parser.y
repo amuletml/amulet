@@ -3,7 +3,7 @@ module Parser (parseInput) where
 
 import Control.Arrow (second)
 
-import Data.List (intercalate)
+import Data.List (intercalate, nub)
 import Data.Maybe (fromJust, isJust)
 import Data.Span
 import Data.Spanned
@@ -303,7 +303,22 @@ lexer :: (Token -> Parser a) -> Parser a
 lexer = (lexerContextScan >>=)
 
 parseError :: (Token, [String]) -> Parser a
-parseError  = failWith . uncurry UnexpectedToken
+parseError (tok, exp) = failWith (UnexpectedToken tok (nub (map unmap exp)))
+  where
+    unmap :: String -> String
+    unmap "'$end'" = friendlyName TcVEnd
+    unmap "'$sep'" = friendlyName TcVSep
+    unmap "'$in'" = friendlyName TcVIn
+    unmap "'$begin'" = friendlyName TcVBegin
+    unmap "op" = "operator"
+    unmap "ident" = "identifier"
+    unmap "opid" = "operator"
+    unmap "conid" = "constructor"
+    unmap "qident" = "identifier"
+    unmap "qconid" = "constructor"
+    unmap "qopid" = "operator"
+    unmap "tyvar" = "type variable"
+    unmap x = x
 
 lPos1 :: Spanned a => a -> b -> Located b
 lPos1 s x = withPos1 s (L x)

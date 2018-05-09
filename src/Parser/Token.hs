@@ -144,3 +144,10 @@ data Token = Token !TokenClass !SourcePos deriving Show
 
 instance Spanned Token where
   annotation (Token _ s) = mkSpan1 s
+
+friendlyName :: TokenClass -> String
+friendlyName TcVEnd = "end of block"
+friendlyName TcVSep = "end of block"
+friendlyName TcVIn = "end of block"
+friendlyName TcVBegin = "start of block"
+friendlyName x = show x
