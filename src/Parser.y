@@ -90,7 +90,7 @@ import Syntax
   '$sep'   { Token TcVSep _ }
 
 
-%expect 8
+%expect 7
 
 %%
 
@@ -251,10 +251,17 @@ Lit :: { Located Lit }
     | true                 { lPos1 $1 $ LiBool True }
     | false                { lPos1 $1 $ LiBool False }
 
+-- An alternative to Pattern which uses TypeProd
+-- instead of Type
+MPattern :: { Pattern Parsed }
+         : ArgP                   { $1 }
+         | Con ArgP               { withPos2 $1 $2 $ Destructure (getL $1) (Just $2) }
+         | MPattern ':' TypeProd  { withPos2 $1 $3 $ PType $1 (getL $3) }
+
 Pattern :: { Pattern Parsed }
-        : ArgP             { $1 }
-        | Con Pattern      { withPos2 $1 $2 $ Destructure (getL $1) (Just $2) }
-        | ArgP ':' Type    { withPos2 $1 $3 $ PType $1 (getL $3) }
+        : ArgP                    { $1 }
+        | Con ArgP                { withPos2 $1 $2 $ Destructure (getL $1) (Just $2) }
+        | Pattern ':' Type        { withPos2 $1 $3 $ PType $1 (getL $3) }
 
 ArgP :: { Pattern Parsed }
      : ident                      { withPos1 $1 $ Capture (getName $1) }
@@ -265,7 +272,7 @@ ArgP :: { Pattern Parsed }
      | Lit                        { withPos1 $1 (PLiteral (getL $1)) }
 
 Arm :: { (Pattern Parsed, Expr Parsed) }
-    : '|' List1(Pattern, ',') '->' ExprBlock  { (completeTuple PTuple $2, $4) }
+    : '|' List1(MPattern, ',') '->' ExprBlock  { (completeTuple PTuple $2, $4) }
 
 
 Type :: { Located (Type Parsed) }
