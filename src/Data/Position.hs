@@ -10,4 +10,11 @@ type Line = Int
 data SourcePos = SourcePos { spFile :: SourceName
                            , spLine :: !Int
                            , spCol  :: !Int }
-  deriving Show
+  deriving (Eq)
+
+instance Show SourcePos where
+  show (SourcePos f l c) = "[" ++ show (lim f f) ++ ":" ++ show l ++ ":" ++ show c ++ "]"
+    where
+      lim [] x = x
+      lim ('/':xs) _ = lim xs xs
+      lim (_:xs) x = lim xs x

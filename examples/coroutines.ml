@@ -21,11 +21,11 @@ type option 'a =
 
 (* in case you didn't notice, this is a great big hack *)
 let parse_num x
-  = let number = int_of_string x
-    in if (unsafe_coerce number == ()) then
-       Nothing
-     else
-       Just number ;;
+  = let number = int_of_string x in
+    if (unsafe_coerce number == ()) then
+      Nothing
+    else
+      Just number ;;
 
 let main _ =
   let thrd _ = begin

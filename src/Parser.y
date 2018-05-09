@@ -3,7 +3,7 @@ module Parser (parseInput) where
 
 import Control.Arrow (second)
 
-import Data.List (intercalate)
+import Data.List (intercalate, nub)
 import Data.Maybe (fromJust, isJust)
 import Data.Span
 import Data.Spanned
@@ -11,8 +11,9 @@ import Data.Semigroup
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.Text as T
 
-import Parser.Lexer
 import Parser.Wrapper
+import Parser.Error
+import Parser.Lexer
 import Parser.Token
 import Syntax
 
@@ -55,7 +56,6 @@ import Syntax
   of       { Token TcOf _ }
   module   { Token TcModule _ }
   open     { Token TcOpen _ }
-  as       { Token TcAs _ }
 
   ','      { Token TcComma _ }
   '.'      { Token TcDot _ }
@@ -84,12 +84,22 @@ import Syntax
   float    { Token (TcFloat _) _ }
   string   { Token (TcString  _) _ }
 
-%expect 79
+  '$begin' { Token TcVBegin _ }
+  '$end'   { Token TcVEnd _ }
+  '$in'    { Token TcVIn _ }
+  '$sep'   { Token TcVSep _ }
+
+
+%expect 7
 
 %%
 
 Tops :: { [Toplevel Parsed] }
-     : List1(Top, ';;')                        { $1 }
+     : List1(Top, TopSep)                      { $1 }
+
+TopSep :: { () }
+    : ';;'   { () }
+    | '$sep' { () }
 
 Top :: { Toplevel Parsed }
     : let BindGroup                             { LetStmt (reverse $2) }
@@ -103,6 +113,7 @@ Top :: { Toplevel Parsed }
 
     | module qconid '=' begin Tops end         { Module (getName $2) $5 }
     | module conid '=' begin Tops end          { Module (getName $2) $5 }
+    | module conid '=' '$begin' Tops '$end'    { Module (getName $2) $5 }
     | module conid '=' Con                     { Open (getL $4) (Just (getIdent $2)) }
     | open Con                                 { Open (getL $2) Nothing }
 
@@ -121,13 +132,15 @@ ExprApp :: { Expr Parsed }
         | ExprApp ':' Type                     { withPos2 $1 $3 $ Ascription $1 (getL $3) }
 
 Expr0 :: { Expr Parsed }
-      : fun ListE1(ArgP) '->' Expr             { foldr (\x y -> withPos2 x $4 $ Fun x y) $4 $2 }
-      | let BindGroup in Expr                  { withPos2 $1 $4 $ Let (reverse $2) $4 }
-      | let open Con in Expr                   { withPos2 $1 $5 $ OpenIn (getL $3) $5 }
-      | if Expr then Expr else Expr            { withPos2 $1 $6 $ If $2 $4 $6 }
-      | match List1(Expr, ',') with ListE1(Arm)
-        { withPos2 $1 $3 $ Match (completeTuple Tuple $2) $4 }
-      | function ListE1(Arm)                   { withPos1 $1 $ Function $2 }
+      : fun ListE1(ArgP) '->' ExprBlock '$end' { foldr (\x y -> withPos2 x $4 $ Fun x y) $4 $2 }
+      | let BindGroup ExprIn ExprBlock '$end'  { withPos2 $1 $4 $ Let (reverse $2) $4 }
+      | let open Con ExprIn ExprBlock '$end'   { withPos2 $1 $5 $ OpenIn (getL $3) $5 }
+      | if Expr then ExprBlock else ExprBlock '$end'
+          { withPos2 $1 $6 $ If $2 $4 $6 }
+      | match List1(Expr, ',') with ListE1(Arm) '$end'
+          { withPos2 $1 $3 $ Match (completeTuple Tuple $2) $4 }
+      | function ListE1(Arm) '$end'            { withPos1 $1 $ Function $2 }
+      | qdotid Atom                            { withPos2 $1 $2 $ OpenIn (getName $1) $2 }
       | Atom                                   { $1 }
 
 Atom :: { Expr Parsed }
@@ -136,15 +149,26 @@ Atom :: { Expr Parsed }
      | Lit                                    { withPos1 $1 (Literal (getL $1)) }
      | hole                                   { withPos1 $1 (Hole (Name (getHole $1))) }
      | '_'                                    { withPos1 $1 (Hole (Name (T.singleton '_'))) }
-     | begin List1(Expr, ';') end             { withPos2 $1 $3 $ Begin $2 }
-     | qdotid Atom                            { withPos2 $1 $2 $ OpenIn (getName $1) $2 }
+     | begin List1(Expr, ExprSep) end         { withPos2 $1 $3 $ Begin $2 }
      | '(' ')'                                { withPos2 $1 $2 $ Literal LiUnit }
      | '(' Section ')'                        { $2 }
-     | '(' List1(NullSection, ',') ')'        { withPos2 $1 $3 $ tupleExpr $2 }
+     | '(' NullSection ',' List1(NullSection, ',') ')'
+         { withPos2 $1 $5 $ tupleExpr ($2:$4) }
      | '{' Rows('=', Expr) '}'                { withPos2 $1 $3 $ Record $2 }
      | '{' Expr with Rows('=',Expr) '}'       { withPos2 $1 $5 $ RecordExt $2 $4 }
 
      | Atom access                            { withPos2 $1 $2 $ Access $1 (getIdent $2) }
+
+ExprBlock :: { Expr Parsed }
+          : List1(Expr, ExprSep)              { completeTuple Begin $1 }
+
+ExprSep :: { () }
+        : ';'    { () }
+        | '$sep' { () }
+
+ExprIn :: { () }
+        : in    { () }
+        | '$in' { () }
 
 Operator :: { Expr Parsed }
          : '*'                                { withPos1 $1 $ varE "*" }
@@ -180,9 +204,9 @@ BindGroup :: { [(Var Parsed, Expr Parsed, Ann Parsed)] }
           | BindGroup and Binding             { $3 : $1 }
 
 Binding :: { (Var Parsed, Expr Parsed, Ann Parsed) }
-        : BindName ListE(ArgP) '=' Expr
+        : BindName ListE(ArgP) '=' ExprBlock '$end'
           { (getL $1, foldr (\x y -> withPos2 x $4 (Fun x y)) $4 $2, withPos2 $1 $4 id) }
-        | BindName ListE(ArgP) ':' Type '=' Expr
+        | BindName ListE(ArgP) ':' Type '=' ExprBlock '$end'
           { (getL $1, (foldr (\x y -> withPos2 x $6 (Fun x y)) (Ascription $6 (getL $4) (withPos2 $1 $6 id)) $2), withPos2 $1 $6 id) }
 
 FuncGroup :: { [Function Parsed] }
@@ -227,10 +251,17 @@ Lit :: { Located Lit }
     | true                 { lPos1 $1 $ LiBool True }
     | false                { lPos1 $1 $ LiBool False }
 
+-- An alternative to Pattern which uses TypeProd
+-- instead of Type
+MPattern :: { Pattern Parsed }
+         : ArgP                   { $1 }
+         | Con ArgP               { withPos2 $1 $2 $ Destructure (getL $1) (Just $2) }
+         | MPattern ':' TypeProd  { withPos2 $1 $3 $ PType $1 (getL $3) }
+
 Pattern :: { Pattern Parsed }
-        : ArgP             { $1 }
-        | Con Pattern      { withPos2 $1 $2 $ Destructure (getL $1) (Just $2) }
-        | ArgP ':' Type    { withPos2 $1 $3 $ PType $1 (getL $3) }
+        : ArgP                    { $1 }
+        | Con ArgP                { withPos2 $1 $2 $ Destructure (getL $1) (Just $2) }
+        | Pattern ':' Type        { withPos2 $1 $3 $ PType $1 (getL $3) }
 
 ArgP :: { Pattern Parsed }
      : ident                      { withPos1 $1 $ Capture (getName $1) }
@@ -241,16 +272,17 @@ ArgP :: { Pattern Parsed }
      | Lit                        { withPos1 $1 (PLiteral (getL $1)) }
 
 Arm :: { (Pattern Parsed, Expr Parsed) }
-    : '|' List1(Pattern, ',') '->' Expr       { (completeTuple PTuple $2, $4) }
+    : '|' List1(MPattern, ',') '->' ExprBlock  { (completeTuple PTuple $2, $4) }
 
 
 Type :: { Located (Type Parsed) }
      : TypeProd                                   { $1 }
      | TypeProd '->' Type                         { lPos2 $1 $3 $ TyPi (Anon (getL $1)) (getL $3) }
+     | forall ListE1(tyvar) '.' Type              { lPos2 $1 $4 $ forallTy (map getName $2) (getL $4) }
 
 TypeProd :: { Located (Type Parsed) }
          : TypeApp                                { $1 }
-         | TypeApp '*' TypeApp                    { lPos2 $1 $3 $ TyTuple (getL $1) (getL $3) }
+         | TypeApp '*' TypeProd                   { lPos2 $1 $3 $ TyTuple (getL $1) (getL $3) }
 
 TypeApp  :: { Located (Type Parsed) }
          : TypeAtom                               { $1 }
@@ -259,10 +291,7 @@ TypeApp  :: { Located (Type Parsed) }
 TypeAtom :: { Located (Type Parsed) }
          : Var                                    { lPos1 $1 $ TyCon (getL $1) }
          | TyVar                                  { lPos1 $1 $ TyVar (getL $1) }
-         | Con
-           { lPos1 $1 $ TyPromotedCon (getL $1) }
-         | forall ListE1(tyvar) '.' Type
-           { lPos2 $1 $4 $ forallTy (map getName $2) (getL $4) }
+         | Con                                    { lPos1 $1 $ TyPromotedCon (getL $1) }
          | '(' ')'                                { lPos2 $1 $2 $ TyCon (Name (T.pack "unit")) }
          | '(' Type ')'                           { lPos2 $1 $3 (getL $2) }
          | '{' Rows(':', Type) '}'                { lPos2 $1 $3 $ TyExactRows (map (second getL) $2) }
@@ -275,12 +304,25 @@ instance Spanned (Located a) where
   annotation (L _ s) = s
 
 lexer :: (Token -> Parser a) -> Parser a
-lexer = (lexerScan >>=)
+lexer = (lexerContextScan >>=)
 
 parseError :: (Token, [String]) -> Parser a
-parseError (Token s p, [])  = failPos ("Unexpected " ++ show s) p
-parseError (Token s p, [x]) = failPos ("Unexpected " ++ show s ++ ", expected " ++ x) p
-parseError (Token s p, xs)  = failPos ("Unexpected " ++ show s ++ ", expected one of " ++ intercalate ", " xs) p
+parseError (tok, exp) = failWith (UnexpectedToken tok (nub (map unmap exp)))
+  where
+    unmap :: String -> String
+    unmap "'$end'" = friendlyName TcVEnd
+    unmap "'$sep'" = friendlyName TcVSep
+    unmap "'$in'" = friendlyName TcVIn
+    unmap "'$begin'" = friendlyName TcVBegin
+    unmap "op" = "operator"
+    unmap "ident" = "identifier"
+    unmap "opid" = "operator"
+    unmap "conid" = "constructor"
+    unmap "qident" = "identifier"
+    unmap "qconid" = "constructor"
+    unmap "qopid" = "operator"
+    unmap "tyvar" = "type variable"
+    unmap x = x
 
 lPos1 :: Spanned a => a -> b -> Located b
 lPos1 s x = withPos1 s (L x)
