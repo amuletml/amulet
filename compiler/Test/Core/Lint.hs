@@ -1,8 +1,6 @@
 {-# LANGUAGE TemplateHaskell, OverloadedStrings, FlexibleContexts #-}
 module Test.Core.Lint (tests) where
 
-import Pretty (pretty)
-
 import qualified Data.ByteString.Builder as B
 import qualified Data.Text.Encoding as T
 import qualified Data.Text.IO as T
@@ -13,7 +11,7 @@ import Control.Monad
 import Control.Monad.Gen
 
 import Data.Position (SourceName)
-import Data.Span (Span)
+import Data.Spanned
 
 import Control.Monad.Infer (TypeError)
 
@@ -30,17 +28,18 @@ import Core.Simplify
 import Core.Lint
 import Core.Var
 
-import Pretty (pretty, render)
+import Pretty
 
 import Parser.Wrapper (ParseResult(POK, PFailed), runParser)
 import Parser (parseInput)
+import Parser.Error
 
 import Test.Tasty
 import Test.Tasty.HUnit
 
 data CompileResult
   = CSuccess [Stmt CoVar]
-  | CParse   String Span
+  | CParse   [ParseError]
   | CResolve ResolveError
   | CInfer   TypeError
 
@@ -74,7 +73,7 @@ compile (file:files) = do
                                   , env')
                 Left e -> pure $ Left $ CInfer e
             Left e -> pure $ Left $ CResolve e
-        PFailed msg sp -> pure $ Left $ CParse msg sp
+        PFailed es -> pure $ Left $ CParse es
     go x _ = pure x
 
 
@@ -89,7 +88,7 @@ testLint f file = do
         case runLintOK (checkStmt emptyScope c') of
           Right _ -> pure $ pure ()
           Left es -> pure $ assertFailure $ "Core lint failed: " ++ render (pretty es)
-      CParse e s -> pure $ assertFailure $ "Parse error: " ++ e ++ " at " ++ render (pretty s)
+      CParse es -> pure $ assertFailure $ render $ vsep $ map (\e -> string "Parse error: " <+> pretty e <+> " at " <+> pretty (annotation e)) es
       CResolve e -> pure $ assertFailure $ "Resolution error: " ++ render (pretty e)
       CInfer e -> pure $ assertFailure $ "Type error: " ++ render (pretty e)
 

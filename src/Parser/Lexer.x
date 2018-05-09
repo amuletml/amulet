@@ -20,8 +20,7 @@ import Data.Position
 import Data.Spanned
 import Data.Span
 
-import Text.Printf
-
+import Parser.Error
 import Parser.Token
 import Parser.Context
 import Parser.Wrapper
@@ -235,10 +234,11 @@ lexerContextScan = do
   s <- getState
   go (pending s) (context s)
     where
+      go :: PendingState -> [Context] -> Parser Token
       go Done cs  = do
         tok <- lexerScan
-        uncurry go (handleContext tok cs)
-      go (Working tok) cs = uncurry go (handleContext tok cs)
+        uncurry go =<< (handleContext tok cs)
+      go (Working tok) cs = uncurry go =<< (handleContext tok cs)
       go (Result tok toks) cs = do
         mapState (\s -> s { pending = toks, context = cs })
         pure tok
@@ -258,7 +258,7 @@ lexerScan = do
     AlexError (LI p str _) ->
       let t = decodeUtf8 . Bs.concat . L.toChunks $ str
           ch = T.head t
-      in failPos (printf "unexpected character '%c'" ch) p
+      in failWith (UnexpectedCharacter p ch)
     AlexSkip  inp' _ -> do
       setInput inp'
       lexerScan

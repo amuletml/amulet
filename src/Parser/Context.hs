@@ -1,4 +1,4 @@
-{-# LANGUAGE MultiWayIf #-}
+{-# LANGUAGE FlexibleContexts #-}
 module Parser.Context
   ( Context
   , PendingState(..)
@@ -6,8 +6,12 @@ module Parser.Context
   , handleContext
   ) where
 
+import Control.Monad
+import Control.Monad.Report
 
 import Data.Position
+
+import Parser.Error
 import Parser.Token
 
 {-
@@ -60,12 +64,16 @@ data PendingState
 defaultContext :: [Context]
 defaultContext = [CtxBlock (SourcePos "" 0 1) False Nothing]
 
-handleContext :: Token -> [Context] -> (PendingState, [Context])
+handleContext :: MonadReport ParseError m
+              => Token -> [Context]
+              -> m (PendingState, [Context])
 handleContext = handleContextBlock True
 
 -- Handles the indentation sensitive parts of the context tracker
-handleContextBlock :: Bool -> Token -> [Context] -> (PendingState, [Context])
-handleContextBlock needsSep  tok@(Token tk tp) c = -- traceShow =<< (\(t, c') -> (tk, t, c')) $
+handleContextBlock :: MonadReport ParseError m
+                   => Bool -> Token -> [Context]
+                   -> m (PendingState, [Context])
+handleContextBlock needsSep  tok@(Token tk tp) c =
   case (tk, c) of
     -- If we've got an empty block then we need to define the first position
     (_, CtxEmptyBlock end:cks) -> handleContext tok (CtxBlock tp False end:cks)
@@ -75,7 +83,7 @@ handleContextBlock needsSep  tok@(Token tk tp) c = -- traceShow =<< (\(t, c') ->
     (TcEOF, ck:cks) ->
       case insertFor ck of
         Nothing -> handleContext tok cks
-        Just x -> (Result (Token x tp) (Working tok), cks)
+        Just x -> pure (Result (Token x tp) (Working tok), cks)
 
     -- If this token may pop some parent context, then pop
     -- as many contexts as possible
@@ -85,20 +93,24 @@ handleContextBlock needsSep  tok@(Token tk tp) c = -- traceShow =<< (\(t, c') ->
           _ -> canTerminate tk && not (terminates tk c) && multiAny (terminates tk) cks
       -> case insertFor ck of
           Nothing -> handleContext tok cks
-          Just x -> (Result (Token x tp) (Working tok), cks)
+          Just x -> pure (Result (Token x tp) (Working tok), cks)
 
     -- If we've got an in, then pop our let context and push a block
     -- TODO: Consider where this rule should occur, or warn if the indentation is funky.
-    (TcIn, CtxLet _:cks) -> ( Result tok Done, CtxEmptyBlock (Just TcVEnd):cks )
+    (TcIn, CtxLet offside:cks) -> do
+      when (spCol tp < spCol offside) (report (UnindentIn tp offside))
+
+      pure ( Result tok Done
+           , CtxEmptyBlock (Just TcVEnd):cks )
     -- TODO: Pop other contexts if this occurs
-    (_, CtxBracket tk':cks) | tk == tk' -> (Result tok Done, cks)
+    (_, CtxBracket tk':cks) | tk == tk' -> pure (Result tok Done, cks)
 
     -- Offside rule for blocks
     (_, CtxBlock offside _ end:cks)
       | spCol tp < spCol offside
       -> case end of
            Nothing -> handleContext tok cks
-           Just x -> (Result (Token x tp) (Working tok), cks)
+           Just x -> pure (Result (Token x tp) (Working tok), cks)
 
     -- If we're inside a context which doesn't need a separator,
     -- then convert it into one which does.
@@ -109,10 +121,12 @@ handleContextBlock needsSep  tok@(Token tk tp) c = -- traceShow =<< (\(t, c') ->
     (_, CtxBlock offside True end:cks)
       | needsSep
       , tk == TcTopSep && isToplevel cks
-      -> ( Result tok Done, CtxBlock offside False end:cks)
+      -> pure ( Result tok Done
+              , CtxBlock offside False end:cks)
       | needsSep
       , tk == TcSemicolon && not (isToplevel cks)
-      -> ( Result tok Done, CtxBlock offside False end:cks)
+      -> pure ( Result tok Done
+              , CtxBlock offside False end:cks)
 
     -- Offside rule for blocks, for tokens which are aligned with the current
     -- context and are not operators
@@ -124,8 +138,8 @@ handleContextBlock needsSep  tok@(Token tk tp) c = -- traceShow =<< (\(t, c') ->
       | needsSep
       , spCol tp == spCol offside && spLine tp /= spLine offside
       , not (isOp tk)
-      -> ( Result (Token TcVSep tp) (Working tok)
-         , CtxBlock offside False end:cks)
+      -> pure ( Result (Token TcVSep tp) (Working tok)
+              , CtxBlock offside False end:cks)
 
     -- Offside rule for statement lets: just pop the context
     (_, CtxStmtLet offside:cks)
@@ -134,14 +148,14 @@ handleContextBlock needsSep  tok@(Token tk tp) c = -- traceShow =<< (\(t, c') ->
     -- Offside rule for expression lets: push an in and replace the context with a new block
     (_, CtxLet offside:cks)
       | (if tk == TcAnd then spCol tp + 1 else spCol tp) <= spCol offside
-      -> ( Result (Token TcVIn tp) $ Working tok
-         , CtxEmptyBlock (Just TcVEnd):cks )
+      -> pure ( Result (Token TcVIn tp) $ Working tok
+              , CtxEmptyBlock (Just TcVEnd):cks )
 
     -- Offside rule for ifs
     (_, CtxIf offside:ck)
       | (if isIfContinue tk then spCol tp + 1 else spCol tp) <= spCol offside
-      -> ( Result (Token TcVEnd tp) (Working tok)
-         , ck )
+      -> pure ( Result (Token TcVEnd tp) (Working tok)
+              , ck )
     (_, CtxThen offside:ck)
       | spCol tp <= spCol offside
       -> handleContext tok ck
@@ -151,8 +165,8 @@ handleContextBlock needsSep  tok@(Token tk tp) c = -- traceShow =<< (\(t, c') ->
 
     -- We process `else if` as a single token.
     (TcIf, CtxElseUnresolved offside:ck) | spLine tp == spLine offside
-      -> ( Result tok Done
-         , CtxEmptyBlock Nothing : CtxIf offside:ck )
+      -> pure ( Result tok Done
+              , CtxEmptyBlock Nothing : CtxIf offside:ck )
     (_, CtxElseUnresolved _:ck)
       -> handleContext tok
            (CtxEmptyBlock Nothing : CtxElse tp:ck)
@@ -160,45 +174,45 @@ handleContextBlock needsSep  tok@(Token tk tp) c = -- traceShow =<< (\(t, c') ->
     -- Offside rule for modules
     (TcEnd, CtxModuleBody offside:ck)
       | spCol tp == spCol offside
-      -> (Result tok Done, ck)
+      -> pure (Result tok Done, ck)
     (_, CtxModuleBody offside:ck)
       | spCol tp <= spCol offside
       -> handleContext tok ck
 
     -- We need to determine if we need to insert a begin or not
     -- If we're followed by a constructor, assume it's a module import
-    (TcConIdent{}, CtxModuleBodyUnresolved{}:ck) -> (Result tok Done, ck)
-    (TcConIdentQual{}, CtxModuleBodyUnresolved{}:ck) -> (Result tok Done, ck)
+    (TcConIdent{}, CtxModuleBodyUnresolved{}:ck) -> pure (Result tok Done, ck)
+    (TcConIdentQual{}, CtxModuleBodyUnresolved{}:ck) -> pure (Result tok Done, ck)
     -- Handle explicit begins
     (TcBegin, CtxModuleBodyUnresolved mod eq:ck)
       | spLine tp == spLine eq || spCol tp == spCol mod
-      -> ( Result tok Done
-         , CtxEmptyBlock Nothing : CtxModuleBody mod:ck )
+      -> pure ( Result tok Done
+              , CtxEmptyBlock Nothing : CtxModuleBody mod:ck )
     -- Otherwise assume it's an implicit begin
     (_, CtxModuleBodyUnresolved mod eq:ck)
-      -> (Result (Token TcVBegin eq) (Working tok)
-         , CtxEmptyBlock (Just TcVEnd) : CtxModuleBody mod :ck)
+      -> pure (Result (Token TcVBegin eq) (Working tok)
+              , CtxEmptyBlock (Just TcVEnd) : CtxModuleBody mod :ck)
 
     -- let ... ~~> Push an let context
-    (TcLet, _) ->
+    (TcLet, _) -> pure
       ( Result tok Done
       , ( if isToplevel c
           then CtxStmtLet tp
           else CtxLet tp ):c )
     -- let ... = ~~> Push a $begin token and a block context
-    (TcEqual, CtxStmtLet _:_) ->
+    (TcEqual, CtxStmtLet _:_) -> pure
       ( Result tok $ Result (Token TcVBegin tp) Done
       , CtxEmptyBlock (Just TcVEnd):c )
-    (TcEqual, CtxLet _:_) ->
+    (TcEqual, CtxLet _:_) -> pure 
       ( Result tok $ Result (Token TcVBegin tp) Done
       , CtxEmptyBlock (Just TcVEnd):c )
 
     -- function ~~> Push a function context
-    (TcFunction, _) -> (Result tok Done, CtxMatchEmptyArms:c)
+    (TcFunction, _) -> pure (Result tok Done, CtxMatchEmptyArms:c)
     -- match ~~> Push a match context
-    (TcMatch, _) -> (Result tok Done, CtxMatch tp:c)
+    (TcMatch, _) -> pure (Result tok Done, CtxMatch tp:c)
     -- match ... with ~~> Replace match with a match arm context
-    (TcWith, CtxMatch _:ck) -> (Result tok Done, CtxMatchEmptyArms:ck)
+    (TcWith, CtxMatch _:ck) -> pure (Result tok Done, CtxMatchEmptyArms:ck)
 
     -- function |
     -- match... with | ~~>
@@ -216,43 +230,48 @@ handleContextBlock needsSep  tok@(Token tk tp) c = -- traceShow =<< (\(t, c') ->
       | case tk of
           TcPipe -> spCol tp < spCol offside
           _ -> spCol tp <= spCol offside
-      -> (Result (Token TcVEnd tp) (Working tok), ck)
+      -> pure (Result (Token TcVEnd tp) (Working tok), ck)
 
     -- | ... -> ~~> Push a new begin context
-    (TcArrow, CtxMatchArms _:_) ->
+    (TcArrow, CtxMatchArms _:_) -> pure
       ( Result tok Done
       , CtxEmptyBlock Nothing:c )
 
     -- fun ~~> Push a fun context
-    (TcFun, _) -> (Result tok Done, CtxFun tp:c)
+    (TcFun, _) -> pure (Result tok Done, CtxFun tp:c)
     -- fun ... -> ~~> Pop function and push block
-    (TcArrow, CtxFun _:ck) ->
+    (TcArrow, CtxFun _:ck) -> pure
       ( Result tok Done
       , CtxEmptyBlock (Just TcVEnd):ck )
 
     -- if ~~> Push a if context
-    (TcIf, _) -> (Result tok Done, CtxIf tp:c)
+    (TcIf, _) -> pure (Result tok Done, CtxIf tp:c)
     -- if ~~> Push a then context and a block
-    (TcThen, _) -> ( Result tok Done
-                   , CtxEmptyBlock Nothing : CtxThen tp:c)
-    (TcElse, _) -> ( Result tok Done
-                   , CtxElseUnresolved tp :
-                     case c of
-                       CtxThen{}:ck -> ck
-                       ck -> ck )
+    (TcThen, _) -> pure
+      ( Result tok Done
+      , CtxEmptyBlock Nothing : CtxThen tp:c)
+    (TcElse, _) -> pure
+      ( Result tok Done
+      , CtxElseUnresolved tp :
+        case c of
+          CtxThen{}:ck -> ck
+          ck -> ck )
 
-    (TcModule, _) -> (Result tok Done, CtxModuleHead tp:c)
-    (TcEqual, CtxModuleHead mod:ck) -> ( Result tok Done
-                                       , CtxModuleBodyUnresolved mod tp:ck)
+    (TcModule, _) -> pure (Result tok Done, CtxModuleHead tp:c)
+    (TcEqual, CtxModuleHead mod:ck) -> pure
+      ( Result tok Done
+      , CtxModuleBodyUnresolved mod tp:ck)
 
     -- begin ... ~~> CtxEmptyBlock : CtxBracket(end)
-    (TcBegin, _) -> (Result tok Done, CtxEmptyBlock Nothing:CtxBracket TcEnd:c)
+    (TcBegin, _) -> pure
+      ( Result tok Done
+      , CtxEmptyBlock Nothing:CtxBracket TcEnd:c)
     -- (, {, [   ~~> CtxBracket()|}|])
-    (TcOParen, _) -> (Result tok Done, CtxBracket TcCParen:c)
-    (TcOBrace, _) -> (Result tok Done, CtxBracket TcCBrace:c)
-    (TcOSquare, _) -> (Result tok Done, CtxBracket TcCSquare:c)
+    (TcOParen, _) -> pure (Result tok Done, CtxBracket TcCParen:c)
+    (TcOBrace, _) -> pure (Result tok Done, CtxBracket TcCBrace:c)
+    (TcOSquare, _) -> pure (Result tok Done, CtxBracket TcCSquare:c)
 
-    _ -> (Result tok Done, c)
+    _ -> pure (Result tok Done, c)
 
 isOp :: TokenClass -> Bool
 isOp TcDot = True

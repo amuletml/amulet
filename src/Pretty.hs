@@ -8,7 +8,7 @@ module Pretty
   , (<>), (<#>), (<##>)
   , putDoc, putDocWithoutColour, hPutDoc
   , render, renderDetailed
-  , text
+  , text, shown
   , skeyword, sliteral, sstring, scomment, stypeCon, stypeVar, stypeSkol, soperator
 
   , arrow, equals, colon, prod, pipe
@@ -62,6 +62,9 @@ infixr 5 <#>,<##>
 
 text :: Text -> Doc
 text = string . T.unpack
+
+shown :: Show a => a -> Doc
+shown = string . show
 
 putDoc :: Doc -> IO ()
 putDoc = hPutDoc stdout

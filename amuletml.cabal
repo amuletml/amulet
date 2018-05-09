@@ -72,10 +72,13 @@ executable lexer
   ghc-options: -Wextra -Wall -Wno-name-shadowing
                -Wno-implicit-prelude -Wno-missing-import-lists
 
-  other-modules:       Parser.Lexer
+  other-modules:       Parser.Error
+                     , Parser.Lexer
                      , Parser.Token
                      , Parser.Context
                      , Parser.Wrapper
+
+                     , Control.Monad.Report
                      , Data.Position
                      , Data.Span
                      , Data.Spanned
@@ -101,6 +104,7 @@ library amulet
                -Wno-implicit-prelude -Wno-missing-import-lists
 
   exposed-modules:     Parser
+                     , Parser.Error
                      , Parser.Lexer
                      , Parser.Token
                      , Parser.Context
@@ -158,3 +162,4 @@ library amulet
                      , Pretty
                      , Control.Monad.Infer
                      , Control.Monad.Infer.Error
+                     , Control.Monad.Report

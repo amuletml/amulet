@@ -11,8 +11,9 @@ import Data.Semigroup
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.Text as T
 
-import Parser.Lexer
 import Parser.Wrapper
+import Parser.Error
+import Parser.Lexer
 import Parser.Token
 import Syntax
 
@@ -302,9 +303,7 @@ lexer :: (Token -> Parser a) -> Parser a
 lexer = (lexerContextScan >>=)
 
 parseError :: (Token, [String]) -> Parser a
-parseError (Token s p, [])  = failPos ("Unexpected " ++ show s) p
-parseError (Token s p, [x]) = failPos ("Unexpected " ++ show s ++ ", expected " ++ x) p
-parseError (Token s p, xs)  = failPos ("Unexpected " ++ show s ++ ", expected one of " ++ intercalate ", " xs) p
+parseError  = failWith . uncurry UnexpectedToken
 
 lPos1 :: Spanned a => a -> b -> Located b
 lPos1 s x = withPos1 s (L x)
