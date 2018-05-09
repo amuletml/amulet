@@ -56,7 +56,6 @@ import Syntax
   of       { Token TcOf _ }
   module   { Token TcModule _ }
   open     { Token TcOpen _ }
-  as       { Token TcAs _ }
 
   ','      { Token TcComma _ }
   '.'      { Token TcDot _ }
@@ -91,7 +90,7 @@ import Syntax
   '$sep'   { Token TcVSep _ }
 
 
-%expect 21
+%expect 13
 
 %%
 
@@ -150,7 +149,6 @@ Atom :: { Expr Parsed }
      | hole                                   { withPos1 $1 (Hole (Name (getHole $1))) }
      | '_'                                    { withPos1 $1 (Hole (Name (T.singleton '_'))) }
      | begin List1(Expr, ExprSep) end         { withPos2 $1 $3 $ Begin $2 }
-     | '$begin' List1(Expr, ExprSep) '$end'   { withPos2 $1 $3 $ Begin $2 }
      | qdotid Atom                            { withPos2 $1 $2 $ OpenIn (getName $1) $2 }
      | '(' ')'                                { withPos2 $1 $2 $ Literal LiUnit }
      | '(' Section ')'                        { $2 }
@@ -167,10 +165,10 @@ ExprSep :: { () }
         : ';'    { () }
         | '$sep' { () }
 
-
 ExprIn :: { () }
         : in    { () }
         | '$in' { () }
+
 Operator :: { Expr Parsed }
          : '*'                                { withPos1 $1 $ varE "*" }
          | '~'                                { withPos1 $1 $ varE "~" }
@@ -205,9 +203,9 @@ BindGroup :: { [(Var Parsed, Expr Parsed, Ann Parsed)] }
           | BindGroup and Binding             { $3 : $1 }
 
 Binding :: { (Var Parsed, Expr Parsed, Ann Parsed) }
-        : BindName ListE(ArgP) '=' Expr
+        : BindName ListE(ArgP) '=' ExprBlock '$end'
           { (getL $1, foldr (\x y -> withPos2 x $4 (Fun x y)) $4 $2, withPos2 $1 $4 id) }
-        | BindName ListE(ArgP) ':' Type '=' Expr
+        | BindName ListE(ArgP) ':' Type '=' ExprBlock '$end'
           { (getL $1, (foldr (\x y -> withPos2 x $6 (Fun x y)) (Ascription $6 (getL $4) (withPos2 $1 $6 id)) $2), withPos2 $1 $6 id) }
 
 FuncGroup :: { [Function Parsed] }
@@ -275,7 +273,7 @@ Type :: { Located (Type Parsed) }
 
 TypeProd :: { Located (Type Parsed) }
          : TypeApp                                { $1 }
-         | TypeApp '*' TypeApp                    { lPos2 $1 $3 $ TyTuple (getL $1) (getL $3) }
+         | TypeApp '*' TypeProd                   { lPos2 $1 $3 $ TyTuple (getL $1) (getL $3) }
 
 TypeApp  :: { Located (Type Parsed) }
          : TypeAtom                               { $1 }

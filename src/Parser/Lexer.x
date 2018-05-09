@@ -76,7 +76,6 @@ tokens :-
   <0> "of"     { constTok TcOf }
   <0> "module" { constTok TcModule }
   <0> "open"   { constTok TcOpen }
-  <0> "as"     { constTok TcAs }
 
   <0> ","      { constTok TcComma }
   <0> "."      { constTok TcDot }

@@ -199,12 +199,12 @@ handleContextBlock needsSep  tok@(Token tk tp) c =
       , ( if isToplevel c
           then CtxStmtLet tp
           else CtxLet tp ):c )
-    -- let ... = ~~> Push a $begin token and a block context
+    -- let ... = ~~> Push a block context
     (TcEqual, CtxStmtLet _:_) -> pure
-      ( Result tok $ Result (Token TcVBegin tp) Done
+      ( Result tok Done
       , CtxEmptyBlock (Just TcVEnd):c )
-    (TcEqual, CtxLet _:_) -> pure 
-      ( Result tok $ Result (Token TcVBegin tp) Done
+    (TcEqual, CtxLet _:_) -> pure
+      ( Result tok Done
       , CtxEmptyBlock (Just TcVEnd):c )
 
     -- function ~~> Push a function context
