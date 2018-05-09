@@ -90,7 +90,7 @@ import Syntax
   '$sep'   { Token TcVSep _ }
 
 
-%expect 13
+%expect 8
 
 %%
 
@@ -140,6 +140,7 @@ Expr0 :: { Expr Parsed }
       | match List1(Expr, ',') with ListE1(Arm) '$end'
           { withPos2 $1 $3 $ Match (completeTuple Tuple $2) $4 }
       | function ListE1(Arm) '$end'            { withPos1 $1 $ Function $2 }
+      | qdotid Atom                            { withPos2 $1 $2 $ OpenIn (getName $1) $2 }
       | Atom                                   { $1 }
 
 Atom :: { Expr Parsed }
@@ -149,10 +150,10 @@ Atom :: { Expr Parsed }
      | hole                                   { withPos1 $1 (Hole (Name (getHole $1))) }
      | '_'                                    { withPos1 $1 (Hole (Name (T.singleton '_'))) }
      | begin List1(Expr, ExprSep) end         { withPos2 $1 $3 $ Begin $2 }
-     | qdotid Atom                            { withPos2 $1 $2 $ OpenIn (getName $1) $2 }
      | '(' ')'                                { withPos2 $1 $2 $ Literal LiUnit }
      | '(' Section ')'                        { $2 }
-     | '(' List1(NullSection, ',') ')'        { withPos2 $1 $3 $ tupleExpr $2 }
+     | '(' NullSection ',' List1(NullSection, ',') ')'
+         { withPos2 $1 $5 $ tupleExpr ($2:$4) }
      | '{' Rows('=', Expr) '}'                { withPos2 $1 $3 $ Record $2 }
      | '{' Expr with Rows('=',Expr) '}'       { withPos2 $1 $5 $ RecordExt $2 $4 }
 
@@ -270,6 +271,7 @@ Arm :: { (Pattern Parsed, Expr Parsed) }
 Type :: { Located (Type Parsed) }
      : TypeProd                                   { $1 }
      | TypeProd '->' Type                         { lPos2 $1 $3 $ TyPi (Anon (getL $1)) (getL $3) }
+     | forall ListE1(tyvar) '.' Type              { lPos2 $1 $4 $ forallTy (map getName $2) (getL $4) }
 
 TypeProd :: { Located (Type Parsed) }
          : TypeApp                                { $1 }
@@ -282,10 +284,7 @@ TypeApp  :: { Located (Type Parsed) }
 TypeAtom :: { Located (Type Parsed) }
          : Var                                    { lPos1 $1 $ TyCon (getL $1) }
          | TyVar                                  { lPos1 $1 $ TyVar (getL $1) }
-         | Con
-           { lPos1 $1 $ TyPromotedCon (getL $1) }
-         | forall ListE1(tyvar) '.' Type
-           { lPos2 $1 $4 $ forallTy (map getName $2) (getL $4) }
+         | Con                                    { lPos1 $1 $ TyPromotedCon (getL $1) }
          | '(' ')'                                { lPos2 $1 $2 $ TyCon (Name (T.pack "unit")) }
          | '(' Type ')'                           { lPos2 $1 $3 (getL $2) }
          | '{' Rows(':', Type) '}'                { lPos2 $1 $3 $ TyExactRows (map (second getL) $2) }
