@@ -56,6 +56,34 @@ test-suite tests
   ghc-options:         -Wextra -Wall -Wno-name-shadowing
                        -Wno-implicit-prelude -Wno-missing-import-lists
 
+executable lexer
+  main-is:           Parser/Main.hs
+  build-depends:       mtl >= 2.2 && < 2.3
+                     , text >= 1.2 && < 1.3
+                     , base >= 4.9 && < 4.12
+                     , array >= 0.5 && < 0.6
+                     , bytestring >= 0.10.8.2 && < 0.11
+                     , containers >= 0.5 && < 0.6
+                     , transformers >= 0.5 && < 0.6
+                     , annotated-wl-pprint >= 0.7 && < 0.8
+                     , pretty-show
+  hs-source-dirs:      src
+  default-language:    Haskell2010
+  ghc-options: -Wextra -Wall -Wno-name-shadowing
+               -Wno-implicit-prelude -Wno-missing-import-lists
+
+  other-modules:       Parser.Error
+                     , Parser.Lexer
+                     , Parser.Token
+                     , Parser.Context
+                     , Parser.Wrapper
+
+                     , Control.Monad.Report
+                     , Data.Position
+                     , Data.Span
+                     , Data.Spanned
+                     , Pretty
+
 library amulet
   build-depends:       mtl >= 2.2 && < 2.3
                      , syb >= 0.7 && < 0.8
@@ -76,8 +104,10 @@ library amulet
                -Wno-implicit-prelude -Wno-missing-import-lists
 
   exposed-modules:     Parser
+                     , Parser.Error
                      , Parser.Lexer
                      , Parser.Token
+                     , Parser.Context
                      , Parser.Wrapper
                      -- the AST
                      , Syntax
@@ -132,3 +162,4 @@ library amulet
                      , Pretty
                      , Control.Monad.Infer
                      , Control.Monad.Infer.Error
+                     , Control.Monad.Report

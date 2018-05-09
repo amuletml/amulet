@@ -42,6 +42,9 @@ reportR err files
     innermostError _ = Nothing
 reportR err _ = putDoc (pretty err)
 
+reportS :: (Pretty a, Spanned a) => a -> FileMap -> IO ()
+reportS err = reportP err (annotation err)
+
 reportP :: Pretty a => a -> Span -> FileMap -> IO ()
 reportP err loc files =
   let SourcePos{ spLine = startLine, spCol = start } = spanStart loc

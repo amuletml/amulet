@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -funbox-strict-fields #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
 module Parser.Wrapper
   ( Token(..)
@@ -8,48 +9,50 @@ module Parser.Wrapper
   , Parser
   , Action
   , alexInputPrevChar, alexGetByte
-  , failPos, failSpan
+  , failWith
   , getStartCode, setStartCode
   , getInput, setInput
-  , getState, setState
+  , getState, setState, mapState
   , getPos
   , runParser, runLexer
   ) where
 
 import Control.Monad
 import Control.Monad.Fail as MonadFail
+import Control.Monad.Report
 
 import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Internal as B (w2c)
 import qualified Data.ByteString.Lazy as B
 import Data.Int (Int64)
 import Data.Position
-import Data.Span
 import Data.Spanned
 import qualified Data.Text as T
 import Data.Word (Word8)
 
+import Parser.Context
 import Parser.Token
+import Parser.Error
 
 import Pretty
 
-data Token = Token !TokenClass !SourcePos deriving Show
-
-instance Spanned Token where
-  annotation (Token _ s) = mkSpan1 s
 
 data AlexInput = LI { liPos  :: !SourcePos
                     , liText :: !B.ByteString
                     , liPrev :: !Char }
 
-data PState = PState { stringBuffer :: B.Builder -- Builder for string literals
-                     , commentDepth :: Int -- Depth for current file
-                     , modulePrefix :: [T.Text] -- List of module prefixes (in reversed order)
+data PState = PState { stringBuffer :: B.Builder   -- Builder for string literals
+                     , commentDepth :: Int         -- Depth for current file
+                     , modulePrefix :: [T.Text]    -- List of module prefixes (in reversed order)
+                     , context :: [Context]
+                     , pending :: PendingState
 
                      , sPos  :: !SourcePos   -- Current source position
                      , sText :: B.ByteString -- Current input
                      , sPrev :: !Char        -- Character before the input
-                     , sMode :: !Int        -- Current startcode
+                     , sMode :: !Int         -- Current startcode
+
+                     , sErrors :: [ParseError]
                      }
 
 alexInputPrevChar :: AlexInput -> Char
@@ -72,15 +75,15 @@ alexMove (SourcePos f l c) _     = SourcePos f l (c + 1)
 
 data ParseResult a
   = POK PState a
-  | PFailed String Span
+  | PFailed [ParseError]
 
 instance Show a => Show (ParseResult a) where
-  show (POK _ s) = show s
-  show (PFailed msg pos) = show pos ++ ": " ++ msg
+  show (POK _ s) = "(POK" ++ show s ++ ")"
+  show (PFailed errs) = "(PFailed " ++ show errs ++ ")"
 
 instance Pretty a => Pretty (ParseResult a) where
   pretty (POK _ s) = pretty s
-  pretty (PFailed msg pos) = pretty pos <> colon <+> string msg
+  pretty (PFailed es) = vsep (map (\e -> pretty (annotation e) <> string ":" <+> pretty e) es)
 
 newtype Parser a = P { unP :: PState -> ParseResult a }
 
@@ -94,17 +97,18 @@ instance Applicative Parser where
 instance Monad Parser where
   (P m) >>= k = P $ \s -> case m s of
     POK s' a -> unP (k a) s'
-    PFailed err pos -> PFailed err pos
+    PFailed e -> PFailed e
   fail = MonadFail.fail
 
 instance MonadFail Parser where
-  fail msg = P $ \s -> PFailed msg (mkSpan1 (sPos s))
+  fail msg = P $ \s -> PFailed (reverse (Failure (sPos s) msg:sErrors s))
 
-failPos :: String -> SourcePos -> Parser a
-failPos msg p = P $ \_ -> PFailed msg (mkSpan1 p)
+instance MonadReport ParseError Parser where
+  report e = P $ \s -> POK s { sErrors = e : sErrors s } ()
+  reports es = P $ \s -> POK s { sErrors = es ++ sErrors s } ()
 
-failSpan :: String -> Span -> Parser a
-failSpan msg p = P $ \_ -> PFailed msg p
+failWith :: ParseError -> Parser a
+failWith e = P $ \s -> PFailed (reverse (e:sErrors s))
 
 getStartCode :: Parser Int
 getStartCode = P $ \s -> POK s (sMode s)
@@ -128,6 +132,9 @@ getState = P $ \s -> POK s s
 setState :: PState -> Parser ()
 setState s = P $ \_ -> POK s ()
 
+mapState :: (PState -> PState) -> Parser ()
+mapState f = P (flip POK () . f)
+
 getPos :: Parser SourcePos
 getPos = P $ \s -> POK s (sPos s)
 
@@ -137,11 +144,16 @@ runParser :: SourceName -> B.ByteString -> Parser a -> ParseResult a
 runParser file input m = unP m PState { stringBuffer = mempty
                                       , commentDepth = 0
                                       , modulePrefix = []
+                                      , context = defaultContext
+                                      , pending = Done
 
                                       , sPos  = SourcePos file 1 1
                                       , sText = input
                                       , sPrev = '\n'
-                                      , sMode = 0 }
+                                      , sMode = 0
+
+                                      , sErrors = []
+                                      }
 
 runLexer :: SourceName -> B.ByteString -> Parser Token -> ParseResult [Token]
 runLexer file input m = runParser file input gather where

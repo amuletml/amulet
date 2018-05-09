@@ -16,7 +16,6 @@ import Control.Monad.Gen (runGen)
 import Control.Lens (ifor_, (^.), to)
 
 import Data.Position (SourceName)
-import Data.Span (Span)
 
 import Control.Monad.Infer (Env, TypeError, difference, values, types)
 import Backend.Compile (compileProgram)
@@ -40,14 +39,15 @@ import Core.Var (CoVar)
 import Pretty (Pretty(pretty), putDoc, (<+>), colon)
 
 import Parser.Wrapper (ParseResult(POK, PFailed), Token(..), runParser, runLexer)
+import Parser.Error (ParseError)
 import Parser (parseInput)
 import Parser.Lexer (lexerScan)
 
-import Errors (reportP, reportR, reportI)
+import Errors (reportS, reportR, reportI)
 
 data CompileResult a
   = CSuccess ([Toplevel Typed], [Stmt CoVar], [Stmt a], Env)
-  | CParse   String Span
+  | CParse   [ParseError]
   | CResolve ResolveError
   | CInfer   TypeError
 
@@ -85,7 +85,7 @@ compile (file:files) = runGen $ do
                                   , env')
                 Left e -> pure $ Left $ CInfer e
             Left e -> pure $ Left $ CResolve e
-        PFailed msg sp -> pure $ Left $ CParse msg sp
+        PFailed es -> pure $ Left $ CParse es
     go x _ = pure x
 
 
@@ -95,7 +95,7 @@ compileFromTo :: [(FilePath, T.Text)]
 compileFromTo fs emit =
   case compile fs of
     CSuccess (_, _, core, env) -> emit (compileProgram env core)
-    CParse e s -> putStrLn "Parse error" >> reportP e s fs
+    CParse es -> traverse_ (flip reportS fs) es
     CResolve e -> putStrLn "Resolution error" >> reportR e fs
     CInfer e -> putStrLn "Type error" >> reportI e fs
 
@@ -118,7 +118,7 @@ test fs = do
       putStrLn "\x1b[1;32m(* Compiled: *)\x1b[0m"
       putDoc (pretty (compileProgram env optm))
       pure (Just (core, env))
-    CParse e s -> Nothing <$ reportP e s fs
+    CParse es -> Nothing <$ traverse_ (flip reportS fs) es
     CResolve e -> Nothing <$ reportR e fs
     CInfer e -> Nothing <$ reportI e fs
 
@@ -126,7 +126,7 @@ testLexer :: [(FilePath, T.Text)] -> IO ()
 testLexer fs = for_ fs $ \(name, file) ->
   case runLexer name (B.toLazyByteString $ T.encodeUtf8Builder file) lexerScan of
     POK _ toks -> print (map (\(Token t _) -> t) toks)
-    PFailed msg _ -> print msg
+    PFailed es -> traverse_ (flip reportS fs) es
 
 testTc :: [(FilePath, T.Text)] -> IO (Maybe ([Stmt CoVar], Env))
 testTc fs = do
@@ -141,7 +141,7 @@ testTc fs = do
       ifor_ (difference env builtinsEnv ^. types . to toMap) . curry $ \(k :: Var Resolved, t) ->
         putDoc (pretty k <+> colon <+> pretty t)
       pure (Just (core, env))
-    CParse e s -> Nothing <$ reportP e s fs
+    CParse es -> Nothing <$ traverse_ (flip reportS fs) es
     CResolve e -> Nothing <$ reportR e fs
     CInfer e -> Nothing <$ reportI e fs
 
