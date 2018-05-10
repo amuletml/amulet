@@ -13,6 +13,8 @@ import Data.Algorithm.Diff
 
 import Control.Exception
 
+import System.Directory
+
 hedgehog :: Group -> TestTree
 hedgehog Group { groupName = n, groupProperties = ps }
   = testGroup (unGroupName n) (map (\(n, p) -> testProperty (unPropertyName n) p) ps)
@@ -52,3 +54,8 @@ goldenFile fn dir name = testCase name $ do
   let file' = dir ++ name
   actual <- fn name <$> T.readFile file'
   golden (file' ++ ".out") actual
+
+goldenDir :: (FilePath -> T.Text -> String) -> FilePath -> String -> IO [TestTree]
+goldenDir fn dir ext = map (goldenFile fn dir) . filter (endsWith ext) <$> listDirectory dir where
+  endsWith _ [] = False
+  endsWith s x@(_:xs) = x == s || endsWith s xs

@@ -52,15 +52,5 @@ result file contents = runGen $ do
     innermostError e@(ArisingFrom err _) = innermostError err <|> Just e
     innermostError _ = Nothing
 
-tests :: TestTree
-tests = testGroup "Test.Types.Check" (map (goldenFile result "tests/types/") files)
-
-files :: [String]
-files =
-  [ "fail_skolem_escape.ml"
-  , "fail_skolem_poly.ml"
-  , "fail_skolem_pure.ml"
-  , "pass_skolem_escape.ml"
-  , "pass_skolem_poly.ml"
-  , "pass_skolem_pure.ml"
-  ]
+tests :: IO TestTree
+tests = testGroup "Tests.Types.Check" <$> goldenDir result "tests/types/" ".ml"

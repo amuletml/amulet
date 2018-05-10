@@ -28,14 +28,5 @@ result file contents =
           | otherwise
           = " " ++ show tc ++ writeToks l False ts
 
-tests :: TestTree
-tests = testGroup "Test.Parser.Lexer" (map (goldenFile result "tests/lexer/") files)
-
-files :: [String]
-files =
-  [ "fail_unterminated_comment.ml"
-  , "fail_unterminated_string.ml"
-  , "pass_context_top.ml"
-  , "pass_context_pattern.ml"
-  , "pass_tokens.ml"
-  ]
+tests :: IO TestTree
+tests = testGroup "Test.Parser.Lexer" <$> goldenDir result "tests/lexer/" ".ml"

@@ -35,14 +35,5 @@ result file contents = runGen $ do
     innermostError e@(ArisingFromTop err _) = innermostError err <|> Just e
     innermostError _ = Nothing
 
-tests :: TestTree
-tests = testGroup "Test.Syntax.Resolve" (map (goldenFile result "tests/resolve/") files)
-
-files :: [String]
-files =
-  [ "fail_let_ambiguity.ml"
-  , "fail_pattern_ambiguity.ml"
-  , "fail_modules.ml"
-  , "pass_modules.ml"
-  , "pass_shadowing.ml"
-  ]
+tests :: IO TestTree
+tests = testGroup "Tests.Syntax.Resolve" <$> goldenDir result "tests/resolve/" ".ml"

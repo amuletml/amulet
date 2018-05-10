@@ -20,10 +20,5 @@ result file contents =
     PFailed es -> show $ vsep (map (\e -> pretty (annotation e) <> colon <+> pretty e) es) <##> empty
     POK _ res -> display $ renderPretty 0.8 120 $ pretty res <##> empty
 
-tests :: TestTree
-tests = testGroup "Test.Parser.Parser" (map (goldenFile result "tests/parser/") files)
-
-files :: [String]
-files =
-  [ "pass_records.ml"
-  ]
+tests :: IO TestTree
+tests = testGroup "Test.Parser.Parser" <$> goldenDir result "tests/parser/" ".ml"

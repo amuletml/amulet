@@ -10,14 +10,16 @@ import qualified Test.Parser.Parser as Parser
 import qualified Test.Syntax.Resolve as Resolve
 import qualified Test.Types.Check as TypesC
 
-tests :: TestTree
-tests = testGroup "Tests" [ hedgehog Types.tests
-                          , CLint.tests
-                          , Lexer.tests
-                          , Parser.tests
-                          , Resolve.tests
-                          , TypesC.tests
-                          ]
+tests :: IO TestTree
+tests = testGroup "Tests" <$> sequence 
+  [ pure (hedgehog Types.tests)
+  , pure CLint.tests
+
+  , Lexer.tests
+  , Parser.tests
+  , Resolve.tests
+  , TypesC.tests
+  ]
 
 main :: IO ()
-main = defaultMain tests
+main = tests >>= defaultMain
