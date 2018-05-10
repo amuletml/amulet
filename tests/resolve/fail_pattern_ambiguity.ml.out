@@ -1,0 +1,2 @@
+fail_pattern_ambiguity.ml[2:13 ..2:13]: Ambiguous reference to variable: `a`
+  · Arising from use of  `a`

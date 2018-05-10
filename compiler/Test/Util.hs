@@ -12,7 +12,6 @@ import qualified Data.Text as T
 import Data.Algorithm.Diff
 
 import Control.Exception
-import Data.List
 
 hedgehog :: Group -> TestTree
 hedgehog Group { groupName = n, groupProperties = ps }
@@ -41,7 +40,7 @@ golden expFile result = do
     process' [] = ([], [])
     process' ('\n':xs) = (process xs, [])
     process' (x:xs) = (x:) <$> process' xs
-    process xs = let (ls, l) = process' xs in dropWhileEnd null (l:ls)
+    process xs = let (ls, l) = process' xs in l:ls
 
     formatDoc :: [Diff String] -> String
     formatDoc [] = ""

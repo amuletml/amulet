@@ -49,10 +49,15 @@ test-suite tests
                      , tasty-hedgehog >= 0.2 && < 0.3
   other-modules:       Test.Util
                      , Test.Core.Lint
+
                      , Test.Syntax.Gen
+                     , Test.Syntax.Resolve
+
                      , Test.Types.Infer
                      , Test.Types.Util
+
                      , Test.Parser.Lexer
+                     , Test.Parser.Parser
   default-language:    Haskell2010
   default-extensions:  PackageImports
   ghc-options:         -Wextra -Wall -Wno-name-shadowing

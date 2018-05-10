@@ -1,1 +1,1 @@
-fail_unterminated_comment.ml[7:1 ..7:1]: expected closing '*)', got end of input
+fail_unterminated_comment.ml[7:1 ..7:1]: Unexpected end of input, expecting to close comment started at 6:1

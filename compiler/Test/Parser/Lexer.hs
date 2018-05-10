@@ -15,9 +15,9 @@ import Parser.Lexer
 import Pretty
 
 result :: String -> T.Text -> String
-result file contents = 
+result file contents =
   case runLexer file (B.toLazyByteString $ T.encodeUtf8Builder contents) lexerContextScan of
-    PFailed es -> show $ vsep $ map (\e -> pretty (annotation e) <> colon <+> pretty e) es
+    PFailed es -> show $ vsep (map (\e -> pretty (annotation e) <> colon <+> pretty e) es) </> string ""
     POK _ toks -> tail $ writeToks 0 True toks
 
   where writeToks _ _ [] = "\n"
@@ -29,12 +29,13 @@ result file contents =
           = " " ++ show tc ++ writeToks l False ts
 
 tests :: TestTree
-tests = testGroup "Test.Parse.Lexer" (map (goldenFile result "tests/lexer/") files)
+tests = testGroup "Test.Parser.Lexer" (map (goldenFile result "tests/lexer/") files)
 
 files :: [String]
 files =
   [ "fail_unterminated_comment.ml"
   , "fail_unterminated_string.ml"
   , "pass_context_top.ml"
+  -- , "pass_context_record.ml" --TODO: This is entirely borked
   , "pass_tokens.ml"
   ]

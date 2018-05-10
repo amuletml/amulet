@@ -253,12 +253,13 @@ lexerScan = do
   sc <- getStartCode
   case alexScan inp sc of
     AlexEOF -> do
+      start <- tokenStart <$> getState
       code <- getStartCode
       case code of
         0 -> Token TcEOF <$> getPos
-        n | n == string -> fail "expected closing '\"', got end of input"
-        n | n == comment -> fail "expected closing '*)', got end of input"
-        _ -> fail "unexpected end of input"
+        n | n == string -> failWith (UnclosedString (liPos inp) start)
+        n | n == comment -> failWith (UnclosedComment (liPos inp) start)
+        _ -> failWith (UnexpectedEnd (liPos inp))
     AlexError (LI p str _) ->
       let t = decodeUtf8 . Bs.concat . L.toChunks $ str
           ch = T.head t

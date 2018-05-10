@@ -1,0 +1,2 @@
+fail_modules.ml[4:9 ..4:9]: Variable not in scope: `x`
+  · Arising from use of  `x`
