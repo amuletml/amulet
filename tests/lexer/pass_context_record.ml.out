@@ -1,3 +1,0 @@
-let c = match b with
-        | { x = 1 , y = y } -> y
-$end $end $sep let d = 1 $end <eof>

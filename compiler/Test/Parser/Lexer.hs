@@ -36,6 +36,6 @@ files =
   [ "fail_unterminated_comment.ml"
   , "fail_unterminated_string.ml"
   , "pass_context_top.ml"
-  -- , "pass_context_record.ml" --TODO: This is entirely borked
+  , "pass_context_pattern.ml"
   , "pass_tokens.ml"
   ]

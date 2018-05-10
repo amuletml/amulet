@@ -1,0 +1,11 @@
+let a = function
+        | _ -> 1
+
+$end $end $sep let b x =
+  let inner x = x * 2
+  $end $in match x with
+  | { x = x , y = y } -> x + y
+  $end $sep inner 2
+
+$end $end $sep let c = ( )
+$end <eof>
