@@ -12,7 +12,6 @@ import qualified Data.Text as T
 import Data.Algorithm.Diff
 import Data.Maybe
 
-import Control.Applicative
 import Control.Exception
 
 import System.Directory

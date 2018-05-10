@@ -49,7 +49,9 @@ test-suite tests
                      , tasty-hunit >= 0.10 && < 0.11
                      , tasty-hedgehog >= 0.2 && < 0.3
   other-modules:       Test.Util
+
                      , Test.Core.Lint
+                     , Test.Core.Backend
 
                      , Test.Syntax.Gen
                      , Test.Syntax.Resolve
