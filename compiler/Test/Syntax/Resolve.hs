@@ -3,7 +3,7 @@ module Test.Syntax.Resolve (tests) where
 import Test.Tasty
 import Test.Util
 
-import Control.Applicative
+import Control.Applicative hiding (empty)
 import Control.Monad.Gen
 
 import qualified Data.ByteString.Builder as B
@@ -24,12 +24,12 @@ import Pretty
 result :: String -> T.Text -> String
 result file contents =
   case runParser file (B.toLazyByteString $ T.encodeUtf8Builder contents) parseInput of
-    PFailed es -> show $ vsep (map (\e -> pretty (annotation e) <> colon <+> pretty e) es) </> string ""
+    PFailed es -> show $ vsep (map (\e -> pretty (annotation e) <> colon <+> pretty e) es) <//> empty
     POK _ parsed ->
       let resolved = runGen (resolveProgram RS.builtinScope RS.emptyModules parsed)
       in case resolved of
-           Left e -> render (pretty (reportR e))
-           Right (r, _) -> render (pretty r)
+           Left e -> render (pretty (reportR e) <##> empty)
+           Right (r, _) -> render (pretty r <##> empty)
 
   where
     render = display . renderPretty 0.8 120
@@ -40,9 +40,6 @@ result file contents =
         innermostError e@(ArisingFrom err _) = innermostError err <|> Just e
         innermostError e@(ArisingFromTop err _) = innermostError err <|> Just e
         innermostError _ = Nothing
-
-
-
 
 tests :: TestTree
 tests = testGroup "Test.Syntax.Resolve" (map (goldenFile result "tests/resolve/") files)

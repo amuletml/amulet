@@ -19,7 +19,6 @@ hedgehog Group { groupName = n, groupProperties = ps }
 
 golden :: FilePath -> String -> Assertion
 golden expFile result = do
-
   expected <- (Just <$> readFile expFile) `catch` catchIO
   case expected of
     Nothing -> do

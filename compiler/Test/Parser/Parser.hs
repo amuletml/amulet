@@ -17,8 +17,8 @@ import Pretty
 result :: String -> T.Text -> String
 result file contents =
   case runParser file (B.toLazyByteString $ T.encodeUtf8Builder contents) parseInput of
-    PFailed es -> show $ vsep (map (\e -> pretty (annotation e) <> colon <+> pretty e) es) </> string ""
-    POK _ res -> display $ renderPretty 0.8 120 $ pretty res
+    PFailed es -> show $ vsep (map (\e -> pretty (annotation e) <> colon <+> pretty e) es) <##> empty
+    POK _ res -> display $ renderPretty 0.8 120 $ pretty res <##> empty
 
 tests :: TestTree
 tests = testGroup "Test.Parser.Parser" (map (goldenFile result "tests/parser/") files)

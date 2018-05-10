@@ -17,7 +17,7 @@ import Pretty
 result :: String -> T.Text -> String
 result file contents =
   case runLexer file (B.toLazyByteString $ T.encodeUtf8Builder contents) lexerContextScan of
-    PFailed es -> show $ vsep (map (\e -> pretty (annotation e) <> colon <+> pretty e) es) </> string ""
+    PFailed es -> show $ vsep (map (\e -> pretty (annotation e) <> colon <+> pretty e) es) <##> empty
     POK _ toks -> tail $ writeToks 0 True toks
 
   where writeToks _ _ [] = "\n"
