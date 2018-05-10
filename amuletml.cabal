@@ -53,6 +53,7 @@ test-suite tests
                      , Test.Syntax.Gen
                      , Test.Syntax.Resolve
 
+                     , Test.Types.Check
                      , Test.Types.Infer
                      , Test.Types.Util
 

@@ -1,0 +1,10 @@
+fail_skolem_escape.ml[2:19 ..2:37]: error
+  Rigid type variable a#4 has escaped its scope of {'a#4 : type}. 'a#4 -> 'o#45
+  · Note: the variable a#4 was rigidified because of a type ascription
+          against the type {'a#4 : type}. 'a#4 -> 'o#45,
+          and is represented by constant au#46
+  
+  · Note: in type `au#46`
+  · Note: in the inferred type for escape_fail#5
+  
+  · Arising from use of the expression escapes#1 (fun x#6 -> x#6)

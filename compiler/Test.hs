@@ -8,6 +8,7 @@ import qualified Test.Core.Lint as CLint
 import qualified Test.Parser.Lexer as Lexer
 import qualified Test.Parser.Parser as Parser
 import qualified Test.Syntax.Resolve as Resolve
+import qualified Test.Types.Check as TypesC
 
 tests :: TestTree
 tests = testGroup "Tests" [ hedgehog Types.tests
@@ -15,6 +16,7 @@ tests = testGroup "Tests" [ hedgehog Types.tests
                           , Lexer.tests
                           , Parser.tests
                           , Resolve.tests
+                          , TypesC.tests
                           ]
 
 main :: IO ()

@@ -9,7 +9,6 @@ import Control.Monad.Gen
 import qualified Data.ByteString.Builder as B
 import qualified Data.Text.Encoding as T
 import qualified Data.Text as T
-import Data.Spanned
 import Data.Maybe
 
 import Parser.Wrapper (ParseResult(..), runParser)
@@ -22,24 +21,19 @@ import Syntax.Pretty()
 import Pretty
 
 result :: String -> T.Text -> String
-result file contents =
-  case runParser file (B.toLazyByteString $ T.encodeUtf8Builder contents) parseInput of
-    PFailed es -> show $ vsep (map (\e -> pretty (annotation e) <> colon <+> pretty e) es) <//> empty
-    POK _ parsed ->
-      let resolved = runGen (resolveProgram RS.builtinScope RS.emptyModules parsed)
-      in case resolved of
-           Left e -> render (pretty (reportR e) <##> empty)
-           Right (r, _) -> render (pretty r <##> empty)
+result file contents = runGen $ do
+  let POK _ parsed = runParser file (B.toLazyByteString $ T.encodeUtf8Builder contents) parseInput
+  resolved <- resolveProgram RS.builtinScope RS.emptyModules parsed
+  pure . display . renderPretty 0.8 120 . (<##>empty)
+       . either (pretty . reportR) (pretty . fst) $ resolved
 
   where
-    render = display . renderPretty 0.8 120
-
     reportR :: ResolveError -> ResolveError
     reportR err = fromMaybe err (innermostError err)
-      where
-        innermostError e@(ArisingFrom err _) = innermostError err <|> Just e
-        innermostError e@(ArisingFromTop err _) = innermostError err <|> Just e
-        innermostError _ = Nothing
+
+    innermostError e@(ArisingFrom err _) = innermostError err <|> Just e
+    innermostError e@(ArisingFromTop err _) = innermostError err <|> Just e
+    innermostError _ = Nothing
 
 tests :: TestTree
 tests = testGroup "Test.Syntax.Resolve" (map (goldenFile result "tests/resolve/") files)
