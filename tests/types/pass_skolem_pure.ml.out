@@ -1,4 +1,4 @@
-Id#3 : {'a#2 : type}. 'a#2 -> id#1 'a#2
-pure#4 : {'f#6 : type -> type}. ({'a#7 : type}. 'a#7 -> 'f#6 'a#7) -> 'f#6 int
-pure_pass#8 : id#1 int
-id#1 : type -> type
+Id : {'a : type}. 'a -> id 'a
+pure : {'f : type -> type}. ({'a : type}. 'a -> 'f 'a) -> 'f int
+pure_pass : id int
+id : type -> type

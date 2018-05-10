@@ -1,2 +1,2 @@
-escapes#1 : {'o#14 : type}. ({'a#4 : type}. 'a#4 -> 'o#14) -> 'o#14
-escape_pass#5 : int
+escapes : {'o : type}. ({'a : type}. 'a -> 'o) -> 'o
+escape_pass : int

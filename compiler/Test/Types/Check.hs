@@ -33,7 +33,7 @@ result file contents = runGen $ do
   desugared <- desugarProgram resolved
   inferred <- inferProgram builtinsEnv desugared
 
-  pure . display . renderPretty 0.8 120 . (<##>empty)
+  pure . displayDecorated decoratePlain . renderPretty 0.8 120 . (<##>empty)
        . either (pretty . reportT) (reportEnv . snd) $ inferred
 
   where

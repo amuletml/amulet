@@ -1,7 +1,7 @@
 fail_skolem_pure.ml[2:32 ..2:32]: error
-  Can not unify rigid type variable a#4 with the type 'f#65 bo#66
-  · Note: the variable a#4 was rigidified because of a type ascription
-  against the type {'a#4 : type}. 'a#4 -> 'f#65 'a#4
-          and is represented by the constant bo#66
+  Can not unify rigid type variable a with the type 'f bo
+  · Note: the variable a was rigidified because of a type ascription
+  against the type {'a : type}. 'a -> 'f 'a
+          and is represented by the constant bo
   
-  · Arising from use of the expression x#6
+  · Arising from use of the expression x

@@ -1,2 +1,2 @@
-poly#1 : ({'a#3 : type}. 'a#3 -> 'a#3) -> unit
-poly_pass#4 : unit
+poly : ({'a : type}. 'a -> 'a) -> unit
+poly_pass : unit

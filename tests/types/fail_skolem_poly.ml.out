@@ -1,7 +1,7 @@
 fail_skolem_poly.ml[2:32 ..2:32]: error
-  Can not unify rigid type variable a#3 with the type int
-  · Note: the variable a#3 was rigidified because of a type ascription
-  against the type {'a#3 : type}. 'a#3 -> 'a#3
-          and is represented by the constant ao#40
+  Can not unify rigid type variable a with the type int
+  · Note: the variable a was rigidified because of a type ascription
+  against the type {'a : type}. 'a -> 'a
+          and is represented by the constant ao
   
-  · Arising from use of the expression x#5
+  · Arising from use of the expression x
