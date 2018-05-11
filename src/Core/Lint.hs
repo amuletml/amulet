@@ -272,9 +272,8 @@ checkTerm s t@(Extend f fs) = do
     if ty `apart` ty' then throwError (TypeMismatch ty ty') else pure ()
 
   case tyf' of
-    ExactRowsTy fs' -> pure $ ExactRowsTy $ nubBy (on (==) fst) $ map (\(f, ty, _) -> (f, ty)) fs ++ fs'
-    RowsTy f' fs' -> pure $ RowsTy f' $ nubBy (on (==) fst) $ map (\(f, ty, _) -> (f, ty)) fs ++ fs'
-    _ -> throwError (TypeMismatch (ExactRowsTy []) tyf') `withContext` t
+    ExactRowsTy [] -> pure . ExactRowsTy $ map (\(f, ty, _) -> (f, ty)) fs
+    _-> pure . RowsTy tyf' $ map (\(f, ty, _) -> (f, ty)) fs
 
 checkTerm s t@(TyApp f x) = do
   f' <- checkAtom s f
