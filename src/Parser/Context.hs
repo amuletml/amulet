@@ -151,6 +151,19 @@ handleContextBlock needsSep  tok@(Token tk tp) c =
       -> pure ( Result (Token TcVIn tp) $ Working tok
               , CtxEmptyBlock (Just TcVEnd):cks )
 
+    -- Offside rule for matches. Pipes must be aligned in order to be
+    -- considered acceptable.  Other characters which are not inside the
+    -- block also pop the context This allows for something like
+    --
+    --   match x with
+    --   | _ -> 1
+    --   f x
+    (_, CtxMatchArms offside:ck)
+      | case tk of
+          TcPipe -> spCol tp < spCol offside
+          _ -> spCol tp <= spCol offside
+      -> pure (Result (Token TcVEnd tp) (Working tok), ck)
+
     -- Offside rule for ifs
     (_, CtxIf offside:ck)
       | (if isIfContinue tk then spCol tp + 1 else spCol tp) <= spCol offside
@@ -218,19 +231,6 @@ handleContextBlock needsSep  tok@(Token tk tp) c =
     -- match... with | ~~>
     -- ~~> Define the first position of our match body
     (TcPipe, CtxMatchEmptyArms:ck) -> handleContext tok (CtxMatchArms tp:ck)
-
-    -- Pipes must be aligned in order to be considered acceptable.
-    -- Other characters which are not inside the block also pop the context
-    -- This allows for something like
-    --
-    --   match x with
-    --   | _ -> 1
-    --   f x
-    (_, CtxMatchArms offside:ck)
-      | case tk of
-          TcPipe -> spCol tp < spCol offside
-          _ -> spCol tp <= spCol offside
-      -> pure (Result (Token TcVEnd tp) (Working tok), ck)
 
     -- | ... -> ~~> Push a new begin context
     (TcArrow, CtxMatchArms _:_) -> pure

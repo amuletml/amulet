@@ -1,0 +1,6 @@
+let x#1 = 1
+let x#2 = 2
+let a#3 = x#2
+let x#4 = let x#5 = 4
+  in x#5
+let b#6 = x#4

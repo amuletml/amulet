@@ -8,6 +8,7 @@ module Pretty
   , (<>), (<#>), (<##>)
   , putDoc, putDocWithoutColour, hPutDoc
   , render, renderDetailed
+  , decorate, decorateDetailed, decoratePlain
   , text, shown
   , skeyword, sliteral, sstring, scomment, stypeCon, stypeVar, stypeSkol, soperator
 
@@ -94,6 +95,10 @@ decorate Operator s = "\x1b[35m" ++ s ++ "\x1b[0m"
 decorateDetailed :: Style -> String -> String
 decorateDetailed Comment s  = "\x1b[1;30m" ++ s ++ "\x1b[0m"
 decorateDetailed st s = decorate st s
+
+decoratePlain :: Style -> String -> String
+decoratePlain Comment _ = ""
+decoratePlain _ s = s
 
 instance Pretty Double where
   pretty = double

@@ -1,0 +1,2 @@
+escapes : {'o : type}. ({'a : type}. 'a -> 'o) -> 'o
+escape_pass : int

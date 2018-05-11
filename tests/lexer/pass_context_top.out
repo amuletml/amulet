@@ -1,0 +1,9 @@
+let a = 1
+
+$end $sep let b = 2
+$end and c = 3
+
+$end $sep let d = 4 $end ;;
+
+let e = 5
+$end <eof>

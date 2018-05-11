@@ -13,4 +13,3 @@ let poly_checks = poly (fun x -> x) ;;
 let poly_errors = poly (fun x -> x + 1) ;;
 
 let main _ = 1
-
