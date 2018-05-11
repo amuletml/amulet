@@ -1,0 +1,2 @@
+# Exclude test files from language stats
+tests/ linguist-generated

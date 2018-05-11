@@ -42,8 +42,10 @@ data AlexInput = LI { liPos  :: !SourcePos
                     , liPrev :: !Char }
 
 data PState = PState { stringBuffer :: B.Builder   -- Builder for string literals
-                     , commentDepth :: Int         -- Depth for current file
+                     , commentDepth :: !Int        -- Depth for current file
                      , modulePrefix :: [T.Text]    -- List of module prefixes (in reversed order)
+                     , tokenStart   :: !SourcePos  -- The position of the start of this token
+
                      , context :: [Context]
                      , pending :: PendingState
 
@@ -144,6 +146,8 @@ runParser :: SourceName -> B.ByteString -> Parser a -> ParseResult a
 runParser file input m = unP m PState { stringBuffer = mempty
                                       , commentDepth = 0
                                       , modulePrefix = []
+                                      , tokenStart = SourcePos file 1 1
+
                                       , context = defaultContext
                                       , pending = Done
 

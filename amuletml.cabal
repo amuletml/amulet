@@ -37,20 +37,31 @@ test-suite tests
                      , text >= 1.2 && < 1.3
                      , base >= 4.9 && < 4.12
                      , lens >= 4.15 && < 4.17
+                     , Diff >= 0.3.4 && < 0.4
                      , HUnit >= 1.6 && < 1.7
                      , tasty >= 1.0 && < 1.1
                      , amulet
                      , hedgehog >= 0.5 && < 0.6
+                     , directory >= 1.3 && < 1.4
                      , monad-gen >= 0.3 && < 0.4
                      , bytestring >= 0.10.8.2 && < 0.11
                      , containers >= 0.5 && < 0.6
                      , tasty-hunit >= 0.10 && < 0.11
                      , tasty-hedgehog >= 0.2 && < 0.3
   other-modules:       Test.Util
+
                      , Test.Core.Lint
+                     , Test.Core.Backend
+
                      , Test.Syntax.Gen
+                     , Test.Syntax.Resolve
+
+                     , Test.Types.Check
                      , Test.Types.Infer
                      , Test.Types.Util
+
+                     , Test.Parser.Lexer
+                     , Test.Parser.Parser
   default-language:    Haskell2010
   default-extensions:  PackageImports
   ghc-options:         -Wextra -Wall -Wno-name-shadowing

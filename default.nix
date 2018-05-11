@@ -33,9 +33,11 @@ let
       , base
       , lens
       , array
+      , Diff
       , HUnit
       , tasty
       , hedgehog
+      , directory
       , monad-gen
       , bytestring
       , containers
@@ -67,8 +69,8 @@ let
         ];
 
         testHaskellDepends = [
-          base bytestring hedgehog HUnit lens monad-gen mtl pretty-show
-          tasty tasty-hedgehog_0_2_0_0 tasty-hunit text
+          base bytestring Diff directory hedgehog HUnit lens monad-gen mtl
+          pretty-show tasty tasty-hedgehog_0_2_0_0 tasty-hunit text
         ];
 
         libraryToolDepends = if ci then [ alex happy ] else [ alex' happy' ];

@@ -1,0 +1,2 @@
+poly : ({'a : type}. 'a -> 'a) -> unit
+poly_pass : unit

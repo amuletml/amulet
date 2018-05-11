@@ -1,0 +1,1 @@
+fail_unterminated_string.ml[1:15 ..1:15]: Unexpected character '\n'

@@ -9,6 +9,7 @@ src/Parser/Lexer.hs
 src/Parser.hs
 src/Parser.info
 
+!/tests/lua/*.lua
+
 cabal.project.local*
 .ghc*
-
