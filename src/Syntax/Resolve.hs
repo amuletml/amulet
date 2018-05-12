@@ -20,7 +20,6 @@ import Control.Monad.Reader
 import Control.Applicative
 import Control.Monad.State
 import Control.Monad.Gen
-import Control.Lens
 
 import Data.Traversable
 import Data.Foldable
@@ -74,20 +73,6 @@ resolveModule (r:rs) = flip catchError (throwError . wrapError)
                 <$> traverse (\((_, e, a), v') -> (v',,a) <$> reExpr e) (zip vs vars')
                 )
           <*> resolveModule rs
-      FunStmt vs -> do
-        let vars = map (^. fnVar) vs
-        vars' <- traverse tagVar vars
-        extendN (zip vars vars') $ do
-          vs <- for (zip vs vars') . uncurry $ \FunDecl{..} var -> do
-            cs <- for _fnClauses $ \Clause{..} -> do
-              v <- lookupEx _clauseName
-              when (v /= var) (throwError (NotInScope _clauseName))
-              (ps, vars, tyvars) <- unzip3 <$> traverse rePattern _clausePat
-              extendN (concat vars) . extendTyvarN (concat tyvars) $
-                Clause v ps <$> reExpr _clauseBody <*> pure _clauseSpan
-            ty <- reType _fnTypeAnn
-            pure (FunDecl var cs ty _fnSpan)
-          (:) (FunStmt vs) <$> resolveModule rs
       ForeignVal v t ty a -> do
         v' <- tagVar v
         extend (v, v') $ (:)

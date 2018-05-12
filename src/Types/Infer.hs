@@ -122,6 +122,7 @@ infer (VarRef k a) = do
 infer (Fun p e an) = let blame = Arm p e in do
   (p, dom, ms, cs) <- inferPattern p
   let tvs = boundTvs p ms
+  
   _ <- leakEqualities blame cs
   (e, cod) <- local (typeVars %~ Set.union (Set.map unTvName tvs)) $
     local (values %~ focus ms) $ infer e
@@ -204,9 +205,6 @@ inferProg (stmt@(LetStmt ns):prg) = do
   local (values %~ focus ts) $
     consFst (LetStmt ns') $
       inferProg prg
-inferProg (FunStmt vs:prg) = do
-  (ns, ts) <- inferFunTy vs
-  local (values %~ focus ts) . consFst (FunStmt ns) $ inferProg prg
 inferProg (st@(ForeignVal v d t ann):prg) = do
   t' <- resolveKind (BecauseOf st) t
   local (values %~ focus (one v t')) $
@@ -376,61 +374,6 @@ solveEx _ ss cs = transformExprTyped go id goType where
   goWrap IdWrap = IdWrap
 
   goType = apply ss
-
-solvePat :: Subst Typed -> Pattern Typed -> Pattern Typed
-solvePat ss = transformPatternTyped go' (normType . apply ss) where
-  go' :: Pattern Typed -> Pattern Typed
-  go' (PType p t a) = PType p (apply ss t) a
-  go' x = x
-
-inferFunTy :: MonadInfer Typed m => [Function Resolved] -> m ([Function Typed], Telescope Typed)
-inferFunTy vs = do
-  vars <- for vs $ \x@FunDecl{..} -> do
-    ty <- resolveKind (BecauseOf x) _fnTypeAnn
-    pure (TvName _fnVar, ty)
-
-  let tele = teleFromList vars
-
-  (vars, cs) <- listen . local (values %~ focus tele) $
-    for (zip vs vars) . uncurry $ \FunDecl{..} (_, ty) -> do
-      (_, t) <- skolemise (ByAscription ty) ty
-      let quants (TyPi x t) = first (x:) $ quants t
-          quants ty = ([], ty)
-
-          (quantifiers, bodyTy) = quants t
-
-      clauses <- for _fnClauses $ \cls@Clause{..} -> do
-        let checkPatQuantifier p (Anon ty) = do
-              (p', vs, cs) <- checkPattern p ty
-              pure (p', vs, implies cls ty cs, mempty)
-            checkPatQuantifier _ Implicit{} = error "impossible: checkPatQuantifier implicit parameters"
-
-        when (length quantifiers /= length _clausePat || length quantifiers == 0) $
-          throwError (ArisingFrom (WrongShape cls (t, length quantifiers)) (BecauseOf cls))
-
-        let go (p:ps) (q:qs) mp = do
-              (p', vs, cs, m) <- checkPatQuantifier p (apply mp q)
-              (ps, vss, css, ms) <- go ps qs (m <> mp)
-              pure (p':ps, vs:vss, cs:css, m <> ms)
-            go _ _ mp = pure ([], [], [], mp)
-
-        (ps, vss, css, rigid) <- go _clausePat quantifiers mempty
-        let implication = foldr (.) id css
-            scope = foldMap focus vss
-
-        body <- local (values %~ scope) . implication $ check _clauseBody (apply rigid bodyTy)
-        pure (Clause (TvName _clauseName) ps body (_clauseSpan, ty))
-      pure (FunDecl (TvName _fnVar) clauses ty (_fnSpan, ty))
-
-  cur <- gen
-  (sol, cos) <- case solve cur cs of
-    Right x -> pure x
-    Left e -> throwError e
-
-  let fixClause tau Clause{..} = Clause _clauseName (map (solvePat sol) _clausePat) (solveEx tau sol cos _clauseBody) _clauseSpan
-      fixFunction FunDecl{..} = FunDecl _fnVar (map (fixClause (apply sol _fnTypeAnn)) _fnClauses) (apply sol _fnTypeAnn) _fnSpan
-
-  pure (map fixFunction vars, tele)
 
 consFst :: Functor m => a -> m ([a], b) -> m ([a], b)
 consFst = fmap . first . (:)

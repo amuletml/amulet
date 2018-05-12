@@ -154,14 +154,12 @@ instance Pretty (Var p) => Pretty (TyBinder p) where
 
 instance (Pretty (Var p)) => Pretty (Toplevel p) where
   pretty (LetStmt []) = error "absurd!"
-  pretty (FunStmt []) = error "absurd!"
   pretty (LetStmt ((n, v, _):xs)) =
     let prettyBind (n, v, _) = keyword "and" <+> prettyOneBinding n v
      in keyword "let" <+> prettyOneBinding n v
              <> case xs of
                   [] -> empty
                   _ -> line <> vsep (map prettyBind xs)
-  pretty (FunStmt (x:xs)) = keyword "fun" <+> pretty x <#> vsep (punctuate (keyword "and") (map pretty xs))
   pretty (ForeignVal v d ty _) = keyword "foreign val" <+> pretty v <+> colon <+> pretty ty <+> equals <+> dquotes (text d)
   pretty (TypeDecl ty args []) = keyword "type" <+> pretty ty <+> hsep (map ((squote <>) . pretty) args)
   pretty (TypeDecl ty args ctors) = keyword "type" <+> pretty ty
@@ -177,12 +175,6 @@ instance (Pretty (Var p)) => Pretty (Toplevel p) where
          , indent 2 (align (pretty bod))
          , keyword "end"
          ]
-
-instance Pretty (Var p) => Pretty (Function p) where
-  pretty FunDecl{..} = pretty _fnVar <+> colon <+> pretty _fnTypeAnn <#> indent 2 (vsep (map pretty _fnClauses)) where
-
-instance Pretty (Var p) => Pretty (Clause p) where
-  pretty Clause{..} = pipe <+> pretty _clauseName <+> hsep (map pretty _clausePat) <+> equals <+> pretty _clauseBody
 
 instance (Pretty (Var p)) => Pretty [Toplevel p] where
   pretty = vcat . map pretty

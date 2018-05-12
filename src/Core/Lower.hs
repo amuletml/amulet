@@ -329,7 +329,6 @@ lowerProg (LetStmt vs:prg) = do
   let env' = Map.fromList (map (\(TvName v, _, (_, ant)) -> (v, lowerType ant)) vs)
   (:) <$> local (\s -> s { vars = env' }) (StmtLet <$> for vs (\(TvName v, ex, (_, ant)) -> (mkVal v,lowerType ant,) <$> lowerPolyBind (lowerType ant) ex))
       <*> lowerProg prg
-lowerProg (FunStmt _:prg) = lowerProg prg
 lowerProg (TypeDecl (TvName var) _ cons:prg) = do
   let cons' = map (\case
                        UnitCon (TvName p) (_, t) -> (p, mkCon p, lowerType t)

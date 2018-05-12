@@ -230,33 +230,8 @@ data Toplevel p
   | ForeignVal (Var p) Text (Type p) (Ann p)
   | TypeDecl (Var p) [Var p] [Constructor p]
   | Module (Var p) [Toplevel p]
-  | FunStmt [Function p]
   | Open { openName :: Var p
          , openAs :: Maybe T.Text }
-
-data Function p
-  = FunDecl { _fnVar :: Var p
-            , _fnClauses :: [Clause p]
-            , _fnTypeAnn :: Type p
-            , _fnSpan :: Ann p }
-
-deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Function p)
-deriving instance (Show (Var p), Show (Ann p)) => Show (Function p)
-deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Function p)
-deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Function p)
-instance (Data (Var p), Data (Ann p), Data p) => Spanned (Function p)
-
-data Clause p
-  = Clause { _clauseName :: Var p
-           , _clausePat :: [Pattern p]
-           , _clauseBody :: Expr p 
-           , _clauseSpan :: Ann p }
-
-deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Clause p)
-deriving instance (Show (Var p), Show (Ann p)) => Show (Clause p)
-deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Clause p)
-deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Clause p)
-instance (Data (Var p), Data (Ann p), Data p) => Spanned (Clause p)
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Toplevel p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Toplevel p)
@@ -303,16 +278,12 @@ makePrisms ''Lit
 
 makeLenses ''Skolem
 makeLenses ''TyBinder
-makeLenses ''Function
-makeLenses ''Clause
 
 instance (Spanned (Constructor p), Ann p ~ Span) => Spanned (Toplevel p) where
   annotation (LetStmt ((_, _, x):vs)) = sconcat (x :| map thd3 vs)
   annotation (TypeDecl _ _ (x:xs)) = sconcat (annotation x :| map annotation xs)
   annotation (ForeignVal _ _ _ x) = x
-  annotation (FunStmt (x:xs)) = sconcat ((x ^. fnSpan) :| map (^. fnSpan) xs)
   annotation _ = internal
-
 
 _TyArr :: Prism' (Type p) (Type p, Type p)
 _TyArr = prism (uncurry (TyPi . Anon)) go where

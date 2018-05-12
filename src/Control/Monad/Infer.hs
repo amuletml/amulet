@@ -93,10 +93,6 @@ data TypeError where
 
   NotPromotable :: Pretty (Var p) => Var p -> Type p -> Doc -> TypeError
 
-  WrongShape :: (Pretty (Var p), Pretty (Var p')) => Clause p -> (Type p', Int) -> TypeError
-
-  IllegalTypeApp :: (Pretty (Var p), Pretty (Var p')) => Expr p -> Type p' -> Type p' -> TypeError
-
 instance (Ord (Var p), Substitutable p (Type p)) => Substitutable p (Constraint p) where
   ftv (ConUnify _ _ a b) = ftv a `Set.union` ftv b
   ftv (ConSubsume _ _ a b) = ftv a `Set.union` ftv b
@@ -210,6 +206,7 @@ instance Pretty TypeError where
            , indent 16 (string "with polymorphic type" <+> verbatim t)
            , bullet (string "Note:") <+> string "doing so would constitute" <+> stypeCon (string "impredicative polymorphism")
            ]
+
   pretty (ImpredicativeApp tf tx)
     = vsep [ string "Illegal use of polymorphic type" <+> verbatim tx
            , indent 2 $ string "as argument to the type function" <+> verbatim tf
@@ -218,10 +215,6 @@ instance Pretty TypeError where
                    </> string "with a polymorphic type constitutes" <+> stypeCon (string "impredicative polymorphism"))
            ]
 
-  pretty (IllegalTypeApp ex ta _)
-    = vsep [ string "Illegal type application" <+> verbatim ex
-           , bullet (string "because of type ") <+> verbatim ta
-           ]
   pretty (EscapedSkolems esc t) =
     vsep [ case esc of
             [Skolem{..}] ->
@@ -241,19 +234,6 @@ instance Pretty TypeError where
          , indent 2 (pretty x)
          , err
          ]
-
-  pretty (WrongShape Clause{..} (ty, arity))
-    | arity == 0 =
-      vsep [ string "Expected a function type, but" <+> pretty ty <+> "has no visible quantifiers"
-           , bullet (string "Note:") <+> keyword "fun" <+> string "bindings can be only used for functions"
-           , empty
-           , align $ bullet (string "Perhaps a let is more appropriate,")
-                 <#> indent 2 (string "or the type is written incorrectly?") ]
-    | funarity /= arity =
-      vsep [ string "Expected a clause with" <+> keyword "exactly" <+> int arity <+> string "arguments"
-           , string "but this equation for" <+> pretty _clauseName <+> "only has" <+> int funarity ]
-    | otherwise = undefined
-    where funarity = length _clausePat
 
   pretty (SkolBinding (Skolem k v _ m) b) =
     vsep [ string "Can not unify rigid type variable" <+> skol <+> string "with" <+> whatIs b
