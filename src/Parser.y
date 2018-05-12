@@ -151,7 +151,7 @@ Atom :: { Expr Parsed }
      | '_'                                    { withPos1 $1 (Hole (Name (T.singleton '_'))) }
      | begin List1(Expr, ExprSep) end         { withPos2 $1 $3 $ Begin $2 }
      | '(' ')'                                { withPos2 $1 $2 $ Literal LiUnit }
-     | '(' Section ')'                        { $2 }
+     | '(' Section ')'                        { withPos2 $1 $3 $ Parens $2 }
      | '(' NullSection ',' List1(NullSection, ',') ')'
          { withPos2 $1 $5 $ tupleExpr ($2:$4) }
      | '{' Rows('=', Expr) '}'                { withPos2 $1 $3 $ Record $2 }
@@ -208,6 +208,8 @@ Binding :: { (Var Parsed, Expr Parsed, Ann Parsed) }
           { (getL $1, foldr (\x y -> withPos2 x $4 (Fun x y)) $4 $2, withPos2 $1 $4 id) }
         | BindName ListE(ArgP) ':' Type '=' ExprBlock '$end'
           { (getL $1, (foldr (\x y -> withPos2 x $6 (Fun x y)) (Ascription $6 (getL $4) (withPos2 $1 $6 id)) $2), withPos2 $1 $6 id) }
+        | ArgP BindOp ArgP '=' ExprBlock '$end'
+          { (getL $2, withPos2 $1 $5 (Fun $1 (withPos2 $3 $5 (Fun $3 $5))), withPos2 $1 $6 id) }
 
 FuncGroup :: { [Function Parsed] }
           : FunctionDecl               { [$1] }
@@ -222,6 +224,12 @@ Clause :: { Clause Parsed }
 BindName :: { Located (Var Parsed) }
      : ident                                   { lPos1 $1 $ getName $1 }
      | '(' op ')'                              { lPos2 $1 $3 $ getName $2 }
+
+BindOp :: { Located (Var Parsed) }
+       : '*'                                   { lPos1 $1 $ Name (T.pack "*") }
+       | '~'                                   { lPos1 $1 $ Name (T.pack "~") }
+       | op                                    { lPos1 $1 $ getName $1 }
+       | opid                                  { lPos1 $1 $ getName $1 }
 
 List(p, s)
     : {- Empty -}       { [] }

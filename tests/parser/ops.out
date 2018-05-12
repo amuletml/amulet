@@ -1,0 +1,4 @@
+let |> x f = f x
+let <| f x = f x
+let add a b = (a + b)
+let main = (((2 |> ((+ 3)))) add 3)
