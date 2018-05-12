@@ -103,7 +103,6 @@ TopSep :: { () }
 
 Top :: { Toplevel Parsed }
     : let BindGroup                             { LetStmt (reverse $2) }
-    | fun FuncGroup                             { FunStmt (reverse $2) }
     | external val ident ':' Type '=' string    { withPos2 $1 $7 $ ForeignVal (getName $3) (getString $7) (getL $5) }
 
     | type ident ListE(TyVar)                          { TypeDecl (getName $2) (map getL $3) [] }
@@ -210,16 +209,6 @@ Binding :: { (Var Parsed, Expr Parsed, Ann Parsed) }
           { (getL $1, (foldr (\x y -> withPos2 x $6 (Fun x y)) (Ascription $6 (getL $4) (withPos2 $1 $6 id)) $2), withPos2 $1 $6 id) }
         | ArgP BindOp ArgP '=' ExprBlock '$end'
           { (getL $2, withPos2 $1 $5 (Fun $1 (withPos2 $3 $5 (Fun $3 $5))), withPos2 $1 $6 id) }
-
-FuncGroup :: { [Function Parsed] }
-          : FunctionDecl               { [$1] }
-          | FuncGroup and FunctionDecl { $3 : $1 }
-
-FunctionDecl :: { Function Parsed }
-             : BindName ':' Type ListE1(Clause) { withPos2 $1 (foldr1 (<>) (map annotation $4)) (FunDecl (getL $1) $4 (getL $3)) }
-
-Clause :: { Clause Parsed }
-       : '|' BindName ListE1(ArgP) '=' Expr { withPos2 $1 $5 $ Clause (getL $2) $3 $5 }
 
 BindName :: { Located (Var Parsed) }
      : ident                                   { lPos1 $1 $ getName $1 }
