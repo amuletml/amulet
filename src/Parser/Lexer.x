@@ -5,14 +5,20 @@ module Parser.Lexer
   ( lexerScan, lexerContextScan
   ) where
 
-import qualified Data.ByteString as Bs
 import qualified Data.ByteString.Builder as B
-import Data.ByteString.Lazy (ByteString)
-import qualified Data.ByteString.Lazy as L
+
 import qualified Data.ByteString.Lazy.Char8 as Bsc
+import qualified Data.ByteString.Lazy as L
+import Data.ByteString.Lazy (ByteString)
+import qualified Data.ByteString as Bs
+
+import qualified Data.Text.Encoding as T
 import qualified Data.Text.Read as R
 import qualified Data.Text as T
-import Data.Text.Encoding
+
+import qualified Data.Text.Lazy.Encoding as Lt
+import qualified Data.Text.Lazy as Lt
+
 import Data.Char (chr, digitToInt)
 import Data.Span
 import Data.Semigroup
@@ -42,11 +48,13 @@ $symbol_tail = [$symbol_head \[ \]]
 tokens :-
   <0> $white+;
 
+  -- Comments
   <0> "(*"       { beginComment }
   <comment> "(*" { beginComment }
   <comment> "*)" { endComment }
   <comment> [.\n] ;
 
+  -- Builtin keywords and symbols
   <0> "->"     { constTok TcArrow }
   <0> "="      { constTok TcEqual }
   <0> "∀"      { constTok TcForall }
@@ -90,29 +98,41 @@ tokens :-
   <0> "["      { constTok TcOSquare }
   <0> "]"      { constTok TcCSquare }
 
+  -- Numbers
   <0> $digit+                          { onString $ TcInteger . parseNum 10 }
+  <0> 0 x $hex+                        { onString $ TcInteger . parseNum 16 . L.drop 2 }
+  <0> 0 b [01]+                        { onString $ TcInteger . parseNum 2 . L.drop 2 }
+
   <0> $digit+ \. $digit+               { onString $ TcFloat . parseDouble }
   <0> $digit+ \. $digit+ [Ee] $digit+  { onString $ TcFloat . parseDouble }
   <0> $digit+ \. $digit+ [Ee] [\+\-] $digit+ { onString $ TcFloat . parseDouble }
 
-  <0> $upper $ident* \.                { beginModule }
+  -- Identifiers
   <0> $lower $ident*                   { lexTok $ TcIdentifier }
   <0> $upper $ident*                   { lexTok $ TcConIdent }
+
+  -- Module identifiers
+  <0> $upper $ident* \.                { beginModule }
   <modP> $upper $ident* \.             { pushModule }
   <modP> $lower $ident*                { endModule TcIdentifierQual }
   <modP> $upper $ident*                { endModule TcConIdentQual }
   <modP> ()                            { endModuleNull TcDotQual }
 
+  -- Operators
   <0> $symbol_head $symbol_tail*       { lexTok $ TcOp }
   <0> \` $lower $ident* \`             { lexTok $ TcOpIdent . T.init . T.tail }
+
+  -- Module operators
   <0> \` $upper $ident* \.             { beginModuleOp }
   <modOp> $upper $ident* \.            { pushModule }
   <modOp> $lower $ident* \`            { endModuleOp TcOpIdentQual }
 
-  <0> \_ $ident+                       { lexTok TcHole }
+  -- Other operators
+  <0> \_ $ident+                       { lexTok (TcHole . T.tail) }
   <0> \. $lower $ident*                { lexTok (TcAccess . T.tail) }
-  <0> \' $lower $ident*                { lexTok (TcTyVar . T.tail) }
+  <0> \' $lower $ident*                { lexTok (TcTyvar . T.tail) }
 
+  -- Strings
   <0> \"                               { beginString }
 
   <string> \" { endString }
@@ -137,7 +157,7 @@ parseNum :: Num a => a -> ByteString -> a
 parseNum radix = Bsc.foldl' (\accum digit -> accum * radix + fromIntegral (digitToInt digit)) 0
 
 parseDouble :: ByteString -> Double
-parseDouble t = case (R.double . decodeUtf8 . Bs.concat . L.toChunks) t of
+parseDouble t = case (R.double . T.decodeUtf8 . L.toStrict) t of
                   Right (x, t) | T.null t -> x
                   _ -> error "Cannot parse float"
 
@@ -154,7 +174,7 @@ append c _ _ = do
   lexerScan -- Don't emit a token, just continue
 
 beginString, endString :: Action Token
-beginString (LI p _ _) _ = do
+beginString (LI p _ _ _) _ = do
   mapState $ \s -> s { tokenStart = p }
   setStartCode string
   lexerScan
@@ -162,10 +182,10 @@ endString _ _ = do
   s <- getState
   setState $ s { stringBuffer = "" }
   setStartCode 0
-  return . flip Token (tokenStart s) .  TcString . decodeUtf8 . Bs.concat . L.toChunks . B.toLazyByteString . stringBuffer $ s
+  return . flip Token (tokenStart s) .  TcString . T.decodeUtf8 . L.toStrict . B.toLazyByteString . stringBuffer $ s
 
 beginComment, endComment :: Action Token
-beginComment (LI p _ _) _ = do
+beginComment (LI p _ _ _) _ = do
   s <- getState
   -- Increment the comment depth and set the mode to comments
   setState $ s { commentDepth = commentDepth s + 1
@@ -180,50 +200,50 @@ endComment _ _ = do
   lexerScan
 
 beginModule, beginModuleOp, pushModule :: Action Token
-beginModule (LI p str _) len = do
+beginModule (LI p str _ _) len = do
   s <- getState
-  setState $ s { modulePrefix = [ decodeUtf8 . Bs.concat . L.toChunks . L.take (pred len) $ str]
+  setState $ s { modulePrefix = [ T.decodeUtf8 . L.toStrict . L.take (pred len) $ str]
                , tokenStart = p }
   setStartCode modP
   lexerScan
-beginModuleOp (LI p str _) len = do
+beginModuleOp (LI p str _ _) len = do
   s <- getState
-  setState $ s { modulePrefix = [ T.tail $ decodeUtf8 . Bs.concat . L.toChunks . L.take (pred len) $ str]
+  setState $ s { modulePrefix = [ T.decodeUtf8 . L.toStrict . L.tail . L.take (pred len) $ str]
                , tokenStart = p }
   setStartCode modOp
   lexerScan
-pushModule (LI _ str _) len = do
+pushModule (LI _ str _ _) len = do
   s <- getState
-  setState $ s { modulePrefix = (decodeUtf8 . Bs.concat . L.toChunks . L.take (pred len) $ str) : modulePrefix s }
+  setState $ s { modulePrefix = (T.decodeUtf8 . L.toStrict . L.take (pred len) $ str) : modulePrefix s }
   lexerScan
 
 endModule, endModuleOp :: ([T.Text] -> T.Text -> TokenClass) -> Action Token
-endModule t (LI _ str _) len = do
+endModule t (LI _ str _ _) len = do
   s <- getState
   setState $ s { modulePrefix = [] }
   setStartCode 0
-  return . flip Token (tokenStart s) .  t (modulePrefix s) . decodeUtf8 . Bs.concat . L.toChunks . L.take len $ str
+  return . flip Token (tokenStart s) .  t (modulePrefix s) . T.decodeUtf8 . L.toStrict . L.take len $ str
 endModuleOp f = endModule (\xs x -> f xs (T.init x))
 
 endModuleNull :: ([T.Text] -> TokenClass) -> Action Token
-endModuleNull t (LI _ _ _) _ = do
+endModuleNull t (LI _ _ _ _) _ = do
   s <- getState
   setState $ s { modulePrefix = [] }
   setStartCode 0
   return (Token (t (modulePrefix s)) (tokenStart s))
 
 constTok :: TokenClass -> Action Token
-constTok t (LI p _ _) _ = return $! Token t p
+constTok t (LI p _ _ _) _ = return $! Token t p
 
 onString :: (ByteString -> TokenClass) -> Action Token
-onString f (LI p str _) len = return $! Token (f (L.take len str)) p
+onString f (LI p str _ _) len = return $! Token (f (L.take len str)) p
 
 lexTok :: (T.Text -> TokenClass) -> Action Token
-lexTok k (LI p str _) len = return (Token (k str') p) where
-    str' = decodeUtf8 . Bs.concat . L.toChunks . L.take len $ str
+lexTok k (LI p str _ _) len = return (Token (k str') p) where
+    str' = T.decodeUtf8 . L.toStrict . L.take len $ str
 
 onStringM :: (ByteString -> Action a) -> Action a
-onStringM f p@(LI _ str _) len = (f (L.take len str)) p len
+onStringM f p@(LI _ str _ _) len = (f (L.take len str)) p len
 
 lexInput :: String -> ByteString -> ParseResult [Token]
 lexInput fp text = runParser fp text (loop []) where
@@ -260,15 +280,14 @@ lexerScan = do
         n | n == string -> failWith (UnclosedString (liPos inp) start)
         n | n == comment -> failWith (UnclosedComment (liPos inp) start)
         _ -> failWith (UnexpectedEnd (liPos inp))
-    AlexError (LI p str _) ->
-      let t = decodeUtf8 . Bs.concat . L.toChunks $ str
-          ch = T.head t
+    AlexError (LI p str _ _) ->
+      let ch = Lt.head . Lt.decodeUtf8 $ str
       in failWith (UnexpectedCharacter p ch)
     AlexSkip  inp' _ -> do
       setInput inp'
       lexerScan
-    AlexToken inp' len action -> do
+    AlexToken inp' _ action -> do
       setInput inp'
-      action inp (fromIntegral len)
+      action inp (liIdx inp' - liIdx inp)
 
 }

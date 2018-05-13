@@ -78,7 +78,7 @@ import Syntax
   qconid   { Token (TcConIdentQual _ _) _ }
   qdotid   { Token (TcDotQual _) _ }
   access   { Token (TcAccess _) _ }
-  tyvar    { Token (TcTyVar _) _ }
+  tyvar    { Token (TcTyvar _) _ }
   hole     { Token (TcHole _) _ }
   int      { Token (TcInteger _) _ }
   float    { Token (TcFloat _) _ }
@@ -355,7 +355,7 @@ getIdent  (Token (TcIdentifier x) _) = x
 getIdent  (Token (TcOpIdent x) _)    = x
 getIdent  (Token (TcConIdent x) _)   = x
 getIdent  (Token (TcAccess x) _)     = x
-getIdent  (Token (TcTyVar x) _)      = x
+getIdent  (Token (TcTyvar x) _)      = x
 
 getName (Token (TcOp x) _)                = Name x
 getName (Token (TcIdentifier x) _)        = Name x
@@ -365,7 +365,7 @@ getName (Token (TcIdentifierQual ms x) _) = foldl (flip InModule) (Name x) ms
 getName (Token (TcOpIdentQual ms x) _)    = foldl (flip InModule) (Name x) ms
 getName (Token (TcConIdentQual ms x) _)   = foldl (flip InModule) (Name x) ms
 getName (Token (TcDotQual ms) _)          = foldl (flip InModule) (Name (last ms)) (init ms)
-getName (Token (TcTyVar x) _)             = Name x
+getName (Token (TcTyvar x) _)             = Name x
 
 getHole   (Token (TcHole x) _)       = x
 getInt    (Token (TcInteger x) _)    = x

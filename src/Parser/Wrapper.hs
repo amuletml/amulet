@@ -39,7 +39,8 @@ import Pretty
 
 data AlexInput = LI { liPos  :: !SourcePos
                     , liText :: !B.ByteString
-                    , liPrev :: !Char }
+                    , liPrev :: !Char
+                    , liIdx  :: !Int64 }
 
 data PState = PState { stringBuffer :: B.Builder   -- Builder for string literals
                      , commentDepth :: !Int        -- Depth for current file
@@ -52,24 +53,25 @@ data PState = PState { stringBuffer :: B.Builder   -- Builder for string literal
                      , sPos  :: !SourcePos   -- Current source position
                      , sText :: B.ByteString -- Current input
                      , sPrev :: !Char        -- Character before the input
+                     , sIdx  :: !Int64       -- Offset into the whole input
                      , sMode :: !Int         -- Current startcode
 
                      , sErrors :: [ParseError]
                      }
 
 alexInputPrevChar :: AlexInput -> Char
-alexInputPrevChar LI{ liPrev = c } = c
+alexInputPrevChar = liPrev
 
 alexGetByte :: AlexInput -> Maybe (Word8, AlexInput)
-alexGetByte LI{ liPos = p, liText = t } =
-    case B.uncons t of
-        Nothing -> Nothing
-        Just (b, t') ->
-            let c = B.w2c b
-                p'  = alexMove p c
-            in Just (b, LI { liPos = p'
-                           , liText = t'
-                           , liPrev = c })
+alexGetByte LI{ liPos = p, liText = t, liIdx = n } =
+  case B.uncons t of
+    Nothing -> Nothing
+    Just (b, t') ->
+      let c = B.w2c b
+      in Just (b, LI { liPos = alexMove p c
+                     , liText = t'
+                     , liPrev = c
+                     , liIdx = n + 1 })
 
 alexMove :: SourcePos -> Char -> SourcePos
 alexMove (SourcePos f l _) '\n' = SourcePos f (l + 1) 1
@@ -121,12 +123,14 @@ setStartCode m = P $ \s -> POK (s { sMode = m }) ()
 getInput :: Parser AlexInput
 getInput = P $ \s -> POK s LI { liPos  = sPos s
                               , liText = sText s
-                              , liPrev = sPrev s }
+                              , liPrev = sPrev s
+                              , liIdx  = sIdx  s }
 
 setInput :: AlexInput -> Parser ()
-setInput p = P $ \s -> POK (s { sPos  = liPos p
+setInput p = P $ \s -> POK (s { sPos  = liPos  p
                               , sText = liText p
-                              , sPrev = liPrev p }) ()
+                              , sPrev = liPrev p
+                              , sIdx  = liIdx  p }) ()
 
 getState :: Parser PState
 getState = P $ \s -> POK s s
@@ -154,6 +158,7 @@ runParser file input m = unP m PState { stringBuffer = mempty
                                       , sPos  = SourcePos file 1 1
                                       , sText = input
                                       , sPrev = '\n'
+                                      , sIdx  = 0
                                       , sMode = 0
 
                                       , sErrors = []
