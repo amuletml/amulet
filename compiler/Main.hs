@@ -6,8 +6,7 @@ import System.Environment (getArgs)
 import System.IO (hPutStrLn, stderr)
 import System.Console.GetOpt
 
-import qualified Data.ByteString.Builder as B
-import qualified Data.Text.Encoding as T
+import qualified Data.Text.Lazy as L
 import qualified Data.Text.IO as T
 import qualified Data.Text as T
 import Data.Foldable
@@ -66,7 +65,7 @@ compile (file:files) = runGen $ do
 
   where
     go (Right (tops, scope, modScope, env)) (name, file) =
-      case runParser name (B.toLazyByteString $ T.encodeUtf8Builder file) parseInput of
+      case runParser name (L.fromStrict file) parseInput of
         POK _ parsed -> do
           resolved <- resolveProgram scope modScope parsed
           case resolved of
@@ -124,7 +123,7 @@ test fs = do
 
 testLexer :: [(FilePath, T.Text)] -> IO ()
 testLexer fs = for_ fs $ \(name, file) ->
-  case runLexer name (B.toLazyByteString $ T.encodeUtf8Builder file) lexerScan of
+  case runLexer name (L.fromStrict file) lexerScan of
     POK _ toks -> print (map (\(Token t _) -> t) toks)
     PFailed es -> traverse_ (flip reportS fs) es
 

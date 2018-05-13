@@ -3,8 +3,7 @@ module Test.Parser.Lexer (tests) where
 import Test.Tasty
 import Test.Util
 
-import qualified Data.ByteString.Builder as B
-import qualified Data.Text.Encoding as T
+import qualified Data.Text.Lazy as L
 import qualified Data.Text as T
 import Data.Position
 import Data.Spanned
@@ -16,7 +15,7 @@ import Pretty
 
 result :: String -> T.Text -> String
 result file contents =
-  case runLexer file (B.toLazyByteString $ T.encodeUtf8Builder contents) lexerContextScan of
+  case runLexer file (L.fromStrict contents) lexerContextScan of
     PFailed es -> show $ vsep (map (\e -> pretty (annotation e) <> colon <+> pretty e) es) <##> empty
     POK _ toks -> tail $ writeToks 0 True toks
 

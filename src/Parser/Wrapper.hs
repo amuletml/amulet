@@ -21,15 +21,17 @@ import Control.Monad
 import Control.Monad.Fail as MonadFail
 import Control.Monad.Report
 
-import qualified Data.ByteString.Builder as B
-import qualified Data.ByteString.Internal as B (w2c)
-import qualified Data.ByteString.Lazy as B
+import qualified Data.Text.Lazy.Builder as B
+import qualified Data.Text.Lazy as L
+import qualified Data.Text as T
+
+import Data.Word (Word8)
 import Data.Int (Int64)
+import Data.Char (ord)
 import Data.Position
 import Data.Spanned
-import qualified Data.Text as T
-import Data.Word (Word8)
 
+import qualified Parser.Unicode as U
 import Parser.Context
 import Parser.Token
 import Parser.Error
@@ -38,23 +40,23 @@ import Pretty
 
 
 data AlexInput = LI { liPos  :: !SourcePos
-                    , liText :: !B.ByteString
+                    , liText :: !L.Text
                     , liPrev :: !Char
                     , liIdx  :: !Int64 }
 
-data PState = PState { stringBuffer :: B.Builder   -- Builder for string literals
-                     , commentDepth :: !Int        -- Depth for current file
-                     , modulePrefix :: [T.Text]    -- List of module prefixes (in reversed order)
-                     , tokenStart   :: !SourcePos  -- The position of the start of this token
+data PState = PState { stringBuffer :: B.Builder -- Builder for string literals
+                     , commentDepth :: !Int      -- Depth for current file
+                     , modulePrefix :: [T.Text]  -- List of module prefixes (in reversed order)
+                     , tokenStart   :: !SourcePos -- The position of the start of this token
 
                      , context :: [Context]
                      , pending :: PendingState
 
-                     , sPos  :: !SourcePos   -- Current source position
-                     , sText :: B.ByteString -- Current input
-                     , sPrev :: !Char        -- Character before the input
-                     , sIdx  :: !Int64       -- Offset into the whole input
-                     , sMode :: !Int         -- Current startcode
+                     , sPos  :: !SourcePos -- Current source position
+                     , sText :: !L.Text    -- Current input
+                     , sPrev :: !Char      -- Character before the input
+                     , sIdx  :: !Int64     -- Offset into the whole input
+                     , sMode :: !Int       -- Current startcode
 
                      , sErrors :: [ParseError]
                      }
@@ -64,10 +66,11 @@ alexInputPrevChar = liPrev
 
 alexGetByte :: AlexInput -> Maybe (Word8, AlexInput)
 alexGetByte LI{ liPos = p, liText = t, liIdx = n } =
-  case B.uncons t of
+  case L.uncons t of
     Nothing -> Nothing
-    Just (b, t') ->
-      let c = B.w2c b
+    Just (c, t') ->
+      let b | c <= '\x7f' = fromIntegral (ord c)
+            | otherwise = U.asFakeWord (U.classify c)
       in Just (b, LI { liPos = alexMove p c
                      , liText = t'
                      , liPrev = c
@@ -146,7 +149,7 @@ getPos = P $ \s -> POK s (sPos s)
 
 type Action a = AlexInput -> Int64 -> Parser a
 
-runParser :: SourceName -> B.ByteString -> Parser a -> ParseResult a
+runParser :: SourceName -> L.Text -> Parser a -> ParseResult a
 runParser file input m = unP m PState { stringBuffer = mempty
                                       , commentDepth = 0
                                       , modulePrefix = []
@@ -164,7 +167,7 @@ runParser file input m = unP m PState { stringBuffer = mempty
                                       , sErrors = []
                                       }
 
-runLexer :: SourceName -> B.ByteString -> Parser Token -> ParseResult [Token]
+runLexer :: SourceName -> L.Text -> Parser Token -> ParseResult [Token]
 runLexer file input m = runParser file input gather where
   gather = do
     t <- m
