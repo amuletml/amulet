@@ -48,17 +48,18 @@ data TokenClass
   | TcOSquare -- [
   | TcCSquare -- ]
 
-  | TcOp Text
-  | TcIdentifier Text
-  | TcOpIdent Text
-  | TcConIdent Text
-  | TcIdentifierQual [Text] Text
-  | TcOpIdentQual [Text] Text
-  | TcConIdentQual [Text] Text
-  | TcDotQual [Text]
-  | TcTyvar Text
-  | TcAccess Text
-  | TcHole Text
+  | TcOp Text                     -- Operators (+)
+  | TcIdentifier Text             -- Identifiers (foo)
+  | TcOpIdent Text                -- Backtick ops (`foo`)
+  | TcConIdent Text               -- Constructors (Foo)
+  | TcIdentifierQual [Text] Text  -- Qualified identifiers (Foo.bar)
+  | TcOpIdentQual [Text] Text     -- Qualified backtick ops (`Foo.bar`)
+  | TcConIdentQual [Text] Text    -- Qualified constructors (Foo.Bar)
+  | TcDotQual [Text]              -- Qualified module, used for "let open ..." (Foo.)
+  | TcTyvar Text                  -- Type variable ('foo)
+  | TcAccess Text                 -- Record access (.foo)
+  | TcHole Text                   -- Hole (_foo)
+
   | TcInteger Integer
   | TcFloat Double
   | TcString Text
