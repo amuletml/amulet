@@ -46,7 +46,7 @@ import Parser.Lexer (lexerScan)
 import Errors (reportS, reportR, reportI)
 
 data CompileResult a
-  = CSuccess ([Toplevel Typed], [Stmt CoVar], [Stmt a], Env)
+  = CSuccess [Toplevel Typed] [Stmt CoVar] [Stmt a] Env
   | CParse   [ParseError]
   | CResolve ResolveError
   | CInfer   TypeError
@@ -60,7 +60,7 @@ compile (file:files) = runGen $ do
     Right (prg, _, _, env) -> do
       lower <- runLowerT (lowerProg prg)
       optm <- optimise lower
-      pure (CSuccess (prg, lower, tagOccursVar optm, env))
+      pure (CSuccess prg lower (tagOccursVar optm) env)
 
     Left err -> pure err
 
@@ -94,7 +94,7 @@ compileFromTo :: [(FilePath, T.Text)]
               -> IO ()
 compileFromTo fs emit =
   case compile fs of
-    CSuccess (_, _, core, env) -> emit (compileProgram env core)
+    CSuccess _ _ core env -> emit (compileProgram env core)
     CParse es -> traverse_ (flip reportS fs) es
     CResolve e -> putStrLn "Resolution error" >> reportR e fs
     CInfer e -> putStrLn "Type error" >> reportI e fs
@@ -103,7 +103,7 @@ test :: [(FilePath, T.Text)] -> IO (Maybe ([Stmt CoVar], Env))
 test fs = do
   putStrLn "\x1b[1;32m(* Program: *)\x1b[0m"
   case compile fs of
-    CSuccess (ast, core, optm, env) -> do
+    CSuccess ast core optm env -> do
       putDoc (pretty ast)
       putStrLn "\x1b[1;32m(* Type inference: *)\x1b[0m"
       ifor_ (difference env builtinsEnv ^. values . to toMap) . curry $ \(k :: Var Resolved, t :: Type Typed) ->
@@ -132,7 +132,7 @@ testTc :: [(FilePath, T.Text)] -> IO (Maybe ([Stmt CoVar], Env))
 testTc fs = do
   putStrLn "\x1b[1;32m(* Program: *)\x1b[0m"
   case compile fs of
-    CSuccess (ast, core, _, env) -> do
+    CSuccess ast core _ env -> do
       putDoc (pretty ast)
       putStrLn "\x1b[1;32m(* Type inference: *)\x1b[0m"
       ifor_ (difference env builtinsEnv ^. values . to toMap) . curry $ \(k :: Var Resolved, t :: Type Typed) ->
