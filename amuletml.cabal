@@ -20,7 +20,6 @@ executable amc
                      , lens >= 4.15 && < 4.17
                      , amulet
                      , monad-gen >= 0.3 && < 0.4
-                     , bytestring >= 0.10.8.2 && < 0.11
                      , pretty-show
 
   other-modules:       Errors
@@ -44,7 +43,6 @@ test-suite tests
                      , hedgehog >= 0.5 && < 0.6
                      , directory >= 1.3 && < 1.4
                      , monad-gen >= 0.3 && < 0.4
-                     , bytestring >= 0.10.8.2 && < 0.11
                      , containers >= 0.5 && < 0.6
                      , tasty-hunit >= 0.10 && < 0.11
                      , tasty-hedgehog >= 0.2 && < 0.3
@@ -73,7 +71,6 @@ executable lexer
                      , text >= 1.2 && < 1.3
                      , base >= 4.9 && < 4.12
                      , array >= 0.5 && < 0.6
-                     , bytestring >= 0.10.8.2 && < 0.11
                      , containers >= 0.5 && < 0.6
                      , transformers >= 0.5 && < 0.6
                      , annotated-wl-pprint >= 0.7 && < 0.8
@@ -88,6 +85,7 @@ executable lexer
                      , Parser.Token
                      , Parser.Context
                      , Parser.Wrapper
+                     , Parser.Unicode
 
                      , Control.Monad.Report
                      , Data.Position
@@ -103,7 +101,6 @@ library amulet
                      , lens >= 4.15 && < 4.17
                      , array >= 0.5 && < 0.6
                      , monad-gen >= 0.3 && < 0.4
-                     , bytestring >= 0.10.8.2 && < 0.11
                      , containers >= 0.5 && < 0.6
                      , transformers >= 0.5 && < 0.6
                      , annotated-wl-pprint >= 0.7 && < 0.8
@@ -120,6 +117,7 @@ library amulet
                      , Parser.Token
                      , Parser.Context
                      , Parser.Wrapper
+                     , Parser.Unicode
                      -- the AST
                      , Syntax
                      , Syntax.Let

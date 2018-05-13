@@ -5,19 +5,10 @@ module Parser.Lexer
   ( lexerScan, lexerContextScan
   ) where
 
-import qualified Data.ByteString.Builder as B
-
-import qualified Data.ByteString.Lazy.Char8 as Bsc
-import qualified Data.ByteString.Lazy as L
-import Data.ByteString.Lazy (ByteString)
-import qualified Data.ByteString as Bs
-
-import qualified Data.Text.Encoding as T
+import qualified Data.Text.Lazy.Builder as B
+import qualified Data.Text.Lazy as L
 import qualified Data.Text.Read as R
 import qualified Data.Text as T
-
-import qualified Data.Text.Lazy.Encoding as Lt
-import qualified Data.Text.Lazy as Lt
 
 import Data.Char (chr, digitToInt)
 import Data.Span
@@ -33,17 +24,29 @@ import Parser.Wrapper
 
 }
 
-$digit = [0-9]       -- Digits
-$hex   = [0-9A-Fa-f] -- Hexadecimal digits
-$upper = [A-Z]       -- Uppercase characters
-$lower = [a-z]       -- Lowercase characters
+%encoding "latin1"
 
-$ident = [$digit $upper $lower '_' '\''] -- Valid identifier characters
+-- See Parser.Unicode
+$unicodeUpper = \xf0
+$unicodeLower = \xf1
+$unicodeSymbol = \xf2
+$unicodeGeneric = \xf3
+$unicodeDigit = \xf4
+$unicodeWhitespace = \xf5
+$unicodeOtherGraphic = \xf6
+$unicodeOther = \xf7
+
+$digit = [0-9]               -- Digits
+$hex   = [0-9A-Fa-f]         -- Hexadecimal digits
+$upper = [$unicodeUpper A-Z] -- Uppercase characters
+$lower = [$unicodeLower a-z] -- Lowercase characters
+
+$ident = [$unicodeDigit $unicodeGeneric $digit $upper $lower '_' '\''] -- Valid identifier characters
 
 -- Valid symbol characters. We're slightly more fluent with what we allow
 -- in non-head positions
-$symbol_head = [\: \! \# \$ \% \& \* \+ \. \/ \< \= \> \? \@ \\ \^ \| \- \~]
-$symbol_tail = [$symbol_head \[ \]]
+$symbolHead = [\: \! \# \$ \% \& \* \+ \. \/ \< \= \> \? \@ \\ \^ \| \- \~ $unicodeSymbol]
+$symbolTail = [$symbolHead \[ \]]
 
 tokens :-
   <0> $white+;
@@ -57,7 +60,6 @@ tokens :-
   -- Builtin keywords and symbols
   <0> "->"     { constTok TcArrow }
   <0> "="      { constTok TcEqual }
-  <0> "∀"      { constTok TcForall }
   <0> "forall" { constTok TcForall }
   <0> "=>"     { constTok TcImplies }
   <0> "|"      { constTok TcPipe }
@@ -95,7 +97,7 @@ tokens :-
   <0> ")"      { constTok TcCParen }
   <0> "{"      { constTok TcOBrace }
   <0> "}"      { constTok TcCBrace }
-  <0> "["      { constTok TcOSquare }
+  H0> "["      { constTok TcOSquare }
   <0> "]"      { constTok TcCSquare }
 
   -- Numbers
@@ -119,7 +121,7 @@ tokens :-
   <modP> ()                            { endModuleNull TcDotQual }
 
   -- Operators
-  <0> $symbol_head $symbol_tail*       { lexTok $ TcOp }
+  <0> $symbolHead $symbolTail*         { lexOperator }
   <0> \` $lower $ident* \`             { lexTok $ TcOpIdent . T.init . T.tail }
 
   -- Module operators
@@ -148,29 +150,29 @@ tokens :-
   <string> \\ \\ { appendChar '\\' }
   <string> \\ \" { appendChar '\"' }
 
-  <string> \\ x $hex+ { onStringM $ appendChar . chr . parseNum 16 . Bsc.drop 2 }
+  <string> \\ x $hex+ { onStringM $ appendChar . chr . parseNum 16 . L.drop 2 }
 
   <string> [^\\\"] { onStringM append }
 
 {
-parseNum :: Num a => a -> ByteString -> a
-parseNum radix = Bsc.foldl' (\accum digit -> accum * radix + fromIntegral (digitToInt digit)) 0
+parseNum :: Num a => a -> L.Text -> a
+parseNum radix = L.foldl' (\accum digit -> accum * radix + fromIntegral (digitToInt digit)) 0
 
-parseDouble :: ByteString -> Double
-parseDouble t = case (R.double . T.decodeUtf8 . L.toStrict) t of
+parseDouble :: L.Text -> Double
+parseDouble t = case (R.double . L.toStrict) t of
                   Right (x, t) | T.null t -> x
                   _ -> error "Cannot parse float"
 
 appendChar :: Char -> Action Token
 appendChar c _ _ = do
   s <- getState
-  setState $ s { stringBuffer = stringBuffer s <> B.charUtf8 c }
+  setState $ s { stringBuffer = stringBuffer s <> B.singleton c }
   lexerScan -- Don't emit a token, just continue
 
-append :: ByteString -> Action Token
+append :: L.Text -> Action Token
 append c _ _ = do
   s <- getState
-  setState $ s { stringBuffer = stringBuffer s <> B.lazyByteString c }
+  setState $ s { stringBuffer = stringBuffer s <> B.fromLazyText c }
   lexerScan -- Don't emit a token, just continue
 
 beginString, endString :: Action Token
@@ -182,7 +184,7 @@ endString _ _ = do
   s <- getState
   setState $ s { stringBuffer = "" }
   setStartCode 0
-  return . flip Token (tokenStart s) .  TcString . T.decodeUtf8 . L.toStrict . B.toLazyByteString . stringBuffer $ s
+  pure . flip Token (tokenStart s) .  TcString . L.toStrict . B.toLazyText . stringBuffer $ s
 
 beginComment, endComment :: Action Token
 beginComment (LI p _ _ _) _ = do
@@ -202,19 +204,19 @@ endComment _ _ = do
 beginModule, beginModuleOp, pushModule :: Action Token
 beginModule (LI p str _ _) len = do
   s <- getState
-  setState $ s { modulePrefix = [ T.decodeUtf8 . L.toStrict . L.take (pred len) $ str]
+  setState $ s { modulePrefix = [ L.toStrict . L.take (pred len) $ str]
                , tokenStart = p }
   setStartCode modP
   lexerScan
 beginModuleOp (LI p str _ _) len = do
   s <- getState
-  setState $ s { modulePrefix = [ T.decodeUtf8 . L.toStrict . L.tail . L.take (pred len) $ str]
+  setState $ s { modulePrefix = [ L.toStrict . L.tail . L.take (pred len) $ str]
                , tokenStart = p }
   setStartCode modOp
   lexerScan
 pushModule (LI _ str _ _) len = do
   s <- getState
-  setState $ s { modulePrefix = (T.decodeUtf8 . L.toStrict . L.take (pred len) $ str) : modulePrefix s }
+  setState $ s { modulePrefix = (L.toStrict . L.take (pred len) $ str) : modulePrefix s }
   lexerScan
 
 endModule, endModuleOp :: ([T.Text] -> T.Text -> TokenClass) -> Action Token
@@ -222,7 +224,7 @@ endModule t (LI _ str _ _) len = do
   s <- getState
   setState $ s { modulePrefix = [] }
   setStartCode 0
-  return . flip Token (tokenStart s) .  t (modulePrefix s) . T.decodeUtf8 . L.toStrict . L.take len $ str
+  pure . flip Token (tokenStart s) .  t (modulePrefix s) . L.toStrict . L.take len $ str
 endModuleOp f = endModule (\xs x -> f xs (T.init x))
 
 endModuleNull :: ([T.Text] -> TokenClass) -> Action Token
@@ -230,27 +232,36 @@ endModuleNull t (LI _ _ _ _) _ = do
   s <- getState
   setState $ s { modulePrefix = [] }
   setStartCode 0
-  return (Token (t (modulePrefix s)) (tokenStart s))
+  pure (Token (t (modulePrefix s)) (tokenStart s))
+
+lexOperator :: Action Token
+lexOperator (LI p str _ _) len =
+  let str' = L.toStrict . L.take len $ str
+      -- We perform some special handling of a couple of fancy operators
+      tok | str' == "∀" = TcForall
+          | str' == "→" = TcArrow
+          | otherwise = TcOp str'
+  in pure (Token tok p)
 
 constTok :: TokenClass -> Action Token
-constTok t (LI p _ _ _) _ = return $! Token t p
+constTok t (LI p _ _ _) _ = pure $! Token t p
 
-onString :: (ByteString -> TokenClass) -> Action Token
-onString f (LI p str _ _) len = return $! Token (f (L.take len str)) p
+onString :: (L.Text -> TokenClass) -> Action Token
+onString f (LI p str _ _) len = pure $! Token (f (L.take len str)) p
 
 lexTok :: (T.Text -> TokenClass) -> Action Token
-lexTok k (LI p str _ _) len = return (Token (k str') p) where
-    str' = T.decodeUtf8 . L.toStrict . L.take len $ str
+lexTok k (LI p str _ _) len = pure (Token (k str') p) where
+    str' = L.toStrict . L.take len $ str
 
-onStringM :: (ByteString -> Action a) -> Action a
+onStringM :: (L.Text -> Action a) -> Action a
 onStringM f p@(LI _ str _ _) len = (f (L.take len str)) p len
 
-lexInput :: String -> ByteString -> ParseResult [Token]
+lexInput :: String -> L.Text -> ParseResult [Token]
 lexInput fp text = runParser fp text (loop []) where
   loop buf = do
     tok <- lexerScan
     case tok of
-      Token TcEOF _ -> return (reverse buf)
+      Token TcEOF _ -> pure (reverse buf)
       tok -> loop $! (tok : buf)
 
 lexerContextScan :: Parser Token
@@ -281,7 +292,7 @@ lexerScan = do
         n | n == comment -> failWith (UnclosedComment (liPos inp) start)
         _ -> failWith (UnexpectedEnd (liPos inp))
     AlexError (LI p str _ _) ->
-      let ch = Lt.head . Lt.decodeUtf8 $ str
+      let ch = L.head str
       in failWith (UnexpectedCharacter p ch)
     AlexSkip  inp' _ -> do
       setInput inp'
