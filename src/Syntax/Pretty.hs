@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
-{-# LANGUAGE FlexibleContexts, UndecidableInstances, FlexibleInstances, RecordWildCards #-}
+{-# LANGUAGE FlexibleContexts, UndecidableInstances, FlexibleInstances, OverloadedStrings #-}
 module Syntax.Pretty
   ( module Syntax
   , tidyPrettyType, applyCons
@@ -52,7 +52,7 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
   pretty (BinOp l o r _) = parens (pretty l <+> pretty o <+> pretty r)
   pretty (Match t bs _) = vsep ((keyword "match" <+> pretty t <+> keyword "with"):prettyMatches bs)
   pretty (Function bs _) = vsep (keyword "function":prettyMatches bs)
-  pretty (Hole v _) = pretty v -- A typed hole
+  pretty (Hole v _) = "_" <> pretty v -- A typed hole
   pretty (Ascription e t _) = parens $ pretty e <+> colon <+> pretty t
   pretty (Record rows _) = record (map (\(n, v) -> text n <+> equals <+> pretty v) rows)
   pretty (RecordExt var rows _) = braces $ pretty var <+> keyword "with" <+> hsep (punctuate comma (prettyRows equals rows))

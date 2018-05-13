@@ -232,7 +232,7 @@ reExpr (Parens e a) = flip Parens a <$> reExpr e
 reExpr (Tuple es a) = Tuple <$> traverse reExpr es <*> pure a
 reExpr (TupleSection es a) = TupleSection <$> traverse (traverse reExpr) es <*> pure a
 
-reExpr (OpenIn m e a) = resolveOpen m Nothing (\m' -> (OpenIn m' <$> reExpr e <*> pure a))
+reExpr (OpenIn m e a) = resolveOpen m Nothing (\m' -> OpenIn m' <$> reExpr e <*> pure a)
 
 reExpr ExprWrapper{} = error "resolve cast"
 
