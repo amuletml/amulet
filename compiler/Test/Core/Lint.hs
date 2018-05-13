@@ -1,8 +1,7 @@
 {-# LANGUAGE OverloadedStrings, FlexibleContexts #-}
 module Test.Core.Lint (tests) where
 
-import qualified Data.ByteString.Builder as B
-import qualified Data.Text.Encoding as T
+import qualified Data.Text.Lazy as L
 import qualified Data.Text.IO as T
 import qualified Data.Text as T
 import Data.Foldable
@@ -54,7 +53,7 @@ compile (file:files) = do
 
   where
     go (Right (tops, scope, modScope, env)) (name, file) =
-      case runParser name (B.toLazyByteString $ T.encodeUtf8Builder file) parseInput of
+      case runParser name (L.fromStrict file) parseInput of
         POK _ parsed -> do
           resolved <- resolveProgram scope modScope parsed
           case resolved of

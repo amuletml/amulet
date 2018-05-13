@@ -8,8 +8,7 @@ import Control.Applicative hiding (empty)
 import Control.Monad.Gen
 import Control.Lens ((^.), to)
 
-import qualified Data.ByteString.Builder as B
-import qualified Data.Text.Encoding as T
+import qualified Data.Text.Lazy as L
 import qualified Data.Text as T
 import qualified Data.Map as Map
 import Data.Maybe
@@ -28,7 +27,7 @@ import Pretty
 
 result :: String -> T.Text -> String
 result file contents = runGen $ do
-  let POK _ parsed = runParser file (B.toLazyByteString $ T.encodeUtf8Builder contents) parseInput
+  let POK _ parsed = runParser file (L.fromStrict contents) parseInput
   Right (resolved, _) <- resolveProgram RS.builtinScope RS.emptyModules parsed
   desugared <- desugarProgram resolved
   inferred <- inferProgram builtinsEnv desugared

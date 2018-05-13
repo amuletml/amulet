@@ -5,8 +5,7 @@ import Test.Util
 
 import Control.Monad.Gen
 
-import qualified Data.ByteString.Builder as B
-import qualified Data.Text.Encoding as T
+import qualified Data.Text.Lazy as L
 import qualified Data.Text as T
 
 import Parser.Wrapper (ParseResult(..), runParser)
@@ -27,7 +26,7 @@ import Pretty
 
 result :: String -> T.Text -> String
 result file contents = runGen $ do
-  let POK _ parsed = runParser file (B.toLazyByteString $ T.encodeUtf8Builder contents) parseInput
+  let POK _ parsed = runParser file (L.fromStrict contents) parseInput
   Right (resolved, _) <- resolveProgram RS.builtinScope RS.emptyModules parsed
   desugared <- desugarProgram resolved
   Right (inferred, env) <- inferProgram builtinsEnv desugared
