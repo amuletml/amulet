@@ -93,7 +93,7 @@ resolveTyDeclKind reason tycon args cons = solveForKind reason $ do
     for_ cons $ \case
       UnitCon{} -> pure ()
       ArgCon _ t _ -> () <$ checkKind t TyType
-      GeneralisedCon _ t _ -> inferGadtConKind t tycon (map TvName args)
+      c@(GeneralisedCon _ t _) -> inferGadtConKind c t tycon (map TvName args)
     pure kind
 
 solveForKind :: MonadKind m => SomeReason -> KindT m (Type Typed) -> m (Type Typed)
@@ -201,11 +201,12 @@ checkKind ty u = do
   pure t
 
 inferGadtConKind :: MonadKind m
-                 => Type Resolved
+                 => Constructor Resolved
+                 -> Type Resolved
                  -> Var Resolved
                  -> [Var Typed]
                  -> KindT m ()
-inferGadtConKind typ tycon args = go typ (reverse (spine (gadtConResult typ))) where
+inferGadtConKind con typ tycon args = go typ (reverse (spine (gadtConResult typ))) where
   spine :: Type Resolved -> [Type Resolved]
   spine (TyApp f x) = x:spine f
   spine x = [x]
@@ -223,7 +224,7 @@ inferGadtConKind typ tycon args = go typ (reverse (spine (gadtConResult typ))) w
            pure ()
   go _ _ = do
     tp <- checkKind typ TyType
-    throwError $ gadtConShape
+    throwError . flip ArisingFrom (BecauseOf con) $ gadtConShape
       (tp, foldl TyApp (TyCon (TvName tycon)) (map TyVar args))
       (gadtConResult tp)
       (Malformed tp)
