@@ -166,7 +166,11 @@ library amulet
                      , Core.Optimise.DeadCode
                      -- Backend
                      , Backend.Lua
-                     , Backend.Compile
+                     , Backend.Lua.Emit
+                     , Backend.Lua.Syntax
+                     , Backend.Lua.Postprocess
+
+                     , Backend.Escape
                      -- Infra
                      , Pretty
                      , Control.Monad.Infer
