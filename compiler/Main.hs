@@ -17,7 +17,7 @@ import Control.Lens (ifor_, (^.), to)
 import Data.Position (SourceName)
 
 import Control.Monad.Infer (Env, TypeError, difference, values, types)
-import Backend.Compile (compileProgram)
+import Backend.Lua (compileProgram)
 
 import Types.Infer (inferProgram, builtinsEnv)
 
@@ -29,7 +29,6 @@ import Syntax.Desugar (desugarProgram)
 import Syntax.Pretty (tidyPrettyType)
 import Syntax (Toplevel, Typed, Var, Resolved, Type)
 
-import Core.Occurrence (OccursVar, tagOccursVar)
 import Core.Simplify (optimise)
 import Core.Lower (runLowerT, lowerProg)
 import Core.Core (Stmt)
@@ -50,7 +49,7 @@ data CompileResult a
   | CResolve ResolveError
   | CInfer   TypeError
 
-compile :: [(SourceName, T.Text)] -> CompileResult (OccursVar CoVar)
+compile :: [(SourceName, T.Text)] -> CompileResult CoVar
 compile [] = error "Cannot compile empty input"
 compile (file:files) = runGen $ do
   file' <- go (Right ([], RS.builtinScope, RS.emptyModules, builtinsEnv)) file
@@ -59,7 +58,7 @@ compile (file:files) = runGen $ do
     Right (prg, _, _, env) -> do
       lower <- runLowerT (lowerProg prg)
       optm <- optimise lower
-      pure (CSuccess prg lower (tagOccursVar optm) env)
+      pure (CSuccess prg lower optm env)
 
     Left err -> pure err
 

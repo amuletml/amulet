@@ -17,9 +17,8 @@ import qualified Syntax.Resolve.Scope as RS
 import Syntax.Desugar (desugarProgram)
 
 import Core.Simplify
-import Core.Occurrence (tagOccursVar)
 import Core.Lower
-import Backend.Compile
+import Backend.Lua
 
 import Syntax.Pretty()
 import Pretty
@@ -33,7 +32,7 @@ result file contents = runGen $ do
   lower <- runLowerT (lowerProg inferred)
   optm <- optimise lower
   pure . display . renderPretty 0.8 120 . (<##>empty)
-        . pretty . compileProgram env $ tagOccursVar optm
+       . pretty . compileProgram env $ optm
 
 tests :: IO TestTree
 tests = testGroup "Tests.Core.Backend" <$> goldenDirOn result (++".lua") "tests/lua/" ".ml"
