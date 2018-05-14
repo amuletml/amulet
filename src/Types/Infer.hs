@@ -146,9 +146,9 @@ infer ex@(App f x a) = do
 
 infer ex@(BinOp l o r a) = do
   (o, (ld, c, k1)) <- secondA (decompose ex _TyArr) =<< infer o
-  (rd, c, k2) <- decompose ex _TyArr c
+  (rd, c', k2) <- decompose ex _TyArr c
   (l, r) <- (,) <$> check l ld <*> check r rd
-  pure (App (k2 (App (k1 o) l (a, TyArr rd c))) r (a, c), c)
+  pure (App (k2 (App (k1 o) l (a, c))) r (a, c'), c')
 
 infer ex@(Match t ps a) = do
   (t', tt) <- infer t
