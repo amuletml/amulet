@@ -7,4 +7,4 @@ fail_skolem_escape.ml[2:19 ..2:38]: error
   · Note: in type `au`
   · Note: in the inferred type for escape_fail
   
-  · Arising from use of the expression escapes (fun x -> x)
+  Arising from use of the expression

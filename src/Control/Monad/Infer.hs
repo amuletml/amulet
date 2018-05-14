@@ -253,7 +253,7 @@ instance Pretty TypeError where
          , bullet (string "Note: the variable") <+> skol <+> string "was rigidified because" <+> prettyMotive m
          , indent 8 (string "and is represented by the constant") <+> stypeSkol (pretty k)
          ] <#> case b of
-             TySkol (Skolem _ v _ m) ->
+             TySkol (Skolem k v _ m) ->
                vcat [ empty
                     , vsep [ bullet (string "Note: the rigid type variable") <+> stypeVar (pretty v) <> comma <+> string "in turn" <> comma
                            , indent 8 (string "was rigidified because") <+> prettyMotive m

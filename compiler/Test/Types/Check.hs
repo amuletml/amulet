@@ -52,4 +52,7 @@ result file contents = runGen $ do
     innermostError _ = Nothing
 
 tests :: IO TestTree
-tests = testGroup "Tests.Types.Check" <$> goldenDir result "tests/types/" ".ml"
+tests = do
+  inference <- testGroup "Type inference tests" <$> goldenDir result "tests/types/" ".ml"
+  gadts <- testGroup "GADT inference tests" <$> goldenDir result "tests/gadt/" ".ml"
+  pure (testGroup "Type inference" [ inference, gadts ])

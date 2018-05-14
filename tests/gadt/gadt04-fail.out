@@ -1,0 +1,2 @@
+MkT : (int * int) -> t
+t : type
