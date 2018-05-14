@@ -244,7 +244,7 @@ compileTerm (Extend tbl exs) = do
 
         compileRow (f, _, e) es = (:es) . LuaAssign [LuaIndex (LuaRef new) (LuaString f)] . pure <$> compileAtom e
 
-compileTerm (Let (One (x, _, e)) body)
+compileTerm (Let ValueBind (One (x, _, e)) body)
   | usedWhen x == Once && not (isMultiMatch e) = do
       -- If we've got a let binding which is only used once then push it onto the stack
       e' <- compileTerm e
@@ -276,7 +276,7 @@ compileTerm (Let (One (x, _, e)) body)
         asStmt (LuaCall f e) = [ LuaCallS f e ]
         asStmt _ = []
 
-compileTerm (Let (Many bs) body) = do
+compileTerm (Let ValueBind (Many bs) body) = do
   -- Otherwise predeclare all variables and emit the bindings
   bs' <- traverse ((LuaName<$>) . pushScope . fst3) bs
   flushStmt [ LuaLocal bs' [] ]

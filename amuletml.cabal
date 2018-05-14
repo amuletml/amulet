@@ -163,6 +163,7 @@ library amulet
                      , Core.Optimise.Inline
                      , Core.Optimise.Sinking
                      , Core.Optimise.Newtype
+                     , Core.Optimise.Joinify
                      , Core.Optimise.DeadCode
                      -- Backend
                      , Backend.Lua

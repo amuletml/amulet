@@ -1,7 +1,7 @@
 module Core.Arity
   ( ArityScope
   , emptyScope
-  , atomArity
+  , atomArity, lamArity, lamArity'
   , isPure
   , extendPureFuns, extendPureCtors
   ) where
@@ -22,6 +22,14 @@ newtype ArityScope = ArityScope { pureArity :: VarMap.Map Int }
 emptyScope :: ArityScope
 emptyScope = ArityScope opArity
 
+lamArity :: AnnAtom b a -> Int
+lamArity (Lam _ e) = 1 + lamArity' e
+lamArity _ = 0
+
+lamArity' :: AnnTerm b a -> Int
+lamArity' (AnnAtom _ a) = lamArity a
+lamArity' _ = 0
+
 -- Compute the number of arguments which can be passed to a function before
 -- it becomes "impure".
 atomArity :: IsVar a => ArityScope -> AnnAtom b a -> Int
@@ -34,8 +42,8 @@ isPure _ AnnAtom{}   = True
 isPure _ AnnExtend{} = True
 isPure _ AnnTyApp{}  = True
 isPure _ AnnCast{}  = True
-isPure s (AnnLet _ (One v) e) = isPure s e && isPure s (thd3 v)
-isPure s (AnnLet _ (Many vs) e) = isPure s e && all (isPure s . thd3) vs
+isPure s (AnnLet _ _ (One v) e) = isPure s e && isPure s (thd3 v)
+isPure s (AnnLet _ _ (Many vs) e) = isPure s e && all (isPure s . thd3) vs
 isPure s (AnnMatch _ _ bs) = all (isPure s . view armBody) bs
 isPure s (AnnApp _ f _) = atomArity s f > 0
 

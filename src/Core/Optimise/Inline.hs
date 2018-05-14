@@ -42,8 +42,8 @@ inlineVariablePass = transS (InlineScope mempty mempty) where
     case f' of
       Ref r _
         | Just (Lam (TermArgument v t) b, score) <- VarMap.lookup (toVar r) (scores s)
-        , score <= limit -> refresh$ Let (One (v, t, Atom a')) b
-      Lam (TermArgument v t) b -> pure $ Let (One (v, t, Atom a')) b
+        , score <= limit -> refresh $ Let ValueBind (One (v, t, Atom a')) b
+      Lam (TermArgument v t) b -> pure $ Let ValueBind (One (v, t, Atom a')) b
       _ -> pure (App f' a')
   transT s (Cast f t) = flip Cast t <$> transA s f
   transT s (TyApp f t) = do
@@ -56,14 +56,17 @@ inlineVariablePass = transS (InlineScope mempty mempty) where
       f' -> pure $ TyApp f' t
   transT s (Extend t rs) = Extend <$> transA s t
                                   <*> traverse (third3A (transA s)) rs
-  transT s (Let (One var) body) = do
+  transT s (Let k (One var) body) = do
     var' <- third3A (transT s) var
     body' <- transT (extendVar var s) body
-    pure (Let (One var') body')
-  transT s (Let (Many vars) body) = do
+    pure $ case var' of
+      (v, ty, Let ek ev eb) -> 
+        Let ek ev (Let k (One (v, ty, eb)) body)
+      _ -> Let k (One var') body'
+  transT s (Let k (Many vars) body) = do
     vars' <- traverse (third3A (transT s)) vars
     body' <- transT (extendVars vars' s) body
-    pure (Let (Many vars') body')
+    pure (Let k (Many vars') body')
   transT s (Match test branches) = Match <$> transA s test
                                          <*> traverse (armBody %%~ transT s) branches
 
@@ -88,8 +91,8 @@ scoreAtom s (Lam TermArgument{} b) = 1 + scoreTerm s b
 scoreTerm :: IsVar a => InlineScope a -> Term a  -> Int
 scoreTerm s (Atom a) = scoreAtom s a
 scoreTerm s (App f x) = scoreAtom s f + scoreAtom s x + 2
-scoreTerm s (Let (One v) e) = scoreTerm s (thd3 v) + scoreTerm s e
-scoreTerm s (Let (Many vs) e) = sum (map (scoreTerm s . thd3) vs) + scoreTerm s e
+scoreTerm s (Let _ (One v) e) = scoreTerm s (thd3 v) + scoreTerm s e
+scoreTerm s (Let _ (Many vs) e) = sum (map (scoreTerm s . thd3) vs) + scoreTerm s e
 scoreTerm s (Match e bs) = scoreAtom s e + sum (map (scoreTerm s . view armBody) bs)
 scoreTerm s (Extend e rs) = scoreAtom s e + sum (map (scoreAtom s . thd3) rs)
 scoreTerm s (TyApp t _) = scoreAtom s t
