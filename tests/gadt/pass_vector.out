@@ -1,0 +1,9 @@
+Z : natural
+S : natural -> natural
+Nil : {'n : natural}. {'a : type}. ('n ~ Z) ⊃ vect 'n 'a
+Cons : {'n : natural}. {'a : type}. {'k : natural}. ('n ~ S 'k) ⊃ ('a * vect 'k 'a) -> vect 'n 'a
+head : {'dy : type}. {'k : natural}. vect (S 'k) 'dy -> 'dy
+tail : {'k : natural}. {'dg : type}. vect (S 'k) 'dg -> vect 'k 'dg
+main : int
+natural : type
+vect : natural -> type -> type

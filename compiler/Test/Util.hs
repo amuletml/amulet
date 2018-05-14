@@ -11,6 +11,7 @@ import qualified Data.Text.IO as T
 import qualified Data.Text as T
 import Data.Algorithm.Diff
 import Data.Maybe
+import Data.List
 
 import Control.Exception
 
@@ -56,7 +57,7 @@ goldenFile fn dir name out = testCase name $ do
   golden (dir ++ out) actual
 
 goldenDirOn :: (FilePath -> T.Text -> String) -> (String -> String) -> FilePath -> String -> IO [TestTree]
-goldenDirOn fn out dir ext = mapMaybe (\x -> goldenFile fn dir x . out <$> spanTail ext x) <$> listDirectory dir where
+goldenDirOn fn out dir ext = mapMaybe (\x -> goldenFile fn dir x . out <$> spanTail ext x) . sort <$> listDirectory dir where
   spanTail _ [] = Nothing
   spanTail s x@(y:ys) = if x == s then Just [] else (y:) <$> spanTail s ys
 

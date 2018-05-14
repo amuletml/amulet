@@ -1,0 +1,4 @@
+gadt03-fail.ml[7:12 ..7:12]: error
+  Could not match type int with bool
+  
+  Arising from use of the expression

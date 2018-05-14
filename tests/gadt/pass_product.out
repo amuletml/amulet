@@ -1,0 +1,9 @@
+Nil : {'tys : type}. ('tys ~ unit) ⊃ list 'tys
+Cons : {'tys : type}. {'a : type}. {'b : type}. ('tys ~ 'a * 'b) ⊃ ('a * list 'b) -> list 'tys
+Here : {'xs : 'eb}. {'x : 'eb}. {'xs : 'eb}. ('xs ~ 'x * 'xs) ⊃ elem 'x 'xs
+There : {'xs : 'fd}. {'x : 'fd}. {'xs : 'fd}. {'y : 'fd}. ('xs ~ 'y * 'xs) ⊃ elem 'x 'xs -> elem 'x 'xs
+index : {'a : type}. {'ts : type}. elem 'a 'ts -> list 'ts -> 'a
+:: : {'jl : type}. {'b : type}. 'jl -> list 'b -> list ('jl * 'b)
+foo : string
+list : type -> type
+elem : {'cw : type}. 'cw -> 'cw -> type

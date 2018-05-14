@@ -1,0 +1,6 @@
+a : bool
+b : bool
+x : int
+f : int -> int
+f' : int -> int
+@ : {'bk : type}. {'bl : type}. {'cc : type}. ('cc -> 'bl) -> ('bk -> 'cc) -> 'bk -> 'bl
