@@ -174,17 +174,30 @@ freshTV :: MonadGen Int m => m (Type Typed)
 freshTV = TyVar . TvName <$> fresh
 
 instance Pretty TypeError where
-  pretty (NotEqual a b) = string "Type error: failed to" <+> align (string "unify" <+> pretty a </> string "with" <+> pretty b)
+  pretty (NotEqual a b@TyArr{}) =
+    let thing = case a of
+          TyType -> string "type constructor"
+          _ -> string "function"
+     in vcat [ string "Could not match type" <+> pretty a <+> string "with" <+> pretty b
+             , string "Have you applied a" <+> thing <+> "to the wrong number of arguments?"
+             ]
+  pretty (NotEqual TyType b) =
+    vcat [ string "Expected a type, but this annotation is of kind" <+> pretty b
+         , string "Have you applied a type constructor to the wrong number of arguments?"
+         ]
+  pretty (NotEqual a b) = string "Could not match type" <+> pretty a <+> string "with" <+> pretty b
+
   pretty (Occurs v t) = string "Occurs check:" <+> string "The type variable" <+> stypeVar (pretty v) </> indent 4 (string "occurs in the type" <+> pretty t)
   pretty (NotInScope e) = string "Variable not in scope:" <+> pretty e
-  pretty (ArisingFrom er ex) = pretty (annotation ex) <> colon <+> stypeSkol (string "error")
-    <#> indent 2 (pretty er <#> empty <#> nest 4 (bullet (string "Arising from use of" <+> blameOf ex) </> pretty ex))
+  pretty (ArisingFrom er ex) = pretty (annotation ex) <> colon <+> highlight "error"
+    <#> indent 2 (pretty er <#> empty <#> nest 4 (string "Arising from use of" <+> blameOf ex))
   pretty (FoundHole e s) = string "Found typed hole" <+> pretty e <+> "of type" <+> pretty s
 
   pretty (Note te m) = pretty te <#> bullet (string "Note:") <+> align (pretty m)
   pretty (Suggestion te m) = pretty te <#> bullet (string "Suggestion:") <+> align (pretty m)
   pretty (CanNotInstance rec new) = string "Can not instance hole of record type" <+> align (verbatim rec </> string " to type " <+> verbatim new)
   pretty (Malformed tp) = string "The type" <+> verbatim tp <+> string "is malformed."
+
   pretty (NoOverlap ta tb)
     | TyExactRows ra <- ta
     , TyRows _ rb <- tb
@@ -236,16 +249,15 @@ instance Pretty TypeError where
          ]
 
   pretty (SkolBinding (Skolem k v _ m) b) =
-    vsep [ string "Can not unify rigid type variable" <+> skol <+> string "with" <+> whatIs b
+    vsep [ string "Could not match rigid type variable" <+> skol <+> string "with" <+> whatIs b
          , bullet (string "Note: the variable") <+> skol <+> string "was rigidified because" <+> prettyMotive m
          , indent 8 (string "and is represented by the constant") <+> stypeSkol (pretty k)
-         ] <> case b of
+         ] <#> case b of
              TySkol (Skolem _ v _ m) ->
-               empty <#>
-                 vsep [ bullet (string "Note: the rigid type variable") <+> stypeVar (pretty v) <> comma <+> string "in turn" <> comma
-                      , indent 8 (string "was rigidified because") <+> prettyMotive m
-                      , indent 8 (string "and is represented by the constant") <+> stypeSkol (pretty k)
-                      ]
+               vcat [ empty
+                    , vsep [ bullet (string "Note: the rigid type variable") <+> stypeVar (pretty v) <> comma <+> string "in turn" <> comma
+                           , indent 8 (string "was rigidified because") <+> prettyMotive m
+                           , indent 8 (string "and is represented by the constant") <+> stypeSkol (pretty k) ] ]
              _ -> empty
     where whatIs (TySkol (Skolem _ v _ _)) = string "the rigid type variable" <+> stypeVar (pretty v)
           whatIs t = string "the type" <+> pretty t

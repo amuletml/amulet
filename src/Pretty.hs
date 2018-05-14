@@ -13,7 +13,7 @@ module Pretty
   , skeyword, sliteral, sstring, scomment, stypeCon, stypeVar, stypeSkol, soperator
 
   , arrow, equals, colon, prod, pipe
-  , keyword
+  , keyword, highlight
   , verbatim, bullet
   ) where
 
@@ -130,8 +130,9 @@ colon = soperator (char ':')
 prod = soperator (char '*')
 pipe = soperator (char '|')
 
-keyword :: String -> Doc
+keyword, highlight :: String -> Doc
 keyword = skeyword . string
+highlight = stypeSkol . string
 
 verbatim :: Pretty a => a -> Doc
 verbatim = enclose (char '`') (char '`') . pretty
