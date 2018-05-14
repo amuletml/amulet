@@ -30,16 +30,16 @@ class (Spanned (f p), Pretty (f p)) => Reasonable f p where
   blame _ = empty
 
 instance (Spanned (Pattern p), Pretty (Var p)) => Reasonable Pattern p where
-  blame _ = string "the pattern"
+  blame _ = string "the" <+> highlight "pattern"
 
 instance (Spanned (Expr p), Pretty (Var p)) => Reasonable Expr p where
-  blame _ = string "the expression"
+  blame _ = string "the" <+> highlight "expression"
 
 instance (Data p, Data (Ann p), Data (Var p), Pretty (Var p)) => Reasonable Constructor p where
-  blame _ = string "the constructor"
+  blame _ = string "the" <+> highlight "constructor"
 
 instance (Ann p ~ Span, Data p, Data (Ann p), Data (Var p), Pretty (Var p)) => Reasonable Toplevel p where
-  blame _ = string "the declaration"
+  blame _ = string "the" <+> highlight "declaration"
 
 instance Reasonable (Const SomeReason) p where
   blame = blameOf . getConst
