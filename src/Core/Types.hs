@@ -95,8 +95,9 @@ unifyClosed = go mempty where
   go _ (ConTy a) (ConTy b) = a == b
   go s (VarTy a) (VarTy b) = fromMaybe a (VarMap.lookup (toVar a) s) == b
   go s (ForallTy (Relevant v) c ty) (ForallTy (Relevant v') c' ty')
-    | v == v' = go s c c' && go s ty ty'
-    | otherwise = go (VarMap.insert (toVar v) v' s) ty ty' && go s c c'
+    | v == v' = go s c c' && go s' ty ty'
+    | otherwise = go (VarMap.insert (toVar v) v' s') ty ty' && go s c c'
+    where s' = VarMap.delete (toVar v') s
   go s (ForallTy Irrelevant a r) (ForallTy Irrelevant a' r') = go s a a' && go s r r'
   go s (AppTy f x) (AppTy f' x') = go s f f' && go s x x'
   go s (RowsTy f ts) (RowsTy f' ts') = go s f f' && and (zipWith (\(l, t) (l', t') -> l == l' && go s t t') (sortOn fst ts) (sortOn fst ts'))
