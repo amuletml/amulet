@@ -142,7 +142,9 @@ inferKind (TyApp f x) = do
   case dom of
     Anon d -> do
       x <- checkKind x d
-      pure (TyApp f x, c)
+      case x of
+        TyForall{} -> throwError (ImpredicativeApp f x)
+        _ -> pure (TyApp f x, c)
     Implicit{} -> error "inferKind TyApp: visible argument to implicit quantifier"
 
 inferKind (TyRows p rs) = do
