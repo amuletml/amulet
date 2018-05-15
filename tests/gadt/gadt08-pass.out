@@ -1,0 +1,11 @@
+Nil : {'a : type}. list 'a
+Cons : {'a : type}. ('a * list 'a) -> list 'a
+Here : {'xs : list 'dt}. {'x : 'dt}. {'xs : list 'dt}. ('xs ~ Cons ('x * 'xs)) ⊃ elem 'x 'xs
+There : {'xs : list 'fb}. {'x : 'fb}. {'xs : list 'fb}. {'y : 'fb}. ('xs ~ Cons ('y * 'xs)) ⊃ elem 'x 'xs -> elem 'x 'xs
+Unit : {'a : list type}. ('a ~ Nil) ⊃ product 'a
+Pair : {'a : list type}. {'a : type}. {'b : list type}. ('a ~ Cons ('a * 'b)) ⊃ ('a * product 'b) -> product 'a
+:: : {'ig : type}. {'b : list type}. 'ig -> product 'b -> product (Cons ('ig * 'b))
+foo : product (Cons (int * Cons (unit * Cons (string * Cons (bool * Cons (float * Nil))))))
+list : type -> type
+elem : {'ci : type}. 'ci -> list 'ci -> type
+product : list type -> type
