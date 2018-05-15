@@ -55,4 +55,5 @@ tests :: IO TestTree
 tests = do
   inference <- testGroup "Type inference tests" <$> goldenDir result "tests/types/" ".ml"
   gadts <- testGroup "GADT inference tests" <$> goldenDir result "tests/gadt/" ".ml"
-  pure (testGroup "Type inference" [ inference, gadts ])
+  rankn <- testGroup "Rank-N inference tests" <$> goldenDir result "tests/rankn/" ".ml"
+  pure (testGroup "Type inference" [ inference, gadts, rankn ])
