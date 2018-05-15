@@ -113,15 +113,19 @@ inferKind (TyCon v) = do
   x <- view (types . at v)
   case x of
     Nothing -> throwError (NotInScope v)
-    Just k -> pure (TyCon (TvName v), k)
+    Just k -> do
+      (_, _, k) <- instantiate k
+      pure (TyCon (TvName v), k)
 
 inferKind (TyPromotedCon v) = do
   x <- view (values . at v)
   case x of
     Nothing -> throwError (NotInScope v)
-    Just k -> case promoteOrError k of
-      Nothing -> pure (TyPromotedCon (TvName v), k)
-      Just err -> throwError (NotPromotable (TvName v) k err)
+    Just k -> do
+      (_, _, k) <- instantiate k
+      case promoteOrError k of
+        Nothing -> pure (TyPromotedCon (TvName v), k)
+        Just err -> throwError (NotPromotable (TvName v) k err)
 
 inferKind (TyVar v) = do
   k <- maybe freshTV pure =<< view (types . at v)
@@ -169,6 +173,9 @@ checkKind (TyExactRows rs) k = do
     ty <- checkKind ty k
     pure (row, ty)
   pure (TyExactRows rs)
+
+checkKind (TyTuple a b) (TyTuple ak bk) = do
+  TyTuple <$> checkKind a ak <*> checkKind b bk
 
 checkKind (TyTuple a b) ek = do
   TyTuple <$> checkKind a ek <*> checkKind b ek
@@ -256,7 +263,7 @@ closeOver r a = kindVars <$> annotateKind r (forall (toList freevars) a) where
 
 promoteOrError :: Type Typed -> Maybe Doc
 promoteOrError TyWithConstraints{} = Just (string "mentions constraints")
-promoteOrError TyTuple{} = Just (string "mentions a tuple")
+promoteOrError TyTuple{} = Nothing
 promoteOrError TyRows{} = Just (string "mentions a tuple")
 promoteOrError TyExactRows{} = Just (string "mentions a tuple")
 promoteOrError (TyApp a b) = promoteOrError a <|> promoteOrError b
