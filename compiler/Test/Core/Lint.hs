@@ -4,15 +4,12 @@ module Test.Core.Lint (tests) where
 import qualified Data.Text.Lazy as L
 import qualified Data.Text.IO as T
 import qualified Data.Text as T
-import Data.Foldable
-
-import Control.Monad
-import Control.Monad.Gen
-
 import Data.Position (SourceName)
+import Data.Foldable
 import Data.Spanned
 
 import Control.Monad.Infer (TypeError)
+import Control.Monad.Gen
 
 import Types.Infer (inferProgram, builtinsEnv)
 
@@ -35,6 +32,8 @@ import Parser.Error
 
 import Test.Tasty
 import Test.Tasty.HUnit
+
+import System.Directory
 
 data CompileResult
   = CSuccess [Stmt CoVar]
@@ -78,7 +77,7 @@ compile (file:files) = do
 
 testLint :: ([Stmt CoVar] -> Gen Int [Stmt CoVar]) -> String -> Assertion
 testLint f file = do
-  contents <- T.readFile ("examples/" ++ file)
+  contents <- T.readFile file
   runGen $ do
     s <- compile [(file, contents)]
     case s of
@@ -95,11 +94,15 @@ testLintLower, testLintSimplify :: String -> Assertion
 testLintLower = testLint pure
 testLintSimplify = testLint optimise
 
-tests :: TestTree
-tests = testGroup "Test.Core.Lint"
-        [ testGroup "Lower" (map (ap testCase testLintLower) files)
-        , testGroup "Simplify" (map (ap testCase testLintSimplify) files)
-        ]
+tests :: IO TestTree
+tests = do
+  folderLint <- map (testCase <*> testLintSimplify . ("tests/lint/"++)) <$> listDirectory "tests/lint/"
+
+  pure $ testGroup "Test.Core.Lint"
+    [ testGroup "Examples" [ testGroup "Lower" (map (testCase <*> testLintLower . ("examples/"++)) files)
+                           , testGroup "Simplify" (map (testCase <*> testLintSimplify . ("examples/"++)) files) ]
+    , testGroup "Test folder" folderLint
+    ]
 
 files :: [String]
 files =
