@@ -24,6 +24,7 @@ report :: Pretty p => p -> FileMap -> IO ()
 report err _ = putDoc (pretty err)
 
 reportI :: I.TypeError -> FileMap -> IO ()
+reportI (I.ManyErrors errs) files = traverse_ (flip reportI files) errs
 reportI err files
   | (err', Just (reason, loc)) <- innermostError err
   = reportP (I.ArisingFrom err' reason) loc files

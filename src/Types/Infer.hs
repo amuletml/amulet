@@ -201,7 +201,7 @@ inferProg :: MonadInfer Typed m
           => [Toplevel Resolved] -> m ([Toplevel Typed], Env)
 inferProg (stmt@(LetStmt ns):prg) = do
   (ns', ts) <- inferLetTy (closeOver (BecauseOf stmt)) ns
-                   `catchError` (throwError . flip ArisingFrom (BecauseOf stmt))
+                   `catchError` (throwError . propagateBlame (BecauseOf stmt))
   local (values %~ focus ts) $
     consFst (LetStmt ns') $
       inferProg prg
@@ -215,7 +215,7 @@ inferProg (decl@(TypeDecl n tvs cs):prg) = do
   let retTy = foldl TyApp (TyCon (TvName n)) (map (TyVar . TvName) tvs)
    in extendKind (TvName n, kind) $ do
      (ts, cs') <- unzip <$> for cs (\con ->
-       inferCon retTy con `catchError` \x -> throwError (ArisingFrom x (BecauseOf con)))
+       inferCon retTy con `catchError` (throwError . propagateBlame (BecauseOf con)))
      local (values %~ focus (teleFromList ts)) . local (constructors %~ Set.union (Set.fromList (map (unTvName . fst) ts))) $
        consFst (TypeDecl (TvName n) (map TvName tvs) cs') $
          inferProg prg
@@ -260,7 +260,7 @@ inferLetTy closeOver vs =
       wasGuessed _ = False
 
       blameSkol :: TypeError -> (Var Resolved, SomeReason) -> TypeError
-      blameSkol e (v, r) = ArisingFrom (Note e (string "in the inferred type for" <+> pretty v)) r
+      blameSkol e (v, r) = propagateBlame r (Note e (string "in the inferred type for" <+> pretty v))
 
       figureOut :: (Var Resolved, SomeReason) -> Type Typed -> Seq.Seq (Constraint Typed) -> m (Type Typed, Expr Typed -> Expr Typed)
       figureOut blame ty cs = do
@@ -269,7 +269,7 @@ inferLetTy closeOver vs =
           Right (x, co) -> do
             ty' <- closeOver (apply x ty)
             pure (x, co, ty')
-          Left e -> throwError (ArisingFrom e (snd blame))
+          Left e -> throwError (propagateBlame (snd blame) e)
         skolCheck (TvName (fst blame)) (snd blame) vt
         pure (vt, solveEx vt x co)
 

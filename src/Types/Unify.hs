@@ -39,7 +39,7 @@ data SolveState
 makeLenses ''SolveState
 makeLenses ''SolveScope
 
-type SolveM = GenT Int (StateT SolveState (ReaderT SolveScope (Except TypeError)))
+type SolveM = GenT Int (WriterT [TypeError] (StateT SolveState (ReaderT SolveScope (Except TypeError))))
 
 bind :: Var Typed -> Type Typed -> SolveM (Coercion Typed)
 bind var ty
@@ -60,7 +60,8 @@ bind var ty
             case Map.lookup var env of
               Nothing -> do
                 if | var `Set.notMember` noTouch -> solveTySubst .= env `compose` Map.singleton var ty
-                   | var `Set.member` noTouch, TyVar v <- ty, v `Set.notMember` noTouch -> solveTySubst .= (env `compose` Map.singleton v (TyVar var))
+                   | var `Set.member` noTouch, TyVar v <- ty, v `Set.notMember` noTouch ->
+                     solveTySubst .= (env `compose` Map.singleton v (TyVar var))
                    | otherwise -> throwError (NotEqual (TyVar var) ty)
                 pure (AssumedCo (TyVar var) ty)
               Just ty'
@@ -183,12 +184,14 @@ unifRow (t, a, b) = do
   pure (t, co)
 
 runSolve :: Int -> Subst Typed -> SolveM b -> Either TypeError (Int, (Subst Typed, Map.Map (Var Typed) (Wrapper Typed)))
-runSolve i s x = runExcept (fix (runReaderT (runStateT (runGenTFrom i act) (SolveState s mempty mempty)) emptyScope)) where
+runSolve i s x = runExcept (fix (runReaderT (runStateT (runWriterT (runGenTFrom i act)) (SolveState s mempty mempty)) emptyScope)) where
   act = (,) <$> gen <*> x
   fix act = do
-    ((i, _), s) <- act
-    let ss = s ^. solveTySubst
-     in pure (i, (fmap (apply ss) ss, s ^. solveCoSubst))
+    (((i, _), w), s) <- act
+    case w of
+      [] -> let ss = s ^. solveTySubst
+             in pure (i, (fmap (apply ss) ss, s ^. solveCoSubst))
+      xs -> throwError (ManyErrors xs)
   emptyScope = SolveScope False mempty
 
 solve :: Int -> Seq.Seq (Constraint Typed) -> Either TypeError (Subst Typed, Map.Map (Var Typed) (Wrapper Typed))
@@ -199,18 +202,20 @@ doSolve Empty = pure ()
 doSolve (ConUnify because v a b :<| xs) = do
   sub <- use solveTySubst
 
-  co <- unify (apply sub a) (apply sub b)
-    `catchError` \e -> throwError (ArisingFrom e because)
-  solveCoSubst . at v .= Just (Cast co)
+  co <- catchy $ unify (apply sub a) (apply sub b)
+  case co of
+    Left e -> tell [propagateBlame because e]
+    Right co -> solveCoSubst . at v .= Just (Cast co)
 
   doSolve xs
 doSolve (ConSubsume because v a b :<| xs) = do
   sub <- use solveTySubst
 
 
-  co <- subsumes unify (apply sub a) (apply sub b)
-    `catchError` \e -> throwError (ArisingFrom e because)
-  solveCoSubst . at v .= Just co
+  co <- catchy $ subsumes unify (apply sub a) (apply sub b)
+  case co of
+    Left e -> tell [propagateBlame because e]
+    Right co -> solveCoSubst . at v .= Just (co)
 
   doSolve xs
 doSolve (ConImplies because not cs ts :<| xs) = do
@@ -227,7 +232,7 @@ doSolve (ConImplies because not cs ts :<| xs) = do
 
     local (don'tTouch %~ Set.union not') $ do
       doSolve (fmap (apply (sub ^. solveTySubst)) ts')
-        `catchError` \e -> throwError (ArisingFrom e because)
+        `catchError` \e -> tell [ArisingFrom e because]
 
     let leaky = Map.filterWithKey (\k _ -> k `Set.notMember` assumptionBound) (sub ^. solveTySubst)
         assumptionBound = not'
@@ -282,3 +287,5 @@ capture m = do
   put x
   pure (r, st)
 
+catchy :: MonadError e m => m a -> m (Either e a)
+catchy x = (Right <$> x) `catchError` (pure . Left)
