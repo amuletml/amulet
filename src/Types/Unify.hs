@@ -23,6 +23,8 @@ import Data.Function
 import Data.List
 import Data.Text (Text)
 
+import Debug.Trace
+
 data SolveScope
   = SolveScope { _bindSkol :: Bool
                , _don'tTouch :: Set.Set (Var Typed)
@@ -241,10 +243,11 @@ doSolve (ConImplies because not cs ts :<| xs) = do
     solveAssumptions .= assump
 
     doSolve xs
-doSolve (ConFail v t :<| cs) = do
+doSolve (ConFail a v t :<| cs) = do
   doSolve cs
   sub <- use solveTySubst
-  tell [foundHole v (apply sub t) sub]
+  let ex = Hole (unTvName v) (fst a)
+  tell [propagateBlame (BecauseOf ex) $ foundHole v (apply sub t) sub]
 
 subsumes :: (Type Typed -> Type Typed -> SolveM (Coercion Typed))
          -> Type Typed -> Type Typed -> SolveM (Wrapper Typed)

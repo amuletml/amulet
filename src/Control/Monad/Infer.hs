@@ -57,7 +57,7 @@ data Constraint p
   = ConUnify   SomeReason (Var p)  (Type p) (Type p)
   | ConSubsume SomeReason (Var p)  (Type p) (Type p)
   | ConImplies SomeReason (Type p) (Seq.Seq (Constraint p)) (Seq.Seq (Constraint p))
-  | ConFail (Var p) (Type p) -- for holes. I hate it.
+  | ConFail (Ann p) (Var p) (Type p) -- for holes. I hate it.
 
 deriving instance (Show (Ann p), Show (Var p), Show (Expr p), Show (Type p))
   => Show (Constraint p)
@@ -99,12 +99,12 @@ instance (Ord (Var p), Substitutable p (Type p)) => Substitutable p (Constraint 
   ftv (ConUnify _ _ a b) = ftv a `Set.union` ftv b
   ftv (ConSubsume _ _ a b) = ftv a `Set.union` ftv b
   ftv (ConImplies _ t a b) = ftv a `Set.union` ftv b `Set.union` ftv t
-  ftv (ConFail _ t) = ftv t
+  ftv (ConFail _ _ t) = ftv t
 
   apply s (ConUnify e v a b) = ConUnify e v (apply s a) (apply s b)
   apply s (ConSubsume e v a b) = ConSubsume e v (apply s a) (apply s b)
   apply s (ConImplies e t a b) = ConImplies e (apply s t) (apply s a) (apply s b)
-  apply s (ConFail e t) = ConFail e (apply s t)
+  apply s (ConFail a e t) = ConFail a e (apply s t)
 
 instance Pretty (Var p) => Pretty (Constraint p) where
   pretty (ConUnify _ _ a b) = pretty a <+> soperator (char '~') <+> pretty b

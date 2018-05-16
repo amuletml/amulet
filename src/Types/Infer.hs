@@ -50,7 +50,7 @@ check e ty@TyForall{} = do -- This is rule Decl∀L from [Complete and Easy]
   pure (ExprWrapper wrap e (annotation e, ty))
 
 check (Hole v a) t = do
-  tell (Seq.singleton (ConFail (TvName v) t))
+  tell (Seq.singleton (ConFail (a, t) (TvName v) t))
   pure (Hole (TvName v) (a, t))
 
 check (Begin [] _) _ = error "impossible: check empty Begin"
