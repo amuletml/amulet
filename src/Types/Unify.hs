@@ -244,7 +244,7 @@ doSolve (ConImplies because not cs ts :<| xs) = do
 doSolve (ConFail v t :<| cs) = do
   doSolve cs
   sub <- use solveTySubst
-  throwError (foundHole v (apply sub t) sub)
+  tell [foundHole v (apply sub t) sub]
 
 subsumes :: (Type Typed -> Type Typed -> SolveM (Coercion Typed))
          -> Type Typed -> Type Typed -> SolveM (Wrapper Typed)
