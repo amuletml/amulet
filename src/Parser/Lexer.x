@@ -256,14 +256,6 @@ lexTok k (LI p str _ _) len = pure (Token (k str') p) where
 onStringM :: (L.Text -> Action a) -> Action a
 onStringM f p@(LI _ str _ _) len = (f (L.take len str)) p len
 
-lexInput :: String -> L.Text -> ParseResult [Token]
-lexInput fp text = runParser fp text (loop []) where
-  loop buf = do
-    tok <- lexerScan
-    case tok of
-      Token TcEOF _ -> pure (reverse buf)
-      tok -> loop $! (tok : buf)
-
 lexerContextScan :: Parser Token
 lexerContextScan = do
   s <- getState

@@ -36,10 +36,9 @@ import Core.Var (CoVar)
 
 import Pretty (Pretty(pretty), putDoc, (<+>), colon)
 
-import Parser.Wrapper (ParseResult(POK, PFailed), Token(..), runParser, runLexer)
+import Parser.Wrapper (runParser)
 import Parser.Error (ParseError)
 import Parser (parseInput)
-import Parser.Lexer (lexerScan)
 
 import Errors (reportS, reportR, reportI)
 
@@ -65,7 +64,7 @@ compile (file:files) = runGen $ do
   where
     go (Right (tops, scope, modScope, env)) (name, file) =
       case runParser name (L.fromStrict file) parseInput of
-        POK _ parsed -> do
+        (Just parsed, _) -> do
           resolved <- resolveProgram scope modScope parsed
           case resolved of
             Right (resolved, modScope') -> do
@@ -83,7 +82,7 @@ compile (file:files) = runGen $ do
                                   , env')
                 Left e -> pure $ Left $ CInfer e
             Left e -> pure $ Left $ CResolve e
-        PFailed es -> pure $ Left $ CParse es
+        (Nothing, es) -> pure $ Left $ CParse es -- TODO: Include parse warnings
     go x _ = pure x
 
 
@@ -120,12 +119,6 @@ test fs = do
     CResolve e -> Nothing <$ traverse_ (flip reportR fs) e
     CInfer e -> Nothing <$ reportI e fs
 
-testLexer :: [(FilePath, T.Text)] -> IO ()
-testLexer fs = for_ fs $ \(name, file) ->
-  case runLexer name (L.fromStrict file) lexerScan of
-    POK _ toks -> print (map (\(Token t _) -> t) toks)
-    PFailed es -> traverse_ (flip reportS fs) es
-
 testTc :: [(FilePath, T.Text)] -> IO (Maybe ([Stmt CoVar], Env))
 testTc fs = do
   putStrLn "\x1b[1;32m(* Program: *)\x1b[0m"
@@ -143,7 +136,7 @@ testTc fs = do
     CResolve e -> Nothing <$ traverse_ (flip reportR fs) e
     CInfer e -> Nothing <$ reportI e fs
 
-data CompilerOption = Test | TestTc | TestLex | Out String
+data CompilerOption = Test | TestTc | Out String
   deriving (Show)
 
 flags :: [OptDescr CompilerOption]
@@ -151,8 +144,6 @@ flags = [ Option ['t'] ["test"] (NoArg Test)
           "Provides additional debug information on the output"
         , Option [] ["test-tc"] (NoArg TestTc)
           "Provides additional type check information on the output"
-        , Option [] ["test-lex"] (NoArg TestLex)
-          "Simply prints the result of lexing the file"
         , Option ['o'] ["out"]  (ReqArg Out "OUT")
           "Writes the generated Lua to a specific file."
         ]
@@ -178,11 +169,6 @@ main = do
     ([TestTc], files, []) -> do
       files' <- traverse T.readFile files
       _ <- testTc (zip files files')
-      pure ()
-
-    ([TestLex], files, []) -> do
-      files' <- traverse T.readFile files
-      _ <- testLexer (zip files files')
       pure ()
 
     ([Out o], files, []) -> do

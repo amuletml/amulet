@@ -1,0 +1,13 @@
+let ok = let x = 2 $end in x
+
+$end $end $sep let under = let x = 2
+          $end in x
+
+$end $end $sep let over = let x = 2
+            $end in x
+$end $end <eof>
+
+(*
+  pass_unaligned_let.ml[4:11 ..4:11]: The in is misaligned with the corresponding 'let' (located at 3:13)
+  pass_unaligned_let.ml[7:13 ..7:13]: The in is misaligned with the corresponding 'let' (located at 6:12)
+*)

@@ -13,7 +13,7 @@ import qualified Data.Text as T
 import qualified Data.Map as Map
 import Data.Maybe
 
-import Parser.Wrapper (ParseResult(..), runParser)
+import Parser.Wrapper (runParser)
 import Parser
 
 import Syntax.Resolve (resolveProgram)
@@ -27,7 +27,7 @@ import Pretty
 
 result :: String -> T.Text -> String
 result file contents = runGen $ do
-  let POK _ parsed = runParser file (L.fromStrict contents) parseInput
+  let (Just parsed, _) = runParser file (L.fromStrict contents) parseInput
   Right (resolved, _) <- resolveProgram RS.builtinScope RS.emptyModules parsed
   desugared <- desugarProgram resolved
   inferred <- inferProgram builtinsEnv desugared

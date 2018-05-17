@@ -87,7 +87,6 @@ executable lexer
                      , Parser.Wrapper
                      , Parser.Unicode
 
-                     , Control.Monad.Report
                      , Data.Position
                      , Data.Span
                      , Data.Spanned
@@ -175,4 +174,3 @@ library amulet
                      , Pretty
                      , Control.Monad.Infer
                      , Control.Monad.Infer.Error
-                     , Control.Monad.Report
