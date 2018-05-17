@@ -26,7 +26,7 @@ import Core.Var
 
 import Pretty
 
-import Parser.Wrapper (ParseResult(POK, PFailed), runParser)
+import Parser.Wrapper (runParser)
 import Parser (parseInput)
 import Parser.Error
 
@@ -53,7 +53,7 @@ compile (file:files) = do
   where
     go (Right (tops, scope, modScope, env)) (name, file) =
       case runParser name (L.fromStrict file) parseInput of
-        POK _ parsed -> do
+        (Just parsed, _) -> do
           resolved <- resolveProgram scope modScope parsed
           case resolved of
             Right (resolved, modScope') -> do
@@ -71,7 +71,7 @@ compile (file:files) = do
                                   , env')
                 Left e -> pure $ Left $ CInfer e
             Left e -> pure $ Left $ CResolve e
-        PFailed es -> pure $ Left $ CParse es
+        (Nothing, es) -> pure $ Left $ CParse es
     go x _ = pure x
 
 
