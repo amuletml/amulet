@@ -38,7 +38,7 @@ import System.Directory
 data CompileResult
   = CSuccess [Stmt CoVar]
   | CParse   [ParseError]
-  | CResolve ResolveError
+  | CResolve [ResolveError]
   | CInfer   TypeError
 
 compile :: MonadGen Int m => [(SourceName, T.Text)] -> m CompileResult
