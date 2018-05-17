@@ -38,7 +38,6 @@ reportR err files
   = reportP err' loc files
   where
     innermostError e@(R.ArisingFrom err p) = innermostError err <|> Just (e, annotation p)
-    innermostError e@(R.ArisingFromTop err p) = innermostError err <|> Just (e, annotation p)
     innermostError _ = Nothing
 reportR err _ = putDoc (pretty err)
 
