@@ -15,14 +15,18 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import Data.Triple
 
+import Control.Monad.Infer.Error
 import Control.Monad.Except
+import Control.Monad.Writer
 import Control.Monad.Reader
-import Control.Applicative
+import Control.Applicative hiding (empty)
 import Control.Monad.State
 import Control.Monad.Gen
 
 import Data.Traversable
+import Data.Sequence (Seq)
 import Data.Foldable
+import Data.Functor
 import Data.Spanned
 import Data.Span
 
@@ -37,102 +41,115 @@ data ResolveError
   = NotInScope (Var Parsed)
   | NoSuchModule (Var Parsed)
   | Ambiguous (Var Parsed) [Var Resolved]
-  | EmptyMatch (Expr Parsed)
-  | EmptyBegin (Expr Parsed)
+  | EmptyMatch
+  | EmptyBegin
 
-  | ArisingFrom ResolveError (Expr Parsed)
-  | ArisingFromTop ResolveError (Toplevel Parsed)
-  deriving (Eq, Ord, Show)
+  | ArisingFrom ResolveError SomeReason
+  deriving (Show)
 
 instance Pretty ResolveError where
-  pretty (NotInScope e) = string "Variable not in scope:" <+> verbatim e
-  pretty (NoSuchModule e) = string "Module not in scope:" <+> verbatim e
-  pretty (Ambiguous v _) = string "Ambiguous reference to variable:" <+> verbatim v
-  pretty (EmptyMatch e) = pretty (annotation e) <> string ": Empty match expression"
-  pretty (EmptyBegin e) = pretty (annotation e) <> string ": Empty begin expression"
-  pretty (ArisingFrom er ex) = pretty (annotation ex) <> colon <+> pretty er <#> indent 2 (bullet (string "Arising from use of ") <+> verbatim ex)
-  pretty (ArisingFromTop er ex) = pretty (annotation ex) <> colon <+> pretty er <#> indent 2 (bullet (string "Arising in") <+> verbatim ex)
+  pretty (NotInScope e) = "Variable not in scope:" <+> verbatim e
+  pretty (NoSuchModule e) = "Module not in scope:" <+> verbatim e
+  pretty (Ambiguous v _) = "Ambiguous reference to variable:" <+> verbatim v
+  pretty EmptyMatch = "Empty match expression"
+  pretty EmptyBegin = "Empty begin expression"
+  pretty (ArisingFrom er ex) = pretty (annotation ex) <> colon <+> highlight "error"
+    <#> indent 2 (pretty er <#> empty <#> nest 4 (string "Arising from use of" <+> blameOf ex </> pretty ex))
 
-type MonadResolve m = (MonadError ResolveError m, MonadReader Scope m, MonadGen Int m, MonadState ModuleScope m)
+type MonadResolve m = ( MonadError ResolveError m
+                      , MonadWriter (Seq ResolveError) m
+                      , MonadReader Scope m
+                      , MonadGen Int m
+                      , MonadState ModuleScope m)
 
-resolveProgram :: MonadGen Int m => Scope -> ModuleScope -> [Toplevel Parsed] -> m (Either ResolveError ([Toplevel Resolved], ModuleScope))
+resolveProgram :: MonadGen Int m
+               => Scope -> ModuleScope -> [Toplevel Parsed]
+               -> m (Either [ResolveError] ([Toplevel Resolved], ModuleScope))
 resolveProgram scope modules = runResolve scope modules . resolveModule
 
-runResolve :: MonadGen Int m => Scope -> ModuleScope -> StateT ModuleScope (ReaderT Scope (ExceptT ResolveError m)) a -> m (Either ResolveError (a, ModuleScope))
-runResolve scope modules = runExceptT . flip runReaderT scope . flip runStateT modules
+runResolve :: MonadGen Int m
+           => Scope -> ModuleScope
+           -> StateT ModuleScope (ReaderT Scope (ExceptT ResolveError (WriterT (Seq ResolveError) m))) a
+           -> m (Either [ResolveError] (a, ModuleScope))
+runResolve scope modules = fmap handle . runWriterT . runExceptT . flip runReaderT scope . flip runStateT modules
+  where handle (Left e, er) = Left (e:toList er)
+        handle (Right e, er) = case toList er of
+                                [] -> Right e
+                                er -> Left er
 
 resolveModule :: MonadResolve m => [Toplevel Parsed] -> m [Toplevel Resolved]
 resolveModule [] = pure []
-resolveModule (r:rs) = flip catchError (throwError . wrapError)
-  $ case r of
-      LetStmt vs -> do
-        let vars = map fst3 vs
-        vars' <- traverse tagVar vars
-        extendN (zip vars vars') $ (:)
-          <$> (LetStmt
-                <$> traverse (\((_, e, a), v') -> (v',,a) <$> reExpr e) (zip vs vars')
-                )
-          <*> resolveModule rs
-      ForeignVal v t ty a -> do
-        v' <- tagVar v
-        extend (v, v') $ (:)
-          <$> (ForeignVal
-               <$> lookupEx v
-                <*> pure t
-                <*> reType (wrap ty)
-                <*> pure a)
-          <*> resolveModule rs
-      TypeDecl t vs cs -> do
-        t'  <- tagVar t
-        vs' <- traverse tagVar vs
-        let c = map extractCons cs
-        c' <- traverse tagVar c
-        extendTy (t, t') $ extendN (zip c c') $ (:)
-          . TypeDecl t' vs' <$> traverse (resolveCons (zip vs vs')) (zip cs c')
-          <*> resolveModule rs
 
-      Open name as -> resolveOpen name as (\name' -> (Open name' as:) <$> resolveModule rs)
+resolveModule (LetStmt vs:rs) =  do
+  let vars = map fst3 vs
+  vars' <- traverse tagVar vars
+  extendN (zip vars vars') $ (:)
+    <$> (LetStmt
+          <$> traverse (\((_, e, a), v') -> (v',,a) <$> reExpr e) (zip vs vars'))
+    <*> resolveModule rs
 
-      Module name body -> do
-        fullName <- foldl (flip InModule) name <$> asks modStack
-        body' <- extendM name $ resolveModule body
+resolveModule (r@(ForeignVal v t ty a):rs) = do
+  v' <- tagVar v
+  extend (v, v') $ (:)
+    <$> (ForeignVal
+          <$> lookupEx v `catchJunk` r
+          <*> pure t
+          <*> reType r (wrap ty)
+          <*> pure a)
+    <*> resolveModule rs
 
-        let (vars, tys) = extractToplevels body
-        let (vars', tys') = extractToplevels body'
+  where wrap x = foldr (TyPi . flip Implicit Nothing) x (toList (ftv x))
+resolveModule (TypeDecl t vs cs:rs) = do
+  t'  <- tagVar t
+  vs' <- traverse tagVar vs
+  let c = map extractCons cs
+  c' <- traverse tagVar c
+  extendTy (t, t') $ extendN (zip c c') $ (:)
+    . TypeDecl t' vs' <$> traverse (resolveCons (zip vs vs')) (zip cs c')
+    <*> resolveModule rs
 
-        (ModuleScope modules) <- get
-        (name', scope) <- case Map.lookup fullName modules of
-                             Just env -> pure env
-                             Nothing -> (,emptyScope) <$> tagModule fullName
+  where resolveCons _ (UnitCon _ a, v') = pure $ UnitCon v' a
+        resolveCons vs (r@(ArgCon _ t a), v') = ArgCon v' <$> extendTyvarN vs (reType r t) <*> pure a
+        resolveCons _  (r@(GeneralisedCon _ t a), v') = do
+          let fvs = toList (ftv t)
+          fresh <- traverse tagVar fvs
+          t' <- extendTyvarN (zip fvs fresh) (reType r t)
+          pure (GeneralisedCon v' t' a)
 
-        let scope' = scope { varScope = foldr (uncurry Map.insert) (varScope scope) (zip vars (map SVar vars'))
-                           , tyScope  = foldr (uncurry Map.insert) (tyScope scope) (zip tys (map SVar tys')) }
-        put $ ModuleScope $ Map.insert fullName (name', scope') modules
+        extractCons (UnitCon v _) = v
+        extractCons (ArgCon v _ _) = v
+        extractCons (GeneralisedCon v _ _) = v
 
-        extendN (modZip name name' vars vars') $ extendTyN (modZip name name' tys tys') $ (:)
-          <$> pure (Module name' body')
-          <*> resolveModule rs
+resolveModule (r@(Open name as):rs) =
+  -- Opens hard-fail, as anything inside it will probably fail to resolve
+  resolveOpen name as (\name' -> (Open name' as:) <$> resolveModule rs)
+  `catchError` (throwError . wrapError r)
 
-     where resolveCons _ (UnitCon _ a, v') = pure $ UnitCon v' a
-           resolveCons vs (ArgCon _ t a, v') = ArgCon v' <$> extendTyvarN vs (reType t) <*> pure a
-           resolveCons _  (GeneralisedCon _ t a, v') = do
-             let fvs = toList (ftv t)
-             fresh <- traverse tagVar fvs
-             t' <- extendTyvarN (zip fvs fresh) (reType t)
-             pure (GeneralisedCon v' t' a)
+resolveModule (Module name body:rs) = do
+  fullName <- foldl (flip InModule) name <$> asks modStack
+  body' <- extendM name $ resolveModule body
 
-           extractCons (UnitCon v _) = v
-           extractCons (ArgCon v _ _) = v
-           extractCons (GeneralisedCon v _ _) = v
+  let (vars, tys) = extractToplevels body
+  let (vars', tys') = extractToplevels body'
 
-           wrap x = foldr (TyPi . flip Implicit Nothing) x (toList (ftv x))
+  (ModuleScope modules) <- get
+  (name', scope) <- case Map.lookup fullName modules of
+                      Just env -> pure env
+                      Nothing -> (,emptyScope) <$> tagModule fullName
 
-           modZip name name' v v' = zip (map (name<>) v) (map (name'<>) v')
+  let scope' = scope { varScope = foldr (uncurry Map.insert) (varScope scope) (zip vars (map SVar vars'))
+                     , tyScope  = foldr (uncurry Map.insert) (tyScope scope) (zip tys (map SVar tys')) }
+  put $ ModuleScope $ Map.insert fullName (name', scope') modules
 
-           wrapError e@(ArisingFromTop _ _) = e
-           wrapError e = ArisingFromTop e r
+  extendN (modZip name name' vars vars') $ extendTyN (modZip name name' tys tys') $ (:)
+    <$> pure (Module name' body')
+    <*> resolveModule rs
 
-lookupVar :: MonadResolve m => (Var Parsed -> ResolveError) -> Var Parsed -> Map.Map (Var Parsed) ScopeVariable -> m (Var Resolved)
+  where modZip name name' v v' = zip (map (name<>) v) (map (name'<>) v')
+
+lookupVar :: MonadResolve m
+          => (Var Parsed -> ResolveError) -> Var Parsed -> Map.Map (Var Parsed) ScopeVariable
+          -> m (Var Resolved)
 lookupVar err v m = case Map.lookup v m of
     Nothing -> throwError (err v)
     Just (SVar x) -> pure x
@@ -148,9 +165,8 @@ lookupTyvar :: MonadResolve m => Var Parsed -> m (Var Resolved)
 lookupTyvar v = asks tyvarScope >>= lookupVar NotInScope v
 
 reExpr :: MonadResolve m => Expr Parsed -> m (Expr Resolved)
-reExpr r@(VarRef v a) = VarRef
-                    <$> catchError (lookupEx v) (throwError . flip ArisingFrom r)
-                    <*> pure a
+reExpr r@(VarRef v a) = flip VarRef a <$> (lookupEx v `catchJunk` r)
+
 reExpr (Let vs c a) = do
   let vars = map fst3 vs
   vars' <- traverse tagVar vars
@@ -163,22 +179,30 @@ reExpr (App f p a) = App <$> reExpr f <*> reExpr p <*> pure a
 reExpr (Fun p e a) = do
   (p', vs, ts) <- rePattern p
   extendTyvarN ts . extendN vs $ Fun p' <$> reExpr e <*> pure a
-reExpr r@(Begin [] _) = throwError (EmptyBegin r)
+
+reExpr r@(Begin [] a) = tell (pure (wrapError r EmptyBegin)) $> junkExpr a
 reExpr (Begin es a) = Begin <$> traverse reExpr es <*> pure a
+
 reExpr (Literal l a) = pure (Literal l a)
-reExpr r@(Match _ [] _) = throwError (EmptyMatch r)
-reExpr r@(Match e ps a) = do
+
+reExpr r@(Match e [] a) = do
+  _ <- reExpr e
+  tell (pure (ArisingFrom EmptyMatch (BecauseOf r)))
+  pure (junkExpr a)
+reExpr (Match e ps a) = do
   e' <- reExpr e
   ps' <- traverse (\(p, b) -> do
-                  (p', vs, ts) <- catchError (rePattern p) (throwError . flip ArisingFrom r)
+                  (p', vs, ts) <- rePattern p
                   (p',) <$> extendTyvarN ts (extendN vs (reExpr b)))
               ps
   pure (Match e' ps' a)
-reExpr r@(Function [] _) = throwError (EmptyMatch r)
-reExpr r@(Function ps a) =
+
+reExpr r@(Function [] a) = tell (pure (ArisingFrom EmptyMatch (BecauseOf r))) $> junkExpr a
+reExpr (Function ps a) =
   flip Function a <$> for ps (\(p, b) -> do
-    (p', vs, ts) <- catchError (rePattern p) (throwError . flip ArisingFrom r)
+    (p', vs, ts) <- rePattern p
     (p',) <$> extendTyvarN ts (extendN vs (reExpr b)))
+
 reExpr o@BinOp{} = do
   (es, os) <- reOp [] [] o
   let ([x], []) = popUntil es os 0 AssocLeft
@@ -215,7 +239,7 @@ reExpr o@BinOp{} = do
 reExpr (Hole v a) = Hole <$> tagVar v <*> pure a
 reExpr r@(Ascription e t a) = Ascription
                           <$> reExpr e
-                          <*> catchError (reType t) (throwError . flip ArisingFrom r)
+                          <*> reType r t
                           <*> pure a
 reExpr (Record fs a) = Record <$> traverse (traverse reExpr) fs <*> pure a
 reExpr (RecordExt e fs a) = RecordExt
@@ -232,28 +256,31 @@ reExpr (Parens e a) = flip Parens a <$> reExpr e
 reExpr (Tuple es a) = Tuple <$> traverse reExpr es <*> pure a
 reExpr (TupleSection es a) = TupleSection <$> traverse (traverse reExpr) es <*> pure a
 
-reExpr (OpenIn m e a) = resolveOpen m Nothing (\m' -> OpenIn m' <$> reExpr e <*> pure a)
+reExpr r@(OpenIn m e a) =
+  resolveOpen m Nothing (\m' -> OpenIn m' <$> reExpr e <*> pure a)
+  `catchError` (throwError . wrapError r)
 
 reExpr ExprWrapper{} = error "resolve cast"
 
-reType :: MonadResolve m => Type Parsed -> m (Type Resolved)
-reType (TyCon v) = TyCon <$> lookupTy v
-reType (TyVar v) = TyVar <$> lookupTyvar v
-reType (TyPromotedCon v) = TyPromotedCon <$> lookupEx v
-reType v@TySkol{} = error ("impossible! resolving skol " ++ show v)
-reType v@TyWithConstraints{} = error ("impossible! resolving withcons " ++ show v)
-reType (TyPi (Implicit v k) ty) = do
+reType :: (MonadResolve m, Reasonable a p)
+       => a p -> Type Parsed -> m (Type Resolved)
+reType r (TyCon v) = TyCon <$> (lookupTy v `catchJunk` r)
+reType r (TyVar v) = TyVar <$> (lookupTyvar v `catchJunk` r)
+reType r (TyPromotedCon v) = TyPromotedCon <$> (lookupEx v `catchJunk` r)
+reType _ v@TySkol{} = error ("impossible! resolving skol " ++ show v)
+reType _ v@TyWithConstraints{} = error ("impossible! resolving withcons " ++ show v)
+reType r (TyPi (Implicit v k) ty) = do
   v' <- tagVar v
-  ty' <- extendTyvar (v, v') $ reType ty
-  k <- traverse reType k
+  ty' <- extendTyvar (v, v') $ reType r ty
+  k <- traverse (reType r) k
   pure (TyPi (Implicit v' k) ty')
-reType (TyPi (Anon l) r) = TyPi . Anon <$> reType l <*> reType r
-reType (TyApp l r) = TyApp <$> reType l <*> reType r
-reType (TyRows t r) = TyRows <$> reType t
-                               <*> traverse (\(a, b) -> (a,) <$> reType b) r
-reType (TyExactRows r) = TyExactRows <$> traverse (\(a, b) -> (a,) <$> reType b) r
-reType (TyTuple ta tb) = TyTuple <$> reType ta <*> reType tb
-reType TyType = pure TyType
+reType r (TyPi (Anon f) x) = TyPi . Anon <$> reType r f <*> reType r x
+reType r (TyApp f x) = TyApp <$> reType r f <*> reType r x
+reType r (TyRows t f) = TyRows <$> reType r t
+                               <*> traverse (\(a, b) -> (a,) <$> reType r b) f
+reType r (TyExactRows f) = TyExactRows <$> traverse (\(a, b) -> (a,) <$> reType r b) f
+reType r (TyTuple ta tb) = TyTuple <$> reType r ta <*> reType r tb
+reType _ TyType = pure TyType
 
 rePattern :: MonadResolve m
           => Pattern Parsed
@@ -263,22 +290,22 @@ rePattern (Wildcard a) = pure (Wildcard a, [], [])
 rePattern (Capture v a) = do
   v' <- tagVar v
   pure (Capture v' a, [(v, v')], [])
-rePattern (Destructure v Nothing a) = do
-  v' <- lookupEx v
+rePattern r@(Destructure v Nothing a) = do
+  v' <- lookupEx v `catchJunk` r
   pure (Destructure v' Nothing a, [], [])
-rePattern (Destructure v p a) = do
-  v' <- lookupEx v
+rePattern r@(Destructure v p a) = do
+  v' <- lookupEx v `catchJunk` r
   (p', vs, ts) <- case p of
     Nothing -> pure (Nothing, [], [])
     Just pat -> do
       (p', vs, ts) <- rePattern pat
       pure (Just p', vs, ts)
   pure (Destructure v' p' a, vs, ts)
-rePattern (PType p t a) = do
+rePattern r@(PType p t a) = do
   (p', vs, ts) <- rePattern p
   let fvs = toList (ftv t)
   fresh <- for fvs $ \x -> lookupTyvar x `catchError` const (tagVar x)
-  t' <- extendTyvarN (zip fvs fresh) (reType t)
+  t' <- extendTyvarN (zip fvs fresh) (reType r t)
   pure (PType p' t' a, vs, zip fvs fresh ++ ts)
 rePattern (PRecord f a) = do
   (f', vss, tss) <- unzip3 <$> traverse (\(n, p) -> do
@@ -345,3 +372,17 @@ resolveOpen name as m = do
     lookupModule n m [] = Map.lookup n m
     lookupModule n m x@(_:xs) = Map.lookup (foldl (flip InModule) n x) m
                                 <|> lookupModule n m xs
+
+junkVar :: Var Resolved
+junkVar = TgInternal "<missing>"
+
+junkExpr :: Ann Resolved -> Expr Resolved
+junkExpr = VarRef junkVar
+
+wrapError :: Reasonable e p => e p -> ResolveError -> ResolveError
+wrapError _  e@(ArisingFrom _ _) = e
+wrapError r e = ArisingFrom e (BecauseOf r)
+
+catchJunk :: (MonadResolve m, Reasonable e p)
+          => m (Var Resolved) -> e p -> m (Var Resolved)
+catchJunk m r = m `catchError` \err -> tell (pure (wrapError r err)) $> junkVar

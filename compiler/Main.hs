@@ -46,7 +46,7 @@ import Errors (reportS, reportR, reportI)
 data CompileResult a
   = CSuccess [Toplevel Typed] [Stmt CoVar] [Stmt a] Env
   | CParse   [ParseError]
-  | CResolve ResolveError
+  | CResolve [ResolveError]
   | CInfer   TypeError
 
 compile :: [(SourceName, T.Text)] -> CompileResult CoVar
@@ -94,7 +94,7 @@ compileFromTo fs emit =
   case compile fs of
     CSuccess _ _ core env -> emit (compileProgram env core)
     CParse es -> traverse_ (flip reportS fs) es
-    CResolve e -> putStrLn "Resolution error" >> reportR e fs
+    CResolve e -> putStrLn "Resolution error" >> traverse_ (flip reportR fs) e
     CInfer e -> putStrLn "Type error" >> reportI e fs
 
 test :: [(FilePath, T.Text)] -> IO (Maybe ([Stmt CoVar], Env))
@@ -117,7 +117,7 @@ test fs = do
       putDoc (pretty (compileProgram env optm))
       pure (Just (core, env))
     CParse es -> Nothing <$ traverse_ (flip reportS fs) es
-    CResolve e -> Nothing <$ reportR e fs
+    CResolve e -> Nothing <$ traverse_ (flip reportR fs) e
     CInfer e -> Nothing <$ reportI e fs
 
 testLexer :: [(FilePath, T.Text)] -> IO ()
@@ -140,7 +140,7 @@ testTc fs = do
         putDoc (pretty k <+> colon <+> pretty t)
       pure (Just (core, env))
     CParse es -> Nothing <$ traverse_ (flip reportS fs) es
-    CResolve e -> Nothing <$ reportR e fs
+    CResolve e -> Nothing <$ traverse_ (flip reportR fs) e
     CInfer e -> Nothing <$ reportI e fs
 
 data CompilerOption = Test | TestTc | TestLex | Out String
