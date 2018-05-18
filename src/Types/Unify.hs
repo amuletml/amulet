@@ -23,8 +23,6 @@ import Data.Function
 import Data.List
 import Data.Text (Text)
 
-import Debug.Trace
-
 data SolveScope
   = SolveScope { _bindSkol :: Bool
                , _don'tTouch :: Set.Set (Var Typed)
