@@ -1,7 +1,7 @@
 impredicative01-fail.ml[3:5 ..3:34]: error
   Illegal use of polymorphic type `{'a : 'n}. 'a`
     as argument to the type function `foo`
-  · Note: instantiating a type variable (the argument to `foo`)
+  • Note: instantiating a type variable (the argument to `foo`)
     with a polymorphic type constitutes impredicative polymorphism
-  
+
   Arising from use of the declaration
