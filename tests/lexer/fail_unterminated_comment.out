@@ -1,4 +1,5 @@
 fail_unterminated_comment.ml[7:1 ..7:1]: error
   Unexpected end of input, expecting to close comment started at 6:1
   │ 
+7 │  
   │ 

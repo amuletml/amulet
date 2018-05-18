@@ -90,7 +90,8 @@ buildLines b s = go s . drop (s - 1) where
     1 -> b (T.pack (show n)) (text t) : go (n + 1) ts (x:xs)
     -- Otherwise drop the required number of lines
     m -> b mempty (string "...") : go (n + m) (drop m (t:ts)) (x:xs)
-  go _ _ _ = []
+  go _ _ [] = []
+  go n [] xs = go n [mempty] xs
 
   -- Drop lines finishing before this one, and patch up the start position of
   -- any lines overlapping with it.
