@@ -3,3 +3,6 @@ gadt01.ml[3:16 ..3:20]: error
   Have you applied a type constructor to the wrong number of arguments?
 
   Arising from use of the declaration
+  │ 
+3 │ type gadt 'a = R : gadt
+  │ 

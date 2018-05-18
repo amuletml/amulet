@@ -3,15 +3,13 @@ module Test.Types.Check (tests) where
 import Test.Tasty
 import Test.Util
 
-import Control.Monad.Infer (TypeError(..), values, types)
-import Control.Applicative hiding (empty)
+import Control.Monad.Infer (values, types)
 import Control.Monad.Gen
 import Control.Lens ((^.), to)
 
 import qualified Data.Text.Lazy as L
 import qualified Data.Text as T
 import qualified Data.Map as Map
-import Data.Maybe
 
 import Parser.Wrapper (runParser)
 import Parser
@@ -24,6 +22,7 @@ import Syntax.Types (difference, toMap)
 
 import Syntax.Pretty()
 
+import qualified Text.Pretty.Note as N
 import Text.Pretty.Semantic
 
 result :: String -> T.Text -> T.Text
@@ -33,14 +32,10 @@ result file contents = runGen $ do
   desugared <- desugarProgram resolved
   inferred <- inferProgram builtinsEnv desugared
 
-  pure . display . simplifyDoc . renderPretty 0.8 120 . (<##>empty)
-       . either reportT (reportEnv . snd) $ inferred
+  pure . displayPlain
+       . either prettyErrs ((Right<$>) . reportEnv . snd) $ inferred
 
   where
-    reportT :: TypeError -> Doc
-    reportT (ManyErrors es) = vsep (map reportT es)
-    reportT err = pretty (fromMaybe err (innermostError err))
-
     reportEnv env =
       let env' = difference env builtinsEnv
       in  vsep $
@@ -49,9 +44,7 @@ result file contents = runGen $ do
 
     reportComponent (v, t) = pretty v <+> colon <+> pretty t
 
-
-    innermostError e@(ArisingFrom err _) = innermostError err <|> Just e
-    innermostError _ = Nothing
+    prettyErrs = vsep . map (N.format (N.fileSpans [(file, contents)]))
 
 tests :: IO TestTree
 tests = do

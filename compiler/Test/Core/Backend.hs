@@ -31,7 +31,7 @@ result file contents = runGen $ do
   Right (inferred, env) <- inferProgram builtinsEnv desugared
   lower <- runLowerT (lowerProg inferred)
   optm <- optimise lower
-  pure . display . simplifyDoc . renderPretty 0.8 120 . (<##>empty)
+  pure . display . uncommentDoc . renderPretty 0.8 120 . (<##>empty)
        . pretty . compileProgram env $ optm
 
 tests :: IO TestTree

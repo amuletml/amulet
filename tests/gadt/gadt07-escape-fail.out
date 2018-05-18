@@ -6,3 +6,6 @@ gadt07-escape-fail.ml[10:3 ..10:14]: error
 
 
   Arising from use of the expression
+   │ 
+10 │   match hval with
+   │ 

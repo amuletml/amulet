@@ -6,22 +6,22 @@ import Test.Util
 import qualified Data.Text.Lazy as L
 import qualified Data.Text as T
 import Data.Position
-import Data.Spanned
 
 import Parser.Wrapper (Token(..), runLexer)
 import Parser.Lexer
 
+import qualified Text.Pretty.Note as N
 import Text.Pretty.Semantic
 
 result :: String -> T.Text -> T.Text
 result file contents =
   case runLexer file (L.fromStrict contents) lexerContextScan of
-    (Just toks, []) -> disp $ writeToks 1 True toks
-    (Just toks, es) -> disp $ writeToks 1 True toks <##>
-                       string "(*" <##> indent 2 (prettyErrs es) <##> string "*)" <##> empty
-    (Nothing, es) -> disp $ prettyErrs es <##> empty
+    (Just toks, []) -> displayPlain $ writeToks 1 True toks
+    (Just toks, es) -> displayPlain $ writeToks 1 True toks <##>
+                       string "(*" <##> indent 2 (prettyErrs es) <##> string "*)"
+    (Nothing, es) -> displayPlain $ prettyErrs es
 
-  where writeToks _ _ [] = linebreak
+  where writeToks _ _ [] = empty
         writeToks l f t@(Token tc p:ts)
           | spLine p > l = empty <##> writeToks (l + 1) True t
           | f
@@ -29,8 +29,7 @@ result file contents =
           | otherwise
           = space <> string (show tc) <> writeToks l False ts
 
-        prettyErrs = vsep . map (\e -> pretty (annotation e) <> colon <+> pretty e)
-        disp = display . simplifyDoc . renderPretty 0.8 120
+        prettyErrs = vsep . map (N.format (N.fileSpans [(file, contents)]))
 
 tests :: IO TestTree
 tests = testGroup "Test.Parser.Lexer" <$> goldenDir result "tests/lexer/" ".ml"

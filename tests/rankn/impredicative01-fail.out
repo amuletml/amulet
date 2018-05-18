@@ -5,3 +5,6 @@ impredicative01-fail.ml[3:5 ..3:34]: error
     with a polymorphic type constitutes impredicative polymorphism
 
   Arising from use of the declaration
+  │ 
+3 │ let main : foo (forall 'a. 'a) = main
+  │ 

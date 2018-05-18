@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, MultiParamTypeClasses, FlexibleContexts #-}
 module Test.Util where
 
 import Hedgehog
@@ -14,9 +14,25 @@ import Data.Algorithm.Diff
 import Data.Maybe
 import Data.List
 
+import qualified Text.Pretty.Note as N
+import Text.Pretty.Semantic
+
 import Control.Exception
 
 import System.Directory
+
+displayPlain, displayPlainVerbose :: N.NoteDoc Style -> T.Text
+displayPlain
+  = display
+  . fmap (either N.toAnsi toAnsi)
+  . filterSimpleDoc (either (const True) uncommentFilter)
+  . renderPretty 0.4 100
+  . (<>line)
+displayPlainVerbose
+  = display
+  . fmap (either N.toAnsi toAnsi)
+  . renderPretty 0.4 100
+  . (<>line)
 
 hedgehog :: Group -> TestTree
 hedgehog Group { groupName = n, groupProperties = ps }
