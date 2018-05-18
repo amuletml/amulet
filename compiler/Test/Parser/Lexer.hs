@@ -11,9 +11,9 @@ import Data.Spanned
 import Parser.Wrapper (Token(..), runLexer)
 import Parser.Lexer
 
-import Pretty
+import Text.Pretty.Semantic
 
-result :: String -> T.Text -> String
+result :: String -> T.Text -> T.Text
 result file contents =
   case runLexer file (L.fromStrict contents) lexerContextScan of
     (Just toks, []) -> disp $ writeToks 1 True toks
@@ -30,7 +30,7 @@ result file contents =
           = space <> string (show tc) <> writeToks l False ts
 
         prettyErrs = vsep . map (\e -> pretty (annotation e) <> colon <+> pretty e)
-        disp = display . renderPretty 0.8 120
+        disp = display . simplifyDoc . renderPretty 0.8 120
 
 tests :: IO TestTree
 tests = testGroup "Test.Parser.Lexer" <$> goldenDir result "tests/lexer/" ".ml"

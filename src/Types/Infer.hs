@@ -38,7 +38,7 @@ import Types.Infer.Builtin
 import Types.Wellformed
 import Types.Unify
 
-import Pretty
+import Text.Pretty.Semantic
 
 -- Solve for the types of lets in a program
 inferProgram :: MonadGen Int m => Env -> [Toplevel Resolved] -> m (Either TypeError ([Toplevel Typed], Env))

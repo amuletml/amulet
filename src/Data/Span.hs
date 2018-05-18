@@ -9,7 +9,7 @@ module Data.Span
   , spanEnd
   ) where
 
-import Pretty
+import Text.Pretty.Semantic
 
 import Data.Data
 import Data.Position

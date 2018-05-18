@@ -37,7 +37,7 @@ import Syntax.Resolve.Toplevel
 import Syntax.Pretty
 import Syntax.Subst
 
-import Pretty
+import Text.Pretty.Semantic
 
 data ResolveError
   = NotInScope (Var Parsed)

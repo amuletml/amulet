@@ -12,7 +12,7 @@ import Syntax.Transform
 import Syntax.Subst
 import Syntax.Pretty
 
-import Pretty
+import Text.Pretty.Semantic
 
 gadtConShape :: (Type Typed, Type Typed) -> Type Typed -> TypeError -> TypeError
 gadtConShape (t, _) (TyArr c d) oerr = k . fix . flip Note (string "Generalised constructors can not be curried") $ err where

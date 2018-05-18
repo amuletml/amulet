@@ -21,9 +21,9 @@ import Core.Lower
 import Backend.Lua
 
 import Syntax.Pretty()
-import Pretty
+import Text.Pretty.Semantic
 
-result :: String -> T.Text -> String
+result :: String -> T.Text -> T.Text
 result file contents = runGen $ do
   let (Just parsed, _) = runParser file (L.fromStrict contents) parseInput
   Right (resolved, _) <- resolveProgram RS.builtinScope RS.emptyModules parsed
@@ -31,7 +31,7 @@ result file contents = runGen $ do
   Right (inferred, env) <- inferProgram builtinsEnv desugared
   lower <- runLowerT (lowerProg inferred)
   optm <- optimise lower
-  pure . display . renderPretty 0.8 120 . (<##>empty)
+  pure . display . simplifyDoc . renderPretty 0.8 120 . (<##>empty)
        . pretty . compileProgram env $ optm
 
 tests :: IO TestTree

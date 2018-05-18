@@ -15,7 +15,7 @@ import Control.Lens
 import Syntax.Types
 import Syntax
 
-import Pretty
+import Text.Pretty.Semantic
 
 tyUnit, tyBool, tyInt, tyString, tyFloat, tyAny :: Type Typed
 tyInt = TyCon (TvName (TgInternal "int"))

@@ -1,4 +1,4 @@
 fail_let_ambiguity.ml[6:18 ..6:18]: error
   Ambiguous reference to variable: `y`
-  
+
   Arising from use of the expression y

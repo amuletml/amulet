@@ -21,7 +21,7 @@ import Hedgehog hiding (Var) -- fuck you
 
 import Test.Types.Util
 
-import Pretty (pretty)
+import Text.Pretty.Semantic (pretty)
 
 genVar :: MonadGen m => m (Var Resolved)
 genVar = do

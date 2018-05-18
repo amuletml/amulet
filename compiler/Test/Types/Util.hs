@@ -11,9 +11,9 @@ import qualified "amuletml" Control.Monad.Infer as MonadInfer
 import "amuletml" Control.Monad.Infer.Error
 import "amuletml" Control.Monad.Infer (Constraint(..), SomeReason(..), TypeError)
 
+import "amuletml" Text.Pretty.Semantic
 import "amuletml" Data.Spanned
 import "amuletml" Data.Span
-import "amuletml" Pretty
 
 import qualified Data.Sequence as Seq
 
@@ -52,7 +52,7 @@ instance Reasonable Blame p where
   blame _ = string "a test"
 
 instance Spanned (Blame p) where
-  annotation (Blame x) =x 
+  annotation (Blame x) =x
 
 instance Pretty (Blame p) where
   pretty _ = empty

@@ -19,7 +19,7 @@ import Data.Triple
 import Data.Maybe
 import Data.Data
 
-import Pretty
+import Text.Pretty.Semantic
 
 data Occurrence = Dead | Once | OnceLambda | Multi | MultiLambda
   deriving (Show, Eq, Ord, Data)

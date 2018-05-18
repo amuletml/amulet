@@ -29,7 +29,7 @@ import Syntax.Subst
 import Syntax.Raise
 import Syntax
 
-import Pretty
+import Text.Pretty.Semantic
 
 type KindT m = StateT SomeReason (WriterT (Seq.Seq (Constraint Typed)) m)
 
