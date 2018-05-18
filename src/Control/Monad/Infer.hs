@@ -158,7 +158,7 @@ instantiate :: MonadGen Int m
                  , Type Typed
                  , Type Typed)
 instantiate tp@(TyPi (Implicit v _) ty) = do
-  var <- TyVar . TvName <$> case (unTvName v) of
+  var <- TyVar . TvName <$> case unTvName v of
     TgInternal n -> TgName n <$> gen
     TgName n _ -> TgName n <$> gen
   let map = Map.singleton v var
@@ -172,6 +172,7 @@ instantiate tp@(TyPi (Anon co) od@dm) = do
   var <- fresh
   let ty = TyPi (Anon co) dm
       lam :: Expr Typed -> Expr Typed
+      lam e | od == dm = e
       lam e
         | ann <- annotation e
         = Fun (PType (Capture (TvName var) (ann, co)) co (ann, co)) (cont (App e (VarRef (TvName var) (ann, co)) (ann, od))) (ann, ty)
@@ -293,5 +294,4 @@ prettyMotive (BySubsumption t1 t2) = string "of a subsumption constraint relatin
 prettyMotive (ByExistential v t) = string "it is an existential" <> comma <#> string "bound by the type of" <+> pretty v <> comma <+> pretty t
 
 squish :: (a -> c) -> Maybe (c -> c) -> Maybe (a -> c)
-squish f (Just x) = Just (x . f)
-squish f _ = Just f
+squish f = Just . maybe f (.f)

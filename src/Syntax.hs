@@ -124,8 +124,8 @@ newtype WrapCont p = MkWrapCont { runWrapper :: Expr p -> Expr p }
 deriving instance Typeable p => Typeable (WrapCont p)
 instance Typeable p => Data (WrapCont p) where
   gunfold _ _ = error "gunfold WrapCont"
-  toConstr _ = error "gunfold WrapCont"
-  dataTypeOf _ = error "gunfold WrapCont"
+  toConstr _ = error "toConstr WrapCont"
+  dataTypeOf _ = error "dataTypeOf WrapCont"
 
 instance Eq (WrapCont p) where _ == _ = False
 instance Ord (WrapCont p) where _ `compare` _ = GT
