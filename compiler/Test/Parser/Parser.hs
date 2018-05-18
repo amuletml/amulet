@@ -13,7 +13,7 @@ import Parser
 import Syntax.Pretty()
 import Text.Pretty.Semantic
 
-result :: String -> T.Text -> String
+result :: String -> T.Text -> T.Text
 result file contents =
   case runParser file (L.fromStrict contents) parseInput of
     (Just res, []) -> disp $ pretty res <##> empty
@@ -22,8 +22,7 @@ result file contents =
     (Nothing, es) -> disp $ prettyErrs es <##> empty
 
   where prettyErrs = vsep . map (\e -> pretty (annotation e) <> colon <+> pretty e)
-        disp = display . renderPretty 0.8 120
-
+        disp = display . simplifyDoc . renderPretty 0.8 120
 
 tests :: IO TestTree
 tests = testGroup "Test.Parser.Parser" <$> goldenDir result "tests/parser/" ".ml"

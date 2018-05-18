@@ -88,6 +88,7 @@ executable lexer
                      , Parser.Unicode
 
                      , Text.Pretty
+                     , Text.Pretty.Ansi
                      , Text.Pretty.Semantic
 
                      , Data.Position
@@ -143,6 +144,7 @@ library amulet
                      , Types.Infer.Constructor
                      -- Pretty
                      , Text.Pretty
+                     , Text.Pretty.Ansi
                      , Text.Pretty.Semantic
                      -- Data
                      , Data.Span

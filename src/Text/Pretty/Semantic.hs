@@ -4,9 +4,11 @@ module Text.Pretty.Semantic
   , Style
   , Pretty(..)
   , Doc
+
   , putDoc, putDocWithoutColour, hPutDoc
-  , render, renderDetailed
-  , decorate, decorateDetailed, decoratePlain
+  , displayT, displayS, displayDetailed
+  , renderAnsi, renderAnsiDetailed, simplifyDoc
+
   , skeyword, sliteral, sstring, scomment, stypeCon, stypeVar, stypeSkol, soperator
 
   , arrow, equals, colon, prod, pipe
@@ -14,11 +16,15 @@ module Text.Pretty.Semantic
   , verbatim
   ) where
 
+import qualified Data.Text.IO as T
+import qualified Data.Text as T
 
+import Text.Pretty hiding (hPutDoc, putDoc, Doc, equals, colon, pipe, displayS)
+import Text.Pretty.Ansi (Colour(..), AnsiStyle(..))
+import qualified Text.Pretty.Ansi as A
 import qualified Text.Pretty as P
-import Text.Pretty hiding (hPutDoc, putDoc, Doc, equals, colon, pipe)
 
-import System.IO (hPutStrLn, Handle, stdout)
+import System.IO (Handle, stdout)
 
 type Doc = P.Doc Style
 
@@ -45,34 +51,36 @@ putDoc :: Doc -> IO ()
 putDoc = hPutDoc stdout
 
 putDocWithoutColour :: Doc -> IO ()
-putDocWithoutColour = putStrLn . displayDecorated (flip const) . renderPretty 0.4 100
+putDocWithoutColour = T.putStrLn . P.display . renderAnsi
 
 hPutDoc :: Handle -> Doc -> IO ()
-hPutDoc h = hPutStrLn h . displayDecorated decorate . renderPretty 0.4 100
+hPutDoc h = T.hPutStrLn h . A.displayDecorated . renderAnsi
 
-render :: Doc -> String
-render = displayDecorated decorate . renderPretty 0.4 100
+displayT :: Doc -> T.Text
+displayT = A.displayDecorated . renderAnsi
 
-renderDetailed :: Doc -> String
-renderDetailed = displayDecorated decorateDetailed . renderPretty 0.4 100
+displayS :: Doc -> String
+displayS = T.unpack . displayT
 
-decorate :: Style -> String -> String
-decorate Keyword s  = "\x1b[35m" ++ s ++ "\x1b[0m"
-decorate Literal s  = "\x1b[1;33m" ++ s ++ "\x1b[0m"
-decorate String s   = "\x1b[32m" ++ s ++ "\x1b[0m"
-decorate Comment _  = ""
-decorate TypeCon s  = "\x1b[34m" ++ s ++ "\x1b[0m"
-decorate TypeVar s  = "\x1b[33m" ++ s ++ "\x1b[0m"
-decorate TypeSkol s = "\x1b[31m" ++ s ++ "\x1b[0m"
-decorate Operator s = "\x1b[35m" ++ s ++ "\x1b[0m"
+displayDetailed  :: Doc -> T.Text
+displayDetailed = A.displayDecorated . renderAnsiDetailed
 
-decorateDetailed :: Style -> String -> String
-decorateDetailed Comment s  = "\x1b[1;30m" ++ s ++ "\x1b[0m"
-decorateDetailed st s = decorate st s
+renderAnsi, renderAnsiDetailed :: Doc -> SimpleDoc AnsiStyle
+renderAnsi = fmap decorate . simplifyDoc . renderPretty 0.4 100
+renderAnsiDetailed = fmap decorate . renderPretty 0.4 100
 
-decoratePlain :: Style -> String -> String
-decoratePlain Comment _ = ""
-decoratePlain _ s = s
+simplifyDoc :: SimpleDoc Style -> SimpleDoc Style
+simplifyDoc = filterSimpleDoc (/=Comment)
+
+decorate :: Style -> AnsiStyle
+decorate Keyword  = DullColour Magenta
+decorate Literal  = BrightColour Yellow
+decorate String   = DullColour Green
+decorate Comment  = BrightColour Black
+decorate TypeCon  = DullColour Blue
+decorate TypeVar  = DullColour Yellow
+decorate TypeSkol = DullColour Red
+decorate Operator = DullColour Magenta
 
 instance Pretty Double where
   pretty = double

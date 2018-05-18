@@ -23,16 +23,17 @@ import Syntax.Desugar (desugarProgram)
 import Syntax.Types (difference, toMap)
 
 import Syntax.Pretty()
+
 import Text.Pretty.Semantic
 
-result :: String -> T.Text -> String
+result :: String -> T.Text -> T.Text
 result file contents = runGen $ do
   let (Just parsed, _) = runParser file (L.fromStrict contents) parseInput
   Right (resolved, _) <- resolveProgram RS.builtinScope RS.emptyModules parsed
   desugared <- desugarProgram resolved
   inferred <- inferProgram builtinsEnv desugared
 
-  pure . displayDecorated decoratePlain . renderPretty 0.8 120 . (<##>empty)
+  pure . display . simplifyDoc . renderPretty 0.8 120 . (<##>empty)
        . either (pretty . reportT) (reportEnv . snd) $ inferred
 
   where

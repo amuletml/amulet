@@ -17,7 +17,7 @@ import Syntax.Resolve (resolveProgram)
 import Syntax.Pretty()
 import Text.Pretty.Semantic
 
-result :: String -> T.Text -> String
+result :: String -> T.Text -> T.Text
 result file contents = runGen $ do
   let (Just parsed, _) = runParser file (L.fromStrict contents) parseInput
   resolved <- resolveProgram RS.builtinScope RS.emptyModules parsed

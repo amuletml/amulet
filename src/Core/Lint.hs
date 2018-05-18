@@ -11,6 +11,7 @@ import Control.Monad.Except
 
 import qualified Data.VarMap as VarMap
 import qualified Data.VarSet as VarSet
+import qualified Data.Text as T
 import Data.Traversable
 import Data.Foldable
 import Data.Function
@@ -76,10 +77,11 @@ runLint m a =
               Right _ -> es
   in case es' of
        [] -> a
-       es' -> error $ renderDetailed $ string "Core lint failed:" <#>
-                                       prettyList es' <#>
-                                       string "for term" <#>
-                                       pretty a
+       es' -> error . T.unpack . displayDetailed $
+              string "Core lint failed:" <#>
+              prettyList es' <#>
+              string "for term" <#>
+              pretty a
 
 runLintOK :: IsVar a => ExceptT (CoreError a) (Writer [CoreError a]) () -> Either [CoreError a] ()
 runLintOK m = case runWriter (runExceptT m) of
