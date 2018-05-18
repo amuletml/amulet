@@ -3,4 +3,4 @@ b : bool
 x : int
 f : int -> int
 f' : int -> int
-@ : {'bk : type}. {'bl : type}. {'cc : type}. ('cc -> 'bl) -> ('bk -> 'cc) -> 'bk -> 'bl
+@ : {'bo : type}. {'bp : type}. {'cg : type}. ('cg -> 'bp) -> ('bo -> 'cg) -> 'bo -> 'bp

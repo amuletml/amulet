@@ -1,6 +1,0 @@
-impredicative02-fail.ml[6:12 ..6:27]: error
-  Illegal instantiation of type variable ak
-                  with polymorphic type `{'b : type}. 'b -> 'a`
-  · Note: doing so would constitute impredicative polymorphism
-  
-  Arising from use of the expression

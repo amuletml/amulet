@@ -1,11 +1,11 @@
 Nil : {'tys : type}. ('tys ~ unit) ⊃ list 'tys
 Cons : {'tys : type}. {'a : type}. {'b : type}. ('tys ~ 'a * 'b) ⊃ ('a * list 'b) -> list 'tys
-Here : {'xs : 'ee}. {'x : 'ee}. {'xs : 'ee}. ('xs ~ 'x * 'xs) ⊃ elem 'x 'xs
-There : {'xs : 'fg}. {'x : 'fg}. {'xs : 'fg}. {'y : 'fg}. ('xs ~ 'y * 'xs) ⊃ elem 'x 'xs -> elem 'x 'xs
-Var : {'ctx : 'ik}. {'ty : 'ik}. elem 'ty 'ctx -> term 'ctx 'ty
-Lam : {'ty : 'js}. {'a : 'js}. {'b : 'js}. {'ctx : 'js}. ('ty ~ 'a -> 'b) ⊃ term ('a * 'ctx) 'b -> term 'ctx 'ty
-App : {'ty : 'lh}. {'a : 'lh}. {'b : 'lh}. {'ctx : 'lh}. ('ty ~ 'b) ⊃ (term 'ctx ('a -> 'b) * term 'ctx 'a) -> term 'ctx 'ty
-const : {'nf : type}. {'y : 'nf}. {'x : 'nf}. {'xs : 'nf}. term 'xs ('x -> 'y -> 'x)
+Here : {'xs : 'ev}. {'x : 'ev}. {'xs : 'ev}. ('xs ~ 'x * 'xs) ⊃ elem 'x 'xs
+There : {'xs : 'gd}. {'x : 'gd}. {'xs : 'gd}. {'y : 'gd}. ('xs ~ 'y * 'xs) ⊃ elem 'x 'xs -> elem 'x 'xs
+Var : {'ctx : 'kd}. {'ty : 'kd}. elem 'ty 'ctx -> term 'ctx 'ty
+Lam : {'ty : 'lt}. {'a : 'lt}. {'b : 'lt}. {'ctx : 'lt}. ('ty ~ 'a -> 'b) ⊃ term ('a * 'ctx) 'b -> term 'ctx 'ty
+App : {'ty : 'ns}. {'a : 'ns}. {'b : 'ns}. {'ctx : 'ns}. ('ty ~ 'b) ⊃ (term 'ctx ('a -> 'b) * term 'ctx 'a) -> term 'ctx 'ty
+const : {'px : type}. {'y : 'px}. {'x : 'px}. {'xs : 'px}. term 'xs ('x -> 'y -> 'x)
 list : type -> type
-elem : {'cz : type}. 'cz -> 'cz -> type
-term : {'hg : type}. 'hg -> 'hg -> type
+elem : {'dk : type}. 'dk -> 'dk -> type
+term : {'it : type}. 'it -> 'it -> type
