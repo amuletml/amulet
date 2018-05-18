@@ -76,7 +76,7 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
     go (TypeApp t) ex = pretty ex <+> braces (pretty t)
     go (wr Syntax.:> wi) ex = go wr (ExprWrapper wi ex undefined)
     go (WrapVar v) ex = pretty ex <+> soperator (char '_') <> pretty v
-    go WrapFn{} ex = char '<' <> pretty ex <> char '>'
+    go (WrapFn f) ex = pretty (runWrapper f ex)
     go IdWrap ex = pretty ex
 
 instance Pretty (Var p) => Pretty (Coercion p) where
