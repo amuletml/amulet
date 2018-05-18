@@ -63,7 +63,7 @@ bind var ty
                    | var `Set.member` noTouch, TyVar v <- ty, v `Set.notMember` noTouch ->
                      solveTySubst .= (env `compose` Map.singleton v (TyVar var))
                    | otherwise -> throwError (NotEqual (TyVar var) ty)
-                pure (AssumedCo (TyVar var) ty)
+                pure (ReflCo ty)
               Just ty'
                 | ty' == ty -> pure (ReflCo (apply env ty'))
                 | otherwise -> unify ty (apply env ty')
