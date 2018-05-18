@@ -36,17 +36,16 @@ import Core.Var (CoVar)
 
 import Pretty (Pretty(pretty), putDoc, (<+>), colon)
 
-import Parser.Wrapper (ParseResult(POK, PFailed), Token(..), runParser, runLexer)
+import Parser.Wrapper (runParser)
 import Parser.Error (ParseError)
 import Parser (parseInput)
-import Parser.Lexer (lexerScan)
 
 import Errors (reportS, reportR, reportI)
 
 data CompileResult a
   = CSuccess [Toplevel Typed] [Stmt CoVar] [Stmt a] Env
   | CParse   [ParseError]
-  | CResolve ResolveError
+  | CResolve [ResolveError]
   | CInfer   TypeError
 
 compile :: [(SourceName, T.Text)] -> CompileResult CoVar
@@ -65,7 +64,7 @@ compile (file:files) = runGen $ do
   where
     go (Right (tops, scope, modScope, env)) (name, file) =
       case runParser name (L.fromStrict file) parseInput of
-        POK _ parsed -> do
+        (Just parsed, _) -> do
           resolved <- resolveProgram scope modScope parsed
           case resolved of
             Right (resolved, modScope') -> do
@@ -83,7 +82,7 @@ compile (file:files) = runGen $ do
                                   , env')
                 Left e -> pure $ Left $ CInfer e
             Left e -> pure $ Left $ CResolve e
-        PFailed es -> pure $ Left $ CParse es
+        (Nothing, es) -> pure $ Left $ CParse es -- TODO: Include parse warnings
     go x _ = pure x
 
 
@@ -94,7 +93,7 @@ compileFromTo fs emit =
   case compile fs of
     CSuccess _ _ core env -> emit (compileProgram env core)
     CParse es -> traverse_ (flip reportS fs) es
-    CResolve e -> putStrLn "Resolution error" >> reportR e fs
+    CResolve e -> putStrLn "Resolution error" >> traverse_ (flip reportR fs) e
     CInfer e -> putStrLn "Type error" >> reportI e fs
 
 test :: [(FilePath, T.Text)] -> IO (Maybe ([Stmt CoVar], Env))
@@ -117,14 +116,8 @@ test fs = do
       putDoc (pretty (compileProgram env optm))
       pure (Just (core, env))
     CParse es -> Nothing <$ traverse_ (flip reportS fs) es
-    CResolve e -> Nothing <$ reportR e fs
+    CResolve e -> Nothing <$ traverse_ (flip reportR fs) e
     CInfer e -> Nothing <$ reportI e fs
-
-testLexer :: [(FilePath, T.Text)] -> IO ()
-testLexer fs = for_ fs $ \(name, file) ->
-  case runLexer name (L.fromStrict file) lexerScan of
-    POK _ toks -> print (map (\(Token t _) -> t) toks)
-    PFailed es -> traverse_ (flip reportS fs) es
 
 testTc :: [(FilePath, T.Text)] -> IO (Maybe ([Stmt CoVar], Env))
 testTc fs = do
@@ -140,10 +133,10 @@ testTc fs = do
         putDoc (pretty k <+> colon <+> pretty t)
       pure (Just (core, env))
     CParse es -> Nothing <$ traverse_ (flip reportS fs) es
-    CResolve e -> Nothing <$ reportR e fs
+    CResolve e -> Nothing <$ traverse_ (flip reportR fs) e
     CInfer e -> Nothing <$ reportI e fs
 
-data CompilerOption = Test | TestTc | TestLex | Out String
+data CompilerOption = Test | TestTc | Out String
   deriving (Show)
 
 flags :: [OptDescr CompilerOption]
@@ -151,8 +144,6 @@ flags = [ Option ['t'] ["test"] (NoArg Test)
           "Provides additional debug information on the output"
         , Option [] ["test-tc"] (NoArg TestTc)
           "Provides additional type check information on the output"
-        , Option [] ["test-lex"] (NoArg TestLex)
-          "Simply prints the result of lexing the file"
         , Option ['o'] ["out"]  (ReqArg Out "OUT")
           "Writes the generated Lua to a specific file."
         ]
@@ -178,11 +169,6 @@ main = do
     ([TestTc], files, []) -> do
       files' <- traverse T.readFile files
       _ <- testTc (zip files files')
-      pure ()
-
-    ([TestLex], files, []) -> do
-      files' <- traverse T.readFile files
-      _ <- testLexer (zip files files')
       pure ()
 
     ([Out o], files, []) -> do

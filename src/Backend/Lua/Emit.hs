@@ -33,10 +33,77 @@ import Syntax (Var(..))
 
 import qualified Types.Wellformed as W
 
+{-
+  = The Amulet imperative backend =
+  =================================
+
+  The backend is one of the more confusing parts of Amulet (even if not the most
+  complex). Every time I go near it I have to sit down and work out what it's
+  doing, and the confusion has not decreased over time. Consequently, this
+  comment hopes to lay out how the backend is designed.
+
+  One thing to note is that while this currently targets Lua, the same
+  techniques could be applied to most imperative languages. It may be worth
+  defining some generic "imperative IR", which can then be converted to Lua, JS,
+  etc... Anyway, a discussion for another day.
+
+  The backend can be thought of as two separate emitters, handling the toplevel
+  and terms/atoms respectively. Both receive an "escape scope", which ensures
+  variables (especially operators) are valid identifiers, as well as preventing
+  accidental shadowing of variable names.
+
+  = The toplevel emitter =
+  ========================
+
+  The toplevel is the simpler of these as there is no fancy handling, we simply
+  loop through each element, push the variables into the escape code and
+  generate the appropriate code. Once all elements have been emitted, we call
+  main with the appropriate number of arguments.*
+
+  When generating lets, we delegate off to the term (or statement) emitter.
+
+  *Less said about this the better. We need to fix our handling of how main is
+   invoked.
+
+  = The expression emitter =
+  =========================================
+
+  In order to convert or flat ANF into a tree, we walk down the "spine" of the
+  expression tree - the body of let bindings and single-variable matches. For
+  each element on the spin, we pop its dependencies from the stack and push the
+  result back onto the stack (when the result is only used once).
+
+  Most of the time this occurs with no problem. However, there are situations
+  where the variables are used in a different order to the order they are
+  consumed in. Here we generate local variables for the entire stack and then
+  continue execution with an empty one.
+
+  Some expressions are not part of a "run," or are guaranteed to require a
+  statement. These include matches with multiple branches, recursive lets, and
+  record extensions. In these cases, we flush* the expression stack and emit the
+  term.
+
+  Sadly, the generating of the statement list is a little confusing. Most of the
+  generation acts as a WriterT: we prepend onto a list. However, we also keep
+  track of a "return generator". This generates the appropriate code to escape
+  from this statement. In most cases this is just `return`, though may assign to
+  a variable instead.
+
+  Consequently, statement generation is expressed as a ContT [LuaStmt], with the
+  initial continuation acting as the returner.
+
+  *Some terms will pop expressions off the stack before flushing the remainder
+   as the can be emitted inline.
+
+-}
+
 type Returner = LuaExpr -> LuaStmt
 
-data VarEntry v = VarEntry { vVar  :: v
-                           , vExpr :: LuaExpr }
+data VarEntry v =
+  VarEntry { vVar  :: v
+           , vExpr :: LuaExpr
+           , vPure :: Bool
+           }
   deriving (Show)
 
 data EmitState v = EmitState { _eStack  :: [VarEntry v]
@@ -148,15 +215,23 @@ emitAtom (Lam (TermArgument v _) e) = do
 emitAtom (Lam TypeArgument{} e) = emitTerm e
 emitAtom (Ref v _) = ContT $ \next -> do
   xs <- use eStack
-  case span ((/= toVar v) . toVar . vVar) xs of
-             -- -- If the variable is not in the scope then skip
-             (_, []) -> do v' <- uses eEscape (getVar v)
-                           next (LuaRef (LuaName v'))
-             -- Otherwise push all needed bindings and then continue
-             (before, VarEntry { vExpr = e }:xs') -> do
-               assign eStack xs'
-               flip mkLets <$> traverse pushEntry before
-                           <*> next e
+  case break ((==toVar v) . toVar . vVar) xs of
+    -- If we're pure, or we're preceded by pure computations then we're OK to emit directly.
+    (before, VarEntry { vExpr = e, vPure = p }:xs') | p || all vPure before -> do
+      assign eStack (before ++ xs')
+      next e
+
+    -- If we're not in the scope at all, emit the variable
+    _ | all ((/= toVar v) . toVar . vVar) xs -> do
+      v' <- gets (getVar v . view eEscape)
+      next (LuaRef (LuaName v'))
+
+    -- If we're in the list head, then flush everything and return
+    _ -> do
+      assign eStack []
+      vs <- traverse pushEntry xs
+      v' <- gets (getVar v . view eEscape)
+      flip mkLets vs <$> next (LuaRef (LuaName v'))
 
 flushStmt :: Occurs a => [LuaStmt] -> ExprContext a ()
 flushStmt extra = ContT $ \next -> do
@@ -187,10 +262,19 @@ emitTerm (TyApp f _) = emitAtom f
 emitTerm (Cast f _) = emitAtom f
 
 emitTerm (Extend (Lit RecNil) fs) = do
+  {-
+    Record literals are nice and simple to generate, and can just be
+    emitted as expressions.
+  -}
   fs' <- foldrM emitRow [] fs
   pure (LuaTable fs')
   where emitRow (f, _, e) es = (:es) . (LuaString f,) <$> emitAtom e
+
 emitTerm (Extend tbl exs) = do
+  {-
+    Record extensions have to be emitted as a statement, and so we flush our
+    context and continue compilation.
+  -}
   exs' <- foldrM emitRow [] exs
   tbl' <- emitAtom tbl
 
@@ -208,30 +292,45 @@ emitTerm (Extend tbl exs) = do
         emitRow (f, _, e) es = (:es) . LuaAssign [LuaIndex (LuaRef new) (LuaString f)] . pure <$> emitAtom e
 
 emitTerm (Let (One (x, _, e)) body)
-  | usedWhen x == Once && not (isMultiMatch e) = do
-      -- If we've got a let binding which is only used once then push it onto the stack
-      e' <- emitTerm e
-      modifying eStack (VarEntry x e':)
+  | Match _ (_:_:_) <- e = do
+      {-
+        This is a match with multiple branches. We declare our variable
+        beforehand, flush all existing variables and emit both branches before
+        continuing.
+      -}
+      x' <- pushScope x
+      flushStmt [ LuaLocal [LuaName x'] [] ]
+      s <- use eEscape
+      flushStmt (emitStmt s (LuaAssign [LuaName x'] . pure) e)
       emitTerm body
 
-  | usedWhen x == Dead && not (isMultiMatch e) = do
+  | usedWhen x == Once = do
+      {-
+        A variable which is only used once can be pushed to the expression
+        stack.
+      -}
+      e' <- emitTerm e
+      modifying eStack (VarEntry x e' False:)
+      emitTerm body
+
+  | usedWhen x == Dead = do
+      {-
+        Are we never used? Then we can safely emit the body without a care in
+        the world.
+      -}
       e' <- emitTerm e
       flushStmt (asStmt e')
       emitTerm body
 
-  | not (isMultiMatch e) = do
-      -- If we've got a let binding which doesn't branch, then we can emit it as a normal
-      -- local.
+  | otherwise = do
+      {-
+        Otheriwse we've got a let binding which doesn't branch, then we can emit
+        it as a normal local.
+      -}
       x' <- pushScope x
       e' <- emitTerm e
       flushStmt [ LuaLocal [LuaName x'] [e'] ]
       emitTerm body
-  | otherwise = do
-    x' <- pushScope x
-    flushStmt [ LuaLocal [LuaName x'] [] ]
-    s <- use eEscape
-    flushStmt (emitStmt s (LuaAssign [LuaName x'] . pure) e)
-    emitTerm body
 
   where asStmt (LuaTable fs) = concatMap (asStmt . snd) fs
         asStmt (LuaBinOp a _ b) = asStmt a ++ asStmt b
@@ -239,7 +338,10 @@ emitTerm (Let (One (x, _, e)) body)
         asStmt _ = []
 
 emitTerm (Let (Many bs) body) = do
-  -- Otherwise predeclare all variables and emit the bindings
+  {-
+    Lets which declare mutually recursive variables are relatively trivial to
+    deal with: just emit the definitions, declare them and continue.
+  -}
   bs' <- traverse ((LuaName<$>) . pushScope . fst3) bs
   flushStmt [ LuaLocal bs' [] ]
   traverse_ emitLet bs
@@ -248,16 +350,27 @@ emitTerm (Let (Many bs) body) = do
           s <- use eEscape
           flushStmt (emitStmt s (LuaAssign [LuaName (getVar v s)] . pure) e)
 
-emitTerm (Match test [Arm { _armPtrn = p, _armBody = body, _armVars = vs}])
-  | all (\(x, _) -> usedWhen x == Once || usedWhen x == Dead) vs
+emitTerm (Match test branches)
+  | [Arm { _armPtrn = p, _armBody = body, _armVars = vs}] <- branches
+  , [(x, _)] <- filter ((/=Dead) . usedWhen . fst) vs
+  , usedWhen x == Once
   = do
       test' <- emitAtom test
       -- Just push the bindings onto the stack
-      modifying eStack (withMatch (patternBindings p test')++)
+      modifying eStack (withMatch False (patternBindings p test')++)
 
       emitTerm body
-  | otherwise
-  = do
+
+  | [Arm { _armPtrn = p, _armBody = body }] <- branches =  do
+      {-
+        Matches with a single arm do not require a branch, so we simply flush
+        the stack and declare whatever variables are needed. It might be
+        possible to improve this in the future: if we know the test is an
+        already popped variable then we could just push them onto the stack.
+        It's worth noting that there are some "obvious" cases not handled here
+        (such as all variables being unused) as the optimiser should have
+        nobbled them already.
+      -}
       flushStmt []
       test' <- emitAtom test
 
@@ -265,19 +378,53 @@ emitTerm (Match test [Arm { _armPtrn = p, _armBody = body, _armVars = vs}])
 
       -- Declare any variable used multiple times (or hoisted into a lambda)
       multi' <- traverse (firstA ((LuaName<$>) . pushScope)) multi
-      flushStmt [uncurry LuaLocal (unzip multi')]
+      unless (null multi') (flushStmt [uncurry LuaLocal (unzip multi')])
 
       -- Push any variable used once onto the stack
-      modifying eStack (withMatch once++)
+      modifying eStack (withMatch True once++)
 
       emitTerm body
 
-  where withMatch = map (uncurry VarEntry)
+  | (ifs@Arm { _armPtrn = PatLit LitTrue } :
+     els@Arm { _armPtrn = PatLit LitFalse } :_) <- branches = do
+      {-
+        Whilst this may seem a little weird special casing this, as we'll
+        generate near equivalent code in the general case, it does allow us to
+        merge the test with the definition, as we know it'll only be evaluated
+        once.
+      -}
+      test' <- emitAtom test
+      flushStmt[]
+      ContT $ \next -> do
+        (_, ifs') <- emitArm test' next ifs
+        (_, els') <- emitArm test' next els
+        pure [ LuaIfElse [ (test', ifs')
+                         , (LuaTrue, els') ] ]
 
-emitTerm (Match test branches) = do
-  flushStmt []
-  test' <- emitAtom test
-  emitMatch test' branches
+  | (els@Arm { _armPtrn = PatLit LitFalse } :
+     ifs@Arm { _armPtrn = PatLit LitTrue } :_) <- branches = do
+      {-
+        As above, but testing against `not EXPR`. In this case we just flip the
+        two branches
+       -}
+      test' <- emitAtom test
+      flushStmt[]
+      ContT $ \next -> do
+        (_, ifs') <- emitArm test' next ifs
+        (_, els') <- emitArm test' next els
+        pure [ LuaIfElse [ (test', ifs')
+                         , (LuaTrue, els') ] ]
+
+  | otherwise = do
+      {-
+        In the case of the general branch, we will probably be consuming the
+        pattern multiple times, and so we need to emit it as a variable.
+      -}
+      flushStmt []
+      test' <- emitAtom test
+      ContT $ \next -> pure . LuaIfElse <$> traverse (emitArm test' next) branches
+
+  where withMatch p = map (\(a, b) -> VarEntry a b p)
 
 emitStmt :: Occurs a => EscapeScope -> Returner -> Term a -> [LuaStmt]
 emitStmt s r term = evalState (runContT (emitTerm term) finish) (EmitState [] s) where
@@ -320,27 +467,25 @@ patternBindings (Destr _ p) vr   = patternBindings p (LuaRef (LuaIndex vr (LuaNu
 patternBindings (PatExtend p rs) vr = patternBindings p vr ++ concatMap (index vr) rs where
   index vr (var', pat) = patternBindings pat (LuaRef (LuaIndex vr (LuaString var')))
 
-emitMatch :: Occurs a => LuaExpr -> [Arm a] -> ExprContext a LuaExpr
-emitMatch test ps = ContT $ \next ->  uses eEscape (pure . genIf next)
-  where genBinding next s Arm { _armPtrn = p, _armBody = c } =
-          ( patternTest s p test
-          , let (once, multi) = partition ((==Once) . usedWhen . fst) (patternBindings p test)
-                (s', multi') = foldl (\(s, vs) (v, e) -> let (v', s') = pushVar v s in (s', (LuaName v', e): vs)) (s, []) multi
-            in (case multi' of
-                  [] -> []
-                  _ -> [uncurry LuaLocal (unzip multi')])
-               ++ evalState (runContT (emitTerm c) next) (EmitState (withMatch once) s') )
+emitArm ::  (MonadState (EmitState v1) m, Occurs v)
+        => LuaExpr
+        -> (LuaExpr -> State (EmitState v) [LuaStmt])
+        -> AnnArm () v
+        -> m (LuaExpr, [LuaStmt])
+emitArm test next Arm { _armPtrn = p, _armBody = c } = do
+  esc <- use eEscape
+  pure ( patternTest esc p test
+       , let (once, multi) = partition ((==Once) . usedWhen . fst) (patternBindings p test)
+             (s', multi') = foldl (\(s, vs) (v, e) ->
+                                      let (v', s') = pushVar v s
+                                      in (s', (LuaName v', e): vs))
+                            (esc, []) multi
+         in (case multi' of
+                [] -> []
+                _ -> [uncurry LuaLocal (unzip multi')])
+            ++ evalState (runContT (emitTerm c) next) (EmitState (withMatch once) s') )
 
-        genIf next s =
-          case ps of
-            (ifs@Arm { _armPtrn = PatLit LitTrue } :
-             els@Arm { _armPtrn = PatLit LitFalse } :_) ->
-              LuaIfElse [ (test, snd (genBinding next s ifs))
-                        , (LuaTrue, snd (genBinding next s els)) ]
-
-            _ -> LuaIfElse $ map (genBinding next s) ps
-
-        withMatch = map (uncurry VarEntry)
+  where withMatch = map (\(a, b) -> VarEntry a b True)
 
 ops :: VarMap.Map Text
 ops = VarMap.fromList
@@ -366,10 +511,6 @@ isBinOp v = VarMap.member (toVar v) ops
 
 remapOp :: IsVar a => a -> Text
 remapOp v | v'@(CoVar _ n _) <- toVar v = fromMaybe n (VarMap.lookup v' ops)
-
-isMultiMatch :: Term a -> Bool
-isMultiMatch (Match _ (_:_:_)) = True
-isMultiMatch _ = False
 
 escapeScope :: EscapeScope
 escapeScope =

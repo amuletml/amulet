@@ -1,11 +1,10 @@
 {-# OPTIONS_GHC -funbox-strict-fields #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE MultiParamTypeClasses, FlexibleInstances #-}
 
 module Parser.Wrapper
   ( Token(..)
   , AlexInput(..)
   , PState(..)
-  , ParseResult(..)
   , Parser
   , Action
   , alexInputPrevChar, alexGetByte
@@ -17,9 +16,8 @@ module Parser.Wrapper
   , runParser, runLexer
   ) where
 
-import Control.Monad
 import Control.Monad.Fail as MonadFail
-import Control.Monad.Report
+import Control.Monad.Writer
 
 import qualified Data.Text.Lazy.Builder as B
 import qualified Data.Text.Lazy as L
@@ -108,14 +106,21 @@ instance Monad Parser where
   fail = MonadFail.fail
 
 instance MonadFail Parser where
-  fail msg = P $ \s -> PFailed (reverse (Failure (sPos s) msg:sErrors s))
+  fail msg = P $ \s -> PFailed (Failure (sPos s) msg:sErrors s)
 
-instance MonadReport ParseError Parser where
-  report e = P $ \s -> POK s { sErrors = e : sErrors s } ()
-  reports es = P $ \s -> POK s { sErrors = es ++ sErrors s } ()
+instance MonadWriter [ParseError] Parser where
+  tell es = P $ \s -> POK s { sErrors = es ++ sErrors s } ()
+  pass m = P $ \s ->
+    case unP m s of
+      PFailed e -> PFailed e
+      POK s' (a, f) -> POK s' { sErrors = f (sErrors s') } a
+  listen m = P $ \s ->
+    case unP m s of
+      PFailed e -> PFailed e
+      POK s' a -> POK s' (a, sErrors s')
 
 failWith :: ParseError -> Parser a
-failWith e = P $ \s -> PFailed (reverse (e:sErrors s))
+failWith e = P $ \s -> PFailed (e:sErrors s)
 
 getStartCode :: Parser Int
 getStartCode = P $ \s -> POK s (sMode s)
@@ -149,25 +154,29 @@ getPos = P $ \s -> POK s (sPos s)
 
 type Action a = AlexInput -> Int64 -> Parser a
 
-runParser :: SourceName -> L.Text -> Parser a -> ParseResult a
-runParser file input m = unP m PState { stringBuffer = mempty
-                                      , commentDepth = 0
-                                      , modulePrefix = []
-                                      , tokenStart = SourcePos file 1 1
+runParser :: SourceName -> L.Text -> Parser a -> (Maybe a, [ParseError])
+runParser file input m =
+  let defaultState  = PState { stringBuffer = mempty
+                             , commentDepth = 0
+                             , modulePrefix = []
+                             , tokenStart = SourcePos file 1 1
 
-                                      , context = defaultContext
-                                      , pending = Done
+                             , context = defaultContext
+                             , pending = Done
 
-                                      , sPos  = SourcePos file 1 1
-                                      , sText = input
-                                      , sPrev = '\n'
-                                      , sIdx  = 0
-                                      , sMode = 0
+                             , sPos  = SourcePos file 1 1
+                             , sText = input
+                             , sPrev = '\n'
+                             , sIdx  = 0
+                             , sMode = 0
 
-                                      , sErrors = []
-                                      }
+                             , sErrors = []
+                             }
+  in case unP m defaultState of
+       PFailed err -> (Nothing, reverse err)
+       POK s' a -> (Just a, reverse (sErrors s'))
 
-runLexer :: SourceName -> L.Text -> Parser Token -> ParseResult [Token]
+runLexer :: SourceName -> L.Text -> Parser Token -> (Maybe [Token], [ParseError])
 runLexer file input m = runParser file input gather where
   gather = do
     t <- m

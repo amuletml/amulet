@@ -23,7 +23,7 @@ data ParseError
   -- Parsing errors
   | UnexpectedToken Token [String]
   -- Various warnings
-  | UnindentIn SourcePos SourcePos
+  | UnalignedIn SourcePos SourcePos
   | UnindentContext SourcePos SourcePos
   deriving (Show)
 
@@ -40,7 +40,7 @@ instance Pretty ParseError where
   pretty (UnexpectedToken (Token s _) [x]) = "Unexpected" <+> string (friendlyName s) <> ", expected" <+> string x
   pretty (UnexpectedToken (Token s _) xs) = "Unexpected" <+> string (friendlyName s) <> ", expected one of" <+> hsep (punctuate comma (map string xs))
 
-  pretty (UnindentIn _ p) = "The in is misaligned with the corresponding 'let'" <+> parens ("located at" <+> prettyPos p)
+  pretty (UnalignedIn _ p) = "The in is misaligned with the corresponding 'let'" <+> parens ("located at" <+> prettyPos p)
   pretty (UnindentContext _ p) = "Possible incorrect indentation" </> "This token is outside the context started at" <+> prettyPos p
 
 instance Spanned ParseError where
@@ -53,7 +53,7 @@ instance Spanned ParseError where
 
   annotation (UnexpectedToken (Token _ p) _) = mkSpan1 p
 
-  annotation (UnindentIn p _) = mkSpan1 p
+  annotation (UnalignedIn p _) = mkSpan1 p
   annotation (UnindentContext p _) = mkSpan1 p
 
 prettyPos :: SourcePos -> Doc

@@ -7,7 +7,7 @@ module Parser.Context
   ) where
 
 import Control.Monad
-import Control.Monad.Report
+import Control.Monad.Writer
 
 import Data.Position
 
@@ -21,7 +21,6 @@ import Parser.Token
 
   Note that the contexts are pushed and popped just like they would be in
   the parser.
-
 -}
 
 data Context
@@ -64,13 +63,13 @@ data PendingState
 defaultContext :: [Context]
 defaultContext = [CtxBlock (SourcePos "" 0 1) False Nothing]
 
-handleContext :: MonadReport ParseError m
+handleContext :: (Applicative f, Monoid (f ParseError), MonadWriter (f ParseError) m)
               => Token -> [Context]
               -> m (PendingState, [Context])
 handleContext = handleContextBlock True
 
 -- Handles the indentation sensitive parts of the context tracker
-handleContextBlock :: MonadReport ParseError m
+handleContextBlock :: (Applicative f, Monoid (f ParseError), MonadWriter (f ParseError) m)
                    => Bool -> Token -> [Context]
                    -> m (PendingState, [Context])
 handleContextBlock needsSep  tok@(Token tk tp) c =
@@ -98,7 +97,9 @@ handleContextBlock needsSep  tok@(Token tk tp) c =
     -- If we've got an in, then pop our let context and push a block
     -- TODO: Consider where this rule should occur, or warn if the indentation is funky.
     (TcIn, CtxLet offside:cks) -> do
-      when (spCol tp < spCol offside) (report (UnindentIn tp offside))
+      -- If we're on the same line then it can be anywhere. Otherwise the
+      -- in should line up with the let.
+      when (spLine tp /= spLine offside && spCol tp /= spCol offside) (tell . pure $ UnalignedIn tp offside)
 
       pure ( Result tok Done
            , CtxEmptyBlock (Just TcVEnd):cks )
@@ -288,21 +289,38 @@ insertFor CtxIf{} = Just TcVEnd
 insertFor _ = Nothing
 
 canTerminate :: TokenClass -> Bool
-canTerminate TcIn = True
-canTerminate TcCParen = True
 canTerminate TcCBrace = True
+canTerminate TcCParen = True
 canTerminate TcCSquare = True
-canTerminate TcEnd = True
+canTerminate TcComma = True
 canTerminate TcElse = True
+canTerminate TcEnd = True
+canTerminate TcIn = True
+canTerminate TcSemicolon = True
+canTerminate TcTopSep = True
 canTerminate _ = False
 
 terminates :: TokenClass -> [Context] -> Bool
--- Some expression terminators
+
+-- `in` terminates the `let` binding
 terminates TcIn (CtxLet{}:_) = True
+
+-- `else` terminates the `then` context, so we want to pop everything until the
+-- nearest `if`.
 terminates TcElse (CtxIf{}:_) = True
-terminates t (CtxBracket t':_)  = t == t'
+
+-- Any bracket is terminated by the closing bracket
+terminates t (CtxBracket t':_) | t == t' = True
+
+-- When observing a comma, we want to close everything up to the nearest bracket
+-- pair.
+terminates TcComma (CtxBracket TcCParen:_) = True
+terminates TcComma (CtxBracket TcCBrace:_) = True
+terminates TcComma (CtxBracket TcCSquare:_) = True
+
 -- Toplevel terminators
 terminates TcEnd (CtxModuleBody{}:_) = True
+
 -- Block level terminators
 terminates TcTopSep (CtxBlock{}:ck) = isToplevel ck
 terminates TcSemicolon (CtxBlock{}:ck) = not (isToplevel ck)
