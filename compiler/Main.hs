@@ -34,7 +34,7 @@ import Core.Lower (runLowerT, lowerProg)
 import Core.Core (Stmt)
 import Core.Var (CoVar)
 
-import Pretty (Pretty(pretty), putDoc, (<+>), colon)
+import Text.Pretty.Semantic (Pretty(pretty), putDoc, (<+>), colon)
 
 import Parser.Wrapper (runParser)
 import Parser.Error (ParseError)

@@ -5,7 +5,7 @@ module Core.Var where
 import qualified Data.Text as T
 import Control.Lens
 import GHC.Generics
-import Pretty
+import Text.Pretty.Semantic
 import Data.Data
 
 data CoVar =

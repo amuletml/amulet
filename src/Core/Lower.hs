@@ -37,7 +37,7 @@ import qualified Syntax as S
 import Syntax.Let
 import Syntax (Var(..), Resolved, Typed, Expr(..), Pattern(..), Lit(..), Skolem(..), Toplevel(..), Constructor(..))
 
-import Pretty (pretty)
+import Text.Pretty.Semantic (pretty)
 
 type Atom = C.Atom CoVar
 type Term = C.Term CoVar

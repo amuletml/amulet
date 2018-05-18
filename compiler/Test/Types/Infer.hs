@@ -8,7 +8,7 @@ import Hedgehog
 import Test.Types.Util
 import Test.Syntax.Gen
 
-import Pretty (pretty)
+import Text.Pretty.Semantic (pretty)
 
 prop_wellTyped :: Property
 prop_wellTyped = property $ do

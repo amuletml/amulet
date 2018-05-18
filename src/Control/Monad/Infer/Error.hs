@@ -8,7 +8,7 @@ import Data.Span
 import Data.Data
 
 import Syntax.Pretty
-import Pretty
+import Text.Pretty.Semantic
 
 data SomeReason where
   BecauseOf :: (Reasonable a p) => a p -> SomeReason

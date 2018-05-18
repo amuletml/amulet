@@ -34,7 +34,7 @@ import Parser.Context
 import Parser.Token
 import Parser.Error
 
-import Pretty
+import Text.Pretty.Semantic
 
 
 data AlexInput = LI { liPos  :: !SourcePos
