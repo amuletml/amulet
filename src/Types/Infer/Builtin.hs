@@ -5,10 +5,10 @@ module Types.Infer.Builtin where
 import qualified Data.Sequence as Seq
 import qualified Data.Text as T
 import Data.Spanned
+import Data.Reason
 import Data.Maybe
 import Data.Data
 
-import Control.Monad.Infer.Error
 import Control.Monad.Infer
 import Control.Lens
 

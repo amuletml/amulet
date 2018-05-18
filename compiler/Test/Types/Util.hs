@@ -8,11 +8,11 @@ import "amuletml" Syntax.Subst
 import "amuletml" Syntax
 
 import qualified "amuletml" Control.Monad.Infer as MonadInfer
-import "amuletml" Control.Monad.Infer.Error
 import "amuletml" Control.Monad.Infer (Constraint(..), SomeReason(..), TypeError)
 
 import "amuletml" Text.Pretty.Semantic
 import "amuletml" Data.Spanned
+import "amuletml" Data.Reason
 import "amuletml" Data.Span
 
 import qualified Data.Sequence as Seq
