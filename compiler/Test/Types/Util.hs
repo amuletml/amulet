@@ -19,18 +19,18 @@ import qualified Data.Sequence as Seq
 
 import qualified Control.Monad.Gen as MonadGen
 
-inferExpr :: Expr Resolved -> Either TypeError (Type Typed)
+inferExpr :: Expr Resolved -> Either [TypeError] (Type Typed)
 inferExpr e = go . MonadGen.runGen $ MonadInfer.runInfer builtinsEnv (infer e) where
   go (Left e) = Left e
   go (Right ((_, t), cs)) = case solve 0 cs of
-    Left e -> Left e
+    Left e -> Left [e]
     Right (x, _) -> pure (apply x t)
 
-checkExpr :: Expr Resolved -> Type Typed -> Either TypeError ()
+checkExpr :: Expr Resolved -> Type Typed -> Either [TypeError] ()
 checkExpr e t = go . MonadGen.runGen $ MonadInfer.runInfer builtinsEnv (check e t) where
   go (Left e) = Left e
   go (Right (_, cs)) = case solve 0 cs of
-    Left e -> Left e
+    Left e -> Left [e]
     Right _ -> pure ()
 
 equivalent, disjoint :: Type Typed -> Type Typed -> Bool

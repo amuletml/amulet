@@ -39,7 +39,7 @@ data CompileResult
   = CSuccess [Stmt CoVar]
   | CParse   [ParseError]
   | CResolve [ResolveError]
-  | CInfer   TypeError
+  | CInfer   [TypeError]
 
 compile :: MonadGen Int m => [(SourceName, T.Text)] -> m CompileResult
 compile [] = error "Cannot compile empty input"
@@ -69,8 +69,8 @@ compile (file:files) = do
                                           }
                                   , modScope'
                                   , env')
-                Left e -> pure $ Left $ CInfer e
-            Left e -> pure $ Left $ CResolve e
+                Left es -> pure $ Left $ CInfer es
+            Left es -> pure $ Left $ CResolve es
         (Nothing, es) -> pure $ Left $ CParse es
     go x _ = pure x
 

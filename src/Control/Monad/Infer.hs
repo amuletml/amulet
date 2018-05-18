@@ -36,6 +36,7 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
 import qualified Data.Text as T
+import Data.Bifunctor
 import Data.Function
 import Data.Foldable
 import Data.Spanned
@@ -46,6 +47,7 @@ import Data.Text (Text)
 import Data.List
 
 import Text.Pretty.Semantic
+import Text.Pretty.Note
 
 import Syntax.Pretty
 import Syntax.Types
@@ -133,8 +135,10 @@ lookupTy' x = do
 runInfer :: MonadGen Int m
          => Env
          -> ReaderT Env (WriterT (Seq.Seq (Constraint p)) (ExceptT TypeError m)) a
-         -> m (Either TypeError (a, Seq.Seq (Constraint p)))
-runInfer ct ac = runExceptT (runWriterT (runReaderT ac ct))
+         -> m (Either [TypeError] (a, Seq.Seq (Constraint p)))
+runInfer ct ac = first unwrap <$> runExceptT (runWriterT (runReaderT ac ct))
+  where unwrap (ManyErrors es) = concatMap unwrap es
+        unwrap e = [e]
 
 fresh :: MonadGen Int m => m (Var Resolved)
 fresh = do
@@ -274,6 +278,17 @@ instance Pretty TypeError where
     where whatIs (TySkol (Skolem _ v _ _)) = string "the rigid type variable" <+> stypeVar (pretty v)
           whatIs t = string "the type" <+> pretty t
           skol = stypeVar (pretty v)
+
+instance Spanned TypeError where
+  annotation (ArisingFrom e@ArisingFrom{} _) = annotation e
+  annotation (ArisingFrom _ x) = annotation x
+  annotation _ = undefined
+
+instance Note TypeError Style where
+  diagnosticKind _ = ErrorMessage
+
+  formatNote f (ArisingFrom e@ArisingFrom{} _) = formatNote f e
+  formatNote f x = indent 2 (Right <$> pretty x) <#> f [annotation x]
 
 missing :: [(Text, b)] -> [(Text, b)] -> Doc
 missing ra rb

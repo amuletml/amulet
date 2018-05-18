@@ -25,6 +25,7 @@ data AnsiStyle
   | DullColour Colour
   | BrightColour Colour
   | Underlined
+  | AnsiStyles [AnsiStyle]
   deriving (Show, Eq, Ord)
 
 data TermState = TS { colour    :: Maybe Colour
@@ -68,6 +69,7 @@ displayDecorated = L.toStrict . B.toLazyText . go [TS Nothing False False] where
   appAnn s Underlined       = s { underline = True }
   appAnn s (BrightColour c) = s { bold = True,  colour = Just c }
   appAnn s (DullColour c)   = s { bold = False, colour = Just c }
+  appAnn s (AnsiStyles c)   = foldl appAnn s c
 
   toAnsi [] = mempty
   toAnsi xs = "\x1b[" <> go xs <> B.singleton 'm' where
