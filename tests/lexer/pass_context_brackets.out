@@ -1,0 +1,3 @@
+
+let paren_fn = ( fun x -> x $end , 1 )
+$end <eof>

@@ -9,7 +9,7 @@ import qualified Data.Text.IO as T
 import qualified Data.Text as T
 import Data.Foldable
 
-import Parser.Wrapper (ParseResult(POK, PFailed), Token(..), runLexer)
+import Parser.Wrapper (Token(..), runLexer)
 import Parser.Lexer (lexerScan)
 import Parser.Context
 import Parser.Error
@@ -17,10 +17,11 @@ import Parser.Error
 testLexer :: [(FilePath, T.Text)] -> IO ()
 testLexer fs = for_ fs $ \(name, file) ->
   case runLexer name (L.fromStrict file) lexerScan of
-    POK _ toks -> do
+    (Just toks, es) -> do
       print (map (\(Token t _) -> t) toks)
       go toks Done defaultContext
-    PFailed es -> print es
+      unless (null es) (print es)
+    (Nothing, es) -> print es
 
   where
     go :: [Token] -> PendingState -> [Context] -> IO ()
