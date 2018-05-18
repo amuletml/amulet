@@ -1,4 +1,4 @@
-fail_skolem_poly.ml[2:32 ..2:32]: error
+error: fail_skolem_poly.ml[2:32 ..2:32]
   Could not match rigid type variable a with the type int
   • Note: the variable a was rigidified because of a type ascription
   against the type {'a : type}. 'a -> 'a
@@ -6,7 +6,10 @@ fail_skolem_poly.ml[2:32 ..2:32]: error
 
 
   Arising from use of the expression
-fail_skolem_poly.ml[2:32 ..2:36]: error
+  │ 
+2 │ let poly_fail = poly (fun x -> x + 1)
+  │ 
+error: fail_skolem_poly.ml[2:32 ..2:36]
   Could not match rigid type variable a with the type int
   • Note: the variable a was rigidified because of a type ascription
   against the type {'a : type}. 'a -> 'a
@@ -14,3 +17,6 @@ fail_skolem_poly.ml[2:32 ..2:36]: error
 
 
   Arising from use of the expression
+  │ 
+2 │ let poly_fail = poly (fun x -> x + 1)
+  │ 

@@ -1,6 +1,9 @@
-gadt04-pass.ml[2:5 ..2:27]: error
+error: gadt04-pass.ml[2:5 ..2:27]
   The type `int -> int -> t` is malformed.
   • Note: Generalised constructors can not be curried
   • Suggestion: Perhaps use a tuple: `(int * int) -> t`
 
   Arising from use of the constructor
+  │ 
+2 │   | MkT : int -> (int -> t)
+  │ 

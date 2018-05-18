@@ -1,4 +1,4 @@
-fail_skolem_pure.ml[2:32 ..2:32]: error
+error: fail_skolem_pure.ml[2:32 ..2:32]
   Could not match rigid type variable a with the type 'f bq
   • Note: the variable a was rigidified because of a type ascription
   against the type {'a : type}. 'a -> 'f 'a
@@ -6,3 +6,6 @@ fail_skolem_pure.ml[2:32 ..2:32]: error
 
 
   Arising from use of the expression
+  │ 
+2 │ let pure_fail = pure (fun x -> x)
+  │ 

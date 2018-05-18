@@ -1,4 +1,4 @@
-gadt07-escape-fail.ml[10:3 ..10:14]: error
+error: gadt07-escape-fail.ml[10:3 ..10:14]
   Could not match rigid type variable a with the type int
   • Note: the variable a was rigidified because it is an existential,
   bound by the type of MkHid, (exp 'a * exp 'a) -> hidden
@@ -6,3 +6,6 @@ gadt07-escape-fail.ml[10:3 ..10:14]: error
 
 
   Arising from use of the expression
+   │ 
+10 │   match hval with
+   │ 

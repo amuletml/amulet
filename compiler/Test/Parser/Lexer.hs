@@ -18,10 +18,10 @@ result file contents =
   case runLexer file (L.fromStrict contents) lexerContextScan of
     (Just toks, []) -> displayPlain $ writeToks 1 True toks
     (Just toks, es) -> displayPlain $ writeToks 1 True toks <##>
-                       string "(*" <##> indent 2 (prettyErrs es) <##> string "*)" <##> empty
-    (Nothing, es) -> displayPlain $ prettyErrs es <##> empty
+                       string "(*" <##> indent 2 (prettyErrs es) <##> string "*)"
+    (Nothing, es) -> displayPlain $ prettyErrs es
 
-  where writeToks _ _ [] = linebreak
+  where writeToks _ _ [] = empty
         writeToks l f t@(Token tc p:ts)
           | spLine p > l = empty <##> writeToks (l + 1) True t
           | f

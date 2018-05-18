@@ -27,10 +27,12 @@ displayPlain
   . fmap (either N.toAnsi toAnsi)
   . filterSimpleDoc (either (const True) uncommentFilter)
   . renderPretty 0.4 100
+  . (<>line)
 displayPlainVerbose
   = display
   . fmap (either N.toAnsi toAnsi)
   . renderPretty 0.4 100
+  . (<>line)
 
 hedgehog :: Group -> TestTree
 hedgehog Group { groupName = n, groupProperties = ps }

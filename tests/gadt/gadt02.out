@@ -1,8 +1,13 @@
-gadt02.ml[7:5 ..7:23]: error
+error: gadt02.ml[7:5 ..7:23]
   The type `t2 int -> t2 bool` is malformed.
-  • Note: The type t2 bool is not an instance of the type being declared
+  • Note: The type t2 bool
+            is not an instance of the type being declared
   • Note: It must end in an application like t1 'a
             but it ends in an application of some other type
-  • Suggestion: did you mean t1 bool instead of t2 bool?
+  • Suggestion: did you mean t1 bool
+                instead of t2 bool?
 
   Arising from use of the constructor
+  │ 
+7 │   | K2 : t2 int -> t2 bool
+  │ 

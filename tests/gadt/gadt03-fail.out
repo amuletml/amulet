@@ -1,4 +1,7 @@
-gadt03-fail.ml[7:12 ..7:12]: error
+error: gadt03-fail.ml[7:12 ..7:12]
   Could not match type int with bool
 
   Arising from use of the expression
+  │ 
+7 │ let show = function
+  │ 

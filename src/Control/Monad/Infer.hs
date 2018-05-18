@@ -204,8 +204,7 @@ instance Pretty TypeError where
 
   pretty (Occurs v t) = string "Occurs check:" <+> string "The type variable" <+> stypeVar (pretty v) </> indent 4 (string "occurs in the type" <+> pretty t)
   pretty (NotInScope e) = string "Variable not in scope:" <+> pretty e
-  pretty (ArisingFrom er ex) = pretty (annotation ex) <> colon <+> highlight "error"
-    <#> indent 2 (pretty er <#> empty <#> nest 4 (string "Arising from use of" <+> blameOf ex))
+  pretty (ArisingFrom er ex) = pretty er <#> empty <#> nest 4 (string "Arising from use of" <+> blameOf ex)
   pretty (FoundHole e s) = string "Found typed hole" <+> pretty e <+> "of type" <+> pretty s
 
   pretty (Note te m) = pretty te <#> bullet (string "Note:") <+> align (pretty m)
