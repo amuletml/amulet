@@ -26,9 +26,11 @@ import Control.Monad.Gen
 import Data.Traversable
 import Data.Sequence (Seq)
 import Data.Foldable
+import Data.Function
 import Data.Functor
 import Data.Spanned
 import Data.Span
+import Data.List
 
 import Syntax.Resolve.Scope
 import Syntax.Resolve.Toplevel
@@ -41,6 +43,7 @@ data ResolveError
   = NotInScope (Var Parsed)
   | NoSuchModule (Var Parsed)
   | Ambiguous (Var Parsed) [Var Resolved]
+  | NonLinearPattern (Var Resolved) [Pattern Resolved]
   | EmptyMatch
   | EmptyBegin
 
@@ -51,6 +54,7 @@ instance Pretty ResolveError where
   pretty (NotInScope e) = "Variable not in scope:" <+> verbatim e
   pretty (NoSuchModule e) = "Module not in scope:" <+> verbatim e
   pretty (Ambiguous v _) = "Ambiguous reference to variable:" <+> verbatim v
+  pretty (NonLinearPattern v _) = "Non-linear pattern (multiple definitions of" <+> verbatim v <+> ")"
   pretty EmptyMatch = "Empty match expression"
   pretty EmptyBegin = "Empty begin expression"
   pretty (ArisingFrom er ex) = pretty (annotation ex) <> colon <+> highlight "error"
@@ -177,7 +181,7 @@ reExpr (Let vs c a) = do
 reExpr (If c t b a) = If <$> reExpr c <*> reExpr t <*> reExpr b <*> pure a
 reExpr (App f p a) = App <$> reExpr f <*> reExpr p <*> pure a
 reExpr (Fun p e a) = do
-  (p', vs, ts) <- rePattern p
+  (p', vs, ts) <- reWholePattern p
   extendTyvarN ts . extendN vs $ Fun p' <$> reExpr e <*> pure a
 
 reExpr r@(Begin [] a) = tell (pure (wrapError r EmptyBegin)) $> junkExpr a
@@ -192,7 +196,7 @@ reExpr r@(Match e [] a) = do
 reExpr (Match e ps a) = do
   e' <- reExpr e
   ps' <- traverse (\(p, b) -> do
-                  (p', vs, ts) <- rePattern p
+                  (p', vs, ts) <- reWholePattern p
                   (p',) <$> extendTyvarN ts (extendN vs (reExpr b)))
               ps
   pure (Match e' ps' a)
@@ -200,7 +204,7 @@ reExpr (Match e ps a) = do
 reExpr r@(Function [] a) = tell (pure (ArisingFrom EmptyMatch (BecauseOf r))) $> junkExpr a
 reExpr (Function ps a) =
   flip Function a <$> for ps (\(p, b) -> do
-    (p', vs, ts) <- rePattern p
+    (p', vs, ts) <- reWholePattern p
     (p',) <$> extendTyvarN ts (extendN vs (reExpr b)))
 
 reExpr o@BinOp{} = do
@@ -282,14 +286,34 @@ reType r (TyExactRows f) = TyExactRows <$> traverse (\(a, b) -> (a,) <$> reType 
 reType r (TyTuple ta tb) = TyTuple <$> reType r ta <*> reType r tb
 reType _ TyType = pure TyType
 
+reWholePattern :: MonadResolve m
+               => Pattern Parsed
+               -> m ( Pattern Resolved
+                    , [(Var Parsed, Var Resolved)]
+                    , [(Var Parsed, Var Resolved)])
+reWholePattern p = do
+  -- Resolves a pattern and ensures it is linear
+  (p', vs, ts) <- rePattern p
+  checkLinear vs
+  checkLinear ts
+  pure (p', map lim vs, map lim ts)
+
+  where checkLinear = traverse_ (\vs@((_,v, _):_) -> tell (pure (wrapError p (NonLinearPattern v (map thd3 vs)))))
+                    . filter ((>1) . length)
+                    . groupBy ((==) `on` fst3)
+                    . sortOn fst3
+        lim (a, b, _) = (a, b)
+
 rePattern :: MonadResolve m
           => Pattern Parsed
-          -> m (Pattern Resolved, [(Var Parsed, Var Resolved)]
-                                , [(Var Parsed, Var Resolved)])
+          -> m ( Pattern Resolved
+               , [(Var Parsed, Var Resolved, Pattern Resolved)]
+               , [(Var Parsed, Var Resolved, Pattern Resolved )])
 rePattern (Wildcard a) = pure (Wildcard a, [], [])
 rePattern (Capture v a) = do
   v' <- tagVar v
-  pure (Capture v' a, [(v, v')], [])
+  let p = Capture v' a
+  pure (p, [(v, v', p)], [])
 rePattern r@(Destructure v Nothing a) = do
   v' <- lookupEx v `catchJunk` r
   pure (Destructure v' Nothing a, [], [])
@@ -306,7 +330,8 @@ rePattern r@(PType p t a) = do
   let fvs = toList (ftv t)
   fresh <- for fvs $ \x -> lookupTyvar x `catchError` const (tagVar x)
   t' <- extendTyvarN (zip fvs fresh) (reType r t)
-  pure (PType p' t' a, vs, zip fvs fresh ++ ts)
+  let r' = PType p' t' a
+  pure (r', vs, zip3 fvs fresh (repeat r') ++ ts)
 rePattern (PRecord f a) = do
   (f', vss, tss) <- unzip3 <$> traverse (\(n, p) -> do
                                        (p', vs, ts) <- rePattern p

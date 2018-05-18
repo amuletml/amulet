@@ -14,12 +14,13 @@ module Syntax.Resolve.Scope
   , insertN
   ) where
 
-import qualified Data.Text as T
 import qualified Data.Map as Map
-import Data.List
+import qualified Data.Text as T
 import Data.Function
-import Control.Monad.Gen
+import Data.List
+
 import Control.Monad.Reader
+import Control.Monad.Gen
 
 import Syntax
 
