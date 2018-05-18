@@ -249,12 +249,7 @@ subsumes k t1 t2@TyForall{} = do
   (Syntax.:>) c <$> subsumes k t1 t2'
 subsumes k t1@TyForall{} t2 = do
   (cont, _, t1') <- instantiate t1
-  wrap <- case cont of
-    Just f -> case f undefined of
-      ExprWrapper w _ _ -> pure w
-      Ascription (ExprWrapper w _ _) _ _ -> pure w
-      _ -> error "what"
-    Nothing -> pure IdWrap
+  let wrap = maybe IdWrap (WrapFn . MkWrapCont) cont
   (Syntax.:>) wrap <$> subsumes k t1' t2
 subsumes k a b = Cast <$> k a b
 

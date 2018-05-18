@@ -5,7 +5,7 @@ S : natural -> natural
 Zero : {'n : natural}. ('n ~ Z) ⊃ nat 'n
 Succ : {'n : natural}. {'k : natural}. ('n ~ S 'k) ⊃ nat 'k -> nat 'n
 SomeNat : {'n : natural}. nat 'n -> some_nat
-with_natural : {'dx : type}. int -> ({'n : natural}. nat 'n -> 'dx) -> 'dx
+with_natural : {'eo : type}. int -> ({'n : natural}. nat 'n -> 'eo) -> 'eo
 main : unit
 natural : type
 nat : natural -> type
