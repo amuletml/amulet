@@ -1,4 +1,5 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings
+           , MultiParamTypeClasses #-}
 module Parser.Error
   ( ParseError(..)
   ) where
@@ -8,8 +9,9 @@ import Data.Spanned
 import Data.Span
 import Data.Char
 
-import Parser.Token
 import Text.Pretty.Semantic
+import Text.Pretty.Note
+import Parser.Token
 
 data ParseError
   = Failure SourcePos String
@@ -58,3 +60,12 @@ instance Spanned ParseError where
 
 prettyPos :: SourcePos -> Doc
 prettyPos p = shown (spLine p) <> colon <> shown (spCol p)
+
+instance Note ParseError Style where
+  diagnosticKind UnalignedIn{} = WarningMessage
+  diagnosticKind UnindentContext{} = WarningMessage
+  diagnosticKind _ = ErrorMessage
+
+  formatNote f (UnalignedIn p i) = indent 2 "This `in` is misaligned with the corresponding `let`" <##> f [mkSpan1 p, mkSpan1 i]--  <##>
+                                   -- indent 2 "`let` appears here" <##> f [mkSpan1 i]
+  formatNote f x = indent 2 (Right <$> pretty x) <##> f [annotation x]

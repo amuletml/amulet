@@ -36,6 +36,7 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
 import qualified Data.Text as T
+import Data.Bifunctor
 import Data.Function
 import Data.Foldable
 import Data.Spanned
@@ -46,6 +47,7 @@ import Data.Text (Text)
 import Data.List
 
 import Text.Pretty.Semantic
+import Text.Pretty.Note
 
 import Syntax.Pretty
 import Syntax.Types
@@ -133,8 +135,10 @@ lookupTy' x = do
 runInfer :: MonadGen Int m
          => Env
          -> ReaderT Env (WriterT (Seq.Seq (Constraint p)) (ExceptT TypeError m)) a
-         -> m (Either TypeError (a, Seq.Seq (Constraint p)))
-runInfer ct ac = runExceptT (runWriterT (runReaderT ac ct))
+         -> m (Either [TypeError] (a, Seq.Seq (Constraint p)))
+runInfer ct ac = first unwrap <$> runExceptT (runWriterT (runReaderT ac ct))
+  where unwrap (ManyErrors es) = concatMap unwrap es
+        unwrap e = [e]
 
 fresh :: MonadGen Int m => m (Var Resolved)
 fresh = do
@@ -200,8 +204,7 @@ instance Pretty TypeError where
 
   pretty (Occurs v t) = string "Occurs check:" <+> string "The type variable" <+> stypeVar (pretty v) </> indent 4 (string "occurs in the type" <+> pretty t)
   pretty (NotInScope e) = string "Variable not in scope:" <+> pretty e
-  pretty (ArisingFrom er ex) = pretty (annotation ex) <> colon <+> highlight "error"
-    <#> indent 2 (pretty er <#> empty <#> nest 4 (string "Arising from use of" <+> blameOf ex))
+  pretty (ArisingFrom er ex) = pretty er <#> empty <#> nest 4 (string "Arising from use of" <+> blameOf ex)
   pretty (FoundHole e s) = string "Found typed hole" <+> pretty e <+> "of type" <+> pretty s
 
   pretty (Note te m) = pretty te <#> bullet (string "Note:") <+> align (pretty m)
@@ -274,6 +277,17 @@ instance Pretty TypeError where
     where whatIs (TySkol (Skolem _ v _ _)) = string "the rigid type variable" <+> stypeVar (pretty v)
           whatIs t = string "the type" <+> pretty t
           skol = stypeVar (pretty v)
+
+instance Spanned TypeError where
+  annotation (ArisingFrom e@ArisingFrom{} _) = annotation e
+  annotation (ArisingFrom _ x) = annotation x
+  annotation _ = undefined
+
+instance Note TypeError Style where
+  diagnosticKind _ = ErrorMessage
+
+  formatNote f (ArisingFrom e@ArisingFrom{} _) = formatNote f e
+  formatNote f x = indent 2 (Right <$> pretty x) <#> f [annotation x]
 
 missing :: [(Text, b)] -> [(Text, b)] -> Doc
 missing ra rb

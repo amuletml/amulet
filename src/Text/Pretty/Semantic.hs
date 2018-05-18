@@ -7,7 +7,9 @@ module Text.Pretty.Semantic
 
   , putDoc, putDocWithoutColour, hPutDoc
   , displayT, displayS, displayDetailed
-  , renderAnsi, renderAnsiDetailed, simplifyDoc
+  , renderAnsi, renderAnsiDetailed
+  , uncommentDoc, uncommentFilter
+  , toAnsi
 
   , skeyword, sliteral, sstring, scomment, stypeCon, stypeVar, stypeSkol, soperator
 
@@ -66,21 +68,24 @@ displayDetailed  :: Doc -> T.Text
 displayDetailed = A.displayDecorated . renderAnsiDetailed
 
 renderAnsi, renderAnsiDetailed :: Doc -> SimpleDoc AnsiStyle
-renderAnsi = fmap decorate . simplifyDoc . renderPretty 0.4 100
-renderAnsiDetailed = fmap decorate . renderPretty 0.4 100
+renderAnsi = fmap toAnsi . uncommentDoc . renderPretty 0.4 100
+renderAnsiDetailed = fmap toAnsi . renderPretty 0.4 100
 
-simplifyDoc :: SimpleDoc Style -> SimpleDoc Style
-simplifyDoc = filterSimpleDoc (/=Comment)
+uncommentDoc :: SimpleDoc Style -> SimpleDoc Style
+uncommentDoc = filterSimpleDoc uncommentFilter
 
-decorate :: Style -> AnsiStyle
-decorate Keyword  = DullColour Magenta
-decorate Literal  = BrightColour Yellow
-decorate String   = DullColour Green
-decorate Comment  = BrightColour Black
-decorate TypeCon  = DullColour Blue
-decorate TypeVar  = DullColour Yellow
-decorate TypeSkol = DullColour Red
-decorate Operator = DullColour Magenta
+uncommentFilter :: Style -> Bool
+uncommentFilter = (/=Comment)
+
+toAnsi :: Style -> AnsiStyle
+toAnsi Keyword  = DullColour Magenta
+toAnsi Literal  = BrightColour Yellow
+toAnsi String   = DullColour Green
+toAnsi Comment  = BrightColour Black
+toAnsi TypeCon  = DullColour Blue
+toAnsi TypeVar  = DullColour Yellow
+toAnsi TypeSkol = DullColour Red
+toAnsi Operator = DullColour Magenta
 
 instance Pretty Double where
   pretty = double

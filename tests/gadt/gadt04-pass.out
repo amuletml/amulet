@@ -4,3 +4,6 @@ gadt04-pass.ml[2:5 ..2:27]: error
   • Suggestion: Perhaps use a tuple: `(int * int) -> t`
 
   Arising from use of the constructor
+  │ 
+2 │   | MkT : int -> (int -> t)
+  │ 

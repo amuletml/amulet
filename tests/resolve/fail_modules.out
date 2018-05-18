@@ -2,3 +2,6 @@ fail_modules.ml[4:9 ..4:9]: error
   Variable not in scope: `x`
 
   Arising from use of the expression x
+  │ 
+4 │ let y = x
+  │ 

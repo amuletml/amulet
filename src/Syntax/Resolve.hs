@@ -3,6 +3,7 @@
   , OverloadedStrings
   , LambdaCase
   , RecordWildCards
+  , MultiParamTypeClasses
   , TupleSections #-}
 
 module Syntax.Resolve
@@ -11,10 +12,6 @@ module Syntax.Resolve
   , ResolveError(..)
   ) where
 
-import qualified Data.Map.Strict as Map
-import qualified Data.Text as T
-import Data.Triple
-
 import Control.Monad.Except
 import Control.Monad.Writer
 import Control.Monad.Reader
@@ -22,6 +19,8 @@ import Control.Applicative hiding (empty)
 import Control.Monad.State
 import Control.Monad.Gen
 
+import qualified Data.Map.Strict as Map
+import qualified Data.Text as T
 import Data.Traversable
 import Data.Sequence (Seq)
 import Data.Foldable
@@ -29,6 +28,8 @@ import Data.Function
 import Data.Functor
 import Data.Spanned
 import Data.Reason
+import Data.Triple
+import Data.Maybe
 import Data.Span
 import Data.List
 
@@ -38,6 +39,7 @@ import Syntax.Pretty
 import Syntax.Subst
 
 import Text.Pretty.Semantic
+import Text.Pretty.Note
 
 data ResolveError
   = NotInScope (Var Parsed)
@@ -57,8 +59,19 @@ instance Pretty ResolveError where
   pretty (NonLinearPattern v _) = "Non-linear pattern (multiple definitions of" <+> verbatim v <+> ")"
   pretty EmptyMatch = "Empty match expression"
   pretty EmptyBegin = "Empty begin expression"
-  pretty (ArisingFrom er ex) = pretty (annotation ex) <> colon <+> highlight "error"
-    <#> indent 2 (pretty er <#> empty <#> nest 4 (string "Arising from use of" <+> blameOf ex </> pretty ex))
+  pretty (ArisingFrom er ex) = pretty er <#> empty <#> nest 4 (string "Arising from use of" <+> blameOf ex </> pretty ex)
+
+instance Spanned ResolveError where
+  annotation (ArisingFrom _ x) = annotation x
+  annotation _ = undefined
+
+instance Note ResolveError Style where
+  diagnosticKind _ = ErrorMessage
+
+  formatNote f x = indent 2 (Right <$> pretty x) <#> fromJust (body x) where
+    body (ArisingFrom er a) = body er <|> Just (f [annotation a])
+    body (NonLinearPattern _ ps) = Just (f (map annotation ps))
+    body _ = Nothing
 
 type MonadResolve m = ( MonadError ResolveError m
                       , MonadWriter (Seq ResolveError) m

@@ -40,13 +40,13 @@ import Parser.Wrapper (runParser)
 import Parser.Error (ParseError)
 import Parser (parseInput)
 
-import Errors (reportS, reportR, reportI)
+import Errors (reportS)
 
 data CompileResult a
   = CSuccess [Toplevel Typed] [Stmt CoVar] [Stmt a] Env
   | CParse   [ParseError]
   | CResolve [ResolveError]
-  | CInfer   TypeError
+  | CInfer   [TypeError]
 
 compile :: [(SourceName, T.Text)] -> CompileResult CoVar
 compile [] = error "Cannot compile empty input"
@@ -93,8 +93,8 @@ compileFromTo fs emit =
   case compile fs of
     CSuccess _ _ core env -> emit (compileProgram env core)
     CParse es -> traverse_ (flip reportS fs) es
-    CResolve e -> putStrLn "Resolution error" >> traverse_ (flip reportR fs) e
-    CInfer e -> putStrLn "Type error" >> reportI e fs
+    CResolve es -> traverse_ (flip reportS fs) es
+    CInfer es -> traverse_ (flip reportS fs) es
 
 test :: [(FilePath, T.Text)] -> IO (Maybe ([Stmt CoVar], Env))
 test fs = do
@@ -116,8 +116,8 @@ test fs = do
       putDoc (pretty (compileProgram env optm))
       pure (Just (core, env))
     CParse es -> Nothing <$ traverse_ (flip reportS fs) es
-    CResolve e -> Nothing <$ traverse_ (flip reportR fs) e
-    CInfer e -> Nothing <$ reportI e fs
+    CResolve es -> Nothing <$ traverse_ (flip reportS fs) es
+    CInfer es -> Nothing <$ traverse_ (flip reportS fs) es
 
 testTc :: [(FilePath, T.Text)] -> IO (Maybe ([Stmt CoVar], Env))
 testTc fs = do
@@ -133,8 +133,8 @@ testTc fs = do
         putDoc (pretty k <+> colon <+> pretty t)
       pure (Just (core, env))
     CParse es -> Nothing <$ traverse_ (flip reportS fs) es
-    CResolve e -> Nothing <$ traverse_ (flip reportR fs) e
-    CInfer e -> Nothing <$ reportI e fs
+    CResolve es -> Nothing <$ traverse_ (flip reportS fs) es
+    CInfer es -> Nothing <$ traverse_ (flip reportS fs) es
 
 data CompilerOption = Test | TestTc | Out String
   deriving (Show)

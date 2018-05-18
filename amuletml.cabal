@@ -89,6 +89,7 @@ executable lexer
 
                      , Text.Pretty
                      , Text.Pretty.Ansi
+                     , Text.Pretty.Note
                      , Text.Pretty.Semantic
 
                      , Data.Span
@@ -145,6 +146,7 @@ library amulet
                      -- Pretty
                      , Text.Pretty
                      , Text.Pretty.Ansi
+                     , Text.Pretty.Note
                      , Text.Pretty.Semantic
                      -- Data
                      , Data.Span
