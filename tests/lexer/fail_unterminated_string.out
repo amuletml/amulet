@@ -1,4 +1,4 @@
-error: fail_unterminated_string.ml[1:15 ..1:15]
+fail_unterminated_string.ml[1:15 ..1:15]: error
   Unexpected character '\n'
   │ 
 1 │ let x = "hello

@@ -66,6 +66,6 @@ instance Note ParseError Style where
   diagnosticKind UnindentContext{} = WarningMessage
   diagnosticKind _ = ErrorMessage
 
-  formatNote f (UnalignedIn p i) = indent 2 "This `in` is misaligned with the corresponding `let`" <##> f [mkSpan1 p] <##>
-                                   indent 2 "`let` appears here" <##> f [mkSpan1 i]
+  formatNote f (UnalignedIn p i) = indent 2 "This `in` is misaligned with the corresponding `let`" <##> f [mkSpan1 p, mkSpan1 i]--  <##>
+                                   -- indent 2 "`let` appears here" <##> f [mkSpan1 i]
   formatNote f x = indent 2 (Right <$> pretty x) <##> f [annotation x]

@@ -1,4 +1,4 @@
-error: fail_skolem_escape.ml[2:19 ..2:38]
+fail_skolem_escape.ml[2:19 ..2:38]: error
   Rigid type variable a has escaped its scope of {'a : type}. 'a -> 'o
   • Note: the variable a was rigidified because of a type ascription
           against the type {'a : type}. 'a -> 'o,

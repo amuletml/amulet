@@ -1,4 +1,4 @@
-error: fail_term.ml[16:3 ..16:30]
+fail_term.ml[16:3 ..16:30]: error
   Could not match rigid type variable b with the rigid type variable a
   • Note: the variable b was rigidified because of a type ascription
   against the type {'a : type}. {'b : type}. term unit ('a -> 'b -> 'b)

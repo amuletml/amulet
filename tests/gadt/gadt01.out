@@ -1,4 +1,4 @@
-error: gadt01.ml[3:16 ..3:20]
+gadt01.ml[3:16 ..3:20]: error
   Could not match type type with 'e -> type
   Have you applied a type constructor to the wrong number of arguments?
 

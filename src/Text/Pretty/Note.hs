@@ -43,10 +43,10 @@ format :: Note a Style => ([Span] -> NoteDoc Style) -> a -> NoteDoc Style
 format f x =
   let a = annotation x
       c = case diagnosticKind x of
-            WarningMessage -> annotate (NoteKind WarningMessage) "warning:"
-            ErrorMessage -> annotate (NoteKind ErrorMessage) "error:"
+            WarningMessage -> annotate (NoteKind WarningMessage) "warning"
+            ErrorMessage -> annotate (NoteKind ErrorMessage) "error"
       body = formatNote f x
-  in (Left <$> c) <+> (Right <$> pretty a) <##> body
+  in (Right <$> pretty a <> colon) <+> (Left <$> c) <##> body
 
 toAnsi :: NoteStyle -> AnsiStyle
 toAnsi LinePrefix = BrightColour Blue
@@ -104,18 +104,17 @@ buildLines b s = go s . drop (s - 1) where
 
 buildLine :: T.Text -> Int -> [Span] -> NoteDoc a
 buildLine = go 1 where
-  go _ t _ [] = text t
-  go c t l (x:xs) =
-    let s = spanStart x
-        e = spanEnd x
-
-        start = if spLine s < l then 1 else spCol s
+  go c t l (x:xs) | spLine s <= l =
+    let start = if spLine s < l then 1 else spCol s
         len = if spLine e > l then T.length t else spCol e - start + 1
 
         (before, remaining) = T.splitAt (start - c) t
         (body, after) = T.splitAt len remaining
     -- TODO: If we need more than len characters, then padding additional spaces
     in text before <> annotate (Left LineHighlight) (text body) <> go (start + len) after l xs
+    where (s, e) = (spanStart x, spanEnd x)
+  go _ t _ _ = text t
+
 
 overlapping :: [Span] -> [Span]
 overlapping = go where

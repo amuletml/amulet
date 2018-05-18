@@ -1,4 +1,4 @@
-error: fail_skolem_pure.ml[2:32 ..2:32]
+fail_skolem_pure.ml[2:32 ..2:32]: error
   Could not match rigid type variable a with the type 'f bq
   • Note: the variable a was rigidified because of a type ascription
   against the type {'a : type}. 'a -> 'f 'a
