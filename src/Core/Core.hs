@@ -2,7 +2,7 @@
 {-# LANGUAGE PatternSynonyms, TemplateHaskell #-}
 module Core.Core where
 
-import Pretty
+import Text.Pretty.Semantic
 
 import qualified Data.VarSet as VarSet
 import Data.Function

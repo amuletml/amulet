@@ -21,7 +21,7 @@ import Data.List
 import Core.Optimise
 import Core.Builtin
 import Core.Types
-import Pretty hiding ((<>))
+import Text.Pretty.Semantic hiding ((<>))
 
 data CoreError a
   = TypeMismatch (Type a) (Type a)

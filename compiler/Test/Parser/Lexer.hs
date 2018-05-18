@@ -11,7 +11,7 @@ import Data.Spanned
 import Parser.Wrapper (Token(..), runLexer)
 import Parser.Lexer
 
-import Pretty
+import Text.Pretty.Semantic
 
 result :: String -> T.Text -> String
 result file contents =

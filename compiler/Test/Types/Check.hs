@@ -23,7 +23,7 @@ import Syntax.Desugar (desugarProgram)
 import Syntax.Types (difference, toMap)
 
 import Syntax.Pretty()
-import Pretty
+import Text.Pretty.Semantic
 
 result :: String -> T.Text -> String
 result file contents = runGen $ do

@@ -87,10 +87,12 @@ executable lexer
                      , Parser.Wrapper
                      , Parser.Unicode
 
+                     , Text.Pretty
+                     , Text.Pretty.Semantic
+
                      , Data.Position
                      , Data.Span
                      , Data.Spanned
-                     , Pretty
 
 library amulet
   build-depends:       mtl >= 2.2 && < 2.3
@@ -139,13 +141,17 @@ library amulet
                      , Types.Infer.Builtin
                      , Types.Infer.Pattern
                      , Types.Infer.Constructor
+                     -- Pretty
+                     , Text.Pretty
+                     , Text.Pretty.Semantic
                      -- Data
                      , Data.Span
                      , Data.VarMap
                      , Data.VarSet
                      , Data.Triple
-                     , Data.Position
                      , Data.Spanned
+                     , Data.Position
+                     , Data.Diagnostic
                      -- Core
                      , Core.Var
                      , Core.Core
@@ -171,6 +177,5 @@ library amulet
 
                      , Backend.Escape
                      -- Infra
-                     , Pretty
                      , Control.Monad.Infer
                      , Control.Monad.Infer.Error

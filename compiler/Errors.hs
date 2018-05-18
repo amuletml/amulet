@@ -16,7 +16,7 @@ import qualified "amuletml" Control.Monad.Infer as I
 
 import qualified "amuletml" Syntax.Resolve as R
 
-import "amuletml" Pretty
+import "amuletml" Text.Pretty.Semantic
 
 type FileMap = [(SourceName, T.Text)]
 

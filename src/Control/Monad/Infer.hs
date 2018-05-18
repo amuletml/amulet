@@ -45,7 +45,7 @@ import Data.Maybe
 import Data.Text (Text)
 import Data.List
 
-import Pretty
+import Text.Pretty.Semantic
 
 import Syntax.Pretty
 import Syntax.Types

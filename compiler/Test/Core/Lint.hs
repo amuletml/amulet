@@ -24,7 +24,7 @@ import Core.Simplify
 import Core.Lint
 import Core.Var
 
-import Pretty
+import Text.Pretty.Semantic
 
 import Parser.Wrapper (runParser)
 import Parser (parseInput)

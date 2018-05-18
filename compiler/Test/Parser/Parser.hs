@@ -11,7 +11,7 @@ import Parser.Wrapper (runParser)
 import Parser
 
 import Syntax.Pretty()
-import Pretty
+import Text.Pretty.Semantic
 
 result :: String -> T.Text -> String
 result file contents =

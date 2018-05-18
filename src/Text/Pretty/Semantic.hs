@@ -1,39 +1,26 @@
-{-# OPTIONS_GHC -Wno-orphans #-}
 {-# LANGUAGE FlexibleInstances, GADTs #-}
-module Pretty
-  ( module Text.PrettyPrint.Annotated.Leijen
+module Text.Pretty.Semantic
+  ( module Text.Pretty
   , Style
   , Pretty(..)
   , Doc
-  , (<>), (<#>), (<##>)
   , putDoc, putDocWithoutColour, hPutDoc
   , render, renderDetailed
   , decorate, decorateDetailed, decoratePlain
-  , text, shown
   , skeyword, sliteral, sstring, scomment, stypeCon, stypeVar, stypeSkol, soperator
 
   , arrow, equals, colon, prod, pipe
   , keyword, highlight
-  , verbatim, bullet
+  , verbatim
   ) where
 
 
-import qualified Text.PrettyPrint.Annotated.Leijen as P
-import Text.PrettyPrint.Annotated.Leijen hiding (text, hPutDoc, putDoc, Doc, equals, colon, pipe, (<>), (<$>), (<$$>))
+import qualified Text.Pretty as P
+import Text.Pretty hiding (hPutDoc, putDoc, Doc, equals, colon, pipe)
 
 import System.IO (hPutStrLn, Handle, stdout)
 
-import qualified Data.Text as T
-import Data.Text (Text)
-
 type Doc = P.Doc Style
-
-instance Semigroup (P.Doc a) where
-  (<>) = (P.<>)
-
-instance Monoid (P.Doc a) where
-  mempty = P.empty
-  mappend = (P.<>)
 
 class Pretty a where
   pretty :: a -> Doc
@@ -53,19 +40,6 @@ data Style
 
   | Operator
   deriving (Eq, Show, Ord)
-
-infixr 5 <#>,<##>
-
--- Alias various definitions so we're not masking existing definitions
-(<#>), (<##>) :: P.Doc a -> P.Doc a -> P.Doc a
-(<#>) = (P.<$>)
-(<##>) = (P.<$$>)
-
-text :: Text -> Doc
-text = string . T.unpack
-
-shown :: Show a => a -> Doc
-shown = string . show
 
 putDoc :: Doc -> IO ()
 putDoc = hPutDoc stdout
@@ -136,6 +110,3 @@ highlight = stypeSkol . string
 
 verbatim :: Pretty a => a -> Doc
 verbatim = enclose (char '`') (char '`') . pretty
-
-bullet :: Doc -> Doc
-bullet = (char '·' <+>)

@@ -14,7 +14,7 @@ import Data.Span
 
 import Syntax.Subst
 import Syntax
-import Pretty
+import Text.Pretty.Semantic
 
 parenFun :: Pretty (Var p) => Expr p -> Doc
 parenFun f = case f of

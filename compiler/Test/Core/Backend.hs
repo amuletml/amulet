@@ -21,7 +21,7 @@ import Core.Lower
 import Backend.Lua
 
 import Syntax.Pretty()
-import Pretty
+import Text.Pretty.Semantic
 
 result :: String -> T.Text -> String
 result file contents = runGen $ do

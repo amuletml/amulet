@@ -9,7 +9,7 @@ import Data.Span
 import Data.Char
 
 import Parser.Token
-import Pretty
+import Text.Pretty.Semantic
 
 data ParseError
   = Failure SourcePos String

@@ -6,7 +6,7 @@ module Backend.Lua.Syntax
   , keywords
   ) where
 
-import Pretty
+import Text.Pretty.Semantic
 
 import qualified Data.Set as Set
 import qualified Data.Text as T
