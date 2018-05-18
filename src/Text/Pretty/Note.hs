@@ -108,11 +108,12 @@ buildLine = go 1 where
     let start = if spLine s < l then 1 else spCol s
         len = if spLine e > l then T.length t else spCol e - start + 1
 
-        (before, remaining) = T.splitAt (start - c) t
-        (body, after) = T.splitAt len remaining
-    -- TODO: If we need more than len characters, then padding additional spaces
+        (before, remaining) = splitPadded (start - c) t
+        (body, after) = splitPadded len remaining
     in text before <> annotate (Left LineHighlight) (text body) <> go (start + len) after l xs
     where (s, e) = (spanStart x, spanEnd x)
+          splitPadded i t | i <= T.length t = T.splitAt i t
+                          | otherwise = (t <> T.replicate (i - T.length t) (T.singleton ' '), mempty)
   go _ t _ _ = text t
 
 
