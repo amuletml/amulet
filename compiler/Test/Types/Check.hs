@@ -34,11 +34,12 @@ result file contents = runGen $ do
   inferred <- inferProgram builtinsEnv desugared
 
   pure . display . simplifyDoc . renderPretty 0.8 120 . (<##>empty)
-       . either (pretty . reportT) (reportEnv . snd) $ inferred
+       . either reportT (reportEnv . snd) $ inferred
 
   where
-    reportT :: TypeError -> TypeError
-    reportT err = fromMaybe err (innermostError err)
+    reportT :: TypeError -> Doc
+    reportT (ManyErrors es) = vsep (map reportT es)
+    reportT err = pretty (fromMaybe err (innermostError err))
 
     reportEnv env =
       let env' = difference env builtinsEnv
