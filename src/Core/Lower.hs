@@ -182,6 +182,7 @@ lowerAt (Tuple (x:xs) _) (ExactRowsTy [(_, a), (_, b)]) = do
 
 lowerAt (ExprWrapper wrap e an) ty =
   case wrap of
+    S.WrapFn f -> lowerExprTerm (S.runWrapper f e)
     S.Cast S.ReflCo{} -> lowerAt e ty
     S.Cast c -> do
       ex' <- lowerExprAtom e

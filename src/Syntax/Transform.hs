@@ -127,6 +127,7 @@ transformExprTyped fe fc ft = goE where
 
   goW (Cast c) = Cast (goC c)
   goW (TypeApp t) = TypeApp (goT t)
+  goW (WrapFn f) = WrapFn f
   goW (x :> y) = goW x :> goW y
   goW x@TypeLam{} = x
   goW x@WrapVar{} = x

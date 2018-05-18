@@ -372,6 +372,7 @@ solveEx _ ss cs = transformExprTyped go id goType where
   goWrap (WrapVar v) = goWrap $ Map.findWithDefault err v cs where
     err = error $ "Unsolved wrapper variable " ++ show v ++ ". This is a bug"
   goWrap IdWrap = IdWrap
+  goWrap (WrapFn f) = WrapFn f
 
   goType = apply ss
 

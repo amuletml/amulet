@@ -41,6 +41,7 @@ import Data.Function
 import Data.Foldable
 import Data.Spanned
 import Data.Triple
+import Data.Maybe
 import Data.Text (Text)
 import Data.List
 
@@ -157,17 +158,26 @@ instantiate :: MonadGen Int m
                  , Type Typed
                  , Type Typed)
 instantiate tp@(TyPi (Implicit v _) ty) = do
-  var <- TyVar . TvName <$> case (unTvName v) of
+  var <- TyVar . TvName <$> case unTvName v of
     TgInternal n -> TgName n <$> gen
     TgName n _ -> TgName n <$> gen
   let map = Map.singleton v var
 
-      squish f (Just x) = Just (x . f)
-      squish f _ = Just f
-
       appThisTy e = ExprWrapper (TypeApp var) e (annotation e, apply map ty)
   (k, _, t) <- instantiate (apply map ty)
   pure (squish appThisTy k, tp, t)
+instantiate tp@(TyPi (Anon co) od@dm) = do
+  (wrap, _, dm) <- instantiate dm
+  let cont = fromMaybe id wrap
+  var <- fresh
+  let ty = TyPi (Anon co) dm
+      lam :: Expr Typed -> Expr Typed
+      lam e | od == dm = e
+      lam e
+        | ann <- annotation e
+        = Fun (PType (Capture (TvName var) (ann, co)) co (ann, co)) (cont (App e (VarRef (TvName var) (ann, co)) (ann, od))) (ann, ty)
+
+  pure (Just lam, tp, ty)
 instantiate ty = pure (Just id, ty, ty)
 
 freshTV :: MonadGen Int m => m (Type Typed)
@@ -282,3 +292,6 @@ prettyMotive :: SkolemMotive Typed -> Doc
 prettyMotive (ByAscription t) = string "of a type ascription" <#> string "against the type" <+> pretty t
 prettyMotive (BySubsumption t1 t2) = string "of a subsumption constraint relating" <+> pretty t1 <+> string "with" <+> pretty t2
 prettyMotive (ByExistential v t) = string "it is an existential" <> comma <#> string "bound by the type of" <+> pretty v <> comma <+> pretty t
+
+squish :: (a -> c) -> Maybe (c -> c) -> Maybe (a -> c)
+squish f = Just . maybe f (.f)

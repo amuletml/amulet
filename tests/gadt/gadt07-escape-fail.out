@@ -2,7 +2,7 @@ gadt07-escape-fail.ml[10:3 ..10:14]: error
   Could not match rigid type variable a with the type int
   · Note: the variable a was rigidified because it is an existential,
   bound by the type of MkHid, (exp 'a * exp 'a) -> hidden
-          and is represented by the constant ce
+          and is represented by the constant cp
   
   
   Arising from use of the expression
