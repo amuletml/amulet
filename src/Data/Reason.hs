@@ -1,6 +1,10 @@
 {-# LANGUAGE GADTs, ConstraintKinds, MultiParamTypeClasses, FlexibleInstances, FlexibleContexts, UndecidableInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-module Control.Monad.Infer.Error where
+module Data.Reason
+  ( SomeReason(..)
+  , Reasonable(..)
+  , blameOf
+  ) where
 
 import Data.Functor.Const
 import Data.Spanned

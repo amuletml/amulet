@@ -91,9 +91,9 @@ executable lexer
                      , Text.Pretty.Ansi
                      , Text.Pretty.Semantic
 
-                     , Data.Position
                      , Data.Span
                      , Data.Spanned
+                     , Data.Position
 
 library amulet
   build-depends:       mtl >= 2.2 && < 2.3
@@ -148,9 +148,10 @@ library amulet
                      , Text.Pretty.Semantic
                      -- Data
                      , Data.Span
+                     , Data.Reason
+                     , Data.Triple
                      , Data.VarMap
                      , Data.VarSet
-                     , Data.Triple
                      , Data.Spanned
                      , Data.Position
                      -- Core
@@ -179,4 +180,3 @@ library amulet
                      , Backend.Escape
                      -- Infra
                      , Control.Monad.Infer
-                     , Control.Monad.Infer.Error

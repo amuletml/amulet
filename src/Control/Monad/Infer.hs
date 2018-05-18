@@ -27,7 +27,6 @@ module Control.Monad.Infer
   where
 
 import Control.Monad.Writer.Strict as M hiding ((<>))
-import Control.Monad.Infer.Error
 import Control.Monad.Reader as M
 import Control.Monad.Except as M
 import Control.Monad.Gen as M
@@ -41,6 +40,7 @@ import Data.Function
 import Data.Foldable
 import Data.Spanned
 import Data.Triple
+import Data.Reason
 import Data.Maybe
 import Data.Text (Text)
 import Data.List

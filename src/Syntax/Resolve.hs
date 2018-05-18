@@ -15,7 +15,6 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import Data.Triple
 
-import Control.Monad.Infer.Error
 import Control.Monad.Except
 import Control.Monad.Writer
 import Control.Monad.Reader
@@ -29,6 +28,7 @@ import Data.Foldable
 import Data.Function
 import Data.Functor
 import Data.Spanned
+import Data.Reason
 import Data.Span
 import Data.List
 

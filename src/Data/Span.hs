@@ -45,6 +45,7 @@ spanStart, spanEnd :: Span -> SourcePos
 spanStart Span { fileName = n, line1 = l, col1 = c } = SourcePos n l c
 spanEnd   Span { fileName = n, line2 = l, col2 = c } = SourcePos n l c
 
+
 instance Pretty Span where
   pretty Span { fileName = n
               , line1 = l1, col1 = c1
