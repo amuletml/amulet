@@ -153,7 +153,6 @@ library amulet
                      , Data.Triple
                      , Data.Spanned
                      , Data.Position
-                     , Data.Diagnostic
                      -- Core
                      , Core.Var
                      , Core.Core
