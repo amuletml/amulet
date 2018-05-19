@@ -5,7 +5,7 @@ fail_skolem_pure.ml[2:32 ..2:32]: error
           and is represented by the constant bq
 
 
-  Arising from use of the expression
+  Arising in the expression
   │ 
 2 │ let pure_fail = pure (fun x -> x)
   │ 
