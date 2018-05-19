@@ -43,6 +43,7 @@ data TokenClass
   | TcTopSep -- ;;
   | TcOParen -- (
   | TcCParen -- )
+  | TcAtBrace -- @{
   | TcOBrace -- {
   | TcCBrace -- }
   | TcOSquare -- [
@@ -112,6 +113,7 @@ instance Show TokenClass where
   show TcTopSep = ";;"
   show TcOParen = "("
   show TcCParen = ")"
+  show TcAtBrace = "@{"
   show TcOBrace = "{"
   show TcCBrace = "}"
   show TcOSquare = "["

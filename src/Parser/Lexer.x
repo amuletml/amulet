@@ -95,6 +95,7 @@ tokens :-
   <0> ";"      { constTok TcSemicolon }
   <0> "("      { constTok TcOParen }
   <0> ")"      { constTok TcCParen }
+  <0> "@{"     { constTok TcAtBrace }
   <0> "{"      { constTok TcOBrace }
   <0> "}"      { constTok TcCBrace }
   H0> "["      { constTok TcOSquare }

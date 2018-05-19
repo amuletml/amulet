@@ -130,6 +130,14 @@ unify (TyForall v (Just k) ty) (TyForall v' (Just k') ty') = do
   ForallCo tv c <$>
     unify (apply (Map.singleton v fresh) ty) (apply (Map.singleton v' fresh) ty')
 
+unify (TyPi (Explicit v k) ty) (TyPi (Explicit v' k') ty') = do
+  c <- unify k k'
+  fresh <- freshTV
+  let (TyVar tv) = fresh
+
+  ForallCo tv c <$>
+    unify (apply (Map.singleton v fresh) ty) (apply (Map.singleton v' fresh) ty')
+
 unify (TyRows rho arow) (TyRows sigma brow)
   | overlaps <- overlap arow brow
   , rhoNew <- deleteFirstsBy ((==) `on` fst) (sortOn fst arow) (sortOn fst brow)
@@ -249,18 +257,18 @@ doSolve (ConFail a v t :<| cs) = do
 
 subsumes :: (Type Typed -> Type Typed -> SolveM (Coercion Typed))
          -> Type Typed -> Type Typed -> SolveM (Wrapper Typed)
-subsumes k t1 t2@TyForall{} = do
+subsumes k t1 t2@TyPi{} | isSkolemisable t2 = do
   sub <- use solveTySubst
   (c, t2') <- skolemise (BySubsumption (apply sub t1) (apply sub t2)) t2
   (Syntax.:>) c <$> subsumes k t1 t2'
-subsumes k t1@TyForall{} t2 = do
+subsumes k t1@TyPi{} t2 | isSkolemisable t1 = do
   (cont, _, t1') <- instantiate t1
   let wrap = maybe IdWrap (WrapFn . MkWrapCont) cont
   (Syntax.:>) wrap <$> subsumes k t1' t2
 subsumes k a b = Cast <$> k a b
 
 skolemise :: MonadGen Int m => SkolemMotive Typed -> Type Typed -> m (Wrapper Typed, Type Typed)
-skolemise motive ty@(TyForall tv k t) = do
+skolemise motive ty@TyPi{} | Just (tv, k, t) <- isSkolemisableTyBinder ty = do
   sk <- freshSkol motive ty tv
   (wrap, ty) <- skolemise motive (apply (Map.singleton tv sk) t)
   kind <- case k of
@@ -270,6 +278,11 @@ skolemise motive ty@(TyForall tv k t) = do
       getSkol _ = error "not a skolem from freshSkol"
   pure (TypeLam (getSkol sk) kind Syntax.:> wrap, ty)
 skolemise _ ty = pure (IdWrap, ty)
+
+isSkolemisableTyBinder :: Type Typed -> Maybe (Var Typed, Maybe (Type Typed), Type Typed)
+isSkolemisableTyBinder (TyPi (Implicit v k) c) = Just (v, k, c)
+isSkolemisableTyBinder (TyPi (Explicit v k) c) = Just (v, Just k, c)
+isSkolemisableTyBinder _ = Nothing
 
 freshSkol :: MonadGen Int m => SkolemMotive Typed -> Type Typed -> Var Typed -> m (Type Typed)
 freshSkol m ty u = do

@@ -40,12 +40,13 @@ import Types.Unify
 
 import Text.Pretty.Semantic
 
+
 -- Solve for the types of lets in a program
 inferProgram :: MonadGen Int m => Env -> [Toplevel Resolved] -> m (Either [TypeError] ([Toplevel Typed], Env))
 inferProgram env ct = fmap fst <$> runInfer env (inferProg ct)
 
 check :: forall m. MonadInfer Typed m => Expr Resolved -> Type Typed -> m (Expr Typed)
-check e ty@TyForall{} = do -- This is rule Decl∀L from [Complete and Easy]
+check e ty@TyPi{} | isSkolemisable ty = do -- This is rule Decl∀L from [Complete and Easy]
   (wrap, e) <- secondA (check e) =<< skolemise (ByAscription ty) ty -- gotta be polymorphic - don't allow instantiation
   pure (ExprWrapper wrap e (annotation e, ty))
 
@@ -122,7 +123,7 @@ infer (VarRef k a) = do
 infer (Fun p e an) = let blame = Arm p e in do
   (p, dom, ms, cs) <- inferPattern p
   let tvs = boundTvs p ms
-  
+
   _ <- leakEqualities blame cs
   (e, cod) <- local (typeVars %~ Set.union (Set.map unTvName tvs)) $
     local (values %~ focus ms) $ infer e
@@ -137,11 +138,25 @@ infer ex@(Ascription e ty an) = do
   pure (Ascription (correct ty e) ty (an, ty), ty)
 
 infer ex@(App f x a) = do
-  (f, (dom, c, k)) <- secondA (quantifier ex) =<< infer f
+  (f, ot) <- infer f
+  (dom, c, k) <- quantifier ex ot
   case dom of
     Anon d -> do
       x <- check x d
       pure (App (k f) x (a, c), c)
+    Explicit{} -> throwError (VisibleExpr x ot)
+    Implicit{} -> error "invalid implicit quantification in App"
+
+infer ex@(InstApp f t a) = do
+  (f, ot) <- infer f
+  (dom, c, k) <- quantifier ex ot
+  case dom of
+    Explicit v ki -> do
+      x <- checkAgainstKind (BecauseOf ex) t ki
+      let sub = Map.singleton v x
+       in pure (InstApp (k f) x (a, apply sub c), apply sub c)
+    Anon{} ->
+      throwError . flip AnonType ot =<< resolveKind (BecauseOf ex) t
     Implicit{} -> error "invalid implicit quantification in App"
 
 infer ex@(BinOp l o r a) = do
@@ -378,3 +393,4 @@ solveEx _ ss cs = transformExprTyped go id goType where
 
 consFst :: Functor m => a -> m ([a], b) -> m ([a], b)
 consFst = fmap . first . (:)
+

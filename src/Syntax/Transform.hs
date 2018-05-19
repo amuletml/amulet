@@ -29,6 +29,7 @@ transformType ft = goT where
 
   transB (Anon t) = Anon (goT t)
   transB (Implicit x k) = Implicit x (fmap goT k)
+  transB (Explicit x k) = Explicit x (goT k)
 
   goT = transT . ft
 
@@ -85,6 +86,8 @@ transformExpr fe = goE where
 
   transE (OpenIn n e a) = OpenIn n (goE e) a
 
+  transE (InstApp e t a) = InstApp (goE e) t a
+
   transE (ExprWrapper w e a) = ExprWrapper w (goE e) a
 
   goE = transE . fe
@@ -122,6 +125,7 @@ transformExprTyped fe fc ft = goE where
   transE (TupleSection es a) = TupleSection (map (goE<$>) es) (goA a)
 
   transE (OpenIn n e a) = OpenIn n (goE e) (goA a)
+  transE (InstApp e t a) = InstApp (goE e) (goT t) (goA a)
 
   transE (ExprWrapper w e a) = ExprWrapper (goW w) (goE e) (goA a)
 
@@ -185,5 +189,6 @@ correct ty (Tuple es a) = Tuple es (fst a, ty)
 correct ty (TupleSection es a) = TupleSection es (fst a, ty)
 
 correct ty (OpenIn n e a) = OpenIn n e (fst a, ty)
+correct ty (InstApp f t a) = InstApp f t (fst a, ty)
 
 correct ty (ExprWrapper w e a) = ExprWrapper w e (fst a, ty)

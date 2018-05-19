@@ -94,6 +94,10 @@ data TypeError where
 
   Malformed :: Pretty (Var p) => Type p -> TypeError
 
+  -- Mismatched quantification
+  VisibleExpr :: (Pretty (Var p), Pretty (Var p')) => Expr p' -> Type p -> TypeError
+  AnonType :: Pretty (Var p) => Type p -> Type p -> TypeError
+
   NotPromotable :: Pretty (Var p) => Var p -> Type p -> Doc -> TypeError
   ManyErrors :: [TypeError] -> TypeError
 
@@ -277,6 +281,11 @@ instance Pretty TypeError where
     where whatIs (TySkol (Skolem _ v _ _)) = string "the rigid type variable" <+> stypeVar (pretty v)
           whatIs t = string "the type" <+> pretty t
           skol = stypeVar (pretty v)
+
+  pretty (VisibleExpr e ty) =
+    vsep [ string "Expression" <+> pretty e <+> "given as argument to function of type" <+> pretty ty ]
+  pretty (AnonType t ty) =
+    vsep [ string "Type" <+> pretty t <+> "given as argument to function of type" <+> pretty ty ]
 
 instance Spanned TypeError where
   annotation (ArisingFrom e@ArisingFrom{} _) = annotation e

@@ -99,6 +99,9 @@ data Expr p
   | Tuple [Expr p] (Ann p)
   | TupleSection [Maybe (Expr p)] (Ann p)
 
+  -- Visible instantiation
+  | InstApp (Expr p) (Type p) (Ann p)
+
   -- Module
   | OpenIn (Var p) (Expr p) (Ann p)
 
@@ -181,8 +184,12 @@ data Type p
 
 data TyBinder p
   = Anon { _tyBinderType :: Type p } -- a function type
-  | Implicit { _tyBinderVar :: Var p
-             , _tyBinderArg :: Maybe (Type p) } -- a forall type
+  | Implicit
+    { _tyBinderVar :: Var p
+    , _tyBinderArg :: Maybe (Type p) } -- a forall. type
+  | Explicit
+    { _tyBinderVar  :: Var p
+    , _tyBinderKind :: Type p } -- a forall -> type
 
 deriving instance (Data p, Data (Var p)) => Data (TyBinder p)
 deriving instance Show (Var p) => Show (TyBinder p)
@@ -302,6 +309,11 @@ _TyArr :: Prism' (Type p) (Type p, Type p)
 _TyArr = prism (uncurry (TyPi . Anon)) go where
   go (TyArr a b) = Right (a, b)
   go x = Left x
+
+isSkolemisable :: Type Typed -> Bool
+isSkolemisable (TyPi Explicit{} _) = True
+isSkolemisable (TyPi Implicit{} _) = True
+isSkolemisable _ = False
 
 
 {- Note [1]: Tuple types vs tuple patterns/values

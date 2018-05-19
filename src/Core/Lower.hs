@@ -260,6 +260,7 @@ lowerAnyway (RecordExt e xs _) = do
 
 lowerAnyway (Literal l _) = pure . Atom . Lit $ lowerLiteral l
 lowerAnyway (S.App f x _) = C.App <$> lowerExprAtom f <*> lowerExprAtom x
+lowerAnyway (S.InstApp f t _) = C.TyApp <$> lowerExprAtom f <*> pure (lowerType t)
 
 lowerAnyway e = error ("can't lower " ++ show e ++ " without type")
 
@@ -278,6 +279,7 @@ lowerType t@S.TyTuple{} = go t where
 lowerType (S.TyPi bind b)
   | S.Implicit v Nothing <- bind = ForallTy (Relevant (mkTyvar (S.unTvName v))) StarTy (lowerType b)
   | S.Implicit v (Just c) <- bind = ForallTy (Relevant (mkTyvar (S.unTvName v))) (lowerType c) (lowerType b)
+  | S.Explicit v c <- bind = ForallTy (Relevant (mkTyvar (S.unTvName v))) (lowerType c) (lowerType b)
   | S.Anon a <- bind = ForallTy Irrelevant (lowerType a) (lowerType b)
 lowerType (S.TyApp a b) = AppTy (lowerType a) (lowerType b)
 lowerType (S.TyRows rho vs) = RowsTy (lowerType rho) (map (fmap lowerType) vs)
