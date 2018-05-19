@@ -290,9 +290,23 @@ instance Pretty TypeError where
          , note <+> "You can use a hole like"
              <+> pretty ((InstHole undefined) :: Expr Typed) <+> "to make the compiler infer this"
          ]
-  pretty (WrongQuantifier (InstType t _) ty@TyArr{}) =
-    vsep [ string "Type" <+> pretty t <+> "given as argument to function of type" <+> pretty ty ]
-  pretty WrongQuantifier{} = error "WrongQuantifier wrong"
+  pretty (WrongQuantifier t ty@TyArr{}) =
+    vsep [ thing <+> "given as argument to function of type" <+> pretty ty
+         , string "Have you applied a function to the wrong number of arguments?"
+         ] where
+      thing = case t of
+        InstHole{} -> highlight "Hole" <+> pretty t
+        InstType{} -> highlight "Type" <+> pretty t
+        _ -> error "WrongQuantifier wrong"
+  pretty (WrongQuantifier t ty) =
+    vsep [ thing <+> "given as argument to expression of type" <+> pretty ty
+         , string "Have you applied a function to too many arguments?"
+         ] where
+      thing = case t of
+        InstHole{} -> highlight "Hole" <+> pretty t
+        InstType{} -> highlight "Type" <+> pretty t
+        _ -> highlight "Expression"
+
 
   pretty (NakedInstArtifact h@InstHole{}) =
     vsep [ string "Instantiation hole" <+> pretty h <+> "used outside of type application" ]

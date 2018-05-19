@@ -40,7 +40,6 @@ import Types.Unify
 
 import Text.Pretty.Semantic
 
-
 -- Solve for the types of lets in a program
 inferProgram :: MonadGen Int m => Env -> [Toplevel Resolved] -> m (Either [TypeError] ([Toplevel Typed], Env))
 inferProgram env ct = fmap fst <$> runInfer env (inferProg ct)
@@ -138,9 +137,12 @@ infer ex@(Ascription e ty an) = do
   pure (Ascription (correct ty e) ty (an, ty), ty)
 
 -- f ? - just delegate to the other checker
-infer (App f (InstHole ha) a) = do
+infer ex@(App f hole@(InstHole ha) a) = do
   ftv <- fresh
-  infer (App f (InstType (TyVar ftv) ha) a)
+  infer (App f (InstType (TyVar ftv) ha) a) `catchError`
+    \err -> case err of
+      WrongQuantifier _ ot -> throwError (ArisingFrom (WrongQuantifier hole ot) (BecauseOf ex))
+      _ -> throwError err
 
 infer ex@(App f (InstType t ta) a) = do
   (f, ot) <- infer f
