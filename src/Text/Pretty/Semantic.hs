@@ -13,7 +13,7 @@ module Text.Pretty.Semantic
 
   , skeyword, sliteral, sstring, scomment, stypeCon, stypeVar, stypeSkol, soperator
 
-  , arrow, equals, colon, prod, pipe
+  , arrow, equals, colon, prod, pipe, note
   , keyword, highlight
   , verbatim
   ) where
@@ -123,3 +123,6 @@ highlight = stypeSkol . string
 
 verbatim :: Pretty a => a -> Doc
 verbatim = enclose (char '`') (char '`') . pretty
+
+note :: P.Doc a
+note = bullet (string "Note:")

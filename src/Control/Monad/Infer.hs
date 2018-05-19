@@ -211,7 +211,7 @@ instance Pretty TypeError where
   pretty (ArisingFrom er ex) = pretty er <#> empty <#> nest 4 (string "Arising in" <+> blameOf ex)
   pretty (FoundHole e s) = string "Found typed hole" <+> pretty e <+> "of type" <+> pretty s
 
-  pretty (Note te m) = pretty te <#> bullet (string "Note:") <+> align (pretty m)
+  pretty (Note te m) = pretty te <#> note <+> align (pretty m)
   pretty (Suggestion te m) = pretty te <#> bullet (string "Suggestion:") <+> align (pretty m)
   pretty (CanNotInstance rec new) = string "Can not instance hole of record type" <+> align (verbatim rec </> string " to type " <+> verbatim new)
   pretty (Malformed tp) = string "The type" <+> verbatim tp <+> string "is malformed."
@@ -236,13 +236,13 @@ instance Pretty TypeError where
   pretty (Impredicative v t)
     = vsep [ string "Illegal instantiation of type variable" <+> stypeVar (pretty v)
            , indent 16 (string "with polymorphic type" <+> verbatim t)
-           , bullet (string "Note:") <+> string "doing so would constitute" <+> stypeCon (string "impredicative polymorphism")
+           , note <+> string "doing so would constitute" <+> stypeCon (string "impredicative polymorphism")
            ]
 
   pretty (ImpredicativeApp tf tx)
     = vsep [ string "Illegal use of polymorphic type" <+> verbatim tx
            , indent 2 $ string "as argument to the type function" <+> verbatim tf
-           , bullet (string "Note:") <+> string "instantiating a type variable"
+           , note <+> string "instantiating a type variable"
            <+> nest 2 (parens (string "the argument to" <+> verbatim tf)
                    </> string "with a polymorphic type constitutes" <+> stypeCon (string "impredicative polymorphism"))
            ]
@@ -252,29 +252,29 @@ instance Pretty TypeError where
             [Skolem{..}] ->
               let skol = stypeVar (pretty _skolVar) in
               string "Rigid type variable" <+> skol <+> string "has escaped its scope of" <+> pretty _skolScope
-                  <#> bullet (string "Note: the variable") <+> skol <+> string "was rigidified because"
+                  <#> note <+> string "the variable" <+> skol <+> string "was rigidified because"
                         <+> nest 8 (prettyMotive _skolMotive <> comma)
                   <#> indent 8 (string "and is represented by constant" <+> stypeSkol (pretty _skolIdent)) 
             _ -> foldr ((<#>) . pretty . flip EscapedSkolems t . pure) empty esc
          , empty -- a line break
-         , bullet (string "Note: in type") <+> verbatim t
+         , note <+> string "in type" <+> verbatim t
          ]
 
   pretty (NotPromotable c x err) =
     vsep [ string "The constructor" <+> pretty c <+> string "can not be used as a type"
-         , string "Note: because its kind,"
+         , note <+> "because its kind,"
          , indent 2 (pretty x)
          , err
          ]
 
   pretty (SkolBinding (Skolem k v _ m) b) =
     vsep [ string "Could not match rigid type variable" <+> skol <+> string "with" <+> whatIs b
-         , bullet (string "Note: the variable") <+> skol <+> string "was rigidified because" <+> prettyMotive m
+         , note <+> "the variable" <+> skol <+> string "was rigidified because" <+> prettyMotive m
          , indent 8 (string "and is represented by the constant") <+> stypeSkol (pretty k)
          ] <#> case b of
              TySkol (Skolem k v _ m) ->
                vcat [ empty
-                    , vsep [ bullet (string "Note: the rigid type variable") <+> stypeVar (pretty v) <> comma <+> string "in turn" <> comma
+                    , vsep [ note <+> "the rigid type variable" <+> stypeVar (pretty v) <> comma <+> string "in turn" <> comma
                            , indent 8 (string "was rigidified because") <+> prettyMotive m
                            , indent 8 (string "and is represented by the constant") <+> stypeSkol (pretty k) ] ]
              _ -> empty
@@ -287,7 +287,7 @@ instance Pretty TypeError where
          , indent 4 $ string "This function expects a type as its first argument;"
          , indent 4 $ string "Have you forgotten an instantiation?"
          , empty
-         , bullet (string "Note:") <+> "You can use a hole like"
+         , note <+> "You can use a hole like"
              <+> pretty ((InstHole undefined) :: Expr Typed) <+> "to make the compiler infer this"
          ]
   pretty (WrongQuantifier (InstType t _) ty@TyArr{}) =
