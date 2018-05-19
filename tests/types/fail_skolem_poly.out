@@ -5,7 +5,7 @@ fail_skolem_poly.ml[2:32 ..2:32]: error
           and is represented by the constant aq
 
 
-  Arising from use of the expression
+  Arising in the expression
   │ 
 2 │ let poly_fail = poly (fun x -> x + 1)
   │ 
@@ -16,7 +16,7 @@ fail_skolem_poly.ml[2:32 ..2:36]: error
           and is represented by the constant aq
 
 
-  Arising from use of the expression
+  Arising in the expression
   │ 
 2 │ let poly_fail = poly (fun x -> x + 1)
   │ 

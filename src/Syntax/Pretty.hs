@@ -45,6 +45,7 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
                                        , keyword "else" <+> pretty e
                                        ])
   pretty (App f x _) = parenFun f <+> parenArg x
+  pretty (InstType t _) = soperator (string "@{") <+> pretty t <+> soperator (char '}')
   pretty (Fun v e _) = keyword "fun" <+> pretty v <+> arrow <+> pretty e
   pretty (Begin e _) =
     vsep [ keyword "begin", indent 2 (vsep (punctuate semi (map pretty e))), keyword "end" ]
@@ -64,6 +65,7 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
   pretty (BothSection op _) = parens $ pretty op
   pretty (AccessSection k _) = parens $ dot <> text k
   pretty (Parens e _) = parens $ pretty e
+  pretty (InstHole _) = keyword "?"
 
   pretty (Tuple es _) = parens (hsep (punctuate comma (map pretty es)))
   pretty (TupleSection es _) = parens (hsep (punctuate comma (map (maybe (string "") pretty) es)))
@@ -153,6 +155,8 @@ instance Pretty (Var p) => Pretty (TyBinder p) where
   pretty (Implicit v (Just k)) = braces (stypeVar (squote <> pretty v) <+> colon <+> pretty k) <> dot
   pretty (Implicit v Nothing)  = stypeVar (squote <> pretty v) <> dot
 
+  pretty (Explicit v k) = parens (stypeVar (squote <> pretty v) <+> colon <+> pretty k) <+> arrow
+
 instance (Pretty (Var p)) => Pretty (Toplevel p) where
   pretty (LetStmt []) = error "absurd!"
   pretty (LetStmt ((n, v, _):xs)) =
@@ -227,6 +231,7 @@ applyCons x@TyPromotedCon{} = x
 applyCons (TyPi a b) = TyPi (go a) (applyCons b) where
   go (Anon t) = Anon (applyCons t)
   go (Implicit t k) = Implicit t (fmap applyCons k)
+  go (Explicit t k) = Explicit t (applyCons k)
 applyCons (TyApp a b) = TyApp (applyCons a) (applyCons b)
 applyCons (TyRows r rs) = TyRows (applyCons r) (map (second applyCons) rs)
 applyCons (TyExactRows rs) = TyExactRows (map (second applyCons) rs)

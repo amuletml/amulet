@@ -258,6 +258,7 @@ reExpr r@(Ascription e t a) = Ascription
                           <$> reExpr e
                           <*> reType r t
                           <*> pure a
+reExpr r@(InstType t a) = InstType <$> reType r t <*> pure a
 reExpr (Record fs a) = Record <$> traverse (traverse reExpr) fs <*> pure a
 reExpr (RecordExt e fs a) = RecordExt
                         <$> reExpr e
@@ -278,6 +279,7 @@ reExpr r@(OpenIn m e a) =
   `catchError` (throwError . wrapError r)
 
 reExpr ExprWrapper{} = error "resolve cast"
+reExpr (InstHole a) = pure $ InstHole a
 
 reType :: (MonadResolve m, Reasonable a p)
        => a p -> Type Parsed -> m (Type Resolved)
@@ -291,6 +293,11 @@ reType r (TyPi (Implicit v k) ty) = do
   ty' <- extendTyvar (v, v') $ reType r ty
   k <- traverse (reType r) k
   pure (TyPi (Implicit v' k) ty')
+reType r (TyPi (Explicit v k) ty) = do
+  v' <- tagVar v
+  ty' <- extendTyvar (v, v') $ reType r ty
+  k <- reType r k
+  pure (TyPi (Explicit v' k) ty')
 reType r (TyPi (Anon f) x) = TyPi . Anon <$> reType r f <*> reType r x
 reType r (TyApp f x) = TyApp <$> reType r f <*> reType r x
 reType r (TyRows t f) = TyRows <$> reType r t

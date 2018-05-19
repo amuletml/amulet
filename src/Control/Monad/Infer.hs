@@ -94,6 +94,10 @@ data TypeError where
 
   Malformed :: Pretty (Var p) => Type p -> TypeError
 
+  -- Visible quantification
+  WrongQuantifier   :: (Pretty (Var p), Pretty (Var p')) => Expr p -> Type p' -> TypeError
+  NakedInstArtifact :: Pretty (Var p) => Expr p -> TypeError
+
   NotPromotable :: Pretty (Var p) => Var p -> Type p -> Doc -> TypeError
   ManyErrors :: [TypeError] -> TypeError
 
@@ -204,10 +208,10 @@ instance Pretty TypeError where
 
   pretty (Occurs v t) = string "Occurs check:" <+> string "The type variable" <+> stypeVar (pretty v) </> indent 4 (string "occurs in the type" <+> pretty t)
   pretty (NotInScope e) = string "Variable not in scope:" <+> pretty e
-  pretty (ArisingFrom er ex) = pretty er <#> empty <#> nest 4 (string "Arising from use of" <+> blameOf ex)
+  pretty (ArisingFrom er ex) = pretty er <#> empty <#> nest 4 (string "Arising in" <+> blameOf ex)
   pretty (FoundHole e s) = string "Found typed hole" <+> pretty e <+> "of type" <+> pretty s
 
-  pretty (Note te m) = pretty te <#> bullet (string "Note:") <+> align (pretty m)
+  pretty (Note te m) = pretty te <#> note <+> align (pretty m)
   pretty (Suggestion te m) = pretty te <#> bullet (string "Suggestion:") <+> align (pretty m)
   pretty (CanNotInstance rec new) = string "Can not instance hole of record type" <+> align (verbatim rec </> string " to type " <+> verbatim new)
   pretty (Malformed tp) = string "The type" <+> verbatim tp <+> string "is malformed."
@@ -232,13 +236,13 @@ instance Pretty TypeError where
   pretty (Impredicative v t)
     = vsep [ string "Illegal instantiation of type variable" <+> stypeVar (pretty v)
            , indent 16 (string "with polymorphic type" <+> verbatim t)
-           , bullet (string "Note:") <+> string "doing so would constitute" <+> stypeCon (string "impredicative polymorphism")
+           , note <+> string "doing so would constitute" <+> stypeCon (string "impredicative polymorphism")
            ]
 
   pretty (ImpredicativeApp tf tx)
     = vsep [ string "Illegal use of polymorphic type" <+> verbatim tx
            , indent 2 $ string "as argument to the type function" <+> verbatim tf
-           , bullet (string "Note:") <+> string "instantiating a type variable"
+           , note <+> string "instantiating a type variable"
            <+> nest 2 (parens (string "the argument to" <+> verbatim tf)
                    </> string "with a polymorphic type constitutes" <+> stypeCon (string "impredicative polymorphism"))
            ]
@@ -248,35 +252,67 @@ instance Pretty TypeError where
             [Skolem{..}] ->
               let skol = stypeVar (pretty _skolVar) in
               string "Rigid type variable" <+> skol <+> string "has escaped its scope of" <+> pretty _skolScope
-                  <#> bullet (string "Note: the variable") <+> skol <+> string "was rigidified because"
+                  <#> note <+> string "the variable" <+> skol <+> string "was rigidified because"
                         <+> nest 8 (prettyMotive _skolMotive <> comma)
                   <#> indent 8 (string "and is represented by constant" <+> stypeSkol (pretty _skolIdent)) 
             _ -> foldr ((<#>) . pretty . flip EscapedSkolems t . pure) empty esc
          , empty -- a line break
-         , bullet (string "Note: in type") <+> verbatim t
+         , note <+> string "in type" <+> verbatim t
          ]
 
   pretty (NotPromotable c x err) =
     vsep [ string "The constructor" <+> pretty c <+> string "can not be used as a type"
-         , string "Note: because its kind,"
+         , note <+> "because its kind,"
          , indent 2 (pretty x)
          , err
          ]
 
   pretty (SkolBinding (Skolem k v _ m) b) =
     vsep [ string "Could not match rigid type variable" <+> skol <+> string "with" <+> whatIs b
-         , bullet (string "Note: the variable") <+> skol <+> string "was rigidified because" <+> prettyMotive m
+         , note <+> "the variable" <+> skol <+> string "was rigidified because" <+> prettyMotive m
          , indent 8 (string "and is represented by the constant") <+> stypeSkol (pretty k)
          ] <#> case b of
              TySkol (Skolem k v _ m) ->
                vcat [ empty
-                    , vsep [ bullet (string "Note: the rigid type variable") <+> stypeVar (pretty v) <> comma <+> string "in turn" <> comma
+                    , vsep [ note <+> "the rigid type variable" <+> stypeVar (pretty v) <> comma <+> string "in turn" <> comma
                            , indent 8 (string "was rigidified because") <+> prettyMotive m
                            , indent 8 (string "and is represented by the constant") <+> stypeSkol (pretty k) ] ]
              _ -> empty
     where whatIs (TySkol (Skolem _ v _ _)) = string "the rigid type variable" <+> stypeVar (pretty v)
           whatIs t = string "the type" <+> pretty t
           skol = stypeVar (pretty v)
+
+  pretty (WrongQuantifier _ ty@(TyPi Explicit{} _)) =
+    vsep [ string "Expression given as argument to function of type" <+> pretty ty
+         , indent 4 $ string "This function expects a type as its first argument;"
+         , indent 4 $ string "Have you forgotten an instantiation?"
+         , empty
+         , note <+> "You can use a hole like"
+             <+> pretty ((InstHole undefined) :: Expr Typed) <+> "to make the compiler infer this"
+         ]
+  pretty (WrongQuantifier t ty@TyArr{}) =
+    vsep [ thing <+> "given as argument to function of type" <+> pretty ty
+         , string "Have you applied a function to the wrong number of arguments?"
+         ] where
+      thing = case t of
+        InstHole{} -> highlight "Hole" <+> pretty t
+        InstType{} -> highlight "Type" <+> pretty t
+        _ -> error "WrongQuantifier wrong"
+  pretty (WrongQuantifier t ty) =
+    vsep [ thing <+> "given as argument to expression of type" <+> pretty ty
+         , string "Have you applied a function to too many arguments?"
+         ] where
+      thing = case t of
+        InstHole{} -> highlight "Hole" <+> pretty t
+        InstType{} -> highlight "Type" <+> pretty t
+        _ -> highlight "Expression"
+
+
+  pretty (NakedInstArtifact h@InstHole{}) =
+    vsep [ string "Instantiation hole" <+> pretty h <+> "used outside of type application" ]
+  pretty (NakedInstArtifact h@InstType{}) =
+    vsep [ string "Can not use the type" <+> pretty h <+> "outside of a type application" ]
+  pretty (NakedInstArtifact _) = error "NakedInstArtifact wrong"
 
 instance Spanned TypeError where
   annotation (ArisingFrom e@ArisingFrom{} _) = annotation e
