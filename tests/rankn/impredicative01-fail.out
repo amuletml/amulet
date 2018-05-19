@@ -4,7 +4,7 @@ impredicative01-fail.ml[3:5 ..3:34]: error
   • Note: instantiating a type variable (the argument to `foo`)
     with a polymorphic type constitutes impredicative polymorphism
 
-  Arising from use of the declaration
+  Arising in the declaration
   │ 
 3 │ let main : foo (forall 'a. 'a) = main
   │ 

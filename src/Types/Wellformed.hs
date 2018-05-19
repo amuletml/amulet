@@ -21,6 +21,7 @@ wellformed tp = case tp of
   TyPi a b -> do
     case a of
       Implicit _ k -> traverse_ wellformed k
+      Explicit _ k -> wellformed k
       Anon a -> wellformed a 
     wellformed b
   TyApp a b -> wellformed a *> wellformed b
@@ -74,6 +75,7 @@ skols (TySkol x) = Set.singleton x
 skols (TyApp a b) = skols a <> skols b
 skols (TyPi b t)
   | Implicit _ k <- b = skols t <> foldMap skols k
+  | Explicit _ k <- b = skols t <> skols k
   | Anon a <- b = skols a <> skols t
 skols (TyRows r rs) = skols r <> foldMap (skols . snd) rs
 skols (TyExactRows rs) = foldMap (skols . snd) rs

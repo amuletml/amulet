@@ -45,7 +45,7 @@ inferProgram :: MonadGen Int m => Env -> [Toplevel Resolved] -> m (Either [TypeE
 inferProgram env ct = fmap fst <$> runInfer env (inferProg ct)
 
 check :: forall m. MonadInfer Typed m => Expr Resolved -> Type Typed -> m (Expr Typed)
-check e ty@TyForall{} = do -- This is rule Decl∀L from [Complete and Easy]
+check e ty@TyPi{} | isSkolemisable ty = do -- This is rule Decl∀L from [Complete and Easy]
   (wrap, e) <- secondA (check e) =<< skolemise (ByAscription ty) ty -- gotta be polymorphic - don't allow instantiation
   pure (ExprWrapper wrap e (annotation e, ty))
 
@@ -122,7 +122,7 @@ infer (VarRef k a) = do
 infer (Fun p e an) = let blame = Arm p e in do
   (p, dom, ms, cs) <- inferPattern p
   let tvs = boundTvs p ms
-  
+
   _ <- leakEqualities blame cs
   (e, cod) <- local (typeVars %~ Set.union (Set.map unTvName tvs)) $
     local (values %~ focus ms) $ infer e
@@ -136,12 +136,34 @@ infer ex@(Ascription e ty an) = do
   e <- check e ty
   pure (Ascription (correct ty e) ty (an, ty), ty)
 
+-- f ? - just delegate to the other checker
+infer ex@(App f hole@(InstHole ha) a) = do
+  ftv <- fresh
+  infer (App f (InstType (TyVar ftv) ha) a) `catchError`
+    \err -> case err of
+      WrongQuantifier _ ot -> throwError (ArisingFrom (WrongQuantifier hole ot) (BecauseOf ex))
+      _ -> throwError err
+
+infer ex@(App f (InstType t ta) a) = do
+  (f, ot) <- infer f
+  (dom, c, k) <- quantifier ex ot
+  case dom of
+    Explicit v ki -> do
+      x <- checkAgainstKind (BecauseOf ex) t ki
+      let sub = Map.singleton v x
+       in pure (App (k f) (InstType x (ta, ki)) (a, apply sub c), apply sub c)
+    Anon{} ->
+      throwError . flip WrongQuantifier ot . flip InstType (ta, undefined) =<< resolveKind (BecauseOf ex) t
+    Implicit{} -> error "invalid implicit quantification in App"
+
 infer ex@(App f x a) = do
-  (f, (dom, c, k)) <- secondA (quantifier ex) =<< infer f
+  (f, ot) <- infer f
+  (dom, c, k) <- quantifier ex ot
   case dom of
     Anon d -> do
       x <- check x d
       pure (App (k f) x (a, c), c)
+    Explicit{} -> throwError (ArisingFrom (WrongQuantifier x ot) (BecauseOf ex))
     Implicit{} -> error "invalid implicit quantification in App"
 
 infer ex@(BinOp l o r a) = do
@@ -184,6 +206,9 @@ infer (Tuple xs an) =
    in do
      (ex, t) <- go xs
      pure (Tuple ex (an, t), t)
+
+infer h@InstHole{} = throwError (NakedInstArtifact h)
+infer h@InstType{} = throwError (NakedInstArtifact h)
 
 infer ex = do
   x <- freshTV
@@ -378,3 +403,4 @@ solveEx _ ss cs = transformExprTyped go id goType where
 
 consFst :: Functor m => a -> m ([a], b) -> m ([a], b)
 consFst = fmap . first . (:)
+

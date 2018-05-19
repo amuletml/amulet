@@ -64,6 +64,8 @@ import Syntax
   ';'      { Token TcSemicolon _ }
   '('      { Token TcOParen _ }
   ')'      { Token TcCParen _ }
+  '@{'     { Token TcAtBrace _ }
+  '?'      { Token TcQuestion _ }
   '{'      { Token TcOBrace _ }
   '}'      { Token TcCBrace _ }
   '['      { Token TcOSquare _ }
@@ -155,6 +157,8 @@ Atom :: { Expr Parsed }
          { withPos2 $1 $5 $ tupleExpr ($2:$4) }
      | '{' Rows('=', Expr) '}'                { withPos2 $1 $3 $ Record $2 }
      | '{' Expr with Rows('=',Expr) '}'       { withPos2 $1 $5 $ RecordExt $2 $4 }
+     | '?'                                    { withPos1 $1 InstHole }
+     | '@{' Type '}'                          { withPos2 $1 $3 $ InstType (getL $2) }
 
      | Atom access                            { withPos2 $1 $2 $ Access $1 (getIdent $2) }
 
@@ -276,6 +280,10 @@ Type :: { Located (Type Parsed) }
      : TypeProd                                   { $1 }
      | TypeProd '->' Type                         { lPos2 $1 $3 $ TyPi (Anon (getL $1)) (getL $3) }
      | forall ListE1(tyvar) '.' Type              { lPos2 $1 $4 $ forallTy (map getName $2) (getL $4) }
+     | forall ListE1(BoundTv) '->' Type           { lPos2 $1 $4 $ foldr TyPi (getL $4) $2 }
+
+BoundTv :: { TyBinder Parsed }
+        : '(' tyvar ':' Type ')' { Explicit (getName $2) (getL $4) }
 
 TypeProd :: { Located (Type Parsed) }
          : TypeApp                                { $1 }
@@ -289,6 +297,7 @@ TypeAtom :: { Located (Type Parsed) }
          : Var                                    { lPos1 $1 $ TyCon (getL $1) }
          | TyVar                                  { lPos1 $1 $ TyVar (getL $1) }
          | Con                                    { lPos1 $1 $ TyPromotedCon (getL $1) }
+         | type                                   { lPos1 $1 TyType }
          | '(' ')'                                { lPos2 $1 $2 $ TyCon (Name (T.pack "unit")) }
          | '(' Type ')'                           { lPos2 $1 $3 (getL $2) }
          | '{' Rows(':', Type) '}'                { lPos2 $1 $3 $ TyExactRows (map (second getL) $2) }

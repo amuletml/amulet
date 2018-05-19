@@ -5,7 +5,7 @@ gadt07-escape-fail.ml[10:3 ..10:14]: error
           and is represented by the constant cp
 
 
-  Arising from use of the expression
+  Arising in the expression
    │ 
 10 │   match hval with
    │ 

@@ -58,6 +58,8 @@ desugarProgram = traverse statement where
     expr (Fun cap (Access ref k a) a)
 
   expr (Parens e _) = expr e
+  expr e@InstHole{} = pure e
+  expr e@InstType{} = pure e
 
   expr (Tuple es a) = Tuple <$> traverse expr es <*> pure a
   expr (TupleSection es a) = do

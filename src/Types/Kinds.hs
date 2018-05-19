@@ -14,6 +14,7 @@ import Control.Applicative
 import Control.Arrow
 import Control.Lens
 
+import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
 import Data.Traversable
@@ -145,6 +146,9 @@ inferKind (TyApp f x) = do
       case x of
         TyForall{} -> throwError (ImpredicativeApp f x)
         _ -> pure (TyApp f x, c)
+    Explicit v k -> do
+      x <- checkKind x k
+      pure (TyApp f x, apply (Map.singleton v x) c)
     Implicit{} -> error "inferKind TyApp: visible argument to implicit quantifier"
 
 inferKind (TyRows p rs) = do
@@ -187,6 +191,14 @@ checkKind (TyPi binder b) ek = do
   -- _ <- isType ek
   case binder of
     Anon t -> TyArr <$> checkKind t ek <*> checkKind b ek
+
+    Explicit v arg -> do
+      (arg, kind) <- inferKind arg
+      _ <- subsumes (Const reason) ek kind
+      b <- extendKind (TvName v, arg) $
+        checkKind b ek
+      let bind = Explicit (TvName v) arg
+      pure $ TyPi bind b
 
     Implicit v (Just arg) -> do
       (arg, kind) <- inferKind arg
@@ -270,6 +282,7 @@ promoteOrError TyRows{} = Just (string "mentions a tuple")
 promoteOrError TyExactRows{} = Just (string "mentions a tuple")
 promoteOrError (TyApp a b) = promoteOrError a <|> promoteOrError b
 promoteOrError (TyPi (Implicit _ a) b) = join (traverse promoteOrError a) <|> promoteOrError b
+promoteOrError (TyPi (Explicit _ a) b) = promoteOrError a <|> promoteOrError b
 promoteOrError (TyPi (Anon a) b) = promoteOrError a <|> promoteOrError b
 promoteOrError TyCon{} = Nothing
 promoteOrError TyVar{} = Nothing
