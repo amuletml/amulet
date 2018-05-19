@@ -9,8 +9,9 @@ import Data.Spanned
 import Data.Span
 import Data.Char
 
-import Text.Pretty.Semantic
+import Text.Pretty.Semantic (Pretty(..), Style)
 import Text.Pretty.Note
+import Text.Pretty
 import Parser.Token
 
 data ParseError
@@ -58,7 +59,7 @@ instance Spanned ParseError where
   annotation (UnalignedIn p _) = mkSpan1 p
   annotation (UnindentContext p _) = mkSpan1 p
 
-prettyPos :: SourcePos -> Doc
+prettyPos :: SourcePos -> Doc a
 prettyPos p = shown (spLine p) <> colon <> shown (spCol p)
 
 instance Note ParseError Style where
@@ -66,6 +67,15 @@ instance Note ParseError Style where
   diagnosticKind UnindentContext{} = WarningMessage
   diagnosticKind _ = ErrorMessage
 
-  formatNote f (UnalignedIn p i) = indent 2 "This `in` is misaligned with the corresponding `let`" <##> f [mkSpan1 p, mkSpan1 i]--  <##>
-                                   -- indent 2 "`let` appears here" <##> f [mkSpan1 i]
-  formatNote f x = indent 2 (Right <$> pretty x) <##> f [annotation x]
+  formatNote f (UnalignedIn p i)
+    = indent 2 "This `in` is misaligned with the corresponding `let`"
+      <##> f [mkSpan1 p, mkSpan1 i]
+  formatNote f (UnclosedString p s)
+    = indent 2 "Unexpected end of input, expecting to close string"
+      <##> f [mkSpan1 s, mkSpan1 p]
+  formatNote f (UnclosedComment p s)
+    = indent 2 "Unexpected end of input, expecting to close comment"
+      <##> f [mkSpan1 s, mkSpan1 p]
+  formatNote f x
+    = indent 2 (Right <$> pretty x)
+      <##> f [annotation x]
