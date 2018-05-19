@@ -1,0 +1,7 @@
+visible01-fail.ml[4:23 ..4:23]: error
+  Could not match type unit with int
+
+  Arising in the expression
+  │ 
+4 │ and baz = foo @{unit} 1
+  │ 
