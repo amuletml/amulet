@@ -35,8 +35,9 @@ freeIn (Parens e _)         = freeIn e
 freeIn (LeftSection a b _)  = freeIn a <> freeIn b
 freeIn (RightSection a b _) = freeIn a <> freeIn b
 freeIn (BothSection b _)    = freeIn b
-freeIn (InstApp e _ _)      = freeIn e
 freeIn AccessSection{}      = mempty
+freeIn InstHole{}           = mempty
+freeIn InstType{}           = mempty
 freeIn x = error (show x)
 
 bound :: Ord (Var p) => Pattern p -> Set.Set (Var p)

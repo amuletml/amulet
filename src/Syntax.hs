@@ -100,7 +100,8 @@ data Expr p
   | TupleSection [Maybe (Expr p)] (Ann p)
 
   -- Visible instantiation
-  | InstApp (Expr p) (Type p) (Ann p)
+  | InstType (Type p) (Ann p)
+  | InstHole (Ann p)
 
   -- Module
   | OpenIn (Var p) (Expr p) (Ann p)

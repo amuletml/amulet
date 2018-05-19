@@ -94,9 +94,9 @@ data TypeError where
 
   Malformed :: Pretty (Var p) => Type p -> TypeError
 
-  -- Mismatched quantification
-  VisibleExpr :: (Pretty (Var p), Pretty (Var p')) => Expr p' -> Type p -> TypeError
-  AnonType :: Pretty (Var p) => Type p -> Type p -> TypeError
+  -- Visible quantification
+  WrongQuantifier   :: (Pretty (Var p), Pretty (Var p')) => Expr p -> Type p' -> TypeError
+  NakedInstArtifact :: Pretty (Var p) => Expr p -> TypeError
 
   NotPromotable :: Pretty (Var p) => Var p -> Type p -> Doc -> TypeError
   ManyErrors :: [TypeError] -> TypeError
@@ -208,7 +208,7 @@ instance Pretty TypeError where
 
   pretty (Occurs v t) = string "Occurs check:" <+> string "The type variable" <+> stypeVar (pretty v) </> indent 4 (string "occurs in the type" <+> pretty t)
   pretty (NotInScope e) = string "Variable not in scope:" <+> pretty e
-  pretty (ArisingFrom er ex) = pretty er <#> empty <#> nest 4 (string "Arising from use of" <+> blameOf ex)
+  pretty (ArisingFrom er ex) = pretty er <#> empty <#> nest 4 (string "Arising in" <+> blameOf ex)
   pretty (FoundHole e s) = string "Found typed hole" <+> pretty e <+> "of type" <+> pretty s
 
   pretty (Note te m) = pretty te <#> bullet (string "Note:") <+> align (pretty m)
@@ -282,10 +282,23 @@ instance Pretty TypeError where
           whatIs t = string "the type" <+> pretty t
           skol = stypeVar (pretty v)
 
-  pretty (VisibleExpr e ty) =
-    vsep [ string "Expression" <+> pretty e <+> "given as argument to function of type" <+> pretty ty ]
-  pretty (AnonType t ty) =
+  pretty (WrongQuantifier _ ty@(TyPi Explicit{} _)) =
+    vsep [ string "Expression given as argument to function of type" <+> pretty ty
+         , indent 4 $ string "This function expects a type as its first argument;"
+         , indent 4 $ string "Have you forgotten an instantiation?"
+         , empty
+         , bullet (string "Note:") <+> "You can use a hole like"
+             <+> pretty ((InstHole undefined) :: Expr Typed) <+> "to make the compiler infer this"
+         ]
+  pretty (WrongQuantifier (InstType t _) ty@TyArr{}) =
     vsep [ string "Type" <+> pretty t <+> "given as argument to function of type" <+> pretty ty ]
+  pretty WrongQuantifier{} = error "WrongQuantifier wrong"
+
+  pretty (NakedInstArtifact h@InstHole{}) =
+    vsep [ string "Instantiation hole" <+> pretty h <+> "used outside of type application" ]
+  pretty (NakedInstArtifact h@InstType{}) =
+    vsep [ string "Can not use the type" <+> pretty h <+> "outside of a type application" ]
+  pretty (NakedInstArtifact _) = error "NakedInstArtifact wrong"
 
 instance Spanned TypeError where
   annotation (ArisingFrom e@ArisingFrom{} _) = annotation e

@@ -137,6 +137,23 @@ infer ex@(Ascription e ty an) = do
   e <- check e ty
   pure (Ascription (correct ty e) ty (an, ty), ty)
 
+-- f ? - just delegate to the other checker
+infer (App f (InstHole ha) a) = do
+  ftv <- fresh
+  infer (App f (InstType (TyVar ftv) ha) a)
+
+infer ex@(App f (InstType t ta) a) = do
+  (f, ot) <- infer f
+  (dom, c, k) <- quantifier ex ot
+  case dom of
+    Explicit v ki -> do
+      x <- checkAgainstKind (BecauseOf ex) t ki
+      let sub = Map.singleton v x
+       in pure (App (k f) (InstType x (ta, ki)) (a, apply sub c), apply sub c)
+    Anon{} ->
+      throwError . flip WrongQuantifier ot . flip InstType (ta, undefined) =<< resolveKind (BecauseOf ex) t
+    Implicit{} -> error "invalid implicit quantification in App"
+
 infer ex@(App f x a) = do
   (f, ot) <- infer f
   (dom, c, k) <- quantifier ex ot
@@ -144,19 +161,7 @@ infer ex@(App f x a) = do
     Anon d -> do
       x <- check x d
       pure (App (k f) x (a, c), c)
-    Explicit{} -> throwError (VisibleExpr x ot)
-    Implicit{} -> error "invalid implicit quantification in App"
-
-infer ex@(InstApp f t a) = do
-  (f, ot) <- infer f
-  (dom, c, k) <- quantifier ex ot
-  case dom of
-    Explicit v ki -> do
-      x <- checkAgainstKind (BecauseOf ex) t ki
-      let sub = Map.singleton v x
-       in pure (InstApp (k f) x (a, apply sub c), apply sub c)
-    Anon{} ->
-      throwError . flip AnonType ot =<< resolveKind (BecauseOf ex) t
+    Explicit{} -> throwError (ArisingFrom (WrongQuantifier x ot) (BecauseOf ex))
     Implicit{} -> error "invalid implicit quantification in App"
 
 infer ex@(BinOp l o r a) = do
@@ -199,6 +204,9 @@ infer (Tuple xs an) =
    in do
      (ex, t) <- go xs
      pure (Tuple ex (an, t), t)
+
+infer h@InstHole{} = throwError (NakedInstArtifact h)
+infer h@InstType{} = throwError (NakedInstArtifact h)
 
 infer ex = do
   x <- freshTV

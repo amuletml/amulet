@@ -259,8 +259,8 @@ lowerAnyway (RecordExt e xs _) = do
   where build (name, _) (atom, ty) = (name, ty, atom)
 
 lowerAnyway (Literal l _) = pure . Atom . Lit $ lowerLiteral l
+lowerAnyway (S.App f (InstType t _) _) = C.TyApp <$> lowerExprAtom f <*> pure (lowerType t)
 lowerAnyway (S.App f x _) = C.App <$> lowerExprAtom f <*> lowerExprAtom x
-lowerAnyway (S.InstApp f t _) = C.TyApp <$> lowerExprAtom f <*> pure (lowerType t)
 
 lowerAnyway e = error ("can't lower " ++ show e ++ " without type")
 

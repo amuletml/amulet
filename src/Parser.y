@@ -65,6 +65,7 @@ import Syntax
   '('      { Token TcOParen _ }
   ')'      { Token TcCParen _ }
   '@{'     { Token TcAtBrace _ }
+  '?'      { Token TcQuestion _ }
   '{'      { Token TcOBrace _ }
   '}'      { Token TcCBrace _ }
   '['      { Token TcOSquare _ }
@@ -129,7 +130,6 @@ Expr :: { Expr Parsed }
 ExprApp :: { Expr Parsed }
         : Expr0                                { $1 }
         | ExprApp Atom                         { withPos2 $1 $2 $ App $1 $2 }
-        | ExprApp '@{' Type '}'                { withPos2 $1 $4 $ InstApp $1 (getL $3) }
         | ExprApp ':' Type                     { withPos2 $1 $3 $ Ascription $1 (getL $3) }
 
 Expr0 :: { Expr Parsed }
@@ -157,6 +157,8 @@ Atom :: { Expr Parsed }
          { withPos2 $1 $5 $ tupleExpr ($2:$4) }
      | '{' Rows('=', Expr) '}'                { withPos2 $1 $3 $ Record $2 }
      | '{' Expr with Rows('=',Expr) '}'       { withPos2 $1 $5 $ RecordExt $2 $4 }
+     | '?'                                    { withPos1 $1 InstHole }
+     | '@{' Type '}'                          { withPos2 $1 $3 $ InstType (getL $2) }
 
      | Atom access                            { withPos2 $1 $2 $ Access $1 (getIdent $2) }
 

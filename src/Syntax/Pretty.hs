@@ -45,7 +45,7 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
                                        , keyword "else" <+> pretty e
                                        ])
   pretty (App f x _) = parenFun f <+> parenArg x
-  pretty (InstApp f t _) = parenFun f <+> soperator (string "@{") <+> pretty t <+> soperator (char '}')
+  pretty (InstType t _) = soperator (string "@{") <+> pretty t <+> soperator (char '}')
   pretty (Fun v e _) = keyword "fun" <+> pretty v <+> arrow <+> pretty e
   pretty (Begin e _) =
     vsep [ keyword "begin", indent 2 (vsep (punctuate semi (map pretty e))), keyword "end" ]
@@ -65,6 +65,7 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
   pretty (BothSection op _) = parens $ pretty op
   pretty (AccessSection k _) = parens $ dot <> text k
   pretty (Parens e _) = parens $ pretty e
+  pretty (InstHole _) = keyword "?"
 
   pretty (Tuple es _) = parens (hsep (punctuate comma (map pretty es)))
   pretty (TupleSection es _) = parens (hsep (punctuate comma (map (maybe (string "") pretty) es)))
@@ -154,7 +155,7 @@ instance Pretty (Var p) => Pretty (TyBinder p) where
   pretty (Implicit v (Just k)) = braces (stypeVar (squote <> pretty v) <+> colon <+> pretty k) <> dot
   pretty (Implicit v Nothing)  = stypeVar (squote <> pretty v) <> dot
 
-  pretty (Explicit v k) = parens (stypeVar (squote <> pretty v) <+> colon <+> pretty k) <> arrow
+  pretty (Explicit v k) = parens (stypeVar (squote <> pretty v) <+> colon <+> pretty k) <+> arrow
 
 instance (Pretty (Var p)) => Pretty (Toplevel p) where
   pretty (LetStmt []) = error "absurd!"

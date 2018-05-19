@@ -44,6 +44,7 @@ data TokenClass
   | TcOParen -- (
   | TcCParen -- )
   | TcAtBrace -- @{
+  | TcQuestion -- ?
   | TcOBrace -- {
   | TcCBrace -- }
   | TcOSquare -- [
@@ -114,6 +115,7 @@ instance Show TokenClass where
   show TcOParen = "("
   show TcCParen = ")"
   show TcAtBrace = "@{"
+  show TcQuestion = "?"
   show TcOBrace = "{"
   show TcCBrace = "}"
   show TcOSquare = "["
