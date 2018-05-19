@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings
            , MultiParamTypeClasses
            , FunctionalDependencies
-           , FlexibleContexts #-}
+#-}
 module Text.Pretty.Note
   ( NoteKind(..)
   , NoteStyle
@@ -18,7 +18,6 @@ import Data.Spanned
 import Data.Span
 import Data.List
 
-import Text.Pretty.Semantic (Style, pretty)
 import Text.Pretty.Ansi
 import Text.Pretty
 
@@ -39,14 +38,14 @@ class Spanned a => Note a b | a -> b where
 
 type FileMap = [(SourceName, T.Text)]
 
-format :: Note a Style => ([Span] -> NoteDoc Style) -> a -> NoteDoc Style
+format :: Note a b => ([Span] -> NoteDoc b) -> a -> NoteDoc b
 format f x =
   let a = annotation x
       c = case diagnosticKind x of
             WarningMessage -> annotate (NoteKind WarningMessage) "warning"
             ErrorMessage -> annotate (NoteKind ErrorMessage) "error"
       body = formatNote f x
-  in (Right <$> pretty a <> colon) <+> (Left <$> c) <##> body
+  in (Right <$> formatSpan a <> colon) <+> (Left <$> c) <##> body
 
 toAnsi :: NoteStyle -> AnsiStyle
 toAnsi LinePrefix = BrightColour Blue

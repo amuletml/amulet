@@ -7,9 +7,11 @@ module Data.Span
   , mkSpan, mkSpanUnsafe, mkSpan1
   , spanStart
   , spanEnd
+  , formatSpan
   ) where
 
-import Text.Pretty.Semantic
+import Text.Pretty.Semantic (Pretty(..))
+import Text.Pretty
 
 import Data.Data
 import Data.Position
@@ -45,13 +47,15 @@ spanStart, spanEnd :: Span -> SourcePos
 spanStart Span { fileName = n, line1 = l, col1 = c } = SourcePos n l c
 spanEnd   Span { fileName = n, line2 = l, col2 = c } = SourcePos n l c
 
-
-instance Pretty Span where
-  pretty Span { fileName = n
+formatSpan :: Span -> Doc a
+formatSpan Span { fileName = n
               , line1 = l1, col1 = c1
               , line2 = l2, col2 = c2 }
     | n == "<wired in>" = string "internal"
     | otherwise = string n <> brackets (int l1 <> colon <> int c1 <+> string ".." <> int l2 <> colon <> int c2)
+
+instance Pretty Span where
+  pretty = formatSpan
 
 instance Semigroup Span where
   x@(Span fa ca1 la1 _ _) <> y@(Span fb _ _ cb2 lb2)
