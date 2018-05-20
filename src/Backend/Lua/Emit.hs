@@ -2,6 +2,7 @@
 
 module Backend.Lua.Emit
   ( emitProgram
+  , emitProgramWith
   , escapeScope, remapOp, ops
   ) where
 
@@ -115,7 +116,10 @@ makeLenses ''EmitState
 type ExprContext v a = ContT [LuaStmt] (State (EmitState v)) a
 
 emitProgram :: forall a. Occurs a => Env -> [Stmt a] -> [LuaStmt]
-emitProgram ev = flip evalState escapeScope . emitProg where
+emitProgram ev = fst . emitProgramWith ev escapeScope
+
+emitProgramWith :: forall a. Occurs a => Env -> EscapeScope -> [Stmt a] -> ([LuaStmt], EscapeScope)
+emitProgramWith ev esc = flip runState esc . emitProg where
   emitProg :: MonadState EscapeScope m => [Stmt a] -> m [LuaStmt]
   emitProg (Foreign n' t s:xs)
     | arity t > 1 = do

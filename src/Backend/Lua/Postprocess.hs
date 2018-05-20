@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Backend.Lua.Postprocess
   ( addOperators
+  , genOperator
   ) where
 
 import qualified Data.Map as Map
@@ -21,34 +22,9 @@ import Core.Var
 addOperators :: [LuaStmt] -> [LuaStmt]
 addOperators stmt =
   let ops = foldMap opsStmt stmt
-  in foldr ((:) . genOp) stmt (VarSet.toList ops)
+  in foldr ((:) . genOperator) stmt (VarSet.toList ops)
 
   where
-    genOp :: CoVar -> LuaStmt
-    genOp op | op == vLAZY =
-      LuaLocal [ LuaName "__builtin_Lazy" ]
-               [ LuaFunction [ eks ]
-                 [ LuaReturn (LuaTable [ (LuaNumber 1, LuaRef eks)
-                                       , (LuaNumber 2, LuaFalse)
-                                       ]) ] ]
-    genOp op | op == vForce =
-      LuaLocal [ LuaName "__builtin_force" ]
-               [ LuaFunction [ eks ]
-                 [ LuaIf (LuaRef (LuaIndex (LuaRef eks) (LuaNumber 2)))
-                    [ LuaReturn ( LuaRef (LuaIndex (LuaRef eks) (LuaNumber 1)) ) ]
-                    [ LuaAssign [ LuaIndex (LuaRef eks) (LuaNumber 1)
-                                , LuaIndex (LuaRef eks) (LuaNumber 2) ]
-                                [ LuaCall (LuaRef (LuaIndex (LuaRef eks) (LuaNumber 1)))
-                                   []
-                                , LuaTrue]
-                    , LuaReturn (LuaRef (LuaIndex (LuaRef eks) (LuaNumber 1))) ] ] ]
-    genOp op =
-      let name =  getVar op escapeScope
-      in LuaLocal [LuaName name]
-                  [ LuaFunction [left]
-                    [LuaReturn (LuaFunction [right]
-                                [LuaReturn (LuaBinOp (LuaRef left) (remapOp op) (LuaRef right))])] ]
-
     opsStmt :: LuaStmt -> VarSet.Set
     opsStmt (LuaDo b) = foldMap opsStmt b
     opsStmt (LuaAssign vs xs) = foldMap opsVar vs <> foldMap opsExpr xs
@@ -86,6 +62,34 @@ addOperators stmt =
     opNames = Map.filter (`VarMap.member` ops) (fromLua escapeScope)
                 `Map.union` Map.fromList [ ( "__builtin_Lazy", vLAZY ), ( "__builtin_force", vForce ) ]
 
+
+genOperator :: CoVar -> LuaStmt
+genOperator op | op == vLAZY =
+  LuaLocal [ LuaName "__builtin_Lazy" ]
+           [ LuaFunction [ eks ]
+             [ LuaReturn (LuaTable [ (LuaNumber 1, LuaRef eks)
+                                   , (LuaNumber 2, LuaFalse)
+                                   ]) ] ] where
+  eks = LuaName "x"
+genOperator op | op == vForce =
+  LuaLocal [ LuaName "__builtin_force" ]
+           [ LuaFunction [ eks ]
+             [ LuaIf (LuaRef (LuaIndex (LuaRef eks) (LuaNumber 2)))
+                [ LuaReturn ( LuaRef (LuaIndex (LuaRef eks) (LuaNumber 1)) ) ]
+                [ LuaAssign [ LuaIndex (LuaRef eks) (LuaNumber 1)
+                            , LuaIndex (LuaRef eks) (LuaNumber 2) ]
+                            [ LuaCall (LuaRef (LuaIndex (LuaRef eks) (LuaNumber 1)))
+                               []
+                            , LuaTrue]
+                  , LuaReturn (LuaRef (LuaIndex (LuaRef eks) (LuaNumber 1))) ] ] ] where
+  eks = LuaName "x"
+genOperator op =
+  let name =  getVar op escapeScope
+  in LuaLocal [LuaName name]
+              [ LuaFunction [left]
+                [LuaReturn (LuaFunction [right]
+                            [LuaReturn (LuaBinOp (LuaRef left) (remapOp op) (LuaRef right))])] ]
+  where
     left  = LuaName "l"
     right = LuaName "r"
     eks = LuaName "x"
