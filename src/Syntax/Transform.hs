@@ -160,7 +160,7 @@ transformPatternTyped fp ft = goP where
   transP (PLiteral l a) = PLiteral l (goA a)
 
   goA (s, ty) = (s, goT ty)
-  goT = transformType ft
+  goT = ft
   goP = transP . fp
 
 correct :: Type Typed -> Expr Typed -> Expr Typed
