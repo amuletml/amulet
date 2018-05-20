@@ -265,6 +265,13 @@ subsumes k t1@TyPi{} t2 | isSkolemisable t1 = do
   (cont, _, t1') <- instantiate t1
   let wrap = maybe IdWrap (WrapFn . MkWrapCont) cont
   (Syntax.:>) wrap <$> subsumes k t1' t2
+subsumes k (TyTuple a b) (TyTuple a' b') = do
+  wa <- subsumes k a' a
+  wb <- subsumes k b' b
+  let cont (Tuple (e:es) (at, _)) = Tuple [ExprWrapper wa e (at, a'), ExprWrapper wb (Tuple es (at, b)) (at, b')] (at, TyTuple a' b')
+      cont _ = error "TODO"
+      cont :: Expr Typed -> Expr Typed
+  pure (WrapFn (MkWrapCont cont))
 subsumes k a b = Cast <$> k a b
 
 skolemise :: MonadGen Int m => SkolemMotive Typed -> Type Typed -> m (Wrapper Typed, Type Typed)
