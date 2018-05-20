@@ -10,6 +10,8 @@ import Control.Monad
 import Control.Monad.Writer
 
 import Data.Position
+import Data.Spanned
+import Data.Span
 
 import Parser.Error
 import Parser.Token
@@ -72,7 +74,7 @@ handleContext = handleContextBlock True
 handleContextBlock :: (Applicative f, Monoid (f ParseError), MonadWriter (f ParseError) m)
                    => Bool -> Token -> [Context]
                    -> m (PendingState, [Context])
-handleContextBlock needsSep  tok@(Token tk tp) c =
+handleContextBlock needsSep  tok@(Token tk tp te) c =
   case (tk, c) of
     -- If we've got an empty block then we need to define the first position
     (_, CtxEmptyBlock end:cks) -> handleContext tok (CtxBlock tp False end:cks)
@@ -82,7 +84,7 @@ handleContextBlock needsSep  tok@(Token tk tp) c =
     (TcEOF, ck:cks) ->
       case insertFor ck of
         Nothing -> handleContext tok cks
-        Just x -> pure (Result (Token x tp) (Working tok), cks)
+        Just x -> pure (Result (Token x te te) (Working tok), cks)
 
     -- If this token may pop some parent context, then pop
     -- as many contexts as possible
@@ -92,14 +94,14 @@ handleContextBlock needsSep  tok@(Token tk tp) c =
           _ -> canTerminate tk && not (terminates tk c) && multiAny (terminates tk) cks
       -> case insertFor ck of
           Nothing -> handleContext tok cks
-          Just x -> pure (Result (Token x tp) (Working tok), cks)
+          Just x -> pure (Result (Token x tp te) (Working tok), cks)
 
     -- If we've got an in, then pop our let context and push a block
     -- TODO: Consider where this rule should occur, or warn if the indentation is funky.
     (TcIn, CtxLet offside:cks) -> do
       -- If we're on the same line then it can be anywhere. Otherwise the
       -- in should line up with the let.
-      when (spLine tp /= spLine offside && spCol tp /= spCol offside) (tell . pure $ UnalignedIn tp offside)
+      when (spLine tp /= spLine offside && spCol tp /= spCol offside) (tell . pure $ UnalignedIn (annotation tok) (mkSpan1 offside))
 
       pure ( Result tok Done
            , CtxEmptyBlock (Just TcVEnd):cks )
@@ -111,7 +113,7 @@ handleContextBlock needsSep  tok@(Token tk tp) c =
       | spCol tp < spCol offside
       -> case end of
            Nothing -> handleContext tok cks
-           Just x -> pure (Result (Token x tp) (Working tok), cks)
+           Just x -> pure (Result (Token x tp te) (Working tok), cks)
 
     -- If we're inside a context which doesn't need a separator,
     -- then convert it into one which does.
@@ -139,7 +141,7 @@ handleContextBlock needsSep  tok@(Token tk tp) c =
       | needsSep
       , spCol tp == spCol offside && spLine tp /= spLine offside
       , not (isOp tk)
-      -> pure ( Result (Token TcVSep tp) (Working tok)
+      -> pure ( Result (Token TcVSep tp te) (Working tok)
               , CtxBlock offside False end:cks)
 
     -- Offside rule for statement lets: just pop the context
@@ -149,7 +151,7 @@ handleContextBlock needsSep  tok@(Token tk tp) c =
     -- Offside rule for expression lets: push an in and replace the context with a new block
     (_, CtxLet offside:cks)
       | (if tk == TcAnd then spCol tp + 1 else spCol tp) <= spCol offside
-      -> pure ( Result (Token TcVIn tp) $ Working tok
+      -> pure ( Result (Token TcVIn tp te) $ Working tok
               , CtxEmptyBlock (Just TcVEnd):cks )
 
     -- Offside rule for matches. Pipes must be aligned in order to be
@@ -163,12 +165,12 @@ handleContextBlock needsSep  tok@(Token tk tp) c =
       | case tk of
           TcPipe -> spCol tp < spCol offside
           _ -> spCol tp <= spCol offside
-      -> pure (Result (Token TcVEnd tp) (Working tok), ck)
+      -> pure (Result (Token TcVEnd tp te) (Working tok), ck)
 
     -- Offside rule for ifs
     (_, CtxIf offside:ck)
       | (if isIfContinue tk then spCol tp + 1 else spCol tp) <= spCol offside
-      -> pure ( Result (Token TcVEnd tp) (Working tok)
+      -> pure ( Result (Token TcVEnd tp te) (Working tok)
               , ck )
     (_, CtxThen offside:ck)
       | spCol tp <= spCol offside
@@ -204,7 +206,7 @@ handleContextBlock needsSep  tok@(Token tk tp) c =
               , CtxEmptyBlock Nothing : CtxModuleBody mod:ck )
     -- Otherwise assume it's an implicit begin
     (_, CtxModuleBodyUnresolved mod eq:ck)
-      -> pure (Result (Token TcVBegin eq) (Working tok)
+      -> pure (Result (Token TcVBegin eq eq) (Working tok)
               , CtxEmptyBlock (Just TcVEnd) : CtxModuleBody mod :ck)
 
     -- let ... ~~> Push an let context
@@ -258,7 +260,7 @@ handleContextBlock needsSep  tok@(Token tk tp) c =
     (TcModule, _) -> pure (Result tok Done, CtxModuleHead tp:c)
     (TcEqual, CtxModuleHead mod:ck) -> pure
       ( Result tok Done
-      , CtxModuleBodyUnresolved mod tp:ck)
+      , CtxModuleBodyUnresolved mod te:ck)
 
     -- begin ... ~~> CtxEmptyBlock : CtxBracket(end)
     (TcBegin, _) -> pure

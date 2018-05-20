@@ -152,7 +152,7 @@ mapState f = P (flip POK () . f)
 getPos :: Parser SourcePos
 getPos = P $ \s -> POK s (sPos s)
 
-type Action a = AlexInput -> Int64 -> Parser a
+type Action a = AlexInput -> Int64 -> SourcePos -> Parser a
 
 runParser :: SourceName -> L.Text -> Parser a -> (Maybe a, [ParseError])
 runParser file input m =
@@ -181,5 +181,5 @@ runLexer file input m = runParser file input gather where
   gather = do
     t <- m
     case t of
-      Token TcEOF _ -> return [t]
+      Token TcEOF _ _ -> return [t]
       _   -> (t:) <$> gather

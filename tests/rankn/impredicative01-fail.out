@@ -1,4 +1,4 @@
-impredicative01-fail.ml[3:5 ..3:34]: error
+impredicative01-fail.ml[3:5 ..3:37]: error
   Illegal use of polymorphic type `{'a : 'n}. 'a`
     as argument to the type function `foo`
   • Note: instantiating a type variable (the argument to `foo`)

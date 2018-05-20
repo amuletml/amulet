@@ -1,4 +1,4 @@
-gadt02.ml[7:5 ..7:23]: error
+gadt02.ml[7:5 ..7:26]: error
   The type `t2 int -> t2 bool` is malformed.
   • Note: The type t2 bool
             is not an instance of the type being declared

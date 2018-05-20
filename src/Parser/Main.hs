@@ -23,7 +23,7 @@ testLexer :: [(FilePath, T.Text)] -> IO ()
 testLexer fs = for_ fs $ \(name, file) ->
   case runLexer name (L.fromStrict file) lexerScan of
     (Just toks, es) -> do
-      print (map (\(Token t _) -> t) toks)
+      print (map (\(Token t _ _) -> t) toks)
       go toks Done defaultContext
       unless (null es) (print es)
     (Nothing, es) -> traverse_ dispMsg es
@@ -35,7 +35,7 @@ testLexer fs = for_ fs $ \(name, file) ->
       let (res, msg) = runWriter (handleContext tok cs)
       in traverse_ dispMsg (msg :: [ParseError]) >> uncurry (go ts) res
 
-    go ts     (Result (Token tok' _) toks') cs = do
+    go ts     (Result (Token tok' _ _) toks') cs = do
       putStrLn (take 10 (show tok' ++ repeat ' ') ++ show cs)
       go ts toks' cs
     go ts     (Working tok) cs =

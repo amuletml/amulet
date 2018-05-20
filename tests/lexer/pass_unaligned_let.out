@@ -7,13 +7,13 @@ $end $end $sep let over = let x = 2
             $end in x
 $end $end <eof>
 (*
-  pass_unaligned_let.ml[4:11 ..4:11]: warning
+  pass_unaligned_let.ml[4:11 ..4:12]: warning
     This `in` is misaligned with the corresponding `let`
     │ 
   3 │ let under = let x = 2
   4 │           in x
     │ 
-  pass_unaligned_let.ml[7:13 ..7:13]: warning
+  pass_unaligned_let.ml[7:13 ..7:14]: warning
     This `in` is misaligned with the corresponding `let`
     │ 
   6 │ let over = let x = 2
