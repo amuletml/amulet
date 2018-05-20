@@ -22,74 +22,74 @@ import Syntax
 %name parseInput Tops
 %tokentype { Token }
 %monad { Parser } { (>>=) } { return }
-%lexer { lexer } { Token TcEOF _ }
+%lexer { lexer } { Token TcEOF _ _ }
 %error { parseError }
 %errorhandlertype explist
 
 %token
-  '->'     { Token TcArrow _ }
-  '='      { Token TcEqual _ }
-  forall   { Token TcForall _ }
-  '=>'     { Token TcImplies _ }
-  '|'      { Token TcPipe _ }
-  '*'      { Token TcStar _ }
-  '~'      { Token TcTilde _ }
-  '_'      { Token TcUnderscore _ }
+  '->'     { Token TcArrow _ _ }
+  '='      { Token TcEqual _ _ }
+  forall   { Token TcForall _ _ }
+  '=>'     { Token TcImplies _ _ }
+  '|'      { Token TcPipe _ _ }
+  '*'      { Token TcStar _ _ }
+  '~'      { Token TcTilde _ _ }
+  '_'      { Token TcUnderscore _ _ }
 
-  let      { Token TcLet _ }
-  fun      { Token TcFun _ }
-  and      { Token TcAnd _ }
-  if       { Token TcIf _ }
-  then     { Token TcThen _ }
-  else     { Token TcElse _ }
-  begin    { Token TcBegin _ }
-  end      { Token TcEnd _ }
-  in       { Token TcIn _ }
-  external { Token TcExternal _ }
-  val      { Token TcVal _ }
-  true     { Token TcTrue _ }
-  false    { Token TcFalse _ }
-  match    { Token TcMatch _ }
-  with     { Token TcWith _ }
-  function { Token TcFunction _ }
-  type     { Token TcType _ }
-  of       { Token TcOf _ }
-  module   { Token TcModule _ }
-  open     { Token TcOpen _ }
+  let      { Token TcLet _ _ }
+  fun      { Token TcFun _ _ }
+  and      { Token TcAnd _ _ }
+  if       { Token TcIf _ _ }
+  then     { Token TcThen _ _ }
+  else     { Token TcElse _ _ }
+  begin    { Token TcBegin _ _ }
+  end      { Token TcEnd _ _ }
+  in       { Token TcIn _ _ }
+  external { Token TcExternal _ _ }
+  val      { Token TcVal _ _ }
+  true     { Token TcTrue _ _ }
+  false    { Token TcFalse _ _ }
+  match    { Token TcMatch _ _ }
+  with     { Token TcWith _ _ }
+  function { Token TcFunction _ _ }
+  type     { Token TcType _ _ }
+  of       { Token TcOf _ _ }
+  module   { Token TcModule _ _ }
+  open     { Token TcOpen _ _ }
 
-  ','      { Token TcComma _ }
-  '.'      { Token TcDot _ }
-  ':'      { Token TcColon _ }
-  ';;'     { Token TcTopSep _ }
-  ';'      { Token TcSemicolon _ }
-  '('      { Token TcOParen _ }
-  ')'      { Token TcCParen _ }
-  '@{'     { Token TcAtBrace _ }
-  '?'      { Token TcQuestion _ }
-  '{'      { Token TcOBrace _ }
-  '}'      { Token TcCBrace _ }
-  '['      { Token TcOSquare _ }
-  ']'      { Token TcCSquare _ }
+  ','      { Token TcComma _ _ }
+  '.'      { Token TcDot _ _ }
+  ':'      { Token TcColon _ _ }
+  ';;'     { Token TcTopSep _ _ }
+  ';'      { Token TcSemicolon _ _ }
+  '('      { Token TcOParen _ _ }
+  ')'      { Token TcCParen _ _ }
+  '@{'     { Token TcAtBrace _ _ }
+  '?'      { Token TcQuestion _ _ }
+  '{'      { Token TcOBrace _ _ }
+  '}'      { Token TcCBrace _ _ }
+  '['      { Token TcOSquare _ _ }
+  ']'      { Token TcCSquare _ _ }
 
-  op       { Token (TcOp _) _ }
-  ident    { Token (TcIdentifier _) _ }
-  opid     { Token (TcOpIdent _) _ }
-  conid    { Token (TcConIdent _) _ }
-  qident   { Token (TcIdentifierQual _ _) _ }
-  qopid    { Token (TcOpIdentQual _ _) _ }
-  qconid   { Token (TcConIdentQual _ _) _ }
-  qdotid   { Token (TcDotQual _) _ }
-  access   { Token (TcAccess _) _ }
-  tyvar    { Token (TcTyvar _) _ }
-  hole     { Token (TcHole _) _ }
-  int      { Token (TcInteger _) _ }
-  float    { Token (TcFloat _) _ }
-  string   { Token (TcString  _) _ }
+  op       { Token (TcOp _) _ _ }
+  ident    { Token (TcIdentifier _) _ _ }
+  opid     { Token (TcOpIdent _) _ _ }
+  conid    { Token (TcConIdent _) _ _ }
+  qident   { Token (TcIdentifierQual _ _) _ _ }
+  qopid    { Token (TcOpIdentQual _ _) _ _ }
+  qconid   { Token (TcConIdentQual _ _) _ _ }
+  qdotid   { Token (TcDotQual _) _ _ }
+  access   { Token (TcAccess _) _ _ }
+  tyvar    { Token (TcTyvar _) _ _ }
+  hole     { Token (TcHole _) _ _ }
+  int      { Token (TcInteger _) _ _ }
+  float    { Token (TcFloat _) _ _ }
+  string   { Token (TcString  _) _ _ }
 
-  '$begin' { Token TcVBegin _ }
-  '$end'   { Token TcVEnd _ }
-  '$in'    { Token TcVIn _ }
-  '$sep'   { Token TcVSep _ }
+  '$begin' { Token TcVBegin _ _ }
+  '$end'   { Token TcVEnd _ _ }
+  '$in'    { Token TcVIn _ _ }
+  '$sep'   { Token TcVSep _ _ }
 
 
 %expect 7
@@ -359,27 +359,27 @@ tuplePattern xs a = PTuple xs a
 
 varE = VarRef . Name . T.pack
 
-getIdent  (Token (TcOp x) _)         = x
-getIdent  (Token (TcIdentifier x) _) = x
-getIdent  (Token (TcOpIdent x) _)    = x
-getIdent  (Token (TcConIdent x) _)   = x
-getIdent  (Token (TcAccess x) _)     = x
-getIdent  (Token (TcTyvar x) _)      = x
+getIdent  (Token (TcOp x) _ _)         = x
+getIdent  (Token (TcIdentifier x) _ _) = x
+getIdent  (Token (TcOpIdent x) _ _)    = x
+getIdent  (Token (TcConIdent x) _ _)   = x
+getIdent  (Token (TcAccess x) _ _)     = x
+getIdent  (Token (TcTyvar x) _ _)      = x
 
-getName (Token (TcOp x) _)                = Name x
-getName (Token (TcIdentifier x) _)        = Name x
-getName (Token (TcOpIdent x) _)           = Name x
-getName (Token (TcConIdent x) _)          = Name x
-getName (Token (TcIdentifierQual ms x) _) = foldl (flip InModule) (Name x) ms
-getName (Token (TcOpIdentQual ms x) _)    = foldl (flip InModule) (Name x) ms
-getName (Token (TcConIdentQual ms x) _)   = foldl (flip InModule) (Name x) ms
-getName (Token (TcDotQual ms) _)          = foldl (flip InModule) (Name (last ms)) (init ms)
-getName (Token (TcTyvar x) _)             = Name x
+getName (Token (TcOp x) _ _)                = Name x
+getName (Token (TcIdentifier x) _ _)        = Name x
+getName (Token (TcOpIdent x) _ _)           = Name x
+getName (Token (TcConIdent x) _ _)          = Name x
+getName (Token (TcIdentifierQual ms x) _ _) = foldl (flip InModule) (Name x) ms
+getName (Token (TcOpIdentQual ms x) _ _)    = foldl (flip InModule) (Name x) ms
+getName (Token (TcConIdentQual ms x) _ _)   = foldl (flip InModule) (Name x) ms
+getName (Token (TcDotQual ms) _ _)          = foldl (flip InModule) (Name (last ms)) (init ms)
+getName (Token (TcTyvar x) _ _)             = Name x
 
-getHole   (Token (TcHole x) _)       = x
-getInt    (Token (TcInteger x) _)    = x
-getFloat  (Token (TcFloat x) _)      = x
-getString (Token (TcString  x) _)    = x
+getHole   (Token (TcHole x) _ _)       = x
+getInt    (Token (TcInteger x) _ _)    = x
+getFloat  (Token (TcFloat x) _ _)      = x
+getString (Token (TcString  x) _ _)    = x
 getL      (L x _)                    = x
 
 forallTy vs t = foldr TyPi t (map (flip Implicit Nothing) vs)

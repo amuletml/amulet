@@ -22,7 +22,7 @@ result file contents =
     (Nothing, es) -> displayPlain $ prettyErrs es
 
   where writeToks _ _ [] = empty
-        writeToks l f t@(Token tc p:ts)
+        writeToks l f t@(Token tc p _:ts)
           | spLine p > l = empty <##> writeToks (l + 1) True t
           | f
           = string (replicate (spCol p - 1) ' ' ++ show tc) <> writeToks l False ts

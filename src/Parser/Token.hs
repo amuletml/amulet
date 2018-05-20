@@ -143,10 +143,10 @@ instance Show TokenClass where
 
   show TcEOF = "<eof>"
 
-data Token = Token !TokenClass !SourcePos deriving Show
+data Token = Token !TokenClass !SourcePos !SourcePos deriving Show
 
 instance Spanned Token where
-  annotation (Token _ s) = mkSpan1 s
+  annotation (Token _ s e) = mkSpanUnsafe s e
 
 friendlyName :: TokenClass -> String
 friendlyName TcVEnd = "end of block"

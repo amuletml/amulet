@@ -157,6 +157,10 @@ tokens :-
   <string> [^\\\"] { onStringM append }
 
 {
+
+fToken :: SourcePos -> SourcePos -> TokenClass -> Token
+fToken s e t = Token t s e
+
 parseNum :: Num a => a -> L.Text -> a
 parseNum radix = L.foldl' (\accum digit -> accum * radix + fromIntegral (digitToInt digit)) 0
 
@@ -166,37 +170,37 @@ parseDouble t = case (R.double . L.toStrict) t of
                   _ -> error "Cannot parse float"
 
 appendChar :: Char -> Action Token
-appendChar c _ _ = do
+appendChar c _ _ _ = do
   s <- getState
   setState $ s { stringBuffer = stringBuffer s <> B.singleton c }
   lexerScan -- Don't emit a token, just continue
 
 append :: L.Text -> Action Token
-append c _ _ = do
+append c _ _ _ = do
   s <- getState
   setState $ s { stringBuffer = stringBuffer s <> B.fromLazyText c }
   lexerScan -- Don't emit a token, just continue
 
 beginString, endString :: Action Token
-beginString (LI p _ _ _) _ = do
+beginString (LI p _ _ _) _ _ = do
   mapState $ \s -> s { tokenStart = p }
   setStartCode string
   lexerScan
-endString _ _ = do
+endString _ _ ep = do
   s <- getState
   setState $ s { stringBuffer = "" }
   setStartCode 0
-  pure . flip Token (tokenStart s) .  TcString . L.toStrict . B.toLazyText . stringBuffer $ s
+  pure . fToken (tokenStart s) ep .  TcString . L.toStrict . B.toLazyText . stringBuffer $ s
 
 beginComment, endComment :: Action Token
-beginComment (LI p _ _ _) _ = do
+beginComment (LI p _ _ _) _ _ = do
   s <- getState
   -- Increment the comment depth and set the mode to comments
   setState $ s { commentDepth = commentDepth s + 1
                , tokenStart = if commentDepth s == 0 then p else tokenStart s }
   setStartCode comment
   lexerScan
-endComment _ _ = do
+endComment _ _ _ = do
   s <- getState
   -- Decrement the comment depth and, if required, set the mode to normal
   setState $ s { commentDepth = commentDepth s - 1 }
@@ -204,55 +208,55 @@ endComment _ _ = do
   lexerScan
 
 beginModule, beginModuleOp, pushModule :: Action Token
-beginModule (LI p str _ _) len = do
+beginModule (LI p str _ _) len _ = do
   s <- getState
   setState $ s { modulePrefix = [ L.toStrict . L.take (pred len) $ str]
                , tokenStart = p }
   setStartCode modP
   lexerScan
-beginModuleOp (LI p str _ _) len = do
+beginModuleOp (LI p str _ _) len _ = do
   s <- getState
   setState $ s { modulePrefix = [ L.toStrict . L.tail . L.take (pred len) $ str]
                , tokenStart = p }
   setStartCode modOp
   lexerScan
-pushModule (LI _ str _ _) len = do
+pushModule (LI _ str _ _) len _ = do
   s <- getState
   setState $ s { modulePrefix = (L.toStrict . L.take (pred len) $ str) : modulePrefix s }
   lexerScan
 
 endModule, endModuleOp :: ([T.Text] -> T.Text -> TokenClass) -> Action Token
-endModule t (LI _ str _ _) len = do
+endModule t (LI _ str _ _) len ep = do
   s <- getState
   setState $ s { modulePrefix = [] }
   setStartCode 0
-  pure . flip Token (tokenStart s) .  t (modulePrefix s) . L.toStrict . L.take len $ str
+  pure . fToken (tokenStart s) ep .  t (modulePrefix s) . L.toStrict . L.take len $ str
 endModuleOp f = endModule (\xs x -> f xs (T.init x))
 
 endModuleNull :: ([T.Text] -> TokenClass) -> Action Token
-endModuleNull t (LI _ _ _ _) _ = do
+endModuleNull t (LI _ _ _ _) _ ep = do
   s <- getState
   setState $ s { modulePrefix = [] }
   setStartCode 0
-  pure (Token (t (modulePrefix s)) (tokenStart s))
+  pure (Token (t (modulePrefix s)) (tokenStart s) ep)
 
 lexOperator :: Action Token
-lexOperator (LI p str _ _) len =
+lexOperator (LI sp str _ _) len ep =
   let str' = L.toStrict . L.take len $ str
       -- We perform some special handling of a couple of fancy operators
       tok | str' == "∀" = TcForall
           | str' == "→" = TcArrow
           | otherwise = TcOp str'
-  in pure (Token tok p)
+  in pure (Token tok sp ep)
 
 constTok :: TokenClass -> Action Token
-constTok t (LI p _ _ _) _ = pure $! Token t p
+constTok t (LI sp _ _ _) _ ep = pure $! Token t sp ep
 
 onString :: (L.Text -> TokenClass) -> Action Token
-onString f (LI p str _ _) len = pure $! Token (f (L.take len str)) p
+onString f (LI sp str _ _) len ep = pure $! Token (f (L.take len str)) sp ep
 
 lexTok :: (T.Text -> TokenClass) -> Action Token
-lexTok k (LI p str _ _) len = pure (Token (k str') p) where
+lexTok k (LI sp str _ _) len ep = pure (Token (k str') sp ep) where
     str' = L.toStrict . L.take len $ str
 
 onStringM :: (L.Text -> Action a) -> Action a
@@ -281,7 +285,7 @@ lexerScan = do
       start <- tokenStart <$> getState
       code <- getStartCode
       case code of
-        0 -> Token TcEOF <$> getPos
+        0 -> (\p -> Token TcEOF p p) <$> getPos
         n | n == string -> failWith (UnclosedString (liPos inp) start)
         n | n == comment -> failWith (UnclosedComment (liPos inp) start)
         _ -> failWith (UnexpectedEnd (liPos inp))
@@ -293,6 +297,11 @@ lexerScan = do
       lexerScan
     AlexToken inp' _ action -> do
       setInput inp'
-      action inp (liIdx inp' - liIdx inp)
+      -- Determine when this token ends. For the sake of the argument, we
+      -- assume all tokens exist on a single line.
+      let ep = case liPos inp' of
+                 SourcePos { spCol = 1 } -> liPos inp
+                 SourcePos f l c -> SourcePos f l (c - 1)
+      action inp (liIdx inp' - liIdx inp) ep
 
 }
