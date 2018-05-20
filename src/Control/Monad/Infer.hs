@@ -49,6 +49,7 @@ import Data.List
 import Text.Pretty.Semantic
 import Text.Pretty.Note
 
+import Syntax.Transform
 import Syntax.Pretty
 import Syntax.Types
 import Syntax.Subst
@@ -254,10 +255,9 @@ instance Pretty TypeError where
               string "Rigid type variable" <+> skol <+> string "has escaped its scope of" <+> pretty _skolScope
                   <#> note <+> string "the variable" <+> skol <+> string "was rigidified because"
                         <+> nest 8 (prettyMotive _skolMotive <> comma)
-                  <#> indent 8 (string "and is represented by constant" <+> stypeSkol (pretty _skolIdent)) 
             _ -> foldr ((<#>) . pretty . flip EscapedSkolems t . pure) empty esc
          , empty -- a line break
-         , note <+> string "in type" <+> verbatim t
+         , note <+> string "in type" <+> verbatim (withoutSkol t)
          ]
 
   pretty (NotPromotable c x err) =
@@ -267,19 +267,19 @@ instance Pretty TypeError where
          , err
          ]
 
-  pretty (SkolBinding (Skolem k v _ m) b) =
+  pretty (SkolBinding (Skolem ok v _ m) b) =
     vsep [ string "Could not match rigid type variable" <+> skol <+> string "with" <+> whatIs b
          , note <+> "the variable" <+> skol <+> string "was rigidified because" <+> prettyMotive m
-         , indent 8 (string "and is represented by the constant") <+> stypeSkol (pretty k)
          ] <#> case b of
              TySkol (Skolem k v _ m) ->
-               vcat [ empty
+               vcat [ indent 8 (string "and is represented by the constant") <+> stypeSkol (pretty ok)
+                    , empty
                     , vsep [ note <+> "the rigid type variable" <+> stypeVar (pretty v) <> comma <+> string "in turn" <> comma
                            , indent 8 (string "was rigidified because") <+> prettyMotive m
                            , indent 8 (string "and is represented by the constant") <+> stypeSkol (pretty k) ] ]
              _ -> empty
     where whatIs (TySkol (Skolem _ v _ _)) = string "the rigid type variable" <+> stypeVar (pretty v)
-          whatIs t = string "the type" <+> pretty t
+          whatIs t = string "the type" <+> pretty (withoutSkol t)
           skol = stypeVar (pretty v)
 
   pretty (WrongQuantifier _ ty@(TyPi Explicit{} _)) =
@@ -351,3 +351,8 @@ squish f = Just . maybe f (.f)
 propagateBlame :: SomeReason -> TypeError -> TypeError
 propagateBlame x (ManyErrors xs) = ManyErrors (map (propagateBlame x) xs)
 propagateBlame x e = ArisingFrom e x
+
+withoutSkol :: Type p -> Type p
+withoutSkol = transformType go where
+  go (TySkol x) = TyVar (x ^. skolVar)
+  go x = x
