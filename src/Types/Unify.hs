@@ -8,6 +8,7 @@ import Control.Applicative
 import Control.Monad.Infer
 import Control.Lens hiding (Empty)
 
+import Types.Infer.Builtin hiding (subsumes, unify)
 import Types.Infer.Errors
 import Types.Wellformed
 
@@ -326,19 +327,3 @@ capture m = do
 
 catchy :: MonadError e m => m a -> m (Either e a)
 catchy x = (Right <$> x) `catchError` (pure . Left)
-
-firstName, secondName :: Var Typed
-firstName = TvName (TgName "$fst" (-32))
-secondName = TvName (TgName "$snd" (-33))
-
-firstTy, secondTy :: Type Typed
-firstTy = TyForall (TvName (TgName "a" (-30))) (Just TyType) (firstTy' (TyVar (TvName (TgName "a" (-30)))))
-secondTy = TyForall (TvName (TgName "a" (-30))) (Just TyType) (secondTy' (TyVar (TvName (TgName "a" (-30)))))
-
-firstTy', secondTy' :: Type Typed -> Type Typed
-firstTy' x = TyForall (TvName (TgName "b" (-31))) (Just TyType) (firstTy'' x (TyVar (TvName (TgName "b" (-31)))))
-secondTy' x = TyForall (TvName (TgName "b" (-31))) (Just TyType) (secondTy'' x (TyVar (TvName (TgName "b" (-31)))))
-
-firstTy'', secondTy'' :: Type Typed -> Type Typed -> Type Typed
-firstTy'' x y = TyArr (TyTuple x y) x
-secondTy'' x y = TyArr (TyTuple x y) y

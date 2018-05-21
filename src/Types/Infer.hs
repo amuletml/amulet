@@ -403,4 +403,3 @@ solveEx _ ss cs = transformExprTyped go id goType where
 
 consFst :: Functor m => a -> m ([a], b) -> m ([a], b)
 consFst = fmap . first . (:)
-
