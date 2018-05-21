@@ -397,10 +397,9 @@ solveEx _ ss cs = transformExprTyped go id goType where
   goWrap (WrapVar v) = goWrap $ Map.findWithDefault err v cs where
     err = error $ "Unsolved wrapper variable " ++ show v ++ ". This is a bug"
   goWrap IdWrap = IdWrap
-  goWrap (WrapFn f) = WrapFn f
+  goWrap (WrapFn f) = WrapFn . flip MkWrapCont (desc f) $ solveEx undefined ss cs . runWrapper f
 
   goType = apply ss
 
 consFst :: Functor m => a -> m ([a], b) -> m ([a], b)
 consFst = fmap . first . (:)
-

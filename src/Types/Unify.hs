@@ -1,5 +1,5 @@
 {-# LANGUAGE MultiWayIf, GADTs, FlexibleContexts, ScopedTypeVariables, TemplateHaskell #-}
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TupleSections, OverloadedStrings #-}
 module Types.Unify (solve, overlap, bind, skolemise, freshSkol) where
 
 import Control.Monad.Except
@@ -8,6 +8,7 @@ import Control.Applicative
 import Control.Monad.Infer
 import Control.Lens hiding (Empty)
 
+import Types.Infer.Builtin hiding (subsumes, unify)
 import Types.Infer.Errors
 import Types.Wellformed
 
@@ -18,6 +19,7 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
 import Data.Sequence (Seq ((:<|), Empty))
+import Data.Spanned
 import Data.Foldable
 import Data.Function
 import Data.List
@@ -263,8 +265,30 @@ subsumes k t1 t2@TyPi{} | isSkolemisable t2 = do
   (Syntax.:>) c <$> subsumes k t1 t2'
 subsumes k t1@TyPi{} t2 | isSkolemisable t1 = do
   (cont, _, t1') <- instantiate t1
-  let wrap = maybe IdWrap (WrapFn . MkWrapCont) cont
-  (Syntax.:>) wrap <$> subsumes k t1' t2
+  let wrap = maybe IdWrap (WrapFn . flip MkWrapCont "forall <= sigma; instantiation") cont
+
+  flip (Syntax.:>) wrap <$> subsumes k t1' t2
+
+subsumes k nt@(TyTuple a' b') ot@(TyTuple a b) = do
+  wa <- subsumes k a a'
+  wb <- subsumes k b b'
+  var <- fresh
+  let ref an = VarRef (TvName var) (an, ot)
+      firstElem an ex = App (ExprWrapper (TypeApp b) (ExprWrapper (TypeApp a)
+                                                        (VarRef firstName (an, firstTy))
+                                                        (an, firstTy' a))
+                                (an, firstTy'' a b)) ex (an, a)
+      secondElem an ex = App (ExprWrapper (TypeApp b) (ExprWrapper (TypeApp a)
+                                                        (VarRef secondName (an, secondTy))
+                                                        (an, secondTy' a))
+                                (an, secondTy'' a b)) ex (an, b)
+      cont ex
+        | an <- annotation ex =
+          Let [(TvName var, ex, (an, ot))]
+           (Tuple [ExprWrapper wa (firstElem an (ref an)) (an, a'), ExprWrapper wb (secondElem an (ref an)) (an, b')] (an, nt))
+           (an, nt)
+  pure (WrapFn (MkWrapCont cont "tuple re-packing"))
+
 subsumes k a b = Cast <$> k a b
 
 skolemise :: MonadGen Int m => SkolemMotive Typed -> Type Typed -> m (Wrapper Typed, Type Typed)
