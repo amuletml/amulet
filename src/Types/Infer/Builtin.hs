@@ -164,3 +164,19 @@ gadtConResult :: Type p -> Type p
 gadtConResult (TyForall _ _ t) = gadtConResult t
 gadtConResult (TyArr _ t) = t
 gadtConResult t = t
+
+firstName, secondName :: Var Typed
+firstName = TvName (TgName "$fst" (-32))
+secondName = TvName (TgName "$snd" (-33))
+
+firstTy, secondTy :: Type Typed
+firstTy = TyForall (TvName (TgName "a" (-30))) (Just TyType) (firstTy' (TyVar (TvName (TgName "a" (-30)))))
+secondTy = TyForall (TvName (TgName "a" (-30))) (Just TyType) (secondTy' (TyVar (TvName (TgName "a" (-30)))))
+
+firstTy', secondTy' :: Type Typed -> Type Typed
+firstTy' x = TyForall (TvName (TgName "b" (-31))) (Just TyType) (firstTy'' x (TyVar (TvName (TgName "b" (-31)))))
+secondTy' x = TyForall (TvName (TgName "b" (-31))) (Just TyType) (secondTy'' x (TyVar (TvName (TgName "b" (-31)))))
+
+firstTy'', secondTy'' :: Type Typed -> Type Typed -> Type Typed
+firstTy'' x y = TyArr (TyTuple x y) x
+secondTy'' x y = TyArr (TyTuple x y) y

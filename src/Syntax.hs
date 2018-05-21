@@ -123,7 +123,7 @@ data Wrapper p
   | WrapFn (WrapCont p)
   | IdWrap
 
-newtype WrapCont p = MkWrapCont { runWrapper :: Expr p -> Expr p }
+data WrapCont p = MkWrapCont { runWrapper :: Expr p -> Expr p, desc :: String }
 
 deriving instance Typeable p => Typeable (WrapCont p)
 instance Typeable p => Data (WrapCont p) where
@@ -133,7 +133,9 @@ instance Typeable p => Data (WrapCont p) where
 
 instance Eq (WrapCont p) where _ == _ = False
 instance Ord (WrapCont p) where _ `compare` _ = GT
-instance Show (WrapCont p) where show _ = "<wrapper continuation>"
+
+instance Show (WrapCont p) where
+  show = desc
 
 infixr 5 :>
 
