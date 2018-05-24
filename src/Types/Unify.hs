@@ -264,7 +264,7 @@ subsumes k t1 t2@TyPi{} | isSkolemisable t2 = do
   (c, t2') <- skolemise (BySubsumption (apply sub t1) (apply sub t2)) t2
   (Syntax.:>) c <$> subsumes k t1 t2'
 subsumes k t1@TyPi{} t2 | isSkolemisable t1 = do
-  (cont, _, t1') <- instantiate t1
+  (cont, _, t1') <- instantiate Subsumption t1
   let wrap = maybe IdWrap (WrapFn . flip MkWrapCont "forall <= sigma; instantiation") cont
 
   flip (Syntax.:>) wrap <$> subsumes k t1' t2

@@ -98,7 +98,7 @@ decompose :: ( Reasonable f p
           -> Type Typed
           -> m (Type Typed, Type Typed, Expr Typed -> Expr Typed)
 decompose r p ty@TyForall{} = do
-  (k', _, t) <- instantiate ty
+  (k', _, t) <- instantiate Expression ty
   (a, b, k) <- decompose r p t
   let cont = fromMaybe id k'
   pure (a, b, cont . k)
@@ -115,7 +115,7 @@ quantifier :: (Reasonable f p, MonadInfer Typed m)
            -> Type Typed
            -> m (TyBinder Typed, Type Typed, Expr Typed -> Expr Typed)
 quantifier r ty@TyForall{} = do
-  (k', _, t) <- instantiate ty
+  (k', _, t) <- instantiate Expression ty
   (a, b, k) <- quantifier r t
   pure (a, b, fromMaybe id k' . k)
 quantifier _ (TyPi x b) = pure (x, b, id)
@@ -162,6 +162,7 @@ instance (Pretty (Var p), Reasonable Pattern p, Reasonable Expr p) => Reasonable
 
 gadtConResult :: Type p -> Type p
 gadtConResult (TyForall _ _ t) = gadtConResult t
+gadtConResult (TyPi Explicit{} t) = gadtConResult t
 gadtConResult (TyArr _ t) = t
 gadtConResult t = t
 

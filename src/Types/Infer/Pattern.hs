@@ -120,9 +120,8 @@ boundTvs p vs = pat p <> foldTele go vs where
 
 skolGadt :: MonadInfer Typed m => Var Resolved -> Type Typed -> m (Type Typed)
 skolGadt var ty =
-  let result (TyForall _ _ t) = result t
+  let result (TyPi _ t) = result t
       result (TyWithConstraints _ t) = result t
-      result (TyArr _ t) = result t
       result t = t
 
       related (TyWithConstraints cs _) = cs

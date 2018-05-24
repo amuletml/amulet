@@ -1,3 +1,6 @@
-type foo 'a
+(* This used to be a very simple test regarding polytypes under constructors,
+ * but we allow that *)
 
-let main : foo (forall 'a. 'a) = main
+type id 'a = Id of 'a
+
+let foo : id (forall 'a. 'a -> 'a) = Id (fun x -> x)

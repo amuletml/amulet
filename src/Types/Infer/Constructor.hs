@@ -38,8 +38,7 @@ inferCon ret c@(GeneralisedCon nm cty ann) = do
     Left e -> throwError (gadtConShape (cty, ret) (gadtConResult cty) e)
     Right _ -> pure ()
 
-  let generalise (TyForall v k t) = TyForall v k <$> generalise t
-      generalise (TyArr a t) = TyArr a <$> generalise t
+  let generalise (TyPi q t) = TyPi q <$> generalise t
       generalise ty = case solve 1 (Seq.singleton (ConUnify (BecauseOf c) var ret ty)) of
         Right (x, _) -> do
           tell (map (\(x, y) -> (TyVar x, y)) (Map.toAscList x))
