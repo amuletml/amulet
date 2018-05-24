@@ -20,6 +20,7 @@ module Control.Monad.Infer
   , instantiate
   , extendKind, extendManyK
   , SomeReason(..), Reasonable, propagateBlame
+  , WhyInstantiate(..)
 
   -- lenses:
   , values, types, typeVars
@@ -102,6 +103,8 @@ data TypeError where
   NotPromotable :: Pretty (Var p) => Var p -> Type p -> Doc -> TypeError
   ManyErrors :: [TypeError] -> TypeError
 
+data WhyInstantiate = Expression | Subsumption
+
 instance (Ord (Var p), Substitutable p (Type p)) => Substitutable p (Constraint p) where
   ftv (ConUnify _ _ a b) = ftv a `Set.union` ftv b
   ftv (ConSubsume _ _ a b) = ftv a `Set.union` ftv b
@@ -126,7 +129,7 @@ lookupTy :: (MonadError TypeError m, MonadReader Env m, MonadGen Int m) => Var R
 lookupTy x = do
   rs <- view (values . at x)
   case rs of
-    Just t -> thd3 <$> instantiate t
+    Just t -> thd3 <$> instantiate Expression t
     Nothing -> throwError (NotInScope x)
 
 lookupTy' :: (MonadError TypeError m, MonadReader Env m, MonadGen Int m) => Var Resolved
@@ -134,7 +137,7 @@ lookupTy' :: (MonadError TypeError m, MonadReader Env m, MonadGen Int m) => Var 
 lookupTy' x = do
   rs <- view (values . at x)
   case rs of
-    Just t -> instantiate t
+    Just t -> instantiate Expression t
     Nothing -> throwError (NotInScope x)
 
 runInfer :: MonadGen Int m
@@ -163,21 +166,32 @@ alpha :: [Text]
 alpha = map T.pack $ [1..] >>= flip replicateM ['a'..'z']
 
 instantiate :: MonadGen Int m
-            => Type Typed
+            => WhyInstantiate
+            -> Type Typed
             -> m ( Maybe (Expr Typed -> Expr Typed)
                  , Type Typed
                  , Type Typed)
-instantiate tp@(TyPi (Implicit v _) ty) = do
+instantiate r tp@(TyPi (Implicit v _) ty) = do
   var <- TyVar . TvName <$> case unTvName v of
     TgInternal n -> TgName n <$> gen
     TgName n _ -> TgName n <$> gen
   let map = Map.singleton v var
 
       appThisTy e = ExprWrapper (TypeApp var) e (annotation e, apply map ty)
-  (k, _, t) <- instantiate (apply map ty)
+  (k, _, t) <- instantiate r (apply map ty)
   pure (squish appThisTy k, tp, t)
-instantiate tp@(TyPi (Anon co) od@dm) = do
-  (wrap, _, dm) <- instantiate dm
+instantiate Expression tp@(TyPi Explicit{} _) = pure (Just id, tp, tp) -- nope!
+instantiate Subsumption tp@(TyPi (Explicit v k) ty) = do
+  var <- TyVar . TvName <$> case unTvName v of
+    TgInternal n -> TgName n <$> gen
+    TgName n _ -> TgName n <$> gen
+  let map = Map.singleton v var
+      appThisTy e = App e (InstType var (annotation e, k)) (annotation e, apply map ty)
+
+  (k, _, t) <- instantiate Subsumption (apply map ty)
+  pure (squish appThisTy k, tp, t)
+instantiate r tp@(TyPi (Anon co) od@dm) = do
+  (wrap, _, dm) <- instantiate r dm
   let cont = fromMaybe id wrap
   var <- fresh
   let ty = TyPi (Anon co) dm
@@ -188,7 +202,7 @@ instantiate tp@(TyPi (Anon co) od@dm) = do
         = Fun (PType (Capture (TvName var) (ann, co)) co (ann, co)) (cont (App e (VarRef (TvName var) (ann, co)) (ann, od))) (ann, ty)
 
   pure (Just lam, tp, ty)
-instantiate ty = pure (Just id, ty, ty)
+instantiate _ ty = pure (Just id, ty, ty)
 
 freshTV :: MonadGen Int m => m (Type Typed)
 freshTV = TyVar . TvName <$> fresh

@@ -115,7 +115,7 @@ inferKind (TyCon v) = do
   case x of
     Nothing -> throwError (NotInScope v)
     Just k -> do
-      (_, _, k) <- instantiate k
+      (_, _, k) <- instantiate Expression k
       pure (TyCon (TvName v), k)
 
 inferKind (TyPromotedCon v) = do
@@ -123,7 +123,7 @@ inferKind (TyPromotedCon v) = do
   case x of
     Nothing -> throwError (NotInScope v)
     Just k -> do
-      (_, _, k) <- instantiate k
+      (_, _, k) <- instantiate Expression k
       case promoteOrError k of
         Nothing -> pure (TyPromotedCon (TvName v), k)
         Just err -> throwError (NotPromotable (TvName v) k err)
@@ -144,7 +144,7 @@ inferKind (TyApp f x) = do
     Anon d -> do
       x <- checkKind x d
       case x of
-        TyForall{} -> throwError (ImpredicativeApp f x)
+        -- TyForall{} -> throwError (ImpredicativeApp f x)
         _ -> pure (TyApp f x, c)
     Explicit v k -> do
       x <- checkKind x k
