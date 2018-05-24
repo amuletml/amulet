@@ -1,5 +1,8 @@
 {
-module Parser (parseInput) where
+module Parser
+  ( parseTops
+  , parseRepl
+  ) where
 
 import Control.Arrow (second)
 
@@ -19,7 +22,9 @@ import Syntax
 
 }
 
-%name parseInput Tops
+%name parseTops Tops
+%name parseRepl Repl
+
 %tokentype { Token }
 %monad { Parser } { (>>=) } { return }
 %lexer { lexer } { Token TcEOF _ _ }
@@ -122,6 +127,15 @@ Ctor :: { Constructor Parsed }
      : conid                                   { withPos1 $1 $ UnitCon (getName $1) }
      | conid of Type                           { withPos2 $1 $3 $ ArgCon (getName $1) (getL $3) }
      | conid ':' Type                          { withPos2 $1 $3 $ GeneralisedCon (getName $1) (getL $3) }
+
+Repl :: { Either (Toplevel Parsed) (Expr Parsed) }
+     : Top   ReplSep                           { Left $1 }
+     | Expr  ReplSep                           { Right $1 }
+
+ReplSep :: { () }
+    : ';;'   { () }
+    | '$sep' { () }
+    |        { () }
 
 Expr :: { Expr Parsed }
      : ExprApp                                 { $1 }

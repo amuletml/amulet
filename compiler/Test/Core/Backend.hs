@@ -25,7 +25,7 @@ import Text.Pretty.Semantic
 
 result :: String -> T.Text -> T.Text
 result file contents = runGen $ do
-  let (Just parsed, _) = runParser file (L.fromStrict contents) parseInput
+  let (Just parsed, _) = runParser file (L.fromStrict contents) parseTops
   Right (resolved, _) <- resolveProgram RS.builtinScope RS.emptyModules parsed
   desugared <- desugarProgram resolved
   Right (inferred, env) <- inferProgram builtinsEnv desugared

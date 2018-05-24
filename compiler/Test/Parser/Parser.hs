@@ -16,7 +16,7 @@ import Text.Pretty.Semantic
 
 result :: String -> T.Text -> T.Text
 result file contents =
-  case runParser file (L.fromStrict contents) parseInput of
+  case runParser file (L.fromStrict contents) parseTops of
     (Just res, []) -> displayPlain $ Right <$> pretty res
     (Just res, es) -> displayPlain $ (Right <$> pretty res) <##>
                        string "(*" <##> indent 2 (prettyErrs es) <##> string "*)"

@@ -38,7 +38,7 @@ import Text.Pretty.Semantic (Pretty(pretty), putDoc, (<+>), colon)
 
 import Parser.Wrapper (runParser)
 import Parser.Error (ParseError)
-import Parser (parseInput)
+import Parser (parseTops)
 
 import Errors (reportS)
 
@@ -63,7 +63,7 @@ compile (file:files) = runGen $ do
 
   where
     go (Right (tops, scope, modScope, env)) (name, file) =
-      case runParser name (L.fromStrict file) parseInput of
+      case runParser name (L.fromStrict file) parseTops of
         (Just parsed, _) -> do
           resolved <- resolveProgram scope modScope parsed
           case resolved of

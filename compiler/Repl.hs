@@ -10,7 +10,9 @@ import qualified Data.Text.Lazy as L
 import qualified Data.Text as T
 
 import qualified Data.VarMap as VarMap
+import Data.Traversable
 import Data.Foldable
+import Data.Spanned
 import Data.Functor
 
 import qualified Foreign.Lua as L
@@ -22,14 +24,16 @@ import qualified Syntax.Resolve.Scope as R
 import qualified Syntax.Resolve.Toplevel as R
 import Syntax.Resolve (resolveProgram)
 import Syntax.Desugar (desugarProgram)
+import qualified Syntax as S
 
 import qualified Control.Monad.Infer as T
 import qualified Types.Infer as I
 import Types.Infer (inferProgram)
 
 import Parser.Wrapper (runParser)
-import Parser (parseInput)
+import Parser (parseRepl)
 
+import qualified Core.Core as C
 import Core.Lower (runLowerT, lowerProg)
 import Core.Optimise.Reduce
 import Core.Occurrence
@@ -95,44 +99,54 @@ runRepl = do
       core <- runGenTFrom (lastGen state) $ parseCore state line
       case core of
         Nothing -> pure ()
-        Just (core, state) -> do
+        Just (vs, core, state) -> do
           let (luaStmt, escape') = B.emitProgramWith (inferScope state) (escapeScope state) (tagOccursVar core)
               luaSyntax = T.unpack . display . uncommentDoc . renderPretty 0.8 100 . pretty
                           . LuaDo . map patchupLua
                           $ luaStmt
 
           liftIO $ do
-            error <- L.runLuaWith (luaState state) $ do
+            res <- L.runLuaWith (luaState state) $ do
               code <- L.dostring luaSyntax
+
               case code of
-                L.OK -> pure Nothing
-                err -> do
-                  msg <- L.tostring L.stackTop
-                  L.pop 0
-                  pure . Just . (,) err . T.unpack . T.decodeLatin1 $ msg
+                L.OK -> do
+                  vs' <- for vs $ \(v, ty) -> do
+                    L.getglobal (T.unpack (B.getVar v escape'))
+                    val <- T.decodeLatin1 <$> L.tostring L.stackTop
+                    L.pop 1
+                    pure (pretty v <+> colon <+> pretty ty <+> equals <+> text val)
+
+                  pure (vsep vs')
+                _ -> do
+                  msg <- T.decodeLatin1 <$> L.tostring L.stackTop
+                  L.pop 1
+
+                  pure (text msg <+> parens (shown code))
 
             hFlush stdout
             hFlush stderr
 
-            case error of
-              Nothing -> pure ()
-              Just (code, err) -> putStrLn $ err ++ " (" ++ show code ++")"
-
+            putDoc res
 
           put state { escapeScope = escape' }
 
 
-    parseCore :: (MonadGen Int m, MonadIO m) => ReplState -> String -> m (Maybe ([Stmt CoVar], ReplState))
+    parseCore :: (MonadGen Int m, MonadIO m) => ReplState -> String -> m (Maybe ([(CoVar, C.Type CoVar)], [Stmt CoVar], ReplState))
     parseCore state input = do
       let files = [("=stdin", T.pack input)]
-          (parsed, parseMsg) = runParser "=stdin" (L.pack input) parseInput
+          (parsed, parseMsg) = runParser "=stdin" (L.pack input) parseRepl
       liftIO $ traverse_ (`reportS`files) parseMsg
 
       case parsed of
         Nothing -> pure Nothing
         Just parsed -> do
+          let parsed' = case parsed of
+                          Left s -> [s]
+                          Right e -> [S.LetStmt [(S.Name "_out", e, annotation e)]]
+
           let rScope = resolveScope state
-          resolved <- resolveProgram rScope (moduleScope state) parsed
+          resolved <- resolveProgram rScope (moduleScope state) parsed'
           case resolved of
             Left es -> liftIO $ traverse_ (`reportS`files) es $> Nothing
             Right (resolved, modScope') -> do
@@ -141,7 +155,7 @@ runRepl = do
               case infered of
                 Left es -> liftIO $ traverse_ (`reportS`files) es $> Nothing
                 Right (prog, env') -> do
-                  let (var, tys) = R.extractToplevels parsed
+                  let (var, tys) = R.extractToplevels parsed'
                       (var', tys') = R.extractToplevels resolved
 
                   -- We don't perform any complex optimisations, but run one reduction pass in order
@@ -149,7 +163,10 @@ runRepl = do
                   -- effective.
                   lower <- reducePass <$> runLowerT (lowerProg prog)
                   lastG <- gen
-                  pure $ Just ( lower
+                  pure $ Just ( case last lower of
+                                  (C.StmtLet vs) -> map (\(v, t, _) -> (v, t)) vs
+                                  _ -> []
+                              , lower
                               , state { resolveScope = rScope { R.varScope = R.insertN (R.varScope rScope) (zip var var')
                                                               , R.tyScope  = R.insertN (R.tyScope rScope)  (zip tys tys')
                                                               }
