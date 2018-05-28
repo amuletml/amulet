@@ -302,7 +302,7 @@ instance Pretty TypeError where
          , indent 4 $ string "Have you forgotten an instantiation?"
          , empty
          , note <+> "You can use a hole like"
-             <+> pretty ((InstHole undefined) :: Expr Typed) <+> "to make the compiler infer this"
+             <+> pretty (InstHole undefined :: Expr Typed) <+> "to make the compiler infer this"
          ]
   pretty (WrongQuantifier t ty@TyArr{}) =
     vsep [ thing <+> "given as argument to function of type" <+> pretty ty

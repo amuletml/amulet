@@ -46,7 +46,7 @@ equivalent a b =
 disjoint a b = not (a `equivalent` b)
 
 
-data Blame p = Blame Span
+newtype Blame p = Blame Span
 
 instance Reasonable Blame p where
   blame _ = string "a test"

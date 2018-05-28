@@ -56,7 +56,7 @@ bind var ty
       assum <- use solveAssumptions
       noTouch <- view don'tTouch
       ty <- pure (apply env ty) -- shadowing
-      if (var `Set.member` noTouch && var `Map.member` assum)
+      if var `Set.member` noTouch && var `Map.member` assum
          then unify ty (apply env (assum Map.! var))
          else -- Attempt to extend the environment, otherwise unify with existing type
             case Map.lookup var env of
@@ -172,7 +172,7 @@ unify ta@(TyExactRows arow) tb@(TyExactRows brow)
 
 unify x tp@TyRows{} = throwError (Note (CanNotInstance tp x) isRec)
 unify tp@TyRows{} x = throwError (Note (CanNotInstance tp x) isRec)
-unify (TyTuple a b) (TyTuple a' b') = do
+unify (TyTuple a b) (TyTuple a' b') =
   ProdCo <$> unify a a' <*> unify b b'
 
 unify TyType TyType = pure (ReflCo TyType)
@@ -225,7 +225,7 @@ doSolve (ConSubsume because v a b :<| xs) = do
   co <- catchy $ subsumes unify (apply sub a) (apply sub b)
   case co of
     Left e -> tell [propagateBlame because e]
-    Right co -> solveCoSubst . at v .= Just (co)
+    Right co -> solveCoSubst . at v .= Just co
 
   doSolve xs
 doSolve (ConImplies because not cs ts :<| xs) = do
@@ -236,11 +236,11 @@ doSolve (ConImplies because not cs ts :<| xs) = do
       ts' = apply before ts
   do
     let go = local (bindSkol .~ True) . local (don'tTouch .~ mempty) $ doSolve cs'
-    ((), sub) <- capture $ go
+    ((), sub) <- capture go
 
     solveAssumptions .= (sub ^. solveAssumptions <> sub ^. solveTySubst)
 
-    local (don'tTouch %~ Set.union not') $ do
+    local (don'tTouch %~ Set.union not') $
       doSolve (fmap (apply (sub ^. solveTySubst)) ts')
         `catchError` \e -> tell [ArisingFrom e because]
 

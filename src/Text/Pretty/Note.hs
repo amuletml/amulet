@@ -1,7 +1,6 @@
 {-# LANGUAGE OverloadedStrings
            , MultiParamTypeClasses
-           , FunctionalDependencies
-#-}
+           , FunctionalDependencies #-}
 module Text.Pretty.Note
   ( NoteKind(..)
   , NoteStyle

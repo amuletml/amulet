@@ -1,8 +1,6 @@
 {-# LANGUAGE FlexibleContexts
   , ConstraintKinds
   , OverloadedStrings
-  , LambdaCase
-  , RecordWildCards
   , MultiParamTypeClasses
   , TupleSections #-}
 

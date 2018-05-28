@@ -82,7 +82,7 @@ substituteInTys = term where
   ptrn m (PatExtend f fs) = PatExtend (ptrn m f) (map (second (ptrn m)) fs)
   ptrn _ l@PatLit{} = l
 
-  gotype m = substituteInType m
+  gotype = substituteInType
 
 substituteInType :: IsVar a => VarMap.Map (Type a) -> Type a -> Type a
 substituteInType = gotype where
