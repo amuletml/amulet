@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleContexts, TupleSections, GADTs #-}
-{-# LANGUAGE ScopedTypeVariables, RankNTypes, RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables, RankNTypes  #-}
 module Types.Infer
   ( inferProgram
   , builtinsEnv

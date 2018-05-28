@@ -98,7 +98,7 @@ resolveTyDeclKind reason tycon args cons = solveForKind reason $ do
     pure kind
 
 solveForKind :: MonadKind m => SomeReason -> KindT m (Type Typed) -> m (Type Typed)
-solveForKind reason k = solveK (closeOver reason) reason k
+solveForKind reason = solveK (closeOver reason) reason
 
 solveK :: MonadKind m => (Type Typed -> m (Type Typed)) -> SomeReason -> KindT m (Type Typed) -> m (Type Typed)
 solveK cont reason k = do
@@ -180,10 +180,10 @@ checkKind (TyExactRows rs) k = do
     pure (row, ty)
   pure (TyExactRows rs)
 
-checkKind (TyTuple a b) (TyTuple ak bk) = do
+checkKind (TyTuple a b) (TyTuple ak bk) =
   TyTuple <$> checkKind a ak <*> checkKind b bk
 
-checkKind (TyTuple a b) ek = do
+checkKind (TyTuple a b) ek =
   TyTuple <$> checkKind a ek <*> checkKind b ek
 
 checkKind (TyPi binder b) ek = do

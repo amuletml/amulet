@@ -1,4 +1,4 @@
-{-# LANGUAGE LambdaCase, ScopedTypeVariables #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Syntax.Raise (raiseT) where
 
 import Control.Arrow

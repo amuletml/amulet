@@ -80,7 +80,7 @@ foundHole hole ht sub = helpMaybe (FoundHole hole ty) where
 
   helpMaybe
     | null skolvars = id
-    | otherwise = \e -> Note e help
+    | otherwise = (`Note` help)
 
   help :: Doc
   help =

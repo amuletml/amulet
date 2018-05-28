@@ -116,7 +116,7 @@ checkStmt s t@(StmtLet vs:xs) = do
 
   checkStmt s' xs
 checkStmt s t@(Type v ctors:xs) = do
-  tryContext t $ do
+  tryContext t $
     -- Ensure we're declaring a type
     unless (varInfo v == TypeConVar) (throwError (InfoIllegal v TypeConVar (varInfo v)))
 

@@ -92,9 +92,9 @@ compileFromTo :: [(FilePath, T.Text)]
 compileFromTo fs emit =
   case compile fs of
     CSuccess _ _ core env -> emit (compileProgram env core)
-    CParse es -> traverse_ (flip reportS fs) es
-    CResolve es -> traverse_ (flip reportS fs) es
-    CInfer es -> traverse_ (flip reportS fs) es
+    CParse es -> traverse_ (`reportS` fs) es
+    CResolve es -> traverse_ (`reportS` fs) es
+    CInfer es -> traverse_ (`reportS` fs) es
 
 test :: [(FilePath, T.Text)] -> IO (Maybe ([Stmt CoVar], Env))
 test fs = do
@@ -115,9 +115,9 @@ test fs = do
       putStrLn "\x1b[1;32m(* Compiled: *)\x1b[0m"
       putDoc (pretty (compileProgram env optm))
       pure (Just (core, env))
-    CParse es -> Nothing <$ traverse_ (flip reportS fs) es
-    CResolve es -> Nothing <$ traverse_ (flip reportS fs) es
-    CInfer es -> Nothing <$ traverse_ (flip reportS fs) es
+    CParse es -> Nothing <$ traverse_ (`reportS` fs) es
+    CResolve es -> Nothing <$ traverse_ (`reportS` fs) es
+    CInfer es -> Nothing <$ traverse_ (`reportS` fs) es
 
 testTc :: [(FilePath, T.Text)] -> IO (Maybe ([Stmt CoVar], Env))
 testTc fs = do
@@ -132,9 +132,9 @@ testTc fs = do
       ifor_ (difference env builtinsEnv ^. types . to toMap) . curry $ \(k :: Var Resolved, t) ->
         putDoc (pretty k <+> colon <+> pretty t)
       pure (Just (core, env))
-    CParse es -> Nothing <$ traverse_ (flip reportS fs) es
-    CResolve es -> Nothing <$ traverse_ (flip reportS fs) es
-    CInfer es -> Nothing <$ traverse_ (flip reportS fs) es
+    CParse es -> Nothing <$ traverse_ (`reportS` fs) es
+    CResolve es -> Nothing <$ traverse_ (`reportS` fs) es
+    CInfer es -> Nothing <$ traverse_ (`reportS` fs) es
 
 data CompilerOption = Test | TestTc | Out String
   deriving (Show)

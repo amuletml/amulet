@@ -68,7 +68,7 @@ deadCodePass = snd . freeS emptyScope Nothing where
 
   freeT s (Match t bs) =
     let (ft, t') = freeA s t
-        (fbs, bs') = unzip $ map (armBody %%~ (freeT s)) bs
+        (fbs, bs') = unzip $ map (armBody %%~ freeT s) bs
         pbs = map (VarSet.fromList . map (toVar . fst) . view armVars) bs
 
         matchFree = mconcat (zipWith VarSet.difference fbs pbs)
