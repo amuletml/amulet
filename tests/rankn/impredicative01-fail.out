@@ -1,10 +1,8 @@
-impredicative01-fail.ml[3:5 ..3:37]: error
-  Illegal use of polymorphic type `{'a : 'n}. 'a`
-    as argument to the type function `foo`
-  • Note: instantiating a type variable (the argument to `foo`)
-    with a polymorphic type constitutes impredicative polymorphism
+impredicative01-fail.ml[6:38 ..6:52]: error
+  Could not match type {'a : type}. 'a -> 'a with 'ae -> 'ae
+  Have you applied a function to the wrong number of arguments?
 
-  Arising in the declaration
+  Arising in the expression
   │ 
-3 │ let main : foo (forall 'a. 'a) = main
+6 │ let foo : id (forall 'a. 'a -> 'a) = Id (fun x -> x)
   │ 
