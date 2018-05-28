@@ -15,6 +15,7 @@ import Data.Foldable
 import Data.Spanned
 import Data.Functor
 
+import qualified Foreign.Lua.Api.Types as L
 import qualified Foreign.Lua as L
 
 import System.Console.Haskeline hiding (display)
@@ -111,11 +112,8 @@ runRepl = do
 
               case code of
                 L.OK -> do
-                  vs' <- for vs $ \(v, ty) -> do
-                    L.getglobal (T.unpack (B.getVar v escape'))
-                    val <- T.decodeLatin1 <$> L.tostring L.stackTop
-                    L.pop 1
-                    pure (pretty v <+> colon <+> pretty ty <+> equals <+> text val)
+                  vs' <- for vs $ \(v, ty) -> displayLuaAsAmulet (L.getglobal (T.unpack (B.getVar v escape'))) $ \t ->
+                    pure (pretty v <+> colon <+> pretty ty <+> equals <+> t)
 
                   pure (vsep vs')
                 _ -> do
@@ -181,5 +179,40 @@ patchupLua :: LuaStmt -> LuaStmt
 patchupLua (LuaLocal vs es) = LuaAssign vs es
 patchupLua x = x
 
+displayLuaAsAmulet :: L.Lua () -> (Doc -> L.Lua a) -> L.Lua a
+displayLuaAsAmulet getVal cont = do
+  getVal
+  t <- L.ltype L.stackTop
+  cont =<< case t of
+    L.TypeString -> do
+      sstring . dquotes . text . T.decodeLatin1
+        <$> L.tostring L.stackTop
+    L.TypeNumber -> do
+      sliteral . text . T.decodeLatin1 <$> L.tostring L.stackTop
+    L.TypeNone -> error "Invalid stack index"
+    L.TypeNil -> pure (keyword "()")
+    L.TypeBoolean -> do
+      b <- L.toboolean L.stackTop
+      pure . sliteral . text $ if b then "true" else "false"
+    L.TypeFunction -> pure (keyword "<function>")
+    L.TypeTable -> do
+      table <- L.absindex L.stackTop
+      L.pushnil
+      let loop :: L.Lua Bool -> L.Lua [Doc]
+          loop cont = do
+            weDo <- cont 
+            if weDo
+               then do
+                 k <- text . T.decodeLatin1 <$> L.tostring (-2)
+                 v <- displayLuaAsAmulet (pure ()) pure
+                 (:) (k <+> equals <+> v) <$> loop cont
+               else pure []
+      enclose (lbrace <> space) (space <> rbrace)
+        . hsep . punctuate comma <$> loop (L.next table)
+    _ -> pure (keyword "<foreign value>")
+
+    <* L.pop 1
+
 main :: IO ()
 main = defaultState >>= evalStateT (runInputT defaultSettings runRepl)
+
