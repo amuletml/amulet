@@ -1,0 +1,12 @@
+print : string -> unit
+Unit : {'a : type}. ('a ~ unit) ⊃ repr 'a
+Pair : {'a : type}. {'a : type}. {'b : type}. ('a ~ 'a * 'b) ⊃ (repr 'a * repr 'b) -> repr 'a
+Int : {'a : type}. ('a ~ int) ⊃ repr 'a
+Some : {'a : type}. 'a -> option 'a
+None : {'a : type}. option 'a
+<$> : {'a : type}. {'a : type}. ('a -> 'a) -> option 'a -> option 'a
+<*> : {'a : type}. {'a : type}. option ('a -> 'a) -> option 'a -> option 'a
+cast : {'a : type}. {'b : type}. repr 'a -> repr 'b -> 'a -> option 'b
+main : unit
+repr : type -> type
+option : type -> type

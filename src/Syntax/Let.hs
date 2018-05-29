@@ -48,3 +48,4 @@ bound (Capture p _)       = Set.singleton p
 bound (PType p _ _)       = bound p
 bound Wildcard{}          = mempty
 bound PLiteral{}          = mempty
+bound (PWrapper _ p _)    = bound p

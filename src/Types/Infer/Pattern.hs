@@ -9,6 +9,7 @@ import Control.Monad.Infer
 import Control.Lens
 
 import Data.Traversable
+import Data.Spanned
 import Data.List
 
 import Types.Kinds
@@ -73,14 +74,14 @@ checkPattern ex@(Destructure con ps ann) target =
             case pty of
               TyWithConstraints cs ty -> (cs, ty)
               _ -> ([], pty)
-      _ <- unify ex ty target
-      pure (Destructure (TvName con) Nothing (ann, ty), mempty, cs)
+      co <- unify ex ty target
+      wrapPattern (Destructure (TvName con) Nothing, mempty, cs) (ann, ty) co
     Just p ->
       let go cs t = do
             (c, d, _) <- decompose ex _TyArr t
             (ps', b, cs') <- checkPattern p c
-            _ <- unify ex d target
-            pure (Destructure (TvName con) (Just ps') (ann, d), b, cs ++ cs')
+            co <- unify ex d target
+            wrapPattern (Destructure (TvName con) (Just ps'), b, cs ++ cs') (ann, d) co
       in do
         t <- skolGadt con =<< lookupTy con
         case t of
@@ -91,18 +92,18 @@ checkPattern pt@(PRecord rows ann) ty = do
   (rowps, rowts, caps, cons) <- unzip4 <$> for rows (\(var, pat) -> do
     (p', t, caps, cs) <- inferPattern pat
     pure ((var, p'), (var, t), caps, cs))
-  _ <- unify pt ty (TyRows rho rowts)
-  pure (PRecord rowps (ann, TyRows rho rowts), mconcat caps, concat cons)
+  co <- unify pt ty (TyRows rho rowts)
+  wrapPattern (PRecord rowps, mconcat caps, concat cons) (ann, TyRows rho rowts) co
 checkPattern pt@(PType p t ann) ty = do
   (p', it, binds, cs) <- inferPattern p
   t' <- resolveKind (BecauseOf pt) t
   _ <- subsumes pt t' it
-  _ <- unify pt ty t'
-  pure (PType p' t' (ann, t'), binds, cs)
+  co <- unify pt ty t'
+  wrapPattern (PType p' t', binds, cs) (ann, t') co
 checkPattern pt ty = do
   (p, ty', binds, cs) <- inferPattern pt
-  _ <- unify pt ty ty'
-  pure (p, binds, cs)
+  (_, co) <- unify pt ty' ty
+  pure (PWrapper (co, ty') p (annotation p, ty'), binds, cs)
 
 boundTvs :: forall p. (Show (Var p), Ord (Var p))
          => Pattern p -> Telescope p -> Set.Set (Var p)
@@ -117,6 +118,7 @@ boundTvs p vs = pat p <> foldTele go vs where
   pat (PRecord ps _) = foldMap (pat . snd) ps
   pat (PTuple ps _) = foldMap pat ps
   pat PLiteral{} = mempty
+  pat (PWrapper _ p _) = pat p
 
 skolGadt :: MonadInfer Typed m => Var Resolved -> Type Typed -> m (Type Typed)
 skolGadt var ty =
@@ -138,3 +140,9 @@ skolGadt var ty =
      vs <- for (Set.toList (ftv ty `Set.difference` fugitives)) $ \v ->
        (v,) <$> freshSkol (ByExistential (TvName var) ty) ty v
      pure $ apply (Map.fromList vs) ty
+
+wrapPattern :: Applicative f => (Ann Typed -> Pattern Typed, Telescope Typed, [(Type Typed, Type Typed)])
+            -> Ann Typed
+            -> (Type Typed, Wrapper Typed)
+            -> f (Pattern Typed, Telescope Typed, [(Type Typed, Type Typed)])
+wrapPattern (k, t, s) (ann, it) (ty, w) = pure (PWrapper (w, it) (k (ann, ty)) (ann, it), t, s)
