@@ -92,7 +92,13 @@ check (Match t ps a) ty = do
       local (typeVars %~ Set.union tvs) $
         local (values %~ focus ms) (check e ty)
     pure (p', bd)
-  pure (Match t ps (a, ty))
+  let ((p, _):_) = ps
+      invert (Cast co) = Cast (SymCo co)
+      invert w = w
+  sc <- case p of
+    PWrapper (w, t') _ _ -> pure $ ExprWrapper (invert w) t (annotation t, t')
+    _ -> pure t
+  pure (Match sc ps (a, ty))
 
 check (Access rc key a) ty = do
   rho <- freshTV

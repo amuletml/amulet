@@ -323,6 +323,7 @@ lowerPat (PTuple xs _) =
         pure (PatExtend (PatLit RecNil) [("1", x'), ("2", xs')])
    in go xs
 lowerPat (PLiteral l _) = pure (PatLit (lowerLiteral l))
+lowerPat (PWrapper _ p _) = lowerPat p
 
 lowerProg, lowerProg' :: forall m. MonadLower m => [Toplevel Typed] -> m [Stmt]
 lowerProg' [] = pure []
@@ -422,6 +423,7 @@ patternTyvars = asks . flip (go . ctors)
     go s (PRecord xs _) = concatMap (go s . snd) xs
     go s (PTuple xs _) = concatMap (go s) xs
     go _ (PLiteral _ _) = []
+    go s (PWrapper _ p _) = go s p
 
     rootType fs (ForallTy Irrelevant f c) =
       let d = VarSet.difference (freeInTy f) (freeInTy c)

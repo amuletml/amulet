@@ -153,6 +153,7 @@ data Pattern p
   | PRecord [(Text, Pattern p)] (Ann p)
   | PTuple [Pattern p] (Ann p)
   | PLiteral Lit (Ann p)
+  | PWrapper (Wrapper p, Type p) (Pattern p) (Ann p)
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Pattern p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Pattern p)

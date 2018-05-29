@@ -386,7 +386,7 @@ squishCoercion (Application c d)
     SameRepr (AppTy t x) (AppTy s y)
 squishCoercion (Symmetry co)
   | Just (a, b) <- relates co =
-    SameRepr a b
+    SameRepr b a
 squishCoercion (ExactRecord rs)
   | all (isJust . (^? _SameRepr) . view _2) rs =
     let co (t, SameRepr a b) = ((t, a), (t, b))
