@@ -307,10 +307,11 @@ makePrisms ''Lit
 makeLenses ''Skolem
 makeLenses ''TyBinder
 
-instance (Spanned (Constructor p), Ann p ~ Span) => Spanned (Toplevel p) where
-  annotation (LetStmt ((_, _, x):vs)) = sconcat (x :| map thd3 vs)
+instance (Spanned (Constructor p), Spanned (Ann p)) => Spanned (Toplevel p) where
+  annotation (LetStmt [(_, _, x)]) = annotation x
+  annotation (LetStmt ((_, _, x):vs)) = sconcat (annotation x :| map (annotation . thd3) vs)
   annotation (TypeDecl _ _ (x:xs)) = sconcat (annotation x :| map annotation xs)
-  annotation (ForeignVal _ _ _ x) = x
+  annotation (ForeignVal _ _ _ x) = annotation x
   annotation _ = internal
 
 _TyArr :: Prism' (Type p) (Type p, Type p)

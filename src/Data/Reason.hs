@@ -8,7 +8,6 @@ module Data.Reason
 
 import Data.Functor.Const
 import Data.Spanned
-import Data.Span
 import Data.Data
 
 import Syntax.Pretty
@@ -42,7 +41,7 @@ instance (Spanned (Expr p), Pretty (Var p)) => Reasonable Expr p where
 instance (Data p, Data (Ann p), Data (Var p), Pretty (Var p)) => Reasonable Constructor p where
   blame _ = string "the" <+> highlight "constructor"
 
-instance (Ann p ~ Span, Data p, Data (Ann p), Data (Var p), Pretty (Var p)) => Reasonable Toplevel p where
+instance (Spanned (Ann p), Data p, Data (Ann p), Data (Var p), Pretty (Var p)) => Reasonable Toplevel p where
   blame _ = string "the" <+> highlight "declaration"
 
 instance Reasonable (Const SomeReason) p where

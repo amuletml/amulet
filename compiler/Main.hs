@@ -25,6 +25,7 @@ import Syntax.Resolve (ResolveError, resolveProgram)
 import qualified Syntax.Resolve.Scope as RS
 import Syntax.Resolve.Toplevel (extractToplevels)
 import Syntax.Desugar (desugarProgram)
+import Syntax.Verify
 import Syntax (Toplevel, Typed)
 
 import Core.Simplify (optimise)
@@ -47,6 +48,7 @@ data CompileResult
   | CParse   [ParseError]
   | CResolve [ResolveError]
   | CInfer   [TypeError]
+  | CVerify  [VerifyError]
 
 compile :: [(SourceName, T.Text)] -> CompileResult
 compile [] = error "Cannot compile empty input"
@@ -72,14 +74,17 @@ compile (file:files) = runGen $ do
               infered <- inferProgram env desugared
               case infered of
                 Right (prog, env') ->
-                  let (var, tys) = extractToplevels parsed
-                      (var', tys') = extractToplevels resolved
-                  in pure $ Right (tops ++ prog
-                                  , scope { RS.varScope = RS.insertN (RS.varScope scope) (zip var var')
-                                          , RS.tyScope  = RS.insertN (RS.tyScope scope)  (zip tys tys')
-                                          }
-                                  , modScope'
-                                  , env')
+                  case runVerify (verifyProgram prog) of
+                    Right () ->
+                      let (var, tys) = extractToplevels parsed
+                          (var', tys') = extractToplevels resolved
+                      in pure $ Right (tops ++ prog
+                                      , scope { RS.varScope = RS.insertN (RS.varScope scope) (zip var var')
+                                              , RS.tyScope  = RS.insertN (RS.tyScope scope)  (zip tys tys')
+                                              }
+                                      , modScope'
+                                      , env')
+                    Left es -> pure $ Left $ CVerify (toList es)
                 Left e -> pure $ Left $ CInfer e
             Left e -> pure $ Left $ CResolve e
         (Nothing, es) -> pure $ Left $ CParse es
@@ -95,6 +100,7 @@ compileFromTo fs emit =
     CParse es -> traverse_ (`reportS` fs) es
     CResolve es -> traverse_ (`reportS` fs) es
     CInfer es -> traverse_ (`reportS` fs) es
+    CVerify es -> traverse_ (`reportS` fs) es
 
 test :: D.DebugMode -> [(FilePath, T.Text)] -> IO (Maybe ([Stmt CoVar], Env))
 test mode fs =
@@ -103,6 +109,7 @@ test mode fs =
     CParse es -> Nothing <$ traverse_ (`reportS` fs) es
     CResolve es -> Nothing <$ traverse_ (`reportS` fs) es
     CInfer es -> Nothing <$ traverse_ (`reportS` fs) es
+    CVerify es -> Nothing <$ traverse_ (`reportS` fs) es
 
 data CompilerOption = Test | TestTc | Out String
   deriving (Show)
