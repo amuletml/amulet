@@ -110,6 +110,7 @@ instance (Pretty (Var p)) => Pretty (Pattern p) where
   pretty (PRecord rows _) = record (prettyRows equals rows)
   pretty (PTuple ps _) = parens (hsep (punctuate comma (map pretty ps)))
   pretty (PLiteral l _) = pretty l
+  pretty (PWrapper _ p _) = pretty p
 
 instance Pretty Lit where
   pretty (LiStr s) = sstring (dquotes (text s))

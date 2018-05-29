@@ -158,6 +158,7 @@ transformPatternTyped fp ft = goP where
   transP (PRecord fs a) = PRecord (map (second goP) fs) (goA a)
   transP (PTuple ps a) = PTuple (map goP ps) (goA a)
   transP (PLiteral l a) = PLiteral l (goA a)
+  transP (PWrapper c p a) = PWrapper c (goP p) (goA a)
 
   goA (s, ty) = (s, goT ty)
   goT = ft

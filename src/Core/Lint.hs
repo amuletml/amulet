@@ -322,7 +322,7 @@ checkTerm s t@(Cast x co) = do
       pure (ExactRowsTy first, RowsTy (ExactRowsTy bs) ts)
     checkCo co@CoercionVar{} = throwError (InvalidCoercion co)
     checkCo (Symmetry x) = do
-      (a,  b) <- checkCo x
+      (a, b) <- checkCo x
       pure (b, a)
     checkCo (Domain x) = do
       (f, t) <- checkCo x
