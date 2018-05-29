@@ -18,3 +18,6 @@ class Spanned a where
                   Nothing -> Nothing
 
 instance Spanned Span
+
+instance Spanned a => Spanned (a, b) where
+  annotation (x, _) = annotation x

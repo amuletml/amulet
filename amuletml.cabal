@@ -134,6 +134,7 @@ library amulet
                      , Syntax.Types
                      , Syntax.Subst
                      , Syntax.Pretty
+                     , Syntax.Verify
                      , Syntax.Desugar
                      , Syntax.Transform
                      -- Renamer

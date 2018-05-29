@@ -63,3 +63,4 @@ instance Semigroup Span where
     | x == internal = y
     | y == internal = x
     | otherwise = error $ "<> spans of different files: " ++ fa ++ ", " ++ fb
+
