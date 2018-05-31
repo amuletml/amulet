@@ -33,6 +33,8 @@ import Types.Infer (inferProgram)
 
 import Parser.Wrapper (runParser)
 import Parser (parseRepl)
+import Parser.Token
+import Parser.Error
 
 import qualified Core.Core as C
 import Core.Lower (runLowerT, lowerProg)
@@ -49,6 +51,7 @@ import Backend.Lua.Syntax
 import Text.Pretty.Semantic
 
 import Errors
+import Debug.Trace
 
 data ReplState = ReplState
   { resolveScope :: R.Scope
@@ -87,10 +90,28 @@ runRepl = do
   line <- getInputLine "> "
   case line of
     Nothing -> pure ()
+    Just "" -> runRepl
     Just (':':cmd) -> execCommand cmd
-    Just line -> lift (execString line) >> runRepl
+    Just line -> getInput line False >>= (lift . execString) >> runRepl
 
   where
+    getInput input empty =
+      case runParser "=stdin" (L.pack input) parseRepl of
+        (Nothing, xs) ->
+          case last xs of
+            UnclosedString{} -> continue
+            UnclosedComment{} -> continue
+            UnexpectedEnd{} -> continue
+            UnexpectedToken (Token TcEOF _ _) _ -> continue
+            _ -> pure input
+        _ -> pure input
+        where continue = do
+                line <- getInputLine ". "
+                case line of
+                  Nothing -> pure input
+                  Just "" | empty -> pure input
+                  Just line -> getInput (input ++ '\n':line) (line == "")
+
     execCommand "quit" = pure ()
     execCommand "q" = pure ()
     execCommand _ = runRepl
@@ -148,6 +169,7 @@ runRepl = do
           case resolved of
             Left es -> liftIO $ traverse_ (`reportS`files) es $> Nothing
             Right (resolved, modScope') -> do
+              traceShow (pretty resolved) (pure ())
               desugared <- desugarProgram resolved
               infered <- inferProgram (inferScope state) desugared
               case infered of
@@ -184,10 +206,10 @@ displayLuaAsAmulet getVal cont = do
   getVal
   t <- L.ltype L.stackTop
   cont =<< case t of
-    L.TypeString -> do
+    L.TypeString ->
       sstring . dquotes . text . T.decodeLatin1
         <$> L.tostring L.stackTop
-    L.TypeNumber -> do
+    L.TypeNumber ->
       sliteral . text . T.decodeLatin1 <$> L.tostring L.stackTop
     L.TypeNone -> error "Invalid stack index"
     L.TypeNil -> pure (keyword "()")
@@ -200,7 +222,7 @@ displayLuaAsAmulet getVal cont = do
       L.pushnil
       let loop :: L.Lua Bool -> L.Lua [Doc]
           loop cont = do
-            weDo <- cont 
+            weDo <- cont
             if weDo
                then do
                  k <- text . T.decodeLatin1 <$> L.tostring (-2)
@@ -215,4 +237,3 @@ displayLuaAsAmulet getVal cont = do
 
 main :: IO ()
 main = defaultState >>= evalStateT (runInputT defaultSettings runRepl)
-

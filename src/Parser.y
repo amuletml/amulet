@@ -15,6 +15,7 @@ import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.Text as T
 
 import Parser.Wrapper
+import Parser.Context
 import Parser.Error
 import Parser.Lexer
 import Parser.Token
@@ -327,8 +328,20 @@ lexer :: (Token -> Parser a) -> Parser a
 lexer = (lexerContextScan >>=)
 
 parseError :: (Token, [String]) -> Parser a
-parseError (tok, exp) = failWith (UnexpectedToken tok (nub (map unmap exp)))
+parseError (tok, exp) = do
+  stk <- pending <$> getState
+  case findEof stk of
+    Nothing -> failWith mainErr
+    Just (Token _ _ e) -> failWiths [mainErr, UnexpectedEnd e]
+
   where
+    mainErr = UnexpectedToken tok (nub (map unmap exp))
+
+    findEof :: PendingState -> Maybe Token
+    findEof (Working t@(Token TcEOF _ _)) = Just t
+    findEof (Result _ s) = findEof s
+    findEof _ = Nothing
+
     unmap :: String -> String
     unmap "'$end'" = friendlyName TcVEnd
     unmap "'$sep'" = friendlyName TcVSep
