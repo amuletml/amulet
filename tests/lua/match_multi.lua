@@ -1,7 +1,7 @@
 do
   local function main (f)
-    local ao = f(nil)
-    return ao.a + ao.b
+    local al = f(nil)
+    return al.a + al.b
   end
   main()
 end

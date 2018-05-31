@@ -272,15 +272,14 @@ subsumes k t1@TyPi{} t2 | isSkolemisable t1 = do
 subsumes k nt@(TyTuple a' b') ot@(TyTuple a b) = do
   wa <- subsumes k a a'
   wb <- subsumes k b b'
-  [var, elem, elem'] <- fmap TvName <$> replicateM 3 fresh
-  let ref an = VarRef var (an, ot)
-      firstElem an ex = Match ex [ ( PTuple [ Capture elem (an, a), Wildcard (an, b) ] (an, ot), VarRef elem (an, a) )] (an, a)
-      secondElem an ex = Match ex [ ( PTuple [ Wildcard (an, a), Capture elem' (an, b) ] (an, ot), VarRef elem' (an, b) )] (an, b)
-      cont ex
+  [elem, elem'] <- fmap TvName <$> replicateM 2 fresh
+  let cont ex
         | an <- annotation ex =
-          Let [(var, ex, (an, ot))]
-           (Tuple [ExprWrapper wa (firstElem an (ref an)) (an, a'), ExprWrapper wb (secondElem an (ref an)) (an, b')] (an, nt))
-           (an, nt)
+          Match ex [ ( PTuple [ Capture elem (an, a), Capture elem' (an, b) ] (an, ot)
+                     , Tuple [ ExprWrapper wa (VarRef elem (an, a)) (an, a')
+                             , ExprWrapper wb (VarRef elem' (an, b)) (an, b') ]
+                             (an, nt)) ]
+                   (an, nt)
   pure (WrapFn (MkWrapCont cont "tuple re-packing"))
 
 subsumes k a@(TyApp lazy _) b@(TyApp lazy' _)
