@@ -1,0 +1,7 @@
+lazy02-fail.ml[2:17 ..2:19]: error
+  Could not match type string with int
+
+  Arising in the expression
+  │ 
+2 │ let bar : int = foo
+  │ 
