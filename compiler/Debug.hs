@@ -6,7 +6,6 @@ module Debug
 
 import Control.Lens
 
-import Syntax.Pretty (tidyPrettyType)
 import Control.Monad.Infer
 import Syntax.Types
 import Syntax
@@ -17,6 +16,8 @@ import Core.Var
 import Backend.Lua
 
 import Text.Pretty.Semantic
+
+import Repl.Display
 
 data DebugMode = Void | Test | TestTc
 
@@ -36,10 +37,10 @@ dump Test ast core optm lua penv env = do
   putDoc (pretty ast)
   putStrLn "\x1b[1;32m(* Type inference: *)\x1b[0m"
   ifor_ (difference env penv ^. values . to toMap) . curry $ \(k :: Var Resolved, t :: Type Typed) ->
-    putDoc (pretty k <+> colon <+> tidyPrettyType t)
+    putDoc (pretty k <+> colon <+> displayType t)
   putStrLn "\x1b[1;32m(* Kind inference: *)\x1b[0m"
   ifor_ (difference env penv ^. types ^. to toMap) . curry $ \(k :: Var Resolved, t) ->
-    putDoc (pretty k <+> colon <+> pretty t)
+    putDoc (pretty k <+> colon <+> displayType t)
   putStrLn "\x1b[1;32m(* Core lowering: *)\x1b[0m"
   putDoc (pretty core)
   putStrLn "\x1b[1;32m(* Optimised: *)\x1b[0m"

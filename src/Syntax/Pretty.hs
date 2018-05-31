@@ -223,7 +223,7 @@ prettyOneBinding n v = hsep (pretty n:map pretty args) <> sig <+> nest 2 (equals
 tidyPrettyType :: (Show (Var p), Pretty (Var p), Ord (Var p)) => Type p -> Doc
 tidyPrettyType = pretty . applyCons
 
-applyCons :: (Show (Var p), Ord (Var p)) => Type p -> Type p
+applyCons :: Ord (Var p) => Type p -> Type p
 applyCons x@TyCon{} = x
 applyCons x@TyVar{} = x
 applyCons x@TySkol{} = x

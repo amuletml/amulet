@@ -43,6 +43,8 @@ import Core.Occurrence
 import Core.Core (Stmt)
 import Core.Var
 
+import Control.Lens
+
 import qualified Backend.Lua.Postprocess as B
 import qualified Backend.Lua.Emit as B
 import qualified Backend.Escape as B
@@ -50,6 +52,7 @@ import Backend.Lua.Syntax
 
 import Text.Pretty.Semantic
 
+import Repl.Display
 import Errors
 import Debug
 
@@ -141,8 +144,12 @@ runRepl = do
 
               case code of
                 L.OK -> do
-                  vs' <- for vs $ \(v, ty) -> displayLuaAsAmulet (L.getglobal (T.unpack (B.getVar v escape'))) $ \t ->
-                    pure (pretty v <+> colon <+> pretty ty <+> equals <+> t)
+                  vs' <- for vs $ \(v, _) -> displayLuaAsAmulet (L.getglobal (T.unpack (B.getVar v escape'))) $ \t -> do
+                    let CoVar id nam _ = v
+                        var = S.TgName nam id
+                    case inferScope state' ^. T.values . at var of
+                      Just ty -> pure (pretty v <+> colon <+> displayType ty <+> equals <+> t)
+                      Nothing -> error "variable not bound in infer scope?"
 
                   pure (vsep vs')
                 _ -> do
