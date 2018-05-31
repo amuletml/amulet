@@ -10,7 +10,9 @@ import qualified Data.VarSet as VarSet
 import Backend.Lua.Syntax
 import Backend.Lua.Emit
 import Backend.Escape
+import Core.Builtin
 import Core.Var
+
 
 {-|
   Walks the Lua tree and identifies which operators are not fully applied
@@ -23,6 +25,23 @@ addOperators stmt =
 
   where
     genOp :: CoVar -> LuaStmt
+    genOp op | op == vLAZY =
+      LuaLocal [ LuaName "__builtin_Lazy" ]
+               [ LuaFunction [ eks ]
+                 [ LuaReturn (LuaTable [ (LuaNumber 1, LuaRef eks)
+                                       , (LuaNumber 2, LuaFalse)
+                                       ]) ] ]
+    genOp op | op == vForce =
+      LuaLocal [ LuaName "__builtin_force" ]
+               [ LuaFunction [ eks ]
+                 [ LuaIf (LuaRef (LuaIndex (LuaRef eks) (LuaNumber 2)))
+                    [ LuaReturn ( LuaRef (LuaIndex (LuaRef eks) (LuaNumber 1)) ) ]
+                    [ LuaAssign [ LuaIndex (LuaRef eks) (LuaNumber 1)
+                                , LuaIndex (LuaRef eks) (LuaNumber 2) ]
+                                [ LuaCall (LuaRef (LuaIndex (LuaRef eks) (LuaNumber 1)))
+                                   []
+                                , LuaTrue]
+                    , LuaReturn (LuaRef (LuaIndex (LuaRef eks) (LuaNumber 1))) ] ] ]
     genOp op =
       let name =  getVar op escapeScope
       in LuaLocal [LuaName name]
@@ -65,6 +84,8 @@ addOperators stmt =
     opsVar (LuaIndex t k) = opsExpr t <> opsExpr k
 
     opNames = Map.filter (`VarMap.member` ops) (fromLua escapeScope)
+                `Map.union` Map.fromList [ ( "__builtin_Lazy", vLAZY ), ( "__builtin_force", vForce ) ]
 
     left  = LuaName "l"
     right = LuaName "r"
+    eks = LuaName "x"

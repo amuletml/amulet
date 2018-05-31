@@ -289,6 +289,32 @@ subsumes k nt@(TyTuple a' b') ot@(TyTuple a b) = do
            (an, nt)
   pure (WrapFn (MkWrapCont cont "tuple re-packing"))
 
+subsumes k a@(TyApp lazy _) b@(TyApp lazy' _)
+  | lazy == lazy', lazy' == tyLazy = Cast <$> k a b
+
+subsumes k ty (TyApp lazy ty') | lazy == tyLazy, _TyVar `isn't` ty = do
+  co <- k ty' ty
+  let wrap ex
+        | an <- annotation ex =
+          App (ExprWrapper (TypeApp ty) (VarRef forceName (an, forceTy))
+                (an, forceTy' ty))
+              (ExprWrapper (Cast (AppCo (ReflCo tyLazy) co)) ex (an, TyApp lazy ty))
+              (an, ty)
+  pure (WrapFn (MkWrapCont wrap "automatic forcing"))
+
+subsumes k (TyApp lazy ty) ty' | lazy == tyLazy, _TyVar `isn't` ty' = do
+  co <- k ty ty'
+  let wrap ex
+        | an <- annotation ex =
+          App (ExprWrapper (TypeApp ty) (VarRef lAZYName (an, lAZYTy))
+                (an, lAZYTy' ty))
+              (Fun (PLiteral LiUnit (an, tyUnit))
+                (ExprWrapper (Cast co) ex (an, ty'))
+                (an, TyArr tyUnit ty))
+              (an, TyApp lazy ty)
+  pure (WrapFn (MkWrapCont wrap "automatic forcing"))
+
+
 subsumes k a b = Cast <$> k a b
 
 skolemise :: MonadGen Int m => SkolemMotive Typed -> Type Typed -> m (Wrapper Typed, Type Typed)

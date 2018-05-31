@@ -75,6 +75,7 @@ opArity = VarMap.fromList
     , (vOpGt,  2), (vOpGtF,  2)
     , (vOpLe,  2), (vOpLeF,  2)
     , (vOpGe,  2), (vOpGeF,  2)
+    , (vLAZY,  2)
 
     , (vOpConcat,  2)
 
