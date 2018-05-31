@@ -272,19 +272,13 @@ subsumes k t1@TyPi{} t2 | isSkolemisable t1 = do
 subsumes k nt@(TyTuple a' b') ot@(TyTuple a b) = do
   wa <- subsumes k a a'
   wb <- subsumes k b b'
-  var <- fresh
-  let ref an = VarRef (TvName var) (an, ot)
-      firstElem an ex = App (ExprWrapper (TypeApp b) (ExprWrapper (TypeApp a)
-                                                        (VarRef firstName (an, firstTy))
-                                                        (an, firstTy' a))
-                                (an, firstTy'' a b)) ex (an, a)
-      secondElem an ex = App (ExprWrapper (TypeApp b) (ExprWrapper (TypeApp a)
-                                                        (VarRef secondName (an, secondTy))
-                                                        (an, secondTy' a))
-                                (an, secondTy'' a b)) ex (an, b)
+  [var, elem, elem'] <- fmap TvName <$> replicateM 3 fresh
+  let ref an = VarRef var (an, ot)
+      firstElem an ex = Match ex [ ( PTuple [ Capture elem (an, a), Wildcard (an, b) ] (an, ot), VarRef elem (an, a) )] (an, a)
+      secondElem an ex = Match ex [ ( PTuple [ Wildcard (an, a), Capture elem' (an, b) ] (an, ot), VarRef elem' (an, b) )] (an, b)
       cont ex
         | an <- annotation ex =
-          Let [(TvName var, ex, (an, ot))]
+          Let [(var, ex, (an, ot))]
            (Tuple [ExprWrapper wa (firstElem an (ref an)) (an, a'), ExprWrapper wb (secondElem an (ref an)) (an, b')] (an, nt))
            (an, nt)
   pure (WrapFn (MkWrapCont cont "tuple re-packing"))

@@ -325,15 +325,15 @@ lowerPat (PTuple xs _) =
 lowerPat (PLiteral l _) = pure (PatLit (lowerLiteral l))
 lowerPat (PWrapper _ p _) = lowerPat p
 
-lowerProg, lowerProg' :: forall m. MonadLower m => [Toplevel Typed] -> m [Stmt]
-lowerProg' [] = pure []
-lowerProg' (ForeignVal (TvName t) ex tp _:prg) =
-  (Foreign (mkVal t) (lowerType tp) ex:) <$> lowerProg' prg
-lowerProg' (LetStmt vs:prg) = do
+lowerProg :: forall m. MonadLower m => [Toplevel Typed] -> m [Stmt]
+lowerProg [] = pure []
+lowerProg (ForeignVal (TvName t) ex tp _:prg) =
+  (Foreign (mkVal t) (lowerType tp) ex:) <$> lowerProg prg
+lowerProg (LetStmt vs:prg) = do
   let env' = Map.fromList (map (\(TvName v, _, (_, ant)) -> (v, lowerType ant)) vs)
   (:) <$> local (\s -> s { vars = env' }) (StmtLet <$> for vs (\(TvName v, ex, (_, ant)) -> (mkVal v,lowerType ant,) <$> lowerPolyBind (lowerType ant) ex))
-      <*> lowerProg' prg
-lowerProg' (TypeDecl (TvName var) _ cons:prg) = do
+      <*> lowerProg prg
+lowerProg (TypeDecl (TvName var) _ cons:prg) = do
   let cons' = map (\case
                        UnitCon (TvName p) (_, t) -> (p, mkCon p, lowerType t)
                        ArgCon (TvName p) _ (_, t) -> (p, mkCon p, lowerType t)
@@ -342,37 +342,9 @@ lowerProg' (TypeDecl (TvName var) _ cons:prg) = do
       ccons = map (\(_, a, b) -> (a, b)) cons'
       scons = map (\(a, _, b) -> (a, b)) cons'
 
-  (C.Type (mkType var) ccons:) <$> local (\s -> s { ctors = Map.union (Map.fromList scons) (ctors s) }) (lowerProg' prg)
-lowerProg' (Open _ _:prg) = lowerProg' prg
-lowerProg' (Module _ b:prg) = lowerProg' (b ++ prg)
-
-lowerProg p = (++) <$> mkBuiltins <*> lowerProg' p where
-  mkBuiltins = do
-    vvs <- replicateM 3 (fresh ValueVar)
-    let vs = vvs ++ [ C.tyvarA, C.tyvarB ]
-
-    (at, fst) <- mkBuiltinTuple vs fst
-    (bt, snd) <- mkBuiltinTuple vs snd
-    pure [ StmtLet [(C.builtinFst, at, fst)], StmtLet [(C.builtinSnd, bt, snd)] ]
-
-  mkBuiltinTuple :: [CoVar] -> (forall a. (a, a) -> a) -> m (C.Type CoVar, C.Term CoVar)
-  mkBuiltinTuple [arg, x, y, a, b] f = do
-    let tuple = ExactRowsTy [("1", VarTy a), ("2", VarTy b)]
-        ty = ForallTy (Relevant a) StarTy $
-              ForallTy (Relevant b) StarTy $
-                ForallTy Irrelevant tuple $
-                  f (VarTy a, VarTy b)
-        def = Atom $ Lam (TypeArgument a StarTy) $
-               Atom $ Lam (TypeArgument b StarTy) $
-                 Atom $ Lam (TermArgument arg tuple) $
-                   C.Match (Ref arg tuple)
-                    [ C.Arm { _armPtrn = PatExtend (PatLit RecNil) [("1", C.Capture x (VarTy a)), ("2", C.Capture y (VarTy b))]
-                            , _armTy   = tuple
-                            , _armBody = Atom (f (Ref x (VarTy a), Ref y (VarTy b)))
-                            , _armVars = [(x, VarTy a), (y, VarTy b)]
-                            , _armTyvars = [] } ]
-    pure (ty, def)
-  mkBuiltinTuple _ _ = undefined
+  (C.Type (mkType var) ccons:) <$> local (\s -> s { ctors = Map.union (Map.fromList scons) (ctors s) }) (lowerProg prg)
+lowerProg (Open _ _:prg) = lowerProg prg
+lowerProg (Module _ b:prg) = lowerProg (b ++ prg)
 
 lowerPolyBind :: MonadLower m => Type -> Expr Typed -> m Term
 lowerPolyBind ty ex = doIt (needed ex ty) (go ty ex) (lowerExprTerm ex) where
