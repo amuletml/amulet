@@ -48,7 +48,7 @@ builtinsEnv = envOf (scopeFromList ops) (scopeFromList tps) where
         , op "<." floatCmp, op ">." floatCmp, op ">=." floatCmp, op "<=." floatCmp
         , op "==" cmp, op "<>" cmp
         , op "||" boolOp, op "&&" boolOp
-        , (TgInternal "Lazy", TyForall a (Just TyType) $ (tyUnit `TyArr` TyVar a) `TyArr` (TyApp tyLazy (TyVar a)))
+        , (TgInternal "lazy", TyForall a (Just TyType) $ (tyUnit `TyArr` TyVar a) `TyArr` (TyApp tyLazy (TyVar a)))
         , (TgInternal "force", TyForall a (Just TyType) $ (TyApp tyLazy (TyVar a)) `TyArr` TyVar a)
         ]
     where a = TvName (TgInternal "a")
@@ -173,7 +173,7 @@ gadtConResult t = t
 firstName, secondName, forceName, lAZYName :: Var Typed
 firstName = TvName (TgName "$fst" (-32))
 secondName = TvName (TgName "$snd" (-33))
-lAZYName = TvName (TgName "Lazy" (-35))
+lAZYName = TvName (TgName "lazy" (-35))
 forceName = TvName (TgName "force" (-36))
 
 firstTy, secondTy, forceTy, lAZYTy :: Type Typed

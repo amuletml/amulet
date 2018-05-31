@@ -72,7 +72,7 @@ vError :: CoVar
 vError = CoVar (-29) "error" ValueVar
 
 vLAZY, vForce :: CoVar
-vLAZY = CoVar (-35) "Lazy" ValueVar
+vLAZY = CoVar (-35) "lazy" ValueVar
 vForce = CoVar (-36) "force" ValueVar
 
 tyvarA, tyvarB :: CoVar
