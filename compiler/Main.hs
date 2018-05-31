@@ -10,45 +10,45 @@ import qualified Data.Text.Lazy as L
 import qualified Data.Text.IO as T
 import qualified Data.Text as T
 import Data.Foldable
+import Data.Functor
 
 import Control.Monad.Gen (runGen)
-import Control.Lens (ifor_, (^.), to)
 
 import Data.Position (SourceName)
 
-import Control.Monad.Infer (Env, TypeError, difference, values, types)
-import Backend.Lua (compileProgram)
+import Control.Monad.Infer (Env, TypeError)
+import Backend.Lua
 
 import Types.Infer (inferProgram, builtinsEnv)
 
 import Syntax.Resolve (ResolveError, resolveProgram)
 import qualified Syntax.Resolve.Scope as RS
 import Syntax.Resolve.Toplevel (extractToplevels)
-import Syntax.Types
 import Syntax.Desugar (desugarProgram)
-import Syntax.Pretty (tidyPrettyType)
-import Syntax (Toplevel, Typed, Var, Resolved, Type)
+import Syntax (Toplevel, Typed)
 
 import Core.Simplify (optimise)
 import Core.Lower (runLowerT, lowerProg)
 import Core.Core (Stmt)
 import Core.Var (CoVar)
 
-import Text.Pretty.Semantic (Pretty(pretty), putDoc, (<+>), colon)
+import Text.Pretty.Semantic
 
 import Parser.Wrapper (runParser)
 import Parser.Error (ParseError)
 import Parser (parseTops)
 
 import Errors (reportS)
+import qualified Debug as D
+import Repl
 
-data CompileResult a
-  = CSuccess [Toplevel Typed] [Stmt CoVar] [Stmt a] Env
+data CompileResult
+  = CSuccess [Toplevel Typed] [Stmt CoVar] [Stmt CoVar] LuaStmt Env
   | CParse   [ParseError]
   | CResolve [ResolveError]
   | CInfer   [TypeError]
 
-compile :: [(SourceName, T.Text)] -> CompileResult CoVar
+compile :: [(SourceName, T.Text)] -> CompileResult
 compile [] = error "Cannot compile empty input"
 compile (file:files) = runGen $ do
   file' <- go (Right ([], RS.builtinScope, RS.emptyModules, builtinsEnv)) file
@@ -57,7 +57,7 @@ compile (file:files) = runGen $ do
     Right (prg, _, _, env) -> do
       lower <- runLowerT (lowerProg prg)
       optm <- optimise lower
-      pure (CSuccess prg lower optm env)
+      pure (CSuccess prg lower optm (compileProgram env optm) env)
 
     Left err -> pure err
 
@@ -82,7 +82,7 @@ compile (file:files) = runGen $ do
                                   , env')
                 Left e -> pure $ Left $ CInfer e
             Left e -> pure $ Left $ CResolve e
-        (Nothing, es) -> pure $ Left $ CParse es -- TODO: Include parse warnings
+        (Nothing, es) -> pure $ Left $ CParse es
     go x _ = pure x
 
 
@@ -91,47 +91,15 @@ compileFromTo :: [(FilePath, T.Text)]
               -> IO ()
 compileFromTo fs emit =
   case compile fs of
-    CSuccess _ _ core env -> emit (compileProgram env core)
+    CSuccess _ _ _ lua _ -> emit lua
     CParse es -> traverse_ (`reportS` fs) es
     CResolve es -> traverse_ (`reportS` fs) es
     CInfer es -> traverse_ (`reportS` fs) es
 
-test :: [(FilePath, T.Text)] -> IO (Maybe ([Stmt CoVar], Env))
-test fs = do
-  putStrLn "\x1b[1;32m(* Program: *)\x1b[0m"
+test :: D.DebugMode -> [(FilePath, T.Text)] -> IO (Maybe ([Stmt CoVar], Env))
+test mode fs =
   case compile fs of
-    CSuccess ast core optm env -> do
-      putDoc (pretty ast)
-      putStrLn "\x1b[1;32m(* Type inference: *)\x1b[0m"
-      ifor_ (difference env builtinsEnv ^. values . to toMap) . curry $ \(k :: Var Resolved, t :: Type Typed) ->
-        putDoc (pretty k <+> colon <+> tidyPrettyType t)
-      putStrLn "\x1b[1;32m(* Kind inference: *)\x1b[0m"
-      ifor_ (difference env builtinsEnv ^. types ^. to toMap) . curry $ \(k :: Var Resolved, t) ->
-        putDoc (pretty k <+> colon <+> pretty t)
-      putStrLn "\x1b[1;32m(* Core lowering: *)\x1b[0m"
-      putDoc (pretty core)
-      putStrLn "\x1b[1;32m(* Optimised: *)\x1b[0m"
-      putDoc (pretty optm)
-      putStrLn "\x1b[1;32m(* Compiled: *)\x1b[0m"
-      putDoc (pretty (compileProgram env optm))
-      pure (Just (core, env))
-    CParse es -> Nothing <$ traverse_ (`reportS` fs) es
-    CResolve es -> Nothing <$ traverse_ (`reportS` fs) es
-    CInfer es -> Nothing <$ traverse_ (`reportS` fs) es
-
-testTc :: [(FilePath, T.Text)] -> IO (Maybe ([Stmt CoVar], Env))
-testTc fs = do
-  putStrLn "\x1b[1;32m(* Program: *)\x1b[0m"
-  case compile fs of
-    CSuccess ast core _ env -> do
-      putDoc (pretty ast)
-      putStrLn "\x1b[1;32m(* Type inference: *)\x1b[0m"
-      ifor_ (difference env builtinsEnv ^. values . to toMap) . curry $ \(k :: Var Resolved, t :: Type Typed) ->
-        putDoc (pretty k <+> colon <+> pretty t)
-      putStrLn "\x1b[1;32m(* Kind inference: *)\x1b[0m"
-      ifor_ (difference env builtinsEnv ^. types . to toMap) . curry $ \(k :: Var Resolved, t) ->
-        putDoc (pretty k <+> colon <+> pretty t)
-      pure (Just (core, env))
+    CSuccess ast core opt lua env -> D.dump mode ast core opt lua builtinsEnv env $> Just (core, env)
     CParse es -> Nothing <$ traverse_ (`reportS` fs) es
     CResolve es -> Nothing <$ traverse_ (`reportS` fs) es
     CInfer es -> Nothing <$ traverse_ (`reportS` fs) es
@@ -152,9 +120,9 @@ main :: IO ()
 main = do
   ags <- getArgs
   case getOpt Permute flags ags of
-    (_ , [], []) -> do
-      hPutStrLn stderr "REPL not implemented yet"
-      exitWith (ExitFailure 1)
+    ([] , [], [])       -> repl D.Void
+    ([Test] , [], [])   -> repl D.Test
+    ([TestTc] , [], []) -> repl D.TestTc
 
     ([], files, []) -> do
       files' <- traverse T.readFile files
@@ -163,12 +131,12 @@ main = do
 
     ([Test], files, []) -> do
       files' <- traverse T.readFile files
-      _ <- test (zip files files')
+      _ <- test D.Test (zip files files')
       pure ()
 
     ([TestTc], files, []) -> do
       files' <- traverse T.readFile files
-      _ <- testTc (zip files files')
+      _ <- test D.TestTc (zip files files')
       pure ()
 
     ([Out o], files, []) -> do

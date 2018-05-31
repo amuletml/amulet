@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings, FlexibleContexts #-}
 
-module Repl where
+module Repl (repl) where
 
 import Control.Monad.Gen
 import Control.Monad.State.Strict
@@ -51,18 +51,22 @@ import Backend.Lua.Syntax
 import Text.Pretty.Semantic
 
 import Errors
+import Debug
 
 data ReplState = ReplState
   { resolveScope :: R.Scope
   , moduleScope  :: R.ModuleScope
   , inferScope   :: T.Env
   , escapeScope  :: B.EscapeScope
-  , luaState     :: L.LuaState
   , lastGen      :: Int
+
+  , luaState     :: L.LuaState
+
+  , debugMode    :: DebugMode
   }
 
-defaultState :: IO ReplState
-defaultState = do
+defaultState :: DebugMode -> IO ReplState
+defaultState mode = do
   state <- L.newstate
 
   let preamble = T.unpack . display . uncommentDoc . renderPretty 0.8 100 . pretty
@@ -80,8 +84,11 @@ defaultState = do
     , moduleScope  = R.emptyModules
     , inferScope   = I.builtinsEnv
     , escapeScope  = B.escapeScope
-    , luaState     = state
     , lastGen      = 0
+
+    , luaState     = state
+
+    , debugMode    = mode
     }
 
 runRepl :: InputT (StateT ReplState IO) ()
@@ -120,14 +127,16 @@ runRepl = do
       core <- runGenTFrom (lastGen state) $ parseCore state line
       case core of
         Nothing -> pure ()
-        Just (vs, core, state) -> do
-          let (luaStmt, escape') = B.emitProgramWith (inferScope state) (escapeScope state) (tagOccursVar core)
-              luaSyntax = T.unpack . display . uncommentDoc . renderPretty 0.8 100 . pretty
-                          . LuaDo . map patchupLua
-                          $ luaStmt
+        Just (vs, prog, core, state') -> do
+          let (luaStmt, escape') = B.emitProgramWith (inferScope state') (escapeScope state') (tagOccursVar core)
+              luaExpr = LuaDo . map patchupLua $ luaStmt
+              luaSyntax = T.unpack . display . uncommentDoc . renderPretty 0.8 100 . pretty $ luaExpr
+
 
           liftIO $ do
-            res <- L.runLuaWith (luaState state) $ do
+            dump (debugMode state') prog core core luaExpr (inferScope state) (inferScope state')
+
+            res <- L.runLuaWith (luaState state') $ do
               code <- L.dostring luaSyntax
 
               case code of
@@ -147,10 +156,15 @@ runRepl = do
 
             putDoc res
 
-          put state { escapeScope = escape' }
+          put state' { escapeScope = escape' }
 
 
-    parseCore :: (MonadGen Int m, MonadIO m) => ReplState -> String -> m (Maybe ([(CoVar, C.Type CoVar)], [Stmt CoVar], ReplState))
+    parseCore :: (MonadGen Int m, MonadIO m)
+              => ReplState -> String
+              -> m (Maybe ([(CoVar, C.Type CoVar)]
+                          , [S.Toplevel S.Typed]
+                          , [Stmt CoVar]
+                          , ReplState))
     parseCore state input = do
       let files = [("=stdin", T.pack input)]
           (parsed, parseMsg) = runParser "=stdin" (L.pack input) parseRepl
@@ -169,8 +183,8 @@ runRepl = do
             Left es -> liftIO $ traverse_ (`reportS`files) es $> Nothing
             Right (resolved, modScope') -> do
               desugared <- desugarProgram resolved
-              infered <- inferProgram (inferScope state) desugared
-              case infered of
+              inferred <- inferProgram (inferScope state) desugared
+              case inferred of
                 Left es -> liftIO $ traverse_ (`reportS`files) es $> Nothing
                 Right (prog, env') -> do
                   let (var, tys) = R.extractToplevels parsed'
@@ -184,6 +198,7 @@ runRepl = do
                   pure $ Just ( case last lower of
                                   (C.StmtLet vs) -> map (\(v, t, _) -> (v, t)) vs
                                   _ -> []
+                              , prog
                               , lower
                               , state { resolveScope = rScope { R.varScope = R.insertN (R.varScope rScope) (zip var var')
                                                               , R.tyScope  = R.insertN (R.tyScope rScope)  (zip tys tys')
@@ -233,5 +248,5 @@ displayLuaAsAmulet getVal cont = do
 
     <* L.pop 1
 
-main :: IO ()
-main = defaultState >>= evalStateT (runInputT defaultSettings runRepl)
+repl :: DebugMode -> IO ()
+repl mode = defaultState mode >>= evalStateT (runInputT defaultSettings runRepl)
