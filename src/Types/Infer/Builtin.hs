@@ -17,13 +17,13 @@ import Syntax
 
 import Text.Pretty.Semantic
 
-tyUnit, tyBool, tyInt, tyString, tyFloat, tyAny :: Type Typed
+tyUnit, tyBool, tyInt, tyString, tyFloat, tyLazy :: Type Typed
 tyInt = TyCon (TvName (TgInternal "int"))
 tyString = TyCon (TvName (TgInternal "string"))
 tyBool = TyCon (TvName (TgInternal "bool"))
 tyUnit = TyCon (TvName (TgInternal "unit"))
 tyFloat = TyCon (TvName (TgInternal "float"))
-tyAny = TyCon (TvName (TgInternal "any"))
+tyLazy = TyCon (TvName (TgInternal "lazy"))
 
 builtinsEnv :: Env
 builtinsEnv = envOf (scopeFromList ops) (scopeFromList tps) where
@@ -47,9 +47,13 @@ builtinsEnv = envOf (scopeFromList ops) (scopeFromList tps) where
         , op "<" intCmp, op ">" intCmp, op ">=" intCmp, op "<=" intCmp
         , op "<." floatCmp, op ">." floatCmp, op ">=." floatCmp, op "<=." floatCmp
         , op "==" cmp, op "<>" cmp
-        , op "||" boolOp, op "&&" boolOp ]
+        , op "||" boolOp, op "&&" boolOp
+        , (TgInternal "lazy", TyForall a (Just TyType) $ (tyUnit `TyArr` TyVar a) `TyArr` (TyApp tyLazy (TyVar a)))
+        , (TgInternal "force", TyForall a (Just TyType) $ (TyApp tyLazy (TyVar a)) `TyArr` TyVar a)
+        ]
+    where a = TvName (TgInternal "a")
   tps :: [(Var Resolved, Type Typed)]
-  tps = [ tp "int", tp "string", tp "bool", tp "unit", tp "float" ]
+  tps = [ tp "int", tp "string", tp "bool", tp "unit", tp "float", (TgInternal "lazy", TyArr TyType TyType) ]
 
 unify, subsumes :: ( Reasonable f p
                    , MonadInfer Typed m )
@@ -166,17 +170,23 @@ gadtConResult (TyPi Explicit{} t) = gadtConResult t
 gadtConResult (TyArr _ t) = t
 gadtConResult t = t
 
-firstName, secondName :: Var Typed
+firstName, secondName, forceName, lAZYName :: Var Typed
 firstName = TvName (TgName "$fst" (-32))
 secondName = TvName (TgName "$snd" (-33))
+lAZYName = TvName (TgName "lazy" (-35))
+forceName = TvName (TgName "force" (-36))
 
-firstTy, secondTy :: Type Typed
+firstTy, secondTy, forceTy, lAZYTy :: Type Typed
 firstTy = TyForall (TvName (TgName "a" (-30))) (Just TyType) (firstTy' (TyVar (TvName (TgName "a" (-30)))))
 secondTy = TyForall (TvName (TgName "a" (-30))) (Just TyType) (secondTy' (TyVar (TvName (TgName "a" (-30)))))
+forceTy = TyForall (TvName (TgName "a" (-30))) (Just TyType) (forceTy' (TyVar (TvName (TgName "a" (-30)))))
+lAZYTy = TyForall (TvName (TgName "a" (-30))) (Just TyType) (lAZYTy' (TyVar (TvName (TgName "a" (-30)))))
 
-firstTy', secondTy' :: Type Typed -> Type Typed
+firstTy', secondTy', forceTy', lAZYTy' :: Type Typed -> Type Typed
 firstTy' x = TyForall (TvName (TgName "b" (-31))) (Just TyType) (firstTy'' x (TyVar (TvName (TgName "b" (-31)))))
 secondTy' x = TyForall (TvName (TgName "b" (-31))) (Just TyType) (secondTy'' x (TyVar (TvName (TgName "b" (-31)))))
+forceTy' x = TyArr (TyApp tyLazy x) x
+lAZYTy' x = TyArr (TyArr tyUnit x) (TyApp tyLazy x)
 
 firstTy'', secondTy'' :: Type Typed -> Type Typed -> Type Typed
 firstTy'' x y = TyArr (TyTuple x y) x

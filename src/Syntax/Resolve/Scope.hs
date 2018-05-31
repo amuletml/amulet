@@ -43,8 +43,8 @@ builtinScope = Scope
                                   , "+.", "-.", "*.", "/.", "**.", "^."
                                   , "<", ">", ">=", "<=", "==", "<>"
                                   , "||", "&&"
-                                  , "@@" ]
-               , tyScope  =  build [ "int", "string", "bool", "unit", "float" ]
+                                  , "@@", "lazy", "force" ]
+               , tyScope  =  build [ "int", "string", "bool", "unit", "float", "lazy" ]
                , tyvarScope = mempty
                , modStack = []
                }

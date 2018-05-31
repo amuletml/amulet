@@ -517,5 +517,7 @@ escapeScope =
   let escaper = basicEscaper keywords
   in flip createEscape escaper
    . ((vError, "error"):)
+   . ((vLAZY, "__builtin_Lazy"):)
+   . ((vForce, "__builtin_force"):)
    . map (fmap escaper)
    $ VarMap.toList ops
