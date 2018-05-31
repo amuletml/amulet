@@ -92,4 +92,3 @@ genOperator op =
   where
     left  = LuaName "l"
     right = LuaName "r"
-    eks = LuaName "x"

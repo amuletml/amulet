@@ -51,7 +51,6 @@ import Backend.Lua.Syntax
 import Text.Pretty.Semantic
 
 import Errors
-import Debug.Trace
 
 data ReplState = ReplState
   { resolveScope :: R.Scope
@@ -169,7 +168,6 @@ runRepl = do
           case resolved of
             Left es -> liftIO $ traverse_ (`reportS`files) es $> Nothing
             Right (resolved, modScope') -> do
-              traceShow (pretty resolved) (pure ())
               desugared <- desugarProgram resolved
               infered <- inferProgram (inferScope state) desugared
               case infered of
