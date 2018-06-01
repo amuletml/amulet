@@ -223,7 +223,9 @@ runRepl = do
 -- We convert any top-level local declarations into global ones. This
 -- means they are accessible outside normal REPL invocations.
 patchupLua :: LuaStmt -> LuaStmt
-patchupLua (LuaLocal vs es) = LuaAssign vs es
+patchupLua (LuaLocal vs es)
+  | length es < length vs = LuaAssign vs (es ++ replicate (length vs - length es) LuaNil)
+  | otherwise = LuaAssign vs es
 patchupLua x = x
 
 displayLuaAsAmulet :: L.Lua () -> (Doc -> L.Lua a) -> L.Lua a
@@ -250,7 +252,9 @@ displayLuaAsAmulet getVal cont = do
             weDo <- cont `L.catchLuaError` (const (pure False))
             if weDo
                then do
-                 k <- T.decodeLatin1 <$> L.tostring (-2)
+                 L.pushvalue (-2)
+                 k <- T.decodeLatin1 <$> L.tostring L.stackTop
+                 L.pop 1
                  v <- displayLuaAsAmulet (pure ()) pure
                  (:) (k, equals <+> v) <$> loop cont
                else pure []
