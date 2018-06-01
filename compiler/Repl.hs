@@ -28,6 +28,7 @@ import qualified Syntax.Resolve.Scope as R
 import qualified Syntax.Resolve.Toplevel as R
 import Syntax.Resolve (resolveProgram)
 import Syntax.Desugar (desugarProgram)
+import Syntax.Pretty (displayType)
 import qualified Syntax as S
 
 import qualified Control.Monad.Infer as T
@@ -43,6 +44,7 @@ import qualified Core.Core as C
 import Core.Lower (runLowerT, lowerProg)
 import Core.Optimise.Reduce
 import Core.Occurrence
+import Core.Builtin (vLAZY, vForce)
 import Core.Core (Stmt)
 import Core.Var
 
@@ -55,7 +57,6 @@ import Backend.Lua.Syntax
 
 import Text.Pretty.Semantic
 
-import Repl.Display
 import Errors
 import Debug
 
@@ -76,8 +77,9 @@ defaultState mode = do
   state <- L.newstate
 
   let preamble = T.unpack . display . uncommentDoc . renderPretty 0.8 100 . pretty
-               . LuaDo . map (patchupLua . B.genOperator . fst)
-               $ VarMap.toList B.ops
+                . LuaDo . map (patchupLua . B.genOperator . fst)
+                . ((vLAZY, undefined):) . ((vForce, undefined):)
+                $ VarMap.toList B.ops
 
   -- Init our default libraries and operator functions
   L.runLuaWith state $ do

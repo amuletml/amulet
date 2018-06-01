@@ -70,6 +70,10 @@ bind var ty
                 | ty' == ty -> pure (ReflCo (apply env ty'))
                 | otherwise -> unify ty (apply env ty')
 
+-- FOR BOTH UNIFY AND SUBSUME:
+--  unify have want
+--  subsume k have want
+-- i.e. The first argument is the type *we have*.
 unify :: Type Typed -> Type Typed -> SolveM (Coercion Typed)
 unify (TySkol x) (TySkol y)
   | x == y = pure (ReflCo (TySkol y))
@@ -95,7 +99,7 @@ unify (TySkol t@(Skolem sv _ _ _)) b = do
   case sub of
     Just ty -> do
       _ <- unify b ty
-      pure (AssumedCo ty (TySkol t))
+      pure (AssumedCo (TySkol t) ty)
     Nothing -> case b of
       TyVar v -> bind v (TySkol t)
       _ -> do
@@ -269,7 +273,7 @@ subsumes k t1@TyPi{} t2 | isSkolemisable t1 = do
 
   flip (Syntax.:>) wrap <$> subsumes k t1' t2
 
-subsumes k nt@(TyTuple a' b') ot@(TyTuple a b) = do
+subsumes k ot@(TyTuple a b) nt@(TyTuple a' b') = do
   wa <- subsumes k a a'
   wb <- subsumes k b b'
   [elem, elem'] <- fmap TvName <$> replicateM 2 fresh
@@ -285,7 +289,7 @@ subsumes k nt@(TyTuple a' b') ot@(TyTuple a b) = do
 subsumes k a@(TyApp lazy _) b@(TyApp lazy' _)
   | lazy == lazy', lazy' == tyLazy = Cast <$> k a b
 
-subsumes k ty (TyApp lazy ty') | lazy == tyLazy, _TyVar `isn't` ty = do
+subsumes k (TyApp lazy ty') ty | lazy == tyLazy, _TyVar `isn't` ty = do
   co <- k ty' ty
   let wrap ex
         | an <- annotation ex =
@@ -295,7 +299,7 @@ subsumes k ty (TyApp lazy ty') | lazy == tyLazy, _TyVar `isn't` ty = do
               (an, ty)
   pure (WrapFn (MkWrapCont wrap "automatic forcing"))
 
-subsumes k (TyApp lazy ty) ty' | lazy == tyLazy, _TyVar `isn't` ty' = do
+subsumes k ty' (TyApp lazy ty) | lazy == tyLazy, _TyVar `isn't` ty' = do
   co <- k ty ty'
   let wrap ex
         | an <- annotation ex =
@@ -305,7 +309,7 @@ subsumes k (TyApp lazy ty) ty' | lazy == tyLazy, _TyVar `isn't` ty' = do
                 (ExprWrapper (Cast co) ex (an, ty'))
                 (an, TyArr tyUnit ty))
               (an, TyApp lazy ty)
-  pure (WrapFn (MkWrapCont wrap "automatic forcing"))
+  pure (WrapFn (MkWrapCont wrap "automatic thunking"))
 
 
 subsumes k a b = Cast <$> k a b

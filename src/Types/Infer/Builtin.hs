@@ -23,7 +23,7 @@ tyString = TyCon (TvName (TgInternal "string"))
 tyBool = TyCon (TvName (TgInternal "bool"))
 tyUnit = TyCon (TvName (TgInternal "unit"))
 tyFloat = TyCon (TvName (TgInternal "float"))
-tyLazy = TyCon (TvName (TgInternal "lazy"))
+tyLazy = TyCon (TvName (TgName "lazy" (-34)))
 
 builtinsEnv :: Env
 builtinsEnv = envOf (scopeFromList ops) (scopeFromList tps) where
@@ -53,7 +53,7 @@ builtinsEnv = envOf (scopeFromList ops) (scopeFromList tps) where
         ]
     where a = TvName (TgInternal "a")
   tps :: [(Var Resolved, Type Typed)]
-  tps = [ tp "int", tp "string", tp "bool", tp "unit", tp "float", (TgInternal "lazy", TyArr TyType TyType) ]
+  tps = [ tp "int", tp "string", tp "bool", tp "unit", tp "float", (TgName "lazy" (-34), TyArr TyType TyType) ]
 
 unify, subsumes :: ( Reasonable f p
                    , MonadInfer Typed m )

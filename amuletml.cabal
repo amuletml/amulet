@@ -28,7 +28,6 @@ executable amc
   other-modules:       Repl
                      , Debug
                      , Errors
-                     , Repl.Display
   default-extensions:  PackageImports
   default-language:    Haskell2010
 

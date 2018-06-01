@@ -93,10 +93,8 @@ check (Match t ps a) ty = do
         local (values %~ focus ms) (check e ty)
     pure (p', bd)
   let ((p, _):_) = ps
-      invert (Cast co) = Cast (SymCo co)
-      invert w = w
   sc <- case p of
-    PWrapper (w, t') _ _ -> pure $ ExprWrapper (invert w) t (annotation t, t')
+    PWrapper (w, t') _ _ -> pure $ ExprWrapper w t (annotation t, t')
     _ -> pure t
   pure (Match sc ps (a, ty))
 
@@ -109,11 +107,11 @@ check ex@(Ascription e ty an) goal = do
   ty <- resolveKind (BecauseOf ex) ty
   e <- check e ty
   (_, c) <- subsumes ex ty goal
-  pure (Ascription (ExprWrapper c e (an, ty)) ty (an, goal))
+  pure (ExprWrapper c e (an, goal))
 
 check e ty = do
   (e', t) <- infer e
-  (_, c) <- subsumes e ty t
+  (_, c) <- subsumes e t ty
   pure (ExprWrapper c e' (annotation e, ty))
 
 -- [Complete and Easy]: See https://www.cl.cam.ac.uk/~nk480/bidir.pdf

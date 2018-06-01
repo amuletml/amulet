@@ -7,8 +7,8 @@ module Debug
 import Control.Lens
 
 import Control.Monad.Infer
+import Syntax.Pretty
 import Syntax.Types
-import Syntax
 
 import Core.Core (Stmt)
 import Core.Var
@@ -16,8 +16,6 @@ import Core.Var
 import Backend.Lua
 
 import Text.Pretty.Semantic
-
-import Repl.Display
 
 data DebugMode = Void | Test | TestTc
 
