@@ -7,6 +7,7 @@ import Control.Lens
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
+import Data.List
 
 import Text.Pretty.Semantic
 import Syntax.Pretty
@@ -89,7 +90,7 @@ record :: [Doc] -> Doc
 record = enclose (lbrace <> space) (space <> rbrace) . hsep . punctuate comma
 
 prettyRows :: (Pretty (Var p), Ord (Var p)) => [(Text, Type p)] -> [Doc]
-prettyRows = map (\(n, v) -> text n <+> colon <+> displayType v)
+prettyRows = map (\(n, v) -> text n <+> colon <+> displayType v) . sortOn fst
 
 parenTyFun, parenTyArg :: Type p -> Doc -> Doc
 parenTyArg TyApp{} = parens

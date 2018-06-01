@@ -2,8 +2,9 @@
 
 module Repl (repl) where
 
-import Control.Monad.Gen
 import Control.Monad.State.Strict
+import Control.Arrow (first)
+import Control.Monad.Gen
 
 import qualified Data.Text.Encoding as T
 import qualified Data.Text.Lazy as L
@@ -14,7 +15,9 @@ import Data.Traversable
 import Data.Foldable
 import Data.Spanned
 import Data.Functor
+import Data.List
 
+import qualified Foreign.Lua.Types.Error as L
 import qualified Foreign.Lua.Api.Types as L
 import qualified Foreign.Lua as L
 
@@ -148,7 +151,7 @@ runRepl = do
                     let CoVar id nam _ = v
                         var = S.TgName nam id
                     case inferScope state' ^. T.values . at var of
-                      Just ty -> pure (pretty v <+> colon <+> displayType ty <+> equals <+> t)
+                      Just ty -> pure (pretty v <+> colon <+> nest 2 (displayType ty <+> equals </> t))
                       Nothing -> error "variable not bound in infer scope?"
 
                   pure (vsep vs')
@@ -240,17 +243,17 @@ displayLuaAsAmulet getVal cont = do
     L.TypeTable -> do
       table <- L.absindex L.stackTop
       L.pushnil
-      let loop :: L.Lua Bool -> L.Lua [Doc]
+      let loop :: L.Lua Bool -> L.Lua [(T.Text, Doc)]
           loop cont = do
-            weDo <- cont
+            weDo <- cont `L.catchLuaError` (const (pure False))
             if weDo
                then do
-                 k <- text . T.decodeLatin1 <$> L.tostring (-2)
+                 k <- T.decodeLatin1 <$> L.tostring (-2)
                  v <- displayLuaAsAmulet (pure ()) pure
-                 (:) (k <+> equals <+> v) <$> loop cont
+                 (:) (k, equals <+> v) <$> loop cont
                else pure []
       enclose (lbrace <> space) (space <> rbrace)
-        . hsep . punctuate comma <$> loop (L.next table)
+        . hsep . punctuate comma . map (uncurry (<+>) . first text) . sortOn fst <$> loop (L.next table)
     _ -> pure (keyword "<foreign value>")
 
     <* L.pop 1
