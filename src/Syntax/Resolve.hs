@@ -276,6 +276,7 @@ reExpr r@(OpenIn m e a) =
   resolveOpen m Nothing (\m' -> OpenIn m' <$> reExpr e <*> pure a)
   `catchError` (throwError . wrapError r)
 
+reExpr (Lazy e a) = Lazy <$> reExpr e <*> pure a
 reExpr ExprWrapper{} = error "resolve cast"
 reExpr (InstHole a) = pure $ InstHole a
 

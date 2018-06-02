@@ -69,6 +69,11 @@ desugarProgram = traverse statement where
          $ foldf (\v e -> Fun v e a) args
          $ Tuple tuple a
 
+  expr (Lazy e a) = do
+    e <- expr e
+    pure $ App (VarRef (TgInternal "lazy") a)
+               (Fun (PLiteral LiUnit a) e a)
+               a
   expr (OpenIn _ e _) = expr e
 
   buildTuple :: MonadGen Int m

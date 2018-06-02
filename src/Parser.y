@@ -62,6 +62,7 @@ import Syntax
   of       { Token TcOf _ _ }
   module   { Token TcModule _ _ }
   open     { Token TcOpen _ _ }
+  lazy     { Token TcLazy _ _ }
 
   ','      { Token TcComma _ _ }
   '.'      { Token TcDot _ _ }
@@ -157,6 +158,7 @@ Expr0 :: { Expr Parsed }
           { withPos2 $1 $3 $ Match (completeTuple Tuple $2) $4 }
       | function ListE1(Arm) '$end'            { withPos1 $1 $ Function $2 }
       | qdotid Atom                            { withPos2 $1 $2 $ OpenIn (getName $1) $2 }
+      | lazy Atom                              { withPos2 $1 $2 $ Lazy $2 }
       | Atom                                   { $1 }
 
 Atom :: { Expr Parsed }
@@ -313,6 +315,7 @@ TypeAtom :: { Located (Type Parsed) }
          | TyVar                                  { lPos1 $1 $ TyVar (getL $1) }
          | Con                                    { lPos1 $1 $ TyPromotedCon (getL $1) }
          | type                                   { lPos1 $1 TyType }
+         | lazy                                   { lPos1 $1 $ TyCon (Name (T.pack "lazy")) }
          | '(' ')'                                { lPos2 $1 $2 $ TyCon (Name (T.pack "unit")) }
          | '(' Type ')'                           { lPos2 $1 $3 (getL $2) }
          | '{' Rows(':', Type) '}'                { lPos2 $1 $3 $ TyExactRows (map (second getL) $2) }
