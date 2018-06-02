@@ -3,7 +3,6 @@
 module Repl (repl) where
 
 import Control.Monad.State.Strict
-import Control.Arrow (first)
 import Control.Monad.Gen
 
 import qualified Data.Text.Encoding as T
@@ -15,9 +14,7 @@ import Data.Traversable
 import Data.Foldable
 import Data.Spanned
 import Data.Functor
-import Data.List
 
-import qualified Foreign.Lua.Types.Error as L
 import qualified Foreign.Lua.Api.Types as L
 import qualified Foreign.Lua as L
 
@@ -57,6 +54,7 @@ import Backend.Lua.Syntax
 
 import Text.Pretty.Semantic
 
+import Repl.Display
 import Errors
 import Debug
 
@@ -149,11 +147,12 @@ runRepl = do
 
               case code of
                 L.OK -> do
-                  vs' <- for vs $ \(v, _) -> displayLuaAsAmulet (L.getglobal (T.unpack (B.getVar v escape'))) $ \t -> do
+                  vs' <- for vs $ \(v, _) -> do
+                    repr <- valueRepr (L.getglobal (T.unpack (B.getVar v escape')))
                     let CoVar id nam _ = v
                         var = S.TgName nam id
                     case inferScope state' ^. T.values . at var of
-                      Just ty -> pure (pretty v <+> colon <+> nest 2 (displayType ty <+> equals </> t))
+                      Just ty -> pure (pretty v <+> colon <+> nest 2 (displayType ty <+> equals </> pretty repr))
                       Nothing -> error "variable not bound in infer scope?"
 
                   pure (vsep vs')
@@ -227,42 +226,6 @@ patchupLua (LuaLocal vs es)
   | length es < length vs = LuaAssign vs (es ++ replicate (length vs - length es) LuaNil)
   | otherwise = LuaAssign vs es
 patchupLua x = x
-
-displayLuaAsAmulet :: L.Lua () -> (Doc -> L.Lua a) -> L.Lua a
-displayLuaAsAmulet getVal cont = do
-  getVal
-  t <- L.ltype L.stackTop
-  cont =<< case t of
-    L.TypeString ->
-      sstring . dquotes . text . T.decodeLatin1
-        <$> L.tostring L.stackTop
-    L.TypeNumber ->
-      sliteral . text . T.decodeLatin1 <$> L.tostring L.stackTop
-    L.TypeNone -> error "Invalid stack index"
-    L.TypeNil -> pure (keyword "()")
-    L.TypeBoolean -> do
-      b <- L.toboolean L.stackTop
-      pure . sliteral . text $ if b then "true" else "false"
-    L.TypeFunction -> pure (keyword "<function>")
-    L.TypeTable -> do
-      table <- L.absindex L.stackTop
-      L.pushnil
-      let loop :: L.Lua Bool -> L.Lua [(T.Text, Doc)]
-          loop cont = do
-            weDo <- cont `L.catchLuaError` (const (pure False))
-            if weDo
-               then do
-                 L.pushvalue (-2)
-                 k <- T.decodeLatin1 <$> L.tostring L.stackTop
-                 L.pop 1
-                 v <- displayLuaAsAmulet (pure ()) pure
-                 (:) (k, equals <+> v) <$> loop cont
-               else pure []
-      enclose (lbrace <> space) (space <> rbrace)
-        . hsep . punctuate comma . map (uncurry (<+>) . first text) . sortOn fst <$> loop (L.next table)
-    _ -> pure (keyword "<foreign value>")
-
-    <* L.pop 1
 
 repl :: DebugMode -> IO ()
 repl mode = defaultState mode >>= evalStateT (runInputT defaultSettings runRepl)

@@ -169,7 +169,7 @@ emitProgramWith ev esc = flip runState esc . emitProg where
   emitConstructor (var, ty)
     | arity ty == 0 = do
         var' <- state (pushVar var)
-        pure $ LuaLocal [LuaName var'] [LuaTable [(LuaNumber 1, LuaString var')]]
+        pure $ LuaLocal [LuaName var'] [LuaTable [(LuaString "__tag", LuaString var')]]
     | otherwise = do
         var' <- state (pushVar var)
         pure $ LuaLocal [LuaName var'] [LuaFunction

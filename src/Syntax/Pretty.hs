@@ -311,14 +311,17 @@ prettyType (TyApp x e) = parenTyFun x (displayType x) <+> parenTyArg e (displayT
 prettyType (TyRows p rows) = enclose (lbrace <> space) (space <> rbrace) $
   pretty p <+> soperator pipe <+> hsep (punctuate comma (prettyRows colon rows))
 prettyType (TyExactRows rows) = record (prettyRows colon rows)
-prettyType (TyTuple t s) = parenTyFun t (displayType t) <+> soperator (char '*') <+> parenTyFun s (displayType s)
+prettyType (TyTuple t s) = parenTyFun t (displayType t) <+> soperator (char '*') <+> parenTuple s (displayType s)
 prettyType t@TyWithConstraints{} = displayType (applyCons t)
 prettyType TyType = keyword "type"
 
-parenTyFun, parenTyArg :: Type p -> Doc -> Doc
+parenTyFun, parenTyArg, parenTuple :: Type p -> Doc -> Doc
 parenTyArg TyApp{} = parens
 parenTyArg x = parenTyFun x
 
 parenTyFun TyPi{} = parens
 parenTyFun TyTuple{} = parens
 parenTyFun _ = id
+
+parenTuple TyPi{} = parens
+parenTuple _ = id
