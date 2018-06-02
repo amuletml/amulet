@@ -6,6 +6,7 @@ import Control.Monad.State.Strict
 import Control.Monad.Gen
 
 import qualified Data.Text.Encoding as T
+import qualified Data.Map.Strict as Map
 import qualified Data.Text.Lazy as L
 import qualified Data.Text as T
 
@@ -26,6 +27,7 @@ import qualified Syntax.Resolve.Toplevel as R
 import Syntax.Resolve (resolveProgram)
 import Syntax.Desugar (desugarProgram)
 import Syntax.Pretty (displayType)
+import Syntax.Types (constructors, toMap)
 import qualified Syntax as S
 
 import qualified Control.Monad.Infer as T
@@ -38,7 +40,7 @@ import Parser.Token
 import Parser.Error
 
 import qualified Core.Core as C
-import Core.Lower (runLowerT, lowerProg)
+import Core.Lower (runLowerWithCtors, lowerProg, lowerType)
 import Core.Optimise.Reduce
 import Core.Occurrence
 import Core.Builtin (vLAZY, vForce)
@@ -201,11 +203,12 @@ runRepl = do
                 Right (prog, env') -> do
                   let (var, tys) = R.extractToplevels parsed'
                       (var', tys') = R.extractToplevels resolved
+                      ctors = fmap lowerType (Map.restrictKeys (env' ^. T.values . to toMap) (env' ^. constructors))
 
                   -- We don't perform any complex optimisations, but run one reduction pass in order
                   -- to get some basic commuting conversion, allowing the codegen to be more
                   -- effective.
-                  lower <- reducePass <$> runLowerT (lowerProg prog)
+                  lower <- reducePass <$> runLowerWithCtors ctors (lowerProg prog)
                   lastG <- gen
                   pure $ Just ( case last lower of
                                   (C.StmtLet vs) -> map (\(v, t, _) -> (v, t)) vs

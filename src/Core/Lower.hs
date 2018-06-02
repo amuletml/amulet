@@ -1,7 +1,7 @@
 {-# LANGUAGE LambdaCase, TupleSections, ExplicitNamespaces, PatternSynonyms, RankNTypes, ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts, ConstraintKinds, OverloadedStrings #-}
 module Core.Lower
-  ( runLowerT
+  ( runLowerT, runLowerWithCtors
   , lowerExprTerm
   , lowerType
   , lowerPat
@@ -59,6 +59,9 @@ type MonadLower m
 
 runLowerT :: MonadGen Int m => ReaderT LowerState m a -> m a
 runLowerT = flip runReaderT (LS mempty mempty)
+
+runLowerWithCtors :: MonadGen Int m => Map.Map (Var Resolved) Type -> ReaderT LowerState m a -> m a
+runLowerWithCtors ct k = runReaderT k (LS mempty ct)
 
 errRef :: Atom
 errRef = Ref C.vError
