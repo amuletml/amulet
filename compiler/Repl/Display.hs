@@ -56,7 +56,9 @@ valueRepr getVal = do
       tab <- loop (L.next table)
       pure $ if T.pack "__tag" `Map.member` tab
                 then case tab Map.! T.pack "__tag" of
-                       String x -> Constructor x (Map.lookup (T.pack "1") tab)
+                       String x -> if x == T.pack "__builtin_unit"
+                                      then Nil
+                                      else Constructor x (Map.lookup (T.pack "1") tab)
                        _ -> error "Malformed constructor value when converting from Lua"
                 else Table tab
     _ -> pure $ Opaque "foreign value"

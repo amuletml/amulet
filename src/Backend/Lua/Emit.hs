@@ -208,7 +208,7 @@ emitLit (Float x) = LuaNumber x
 emitLit (Str str) = LuaString str
 emitLit LitTrue   = LuaTrue
 emitLit LitFalse  = LuaFalse
-emitLit Unit      = LuaNil -- evil!
+emitLit Unit      = LuaRef (LuaName "__builtin_unit") -- evil!
 emitLit RecNil    = LuaTable []
 
 emitAtom :: Occurs a => Atom a -> ExprContext a LuaExpr

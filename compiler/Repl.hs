@@ -83,6 +83,7 @@ defaultState mode = do
   L.runLuaWith state $ do
     L.openlibs
     L.OK <- L.dostring preamble
+    L.OK <- L.dostring "__builtin_unit = { __tag = '__builtin_unit' }"
     pure ()
 
   pure ReplState
