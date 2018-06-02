@@ -297,6 +297,7 @@ makePrisms ''Expr
 makePrisms ''Type
 makePrisms ''Pattern
 makePrisms ''Toplevel
+makePrisms ''TyBinder
 makePrisms ''Constructor
 makePrisms ''Lit
 

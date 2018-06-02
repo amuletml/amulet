@@ -1,4 +1,7 @@
 do
+  local __builtin_unit = {
+    ["__tag"] = "__builtin_unit"
+  }
   local function main (x)
     local __o, __n = x, {
       

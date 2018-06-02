@@ -27,7 +27,7 @@ import Core.Var
 import Text.Pretty.Semantic
 
 import Parser.Wrapper (runParser)
-import Parser (parseInput)
+import Parser (parseTops)
 import Parser.Error
 
 import Test.Tasty
@@ -52,7 +52,7 @@ compile (file:files) = do
 
   where
     go (Right (tops, scope, modScope, env)) (name, file) =
-      case runParser name (L.fromStrict file) parseInput of
+      case runParser name (L.fromStrict file) parseTops of
         (Just parsed, _) -> do
           resolved <- resolveProgram scope modScope parsed
           case resolved of

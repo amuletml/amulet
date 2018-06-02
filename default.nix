@@ -34,9 +34,11 @@ let
       , lens
       , array
       , Diff
+      , hslua
       , HUnit
       , tasty
       , hedgehog
+      , haskeline
       , directory
       , monad-gen
       , bytestring
@@ -65,7 +67,8 @@ let
         ];
 
         executableHaskellDepends = [
-          mtl text base lens monad-gen bytestring containers pretty-show
+          mtl text base lens monad-gen bytestring containers pretty-show hslua
+          haskeline
         ];
 
         testHaskellDepends = [

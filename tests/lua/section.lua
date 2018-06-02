@@ -1,4 +1,7 @@
 do
+  local __builtin_unit = {
+    ["__tag"] = "__builtin_unit"
+  }
   local function _star (l)
     return function (r)
       return l * r

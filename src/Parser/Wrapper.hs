@@ -8,7 +8,7 @@ module Parser.Wrapper
   , Parser
   , Action
   , alexInputPrevChar, alexGetByte
-  , failWith
+  , failWith, failWiths
   , getStartCode, setStartCode
   , getInput, setInput
   , getState, setState, mapState
@@ -121,6 +121,9 @@ instance MonadWriter [ParseError] Parser where
 
 failWith :: ParseError -> Parser a
 failWith e = P $ \s -> PFailed (e:sErrors s)
+
+failWiths :: [ParseError] -> Parser a
+failWiths e = P $ \s -> PFailed (reverse e ++ sErrors s)
 
 getStartCode :: Parser Int
 getStartCode = P $ \s -> POK s (sMode s)

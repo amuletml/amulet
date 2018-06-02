@@ -1,5 +1,5 @@
 visible03-fail.ml[3:12 ..3:16]: error
-  Expression given as argument to function of type ('a : type) -> 'a -> int
+  Expression given as argument to function of type forall ('a : type) -> 'a -> int
       This function expects a type as its first argument;
       Have you forgotten an instantiation?
 

@@ -1,7 +1,7 @@
 fail_skolem_poly.ml[2:32 ..2:32]: error
   Could not match rigid type variable a with the type int
-  • Note: the variable a was rigidified because of a type ascription
-  against the type {'a : type}. 'a -> 'a
+  • Note: the variable a was rigidified because of an ascription against the type
+          forall 'a. 'a -> 'a
 
 
   Arising in the expression
@@ -10,8 +10,8 @@ fail_skolem_poly.ml[2:32 ..2:32]: error
   │ 
 fail_skolem_poly.ml[2:32 ..2:36]: error
   Could not match rigid type variable a with the type int
-  • Note: the variable a was rigidified because of a type ascription
-  against the type {'a : type}. 'a -> 'a
+  • Note: the variable a was rigidified because of an ascription against the type
+          forall 'a. 'a -> 'a
 
 
   Arising in the expression
