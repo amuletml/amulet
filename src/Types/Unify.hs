@@ -277,7 +277,14 @@ subsumes k ot@(TyTuple a b) nt@(TyTuple a' b') = do
   wa <- subsumes k a a'
   wb <- subsumes k b b'
   [elem, elem'] <- fmap TvName <$> replicateM 2 fresh
-  let cont ex
+  let cont (Tuple (e:es) (an, _)) =
+        Tuple [ ExprWrapper wa e (an, a')
+              , case es of
+                 [e] -> ExprWrapper wb e (an, b')
+                 xs -> ExprWrapper wb (Tuple xs (an, b)) (an, b')
+              ]
+              (an, nt)
+      cont ex
         | an <- annotation ex =
           Match ex [ ( PTuple [ Capture elem (an, a), Capture elem' (an, b) ] (an, ot)
                      , Tuple [ ExprWrapper wa (VarRef elem (an, a)) (an, a')
@@ -287,7 +294,7 @@ subsumes k ot@(TyTuple a b) nt@(TyTuple a' b') = do
   pure (WrapFn (MkWrapCont cont "tuple re-packing"))
 
 subsumes k a@(TyApp lazy _) b@(TyApp lazy' _)
-  | lazy == lazy', lazy' == tyLazy = Cast <$> k a b
+  | lazy == lazy', lazy' == tyLazy = probablyCast <$> k a b
 
 subsumes k (TyApp lazy ty') ty | lazy == tyLazy, _TyVar `isn't` ty = do
   co <- k ty' ty
@@ -295,7 +302,7 @@ subsumes k (TyApp lazy ty') ty | lazy == tyLazy, _TyVar `isn't` ty = do
         | an <- annotation ex =
           App (ExprWrapper (TypeApp ty) (VarRef forceName (an, forceTy))
                 (an, forceTy' ty))
-              (ExprWrapper (Cast (AppCo (ReflCo tyLazy) co)) ex (an, TyApp lazy ty))
+              (ExprWrapper (probablyCast (AppCo (ReflCo tyLazy) co)) ex (an, TyApp lazy ty))
               (an, ty)
   pure (WrapFn (MkWrapCont wrap "automatic forcing"))
 
@@ -306,13 +313,14 @@ subsumes k ty' (TyApp lazy ty) | lazy == tyLazy, _TyVar `isn't` ty' = do
           App (ExprWrapper (TypeApp ty) (VarRef lAZYName (an, lAZYTy))
                 (an, lAZYTy' ty))
               (Fun (PLiteral LiUnit (an, tyUnit))
-                (ExprWrapper (Cast co) ex (an, ty'))
+                (ExprWrapper (probablyCast co) ex (an, ty'))
                 (an, TyArr tyUnit ty))
               (an, TyApp lazy ty)
   pure (WrapFn (MkWrapCont wrap "automatic thunking"))
 
 
-subsumes k a b = Cast <$> k a b
+subsumes k a b = probablyCast <$> k a b where
+
 
 skolemise :: MonadGen Int m => SkolemMotive Typed -> Type Typed -> m (Wrapper Typed, Type Typed)
 skolemise motive ty@TyPi{} | Just (tv, k, t) <- isSkolemisableTyBinder ty = do
@@ -330,6 +338,25 @@ isSkolemisableTyBinder :: Type Typed -> Maybe (Var Typed, Maybe (Type Typed), Ty
 isSkolemisableTyBinder (TyPi (Implicit v k) c) = Just (v, k, c)
 isSkolemisableTyBinder (TyPi (Explicit v k) c) = Just (v, Just k, c)
 isSkolemisableTyBinder _ = Nothing
+
+-- Which coercions are safe to remove *here*?
+isReflexiveCo :: Coercion Typed -> Bool
+isReflexiveCo ReflCo{} = True
+isReflexiveCo (SymCo c) = isReflexiveCo c
+isReflexiveCo (AppCo a b) = isReflexiveCo a && isReflexiveCo b
+isReflexiveCo (ArrCo a b) = isReflexiveCo a && isReflexiveCo b
+isReflexiveCo (ProdCo a b) = isReflexiveCo a && isReflexiveCo b
+isReflexiveCo (ExactRowsCo rs) = all (isReflexiveCo . snd) rs
+isReflexiveCo (RowsCo c rs) = isReflexiveCo c && all (isReflexiveCo . snd) rs
+isReflexiveCo (ForallCo _ d c) = isReflexiveCo d && isReflexiveCo c
+isReflexiveCo AssumedCo{} = False
+isReflexiveCo ProjCo{} = False
+isReflexiveCo VarCo{} = False
+
+probablyCast :: Coercion Typed -> Wrapper Typed
+probablyCast x
+  | isReflexiveCo x = IdWrap
+  | otherwise = Cast x
 
 freshSkol :: MonadGen Int m => SkolemMotive Typed -> Type Typed -> Var Typed -> m (Type Typed)
 freshSkol m ty u = do
