@@ -71,7 +71,7 @@ import qualified Types.Wellformed as W
 
   In order to convert or flat ANF into a tree, we walk down the "spine" of the
   expression tree - the body of let bindings and single-variable matches. For
-  each element on the spin, we pop its dependencies from the stack and push the
+  each element on the spine, we pop its dependencies from the stack and push the
   result back onto the stack (when the result is only used once).
 
   Most of the time this occurs with no problem. However, there are situations
@@ -174,8 +174,8 @@ emitProgramWith ev esc = flip runState esc . emitProg where
         var' <- state (pushVar var)
         pure $ LuaLocal [LuaName var'] [LuaFunction
                                          [LuaName "x"]
-                                        [LuaReturn (LuaTable [(LuaNumber 1, LuaString var')
-                                                             , (LuaNumber 2, LuaRef (LuaName "x"))])]]
+                                        [LuaReturn (LuaTable [ (LuaString "__tag", LuaString var')
+                                                             , (LuaNumber 1, LuaRef (LuaName "x"))])]]
 
   emitLet :: (MonadState EscapeScope m, Occurs a) => ([a], [Type a], [Term a]) -> m [LuaStmt]
   emitLet (vs, _, es) = concat <$> traverse emitBind (stronglyConnComp (zipWith letDeps vs es))
@@ -456,10 +456,10 @@ patternTest _ (PatLit l)  vr       = LuaBinOp (emitLit l) "==" vr
 patternTest s (PatExtend p rs) vr  = foldAnd (patternTest s p vr : map test rs) where
   test (var', pat) = patternTest s pat (LuaRef (LuaIndex vr (LuaString var')))
 patternTest s (Constr con) vr      = foldAnd [tag s con vr]
-patternTest s (Destr con p) vr     = foldAnd [tag s con vr, patternTest s p (LuaRef (LuaIndex vr (LuaNumber 2)))]
+patternTest s (Destr con p) vr     = foldAnd [tag s con vr, patternTest s p (LuaRef (LuaIndex vr (LuaNumber 1)))]
 
 tag :: Occurs a => EscapeScope -> a -> LuaExpr -> LuaExpr
-tag scp con vr = LuaBinOp (LuaRef (LuaIndex vr (LuaNumber 1))) "==" (LuaString (getVar con scp))
+tag scp con vr = LuaBinOp (LuaRef (LuaIndex vr (LuaString "__tag"))) "==" (LuaString (getVar con scp))
 
 patternBindings :: Occurs a => Pattern a -> LuaExpr -> [(a, LuaExpr)]
 patternBindings (PatLit _) _     = []
@@ -467,7 +467,7 @@ patternBindings (Capture n _) v
   | doesItOccur n = [(n, v)]
   | otherwise = []
 patternBindings (Constr _) _     = []
-patternBindings (Destr _ p) vr   = patternBindings p (LuaRef (LuaIndex vr (LuaNumber 2)))
+patternBindings (Destr _ p) vr   = patternBindings p (LuaRef (LuaIndex vr (LuaNumber 1)))
 patternBindings (PatExtend p rs) vr = patternBindings p vr ++ concatMap (index vr) rs where
   index vr (var', pat) = patternBindings pat (LuaRef (LuaIndex vr (LuaString var')))
 

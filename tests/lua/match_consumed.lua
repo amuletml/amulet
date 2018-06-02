@@ -4,7 +4,7 @@ do
   }
   local function Some (x)
     return {
-      [1.0] = "Some",
+      ["__tag"] = "Some",
       [2.0] = x
     }
   end
@@ -12,9 +12,9 @@ do
     return function (x)
       local a = f(1.0)
       local b
-      if x[1.0] == "None" then
+      if x.__tag == "None" then
         b = 0.0
-      elseif x[1.0] == "Some" then
+      elseif x.__tag == "Some" then
         b = x[2.0] * 2.0
       end
       return f(a + b)

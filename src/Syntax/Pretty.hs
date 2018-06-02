@@ -300,7 +300,7 @@ prettyType (TyPi x t) = uncurry prettyQuantifiers . second reverse $ unwind t [x
                            ppr _ = undefined
                         in hsep (map ppr (q:these)) <+> arrow
                    <+> prettyQuantifiers inner those
-       Anon{}:_ -> hsep (punctuate arrow (map (prettyType . (^?! _Anon)) (q:these))) <+> arrow <+> prettyQuantifiers inner those
+       Anon{}:_ -> hsep (punctuate (space <> arrow) (map (prettyType . (^?! _Anon)) (q:these))) <+> arrow <+> prettyQuantifiers inner those
        [] -> error "what?"
 
   sameAs Implicit{} Implicit{} = True

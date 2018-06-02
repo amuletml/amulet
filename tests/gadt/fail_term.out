@@ -1,12 +1,12 @@
 fail_term.ml[16:3 ..16:30]: error
   Could not match rigid type variable b with the rigid type variable a
   • Note: the variable b was rigidified because of an ascription against the type
-          forall 'a 'b. term unit ('a-> 'b -> 'b)
+          forall 'a 'b. term unit ('a -> 'b -> 'b)
           and is represented by the constant ph
 
   • Note: the rigid type variable a, in turn,
           was rigidified because of an ascription against the type
-          forall 'a 'b. term unit ('a-> 'b -> 'b)
+          forall 'a 'b. term unit ('a -> 'b -> 'b)
           and is represented by the constant pg
 
   Arising in the expression

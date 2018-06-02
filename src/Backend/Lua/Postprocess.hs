@@ -69,6 +69,7 @@ genOperator op | op == vLAZY =
            [ LuaFunction [ eks ]
              [ LuaReturn (LuaTable [ (LuaNumber 1, LuaRef eks)
                                    , (LuaNumber 2, LuaFalse)
+                                   , (LuaString "__tag", LuaString "Lazy")
                                    ]) ] ] where
   eks = LuaName "x"
 genOperator op | op == vForce =
@@ -92,3 +93,10 @@ genOperator op =
   where
     left  = LuaName "l"
     right = LuaName "r"
+
+{- Note: Tags on Lazy
+
+   Lazy doesn't technically _need_ a tag, and including it in fact
+   raises the memory usage of things. But, the REPL is taught to
+   recognise __tag fields and print them as constructors, and so this
+   looks better. -}
