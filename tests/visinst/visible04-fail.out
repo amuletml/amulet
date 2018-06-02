@@ -1,5 +1,5 @@
 visible04-fail.ml[4:24 ..4:24]: error
-  Could not match type unit with int
+  Could not match type int with unit
 
   Arising in the expression
   │ 

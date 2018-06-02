@@ -74,14 +74,14 @@ checkPattern ex@(Destructure con ps ann) target =
             case pty of
               TyWithConstraints cs ty -> (cs, ty)
               _ -> ([], pty)
-      co <- unify ex ty target
-      wrapPattern (Destructure (TvName con) Nothing, mempty, cs) (ann, ty) co
+      co <- unify ex target ty
+      wrapPattern (Destructure (TvName con) Nothing, mempty, cs) (ann, target) co
     Just p ->
       let go cs t = do
             (c, d, _) <- decompose ex _TyArr t
             (ps', b, cs') <- checkPattern p c
-            co <- unify ex d target
-            wrapPattern (Destructure (TvName con) (Just ps'), b, cs ++ cs') (ann, d) co
+            co <- unify ex target d
+            wrapPattern (Destructure (TvName con) (Just ps'), b, cs ++ cs') (ann, target) co
       in do
         t <- skolGadt con =<< lookupTy con
         case t of
@@ -93,17 +93,17 @@ checkPattern pt@(PRecord rows ann) ty = do
     (p', t, caps, cs) <- inferPattern pat
     pure ((var, p'), (var, t), caps, cs))
   co <- unify pt ty (TyRows rho rowts)
-  wrapPattern (PRecord rowps, mconcat caps, concat cons) (ann, TyRows rho rowts) co
+  wrapPattern (PRecord rowps, mconcat caps, concat cons) (ann, ty) co
 checkPattern pt@(PType p t ann) ty = do
   (p', it, binds, cs) <- inferPattern p
   t' <- resolveKind (BecauseOf pt) t
   _ <- subsumes pt t' it
   co <- unify pt ty t'
-  wrapPattern (PType p' t', binds, cs) (ann, t') co
+  wrapPattern (PType p' t', binds, cs) (ann, ty) co
 checkPattern pt ty = do
   (p, ty', binds, cs) <- inferPattern pt
-  (_, co) <- unify pt ty' ty
-  pure (PWrapper (co, ty') p (annotation p, ty'), binds, cs)
+  (_, co) <- unify pt ty ty'
+  pure (PWrapper (co, ty') p (annotation p, ty), binds, cs)
 
 boundTvs :: forall p. (Show (Var p), Ord (Var p))
          => Pattern p -> Telescope p -> Set.Set (Var p)

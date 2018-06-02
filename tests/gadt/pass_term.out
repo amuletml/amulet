@@ -5,7 +5,7 @@ There : {'xs : 'gd}. {'x : 'gd}. {'xs : 'gd}. {'y : 'gd}. ('xs ~ 'y * 'xs) ⊃ e
 Var : {'ctx : 'kd}. {'ty : 'kd}. elem 'ty 'ctx -> term 'ctx 'ty
 Lam : {'ty : 'lt}. {'a : 'lt}. {'b : 'lt}. {'ctx : 'lt}. ('ty ~ 'a -> 'b) ⊃ term ('a * 'ctx) 'b -> term 'ctx 'ty
 App : {'ty : 'ns}. {'a : 'ns}. {'b : 'ns}. {'ctx : 'ns}. ('ty ~ 'b) ⊃ (term 'ctx ('a -> 'b) * term 'ctx 'a) -> term 'ctx 'ty
-const : {'px : type}. {'y : 'px}. {'x : 'px}. {'xs : 'px}. term 'xs ('x -> 'y -> 'x)
+const : {'pz : type}. {'a : 'pz}. {'ctx : 'pz}. {'a : 'pz}. term 'ctx ('a -> 'a -> 'a)
 list : type -> type
 elem : {'dk : type}. 'dk -> 'dk -> type
 term : {'it : type}. 'it -> 'it -> type

@@ -79,10 +79,6 @@ tyvarA, tyvarB :: CoVar
 tyvarA = CoVar (-30) "a" TypeVar
 tyvarB = CoVar (-31) "b" TypeVar
 
-builtinFst, builtinSnd :: CoVar
-builtinFst = CoVar (-32) "fst" ValueVar
-builtinSnd = CoVar (-33) "snd" ValueVar
-
 builtinVarList :: (IsVar a, IsVar b) => [(a, Type b)]
 builtinVarList = vars where
   op x t = (fromVar x, t)

@@ -15,6 +15,7 @@ import Data.Tuple
 
 import Numeric (showHex)
 
+import Text.Pretty.Semantic
 import Core.Var
 
 data EscapeScope = EscapeScope { toLua   :: Map.Map CoVar T.Text
@@ -43,7 +44,7 @@ pushVar :: IsVar a => a -> EscapeScope -> (T.Text, EscapeScope)
 pushVar v s = escapeVar (toVar v) where
   escapeVar v@(CoVar _ name _) =
     case Map.lookup v (toLua s) of
-      Just _ -> error "Variable already declared"
+      Just _ -> error ("Variable already declared: " ++ show (pretty v))
       Nothing -> pushFirst Nothing (escape s name)
 
   pushFirst :: Maybe Int -> T.Text -> (T.Text, EscapeScope)
@@ -84,4 +85,6 @@ chars = Map.fromList
   , ('-', "_minus")
   , ('~', "_tilde")
   , ('[', "_lbrack")
-  , (']', "_rbrack ") ]
+  , (']', "_rbrack ")
+  , ('\'', "_prime")
+  , ('_', "_") ]

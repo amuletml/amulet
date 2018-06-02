@@ -1,5 +1,8 @@
 {
-module Parser (parseInput) where
+module Parser
+  ( parseTops
+  , parseRepl
+  ) where
 
 import Control.Arrow (second)
 
@@ -12,6 +15,7 @@ import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.Text as T
 
 import Parser.Wrapper
+import Parser.Context
 import Parser.Error
 import Parser.Lexer
 import Parser.Token
@@ -19,7 +23,9 @@ import Syntax
 
 }
 
-%name parseInput Tops
+%name parseTops Tops
+%name parseRepl Repl
+
 %tokentype { Token }
 %monad { Parser } { (>>=) } { return }
 %lexer { lexer } { Token TcEOF _ _ }
@@ -122,6 +128,15 @@ Ctor :: { Constructor Parsed }
      : conid                                   { withPos1 $1 $ UnitCon (getName $1) }
      | conid of Type                           { withPos2 $1 $3 $ ArgCon (getName $1) (getL $3) }
      | conid ':' Type                          { withPos2 $1 $3 $ GeneralisedCon (getName $1) (getL $3) }
+
+Repl :: { Either (Toplevel Parsed) (Expr Parsed) }
+     : Top   ReplSep                           { Left $1 }
+     | Expr  ReplSep                           { Right $1 }
+
+ReplSep :: { () }
+    : ';;'   { () }
+    | '$sep' { () }
+    |        { () }
 
 Expr :: { Expr Parsed }
      : ExprApp                                 { $1 }
@@ -313,8 +328,20 @@ lexer :: (Token -> Parser a) -> Parser a
 lexer = (lexerContextScan >>=)
 
 parseError :: (Token, [String]) -> Parser a
-parseError (tok, exp) = failWith (UnexpectedToken tok (nub (map unmap exp)))
+parseError (tok, exp) = do
+  stk <- pending <$> getState
+  case findEof stk of
+    Nothing -> failWith mainErr
+    Just (Token _ _ e) -> failWiths [mainErr, UnexpectedEnd e]
+
   where
+    mainErr = UnexpectedToken tok (nub (map unmap exp))
+
+    findEof :: PendingState -> Maybe Token
+    findEof (Working t@(Token TcEOF _ _)) = Just t
+    findEof (Result _ s) = findEof s
+    findEof _ = Nothing
+
     unmap :: String -> String
     unmap "'$end'" = friendlyName TcVEnd
     unmap "'$sep'" = friendlyName TcVSep

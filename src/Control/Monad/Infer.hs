@@ -70,14 +70,14 @@ deriving instance (Eq (Ann p), Eq (Var p), Eq (Expr p), Eq (Type p))
   => Eq (Constraint p)
 
 data TypeError where
-  NotEqual :: Pretty (Var p) => Type p -> Type p -> TypeError
-  Occurs :: Pretty (Var p) => Var p -> Type p -> TypeError
+  NotEqual :: (Pretty (Var p), Ord (Var p)) => Type p -> Type p -> TypeError
+  Occurs :: (Pretty (Var p), Ord (Var p)) => Var p -> Type p -> TypeError
 
   NotInScope :: Var Resolved -> TypeError
   FoundHole :: Var Typed -> Type Typed -> TypeError
 
-  Impredicative :: Pretty (Var p) => Var p -> Type p -> TypeError
-  ImpredicativeApp :: Pretty (Var p) => Type p -> Type p -> TypeError
+  Impredicative :: (Pretty (Var p), Ord (Var p)) => Var p -> Type p -> TypeError
+  ImpredicativeApp :: (Pretty (Var p), Ord (Var p)) => Type p -> Type p -> TypeError
 
   EscapedSkolems :: [Skolem Typed] -> Type Typed -> TypeError
   SkolBinding :: Skolem Typed -> Type Typed -> TypeError
@@ -97,8 +97,8 @@ data TypeError where
   Malformed :: Pretty (Var p) => Type p -> TypeError
 
   -- Visible quantification
-  WrongQuantifier   :: (Pretty (Var p), Pretty (Var p')) => Expr p -> Type p' -> TypeError
-  NakedInstArtifact :: Pretty (Var p) => Expr p -> TypeError
+  WrongQuantifier   :: (Pretty (Var p), Pretty (Var p'), Ord (Var p), Ord (Var p')) => Expr p -> Type p' -> TypeError
+  NakedInstArtifact :: (Pretty (Var p), Ord (Var p)) => Expr p -> TypeError
 
   NotPromotable :: Pretty (Var p) => Var p -> Type p -> Doc -> TypeError
   ManyErrors :: [TypeError] -> TypeError
@@ -208,23 +208,23 @@ freshTV :: MonadGen Int m => m (Type Typed)
 freshTV = TyVar . TvName <$> fresh
 
 instance Pretty TypeError where
-  pretty (NotEqual a b@TyArr{}) =
+  pretty (NotEqual b@TyArr{} a) =
     let thing = case a of
           TyType -> string "type constructor"
           _ -> string "function"
-     in vcat [ string "Could not match type" <+> pretty a <+> string "with" <+> pretty b
+     in vcat [ string "Could not match type" <+> displayType a <+> string "with" <+> displayType b
              , string "Have you applied a" <+> thing <+> "to the wrong number of arguments?"
              ]
   pretty (NotEqual TyType b) =
-    vcat [ string "Expected a type, but this annotation is of kind" <+> pretty b
+    vcat [ string "Expected a type, but this annotation is of kind" <+> displayType b
          , string "Have you applied a type constructor to the wrong number of arguments?"
          ]
-  pretty (NotEqual a b) = string "Could not match type" <+> pretty a <+> string "with" <+> pretty b
+  pretty (NotEqual a b) = string "Could not match type" <+> displayType a <+> string "with" <+> displayType b
 
-  pretty (Occurs v t) = string "Occurs check:" <+> string "The type variable" <+> stypeVar (pretty v) </> indent 4 (string "occurs in the type" <+> pretty t)
+  pretty (Occurs v t) = string "Occurs check:" <+> string "The type variable" <+> stypeVar (pretty v) </> indent 4 (string "occurs in the type" <+> displayType t)
   pretty (NotInScope e) = string "Variable not in scope:" <+> pretty e
   pretty (ArisingFrom er ex) = pretty er <#> empty <#> nest 4 (string "Arising in" <+> blameOf ex)
-  pretty (FoundHole e s) = string "Found typed hole" <+> pretty e <+> "of type" <+> pretty s
+  pretty (FoundHole e s) = string "Found typed hole" <+> pretty e <+> "of type" <+> displayType s
 
   pretty (Note te m) = pretty te <#> note <+> align (pretty m)
   pretty (Suggestion te m) = pretty te <#> bullet (string "Suggestion:") <+> align (pretty m)
@@ -235,30 +235,30 @@ instance Pretty TypeError where
   pretty (NoOverlap ta tb)
     | TyExactRows ra <- ta
     , TyRows _ rb <- tb
-    =   string "No overlap between exact record" <+> nest 9 (verbatim ta </> string "and polymorphic record" <+> verbatim tb)
+    =   string "No overlap between exact record" <+> nest 9 (displayType ta </> string "and polymorphic record" <+> displayType tb)
     <#> missing ra rb
     | TyExactRows rb <- tb
     , TyRows _ ra <- ta
-    =   string "No overlap between polymorphic record" <+> nest 21 (verbatim ta </> string "and exact record" <+> verbatim tb)
+    =   string "No overlap between polymorphic record" <+> nest 21 (displayType ta </> string "and exact record" <+> displayType tb)
     <#> missing ra rb
     | TyExactRows ra <- ta
     , TyExactRows rb <- tb
-    =  string "No overlap between exact records" <+> nest 29 (verbatim ta </> string "and" <+> verbatim tb)
-    <#> missing ra rb
+    =  string "No overlap between exact records" <+> nest 29 (displayType ta </> string "and" <+> displayType tb)
+    <#> missing rb ra
     | otherwise
-    = string "\x1b[1;32minternal compiler error\x1b[0m: NoOverlap" <+> verbatim ta <+> verbatim tb
+    = string "\x1b[1;32minternal compiler error\x1b[0m: NoOverlap" <+> displayType ta <+> displayType tb
 
   pretty (Impredicative v t)
     = vsep [ string "Illegal instantiation of type variable" <+> stypeVar (pretty v)
-           , indent 16 (string "with polymorphic type" <+> verbatim t)
+           , indent 16 (string "with polymorphic type" <+> displayType t)
            , note <+> string "doing so would constitute" <+> stypeCon (string "impredicative polymorphism")
            ]
 
   pretty (ImpredicativeApp tf tx)
-    = vsep [ string "Illegal use of polymorphic type" <+> verbatim tx
-           , indent 2 $ string "as argument to the type function" <+> verbatim tf
+    = vsep [ string "Illegal use of polymorphic type" <+> displayType tx
+           , indent 2 $ string "as argument to the type function" <+> displayType tf
            , note <+> string "instantiating a type variable"
-           <+> nest 2 (parens (string "the argument to" <+> verbatim tf)
+           <+> nest 2 (parens (string "the argument to" <+> displayType tf)
                    </> string "with a polymorphic type constitutes" <+> stypeCon (string "impredicative polymorphism"))
            ]
 
@@ -266,7 +266,7 @@ instance Pretty TypeError where
     vsep [ case esc of
             [Skolem{..}] ->
               let skol = stypeVar (pretty _skolVar) in
-              string "Rigid type variable" <+> skol <+> string "has escaped its scope of" <+> pretty _skolScope
+              string "Rigid type variable" <+> skol <+> string "has escaped its scope of" <+> displayType _skolScope
                   <#> note <+> string "the variable" <+> skol <+> string "was rigidified because"
                         <+> nest 8 (prettyMotive _skolMotive <> comma)
             _ -> foldr ((<#>) . pretty . flip EscapedSkolems t . pure) empty esc
@@ -283,21 +283,22 @@ instance Pretty TypeError where
 
   pretty (SkolBinding (Skolem ok v _ m) b) =
     vsep [ string "Could not match rigid type variable" <+> skol <+> string "with" <+> whatIs b
-         , note <+> "the variable" <+> skol <+> string "was rigidified because" <+> prettyMotive m
+         , note <+> "the variable" <+> skol <+> string "was rigidified because"
+                <+> nest 8 (prettyMotive m)
          ] <#> case b of
              TySkol (Skolem k v _ m) ->
                vcat [ indent 8 (string "and is represented by the constant") <+> stypeSkol (pretty ok)
                     , empty
                     , vsep [ note <+> "the rigid type variable" <+> stypeVar (pretty v) <> comma <+> string "in turn" <> comma
-                           , indent 8 (string "was rigidified because") <+> prettyMotive m
+                           , indent 8 . align $ string "was rigidified because" <+> prettyMotive m
                            , indent 8 (string "and is represented by the constant") <+> stypeSkol (pretty k) ] ]
              _ -> empty
     where whatIs (TySkol (Skolem _ v _ _)) = string "the rigid type variable" <+> stypeVar (pretty v)
-          whatIs t = string "the type" <+> pretty (withoutSkol t)
+          whatIs t = string "the type" <+> displayType (withoutSkol t)
           skol = stypeVar (pretty v)
 
   pretty (WrongQuantifier _ ty@(TyPi Explicit{} _)) =
-    vsep [ string "Expression given as argument to function of type" <+> pretty ty
+    vsep [ string "Expression given as argument to function of type" <+> displayType ty
          , indent 4 $ string "This function expects a type as its first argument;"
          , indent 4 $ string "Have you forgotten an instantiation?"
          , empty
@@ -305,7 +306,7 @@ instance Pretty TypeError where
              <+> pretty (InstHole undefined :: Expr Typed) <+> "to make the compiler infer this"
          ]
   pretty (WrongQuantifier t ty@TyArr{}) =
-    vsep [ thing <+> "given as argument to function of type" <+> pretty ty
+    vsep [ thing <+> "given as argument to function of type" <+> displayType ty
          , string "Have you applied a function to the wrong number of arguments?"
          ] where
       thing = case t of
@@ -313,7 +314,7 @@ instance Pretty TypeError where
         InstType{} -> highlight "Type" <+> pretty t
         _ -> error "WrongQuantifier wrong"
   pretty (WrongQuantifier t ty) =
-    vsep [ thing <+> "given as argument to expression of type" <+> pretty ty
+    vsep [ thing <+> "given as argument to expression of type" <+> displayType ty
          , string "Have you applied a function to too many arguments?"
          ] where
       thing = case t of
@@ -355,9 +356,9 @@ diff :: [(Text, b)] -> [(Text, b)] -> [Doc]
 diff ra rb = map (stypeVar . string . T.unpack . fst) (deleteFirstsBy ((==) `on` fst) rb ra)
 
 prettyMotive :: SkolemMotive Typed -> Doc
-prettyMotive (ByAscription t) = string "of a type ascription" <#> string "against the type" <+> pretty t
-prettyMotive (BySubsumption t1 t2) = string "of a subsumption constraint relating" <+> pretty t1 <+> string "with" <+> pretty t2
-prettyMotive (ByExistential v t) = string "it is an existential" <> comma <#> string "bound by the type of" <+> pretty v <> comma <+> pretty t
+prettyMotive (ByAscription t) = string "of an ascription against the type" <#> displayType t
+prettyMotive (BySubsumption t1 t2) = string "of a requirement that" <+> displayType t1 <#> string "be as polymorphic as" <+> displayType t2
+prettyMotive (ByExistential v t) = string "it is an existential" <> comma <#> string "bound by the type of" <+> pretty v <> comma <+> displayType t
 
 squish :: (a -> c) -> Maybe (c -> c) -> Maybe (a -> c)
 squish f = Just . maybe f (.f)

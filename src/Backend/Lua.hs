@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Backend.Lua
   ( compileProgram
   , LuaStmt
@@ -14,4 +15,6 @@ import Core.Var
 import Syntax.Types
 
 compileProgram :: IsVar a => Env -> [Stmt a] -> LuaStmt
-compileProgram e = LuaDo . addOperators . emitProgram e . tagOccursVar
+compileProgram e = LuaDo . (unitDef :) . addOperators . emitProgram e . tagOccursVar where
+  unitDef = LuaLocal [ LuaName "__builtin_unit" ] [ LuaTable [ (LuaString "__tag", LuaString "__builtin_unit") ] ] 
+
