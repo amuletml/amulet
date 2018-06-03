@@ -284,7 +284,7 @@ prettyType :: forall p. (Pretty (Var p), Ord (Var p)) => Type p -> Doc
 prettyType x@TyPromotedCon{} = pretty x
 prettyType x@TyVar{} = pretty x
 prettyType x@TyCon{} = pretty x
-prettyType TySkol{} = error "skolem in displayType is a TC bug"
+prettyType (TySkol v) = stypeSkol (pretty (v ^. skolVar))
 prettyType (TyPi x t) = uncurry prettyQuantifiers . second reverse $ unwind t [x] where
   unwind (TyPi x t) xs = unwind t (x:xs)
   unwind t xs = (t, xs)
@@ -301,7 +301,9 @@ prettyType (TyPi x t) = uncurry prettyQuantifiers . second reverse $ unwind t [x
                            ppr _ = undefined
                         in hsep (map ppr (q:these)) <+> arrow
                    <+> prettyQuantifiers inner those
-       Anon{}:_ -> hsep (punctuate (space <> arrow) (map (prettyType . (^?! _Anon)) (q:these))) <+> arrow <+> prettyQuantifiers inner those
+       Anon{}:_ ->
+         let arg x = parenTuple x (pretty x)
+          in hsep (punctuate (space <> arrow) (map (arg . (^?! _Anon)) (q:these))) <+> arrow <+> prettyQuantifiers inner those
        [] -> error "what?"
 
   sameAs Implicit{} Implicit{} = True
