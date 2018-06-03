@@ -106,6 +106,9 @@ data Expr p
   -- Module
   | OpenIn (Var p) (Expr p) (Ann p)
 
+  -- Laziness
+  | Lazy (Expr p) (Ann p)
+
   | ExprWrapper (Wrapper p) (Expr p) (Ann p)
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Expr p)

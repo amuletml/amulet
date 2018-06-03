@@ -3,6 +3,6 @@ let if_then_else c t e =
 
 external val print : string -> unit = "print"
 
-let main = if_then_else true (print "hello there") (lazy (fun x -> x))
+let main = if_then_else true (print "hello there") (lazy ())
 
 (* one branch explicit, one implicit *)

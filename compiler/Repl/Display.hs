@@ -4,6 +4,7 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Text.Encoding as T
 import qualified Data.Text as T
 import Data.Maybe
+import Data.Char
 
 import qualified Foreign.Lua.Types.Error as L
 import qualified Foreign.Lua.Api.Types as L
@@ -72,9 +73,10 @@ instance Pretty Value where
   pretty (Boolean x) = sliteral . string $ if x then "true" else "false"
   pretty (Opaque x)  = enclose (char '<') (char '>') (keyword x)
   pretty (Constructor x Nothing) = stypeCon (text x)
-  pretty (Constructor x (Just t)) = stypeCon (text x) <+> parensIf t where
+  pretty (Constructor x (Just t)) = colour (text x) <+> parensIf t where
     parensIf x@Constructor{} = parens (pretty x)
     parensIf x = pretty x
+    colour = if isLower (T.head x) then stypeSkol else stypeCon
   pretty (Table m) | isTuple m = parens (hsep (punctuate comma (map pretty vs))) where
     vs = getValues m
     getValues m = case m Map.! T.pack "2" of
