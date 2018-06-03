@@ -390,7 +390,9 @@ inferLetTy closeOver vs =
 solveEx :: Type Typed -> Subst Typed -> Map.Map (Var Typed) (Wrapper Typed) -> Expr Typed -> Expr Typed
 solveEx _ ss cs = transformExprTyped go id goType where
   go :: Expr Typed -> Expr Typed
-  go (ExprWrapper w e a) = ExprWrapper (goWrap w) e a
+  go (ExprWrapper w e a) = case goWrap w of
+    WrapFn w -> runWrapper w e
+    x -> ExprWrapper x e a
   go x = x
 
   goWrap (TypeApp t) = TypeApp (goType t)
