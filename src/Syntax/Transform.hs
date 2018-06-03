@@ -90,6 +90,7 @@ transformExpr fe = goE where
   transE (InstHole a) = InstHole a
 
   transE (ExprWrapper w e a) = ExprWrapper w (goE e) a
+  transE (Lazy e a) = Lazy (goE e) a
 
   goE = transE . fe
 
@@ -130,6 +131,7 @@ transformExprTyped fe fc ft = goE where
   transE (InstHole a) = InstHole (goA a)
 
   transE (ExprWrapper w e a) = ExprWrapper (goW w) (goE e) (goA a)
+  transE (Lazy e a) = Lazy (goE e) (goA a)
 
   goW (Cast c) = Cast (goC c)
   goW (TypeApp t) = TypeApp (goT t)
@@ -194,5 +196,6 @@ correct ty (TupleSection es a) = TupleSection es (fst a, ty)
 correct ty (OpenIn n e a) = OpenIn n e (fst a, ty)
 correct ty (InstType t a) = InstType t (fst a, ty)
 correct ty (InstHole a) = InstHole (fst a, ty)
+correct ty (Lazy e a) = Lazy e (fst a, ty)
 
 correct ty (ExprWrapper w e a) = ExprWrapper w e (fst a, ty)

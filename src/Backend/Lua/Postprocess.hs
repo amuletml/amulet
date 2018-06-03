@@ -69,7 +69,7 @@ genOperator op | op == vLAZY =
            [ LuaFunction [ eks ]
              [ LuaReturn (LuaTable [ (LuaNumber 1, LuaRef eks)
                                    , (LuaNumber 2, LuaFalse)
-                                   , (LuaString "__tag", LuaString "Lazy")
+                                   , (LuaString "__tag", LuaString "lazy")
                                    ]) ] ] where
   eks = LuaName "x"
 genOperator op | op == vForce =

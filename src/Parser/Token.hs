@@ -35,6 +35,7 @@ data TokenClass
   | TcOf -- of
   | TcModule -- module
   | TcOpen -- open
+  | TcLazy
 
   | TcDot -- .
   | TcComma -- ,
@@ -106,6 +107,7 @@ instance Show TokenClass where
   show TcOf = "of"
   show TcModule = "module"
   show TcOpen = "open"
+  show TcLazy = "lazy"
 
   show TcComma = ","
   show TcDot = "."
