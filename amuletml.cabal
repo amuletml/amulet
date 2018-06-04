@@ -59,6 +59,7 @@ test-suite tests
 
                      , Test.Syntax.Gen
                      , Test.Syntax.Resolve
+                     , Test.Syntax.Verify
 
                      , Test.Types.Check
                      , Test.Types.Unify

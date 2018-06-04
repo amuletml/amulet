@@ -343,7 +343,6 @@ inferLetTy closeOver vs =
               (exp', ty) <- infer exp
               _ <- unify exp ty (snd tv)
               pure (exp', ty)
-        _ <- traverse (flip trace (pure ()) . displayS . pretty) cs
         (tp, k) <- figureOut (var, BecauseOf exp) ty cs
         pure ( [(TvName var, k exp', (ann, tp))], one var tp )
 

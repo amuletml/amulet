@@ -9,8 +9,10 @@ import Data.Spanned
 import Data.Reason
 import Data.Triple
 import Data.Graph
+import Data.Span
 
-import Control.Monad.Writer
+import Control.Monad.Writer.Strict
+import Control.Monad.State.Strict
 
 import Text.Pretty.Semantic
 import Text.Pretty.Note
@@ -18,16 +20,25 @@ import Text.Pretty.Note
 import Syntax.Pretty
 import Syntax.Let
 
-type MonadVerify m = ( MonadWriter (Seq.Seq VerifyError) m )
+type MonadVerify m = ( MonadWriter (Seq.Seq VerifyError) m, MonadState (Set.Set BindingSite) m )
+
+data BindingSite
+  = BindingSite { boundVar :: Var Typed
+                , boundWhere :: Span
+                , boundType :: Type Typed
+                }
+  deriving Show
 
 data VerifyError
   = NonRecursiveRhs { why :: SomeReason
                     , var :: Var Typed
                     , unguarded :: [Var Typed]
                     }
+  | DefinedUnused BindingSite
 
 instance Spanned VerifyError where
   annotation (NonRecursiveRhs e _ _) = annotation e
+  annotation (DefinedUnused b) = boundWhere b
 
 instance Pretty VerifyError where
   pretty (NonRecursiveRhs re ex xs) =
@@ -40,52 +51,76 @@ instance Pretty VerifyError where
          ]
     where plural | length xs == 1 = empty | otherwise = char 's'
           verb | length xs == 1 = string "is" | otherwise = string "are"
+  pretty (DefinedUnused (BindingSite v _ _)) =
+    string "Bound locally but not used:" <+> squotes (pretty v)
 
 instance Note VerifyError Style where
-  diagnosticKind _ = ErrorMessage
+  diagnosticKind NonRecursiveRhs{} = ErrorMessage
+  diagnosticKind DefinedUnused{} = WarningMessage
 
   formatNote f x = indent 2 (Right <$> pretty x) <#> f [annotation x]
 
-runVerify :: Writer (Seq.Seq VerifyError) () -> Either (Seq.Seq VerifyError) ()
-runVerify = fixup . runWriter where
-  fixup ((), w)
-    | Seq.null w = Right ()
-    | otherwise = Left w
+runVerify :: WriterT (Seq.Seq VerifyError) (State (Set.Set BindingSite)) () -> Either (Seq.Seq VerifyError) ()
+runVerify = fixup . flip runState mempty . runWriterT where
+  fixup (((), w), st) =
+    let errs | Seq.null w = Right () | otherwise = Left w
+        others = if Set.null st
+                    then []
+                    else map DefinedUnused (Set.elems st)
+        probably [] = Right ()
+        probably xs = Left (Seq.fromList xs)
+     in case errs of
+       Right () -> probably others
+       Left es -> Left (es Seq.>< Seq.fromList others)
 
 verifyProgram :: MonadVerify m => [Toplevel Typed] -> m ()
 verifyProgram = traverse_ verifyStmt where
-  verifyStmt st@(LetStmt vs) = verifyBindingGroup (BecauseOf st) vs
+  verifyStmt st@(LetStmt vs) = verifyBindingGroup (flip const) (BecauseOf st) vs
   verifyStmt ForeignVal{} = pure ()
   verifyStmt TypeDecl{}   = pure ()
   verifyStmt (Module _ p) = verifyProgram p
   verifyStmt Open{}       = pure ()
 
-verifyBindingGroup :: MonadVerify m => SomeReason -> [(Var Typed, Expr Typed, Ann Typed)] -> m ()
-verifyBindingGroup _ = traverse_ verifyScc . depOrder where
-  verifyScc (AcyclicSCC (_, e, _)) = verifyExpr e
+verifyBindingGroup :: MonadVerify m
+                   => (BindingSite -> Set.Set BindingSite -> Set.Set BindingSite)
+                   -> SomeReason -> [(Var Typed, Expr Typed, Ann Typed)] -> m ()
+verifyBindingGroup k _ = traverse_ verifyScc . depOrder where
+  verifyScc (AcyclicSCC (v, e, (s, t))) = do
+    modify (k (BindingSite v s t))
+    verifyExpr e
   verifyScc (CyclicSCC vs) = do
     let vars = Set.fromList (map fst3 vs)
-    forM_ vs $ \b@(var, ex, _) -> do
+    forM_ vs $ \b@(var, ex, (s, ty)) -> do
       let naked = unguardedVars ex
           blame = BecauseOf (Binding b)
       verifyExpr ex
+      modify (k (BindingSite var s ty))
       unless (naked `Set.disjoint` vars) $
         tell (Seq.singleton (NonRecursiveRhs blame var (Set.toList (naked `Set.intersection` vars))))
 
 verifyExpr :: MonadVerify m => Expr Typed -> m ()
-verifyExpr VarRef{} = pure ()
+verifyExpr (VarRef v (s, t)) = do
+  modify $ Set.delete (BindingSite v s t)
+  pure ()
 verifyExpr ex@(Let vs e _) = do
-  verifyBindingGroup (BecauseOf ex) vs
+  verifyBindingGroup Set.insert (BecauseOf ex) vs
   verifyExpr e
 verifyExpr (If c t e _) = traverse_ verifyExpr [c, t, e]
 verifyExpr (App f x _) = verifyExpr f *> verifyExpr x
-verifyExpr (Fun _ x _) = verifyExpr x
+verifyExpr (Fun p x _) = do
+  modify (Set.union (bindingSites p))
+  verifyExpr x
 verifyExpr (Begin es _) = traverse_ verifyExpr es
 verifyExpr Literal{} = pure ()
 verifyExpr (Match e bs _) = do
   verifyExpr e
-  traverse_ (verifyExpr . snd) bs
-verifyExpr (Function bs _) = traverse_ (verifyExpr . snd) bs
+  for_ bs $ \(pat, body) -> do
+    modify (Set.union (bindingSites pat))
+    verifyExpr body
+verifyExpr (Function bs _) = do
+  for_ bs $ \(pat, body) -> do
+    modify (Set.union (bindingSites pat))
+    verifyExpr body
 verifyExpr (BinOp l o r _) = traverse_ verifyExpr [l, o, r]
 verifyExpr Hole{} = pure ()
 verifyExpr (Ascription e _ _) = verifyExpr e
@@ -104,17 +139,6 @@ verifyExpr InstHole{} = pure ()
 verifyExpr (Lazy e _) = verifyExpr e
 verifyExpr (OpenIn _ e _) = verifyExpr e
 verifyExpr (ExprWrapper _ e _) = verifyExpr e
-
-newtype Binding p = Binding (Var p, Expr p, Ann p)
-
-instance Spanned (Ann p) => Spanned (Binding p) where
-  annotation (Binding (_, _, x)) = annotation x
-
-instance Pretty (Var p) => Pretty (Binding p) where
-  pretty (Binding v) = pretty (LetStmt [v])
-
-instance (Spanned (Ann p), Pretty (Var p)) => Reasonable Binding p where
-  blame _ = string "the" <+> highlight "binding"
 
 unguardedVars :: Expr Typed -> Set.Set (Var Typed)
 unguardedVars (Ascription e _ _)   = unguardedVars e
@@ -143,4 +167,29 @@ unguardedVars InstHole{}           = mempty
 unguardedVars InstType{}           = mempty
 unguardedVars x = error (show x)
 
+bindingSites :: Pattern Typed -> Set.Set BindingSite
+bindingSites (Capture v (s, t)) = Set.singleton (BindingSite v s t)
+bindingSites Wildcard{} = mempty
+bindingSites PLiteral{} = mempty
+bindingSites (Destructure _ p _) = maybe mempty bindingSites p
+bindingSites (PType p _ _) = bindingSites p
+bindingSites (PRecord rs _) = foldMap (bindingSites . snd) rs
+bindingSites (PTuple ps _) = foldMap bindingSites ps
+bindingSites (PWrapper _ p _) = bindingSites p
 
+newtype Binding p = Binding (Var p, Expr p, Ann p)
+
+instance Spanned (Ann p) => Spanned (Binding p) where
+  annotation (Binding (_, _, x)) = annotation x
+
+instance Pretty (Var p) => Pretty (Binding p) where
+  pretty (Binding v) = pretty (LetStmt [v])
+
+instance (Spanned (Ann p), Pretty (Var p)) => Reasonable Binding p where
+  blame _ = string "the" <+> highlight "binding"
+
+instance Ord BindingSite where
+  BindingSite v _ _ `compare` BindingSite v' _ _ = v `compare` v'
+
+instance Eq BindingSite where
+  BindingSite v _ _ == BindingSite v' _ _ = v == v'

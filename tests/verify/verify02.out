@@ -1,0 +1,5 @@
+verify02.ml[2:7 ..2:11]: warning
+  Bound locally but not used: 'y'
+  │ 
+2 │   let y = 1
+  │ 
