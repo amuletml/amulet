@@ -61,7 +61,7 @@ test-suite tests
                      , Test.Syntax.Resolve
 
                      , Test.Types.Check
-                     , Test.Types.Infer
+                     , Test.Types.Unify
                      , Test.Types.Util
 
                      , Test.Parser.Lexer

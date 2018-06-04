@@ -15,6 +15,7 @@ import "amuletml" Data.Spanned
 import "amuletml" Data.Reason
 import "amuletml" Data.Span
 
+import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 
 import qualified Control.Monad.Gen as MonadGen
@@ -35,15 +36,18 @@ checkExpr e t = go . MonadGen.runGen $ MonadInfer.runInfer builtinsEnv (check e 
 
 equivalent, disjoint :: Type Typed -> Type Typed -> Bool
 equivalent a b =
-  let noPoly (TyForall _ _ t) = noPoly t
-      noPoly t = t
-
-      a' = noPoly a
-      b' = noPoly b
-   in case solve 0 (Seq.singleton (ConUnify (BecauseOf (Blame internal)) (TvName (TgInternal "co")) a' b')) of
-       Left{} -> False
-       Right{} -> True
+  case solve 0 (Seq.singleton (ConUnify (BecauseOf (Blame internal)) (TvName (TgInternal "co")) a b)) of
+    Left{} -> False
+    Right{} -> True
 disjoint a b = not (a `equivalent` b)
+
+unify :: Type Typed -> Type Typed -> Either TypeError (Coercion Typed)
+unify a b =
+  case solve 0 (Seq.singleton (ConUnify (BecauseOf (Blame internal)) (TvName (TgInternal "co")) a b)) of
+    Left e -> Left e
+    Right (_, m) -> case m Map.! TvName (TgInternal "co") of
+      Cast co -> Right co
+      _ -> error "not a coercion"
 
 
 newtype Blame p = Blame Span

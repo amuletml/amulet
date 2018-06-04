@@ -3,7 +3,7 @@ module Main where
 import Test.Tasty
 
 import Test.Util
-import qualified Test.Types.Infer as Types
+import qualified Test.Types.Unify as Solver
 import qualified Test.Core.Lint as Lint
 
 import qualified Test.Parser.Lexer as Lexer
@@ -14,7 +14,7 @@ import qualified Test.Core.Backend as Backend
 
 tests :: IO TestTree
 tests = testGroup "Tests" <$> sequence 
-  [ pure (hedgehog Types.tests)
+  [ pure (hedgehog Solver.tests)
 
   , Lint.tests
   , Lexer.tests
