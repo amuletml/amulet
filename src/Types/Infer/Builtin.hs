@@ -26,7 +26,7 @@ tyFloat = TyCon (TvName (TgInternal "float"))
 tyLazy = TyCon (TvName (TgName "lazy" (-34)))
 
 builtinsEnv :: Env
-builtinsEnv = envOf (scopeFromList ops) (scopeFromList tps) where
+builtinsEnv = envOf (scopeFromList builtin) where
   op :: T.Text -> Type Typed -> (Var Resolved, Type Typed)
   op x t = (TgInternal x, t)
   tp :: T.Text -> (Var Resolved, Type Typed)
@@ -41,19 +41,19 @@ builtinsEnv = envOf (scopeFromList ops) (scopeFromList tps) where
 
   cmp = TyForall name (Just TyType) $ TyVar name `TyArr` (TyVar name `TyArr` tyBool)
     where name = TvName (TgInternal "a")-- TODO: This should use TvName/TvFresh instead
-  ops = [ op "+" intOp, op "-" intOp, op "*" intOp, op "/" intOp, op "**" intOp
-        , op "+." floatOp, op "-." floatOp, op "*." floatOp, op "/." floatOp, op "**." floatOp
-        , op "^" stringOp
-        , op "<" intCmp, op ">" intCmp, op ">=" intCmp, op "<=" intCmp
-        , op "<." floatCmp, op ">." floatCmp, op ">=." floatCmp, op "<=." floatCmp
-        , op "==" cmp, op "<>" cmp
-        , op "||" boolOp, op "&&" boolOp
-        , (TgInternal "lazy", TyForall a (Just TyType) $ (tyUnit `TyArr` TyVar a) `TyArr` (TyApp tyLazy (TyVar a)))
-        , (TgInternal "force", TyForall a (Just TyType) $ (TyApp tyLazy (TyVar a)) `TyArr` TyVar a)
-        ]
+  builtin
+    = [ op "+" intOp, op "-" intOp, op "*" intOp, op "/" intOp, op "**" intOp
+      , op "+." floatOp, op "-." floatOp, op "*." floatOp, op "/." floatOp, op "**." floatOp
+      , op "^" stringOp
+      , op "<" intCmp, op ">" intCmp, op ">=" intCmp, op "<=" intCmp
+      , op "<." floatCmp, op ">." floatCmp, op ">=." floatCmp, op "<=." floatCmp
+      , op "==" cmp, op "<>" cmp
+      , op "||" boolOp, op "&&" boolOp
+      , (TgInternal "lazy", TyForall a (Just TyType) $ (tyUnit `TyArr` TyVar a) `TyArr` (TyApp tyLazy (TyVar a)))
+      , (TgInternal "force", TyForall a (Just TyType) $ (TyApp tyLazy (TyVar a)) `TyArr` TyVar a)
+      , tp "int", tp "string", tp "bool", tp "unit", tp "float", (TgName "lazy" (-34), TyArr TyType TyType) 
+      ]
     where a = TvName (TgInternal "a")
-  tps :: [(Var Resolved, Type Typed)]
-  tps = [ tp "int", tp "string", tp "bool", tp "unit", tp "float", (TgName "lazy" (-34), TyArr TyType TyType) ]
 
 unify, subsumes :: ( Reasonable f p
                    , MonadInfer Typed m )
@@ -111,8 +111,8 @@ decompose r p t =
     Just (a, b) -> pure (a, b, id)
     Nothing -> do
       (a, b) <- (,) <$> freshTV <*> freshTV
-      _ <- subsumes r t (p # (a, b))
-      pure (a, b, id)
+      (_, k) <- subsumes r t (p # (a, b))
+      pure (a, b, \x -> ExprWrapper k x (annotation x, p # (a, b)))
 
 quantifier :: (Reasonable f p, MonadInfer Typed m)
            => f p
@@ -125,8 +125,8 @@ quantifier r ty@TyForall{} = do
 quantifier _ (TyPi x b) = pure (x, b, id)
 quantifier r t = do
   (a, b) <- (,) <$> freshTV <*> freshTV
-  _ <- subsumes r t (TyPi (Anon a) b)
-  pure (Anon a, b, id)
+  (_, k) <- subsumes r t (TyPi (Anon a) b)
+  pure (Anon a, b, \x -> ExprWrapper k x (annotation x, TyPi (Anon a) b))
 
 discharge :: (Reasonable f p, MonadInfer Typed m)
           => f p

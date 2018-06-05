@@ -102,7 +102,7 @@ checkPattern pt@(PType p t ann) ty = do
   wrapPattern (PType p' t', binds, cs) (ann, ty) co
 checkPattern pt ty = do
   (p, ty', binds, cs) <- inferPattern pt
-  (_, co) <- unify pt ty ty'
+  (_, co) <- subsumes pt ty ty'
   pure (PWrapper (co, ty') p (annotation p, ty), binds, cs)
 
 boundTvs :: forall p. (Show (Var p), Ord (Var p))

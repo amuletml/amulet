@@ -148,7 +148,7 @@ emitProgramWith ev esc = flip runState esc . emitProg where
              . sortOn key
              . filter isMain
              . namesInScope
-             . view values
+             . view names
         isMain (TgName x _) = x == "main"
         isMain _ = False
         key (TgName k _) = k
@@ -161,7 +161,7 @@ emitProgramWith ev esc = flip runState esc . emitProg where
              go n it = do
                LuaCallS e _ <- go (n - 1) it
                pure $ LuaCallS (LuaCall e []) []
-             ar = W.arity (ev ^. values . at ref . non undefined)
+             ar = W.arity (ev ^. names . at ref . non undefined)
           in pure (maybeToList (go ar (LuaRef (LuaName ref'))))
        _ -> pure []
 

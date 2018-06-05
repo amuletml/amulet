@@ -18,12 +18,11 @@ module Control.Monad.Infer
   , lookupTy, lookupTy', fresh, freshFrom, runInfer, freeInEnv
   , difference, freshTV
   , instantiate
-  , extendKind, extendManyK
   , SomeReason(..), Reasonable, propagateBlame
   , WhyInstantiate(..)
 
   -- lenses:
-  , values, types, typeVars
+  , names, typeVars
   )
   where
 
@@ -127,7 +126,7 @@ instance Pretty (Var p) => Pretty (Constraint p) where
 
 lookupTy :: (MonadError TypeError m, MonadReader Env m, MonadGen Int m) => Var Resolved -> m (Type Typed)
 lookupTy x = do
-  rs <- view (values . at x)
+  rs <- view (names . at x)
   case rs of
     Just t -> thd3 <$> instantiate Expression t
     Nothing -> throwError (NotInScope x)
@@ -135,7 +134,7 @@ lookupTy x = do
 lookupTy' :: (MonadError TypeError m, MonadReader Env m, MonadGen Int m) => Var Resolved
           -> m (Maybe (Expr Typed -> Expr Typed), Type Typed, Type Typed)
 lookupTy' x = do
-  rs <- view (values . at x)
+  rs <- view (names . at x)
   case rs of
     Just t -> instantiate Expression t
     Nothing -> throwError (NotInScope x)
@@ -155,12 +154,6 @@ fresh = do
 
 freshFrom :: MonadGen Int m => Text -> m (Var Resolved)
 freshFrom t = TgName t <$> gen
-
-extendKind :: MonadReader Env m => (Var Typed, Type Typed) -> m a -> m a
-extendKind (v, k) = local (types . at (unTvName v) ?~ k)
-
-extendManyK :: MonadReader Env m => [(Var Typed, Type Typed)] -> m a -> m a
-extendManyK = flip (foldr extendKind)
 
 alpha :: [Text]
 alpha = map T.pack $ [1..] >>= flip replicateM ['a'..'z']

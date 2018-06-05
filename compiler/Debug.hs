@@ -34,10 +34,7 @@ dump Test ast core optm lua penv env = do
   putStrLn "\x1b[1;32m(* Program: *)\x1b[0m"
   putDoc (pretty ast)
   putStrLn "\x1b[1;32m(* Type inference: *)\x1b[0m"
-  ifor_ (difference env penv ^. values . to toMap) . curry $ \(k :: Var Resolved, t :: Type Typed) ->
-    putDoc (pretty k <+> colon <+> displayType t)
-  putStrLn "\x1b[1;32m(* Kind inference: *)\x1b[0m"
-  ifor_ (difference env penv ^. types ^. to toMap) . curry $ \(k :: Var Resolved, t) ->
+  ifor_ (difference env penv ^. names . to toMap) . curry $ \(k :: Var Resolved, t :: Type Typed) ->
     putDoc (pretty k <+> colon <+> displayType t)
   putStrLn "\x1b[1;32m(* Core lowering: *)\x1b[0m"
   putDoc (pretty core)
@@ -51,8 +48,5 @@ dump TestTc ast _ _ _ penv env = do
   putStrLn "\x1b[1;32m(* Program: *)\x1b[0m"
   putDoc (pretty ast)
   putStrLn "\x1b[1;32m(* Type inference: *)\x1b[0m"
-  ifor_ (difference env penv ^. values . to toMap) . curry $ \(k :: Var Resolved, t :: Type Typed) ->
-    putDoc (pretty k <+> colon <+> pretty t)
-  putStrLn "\x1b[1;32m(* Kind inference: *)\x1b[0m"
-  ifor_ (difference env penv ^. types . to toMap) . curry $ \(k :: Var Resolved, t) ->
+  ifor_ (difference env penv ^. names . to toMap) . curry $ \(k :: Var Resolved, t :: Type Typed) ->
     putDoc (pretty k <+> colon <+> pretty t)
