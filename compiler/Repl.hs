@@ -26,6 +26,7 @@ import qualified Syntax.Resolve.Scope as R
 import qualified Syntax.Resolve.Toplevel as R
 import Syntax.Resolve (resolveProgram)
 import Syntax.Desugar (desugarProgram)
+import Syntax.Verify
 import Syntax.Pretty (displayType)
 import Syntax.Types (constructors, toMap)
 import qualified Syntax as S
@@ -200,27 +201,30 @@ runRepl = do
               inferred <- inferProgram (inferScope state) desugared
               case inferred of
                 Left es -> liftIO $ traverse_ (`reportS`files) es $> Nothing
-                Right (prog, env') -> do
-                  let (var, tys) = R.extractToplevels parsed'
-                      (var', tys') = R.extractToplevels resolved
-                      ctors = fmap lowerType (Map.restrictKeys (env' ^. T.names . to toMap) (env' ^. constructors))
+                Right (prog, env') ->
+                  case runVerify (verifyProgram prog) of
+                    Left e -> liftIO $ traverse_ (`reportS` files) e $> Nothing
+                    Right () -> do
+                      let (var, tys) = R.extractToplevels parsed'
+                          (var', tys') = R.extractToplevels resolved
+                          ctors = fmap lowerType (Map.restrictKeys (env' ^. T.names . to toMap) (env' ^. constructors))
 
-                  -- We don't perform any complex optimisations, but run one reduction pass in order
-                  -- to get some basic commuting conversion, allowing the codegen to be more
-                  -- effective.
-                  lower <- reducePass <$> runLowerWithCtors ctors (lowerProg prog)
-                  lastG <- gen
-                  pure $ Just ( case last lower of
-                                  (C.StmtLet vs) -> map (\(v, t, _) -> (v, t)) vs
-                                  _ -> []
-                              , prog
-                              , lower
-                              , state { resolveScope = rScope { R.varScope = R.insertN (R.varScope rScope) (zip var var')
-                                                              , R.tyScope  = R.insertN (R.tyScope rScope)  (zip tys tys')
-                                                              }
-                                      , moduleScope = modScope'
-                                      , inferScope = env'
-                                      , lastGen = lastG })
+                      -- We don't perform any complex optimisations, but run one reduction pass in order
+                      -- to get some basic commuting conversion, allowing the codegen to be more
+                      -- effective.
+                      lower <- reducePass <$> runLowerWithCtors ctors (lowerProg prog)
+                      lastG <- gen
+                      pure $ Just ( case last lower of
+                                      (C.StmtLet vs) -> map (\(v, t, _) -> (v, t)) vs
+                                      _ -> []
+                                  , prog
+                                  , lower
+                                  , state { resolveScope = rScope { R.varScope = R.insertN (R.varScope rScope) (zip var var')
+                                                                  , R.tyScope  = R.insertN (R.tyScope rScope)  (zip tys tys')
+                                                                  }
+                                          , moduleScope = modScope'
+                                          , inferScope = env'
+                                          , lastGen = lastG })
 
 
 -- We convert any top-level local declarations into global ones. This

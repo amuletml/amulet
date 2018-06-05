@@ -18,7 +18,7 @@ import Data.Triple
 import Data.Maybe
 import Data.Data
 
-import Control.Lens
+import Control.Lens hiding (Lazy)
 
 newtype Parsed = Parsed Parsed deriving Data
 newtype Resolved = Resolved Resolved deriving Data
@@ -115,7 +115,6 @@ deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Expr p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Expr p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Expr p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Expr p)
-instance (Data (Var p), Data (Ann p), Data p) => Spanned (Expr p)
 
 data Wrapper p
   = TypeApp (Type p)
@@ -307,10 +306,11 @@ makePrisms ''Lit
 makeLenses ''Skolem
 makeLenses ''TyBinder
 
-instance (Spanned (Constructor p), Ann p ~ Span) => Spanned (Toplevel p) where
-  annotation (LetStmt ((_, _, x):vs)) = sconcat (x :| map thd3 vs)
+instance (Spanned (Constructor p), Spanned (Ann p)) => Spanned (Toplevel p) where
+  annotation (LetStmt [(_, _, x)]) = annotation x
+  annotation (LetStmt ((_, _, x):vs)) = sconcat (annotation x :| map (annotation . thd3) vs)
   annotation (TypeDecl _ _ (x:xs)) = sconcat (annotation x :| map annotation xs)
-  annotation (ForeignVal _ _ _ x) = x
+  annotation (ForeignVal _ _ _ x) = annotation x
   annotation _ = internal
 
 _TyArr :: Prism' (Type p) (Type p, Type p)
@@ -323,6 +323,39 @@ isSkolemisable (TyPi Explicit{} _) = True
 isSkolemisable (TyPi Implicit{} _) = True
 isSkolemisable _ = False
 
+instance Spanned (Ann p) => Spanned (Expr p) where
+  annotation (VarRef _ a) = annotation a
+  annotation (Let _ _ a) = annotation a
+  annotation (If _ _ _ a) = annotation a
+  annotation (App _ _ a) = annotation a
+  annotation (Fun _ _ a) = annotation a
+  annotation (Begin _ a) = annotation a
+  annotation (Literal _ a) = annotation a
+  annotation (Match _ _ a) = annotation a
+  annotation (Function _ a) = annotation a
+  annotation (BinOp _ _ _ a) = annotation a
+  annotation (Hole _ a) = annotation a
+  annotation (Ascription _ _ a) = annotation a
+
+  annotation (Record _ a) = annotation a
+  annotation (RecordExt _ _ a) = annotation a
+  annotation (Access _ _ a) = annotation a
+
+  annotation (LeftSection _ _ a) = annotation a
+  annotation (RightSection _ _ a) = annotation a
+  annotation (BothSection _ a) = annotation a
+  annotation (AccessSection _ a) = annotation a
+  annotation (Parens _ a) = annotation a
+
+  annotation (Tuple _ a) = annotation a
+  annotation (TupleSection _ a) = annotation a
+
+  annotation (OpenIn _ _ a) = annotation a
+  annotation (InstType _ a) = annotation a
+  annotation (InstHole a) = annotation a
+  annotation (Lazy _ a) = annotation a
+
+  annotation (ExprWrapper _ _ a) = annotation a
 
 {- Note [1]: Tuple types vs tuple patterns/values
 

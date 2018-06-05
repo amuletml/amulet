@@ -59,6 +59,7 @@ test-suite tests
 
                      , Test.Syntax.Gen
                      , Test.Syntax.Resolve
+                     , Test.Syntax.Verify
 
                      , Test.Types.Check
                      , Test.Types.Unify
@@ -134,6 +135,7 @@ library amulet
                      , Syntax.Types
                      , Syntax.Subst
                      , Syntax.Pretty
+                     , Syntax.Verify
                      , Syntax.Desugar
                      , Syntax.Transform
                      -- Renamer

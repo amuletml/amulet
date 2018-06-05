@@ -1,0 +1,4 @@
+id : type -> type
+Id : {'a : type}. 'a -> id 'a
+pure : {'f : type -> type}. ({'a : type}. 'a -> 'f 'a) -> 'f int
+pure_pass : id int
