@@ -40,6 +40,8 @@ import Types.Unify
 
 import Text.Pretty.Semantic
 
+import Debug.Trace
+
 -- Solve for the types of lets in a program
 inferProgram :: MonadGen Int m => Env -> [Toplevel Resolved] -> m (Either [TypeError] ([Toplevel Typed], Env))
 inferProgram env ct = fmap fst <$> runInfer env (inferProg ct)
@@ -63,7 +65,7 @@ check (Begin xs a) t = do
 
 check ex@(Let ns b an) t = do
   (ns, ts) <- inferLetTy (annotateKind (BecauseOf ex)) ns
-  local (values %~ focus ts) $ do
+  local (names %~ focus ts) $ do
     b <- check b t
     pure (Let ns b (an, t))
 
@@ -75,7 +77,7 @@ check ex@(Fun pat e an) ty = do
   let tvs = Set.map unTvName (boundTvs p vs)
 
   implies (Arm pat e) domain cs $ do
-    e <- local (typeVars %~ Set.union tvs) . local (values %~ focus vs) $
+    e <- local (typeVars %~ Set.union tvs) . local (names %~ focus vs) $
       check e cod
     pure (Fun p e (an, ty))
 
@@ -90,7 +92,7 @@ check (Match t ps a) ty = do
 
     bd <- implies (Arm p e) tt cs $
       local (typeVars %~ Set.union tvs) $
-        local (values %~ focus ms) (check e ty)
+        local (names %~ focus ms) (check e ty)
     pure (p', bd)
   let ((p, _):_) = ps
   sc <- case p of
@@ -129,7 +131,7 @@ infer (Fun p e an) = let blame = Arm p e in do
 
   _ <- leakEqualities blame cs
   (e, cod) <- local (typeVars %~ Set.union (Set.map unTvName tvs)) $
-    local (values %~ focus ms) $ infer e
+    local (names %~ focus ms) $ infer e
   pure (Fun p e (an, TyArr dom cod), TyArr dom cod)
 
 infer (Literal l an) = pure (Literal l (an, ty), ty) where
@@ -184,7 +186,7 @@ infer ex@(Match t ps a) = do
     let tvs = Set.map unTvName (boundTvs p' ms)
     leakEqualities ex cs
     e' <- local (typeVars %~ Set.union tvs) $
-      local (values %~ focus ms) $
+      local (names %~ focus ms) $
         check e ty
     pure (p', e')
   pure (Match t' ps' (a, ty), ty)
@@ -231,21 +233,21 @@ inferProg :: MonadInfer Typed m
 inferProg (stmt@(LetStmt ns):prg) = do
   (ns', ts) <- inferLetTy (closeOver (BecauseOf stmt)) ns
                    `catchError` (throwError . propagateBlame (BecauseOf stmt))
-  local (values %~ focus ts) $
+  local (names %~ focus ts) $
     consFst (LetStmt ns') $
       inferProg prg
 inferProg (st@(ForeignVal v d t ann):prg) = do
   t' <- resolveKind (BecauseOf st) t
-  local (values %~ focus (one v t')) $
+  local (names %~ focus (one v t')) $
     consFst (ForeignVal (TvName v) d t' (ann, t')) $
       inferProg prg
 inferProg (decl@(TypeDecl n tvs cs):prg) = do
   kind <- resolveTyDeclKind (BecauseOf decl) n tvs cs
   let retTy = foldl TyApp (TyCon (TvName n)) (map (TyVar . TvName) tvs)
-   in extendKind (TvName n, kind) $ do
+   in local (names %~ focus (one n kind)) $ do
      (ts, cs') <- unzip <$> for cs (\con ->
        inferCon retTy con `catchError` (throwError . propagateBlame (BecauseOf con)))
-     local (values %~ focus (teleFromList ts)) . local (constructors %~ Set.union (Set.fromList (map (unTvName . fst) ts))) $
+     local (names %~ focus (teleFromList ts)) . local (constructors %~ Set.union (Set.fromList (map (unTvName . fst) ts))) $
        consFst (TypeDecl (TvName n) (map TvName tvs) cs') $
          inferProg prg
 inferProg (Open mod pre:prg) =
@@ -255,10 +257,9 @@ inferProg (Module name body:prg) = do
   (body', env) <- inferProg body
 
   let (vars, tys) = extractToplevels body
-      vars' = map (\x -> (TvName x, env ^. values . at x . non (error ("value: " ++ show x)))) vars
-      tys' = map (\x -> (TvName x, env ^. types . at x . non (error ("type: " ++ show x)))) tys
+      vars' = map (\x -> (TvName x, env ^. names . at x . non (error ("value: " ++ show x)))) (vars ++ tys)
 
-  local (values %~ focus (teleFromList vars')) . extendManyK tys' $
+  local (names %~ focus (teleFromList vars')) $
     consFst (Module (TvName name) body') $
     inferProg prg
 
@@ -331,7 +332,7 @@ inferLetTy closeOver vs =
 
       tcOne (AcyclicSCC decl@(var, exp, ann)) = do
         (origin, tv) <- approximate decl
-        ((exp', ty), cs) <- listen . local (values %~ focus (uncurry one tv)) $
+        ((exp', ty), cs) <- listen . local (names %~ focus (uncurry one tv)) $
           case origin of
             Supplied -> do
               let exp' (Ascription e _ _) = exp' e
@@ -342,13 +343,14 @@ inferLetTy closeOver vs =
               (exp', ty) <- infer exp
               _ <- unify exp ty (snd tv)
               pure (exp', ty)
+        _ <- traverse (flip trace (pure ()) . displayS . pretty) cs
         (tp, k) <- figureOut (var, BecauseOf exp) ty cs
         pure ( [(TvName var, k exp', (ann, tp))], one var tp )
 
       tcOne (CyclicSCC vars) = do
         (origins, tvs) <- unzip <$> traverse approximate vars
 
-        (vs, cs) <- listen . local (values %~ focus (teleFromList tvs)) $
+        (vs, cs) <- listen . local (names %~ focus (teleFromList tvs)) $
           ifor (zip tvs vars) $ \i ((_, tyvar), (var, exp, ann)) ->
             case origins !! i of
               Supplied -> do
@@ -381,7 +383,7 @@ inferLetTy closeOver vs =
          -> m ( [(Var Typed, Expr Typed, Ann Typed)] , Telescope Typed )
       tc (s:cs) = do
         (vs', binds) <- tcOne s
-        fmap ((vs' ++) *** (binds <>)) . local (values %~ focus binds) $ tc cs
+        fmap ((vs' ++) *** (binds <>)) . local (names %~ focus binds) $ tc cs
       tc [] = pure ([], mempty)
    in tc sccs
 

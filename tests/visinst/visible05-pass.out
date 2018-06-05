@@ -1,19 +1,19 @@
 io_write : string -> unit
 to_string : {'a : type}. 'a -> string
+nat : type
 Z : nat
 S : nat -> nat
+natural : nat -> type
 SZ : {'n : nat}. ('n ~ Z) ⊃ natural 'n
 SS : {'n : nat}. {'k : nat}. ('n ~ S 'k) ⊃ natural 'k -> natural 'n
+flip : {'el : type}. {'em : type}. ('em -> 'el -> type) -> 'el -> 'em -> type
 Flip : {'f : 'fv -> 'fu -> type}. {'a : 'fu}. {'b : 'fv}. 'f 'b 'a -> flip 'f 'a 'b
 getFlip : {'f : 'hq -> 'hu -> type}. {'a : 'hu}. {'b : 'hq}. flip 'f 'a 'b -> 'f 'b 'a
 @ : {'ic : type}. {'id : type}. {'iq : type}. ('iq -> 'id) -> ('ic -> 'iq) -> 'ic -> 'id
 ind : {'n : nat}. ('prop : nat -> type) -> 'prop Z -> ({'n : nat}. 'prop 'n -> 'prop (S 'n)) -> natural 'n -> 'prop 'n
+vect : nat -> type -> type
 Nil : {'n : nat}. {'a : type}. ('n ~ Z) ⊃ vect 'n 'a
 Cons : {'n : nat}. {'a : type}. {'k : nat}. ('n ~ S 'k) ⊃ ('a * vect 'k 'a) -> vect 'n 'a
 replicate : {'n : nat}. {'a : type}. 'a -> natural 'n -> vect 'n 'a
 print : {'a : type}. {'n : nat}. ('a -> string) -> vect 'n 'a -> unit
 main : unit
-nat : type
-natural : nat -> type
-flip : {'el : type}. {'em : type}. ('em -> 'el -> type) -> 'el -> 'em -> type
-vect : nat -> type -> type

@@ -27,6 +27,7 @@ import Types.Infer.Errors
 import Types.Unify (solve)
 
 import Syntax.Subst
+import Syntax.Types
 import Syntax.Raise
 import Syntax
 
@@ -89,8 +90,9 @@ resolveTyDeclKind :: MonadKind m
 resolveTyDeclKind reason tycon args cons = solveForKind reason $ do
   ks <- replicateM (length args) freshTV
   let kind = foldr TyArr TyType ks
+      scope = one tycon kind <> teleFromList (zip (map TvName args) ks)
 
-  extendManyK ((TvName tycon, kind):zip (map TvName args) ks) $ do
+  local (names %~ focus scope) $ do
     for_ cons $ \case
       UnitCon{} -> pure ()
       ArgCon _ t _ -> () <$ checkKind t TyType
@@ -111,7 +113,7 @@ solveK cont reason k = do
 
 inferKind :: MonadKind m => Type Resolved -> KindT m (Type Typed, Kind Typed)
 inferKind (TyCon v) = do
-  x <- view (types . at v)
+  x <- view (names . at v)
   case x of
     Nothing -> throwError (NotInScope v)
     Just k -> do
@@ -119,7 +121,7 @@ inferKind (TyCon v) = do
       pure (TyCon (TvName v), k)
 
 inferKind (TyPromotedCon v) = do
-  x <- view (values . at v)
+  x <- view (names . at v)
   case x of
     Nothing -> throwError (NotInScope v)
     Just k -> do
@@ -129,11 +131,11 @@ inferKind (TyPromotedCon v) = do
         Just err -> throwError (NotPromotable (TvName v) k err)
 
 inferKind (TyVar v) = do
-  k <- maybe freshTV pure =<< view (types . at v)
+  k <- maybe freshTV pure =<< view (names . at v)
   pure (TyVar (TvName v), k)
 
 inferKind (TySkol sk) = do
-  k <- maybe freshTV pure =<< view (types . at (sk ^. skolIdent))
+  k <- maybe freshTV pure =<< view (names . at (sk ^. skolIdent))
   pure (raiseT TvName (TySkol sk), k)
 
 inferKind (TyApp f x) = do
@@ -195,7 +197,7 @@ checkKind (TyPi binder b) ek = do
     Explicit v arg -> do
       (arg, kind) <- inferKind arg
       _ <- subsumes (Const reason) ek kind
-      b <- extendKind (TvName v, arg) $
+      b <- local (names %~ focus (one v arg)) $
         checkKind b ek
       let bind = Explicit (TvName v) arg
       pure $ TyPi bind b
@@ -203,14 +205,14 @@ checkKind (TyPi binder b) ek = do
     Implicit v (Just arg) -> do
       (arg, kind) <- inferKind arg
       _ <- subsumes (Const reason) ek kind
-      b <- extendKind (TvName v, arg) $
+      b <- local (names %~ focus (one v arg)) $
         checkKind b ek
       let bind = Implicit (TvName v) (Just arg)
       pure $ TyPi bind b
 
     Implicit v Nothing -> do
       x <- freshTV
-      b <- extendKind (TvName v, x) $
+      b <- local (names %~ focus (one v x)) $
         checkKind b ek
       let bind = Implicit (TvName v) (Just x)
       pure $ TyPi bind b
@@ -237,7 +239,7 @@ inferGadtConKind con typ tycon args = go typ (reverse (spine (gadtConResult typ)
       let fv = map TvName $ toList (foldMap ftv apps)
        in do
          fresh <- replicateM (length fv) freshTV
-         extendManyK (zip fv fresh) $ do
+         local (names %~ focus (teleFromList (zip fv fresh))) $ do
            _ <- checkKind ty TyType
            for_ (zip args apps) $ \(var, arg) -> do
              (_, k) <- inferKind arg

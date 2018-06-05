@@ -1,2 +1,2 @@
 type t =
-  | MkT : int * int -> t
+  | MkT : int * (int -> t)

@@ -1,5 +1,5 @@
 to_string : {'a : type}. 'a -> string
+term : type -> type
 B : {'a : type}. ('a ~ bool) ⊃ bool -> term 'a
 I : {'a : type}. ('a ~ int) ⊃ int -> term 'a
 show : {'a : type}. term 'a -> string
-term : type -> type

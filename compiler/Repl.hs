@@ -154,7 +154,7 @@ runRepl = do
                     repr <- valueRepr (L.getglobal (T.unpack (B.getVar v escape')))
                     let CoVar id nam _ = v
                         var = S.TgName nam id
-                    case inferScope state' ^. T.values . at var of
+                    case inferScope state' ^. T.names . at var of
                       Just ty -> pure (pretty v <+> colon <+> nest 2 (displayType ty <+> equals </> pretty repr))
                       Nothing -> error "variable not bound in infer scope?"
 
@@ -203,7 +203,7 @@ runRepl = do
                 Right (prog, env') -> do
                   let (var, tys) = R.extractToplevels parsed'
                       (var', tys') = R.extractToplevels resolved
-                      ctors = fmap lowerType (Map.restrictKeys (env' ^. T.values . to toMap) (env' ^. constructors))
+                      ctors = fmap lowerType (Map.restrictKeys (env' ^. T.names . to toMap) (env' ^. constructors))
 
                   -- We don't perform any complex optimisations, but run one reduction pass in order
                   -- to get some basic commuting conversion, allowing the codegen to be more

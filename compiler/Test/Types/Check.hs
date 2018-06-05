@@ -3,7 +3,7 @@ module Test.Types.Check (tests) where
 import Test.Tasty
 import Test.Util
 
-import Control.Monad.Infer (values, types)
+import Control.Monad.Infer (names)
 import Control.Monad.Gen
 import Control.Lens ((^.), to)
 
@@ -39,8 +39,7 @@ result file contents = runGen $ do
     reportEnv env =
       let env' = difference env builtinsEnv
       in  vsep $
-          map reportComponent (Map.toList (env' ^. values . to toMap)) ++
-          map reportComponent (Map.toList (env' ^. types . to toMap))
+          map reportComponent (Map.toList (env' ^. names . to toMap))
 
     reportComponent (v, t) = pretty v <+> colon <+> pretty t
 
