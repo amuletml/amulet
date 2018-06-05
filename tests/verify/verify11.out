@@ -1,0 +1,7 @@
+verify11.ml[2:5 ..2:9]: error
+  Invalid recursive right-hand side for variable g
+  • Note: because the variable f is not under a function
+  Arising from use of the binding
+  │ 
+2 │ and g = f
+  │ 

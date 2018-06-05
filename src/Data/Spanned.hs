@@ -17,4 +17,8 @@ class Spanned a where
                   Just x -> Just (x :: Span)
                   Nothing -> Nothing
 
-instance Spanned Span
+instance Spanned Span where
+  annotation x = x
+
+instance Spanned a => Spanned (a, b) where
+  annotation (x, _) = annotation x
