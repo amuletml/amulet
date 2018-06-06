@@ -40,10 +40,8 @@ import Types.Unify
 
 import Text.Pretty.Semantic
 
-import Debug.Trace
-
 -- Solve for the types of lets in a program
-inferProgram :: MonadGen Int m => Env -> [Toplevel Resolved] -> m (Either [TypeError] ([Toplevel Typed], Env))
+inferProgram :: MonadNamey Name m => Env -> [Toplevel Resolved] -> m (Either [TypeError] ([Toplevel Typed], Env))
 inferProgram env ct = fmap fst <$> runInfer env (inferProg ct)
 
 check :: forall m. MonadInfer Typed m => Expr Resolved -> Type Typed -> m (Expr Typed)
@@ -144,7 +142,7 @@ infer ex@(Ascription e ty an) = do
 
 -- f ? - just delegate to the other checker
 infer ex@(App f hole@(InstHole ha) a) = do
-  ftv <- fresh
+  ftv <- genName
   infer (App f (InstType (TyVar ftv) ha) a) `catchError`
     \err -> case err of
       WrongQuantifier _ ot -> throwError (ArisingFrom (WrongQuantifier hole ot) (BecauseOf ex))
@@ -294,7 +292,7 @@ inferLetTy closeOver vs =
 
       figureOut :: (Var Resolved, SomeReason) -> Type Typed -> Seq.Seq (Constraint Typed) -> m (Type Typed, Expr Typed -> Expr Typed)
       figureOut blame ty cs = do
-        cur <- gen
+        cur <- forkNames
         (x, co, vt) <- case solve cur cs of
           Right (x, co) -> do
             ty' <- closeOver (apply x ty)
@@ -362,7 +360,7 @@ inferLetTy closeOver vs =
                 _ <- unify exp ty tyvar
                 pure (TvName var, exp', ann, ty)
 
-        cur <- gen
+        cur <- forkNames
         (solution, cs) <- case solve cur cs of
           Right x -> pure x
           Left e -> throwError e

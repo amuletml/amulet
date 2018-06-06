@@ -1,2 +1,2 @@
-escapes : {'o : type}. ({'a : type}. 'a -> 'o) -> 'o
+escapes : {'m : type}. ({'a : type}. 'a -> 'm) -> 'm
 escape_pass : int

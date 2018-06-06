@@ -9,8 +9,8 @@ module Core.Lower
   ) where
 
 import Control.Monad.Reader
+import Control.Monad.Namey
 import Control.Monad.Cont
-import Control.Monad.Gen
 import Control.Arrow
 
 import qualified Data.VarMap as VarMap
@@ -47,6 +47,7 @@ type Stmt = C.Stmt CoVar
 type Arm = C.Arm CoVar
 
 type Lower = ContT Term
+type Name = Var Resolved
 
 data LowerState = LS { vars :: Map.Map (Var Resolved) Type
                      , ctors :: Map.Map (Var Resolved) Type
@@ -54,13 +55,13 @@ data LowerState = LS { vars :: Map.Map (Var Resolved) Type
   deriving (Eq, Show)
 
 type MonadLower m
-  = ( MonadGen Int m
+  = ( MonadNamey Name m
     , MonadReader LowerState m )
 
-runLowerT :: MonadGen Int m => ReaderT LowerState m a -> m a
+runLowerT :: MonadNamey Name m => ReaderT LowerState m a -> m a
 runLowerT = flip runReaderT (LS mempty mempty)
 
-runLowerWithCtors :: MonadGen Int m => Map.Map (Var Resolved) Type -> ReaderT LowerState m a -> m a
+runLowerWithCtors :: MonadNamey Name m => Map.Map (Var Resolved) Type -> ReaderT LowerState m a -> m a
 runLowerWithCtors ct k = runReaderT k (LS mempty ct)
 
 errRef :: Atom

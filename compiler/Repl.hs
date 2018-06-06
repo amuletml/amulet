@@ -3,7 +3,6 @@
 module Repl (repl) where
 
 import Control.Monad.State.Strict
-import Control.Monad.Gen
 
 import qualified Data.Text.Encoding as T
 import qualified Data.Map.Strict as Map
@@ -32,6 +31,8 @@ import Syntax.Types (constructors, toMap)
 import qualified Syntax as S
 
 import qualified Control.Monad.Infer as T
+import Control.Monad.Namey
+
 import qualified Types.Infer as I
 import Types.Infer (inferProgram)
 
@@ -56,17 +57,20 @@ import qualified Backend.Escape as B
 import Backend.Lua.Syntax
 
 import Text.Pretty.Semantic
+import Text.Pretty.Note
 
 import Repl.Display
 import Errors
 import Debug
+
+type Name = S.Var S.Resolved
 
 data ReplState = ReplState
   { resolveScope :: R.Scope
   , moduleScope  :: R.ModuleScope
   , inferScope   :: T.Env
   , escapeScope  :: B.EscapeScope
-  , lastGen      :: Int
+  , names        :: [Name]
 
   , luaState     :: L.LuaState
 
@@ -94,7 +98,7 @@ defaultState mode = do
     , moduleScope  = R.emptyModules
     , inferScope   = I.builtinsEnv
     , escapeScope  = B.escapeScope
-    , lastGen      = 0
+    , names      = T.nameSupply
 
     , luaState     = state
 
@@ -134,7 +138,7 @@ runRepl = do
 
     execString line = do
       state <- get
-      core <- runGenTFrom (lastGen state) $ parseCore state line
+      core <- flip evalNameyT (names state) $ parseCore state line
       case core of
         Nothing -> pure ()
         Just (vs, prog, core, state') -> do
@@ -174,7 +178,7 @@ runRepl = do
           put state' { escapeScope = escape' }
 
 
-    parseCore :: (MonadGen Int m, MonadIO m)
+    parseCore :: (MonadNamey Name m, MonadIO m)
               => ReplState -> String
               -> m (Maybe ([(CoVar, C.Type CoVar)]
                           , [S.Toplevel S.Typed]
@@ -202,30 +206,38 @@ runRepl = do
               case inferred of
                 Left es -> liftIO $ traverse_ (`reportS`files) es $> Nothing
                 Right (prog, env') ->
-                  case runVerify (verifyProgram prog) of
-                    Left e -> liftIO $ traverse_ (`reportS` files) e $> Nothing
-                    Right () -> do
-                      let (var, tys) = R.extractToplevels parsed'
-                          (var', tys') = R.extractToplevels resolved
-                          ctors = fmap lowerType (Map.restrictKeys (env' ^. T.names . to toMap) (env' ^. constructors))
+                  let es = case runVerify (verifyProgram prog) of
+                             Left es -> toList es
+                             Right () -> []
+                   in do
+                    liftIO $ traverse_ (`reportS`files) es
+                    if any isError es
+                       then pure Nothing
+                       else do
+                         let (var, tys) = R.extractToplevels parsed'
+                             (var', tys') = R.extractToplevels resolved
+                             ctors = fmap lowerType (Map.restrictKeys (env' ^. T.names . to toMap) (env' ^. constructors))
 
-                      -- We don't perform any complex optimisations, but run one reduction pass in order
-                      -- to get some basic commuting conversion, allowing the codegen to be more
-                      -- effective.
-                      lower <- reducePass <$> runLowerWithCtors ctors (lowerProg prog)
-                      lastG <- gen
-                      pure $ Just ( case last lower of
-                                      (C.StmtLet vs) -> map (\(v, t, _) -> (v, t)) vs
-                                      _ -> []
-                                  , prog
-                                  , lower
-                                  , state { resolveScope = rScope { R.varScope = R.insertN (R.varScope rScope) (zip var var')
-                                                                  , R.tyScope  = R.insertN (R.tyScope rScope)  (zip tys tys')
-                                                                  }
-                                          , moduleScope = modScope'
-                                          , inferScope = env'
-                                          , lastGen = lastG })
+                         -- We don't perform any complex optimisations, but run one reduction pass in order
+                         -- to get some basic commuting conversion, allowing the codegen to be more
+                         -- effective.
+                         lower <- reducePass <$> runLowerWithCtors ctors (lowerProg prog)
+                         lastG <- forkNames
+                         pure $ Just ( case last lower of
+                                         (C.StmtLet vs) -> map (\(v, t, _) -> (v, t)) vs
+                                         _ -> []
+                                     , prog
+                                     , lower
+                                     , state { resolveScope = rScope { R.varScope = R.insertN (R.varScope rScope) (zip var var')
+                                                                     , R.tyScope  = R.insertN (R.tyScope rScope)  (zip tys tys')
+                                                                     }
+                                             , moduleScope = modScope'
+                                             , inferScope = env'
+                                             , names = lastG })
 
+
+isError :: Note a b => a -> Bool
+isError x = diagnosticKind x == ErrorMessage
 
 -- We convert any top-level local declarations into global ones. This
 -- means they are accessible outside normal REPL invocations.

@@ -40,7 +40,6 @@ let
       , hedgehog
       , haskeline
       , directory
-      , monad-gen
       , bytestring
       , containers
       , transformers
@@ -62,17 +61,17 @@ let
         isExecutable = true;
 
         libraryHaskellDepends = [
-          annotated-wl-pprint array base bytestring containers lens monad-gen
+          annotated-wl-pprint array base bytestring containers lens
           mtl pretty-show syb text transformers
         ];
 
         executableHaskellDepends = [
-          mtl text base lens monad-gen bytestring containers pretty-show hslua
+          mtl text base lens bytestring containers pretty-show hslua
           haskeline
         ];
 
         testHaskellDepends = [
-          base bytestring Diff directory hedgehog HUnit lens monad-gen mtl
+          base bytestring Diff directory hedgehog HUnit lens mtl
           pretty-show tasty tasty-hedgehog_0_2_0_0 tasty-hunit text
         ];
 
