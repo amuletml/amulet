@@ -4,7 +4,7 @@ module Core.Simplify
 
 import Data.List
 
--- import Core.Optimise.Newtype
+import Core.Optimise.Newtype
 import Core.Optimise.DeadCode
 import Core.Optimise.Inline
 import Core.Optimise.Reduce
@@ -29,7 +29,7 @@ optmOnce = passes where
            , inlineVariablePass
 
            , pure . deadCodePass
-           -- , killNewtypePass
+           , killNewtypePass
 
            , pure . sinkingPass . tagFreeSet
 
