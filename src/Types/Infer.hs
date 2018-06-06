@@ -29,6 +29,7 @@ import Syntax.Transform
 import Syntax.Subst
 import Syntax.Types
 import Syntax.Let
+import Syntax.Var
 import Syntax
 
 import Types.Kinds
@@ -41,7 +42,7 @@ import Types.Unify
 import Text.Pretty.Semantic
 
 -- Solve for the types of lets in a program
-inferProgram :: MonadNamey Name m => Env -> [Toplevel Resolved] -> m (Either [TypeError] ([Toplevel Typed], Env))
+inferProgram :: MonadNamey m => Env -> [Toplevel Resolved] -> m (Either [TypeError] ([Toplevel Typed], Env))
 inferProgram env ct = fmap fst <$> runInfer env (inferProg ct)
 
 check :: forall m. MonadInfer Typed m => Expr Resolved -> Type Typed -> m (Expr Typed)
@@ -292,7 +293,7 @@ inferLetTy closeOver vs =
 
       figureOut :: (Var Resolved, SomeReason) -> Type Typed -> Seq.Seq (Constraint Typed) -> m (Type Typed, Expr Typed -> Expr Typed)
       figureOut blame ty cs = do
-        cur <- forkNames
+        cur <- genName
         (x, co, vt) <- case solve cur cs of
           Right (x, co) -> do
             ty' <- closeOver (apply x ty)
@@ -360,7 +361,7 @@ inferLetTy closeOver vs =
                 _ <- unify exp ty tyvar
                 pure (TvName var, exp', ann, ty)
 
-        cur <- forkNames
+        cur <- genName
         (solution, cs) <- case solve cur cs of
           Right x -> pure x
           Left e -> throwError e

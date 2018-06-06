@@ -5,6 +5,7 @@ import qualified Data.Set as Set
 import Data.Triple
 import Data.Graph
 
+import Syntax.Var
 import Syntax
 
 depOrder :: (Show (Var p), Show (Ann p), Ord (Var p))

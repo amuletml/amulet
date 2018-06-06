@@ -11,6 +11,7 @@ import Data.Spanned
 import Data.Data
 
 import Syntax.Pretty
+
 import Text.Pretty.Semantic
 
 data SomeReason where

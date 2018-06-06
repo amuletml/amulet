@@ -15,7 +15,7 @@ import Data.Functor
 import Data.Functor.Identity
 import Data.Position (SourceName)
 
-import Control.Monad.Infer (Env, TypeError, nameSupply)
+import Control.Monad.Infer (Env, TypeError, firstName)
 import Control.Monad.Namey
 import Backend.Lua
 
@@ -26,7 +26,8 @@ import qualified Syntax.Resolve.Scope as RS
 import Syntax.Resolve.Toplevel (extractToplevels)
 import Syntax.Desugar (desugarProgram)
 import Syntax.Verify
-import Syntax (Toplevel, Typed)
+import Syntax.Var (Typed)
+import Syntax (Toplevel)
 
 import Core.Simplify (optimise)
 import Core.Lower (runLowerT, lowerProg)
@@ -52,7 +53,7 @@ data CompileResult
 
 compile :: [(SourceName, T.Text)] -> CompileResult
 compile [] = error "Cannot compile empty input"
-compile (file:files) = runIdentity . flip evalNameyT nameSupply $ do
+compile (file:files) = runIdentity . flip evalNameyT firstName $ do
   file' <- go (Right ([], [], RS.builtinScope, RS.emptyModules, builtinsEnv)) file
   files' <- foldlM go file' files
   case files' of

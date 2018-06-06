@@ -13,6 +13,7 @@ import Control.Monad.Infer
 import Control.Lens
 
 import Syntax.Types
+import Syntax.Var
 import Syntax
 
 import Text.Pretty.Semantic

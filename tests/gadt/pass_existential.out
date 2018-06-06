@@ -8,5 +8,5 @@ Zero : {'n : natural}. ('n ~ Z) ⊃ nat 'n
 Succ : {'n : natural}. {'k : natural}. ('n ~ S 'k) ⊃ nat 'k -> nat 'n
 some_nat : type
 SomeNat : {'n : natural}. nat 'n -> some_nat
-with_natural : {'dv : type}. int -> ({'n : natural}. nat 'n -> 'dv) -> 'dv
+with_natural : {'eq : type}. int -> ({'n : natural}. nat 'n -> 'eq) -> 'eq
 main : unit

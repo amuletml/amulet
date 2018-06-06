@@ -5,6 +5,7 @@ module Syntax.Resolve.Toplevel
 
 import Data.Triple
 
+import Syntax.Var
 import Syntax
 
 extractToplevel :: Semigroup (Var p) => Toplevel p -> ([Var p], [Var p])

@@ -4,6 +4,7 @@ module Syntax.Transform where
 import Control.Arrow
 import Data.Triple
 
+import Syntax.Var
 import Syntax
 
 transformType

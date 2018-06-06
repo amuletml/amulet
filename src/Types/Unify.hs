@@ -13,6 +13,7 @@ import Types.Infer.Errors
 import Types.Wellformed
 
 import Syntax.Subst
+import Syntax.Var
 import Syntax
 
 import qualified Data.Map.Strict as Map
@@ -41,7 +42,7 @@ data SolveState
 makeLenses ''SolveState
 makeLenses ''SolveScope
 
-type SolveM = NameyT Name (WriterT [TypeError] (StateT SolveState (ReaderT SolveScope (Except TypeError))))
+type SolveM = NameyT (WriterT [TypeError] (StateT SolveState (ReaderT SolveScope (Except TypeError))))
 
 bind :: Var Typed -> Type Typed -> SolveM (Coercion Typed)
 bind var ty
@@ -197,7 +198,7 @@ unifRow (t, a, b) = do
   co <- unify a b
   pure (t, co)
 
-runSolve :: [Name] -> Subst Typed -> SolveM b -> Either TypeError ([Name], (Subst Typed, Map.Map (Var Typed) (Wrapper Typed)))
+runSolve :: Var Resolved -> Subst Typed -> SolveM b -> Either TypeError (Var Resolved, (Subst Typed, Map.Map (Var Typed) (Wrapper Typed)))
 runSolve i s x = runExcept (fix (runReaderT (runStateT (runWriterT (runNameyT act i)) (SolveState s mempty mempty)) emptyScope)) where
   act = (,) <$> genName <*> x
   fix act = do
@@ -208,7 +209,7 @@ runSolve i s x = runExcept (fix (runReaderT (runStateT (runWriterT (runNameyT ac
       xs -> throwError (ManyErrors xs)
   emptyScope = SolveScope False mempty
 
-solve :: [Name] -> Seq.Seq (Constraint Typed) -> Either TypeError (Subst Typed, Map.Map (Var Typed) (Wrapper Typed))
+solve :: Var Resolved -> Seq.Seq (Constraint Typed) -> Either TypeError (Subst Typed, Map.Map (Var Typed) (Wrapper Typed))
 solve i cs = snd <$> runSolve i mempty (doSolve cs)
 
 doSolve :: Seq.Seq (Constraint Typed) -> SolveM ()
@@ -322,7 +323,7 @@ subsumes k ty' (TyApp lazy ty) | lazy == tyLazy, _TyVar `isn't` ty' = do
 subsumes k a b = probablyCast <$> k a b where
 
 
-skolemise :: MonadNamey Name m => SkolemMotive Typed -> Type Typed -> m (Wrapper Typed, Type Typed)
+skolemise :: MonadNamey m => SkolemMotive Typed -> Type Typed -> m (Wrapper Typed, Type Typed)
 skolemise motive ty@TyPi{} | Just (tv, k, t) <- isSkolemisableTyBinder ty = do
   sk <- freshSkol motive ty tv
   (wrap, ty) <- skolemise motive (apply (Map.singleton tv sk) t)
@@ -358,7 +359,7 @@ probablyCast x
   | isReflexiveCo x = IdWrap
   | otherwise = Cast x
 
-freshSkol :: MonadNamey Name m => SkolemMotive Typed -> Type Typed -> Var Typed -> m (Type Typed)
+freshSkol :: MonadNamey m => SkolemMotive Typed -> Type Typed -> Var Typed -> m (Type Typed)
 freshSkol m ty u = do
   var <- TvName <$> genName
   pure (TySkol (Skolem var u ty m))

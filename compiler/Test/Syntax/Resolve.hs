@@ -19,7 +19,7 @@ import qualified Text.Pretty.Note as N
 import Text.Pretty.Semantic
 
 result :: String -> T.Text -> T.Text
-result file contents = fst . flip runNamey nameSupply $ do
+result file contents = fst . flip runNamey firstName $ do
   let (Just parsed, _) = runParser file (L.fromStrict contents) parseTops
   resolved <- resolveProgram RS.builtinScope RS.emptyModules parsed
   pure . displayPlainVerbose . either prettyErrs ((Right<$>) . pretty . fst) $ resolved

@@ -20,7 +20,7 @@ import Control.Monad
 lintPasses :: Bool
 lintPasses = True
 
-optmOnce :: [Stmt CoVar] -> Namey Name [Stmt CoVar]
+optmOnce :: [Stmt CoVar] -> Namey [Stmt CoVar]
 optmOnce = passes where
   passes = foldr1 (>=>) $ linted
            [ pure
@@ -42,9 +42,9 @@ optmOnce = passes where
     = intersperse (pure . (runLint =<< checkStmt emptyScope))
     | otherwise = id
 
-optimise :: [Stmt CoVar] -> Namey Name [Stmt CoVar]
+optimise :: [Stmt CoVar] -> Namey [Stmt CoVar]
 optimise = go 25 where
-  go :: Integer -> [Stmt CoVar] -> Namey Name [Stmt CoVar]
+  go :: Integer -> [Stmt CoVar] -> Namey [Stmt CoVar]
   go k sts
     | k > 0 = go (k - 1) . (runLint =<< checkStmt emptyScope) =<< optmOnce sts
     | otherwise = pure sts

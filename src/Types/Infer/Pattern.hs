@@ -19,6 +19,7 @@ import Types.Unify (freshSkol)
 
 import Syntax.Types
 import Syntax.Subst
+import Syntax.Var
 import Syntax
 
 inferPattern :: MonadInfer Typed m

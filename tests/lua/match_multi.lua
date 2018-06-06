@@ -3,8 +3,8 @@ do
     ["__tag"] = "__builtin_unit"
   }
   local function main (f)
-    local ah = f(__builtin_unit)
-    return ah.a + ah.b
+    local ak = f(__builtin_unit)
+    return ak.a + ak.b
   end
   main()
 end

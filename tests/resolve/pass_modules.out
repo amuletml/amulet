@@ -1,10 +1,10 @@
-module X#3 = begin
-  module X.Y#2 = begin
-    let x#1 = 1
+module X#2 = begin
+  module X.Y#1 = begin
+    let x#0 = 1
   end
 end
-open X.Y#2 as Z
-let a#4 = x#1
-open X#3
-let b#5 = X.Y.x#1
-let z#6 = X#3 . ({ a = X.Y.x#1 })
+open X.Y#1 as Z
+let a#3 = x#0
+open X#2
+let b#4 = X.Y.x#0
+let z#5 = X#2 . ({ a = X.Y.x#0 })
