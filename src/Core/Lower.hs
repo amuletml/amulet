@@ -35,7 +35,8 @@ import Core.Var
 
 import qualified Syntax as S
 import Syntax.Let
-import Syntax (Var(..), Resolved, Typed, Expr(..), Pattern(..), Lit(..), Skolem(..), Toplevel(..), Constructor(..))
+import Syntax.Var (Var(..), Resolved, Typed)
+import Syntax (Expr(..), Pattern(..), Lit(..), Skolem(..), Toplevel(..), Constructor(..))
 
 import Text.Pretty.Semantic (pretty)
 
@@ -47,7 +48,6 @@ type Stmt = C.Stmt CoVar
 type Arm = C.Arm CoVar
 
 type Lower = ContT Term
-type Name = Var Resolved
 
 data LowerState = LS { vars :: Map.Map (Var Resolved) Type
                      , ctors :: Map.Map (Var Resolved) Type
@@ -55,13 +55,13 @@ data LowerState = LS { vars :: Map.Map (Var Resolved) Type
   deriving (Eq, Show)
 
 type MonadLower m
-  = ( MonadNamey Name m
+  = ( MonadNamey m
     , MonadReader LowerState m )
 
-runLowerT :: MonadNamey Name m => ReaderT LowerState m a -> m a
+runLowerT :: MonadNamey m => ReaderT LowerState m a -> m a
 runLowerT = flip runReaderT (LS mempty mempty)
 
-runLowerWithCtors :: MonadNamey Name m => Map.Map (Var Resolved) Type -> ReaderT LowerState m a -> m a
+runLowerWithCtors :: MonadNamey m => Map.Map (Var Resolved) Type -> ReaderT LowerState m a -> m a
 runLowerWithCtors ct k = runReaderT k (LS mempty ct)
 
 errRef :: Atom

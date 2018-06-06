@@ -1,5 +1,5 @@
 impredicative01-fail.ml[6:38 ..6:52]: error
-  Could not match type forall 'a. 'a -> 'a with 'z -> 'z
+  Could not match type forall 'a. 'a -> 'a with 'ae -> 'ae
   Have you applied a function to the wrong number of arguments?
 
   Arising in the expression

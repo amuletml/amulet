@@ -30,7 +30,7 @@ import Core.Core
 import Core.Var
 
 import Syntax.Types
-import Syntax (Var(..))
+import Syntax.Var
 
 import qualified Types.Wellformed as W
 

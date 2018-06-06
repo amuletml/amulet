@@ -2,6 +2,7 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
 module Syntax.Pretty
   ( module Syntax
+  , module Syntax.Var
   , displayType, applyCons
   ) where
 
@@ -15,7 +16,9 @@ import Data.Span
 import Data.List
 
 import Syntax.Subst
+import Syntax.Var
 import Syntax
+
 import Text.Pretty.Semantic
 
 parenFun :: Pretty (Var p) => Expr p -> Doc
@@ -193,16 +196,6 @@ instance (Pretty (Var p)) => Pretty (Constructor p) where
   pretty (ArgCon p t _) = pretty p <+> keyword "of" <+> pretty t
   pretty (GeneralisedCon p t _) = pretty p <+> colon <+> pretty t
 
-instance Pretty (Var Parsed) where
-  pretty (Name v) = text v
-  pretty (InModule t v) = text t <> dot <> pretty v
-
-instance Pretty (Var Resolved) where
-  pretty (TgName v i) = text v <> scomment (string "#" <> string (show i))
-  pretty (TgInternal v) = text v
-
-instance Pretty (Var Typed) where
-  pretty (TvName v) = pretty v
   -- pretty (TvName v t)
     -- | t == internalTyVar = pretty v
     -- | otherwise = parens $ v <+> opClr " : " <+> t

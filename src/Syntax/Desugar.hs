@@ -6,11 +6,10 @@ import Control.Monad.Namey
 import Data.Foldable
 import Data.Triple
 
+import Syntax.Var
 import Syntax
 
-type Name = Var Resolved
-
-desugarProgram :: forall m. MonadNamey Name m => [Toplevel Resolved] -> m [Toplevel Resolved]
+desugarProgram :: forall m. MonadNamey m => [Toplevel Resolved] -> m [Toplevel Resolved]
 desugarProgram = traverse statement where
   statement (LetStmt vs) = LetStmt <$> traverse (second3A expr) vs
   statement (Module v ss) = Module v <$> traverse statement ss
@@ -76,7 +75,7 @@ desugarProgram = traverse statement where
                a
   expr (OpenIn _ e _) = expr e
 
-  buildTuple :: MonadNamey Name m
+  buildTuple :: MonadNamey m
              => Ann Resolved
              -> Maybe (Expr Resolved)
              -> ([Pattern Resolved], [(Var Resolved, Expr Resolved)], [Expr Resolved])
@@ -92,7 +91,7 @@ desugarProgram = traverse statement where
 
   foldf f xs v = foldr f v xs
 
-fresh :: MonadNamey Name m => Ann Resolved -> m (Pattern Resolved, Expr Resolved)
+fresh :: MonadNamey m => Ann Resolved -> m (Pattern Resolved, Expr Resolved)
 fresh an = do
   var <- genName
   pure (Capture var an, VarRef var an)

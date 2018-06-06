@@ -128,6 +128,7 @@ library amulet
                      -- the AST
                      , Syntax
                      , Syntax.Let
+                     , Syntax.Var
                      , Syntax.Raise
                      , Syntax.Types
                      , Syntax.Subst

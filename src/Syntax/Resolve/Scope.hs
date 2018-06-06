@@ -22,9 +22,7 @@ import Data.List
 import Control.Monad.Reader
 import Control.Monad.Namey
 
-import Syntax
-
-type Name = Var Resolved
+import Syntax.Var
 
 data ScopeVariable
   = SVar (Var Resolved)
@@ -59,11 +57,11 @@ emptyScope = Scope mempty mempty mempty mempty
 emptyModules :: ModuleScope
 emptyModules = ModuleScope mempty
 
-tagVar :: MonadNamey Name m => Var Parsed -> m (Var Resolved)
+tagVar :: MonadNamey m => Var Parsed -> m (Var Resolved)
 tagVar (Name n) = TgName n <$> gen
 tagVar x = error ("Cannot tag variable " ++ show x)
 
-tagModule :: MonadNamey Name m => Var Parsed -> m (Var Resolved)
+tagModule :: MonadNamey m => Var Parsed -> m (Var Resolved)
 tagModule n = TgName (T.intercalate (T.singleton '.') (expand n)) <$> gen where
   expand (Name n) = [n]
   expand (InModule m n) = m:expand n
@@ -76,27 +74,27 @@ insertN scope = foldr (\case
                 . groupBy ((==) `on` fst)
                 . sortOn fst
 
-extend :: (MonadNamey Name m, MonadReader Scope m) => (Var Parsed, Var Resolved) -> m a -> m a
+extend :: (MonadNamey m, MonadReader Scope m) => (Var Parsed, Var Resolved) -> m a -> m a
 extend (v, v') =
   local (\x -> x { varScope = Map.insert v (SVar v') (varScope x) })
 
-extendN :: (MonadNamey Name m, MonadReader Scope m) => [(Var Parsed, Var Resolved)] -> m a -> m a
+extendN :: (MonadNamey m, MonadReader Scope m) => [(Var Parsed, Var Resolved)] -> m a -> m a
 extendN vs =
   local (\x -> x { varScope = insertN (varScope x) vs })
 
-extendTy :: (MonadNamey Name m, MonadReader Scope m) => (Var Parsed, Var Resolved) -> m a -> m a
+extendTy :: (MonadNamey m, MonadReader Scope m) => (Var Parsed, Var Resolved) -> m a -> m a
 extendTy (v, v') =
   local (\x -> x { tyScope = Map.insert v (SVar v') (tyScope x) })
 
-extendTyN :: (MonadNamey Name m, MonadReader Scope m) => [(Var Parsed, Var Resolved)] -> m a -> m a
+extendTyN :: (MonadNamey m, MonadReader Scope m) => [(Var Parsed, Var Resolved)] -> m a -> m a
 extendTyN vs =
   local (\x -> x { tyScope = insertN (tyScope x) vs })
 
-extendTyvar :: (MonadNamey Name m, MonadReader Scope m) => (Var Parsed, Var Resolved) -> m a -> m a
+extendTyvar :: (MonadNamey m, MonadReader Scope m) => (Var Parsed, Var Resolved) -> m a -> m a
 extendTyvar (v, v') =
   local (\x -> x { tyvarScope = Map.insert v (SVar v') (tyvarScope x) })
 
-extendTyvarN :: (MonadNamey Name m, MonadReader Scope m) => [(Var Parsed, Var Resolved)] -> m a -> m a
+extendTyvarN :: (MonadNamey m, MonadReader Scope m) => [(Var Parsed, Var Resolved)] -> m a -> m a
 extendTyvarN vs =
   local (\x -> x { tyvarScope = insertN (tyvarScope x) vs })
 
@@ -105,5 +103,5 @@ extendM m = local (\x -> x { modStack = extend m (modStack x) }) where
   extend (Name n) xs = n:xs
   extend (InModule m n) xs = m:extend n xs
 
-gen :: MonadNamey Name m => m Int
+gen :: MonadNamey m => m Int
 gen = (\(TgName _ i) -> i) <$> genName

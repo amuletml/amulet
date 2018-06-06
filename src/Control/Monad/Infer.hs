@@ -10,7 +10,7 @@
   , RecordWildCards
   #-}
 module Control.Monad.Infer
-  ( module M, nameSupply
+  ( module M, firstName
   , TypeError(..)
   , Constraint(..)
   , Env
@@ -54,9 +54,7 @@ import Syntax.Pretty
 import Syntax.Types
 import Syntax.Subst
 
-type Name = Var Resolved
-
-type MonadInfer p m = (MonadError TypeError m, MonadReader Env m, MonadWriter (Seq.Seq (Constraint p)) m, MonadNamey Name m)
+type MonadInfer p m = (MonadError TypeError m, MonadReader Env m, MonadWriter (Seq.Seq (Constraint p)) m, MonadNamey m)
 
 data Constraint p
   = ConUnify   SomeReason (Var p)  (Type p) (Type p)
@@ -126,14 +124,14 @@ instance Pretty (Var p) => Pretty (Constraint p) where
   pretty ConFail{} = string "fail"
 
 
-lookupTy :: (MonadError TypeError m, MonadReader Env m, MonadNamey Name m) => Var Resolved -> m (Type Typed)
+lookupTy :: (MonadError TypeError m, MonadReader Env m, MonadNamey m) => Var Resolved -> m (Type Typed)
 lookupTy x = do
   rs <- view (names . at x)
   case rs of
     Just t -> thd3 <$> instantiate Expression t
     Nothing -> throwError (NotInScope x)
 
-lookupTy' :: (MonadError TypeError m, MonadReader Env m, MonadNamey Name m) => Var Resolved
+lookupTy' :: (MonadError TypeError m, MonadReader Env m, MonadNamey m) => Var Resolved
           -> m (Maybe (Expr Typed -> Expr Typed), Type Typed, Type Typed)
 lookupTy' x = do
   rs <- view (names . at x)
@@ -141,7 +139,7 @@ lookupTy' x = do
     Just t -> instantiate Expression t
     Nothing -> throwError (NotInScope x)
 
-runInfer :: MonadNamey Name m
+runInfer :: MonadNamey m
          => Env
          -> ReaderT Env (WriterT (Seq.Seq (Constraint p)) (ExceptT TypeError m)) a
          -> m (Either [TypeError] (a, Seq.Seq (Constraint p)))
@@ -149,18 +147,15 @@ runInfer ct ac = first unwrap <$> runExceptT (runWriterT (runReaderT ac ct))
   where unwrap (ManyErrors es) = concatMap unwrap es
         unwrap e = [e]
 
-genNameFrom :: MonadNamey Name m => Text -> m (Var Resolved)
+genNameFrom :: MonadNamey m => Text -> m (Var Resolved)
 genNameFrom t = do
   TgName _ n <- genName
   pure (TgName t n)
 
-alpha :: [Text]
-alpha = map T.pack $ [1..] >>= flip replicateM ['a'..'z']
+firstName :: Var Resolved
+firstName = TgName "a" 0
 
-nameSupply :: [Name]
-nameSupply = zipWith TgName alpha [1..]
-
-instantiate :: MonadNamey Name m
+instantiate :: MonadNamey m
             => WhyInstantiate
             -> Type Typed
             -> m ( Maybe (Expr Typed -> Expr Typed)
@@ -201,7 +196,7 @@ instantiate r tp@(TyPi (Anon co) od@dm) = do
   pure (Just lam, tp, ty)
 instantiate _ ty = pure (Just id, ty, ty)
 
-freshTV :: MonadNamey Name m => m (Type Typed)
+freshTV :: MonadNamey m => m (Type Typed)
 freshTV = TyVar . TvName <$> genName
 
 instance Pretty TypeError where

@@ -24,7 +24,7 @@ import Syntax.Pretty()
 import Text.Pretty.Semantic
 
 result :: String -> T.Text -> T.Text
-result file contents = fst . flip runNamey nameSupply $ do
+result file contents = fst . flip runNamey firstName $ do
   let (Just parsed, _) = runParser file (L.fromStrict contents) parseTops
   Right (resolved, _) <- resolveProgram RS.builtinScope RS.emptyModules parsed
   desugared <- desugarProgram resolved

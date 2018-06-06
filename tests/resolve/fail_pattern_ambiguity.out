@@ -1,5 +1,5 @@
 fail_pattern_ambiguity.ml[2:3 ..2:8]: error
-  Non-linear pattern (multiple definitions of `a#2` )
+  Non-linear pattern (multiple definitions of `a#1` )
 
   Arising from use of the pattern (a, a)
   │ 

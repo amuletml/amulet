@@ -19,6 +19,8 @@ import Parser.Context
 import Parser.Error
 import Parser.Lexer
 import Parser.Token
+
+import Syntax.Var
 import Syntax
 
 }

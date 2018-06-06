@@ -2,6 +2,8 @@
 module Syntax.Raise (raiseT) where
 
 import Control.Arrow
+
+import Syntax.Var
 import Syntax
 
 raiseT :: (Var p -> Var p') -- How to raise variables

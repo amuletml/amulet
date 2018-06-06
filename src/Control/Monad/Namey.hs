@@ -13,11 +13,17 @@ import Control.Monad.IO.Class
 import Control.Monad.Except
 import Control.Applicative
 import Control.Monad.Cont
+import Control.Arrow
 
+import qualified Data.Text as T
 import Data.Functor.Identity
+import Data.Fixed
+import Data.Char
 
-newtype NameyT nam m a =
-  NameyT { unNameyT :: StrictS.StateT [nam] m a }
+import Syntax.Var
+
+newtype NameyT m a =
+  NameyT { unNameyT :: StrictS.StateT Int m a }
   deriving newtype
   ( Functor
   , Applicative
@@ -31,57 +37,62 @@ newtype NameyT nam m a =
   , MonadIO
   )
 
-type Namey n = NameyT n Identity
+type Namey = NameyT Identity
 
-instance MonadState s m => MonadState s (NameyT nam m) where
+instance MonadState s m => MonadState s (NameyT m) where
   get = lift StrictS.get
   put = lift . StrictS.put
 
-class Monad m => MonadNamey nam m | m -> nam where
-  genName :: m nam
-  forkNames :: m [nam]
+class Monad m => MonadNamey m where
+  genName :: m Name
 
-runNameyT :: NameyT nam m a -> [nam] -> m (a, [nam])
-runNameyT (NameyT k) ns = StrictS.runStateT k ns
+runNameyT :: Functor m => NameyT m a -> Name -> m (a, Name)
+runNameyT (NameyT k) (TgName _ i) = fmap (second genVar) $ StrictS.runStateT k i where
+  genVar x = TgName (genAlnum x) x
+runNameyT _ _ = undefined
 
-evalNameyT :: Monad m => NameyT nam m a -> [nam] -> m a
-evalNameyT (NameyT k) ns = StrictS.evalStateT k ns
+evalNameyT :: Monad m => NameyT m a -> Name -> m a
+evalNameyT (NameyT k) (TgName _ i) = StrictS.evalStateT k i
+evalNameyT _ _ = undefined
 
-runNamey :: NameyT nam Identity a -> [nam] -> (a, [nam])
-runNamey (NameyT k) ns = StrictS.runState k ns
+runNamey :: NameyT Identity a -> Name -> (a, Name)
+runNamey (NameyT k) (TgName _ i) = second genVar $ StrictS.runState k i where
+  genVar x = TgName (genAlnum x) x
+runNamey _ _ = undefined
 
-instance Monad m => MonadNamey nam (NameyT nam m) where
+instance Monad m => MonadNamey (NameyT m) where
   genName = NameyT $ do
-    (x:xs) <- get
-    put xs
-    pure x
-  forkNames = NameyT get
+    x <- get
+    put (x + 1)
+    pure (TgName (genAlnum x) x)
 
-instance MonadNamey n m => MonadNamey n (ContT r m) where
+instance MonadNamey m => MonadNamey (ContT r m) where
   genName = lift genName
-  forkNames = lift forkNames
 
-instance MonadNamey n m => MonadNamey n (StrictS.StateT s m) where
+instance MonadNamey m => MonadNamey (StrictS.StateT s m) where
   genName = lift genName
-  forkNames = lift forkNames
 
-instance MonadNamey n m => MonadNamey n (LazyS.StateT s m) where
+instance MonadNamey m => MonadNamey (LazyS.StateT s m) where
   genName = lift genName
-  forkNames = lift forkNames
 
-instance (MonadNamey n m, Monoid s) => MonadNamey n (StrictW.WriterT s m) where
+instance (MonadNamey m, Monoid s) => MonadNamey (StrictW.WriterT s m) where
   genName = lift genName
-  forkNames = lift forkNames
 
-instance (MonadNamey n m, Monoid s) => MonadNamey n (LazyW.WriterT s m) where
+instance (MonadNamey m, Monoid s) => MonadNamey (LazyW.WriterT s m) where
   genName = lift genName
-  forkNames = lift forkNames
 
-instance MonadNamey n m => MonadNamey n (ExceptT e m) where
+instance MonadNamey m => MonadNamey (ExceptT e m) where
   genName = lift genName
-  forkNames = lift forkNames
 
-instance MonadNamey n m => MonadNamey n (Reader.ReaderT e m) where
+instance MonadNamey m => MonadNamey (Reader.ReaderT e m) where
   genName = lift genName
-  forkNames = lift forkNames
+
+genAlnum :: Int -> T.Text
+genAlnum 0 = T.singleton 'a'
+genAlnum n = go (fromIntegral n) T.empty (floor (logBase 26 (fromIntegral n :: Double))) where
+  go :: Double -> T.Text -> Int -> T.Text
+  go n out 0 = T.snoc out (chr (97 + floor n))
+  go n out p =
+    let m = floor (n / (26 ^ p))
+     in go (n `mod'` (26 ^ p)) (T.snoc out (chr (96 + m))) (p - 1)
 

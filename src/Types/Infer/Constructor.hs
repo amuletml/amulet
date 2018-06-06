@@ -14,6 +14,7 @@ import Types.Infer.Errors
 import Types.Unify
 
 import Syntax.Subst
+import Syntax.Var
 import Syntax
 
 inferCon :: MonadInfer Typed m
@@ -34,7 +35,7 @@ inferCon ret c@(GeneralisedCon nm cty ann) = do
 
   cty <- resolveKind (BecauseOf c) cty
   var <- TvName <$> genName
-  x <- forkNames
+  x <- genName
   case solve x (Seq.singleton (ConUnify (BecauseOf c) var (gadtConResult cty) ret)) of
     Left e -> throwError (gadtConShape (cty, ret) (gadtConResult cty) e)
     Right _ -> pure ()

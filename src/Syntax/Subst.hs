@@ -19,6 +19,7 @@ import qualified Data.Set as Set
 
 import Control.Arrow (second)
 
+import Syntax.Var
 import Syntax
 
 type Subst p = Map.Map (Var p) (Type p)

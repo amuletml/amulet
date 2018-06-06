@@ -39,8 +39,6 @@ import Syntax.Subst
 import Text.Pretty.Semantic
 import Text.Pretty.Note
 
-type Name = Var Resolved
-
 data ResolveError
   = NotInScope (Var Parsed)
   | NoSuchModule (Var Parsed)
@@ -76,15 +74,15 @@ instance Note ResolveError Style where
 type MonadResolve m = ( MonadError ResolveError m
                       , MonadWriter (Seq ResolveError) m
                       , MonadReader Scope m
-                      , MonadNamey Name m
+                      , MonadNamey m
                       , MonadState ModuleScope m)
 
-resolveProgram :: MonadNamey Name m
+resolveProgram :: MonadNamey m
                => Scope -> ModuleScope -> [Toplevel Parsed]
                -> m (Either [ResolveError] ([Toplevel Resolved], ModuleScope))
 resolveProgram scope modules = runResolve scope modules . resolveModule
 
-runResolve :: MonadNamey Name m
+runResolve :: MonadNamey m
            => Scope -> ModuleScope
            -> StateT ModuleScope (ReaderT Scope (ExceptT ResolveError (WriterT (Seq ResolveError) m))) a
            -> m (Either [ResolveError] (a, ModuleScope))

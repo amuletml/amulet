@@ -3,7 +3,7 @@ module Test.Types.Check (tests) where
 import Test.Tasty
 import Test.Util
 
-import Control.Monad.Infer (names, nameSupply)
+import Control.Monad.Infer (names, firstName)
 import Control.Monad.Namey
 import Control.Lens ((^.), to, runIdentity)
 
@@ -26,7 +26,7 @@ import qualified Text.Pretty.Note as N
 import Text.Pretty.Semantic
 
 result :: String -> T.Text -> T.Text
-result file contents = runIdentity . flip evalNameyT nameSupply $ do
+result file contents = runIdentity . flip evalNameyT firstName $ do
   let (Just parsed, _) = runParser file (L.fromStrict contents) parseTops
   Right (resolved, _) <- resolveProgram RS.builtinScope RS.emptyModules parsed
   desugared <- desugarProgram resolved

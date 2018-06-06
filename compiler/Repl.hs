@@ -28,6 +28,7 @@ import Syntax.Desugar (desugarProgram)
 import Syntax.Verify
 import Syntax.Pretty (displayType)
 import Syntax.Types (constructors, toMap)
+import qualified Syntax.Var as S
 import qualified Syntax as S
 
 import qualified Control.Monad.Infer as T
@@ -63,14 +64,12 @@ import Repl.Display
 import Errors
 import Debug
 
-type Name = S.Var S.Resolved
-
 data ReplState = ReplState
   { resolveScope :: R.Scope
   , moduleScope  :: R.ModuleScope
   , inferScope   :: T.Env
   , escapeScope  :: B.EscapeScope
-  , names        :: [Name]
+  , lastName     :: S.Name
 
   , luaState     :: L.LuaState
 
@@ -98,7 +97,7 @@ defaultState mode = do
     , moduleScope  = R.emptyModules
     , inferScope   = I.builtinsEnv
     , escapeScope  = B.escapeScope
-    , names      = T.nameSupply
+    , lastName     = S.TgName (T.pack "a") 1
 
     , luaState     = state
 
@@ -138,7 +137,7 @@ runRepl = do
 
     execString line = do
       state <- get
-      core <- flip evalNameyT (names state) $ parseCore state line
+      core <- flip evalNameyT (lastName state) $ parseCore state line
       case core of
         Nothing -> pure ()
         Just (vs, prog, core, state') -> do
@@ -178,7 +177,7 @@ runRepl = do
           put state' { escapeScope = escape' }
 
 
-    parseCore :: (MonadNamey Name m, MonadIO m)
+    parseCore :: (MonadNamey m, MonadIO m)
               => ReplState -> String
               -> m (Maybe ([(CoVar, C.Type CoVar)]
                           , [S.Toplevel S.Typed]
@@ -222,7 +221,7 @@ runRepl = do
                          -- to get some basic commuting conversion, allowing the codegen to be more
                          -- effective.
                          lower <- reducePass <$> runLowerWithCtors ctors (lowerProg prog)
-                         lastG <- forkNames
+                         lastG <- genName
                          pure $ Just ( case last lower of
                                          (C.StmtLet vs) -> map (\(v, t, _) -> (v, t)) vs
                                          _ -> []
@@ -233,7 +232,7 @@ runRepl = do
                                                                      }
                                              , moduleScope = modScope'
                                              , inferScope = env'
-                                             , names = lastG })
+                                             , lastName = lastG })
 
 
 isError :: Note a b => a -> Bool
