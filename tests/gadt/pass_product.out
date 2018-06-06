@@ -1,9 +1,9 @@
 list : type -> type
 Nil : {'tys : type}. ('tys ~ unit) ⊃ list 'tys
 Cons : {'tys : type}. {'a : type}. {'b : type}. ('tys ~ 'a * 'b) ⊃ ('a * list 'b) -> list 'tys
-elem : {'dh : type}. 'dh -> 'dh -> type
-Here : {'xs : 'es}. {'x : 'es}. {'xs : 'es}. ('xs ~ 'x * 'xs) ⊃ elem 'x 'xs
-There : {'xs : 'ga}. {'x : 'ga}. {'xs : 'ga}. {'y : 'ga}. ('xs ~ 'y * 'xs) ⊃ elem 'x 'xs -> elem 'x 'xs
+elem : {'da : type}. 'da -> 'da -> type
+Here : {'xs : 'ei}. {'x : 'ei}. {'xs : 'ei}. ('xs ~ 'x * 'xs) ⊃ elem 'x 'xs
+There : {'xs : 'fo}. {'x : 'fo}. {'xs : 'fo}. {'y : 'fo}. ('xs ~ 'y * 'xs) ⊃ elem 'x 'xs -> elem 'x 'xs
 index : {'a : type}. {'ts : type}. elem 'a 'ts -> list 'ts -> 'a
-:: : {'la : type}. {'b : type}. 'la -> list 'b -> list ('la * 'b)
+:: : {'ke : type}. {'b : type}. 'ke -> list 'b -> list ('ke * 'b)
 foo : string

@@ -15,7 +15,7 @@ import Control.Monad.Writer
 import Control.Monad.Reader
 import Control.Applicative hiding (empty)
 import Control.Monad.State
-import Control.Monad.Gen
+import Control.Monad.Namey
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
@@ -38,6 +38,8 @@ import Syntax.Subst
 
 import Text.Pretty.Semantic
 import Text.Pretty.Note
+
+type Name = Var Resolved
 
 data ResolveError
   = NotInScope (Var Parsed)
@@ -74,15 +76,15 @@ instance Note ResolveError Style where
 type MonadResolve m = ( MonadError ResolveError m
                       , MonadWriter (Seq ResolveError) m
                       , MonadReader Scope m
-                      , MonadGen Int m
+                      , MonadNamey Name m
                       , MonadState ModuleScope m)
 
-resolveProgram :: MonadGen Int m
+resolveProgram :: MonadNamey Name m
                => Scope -> ModuleScope -> [Toplevel Parsed]
                -> m (Either [ResolveError] ([Toplevel Resolved], ModuleScope))
 resolveProgram scope modules = runResolve scope modules . resolveModule
 
-runResolve :: MonadGen Int m
+runResolve :: MonadNamey Name m
            => Scope -> ModuleScope
            -> StateT ModuleScope (ReaderT Scope (ExceptT ResolveError (WriterT (Seq ResolveError) m))) a
            -> m (Either [ResolveError] (a, ModuleScope))

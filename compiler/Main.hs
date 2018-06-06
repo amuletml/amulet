@@ -12,11 +12,11 @@ import qualified Data.Text as T
 import Data.Foldable
 import Data.Functor
 
-import Control.Monad.Gen (runGen)
-
+import Data.Functor.Identity
 import Data.Position (SourceName)
 
-import Control.Monad.Infer (Env, TypeError)
+import Control.Monad.Infer (Env, TypeError, nameSupply)
+import Control.Monad.Namey
 import Backend.Lua
 
 import Types.Infer (inferProgram, builtinsEnv)
@@ -34,6 +34,7 @@ import Core.Core (Stmt)
 import Core.Var (CoVar)
 
 import Text.Pretty.Semantic
+import Text.Pretty.Note
 
 import Parser.Wrapper (runParser)
 import Parser.Error (ParseError)
@@ -44,27 +45,26 @@ import qualified Debug as D
 import Repl
 
 data CompileResult
-  = CSuccess [Toplevel Typed] [Stmt CoVar] [Stmt CoVar] LuaStmt Env
+  = CSuccess [VerifyError] [Toplevel Typed] [Stmt CoVar] [Stmt CoVar] LuaStmt Env
   | CParse   [ParseError]
   | CResolve [ResolveError]
   | CInfer   [TypeError]
-  | CVerify  [VerifyError]
 
 compile :: [(SourceName, T.Text)] -> CompileResult
 compile [] = error "Cannot compile empty input"
-compile (file:files) = runGen $ do
-  file' <- go (Right ([], RS.builtinScope, RS.emptyModules, builtinsEnv)) file
+compile (file:files) = runIdentity . flip evalNameyT nameSupply $ do
+  file' <- go (Right ([], [], RS.builtinScope, RS.emptyModules, builtinsEnv)) file
   files' <- foldlM go file' files
   case files' of
-    Right (prg, _, _, env) -> do
+    Right (ve, prg, _, _, env) -> do
       lower <- runLowerT (lowerProg prg)
       optm <- optimise lower
-      pure (CSuccess prg lower optm (compileProgram env optm) env)
+      pure (CSuccess ve prg lower optm (compileProgram env optm) env)
 
     Left err -> pure err
 
   where
-    go (Right (tops, scope, modScope, env)) (name, file) =
+    go (Right (errs, tops, scope, modScope, env)) (name, file) =
       case runParser name (L.fromStrict file) parseTops of
         (Just parsed, _) -> do
           resolved <- resolveProgram scope modScope parsed
@@ -74,17 +74,19 @@ compile (file:files) = runGen $ do
               infered <- inferProgram env desugared
               case infered of
                 Right (prog, env') ->
-                  case runVerify (verifyProgram prog) of
-                    Right () ->
-                      let (var, tys) = extractToplevels parsed
-                          (var', tys') = extractToplevels resolved
-                      in pure $ Right (tops ++ prog
-                                      , scope { RS.varScope = RS.insertN (RS.varScope scope) (zip var var')
-                                              , RS.tyScope  = RS.insertN (RS.tyScope scope)  (zip tys tys')
-                                              }
-                                      , modScope'
-                                      , env')
-                    Left es -> pure $ Left $ CVerify (toList es)
+                  let x = runVerify (verifyProgram prog)
+                      (var, tys) = extractToplevels parsed
+                      (var', tys') = extractToplevels resolved
+                      errs' = case x of
+                        Left es -> toList es
+                        Right () -> []
+                   in pure $ Right ( errs ++ errs'
+                                   , tops ++ prog
+                                   , scope { RS.varScope = RS.insertN (RS.varScope scope) (zip var var')
+                                           , RS.tyScope  = RS.insertN (RS.tyScope scope)  (zip tys tys')
+                                           }
+                                   , modScope'
+                                   , env')
                 Left e -> pure $ Left $ CInfer e
             Left e -> pure $ Left $ CResolve e
         (Nothing, es) -> pure $ Left $ CParse es
@@ -96,23 +98,32 @@ compileFromTo :: [(FilePath, T.Text)]
               -> IO ()
 compileFromTo fs emit =
   case compile fs of
-    CSuccess _ _ _ lua _ -> emit lua
+    CSuccess es _ _ _ lua _ -> do
+      traverse_ (`reportS` fs) es
+      if any isError es
+         then pure ()
+         else emit lua
     CParse es -> traverse_ (`reportS` fs) es
     CResolve es -> traverse_ (`reportS` fs) es
     CInfer es -> traverse_ (`reportS` fs) es
-    CVerify es -> traverse_ (`reportS` fs) es
 
 test :: D.DebugMode -> [(FilePath, T.Text)] -> IO (Maybe ([Stmt CoVar], Env))
 test mode fs =
   case compile fs of
-    CSuccess ast core opt lua env -> D.dump mode ast core opt lua builtinsEnv env $> Just (core, env)
+    CSuccess es ast core opt lua env -> do
+      traverse_ (`reportS` fs) es
+      if any isError es
+         then pure Nothing
+         else D.dump mode ast core opt lua builtinsEnv env $> Just (core, env)
     CParse es -> Nothing <$ traverse_ (`reportS` fs) es
     CResolve es -> Nothing <$ traverse_ (`reportS` fs) es
     CInfer es -> Nothing <$ traverse_ (`reportS` fs) es
-    CVerify es -> Nothing <$ traverse_ (`reportS` fs) es
 
 data CompilerOption = Test | TestTc | Out String
   deriving (Show)
+
+isError :: Note a b => a -> Bool
+isError x = diagnosticKind x == ErrorMessage
 
 flags :: [OptDescr CompilerOption]
 flags = [ Option ['t'] ["test"] (NoArg Test)

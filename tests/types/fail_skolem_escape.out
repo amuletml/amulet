@@ -1,7 +1,7 @@
 fail_skolem_escape.ml[2:19 ..2:38]: error
-  Rigid type variable a has escaped its scope of forall 'a. 'a -> 'o
+  Rigid type variable a has escaped its scope of forall 'a. 'a -> 'm
   • Note: the variable a was rigidified because of an ascription against the type
-          forall 'a. 'a -> 'o,
+          forall 'a. 'a -> 'm,
 
   • Note: in type `'a`
   • Note: in the inferred type for escape_fail

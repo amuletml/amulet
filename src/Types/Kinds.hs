@@ -38,7 +38,7 @@ type KindT m = StateT SomeReason (WriterT (Seq.Seq (Constraint Typed)) m)
 type MonadKind m =
   ( MonadError TypeError m
   , MonadReader Env m
-  , MonadGen Int m
+  , MonadNamey Name m
   )
 
 type Kind = Type
@@ -49,7 +49,7 @@ resolveKind reason otp = do
                         (t, _) <- secondA isType =<< inferKind t
                         pure t
                      in runWriterT (runStateT (cont otp) reason)
-  x <- gen
+  x <- forkNames
 
   sub <- case solve x cs of
     Left e -> throwError e
@@ -74,7 +74,7 @@ checkAgainstKind r t k = do
 annotateKind :: MonadKind m => SomeReason -> Type Typed -> m (Type Typed)
 annotateKind r ty = do
   ((ty, _), cs) <- runWriterT (runStateT (checkKind (raiseT unTvName ty) TyType) r)
-  x <- gen
+  x <- forkNames
 
   sub <- case solve x cs of
     Left e -> throwError e
@@ -105,7 +105,7 @@ solveForKind reason = solveK (closeOver reason) reason
 solveK :: MonadKind m => (Type Typed -> m (Type Typed)) -> SomeReason -> KindT m (Type Typed) -> m (Type Typed)
 solveK cont reason k = do
   ((kind, _), cs) <- runWriterT (runStateT k reason)
-  x <- gen
+  x <- forkNames
 
   case solve x cs of
     Left e -> throwError e

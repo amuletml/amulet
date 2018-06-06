@@ -41,7 +41,7 @@ data SolveState
 makeLenses ''SolveState
 makeLenses ''SolveScope
 
-type SolveM = GenT Int (WriterT [TypeError] (StateT SolveState (ReaderT SolveScope (Except TypeError))))
+type SolveM = NameyT Name (WriterT [TypeError] (StateT SolveState (ReaderT SolveScope (Except TypeError))))
 
 bind :: Var Typed -> Type Typed -> SolveM (Coercion Typed)
 bind var ty
@@ -197,18 +197,18 @@ unifRow (t, a, b) = do
   co <- unify a b
   pure (t, co)
 
-runSolve :: Int -> Subst Typed -> SolveM b -> Either TypeError (Int, (Subst Typed, Map.Map (Var Typed) (Wrapper Typed)))
-runSolve i s x = runExcept (fix (runReaderT (runStateT (runWriterT (runGenTFrom i act)) (SolveState s mempty mempty)) emptyScope)) where
-  act = (,) <$> gen <*> x
+runSolve :: [Name] -> Subst Typed -> SolveM b -> Either TypeError ([Name], (Subst Typed, Map.Map (Var Typed) (Wrapper Typed)))
+runSolve i s x = runExcept (fix (runReaderT (runStateT (runWriterT (runNameyT act i)) (SolveState s mempty mempty)) emptyScope)) where
+  act = (,) <$> genName <*> x
   fix act = do
-    (((i, _), w), s) <- act
+    (((_, x), w), s) <- act
     case w of
       [] -> let ss = s ^. solveTySubst
-             in pure (i, (fmap (apply ss) ss, s ^. solveCoSubst))
+             in pure (x, (fmap (apply ss) ss, s ^. solveCoSubst))
       xs -> throwError (ManyErrors xs)
   emptyScope = SolveScope False mempty
 
-solve :: Int -> Seq.Seq (Constraint Typed) -> Either TypeError (Subst Typed, Map.Map (Var Typed) (Wrapper Typed))
+solve :: [Name] -> Seq.Seq (Constraint Typed) -> Either TypeError (Subst Typed, Map.Map (Var Typed) (Wrapper Typed))
 solve i cs = snd <$> runSolve i mempty (doSolve cs)
 
 doSolve :: Seq.Seq (Constraint Typed) -> SolveM ()
@@ -276,7 +276,7 @@ subsumes k t1@TyPi{} t2 | isSkolemisable t1 = do
 subsumes k ot@(TyTuple a b) nt@(TyTuple a' b') = do
   wa <- subsumes k a a'
   wb <- subsumes k b b'
-  [elem, elem'] <- fmap TvName <$> replicateM 2 fresh
+  [elem, elem'] <- fmap TvName <$> replicateM 2 genName
   let cont (Tuple (e:es) (an, _)) =
         Tuple [ ExprWrapper wa e (an, a')
               , case es of
@@ -322,7 +322,7 @@ subsumes k ty' (TyApp lazy ty) | lazy == tyLazy, _TyVar `isn't` ty' = do
 subsumes k a b = probablyCast <$> k a b where
 
 
-skolemise :: MonadGen Int m => SkolemMotive Typed -> Type Typed -> m (Wrapper Typed, Type Typed)
+skolemise :: MonadNamey Name m => SkolemMotive Typed -> Type Typed -> m (Wrapper Typed, Type Typed)
 skolemise motive ty@TyPi{} | Just (tv, k, t) <- isSkolemisableTyBinder ty = do
   sk <- freshSkol motive ty tv
   (wrap, ty) <- skolemise motive (apply (Map.singleton tv sk) t)
@@ -358,9 +358,9 @@ probablyCast x
   | isReflexiveCo x = IdWrap
   | otherwise = Cast x
 
-freshSkol :: MonadGen Int m => SkolemMotive Typed -> Type Typed -> Var Typed -> m (Type Typed)
+freshSkol :: MonadNamey Name m => SkolemMotive Typed -> Type Typed -> Var Typed -> m (Type Typed)
 freshSkol m ty u = do
-  var <- TvName <$> fresh
+  var <- TvName <$> genName
   pure (TySkol (Skolem var u ty m))
 
 occurs :: Var Typed -> Type Typed -> Bool

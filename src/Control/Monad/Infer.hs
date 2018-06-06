@@ -10,12 +10,12 @@
   , RecordWildCards
   #-}
 module Control.Monad.Infer
-  ( module M
+  ( module M, nameSupply
   , TypeError(..)
   , Constraint(..)
   , Env
-  , MonadInfer
-  , lookupTy, lookupTy', fresh, freshFrom, runInfer, freeInEnv
+  , MonadInfer, Name
+  , lookupTy, lookupTy', genNameFrom, runInfer, freeInEnv
   , difference, freshTV
   , instantiate
   , SomeReason(..), Reasonable, propagateBlame
@@ -29,7 +29,7 @@ module Control.Monad.Infer
 import Control.Monad.Writer.Strict as M hiding ((<>))
 import Control.Monad.Reader as M
 import Control.Monad.Except as M
-import Control.Monad.Gen as M
+import Control.Monad.Namey as M
 import Control.Lens
 
 import qualified Data.Map.Strict as Map
@@ -54,7 +54,9 @@ import Syntax.Pretty
 import Syntax.Types
 import Syntax.Subst
 
-type MonadInfer p m = (MonadError TypeError m, MonadReader Env m, MonadWriter (Seq.Seq (Constraint p)) m, MonadGen Int m)
+type Name = Var Resolved
+
+type MonadInfer p m = (MonadError TypeError m, MonadReader Env m, MonadWriter (Seq.Seq (Constraint p)) m, MonadNamey Name m)
 
 data Constraint p
   = ConUnify   SomeReason (Var p)  (Type p) (Type p)
@@ -124,14 +126,14 @@ instance Pretty (Var p) => Pretty (Constraint p) where
   pretty ConFail{} = string "fail"
 
 
-lookupTy :: (MonadError TypeError m, MonadReader Env m, MonadGen Int m) => Var Resolved -> m (Type Typed)
+lookupTy :: (MonadError TypeError m, MonadReader Env m, MonadNamey Name m) => Var Resolved -> m (Type Typed)
 lookupTy x = do
   rs <- view (names . at x)
   case rs of
     Just t -> thd3 <$> instantiate Expression t
     Nothing -> throwError (NotInScope x)
 
-lookupTy' :: (MonadError TypeError m, MonadReader Env m, MonadGen Int m) => Var Resolved
+lookupTy' :: (MonadError TypeError m, MonadReader Env m, MonadNamey Name m) => Var Resolved
           -> m (Maybe (Expr Typed -> Expr Typed), Type Typed, Type Typed)
 lookupTy' x = do
   rs <- view (names . at x)
@@ -139,7 +141,7 @@ lookupTy' x = do
     Just t -> instantiate Expression t
     Nothing -> throwError (NotInScope x)
 
-runInfer :: MonadGen Int m
+runInfer :: MonadNamey Name m
          => Env
          -> ReaderT Env (WriterT (Seq.Seq (Constraint p)) (ExceptT TypeError m)) a
          -> m (Either [TypeError] (a, Seq.Seq (Constraint p)))
@@ -147,27 +149,28 @@ runInfer ct ac = first unwrap <$> runExceptT (runWriterT (runReaderT ac ct))
   where unwrap (ManyErrors es) = concatMap unwrap es
         unwrap e = [e]
 
-fresh :: MonadGen Int m => m (Var Resolved)
-fresh = do
-  x <- gen
-  pure (TgName (alpha !! x) x)
-
-freshFrom :: MonadGen Int m => Text -> m (Var Resolved)
-freshFrom t = TgName t <$> gen
+genNameFrom :: MonadNamey Name m => Text -> m (Var Resolved)
+genNameFrom t = do
+  TgName _ n <- genName
+  pure (TgName t n)
 
 alpha :: [Text]
 alpha = map T.pack $ [1..] >>= flip replicateM ['a'..'z']
 
-instantiate :: MonadGen Int m
+nameSupply :: [Name]
+nameSupply = zipWith TgName alpha [1..]
+
+instantiate :: MonadNamey Name m
             => WhyInstantiate
             -> Type Typed
             -> m ( Maybe (Expr Typed -> Expr Typed)
                  , Type Typed
                  , Type Typed)
 instantiate r tp@(TyPi (Implicit v _) ty) = do
-  var <- TyVar . TvName <$> case unTvName v of
-    TgInternal n -> TgName n <$> gen
-    TgName n _ -> TgName n <$> gen
+  TgName _ num <- genName
+  var <- pure . TyVar . TvName $ case unTvName v of
+    TgInternal n -> TgName n num
+    TgName n _ -> TgName n num
   let map = Map.singleton v var
 
       appThisTy e = ExprWrapper (TypeApp var) e (annotation e, apply map ty)
@@ -175,9 +178,10 @@ instantiate r tp@(TyPi (Implicit v _) ty) = do
   pure (squish appThisTy k, tp, t)
 instantiate Expression tp@(TyPi Explicit{} _) = pure (Just id, tp, tp) -- nope!
 instantiate Subsumption tp@(TyPi (Explicit v k) ty) = do
-  var <- TyVar . TvName <$> case unTvName v of
-    TgInternal n -> TgName n <$> gen
-    TgName n _ -> TgName n <$> gen
+  TgName _ num <- genName
+  var <- pure . TyVar . TvName $ case unTvName v of
+    TgInternal n -> TgName n num
+    TgName n _ -> TgName n num
   let map = Map.singleton v var
       appThisTy e = App e (InstType var (annotation e, k)) (annotation e, apply map ty)
 
@@ -186,7 +190,7 @@ instantiate Subsumption tp@(TyPi (Explicit v k) ty) = do
 instantiate r tp@(TyPi (Anon co) od@dm) = do
   (wrap, _, dm) <- instantiate r dm
   let cont = fromMaybe id wrap
-  var <- fresh
+  var <- genName
   let ty = TyPi (Anon co) dm
       lam :: Expr Typed -> Expr Typed
       lam e | od == dm = e
@@ -197,8 +201,8 @@ instantiate r tp@(TyPi (Anon co) od@dm) = do
   pure (Just lam, tp, ty)
 instantiate _ ty = pure (Just id, ty, ty)
 
-freshTV :: MonadGen Int m => m (Type Typed)
-freshTV = TyVar . TvName <$> fresh
+freshTV :: MonadNamey Name m => m (Type Typed)
+freshTV = TyVar . TvName <$> genName
 
 instance Pretty TypeError where
   pretty (NotEqual b@TyArr{} a) =

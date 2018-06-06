@@ -3,8 +3,8 @@ module Core.Optimise.Inline
   ( inlineVariablePass
   ) where
 
+import Control.Monad.Namey
 import Control.Lens hiding (cons)
-import Control.Monad.Gen
 
 import qualified Data.VarMap as VarMap
 import qualified Data.VarSet as VarSet
@@ -18,7 +18,7 @@ limit = 500
 data InlineScope a = InlineScope { scores :: VarMap.Map (Atom a, Int)
                                  , cons :: VarSet.Set }
 
-inlineVariablePass :: (MonadGen Int m, IsVar a) => [Stmt a] -> m [Stmt a]
+inlineVariablePass :: (MonadNamey Name m, IsVar a) => [Stmt a] -> m [Stmt a]
 inlineVariablePass = transS (InlineScope mempty mempty) where
   transS _ [] = pure []
   transS s (x@Foreign{}:xs) = (x:) <$> transS s xs
@@ -34,7 +34,7 @@ inlineVariablePass = transS (InlineScope mempty mempty) where
   transA _ t@Lit{} = pure t
   transA s (Lam arg b) = Lam arg <$> transT s b
 
-  transT :: (MonadGen Int m, IsVar a) => InlineScope a -> Term a -> m (Term a)
+  transT :: (MonadNamey Name m, IsVar a) => InlineScope a -> Term a -> m (Term a)
   transT s (Atom a) = Atom <$> transA s a
   transT s (App f a) = do
     f' <- transA s f

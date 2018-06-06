@@ -6,21 +6,24 @@ module Core.Optimise
   , module Core.Var
   , refresh, fresh, freshFrom, freshFrom'
   , argVar
+  , Name
   ) where
 
 import Control.Arrow (second)
-import Control.Monad.Gen
-import Control.Monad
+import Control.Monad.Namey
 import Control.Lens
 
 import qualified Data.VarMap as VarMap
-import qualified Data.Text as T
 import Data.Foldable
 import Data.Triple
 import Data.Maybe
 
 import Core.Core
 import Core.Var
+
+import Syntax (Var(..), Resolved)
+
+type Name = Var Resolved
 
 substitute :: IsVar a => VarMap.Map (Atom a) -> Term a -> Term a
 substitute m = term where
@@ -111,9 +114,9 @@ substituteInCo m = coercion where
 
   gotype = substituteInType m
 
-refresh :: (MonadGen Int m, IsVar a) => Term a -> m (Term a)
+refresh :: (MonadNamey Name m, IsVar a) => Term a -> m (Term a)
 refresh = refreshTerm mempty where
-  refreshAtom :: (MonadGen Int m, IsVar a) => VarMap.Map a -> Atom a -> m (Atom a)
+  refreshAtom :: (MonadNamey Name m, IsVar a) => VarMap.Map a -> Atom a -> m (Atom a)
   refreshAtom s (Ref v ty) =
     let v' = fromMaybe v (VarMap.lookup (toVar v) s)
         ty' = refreshType s ty
@@ -123,7 +126,7 @@ refresh = refreshTerm mempty where
     (arg', v') <- refreshArg s arg
     Lam arg' <$> refreshTerm (VarMap.insert (argVar arg) v' s) b
 
-  refreshArg :: (MonadGen Int m, IsVar a) => VarMap.Map a -> Argument a -> m (Argument a, a)
+  refreshArg :: (MonadNamey Name m, IsVar a) => VarMap.Map a -> Argument a -> m (Argument a, a)
   refreshArg s (TermArgument n ty) = do
     let ty' = refreshType s ty
     v' <- freshFrom' n
@@ -133,7 +136,7 @@ refresh = refreshTerm mempty where
     v' <- freshFrom' n
     pure (TypeArgument v' ty', v')
 
-  refreshTerm :: (MonadGen Int m, IsVar a) => VarMap.Map a -> Term a -> m (Term a)
+  refreshTerm :: (MonadNamey Name m, IsVar a) => VarMap.Map a -> Term a -> m (Term a)
   refreshTerm s (Atom a) = Atom <$> refreshAtom s a
   refreshTerm s (App f x) = App <$> refreshAtom s f <*> refreshAtom s x
   refreshTerm s (TyApp f ty) = TyApp <$> refreshAtom s f <*> pure (refreshType s ty)
@@ -149,7 +152,7 @@ refresh = refreshTerm mempty where
     vs' <- traverse (trimapA (pure . get s') (pure . refreshType s') (refreshTerm s')) vs
     Let (Many vs') <$> refreshTerm s' b
   refreshTerm s (Match e branches) = Match <$> refreshAtom s e <*> refreshArms s branches where
-    refreshArm :: (IsVar a, MonadGen Int m) => VarMap.Map a -> Arm a -> m (Arm a, VarMap.Map a)
+    refreshArm :: (IsVar a, MonadNamey Name m) => VarMap.Map a -> Arm a -> m (Arm a, VarMap.Map a)
     refreshArm s (a@Arm{ _armPtrn = test, _armBody = branch }) = do
       s' <- refreshVs (a ^. armTyvars) s >>= refreshVs (a ^. armVars)
       branch' <- refreshTerm s' branch
@@ -161,16 +164,16 @@ refresh = refreshTerm mempty where
                  }
            , s' )
 
-    refreshArms :: (IsVar a, MonadGen Int m) => VarMap.Map a -> [Arm a] -> m [Arm a]
+    refreshArms :: (IsVar a, MonadNamey Name m) => VarMap.Map a -> [Arm a] -> m [Arm a]
     refreshArms s (a:as) = do
       (a', s) <- refreshArm s a
       (a':) <$> refreshArms s as
     refreshArms _ [] = pure []
 
-    refreshVs :: (MonadGen Int m, IsVar a) => [(a, Type a)] -> VarMap.Map a -> m (VarMap.Map a)
+    refreshVs :: (MonadNamey Name m, IsVar a) => [(a, Type a)] -> VarMap.Map a -> m (VarMap.Map a)
     refreshVs = flip (foldrM refreshV)
 
-    refreshV :: (MonadGen Int m, IsVar a) => (a, Type a) -> VarMap.Map a -> m (VarMap.Map a)
+    refreshV :: (MonadNamey Name m, IsVar a) => (a, Type a) -> VarMap.Map a -> m (VarMap.Map a)
     refreshV (v, _) m =
       case VarMap.lookup (toVar v) m of
         Just{} -> pure m
@@ -218,16 +221,15 @@ argVar :: IsVar a => Argument a -> CoVar
 argVar (TermArgument v _) = toVar v
 argVar (TypeArgument v _) = toVar v
 
-freshFrom :: MonadGen Int m => CoVar -> m CoVar
+freshFrom :: MonadNamey Name m => CoVar -> m CoVar
 freshFrom (CoVar _ name dat) = do
-  x <- gen
+  CoVar x _ _ <- fresh dat
   pure (CoVar x name dat)
 
-freshFrom' :: (MonadGen Int m, IsVar a) => a -> m a
+freshFrom' :: (MonadNamey Name m, IsVar a) => a -> m a
 freshFrom' x = fromVar <$> freshFrom (toVar x)
 
-fresh :: MonadGen Int m => VarInfo -> m CoVar
+fresh :: MonadNamey Name m => VarInfo -> m CoVar
 fresh k = do
-  x <- gen
-  pure (CoVar x (alpha !! x) k)
-  where alpha = map T.pack $ [1..] >>= flip replicateM ['a'..'z']
+  TgName nam x <- genName
+  pure (CoVar x nam k)

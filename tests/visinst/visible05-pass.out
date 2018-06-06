@@ -6,10 +6,10 @@ S : nat -> nat
 natural : nat -> type
 SZ : {'n : nat}. ('n ~ Z) ⊃ natural 'n
 SS : {'n : nat}. {'k : nat}. ('n ~ S 'k) ⊃ natural 'k -> natural 'n
-flip : {'el : type}. {'em : type}. ('em -> 'el -> type) -> 'el -> 'em -> type
-Flip : {'f : 'fv -> 'fu -> type}. {'a : 'fu}. {'b : 'fv}. 'f 'b 'a -> flip 'f 'a 'b
-getFlip : {'f : 'hq -> 'hu -> type}. {'a : 'hu}. {'b : 'hq}. flip 'f 'a 'b -> 'f 'b 'a
-@ : {'ic : type}. {'id : type}. {'iq : type}. ('iq -> 'id) -> ('ic -> 'iq) -> 'ic -> 'id
+flip : {'dx : type}. {'dy : type}. ('dy -> 'dx -> type) -> 'dx -> 'dy -> type
+Flip : {'f : 'fe -> 'fd -> type}. {'a : 'fd}. {'b : 'fe}. 'f 'b 'a -> flip 'f 'a 'b
+getFlip : {'f : 'gw -> 'ha -> type}. {'a : 'ha}. {'b : 'gw}. flip 'f 'a 'b -> 'f 'b 'a
+@ : {'hh : type}. {'hi : type}. {'hu : type}. ('hu -> 'hi) -> ('hh -> 'hu) -> 'hh -> 'hi
 ind : {'n : nat}. ('prop : nat -> type) -> 'prop Z -> ({'n : nat}. 'prop 'n -> 'prop (S 'n)) -> natural 'n -> 'prop 'n
 vect : nat -> type -> type
 Nil : {'n : nat}. {'a : type}. ('n ~ Z) ⊃ vect 'n 'a

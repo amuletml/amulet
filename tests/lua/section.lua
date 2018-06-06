@@ -17,11 +17,11 @@ do
     ["2"] = {
       ["1"] = _star(2.0),
       ["2"] = {
-        ["1"] = function (c)
-          return c / 2.0
+        ["1"] = function (b)
+          return b / 2.0
         end,
-        ["2"] = function (d)
-          return d.foo
+        ["2"] = function (c)
+          return c.foo
         end
       }
     }

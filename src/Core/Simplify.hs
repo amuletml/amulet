@@ -14,13 +14,13 @@ import Core.Optimise
 import Core.Free
 import Core.Lint
 
-import Control.Monad.Gen
+import Control.Monad.Namey
 import Control.Monad
 
 lintPasses :: Bool
 lintPasses = True
 
-optmOnce :: [Stmt CoVar] -> Gen Int [Stmt CoVar]
+optmOnce :: [Stmt CoVar] -> Namey Name [Stmt CoVar]
 optmOnce = passes where
   passes = foldr1 (>=>) $ linted
            [ pure
@@ -42,9 +42,9 @@ optmOnce = passes where
     = intersperse (pure . (runLint =<< checkStmt emptyScope))
     | otherwise = id
 
-optimise :: [Stmt CoVar] -> Gen Int [Stmt CoVar]
+optimise :: [Stmt CoVar] -> Namey Name [Stmt CoVar]
 optimise = go 25 where
-  go :: Integer -> [Stmt CoVar] -> Gen Int [Stmt CoVar]
+  go :: Integer -> [Stmt CoVar] -> Namey Name [Stmt CoVar]
   go k sts
     | k > 0 = go (k - 1) . (runLint =<< checkStmt emptyScope) =<< optmOnce sts
     | otherwise = pure sts

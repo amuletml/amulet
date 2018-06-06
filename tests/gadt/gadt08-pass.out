@@ -1,11 +1,11 @@
 list : type -> type
 Nil : {'a : type}. list 'a
 Cons : {'a : type}. ('a * list 'a) -> list 'a
-elem : {'cv : type}. 'cv -> list 'cv -> type
-Here : {'xs : list 'eq}. {'x : 'eq}. {'xs : list 'eq}. ('xs ~ Cons ('x * 'xs)) ⊃ elem 'x 'xs
-There : {'xs : list 'gg}. {'x : 'gg}. {'xs : list 'gg}. {'y : 'gg}. ('xs ~ Cons ('y * 'xs)) ⊃ elem 'x 'xs -> elem 'x 'xs
+elem : {'co : type}. 'co -> list 'co -> type
+Here : {'xs : list 'eg}. {'x : 'eg}. {'xs : list 'eg}. ('xs ~ Cons ('x * 'xs)) ⊃ elem 'x 'xs
+There : {'xs : list 'fu}. {'x : 'fu}. {'xs : list 'fu}. {'y : 'fu}. ('xs ~ Cons ('y * 'xs)) ⊃ elem 'x 'xs -> elem 'x 'xs
 product : list type -> type
 Unit : {'a : list type}. ('a ~ Nil) ⊃ product 'a
 Pair : {'a : list type}. {'a : type}. {'b : list type}. ('a ~ Cons ('a * 'b)) ⊃ ('a * product 'b) -> product 'a
-:: : {'ke : type}. {'b : list type}. 'ke -> product 'b -> product (Cons ('ke * 'b))
+:: : {'jl : type}. {'b : list type}. 'jl -> product 'b -> product (Cons ('jl * 'b))
 foo : product (Cons (int * Cons (unit * Cons (string * Cons (bool * Cons (float * Nil))))))

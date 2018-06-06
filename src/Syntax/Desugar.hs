@@ -1,16 +1,16 @@
 {-# LANGUAGE FlexibleContexts, ScopedTypeVariables, OverloadedStrings #-}
 module Syntax.Desugar (desugarProgram) where
 
-import Control.Monad.Gen
-import Control.Monad
+import Control.Monad.Namey
 
-import qualified Data.Text as T
 import Data.Foldable
 import Data.Triple
 
 import Syntax
 
-desugarProgram :: forall m. MonadGen Int m => [Toplevel Resolved] -> m [Toplevel Resolved]
+type Name = Var Resolved
+
+desugarProgram :: forall m. MonadNamey Name m => [Toplevel Resolved] -> m [Toplevel Resolved]
 desugarProgram = traverse statement where
   statement (LetStmt vs) = LetStmt <$> traverse (second3A expr) vs
   statement (Module v ss) = Module v <$> traverse statement ss
@@ -76,7 +76,7 @@ desugarProgram = traverse statement where
                a
   expr (OpenIn _ e _) = expr e
 
-  buildTuple :: MonadGen Int m
+  buildTuple :: MonadNamey Name m
              => Ann Resolved
              -> Maybe (Expr Resolved)
              -> ([Pattern Resolved], [(Var Resolved, Expr Resolved)], [Expr Resolved])
@@ -92,11 +92,7 @@ desugarProgram = traverse statement where
 
   foldf f xs v = foldr f v xs
 
-fresh :: MonadGen Int m => Ann Resolved -> m (Pattern Resolved, Expr Resolved)
+fresh :: MonadNamey Name m => Ann Resolved -> m (Pattern Resolved, Expr Resolved)
 fresh an = do
-  x <- gen
-  let var = TgName (alpha !! x) x
+  var <- genName
   pure (Capture var an, VarRef var an)
-
-alpha :: [T.Text]
-alpha = map T.pack $ [1..] >>= flip replicateM ['a'..'z']

@@ -1,4 +1,4 @@
 foo : {'a : type}. 'a -> 'a * {'a : type}. 'a -> int
-fst : {'ai : type}. {'ap : type}. ('ai * 'ap) -> 'ai
-snd : {'az : type}. {'bf : type}. ('bf * 'az) -> 'az
+fst : {'ae : type}. {'ak : type}. ('ae * 'ak) -> 'ae
+snd : {'as : type}. {'ax : type}. ('ax * 'as) -> 'as
 main : int

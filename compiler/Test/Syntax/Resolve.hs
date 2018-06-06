@@ -3,7 +3,7 @@ module Test.Syntax.Resolve (tests) where
 import Test.Tasty
 import Test.Util
 
-import Control.Monad.Gen
+import Control.Monad.Infer
 
 import qualified Data.Text.Lazy as L
 import qualified Data.Text as T
@@ -19,7 +19,7 @@ import qualified Text.Pretty.Note as N
 import Text.Pretty.Semantic
 
 result :: String -> T.Text -> T.Text
-result file contents = runGen $ do
+result file contents = fst . flip runNamey nameSupply $ do
   let (Just parsed, _) = runParser file (L.fromStrict contents) parseTops
   resolved <- resolveProgram RS.builtinScope RS.emptyModules parsed
   pure . displayPlainVerbose . either prettyErrs ((Right<$>) . pretty . fst) $ resolved

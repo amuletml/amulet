@@ -8,8 +8,8 @@ import Data.Position (SourceName)
 import Data.Foldable
 import Data.Spanned
 
-import Control.Monad.Infer (TypeError)
-import Control.Monad.Gen
+import Control.Monad.Infer (TypeError, nameSupply)
+import Control.Monad.Namey
 
 import Types.Infer (inferProgram, builtinsEnv)
 
@@ -17,6 +17,7 @@ import Syntax.Resolve (ResolveError, resolveProgram)
 import qualified Syntax.Resolve.Scope as RS
 import Syntax.Resolve.Toplevel (extractToplevels)
 import Syntax.Desugar (desugarProgram)
+import Syntax (Var, Resolved)
 
 import Core.Lower (runLowerT, lowerProg)
 import Core.Core (Stmt)
@@ -35,13 +36,15 @@ import Test.Tasty.HUnit
 
 import System.Directory
 
+type Name = Var Resolved
+
 data CompileResult
   = CSuccess [Stmt CoVar]
   | CParse   [ParseError]
   | CResolve [ResolveError]
   | CInfer   [TypeError]
 
-compile :: MonadGen Int m => [(SourceName, T.Text)] -> m CompileResult
+compile :: MonadNamey Name m => [(SourceName, T.Text)] -> m CompileResult
 compile [] = error "Cannot compile empty input"
 compile (file:files) = do
   file' <- go (Right ([], RS.builtinScope, RS.emptyModules, builtinsEnv)) file
@@ -75,10 +78,10 @@ compile (file:files) = do
     go x _ = pure x
 
 
-testLint :: ([Stmt CoVar] -> Gen Int [Stmt CoVar]) -> String -> Assertion
+testLint :: ([Stmt CoVar] -> Namey Name [Stmt CoVar]) -> String -> Assertion
 testLint f file = do
   contents <- T.readFile file
-  runGen $ do
+  fst . flip runNamey nameSupply $ do
     s <- compile [(file, contents)]
     case s of
       CSuccess c -> do

@@ -61,11 +61,11 @@ unify, subsumes :: ( Reasonable f p
                 -> Type Typed
                 -> Type Typed -> m (Type Typed, Wrapper Typed)
 unify e a b = do
-  x <- TvName <$> fresh
+  x <- TvName <$> genName
   tell (Seq.singleton (ConUnify (BecauseOf e) x a b))
   pure (b, WrapVar x)
 subsumes e a b = do
-  x <- TvName <$> fresh
+  x <- TvName <$> genName
   tell (Seq.singleton (ConSubsume (BecauseOf e) x a b))
   pure (b, WrapVar x)
 
@@ -78,7 +78,7 @@ implies :: ( Reasonable f p
         -> m a
 implies _ _ [] k = k
 implies e t cs k = do
-  vs <- replicateM (length cs) fresh
+  vs <- replicateM (length cs) genName
   let eqToCon v (a, b) = ConUnify (BecauseOf e) (TvName v) a b
       eqToCons = zipWith eqToCon vs
 
