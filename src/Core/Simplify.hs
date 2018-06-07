@@ -21,7 +21,7 @@ lintPasses :: Bool
 lintPasses = True
 
 optmOnce :: [Stmt CoVar] -> Namey [Stmt CoVar]
-optmOnce = passes where
+optmOnce = passes <=< killNewtypePass where
   passes = foldr1 (>=>) $ linted
            [ pure
 
@@ -29,7 +29,6 @@ optmOnce = passes where
            , inlineVariablePass
 
            , pure . deadCodePass
-           , killNewtypePass
 
            , pure . sinkingPass . tagFreeSet
 
