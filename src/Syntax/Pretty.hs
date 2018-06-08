@@ -197,13 +197,6 @@ instance (Pretty (Var p)) => Pretty (Constructor p) where
   pretty (ArgCon p t _) = pretty p <+> keyword "of" <+> pretty t
   pretty (GeneralisedCon p t _) = pretty p <+> colon <+> pretty t
 
-  -- pretty (TvName v t)
-    -- | t == internalTyVar = pretty v
-    -- | otherwise = parens $ v <+> opClr " : " <+> t
-    --
-instance Pretty (Span, Type Typed) where
-  pretty (x, _) = pretty x
-
 record :: [Doc] -> Doc
 record = enclose (lbrace <> space) (space <> rbrace) . hsep . punctuate comma
 

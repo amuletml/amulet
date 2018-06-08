@@ -1,4 +1,12 @@
 {-# LANGUAGE FlexibleContexts #-}
+
+{-| In order to determine how indentation should be handled, we keep track
+  of the current context we're in. For instance, if we're in a @let@
+  context then a dedent will insert a virtual @in@ token.
+
+  Note that the contexts are pushed and popped just like they would be in
+  the parser.
+-}
 module Parser.Context
   ( Context
   , PendingState(..)
@@ -16,23 +24,16 @@ import Data.Span
 import Parser.Error
 import Parser.Token
 
-{-
-  In order to determine how indentation should be handled, we keep track
-  of the current context we're in. For instance, if we're in a let
-  context then a dedent will insert a virtual `in` token.
-
-  Note that the contexts are pushed and popped just like they would be in
-  the parser.
--}
-
+--- | An element in the context stack.
 data Context
-  -- -- (, [ and { (closed by ), ] and } respectively).
+  -- | @(@, @[@ and @{@ (closed by @)@, @]@ and @}@ respectively).
   = CtxBracket TokenClass
-  -- A top-level let definition
+  -- | A top-level let definition
   | CtxStmtLet SourcePos
-  -- An expression level let definition
+  -- | An expression level let definition
   | CtxLet SourcePos
-  -- A list of sequences. The bool represents whether a separator is needed
+  -- | A list of sequences. The bool represents whether a separator is
+  -- needed
   | CtxEmptyBlock (Maybe TokenClass)
   | CtxBlock SourcePos Bool (Maybe TokenClass)
 
@@ -42,29 +43,39 @@ data Context
 
   | CtxFun SourcePos
 
-  -- The if context spans the entire if block. then spans from `then` to the
-  -- `else` keword.
+  -- | The if context spans the entire if block. then spans from @then@
+  -- to the @else@ keword.
   | CtxIf SourcePos | CtxThen SourcePos
-  -- else unresolved marks an else block which has not yet seen a token. This is
-  -- used in order to merge `else if`.
+  -- | else unresolved marks an else block which has not yet seen a
+  -- token. This is used in order to merge `else if`.
   | CtxElseUnresolved SourcePos | CtxElse SourcePos
 
-  -- Anything between a module and the =, then the actual contents of the module
+  -- | Anything between a module and the =, then the actual contents of
+  -- the module
   | CtxModuleHead SourcePos
   | CtxModuleBodyUnresolved SourcePos SourcePos
   | CtxModuleBody SourcePos
 
   deriving (Show, Eq)
 
+-- | Represents a "working list" of tokens the context processor is
+-- currently handling.
 data PendingState
+  -- | There are no more tokens left to emit.
   = Done
+  -- | This token requires more processing
   | Working Token
-  | Result Token PendingState
-  deriving (Show)
+  -- | Push a new token to the parser, with additional tokens which may
+  -- need processing.
+  | Result Token PendingState   deriving (Show)
 
+-- | The starting context for a set of top-level statements
 defaultContext :: [Context]
 defaultContext = [CtxBlock (SourcePos "" 0 1) False Nothing]
 
+-- | Track our current context stack. This consumes a token and builds up
+-- the context stack, returning any additional tokens which should be
+-- emitted.
 handleContext :: (Applicative f, Monoid (f ParseError), MonadWriter (f ParseError) m)
               => Token -> [Context]
               -> m (PendingState, [Context])
@@ -135,8 +146,10 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
     -- context and are not operators
     -- This allows for expressions like
     --
-    -- foo
-    -- |> bar
+    -- @
+    --   foo
+    --   |> bar
+    -- @
     (_, CtxBlock offside True end:cks)
       | needsSep
       , spCol tp == spCol offside && spLine tp /= spLine offside
@@ -209,13 +222,13 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
       -> pure (Result (Token TcVBegin eq eq) (Working tok)
               , CtxEmptyBlock (Just TcVEnd) : CtxModuleBody mod :ck)
 
-    -- let ... ~~> Push an let context
+    -- @let ...@ ~~> Push an let context
     (TcLet, _) -> pure
       ( Result tok Done
       , ( if isToplevel c
           then CtxStmtLet tp
           else CtxLet tp ):c )
-    -- let ... = ~~> Push a block context
+    -- @let ...@ = ~~> Push a block context
     (TcEqual, CtxStmtLet _:_) -> pure
       ( Result tok Done
       , CtxEmptyBlock (Just TcVEnd):c )
@@ -223,37 +236,36 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
       ( Result tok Done
       , CtxEmptyBlock (Just TcVEnd):c )
 
-    -- function ~~> Push a function context
+    -- @function@ ~~> Push a function context
     (TcFunction, _) -> pure (Result tok Done, CtxMatchEmptyArms:c)
     -- match ~~> Push a match context
     (TcMatch, _) -> pure (Result tok Done, CtxMatch tp:c)
-    -- match ... with ~~> Replace match with a match arm context
+    -- @match ... with~ ~~> Replace match with a match arm context
     (TcWith, CtxMatch _:ck) -> pure (Result tok Done, CtxMatchEmptyArms:ck)
 
-    -- function |
-    -- match ... with | ~~>
+    -- @function |@
+    -- @match ... with |@ ~~>
     -- ~~> Define the first position of our match body
     (TcPipe, CtxMatchEmptyArms:ck) -> handleContext tok (CtxMatchArms tp:ck)
-
-    --- function ()
-    --- match ... with () ~~>
+    --- @function ()@
+    --- @match ... with ()@ ~~>
     (TcOParen, CtxMatchEmptyArms:ck) -> handleContext tok ck
 
-    -- | ... -> ~~> Push a new begin context
+    -- @| ... ->@ ~~> Push a new begin context
     (TcArrow, CtxMatchArms _:_) -> pure
       ( Result tok Done
       , CtxEmptyBlock Nothing:c )
 
-    -- fun ~~> Push a fun context
+    -- @fun@ ~~> Push a fun context
     (TcFun, _) -> pure (Result tok Done, CtxFun tp:c)
-    -- fun ... -> ~~> Pop function and push block
+    -- @fun ... ->@ ~~> Pop function and push block
     (TcArrow, CtxFun _:ck) -> pure
       ( Result tok Done
       , CtxEmptyBlock (Just TcVEnd):ck )
 
-    -- if ~~> Push a if context
+    -- @if@ ~~> Push a if context
     (TcIf, _) -> pure (Result tok Done, CtxIf tp:c)
-    -- if ~~> Push a then context and a block
+    -- @if@ ~~> Push a then context and a block
     (TcThen, _) -> pure
       ( Result tok Done
       , CtxEmptyBlock Nothing : CtxThen tp:c)
@@ -266,11 +278,11 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
       ( Result tok Done
       , CtxModuleBodyUnresolved mod te:ck)
 
-    -- begin ... ~~> CtxEmptyBlock : CtxBracket(end)
+    -- @begin ...@ ~~> CtxEmptyBlock : CtxBracket(end)
     (TcBegin, _) -> pure
       ( Result tok Done
       , CtxEmptyBlock Nothing:CtxBracket TcEnd:c)
-    -- (, {, [   ~~> CtxBracket()|}|])
+    -- @(@, @{@, @[@  ~~> CtxBracket()|}|])
     (TcOParen, _) -> pure (Result tok Done, CtxBracket TcCParen:c)
     (TcOBrace, _) -> pure (Result tok Done, CtxBracket TcCBrace:c)
     (TcOSquare, _) -> pure (Result tok Done, CtxBracket TcCSquare:c)
