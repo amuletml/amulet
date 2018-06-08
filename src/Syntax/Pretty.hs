@@ -295,7 +295,7 @@ prettyType (TyPi x t) = uncurry prettyQuantifiers . second reverse $ unwind t [x
                         in hsep (map ppr (q:these)) <+> arrow
                    <+> prettyQuantifiers inner those
        Anon{}:_ ->
-         let arg x = parenTuple x (pretty x)
+         let arg x = parenTuple x (prettyType x)
           in hsep (punctuate (space <> arrow) (map (arg . (^?! _Anon)) (q:these))) <+> arrow <+> prettyQuantifiers inner those
        [] -> error "what?"
 
