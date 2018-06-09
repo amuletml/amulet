@@ -200,10 +200,10 @@ reExpr (Begin es a) = Begin <$> traverse reExpr es <*> pure a
 
 reExpr (Literal l a) = pure (Literal l a)
 
-reExpr r@(Match e [] a) = do
-  _ <- reExpr e
-  tell (pure (ArisingFrom EmptyMatch (BecauseOf r)))
-  pure (junkExpr a)
+-- reExpr r@(Match e [] a) = do
+--   _ <- reExpr e
+--   tell (pure (ArisingFrom EmptyMatch (BecauseOf r)))
+--   pure (junkExpr a)
 reExpr (Match e ps a) = do
   e' <- reExpr e
   ps' <- traverse (\(p, b) -> do
