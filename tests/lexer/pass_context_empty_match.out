@@ -1,0 +1,4 @@
+let main x =
+  let a = match x with ( ) 2
+  $end $in ( match x with ( ) , 2 )
+$end $end <eof>

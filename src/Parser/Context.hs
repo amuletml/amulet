@@ -231,9 +231,13 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
     (TcWith, CtxMatch _:ck) -> pure (Result tok Done, CtxMatchEmptyArms:ck)
 
     -- function |
-    -- match... with | ~~>
+    -- match ... with | ~~>
     -- ~~> Define the first position of our match body
     (TcPipe, CtxMatchEmptyArms:ck) -> handleContext tok (CtxMatchArms tp:ck)
+
+    --- function ()
+    --- match ... with () ~~>
+    (TcOParen, CtxMatchEmptyArms:ck) -> handleContext tok ck
 
     -- | ... -> ~~> Push a new begin context
     (TcArrow, CtxMatchArms _:_) -> pure

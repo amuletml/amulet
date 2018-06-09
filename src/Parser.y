@@ -158,6 +158,8 @@ Expr0 :: { Expr Parsed }
           { withPos2 $1 $6 $ If $2 $4 $6 }
       | match List1(Expr, ',') with ListE1(Arm) '$end'
           { withPos2 $1 $3 $ Match (completeTuple Tuple $2) $4 }
+      | match List1(Expr, ',') with '(' ')'
+          { withPos2 $1 $3 $ Match (completeTuple Tuple $2) [] }
       | function ListE1(Arm) '$end'            { withPos1 $1 $ Function $2 }
       | qdotid Atom                            { withPos2 $1 $2 $ OpenIn (getName $1) $2 }
       | lazy Atom                              { withPos2 $1 $2 $ Lazy $2 }
