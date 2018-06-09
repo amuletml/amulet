@@ -158,6 +158,7 @@ validKey t = case T.uncons t of
     start c = c == '_' || isAsciiUpper c || isAsciiLower c
     rest c = start c || isDigit c
 
+-- | A set of all Lua keywords, which cannot be used as identifiers.
 keywords :: Set.Set T.Text
 keywords = Set.fromList [ "and", "break", "do", "else", "elseif", "end"
                         , "false", "for" , "function",  "if", "in", "local"

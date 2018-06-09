@@ -1,4 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
+
+{-| The frontend for the Lua backend. This acts as the primary access point
+  for basic interaction with the Lua compiler.
+-}
 module Backend.Lua
   ( compileProgram
   , LuaStmt
@@ -14,7 +18,8 @@ import Core.Var
 
 import Syntax.Types
 
+-- | Compile a collection of "Core"'s top-level statements to a Lua
+-- statement
 compileProgram :: IsVar a => Env -> [Stmt a] -> LuaStmt
 compileProgram e = LuaDo . (unitDef :) . addOperators . emitProgram e . tagOccursVar where
-  unitDef = LuaLocal [ LuaName "__builtin_unit" ] [ LuaTable [ (LuaString "__tag", LuaString "__builtin_unit") ] ] 
-
+  unitDef = LuaLocal [ LuaName "__builtin_unit" ] [ LuaTable [ (LuaString "__tag", LuaString "__builtin_unit") ] ]

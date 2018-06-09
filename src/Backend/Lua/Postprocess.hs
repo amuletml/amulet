@@ -1,4 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
+
+{-|Handles post-processing the generated Lua sources, injecting any
+ additional code which may be needed and (potentially) doing some basic
+ optimisations.
+-}
 module Backend.Lua.Postprocess
   ( addOperators
   , genOperator
@@ -62,7 +67,10 @@ addOperators stmt =
     opNames = Map.filter (`VarMap.member` ops) (fromLua escapeScope)
                 `Map.union` Map.fromList [ ( "__builtin_Lazy", vLAZY ), ( "__builtin_force", vForce ) ]
 
-
+-- | Generate the Lua definition for some built-in Amulet variable.
+--
+-- The name is a little misleading, as this this does not exclusively
+-- apply to binary operators.
 genOperator :: CoVar -> LuaStmt
 genOperator op | op == vLAZY =
   LuaLocal [ LuaName "__builtin_Lazy" ]
