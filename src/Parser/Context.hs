@@ -24,7 +24,7 @@ import Data.Span
 import Parser.Error
 import Parser.Token
 
---- | An element in the context stack.
+-- | An element in the context stack.
 data Context
   -- | @(@, @[@ and @{@ (closed by @)@, @]@ and @}@ respectively).
   = CtxBracket TokenClass

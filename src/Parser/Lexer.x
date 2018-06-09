@@ -263,6 +263,8 @@ lexTok k (LI sp str _ _) len ep = pure (Token (k str') sp ep) where
 onStringM :: (L.Text -> Action a) -> Action a
 onStringM f p@(LI _ str _ _) len = (f (L.take len str)) p len
 
+-- | Consume a virtual context token or a token from the current input
+-- text.
 lexerContextScan :: Parser Token
 lexerContextScan = do
   s <- getState
@@ -277,6 +279,8 @@ lexerContextScan = do
         mapState (\s -> s { pending = toks, context = cs })
         pure tok
 
+-- | Consume a token from the input text without adding virtual
+-- "context" tokens.
 lexerScan :: Parser Token
 lexerScan = do
   inp <- getInput
