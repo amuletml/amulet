@@ -217,10 +217,7 @@ runRepl = do
                              (var', tys') = R.extractToplevels resolved
                              ctors = fmap lowerType (Map.restrictKeys (env' ^. T.names . to toMap) (env' ^. constructors))
 
-                         -- We don't perform any complex optimisations, but run one reduction pass in order
-                         -- to get some basic commuting conversion, allowing the codegen to be more
-                         -- effective.
-                         lower <- reducePass <$> runLowerWithCtors ctors (lowerProg prog)
+                         lower <- runLowerWithCtors ctors (lowerProg prog)
                          lastG <- genName
                          pure $ Just ( case last lower of
                                          (C.StmtLet vs) -> map (\(v, t, _) -> (v, t)) vs
