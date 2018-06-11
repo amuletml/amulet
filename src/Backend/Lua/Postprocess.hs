@@ -80,7 +80,7 @@ genOperator op | op == vForce =
                 [ LuaAssign [ LuaIndex (LuaRef eks) (LuaNumber 1)
                             , LuaIndex (LuaRef eks) (LuaNumber 2) ]
                             [ LuaCall (LuaRef (LuaIndex (LuaRef eks) (LuaNumber 1)))
-                               []
+                               [ LuaRef (LuaName "__builtin_unit") ]
                             , LuaTrue]
                   , LuaReturn (LuaRef (LuaIndex (LuaRef eks) (LuaNumber 1))) ] ] ] where
   eks = LuaName "x"
