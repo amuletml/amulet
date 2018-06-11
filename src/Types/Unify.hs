@@ -268,23 +268,11 @@ subsumes k t1 t2@TyPi{} | isSkolemisable t2 = do
   sub <- use solveTySubst
   (c, t2') <- skolemise (BySubsumption (apply sub t1) (apply sub t2)) t2
   (Syntax.:>) c <$> subsumes k t1 t2'
-
 subsumes k t1@TyPi{} t2 | isSkolemisable t1 = do
   (cont, _, t1') <- instantiate Subsumption t1
   let wrap = maybe IdWrap (WrapFn . flip MkWrapCont "forall <= sigma; instantiation") cont
 
   flip (Syntax.:>) wrap <$> subsumes k t1' t2
-
-subsumes k (TyArr c d) (TyArr c' d') = do
-  wc <- subsumes k c' c 
-  wd <- subsumes k d d'
-  var <- TvName <$> genName
-  let wrap ex
-        | an <- annotation ex
-        = Fun (Capture var (an, c'))
-            (ExprWrapper wd (App ex (ExprWrapper wc (VarRef var (an, c')) (an, c)) (an, d)) (an, d'))
-            (an, TyArr c' d')
-  pure (WrapFn (MkWrapCont wrap "deep subsumption"))
 
 subsumes k ot@(TyTuple a b) nt@(TyTuple a' b') = do
   wa <- subsumes k a a'
