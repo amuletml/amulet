@@ -287,6 +287,7 @@ lowerType (S.TyPi bind b)
   | S.Anon a <- bind = ForallTy Irrelevant (lowerType a) (lowerType b)
 lowerType (S.TyApp a b) = AppTy (lowerType a) (lowerType b)
 lowerType (S.TyRows rho vs) = RowsTy (lowerType rho) (map (fmap lowerType) vs)
+lowerType (S.TyExactRows []) = NilTy
 lowerType (S.TyExactRows vs) = ExactRowsTy (map (fmap lowerType) vs)
 lowerType (S.TyVar (TvName v)) = VarTy (mkTyvar v)
 lowerType (S.TyCon (TvName v)) = ConTy (mkType v)

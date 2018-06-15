@@ -79,10 +79,11 @@ unify' (RowsTy t ts) (RowsTy t' ts') = do
   mgu_t <- unify' t t'
   ts <- for (zip (sortOn fst ts) (sortOn fst ts')) $ \((_, t), (_, t')) -> unify' t t'
   pure (mgu_t <> fold ts)
-unify' (ExactRowsTy ts) (ExactRowsTy ts') = fold <$> for (zip (sortOn fst ts) (sortOn fst ts')) (\((_, t), (_, t')) -> unify' t t')
+-- unify' (ExactRowsTy ts) (ExactRowsTy ts') = fold <$> for (zip (sortOn fst ts) (sortOn fst ts')) (\((_, t), (_, t')) -> unify' t t')
 unify' (ForallTy (Relevant v) c t) (ForallTy (Relevant v') c' t') = liftA2 (<>) (unify' c c') (unify' t (replaceTy v' (VarTy v) t'))
 unify' (AppTy f t) (AppTy f' t') = liftA2 (<>) (unify' f f') (unify' t t')
 unify' StarTy StarTy = pure ()
+unify' NilTy NilTy = pure ()
 unify' _ _ = lift Nothing
 
 replaceTy :: IsVar a => a -> Type a -> Type a -> Type a
@@ -101,6 +102,7 @@ unifyClosed = go mempty where
   go s (ForallTy Irrelevant a r) (ForallTy Irrelevant a' r') = go s a a' && go s r r'
   go s (AppTy f x) (AppTy f' x') = go s f f' && go s x x'
   go s (RowsTy f ts) (RowsTy f' ts') = go s f f' && and (zipWith (\(l, t) (l', t') -> l == l' && go s t t') (sortOn fst ts) (sortOn fst ts'))
-  go s (ExactRowsTy ts) (ExactRowsTy ts') = and (zipWith (\(l, t) (l', t') -> l == l' && go s t t') (sortOn fst ts) (sortOn fst ts'))
+  -- go s (ExactRowsTy ts) (ExactRowsTy ts') = and (zipWith (\(l, t) (l', t') -> l == l' && go s t t') (sortOn fst ts) (sortOn fst ts'))
   go _ StarTy StarTy = True
+  go _ NilTy NilTy = True
   go _ _ _ = False
