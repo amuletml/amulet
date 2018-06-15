@@ -124,9 +124,12 @@ data Type a
   | ForallTy (BoundTv a) (Type a) (Type a)
   | AppTy (Type a) (Type a)
   | RowsTy (Type a) [(Text, Type a)]
-  | ExactRowsTy [(Text, Type a)]
+  | NilTy
   | StarTy -- * :: *
   deriving (Eq, Show, Ord, Functor, Generic)
+
+pattern ExactRowsTy :: [(Text, Type a)] -> Type a
+pattern ExactRowsTy ts = RowsTy NilTy ts
 
 data BoundTv a = Irrelevant | Relevant a
   deriving (Eq, Show, Ord, Functor, Generic)
@@ -224,6 +227,7 @@ instance Pretty a => Pretty (Type a) where
 
   pretty (ExactRowsTy rows) = braces $ prettyRows rows where
     prettyRows = hsep . punctuate comma . map (\(x, t) -> text x <+> colon <+> pretty t)
+  pretty NilTy = braces empty
 
   pretty (AppTy e x) = pretty e <+> k x (pretty x) where
     k AppTy{} = parens
@@ -275,6 +279,7 @@ freeInTy (RowsTy c rs) = foldMap (freeInTy . snd) rs <> freeInTy c
 freeInTy (ExactRowsTy rs) = foldMap (freeInTy . snd) rs
 freeInTy ConTy{} = mempty
 freeInTy StarTy = mempty
+freeInTy NilTy = mempty
 
 occursInAtom :: IsVar a => a -> Atom a -> Bool
 occursInAtom v (Ref v' _) = toVar v == toVar v'
@@ -301,6 +306,7 @@ occursInTy v (AppTy a b) = occursInTy v a || occursInTy v b
 occursInTy v (RowsTy t rs) = occursInTy v t || any (occursInTy v . snd) rs
 occursInTy v (ExactRowsTy rs) = any (occursInTy v . snd) rs
 occursInTy _ StarTy = False
+occursInTy _ NilTy = False
 
 relates :: Coercion a -> Maybe (Type a, Type a)
 relates (SameRepr a b) = Just (a, b)

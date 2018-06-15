@@ -96,6 +96,7 @@ substituteInType = gotype where
   gotype m (RowsTy v rs) = RowsTy (gotype m v) (map (second (gotype m)) rs)
   gotype m (ExactRowsTy rs) = ExactRowsTy (map (second (gotype m)) rs)
   gotype _ StarTy = StarTy
+  gotype _ NilTy = NilTy
 
 substituteInCo :: IsVar a => VarMap.Map (Type a) -> Coercion a -> Coercion a
 substituteInCo m = coercion where
@@ -200,6 +201,7 @@ refresh = refreshTerm mempty where
   refreshType s (RowsTy v rs) = RowsTy (refreshType s v) (map (second (refreshType s)) rs)
   refreshType s (ExactRowsTy rs) = ExactRowsTy (map (second (refreshType s)) rs)
   refreshType _ StarTy = StarTy
+  refreshType _ NilTy = NilTy
 
   refreshCoercion :: IsVar a => VarMap.Map a -> Coercion a -> Coercion a
   refreshCoercion s (SameRepr t t') = SameRepr (refreshType s t) (refreshType s t')

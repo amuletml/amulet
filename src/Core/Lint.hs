@@ -218,7 +218,6 @@ checkTerm s t@(Match e bs) = flip withContext t $ do
         | varInfo a /= ValueVar = throwError (InfoIllegal a ValueVar (varInfo a))
         | otherwise = pure (VarMap.singleton (toVar a) (ty, varInfo a))
       checkPattern (RowsTy _ _) (PatLit RecNil) = pure mempty
-      checkPattern (ExactRowsTy _) (PatLit RecNil) = pure mempty
       checkPattern ty' (PatLit l) = do
         let ty = litTy l
         if ty `apart` ty'
@@ -256,12 +255,12 @@ checkTerm s t@(Match e bs) = flip withContext t $ do
 
         pure (mconcat (v:vs))
 
-      checkPattern ty@(ExactRowsTy ts) (PatExtend (PatLit RecNil) fs) =
-        fmap mconcat . for fs $ \(t, p) ->
-          case find ((==t) . fst) ts of
-            Nothing -> throwError (TypeMismatch (ExactRowsTy [(t, unknownTyvar)]) ty)
-            Just (_, ty) -> checkPattern ty p
-
+      -- checkPattern ty@(ExactRowsTy ts) (PatExtend (PatLit RecNil) fs) =
+      --   fmap mconcat . for fs $ \(t, p) ->
+      --     case find ((==t) . fst) ts of
+      --       Nothing -> throwError (TypeMismatch (ExactRowsTy [(t, unknownTyvar)]) ty)
+      --       Just (_, ty) -> checkPattern ty p
+      --
       checkPattern t p@PatExtend{} = error ("extend pattern " ++ show p ++ " for type " ++ show t)
 
       inst (ForallTy (Relevant _) _ t) = inst t
@@ -372,6 +371,7 @@ checkType s (AppTy f x) = checkType s f >> checkType s x
 checkType s (RowsTy f fs) = checkType s f >> traverse_ (checkType s . snd) fs
 checkType s (ExactRowsTy fs) = traverse_ (checkType s . snd) fs
 checkType _ StarTy = pure ()
+checkType _ NilTy = pure ()
 
 unknownVar :: IsVar a => a
 unknownVar = fromVar (CoVar (-100) "?" ValueVar)
@@ -398,7 +398,7 @@ litTy (Float _) = fromVar <$> tyFloat
 litTy LitTrue = fromVar <$> tyBool
 litTy LitFalse = fromVar <$> tyBool
 litTy Unit = fromVar <$> tyUnit
-litTy RecNil = ExactRowsTy []
+litTy RecNil = NilTy
 
 uni, apart, uniOpen, apartOpen :: IsVar a => Type a -> Type a -> Bool
 uni = unifyClosed

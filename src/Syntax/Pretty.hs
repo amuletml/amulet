@@ -60,8 +60,9 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
   pretty (Function bs _) = vsep (keyword "function":prettyMatches bs)
   pretty (Hole v _) = "_" <> pretty v -- A typed hole
   pretty (Ascription e t _) = parens $ pretty e <+> colon <+> pretty t
+  pretty (Record [] _) = braces empty
   pretty (Record rows _) = record (map (\(n, v) -> text n <+> equals <+> pretty v) rows)
-  pretty (RecordExt var rows _) = braces $ pretty var <+> keyword "with" <+> hsep (punctuate comma (prettyRows equals rows))
+  pretty (RecordExt var rows _) = enclose (char '{' <> space) (space <> char '}') $ pretty var <+> keyword "with" <+> hsep (punctuate comma (prettyRows equals rows))
   pretty (Access x@VarRef{} f _) = pretty x <> dot <> text f
   pretty (Access e f _) = parens (pretty e) <> dot <> text f
 
