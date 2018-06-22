@@ -90,6 +90,9 @@ toAnsi Operator = DullColour Magenta
 instance Pretty Double where
   pretty = double
 
+instance Pretty Int where
+  pretty = int
+
 instance a ~ Style => Pretty (P.Doc a) where
   pretty = id
 

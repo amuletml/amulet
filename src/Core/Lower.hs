@@ -182,7 +182,7 @@ lowerAt (Tuple [x] _) t = lowerAt x t
 lowerAt (Tuple (x:xs) _) (ExactRowsTy [(_, a), (_, b)]) = do
   x <- lowerAtAtom x a
   xs <- lowerAtAtom (Tuple xs undefined) b
-  pure (Extend (Lit RecNil) [("1", a, x), ("2", b, xs)])
+  pure (Extend (Lit RecNil) [("_1", a, x), ("_2", b, xs)])
 
 lowerAt (ExprWrapper wrap e an) ty =
   case wrap of
@@ -210,7 +210,7 @@ lowerAt (ExprWrapper wrap e an) ty =
     co (S.SymCo c) = Symmetry (co c)
     co (S.AppCo a b) = Application (co a) (co b)
     co (S.ArrCo a b) = C.Quantified Irrelevant (co a) (co b)
-    co (S.ProdCo a b) = ExactRecord [("1", co a), ("2", co b)]
+    co (S.ProdCo a b) = ExactRecord [("_1", co a), ("_2", co b)]
     co (S.RowsCo c rs) = C.Record (co c) (map (second co) rs)
     co (S.ExactRowsCo rs) = C.ExactRecord (map (second co) rs)
     co (S.ProjCo rs rs') = Projection (map (second mkReflexive) rs) (map (second co) rs')
@@ -278,7 +278,7 @@ lowerLiteral LiUnit = Unit
 
 lowerType :: S.Type Typed -> Type
 lowerType t@S.TyTuple{} = go t where
-  go (S.TyTuple a b) = ExactRowsTy [("1", lowerType a), ("2", lowerType b)]
+  go (S.TyTuple a b) = ExactRowsTy [("_1", lowerType a), ("_2", lowerType b)]
   go x = lowerType x
 lowerType (S.TyPi bind b)
   | S.Implicit v Nothing <- bind = ForallTy (Relevant (mkTyvar (S.unTvName v))) StarTy (lowerType b)
@@ -325,7 +325,7 @@ lowerPat (PTuple xs _) =
       go (x:xs) = do
         x' <- lowerPat x
         xs' <- go xs
-        pure (PatExtend (PatLit RecNil) [("1", x'), ("2", xs')])
+        pure (PatExtend (PatLit RecNil) [("_1", x'), ("_2", xs')])
    in go xs
 lowerPat (PLiteral l _) = pure (PatLit (lowerLiteral l))
 lowerPat (PWrapper _ p _) = lowerPat p

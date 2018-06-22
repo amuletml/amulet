@@ -44,7 +44,6 @@ import Parser.Error
 
 import qualified Core.Core as C
 import Core.Lower (runLowerWithCtors, lowerProg, lowerType)
-import Core.Optimise.Reduce
 import Core.Occurrence
 import Core.Builtin (vLAZY, vForce)
 import Core.Core (Stmt)

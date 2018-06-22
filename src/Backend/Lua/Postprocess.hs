@@ -46,6 +46,7 @@ addOperators stmt =
     opsExpr LuaFalse = mempty
     opsExpr LuaDots = mempty
     opsExpr LuaNumber{} = mempty
+    opsExpr LuaInteger{} = mempty
     opsExpr LuaString{} = mempty
     opsExpr LuaBitE{} = mempty
 
