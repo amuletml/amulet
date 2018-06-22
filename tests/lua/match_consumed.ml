@@ -1,6 +1,7 @@
 (* This ensures that matches which are not in the tail position correctly
    pop all pending expressions on the stack and generate the appropriate
-   declaration before the join. *)
+   declaration before the join.
+   *)
 
 type option 't = None | Some of 't
 
