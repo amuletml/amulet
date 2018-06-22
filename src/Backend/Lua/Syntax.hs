@@ -39,6 +39,7 @@ data LuaExpr
   | LuaNil | LuaTrue | LuaFalse | LuaDots
   | LuaRef LuaVar
   | LuaNumber Double
+  | LuaInteger Int
   | LuaString Text
   | LuaFunction [LuaVar] [LuaStmt]
   | LuaTable [(LuaExpr, LuaExpr)]
@@ -137,6 +138,7 @@ instance Pretty LuaExpr where
   pretty LuaNil = sliteral (string "nil")
   pretty (LuaString k) = sstring (dquotes (text k))
   pretty (LuaNumber d) = sliteral (pretty d)
+  pretty (LuaInteger d) = sliteral (pretty d)
   pretty (LuaBinOp l o r) = pretty l <+> text o <+> pretty r
   pretty (LuaRef x) = pretty x
   pretty (LuaFunction a b) =
@@ -145,7 +147,9 @@ instance Pretty LuaExpr where
          , keyword "end"
          ]
   pretty (LuaTable ps) = enclose (lbrace <> line) (line <> rbrace) . indent 2 . vsep . punctuate comma $
-    map (\(k, v) -> brackets (pretty k) <+> equals <+> pretty v) ps
+    map (\(k, v) -> key k <+> equals <+> pretty v) ps
+    where key (LuaString k) | validKey k = text k
+          key k = brackets (pretty k)
   pretty (LuaCall x@LuaFunction{} a) = parens (pretty x) <> tupled (map pretty a)
   pretty (LuaCall x a) = pretty x <> tupled (map pretty a)
   pretty (LuaBitE x) = text x

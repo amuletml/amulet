@@ -16,5 +16,4 @@ import Syntax.Types
 
 compileProgram :: IsVar a => Env -> [Stmt a] -> LuaStmt
 compileProgram e = LuaDo . (unitDef :) . addOperators . emitProgram e . tagOccursVar where
-  unitDef = LuaLocal [ LuaName "__builtin_unit" ] [ LuaTable [ (LuaString "__tag", LuaString "__builtin_unit") ] ] 
-
+  unitDef = LuaLocal [ LuaName "__builtin_unit" ] [ LuaTable [ (LuaString "__tag", LuaString "__builtin_unit") ] ]

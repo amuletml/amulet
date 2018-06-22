@@ -175,7 +175,7 @@ emitProgramWith ev esc = flip runState esc . emitProg where
         pure $ LuaLocal [LuaName var'] [LuaFunction
                                          [LuaName "x"]
                                         [LuaReturn (LuaTable [ (LuaString "__tag", LuaString var')
-                                                             , (LuaNumber 1, LuaRef (LuaName "x"))])]]
+                                                             , (LuaInteger 1, LuaRef (LuaName "x"))])]]
 
   emitLet :: (MonadState EscapeScope m, Occurs a) => ([a], [Type a], [Term a]) -> m [LuaStmt]
   emitLet (vs, _, es) = concat <$> traverse emitBind (stronglyConnComp (zipWith letDeps vs es))
@@ -203,7 +203,7 @@ pushEntry :: IsVar a => MonadState (EmitState a) m => VarEntry a -> m (Text, Lua
 pushEntry v = (,vExpr v) <$> pushScope (vVar v)
 
 emitLit :: Literal -> LuaExpr
-emitLit (Int x)   = LuaNumber (fromInteger x)
+emitLit (Int x)   = LuaInteger (fromIntegral x)
 emitLit (Float x) = LuaNumber x
 emitLit (Str str) = LuaString str
 emitLit LitTrue   = LuaTrue
@@ -456,7 +456,7 @@ patternTest _ (PatLit l)  vr       = LuaBinOp (emitLit l) "==" vr
 patternTest s (PatExtend p rs) vr  = foldAnd (patternTest s p vr : map test rs) where
   test (var', pat) = patternTest s pat (LuaRef (LuaIndex vr (LuaString var')))
 patternTest s (Constr con) vr      = foldAnd [tag s con vr]
-patternTest s (Destr con p) vr     = foldAnd [tag s con vr, patternTest s p (LuaRef (LuaIndex vr (LuaNumber 1)))]
+patternTest s (Destr con p) vr     = foldAnd [tag s con vr, patternTest s p (LuaRef (LuaIndex vr (LuaInteger 1)))]
 
 tag :: Occurs a => EscapeScope -> a -> LuaExpr -> LuaExpr
 tag scp con vr = LuaBinOp (LuaRef (LuaIndex vr (LuaString "__tag"))) "==" (LuaString (getVar con scp))
@@ -467,7 +467,7 @@ patternBindings (Capture n _) v
   | doesItOccur n = [(n, v)]
   | otherwise = []
 patternBindings (Constr _) _     = []
-patternBindings (Destr _ p) vr   = patternBindings p (LuaRef (LuaIndex vr (LuaNumber 1)))
+patternBindings (Destr _ p) vr   = patternBindings p (LuaRef (LuaIndex vr (LuaInteger 1)))
 patternBindings (PatExtend p rs) vr = patternBindings p vr ++ concatMap (index vr) rs where
   index vr (var', pat) = patternBindings pat (LuaRef (LuaIndex vr (LuaString var')))
 

@@ -1,6 +1,6 @@
 do
   local __builtin_unit = {
-    ["__tag"] = "__builtin_unit"
+    __tag = "__builtin_unit"
   }
   local function _star (l)
     return function (r)
@@ -13,14 +13,14 @@ do
     end
   end
   local main = {
-    ["1"] = _plus,
-    ["2"] = {
-      ["1"] = _star(2.0),
-      ["2"] = {
-        ["1"] = function (b)
-          return b / 2.0
+    _1 = _plus,
+    _2 = {
+      _1 = _star(2),
+      _2 = {
+        _1 = function (b)
+          return b / 2
         end,
-        ["2"] = function (c)
+        _2 = function (c)
           return c.foo
         end
       }

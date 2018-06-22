@@ -1,9 +1,9 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Repl.Display where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Text.Encoding as T
 import qualified Data.Text as T
-import Data.Maybe
 import Data.Char
 
 import qualified Foreign.Lua.Types.Error as L
@@ -11,7 +11,6 @@ import qualified Foreign.Lua.Api.Types as L
 import qualified Foreign.Lua as L
 
 import Text.Pretty.Semantic
-import Text.Read (readMaybe)
 
 data Value
   = String T.Text
@@ -79,16 +78,14 @@ instance Pretty Value where
     colour = if isLower (T.head x) then stypeSkol else stypeCon
   pretty (Table m) | isTuple m = parens (hsep (punctuate comma (map pretty vs))) where
     vs = getValues m
-    getValues m = case m Map.! T.pack "2" of
-      Table m' | isTuple m' -> (m Map.! T.pack "1"):getValues m'
-      _ -> [ m Map.! T.pack "1", m Map.! T.pack "2" ]
+    getValues m = case m Map.! T.pack "_2" of
+      Table m' | isTuple m' -> (m Map.! T.pack "_2"):getValues m'
+      _ -> [ m Map.! T.pack "_1", m Map.! T.pack "_2" ]
   pretty (Table m) = enclose (char '{' <> space) (space <> char '}') (hsep (punctuate comma vs)) where
     vs = map (\(k, v) -> text k <+> equals <+> pretty v) $ Map.toList m
 
 isTuple :: Map.Map T.Text Value -> Bool
-isTuple m =
-  let keys = Map.keys m
-   in length keys == 2 && all (\n -> isJust (readMaybe (T.unpack n) :: Maybe Integer)) keys
+isTuple m = Map.size m == 2 && "_1" `Map.member` m && "_2" `Map.member` m
 
 isInt :: L.LuaNumber -> Integer -> Bool
-isInt x n = (round $ 10 ^ n * (x - fromIntegral (round x :: Integer))) == (0 :: Integer)
+isInt x n = round (10 ^ n * (x - fromIntegral (round x :: Integer))) == (0 :: Integer)
