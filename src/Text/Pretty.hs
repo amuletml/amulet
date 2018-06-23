@@ -1,4 +1,11 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
+
+{- | A wrapper around "Text.PrettyPrint.Annotated.Leijen" which exposes an
+   interface more in line with modern Haskell.
+
+   This provides a way to build up documents using Wadler's combinators,
+   which can then be rendered using 'renderPretty' and similar methods.
+ -}
 module Text.Pretty
   ( module Text.PrettyPrint.Annotated.Leijen
   , (<>), (<#>), (<##>)
@@ -24,20 +31,30 @@ instance Monoid (Doc a) where
 
 infixr 5 <#>,<##>
 
--- Alias various definitions so we're not masking existing definitions
-(<#>), (<##>) :: Doc a -> Doc a -> Doc a
+-- | Concatenates two documents with a 'line' between them.
+(<#>) :: Doc a -> Doc a -> Doc a
 (<#>) = (P.<$>)
+
+-- | Concatenates two documents with a 'linebreak' between them.
+(<##>) :: Doc a -> Doc a -> Doc a
 (<##>) = (P.<$$>)
 
+-- | Build a document from a text value.
 text :: T.Text -> Doc a
 text = string . T.unpack
 
+-- | Build a document from some 'show'able value.
 shown :: Show b => b -> Doc a
 shown = string . show
 
+-- | Prepend a bullet to a document.
 bullet :: Doc a -> Doc a
 bullet = (char '•'<+>)
 
+-- | Filter a simple document, removing any regions whose annotation(s) do
+-- not match a predicate.
+--
+-- This may be used to strip out additional metadata or comments.
 filterSimpleDoc :: (a -> Bool) -> SimpleDoc a -> SimpleDoc a
 filterSimpleDoc f = go where
   go SEmpty              = SEmpty
@@ -55,7 +72,10 @@ filterSimpleDoc f = go where
   discard n (SAnnotStop x)    | n == 0 = go x
                               | otherwise = discard (n - 1) x
 
---- Mostly the same as normal display, but emitting text and avoiding trailing whitespace on blank lines
+-- | Render a 'SimpleDoc' as a text value
+--
+-- This is mostly the same as @annotated-wl-pprint@'s @display@, but it
+-- avoids useless whitespace.
 display :: SimpleDoc a -> T.Text
 display = L.toStrict . B.toLazyText . go where
   go SEmpty              = mempty

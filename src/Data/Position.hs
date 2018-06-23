@@ -1,3 +1,4 @@
+-- | Positions represent a single point or character within a file.
 module Data.Position
   ( SourceName, Line, Column
   , SourcePos(..)
