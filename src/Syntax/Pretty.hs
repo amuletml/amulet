@@ -12,7 +12,6 @@ import Control.Lens hiding (Lazy)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
-import Data.Span
 import Data.List
 
 import Syntax.Subst

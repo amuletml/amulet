@@ -4,6 +4,20 @@
   , MultiParamTypeClasses
   , TupleSections #-}
 
+{- | The resolver is the first step after parsing. It performs several key
+   actions:
+
+    * Determines what variable every identifier is pointing to, including
+      module variables and handling ambiguous variables.
+
+    * Handles module definitions and `open`s.
+
+    * Prohibit some dubious constructs, such as patterns which bind the
+      same identifier multiple times.
+
+    * Reorganise binary operators, taking precedence and associativity
+      into account (the parser ignores these intentionally).
+-}
 module Syntax.Resolve
   ( resolveProgram
   , runResolve
@@ -39,6 +53,8 @@ import Syntax.Subst
 import Text.Pretty.Semantic
 import Text.Pretty.Note
 
+-- | An error in the resolution process. Note that one error may be
+-- thrown multiple times.
 data ResolveError
   = NotInScope (Var Parsed)
   | NoSuchModule (Var Parsed)
@@ -82,8 +98,10 @@ resolveProgram :: MonadNamey m
                -> m (Either [ResolveError] ([Toplevel Resolved], ModuleScope))
 resolveProgram scope modules = runResolve scope modules . resolveModule
 
+-- | Run the resolver monad
 runResolve :: MonadNamey m
-           => Scope -> ModuleScope
+           => Scope -- ^ The initial state to resolve objects in
+           -> ModuleScope -- ^ The scope for modules
            -> StateT ModuleScope (ReaderT Scope (ExceptT ResolveError (WriterT (Seq ResolveError) m))) a
            -> m (Either [ResolveError] (a, ModuleScope))
 runResolve scope modules = fmap handle . runWriterT . runExceptT . flip runReaderT scope . flip runStateT modules
@@ -92,6 +110,7 @@ runResolve scope modules = fmap handle . runWriterT . runExceptT . flip runReade
                                 [] -> Right e
                                 er -> Left er
 
+-- | Resolve the whole program
 resolveModule :: MonadResolve m => [Toplevel Parsed] -> m [Toplevel Resolved]
 resolveModule [] = pure []
 

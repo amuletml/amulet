@@ -64,7 +64,7 @@ addOperators stmt =
     opsVar (LuaName t) = maybe mempty VarSet.singleton (Map.lookup t opNames)
     opsVar (LuaIndex t k) = opsExpr t <> opsExpr k
 
-    opNames = Map.filter (`VarMap.member` ops) (fromLua escapeScope)
+    opNames = Map.filter (`VarMap.member` ops) (fromEsc escapeScope)
                 `Map.union` Map.fromList [ ( "__builtin_Lazy", vLAZY ), ( "__builtin_force", vForce ) ]
 
 -- | Generate the Lua definition for some built-in Amulet variable.

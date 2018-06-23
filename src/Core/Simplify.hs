@@ -1,3 +1,4 @@
+-- | The frontend to the optimiser.
 module Core.Simplify
   ( optimise
   ) where
@@ -41,6 +42,7 @@ optmOnce = passes <=< killNewtypePass where
     = intersperse (pure . (runLint =<< checkStmt emptyScope))
     | otherwise = id
 
+-- | Run the optimiser multiple times over the input core.
 optimise :: [Stmt CoVar] -> Namey [Stmt CoVar]
 optimise = go 25 where
   go :: Integer -> [Stmt CoVar] -> Namey [Stmt CoVar]

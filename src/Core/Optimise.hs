@@ -1,12 +1,13 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+
+-- | A collection of utility methods for the optimiser.
 module Core.Optimise
   ( substitute, substituteInTys, substituteInType, substituteInCo
   , module Core.Core
   , module Core.Var
   , refresh, fresh, freshFrom, freshFrom'
   , argVar
-  , Name
   ) where
 
 import Control.Arrow (second)
@@ -23,6 +24,7 @@ import Core.Var
 
 import Syntax.Var
 
+-- | Substitute a variable with some other atom
 substitute :: IsVar a => VarMap.Map (Atom a) -> Term a -> Term a
 substitute m = term where
   term (Atom a) = Atom (atom a)
@@ -40,6 +42,7 @@ substitute m = term where
 
   arm = armBody %~ term
 
+-- | Substitute a type variable with some other type inside terms
 substituteInTys :: forall a. IsVar a => VarMap.Map (Type a) -> Term a -> Term a
 substituteInTys = term where
   term :: VarMap.Map (Type a) -> Term a -> Term a
@@ -85,6 +88,7 @@ substituteInTys = term where
 
   gotype = substituteInType
 
+-- | Substitute a type variable with some other type inside a type
 substituteInType :: IsVar a => VarMap.Map (Type a) -> Type a -> Type a
 substituteInType = gotype where
   gotype m x@(VarTy v) = VarMap.findWithDefault x (toVar v) m
@@ -98,6 +102,7 @@ substituteInType = gotype where
   gotype _ StarTy = StarTy
   gotype _ NilTy = NilTy
 
+-- | Substitute a type variable with some other type inside a coercion
 substituteInCo :: IsVar a => VarMap.Map (Type a) -> Coercion a -> Coercion a
 substituteInCo m = coercion where
   coercion (SameRepr t t') = SameRepr (gotype t) (gotype t')
@@ -113,6 +118,8 @@ substituteInCo m = coercion where
 
   gotype = substituteInType m
 
+-- | Refresh every closed variable within a term, replacing it with some
+-- fresh variable.
 refresh :: (MonadNamey m, IsVar a) => Term a -> m (Term a)
 refresh = refreshTerm mempty where
   refreshAtom :: (MonadNamey m, IsVar a) => VarMap.Map a -> Atom a -> m (Atom a)
@@ -217,18 +224,24 @@ refresh = refreshTerm mempty where
 
   get s v = fromJust (VarMap.lookup (toVar v) s)
 
+-- | Get the variable bound by the given argument
 argVar :: IsVar a => Argument a -> CoVar
 argVar (TermArgument v _) = toVar v
 argVar (TypeArgument v _) = toVar v
 
+-- | Create a new fresh 'CoVar' with the same name as a previous
+-- one.
 freshFrom :: MonadNamey m => CoVar -> m CoVar
 freshFrom (CoVar _ name dat) = do
   CoVar x _ _ <- fresh dat
   pure (CoVar x name dat)
 
+-- | Create a new fresh variable with the same name as a previous
+-- one.
 freshFrom' :: (MonadNamey m, IsVar a) => a -> m a
 freshFrom' x = fromVar <$> freshFrom (toVar x)
 
+-- | Create a new fresh variable
 fresh :: MonadNamey m => VarInfo -> m CoVar
 fresh k = do
   TgName nam x <- genName

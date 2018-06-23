@@ -1,7 +1,20 @@
-{-# LANGUAGE DerivingStrategies, GeneralizedNewtypeDeriving, FunctionalDependencies #-}
+{-# LANGUAGE DerivingStrategies, GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, MultiParamTypeClasses #-}
 {-# LANGUAGE UndecidableInstances #-}
-module Control.Monad.Namey where
+
+{-| The compiler often needs a source of fresh variables, such as when
+  performing optimisations or creating new type variables during
+  inference.
+
+  Instead of piping through some concrete generator, we use 'MonadNamey'
+  as a source of fresh 'Name's, which may then be converted to other
+  variables as needed.
+-}
+module Control.Monad.Namey
+  ( NameyT, runNameyT, evalNameyT
+  , Namey, runNamey
+  , MonadNamey(..)
+  ) where
 
 import qualified Control.Monad.Writer.Strict as StrictW
 import qualified Control.Monad.State.Strict as StrictS
@@ -22,8 +35,12 @@ import Data.Char
 
 import Syntax.Var
 
+-- | The namey monad transformer
+--
+-- This is both an instance of 'MonadState' and 'MonadNamey', allowing it
+-- to be used with lenses.
 newtype NameyT m a =
-  NameyT { unNameyT :: StrictS.StateT Int m a }
+  NameyT (StrictS.StateT Int m a)
   deriving newtype
   ( Functor
   , Applicative
@@ -37,24 +54,33 @@ newtype NameyT m a =
   , MonadIO
   )
 
+-- | The namey monad
 type Namey = NameyT Identity
 
 instance MonadState s m => MonadState s (NameyT m) where
   get = lift StrictS.get
   put = lift . StrictS.put
 
+-- | A source of fresh variable names
 class Monad m => MonadNamey m where
+  -- | Get a fresh variable
   genName :: m Name
 
+-- | Run the namey monad transformer with some starting name, returning
+-- the result of the computation and the next name to generate.
 runNameyT :: Functor m => NameyT m a -> Name -> m (a, Name)
-runNameyT (NameyT k) (TgName _ i) = fmap (second genVar) $ StrictS.runStateT k i where
+runNameyT (NameyT k) (TgName _ i) = second genVar <$> StrictS.runStateT k i where
   genVar x = TgName (genAlnum x) x
 runNameyT _ _ = undefined
 
+-- | Run the namey monad transformer with some starting name, returning
+-- the result of the computation.
 evalNameyT :: Monad m => NameyT m a -> Name -> m a
 evalNameyT (NameyT k) (TgName _ i) = StrictS.evalStateT k i
 evalNameyT _ _ = undefined
 
+-- | Run the namey monad with some starting name, returning the result of
+-- the computation and the next name to generate.
 runNamey :: NameyT Identity a -> Name -> (a, Name)
 runNamey (NameyT k) (TgName _ i) = second genVar $ StrictS.runState k i where
   genVar x = TgName (genAlnum x) x
@@ -97,4 +123,3 @@ genAlnum n = go (fromIntegral n) T.empty (floor (logBase 26 (fromIntegral n :: D
               0 -> 1
               x -> x
      in go (n `mod'` (26 ^ p)) (T.snoc out (chr (96 + m))) (p - 1)
-

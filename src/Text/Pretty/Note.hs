@@ -1,6 +1,9 @@
 {-# LANGUAGE OverloadedStrings
            , MultiParamTypeClasses
            , FunctionalDependencies #-}
+
+-- | A series of utilities for generating annotating source positions
+-- with error messages.
 module Text.Pretty.Note
   ( NoteKind(..)
   , NoteStyle
@@ -20,23 +23,33 @@ import Data.List
 import Text.Pretty.Ansi
 import Text.Pretty
 
+-- | The severity of a note
 data NoteKind = WarningMessage | ErrorMessage
   deriving (Show, Eq, Ord)
 
+-- | The document style for a note
 data NoteStyle
   = LinePrefix | LineHighlight
   | NoteKind NoteKind
   deriving (Show, Eq)
 
+-- | A document styled with either 'NoteKind' or 'a'.
 type NoteDoc a = Doc (Either NoteStyle a)
 
+-- | Some diagnostic "note" which can be reported
 class Spanned a => Note a b | a -> b where
+  -- | The kind of this note
   diagnosticKind :: a -> NoteKind
+  -- | Convert a note into some document
+  formatNote :: ([Span] -> NoteDoc b) -- ^ A function which renders one or more 'Span's in a readable manner.
+             -> a -- ^ The note to convert
+             -> NoteDoc b
 
-  formatNote :: ([Span] -> NoteDoc b) -> a -> NoteDoc b
-
+-- | A mapping of file names and their contents
 type FileMap = [(SourceName, T.Text)]
 
+-- | Format a note. This simply wraps 'formatNote' with some additional
+-- information.
 format :: Note a b => ([Span] -> NoteDoc b) -> a -> NoteDoc b
 format f x =
   let a = annotation x
@@ -46,12 +59,15 @@ format f x =
       body = formatNote f x
   in (Right <$> formatSpan a <> colon) <+> (Left <$> c) <##> body
 
+-- | Convert a note style to an ANSI style
 toAnsi :: NoteStyle -> AnsiStyle
 toAnsi LinePrefix = BrightColour Blue
 toAnsi LineHighlight = AnsiStyles [BrightColour White, Underlined]
 toAnsi (NoteKind WarningMessage) = BrightColour Yellow
 toAnsi (NoteKind ErrorMessage) = BrightColour Red
 
+-- | A pretty printer for 'formatNote' and 'format', which displays the
+-- source code associated with each span argument.
 fileSpans :: FileMap -> [Span] -> NoteDoc b
 fileSpans files locs@(loc:_) =
   let

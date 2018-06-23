@@ -13,6 +13,7 @@ import qualified Data.Text as T
 import Data.Text (Text)
 import Data.Char
 
+-- | A Lua statement
 data LuaStmt
   = LuaDo [LuaStmt]
   | LuaAssign [LuaVar] [LuaExpr]
@@ -29,11 +30,13 @@ data LuaStmt
   | LuaBit Text
   deriving (Eq, Show, Ord)
 
+-- | A variable which can be set on the left hand side of a binder
 data LuaVar
   = LuaName Text
   | LuaIndex LuaExpr LuaExpr
   deriving (Eq, Show, Ord)
 
+-- | A Lua expression
 data LuaExpr
   = LuaCall LuaExpr [LuaExpr]
   | LuaNil | LuaTrue | LuaFalse | LuaDots

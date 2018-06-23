@@ -89,11 +89,3 @@ asFakeWord Digit = 0xf4
 asFakeWord Whitespace = 0xf5
 asFakeWord OtherGraphic = 0xf6
 asFakeWord Other = 0xf7
-
--- Is this character usable later on as a symbol
-isIdentifier :: UnicodeClass -> Bool
-isIdentifier Upper = True
-isIdentifier Lower = True
-isIdentifier Generic = True
-isIdentifier Digit = True
-isIdentifier _ = False
