@@ -22,7 +22,7 @@ newtype ArityScope = ArityScope { pureArity :: VarMap.Map Int }
 emptyScope :: ArityScope
 emptyScope = ArityScope opArity
 
--- Compute the number of arguments which can be passed to a function before
+-- | Compute the number of arguments which can be passed to a function before
 -- it becomes "impure".
 atomArity :: IsVar a => ArityScope -> AnnAtom b a -> Int
 atomArity s (Ref r _) = fromMaybe 0 (VarMap.lookup (toVar r) (pureArity s))
@@ -63,7 +63,7 @@ extendPureCtors s cts = s {
     typeArity _ = 0
 
 
--- Various built-in functions with a predetermined arity
+-- | Various built-in functions with a predetermined arity
 opArity :: VarMap.Map Int
 opArity = VarMap.fromList
     [ (vOpAdd, 2), (vOpAddF, 2)
