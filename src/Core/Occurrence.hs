@@ -1,4 +1,8 @@
 {-# LANGUAGE ScopedTypeVariables, DeriveDataTypeable, ExplicitNamespaces #-}
+
+{- | Similar to "Core.Free", but also tracking /how/ a variable is
+   used. Namely, we annotate variables and bindings with 'Occurrence'.
+-}
 module Core.Occurrence
   ( OccursVar(..)
   , Occurs(..)
@@ -7,7 +11,6 @@ module Core.Occurrence
   , tagOccurStmt, tagOccurTerm
   , doesItOccur, occurrenceIn
   ) where
-
 
 import Control.Lens hiding ((#))
 
@@ -21,7 +24,13 @@ import Data.Data
 
 import Text.Pretty.Semantic
 
-data Occurrence = Dead | Once | OnceLambda | Multi | MultiLambda
+-- | The occurrence of a variable
+data Occurrence
+  = Dead        -- ^ This variable is never used
+  | Once        -- ^ This variable is only used once
+  | OnceLambda  -- ^ This variable is used once and is captured by a lambda
+  | Multi       -- ^ This variable is used multiple times (or in multiple cases)
+  | MultiLambda -- ^ This variable is used multiple times and is captured by a lambda
   deriving (Show, Eq, Ord, Data)
 
 defOcc :: Occurrence
@@ -47,6 +56,8 @@ instance Monoid Occurrence where
   mempty = Dead
   mappend = (<>)
 
+-- | A mapping of variables to occurrences. If a variable does not occur
+-- in this map it can be assumed 'Dead'.
 type OccursMap = VarMap.Map Occurrence
 
 data OccursVar v
@@ -62,16 +73,20 @@ instance IsVar a => IsVar (OccursVar a) where
 instance Pretty a => Pretty (OccursVar a) where
   pretty = pretty . underlying
 
+-- | Tag each variable with it's 'Occurrence' /at the binding point/.
 tagOccursVar :: IsVar a => [AnnStmt b a] -> [AnnStmt b (OccursVar a)]
 tagOccursVar = snd . tagOccurStmt const OccursVar
 
+-- | Tag each expression with its free variables and their occurrence.
 tagOccursMap :: IsVar a => [AnnStmt b a] -> [AnnStmt OccursMap a]
 tagOccursMap = snd . tagOccurStmt (flip const) const
 
+-- | Tag some statements with occurrence information
 tagOccurStmt :: forall a a' b b'. (IsVar a, IsVar a')
-             => (b -> OccursMap -> b')
-             -> (a -> Occurrence -> a')
-             -> [AnnStmt b a] -> (OccursMap, [AnnStmt b' a'])
+             => (b -> OccursMap -> b')  -- ^ Build a new annotation from the set of free variables
+             -> (a -> Occurrence -> a') -- ^ Build a new variable from its occurrence.
+             -> [AnnStmt b a]           -- ^ The statements to tag
+             -> (OccursMap, [AnnStmt b' a'])
 tagOccurStmt ann var = tagStmt where
   conv = fmap (`var` defOcc)
   var' v = var v . occurrenceIn v
@@ -95,10 +110,12 @@ tagOccurStmt ann var = tagStmt where
         fv = foldr (VarMap.delete . toVar . fst3) fvs vs
     in (fv, StmtLet (zipWith (\(v, ty, _) e -> (var' v fvs, conv ty, e)) vs vs'):xs')
 
-tagOccurTerm :: forall a a' b b' . (IsVar a, IsVar a')
-             => (b -> OccursMap -> b')
-             -> (a -> Occurrence -> a')
-             -> AnnTerm b a -> (OccursMap, AnnTerm b' a')
+-- | Tag a term with occurrence information
+tagOccurTerm :: forall a a' b b'. (IsVar a, IsVar a')
+             => (b -> OccursMap -> b')  -- ^ Build a new annotation from the set of free variables
+             -> (a -> Occurrence -> a') -- ^ Build a new variable from its occurrence.
+             -> AnnTerm b a             -- ^ The term to tag
+             -> (OccursMap, AnnTerm b' a')
 tagOccurTerm ann var = tagTerm where
   conv :: Functor f => f a -> f a'
   conv = fmap (`var` defOcc)
@@ -172,12 +189,15 @@ tagOccurTerm ann var = tagTerm where
     let (fv, x') = tagAtom x
     in (fv, AnnCast (ann an fv) x' (conv co))
 
+-- | An extension of 'IsVar' which also tracks occurrence information
 class IsVar a => Occurs a where
+  -- | How this variable is used
   usedWhen :: a -> Occurrence
 
 instance IsVar a => Occurs (OccursVar a) where
   usedWhen = used
 
+-- | Does this variable occur /somewhere/.
 doesItOccur :: Occurs a => a -> Bool
 doesItOccur = (/= Dead) . usedWhen
 
@@ -188,5 +208,7 @@ occConcat :: [OccursMap] -> OccursMap
 occConcat [] = mempty
 occConcat (x:xs) = foldr (#) x xs
 
+-- | Lookup a variable in an 'OccursMap', returning 'Dead' if it is not
+-- used.
 occurrenceIn :: IsVar a => a -> OccursMap -> Occurrence
 occurrenceIn v m = fromMaybe Dead $ VarMap.lookup (toVar v) m

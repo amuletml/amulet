@@ -14,19 +14,31 @@ import Text.Pretty.Note
 import Text.Pretty
 import Parser.Token
 
+-- | An error in the parsing process
 data ParseError
+  -- | Represents an error with an arbitrary message. This is used by
+  -- 'fail'
   = Failure SourcePos String
 
-  -- Lexing errors
+  -- | An unexpected character in the input text
   | UnexpectedCharacter SourcePos Char
+  -- | The end of the file was unexpectedly reached
   | UnexpectedEnd SourcePos
+  -- | A string was not correctly terminated (due to a new line or the
+  -- end of a file)
   | UnclosedString SourcePos SourcePos
+  -- | A comment was not correctly terminated (due to the end of the
+  -- file).
   | UnclosedComment SourcePos SourcePos
 
-  -- Parsing errors
+  -- | An unexpected token appeared in the lexer stream
   | UnexpectedToken Token [String]
-  -- Various warnings
+
+  -- | __Warning:__ An @in@ was not aligned with its
+  -- corresponding @let@
   | UnalignedIn Span Span
+  -- | __Warning:__ A context was started at a lower indent than
+  -- was expected.
   | UnindentContext Span Span
   deriving (Show)
 

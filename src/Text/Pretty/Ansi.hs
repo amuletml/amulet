@@ -1,4 +1,15 @@
 {-# LANGUAGE FlexibleContexts, OverloadedStrings #-}
+
+{- | Provides methods for building and displaying documents that can be
+   drawn to the terminal using ANSI escape sequences.
+
+   One should ideally not construct a document using 'AnsiStyle'
+   directly: you should have some domain-specific styles which can then
+   be mapped to 'AnsiStyle'.
+
+   This module is capable of nested annotations, ensuring that the
+   correct colour is used when one annotation is popped.
+-}
 module Text.Pretty.Ansi
   ( Colour(..)
   , AnsiStyle (..)
@@ -17,9 +28,11 @@ import Text.Pretty hiding (putDoc, displayDecorated, hPutDoc)
 
 import System.IO (Handle, stdout)
 
+-- | A colour usable in an ANSI escape sequence
 data Colour = Black | Red | Green | Yellow | Blue | Magenta | Cyan | White
   deriving (Show, Eq, Ord, Enum)
 
+-- | A style representable by an ANSI escape sequence
 data AnsiStyle
   = Unstyled
   | DullColour Colour
@@ -34,18 +47,25 @@ data TermState = TS { colour    :: Maybe Colour
                     }
   deriving (Show, Eq)
 
+-- | Render an ANSI document to stdout
 putDoc :: Doc AnsiStyle -> IO ()
 putDoc = hPutDoc stdout
 
+-- | Render a plain-text document to stdout
 putDocWithoutColour :: Doc AnsiStyle -> IO ()
 putDocWithoutColour = T.putStrLn . display . renderPretty 0.4 100
 
+-- | Render an ANSI document to a given handle
 hPutDoc :: Handle -> Doc AnsiStyle -> IO ()
 hPutDoc h = T.hPutStrLn h . displayDecorated . renderPretty 0.4 100
 
+-- | Convert an ANSI document to a text value, including the appropriate
+-- escape sequences.
 render :: Doc AnsiStyle -> T.Text
 render = displayDecorated . renderPretty 0.4 100
 
+-- | Convert a simple ANSI document to a text value, including the
+-- appropriate escape sequences.
 displayDecorated :: SimpleDoc AnsiStyle -> T.Text
 displayDecorated = L.toStrict . B.toLazyText . go [TS Nothing False False] where
   genDelta :: TermState -> TermState -> [Int]

@@ -1,5 +1,66 @@
 {-# LANGUAGE OverloadedStrings, ScopedTypeVariables, FlexibleContexts, TupleSections, TemplateHaskell #-}
 
+{-|
+  = The Amulet imperative backend
+
+  The backend is one of the more confusing parts of Amulet (even if not the most
+  complex). Every time I go near it I have to sit down and work out what it's
+  doing, and the confusion has not decreased over time. Consequently, this
+  comment hopes to lay out how the backend is designed.
+
+  One thing to note is that while this currently targets Lua, the same
+  techniques could be applied to most imperative languages. It may be worth
+  defining some generic "imperative IR", which can then be converted to Lua, JS,
+  etc... Anyway, a discussion for another day.
+
+  The backend can be thought of as two separate emitters, handling the toplevel
+  and terms/atoms respectively. Both receive an "escape scope", which ensures
+  variables (especially operators) are valid identifiers, as well as preventing
+  accidental shadowing of variable names.
+
+  == The toplevel emitter
+
+  The toplevel is the simpler of these as there is no fancy handling, we simply
+  loop through each element, push the variables into the escape code and
+  generate the appropriate code. Once all elements have been emitted, we call
+  main with the appropriate number of arguments.*
+
+  When generating lets, we delegate off to the term (or statement) emitter.
+
+  *Less said about this the better. We need to fix our handling of how main is
+   invoked.
+
+  == The expression emitter
+
+  In order to convert or flat ANF into a tree, we walk down the "spine" of the
+  expression tree - the body of let bindings and single-variable matches. For
+  each element on the spine, we pop its dependencies from the stack and push the
+  result back onto the stack (when the result is only used once).
+
+  Most of the time this occurs with no problem. However, there are situations
+  where the variables are used in a different order to the order they are
+  consumed in. Here we generate local variables for the entire stack and then
+  continue execution with an empty one.
+
+  Some expressions are not part of a "run," or are guaranteed to require a
+  statement. These include matches with multiple branches, recursive lets, and
+  record extensions. In these cases, we flush* the expression stack and emit the
+  term.
+
+  Sadly, the generating of the statement list is a little confusing. Most of the
+  generation acts as a WriterT: we prepend onto a list. However, we also keep
+  track of a "return generator". This generates the appropriate code to escape
+  from this statement. In most cases this is just `return`, though may assign to
+  a variable instead.
+
+  Consequently, statement generation is expressed as a ContT [LuaStmt], with the
+  initial continuation acting as the returner.
+
+  *Some terms will pop expressions off the stack before flushing the remainder
+   as the can be emitted inline.
+
+-}
+
 module Backend.Lua.Emit
   ( emitProgram
   , emitProgramWith
@@ -34,69 +95,6 @@ import Syntax.Var
 
 import qualified Types.Wellformed as W
 
-{-
-  = The Amulet imperative backend =
-  =================================
-
-  The backend is one of the more confusing parts of Amulet (even if not the most
-  complex). Every time I go near it I have to sit down and work out what it's
-  doing, and the confusion has not decreased over time. Consequently, this
-  comment hopes to lay out how the backend is designed.
-
-  One thing to note is that while this currently targets Lua, the same
-  techniques could be applied to most imperative languages. It may be worth
-  defining some generic "imperative IR", which can then be converted to Lua, JS,
-  etc... Anyway, a discussion for another day.
-
-  The backend can be thought of as two separate emitters, handling the toplevel
-  and terms/atoms respectively. Both receive an "escape scope", which ensures
-  variables (especially operators) are valid identifiers, as well as preventing
-  accidental shadowing of variable names.
-
-  = The toplevel emitter =
-  ========================
-
-  The toplevel is the simpler of these as there is no fancy handling, we simply
-  loop through each element, push the variables into the escape code and
-  generate the appropriate code. Once all elements have been emitted, we call
-  main with the appropriate number of arguments.*
-
-  When generating lets, we delegate off to the term (or statement) emitter.
-
-  *Less said about this the better. We need to fix our handling of how main is
-   invoked.
-
-  = The expression emitter =
-  =========================================
-
-  In order to convert or flat ANF into a tree, we walk down the "spine" of the
-  expression tree - the body of let bindings and single-variable matches. For
-  each element on the spine, we pop its dependencies from the stack and push the
-  result back onto the stack (when the result is only used once).
-
-  Most of the time this occurs with no problem. However, there are situations
-  where the variables are used in a different order to the order they are
-  consumed in. Here we generate local variables for the entire stack and then
-  continue execution with an empty one.
-
-  Some expressions are not part of a "run," or are guaranteed to require a
-  statement. These include matches with multiple branches, recursive lets, and
-  record extensions. In these cases, we flush* the expression stack and emit the
-  term.
-
-  Sadly, the generating of the statement list is a little confusing. Most of the
-  generation acts as a WriterT: we prepend onto a list. However, we also keep
-  track of a "return generator". This generates the appropriate code to escape
-  from this statement. In most cases this is just `return`, though may assign to
-  a variable instead.
-
-  Consequently, statement generation is expressed as a ContT [LuaStmt], with the
-  initial continuation acting as the returner.
-
-  *Some terms will pop expressions off the stack before flushing the remainder
-   as the can be emitted inline.
-
--}
 
 type Returner = LuaExpr -> LuaStmt
 
@@ -115,9 +113,13 @@ makeLenses ''EmitState
 
 type ExprContext v a = ContT [LuaStmt] (State (EmitState v)) a
 
+-- | Convert a list of core top-levels into a collection of Lua
+-- statements using the default scope.
 emitProgram :: forall a. Occurs a => Env -> [Stmt a] -> [LuaStmt]
 emitProgram ev = fst . emitProgramWith ev escapeScope
 
+-- | Convert a list of core top-levels into a collection of Lua
+-- statements using the provided scope.
 emitProgramWith :: forall a. Occurs a => Env -> EscapeScope -> [Stmt a] -> ([LuaStmt], EscapeScope)
 emitProgramWith ev esc = flip runState esc . emitProg where
   emitProg :: MonadState EscapeScope m => [Stmt a] -> m [LuaStmt]
@@ -256,8 +258,8 @@ emitTerm (App f e) = do
     -- Attempt to reduce applications of binary functions to the operators
     -- themselves.
     LuaCall (LuaRef (LuaName op)) [l]
-      | Just op' <- getEscaped op esc, isBinOp (op' :: CoVar)
-      -> LuaBinOp l (remapOp op') e'
+      | Just op' <- getEscaped op esc, Just opv <- VarMap.lookup (op' :: CoVar) ops
+      -> LuaBinOp l opv e'
 
     _ -> LuaCall f' [e']
 
@@ -491,6 +493,7 @@ emitArm test next Arm { _armPtrn = p, _armBody = c } = do
 
   where withMatch = map (\(a, b) -> VarEntry a b True)
 
+-- | A mapping from Amulet binary operators to their Lua equivalent.
 ops :: VarMap.Map Text
 ops = VarMap.fromList
   [ (vOpAdd, "+"),  (vOpAddF, "+")
@@ -510,12 +513,11 @@ ops = VarMap.fromList
   , (vOpOr, "or")
   , (vOpAnd, "and") ]
 
-isBinOp :: IsVar a => a -> Bool
-isBinOp v = VarMap.member (toVar v) ops
-
+-- | Remap an Amulet binary op to the equivalent Lua operator
 remapOp :: IsVar a => a -> Text
 remapOp v | v'@(CoVar _ n _) <- toVar v = fromMaybe n (VarMap.lookup v' ops)
 
+-- | The default 'EscapeScope' for the backend
 escapeScope :: EscapeScope
 escapeScope =
   let escaper = basicEscaper keywords

@@ -1,4 +1,20 @@
 {-# LANGUAGE ScopedTypeVariables, FlexibleContexts #-}
+
+{- | Possibly the most naive inliner possible.
+
+   This simply takes any non-recursive function with a score below the
+   given threshold and inlines it in every position. While this is
+   somewhat effective, there are several major improvements which could
+   be made in the future:
+ 
+    * This will duplicate an expression every time we inline something,
+      which takes an awful lot of time and is often redundant as a
+      function may only be used once.
+ 
+    * The inliner will unconditionally inline, instead of considering
+      either the arguments or the body. We should prefer to inline
+      expressions which are applied to constants or constructors.
+-}
 module Core.Optimise.Inline
   ( inlineVariablePass
   ) where
@@ -18,6 +34,7 @@ limit = 500
 data InlineScope a = InlineScope { scores :: VarMap.Map (Atom a, Int)
                                  , cons :: VarSet.Set }
 
+-- | Run the inlining pass
 inlineVariablePass :: (MonadNamey m, IsVar a) => [Stmt a] -> m [Stmt a]
 inlineVariablePass = transS (InlineScope mempty mempty) where
   transS _ [] = pure []

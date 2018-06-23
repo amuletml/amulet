@@ -1,4 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables, ExplicitNamespaces #-}
+
+-- | Annotate terms with which variables are free within them
 module Core.Free
   ( tagFreeSet, freeSet
   , tagFreeStmt, tagFreeTerm
@@ -12,16 +14,20 @@ import Core.Var
 import qualified Data.VarSet as VarSet
 import Data.Triple
 
+-- | The set of free variables with in a list of statements
 freeSet :: IsVar a => [AnnStmt b a] -> VarSet.Set
 freeSet = fst . tagFreeStmt const const
 
+-- | Tag a list of statements with their free variables
 tagFreeSet :: IsVar a => [AnnStmt b a] -> [AnnStmt VarSet.Set a]
 tagFreeSet = snd . tagFreeStmt (flip const) const
 
+-- | Tag some statements with free variable information
 tagFreeStmt :: forall a a' b b'. (IsVar a, IsVar a')
-             => (b -> VarSet.Set -> b')
-             -> (a -> Bool -> a')
-             -> [AnnStmt b a] -> (VarSet.Set, [AnnStmt b' a'])
+            => (b -> VarSet.Set -> b') -- ^ Build a new annotation from the set of free variables
+            -> (a -> Bool -> a')       -- ^ Build a new variable from its occurrence.
+            -> [AnnStmt b a]           -- ^ The statements to annotate
+            -> (VarSet.Set, [AnnStmt b' a'])
 tagFreeStmt ann var = tagStmt where
   conv = fmap (`var` True)
   var' v = var v . VarSet.member (toVar v)
@@ -45,10 +51,12 @@ tagFreeStmt ann var = tagStmt where
         fv = foldr (VarSet.delete . toVar . fst3) fvs vs
     in (fv, StmtLet (zipWith (\(v, ty, _) e -> (var' v fvs, conv ty, e)) vs vs'):xs')
 
-tagFreeTerm :: forall a a' b b' . (IsVar a, IsVar a')
-             => (b -> VarSet.Set -> b')
-             -> (a -> Bool -> a')
-             -> AnnTerm b a -> (VarSet.Set, AnnTerm b' a')
+-- | Tag some statements with free variable information
+tagFreeTerm :: forall a a' b b'. (IsVar a, IsVar a')
+            => (b -> VarSet.Set -> b')  -- ^ Build a new annotation from the set of free variables
+            -> (a -> Bool -> a')        -- ^ Build a new variable from its occurrence.
+            -> AnnTerm b a              -- ^ The term to annotate
+            -> (VarSet.Set, AnnTerm b' a')
 tagFreeTerm ann var = tagTerm where
   conv :: Functor f => f a -> f a'
   conv = fmap (`var` True)

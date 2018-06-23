@@ -83,8 +83,8 @@ compile (file:files) = runIdentity . flip evalNameyT firstName $ do
                         Right () -> []
                    in pure $ Right ( errs ++ errs'
                                    , tops ++ prog
-                                   , scope { RS.varScope = RS.insertN (RS.varScope scope) (zip var var')
-                                           , RS.tyScope  = RS.insertN (RS.tyScope scope)  (zip tys tys')
+                                   , scope { RS.varScope = RS.insertN' (RS.varScope scope) (zip var var')
+                                           , RS.tyScope  = RS.insertN' (RS.tyScope scope)  (zip tys tys')
                                            }
                                    , modScope'
                                    , env')

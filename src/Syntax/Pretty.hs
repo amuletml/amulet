@@ -12,7 +12,6 @@ import Control.Lens hiding (Lazy)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
-import Data.Span
 import Data.List
 
 import Syntax.Subst
@@ -196,13 +195,6 @@ instance (Pretty (Var p)) => Pretty (Constructor p) where
   pretty (UnitCon p _) = pretty p
   pretty (ArgCon p t _) = pretty p <+> keyword "of" <+> pretty t
   pretty (GeneralisedCon p t _) = pretty p <+> colon <+> pretty t
-
-  -- pretty (TvName v t)
-    -- | t == internalTyVar = pretty v
-    -- | otherwise = parens $ v <+> opClr " : " <+> t
-    --
-instance Pretty (Span, Type Typed) where
-  pretty (x, _) = pretty x
 
 record :: [Doc] -> Doc
 record = enclose (lbrace <> space) (space <> rbrace) . hsep . punctuate comma
