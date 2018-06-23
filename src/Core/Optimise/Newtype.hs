@@ -1,4 +1,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+
+{- | Eliminate new types with a single case, converting constructors and
+   pattern matches on them into a coercion.
+-}
 module Core.Optimise.Newtype (killNewtypePass) where
 
 import Control.Monad.Namey
@@ -11,6 +15,7 @@ import Data.Triple
 import Core.Optimise
 import Core.Types
 
+-- | Run the new-type elimination pass.
 killNewtypePass :: forall a. IsVar a => [Stmt a] -> Namey [Stmt a]
 killNewtypePass = go mempty mempty where
   go :: V.Map (Atom a) -> V.Map (Coercion a) -> [Stmt a] -> Namey [Stmt a]

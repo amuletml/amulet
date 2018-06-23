@@ -223,8 +223,8 @@ runRepl = do
                                          _ -> []
                                      , prog
                                      , lower
-                                     , state { resolveScope = rScope { R.varScope = R.insertN (R.varScope rScope) (zip var var')
-                                                                     , R.tyScope  = R.insertN (R.tyScope rScope)  (zip tys tys')
+                                     , state { resolveScope = rScope { R.varScope = R.insertN' (R.varScope rScope) (zip var var')
+                                                                     , R.tyScope  = R.insertN' (R.tyScope rScope)  (zip tys tys')
                                                                      }
                                              , moduleScope = modScope'
                                              , inferScope = env'

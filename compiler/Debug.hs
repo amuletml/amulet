@@ -21,11 +21,11 @@ data DebugMode = Void | Test | TestTc
 
 dump :: DebugMode
      -> [Toplevel Typed]
-     -> [Stmt CoVar] -- |Core
-     -> [Stmt CoVar] -- |Optimised code
+     -> [Stmt CoVar] -- ^ Core
+     -> [Stmt CoVar] -- ^ Optimised code
      -> LuaStmt
-     -> Env          -- |Base environment
-     -> Env          -- |Current environment
+     -> Env          -- ^ Base environment
+     -> Env          -- ^ Current environment
      -> IO ()
 
 dump Void _ _ _ _ _ _ = pure ()

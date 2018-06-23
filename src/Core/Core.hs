@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleInstances, FlexibleContexts, ScopedTypeVariables, DeriveFunctor, DeriveGeneric #-}
 {-# LANGUAGE PatternSynonyms, TemplateHaskell #-}
+-- | Amulet's explicitly-typed intermediate representation
 module Core.Core where
 
 import Text.Pretty.Semantic
@@ -16,73 +17,89 @@ import Control.Lens
 
 import GHC.Generics
 
+-- | Atoms.
 data AnnAtom b a
-  = Ref a (Type a)
-  | Lam (Argument a) (AnnTerm b a)
-  | Lit Literal
+  = Ref a (Type a) -- ^ A reference to a variable, with an explicit type
+  | Lam (Argument a) (AnnTerm b a) -- ^ A lambda abstraction, with explicit domain, encompassing a 'Term'.
+  | Lit Literal -- ^ A literal.
   deriving (Eq, Show, Ord, Functor, Generic)
 
+-- | An 'AnnAtom' with '()' annotations.
 type Atom = AnnAtom ()
 
+-- | The domain of a lambda
 data Argument a
-  = TermArgument a (Type a)
-  | TypeArgument a (Type a) -- TODO kinds
+  = TermArgument a (Type a) -- ^ Computationally-relevant domain
+  | TypeArgument a (Type a) -- ^ Type abstraction, erased at Emit-time.
   deriving (Eq, Show, Ord, Functor, Generic)
 
+-- | Terms.
 data AnnTerm b a
-  = AnnAtom b (AnnAtom b a)
-  | AnnApp b (AnnAtom b a) (AnnAtom b a) -- removes a λ
+  = AnnAtom b (AnnAtom b a) -- ^ Embed an 'Atom' into a 'Term'
+  | AnnApp b (AnnAtom b a) (AnnAtom b a) -- ^ Eliminate a 'Lam' expecting a 'TermArgument'
 
-  | AnnLet b (AnnBinding b a) (AnnTerm b a)
-  | AnnMatch b (AnnAtom b a) [AnnArm b a]
+  | AnnLet b (AnnBinding b a) (AnnTerm b a) -- ^ Bind some variables within the scope of some 'Term'
+  | AnnMatch b (AnnAtom b a) [AnnArm b a] -- ^ Pattern matching
 
-  | AnnExtend b (AnnAtom b a) [(Text, Type a, AnnAtom b a)]
+  | AnnExtend b (AnnAtom b a) [(Text, Type a, AnnAtom b a)] -- ^ Record extension
 
-  | AnnTyApp b (AnnAtom b a) (Type a) -- removes a Λ
-  | AnnCast b (AnnAtom b a) (Coercion a)
+  | AnnTyApp b (AnnAtom b a) (Type a) -- Eliminate a 'Lam' expecting a 'TypeArgument'
+  | AnnCast b (AnnAtom b a) (Coercion a) -- Cast an 'Atom' using some 'Coercion'.
   deriving (Eq, Show, Ord, Functor, Generic)
 
+-- | An 'AnnTerm' with '()' annotations.
 type Term = AnnTerm ()
 
 {-# COMPLETE Atom, App, Let, Match, Extend, TyApp, Cast #-}
 
+-- | Match an 'Atom' with '()' annotation
 pattern Atom :: Atom a -> Term a
 pattern Atom a = AnnAtom () a
 
+-- | Match an 'App' with '()' annotation
 pattern App :: Atom a -> Atom a -> Term a
 pattern App f x = AnnApp () f x
 
+-- | Match a 'Let' with '()' annotation
 pattern Let :: Binding a -> Term a -> Term a
 pattern Let b r = AnnLet () b r
 
+-- | Match a 'Match' with '()' annotation
 pattern Match :: Atom a -> [Arm a] -> Term a
 pattern Match t b = AnnMatch () t b
 
+-- | Match an 'Extend' with '()' annotation
 pattern Extend :: Atom a -> [(Text, Type a, Atom a)] -> Term a
 pattern Extend f fs = AnnExtend () f fs
 
+-- | Match a 'TyApp' with '()' annotation
 pattern TyApp :: Atom a -> Type a -> Term a
 pattern TyApp f x = AnnTyApp () f x
 
+-- | Match a 'Cast' with '()' annotation
 pattern Cast :: AnnAtom () a -> Coercion a -> Term a
 pattern Cast a ty = AnnCast () a ty
 
+-- | A binding group
 data AnnBinding b a
-  = One (a, Type a, AnnTerm b a) -- uncurried for convenience
-  | Many [(a, Type a, AnnTerm b a)]
+  = One (a, Type a, AnnTerm b a) -- ^ Acyclic binding group (no recursion)
+  | Many [(a, Type a, AnnTerm b a)] -- ^ Cyclic, possibly mutually recursive binding groups
   deriving (Eq, Show, Ord, Functor, Generic)
 
+-- | An 'AnnBinding' with '()' annotations.
 type Binding = AnnBinding ()
 
+-- | An 'Arm' of a pattern matching expression.
 data AnnArm b a = Arm
-  { _armPtrn :: Pattern a
-  , _armTy   :: Type a
-  , _armBody :: AnnTerm b a
-  , _armVars :: [(a, Type a)]
-  , _armTyvars :: [(a, Type a)]
+  { _armPtrn :: Pattern a -- ^ The pattern
+  , _armTy   :: Type a -- ^ The type of the scrutinee
+  , _armBody :: AnnTerm b a -- ^ The body of the arm
+  , _armVars :: [(a, Type a)] -- ^ Bound value variables
+  , _armTyvars :: [(a, Type a)] -- ^ Existential type variables
   }
   deriving (Eq, Show, Ord, Functor, Generic)
 
+-- | An 'Arm' with '()' annotations
 type Arm = AnnArm ()
 
 data Pattern a
@@ -119,13 +136,13 @@ data Literal
   deriving (Eq, Show, Ord)
 
 data Type a
-  = ConTy a
-  | VarTy a
-  | ForallTy (BoundTv a) (Type a) (Type a)
-  | AppTy (Type a) (Type a)
-  | RowsTy (Type a) [(Text, Type a)]
-  | NilTy
-  | StarTy -- * :: *
+  = ConTy a -- A type constructor
+  | VarTy a -- A type variable
+  | ForallTy (BoundTv a) (Type a) (Type a) -- ^ A function abstraction
+  | AppTy (Type a) (Type a) -- ^ A @tycon x@ type application
+  | RowsTy (Type a) [(Text, Type a)] -- ^ The type of record extensions
+  | NilTy -- ^ The type of empty records
+  | StarTy -- ^ The type of types
   deriving (Eq, Show, Ord, Functor, Generic)
 
 pattern ExactRowsTy :: [(Text, Type a)] -> Type a

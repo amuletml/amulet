@@ -1,0 +1,86 @@
+\documentclass[11pt]{article}
+\usepackage{amssymb,amsmath,cuted,mathpartir,hyphenat,float,mathrsfs}
+\usepackage[usenames, dvipsnames]{color}
+\usepackage[utf8]{inputenc}
+
+\newcommand{\checks}{\Leftarrow}
+\newcommand{\infers}{\Rightarrow}
+\newcommand{\cons}{\rightsquigarrow}
+\newcommand{\reduces}{\hookrightarrow}
+\newcommand{\skol}[1]{\mathtt{skol}\left(#1\right)}
+\newcommand{\quant}[1]{\mathtt{quantifier}\left(#1\right)}
+\newcommand{\skv}[1]{{\color{red} \mathbf{#1}}}
+\newcommand{\Ambient}{\Gamma; \Sigma \vdash}
+
+\begin{document}
+
+$$\Ambient e \infers \tau \cons \mathscr{Q} \reduces e'$$
+Under context $\Gamma$ and signature $\Sigma$, the expression $e$ infers type
+$\tau$, generating constraints $\mathscr{Q}$ and elaborating into $e'$
+
+$$\Ambient e \checks \tau \cons \mathscr{Q} \reduces e'$$
+Under context $\Gamma$ and signature $\Sigma$, the expression $e$ checks
+against type $\tau$, generating constraints $\mathscr{Q}$ and elaborating into
+$e'$.
+
+$$\gamma: \tau \sim \sigma$$
+The types $\tau$ and $\sigma$ unify, producing a coercion $\gamma$.
+
+$$\omega: \tau \le \sigma$$
+The types $\sigma$ subsumes the type $\tau$, producing a wrapper $\omega$.
+
+$$\tau' = \skol{\forall{\bar{a}}. \tau}, \omega$$
+Skolemise a $\forall$-type, turning any bound variables $a$ into fresh
+type constants $\skv{\alpha}$, producing a wrapper $\omega$.
+
+$$\beta, \sigma = \quant{\tau}, \omega$$
+Extract the quantifier of some type $\tau$, returning the binder (either some
+type $\rho$, a named, visible variable $\left(x:\rho\right)$, or an invisible
+variable $\left\{x:\rho\right\}$) and the codomain.
+
+$$\Ambient p \infers_{pat} \tau \cons \mathscr{Q} \reduces p'$$
+Under context $\Gamma$ and signature $\Sigma$, the pattern $p$ infers type
+$\tau$, generating constraints $\mathscr{Q}$ and elaborating into $p'$
+
+$$\Ambient p \checks_{pat} \tau \cons \mathscr{Q}; \mathscr{R} \reduces p'$$
+Under context $\Gamma$ and signature $\Sigma$, the pattern $p$ checks against
+type $\tau$, generating \textit{ambient} constraints $\mathscr{Q}$,
+\textit{local} constraints $\mathscr{R}$ and elaborating into $p'$.
+
+\begin{mathpar}
+\inferrule[Check-$\forall$]
+  { \Ambient e \checks \tau' \cons \mathscr{Q} \reduces e'
+    \\ \tau' = \skol{\forall\bar{a}. \tau}, \omega }
+  { \Ambient e \checks \forall\bar{a}. \tau
+    \cons \mathscr{Q} \reduces e'_\omega } \and
+
+\inferrule[Hole]{ }
+  { \Ambient h \checks \tau \cons \{\mathtt{fail}\left(h, \tau\right)\}
+      \reduces e' } \and
+
+\inferrule[Begin]
+  { \Ambient e_i \infers \tau_i \cons \mathscr{Q}_i \reduces e'_i
+  \\ \Ambient e \checks \tau \cons \mathscr{Q} \reduces e' }
+  { \Ambient \mathtt{begin}\ e_i; e\ \mathtt{end} \checks \tau
+    \cons \bigcup{\mathscr{Q}_i} \cup \mathscr{Q}
+    \reduces \mathtt{begin}\ e'_i; e'\ \mathtt{end}
+  } \and
+
+\inferrule[Fun]
+  { \Ambient p \checks_{pat} \tau \cons \mathscr{Q}; \mathscr{R} \reduces p'
+  \\ \Gamma, binds(p) \vdash e \checks \sigma \cons \mathscr{Q}' \reduces e' }
+  { \Ambient \lambda p. e \checks \tau \to \sigma
+    \cons \mathscr{Q \cup \left[\tau\right]\left(R \leadsto Q'\right)}
+    \reduces \lambda p'. e' } \and
+
+\inferrule[If]
+  { \Ambient c \checks \mathtt{bool} \cons \mathscr{Q} \reduces c'
+  \\ \Ambient t \checks \tau \cons \mathscr{R} \reduces t'
+  \\ \Ambient e \checks \tau \cons \mathscr{S} \reduces e' }
+  { \Ambient \mathtt{if}\ c\ \mathtt{then}\ t\ \mathtt{else}\ e
+    \checks \tau \cons \mathscr{Q \cup R \cup S}
+    \reduces \mathtt{if}\ c'\ \mathtt{then}\ t'\ \mathtt{else}\ e'}
+
+\end{mathpar}
+
+\end{document}

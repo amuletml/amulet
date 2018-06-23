@@ -1,5 +1,8 @@
 {-# LANGUAGE GADTs, ConstraintKinds, MultiParamTypeClasses, FlexibleInstances, FlexibleContexts, UndecidableInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+
+-- | Represents a context associated with an error, such as what
+-- expression the error occurred in.
 module Data.Reason
   ( SomeReason(..)
   , Reasonable(..)
@@ -14,7 +17,9 @@ import Syntax.Pretty
 
 import Text.Pretty.Semantic
 
+-- | The reason for some error message
 data SomeReason where
+  -- | Blame a specific 'Reasonable' value.
   BecauseOf :: (Reasonable a p) => a p -> SomeReason
 
 instance Pretty SomeReason where
@@ -29,7 +34,9 @@ instance Show SomeReason where
 instance Eq SomeReason where
   BecauseOf _ == BecauseOf _ = False
 
+-- | A type which can be blamed for an error
 class (Spanned (f p), Pretty (f p)) => Reasonable f p where
+  -- | Convert this blameable value into a pretty-printed document.
   blame :: f p -> Doc
   blame _ = empty
 
@@ -54,5 +61,6 @@ instance Spanned (Const SomeReason a) where
 instance Pretty (Const SomeReason a) where
   pretty = pretty . getConst
 
+-- | Convert a reason into a pretty-printed document
 blameOf :: SomeReason -> Doc
 blameOf (BecauseOf (x :: f p)) = blame x

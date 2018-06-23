@@ -1,4 +1,18 @@
 {-# LANGUAGE FlexibleContexts, ScopedTypeVariables, OverloadedStrings #-}
+
+{- | The desugar process is run before the type checker in order to
+   simplify the number of cases it needs to handle.
+
+     * Replace sections and tuple sections with a lambda (or function
+       symbol).
+
+     * Removes 'Parens' and 'OpenIn' (these are only required by the
+       resolver).
+
+     * Replace @\@\@@ with 'App'.
+
+     * Replace 'Function' with a lambda and match.
+ -}
 module Syntax.Desugar (desugarProgram) where
 
 import Control.Monad.Namey
@@ -9,6 +23,7 @@ import Data.Triple
 import Syntax.Var
 import Syntax
 
+-- | Desugar a program into a more simple representation
 desugarProgram :: forall m. MonadNamey m => [Toplevel Resolved] -> m [Toplevel Resolved]
 desugarProgram = traverse statement where
   statement (LetStmt vs) = LetStmt <$> traverse (second3A expr) vs

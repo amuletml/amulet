@@ -1,4 +1,23 @@
 {-# LANGUAGE OverloadedStrings, TupleSections #-}
+
+{- | The dead code pass performs dead code elimination on the
+   input core. This pass assumes all pure expressions are dead,
+   and will only preserve them if it can find some expression
+   which consumes it.
+
+   We consider an expression as pure by using the methods
+   provided by "Core.Arity". Thus we must maintain an
+   'ArityScope' while traversing the expression tree.
+
+   Each function within the pass returns the optimised
+   expression and a set of free variables consumed. If a
+   variable is not used, we will remove it (unless the body is
+   impure).
+
+   While it may be possible to eliminate unused arguments from
+   within this pass, it would probably be more elegant to
+   perform this within a lambda lifting pass.
+-}
 module Core.Optimise.DeadCode ( deadCodePass ) where
 
 import qualified Data.VarSet as VarSet
@@ -11,6 +30,7 @@ import Control.Lens
 import Core.Optimise
 import Core.Arity
 
+-- | Perform a dead-code elimination pass
 deadCodePass :: IsVar a => [Stmt a] -> [Stmt a]
 deadCodePass = snd . freeS emptyScope Nothing where
   freeS :: IsVar a => ArityScope -> Maybe a -> [Stmt a] -> (VarSet.Set, [Stmt a])
@@ -79,8 +99,20 @@ deadCodePass = snd . freeS emptyScope Nothing where
          -- Otherwise assume everything is used
          _ -> (ft <> matchFree, Match t' bs')
 
-  buildFrees :: IsVar a => ArityScope -> VarSet.Set -> [(VarSet.Set, (a, Type a, Term a))]
-            -> Bool -> [(VarSet.Set, (a, Type a, Term a))] -> VarSet.Set
+  -- | A worker function for 'buildLet'. This finds all variables within
+  -- a binding group which are live, adding their dependencies to the
+  -- live variable set.
+  --
+  -- The complexity mostly stems from the fact that we perform multiple
+  -- passes over the binding group, as we loop until a steady state is
+  -- found.
+  buildFrees :: IsVar a
+             => ArityScope
+             -> VarSet.Set -- ^ The free variables within the body of this binding group
+             -> [(VarSet.Set, (a, Type a, Term a))] -- ^ Each binding group and free variables within the value
+             -> Bool -- ^ Whether we need to perform another round
+             -> [(VarSet.Set, (a, Type a, Term a))] -- ^ Bindings which we consider dead
+             -> VarSet.Set -- ^ The set of free variables including the bindings and their variables
   buildFrees s free [] True rest = buildFrees s free rest False []
   buildFrees _ free [] False _   = free
   buildFrees s free (b@(fs, (v, _, d)):bs) change rest

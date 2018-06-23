@@ -1,3 +1,5 @@
+-- | Represents a series of operations which may be performed on
+-- 3-tuples.
 module Data.Triple
   ( fst3
   , snd3

@@ -13,6 +13,7 @@ import qualified Data.Text as T
 import Data.Text (Text)
 import Data.Char
 
+-- | A Lua statement
 data LuaStmt
   = LuaDo [LuaStmt]
   | LuaAssign [LuaVar] [LuaExpr]
@@ -29,11 +30,13 @@ data LuaStmt
   | LuaBit Text
   deriving (Eq, Show, Ord)
 
+-- | A variable which can be set on the left hand side of a binder
 data LuaVar
   = LuaName Text
   | LuaIndex LuaExpr LuaExpr
   deriving (Eq, Show, Ord)
 
+-- | A Lua expression
 data LuaExpr
   = LuaCall LuaExpr [LuaExpr]
   | LuaNil | LuaTrue | LuaFalse | LuaDots
@@ -162,6 +165,7 @@ validKey t = case T.uncons t of
     start c = c == '_' || isAsciiUpper c || isAsciiLower c
     rest c = start c || isDigit c
 
+-- | A set of all Lua keywords, which cannot be used as identifiers.
 keywords :: Set.Set T.Text
 keywords = Set.fromList [ "and", "break", "do", "else", "elseif", "end"
                         , "false", "for" , "function",  "if", "in", "local"

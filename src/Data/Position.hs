@@ -1,15 +1,23 @@
+-- | Positions represent a single point or character within a file.
 module Data.Position
   ( SourceName, Line, Column
   , SourcePos(..)
   ) where
 
+-- | The type of file names
 type SourceName = String
+
+-- | The type of column numbers
 type Column = Int
+
+-- | The type of line numbers
 type Line = Int
 
-data SourcePos = SourcePos { spFile :: SourceName
-                           , spLine :: !Int
-                           , spCol  :: !Int }
+-- | A point in the source code
+data SourcePos = SourcePos { spFile :: SourceName -- ^ The file name of this position
+                           , spLine :: !Int       -- ^ The line number (1-based)
+                           , spCol  :: !Int       -- ^ The column number (1-based)
+                           }
   deriving (Eq)
 
 instance Show SourcePos where

@@ -64,8 +64,8 @@ compile (file:files) = do
                   let (var, tys) = extractToplevels parsed
                       (var', tys') = extractToplevels resolved
                   in pure $ Right (tops ++ prog
-                                  , scope { RS.varScope = RS.insertN (RS.varScope scope) (zip var var')
-                                          , RS.tyScope  = RS.insertN (RS.tyScope scope)  (zip tys tys')
+                                  , scope { RS.varScope = RS.insertN' (RS.varScope scope) (zip var var')
+                                          , RS.tyScope  = RS.insertN' (RS.tyScope scope)  (zip tys tys')
                                           }
                                   , modScope'
                                   , env')

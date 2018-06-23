@@ -1,4 +1,24 @@
 {-# LANGUAGE TupleSections #-}
+
+{- | The allocation sinking pass (also referred to as float-in or lambda
+   dropping) moves pure expressions closer to where they are used. If an
+   expression is only used within a single branch of a match case, then
+   it will be moved into that case.
+
+   This hopefully reduces the times when allocation is needed, as only
+   code paths which require the value actually execute it.
+
+   This operates very much as you'd expect: keep track of which variables
+   we're trying to sink, determine if they can be sunk to the next level
+   and, if not, emit their corresponding bindings here. The main
+   exception to this rule is lambdas, as one should not shift values
+   /inside/ lambdas: that could lead to duplicating work instead.
+
+   The current purity tracking is rather naive: atoms, constructors and
+   records are the only "pure" expressions. It may be a good idea to
+   extend this in the future to include partially applied functions (like
+   the DCE pass does).
+-}
 module Core.Optimise.Sinking (sinkingPass) where
 
 import Control.Lens
@@ -17,28 +37,6 @@ data Sinkable a = Sinkable { sBind  :: (a, Type a, Term a)
 data SinkState a = SinkState { sinkable :: [Sinkable a]
                              , arity :: A.ArityScope }
   deriving (Show)
-
-
-{-
-The allocation sinking pass (also referred to as float-in or lambda dropping)
-moves pure expressions closer to where they are used. If an expression is only
-used within a single branch of a match case, then it will be moved into that
-case.
-
-This hopefully reduces the times when allocation is needed, as only code paths
-which require the value actually execute it.
-
-This operates very much as you'd expect: keep track of which variables we're
-trying to sink, determine if they can be sunk to the next level and, if not,
-emit their corresponding bindings here. The main exception to this rule is
-lambdas, as one should not shift values _inside_ lambdas: that could lead to
-duplicating work instead.
-
-The current purity tracking is rather naive: atoms, constructors and records are
-the only "pure" expressions. It may be a good idea to extend this in the future
-to include partially applied functions (like the DCE pass does).
-
--}
 
 sinkingPass :: IsVar a => [AnnStmt VarSet.Set a] -> [Stmt a]
 sinkingPass = sinkStmts (SinkState [] A.emptyScope)

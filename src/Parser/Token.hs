@@ -6,75 +6,75 @@ import Data.Spanned
 import Data.Span
 
 data TokenClass
-  = TcArrow -- ->
-  | TcEqual -- =
-  | TcForall -- forall
-  | TcImplies -- =>
-  | TcPipe -- |
-  | TcStar -- *
-  | TcTilde -- ~
-  | TcUnderscore -- _
+  = TcArrow -- ^ A @->@ token.
+  | TcEqual -- ^ A @=@ token.
+  | TcForall -- ^ A @forall@ token.
+  | TcImplies -- ^ A @=>@ token.
+  | TcPipe -- ^ A @|@ token.
+  | TcStar -- ^ A @*@ token.
+  | TcTilde -- ^ A @~@ token.
+  | TcUnderscore -- ^ A @_@ token.
 
-  | TcLet -- let
-  | TcAnd -- and
-  | TcFun -- fun
-  | TcIf -- if
-  | TcThen -- then
-  | TcElse -- else
-  | TcBegin -- begin
-  | TcEnd -- end
-  | TcIn -- in
-  | TcExternal -- external
-  | TcVal -- val
-  | TcTrue -- true
-  | TcFalse -- false
-  | TcMatch -- match
-  | TcFunction -- function
-  | TcWith -- with
-  | TcType -- type
-  | TcOf -- of
-  | TcModule -- module
-  | TcOpen -- open
+  | TcLet -- ^ A @let@ token.
+  | TcAnd -- ^ An @and@ token.
+  | TcFun -- ^ A @fun@ token.
+  | TcIf -- ^ An @if@ token.
+  | TcThen -- ^ A @then@ token.
+  | TcElse -- ^ An @else@ token.
+  | TcBegin -- ^ A @begin@ token.
+  | TcEnd -- ^ An @end@ token.
+  | TcIn -- ^ An @in@ token.
+  | TcExternal -- ^ An @external@ token.
+  | TcVal -- ^ A @val@ token.
+  | TcTrue -- ^ A @true@ token.
+  | TcFalse -- ^ A @false@ token.
+  | TcMatch -- ^ A @match@ token.
+  | TcFunction -- ^ A @function@ token.
+  | TcWith -- ^ A @with@ token.
+  | TcType -- ^ A @type@ token.
+  | TcOf -- ^ An @of@ token.
+  | TcModule -- ^ A @module@ token.
+  | TcOpen -- ^ An @open@ token.
   | TcLazy
 
-  | TcDot -- .
-  | TcComma -- ,
-  | TcColon -- :
-  | TcSemicolon -- ;
-  | TcTopSep -- ;;
-  | TcOParen -- (
-  | TcCParen -- )
-  | TcAtBrace -- @{
-  | TcQuestion -- ?
-  | TcOBrace -- {
-  | TcCBrace -- }
-  | TcOSquare -- [
-  | TcCSquare -- ]
+  | TcDot -- ^ A @.@ token.
+  | TcComma -- ^ A @,@ token.
+  | TcColon -- ^ A @:@ token.
+  | TcSemicolon -- ^ A @;@ token.
+  | TcTopSep -- ^ A @;;@ token.
+  | TcOParen -- ^ A @(@ token.
+  | TcCParen -- ^ A @)@ token.
+  | TcAtBrace -- ^ A @@{@ token.
+  | TcQuestion -- ^ A @?@ token.
+  | TcOBrace -- ^ A @{@ token.
+  | TcCBrace -- ^ A @}@ token.
+  | TcOSquare -- ^ A @[@ token.
+  | TcCSquare -- ^ A @]@ token.
 
-  | TcOp Text                     -- Operators (+)
-  | TcIdentifier Text             -- Identifiers (foo)
-  | TcOpIdent Text                -- Backtick ops (`foo`)
-  | TcConIdent Text               -- Constructors (Foo)
-  | TcIdentifierQual [Text] Text  -- Qualified identifiers (Foo.bar)
-  | TcOpIdentQual [Text] Text     -- Qualified backtick ops (`Foo.bar`)
-  | TcConIdentQual [Text] Text    -- Qualified constructors (Foo.Bar)
-  | TcDotQual [Text]              -- Qualified module, used for "let open ..." (Foo.)
-  | TcTyvar Text                  -- Type variable ('foo)
-  | TcAccess Text                 -- Record access (.foo)
-  | TcHole Text                   -- Hole (_foo)
+  | TcOp Text                     -- ^ Operators (@+@)
+  | TcIdentifier Text             -- ^ Identifiers (@foo@)
+  | TcOpIdent Text                -- ^ Backtick ops (@`foo`@)
+  | TcConIdent Text               -- ^ Constructors (@Foo@)
+  | TcIdentifierQual [Text] Text  -- ^ Qualified identifiers (@Foo.bar@)
+  | TcOpIdentQual [Text] Text     -- ^ Qualified backtick ops (@`Foo.bar`@)
+  | TcConIdentQual [Text] Text    -- ^ Qualified constructors (@Foo.Bar@)
+  | TcDotQual [Text]              -- ^ Qualified module, used for "let open ..." (@Foo.@)
+  | TcTyvar Text                  -- ^ Type variable (@'foo@)
+  | TcAccess Text                 -- ^ Record access (@.foo@)
+  | TcHole Text                   -- ^ Hole (@_foo@)
 
-  | TcInteger Integer
-  | TcFloat Double
-  | TcString Text
+  | TcInteger Integer -- ^ Integer literal
+  | TcFloat Double -- ^ Floating-point literal
+  | TcString Text -- ^ String literal
 
   -- "Virtual" tokens. It might be possible merge "end" and "in", but
   -- this allows for easier inspection
-  | TcVBegin -- $begin (begin)
-  | TcVEnd   -- $end   (end)
-  | TcVSep   -- $sep   (; ;;)
-  | TcVIn    -- $in    (in)
+  | TcVBegin -- ^ Virtual @begin@ token, @$begin@.
+  | TcVEnd   -- ^ Virtual @end@ token, @$end@.
+  | TcVSep   -- ^ Virtual @;;@ token, @$sep@.
+  | TcVIn    -- ^ Virtual @in@ token, @$in@.
 
-  | TcEOF
+  | TcEOF -- ^ End of file
   deriving Eq
 
 instance Show TokenClass where
@@ -145,11 +145,13 @@ instance Show TokenClass where
 
   show TcEOF = "<eof>"
 
+-- | A token, with its class, start, and end position.
 data Token = Token !TokenClass !SourcePos !SourcePos deriving Show
 
 instance Spanned Token where
   annotation (Token _ s e) = mkSpanUnsafe s e
 
+-- | Determine the friendly name of virtual token
 friendlyName :: TokenClass -> String
 friendlyName TcVEnd = "end of block"
 friendlyName TcVSep = "end of block"
