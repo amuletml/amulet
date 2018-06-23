@@ -13,6 +13,7 @@ module Syntax.Resolve.Scope
   , extendTy, extendTyN
   , extendTyvar, extendTyvarN
   , extendM
+  , insertN'
   ) where
 
 import qualified Data.Map as Map
@@ -85,6 +86,8 @@ tagModule n = TgName (T.intercalate (T.singleton '.') (expand n)) <$> gen where
   expand (Name n) = [n]
   expand (InModule m n) = m:expand n
 
+-- | Insert one or more variables into a map. If multiple variables with
+-- the same name are defined, this will be considered as ambiguous.
 insertN :: Map.Map (Var Parsed) ScopeVariable -> [(Var Parsed, Var Resolved)] -> Map.Map (Var Parsed) ScopeVariable
 insertN scope = foldr (\case
                           [(v, v')] -> Map.insert v (SVar v')
@@ -92,6 +95,11 @@ insertN scope = foldr (\case
                           [] -> undefined) scope
                 . groupBy ((==) `on` fst)
                 . sortOn fst
+
+-- | Insert one or more variables into a map. If a variable is declared
+-- multiple times, we will prefer the latest definition.
+insertN' :: Map.Map (Var Parsed) ScopeVariable -> [(Var Parsed, Var Resolved)] -> Map.Map (Var Parsed) ScopeVariable
+insertN' = foldl' (\s (v, v') -> Map.insert v (SVar v') s)
 
 -- | Create a scope with one variable and evaluate the provided monad
 -- within it.
