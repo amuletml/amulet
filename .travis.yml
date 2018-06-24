@@ -1,7 +1,21 @@
 language: nix
-install: true
+
+before_install:
+- sudo mkdir -p /etc/nix
+- echo "substituters = https://cache.nixos.org/ file://$HOME/nix.store" | sudo tee -a /etc/nix/nix.conf > /dev/null
+- echo 'require-sigs = false' | sudo tee -a /etc/nix/nix.conf > /dev/null
+
 script:
-  - nix-shell . --run "cabal new-configure --enable-tests" --arg ci true
-  - nix-shell . --run "cabal new-build amuletml:amc --ghc-option=-Werror" --arg ci true
-  - nix-shell . --run "cabal new-test --ghc-option=-Werror" --arg ci true
-  - nix-shell . --run "hlint --git" --arg ci true
+- nix-shell . --run "cabal new-configure --enable-tests" --arg ci true
+- nix-shell . --run "cabal new-build amuletml:amc --ghc-option=-Werror" --arg ci true
+- nix-shell . --run "cabal new-test --ghc-option=-Werror" --arg ci true
+- nix-shell . --run "hlint --git" --arg ci true
+
+# See https://nixos.wiki/wiki/Nix_on_Travis
+before_cache:
+- mkdir -p $HOME/nix.store
+- nix copy --to file://$HOME/nix.store -f default.nix buildInputs
+
+cache:
+  directories:
+  - $HOME/nix.store
