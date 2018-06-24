@@ -49,9 +49,11 @@ let
       , tasty-hedgehog_0_2_0_0
       , alex
       , happy
+      , hlint
       }:
       let alex' = haskell.lib.dontCheck alex;
           happy' = haskell.lib.dontCheck happy;
+          hlint' = haskell.lib.dontCheck hlint;
       in mkDerivation rec {
         pname = "amuletml";
         version = "0.1.0.0";
@@ -76,7 +78,7 @@ let
         ];
 
         libraryToolDepends = if ci then [ alex happy ] else [ alex' happy' ];
-        buildDepends = libraryToolDepends ++ [ pkgs.cabal-install ];
+        buildDepends = libraryToolDepends ++ [ pkgs.cabal-install ] ++ [ hlint' ];
 
         homepage = "https://amulet.ml";
         description = "A functional programming language";
