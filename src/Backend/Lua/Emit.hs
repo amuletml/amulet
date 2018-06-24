@@ -267,13 +267,12 @@ emitTerm (App f e) = do
 emitTerm (TyApp f _) = emitAtom f
 emitTerm (Cast f _) = emitAtom f
 
-emitTerm (Extend (Lit RecNil) fs) = do
+emitTerm (Extend (Lit RecNil) fs) =
   {-
     Record literals are nice and simple to generate, and can just be
     emitted as expressions.
   -}
-  fs' <- foldrM emitRow [] fs
-  pure (LuaTable fs')
+  LuaTable <$> foldrM emitRow [] fs
   where emitRow (f, _, e) es = (:es) . (LuaString f,) <$> emitAtom e
 
 emitTerm (Extend tbl exs) = do

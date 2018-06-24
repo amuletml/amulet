@@ -43,7 +43,7 @@ instance Spanned VerifyError where
 instance Pretty VerifyError where
   pretty (NonRecursiveRhs re ex xs) =
     vsep [ "Invalid recursive right-hand side for variable" <+> skeyword (pretty ex)
-         , if length xs == 0
+         , if null xs
               then empty
               else note <+> "because the variable" <> plural
                         <+> hsep (punctuate comma (map pretty xs)) <+> verb <+> "not under a function"
@@ -90,7 +90,7 @@ verifyBindingGroup k _ = traverse_ verifyScc . depOrder where
     verifyExpr e
   verifyScc (CyclicSCC vs) = do
     let vars = Set.fromList (map fst3 vs)
-    forM_ vs $ \b@(var, ex, (s, ty)) -> do
+    for_ vs $ \b@(var, ex, (s, ty)) -> do
       let naked = unguardedVars ex
           blame = BecauseOf (Binding b)
       verifyExpr ex
@@ -117,7 +117,7 @@ verifyExpr (Match e bs _) = do
   for_ bs $ \(pat, body) -> do
     modify (Set.union (bindingSites pat))
     verifyExpr body
-verifyExpr (Function bs _) = do
+verifyExpr (Function bs _) =
   for_ bs $ \(pat, body) -> do
     modify (Set.union (bindingSites pat))
     verifyExpr body

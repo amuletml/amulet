@@ -252,9 +252,8 @@ lowerAnyway (S.VarRef (TvName v) (_, ty)) = do
     _ -> pure (Atom (Ref (mkVar kind v) lty))
 lowerAnyway (S.Record xs _) = case xs of
   [] -> pure (Atom (Lit RecNil))
-  xs -> do
-    xs' <- traverse (lowerBothAtom . snd) xs
-    pure $ Extend (Lit RecNil) (zipWith build xs xs')
+  xs -> Extend (Lit RecNil) . zipWith build xs <$>
+          traverse (lowerBothAtom . snd) xs
   where build (name, _) (atom, ty) = (name, ty, atom)
 lowerAnyway (RecordExt e xs _) = do
   e' <- lowerExprAtom e

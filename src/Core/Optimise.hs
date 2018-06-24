@@ -159,7 +159,7 @@ refresh = refreshTerm mempty where
     Let (Many vs') <$> refreshTerm s' b
   refreshTerm s (Match e branches) = Match <$> refreshAtom s e <*> refreshArms s branches where
     refreshArm :: (IsVar a, MonadNamey m) => VarMap.Map a -> Arm a -> m (Arm a, VarMap.Map a)
-    refreshArm s (a@Arm{ _armPtrn = test, _armBody = branch }) = do
+    refreshArm s a@Arm{ _armPtrn = test, _armBody = branch } = do
       s' <- refreshVs (a ^. armTyvars) s >>= refreshVs (a ^. armVars)
       branch' <- refreshTerm s' branch
       pure ( Arm { _armPtrn = refreshPattern s' test

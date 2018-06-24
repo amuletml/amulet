@@ -320,7 +320,7 @@ subsumes k ty' (TyApp lazy ty) | lazy == tyLazy, _TyVar `isn't` ty' = do
   pure (WrapFn (MkWrapCont wrap "automatic thunking"))
 
 
-subsumes k a b = probablyCast <$> k a b where
+subsumes k a b = probablyCast <$> k a b
 
 
 skolemise :: MonadNamey m => SkolemMotive Typed -> Type Typed -> m (Wrapper Typed, Type Typed)

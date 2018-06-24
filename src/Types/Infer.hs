@@ -99,8 +99,7 @@ check (Match t ps a) ty = do
         PWrapper (w, t') _ _ -> pure $ ExprWrapper w t (annotation t, t')
         _ -> pure t
       pure (Match sc ps (a, ty))
-    _ -> do
-      pure (Match t ps (a, ty))
+    _ -> pure (Match t ps (a, ty))
 
 check (Access rc key a) ty = do
   rho <- freshTV

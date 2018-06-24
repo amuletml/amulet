@@ -162,7 +162,7 @@ tagOccurTerm ann var = tagTerm where
         (ftbs, bs') = unzip (map tagPtrn bs)
         fv = occConcat (fvt : ftbs)
     in (fv, AnnMatch (ann an fv) t' bs') where
-      tagPtrn (a@Arm { _armPtrn = p, _armBody = b, _armVars = pv }) =
+      tagPtrn a@Arm { _armPtrn = p, _armBody = b, _armVars = pv } =
         let (fvb, b') = tagTerm b
             p' = flip var' fvb <$> p
         in (foldr (VarMap.delete . toVar . fst) fvb pv
