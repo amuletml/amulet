@@ -20,7 +20,7 @@ pipeline {
     }
     stage('Build Amulet') {
       steps {
-        sh 'nix-shell . --run \'cabal new-build -j2 test:tests\' --arg ci true'
+        sh 'nix-shell . --run \'cabal new-build -j6 test:tests\' --arg ci true'
       }
     }
     stage('Run tests') {
@@ -33,7 +33,7 @@ pipeline {
         }
         stage('Build Compiler') {
           steps {
-            sh 'nix-shell . --run \'cabal new-build -j2 exe:amc\' --arg ci true'
+            sh 'nix-shell . --run \'cabal new-build -j6 exe:amc\' --arg ci true'
           }
         }
       }
