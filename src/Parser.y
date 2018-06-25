@@ -263,8 +263,8 @@ ListE1(p)
 
 Rows(p, q)
    : {- Empty -}             { [] }
-   | ident p q ',' Rows(p,q) { (getIdent $1, $3) : $5 }
-   | ident p q               { [(getIdent $1, $3)] }
+   | access p q ',' Rows(p,q) { (getIdent $1, $3) : $5 }
+   | access p q               { [(getIdent $1, $3)] }
 
 Lit :: { Located Lit }
     : int                  { lPos1 $1 $ LiInt (getInt $1) }

@@ -1,1 +1,1 @@
-let main x = { x with x = 1 }
+let main x = { x with .x = 1 }

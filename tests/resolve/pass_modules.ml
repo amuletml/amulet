@@ -11,4 +11,4 @@ open X
 
 let b = Y.x
 
-let z = X.{ a = Y.x }
+let z = X.{ .a = Y.x }
