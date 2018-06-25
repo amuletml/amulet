@@ -1,21 +1,21 @@
 {-# LANGUAGE FlexibleContexts, OverloadedStrings, FlexibleInstances, MultiParamTypeClasses #-}
 module Test.Types.Util where
 
-import "amuletml" Types.Infer
-import "amuletml" Types.Unify
+import Types.Infer
+import Types.Unify
 
-import "amuletml" Syntax.Subst
-import "amuletml" Syntax.Var
-import "amuletml" Syntax
+import Syntax.Subst
+import Syntax.Var
+import Syntax
 
-import qualified "amuletml" Control.Monad.Infer as MonadInfer
-import "amuletml" Control.Monad.Infer (Constraint(..), SomeReason(..), TypeError)
+import qualified Control.Monad.Infer as MonadInfer
+import Control.Monad.Infer (Constraint(..), SomeReason(..), TypeError)
 import qualified Control.Monad.Namey as Namey
 
-import "amuletml" Text.Pretty.Semantic
-import "amuletml" Data.Spanned
-import "amuletml" Data.Reason
-import "amuletml" Data.Span
+import Text.Pretty.Semantic
+import Data.Spanned
+import Data.Reason
+import Data.Span
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq

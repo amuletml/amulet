@@ -1,6 +1,7 @@
 language: nix
-install: true
+
 script:
-  - nix-shell . --run "cabal new-configure --enable-tests" --arg ci true
-  - nix-shell . --run "cabal new-build amuletml:amc --ghc-option=-Werror" --arg ci true
-  - nix-shell . --run "cabal new-test --ghc-option=-Werror" --arg ci true
+- nix-shell . --run "cabal new-configure --enable-tests" --arg ci true
+- nix-shell . --run "cabal new-build amuletml:amc --ghc-option=-Werror" --arg ci true
+- nix-shell . --run "cabal new-test --ghc-option=-Werror" --arg ci true
+- nix-shell . --run "hlint --git" --arg ci true

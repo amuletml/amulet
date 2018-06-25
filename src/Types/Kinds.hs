@@ -146,9 +146,8 @@ inferKind (TyApp f x) = do
   case dom of
     Anon d -> do
       x <- checkKind x d
-      case x of
-        -- TyForall{} -> throwError (ImpredicativeApp f x)
-        _ -> pure (TyApp f x, c)
+      -- TyForall{} -> throwError (ImpredicativeApp f x)
+      pure (TyApp f x, c)
     Explicit v k -> do
       x <- checkKind x k
       pure (TyApp f x, apply (Map.singleton v x) c)
@@ -245,7 +244,6 @@ inferGadtConKind con typ tycon args = go typ (reverse (spine (gadtConResult typ)
            for_ (zip args apps) $ \(var, arg) -> do
              (_, k) <- inferKind arg
              checkKind (TyVar (unTvName var)) k
-           pure ()
   go _ _ = do
     tp <- checkKind typ TyType
     throwError . flip ArisingFrom (BecauseOf con) $ gadtConShape
