@@ -50,9 +50,9 @@ builtinsEnv = envOf (scopeFromList builtin) where
       , op "<." floatCmp, op ">." floatCmp, op ">=." floatCmp, op "<=." floatCmp
       , op "==" cmp, op "<>" cmp
       , op "||" boolOp, op "&&" boolOp
-      , (TgInternal "lazy", TyForall a (Just TyType) $ (tyUnit `TyArr` TyVar a) `TyArr` (TyApp tyLazy (TyVar a)))
-      , (TgInternal "force", TyForall a (Just TyType) $ (TyApp tyLazy (TyVar a)) `TyArr` TyVar a)
-      , tp "int", tp "string", tp "bool", tp "unit", tp "float", (TgName "lazy" (-34), TyArr TyType TyType) 
+      , (TgInternal "lazy", TyForall a (Just TyType) $ (tyUnit `TyArr` TyVar a) `TyArr` TyApp tyLazy (TyVar a))
+      , (TgInternal "force", TyForall a (Just TyType) $ TyApp tyLazy (TyVar a) `TyArr` TyVar a)
+      , tp "int", tp "string", tp "bool", tp "unit", tp "float", (TgName "lazy" (-34), TyArr TyType TyType)
       ]
     where a = TvName (TgInternal "a")
 

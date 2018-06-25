@@ -1,4 +1,4 @@
-{-# LANGUAGE PackageImports, ScopedTypeVariables, TupleSections #-}
+{-# LANGUAGE PackageImports, ScopedTypeVariables #-}
 module Test.Syntax.Gen ( genType ) where
 
 import "amuletml" Types.Infer.Builtin (tyUnit, tyBool, tyInt, tyString, tyLazy)
@@ -38,8 +38,7 @@ genType =
         n <- Gen.int (Range.linear 1 10)
         let alpha = map singleton $ cycle ['a'..'z']
 
-        fmap (TyExactRows . nubBy ((==) `on` fst)) . for [1..n] . const $ do
+        fmap (TyExactRows . nubBy ((==) `on` fst)) . for [1..n] . const $
           (,) (alpha !! n) <$> genType
 
     ]
-

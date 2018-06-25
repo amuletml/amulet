@@ -13,3 +13,5 @@
 - warning: {lhs: "f <$> ask", rhs: asks f}
 
 - ignore: {name: "Reduce duplication"}
+- ignore: {name: "Use camelCase"}
+- ignore: {name: "Parse error"}

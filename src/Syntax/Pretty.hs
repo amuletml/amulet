@@ -236,7 +236,7 @@ displayType :: forall p. (Pretty (Var p), Ord (Var p)) => Type p -> Doc
 displayType = prettyType . dropKindVars mempty where
   dropKindVars :: Subst p -> Type p -> Type p
   dropKindVars sub (TyPi x@(Implicit v (Just TyType)) t)
-    | v `kindVarIn` t, v `Set.member` (ftv t) = dropKindVars (Map.insert v TyType sub) t
+    | v `kindVarIn` t, v `Set.member` ftv t = dropKindVars (Map.insert v TyType sub) t
     | otherwise = TyPi x (dropKindVars sub t)
 
   dropKindVars s (TyPi q ty) = TyPi (apply s q) (dropKindVars s ty)
