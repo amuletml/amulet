@@ -13,3 +13,12 @@ src/Parser.info
 
 cabal.project.local*
 .ghc*
+
+doc/*.aux
+doc/*.fdb_latexmk
+doc/*.fls
+doc/*.log
+doc/*.pdf
+doc/*.synctex.gz
+
+/*.xml

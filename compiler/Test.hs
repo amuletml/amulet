@@ -1,5 +1,9 @@
 module Main where
 
+import Test.Tasty.Ingredients.ConsoleReporter
+import Test.Tasty.Ingredients.Basic
+import Test.Tasty.Runners.AntXML
+import Test.Tasty.Ingredients
 import Test.Tasty
 
 import Test.Util
@@ -27,4 +31,5 @@ tests = testGroup "Tests" <$> sequence
   ]
 
 main :: IO ()
-main = tests >>= defaultMain
+main = tests >>= defaultMainWithIngredients [ listingTests, consoleTestReporter `composeReporters` antXMLRunner ]
+
