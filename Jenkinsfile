@@ -1,6 +1,14 @@
 pipeline {
   agent any
   stages {
+    stage('Build documentation') {
+      steps {
+        sh 'nix-shell . --run true' /* fetch Nix dependencies first */
+        timestamps() {
+          sh 'pdflatex doc/tc.tex'
+        }
+      }
+    }
     stage('Configure Cabal project') {
       parallel {
         stage('Configure Cabal project') {
@@ -20,15 +28,18 @@ pipeline {
     }
     stage('Build Amulet') {
       steps {
-        sh 'nix-shell . --run \'cabal new-build -j6 test:tests\' --arg ci true'
+        timestamps() {
+          sh 'nix-shell . --run \'cabal new-build -j6 test:tests\' --arg ci true'
+        }
       }
     }
     stage('Run tests') {
       parallel {
         stage('Run tests') {
           steps {
-            sh '''nix-shell . --run "cabal new-test --ghc-option=-Werror" --arg ci true
-'''
+            timestamps () {
+              sh 'nix-shell . --run "cabal new-run test:tests -- --ant junit.xml " --arg ci true'
+            }
           }
         }
         stage('Build Compiler') {
@@ -37,6 +48,12 @@ pipeline {
           }
         }
       }
+    }
+  }
+  post {
+    always {
+      archiveArtifacts artifacts: '*.pdf'
+      junit 'junit.xml'
     }
   }
 }

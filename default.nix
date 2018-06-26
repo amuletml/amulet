@@ -16,6 +16,13 @@ let
                 });
               };
             };
+            ghc842 = haskell.packages.ghc842.override {
+              overrides = self: super: {
+                io-capture = haskell.lib.overrideCabal super.io-capture (old: rec {
+                  doCheck = false;
+                });
+              };
+            };
           };
         };
       };
@@ -47,6 +54,7 @@ let
       , annotated-wl-pprint
       , tasty-hunit
       , tasty-hedgehog_0_2_0_0
+      , tasty-ant-xml
       , alex
       , happy
       , hlint
@@ -75,6 +83,7 @@ let
         testHaskellDepends = [
           base bytestring Diff directory hedgehog HUnit lens mtl
           pretty-show tasty tasty-hedgehog_0_2_0_0 tasty-hunit text
+          tasty-ant-xml
         ];
 
         libraryToolDepends = if ci then [ alex happy ] else [ alex' happy' ];
