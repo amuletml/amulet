@@ -38,7 +38,7 @@ parenArg f = case f of
 instance (Pretty (Var p)) => Pretty (Expr p) where
   pretty (VarRef v _) = pretty v
   pretty (Let [] _ _) = error "absurd: never parsed"
-  pretty (Let ((Binding n v p _):xs) e _) =
+  pretty (Let (Binding n v p _:xs) e _) =
     let prettyBind (Binding n v p _) = keyword "and" <+> prettyOneBinding n v p
      in keyword "let" <+> prettyOneBinding n v p
             <#> case xs of

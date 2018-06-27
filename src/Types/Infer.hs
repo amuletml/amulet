@@ -352,7 +352,7 @@ inferLetTy closeOver vs =
         (origins, tvs) <- unzip <$> traverse approximate vars
 
         (vs, cs) <- listen . local (names %~ focus (teleFromList tvs)) $
-          ifor (zip tvs vars) $ \i ((_, tyvar), (Binding var exp p ann)) ->
+          ifor (zip tvs vars) $ \i ((_, tyvar), Binding var exp p ann) ->
             case origins !! i of
               Supplied -> do
                 let exp' (Ascription e _ _) = exp' e
