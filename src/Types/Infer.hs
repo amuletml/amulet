@@ -78,9 +78,20 @@ check ex@(Fun pat e an) ty = do
   let tvs = Set.map unTvName (boundTvs p vs)
 
   implies (Arm pat e) domain cs $ do
-    e <- local (typeVars %~ Set.union tvs) . local (names %~ focus vs) $
-      check e cod
-    pure (Fun p e (an, ty))
+    case dom of
+      Implicit{} -> do
+        name <- TvName <$> genName
+        e <- local (typeVars %~ Set.union tvs) $ local (names %~ focus vs) $
+          local (implicits %~ Map.insert domain name) $
+            check e cod
+        let body = Match (VarRef name (an, domain)) [ (p, e) ] (an, cod)
+            pat = Capture name (an, domain)
+        pure (Fun pat body (an, ty))
+      Anon{} -> do
+        e <- local (typeVars %~ Set.union tvs) . local (names %~ focus vs) $
+          check e cod
+        pure (Fun p e (an, ty))
+      _ -> error "invalid quantifier in check Fun"
 
 check (If c t e an) ty = If <$> check c tyBool <*> check t ty <*> check e ty <*> pure (an, ty)
 

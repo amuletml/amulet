@@ -259,10 +259,13 @@ doSolve (ConImplies because not cs ts :<| xs) = do
 
 -- TODO: Better implicit searching
 doSolve (ConImplicit because var scope t :<| xs) = do
-  case Map.lookup t scope of
+  doSolve xs
+  sub <- use solveTySubst
+  let scope' = Map.mapKeys (apply sub) scope
+      t' = apply sub t
+  case Map.lookup t' scope' of
     Just nm -> solveCoSubst . at var ?= ExprApp (VarRef nm (annotation because, t))
     Nothing -> throwError (NoImplicit t)
-  doSolve xs
 
 doSolve (ConFail a v t :<| cs) = do
   doSolve cs

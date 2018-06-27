@@ -95,6 +95,19 @@ checkPattern pt@(PRecord rows ann) ty = do
     pure ((var, p'), (var, t), caps, cs))
   co <- unify pt ty (TyRows rho rowts)
   wrapPattern (PRecord rowps, mconcat caps, concat cons) (ann, ty) co
+
+checkPattern (PTuple xs ann) ty@TyTuple{} = do
+  let go (x:xs) (TyTuple a b) = do
+        (p, bs, cs) <- checkPattern x a
+        (ps, bss, css) <- go xs b
+        pure (p:ps, bs <> bss, cs <> css)
+      go [x] t = do
+        (p, bs, cs) <- checkPattern x t
+        pure ([p], bs, cs)
+      go _ _ = undefined
+  (ps, bs, cs) <- go xs ty
+  pure (PTuple ps (ann, ty), bs, cs)
+
 checkPattern pt@(PType p t ann) ty = do
   (p', it, binds, cs) <- inferPattern p
   t' <- resolveKind (BecauseOf pt) t
