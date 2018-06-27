@@ -77,7 +77,7 @@ check ex@(Fun pat e an) ty = do
   (p, vs, cs) <- checkPattern pat domain
   let tvs = Set.map unTvName (boundTvs p vs)
 
-  implies (Arm pat e) domain cs $ do
+  implies (Arm pat e) domain cs $
     case dom of
       Implicit{} -> do
         name <- TvName <$> genName
