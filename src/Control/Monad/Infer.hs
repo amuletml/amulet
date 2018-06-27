@@ -60,6 +60,7 @@ data Constraint p
   = ConUnify   SomeReason (Var p)  (Type p) (Type p)
   | ConSubsume SomeReason (Var p)  (Type p) (Type p)
   | ConImplies SomeReason (Type p) (Seq.Seq (Constraint p)) (Seq.Seq (Constraint p))
+  | ConImplicit SomeReason (Var p) (Map.Map (Type p) (Var p)) (Type p)
   | ConFail (Ann p) (Var p) (Type p) -- for holes. I hate it.
 
 deriving instance (Show (Ann p), Show (Var p), Show (Expr p), Show (Type p))
@@ -99,6 +100,9 @@ data TypeError where
   WrongQuantifier   :: (Pretty (Var p), Pretty (Var p'), Ord (Var p), Ord (Var p')) => Expr p -> Type p' -> TypeError
   NakedInstArtifact :: (Pretty (Var p), Ord (Var p)) => Expr p -> TypeError
 
+  -- Implicit parameters
+  NoImplicit :: (Ord (Var p), Pretty (Var p)) => Type p -> TypeError
+
   NotPromotable :: Pretty (Var p) => Var p -> Type p -> Doc -> TypeError
   ManyErrors :: [TypeError] -> TypeError
 
@@ -108,11 +112,13 @@ instance (Ord (Var p), Substitutable p (Type p)) => Substitutable p (Constraint 
   ftv (ConUnify _ _ a b) = ftv a `Set.union` ftv b
   ftv (ConSubsume _ _ a b) = ftv a `Set.union` ftv b
   ftv (ConImplies _ t a b) = ftv a `Set.union` ftv b `Set.union` ftv t
+  ftv (ConImplicit _ _ s t) = Map.foldMapWithKey (\k _ -> ftv k) s <> ftv t
   ftv (ConFail _ _ t) = ftv t
 
   apply s (ConUnify e v a b) = ConUnify e v (apply s a) (apply s b)
   apply s (ConSubsume e v a b) = ConSubsume e v (apply s a) (apply s b)
   apply s (ConImplies e t a b) = ConImplies e (apply s t) (apply s a) (apply s b)
+  apply s (ConImplicit e t m i) = ConImplicit e t (Map.mapKeys (apply s) m) (apply s i)
   apply s (ConFail a e t) = ConFail a e (apply s t)
 
 instance Pretty (Var p) => Pretty (Constraint p) where
@@ -121,6 +127,7 @@ instance Pretty (Var p) => Pretty (Constraint p) where
   pretty (ConImplies _ t a b) = brackets (pretty t) <+> hsep (punctuate comma (toList (fmap pretty a)))
                             <+> soperator (char '⊃')
                             <#> indent 2 (vsep (punctuate comma (toList (fmap pretty b))))
+  pretty (ConImplicit _ v _ t) = pretty v <+> " : " <+> pretty t <+> parens (keyword "implicitly")
   pretty ConFail{} = string "fail"
 
 
@@ -313,6 +320,8 @@ instance Pretty TypeError where
         InstHole{} -> highlight "Hole" <+> pretty t
         InstType{} -> highlight "Type" <+> pretty t
         _ -> highlight "Expression"
+  pretty (NoImplicit tau) =
+    vsep [ "Could not find implicit value of type" <+> displayType tau ]
 
 
   pretty (NakedInstArtifact h@InstHole{}) =

@@ -17,6 +17,7 @@ import Data.Traversable
 import Data.Spanned
 import Data.Triple
 import Data.Graph
+import Data.Maybe
 
 import Control.Monad.State
 import Control.Monad.Infer
@@ -40,6 +41,8 @@ import Types.Unify
 
 import Text.Pretty.Semantic
 
+-- import Debug.Trace
+
 -- Solve for the types of lets in a program
 inferProgram :: MonadNamey m => Env -> [Toplevel Resolved] -> m (Either [TypeError] ([Toplevel Typed], Env))
 inferProgram env ct = fmap fst <$> runInfer env (inferProg ct)
@@ -62,8 +65,8 @@ check (Begin xs a) t = do
   pure (Begin (start ++ [end]) (a, t))
 
 check ex@(Let ns b an) t = do
-  (ns, ts) <- inferLetTy (annotateKind (BecauseOf ex)) ns
-  local (names %~ focus ts) $ do
+  (ns, ts, is) <- inferLetTy (annotateKind (BecauseOf ex)) ns
+  local (names %~ focus ts) $ local (implicits %~ Map.union is) $ do
     b <- check b t
     pure (Let ns b (an, t))
 
@@ -233,9 +236,9 @@ inferRows rows = for rows $ \(var', val) -> do
 inferProg :: MonadInfer Typed m
           => [Toplevel Resolved] -> m ([Toplevel Typed], Env)
 inferProg (stmt@(LetStmt ns):prg) = do
-  (ns', ts) <- inferLetTy (closeOver (BecauseOf stmt)) ns
+  (ns', ts, is) <- inferLetTy (closeOver (BecauseOf stmt)) ns
                    `catchError` (throwError . propagateBlame (BecauseOf stmt))
-  local (names %~ focus ts) $
+  local (names %~ focus ts) . local (implicits %~ Map.union is) $
     consFst (LetStmt ns') $
       inferProg prg
 inferProg (st@(ForeignVal v d t ann):prg) = do
@@ -283,6 +286,7 @@ inferLetTy :: forall m. MonadInfer Typed m
            -> [Binding Resolved]
            -> m ( [Binding Typed]
                 , Telescope Typed
+                , Map.Map (Type Typed) (Var Typed)
                 )
 inferLetTy closeOver vs =
   let sccs = depOrder vs
@@ -386,7 +390,13 @@ inferLetTy closeOver vs =
         (vs', binds) <- tcOne s
         fmap ((vs' ++) *** (binds <>)) . local (names %~ focus binds) $ tc cs
       tc [] = pure ([], mempty)
-   in tc sccs
+
+      mkImplicits :: ([Binding Typed], Telescope Typed) -> ([Binding Typed], Telescope Typed, Map.Map (Type Typed) (Var Typed))
+      mkImplicits (bs, t) =
+        let one (Binding v _ BindImplicit (_, t)) = Just (t, v)
+            one _ = Nothing
+         in (bs, t, Map.fromList (mapMaybe one bs))
+   in mkImplicits <$> tc sccs
 
 solveEx :: Type Typed -> Subst Typed -> Map.Map (Var Typed) (Wrapper Typed) -> Expr Typed -> Expr Typed
 solveEx _ ss cs = transformExprTyped go id goType where

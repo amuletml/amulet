@@ -1,0 +1,7 @@
+implicit02-fail.ml[3:12 ..3:14]: error
+  Could not find implicit value of type int
+
+  Arising in the expression
+  │ 
+3 │ let main = foo
+  │ 

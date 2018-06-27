@@ -134,9 +134,11 @@ discharge :: (Reasonable f p, MonadInfer Typed m)
           -> Type Typed
           -> m (Type Typed, Expr Typed -> Expr Typed)
 discharge r (TyWithConstraints cs tau) = leakEqualities r cs *> discharge r tau
-discharge r (TyPi (Implicit _) sigma) = do
+discharge r (TyPi (Implicit tau) sigma) = do
   x <- TvName <$> genName
-  -- tell (Seq.singleton (undefined tau))
+  i <- view implicits
+  tell (Seq.singleton (ConImplicit (BecauseOf r) x i tau))
+
   (sigma', k) <- discharge r sigma
   let wrap ex = ExprWrapper (WrapVar x) ex (annotation ex, sigma)
   pure (sigma', wrap . k)

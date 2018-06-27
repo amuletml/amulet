@@ -256,6 +256,14 @@ doSolve (ConImplies because not cs ts :<| xs) = do
     solveAssumptions .= assump
 
     doSolve xs
+
+-- TODO: Better implicit searching
+doSolve (ConImplicit because var scope t :<| xs) = do
+  case Map.lookup t scope of
+    Just nm -> solveCoSubst . at var ?= ExprApp (VarRef nm (annotation because, t))
+    Nothing -> throwError (NoImplicit t)
+  doSolve xs
+
 doSolve (ConFail a v t :<| cs) = do
   doSolve cs
   sub <- use solveTySubst
