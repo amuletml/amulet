@@ -2,17 +2,16 @@
 module Syntax.Let where
 
 import qualified Data.Set as Set
-import Data.Triple
 import Data.Graph
 
 import Syntax.Var
 import Syntax
 
 depOrder :: (Show (Var p), Show (Ann p), Ord (Var p))
-         => [(Var p, Expr p, Ann p)]
-         -> [SCC (Var p, Expr p, Ann p)]
+         => [Binding p]
+         -> [SCC (Binding p)]
 depOrder = stronglyConnComp . build where
-  build = map (\it@(var, ex, _) -> (it, var, Set.toList (freeIn ex)))
+  build = map (\it@(Binding var ex _ _) -> (it, var, Set.toList (freeIn ex)))
 
 freeIn :: (Show (Var p), Show (Ann p), Ord (Var p)) => Expr p -> Set.Set (Var p)
 freeIn (Ascription e _ _)   = freeIn e
@@ -20,7 +19,9 @@ freeIn (RecordExt e rs _)   = freeIn e <> foldMap (freeIn . snd) rs
 freeIn (BinOp a b c _)      = freeIn a <> freeIn b <> freeIn c
 freeIn (VarRef v _)         = Set.singleton v
 freeIn (Begin es _)         = foldMap freeIn es
-freeIn (Let vs b _)         = (freeIn b <> foldMap (freeIn . snd3) vs) Set.\\ Set.fromList (map fst3 vs)
+freeIn (Let vs b _)         = (freeIn b <> foldMap (freeIn . e) vs) Set.\\ Set.fromList (map v vs) where
+  v (Binding v _ _ _) = v
+  e (Binding _ e _ _) = e
 freeIn (App f x _)          = freeIn f <> freeIn x
 freeIn (Fun p e _)          = freeIn e Set.\\ bound p
 freeIn (Record rs _)        = foldMap (freeIn . snd) rs

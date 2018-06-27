@@ -20,9 +20,10 @@ wellformed tp = case tp of
   TyPromotedCon{} -> pure ()
   TyPi a b -> do
     case a of
-      Implicit _ k -> traverse_ wellformed k
+      Invisible _ k -> traverse_ wellformed k
       Explicit _ k -> wellformed k
       Anon a -> wellformed a 
+      Implicit a -> wellformed a 
     wellformed b
   TyApp a b -> wellformed a *> wellformed b
   TyTuple a b -> wellformed a *> wellformed b
@@ -51,7 +52,7 @@ normType = flatten . uncurry collect . runWriter . spread . applyCons where
     xs -> foldr TyPi t xs
 
   spread :: Type p -> Writer (Set.Set (TyBinder p)) (Type p)
-  spread (TyPi b@Implicit{} t) = spread t <* tell (Set.singleton b)
+  spread (TyPi b@Invisible{} t) = spread t <* tell (Set.singleton b)
   spread (TyArr a t) = TyArr a <$> spread t
   spread x = pure x
 
@@ -74,9 +75,10 @@ skols TyPromotedCon{}  = mempty
 skols (TySkol x) = Set.singleton x
 skols (TyApp a b) = skols a <> skols b
 skols (TyPi b t)
-  | Implicit _ k <- b = skols t <> foldMap skols k
+  | Invisible _ k <- b = skols t <> foldMap skols k
   | Explicit _ k <- b = skols t <> skols k
   | Anon a <- b = skols a <> skols t
+  | Implicit a <- b = skols a <> skols t
 skols (TyRows r rs) = skols r <> foldMap (skols . snd) rs
 skols (TyExactRows rs) = foldMap (skols . snd) rs
 skols (TyTuple a b) = skols a <> skols b

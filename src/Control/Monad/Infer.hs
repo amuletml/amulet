@@ -161,7 +161,7 @@ instantiate :: MonadNamey m
             -> m ( Maybe (Expr Typed -> Expr Typed)
                  , Type Typed
                  , Type Typed)
-instantiate r tp@(TyPi (Implicit v _) ty) = do
+instantiate r tp@(TyPi (Invisible v _) ty) = do
   TgName _ num <- genName
   var <- pure . TyVar . TvName $ case unTvName v of
     TgInternal n -> TgName n num

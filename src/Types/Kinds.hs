@@ -151,6 +151,7 @@ inferKind (TyApp f x) = do
     Explicit v k -> do
       x <- checkKind x k
       pure (TyApp f x, apply (Map.singleton v x) c)
+    Invisible{} -> error "inferKind TyApp: visible argument to implicit quantifier"
     Implicit{} -> error "inferKind TyApp: visible argument to implicit quantifier"
 
 inferKind (TyRows p rs) = do
@@ -193,6 +194,9 @@ checkKind (TyPi binder b) ek = do
   -- _ <- isType ek
   case binder of
     Anon t -> TyArr <$> checkKind t ek <*> checkKind b ek
+    Implicit t -> do
+      t <- checkKind t ek
+      TyPi (Implicit t) <$> checkKind b ek
 
     Explicit v arg -> do
       (arg, kind) <- inferKind arg
@@ -202,19 +206,19 @@ checkKind (TyPi binder b) ek = do
       let bind = Explicit (TvName v) arg
       pure $ TyPi bind b
 
-    Implicit v (Just arg) -> do
+    Invisible v (Just arg) -> do
       (arg, kind) <- inferKind arg
       _ <- subsumes (Const reason) ek kind
       b <- local (names %~ focus (one v arg)) $
         checkKind b ek
-      let bind = Implicit (TvName v) (Just arg)
+      let bind = Invisible (TvName v) (Just arg)
       pure $ TyPi bind b
 
-    Implicit v Nothing -> do
+    Invisible v Nothing -> do
       x <- freshTV
       b <- local (names %~ focus (one v x)) $
         checkKind b ek
-      let bind = Implicit (TvName v) (Just x)
+      let bind = Invisible (TvName v) (Just x)
       pure $ TyPi bind b
 
 checkKind ty u = do
@@ -282,8 +286,9 @@ promoteOrError TyTuple{} = Nothing
 promoteOrError TyRows{} = Just (string "mentions a tuple")
 promoteOrError TyExactRows{} = Just (string "mentions a tuple")
 promoteOrError (TyApp a b) = promoteOrError a <|> promoteOrError b
-promoteOrError (TyPi (Implicit _ a) b) = join (traverse promoteOrError a) <|> promoteOrError b
+promoteOrError (TyPi (Invisible _ a) b) = join (traverse promoteOrError a) <|> promoteOrError b
 promoteOrError (TyPi (Explicit _ a) b) = promoteOrError a <|> promoteOrError b
+promoteOrError (TyPi (Implicit a) b) = promoteOrError a <|> promoteOrError b
 promoteOrError (TyPi (Anon a) b) = promoteOrError a <|> promoteOrError b
 promoteOrError TyCon{} = Nothing
 promoteOrError TyVar{} = Nothing

@@ -7,7 +7,6 @@ import qualified Data.Set as Set
 import Data.Foldable
 import Data.Spanned
 import Data.Reason
-import Data.Triple
 import Data.Graph
 import Data.Span
 
@@ -83,16 +82,17 @@ verifyProgram = traverse_ verifyStmt where
 
 verifyBindingGroup :: MonadVerify m
                    => (BindingSite -> Set.Set BindingSite -> Set.Set BindingSite)
-                   -> SomeReason -> [(Var Typed, Expr Typed, Ann Typed)] -> m ()
+                   -> SomeReason -> [Binding Typed] -> m ()
 verifyBindingGroup k _ = traverse_ verifyScc . depOrder where
-  verifyScc (AcyclicSCC (v, e, (s, t))) = do
+  verifyScc (AcyclicSCC (Binding v e _(s, t))) = do
     modify (k (BindingSite v s t))
     verifyExpr e
   verifyScc (CyclicSCC vs) = do
-    let vars = Set.fromList (map fst3 vs)
-    for_ vs $ \b@(var, ex, (s, ty)) -> do
+    let vars = Set.fromList (map var vs)
+        var (Binding v _ _ _) = v
+    for_ vs $ \b@(Binding var ex _ (s, ty)) -> do
       let naked = unguardedVars ex
-          blame = BecauseOf (Binding b)
+          blame = BecauseOf b
       verifyExpr ex
       modify (k (BindingSite var s ty))
       unless (naked `Set.disjoint` vars) $
@@ -146,7 +146,9 @@ unguardedVars (RecordExt e rs _)   = unguardedVars e <> foldMap (unguardedVars .
 unguardedVars (BinOp a b c _)      = unguardedVars a <> unguardedVars b <> unguardedVars c
 unguardedVars (VarRef v _)         = Set.singleton v
 unguardedVars (Begin es _)         = foldMap unguardedVars es
-unguardedVars (Let vs b _)         = (unguardedVars b <> foldMap (unguardedVars . snd3) vs) Set.\\ Set.fromList (map fst3 vs)
+unguardedVars (Let vs b _)         = (unguardedVars b <> foldMap (unguardedVars . e) vs) Set.\\ Set.fromList (map v vs) where
+  v (Binding v _ _ _) = v
+  e (Binding _ e _ _) = e
 unguardedVars (App f x _)          = unguardedVars f <> unguardedVars x
 unguardedVars Fun{}                = mempty
 unguardedVars (Record rs _)        = foldMap (unguardedVars . snd) rs
@@ -177,16 +179,6 @@ bindingSites (PRecord rs _) = foldMap (bindingSites . snd) rs
 bindingSites (PTuple ps _) = foldMap bindingSites ps
 bindingSites (PWrapper _ p _) = bindingSites p
 
-newtype Binding p = Binding (Var p, Expr p, Ann p)
-
-instance Spanned (Ann p) => Spanned (Binding p) where
-  annotation (Binding (_, _, x)) = annotation x
-
-instance Pretty (Var p) => Pretty (Binding p) where
-  pretty (Binding v) = pretty (LetStmt [v])
-
-instance (Spanned (Ann p), Pretty (Var p)) => Reasonable Binding p where
-  blame _ = string "the" <+> highlight "binding"
 
 instance Ord BindingSite where
   BindingSite v _ _ `compare` BindingSite v' _ _ = v `compare` v'

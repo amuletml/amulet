@@ -132,9 +132,15 @@ quantifier r t = do
 discharge :: (Reasonable f p, MonadInfer Typed m)
           => f p
           -> Type Typed
-          -> m (Type Typed)
+          -> m (Type Typed, Expr Typed -> Expr Typed)
 discharge r (TyWithConstraints cs tau) = leakEqualities r cs *> discharge r tau
-discharge _ t = pure t
+discharge r (TyPi (Implicit _) sigma) = do
+  x <- TvName <$> genName
+  -- tell (Seq.singleton (undefined tau))
+  (sigma', k) <- discharge r sigma
+  let wrap ex = ExprWrapper (WrapVar x) ex (annotation ex, sigma)
+  pure (sigma', wrap . k)
+discharge _ t = pure (t, id)
 
 litTy :: Lit -> Type Typed
 litTy LiInt{} = tyInt

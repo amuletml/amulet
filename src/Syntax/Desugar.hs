@@ -26,7 +26,7 @@ import Syntax
 -- | Desugar a program into a more simple representation
 desugarProgram :: forall m. MonadNamey m => [Toplevel Resolved] -> m [Toplevel Resolved]
 desugarProgram = traverse statement where
-  statement (LetStmt vs) = LetStmt <$> traverse (second3A expr) vs
+  statement (LetStmt vs) = LetStmt <$> traverse binding vs
   statement (Module v ss) = Module v <$> traverse statement ss
   statement x = pure x
 
@@ -34,7 +34,7 @@ desugarProgram = traverse statement where
   expr x@VarRef{} = pure x
   expr x@Hole{} = pure x
   expr (ExprWrapper w e a) = ExprWrapper w <$> expr e <*> pure a
-  expr (Let vs e a) = Let <$> traverse (second3A expr) vs <*> expr e <*> pure a
+  expr (Let vs e a) = Let <$> traverse binding vs <*> expr e <*> pure a
   expr (If c t e a) = If <$> expr c <*> expr t <*> expr e <*> pure a
   expr (App f x a) = App <$> expr f <*> expr x <*> pure a
   expr (Fun p b a) = Fun p <$> expr b <*> pure a
@@ -62,7 +62,7 @@ desugarProgram = traverse statement where
       Literal{} -> go vl
       _ -> do
         (Capture lv _, ref) <- fresh an
-        Let [(lv, vl, an)] <$> go ref <*> pure an
+        Let [Binding lv vl BindRegular an] <$> go ref <*> pure an
 
   expr (RightSection vl op an) = expr (App op vl an)
   expr (BothSection o _) = pure o
@@ -79,7 +79,7 @@ desugarProgram = traverse statement where
   expr (TupleSection es a) = do
     es' <- traverse (traverse expr) es
     (args, binds, tuple) <- foldrM (buildTuple a) ([], [], []) es'
-    pure $ foldf (\(v, e) r -> Let [(v, e, a)] r a) binds
+    pure $ foldf (\(v, e) r -> Let [Binding v e BindRegular a] r a) binds
          $ foldf (\v e -> Fun v e a) args
          $ Tuple tuple a
 
@@ -103,6 +103,8 @@ desugarProgram = traverse statement where
   buildTuple a (Just e) (as, vs, tuple) = do
     (Capture v _, ref) <- fresh a
     pure (as, (v, e):vs, ref:tuple)
+
+  binding (Binding v e p a) = Binding v <$> expr e <*> pure p <*> pure a
 
   foldf f xs v = foldr f v xs
 

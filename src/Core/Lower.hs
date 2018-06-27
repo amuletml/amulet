@@ -112,10 +112,10 @@ lowerAt (Ascription e _ _) t = lowerAt e t
 lowerAt (S.Let vs t _) ty = do
   let sccs = depOrder vs
       lowerScc (CyclicSCC vs) = CyclicSCC <$> do
-        for vs $ \(TvName var, ex, (_, ty)) -> do
+        for vs $ \(S.Binding (TvName var) ex _ (_, ty)) -> do
           let ty' = lowerType ty
           (mkVal var,ty',) <$> lowerAtTerm ex ty'
-      lowerScc (AcyclicSCC (TvName var, ex, (_, ty))) = AcyclicSCC <$> do
+      lowerScc (AcyclicSCC (S.Binding (TvName var) ex _ (_, ty))) = AcyclicSCC <$> do
         let ty' = lowerType ty
         (mkVal var, ty',) <$> lowerAtTerm ex ty'
       foldScc (AcyclicSCC v) = C.Let (One v)
@@ -194,6 +194,7 @@ lowerAt (ExprWrapper wrap e an) ty =
     S.TypeApp t -> do
       ex' <- lowerAtAtom e (lowerType (S.getType e))
       pure (C.TyApp ex' (lowerType t))
+    S.ExprApp x -> lowerExprTerm (S.App e x an)
     S.TypeLam (Skolem (TvName (TgName _ id)) (TvName (TgName n _)) _ _) k ->
       let ty' (ForallTy (Relevant v) _ t) = substituteInType (VarMap.singleton v (VarTy var)) t
           ty' x = x
@@ -280,9 +281,10 @@ lowerType t@S.TyTuple{} = go t where
   go (S.TyTuple a b) = ExactRowsTy [("_1", lowerType a), ("_2", lowerType b)]
   go x = lowerType x
 lowerType (S.TyPi bind b)
-  | S.Implicit v Nothing <- bind = ForallTy (Relevant (mkTyvar (S.unTvName v))) StarTy (lowerType b)
-  | S.Implicit v (Just c) <- bind = ForallTy (Relevant (mkTyvar (S.unTvName v))) (lowerType c) (lowerType b)
+  | S.Invisible v Nothing <- bind = ForallTy (Relevant (mkTyvar (S.unTvName v))) StarTy (lowerType b)
+  | S.Invisible v (Just c) <- bind = ForallTy (Relevant (mkTyvar (S.unTvName v))) (lowerType c) (lowerType b)
   | S.Explicit v c <- bind = ForallTy (Relevant (mkTyvar (S.unTvName v))) (lowerType c) (lowerType b)
+  | S.Implicit a <- bind = ForallTy Irrelevant (lowerType a) (lowerType b)
   | S.Anon a <- bind = ForallTy Irrelevant (lowerType a) (lowerType b)
 lowerType (S.TyApp a b) = AppTy (lowerType a) (lowerType b)
 lowerType (S.TyRows rho vs) = RowsTy (lowerType rho) (map (fmap lowerType) vs)
@@ -334,8 +336,10 @@ lowerProg [] = pure []
 lowerProg (ForeignVal (TvName t) ex tp _:prg) =
   (Foreign (mkVal t) (lowerType tp) ex:) <$> lowerProg prg
 lowerProg (LetStmt vs:prg) = do
-  let env' = Map.fromList (map (\(TvName v, _, (_, ant)) -> (v, lowerType ant)) vs)
-  (:) <$> local (\s -> s { vars = env' }) (StmtLet <$> for vs (\(TvName v, ex, (_, ant)) -> (mkVal v,lowerType ant,) <$> lowerPolyBind (lowerType ant) ex))
+  let env' = Map.fromList (map (\(S.Binding (TvName v) _ _ (_, ant)) -> (v, lowerType ant)) vs)
+
+  (:) <$> local (\s -> s { vars = env' }) (StmtLet <$> for vs (\(S.Binding (TvName v) ex _ (_, ant))
+                                                                  -> (mkVal v,lowerType ant,) <$> lowerPolyBind (lowerType ant) ex))
       <*> lowerProg prg
 lowerProg (TypeDecl (TvName var) _ cons:prg) = do
   let cons' = map (\case

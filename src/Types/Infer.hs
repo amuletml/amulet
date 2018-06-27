@@ -17,7 +17,6 @@ import Data.Traversable
 import Data.Spanned
 import Data.Triple
 import Data.Graph
-import Data.Span
 
 import Control.Monad.State
 import Control.Monad.Infer
@@ -121,10 +120,10 @@ check e ty = do
 
 infer :: MonadInfer Typed m => Expr Resolved -> m (Expr Typed, Type Typed)
 infer (VarRef k a) = do
-  (cont, old, new) <- third3A (discharge (VarRef k a)) =<< lookupTy' k
+  (cont, old, (new, cont')) <- third3A (discharge (VarRef k a)) =<< lookupTy' k
   case cont of
     Nothing -> pure (VarRef (TvName k) (a, old), old)
-    Just cont -> pure (cont (VarRef (TvName k) (a, old)), new)
+    Just cont -> pure (cont' (cont (VarRef (TvName k) (a, old))), new)
 
 infer (Fun p e an) = let blame = Arm p e in do
   (p, dom, ms, cs) <- inferPattern p
@@ -162,6 +161,7 @@ infer ex@(App f (InstType t ta) a) = do
     Anon{} ->
       throwError . flip WrongQuantifier ot . flip InstType (ta, undefined) =<< resolveKind (BecauseOf ex) t
     Implicit{} -> error "invalid implicit quantification in App"
+    Invisible{} -> error "invalid invisible quantification in App"
 
 infer ex@(App f x a) = do
   (f, ot) <- infer f
@@ -172,6 +172,7 @@ infer ex@(App f x a) = do
       pure (App (k f) x (a, c), c)
     Explicit{} -> throwError (ArisingFrom (WrongQuantifier x ot) (BecauseOf ex))
     Implicit{} -> error "invalid implicit quantification in App"
+    Invisible{} -> error "invalid invisible quantification in App"
 
 infer ex@(BinOp l o r a) = do
   (o, (ld, c, k1)) <- secondA (decompose ex _TyArr) =<< infer o
@@ -279,8 +280,8 @@ approxType _ = do
 
 inferLetTy :: forall m. MonadInfer Typed m
            => (Type Typed -> m (Type Typed))
-           -> [(Var Resolved, Expr Resolved, Ann Resolved)]
-           -> m ( [(Var Typed, Expr Typed, Ann Typed)]
+           -> [Binding Resolved]
+           -> m ( [Binding Typed]
                 , Telescope Typed
                 )
 inferLetTy closeOver vs =
@@ -313,9 +314,9 @@ inferLetTy closeOver vs =
              [] -> pure ty
              vs -> annotateKind r $ foldr (flip TyForall Nothing) ty vs
 
-      approximate :: (Var Resolved, Expr Resolved, Span)
+      approximate :: Binding Resolved
                   -> m (Origin, (Var Typed, Type Typed))
-      approximate (v, e, _) = do
+      approximate (Binding v e _ _) = do
         (ty, st) <- runStateT (approxType e) Supplied
         ty' <- generalise (BecauseOf e) ty
         pure (st, (TvName v, if not (wasGuessed st) then ty' else ty))
@@ -327,11 +328,11 @@ inferLetTy closeOver vs =
         unless (null (sks `Set.difference` env)) $
           throwError (blameSkol (EscapedSkolems (Set.toList (skols ty)) ty) (unTvName var, exp))
 
-      tcOne :: SCC (Var Resolved, Expr Resolved, Ann Resolved)
-            -> m ( [(Var Typed, Expr Typed, Ann Typed)]
+      tcOne :: SCC (Binding Resolved)
+            -> m ( [Binding Typed]
                  , Telescope Typed )
 
-      tcOne (AcyclicSCC decl@(var, exp, ann)) = do
+      tcOne (AcyclicSCC decl@(Binding var exp p ann)) = do
         (origin, tv) <- approximate decl
         ((exp', ty), cs) <- listen . local (names %~ focus (uncurry one tv)) $
           case origin of
@@ -345,42 +346,42 @@ inferLetTy closeOver vs =
               _ <- unify exp ty (snd tv)
               pure (exp', ty)
         (tp, k) <- figureOut (var, BecauseOf exp) ty cs
-        pure ( [(TvName var, k exp', (ann, tp))], one var tp )
+        pure ( [Binding (TvName var) (k exp') p (ann, tp)], one var tp )
 
       tcOne (CyclicSCC vars) = do
         (origins, tvs) <- unzip <$> traverse approximate vars
 
         (vs, cs) <- listen . local (names %~ focus (teleFromList tvs)) $
-          ifor (zip tvs vars) $ \i ((_, tyvar), (var, exp, ann)) ->
+          ifor (zip tvs vars) $ \i ((_, tyvar), (Binding var exp p ann)) ->
             case origins !! i of
               Supplied -> do
                 let exp' (Ascription e _ _) = exp' e
                     exp' e = e
                 exp <- check (exp' exp) tyvar
-                pure (TvName var, exp, ann, tyvar)
+                pure (Binding (TvName var) exp p (ann, tyvar), tyvar)
               Guessed -> do
                 (exp', ty) <- infer exp
                 _ <- unify exp ty tyvar
-                pure (TvName var, exp', ann, ty)
+                pure (Binding (TvName var) exp' p (ann, ty), ty)
 
         cur <- genName
         (solution, cs) <- case solve cur cs of
           Right x -> pure x
           Left e -> throwError e
-        let solveOne :: (Var Typed, Expr Typed, Span, Type Typed)
-                     -> m ((Var Typed, Expr Typed, Ann Typed), Telescope Typed)
-            solveOne (var, exp, ann, given) =
+        let solveOne :: (Binding Typed, Type Typed)
+                     -> m (Binding Typed, Telescope Typed)
+            solveOne (Binding var exp p ann, given) =
               let figure = apply solution
                in do
                   ty <- closeOver (figure given)
                   skolCheck var (BecauseOf exp) ty
-                  pure ( (var, solveEx ty solution cs exp, (ann, ty))
+                  pure ( Binding var (solveEx ty solution cs exp) p (fst ann, ty)
                        , one var ty )
             squish = fmap (second mconcat . unzip)
          in squish . traverse solveOne $ vs
 
-      tc :: [SCC (Var Resolved, Expr Resolved, Ann Resolved)]
-         -> m ( [(Var Typed, Expr Typed, Ann Typed)] , Telescope Typed )
+      tc :: [SCC (Binding Resolved)]
+         -> m ( [Binding Typed] , Telescope Typed )
       tc (s:cs) = do
         (vs', binds) <- tcOne s
         fmap ((vs' ++) *** (binds <>)) . local (names %~ focus binds) $ tc cs
@@ -396,6 +397,7 @@ solveEx _ ss cs = transformExprTyped go id goType where
   go x = x
 
   goWrap (TypeApp t) = TypeApp (goType t)
+  goWrap (ExprApp t) = ExprApp (solveEx undefined ss cs t)
   goWrap (Cast c) = case c of
     ReflCo{} -> IdWrap
     AssumedCo a b | a == b -> IdWrap

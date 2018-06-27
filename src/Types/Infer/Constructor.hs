@@ -60,7 +60,7 @@ closeOverGadt r cons cty =
       pushCons c t = TyWithConstraints c t
 
       forall [] t = t
-      forall xs t = foldr (TyPi . flip Implicit Nothing) t xs
+      forall xs t = foldr (TyPi . flip Invisible Nothing) t xs
    in annotateKind r $ if Set.null fv
          then pushCons cons cty
          else pushCons cons (forall (Set.toList fv) cty)

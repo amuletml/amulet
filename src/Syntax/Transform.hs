@@ -2,7 +2,6 @@
 module Syntax.Transform where
 
 import Control.Arrow
-import Data.Triple
 
 import Syntax.Var
 import Syntax
@@ -29,7 +28,8 @@ transformType ft = goT where
   transM (ByExistential v ty) = ByExistential v (goT ty)
 
   transB (Anon t) = Anon (goT t)
-  transB (Implicit x k) = Implicit x (fmap goT k)
+  transB (Implicit t) = Implicit (goT t)
+  transB (Invisible x k) = Invisible x (fmap goT k)
   transB (Explicit x k) = Explicit x (goT k)
 
   goT = transT . ft
@@ -60,7 +60,7 @@ transformExpr
   -> Expr p -> Expr p
 transformExpr fe = goE where
   transE (VarRef v a) = VarRef v a
-  transE (Let vs r a) = Let (map (second3 goE) vs) (goE r) a
+  transE (Let vs r a) = Let (map goB vs) (goE r) a
   transE (If c t f a) = If (goE c) (goE t) (goE f) a
   transE (App f x a) = App (goE f) (goE x) a
   transE (Fun p b a) = Fun p (goE b) a
@@ -93,6 +93,8 @@ transformExpr fe = goE where
   transE (ExprWrapper w e a) = ExprWrapper w (goE e) a
   transE (Lazy e a) = Lazy (goE e) a
 
+  goB (Binding v e p a) = Binding v (goE e) p a
+
   goE = transE . fe
 
 transformExprTyped
@@ -102,7 +104,7 @@ transformExprTyped
   -> Expr Typed -> Expr Typed
 transformExprTyped fe fc ft = goE where
   transE (VarRef v a) = VarRef v (goA a)
-  transE (Let vs r a) = Let (map (trimap id goE goA) vs) (goE r) (goA a)
+  transE (Let vs r a) = Let (map transBind vs) (goE r) (goA a)
   transE (If c t f a) = If (goE c) (goE t) (goE f) (goA a)
   transE (App f x a) = App (goE f) (goE x) (goA a)
   transE (Fun p b a) = Fun (goP p) (goE b) (goA a)
@@ -133,9 +135,12 @@ transformExprTyped fe fc ft = goE where
 
   transE (ExprWrapper w e a) = ExprWrapper (goW w) (goE e) (goA a)
   transE (Lazy e a) = Lazy (goE e) (goA a)
+  
+  transBind (Binding v e p a) = Binding v (goE e) p (goA a)
 
   goW (Cast c) = Cast (goC c)
   goW (TypeApp t) = TypeApp (goT t)
+  goW (ExprApp t) = ExprApp (goE t)
   goW (WrapFn f) = WrapFn f
   goW (x :> y) = goW x :> goW y
   goW x@TypeLam{} = x

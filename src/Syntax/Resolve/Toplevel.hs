@@ -3,13 +3,12 @@ module Syntax.Resolve.Toplevel
   ( extractToplevel, extractToplevels
   ) where
 
-import Data.Triple
-
 import Syntax.Var
 import Syntax
 
 extractToplevel :: Semigroup (Var p) => Toplevel p -> ([Var p], [Var p])
-extractToplevel (LetStmt d) = (map fst3 d, [])
+extractToplevel (LetStmt d) = (map b d, []) where
+  b (Binding v _ _ _) = v
 extractToplevel (ForeignVal v _ _ _) = ([v], [])
 extractToplevel (TypeDecl v _ c) = (map ctor c, [v]) where
   ctor (UnitCon v _) = v

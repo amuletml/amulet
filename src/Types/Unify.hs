@@ -336,7 +336,7 @@ skolemise motive ty@TyPi{} | Just (tv, k, t) <- isSkolemisableTyBinder ty = do
 skolemise _ ty = pure (IdWrap, ty)
 
 isSkolemisableTyBinder :: Type Typed -> Maybe (Var Typed, Maybe (Type Typed), Type Typed)
-isSkolemisableTyBinder (TyPi (Implicit v k) c) = Just (v, k, c)
+isSkolemisableTyBinder (TyPi (Invisible v k) c) = Just (v, k, c)
 isSkolemisableTyBinder (TyPi (Explicit v k) c) = Just (v, Just k, c)
 isSkolemisableTyBinder _ = Nothing
 

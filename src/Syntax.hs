@@ -14,7 +14,6 @@ import Data.Span
 import Data.List.NonEmpty(NonEmpty ((:|)))
 import Data.Semigroup (sconcat)
 import Data.Typeable
-import Data.Triple
 import Data.Maybe
 import Data.Data
 
@@ -28,9 +27,21 @@ type family Ann a :: * where
   Ann Resolved = Span
   Ann Typed = (Span, Type Typed)
 
+
+data Plicity = BindImplicit | BindRegular
+  deriving (Eq, Show, Ord, Data, Typeable)
+
+data Binding p
+  = Binding (Var p) (Expr p) Plicity (Ann p)
+
+deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Binding p)
+deriving instance (Show (Var p), Show (Ann p)) => Show (Binding p)
+deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Binding p)
+deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Binding p)
+
 data Expr p
   = VarRef (Var p) (Ann p)
-  | Let [(Var p, Expr p, Ann p)] (Expr p) (Ann p)
+  | Let [Binding p] (Expr p) (Ann p)
   | If (Expr p) (Expr p) (Expr p) (Ann p)
   | App (Expr p) (Expr p) (Ann p)
   | Fun (Pattern p) (Expr p) (Ann p)
@@ -77,6 +88,7 @@ deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Expr
 
 data Wrapper p
   = TypeApp (Type p)
+  | ExprApp (Expr p)
   | Cast (Coercion p)
   | TypeLam (Skolem p) (Type p)
   | (:>) (Wrapper p) (Wrapper p)
@@ -149,7 +161,8 @@ data Type p
 
 data TyBinder p
   = Anon { _tyBinderType :: Type p } -- a function type
-  | Implicit
+  | Implicit { _tyBinderType :: Type p } -- implicit function type
+  | Invisible
     { _tyBinderVar :: Var p
     , _tyBinderArg :: Maybe (Type p) } -- a forall. type
   | Explicit
@@ -211,7 +224,7 @@ deriving instance Ord (Var p) => Ord (Coercion p)
 deriving instance Eq (Var p) => Eq (Coercion p)
 
 data Toplevel p
-  = LetStmt [(Var p, Expr p, Ann p)]
+  = LetStmt [Binding p]
   | ForeignVal (Var p) Text (Type p) (Ann p)
   | TypeDecl (Var p) [Var p] [Constructor p]
   | Module (Var p) [Toplevel p]
@@ -241,8 +254,8 @@ pattern TyArr t t' <- TyPi (Anon t) t' where
   TyArr t ty = TyPi (Anon t) ty
 
 pattern TyForall :: Var p -> Maybe (Type p) -> Type p -> Type p
-pattern TyForall v k t' <- TyPi (Implicit v k) t' where
-  TyForall v k ty = TyPi (Implicit v k) ty
+pattern TyForall v k t' <- TyPi (Invisible v k) t' where
+  TyForall v k ty = TyPi (Invisible v k) ty
 
 
 unTvName :: Var Typed -> Var Resolved
@@ -265,9 +278,12 @@ makePrisms ''Lit
 makeLenses ''Skolem
 makeLenses ''TyBinder
 
+instance Spanned (Ann p) => Spanned (Binding p) where
+  annotation (Binding _ _ _ x) = annotation x
+
 instance (Spanned (Constructor p), Spanned (Ann p)) => Spanned (Toplevel p) where
-  annotation (LetStmt [(_, _, x)]) = annotation x
-  annotation (LetStmt ((_, _, x):vs)) = sconcat (annotation x :| map (annotation . thd3) vs)
+  annotation (LetStmt [b]) = annotation b
+  annotation (LetStmt (b:vs)) = sconcat (annotation b :| map annotation vs)
   annotation (TypeDecl _ _ (x:xs)) = sconcat (annotation x :| map annotation xs)
   annotation (ForeignVal _ _ _ x) = annotation x
   annotation _ = internal
@@ -279,7 +295,7 @@ _TyArr = prism (uncurry (TyPi . Anon)) go where
 
 isSkolemisable :: Type Typed -> Bool
 isSkolemisable (TyPi Explicit{} _) = True
-isSkolemisable (TyPi Implicit{} _) = True
+isSkolemisable (TyPi Invisible{} _) = True
 isSkolemisable _ = False
 
 instance Spanned (Ann p) => Spanned (Expr p) where
