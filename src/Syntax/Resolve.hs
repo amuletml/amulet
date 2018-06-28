@@ -134,13 +134,13 @@ resolveModule (r@(ForeignVal v t ty a):rs) = do
     <*> resolveModule rs
 
   where wrap x = foldr (TyPi . flip Invisible Nothing) x (toList (ftv x))
-resolveModule (TypeDecl t vs cs:rs) = do
+resolveModule (d@(TypeDecl t vs cs):rs) = do
   t'  <- tagVar t
-  vs' <- traverse tagVar vs
+  (vs', sc) <- resolveTele d vs
   let c = map extractCons cs
   c' <- traverse tagVar c
   extendTy (t, t') $ extendN (zip c c') $ (:)
-    . TypeDecl t' vs' <$> traverse (resolveCons (zip vs vs')) (zip cs c')
+    . TypeDecl t' vs' <$> traverse (resolveCons sc) (zip cs c')
     <*> resolveModule rs
 
   where resolveCons _ (UnitCon _ a, v') = pure $ UnitCon v' a
@@ -198,6 +198,23 @@ lookupTy v = asks tyScope >>= lookupVar NotInScope v
 
 lookupTyvar :: MonadResolve m => Var Parsed -> m (Var Resolved)
 lookupTyvar v = asks tyvarScope >>= lookupVar NotInScope v
+
+resolveTele :: (MonadResolve m, Reasonable f p) => f p -> [TyConArg Parsed] -> m ([TyConArg Resolved], [(Var Parsed, Var Resolved)])
+resolveTele r (TyVarArg v:as) = do
+  v' <- tagVar v
+  (as, vs) <- resolveTele r as
+  pure (TyVarArg v':as, (v, v'):vs)
+resolveTele r (TyAnnArg v k:as) = do
+  v' <- tagVar v
+  ((as, vs), k) <- extendTyvar (v, v') $ 
+    (,) <$> resolveTele r as <*> reType r k
+  pure (TyAnnArg v' k:as, (v, v'):vs)
+resolveTele r (TyVisArg v k:as) = do
+  v' <- tagVar v
+  ((as, vs), k) <- extendTyvar (v, v') $ 
+    (,) <$> resolveTele r as <*> reType r k
+  pure (TyVisArg v' k:as, (v, v'):vs)
+resolveTele _ [] = pure ([], [])
 
 reExpr :: MonadResolve m => Expr Parsed -> m (Expr Resolved)
 reExpr r@(VarRef v a) = flip VarRef a <$> (lookupEx v `catchJunk` r)

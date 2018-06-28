@@ -169,10 +169,10 @@ instantiate :: MonadNamey m
                  , Type Typed
                  , Type Typed)
 instantiate r tp@(TyPi (Invisible v _) ty) = do
-  TgName _ num <- genName
+  TgName n num <- genName
   var <- pure . TyVar . TvName $ case unTvName v of
-    TgInternal n -> TgName n num
-    TgName n _ -> TgName n num
+    TgInternal _ -> TgName n num
+    TgName _ _ -> TgName n num
   let map = Map.singleton v var
 
       appThisTy e = ExprWrapper (TypeApp var) e (annotation e, apply map ty)

@@ -22,6 +22,7 @@ import Syntax.Subst
 import Syntax.Var
 import Syntax
 
+
 inferPattern :: MonadInfer Typed m
              => Pattern Resolved
              -> m ( Pattern Typed -- the pattern
@@ -66,7 +67,7 @@ checkPattern :: MonadInfer Typed m
                   , [(Type Typed, Type Typed)]
                   )
 checkPattern (Wildcard ann) ty = pure (Wildcard (ann, ty), mempty, [])
-checkPattern (Capture v ann) ty = pure (Capture (TvName v) (ann, ty), one v ty, [])
+checkPattern (Capture v ann) ty = pure (PType (Capture (TvName v) (ann, ty)) ty (ann, ty), one v ty, [])
 checkPattern ex@(Destructure con ps ann) target =
   case ps of
     Nothing -> do

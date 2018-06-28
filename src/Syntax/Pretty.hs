@@ -196,6 +196,11 @@ instance (Pretty (Var p)) => Pretty (Toplevel p) where
          , keyword "end"
          ]
 
+instance Pretty (Var p) => Pretty (TyConArg p) where
+  pretty (TyVarArg var) = pretty var
+  pretty (TyAnnArg v k) = braces (pretty v <+> colon <+> pretty k)
+  pretty (TyVisArg v k) = braces (pretty v <+> colon <+> pretty k)
+
 instance (Pretty (Var p)) => Pretty [Toplevel p] where
   pretty = vcat . map pretty
 

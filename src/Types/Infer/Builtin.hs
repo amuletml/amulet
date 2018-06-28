@@ -138,7 +138,6 @@ discharge r (TyPi (Implicit tau) sigma) = do
   x <- TvName <$> genName
   i <- view implicits
   tell (Seq.singleton (ConImplicit (BecauseOf r) x i tau))
-
   (sigma', k) <- discharge r sigma
   let wrap ex = ExprWrapper (WrapVar x) ex (annotation ex, sigma)
   pure (sigma', wrap . k)

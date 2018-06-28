@@ -20,6 +20,7 @@ import qualified Data.Set as Set
 import Data.Traversable
 import Data.Foldable
 import Data.Triple
+import Data.Maybe
 
 import Types.Wellformed (wellformed)
 import Types.Infer.Builtin
@@ -83,22 +84,46 @@ annotateKind r ty = do
 
   pure (apply sub ty)
 
+initialKind :: MonadKind m => [TyConArg Resolved] -> KindT m (Type Typed, Telescope Typed)
+initialKind (TyVarArg v:as) = do
+  (k, t) <- initialKind as
+  ty <- freshTV
+  pure (TyArr ty k, one v ty <> t)
+initialKind (TyAnnArg v k:as) = do
+  k <- checkKind k TyType
+  (s, t) <- initialKind as
+  pure (TyForall (TvName v) (Just k) s, t <> one v k)
+initialKind (TyVisArg v k:as) = do
+  k <- checkKind k TyType
+  (s, t) <- initialKind as
+  pure (TyPi (Explicit (TvName v) k) s, t <> one v k)
+initialKind [] = pure (TyType, mempty)
+
 resolveTyDeclKind :: MonadKind m
                   => SomeReason
-                  -> Var Resolved -> [Var Resolved]
+                  -> Var Resolved -> [TyConArg Resolved]
                   -> [Constructor Resolved]
-                  -> m (Type Typed)
-resolveTyDeclKind reason tycon args cons = solveForKind reason $ do
-  ks <- replicateM (length args) freshTV
-  let kind = foldr TyArr TyType ks
-      scope = one tycon kind <> teleFromList (zip (map TvName args) ks)
+                  -> m (Type Typed, Type Typed, [TyConArg Typed])
+resolveTyDeclKind reason tycon args cons = do
+  let argTvName (TyVarArg v)   = Just (TvName v)
+      argTvName TyAnnArg{} = Nothing
+      argTvName (TyVisArg v _) = Just (TvName v)
+      vs = mapMaybe argTvName args
+  k <- solveForKind reason $ do
+    (kind, tele) <- initialKind args
+    let scope = one tycon kind <> tele
 
-  local (names %~ focus scope) $ do
-    for_ cons $ \case
-      UnitCon{} -> pure ()
-      ArgCon _ t _ -> () <$ checkKind t TyType
-      c@(GeneralisedCon _ t _) -> inferGadtConKind c t tycon (map TvName args)
-    pure kind
+    local (names %~ focus scope) $ do
+      for_ cons $ \case
+        UnitCon{} -> pure ()
+        ArgCon _ t _ -> () <$ checkKind t TyType
+        c@(GeneralisedCon _ t _) -> inferGadtConKind c t tycon (mapMaybe argTvName args)
+      pure kind
+  let remake (TyVarArg v:as) (TyArr _ k) = TyVarArg (TvName v):remake as k
+      remake (TyAnnArg v _:as) (TyForall _ (Just k) _) = TyAnnArg (TvName v) k:remake as k
+      remake (TyVisArg v _:as) (TyPi (Explicit _ k) _) = TyVisArg (TvName v) k:remake as k
+      remake _ _ = []
+  pure (k, foldl TyApp (TyCon (TvName tycon)) (map TyVar vs), remake args k)
 
 solveForKind :: MonadKind m => SomeReason -> KindT m (Type Typed) -> m (Type Typed)
 solveForKind reason = solveK (closeOver reason) reason

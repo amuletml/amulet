@@ -41,8 +41,6 @@ import Types.Unify
 
 import Text.Pretty.Semantic
 
--- import Debug.Trace
-
 -- Solve for the types of lets in a program
 inferProgram :: MonadNamey m => Env -> [Toplevel Resolved] -> m (Either [TypeError] ([Toplevel Typed], Env))
 inferProgram env ct = fmap fst <$> runInfer env (inferProg ct)
@@ -258,13 +256,12 @@ inferProg (st@(ForeignVal v d t ann):prg) = do
     consFst (ForeignVal (TvName v) d t' (ann, t')) $
       inferProg prg
 inferProg (decl@(TypeDecl n tvs cs):prg) = do
-  kind <- resolveTyDeclKind (BecauseOf decl) n tvs cs
-  let retTy = foldl TyApp (TyCon (TvName n)) (map (TyVar . TvName) tvs)
-   in local (names %~ focus (one n kind)) $ do
+  (kind, retTy, tvs) <- resolveTyDeclKind (BecauseOf decl) n tvs cs
+  local (names %~ focus (one n kind)) $ do
      (ts, cs') <- unzip <$> for cs (\con ->
        inferCon retTy con `catchError` (throwError . propagateBlame (BecauseOf con)))
      local (names %~ focus (teleFromList ts)) . local (constructors %~ Set.union (Set.fromList (map (unTvName . fst) ts))) $
-       consFst (TypeDecl (TvName n) (map TvName tvs) cs') $
+       consFst (TypeDecl (TvName n) tvs cs') $
          inferProg prg
 inferProg (Open mod pre:prg) =
   -- Currently open doesn't need to do anything as we'll be in scope anyway

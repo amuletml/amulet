@@ -226,7 +226,7 @@ deriving instance Eq (Var p) => Eq (Coercion p)
 data Toplevel p
   = LetStmt [Binding p]
   | ForeignVal (Var p) Text (Type p) (Ann p)
-  | TypeDecl (Var p) [Var p] [Constructor p]
+  | TypeDecl (Var p) [TyConArg p] [Constructor p]
   | Module (Var p) [Toplevel p]
   | Open { openName :: Var p
          , openAs :: Maybe T.Text }
@@ -235,6 +235,17 @@ deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Toplevel p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Toplevel p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Toplevel p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Toplevel p)
+
+data TyConArg p
+  = TyVarArg (Var p)
+  | TyAnnArg (Var p) (Type p) -- { 'a : k }
+  | TyVisArg (Var p) (Type p) -- ( 'a : k )
+
+deriving instance (Eq (Var p), Eq (Ann p)) => Eq (TyConArg p)
+deriving instance (Show (Var p), Show (Ann p)) => Show (TyConArg p)
+deriving instance (Ord (Var p), Ord (Ann p)) => Ord (TyConArg p)
+deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (TyConArg p)
+
 
 data Constructor p
   = UnitCon (Var p) (Ann p)
