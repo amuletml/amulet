@@ -103,8 +103,12 @@ noImplicitFound scope tau
                                               , indent 14 (string "perhaps to the type" <+> displayType s)
                                               , empty
                                               ]
-                                         <#> string "These" <+> keyword "relevant" <+> string "implicit values are in scope:"
-                                         <#> vsep (map displaySuggestion ss)
+                                         <#> let ss' = take 5 ss
+                                                 trunc = if length ss' < length ss
+                                                            then parens (string "list truncated")
+                                                            else empty
+                                              in string "These" <+> keyword "relevant" <+> string "implicit values are in scope:" <+> trunc
+                                         <#> vsep (map displaySuggestion ss')
                          [] -> empty
                      ]
     tvs = hcat (punctuate comma (map (pretty . TyVar) vars))

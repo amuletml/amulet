@@ -5,7 +5,7 @@ implicit05-fail.ml[10:12 ..10:14]: error
   • Suggestion: use a type annotation to specify it
                 perhaps to the type foo int
 
-  These relevant implicit values are in scope:
+  These relevant implicit values are in scope: 
   • foo_int : foo int
   • foo_string : foo string
 

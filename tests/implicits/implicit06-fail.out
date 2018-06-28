@@ -1,0 +1,18 @@
+implicit06-fail.ml[14:12 ..14:14]: error
+  Could not find implicit value of type foo 'a
+
+  • Ambiguous type variable 'a prevents finding a value
+  • Suggestion: use a type annotation to specify it
+                perhaps to the type foo float
+
+  These relevant implicit values are in scope: (list truncated)
+  • foo_float : foo float
+  • foo_int : foo int
+  • foo_string : foo string
+  • foo_unit : foo unit
+  • foo_lazy_int : foo (lazy int)
+
+  Arising in the expression
+   │ 
+14 │ let main = foo
+   │ 
