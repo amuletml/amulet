@@ -265,7 +265,7 @@ doSolve (ConImplicit because var scope t :<| xs) = do
       t' = apply sub t
   case Map.lookup t' scope' of
     Just nm -> solveCoSubst . at var ?= ExprApp (VarRef nm (annotation because, t))
-    Nothing -> throwError (NoImplicit t)
+    Nothing -> throwError (noImplicitFound scope' t')
 
 doSolve (ConFail a v t :<| cs) = do
   doSolve cs

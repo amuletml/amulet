@@ -1,6 +1,7 @@
 {-# LANGUAGE ViewPatterns #-}
 module Types.Infer.Errors where
 
+import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 
 import Control.Monad.Infer
@@ -91,3 +92,44 @@ foundHole hole ht sub = helpMaybe (FoundHole hole ty) where
         oneEquality :: Skolem Typed -> [Doc]
      in string "The following equalities might be relevant:"
         <#> vsep (map bullet (concatMap oneEquality skolvars))
+
+noImplicitFound :: Map.Map (Type Typed) (Var Typed) -> Type Typed -> TypeError
+noImplicitFound scope tau
+  | not (null vars) = NoImplicit tau (<#> ambiguous) where
+    ambiguous = vsep [ empty
+                     , bullet (string "Ambiguous type variable" <> plural <+> tvs <+> string "prevent" <> tense <+> string "finding a value")
+                     , case findSuggestions scope tau of
+                         ss@((s,_):_) -> vsep [ bullet $ string "Suggestion: use a type annotation to specify" <+> pronoun
+                                              , indent 14 (string "perhaps to the type" <+> displayType s)
+                                              , empty
+                                              ]
+                                         <#> string "These" <+> keyword "relevant" <+> string "implicit values are in scope:"
+                                         <#> vsep (map displaySuggestion ss)
+                         [] -> empty
+                     ]
+    tvs = hcat (punctuate comma (map (pretty . TyVar) vars))
+    vars = Set.toList (ftv tau)
+    plural = case vars of
+      [_] -> empty
+      _ -> char 's'
+    tense = case vars of
+      [_] -> char 's'
+      _ -> empty
+    pronoun = case vars of
+      [_] -> string "it"
+      _ -> string "them"
+    displaySuggestion :: (Type Typed, Var Typed) -> Doc
+    displaySuggestion (t, v) = bullet (pretty v <+> colon <+> displayType t)
+
+noImplicitFound _ tau = NoImplicit tau id
+
+-- | Given a scope of implicit values and a type (which does not have
+-- any associated implicit), find a "close enough" type which does.
+findSuggestions :: Map.Map (Type Typed) (Var Typed) -> Type Typed -> [(Type Typed, Var Typed)]
+findSuggestions scope ty = filter (closeEnoughTo ty . fst) . Map.toList $ scope where
+  closeEnoughTo :: Type Typed -> Type Typed -> Bool
+  closeEnoughTo (TyApp a b) (TyApp a' b') = closeEnoughTo a a' && closeEnoughTo b b'
+  closeEnoughTo (TyCon v) (TyCon v') = v == v'
+  closeEnoughTo TyVar{} _ = True
+  closeEnoughTo (TyArr a b) (TyArr a' b') = closeEnoughTo a a' && closeEnoughTo b b'
+  closeEnoughTo _ _ = False

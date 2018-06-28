@@ -101,7 +101,7 @@ data TypeError where
   NakedInstArtifact :: (Pretty (Var p), Ord (Var p)) => Expr p -> TypeError
 
   -- Implicit parameters
-  NoImplicit :: (Ord (Var p), Pretty (Var p)) => Type p -> TypeError
+  NoImplicit :: (Ord (Var p), Pretty (Var p)) => Type p -> (Doc -> Doc) -> TypeError
 
   NotPromotable :: Pretty (Var p) => Var p -> Type p -> Doc -> TypeError
   ManyErrors :: [TypeError] -> TypeError
@@ -320,9 +320,8 @@ instance Pretty TypeError where
         InstHole{} -> highlight "Hole" <+> pretty t
         InstType{} -> highlight "Type" <+> pretty t
         _ -> highlight "Expression"
-  pretty (NoImplicit tau) =
-    vsep [ "Could not find implicit value of type" <+> displayType tau ]
-
+  pretty (NoImplicit tau doc) =
+    doc $ vsep [ "Could not find implicit value of type" <+> displayType tau ]
 
   pretty (NakedInstArtifact h@InstHole{}) =
     vsep [ string "Instantiation hole" <+> pretty h <+> "used outside of type application" ]
