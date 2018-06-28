@@ -116,16 +116,19 @@ Top :: { Toplevel Parsed }
     : let BindGroup                             { LetStmt (reverse $2) }
     | external val ident ':' Type '=' string    { withPos2 $1 $7 $ ForeignVal (getName $3) (getString $7) (getL $5) }
 
-    | type ident ListE(TyVar)                          { TypeDecl (getName $2) (map getL $3) [] }
-    | type ident ListE(TyVar) '=' List1(Ctor, '|')     { TypeDecl (getName $2) (map getL $3) $5 }
-    | type ident ListE(TyVar) '=' '|' List1(Ctor, '|') { TypeDecl (getName $2) (map getL $3) $6 }
-
+    | type ident ListE(TyVar) Ctors            { TypeDecl (getName $2) (map getL $3) Nothing $4 }
+    | type ident ListE(TyVar) ':' Type Ctors   { TypeDecl (getName $2) (map getL $3) (Just (getL $5)) $6 }
 
     | module qconid '=' begin Tops end         { Module (getName $2) $5 }
     | module conid '=' begin Tops end          { Module (getName $2) $5 }
     | module conid '=' '$begin' Tops '$end'    { Module (getName $2) $5 }
     | module conid '=' Con                     { Open (getL $4) (Just (getIdent $2)) }
     | open Con                                 { Open (getL $2) Nothing }
+
+Ctors :: { [Constructor Parsed] }
+      :                                        { [] }
+      | '=' List1(Ctor, '|')                   { $2 }
+      | '=' '|' List1(Ctor, '|')               { $3 }
 
 Ctor :: { Constructor Parsed }
      : conid                                   { withPos1 $1 $ UnitCon (getName $1) }

@@ -133,13 +133,15 @@ resolveModule (r@(ForeignVal v t ty a):rs) = do
     <*> resolveModule rs
 
   where wrap x = foldr (TyPi . flip Implicit Nothing) x (toList (ftv x))
-resolveModule (TypeDecl t vs cs:rs) = do
+resolveModule (r@(TypeDecl t vs ann cs):rs) = do
   t'  <- tagVar t
   vs' <- traverse tagVar vs
   let c = map extractCons cs
   c' <- traverse tagVar c
   extendTy (t, t') $ extendN (zip c c') $ (:)
-    . TypeDecl t' vs' <$> traverse (resolveCons (zip vs vs')) (zip cs c')
+    <$> (TypeDecl t' vs'
+         <$> traverse (reType r) ann
+         <*> traverse (resolveCons (zip vs vs')) (zip cs c'))
     <*> resolveModule rs
 
   where resolveCons _ (UnitCon _ a, v') = pure $ UnitCon v' a

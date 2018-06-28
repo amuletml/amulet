@@ -213,7 +213,7 @@ deriving instance Eq (Var p) => Eq (Coercion p)
 data Toplevel p
   = LetStmt [(Var p, Expr p, Ann p)]
   | ForeignVal (Var p) Text (Type p) (Ann p)
-  | TypeDecl (Var p) [Var p] [Constructor p]
+  | TypeDecl (Var p) [Var p] (Maybe (Type p)) [Constructor p]
   | Module (Var p) [Toplevel p]
   | Open { openName :: Var p
          , openAs :: Maybe T.Text }
@@ -268,7 +268,7 @@ makeLenses ''TyBinder
 instance (Spanned (Constructor p), Spanned (Ann p)) => Spanned (Toplevel p) where
   annotation (LetStmt [(_, _, x)]) = annotation x
   annotation (LetStmt ((_, _, x):vs)) = sconcat (annotation x :| map (annotation . thd3) vs)
-  annotation (TypeDecl _ _ (x:xs)) = sconcat (annotation x :| map annotation xs)
+  annotation (TypeDecl _ _ _ (x:xs)) = sconcat (annotation x :| map annotation xs)
   annotation (ForeignVal _ _ _ x) = annotation x
   annotation _ = internal
 

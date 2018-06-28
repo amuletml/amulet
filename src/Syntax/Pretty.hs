@@ -173,11 +173,12 @@ instance (Pretty (Var p)) => Pretty (Toplevel p) where
                   [] -> empty
                   _ -> line <> vsep (map prettyBind xs)
   pretty (ForeignVal v d ty _) = keyword "foreign val" <+> pretty v <+> colon <+> pretty ty <+> equals <+> dquotes (text d)
-  pretty (TypeDecl ty args []) = keyword "type" <+> pretty ty <+> hsep (map ((squote <>) . pretty) args)
-  pretty (TypeDecl ty args ctors) = keyword "type" <+> pretty ty
-                                <+> hsep (map ((squote <>) . pretty) args)
-                                <+> equals
-                                <#> indent 2 (vsep (map ((pipe <+>) . pretty) ctors))
+  pretty (TypeDecl ty args ann []) = keyword "type" <+> pretty ty <+> hsep (map ((squote <>) . pretty) args) <> prettyAnnot ann
+  pretty (TypeDecl ty args ann ctors) = keyword "type" <+> pretty ty
+                                        <+> hsep (map ((squote <>) . pretty) args)
+                                        <>  prettyAnnot ann
+                                        <+> equals
+                                        <#> indent 2 (vsep (map ((pipe <+>) . pretty) ctors))
 
   pretty (Open m Nothing) = keyword "open" <+> pretty m
   pretty (Open m (Just a)) = keyword "open" <+> pretty m <+> keyword "as" <+> text a
@@ -296,6 +297,7 @@ prettyType (TyPi x t) = uncurry prettyQuantifiers . second reverse $ unwind t [x
   sameAs Explicit{} Explicit{} = True
   sameAs Anon{} Anon{} = True
   sameAs _ _ = False
+
 prettyType (TyApp x e) = parenTyFun x (displayType x) <+> parenTyArg e (displayType e)
 prettyType (TyRows p rows) = enclose (lbrace <> space) (space <> rbrace) $
   pretty p <+> soperator pipe <+> hsep (punctuate comma (prettyRows colon rows))
@@ -303,6 +305,10 @@ prettyType (TyExactRows rows) = record (prettyRows colon rows)
 prettyType (TyTuple t s) = parenTyFun t (displayType t) <+> soperator (char '*') <+> parenTuple s (displayType s)
 prettyType t@TyWithConstraints{} = displayType (applyCons t)
 prettyType TyType = keyword "type"
+
+prettyAnnot :: Pretty (Var p) => Maybe (Type p) -> Doc
+prettyAnnot Nothing = mempty
+prettyAnnot (Just ty) = space <> colon <+> pretty ty
 
 parenTyFun, parenTyArg, parenTuple :: Type p -> Doc -> Doc
 parenTyArg TyApp{} = parens

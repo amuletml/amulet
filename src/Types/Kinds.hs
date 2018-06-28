@@ -34,6 +34,8 @@ import Syntax
 
 import Text.Pretty.Semantic
 
+import Debug.Trace
+
 type KindT m = StateT SomeReason (WriterT (Seq.Seq (Constraint Typed)) m)
 
 type MonadKind m =
@@ -86,12 +88,14 @@ annotateKind r ty = do
 resolveTyDeclKind :: MonadKind m
                   => SomeReason
                   -> Var Resolved -> [Var Resolved]
+                  -> Maybe (Type Resolved)
                   -> [Constructor Resolved]
                   -> m (Type Typed)
-resolveTyDeclKind reason tycon args cons = solveForKind reason $ do
+resolveTyDeclKind reason tycon args mkind cons = solveForKind reason $ do
   ks <- replicateM (length args) freshTV
-  let kind = foldr TyArr TyType ks
-      scope = one tycon kind <> teleFromList (zip (map TvName args) ks)
+
+  kind <- maybe (pure (foldr TyArr TyType ks)) (resolveKind reason) mkind
+  let scope = one tycon kind <> teleFromList (zip (map TvName args) ks)
 
   local (names %~ focus scope) $ do
     for_ cons $ \case
