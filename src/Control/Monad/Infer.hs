@@ -169,15 +169,16 @@ instantiate :: MonadNamey m
                  , Type Typed
                  , Type Typed)
 instantiate r tp@(TyPi (Invisible v _) ty) = do
-  TgName n num <- genName
+  TgName _ num <- genName
   var <- pure . TyVar . TvName $ case unTvName v of
-    TgInternal _ -> TgName n num
-    TgName _ _ -> TgName n num
+    TgInternal n -> TgName n num
+    TgName n _ -> TgName n num
   let map = Map.singleton v var
 
       appThisTy e = ExprWrapper (TypeApp var) e (annotation e, apply map ty)
   (k, _, t) <- instantiate r (apply map ty)
   pure (squish appThisTy k, tp, t)
+
 instantiate Expression tp@(TyPi Explicit{} _) = pure (Just id, tp, tp) -- nope!
 instantiate Subsumption tp@(TyPi (Explicit v k) ty) = do
   TgName _ num <- genName
@@ -189,6 +190,7 @@ instantiate Subsumption tp@(TyPi (Explicit v k) ty) = do
 
   (k, _, t) <- instantiate Subsumption (apply map ty)
   pure (squish appThisTy k, tp, t)
+
 instantiate r tp@(TyPi (Anon co) od@dm) = do
   (wrap, _, dm) <- instantiate r dm
   let cont = fromMaybe id wrap

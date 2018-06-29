@@ -41,7 +41,7 @@ import Types.Unify
 
 import Text.Pretty.Semantic
 
--- Solve for the types of lets in a program
+
 inferProgram :: MonadNamey m => Env -> [Toplevel Resolved] -> m (Either [TypeError] ([Toplevel Typed], Env))
 inferProgram env ct = fmap fst <$> runInfer env (inferProg ct)
 
