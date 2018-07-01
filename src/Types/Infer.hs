@@ -242,14 +242,14 @@ inferProg (st@(ForeignVal v d t ann):prg) = do
   local (names %~ focus (one v t')) $
     consFst (ForeignVal (TvName v) d t' (ann, t')) $
       inferProg prg
-inferProg (decl@(TypeDecl n tvs cs):prg) = do
-  kind <- resolveTyDeclKind (BecauseOf decl) n tvs cs
+inferProg (decl@(TypeDecl n tvs ann cs):prg) = do
+  kind <- resolveTyDeclKind (BecauseOf decl) n tvs ann cs
   let retTy = foldl TyApp (TyCon (TvName n)) (map (TyVar . TvName) tvs)
    in local (names %~ focus (one n kind)) $ do
      (ts, cs') <- unzip <$> for cs (\con ->
        inferCon retTy con `catchError` (throwError . propagateBlame (BecauseOf con)))
      local (names %~ focus (teleFromList ts)) . local (constructors %~ Set.union (Set.fromList (map (unTvName . fst) ts))) $
-       consFst (TypeDecl (TvName n) (map TvName tvs) cs') $
+       consFst (TypeDecl (TvName n) (map TvName tvs) Nothing cs') $
          inferProg prg
 inferProg (Open mod pre:prg) =
   -- Currently open doesn't need to do anything as we'll be in scope anyway
