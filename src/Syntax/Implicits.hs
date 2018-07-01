@@ -1,6 +1,14 @@
 {-# LANGUAGE StandaloneDeriving, FlexibleContexts, FlexibleInstances,
    UndecidableInstances, ScopedTypeVariables, TemplateHaskell #-}
-module Syntax.Implicits where
+module Syntax.Implicits
+  ( ImplicitScope
+  , Obligation(..)
+  , Implicit(..), implHead, implPre, implVar, implType
+  , lookup, keys, mapTypes, subTrie
+  , insert, singleton
+  , spine
+  )
+  where
 
 import qualified Data.Map.Merge.Strict as Map
 import qualified Data.Map.Strict as Map
@@ -14,6 +22,8 @@ import Data.Maybe
 import Control.Lens
 
 import Syntax.Pretty hiding ((:>))
+
+import Prelude hiding (lookup)
 
 -- | An obligation the solver needs to resolve if it chose this
 -- implicit parameter.

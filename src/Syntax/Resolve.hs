@@ -30,6 +30,7 @@ import Control.Monad.Reader
 import Control.Applicative hiding (empty)
 import Control.Monad.State
 import Control.Monad.Namey
+import Control.Lens hiding (Lazy)
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
@@ -115,8 +116,7 @@ resolveModule :: MonadResolve m => [Toplevel Parsed] -> m [Toplevel Resolved]
 resolveModule [] = pure []
 
 resolveModule (LetStmt vs:rs) =  do
-  let var (Binding v _ _ _) = v
-      vars = map var vs
+  let vars = vs ^.. each . bindVariable
   vars' <- traverse tagVar vars
   extendN (zip vars vars') $ (:)
     <$> (LetStmt
@@ -220,8 +220,7 @@ reExpr :: MonadResolve m => Expr Parsed -> m (Expr Resolved)
 reExpr r@(VarRef v a) = flip VarRef a <$> (lookupEx v `catchJunk` r)
 
 reExpr (Let vs c a) = do
-  let var (Binding v _ _ _) = v
-      vars = map var vs
+  let vars = vs ^.. each . bindVariable
   vars' <- traverse tagVar vars
   extendN (zip vars vars') $ Let <$> traverse (\(Binding _ e p a, v') -> (\e -> Binding v' e p a) <$> reExpr e)
                                               (zip vs vars')

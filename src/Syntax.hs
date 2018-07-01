@@ -32,7 +32,11 @@ data Plicity = BindImplicit | BindRegular
   deriving (Eq, Show, Ord, Data, Typeable)
 
 data Binding p
-  = Binding (Var p) (Expr p) Plicity (Ann p)
+  = Binding { _bindVariable :: Var p
+            , _bindBody :: Expr p
+            , _bindPlicity :: Plicity
+            , _bindAnn :: Ann p
+            }
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Binding p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Binding p)
@@ -288,9 +292,10 @@ makePrisms ''Lit
 
 makeLenses ''Skolem
 makeLenses ''TyBinder
+makeLenses ''Binding
 
 instance Spanned (Ann p) => Spanned (Binding p) where
-  annotation (Binding _ _ _ x) = annotation x
+  annotation = annotation . _bindAnn
 
 instance (Spanned (Constructor p), Spanned (Ann p)) => Spanned (Toplevel p) where
   annotation (LetStmt [b]) = annotation b

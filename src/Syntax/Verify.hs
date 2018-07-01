@@ -12,6 +12,7 @@ import Data.Span
 
 import Control.Monad.Writer.Strict
 import Control.Monad.State.Strict
+import Control.Lens hiding (Lazy)
 
 import Text.Pretty.Semantic
 import Text.Pretty.Note
@@ -88,8 +89,7 @@ verifyBindingGroup k _ = traverse_ verifyScc . depOrder where
     modify (k (BindingSite v s t))
     verifyExpr e
   verifyScc (CyclicSCC vs) = do
-    let vars = Set.fromList (map var vs)
-        var (Binding v _ _ _) = v
+    let vars = foldMapOf (each . bindVariable) Set.singleton vs
     for_ vs $ \b@(Binding var ex _ (s, ty)) -> do
       let naked = unguardedVars ex
           blame = BecauseOf b
@@ -146,9 +146,8 @@ unguardedVars (RecordExt e rs _)   = unguardedVars e <> foldMap (unguardedVars .
 unguardedVars (BinOp a b c _)      = unguardedVars a <> unguardedVars b <> unguardedVars c
 unguardedVars (VarRef v _)         = Set.singleton v
 unguardedVars (Begin es _)         = foldMap unguardedVars es
-unguardedVars (Let vs b _)         = (unguardedVars b <> foldMap (unguardedVars . e) vs) Set.\\ Set.fromList (map v vs) where
-  v (Binding v _ _ _) = v
-  e (Binding _ e _ _) = e
+unguardedVars (Let vs b _)         = (unguardedVars b <> foldMap (unguardedVars . view bindBody) vs)
+                              Set.\\ foldMapOf (each . bindVariable) Set.singleton vs
 unguardedVars (App f x _)          = unguardedVars f <> unguardedVars x
 unguardedVars Fun{}                = mempty
 unguardedVars (Record rs _)        = foldMap (unguardedVars . snd) rs
