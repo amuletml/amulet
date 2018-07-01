@@ -4,6 +4,8 @@ module Syntax.Let where
 import qualified Data.Set as Set
 import Data.Graph
 
+import Control.Lens
+
 import Syntax.Var
 import Syntax
 
@@ -19,9 +21,7 @@ freeIn (RecordExt e rs _)   = freeIn e <> foldMap (freeIn . snd) rs
 freeIn (BinOp a b c _)      = freeIn a <> freeIn b <> freeIn c
 freeIn (VarRef v _)         = Set.singleton v
 freeIn (Begin es _)         = foldMap freeIn es
-freeIn (Let vs b _)         = (freeIn b <> foldMap (freeIn . e) vs) Set.\\ Set.fromList (map v vs) where
-  v (Binding v _ _ _) = v
-  e (Binding _ e _ _) = e
+freeIn (Let vs b _)         = (freeIn b <> foldMap (freeIn . view bindBody) vs) Set.\\ foldMapOf (each . bindVariable) Set.singleton vs
 freeIn (App f x _)          = freeIn f <> freeIn x
 freeIn (Fun p e _)          = freeIn e Set.\\ bound p
 freeIn (Record rs _)        = foldMap (freeIn . snd) rs
