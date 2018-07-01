@@ -9,6 +9,7 @@ import qualified Data.Set as Set
 import Data.List.NonEmpty (NonEmpty((:|)))
 import Data.Semigroup
 import Data.Foldable
+import Data.Maybe
 
 import Control.Lens
 
@@ -72,13 +73,13 @@ insert v ty = go ts implicit where
   ts = spine head
 
   go [] _ _ = error "empty spine (*very* malformed type?)"
-  go [x] i (Trie m) = Trie (Map.alter (\node -> join node i) x m)
+  go [x] i (Trie m) = Trie (Map.alter (`join` i) x m)
       where join (Just (One x)) i = Just (Some [i, x])
             join (Just (Some xs)) i = Just (Some (i:xs))
             join Nothing i = Just (One i)
             join _ _ = Nothing
 
-  go (x:xs) i (Trie l) = Trie (Map.alter (\node -> insert' xs i node) x l) where
+  go (x:xs) i (Trie l) = Trie (Map.alter (insert' xs i) x l) where
     insert' :: [Type p] -> Implicit p -> Maybe (Node p) -> Maybe (Node p)
     insert' xs i (Just (Many t)) = Just (Many (go xs i t))
     insert' xs i Nothing = Just (Many (go xs i (Trie Map.empty)))
@@ -207,7 +208,7 @@ matches TyApp{} _ = False
 matches (TyPi b t) (TyPi b' t') = t `matches` t' && b `matchesBinder` b' where
   matchesBinder (Anon t) (Anon t') = t `matches` t'
   matchesBinder (Implicit t) (Implicit t') = t `matches` t'
-  matchesBinder (Invisible _ k) (Invisible _ k') = maybe False id (matches <$> k <*> k')
+  matchesBinder (Invisible _ k) (Invisible _ k') = fromMaybe False (matches <$> k <*> k')
   matchesBinder (Explicit _ k) (Explicit _ k') = k `matches` k'
   matchesBinder _ _ = False
 
