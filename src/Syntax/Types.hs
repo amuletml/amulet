@@ -16,10 +16,10 @@ module Syntax.Types
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 
-
 import Control.Arrow
 import Control.Lens
 
+import Syntax.Implicits
 import Syntax.Pretty
 import Syntax.Subst
 
@@ -68,7 +68,7 @@ instance Ord (Var p) => At (Scope p f) where
 
 data Env
   = Env { _names        :: Scope Resolved (Type Typed)
-        , _implicits    :: Map.Map (Type Typed) (Var Typed)
+        , _implicits    :: ImplicitScope Typed
         , _typeVars     :: Set.Set (Var Resolved)
         , _constructors :: Set.Set (Var Resolved)
         }
@@ -87,7 +87,7 @@ instance Semigroup Env where
   Env s i c d <> Env s' i' c' d' = Env (s <> s') (i <> i') (c <> c') (d <> d')
 
 difference :: Env -> Env -> Env
-difference (Env ma mi mc md) (Env ma' mi' mc' md') = Env (ma \\ ma') (mi Map.\\ mi') (mc Set.\\ mc') (md Set.\\ md')
+difference (Env ma _ mc md) (Env ma' mi' mc' md') = Env (ma \\ ma') mi' (mc Set.\\ mc') (md Set.\\ md')
 
 freeInEnv :: Env -> Set.Set (Var Typed)
 freeInEnv = foldMap ftv . view names

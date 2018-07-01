@@ -50,6 +50,7 @@ import Text.Pretty.Semantic
 import Text.Pretty.Note
 
 import Syntax.Transform
+import Syntax.Implicits
 import Syntax.Pretty
 import Syntax.Types
 import Syntax.Subst
@@ -60,7 +61,7 @@ data Constraint p
   = ConUnify   SomeReason (Var p)  (Type p) (Type p)
   | ConSubsume SomeReason (Var p)  (Type p) (Type p)
   | ConImplies SomeReason (Type p) (Seq.Seq (Constraint p)) (Seq.Seq (Constraint p))
-  | ConImplicit SomeReason (Var p) (Map.Map (Type p) (Var p)) (Type p)
+  | ConImplicit SomeReason (Var p) (ImplicitScope p) (Type p)
   | ConFail (Ann p) (Var p) (Type p) -- for holes. I hate it.
 
 deriving instance (Show (Ann p), Show (Var p), Show (Expr p), Show (Type p))
@@ -112,13 +113,13 @@ instance (Ord (Var p), Substitutable p (Type p)) => Substitutable p (Constraint 
   ftv (ConUnify _ _ a b) = ftv a `Set.union` ftv b
   ftv (ConSubsume _ _ a b) = ftv a `Set.union` ftv b
   ftv (ConImplies _ t a b) = ftv a `Set.union` ftv b `Set.union` ftv t
-  ftv (ConImplicit _ _ s t) = Map.foldMapWithKey (\k _ -> ftv k) s <> ftv t
+  ftv (ConImplicit _ _ s t) = foldMap ftv (keys s) <> ftv t
   ftv (ConFail _ _ t) = ftv t
 
   apply s (ConUnify e v a b) = ConUnify e v (apply s a) (apply s b)
   apply s (ConSubsume e v a b) = ConSubsume e v (apply s a) (apply s b)
   apply s (ConImplies e t a b) = ConImplies e (apply s t) (apply s a) (apply s b)
-  apply s (ConImplicit e t m i) = ConImplicit e t (Map.mapKeys (apply s) m) (apply s i)
+  apply s (ConImplicit e t m i) = ConImplicit e t (mapTypes (apply s) m) (apply s i)
   apply s (ConFail a e t) = ConFail a e (apply s t)
 
 instance Pretty (Var p) => Pretty (Constraint p) where

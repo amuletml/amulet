@@ -33,14 +33,14 @@ do
   end
   local main = (function ()
     local go
-    local nt = to_string
+    local nl = to_string
     go = function (st)
       if st > 5 then
         return print("]")
       else
-        local nd = nt(st)
-        local nc = _dot_dot("'")
-        io_write(nc(nd .. "', "))
+        local mv = nl(st)
+        local mu = _dot_dot("'")
+        io_write(mu(mv .. "', "))
         return go(st + 1)
       end
     end

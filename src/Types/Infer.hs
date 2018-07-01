@@ -17,7 +17,6 @@ import Data.Traversable
 import Data.Spanned
 import Data.Triple
 import Data.Graph
-import Data.Maybe
 
 import Control.Monad.State
 import Control.Monad.Infer
@@ -25,6 +24,7 @@ import Control.Arrow (first, second, (***))
 import Control.Lens
 
 import Syntax.Resolve.Toplevel
+import Syntax.Implicits
 import Syntax.Transform
 import Syntax.Subst
 import Syntax.Types
@@ -64,7 +64,7 @@ check (Begin xs a) t = do
 
 check ex@(Let ns b an) t = do
   (ns, ts, is) <- inferLetTy (annotateKind (BecauseOf ex)) ns
-  local (names %~ focus ts) $ local (implicits %~ Map.union is) $ do
+  local (names %~ focus ts) $ local (implicits %~ mappend is) $ do
     b <- check b t
     pure (Let ns b (an, t))
 
@@ -80,7 +80,7 @@ check ex@(Fun pat e an) ty = do
       Implicit{} -> do
         name <- TvName <$> genName
         e <- local (typeVars %~ Set.union tvs) $ local (names %~ focus vs) $
-          local (implicits %~ Map.insert domain name) $
+          local (implicits %~ insert name domain) $
             check e cod
         let body = Match (VarRef name (an, domain)) [ (p, e) ] (an, cod)
             pat = Capture name (an, domain)
@@ -247,7 +247,7 @@ inferProg :: MonadInfer Typed m
 inferProg (stmt@(LetStmt ns):prg) = do
   (ns', ts, is) <- inferLetTy (closeOver (BecauseOf stmt)) ns
                    `catchError` (throwError . propagateBlame (BecauseOf stmt))
-  local (names %~ focus ts) . local (implicits %~ Map.union is) $
+  local (names %~ focus ts) . local (implicits %~ mappend is) $
     consFst (LetStmt ns') $
       inferProg prg
 inferProg (st@(ForeignVal v d t ann):prg) = do
@@ -294,7 +294,7 @@ inferLetTy :: forall m. MonadInfer Typed m
            -> [Binding Resolved]
            -> m ( [Binding Typed]
                 , Telescope Typed
-                , Map.Map (Type Typed) (Var Typed)
+                , ImplicitScope Typed
                 )
 inferLetTy closeOver vs =
   let sccs = depOrder vs
@@ -399,11 +399,11 @@ inferLetTy closeOver vs =
         fmap ((vs' ++) *** (binds <>)) . local (names %~ focus binds) $ tc cs
       tc [] = pure ([], mempty)
 
-      mkImplicits :: ([Binding Typed], Telescope Typed) -> ([Binding Typed], Telescope Typed, Map.Map (Type Typed) (Var Typed))
+      mkImplicits :: ([Binding Typed], Telescope Typed) -> ([Binding Typed], Telescope Typed, ImplicitScope Typed)
       mkImplicits (bs, t) =
-        let one (Binding v _ BindImplicit (_, t)) = Just (t, v)
-            one _ = Nothing
-         in (bs, t, Map.fromList (mapMaybe one bs))
+        let one (Binding v _ BindImplicit (_, t)) = singleton v t
+            one _ = mempty
+         in (bs, t, foldMap one bs)
    in mkImplicits <$> tc sccs
 
 solveEx :: Type Typed -> Subst Typed -> Map.Map (Var Typed) (Wrapper Typed) -> Expr Typed -> Expr Typed

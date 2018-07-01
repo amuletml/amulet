@@ -1,7 +1,7 @@
 {-# LANGUAGE ViewPatterns #-}
 module Types.Infer.Errors where
 
-import qualified Data.Map.Strict as Map
+-- import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 
 import Control.Monad.Infer
@@ -9,11 +9,13 @@ import Control.Lens
 
 import Types.Wellformed -- skols
 
+import Syntax.Implicits
 import Syntax.Transform
 import Syntax.Subst
 import Syntax.Pretty
 
 import Text.Pretty.Semantic
+
 
 gadtConShape :: (Type Typed, Type Typed) -> Type Typed -> TypeError -> TypeError
 gadtConShape (t, _) (TyArr c d) oerr = k . fix . flip Note (string "Generalised constructors can not be curried") $ err where
@@ -58,11 +60,6 @@ getErr (ArisingFrom e blame) = case getErr e of
   (e, k) -> (e, flip ArisingFrom blame . k)
 getErr x = (x, id)
 
-spine :: Type p -> [Type p]
-spine = go [] where
-  go acc (TyApp fs x) = go (x:acc) fs
-  go acc t = t:acc
-
 rewind :: Var Typed -> [Type Typed] -> Type Typed
 rewind x = foldl TyApp (TyCon x)
 
@@ -93,47 +90,45 @@ foundHole hole ht sub = helpMaybe (FoundHole hole ty) where
      in string "The following equalities might be relevant:"
         <#> vsep (map bullet (concatMap oneEquality skolvars))
 
-noImplicitFound :: Map.Map (Type Typed) (Var Typed) -> Type Typed -> TypeError
-noImplicitFound scope tau
-  | not (null vars) = NoImplicit tau (<#> ambiguous) where
-    ambiguous = vsep [ empty
-                     , bullet (string "Ambiguous type variable" <> plural <+> tvs <+> string "prevent" <> tense <+> string "finding a value")
-                     , case findSuggestions scope tau of
-                         ss@((s,_):_) -> vsep [ bullet $ string "Suggestion: use a type annotation to specify" <+> pronoun
-                                              , indent 14 (string "perhaps to the type" <+> displayType s)
-                                              , empty
-                                              ]
-                                         <#> let ss' = take 5 ss
-                                                 trunc = if length ss' < length ss
-                                                            then parens (string "list truncated")
-                                                            else empty
-                                              in string "These" <+> keyword "relevant" <+> string "implicit values are in scope:" <+> trunc
-                                         <#> vsep (map displaySuggestion ss')
-                         [] -> empty
-                     ]
-    tvs = hcat (punctuate comma (map (pretty . TyVar) vars))
-    vars = Set.toList (ftv tau)
-    plural = case vars of
-      [_] -> empty
-      _ -> char 's'
-    tense = case vars of
-      [_] -> char 's'
-      _ -> empty
-    pronoun = case vars of
-      [_] -> string "it"
-      _ -> string "them"
-    displaySuggestion :: (Type Typed, Var Typed) -> Doc
-    displaySuggestion (t, v) = bullet (pretty v <+> colon <+> displayType t)
-
+noImplicitFound :: ImplicitScope Typed -> Type Typed -> TypeError
 noImplicitFound _ tau = NoImplicit tau id
+
+ambiguousImplicits :: [Implicit Typed] -> Type Typed -> TypeError
+ambiguousImplicits cs tau = NoImplicit tau (<#> ambiguous) where
+   ambiguous = vsep [ empty
+                    , bullet (string "Ambiguous type variable" <> plural <+> tvs <+> string "prevent" <> tense <+> string "finding a value")
+                    , suggestion
+                    ]
+   suggestion = case cs of
+     ss@((ImplChoice _ s _ _):_) ->
+       vsep [ bullet $ string "Suggestion: use a type annotation to specify" <+> pronoun
+            , indent 14 (string "perhaps to the type" <+> displayType s)
+            , empty
+            ]
+        <#> let ss' = take 5 ss
+                trunc = if length ss' < length ss
+                           then parens (string "list truncated")
+                           else empty
+             in string "These" <+> keyword "relevant" <+> string "implicit values are in scope:" <+> trunc
+        <#> vsep (map displaySuggestion ss')
+     [] -> empty
+   tvs = hcat (punctuate comma (map (pretty . TyVar) vars))
+
+   vars = Set.toList (ftv tau)
+   plural = case vars of
+     [_] -> empty
+     _ -> char 's'
+   tense = case vars of
+     [_] -> char 's'
+     _ -> empty
+   pronoun = case vars of
+     [_] -> string "it"
+     _ -> string "them"
+   displaySuggestion :: Implicit Typed -> Doc
+   displaySuggestion (ImplChoice _ t _ v) = bullet (pretty v <+> colon <+> displayType t)
+
 
 -- | Given a scope of implicit values and a type (which does not have
 -- any associated implicit), find a "close enough" type which does.
-findSuggestions :: Map.Map (Type Typed) (Var Typed) -> Type Typed -> [(Type Typed, Var Typed)]
-findSuggestions scope ty = filter (closeEnoughTo ty . fst) . Map.toList $ scope where
-  closeEnoughTo :: Type Typed -> Type Typed -> Bool
-  closeEnoughTo (TyApp a b) (TyApp a' b') = closeEnoughTo a a' && closeEnoughTo b b'
-  closeEnoughTo (TyCon v) (TyCon v') = v == v'
-  closeEnoughTo TyVar{} _ = True
-  closeEnoughTo (TyArr a b) (TyArr a' b') = closeEnoughTo a a' && closeEnoughTo b b'
-  closeEnoughTo _ _ = False
+findSuggestions :: ImplicitScope Typed -> Type Typed -> [(Type Typed, Var Typed)]
+findSuggestions scope ty = const (const []) scope ty -- TODO

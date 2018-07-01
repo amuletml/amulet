@@ -18,12 +18,13 @@ import Syntax
 
 import Text.Pretty.Semantic
 
-tyUnit, tyBool, tyInt, tyString, tyFloat, tyLazy :: Type Typed
+tyUnit, tyBool, tyInt, tyString, tyFloat, tyLazy, tyArrow :: Type Typed
 tyInt = TyCon (TvName (TgInternal "int"))
 tyString = TyCon (TvName (TgInternal "string"))
 tyBool = TyCon (TvName (TgInternal "bool"))
 tyUnit = TyCon (TvName (TgInternal "unit"))
 tyFloat = TyCon (TvName (TgInternal "float"))
+tyArrow = TyCon (TvName (TgInternal "(->)"))
 tyLazy = TyCon (TvName (TgName "lazy" (-34)))
 
 builtinsEnv :: Env

@@ -12,6 +12,8 @@ import Types.Infer.Builtin hiding (subsumes, unify)
 import Types.Infer.Errors
 import Types.Wellformed
 
+import qualified Syntax.Implicits as Imp
+import Syntax.Implicits (Obligation(..), Implicit(..))
 import Syntax.Subst
 import Syntax.Var
 import Syntax
@@ -226,7 +228,6 @@ doSolve (ConUnify because v a b :<| xs) = do
 doSolve (ConSubsume because v a b :<| xs) = do
   sub <- use solveTySubst
 
-
   co <- catchy $ subsumes unify (apply sub a) (apply sub b)
   case co of
     Left e -> tell [propagateBlame because e]
@@ -261,17 +262,42 @@ doSolve (ConImplies because not cs ts :<| xs) = do
 doSolve (ConImplicit because var scope t :<| xs) = do
   doSolve xs
   sub <- use solveTySubst
-  let scope' = Map.mapKeys (apply sub) scope
+  let scope' = Imp.mapTypes (apply sub) scope
       t' = apply sub t
-  case Map.lookup t' scope' of
-    Just nm -> solveCoSubst . at var ?= ExprApp (VarRef nm (annotation because, t))
-    Nothing -> throwError (noImplicitFound scope' t')
+  case Imp.lookup t' scope' of
+    [c] -> useImplicit scope' var t' c because
+    [] -> throwError (noImplicitFound scope' t')
+    xs -> throwError (ambiguousImplicits xs t')
 
 doSolve (ConFail a v t :<| cs) = do
   doSolve cs
   sub <- use solveTySubst
   let ex = Hole (unTvName v) (fst a)
   tell [propagateBlame (BecauseOf ex) $ foundHole v (apply sub t) sub]
+
+useImplicit :: Imp.ImplicitScope Typed -> Var Typed -> Type Typed -> Implicit Typed -> SomeReason -> SolveM ()
+useImplicit scope' goal ty (ImplChoice hdt oty os imp) because = go where
+  go = do
+    cur <- genName
+    (sub, cast) <- case solve cur (Seq.singleton (ConUnify because (TvName cur) ty hdt)) of
+      Right (sub, cs) -> pure (sub, cs ^. at (TvName cur) . non undefined)
+      Left e -> throwError e
+
+    let start = VarRef imp (annotation because, oty)
+        mk _ [] acc = pure acc
+        mk (TyPi (Invisible _ _) t) (Quantifier (Invisible v _):xs) acc
+          = let sub' = Map.singleton v tau
+                tau = sub Map.! v
+             in mk (apply sub' t) xs (ExprWrapper (TypeApp tau) acc (annotation because, apply sub' t))
+        mk (TyPi (Implicit tau) t) (Implication _:os) acc = do
+          v <- TvName <$> genName
+          doSolve (Seq.singleton (ConImplicit because v scope' tau))
+          mk t os (ExprWrapper (WrapVar v) acc (annotation because, t))
+        mk x (o:_) _ = error (show x ++ " missing " ++ show o)
+
+    solution <- mk oty os start
+    solveCoSubst . at goal ?= ExprApp (ExprWrapper cast solution (annotation because, ty))
+    solveTySubst %= compose sub
 
 subsumes :: (Type Typed -> Type Typed -> SolveM (Coercion Typed))
          -> Type Typed -> Type Typed -> SolveM (Wrapper Typed)
@@ -332,7 +358,6 @@ subsumes k ty' (TyApp lazy ty) | lazy == tyLazy, _TyVar `isn't` ty' = do
 
 
 subsumes k a b = probablyCast <$> k a b
-
 
 skolemise :: MonadNamey m => SkolemMotive Typed -> Type Typed -> m (Wrapper Typed, Type Typed)
 skolemise motive ty@TyPi{} | Just (tv, k, t) <- isSkolemisableTyBinder ty = do

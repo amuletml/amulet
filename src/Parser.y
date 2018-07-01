@@ -231,16 +231,19 @@ TyVar :: { Located (Var Parsed) }
 
 BindGroup :: { [Binding Parsed] }
           : Binding                           { [$1] }
-          | implicit Binding                  { [implicitify $2] }
           | BindGroup and Binding             { $3 : $1 }
 
 Binding :: { Binding Parsed }
-        : BindName ListE(ArgP) '=' ExprBlock '$end'
-          { Binding (getL $1) (foldr (\x y -> withPos2 x $4 (Fun x y)) $4 $2) BindRegular (withPos2 $1 $4 id) }
-        | BindName ListE(ArgP) ':' Type '=' ExprBlock '$end'
-          { Binding (getL $1) (foldr (\x y -> withPos2 x $6 (Fun x y)) (Ascription $6 (getL $4) (withPos2 $1 $6 id)) $2) BindRegular (withPos2 $1 $6 id) }
-        | ArgP BindOp ArgP '=' ExprBlock '$end'
-          { Binding (getL $2) (withPos2 $1 $5 (Fun $1 (withPos2 $3 $5 (Fun $3 $5)))) BindRegular (withPos2 $1 $6 id) }
+        : PreBinding { $1 }
+        | implicit PreBinding { implicitify $2 }
+
+PreBinding :: { Binding Parsed }
+           : BindName ListE(ArgP) '=' ExprBlock '$end'
+             { Binding (getL $1) (foldr (\x y -> withPos2 x $4 (Fun x y)) $4 $2) BindRegular (withPos2 $1 $4 id) }
+           | BindName ListE(ArgP) ':' Type '=' ExprBlock '$end'
+             { Binding (getL $1) (foldr (\x y -> withPos2 x $6 (Fun x y)) (Ascription $6 (getL $4) (withPos2 $1 $6 id)) $2) BindRegular (withPos2 $1 $6 id) }
+           | ArgP BindOp ArgP '=' ExprBlock '$end'
+             { Binding (getL $2) (withPos2 $1 $5 (Fun $1 (withPos2 $3 $5 (Fun $3 $5)))) BindRegular (withPos2 $1 $6 id) }
 
 BindName :: { Located (Var Parsed) }
      : ident                                   { lPos1 $1 $ getName $1 }

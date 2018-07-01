@@ -1,0 +1,21 @@
+tostring : {'a : type}. 'a -> string
+print : string -> unit
+identity : type -> type
+Identity : {'a : type}. 'a -> identity 'a
+runIdentity : {'cu : type}. identity 'cu -> 'cu
+const : {'dm : type}. type -> 'dm -> type
+Const : {'a : type}. {'b : 'dz}. 'a -> const 'a 'b
+getConst : {'ej : type}. {'b : 'ex}. const 'ej 'b -> 'ej
+functor : (type -> type) -> type
+Functor : {'f : type -> type}. ({'a : type}. {'b : type}. ('a -> 'b) -> 'f 'a -> 'f 'b) -> functor 'f
+functor_identity : functor identity
+functor_const : {'a : type}. functor (const 'a)
+& : {'jo : type}. {'jp : type}. {'kc : type}. ('kc -> 'jp) -> ('jo -> 'kc) -> 'jo -> 'jp
+|> : {'kw : type}. {'ky : type}. 'kw -> ('kw -> 'ky) -> 'ky
+<$> : {'a : type}. {'b : type}. {'f : type -> type}. functor 'f => ('a -> 'b) -> 'f 'a -> 'f 'b
+fst : {'a : type}. {'b : type}. {'c : type}. {'f : type -> type}. functor 'f => ('a -> 'f 'b) -> ('a * 'c) -> 'f ('b * 'c)
+snd : {'a : type}. {'b : type}. {'c : type}. {'f : type -> type}. functor 'f => ('a -> 'f 'b) -> ('c * 'a) -> 'f ('c * 'b)
+.~ : {'s : type}. {'t : type}. {'a : type}. {'b : type}. (('a -> identity 'b) -> 's -> identity 't) -> 'b -> 's -> 't
+^. : {'s : type}. {'a : type}. 's -> (('a -> const 'a 'a) -> 's -> const 'a 's) -> 'a
+print_pair : {'a : type}. {'a : type}. ('a * 'a) -> unit
+main : unit
