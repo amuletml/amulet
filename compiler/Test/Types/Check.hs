@@ -48,9 +48,9 @@ result file contents = runIdentity . flip evalNameyT firstName $ do
 tests :: IO TestTree
 tests = do
   inference <- testGroup "Type inference tests" <$> goldenDir result "tests/types/" ".ml"
-  gadts <- testGroup "GADT inference tests" <$> goldenDir result "tests/gadt/" ".ml"
-  rankn <- testGroup "Rank-N inference tests" <$> goldenDir result "tests/rankn/" ".ml"
-  visinst <- testGroup "Visible Instantiation inference tests" <$> goldenDir result "tests/visinst/" ".ml"
-  lazy <- testGroup "Automatic laziness tests" <$> goldenDir result "tests/lazy/" ".ml"
-  implicit <- testGroup "Implicit parameter tests" <$> goldenDir result "tests/implicits/" ".ml"
+  gadts <- testGroup "GADT inference tests" <$> goldenDir result "tests/types/gadt/" ".ml"
+  rankn <- testGroup "Rank-N inference tests" <$> goldenDir result "tests/types/rankn/" ".ml"
+  visinst <- testGroup "Visible Instantiation inference tests" <$> goldenDir result "tests/types/visinst/" ".ml"
+  lazy <- testGroup "Automatic laziness tests" <$> goldenDir result "tests/types/lazy/" ".ml"
+  implicit <- testGroup "Implicit parameter tests" <$> goldenDir result "tests/types/implicits/" ".ml"
   pure (testGroup "Type inference" [ inference, gadts, rankn, visinst, lazy, implicit ])

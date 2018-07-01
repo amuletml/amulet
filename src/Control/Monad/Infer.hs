@@ -16,7 +16,7 @@ module Control.Monad.Infer
   , Env
   , MonadInfer, Name
   , lookupTy, lookupTy', genNameFrom, runInfer, freeInEnv
-  , difference, freshTV
+  , difference, freshTV, refreshTV
   , instantiate
   , SomeReason(..), Reasonable, propagateBlame
   , WhyInstantiate(..)
@@ -170,10 +170,7 @@ instantiate :: MonadNamey m
                  , Type Typed
                  , Type Typed)
 instantiate r tp@(TyPi (Invisible v _) ty) = do
-  TgName _ num <- genName
-  var <- pure . TyVar . TvName $ case unTvName v of
-    TgInternal n -> TgName n num
-    TgName n _ -> TgName n num
+  var <- refreshTV v
   let map = Map.singleton v var
 
       appThisTy e = ExprWrapper (TypeApp var) e (annotation e, apply map ty)
@@ -182,10 +179,7 @@ instantiate r tp@(TyPi (Invisible v _) ty) = do
 
 instantiate Expression tp@(TyPi Explicit{} _) = pure (Just id, tp, tp) -- nope!
 instantiate Subsumption tp@(TyPi (Explicit v k) ty) = do
-  TgName _ num <- genName
-  var <- pure . TyVar . TvName $ case unTvName v of
-    TgInternal n -> TgName n num
-    TgName n _ -> TgName n num
+  var <- refreshTV v
   let map = Map.singleton v var
       appThisTy e = App e (InstType var (annotation e, k)) (annotation e, apply map ty)
 
@@ -208,6 +202,12 @@ instantiate _ ty = pure (Just id, ty, ty)
 
 freshTV :: MonadNamey m => m (Type Typed)
 freshTV = TyVar . TvName <$> genName
+
+refreshTV :: MonadNamey m => Var Typed -> m (Type Typed)
+refreshTV (TvName v) = TyVar . TvName <$> genNameFrom nm where
+  nm = case v of
+    TgInternal x -> x
+    TgName x _ -> x
 
 instance Pretty TypeError where
   pretty (NotEqual b@TyArr{} a) =
