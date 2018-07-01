@@ -287,7 +287,9 @@ useImplicit scope' goal ty (ImplChoice hdt oty os imp) because = go where
         mk _ [] acc = pure acc
         mk (TyPi (Invisible _ _) t) (Quantifier (Invisible v _):xs) acc
           = let sub' = Map.singleton v tau
-                tau = sub Map.! v
+                tau = case v `Map.lookup` sub of
+                  Nothing -> error $ "quantified type variable " ++ show v ++ " doesn't have an instantiation while solving " ++ show imp
+                  Just t -> t
              in mk (apply sub' t) xs (ExprWrapper (TypeApp tau) acc (annotation because, apply sub' t))
         mk (TyPi (Implicit tau) t) (Implication _:os) acc = do
           v <- TvName <$> genName

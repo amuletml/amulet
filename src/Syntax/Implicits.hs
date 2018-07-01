@@ -96,7 +96,11 @@ lookup ty = go ts where
     Just (Some xs) -> xs
     Nothing -> []
     _ -> error "badly-kinded type (trie with no spine left)"
-  go (x:xs) (Trie m) = case Map.lookup x m of
+  go (x@TyCon{}:xs) (Trie m) = case Map.lookup x m of
+    Just (Many m) -> go xs m
+    Nothing -> []
+    Just _ -> error "badly-kinded type (end with spine remaining)"
+  go (x:xs) (Trie m) = case find x m of
     Just (Many m) -> go xs m
     Nothing -> []
     Just _ -> error "badly-kinded type (end with spine remaining)"
