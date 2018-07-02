@@ -3,7 +3,7 @@
 module Syntax.Pretty
   ( module Syntax
   , module Syntax.Var
-  , displayType, applyCons
+  , displayType, applyCons, prettyMotive
   ) where
 
 import Control.Arrow (first, second)
@@ -339,3 +339,9 @@ parenTyFun _ = id
 
 parenTuple TyPi{} = parens
 parenTuple _ = id
+
+prettyMotive :: SkolemMotive Typed -> Doc
+prettyMotive (ByAscription t) = string "of the context, the type" <#> displayType t
+prettyMotive (BySubsumption t1 t2) = string "of a requirement that" <+> displayType t1 <#> string "be as polymorphic as" <+> displayType t2
+prettyMotive (ByExistential v t) = string "it is an existential" <> comma <#> string "bound by the type of" <+> pretty v <> comma <+> displayType t
+

@@ -11,8 +11,8 @@ import Types.Wellformed -- skols
 
 import Syntax.Implicits
 import Syntax.Transform
-import Syntax.Subst
 import Syntax.Pretty
+import Syntax.Subst
 
 import Text.Pretty.Semantic
 
@@ -91,39 +91,55 @@ foundHole hole ht sub = helpMaybe (FoundHole hole ty) where
         <#> vsep (map bullet (concatMap oneEquality skolvars))
 
 noImplicitFound :: ImplicitScope Typed -> Type Typed -> TypeError
+noImplicitFound _ tau | not (null sks) = NoImplicit tau (<#> msg) where
+  sks = Set.toList (skols tau)
+  msg = vsep [ empty
+             , bullet (string "Where" <+> vcat (punctuate comma (map (displayType . TySkol) sks))
+                        <+> verb <+> string "rigid type variable" <> plural <> char ',')
+             , indent 4 (string "rigidified because" <+> prettyMotive (head sks ^. skolMotive))
+             ]
+
+  plural = case sks of
+    [_] -> empty
+    _ -> char 's'
+  verb = case sks of
+    [_] -> string "are"
+    _ -> string "is"
+
 noImplicitFound _ tau = NoImplicit tau id
 
 ambiguousImplicits :: [Implicit Typed] -> Type Typed -> TypeError
 ambiguousImplicits cs tau = NoImplicit tau (<#> ambiguous) where
-   ambiguous = vsep [ empty
-                    , bullet (string "Ambiguous type variable" <> plural <+> tvs <+> string "prevent" <> tense <+> string "finding a value")
-                    , suggestion
-                    ]
-   suggestion = case cs of
-     ss@(ImplChoice _ s _ _ _:_) ->
-       vsep [ bullet $ string "Suggestion: use a type annotation to specify" <+> pronoun
-            , indent 14 (string "perhaps to the type" <+> displayType s)
-            , empty
-            ]
-        <#> let ss' = take 5 ss
-                trunc = if length ss' < length ss
-                           then parens (string "list truncated")
-                           else empty
-             in string "These" <+> keyword "relevant" <+> string "implicit values are in scope:" <+> trunc
-        <#> vsep (map displaySuggestion ss')
-     [] -> empty
-   tvs = hcat (punctuate comma (map (pretty . TyVar) vars))
+  ambiguous = vsep [ empty
+                   , bullet (string "Ambiguous type variable" <> plural <+> tvs <+> string "prevent" <> tense <+> string "finding a value")
+                   , suggestion
+                   ]
+  suggestion = case cs of
+    ss@(ImplChoice _ s _ _ _:_) ->
+      vsep [ bullet $ string "Suggestion: use a type annotation to specify" <+> pronoun
+           , indent 14 (string "perhaps to the type" <+> displayType s)
+           , empty
+           ]
+       <#> let ss' = take 5 ss
+               trunc = if length ss' < length ss
+                          then parens (string "list truncated")
+                          else empty
+            in string "These" <+> keyword "relevant" <+> string "implicit values are in scope:" <+> trunc
+       <#> vsep (map displaySuggestion ss')
+    [] -> empty
+  tvs = hcat (punctuate comma (map (pretty . TyVar) vars))
 
-   vars = Set.toList (ftv tau)
-   plural = case vars of
-     [_] -> empty
-     _ -> char 's'
-   tense = case vars of
-     [_] -> char 's'
-     _ -> empty
-   pronoun = case vars of
-     [_] -> string "it"
-     _ -> string "them"
-   displaySuggestion :: Implicit Typed -> Doc
-   displaySuggestion (ImplChoice _ t _ Solved v) = bullet (pretty v <+> colon <+> displayType t)
-   displaySuggestion (ImplChoice _ t _ Unsolved v) = bullet (pretty v <+> colon <+> displayType t <+> parens (string "bound locally"))
+  vars = Set.toList (ftv tau)
+  plural = case vars of
+    [_] -> empty
+    _ -> char 's'
+  tense = case vars of
+    [_] -> char 's'
+    _ -> empty
+  pronoun = case vars of
+    [_] -> string "it"
+    _ -> string "them"
+
+displaySuggestion :: Implicit Typed -> Doc
+displaySuggestion (ImplChoice _ t _ Solved v) = bullet (pretty v <+> colon <+> displayType t)
+displaySuggestion (ImplChoice _ t _ Unsolved v) = bullet (pretty v <+> colon <+> displayType t <+> parens (string "bound locally"))

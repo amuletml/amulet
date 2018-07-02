@@ -22,7 +22,6 @@ import Syntax.Subst
 import Syntax.Var
 import Syntax
 
-
 inferPattern :: MonadInfer Typed m
              => Pattern Resolved
              -> m ( Pattern Typed -- the pattern
@@ -115,6 +114,7 @@ checkPattern pt@(PType p t ann) ty = do
   _ <- subsumes pt t' it
   co <- unify pt ty t'
   wrapPattern (PType p' t', binds, cs) (ann, ty) co
+
 checkPattern pt ty = do
   (p, ty', binds, cs) <- inferPattern pt
   (_, co) <- subsumes pt ty ty'
@@ -130,6 +130,7 @@ checkParameter :: MonadInfer Typed m
 checkParameter (PatParam p) t = do
   (p, t, cs) <- checkPattern p t
   pure (PatParam p, t, cs)
+
 checkParameter (ImplParam p) t = do
   (p, t, cs) <- checkPattern p t
   pure (ImplParam p, t, cs)

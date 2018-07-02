@@ -76,10 +76,11 @@ check ex@(Let ns b an) t = do
     pure (Let ns b (an, t))
 
 check ex@(Fun pat e an) ty = do
-  (dom, cod, _) <- quantifier ex ty
+  (dom, cod, _) <- quantifier ex Don'tSkip ty
   let domain = _tyBinderType dom
 
-  (p, vs, cs) <- checkParameter pat domain
+  (p, tau, vs, cs) <- inferParameter pat
+  _ <- subsumes ex domain (_tyBinderType tau)
   let tvs = Set.map unTvName (boundTvs (p ^. paramPat) vs)
 
   implies (Arm (pat ^. paramPat) e) domain cs $
@@ -187,7 +188,7 @@ infer ex@(App f hole@(InstHole ha) a) = do
 
 infer ex@(App f (InstType t ta) a) = do
   (f, ot) <- infer f
-  (dom, c, k) <- quantifier ex ot
+  (dom, c, k) <- quantifier ex DoSkip ot
   case dom of
     Explicit v ki -> do
       x <- checkAgainstKind (BecauseOf ex) t ki
@@ -200,7 +201,7 @@ infer ex@(App f (InstType t ta) a) = do
 
 infer ex@(App f x a) = do
   (f, ot) <- infer f
-  (dom, c, k) <- quantifier ex ot
+  (dom, c, k) <- quantifier ex DoSkip ot
   case dom of
     Anon d -> do
       x <- check x d

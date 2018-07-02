@@ -59,9 +59,9 @@ type MonadInfer p m = (MonadError TypeError m, MonadReader Env m, MonadWriter (S
 
 data Constraint p
   = ConUnify   SomeReason (Var p)  (Type p) (Type p)
-  | ConSubsume SomeReason (Var p)  (Type p) (Type p)
+  | ConSubsume SomeReason (Var p)  (ImplicitScope p) (Type p) (Type p)
   | ConImplies SomeReason (Type p) (Seq.Seq (Constraint p)) (Seq.Seq (Constraint p))
-  | ConImplicit SomeReason (Var p) (ImplicitScope p) (Type p)
+  | ConImplicit SomeReason (Var p) (ImplicitScope p) (Type p) (Type p)
   | ConFail (Ann p) (Var p) (Type p) -- for holes. I hate it.
 
 deriving instance (Show (Ann p), Show (Var p), Show (Expr p), Show (Type p))
@@ -111,24 +111,24 @@ data WhyInstantiate = Expression | Subsumption
 
 instance (Show (Ann p), Show (Var p), Ord (Var p), Substitutable p (Type p)) => Substitutable p (Constraint p) where
   ftv (ConUnify _ _ a b) = ftv a `Set.union` ftv b
-  ftv (ConSubsume _ _ a b) = ftv a `Set.union` ftv b
+  ftv (ConSubsume _ _ s a b) = ftv a `Set.union` ftv b <> foldMap ftv (keys s)
   ftv (ConImplies _ t a b) = ftv a `Set.union` ftv b `Set.union` ftv t
-  ftv (ConImplicit _ _ s t) = foldMap ftv (keys s) <> ftv t
+  ftv (ConImplicit _ _ s t t') = foldMap ftv (keys s) <> ftv t <> ftv t'
   ftv (ConFail _ _ t) = ftv t
 
   apply s (ConUnify e v a b) = ConUnify e v (apply s a) (apply s b)
-  apply s (ConSubsume e v a b) = ConSubsume e v (apply s a) (apply s b)
+  apply s (ConSubsume e v t a b) = ConSubsume e v (mapTypes (apply s) t) (apply s a) (apply s b)
   apply s (ConImplies e t a b) = ConImplies e (apply s t) (apply s a) (apply s b)
-  apply s (ConImplicit e t m i) = ConImplicit e t (mapTypes (apply s) m) (apply s i)
+  apply s (ConImplicit e t m i t') = ConImplicit e t (mapTypes (apply s) m) (apply s i) (apply s t')
   apply s (ConFail a e t) = ConFail a e (apply s t)
 
 instance Pretty (Var p) => Pretty (Constraint p) where
   pretty (ConUnify _ _ a b) = pretty a <+> soperator (char '~') <+> pretty b
-  pretty (ConSubsume _ _ a b) = pretty a <+> soperator (string "<=") <+> pretty b
+  pretty (ConSubsume _ _ _ a b) = pretty a <+> soperator (string "<=") <+> pretty b
   pretty (ConImplies _ t a b) = brackets (pretty t) <+> hsep (punctuate comma (toList (fmap pretty a)))
                             <+> soperator (char '⊃')
                             <#> indent 2 (vsep (punctuate comma (toList (fmap pretty b))))
-  pretty (ConImplicit _ v _ t) = pretty v <+> " : " <+> pretty t <+> parens (keyword "implicitly")
+  pretty (ConImplicit _ v _ t _) = pretty v <+> colon <+> pretty t <+> parens (keyword "implicitly")
   pretty ConFail{} = string "fail"
 
 
@@ -357,11 +357,6 @@ missing _ _ = undefined -- freaking GHC
 
 diff :: [(Text, b)] -> [(Text, b)] -> [Doc]
 diff ra rb = map (stypeVar . string . T.unpack . fst) (deleteFirstsBy ((==) `on` fst) rb ra)
-
-prettyMotive :: SkolemMotive Typed -> Doc
-prettyMotive (ByAscription t) = string "of the context, the type" <#> displayType t
-prettyMotive (BySubsumption t1 t2) = string "of a requirement that" <+> displayType t1 <#> string "be as polymorphic as" <+> displayType t2
-prettyMotive (ByExistential v t) = string "it is an existential" <> comma <#> string "bound by the type of" <+> pretty v <> comma <+> displayType t
 
 squish :: (a -> c) -> Maybe (c -> c) -> Maybe (a -> c)
 squish f = Just . maybe f (.f)

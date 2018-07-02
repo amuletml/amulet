@@ -11,4 +11,4 @@ let implicit foo_lazy_string : foo (lazy string) = Foo 1
 
 let foo : forall 'a. foo 'a => foo 'a = fun x -> x
 
-let main = foo
+let main : forall 'a. foo 'a = foo

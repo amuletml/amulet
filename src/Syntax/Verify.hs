@@ -140,7 +140,13 @@ verifyExpr InstType{} = pure ()
 verifyExpr InstHole{} = pure ()
 verifyExpr (Lazy e _) = verifyExpr e
 verifyExpr (OpenIn _ e _) = verifyExpr e
-verifyExpr (ExprWrapper _ e _) = verifyExpr e
+verifyExpr (ExprWrapper w e _) =
+  case w of
+    WrapFn (MkWrapCont k _) -> verifyExpr (k e)
+    ExprApp a -> do
+      verifyExpr a
+      verifyExpr e
+    _ -> verifyExpr e
 
 unguardedVars :: Expr Typed -> Set.Set (Var Typed)
 unguardedVars (Ascription e _ _)   = unguardedVars e
