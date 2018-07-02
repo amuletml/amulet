@@ -30,16 +30,20 @@ import Prelude hiding (lookup)
 -- | An obligation the solver needs to resolve if it chose this
 -- implicit parameter.
 data Obligation p
-  -- | A 'TyForall' (or similar that was skipped over to get to the head
+  -- | A 'TyForall' (or similar) that was skipped over to get to the head of this type.
   = Quantifier (TyBinder p)
-  -- | An implicit parameter to an implicit value
+  -- | An implicit parameter to an implicit value.
   | Implication (Type p)
 
 deriving instance (Show (Var p), Show (Ann p)) => Show (Obligation p)
 deriving instance Ord (Var p) => Ord (Obligation p)
 deriving instance Eq (Var p) => Eq (Obligation p)
 
-data Solvedness = Solved | Unsolved
+-- | Has this implicit value been fully solved before being added as a
+-- choice?
+data Solvedness
+  = Solved -- ^ Introduced by a @let@
+  | Unsolved -- ^ Introduced by a parameter like @?foo@ to a function, in the 'infer' direction
   deriving (Eq, Show, Ord)
 
 
@@ -82,8 +86,8 @@ deriving instance (Show (Var p), Show (Ann p)) => Show (ImplicitScope p)
 deriving instance Ord (Var p) => Ord (ImplicitScope p)
 deriving instance Eq (Var p) => Eq (ImplicitScope p)
 
--- | Insert a choice for a *fully-known* implicit parameter (the
--- variable @v@) of type @tau@ at the given trie.
+-- | Insert a choice for a *fully-known* (@Solved@) implicit parameter
+-- (the variable @v@) of type @tau@ at the given trie.
 insert :: forall p. Ord (Var p) => Var p -> Type p -> ImplicitScope p -> ImplicitScope p
 insert v ty = go ts implicit where
   (head, obligations) = getHead ty
@@ -104,8 +108,8 @@ insert v ty = go ts implicit where
     insert' xs i Nothing = Just (Many (go xs i (Trie Map.empty)))
     insert' _ _ (Just _) = error "badly-kinded type (end with spine remaining)"
 
--- | Insert a choice for an *unknown* implicit parameter (the
--- variable @v@) of type @tau@ at the given trie.
+-- | Insert a choice for an *unknown* (@Unsolved@) implicit parameter
+-- (the variable @v@) of type @tau@ at the given trie.
 consider :: forall p. Ord (Var p) => Var p -> Type p -> ImplicitScope p -> ImplicitScope p
 consider v ty = go ts implicit where
   (head, obligations) = getHead ty
@@ -126,8 +130,7 @@ consider v ty = go ts implicit where
     insert' xs i Nothing = Just (Many (go xs i (Trie Map.empty)))
     insert' _ _ (Just _) = error "badly-kinded type (end with spine remaining)"
 
--- | Find a type in a trie *exactly* (i.e., without considering type
--- variables)
+-- | Find a type in a trie by conservative fuzzy search.
 lookup :: forall p. Ord (Var p) => Type p -> ImplicitScope p -> [Implicit p]
 lookup ty = go ts where
   ts = spine ty
@@ -230,9 +233,14 @@ subTrie = go where
   goNode xs (Just (Many t)) = go xs t
   goNode _ _ = Nothing
 
+-- | Make a trie consisting of the only the one given implicit.
 singleton :: Ord (Var p) => Var p -> Type p -> ImplicitScope p
 singleton v t = insert v t mempty
 
+-- | Decompose a type into its main "spine" of left-nested applications.
+-- @
+--  spine (f x y (a b)) = [ f, x, y, a b ]
+-- @
 spine :: Type p -> [Type p]
 spine (TyApp f x) = spine f `snoc` x
 spine t = [t]

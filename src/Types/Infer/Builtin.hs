@@ -129,6 +129,9 @@ quantifier r t = do
   (_, k) <- subsumes r t (TyPi (Anon a) b)
   pure (Anon a, b, \x -> ExprWrapper k x (annotation x, TyPi (Anon a) b))
 
+-- | Discharge any constraints embedded in this kind, either from
+-- 'TyWithConstraints' (which become unification problems) or 'TyPi'
+-- with 'Implicit' binders (which become implicit value constraints.)
 discharge :: (Reasonable f p, MonadInfer Typed m)
           => f p
           -> Type Typed

@@ -4,7 +4,11 @@ module Types.Infer
   ( inferProgram
   , builtinsEnv
   , closeOver
-  , tyString, tyInt, tyBool, tyUnit, tyFloat
+  , tyString
+  , tyInt
+  , tyBool
+  , tyUnit
+  , tyFloat
 
   , infer, check
   ) where
@@ -41,9 +45,13 @@ import Types.Unify
 
 import Text.Pretty.Semantic
 
+-- | Solve for the types of bindings in a problem: Either @TypeDecl@s,
+-- @LetStmt@s, or @ForeignVal@s.
 inferProgram :: MonadNamey m => Env -> [Toplevel Resolved] -> m (Either [TypeError] ([Toplevel Typed], Env))
 inferProgram env ct = fmap fst <$> runInfer env (inferProg ct)
 
+-- | Check an 'Expr'ession against a known 'Type', annotating it with
+-- appropriate 'Wrapper's, and performing /some/ level of desugaring.
 check :: forall m. MonadInfer Typed m => Expr Resolved -> Type Typed -> m (Expr Typed)
 check e ty@TyPi{} | isSkolemisable ty = do -- This is rule Decl∀L from [Complete and Easy]
   (wrap, e) <- secondA (check e) =<< skolemise (ByAscription ty) ty -- gotta be polymorphic - don't allow instantiation
@@ -129,6 +137,9 @@ check e ty = do
 
 -- [Complete and Easy]: See https://www.cl.cam.ac.uk/~nk480/bidir.pdf
 
+-- | Infer a 'Type' for an 'Expr'ession provided no other information
+-- than the environment, producing an 'Expr'ession annotated with
+-- 'Wrapper's where nescessary.
 infer :: MonadInfer Typed m => Expr Resolved -> m (Expr Typed, Type Typed)
 infer (VarRef k a) = do
   (cont, old, (new, cont')) <- third3A (discharge (VarRef k a)) =<< lookupTy' k

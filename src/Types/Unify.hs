@@ -1,6 +1,10 @@
 {-# LANGUAGE MultiWayIf, GADTs, FlexibleContexts, ScopedTypeVariables, TemplateHaskell #-}
 {-# LANGUAGE TupleSections, OverloadedStrings #-}
-module Types.Unify (solve, overlap, bind, skolemise, freshSkol) where
+
+-- | This module implements the logic responsible for solving the
+-- sequence of @Constraint@s the type-checker generates for a particular
+-- binding groups.
+module Types.Unify (solve, skolemise, freshSkol) where
 
 import Control.Monad.Except
 import Control.Monad.State
@@ -215,6 +219,12 @@ runSolve i s x = runExcept (fix (runReaderT (runStateT (runWriterT (runNameyT ac
       xs -> throwError (ManyErrors xs)
   emptyScope = SolveScope False mempty
 
+-- | Solve a sequence of constraints, returning either a substitution
+-- for both type variables (a 'Subst' 'Typed') and for 'Wrapper'
+-- variables.
+--
+-- The 'Var' 'Resolved' parameter is the first fresh name this
+-- particular instance of the solver is allowed to generate from.
 solve :: Var Resolved -> Seq.Seq (Constraint Typed) -> Either TypeError (Subst Typed, Map.Map (Var Typed) (Wrapper Typed))
 solve i cs = snd <$> runSolve i mempty (doSolve cs)
 
@@ -278,7 +288,7 @@ doSolve (ConFail a v t :<| cs) = do
 
 solveImplicitConstraint :: Int -> SomeReason -> Var Typed -> Imp.ImplicitScope Typed -> Type Typed -> SolveM ()
 solveImplicitConstraint x _ _ _ _ | x >= 200 = throwError undefined
-solveImplicitConstraint x because var scope t = do
+solveImplicitConstraint x because var scope t =
   case Imp.lookup t scope of
     [c] -> useImplicit x scope var t c because
     [] -> throwError (noImplicitFound scope t)
@@ -376,6 +386,8 @@ subsumes k ty' (TyApp lazy ty) | lazy == tyLazy, _TyVar `isn't` ty' = do
 
 subsumes k a b = probablyCast <$> k a b
 
+-- | Shallowly skolemise a type, replacing any @forall@-bound 'TyVar's
+-- with fresh 'Skolem' constants.
 skolemise :: MonadNamey m => SkolemMotive Typed -> Type Typed -> m (Wrapper Typed, Type Typed)
 skolemise motive ty@TyPi{} | Just (tv, k, t) <- isSkolemisableTyBinder ty = do
   sk <- freshSkol motive ty tv
@@ -412,6 +424,12 @@ probablyCast x
   | isReflexiveCo x = IdWrap
   | otherwise = Cast x
 
+-- | Make a fresh 'Skolem' constant, with the given 'SkolemMotive', for
+-- a 'Var' in the 'Type'.
+--
+-- @
+--  freshSkol motive scope var
+-- @
 freshSkol :: MonadNamey m => SkolemMotive Typed -> Type Typed -> Var Typed -> m (Type Typed)
 freshSkol m ty u = do
   var <- TvName <$> genName
