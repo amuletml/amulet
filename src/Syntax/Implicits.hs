@@ -207,8 +207,7 @@ mapTypes fn = go where
   makeTrie :: [Type p] -> Node p -> Map.Map (Type p) (Node p)
   makeTrie [x] n = Map.singleton x n
   makeTrie (x:xs) n = Map.singleton x (Many (Trie (makeTrie xs n)))
-  makeTrie [] _ = error ("a node was left dangling while balancing trie")
-
+  makeTrie [] _ = error "a node was left dangling while balancing trie"
 
   goNode (One x) = One (goI x)
   goNode (Some xs) = Some (map goI xs)

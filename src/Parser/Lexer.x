@@ -77,7 +77,6 @@ tokens :-
   <0> "end"    { constTok TcEnd }
   <0> "in"     { constTok TcIn }
   <0> "external" { constTok TcExternal }
-  <0> "implicit" { constTok TcImplicit }
   <0> "val"    { constTok TcVal }
   <0> "true"   { constTok TcTrue }
   <0> "false"  { constTok TcFalse }
@@ -89,6 +88,7 @@ tokens :-
   <0> "module" { constTok TcModule }
   <0> "open"   { constTok TcOpen }
   <0> "lazy"   { constTok TcLazy }
+  <0> "implicit" { constTok TcImplicit }
 
   <0> ","      { constTok TcComma }
   <0> "."      { constTok TcDot }

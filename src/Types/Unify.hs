@@ -265,7 +265,10 @@ doSolve (ConImplies because not cs ts :<| xs) = do
 -- TODO: Better implicit searching
 doSolve (ConImplicit because var scope t :<| xs) = do
   doSolve xs
-  solveImplicitConstraint 0 because var scope t
+  sub <- use solveTySubst
+  let scope' = Imp.mapTypes (apply sub) scope
+      t' = apply sub t
+  solveImplicitConstraint 0 because var scope' t'
 
 doSolve (ConFail a v t :<| cs) = do
   doSolve cs
@@ -276,15 +279,12 @@ doSolve (ConFail a v t :<| cs) = do
 solveImplicitConstraint :: Int -> SomeReason -> Var Typed -> Imp.ImplicitScope Typed -> Type Typed -> SolveM ()
 solveImplicitConstraint x _ _ _ _ | x >= 200 = throwError undefined
 solveImplicitConstraint x because var scope t = do
-  sub <- use solveTySubst
-  let scope' = Imp.mapTypes (apply sub) scope
-      t' = apply sub t
-  case Imp.lookup t' scope' of
-    [c] -> useImplicit x scope' var t' c because
-    [] -> throwError (noImplicitFound scope' t')
+  case Imp.lookup t scope of
+    [c] -> useImplicit x scope var t c because
+    [] -> throwError (noImplicitFound scope t)
     xs -> case partition bySolvedness xs of
-      ([c], _) -> useImplicit x scope' var t' c because
-      _ -> throwError (ambiguousImplicits xs t')
+      ([c], _) -> useImplicit x scope var t c because
+      _ -> throwError (ambiguousImplicits xs t)
 
 bySolvedness :: Implicit p -> Bool
 bySolvedness (ImplChoice _ _ _ s _) = s == Imp.Unsolved
