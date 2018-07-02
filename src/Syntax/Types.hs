@@ -7,7 +7,7 @@ module Syntax.Types
   ( Telescope, one, foldTele, teleFromList, mapTele
   , Scope(..), namesInScope, inScope
   , Env, freeInEnv, difference, envOf, scopeFromList, toMap
-  , names, typeVars, constructors
+  , names, typeVars, constructors, implicits
   , Origin(..)
 
   , focus
@@ -16,10 +16,10 @@ module Syntax.Types
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 
-
 import Control.Arrow
 import Control.Lens
 
+import Syntax.Implicits
 import Syntax.Pretty
 import Syntax.Subst
 
@@ -67,7 +67,8 @@ instance Ord (Var p) => At (Scope p f) where
   at k f (Scope m) = Scope <$> at k f m
 
 data Env
-  = Env { _names       :: Scope Resolved (Type Typed)
+  = Env { _names        :: Scope Resolved (Type Typed)
+        , _implicits    :: ImplicitScope Typed
         , _typeVars     :: Set.Set (Var Resolved)
         , _constructors :: Set.Set (Var Resolved)
         }
@@ -80,19 +81,19 @@ Scope x \\ Scope y = Scope (x Map.\\ y)
 
 instance Monoid Env where
   mappend = (<>)
-  mempty = Env mempty mempty mempty
+  mempty = Env mempty mempty mempty mempty
 
 instance Semigroup Env where
-  Env s c d <> Env s' c' d' = Env (s <> s') (c <> c') (d <> d')
+  Env s i c d <> Env s' i' c' d' = Env (s <> s') (i <> i') (c <> c') (d <> d')
 
 difference :: Env -> Env -> Env
-difference (Env ma mc md) (Env ma' mc' md') = Env (ma \\ ma') (mc Set.\\ mc') (md Set.\\ md')
+difference (Env ma _ mc md) (Env ma' mi' mc' md') = Env (ma \\ ma') mi' (mc Set.\\ mc') (md Set.\\ md')
 
 freeInEnv :: Env -> Set.Set (Var Typed)
 freeInEnv = foldMap ftv . view names
 
 envOf :: Scope Resolved (Type Typed) -> Env
-envOf a = Env a mempty mempty
+envOf a = Env a mempty mempty mempty
 
 scopeFromList :: Ord (Var p) => [(Var p, f)] -> Scope p f
 scopeFromList = Scope . Map.fromList

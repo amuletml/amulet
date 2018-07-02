@@ -30,6 +30,7 @@ import Control.Monad.Reader
 import Control.Applicative hiding (empty)
 import Control.Monad.State
 import Control.Monad.Namey
+import Control.Lens hiding (Lazy)
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
@@ -115,11 +116,11 @@ resolveModule :: MonadResolve m => [Toplevel Parsed] -> m [Toplevel Resolved]
 resolveModule [] = pure []
 
 resolveModule (LetStmt vs:rs) =  do
-  let vars = map fst3 vs
+  let vars = vs ^.. each . bindVariable
   vars' <- traverse tagVar vars
   extendN (zip vars vars') $ (:)
     <$> (LetStmt
-          <$> traverse (\((_, e, a), v') -> (v',,a) <$> reExpr e) (zip vs vars'))
+          <$> zipWithM (\v' (Binding _ e p a) -> flip (flip (Binding v') p) a <$> reExpr e) vars' vs)
     <*> resolveModule rs
 
 resolveModule (r@(ForeignVal v t ty a):rs) = do
@@ -132,14 +133,14 @@ resolveModule (r@(ForeignVal v t ty a):rs) = do
           <*> pure a)
     <*> resolveModule rs
 
-  where wrap x = foldr (TyPi . flip Implicit Nothing) x (toList (ftv x))
-resolveModule (TypeDecl t vs cs:rs) = do
+  where wrap x = foldr (TyPi . flip Invisible Nothing) x (toList (ftv x))
+resolveModule (d@(TypeDecl t vs cs):rs) = do
   t'  <- tagVar t
-  vs' <- traverse tagVar vs
+  (vs', sc) <- resolveTele d vs
   let c = map extractCons cs
   c' <- traverse tagVar c
   extendTy (t, t') $ extendN (zip c c') $ (:)
-    . TypeDecl t' vs' <$> traverse (resolveCons (zip vs vs')) (zip cs c')
+    . TypeDecl t' vs' <$> traverse (resolveCons sc) (zip cs c')
     <*> resolveModule rs
 
   where resolveCons _ (UnitCon _ a, v') = pure $ UnitCon v' a
@@ -198,20 +199,42 @@ lookupTy v = asks tyScope >>= lookupVar NotInScope v
 lookupTyvar :: MonadResolve m => Var Parsed -> m (Var Resolved)
 lookupTyvar v = asks tyvarScope >>= lookupVar NotInScope v
 
+resolveTele :: (MonadResolve m, Reasonable f p) => f p -> [TyConArg Parsed] -> m ([TyConArg Resolved], [(Var Parsed, Var Resolved)])
+resolveTele r (TyVarArg v:as) = do
+  v' <- tagVar v
+  (as, vs) <- resolveTele r as
+  pure (TyVarArg v':as, (v, v'):vs)
+resolveTele r (TyAnnArg v k:as) = do
+  v' <- tagVar v
+  ((as, vs), k) <- extendTyvar (v, v') $ 
+    (,) <$> resolveTele r as <*> reType r k
+  pure (TyAnnArg v' k:as, (v, v'):vs)
+resolveTele r (TyVisArg v k:as) = do
+  v' <- tagVar v
+  ((as, vs), k) <- extendTyvar (v, v') $ 
+    (,) <$> resolveTele r as <*> reType r k
+  pure (TyVisArg v' k:as, (v, v'):vs)
+resolveTele _ [] = pure ([], [])
+
 reExpr :: MonadResolve m => Expr Parsed -> m (Expr Resolved)
 reExpr r@(VarRef v a) = flip VarRef a <$> (lookupEx v `catchJunk` r)
 
 reExpr (Let vs c a) = do
-  let vars = map fst3 vs
+  let vars = vs ^.. each . bindVariable
   vars' <- traverse tagVar vars
-  extendN (zip vars vars') $ Let <$> traverse (\((_, e, a), v') -> (v',,a) <$> reExpr e)
-                                              (zip vs vars')
+  extendN (zip vars vars') $ Let <$> zipWithM (\v' (Binding _ e p a) -> flip (flip (Binding v') p) a <$> reExpr e) vars' vs
                                  <*> reExpr c
                                  <*> pure a
 reExpr (If c t b a) = If <$> reExpr c <*> reExpr t <*> reExpr b <*> pure a
 reExpr (App f p a) = App <$> reExpr f <*> reExpr p <*> pure a
 reExpr (Fun p e a) = do
-  (p', vs, ts) <- reWholePattern p
+  let reWholePattern' (PatParam p) = do
+        (p', vs, ts) <- reWholePattern p
+        pure (PatParam p', vs, ts)
+      reWholePattern' (ImplParam p) = do
+        (p', vs, ts) <- reWholePattern p
+        pure (ImplParam p', vs, ts)
+  (p', vs, ts) <- reWholePattern' p
   extendTyvarN ts . extendN vs $ Fun p' <$> reExpr e <*> pure a
 
 reExpr r@(Begin [] a) = tell (pure (wrapError r EmptyBegin)) $> junkExpr a
@@ -306,17 +329,18 @@ reType r (TyVar v) = TyVar <$> (lookupTyvar v `catchJunk` r)
 reType r (TyPromotedCon v) = TyPromotedCon <$> (lookupEx v `catchJunk` r)
 reType _ v@TySkol{} = error ("impossible! resolving skol " ++ show v)
 reType _ v@TyWithConstraints{} = error ("impossible! resolving withcons " ++ show v)
-reType r (TyPi (Implicit v k) ty) = do
+reType r (TyPi (Invisible v k) ty) = do
   v' <- tagVar v
   ty' <- extendTyvar (v, v') $ reType r ty
   k <- traverse (reType r) k
-  pure (TyPi (Implicit v' k) ty')
+  pure (TyPi (Invisible v' k) ty')
 reType r (TyPi (Explicit v k) ty) = do
   v' <- tagVar v
   ty' <- extendTyvar (v, v') $ reType r ty
   k <- reType r k
   pure (TyPi (Explicit v' k) ty')
 reType r (TyPi (Anon f) x) = TyPi . Anon <$> reType r f <*> reType r x
+reType r (TyPi (Implicit f) x) = TyPi . Implicit <$> reType r f <*> reType r x
 reType r (TyApp f x) = TyApp <$> reType r f <*> reType r x
 reType r (TyRows t f) = TyRows <$> reType r t
                                <*> traverse (\(a, b) -> (a,) <$> reType r b) f

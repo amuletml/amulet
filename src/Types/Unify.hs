@@ -1,6 +1,10 @@
 {-# LANGUAGE MultiWayIf, GADTs, FlexibleContexts, ScopedTypeVariables, TemplateHaskell #-}
-{-# LANGUAGE TupleSections, OverloadedStrings #-}
-module Types.Unify (solve, overlap, bind, skolemise, freshSkol) where
+{-# LANGUAGE TupleSections, OverloadedStrings, ViewPatterns #-}
+
+-- | This module implements the logic responsible for solving the
+-- sequence of @Constraint@s the type-checker generates for a particular
+-- binding groups.
+module Types.Unify (solve, skolemise, freshSkol) where
 
 import Control.Monad.Except
 import Control.Monad.State
@@ -12,6 +16,8 @@ import Types.Infer.Builtin hiding (subsumes, unify)
 import Types.Infer.Errors
 import Types.Wellformed
 
+import qualified Syntax.Implicits as Imp
+import Syntax.Implicits (Obligation(..), Implicit(..))
 import Syntax.Subst
 import Syntax.Var
 import Syntax
@@ -116,6 +122,10 @@ unify (TyVar a) b = bind a b
 unify a (TyVar b) = SymCo <$> bind b a
 
 unify (TyArr a b) (TyArr a' b') = ArrCo <$> unify a a' <*> unify b b'
+
+unify (TyPi (Implicit a) b) (TyPi (Implicit a') b') =
+  ArrCo <$> unify a a' <*> unify b b' -- Technically cheating but yay desugaring
+
 unify (TyApp a b) (TyApp a' b') = AppCo <$> unify a a' <*> unify b b'
 
 unify ta@(TyCon a) tb@(TyCon b)
@@ -209,6 +219,12 @@ runSolve i s x = runExcept (fix (runReaderT (runStateT (runWriterT (runNameyT ac
       xs -> throwError (ManyErrors xs)
   emptyScope = SolveScope False mempty
 
+-- | Solve a sequence of constraints, returning either a substitution
+-- for both type variables (a 'Subst' 'Typed') and for 'Wrapper'
+-- variables.
+--
+-- The 'Var' 'Resolved' parameter is the first fresh name this
+-- particular instance of the solver is allowed to generate from.
 solve :: Var Resolved -> Seq.Seq (Constraint Typed) -> Either TypeError (Subst Typed, Map.Map (Var Typed) (Wrapper Typed))
 solve i cs = snd <$> runSolve i mempty (doSolve cs)
 
@@ -223,16 +239,25 @@ doSolve (ConUnify because v a b :<| xs) = do
     Right co -> solveCoSubst . at v .= Just (Cast co)
 
   doSolve xs
-doSolve (ConSubsume because v a b :<| xs) = do
+doSolve (ConSubsume because v scope a b :<| xs) = do
   sub <- use solveTySubst
 
+  let a' = apply sub a
+      cont = do
+        sub <- use solveTySubst
+        co <- catchy $ subsumes scope (apply sub a) (apply sub b)
+        case co of
+          Left e -> tell [propagateBlame because e]
+          Right co -> solveCoSubst . at v .= Just co
 
-  co <- catchy $ subsumes unify (apply sub a) (apply sub b)
-  case co of
-    Left e -> tell [propagateBlame because e]
-    Right co -> solveCoSubst . at v .= Just co
+  case a' of
+    TyPi (Implicit _) _ -> do
+      doSolve xs
+      cont
+    _ -> do
+      cont
+      doSolve xs
 
-  doSolve xs
 doSolve (ConImplies because not cs ts :<| xs) = do
   before <- use solveTySubst
   assump <- use solveAssumptions
@@ -256,27 +281,97 @@ doSolve (ConImplies because not cs ts :<| xs) = do
     solveAssumptions .= assump
 
     doSolve xs
+
+doSolve (ConImplicit because var scope t inner :<| xs) = do
+  doSolve xs
+  sub <- use solveTySubst
+  let scope' = Imp.mapTypes (apply sub) scope
+      t' = apply sub t
+  w <- catchy $ solveImplicitConstraint 0 inner scope' t'
+  case w of
+    Left e -> tell [propagateBlame because e]
+    Right w -> solveCoSubst . at var ?= w
+
 doSolve (ConFail a v t :<| cs) = do
   doSolve cs
   sub <- use solveTySubst
   let ex = Hole (unTvName v) (fst a)
   tell [propagateBlame (BecauseOf ex) $ foundHole v (apply sub t) sub]
 
-subsumes :: (Type Typed -> Type Typed -> SolveM (Coercion Typed))
+solveImplicitConstraint :: Int -> Type Typed -> Imp.ImplicitScope Typed -> Type Typed -> SolveM (Wrapper Typed)
+solveImplicitConstraint x _ _ _ | x >= 200 = throwError undefined
+solveImplicitConstraint x inner scope t =
+  case Imp.lookup t scope of
+    [c] -> useImplicit x inner scope t c
+    [] -> throwError (noImplicitFound scope t)
+    xs -> case partition bySolvedness xs of
+      ([c], _) -> useImplicit x inner scope t c
+      _ -> throwError (ambiguousImplicits xs t)
+
+bySolvedness :: Implicit p -> Bool
+bySolvedness (ImplChoice _ _ _ s _) = s == Imp.Unsolved
+
+useImplicit :: Int -> Type Typed -> Imp.ImplicitScope Typed -> Type Typed -> Implicit Typed -> SolveM (Wrapper Typed)
+useImplicit x inner scope' ty (ImplChoice hdt oty os _ imp) = go where
+  go :: SolveM (Wrapper Typed)
+  go = do
+    (cast, view solveTySubst -> sub) <- capture $ unify ty hdt
+
+    let start e = Ascription (VarRef imp (annotation e, oty)) oty (annotation e, oty)
+        mk _ [] = pure (\e -> ExprWrapper (Cast cast) e (annotation e, ty))
+        mk (TyPi (Invisible _ _) t) (Quantifier (Invisible v _):xs) = do
+          tau <- case v `Map.lookup` sub of
+            Nothing -> refreshTV v
+            Just t -> pure t
+          let sub' = Map.singleton v tau
+
+          flip (.) (\ex -> ExprWrapper (TypeApp tau) ex (annotation ex, apply sub' t)) <$> mk (apply sub' t) xs
+        mk (TyPi (Implicit tau) t) (Implication _:os) = do
+          w <- solveImplicitConstraint (x + 1) t scope' tau
+          k' <- mk t os
+          pure (k' . (\ex -> ExprWrapper w ex (annotation ex, t)))
+        mk x (o:_) = error (show x ++ " missing " ++ show o)
+
+    wrap <- mk oty os
+    solveTySubst %= compose sub
+    let cont ex = ExprWrapper (ExprApp (wrap (start ex))) ex (annotation ex, inner)
+    pure (WrapFn (MkWrapCont cont ("implicit value for " ++ show ty)))
+
+subsumes :: Imp.ImplicitScope Typed
          -> Type Typed -> Type Typed -> SolveM (Wrapper Typed)
-subsumes k t1 t2@TyPi{} | isSkolemisable t2 = do
+subsumes s t1 t2@TyPi{} | isSkolemisable t2 = do
   sub <- use solveTySubst
   (c, t2') <- skolemise (BySubsumption (apply sub t1) (apply sub t2)) t2
-  (Syntax.:>) c <$> subsumes k t1 t2'
-subsumes k t1@TyPi{} t2 | isSkolemisable t1 = do
+  (Syntax.:>) c <$> subsumes s t1 t2'
+
+subsumes s t1@TyPi{} t2 | isSkolemisable t1 = do
   (cont, _, t1') <- instantiate Subsumption t1
   let wrap = maybe IdWrap (WrapFn . flip MkWrapCont "forall <= sigma; instantiation") cont
 
-  flip (Syntax.:>) wrap <$> subsumes k t1' t2
+  flip (Syntax.:>) wrap <$> subsumes s t1' t2
 
-subsumes k ot@(TyTuple a b) nt@(TyTuple a' b') = do
-  wa <- subsumes k a a'
-  wb <- subsumes k b b'
+subsumes s (TyPi (Implicit b) c) (TyPi (Implicit a) d) = do
+  wa <- subsumes s a b
+  wc <- subsumes s c d
+
+  arg <- TvName <$> genName
+
+  let wrap ex | an <- annotation ex
+        = Fun (ImplParam (Capture arg (an, a))) (ExprWrapper wc (App ex (ExprWrapper wa (VarRef arg (an, a)) (an, b)) (an, c)) (an, d)) (an, TyPi (Implicit a) d)
+
+  pure (WrapFn (MkWrapCont wrap "co/contra subsumption for implicit functions"))
+
+subsumes s wt@(TyPi (Implicit t) t1) t2 | _TyVar `isn't` t2 = do
+  _ <- unify t1 t2
+
+  sub <- use solveTySubst
+  w <- solveImplicitConstraint 0 wt s (apply sub t)
+  let wrap ex | an <- annotation ex = Ascription (ExprWrapper w (Ascription ex wt (an, wt)) (an, t1)) t1 (an, t1)
+   in pure (WrapFn (MkWrapCont wrap "implicit instantation"))
+
+subsumes s ot@(TyTuple a b) nt@(TyTuple a' b') = do
+  wa <- subsumes s a a'
+  wb <- subsumes s b b'
   [elem, elem'] <- fmap TvName <$> replicateM 2 genName
   let cont (Tuple (e:es) (an, _)) =
         Tuple [ ExprWrapper wa e (an, a')
@@ -294,11 +389,11 @@ subsumes k ot@(TyTuple a b) nt@(TyTuple a' b') = do
                    (an, nt)
   pure (WrapFn (MkWrapCont cont "tuple re-packing"))
 
-subsumes k a@(TyApp lazy _) b@(TyApp lazy' _)
-  | lazy == lazy', lazy' == tyLazy = probablyCast <$> k a b
+subsumes _ a@(TyApp lazy _) b@(TyApp lazy' _)
+  | lazy == lazy', lazy' == tyLazy = probablyCast <$> unify a b
 
-subsumes k (TyApp lazy ty') ty | lazy == tyLazy, _TyVar `isn't` ty = do
-  co <- k ty' ty
+subsumes _ (TyApp lazy ty') ty | lazy == tyLazy, _TyVar `isn't` ty = do
+  co <- unify ty' ty
   let wrap ex
         | an <- annotation ex =
           App (ExprWrapper (TypeApp ty) (VarRef forceName (an, forceTy))
@@ -307,22 +402,22 @@ subsumes k (TyApp lazy ty') ty | lazy == tyLazy, _TyVar `isn't` ty = do
               (an, ty)
   pure (WrapFn (MkWrapCont wrap "automatic forcing"))
 
-subsumes k ty' (TyApp lazy ty) | lazy == tyLazy, _TyVar `isn't` ty' = do
-  co <- k ty ty'
+subsumes _ ty' (TyApp lazy ty) | lazy == tyLazy, _TyVar `isn't` ty' = do
+  co <- unify ty ty'
   let wrap ex
         | an <- annotation ex =
           App (ExprWrapper (TypeApp ty) (VarRef lAZYName (an, lAZYTy))
                 (an, lAZYTy' ty))
-              (Fun (PLiteral LiUnit (an, tyUnit))
+              (Fun (PatParam (PLiteral LiUnit (an, tyUnit)))
                 (ExprWrapper (probablyCast co) ex (an, ty'))
                 (an, TyArr tyUnit ty))
               (an, TyApp lazy ty)
   pure (WrapFn (MkWrapCont wrap "automatic thunking"))
 
+subsumes _ a b = probablyCast <$> unify a b
 
-subsumes k a b = probablyCast <$> k a b
-
-
+-- | Shallowly skolemise a type, replacing any @forall@-bound 'TyVar's
+-- with fresh 'Skolem' constants.
 skolemise :: MonadNamey m => SkolemMotive Typed -> Type Typed -> m (Wrapper Typed, Type Typed)
 skolemise motive ty@TyPi{} | Just (tv, k, t) <- isSkolemisableTyBinder ty = do
   sk <- freshSkol motive ty tv
@@ -336,7 +431,7 @@ skolemise motive ty@TyPi{} | Just (tv, k, t) <- isSkolemisableTyBinder ty = do
 skolemise _ ty = pure (IdWrap, ty)
 
 isSkolemisableTyBinder :: Type Typed -> Maybe (Var Typed, Maybe (Type Typed), Type Typed)
-isSkolemisableTyBinder (TyPi (Implicit v k) c) = Just (v, k, c)
+isSkolemisableTyBinder (TyPi (Invisible v k) c) = Just (v, k, c)
 isSkolemisableTyBinder (TyPi (Explicit v k) c) = Just (v, Just k, c)
 isSkolemisableTyBinder _ = Nothing
 
@@ -359,6 +454,12 @@ probablyCast x
   | isReflexiveCo x = IdWrap
   | otherwise = Cast x
 
+-- | Make a fresh 'Skolem' constant, with the given 'SkolemMotive', for
+-- a 'Var' in the 'Type'.
+--
+-- @
+--  freshSkol motive scope var
+-- @
 freshSkol :: MonadNamey m => SkolemMotive Typed -> Type Typed -> Var Typed -> m (Type Typed)
 freshSkol m ty u = do
   var <- TvName <$> genName

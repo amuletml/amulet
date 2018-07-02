@@ -4,7 +4,11 @@ module Types.Infer
   ( inferProgram
   , builtinsEnv
   , closeOver
-  , tyString, tyInt, tyBool, tyUnit, tyFloat
+  , tyString
+  , tyInt
+  , tyBool
+  , tyUnit
+  , tyFloat
 
   , infer, check
   ) where
@@ -17,7 +21,6 @@ import Data.Traversable
 import Data.Spanned
 import Data.Triple
 import Data.Graph
-import Data.Span
 
 import Control.Monad.State
 import Control.Monad.Infer
@@ -25,6 +28,7 @@ import Control.Arrow (first, second, (***))
 import Control.Lens
 
 import Syntax.Resolve.Toplevel
+import Syntax.Implicits
 import Syntax.Transform
 import Syntax.Subst
 import Syntax.Types
@@ -41,10 +45,13 @@ import Types.Unify
 
 import Text.Pretty.Semantic
 
--- Solve for the types of lets in a program
+-- | Solve for the types of bindings in a problem: Either @TypeDecl@s,
+-- @LetStmt@s, or @ForeignVal@s.
 inferProgram :: MonadNamey m => Env -> [Toplevel Resolved] -> m (Either [TypeError] ([Toplevel Typed], Env))
 inferProgram env ct = fmap fst <$> runInfer env (inferProg ct)
 
+-- | Check an 'Expr'ession against a known 'Type', annotating it with
+-- appropriate 'Wrapper's, and performing /some/ level of desugaring.
 check :: forall m. MonadInfer Typed m => Expr Resolved -> Type Typed -> m (Expr Typed)
 check e ty@TyPi{} | isSkolemisable ty = do -- This is rule Decl∀L from [Complete and Easy]
   (wrap, e) <- secondA (check e) =<< skolemise (ByAscription ty) ty -- gotta be polymorphic - don't allow instantiation
@@ -63,22 +70,34 @@ check (Begin xs a) t = do
   pure (Begin (start ++ [end]) (a, t))
 
 check ex@(Let ns b an) t = do
-  (ns, ts) <- inferLetTy (annotateKind (BecauseOf ex)) ns
-  local (names %~ focus ts) $ do
+  (ns, ts, is) <- inferLetTy (annotateKind (BecauseOf ex)) ns
+  local (names %~ focus ts) $ local (implicits %~ mappend is) $ do
     b <- check b t
     pure (Let ns b (an, t))
 
 check ex@(Fun pat e an) ty = do
-  (dom, cod, _) <- quantifier ex ty
+  (dom, cod, _) <- quantifier ex Don'tSkip ty
   let domain = _tyBinderType dom
 
-  (p, vs, cs) <- checkPattern pat domain
-  let tvs = Set.map unTvName (boundTvs p vs)
+  (p, tau, vs, cs) <- inferParameter pat
+  _ <- subsumes ex domain (_tyBinderType tau)
+  let tvs = Set.map unTvName (boundTvs (p ^. paramPat) vs)
 
-  implies (Arm pat e) domain cs $ do
-    e <- local (typeVars %~ Set.union tvs) . local (names %~ focus vs) $
-      check e cod
-    pure (Fun p e (an, ty))
+  implies (Arm (pat ^. paramPat) e) domain cs $
+    case dom of
+      Implicit{} -> do
+        name <- TvName <$> genName
+        e <- local (typeVars %~ Set.union tvs) $ local (names %~ focus vs) $
+          local (implicits %~ insert name domain) $
+            check e cod
+        let body = Match (VarRef name (an, domain)) [ (p ^. paramPat, e) ] (an, cod)
+            pat = ImplParam (Capture name (an, domain))
+        pure (Fun pat body (an, ty))
+      Anon{} -> do
+        e <- local (typeVars %~ Set.union tvs) . local (names %~ focus vs) $
+          check e cod
+        pure (Fun p e (an, ty))
+      _ -> error "invalid quantifier in check Fun"
 
 check (If c t e an) ty = If <$> check c tyBool <*> check t ty <*> check e ty <*> pure (an, ty)
 
@@ -119,21 +138,37 @@ check e ty = do
 
 -- [Complete and Easy]: See https://www.cl.cam.ac.uk/~nk480/bidir.pdf
 
+-- | Infer a 'Type' for an 'Expr'ession provided no other information
+-- than the environment, producing an 'Expr'ession annotated with
+-- 'Wrapper's where nescessary.
 infer :: MonadInfer Typed m => Expr Resolved -> m (Expr Typed, Type Typed)
 infer (VarRef k a) = do
-  (cont, old, new) <- third3A (discharge (VarRef k a)) =<< lookupTy' k
+  (cont, old, (new, cont')) <- third3A (discharge (VarRef k a)) =<< lookupTy' k
   case cont of
     Nothing -> pure (VarRef (TvName k) (a, old), old)
-    Just cont -> pure (cont (VarRef (TvName k) (a, old)), new)
+    Just cont -> pure (cont' (cont (VarRef (TvName k) (a, old))), new)
 
-infer (Fun p e an) = let blame = Arm p e in do
-  (p, dom, ms, cs) <- inferPattern p
-  let tvs = boundTvs p ms
+infer (Fun p e an) = let blame = Arm (p ^. paramPat) e in do
+  (p, dom, ms, cs) <- inferParameter p
+  let tvs = boundTvs (p ^. paramPat) ms
+      domain = _tyBinderType dom
 
   _ <- leakEqualities blame cs
-  (e, cod) <- local (typeVars %~ Set.union (Set.map unTvName tvs)) $
-    local (names %~ focus ms) $ infer e
-  pure (Fun p e (an, TyArr dom cod), TyArr dom cod)
+  case p of
+    ImplParam p -> do
+      name <- TvName <$> genName
+      (e, cod) <- local (typeVars %~ Set.union (Set.map unTvName tvs)) $
+        local (names %~ focus ms) $
+          local (implicits %~ consider name domain) $
+            infer e
+      let body = Match (VarRef name (an, domain)) [ (p, e) ] (an, cod)
+          pat = ImplParam (Capture name (an, domain))
+      pure (Fun pat body (an, TyPi dom cod), TyPi dom cod)
+    PatParam _ -> do
+      (e, cod) <- local (typeVars %~ Set.union (Set.map unTvName tvs)) $
+        local (names %~ focus ms) $
+          infer e
+      pure (Fun p e (an, TyPi dom cod), TyPi dom cod)
 
 infer (Literal l an) = pure (Literal l (an, ty), ty) where
   ty = litTy l
@@ -153,7 +188,7 @@ infer ex@(App f hole@(InstHole ha) a) = do
 
 infer ex@(App f (InstType t ta) a) = do
   (f, ot) <- infer f
-  (dom, c, k) <- quantifier ex ot
+  (dom, c, k) <- quantifier ex DoSkip ot
   case dom of
     Explicit v ki -> do
       x <- checkAgainstKind (BecauseOf ex) t ki
@@ -162,16 +197,18 @@ infer ex@(App f (InstType t ta) a) = do
     Anon{} ->
       throwError . flip WrongQuantifier ot . flip InstType (ta, undefined) =<< resolveKind (BecauseOf ex) t
     Implicit{} -> error "invalid implicit quantification in App"
+    Invisible{} -> error "invalid invisible quantification in App"
 
 infer ex@(App f x a) = do
   (f, ot) <- infer f
-  (dom, c, k) <- quantifier ex ot
+  (dom, c, k) <- quantifier ex DoSkip ot
   case dom of
     Anon d -> do
       x <- check x d
       pure (App (k f) x (a, c), c)
     Explicit{} -> throwError (ArisingFrom (WrongQuantifier x ot) (BecauseOf ex))
     Implicit{} -> error "invalid implicit quantification in App"
+    Invisible{} -> error "invalid invisible quantification in App"
 
 infer ex@(BinOp l o r a) = do
   (o, (ld, c, k1)) <- secondA (decompose ex _TyArr) =<< infer o
@@ -232,9 +269,9 @@ inferRows rows = for rows $ \(var', val) -> do
 inferProg :: MonadInfer Typed m
           => [Toplevel Resolved] -> m ([Toplevel Typed], Env)
 inferProg (stmt@(LetStmt ns):prg) = do
-  (ns', ts) <- inferLetTy (closeOver (BecauseOf stmt)) ns
+  (ns', ts, is) <- inferLetTy (closeOver (BecauseOf stmt)) ns
                    `catchError` (throwError . propagateBlame (BecauseOf stmt))
-  local (names %~ focus ts) $
+  local (names %~ focus ts) . local (implicits %~ mappend is) $
     consFst (LetStmt ns') $
       inferProg prg
 inferProg (st@(ForeignVal v d t ann):prg) = do
@@ -243,13 +280,12 @@ inferProg (st@(ForeignVal v d t ann):prg) = do
     consFst (ForeignVal (TvName v) d t' (ann, t')) $
       inferProg prg
 inferProg (decl@(TypeDecl n tvs cs):prg) = do
-  kind <- resolveTyDeclKind (BecauseOf decl) n tvs cs
-  let retTy = foldl TyApp (TyCon (TvName n)) (map (TyVar . TvName) tvs)
-   in local (names %~ focus (one n kind)) $ do
+  (kind, retTy, tvs) <- resolveTyDeclKind (BecauseOf decl) n tvs cs
+  local (names %~ focus (one n kind)) $ do
      (ts, cs') <- unzip <$> for cs (\con ->
        inferCon retTy con `catchError` (throwError . propagateBlame (BecauseOf con)))
      local (names %~ focus (teleFromList ts)) . local (constructors %~ Set.union (Set.fromList (map (unTvName . fst) ts))) $
-       consFst (TypeDecl (TvName n) (map TvName tvs) cs') $
+       consFst (TypeDecl (TvName n) tvs cs') $
          inferProg prg
 inferProg (Open mod pre:prg) =
   -- Currently open doesn't need to do anything as we'll be in scope anyway
@@ -268,20 +304,26 @@ inferProg [] = asks ([],)
 
 -- For polymorphic recursion, mostly
 approxType :: MonadInfer Typed m => Expr Resolved -> StateT Origin m (Type Typed)
-approxType (Fun r@(PType _ t _) e _) = TyArr <$> resolveKind (BecauseOf r) t <*> approxType e
+approxType r@(Fun p e _) = TyPi <$> approxParam p <*> approxType e where
+  approxParam (ImplParam (PType _ t _)) = Implicit <$> resolveKind (BecauseOf r) t
+  approxParam (PatParam (PType _ t _)) = Anon <$> resolveKind (BecauseOf r) t
+  approxParam (ImplParam _) = do
+    put Guessed
+    Implicit <$> freshTV
+  approxParam (PatParam _) = do
+    put Guessed
+    Anon <$> freshTV
 approxType r@(Ascription _ t _) = resolveKind (BecauseOf r) t
-approxType (Fun _ e _) = do
-  put Guessed
-  TyArr <$> freshTV <*> approxType e
 approxType _ = do
   put Guessed
   lift freshTV
 
 inferLetTy :: forall m. MonadInfer Typed m
            => (Type Typed -> m (Type Typed))
-           -> [(Var Resolved, Expr Resolved, Ann Resolved)]
-           -> m ( [(Var Typed, Expr Typed, Ann Typed)]
+           -> [Binding Resolved]
+           -> m ( [Binding Typed]
                 , Telescope Typed
+                , ImplicitScope Typed
                 )
 inferLetTy closeOver vs =
   let sccs = depOrder vs
@@ -313,9 +355,9 @@ inferLetTy closeOver vs =
              [] -> pure ty
              vs -> annotateKind r $ foldr (flip TyForall Nothing) ty vs
 
-      approximate :: (Var Resolved, Expr Resolved, Span)
+      approximate :: Binding Resolved
                   -> m (Origin, (Var Typed, Type Typed))
-      approximate (v, e, _) = do
+      approximate (Binding v e _ _) = do
         (ty, st) <- runStateT (approxType e) Supplied
         ty' <- generalise (BecauseOf e) ty
         pure (st, (TvName v, if not (wasGuessed st) then ty' else ty))
@@ -327,11 +369,11 @@ inferLetTy closeOver vs =
         unless (null (sks `Set.difference` env)) $
           throwError (blameSkol (EscapedSkolems (Set.toList (skols ty)) ty) (unTvName var, exp))
 
-      tcOne :: SCC (Var Resolved, Expr Resolved, Ann Resolved)
-            -> m ( [(Var Typed, Expr Typed, Ann Typed)]
+      tcOne :: SCC (Binding Resolved)
+            -> m ( [Binding Typed]
                  , Telescope Typed )
 
-      tcOne (AcyclicSCC decl@(var, exp, ann)) = do
+      tcOne (AcyclicSCC decl@(Binding var exp p ann)) = do
         (origin, tv) <- approximate decl
         ((exp', ty), cs) <- listen . local (names %~ focus (uncurry one tv)) $
           case origin of
@@ -345,47 +387,53 @@ inferLetTy closeOver vs =
               _ <- unify exp ty (snd tv)
               pure (exp', ty)
         (tp, k) <- figureOut (var, BecauseOf exp) ty cs
-        pure ( [(TvName var, k exp', (ann, tp))], one var tp )
+        pure ( [Binding (TvName var) (k exp') p (ann, tp)], one var tp )
 
       tcOne (CyclicSCC vars) = do
         (origins, tvs) <- unzip <$> traverse approximate vars
 
         (vs, cs) <- listen . local (names %~ focus (teleFromList tvs)) $
-          ifor (zip tvs vars) $ \i ((_, tyvar), (var, exp, ann)) ->
+          ifor (zip tvs vars) $ \i ((_, tyvar), Binding var exp p ann) ->
             case origins !! i of
               Supplied -> do
                 let exp' (Ascription e _ _) = exp' e
                     exp' e = e
                 exp <- check (exp' exp) tyvar
-                pure (TvName var, exp, ann, tyvar)
+                pure (Binding (TvName var) exp p (ann, tyvar), tyvar)
               Guessed -> do
                 (exp', ty) <- infer exp
                 _ <- unify exp ty tyvar
-                pure (TvName var, exp', ann, ty)
+                pure (Binding (TvName var) exp' p (ann, ty), ty)
 
         cur <- genName
         (solution, cs) <- case solve cur cs of
           Right x -> pure x
           Left e -> throwError e
-        let solveOne :: (Var Typed, Expr Typed, Span, Type Typed)
-                     -> m ((Var Typed, Expr Typed, Ann Typed), Telescope Typed)
-            solveOne (var, exp, ann, given) =
+        let solveOne :: (Binding Typed, Type Typed)
+                     -> m (Binding Typed, Telescope Typed)
+            solveOne (Binding var exp p ann, given) =
               let figure = apply solution
                in do
                   ty <- closeOver (figure given)
                   skolCheck var (BecauseOf exp) ty
-                  pure ( (var, solveEx ty solution cs exp, (ann, ty))
+                  pure ( Binding var (solveEx ty solution cs exp) p (fst ann, ty)
                        , one var ty )
             squish = fmap (second mconcat . unzip)
          in squish . traverse solveOne $ vs
 
-      tc :: [SCC (Var Resolved, Expr Resolved, Ann Resolved)]
-         -> m ( [(Var Typed, Expr Typed, Ann Typed)] , Telescope Typed )
+      tc :: [SCC (Binding Resolved)]
+         -> m ( [Binding Typed] , Telescope Typed )
       tc (s:cs) = do
         (vs', binds) <- tcOne s
         fmap ((vs' ++) *** (binds <>)) . local (names %~ focus binds) $ tc cs
       tc [] = pure ([], mempty)
-   in tc sccs
+
+      mkImplicits :: ([Binding Typed], Telescope Typed) -> ([Binding Typed], Telescope Typed, ImplicitScope Typed)
+      mkImplicits (bs, t) =
+        let one (Binding v _ BindImplicit (_, t)) = singleton v t
+            one _ = mempty
+         in (bs, t, foldMap one bs)
+   in mkImplicits <$> tc sccs
 
 solveEx :: Type Typed -> Subst Typed -> Map.Map (Var Typed) (Wrapper Typed) -> Expr Typed -> Expr Typed
 solveEx _ ss cs = transformExprTyped go id goType where
@@ -396,6 +444,7 @@ solveEx _ ss cs = transformExprTyped go id goType where
   go x = x
 
   goWrap (TypeApp t) = TypeApp (goType t)
+  goWrap (ExprApp t) = ExprApp (solveEx undefined ss cs t)
   goWrap (Cast c) = case c of
     ReflCo{} -> IdWrap
     AssumedCo a b | a == b -> IdWrap

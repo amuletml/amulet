@@ -1,0 +1,12 @@
+ordering : type
+Lt : ordering
+Gt : ordering
+Eq : ordering
+ord : type -> type
+Ord : {'a : type}. ('a -> 'a -> ordering) -> ord 'a
+ord_int : ord int
+eq : type -> type
+MkEq : {'a : type}. ('a -> 'a -> bool) -> eq 'a
+equals : {'a : type}. eq 'a => 'a -> 'a -> bool
+eq_from_ord : {'a : type}. ord 'a => eq 'a
+main : int -> int -> bool

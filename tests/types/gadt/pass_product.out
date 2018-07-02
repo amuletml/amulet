@@ -5,5 +5,5 @@ elem : {'di : type}. 'di -> 'di -> type
 Here : {'xs : 'eu}. {'x : 'eu}. {'xs : 'eu}. ('xs ~ 'x * 'xs) ⊃ elem 'x 'xs
 There : {'xs : 'gd}. {'x : 'gd}. {'xs : 'gd}. {'y : 'gd}. ('xs ~ 'y * 'xs) ⊃ elem 'x 'xs -> elem 'x 'xs
 index : {'a : type}. {'ts : type}. elem 'a 'ts -> list 'ts -> 'a
-:: : {'ld : type}. {'b : type}. 'ld -> list 'b -> list ('ld * 'b)
+:: : {'kr : type}. {'b : type}. 'kr -> list 'b -> list ('kr * 'b)
 foo : string

@@ -65,9 +65,11 @@ unify e a b = do
   x <- TvName <$> genName
   tell (Seq.singleton (ConUnify (BecauseOf e) x a b))
   pure (b, WrapVar x)
+
 subsumes e a b = do
+  i <- view implicits
   x <- TvName <$> genName
-  tell (Seq.singleton (ConSubsume (BecauseOf e) x a b))
+  tell (Seq.singleton (ConSubsume (BecauseOf e) x i a b))
   pure (b, WrapVar x)
 
 implies :: ( Reasonable f p
@@ -115,16 +117,28 @@ decompose r p t =
       (_, k) <- subsumes r t (p # (a, b))
       pure (a, b, \x -> ExprWrapper k x (annotation x, p # (a, b)))
 
+-- | Get the first /visible/ 'TyBinder' in this 'Type', possibly
+-- instantiating 'TyForall's and discharging 'Implicit' binders.
 quantifier :: (Reasonable f p, MonadInfer Typed m)
            => f p
+           -> SkipImplicit
            -> Type Typed
            -> m (TyBinder Typed, Type Typed, Expr Typed -> Expr Typed)
-quantifier r ty@TyForall{} = do
+quantifier r s ty@TyForall{} = do
   (k', _, t) <- instantiate Expression ty
-  (a, b, k) <- quantifier r t
+  (a, b, k) <- quantifier r s t
   pure (a, b, fromMaybe id k' . k)
-quantifier _ (TyPi x b) = pure (x, b, id)
-quantifier r t = do
+
+quantifier r DoSkip (TyPi (Implicit tau) sigma) = do
+  x <- TvName <$> genName
+  i <- view implicits
+  tell (Seq.singleton (ConImplicit (BecauseOf r) x i tau sigma))
+  (dom, cod, k) <- quantifier r DoSkip sigma
+  let wrap ex = ExprWrapper (WrapVar x) ex (annotation ex, sigma)
+  pure (dom, cod, wrap . k)
+
+quantifier _ _ (TyPi x b) = pure (x, b, id)
+quantifier r _ t = do
   (a, b) <- (,) <$> freshTV <*> freshTV
   (_, k) <- subsumes r t (TyPi (Anon a) b)
   pure (Anon a, b, \x -> ExprWrapper k x (annotation x, TyPi (Anon a) b))
@@ -132,9 +146,9 @@ quantifier r t = do
 discharge :: (Reasonable f p, MonadInfer Typed m)
           => f p
           -> Type Typed
-          -> m (Type Typed)
+          -> m (Type Typed, Expr Typed -> Expr Typed)
 discharge r (TyWithConstraints cs tau) = leakEqualities r cs *> discharge r tau
-discharge _ t = pure t
+discharge _ t = pure (t, id)
 
 litTy :: Lit -> Type Typed
 litTy LiInt{} = tyInt
@@ -145,6 +159,9 @@ litTy LiFloat{} = tyFloat
 
 -- A representation of an individual 'match' arm, for blaming type
 -- errors on:
+
+data SkipImplicit = DoSkip | Don'tSkip
+  deriving (Eq, Show, Ord)
 
 data Arm p
   = Arm { armPat :: Pattern p

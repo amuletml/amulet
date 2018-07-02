@@ -20,6 +20,7 @@ import qualified Data.Set as Set
 import Data.Traversable
 import Data.Foldable
 import Data.Triple
+import Data.Maybe
 
 import Types.Wellformed (wellformed)
 import Types.Infer.Builtin
@@ -83,22 +84,46 @@ annotateKind r ty = do
 
   pure (apply sub ty)
 
+initialKind :: MonadKind m => [TyConArg Resolved] -> KindT m (Type Typed, Telescope Typed)
+initialKind (TyVarArg v:as) = do
+  (k, t) <- initialKind as
+  ty <- freshTV
+  pure (TyArr ty k, one v ty <> t)
+initialKind (TyAnnArg v k:as) = do
+  k <- checkKind k TyType
+  (s, t) <- initialKind as
+  pure (TyForall (TvName v) (Just k) s, t <> one v k)
+initialKind (TyVisArg v k:as) = do
+  k <- checkKind k TyType
+  (s, t) <- initialKind as
+  pure (TyPi (Explicit (TvName v) k) s, t <> one v k)
+initialKind [] = pure (TyType, mempty)
+
 resolveTyDeclKind :: MonadKind m
                   => SomeReason
-                  -> Var Resolved -> [Var Resolved]
+                  -> Var Resolved -> [TyConArg Resolved]
                   -> [Constructor Resolved]
-                  -> m (Type Typed)
-resolveTyDeclKind reason tycon args cons = solveForKind reason $ do
-  ks <- replicateM (length args) freshTV
-  let kind = foldr TyArr TyType ks
-      scope = one tycon kind <> teleFromList (zip (map TvName args) ks)
+                  -> m (Type Typed, Type Typed, [TyConArg Typed])
+resolveTyDeclKind reason tycon args cons = do
+  let argTvName (TyVarArg v)   = Just (TvName v)
+      argTvName TyAnnArg{} = Nothing
+      argTvName (TyVisArg v _) = Just (TvName v)
+      vs = mapMaybe argTvName args
+  k <- solveForKind reason $ do
+    (kind, tele) <- initialKind args
+    let scope = one tycon kind <> tele
 
-  local (names %~ focus scope) $ do
-    for_ cons $ \case
-      UnitCon{} -> pure ()
-      ArgCon _ t _ -> () <$ checkKind t TyType
-      c@(GeneralisedCon _ t _) -> inferGadtConKind c t tycon (map TvName args)
-    pure kind
+    local (names %~ focus scope) $ do
+      for_ cons $ \case
+        UnitCon{} -> pure ()
+        ArgCon _ t _ -> () <$ checkKind t TyType
+        c@(GeneralisedCon _ t _) -> inferGadtConKind c t tycon (mapMaybe argTvName args)
+      pure kind
+  let remake (TyVarArg v:as) (TyArr _ k) = TyVarArg (TvName v):remake as k
+      remake (TyAnnArg v _:as) (TyForall _ (Just k) _) = TyAnnArg (TvName v) k:remake as k
+      remake (TyVisArg v _:as) (TyPi (Explicit _ k) _) = TyVisArg (TvName v) k:remake as k
+      remake _ _ = []
+  pure (k, foldl TyApp (TyCon (TvName tycon)) (map TyVar vs), remake args k)
 
 solveForKind :: MonadKind m => SomeReason -> KindT m (Type Typed) -> m (Type Typed)
 solveForKind reason = solveK (closeOver reason) reason
@@ -141,7 +166,7 @@ inferKind (TySkol sk) = do
 
 inferKind (TyApp f x) = do
   reason <- get
-  (f, (dom, c, _)) <- secondA (quantifier (Const reason)) =<< inferKind f
+  (f, (dom, c, _)) <- secondA (quantifier (Const reason) Don'tSkip) =<< inferKind f
 
   case dom of
     Anon d -> do
@@ -151,6 +176,7 @@ inferKind (TyApp f x) = do
     Explicit v k -> do
       x <- checkKind x k
       pure (TyApp f x, apply (Map.singleton v x) c)
+    Invisible{} -> error "inferKind TyApp: visible argument to implicit quantifier"
     Implicit{} -> error "inferKind TyApp: visible argument to implicit quantifier"
 
 inferKind (TyRows p rs) = do
@@ -193,6 +219,9 @@ checkKind (TyPi binder b) ek = do
   -- _ <- isType ek
   case binder of
     Anon t -> TyArr <$> checkKind t ek <*> checkKind b ek
+    Implicit t -> do
+      t <- checkKind t ek
+      TyPi (Implicit t) <$> checkKind b ek
 
     Explicit v arg -> do
       (arg, kind) <- inferKind arg
@@ -202,19 +231,19 @@ checkKind (TyPi binder b) ek = do
       let bind = Explicit (TvName v) arg
       pure $ TyPi bind b
 
-    Implicit v (Just arg) -> do
+    Invisible v (Just arg) -> do
       (arg, kind) <- inferKind arg
       _ <- subsumes (Const reason) ek kind
       b <- local (names %~ focus (one v arg)) $
         checkKind b ek
-      let bind = Implicit (TvName v) (Just arg)
+      let bind = Invisible (TvName v) (Just arg)
       pure $ TyPi bind b
 
-    Implicit v Nothing -> do
+    Invisible v Nothing -> do
       x <- freshTV
       b <- local (names %~ focus (one v x)) $
         checkKind b ek
-      let bind = Implicit (TvName v) (Just x)
+      let bind = Invisible (TvName v) (Just x)
       pure $ TyPi bind b
 
 checkKind ty u = do
@@ -282,8 +311,9 @@ promoteOrError TyTuple{} = Nothing
 promoteOrError TyRows{} = Just (string "mentions a tuple")
 promoteOrError TyExactRows{} = Just (string "mentions a tuple")
 promoteOrError (TyApp a b) = promoteOrError a <|> promoteOrError b
-promoteOrError (TyPi (Implicit _ a) b) = join (traverse promoteOrError a) <|> promoteOrError b
+promoteOrError (TyPi (Invisible _ a) b) = join (traverse promoteOrError a) <|> promoteOrError b
 promoteOrError (TyPi (Explicit _ a) b) = promoteOrError a <|> promoteOrError b
+promoteOrError (TyPi (Implicit a) b) = promoteOrError a <|> promoteOrError b
 promoteOrError (TyPi (Anon a) b) = promoteOrError a <|> promoteOrError b
 promoteOrError TyCon{} = Nothing
 promoteOrError TyVar{} = Nothing

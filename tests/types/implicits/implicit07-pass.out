@@ -1,0 +1,4 @@
+print : {'a : type}. 'a -> unit
+given : {'a : type}. {'b : type}. 'a -> ('a => 'b) -> 'b
+foo : int => int
+main : int
