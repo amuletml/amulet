@@ -16,7 +16,7 @@ module Control.Monad.Infer
   , Env
   , MonadInfer, Name
   , lookupTy, lookupTy', genNameFrom, runInfer, freeInEnv
-  , difference, freshTV
+  , difference, freshTV, refreshTV
   , instantiate
   , SomeReason(..), Reasonable, propagateBlame
   , WhyInstantiate(..)
@@ -50,6 +50,7 @@ import Text.Pretty.Semantic
 import Text.Pretty.Note
 
 import Syntax.Transform
+import Syntax.Implicits
 import Syntax.Pretty
 import Syntax.Types
 import Syntax.Subst
@@ -58,8 +59,9 @@ type MonadInfer p m = (MonadError TypeError m, MonadReader Env m, MonadWriter (S
 
 data Constraint p
   = ConUnify   SomeReason (Var p)  (Type p) (Type p)
-  | ConSubsume SomeReason (Var p)  (Type p) (Type p)
+  | ConSubsume SomeReason (Var p)  (ImplicitScope p) (Type p) (Type p)
   | ConImplies SomeReason (Type p) (Seq.Seq (Constraint p)) (Seq.Seq (Constraint p))
+  | ConImplicit SomeReason (Var p) (ImplicitScope p) (Type p) (Type p)
   | ConFail (Ann p) (Var p) (Type p) -- for holes. I hate it.
 
 deriving instance (Show (Ann p), Show (Var p), Show (Expr p), Show (Type p))
@@ -99,28 +101,34 @@ data TypeError where
   WrongQuantifier   :: (Pretty (Var p), Pretty (Var p'), Ord (Var p), Ord (Var p')) => Expr p -> Type p' -> TypeError
   NakedInstArtifact :: (Pretty (Var p), Ord (Var p)) => Expr p -> TypeError
 
+  -- Implicit parameters
+  NoImplicit :: (Ord (Var p), Pretty (Var p)) => Type p -> (Doc -> Doc) -> TypeError
+
   NotPromotable :: Pretty (Var p) => Var p -> Type p -> Doc -> TypeError
   ManyErrors :: [TypeError] -> TypeError
 
 data WhyInstantiate = Expression | Subsumption
 
-instance (Ord (Var p), Substitutable p (Type p)) => Substitutable p (Constraint p) where
+instance (Show (Ann p), Show (Var p), Ord (Var p), Substitutable p (Type p)) => Substitutable p (Constraint p) where
   ftv (ConUnify _ _ a b) = ftv a `Set.union` ftv b
-  ftv (ConSubsume _ _ a b) = ftv a `Set.union` ftv b
+  ftv (ConSubsume _ _ s a b) = ftv a `Set.union` ftv b <> foldMap ftv (keys s)
   ftv (ConImplies _ t a b) = ftv a `Set.union` ftv b `Set.union` ftv t
+  ftv (ConImplicit _ _ s t t') = foldMap ftv (keys s) <> ftv t <> ftv t'
   ftv (ConFail _ _ t) = ftv t
 
   apply s (ConUnify e v a b) = ConUnify e v (apply s a) (apply s b)
-  apply s (ConSubsume e v a b) = ConSubsume e v (apply s a) (apply s b)
+  apply s (ConSubsume e v t a b) = ConSubsume e v (mapTypes (apply s) t) (apply s a) (apply s b)
   apply s (ConImplies e t a b) = ConImplies e (apply s t) (apply s a) (apply s b)
+  apply s (ConImplicit e t m i t') = ConImplicit e t (mapTypes (apply s) m) (apply s i) (apply s t')
   apply s (ConFail a e t) = ConFail a e (apply s t)
 
 instance Pretty (Var p) => Pretty (Constraint p) where
   pretty (ConUnify _ _ a b) = pretty a <+> soperator (char '~') <+> pretty b
-  pretty (ConSubsume _ _ a b) = pretty a <+> soperator (string "<=") <+> pretty b
+  pretty (ConSubsume _ _ _ a b) = pretty a <+> soperator (string "<=") <+> pretty b
   pretty (ConImplies _ t a b) = brackets (pretty t) <+> hsep (punctuate comma (toList (fmap pretty a)))
                             <+> soperator (char '⊃')
                             <#> indent 2 (vsep (punctuate comma (toList (fmap pretty b))))
+  pretty (ConImplicit _ v _ t _) = pretty v <+> colon <+> pretty t <+> parens (keyword "implicitly")
   pretty ConFail{} = string "fail"
 
 
@@ -161,27 +169,23 @@ instantiate :: MonadNamey m
             -> m ( Maybe (Expr Typed -> Expr Typed)
                  , Type Typed
                  , Type Typed)
-instantiate r tp@(TyPi (Implicit v _) ty) = do
-  TgName _ num <- genName
-  var <- pure . TyVar . TvName $ case unTvName v of
-    TgInternal n -> TgName n num
-    TgName n _ -> TgName n num
+instantiate r tp@(TyPi (Invisible v _) ty) = do
+  var <- refreshTV v
   let map = Map.singleton v var
 
       appThisTy e = ExprWrapper (TypeApp var) e (annotation e, apply map ty)
   (k, _, t) <- instantiate r (apply map ty)
   pure (squish appThisTy k, tp, t)
+
 instantiate Expression tp@(TyPi Explicit{} _) = pure (Just id, tp, tp) -- nope!
 instantiate Subsumption tp@(TyPi (Explicit v k) ty) = do
-  TgName _ num <- genName
-  var <- pure . TyVar . TvName $ case unTvName v of
-    TgInternal n -> TgName n num
-    TgName n _ -> TgName n num
+  var <- refreshTV v
   let map = Map.singleton v var
       appThisTy e = App e (InstType var (annotation e, k)) (annotation e, apply map ty)
 
   (k, _, t) <- instantiate Subsumption (apply map ty)
   pure (squish appThisTy k, tp, t)
+
 instantiate r tp@(TyPi (Anon co) od@dm) = do
   (wrap, _, dm) <- instantiate r dm
   let cont = fromMaybe id wrap
@@ -191,13 +195,19 @@ instantiate r tp@(TyPi (Anon co) od@dm) = do
       lam e | od == dm = e
       lam e
         | ann <- annotation e
-        = Fun (PType (Capture (TvName var) (ann, co)) co (ann, co)) (cont (App e (VarRef (TvName var) (ann, co)) (ann, od))) (ann, ty)
+        = Fun (PatParam (PType (Capture (TvName var) (ann, co)) co (ann, co))) (cont (App e (VarRef (TvName var) (ann, co)) (ann, od))) (ann, ty)
 
   pure (Just lam, tp, ty)
 instantiate _ ty = pure (Just id, ty, ty)
 
 freshTV :: MonadNamey m => m (Type Typed)
 freshTV = TyVar . TvName <$> genName
+
+refreshTV :: MonadNamey m => Var Typed -> m (Type Typed)
+refreshTV (TvName v) = TyVar . TvName <$> genNameFrom nm where
+  nm = case v of
+    TgInternal x -> x
+    TgName x _ -> x
 
 instance Pretty TypeError where
   pretty (NotEqual b@TyArr{} a) =
@@ -313,7 +323,8 @@ instance Pretty TypeError where
         InstHole{} -> highlight "Hole" <+> pretty t
         InstType{} -> highlight "Type" <+> pretty t
         _ -> highlight "Expression"
-
+  pretty (NoImplicit tau doc) =
+    doc $ vsep [ "Could not find implicit value of type" <+> displayType tau ]
 
   pretty (NakedInstArtifact h@InstHole{}) =
     vsep [ string "Instantiation hole" <+> pretty h <+> "used outside of type application" ]
@@ -346,11 +357,6 @@ missing _ _ = undefined -- freaking GHC
 
 diff :: [(Text, b)] -> [(Text, b)] -> [Doc]
 diff ra rb = map (stypeVar . string . T.unpack . fst) (deleteFirstsBy ((==) `on` fst) rb ra)
-
-prettyMotive :: SkolemMotive Typed -> Doc
-prettyMotive (ByAscription t) = string "of the context, the type" <#> displayType t
-prettyMotive (BySubsumption t1 t2) = string "of a requirement that" <+> displayType t1 <#> string "be as polymorphic as" <+> displayType t2
-prettyMotive (ByExistential v t) = string "it is an existential" <> comma <#> string "bound by the type of" <+> pretty v <> comma <+> displayType t
 
 squish :: (a -> c) -> Maybe (c -> c) -> Maybe (a -> c)
 squish f = Just . maybe f (.f)

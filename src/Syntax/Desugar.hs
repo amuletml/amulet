@@ -26,7 +26,7 @@ import Syntax
 -- | Desugar a program into a more simple representation
 desugarProgram :: forall m. MonadNamey m => [Toplevel Resolved] -> m [Toplevel Resolved]
 desugarProgram = traverse statement where
-  statement (LetStmt vs) = LetStmt <$> traverse (second3A expr) vs
+  statement (LetStmt vs) = LetStmt <$> traverse binding vs
   statement (Module v ss) = Module v <$> traverse statement ss
   statement x = pure x
 
@@ -34,16 +34,16 @@ desugarProgram = traverse statement where
   expr x@VarRef{} = pure x
   expr x@Hole{} = pure x
   expr (ExprWrapper w e a) = ExprWrapper w <$> expr e <*> pure a
-  expr (Let vs e a) = Let <$> traverse (second3A expr) vs <*> expr e <*> pure a
+  expr (Let vs e a) = Let <$> traverse binding vs <*> expr e <*> pure a
   expr (If c t e a) = If <$> expr c <*> expr t <*> expr e <*> pure a
   expr (App f x a) = App <$> expr f <*> expr x <*> pure a
   expr (Fun p b a) = Fun p <$> expr b <*> pure a
   expr (Begin es a) = Begin <$> traverse expr es <*> pure a
   expr (Match e bs a) = Match <$> expr e <*> traverse (secondA expr) bs <*> pure a
-  expr (Function [(p, b)] a) = Fun p <$> expr b <*> pure a
+  expr (Function [(p, b)] a) = Fun (PatParam p) <$> expr b <*> pure a
   expr (Function bs a) = do
     (cap, rhs) <- fresh a
-    Fun cap <$>
+    Fun (PatParam cap) <$>
       (Match <$> expr rhs <*> traverse (secondA expr) bs <*> pure a)
       <*> pure a
   -- Special case @@ so we can work on skolem variables
@@ -56,20 +56,20 @@ desugarProgram = traverse statement where
 
   expr (LeftSection op vl an) = do
     (cap, rhs) <- fresh an
-    let go lhs = expr (Fun cap (BinOp rhs op lhs an) an)
+    let go lhs = expr (Fun (PatParam cap) (BinOp rhs op lhs an) an)
     case vl of
       VarRef{} -> go vl
       Literal{} -> go vl
       _ -> do
         (Capture lv _, ref) <- fresh an
-        Let [(lv, vl, an)] <$> go ref <*> pure an
+        Let [Binding lv vl BindRegular an] <$> go ref <*> pure an
 
   expr (RightSection vl op an) = expr (App op vl an)
   expr (BothSection o _) = pure o
 
   expr (AccessSection k a) = do
     (cap, ref) <- fresh a
-    expr (Fun cap (Access ref k a) a)
+    expr (Fun (PatParam cap) (Access ref k a) a)
 
   expr (Parens e _) = expr e
   expr e@InstHole{} = pure e
@@ -79,14 +79,14 @@ desugarProgram = traverse statement where
   expr (TupleSection es a) = do
     es' <- traverse (traverse expr) es
     (args, binds, tuple) <- foldrM (buildTuple a) ([], [], []) es'
-    pure $ foldf (\(v, e) r -> Let [(v, e, a)] r a) binds
-         $ foldf (\v e -> Fun v e a) args
+    pure $ foldf (\(v, e) r -> Let [Binding v e BindRegular a] r a) binds
+         $ foldf (\v e -> Fun (PatParam v) e a) args
          $ Tuple tuple a
 
   expr (Lazy e a) = do
     e <- expr e
     pure $ App (VarRef (TgInternal "lazy") a)
-               (Fun (PLiteral LiUnit a) e a)
+               (Fun (PatParam (PLiteral LiUnit a)) e a)
                a
   expr (OpenIn _ e _) = expr e
 
@@ -103,6 +103,8 @@ desugarProgram = traverse statement where
   buildTuple a (Just e) (as, vs, tuple) = do
     (Capture v _, ref) <- fresh a
     pure (as, (v, e):vs, ref:tuple)
+
+  binding (Binding v e p a) = Binding v <$> expr e <*> pure p <*> pure a
 
   foldf f xs v = foldr f v xs
 

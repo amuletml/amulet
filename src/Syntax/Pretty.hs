@@ -3,7 +3,7 @@
 module Syntax.Pretty
   ( module Syntax
   , module Syntax.Var
-  , displayType, applyCons
+  , displayType, applyCons, prettyMotive
   ) where
 
 import Control.Arrow (first, second)
@@ -38,9 +38,9 @@ parenArg f = case f of
 instance (Pretty (Var p)) => Pretty (Expr p) where
   pretty (VarRef v _) = pretty v
   pretty (Let [] _ _) = error "absurd: never parsed"
-  pretty (Let ((n, v, _):xs) e _) =
-    let prettyBind (n, v, _) = keyword "and" <+> prettyOneBinding n v
-     in keyword "let" <+> prettyOneBinding n v
+  pretty (Let (Binding n v p _:xs) e _) =
+    let prettyBind (Binding n v p _) = keyword "and" <+> prettyOneBinding n v p
+     in keyword "let" <+> prettyOneBinding n v p
             <#> case xs of
               [] -> keyword "in" <+> pretty e
               _ -> vsep (map prettyBind xs) <#> keyword "in" <+> pretty e
@@ -82,6 +82,7 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
     go (TypeLam v t) ex = keyword "fun" <+> braces (pretty (TySkol v) <+> colon <+> pretty t) <> dot <+> pretty ex
     go (Cast c) ex = parens (pretty ex <+> soperator (string "|>") <+> pretty c)
     go (TypeApp t) ex = pretty ex <+> braces (pretty t)
+    go (ExprApp t) ex = pretty ex <+> brackets (pretty t)
     go (wr Syntax.:> wi) ex = go wr (ExprWrapper wi ex undefined)
     go (WrapVar v) ex = pretty ex <+> soperator (char '_') <> pretty v
     go (WrapFn f) ex = pretty (runWrapper f ex)
@@ -126,6 +127,9 @@ instance Pretty Lit where
   pretty (LiBool False) = sliteral (string "false")
   pretty LiUnit = sliteral (parens empty)
 
+instance Pretty (Var p) => Pretty (Binding p) where
+  pretty (Binding v n p _) = prettyOneBinding v n p
+
 instance (Pretty (Var p)) => Pretty (Type p) where
   pretty (TyCon v) = stypeCon (pretty v)
   pretty (TyPromotedCon v) = stypeCon (pretty v)
@@ -154,21 +158,29 @@ instance (Pretty (Var p)) => Pretty (Type p) where
 
   pretty TyType = stypeCon (string "type")
 
+instance Pretty (Var p) => Pretty (Parameter p) where
+  pretty (PatParam p) = pretty p
+  pretty (ImplParam p) = char '?' <> pretty p
+
 instance Pretty (Var p) => Pretty (TyBinder p) where
   pretty (Anon t) = k t (pretty t) <+> arrow where
     k TyPi{} = parens
     k TyTuple{} = parens
     k _ = id
-  pretty (Implicit v (Just k)) = braces (stypeVar (squote <> pretty v) <+> colon <+> pretty k) <> dot
-  pretty (Implicit v Nothing)  = stypeVar (squote <> pretty v) <> dot
+  pretty (Implicit t) = k t (pretty t) <+> soperator (string "=>") where
+    k TyPi{} = parens
+    k TyTuple{} = parens
+    k _ = id
+  pretty (Invisible v (Just k)) = braces (stypeVar (squote <> pretty v) <+> colon <+> pretty k) <> dot
+  pretty (Invisible v Nothing)  = stypeVar (squote <> pretty v) <> dot
 
   pretty (Explicit v k) = parens (stypeVar (squote <> pretty v) <+> colon <+> pretty k) <+> arrow
 
 instance (Pretty (Var p)) => Pretty (Toplevel p) where
   pretty (LetStmt []) = error "absurd!"
-  pretty (LetStmt ((n, v, _):xs)) =
-    let prettyBind (n, v, _) = keyword "and" <+> prettyOneBinding n v
-     in keyword "let" <+> prettyOneBinding n v
+  pretty (LetStmt (Binding n v p _:xs)) =
+    let prettyBind (Binding n v p _) = keyword "and" <+> prettyOneBinding n v p
+     in keyword "let" <+> prettyOneBinding n v p
              <> case xs of
                   [] -> empty
                   _ -> line <> vsep (map prettyBind xs)
@@ -188,6 +200,11 @@ instance (Pretty (Var p)) => Pretty (Toplevel p) where
          , keyword "end"
          ]
 
+instance Pretty (Var p) => Pretty (TyConArg p) where
+  pretty (TyVarArg var) = pretty var
+  pretty (TyAnnArg v k) = braces (pretty v <+> colon <+> pretty k)
+  pretty (TyVisArg v k) = braces (pretty v <+> colon <+> pretty k)
+
 instance (Pretty (Var p)) => Pretty [Toplevel p] where
   pretty = vcat . map pretty
 
@@ -199,8 +216,8 @@ instance (Pretty (Var p)) => Pretty (Constructor p) where
 record :: [Doc] -> Doc
 record = enclose (lbrace <> space) (space <> rbrace) . hsep . punctuate comma
 
-prettyOneBinding :: Pretty (Var p) => Var p -> Expr p -> Doc
-prettyOneBinding n v = hsep (pretty n:map pretty args) <> sig <+> nest 2 (equals </> pretty rest') where
+prettyOneBinding :: Pretty (Var p) => Var p -> Expr p -> Plicity -> Doc
+prettyOneBinding n v p = i <> hsep (pretty n:map pretty args) <> sig <+> nest 2 (equals </> pretty rest') where
   (args, rest) = takeLambdas v
   (sig, rest') = case rest of
     Ascription e t _ -> (space <> colon <+> pretty t, e)
@@ -208,6 +225,9 @@ prettyOneBinding n v = hsep (pretty n:map pretty args) <> sig <+> nest 2 (equals
 
   takeLambdas (Fun p x _) = first (p:) . takeLambdas $ x
   takeLambdas x = ([], x)
+  i = case p of
+    BindImplicit -> keyword "implicit "
+    BindRegular -> empty
 
 applyCons :: Ord (Var p) => Type p -> Type p
 applyCons x@TyCon{} = x
@@ -217,7 +237,8 @@ applyCons x@TyType{} = x
 applyCons x@TyPromotedCon{} = x
 applyCons (TyPi a b) = TyPi (go a) (applyCons b) where
   go (Anon t) = Anon (applyCons t)
-  go (Implicit t k) = Implicit t (fmap applyCons k)
+  go (Implicit t) = Implicit (applyCons t)
+  go (Invisible t k) = Invisible t (fmap applyCons k)
   go (Explicit t k) = Explicit t (applyCons k)
 applyCons (TyApp a b) = TyApp (applyCons a) (applyCons b)
 applyCons (TyRows r rs) = TyRows (applyCons r) (map (second applyCons) rs)
@@ -235,7 +256,7 @@ applyCons (TyWithConstraints cs a) =
 displayType :: forall p. (Pretty (Var p), Ord (Var p)) => Type p -> Doc
 displayType = prettyType . dropKindVars mempty where
   dropKindVars :: Subst p -> Type p -> Type p
-  dropKindVars sub (TyPi x@(Implicit v (Just TyType)) t)
+  dropKindVars sub (TyPi x@(Invisible v (Just TyType)) t)
     | v `kindVarIn` t, v `Set.member` ftv t = dropKindVars (Map.insert v TyType sub) t
     | otherwise = TyPi x (dropKindVars sub t)
 
@@ -253,8 +274,9 @@ displayType = prettyType . dropKindVars mempty where
 
   kindVarIn :: Var p -> Type p -> Bool
   kindVarIn v (TyPi (Explicit _ k) t) = v `Set.member` ftv k || kindVarIn v t
-  kindVarIn v (TyPi (Implicit _ k) t) = v `Set.member` maybe mempty ftv k || kindVarIn v t
+  kindVarIn v (TyPi (Invisible _ k) t) = v `Set.member` maybe mempty ftv k || kindVarIn v t
   kindVarIn v (TyPi (Anon a) b) = kindVarIn v a && kindVarIn v b
+  kindVarIn v (TyPi (Implicit a) b) = kindVarIn v a && kindVarIn v b
   kindVarIn _ TyPromotedCon{} = True
   kindVarIn v (TyVar x) = x /= v
   kindVarIn _ TyCon{} = True
@@ -281,7 +303,7 @@ prettyType (TyPi x t) = uncurry prettyQuantifiers . second reverse $ unwind t [x
     let (these, those) = span (sameAs q) qs
         these, those :: [TyBinder p]
      in case q:these of
-       Implicit{}:_ -> keyword "forall" <+> hsep (map (stypeVar . (char '\'' <>) . pretty . (^?! tyBinderVar)) (q:these)) <> dot <+> prettyQuantifiers inner those
+       Invisible{}:_ -> keyword "forall" <+> hsep (map (stypeVar . (char '\'' <>) . pretty . (^?! tyBinderVar)) (q:these)) <> dot <+> prettyQuantifiers inner those
        Explicit{}:_ -> keyword "forall"
                    <+> let ppr (Explicit v k) = parens (stypeVar (char '\'' <> pretty v) <+> colon <+> prettyType k)
                            ppr _ = undefined
@@ -290,9 +312,12 @@ prettyType (TyPi x t) = uncurry prettyQuantifiers . second reverse $ unwind t [x
        Anon{}:_ ->
          let arg x = parenTuple x (prettyType x)
           in hsep (punctuate (space <> arrow) (map (arg . (^?! _Anon)) (q:these))) <+> arrow <+> prettyQuantifiers inner those
+       Implicit{}:_ ->
+         let arg x = parenTuple x (prettyType x)
+          in hsep (punctuate (space <> soperator (string "=>")) (map (arg . (^?! _Implicit)) (q:these))) <+> soperator (string "=>") <+> prettyQuantifiers inner those
        [] -> error "what?"
 
-  sameAs Implicit{} Implicit{} = True
+  sameAs Invisible{} Invisible{} = True
   sameAs Explicit{} Explicit{} = True
   sameAs Anon{} Anon{} = True
   sameAs _ _ = False
@@ -314,3 +339,9 @@ parenTyFun _ = id
 
 parenTuple TyPi{} = parens
 parenTuple _ = id
+
+prettyMotive :: SkolemMotive Typed -> Doc
+prettyMotive (ByAscription t) = string "of the context, the type" <#> displayType t
+prettyMotive (BySubsumption t1 t2) = string "of a requirement that" <+> displayType t1 <#> string "be as polymorphic as" <+> displayType t2
+prettyMotive (ByExistential v t) = string "it is an existential" <> comma <#> string "bound by the type of" <+> pretty v <> comma <+> displayType t
+

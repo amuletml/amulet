@@ -88,12 +88,14 @@ tokens :-
   <0> "module" { constTok TcModule }
   <0> "open"   { constTok TcOpen }
   <0> "lazy"   { constTok TcLazy }
+  <0> "implicit" { constTok TcImplicit }
 
   <0> ","      { constTok TcComma }
   <0> "."      { constTok TcDot }
   <0> ":"      { constTok TcColon }
   <0> ";" ";"  { constTok TcTopSep }
   <0> ";"      { constTok TcSemicolon }
+  <0> "?("     { constTok TcQParen }
   <0> "("      { constTok TcOParen }
   <0> ")"      { constTok TcCParen }
   <0> "@{"     { constTok TcAtBrace }
@@ -114,6 +116,7 @@ tokens :-
 
   -- Identifiers
   <0> $lower $ident*                   { lexTok $ TcIdentifier }
+  <0> "?" $lower $ident*               { lexTok $ TcQIdentifier . T.tail }
   <0> $upper $ident*                   { lexTok $ TcConIdent }
 
   -- Module identifiers

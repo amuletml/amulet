@@ -1,0 +1,6 @@
+foo : {'j : type}. 'j -> type
+Foo : {'s : type}. {'a : 's}. int -> foo 'a
+foo_int : foo int
+foo_string : foo string
+foo : {'bg : type}. {'a : 'bg}. foo 'a => foo 'a
+main : foo string

@@ -6,7 +6,7 @@ S : nat -> nat
 natural : nat -> type
 SZ : {'n : nat}. ('n ~ Z) ⊃ natural 'n
 SS : {'n : nat}. {'k : nat}. ('n ~ S 'k) ⊃ natural 'k -> natural 'n
-flip : {'em : type}. {'en : type}. ('en -> 'em -> type) -> 'em -> 'en -> type
+flip : {'el : type}. {'em : type}. ('el -> 'em -> type) -> 'em -> 'el -> type
 Flip : {'f : 'fw -> 'fv -> type}. {'a : 'fv}. {'b : 'fw}. 'f 'b 'a -> flip 'f 'a 'b
 getFlip : {'f : 'hr -> 'hv -> type}. {'a : 'hv}. {'b : 'hr}. flip 'f 'a 'b -> 'f 'b 'a
 @ : {'id : type}. {'ie : type}. {'ir : type}. ('ir -> 'ie) -> ('id -> 'ir) -> 'id -> 'ie

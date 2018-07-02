@@ -1,6 +1,7 @@
 {-# LANGUAGE ViewPatterns #-}
 module Types.Infer.Errors where
 
+-- import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 
 import Control.Monad.Infer
@@ -8,11 +9,13 @@ import Control.Lens
 
 import Types.Wellformed -- skols
 
+import Syntax.Implicits
 import Syntax.Transform
-import Syntax.Subst
 import Syntax.Pretty
+import Syntax.Subst
 
 import Text.Pretty.Semantic
+
 
 gadtConShape :: (Type Typed, Type Typed) -> Type Typed -> TypeError -> TypeError
 gadtConShape (t, _) (TyArr c d) oerr = k . fix . flip Note (string "Generalised constructors can not be curried") $ err where
@@ -57,11 +60,6 @@ getErr (ArisingFrom e blame) = case getErr e of
   (e, k) -> (e, flip ArisingFrom blame . k)
 getErr x = (x, id)
 
-spine :: Type p -> [Type p]
-spine = go [] where
-  go acc (TyApp fs x) = go (x:acc) fs
-  go acc t = t:acc
-
 rewind :: Var Typed -> [Type Typed] -> Type Typed
 rewind x = foldl TyApp (TyCon x)
 
@@ -91,3 +89,57 @@ foundHole hole ht sub = helpMaybe (FoundHole hole ty) where
         oneEquality :: Skolem Typed -> [Doc]
      in string "The following equalities might be relevant:"
         <#> vsep (map bullet (concatMap oneEquality skolvars))
+
+noImplicitFound :: ImplicitScope Typed -> Type Typed -> TypeError
+noImplicitFound _ tau | not (null sks) = NoImplicit tau (<#> msg) where
+  sks = Set.toList (skols tau)
+  msg = vsep [ empty
+             , bullet (string "Where" <+> vcat (punctuate comma (map (displayType . TySkol) sks))
+                        <+> verb <+> string "rigid type variable" <> plural <> char ',')
+             , indent 4 (string "rigidified because" <+> prettyMotive (head sks ^. skolMotive))
+             ]
+
+  plural = case sks of
+    [_] -> empty
+    _ -> char 's'
+  verb = case sks of
+    [_] -> string "are"
+    _ -> string "is"
+
+noImplicitFound _ tau = NoImplicit tau id
+
+ambiguousImplicits :: [Implicit Typed] -> Type Typed -> TypeError
+ambiguousImplicits cs tau = NoImplicit tau (<#> ambiguous) where
+  ambiguous = vsep [ empty
+                   , bullet (string "Ambiguous type variable" <> plural <+> tvs <+> string "prevent" <> tense <+> string "finding a value")
+                   , suggestion
+                   ]
+  suggestion = case cs of
+    ss@(ImplChoice _ s _ _ _:_) ->
+      vsep [ bullet $ string "Suggestion: use a type annotation to specify" <+> pronoun
+           , indent 14 (string "perhaps to the type" <+> displayType s)
+           , empty
+           ]
+       <#> let ss' = take 5 ss
+               trunc = if length ss' < length ss
+                          then parens (string "list truncated")
+                          else empty
+            in string "These" <+> keyword "relevant" <+> string "implicit values are in scope:" <+> trunc
+       <#> vsep (map displaySuggestion ss')
+    [] -> empty
+  tvs = hcat (punctuate comma (map (pretty . TyVar) vars))
+
+  vars = Set.toList (ftv tau)
+  plural = case vars of
+    [_] -> empty
+    _ -> char 's'
+  tense = case vars of
+    [_] -> char 's'
+    _ -> empty
+  pronoun = case vars of
+    [_] -> string "it"
+    _ -> string "them"
+
+displaySuggestion :: Implicit Typed -> Doc
+displaySuggestion (ImplChoice _ t _ Solved v) = bullet (pretty v <+> colon <+> displayType t)
+displaySuggestion (ImplChoice _ t _ Unsolved v) = bullet (pretty v <+> colon <+> displayType t <+> parens (string "bound locally"))

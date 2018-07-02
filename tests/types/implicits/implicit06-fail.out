@@ -1,0 +1,11 @@
+implicit06-fail.ml[14:32 ..14:34]: error
+  Could not find implicit value of type foo a
+
+  • Where a are rigid type variable,
+      rigidified because of the context, the type
+      forall 'a. foo 'a
+
+  Arising in the expression
+   │ 
+14 │ let main : forall 'a. foo 'a = foo
+   │ 

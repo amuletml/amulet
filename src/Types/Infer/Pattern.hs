@@ -95,16 +95,59 @@ checkPattern pt@(PRecord rows ann) ty = do
     pure ((var, p'), (var, t), caps, cs))
   co <- unify pt ty (TyRows rho rowts)
   wrapPattern (PRecord rowps, mconcat caps, concat cons) (ann, ty) co
+
+checkPattern (PTuple xs ann) ty@TyTuple{} = do
+  let go (x:xs) (TyTuple a b) = do
+        (p, bs, cs) <- checkPattern x a
+        (ps, bss, css) <- go xs b
+        pure (p:ps, bs <> bss, cs <> css)
+      go [x] t = do
+        (p, bs, cs) <- checkPattern x t
+        pure ([p], bs, cs)
+      go _ _ = undefined
+  (ps, bs, cs) <- go xs ty
+  pure (PTuple ps (ann, ty), bs, cs)
+
 checkPattern pt@(PType p t ann) ty = do
   (p', it, binds, cs) <- inferPattern p
   t' <- resolveKind (BecauseOf pt) t
   _ <- subsumes pt t' it
   co <- unify pt ty t'
   wrapPattern (PType p' t', binds, cs) (ann, ty) co
+
 checkPattern pt ty = do
   (p, ty', binds, cs) <- inferPattern pt
   (_, co) <- subsumes pt ty ty'
   pure (PWrapper (co, ty') p (annotation p, ty), binds, cs)
+
+checkParameter :: MonadInfer Typed m
+               => Parameter Resolved
+               -> Type Typed
+               -> m ( Parameter Typed
+                    , Telescope Typed
+                    , [(Type Typed, Type Typed)]
+                    )
+checkParameter (PatParam p) t = do
+  (p, t, cs) <- checkPattern p t
+  pure (PatParam p, t, cs)
+
+checkParameter (ImplParam p) t = do
+  (p, t, cs) <- checkPattern p t
+  pure (ImplParam p, t, cs)
+
+inferParameter :: MonadInfer Typed m
+               => Parameter Resolved
+               -> m ( Parameter Typed -- the pattern
+                    , TyBinder Typed -- binder for the pattern
+                    , Telescope Typed -- captures
+                    , [(Type Typed, Type Typed)] -- constraints
+                    )
+inferParameter (PatParam p) = do
+  (p, tau, t, cs) <- inferPattern p
+  pure (PatParam p, Anon tau, t, cs)
+inferParameter (ImplParam p) = do
+  (p, tau, t, cs) <- inferPattern p
+  pure (ImplParam p, Implicit tau, t, cs)
 
 boundTvs :: forall p. (Show (Var p), Ord (Var p))
          => Pattern p -> Telescope p -> Set.Set (Var p)

@@ -54,6 +54,7 @@ import Syntax
   end      { Token TcEnd _ _ }
   in       { Token TcIn _ _ }
   external { Token TcExternal _ _ }
+  implicit { Token TcImplicit _ _ }
   val      { Token TcVal _ _ }
   true     { Token TcTrue _ _ }
   false    { Token TcFalse _ _ }
@@ -72,6 +73,7 @@ import Syntax
   ';;'     { Token TcTopSep _ _ }
   ';'      { Token TcSemicolon _ _ }
   '('      { Token TcOParen _ _ }
+  '?('     { Token TcQParen _ _ }
   ')'      { Token TcCParen _ _ }
   '@{'     { Token TcAtBrace _ _ }
   '?'      { Token TcQuestion _ _ }
@@ -82,6 +84,7 @@ import Syntax
 
   op       { Token (TcOp _) _ _ }
   ident    { Token (TcIdentifier _) _ _ }
+  iident   { Token (TcQIdentifier _) _ _ }
   opid     { Token (TcOpIdent _) _ _ }
   conid    { Token (TcConIdent _) _ _ }
   qident   { Token (TcIdentifierQual _ _) _ _ }
@@ -116,9 +119,9 @@ Top :: { Toplevel Parsed }
     : let BindGroup                             { LetStmt (reverse $2) }
     | external val ident ':' Type '=' string    { withPos2 $1 $7 $ ForeignVal (getName $3) (getString $7) (getL $5) }
 
-    | type ident ListE(TyVar)                          { TypeDecl (getName $2) (map getL $3) [] }
-    | type ident ListE(TyVar) '=' List1(Ctor, '|')     { TypeDecl (getName $2) (map getL $3) $5 }
-    | type ident ListE(TyVar) '=' '|' List1(Ctor, '|') { TypeDecl (getName $2) (map getL $3) $6 }
+    | type ident ListE(TyConArg)                          { TypeDecl (getName $2) $3 [] }
+    | type ident ListE(TyConArg) '=' List1(Ctor, '|')     { TypeDecl (getName $2) $3 $5 }
+    | type ident ListE(TyConArg) '=' '|' List1(Ctor, '|') { TypeDecl (getName $2) $3 $6 }
 
 
     | module qconid '=' begin Tops end         { Module (getName $2) $5 }
@@ -126,6 +129,11 @@ Top :: { Toplevel Parsed }
     | module conid '=' '$begin' Tops '$end'    { Module (getName $2) $5 }
     | module conid '=' Con                     { Open (getL $4) (Just (getIdent $2)) }
     | open Con                                 { Open (getL $2) Nothing }
+
+TyConArg :: { TyConArg Parsed }
+         : TyVar { TyVarArg (getL $1) }
+         | '(' TyVar ':' Type ')' { TyVisArg (getL $2) (getL $4) }
+         | '{' TyVar ':' Type '}' { TyAnnArg (getL $2) (getL $4) }
 
 Ctor :: { Constructor Parsed }
      : conid                                   { withPos1 $1 $ UnitCon (getName $1) }
@@ -151,7 +159,7 @@ ExprApp :: { Expr Parsed }
         | ExprApp ':' Type                     { withPos2 $1 $3 $ Ascription $1 (getL $3) }
 
 Expr0 :: { Expr Parsed }
-      : fun ListE1(ArgP) '->' ExprBlock '$end' { foldr (\x y -> withPos2 x $4 $ Fun x y) $4 $2 }
+      : fun ListE1(Parameter) '->' ExprBlock '$end' { foldr (\x y -> withPos2 x $4 $ Fun x y) $4 $2 }
       | let BindGroup ExprIn ExprBlock '$end'  { withPos2 $1 $4 $ Let (reverse $2) $4 }
       | let open Con ExprIn ExprBlock '$end'   { withPos2 $1 $5 $ OpenIn (getL $3) $5 }
       | if Expr then ExprBlock else ExprBlock '$end'
@@ -223,17 +231,21 @@ Con :: { Located (Var Parsed) }
 TyVar :: { Located (Var Parsed) }
       : tyvar { lPos1 $1 $ Name (getIdent $1) }
 
-BindGroup :: { [(Var Parsed, Expr Parsed, Ann Parsed)] }
+BindGroup :: { [Binding Parsed] }
           : Binding                           { [$1] }
           | BindGroup and Binding             { $3 : $1 }
 
-Binding :: { (Var Parsed, Expr Parsed, Ann Parsed) }
-        : BindName ListE(ArgP) '=' ExprBlock '$end'
-          { (getL $1, foldr (\x y -> withPos2 x $4 (Fun x y)) $4 $2, withPos2 $1 $4 id) }
-        | BindName ListE(ArgP) ':' Type '=' ExprBlock '$end'
-          { (getL $1, (foldr (\x y -> withPos2 x $6 (Fun x y)) (Ascription $6 (getL $4) (withPos2 $1 $6 id)) $2), withPos2 $1 $6 id) }
-        | ArgP BindOp ArgP '=' ExprBlock '$end'
-          { (getL $2, withPos2 $1 $5 (Fun $1 (withPos2 $3 $5 (Fun $3 $5))), withPos2 $1 $6 id) }
+Binding :: { Binding Parsed }
+        : PreBinding { $1 }
+        | implicit PreBinding { implicitify $2 }
+
+PreBinding :: { Binding Parsed }
+           : BindName ListE(Parameter) '=' ExprBlock '$end'
+             { Binding (getL $1) (foldr (\x y -> withPos2 x $4 (Fun x y)) $4 $2) BindRegular (withPos2 $1 $4 id) }
+           | BindName ListE(Parameter) ':' Type '=' ExprBlock '$end'
+             { Binding (getL $1) (foldr (\x y -> withPos2 x $6 (Fun x y)) (Ascription $6 (getL $4) (withPos2 $1 $6 id)) $2) BindRegular (withPos2 $1 $6 id) }
+           | ArgP BindOp ArgP '=' ExprBlock '$end'
+             { Binding (getL $2) (withPos2 $1 $5 (Fun (PatParam $1) (withPos2 $3 $5 (Fun (PatParam $3) $5)))) BindRegular (withPos2 $1 $6 id) }
 
 BindName :: { Located (Var Parsed) }
      : ident                                   { lPos1 $1 $ getName $1 }
@@ -296,10 +308,15 @@ ArgP :: { Pattern Parsed }
 Arm :: { (Pattern Parsed, Expr Parsed) }
     : '|' List1(MPattern, ',') '->' ExprBlock  { (completeTuple PTuple $2, $4) }
 
+Parameter :: { Parameter Parsed }
+          : ArgP             { PatParam $1 }
+          | iident           { ImplParam (withPos1 $1 $ Capture (getName $1)) }
+          | '?(' Pattern ')' { ImplParam $2 }
 
 Type :: { Located (Type Parsed) }
      : TypeProd                                   { $1 }
      | TypeProd '->' Type                         { lPos2 $1 $3 $ TyPi (Anon (getL $1)) (getL $3) }
+     | TypeProd '=>' Type                         { lPos2 $1 $3 $ TyPi (Implicit (getL $1)) (getL $3) }
      | forall ListE1(tyvar) '.' Type              { lPos2 $1 $4 $ forallTy (map getName $2) (getL $4) }
      | forall ListE1(BoundTv) '->' Type           { lPos2 $1 $4 $ foldr TyPi (getL $4) $2 }
 
@@ -402,6 +419,7 @@ getIdent  (Token (TcTyvar x) _ _)      = x
 
 getName (Token (TcOp x) _ _)                = Name x
 getName (Token (TcIdentifier x) _ _)        = Name x
+getName (Token (TcQIdentifier x) _ _)       = Name x
 getName (Token (TcOpIdent x) _ _)           = Name x
 getName (Token (TcConIdent x) _ _)          = Name x
 getName (Token (TcIdentifierQual ms x) _ _) = foldl (flip InModule) (Name x) ms
@@ -416,5 +434,8 @@ getFloat  (Token (TcFloat x) _ _)      = x
 getString (Token (TcString  x) _ _)    = x
 getL      (L x _)                    = x
 
-forallTy vs t = foldr TyPi t (map (flip Implicit Nothing) vs)
+forallTy vs t = foldr TyPi t (map (flip Invisible Nothing) vs)
+
+implicitify :: Binding Parsed -> Binding Parsed
+implicitify (Binding a b _ c) = Binding a b BindImplicit c
 }

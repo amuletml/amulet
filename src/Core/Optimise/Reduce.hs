@@ -206,8 +206,8 @@ reduceTerm s (Cast (Ref v _) c)
   | Just (Cast a c') <- lookupVar s v
   , Just (l, r) <- relates c
   , Just (l', r') <- relates c'
-  , Just uni <- unify r l'
-  , Just _ <- unifyWith uni l r'
+  , unifyClosed r l'
+  , unifyClosed l r'
   = Atom a
 
 reduceTerm _ (Cast a co)
