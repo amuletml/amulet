@@ -107,7 +107,7 @@ transformExprTyped fe fc ft = goE where
   transE (Let vs r a) = Let (map transBind vs) (goE r) (goA a)
   transE (If c t f a) = If (goE c) (goE t) (goE f) (goA a)
   transE (App f x a) = App (goE f) (goE x) (goA a)
-  transE (Fun p b a) = Fun (goP p) (goE b) (goA a)
+  transE (Fun p b a) = Fun (goPa p) (goE b) (goA a)
   transE (Begin es a) = Begin (map goE es) (goA a)
   transE (Literal l a) = Literal l (goA a)
   transE (Match e bs a) = Match (goE e) (map (goP *** goE) bs) (goA a)
@@ -146,6 +146,9 @@ transformExprTyped fe fc ft = goE where
   goW x@TypeLam{} = x
   goW x@WrapVar{} = x
   goW IdWrap = IdWrap
+
+  goPa (PatParam p) = PatParam (goP p)
+  goPa (ImplParam p) = ImplParam (goP p)
 
   goE = transE . fe
   goT = ft

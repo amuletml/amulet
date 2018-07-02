@@ -41,7 +41,6 @@ import Types.Unify
 
 import Text.Pretty.Semantic
 
-
 inferProgram :: MonadNamey m => Env -> [Toplevel Resolved] -> m (Either [TypeError] ([Toplevel Typed], Env))
 inferProgram env ct = fmap fst <$> runInfer env (inferProg ct)
 
@@ -72,18 +71,18 @@ check ex@(Fun pat e an) ty = do
   (dom, cod, _) <- quantifier ex ty
   let domain = _tyBinderType dom
 
-  (p, vs, cs) <- checkPattern pat domain
-  let tvs = Set.map unTvName (boundTvs p vs)
+  (p, vs, cs) <- checkParameter pat domain
+  let tvs = Set.map unTvName (boundTvs (p ^. paramPat) vs)
 
-  implies (Arm pat e) domain cs $
+  implies (Arm (pat ^. paramPat) e) domain cs $
     case dom of
       Implicit{} -> do
         name <- TvName <$> genName
         e <- local (typeVars %~ Set.union tvs) $ local (names %~ focus vs) $
           local (implicits %~ insert name domain) $
             check e cod
-        let body = Match (VarRef name (an, domain)) [ (p, e) ] (an, cod)
-            pat = Capture name (an, domain)
+        let body = Match (VarRef name (an, domain)) [ (p ^. paramPat, e) ] (an, cod)
+            pat = ImplParam (Capture name (an, domain))
         pure (Fun pat body (an, ty))
       Anon{} -> do
         e <- local (typeVars %~ Set.union tvs) . local (names %~ focus vs) $
@@ -137,14 +136,27 @@ infer (VarRef k a) = do
     Nothing -> pure (VarRef (TvName k) (a, old), old)
     Just cont -> pure (cont' (cont (VarRef (TvName k) (a, old))), new)
 
-infer (Fun p e an) = let blame = Arm p e in do
-  (p, dom, ms, cs) <- inferPattern p
-  let tvs = boundTvs p ms
+infer (Fun p e an) = let blame = Arm (p ^. paramPat) e in do
+  (p, dom, ms, cs) <- inferParameter p
+  let tvs = boundTvs (p ^. paramPat) ms
+      domain = _tyBinderType dom
 
   _ <- leakEqualities blame cs
-  (e, cod) <- local (typeVars %~ Set.union (Set.map unTvName tvs)) $
-    local (names %~ focus ms) $ infer e
-  pure (Fun p e (an, TyArr dom cod), TyArr dom cod)
+  case p of
+    ImplParam p -> do
+      name <- TvName <$> genName
+      (e, cod) <- local (typeVars %~ Set.union (Set.map unTvName tvs)) $
+        local (names %~ focus ms) $
+          local (implicits %~ consider name domain) $
+            infer e
+      let body = Match (VarRef name (an, domain)) [ (p, e) ] (an, cod)
+          pat = ImplParam (Capture name (an, domain))
+      pure (Fun pat body (an, TyPi dom cod), TyPi dom cod)
+    PatParam _ -> do
+      (e, cod) <- local (typeVars %~ Set.union (Set.map unTvName tvs)) $
+        local (names %~ focus ms) $
+          infer e
+      pure (Fun p e (an, TyPi dom cod), TyPi dom cod)
 
 infer (Literal l an) = pure (Literal l (an, ty), ty) where
   ty = litTy l
@@ -280,11 +292,16 @@ inferProg [] = asks ([],)
 
 -- For polymorphic recursion, mostly
 approxType :: MonadInfer Typed m => Expr Resolved -> StateT Origin m (Type Typed)
-approxType (Fun r@(PType _ t _) e _) = TyArr <$> resolveKind (BecauseOf r) t <*> approxType e
+approxType r@(Fun p e _) = TyPi <$> approxParam p <*> approxType e where
+  approxParam (ImplParam (PType _ t _)) = Implicit <$> resolveKind (BecauseOf r) t
+  approxParam (PatParam (PType _ t _)) = Anon <$> resolveKind (BecauseOf r) t
+  approxParam (ImplParam _) = do
+    put Guessed
+    Implicit <$> freshTV
+  approxParam (PatParam _) = do
+    put Guessed
+    Anon <$> freshTV
 approxType r@(Ascription _ t _) = resolveKind (BecauseOf r) t
-approxType (Fun _ e _) = do
-  put Guessed
-  TyArr <$> freshTV <*> approxType e
 approxType _ = do
   put Guessed
   lift freshTV

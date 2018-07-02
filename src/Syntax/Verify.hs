@@ -108,7 +108,9 @@ verifyExpr ex@(Let vs e _) = do
 verifyExpr (If c t e _) = traverse_ verifyExpr [c, t, e]
 verifyExpr (App f x _) = verifyExpr f *> verifyExpr x
 verifyExpr (Fun p x _) = do
-  modify (Set.union (bindingSites p))
+  let bindingSites' (PatParam p) = bindingSites p
+      bindingSites' (ImplParam p) = bindingSites p
+  modify (Set.union (bindingSites' p))
   verifyExpr x
 verifyExpr (Begin es _) = traverse_ verifyExpr es
 verifyExpr Literal{} = pure ()
@@ -177,7 +179,6 @@ bindingSites (PType p _ _) = bindingSites p
 bindingSites (PRecord rs _) = foldMap (bindingSites . snd) rs
 bindingSites (PTuple ps _) = foldMap bindingSites ps
 bindingSites (PWrapper _ p _) = bindingSites p
-
 
 instance Ord BindingSite where
   BindingSite v _ _ `compare` BindingSite v' _ _ = v `compare` v'

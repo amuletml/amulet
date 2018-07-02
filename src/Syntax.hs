@@ -43,12 +43,21 @@ deriving instance (Show (Var p), Show (Ann p)) => Show (Binding p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Binding p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Binding p)
 
+data Parameter p
+  = PatParam { _paramPat :: Pattern p }
+  | ImplParam { _paramPat :: Pattern p }
+
+deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Parameter p)
+deriving instance (Show (Var p), Show (Ann p)) => Show (Parameter p)
+deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Parameter p)
+deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Parameter p)
+
 data Expr p
   = VarRef (Var p) (Ann p)
   | Let [Binding p] (Expr p) (Ann p)
   | If (Expr p) (Expr p) (Expr p) (Ann p)
   | App (Expr p) (Expr p) (Ann p)
-  | Fun (Pattern p) (Expr p) (Ann p)
+  | Fun (Parameter p) (Expr p) (Ann p)
   | Begin [Expr p] (Ann p)
   | Literal Lit (Ann p)
   | Match (Expr p) [(Pattern p, Expr p)] (Ann p)
@@ -293,6 +302,7 @@ makePrisms ''Lit
 makeLenses ''Skolem
 makeLenses ''TyBinder
 makeLenses ''Binding
+makeLenses ''Parameter
 
 instance Spanned (Ann p) => Spanned (Binding p) where
   annotation = annotation . _bindAnn
@@ -347,6 +357,10 @@ instance Spanned (Ann p) => Spanned (Expr p) where
   annotation (Lazy _ a) = annotation a
 
   annotation (ExprWrapper _ _ a) = annotation a
+
+instance (Spanned (Ann p), Data (Ann p), Data (Var p), Data p) => Spanned (Parameter p) where
+  annotation (PatParam p) = annotation p
+  annotation (ImplParam p) = annotation p
 
 {- Note [1]: Tuple types vs tuple patterns/values
 

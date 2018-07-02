@@ -194,7 +194,15 @@ keys = go where
 -- distinct parts of possibly the same type.
 mapTypes :: forall p. (Ord (Var p), Show (Var p), Show (Ann p)) => (Type p -> Type p) -> ImplicitScope p -> ImplicitScope p
 mapTypes fn = go where
-  go (Trie m) = Trie (Map.foldrWithKey (\k x r -> makeTrie (spine (fn k)) (goNode x) `merge` r) mempty m)
+  go (Trie m) = Trie (Map.foldrWithKey (\k x r -> makeTrie (change fn k) (goNode x) `merge` r) mempty m)
+
+  change fn k =
+    let sp = spine k
+        k' = fn k
+        sp' = spine k'
+     in if sp == sp'
+           then [k']
+           else sp'
 
   makeTrie :: [Type p] -> Node p -> Map.Map (Type p) (Node p)
   makeTrie [x] n = Map.singleton x n

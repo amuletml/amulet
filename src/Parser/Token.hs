@@ -43,6 +43,7 @@ data TokenClass
   | TcColon -- ^ A @:@ token.
   | TcSemicolon -- ^ A @;@ token.
   | TcTopSep -- ^ A @;;@ token.
+  | TcQParen -- ^ A @?(@ token.
   | TcOParen -- ^ A @(@ token.
   | TcCParen -- ^ A @)@ token.
   | TcAtBrace -- ^ A @@{@ token.
@@ -54,6 +55,7 @@ data TokenClass
 
   | TcOp Text                     -- ^ Operators (@+@)
   | TcIdentifier Text             -- ^ Identifiers (@foo@)
+  | TcQIdentifier Text             -- ^ Identifiers (@?foo@)
   | TcOpIdent Text                -- ^ Backtick ops (@`foo`@)
   | TcConIdent Text               -- ^ Constructors (@Foo@)
   | TcIdentifierQual [Text] Text  -- ^ Qualified identifiers (@Foo.bar@)
@@ -116,6 +118,7 @@ instance Show TokenClass where
   show TcColon = ":"
   show TcSemicolon = ";"
   show TcTopSep = ";;"
+  show TcQParen = "?("
   show TcOParen = "("
   show TcCParen = ")"
   show TcAtBrace = "@{"
@@ -127,6 +130,7 @@ instance Show TokenClass where
 
   show (TcOp t) = unpack t
   show (TcIdentifier t) = unpack t
+  show (TcQIdentifier t) = '?':unpack t
   show (TcOpIdent t) = "`" ++ unpack t ++ "`"
   show (TcConIdent t) = unpack t
   show (TcIdentifierQual ms t) = concatMap (\m -> unpack m ++ ['.']) (reverse ms) ++ unpack t

@@ -100,7 +100,7 @@ ambiguousImplicits cs tau = NoImplicit tau (<#> ambiguous) where
                     , suggestion
                     ]
    suggestion = case cs of
-     ss@(ImplChoice _ s _ _:_) ->
+     ss@(ImplChoice _ s _ _ _:_) ->
        vsep [ bullet $ string "Suggestion: use a type annotation to specify" <+> pronoun
             , indent 14 (string "perhaps to the type" <+> displayType s)
             , empty
@@ -125,4 +125,5 @@ ambiguousImplicits cs tau = NoImplicit tau (<#> ambiguous) where
      [_] -> string "it"
      _ -> string "them"
    displaySuggestion :: Implicit Typed -> Doc
-   displaySuggestion (ImplChoice _ t _ v) = bullet (pretty v <+> colon <+> displayType t)
+   displaySuggestion (ImplChoice _ t _ Solved v) = bullet (pretty v <+> colon <+> displayType t)
+   displaySuggestion (ImplChoice _ t _ Unsolved v) = bullet (pretty v <+> colon <+> displayType t <+> parens (string "bound locally"))

@@ -120,7 +120,7 @@ resolveModule (LetStmt vs:rs) =  do
   vars' <- traverse tagVar vars
   extendN (zip vars vars') $ (:)
     <$> (LetStmt
-          <$> traverse (\(Binding _ e p a, v') -> (\e -> Binding v' e p a) <$> reExpr e) (zip vs vars'))
+          <$> zipWithM (\v' (Binding _ e p a) -> flip (flip (Binding v') p) a <$> reExpr e) vars' vs)
     <*> resolveModule rs
 
 resolveModule (r@(ForeignVal v t ty a):rs) = do
@@ -222,14 +222,19 @@ reExpr r@(VarRef v a) = flip VarRef a <$> (lookupEx v `catchJunk` r)
 reExpr (Let vs c a) = do
   let vars = vs ^.. each . bindVariable
   vars' <- traverse tagVar vars
-  extendN (zip vars vars') $ Let <$> traverse (\(Binding _ e p a, v') -> (\e -> Binding v' e p a) <$> reExpr e)
-                                              (zip vs vars')
+  extendN (zip vars vars') $ Let <$> zipWithM (\v' (Binding _ e p a) -> flip (flip (Binding v') p) a <$> reExpr e) vars' vs
                                  <*> reExpr c
                                  <*> pure a
 reExpr (If c t b a) = If <$> reExpr c <*> reExpr t <*> reExpr b <*> pure a
 reExpr (App f p a) = App <$> reExpr f <*> reExpr p <*> pure a
 reExpr (Fun p e a) = do
-  (p', vs, ts) <- reWholePattern p
+  let reWholePattern' (PatParam p) = do
+        (p', vs, ts) <- reWholePattern p
+        pure (PatParam p', vs, ts)
+      reWholePattern' (ImplParam p) = do
+        (p', vs, ts) <- reWholePattern p
+        pure (ImplParam p', vs, ts)
+  (p', vs, ts) <- reWholePattern' p
   extendTyvarN ts . extendN vs $ Fun p' <$> reExpr e <*> pure a
 
 reExpr r@(Begin [] a) = tell (pure (wrapError r EmptyBegin)) $> junkExpr a

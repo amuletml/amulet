@@ -40,10 +40,10 @@ desugarProgram = traverse statement where
   expr (Fun p b a) = Fun p <$> expr b <*> pure a
   expr (Begin es a) = Begin <$> traverse expr es <*> pure a
   expr (Match e bs a) = Match <$> expr e <*> traverse (secondA expr) bs <*> pure a
-  expr (Function [(p, b)] a) = Fun p <$> expr b <*> pure a
+  expr (Function [(p, b)] a) = Fun (PatParam p) <$> expr b <*> pure a
   expr (Function bs a) = do
     (cap, rhs) <- fresh a
-    Fun cap <$>
+    Fun (PatParam cap) <$>
       (Match <$> expr rhs <*> traverse (secondA expr) bs <*> pure a)
       <*> pure a
   -- Special case @@ so we can work on skolem variables
@@ -56,7 +56,7 @@ desugarProgram = traverse statement where
 
   expr (LeftSection op vl an) = do
     (cap, rhs) <- fresh an
-    let go lhs = expr (Fun cap (BinOp rhs op lhs an) an)
+    let go lhs = expr (Fun (PatParam cap) (BinOp rhs op lhs an) an)
     case vl of
       VarRef{} -> go vl
       Literal{} -> go vl
@@ -69,7 +69,7 @@ desugarProgram = traverse statement where
 
   expr (AccessSection k a) = do
     (cap, ref) <- fresh a
-    expr (Fun cap (Access ref k a) a)
+    expr (Fun (PatParam cap) (Access ref k a) a)
 
   expr (Parens e _) = expr e
   expr e@InstHole{} = pure e
@@ -80,13 +80,13 @@ desugarProgram = traverse statement where
     es' <- traverse (traverse expr) es
     (args, binds, tuple) <- foldrM (buildTuple a) ([], [], []) es'
     pure $ foldf (\(v, e) r -> Let [Binding v e BindRegular a] r a) binds
-         $ foldf (\v e -> Fun v e a) args
+         $ foldf (\v e -> Fun (PatParam v) e a) args
          $ Tuple tuple a
 
   expr (Lazy e a) = do
     e <- expr e
     pure $ App (VarRef (TgInternal "lazy") a)
-               (Fun (PLiteral LiUnit a) e a)
+               (Fun (PatParam (PLiteral LiUnit a)) e a)
                a
   expr (OpenIn _ e _) = expr e
 

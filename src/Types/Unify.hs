@@ -118,6 +118,10 @@ unify (TyVar a) b = bind a b
 unify a (TyVar b) = SymCo <$> bind b a
 
 unify (TyArr a b) (TyArr a' b') = ArrCo <$> unify a a' <*> unify b b'
+
+unify (TyPi (Implicit a) b) (TyPi (Implicit a') b') =
+  ArrCo <$> unify a a' <*> unify b b' -- Technically cheating but yay desugaring
+
 unify (TyApp a b) (TyApp a' b') = AppCo <$> unify a a' <*> unify b b'
 
 unify ta@(TyCon a) tb@(TyCon b)
@@ -261,13 +265,7 @@ doSolve (ConImplies because not cs ts :<| xs) = do
 -- TODO: Better implicit searching
 doSolve (ConImplicit because var scope t :<| xs) = do
   doSolve xs
-  sub <- use solveTySubst
-  let scope' = Imp.mapTypes (apply sub) scope
-      t' = apply sub t
-  case Imp.lookup t' scope' of
-    [c] -> useImplicit scope' var t' c because
-    [] -> throwError (noImplicitFound scope' t')
-    xs -> throwError (ambiguousImplicits xs t')
+  solveImplicitConstraint 0 because var scope t
 
 doSolve (ConFail a v t :<| cs) = do
   doSolve cs
@@ -275,8 +273,24 @@ doSolve (ConFail a v t :<| cs) = do
   let ex = Hole (unTvName v) (fst a)
   tell [propagateBlame (BecauseOf ex) $ foundHole v (apply sub t) sub]
 
-useImplicit :: Imp.ImplicitScope Typed -> Var Typed -> Type Typed -> Implicit Typed -> SomeReason -> SolveM ()
-useImplicit scope' goal ty (ImplChoice hdt oty os imp) because = go where
+solveImplicitConstraint :: Int -> SomeReason -> Var Typed -> Imp.ImplicitScope Typed -> Type Typed -> SolveM ()
+solveImplicitConstraint x _ _ _ _ | x >= 200 = throwError undefined
+solveImplicitConstraint x because var scope t = do
+  sub <- use solveTySubst
+  let scope' = Imp.mapTypes (apply sub) scope
+      t' = apply sub t
+  case Imp.lookup t' scope' of
+    [c] -> useImplicit x scope' var t' c because
+    [] -> throwError (noImplicitFound scope' t')
+    xs -> case partition bySolvedness xs of
+      ([c], _) -> useImplicit x scope' var t' c because
+      _ -> throwError (ambiguousImplicits xs t')
+
+bySolvedness :: Implicit p -> Bool
+bySolvedness (ImplChoice _ _ _ s _) = s == Imp.Unsolved
+
+useImplicit :: Int -> Imp.ImplicitScope Typed -> Var Typed -> Type Typed -> Implicit Typed -> SomeReason -> SolveM ()
+useImplicit x scope' goal ty (ImplChoice hdt oty os _ imp) because = go where
   go :: SolveM ()
   go = do
     cur <- genName
@@ -294,7 +308,7 @@ useImplicit scope' goal ty (ImplChoice hdt oty os imp) because = go where
           mk (apply sub' t) xs (ExprWrapper (TypeApp tau) acc (annotation because, apply sub' t))
         mk (TyPi (Implicit tau) t) (Implication _:os) acc = do
           v <- TvName <$> genName
-          doSolve (Seq.singleton (ConImplicit because v scope' tau))
+          solveImplicitConstraint (x + 1) because v scope' tau
           mk t os (ExprWrapper (WrapVar v) acc (annotation because, t))
         mk x (o:_) _ = error (show x ++ " missing " ++ show o)
 
@@ -353,7 +367,7 @@ subsumes k ty' (TyApp lazy ty) | lazy == tyLazy, _TyVar `isn't` ty' = do
         | an <- annotation ex =
           App (ExprWrapper (TypeApp ty) (VarRef lAZYName (an, lAZYTy))
                 (an, lAZYTy' ty))
-              (Fun (PLiteral LiUnit (an, tyUnit))
+              (Fun (PatParam (PLiteral LiUnit (an, tyUnit)))
                 (ExprWrapper (probablyCast co) ex (an, ty'))
                 (an, TyArr tyUnit ty))
               (an, TyApp lazy ty)

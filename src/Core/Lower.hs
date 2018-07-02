@@ -130,8 +130,11 @@ lowerAt (S.If c t e _) ty = do
   let tc = C.Arm (PatLit LitTrue) C.tyBool t' [] []
       te = C.Arm (PatLit LitFalse)  C.tyBool e' [] []
   pure $ C.Match c' [tc, te]
-lowerAt (Fun p bd an) (ForallTy Irrelevant a b) =
-  let operational (PType p _ _) = operational p
+lowerAt (Fun param bd an) (ForallTy Irrelevant a b) =
+  let p = case param of
+        S.ImplParam p -> p
+        S.PatParam p -> p
+      operational (PType p _ _) = operational p
       operational p = p
    in case operational p of
         S.Capture (TvName v) _ -> Atom . Lam (TermArgument (mkVal v) a) <$> lowerAtTerm bd b

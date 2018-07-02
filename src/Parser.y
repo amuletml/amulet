@@ -73,6 +73,7 @@ import Syntax
   ';;'     { Token TcTopSep _ _ }
   ';'      { Token TcSemicolon _ _ }
   '('      { Token TcOParen _ _ }
+  '?('     { Token TcQParen _ _ }
   ')'      { Token TcCParen _ _ }
   '@{'     { Token TcAtBrace _ _ }
   '?'      { Token TcQuestion _ _ }
@@ -83,6 +84,7 @@ import Syntax
 
   op       { Token (TcOp _) _ _ }
   ident    { Token (TcIdentifier _) _ _ }
+  iident   { Token (TcQIdentifier _) _ _ }
   opid     { Token (TcOpIdent _) _ _ }
   conid    { Token (TcConIdent _) _ _ }
   qident   { Token (TcIdentifierQual _ _) _ _ }
@@ -157,7 +159,7 @@ ExprApp :: { Expr Parsed }
         | ExprApp ':' Type                     { withPos2 $1 $3 $ Ascription $1 (getL $3) }
 
 Expr0 :: { Expr Parsed }
-      : fun ListE1(ArgP) '->' ExprBlock '$end' { foldr (\x y -> withPos2 x $4 $ Fun x y) $4 $2 }
+      : fun ListE1(Parameter) '->' ExprBlock '$end' { foldr (\x y -> withPos2 x $4 $ Fun x y) $4 $2 }
       | let BindGroup ExprIn ExprBlock '$end'  { withPos2 $1 $4 $ Let (reverse $2) $4 }
       | let open Con ExprIn ExprBlock '$end'   { withPos2 $1 $5 $ OpenIn (getL $3) $5 }
       | if Expr then ExprBlock else ExprBlock '$end'
@@ -238,12 +240,12 @@ Binding :: { Binding Parsed }
         | implicit PreBinding { implicitify $2 }
 
 PreBinding :: { Binding Parsed }
-           : BindName ListE(ArgP) '=' ExprBlock '$end'
+           : BindName ListE(Parameter) '=' ExprBlock '$end'
              { Binding (getL $1) (foldr (\x y -> withPos2 x $4 (Fun x y)) $4 $2) BindRegular (withPos2 $1 $4 id) }
-           | BindName ListE(ArgP) ':' Type '=' ExprBlock '$end'
+           | BindName ListE(Parameter) ':' Type '=' ExprBlock '$end'
              { Binding (getL $1) (foldr (\x y -> withPos2 x $6 (Fun x y)) (Ascription $6 (getL $4) (withPos2 $1 $6 id)) $2) BindRegular (withPos2 $1 $6 id) }
            | ArgP BindOp ArgP '=' ExprBlock '$end'
-             { Binding (getL $2) (withPos2 $1 $5 (Fun $1 (withPos2 $3 $5 (Fun $3 $5)))) BindRegular (withPos2 $1 $6 id) }
+             { Binding (getL $2) (withPos2 $1 $5 (Fun (PatParam $1) (withPos2 $3 $5 (Fun (PatParam $3) $5)))) BindRegular (withPos2 $1 $6 id) }
 
 BindName :: { Located (Var Parsed) }
      : ident                                   { lPos1 $1 $ getName $1 }
@@ -306,6 +308,10 @@ ArgP :: { Pattern Parsed }
 Arm :: { (Pattern Parsed, Expr Parsed) }
     : '|' List1(MPattern, ',') '->' ExprBlock  { (completeTuple PTuple $2, $4) }
 
+Parameter :: { Parameter Parsed }
+          : ArgP             { PatParam $1 }
+          | iident           { ImplParam (withPos1 $1 $ Capture (getName $1)) }
+          | '?(' Pattern ')' { ImplParam $2 }
 
 Type :: { Located (Type Parsed) }
      : TypeProd                                   { $1 }
@@ -413,6 +419,7 @@ getIdent  (Token (TcTyvar x) _ _)      = x
 
 getName (Token (TcOp x) _ _)                = Name x
 getName (Token (TcIdentifier x) _ _)        = Name x
+getName (Token (TcQIdentifier x) _ _)       = Name x
 getName (Token (TcOpIdent x) _ _)           = Name x
 getName (Token (TcConIdent x) _ _)          = Name x
 getName (Token (TcIdentifierQual ms x) _ _) = foldl (flip InModule) (Name x) ms

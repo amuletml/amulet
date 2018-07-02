@@ -109,7 +109,7 @@ data TypeError where
 
 data WhyInstantiate = Expression | Subsumption
 
-instance (Ord (Var p), Substitutable p (Type p)) => Substitutable p (Constraint p) where
+instance (Show (Ann p), Show (Var p), Ord (Var p), Substitutable p (Type p)) => Substitutable p (Constraint p) where
   ftv (ConUnify _ _ a b) = ftv a `Set.union` ftv b
   ftv (ConSubsume _ _ a b) = ftv a `Set.union` ftv b
   ftv (ConImplies _ t a b) = ftv a `Set.union` ftv b `Set.union` ftv t
@@ -195,7 +195,7 @@ instantiate r tp@(TyPi (Anon co) od@dm) = do
       lam e | od == dm = e
       lam e
         | ann <- annotation e
-        = Fun (PType (Capture (TvName var) (ann, co)) co (ann, co)) (cont (App e (VarRef (TvName var) (ann, co)) (ann, od))) (ann, ty)
+        = Fun (PatParam (PType (Capture (TvName var) (ann, co)) co (ann, co))) (cont (App e (VarRef (TvName var) (ann, co)) (ann, od))) (ann, ty)
 
   pure (Just lam, tp, ty)
 instantiate _ ty = pure (Just id, ty, ty)

@@ -120,6 +120,34 @@ checkPattern pt ty = do
   (_, co) <- subsumes pt ty ty'
   pure (PWrapper (co, ty') p (annotation p, ty), binds, cs)
 
+checkParameter :: MonadInfer Typed m
+               => Parameter Resolved
+               -> Type Typed
+               -> m ( Parameter Typed
+                    , Telescope Typed
+                    , [(Type Typed, Type Typed)]
+                    )
+checkParameter (PatParam p) t = do
+  (p, t, cs) <- checkPattern p t
+  pure (PatParam p, t, cs)
+checkParameter (ImplParam p) t = do
+  (p, t, cs) <- checkPattern p t
+  pure (ImplParam p, t, cs)
+
+inferParameter :: MonadInfer Typed m
+               => Parameter Resolved
+               -> m ( Parameter Typed -- the pattern
+                    , TyBinder Typed -- binder for the pattern
+                    , Telescope Typed -- captures
+                    , [(Type Typed, Type Typed)] -- constraints
+                    )
+inferParameter (PatParam p) = do
+  (p, tau, t, cs) <- inferPattern p
+  pure (PatParam p, Anon tau, t, cs)
+inferParameter (ImplParam p) = do
+  (p, tau, t, cs) <- inferPattern p
+  pure (ImplParam p, Implicit tau, t, cs)
+
 boundTvs :: forall p. (Show (Var p), Ord (Var p))
          => Pattern p -> Telescope p -> Set.Set (Var p)
 boundTvs p vs = pat p <> foldTele go vs where
