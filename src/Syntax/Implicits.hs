@@ -3,10 +3,11 @@
 module Syntax.Implicits
   ( ImplicitScope
   , Obligation(..)
-  , Implicit(..), implHead, implPre, implVar, implType
+  , Solvedness(..)
+  , Implicit(..), implHead, implPre, implVar, implType, implSolved
   , lookup, keys, mapTypes, subTrie
-  , insert, singleton
-  , spine
+  , insert, singleton, consider
+  , spine, splitImplVarType
   )
   where
 
@@ -25,6 +26,7 @@ import Syntax.Pretty hiding ((:>))
 
 import Prelude hiding (lookup)
 
+
 -- | An obligation the solver needs to resolve if it chose this
 -- implicit parameter.
 data Obligation p
@@ -37,6 +39,10 @@ deriving instance (Show (Var p), Show (Ann p)) => Show (Obligation p)
 deriving instance Ord (Var p) => Ord (Obligation p)
 deriving instance Eq (Var p) => Eq (Obligation p)
 
+data Solvedness = Solved | Unsolved
+  deriving (Eq, Show, Ord)
+
+
 -- | A concrete representation of /one/ implicit parameter, stored in an
 -- implicit parameter scope (a trie, indexed by the 'head').
 data Implicit p
@@ -44,6 +50,7 @@ data Implicit p
   = ImplChoice { _implHead :: Type p -- ^ The 'head' of the implicit parameter, i.e. the return type
                , _implType :: Type p -- ^ The /entire/ type of the implicit parameter, with all quantifiers and such
                , _implPre :: [Obligation p] -- ^ The list of 'pre'conditions this choice implies
+               , _implSolved :: Solvedness -- ^ Was this implicit value declared in a 'let' or as a parameter 'fun ?m -> ...'?
                , _implVar :: Var p -- ^ The actual implicit
                }
 
@@ -61,6 +68,8 @@ data Node p
   | Some [Implicit p]
   -- | There are more to go
   | Many (ImplicitScope p)
+  -- | There are choices to consider, but there are also more to go
+  | ManyMore [Implicit p] (ImplicitScope p)
 
 deriving instance (Show (Var p), Show (Ann p)) => Show (Node p)
 deriving instance Ord (Var p) => Ord (Node p)
@@ -73,13 +82,35 @@ deriving instance (Show (Var p), Show (Ann p)) => Show (ImplicitScope p)
 deriving instance Ord (Var p) => Ord (ImplicitScope p)
 deriving instance Eq (Var p) => Eq (ImplicitScope p)
 
--- | Insert a choice for an implicit parameter (the variable @v@) of
--- type @tau@ at the given trie.
+-- | Insert a choice for a *fully-known* implicit parameter (the
+-- variable @v@) of type @tau@ at the given trie.
 insert :: forall p. Ord (Var p) => Var p -> Type p -> ImplicitScope p -> ImplicitScope p
 insert v ty = go ts implicit where
   (head, obligations) = getHead ty
 
-  implicit = ImplChoice head ty (toList obligations) v
+  implicit = ImplChoice head ty (toList obligations) Solved v
+  ts = spine head
+
+  go [] _ _ = error "empty spine (*very* malformed type?)"
+  go [x] i (Trie m) = Trie (Map.alter (`join` i) x m)
+      where join (Just (One x)) i = Just (Some [i, x])
+            join (Just (Some xs)) i = Just (Some (i:xs))
+            join Nothing i = Just (One i)
+            join _ _ = Nothing
+
+  go (x:xs) i (Trie l) = Trie (Map.alter (insert' xs i) x l) where
+    insert' :: [Type p] -> Implicit p -> Maybe (Node p) -> Maybe (Node p)
+    insert' xs i (Just (Many t)) = Just (Many (go xs i t))
+    insert' xs i Nothing = Just (Many (go xs i (Trie Map.empty)))
+    insert' _ _ (Just _) = error "badly-kinded type (end with spine remaining)"
+
+-- | Insert a choice for an *unknown* implicit parameter (the
+-- variable @v@) of type @tau@ at the given trie.
+consider :: forall p. Ord (Var p) => Var p -> Type p -> ImplicitScope p -> ImplicitScope p
+consider v ty = go ts implicit where
+  (head, obligations) = getHead ty
+
+  implicit = ImplChoice head ty (toList obligations) Unsolved v
   ts = spine head
 
   go [] _ _ = error "empty spine (*very* malformed type?)"
@@ -104,14 +135,12 @@ lookup ty = go ts where
   go [x] (Trie m) = case find x m of
     Just (One x) -> [x]
     Just (Some xs) -> xs
+    Just (ManyMore xs _) -> xs
     Nothing -> []
     _ -> error "badly-kinded type (trie with no spine left)"
-  go (x@TyCon{}:xs) (Trie m) = case Map.lookup x m of
-    Just (Many m) -> go xs m
-    Nothing -> []
-    Just _ -> error "badly-kinded type (end with spine remaining)"
   go (x:xs) (Trie m) = case find x m of
     Just (Many m) -> go xs m
+    Just (ManyMore ss m) -> ss ++ go xs m
     Nothing -> []
     Just _ -> error "badly-kinded type (end with spine remaining)"
   go [] Trie{} = error "badly-kinded type (empty spine?)"
@@ -126,18 +155,28 @@ instance Ord (Var p) => Monoid (ImplicitScope p) where
   mempty = Trie mempty
 
 instance Ord (Var p) => Semigroup (ImplicitScope p) where
-  Trie m <> Trie m' = Trie (merge m m') where
-    merge = Map.merge Map.preserveMissing Map.preserveMissing (Map.zipWithMatched (const (<>)))
+  Trie m <> Trie m' = Trie (merge m m')
 
 instance Ord (Var p) => Semigroup (Node p) where
-  (<>) (One x) (One y) = Some [x, y]
-  (<>) (One x) (Some xs) = Some (x:xs)
-  (<>) One{} _ = error "malformed trie (Many and One at same level)"
-  (<>) (Some x) (One y) = Some (x `snoc` y)
-  (<>) (Some x) (Some y) = Some (x ++ y)
-  (<>) Some{} _ = error "malformed trie (Many and Some at same level)"
-  (<>) (Many x) (Many y) = Many (x <> y)
-  (<>) Many{} _ = error "malformed trie (Many and Some/One at same level)"
+  One x <> One y = Some [x, y]
+  One x <> Some xs = Some (x:xs)
+  One x <> ManyMore xs t = ManyMore (x:xs) t
+  One x <> Many t = ManyMore [x] t
+
+  Some x <> One y = Some (x `snoc` y)
+  Some x <> Some y = Some (x ++ y)
+  Some x <> ManyMore xs t = ManyMore (x ++ xs) t
+  Some x <> Many t = ManyMore x t
+
+  Many x <> Many y = Many (x <> y)
+  Many t <> One x = ManyMore [x] t
+  Many t <> Some xs = ManyMore xs t
+  Many t <> ManyMore xs t' = ManyMore xs (t <> t')
+
+  ManyMore xs ts <> One x = ManyMore (xs `snoc` x) ts
+  ManyMore xs ts <> Some ys = ManyMore (xs ++ ys) ts
+  ManyMore xs ts <> ManyMore ys ts' = ManyMore (xs ++ ys) (ts <> ts')
+  ManyMore xs ts <> Many ts' = ManyMore xs (ts <> ts')
 
 -- | Compute the set of keys in a scope. Note that this operation takes
 -- time proportional to the number of elements in the trie!
@@ -148,19 +187,27 @@ keys = go where
   goNode (One x) = x ^. implHead & Set.singleton
   goNode (Some xs) = foldMapOf (each . implHead) Set.singleton xs
   goNode (Many t) = go t
+  goNode (ManyMore xs t) = foldMapOf (each . implHead) Set.singleton xs <> go t
 
 -- | Map a function over the elements of a trie. Note that, because of
 -- the way they are stored, the function will be applied many times to
 -- distinct parts of possibly the same type.
-mapTypes :: forall p. Ord (Var p) => (Type p -> Type p) -> ImplicitScope p -> ImplicitScope p
+mapTypes :: forall p. (Ord (Var p), Show (Var p), Show (Ann p)) => (Type p -> Type p) -> ImplicitScope p -> ImplicitScope p
 mapTypes fn = go where
-  go (Trie m) = Trie (Map.foldMapWithKey (\k x -> Map.singleton (fn k) (goNode x)) m)
+  go (Trie m) = Trie (Map.foldrWithKey (\k x r -> makeTrie (spine (fn k)) (goNode x) `merge` r) mempty m)
+
+  makeTrie :: [Type p] -> Node p -> Map.Map (Type p) (Node p)
+  makeTrie [x] n = Map.singleton x n
+  makeTrie (x:xs) n = Map.singleton x (Many (Trie (makeTrie xs n)))
+  makeTrie [] _ = error ("a node was left dangling while balancing trie")
+
 
   goNode (One x) = One (goI x)
   goNode (Some xs) = Some (map goI xs)
   goNode (Many t) = Many (go t)
+  goNode (ManyMore xs t) = ManyMore (map goI xs) (go t)
 
-  goI (ImplChoice h t o v) = ImplChoice (fn h) (fn t) (map goO o) v
+  goI (ImplChoice h t o s v) = ImplChoice (fn h) (fn t) (map goO o) s v
 
   goO (Quantifier (Invisible v k)) = Quantifier (Invisible v (fn <$> k))
   goO (Quantifier _) = error "impossible quantifier"
@@ -183,7 +230,7 @@ spine :: Type p -> [Type p]
 spine (TyApp f x) = spine f `snoc` x
 spine t = [t]
 
-getHead :: Type p -> (Type p, Seq.Seq (Obligation p))
+getHead, splitImplVarType :: Type p -> (Type p, Seq.Seq (Obligation p))
 getHead t@TyVar{} = (t, Seq.empty)
 getHead t@TyCon{} = (t, Seq.empty)
 getHead t@TyPromotedCon{} = (t, Seq.empty)
@@ -203,6 +250,13 @@ getHead t@TyTuple{} = (t, Seq.empty)
 getHead t@TySkol{} = (t, Seq.empty)
 getHead t@TyWithConstraints{} = (t, Seq.empty)
 getHead t@TyType = (t, Seq.empty)
+
+-- | Split the type of an implicit variable into its head and a set of
+-- obligations.
+splitImplVarType = getHead
+
+merge :: Ord (Var p) => Map.Map (Type p) (Node p) -> Map.Map (Type p) (Node p) -> Map.Map (Type p) (Node p)
+merge = Map.merge Map.preserveMissing Map.preserveMissing (Map.zipWithMatched (const (<>)))
 
 -- | Does there exist a substitution that can make a the same as b?
 -- (Conservative check.)
