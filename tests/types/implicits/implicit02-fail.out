@@ -1,5 +1,5 @@
 implicit02-fail.ml[3:18 ..3:20]: error
-  Could not find implicit value of type int
+  Could not choose implicit value of type int
 
   Arising in the expression
   │ 

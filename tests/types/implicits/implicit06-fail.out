@@ -1,7 +1,7 @@
 implicit06-fail.ml[14:32 ..14:34]: error
-  Could not find implicit value of type foo a
+  Could not choose implicit value of type foo a
 
-  • Where a are rigid type variable,
+  • Where a is a rigid type variable,
       rigidified because of the context, the type
       forall 'a. foo 'a
 

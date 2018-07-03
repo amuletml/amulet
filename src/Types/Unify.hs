@@ -317,8 +317,8 @@ useImplicit x inner scope' ty (ImplChoice hdt oty os _ imp) = go where
   go = do
     (cast, view solveTySubst -> sub) <- capture $ unify ty hdt
 
-    let start e = Ascription (VarRef imp (annotation e, oty)) oty (annotation e, oty)
-        mk _ [] = pure (\e -> ExprWrapper (Cast cast) e (annotation e, ty))
+    let start e = VarRef imp (annotation e, oty)
+        mk _ [] = pure (\e -> ExprWrapper (probablyCast cast) e (annotation e, ty))
         mk (TyPi (Invisible _ _) t) (Quantifier (Invisible v _):xs) = do
           tau <- case v `Map.lookup` sub of
             Nothing -> refreshTV v
@@ -366,7 +366,7 @@ subsumes s wt@(TyPi (Implicit t) t1) t2 | _TyVar `isn't` t2 = do
 
   sub <- use solveTySubst
   w <- solveImplicitConstraint 0 wt s (apply sub t)
-  let wrap ex | an <- annotation ex = Ascription (ExprWrapper w (Ascription ex wt (an, wt)) (an, t1)) t1 (an, t1)
+  let wrap ex | an <- annotation ex = Ascription (ExprWrapper w ex (an, t1)) t1 (an, t1)
    in pure (WrapFn (MkWrapCont wrap "implicit instantation"))
 
 subsumes s ot@(TyTuple a b) nt@(TyTuple a' b') = do
