@@ -16,7 +16,6 @@ import Syntax.Subst
 
 import Text.Pretty.Semantic
 
-
 gadtConShape :: (Type Typed, Type Typed) -> Type Typed -> TypeError -> TypeError
 gadtConShape (t, _) (TyArr c d) oerr = k . fix . flip Note (string "Generalised constructors can not be curried") $ err where
   fix = case t of
@@ -103,15 +102,15 @@ noImplicitFound _ tau | not (null sks) = NoImplicit tau (<#> msg) where
     [_] -> empty
     _ -> char 's'
   verb = case sks of
-    [_] -> string "are"
-    _ -> string "is"
+    [_] -> string "is a"
+    _ -> string "are"
 
 noImplicitFound _ tau = NoImplicit tau id
 
 ambiguousImplicits :: [Implicit Typed] -> Type Typed -> TypeError
-ambiguousImplicits cs tau = NoImplicit tau (<#> ambiguous) where
+ambiguousImplicits cs tau | not (Set.null (ftv tau)) = NoImplicit tau (<#> ambiguous) where
   ambiguous = vsep [ empty
-                   , bullet (string "Ambiguous type variable" <> plural <+> tvs <+> string "prevent" <> tense <+> string "finding a value")
+                   , bullet (string "Ambiguous type variable" <> plural <+> tvs <+> string "prevent" <> tense <+> string "choosing a value")
                    , suggestion
                    ]
   suggestion = case cs of
@@ -139,6 +138,12 @@ ambiguousImplicits cs tau = NoImplicit tau (<#> ambiguous) where
   pronoun = case vars of
     [_] -> string "it"
     _ -> string "them"
+ambiguousImplicits cs tau = NoImplicit tau (<#> candidates) where
+  candidates = vsep ( [ empty
+                      , bullet (string "The following candidates exist:")
+                      ]
+                   ++ map displaySuggestion cs)
+
 
 displaySuggestion :: Implicit Typed -> Doc
 displaySuggestion (ImplChoice _ t _ Solved v) = bullet (pretty v <+> colon <+> displayType t)

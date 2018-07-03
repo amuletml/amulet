@@ -324,7 +324,7 @@ instance Pretty TypeError where
         InstType{} -> highlight "Type" <+> pretty t
         _ -> highlight "Expression"
   pretty (NoImplicit tau doc) =
-    doc $ vsep [ "Could not find implicit value of type" <+> displayType tau ]
+    doc $ vsep [ "Could not choose implicit value of type" <+> displayType tau ]
 
   pretty (NakedInstArtifact h@InstHole{}) =
     vsep [ string "Instantiation hole" <+> pretty h <+> "used outside of type application" ]
