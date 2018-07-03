@@ -46,7 +46,7 @@ sinkStmts _ [] = []
 sinkStmts s (Foreign v ty bod:xs) = Foreign v ty bod:sinkStmts s xs
 sinkStmts s (StmtLet vars:xs) =
   let vars' = map (third3 (sinkTerm s)) vars
-      s' = s { arity = A.extendPureFuns (arity s) vars }
+      s' = s { arity = A.extendPureLets (arity s) vars }
   in StmtLet vars':sinkStmts s' xs
 sinkStmts s (Type v cases:xs) =
   let s' = s { arity = A.extendPureCtors (arity s) cases }
@@ -69,20 +69,20 @@ sinkTerm s (AnnLet _ (One b@(v, ty, e)) r)
         s' = s { sinkable = Sinkable { sBind = (v, ty, e')
                                      , sBound = VarSet.singleton (toVar v)
                                      , sFree = extractAnn e } : sinkable s
-               , arity = A.extendPureFuns (arity s) [b] }
+               , arity = A.extendPureLets (arity s) [b] }
     in sinkTerm s' r
 
   -- Otherwise, partition into sinkable/nonsinkable
   | otherwise
   = let (fs, [rs, es]) = partitionBinds (sinkable s) [extractAnn r, extractAnn e]
-        a' = A.extendPureFuns (arity s) [b]
+        a' = A.extendPureLets (arity s) [b]
         e' = sinkTerm (s { sinkable = es, arity = a' }) e
         r' = sinkTerm (s { sinkable = rs, arity = a' }) r
     in flushBinds fs (Let (One (v, ty, e')) r')
 
 sinkTerm s (AnnLet _ (Many vs) r) =
   let (fs, rs:vss) = partitionBinds (sinkable s) (extractAnn r : map (extractAnn . thd3) vs)
-      a' = A.extendPureFuns (arity s) vs
+      a' = A.extendPureLets (arity s) vs
       vs' = zipWith (\fv -> third3 (sinkTerm (s { sinkable = fv, arity = a' }))) vss vs
       r'  = sinkTerm (s { sinkable = rs, arity = a' }) r
   in flushBinds fs (Let (Many vs') r')

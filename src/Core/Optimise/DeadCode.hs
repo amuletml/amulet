@@ -46,7 +46,7 @@ deadCodePass = snd . freeS emptyScope Nothing where
     let m' = find (\x -> case toVar x of
                            CoVar _ "main" _ -> True
                            _ -> False) (map fst3 vs)
-        s' = extendPureFuns s vs
+        s' = extendPureLets s vs
     in case uncurry (buildLet s' vs) (freeS s' (m <|> m') xs) of
          -- If we've no bindings, just return the primary expression
          (f, [], xs') -> (f, xs')
@@ -71,7 +71,7 @@ deadCodePass = snd . freeS emptyScope Nothing where
   freeT s (Cast f t) = Cast <$> freeA s f <*> pure t
   freeT s (Extend t rs) = Extend <$> freeA s t <*> traverse (third3A (freeA s)) rs
   freeT s (Let (One vs@(v, ty, e)) b) =
-    let s' = extendPureFuns s [vs]
+    let s' = extendPureLets s [vs]
         (fe, e') = freeT s e
         (fb, b') = freeT s' b
     in if isPure s' e' && toVar v `VarSet.notMember` fb
@@ -79,7 +79,7 @@ deadCodePass = snd . freeS emptyScope Nothing where
        else (fe <> fb, Let (One (v, ty, e')) b')
 
   freeT s (Let (Many vs) b) =
-    let s' = extendPureFuns s vs in
+    let s' = extendPureLets s vs in
     case uncurry (buildLet s' vs) (freeT s' b) of
       -- If we've no bindings, just return the primary expression
       (f, [], b') -> (f, b')
