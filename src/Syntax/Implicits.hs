@@ -105,8 +105,10 @@ insert v ty = go ts implicit where
   go (x:xs) i (Trie l) = Trie (Map.alter (insert' xs i) x l) where
     insert' :: [Type p] -> Implicit p -> Maybe (Node p) -> Maybe (Node p)
     insert' xs i (Just (Many t)) = Just (Many (go xs i t))
+    insert' xs i (Just (One t)) = Just (ManyMore [t] (go xs i mempty))
+    insert' xs i (Just (Some ts)) = Just (ManyMore ts (go xs i mempty))
+    insert' xs i (Just (ManyMore ts t)) = Just (ManyMore ts (go xs i t))
     insert' xs i Nothing = Just (Many (go xs i (Trie Map.empty)))
-    insert' _ _ (Just _) = error "badly-kinded type (end with spine remaining)"
 
 -- | Insert a choice for an *unknown* (@Unsolved@) implicit parameter
 -- (the variable @v@) of type @tau@ at the given trie.
@@ -127,8 +129,10 @@ consider v ty = go ts implicit where
   go (x:xs) i (Trie l) = Trie (Map.alter (insert' xs i) x l) where
     insert' :: [Type p] -> Implicit p -> Maybe (Node p) -> Maybe (Node p)
     insert' xs i (Just (Many t)) = Just (Many (go xs i t))
+    insert' xs i (Just (One t)) = Just (ManyMore [t] (go xs i mempty))
+    insert' xs i (Just (Some ts)) = Just (ManyMore ts (go xs i mempty))
+    insert' xs i (Just (ManyMore ts t)) = Just (ManyMore ts (go xs i t))
     insert' xs i Nothing = Just (Many (go xs i (Trie Map.empty)))
-    insert' _ _ (Just _) = error "badly-kinded type (end with spine remaining)"
 
 -- | Find a type in a trie by conservative fuzzy search.
 lookup :: forall p. Ord (Var p) => Type p -> ImplicitScope p -> [Implicit p]
@@ -139,13 +143,11 @@ lookup ty = go ts where
     Just (One x) -> [x]
     Just (Some xs) -> xs
     Just (ManyMore xs _) -> xs
-    Nothing -> []
-    _ -> error "badly-kinded type (trie with no spine left)"
+    _ -> []
   go (x:xs) (Trie m) = case find x m of
     Just (Many m) -> go xs m
     Just (ManyMore ss m) -> ss ++ go xs m
-    Nothing -> []
-    Just _ -> error "badly-kinded type (end with spine remaining)"
+    _ -> []
   go [] Trie{} = error "badly-kinded type (empty spine?)"
 
   find :: Type p -> Map.Map (Type p) (Node p) -> Maybe (Node p)

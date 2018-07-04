@@ -1,5 +1,5 @@
 {-# LANGUAGE MultiWayIf, GADTs, FlexibleContexts, ScopedTypeVariables, TemplateHaskell #-}
-{-# LANGUAGE TupleSections, OverloadedStrings, ViewPatterns #-}
+{-# LANGUAGE TupleSections, OverloadedStrings, ViewPatterns, LambdaCase #-}
 
 -- | This module implements the logic responsible for solving the
 -- sequence of @Constraint@s the type-checker generates for a particular
@@ -18,17 +18,18 @@ import Types.Wellformed
 
 import qualified Syntax.Implicits as Imp
 import Syntax.Implicits (Obligation(..), Implicit(..))
+import Syntax.Pretty
 import Syntax.Subst
-import Syntax.Var
 import Syntax
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
+import Data.Traversable
 import Data.Sequence (Seq ((:<|), Empty))
-import Data.Spanned
 import Data.Foldable
 import Data.Function
+import Data.Spanned
 import Data.List
 import Data.Text (Text)
 
@@ -301,26 +302,60 @@ doSolve (ConFail a v t :<| cs) = do
 solveImplicitConstraint :: Int -> Type Typed -> Imp.ImplicitScope Typed -> Type Typed -> SolveM (Wrapper Typed)
 solveImplicitConstraint x _ _ _ | x >= 200 = throwError undefined
 solveImplicitConstraint x inner scope t =
-  case Imp.lookup t scope of
-    [c] -> useImplicit x inner scope t c
-    [] -> throwError (noImplicitFound scope t)
-    xs -> case partition bySolvedness xs of
-      ([c], _) -> useImplicit x inner scope t c
-      _ -> throwError (ambiguousImplicits xs t)
-
-bySolvedness :: Implicit p -> Bool
-bySolvedness (ImplChoice _ _ _ s _) = s == Imp.Unsolved
+  let isUnsolved t = (t ^. Imp.implSolved) == Imp.Unsolved
+      freeInHead t = ftv (t ^. Imp.implHead)
+      freeInPre t = flip foldMap (t ^. Imp.implPre) $ \case
+        Quantifier{} -> Set.empty
+        Implication t -> ftv t
+      isPolymorphic t = let tv (Quantifier (Invisible v _)) = [v]
+                            tv _ = mempty
+                            tvs = foldMap tv (t ^. Imp.implPre)
+                         in all (`Set.member` freeInHead t) tvs
+                         && all (`Set.member` freeInPre t) tvs
+                         && not (null tvs)
+      pickClosest t xs = groupBy (\a b -> fst a == fst b) (sortOn fst (map (matchDistance t) xs))
+      trySolved xs =
+        case partition isUnsolved xs of
+          ([c], _) -> useImplicit (x + 1) inner scope t c
+          _ -> retry xs
+      tryPoly xs =
+        case partition isPolymorphic xs of
+          ([c], _) -> do
+            let solvable (Quantifier _) = pure True
+                solvable (Implication tau) = do
+                  w <- catchy (solveImplicitConstraint (x + 1) inner scope tau)
+                  case w of
+                    Left _ -> pure False
+                    Right _ -> pure True
+            weCan <- allM solvable (c ^. Imp.implPre)
+            unless weCan (retry xs)
+            useImplicit (x + 1) inner scope t c
+          _ -> retry xs
+      tryMoreSpecific xs =
+        case pickClosest t xs of
+          ([(_, c)]:_) -> useImplicit (x + 1) inner scope t c
+          _ -> retry xs
+      retry :: [Implicit Typed] -> SolveM a
+      retry xs = throwError (ambiguousImplicits xs t)
+   in case Imp.lookup t scope of
+       [c] -> useImplicit x inner scope t c
+       [] -> throwError (noImplicitFound scope t)
+       xs -> trySolved xs `orElse` tryPoly xs `orElse` tryMoreSpecific xs
 
 useImplicit :: Int -> Type Typed -> Imp.ImplicitScope Typed -> Type Typed -> Implicit Typed -> SolveM (Wrapper Typed)
-useImplicit x inner scope' ty (ImplChoice hdt oty os _ imp) = go where
+useImplicit x inner scope' ty (ImplChoice hdt oty os s imp) = go where
   go :: SolveM (Wrapper Typed)
   go = do
-    (cast, view solveTySubst -> sub) <- capture $ unify ty hdt
+    (hdt, refresh) <- if s == Imp.Solved then refreshTy hdt else pure (hdt, mempty)
+    (cast, view solveTySubst -> sub) <- capture $ unify hdt ty
 
     let start e = VarRef imp (annotation e, oty)
         mk _ [] = pure (\e -> ExprWrapper (probablyCast cast) e (annotation e, ty))
-        mk (TyPi (Invisible _ _) t) (Quantifier (Invisible v _):xs) = do
-          tau <- case v `Map.lookup` sub of
+        mk (TyPi (Invisible v _) t) (Quantifier (Invisible _ _):xs) = do
+          let v' = case v `Map.lookup` refresh of
+                    Just (TyVar v') -> v'
+                    _ -> v
+          tau <- case v' `Map.lookup` sub of
             Nothing -> refreshTV v
             Just t -> pure t
           let sub' = Map.singleton v tau
@@ -336,6 +371,20 @@ useImplicit x inner scope' ty (ImplChoice hdt oty os _ imp) = go where
     solveTySubst %= compose sub
     let cont ex = ExprWrapper (ExprApp (wrap (start ex))) ex (annotation ex, inner)
     pure (WrapFn (MkWrapCont cont ("implicit value for " ++ show ty)))
+
+matchDistance :: Type Typed -> Implicit Typed -> (Int, Implicit Typed)
+matchDistance t im =
+  let occm = tyVarOcc (im ^. Imp.implHead) <> foldMap (\case Quantifier{} -> mempty; Implication t -> tyVarOcc t) (im ^. Imp.implPre)
+      distance =
+        case solve firstName (Seq.singleton (ConUnify (BecauseOf (undefined :: Expr Typed)) (TvName firstName) t (im ^. Imp.implHead))) of
+          Left _ -> maxBound
+          Right (s, _) ->
+            let weight v =
+                  case Map.lookup v s of
+                    Just _ -> 1
+                    Nothing -> 0
+             in foldOccMap (\v o x -> x + o * weight v) 0 occm
+   in (distance, im)
 
 subsumes :: Imp.ImplicitScope Typed
          -> Type Typed -> Type Typed -> SolveM (Wrapper Typed)
@@ -479,3 +528,15 @@ capture m = do
 
 catchy :: MonadError e m => m a -> m (Either e a)
 catchy x = (Right <$> x) `catchError` (pure . Left)
+
+orElse :: MonadError e m => m a -> m a -> m a
+orElse x y = x `catchError` const y
+
+allM :: (Monad m, Foldable t) => (a -> m Bool) -> t a -> m Bool
+allM p = foldM (\x b -> (&&) x <$> p b) True
+
+refreshTy :: (Substitutable Typed a, MonadNamey m) => a -> m (a, Subst Typed)
+refreshTy ty = do
+  vs <- for (Set.toList (ftv ty)) $ \v ->
+    (v,) <$> refreshTV v
+  pure (apply (Map.fromList vs) ty, Map.fromList vs)

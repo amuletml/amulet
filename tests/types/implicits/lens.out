@@ -1,21 +1,50 @@
 tostring : {'a : type}. 'a -> string
-print : string -> unit
+writeln : string -> unit
 identity : type -> type
 Identity : {'a : type}. 'a -> identity 'a
-runIdentity : {'cf : type}. identity 'cf -> 'cf
-const : {'cx : type}. type -> 'cx -> type
-Const : {'a : type}. {'b : 'dk}. 'a -> const 'a 'b
-getConst : {'du : type}. {'b : 'ei}. const 'du 'b -> 'du
+runIdentity : {'gi : type}. identity 'gi -> 'gi
+const : {'ha : type}. type -> 'ha -> type
+Const : {'a : type}. {'b : 'hn}. 'a -> const 'a 'b
+getConst : {'hx : type}. {'b : 'il}. const 'hx 'b -> 'hx
 functor : (type -> type) -> type
 Functor : {'f : type -> type}. ({'a : type}. {'b : type}. ('a -> 'b) -> 'f 'a -> 'f 'b) -> functor 'f
+<$> : {'f : type -> type}. {'a : type}. {'b : type}. functor 'f => ('a -> 'b) -> 'f 'a -> 'f 'b
+applicative : (type -> type) -> type
+Applicative : {'f : type -> type}. {'ns : type}. ({'a : 'ns}. {'b : 'ns}. 'f ('a -> 'b) -> 'f 'a -> 'f 'b * {'a : type}. 'a -> 'f 'a) -> applicative 'f
+<*> : {'f : type -> type}. {'a : type}. {'b : type}. applicative 'f => 'f ('a -> 'b) -> 'f 'a -> 'f 'b
+pure : {'f : type -> type}. {'a : type}. applicative 'f => 'a -> 'f 'a
+monoid : type -> type
+Monoid : {'m : type}. ('m * 'm -> 'm -> 'm) -> monoid 'm
+mappend : {'m : type}. monoid 'm => 'm -> 'm -> 'm
+mempty : {'uy : type}. monoid 'uy => 'uy
+show : type -> type
+Show : {'a : type}. ('a -> string) -> show 'a
+show : {'a : type}. show 'a => 'a -> string
+print : {'xi : type}. show 'xi => 'xi -> unit
+show_string : show string
+show_int : show int
+show_bool : show bool
+show_pair : {'a : type}. {'b : type}. show 'a => show 'b => show ('a * 'b)
 functor_identity : functor identity
 functor_const : {'a : type}. functor (const 'a)
-& : {'jj : type}. {'jk : type}. {'jx : type}. ('jx -> 'jk) -> ('jj -> 'jx) -> 'jj -> 'jk
-|> : {'kr : type}. {'kt : type}. 'kr -> ('kr -> 'kt) -> 'kt
-<$> : {'f : type -> type}. {'a : type}. {'b : type}. functor 'f => ('a -> 'b) -> 'f 'a -> 'f 'b
-fst : {'ns : type}. {'f : type -> type}. {'of : type}. {'oi : type}. functor 'f => ('oi -> 'f 'of) -> ('oi * 'ns) -> 'f ('of * 'ns)
-snd : {'qb : type}. {'f : type -> type}. {'qp : type}. {'qs : type}. functor 'f => ('qs -> 'f 'qp) -> ('qb * 'qs) -> 'f ('qb * 'qp)
-.~ : {'rw : type}. {'jj : type}. {'jk : type}. {'sw : type}. (('sw -> identity 'rw) -> 'jj -> identity 'jk) -> 'rw -> 'jj -> 'jk
-^. : {'tv : type}. {'tx : type}. {'b : 'va}. {'a : type}. {'b : 'vc}. 'tv -> (('a -> const 'a 'b) -> 'tv -> const 'tx 'b) -> 'tx
-print_pair : {'a : type}. {'a : type}. ('a * 'a) -> unit
+applicative_identity : applicative identity
+applicative_const : {'a : type}. monoid 'a => applicative (const 'a)
+functor_from_applicative : {'f : type -> type}. applicative 'f => functor 'f
+& : {'amu : type}. {'amv : type}. {'ani : type}. ('ani -> 'amv) -> ('amu -> 'ani) -> 'amu -> 'amv
+|> : {'aoc : type}. {'aoe : type}. 'aoc -> ('aoc -> 'aoe) -> 'aoe
+fst : {'apr : type}. {'f : type -> type}. {'aqe : type}. {'aqh : type}. functor 'f => ('aqh -> 'f 'aqe) -> ('aqh * 'apr) -> 'f ('aqe * 'apr)
+snd : {'arz : type}. {'f : type -> type}. {'asn : type}. {'asq : type}. functor 'f => ('asq -> 'f 'asn) -> ('arz * 'asq) -> 'f ('arz * 'asn)
+.~ : {'atu : type}. {'amu : type}. {'amv : type}. {'auu : type}. (('auu -> identity 'atu) -> 'amu -> identity 'amv) -> 'atu -> 'amu -> 'amv
+^. : {'avt : type}. {'avv : type}. {'b : 'awy}. {'a : type}. {'b : 'axa}. 'avt -> (('a -> const 'a 'b) -> 'avt -> const 'avv 'b) -> 'avv
+list : type -> type
+Nil : {'a : type}. list 'a
+Cons : {'a : type}. ('a * list 'a) -> list 'a
+:: : {'ayy : type}. 'ayy -> list 'ayy -> list 'ayy
+show_list : {'a : type}. show 'a => show (list 'a)
+functor_list : functor list
+applicative_list : applicative list
+monoid_list : {'a : type}. monoid (list 'a)
+traverse : {'f : type -> type}. {'ayy : type}. {'buk : type}. applicative 'f => ('buk -> 'f 'ayy) -> list 'buk -> 'f (list 'ayy)
+foldMapOf : {'amu : type}. {'amv : type}. {'b : 'bxk}. {'amu : type}. {'ani : type}. {'b : 'bxn}. (('amu -> const 'ani 'b) -> 'amu -> const 'amv 'b) -> ('amu -> 'ani) -> 'amu -> 'amv
+toListOf : {'amu : type}. {'amv : type}. {'b : 'cak}. {'b : 'cal}. {'a : type}. (('a -> const (list 'a) 'b) -> 'amu -> const 'amv 'b) -> 'amu -> 'amv
 main : unit
