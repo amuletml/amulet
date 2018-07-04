@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleContexts, TupleSections, GADTs #-}
-{-# LANGUAGE ScopedTypeVariables, RankNTypes  #-}
+{-# LANGUAGE ScopedTypeVariables, RankNTypes, ViewPatterns #-}
 module Types.Infer
   ( inferProgram
   , builtinsEnv
@@ -86,13 +86,11 @@ check ex@(Fun pat e an) ty = do
   implies (Arm (pat ^. paramPat) e) domain cs $
     case dom of
       Implicit{} -> do
-        name <- TvName <$> genName
+        (name, body, pat) <- makeImplicitName (annotation e) domain p
         e <- local (typeVars %~ Set.union tvs) $ local (names %~ focus vs) $
           local (implicits %~ insert name domain) $
             check e cod
-        let body = Match (VarRef name (an, domain)) [ (p ^. paramPat, e) ] (an, cod)
-            pat = ImplParam (Capture name (an, domain))
-        pure (Fun pat body (an, ty))
+        pure (Fun pat (body cod e) (an, ty))
       Anon{} -> do
         e <- local (typeVars %~ Set.union tvs) . local (names %~ focus vs) $
           check e cod
@@ -155,15 +153,13 @@ infer (Fun p e an) = let blame = Arm (p ^. paramPat) e in do
 
   _ <- leakEqualities blame cs
   case p of
-    ImplParam p -> do
-      name <- TvName <$> genName
+    ImplParam{} -> do
+      (name, body, pat) <- makeImplicitName an domain p
       (e, cod) <- local (typeVars %~ Set.union (Set.map unTvName tvs)) $
         local (names %~ focus ms) $
           local (implicits %~ consider name domain) $
             infer e
-      let body = Match (VarRef name (an, domain)) [ (p, e) ] (an, cod)
-          pat = ImplParam (Capture name (an, domain))
-      pure (Fun pat body (an, TyPi dom cod), TyPi dom cod)
+      pure (Fun pat (body cod e) (an, TyPi dom cod), TyPi dom cod)
     PatParam _ -> do
       (e, cod) <- local (typeVars %~ Set.union (Set.map unTvName tvs)) $
         local (names %~ focus ms) $
@@ -460,3 +456,23 @@ solveEx _ ss cs = transformExprTyped go id goType where
 
 consFst :: Functor m => a -> m ([a], b) -> m ([a], b)
 consFst = fmap . first . (:)
+
+makeImplicitName :: MonadInfer Typed m
+                 => Ann Resolved -> Type Typed -> Parameter Typed
+                 -> m (Var Typed, Type Typed -> Expr Typed -> Expr Typed, Parameter Typed)
+makeImplicitName _ _ pa@(ImplParam (viewOp -> Capture name _)) =
+  pure (name, const id, pa)
+makeImplicitName an domain (ImplParam p) = do
+  name <- TvName <$> genName
+  let body co e = Match (VarRef name (an, domain)) [ (p, e) ] (an, co)
+      pat = ImplParam (Capture name (an, domain))
+  pure (name, body, pat)
+makeImplicitName an domain (PatParam p) = do
+  name <- TvName <$> genName
+  let body co e = Match (VarRef name (an, domain)) [ (p, e) ] (an, co)
+      pat = ImplParam (Capture name (an, domain))
+  pure (name, body, pat)
+
+viewOp :: Pattern p -> Pattern p
+viewOp (PType p _ _) = viewOp p
+viewOp v = v

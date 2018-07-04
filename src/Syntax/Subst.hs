@@ -3,21 +3,25 @@
   , UndecidableInstances
   , MultiParamTypeClasses
   , FunctionalDependencies
+  , TypeFamilies
   #-}
 module Syntax.Subst
   ( Subst
   , Substitutable
+  , tyVarOcc, foldOccMap
   , ftv
   , apply
   , compose
   , Map.fromList )
   where
 
+import qualified Data.Map.Merge.Strict as Map
 import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
 
 import Control.Arrow (second)
+import Control.Lens
 
 import Syntax.Var
 import Syntax
@@ -107,3 +111,52 @@ bound (Explicit v _) = Set.singleton v
 
 compose :: Ord (Var p) => Subst p -> Subst p -> Subst p
 s1 `compose` s2 = fmap (apply s1) s2 <> fmap (apply s2) s1
+
+newtype OccMap p = OccMap (Map.Map (Var p) Int)
+
+instance Ord (Var p) => Semigroup (OccMap p) where
+  OccMap x <> OccMap y = OccMap (x `go` y) where
+    go = Map.merge Map.preserveMissing Map.preserveMissing (Map.zipWithMatched (const (+)))
+
+instance Ord (Var p) => Monoid (OccMap p) where
+  mempty = OccMap mempty
+
+type instance IxValue (OccMap p) = Int
+type instance Index (OccMap p) = Var p
+instance Ord (Var p) => Ixed (OccMap p) where
+  ix k f (OccMap m) = case Map.lookup k m of
+    Just v  -> f v <&> \v' -> OccMap (Map.insert k v' m)
+    Nothing -> pure (OccMap m)
+
+instance Ord (Var p) => At (OccMap p) where
+  at k f (OccMap m) = OccMap <$> Map.alterF f k m
+
+singletonOcc :: Ord (Var p) => Var p -> OccMap p
+singletonOcc v = OccMap (Map.singleton v 1)
+
+removeOccs :: Ord (Var p) => OccMap p -> Set.Set (Var p) -> OccMap p
+removeOccs (OccMap m) s = OccMap (m `Map.withoutKeys` s)
+
+foldOccMap :: Ord (Var p) => (Var p -> Int -> b -> b) -> b -> OccMap p -> b
+foldOccMap k b (OccMap m) = Map.foldrWithKey k b m
+
+tyVarOcc :: Ord (Var p) => Type p -> OccMap p
+tyVarOcc TyCon{} = mempty
+tyVarOcc TyPromotedCon{} = mempty
+tyVarOcc TySkol{} = mempty
+tyVarOcc TyType{} = mempty
+tyVarOcc (TyVar v) = singletonOcc v
+tyVarOcc (TyApp a b) = tyVarOcc a <> tyVarOcc b
+tyVarOcc (TyTuple a b) = tyVarOcc a <> tyVarOcc b
+tyVarOcc (TyRows rho rows) = tyVarOcc rho <> foldMap (tyVarOcc . snd) rows
+tyVarOcc (TyExactRows rows) = foldMap (tyVarOcc . snd) rows
+tyVarOcc (TyWithConstraints eq b) = foldMap (\(a, b) -> tyVarOcc a <> tyVarOcc b) eq <> tyVarOcc b
+tyVarOcc (TyPi binder t) = tyVarOcc' binder <> (tyVarOcc t `removeOccs` bound binder) where
+  bound Anon{} = Set.empty
+  bound Implicit{} = Set.empty
+  bound (Invisible v _) = Set.singleton v
+  bound (Explicit v _) = Set.singleton v
+  tyVarOcc' (Anon t) = tyVarOcc t
+  tyVarOcc' (Implicit t) = tyVarOcc t
+  tyVarOcc' (Invisible _ k) = maybe mempty tyVarOcc k
+  tyVarOcc' (Explicit _ k) = tyVarOcc k
