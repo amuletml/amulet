@@ -340,7 +340,7 @@ solveImplicitConstraint x inner scope t =
    in case Imp.lookup t scope of
        [c] -> useImplicit x inner scope t c
        [] -> throwError (noImplicitFound scope t)
-       xs -> trySolved xs `orElse` tryPoly xs `orElse` tryMoreSpecific xs
+       xs -> trySolved xs `orElse` tryMoreSpecific xs `orElse` tryPoly xs
 
 useImplicit :: Int -> Type Typed -> Imp.ImplicitScope Typed -> Type Typed -> Implicit Typed -> SolveM (Wrapper Typed)
 useImplicit x inner scope' ty (ImplChoice hdt oty os s imp) = go where
