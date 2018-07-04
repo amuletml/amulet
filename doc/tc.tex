@@ -5,10 +5,17 @@
 
 \newcommand{\checks}{\Leftarrow}
 \newcommand{\infers}{\Rightarrow}
+\newcommand{\ito}{\Rightarrow}
 \newcommand{\cons}{\rightsquigarrow}
 \newcommand{\reduces}{\hookrightarrow}
-\newcommand{\skol}[1]{\mathtt{skol}\left(#1\right)}
+\newcommand{\cast}{\triangleright}
+\newcommand{\sub}{\le}
+\newcommand{\fresh}{\mathtt{fresh}}
+\newcommand{\skol}[1]{\mathtt{skol}(#1)}
+\newcommand{\binds}[1]{\mathtt{binds}(#1)}
+\newcommand{\impl}[1]{\mathtt{implicit}(#1)}
 \newcommand{\quant}[1]{\mathtt{quantifier}\left(#1\right)}
+\newcommand{\fun}[1]{\mathtt{fun}\ #1 \to}
 \newcommand{\skv}[1]{{\color{red} \mathbf{#1}}}
 \newcommand{\Ambient}{\Gamma; \Sigma \vdash}
 
@@ -21,15 +28,15 @@ $\tau$, generating constraints $\mathscr{Q}$ and elaborating into $e'$
 $$\Ambient e \checks \tau \cons \mathscr{Q} \reduces e'$$
 Under context $\Gamma$ and signature $\Sigma$, the expression $e$ checks
 against type $\tau$, generating constraints $\mathscr{Q}$ and elaborating into
-$e'$.
+  $e'$.
 
 $$\gamma: \tau \sim \sigma$$
 The types $\tau$ and $\sigma$ unify, producing a coercion $\gamma$.
 
-$$\omega: \tau \le \sigma$$
+$$\Ambient \omega: \tau \le \sigma$$
 The types $\sigma$ subsumes the type $\tau$, producing a wrapper $\omega$.
 
-$$\tau' = \skol{\forall{\bar{a}}. \tau}, \omega$$
+$$\tau' = \skol{\forall{\bar{a}}. \tau}$$
 Skolemise a $\forall$-type, turning any bound variables $a$ into fresh
 type constants $\skv{\alpha}$, producing a wrapper $\omega$.
 
@@ -47,17 +54,20 @@ Under context $\Gamma$ and signature $\Sigma$, the pattern $p$ checks against
 type $\tau$, generating \textit{ambient} constraints $\mathscr{Q}$,
 \textit{local} constraints $\mathscr{R}$ and elaborating into $p'$.
 
+\section{Checking Expressions}
+
 \begin{mathpar}
 \inferrule[Check-$\forall$]
   { \Ambient e \checks \tau' \cons \mathscr{Q} \reduces e'
-    \\ \tau' = \skol{\forall\bar{a}. \tau}, \omega }
-  { \Ambient e \checks \forall\bar{a}. \tau
-    \cons \mathscr{Q} \reduces e'_\omega } \and
+    \\ \tau' = \skol{\forall{(a : \kappa)}. \tau} }
+  { \Ambient e \checks \forall{(a : \kappa)}. \tau
+    \cons \mathscr{Q} \reduces \Lambda{(a : \kappa)}. [\omega]e'} \and
 
 \inferrule[Hole]{ }
   { \Ambient h \checks \tau \cons \{\mathtt{fail}\left(h, \tau\right)\}
-      \reduces e' } \and
+    \reduces \mathtt{absurd} }
 
+\and
 \inferrule[Begin]
   { \Ambient e_i \infers \tau_i \cons \mathscr{Q}_i \reduces e'_i
   \\ \Ambient e \checks \tau \cons \mathscr{Q} \reduces e' }
@@ -67,19 +77,74 @@ type $\tau$, generating \textit{ambient} constraints $\mathscr{Q}$,
   } \and
 
 \inferrule[Fun]
-  { \Ambient p \checks_{pat} \tau \cons \mathscr{Q}; \mathscr{R} \reduces p'
-  \\ \Gamma, binds(p) \vdash e \checks \sigma \cons \mathscr{Q}' \reduces e' }
-  { \Ambient \lambda p. e \checks \tau \to \sigma
-    \cons \mathscr{Q \cup \left[\tau\right]\left(R \leadsto Q'\right)}
-    \reduces \lambda p'. e' } \and
+  { \Ambient p \checks_{par} \beta \cons \mathscr{Q}; \mathscr{R} \reduces p'
+  \\ \Gamma, \binds{p}; \Sigma, \impl{p} \vdash e \checks \sigma \cons \mathscr{Q}' \reduces e'
+  \\ \beta, \sigma = \quant{\tau}
+  \\ x\ \fresh
+  }
+  { \Ambient \fun{p} e \checks \tau
+    \cons \mathscr{Q \cup [\tau](R \leadsto Q')}
+    \reduces \lambda (x : \beta). \mathtt{match}\ x \left\{ p' \to e' \right\} }
 
+\and
 \inferrule[If]
   { \Ambient c \checks \mathtt{bool} \cons \mathscr{Q} \reduces c'
   \\ \Ambient t \checks \tau \cons \mathscr{R} \reduces t'
   \\ \Ambient e \checks \tau \cons \mathscr{S} \reduces e' }
   { \Ambient \mathtt{if}\ c\ \mathtt{then}\ t\ \mathtt{else}\ e
     \checks \tau \cons \mathscr{Q \cup R \cup S}
-    \reduces \mathtt{if}\ c'\ \mathtt{then}\ t'\ \mathtt{else}\ e'}
+    \reduces \mathtt{match}\ c' \left\{ \mathtt{true} \to t'; \mathtt{false} \to e' \right\} }
+
+\inferrule[Check-Infer]
+  { \Ambient e \infers \tau \cons \mathscr{Q} \reduces e'
+  \\ \Ambient \omega : \tau \sub \sigma }
+  { \Ambient e \checks \sigma \cons \mathscr{Q \cup \omega} \reduces [\omega] e' }
+\end{mathpar}
+
+\section{Type Subsumption}
+
+Keep in mind that, in $\Ambient a : \tau \sub \sigma$, the evidence $\Ambient a : \tau \to \sigma$.
+
+\begin{mathpar}
+  \inferrule[Sub-Mono]
+    { \phi : \tau \sim \sigma }
+    { \Ambient \lambda{(x : \tau)}. x \cast \phi : \tau \sub \sigma }
+
+  \and
+  \inferrule[Sub-$\forall$-Left]
+    { \alpha : \kappa\ \fresh
+    \\ \Ambient \omega : \sigma[a/\alpha] \sub \tau }
+    { \Ambient \lambda{(x : \sigma)}. [\omega] (x\ @a) : \forall{}(\alpha : \kappa). \sigma \sub \tau }
+
+  \and
+  \inferrule[Sub-$\forall$-Right]
+    { \tau' = \skol{\forall{}(a : \kappa). \tau}
+    \\ \Ambient \omega' : \sigma \sub \tau' }
+    { \Ambient \lambda{}(x : \sigma).\Lambda{}(a : \kappa). [\omega]x : \sigma \sub \forall{}(a : \kappa). \tau }
+
+  \and
+  \inferrule[Sub-Invis-Search]
+    { i : \tau \in \Sigma
+    \\ \phi : \sigma \sim \rho }
+    { \Ambient \lambda{}(x : \sigma).(x\ i) \cast \phi : (\tau \ito \sigma) \sub \rho }
+    }
+
+  \and
+  \inferrule[Sub-Invis-Fun]
+    { \Ambient \omega : \alpha \sub \beta
+    \\ \Ambient \omega' : \gamma \sub \delta }
+    { \Ambient \lambda{(f : \beta \ito \gamma)}.\lambda{(x : \alpha)}. [\omega'](f\ [\omega]x)
+        : (\beta \ito \gamma) \sub (\alpha \ito \delta)
+    }
+
+  \and
+  \inferrule[Sub-Lazy-Force]
+    { \phi : \tau \sim \sigma }
+    { \Ambient \lambda{(x : \mathtt{lazy}\ \tau)}. \mathtt{force}\ (x \cast \phi) : \mathtt{lazy}\ \tau \sub \sigma }
+  \and
+  \inferrule[Sub-Lazy-Thunk]
+    { \phi : \tau \sim \sigma }
+    { \Ambient \lambda{(x : \tau)}. \mathtt{lazy}\ (\fun{()} x \cast \phi) : \tau \sub \mathtt{lazy}\ \sigma }
 
 \end{mathpar}
 
