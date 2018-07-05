@@ -11,6 +11,7 @@
 \newcommand{\cast}{\triangleright}
 \newcommand{\sub}{\le}
 \newcommand{\fresh}{\mathtt{fresh}}
+\newcommand{\type}{\mathtt{type}}
 \newcommand{\skol}[1]{\mathtt{skol}(#1)}
 \newcommand{\binds}[1]{\mathtt{binds}(#1)}
 \newcommand{\impl}[1]{\mathtt{implicit}(#1)}
@@ -34,7 +35,8 @@ $$\gamma: \tau \sim \sigma$$
 The types $\tau$ and $\sigma$ unify, producing a coercion $\gamma$.
 
 $$\Ambient \omega: \tau \le \sigma$$
-The types $\sigma$ subsumes the type $\tau$, producing a wrapper $\omega$.
+The types $\sigma$ subsumes the type $\tau$ (i.e., there exists a coercion
+function $\omega : \tau \to \sigma$), producing a wrapper $\omega$.
 
 $$\tau' = \skol{\forall{\bar{a}}. \tau}$$
 Skolemise a $\forall$-type, turning any bound variables $a$ into fresh
@@ -53,6 +55,11 @@ $$\Ambient p \checks_{pat} \tau \cons \mathscr{Q}; \mathscr{R} \reduces p'$$
 Under context $\Gamma$ and signature $\Sigma$, the pattern $p$ checks against
 type $\tau$, generating \textit{ambient} constraints $\mathscr{Q}$,
 \textit{local} constraints $\mathscr{R}$ and elaborating into $p'$.
+
+$$\Ambient b \infers \Gamma'; \Sigma' \reduces b'$$
+Infer new $\Gamma$ and $\Sigma$ contexts based on a binding group. The bindings
+$b$ must be sorted into strongly-connected components, but this is left
+implicit in the following presentation.
 
 \section{Checking Expressions}
 
@@ -95,10 +102,127 @@ type $\tau$, generating \textit{ambient} constraints $\mathscr{Q}$,
     \checks \tau \cons \mathscr{Q \cup R \cup S}
     \reduces \mathtt{match}\ c' \left\{ \mathtt{true} \to t'; \mathtt{false} \to e' \right\} }
 
+\and
+\inferrule[Let]
+  { \Ambient b \infers \Gamma'; \Sigma' \reduces b'
+  \\ \Gamma'; \Sigma' \vdash e \checks \tau \mathscr{Q} \reduces e' }
+  { \Ambient \mathtt{let}\ b\ \mathtt{in}\ e \checks \tau \cons \mathscr{Q}
+      \reduces \mathtt{let}\ b'\ \mathtt{in}\ e' }
+
+\and
 \inferrule[Check-Infer]
   { \Ambient e \infers \tau \cons \mathscr{Q} \reduces e'
   \\ \Ambient \omega : \tau \sub \sigma }
   { \Ambient e \checks \sigma \cons \mathscr{Q \cup \omega} \reduces [\omega] e' }
+\end{mathpar}
+
+\section{Synthesising Expression Types}
+\begin{mathpar}
+
+\inferrule[Infer-Var]
+  { x : \forall{x : \kappa}. \sigma \in \Gamma
+  \\ \alpha : \kappa\ \mathtt{fresh}
+  } { \Ambient x : \sigma[a/\alpha] \cons \varnothing \reduces x }
+
+\and
+\inferrule[Infer-Fun]
+  { \Ambient p \infers_{par} \beta \cons \mathscr{Q} \reduces p'
+  \\ \Gamma, \binds{p}; \Sigma, \impl{p} \vdash e \infers \gamma
+      \cons \mathscr{R} \reduces e'
+  \\ x\ \mathtt{fresh} }
+  { \Ambient \fun{p} e \cons \mathscr{Q \cup R}
+      \reduces \lambda{(x : \beta)}. \mathtt{match}\ x \left\{ p' \to e' \right\} }
+
+\and
+\inferrule[Ascription]
+  { \Ambient \sigma\ \mathtt{type}
+  \\ \Ambient e \checks \sigma \cons \mathscr{Q} \reduces e' }
+  { \Ambient (e : \sigma) \infers \sigma \cons \mathscr{Q} \reduces e' }
+
+\and
+\inferrule[App]
+  { \Ambient f \infers \tau \cons \mathscr{Q} \reduces f'
+  \\ \beta, \gamma = \quant{f}, \omega
+  \\ \Ambient x \checks \beta \cons \mathscr{R} \reduces x' }
+  { \Ambient f\ x \infers \gamma \cons \mathscr{Q \cup R}
+      \reduces ([\omega] f')\ x'}
+
+\and
+\inferrule[Match]
+  { \Ambient x \infers \tau \cons \mathscr{Q} \reduces x'
+  \\ \alpha\ \fresh{}
+  \\ \overline{\Ambient p_i \checks_{pat} \tau \cons \mathscr{R}_i \reduces p'_i}
+  \\ \overline{\Gamma, \binds{p_i}; \Sigma \vdash e_i \checks \alpha \cons \mathscr{Q}_i \reduces e'_i} }
+  { \Ambient \mathtt{match}\ x \mathtt{with}\ \left\{\overline{p_i \to e_i}\right\}
+      \cons \mathscr{Q} \cup \bigcup\overline{\mathscr{R}_i} \cup \bigcup\overline{\mathscr{Q}_i}
+      \reduces \mathtt{match}\ x \left\{\overline{p'_i \to e'_i}\right\} }
+
+\and
+\inferrule[Record]
+  { \Ambient \overline{x_i \infers \tau_i \cons \mathscr{Q}_i \reduces x'_i}
+  } { \Ambient \left\{ \overline{l_i = x_i} \right\}
+        \infers \left\{ \overline{l_i : \tau_i} \right\}
+        \cons \bigcup\overline{\mathscr{Q}_i}
+        \reduces \left\{ \overline{l_i = x'_i} \right\} }
+
+\and
+\inferrule[Record-Ext]
+  { \Ambient \overline{x_i \infers \tau_i \cons \mathscr{Q}_i \reduces x'_i}
+  \\ \Ambient e \infers \sigma \cons \mathscr{R} \reduces e'
+  } { \Ambient \left\{ e\ \mathtt{with}\ \overline{l_i = x_i} \right\}
+        \infers \left\{ \sigma\ |\ \overline{l_i : \tau_i} \right\}
+        \cons \bigcup\overline{\mathscr{Q}_i} \cup \mathscr{R}
+        \reduces \left\{ e'\ \mathtt{with}\ \overline{l_i = x'_i} \right\} }
+
+\and
+\inferrule[Tuple]
+  { \Ambient x \infers \tau \cons \mathscr{Q} \reduces x'
+  \\ \Ambient y \infers \sigma \cons \mathscr{R} \reduces y' }
+  { \Ambient (x, y) \infers \tau \times \sigma \cons \mathscr{Q \cup R}
+      \reduces (x', y') }
+
+\and
+\inferrule[Infer-Check]
+  { \alpha\ \fresh{}
+  \\ \Ambient x \checks \alpha \cons \mathscr{Q} \reduces x' }
+  { \Ambient x \infers \alpha \cons \mathscr{Q} \reduces x' }
+
+\end{mathpar}
+
+\section{Synthesising Types for Binding Groups}
+
+\begin{mathpar}
+\inferrule[Infer-One-Binding]
+  { \Ambient e \infers \tau \cons \mathscr{Q} \reduces e'
+  \\ \theta = \mathtt{solve}(\mathscr{Q}) }
+  { \Ambient x = e \infers \Gamma, x : [\theta]\tau; \Sigma
+      \reduces x = e' }
+
+\and
+\inferrule[Infer-One-Implicit-Binding]
+  { \Ambient e \infers \tau \cons \mathscr{Q} \reduces e'
+  \\ \theta = \mathtt{solve}(\mathscr{Q}) }
+  { \Ambient \mathtt{implicit}\ x = e \infers \Gamma, x : [\theta]\tau; \Sigma, x : [\theta]\tau
+      \reduces x = e' }
+
+\and
+\inferrule[Check-One-Implicit-Binding]
+  { \Ambient e \checks \tau \cons \mathscr{Q} \reduces e'
+  \\ \theta = \mathtt{solve}(\mathscr{Q}) }
+  { \Ambient \mathtt{implicit}\ x : \tau = e
+      \infers \Gamma, x : [\theta]\tau; \Sigma, x : [\theta]\tau
+      \reduces x = e' }
+
+\and
+\inferrule[Many-Bindings]
+  { \Ambient \overline{e_i \infers \tau_i \cons \mathscr{Q}_i \reduces e'_i}
+  \\ \Ambient \overline{e_j \infers \sigma_i \cons \mathscr{R}_i \reduces e'_j}
+  \\ \theta = \mathtt{solve}(\bigcup \overline{\mathscr{Q}_i} \cup \bigcup \overline{\mathscr{R}_i}) }
+  { \Ambient \overline{x_i = e_i}; \mathtt{implicit}\ \overline{y_j = e_j}
+      \infers \Gamma, \overline{x_i : [\theta]\tau_i}, \overline{y_j : [\theta]\tau_i};
+              \Sigma, \overline{y_j : [\theta]\sigma_i }
+      \reduces x_i = e_i'; y_j = e'_j}
+
 \end{mathpar}
 
 \section{Type Subsumption}
@@ -106,45 +230,44 @@ type $\tau$, generating \textit{ambient} constraints $\mathscr{Q}$,
 Keep in mind that, in $\Ambient a : \tau \sub \sigma$, the evidence $\Ambient a : \tau \to \sigma$.
 
 \begin{mathpar}
-  \inferrule[Sub-Mono]
-    { \phi : \tau \sim \sigma }
-    { \Ambient \lambda{(x : \tau)}. x \cast \phi : \tau \sub \sigma }
+\inferrule[Sub-Mono]
+  { \phi : \tau \sim \sigma }
+  { \Ambient \lambda{(x : \tau)}. x \cast \phi : \tau \sub \sigma }
 
-  \and
-  \inferrule[Sub-$\forall$-Left]
-    { \alpha : \kappa\ \fresh
-    \\ \Ambient \omega : \sigma[a/\alpha] \sub \tau }
-    { \Ambient \lambda{(x : \sigma)}. [\omega] (x\ @a) : \forall{}(\alpha : \kappa). \sigma \sub \tau }
+\and
+\inferrule[Sub-$\forall$-Left]
+  { \alpha : \kappa\ \fresh
+  \\ \Ambient \omega : \sigma[a/\alpha] \sub \tau }
+  { \Ambient \lambda{(x : \sigma)}. [\omega] (x\ @a) : \forall{(\alpha : \kappa)}. \sigma \sub \tau }
 
-  \and
-  \inferrule[Sub-$\forall$-Right]
-    { \tau' = \skol{\forall{}(a : \kappa). \tau}
-    \\ \Ambient \omega' : \sigma \sub \tau' }
-    { \Ambient \lambda{}(x : \sigma).\Lambda{}(a : \kappa). [\omega]x : \sigma \sub \forall{}(a : \kappa). \tau }
+\and
+\inferrule[Sub-$\forall$-Right]
+  { \tau' = \skol{\forall{}(a : \kappa). \tau}
+  \\ \Ambient \omega' : \sigma \sub \tau' }
+  { \Ambient \lambda{(x : \sigma)}.\Lambda{}(a : \kappa). [\omega]x : \sigma \sub \forall{}(a : \kappa). \tau }
 
-  \and
-  \inferrule[Sub-Invis-Search]
-    { i : \tau \in \Sigma
-    \\ \phi : \sigma \sim \rho }
-    { \Ambient \lambda{}(x : \sigma).(x\ i) \cast \phi : (\tau \ito \sigma) \sub \rho }
-    }
+\and
+\inferrule[Sub-Invis-Search]
+  { i : \tau \in \Sigma
+  \\ \phi : \sigma \sim \rho }
+  { \Ambient \lambda{(x : \sigma)}.(x\ i) \cast \phi : (\tau \ito \sigma) \sub \rho }
 
-  \and
-  \inferrule[Sub-Invis-Fun]
-    { \Ambient \omega : \alpha \sub \beta
-    \\ \Ambient \omega' : \gamma \sub \delta }
-    { \Ambient \lambda{(f : \beta \ito \gamma)}.\lambda{(x : \alpha)}. [\omega'](f\ [\omega]x)
-        : (\beta \ito \gamma) \sub (\alpha \ito \delta)
-    }
+\and
+\inferrule[Sub-Invis-Fun]
+  { \Ambient \omega : \alpha \sub \beta
+  \\ \Ambient \omega' : \gamma \sub \delta }
+  { \Ambient \lambda{(f : \beta \ito \gamma)}.\lambda{(x : \alpha)}. [\omega'](f\ [\omega]x)
+      : (\beta \ito \gamma) \sub (\alpha \ito \delta)
+  }
 
-  \and
-  \inferrule[Sub-Lazy-Force]
-    { \phi : \tau \sim \sigma }
-    { \Ambient \lambda{(x : \mathtt{lazy}\ \tau)}. \mathtt{force}\ (x \cast \phi) : \mathtt{lazy}\ \tau \sub \sigma }
-  \and
-  \inferrule[Sub-Lazy-Thunk]
-    { \phi : \tau \sim \sigma }
-    { \Ambient \lambda{(x : \tau)}. \mathtt{lazy}\ (\fun{()} x \cast \phi) : \tau \sub \mathtt{lazy}\ \sigma }
+\and
+\inferrule[Sub-Lazy-Force]
+  { \phi : \tau \sim \sigma }
+  { \Ambient \lambda{(x : \mathtt{lazy}\ \tau)}. \mathtt{force}\ (x \cast \phi) : \mathtt{lazy}\ \tau \sub \sigma }
+\and
+\inferrule[Sub-Lazy-Thunk]
+  { \phi : \tau \sim \sigma }
+  { \Ambient \lambda{(x : \tau)}. \mathtt{lazy}\ (\fun{()} x \cast \phi) : \tau \sub \mathtt{lazy}\ \sigma }
 
 \end{mathpar}
 
