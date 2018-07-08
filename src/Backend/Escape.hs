@@ -50,7 +50,7 @@ basicEscaper keywords name =
             else T.concatMap escapeChar name
   in esc
   where
-    escapeChar c | c > '\x75' = T.pack ('_':showHex (ord c) "")
+    escapeChar c | c > '\x7a' = T.pack ('_':showHex (ord c) "")
                  | isAlpha c = T.singleton c
                  | otherwise = fromMaybe T.empty (Map.lookup c chars)
 
