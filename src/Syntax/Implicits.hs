@@ -147,6 +147,8 @@ lookup ty = go ts where
   go (x:xs) (Trie m) = case find x m of
     Just (Many m) -> go xs m
     Just (ManyMore ss m) -> ss ++ go xs m
+    Just (One x) -> [x] -- discard xs
+    Just (Some xs) -> xs -- discard xs
     _ -> []
   go [] Trie{} = error "badly-kinded type (empty spine?)"
 

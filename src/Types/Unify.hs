@@ -336,10 +336,12 @@ solveImplicitConstraint x inner scope t =
           ([(_, c)]:_) -> useImplicit (x + 1) inner scope t c
           _ -> retry xs
       retry :: [Implicit Typed] -> SolveM a
-      retry xs = throwError (ambiguousImplicits xs t)
-   in case Imp.lookup t scope of
+      retry xs = case xs of
+        [] -> throwError (noImplicitFound scope t)
+        _ -> throwError (ambiguousImplicits xs t)
+  in case Imp.lookup t scope of
        [c] -> useImplicit x inner scope t c
-       [] -> throwError (noImplicitFound scope t)
+       -- [] -> throwError (noImplicitFound scope t)
        xs -> trySolved xs `orElse` tryMoreSpecific xs `orElse` tryPoly xs
 
 useImplicit :: Int -> Type Typed -> Imp.ImplicitScope Typed -> Type Typed -> Implicit Typed -> SolveM (Wrapper Typed)
