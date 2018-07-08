@@ -283,16 +283,19 @@ inferProg (decl@(TypeDecl n tvs cs):prg) = do
      local (names %~ focus (teleFromList ts)) . local (constructors %~ Set.union (Set.fromList (map (unTvName . fst) ts))) $
        consFst (TypeDecl (TvName n) tvs cs') $
          inferProg prg
-inferProg (Open mod pre:prg) =
-  -- Currently open doesn't need to do anything as we'll be in scope anyway
-  consFst (Open (TvName mod) pre) $ inferProg prg
+inferProg (Open mod pre:prg) = do
+  modImplicits <- view (modules . at mod . non undefined)
+  local (implicits %~ (<>modImplicits)) $
+    consFst (Open (TvName mod) pre) $ inferProg prg
 inferProg (Module name body:prg) = do
   (body', env) <- inferProg body
 
   let (vars, tys) = extractToplevels body
       vars' = map (\x -> (TvName x, env ^. names . at x . non (error ("value: " ++ show x)))) (vars ++ tys)
 
-  local (names %~ focus (teleFromList vars')) $
+  -- Extend the current scope and module scope
+  local ( (names %~ focus (teleFromList vars'))
+        . (modules %~ (Map.insert name (env ^. implicits) . (<>(env ^. modules))))) $
     consFst (Module (TvName name) body') $
     inferProg prg
 
