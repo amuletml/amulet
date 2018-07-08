@@ -443,6 +443,7 @@ solveEx _ ss cs = transformExprTyped go id goType where
   go x = x
 
   goWrap (TypeApp t) = TypeApp (goType t)
+  goWrap (TypeAsc t) = TypeAsc (goType t)
   goWrap (ExprApp t) = ExprApp (solveEx undefined ss cs t)
   goWrap (Cast c) = case c of
     ReflCo{} -> IdWrap

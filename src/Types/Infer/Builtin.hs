@@ -129,12 +129,12 @@ quantifier r s ty@TyForall{} = do
   (a, b, k) <- quantifier r s t
   pure (a, b, fromMaybe id k' . k)
 
-quantifier r DoSkip (TyPi (Implicit tau) sigma) = do
+quantifier r DoSkip wty@(TyPi (Implicit tau) sigma) = do
   x <- TvName <$> genName
   i <- view implicits
   tell (Seq.singleton (ConImplicit (BecauseOf r) x i tau sigma))
   (dom, cod, k) <- quantifier r DoSkip sigma
-  let wrap ex = ExprWrapper (WrapVar x) ex (annotation ex, sigma)
+  let wrap ex = ExprWrapper (WrapVar x) (ExprWrapper (TypeAsc wty) ex (annotation ex, wty)) (annotation ex, sigma)
   pure (dom, cod, wrap . k)
 
 quantifier _ _ (TyPi x b) = pure (x, b, id)
