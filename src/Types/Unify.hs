@@ -415,7 +415,7 @@ subsumes s wt@(TyPi (Implicit t) t1) t2 | _TyVar `isn't` t2 = do
 
   sub <- use solveTySubst
   w <- solveImplicitConstraint 0 wt s (apply sub t)
-  let wrap ex | an <- annotation ex = Ascription (ExprWrapper w ex (an, t1)) t1 (an, t1)
+  let wrap ex | an <- annotation ex = ExprWrapper (TypeAsc t1) (ExprWrapper w ex (an, t1)) (an, t1)
    in pure (WrapFn (MkWrapCont wrap "implicit instantation"))
 
 subsumes s ot@(TyTuple a b) nt@(TyTuple a' b') = do

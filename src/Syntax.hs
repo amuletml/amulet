@@ -105,6 +105,7 @@ data Wrapper p
   | Cast (Coercion p)
   | TypeLam (Skolem p) (Type p)
   | (:>) (Wrapper p) (Wrapper p)
+  | TypeAsc (Type p) -- invisible (to pretty-printer) ascription
   | WrapVar (Var p) -- Unsolved wrapper variable
   | WrapFn (WrapCont p)
   | IdWrap
