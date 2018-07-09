@@ -146,7 +146,24 @@ ambiguousImplicits cs tau = NoImplicit tau (<#> candidates) where
 
 tooMuchRecursion :: Type Typed -> TypeError
 tooMuchRecursion tau = NoImplicit tau (<#> overflow) where
-  overflow = string "Choosing this value took over 200 iterations"
+  overflow = vsep [ string "Choosing a candidate took over 200 iterations."
+                  , bullet $ string "Suggestion: bind the choice with an" <+> keyword "implicit function" <> dot ]
+              <#> ambiguous
+  ambiguous
+    | not (Set.null (ftv tau))
+    = vsep [ empty
+           , bullet (string "Possible cause: ambiguous type variable" <> plural <+> tvs <+> string "prevent" <> tense <+> string "choosing a value.")
+           , indent 5 (string "Perhaps add a" <+> keyword "type annotation" <> string ", specifying the wanted type?")
+           ]
+    | otherwise = empty
+    where vars = Set.toList (ftv tau)
+          tvs = hsep (punctuate comma (map (pretty . TyVar) vars))
+          plural = case vars of
+            [_] -> empty
+            _ -> char 's'
+          tense = case vars of
+            [_] -> char 's'
+            _ -> empty
 
 displaySuggestion :: Implicit Typed -> Doc
 displaySuggestion (ImplChoice _ t _ Solved v) = bullet (pretty v <+> colon <+> displayType t)

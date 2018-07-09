@@ -1,0 +1,12 @@
+overflow-fail.ml[22:14 ..22:33]: error
+  Could not choose implicit value of type add 'a 'k 'c
+  Choosing a candidate took over 200 iterations.
+  • Suggestion: bind the choice with an implicit function.
+
+  • Possible cause: ambiguous type variables 'k, 'a, 'c prevent choosing a value.
+       Perhaps add a type annotation, specifying the wanted type?
+
+  Arising in the expression
+   │ 
+22 │ let main c = append (1 :: 2 :: c)
+   │ 
