@@ -17,7 +17,7 @@ import Types.Infer.Errors
 import Types.Wellformed
 
 import qualified Syntax.Implicits as Imp
-import Syntax.Implicits (Obligation(..), Implicit(..))
+import Syntax.Implicits (Obligation(..), Implicit(..), overlap)
 import Syntax.Pretty
 import Syntax.Subst
 import Syntax
@@ -64,6 +64,7 @@ bind var ty
       assum <- use solveAssumptions
       noTouch <- view don'tTouch
       ty <- pure (apply env ty) -- shadowing
+      when (occurs var ty) (throwError (Occurs var ty))
       if var `Set.member` noTouch && var `Map.member` assum
          then unify ty (apply env (assum Map.! var))
          else -- Attempt to extend the environment, otherwise unify with existing type
@@ -113,9 +114,11 @@ unify (TySkol t@(Skolem sv _ _ _)) b = do
       _ -> do
         canWe <- view bindSkol
         if canWe
+           then if t `Set.notMember` skols b
            then do
              solveAssumptions . at sv ?= b
              pure (AssumedCo (TySkol t) b)
+           else throwError (Occurs sv b)
            else throwError $ SkolBinding t b
 unify b (TySkol t) = SymCo <$> unify (TySkol t) b
 
@@ -163,9 +166,12 @@ unify (TyRows rho arow) (TyRows sigma brow)
     do
       tau <- freshTV
       cs <- traverse unifRow overlaps
-      co <- unify rho (TyRows tau sigmaNew) -- yes
-      _ <- unify sigma (TyRows tau rhoNew) -- it's backwards
-      pure (RowsCo co cs)
+      if null sigmaNew && null rhoNew
+         then RowsCo <$> unify rho sigma <*> pure cs
+         else do
+           co <- unify rho (TyRows tau sigmaNew) -- yes
+           _ <- unify sigma (TyRows tau rhoNew) -- it's backwards
+           pure (RowsCo co cs)
 
 unify ta@TyExactRows{} tb@TyRows{} = unify tb ta
 
@@ -197,12 +203,6 @@ unify a b = throwError (NotEqual a b)
 isRec :: String
 isRec = "A record type's hole can only be instanced to another record"
 
-overlap :: Typed ~ p => [(Text, Type p)] -> [(Text, Type p)] -> [(Text, Type p, Type p)]
-overlap xs ys
-  | inter <- filter ((/=) 1 . length) $ groupBy ((==) `on` fst) (sortOn fst (xs ++ ys))
-  = map get inter
-  where get [(t, a), (_, b)] = (t, a, b)
-        get _ = undefined
 
 unifRow :: (Text, Type Typed, Type Typed) -> SolveM (Text, Coercion Typed)
 unifRow (t, a, b) = do
@@ -300,7 +300,7 @@ doSolve (ConFail a v t :<| cs) = do
   tell [propagateBlame (BecauseOf ex) $ foundHole v (apply sub t) sub]
 
 solveImplicitConstraint :: Int -> Type Typed -> Imp.ImplicitScope Typed -> Type Typed -> SolveM (Wrapper Typed)
-solveImplicitConstraint x _ _ _ | x >= 200 = throwError undefined
+solveImplicitConstraint x _ _ tau | x >= 200 = throwError (tooMuchRecursion tau)
 solveImplicitConstraint x inner scope t =
   let isUnsolved t = (t ^. Imp.implSolved) == Imp.Unsolved
       freeInHead t = ftv (t ^. Imp.implHead)
@@ -354,12 +354,7 @@ useImplicit x inner scope' ty (ImplChoice hdt oty os s imp) = go where
     let start e = VarRef imp (annotation e, oty)
         mk _ [] = pure (\e -> ExprWrapper (probablyCast cast) e (annotation e, ty))
         mk (TyPi (Invisible v _) t) (Quantifier (Invisible _ _):xs) = do
-          let v' = case v `Map.lookup` refresh of
-                    Just (TyVar v') -> v'
-                    _ -> v
-          tau <- case v' `Map.lookup` sub of
-            Nothing -> refreshTV v
-            Just t -> pure t
+          let tau = apply sub . apply refresh . TyVar $ v
           let sub' = Map.singleton v tau
 
           flip (.) (\ex -> ExprWrapper (TypeApp tau) ex (annotation ex, apply sub' t)) <$> mk (apply sub' t) xs

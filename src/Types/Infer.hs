@@ -466,6 +466,8 @@ makeImplicitName :: MonadInfer Typed m
                  -> m (Var Typed, Type Typed -> Expr Typed -> Expr Typed, Parameter Typed)
 makeImplicitName _ _ pa@(ImplParam (viewOp -> Capture name _)) =
   pure (name, const id, pa)
+makeImplicitName _ _ pa@(PatParam (viewOp -> Capture name _)) =
+  pure (name, const id, pa)
 makeImplicitName an domain (ImplParam p) = do
   name <- TvName <$> genName
   let body co e = Match (VarRef name (an, domain)) [ (p, e) ] (an, co)

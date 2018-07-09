@@ -7,26 +7,23 @@
 module Syntax where
 
 import qualified Data.Text as T
-import Data.Text (Text)
-import Data.Spanned
-import Data.Span
-
 import Data.List.NonEmpty(NonEmpty ((:|)))
 import Data.Semigroup (sconcat)
+import Data.Text (Text)
 import Data.Typeable
+import Data.Spanned
 import Data.Maybe
+import Data.Span
 import Data.Data
 
 import Syntax.Var
 
 import Control.Lens hiding (Lazy)
 
-
 type family Ann a :: * where
   Ann Parsed = Span
   Ann Resolved = Span
   Ann Typed = (Span, Type Typed)
-
 
 data Plicity = BindImplicit | BindRegular
   deriving (Eq, Show, Ord, Data, Typeable)
@@ -259,7 +256,6 @@ deriving instance (Eq (Var p), Eq (Ann p)) => Eq (TyConArg p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (TyConArg p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (TyConArg p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (TyConArg p)
-
 
 data Constructor p
   = UnitCon (Var p) (Ann p)

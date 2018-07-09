@@ -4,7 +4,7 @@
 {- | The various variables that "Syntax" uses.
 
    We make liberal use of trees that grow within the Amulet compiler,
-   meaning we define a series of \"phrases\" ('Parsed', 'Resolved',
+   meaning we define a series of \"phases\" ('Parsed', 'Resolved',
    etc...) and use type families to change how we annotate syntax as
    progress through the compiler progresses.
 -}

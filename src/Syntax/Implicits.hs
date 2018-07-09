@@ -8,6 +8,7 @@ module Syntax.Implicits
   , lookup, keys, mapTypes, subTrie
   , insert, singleton, consider
   , spine, splitImplVarType
+  , matches, overlap
   )
   where
 
@@ -16,16 +17,17 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
 import Data.List.NonEmpty (NonEmpty((:|)))
+import Data.Text (Text)
 import Data.Semigroup
+import Data.Function
 import Data.Foldable
 import Data.Maybe
+import Data.List hiding (insert, lookup)
 
 import Control.Lens
 
 import Syntax.Pretty hiding ((:>))
-
 import Prelude hiding (lookup)
-
 
 -- | An obligation the solver needs to resolve if it chose this
 -- implicit parameter.
@@ -153,7 +155,7 @@ lookup ty = go ts where
   go [] Trie{} = error "badly-kinded type (empty spine?)"
 
   find :: Type p -> Map.Map (Type p) (Node p) -> Maybe (Node p)
-  find w = fixup . toList . Map.filterWithKey (\k _ -> k `matches` w) where
+  find w = fixup . toList . Map.filterWithKey (\k _ -> w `matches` k) where
     fixup []  = Nothing
     fixup [x] = Just x
     fixup (x:xs) = Just (sconcat (x :| xs))
@@ -199,7 +201,7 @@ keys = go where
 -- | Map a function over the elements of a trie. Note that, because of
 -- the way they are stored, the function will be applied many times to
 -- distinct parts of possibly the same type.
-mapTypes :: forall p. (Ord (Var p), Show (Var p), Show (Ann p)) => (Type p -> Type p) -> ImplicitScope p -> ImplicitScope p
+mapTypes :: forall p. (Ord (Var p)) => (Type p -> Type p) -> ImplicitScope p -> ImplicitScope p
 mapTypes fn = go where
   go (Trie m) = Trie (Map.foldrWithKey (\k x r -> makeTrie (change fn k) (goNode x) `merge` r) mempty m)
 
@@ -301,7 +303,14 @@ matches (TyPi b t) (TyPi b' t') = t `matches` t' && b `matchesBinder` b' where
 
 matches TyPi{} _ = False
 
-matches TyRows{} _ = False -- TODO
+matches (TyRows _ vs) (TyExactRows vs') = length vs' >= length vs && all m (overlap vs vs') where
+  m (_, a, b) = a `matches` b
+matches TyRows{} TyRows{} = False
+matches TyRows{} _ = False
+
+matches (TyExactRows vs) (TyExactRows vs') = length vs' == length vs && all m (overlap vs vs') where
+  m (_, a, b) = a `matches` b
+
 matches TyExactRows{} _ = False -- TODO
 
 matches (TyTuple a b) (TyTuple a' b') = matches a a' && matches b b'
@@ -313,3 +322,10 @@ matches TySkol{} _ = False
 matches (TyWithConstraints _ _) _ = error "matches TyWithConstraints"
 
 matches TyType t = t == TyType
+
+overlap :: [(Text, Type p)] -> [(Text, Type p)] -> [(Text, Type p, Type p)]
+overlap xs ys
+  | inter <- filter ((/=) 1 . length) $ groupBy ((==) `on` fst) (sortOn fst (xs ++ ys))
+  = map get inter
+  where get [(t, a), (_, b)] = (t, a, b)
+        get _ = undefined

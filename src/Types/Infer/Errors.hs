@@ -144,6 +144,9 @@ ambiguousImplicits cs tau = NoImplicit tau (<#> candidates) where
                       ]
                    ++ map displaySuggestion cs)
 
+tooMuchRecursion :: Type Typed -> TypeError
+tooMuchRecursion tau = NoImplicit tau (<#> overflow) where
+  overflow = string "Choosing this value took over 200 iterations"
 
 displaySuggestion :: Implicit Typed -> Doc
 displaySuggestion (ImplChoice _ t _ Solved v) = bullet (pretty v <+> colon <+> displayType t)
