@@ -1,11 +1,11 @@
-verify12.ml[4:5 ..4:9]: error
+verify12.ml[4:5 ..4:7]: error
   Invalid recursive right-hand side for variable g
   • Note: because the variable f is not under a function
   Arising from use of the binding
   │ 
 4 │ and g = f
   │ 
-verify12.ml[2:7 ..2:11]: warning
+verify12.ml[2:7 ..2:9]: warning
   Bound locally but not used: 'y'
   │ 
 2 │   let y = 1

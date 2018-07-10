@@ -247,8 +247,8 @@ infer (Tuple xs an) =
      (ex, t) <- go xs
      pure (Tuple ex (an, t), t)
 
-infer h@InstHole{} = throwError (NakedInstArtifact h)
-infer h@InstType{} = throwError (NakedInstArtifact h)
+infer h@InstHole{} = throwError (propagateBlame (BecauseOf h) (NakedInstArtifact h))
+infer h@InstType{} = throwError (propagateBlame (BecauseOf h) (NakedInstArtifact h))
 
 infer ex = do
   x <- freshTV
@@ -427,12 +427,16 @@ inferLetTy closeOver vs =
         fmap ((vs' ++) *** (binds <>)) . local (names %~ focus binds) $ tc cs
       tc [] = pure ([], mempty)
 
-      mkImplicits :: ([Binding Typed], Telescope Typed) -> ([Binding Typed], Telescope Typed, ImplicitScope Typed)
-      mkImplicits (bs, t) =
-        let one (Binding v _ BindImplicit (_, t)) = singleton v t
-            one _ = mempty
-         in (bs, t, foldMap one bs)
-   in mkImplicits <$> tc sccs
+      mkImplicits :: ([Binding Typed], Telescope Typed) -> m ([Binding Typed], Telescope Typed, ImplicitScope Typed)
+      mkImplicits (bs, t) = do
+        let one :: Binding Typed -> m (ImplicitScope Typed)
+            one b@(Binding v _ BindImplicit (_, t)) = do
+              checkAmbiguous v t
+                `catchError` \e -> throwError (propagateBlame (BecauseOf b) e)
+              pure (singleton v t)
+            one _ = pure mempty
+        (bs, t,) <$> foldMapM one bs
+   in mkImplicits =<< tc sccs
 
 solveEx :: Type Typed -> Subst Typed -> Map.Map (Var Typed) (Wrapper Typed) -> Expr Typed -> Expr Typed
 solveEx _ ss cs = transformExprTyped go id goType where
@@ -482,3 +486,6 @@ makeImplicitName an domain (PatParam p) = do
 viewOp :: Pattern p -> Pattern p
 viewOp (PType p _ _) = viewOp p
 viewOp v = v
+
+foldMapM :: (Foldable t, Monoid m, Monad f) => (a -> f m) -> t a -> f m
+foldMapM k = foldM ((.k) . fmap . mappend) mempty

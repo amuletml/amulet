@@ -1,4 +1,4 @@
-verify06.ml[1:5 ..1:9]: error
+verify06.ml[1:5 ..1:7]: error
   Invalid recursive right-hand side for variable x
   • Note: because the variable x is not under a function
   Arising from use of the binding
