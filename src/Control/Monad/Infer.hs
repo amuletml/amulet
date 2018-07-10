@@ -8,6 +8,7 @@
   , OverloadedStrings
   , ScopedTypeVariables
   , RecordWildCards
+  , ViewPatterns
   #-}
 module Control.Monad.Infer
   ( module M, firstName
@@ -103,6 +104,7 @@ data TypeError where
 
   -- Implicit parameters
   NoImplicit :: (Ord (Var p), Pretty (Var p)) => Type p -> (Doc -> Doc) -> TypeError
+  AmbiguousType :: (Ord (Var p), Pretty (Var p)) => Var p -> Type p -> Set.Set (Var p) -> TypeError
 
   NotPromotable :: Pretty (Var p) => Var p -> Type p -> Doc -> TypeError
   ManyErrors :: [TypeError] -> TypeError
@@ -307,6 +309,7 @@ instance Pretty TypeError where
          , note <+> "You can use a hole like"
              <+> pretty (InstHole undefined :: Expr Typed) <+> "to make the compiler infer this"
          ]
+
   pretty (WrongQuantifier t ty@TyArr{}) =
     vsep [ thing <+> "given as argument to function of type" <+> displayType ty
          , string "Have you applied a function to the wrong number of arguments?"
@@ -315,6 +318,7 @@ instance Pretty TypeError where
         InstHole{} -> highlight "Hole" <+> pretty t
         InstType{} -> highlight "Type" <+> pretty t
         _ -> error "WrongQuantifier wrong"
+
   pretty (WrongQuantifier t ty) =
     vsep [ thing <+> "given as argument to expression of type" <+> displayType ty
          , string "Have you applied a function to too many arguments?"
@@ -323,8 +327,21 @@ instance Pretty TypeError where
         InstHole{} -> highlight "Hole" <+> pretty t
         InstType{} -> highlight "Type" <+> pretty t
         _ -> highlight "Expression"
+
   pretty (NoImplicit tau doc) =
     doc $ vsep [ "Could not choose implicit value of type" <+> displayType tau ]
+
+  pretty (AmbiguousType v t (Set.toList -> vs)) =
+    vsep [ "Ambiguous type for implicit value" <+> skeyword (pretty v)
+         , bullet "Note: in the type" <+> displayType t <> comma
+         , indent 4 "the type variable" <+> hsep (punctuate comma (map (pretty . TyVar) vs)) <> s <+> quan <+> "in the head" ]
+    where
+      s = case vs of
+        [_] -> text ""
+        _ -> text "s"
+      quan = case vs of
+        [_] -> text "is quantified but does not appear"
+        _ -> text "are quantified but do not appear"
 
   pretty (NakedInstArtifact h@InstHole{}) =
     vsep [ string "Instantiation hole" <+> pretty h <+> "used outside of type application" ]

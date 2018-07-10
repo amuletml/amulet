@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleContexts, TypeFamilies, ScopedTypeVariables, UndecidableInstances #-}
-module Types.Wellformed (wellformed, arity, normType, skols, Skolem(..)) where
+module Types.Wellformed (wellformed, arity, normType, skols, Skolem(..), checkAmbiguous) where
 
 import Control.Monad.Except
 import Control.Monad.Infer
@@ -10,6 +10,7 @@ import Data.Function
 import Data.List (unionBy)
 
 import Syntax.Pretty
+import Syntax.Subst
 
 wellformed :: (MonadError TypeError m, MonadReader Env m) => Type Typed -> m ()
 wellformed tp = case tp of
@@ -84,3 +85,11 @@ skols (TyExactRows rs) = foldMap (skols . snd) rs
 skols (TyTuple a b) = skols a <> skols b
 skols (TyWithConstraints cs a) = foldMap (\(x, y) -> skols x <> skols y) cs <> skols a
 
+checkAmbiguous :: MonadError TypeError m => Var Typed -> Type Typed -> m ()
+checkAmbiguous v tau = go mempty tau where
+  go s (TyPi (Invisible v _) t) = go (Set.insert v s) t
+  go s (TyPi (Implicit _) t) = go s t
+  go s t = if not (Set.null (s Set.\\ fv))
+              then throwError (AmbiguousType v tau (s Set.\\ fv))
+              else pure ()
+    where fv = ftv t

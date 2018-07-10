@@ -237,15 +237,15 @@ BindGroup :: { [Binding Parsed] }
 
 Binding :: { Binding Parsed }
         : PreBinding { $1 }
-        | implicit PreBinding { implicitify $2 }
+        | implicit PreBinding { implicitify $1 $2 }
 
 PreBinding :: { Binding Parsed }
            : BindName ListE(Parameter) '=' ExprBlock '$end'
-             { Binding (getL $1) (foldr (\x y -> withPos2 x $4 (Fun x y)) $4 $2) BindRegular (withPos2 $1 $4 id) }
+             { Binding (getL $1) (foldr (\x y -> withPos2 x $4 (Fun x y)) $4 $2) BindRegular (withPos2 $1 $3 id) }
            | BindName ListE(Parameter) ':' Type '=' ExprBlock '$end'
-             { Binding (getL $1) (foldr (\x y -> withPos2 x $6 (Fun x y)) (Ascription $6 (getL $4) (withPos2 $1 $6 id)) $2) BindRegular (withPos2 $1 $6 id) }
+             { Binding (getL $1) (foldr (\x y -> withPos2 x $6 (Fun x y)) (Ascription $6 (getL $4) (withPos2 $1 $6 id)) $2) BindRegular (withPos2 $1 $4 id) }
            | ArgP BindOp ArgP '=' ExprBlock '$end'
-             { Binding (getL $2) (withPos2 $1 $5 (Fun (PatParam $1) (withPos2 $3 $5 (Fun (PatParam $3) $5)))) BindRegular (withPos2 $1 $6 id) }
+             { Binding (getL $2) (withPos2 $1 $5 (Fun (PatParam $1) (withPos2 $3 $5 (Fun (PatParam $3) $5)))) BindRegular (withPos2 $1 $4 id) }
 
 BindName :: { Located (Var Parsed) }
      : ident                                   { lPos1 $1 $ getName $1 }
@@ -436,6 +436,6 @@ getL      (L x _)                    = x
 
 forallTy vs t = foldr TyPi t (map (flip Invisible Nothing) vs)
 
-implicitify :: Binding Parsed -> Binding Parsed
-implicitify (Binding a b _ c) = Binding a b BindImplicit c
+implicitify :: Spanned a => a -> Binding Parsed -> Binding Parsed
+implicitify x (Binding a b _ c) = Binding a b BindImplicit (withPos1 x id <> c)
 }
