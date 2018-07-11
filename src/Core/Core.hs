@@ -239,10 +239,10 @@ instance Pretty a => Pretty (Type a) where
     | ForallTy{} <- x = parens (pretty x) <+> arrow <+> pretty e
     | otherwise = pretty x <+> arrow <+> pretty e
 
-  pretty (RowsTy p rows) = braces $ pretty p <+> pipe <+> prettyRows rows where
+  pretty (ExactRowsTy rows) = braces $ prettyRows rows where
     prettyRows = hsep . punctuate comma . map (\(x, t) -> text x <+> colon <+> pretty t)
 
-  pretty (ExactRowsTy rows) = braces $ prettyRows rows where
+  pretty (RowsTy p rows) = braces $ pretty p <+> pipe <+> prettyRows rows where
     prettyRows = hsep . punctuate comma . map (\(x, t) -> text x <+> colon <+> pretty t)
   pretty NilTy = braces empty
 
