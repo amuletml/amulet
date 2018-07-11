@@ -43,13 +43,18 @@ tagFreeStmt ann var = tagStmt where
     in ( fv
        , Type (var v True) (map (tagCons fv) tys):xs') where
       tagCons fv (cons, ty) = (var' cons fv, conv ty)
-  tagStmt (StmtLet vs:xs) =
-    let (fvxs, xs') = tagStmt xs
-        (fvvs, vs') = unzip (map (tagFreeTerm ann var . thd3) vs)
+  tagStmt (StmtLet (One (v, ty, e)):xs) =
+    let (fve, e') = tagFreeTerm ann var e
+        (fvr, xs') = tagStmt xs
+        fv = fve <> VarSet.delete (toVar v) fvr
+    in (fv, StmtLet (One (var' v fvr, conv ty, e')):xs')
+  tagStmt (StmtLet (Many vs):xs) =
+    let (fvvs, vs') = unzip (map (tagFreeTerm ann var . thd3) vs)
+        (fvr, xs') = tagStmt xs
 
-        fvs = mconcat (fvxs : fvvs)
+        fvs = mconcat (fvr : fvvs)
         fv = foldr (VarSet.delete . toVar . fst3) fvs vs
-    in (fv, StmtLet (zipWith (\(v, ty, _) e -> (var' v fvs, conv ty, e)) vs vs'):xs')
+    in (fv, StmtLet (Many (zipWith (\(v, ty, _) e -> (var' v fvs, conv ty, e)) vs vs')):xs')
 
 -- | Tag some statements with free variable information
 tagFreeTerm :: forall a a' b b'. (IsVar a, IsVar a')

@@ -342,9 +342,19 @@ lowerProg (ForeignVal (TvName t) ex tp _:prg) =
 lowerProg (LetStmt vs:prg) = do
   let env' = Map.fromList (map (\(S.Binding (TvName v) _ _ (_, ant)) -> (v, lowerType ant)) vs)
 
-  (:) <$> local (\s -> s { vars = env' }) (StmtLet <$> for vs (\(S.Binding (TvName v) ex _ (_, ant))
-                                                                  -> (mkVal v,lowerType ant,) <$> lowerPolyBind (lowerType ant) ex))
-      <*> lowerProg prg
+  let sccs = depOrder vs
+      lowerScc (CyclicSCC vs) = CyclicSCC <$> do
+        for vs $ \(S.Binding (TvName var) ex _ (_, ty)) -> do
+          let ty' = lowerType ty
+          (mkVal var,ty',) <$> lowerPolyBind ty' ex
+      lowerScc (AcyclicSCC (S.Binding (TvName var) ex _ (_, ty))) = AcyclicSCC <$> do
+        let ty' = lowerType ty
+        (mkVal var, ty',) <$> lowerPolyBind ty' ex
+      foldScc (AcyclicSCC v) = (C.StmtLet (One v):)
+      foldScc (CyclicSCC vs) = (C.StmtLet (Many vs):)
+  local (\s -> s { vars = env' }) $ do
+    vs' <- traverse lowerScc sccs
+    foldr ((.) . foldScc) id vs' <$> lowerProg prg
 lowerProg (TypeDecl (TvName var) _ cons:prg) = do
   let cons' = map (\case
                        UnitCon (TvName p) (_, t) -> (p, mkCon p, lowerType t)

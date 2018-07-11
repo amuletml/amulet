@@ -72,14 +72,12 @@ import Control.Monad.Cont
 import Control.Lens hiding (uncons)
 
 import qualified Data.VarMap as VarMap
-import qualified Data.VarSet as VarSet
 import qualified Data.Text as T
 import Data.Foldable
 import Data.Triple
 import Data.Maybe (fromMaybe, maybeToList)
 import Data.List (sortOn, partition, uncons)
 import Data.Text (Text)
-import Data.Graph
 
 import Backend.Lua.Syntax
 import Backend.Escape
@@ -143,7 +141,17 @@ emitProgramWith ev esc = flip runState esc . emitProg where
         n <- state (pushVar n')
         (:) (LuaLocal [LuaName n] [LuaBitE s]) <$> emitProg xs
 
-  emitProg (StmtLet vs:xs) = (++) <$> emitLet (unzip3 vs) <*> emitProg xs
+  emitProg (StmtLet (One (v, _, e)):xs) = do
+    v' <- state (pushVar v)
+    s <- get
+    (LuaLocal [LuaName v'] [iife (emitStmt s LuaReturn e)]:)
+      <$> emitProg xs
+  emitProg (StmtLet (Many vs):xs) = do
+    vs' <- traverse (first3A (state . pushVar)) vs
+    s <- get
+    ((LuaLocal (map (LuaName . fst3) vs') []
+       : concatMap (\(v, _, e) -> emitStmt s (LuaAssign [LuaName v] . pure) e) vs')++)
+      <$> emitProg xs
   emitProg (Type _ cs:xs) = (++) <$> traverse emitConstructor cs <*> emitProg xs
   emitProg [] =
     let main = fmap fst . uncons
@@ -178,21 +186,6 @@ emitProgramWith ev esc = flip runState esc . emitProg where
                                          [LuaName "x"]
                                         [LuaReturn (LuaTable [ (LuaString "__tag", LuaString var')
                                                              , (LuaInteger 1, LuaRef (LuaName "x"))])]]
-
-  emitLet :: (MonadState EscapeScope m, Occurs a) => ([a], [Type a], [Term a]) -> m [LuaStmt]
-  emitLet (vs, _, es) = concat <$> traverse emitBind (stronglyConnComp (zipWith letDeps vs es))
-
-  letDeps v e = ((v, e), toVar v, VarSet.toList (freeIn e))
-
-  emitBind (AcyclicSCC (v, e)) = do
-    v' <- state (pushVar v)
-    s <- get
-    pure [LuaLocal [LuaName v'] [iife (emitStmt s LuaReturn e)]]
-  emitBind (CyclicSCC bs) = do
-    bs' <- traverse (firstA (state . pushVar)) bs
-    s <- get
-    pure $ LuaLocal (map (LuaName . fst) bs') []
-         : concatMap (\(v, e) -> emitStmt s (LuaAssign [LuaName v] . pure) e) bs'
 
   alpha :: [Text]
   alpha = map T.pack ([1..] >>= flip replicateM ['a'..'z'])

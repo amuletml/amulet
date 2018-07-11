@@ -42,17 +42,22 @@ deadCodePass = snd . freeS emptyScope Nothing where
      in if toVar v `VarSet.member` fxs
            then (toVar v `VarSet.delete` fxs, x:xs')
            else (fxs, xs')
-  freeS s m (StmtLet vs:xs) =
-    let m' = find (\x -> case toVar x of
-                           CoVar _ "main" _ -> True
-                           _ -> False) (map fst3 vs)
+  freeS s m (StmtLet (One vs@(v, ty, e)):xs) =
+    let s' = extendPureLets s [vs]
+        m' = if isMain v then Just v else m
+        (fe, e') = freeT s e
+        (fb, xs') = freeS s m' xs
+    in if isPure s' e' && toVar v `VarSet.notMember` fb
+       then (fb, xs')
+       else (fe <> fb, StmtLet (One (v, ty, e')):xs')
+  freeS s m (StmtLet (Many vs):xs) =
+    let m' = find isMain (map fst3 vs)
         s' = extendPureLets s vs
     in case uncurry (buildLet s' vs) (freeS s' (m <|> m') xs) of
          -- If we've no bindings, just return the primary expression
          (f, [], xs') -> (f, xs')
          -- Otherwise emit as normal
-         (f, vs', xs') -> (f, StmtLet vs':xs')
-
+         (f, vs', xs') -> (f, StmtLet (Many vs'):xs')
   freeS s m (x@(Type _ cases):xs) =
     let s' = extendPureCtors s cases
     in (x:) <$> freeS s' m xs
@@ -129,3 +134,8 @@ deadCodePass = snd . freeS emptyScope Nothing where
         termFree = foldr (VarSet.delete . toVar . fst3 . snd) letFree binds
         vs' = filter ((`VarSet.member` letFree) . toVar . fst3) (map snd binds)
     in (termFree, vs', rest)
+
+  isMain x =
+    case toVar x of
+      CoVar _ "main" _ -> True
+      _ -> False

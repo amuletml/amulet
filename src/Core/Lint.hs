@@ -103,14 +103,23 @@ checkStmt s t@(Foreign v ty _:xs) = do
 
   checkStmt (s { vars = insertVar v ty (vars s) }) xs
 
-checkStmt s t@(StmtLet vs:xs) = do
+checkStmt s t@(StmtLet (One (v, ty, e)):xs) = do
+  tryContext t $ do
+    -- Ensure type is valid and we're declaring a value
+    unless (varInfo v == ValueVar) (throwError (InfoIllegal v ValueVar (varInfo v)))
+    checkType s ty
+
+    ty' <- checkTerm s e
+    if ty `apart` ty' then throwError (TypeMismatch ty ty') else pure ()
+
+  checkStmt (s { vars = insertVar v ty (vars s) }) xs
+checkStmt s t@(StmtLet (Many vs):xs) = do
   let s' = s { vars = foldr (\(v, t, _) -> insertVar v t) (vars s) vs }
   for_ vs $ \(v, ty, e) -> tryContext t $ do
-    -- Ensure we're declaring a value
+    -- Ensure type is valid and we're declaring a value
     unless (varInfo v == ValueVar) (throwError (InfoIllegal v ValueVar (varInfo v)))
-    -- And the type is well formed
     checkType s ty
-    -- And the definition matches the expected type
+
     ty' <- checkTerm s' e
     if ty `apart` ty' then throwError (TypeMismatch ty ty') else pure ()
 
