@@ -219,7 +219,8 @@ runRepl = do
                          lower <- runLowerWithCtors ctors (lowerProg prog)
                          lastG <- genName
                          pure $ Just ( case last lower of
-                                         (C.StmtLet vs) -> map (\(v, t, _) -> (v, t)) vs
+                                         (C.StmtLet (C.One (v, t, _))) -> [(v, t)]
+                                         (C.StmtLet (C.Many vs)) -> map (\(v, t, _) -> (v, t)) vs
                                          _ -> []
                                      , prog
                                      , lower

@@ -153,7 +153,7 @@ data BoundTv a = Irrelevant | Relevant a
 
 data AnnStmt b a
   = Foreign a (Type a) Text
-  | StmtLet [(a, Type a, AnnTerm b a)]
+  | StmtLet (AnnBinding b a)
   | Type a [(a, Type a)]
   deriving (Eq, Show, Ord, Functor, Generic)
 
@@ -263,7 +263,8 @@ instance Pretty Literal where
 
 instance Pretty a => Pretty (Stmt a) where
   pretty (Foreign v t _) = pretty v <+> colon <+> pretty t <+> equals <+> keyword "foreign"
-  pretty (StmtLet vs) = keyword "let" <+> pprLet vs
+  pretty (StmtLet (One x)) = keyword "let" <+> pprLet1 x
+  pretty (StmtLet (Many xs)) = keyword "let rec" <+> pprLet xs
   pretty (Type v cs) = keyword "type" <+> pretty v <+> pprBegin (map pprCons cs) where
     pprCons (x, t) = pretty x <+> colon <+> pretty t
 

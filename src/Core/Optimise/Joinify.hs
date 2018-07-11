@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts, ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleContexts, ScopedTypeVariables, TupleSections #-}
 module Core.Optimise.Joinify where
 
 import Control.Monad.Namey
@@ -11,7 +11,8 @@ import Core.Types
 
 matchJoinPass :: forall m a. (MonadNamey m, IsVar a) => [Stmt a] -> m [Stmt a]
 matchJoinPass = traverse transS where
-  transS (StmtLet vars) = StmtLet <$> traverse (third3A transT) vars
+  transS (StmtLet (Many vars)) = StmtLet . Many <$> traverse (third3A transT) vars
+  transS (StmtLet (One (v, t, e))) = StmtLet . One . (v, t, ) <$> transT e
   transS s = pure s
 
   transA t@Ref{} = pure t

@@ -75,7 +75,7 @@ transformOver = transT where
   mapT s (Cast f t) = Cast (transA s f) t
   mapT s (Extend t rs) = Extend (transA s t) (map (third3 (transA s)) rs)
   mapT s (Let (One var) body) =
-    let var' = third3 (transT (extendVar var s)) var
+    let var' = third3 (transT s) var
         body' = transT (extendVar var' s) body
      in Let (One var') body'
   mapT s (Let (Many vars) body) =
@@ -93,10 +93,14 @@ reducePass :: IsVar a => [Stmt a] -> [Stmt a]
 reducePass = reduceStmts (Scope mempty mempty mempty) where
   reduceStmts _ [] = []
   reduceStmts s (x@Foreign{}:xs) = x:reduceStmts s xs
-  reduceStmts s (StmtLet vars:xs) =
+  reduceStmts s (StmtLet (One var):xs) =
+    let var' = third3 (transformOver s) var
+        xs' = reduceStmts (extendVar var' s) xs
+     in StmtLet (One var'):xs'
+  reduceStmts s (StmtLet (Many vars):xs) =
     let vars' = map (third3 (transformOver (extendVars vars s))) vars
         xs' = reduceStmts (extendVars vars' s) xs
-    in StmtLet vars':xs'
+     in StmtLet (Many vars'):xs'
   reduceStmts s (x@(Type v cases):xs) =
     let s' = s { types = VarMap.insert (toVar v) cases (types s)
                , cons = VarMap.union (VarMap.fromList (map (first toVar) cases)) (cons s) }

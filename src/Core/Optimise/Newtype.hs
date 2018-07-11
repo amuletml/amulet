@@ -25,9 +25,15 @@ killNewtypePass = go mempty mempty where
       (Type n [] :) . (con :) <$> go (ss <> sub) (V.insert (toVar var) phi m) xs
     _ -> (Type n cs:) <$> go ss m xs
   go ss m (x@Foreign{}:xs) = (x:) <$> go ss m xs
-  go ss m (StmtLet vs:xs) = do
+  go ss m (StmtLet (Many vs):xs) = do
     vs' <- goBinding ss m vs
-    (StmtLet vs':) <$> go ss m xs
+    xs' <- go ss m xs
+    pure (StmtLet (Many vs'):xs')
+  go ss m (StmtLet (One v):xs) = do
+    [v'] <- goBinding ss m [v]
+    xs' <- go ss m xs
+    pure (StmtLet (One v'):xs')
+
   go _ _ [] = pure []
 
 isNewtype :: IsVar a => Type a -> Maybe (Spine a)
@@ -70,7 +76,7 @@ newtypeWorker (cn, tp) (Spine tys cod) = do
 
   wrapper <- wrap tys work
   let con = ( cname, tp, wrapper )
-  pure (StmtLet [con], phi, V.singleton (toVar cn) (Ref (fromVar (CoVar nam id ValueVar)) tp))
+  pure (StmtLet (One con), phi, V.singleton (toVar cn) (Ref (fromVar (CoVar nam id ValueVar)) tp))
 
 goBinding :: forall a. IsVar a => V.Map (Atom a) -> V.Map (Coercion a) -> [(a, Type a, Term a)] -> Namey [(a, Type a, Term a)]
 goBinding ss m = traverse (third3A (fmap (substitute ss) . goTerm)) where

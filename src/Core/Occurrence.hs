@@ -102,13 +102,18 @@ tagOccurStmt ann var = tagStmt where
     in ( fv
        , Type (var v defOcc) (map (tagCons fv) tys):xs') where
       tagCons fv (cons, ty) = (var' cons fv, conv ty)
-  tagStmt (StmtLet vs:xs) =
-    let (fvxs, xs') = tagStmt xs
-        (fvvs, vs') = unzip (map (tagOccurTerm ann var . thd3) vs)
+  tagStmt (StmtLet (One (v, ty, e)):xs) =
+    let (fve, e') = tagOccurTerm ann var e
+        (fvr, xs') = tagStmt xs
+        fv = fve # VarMap.delete (toVar v) fvr
+    in (fv, StmtLet (One (var' v fvr, conv ty, e')):xs')
+  tagStmt (StmtLet (Many vs):xs) =
+    let (fvvs, vs') = unzip (map (tagOccurTerm ann var . thd3) vs)
+        (fvr, xs') = tagStmt xs
 
-        fvs = occConcat (fvxs : fvvs)
+        fvs = occConcat (fvr : fvvs)
         fv = foldr (VarMap.delete . toVar . fst3) fvs vs
-    in (fv, StmtLet (zipWith (\(v, ty, _) e -> (var' v fvs, conv ty, e)) vs vs'):xs')
+    in (fv, StmtLet (Many (zipWith (\(v, ty, _) e -> (var' v fvs, conv ty, e)) vs vs')):xs')
 
 -- | Tag a term with occurrence information
 tagOccurTerm :: forall a a' b b'. (IsVar a, IsVar a')
