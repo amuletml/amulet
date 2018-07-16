@@ -133,9 +133,10 @@ quantifier r DoSkip wty@(TyPi (Implicit tau) sigma) = do
   x <- TvName <$> genName
   i <- view implicits
   tell (Seq.singleton (ConImplicit (BecauseOf r) x i tau sigma))
+
   (dom, cod, k) <- quantifier r DoSkip sigma
   let wrap ex = ExprWrapper (WrapVar x) (ExprWrapper (TypeAsc wty) ex (annotation ex, wty)) (annotation ex, sigma)
-  pure (dom, cod, wrap . k)
+  pure (dom, cod, k . wrap)
 
 quantifier _ _ (TyPi x b) = pure (x, b, id)
 quantifier r _ t = do
