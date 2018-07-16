@@ -43,6 +43,7 @@ data SolveState
   = SolveState { _solveTySubst :: Subst Typed
                , _solveAssumptions :: Subst Typed
                , _solveCoSubst :: Map.Map (Var Typed) (Wrapper Typed)
+               , _solveImplBail :: Set.Set (Var Typed)
                }
   deriving (Eq, Show, Ord)
 
@@ -198,7 +199,8 @@ unify (TyTuple a b) (TyTuple a' b') =
   ProdCo <$> unify a a' <*> unify b b'
 
 unify TyType TyType = pure (ReflCo TyType)
-unify a b = throwError (NotEqual a b)
+unify a b = do
+  throwError (NotEqual a b)
 
 isRec :: String
 isRec = "A record type's hole can only be instanced to another record"
@@ -210,7 +212,7 @@ unifRow (t, a, b) = do
   pure (t, co)
 
 runSolve :: Var Resolved -> Subst Typed -> SolveM b -> Either TypeError (Var Resolved, (Subst Typed, Map.Map (Var Typed) (Wrapper Typed)))
-runSolve i s x = runExcept (fix (runReaderT (runStateT (runWriterT (runNameyT act i)) (SolveState s mempty mempty)) emptyScope)) where
+runSolve i s x = runExcept (fix (runReaderT (runStateT (runWriterT (runNameyT act i)) (SolveState s mempty mempty mempty)) emptyScope)) where
   act = (,) <$> genName <*> x
   fix act = do
     (((_, x), w), s) <- act
@@ -248,7 +250,9 @@ doSolve (ConSubsume because v scope a b :<| xs) = do
         sub <- use solveTySubst
         co <- catchy $ subsumes scope (apply sub a) (apply sub b)
         case co of
-          Left e -> tell [propagateBlame because e]
+          Left e -> do
+            solveImplBail %= Set.union (ftv a' <> ftv (apply sub b))
+            tell [propagateBlame because e]
           Right co -> solveCoSubst . at v .= Just co
 
   case a' of
@@ -286,12 +290,14 @@ doSolve (ConImplies because not cs ts :<| xs) = do
 doSolve (ConImplicit because var scope t inner :<| xs) = do
   doSolve xs
   sub <- use solveTySubst
+  abort <- use solveImplBail
   let scope' = Imp.mapTypes (apply sub) scope
       t' = apply sub t
-  w <- catchy $ solveImplicitConstraint 0 inner scope' t'
-  case w of
-    Left e -> tell [propagateBlame because e]
-    Right w -> solveCoSubst . at var ?= w
+  when (Set.disjoint (ftv t') abort) $ do
+    w <- catchy $ solveImplicitConstraint 0 inner scope' t'
+    case w of
+      Left e -> tell [propagateBlame because e]
+      Right w -> solveCoSubst . at var ?= w
 
 doSolve (ConFail a v t :<| cs) = do
   doSolve cs
@@ -334,7 +340,7 @@ solveImplicitConstraint x inner scope t =
       tryMoreSpecific xs =
         case pickClosest t xs of
           ([(_, c)]:_) -> useImplicit (x + 1) inner scope t c
-          _ -> retry xs
+          _ -> throwError (ambiguousImplicits xs t)
       retry :: [Implicit Typed] -> SolveM a
       retry xs = case xs of
         [] -> throwError (noImplicitFound scope t)
@@ -342,7 +348,7 @@ solveImplicitConstraint x inner scope t =
   in case Imp.lookup t scope of
        [c] -> useImplicit x inner scope t c
        -- [] -> throwError (noImplicitFound scope t)
-       xs -> trySolved xs `orElse` tryMoreSpecific xs `orElse` tryPoly xs
+       xs -> (trySolved xs `orElse` tryMoreSpecific xs) `orElse` tryPoly xs
 
 useImplicit :: Int -> Type Typed -> Imp.ImplicitScope Typed -> Type Typed -> Implicit Typed -> SolveM (Wrapper Typed)
 useImplicit x inner scope' ty (ImplChoice hdt oty os s imp) = go where
@@ -408,11 +414,11 @@ subsumes s (TyPi (Implicit b) c) (TyPi (Implicit a) d) = do
   pure (WrapFn (MkWrapCont wrap "co/contra subsumption for implicit functions"))
 
 subsumes s wt@(TyPi (Implicit t) t1) t2 | _TyVar `isn't` t2 = do
-  _ <- unify t1 t2
+  omega <- subsumes s t1 t2
 
   sub <- use solveTySubst
   w <- solveImplicitConstraint 0 wt s (apply sub t)
-  let wrap ex | an <- annotation ex = ExprWrapper (TypeAsc t1) (ExprWrapper w ex (an, t1)) (an, t1)
+  let wrap ex | an <- annotation ex = ExprWrapper omega (ExprWrapper (TypeAsc t1) (ExprWrapper w ex (an, t1)) (an, t1)) (an, t2)
    in pure (WrapFn (MkWrapCont wrap "implicit instantation"))
 
 subsumes s ot@(TyTuple a b) nt@(TyTuple a' b') = do

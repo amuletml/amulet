@@ -410,7 +410,7 @@ litTy Unit = fromVar <$> tyUnit
 litTy RecNil = NilTy
 
 uni, apart, uniOpen, apartOpen :: IsVar a => Type a -> Type a -> Bool
-uni = unifyClosed
+uni = uniOpen
 apart a b = not (uni a b)
 uniOpen a b = isJust (unify a b)
 apartOpen a b = not (uniOpen a b)

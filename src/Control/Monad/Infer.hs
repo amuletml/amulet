@@ -334,7 +334,7 @@ instance Pretty TypeError where
   pretty (AmbiguousType v t (Set.toList -> vs)) =
     vsep [ "Ambiguous type for implicit value" <+> skeyword (pretty v)
          , bullet "Note: in the type" <+> displayType t <> comma
-         , indent 4 "the type variable" <+> hsep (punctuate comma (map (pretty . TyVar) vs)) <> s <+> quan <+> "in the head" ]
+         , indent 4 "the type variable" <> s <+> hsep (punctuate comma (map (pretty . TyVar) vs)) <+> quan <+> "in the head" ]
     where
       s = case vs of
         [_] -> text ""

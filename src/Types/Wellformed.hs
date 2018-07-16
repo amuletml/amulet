@@ -87,7 +87,7 @@ skols (TyWithConstraints cs a) = foldMap (\(x, y) -> skols x <> skols y) cs <> s
 
 checkAmbiguous :: MonadError TypeError m => Var Typed -> Type Typed -> m ()
 checkAmbiguous v tau = go mempty tau where
-  go s (TyPi (Invisible v _) t) = go (Set.insert v s) t
+  go s (TyPi (Invisible v k) t) = go (Set.insert v (s <> foldMap ftv k)) t
   go s (TyPi (Implicit _) t) = go s t
   go s t = if not (Set.null (s Set.\\ fv))
               then throwError (AmbiguousType v tau (s Set.\\ fv))
