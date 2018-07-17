@@ -19,7 +19,7 @@ module Parser.Wrapper
   , getInput, setInput
   , getState, setState, mapState
   , getPos
-  , runParser, runLexer
+  , runParser, runLexer, runLexerTrivial
   ) where
 
 import Control.Monad.Fail as MonadFail
@@ -53,6 +53,7 @@ data PState = PState { stringBuffer :: B.Builder  -- ^ Builder for string litera
                      , commentDepth :: !Int       -- ^ Depth for current file
                      , modulePrefix :: [T.Text]   -- ^ List of module prefixes (in reversed order)
                      , tokenStart   :: !SourcePos -- ^ The position of the start of this token
+                     , trivials     :: Bool       -- ^ Whether "trivial" tokens such as whitespace and comments should be emitted.
 
                      , context :: [Context]    -- ^ The current 'Context' stack
                      , pending :: PendingState -- ^ The tokens which are awaiting consumption or context handling
@@ -187,11 +188,15 @@ type Action a = AlexInput -> Int64 -> SourcePos -> Parser a
 -- | Run the parser monad, returning the result and a list of errors and
 -- warnings
 runParser :: SourceName -> L.Text -> Parser a -> (Maybe a, [ParseError])
-runParser file input m =
+runParser = runParser' False
+
+runParser' :: Bool -> SourceName -> L.Text -> Parser a -> (Maybe a, [ParseError])
+runParser' trivial file input m =
   let defaultState  = PState { stringBuffer = mempty
                              , commentDepth = 0
                              , modulePrefix = []
-                             , tokenStart = SourcePos file 1 1
+                             , tokenStart   = SourcePos file 1 1
+                             , trivials     = trivial
 
                              , context = defaultContext
                              , pending = Done
@@ -208,10 +213,19 @@ runParser file input m =
        PFailed err -> (Nothing, reverse err)
        POK s' a -> (Just a, reverse (sErrors s'))
 
+
 -- | Run the parser monad on a lexing function, returning a list of
 -- tokens and all warnings/errors.
 runLexer :: SourceName -> L.Text -> Parser Token -> (Maybe [Token], [ParseError])
-runLexer file input m = runParser file input gather where
+runLexer = runLexer' False
+
+-- | Run the parser monad on a lexing function, returning a list of
+-- normal and trivial tokens as well all warnings/errors.
+runLexerTrivial :: SourceName -> L.Text -> Parser Token -> (Maybe [Token], [ParseError])
+runLexerTrivial = runLexer' True
+
+runLexer' :: Bool -> SourceName -> L.Text -> Parser Token -> (Maybe [Token], [ParseError])
+runLexer' trivial file input m = runParser' trivial file input gather where
   gather = do
     t <- m
     case t of

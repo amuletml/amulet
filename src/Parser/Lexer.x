@@ -49,13 +49,19 @@ $symbolHead = [\: \! \# \$ \% \& \* \+ \. \/ \< \= \> \? \@ \\ \^ \| \- \~ $unic
 $symbolTail = [$symbolHead \[ \]]
 
 tokens :-
-  <0> $white+;
+  <0> $white+    { whitespace }
 
   -- Comments
-  <0> "(*"       { beginComment }
-  <comment> "(*" { beginComment }
-  <comment> "*)" { endComment }
-  <comment> [.\n] ;
+  <0> "(*"           { beginComment }
+  <comment> "(*"     { beginComment }
+  <comment> "*)"     { endComment }
+  -- We have a greedy "comment" body regex which consumes everything
+  -- until a potential starting/ending character. This hopefully reduces
+  -- the number of times we call the action.
+  <comment> [^\*\(]+ { addComment }
+  -- This rule is our fall back which will handle any remaining
+  -- characters
+  <comment> [.\n]    { addComment }
 
   -- Builtin keywords and symbols
   <0> "->"     { constTok TcArrow }
@@ -196,19 +202,46 @@ endString _ _ ep = do
   setStartCode 0
   pure . fToken (tokenStart s) ep .  TcString . L.toStrict . B.toLazyText . stringBuffer $ s
 
-beginComment, endComment :: Action Token
-beginComment (LI p _ _ _) _ _ = do
+
+whitespace :: Action Token
+whitespace (LI sp str _ _) len ep = do
+  s <- getState
+  if trivials s
+  then pure $! Token (TcWhitespace (L.toStrict (L.take len str))) sp ep
+  else lexerScan
+
+beginComment, endComment, addComment :: Action Token
+beginComment (LI p str _ _) len _ = do
   s <- getState
   -- Increment the comment depth and set the mode to comments
   setState $ s { commentDepth = commentDepth s + 1
-               , tokenStart = if commentDepth s == 0 then p else tokenStart s }
+               , tokenStart = if commentDepth s == 0 then p else tokenStart s
+               , stringBuffer = if trivials s
+                                then stringBuffer s <> B.fromLazyText (L.take len str)
+                                else mempty
+               }
   setStartCode comment
   lexerScan
-endComment _ _ _ = do
+endComment (LI _ str _ _) len ep = do
   s <- getState
-  -- Decrement the comment depth and, if required, set the mode to normal
-  setState $ s { commentDepth = commentDepth s - 1 }
-  if commentDepth s == 1 then setStartCode 0 else pure ()
+
+  if commentDepth s > 1
+  then do
+    -- Pop up a comment level
+    setState $ s { commentDepth = commentDepth s - 1 }
+    lexerScan
+  else do
+    -- Return to normal parsing and, if desired, emit a comment token
+    setState $ s { commentDepth = 0, stringBuffer = mempty, sMode = 0 }
+    if trivials s
+    then pure $! Token (TcComment . L.toStrict . B.toLazyText $ stringBuffer s <> B.fromLazyText (L.take len str))
+                       (tokenStart s) ep
+    else lexerScan
+addComment (LI _ str _ _) len _ = do
+  s <- getState
+  if trivials s
+  then setState $ s { stringBuffer = stringBuffer s <> B.fromLazyText (L.take len str) }
+  else pure ()
   lexerScan
 
 beginModule, beginModuleOp, pushModule :: Action Token
