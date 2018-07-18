@@ -1,3 +1,3 @@
-if_then_else : {'j : type}. bool -> lazy 'j -> lazy 'j -> 'j
+if_then_else : {'a : type}. bool -> lazy 'a -> lazy 'a -> 'a
 print : string -> unit
 main : unit
