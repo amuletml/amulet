@@ -21,6 +21,7 @@ import Data.Traversable
 import Data.Spanned
 import Data.Triple
 import Data.Graph
+import Data.Char
 
 import Control.Monad.State
 import Control.Monad.Infer
@@ -277,7 +278,7 @@ inferProg (st@(ForeignVal v d t ann):prg) = do
       inferProg prg
 inferProg (decl@(TypeDecl n tvs cs):prg) = do
   (kind, retTy, tvs) <- resolveTyDeclKind (BecauseOf decl) n tvs cs
-  local (names %~ focus (one n kind)) $ do
+  local (names %~ focus (one n (rename kind))) $ do
      (ts, cs') <- unzip <$> for cs (\con ->
        inferCon retTy con `catchError` (throwError . propagateBlame (BecauseOf con)))
      local (names %~ focus (teleFromList ts)) . local (constructors %~ Set.union (Set.fromList (map (unTvName . fst) ts))) $
@@ -386,7 +387,7 @@ inferLetTy closeOver vs =
               _ <- unify exp ty (snd tv)
               pure (exp', ty)
         (tp, k) <- figureOut (var, BecauseOf exp) ty cs
-        pure ( [Binding (TvName var) (k exp') p (ann, tp)], one var tp )
+        pure ( [Binding (TvName var) (k exp') p (ann, tp)], one var (rename tp) )
 
       tcOne (CyclicSCC vars) = do
         (origins, tvs) <- unzip <$> traverse approximate vars
@@ -416,7 +417,7 @@ inferLetTy closeOver vs =
                   ty <- closeOver (figure given)
                   skolCheck var (BecauseOf exp) ty
                   pure ( Binding var (solveEx ty solution cs exp) p (fst ann, ty)
-                       , one var ty )
+                       , one var (rename ty) )
             squish = fmap (second mconcat . unzip)
          in squish . traverse solveOne $ vs
 
@@ -489,3 +490,26 @@ viewOp v = v
 
 foldMapM :: (Foldable t, Monoid m, Monad f) => (a -> f m) -> t a -> f m
 foldMapM k = foldM ((.k) . fmap . mappend) mempty
+
+rename :: Type Typed -> Type Typed
+rename = go 0 mempty mempty where
+  go :: Int -> Set.Set T.Text -> Subst Typed -> Type Typed -> Type Typed
+  go n l s (TyPi (Invisible v k) t) =
+    let (v', n', l') = new n l v
+     in TyPi (Invisible v' (fmap (apply s) k)) (go n' l' (Map.insert v (TyVar v') s) t)
+  go n l s (TyPi (Anon k) t) = TyPi (Anon (go n l s k)) (go n l s t)
+  go _ _ s tau = apply s tau
+
+  new v l var@(TvName (TgName vr n))
+    | toIdx vr == n || vr `Set.member` l =
+      let name = genAlnum v
+       in if Set.member name l
+             then new (v + 1) l var
+             else (TvName (TgName name n), v + 1, Set.insert name l)
+    | otherwise = (TvName (TgName vr n), v, Set.insert vr l)
+
+  new _ _ (TvName TgInternal{}) = error "TgInternal in rename"
+
+  toIdx t = go (T.unpack t) (T.length t - 1) - 1 where
+    go (c:cs) l = (ord c - 96) * (26 ^ l) + go cs (l - 1)
+    go [] _ = 0

@@ -6,7 +6,7 @@ Int : {'a : type}. ('a ~ int) ⊃ repr 'a
 option : type -> type
 Some : {'a : type}. 'a -> option 'a
 None : {'a : type}. option 'a
-<$> : {'a : type}. {'a : type}. ('a -> 'a) -> option 'a -> option 'a
-<*> : {'a : type}. {'hf : type}. option ('hf -> 'a) -> option 'hf -> option 'a
+<$> : {'a : type}. {'b : type}. ('b -> 'a) -> option 'b -> option 'a
+<*> : {'a : type}. {'b : type}. option ('b -> 'a) -> option 'b -> option 'a
 cast : {'a : type}. {'b : type}. repr 'a -> repr 'b -> 'a -> option 'b
 main : unit

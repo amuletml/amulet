@@ -4,7 +4,7 @@ S : nat -> nat
 vect : nat -> type -> type
 Nil : {'n : nat}. {'a : type}. ('n ~ Z) ⊃ vect 'n 'a
 Cons : {'n : nat}. {'a : type}. {'k : nat}. ('n ~ S 'k) ⊃ ('a * vect 'k 'a) -> vect 'n 'a
-:: : {'ev : type}. {'k : nat}. 'ev -> vect 'k 'ev -> vect (S 'k) 'ev
+:: : {'a : type}. {'k : nat}. 'a -> vect 'k 'a -> vect (S 'k) 'a
 add : nat -> nat -> nat -> type
 AZ : {'a : nat}. {'c : nat}. {'b : nat}. ('a ~ Z, 'c ~ 'b) ⊃ add 'a 'b 'c
 AS : {'a : nat}. {'c : nat}. {'a : nat}. {'b : nat}. {'c : nat}. ('a ~ S 'a, 'c ~ S 'c) ⊃ add 'a 'b 'c -> add 'a 'b 'c

@@ -14,6 +14,7 @@ module Control.Monad.Namey
   ( NameyT, runNameyT, evalNameyT
   , Namey, runNamey
   , MonadNamey(..)
+  , genAlnum
   ) where
 
 import qualified Control.Monad.Writer.Strict as StrictW
