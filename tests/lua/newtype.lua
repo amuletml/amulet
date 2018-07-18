@@ -2,8 +2,17 @@ do
   local __builtin_unit = {
     __tag = "__builtin_unit"
   }
-  local function Foo (en)
-    return en
+  local function Foo (x)
+    return {
+      __tag = "Foo",
+      [1] = x
+    }
+  end
+  local function Bar (x)
+    return {
+      __tag = "Bar",
+      [1] = x
+    }
   end
   local function It (x)
     return {
@@ -11,15 +20,17 @@ do
       [1] = x
     }
   end
+  local function Mk (x)
+    return {
+      __tag = "Mk",
+      [1] = x
+    }
+  end
   local function main (x)
     x(Foo)
-    x(function (eo)
-      return eo
-    end)
+    x(Bar)
     x(It)
-    return x(function (ep)
-      return ep
-    end)
+    return x(Mk)
   end
   main()
 end

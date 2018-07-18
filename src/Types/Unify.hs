@@ -199,8 +199,7 @@ unify (TyTuple a b) (TyTuple a' b') =
   ProdCo <$> unify a a' <*> unify b b'
 
 unify TyType TyType = pure (ReflCo TyType)
-unify a b = do
-  throwError (NotEqual a b)
+unify a b = throwError (NotEqual a b)
 
 isRec :: String
 isRec = "A record type's hole can only be instanced to another record"
@@ -409,7 +408,15 @@ subsumes s (TyPi (Implicit b) c) (TyPi (Implicit a) d) = do
   arg <- TvName <$> genName
 
   let wrap ex | an <- annotation ex
-        = Fun (ImplParam (Capture arg (an, a))) (ExprWrapper wc (App ex (ExprWrapper wa (VarRef arg (an, a)) (an, b)) (an, c)) (an, d)) (an, TyPi (Implicit a) d)
+        = Fun (ImplParam (Capture arg (an, a)))
+              (ExprWrapper wc
+                (App ex
+                     (ExprWrapper wa
+                        (VarRef arg (an, a))
+                        (an, b))
+                     (an, c))
+                (an, d))
+              (an, TyPi (Implicit a) d)
 
   pure (WrapFn (MkWrapCont wrap "co/contra subsumption for implicit functions"))
 
@@ -418,7 +425,10 @@ subsumes s wt@(TyPi (Implicit t) t1) t2 | _TyVar `isn't` t2 = do
 
   sub <- use solveTySubst
   w <- solveImplicitConstraint 0 wt s (apply sub t)
-  let wrap ex | an <- annotation ex = ExprWrapper omega (ExprWrapper (TypeAsc t1) (ExprWrapper w ex (an, t1)) (an, t1)) (an, t2)
+  let wrap ex | an <- annotation ex
+        = ExprWrapper omega
+            (ExprWrapper (TypeAsc t1)
+              (ExprWrapper w ex (an, t1)) (an, t1)) (an, t2)
    in pure (WrapFn (MkWrapCont wrap "implicit instantation"))
 
 subsumes s ot@(TyTuple a b) nt@(TyTuple a' b') = do
@@ -444,7 +454,7 @@ subsumes s ot@(TyTuple a b) nt@(TyTuple a' b') = do
 subsumes _ a@(TyApp lazy _) b@(TyApp lazy' _)
   | lazy == lazy', lazy' == tyLazy = probablyCast <$> unify a b
 
-subsumes _ (TyApp lazy ty') ty | lazy == tyLazy, _TyVar `isn't` ty = do
+subsumes _ (TyApp lazy ty') ty | lazy == tyLazy, concretish ty = do
   co <- unify ty' ty
   let wrap ex
         | an <- annotation ex =
@@ -454,7 +464,7 @@ subsumes _ (TyApp lazy ty') ty | lazy == tyLazy, _TyVar `isn't` ty = do
               (an, ty)
   pure (WrapFn (MkWrapCont wrap "automatic forcing"))
 
-subsumes _ ty' (TyApp lazy ty) | lazy == tyLazy, _TyVar `isn't` ty' = do
+subsumes _ ty' (TyApp lazy ty) | lazy == tyLazy, concretish ty' = do
   co <- unify ty ty'
   let wrap ex
         | an <- annotation ex =
@@ -528,6 +538,11 @@ capture m = do
   st <- get
   put x
   pure (r, st)
+
+concretish :: Type Typed -> Bool
+concretish TyVar{} = False
+concretish (TyApp f x) = concretish f && concretish x
+concretish _ = True
 
 catchy :: MonadError e m => m a -> m (Either e a)
 catchy x = (Right <$> x) `catchError` (pure . Left)

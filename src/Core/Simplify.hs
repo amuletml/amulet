@@ -5,7 +5,7 @@ module Core.Simplify
 
 import Data.List
 
-import Core.Optimise.Newtype
+-- import Core.Optimise.Newtype
 import Core.Optimise.DeadCode
 import Core.Optimise.Sinking
 import Core.Optimise.Joinify
@@ -23,7 +23,7 @@ lintPasses :: Bool
 lintPasses = True
 
 optmOnce :: [Stmt CoVar] -> Namey [Stmt CoVar]
-optmOnce = passes <=< killNewtypePass where
+optmOnce = passes where
   passes = foldr1 (>=>) $ linted
            [ pure
 
