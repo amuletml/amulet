@@ -1,5 +1,7 @@
 (* A rather convoluted test case, combining visible instantiation with
- * componentwise tuple subsumption *and* GADTs *)
+ * componentwise tuple subsumption *and* GADTs
+ *
+ * Now rejected due to impredicativity concerns! *)
 
 
 external val io_write : string -> unit = "io.write"

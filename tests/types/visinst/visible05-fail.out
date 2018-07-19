@@ -1,0 +1,9 @@
+visible05-fail.ml[21:9 ..21:21]: error
+  Illegal instantiation of type variable kl
+                  with polymorphic type forall 'n. prop 'n -> prop (S 'n)
+  • Note: doing so would constitute impredicative polymorphism
+
+  Arising in the expression
+   │ 
+21 │   fun z s -> function
+   │ 
