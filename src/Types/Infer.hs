@@ -71,16 +71,7 @@ check (Begin xs a) t = do
   pure (Begin (start ++ [end]) (a, t))
 
 check (Let ns b an) t = do
-  bound <- view letBound
-  cons <- view constructors
-  types <- view names
-  let genStrat ex =
-        if Set.foldr ((&&) . generalisable) True (freeIn ex)
-           then generalise (BecauseOf ex)
-           else annotateKind (BecauseOf ex)
-      generalisable v = (Set.member v bound || Set.member v cons) && maybe True Set.null (types ^. at (unTvName v) . to (fmap ftv))
-
-  (ns, ts, is) <- inferLetTy genStrat ns
+  (ns, ts, is) <- inferLetTy localGenStrat ns
   let bvs = Set.fromList (map TvName (namesInScope (focus ts mempty)))
   local (letBound %~ Set.union bvs) $ local (names %~ focus ts) $ local (implicits %~ mappend is) $ do
     b <- check b t
@@ -523,3 +514,13 @@ generalise r ty =
     case Set.toList (fv `Set.difference` env) of
       [] -> pure ty
       vs -> annotateKind r $ foldr (flip TyForall Nothing) ty vs
+
+localGenStrat :: MonadInfer Typed m => Expr Typed -> Type Typed -> m (Type Typed)
+localGenStrat ex ty = do
+  bound <- view letBound
+  cons <- view constructors
+  types <- view names
+  let generalisable v = (Set.member v bound || Set.member v cons) && maybe True Set.null (types ^. at (unTvName v) . to (fmap ftv))
+  if Set.foldr ((&&) . generalisable) True (freeIn ex)
+     then generalise (BecauseOf ex) ty
+     else annotateKind (BecauseOf ex) ty

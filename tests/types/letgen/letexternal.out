@@ -1,0 +1,2 @@
+external_id : {'a : type}. 'a -> 'a
+main : int
