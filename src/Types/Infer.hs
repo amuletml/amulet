@@ -71,12 +71,18 @@ check (Begin xs a) t = do
   pure (Begin (start ++ [end]) (a, t))
 
 check (Let ns b an) t = do
+  bound <- view letBound
+  cons <- view constructors
+  types <- view names
   let genStrat ex =
-        if Set.null (freeIn ex)
+        if Set.foldr ((&&) . generalisable) True (freeIn ex)
            then generalise (BecauseOf ex)
            else annotateKind (BecauseOf ex)
+      generalisable v = (Set.member v bound || Set.member v cons) && maybe True Set.null (types ^. at (unTvName v) . to (fmap ftv))
+
   (ns, ts, is) <- inferLetTy genStrat ns
-  local (names %~ focus ts) $ local (implicits %~ mappend is) $ do
+  let bvs = Set.fromList (map TvName (namesInScope (focus ts mempty)))
+  local (letBound %~ Set.union bvs) $ local (names %~ focus ts) $ local (implicits %~ mappend is) $ do
     b <- check b t
     pure (Let ns b (an, t))
 
@@ -86,7 +92,7 @@ check ex@(Fun pat e an) ty = do
 
   (p, tau, vs, cs) <- inferParameter pat
   _ <- unify ex domain (_tyBinderType tau)
-  let tvs = Set.map unTvName (boundTvs (p ^. paramPat) vs)
+  let tvs = boundTvs (p ^. paramPat) vs
 
   implies (Arm (pat ^. paramPat) e) domain cs $
     case dom of
@@ -109,7 +115,7 @@ check (Match t ps a) ty = do
 
   ps <- for ps $ \(p, e) -> do
     (p', ms, cs) <- checkPattern p tt
-    let tvs = Set.map unTvName (boundTvs p' ms)
+    let tvs = boundTvs p' ms
 
     bd <- implies (Arm p e) tt cs $
       local (typeVars %~ Set.union tvs) $
@@ -160,13 +166,13 @@ infer (Fun p e an) = let blame = Arm (p ^. paramPat) e in do
   case p of
     ImplParam{} -> do
       (name, body, pat) <- makeImplicitName an domain p
-      (e, cod) <- local (typeVars %~ Set.union (Set.map unTvName tvs)) $
+      (e, cod) <- local (typeVars %~ Set.union tvs) $
         local (names %~ focus ms) $
           local (implicits %~ consider name domain) $
             infer e
       pure (Fun pat (body cod e) (an, TyPi dom cod), TyPi dom cod)
     PatParam _ -> do
-      (e, cod) <- local (typeVars %~ Set.union (Set.map unTvName tvs)) $
+      (e, cod) <- local (typeVars %~ Set.union tvs) $
         local (names %~ focus ms) $
           infer e
       pure (Fun p e (an, TyPi dom cod), TyPi dom cod)
@@ -222,7 +228,7 @@ infer ex@(Match t ps a) = do
   ty <- freshTV
   ps' <- for ps $ \(p, e) -> do
     (p', ms, cs) <- checkPattern p tt
-    let tvs = Set.map unTvName (boundTvs p' ms)
+    let tvs = boundTvs p' ms
     leakEqualities ex cs
     e' <- local (typeVars %~ Set.union tvs) $
       local (names %~ focus ms) $
@@ -277,7 +283,7 @@ inferProg (stmt@(LetStmt ns):prg) = do
       inferProg prg
 inferProg (st@(ForeignVal v d t ann):prg) = do
   t' <- resolveKind (BecauseOf st) t
-  local (names %~ focus (one v t')) $
+  local (names %~ focus (one v t')) . local (letBound %~ Set.insert (TvName v)) $
     consFst (ForeignVal (TvName v) d t' (ann, t')) $
       inferProg prg
 inferProg (decl@(TypeDecl n tvs cs):prg) = do
@@ -285,11 +291,11 @@ inferProg (decl@(TypeDecl n tvs cs):prg) = do
   local (names %~ focus (one n (rename kind))) $ do
      (ts, cs') <- unzip <$> for cs (\con ->
        inferCon retTy con `catchError` (throwError . propagateBlame (BecauseOf con)))
-     local (names %~ focus (teleFromList ts)) . local (constructors %~ Set.union (Set.fromList (map (unTvName . fst) ts))) $
+     local (names %~ focus (teleFromList ts)) . local (constructors %~ Set.union (Set.fromList (map fst ts))) $
        consFst (TypeDecl (TvName n) tvs cs') $
          inferProg prg
 inferProg (Open mod pre:prg) = do
-  modImplicits <- view (modules . at mod . non undefined)
+  modImplicits <- view (modules . at (TvName mod) . non undefined)
   local (implicits %~ (<>modImplicits)) $
     consFst (Open (TvName mod) pre) $ inferProg prg
 inferProg (Module name body:prg) = do
@@ -300,7 +306,7 @@ inferProg (Module name body:prg) = do
 
   -- Extend the current scope and module scope
   local ( (names %~ focus (teleFromList vars'))
-        . (modules %~ (Map.insert name (env ^. implicits) . (<>(env ^. modules))))) $
+        . (modules %~ (Map.insert (TvName name) (env ^. implicits) . (<> (env ^. modules))))) $
     consFst (Module (TvName name) body') $
     inferProg prg
 
@@ -361,7 +367,7 @@ inferLetTy closeOver vs =
       skolCheck :: Var Typed -> SomeReason -> Type Typed -> m ()
       skolCheck var exp ty = do
         env <- view typeVars
-        let sks = Set.map (^. skolIdent . to unTvName) (skols ty)
+        let sks = Set.map (^. skolIdent) (skols ty)
         unless (null (sks `Set.difference` env)) $
           throwError (blameSkol (EscapedSkolems (Set.toList (skols ty)) ty) (unTvName var, exp))
 
@@ -513,7 +519,7 @@ rename = go 0 mempty mempty where
 generalise :: MonadInfer Typed m => SomeReason -> Type Typed -> m (Type Typed)
 generalise r ty =
   let fv = ftv ty in do
-    env <- Set.map TvName <$> view typeVars
+    env <- view typeVars
     case Set.toList (fv `Set.difference` env) of
       [] -> pure ty
       vs -> annotateKind r $ foldr (flip TyForall Nothing) ty vs
