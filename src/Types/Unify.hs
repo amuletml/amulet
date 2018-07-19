@@ -33,6 +33,9 @@ import Data.Spanned
 import Data.List
 import Data.Text (Text)
 
+import Debug.Trace
+import Text.Pretty.Semantic
+
 data SolveScope
   = SolveScope { _bindSkol :: Bool
                , _don'tTouch :: Set.Set (Var Typed)
@@ -244,6 +247,7 @@ doSolve (ConUnify because v a b :<| xs) = do
 doSolve (ConSubsume because v scope a b :<| xs) = do
   sub <- use solveTySubst
 
+  traceM (displayS (pretty (ConSubsume because v scope (apply sub a) (apply sub b))))
   let a' = apply sub a
       cont = do
         sub <- use solveTySubst
@@ -292,6 +296,7 @@ doSolve (ConImplicit because var scope t inner :<| xs) = do
   abort <- use solveImplBail
   let scope' = Imp.mapTypes (apply sub) scope
       t' = apply sub t
+  traceM (displayS (pretty (ConSubsume because var scope t' inner)))
   when (Set.disjoint (ftv t') abort) $ do
     w <- catchy $ solveImplicitConstraint 0 inner scope' t'
     case w of
@@ -388,23 +393,25 @@ matchDistance t im =
              in foldOccMap (\v o x -> x + o * weight v) 0 occm
    in (distance, im)
 
-subsumes :: Imp.ImplicitScope Typed
-         -> Type Typed -> Type Typed -> SolveM (Wrapper Typed)
-subsumes s t1 t2@TyPi{} | isSkolemisable t2 = do
+subsumes', subsumes :: Imp.ImplicitScope Typed -> Type Typed -> Type Typed -> SolveM (Wrapper Typed)
+subsumes s a b = do
+  x <- use solveTySubst
+  subsumes' s (apply x a) (apply x b)
+
+subsumes' s t1 t2@TyPi{} | isSkolemisable t2 = do
   sub <- use solveTySubst
   (c, t2') <- skolemise (BySubsumption (apply sub t1) (apply sub t2)) t2
   (Syntax.:>) c <$> subsumes s t1 t2'
 
-subsumes s t1@TyPi{} t2 | isSkolemisable t1 = do
+subsumes' s t1@TyPi{} t2 | isSkolemisable t1 = do
   (cont, _, t1') <- instantiate Subsumption t1
   let wrap = maybe IdWrap (WrapFn . flip MkWrapCont "forall <= sigma; instantiation") cont
 
   flip (Syntax.:>) wrap <$> subsumes s t1' t2
 
-subsumes s (TyPi (Implicit b) c) (TyPi (Implicit a) d) = do
-  wa <- subsumes s a b
+subsumes' s (TyPi (Implicit b) c) (TyPi (Implicit a) d) = do
   wc <- subsumes s c d
-
+  wa <- subsumes s a b
   arg <- TvName <$> genName
 
   let wrap ex | an <- annotation ex
@@ -420,7 +427,7 @@ subsumes s (TyPi (Implicit b) c) (TyPi (Implicit a) d) = do
 
   pure (WrapFn (MkWrapCont wrap "co/contra subsumption for implicit functions"))
 
-subsumes s wt@(TyPi (Implicit t) t1) t2 | _TyVar `isn't` t2 = do
+subsumes' s wt@(TyPi (Implicit t) t1) t2 | _TyVar `isn't` t2 = do
   omega <- subsumes s t1 t2
 
   sub <- use solveTySubst
@@ -431,9 +438,9 @@ subsumes s wt@(TyPi (Implicit t) t1) t2 | _TyVar `isn't` t2 = do
               (ExprWrapper w ex (an, t1)) (an, t1)) (an, t2)
    in pure (WrapFn (MkWrapCont wrap "implicit instantation"))
 
-subsumes s ot@(TyTuple a b) nt@(TyTuple a' b') = do
-  wa <- subsumes s a a'
+subsumes' s ot@(TyTuple a b) nt@(TyTuple a' b') = do
   wb <- subsumes s b b'
+  wa <- subsumes s a a'
   [elem, elem'] <- fmap TvName <$> replicateM 2 genName
   let cont (Tuple (e:es) (an, _)) =
         Tuple [ ExprWrapper wa e (an, a')
@@ -451,10 +458,10 @@ subsumes s ot@(TyTuple a b) nt@(TyTuple a' b') = do
                    (an, nt)
   pure (WrapFn (MkWrapCont cont "tuple re-packing"))
 
-subsumes _ a@(TyApp lazy _) b@(TyApp lazy' _)
+subsumes' _ a@(TyApp lazy _) b@(TyApp lazy' _)
   | lazy == lazy', lazy' == tyLazy = probablyCast <$> unify a b
 
-subsumes _ (TyApp lazy ty') ty | lazy == tyLazy, concretish ty = do
+subsumes' _ (TyApp lazy ty') ty | lazy == tyLazy, concretish ty = do
   co <- unify ty' ty
   let wrap ex
         | an <- annotation ex =
@@ -464,7 +471,7 @@ subsumes _ (TyApp lazy ty') ty | lazy == tyLazy, concretish ty = do
               (an, ty)
   pure (WrapFn (MkWrapCont wrap "automatic forcing"))
 
-subsumes _ ty' (TyApp lazy ty) | lazy == tyLazy, concretish ty' = do
+subsumes' _ ty' (TyApp lazy ty) | lazy == tyLazy, concretish ty' = do
   co <- unify ty ty'
   let wrap ex
         | an <- annotation ex =
@@ -476,7 +483,8 @@ subsumes _ ty' (TyApp lazy ty) | lazy == tyLazy, concretish ty' = do
               (an, TyApp lazy ty)
   pure (WrapFn (MkWrapCont wrap "automatic thunking"))
 
-subsumes _ a b = probablyCast <$> unify a b
+subsumes' _ a b = probablyCast <$> unify a b
+
 
 -- | Shallowly skolemise a type, replacing any @forall@-bound 'TyVar's
 -- with fresh 'Skolem' constants.
