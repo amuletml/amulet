@@ -33,9 +33,6 @@ import Data.Spanned
 import Data.List
 import Data.Text (Text)
 
-import Debug.Trace
-import Text.Pretty.Semantic
-
 data SolveScope
   = SolveScope { _bindSkol :: Bool
                , _don'tTouch :: Set.Set (Var Typed)
@@ -247,7 +244,6 @@ doSolve (ConUnify because v a b :<| xs) = do
 doSolve (ConSubsume because v scope a b :<| xs) = do
   sub <- use solveTySubst
 
-  traceM (displayS (pretty (ConSubsume because v scope (apply sub a) (apply sub b))))
   let a' = apply sub a
       cont = do
         sub <- use solveTySubst
@@ -296,7 +292,6 @@ doSolve (ConImplicit because var scope t inner :<| xs) = do
   abort <- use solveImplBail
   let scope' = Imp.mapTypes (apply sub) scope
       t' = apply sub t
-  traceM (displayS (pretty (ConSubsume because var scope t' inner)))
   when (Set.disjoint (ftv t') abort) $ do
     w <- catchy $ solveImplicitConstraint 0 inner scope' t'
     case w of

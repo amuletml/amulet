@@ -53,4 +53,5 @@ tests = do
   visinst <- testGroup "Visible Instantiation inference tests" <$> goldenDir result "tests/types/visinst/" ".ml"
   lazy <- testGroup "Automatic laziness tests" <$> goldenDir result "tests/types/lazy/" ".ml"
   implicit <- testGroup "Implicit parameter tests" <$> goldenDir result "tests/types/implicits/" ".ml"
-  pure (testGroup "Type inference" [ inference, gadts, rankn, visinst, lazy, implicit ])
+  letgen <- testGroup "Let generalization tests" <$> goldenDir result "tests/types/letgen/" ".ml"
+  pure (testGroup "Type inference" [ inference, gadts, rankn, visinst, lazy, implicit, letgen ])

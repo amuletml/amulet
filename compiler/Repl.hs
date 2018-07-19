@@ -7,6 +7,7 @@ import Control.Monad.State.Strict
 import qualified Data.Text.Encoding as T
 import qualified Data.Map.Strict as Map
 import qualified Data.Text.Lazy as L
+import qualified Data.Set as Set
 import qualified Data.Text as T
 
 import qualified Data.VarMap as VarMap
@@ -214,7 +215,8 @@ runRepl = do
                        else do
                          let (var, tys) = R.extractToplevels parsed'
                              (var', tys') = R.extractToplevels resolved
-                             ctors = fmap lowerType (Map.restrictKeys (env' ^. T.names . to toMap) (env' ^. constructors))
+                             ctors = fmap lowerType (Map.restrictKeys (env' ^. T.names . to toMap)
+                                                      (Set.mapMonotonic S.unTvName (env' ^. constructors)))
 
                          lower <- runLowerWithCtors ctors (lowerProg prog)
                          lastG <- genName
