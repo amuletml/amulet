@@ -81,7 +81,7 @@ check ex@(Fun pat e an) ty = do
   let domain = _tyBinderType dom
 
   (p, tau, vs, cs) <- inferParameter pat
-  _ <- subsumes ex domain (_tyBinderType tau)
+  _ <- unify ex domain (_tyBinderType tau)
   let tvs = Set.map unTvName (boundTvs (p ^. paramPat) vs)
 
   implies (Arm (pat ^. paramPat) e) domain cs $
