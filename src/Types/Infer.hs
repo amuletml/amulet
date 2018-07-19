@@ -70,8 +70,12 @@ check (Begin xs a) t = do
   end <- check end t
   pure (Begin (start ++ [end]) (a, t))
 
-check ex@(Let ns b an) t = do
-  (ns, ts, is) <- inferLetTy (annotateKind (BecauseOf ex)) ns
+check (Let ns b an) t = do
+  let genStrat ex =
+        if Set.null (freeIn ex)
+           then generalise (BecauseOf ex)
+           else annotateKind (BecauseOf ex)
+  (ns, ts, is) <- inferLetTy genStrat ns
   local (names %~ focus ts) $ local (implicits %~ mappend is) $ do
     b <- check b t
     pure (Let ns b (an, t))
@@ -266,7 +270,7 @@ inferRows rows = for rows $ \(var', val) -> do
 inferProg :: MonadInfer Typed m
           => [Toplevel Resolved] -> m ([Toplevel Typed], Env)
 inferProg (stmt@(LetStmt ns):prg) = do
-  (ns', ts, is) <- inferLetTy (closeOver (BecauseOf stmt)) ns
+  (ns', ts, is) <- inferLetTy (const (closeOver (BecauseOf stmt))) ns
                    `catchError` (throwError . propagateBlame (BecauseOf stmt))
   local (names %~ focus ts) . local (implicits %~ mappend is) $
     consFst (LetStmt ns') $
@@ -319,7 +323,7 @@ approxType _ = do
   lift freshTV
 
 inferLetTy :: forall m. MonadInfer Typed m
-           => (Type Typed -> m (Type Typed))
+           => (Expr Typed -> Type Typed -> m (Type Typed))
            -> [Binding Resolved]
            -> m ( [Binding Typed]
                 , Telescope Typed
@@ -335,25 +339,17 @@ inferLetTy closeOver vs =
       blameSkol :: TypeError -> (Var Resolved, SomeReason) -> TypeError
       blameSkol e (v, r) = propagateBlame r (Note e (string "in the inferred type for" <+> pretty v))
 
-      figureOut :: (Var Resolved, SomeReason) -> Type Typed -> Seq.Seq (Constraint Typed) -> m (Type Typed, Expr Typed -> Expr Typed)
-      figureOut blame ty cs = do
+      figureOut :: (Var Resolved, SomeReason) -> Expr Typed -> Type Typed -> Seq.Seq (Constraint Typed) -> m (Type Typed, Expr Typed -> Expr Typed)
+      figureOut blame ex ty cs = do
         cur <- genName
         (x, co, vt) <- case solve cur cs of
           Right (x, co) -> do
-            ty' <- closeOver (apply x ty)
+            ty' <- closeOver ex (apply x ty)
             pure (x, co, ty')
           Left e -> throwError (propagateBlame (snd blame) e)
         skolCheck (TvName (fst blame)) (snd blame) vt
         pure (vt, solveEx vt x co)
 
-      generalise :: SomeReason -> Type Typed -> m (Type Typed)
-      generalise r ty =
-        let fv = ftv ty
-         in do
-           env <- Set.map TvName <$> view typeVars
-           case Set.toList (fv `Set.difference` env) of
-             [] -> pure ty
-             vs -> annotateKind r $ foldr (flip TyForall Nothing) ty vs
 
       approximate :: Binding Resolved
                   -> m (Origin, (Var Typed, Type Typed))
@@ -386,7 +382,7 @@ inferLetTy closeOver vs =
               (exp', ty) <- infer exp
               _ <- unify exp ty (snd tv)
               pure (exp', ty)
-        (tp, k) <- figureOut (var, BecauseOf exp) ty cs
+        (tp, k) <- figureOut (var, BecauseOf exp) exp' ty cs
         pure ( [Binding (TvName var) (k exp') p (ann, tp)], one var (rename tp) )
 
       tcOne (CyclicSCC vars) = do
@@ -414,7 +410,7 @@ inferLetTy closeOver vs =
             solveOne (Binding var exp p ann, given) =
               let figure = apply solution
                in do
-                  ty <- closeOver (figure given)
+                  ty <- closeOver exp (figure given)
                   skolCheck var (BecauseOf exp) ty
                   pure ( Binding var (solveEx ty solution cs exp) p (fst ann, ty)
                        , one var (rename ty) )
@@ -513,3 +509,11 @@ rename = go 0 mempty mempty where
   toIdx t = go (T.unpack t) (T.length t - 1) - 1 where
     go (c:cs) l = (ord c - 96) * (26 ^ l) + go cs (l - 1)
     go [] _ = 0
+
+generalise :: MonadInfer Typed m => SomeReason -> Type Typed -> m (Type Typed)
+generalise r ty =
+  let fv = ftv ty in do
+    env <- Set.map TvName <$> view typeVars
+    case Set.toList (fv `Set.difference` env) of
+      [] -> pure ty
+      vs -> annotateKind r $ foldr (flip TyForall Nothing) ty vs

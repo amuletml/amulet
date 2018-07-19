@@ -114,10 +114,10 @@ lowerAt (S.Let vs t _) ty = do
       lowerScc (CyclicSCC vs) = CyclicSCC <$> do
         for vs $ \(S.Binding (TvName var) ex _ (_, ty)) -> do
           let ty' = lowerType ty
-          (mkVal var,ty',) <$> lowerAtTerm ex ty'
+          (mkVal var,ty',) <$> lowerPolyBind ty' ex
       lowerScc (AcyclicSCC (S.Binding (TvName var) ex _ (_, ty))) = AcyclicSCC <$> do
         let ty' = lowerType ty
-        (mkVal var, ty',) <$> lowerAtTerm ex ty'
+        (mkVal var, ty',) <$> lowerPolyBind ty' ex
       foldScc (AcyclicSCC v) = C.Let (One v)
       foldScc (CyclicSCC vs) = C.Let (Many vs)
   vs' <- traverse lowerScc sccs
