@@ -1,7 +1,0 @@
-visible04-fail.ml[4:24 ..4:24]: error
-  Could not match type int with unit
-
-  Arising in the expression
-  │ 
-4 │ let main = foo @{unit} 1 @{unit} ()
-  │ 

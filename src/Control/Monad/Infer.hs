@@ -99,7 +99,6 @@ data TypeError where
   Malformed :: Pretty (Var p) => Type p -> TypeError
 
   -- Visible quantification
-  WrongQuantifier   :: (Pretty (Var p), Pretty (Var p'), Ord (Var p), Ord (Var p')) => Expr p -> Type p' -> TypeError
   NakedInstArtifact :: (Pretty (Var p), Ord (Var p)) => Expr p -> TypeError
 
   -- Implicit parameters
@@ -177,15 +176,6 @@ instantiate r tp@(TyPi (Invisible v _) ty) = do
 
       appThisTy e = ExprWrapper (TypeApp var) e (annotation e, apply map ty)
   (k, _, t) <- instantiate r (apply map ty)
-  pure (squish appThisTy k, tp, t)
-
-instantiate Expression tp@(TyPi Explicit{} _) = pure (Just id, tp, tp) -- nope!
-instantiate Subsumption tp@(TyPi (Explicit v k) ty) = do
-  var <- refreshTV v
-  let map = Map.singleton v var
-      appThisTy e = App e (InstType var (annotation e, k)) (annotation e, apply map ty)
-
-  (k, _, t) <- instantiate Subsumption (apply map ty)
   pure (squish appThisTy k, tp, t)
 
 instantiate r tp@(TyPi (Anon co) od@dm) = do
@@ -300,33 +290,6 @@ instance Pretty TypeError where
     where whatIs (TySkol (Skolem _ v _ _)) = string "the rigid type variable" <+> stypeVar (pretty v)
           whatIs t = string "the type" <+> displayType (withoutSkol t)
           skol = stypeVar (pretty v)
-
-  pretty (WrongQuantifier _ ty@(TyPi Explicit{} _)) =
-    vsep [ string "Expression given as argument to function of type" <+> displayType ty
-         , indent 4 $ string "This function expects a type as its first argument;"
-         , indent 4 $ string "Have you forgotten an instantiation?"
-         , empty
-         , note <+> "You can use a hole like"
-             <+> pretty (InstHole undefined :: Expr Typed) <+> "to make the compiler infer this"
-         ]
-
-  pretty (WrongQuantifier t ty@TyArr{}) =
-    vsep [ thing <+> "given as argument to function of type" <+> displayType ty
-         , string "Have you applied a function to the wrong number of arguments?"
-         ] where
-      thing = case t of
-        InstHole{} -> highlight "Hole" <+> pretty t
-        InstType{} -> highlight "Type" <+> pretty t
-        _ -> error "WrongQuantifier wrong"
-
-  pretty (WrongQuantifier t ty) =
-    vsep [ thing <+> "given as argument to expression of type" <+> displayType ty
-         , string "Have you applied a function to too many arguments?"
-         ] where
-      thing = case t of
-        InstHole{} -> highlight "Hole" <+> pretty t
-        InstType{} -> highlight "Type" <+> pretty t
-        _ -> highlight "Expression"
 
   pretty (NoImplicit tau doc) =
     doc $ vsep [ "Could not choose implicit value of type" <+> displayType tau ]

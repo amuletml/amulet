@@ -1,7 +1,0 @@
-visible02-fail.ml[2:13 ..2:18]: error
-  Can not use the type @{ int } outside of a type application
-
-  Arising in the expression
-  │ 
-2 │ and main' = @{int}
-  │ 

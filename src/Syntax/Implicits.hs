@@ -258,7 +258,6 @@ getHead t@TyPromotedCon{} = (t, Seq.empty)
 getHead t@TyApp{} = (t, Seq.empty)
 getHead (TyPi b t) = case b of
   Anon v -> (TyArr v t, Seq.empty) -- regular function, do nothing
-  Explicit v k -> (TyPi (Explicit v k) t, Seq.empty) -- explicitly-quantified forall, do nothing
   Invisible{} ->
     let (hd, cs) = getHead t
      in (hd, Quantifier b `cons` cs)
@@ -298,7 +297,6 @@ matches (TyPi b t) (TyPi b' t') = t `matches` t' && b `matchesBinder` b' where
   matchesBinder (Anon t) (Anon t') = t `matches` t'
   matchesBinder (Implicit t) (Implicit t') = t `matches` t'
   matchesBinder (Invisible _ k) (Invisible _ k') = fromMaybe False (matches <$> k <*> k')
-  matchesBinder (Explicit _ k) (Explicit _ k') = k `matches` k'
   matchesBinder _ _ = False
 
 matches TyPi{} _ = False

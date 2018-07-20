@@ -174,8 +174,6 @@ instance Pretty (Var p) => Pretty (TyBinder p) where
   pretty (Invisible v (Just k)) = braces (stypeVar (squote <> pretty v) <+> colon <+> pretty k) <> dot
   pretty (Invisible v Nothing)  = stypeVar (squote <> pretty v) <> dot
 
-  pretty (Explicit v k) = parens (stypeVar (squote <> pretty v) <+> colon <+> pretty k) <+> arrow
-
 instance (Pretty (Var p)) => Pretty (Toplevel p) where
   pretty (LetStmt []) = error "absurd!"
   pretty (LetStmt (Binding n v p _:xs)) =
@@ -202,8 +200,7 @@ instance (Pretty (Var p)) => Pretty (Toplevel p) where
 
 instance Pretty (Var p) => Pretty (TyConArg p) where
   pretty (TyVarArg var) = pretty var
-  pretty (TyAnnArg v k) = braces (pretty v <+> colon <+> pretty k)
-  pretty (TyVisArg v k) = braces (pretty v <+> colon <+> pretty k)
+  pretty (TyAnnArg v k) = parens (pretty v <+> colon <+> pretty k)
 
 instance (Pretty (Var p)) => Pretty [Toplevel p] where
   pretty = vcat . map pretty
@@ -239,7 +236,6 @@ applyCons (TyPi a b) = TyPi (go a) (applyCons b) where
   go (Anon t) = Anon (applyCons t)
   go (Implicit t) = Implicit (applyCons t)
   go (Invisible t k) = Invisible t (fmap applyCons k)
-  go (Explicit t k) = Explicit t (applyCons k)
 applyCons (TyApp a b) = TyApp (applyCons a) (applyCons b)
 applyCons (TyRows r rs) = TyRows (applyCons r) (map (second applyCons) rs)
 applyCons (TyExactRows rs) = TyExactRows (map (second applyCons) rs)
@@ -273,7 +269,6 @@ displayType = prettyType . dropKindVars mempty where
   dropKindVars _ TyType = TyType
 
   kindVarIn :: Var p -> Type p -> Bool
-  kindVarIn v (TyPi (Explicit _ k) t) = v `Set.member` ftv k || kindVarIn v t
   kindVarIn v (TyPi (Invisible _ k) t) = v `Set.member` maybe mempty ftv k || kindVarIn v t
   kindVarIn v (TyPi (Anon a) b) = kindVarIn v a && kindVarIn v b
   kindVarIn v (TyPi (Implicit a) b) = kindVarIn v a && kindVarIn v b
@@ -304,11 +299,6 @@ prettyType (TyPi x t) = uncurry prettyQuantifiers . second reverse $ unwind t [x
         these, those :: [TyBinder p]
      in case q:these of
        Invisible{}:_ -> keyword "forall" <+> hsep (map (stypeVar . (char '\'' <>) . pretty . (^?! tyBinderVar)) (q:these)) <> dot <+> prettyQuantifiers inner those
-       Explicit{}:_ -> keyword "forall"
-                   <+> let ppr (Explicit v k) = parens (stypeVar (char '\'' <> pretty v) <+> colon <+> prettyType k)
-                           ppr _ = undefined
-                        in hsep (map ppr (q:these)) <+> arrow
-                   <+> prettyQuantifiers inner those
        Anon{}:_ ->
          let arg x = parenTuple x (prettyType x)
           in hsep (punctuate (space <> arrow) (map (arg . (^?! _Anon)) (q:these))) <+> arrow <+> prettyQuantifiers inner those
@@ -318,8 +308,8 @@ prettyType (TyPi x t) = uncurry prettyQuantifiers . second reverse $ unwind t [x
        [] -> error "what?"
 
   sameAs Invisible{} Invisible{} = True
-  sameAs Explicit{} Explicit{} = True
   sameAs Anon{} Anon{} = True
+  sameAs Implicit{} Implicit{} = True
   sameAs _ _ = False
 prettyType (TyApp x e) = parenTyFun x (displayType x) <+> parenTyArg e (displayType e)
 prettyType (TyRows p rows) = enclose (lbrace <> space) (space <> rbrace) $

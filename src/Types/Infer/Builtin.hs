@@ -185,7 +185,6 @@ instance (Pretty (Var p), Reasonable Pattern p, Reasonable Expr p) => Reasonable
 
 gadtConResult :: Type p -> Type p
 gadtConResult (TyForall _ _ t) = gadtConResult t
-gadtConResult (TyPi Explicit{} t) = gadtConResult t
 gadtConResult (TyArr _ t) = t
 gadtConResult t = t
 

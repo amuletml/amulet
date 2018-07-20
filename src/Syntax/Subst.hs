@@ -96,18 +96,15 @@ instance Ord (Var p) => Substitutable p (TyBinder p) where
   ftv (Anon t) = ftv t
   ftv (Implicit t) = ftv t
   ftv (Invisible _ k) = maybe mempty ftv k
-  ftv (Explicit _ k) = ftv k
 
   apply s (Anon t) = Anon (apply s t)
   apply s (Implicit t) = Implicit (apply s t)
   apply s (Invisible v k) = Invisible v (fmap (apply s) k)
-  apply s (Explicit v k) = Explicit v (apply s k)
 
 bound :: Ord (Var p) => TyBinder p -> Set.Set (Var p)
 bound Anon{} = Set.empty
 bound Implicit{} = Set.empty
 bound (Invisible v _) = Set.singleton v
-bound (Explicit v _) = Set.singleton v
 
 compose :: Ord (Var p) => Subst p -> Subst p -> Subst p
 s1 `compose` s2 = fmap (apply s1) s2 <> fmap (apply s2) s1
@@ -155,8 +152,6 @@ tyVarOcc (TyPi binder t) = tyVarOcc' binder <> (tyVarOcc t `removeOccs` bound bi
   bound Anon{} = Set.empty
   bound Implicit{} = Set.empty
   bound (Invisible v _) = Set.singleton v
-  bound (Explicit v _) = Set.singleton v
   tyVarOcc' (Anon t) = tyVarOcc t
   tyVarOcc' (Implicit t) = tyVarOcc t
   tyVarOcc' (Invisible _ k) = maybe mempty tyVarOcc k
-  tyVarOcc' (Explicit _ k) = tyVarOcc k

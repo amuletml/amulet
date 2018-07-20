@@ -1,3 +1,0 @@
-foo : ('a : type) -> 'a -> 'a
-bar : int
-baz : int

@@ -176,9 +176,6 @@ data TyBinder p
   | Invisible
     { _tyBinderVar :: Var p
     , _tyBinderArg :: Maybe (Type p) } -- a forall. type
-  | Explicit
-    { _tyBinderVar  :: Var p
-    , _tyBinderKind :: Type p } -- a forall -> type
 
 deriving instance (Data p, Data (Var p)) => Data (TyBinder p)
 deriving instance Show (Var p) => Show (TyBinder p)
@@ -249,8 +246,7 @@ deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Topl
 
 data TyConArg p
   = TyVarArg (Var p)
-  | TyAnnArg (Var p) (Type p) -- { 'a : k }
-  | TyVisArg (Var p) (Type p) -- ( 'a : k )
+  | TyAnnArg (Var p) (Type p) -- ( 'a : k )
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (TyConArg p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (TyConArg p)
@@ -317,7 +313,6 @@ _TyArr = prism (uncurry (TyPi . Anon)) go where
   go x = Left x
 
 isSkolemisable :: Type Typed -> Bool
-isSkolemisable (TyPi Explicit{} _) = True
 isSkolemisable (TyPi Invisible{} _) = True
 isSkolemisable _ = False
 

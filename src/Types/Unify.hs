@@ -152,14 +152,6 @@ unify (TyForall v (Just k) ty) (TyForall v' (Just k') ty') = do
   ForallCo tv c <$>
     unify (apply (Map.singleton v fresh) ty) (apply (Map.singleton v' fresh) ty')
 
-unify (TyPi (Explicit v k) ty) (TyPi (Explicit v' k') ty') = do
-  c <- unify k k'
-  fresh <- freshTV
-  let (TyVar tv) = fresh
-
-  ForallCo tv c <$>
-    unify (apply (Map.singleton v fresh) ty) (apply (Map.singleton v' fresh) ty')
-
 unify (TyRows rho arow) (TyRows sigma brow)
   | overlaps <- overlap arow brow
   , rhoNew <- deleteFirstsBy ((==) `on` fst) (sortOn fst arow) (sortOn fst brow)
@@ -497,7 +489,6 @@ skolemise _ ty = pure (IdWrap, ty)
 
 isSkolemisableTyBinder :: Type Typed -> Maybe (Var Typed, Maybe (Type Typed), Type Typed)
 isSkolemisableTyBinder (TyPi (Invisible v k) c) = Just (v, k, c)
-isSkolemisableTyBinder (TyPi (Explicit v k) c) = Just (v, Just k, c)
 isSkolemisableTyBinder _ = Nothing
 
 -- Which coercions are safe to remove *here*?
