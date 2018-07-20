@@ -45,7 +45,6 @@ import Types.Wellformed
 import Types.Unify
 
 import Text.Pretty.Semantic
-import Debug.Trace
 
 -- | Solve for the types of bindings in a problem: Either @TypeDecl@s,
 -- @LetStmt@s, or @ForeignVal@s.
@@ -526,11 +525,10 @@ localGenStrat bg ex ty = do
   bound <- view letBound
   cons <- view constructors
   types <- view names
-  let generalisable v = traceShow v $
-        (traceShowId (Set.member v bound || Set.member v cons))
-       && maybe True Set.null (traceShowId (types ^. at (unTvName v) . to (fmap ftv)))
+  let generalisable v =
+        (Set.member v bound || Set.member v cons)
+       && maybe True Set.null (types ^. at (unTvName v) . to (fmap ftv))
 
-  traceM (displayS (pretty ex <+> shown (freeIn ex Set.\\ bg)))
   if Set.foldr ((&&) . generalisable) True (freeIn ex Set.\\ bg)
      then generalise (BecauseOf ex) ty
      else annotateKind (BecauseOf ex) ty
