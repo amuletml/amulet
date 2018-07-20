@@ -1,2 +1,0 @@
-foo : ('a : type) -> 'a -> ('b : type) -> 'b -> 'a
-main : int

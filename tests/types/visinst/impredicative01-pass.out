@@ -1,6 +1,0 @@
-list : type -> type
-Nil : ('a : type) -> list 'a
-Cons : ('a : type) -> ('a * list 'a) -> list 'a
-ids : list ({'a : type}. 'a -> 'a)
-head : ('a : type) -> list 'a -> 'a
-main : int

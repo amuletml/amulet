@@ -24,5 +24,4 @@ raiseT v (TyPi binder t) = TyPi (go binder) (raiseT v t) where
   go (Anon t) = Anon (raiseT v t)
   go (Implicit t) = Implicit (raiseT v t)
   go (Invisible var k) = Invisible (v var) (fmap (raiseT v) k)
-  go (Explicit var k) = Explicit (v var) (raiseT v k)
 raiseT _ TyType = TyType

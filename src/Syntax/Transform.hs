@@ -30,7 +30,6 @@ transformType ft = goT where
   transB (Anon t) = Anon (goT t)
   transB (Implicit t) = Implicit (goT t)
   transB (Invisible x k) = Invisible x (fmap goT k)
-  transB (Explicit x k) = Explicit x (goT k)
 
   goT = transT . ft
 

@@ -206,14 +206,9 @@ resolveTele r (TyVarArg v:as) = do
   pure (TyVarArg v':as, (v, v'):vs)
 resolveTele r (TyAnnArg v k:as) = do
   v' <- tagVar v
-  ((as, vs), k) <- extendTyvar (v, v') $ 
+  ((as, vs), k) <-
     (,) <$> resolveTele r as <*> reType r k
   pure (TyAnnArg v' k:as, (v, v'):vs)
-resolveTele r (TyVisArg v k:as) = do
-  v' <- tagVar v
-  ((as, vs), k) <- extendTyvar (v, v') $ 
-    (,) <$> resolveTele r as <*> reType r k
-  pure (TyVisArg v' k:as, (v, v'):vs)
 resolveTele _ [] = pure ([], [])
 
 reExpr :: MonadResolve m => Expr Parsed -> m (Expr Resolved)
@@ -334,11 +329,6 @@ reType r (TyPi (Invisible v k) ty) = do
   ty' <- extendTyvar (v, v') $ reType r ty
   k <- traverse (reType r) k
   pure (TyPi (Invisible v' k) ty')
-reType r (TyPi (Explicit v k) ty) = do
-  v' <- tagVar v
-  ty' <- extendTyvar (v, v') $ reType r ty
-  k <- reType r k
-  pure (TyPi (Explicit v' k) ty')
 reType r (TyPi (Anon f) x) = TyPi . Anon <$> reType r f <*> reType r x
 reType r (TyPi (Implicit f) x) = TyPi . Implicit <$> reType r f <*> reType r x
 reType r (TyApp f x) = TyApp <$> reType r f <*> reType r x

@@ -176,27 +176,6 @@ infer ex@(Ascription e ty an) = do
   e <- check e ty
   pure (Ascription (correct ty e) ty (an, ty), ty)
 
--- f ? - just delegate to the other checker
-infer ex@(App f hole@(InstHole ha) a) = do
-  ftv <- genName
-  infer (App f (InstType (TyVar ftv) ha) a) `catchError`
-    \err -> case err of
-      WrongQuantifier _ ot -> throwError (ArisingFrom (WrongQuantifier hole ot) (BecauseOf ex))
-      _ -> throwError err
-
-infer ex@(App f (InstType t ta) a) = do
-  (f, ot) <- infer f
-  (dom, c, k) <- quantifier ex DoSkip ot
-  case dom of
-    Explicit v ki -> do
-      x <- checkAgainstKind (BecauseOf ex) t ki
-      let sub = Map.singleton v x
-       in pure (App (k f) (InstType x (ta, ki)) (a, apply sub c), apply sub c)
-    Anon{} ->
-      throwError . flip WrongQuantifier ot . flip InstType (ta, undefined) =<< resolveKind (BecauseOf ex) t
-    Implicit{} -> error "invalid implicit quantification in App"
-    Invisible{} -> error "invalid invisible quantification in App"
-
 infer ex@(App f x a) = do
   (f, ot) <- infer f
   (dom, c, k) <- quantifier ex DoSkip ot
@@ -204,7 +183,6 @@ infer ex@(App f x a) = do
     Anon d -> do
       x <- check x d
       pure (App (k f) x (a, c), c)
-    Explicit{} -> throwError (ArisingFrom (WrongQuantifier x ot) (BecauseOf ex))
     Implicit{} -> error "invalid implicit quantification in App"
     Invisible{} -> error "invalid invisible quantification in App"
 
@@ -248,9 +226,6 @@ infer (Tuple xs an) =
    in do
      (ex, t) <- go xs
      pure (Tuple ex (an, t), t)
-
-infer h@InstHole{} = throwError (propagateBlame (BecauseOf h) (NakedInstArtifact h))
-infer h@InstType{} = throwError (propagateBlame (BecauseOf h) (NakedInstArtifact h))
 
 infer ex = do
   x <- freshTV
