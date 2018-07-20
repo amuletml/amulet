@@ -55,4 +55,5 @@ matchJoinPass = traverse transS where
     Let (Many vs') <$> transT r
 
   transT (Extend t rs) = Extend <$> transA t <*> traverse (third3A transA) rs
+  transT (Values xs) = Values <$> traverse transA xs
   transT (Match t bs) = Match <$> transA t <*> traverse (armBody %%~ transT) bs

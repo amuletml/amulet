@@ -529,7 +529,7 @@ localGenStrat bg ex ty = do
         (Set.member v bound || Set.member v cons)
        && maybe True Set.null (types ^. at (unTvName v) . to (fmap ftv))
 
-  if (Set.foldr ((&&) . generalisable) True (freeIn ex Set.\\ bg)) && value ex
+  if Set.foldr ((&&) . generalisable) True (freeIn ex Set.\\ bg) && value ex
      then generalise (BecauseOf ex) ty
      else annotateKind (BecauseOf ex) ty
 

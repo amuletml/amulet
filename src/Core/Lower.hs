@@ -10,6 +10,7 @@ module Core.Lower
 
 import Control.Monad.Reader
 import Control.Monad.Namey
+import Control.Monad.State
 import Control.Monad.Cont
 import Control.Arrow
 
@@ -27,7 +28,7 @@ import Data.List
 
 import qualified Core.Core as C
 import qualified Core.Builtin as C
-import Core.Optimise (substituteInType, fresh)
+import Core.Optimise (substituteInType, fresh, freshFrom)
 import Core.Core hiding (Atom, Term, Stmt, Type, Pattern, Arm)
 import Core.Core (pattern Atom)
 import Core.Types (unify, replaceTy)
@@ -54,15 +55,18 @@ data LowerState = LS { vars :: Map.Map (Var Resolved) Type
                      }
   deriving (Eq, Show)
 
+type LowerTrack = VarMap.Map CoVar
+
 type MonadLower m
   = ( MonadNamey m
+    , MonadState LowerTrack m
     , MonadReader LowerState m )
 
-runLowerT :: MonadNamey m => ReaderT LowerState m a -> m a
-runLowerT = flip runReaderT (LS mempty mempty)
+runLowerT :: MonadNamey m => ReaderT LowerState (StateT LowerTrack m) a -> m a
+runLowerT = runLowerWithCtors mempty
 
-runLowerWithCtors :: MonadNamey m => Map.Map (Var Resolved) Type -> ReaderT LowerState m a -> m a
-runLowerWithCtors ct k = runReaderT k (LS mempty ct)
+runLowerWithCtors :: MonadNamey m => Map.Map (Var Resolved) Type -> ReaderT LowerState (StateT LowerTrack m) a -> m a
+runLowerWithCtors ct = flip evalStateT mempty . flip runReaderT (LS mempty ct)
 
 errRef :: Atom
 errRef = Ref C.vError
@@ -254,7 +258,23 @@ lowerAnyway (S.VarRef (TvName v) (_, ty)) = do
           addApps _ _ = error "impossible"
       in runContT (addApps fty []) (pure . Atom . fst)
 
+    -- If we're accessing a natively boxed operator, generate some stubs for it.
+    -- This is horrible, and would be nicer as part of the stdlib, but this is
+    -- the only solution for now.
+    _ | TgInternal{} <- v
+      , v' <- mkVar kind v
+      , Just _ <- VarMap.lookup v' boxedTys -> do
+          injects <- get
+          Atom . flip Ref lty <$> case VarMap.lookup v' injects of
+            Just e -> pure e
+            Nothing -> do
+              e <- freshFrom v'
+              put (VarMap.insert v' e injects)
+              pure e
+
+      -- Just emit as normal
     _ -> pure (Atom (Ref (mkVar kind v) lty))
+
 lowerAnyway (S.Record xs _) = case xs of
   [] -> pure (Atom (Lit RecNil))
   xs -> Extend (Lit RecNil) . zipWith build xs <$>
@@ -335,11 +355,48 @@ lowerPat (PTuple xs _) =
 lowerPat (PLiteral l _) = pure (PatLit (lowerLiteral l))
 lowerPat (PWrapper _ p _) = lowerPat p
 
+
 lowerProg :: forall m. MonadLower m => [Toplevel Typed] -> m [Stmt]
-lowerProg [] = pure []
-lowerProg (ForeignVal (TvName t) ex tp _:prg) =
-  (Foreign (mkVal t) (lowerType tp) ex:) <$> lowerProg prg
-lowerProg (LetStmt vs:prg) = do
+lowerProg stmt = do
+  stmt' <- lowerProg' stmt
+  ops <- gets VarMap.toList
+  foldrM (\x xs -> (:xs) <$> genOp x) stmt' ops
+  where
+    genOp (op, var) = do
+      let Just ty = VarMap.lookup op boxedTys
+      (body, ty') <- genWrapper id (Ref op ty) ty
+      pure . StmtLet . One $ (var, ty', body)
+
+    genWrapper :: MonadLower m => (Term -> Term) -> Atom -> Type -> m (Term, Type)
+    genWrapper build bod  (ForallTy (Relevant a) l r) = do
+      -- Generate forall wrapper
+      t <- fresh TypeVar
+      v <- fresh ValueVar
+
+      let r' = substituteInType (VarMap.singleton a (VarTy t)) r
+      (bod', ty') <- genWrapper (build . C.Let (One (v, r', TyApp bod (VarTy t))))
+                       (Ref v r') r'
+      pure ( Atom (Lam (TypeArgument t l) bod')
+           , ForallTy (Relevant a) l ty' )
+
+    genWrapper build bod (ForallTy Irrelevant t@(ValuesTy ts) r) = do
+      -- Generate nested functions for each unboxed argument
+      tvars <- traverse (\t -> (,t) <$> fresh ValueVar) ts
+      tvar  <- fresh ValueVar
+
+      pure ( foldr (\(v, ty) -> Atom . Lam (TermArgument v ty))
+             (build (C.Let (One (tvar, t, Values (map (uncurry Ref) tvars)))
+                     (C.App bod (Ref tvar t))))
+             tvars
+           , foldr (ForallTy Irrelevant) r ts )
+
+    genWrapper build bod ty = pure (build (Atom bod), ty)
+
+lowerProg' :: forall m. MonadLower m => [Toplevel Typed] -> m [Stmt]
+lowerProg' [] = pure []
+lowerProg' (ForeignVal (TvName v) ex tp _:prg) =
+  (Foreign (mkVal v) (lowerType tp) ex:) <$> lowerProg' prg
+lowerProg' (LetStmt vs:prg) = do
   let env' = Map.fromList (map (\(S.Binding (TvName v) _ _ (_, ant)) -> (v, lowerType ant)) vs)
 
   let sccs = depOrder vs
@@ -354,8 +411,8 @@ lowerProg (LetStmt vs:prg) = do
       foldScc (CyclicSCC vs) = (C.StmtLet (Many vs):)
   local (\s -> s { vars = env' }) $ do
     vs' <- traverse lowerScc sccs
-    foldr ((.) . foldScc) id vs' <$> lowerProg prg
-lowerProg (TypeDecl (TvName var) _ cons:prg) = do
+    foldr ((.) . foldScc) id vs' <$> lowerProg' prg
+lowerProg' (TypeDecl (TvName var) _ cons:prg) = do
   let cons' = map (\case
                        UnitCon (TvName p) (_, t) -> (p, mkCon p, lowerType t)
                        ArgCon (TvName p) _ (_, t) -> (p, mkCon p, lowerType t)
@@ -364,9 +421,9 @@ lowerProg (TypeDecl (TvName var) _ cons:prg) = do
       ccons = map (\(_, a, b) -> (a, b)) cons'
       scons = map (\(a, _, b) -> (a, b)) cons'
 
-  (C.Type (mkType var) ccons:) <$> local (\s -> s { ctors = Map.union (Map.fromList scons) (ctors s) }) (lowerProg prg)
-lowerProg (Open _ _:prg) = lowerProg prg
-lowerProg (Module _ b:prg) = lowerProg (b ++ prg)
+  (C.Type (mkType var) ccons:) <$> local (\s -> s { ctors = Map.union (Map.fromList scons) (ctors s) }) (lowerProg' prg)
+lowerProg' (Open _ _:prg) = lowerProg' prg
+lowerProg' (Module _ b:prg) = lowerProg' (b ++ prg)
 
 lowerPolyBind :: MonadLower m => Type -> Expr Typed -> m Term
 lowerPolyBind ty ex = doIt (needed ex ty) (go ty ex) (lowerExprTerm ex) where
@@ -398,6 +455,7 @@ patternVars :: Pat -> [(CoVar, Type)]
 patternVars (C.Capture v ty) = [(v, ty)]
 patternVars (Destr _ p) = patternVars p
 patternVars (PatExtend p ps) = patternVars p ++ concatMap (patternVars . snd) ps
+patternVars (PatValues ps) = concatMap patternVars ps
 patternVars Constr{} = []
 patternVars PatLit{} = []
 
@@ -432,7 +490,7 @@ patternTyvars = asks . flip (go . ctors)
                                    VarTy t' -> Just (t', k)
                                    _ -> error ("must replace skolem tyvar with tyvar " ++ show (pretty t))
 
-mkTyvar, mkVal, mkType, mkCo, mkCon :: Var Resolved-> CoVar
+mkTyvar, mkVal, mkType, mkCo, mkCon :: Var Resolved -> CoVar
 mkTyvar = mkVar TypeVar
 mkVal = mkVar ValueVar
 mkType = mkVar TypeConVar
@@ -451,3 +509,20 @@ mkVar k (TgInternal name) = CoVar (builtin name) name k where
 
   ex :: CoVar -> (T.Text, Int)
   ex (CoVar v n _) = (n, v)
+
+boxedTys :: VarMap.Map Type
+boxedTys = VarMap.fromList
+           . filter (flip VarSet.member boxed . fst)
+           $ C.builtinVarList where
+  boxed = VarSet.fromList
+    [ C.vOpAdd, C.vOpSub, C.vOpMul, C.vOpDiv, C.vOpExp
+    , C.vOpLt,  C.vOpGt,  C.vOpLe,  C.vOpGe
+
+    , C.vOpAddF, C.vOpSubF, C.vOpMulF, C.vOpDivF, C.vOpExpF
+    , C.vOpLtF,  C.vOpGtF,  C.vOpLeF,  C.vOpGeF
+
+    , C.vOpConcat
+
+    , C.vOpEq, C.vOpNe
+    , C.vOpOr, C.vOpAnd
+    ]

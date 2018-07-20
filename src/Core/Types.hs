@@ -51,6 +51,7 @@ approximateType (Match _ xs) = case xs of
   (x:_) -> approximateType (x ^. armBody)
   [] -> error "impossible approximateType empty match"
 approximateType (Extend e rs) = RowsTy <$> approximateAtomType e <*> traverse (\(x, _, t) -> (x,) <$> approximateAtomType t) rs
+approximateType (Values xs) = ValuesTy <$> traverse approximateAtomType xs
 approximateType (TyApp f at) = do
   ForallTy (Relevant v) _ t <- approximateAtomType f
   let replace = transform go
@@ -79,9 +80,9 @@ unify' (RowsTy t ts) (RowsTy t' ts') = do
   mgu_t <- unify' t t'
   ts <- for (zip (sortOn fst ts) (sortOn fst ts')) $ \((_, t), (_, t')) -> unify' t t'
   pure (mgu_t <> fold ts)
--- unify' (ExactRowsTy ts) (ExactRowsTy ts') = fold <$> for (zip (sortOn fst ts) (sortOn fst ts')) (\((_, t), (_, t')) -> unify' t t')
 unify' (ForallTy (Relevant v) c t) (ForallTy (Relevant v') c' t') = liftA2 (<>) (unify' c c') (unify' t (replaceTy v' (VarTy v) t'))
 unify' (AppTy f t) (AppTy f' t') = liftA2 (<>) (unify' f f') (unify' t t')
+unify' (ValuesTy xs) (ValuesTy xs') = traverse_ (uncurry unify') (zip xs xs')
 unify' StarTy StarTy = pure ()
 unify' NilTy NilTy = pure ()
 unify' _ _ = lift Nothing
@@ -102,7 +103,7 @@ unifyClosed = go mempty where
   go s (ForallTy Irrelevant a r) (ForallTy Irrelevant a' r') = go s a a' && go s r r'
   go s (AppTy f x) (AppTy f' x') = go s f f' && go s x x'
   go s (RowsTy f ts) (RowsTy f' ts') = go s f f' && and (zipWith (\(l, t) (l', t') -> l == l' && go s t t') (sortOn fst ts) (sortOn fst ts'))
-  -- go s (ExactRowsTy ts) (ExactRowsTy ts') = and (zipWith (\(l, t) (l', t') -> l == l' && go s t t') (sortOn fst ts) (sortOn fst ts'))
+  go s (ValuesTy xs) (ValuesTy xs') = and (zipWith (go s) xs xs')
   go _ StarTy StarTy = True
   go _ NilTy NilTy = True
   go _ _ _ = False

@@ -33,6 +33,7 @@ substitute m = term where
   term (Let (Many vs) x) = Let (Many (map (third3 term) vs)) (term x)
   term (Match x vs) = Match (atom x) (map arm vs)
   term (Extend e rs) = Extend (atom e) (map (third3 atom) rs)
+  term (Values xs) = Values (map atom xs)
   term (TyApp f t) = TyApp (atom f) t
   term (Cast f t) = Cast (atom f) t
 
@@ -52,6 +53,7 @@ substituteInTys = term where
   term m (Let (Many vs) x) = Let (Many (map (trimap id (gotype m) (term m)) vs)) (term m x)
   term m (Match x vs) = Match (atom m x) (map (arm m) vs)
   term m (Extend e rs) = Extend (atom m e) (map (trimap id (gotype m) (atom m)) rs)
+  term m (Values xs) = Values (map (atom m) xs)
   term m (TyApp f t) = TyApp (atom m f) (gotype m t)
   term m (Cast f t) = Cast (atom m f) (coercion m t)
 
@@ -84,6 +86,7 @@ substituteInTys = term where
   ptrn _ (Constr a) = Constr a
   ptrn m (Destr a p) = Destr a (ptrn m p)
   ptrn m (PatExtend f fs) = PatExtend (ptrn m f) (map (second (ptrn m)) fs)
+  ptrn m (PatValues xs) = PatValues (map (ptrn m) xs)
   ptrn _ l@PatLit{} = l
 
   gotype = substituteInType
@@ -99,6 +102,7 @@ substituteInType = gotype where
   gotype m (AppTy f x) = AppTy (gotype m f) (gotype m x)
   gotype m (RowsTy v rs) = RowsTy (gotype m v) (map (second (gotype m)) rs)
   gotype m (ExactRowsTy rs) = ExactRowsTy (map (second (gotype m)) rs)
+  gotype m (ValuesTy xs) = ValuesTy (map (gotype m) xs)
   gotype _ StarTy = StarTy
   gotype _ NilTy = NilTy
 
@@ -188,6 +192,7 @@ refresh = refreshTerm mempty where
           pure (VarMap.insert (toVar v) v' m)
 
   refreshTerm s (Extend e bs) = Extend <$> refreshAtom s e <*> traverse (trimapA pure (pure . refreshType s) (refreshAtom s)) bs
+  refreshTerm s (Values xs) = Values <$> traverse (refreshAtom s) xs
   refreshTerm s (Cast e c) = Cast <$> refreshAtom s e <*> pure (refreshCoercion s c)
 
   refreshPattern :: IsVar a => VarMap.Map a -> Pattern a -> Pattern a
@@ -195,6 +200,7 @@ refresh = refreshTerm mempty where
   refreshPattern _ p@Constr{} = p
   refreshPattern s (Destr c p) = Destr c (refreshPattern s p)
   refreshPattern s (PatExtend p fs) = PatExtend (refreshPattern s p) (map (second (refreshPattern s)) fs)
+  refreshPattern s (PatValues xs) = PatValues (map (refreshPattern s) xs)
   refreshPattern _ p@PatLit{} = p
 
   refreshType :: IsVar a => VarMap.Map a -> Type a -> Type a
@@ -207,6 +213,7 @@ refresh = refreshTerm mempty where
   refreshType s (AppTy f x) = AppTy (refreshType s f) (refreshType s x)
   refreshType s (RowsTy v rs) = RowsTy (refreshType s v) (map (second (refreshType s)) rs)
   refreshType s (ExactRowsTy rs) = ExactRowsTy (map (second (refreshType s)) rs)
+  refreshType s (ValuesTy xs) = ValuesTy (map (refreshType s) xs)
   refreshType _ StarTy = StarTy
   refreshType _ NilTy = NilTy
 

@@ -77,6 +77,7 @@ inlineVariablePass = transS (InlineScope mempty mempty) where
       f' -> pure $ TyApp f' t
   transT s (Extend t rs) = Extend <$> transA s t
                                   <*> traverse (third3A (transA s)) rs
+  transT s (Values xs) = Values <$> traverse (transA s) xs
   transT s (Let (One var) body) = do
     var' <- third3A (transT s) var
     body' <- transT (extendVar var s) body
@@ -113,5 +114,6 @@ scoreTerm s (Let (One v) e) = scoreTerm s (thd3 v) + scoreTerm s e
 scoreTerm s (Let (Many vs) e) = sum (map (scoreTerm s . thd3) vs) + scoreTerm s e
 scoreTerm s (Match e bs) = scoreAtom s e + sum (map (scoreTerm s . view armBody) bs)
 scoreTerm s (Extend e rs) = scoreAtom s e + sum (map (scoreAtom s . thd3) rs)
+scoreTerm s (Values xs) = sum (map (scoreAtom s) xs)
 scoreTerm s (TyApp t _) = scoreAtom s t
 scoreTerm s (Cast t _) = scoreAtom s t

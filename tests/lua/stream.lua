@@ -2,11 +2,6 @@ do
   local __builtin_unit = {
     __tag = "__builtin_unit"
   }
-  local function _dot_dot (l)
-    return function (r)
-      return l .. r
-    end
-  end
   local io_write = io.write
   local print = print
   local to_string = tostring
@@ -33,14 +28,12 @@ do
   end
   local main = (function ()
     local go
-    local nl = to_string
+    local no = to_string
     go = function (st)
       if st > 5 then
         return print("]")
       else
-        local mv = nl(st)
-        local mu = _dot_dot("'")
-        io_write(mu(mv .. "', "))
+        io_write("'" .. no(st) .. "', ")
         return go(st + 1)
       end
     end
