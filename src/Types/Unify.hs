@@ -170,7 +170,7 @@ unify (TyRows rho arow) (TyRows sigma brow)
            _ <- unify sigma (TyRows tau rhoNew) -- it's backwards
            pure (RowsCo co cs)
 
-unify ta@TyExactRows{} tb@TyRows{} = unify tb ta
+unify ta@TyExactRows{} tb@TyRows{} = SymCo <$> unify tb ta
 
 unify tb@(TyRows rho brow) ta@(TyExactRows arow)
   | overlaps <- overlap arow brow
@@ -180,7 +180,7 @@ unify tb@(TyRows rho brow) ta@(TyExactRows arow)
       xs -> do
         cs <- traverse unifRow xs
         _ <- unify rho (TyExactRows rhoNew)
-        pure (ProjCo rhoNew cs)
+        pure (SymCo (ProjCo rhoNew cs))
 
 unify ta@(TyExactRows arow) tb@(TyExactRows brow)
   | overlaps <- overlap arow brow

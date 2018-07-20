@@ -210,11 +210,14 @@ infer (Record rows a) = do
   let ty = TyExactRows rowts
    in pure (Record rows (a, ty), ty)
 
-infer (RecordExt rec rows a) = do
+infer ex@(RecordExt rec rows a) = do
   (rec, rho) <- infer rec
   (rows, newts) <- unzip <$> inferRows rows
-  let ty = TyRows rho newts
-   in pure (RecordExt rec rows (a, ty), ty)
+  tv <- freshTV
+  let ty = TyRows tv newts
+
+  (t, co) <- unify ex rho ty
+  pure (ExprWrapper co (RecordExt rec rows (a, ty)) (a, t), t)
 
 infer (Tuple xs an) =
   let go [x] = first (:[]) <$> infer x
