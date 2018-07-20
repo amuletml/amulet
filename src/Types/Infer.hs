@@ -529,7 +529,7 @@ localGenStrat bg ex ty = do
         (Set.member v bound || Set.member v cons)
        && maybe True Set.null (types ^. at (unTvName v) . to (fmap ftv))
 
-  if Set.foldr ((&&) . generalisable) True (freeIn ex Set.\\ bg)
+  if (Set.foldr ((&&) . generalisable) True (freeIn ex Set.\\ bg)) && value ex
      then generalise (BecauseOf ex) ty
      else annotateKind (BecauseOf ex) ty
 
@@ -537,3 +537,32 @@ closeOverStrat :: MonadInfer Typed m
                => SomeReason
                -> Set.Set (Var Typed) -> Expr Typed -> Type Typed -> m (Type Typed)
 closeOverStrat r _ _ = closeOver r
+
+value :: Expr a -> Bool
+value Fun{} = True
+value Literal{} = True
+value Function{} = True
+value (Let _ e _) = value e
+value (Parens e _) = value e
+value Tuple{} = True
+value (Begin es _) = value (last es)
+value Syntax.Lazy{} = True
+value TupleSection{} = True
+value Record{} = True
+value RecordExt{} = True
+value VarRef{} = False
+value If{} = False
+value App{} = False
+value Match{} = False
+value BinOp{} = False
+value Hole{} = False
+value (Ascription e _ _) = value e
+value Access{} = False
+value LeftSection{} = True
+value RightSection{} = True
+value BothSection{} = True
+value AccessSection{} = True
+value InstType{} = error "instType value??"
+value InstHole{} = error "instHole value??"
+value (OpenIn _ e _) = value e
+value (ExprWrapper _ e _) = value e
