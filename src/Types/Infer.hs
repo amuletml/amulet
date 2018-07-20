@@ -45,6 +45,7 @@ import Types.Wellformed
 import Types.Unify
 
 import Text.Pretty.Semantic
+import Debug.Trace
 
 -- | Solve for the types of bindings in a problem: Either @TypeDecl@s,
 -- @LetStmt@s, or @ForeignVal@s.
@@ -267,9 +268,11 @@ inferRows rows = for rows $ \(var', val) -> do
 inferProg :: MonadInfer Typed m
           => [Toplevel Resolved] -> m ([Toplevel Typed], Env)
 inferProg (stmt@(LetStmt ns):prg) = do
-  (ns', ts, is) <- inferLetTy (const (closeOver (BecauseOf stmt))) ns
+  (ns', ts, is) <- inferLetTy (closeOverStrat (BecauseOf stmt)) ns
                    `catchError` (throwError . propagateBlame (BecauseOf stmt))
-  local (names %~ focus ts) . local (implicits %~ mappend is) $
+  let bvs = Set.fromList (map TvName (namesInScope (focus ts mempty)))
+
+  local (letBound %~ Set.union bvs) . local (names %~ focus ts) . local (implicits %~ mappend is) $
     consFst (LetStmt ns') $
       inferProg prg
 inferProg (st@(ForeignVal v d t ann):prg) = do
@@ -320,7 +323,7 @@ approxType _ = do
   lift freshTV
 
 inferLetTy :: forall m. MonadInfer Typed m
-           => (Expr Typed -> Type Typed -> m (Type Typed))
+           => (Set.Set (Var Typed) -> Expr Typed -> Type Typed -> m (Type Typed))
            -> [Binding Resolved]
            -> m ( [Binding Typed]
                 , Telescope Typed
@@ -336,17 +339,19 @@ inferLetTy closeOver vs =
       blameSkol :: TypeError -> (Var Resolved, SomeReason) -> TypeError
       blameSkol e (v, r) = propagateBlame r (Note e (string "in the inferred type for" <+> pretty v))
 
-      figureOut :: (Var Resolved, SomeReason) -> Expr Typed -> Type Typed -> Seq.Seq (Constraint Typed) -> m (Type Typed, Expr Typed -> Expr Typed)
+      figureOut :: (Var Resolved, SomeReason)
+                -> Expr Typed -> Type Typed
+                -> Seq.Seq (Constraint Typed)
+                -> m (Type Typed, Expr Typed -> Expr Typed)
       figureOut blame ex ty cs = do
         cur <- genName
         (x, co, vt) <- case solve cur cs of
           Right (x, co) -> do
-            ty' <- closeOver ex (apply x ty)
+            ty' <- closeOver (Set.singleton (TvName (fst blame))) ex (apply x ty)
             pure (x, co, ty')
           Left e -> throwError (propagateBlame (snd blame) e)
         skolCheck (TvName (fst blame)) (snd blame) vt
         pure (vt, solveEx vt x co)
-
 
       approximate :: Binding Resolved
                   -> m (Origin, (Var Typed, Type Typed))
@@ -407,7 +412,7 @@ inferLetTy closeOver vs =
             solveOne (Binding var exp p ann, given) =
               let figure = apply solution
                in do
-                  ty <- closeOver exp (figure given)
+                  ty <- closeOver mempty exp (figure given)
                   skolCheck var (BecauseOf exp) ty
                   pure ( Binding var (solveEx ty solution cs exp) p (fst ann, ty)
                        , one var (rename ty) )
@@ -515,12 +520,22 @@ generalise r ty =
       [] -> pure ty
       vs -> annotateKind r $ foldr (flip TyForall Nothing) ty vs
 
-localGenStrat :: MonadInfer Typed m => Expr Typed -> Type Typed -> m (Type Typed)
-localGenStrat ex ty = do
+localGenStrat :: MonadInfer Typed m
+              => Set.Set (Var Typed) -> Expr Typed -> Type Typed -> m (Type Typed)
+localGenStrat bg ex ty = do
   bound <- view letBound
   cons <- view constructors
   types <- view names
-  let generalisable v = (Set.member v bound || Set.member v cons) && maybe True Set.null (types ^. at (unTvName v) . to (fmap ftv))
-  if Set.foldr ((&&) . generalisable) True (freeIn ex)
+  let generalisable v = traceShow v $
+        (traceShowId (Set.member v bound || Set.member v cons))
+       && maybe True Set.null (traceShowId (types ^. at (unTvName v) . to (fmap ftv)))
+
+  traceM (displayS (pretty ex <+> shown (freeIn ex Set.\\ bg)))
+  if Set.foldr ((&&) . generalisable) True (freeIn ex Set.\\ bg)
      then generalise (BecauseOf ex) ty
      else annotateKind (BecauseOf ex) ty
+
+closeOverStrat :: MonadInfer Typed m
+               => SomeReason
+               -> Set.Set (Var Typed) -> Expr Typed -> Type Typed -> m (Type Typed)
+closeOverStrat r _ _ = closeOver r
