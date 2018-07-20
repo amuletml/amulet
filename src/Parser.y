@@ -117,7 +117,7 @@ TopSep :: { () }
 
 Top :: { Toplevel Parsed }
     : let BindGroup                             { LetStmt (reverse $2) }
-    | external val ident ':' Type '=' string    { withPos2 $1 $7 $ ForeignVal (getName $3) (getString $7) (getL $5) }
+    | external val BindName ':' Type '=' string    { withPos2 $1 $7 $ ForeignVal (getL $3) (getString $7) (getL $5) }
 
     | type ident ListE(TyConArg)                          { TypeDecl (getName $2) $3 [] }
     | type ident ListE(TyConArg) '=' List1(Ctor, '|')     { TypeDecl (getName $2) $3 $5 }
