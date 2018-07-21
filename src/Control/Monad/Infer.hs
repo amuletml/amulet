@@ -98,9 +98,6 @@ data TypeError where
 
   Malformed :: Pretty (Var p) => Type p -> TypeError
 
-  -- Visible quantification
-  NakedInstArtifact :: (Pretty (Var p), Ord (Var p)) => Expr p -> TypeError
-
   -- Implicit parameters
   NoImplicit :: (Ord (Var p), Pretty (Var p)) => Type p -> (Doc -> Doc) -> TypeError
   AmbiguousType :: (Ord (Var p), Pretty (Var p)) => Var p -> Type p -> Set.Set (Var p) -> TypeError
@@ -305,12 +302,6 @@ instance Pretty TypeError where
       quan = case vs of
         [_] -> text "is quantified but does not appear"
         _ -> text "are quantified but do not appear"
-
-  pretty (NakedInstArtifact h@InstHole{}) =
-    vsep [ string "Instantiation hole" <+> pretty h <+> "used outside of type application" ]
-  pretty (NakedInstArtifact h@InstType{}) =
-    vsep [ string "Can not use the type" <+> pretty h <+> "outside of a type application" ]
-  pretty (NakedInstArtifact _) = error "NakedInstArtifact wrong"
 
 instance Spanned TypeError where
   annotation (ArisingFrom e@ArisingFrom{} _) = annotation e

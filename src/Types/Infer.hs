@@ -537,7 +537,5 @@ value LeftSection{} = True
 value RightSection{} = True
 value BothSection{} = True
 value AccessSection{} = True
-value InstType{} = error "instType value??"
-value InstHole{} = error "instHole value??"
 value (OpenIn _ e _) = value e
 value (ExprWrapper _ e _) = value e

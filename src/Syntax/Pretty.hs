@@ -49,7 +49,6 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
                                        , keyword "else" <+> pretty e
                                        ])
   pretty (App f x _) = parenFun f <+> parenArg x
-  pretty (InstType t _) = soperator (string "@{") <+> pretty t <+> soperator (char '}')
   pretty (Fun v e _) = keyword "fun" <+> pretty v <+> arrow <+> pretty e
   pretty (Begin e _) =
     vsep [ keyword "begin", indent 2 (vsep (punctuate semi (map pretty e))), keyword "end" ]
@@ -69,7 +68,6 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
   pretty (BothSection op _) = parens $ pretty op
   pretty (AccessSection k _) = parens $ dot <> text k
   pretty (Parens e _) = parens $ pretty e
-  pretty (InstHole _) = keyword "?"
 
   pretty (Tuple es _) = parens (hsep (punctuate comma (map pretty es)))
   pretty (TupleSection es _) = parens (hsep (punctuate comma (map (maybe (string "") pretty) es)))
