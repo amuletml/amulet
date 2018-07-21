@@ -185,8 +185,6 @@ Atom :: { Expr Parsed }
          { withPos2 $1 $5 $ tupleExpr ($2:$4) }
      | '{' Rows('=', Expr) '}'                { withPos2 $1 $3 $ Record $2 }
      | '{' Expr with Rows('=',Expr) '}'       { withPos2 $1 $5 $ RecordExt $2 $4 }
-     | '?'                                    { withPos1 $1 InstHole }
-     | '@{' Type '}'                          { withPos2 $1 $3 $ InstType (getL $2) }
 
      | Atom access                            { withPos2 $1 $2 $ Access $1 (getIdent $2) }
 

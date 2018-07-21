@@ -136,8 +136,6 @@ verifyExpr AccessSection{} = pure ()
 verifyExpr (Parens e _) = verifyExpr e
 verifyExpr (Tuple es _) = traverse_ verifyExpr es
 verifyExpr (TupleSection es _) = traverse_ (traverse_ verifyExpr) es
-verifyExpr InstType{} = pure ()
-verifyExpr InstHole{} = pure ()
 verifyExpr (Lazy e _) = verifyExpr e
 verifyExpr (OpenIn _ e _) = verifyExpr e
 verifyExpr (ExprWrapper w e _) =
@@ -172,8 +170,6 @@ unguardedVars (LeftSection a b _)  = unguardedVars a <> unguardedVars b
 unguardedVars (RightSection a b _) = unguardedVars a <> unguardedVars b
 unguardedVars (BothSection b _)    = unguardedVars b
 unguardedVars AccessSection{}      = mempty
-unguardedVars InstHole{}           = mempty
-unguardedVars InstType{}           = mempty
 unguardedVars x = error (show x)
 
 bindingSites :: Pattern Typed -> Set.Set BindingSite

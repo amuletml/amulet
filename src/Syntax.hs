@@ -79,10 +79,6 @@ data Expr p
   | Tuple [Expr p] (Ann p)
   | TupleSection [Maybe (Expr p)] (Ann p)
 
-  -- Visible instantiation
-  | InstType (Type p) (Ann p)
-  | InstHole (Ann p)
-
   -- Module
   | OpenIn (Var p) (Expr p) (Ann p)
 
@@ -344,8 +340,6 @@ instance Spanned (Ann p) => Spanned (Expr p) where
   annotation (TupleSection _ a) = annotation a
 
   annotation (OpenIn _ _ a) = annotation a
-  annotation (InstType _ a) = annotation a
-  annotation (InstHole a) = annotation a
   annotation (Lazy _ a) = annotation a
 
   annotation (ExprWrapper _ _ a) = annotation a

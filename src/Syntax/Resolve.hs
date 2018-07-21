@@ -293,7 +293,6 @@ reExpr r@(Ascription e t a) = Ascription
                           <$> reExpr e
                           <*> reType r t
                           <*> pure a
-reExpr r@(InstType t a) = InstType <$> reType r t <*> pure a
 reExpr (Record fs a) = Record <$> traverse (traverse reExpr) fs <*> pure a
 reExpr (RecordExt e fs a) = RecordExt
                         <$> reExpr e
@@ -315,7 +314,6 @@ reExpr r@(OpenIn m e a) =
 
 reExpr (Lazy e a) = Lazy <$> reExpr e <*> pure a
 reExpr ExprWrapper{} = error "resolve cast"
-reExpr (InstHole a) = pure $ InstHole a
 
 reType :: (MonadResolve m, Reasonable a p)
        => a p -> Type Parsed -> m (Type Resolved)
