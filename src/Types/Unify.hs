@@ -33,6 +33,9 @@ import Data.Spanned
 import Data.List
 import Data.Text (Text)
 
+import Debug.Trace
+import Text.Pretty.Semantic
+
 data SolveScope
   = SolveScope { _bindSkol :: Bool
                , _don'tTouch :: Set.Set (Var Typed)
@@ -161,13 +164,14 @@ unify (TyRows rho arow) (TyRows sigma brow)
   , rhoNew <- deleteFirstsBy ((==) `on` fst) (sortOn fst arow) (sortOn fst brow)
   , sigmaNew <- deleteFirstsBy ((==) `on` fst) (sortOn fst brow) (sortOn fst arow) =
     do
+      let mk t rs = if rs /= [] then TyRows t rs else t
       tau <- freshTV
       cs <- traverse unifRow overlaps
       if null sigmaNew && null rhoNew
          then RowsCo <$> unify rho sigma <*> pure cs
          else do
-           co <- unify rho (TyRows tau sigmaNew) -- yes
-           _ <- unify sigma (TyRows tau rhoNew) -- it's backwards
+           co <- unify rho (mk tau sigmaNew) -- yes
+           _ <- unify sigma (mk tau rhoNew) -- it's backwards
            pure (RowsCo co cs)
 
 unify ta@TyExactRows{} tb@TyRows{} = SymCo <$> unify tb ta
@@ -175,12 +179,11 @@ unify ta@TyExactRows{} tb@TyRows{} = SymCo <$> unify tb ta
 unify tb@(TyRows rho brow) ta@(TyExactRows arow)
   | overlaps <- overlap arow brow
   , rhoNew <- deleteFirstsBy ((==) `on` fst) (sortOn fst arow) (sortOn fst brow)
-  = case overlaps of
-      [] -> throwError (NoOverlap tb ta)
-      xs -> do
-        cs <- traverse unifRow xs
-        _ <- unify rho (TyExactRows rhoNew)
-        pure (SymCo (ProjCo rhoNew cs))
+  = if | length overlaps < length brow -> throwError (NoOverlap tb ta)
+       | otherwise -> do
+          cs <- traverse unifRow overlaps
+          _ <- unify rho (TyExactRows rhoNew)
+          pure (SymCo (ProjCo rhoNew cs))
 
 unify ta@(TyExactRows arow) tb@(TyExactRows brow)
   | overlaps <- overlap arow brow
@@ -231,6 +234,7 @@ doSolve Empty = pure ()
 doSolve (ConUnify because v a b :<| xs) = do
   sub <- use solveTySubst
 
+  traceM (displayS (pretty (ConUnify because v (apply sub a) (apply sub b))))
   co <- catchy $ unify (apply sub a) (apply sub b)
   case co of
     Left e -> tell [propagateBlame because e]
@@ -240,6 +244,7 @@ doSolve (ConUnify because v a b :<| xs) = do
 doSolve (ConSubsume because v scope a b :<| xs) = do
   sub <- use solveTySubst
 
+  traceM (displayS (pretty (ConSubsume because v scope (apply sub a) (apply sub b))))
   let a' = apply sub a
       cont = do
         sub <- use solveTySubst
@@ -473,6 +478,8 @@ subsumes' _ ty' (TyApp lazy ty) | lazy == tyLazy, concretish ty' = do
                 (an, TyArr tyUnit ty))
               (an, TyApp lazy ty)
   pure (WrapFn (MkWrapCont wrap "automatic thunking"))
+
+subsumes' _ t@TyVar{} (TyRows tau _) = probablyCast <$> unify t tau
 
 subsumes' _ a b = probablyCast <$> unify a b
 

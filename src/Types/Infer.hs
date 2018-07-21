@@ -216,7 +216,7 @@ infer ex@(RecordExt rec rows a) = do
   tv <- freshTV
   let ty = TyRows tv newts
 
-  (t, co) <- unify ex rho ty
+  (t, co) <- subsumes ex rho ty
   pure (ExprWrapper co (RecordExt rec rows (a, ty)) (a, t), t)
 
 infer (Tuple xs an) =
