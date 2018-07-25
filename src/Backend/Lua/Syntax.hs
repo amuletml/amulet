@@ -8,6 +8,9 @@ module Backend.Lua.Syntax
 
 import Text.Pretty.Semantic
 
+import qualified Data.Text.Lazy.Builder.Int as B
+import qualified Data.Text.Lazy.Builder as B
+import qualified Data.Text.Lazy as L
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import Data.Text (Text)
@@ -139,7 +142,13 @@ instance Pretty LuaExpr where
   pretty LuaFalse = sliteral (string "false")
   pretty LuaDots = sliteral (string "...")
   pretty LuaNil = sliteral (string "nil")
-  pretty (LuaString k) = sstring (dquotes (text k))
+  pretty (LuaString k) = sstring (dquotes (text (escapeStr k))) where
+    escapeStr = L.toStrict . B.toLazyText . T.foldr (\x t -> escape x <> t) mempty
+    escape '\n' = "\\n"
+    escape '"' = "\\\""
+    escape '\t' = "\\t"
+    escape x | x < ' ' = "\\" <> B.decimal (ord x)
+             | otherwise = B.singleton x
   pretty (LuaNumber d) = sliteral (pretty d)
   pretty (LuaInteger d) = sliteral (pretty d)
   pretty (LuaBinOp l o r) = pretty l <+> text o <+> pretty r
