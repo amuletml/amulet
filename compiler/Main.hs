@@ -29,6 +29,7 @@ import Syntax.Verify
 import Syntax.Var (Typed)
 import Syntax (Toplevel)
 
+import Core.Optimise.DeadCode (deadCodePass)
 import Core.Simplify (optimise)
 import Core.Lower (runLowerT, lowerProg)
 import Core.Core (Stmt)
@@ -51,15 +52,17 @@ data CompileResult
   | CResolve [ResolveError]
   | CInfer   [TypeError]
 
-compile :: [(SourceName, T.Text)] -> CompileResult
-compile [] = error "Cannot compile empty input"
-compile (file:files) = runIdentity . flip evalNameyT firstName $ do
+compile :: DoOptimise -> [(SourceName, T.Text)] -> CompileResult
+compile _ [] = error "Cannot compile empty input"
+compile opt (file:files) = runIdentity . flip evalNameyT firstName $ do
   file' <- go (Right ([], [], RS.builtinScope, RS.emptyModules, builtinsEnv)) file
   files' <- foldlM go file' files
   case files' of
     Right (ve, prg, _, _, env) -> do
       lower <- runLowerT (lowerProg prg)
-      optm <- optimise lower
+      optm <- case opt of
+                Do -> optimise lower
+                Don't -> pure (deadCodePass lower)
       pure (CSuccess ve prg lower optm (compileProgram env optm) env)
 
     Left err -> pure err
@@ -94,11 +97,12 @@ compile (file:files) = runIdentity . flip evalNameyT firstName $ do
     go x _ = pure x
 
 
-compileFromTo :: [(FilePath, T.Text)]
+compileFromTo :: DoOptimise
+              -> [(FilePath, T.Text)]
               -> (forall a. Pretty a => a -> IO ())
               -> IO ()
-compileFromTo fs emit =
-  case compile fs of
+compileFromTo opt fs emit =
+  case compile opt fs of
     CSuccess es _ _ _ lua _ -> do
       traverse_ (`reportS` fs) es
       if any isError es
@@ -110,7 +114,7 @@ compileFromTo fs emit =
 
 test :: D.DebugMode -> [(FilePath, T.Text)] -> IO (Maybe ([Stmt CoVar], Env))
 test mode fs =
-  case compile fs of
+  case compile Do fs of
     CSuccess es ast core opt lua env -> do
       traverse_ (`reportS` fs) es
       if any isError es
@@ -120,8 +124,10 @@ test mode fs =
     CResolve es -> Nothing <$ traverse_ (`reportS` fs) es
     CInfer es -> Nothing <$ traverse_ (`reportS` fs) es
 
-data CompilerOption = Test | TestTc | Out String
-  deriving (Show)
+data DoOptimise = Do | Don't
+
+data CompilerOption = Test | TestTc | Out String | Optl Int
+  deriving (Show, Eq)
 
 isError :: Note a b => a -> Bool
 isError x = diagnosticKind x == ErrorMessage
@@ -131,8 +137,10 @@ flags = [ Option ['t'] ["test"] (NoArg Test)
           "Provides additional debug information on the output"
         , Option [] ["test-tc"] (NoArg TestTc)
           "Provides additional type check information on the output"
-        , Option ['o'] ["out"]  (ReqArg Out "OUT")
+        , Option ['o'] ["out"]  (ReqArg Out "[output]")
           "Writes the generated Lua to a specific file."
+        , Option ['O'] ["optl"] (ReqArg (Optl . read) "[level]")
+          "Controls the optimisation level."
         ]
 
 main :: IO ()
@@ -143,9 +151,10 @@ main = do
     ([Test] , [], [])   -> repl D.Test
     ([TestTc] , [], []) -> repl D.TestTc
 
-    ([], files, []) -> do
+    ([Optl n], files, []) -> do
+      let opt = if n == 0 then Don't else Do
       files' <- traverse T.readFile files
-      compileFromTo (zip files files') (putDoc . pretty)
+      compileFromTo opt (zip files files') (putDoc . pretty)
       pure ()
 
     ([Test], files, []) -> do
@@ -158,9 +167,10 @@ main = do
       _ <- test D.TestTc (zip files files')
       pure ()
 
-    ([Out o], files, []) -> do
+    ((Out o:xs), files, []) -> do
+      let opt = if any (== Optl 0) xs then Don't else Do
       files' <- traverse T.readFile files
-      compileFromTo (zip files files') (T.writeFile o . T.pack . show . pretty)
+      compileFromTo opt (zip files files') (T.writeFile o . T.pack . show . pretty)
       pure ()
 
     (_, _, []) -> do
