@@ -7,7 +7,7 @@
 
 src/Parser/Lexer.hs
 src/Parser.hs
-src/Parser.info
+src/*.info
 
 !/tests/lua/*.lua
 
