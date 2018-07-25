@@ -3,9 +3,7 @@ do
     __tag = "__builtin_unit"
   }
   local function main (f)
-    local a = f(1)
-    local b = f(2)
-    return a + b
+    return f(1) + f(2)
   end
   main()
 end

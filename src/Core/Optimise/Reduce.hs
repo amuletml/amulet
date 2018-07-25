@@ -74,6 +74,7 @@ transformOver = transT where
   mapT s (TyApp f t) = TyApp (transA s f) t
   mapT s (Cast f t) = Cast (transA s f) t
   mapT s (Extend t rs) = Extend (transA s t) (map (third3 (transA s)) rs)
+  mapT s (Values xs) = Values (map (transA s) xs)
   mapT s (Let (One var) body) =
     let var' = third3 (transT s) var
         body' = transT (extendVar var' s) body
@@ -219,54 +220,54 @@ reduceTerm _ (Cast a co)
   | otherwise = Cast a (squishCoercion co)
 
 -- Constant fold
-reduceTerm s e@(App (Ref f1 _) r1)
-  | Just (App (Ref v _) l1) <- lookupVar s f1
+reduceTerm s e@(App (Ref v _) (Ref a _))
+  | Just (Values xs) <- lookupVar s a
   , n <- toVar v
-  = case (l1, r1) of
+  = case xs of
       -- Primitive integer reductions
-      (Lit (Int l), Lit (Int r)) | n == vOpAdd -> num (l + r)
-      (Lit (Int l), Lit (Int r)) | n == vOpSub -> num (l - r)
-      (Lit (Int l), Lit (Int r)) | n == vOpMul -> num (l * r)
-      (Lit (Int l), Lit (Int r)) | n == vOpDiv -> num (l `div` r)
-      (Lit (Int l), Lit (Int r)) | n == vOpExp -> num (l ^ r)
-      (Lit (Int l), Lit (Int r)) | n == vOpLt -> bool (l < r)
-      (Lit (Int l), Lit (Int r)) | n == vOpGt -> bool (l > r)
-      (Lit (Int l), Lit (Int r)) | n == vOpLe -> bool (l <= r)
-      (Lit (Int l), Lit (Int r)) | n == vOpGe -> bool (l >= r)
+      [Lit (Int l), Lit (Int r)] | n == vOpAdd -> num (l + r)
+      [Lit (Int l), Lit (Int r)] | n == vOpSub -> num (l - r)
+      [Lit (Int l), Lit (Int r)] | n == vOpMul -> num (l * r)
+      [Lit (Int l), Lit (Int r)] | n == vOpDiv -> num (l `div` r)
+      [Lit (Int l), Lit (Int r)] | n == vOpExp -> num (l ^ r)
+      [Lit (Int l), Lit (Int r)] | n == vOpLt -> bool (l < r)
+      [Lit (Int l), Lit (Int r)] | n == vOpGt -> bool (l > r)
+      [Lit (Int l), Lit (Int r)] | n == vOpLe -> bool (l <= r)
+      [Lit (Int l), Lit (Int r)] | n == vOpGe -> bool (l >= r)
 
       -- Partial integer reductions
-      (x, Lit (Int 0)) | n == vOpAdd -> Atom x
-      (Lit (Int 0), x) | n == vOpAdd -> Atom x
-      (Lit (Int 0), x) | n == vOpSub -> Atom x
-      (x, Lit (Int 1)) | n == vOpMul -> Atom x
-      (Lit (Int 1), x) | n == vOpMul -> Atom x
-      (_, Lit (Int 0)) | n == vOpMul -> num 0
-      (Lit (Int 0), _) | n == vOpMul -> num 0
-      (x, Lit (Int 1)) | n == vOpDiv -> Atom x
+      [x, Lit (Int 0)] | n == vOpAdd -> Atom x
+      [Lit (Int 0), x] | n == vOpAdd -> Atom x
+      [Lit (Int 0), x] | n == vOpSub -> Atom x
+      [x, Lit (Int 1)] | n == vOpMul -> Atom x
+      [Lit (Int 1), x] | n == vOpMul -> Atom x
+      [_, Lit (Int 0)] | n == vOpMul -> num 0
+      [Lit (Int 0), _] | n == vOpMul -> num 0
+      [x, Lit (Int 1)] | n == vOpDiv -> Atom x
 
       -- Primitive boolean reductions
-      (Lit LitTrue,  Lit LitTrue)  | n == vOpAnd -> bool True
-      (Lit _,        Lit _)        | n == vOpAnd -> bool False
-      (Lit LitFalse, Lit LitFalse) | n == vOpOr  -> bool False
-      (Lit _,        Lit _)        | n == vOpOr  -> bool True
+      [Lit LitTrue,  Lit LitTrue]  | n == vOpAnd -> bool True
+      [Lit _,        Lit _]        | n == vOpAnd -> bool False
+      [Lit LitFalse, Lit LitFalse] | n == vOpOr  -> bool False
+      [Lit _,        Lit _]        | n == vOpOr  -> bool True
 
       -- Partial boolean reductions
-      (_, Lit LitFalse)  | n == vOpAnd -> bool False
-      (Lit LitFalse,  _) | n == vOpAnd -> bool False
-      (x, Lit LitTrue)   | n == vOpAnd -> Atom x
-      (Lit LitTrue,  x)  | n == vOpAnd -> Atom x
-      (_, Lit LitTrue)   | n == vOpOr  -> bool True
-      (Lit LitTrue,  _)  | n == vOpOr  -> bool True
-      (x, Lit LitFalse)  | n == vOpOr  -> Atom x
-      (Lit LitFalse,  x) | n == vOpOr  -> Atom x
+      [_, Lit LitFalse]  | n == vOpAnd -> bool False
+      [Lit LitFalse,  _] | n == vOpAnd -> bool False
+      [x, Lit LitTrue]   | n == vOpAnd -> Atom x
+      [Lit LitTrue,  x]  | n == vOpAnd -> Atom x
+      [_, Lit LitTrue]   | n == vOpOr  -> bool True
+      [Lit LitTrue,  _]  | n == vOpOr  -> bool True
+      [x, Lit LitFalse]  | n == vOpOr  -> Atom x
+      [Lit LitFalse,  x] | n == vOpOr  -> Atom x
 
 
       -- Primitive string reductions
-      (Lit (Str l), Lit (Str r))  | n == vOpConcat -> str (l `T.append` r)
+      [Lit (Str l), Lit (Str r)]  | n == vOpConcat -> str (l `T.append` r)
 
       -- Partial string reductions
-      (x, Lit (Str "")) | n == vOpConcat -> Atom x
-      (Lit (Str ""), x) | n == vOpConcat -> Atom x
+      [x, Lit (Str "")] | n == vOpConcat -> Atom x
+      [Lit (Str ""), x] | n == vOpConcat -> Atom x
 
       _ -> e
   where num = Atom . Lit . Int
@@ -353,6 +354,7 @@ reducePattern s e (PatExtend rest fs) = foldr ((<>) . handle) (reducePattern s e
   allMatching (PatLit Unit) = True
   allMatching (Capture _ _) = True
   allMatching (PatExtend r fs) = allMatching r && all (allMatching . snd) fs
+  allMatching (PatValues xs) = all allMatching xs
   allMatching _ = False
 
 reducePattern _ _ _ = PatternUnknown mempty
@@ -378,6 +380,11 @@ isComplete s = isComplete' where
 
   -- Skip record types for now
   isComplete' xs@(PatExtend{}:_) = hasRecord Map.empty xs
+
+  -- For unboxed tuples we simply determine if the first pattern is complete, or
+  -- if some later one could be. This is definitely not a complete check, but it
+  -- is correct.
+  isComplete' (PatValues ps:xs) = all (isComplete' . pure) ps || isComplete' xs
 
   hasBool _ [] = False
   hasBool _ (Capture _ _:_) = True

@@ -30,6 +30,7 @@ data CoreError a
   | InfoIllegal a VarInfo VarInfo
   | forall b. Pretty b => ArisingIn (CoreError a) b
   | NoSuchVar a
+  | IllegalUnbox
   | InvalidCoercion (Coercion a)
   | PatternMismatch [(a, Type a)] [(a, Type a)]
 
@@ -60,6 +61,7 @@ instance Pretty a => Pretty (CoreError a) where
                                text "for" <+> pretty v
   pretty (ArisingIn e c) = pretty e </> text "arising in" <+> pretty c
   pretty (NoSuchVar a) = text "No such variable" <+> pretty a
+  pretty IllegalUnbox = text "Illegal unboxed type"
   pretty (InvalidCoercion a) = text "Illegal coercion" <+> pretty a
   pretty (PatternMismatch l r) = text "Expected vars" <+> pVs l </>
                                  text "     got vars" <+> pVs r
@@ -263,14 +265,11 @@ checkTerm s t@(Match e bs) = flip withContext t $ do
             Just (_, ty) -> checkPattern ty p
 
         pure (mconcat (v:vs))
-
-      -- checkPattern ty@(ExactRowsTy ts) (PatExtend (PatLit RecNil) fs) =
-      --   fmap mconcat . for fs $ \(t, p) ->
-      --     case find ((==t) . fst) ts of
-      --       Nothing -> throwError (TypeMismatch (ExactRowsTy [(t, unknownTyvar)]) ty)
-      --       Just (_, ty) -> checkPattern ty p
-      --
       checkPattern t p@PatExtend{} = error ("extend pattern " ++ show p ++ " for type " ++ show t)
+      checkPattern (ValuesTy ts) (PatValues ps) | length ts == length ps =
+        mconcat <$> traverse (uncurry checkPattern) (zip ts ps)
+      checkPattern t (PatValues ps) =
+        throwError (TypeMismatch (ValuesTy (replicate (length ps) unknownTyvar)) t)
 
       inst (ForallTy (Relevant _) _ t) = inst t
       inst t = t
@@ -285,9 +284,11 @@ checkTerm s t@(Extend f fs) = do
     ExactRowsTy [] -> pure . ExactRowsTy $ map (\(f, ty, _) -> (f, ty)) fs
     _-> pure . RowsTy tyf' $ map (\(f, ty, _) -> (f, ty)) fs
 
+checkTerm s t@(Values xs) = ValuesTy <$> for xs (\x -> checkAtom s x `withContext` t)
+
 checkTerm s t@(TyApp f x) = do
   f' <- checkAtom s f
-  checkType s x `withContext` t
+  checkTypeBoxed s x `withContext` t
   case f' of
     ForallTy (Relevant a) _ ty -> pure (substituteInType (VarMap.singleton (toVar a) x) ty)
     _ -> throwError (TypeMismatch (ForallTy (Relevant unknownVar) unknownTyvar unknownTyvar) f') `withContext` t
@@ -371,16 +372,24 @@ checkType s (ConTy v) =
 checkType _ (VarTy v)
   | varInfo v /= TypeVar = throwError (InfoIllegal v TypeVar (varInfo v))
   | otherwise = pure ()
-checkType s (ForallTy Irrelevant a r) = checkType s a >> checkType s r
+checkType s (ForallTy Irrelevant a r) = checkType s a >> checkTypeBoxed s r
 checkType s (ForallTy (Relevant vs) c v) = do
   unless (varInfo vs == TypeVar) (throwError (InfoIllegal vs TypeVar (varInfo vs)))
   let s' = s { tyVars = VarSet.insert (toVar vs) (tyVars s) }
   checkType s' c >> checkType s' v
-checkType s (AppTy f x) = checkType s f >> checkType s x
-checkType s (RowsTy f fs) = checkType s f >> traverse_ (checkType s . snd) fs
-checkType s (ExactRowsTy fs) = traverse_ (checkType s . snd) fs
+checkType s (AppTy f x) = checkType s f >> checkTypeBoxed s x
+checkType s (RowsTy f fs) = checkType s f >> traverse_ (checkTypeBoxed s . snd) fs
+checkType s (ValuesTy xs) = traverse_ (checkTypeBoxed s) xs
 checkType _ StarTy = pure ()
 checkType _ NilTy = pure ()
+
+checkTypeBoxed :: (IsVar a, MonadError (CoreError a) m)
+         => Scope a -> Type a -> m ()
+checkTypeBoxed s x = checkType s x >> checkNoUnboxed x
+
+checkNoUnboxed :: (IsVar a, MonadError (CoreError a) m) => Type a -> m ()
+checkNoUnboxed ValuesTy{} = throwError IllegalUnbox
+checkNoUnboxed _ = pure ()
 
 unknownVar :: IsVar a => a
 unknownVar = fromVar (CoVar (-100) "?" ValueVar)
@@ -419,5 +428,6 @@ patternVars :: Pattern a -> [(a, Type a)]
 patternVars (Capture v ty) = [(v, ty)]
 patternVars (Destr _ p) = patternVars p
 patternVars (PatExtend p ps) = patternVars p ++ concatMap (patternVars . snd) ps
+patternVars (PatValues ps) = concatMap patternVars ps
 patternVars Constr{} = []
 patternVars PatLit{} = []
