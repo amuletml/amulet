@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, OverloadedStrings, ScopedTypeVariables, FlexibleContexts #-}
+{-# LANGUAGE RankNTypes, OverloadedStrings, ScopedTypeVariables, FlexibleContexts, LambdaCase #-}
 module Main where
 
 import System.Exit (ExitCode(..), exitWith)
@@ -9,14 +9,14 @@ import System.Console.GetOpt
 import qualified Data.Text.Lazy as L
 import qualified Data.Text.IO as T
 import qualified Data.Text as T
+import Data.Position (SourceName)
+import Data.Functor.Identity
 import Data.Foldable
 import Data.Functor
 
-import Data.Functor.Identity
-import Data.Position (SourceName)
-
 import Control.Monad.Infer (Env, TypeError, firstName)
 import Control.Monad.Namey
+import Control.Monad
 import Backend.Lua
 
 import Types.Infer (inferProgram, builtinsEnv)
@@ -29,6 +29,7 @@ import Syntax.Verify
 import Syntax.Var (Typed)
 import Syntax (Toplevel)
 
+import Core.Optimise.Reduce (reducePass)
 import Core.Optimise.DeadCode (deadCodePass)
 import Core.Simplify (optimise)
 import Core.Lower (runLowerT, lowerProg)
@@ -62,7 +63,7 @@ compile opt (file:files) = runIdentity . flip evalNameyT firstName $ do
       lower <- runLowerT (lowerProg prg)
       optm <- case opt of
                 Do -> optimise lower
-                Don't -> pure (deadCodePass lower)
+                Don't -> pure (deadCodePass (reducePass lower))
       pure (CSuccess ve prg lower optm (compileProgram env optm) env)
 
     Left err -> pure err
@@ -151,8 +152,7 @@ main = do
     ([Test] , [], [])   -> repl D.Test
     ([TestTc] , [], []) -> repl D.TestTc
 
-    ([Optl n], files, []) -> do
-      let opt = if n == 0 then Don't else Do
+    (xs, files, []) | opt <- findOptl xs, null xs || length xs == 1 -> do
       files' <- traverse T.readFile files
       compileFromTo opt (zip files files') (putDoc . pretty)
       pure ()
@@ -167,8 +167,13 @@ main = do
       _ <- test D.TestTc (zip files files')
       pure ()
 
-    ((Out o:xs), files, []) -> do
-      let opt = if any (== Optl 0) xs then Don't else Do
+    (opts, files, []) | Just o <- findOut opts -> do
+      let opt = if Optl 0 `elem` opts then Don't else Do
+
+      when (o `elem` files) $ do
+        hPutStrLn stderr ("error: refusing to overwrite input file " ++ o)
+        exitWith (ExitFailure 1)
+
       files' <- traverse T.readFile files
       compileFromTo opt (zip files files') (T.writeFile o . T.pack . show . pretty)
       pure ()
@@ -180,3 +185,10 @@ main = do
     (_, _, errs) -> do
       hPutStrLn stderr (concat errs ++ usageInfo "amc: The Amulet compiler" flags)
       exitWith (ExitFailure 1)
+
+ where
+   findOut :: [CompilerOption] -> Maybe String
+   findOut = fmap (\(Out x) -> x) . find (\case { Out{} -> True; _ -> False })
+
+   findOptl :: [CompilerOption] -> DoOptimise
+   findOptl = maybe Do (\(Optl n) -> if n == 0 then Don't else Do) . find (\case { Optl{} -> True; _ -> False })

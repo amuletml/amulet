@@ -131,7 +131,11 @@ unify (TyArr a b) (TyArr a' b') = ArrCo <$> unify a a' <*> unify b b'
 unify (TyPi (Implicit a) b) (TyPi (Implicit a') b') =
   ArrCo <$> unify a a' <*> unify b b' -- Technically cheating but yay desugaring
 
-unify (TyApp a b) (TyApp a' b') = AppCo <$> unify a a' <*> unify b b'
+unify l@(TyApp a b) r@(TyApp a' b') =
+  (AppCo <$> unify a a' <*> unify b b')
+    `catchError` \case
+      NotEqual _ _ -> throwError (NotEqual l r)
+      x -> throwError x
 
 unify ta@(TyCon a) tb@(TyCon b)
   | a == b = pure (ReflCo tb)
