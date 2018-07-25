@@ -84,6 +84,8 @@ unify' (ForallTy (Relevant v) c t) (ForallTy (Relevant v') c' t') = liftA2 (<>) 
 unify' (AppTy f t) (AppTy f' t') = liftA2 (<>) (unify' f f') (unify' t t')
 unify' StarTy StarTy = pure ()
 unify' NilTy NilTy = pure ()
+unify' (RowsTy NilTy []) NilTy = pure ()
+unify' NilTy (RowsTy NilTy []) = pure ()
 unify' _ _ = lift Nothing
 
 replaceTy :: IsVar a => a -> Type a -> Type a -> Type a

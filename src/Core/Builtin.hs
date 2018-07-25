@@ -65,8 +65,8 @@ vOpEq = CoVar (-25) "==" ValueVar
 vOpNe = CoVar (-26) "<>" ValueVar
 
 vOpAnd, vOpOr :: CoVar
-vOpAnd = CoVar (-27) "||" ValueVar
-vOpOr  = CoVar (-28) "&&" ValueVar
+vOpAnd = CoVar (-27) "&&" ValueVar
+vOpOr  = CoVar (-28) "||" ValueVar
 
 vError :: CoVar
 vError = CoVar (-29) "error" ValueVar
