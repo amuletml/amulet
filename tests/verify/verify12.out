@@ -1,6 +1,6 @@
 verify12.ml[4:5 ..4:7]: error
   Invalid recursive right-hand side for variable g
-  • Note: because the variable f is not under a function
+  • Note: because evaluation of the variable f is not delayed
   Arising from use of the binding
   │ 
 4 │ and g = f

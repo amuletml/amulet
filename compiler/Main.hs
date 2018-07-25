@@ -115,7 +115,7 @@ compileFromTo opt fs emit =
 
 test :: D.DebugMode -> [(FilePath, T.Text)] -> IO (Maybe ([Stmt CoVar], Env))
 test mode fs =
-  case compile Do fs of
+  case compile (if mode == D.TestTc then Don't else Do) fs of
     CSuccess es ast core opt lua env -> do
       traverse_ (`reportS` fs) es
       if any isError es
