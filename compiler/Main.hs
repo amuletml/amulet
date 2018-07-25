@@ -152,7 +152,13 @@ main = do
     ([Test] , [], [])   -> repl D.Test
     ([TestTc] , [], []) -> repl D.TestTc
 
-    (xs, files, []) | opt <- findOptl xs, null xs || length xs == 1 -> do
+    ([], files, []) -> do
+      files' <- traverse T.readFile files
+      compileFromTo Do (zip files files') (putDoc . pretty)
+      pure ()
+
+    ([Optl n], files, []) -> do
+      let opt = if n == 0 then Don't else Do
       files' <- traverse T.readFile files
       compileFromTo opt (zip files files') (putDoc . pretty)
       pure ()
@@ -189,6 +195,3 @@ main = do
  where
    findOut :: [CompilerOption] -> Maybe String
    findOut = fmap (\(Out x) -> x) . find (\case { Out{} -> True; _ -> False })
-
-   findOptl :: [CompilerOption] -> DoOptimise
-   findOptl = maybe Do (\(Optl n) -> if n == 0 then Don't else Do) . find (\case { Optl{} -> True; _ -> False })
