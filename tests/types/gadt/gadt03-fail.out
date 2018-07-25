@@ -1,5 +1,5 @@
 gadt03-fail.ml[7:12 ..7:19]: error
-  Could not match type int with bool
+  Could not match expected type bool with int
 
   Arising in the expression
   │ 

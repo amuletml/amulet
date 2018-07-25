@@ -210,7 +210,7 @@ instance Pretty TypeError where
     vcat [ string "Expected a type, but this annotation is of kind" <+> displayType b
          , string "Have you applied a type constructor to the wrong number of arguments?"
          ]
-  pretty (NotEqual a b) = string "Could not match type" <+> displayType a <+> string "with" <+> displayType b
+  pretty (NotEqual a b) = string "Could not match expected type" <+> displayType b <+> string "with" <+> displayType a
 
   pretty (Occurs v t) = string "Occurs check:" <+> string "The type variable" <+> stypeVar (pretty v) </> indent 4 (string "occurs in the type" <+> displayType t)
   pretty (NotInScope e) = string "Variable not in scope:" <+> pretty e
