@@ -88,6 +88,7 @@ goBinding ss m = traverse (third3A (fmap (substitute ss) . goTerm)) where
     e' <- goTerm e
     Let (One (v, t, e')) <$> goTerm b
   goTerm (Extend a as) = Extend <$> goAtom a <*> traverse (third3A goAtom) as
+  goTerm (Values xs) = Values <$> traverse goAtom xs
   goTerm (TyApp f t) = TyApp <$> goAtom f <*> pure t
   goTerm (Cast f t) = Cast <$> goAtom f <*> pure t
   goTerm (Match a x) = case newtypeMatch m x of

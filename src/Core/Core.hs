@@ -42,15 +42,16 @@ data AnnTerm b a
   | AnnMatch b (AnnAtom b a) [AnnArm b a] -- ^ Pattern matching
 
   | AnnExtend b (AnnAtom b a) [(Text, Type a, AnnAtom b a)] -- ^ Record extension
+  | AnnValues b [AnnAtom b a] -- ^ Unboxed tuple
 
-  | AnnTyApp b (AnnAtom b a) (Type a) -- Eliminate a 'Lam' expecting a 'TypeArgument'
-  | AnnCast b (AnnAtom b a) (Coercion a) -- Cast an 'Atom' using some 'Coercion'.
+  | AnnTyApp b (AnnAtom b a) (Type a) -- ^ Eliminate a 'Lam' expecting a 'TypeArgument'
+  | AnnCast b (AnnAtom b a) (Coercion a) -- ^ Cast an 'Atom' using some 'Coercion'.
   deriving (Eq, Show, Ord, Functor, Generic)
 
 -- | An 'AnnTerm' with '()' annotations.
 type Term = AnnTerm ()
 
-{-# COMPLETE Atom, App, Let, Match, Extend, TyApp, Cast #-}
+{-# COMPLETE Atom, App, Let, Match, Extend, Values, TyApp, Cast #-}
 
 -- | Match an 'Atom' with '()' annotation
 pattern Atom :: Atom a -> Term a
@@ -71,6 +72,10 @@ pattern Match t b = AnnMatch () t b
 -- | Match an 'Extend' with '()' annotation
 pattern Extend :: Atom a -> [(Text, Type a, Atom a)] -> Term a
 pattern Extend f fs = AnnExtend () f fs
+
+-- | Match an 'Extend' with '()' annotation
+pattern Values :: [Atom a] -> Term a
+pattern Values xs = AnnValues () xs
 
 -- | Match a 'TyApp' with '()' annotation
 pattern TyApp :: Atom a -> Type a -> Term a
@@ -107,6 +112,7 @@ data Pattern a
   | Constr a
   | Destr a (Pattern a)
   | PatExtend (Pattern a) [(Text, Pattern a)]
+  | PatValues [Pattern a]
 
   | PatLit Literal
   deriving (Eq, Show, Ord, Functor, Generic)
@@ -141,6 +147,7 @@ data Type a
   | ForallTy (BoundTv a) (Type a) (Type a) -- ^ A function abstraction
   | AppTy (Type a) (Type a) -- ^ A @tycon x@ type application
   | RowsTy (Type a) [(Text, Type a)] -- ^ The type of record extensions
+  | ValuesTy [Type a] -- ^ The type of unboxed tuples
   | NilTy -- ^ The type of empty records
   | StarTy -- ^ The type of types
   deriving (Eq, Show, Ord, Functor, Generic)
@@ -185,6 +192,7 @@ instance Pretty a => Pretty (Term a) where
   pretty (Match e ps) = keyword "match" <+> pretty e <+> pprArms ps
   pretty (Extend x rs) = braces $ pretty x <+> pipe <+> prettyRows rs where
     prettyRows = hsep . punctuate comma . map (\(x, t, v) -> text x <+> colon <+> pretty t <+> equals <+> pretty v)
+  pretty (Values xs) = soperator (string "(|") <+> (hsep . punctuate comma . map pretty $ xs) <+> soperator (string "|)")
   pretty (Cast a phi) = parens $ pretty a <+> soperator (string "|>") <+> pretty phi
 
 instance Pretty a => Pretty (Coercion a) where
@@ -227,6 +235,7 @@ instance Pretty a => Pretty (Pattern a) where
   pretty (PatExtend p rs) = braces $ pretty p <+> pipe <+> prettyRows rs where
     prettyRows = hsep . punctuate comma . map (\(x, v) ->
       text x <+> equals <+> pretty v)
+  pretty (PatValues xs) = soperator (string "(|") <+> (hsep . punctuate comma . map pretty $ xs) <+> soperator (string "|)")
   pretty (PatLit l) = pretty l
 
 instance Pretty a => Pretty (Type a) where
@@ -250,6 +259,9 @@ instance Pretty a => Pretty (Type a) where
     k AppTy{} = parens
     k ForallTy{} = parens
     k _ = id
+
+  pretty (ValuesTy xs) = soperator (string "(|") <+> (hsep . punctuate comma . map pretty $ xs) <+> soperator (string "|)")
+
   pretty StarTy = prod
 
 instance Pretty Literal where
@@ -285,6 +297,7 @@ freeIn (AnnLet _ (Many vs) e) = VarSet.difference (freeIn e <> foldMap (freeIn .
 freeIn (AnnMatch _ e bs) = freeInAtom e <> foldMap freeInBranch bs where
   freeInBranch x = foldr (VarSet.delete . toVar . fst) (freeIn (x ^. armBody)) (x ^. armVars)
 freeIn (AnnExtend _ c rs) = freeInAtom c <> foldMap (freeInAtom . thd3) rs
+freeIn (AnnValues _ xs) = foldMap freeInAtom xs
 freeIn (AnnTyApp _ f _) = freeInAtom f
 freeIn (AnnCast _ f _) = freeInAtom f
 
@@ -295,6 +308,7 @@ freeInTy (ForallTy Irrelevant a b) = freeInTy a <> freeInTy b
 freeInTy (AppTy a b) = freeInTy a <> freeInTy b
 freeInTy (RowsTy c rs) = foldMap (freeInTy . snd) rs <> freeInTy c
 freeInTy (ExactRowsTy rs) = foldMap (freeInTy . snd) rs
+freeInTy (ValuesTy xs) = foldMap freeInTy xs
 freeInTy ConTy{} = mempty
 freeInTy StarTy = mempty
 freeInTy NilTy = mempty
@@ -313,6 +327,7 @@ occursInTerm v (Let (One va) e) = occursInTerm v (thd3 va) || occursInTerm v e
 occursInTerm v (Let (Many vs) e) = any (occursInTerm v . thd3) vs || occursInTerm v e
 occursInTerm v (Match e bs) = occursInAtom v e || any (occursInTerm v . view armBody) bs
 occursInTerm v (Extend e fs) = occursInAtom v e || any (occursInAtom v . thd3) fs
+occursInTerm v (Values xs) = any (occursInAtom v) xs
 
 occursInTy :: IsVar a => a -> Type a -> Bool
 occursInTy _ (ConTy _) = False
@@ -323,6 +338,7 @@ occursInTy v (ForallTy b k t)
 occursInTy v (AppTy a b) = occursInTy v a || occursInTy v b
 occursInTy v (RowsTy t rs) = occursInTy v t || any (occursInTy v . snd) rs
 occursInTy v (ExactRowsTy rs) = any (occursInTy v . snd) rs
+occursInTy v (ValuesTy xs) = any (occursInTy v) xs
 occursInTy _ StarTy = False
 occursInTy _ NilTy = False
 
@@ -379,9 +395,9 @@ extractAnn (AnnApp b _ _)    = b
 extractAnn (AnnLet b _ _)    = b
 extractAnn (AnnMatch b _ _)  = b
 extractAnn (AnnExtend b _ _) = b
+extractAnn (AnnValues b _)  = b
 extractAnn (AnnTyApp b _ _)  = b
 extractAnn (AnnCast b _ _)   = b
-
 
 instance Plated (AnnAtom b a) where
   plate = gplate

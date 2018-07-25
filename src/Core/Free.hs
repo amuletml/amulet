@@ -127,6 +127,11 @@ tagFreeTerm ann var = tagTerm where
         fv = mconcat (fvf : fvfs)
     in (fv, AnnExtend (ann an fv) f' fs')
 
+  tagTerm (AnnValues an xs) =
+    let (fvfs, xs') = unzip (map tagAtom xs)
+        fv = mconcat fvfs
+    in (fv, AnnValues (ann an fv) xs')
+
   tagTerm (AnnTyApp an f ty) =
     let (fv, f') = tagAtom f
     in (fv, AnnTyApp (ann an fv) f' (conv ty))

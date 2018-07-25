@@ -75,6 +75,7 @@ deadCodePass = snd . freeS emptyScope Nothing where
   freeT s (TyApp f t) = TyApp <$> freeA s f <*> pure t
   freeT s (Cast f t) = Cast <$> freeA s f <*> pure t
   freeT s (Extend t rs) = Extend <$> freeA s t <*> traverse (third3A (freeA s)) rs
+  freeT s (Values xs) = Values <$> traverse (freeA s) xs
   freeT s (Let (One vs@(v, ty, e)) b) =
     let s' = extendPureLets s [vs]
         (fe, e') = freeT s e

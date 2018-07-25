@@ -2,11 +2,6 @@ do
   local __builtin_unit = {
     __tag = "__builtin_unit"
   }
-  local function _plus (l)
-    return function (r)
-      return l + r
-    end
-  end
   local None = {
     __tag = "None"
   }
@@ -22,9 +17,7 @@ do
       if x.__tag == "None" then
         return f(a)
       elseif x.__tag == "Some" then
-        local cw = x[1] * 2
-        local ct = _plus(a)
-        return f(ct(cw))
+        return f(a + x[1] * 2)
       end
     end
   end

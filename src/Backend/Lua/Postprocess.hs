@@ -39,7 +39,7 @@ addOperators stmt =
     opsStmt (LuaFornum _ b e s bo) = opsExpr b <> opsExpr e <> opsExpr s <> foldMap opsStmt bo
     opsStmt (LuaFor _ g b) = foldMap opsExpr g <> foldMap opsStmt b
     opsStmt (LuaLocal _ e) = foldMap opsExpr e
-    opsStmt (LuaReturn r) = opsExpr r
+    opsStmt (LuaReturn r) = foldMap opsExpr r
     opsStmt (LuaIfElse t) = foldMap (\(c, b) -> opsExpr c <> foldMap opsStmt b) t
     opsStmt LuaBreak = mempty
     opsStmt (LuaCallS f xs) = foldMap opsExpr (f:xs)
@@ -76,29 +76,29 @@ genOperator :: CoVar -> LuaStmt
 genOperator op | op == vLAZY =
   LuaLocal [ LuaName "__builtin_Lazy" ]
            [ LuaFunction [ eks ]
-             [ LuaReturn (LuaTable [ (LuaNumber 1, LuaRef eks)
+             [ LuaReturn [LuaTable [ (LuaNumber 1, LuaRef eks)
                                    , (LuaNumber 2, LuaFalse)
                                    , (LuaString "__tag", LuaString "lazy")
-                                   ]) ] ] where
+                                   ]] ] ] where
   eks = LuaName "x"
 genOperator op | op == vForce =
   LuaLocal [ LuaName "__builtin_force" ]
            [ LuaFunction [ eks ]
              [ LuaIf (LuaRef (LuaIndex (LuaRef eks) (LuaNumber 2)))
-                [ LuaReturn ( LuaRef (LuaIndex (LuaRef eks) (LuaNumber 1)) ) ]
+                [ LuaReturn [ LuaRef (LuaIndex (LuaRef eks) (LuaNumber 1)) ] ]
                 [ LuaAssign [ LuaIndex (LuaRef eks) (LuaNumber 1)
                             , LuaIndex (LuaRef eks) (LuaNumber 2) ]
                             [ LuaCall (LuaRef (LuaIndex (LuaRef eks) (LuaNumber 1)))
                                [ LuaRef (LuaName "__builtin_unit") ]
                             , LuaTrue]
-                  , LuaReturn (LuaRef (LuaIndex (LuaRef eks) (LuaNumber 1))) ] ] ] where
+                  , LuaReturn [LuaRef (LuaIndex (LuaRef eks) (LuaNumber 1))] ] ] ] where
   eks = LuaName "x"
 genOperator op =
   let name =  getVar op escapeScope
   in LuaLocal [LuaName name]
               [ LuaFunction [left]
-                [LuaReturn (LuaFunction [right]
-                            [LuaReturn (LuaBinOp (LuaRef left) (remapOp op) (LuaRef right))])] ]
+                [LuaReturn [LuaFunction [right]
+                            [LuaReturn [LuaBinOp (LuaRef left) (remapOp op) (LuaRef right)]]]] ]
   where
     left  = LuaName "l"
     right = LuaName "r"

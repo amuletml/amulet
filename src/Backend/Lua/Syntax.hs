@@ -26,7 +26,7 @@ data LuaStmt
   | LuaFornum Text LuaExpr LuaExpr LuaExpr [LuaStmt]
   | LuaFor [Text] [LuaExpr] [LuaStmt]
   | LuaLocal [LuaVar] [LuaExpr]
-  | LuaReturn LuaExpr
+  | LuaReturn [LuaExpr]
   | LuaIfElse [(LuaExpr, [LuaStmt])]
   | LuaBreak
   | LuaCallS LuaExpr [LuaExpr]

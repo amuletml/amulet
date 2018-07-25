@@ -83,15 +83,17 @@ builtinVarList :: (IsVar a, IsVar b) => [(a, Type b)]
 builtinVarList = vars where
   op x t = (fromVar x, t)
 
+  tupTy = ValuesTy
   arrTy = ForallTy Irrelevant
-  boolOp = ForallTy Irrelevant tyBool (ForallTy Irrelevant tyBool tyBool)
-  intOp = tyInt `arrTy` (tyInt `arrTy` tyInt)
-  floatOp = tyFloat `arrTy` (tyFloat `arrTy` tyFloat)
-  stringOp = tyString `arrTy` (tyString `arrTy` tyString)
-  intCmp = tyInt `arrTy` (tyInt `arrTy` tyBool)
-  floatCmp = tyInt `arrTy` (tyInt `arrTy` tyBool)
 
-  cmp = ForallTy (Relevant name) StarTy $ VarTy name `arrTy` (VarTy name `arrTy` tyBool)
+  boolOp = ForallTy Irrelevant tyBool (ForallTy Irrelevant tyBool tyBool)
+  intOp = tupTy [tyInt, tyInt] `arrTy` tyInt
+  floatOp = tupTy [tyFloat, tyFloat] `arrTy` tyFloat
+  stringOp = tupTy [tyString, tyString] `arrTy` tyString
+  intCmp = tupTy [tyInt, tyInt] `arrTy` tyBool
+  floatCmp = tupTy [tyFloat, tyFloat] `arrTy` tyBool
+
+  cmp = ForallTy (Relevant name) StarTy $ tupTy [VarTy name, VarTy name] `arrTy` tyBool
 
   name = fromVar tyvarA
 

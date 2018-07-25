@@ -94,11 +94,11 @@ import Syntax.Var
 import qualified Types.Wellformed as W
 
 
-type Returner = LuaExpr -> LuaStmt
+type Returner = [LuaExpr] -> LuaStmt
 
 data VarEntry v =
   VarEntry { vVar  :: v
-           , vExpr :: LuaExpr
+           , vExpr :: [LuaExpr]
            , vPure :: Bool
            }
   deriving (Show)
@@ -125,7 +125,7 @@ emitProgramWith ev esc = flip runState esc . emitProg where
     | arity t > 1 = do
         n <- state (pushVar n')
         let ags = map LuaName $ take (arity t) alpha
-            mkF (a:ag) bd = LuaFunction [a] [LuaReturn (mkF ag bd)]
+            mkF (a:ag) bd = LuaFunction [a] [LuaReturn [mkF ag bd]]
             mkF [] bd = bd
 
         xs' <- emitProg xs
@@ -144,13 +144,13 @@ emitProgramWith ev esc = flip runState esc . emitProg where
   emitProg (StmtLet (One (v, _, e)):xs) = do
     v' <- state (pushVar v)
     s <- get
-    (LuaLocal [LuaName v'] [iife (emitStmt s LuaReturn e)]:)
+    (mkBind LuaLocal v' (iife (emitStmt s LuaReturn e)):)
       <$> emitProg xs
   emitProg (StmtLet (Many vs):xs) = do
     vs' <- traverse (first3A (state . pushVar)) vs
     s <- get
     ((LuaLocal (map (LuaName . fst3) vs') []
-       : concatMap (\(v, _, e) -> emitStmt s (LuaAssign [LuaName v] . pure) e) vs')++)
+       : concatMap (\(v, _, e) -> emitStmt s (LuaAssign [LuaName v]) e) vs')++)
       <$> emitProg xs
   emitProg (Type _ cs:xs) = (++) <$> traverse emitConstructor cs <*> emitProg xs
   emitProg [] =
@@ -184,8 +184,8 @@ emitProgramWith ev esc = flip runState esc . emitProg where
         var' <- state (pushVar var)
         pure $ LuaLocal [LuaName var'] [LuaFunction
                                          [LuaName "x"]
-                                        [LuaReturn (LuaTable [ (LuaString "__tag", LuaString var')
-                                                             , (LuaInteger 1, LuaRef (LuaName "x"))])]]
+                                        [LuaReturn [LuaTable [ (LuaString "__tag", LuaString var')
+                                                             , (LuaInteger 1, LuaRef (LuaName "x"))]]]]
 
   alpha :: [Text]
   alpha = map T.pack ([1..] >>= flip replicateM ['a'..'z'])
@@ -194,7 +194,7 @@ emitProgramWith ev esc = flip runState esc . emitProg where
 pushScope :: IsVar a => MonadState (EmitState a) m => a -> m Text
 pushScope v = state (\s -> let (v', s') = pushVar v (s ^. eEscape) in (v', set eEscape s' s))
 
-pushEntry :: IsVar a => MonadState (EmitState a) m => VarEntry a -> m (Text, LuaExpr)
+pushEntry :: IsVar a => MonadState (EmitState a) m => VarEntry a -> m (Text, [LuaExpr])
 pushEntry v = (,vExpr v) <$> pushScope (vVar v)
 
 emitLit :: Literal -> LuaExpr
@@ -206,11 +206,11 @@ emitLit LitFalse  = LuaFalse
 emitLit Unit      = LuaRef (LuaName "__builtin_unit") -- evil!
 emitLit RecNil    = LuaTable []
 
-emitAtom :: Occurs a => Atom a -> ExprContext a LuaExpr
-emitAtom (Lit l) = pure (emitLit l)
+emitAtom :: Occurs a => Atom a -> ExprContext a [LuaExpr]
+emitAtom (Lit l) = pure [emitLit l]
 emitAtom (Lam (TermArgument v _) e) = do
   (v', s) <- uses eEscape (pushVar v) -- Note this doesn't modify the scope, only extends it
-  pure (LuaFunction [LuaName v'] (emitStmt s LuaReturn e))
+  pure [LuaFunction [LuaName v'] (emitStmt s LuaReturn e)]
 emitAtom (Lam TypeArgument{} e) = emitTerm e
 emitAtom (Ref v _) = ContT $ \next -> do
   xs <- use eStack
@@ -223,14 +223,14 @@ emitAtom (Ref v _) = ContT $ \next -> do
     -- If we're not in the scope at all, emit the variable
     _ | all ((/= toVar v) . toVar . vVar) xs -> do
       v' <- gets (getVar v . view eEscape)
-      next (LuaRef (LuaName v'))
+      next [LuaRef (LuaName v')]
 
     -- If we're in the list head, then flush everything and return
     _ -> do
       assign eStack []
       vs <- traverse pushEntry xs
       v' <- gets (getVar v . view eEscape)
-      flip mkLets vs <$> next (LuaRef (LuaName v'))
+      flip mkLets vs <$> next [LuaRef (LuaName v')]
 
 flushStmt :: Occurs a => [LuaStmt] -> ExprContext a ()
 flushStmt extra = ContT $ \next -> do
@@ -239,22 +239,23 @@ flushStmt extra = ContT $ \next -> do
   stmts <- next ()
   pure (mkLets (extra ++ stmts) xs)
 
-emitTerm :: forall a. Occurs a => Term a -> ExprContext a LuaExpr
+emitTerm :: forall a. Occurs a => Term a -> ExprContext a [LuaExpr]
 emitTerm (Atom a) = emitAtom a
 
 emitTerm (App f e) = do
   e' <- emitAtom e
-  f' <- emitAtom f
+  [f'] <- emitAtom f
 
   esc <- use eEscape
-  pure $ case f' of
+  pure . pure $ case f' of
     -- Attempt to reduce applications of binary functions to the operators
     -- themselves.
-    LuaCall (LuaRef (LuaName op)) [l]
+    LuaRef (LuaName op)
       | Just op' <- getEscaped op esc, Just opv <- VarMap.lookup (op' :: CoVar) ops
-      -> LuaBinOp l opv e'
+      , [l, r] <- e'
+      -> LuaBinOp l opv r
 
-    _ -> LuaCall f' [e']
+    _ -> LuaCall f' e'
 
 
 emitTerm (TyApp f _) = emitAtom f
@@ -265,8 +266,8 @@ emitTerm (Extend (Lit RecNil) fs) =
     Record literals are nice and simple to generate, and can just be
     emitted as expressions.
   -}
-  LuaTable <$> foldrM emitRow [] fs
-  where emitRow (f, _, e) es = (:es) . (LuaString f,) <$> emitAtom e
+  pure . LuaTable <$> foldrM emitRow [] fs
+  where emitRow (f, _, e) es = (:es) . (LuaString f,) . head <$> emitAtom e
 
 emitTerm (Extend tbl exs) = do
   {-
@@ -274,12 +275,12 @@ emitTerm (Extend tbl exs) = do
     context and continue compilation.
   -}
   exs' <- foldrM emitRow [] exs
-  tbl' <- emitAtom tbl
+  [tbl'] <- emitAtom tbl
 
   flushStmt ([ LuaLocal [old, new] [tbl', LuaTable []]
              , LuaFor [k, v] [LuaCall (LuaRef pairs) [LuaRef old]]
                [LuaAssign [LuaIndex (LuaRef new) (LuaRef (LuaName k))] [LuaRef (LuaName v)]] ] ++ exs')
-  pure (LuaRef new)
+  pure [LuaRef new]
 
   where old = LuaName (T.pack "__o")
         new = LuaName (T.pack "__n")
@@ -287,7 +288,9 @@ emitTerm (Extend tbl exs) = do
         v = T.pack "v"
         pairs = LuaName (T.pack "pairs")
 
-        emitRow (f, _, e) es = (:es) . LuaAssign [LuaIndex (LuaRef new) (LuaString f)] . pure <$> emitAtom e
+        emitRow (f, _, e) es = (:es) . LuaAssign [LuaIndex (LuaRef new) (LuaString f)] <$> emitAtom e
+
+emitTerm (Values ts) = foldrM (\x xs -> (:xs) . head <$> emitAtom x) [] ts
 
 emitTerm (Let (One (x, _, e)) body)
   | Match _ (_:_:_) <- e = do
@@ -299,7 +302,7 @@ emitTerm (Let (One (x, _, e)) body)
       x' <- pushScope x
       flushStmt [ LuaLocal [LuaName x'] [] ]
       s <- use eEscape
-      flushStmt (emitStmt s (LuaAssign [LuaName x'] . pure) e)
+      flushStmt (emitStmt s (mkBind LuaAssign x') e)
       emitTerm body
 
   | usedWhen x == Once = do
@@ -317,7 +320,7 @@ emitTerm (Let (One (x, _, e)) body)
         the world.
       -}
       e' <- emitTerm e
-      flushStmt (asStmt e')
+      traverse_ (flushStmt . asStmt) e'
       emitTerm body
 
   | otherwise = do
@@ -325,9 +328,9 @@ emitTerm (Let (One (x, _, e)) body)
         Otheriwse we've got a let binding which doesn't branch, then we can emit
         it as a normal local.
       -}
+      e' <- emitTerm e -- TODO: Fix my emission of tuples
       x' <- pushScope x
-      e' <- emitTerm e
-      flushStmt [ LuaLocal [LuaName x'] [e'] ]
+      flushStmt [mkBind LuaLocal x' e']
       emitTerm body
 
   where asStmt (LuaTable fs) = concatMap (asStmt . snd) fs
@@ -346,12 +349,13 @@ emitTerm (Let (Many bs) body) = do
   emitTerm body
   where emitLet (v, _, e) = do
           s <- use eEscape
-          flushStmt (emitStmt s (LuaAssign [LuaName (getVar v s)] . pure) e)
+          flushStmt (emitStmt s (mkBind LuaAssign (getVar v s)) e)
 
 emitTerm (Match test branches)
   | [Arm { _armPtrn = p, _armBody = body, _armVars = vs}] <- branches
   , [(x, _)] <- filter ((/=Dead) . usedWhen . fst) vs
   , usedWhen x == Once
+  , isntTuple p
   = do
       test' <- emitAtom test
       -- Just push the bindings onto the stack
@@ -375,8 +379,8 @@ emitTerm (Match test branches)
       let (once, multi) = partition ((==Once) . usedWhen . fst) (patternBindings p test')
 
       -- Declare any variable used multiple times (or hoisted into a lambda)
-      multi' <- traverse (firstA ((LuaName<$>) . pushScope)) multi
-      unless (null multi') (flushStmt [uncurry LuaLocal (unzip multi')])
+      multi' <- traverse (firstA pushScope) multi
+      unless (null multi') (flushStmt (map (uncurry (mkBind LuaLocal)) multi'))
 
       -- Push any variable used once onto the stack
       modifying eStack (withMatch True once++)
@@ -391,11 +395,11 @@ emitTerm (Match test branches)
         merge the test with the definition, as we know it'll only be evaluated
         once.
       -}
-      test' <- emitAtom test
+      [test'] <- emitAtom test
       flushStmt[]
       ContT $ \next -> do
-        (_, ifs') <- emitArm test' next ifs
-        (_, els') <- emitArm test' next els
+        (_, ifs') <- emitArm [test'] next ifs
+        (_, els') <- emitArm [test'] next els
         pure [ LuaIfElse [ (test', ifs')
                          , (LuaTrue, els') ] ]
 
@@ -405,11 +409,11 @@ emitTerm (Match test branches)
         As above, but testing against `not EXPR`. In this case we just flip the
         two branches
        -}
-      test' <- emitAtom test
+      [test'] <- emitAtom test
       flushStmt[]
       ContT $ \next -> do
-        (_, ifs') <- emitArm test' next ifs
-        (_, els') <- emitArm test' next els
+        (_, ifs') <- emitArm [test'] next ifs
+        (_, els') <- emitArm [test'] next els
         pure [ LuaIfElse [ (test', ifs')
                          , (LuaTrue, els') ] ]
 
@@ -424,16 +428,24 @@ emitTerm (Match test branches)
 
   where withMatch p = map (\(a, b) -> VarEntry a b p)
 
+        isntTuple PatValues{} = False
+        isntTuple _ = True
+
 emitStmt :: Occurs a => EscapeScope -> Returner -> Term a -> [LuaStmt]
 emitStmt s r term = evalState (runContT (emitTerm term) finish) (EmitState [] s) where
   finish x = mkLets [r x] <$> (traverse pushEntry =<< use eStack)
 
-iife :: [LuaStmt] -> LuaExpr
+iife :: [LuaStmt] -> [LuaExpr]
 iife [LuaReturn v] = v
-iife b = LuaCall (LuaFunction [] b) []
+iife b = [LuaCall (LuaFunction [] b) []]
 
-mkLets :: [LuaStmt] -> [(Text, LuaExpr)] -> [LuaStmt]
-mkLets = foldl (\stmts (v, b) -> LuaLocal [LuaName v] [b] : stmts)
+mkLets :: [LuaStmt] -> [(Text, [LuaExpr])] -> [LuaStmt]
+mkLets = foldl (\stmts (v, b) -> mkBind LuaLocal v b : stmts)
+
+mkBind :: ([LuaVar] -> [LuaExpr] -> LuaStmt) -> Text -> [LuaExpr] -> LuaStmt
+mkBind f v [] = f [LuaName v] [LuaNil]
+mkBind f v [e] = f [LuaName v] [e]
+mkBind f v e = f (zipWith (\i _ -> LuaName (v <> T.pack (show i))) [1::Int ..] e) e
 
 foldAnd :: [LuaExpr] -> LuaExpr
 foldAnd = foldl1 k where
@@ -443,31 +455,35 @@ foldAnd = foldl1 k where
     | r == LuaFalse || l == LuaFalse = LuaFalse
     | otherwise = LuaBinOp l "and" r
 
-patternTest :: forall a. Occurs a => EscapeScope -> Pattern a -> LuaExpr ->  LuaExpr
-patternTest _ (Capture _ _) _      = LuaTrue
-patternTest _ (PatLit RecNil) _    = LuaTrue
-patternTest _ (PatLit l)  vr       = LuaBinOp (emitLit l) "==" vr
-patternTest s (PatExtend p rs) vr  = foldAnd (patternTest s p vr : map test rs) where
-  test (var', pat) = patternTest s pat (LuaRef (LuaIndex vr (LuaString var')))
-patternTest s (Constr con) vr      = foldAnd [tag s con vr]
-patternTest s (Destr con p) vr     = foldAnd [tag s con vr, patternTest s p (LuaRef (LuaIndex vr (LuaInteger 1)))]
+patternTest :: forall a. Occurs a => EscapeScope -> Pattern a -> [LuaExpr] ->  LuaExpr
+patternTest _ (Capture _ _) _       = LuaTrue
+patternTest _ (PatLit RecNil) _     = LuaTrue
+patternTest _ (PatLit l)  [vr]      = LuaBinOp (emitLit l) "==" vr
+patternTest s (PatExtend p rs) [vr] = foldAnd (patternTest s p [vr] : map test rs) where
+  test (var', pat) = patternTest s pat [LuaRef (LuaIndex vr (LuaString var'))]
+patternTest s (Constr con) [vr]    = foldAnd [tag s con vr]
+patternTest s (Destr con p) [vr]   = foldAnd [tag s con vr, patternTest s p [LuaRef (LuaIndex vr (LuaInteger 1))]]
+patternTest s (PatValues ps) vr   = foldAnd (zipWith (\p v -> patternTest s p [v]) ps vr)
+patternTest _ _ _ = undefined
 
 tag :: Occurs a => EscapeScope -> a -> LuaExpr -> LuaExpr
 tag scp con vr = LuaBinOp (LuaRef (LuaIndex vr (LuaString "__tag"))) "==" (LuaString (getVar con scp))
 
-patternBindings :: Occurs a => Pattern a -> LuaExpr -> [(a, LuaExpr)]
+patternBindings :: Occurs a => Pattern a -> [LuaExpr] -> [(a, [LuaExpr])]
 patternBindings (PatLit _) _     = []
 patternBindings (Capture n _) v
   | doesItOccur n = [(n, v)]
   | otherwise = []
 patternBindings (Constr _) _     = []
-patternBindings (Destr _ p) vr   = patternBindings p (LuaRef (LuaIndex vr (LuaInteger 1)))
-patternBindings (PatExtend p rs) vr = patternBindings p vr ++ concatMap (index vr) rs where
-  index vr (var', pat) = patternBindings pat (LuaRef (LuaIndex vr (LuaString var')))
+patternBindings (Destr _ p) [vr] = patternBindings p [LuaRef (LuaIndex vr (LuaInteger 1))]
+patternBindings (PatExtend p rs) [vr] = patternBindings p [vr] ++ concatMap (index vr) rs where
+  index vr (var', pat) = patternBindings pat [LuaRef (LuaIndex vr (LuaString var'))]
+patternBindings (PatValues ps) vr = mconcat (zipWith (\p v -> patternBindings p [v]) ps vr)
+patternBindings _ _ = undefined
 
 emitArm ::  (MonadState (EmitState v1) m, Occurs v)
-        => LuaExpr
-        -> (LuaExpr -> State (EmitState v) [LuaStmt])
+        => [LuaExpr]
+        -> ([LuaExpr] -> State (EmitState v) [LuaStmt])
         -> AnnArm () v
         -> m (LuaExpr, [LuaStmt])
 emitArm test next Arm { _armPtrn = p, _armBody = c } = do
@@ -476,11 +492,11 @@ emitArm test next Arm { _armPtrn = p, _armBody = c } = do
        , let (once, multi) = partition ((==Once) . usedWhen . fst) (patternBindings p test)
              (s', multi') = foldl (\(s, vs) (v, e) ->
                                       let (v', s') = pushVar v s
-                                      in (s', (LuaName v', e): vs))
+                                      in (s', (v', e): vs))
                             (esc, []) multi
          in (case multi' of
                 [] -> []
-                _ -> [uncurry LuaLocal (unzip multi')])
+                _ -> map (uncurry (mkBind LuaLocal)) multi')
             ++ evalState (runContT (emitTerm c) next) (EmitState (withMatch once) s') )
 
   where withMatch = map (\(a, b) -> VarEntry a b True)

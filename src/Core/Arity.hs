@@ -46,10 +46,11 @@ atomArity _ (Lit _) = Arity 0 True
 
 -- | Determine if the given term can be evaluated without side effects
 isPure :: IsVar a => ArityScope -> AnnTerm b a -> Bool
-isPure _ AnnAtom{}   = True
-isPure _ AnnExtend{} = True
-isPure _ AnnTyApp{}  = True
-isPure _ AnnCast{}  = True
+isPure _ AnnAtom{}    = True
+isPure _ AnnExtend{}  = True
+isPure _ AnnValues{} = True
+isPure _ AnnTyApp{}   = True
+isPure _ AnnCast{}    = True
 isPure s (AnnLet _ (One v) e) = isPure s e && isPure s (thd3 v)
 isPure s (AnnLet _ (Many vs) e) = isPure s e && all (isPure s . thd3) vs
 isPure s (AnnMatch _ _ bs) = all (isPure s . view armBody) bs
@@ -88,21 +89,21 @@ mapArity f (Arity a p) = Arity (f a) p
 -- | Various built-in functions with a predetermined arity
 opArity :: VarMap.Map Arity
 opArity = VarMap.fromList . map (flip Arity True <$>) $
-    [ (vOpAdd, 2), (vOpAddF, 2)
-    , (vOpSub, 2), (vOpSubF, 2)
-    , (vOpMul, 2), (vOpMulF, 2)
-    , (vOpDiv, 2), (vOpDivF, 2)
-    , (vOpExp, 2), (vOpExpF, 2)
-    , (vOpLt,  2), (vOpLtF,  2)
-    , (vOpGt,  2), (vOpGtF,  2)
-    , (vOpLe,  2), (vOpLeF,  2)
-    , (vOpGe,  2), (vOpGeF,  2)
+    [ (vOpAdd, 1), (vOpAddF, 1)
+    , (vOpSub, 1), (vOpSubF, 1)
+    , (vOpMul, 1), (vOpMulF, 1)
+    , (vOpDiv, 1), (vOpDivF, 1)
+    , (vOpExp, 1), (vOpExpF, 1)
+    , (vOpLt,  1), (vOpLtF,  1)
+    , (vOpGt,  1), (vOpGtF,  1)
+    , (vOpLe,  1), (vOpLeF,  1)
+    , (vOpGe,  1), (vOpGeF,  1)
     , (vLAZY,  2)
 
-    , (vOpConcat,  2)
+    , (vOpConcat,  1)
 
-    , (vOpEq, 3)
-    , (vOpNe, 3)
-    , (vOpOr, 2)
-    , (vOpAnd, 2)
+    , (vOpEq, 2)
+    , (vOpNe, 2)
+    , (vOpOr, 1)
+    , (vOpAnd, 1)
     ]
