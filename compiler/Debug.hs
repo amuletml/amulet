@@ -18,6 +18,7 @@ import Backend.Lua
 import Text.Pretty.Semantic
 
 data DebugMode = Void | Test | TestTc
+  deriving Eq
 
 dump :: DebugMode
      -> [Toplevel Typed]

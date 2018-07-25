@@ -1,6 +1,6 @@
 verify06.ml[1:5 ..1:7]: error
   Invalid recursive right-hand side for variable x
-  • Note: because the variable x is not under a function
+  • Note: because evaluation of the variable x is not delayed
   Arising from use of the binding
   │ 
 1 │ let x = x

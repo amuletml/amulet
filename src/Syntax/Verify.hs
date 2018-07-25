@@ -45,12 +45,11 @@ instance Pretty VerifyError where
     vsep [ "Invalid recursive right-hand side for variable" <+> skeyword (pretty ex)
          , if null xs
               then empty
-              else note <+> "because the variable" <> plural
-                        <+> hsep (punctuate comma (map pretty xs)) <+> verb <+> "not under a function"
+              else note <+> "because evaluation of the variable" <> plural
+                        <+> hsep (punctuate comma (map pretty xs)) <+> "is not delayed"
          , nest 4 ("Arising from use of" <+> blameOf re)
          ]
     where plural | length xs == 1 = empty | otherwise = char 's'
-          verb | length xs == 1 = string "is" | otherwise = string "are"
   pretty (DefinedUnused (BindingSite v _ _)) =
     string "Bound locally but not used:" <+> squotes (pretty v)
 
@@ -90,11 +89,11 @@ verifyBindingGroup k _ = traverse_ verifyScc . depOrder where
     verifyExpr e
   verifyScc (CyclicSCC vs) = do
     let vars = foldMapOf (each . bindVariable) Set.singleton vs
-    for_ vs $ \b@(Binding var ex _ (s, ty)) -> do
+    for_ vs $ \(Binding var _ _ (s, ty)) -> modify (k (BindingSite var s ty))
+    for_ vs $ \b@(Binding var ex _ (_, _)) -> do
       let naked = unguardedVars ex
           blame = BecauseOf b
       verifyExpr ex
-      modify (k (BindingSite var s ty))
       unless (naked `Set.disjoint` vars) $
         tell (Seq.singleton (NonRecursiveRhs blame var (Set.toList (naked `Set.intersection` vars))))
 
@@ -154,7 +153,7 @@ unguardedVars (VarRef v _)         = Set.singleton v
 unguardedVars (Begin es _)         = foldMap unguardedVars es
 unguardedVars (Let vs b _)         = (unguardedVars b <> foldMap (unguardedVars . view bindBody) vs)
                               Set.\\ foldMapOf (each . bindVariable) Set.singleton vs
-unguardedVars (App f x _)          = unguardedVars f <> unguardedVars x
+unguardedVars (App f x _)          = freeIn f <> unguardedVars x
 unguardedVars Fun{}                = mempty
 unguardedVars (Record rs _)        = foldMap (unguardedVars . snd) rs
 unguardedVars (Access e _ _)       = unguardedVars e
