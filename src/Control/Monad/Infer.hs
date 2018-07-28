@@ -20,6 +20,7 @@ module Control.Monad.Infer
   , difference, freshTV, refreshTV
   , instantiate
   , SomeReason(..), Reasonable, propagateBlame
+  , becauseExp, becausePat
   , WhyInstantiate(..)
 
   -- lenses:
@@ -59,10 +60,10 @@ import Syntax.Subst
 type MonadInfer p m = (MonadError TypeError m, MonadReader Env m, MonadWriter (Seq.Seq (Constraint p)) m, MonadNamey m)
 
 data Constraint p
-  = ConUnify   SomeReason (Var p)  (Type p) (Type p)
-  | ConSubsume SomeReason (Var p)  (ImplicitScope p) (Type p) (Type p)
-  | ConImplies SomeReason (Type p) (Seq.Seq (Constraint p)) (Seq.Seq (Constraint p))
-  | ConImplicit SomeReason (Var p) (ImplicitScope p) (Type p) (Type p)
+  = ConUnify    SomeReason (Var p)  (Type p) (Type p)
+  | ConSubsume  SomeReason (Var p)  (ImplicitScope p) (Type p) (Type p)
+  | ConImplies  SomeReason (Type p) (Seq.Seq (Constraint p)) (Seq.Seq (Constraint p))
+  | ConImplicit SomeReason (Var p)  (ImplicitScope p) (Type p) (Type p)
   | ConFail (Ann p) (Var p) (Type p) -- for holes. I hate it.
 
 deriving instance (Show (Ann p), Show (Var p), Show (Expr p), Show (Type p))
@@ -289,8 +290,8 @@ instance Pretty TypeError where
                     , indent 5 (displayType t)
                     ]
            ]
-    where whatIs (TySkol (Skolem _ v _ _)) = string "the rigid type variable" <+> stypeVar (pretty v)
-          whatIs t = string "the type" <+> displayType (withoutSkol t)
+   where whatIs (TySkol (Skolem _ v _ _)) = string "the rigid type variable" <+> stypeVar (squote <>pretty v)
+         whatIs t = string "the type" <+> displayType (withoutSkol t)
 
   pretty (NoImplicit tau doc) =
     doc $ vsep [ "Could not choose implicit value of type" <+> displayType tau ]

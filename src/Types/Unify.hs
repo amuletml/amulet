@@ -25,11 +25,14 @@ import Syntax
 import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.Traversable
+import Data.Semigroup
 import Data.Sequence (Seq ((:<|), Empty))
 import Data.Foldable
 import Data.Function
 import Data.Spanned
+import Data.Reason
 import Data.List
 import Data.Text (Text)
 
@@ -243,11 +246,11 @@ doSolve (ConSubsume because v scope a b :<| xs) = do
   let a' = apply sub a
       cont = do
         sub <- use solveTySubst
-        co <- catchy $ subsumes scope (apply sub a) (apply sub b)
+        co <- catchy $ subsumes because scope (apply sub a) (apply sub b)
         case co of
           Left e -> do
             solveImplBail %= Set.union (ftv a' <> ftv (apply sub b))
-            tell [propagateBlame because e]
+            tell [e]
           Right co -> solveCoSubst . at v .= Just co
 
   case a' of
@@ -384,25 +387,28 @@ matchDistance t im =
              in foldOccMap (\v o x -> x + o * weight v) 0 occm
    in (distance, im)
 
-subsumes', subsumes :: Imp.ImplicitScope Typed -> Type Typed -> Type Typed -> SolveM (Wrapper Typed)
-subsumes s a b = do
+subsumes', subsumes :: SomeReason -> Imp.ImplicitScope Typed -> Type Typed -> Type Typed -> SolveM (Wrapper Typed)
+subsumes blame s a b = do
   x <- use solveTySubst
-  subsumes' s (apply x a) (apply x b)
+  subsumes' blame s (apply x a) (apply x b)
+    `catchError` \case
+      e@ArisingFrom{} -> throwError e
+      x -> throwError (ArisingFrom x blame)
 
-subsumes' s t1 t2@TyPi{} | isSkolemisable t2 = do
+subsumes' b s t1 t2@TyPi{} | isSkolemisable t2 = do
   sub <- use solveTySubst
   (c, t2') <- skolemise (BySubsumption (apply sub t1) (apply sub t2)) t2
-  (Syntax.:>) c <$> subsumes s t1 t2'
+  (Syntax.:>) c <$> subsumes b s t1 t2'
 
-subsumes' s t1@TyPi{} t2 | isSkolemisable t1 = do
+subsumes' b s t1@TyPi{} t2 | isSkolemisable t1 = do
   (cont, _, t1') <- instantiate Subsumption t1
   let wrap = maybe IdWrap (WrapFn . flip MkWrapCont "forall <= sigma; instantiation") cont
 
-  flip (Syntax.:>) wrap <$> subsumes s t1' t2
+  flip (Syntax.:>) wrap <$> subsumes b s t1' t2
 
-subsumes' s (TyPi (Implicit b) c) (TyPi (Implicit a) d) = do
-  wc <- subsumes s c d
-  wa <- subsumes s a b
+subsumes' blame s (TyPi (Implicit b) c) (TyPi (Implicit a) d) = do
+  wc <- subsumes blame s c d `catchError` \x -> IdWrap <$ tell [x]
+  wa <- subsumes blame s a b
   arg <- TvName <$> genName
 
   let wrap ex | an <- annotation ex
@@ -418,8 +424,8 @@ subsumes' s (TyPi (Implicit b) c) (TyPi (Implicit a) d) = do
 
   pure (WrapFn (MkWrapCont wrap "co/contra subsumption for implicit functions"))
 
-subsumes' s wt@(TyPi (Implicit t) t1) t2 | _TyVar `isn't` t2 = do
-  omega <- subsumes s t1 t2
+subsumes' r s wt@(TyPi (Implicit t) t1) t2 | _TyVar `isn't` t2 = do
+  omega <- subsumes r s t1 t2
 
   sub <- use solveTySubst
   w <- solveImplicitConstraint 0 wt s (apply sub t)
@@ -429,9 +435,11 @@ subsumes' s wt@(TyPi (Implicit t) t1) t2 | _TyVar `isn't` t2 = do
               (ExprWrapper w ex (an, t1)) (an, t1)) (an, t2)
    in pure (WrapFn (MkWrapCont wrap "implicit instantation"))
 
-subsumes' s ot@(TyTuple a b) nt@(TyTuple a' b') = do
-  wb <- subsumes s b b'
-  wa <- subsumes s a a'
+subsumes' r s ot@(TyTuple a b) nt@(TyTuple a' b') = do
+  (wb, wa) <- censor reverse $ do
+    wb <- subsumes (secondBlame r) s b b' `catchError` \x -> IdWrap <$ tell [x]
+    wa <- subsumes (firstBlame r) s a a' `catchError` \x -> IdWrap <$ tell [x]
+    pure (wb, wa)
   [elem, elem'] <- fmap TvName <$> replicateM 2 genName
   let cont (Tuple (e:es) (an, _)) =
         Tuple [ ExprWrapper wa e (an, a')
@@ -449,10 +457,10 @@ subsumes' s ot@(TyTuple a b) nt@(TyTuple a' b') = do
                    (an, nt)
   pure (WrapFn (MkWrapCont cont "tuple re-packing"))
 
-subsumes' _ a@(TyApp lazy _) b@(TyApp lazy' _)
+subsumes' _ _ a@(TyApp lazy _) b@(TyApp lazy' _)
   | lazy == lazy', lazy' == tyLazy = probablyCast <$> unify a b
 
-subsumes' _ (TyApp lazy ty') ty | lazy == tyLazy, concretish ty = do
+subsumes' _ _ (TyApp lazy ty') ty | lazy == tyLazy, concretish ty = do
   co <- unify ty' ty
   let wrap ex
         | an <- annotation ex =
@@ -462,7 +470,7 @@ subsumes' _ (TyApp lazy ty') ty | lazy == tyLazy, concretish ty = do
               (an, ty)
   pure (WrapFn (MkWrapCont wrap "automatic forcing"))
 
-subsumes' _ ty' (TyApp lazy ty) | lazy == tyLazy, concretish ty' = do
+subsumes' _ _ ty' (TyApp lazy ty) | lazy == tyLazy, concretish ty' = do
   co <- unify ty ty'
   let wrap ex
         | an <- annotation ex =
@@ -474,7 +482,7 @@ subsumes' _ ty' (TyApp lazy ty) | lazy == tyLazy, concretish ty' = do
               (an, TyApp lazy ty)
   pure (WrapFn (MkWrapCont wrap "automatic thunking"))
 
-subsumes' _ a b = probablyCast <$> unify a b
+subsumes' r _ a b = probablyCast <$> unify a b `catchError` (throwError . propagateBlame r)
 
 
 -- | Shallowly skolemise a type, replacing any @forall@-bound 'TyVar's
@@ -556,3 +564,15 @@ refreshTy ty = do
   vs <- for (Set.toList (ftv ty)) $ \v ->
     (v,) <$> refreshTV v
   pure (apply (Map.fromList vs) ty, Map.fromList vs)
+
+firstBlame, secondBlame :: SomeReason -> SomeReason
+firstBlame (It'sThis (BecauseOfExpr (Tuple (x:_) _))) = becauseExp x
+firstBlame x = x
+secondBlame (It'sThis (BecauseOfExpr (Tuple (_:xs) an))) =
+  case xs of
+    [] -> error "wot"
+    [x] -> becauseExp x
+    xs@(x:ys) ->
+      let len = sconcat (annotation x :| map annotation ys)
+       in becauseExp (respan (const len) (Tuple xs an))
+secondBlame x = x

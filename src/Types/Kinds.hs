@@ -159,7 +159,7 @@ inferKind (TySkol sk) = do
 
 inferKind (TyApp f x) = do
   reason <- get
-  (f, (dom, c, _)) <- secondA (quantifier (Const reason) Don'tSkip) =<< inferKind f
+  (f, (dom, c, _)) <- secondA (quantifier reason Don'tSkip) =<< inferKind f
 
   case dom of
     Anon d -> do
@@ -214,7 +214,7 @@ checkKind (TyPi binder b) ek = do
 
     Invisible v (Just arg) -> do
       (arg, kind) <- inferKind arg
-      _ <- subsumes (Const reason) ek kind
+      _ <- subsumes reason ek kind
       b <- local (names %~ focus (one v arg)) $
         checkKind b ek
       let bind = Invisible (TvName v) (Just arg)
@@ -230,7 +230,7 @@ checkKind (TyPi binder b) ek = do
 checkKind ty u = do
   reason <- get
   (t, k) <- inferKind ty
-  _ <- subsumes (Const reason) u k
+  _ <- subsumes reason u k
   pure t
 
 inferGadtConKind :: MonadKind m
@@ -264,7 +264,7 @@ inferGadtConKind con typ tycon args = go typ (reverse (spine (gadtConResult typ)
 isType :: MonadKind m => Kind Typed -> KindT m (Kind Typed)
 isType t = do
   blame <- get
-  _ <- unify (Const blame) TyType t
+  _ <- unify blame TyType t
   pure t
 
 closeOver :: MonadKind m => SomeReason -> Type Typed -> m (Type Typed)

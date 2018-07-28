@@ -158,7 +158,7 @@ ExprApp :: { Expr Parsed }
         | ExprApp ':' Type                     { withPos2 $1 $3 $ Ascription $1 (getL $3) }
 
 Expr0 :: { Expr Parsed }
-      : fun ListE1(Parameter) '->' ExprBlock '$end' { foldr (\x y -> withPos2 x $4 $ Fun x y) $4 $2 }
+      : fun ListE1(Parameter) '->' ExprBlock '$end' { respanFun $1 $4 $ foldr (\x y -> withPos2 x $4 $ Fun x y) $4 $2 }
       | let BindGroup ExprIn ExprBlock '$end'  { withPos2 $1 $4 $ Let (reverse $2) $4 }
       | let open Con ExprIn ExprBlock '$end'   { withPos2 $1 $5 $ OpenIn (getL $3) $5 }
       | if Expr then ExprBlock else ExprBlock '$end'
@@ -431,4 +431,8 @@ forallTy vs t = foldr TyPi t (map (flip Invisible Nothing) vs)
 
 implicitify :: Spanned a => a -> Binding Parsed -> Binding Parsed
 implicitify x (Binding a b _ c) = Binding a b BindImplicit (withPos1 x id <> c)
+
+respanFun :: (Spanned a, Spanned b) => a -> b -> Expr Parsed -> Expr Parsed
+respanFun s e (Fun p b _) = Fun p b (mkSpanUnsafe (spanStart (annotation s)) (spanEnd (annotation e)))
+respanFun _ _ _ = error "what"
 }

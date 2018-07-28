@@ -1,5 +1,5 @@
 fail_term.ml[16:3 ..16:30]: error
-  Could not match expected type 'b with the rigid type variable a
+  Could not match expected type 'b with the rigid type variable 'a
 
   • When checking that this expression has type
        forall 'a 'b. term unit ('a -> 'b -> 'b)

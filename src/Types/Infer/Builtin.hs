@@ -56,20 +56,19 @@ builtinsEnv = envOf (scopeFromList builtin) where
       ]
     where a = TvName (TgInternal "a")
 
-unify, subsumes :: ( Reasonable f p
-                   , MonadInfer Typed m )
-                => f p
+unify, subsumes :: ( MonadInfer Typed m )
+                => SomeReason
                 -> Type Typed
                 -> Type Typed -> m (Type Typed, Wrapper Typed)
 unify e a b = do
   x <- TvName <$> genName
-  tell (Seq.singleton (ConUnify (BecauseOf e) x a b))
+  tell (Seq.singleton (ConUnify e x a b))
   pure (b, WrapVar x)
 
 subsumes e a b = do
   i <- view implicits
   x <- TvName <$> genName
-  tell (Seq.singleton (ConSubsume (BecauseOf e) x i a b))
+  tell (Seq.singleton (ConSubsume e x i a b))
   pure (b, WrapVar x)
 
 implies :: ( Reasonable f p
@@ -95,12 +94,11 @@ leakEqualities :: ( Reasonable f p
                => f p
                -> [(Type Typed, Type Typed)]
                -> m ()
-leakEqualities r ((a, b):xs) = unify r a b *> leakEqualities r xs
+leakEqualities r ((a, b):xs) = unify (BecauseOf r) a b *> leakEqualities r xs
 leakEqualities _ [] = pure ()
 
-decompose :: ( Reasonable f p
-             , MonadInfer Typed m )
-          => f p
+decompose :: MonadInfer Typed m
+          => SomeReason
           -> Prism' (Type Typed) (Type Typed, Type Typed)
           -> Type Typed
           -> m (Type Typed, Type Typed, Expr Typed -> Expr Typed)
@@ -119,8 +117,8 @@ decompose r p t =
 
 -- | Get the first /visible/ 'TyBinder' in this 'Type', possibly
 -- instantiating 'TyForall's and discharging 'Implicit' binders.
-quantifier :: (Reasonable f p, MonadInfer Typed m)
-           => f p
+quantifier :: MonadInfer Typed m
+           => SomeReason
            -> SkipImplicit
            -> Type Typed
            -> m (TyBinder Typed, Type Typed, Expr Typed -> Expr Typed)
@@ -132,7 +130,7 @@ quantifier r s ty@TyForall{} = do
 quantifier r DoSkip wty@(TyPi (Implicit tau) sigma) = do
   x <- TvName <$> genName
   i <- view implicits
-  tell (Seq.singleton (ConImplicit (BecauseOf r) x i tau sigma))
+  tell (Seq.singleton (ConImplicit r x i tau sigma))
 
   (dom, cod, k) <- quantifier r DoSkip sigma
   let wrap ex = ExprWrapper (WrapVar x) (ExprWrapper (TypeAsc wty) ex (annotation ex, wty)) (annotation ex, sigma)
