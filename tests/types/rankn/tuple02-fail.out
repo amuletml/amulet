@@ -1,8 +1,10 @@
 tuple02-fail.ml[1:41 ..1:56]: error
-  Could not match rigid type variable a with the type int
-  • Note: the variable a was rigidified because of a requirement that int -> unit
-          be as polymorphic as forall 'a. 'a -> 'a
+  Could not match expected type 'a with the type int
 
+  • When checking that the type
+       int -> unit
+    can be made as polymorphic as
+       forall 'a. 'a -> 'a
 
   Arising in the expression
   │ 

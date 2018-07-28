@@ -207,7 +207,7 @@ instance Pretty TypeError where
              , string "Have you applied a" <+> thing <+> "to the wrong number of arguments?"
              ]
   pretty (NotEqual TyType b) =
-    vcat [ string "Expected a type, but this annotation is of kind" <+> displayType b
+    vcat [ string "Expected a type, but this has kind" <+> displayType b
          , string "Have you applied a type constructor to the wrong number of arguments?"
          ]
   pretty (NotEqual a b) = string "Could not match expected type" <+> displayType b <+> string "with" <+> displayType a
@@ -272,21 +272,25 @@ instance Pretty TypeError where
          , err
          ]
 
-  pretty (SkolBinding (Skolem ok v _ m) b) =
-    vsep [ string "Could not match rigid type variable" <+> skol <+> string "with" <+> whatIs b
-         , note <+> "the variable" <+> skol <+> string "was rigidified because"
-                <+> nest 8 (prettyMotive m)
-         ] <#> case b of
-             TySkol (Skolem k v _ m) ->
-               vcat [ indent 8 (string "and is represented by the constant") <+> stypeSkol (pretty ok)
-                    , empty
-                    , vsep [ note <+> "the rigid type variable" <+> stypeVar (pretty v) <> comma <+> string "in turn" <> comma
-                           , indent 8 . align $ string "was rigidified because" <+> prettyMotive m
-                           , indent 8 (string "and is represented by the constant") <+> stypeSkol (pretty k) ] ]
-             _ -> empty
+  pretty (SkolBinding (Skolem _ v _ m) t) =
+    vsep [ string "Could not match expected type" <+> stypeSkol (squote <> pretty v) <+> "with" <+> whatIs t
+         , empty
+         , case m of
+             ByAscription t -> bullet $ string "When checking that this expression has type" <#> indent 5 (displayType t)
+             BySubsumption s t ->
+               vsep [ bullet $ string "When checking that the type"
+                    , indent 5 (displayType s)
+                    , indent 2 (string "can be made as polymorphic as")
+                    , indent 5 (displayType t)
+                    ]
+             ByExistential c t ->
+               vsep [ bullet $ string "Where the type variable" <+> stypeSkol (pretty v) <+> "is an" <+> keyword "existential" <> comma
+                    , indent 2 $ string "bound by the constructor" <+> stypeCon (pretty c) <> ", which has type"
+                    , indent 5 (displayType t)
+                    ]
+           ]
     where whatIs (TySkol (Skolem _ v _ _)) = string "the rigid type variable" <+> stypeVar (pretty v)
           whatIs t = string "the type" <+> displayType (withoutSkol t)
-          skol = stypeVar (pretty v)
 
   pretty (NoImplicit tau doc) =
     doc $ vsep [ "Could not choose implicit value of type" <+> displayType tau ]
