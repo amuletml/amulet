@@ -33,9 +33,6 @@ import Data.Spanned
 import Data.List
 import Data.Text (Text)
 
-import Debug.Trace
-import Text.Pretty.Semantic
-
 data SolveScope
   = SolveScope { _bindSkol :: Bool
                , _don'tTouch :: Set.Set (Var Typed)
@@ -234,7 +231,6 @@ doSolve Empty = pure ()
 doSolve (ConUnify because v a b :<| xs) = do
   sub <- use solveTySubst
 
-  traceM (displayS (pretty (ConUnify because v (apply sub a) (apply sub b))))
   co <- catchy $ unify (apply sub a) (apply sub b)
   case co of
     Left e -> tell [propagateBlame because e]
@@ -244,7 +240,6 @@ doSolve (ConUnify because v a b :<| xs) = do
 doSolve (ConSubsume because v scope a b :<| xs) = do
   sub <- use solveTySubst
 
-  traceM (displayS (pretty (ConSubsume because v scope (apply sub a) (apply sub b))))
   let a' = apply sub a
       cont = do
         sub <- use solveTySubst

@@ -34,6 +34,7 @@ import Control.Lens hiding (Lazy)
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
+import qualified Data.Set as Set
 import Data.Traversable
 import Data.Sequence (Seq)
 import Data.Foldable
@@ -61,6 +62,7 @@ data ResolveError
   | NoSuchModule (Var Parsed)
   | Ambiguous (Var Parsed) [Var Resolved]
   | NonLinearPattern (Var Resolved) [Pattern Resolved]
+  | NonLinearRecord (Expr Parsed) T.Text
   | EmptyMatch
   | EmptyBegin
 
@@ -74,10 +76,12 @@ instance Pretty ResolveError where
   pretty (NonLinearPattern v _) = "Non-linear pattern (multiple definitions of" <+> verbatim v <+> ")"
   pretty EmptyMatch = "Empty match expression"
   pretty EmptyBegin = "Empty begin expression"
+  pretty (NonLinearRecord _ t) = "Duplicate field" <+> stypeSkol (text t) <+> "in record" <#> empty
   pretty (ArisingFrom er ex) = pretty er <#> empty <#> nest 4 (string "Arising from use of" <+> blameOf ex </> pretty ex)
 
 instance Spanned ResolveError where
   annotation (ArisingFrom _ x) = annotation x
+  annotation (NonLinearRecord e _) = annotation e
   annotation _ = undefined
 
 instance Note ResolveError Style where
@@ -86,6 +90,7 @@ instance Note ResolveError Style where
   formatNote f x = indent 2 (Right <$> pretty x) <#> fromJust (body x) where
     body (ArisingFrom er a) = body er <|> Just (f [annotation a])
     body (NonLinearPattern _ ps) = Just (f (map annotation ps))
+    body (NonLinearRecord e _) = Just (f [annotation e])
     body _ = Nothing
 
 type MonadResolve m = ( MonadError ResolveError m
@@ -293,11 +298,21 @@ reExpr r@(Ascription e t a) = Ascription
                           <$> reExpr e
                           <*> reType r t
                           <*> pure a
-reExpr (Record fs a) = Record <$> traverse (traverse reExpr) fs <*> pure a
-reExpr (RecordExt e fs a) = RecordExt
-                        <$> reExpr e
-                        <*> traverse (traverse reExpr) fs
-                        <*> pure a
+reExpr e@(Record fs a) = do
+  let ls = map fst fs
+      nub = Set.toList . Set.fromList
+  case ls \\ nub ls of
+    l:_ -> throwError $ NonLinearRecord e l
+    _ -> pure ()
+  Record <$> traverse (traverse reExpr) fs <*> pure a
+reExpr (RecordExt e fs a) = do
+  let ls = map fst fs
+      nub = Set.toList . Set.fromList
+  case ls \\ nub ls of
+    l:_ -> throwError $ NonLinearRecord e l
+    _ -> pure ()
+  RecordExt <$> reExpr e <*> traverse (traverse reExpr) fs <*> pure a
+
 reExpr (Access e t a) = Access <$> reExpr e <*> pure t <*> pure a
 reExpr (LeftSection o r a) = LeftSection <$> reExpr o <*> reExpr r <*> pure a
 reExpr (RightSection l o a) = RightSection <$> reExpr l <*> reExpr o <*> pure a
