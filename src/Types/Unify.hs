@@ -161,26 +161,26 @@ unify (TyRows rho arow) (TyRows sigma brow)
   , rhoNew <- deleteFirstsBy ((==) `on` fst) (sortOn fst arow) (sortOn fst brow)
   , sigmaNew <- deleteFirstsBy ((==) `on` fst) (sortOn fst brow) (sortOn fst arow) =
     do
+      let mk t rs = if rs /= [] then TyRows t rs else t
       tau <- freshTV
       cs <- traverse unifRow overlaps
       if null sigmaNew && null rhoNew
          then RowsCo <$> unify rho sigma <*> pure cs
          else do
-           co <- unify rho (TyRows tau sigmaNew) -- yes
-           _ <- unify sigma (TyRows tau rhoNew) -- it's backwards
+           co <- unify rho (mk tau sigmaNew) -- yes
+           _ <- unify sigma (mk tau rhoNew) -- it's backwards
            pure (RowsCo co cs)
 
-unify ta@TyExactRows{} tb@TyRows{} = unify tb ta
+unify ta@TyExactRows{} tb@TyRows{} = SymCo <$> unify tb ta
 
 unify tb@(TyRows rho brow) ta@(TyExactRows arow)
   | overlaps <- overlap arow brow
   , rhoNew <- deleteFirstsBy ((==) `on` fst) (sortOn fst arow) (sortOn fst brow)
-  = case overlaps of
-      [] -> throwError (NoOverlap tb ta)
-      xs -> do
-        cs <- traverse unifRow xs
-        _ <- unify rho (TyExactRows rhoNew)
-        pure (ProjCo rhoNew cs)
+  = if | length overlaps < length brow -> throwError (NoOverlap tb ta)
+       | otherwise -> do
+          cs <- traverse unifRow overlaps
+          _ <- unify rho (TyExactRows rhoNew)
+          pure (SymCo (ProjCo rhoNew cs))
 
 unify ta@(TyExactRows arow) tb@(TyExactRows brow)
   | overlaps <- overlap arow brow

@@ -281,8 +281,14 @@ checkTerm s t@(Extend f fs) = do
     if ty `apart` ty' then throwError (TypeMismatch ty ty') else pure ()
 
   case tyf' of
-    ExactRowsTy [] -> pure . ExactRowsTy $ map (\(f, ty, _) -> (f, ty)) fs
-    _-> pure . RowsTy tyf' $ map (\(f, ty, _) -> (f, ty)) fs
+    RowsTy tau rs ->
+      let updated = deleteFirstsBy ((==) `on` fst) rs tys
+          tys = map (\(f, ty, _) -> (f, ty)) fs
+          inner = case updated of
+            [] -> tau
+            xs -> RowsTy tau xs
+       in pure $ RowsTy inner tys
+    x -> pure . RowsTy x . map (\(f, ty, _) -> (f, ty)) $ fs
 
 checkTerm s t@(Values xs) = ValuesTy <$> for xs (\x -> checkAtom s x `withContext` t)
 
