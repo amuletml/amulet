@@ -479,8 +479,6 @@ subsumes' _ ty' (TyApp lazy ty) | lazy == tyLazy, concretish ty' = do
               (an, TyApp lazy ty)
   pure (WrapFn (MkWrapCont wrap "automatic thunking"))
 
-subsumes' _ t@TyVar{} (TyRows tau _) = probablyCast <$> unify t tau
-
 subsumes' _ a b = probablyCast <$> unify a b
 
 
