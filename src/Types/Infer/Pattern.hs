@@ -70,7 +70,7 @@ checkPattern (Capture v ann) ty = pure (Capture (TvName v) (ann, ty), one v ty, 
 checkPattern ex@(Destructure con ps ann) target =
   case ps of
     Nothing -> do
-      pty <- skolGadt con =<< lookupTy con
+      pty <- skolGadt con =<< lookupTy' con
       let (cs, ty) =
             case pty of
               TyWithConstraints cs ty -> (cs, ty)
@@ -84,7 +84,7 @@ checkPattern ex@(Destructure con ps ann) target =
             co <- unify ex target d
             wrapPattern (Destructure (TvName con) (Just ps'), b, cs ++ cs') (ann, target) co
       in do
-        t <- skolGadt con =<< lookupTy con
+        t <- skolGadt con =<< lookupTy' con
         case t of
           TyWithConstraints cs ty -> go cs ty
           _ -> go [] t
@@ -164,8 +164,8 @@ boundTvs p vs = pat p <> foldTele go vs where
   pat PLiteral{} = mempty
   pat (PWrapper _ p _) = pat p
 
-skolGadt :: MonadInfer Typed m => Var Resolved -> Type Typed -> m (Type Typed)
-skolGadt var ty =
+skolGadt :: MonadInfer Typed m => Var Resolved -> (Maybe a, Type Typed, Type Typed) -> m (Type Typed)
+skolGadt var (_, oty, ty) =
   let result (TyPi _ t) = result t
       result (TyWithConstraints _ t) = result t
       result t = t
@@ -182,7 +182,7 @@ skolGadt var ty =
       fugitives = mentioned `Set.union` foldMap (ftv . snd) freed
    in do
      vs <- for (Set.toList (ftv ty `Set.difference` fugitives)) $ \v ->
-       (v,) <$> freshSkol (ByExistential (TvName var) ty) ty v
+       (v,) <$> freshSkol (ByExistential (TvName var) oty) ty v
      pure $ apply (Map.fromList vs) ty
 
 wrapPattern :: Applicative f => (Ann Typed -> Pattern Typed, Telescope Typed, [(Type Typed, Type Typed)])

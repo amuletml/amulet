@@ -1,8 +1,8 @@
 fail_skolem_pure.ml[2:32 ..2:32]: error
-  Could not match rigid type variable a with the type 'f 'a
-  • Note: the variable a was rigidified because of the context, the type
-          forall 'a. 'a -> 'f 'a
+  Could not match expected type 'a with the type 'f 'a
 
+  • When checking that this expression has type
+       forall 'a. 'a -> 'f 'a
 
   Arising in the expression
   │ 
