@@ -33,8 +33,8 @@ import Control.Monad.Namey
 import Control.Lens hiding (Lazy)
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Sequence as Seq
 import qualified Data.Text as T
-import qualified Data.Set as Set
 import Data.Traversable
 import Data.Sequence (Seq)
 import Data.Foldable
@@ -52,7 +52,7 @@ import Syntax.Resolve.Toplevel
 import Syntax.Pretty
 import Syntax.Subst
 
-import Text.Pretty.Semantic
+import Text.Pretty.Semantic hiding (group)
 import Text.Pretty.Note
 
 -- | An error in the resolution process. Note that one error may be
@@ -300,17 +300,13 @@ reExpr r@(Ascription e t a) = Ascription
                           <*> pure a
 reExpr e@(Record fs a) = do
   let ls = map fst fs
-      nub = Set.toList . Set.fromList
-  case ls \\ nub ls of
-    l:_ -> throwError $ NonLinearRecord e l
-    _ -> pure ()
+      dupes = mapMaybe (listToMaybe . tail) . group . sort $ ls
+  traverse_ (tell . Seq.singleton . NonLinearRecord e) dupes
   Record <$> traverse (traverse reExpr) fs <*> pure a
-reExpr (RecordExt e fs a) = do
+reExpr ex@(RecordExt e fs a) = do
   let ls = map fst fs
-      nub = Set.toList . Set.fromList
-  case ls \\ nub ls of
-    l:_ -> throwError $ NonLinearRecord e l
-    _ -> pure ()
+      dupes = mapMaybe (listToMaybe . tail) . group . sort $ ls
+  traverse_ (tell . Seq.singleton . NonLinearRecord ex) dupes
   RecordExt <$> reExpr e <*> traverse (traverse reExpr) fs <*> pure a
 
 reExpr (Access e t a) = Access <$> reExpr e <*> pure t <*> pure a
