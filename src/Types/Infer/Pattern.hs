@@ -31,8 +31,8 @@ inferPattern :: MonadInfer Typed m
                   )
 inferPattern pat@(PType p t ann) = do
   (p', pt, vs, cs) <- inferPattern p
-  t' <- resolveKind (BecauseOf pat) t
-  _ <- subsumes pat t' pt
+  t' <- resolveKind (becausePat pat) t
+  _ <- subsumes (becausePat pat) t' pt
   case p' of
     Capture v _ -> pure (PType p' t' (ann, t'), t', one v t', cs)
     _ -> pure (PType p' t' (ann, t'), t', vs, cs)
@@ -75,13 +75,13 @@ checkPattern ex@(Destructure con ps ann) target =
             case pty of
               TyWithConstraints cs ty -> (cs, ty)
               _ -> ([], pty)
-      co <- unify ex target ty
+      co <- unify (becausePat ex) target ty
       wrapPattern (Destructure (TvName con) Nothing, mempty, cs) (ann, target) co
     Just p ->
       let go cs t = do
-            (c, d, _) <- decompose ex _TyArr t
+            (c, d, _) <- decompose (becausePat ex) _TyArr t
             (ps', b, cs') <- checkPattern p c
-            co <- unify ex target d
+            co <- unify (becausePat ex) target d
             wrapPattern (Destructure (TvName con) (Just ps'), b, cs ++ cs') (ann, target) co
       in do
         t <- skolGadt con =<< lookupTy' con
@@ -93,7 +93,7 @@ checkPattern pt@(PRecord rows ann) ty = do
   (rowps, rowts, caps, cons) <- unzip4 <$> for rows (\(var, pat) -> do
     (p', t, caps, cs) <- inferPattern pat
     pure ((var, p'), (var, t), caps, cs))
-  co <- unify pt ty (TyRows rho rowts)
+  co <- unify (becausePat pt) ty (TyRows rho rowts)
   wrapPattern (PRecord rowps, mconcat caps, concat cons) (ann, ty) co
 
 checkPattern (PTuple xs ann) ty@TyTuple{} = do
@@ -111,13 +111,13 @@ checkPattern (PTuple xs ann) ty@TyTuple{} = do
 checkPattern pt@(PType p t ann) ty = do
   (p', it, binds, cs) <- inferPattern p
   t' <- resolveKind (BecauseOf pt) t
-  _ <- subsumes pt t' it
-  co <- unify pt ty t'
+  _ <- subsumes (becausePat pt) t' it
+  co <- unify (becausePat pt) ty t'
   wrapPattern (PType p' t', binds, cs) (ann, ty) co
 
 checkPattern pt ty = do
   (p, ty', binds, cs) <- inferPattern pt
-  (_, co) <- subsumes pt ty ty'
+  (_, co) <- subsumes (becausePat pt) ty ty'
   pure (PWrapper (co, ty') p (annotation p, ty), binds, cs)
 
 checkParameter :: MonadInfer Typed m

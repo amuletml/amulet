@@ -78,11 +78,11 @@ check (Let ns b an) t = do
     pure (Let ns b (an, t))
 
 check ex@(Fun pat e an) ty = do
-  (dom, cod, _) <- quantifier ex Don'tSkip ty
+  (dom, cod, _) <- quantifier (becauseExp ex) Don'tSkip ty
   let domain = _tyBinderType dom
 
   (p, tau, vs, cs) <- inferParameter pat
-  _ <- unify ex domain (_tyBinderType tau)
+  _ <- unify (becauseExp ex) domain (_tyBinderType tau)
   let tvs = boundTvs (p ^. paramPat) vs
 
   implies (Arm (pat ^. paramPat) e) domain cs $
@@ -126,14 +126,14 @@ check (Access rc key a) ty = do
 
 -- This is _very_ annoying, but we need it for nested ascriptions
 check ex@(Ascription e ty an) goal = do
-  ty <- resolveKind (BecauseOf ex) ty
+  ty <- resolveKind (becauseExp ex) ty
   e <- check e ty
-  (_, c) <- subsumes ex ty goal
+  (_, c) <- subsumes (becauseExp ex) ty goal
   pure (ExprWrapper c e (an, goal))
 
 check e ty = do
   (e', t) <- infer e
-  (_, c) <- subsumes e t ty
+  (_, c) <- subsumes (becauseExp e) t ty
   pure (ExprWrapper c e' (annotation e, ty))
 
 -- [Complete and Easy]: See https://www.cl.cam.ac.uk/~nk480/bidir.pdf
@@ -172,13 +172,13 @@ infer (Literal l an) = pure (Literal l (an, ty), ty) where
   ty = litTy l
 
 infer ex@(Ascription e ty an) = do
-  ty <- resolveKind (BecauseOf ex) ty
+  ty <- resolveKind (becauseExp ex) ty
   e <- check e ty
   pure (Ascription (correct ty e) ty (an, ty), ty)
 
 infer ex@(App f x a) = do
   (f, ot) <- infer f
-  (dom, c, k) <- quantifier ex DoSkip ot
+  (dom, c, k) <- quantifier (becauseExp ex) DoSkip ot
   case dom of
     Anon d -> do
       x <- check x d
@@ -187,8 +187,8 @@ infer ex@(App f x a) = do
     Invisible{} -> error "invalid invisible quantification in App"
 
 infer ex@(BinOp l o r a) = do
-  (o, (ld, c, k1)) <- secondA (decompose ex _TyArr) =<< infer o
-  (rd, c', k2) <- decompose ex _TyArr c
+  (o, (ld, c, k1)) <- secondA (decompose (becauseExp ex) _TyArr) =<< infer o
+  (rd, c', k2) <- decompose (becauseExp ex) _TyArr c
   (l, r) <- (,) <$> check l ld <*> check r rd
   pure (App (k2 (App (k1 o) l (a, c))) r (a, c'), c')
 
@@ -216,7 +216,7 @@ infer ex@(RecordExt rec rows a) = do
   tv <- freshTV
   let ty = TyRows tv newts
 
-  (t, co) <- subsumes ex rho ty
+  (t, co) <- subsumes (becauseExp ex) rho ty
   pure (ExprWrapper co (RecordExt rec rows (a, ty)) (a, t), t)
 
 infer (Tuple xs an) =
@@ -286,15 +286,15 @@ inferProg [] = asks ([],)
 -- For polymorphic recursion, mostly
 approxType :: MonadInfer Typed m => Expr Resolved -> StateT Origin m (Type Typed)
 approxType r@(Fun p e _) = TyPi <$> approxParam p <*> approxType e where
-  approxParam (ImplParam (PType _ t _)) = Implicit <$> resolveKind (BecauseOf r) t
-  approxParam (PatParam (PType _ t _)) = Anon <$> resolveKind (BecauseOf r) t
+  approxParam (ImplParam (PType _ t _)) = Implicit <$> resolveKind (becauseExp r) t
+  approxParam (PatParam (PType _ t _)) = Anon <$> resolveKind (becauseExp r) t
   approxParam (ImplParam _) = do
     put Guessed
     Implicit <$> freshTV
   approxParam (PatParam _) = do
     put Guessed
     Anon <$> freshTV
-approxType r@(Ascription _ t _) = resolveKind (BecauseOf r) t
+approxType r@(Ascription _ t _) = resolveKind (becauseExp r) t
 approxType _ = do
   put Guessed
   lift freshTV
@@ -334,7 +334,7 @@ inferLetTy closeOver vs =
                   -> m (Origin, (Var Typed, Type Typed))
       approximate (Binding v e _ _) = do
         (ty, st) <- runStateT (approxType e) Supplied
-        ty' <- generalise (BecauseOf e) ty
+        ty' <- generalise (becauseExp e) ty
         pure (st, (TvName v, if not (wasGuessed st) then ty' else ty))
 
       skolCheck :: Var Typed -> SomeReason -> Type Typed -> m ()
@@ -359,9 +359,9 @@ inferLetTy closeOver vs =
               pure (exp', snd tv)
             Guessed -> do
               (exp', ty) <- infer exp
-              _ <- unify exp ty (snd tv)
+              _ <- unify (becauseExp exp) ty (snd tv)
               pure (exp', ty)
-        (tp, k) <- figureOut (var, BecauseOf exp) exp' ty cs
+        (tp, k) <- figureOut (var, becauseExp exp) exp' ty cs
         pure ( [Binding (TvName var) (k exp') p (ann, tp)], one var (rename tp) )
 
       tcOne (CyclicSCC vars) = do
@@ -377,7 +377,7 @@ inferLetTy closeOver vs =
                 pure (Binding (TvName var) exp p (ann, tyvar), tyvar)
               Guessed -> do
                 (exp', ty) <- infer exp
-                _ <- unify exp ty tyvar
+                _ <- unify (becauseExp exp) ty tyvar
                 pure (Binding (TvName var) exp' p (ann, ty), ty)
 
         cur <- genName
@@ -390,7 +390,7 @@ inferLetTy closeOver vs =
               let figure = apply solution
                in do
                   ty <- closeOver mempty exp (figure given)
-                  skolCheck var (BecauseOf exp) ty
+                  skolCheck var (becauseExp exp) ty
                   pure ( Binding var (solveEx ty solution cs exp) p (fst ann, ty)
                        , one var (rename ty) )
             squish = fmap (second mconcat . unzip)
@@ -508,8 +508,8 @@ localGenStrat bg ex ty = do
        && maybe True Set.null (types ^. at (unTvName v) . to (fmap ftv))
 
   if Set.foldr ((&&) . generalisable) True (freeIn ex Set.\\ bg) && value ex
-     then generalise (BecauseOf ex) ty
-     else annotateKind (BecauseOf ex) ty
+     then generalise (becauseExp ex) ty
+     else annotateKind (becauseExp ex) ty
 
 closeOverStrat :: MonadInfer Typed m
                => SomeReason
