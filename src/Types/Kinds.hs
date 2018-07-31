@@ -91,7 +91,7 @@ initialKind (TyVarArg v:as) = do
 initialKind (TyAnnArg v k:as) = do
   k <- checkKind k TyType
   (s, t) <- initialKind as
-  pure (TyForall (TvName v) (Just k) s, t <> one v k)
+  pure (TyArr k s, t <> one v k)
 initialKind [] = pure (TyType, mempty)
 
 resolveTyDeclKind :: MonadKind m
@@ -101,7 +101,7 @@ resolveTyDeclKind :: MonadKind m
                   -> m (Type Typed, Type Typed, [TyConArg Typed])
 resolveTyDeclKind reason tycon args cons = do
   let argTvName (TyVarArg v)   = Just (TvName v)
-      argTvName TyAnnArg{} = Nothing
+      argTvName (TyAnnArg v _) = Just (TvName v)
       vs = mapMaybe argTvName args
   k <- solveForKind reason $ do
     (kind, tele) <- initialKind args
@@ -114,7 +114,7 @@ resolveTyDeclKind reason tycon args cons = do
         c@(GeneralisedCon _ t _) -> inferGadtConKind c t tycon (mapMaybe argTvName args)
       pure kind
   let remake (TyVarArg v:as) (TyArr _ k) = TyVarArg (TvName v):remake as k
-      remake (TyAnnArg v _:as) (TyForall _ (Just k) _) = TyAnnArg (TvName v) k:remake as k
+      remake (TyAnnArg v _:as) (TyArr k _) = TyAnnArg (TvName v) k:remake as k
       remake _ _ = []
   pure (k, foldl TyApp (TyCon (TvName tycon)) (map TyVar vs), remake args k)
 
