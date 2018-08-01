@@ -236,11 +236,11 @@ infer ex = do
   pure (ex', x)
 
 inferRows :: MonadInfer Typed m
-          => [(T.Text, Expr Resolved)]
-          -> m [((T.Text, Expr Typed), (T.Text, Type Typed))]
-inferRows rows = for rows $ \(var', val) -> do
-  (val', typ) <- infer val
-  pure ((var', val'), (var', typ))
+          => [Field Resolved]
+          -> m [(Field Typed, (T.Text, Type Typed))]
+inferRows rows = for rows $ \(Field n e s) -> do
+  (e, t) <- infer e
+  pure (Field n e (s, t), (n, t))
 
 inferProg :: MonadInfer Typed m
           => [Toplevel Resolved] -> m ([Toplevel Typed], Env)

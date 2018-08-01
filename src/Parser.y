@@ -183,8 +183,8 @@ Atom :: { Expr Parsed }
      | '(' Section ')'                        { withPos2 $1 $3 $ Parens $2 }
      | '(' NullSection ',' List1(NullSection, ',') ')'
          { withPos2 $1 $5 $ tupleExpr ($2:$4) }
-     | '{' Rows('=', Expr) '}'                { withPos2 $1 $3 $ Record $2 }
-     | '{' Expr with Rows('=',Expr) '}'       { withPos2 $1 $5 $ RecordExt $2 $4 }
+     | '{' ExprRows '}'                { withPos2 $1 $3 $ Record $2 }
+     | '{' Expr with ExprRows '}'       { withPos2 $1 $5 $ RecordExt $2 $4 }
 
      | Atom access                            { withPos2 $1 $2 $ Access $1 (getIdent $2) }
 
@@ -274,6 +274,11 @@ Rows(p, q)
    : {- Empty -}             { [] }
    | ident p q ',' Rows(p,q) { (getIdent $1, $3) : $5 }
    | ident p q               { [(getIdent $1, $3)] }
+
+ExprRows :: { [Field Parsed] }
+   : {- Empty -}                 { [] }
+   | ident '=' Expr ',' ExprRows { withPos2 $1 $3 (Field (getIdent $1) $3) : $5 }
+   | ident '=' Expr              { [withPos2 $1 $3 (Field (getIdent $1) $3)] }
 
 Lit :: { Located Lit }
     : int                  { lPos1 $1 $ LiInt (getInt $1) }
