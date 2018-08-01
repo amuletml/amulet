@@ -62,14 +62,6 @@ check (Hole v a) t = do
   tell (Seq.singleton (ConFail (a, t) (TvName v) t))
   pure (Hole (TvName v) (a, t))
 
-check (Begin [] _) _ = error "impossible: check empty Begin"
-check (Begin xs a) t = do
-  let start = init xs
-      end = last xs
-  start <- traverse (fmap fst . infer) start
-  end <- check end t
-  pure (Begin (start ++ [end]) (a, t))
-
 check (Let ns b an) t = do
   (ns, ts, is) <- inferLetTy localGenStrat ns
   let bvs = Set.fromList (map TvName (namesInScope (focus ts mempty)))
@@ -229,6 +221,21 @@ infer (Tuple xs an) =
    in do
      (ex, t) <- go xs
      pure (Tuple ex (an, t), t)
+
+infer (Begin xs a) = do
+  let start = init xs
+      end = last xs
+  start <- traverse (fmap fst . infer) start
+  (end, t) <- infer end
+  pure (Begin (start ++ [end]) (a, t), t)
+
+-- check (Begin [] _) _ = error "impossible: check empty Begin"
+-- check (Begin xs a) t = do
+--   let start = init xs
+--       end = last xs
+--   start <- traverse (fmap fst . infer) start
+--   end <- check end t
+--   pure (Begin (start ++ [end]) (a, t))
 
 infer ex = do
   x <- freshTV
