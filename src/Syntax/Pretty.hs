@@ -59,8 +59,8 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
   pretty (Hole v _) = "_" <> pretty v -- A typed hole
   pretty (Ascription e t _) = parens $ pretty e <+> colon <+> pretty t
   pretty (Record [] _) = braces empty
-  pretty (Record rows _) = record (map (\(n, v) -> text n <+> equals <+> pretty v) rows)
-  pretty (RecordExt var rows _) = enclose (char '{' <> space) (space <> char '}') $ pretty var <+> keyword "with" <+> hsep (punctuate comma (prettyRows equals rows))
+  pretty (Record rows _) = record (map (\(Field n v _) -> text n <+> equals <+> pretty v) rows)
+  pretty (RecordExt var rows _) = enclose (char '{' <> space) (space <> char '}') $ pretty var <+> keyword "with" <+> hsep (punctuate comma (prettyRows' equals rows))
   pretty (Access e f _) = pretty e <> dot <> text f
 
   pretty (LeftSection op vl _) = parens $ pretty op <+> pretty vl
@@ -105,6 +105,9 @@ prettyMatches = map (\(a, b) -> pipe <+> nest 4 (pretty a <+> arrow </> pretty b
 
 prettyRows :: Pretty x => Doc -> [(Text, x)] -> [Doc]
 prettyRows sep = map (\(n, v) -> text n <+> sep <+> pretty v) . sortOn fst
+
+prettyRows' :: Pretty (Var p) => Doc -> [Field p] -> [Doc]
+prettyRows' sep = map (\(Field n v _) -> text n <+> sep <+> pretty v) . sortOn (view fName)
 
 instance (Pretty (Var p)) => Pretty (Pattern p) where
   pretty Wildcard{} = skeyword (char '_')

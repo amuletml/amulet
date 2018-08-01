@@ -64,8 +64,8 @@ data Expr p
   | Ascription (Expr p) (Type p) (Ann p)
 
   -- Records
-  | Record [(Text, Expr p)] (Ann p) -- { foo = bar, baz = quux }
-  | RecordExt (Expr p) [(Text, Expr p)] (Ann p) -- { foo with baz = quux }
+  | Record [Field p] (Ann p) -- { foo = bar, baz = quux }
+  | RecordExt (Expr p) [Field p] (Ann p) -- { foo with baz = quux }
   | Access (Expr p) Text (Ann p) -- foo.bar
 
   -- Sections
@@ -91,6 +91,17 @@ deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Expr p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Expr p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Expr p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Expr p)
+
+data Field p =
+  Field { _fName :: Text
+        , _fExpr :: Expr p
+        , _fAnn :: Ann p
+        }
+
+deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Field p)
+deriving instance (Show (Var p), Show (Ann p)) => Show (Field p)
+deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Field p)
+deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Field p)
 
 data Wrapper p
   = TypeApp (Type p)
@@ -292,6 +303,7 @@ makeLenses ''Skolem
 makeLenses ''TyBinder
 makeLenses ''Binding
 makeLenses ''Parameter
+makeLenses ''Field
 
 instance Spanned (Ann p) => Spanned (Binding p) where
   annotation = annotation . _bindAnn

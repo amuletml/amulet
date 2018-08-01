@@ -13,6 +13,7 @@ import Control.Monad.Namey
 import Control.Monad.State
 import Control.Monad.Cont
 import Control.Arrow
+import Control.Lens
 
 import qualified Data.VarMap as VarMap
 import qualified Data.VarSet as VarSet
@@ -278,13 +279,13 @@ lowerAnyway (S.VarRef (TvName v) (_, ty)) = do
 lowerAnyway (S.Record xs _) = case xs of
   [] -> pure (Atom (Lit RecNil))
   xs -> Extend (Lit RecNil) . zipWith build xs <$>
-          traverse (lowerBothAtom . snd) xs
-  where build (name, _) (atom, ty) = (name, ty, atom)
+    traverse (lowerBothAtom . view S.fExpr) xs
+  where build (S.Field name _ _) (atom, ty) = (name, ty, atom)
 lowerAnyway (RecordExt e xs _) = do
   e' <- lowerExprAtom e
-  xs' <- traverse (lowerBothAtom . snd) xs
+  xs' <- traverse (lowerBothAtom . view S.fExpr) xs
   pure $ Extend e' (zipWith build xs xs')
-  where build (name, _) (atom, ty) = (name, ty, atom)
+  where build (S.Field name _ _) (atom, ty) = (name, ty, atom)
 
 lowerAnyway (Literal l _) = pure . Atom . Lit $ lowerLiteral l
 lowerAnyway (S.App f x _) = C.App <$> lowerExprAtom f <*> lowerExprAtom x

@@ -16,6 +16,7 @@
 module Syntax.Desugar (desugarProgram) where
 
 import Control.Monad.Namey
+import Control.Lens hiding (Lazy)
 
 import Data.Foldable
 import Data.Triple
@@ -50,8 +51,8 @@ desugarProgram = traverse statement where
   expr (BinOp l (VarRef (TgInternal "@@") _) r a) = App <$> expr l <*> expr r <*> pure a
   expr (BinOp l o r a) = BinOp <$> expr l <*> expr o <*> expr r <*> pure a
   expr (Ascription e t a) = Ascription <$> expr e <*> pure t <*> pure a
-  expr (Record rs a) = Record <$> traverse (secondA expr) rs <*> pure a
-  expr (RecordExt e rs a) = RecordExt <$> expr e <*> traverse (secondA expr) rs <*> pure a
+  expr (Record rs a) = Record <$> traverse (fExpr %%~ expr) rs <*> pure a
+  expr (RecordExt e rs a) = RecordExt <$> expr e <*> traverse (fExpr %%~ expr) rs <*> pure a
   expr (Access e k a) = Access <$> expr e <*> pure k <*> pure a
 
   expr (LeftSection op vl an) = do

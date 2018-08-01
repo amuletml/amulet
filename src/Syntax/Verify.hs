@@ -125,8 +125,8 @@ verifyExpr (Function bs _) =
 verifyExpr (BinOp l o r _) = traverse_ verifyExpr [l, o, r]
 verifyExpr Hole{} = pure ()
 verifyExpr (Ascription e _ _) = verifyExpr e
-verifyExpr (Record rs _) = traverse_ (verifyExpr . snd) rs
-verifyExpr (RecordExt e rs _) = verifyExpr e *> traverse_ (verifyExpr . snd) rs
+verifyExpr (Record rs _) = traverse_ (verifyExpr . view fExpr) rs
+verifyExpr (RecordExt e rs _) = verifyExpr e *> traverse_ (verifyExpr . view fExpr) rs
 verifyExpr (Access e _ _) = verifyExpr e
 verifyExpr (LeftSection l o _) = traverse_ verifyExpr [l, o]
 verifyExpr (RightSection o r _) = traverse_ verifyExpr [o, r]
@@ -147,7 +147,7 @@ verifyExpr (ExprWrapper w e _) =
 
 unguardedVars :: Expr Typed -> Set.Set (Var Typed)
 unguardedVars (Ascription e _ _)   = unguardedVars e
-unguardedVars (RecordExt e rs _)   = unguardedVars e <> foldMap (unguardedVars . snd) rs
+unguardedVars (RecordExt e rs _)   = unguardedVars e <> foldMap (unguardedVars . view fExpr) rs
 unguardedVars (BinOp a b c _)      = unguardedVars a <> unguardedVars b <> unguardedVars c
 unguardedVars (VarRef v _)         = Set.singleton v
 unguardedVars (Begin es _)         = foldMap unguardedVars es
@@ -155,7 +155,7 @@ unguardedVars (Let vs b _)         = (unguardedVars b <> foldMap (unguardedVars 
                               Set.\\ foldMapOf (each . bindVariable) Set.singleton vs
 unguardedVars (App f x _)          = freeIn f <> unguardedVars x
 unguardedVars Fun{}                = mempty
-unguardedVars (Record rs _)        = foldMap (unguardedVars . snd) rs
+unguardedVars (Record rs _)        = foldMap (unguardedVars . view fExpr) rs
 unguardedVars (Access e _ _)       = unguardedVars e
 unguardedVars (Match t ps _)       = unguardedVars t <> foldMap unguardedVarsBranch ps where
   unguardedVarsBranch (p, e)       = unguardedVars e Set.\\ bound p

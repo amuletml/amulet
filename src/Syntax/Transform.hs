@@ -2,6 +2,7 @@
 module Syntax.Transform where
 
 import Control.Arrow
+import Control.Lens hiding (Lazy, (:>))
 
 import Syntax.Var
 import Syntax
@@ -71,8 +72,8 @@ transformExpr fe = goE where
   transE (Hole v a) = Hole v a
   transE (Ascription e t a) = Ascription (goE e) t a
 
-  transE (Record fs a) = Record (map (second goE) fs) a
-  transE (RecordExt f fs a) = RecordExt (goE f) (map (second goE) fs) a
+  transE (Record fs a) = Record (map (over fExpr goE) fs) a
+  transE (RecordExt f fs a) = RecordExt (goE f) (map (over fExpr goE) fs) a
   transE (Access e f a) = Access (goE e) f a
 
   transE (LeftSection o r a) = LeftSection (goE o) (goE r) a
@@ -112,8 +113,8 @@ transformExprTyped fe fc ft = goE where
   transE (Hole v a) = Hole v (goA a)
   transE (Ascription e t a) = Ascription (goE e) (goT t) (goA a)
 
-  transE (Record fs a) = Record (map (second goE) fs) (goA a)
-  transE (RecordExt f fs a) = RecordExt (goE f) (map (second goE) fs) (goA a)
+  transE (Record fs a) = Record (map (over fExpr goE) fs) (goA a)
+  transE (RecordExt f fs a) = RecordExt (goE f) (map (over fExpr goE) fs) (goA a)
   transE (Access e f a) = Access (goE e) f (goA a)
 
   transE (LeftSection o r a) = LeftSection (goE o) (goE r) (goA a)

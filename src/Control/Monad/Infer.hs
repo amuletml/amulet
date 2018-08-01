@@ -40,6 +40,7 @@ import qualified Data.Set as Set
 import qualified Data.Text as T
 import Data.Bifunctor
 import Data.Function
+import Data.Typeable
 import Data.Foldable
 import Data.Spanned
 import Data.Triple
@@ -89,7 +90,7 @@ data TypeError where
 
   NoOverlap :: Type Typed -> Type Typed -> TypeError
 
-  Note :: Pretty x => TypeError -> x -> TypeError
+  Note :: (Pretty x, Typeable x) => TypeError -> x -> TypeError
   Suggestion :: Pretty x => TypeError -> x -> TypeError
 
   CanNotInstance :: Pretty (Var p)

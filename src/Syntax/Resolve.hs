@@ -299,15 +299,15 @@ reExpr r@(Ascription e t a) = Ascription
                           <*> reType r t
                           <*> pure a
 reExpr e@(Record fs a) = do
-  let ls = map fst fs
+  let ls = map (view fName) fs
       dupes = mapMaybe (listToMaybe . tail) . group . sort $ ls
   traverse_ (tell . Seq.singleton . NonLinearRecord e) dupes
-  Record <$> traverse (traverse reExpr) fs <*> pure a
+  Record <$> traverse reField fs <*> pure a
 reExpr ex@(RecordExt e fs a) = do
-  let ls = map fst fs
+  let ls = map (view fName) fs
       dupes = mapMaybe (listToMaybe . tail) . group . sort $ ls
   traverse_ (tell . Seq.singleton . NonLinearRecord ex) dupes
-  RecordExt <$> reExpr e <*> traverse (traverse reExpr) fs <*> pure a
+  RecordExt <$> reExpr e <*> traverse reField fs <*> pure a
 
 reExpr (Access e t a) = Access <$> reExpr e <*> pure t <*> pure a
 reExpr (LeftSection o r a) = LeftSection <$> reExpr o <*> reExpr r <*> pure a
@@ -473,3 +473,6 @@ wrapError r e = ArisingFrom e (BecauseOf r)
 catchJunk :: (MonadResolve m, Reasonable e p)
           => m (Var Resolved) -> e p -> m (Var Resolved)
 catchJunk m r = m `catchError` \err -> tell (pure (wrapError r err)) $> junkVar
+
+reField :: MonadResolve m => Field Parsed -> m (Field Resolved)
+reField (Field n e s) = Field n <$> reExpr e <*> pure s

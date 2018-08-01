@@ -29,12 +29,15 @@ import Data.List.NonEmpty (NonEmpty(..))
 import Data.Traversable
 import Data.Semigroup
 import Data.Sequence (Seq ((:<|), Empty))
+import Data.Typeable
 import Data.Foldable
 import Data.Function
 import Data.Spanned
 import Data.Reason
 import Data.List
 import Data.Text (Text)
+
+import Text.Pretty.Semantic
 
 data SolveScope
   = SolveScope { _bindSkol :: Bool
@@ -203,10 +206,10 @@ unify a b = unequal a b
 isRec :: String
 isRec = "A record type's hole can only be instanced to another record"
 
-
 unifRow :: (Text, Type Typed, Type Typed) -> SolveM (Text, Coercion Typed)
 unifRow (t, a, b) = do
-  co <- unify a b
+  co <- unify a b `catchError` \err ->
+    throwError (Note err (InField t))
   pure (t, co)
 
 runSolve :: Var Resolved -> Subst Typed -> SolveM b -> Either TypeError (Var Resolved, (Subst Typed, Map.Map (Var Typed) (Wrapper Typed)))
@@ -236,7 +239,7 @@ doSolve (ConUnify because v a b :<| xs) = do
 
   co <- catchy $ unify (apply sub a) (apply sub b)
   case co of
-    Left e -> tell [propagateBlame because e]
+    Left e -> tell [reblame because e]
     Right co -> solveCoSubst . at v .= Just (Cast co)
 
   doSolve xs
@@ -294,14 +297,14 @@ doSolve (ConImplicit because var scope t inner :<| xs) = do
   when (Set.disjoint (ftv t') abort) $ do
     w <- catchy $ solveImplicitConstraint 0 inner scope' t'
     case w of
-      Left e -> tell [propagateBlame because e]
+      Left e -> tell [reblame because e]
       Right w -> solveCoSubst . at var ?= w
 
 doSolve (ConFail a v t :<| cs) = do
   doSolve cs
   sub <- use solveTySubst
   let ex = Hole (unTvName v) (fst a)
-  tell [propagateBlame (BecauseOf ex) $ foundHole v (apply sub t) sub]
+  tell [reblame (BecauseOf ex) $ foundHole v (apply sub t) sub]
 
 solveImplicitConstraint :: Int -> Type Typed -> Imp.ImplicitScope Typed -> Type Typed -> SolveM (Wrapper Typed)
 solveImplicitConstraint x _ _ tau | x >= 200 = throwError (tooMuchRecursion tau)
@@ -482,7 +485,7 @@ subsumes' _ _ ty' (TyApp lazy ty) | lazy == tyLazy, concretish ty' = do
               (an, TyApp lazy ty)
   pure (WrapFn (MkWrapCont wrap "automatic thunking"))
 
-subsumes' r _ a b = probablyCast <$> unify a b `catchError` (throwError . propagateBlame r)
+subsumes' r _ a b = probablyCast <$> unify a b `catchError` (throwError . reblame r)
 
 
 -- | Shallowly skolemise a type, replacing any @forall@-bound 'TyVar's
@@ -577,7 +580,28 @@ secondBlame (It'sThis (BecauseOfExpr (Tuple (_:xs) an))) =
        in becauseExp (respan (const len) (Tuple xs an))
 secondBlame x = x
 
+reblame :: SomeReason -> TypeError -> TypeError
+reblame (It'sThis (BecauseOfExpr (Record rs _))) (Note err note)
+  | Just (InField t) <- cast note, Just ex <- select t rs
+  = propagateBlame (It'sThis (BecauseOfExpr ex)) err
+
+reblame (It'sThis (BecauseOfExpr (RecordExt _ rs _))) (Note err note)
+  | Just (InField t) <- cast note, Just ex <- select t rs
+  = propagateBlame (It'sThis (BecauseOfExpr ex)) err
+
+reblame r e = propagateBlame r e
+
 unequal :: Type Typed -> Type Typed -> SolveM a
 unequal a b = do
   x <- use solveTySubst
   throwError (NotEqual (apply x a) (apply x b))
+
+select :: Respannable a => Text -> [Field a] -> Maybe (Expr a)
+select t = fmap go . find ((== t) . view fName) where
+  go (Field _ e s) = respan (const (annotation s)) e
+
+newtype InField = InField Text
+  deriving Show
+
+instance Pretty InField where
+  pretty (InField t) = string "In the field" <+> skeyword (text t)
