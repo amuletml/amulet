@@ -7,7 +7,7 @@ gadt04-fail.ml[2:5 ..2:26]: error
   • Suggestion: did you mean a function, like
                   int -> int -> t?
 
-  Arising in the constructor
+  Arising from use of the constructor
   │ 
 2 │   | MkT : int * (int -> t)
   │ 

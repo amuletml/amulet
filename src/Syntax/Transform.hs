@@ -24,7 +24,7 @@ transformType ft = goT where
   transT (TyWithConstraints cons ty) = TyWithConstraints (map (goT***goT) cons) (goT ty)
   transT TyType = TyType
 
-  transM (ByAscription ty) = ByAscription (goT ty)
+  transM (ByAscription ex ty) = ByAscription ex (goT ty)
   transM (BySubsumption l r) = BySubsumption (goT l) (goT r)
   transM (ByExistential v ty) = ByExistential v (goT ty)
 

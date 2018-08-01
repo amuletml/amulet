@@ -1,12 +1,10 @@
 tuple02-fail.ml[1:42 ..1:52]: error
-  Could not match expected type 'a with the type int
+  Could not the rigid type variable 'a with the type int
 
   • When checking that the type
-       int -> unit
+     int -> unit
     can be made as polymorphic as
-       forall 'a. 'a -> 'a
-
-  Arising in the expression
+     forall 'a. 'a -> 'a
   │ 
 1 │ let foo : (forall 'a. 'a -> 'a) * int = (fun 0 -> (), 1)
   │ 

@@ -43,19 +43,19 @@ instance Eq SomeReason where
   _ == _ = False
 
 data ConcreteReason where
-  BecauseOfExpr :: forall p. (Pretty (Var p), Respannable p) => Expr p -> ConcreteReason
+  BecauseOfExpr :: forall p. (Pretty (Var p), Respannable p) => Expr p -> String -> ConcreteReason
   BecauseOfPat :: forall p. (Pretty (Var p), Spanned (Ann p), Data (Var p), Data (Ann p), Data p) => Pattern p -> ConcreteReason
 
 instance Show ConcreteReason where
-  show (BecauseOfExpr _) = "expression blame"
+  show (BecauseOfExpr _ _) = "expression blame"
   show (BecauseOfPat _) = "pattern blame"
 
 instance Spanned ConcreteReason where
-  annotation (BecauseOfExpr e) = annotation e
+  annotation (BecauseOfExpr e _) = annotation e
   annotation (BecauseOfPat e) = annotation e
 
 instance Pretty ConcreteReason where
-  pretty (BecauseOfExpr e) = pretty e
+  pretty (BecauseOfExpr e _) = pretty e
   pretty (BecauseOfPat e) = pretty e
 
 -- | A type which can be blamed for an error
@@ -92,11 +92,11 @@ instance Pretty (Const SomeReason a) where
 blameOf :: SomeReason -> Doc
 blameOf (BecauseOf (x :: f p)) = blame x
 blameOf (It'sThis x) = case x of
-  BecauseOfExpr e -> blame e
+  BecauseOfExpr _ s -> string "the" <+> highlight s
   BecauseOfPat e -> blame e
 
 becauseExp :: (Pretty (Var p), Respannable p) => Expr p -> SomeReason
-becauseExp = It'sThis . BecauseOfExpr
+becauseExp = It'sThis . flip BecauseOfExpr "expression"
 
 becausePat :: forall p. (Pretty (Var p), Spanned (Ann p), Data (Var p), Data (Ann p), Data p) => Pattern p -> SomeReason
 becausePat = It'sThis . BecauseOfPat

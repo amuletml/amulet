@@ -48,6 +48,7 @@ import Data.Reason
 import Data.Maybe
 import Data.Text (Text)
 import Data.List
+import Data.Span
 
 import Text.Pretty.Semantic
 import Text.Pretty.Note
@@ -216,7 +217,7 @@ instance Pretty TypeError where
 
   pretty (Occurs v t) = string "Occurs check:" <+> string "The type variable" <+> stypeVar (pretty v) </> indent 4 (string "occurs in the type" <+> displayType t)
   pretty (NotInScope e) = string "Variable not in scope:" <+> pretty e
-  pretty (ArisingFrom er ex) = pretty er <#> empty <#> nest 4 (string "Arising in" <+> blameOf ex)
+  pretty (ArisingFrom er ex) = pretty er <#> empty <#> nest 4 (string "Arising from use of" <+> blameOf ex)
   pretty (FoundHole e s) = string "Found typed hole" <+> pretty e <+> "of type" <+> displayType s
 
   pretty (Note te m) = pretty te <#> note <+> align (pretty m)
@@ -278,13 +279,14 @@ instance Pretty TypeError where
     vsep [ string "Could not match expected type" <+> stypeSkol (squote <> pretty v) <+> "with" <+> whatIs t
          , empty
          , case m of
-             ByAscription t -> bullet $ string "When checking that this expression has type" <#> indent 5 (displayType t)
+             ByAscription _ t ->
+               vsep [ bullet "When checking that this expression has type"
+                    , indent 5 (displayType t) ]
              BySubsumption s t ->
                vsep [ bullet $ string "When checking that the type"
                     , indent 5 (displayType s)
                     , indent 2 (string "can be made as polymorphic as")
-                    , indent 5 (displayType t)
-                    ]
+                    , indent 5 (displayType t) ]
              ByExistential c t ->
                vsep [ bullet $ string "Where the type variable" <+> stypeSkol (pretty v) <+> "is an" <+> keyword "existential" <> comma
                     , indent 2 $ string "bound by the constructor" <+> stypeCon (pretty c) <> ", which has type"
@@ -318,6 +320,41 @@ instance Note TypeError Style where
   diagnosticKind _ = ErrorMessage
 
   formatNote f (ArisingFrom e@ArisingFrom{} _) = formatNote f e
+  -- This one gets ~Special Handling~™
+  formatNote f (ArisingFrom (SkolBinding (Skolem _ v _ m) t) rs) =
+    vsep [ indent 2 "Could not the rigid type variable" <+> sk (squote <> pretty v) <+> "with" <+> whatIs t
+         , empty
+         , case m of
+             ByAscription ex t ->
+               let k =
+                     if annotation rs `includes` annotation ex
+                        then id
+                        else (<#>) (vsep [ indent 2 $ bullet "Arising from use of the expression"
+                                         , f [annotation rs]
+                                         , empty ])
+                 in
+                  k (vsep [ indent 2 $ bullet "When checking that this expression has type"
+                          , indent 5 (Right <$> displayType t)
+                          , nest (-2) $ f [annotation ex] ])
+             BySubsumption s t ->
+               vsep [ indent 2 $ bullet "When checking that the type"
+                    , indent 5 (Right <$> displayType s)
+                    , indent 4 "can be made as polymorphic as"
+                    , indent 5 (Right <$> displayType t)
+                    , f [annotation rs]
+                    ]
+             ByExistential c t ->
+               vsep [ indent 2 $ string "Where the type variable" <+> sk (pretty v) <+> "is an" <+> sk "existential" <> comma
+                    , indent 2 $ string "bound by the constructor" <+> sc (pretty c) <> ", which has type"
+                    , indent 5 (Right <$> displayType t)
+                    , nest (-2) $ f [annotation rs]
+                    ]
+           ]
+   where whatIs (TySkol (Skolem _ v _ _)) = string "the type" <+> sv (squote <> pretty v)
+         whatIs t = string "the type" <+> (Right <$> displayType (withoutSkol t))
+         sv = fmap Right . stypeVar
+         sk = fmap Right . stypeSkol
+         sc = fmap Right . stypeCon
   formatNote f x = indent 2 (Right <$> pretty x) <#> f [annotation x]
 
 missing :: [(Text, b)] -> [(Text, b)] -> Doc

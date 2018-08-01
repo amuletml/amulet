@@ -55,7 +55,7 @@ inferProgram env ct = fmap fst <$> runInfer env (inferProg ct)
 -- appropriate 'Wrapper's, and performing /some/ level of desugaring.
 check :: forall m. MonadInfer Typed m => Expr Resolved -> Type Typed -> m (Expr Typed)
 check e ty@TyPi{} | isSkolemisable ty = do -- This is rule Decl∀L from [Complete and Easy]
-  (wrap, e) <- secondA (check e) =<< skolemise (ByAscription ty) ty -- gotta be polymorphic - don't allow instantiation
+  (wrap, e) <- secondA (check e) =<< skolemise (ByAscription e ty) ty -- gotta be polymorphic - don't allow instantiation
   pure (ExprWrapper wrap e (annotation e, ty))
 
 check (Hole v a) t = do

@@ -332,7 +332,7 @@ parenTuple TyPi{} = parens
 parenTuple _ = id
 
 prettyMotive :: SkolemMotive Typed -> Doc
-prettyMotive (ByAscription t) = string "of the context, the type" <#> displayType t
+prettyMotive (ByAscription _ t) = string "of the context, the type" <#> displayType t
 prettyMotive (BySubsumption t1 t2) = string "of a requirement that" <+> displayType t1 <#> string "be as polymorphic as" <+> displayType t2
 prettyMotive (ByExistential v t) = string "it is an existential" <> comma <#> string "bound by the type of" <+> pretty v <> comma <+> displayType t
 

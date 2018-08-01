@@ -11,6 +11,7 @@ module Data.Span
   , spanStart
   , spanEnd
   , formatSpan
+  , includes
   ) where
 
 import Text.Pretty.Semantic (Pretty(..))
@@ -64,6 +65,9 @@ spanStart Span { fileName = n, line1 = l, col1 = c } = SourcePos n l c
 -- | The 'SourcePos'ition a span ends at
 spanEnd :: Span -> SourcePos
 spanEnd   Span { fileName = n, line2 = l, col2 = c } = SourcePos n l c
+
+includes :: Span -> Span -> Bool
+includes (Span f c1 l1 c2 l2) (Span f' c1' l1' c2' l2') = f == f' && l1 == l1' && l2 == l2' && c1 > c1' && c2 > c2'
 
 -- | Format a 'Span' for human-readable (i.e., error message)
 -- pretty-printing.

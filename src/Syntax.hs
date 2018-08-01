@@ -184,10 +184,10 @@ data TyBinder p
     { _tyBinderVar :: Var p
     , _tyBinderArg :: Maybe (Type p) } -- a forall. type
 
-deriving instance (Data p, Data (Var p)) => Data (TyBinder p)
-deriving instance Show (Var p) => Show (TyBinder p)
-deriving instance Ord (Var p) => Ord (TyBinder p)
+deriving instance (Show (Var p), Show (Ann p)) => Show (TyBinder p)
+deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (TyBinder p)
 deriving instance Eq (Var p) => Eq (TyBinder p)
+deriving instance Ord (Var p) => Ord (TyBinder p)
 
 data Skolem p
   = Skolem { _skolIdent :: Var p -- the constant itself
@@ -196,18 +196,18 @@ data Skolem p
            , _skolMotive :: SkolemMotive p
            }
 
-deriving instance (Data p, Data (Var p)) => Data (Skolem p)
-deriving instance Show (Var p) => Show (Skolem p)
+deriving instance (Show (Var p), Show (Ann p)) => Show (Skolem p)
+deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Skolem p)
 
 data SkolemMotive p
-  = ByAscription (Type p)
+  = ByAscription (Expr Resolved) (Type p) -- what r phases?
   | BySubsumption (Type p) (Type p)
   | ByExistential (Var p) (Type p)
 
-deriving instance (Data p, Data (Var p)) => Data (SkolemMotive p)
-deriving instance Show (Var p) => Show (SkolemMotive p)
-deriving instance Ord (Var p) => Ord (SkolemMotive p)
-deriving instance Eq (Var p) => Eq (SkolemMotive p)
+deriving instance (Eq (Var p), Eq (Ann p)) => Eq (SkolemMotive p)
+deriving instance (Show (Var p), Show (Ann p)) => Show (SkolemMotive p)
+deriving instance (Ord (Var p), Ord (Ann p)) => Ord (SkolemMotive p)
+deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (SkolemMotive p)
 
 instance Eq (Var p) => Eq (Skolem p) where
   Skolem v _ _ _ == Skolem v' _ _ _ = v == v'
@@ -215,8 +215,8 @@ instance Eq (Var p) => Eq (Skolem p) where
 instance Ord (Var p) => Ord (Skolem p) where
   Skolem v _ _ _ `compare` Skolem v' _ _ _ = v `compare` v'
 
-deriving instance (Data p, Data (Var p)) => Data (Type p)
-deriving instance Show (Var p) => Show (Type p)
+deriving instance (Show (Var p), Show (Ann p)) => Show (Type p)
+deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Type p)
 deriving instance Ord (Var p) => Ord (Type p)
 deriving instance Eq (Var p) => Eq (Type p)
 
@@ -233,10 +233,10 @@ data Coercion p
   | AssumedCo (Type p) (Type p) -- <A, B> : A ~ B
   | ForallCo (Var p) (Coercion p) (Coercion p) -- (forall (v : x : c ~ d). phi : a ~ b) : forall (v : c). a ~ forall (v : d). b
 
-deriving instance (Data p, Data (Var p)) => Data (Coercion p)
-deriving instance Show (Var p) => Show (Coercion p)
-deriving instance Ord (Var p) => Ord (Coercion p)
-deriving instance Eq (Var p) => Eq (Coercion p)
+deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Coercion p)
+deriving instance (Show (Var p), Show (Ann p)) => Show (Coercion p)
+deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Coercion p)
+deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Coercion p)
 
 data Toplevel p
   = LetStmt [Binding p]
