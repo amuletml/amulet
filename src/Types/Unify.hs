@@ -180,7 +180,7 @@ unify (TyRows rho arow) (TyRows sigma brow)
 unify ta@TyExactRows{} tb@TyRows{} = SymCo <$> unify tb ta
 
 unify tb@(TyRows rho brow) ta@(TyExactRows arow)
-  | overlaps <- overlap arow brow
+  | overlaps <- overlap brow arow
   , rhoNew <- deleteFirstsBy ((==) `on` fst) (sortOn fst arow) (sortOn fst brow)
   = if | length overlaps < length brow -> throwError (NoOverlap tb ta)
        | otherwise -> do
@@ -569,9 +569,9 @@ refreshTy ty = do
   pure (apply (Map.fromList vs) ty, Map.fromList vs)
 
 firstBlame, secondBlame :: SomeReason -> SomeReason
-firstBlame (It'sThis (BecauseOfExpr (Tuple (x:_) _))) = becauseExp x
+firstBlame (It'sThis (BecauseOfExpr (Tuple (x:_) _) _)) = becauseExp x
 firstBlame x = x
-secondBlame (It'sThis (BecauseOfExpr (Tuple (_:xs) an))) =
+secondBlame (It'sThis (BecauseOfExpr (Tuple (_:xs) an) _)) =
   case xs of
     [] -> error "wot"
     [x] -> becauseExp x
@@ -581,13 +581,13 @@ secondBlame (It'sThis (BecauseOfExpr (Tuple (_:xs) an))) =
 secondBlame x = x
 
 reblame :: SomeReason -> TypeError -> TypeError
-reblame (It'sThis (BecauseOfExpr (Record rs _))) (Note err note)
+reblame (It'sThis (BecauseOfExpr (Record rs _) _)) (Note err note)
   | Just (InField t) <- cast note, Just ex <- select t rs
-  = propagateBlame (It'sThis (BecauseOfExpr ex)) err
+  = propagateBlame (It'sThis (BecauseOfExpr ex "field")) err
 
-reblame (It'sThis (BecauseOfExpr (RecordExt _ rs _))) (Note err note)
+reblame (It'sThis (BecauseOfExpr (RecordExt _ rs _) _)) (Note err note)
   | Just (InField t) <- cast note, Just ex <- select t rs
-  = propagateBlame (It'sThis (BecauseOfExpr ex)) err
+  = propagateBlame (It'sThis (BecauseOfExpr ex "field")) err
 
 reblame r e = propagateBlame r e
 

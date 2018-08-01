@@ -1,7 +1,7 @@
 gadt03-fail.ml[7:12 ..7:19]: error
   Could not match expected type bool with int
 
-  Arising in the expression
+  Arising from use of the expression
   │ 
 7 │ let show = function
   │ 

@@ -6,7 +6,7 @@ fail_skolem_escape.ml[2:19 ..2:38]: error
   • Note: in type `'b`
   • Note: in the inferred type for escape_fail
 
-  Arising in the expression
+  Arising from use of the expression
   │ 
 2 │ let escape_fail = escapes (fun x -> x)
   │ 

@@ -1,10 +1,13 @@
 fail_skolem_pure.ml[2:32 ..2:32]: error
-  Could not match expected type 'a with the type 'f 'a
+  Could not the rigid type variable 'a with the type 'f 'a
+
+  • Arising from use of the expression
+  │ 
+2 │ let pure_fail = pure (fun x -> x)
+  │ 
 
   • When checking that this expression has type
-       forall 'a. 'a -> 'f 'a
-
-  Arising in the expression
+     forall 'a. 'a -> 'f 'a
   │ 
 2 │ let pure_fail = pure (fun x -> x)
   │ 
