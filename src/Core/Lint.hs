@@ -257,6 +257,14 @@ checkTerm s t@(Match e bs) = flip withContext t $ do
             -- TODO: Do we need Relevant as well?
             -> checkPattern (substituteInType s x) p
             | otherwise -> throwError (TypeMismatch (ForallTy Irrelevant unknownTyvar ty') (inst ty))
+      checkPattern ty@(RowsTy NilTy ts) (PatExtend f fs) | f /= (PatLit RecNil) = do
+        let (outer, inner) = partition (\(l, _) -> any (== l) (map fst fs)) ts
+        v <- checkPattern (RowsTy NilTy inner) f
+        vs <- for fs $ \(t, p) ->
+          case find ((==t) . fst) outer of
+            Nothing -> throwError (TypeMismatch (RowsTy NilTy [(t, unknownTyvar)]) ty)
+            Just (_, ty) -> checkPattern ty p
+        pure (mconcat (v:vs))
       checkPattern ty@(RowsTy ext ts) (PatExtend f fs) = do
         v <- checkPattern ext f
         vs <- for fs $ \(t, p) ->

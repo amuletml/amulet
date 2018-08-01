@@ -77,7 +77,7 @@ bind var ty
                 if | var `Set.notMember` noTouch -> solveTySubst .= env `compose` Map.singleton var ty
                    | var `Set.member` noTouch, TyVar v <- ty, v `Set.notMember` noTouch ->
                      solveTySubst .= (env `compose` Map.singleton v (TyVar var))
-                   | otherwise -> throwError (NotEqual (TyVar var) ty)
+                   | otherwise -> unequal (TyVar var) ty
                 pure (ReflCo ty)
               Just ty'
                 | ty' == ty -> pure (ReflCo (apply env ty'))
@@ -105,7 +105,7 @@ unify (TySkol x) (TySkol y)
 
 unify ta@(TyPromotedCon a) tb@(TyPromotedCon b)
   | a == b = pure (ReflCo tb)
-  | otherwise = throwError (NotEqual ta tb)
+  | otherwise = unequal ta tb
 
 unify (TySkol t@(Skolem sv _ _ _)) b = do
   sub <- use (solveAssumptions . at sv)
@@ -137,12 +137,12 @@ unify (TyPi (Implicit a) b) (TyPi (Implicit a') b') =
 unify l@(TyApp a b) r@(TyApp a' b') =
   (AppCo <$> unify a a' <*> unify b b')
     `catchError` \case
-      NotEqual _ _ -> throwError (NotEqual l r)
+      NotEqual _ _ -> unequal l r
       x -> throwError x
 
 unify ta@(TyCon a) tb@(TyCon b)
   | a == b = pure (ReflCo tb)
-  | otherwise = throwError (NotEqual ta tb)
+  | otherwise = unequal ta tb
 
 unify (TyForall v Nothing ty) (TyForall v' Nothing ty') = do
   fresh <- freshTV
@@ -198,7 +198,7 @@ unify (TyTuple a b) (TyTuple a' b') =
   ProdCo <$> unify a a' <*> unify b b'
 
 unify TyType TyType = pure (ReflCo TyType)
-unify a b = throwError (NotEqual a b)
+unify a b = unequal a b
 
 isRec :: String
 isRec = "A record type's hole can only be instanced to another record"
@@ -576,3 +576,8 @@ secondBlame (It'sThis (BecauseOfExpr (Tuple (_:xs) an))) =
       let len = sconcat (annotation x :| map annotation ys)
        in becauseExp (respan (const len) (Tuple xs an))
 secondBlame x = x
+
+unequal :: Type Typed -> Type Typed -> SolveM a
+unequal a b = do
+  x <- use solveTySubst
+  throwError (NotEqual (apply x a) (apply x b))
