@@ -28,12 +28,12 @@ do
   end
   local main = (function ()
     local go
-    local no = to_string
+    local nr = to_string
     go = function (st)
       if st > 5 then
         return print("]")
       else
-        io_write("'" .. no(st) .. "', ")
+        io_write("'" .. nr(st) .. "', ")
         return go(st + 1)
       end
     end

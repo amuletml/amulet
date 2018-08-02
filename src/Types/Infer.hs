@@ -41,6 +41,7 @@ import Types.Kinds
 import Types.Infer.Constructor
 import Types.Infer.Pattern
 import Types.Infer.Builtin
+import Types.Infer.Outline
 import Types.Wellformed
 import Types.Unify
 
@@ -112,9 +113,11 @@ check (Match t ps a) ty = do
       pure (Match sc ps (a, ty))
     _ -> pure (Match t ps (a, ty))
 
-check (Access rc key a) ty = do
+check e@(Access rc key a) ty = do
   rho <- freshTV
-  Access <$> check rc (TyRows rho [(key, ty)]) <*> pure key <*> pure (a, ty)
+  rc <- censor (rereason (becauseExp e)) $
+    check rc (TyRows rho [(key, ty)])
+  pure (Access rc key (a, ty))
 
 -- This is _very_ annoying, but we need it for nested ascriptions
 check ex@(Ascription e ty an) goal = do
@@ -290,22 +293,6 @@ inferProg (Module name body:prg) = do
 
 inferProg [] = asks ([],)
 
--- For polymorphic recursion, mostly
-approxType :: MonadInfer Typed m => Expr Resolved -> StateT Origin m (Type Typed)
-approxType r@(Fun p e _) = TyPi <$> approxParam p <*> approxType e where
-  approxParam (ImplParam (PType _ t _)) = Implicit <$> resolveKind (becauseExp r) t
-  approxParam (PatParam (PType _ t _)) = Anon <$> resolveKind (becauseExp r) t
-  approxParam (ImplParam _) = do
-    put Guessed
-    Implicit <$> freshTV
-  approxParam (PatParam _) = do
-    put Guessed
-    Anon <$> freshTV
-approxType r@(Ascription _ t _) = resolveKind (becauseExp r) t
-approxType _ = do
-  put Guessed
-  lift freshTV
-
 inferLetTy :: forall m. MonadInfer Typed m
            => (Set.Set (Var Typed) -> Expr Typed -> Type Typed -> m (Type Typed))
            -> [Binding Resolved]
@@ -315,10 +302,6 @@ inferLetTy :: forall m. MonadInfer Typed m
                 )
 inferLetTy closeOver vs =
   let sccs = depOrder vs
-
-      wasGuessed :: Origin -> Bool
-      wasGuessed Guessed = True
-      wasGuessed _ = False
 
       blameSkol :: TypeError -> (Var Resolved, SomeReason) -> TypeError
       blameSkol e (v, r) = propagateBlame r (Note e (string "in the inferred type for" <+> pretty v))
@@ -337,12 +320,6 @@ inferLetTy closeOver vs =
         skolCheck (TvName (fst blame)) (snd blame) vt
         pure (vt, solveEx vt x co)
 
-      approximate :: Binding Resolved
-                  -> m (Origin, (Var Typed, Type Typed))
-      approximate (Binding v e _ _) = do
-        (ty, st) <- runStateT (approxType e) Supplied
-        ty' <- generalise (becauseExp e) ty
-        pure (st, (TvName v, if not (wasGuessed st) then ty' else ty))
 
       skolCheck :: Var Typed -> SomeReason -> Type Typed -> m ()
       skolCheck var exp ty = do
@@ -496,13 +473,6 @@ rename = go 0 mempty mempty where
     go (c:cs) l = (ord c - 96) * (26 ^ l) + go cs (l - 1)
     go [] _ = 0
 
-generalise :: MonadInfer Typed m => SomeReason -> Type Typed -> m (Type Typed)
-generalise r ty =
-  let fv = ftv ty in do
-    env <- view typeVars
-    case Set.toList (fv `Set.difference` env) of
-      [] -> pure ty
-      vs -> annotateKind r $ foldr (flip TyForall Nothing) ty vs
 
 localGenStrat :: MonadInfer Typed m
               => Set.Set (Var Typed) -> Expr Typed -> Type Typed -> m (Type Typed)

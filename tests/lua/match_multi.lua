@@ -3,8 +3,8 @@ do
     __tag = "__builtin_unit"
   }
   local function main (f)
-    local ak = f(__builtin_unit)
-    return ak.a + ak.b
+    local ai = f(__builtin_unit)
+    return ai.a + ai.b
   end
   main()
 end
