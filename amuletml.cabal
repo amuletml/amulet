@@ -156,6 +156,7 @@ library amulet
                      , Types.Wellformed
                      , Types.Infer.Errors
                      , Types.Infer.Builtin
+                     , Types.Infer.Outline
                      , Types.Infer.Pattern
                      , Types.Infer.Constructor
                      -- Pretty

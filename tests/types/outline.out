@@ -1,0 +1,4 @@
+nested : type -> type
+Nested : {'a : type}. (nested ('a * 'a) * nested ('a * 'a)) -> nested 'a
+One : {'a : type}. 'a -> nested 'a
+size : {'a : type}. nested 'a -> { count : int }

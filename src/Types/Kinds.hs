@@ -5,6 +5,7 @@ module Types.Kinds
   , annotateKind
   , closeOver
   , checkAgainstKind, getKind, liftType
+  , generalise
   )
   where
 
@@ -300,3 +301,11 @@ promoteOrError TyVar{} = Nothing
 promoteOrError TySkol{} = Nothing
 promoteOrError TyPromotedCon{} = Nothing
 promoteOrError TyType{} = Nothing
+
+generalise :: MonadInfer Typed m => SomeReason -> Type Typed -> m (Type Typed)
+generalise r ty =
+  let fv = ftv ty in do
+    env <- view typeVars
+    case Set.toList (fv `Set.difference` env) of
+      [] -> pure ty
+      vs -> annotateKind r $ foldr (flip TyForall Nothing) ty vs

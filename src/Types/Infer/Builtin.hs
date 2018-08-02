@@ -149,6 +149,14 @@ discharge :: (Reasonable f p, MonadInfer Typed m)
 discharge r (TyWithConstraints cs tau) = leakEqualities r cs *> discharge r tau
 discharge _ t = pure (t, id)
 
+rereason :: SomeReason -> Seq.Seq (Constraint p) -> Seq.Seq (Constraint p)
+rereason because = fmap go where
+  go (ConUnify _ v l r) = ConUnify because v l r
+  go (ConSubsume _ v s l r) = ConSubsume because v s l r
+  go (ConImplicit _ v s t u) = ConImplicit because v s t u
+  go (ConImplies _ u b a) = ConImplies because u b a
+  go x@ConFail{} = x
+
 litTy :: Lit -> Type Typed
 litTy LiInt{} = tyInt
 litTy LiStr{} = tyString

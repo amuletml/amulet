@@ -604,4 +604,4 @@ newtype InField = InField Text
   deriving Show
 
 instance Pretty InField where
-  pretty (InField t) = string "In the field" <+> skeyword (text t)
+  pretty (InField t) = string "When checking the field" <+> skeyword (text t)
