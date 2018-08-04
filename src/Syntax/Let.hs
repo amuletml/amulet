@@ -1,7 +1,9 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, TypeFamilies #-}
 module Syntax.Let where
 
 import qualified Data.Set as Set
+import qualified Data.Map as Map
+
 import Data.Graph
 
 import Control.Lens
@@ -9,11 +11,26 @@ import Control.Lens
 import Syntax.Var
 import Syntax
 
+import GHC.Exts (IsList(..))
+
 depOrder :: (Show (Var p), Show (Ann p), Ord (Var p))
          => [Binding p]
          -> [SCC (Binding p)]
-depOrder = stronglyConnComp . build where
-  build = map (\it@(Binding var ex _ _) -> (it, var, Set.toList (freeIn ex)))
+depOrder binds = extra ++ stronglyConnComp nodes where
+  (extra, nodes, mapping) = foldr buildNode (mempty, mempty, mempty) binds
+
+  buildNode it@(Binding var ex _ _) (e, n, m) =
+    ( e, (it, var, freeInMapped ex):n, Map.insert var var m )
+  buildNode it@(Matching p ex _) (e, n, m) =
+    case bound p of
+      [] -> (AcyclicSCC it:e, n, m)
+      vs@(var:_) -> (e, (it, var, freeInMapped ex):n, foldr (`Map.insert`var) m vs)
+  buildNode it@(ParsedBinding p ex _ _) (e, n, m) =
+    case bound p of
+      [] -> (AcyclicSCC it:e, n, m)
+      vs@(var:_) -> (e, (it, var, freeInMapped ex):n, foldr (`Map.insert`var) m vs)
+
+  freeInMapped = Set.toList . Set.foldr (maybe id Set.insert . flip Map.lookup mapping) mempty . freeIn
 
 freeIn :: (Show (Var p), Show (Ann p), Ord (Var p)) => Expr p -> Set.Set (Var p)
 freeIn (Ascription e _ _)   = freeIn e
@@ -42,12 +59,19 @@ freeIn (BothSection b _)    = freeIn b
 freeIn AccessSection{}      = mempty
 freeIn x = error (show x)
 
-bound :: Ord (Var p) => Pattern p -> Set.Set (Var p)
+bound :: (IsList (m (Var p)), Item (m (Var p)) ~ Var p, Monoid (m (Var p)))
+      => Pattern p -> m (Var p)
 bound (Destructure _ x _) = maybe mempty bound x
 bound (PRecord vs _)      = foldMap (bound . snd) vs
 bound (PTuple ps _)       = foldMap bound ps
-bound (Capture p _)       = Set.singleton p
+bound (Capture p _)       = fromList [p]
 bound (PType p _ _)       = bound p
 bound Wildcard{}          = mempty
 bound PLiteral{}          = mempty
 bound (PWrapper _ p _)    = bound p
+
+bindVariables :: (IsList (m (Var p)), Item (m (Var p)) ~ Var p, Monoid (m (Var p)))
+              => Binding p -> m (Var p)
+bindVariables Binding { _bindVariable = v } = fromList [v]
+bindVariables Matching { _bindPattern = p } = bound p
+bindVariables ParsedBinding { _bindPattern = p } = bound p

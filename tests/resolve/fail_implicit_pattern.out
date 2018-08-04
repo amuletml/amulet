@@ -1,0 +1,8 @@
+fail_implicit_pattern.ml[1:5 ..1:28]: error
+  Invalid pattern `(a, b)` for implicit binding (should be a simple capture)
+
+  Arising from use of the binding
+      implicit  (a, b) = (1, 2)
+  │ 
+1 │ let implicit (a, b) = (1, 2)
+  │ 

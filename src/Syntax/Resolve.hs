@@ -65,6 +65,7 @@ data ResolveError
   | NonLinearRecord (Expr Parsed) T.Text
   | EmptyMatch
   | EmptyBegin
+  | IllegalImplicit (Pattern Parsed)
 
   | ArisingFrom ResolveError SomeReason
   deriving (Show)
@@ -77,6 +78,7 @@ instance Pretty ResolveError where
   pretty EmptyMatch = "Empty match expression"
   pretty EmptyBegin = "Empty begin expression"
   pretty (NonLinearRecord _ t) = "Duplicate field" <+> stypeSkol (text t) <+> "in record" <#> empty
+  pretty (IllegalImplicit p) = "Invalid pattern" <+> verbatim p <+> "for implicit binding (should be a simple capture)"
   pretty (ArisingFrom er ex) = pretty er <#> empty <#> nest 4 (string "Arising from use of" <+> blameOf ex </> pretty ex)
 
 instance Spanned ResolveError where
@@ -120,12 +122,10 @@ runResolve scope modules = fmap handle . runWriterT . runExceptT . flip runReade
 resolveModule :: MonadResolve m => [Toplevel Parsed] -> m [Toplevel Resolved]
 resolveModule [] = pure []
 
-resolveModule (LetStmt vs:rs) =  do
-  let vars = vs ^.. each . bindVariable
-  vars' <- traverse tagVar vars
-  extendN (zip vars vars') $ (:)
-    <$> (LetStmt
-          <$> zipWithM (\v' (Binding _ e p a) -> flip (flip (Binding v') p) a <$> reExpr e) vars' vs)
+resolveModule (LetStmt bs:rs) = do
+  (bs', vs, ts) <- unzip3 <$> traverse reBinding bs
+  extendTyvarN (concat ts) . extendN (concat vs) $ (:)
+    <$> (LetStmt <$> traverse (uncurry (flip (<$>) . reExpr . view bindBody)) (zip bs bs'))
     <*> resolveModule rs
 
 resolveModule (r@(ForeignVal v t ty a):rs) = do
@@ -219,12 +219,12 @@ resolveTele _ [] = pure ([], [])
 reExpr :: MonadResolve m => Expr Parsed -> m (Expr Resolved)
 reExpr r@(VarRef v a) = flip VarRef a <$> (lookupEx v `catchJunk` r)
 
-reExpr (Let vs c a) = do
-  let vars = vs ^.. each . bindVariable
-  vars' <- traverse tagVar vars
-  extendN (zip vars vars') $ Let <$> zipWithM (\v' (Binding _ e p a) -> flip (flip (Binding v') p) a <$> reExpr e) vars' vs
-                                 <*> reExpr c
-                                 <*> pure a
+reExpr (Let bs c a) = do
+  (bs', vs, ts) <- unzip3 <$> traverse reBinding bs
+  extendTyvarN (concat ts) . extendN (concat vs) $
+    Let <$> traverse (uncurry (flip (<$>) . reExpr . view bindBody)) (zip bs bs')
+        <*> reExpr c
+        <*> pure a
 reExpr (If c t b a) = If <$> reExpr c <*> reExpr t <*> reExpr b <*> pure a
 reExpr (App f p a) = App <$> reExpr f <*> reExpr p <*> pure a
 reExpr (Fun p e a) = do
@@ -404,6 +404,26 @@ rePattern (PTuple ps a) = do
   pure (PTuple ps' a, concat vss, concat tss)
 rePattern (PLiteral l a) = pure (PLiteral l a, [], [])
 rePattern PWrapper{} = undefined
+
+reBinding :: MonadResolve m
+          => Binding Parsed
+          -> m ( Expr Resolved -> Binding Resolved
+               , [(Var Parsed, Var Resolved)]
+               , [(Var Parsed, Var Resolved)] )
+reBinding (Binding v _ pl a) = do
+  v' <- tagVar v
+  pure ( \e' -> Binding v' e' pl a, [(v, v')], [])
+reBinding (Matching p _ a) = do
+  (p', vs, ts) <- reWholePattern p
+  pure ( \e' -> Matching p' e' a, vs, ts)
+reBinding b@(ParsedBinding p e pl a) =
+  case p of
+    Capture v _ -> reBinding (Binding v e pl a)
+    _ -> do
+      case pl of
+        BindRegular -> pure ()
+        BindImplicit -> tell . pure . wrapError b $ IllegalImplicit p
+      reBinding (Matching p e a)
 
 data Associativity = AssocLeft | AssocRight
   deriving (Eq, Show)
