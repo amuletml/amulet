@@ -24,5 +24,5 @@ do
     }
   }
   local bottom = nil
-  local br = bottom(main)
+  bottom(main)
 end

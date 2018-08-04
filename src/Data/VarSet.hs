@@ -1,14 +1,18 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, DerivingStrategies, FlexibleInstances #-}
 module Data.VarSet
   ( Set
-  , fromList, toList
-  , member, notMember, insert
-  , difference, union, intersection, singleton, delete
+  , fromList, toList, singleton
+  , foldr, filter
+  , member, notMember
+  , insert, delete
+  , difference, union, intersection
   , (<>), mempty, isEmpty
   ) where
 
 import qualified Data.HashSet as Set
 import qualified Data.Text as T
+import qualified Data.List as L
+import Prelude hiding (foldr, filter)
 
 import Core.Var
 
@@ -23,10 +27,13 @@ insert :: CoVar -> Set -> Set
 insert (CoVar x _ _) (Set k) = Set (Set.insert x k)
 
 fromList :: [CoVar] -> Set
-fromList = foldr insert mempty
+fromList = L.foldr insert mempty
 
 toList :: Set -> [CoVar]
-toList (Set s) = map (\x -> CoVar x (T.singleton '?') ValueVar) (Set.toList s)
+toList (Set s) = map fake (Set.toList s)
+
+foldr :: (CoVar -> a -> a) -> a -> Set -> a
+foldr f a (Set s) = Set.foldr (f . fake) a s
 
 member :: CoVar -> Set -> Bool
 member (CoVar x _ _) set = Set.member x (coerce set)
@@ -49,5 +56,11 @@ singleton (CoVar x _ _) = coerce (Set.singleton x)
 delete :: CoVar -> Set -> Set
 delete (CoVar x _ _) set = coerce (Set.delete x (coerce set))
 
+filter :: (CoVar -> Bool) -> Set -> Set
+filter f (Set s) = Set (Set.filter (f . fake) s)
+
 isEmpty :: Set -> Bool
 isEmpty = coerce Set.null
+
+fake :: Int -> CoVar
+fake x = CoVar x (T.singleton '?') ValueVar

@@ -9,10 +9,7 @@ do
       [1] = x
     }
   end
-  local ch = (function ()
-    local x = Foo(1)
-    local cd = print
-    cd(x)
-    return cd(x)
-  end)()
+  local x = Foo(1)
+  print(x)
+  print(x)
 end

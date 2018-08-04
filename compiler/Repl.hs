@@ -69,7 +69,7 @@ data ReplState = ReplState
   { resolveScope :: R.Scope
   , moduleScope  :: R.ModuleScope
   , inferScope   :: T.Env
-  , escapeScope  :: B.EscapeScope
+  , emitState    :: B.TopEmitState
   , lastName     :: S.Name
 
   , luaState     :: L.LuaState
@@ -97,7 +97,7 @@ defaultState mode = do
     { resolveScope = R.builtinScope
     , moduleScope  = R.emptyModules
     , inferScope   = I.builtinsEnv
-    , escapeScope  = B.escapeScope
+    , emitState    = B.defaultEmitState
     , lastName     = S.TgName (T.pack "a") 1
 
     , luaState     = state
@@ -142,8 +142,8 @@ runRepl = do
       case core of
         Nothing -> pure ()
         Just (vs, prog, core, state') -> do
-          let (luaStmt, escape') = B.emitProgramWith (escapeScope state') (tagOccursVar core)
-              luaExpr = LuaDo . map patchupLua $ luaStmt
+          let (luaStmt, emit') = runState (B.emitStmt (tagOccursVar core)) (emitState state')
+              luaExpr = LuaDo . map patchupLua . toList $ luaStmt
               luaSyntax = T.unpack . display . uncommentDoc . renderPretty 0.8 100 . pretty $ luaExpr
 
 
@@ -156,7 +156,7 @@ runRepl = do
               case code of
                 L.OK -> do
                   vs' <- for vs $ \(v, _) -> do
-                    repr <- valueRepr (L.getglobal (T.unpack (B.getVar v escape')))
+                    repr <- valueRepr . L.getglobal . T.unpack . B.getVar v . B.topEscape $ emit'
                     let CoVar id nam _ = v
                         var = S.TgName nam id
                     case inferScope state' ^. T.names . at var of
@@ -175,7 +175,7 @@ runRepl = do
 
             putDoc res
 
-          put state' { escapeScope = escape' }
+          put state' { emitState = emit' }
 
 
     parseCore :: (MonadNamey m, MonadIO m)
