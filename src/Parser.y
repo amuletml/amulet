@@ -183,8 +183,8 @@ Atom :: { Expr Parsed }
      | '(' Section ')'                        { withPos2 $1 $3 $ Parens $2 }
      | '(' NullSection ',' List1(NullSection, ',') ')'
          { withPos2 $1 $5 $ tupleExpr ($2:$4) }
-     | '{' ExprRows '}'                { withPos2 $1 $3 $ Record $2 }
-     | '{' Expr with ExprRows '}'       { withPos2 $1 $5 $ RecordExt $2 $4 }
+     | '{' List(ExprRow, ',') '}'             { withPos2 $1 $3 $ Record $2 }
+     | '{' Expr with List1(ExprRow, ',') '}'  { withPos2 $1 $5 $ RecordExt $2 $4 }
 
      | Atom access                            { withPos2 $1 $2 $ Access $1 (getIdent $2) }
 
@@ -216,6 +216,10 @@ Section :: { Expr Parsed }
 NullSection :: { Maybe (Expr Parsed) }
   :                                           { Nothing }
   | Section                                   { Just $1 }
+
+ExprRow :: { Field Parsed }
+  : ident '=' Expr         { withPos2 $1 $3 $ Field (getIdent $1) $3 }
+  | ident                  { withPos1 $1    $ Field (getIdent $1) $ withPos1 $1 $ VarRef (getName $1) }
 
 Var :: { Located (Var Parsed) }
     : ident  { lPos1 $1 $ getName $1 }
@@ -270,16 +274,6 @@ ListE1(p)
      : p                { [$1] }
      | p ListE1(p)      { $1 : $2 }
 
-Rows(p, q)
-   : {- Empty -}             { [] }
-   | ident p q ',' Rows(p,q) { (getIdent $1, $3) : $5 }
-   | ident p q               { [(getIdent $1, $3)] }
-
-ExprRows :: { [Field Parsed] }
-   : {- Empty -}                 { [] }
-   | ident '=' Expr ',' ExprRows { withPos2 $1 $3 (Field (getIdent $1) $3) : $5 }
-   | ident '=' Expr              { [withPos2 $1 $3 (Field (getIdent $1) $3)] }
-
 Lit :: { Located Lit }
     : int                  { lPos1 $1 $ LiInt (getInt $1) }
     | float                { lPos1 $1 $ LiFloat (getFloat $1) }
@@ -300,15 +294,20 @@ Pattern :: { Pattern Parsed }
         | Pattern ':' Type        { withPos2 $1 $3 $ PType $1 (getL $3) }
 
 ArgP :: { Pattern Parsed }
-     : ident                      { withPos1 $1 $ Capture (getName $1) }
-     | '_'                        { withPos1 $1 $ Wildcard }
-     | Con                        { withPos1 $1 $ Destructure (getL $1) Nothing }
-     | '{' Rows('=',Pattern) '}'  { withPos2 $1 $3 $ PRecord $2 }
-     | '(' List(Pattern, ',') ')' { withPos2 $1 $3 $ tuplePattern $2 }
-     | Lit                        { withPos1 $1 (PLiteral (getL $1)) }
+     : ident                                      { withPos1 $1 $ Capture (getName $1) }
+     | '_'                                        { withPos1 $1 $ Wildcard }
+     | Con                                        { withPos1 $1 $ Destructure (getL $1) Nothing }
+     | '{' List(PatternRow, ',') '}'              { withPos2 $1 $3 $ PRecord $2 }
+     | '(' List(Pattern, ',') ')'                 { withPos2 $1 $3 $ tuplePattern $2 }
+     | Lit                                        { withPos1 $1 (PLiteral (getL $1)) }
+
+PatternRow :: { (T.Text, Pattern Parsed) }
+  : ident '=' Pattern                             { (getIdent $1, $3) }
+  | ident                                         { (getIdent $1, withPos1 $1 $ Capture(getName $1)) }
 
 Arm :: { (Pattern Parsed, Expr Parsed) }
     : '|' List1(MPattern, ',') '->' ExprBlock  { (completeTuple PTuple $2, $4) }
+
 
 Parameter :: { Parameter Parsed }
           : ArgP             { PatParam $1 }
@@ -337,8 +336,12 @@ TypeAtom :: { Located (Type Parsed) }
          | lazy                                   { lPos1 $1 $ TyCon (Name (T.pack "lazy")) }
          | '(' ')'                                { lPos2 $1 $2 $ TyCon (Name (T.pack "unit")) }
          | '(' Type ')'                           { lPos2 $1 $3 (getL $2) }
-         | '{' Rows(':', Type) '}'                { lPos2 $1 $3 $ TyExactRows (map (second getL) $2) }
-         | '{' Type '|' Rows(':', Type) '}'       { lPos2 $1 $5 $ TyRows (getL $2) (map (second getL) $4) }
+         | '{' List(TypeRow, ',') '}'             { lPos2 $1 $3 $ TyExactRows $2 }
+         | '{' Type '|' List(TypeRow, ',') '}'    { lPos2 $1 $5 $ TyRows (getL $2) $4 }
+
+TypeRow :: { (T.Text, Type Parsed) }
+  : ident ':' Type                                { (getIdent $1, getL $3) }
+
 {
 
 data Located a = L a Span
