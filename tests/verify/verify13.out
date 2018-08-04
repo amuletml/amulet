@@ -1,9 +1,9 @@
-verify13.ml[2:7 ..2:9]: warning
+verify13.ml[2:7 ..2:7]: warning
   Bound locally but not used: 'y'
   │ 
 2 │   let y = 0
   │ 
-verify13.ml[3:7 ..3:9]: warning
+verify13.ml[3:7 ..3:7]: warning
   Bound locally but not used: 'x'
   │ 
 3 │   let x = 0
