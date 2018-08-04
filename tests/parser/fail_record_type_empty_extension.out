@@ -1,0 +1,5 @@
+fail_record_type_empty_extension.ml[1:15 ..1:15]: error
+  Unexpected }, expected identifier
+  │ 
+1 │ let a : { x | } = 0
+  │ 
