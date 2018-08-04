@@ -22,3 +22,5 @@ let short_pattern = function
 let record_type : {  x: int, y : int, z : int } = a
 
 let record_type_extension : { 'a | x: int, y : int } = a
+
+let record_type_empty_extension : { 'a | } = a

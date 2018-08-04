@@ -337,7 +337,7 @@ TypeAtom :: { Located (Type Parsed) }
          | '(' ')'                                { lPos2 $1 $2 $ TyCon (Name (T.pack "unit")) }
          | '(' Type ')'                           { lPos2 $1 $3 (getL $2) }
          | '{' List(TypeRow, ',') '}'             { lPos2 $1 $3 $ TyExactRows $2 }
-         | '{' Type '|' List1(TypeRow, ',') '}'   { lPos2 $1 $5 $ TyRows (getL $2) $4 }
+         | '{' Type '|' List(TypeRow, ',') '}'    { lPos2 $1 $5 $ TyRows (getL $2) $4 }
 
 TypeRow :: { (T.Text, Type Parsed) }
   : ident ':' Type                                { (getIdent $1, getL $3) }
