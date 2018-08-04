@@ -1,7 +1,21 @@
-let a = { x = 1, y = 2, z = 3 }
-let b = { a with y = 3 }
-let c = match b with
+let x = 1
+and y = 2
+and z = 3
+let basic_record =
+  { x = 1, y = 2, z = 3 }
+let short_record =
+  { x = x, y = y, z = z }
+let basic_extension =
+  { basic_record with y = 3 }
+let short_extension =
+  { short_record with y = y }
+let basic_pattern = function
   | { x = 1, y = y } -> y
-let d : { x : int, y : int, z : int } =
+let short_pattern = function
+  | { x = x, y = y } -> y
+let record_type : { x : int, y : int, z : int } =
   a
-let e : { 'a | x : int, y : int } = a
+let record_type_extension : { 'a | x : int, y : int } =
+  a
+let record_type_empty_extension : { 'a |  } =
+  a
