@@ -337,7 +337,7 @@ inferLetTy closeOver vs =
 
       tcOne (AcyclicSCC decl@(Binding var exp p ann)) = do
         (origin, tv) <- approximate decl
-        ((exp', ty), cs) <- listen . local (names %~ focus (uncurry one tv)) $
+        ((exp', ty), cs) <- listen $
           case origin of
             Supplied -> do
               let exp' (Ascription e _ _) = exp' e
@@ -351,7 +351,26 @@ inferLetTy closeOver vs =
         (tp, k) <- figureOut (var, becauseExp exp) exp' ty cs
         pure ( [Binding (TvName var) (k exp') p (ann, tp)], one var (rename tp) )
 
+      tcOne (AcyclicSCC b@(Matching p e ann)) = do
+        ((e, p, ty, tel), cs) <- listen $ do
+          (e, t) <- infer e
+          (p, tel, cs) <- checkPattern p t
+          leakEqualities b cs
+          pure (e, p, t, tel)
+        cur <- genName
+        (solution, wraps) <- case solve cur cs of
+          Left e -> throwError e 
+          Right x -> pure x
+        let solved = apply solution
+            tel' = mapTele solved tel
+            ex = solveEx ty solution wraps e
+
+        pure ( [Matching p ex (ann, solved ty)], tel' )
+
+      tcOne (AcyclicSCC ParsedBinding{}) = error "ParsedBinding in TC (inferLetTy)"
+
       tcOne (CyclicSCC vars) = do
+        guardOnlyBindings vars
         (origins, tvs) <- unzip <$> traverse approximate vars
 
         (vs, cs) <- listen . local (names %~ focus (teleFromList tvs)) $
@@ -380,6 +399,7 @@ inferLetTy closeOver vs =
                   skolCheck var (becauseExp exp) ty
                   pure ( Binding var (solveEx ty solution cs exp) p (fst ann, ty)
                        , one var (rename ty) )
+            solveOne _ = error "solveOne non-Binding forbidden"
             squish = fmap (second mconcat . unzip)
          in squish . traverse solveOne $ vs
 
@@ -522,3 +542,12 @@ value BothSection{} = True
 value AccessSection{} = True
 value (OpenIn _ e _) = value e
 value (ExprWrapper _ e _) = value e
+
+guardOnlyBindings :: MonadError TypeError m => [Binding Resolved] -> m ()
+guardOnlyBindings bs = go bs where
+  go (Binding{}:xs) = go xs
+  go (m@Matching{}:_) =
+    throwError (undefined m)
+
+  go (ParsedBinding{}:_) = error "ParsedBinding in guardOnlyBindings"
+  go [] = pure ()

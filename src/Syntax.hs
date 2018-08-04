@@ -29,11 +29,24 @@ data Plicity = BindImplicit | BindRegular
   deriving (Eq, Show, Ord, Data, Typeable)
 
 data Binding p
+  -- let implicit f x = ...
   = Binding { _bindVariable :: Var p
             , _bindBody :: Expr p
             , _bindPlicity :: Plicity
             , _bindAnn :: Ann p
             }
+  -- let (a, b) = ...
+  | Matching { _bindPattern :: Pattern p
+             , _bindBody :: Expr p
+             , _bindAnn :: Ann p
+             }
+  -- what the parser emits
+  -- might contain nonsense like
+  --  let implicit (a, b) = ...
+  | ParsedBinding { _bindPattern :: Pattern p
+                  , _bindBody :: Expr p
+                  , _bindPlicity :: Plicity
+                  , _bindAnn :: Ann p }
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Binding p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Binding p)

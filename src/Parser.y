@@ -104,7 +104,7 @@ import Syntax
   '$sep'   { Token TcVSep _ _ }
 
 
-%expect 7
+%expect 8
 
 %%
 
@@ -241,9 +241,11 @@ Binding :: { Binding Parsed }
         | implicit PreBinding { implicitify $1 $2 }
 
 PreBinding :: { Binding Parsed }
-           : BindName ListE(Parameter) '=' ExprBlock '$end'
+           : Pattern '=' ExprBlock '$end' { withPos2 $1 $3 (Matching $1 $3) }
+           | Pattern ':' Type '=' ExprBlock '$end' { withPos2 $1 $5 (Matching $1 (withPos2 $3 $5 (Ascription $5 (getL $3)))) }
+           | BindName ListE1(Parameter) '=' ExprBlock '$end'
              { Binding (getL $1) (foldr (\x y -> withPos2 x $4 (Fun x y)) $4 $2) BindRegular (withPos2 $1 $3 id) }
-           | BindName ListE(Parameter) ':' Type '=' ExprBlock '$end'
+           | BindName ListE1(Parameter) ':' Type '=' ExprBlock '$end'
              { Binding (getL $1) (foldr (\x y -> withPos2 x $6 (Fun x y)) (Ascription $6 (getL $4) (withPos2 $1 $6 id)) $2) BindRegular (withPos2 $1 $4 id) }
            | ArgP BindOp ArgP '=' ExprBlock '$end'
              { Binding (getL $2) (withPos2 $1 $5 (Fun (PatParam $1) (withPos2 $3 $5 (Fun (PatParam $3) $5)))) BindRegular (withPos2 $1 $4 id) }

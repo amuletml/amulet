@@ -123,6 +123,8 @@ lowerAt (S.Let vs t _) ty = do
       lowerScc (AcyclicSCC (S.Binding (TvName var) ex _ (_, ty))) = AcyclicSCC <$> do
         let ty' = lowerType ty
         (mkVal var, ty',) <$> lowerPolyBind ty' ex
+      lowerScc (AcyclicSCC S.ParsedBinding{}) = error "ParsedBinding{} in lower this is getting ridiculous"
+      lowerScc (AcyclicSCC S.Matching{}) = error "Squid: TODO lower Matching{}"
       foldScc (AcyclicSCC v) = C.Let (One v)
       foldScc (CyclicSCC vs) = C.Let (Many vs)
   vs' <- traverse lowerScc sccs
@@ -403,6 +405,8 @@ lowerProg' (LetStmt vs:prg) = do
         for vs $ \(S.Binding (TvName var) ex _ (_, ty)) -> do
           let ty' = lowerType ty
           (mkVal var,ty',) <$> lowerPolyBind ty' ex
+      lowerScc (AcyclicSCC S.ParsedBinding{}) = error "ParsedBinding{} in Lower top-level"
+      lowerScc (AcyclicSCC S.Matching{}) = error "Matching{} top-level"
       lowerScc (AcyclicSCC (S.Binding (TvName var) ex _ (_, ty))) = AcyclicSCC <$> do
         let ty' = lowerType ty
         (mkVal var, ty',) <$> lowerPolyBind ty' ex
