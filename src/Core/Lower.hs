@@ -115,21 +115,9 @@ lowerAt :: MonadLower m => Expr Typed -> Type -> Lower m Term
 lowerAt (Ascription e _ _) t = lowerAt e t
 
 lowerAt (S.Let vs t _) ty = do
-  let sccs = depOrder vs
-      lowerScc (CyclicSCC vs) = CyclicSCC <$> do
-        for vs $ \(S.Binding (TvName var) ex _ (_, ty)) -> do
-          let ty' = lowerType ty
-          (mkVal var,ty',) <$> lowerPolyBind ty' ex
-      lowerScc (AcyclicSCC (S.Binding (TvName var) ex _ (_, ty))) = AcyclicSCC <$> do
-        let ty' = lowerType ty
-        (mkVal var, ty',) <$> lowerPolyBind ty' ex
-      lowerScc (AcyclicSCC S.ParsedBinding{}) = error "ParsedBinding{} in lower this is getting ridiculous"
-      lowerScc (AcyclicSCC S.Matching{}) = error "Squid: TODO lower Matching{}"
-      foldScc (AcyclicSCC v) = C.Let (One v)
-      foldScc (CyclicSCC vs) = C.Let (Many vs)
-  vs' <- traverse lowerScc sccs
-  let k = foldr ((.) . foldScc) id vs'
-  k <$> lowerAtTerm t ty -- TODO scc these
+  vs' <- lowerLet vs
+  let k = foldr ((.) . C.Let) id vs'
+  k <$> lowerAtTerm t ty
 lowerAt (S.If c t e _) ty = do
   c' <- lowerAtAtom c C.tyBool
   t' <- lowerAtTerm t ty
@@ -400,21 +388,9 @@ lowerProg' (ForeignVal (TvName v) ex tp _:prg) =
 lowerProg' (LetStmt vs:prg) = do
   let env' = Map.fromList (map (\(S.Binding (TvName v) _ _ (_, ant)) -> (v, lowerType ant)) vs)
 
-  let sccs = depOrder vs
-      lowerScc (CyclicSCC vs) = CyclicSCC <$> do
-        for vs $ \(S.Binding (TvName var) ex _ (_, ty)) -> do
-          let ty' = lowerType ty
-          (mkVal var,ty',) <$> lowerPolyBind ty' ex
-      lowerScc (AcyclicSCC S.ParsedBinding{}) = error "ParsedBinding{} in Lower top-level"
-      lowerScc (AcyclicSCC S.Matching{}) = error "Matching{} top-level"
-      lowerScc (AcyclicSCC (S.Binding (TvName var) ex _ (_, ty))) = AcyclicSCC <$> do
-        let ty' = lowerType ty
-        (mkVal var, ty',) <$> lowerPolyBind ty' ex
-      foldScc (AcyclicSCC v) = (C.StmtLet (One v):)
-      foldScc (CyclicSCC vs) = (C.StmtLet (Many vs):)
   local (\s -> s { vars = env' }) $ do
-    vs' <- traverse lowerScc sccs
-    foldr ((.) . foldScc) id vs' <$> lowerProg' prg
+    vs' <- lowerLet vs
+    foldr ((.) . ((:) . C.StmtLet)) id vs' <$> lowerProg' prg
 lowerProg' (TypeDecl (TvName var) _ cons:prg) = do
   let cons' = map (\case
                        UnitCon (TvName p) (_, t) -> (p, mkCon p, lowerType t)
@@ -427,6 +403,32 @@ lowerProg' (TypeDecl (TvName var) _ cons:prg) = do
   (C.Type (mkType var) ccons:) <$> local (\s -> s { ctors = Map.union (Map.fromList scons) (ctors s) }) (lowerProg' prg)
 lowerProg' (Open _ _:prg) = lowerProg' prg
 lowerProg' (Module _ b:prg) = lowerProg' (b ++ prg)
+
+lowerLet :: MonadLower m => [S.Binding Typed] -> m [Binding CoVar]
+lowerLet bs =
+  let sccs = depOrder bs
+      lowerScc (CyclicSCC vs) = Many <$> do
+        -- Cyclic bindings will only every be normal. Well, I
+        -- jolly hope so anyway
+        for vs $ \(S.Binding (TvName var) ex _ (_, ty)) -> do
+          let ty' = lowerType ty
+          (mkVal var,ty',) <$> lowerPolyBind ty' ex
+
+      lowerScc (AcyclicSCC (S.Binding (TvName var) ex _ (_, ty))) = One <$> do
+        let ty' = lowerType ty
+        (mkVal var, ty',) <$> lowerPolyBind ty' ex
+
+      lowerScc (AcyclicSCC S.ParsedBinding{}) = error "ParsedBinding{} in Lower top-level"
+      lowerScc (AcyclicSCC (S.Matching p ex (_, ty))) = do
+        let ty' = lowerType ty
+        bind <- lowerPolyBind ty' ex
+        case bound p of
+          [] -> do
+            var <- fresh ValueVar
+            pure (One (var, ty', bind))
+          [TvName var] -> pure (One (mkVal var, ty', bind))
+
+  in traverse lowerScc sccs
 
 lowerPolyBind :: MonadLower m => Type -> Expr Typed -> m Term
 lowerPolyBind ty ex = doIt (needed ex ty) (go ty ex) (lowerExprTerm ex) where

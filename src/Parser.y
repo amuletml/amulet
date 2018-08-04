@@ -241,8 +241,8 @@ Binding :: { Binding Parsed }
         | implicit PreBinding { implicitify $1 $2 }
 
 PreBinding :: { Binding Parsed }
-           : Pattern PostBinding               { withPos2 $1 $2 (Matching $1 $2) }
-           | Pattern ':' Type PostBinding      { withPos2 $1 $4 (Matching $1 (withPos2 $3 $4 (Ascription $4 (getL $3)))) }
+           : Pattern PostBinding               { withPos1 $1 $ Matching $1 $2 }
+           | Pattern ':' Type PostBinding      { withPos2 $1 $3 $ Matching $1 $ withPos2 $3 $4 $ Ascription $4 (getL $3) }
 
            | BindName ListE1(Parameter) PostBinding
              { Binding (getL $1) (foldr (\x y -> withPos2 x $3 (Fun x y)) $3 $2) BindRegular (withPos1 $1 id) }
