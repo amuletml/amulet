@@ -59,8 +59,8 @@ freeIn (BothSection b _)    = freeIn b
 freeIn AccessSection{}      = mempty
 freeIn x = error (show x)
 
-bound :: (IsList (m (Var p)), Item (m (Var p)) ~ Var p, Monoid (m (Var p)))
-      => Pattern p -> m (Var p)
+bound :: (IsList m, Item m ~ Var p, Monoid m)
+      => Pattern p -> m
 bound (Destructure _ x _) = maybe mempty bound x
 bound (PRecord vs _)      = foldMap (bound . snd) vs
 bound (PTuple ps _)       = foldMap bound ps
@@ -69,6 +69,18 @@ bound (PType p _ _)       = bound p
 bound Wildcard{}          = mempty
 bound PLiteral{}          = mempty
 bound (PWrapper _ p _)    = bound p
+
+boundWith :: (IsList m, Item m ~ (Var p, Ann p), Monoid m)
+          => Pattern p -> m
+boundWith (Destructure _ x _) = maybe mempty boundWith x
+boundWith (PRecord vs _)      = foldMap (boundWith . snd) vs
+boundWith (PTuple ps _)       = foldMap boundWith ps
+boundWith (Capture p a)       = fromList [(p, a)]
+boundWith (PType p _ _)       = boundWith p
+boundWith Wildcard{}          = mempty
+boundWith PLiteral{}          = mempty
+boundWith (PWrapper _ p _)    = boundWith p
+
 
 bindVariables :: (IsList (m (Var p)), Item (m (Var p)) ~ Var p, Monoid (m (Var p)))
               => Binding p -> m (Var p)

@@ -1,5 +1,5 @@
 {-# LANGUAGE LambdaCase, TupleSections, ExplicitNamespaces, PatternSynonyms, RankNTypes, ScopedTypeVariables #-}
-{-# LANGUAGE FlexibleContexts, ConstraintKinds, OverloadedStrings #-}
+{-# LANGUAGE FlexibleContexts, ConstraintKinds, OverloadedStrings, TupleSections #-}
 module Core.Lower
   ( runLowerT, runLowerWithCtors
   , lowerExprTerm
@@ -39,6 +39,7 @@ import qualified Syntax as S
 import Syntax.Let
 import Syntax.Var (Var(..), Resolved, Typed)
 import Syntax (Expr(..), Pattern(..), Lit(..), Skolem(..), Toplevel(..), Constructor(..))
+import Syntax.Transform
 
 import Text.Pretty.Semantic (pretty)
 
@@ -87,12 +88,12 @@ patternMatchingFail w p t = do
              , _armVars = [(var, p)], _armTyvars = []
              }
 
+onAtom :: MonadLower m => Term -> Type -> Lower m Atom
+onAtom (C.Atom a) _ = pure a
+onAtom x' t = ContT $ \k -> fresh ValueVar >>= \v -> C.Let (One (v, t, x')) <$> k (C.Ref v t)
+
 lowerAtAtom :: MonadLower m => Expr Typed -> Type -> Lower m Atom
-lowerAtAtom x t = do x' <- lowerAt x t
-                     case x' of
-                       C.Atom a -> pure a
-                       x' -> ContT $ \k ->
-                         fresh ValueVar >>= \v -> C.Let (One (v, t, x')) <$> k (C.Ref v t)
+lowerAtAtom x t = lowerAt x t >>= flip onAtom t
 
 lowerAtTerm :: MonadLower m => Expr Typed -> Type -> m Term
 lowerAtTerm x t = runContT (lowerAt x t) pure
@@ -386,7 +387,10 @@ lowerProg' [] = pure []
 lowerProg' (ForeignVal (TvName v) ex tp _:prg) =
   (Foreign (mkVal v) (lowerType tp) ex:) <$> lowerProg' prg
 lowerProg' (LetStmt vs:prg) = do
-  let env' = Map.fromList (map (\(S.Binding (TvName v) _ _ (_, ant)) -> (v, lowerType ant)) vs)
+  let env' = Map.fromList (foldMap lowerBind vs)
+      lowerBind bind =
+        let ty = lowerType (bind ^. (S.bindAnn . _2))
+        in map (\(TvName v) -> (v, ty)) (bindVariables bind)
 
   local (\s -> s { vars = env' }) $ do
     vs' <- lowerLet vs
@@ -407,28 +411,80 @@ lowerProg' (Module _ b:prg) = lowerProg' (b ++ prg)
 lowerLet :: MonadLower m => [S.Binding Typed] -> m [Binding CoVar]
 lowerLet bs =
   let sccs = depOrder bs
-      lowerScc (CyclicSCC vs) = Many <$> do
+
+      lowerScc (CyclicSCC vs) = pure . Many <$> do
         -- Cyclic bindings will only every be normal. Well, I
         -- jolly hope so anyway
         for vs $ \(S.Binding (TvName var) ex _ (_, ty)) -> do
           let ty' = lowerType ty
           (mkVal var,ty',) <$> lowerPolyBind ty' ex
 
-      lowerScc (AcyclicSCC (S.Binding (TvName var) ex _ (_, ty))) = One <$> do
+      lowerScc (AcyclicSCC (S.Binding (TvName var) ex _ (_, ty))) = pure . One <$> do
         let ty' = lowerType ty
         (mkVal var, ty',) <$> lowerPolyBind ty' ex
 
-      lowerScc (AcyclicSCC S.ParsedBinding{}) = error "ParsedBinding{} in Lower top-level"
-      lowerScc (AcyclicSCC (S.Matching p ex (_, ty))) = do
-        let ty' = lowerType ty
-        bind <- lowerPolyBind ty' ex
-        case bound p of
-          [] -> do
-            var <- fresh ValueVar
-            pure (One (var, ty', bind))
-          [TvName var] -> pure (One (mkVal var, ty', bind))
+      lowerScc (AcyclicSCC S.ParsedBinding{}) = error "ParsedBinding{} in Lower"
 
-  in traverse lowerScc sccs
+      lowerScc (AcyclicSCC (S.Matching p ex (pos, ty))) = do
+        let ty' = lowerType ty
+        ts <- patternTyvars p
+        ex' <- lowerPolyBind ty' ex
+
+        case boundWith p of
+          [bind] ->
+            -- Generate `let x = match expr with | ... x' ... -> x`
+            pure <$> patternExtract pos p ts ex' ty' bind
+          vs -> do
+            -- Generate `let a = expr`
+            var <- fresh ValueVar
+            (One (var, ty', ex'):)
+              <$> traverse (patternExtract pos p ts (Atom (Ref var ty')) ty') vs
+
+      -- | Strip all variables from a pattern aside from the given one,
+      -- which is replaced with @n@
+      stripPtrn v n = transformPatternTyped go id where
+        go (S.Capture v' a) | v == v' = S.Capture n a
+                            | otherwise = S.Wildcard a
+        go p = p
+
+      patternExtract :: MonadLower m
+                     => Span -> Pattern Typed -> [(CoVar, Type)]
+                     -> Term -> Type
+                     -> (Var Typed, S.Ann Typed)
+                     -> m (Binding CoVar)
+      patternExtract pos p ts test ty (TvName var, (_, vty)) = do
+        let var' = mkVal var
+            vty' = lowerType vty
+        pvar@(CoVar vn vt _) <- freshFrom var'
+        p' <- lowerPat (stripPtrn (TvName var) (TvName (TgName vt vn)) p)
+
+        -- Generate `let x = match test with | ... x' ... -> x`
+        vex <- flip runContT pure $ do
+          test' <- onAtom test ty
+          withinLambda ty test' $ \test -> do
+            fail <- patternMatchingFail pos ty vty'
+            pure $ C.Match test
+              [ C.Arm { _armPtrn = p', _armTy = ty, _armBody = Atom (Ref pvar vty')
+                      , _armVars = patternVars p', _armTyvars = ts }
+              , fail ]
+        pure (One (var', vty', vex))
+
+      withinLambda :: MonadLower m
+                   => Type -> Atom
+                   -> (Atom -> m Term) -> m Term
+      withinLambda (ForallTy (Relevant t) kind ty) v f = do
+        t' <- freshFrom t
+        let ty' = substituteInType (VarMap.singleton t (VarTy t')) ty
+
+        v' <- fresh ValueVar
+
+        Atom
+         . Lam (TypeArgument t' kind)
+         . C.Let (One (v', ty', TyApp v (VarTy t')))
+         <$> withinLambda ty' (Ref v' ty') f
+      withinLambda _ v f = f v
+
+  in concat <$> traverse lowerScc sccs
 
 lowerPolyBind :: MonadLower m => Type -> Expr Typed -> m Term
 lowerPolyBind ty ex = doIt (needed ex ty) (go ty ex) (lowerExprTerm ex) where
@@ -452,9 +508,9 @@ lowerPolyBind ty ex = doIt (needed ex ty) (go ty ex) (lowerExprTerm ex) where
     go _ ac = ac
   countLams _ = 0
 
-  countForalls :: Type -> Integer
-  countForalls (ForallTy Relevant{} _ t) = 1 + countForalls t
-  countForalls _ = 0
+countForalls :: Type -> Integer
+countForalls (ForallTy Relevant{} _ t) = 1 + countForalls t
+countForalls _ = 0
 
 patternVars :: Pat -> [(CoVar, Type)]
 patternVars (C.Capture v ty) = [(v, ty)]
