@@ -104,6 +104,7 @@ data TypeError where
   -- Implicit parameters
   NoImplicit :: (Ord (Var p), Pretty (Var p)) => Type p -> (Doc -> Doc) -> TypeError
   AmbiguousType :: (Ord (Var p), Pretty (Var p)) => Var p -> Type p -> Set.Set (Var p) -> TypeError
+  PatternRecursive :: Binding Resolved -> [Binding Resolved] -> TypeError
 
   NotPromotable :: Pretty (Var p) => Var p -> Type p -> Doc -> TypeError
   ManyErrors :: [TypeError] -> TypeError
@@ -311,6 +312,8 @@ instance Pretty TypeError where
         [_] -> text "is quantified but does not appear"
         _ -> text "are quantified but do not appear"
 
+  pretty (PatternRecursive _ _) = string "pattern recursive error should be formatNoted"
+
 instance Spanned TypeError where
   annotation (ArisingFrom e@ArisingFrom{} _) = annotation e
   annotation (ArisingFrom _ x) = annotation x
@@ -355,6 +358,27 @@ instance Note TypeError Style where
          sv = fmap Right . stypeVar
          sk = fmap Right . stypeSkol
          sc = fmap Right . stypeCon
+
+  formatNote f (ArisingFrom (PatternRecursive p [p']) _) | p == p' =
+    vsep [ indent 2 "Recursive pattern bindings are not allowed"
+         , indent 2 "Note: this definition refers to itself" <+> (Right <$> highlight "directly")
+         , empty
+         , f [annotation p]
+         ]
+
+  formatNote f (ArisingFrom (PatternRecursive p bs) _) | bs <- delete p bs =
+    vsep [ indent 2 "Pattern bindings can not participate in recursion"
+         , empty
+         , f [annotation p]
+         , empty
+         , indent 2 "Note: this binding is in the same" <+> (Right <$> highlight "recursive group") <+> string "as these"
+           <#> if length bs > 3
+                  then vsep [ indent 4 "and" <+> int (length bs - 3) <+> "other binding" <> (if length bs - 3 /= 1 then "s." else ".")
+                            , empty ]
+                  else empty
+         , f (map annotation (take 3 bs))
+         ]
+
   formatNote f x = indent 2 (Right <$> pretty x) <#> f [annotation x]
 
 missing :: [(Text, b)] -> [(Text, b)] -> Doc

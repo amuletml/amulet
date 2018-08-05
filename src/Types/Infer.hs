@@ -548,7 +548,7 @@ guardOnlyBindings :: MonadError TypeError m => [Binding Resolved] -> m ()
 guardOnlyBindings bs = go bs where
   go (Binding{}:xs) = go xs
   go (m@Matching{}:_) =
-    throwError (undefined m)
+    throwError (PatternRecursive m bs)
 
   go (ParsedBinding{}:_) = error "ParsedBinding in guardOnlyBindings"
   go [] = pure ()
