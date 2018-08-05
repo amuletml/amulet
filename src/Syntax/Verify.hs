@@ -88,7 +88,7 @@ verifyBindingGroup k _ = traverse_ verifyScc . depOrder where
     modify (k (BindingSite v s t))
     verifyExpr e
   verifyScc (AcyclicSCC (Matching p e _)) = do
-    modify (Set.union (bindingSites p))
+    traverse_ (modify . k) $ bindingSites p 
     verifyExpr e
   verifyScc (AcyclicSCC ParsedBinding{}) = error "ParsedBinding in *verify*"
   verifyScc (CyclicSCC vs) = do

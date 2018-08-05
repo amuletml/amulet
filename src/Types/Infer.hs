@@ -361,12 +361,13 @@ inferLetTy closeOver vs =
         (solution, wraps) <- case solve cur cs of
           Left e -> throwError e 
           Right x -> pure x
-        let solved = apply solution
+        let solved = closeOver mempty ex . apply solution
             ex = solveEx ty solution wraps e
 
-        tel' <- traverseTele (closeOver mempty ex . solved) tel
+        tel' <- traverseTele solved tel
+        ty <- solved ty
 
-        pure ( [Matching p ex (ann, solved ty)], tel' )
+        pure ( [Matching (lineUpPattern p tel') ex (ann, ty)], tel' )
 
       tcOne (AcyclicSCC ParsedBinding{}) = error "ParsedBinding in TC (inferLetTy)"
 
@@ -552,3 +553,17 @@ guardOnlyBindings bs = go bs where
 
   go (ParsedBinding{}:_) = error "ParsedBinding in guardOnlyBindings"
   go [] = pure ()
+
+lineUpPattern :: Pattern Typed -> Telescope Typed -> Pattern Typed
+lineUpPattern (Capture v (an, _)) tele
+  | Just k <- tele ^. at (unTvName v)
+  = Capture v (an, k)
+  | otherwise = error $ "pattern variable " ++ show v ++ " captured but not in telescope"
+
+lineUpPattern x@Wildcard{} _ = x
+lineUpPattern x@PLiteral{} _ = x
+lineUpPattern (Destructure k m a) tele = Destructure k (fmap (flip lineUpPattern tele) m) a
+lineUpPattern (PType p t a) tele = PType (lineUpPattern p tele) t a
+lineUpPattern (PRecord rs a) tele = PRecord (map (second (flip lineUpPattern tele)) rs) a
+lineUpPattern (PTuple rs a) tele = PTuple (map (flip lineUpPattern tele) rs) a
+lineUpPattern (PWrapper w p a) tele = PWrapper w (lineUpPattern p tele) a
