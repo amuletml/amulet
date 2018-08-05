@@ -1,9 +1,9 @@
-{-# LANGUAGE PackageImports, ScopedTypeVariables #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Test.Syntax.Gen ( genType ) where
 
-import "amuletml" Types.Infer.Builtin (tyUnit, tyBool, tyInt, tyString, tyLazy)
-import "amuletml" Syntax.Var
-import "amuletml" Syntax
+import Types.Infer.Builtin (tyUnit, tyBool, tyInt, tyString, tyLazy)
+import Syntax.Var
+import Syntax
 
 import Data.Traversable
 import Data.Function
