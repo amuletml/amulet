@@ -4,7 +4,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
 module Syntax.Types
-  ( Telescope, one, foldTele, teleFromList, mapTele
+  ( Telescope, one, foldTele, teleFromList, mapTele, traverseTele
   , Scope(..), namesInScope, inScope
   , Env, freeInEnv, difference, envOf, scopeFromList, toMap
   , names, typeVars, constructors, implicits, modules, letBound
@@ -123,6 +123,11 @@ foldTele f x = foldMap f (getTele x)
 
 mapTele :: Ord (Var p) => (Type p -> Type p) -> Telescope p -> Telescope p
 mapTele f (Telescope x) = Telescope (fmap f x)
+
+traverseTele :: (Ord (Var p), Applicative f)
+             => (Type p -> f (Type p))
+             -> Telescope p -> f (Telescope p)
+traverseTele f (Telescope x) = Telescope <$> traverse f x
 
 teleFromList :: Degrade p
              => [(Var p, Type p)] -> Telescope p

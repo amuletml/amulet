@@ -323,7 +323,6 @@ inferLetTy closeOver vs =
         skolCheck (TvName (fst blame)) (snd blame) vt
         pure (vt, solveEx vt x co)
 
-
       skolCheck :: Var Typed -> SomeReason -> Type Typed -> m ()
       skolCheck var exp ty = do
         env <- view typeVars
@@ -357,13 +356,15 @@ inferLetTy closeOver vs =
           (p, tel, cs) <- checkPattern p t
           leakEqualities b cs
           pure (e, p, t, tel)
+
         cur <- genName
         (solution, wraps) <- case solve cur cs of
           Left e -> throwError e 
           Right x -> pure x
         let solved = apply solution
-            tel' = mapTele solved tel
             ex = solveEx ty solution wraps e
+
+        tel' <- traverseTele (closeOver mempty ex . solved) tel
 
         pure ( [Matching p ex (ann, solved ty)], tel' )
 

@@ -84,10 +84,37 @@ instance Pretty ResolveError where
 instance Spanned ResolveError where
   annotation (ArisingFrom _ x) = annotation x
   annotation (NonLinearRecord e _) = annotation e
+  annotation (IllegalImplicit p) = annotation p
   annotation _ = undefined
+
+{-
+  Illegal implicit binding of (a, b)
+
+  |
+  |  let implicit (a, b) = (1, 2)
+  |      ¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
+
+  · Note: all implicit bindings must be of the form
+
+      let implicit f = ...
+
+    where <tv>f</tv> is an identifier.
+-}
 
 instance Note ResolveError Style where
   diagnosticKind _ = ErrorMessage
+
+  formatNote f (IllegalImplicit pat) =
+    vsep [ indent 2 $ string "Illegal implicit binding of" <+> (Right <$> highlight "pattern" <+> pretty pat)
+         , empty
+         , f [annotation pat]
+         , empty
+         , indent 2 . bullet $ string "Note: all implicit bindings must be of the form"
+         , empty
+         , indent 6 $ (Right <$> keyword "let implicit") <+> char 'f' <+> (Right <$> equals) <+> string "..."
+         , empty
+         , indent 4 $ string "where" <+> (Right <$> stypeVar (char 'f')) <+> string "is an identifier or function."
+         ]
 
   formatNote f x = indent 2 (Right <$> pretty x) <#> fromJust (body x) where
     body (ArisingFrom er a) = body er <|> Just (f [annotation a])
@@ -416,13 +443,13 @@ reBinding (Binding v _ pl a) = do
 reBinding (Matching p _ a) = do
   (p', vs, ts) <- reWholePattern p
   pure ( \e' -> Matching p' e' a, vs, ts)
-reBinding b@(ParsedBinding p e pl a) =
+reBinding (ParsedBinding p e pl a) =
   case p of
     Capture v _ -> reBinding (Binding v e pl a)
     _ -> do
       case pl of
         BindRegular -> pure ()
-        BindImplicit -> tell . pure . wrapError b $ IllegalImplicit p
+        BindImplicit -> tell . pure $ IllegalImplicit p
       reBinding (Matching p e a)
 
 data Associativity = AssocLeft | AssocRight
