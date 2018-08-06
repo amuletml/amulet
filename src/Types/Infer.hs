@@ -269,9 +269,12 @@ inferProg (st@(ForeignVal v d t ann):prg) = do
       inferProg prg
 inferProg (decl@(TypeDecl n tvs cs):prg) = do
   (kind, retTy, tvs) <- resolveTyDeclKind (BecauseOf decl) n tvs cs
+                          `catchError` (throwError . propagateBlame (BecauseOf decl))
+
   local (names %~ focus (one n (rename kind))) $ do
      (ts, cs') <- unzip <$> for cs (\con ->
        inferCon retTy con `catchError` (throwError . propagateBlame (BecauseOf con)))
+
      local (names %~ focus (teleFromList ts)) . local (constructors %~ Set.union (Set.fromList (map fst ts))) $
        consFst (TypeDecl (TvName n) tvs cs') $
          inferProg prg

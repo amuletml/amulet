@@ -314,7 +314,7 @@ instance Pretty TypeError where
 instance Spanned TypeError where
   annotation (ArisingFrom e@ArisingFrom{} _) = annotation e
   annotation (ArisingFrom _ x) = annotation x
-  annotation _ = undefined
+  annotation x = error (show (pretty x))
 
 instance Note TypeError Style where
   diagnosticKind _ = ErrorMessage
