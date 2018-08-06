@@ -1,5 +1,5 @@
-{-# LANGUAGE FlexibleContexts, ExistentialQuantification, ScopedTypeVariables #-}
-{-# LANGUAGE OverloadedStrings, TupleSections #-}
+{-# LANGUAGE FlexibleContexts, ExistentialQuantification,
+   ScopedTypeVariables, OverloadedStrings, TupleSections #-}
 module Core.Lint
   ( CoreError
   , runLint, runLintOK, emptyScope

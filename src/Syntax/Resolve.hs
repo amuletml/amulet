@@ -87,20 +87,6 @@ instance Spanned ResolveError where
   annotation (IllegalImplicit p) = annotation p
   annotation _ = undefined
 
-{-
-  Illegal implicit binding of (a, b)
-
-  |
-  |  let implicit (a, b) = (1, 2)
-  |      ¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
-
-  · Note: all implicit bindings must be of the form
-
-      let implicit f = ...
-
-    where <tv>f</tv> is an identifier.
--}
-
 instance Note ResolveError Style where
   diagnosticKind _ = ErrorMessage
 

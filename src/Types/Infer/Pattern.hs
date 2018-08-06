@@ -1,5 +1,4 @@
-{-# LANGUAGE FlexibleContexts, GADTs #-}
-{-# LANGUAGE ScopedTypeVariables, ViewPatterns, RankNTypes, TupleSections #-}
+{-# LANGUAGE FlexibleContexts, ScopedTypeVariables, ViewPatterns, TupleSections #-}
 module Types.Infer.Pattern where
 
 import qualified Data.Map.Strict as Map

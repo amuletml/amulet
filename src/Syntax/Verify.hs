@@ -1,5 +1,5 @@
-{-# LANGUAGE ConstraintKinds, FlexibleContexts, FlexibleInstances, UndecidableInstances #-}
-{-# LANGUAGE MultiParamTypeClasses, OverloadedStrings #-}
+{-# LANGUAGE ConstraintKinds, FlexibleContexts, FlexibleInstances,
+   UndecidableInstances, MultiParamTypeClasses, OverloadedStrings #-}
 module Syntax.Verify where
 
 import qualified Data.Sequence as Seq
@@ -84,7 +84,7 @@ verifyBindingGroup :: MonadVerify m
                    => (BindingSite -> Set.Set BindingSite -> Set.Set BindingSite)
                    -> SomeReason -> [Binding Typed] -> m ()
 verifyBindingGroup k _ = traverse_ verifyScc . depOrder where
-  verifyScc (AcyclicSCC (Binding v e _(s, t))) = do
+  verifyScc (AcyclicSCC (Binding v e _ (s, t))) = do
     modify (k (BindingSite v s t))
     verifyExpr e
   verifyScc (AcyclicSCC (Matching p e _)) = do

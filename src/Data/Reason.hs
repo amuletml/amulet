@@ -1,5 +1,4 @@
-{-# LANGUAGE GADTs, ConstraintKinds, MultiParamTypeClasses, FlexibleInstances, FlexibleContexts, UndecidableInstances #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE GADTs, ConstraintKinds, MultiParamTypeClasses, FlexibleInstances, FlexibleContexts, UndecidableInstances, ScopedTypeVariables #-}
 
 -- | Represents a context associated with an error, such as what
 -- expression the error occurred in.

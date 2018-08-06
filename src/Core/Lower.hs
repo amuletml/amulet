@@ -1,5 +1,6 @@
-{-# LANGUAGE LambdaCase, TupleSections, ExplicitNamespaces, PatternSynonyms, RankNTypes, ScopedTypeVariables #-}
-{-# LANGUAGE FlexibleContexts, ConstraintKinds, OverloadedStrings, TupleSections #-}
+{-# LANGUAGE LambdaCase, TupleSections, ExplicitNamespaces,
+    PatternSynonyms, RankNTypes, ScopedTypeVariables, FlexibleContexts,
+    ConstraintKinds, OverloadedStrings #-}
 module Core.Lower
   ( runLowerT, runLowerWithCtors
   , lowerExprTerm

@@ -1,5 +1,4 @@
-{-# LANGUAGE FlexibleContexts, TupleSections, GADTs #-}
-{-# LANGUAGE ScopedTypeVariables, RankNTypes, ViewPatterns #-}
+{-# LANGUAGE FlexibleContexts, TupleSections, ScopedTypeVariables, ViewPatterns #-}
 module Types.Infer
   ( inferProgram
   , builtinsEnv
@@ -568,8 +567,8 @@ lineUpPattern (Capture v (an, _)) tele
 
 lineUpPattern x@Wildcard{} _ = x
 lineUpPattern x@PLiteral{} _ = x
-lineUpPattern (Destructure k m a) tele = Destructure k (fmap (flip lineUpPattern tele) m) a
+lineUpPattern (Destructure k m a) tele = Destructure k (fmap (`lineUpPattern` tele) m) a
 lineUpPattern (PType p t a) tele = PType (lineUpPattern p tele) t a
-lineUpPattern (PRecord rs a) tele = PRecord (map (second (flip lineUpPattern tele)) rs) a
-lineUpPattern (PTuple rs a) tele = PTuple (map (flip lineUpPattern tele) rs) a
+lineUpPattern (PRecord rs a) tele = PRecord (map (second (`lineUpPattern` tele)) rs) a
+lineUpPattern (PTuple rs a) tele = PTuple (map (`lineUpPattern` tele) rs) a
 lineUpPattern (PWrapper w p a) tele = PWrapper w (lineUpPattern p tele) a

@@ -1,5 +1,6 @@
-{-# LANGUAGE OverloadedStrings, FlexibleContexts, RankNTypes, StandaloneDeriving, GADTs, UndecidableInstances #-}
-{-# LANGUAGE DeriveDataTypeable, FlexibleInstances, MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings, FlexibleContexts, RankNTypes,
+   StandaloneDeriving, GADTs, UndecidableInstances,
+   DeriveDataTypeable, FlexibleInstances, MultiParamTypeClasses #-}
 module Types.Infer.Builtin where
 
 import qualified Data.Sequence as Seq

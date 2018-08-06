@@ -1,9 +1,7 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
-{-# LANGUAGE FlexibleInstances, FlexibleContexts, UndecidableInstances #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TypeFamilies, DataKinds #-}
-{-# LANGUAGE DeriveDataTypeable, TemplateHaskell #-}
-{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE FlexibleInstances, FlexibleContexts, UndecidableInstances,
+   StandaloneDeriving, TypeFamilies, DataKinds, DeriveDataTypeable,
+   TemplateHaskell, PatternSynonyms #-}
 module Syntax where
 
 import qualified Data.Text as T
