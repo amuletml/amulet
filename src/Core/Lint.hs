@@ -1,5 +1,5 @@
-{-# LANGUAGE FlexibleContexts, ExistentialQuantification, ScopedTypeVariables #-}
-{-# LANGUAGE OverloadedStrings, TupleSections #-}
+{-# LANGUAGE FlexibleContexts, ExistentialQuantification,
+   ScopedTypeVariables, OverloadedStrings, TupleSections #-}
 module Core.Lint
   ( CoreError
   , runLint, runLintOK, emptyScope
@@ -273,7 +273,8 @@ checkTerm s t@(Match e bs) = flip withContext t $ do
             Just (_, ty) -> checkPattern ty p
 
         pure (mconcat (v:vs))
-      checkPattern t p@PatExtend{} = error ("extend pattern " ++ show p ++ " for type " ++ show t)
+      checkPattern t (PatExtend _ fs) =
+        throwError (TypeMismatch (RowsTy unknownTyvar (map (\(a, _) -> (a, unknownTyvar)) fs)) t)
       checkPattern (ValuesTy ts) (PatValues ps) | length ts == length ps =
         mconcat <$> traverse (uncurry checkPattern) (zip ts ps)
       checkPattern t (PatValues ps) =

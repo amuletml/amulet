@@ -1,5 +1,5 @@
-{-# LANGUAGE FlexibleInstances, FlexibleContexts, ScopedTypeVariables, DeriveFunctor, DeriveGeneric #-}
-{-# LANGUAGE PatternSynonyms, TemplateHaskell #-}
+{-# LANGUAGE FlexibleInstances, FlexibleContexts, ScopedTypeVariables,
+   DeriveFunctor, DeriveGeneric, PatternSynonyms, TemplateHaskell #-}
 -- | Amulet's explicitly-typed intermediate representation
 module Core.Core where
 

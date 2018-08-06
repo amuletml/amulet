@@ -1,9 +1,7 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
-{-# LANGUAGE FlexibleInstances, FlexibleContexts, UndecidableInstances #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TypeFamilies, DataKinds #-}
-{-# LANGUAGE DeriveDataTypeable, TemplateHaskell #-}
-{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE FlexibleInstances, FlexibleContexts, UndecidableInstances,
+   StandaloneDeriving, TypeFamilies, DataKinds, DeriveDataTypeable,
+   TemplateHaskell, PatternSynonyms #-}
 module Syntax where
 
 import qualified Data.Text as T
@@ -29,11 +27,31 @@ data Plicity = BindImplicit | BindRegular
   deriving (Eq, Show, Ord, Data, Typeable)
 
 data Binding p
+  -- | @let implicit f x = ...@
   = Binding { _bindVariable :: Var p
             , _bindBody :: Expr p
             , _bindPlicity :: Plicity
             , _bindAnn :: Ann p
             }
+  -- | @let (a, b) = ...@
+  | Matching { _bindPattern :: Pattern p
+             , _bindBody :: Expr p
+             , _bindAnn :: Ann p
+             }
+
+  -- | @let (a, b) = ...@
+  | TypedMatching { _bindPattern :: Pattern p -- fucking ghc, p ~ Typed
+                  , _bindBody :: Expr p -- fucking ghc, p ~ Typed
+                  , _bindAnn :: Ann p -- fucking ghc, p ~ Typed
+                  , _bindBindings :: [(Var Typed, Type Typed)]
+                  }
+  -- | The parsed form of a binding.
+  --
+  -- This might contain nonsense like @let implicit (a, b) = ...@
+  | ParsedBinding { _bindPattern :: Pattern p
+                  , _bindBody :: Expr p
+                  , _bindPlicity :: Plicity
+                  , _bindAnn :: Ann p }
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Binding p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Binding p)

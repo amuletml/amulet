@@ -1,5 +1,4 @@
-{-# LANGUAGE OverloadedStrings, LambdaCase #-}
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings, LambdaCase, FlexibleContexts #-}
 
 -- | Track variables in the current scope while resolving 'Syntax'. This
 -- also tracks ambiguous definitions and modules.

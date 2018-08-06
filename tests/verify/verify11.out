@@ -1,4 +1,4 @@
-verify11.ml[2:5 ..2:7]: error
+verify11.ml[2:5 ..2:5]: error
   Invalid recursive right-hand side for variable g
   • Note: because evaluation of the variable f is not delayed
   Arising from use of the binding
