@@ -87,10 +87,13 @@ verifyBindingGroup k _ = traverse_ verifyScc . depOrder where
   verifyScc (AcyclicSCC (Binding v e _ (s, t))) = do
     modify (k (BindingSite v s t))
     verifyExpr e
-  verifyScc (AcyclicSCC (Matching p e _)) = do
+  verifyScc (AcyclicSCC (TypedMatching p e _ _)) = do
     traverse_ (modify . k) $ bindingSites p 
     verifyExpr e
+
   verifyScc (AcyclicSCC ParsedBinding{}) = error "ParsedBinding in *verify*"
+  verifyScc (AcyclicSCC Matching{}) = error "Matching after TC"
+
   verifyScc (CyclicSCC vs) = do
     let vars = foldMapOf (each . bindVariable) Set.singleton vs
     for_ vs $ \(Binding var _ _ (s, ty)) -> modify (k (BindingSite var s ty))

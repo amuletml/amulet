@@ -437,6 +437,7 @@ reBinding (ParsedBinding p e pl a) =
         BindRegular -> pure ()
         BindImplicit -> tell . pure $ IllegalImplicit p
       reBinding (Matching p e a)
+reBinding TypedMatching{} = error "reBinding TypedMatching{}"
 
 data Associativity = AssocLeft | AssocRight
   deriving (Eq, Show)

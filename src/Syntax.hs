@@ -38,6 +38,13 @@ data Binding p
              , _bindBody :: Expr p
              , _bindAnn :: Ann p
              }
+
+  -- | @let (a, b) = ...@
+  | TypedMatching { _bindPattern :: Pattern p -- fucking ghc, p ~ Typed
+                  , _bindBody :: Expr p -- fucking ghc, p ~ Typed
+                  , _bindAnn :: Ann p -- fucking ghc, p ~ Typed
+                  , _bindBindings :: [(Var Typed, Type Typed)]
+                  }
   -- | The parsed form of a binding.
   --
   -- This might contain nonsense like @let implicit (a, b) = ...@

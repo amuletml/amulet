@@ -141,6 +141,7 @@ instance Pretty (Var p) => Pretty (Binding p) where
       BindImplicit -> keyword "implicit "
       BindRegular -> empty
   pretty (Matching p e _) = pretty p <+> equals <+> pretty e
+  pretty (TypedMatching p e _ _) = pretty p <+> equals <+> pretty e
   pretty (ParsedBinding n e p _) = i <+> pretty n <+> equals <+> pretty e where
     i = case p of
       BindImplicit -> keyword "implicit "

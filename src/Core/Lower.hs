@@ -414,7 +414,7 @@ lowerLet bs =
   let sccs = depOrder bs
 
       lowerScc (CyclicSCC vs) = pure . Many <$> do
-        -- Cyclic bindings will only every be normal. Well, I
+        -- Cyclic bindings will only ever be normal. Well, I
         -- jolly hope so anyway
         for vs $ \(S.Binding (TvName var) ex _ (_, ty)) -> do
           let ty' = lowerType ty
@@ -425,21 +425,24 @@ lowerLet bs =
         (mkVal var, ty',) <$> lowerPolyBind ty' ex
 
       lowerScc (AcyclicSCC S.ParsedBinding{}) = error "ParsedBinding{} in Lower"
+      lowerScc (AcyclicSCC S.Matching{}) = error "Matching{} in Lower"
 
-      lowerScc (AcyclicSCC (S.Matching p ex (pos, ty))) = do
+      lowerScc (AcyclicSCC (S.TypedMatching p ex (pos, ty) bound)) = do
         let ty' = lowerType ty
+            boundVarMap = Map.fromList bound
         ts <- patternTyvars p
         ex' <- lowerPolyBind ty' ex
 
         case boundWith p of
           [bind] ->
             -- Generate `let x = match expr with | ... x' ... -> x`
-            pure <$> patternExtract pos p ts ex' ty' bind
+            pure <$> patternExtract pos p ts ex' ty' (lowerType (boundVarMap Map.! fst bind)) bind
           vs -> do
-            -- Generate `let a = expr`
             var <- fresh ValueVar
+            let cont bind = patternExtract pos p ts (Atom (Ref var ty')) ty' (lowerType (boundVarMap Map.! fst bind)) bind
+            -- Generate `let a = expr`
             (One (var, ty', ex'):)
-              <$> traverse (patternExtract pos p ts (Atom (Ref var ty')) ty') vs
+              <$> traverse cont vs
 
       -- | Strip all variables from a pattern aside from the given one,
       -- which is replaced with @n@
@@ -450,10 +453,12 @@ lowerLet bs =
 
       patternExtract :: MonadLower m
                      => Span -> Pattern Typed -> [(CoVar, Type)]
-                     -> Term -> Type
+                     -> Term
+                     -> Type
+                     -> Type
                      -> (Var Typed, S.Ann Typed)
                      -> m (Binding CoVar)
-      patternExtract pos p ts test ty (TvName var, (_, vty)) = do
+      patternExtract pos p ts test ty vartype (TvName var, (_, vty)) = do
         let var' = mkVal var
             vty' = lowerType vty
         pvar@(CoVar vn vt _) <- freshFrom var'
@@ -462,17 +467,17 @@ lowerLet bs =
         -- Generate `let x = match test with | ... x' ... -> x`
         vex <- flip runContT pure $ do
           test' <- onAtom test ty
-          withinLambda ty test' $ \test -> do
+          withinLambda ty test' $ \ty value -> do
             fail <- patternMatchingFail pos ty vty'
-            pure $ C.Match test
+            pure $ C.Match value
               [ C.Arm { _armPtrn = p', _armTy = ty, _armBody = Atom (Ref pvar vty')
                       , _armVars = patternVars p', _armTyvars = ts }
               , fail ]
-        pure (One (var', vty', vex))
+        pure (One (var', vartype, vex))
 
       withinLambda :: MonadLower m
                    => Type -> Atom
-                   -> (Atom -> m Term) -> m Term
+                   -> (Type -> Atom -> m Term) -> m Term
       withinLambda (ForallTy (Relevant t) kind ty) v f = do
         t' <- freshFrom t
         let ty' = substituteInType (VarMap.singleton t (VarTy t')) ty
@@ -483,7 +488,7 @@ lowerLet bs =
          . Lam (TypeArgument t' kind)
          . C.Let (One (v', ty', TyApp v (VarTy t')))
          <$> withinLambda ty' (Ref v' ty') f
-      withinLambda _ v f = f v
+      withinLambda t v f = f t v
 
   in concat <$> traverse lowerScc sccs
 

@@ -3,7 +3,7 @@
    TypeFamilies, TemplateHaskell, MultiParamTypeClasses,
    FunctionalDependencies #-}
 module Syntax.Types
-  ( Telescope, one, foldTele, teleFromList, mapTele, traverseTele
+  ( Telescope, one, foldTele, teleFromList, mapTele, traverseTele, teleToList
   , Scope(..), namesInScope, inScope
   , Env, freeInEnv, difference, envOf, scopeFromList, toMap
   , names, typeVars, constructors, implicits, modules, letBound
@@ -110,9 +110,15 @@ focus m s = Scope (getScope s <> getTele m)
 
 class Degrade r where
   degrade :: Var r -> Var Resolved
+  upgrade :: Var Resolved -> Var r
 
-instance Degrade Resolved where degrade = id
-instance Degrade Typed where degrade = unTvName
+instance Degrade Resolved where
+  degrade = id
+  upgrade = id
+
+instance Degrade Typed where
+  degrade = unTvName
+  upgrade = TvName
 
 one :: Degrade k => Var k -> Type p -> Telescope p
 one k t = Telescope (Map.singleton (degrade k) t)
@@ -131,6 +137,9 @@ traverseTele f (Telescope x) = Telescope <$> traverse f x
 teleFromList :: Degrade p
              => [(Var p, Type p)] -> Telescope p
 teleFromList = Telescope . Map.fromList . map (first degrade)
+
+teleToList :: Degrade p => Telescope p -> [(Var p, Type p)]
+teleToList = map (first upgrade) . Map.toList . getTele
 
 toMap :: Scope p f -> Map.Map (Var p) f
 toMap = getScope

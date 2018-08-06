@@ -25,6 +25,10 @@ depOrder binds = extra ++ stronglyConnComp nodes where
     case bound p of
       [] -> (AcyclicSCC it:e, n, m)
       vs@(var:_) -> (e, (it, var, freeInMapped ex):n, foldr (`Map.insert`var) m vs)
+  buildNode it@(TypedMatching p ex _ _) (e, n, m) =
+    case bound p of
+      [] -> (AcyclicSCC it:e, n, m)
+      vs@(var:_) -> (e, (it, var, freeInMapped ex):n, foldr (`Map.insert`var) m vs)
   buildNode it@(ParsedBinding p ex _ _) (e, n, m) =
     case bound p of
       [] -> (AcyclicSCC it:e, n, m)
@@ -87,3 +91,4 @@ bindVariables :: (IsList (m (Var p)), Item (m (Var p)) ~ Var p, Monoid (m (Var p
 bindVariables Binding { _bindVariable = v } = fromList [v]
 bindVariables Matching { _bindPattern = p } = bound p
 bindVariables ParsedBinding { _bindPattern = p } = bound p
+bindVariables TypedMatching { _bindPattern = p } = bound p

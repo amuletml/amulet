@@ -92,6 +92,7 @@ transformExpr fe = goE where
 
   goB (Binding v e p a) = Binding v (goE e) p a
   goB (ParsedBinding v e p a) = ParsedBinding v (goE e) p a
+  goB (TypedMatching v e a b) = TypedMatching v (goE e) a b
   goB (Matching p e a) = Matching p (goE e) a
 
   goE = transE . fe
@@ -136,6 +137,7 @@ transformExprTyped fe fc ft = goE where
   transBind (Binding v e p a) = Binding v (goE e) p (goA a)
   transBind (ParsedBinding v e p a) = ParsedBinding v (goE e) p (goA a)
   transBind (Matching p e a) = Matching (goP p) (goE e) (goA a)
+  transBind (TypedMatching p e a c) = TypedMatching (goP p) (goE e) (goA a) (map (second goT) c)
 
   goW (Cast c) = Cast (goC c)
   goW (TypeApp t) = TypeApp (goT t)

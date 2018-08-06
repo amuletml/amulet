@@ -273,7 +273,7 @@ checkTerm s t@(Match e bs) = flip withContext t $ do
             Just (_, ty) -> checkPattern ty p
 
         pure (mconcat (v:vs))
-      checkPattern t (PatExtend f fs) =
+      checkPattern t (PatExtend _ fs) =
         throwError (TypeMismatch (RowsTy unknownTyvar (map (\(a, _) -> (a, unknownTyvar)) fs)) t)
       checkPattern (ValuesTy ts) (PatValues ps) | length ts == length ps =
         mconcat <$> traverse (uncurry checkPattern) (zip ts ps)
