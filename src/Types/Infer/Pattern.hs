@@ -76,13 +76,13 @@ checkPattern ex@(Destructure con ps ann) target =
               TyWithConstraints cs ty -> (cs, ty)
               _ -> ([], pty)
       co <- unify (becausePat ex) target ty
-      wrapPattern (Destructure (TvName con) Nothing, mempty, cs) (ann, target) co
+      wrapPattern (Destructure (TvName con) Nothing, mempty, cs) (ann, target) (ty, co)
     Just p ->
       let go cs t = do
             (c, d, _) <- decompose (becausePat ex) _TyArr t
             (ps', b, cs') <- checkPattern p c
             co <- unify (becausePat ex) target d
-            wrapPattern (Destructure (TvName con) (Just ps'), b, cs ++ cs') (ann, target) co
+            wrapPattern (Destructure (TvName con) (Just ps'), b, cs ++ cs') (ann, target) (d, co)
       in do
         t <- skolGadt con =<< lookupTy' con
         case t of
@@ -94,7 +94,7 @@ checkPattern pt@(PRecord rows ann) ty = do
     (p', t, caps, cs) <- inferPattern pat
     pure ((var, p'), (var, t), caps, cs))
   co <- unify (becausePat pt) ty (TyRows rho rowts)
-  wrapPattern (PRecord rowps, mconcat caps, concat cons) (ann, ty) co
+  wrapPattern (PRecord rowps, mconcat caps, concat cons) (ann, ty) (TyRows rho rowts, co)
 
 checkPattern (PTuple xs ann) ty@TyTuple{} = do
   let go (x:xs) (TyTuple a b) = do
@@ -113,11 +113,11 @@ checkPattern pt@(PType p t ann) ty = do
   t' <- resolveKind (BecauseOf pt) t
   _ <- subsumes (becausePat pt) t' it
   co <- unify (becausePat pt) ty t'
-  wrapPattern (PType p' t', binds, cs) (ann, ty) co
+  wrapPattern (PType p' t', binds, cs) (ann, ty) (t', co)
 
 checkPattern pt ty = do
   (p, ty', binds, cs) <- inferPattern pt
-  (_, co) <- subsumes (becausePat pt) ty ty'
+  co <- subsumes (becausePat pt) ty ty'
   pure (PWrapper (co, ty') p (annotation p, ty), binds, cs)
 
 checkParameter :: MonadInfer Typed m

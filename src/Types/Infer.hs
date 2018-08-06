@@ -123,12 +123,16 @@ check e@(Access rc key a) ty = do
 check ex@(Ascription e ty an) goal = do
   ty <- resolveKind (becauseExp ex) ty
   e <- check e ty
-  (_, c) <- subsumes (becauseExp ex) ty goal
+  -- here: have ty (given)
+  --       want goal (given)
+  c <- subsumes (becauseExp ex) ty goal
   pure (ExprWrapper c e (an, goal))
 
 check e ty = do
   (e', t) <- infer e
-  (_, c) <- subsumes (becauseExp e) t ty
+  -- here: have t (inferred)
+  --       want ty (given)
+  c <- subsumes (becauseExp e) t ty
   pure (ExprWrapper c e' (annotation e, ty))
 
 -- [Complete and Easy]: See https://www.cl.cam.ac.uk/~nk480/bidir.pdf
@@ -211,8 +215,10 @@ infer ex@(RecordExt rec rows a) = do
   tv <- freshTV
   let ty = TyRows tv newts
 
-  (t, co) <- subsumes (becauseExp ex) rho ty
-  pure (ExprWrapper co (RecordExt rec rows (a, ty)) (a, t), t)
+  -- here: have rho (inferred)
+  --       want ty (inferred)
+  co <- subsumes (becauseExp ex) rho ty
+  pure (ExprWrapper co (RecordExt rec rows (a, ty)) (a, ty), ty)
 
 infer (Tuple xs an) =
   let go [x] = first (:[]) <$> infer x
@@ -231,14 +237,6 @@ infer (Begin xs a) = do
   start <- traverse (fmap fst . infer) start
   (end, t) <- infer end
   pure (Begin (start ++ [end]) (a, t), t)
-
--- check (Begin [] _) _ = error "impossible: check empty Begin"
--- check (Begin xs a) t = do
---   let start = init xs
---       end = last xs
---   start <- traverse (fmap fst . infer) start
---   end <- check end t
---   pure (Begin (start ++ [end]) (a, t))
 
 infer ex = do
   x <- freshTV
@@ -262,11 +260,13 @@ inferProg (stmt@(LetStmt ns):prg) = do
   local (letBound %~ Set.union bvs) . local (names %~ focus ts) . local (implicits %~ mappend is) $
     consFst (LetStmt ns') $
       inferProg prg
+
 inferProg (st@(ForeignVal v d t ann):prg) = do
   t' <- resolveKind (BecauseOf st) t
   local (names %~ focus (one v t')) . local (letBound %~ Set.insert (TvName v)) $
     consFst (ForeignVal (TvName v) d t' (ann, t')) $
       inferProg prg
+
 inferProg (decl@(TypeDecl n tvs cs):prg) = do
   (kind, retTy, tvs) <- resolveTyDeclKind (BecauseOf decl) n tvs cs
                           `catchError` (throwError . propagateBlame (BecauseOf decl))
@@ -278,10 +278,12 @@ inferProg (decl@(TypeDecl n tvs cs):prg) = do
      local (names %~ focus (teleFromList ts)) . local (constructors %~ Set.union (Set.fromList (map fst ts))) $
        consFst (TypeDecl (TvName n) tvs cs') $
          inferProg prg
+
 inferProg (Open mod pre:prg) = do
   modImplicits <- view (modules . at (TvName mod) . non undefined)
   local (implicits %~ (<>modImplicits)) $
     consFst (Open (TvName mod) pre) $ inferProg prg
+
 inferProg (Module name body:prg) = do
   (body', env) <- inferProg body
 
@@ -352,10 +354,14 @@ inferLetTy closeOver vs =
 
       tcOne (AcyclicSCC b@(Matching p e ann)) = do
         ((e, p, ty, tel), cs) <- listen $ do
-          (e, t) <- infer e
-          (p, tel, cs) <- checkPattern p t
+          (e, ety) <- infer e
+          (p, pty, tel, cs) <- inferPattern p
           leakEqualities b cs
-          pure (e, p, t, tel)
+
+          -- here: have expression type (inferred)
+          --       want pattern type (inferred)
+          wrap <- subsumes (BecauseOf b) ety pty
+          pure (ExprWrapper wrap e (annotation e, pty), p, pty, tel)
 
         cur <- genName
         (solution, wraps) <- case solve cur cs of
