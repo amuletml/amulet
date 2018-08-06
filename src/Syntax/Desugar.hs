@@ -19,6 +19,7 @@ import Control.Monad.Namey
 import Control.Lens hiding (Lazy)
 
 import Data.Foldable
+import Data.Spanned
 import Data.Triple
 
 import Syntax.Var
@@ -104,6 +105,14 @@ desugarProgram = traverse statement where
     pure (as, (v, e):vs, ref:tuple)
 
   binding (Binding v e p a) = Binding v <$> expr e <*> pure p <*> pure a
+
+  binding (ParsedBinding (Capture v _) e p a) = Binding v <$> expr e <*> pure p <*> pure a
+  binding (ParsedBinding p e _ a) = Matching p <$> expr e <*> pure a
+
+  binding (Matching (Capture v _) e a) = Binding v <$> expr e <*> pure BindRegular <*> pure a
+  binding (Matching (PType p t _) e a) = binding (Matching p (Ascription e t (annotation e)) a)
+  binding (Matching p e a) = Matching p <$> expr e <*> pure a
+  binding TypedMatching{} = error "TypedMatching{} desugar binding"
 
   foldf f xs v = foldr f v xs
 

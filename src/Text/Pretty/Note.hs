@@ -6,7 +6,7 @@
 -- with error messages.
 module Text.Pretty.Note
   ( NoteKind(..)
-  , NoteStyle
+  , NoteStyle(..)
   , NoteDoc
   , Note(..)
   , FileMap

@@ -1,6 +1,6 @@
-{-# LANGUAGE DerivingStrategies, GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE FlexibleContexts, FlexibleInstances, MultiParamTypeClasses #-}
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE DerivingStrategies, GeneralizedNewtypeDeriving,
+   FlexibleContexts, FlexibleInstances, MultiParamTypeClasses,
+   UndecidableInstances #-}
 
 {-| The compiler often needs a source of fresh variables, such as when
   performing optimisations or creating new type variables during

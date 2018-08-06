@@ -38,9 +38,9 @@ parenArg f = case f of
 instance (Pretty (Var p)) => Pretty (Expr p) where
   pretty (VarRef v _) = pretty v
   pretty (Let [] _ _) = error "absurd: never parsed"
-  pretty (Let (Binding n v p _:xs) e _) =
-    let prettyBind (Binding n v p _) = keyword "and" <+> prettyOneBinding n v p
-     in keyword "let" <+> prettyOneBinding n v p
+  pretty (Let (x:xs) e _) =
+    let prettyBind x = keyword "and" <+> pretty x
+     in keyword "let" <+> pretty x
             <#> case xs of
               [] -> keyword "in" <+> pretty e
               _ -> vsep (map prettyBind xs) <#> keyword "in" <+> pretty e
@@ -129,7 +129,23 @@ instance Pretty Lit where
   pretty LiUnit = sliteral (parens empty)
 
 instance Pretty (Var p) => Pretty (Binding p) where
-  pretty (Binding v n p _) = prettyOneBinding v n p
+  pretty (Binding n v p _) = i <> hsep (pretty n:map pretty args) <> sig <+> nest 2 (equals </> pretty rest') where
+    (args, rest) = takeLambdas v
+    (sig, rest') = case rest of
+      Ascription e t _ -> (space <> colon <+> pretty t, e)
+      _ -> (empty, rest)
+
+    takeLambdas (Fun p x _) = first (p:) . takeLambdas $ x
+    takeLambdas x = ([], x)
+    i = case p of
+      BindImplicit -> keyword "implicit "
+      BindRegular -> empty
+  pretty (Matching p e _) = pretty p <+> equals <+> pretty e
+  pretty (TypedMatching p e _ _) = pretty p <+> equals <+> pretty e
+  pretty (ParsedBinding n e p _) = i <+> pretty n <+> equals <+> pretty e where
+    i = case p of
+      BindImplicit -> keyword "implicit "
+      BindRegular -> empty
 
 instance (Pretty (Var p)) => Pretty (Type p) where
   pretty (TyCon v) = stypeCon (pretty v)
@@ -176,10 +192,10 @@ instance Pretty (Var p) => Pretty (TyBinder p) where
   pretty (Invisible v Nothing)  = stypeVar (squote <> pretty v) <> dot
 
 instance (Pretty (Var p)) => Pretty (Toplevel p) where
-  pretty (LetStmt []) = error "absurd!"
-  pretty (LetStmt (Binding n v p _:xs)) =
-    let prettyBind (Binding n v p _) = keyword "and" <+> prettyOneBinding n v p
-     in keyword "let" <+> prettyOneBinding n v p
+  pretty (LetStmt []) = string "empty let?"
+  pretty (LetStmt (x:xs)) =
+    let prettyBind x = keyword "and" <+> pretty x
+     in keyword "let" <+> pretty x
              <> case xs of
                   [] -> empty
                   _ -> line <> vsep (map prettyBind xs)
@@ -213,19 +229,6 @@ instance (Pretty (Var p)) => Pretty (Constructor p) where
 
 record :: [Doc] -> Doc
 record = enclose (lbrace <> space) (space <> rbrace) . hsep . punctuate comma
-
-prettyOneBinding :: Pretty (Var p) => Var p -> Expr p -> Plicity -> Doc
-prettyOneBinding n v p = i <> hsep (pretty n:map pretty args) <> sig <+> nest 2 (equals </> pretty rest') where
-  (args, rest) = takeLambdas v
-  (sig, rest') = case rest of
-    Ascription e t _ -> (space <> colon <+> pretty t, e)
-    _ -> (empty, rest)
-
-  takeLambdas (Fun p x _) = first (p:) . takeLambdas $ x
-  takeLambdas x = ([], x)
-  i = case p of
-    BindImplicit -> keyword "implicit "
-    BindRegular -> empty
 
 applyCons :: Ord (Var p) => Type p -> Type p
 applyCons x@TyCon{} = x

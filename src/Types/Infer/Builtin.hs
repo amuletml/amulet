@@ -1,5 +1,6 @@
-{-# LANGUAGE OverloadedStrings, FlexibleContexts, RankNTypes, StandaloneDeriving, GADTs, UndecidableInstances #-}
-{-# LANGUAGE DeriveDataTypeable, FlexibleInstances, MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings, FlexibleContexts, RankNTypes,
+   StandaloneDeriving, GADTs, UndecidableInstances,
+   DeriveDataTypeable, FlexibleInstances, MultiParamTypeClasses #-}
 module Types.Infer.Builtin where
 
 import qualified Data.Sequence as Seq
@@ -59,17 +60,17 @@ builtinsEnv = envOf (scopeFromList builtin) where
 unify, subsumes :: ( MonadInfer Typed m )
                 => SomeReason
                 -> Type Typed
-                -> Type Typed -> m (Type Typed, Wrapper Typed)
+                -> Type Typed -> m (Wrapper Typed)
 unify e a b = do
   x <- TvName <$> genName
   tell (Seq.singleton (ConUnify e x a b))
-  pure (b, WrapVar x)
+  pure (WrapVar x)
 
 subsumes e a b = do
   i <- view implicits
   x <- TvName <$> genName
   tell (Seq.singleton (ConSubsume e x i a b))
-  pure (b, WrapVar x)
+  pure (WrapVar x)
 
 implies :: ( Reasonable f p
            , MonadInfer Typed m
@@ -112,7 +113,7 @@ decompose r p t =
     Just (a, b) -> pure (a, b, id)
     Nothing -> do
       (a, b) <- (,) <$> freshTV <*> freshTV
-      (_, k) <- subsumes r t (p # (a, b))
+      k <- subsumes r t (p # (a, b))
       pure (a, b, \x -> ExprWrapper k x (annotation x, p # (a, b)))
 
 -- | Get the first /visible/ 'TyBinder' in this 'Type', possibly
@@ -139,7 +140,7 @@ quantifier r DoSkip wty@(TyPi (Implicit tau) sigma) = do
 quantifier _ _ (TyPi x b) = pure (x, b, id)
 quantifier r _ t = do
   (a, b) <- (,) <$> freshTV <*> freshTV
-  (_, k) <- subsumes r t (TyPi (Anon a) b)
+  k <- subsumes r t (TyPi (Anon a) b)
   pure (Anon a, b, \x -> ExprWrapper k x (annotation x, TyPi (Anon a) b))
 
 discharge :: (Reasonable f p, MonadInfer Typed m)

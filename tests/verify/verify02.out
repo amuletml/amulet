@@ -1,4 +1,4 @@
-verify02.ml[2:7 ..2:9]: warning
+verify02.ml[2:7 ..2:7]: warning
   Bound locally but not used: 'y'
   │ 
 2 │   let y = 1

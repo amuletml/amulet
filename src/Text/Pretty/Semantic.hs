@@ -159,7 +159,7 @@ keyword = skeyword . string
 
 -- | Create a named type skolem
 highlight :: String -> Doc
-highlight = stypeSkol . string
+highlight = stypeVar . string
 
 -- | Pretty print a value wrapped in backticks, useful for displaying
 -- literals or variable names.

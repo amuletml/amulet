@@ -1,5 +1,4 @@
-{-# LANGUAGE TypeFamilies, FlexibleContexts, FlexibleInstances #-}
-{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE TypeFamilies, FlexibleContexts, FlexibleInstances, DeriveDataTypeable #-}
 
 {- | The various variables that "Syntax" uses.
 

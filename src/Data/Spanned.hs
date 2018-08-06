@@ -1,5 +1,4 @@
-{-# LANGUAGE DefaultSignatures, FlexibleInstances, FlexibleContexts #-}
-{-# LANGUAGE TypeOperators, GADTs #-}
+{-# LANGUAGE DefaultSignatures, FlexibleInstances, FlexibleContexts, TypeOperators, GADTs #-}
 
 -- | Many terms in the compiler are associated with a 'Span' of source
 -- code, such as expressions or patterns. We refer to these types as

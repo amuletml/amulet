@@ -2,5 +2,5 @@ let x#0 = 1
 let x#1 = 2
 let a#2 = x#1
 let x#3 = let x#4 = 4
-  in x#4
+in x#4
 let b#5 = x#3

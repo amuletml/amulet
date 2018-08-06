@@ -3,13 +3,12 @@ module Syntax.Resolve.Toplevel
   ( extractToplevel, extractToplevels
   ) where
 
-import Control.Lens
-
 import Syntax.Var
+import Syntax.Let
 import Syntax
 
 extractToplevel :: Semigroup (Var p) => Toplevel p -> ([Var p], [Var p])
-extractToplevel (LetStmt d) = (d ^.. each . bindVariable, [])
+extractToplevel (LetStmt d) = (foldMap bindVariables d, [])
 extractToplevel (ForeignVal v _ _ _) = ([v], [])
 extractToplevel (TypeDecl v _ c) = (map ctor c, [v]) where
   ctor (UnitCon v _) = v

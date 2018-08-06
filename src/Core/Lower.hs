@@ -1,5 +1,6 @@
-{-# LANGUAGE LambdaCase, TupleSections, ExplicitNamespaces, PatternSynonyms, RankNTypes, ScopedTypeVariables #-}
-{-# LANGUAGE FlexibleContexts, ConstraintKinds, OverloadedStrings #-}
+{-# LANGUAGE LambdaCase, TupleSections, ExplicitNamespaces,
+    PatternSynonyms, RankNTypes, ScopedTypeVariables, FlexibleContexts,
+    ConstraintKinds, OverloadedStrings #-}
 module Core.Lower
   ( runLowerT, runLowerWithCtors
   , lowerExprTerm
@@ -29,7 +30,7 @@ import Data.List
 
 import qualified Core.Core as C
 import qualified Core.Builtin as C
-import Core.Optimise (substituteInType, fresh, freshFrom)
+import Core.Optimise (substituteInType, substituteInTys, fresh, freshFrom)
 import Core.Core hiding (Atom, Term, Stmt, Type, Pattern, Arm)
 import Core.Core (pattern Atom)
 import Core.Types (unify, replaceTy)
@@ -39,6 +40,7 @@ import qualified Syntax as S
 import Syntax.Let
 import Syntax.Var (Var(..), Resolved, Typed)
 import Syntax (Expr(..), Pattern(..), Lit(..), Skolem(..), Toplevel(..), Constructor(..))
+import Syntax.Transform
 
 import Text.Pretty.Semantic (pretty)
 
@@ -87,12 +89,12 @@ patternMatchingFail w p t = do
              , _armVars = [(var, p)], _armTyvars = []
              }
 
+onAtom :: MonadLower m => Term -> Type -> Lower m Atom
+onAtom (C.Atom a) _ = pure a
+onAtom x' t = ContT $ \k -> fresh ValueVar >>= \v -> C.Let (One (v, t, x')) <$> k (C.Ref v t)
+
 lowerAtAtom :: MonadLower m => Expr Typed -> Type -> Lower m Atom
-lowerAtAtom x t = do x' <- lowerAt x t
-                     case x' of
-                       C.Atom a -> pure a
-                       x' -> ContT $ \k ->
-                         fresh ValueVar >>= \v -> C.Let (One (v, t, x')) <$> k (C.Ref v t)
+lowerAtAtom x t = lowerAt x t >>= flip onAtom t
 
 lowerAtTerm :: MonadLower m => Expr Typed -> Type -> m Term
 lowerAtTerm x t = runContT (lowerAt x t) pure
@@ -115,19 +117,9 @@ lowerAt :: MonadLower m => Expr Typed -> Type -> Lower m Term
 lowerAt (Ascription e _ _) t = lowerAt e t
 
 lowerAt (S.Let vs t _) ty = do
-  let sccs = depOrder vs
-      lowerScc (CyclicSCC vs) = CyclicSCC <$> do
-        for vs $ \(S.Binding (TvName var) ex _ (_, ty)) -> do
-          let ty' = lowerType ty
-          (mkVal var,ty',) <$> lowerPolyBind ty' ex
-      lowerScc (AcyclicSCC (S.Binding (TvName var) ex _ (_, ty))) = AcyclicSCC <$> do
-        let ty' = lowerType ty
-        (mkVal var, ty',) <$> lowerPolyBind ty' ex
-      foldScc (AcyclicSCC v) = C.Let (One v)
-      foldScc (CyclicSCC vs) = C.Let (Many vs)
-  vs' <- traverse lowerScc sccs
-  let k = foldr ((.) . foldScc) id vs'
-  k <$> lowerAtTerm t ty -- TODO scc these
+  vs' <- lowerLet vs
+  let k = foldr ((.) . C.Let) id vs'
+  k <$> lowerAtTerm t ty
 lowerAt (S.If c t e _) ty = do
   c' <- lowerAtAtom c C.tyBool
   t' <- lowerAtTerm t ty
@@ -396,21 +388,14 @@ lowerProg' [] = pure []
 lowerProg' (ForeignVal (TvName v) ex tp _:prg) =
   (Foreign (mkVal v) (lowerType tp) ex:) <$> lowerProg' prg
 lowerProg' (LetStmt vs:prg) = do
-  let env' = Map.fromList (map (\(S.Binding (TvName v) _ _ (_, ant)) -> (v, lowerType ant)) vs)
+  let env' = Map.fromList (foldMap lowerBind vs)
+      lowerBind bind =
+        let ty = lowerType (bind ^. (S.bindAnn . _2))
+        in map (\(TvName v) -> (v, ty)) (bindVariables bind)
 
-  let sccs = depOrder vs
-      lowerScc (CyclicSCC vs) = CyclicSCC <$> do
-        for vs $ \(S.Binding (TvName var) ex _ (_, ty)) -> do
-          let ty' = lowerType ty
-          (mkVal var,ty',) <$> lowerPolyBind ty' ex
-      lowerScc (AcyclicSCC (S.Binding (TvName var) ex _ (_, ty))) = AcyclicSCC <$> do
-        let ty' = lowerType ty
-        (mkVal var, ty',) <$> lowerPolyBind ty' ex
-      foldScc (AcyclicSCC v) = (C.StmtLet (One v):)
-      foldScc (CyclicSCC vs) = (C.StmtLet (Many vs):)
   local (\s -> s { vars = env' }) $ do
-    vs' <- traverse lowerScc sccs
-    foldr ((.) . foldScc) id vs' <$> lowerProg' prg
+    vs' <- lowerLet vs
+    foldr ((.) . ((:) . C.StmtLet)) id vs' <$> lowerProg' prg
 lowerProg' (TypeDecl (TvName var) _ cons:prg) = do
   let cons' = map (\case
                        UnitCon (TvName p) (_, t) -> (p, mkCon p, lowerType t)
@@ -423,6 +408,111 @@ lowerProg' (TypeDecl (TvName var) _ cons:prg) = do
   (C.Type (mkType var) ccons:) <$> local (\s -> s { ctors = Map.union (Map.fromList scons) (ctors s) }) (lowerProg' prg)
 lowerProg' (Open _ _:prg) = lowerProg' prg
 lowerProg' (Module _ b:prg) = lowerProg' (b ++ prg)
+
+lowerLet :: MonadLower m => [S.Binding Typed] -> m [Binding CoVar]
+lowerLet bs =
+  let sccs = depOrder bs
+
+      lowerScc (CyclicSCC vs) = pure . Many <$> do
+        -- Cyclic bindings will only ever be normal. Well, I
+        -- jolly hope so anyway
+        for vs $ \(S.Binding (TvName var) ex _ (_, ty)) -> do
+          let ty' = lowerType ty
+          (mkVal var,ty',) <$> lowerPolyBind ty' ex
+
+      lowerScc (AcyclicSCC (S.Binding (TvName var) ex _ (_, ty))) = pure . One <$> do
+        let ty' = lowerType ty
+        (mkVal var, ty',) <$> lowerPolyBind ty' ex
+
+      lowerScc (AcyclicSCC S.ParsedBinding{}) = error "ParsedBinding{} in Lower"
+      lowerScc (AcyclicSCC S.Matching{}) = error "Matching{} in Lower"
+
+      lowerScc (AcyclicSCC (S.TypedMatching p ex (pos, ty) bound)) = do
+        let ty' = lowerType ty
+            boundVarMap = Map.fromList bound
+        ts <- patternTyvars p
+        ex' <- lowerPolyBind ty' ex
+
+        case boundWith p of
+          [bind] ->
+            -- Generate `let x = match expr with | ... x' ... -> x`
+            pure <$> patternExtract pos p ts ex' ty' (lowerType (boundVarMap Map.! fst bind)) bind
+          vs -> do
+            var <- fresh ValueVar
+            let cont bind = patternExtract pos p ts (Atom (Ref var ty')) ty' (lowerType (boundVarMap Map.! fst bind)) bind
+            -- Generate `let a = expr`
+            (One (var, ty', ex'):)
+              <$> traverse cont vs
+
+      -- | Strip all variables from a pattern aside from the given one,
+      -- which is replaced with @n@
+      stripPtrn v n = transformPatternTyped go id where
+        go (S.Capture v' a) | v == v' = S.Capture n a
+                            | otherwise = S.Wildcard a
+        go p = p
+
+      patternExtract :: MonadLower m
+                     -- | The pattern's position, the pattern and all bound vars
+                     => Span -> Pattern Typed -> [(CoVar, Type)]
+                     -> Term -> Type -- ^ The variable we're binding from and its type
+                     -> Type -- ^ The quantified variable we're binding to's type
+                     -> (Var Typed, S.Ann Typed) -- ^ The pattern variable we're binding to
+                     -> m (Binding CoVar)
+      patternExtract pos p ts test ty outerTy (TvName var, (_, innerTy)) = do
+        let var' = mkVal var
+            innerTy' = lowerType innerTy
+        pvar@(CoVar vn vt _) <- freshFrom var'
+        p' <- lowerPat (stripPtrn (TvName var) (TvName (TgName vt vn)) p)
+
+        -- Generate `let x = match test with | ... x' ... -> x`
+        vex <- flip runContT pure $ do
+          test' <- onAtom test ty
+          genWrapper id mempty test' ty (requiredVars outerTy) $ \subst ptrnTy res -> do
+            fail <- patternMatchingFail pos ptrnTy innerTy'
+
+            -- We substitute the whole match to use our new type arguments, as it's
+            -- easier than substituting each pattern + pattern binds
+            pure . substituteInTys subst $ C.Match res
+              [ C.Arm { _armPtrn = p', _armTy = ptrnTy, _armBody = Atom (Ref pvar innerTy')
+                      , _armVars = patternVars p', _armTyvars = ts }
+              , fail ]
+        pure (One (var', outerTy, vex))
+
+      requiredVars :: Type -> VarSet.Set
+      requiredVars (ForallTy (Relevant v) _ rest) = VarSet.insert v (requiredVars rest)
+      requiredVars _ = mempty
+
+      genWrapper :: MonadLower m
+                 => (Term -> Term) -- ^ Wraps the inner lambda body
+                 -> VarMap.Map Type -- ^ Accumulator tyvar substitution map
+                 -> Atom -> Type -- ^ The variable and type we'll generate against
+                 -> VarSet.Set -- ^ "Interesting" tyvars we should generate lambdas for
+                 -> (VarMap.Map Type -> Type -> Atom -> m Term)
+                 -> m Term
+      genWrapper wrap subst bod (ForallTy (Relevant a) l r) vs result
+        | VarSet.member a vs = do
+            -- If we're an interesting tyvar (we appear in the forall) then
+            -- generate a type lambda.
+            t <- freshFrom a
+            v <- fresh ValueVar
+            Atom . Lam (TypeArgument t l) <$> worker v (VarTy t)
+        | otherwise = do
+            -- Otherwise just replace with unit
+            v <- fresh ValueVar
+            worker v C.tyUnit
+        where
+          -- | The worker performs a tyapp within the lambda body (the @wrap@
+          -- function), extends the variable substitution and visits the inner
+          -- type.
+          worker bind rTy =
+            let r' = substituteInType (VarMap.singleton a rTy) r
+            in genWrapper (wrap . C.Let (One (bind, r', TyApp bod rTy)))
+                          (VarMap.insert a rTy subst)
+                          (Ref bind r') r' vs result
+
+      genWrapper wrap subst bod ty _ res = wrap <$> res subst ty bod
+
+  in concat <$> traverse lowerScc sccs
 
 lowerPolyBind :: MonadLower m => Type -> Expr Typed -> m Term
 lowerPolyBind ty ex = doIt (needed ex ty) (go ty ex) (lowerExprTerm ex) where
@@ -446,9 +536,9 @@ lowerPolyBind ty ex = doIt (needed ex ty) (go ty ex) (lowerExprTerm ex) where
     go _ ac = ac
   countLams _ = 0
 
-  countForalls :: Type -> Integer
-  countForalls (ForallTy Relevant{} _ t) = 1 + countForalls t
-  countForalls _ = 0
+countForalls :: Type -> Integer
+countForalls (ForallTy Relevant{} _ t) = 1 + countForalls t
+countForalls _ = 0
 
 patternVars :: Pat -> [(CoVar, Type)]
 patternVars (C.Capture v ty) = [(v, ty)]

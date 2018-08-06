@@ -1,5 +1,6 @@
-{-# LANGUAGE MultiWayIf, GADTs, FlexibleContexts, ScopedTypeVariables, TemplateHaskell #-}
-{-# LANGUAGE TupleSections, OverloadedStrings, ViewPatterns, LambdaCase #-}
+{-# LANGUAGE MultiWayIf, FlexibleContexts, ScopedTypeVariables,
+   TemplateHaskell, TupleSections, ViewPatterns,
+   LambdaCase #-}
 
 -- | This module implements the logic responsible for solving the
 -- sequence of @Constraint@s the type-checker generates for a particular
