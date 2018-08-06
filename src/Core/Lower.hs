@@ -30,7 +30,7 @@ import Data.List
 
 import qualified Core.Core as C
 import qualified Core.Builtin as C
-import Core.Optimise (substituteInType, fresh, freshFrom)
+import Core.Optimise (substituteInType, substituteInTys, fresh, freshFrom)
 import Core.Core hiding (Atom, Term, Stmt, Type, Pattern, Arm)
 import Core.Core (pattern Atom)
 import Core.Types (unify, replaceTy)
@@ -452,43 +452,65 @@ lowerLet bs =
         go p = p
 
       patternExtract :: MonadLower m
+                     -- | The pattern's position, the pattern and all bound vars
                      => Span -> Pattern Typed -> [(CoVar, Type)]
-                     -> Term
-                     -> Type
-                     -> Type
-                     -> (Var Typed, S.Ann Typed)
+                     -> Term -> Type -- ^ The variable we're binding from and its type
+                     -> Type -- ^ The quantified variable we're binding to's type
+                     -> (Var Typed, S.Ann Typed) -- ^ The pattern variable we're binding to
                      -> m (Binding CoVar)
-      patternExtract pos p ts test ty vartype (TvName var, (_, vty)) = do
+      patternExtract pos p ts test ty outerTy (TvName var, (_, innerTy)) = do
         let var' = mkVal var
-            vty' = lowerType vty
+            innerTy' = lowerType innerTy
         pvar@(CoVar vn vt _) <- freshFrom var'
         p' <- lowerPat (stripPtrn (TvName var) (TvName (TgName vt vn)) p)
 
         -- Generate `let x = match test with | ... x' ... -> x`
         vex <- flip runContT pure $ do
           test' <- onAtom test ty
-          withinLambda ty test' $ \ty value -> do
-            fail <- patternMatchingFail pos ty vty'
-            pure $ C.Match value
-              [ C.Arm { _armPtrn = p', _armTy = ty, _armBody = Atom (Ref pvar vty')
+          genWrapper id mempty test' ty (requiredVars outerTy) $ \subst ptrnTy res -> do
+            fail <- patternMatchingFail pos ptrnTy innerTy'
+
+            -- We substitute the whole match to use our new type arguments, as it's
+            -- easier than substituting each pattern + pattern binds
+            pure . substituteInTys subst $ C.Match res
+              [ C.Arm { _armPtrn = p', _armTy = ptrnTy, _armBody = Atom (Ref pvar innerTy')
                       , _armVars = patternVars p', _armTyvars = ts }
               , fail ]
-        pure (One (var', vartype, vex))
+        pure (One (var', outerTy, vex))
 
-      withinLambda :: MonadLower m
-                   => Type -> Atom
-                   -> (Type -> Atom -> m Term) -> m Term
-      withinLambda (ForallTy (Relevant t) kind ty) v f = do
-        t' <- freshFrom t
-        let ty' = substituteInType (VarMap.singleton t (VarTy t')) ty
+      requiredVars :: Type -> VarSet.Set
+      requiredVars (ForallTy (Relevant v) _ rest) = VarSet.insert v (requiredVars rest)
+      requiredVars _ = mempty
 
-        v' <- fresh ValueVar
+      genWrapper :: MonadLower m
+                 => (Term -> Term) -- ^ Wraps the inner lambda body
+                 -> VarMap.Map Type -- ^ Accumulator tyvar substitution map
+                 -> Atom -> Type -- ^ The variable and type we'll generate against
+                 -> VarSet.Set -- ^ "Interesting" tyvars we should generate lambdas for
+                 -> (VarMap.Map Type -> Type -> Atom -> m Term)
+                 -> m Term
+      genWrapper wrap subst bod (ForallTy (Relevant a) l r) vs result
+        | VarSet.member a vs = do
+            -- If we're an interesting tyvar (we appear in the forall) then
+            -- generate a type lambda.
+            t <- freshFrom a
+            v <- fresh ValueVar
+            Atom . Lam (TypeArgument t l) <$> worker v (VarTy t)
+        | otherwise = do
+            -- Otherwise just replace with unit
+            v <- fresh ValueVar
+            worker v C.tyUnit
+        where
+          -- | The worker performs a tyapp within the lambda body (the @wrap@
+          -- function), extends the variable substitution and visits the inner
+          -- type.
+          worker bind rTy =
+            let r' = substituteInType (VarMap.singleton a rTy) r
+            in genWrapper (wrap . C.Let (One (bind, r', TyApp bod rTy)))
+                          (VarMap.insert a rTy subst)
+                          (Ref bind r') r' vs result
 
-        Atom
-         . Lam (TypeArgument t' kind)
-         . C.Let (One (v', ty', TyApp v (VarTy t')))
-         <$> withinLambda ty' (Ref v' ty') f
-      withinLambda t v f = f t v
+      genWrapper wrap subst bod ty _ res = wrap <$> res subst ty bod
 
   in concat <$> traverse lowerScc sccs
 
