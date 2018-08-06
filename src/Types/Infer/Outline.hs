@@ -13,8 +13,6 @@ import Syntax
 import Types.Infer.Builtin
 import Types.Kinds
 
-import Debug.Trace
-
 -- For polymorphic recursion, mostly
 approxType :: MonadInfer Typed m => Expr Resolved -> StateT Origin m (Type Typed)
 approxType r@(Fun p e _) = TyPi <$> approxParam p <*> approxType e where
@@ -39,7 +37,7 @@ approxType (Record vs _) = do
   TyExactRows <$> traverse one vs
 
 approxType (BinOp _ (VarRef o _) _ _) | o `Map.member` builtinOps = pure (builtinOps Map.! o)
-approxType (App (VarRef v _) (Fun (PatParam (PLiteral LiUnit _)) e _) _) | v == TgInternal "lazy" = trace "app lazy" $
+approxType (App (VarRef v _) (Fun (PatParam (PLiteral LiUnit _)) e _) _) | v == TgInternal "lazy" =
   TyApp tyLazy <$> approxType e
 
 approxType _ = guess
