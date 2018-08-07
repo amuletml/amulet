@@ -301,7 +301,7 @@ Pattern :: { Pattern Parsed }
         | Pattern ':' Type        { withPos2 $1 $3 $ PType $1 (getL $3) }
 
 ArgP :: { Pattern Parsed }
-     : ident                                      { withPos1 $1 $ Capture (getName $1) }
+     : BindName                                   { withPos1 $1 $ Capture (getL $1) }
      | '_'                                        { withPos1 $1 $ Wildcard }
      | Con                                        { withPos1 $1 $ Destructure (getL $1) Nothing }
      | '{' List(PatternRow, ',') '}'              { withPos2 $1 $3 $ PRecord $2 }
