@@ -7,7 +7,7 @@ import qualified Data.Text.Lazy as L
 import qualified Data.Text as T
 import Data.Position
 
-import Parser.Wrapper (Token(..), runLexer)
+import Parser.Wrapper
 import Parser.Lexer
 
 import qualified Text.Pretty.Note as N
@@ -31,5 +31,14 @@ result file contents =
 
         prettyErrs = vsep . map (N.format (N.fileSpans [(file, contents)]))
 
+resultTrivial :: String -> T.Text -> T.Text
+resultTrivial file contents =
+  let (Just toks, _) = runLexerTrivial file (L.fromStrict contents) lexerScan
+  in T.pack (concatMap (\(Token tc f t) -> "\"" <> show tc <> "\" " <> sp f <> "-" <> sp t <> "\n") toks)
+  where sp (SourcePos _ l c) = show l ++ ":" ++ show c
+
 tests :: IO TestTree
-tests = testGroup "Test.Parser.Lexer" <$> goldenDir result "tests/lexer/" ".ml"
+tests = testGroup "Lexer" <$> sequenceA
+  [ testGroup "Normal" <$> goldenDir result "tests/lexer/" ".ml"
+  , testGroup "Trivials" <$> goldenDir resultTrivial "tests/lexer/trivial/" ".ml"
+  ]

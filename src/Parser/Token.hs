@@ -77,6 +77,9 @@ data TokenClass
   | TcVSep   -- ^ Virtual @;;@ token, @$sep@.
   | TcVIn    -- ^ Virtual @in@ token, @$in@.
 
+  | TcWhitespace Text -- ^ One of more whitespace characters, only appearing in lexing streams
+  | TcComment Text    -- ^ The body of a comment, including the `(*` and `*)`.
+
   | TcEOF -- ^ End of file
   deriving Eq
 
@@ -149,6 +152,12 @@ instance Show TokenClass where
   show TcVSep = "$sep"
   show TcVIn = "$in"
 
+  show (TcWhitespace t) = concatMap escape (unpack t) where
+    escape '\t' = "\\t"
+    escape '\n' = "\\n"
+    escape c    = [c]
+  show (TcComment t) = unpack t
+
   show TcEOF = "<eof>"
 
 -- | A token, with its class, start, and end position.
@@ -163,4 +172,6 @@ friendlyName TcVEnd = "end of block"
 friendlyName TcVSep = "end of block"
 friendlyName TcVIn = "end of block"
 friendlyName TcVBegin = "start of block"
+friendlyName TcWhitespace{} = "whitespace"
+friendlyName TcComment{} = "comment"
 friendlyName x = show x
