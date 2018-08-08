@@ -5,7 +5,7 @@ implicit06-fail.ml[14:32 ..14:34]: error
       rigidified because of the context, the type
       forall 'a. foo 'a
 
-  Arising from use of the expression
+  Arising in the expression
    │ 
 14 │ let main : forall 'a. foo 'a = foo
    │ 

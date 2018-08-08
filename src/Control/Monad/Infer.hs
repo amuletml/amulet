@@ -218,7 +218,7 @@ instance Pretty TypeError where
 
   pretty (Occurs v t) = string "Occurs check:" <+> string "The type variable" <+> stypeVar (pretty v) </> indent 4 (string "occurs in the type" <+> displayType t)
   pretty (NotInScope e) = string "Variable not in scope:" <+> pretty e
-  pretty (ArisingFrom er ex) = pretty er <#> empty <#> nest 4 (string "Arising from use of" <+> blameOf ex)
+  pretty (ArisingFrom er ex) = pretty er <#> empty <#> nest 4 (string "Arising in" <+> blameOf ex)
   pretty (FoundHole e s) = string "Found typed hole" <+> pretty e <+> "of type" <+> displayType s
 
   pretty (Note te m) = pretty te <#> note <+> align (pretty m)
@@ -332,7 +332,7 @@ instance Note TypeError Style where
                let k =
                      if annotation rs `includes` annotation ex
                         then id
-                        else (<#>) (vsep [ indent 2 $ bullet "Arising from use of the expression"
+                        else (<#>) (vsep [ indent 2 $ bullet "Arising in" <+> (Right <$> blameOf rs)
                                          , f [annotation rs]
                                          , empty ])
                  in
@@ -344,12 +344,20 @@ instance Note TypeError Style where
                     , indent 5 (Right <$> displayType s)
                     , indent 4 "can be made as polymorphic as"
                     , indent 5 (Right <$> displayType t)
+
+                    , empty
+
+                    , indent 2 $ bullet "Arising in the" <+> (Right <$> blameOf rs)
                     , f [annotation rs]
                     ]
              ByExistential c t ->
                vsep [ indent 2 $ string "Where the type variable" <+> sk (pretty v) <+> "is an" <+> sk "existential" <> comma
                     , indent 2 $ string "bound by the constructor" <+> sc (pretty c) <> ", which has type"
                     , indent 5 (Right <$> displayType t)
+
+                    , empty
+
+                    , indent 2 $ bullet "Arising in the" <+> (Right <$> blameOf rs)
                     , nest (-2) $ f [annotation rs]
                     ]
            ]

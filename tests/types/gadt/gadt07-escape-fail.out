@@ -4,6 +4,8 @@ gadt07-escape-fail.ml[10:3 ..10:17]: error
   Where the type variable a is an existential,
   bound by the constructor MkHid, which has type
      forall 'a. exp 'a * exp 'a -> hidden
+
+  • Arising in the the expression
    │ 
 10 │   match hval with
    │ 

@@ -6,7 +6,7 @@ overflow-fail.ml[22:14 ..22:33]: error
   • Possible cause: ambiguous type variables 'k, 'a, 'c prevent choosing a value.
        Perhaps add a type annotation, specifying the wanted type?
 
-  Arising from use of the expression
+  Arising in the expression
    │ 
 22 │ let main c = append (1 :: 2 :: c)
    │ 

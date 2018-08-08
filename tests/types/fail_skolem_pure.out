@@ -1,7 +1,7 @@
 fail_skolem_pure.ml[2:32 ..2:32]: error
   Could not the rigid type variable 'a with the type 'f 'a
 
-  • Arising from use of the expression
+  • Arising in the expression
   │ 
 2 │ let pure_fail = pure (fun x -> x)
   │ 

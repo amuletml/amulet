@@ -1,0 +1,10 @@
+record03-fail.ml[5:20 ..5:24]: error
+  No overlap between exact record { bar : {'a : type}. 'a -> 'a }
+           and polymorphic record { 'au | baz : 'at }
+  • Note: no fields match
+  • The following fields are missing: baz
+
+  Arising in the expression
+  │ 
+5 │ let main (Foo r) = r.baz 1
+  │ 
