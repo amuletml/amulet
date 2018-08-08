@@ -3,9 +3,9 @@ and y = 2
 and z = 3
 
 (* Expressions *)
-let basic_record = { x = 1, y = 2, z = 3 }
+let basic_record = { x = 1, y = 2, z : int = 3 }
 
-let short_record = { x, y, z }
+let short_record = { x, y, z : int }
 
 let basic_extension = { basic_record with y = 3 }
 
