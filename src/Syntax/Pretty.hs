@@ -317,11 +317,14 @@ prettyType (TyPi x t) = uncurry prettyQuantifiers . second reverse $ unwind t [x
   sameAs _ _ = False
 prettyType (TyApp x e) = parenTyFun x (displayType x) <+> parenTyArg e (displayType e)
 prettyType (TyRows p rows) = enclose (lbrace <> space) (space <> rbrace) $
-  pretty p <+> soperator pipe <+> hsep (punctuate comma (prettyRows colon rows))
-prettyType (TyExactRows rows) = record (prettyRows colon rows)
+  pretty p <+> soperator pipe <+> hsep (punctuate comma (displayRows rows))
+prettyType (TyExactRows rows) = record (displayRows rows)
 prettyType (TyTuple t s) = parenTyFun t (displayType t) <+> soperator (char '*') <+> parenTuple s (displayType s)
 prettyType t@TyWithConstraints{} = displayType (applyCons t)
 prettyType TyType = keyword "type"
+
+displayRows :: (Ord (Var p), Pretty (Var p)) => [(Text, Type p)] -> [Doc]
+displayRows = map (\(n, v) -> text n <+> colon <+> displayType v) . sortOn fst
 
 parenTyFun, parenTyArg, parenTuple :: Type p -> Doc -> Doc
 parenTyArg TyApp{} = parens
