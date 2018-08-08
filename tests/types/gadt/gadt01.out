@@ -2,7 +2,7 @@ gadt01.ml[3:16 ..3:23]: error
   Expected a type, but this has kind 'd -> type
   Have you applied a type constructor to the wrong number of arguments?
 
-  Arising from use of the declaration
+  Arising in the declaration
   │ 
 3 │ type gadt 'a = R : gadt
   │ 

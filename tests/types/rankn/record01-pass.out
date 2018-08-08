@@ -1,0 +1,4 @@
+foo : type
+Foo : { bar : {'a : type}. 'a -> 'a } -> foo
+foo : foo
+main : foo -> int

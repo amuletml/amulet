@@ -1,7 +1,7 @@
 impredicative01-fail.ml[6:38 ..6:52]: error
   Could not match expected type id (forall 'a. 'a -> 'a) with id ('ae -> 'ae)
 
-  Arising from use of the expression
+  Arising in the expression
   │ 
 6 │ let foo : id (forall 'a. 'a -> 'a) = Id (fun x -> x)
   │ 

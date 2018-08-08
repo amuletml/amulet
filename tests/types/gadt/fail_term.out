@@ -1,7 +1,7 @@
 fail_term.ml[16:3 ..16:30]: error
   Could not the rigid type variable 'b with the type 'a
 
-  • Arising from use of the expression
+  • Arising in the expression
    │ 
 16 │   Lam (Lam (Var (There Here)))
    │ 

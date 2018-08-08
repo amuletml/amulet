@@ -3,7 +3,7 @@ gadt04-pass.ml[2:5 ..2:27]: error
   • Note: Generalised constructors can not be curried
   • Suggestion: Perhaps use a tuple: `(int * int) -> t`
 
-  Arising from use of the constructor
+  Arising in the constructor
   │ 
 2 │   | MkT : int -> (int -> t)
   │ 
