@@ -1,8 +1,8 @@
 let x = 1
 and y = 2
 and z = 3
-let basic_record = { x = 1, y = 2, z = 3 }
-let short_record = { x = x, y = y, z = z }
+let basic_record = { x = 1, y = 2, z = (3 : int) }
+let short_record = { x = x, y = y, z = (z : int) }
 let basic_extension = { basic_record with y = 3 }
 let short_extension = { short_record with y = y }
 let basic_pattern = function

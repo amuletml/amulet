@@ -104,7 +104,7 @@ import Syntax
   '$sep'   { Token TcVSep _ _ }
 
 
-%expect 8
+%expect 9
 
 %%
 
@@ -218,8 +218,13 @@ NullSection :: { Maybe (Expr Parsed) }
   | Section                                   { Just $1 }
 
 ExprRow :: { Field Parsed }
-  : ident '=' Expr         { withPos2 $1 $3 $ Field (getIdent $1) $3 }
-  | ident                  { withPos1 $1    $ Field (getIdent $1) $ withPos1 $1 $ VarRef (getName $1) }
+  : ident OptType '=' Expr                    { withPos2 $1 $4 $ Field (getIdent $1) $ $2 $4 }
+  | ident OptType                             { withPos1 $1    $ Field (getIdent $1) $ $2 $ withPos1 $1 $ VarRef (getName $1) }
+
+OptType :: { Expr Parsed -> Expr Parsed }
+  :                                           { id }
+  | ':' Type                                  { withPos1 $2 . flip Ascription (getL $2) }
+
 
 Var :: { Located (Var Parsed) }
     : ident  { lPos1 $1 $ getName $1 }
