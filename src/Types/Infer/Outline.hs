@@ -110,6 +110,4 @@ builtinOps =
     , (TgInternal "<=.", tyBool)
     , (TgInternal "==", tyBool)
     , (TgInternal "<>", tyBool)
-    , (TgInternal "&&", tyBool)
-    , (TgInternal "||", tyBool)
     ]

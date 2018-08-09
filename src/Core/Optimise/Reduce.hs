@@ -245,23 +245,6 @@ reduceTerm s e@(App (Ref v _) (Ref a _))
       [Lit (Int 0), _] | n == vOpMul -> num 0
       [x, Lit (Int 1)] | n == vOpDiv -> Atom x
 
-      -- Primitive boolean reductions
-      [Lit LitTrue,  Lit LitTrue]  | n == vOpAnd -> bool True
-      [Lit _,        Lit _]        | n == vOpAnd -> bool False
-      [Lit LitFalse, Lit LitFalse] | n == vOpOr  -> bool False
-      [Lit _,        Lit _]        | n == vOpOr  -> bool True
-
-      -- Partial boolean reductions
-      [_, Lit LitFalse]  | n == vOpAnd -> bool False
-      [Lit LitFalse,  _] | n == vOpAnd -> bool False
-      [x, Lit LitTrue]   | n == vOpAnd -> Atom x
-      [Lit LitTrue,  x]  | n == vOpAnd -> Atom x
-      [_, Lit LitTrue]   | n == vOpOr  -> bool True
-      [Lit LitTrue,  _]  | n == vOpOr  -> bool True
-      [x, Lit LitFalse]  | n == vOpOr  -> Atom x
-      [Lit LitFalse,  x] | n == vOpOr  -> Atom x
-
-
       -- Primitive string reductions
       [Lit (Str l), Lit (Str r)]  | n == vOpConcat -> str (l `T.append` r)
 

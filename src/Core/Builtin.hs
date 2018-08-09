@@ -64,10 +64,6 @@ vOpEq, vOpNe :: CoVar
 vOpEq = CoVar (-25) "==" ValueVar
 vOpNe = CoVar (-26) "<>" ValueVar
 
-vOpAnd, vOpOr :: CoVar
-vOpAnd = CoVar (-27) "&&" ValueVar
-vOpOr  = CoVar (-28) "||" ValueVar
-
 vError :: CoVar
 vError = CoVar (-29) "error" ValueVar
 
@@ -86,7 +82,6 @@ builtinVarList = vars where
   tupTy = ValuesTy
   arrTy = ForallTy Irrelevant
 
-  boolOp = ForallTy Irrelevant tyBool (ForallTy Irrelevant tyBool tyBool)
   intOp = tupTy [tyInt, tyInt] `arrTy` tyInt
   floatOp = tupTy [tyFloat, tyFloat] `arrTy` tyFloat
   stringOp = tupTy [tyString, tyString] `arrTy` tyString
@@ -106,7 +101,6 @@ builtinVarList = vars where
          , op vOpConcat stringOp
 
          , op vOpEq cmp, op vOpNe cmp
-         , op vOpOr boolOp, op vOpAnd boolOp
 
          , (fromVar vError, ForallTy (Relevant name) StarTy $ tyString `arrTy` VarTy name)
          , (fromVar vLAZY, ForallTy (Relevant name) StarTy $ (tyUnit `arrTy` VarTy name) `arrTy` AppTy tyLazy (VarTy name))
