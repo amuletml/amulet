@@ -1,0 +1,2 @@
+apply : {'row : type}. { 'row | apply : {'a : type}. {'b : type}. ('a -> 'b) -> 'a -> 'b } -> {'a : type}. {'b : type}. ('a -> 'b) -> 'a -> 'b
+main : int
