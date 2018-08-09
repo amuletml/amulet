@@ -518,8 +518,7 @@ ops = VarMap.fromList
 
   , (vOpEq, "==")
   , (vOpNe, "~=")
-  , (vOpOr, "or")
-  , (vOpAnd, "and") ]
+  ]
 
 -- | Remap an Amulet binary op to the equivalent Lua operator
 remapOp :: IsVar a => a -> Text

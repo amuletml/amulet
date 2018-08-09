@@ -34,7 +34,6 @@ builtinsEnv = envOf (scopeFromList builtin) where
   tp :: T.Text -> (Var Resolved, Type Typed)
   tp x = (TgInternal x, TyType)
 
-  boolOp = tyBool `TyArr` (tyBool `TyArr` tyBool)
   intOp = tyInt `TyArr` (tyInt `TyArr` tyInt)
   floatOp = tyFloat `TyArr` (tyFloat `TyArr` tyFloat)
   stringOp = tyString `TyArr` (tyString `TyArr` tyString)
@@ -50,7 +49,6 @@ builtinsEnv = envOf (scopeFromList builtin) where
       , op "<" intCmp, op ">" intCmp, op ">=" intCmp, op "<=" intCmp
       , op "<." floatCmp, op ">." floatCmp, op ">=." floatCmp, op "<=." floatCmp
       , op "==" cmp, op "<>" cmp
-      , op "||" boolOp, op "&&" boolOp
       , (TgInternal "lazy", TyForall a (Just TyType) $ (tyUnit `TyArr` TyVar a) `TyArr` TyApp tyLazy (TyVar a))
       , (TgInternal "force", TyForall a (Just TyType) $ TyApp tyLazy (TyVar a) `TyArr` TyVar a)
       , tp "int", tp "string", tp "bool", tp "unit", tp "float", (TgName "lazy" (-34), TyArr TyType TyType)

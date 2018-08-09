@@ -55,7 +55,6 @@ builtinScope = Scope
                { varScope = build [ "+", "-", "*", "/", "**", "^"
                                   , "+.", "-.", "*.", "/.", "**.", "^."
                                   , "<", ">", ">=", "<=", "==", "<>"
-                                  , "||", "&&"
                                   , "@@", "lazy", "force" ]
                , tyScope    = Map.insert (Name "lazy") (SVar (TgName "lazy" (-34))) $ build [ "int", "string", "bool", "unit", "float" ]
                , tyvarScope = mempty
