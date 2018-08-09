@@ -141,7 +141,7 @@ runRepl = do
       case core of
         Nothing -> pure ()
         Just (vs, prog, core, state') -> do
-          let (luaStmt, escape') = B.emitProgramWith (inferScope state') (escapeScope state') (tagOccursVar core)
+          let (luaStmt, escape') = B.emitProgramWith (escapeScope state') (tagOccursVar core)
               luaExpr = LuaDo . map patchupLua $ luaStmt
               luaSyntax = T.unpack . display . uncommentDoc . renderPretty 0.8 100 . pretty $ luaExpr
 

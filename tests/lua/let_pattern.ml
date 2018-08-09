@@ -12,4 +12,5 @@ let (b, c) = (5, 6)
 (* Test polymorphic binds *)
 let (d, e) = (id, id)
 
-let main = { a, b, c, d, e }
+external val bottom : 'a = "nil"
+let () = bottom { a, b, c, d, e }

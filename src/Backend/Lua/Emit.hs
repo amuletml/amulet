@@ -69,14 +69,14 @@ module Backend.Lua.Emit
 
 import Control.Monad.State
 import Control.Monad.Cont
-import Control.Lens hiding (uncons)
+import Control.Lens
 
 import qualified Data.VarMap as VarMap
 import qualified Data.Text as T
 import Data.Foldable
 import Data.Triple
-import Data.Maybe (fromMaybe, maybeToList)
-import Data.List (sortOn, partition, uncons)
+import Data.Maybe
+import Data.List
 import Data.Text (Text)
 
 import Backend.Lua.Syntax
@@ -87,12 +87,6 @@ import Core.Builtin
 import Core.Types
 import Core.Core
 import Core.Var
-
-import Syntax.Types
-import Syntax.Var
-
-import qualified Types.Wellformed as W
-
 
 type Returner = [LuaExpr] -> LuaStmt
 
@@ -113,13 +107,13 @@ type ExprContext v a = ContT [LuaStmt] (State (EmitState v)) a
 
 -- | Convert a list of core top-levels into a collection of Lua
 -- statements using the default scope.
-emitProgram :: forall a. Occurs a => Env -> [Stmt a] -> [LuaStmt]
-emitProgram ev = fst . emitProgramWith ev escapeScope
+emitProgram :: forall a. Occurs a => [Stmt a] -> [LuaStmt]
+emitProgram = fst . emitProgramWith escapeScope
 
 -- | Convert a list of core top-levels into a collection of Lua
 -- statements using the provided scope.
-emitProgramWith :: forall a. Occurs a => Env -> EscapeScope -> [Stmt a] -> ([LuaStmt], EscapeScope)
-emitProgramWith ev esc = flip runState esc . emitProg where
+emitProgramWith :: forall a. Occurs a => EscapeScope -> [Stmt a] -> ([LuaStmt], EscapeScope)
+emitProgramWith esc = flip runState esc . emitProg where
   emitProg :: MonadState EscapeScope m => [Stmt a] -> m [LuaStmt]
   emitProg (Foreign n' t s:xs)
     | arity t > 1 = do
@@ -153,27 +147,7 @@ emitProgramWith ev esc = flip runState esc . emitProg where
        : concatMap (\(v, _, e) -> emitStmt s (LuaAssign [LuaName v]) e) vs')++)
       <$> emitProg xs
   emitProg (Type _ cs:xs) = (++) <$> traverse emitConstructor cs <*> emitProg xs
-  emitProg [] =
-    let main = fmap fst . uncons
-             . sortOn key
-             . filter isMain
-             . namesInScope
-             . view names
-        isMain (TgName x _) = x == "main"
-        isMain _ = False
-        key (TgName k _) = k
-        key _ = undefined
-     in case main ev of
-       Just ref@(TgName n i) -> do
-         ref' <- gets (getVar (CoVar i n ValueVar))
-         let go 0 _ = Nothing
-             go 1 it = Just (LuaCallS it [])
-             go n it = do
-               LuaCallS e _ <- go (n - 1) it
-               pure $ LuaCallS (LuaCall e []) []
-             ar = W.arity (ev ^. names . at ref . non undefined)
-          in pure (maybeToList (go ar (LuaRef (LuaName ref'))))
-       _ -> pure []
+  emitProg [] = pure []
 
   emitConstructor :: (MonadState EscapeScope m, Occurs a) => (a, Type a) -> m LuaStmt
   emitConstructor (var, ty)

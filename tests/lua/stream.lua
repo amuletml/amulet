@@ -28,16 +28,18 @@ do
   end
   local main = (function ()
     local go
-    local nr = to_string
+    local oh = to_string
     go = function (st)
       if st > 5 then
         return print("]")
       else
-        io_write("'" .. nr(st) .. "', ")
+        io_write("'" .. oh(st) .. "', ")
         return go(st + 1)
       end
     end
     io_write("[")
     return go(1)
   end)()
+  local bottom = nil
+  local ok = bottom(main)
 end

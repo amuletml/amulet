@@ -16,10 +16,8 @@ import Core.Occurrence
 import Core.Core
 import Core.Var
 
-import Syntax.Types
-
 -- | Compile a collection of "Core"'s top-level statements to a Lua
 -- statement
-compileProgram :: IsVar a => Env -> [Stmt a] -> LuaStmt
-compileProgram e = LuaDo . (unitDef :) . addOperators . emitProgram e . tagOccursVar where
+compileProgram :: IsVar a => [Stmt a] -> LuaStmt
+compileProgram = LuaDo . (unitDef :) . addOperators . emitProgram . tagOccursVar where
   unitDef = LuaLocal [ LuaName "__builtin_unit" ] [ LuaTable [ (LuaString "__tag", LuaString "__builtin_unit") ] ]

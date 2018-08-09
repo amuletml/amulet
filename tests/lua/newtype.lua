@@ -26,11 +26,12 @@ do
       [1] = x
     }
   end
-  local function main (x)
+  local bottom = nil
+  local fa = (function ()
+    local x = bottom
     x(Foo)
     x(Bar)
     x(It)
     return x(Mk)
-  end
-  main()
+  end)()
 end
