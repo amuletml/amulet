@@ -2,8 +2,11 @@ do
   local __builtin_unit = {
     __tag = "__builtin_unit"
   }
-  local function main (f)
-    return f(1) + f(2)
-  end
-  main()
+  local bottom = nil
+  local cg = (function ()
+    local ce = bottom
+    local cf = ce(1) + ce(2)
+    local cd = bottom
+    return cd(cf)
+  end)()
 end

@@ -9,3 +9,7 @@ let main f =
   let b = f 2
   let c = f 3
   ( b, c, a )
+
+
+external val bottom : 'a = "nil"
+let () = bottom (main bottom)

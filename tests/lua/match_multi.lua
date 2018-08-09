@@ -2,9 +2,11 @@ do
   local __builtin_unit = {
     __tag = "__builtin_unit"
   }
-  local function main (f)
-    local ai = f(__builtin_unit)
-    return ai.a + ai.b
-  end
-  main()
+  local bottom = nil
+  local bm = (function ()
+    local bc = bottom(__builtin_unit)
+    local bl = bc.a + bc.b
+    local bi = bottom
+    return bi(bl)
+  end)()
 end

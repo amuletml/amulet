@@ -3,3 +3,6 @@
 let main f = if f 1
              then f 2
              else f 3
+
+external val bottom : 'a = "nil"
+let () = bottom (main bottom)

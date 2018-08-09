@@ -11,15 +11,19 @@ do
       [1] = x
     }
   end
-  local function main (f)
-    return function (x)
-      local a = f(1)
-      if x.__tag == "None" then
-        return f(a)
-      elseif x.__tag == "Some" then
-        return f(a + x[1] * 2)
-      end
+  local bottom = nil
+  local ds = (function ()
+    local _do = bottom
+    local a = _do(1)
+    local dq = bottom
+    if dq.__tag == "None" then
+      local fx = _do(a)
+      local dn = bottom
+      return dn(fx)
+    elseif dq.__tag == "Some" then
+      local fy = _do(a + dq[1] * 2)
+      local dn = bottom
+      return dn(fy)
     end
-  end
-  main()()
+  end)()
 end

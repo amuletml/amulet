@@ -64,7 +64,7 @@ compile opt (file:files) = runIdentity . flip evalNameyT firstName $ do
       optm <- case opt of
                 Do -> optimise lower
                 Don't -> pure (deadCodePass (reducePass lower))
-      pure (CSuccess ve prg lower optm (compileProgram env optm) env)
+      pure (CSuccess ve prg lower optm (compileProgram optm) env)
 
     Left err -> pure err
 

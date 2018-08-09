@@ -28,11 +28,11 @@ result file contents = fst . flip runNamey firstName $ do
   let (Just parsed, _) = runParser file (L.fromStrict contents) parseTops
   Right (resolved, _) <- resolveProgram RS.builtinScope RS.emptyModules parsed
   desugared <- desugarProgram resolved
-  Right (inferred, env) <- inferProgram builtinsEnv desugared
+  Right (inferred, _) <- inferProgram builtinsEnv desugared
   lower <- runLowerT (lowerProg inferred)
   optm <- optimise lower
   pure . display . uncommentDoc . renderPretty 0.8 120 . (<##>empty)
-       . pretty . compileProgram env $ optm
+       . pretty . compileProgram $ optm
 
 tests :: IO TestTree
 tests = testGroup "Tests.Core.Backend" <$> goldenDirOn result (++".lua") "tests/lua/" ".ml"
