@@ -104,6 +104,4 @@ opArity = VarMap.fromList . map (flip Arity True <$>) $
 
     , (vOpEq, 2)
     , (vOpNe, 2)
-    , (vOpOr, 1)
-    , (vOpAnd, 1)
     ]

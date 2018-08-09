@@ -25,6 +25,8 @@ type some_nat =
 
 type maybe 'a = Some of 'a | None ;;
 
+let left && (right : lazy 'a) = if left then force right else false
+
 (* uses supplied type signature *)
 let map (f : 'a -> 'b) (xs : vect 'n 'a) : vect 'n 'b =
   match xs with
