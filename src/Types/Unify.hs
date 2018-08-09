@@ -218,7 +218,7 @@ useImplicit x inner scope' ty (ImplChoice hdt oty os s imp) = go where
   go = do
     (hdt, refresh) <- if s == Imp.Solved then refreshTy hdt else pure (hdt, mempty)
     (cast, view solveTySubst -> sub) <- capture $ unify hdt ty
-      `catchError` \e -> throwError (Note e (string "When considering implicit value" <+> pretty imp))
+      `catchError` \e -> throwError (Note e (string "when considering implicit value" <+> pretty imp))
 
     let start e = VarRef imp (annotation e, oty)
         mk _ [] = pure (\e -> ExprWrapper (probablyCast cast) e (annotation e, ty))
