@@ -3,3 +3,6 @@ let main f =
   let b = f 2
   let c = (+) a
   c b
+
+external val bottom : 'a = "nil"
+let () = bottom (main bottom)

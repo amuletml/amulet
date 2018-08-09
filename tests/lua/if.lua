@@ -2,12 +2,17 @@ do
   local __builtin_unit = {
     __tag = "__builtin_unit"
   }
-  local function main (f)
-    if f(1) then
-      return f(2)
+  local bottom = nil
+  local bd = (function ()
+    local bb = bottom
+    if bb(1) then
+      local bh = bb(2)
+      local ba = bottom
+      return ba(bh)
     else
-      return f(3)
+      local bi = bb(3)
+      local ba = bottom
+      return ba(bi)
     end
-  end
-  main()
+  end)()
 end

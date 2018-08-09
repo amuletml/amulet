@@ -39,3 +39,6 @@ let main = range (1, 5) |> dump_stream to_string
  * of Stream, Skip, Yield or Done (even though at this time the compiler will
  * generate code for them)
  *)
+
+external val bottom : 'a = "nil"
+let () = bottom main

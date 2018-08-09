@@ -17,16 +17,19 @@ do
       __tag = "lazy"
     }
   end
-  local function main (f)
-    if f(1) then
-      local ca = __builtin_Lazy(function (bx)
-        return f(2)
+  local bottom = nil
+  local cx = (function ()
+    local cv = bottom
+    if cv(1) then
+      local ct = __builtin_Lazy(function (cq)
+        return cv(2)
       end)
-      local bt = __builtin_force
-      return bt(ca)
+      local cm = __builtin_force
+      local dn = cm(ct)
+      local cu = bottom
+      return cu(dn)
     else
-      return false
+      return bottom(false)
     end
-  end
-  main()
+  end)()
 end

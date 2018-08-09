@@ -11,3 +11,6 @@ let main f x =
           | None -> 0
           | Some x -> x * 2
   in f (a + b)
+
+external val bottom : 'a = "nil"
+let () = bottom (main bottom bottom)
