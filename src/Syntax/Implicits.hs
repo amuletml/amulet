@@ -303,7 +303,10 @@ matches TyPi{} _ = False
 
 matches (TyRows _ vs) (TyExactRows vs') = length vs' >= length vs && all m (overlap vs vs') where
   m (_, a, b) = a `matches` b
-matches TyRows{} TyRows{} = False
+matches (TyRows rho xs) (TyRows sigma ys)
+  | over <- overlap xs ys
+  = rho `matches` sigma && length ys >= length xs && all m over
+    where m (_, a, b) = a `matches` b
 matches TyRows{} _ = False
 
 matches (TyExactRows vs) (TyExactRows vs') = length vs' == length vs && all m (overlap vs vs') where
