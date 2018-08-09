@@ -185,10 +185,13 @@ infer ex@(App f x a) = do
     Invisible{} -> error "invalid invisible quantification in App"
 
 infer ex@(BinOp l o r a) = do
-  (o, (ld, c, k1)) <- secondA (decompose (becauseExp ex) _TyArr) =<< infer o
-  (rd, c', k2) <- decompose (becauseExp ex) _TyArr c
-  (l, r) <- (,) <$> check l ld <*> check r rd
-  pure (App (k2 (App (k1 o) l (a, c))) r (a, c'), c')
+  (o, ty) <- infer o
+
+  (Anon lt, c1, k1) <- quantifier (becauseExp ex) DoSkip ty
+  (Anon rt, c2, k2) <- quantifier (becauseExp ex) DoSkip c1
+
+  (l, r) <- (,) <$> check l lt <*> check r rt
+  pure (App (k2 (App (k1 o) l (a, c1))) r (a, c2), c2)
 
 infer ex@(Match t ps a) = do
   (t', tt) <- infer t
