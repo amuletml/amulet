@@ -406,15 +406,20 @@ inferLetTy closeOver vs =
         let solveOne :: (Binding Typed, Type Typed)
                      -> m (Binding Typed, Telescope Typed)
             solveOne (Binding var exp p ann, given) =
-              let figure = apply solution
+              let figure :: Type Typed -> Type Typed
+                  figure = apply solution
                in do
                   ty <- closeOver mempty exp (figure given)
                   skolCheck var (becauseExp exp) ty
                   pure ( Binding var (solveEx ty solution cs exp) p (fst ann, ty)
                        , one var (rename ty) )
+
             solveOne _ = error "solveOne non-Binding forbidden"
+
+            squish :: m [(Binding Typed, Telescope Typed)]
+                   -> m ([Binding Typed], Telescope Typed)
             squish = fmap (second mconcat . unzip)
-         in squish . traverse solveOne $ vs
+        squish . traverse solveOne $ vs
 
       tc :: [SCC (Binding Resolved)]
          -> m ( [Binding Typed] , Telescope Typed )
@@ -456,6 +461,7 @@ solveEx _ ss cs = transformExprTyped go id goType where
   goWrap IdWrap = IdWrap
   goWrap (WrapFn f) = WrapFn . flip MkWrapCont (desc f) $ solveEx undefined ss cs . runWrapper f
 
+  goType :: Type Typed -> Type Typed
   goType = apply ss
 
 consFst :: Functor m => a -> m ([a], b) -> m ([a], b)

@@ -358,7 +358,7 @@ lowerProg stmt = do
       (body, ty') <- genWrapper id (Ref op ty) ty
       pure . StmtLet . One $ (var, ty', body)
 
-    genWrapper :: MonadLower m => (Term -> Term) -> Atom -> Type -> m (Term, Type)
+    genWrapper :: (Term -> Term) -> Atom -> Type -> m (Term, Type)
     genWrapper build bod  (ForallTy (Relevant a) l r) = do
       -- Generate forall wrapper
       t <- fresh TypeVar

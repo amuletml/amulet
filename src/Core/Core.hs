@@ -191,6 +191,7 @@ instance Pretty a => Pretty (Term a) where
   pretty (Let (Many xs) e) = keyword "let rec" <+> pprLet xs </> (keyword "in" <+> pretty e)
   pretty (Match e ps) = keyword "match" <+> pretty e <+> pprArms ps
   pretty (Extend x rs) = braces $ pretty x <+> pipe <+> prettyRows rs where
+    prettyRows :: [(Text, Type a, Atom a)] -> Doc
     prettyRows = hsep . punctuate comma . map (\(x, t, v) -> text x <+> colon <+> pretty t <+> equals <+> pretty v)
   pretty (Values xs) = soperator (string "(|") <+> (hsep . punctuate comma . map pretty $ xs) <+> soperator (string "|)")
   pretty (Cast a phi) = parens $ pretty a <+> soperator (string "|>") <+> pretty phi
@@ -233,6 +234,7 @@ instance Pretty a => Pretty (Pattern a) where
   pretty (Constr v) = pretty v
   pretty (Destr v p) = parens (pretty v <+> pretty p)
   pretty (PatExtend p rs) = braces $ pretty p <+> pipe <+> prettyRows rs where
+    prettyRows :: [(Text, Pattern a)] -> Doc
     prettyRows = hsep . punctuate comma . map (\(x, v) ->
       text x <+> equals <+> pretty v)
   pretty (PatValues xs) = soperator (string "(|") <+> (hsep . punctuate comma . map pretty $ xs) <+> soperator (string "|)")
@@ -249,9 +251,11 @@ instance Pretty a => Pretty (Type a) where
     | otherwise = pretty x <+> arrow <+> pretty e
 
   pretty (ExactRowsTy rows) = braces $ prettyRows rows where
+    prettyRows :: [(Text, Type a)] -> Doc
     prettyRows = hsep . punctuate comma . map (\(x, t) -> text x <+> colon <+> pretty t)
 
   pretty (RowsTy p rows) = braces $ pretty p <+> pipe <+> prettyRows rows where
+    prettyRows :: [(Text, Type a)] -> Doc
     prettyRows = hsep . punctuate comma . map (\(x, t) -> text x <+> colon <+> pretty t)
   pretty NilTy = braces empty
 

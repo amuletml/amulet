@@ -39,6 +39,7 @@ optmOnce = passes where
            , pure
            ]
 
+  linted :: [[Stmt CoVar] -> Namey [Stmt CoVar]] -> [[Stmt CoVar] -> Namey [Stmt CoVar]]
   linted
     | lintPasses
     = intersperse (pure . (runLint =<< checkStmt emptyScope))

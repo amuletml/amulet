@@ -111,8 +111,7 @@ nullBinds :: SinkState a -> SinkState a
 nullBinds s = s { sinkable = [] }
 
 partitionBinds
-  :: IsVar a
-  => [Sinkable a] -- Terms which may be sunk
+  :: [Sinkable a] -- Terms which may be sunk
   -> [VarSet.Set] -- Free variables of the places which these terms may be sunk into
   -> ([Sinkable a], [[Sinkable a]]) -- A tuple of non-sunk terms and a list with sunken terms, with
                                     -- each entry corresponding to an entry in the places list.

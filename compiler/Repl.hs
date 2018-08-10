@@ -15,6 +15,7 @@ import Data.Traversable
 import Data.Foldable
 import Data.Spanned
 import Data.Functor
+import Data.Maybe
 
 import qualified Foreign.Lua.Api.Types as L
 import qualified Foreign.Lua as L
@@ -159,10 +160,10 @@ runRepl = do
                     let CoVar id nam _ = v
                         var = S.TgName nam id
                     case inferScope state' ^. T.names . at var of
-                      Just ty -> pure (pretty v <+> colon <+> nest 2 (displayType ty <+> equals </> pretty repr))
-                      Nothing -> error "variable not bound in infer scope?"
+                      Just ty -> pure (Just (pretty v <+> colon <+> nest 2 (displayType ty <+> equals </> pretty repr)))
+                      Nothing -> pure Nothing
 
-                  pure (vsep vs')
+                  pure (vsep (catMaybes vs'))
                 _ -> do
                   msg <- T.decodeLatin1 <$> L.tostring L.stackTop
                   L.pop 1

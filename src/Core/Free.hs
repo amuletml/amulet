@@ -23,12 +23,13 @@ tagFreeSet :: IsVar a => [AnnStmt b a] -> [AnnStmt VarSet.Set a]
 tagFreeSet = snd . tagFreeStmt (flip const) const
 
 -- | Tag some statements with free variable information
-tagFreeStmt :: forall a a' b b'. (IsVar a, IsVar a')
+tagFreeStmt :: forall a a' b b'. IsVar a
             => (b -> VarSet.Set -> b') -- ^ Build a new annotation from the set of free variables
             -> (a -> Bool -> a')       -- ^ Build a new variable from its occurrence.
             -> [AnnStmt b a]           -- ^ The statements to annotate
             -> (VarSet.Set, [AnnStmt b' a'])
 tagFreeStmt ann var = tagStmt where
+  conv :: Type a -> Type a'
   conv = fmap (`var` True)
   var' v = var v . VarSet.member (toVar v)
 
@@ -57,7 +58,7 @@ tagFreeStmt ann var = tagStmt where
     in (fv, StmtLet (Many (zipWith (\(v, ty, _) e -> (var' v fvs, conv ty, e)) vs vs')):xs')
 
 -- | Tag some statements with free variable information
-tagFreeTerm :: forall a a' b b'. (IsVar a, IsVar a')
+tagFreeTerm :: forall a a' b b'. IsVar a
             => (b -> VarSet.Set -> b')  -- ^ Build a new annotation from the set of free variables
             -> (a -> Bool -> a')        -- ^ Build a new variable from its occurrence.
             -> AnnTerm b a              -- ^ The term to annotate

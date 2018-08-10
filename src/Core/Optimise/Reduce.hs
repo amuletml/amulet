@@ -31,7 +31,7 @@ isCon s var = VarMap.member (toVar var) (cons s)
 lookupVar :: IsVar a => Scope a -> a -> Maybe (Term a)
 lookupVar s v = VarMap.lookup (toVar v) (vars s)
 
-lookupBaseVar :: IsVar a => Scope a -> a -> Maybe (Term a)
+lookupBaseVar :: forall a. IsVar a => Scope a -> a -> Maybe (Term a)
 lookupBaseVar s v = lookup v v where
   lookup u v = case (var u, var v) of
                  (Just (Atom (Ref u' _)), Just (Atom (Ref v' _)))
@@ -45,6 +45,7 @@ lookupBaseVar s v = lookup v v where
                    Just e'@(Atom (Ref v' _)) | v' < v -> e'
                    _ -> e
 
+  var :: a -> Maybe (Term a)
   var = flip VarMap.lookup (vars s) . toVar
 
 lookupRawVar :: IsVar a => Scope a -> a -> a
@@ -280,7 +281,7 @@ instance Ord a => Semigroup (PatternResult a) where
 
   (PatternComplete s) <> (PatternComplete t) = PatternComplete (s <> t)
 
-extract :: Ord a => PatternResult a -> Subst a
+extract :: PatternResult a -> Subst a
 extract PatternFail = mempty
 extract (PatternUnknown s) = s
 extract (PatternPartial s) = s

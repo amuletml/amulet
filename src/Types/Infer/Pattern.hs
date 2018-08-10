@@ -95,14 +95,15 @@ checkPattern pt@(PRecord rows ann) ty = do
   co <- unify (becausePat pt) ty (TyRows rho rowts)
   wrapPattern (PRecord rowps, mconcat caps, concat cons) (ann, ty) (TyRows rho rowts, co)
 
-checkPattern (PTuple xs ann) ty@TyTuple{} = do
-  let go (x:xs) (TyTuple a b) = do
+checkPattern pat@(PTuple xs ann) ty@TyTuple{} = do
+  let go [x] t = do
+        (p, bs, cs) <- checkPattern x t
+        pure ([p], bs, cs)
+      go (x:xs) ty = do
+        (a, b, _) <- decompose (BecauseOf pat) _TyTuple ty
         (p, bs, cs) <- checkPattern x a
         (ps, bss, css) <- go xs b
         pure (p:ps, bs <> bss, cs <> css)
-      go [x] t = do
-        (p, bs, cs) <- checkPattern x t
-        pure ([p], bs, cs)
       go _ _ = undefined
   (ps, bs, cs) <- go xs ty
   pure (PTuple ps (ann, ty), bs, cs)
@@ -148,7 +149,7 @@ inferParameter (ImplParam p) = do
   (p, tau, t, cs) <- inferPattern p
   pure (ImplParam p, Implicit tau, t, cs)
 
-boundTvs :: forall p. (Show (Var p), Ord (Var p))
+boundTvs :: forall p. Ord (Var p)
          => Pattern p -> Telescope p -> Set.Set (Var p)
 boundTvs p vs = pat p <> foldTele go vs where
   go :: Type p -> Set.Set (Var p)

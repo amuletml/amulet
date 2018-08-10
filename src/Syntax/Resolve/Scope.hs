@@ -101,37 +101,37 @@ insertN' = foldl' (\s (v, v') -> Map.insert v (SVar v') s)
 
 -- | Create a scope with one variable and evaluate the provided monad
 -- within it.
-extend :: (MonadNamey m, MonadReader Scope m) => (Var Parsed, Var Resolved) -> m a -> m a
+extend :: MonadReader Scope m => (Var Parsed, Var Resolved) -> m a -> m a
 extend (v, v') =
   local (\x -> x { varScope = Map.insert v (SVar v') (varScope x) })
 
 -- | Create a scope with one or more variables and evaluate the provided
 -- monad within it.
-extendN :: (MonadNamey m, MonadReader Scope m) => [(Var Parsed, Var Resolved)] -> m a -> m a
+extendN :: MonadReader Scope m => [(Var Parsed, Var Resolved)] -> m a -> m a
 extendN vs =
   local (\x -> x { varScope = insertN (varScope x) vs })
 
 -- | Create a scope with one type and evaluate the provided monad within
 -- it.
-extendTy :: (MonadNamey m, MonadReader Scope m) => (Var Parsed, Var Resolved) -> m a -> m a
+extendTy :: MonadReader Scope m => (Var Parsed, Var Resolved) -> m a -> m a
 extendTy (v, v') =
   local (\x -> x { tyScope = Map.insert v (SVar v') (tyScope x) })
 
 -- | Create a scope with one or more types and evaluate the provided
 -- monad within it.
-extendTyN :: (MonadNamey m, MonadReader Scope m) => [(Var Parsed, Var Resolved)] -> m a -> m a
+extendTyN :: MonadReader Scope m => [(Var Parsed, Var Resolved)] -> m a -> m a
 extendTyN vs =
   local (\x -> x { tyScope = insertN (tyScope x) vs })
 
 -- | Create a scope with one type variables and evaluate the provided
 -- monad within it.
-extendTyvar :: (MonadNamey m, MonadReader Scope m) => (Var Parsed, Var Resolved) -> m a -> m a
+extendTyvar :: MonadReader Scope m => (Var Parsed, Var Resolved) -> m a -> m a
 extendTyvar (v, v') =
   local (\x -> x { tyvarScope = Map.insert v (SVar v') (tyvarScope x) })
 
 -- | Create a scope with one or more type variables and evaluate the
 -- provided monad within it.
-extendTyvarN :: (MonadNamey m, MonadReader Scope m) => [(Var Parsed, Var Resolved)] -> m a -> m a
+extendTyvarN :: MonadReader Scope m => [(Var Parsed, Var Resolved)] -> m a -> m a
 extendTyvarN vs =
   local (\x -> x { tyvarScope = insertN (tyvarScope x) vs })
 

@@ -149,7 +149,7 @@ emitProgramWith esc = flip runState esc . emitProg where
   emitProg (Type _ cs:xs) = (++) <$> traverse emitConstructor cs <*> emitProg xs
   emitProg [] = pure []
 
-  emitConstructor :: (MonadState EscapeScope m, Occurs a) => (a, Type a) -> m LuaStmt
+  emitConstructor :: MonadState EscapeScope m => (a, Type a) -> m LuaStmt
   emitConstructor (var, ty)
     | arity ty == 0 = do
         var' <- state (pushVar var)

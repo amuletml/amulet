@@ -2,7 +2,8 @@
   , ConstraintKinds
   , OverloadedStrings
   , MultiParamTypeClasses
-  , TupleSections #-}
+  , TupleSections
+  , ScopedTypeVariables #-}
 
 {- | The resolver is the first step after parsing. It performs several key
    actions:
@@ -360,7 +361,7 @@ reType r (TyExactRows f) = TyExactRows <$> traverse (\(a, b) -> (a,) <$> reType 
 reType r (TyTuple ta tb) = TyTuple <$> reType r ta <*> reType r tb
 reType _ TyType = pure TyType
 
-reWholePattern :: MonadResolve m
+reWholePattern :: forall m. MonadResolve m
                => Pattern Parsed
                -> m ( Pattern Resolved
                     , [(Var Parsed, Var Resolved)]
@@ -372,11 +373,12 @@ reWholePattern p = do
   checkLinear ts
   pure (p', map lim vs, map lim ts)
 
-  where checkLinear = traverse_ (\vs@((_,v, _):_) -> tell (pure (wrapError p (NonLinearPattern v (map thd3 vs)))))
-                    . filter ((>1) . length)
-                    . groupBy ((==) `on` fst3)
-                    . sortOn fst3
-        lim (a, b, _) = (a, b)
+ where checkLinear :: [(Var Parsed, Var Resolved, Pattern Resolved)] -> m ()
+       checkLinear = traverse_ (\vs@((_,v, _):_) -> tell (pure (wrapError p (NonLinearPattern v (map thd3 vs)))))
+                   . filter ((>1) . length)
+                   . groupBy ((==) `on` fst3)
+                   . sortOn fst3
+       lim (a, b, _) = (a, b)
 
 rePattern :: MonadResolve m
           => Pattern Parsed

@@ -4,6 +4,7 @@
   , MultiParamTypeClasses
   , FunctionalDependencies
   , TypeFamilies
+  , ScopedTypeVariables
   #-}
 module Syntax.Subst
   ( Subst
@@ -101,7 +102,7 @@ instance Ord (Var p) => Substitutable p (TyBinder p) where
   apply s (Implicit t) = Implicit (apply s t)
   apply s (Invisible v k) = Invisible v (fmap (apply s) k)
 
-bound :: Ord (Var p) => TyBinder p -> Set.Set (Var p)
+bound :: TyBinder p -> Set.Set (Var p)
 bound Anon{} = Set.empty
 bound Implicit{} = Set.empty
 bound (Invisible v _) = Set.singleton v
@@ -111,9 +112,10 @@ s1 `compose` s2 = fmap (apply s1) s2 <> fmap (apply s2) s1
 
 newtype OccMap p = OccMap (Map.Map (Var p) Int)
 
-instance Ord (Var p) => Semigroup (OccMap p) where
+instance forall p. Ord (Var p) => Semigroup (OccMap p) where
   OccMap x <> OccMap y = OccMap (x `go` y) where
     go = Map.merge Map.preserveMissing Map.preserveMissing (Map.zipWithMatched (const (+)))
+    go :: Map.Map (Var p) Int -> Map.Map (Var p) Int -> Map.Map (Var p) Int
 
 instance Ord (Var p) => Monoid (OccMap p) where
   mempty = OccMap mempty
@@ -128,13 +130,13 @@ instance Ord (Var p) => Ixed (OccMap p) where
 instance Ord (Var p) => At (OccMap p) where
   at k f (OccMap m) = OccMap <$> Map.alterF f k m
 
-singletonOcc :: Ord (Var p) => Var p -> OccMap p
+singletonOcc :: Var p -> OccMap p
 singletonOcc v = OccMap (Map.singleton v 1)
 
 removeOccs :: Ord (Var p) => OccMap p -> Set.Set (Var p) -> OccMap p
 removeOccs (OccMap m) s = OccMap (m `Map.withoutKeys` s)
 
-foldOccMap :: Ord (Var p) => (Var p -> Int -> b -> b) -> b -> OccMap p -> b
+foldOccMap :: (Var p -> Int -> b -> b) -> b -> OccMap p -> b
 foldOccMap k b (OccMap m) = Map.foldrWithKey k b m
 
 tyVarOcc :: Ord (Var p) => Type p -> OccMap p
