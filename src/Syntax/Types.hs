@@ -28,15 +28,15 @@ newtype Telescope p =
   deriving newtype (Semigroup, Monoid)
 
 deriving instance (Show (Ann p), Show (Var p)) => Show (Telescope p)
-deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Telescope p)
-deriving instance (Ord (Ann p), Ord (Var p)) => Eq (Telescope p)
+deriving instance Ord (Var p) => Ord (Telescope p)
+deriving instance Ord (Var p) => Eq (Telescope p)
 
 type instance Index (Telescope p) = Var Resolved
 type instance IxValue (Telescope p) = Type p
-instance Ord (Var p) => Ixed (Telescope p) where
+instance Ixed (Telescope p) where
   ix k f (Telescope m) = Telescope <$> ix k f m
 
-instance Ord (Var p) => At (Telescope p) where
+instance At (Telescope p) where
   at k f (Telescope m) = Telescope <$> at k f m
 
 newtype Scope p f =
@@ -126,10 +126,10 @@ one k t = Telescope (Map.singleton (degrade k) t)
 foldTele :: Monoid m => (Type p -> m) -> Telescope p -> m
 foldTele f x = foldMap f (getTele x)
 
-mapTele :: Ord (Var p) => (Type p -> Type p) -> Telescope p -> Telescope p
+mapTele :: (Type p -> Type p) -> Telescope p -> Telescope p
 mapTele f (Telescope x) = Telescope (fmap f x)
 
-traverseTele :: (Ord (Var p), Applicative f)
+traverseTele :: Applicative f
              => (Type p -> f (Type p))
              -> Telescope p -> f (Telescope p)
 traverseTele f (Telescope x) = Telescope <$> traverse f x

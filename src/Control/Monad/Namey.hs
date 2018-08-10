@@ -120,7 +120,8 @@ genAlnum n = go (fromIntegral n) T.empty (floor (logBase 26 (fromIntegral n :: D
   go :: Double -> T.Text -> Int -> T.Text
   go n out 0 = T.snoc out (chr (97 + floor n))
   go n out p =
-    let m = case floor (n / (26 ^ p)) of
+    let m :: Int
+        m = case floor (n / (26 ^ p)) of
               0 -> 1
               x -> x
      in go (n `mod'` (26 ^ p)) (T.snoc out (chr (96 + m))) (p - 1)

@@ -123,6 +123,7 @@ library amulet
   default-language:    Haskell2010
   ghc-options: -Wextra -Wall -Wno-name-shadowing
                -Wno-implicit-prelude -Wno-missing-import-lists
+               -Wredundant-constraints -Wmonomorphism-restriction
 
   exposed-modules:     Parser
                      , Parser.Error

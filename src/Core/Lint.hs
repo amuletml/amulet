@@ -66,6 +66,7 @@ instance Pretty a => Pretty (CoreError a) where
   pretty (PatternMismatch l r) = text "Expected vars" <+> pVs l </>
                                  text "     got vars" <+> pVs r
     where pVs = hsep . punctuate comma . map (\(v, ty) -> pretty v <+> colon <+> pretty ty)
+          pVs :: [(a, Type a)] -> Doc
 
   prettyList = vsep . map pretty
 
@@ -85,7 +86,7 @@ runLint m a =
               string "for term" <#>
               pretty a
 
-runLintOK :: IsVar a => ExceptT (CoreError a) (Writer [CoreError a]) () -> Either [CoreError a] ()
+runLintOK :: ExceptT (CoreError a) (Writer [CoreError a]) () -> Either [CoreError a] ()
 runLintOK m = case runWriter (runExceptT m) of
                      (Right _, []) -> Right ()
                      (Right _, es) -> Left es
@@ -231,6 +232,7 @@ checkTerm s t@(Match e bs) = flip withContext t $ do
       checkPattern (RowsTy _ _) (PatLit RecNil) = pure mempty
       checkPattern ty' (PatLit l) = do
         let ty = litTy l
+            ty :: Type a
         if ty `apart` ty'
         then throwError (TypeMismatch ty ty')
         else pure mempty
@@ -402,7 +404,7 @@ checkTypeBoxed :: (IsVar a, MonadError (CoreError a) m)
          => Scope a -> Type a -> m ()
 checkTypeBoxed s x = checkType s x >> checkNoUnboxed x
 
-checkNoUnboxed :: (IsVar a, MonadError (CoreError a) m) => Type a -> m ()
+checkNoUnboxed :: MonadError (CoreError a) m => Type a -> m ()
 checkNoUnboxed ValuesTy{} = throwError IllegalUnbox
 checkNoUnboxed _ = pure ()
 
@@ -412,11 +414,11 @@ unknownVar = fromVar (CoVar (-100) "?" ValueVar)
 unknownTyvar :: IsVar a => Type a
 unknownTyvar = VarTy unknownVar
 
-tryContext :: (IsVar a, Pretty b, MonadError (CoreError a) m, MonadWriter [CoreError a] m)
+tryContext :: (Pretty b, MonadError (CoreError a) m, MonadWriter [CoreError a] m)
             => b -> m () -> m ()
 tryContext c m = m `catchError` (tell . pure . wrapContext c)
 
-withContext :: (IsVar a, Pretty b, MonadError (CoreError a) m, MonadWriter [CoreError a] m)
+withContext :: (Pretty b, MonadError (CoreError a) m)
             => m c -> b -> m c
 withContext m c = m `catchError` (throwError . wrapContext c)
 

@@ -63,14 +63,20 @@ newtypeWorker :: forall a. IsVar a => (a, Type a) -> Spine a -> Namey (Stmt a, C
 newtypeWorker (cn, tp) (Spine tys cod) = do
   let CoVar nam id _ = toVar cn
       (Irrelevant, dom) = last tys
-  let cname = fromVar (CoVar nam id ValueVar)
+
+      cname :: a
+      cname = fromVar (CoVar nam id ValueVar)
+
       phi = SameRepr dom cod
-  let wrap ((Relevant v, c):ts) ex = Atom . Lam (TypeArgument v c) <$> wrap ts ex
+
+      wrap ((Relevant v, c):ts) ex = Atom . Lam (TypeArgument v c) <$> wrap ts ex
       wrap [(Irrelevant, c)] ex = do
         v <- fresh ValueVar
         Atom . Lam (TermArgument (fromVar v) c) <$> pure (ex (fromVar v) c)
       wrap _ _ = undefined
+
       work var ty = Cast (Ref var ty) phi
+
       work :: a -> Type a -> Term a
       wrap :: [(BoundTv a, Type a)] -> (a -> Type a -> Term a) -> Namey (Term a)
 

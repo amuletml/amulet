@@ -76,13 +76,13 @@ defaultContext = [CtxBlock (SourcePos "" 0 1) False Nothing]
 -- | Track our current context stack. This consumes a token and builds up
 -- the context stack, returning any additional tokens which should be
 -- emitted.
-handleContext :: (Applicative f, Monoid (f ParseError), MonadWriter (f ParseError) m)
+handleContext :: (Applicative f, MonadWriter (f ParseError) m)
               => Token -> [Context]
               -> m (PendingState, [Context])
 handleContext = handleContextBlock True
 
 -- Handles the indentation sensitive parts of the context tracker
-handleContextBlock :: (Applicative f, Monoid (f ParseError), MonadWriter (f ParseError) m)
+handleContextBlock :: (Applicative f, MonadWriter (f ParseError) m)
                    => Bool -> Token -> [Context]
                    -> m (PendingState, [Context])
 handleContextBlock needsSep  tok@(Token tk tp te) c =

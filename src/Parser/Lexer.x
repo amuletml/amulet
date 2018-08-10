@@ -1,5 +1,5 @@
 {
-{-# OPTIONS_GHC -Wwarn -Wno-unused-imports #-}
+{-# OPTIONS_GHC -Wwarn -Wno-unused-imports -Wno-monomorphism-restriction #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Parser.Lexer
   ( lexerScan, lexerContextScan

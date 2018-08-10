@@ -374,7 +374,7 @@ instance Spanned (Ann p) => Spanned (Expr p) where
 
   annotation (ExprWrapper _ _ a) = annotation a
 
-instance (Spanned (Ann p), Data (Ann p), Data (Var p), Data p) => Spanned (Parameter p) where
+instance (Data (Ann p), Data (Var p), Data p) => Spanned (Parameter p) where
   annotation (PatParam p) = annotation p
   annotation (ImplParam p) = annotation p
 

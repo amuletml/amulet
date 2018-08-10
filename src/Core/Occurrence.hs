@@ -82,13 +82,14 @@ tagOccursMap :: IsVar a => [AnnStmt b a] -> [AnnStmt OccursMap a]
 tagOccursMap = snd . tagOccurStmt (flip const) const
 
 -- | Tag some statements with occurrence information
-tagOccurStmt :: forall a a' b b'. (IsVar a, IsVar a')
+tagOccurStmt :: forall a a' b b'. IsVar a
              => (b -> OccursMap -> b')  -- ^ Build a new annotation from the set of free variables
              -> (a -> Occurrence -> a') -- ^ Build a new variable from its occurrence.
              -> [AnnStmt b a]           -- ^ The statements to tag
              -> (OccursMap, [AnnStmt b' a'])
 tagOccurStmt ann var = tagStmt where
   conv = fmap (`var` defOcc)
+  conv :: Type a -> Type a'
   var' v = var v . occurrenceIn v
 
   tagStmt :: [AnnStmt b a] -> (OccursMap, [AnnStmt b' a'])
@@ -116,7 +117,7 @@ tagOccurStmt ann var = tagStmt where
     in (fv, StmtLet (Many (zipWith (\(v, ty, _) e -> (var' v fvs, conv ty, e)) vs vs')):xs')
 
 -- | Tag a term with occurrence information
-tagOccurTerm :: forall a a' b b'. (IsVar a, IsVar a')
+tagOccurTerm :: forall a a' b b'. IsVar a
              => (b -> OccursMap -> b')  -- ^ Build a new annotation from the set of free variables
              -> (a -> Occurrence -> a') -- ^ Build a new variable from its occurrence.
              -> AnnTerm b a             -- ^ The term to tag

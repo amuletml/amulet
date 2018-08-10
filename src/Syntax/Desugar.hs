@@ -90,8 +90,7 @@ desugarProgram = traverse statement where
                a
   expr (OpenIn _ e _) = expr e
 
-  buildTuple :: MonadNamey m
-             => Ann Resolved
+  buildTuple :: Ann Resolved
              -> Maybe (Expr Resolved)
              -> ([Pattern Resolved], [(Var Resolved, Expr Resolved)], [Expr Resolved])
              -> m ([Pattern Resolved], [(Var Resolved, Expr Resolved)], [Expr Resolved])

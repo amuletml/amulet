@@ -88,6 +88,7 @@ substituteInTys = term where
   ptrn m (PatValues xs) = PatValues (map (ptrn m) xs)
   ptrn _ l@PatLit{} = l
 
+  gotype :: VarMap.Map (Type a) -> Type a -> Type a
   gotype = substituteInType
 
 -- | Substitute a type variable with some other type inside a type

@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, ScopedTypeVariables #-}
 module Core.Builtin where
 
 import Data.Text ()
@@ -75,13 +75,14 @@ tyvarA, tyvarB :: CoVar
 tyvarA = CoVar (-30) "a" TypeVar
 tyvarB = CoVar (-31) "b" TypeVar
 
-builtinVarList :: (IsVar a, IsVar b) => [(a, Type b)]
+builtinVarList :: forall a b. (IsVar a, IsVar b) => [(a, Type b)]
 builtinVarList = vars where
   op x t = (fromVar x, t)
 
   tupTy = ValuesTy
   arrTy = ForallTy Irrelevant
 
+  intOp, floatOp, stringOp, intCmp, floatCmp :: Type b
   intOp = tupTy [tyInt, tyInt] `arrTy` tyInt
   floatOp = tupTy [tyFloat, tyFloat] `arrTy` tyFloat
   stringOp = tupTy [tyString, tyString] `arrTy` tyString
@@ -90,8 +91,10 @@ builtinVarList = vars where
 
   cmp = ForallTy (Relevant name) StarTy $ tupTy [VarTy name, VarTy name] `arrTy` tyBool
 
+  name :: b
   name = fromVar tyvarA
 
+  vars :: [(a, Type b)]
   vars = [ op vOpAdd intOp, op vOpSub intOp, op vOpMul intOp, op vOpDiv intOp, op vOpExp intOp
          , op vOpLt intCmp, op vOpGt intCmp, op vOpLe intCmp, op vOpGe intCmp
 
