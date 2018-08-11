@@ -2,7 +2,7 @@ do
   local __builtin_unit = {
     __tag = "__builtin_unit"
   }
-  local de = {
+  local dj = {
     _1 = function (x)
       return x
     end,
@@ -10,10 +10,10 @@ do
       return x
     end
   }
-  local d = de._1
-  local e = de._2
+  local d = dj._1
+  local e = dj._2
   local bottom = nil
-  local dx = bottom({
+  local ec = bottom({
     a = 3,
     b = 5,
     c = 6,

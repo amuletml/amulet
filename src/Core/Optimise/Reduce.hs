@@ -207,6 +207,9 @@ reduceTerm s (TyApp (Lam (TypeArgument var _) body) tp) = {-# SCC "Reduce.beta_t
 reduceTerm _ (Let (One (v, _, term)) (Atom (Ref v' _)))
   | v == v' = {-# SCC "Reduce.eta_let" #-} term
 
+reduceTerm _ (Let (One (_, ty, term)) (Atom (Lit Unit)))
+  | ty == tyUnit = {-# SCC "Reduce.eta_let" #-} term
+
 -- Coercion reduction
 reduceTerm s (Cast (Ref v _) c)
   | Just (Cast a c') <- lookupVar s v
