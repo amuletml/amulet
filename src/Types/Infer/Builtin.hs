@@ -43,7 +43,7 @@ builtinsEnv = envOf (scopeFromList builtin) where
   cmp = TyForall name (Just TyType) $ TyVar name `TyArr` (TyVar name `TyArr` tyBool)
     where name = TvName (TgInternal "a")-- TODO: This should use TvName/TvFresh instead
   builtin
-    = [ op "+" intOp, op "-" intOp, op "*" intOp, op "/" intOp, op "**" intOp
+    = [ op "+" intOp, op "-" intOp, op "*" intOp, op "/" (tyInt `TyArr` (tyInt `TyArr` tyFloat)), op "**" intOp
       , op "+." floatOp, op "-." floatOp, op "*." floatOp, op "/." floatOp, op "**." floatOp
       , op "^" stringOp
       , op "<" intCmp, op ">" intCmp, op ">=" intCmp, op "<=" intCmp

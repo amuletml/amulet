@@ -95,7 +95,7 @@ builtinVarList = vars where
   name = fromVar tyvarA
 
   vars :: [(a, Type b)]
-  vars = [ op vOpAdd intOp, op vOpSub intOp, op vOpMul intOp, op vOpDiv intOp, op vOpExp intOp
+  vars = [ op vOpAdd intOp, op vOpSub intOp, op vOpMul intOp, op vOpDiv (tupTy [tyInt, tyInt] `arrTy` tyFloat), op vOpExp intOp
          , op vOpLt intCmp, op vOpGt intCmp, op vOpLe intCmp, op vOpGe intCmp
 
          , op vOpAddF floatOp, op vOpSubF floatOp, op vOpMulF floatOp, op vOpDivF floatOp, op vOpExpF floatOp

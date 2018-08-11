@@ -92,7 +92,7 @@ builtinOps =
     [ (TgInternal "+", tyInt)
     , (TgInternal "-", tyInt)
     , (TgInternal "*", tyInt)
-    , (TgInternal "/", tyInt)
+    , (TgInternal "/", tyFloat)
     , (TgInternal "**", tyInt)
     , (TgInternal "+.", tyFloat)
     , (TgInternal "-.", tyFloat)
