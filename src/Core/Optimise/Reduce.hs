@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, ScopedTypeVariables #-}
+{-# LANGUAGE OverloadedStrings, ScopedTypeVariables, ViewPatterns #-}
 
 module Core.Optimise.Reduce
   ( Scope(..)
@@ -209,6 +209,19 @@ reduceTerm _ (Let (One (v, _, term)) (Atom (Ref v' _)))
 
 reduceTerm _ (Let (One (_, ty, term)) (Atom (Lit Unit)))
   | ty == tyUnit = {-# SCC "Reduce.eta_let" #-} term
+
+-- Eta reduction (let case) for single constructor types which
+-- take no arguments
+reduceTerm s (Let (One (_, ty, term)) (Atom (Ref _ ty')))
+  -- We need the types to be equivalent and to have a single, no-args constructor
+  | ty `unifyClosed` ty'
+  , Just tyName <- unwrapTy ty
+  , Just [(_, unwrapTy -> Just _)] <- VarMap.lookup (toVar tyName) (types s)
+  = {-# SCC "Reduce.eta_let" #-} term
+  where
+    unwrapTy (ForallTy Relevant{} _ t) = unwrapTy t
+    unwrapTy (ConTy v) = Just v
+    unwrapTy _ = Nothing
 
 -- Coercion reduction
 reduceTerm s (Cast (Ref v _) c)
