@@ -434,6 +434,10 @@ lowerLet bs =
         ex' <- lowerPolyBind ty' ex
 
         case boundWith p of
+          [] -> do
+            -- Generate `let x = match expr with | ... -> ()
+            var <- fresh ValueVar
+            pure . One . (var, C.tyUnit, ) <$> patternWrap pos p ts ex' ty' C.tyUnit (Atom (Lit Unit)) C.tyUnit
           [bind] ->
             -- Generate `let x = match expr with | ... x' ... -> x`
             pure <$> patternExtract pos p ts ex' ty' (lowerType (boundVarMap Map.! fst bind)) bind
@@ -462,21 +466,36 @@ lowerLet bs =
         let var' = mkVal var
             innerTy' = lowerType innerTy
         pvar@(CoVar vn vt _) <- freshFrom var'
-        p' <- lowerPat (stripPtrn (TvName var) (TvName (TgName vt vn)) p)
+        let p' = stripPtrn (TvName var) (TvName (TgName vt vn)) p
 
         -- Generate `let x = match test with | ... x' ... -> x`
-        vex <- flip runContT pure $ do
+        One  . (var', outerTy, ) <$> patternWrap pos p' ts test ty outerTy (Atom (Ref pvar innerTy')) innerTy'
+
+      -- | Wrap an expression in a pattern match, generating the
+      -- appropriate type lambdas and performing correct substitutions.
+      patternWrap :: MonadLower m
+                     -- | The pattern's position, the pattern and all bound vars
+                  => Span -> Pattern Typed -> [(CoVar, Type)]
+                  -> Term -> Type -- ^ The variable we're binding from and its type
+                  -> Type -- ^ The quantified variable we're binding to's type
+                  -> Term -> Type -- ^ The inner term and its resulting type
+                  -> m Term
+      patternWrap pos p ts test ty outerTy inner innerTy = do
+        p' <- lowerPat p
+
+        -- Generate `let x = match test with | ... x' ... -> x`
+        flip runContT pure $ do
           test' <- onAtom test ty
           genWrapper id mempty test' ty (requiredVars outerTy) $ \subst ptrnTy res -> do
-            fail <- patternMatchingFail pos ptrnTy innerTy'
+            fail <- patternMatchingFail pos ptrnTy innerTy
 
             -- We substitute the whole match to use our new type arguments, as it's
             -- easier than substituting each pattern + pattern binds
             pure . substituteInTys subst $ C.Match res
-              [ C.Arm { _armPtrn = p', _armTy = ptrnTy, _armBody = Atom (Ref pvar innerTy')
+              [ C.Arm { _armPtrn = p', _armTy = ptrnTy, _armBody = inner
                       , _armVars = patternVars p', _armTyvars = ts }
               , fail ]
-        pure (One (var', outerTy, vex))
+
 
       requiredVars :: Type -> VarSet.Set
       requiredVars (ForallTy (Relevant v) _ rest) = VarSet.insert v (requiredVars rest)

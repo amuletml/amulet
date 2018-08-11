@@ -17,13 +17,13 @@ do
     local a = _do(1)
     local dq = bottom
     if dq.__tag == "None" then
-      local fx = _do(a)
+      local ga = _do(a)
       local dn = bottom
-      return dn(fx)
+      return dn(ga)
     elseif dq.__tag == "Some" then
-      local fy = _do(a + dq[1] * 2)
+      local gb = _do(a + dq[1] * 2)
       local dn = bottom
-      return dn(fy)
+      return dn(gb)
     end
   end)()
 end

@@ -25,9 +25,9 @@ do
         return cv(2)
       end)
       local cm = __builtin_force
-      local dn = cm(ct)
+      local dq = cm(ct)
       local cu = bottom
-      return cu(dn)
+      return cu(dq)
     else
       return bottom(false)
     end

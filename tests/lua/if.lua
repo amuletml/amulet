@@ -6,13 +6,13 @@ do
   local bd = (function ()
     local bb = bottom
     if bb(1) then
-      local bh = bb(2)
+      local bk = bb(2)
       local ba = bottom
-      return ba(bh)
+      return ba(bk)
     else
-      local bi = bb(3)
+      local bl = bb(3)
       local ba = bottom
-      return ba(bi)
+      return ba(bl)
     end
   end)()
 end
