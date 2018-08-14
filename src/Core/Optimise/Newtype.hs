@@ -87,17 +87,20 @@ newtypeWorker (cn, tp) (Spine tys cod) = do
 goBinding :: forall a. IsVar a => V.Map (Atom a) -> V.Map (Coercion a) -> [(a, Type a, Term a)] -> Namey [(a, Type a, Term a)]
 goBinding ss m = traverse (third3A (fmap (substitute ss) . goTerm)) where
   goTerm :: Term a -> Namey (Term a)
-  goTerm (Atom x) = Atom <$> goAtom x
-  goTerm (App f x) = App <$> goAtom f <*> goAtom x
+  goTerm e@Atom{}   = pure e
+  goTerm e@App{}    = pure e
+  goTerm e@Extend{} = pure e
+  goTerm e@Values{} = pure e
+  goTerm e@Values{} = pure e
+  goTerm e@Cast{}   = pure e
+  goTerm e@TyApp{}  = pure e
+
   goTerm (Lam arg e) = Lam arg <$> goTerm e
   goTerm (Let (Many vs) e) = Let . Many <$> goBinding ss m vs <*> goTerm e
   goTerm (Let (One (v, t, e)) b) = do
     e' <- goTerm e
     Let (One (v, t, e')) <$> goTerm b
-  goTerm (Extend a as) = Extend <$> goAtom a <*> traverse (third3A goAtom) as
-  goTerm (Values xs) = Values <$> traverse goAtom xs
-  goTerm (TyApp f t) = TyApp <$> goAtom f <*> pure t
-  goTerm (Cast f t) = Cast <$> goAtom f <*> pure t
+
   goTerm (Match a x) = case newtypeMatch m x of
     Just (phi, Arm { _armPtrn = Destr _ p, _armBody = bd, _armVars = vs, _armTyvars = tvs }) -> do
       var <- fresh ValueVar
@@ -105,10 +108,7 @@ goBinding ss m = traverse (third3A (fmap (substitute ss) . goTerm)) where
       bd' <- goTerm (Match (Ref (fromVar var) castCodomain) [Arm { _armPtrn = p, _armTy = castCodomain
                                                                  , _armBody = bd, _armVars = vs, _armTyvars = tvs }])
       pure $ Let (One (fromVar var, castCodomain, Cast a phi)) bd'
-    _ -> Match <$> goAtom a <*> traverse (armBody %%~ goTerm) x
-
-  goAtom :: Atom a -> Namey (Atom a)
-  goAtom = pure
+    _ -> Match a <$> traverse (armBody %%~ goTerm) x
 
 data Spine a =
   Spine [(BoundTv a, Type a)] (Type a)
