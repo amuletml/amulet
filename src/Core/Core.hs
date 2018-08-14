@@ -20,7 +20,6 @@ import GHC.Generics
 -- | Atoms.
 data AnnAtom b a
   = Ref a (Type a) -- ^ A reference to a variable, with an explicit type
-  | Lam (Argument a) (AnnTerm b a) -- ^ A lambda abstraction, with explicit domain, encompassing a 'Term'.
   | Lit Literal -- ^ A literal.
   deriving (Eq, Show, Ord, Functor, Generic)
 
@@ -37,6 +36,7 @@ data Argument a
 data AnnTerm b a
   = AnnAtom b (AnnAtom b a) -- ^ Embed an 'Atom' into a 'Term'
   | AnnApp b (AnnAtom b a) (AnnAtom b a) -- ^ Eliminate a 'Lam' expecting a 'TermArgument'
+  | AnnLam b (Argument a) (AnnTerm b a) -- ^ A lambda abstraction, with explicit domain, encompassing a 'Term'.
 
   | AnnLet b (AnnBinding b a) (AnnTerm b a) -- ^ Bind some variables within the scope of some 'Term'
   | AnnMatch b (AnnAtom b a) [AnnArm b a] -- ^ Pattern matching
@@ -51,7 +51,7 @@ data AnnTerm b a
 -- | An 'AnnTerm' with '()' annotations.
 type Term = AnnTerm ()
 
-{-# COMPLETE Atom, App, Let, Match, Extend, Values, TyApp, Cast #-}
+{-# COMPLETE Atom, App, Lam, Let, Match, Extend, Values, TyApp, Cast #-}
 
 -- | Match an 'Atom' with '()' annotation
 pattern Atom :: Atom a -> Term a
@@ -60,6 +60,10 @@ pattern Atom a = AnnAtom () a
 -- | Match an 'App' with '()' annotation
 pattern App :: Atom a -> Atom a -> Term a
 pattern App f x = AnnApp () f x
+
+-- | Match an 'App' with '()' annotation
+pattern Lam :: Argument a -> Term a -> Term a
+pattern Lam f x = AnnLam () f x
 
 -- | Match a 'Let' with '()' annotation
 pattern Let :: Binding a -> Term a -> Term a
@@ -176,16 +180,17 @@ type Stmt = AnnStmt ()
 
 instance Pretty a => Pretty (Atom a) where
   pretty (Ref v ty) = pretty v <> scomment (string ":[" <> pretty ty <> string "]")
-  pretty (Lam (TypeArgument v t) c)
-    = soperator (char 'Λ') <+> parens (pretty v <+> colon <+> pretty t) <> nest 2 (dot </> pretty c)
-  pretty (Lam (TermArgument v t) c)
-    = soperator (char 'λ') <+> parens (pretty v <+> colon <+> pretty t) <> nest 2 (dot </> pretty c)
   pretty (Lit l) = pretty l
 
 instance Pretty a => Pretty (Term a) where
   pretty (Atom a) = pretty a
   pretty (App f x) = pretty f <+> pretty x
   pretty (TyApp f t) = pretty f <+> braces (pretty t)
+
+  pretty (Lam (TypeArgument v t) c)
+    = soperator (char 'Λ') <+> parens (pretty v <+> colon <+> pretty t) <> nest 2 (dot </> pretty c)
+  pretty (Lam (TermArgument v t) c)
+    = soperator (char 'λ') <+> parens (pretty v <+> colon <+> pretty t) <> nest 2 (dot </> pretty c)
 
   pretty (Let (One x) e) = keyword "let" <+> braces (space <> pprLet1 x <> space) <+> keyword "in" <#> pretty e
   pretty (Let (Many xs) e) = keyword "let rec" <+> pprLet xs </> (keyword "in" <+> pretty e)
@@ -289,13 +294,13 @@ instance Pretty a => Pretty [Stmt a] where
 
 freeInAtom :: IsVar a => AnnAtom b a -> VarSet.Set
 freeInAtom (Ref v _) = VarSet.singleton (toVar v)
-freeInAtom (Lam (TermArgument v _) e) = VarSet.delete (toVar v) (freeIn e)
-freeInAtom (Lam TypeArgument{} e) = freeIn e
 freeInAtom (Lit _) = mempty
 
 freeIn :: IsVar a => AnnTerm b a -> VarSet.Set
 freeIn (AnnAtom _ a) = freeInAtom a
 freeIn (AnnApp _ f x) = freeInAtom f <> freeInAtom x
+freeIn (AnnLam _ (TermArgument v _) e) = VarSet.delete (toVar v) (freeIn e)
+freeIn (AnnLam _ TypeArgument{} e) = freeIn e
 freeIn (AnnLet _ (One v) e) = VarSet.difference (freeIn e <> freeIn (thd3 v)) (VarSet.singleton (toVar (fst3 v)))
 freeIn (AnnLet _ (Many vs) e) = VarSet.difference (freeIn e <> foldMap (freeIn . thd3) vs) (VarSet.fromList (map (toVar . fst3) vs))
 freeIn (AnnMatch _ e bs) = freeInAtom e <> foldMap freeInBranch bs where
@@ -320,11 +325,11 @@ freeInTy NilTy = mempty
 occursInAtom :: IsVar a => a -> Atom a -> Bool
 occursInAtom v (Ref v' _) = toVar v == toVar v'
 occursInAtom _ (Lit _) = False
-occursInAtom v (Lam _ b) = occursInTerm v b
 
 occursInTerm :: IsVar a => a -> Term a -> Bool
 occursInTerm v (Atom a) = occursInAtom v a
 occursInTerm v (App f x) = occursInAtom v f || occursInAtom v x
+occursInTerm v (Lam _ b) = occursInTerm v b
 occursInTerm v (TyApp f _) = occursInAtom v f
 occursInTerm v (Cast f _) = occursInAtom v f
 occursInTerm v (Let (One va) e) = occursInTerm v (thd3 va) || occursInTerm v e
@@ -396,6 +401,7 @@ relates (Quantified v co c) = do
 extractAnn :: AnnTerm b a -> b
 extractAnn (AnnAtom b _)     = b
 extractAnn (AnnApp b _ _)    = b
+extractAnn (AnnLam b _ _)    = b
 extractAnn (AnnLet b _ _)    = b
 extractAnn (AnnMatch b _ _)  = b
 extractAnn (AnnExtend b _ _) = b

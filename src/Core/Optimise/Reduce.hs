@@ -66,12 +66,12 @@ transformOver :: IsVar a => Scope a -> Term a -> Term a
 transformOver = transT where
   mapA _ t@Ref{} = t
   mapA _ t@Lit{} = t
-  mapA s (Lam v b) = Lam v (transT s b)
 
   transA s = reduceAtom s . mapA s
 
   mapT s (Atom a) = Atom (transA s a)
   mapT s (App f a) = App (transA s f) (transA s a)
+  mapT s (Lam v b) = Lam v (transT s b)
   mapT s (TyApp f t) = TyApp (transA s f) t
   mapT s (Cast f t) = Cast (transA s f) t
   mapT s (Extend t rs) = Extend (transA s t) (map (third3 (transA s)) rs)
@@ -109,12 +109,6 @@ reducePass = reduceStmts (Scope mempty mempty mempty) where
     in x:reduceStmts s' xs
 
 reduceAtom :: IsVar a => Scope a -> Atom a -> Atom a
-
--- Eta conversion (function case)
-reduceAtom _ (Lam (TermArgument var _) (App r (Ref var' _)))
-  | var == var' = {-# SCC "Reduce.eta_term" #-} r
-reduceAtom _ (Lam (TypeArgument var _) (TyApp r (VarTy var')))
-  | var == var' = {-# SCC "Reduce.eta_type" #-} r
 
 -- Beta reduction (let case)
 reduceAtom s a@(Ref v _) = {-# SCC "Reduce.beta_let" #-}
@@ -198,10 +192,16 @@ reduceTerm s (Match t bs) = {-# SCC "Reduce.fold_cases" #-}
           unifyWith sol vty aty
 
 -- Beta reduction (function case)
-reduceTerm s (App (Lam (TermArgument var ty) body) ex) = {-# SCC "Reduce.beta_function" #-}
-  reduceTerm s $ Let (One (var, ty, Atom ex)) body
-reduceTerm s (TyApp (Lam (TypeArgument var _) body) tp) = {-# SCC "Reduce.beta_type_function" #-}
-  reduceTerm s (substituteInTys (VarMap.singleton (toVar var) tp) body)
+-- reduceTerm s (App (Lam (TermArgument var ty) body) ex) = {-# SCC "Reduce.beta_function" #-}
+--   reduceTerm s $ Let (One (var, ty, Atom ex)) body
+-- reduceTerm s (TyApp (Lam (TypeArgument var _) body) tp) = {-# SCC "Reduce.beta_type_function" #-}
+--   reduceTerm s (substituteInTys (VarMap.singleton (toVar var) tp) body)
+
+-- Eta conversion (function case)
+reduceTerm _ (Lam (TermArgument var _) (App r (Ref var' _)))
+  | var == var' = {-# SCC "Reduce.eta_term" #-} Atom r
+reduceTerm _ (Lam (TypeArgument var _) (TyApp r (VarTy var')))
+  | var == var' = {-# SCC "Reduce.eta_type" #-} Atom r
 
 -- Eta reduction (let case)
 reduceTerm _ (Let (One (v, _, term)) (Atom (Ref v' _)))
@@ -433,4 +433,3 @@ trivialAtom :: Atom a -> Bool
 trivialAtom Ref{} = True
 trivialAtom (Lit (Str t)) = T.length t <= 8
 trivialAtom (Lit _) = True
-trivialAtom (Lam _ _) = False

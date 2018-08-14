@@ -56,15 +56,14 @@ sinkStmts s (Type v cases:xs) =
   let s' = s { arity = A.extendPureCtors (arity s) cases }
   in Type v cases:sinkStmts s' xs
 
-sinkAtom :: IsVar a => SinkState a -> AnnAtom VarSet.Set a -> Atom a
-sinkAtom _ (Lit l) = Lit l
-sinkAtom _ (Ref v ty) = Ref v ty
-sinkAtom s (Lam var term) = Lam var (sinkTerm s term)
+sinkAtom :: AnnAtom VarSet.Set a -> Atom a
+sinkAtom (Lit l) = Lit l
+sinkAtom (Ref v ty) = Ref v ty
 
 sinkTerm :: IsVar a => SinkState a -> AnnTerm VarSet.Set a -> Term a
-sinkTerm s (AnnAtom _ a) = flushBinds (sinkable s) (Atom (sinkAtom (nullBinds s) a))
-sinkTerm s (AnnApp _ f x) = flushBinds (sinkable s) (App (sinkAtom s' f) (sinkAtom s' x))
-  where s' = nullBinds s
+sinkTerm s (AnnAtom _ a) = flushBinds (sinkable s) (Atom (sinkAtom a))
+sinkTerm s (AnnApp _ f x) = flushBinds (sinkable s) (App (sinkAtom f) (sinkAtom x))
+sinkTerm s (AnnLam _ var term) = Lam var (sinkTerm s term)
 
 sinkTerm s (AnnLet _ (One b@(v, ty, e)) r)
   -- If we're pure, add it to the sink set
@@ -93,15 +92,14 @@ sinkTerm s (AnnLet _ (Many vs) r) =
 
 sinkTerm s (AnnMatch _ t bs) =
   let (fs, ts:bss) = partitionBinds (sinkable s) (freeInAtom t : map (extractAnn . view armBody) bs)
-      t' = sinkAtom (nullBinds s) t
+      t' = sinkAtom t
       bs' = zipWith (\fv -> armBody %~ sinkTerm (s { sinkable = fv })) bss bs
   in flushBinds fs $ flushBinds ts $ Match t' bs'
 
-sinkTerm s (AnnTyApp _ f ty) = flushBinds (sinkable s) (TyApp (sinkAtom (nullBinds s) f) ty)
-sinkTerm s (AnnExtend _ f fs) = flushBinds (sinkable s) (Extend (sinkAtom s' f) (map (third3 (sinkAtom s')) fs))
-  where s' = nullBinds s
-sinkTerm s (AnnValues _ xs) = flushBinds (sinkable s) (Values (map (sinkAtom (nullBinds s)) xs))
-sinkTerm s (AnnCast _ f co) = flushBinds (sinkable s) (Cast (sinkAtom (nullBinds s) f) co)
+sinkTerm s (AnnTyApp _ f ty) = flushBinds (sinkable s) (TyApp (sinkAtom f) ty)
+sinkTerm s (AnnExtend _ f fs) = flushBinds (sinkable s) (Extend (sinkAtom f) (map (third3 sinkAtom) fs))
+sinkTerm s (AnnValues _ xs) = flushBinds (sinkable s) (Values (map sinkAtom xs))
+sinkTerm s (AnnCast _ f co) = flushBinds (sinkable s) (Cast (sinkAtom f) co)
 
 flushBinds :: [Sinkable a] -> Term a -> Term a
 flushBinds [] t = t

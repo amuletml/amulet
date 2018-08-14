@@ -60,9 +60,6 @@ deadCodePass = snd . freeS emptyScope where
   freeA :: IsVar a => ArityScope -> Atom a -> (VarSet.Set, Atom a)
   freeA _ t@(Ref v _)= (VarSet.singleton (toVar v), t)
   freeA _ t@Lit{} = (mempty, t)
-  freeA s (Lam a b) =
-    let (fb, b') = freeT s b
-     in (argVar a `VarSet.delete` fb, Lam a b')
 
   freeT :: IsVar a => ArityScope -> Term a -> (VarSet.Set, Term a)
   freeT s (Atom a) = Atom <$> freeA s a
@@ -71,6 +68,9 @@ deadCodePass = snd . freeS emptyScope where
   freeT s (Cast f t) = Cast <$> freeA s f <*> pure t
   freeT s (Extend t rs) = Extend <$> freeA s t <*> traverse (third3A (freeA s)) rs
   freeT s (Values xs) = Values <$> traverse (freeA s) xs
+  freeT s (Lam a b) =
+    let (fb, b') = freeT s b
+     in (argVar a `VarSet.delete` fb, Lam a b')
   freeT s (Let (One vs@(v, ty, e)) b) =
     let s' = extendPureLets s [vs]
         (fe, e') = freeT s e

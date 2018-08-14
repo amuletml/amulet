@@ -28,12 +28,11 @@ do
   end
   local main = (function ()
     local go
-    local oh = to_string
     go = function (st)
       if st > 5 then
         return print("]")
       else
-        io_write("'" .. oh(st) .. "', ")
+        io_write("'" .. to_string(st) .. "', ")
         return go(st + 1)
       end
     end

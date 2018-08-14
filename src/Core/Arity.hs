@@ -37,20 +37,26 @@ varArity var = fromMaybe impureTerm . VarMap.lookup (toVar var) . pureArity wher
 emptyScope :: ArityScope
 emptyScope = ArityScope opArity
 
--- | Compute the arity of a function
+-- | Compute the arity of a term
 atomArity :: IsVar a => ArityScope -> AnnAtom b a -> Arity
 atomArity s (Ref r _) = varArity r s
-atomArity s (Lam _ (AnnAtom _ a)) = mapArity succ (atomArity s a)
-atomArity _ (Lam _ _) = Arity 1 False
 atomArity _ (Lit _) = Arity 0 True
+
+termArity :: IsVar a => ArityScope -> AnnTerm b a -> Arity
+termArity s (AnnAtom _ a) = atomArity s a
+termArity s (AnnApp   _ a _) = mapArity pred (atomArity s a)
+termArity s (AnnTyApp  _ a _) = mapArity pred (atomArity s a)
+termArity s (AnnLam _ _ b) = mapArity succ (termArity s b)
+termArity _ _ = Arity 0 False
 
 -- | Determine if the given term can be evaluated without side effects
 isPure :: IsVar a => ArityScope -> AnnTerm b a -> Bool
-isPure _ AnnAtom{}    = True
-isPure _ AnnExtend{}  = True
+isPure _ AnnAtom{}   = True
+isPure _ AnnExtend{} = True
 isPure _ AnnValues{} = True
-isPure _ AnnTyApp{}   = True
-isPure _ AnnCast{}    = True
+isPure _ AnnTyApp{}  = True
+isPure _ AnnCast{}   = True
+isPure _ AnnLam{}    = True
 isPure s (AnnLet _ (One v) e) = isPure s e && isPure s (thd3 v)
 isPure s (AnnLet _ (Many vs) e) = isPure s e && all (isPure s . thd3) vs
 isPure s (AnnMatch _ _ bs) = all (isPure s . view armBody) bs
@@ -61,14 +67,7 @@ isPureA (Arity a p) | p = a >= 0
                     | otherwise = a > 0
 
 extendPureLets :: IsVar a => ArityScope -> [(a, Type a, AnnTerm b a)] -> ArityScope
-extendPureLets s vs = s
-  { pureArity = foldr (\(v, _, e) p ->
-                         case e of
-                           AnnAtom  _ a    -> maybeInsert v (atomArity s a) p
-                           AnnApp   _ a _  -> maybeInsert v (mapArity pred (atomArity s a)) p
-                           AnnTyApp  _ a _ -> maybeInsert v (mapArity pred (atomArity s a)) p
-                           _ -> p) (pureArity s) vs
-  }
+extendPureLets s vs = s { pureArity = foldr (\(v, _, e) p -> maybeInsert v (termArity s e) p) (pureArity s) vs }
   where
     maybeInsert v a m
       | defArity a > 0 = VarMap.insert (toVar v) a m

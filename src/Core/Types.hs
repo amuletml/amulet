@@ -29,8 +29,6 @@ arity _ = 0
 
 approximateAtomType :: IsVar a => Atom a -> Maybe (Type a)
 approximateAtomType (Ref _ t) = pure t
-approximateAtomType (Lam (TypeArgument v k) f) = ForallTy (Relevant v) k <$> approximateType f
-approximateAtomType (Lam (TermArgument _ t) f) = ForallTy Irrelevant t <$> approximateType f
 approximateAtomType (Lit l) = pure . fmap fromVar $ case l of
   Int{} -> tyInt
   Float{} -> tyFloat
@@ -46,6 +44,8 @@ approximateType (Cast _ phi) = snd <$> relates phi
 approximateType (App f _) = do
   ForallTy _ _ d <- approximateAtomType f
   pure d
+approximateType (Lam (TypeArgument v k) f) = ForallTy (Relevant v) k <$> approximateType f
+approximateType (Lam (TermArgument _ t) f) = ForallTy Irrelevant t <$> approximateType f
 approximateType (Let _ e) = approximateType e
 approximateType (Match _ xs) = case xs of
   (x:_) -> approximateType (x ^. armBody)

@@ -69,10 +69,10 @@ newtypeWorker (cn, tp) (Spine tys cod) = do
 
       phi = SameRepr dom cod
 
-      wrap ((Relevant v, c):ts) ex = Atom . Lam (TypeArgument v c) <$> wrap ts ex
+      wrap ((Relevant v, c):ts) ex = Lam (TypeArgument v c) <$> wrap ts ex
       wrap [(Irrelevant, c)] ex = do
         v <- fresh ValueVar
-        Atom . Lam (TermArgument (fromVar v) c) <$> pure (ex (fromVar v) c)
+        Lam (TermArgument (fromVar v) c) <$> pure (ex (fromVar v) c)
       wrap _ _ = undefined
 
       work var ty = Cast (Ref var ty) phi
@@ -89,6 +89,7 @@ goBinding ss m = traverse (third3A (fmap (substitute ss) . goTerm)) where
   goTerm :: Term a -> Namey (Term a)
   goTerm (Atom x) = Atom <$> goAtom x
   goTerm (App f x) = App <$> goAtom f <*> goAtom x
+  goTerm (Lam arg e) = Lam arg <$> goTerm e
   goTerm (Let (Many vs) e) = Let . Many <$> goBinding ss m vs <*> goTerm e
   goTerm (Let (One (v, t, e)) b) = do
     e' <- goTerm e
@@ -106,8 +107,8 @@ goBinding ss m = traverse (third3A (fmap (substitute ss) . goTerm)) where
       pure $ Let (One (fromVar var, castCodomain, Cast a phi)) bd'
     _ -> Match <$> goAtom a <*> traverse (armBody %%~ goTerm) x
 
-  goAtom (Lam arg e) = Lam arg <$> goTerm e
-  goAtom x = pure x
+  goAtom :: Atom a -> Namey (Atom a)
+  goAtom = pure
 
 data Spine a =
   Spine [(BoundTv a, Type a)] (Type a)
