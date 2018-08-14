@@ -17,13 +17,13 @@ matchJoinPass = traverse transS where
 
   transA t@Ref{} = pure t
   transA t@Lit{} = pure t
-  transA (Lam arg b) = Lam arg <$> transT b
 
   transT (Atom a) = Atom <$> transA a
   transT (App f a) = App <$> transA f <*> transA a
   transT (TyApp f t) = flip TyApp t <$> transA f
   transT (Cast f t) = flip Cast t <$> transA f
 
+  transT (Lam arg b) = Lam arg <$> transT b
   transT (Let (One (name, nameTy, Match sc as)) cont) = do
     join <- fromVar <$> fresh ValueVar
     let Just res = approximateType cont
@@ -43,7 +43,7 @@ matchJoinPass = traverse transS where
         shoveJoin j t ex = error ("What: shoveJoin " ++ show j ++ " " ++ show t ++ " " ++ show ex)
 
     as <- traverse (shoveJoinArm (Ref join joinTy) joinTy) as
-    transT (Let (One (join, joinTy, Atom (Lam (TermArgument name nameTy) cont)))
+    transT (Let (One (join, joinTy, Lam (TermArgument name nameTy) cont))
               (Match sc as))
 
   transT (Let (One var) r) = do

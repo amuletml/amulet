@@ -182,10 +182,6 @@ emitLit RecNil    = LuaTable []
 
 emitAtom :: Occurs a => Atom a -> ExprContext a [LuaExpr]
 emitAtom (Lit l) = pure [emitLit l]
-emitAtom (Lam (TermArgument v _) e) = do
-  (v', s) <- uses eEscape (pushVar v) -- Note this doesn't modify the scope, only extends it
-  pure [LuaFunction [LuaName v'] (emitStmt s LuaReturn e)]
-emitAtom (Lam TypeArgument{} e) = emitTerm e
 emitAtom (Ref v _) = ContT $ \next -> do
   xs <- use eStack
   case break ((==toVar v) . toVar . vVar) xs of
@@ -231,6 +227,10 @@ emitTerm (App f e) = do
 
     _ -> LuaCall f' e'
 
+emitTerm (Lam (TermArgument v _) e) = do
+  (v', s) <- uses eEscape (pushVar v) -- Note this doesn't modify the scope, only extends it
+  pure [LuaFunction [LuaName v'] (emitStmt s LuaReturn e)]
+emitTerm (Lam TypeArgument{} e) = emitTerm e
 
 emitTerm (TyApp f _) = emitAtom f
 emitTerm (Cast f _) = emitAtom f

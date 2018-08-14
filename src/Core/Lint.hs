@@ -142,7 +142,7 @@ checkStmt s t@(Type v ctors:xs) = do
 
   checkStmt s' xs
 
-checkAtom :: (IsVar a, MonadError (CoreError a) m, MonadWriter [CoreError a] m)
+checkAtom :: (IsVar a, MonadError (CoreError a) m)
          => Scope a
          -> Atom a
          -> m (Type a)
@@ -157,22 +157,6 @@ checkAtom s a@(Ref v ty) =
       | not (isValueInfo inf') -> throwError (InfoIllegal v ValueVar inf')
       | otherwise -> pure ty
 checkAtom _ (Lit l) = pure (litTy l)
-checkAtom s l@(Lam (TermArgument a ty) bod) = do
-  tryContext l $ do
-    -- Ensure type is valid and we're declaring a value
-    unless (varInfo a == ValueVar) (throwError (InfoIllegal a ValueVar (varInfo a)))
-    checkType s ty
-
-  bty <- checkTerm (s { vars = insertVar a ty (vars s) }) bod `withContext` l
-  pure (ForallTy Irrelevant ty bty)
-checkAtom s l@(Lam (TypeArgument a ty) bod) = do
-  tryContext l $ do
-    -- Ensure type is valid and we're declaring a tyvar
-    unless (varInfo a == TypeVar) (throwError (InfoIllegal a TypeVar (varInfo a)))
-    checkType s ty
-
-  bty <- checkTerm (s { tyVars = VarSet.insert (toVar a) (tyVars s) }) bod `withContext` l
-  pure (ForallTy (Relevant a) ty bty)
 
 checkTerm :: forall a m. (IsVar a, MonadError (CoreError a) m, MonadWriter [CoreError a] m)
          => Scope a
@@ -185,6 +169,24 @@ checkTerm s (App f x) = do
   case f' of
     ForallTy Irrelevant a r | a `uni` x' -> pure r
     _ -> throwError (TypeMismatch (ForallTy Irrelevant x' unknownTyvar) f')
+
+checkTerm s l@(Lam (TermArgument a ty) bod) = do
+  tryContext l $ do
+    -- Ensure type is valid and we're declaring a value
+    unless (varInfo a == ValueVar) (throwError (InfoIllegal a ValueVar (varInfo a)))
+    checkType s ty
+
+  bty <- checkTerm (s { vars = insertVar a ty (vars s) }) bod `withContext` l
+  pure (ForallTy Irrelevant ty bty)
+checkTerm s l@(Lam (TypeArgument a ty) bod) = do
+  tryContext l $ do
+    -- Ensure type is valid and we're declaring a tyvar
+    unless (varInfo a == TypeVar) (throwError (InfoIllegal a TypeVar (varInfo a)))
+    checkType s ty
+
+  bty <- checkTerm (s { tyVars = VarSet.insert (toVar a) (tyVars s) }) bod `withContext` l
+  pure (ForallTy (Relevant a) ty bty)
+
 checkTerm s t@(Let (One (v, ty, e)) r) = do
   tryContext t $ do
     -- Ensure type is valid and we're declaring a value

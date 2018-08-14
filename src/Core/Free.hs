@@ -72,14 +72,6 @@ tagFreeTerm ann var = tagTerm where
   tagAtom (Lit l) = (mempty, Lit l)
   tagAtom (Ref a ty) = (VarSet.singleton (toVar a)
                        , Ref (var a True) (conv ty))
-  tagAtom (Lam (TermArgument arg ty) bod) =
-    let (fv, bod') = tagTerm bod
-    in (VarSet.delete (toVar arg) fv
-       , Lam (TermArgument (var' arg fv) (conv ty)) bod')
-  tagAtom (Lam (TypeArgument arg ty) bod) =
-    let (fv, bod') = tagTerm bod
-    in (fv
-       , Lam (TypeArgument (var arg True) (conv ty)) bod')
 
   tagTerm (AnnAtom an a) =
     let (fv, a') = tagAtom a
@@ -90,6 +82,16 @@ tagFreeTerm ann var = tagTerm where
         (fvx, x') = tagAtom x
         fv = fvf <> fvx
     in (fv, AnnApp (ann an fv) f' x')
+
+  tagTerm (AnnLam an (TermArgument arg ty) bod) =
+    let (fv, bod') = tagTerm bod
+        fv' = VarSet.delete (toVar arg) fv
+    in ( fv
+       , AnnLam (ann an fv') (TermArgument (var' arg fv) (conv ty)) bod')
+  tagTerm (AnnLam an (TypeArgument arg ty) bod) =
+    let (fv, bod') = tagTerm bod
+    in ( fv
+       , AnnLam (ann an fv) (TypeArgument (var arg True) (conv ty)) bod')
 
   tagTerm (AnnLet an (One (v, ty, e)) r) =
     let (fve, e') = tagTerm e

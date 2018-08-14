@@ -134,16 +134,16 @@ lowerAt (Fun param bd an) (ForallTy Irrelevant a b) =
       operational (PType p _ _) = operational p
       operational p = p
    in case operational p of
-        S.Capture (TvName v) _ -> Atom . Lam (TermArgument (mkVal v) a) <$> lowerAtTerm bd b
+        S.Capture (TvName v) _ -> Lam (TermArgument (mkVal v) a) <$> lowerAtTerm bd b
         _ -> do
           p' <- lowerPat p
           ts <- patternTyvars p
           bd' <- lowerAtTerm bd b
           arg <- fresh ValueVar
           fail <- patternMatchingFail (fst an) a b
-          pure (Atom (Lam (TermArgument arg a) (C.Match (Ref arg a) [ C.Arm { _armPtrn = p', _armTy = a, _armBody = bd'
-                                                                            , _armVars = patternVars p', _armTyvars = ts }
-                                                                    , fail ])))
+          pure (Lam (TermArgument arg a) (C.Match (Ref arg a) [ C.Arm { _armPtrn = p', _armTy = a, _armBody = bd'
+                                                                      , _armVars = patternVars p', _armTyvars = ts }
+                                                              , fail ]))
 lowerAt (Begin [x] _) t = lowerAt x t
 lowerAt (Begin xs _) t = lowerAtTerm (last xs) t >>= flip (foldrM bind) (init xs) where
   bind e r = flip C.Let r . One <$> (build <$> fresh ValueVar <*> lowerBothTerm e)
@@ -200,7 +200,7 @@ lowerAt (ExprWrapper wrap e an) ty =
       let ty' (ForallTy (Relevant v) _ t) = substituteInType (VarMap.singleton v (VarTy var)) t
           ty' x = x
           var = CoVar id n TypeVar
-       in Atom . Lam (TypeArgument var (lowerType k)) <$> lowerAtTerm e (ty' ty)
+       in Lam (TypeArgument var (lowerType k)) <$> lowerAtTerm e (ty' ty)
     S.TypeLam _ _ -> error "impossible lowerAt TypeLam"
     ws S.:> wy -> lowerAt (ExprWrapper ws (ExprWrapper wy e an) an) ty
     S.WrapVar v -> error $ "Unsolved wrapper variable " ++ show v ++ ". This is a bug"
@@ -367,7 +367,7 @@ lowerProg stmt = do
       let r' = substituteInType (VarMap.singleton a (VarTy t)) r
       (bod', ty') <- genWrapper (build . C.Let (One (v, r', TyApp bod (VarTy t))))
                        (Ref v r') r'
-      pure ( Atom (Lam (TypeArgument t l) bod')
+      pure ( Lam (TypeArgument t l) bod'
            , ForallTy (Relevant a) l ty' )
 
     genWrapper build bod (ForallTy Irrelevant t@(ValuesTy ts) r) = do
@@ -375,7 +375,7 @@ lowerProg stmt = do
       tvars <- traverse (\t -> (,t) <$> fresh ValueVar) ts
       tvar  <- fresh ValueVar
 
-      pure ( foldr (\(v, ty) -> Atom . Lam (TermArgument v ty))
+      pure ( foldr (\(v, ty) -> Lam (TermArgument v ty))
              (build (C.Let (One (tvar, t, Values (map (uncurry Ref) tvars)))
                      (C.App bod (Ref tvar t))))
              tvars
@@ -514,7 +514,7 @@ lowerLet bs =
             -- generate a type lambda.
             t <- freshFrom a
             v <- fresh ValueVar
-            Atom . Lam (TypeArgument t l) <$> worker v (VarTy t)
+            Lam (TypeArgument t l) <$> worker v (VarTy t)
         | otherwise = do
             -- Otherwise just replace with unit
             v <- fresh ValueVar
@@ -537,7 +537,7 @@ lowerPolyBind :: MonadLower m => Type -> Expr Typed -> m Term
 lowerPolyBind ty ex = doIt (needed ex ty) (go ty ex) (lowerExprTerm ex) where
   go _ ex 0 = lowerExprTerm ex
   go (ForallTy (Relevant v) kind ty) ex n
-    | n >= 1 = Atom . Lam (TypeArgument v kind) <$> go ty ex (n - 1)
+    | n >= 1 = Lam (TypeArgument v kind) <$> go ty ex (n - 1)
   go _ _ _ = error "impossible"
 
   needed ex ty

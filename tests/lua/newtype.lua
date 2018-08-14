@@ -27,11 +27,11 @@ do
     }
   end
   local bottom = nil
-  local fa = (function ()
-    local x = bottom
-    x(Foo)
-    x(Bar)
-    x(It)
-    return x(Mk)
+  local fb = (function ()
+    local fa = bottom
+    fa(Foo)
+    fa(Bar)
+    fa(It)
+    return fa(Mk)
   end)()
 end

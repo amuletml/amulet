@@ -2,16 +2,16 @@ do
   local __builtin_unit = {
     __tag = "__builtin_unit"
   }
-  local function _plus0 (bt)
-    return function (bu)
-      return bt + bu
+  local function _plus0 (bv)
+    return function (bw)
+      return bv + bw
     end
   end
   local main = {
     _1 = _plus0,
     _2 = {
-      _1 = function (bx)
-        return 2 * bx
+      _1 = function (bz)
+        return 2 * bz
       end,
       _2 = {
         _1 = function (d)
@@ -24,5 +24,5 @@ do
     }
   }
   local bottom = nil
-  local bp = bottom(main)
+  local br = bottom(main)
 end
