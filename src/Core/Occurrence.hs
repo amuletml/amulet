@@ -129,16 +129,8 @@ tagOccurTerm ann var = tagTerm where
   var' v = var v . occurrenceIn v
 
   tagAtom (Lit l) = (mempty, Lit l)
-  tagAtom (Ref a ty) = (VarMap.singleton (toVar a) Once
+  tagAtom (Ref a ty) = ( VarMap.singleton (toVar a) Once
                        , Ref (var a defOcc) (conv ty))
-  tagAtom (Lam (TermArgument arg ty) bod) =
-    let (fv, bod') = tagTerm bod
-    in (VarMap.map escapeLambda (VarMap.delete (toVar arg) fv)
-       , Lam (TermArgument (var' arg fv) (conv ty)) bod')
-  tagAtom (Lam (TypeArgument arg ty) bod) =
-    let (fv, bod') = tagTerm bod
-    in (VarMap.map escapeLambda fv
-       , Lam (TypeArgument (var arg MultiLambda) (conv ty)) bod')
 
   tagTerm (AnnAtom an a) =
     let (fv, a') = tagAtom a
@@ -149,6 +141,17 @@ tagOccurTerm ann var = tagTerm where
         (fvx, x') = tagAtom x
         fv = fvf # fvx
     in (fv, AnnApp (ann an fv) f' x')
+
+  tagTerm (AnnLam an (TermArgument arg ty) bod) =
+    let (fv, bod') = tagTerm bod
+        fv' = VarMap.map escapeLambda (VarMap.delete (toVar arg) fv)
+    in ( fv'
+       , AnnLam (ann an fv') (TermArgument (var' arg fv) (conv ty)) bod')
+  tagTerm (AnnLam an (TypeArgument arg ty) bod) =
+    let (fv, bod') = tagTerm bod
+        fv' = VarMap.map escapeLambda fv
+    in ( fv'
+       , AnnLam (ann an fv') (TypeArgument (var arg MultiLambda) (conv ty)) bod')
 
   tagTerm (AnnLet an (One (v, ty, e)) r) =
     let (fve, e') = tagTerm e

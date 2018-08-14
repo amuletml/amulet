@@ -28,6 +28,7 @@ substitute :: IsVar a => VarMap.Map (Atom a) -> Term a -> Term a
 substitute m = term where
   term (Atom a) = Atom (atom a)
   term (App f x) = App (atom f) (atom x)
+  term (Lam v b) = Lam v (term b)
   term (Let (One v) x) = Let (One (third3 term v)) (term x)
   term (Let (Many vs) x) = Let (Many (map (third3 term) vs)) (term x)
   term (Match x vs) = Match (atom x) (map arm vs)
@@ -37,7 +38,6 @@ substitute m = term where
   term (Cast f t) = Cast (atom f) t
 
   atom x@(Ref v _) = VarMap.findWithDefault x (toVar v) m
-  atom (Lam v b) = Lam v (term b)
   atom x@Lit{} = x
 
   arm = armBody %~ term
@@ -55,6 +55,12 @@ substituteInTys = term where
   term m (Values xs) = Values (map (atom m) xs)
   term m (TyApp f t) = TyApp (atom m f) (gotype m t)
   term m (Cast f t) = Cast (atom m f) (coercion m t)
+  term m (Lam arg b) = Lam (go arg) (term (delete m) b) where
+    go (TermArgument v t) = TermArgument v (gotype m t)
+    go (TypeArgument v t) = TypeArgument v (gotype m t)
+    delete = case arg of
+      TypeArgument v _ -> VarMap.delete (toVar v)
+      _ -> id
 
   coercion m (SameRepr t t') = SameRepr (gotype m t) (gotype m t')
   coercion m (Domain c) = Domain (coercion m c)
@@ -68,12 +74,6 @@ substituteInTys = term where
   coercion m (Quantified v co c) = Quantified v (coercion m co) (coercion m c)
 
   atom m (Ref v t) = Ref v (gotype m t)
-  atom m (Lam arg b) = Lam (go arg) (term (delete m) b) where
-    go (TermArgument v t) = TermArgument v (gotype m t)
-    go (TypeArgument v t) = TypeArgument v (gotype m t)
-    delete = case arg of
-      TypeArgument v _ -> VarMap.delete (toVar v)
-      _ -> id
   atom _ x@Lit{} = x
 
   arm m a = a & armPtrn %~ ptrn m
@@ -132,9 +132,6 @@ refresh = refreshTerm mempty where
         ty' = refreshType s ty
     in pure (Ref v' ty')
   refreshAtom _ a@Lit{} = pure a
-  refreshAtom s (Lam arg b) = do
-    (arg', v') <- refreshArg s arg
-    Lam arg' <$> refreshTerm (VarMap.insert (argVar arg) v' s) b
 
   refreshArg :: (MonadNamey m, IsVar a) => VarMap.Map a -> Argument a -> m (Argument a, a)
   refreshArg s (TermArgument n ty) = do
@@ -150,6 +147,9 @@ refresh = refreshTerm mempty where
   refreshTerm s (Atom a) = Atom <$> refreshAtom s a
   refreshTerm s (App f x) = App <$> refreshAtom s f <*> refreshAtom s x
   refreshTerm s (TyApp f ty) = TyApp <$> refreshAtom s f <*> pure (refreshType s ty)
+  refreshTerm s (Lam arg b) = do
+    (arg', v') <- refreshArg s arg
+    Lam arg' <$> refreshTerm (VarMap.insert (argVar arg) v' s) b
   refreshTerm s (Let (One (v, ty, e)) b) = do
     v' <- freshFrom' v
     let s' = VarMap.insert (toVar v) v' s
