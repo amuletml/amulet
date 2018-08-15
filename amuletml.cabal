@@ -54,7 +54,8 @@ test-suite tests
                      , tasty-hunit >= 0.10 && < 0.11
                      , tasty-ant-xml >= 1.1 && < 1.2
                      , tasty-hedgehog >= 0.2 && < 0.3
-  other-modules:       Test.Util
+  other-modules:       Test.Golden
+                     , Test.Util
 
                      , Test.Core.Lint
                      , Test.Core.Backend
