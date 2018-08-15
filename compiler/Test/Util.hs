@@ -50,7 +50,7 @@ golden expFile result = do
       let result' = process result
       if expected' /= result' then
         let contextDiff = getDiff expected' result'
-        in assertFailure (T.unpack (formatDoc contextDiff))
+        in assertFailure ("\27[0m" ++ T.unpack (formatDoc contextDiff))
       else pure ()
 
   where
