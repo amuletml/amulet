@@ -38,7 +38,7 @@ emptyScope :: ArityScope
 emptyScope = ArityScope opArity
 
 -- | Compute the arity of a term
-atomArity :: IsVar a => ArityScope -> AnnAtom b a -> Arity
+atomArity :: IsVar a => ArityScope -> Atom a -> Arity
 atomArity s (Ref r _) = varArity r s
 atomArity _ (Lit _) = Arity 0 True
 

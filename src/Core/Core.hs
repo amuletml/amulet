@@ -18,13 +18,10 @@ import Control.Lens
 import GHC.Generics
 
 -- | Atoms.
-data AnnAtom b a
+data Atom a
   = Ref a (Type a) -- ^ A reference to a variable, with an explicit type
   | Lit Literal -- ^ A literal.
   deriving (Eq, Show, Ord, Functor, Generic)
-
--- | An 'AnnAtom' with '()' annotations.
-type Atom = AnnAtom ()
 
 -- | The domain of a lambda
 data Argument a
@@ -34,18 +31,18 @@ data Argument a
 
 -- | Terms.
 data AnnTerm b a
-  = AnnAtom b (AnnAtom b a) -- ^ Embed an 'Atom' into a 'Term'
-  | AnnApp b (AnnAtom b a) (AnnAtom b a) -- ^ Eliminate a 'Lam' expecting a 'TermArgument'
+  = AnnAtom b (Atom a) -- ^ Embed an 'Atom' into a 'Term'
+  | AnnApp b (Atom a) (Atom a) -- ^ Eliminate a 'Lam' expecting a 'TermArgument'
   | AnnLam b (Argument a) (AnnTerm b a) -- ^ A lambda abstraction, with explicit domain, encompassing a 'Term'.
 
   | AnnLet b (AnnBinding b a) (AnnTerm b a) -- ^ Bind some variables within the scope of some 'Term'
-  | AnnMatch b (AnnAtom b a) [AnnArm b a] -- ^ Pattern matching
+  | AnnMatch b (Atom a) [AnnArm b a] -- ^ Pattern matching
 
-  | AnnExtend b (AnnAtom b a) [(Text, Type a, AnnAtom b a)] -- ^ Record extension
-  | AnnValues b [AnnAtom b a] -- ^ Unboxed tuple
+  | AnnExtend b (Atom a) [(Text, Type a, Atom a)] -- ^ Record extension
+  | AnnValues b [Atom a] -- ^ Unboxed tuple
 
-  | AnnTyApp b (AnnAtom b a) (Type a) -- ^ Eliminate a 'Lam' expecting a 'TypeArgument'
-  | AnnCast b (AnnAtom b a) (Coercion a) -- ^ Cast an 'Atom' using some 'Coercion'.
+  | AnnTyApp b (Atom a) (Type a) -- ^ Eliminate a 'Lam' expecting a 'TypeArgument'
+  | AnnCast b (Atom a) (Coercion a) -- ^ Cast an 'Atom' using some 'Coercion'.
   deriving (Eq, Show, Ord, Functor, Generic)
 
 -- | An 'AnnTerm' with '()' annotations.
@@ -86,7 +83,7 @@ pattern TyApp :: Atom a -> Type a -> Term a
 pattern TyApp f x = AnnTyApp () f x
 
 -- | Match a 'Cast' with '()' annotation
-pattern Cast :: AnnAtom () a -> Coercion a -> Term a
+pattern Cast :: Atom a -> Coercion a -> Term a
 pattern Cast a ty = AnnCast () a ty
 
 -- | A binding group
@@ -170,7 +167,7 @@ data AnnStmt b a
 
 makeLenses ''AnnArm
 makePrisms ''AnnStmt
-makePrisms ''AnnAtom
+makePrisms ''Atom
 makePrisms ''AnnTerm
 makePrisms ''Type
 makePrisms ''Literal
@@ -292,7 +289,7 @@ instance Pretty a => Pretty (Stmt a) where
 instance Pretty a => Pretty [Stmt a] where
   pretty = vcat . map pretty
 
-freeInAtom :: IsVar a => AnnAtom b a -> VarSet.Set
+freeInAtom :: IsVar a => Atom a -> VarSet.Set
 freeInAtom (Ref v _) = VarSet.singleton (toVar v)
 freeInAtom (Lit _) = mempty
 
@@ -409,7 +406,7 @@ extractAnn (AnnValues b _)  = b
 extractAnn (AnnTyApp b _ _)  = b
 extractAnn (AnnCast b _ _)   = b
 
-instance Plated (AnnAtom b a) where
+instance Plated (Atom a) where
   plate = gplate
 
 instance Plated (AnnTerm b a) where
