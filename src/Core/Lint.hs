@@ -1,38 +1,48 @@
-{-# LANGUAGE FlexibleContexts, ExistentialQuantification,
-   ScopedTypeVariables, OverloadedStrings, TupleSections #-}
+{-# LANGUAGE FlexibleContexts, FlexibleInstances,
+  ScopedTypeVariables, OverloadedStrings, TupleSections, ViewPatterns #-}
 module Core.Lint
   ( CoreError
   , runLint, runLintOK, emptyScope
   , checkStmt, checkTerm, checkAtom, checkType
   ) where
 
+import Control.Applicative.Lift
 import Control.Monad.Writer
 import Control.Monad.Except
+import Control.Applicative
 
 import qualified Data.VarMap as VarMap
 import qualified Data.VarSet as VarSet
+import qualified Data.Sequence as Seq
 import qualified Data.Text as T
 import Data.Traversable
 import Data.Foldable
 import Data.Function
+import Data.Functor
 import Data.Text ()
 import Data.Maybe
+import Data.Tuple
 import Data.List
 
 import Core.Optimise
 import Core.Builtin
 import Core.Types
+
 import Text.Pretty.Semantic hiding ((<>))
+import Text.Pretty.Annotation
 
 data CoreError a
   = TypeMismatch (Type a) (Type a)
   | InfoMismatch a VarInfo VarInfo
   | InfoIllegal a VarInfo VarInfo
-  | forall b. Pretty b => ArisingIn (CoreError a) b
   | NoSuchVar a
   | IllegalUnbox
   | InvalidCoercion (Coercion a)
   | PatternMismatch [(a, Type a)] [(a, Type a)]
+
+type CoreErrors a = (Seq.Seq (CoreError a))
+
+type LintResult = Sum Int
 
 data Scope a = Scope { vars :: VarMap.Map (Type a, VarInfo)
                      , types :: VarMap.Map VarInfo
@@ -59,7 +69,6 @@ instance Pretty a => Pretty (CoreError a) where
   pretty (InfoIllegal v l r) = text "Expected var info like" <+> string (show l) </>
                                text "          got var info" <+> string (show r) </>
                                text "for" <+> pretty v
-  pretty (ArisingIn e c) = pretty e </> text "arising in" <+> pretty c
   pretty (NoSuchVar a) = text "No such variable" <+> pretty a
   pretty IllegalUnbox = text "Illegal unboxed type"
   pretty (InvalidCoercion a) = text "Illegal coercion" <+> pretty a
@@ -70,344 +79,372 @@ instance Pretty a => Pretty (CoreError a) where
 
   prettyList = vsep . map pretty
 
-runLint :: (IsVar a, Pretty b)
-        => ExceptT (CoreError a) (Writer [CoreError a]) ()
-        -> b -> b
-runLint m a =
-  let (r, es) = runWriter (runExceptT m)
-      es' = case r of
-              Left e -> e:es
-              Right _ -> es
-  in case es' of
-       [] -> a
-       es' -> error . T.unpack . displayDetailed $
-              string "Core lint failed:" <#>
-              prettyList es' <#>
-              string "for term" <#>
-              pretty a
+instance Pretty a => Annotation (CoreError a) where
+  annotated e a = pretty e <#> a
 
-runLintOK :: ExceptT (CoreError a) (Writer [CoreError a]) () -> Either [CoreError a] ()
-runLintOK m = case runWriter (runExceptT m) of
-                     (Right _, []) -> Right ()
-                     (Right _, es) -> Left es
-                     (Left e, es) -> Left (es ++ [e])
+instance Pretty a => Annotation (Seq.Seq (CoreError a)) where
+  annotated = flip (foldr annotated)
 
-checkStmt :: (IsVar a, MonadError (CoreError a) m, MonadWriter [CoreError a] m)
+instance Pretty a => Pretty [(AnnStmt (CoreErrors a) a, CoreErrors a)] where
+  pretty = vsep . map (\(s, es) -> annotated es (pretty s))
+
+runLint :: Pretty b
+        => String -> Writer LintResult b
+        -> c -> c
+runLint context m res =
+  case runLintOK m of
+    Nothing -> res
+    Just (c, e) -> error . T.unpack . displayDetailed $
+     string ("Core lint failed after `" ++ context ++ "` with " ++ show c ++ " errors") <#>
+     pretty e
+
+runLintOK :: Writer LintResult b -> Maybe (Int, b)
+runLintOK m = case runWriter m of
+                (_, Sum 0) -> Nothing
+                (x, Sum c) -> Just (c, x)
+
+checkStmt :: (IsVar a, MonadWriter LintResult m)
           => Scope a
           -> [Stmt a]
-          -> m ()
-checkStmt _ [] = pure ()
-checkStmt s t@(Foreign v ty _:xs) = do
-  tryContext t $ do
+          -> m [(AnnStmt (CoreErrors a) a, CoreErrors a)]
+checkStmt _ [] = pure []
+checkStmt s (Foreign v ty b:xs) = do
+  es <- gatherError' . liftError $
     -- Ensure we're declaring a value
-    unless (varInfo v == ValueVar) (throwError (InfoIllegal v ValueVar (varInfo v)))
+       unless (varInfo v == ValueVar) (pushError (InfoIllegal v ValueVar (varInfo v)))
     -- And the type is well formed
-    checkType s ty
+    *> checkType s ty
 
-  checkStmt (s { vars = insertVar v ty (vars s) }) xs
+  ((Foreign v ty b, es):) <$> checkStmt (s { vars = insertVar v ty (vars s) }) xs
 
-checkStmt s t@(StmtLet (One (v, ty, e)):xs) = do
-  tryContext t $ do
+checkStmt s (StmtLet (One (v, ty, e)):xs) = do
+  (ty', e') <- checkTerm s e
+
+  es <- gatherError' . liftError $
     -- Ensure type is valid and we're declaring a value
-    unless (varInfo v == ValueVar) (throwError (InfoIllegal v ValueVar (varInfo v)))
-    checkType s ty
+    (case ty' of
+       Just ty' | ty `apart` ty' -> pushError (TypeMismatch ty ty')
+       _ -> pure ())
+    *> unless (varInfo v == ValueVar) (pushError (InfoIllegal v ValueVar (varInfo v)))
+    *> checkType s ty
 
-    ty' <- checkTerm s e
-    if ty `apart` ty' then throwError (TypeMismatch ty ty') else pure ()
-
-  checkStmt (s { vars = insertVar v ty (vars s) }) xs
-checkStmt s t@(StmtLet (Many vs):xs) = do
+  ((StmtLet (One (v, ty, e')), es):) <$> checkStmt (s { vars = insertVar v ty (vars s) }) xs
+checkStmt s (StmtLet (Many vs):xs) = do
   let s' = s { vars = foldr (\(v, t, _) -> insertVar v t) (vars s) vs }
-  for_ vs $ \(v, ty, e) -> tryContext t $ do
-    -- Ensure type is valid and we're declaring a value
-    unless (varInfo v == ValueVar) (throwError (InfoIllegal v ValueVar (varInfo v)))
-    checkType s ty
 
-    ty' <- checkTerm s' e
-    if ty `apart` ty' then throwError (TypeMismatch ty ty') else pure ()
+  (vs', es) <- forMA vs $ \(v, ty, e) -> do
+    (ty', e') <- checkTerm s' e
+    es <- gatherError' . liftError $
+      -- Ensure type is valid and we're declaring a value
+      (case ty' of
+         Just ty' | ty `apart` ty' -> pushError (TypeMismatch ty ty')
+         _ -> pure ())
+      *> unless (varInfo v == ValueVar) (pushError (InfoIllegal v ValueVar (varInfo v)))
+      *> checkType s ty
+    pure ((v, ty, e'), es)
 
-  checkStmt s' xs
-checkStmt s t@(Type v ctors:xs) = do
-  tryContext t $
-    -- Ensure we're declaring a type
-    unless (varInfo v == TypeConVar) (throwError (InfoIllegal v TypeConVar (varInfo v)))
+  ((StmtLet (Many vs'), es):) <$> checkStmt s' xs
 
+checkStmt s (Type v ctors:xs) = do
   let s' = s { vars = foldr (uncurry insertVar) (vars s) ctors
              , types = foldr insertTy (types s) (toVar v : map (toVar . fst) ctors)}
-  tryContext t $ for_ ctors $ \(v, x) -> do
-     -- Ensure we're declaring a constructor
-    unless (varInfo v == DataConVar) (throwError (InfoIllegal v DataConVar (varInfo v)))
-    -- Ensure the type is well formed
-    checkType s' x
 
-  checkStmt s' xs
+  es <- gatherError' . liftError $
+    -- Ensure we're declaring a type
+       unless (varInfo v == TypeConVar) (pushError (InfoIllegal v TypeConVar (varInfo v)))
+    *> for_ ctors (\(v, x) ->
+         -- Ensure we're declaring a constructor
+         unless (varInfo v == DataConVar) (pushError (InfoIllegal v DataConVar (varInfo v)))
+          -- Ensure the type is well formed
+         *> checkType s' x)
 
-checkAtom :: (IsVar a, MonadError (CoreError a) m)
+  ((Type v ctors, es):) <$> checkStmt s' xs
+
+checkAtom :: IsVar a
          => Scope a
          -> Atom a
-         -> m (Type a)
-checkAtom s a@(Ref v ty) =
+         -> Errors (CoreErrors a) (Type a)
+checkAtom s (Ref v ty) =
   case VarMap.lookup (toVar v) (vars s) of
-    Nothing -> throwError (NoSuchVar v)
+    Nothing -> pushError (NoSuchVar v)
     Just (ty', inf')
       -- Ensure the types line up
-      | ty `apart` ty' -> throwError (TypeMismatch ty' ty) `withContext` a
+      | ty `apart` ty' -> pushError (TypeMismatch ty' ty)
       -- Ensure the variable info lines up, and it's a valid variable
-      | inf' /= varInfo v -> throwError (InfoMismatch v inf'(varInfo v))
-      | not (isValueInfo inf') -> throwError (InfoIllegal v ValueVar inf')
+      | inf' /= varInfo v -> pushError (InfoMismatch v inf'(varInfo v))
+      | not (isValueInfo inf') -> pushError (InfoIllegal v ValueVar inf')
       | otherwise -> pure ty
 checkAtom _ (Lit l) = pure (litTy l)
 
-checkTerm :: forall a m. (IsVar a, MonadError (CoreError a) m, MonadWriter [CoreError a] m)
+checkTerm :: forall a m. (IsVar a, MonadWriter LintResult m)
          => Scope a
          -> Term a
-         -> m (Type a)
-checkTerm s (Atom a) = checkAtom s a
+         -> m (Maybe (Type a), AnnTerm (CoreErrors a) a)
+checkTerm s (Atom a) = do
+  res <- gatherError (liftError (checkAtom s a))
+  pure (flip AnnAtom a <$> res)
+
 checkTerm s (App f x) = do
-  f' <- checkAtom s f
-  x' <- checkAtom s x
-  case f' of
-    ForallTy Irrelevant a r | a `uni` x' -> pure r
-    _ -> throwError (TypeMismatch (ForallTy Irrelevant x' unknownTyvar) f')
+  res <- gatherError $ do
+    (f', x') <- liftError $ (,) <$> checkAtom s f <*> checkAtom s x
+    case f' of
+      ForallTy Irrelevant a r | a `uni` x' -> pure r
+      _ -> chuckError (TypeMismatch (ForallTy Irrelevant x' unknownTyvar) f')
+  pure ((\es -> AnnApp es f x) <$> res)
 
-checkTerm s l@(Lam (TermArgument a ty) bod) = do
-  tryContext l $ do
+checkTerm s (Lam arg@(TermArgument a ty) bod) = do
+  errs <- gatherError' . liftError $
     -- Ensure type is valid and we're declaring a value
-    unless (varInfo a == ValueVar) (throwError (InfoIllegal a ValueVar (varInfo a)))
-    checkType s ty
+       unless (varInfo a == ValueVar) (pushError (InfoIllegal a ValueVar (varInfo a)))
+    *> checkType s ty
 
-  bty <- checkTerm (s { vars = insertVar a ty (vars s) }) bod `withContext` l
-  pure (ForallTy Irrelevant ty bty)
-checkTerm s l@(Lam (TypeArgument a ty) bod) = do
-  tryContext l $ do
+  (bty, bod') <- checkTerm (s { vars = insertVar a ty (vars s) }) bod
+  pure ( ForallTy Irrelevant ty <$> bty
+       , AnnLam errs arg bod')
+checkTerm s (Lam arg@(TypeArgument a ty) bod) = do
+  errs <- gatherError' . liftError $
     -- Ensure type is valid and we're declaring a tyvar
-    unless (varInfo a == TypeVar) (throwError (InfoIllegal a TypeVar (varInfo a)))
-    checkType s ty
+       unless (varInfo a == TypeVar) (pushError (InfoIllegal a TypeVar (varInfo a)))
+    *> checkType s ty
 
-  bty <- checkTerm (s { tyVars = VarSet.insert (toVar a) (tyVars s) }) bod `withContext` l
-  pure (ForallTy (Relevant a) ty bty)
+  (bty, bod') <- checkTerm (s { tyVars = VarSet.insert (toVar a) (tyVars s) }) bod
+  pure ( ForallTy (Relevant a) ty <$> bty
+       , AnnLam errs arg bod')
 
-checkTerm s t@(Let (One (v, ty, e)) r) = do
-  tryContext t $ do
+checkTerm s (Let (One (v, ty, e)) r) = do
+  (ty', e') <- checkTerm s e
+  (tyr, r') <- checkTerm (s { vars = insertVar v ty (vars s) }) r
+
+  es <- gatherError' . liftError $
     -- Ensure type is valid and we're declaring a value
-    unless (varInfo v == ValueVar) (throwError (InfoIllegal v ValueVar (varInfo v)))
-    checkType s ty
+    (case ty' of
+       Just ty' | ty `apart` ty' -> pushError (TypeMismatch ty ty')
+       _ -> pure ())
+    *> unless (varInfo v == ValueVar) (pushError (InfoIllegal v ValueVar (varInfo v)))
+    *> checkType s ty
 
-    ty' <- checkTerm s e
-    if ty `apart` ty' then throwError (TypeMismatch ty ty') else pure ()
+  pure ( tyr, AnnLet es (One (v, ty, e')) r')
 
-  checkTerm (s { vars = insertVar v ty (vars s) }) r
-checkTerm s t@(Let (Many vs) r) = do
+checkTerm s (Let (Many vs) r) = do
   let s' = s { vars = foldr (\(v, t, _) -> insertVar v t) (vars s) vs }
-  for_ vs $ \(v, ty, e) -> tryContext t $ do
-    -- Ensure type is valid and we're declaring a value
-    unless (varInfo v == ValueVar) (throwError (InfoIllegal v ValueVar (varInfo v)))
-    checkType s ty
 
-    ty' <- checkTerm s' e
-    if ty `apart` ty' then throwError (TypeMismatch ty ty') else pure ()
+  (vs', es) <- forMA vs $ \(v, ty, e) -> do
+    (ty', e') <- checkTerm s' e
+    es <- gatherError' . liftError $
+      -- Ensure type is valid and we're declaring a value
+      (case ty' of
+         Just ty' | ty `apart` ty' -> pushError (TypeMismatch ty ty')
+         _ -> pure ())
+      *> unless (varInfo v == ValueVar) (pushError (InfoIllegal v ValueVar (varInfo v)))
+      *> checkType s ty
+    pure ((v, ty, e'), es)
 
-  checkTerm s' r
+  (tyr, r') <- checkTerm s' r
+  pure ( tyr, AnnLet es (Many vs') r')
 
-checkTerm s t@(Match e bs) = flip withContext t $ do
-  tye <- checkAtom s e
-  (ty:tys) <- for bs $ \Arm { _armPtrn = p, _armTy = ty, _armBody = r, _armVars = vs } -> do
-    if vs /= patternVars p
-    then tell [ArisingIn (PatternMismatch (patternVars p) vs) t]
-    else pure ()
+checkTerm s (Match e bs) = do
+  (tye, es) <- gatherError . liftError $ checkAtom s e
 
-    pVars <- checkPattern ty p `withContext` p
-    if ty `apart` tye
-    then throwError (TypeMismatch ty tye)
-    else checkTerm (s { vars = VarMap.union pVars (vars s), tyVars = tyVars s <> foldMap (freeInTy . fst) pVars }) r
+  -- Build up our arms and verify they are well formed
+  (unzip -> (tys, bs'), es') <- forMA bs $ \Arm { _armPtrn = p, _armTy = ty, _armBody = r, _armVars = vs, _armTyvars = tvs } -> do
+    let pVars = patternVars p
+    (tyr, r') <- checkTerm (s { vars = foldr (uncurry insertVar) (vars s) pVars
+                              , tyVars = tyVars s <> foldMap (freeInTy . snd) pVars }) r
+    es <- gatherError' . liftError $
+      (case tye of
+         Just tye | ty `apart` tye -> pushError (TypeMismatch ty tye)
+         _ -> pure ())
+      *> when (vs /= patternVars p) (pushError (PatternMismatch (patternVars p) vs))
+      *> checkPattern s ty p
+    pure ((tyr, Arm p ty r' vs tvs), es)
 
-  -- Ensure all types are consistent
-  foldrM (\ty ty' -> if ty `apart` ty'
-                     then throwError (TypeMismatch ty ty')
-                     else pure ty') ty tys
-    where
-      checkPattern :: Type a -> Pattern a -> m (VarMap.Map (Type a, VarInfo))
-      checkPattern ty' (Capture a ty)
-        | ty `apartOpen` ty' = throwError (TypeMismatch ty ty')
-        | varInfo a /= ValueVar = throwError (InfoIllegal a ValueVar (varInfo a))
-        | otherwise = pure (VarMap.singleton (toVar a) (ty, varInfo a))
-      checkPattern (RowsTy _ _) (PatLit RecNil) = pure mempty
-      checkPattern ty' (PatLit l) = do
-        let ty = litTy l
-            ty :: Type a
-        if ty `apart` ty'
-        then throwError (TypeMismatch ty ty')
-        else pure mempty
-      checkPattern ty' (Constr a) =
-        case VarMap.lookup (toVar a) (vars s) of
-          Nothing -> throwError (NoSuchVar a)
-          Just (ty, inf)
-            -- Ensure types line up
-            | inst ty `apartOpen` ty' -> throwError (TypeMismatch ty' (inst ty))
-            -- Ensure we're matching on a constructor
-            | inf /= varInfo a -> throwError (InfoMismatch a inf (varInfo a))
-            | inf /= DataConVar  -> throwError (InfoMismatch a DataConVar (varInfo a))
-            | otherwise -> pure mempty
-      checkPattern ty' (Destr a p) =
-        case VarMap.lookup (toVar a) (vars s) of
-          Nothing -> throwError (NoSuchVar a)
-          Just (ty, inf)
-            -- Ensure we're matching on a constructor
-            | inf /= varInfo a -> throwError (InfoMismatch a inf (varInfo a))
-            | inf /= DataConVar  -> throwError (InfoMismatch a DataConVar (varInfo a))
-            -- Ensure types line up
-            | ForallTy Irrelevant x r <- inst ty
-            , Just s <- r `unify` ty'
-            -- TODO: Do we need Relevant as well?
-            -> checkPattern (substituteInType s x) p
-            | otherwise -> throwError (TypeMismatch (ForallTy Irrelevant unknownTyvar ty') (inst ty))
-      checkPattern ty@(RowsTy NilTy ts) (PatExtend f fs) | f /= PatLit RecNil = do
-        let (outer, inner) = partition (\(l, _) -> any ((== l) . fst) fs) ts
-        v <- checkPattern (RowsTy NilTy inner) f
-        vs <- for fs $ \(t, p) ->
-          case find ((==t) . fst) outer of
-            Nothing -> throwError (TypeMismatch (RowsTy NilTy [(t, unknownTyvar)]) ty)
-            Just (_, ty) -> checkPattern ty p
-        pure (mconcat (v:vs))
-      checkPattern ty@(RowsTy ext ts) (PatExtend f fs) = do
-        v <- checkPattern ext f
-        vs <- for fs $ \(t, p) ->
-          case find ((==t) . fst) ts of
-            Nothing -> throwError (TypeMismatch (RowsTy ext [(t, unknownTyvar)]) ty)
-            Just (_, ty) -> checkPattern ty p
+  -- Verify the types are consistent
+  let ty = foldr1 (<|>) tys
+  es'' <- gatherError' . liftError . for_ tys $ \ty' ->
+    case (ty, ty') of
+      (Just ty, Just ty') | ty `apart` ty' -> pushError (TypeMismatch ty ty')
+      _ -> pure ()
 
-        pure (mconcat (v:vs))
-      checkPattern t (PatExtend _ fs) =
-        throwError (TypeMismatch (RowsTy unknownTyvar (map (\(a, _) -> (a, unknownTyvar)) fs)) t)
-      checkPattern (ValuesTy ts) (PatValues ps) | length ts == length ps =
-        mconcat <$> traverse (uncurry checkPattern) (zip ts ps)
-      checkPattern t (PatValues ps) =
-        throwError (TypeMismatch (ValuesTy (replicate (length ps) unknownTyvar)) t)
+  pure ( ty, AnnMatch (es <> es' <> es'') e bs')
 
-      inst (ForallTy (Relevant _) _ t) = inst t
-      inst t = t
+checkTerm s (Extend f fs) = do
+  res <- gatherError $ do
+    tyf' <- liftError $
+         for_ fs (\(_, ty, v) ->
+           (\ty' -> if ty `apart` ty' then pushError (TypeMismatch ty ty') else pure ())
+           <$> checkAtom s v)
+      *> checkAtom s f
 
-checkTerm s t@(Extend f fs) = do
-  tyf' <- checkAtom s f
-  for_ fs $ \(_, ty, v) -> tryContext t $ do
-    ty' <- checkAtom s v
-    if ty `apart` ty' then throwError (TypeMismatch ty ty') else pure ()
+    pure $ case tyf' of
+      RowsTy tau rs ->
+        let updated = deleteFirstsBy ((==) `on` fst) rs tys
+            tys = map (\(f, ty, _) -> (f, ty)) fs
+            inner = case updated of
+              [] -> tau
+              xs -> RowsTy tau xs
+         in RowsTy inner tys
+      x -> RowsTy x . map (\(f, ty, _) -> (f, ty)) $ fs
 
-  case tyf' of
-    RowsTy tau rs ->
-      let updated = deleteFirstsBy ((==) `on` fst) rs tys
-          tys = map (\(f, ty, _) -> (f, ty)) fs
-          inner = case updated of
-            [] -> tau
-            xs -> RowsTy tau xs
-       in pure $ RowsTy inner tys
-    x -> pure . RowsTy x . map (\(f, ty, _) -> (f, ty)) $ fs
+  pure ((\es -> AnnExtend es f fs) <$> res)
 
-checkTerm s t@(Values xs) = ValuesTy <$> for xs (\x -> checkAtom s x `withContext` t)
+checkTerm s (Values xs) = do
+  (ty, es) <- gatherError . liftError $ for xs (checkAtom s)
+  pure (ValuesTy <$> ty, AnnValues es xs)
 
-checkTerm s t@(TyApp f x) = do
-  f' <- checkAtom s f
-  checkTypeBoxed s x `withContext` t
-  case f' of
-    ForallTy (Relevant a) _ ty -> pure (substituteInType (VarMap.singleton (toVar a) x) ty)
-    _ -> throwError (TypeMismatch (ForallTy (Relevant unknownVar) unknownTyvar unknownTyvar) f') `withContext` t
+checkTerm s (TyApp f x) = do
+  res <- gatherError $ do
+    (f', ()) <- liftError $ (,) <$> checkAtom s f <*> checkTypeBoxed s x
+    case f' of
+      ForallTy (Relevant a) _ ty -> pure (substituteInType (VarMap.singleton (toVar a) x) ty)
+      _ -> chuckError (TypeMismatch (ForallTy (Relevant unknownVar) unknownTyvar unknownTyvar) f')
 
-checkTerm s t@(Cast x co) = do
-  ty <- checkAtom s x
+  pure ((\es -> AnnTyApp es f x) <$> res)
 
-  (from, to) <- checkCo co
-  tryContext t $
-    if from `apart` ty then throwError (TypeMismatch from ty) else pure ()
+checkTerm s (Cast x co) = do
+  res <- gatherError $ do
+    (ty, (from, to)) <- liftError $ (,) <$> checkAtom s x <*> checkCoercion s co
+    when (from `apart` ty) (chuckError (TypeMismatch from ty))
+    pure to
 
-  pure to where
-    checkCo (SameRepr a b) = do
-      checkType s a
-      checkType s b
-      pure (a, b)
-    checkCo (Application l r) = do
-      (f, g) <- checkCo l
-      (x, y) <- checkCo r
-      pure (AppTy f x, AppTy g y)
-    checkCo (ExactRecord rs) = do
-      (as, bs) <- fmap unzip . for rs $ \(t, c) -> do
-        (a, b) <- checkCo c
-        pure ((t, a), (t, b))
-      pure (ExactRowsTy as, ExactRowsTy bs)
-    checkCo (Record c rs) = do
-      (as, bs) <- fmap unzip . for rs $ \(t, c) -> do
-        (a, b) <- checkCo c
-        pure ((t, a), (t, b))
-      (a, b) <- checkCo c
-      pure (RowsTy a as, RowsTy b bs)
-    checkCo (Projection rs rs') = do
-      (as, bs) <- fmap unzip . for rs $ \(t, c) -> do
-        (a, b) <- checkCo c
-        pure ((t, a), (t, b))
-      (ss, ts) <- fmap unzip . for rs' $ \(t, c) -> do
-        (a, b) <- checkCo c
-        pure ((t, a), (t, b))
-      let first = unionBy ((==) `on` fst) as ss
-      pure (ExactRowsTy first, RowsTy (ExactRowsTy bs) ts)
-    checkCo co@CoercionVar{} = throwError (InvalidCoercion co)
-    checkCo (Symmetry x) = do
-      (a, b) <- checkCo x
-      pure (b, a)
-    checkCo (Domain x) = do
-      (f, t) <- checkCo x
-      f' <- case f of
-              ForallTy _ a _ -> pure a
-              _ -> throwError (TypeMismatch (ForallTy Irrelevant unknownTyvar unknownTyvar) t)
-      t' <- case t of
-              ForallTy _ a _ -> pure a
-              _ -> throwError (TypeMismatch (ForallTy Irrelevant unknownTyvar unknownTyvar) t)
-      pure (f', t')
-    checkCo (Codomain x) = do
-      (f, t) <- checkCo x
-      f' <- case f of
-              ForallTy _ _ a -> pure a
-              _ -> throwError (TypeMismatch (ForallTy Irrelevant unknownTyvar unknownTyvar) t)
-      t' <- case t of
-              ForallTy _ _ a -> pure a
-              _ -> throwError (TypeMismatch (ForallTy Irrelevant unknownTyvar unknownTyvar) t)
-      pure (f', t')
-    checkCo (Quantified v l r) = do
-      (f, g) <- checkCo l
-      (x, y) <- checkCo r
-      pure (ForallTy v f x, ForallTy v g y)
+  pure ((\es -> AnnCast es x co) <$> res)
 
-
--- TODO: We should really verify the kinds match up, but we're a long way
--- away from that working
-checkType :: (IsVar a, MonadError (CoreError a) m)
-         => Scope a
-         -> Type a
-         -> m ()
+-- | Verify a type is valid within the given scope
+--
+-- TODO: We should really verify the kinds match up, but we're a long way away
+-- from that working
+checkType :: IsVar a => Scope a -> Type a -> Errors (CoreErrors a) ()
 checkType s (ConTy v) =
   case VarMap.lookup (toVar v) (types s) of
-    Nothing -> throwError (NoSuchVar v)
-    Just inf | inf /= varInfo v -> throwError (InfoMismatch v inf (varInfo v))
-             | not (isTypeInfo inf) -> throwError (InfoIllegal v TypeConVar inf)
+    Nothing -> pushError (NoSuchVar v)
+    Just inf | inf /= varInfo v -> pushError (InfoMismatch v inf (varInfo v))
+             | not (isTypeInfo inf) -> pushError (InfoIllegal v TypeConVar inf)
              | otherwise -> pure ()
 checkType _ (VarTy v)
-  | varInfo v /= TypeVar = throwError (InfoIllegal v TypeVar (varInfo v))
+  | varInfo v /= TypeVar = pushError (InfoIllegal v TypeVar (varInfo v))
   | otherwise = pure ()
-checkType s (ForallTy Irrelevant a r) = checkType s a >> checkTypeBoxed s r
-checkType s (ForallTy (Relevant vs) c v) = do
-  unless (varInfo vs == TypeVar) (throwError (InfoIllegal vs TypeVar (varInfo vs)))
+checkType s (ForallTy Irrelevant a r) = checkType s a *> checkTypeBoxed s r
+checkType s (ForallTy (Relevant vs) c v) =
   let s' = s { tyVars = VarSet.insert (toVar vs) (tyVars s) }
-  checkType s' c >> checkType s' v
-checkType s (AppTy f x) = checkType s f >> checkTypeBoxed s x
-checkType s (RowsTy f fs) = checkType s f >> traverse_ (checkTypeBoxed s . snd) fs
+  in unless (varInfo vs == TypeVar) (pushError (InfoIllegal vs TypeVar (varInfo vs)))
+  *> checkType s' c
+  *> checkType s' v
+checkType s (AppTy f x) = checkType s f *> checkTypeBoxed s x
+checkType s (RowsTy f fs) = checkType s f *> traverse_ (checkTypeBoxed s . snd) fs
 checkType s (ValuesTy xs) = traverse_ (checkTypeBoxed s) xs
 checkType _ StarTy = pure ()
 checkType _ NilTy = pure ()
 
-checkTypeBoxed :: (IsVar a, MonadError (CoreError a) m)
-         => Scope a -> Type a -> m ()
-checkTypeBoxed s x = checkType s x >> checkNoUnboxed x
+checkTypeBoxed :: IsVar a => Scope a -> Type a -> Errors (CoreErrors a) ()
+checkTypeBoxed s x = checkType s x *> checkNoUnboxed x
 
-checkNoUnboxed :: MonadError (CoreError a) m => Type a -> m ()
-checkNoUnboxed ValuesTy{} = throwError IllegalUnbox
+-- | Check a coercion is well formed within a given scope, returning the input
+-- and output types.
+--
+-- Ideally this would use ApplicativeDo, but GHC is still a little silly at
+-- desugaring it all.
+checkCoercion :: IsVar a => Scope a -> Coercion a -> Errors (CoreErrors a) (Type a, Type a)
+checkCoercion s = checkCo where
+  checkCo (SameRepr a b) =
+       checkType s a
+    *> checkType s b
+    $> (a, b)
+  checkCo (Application l r) =
+    (\(f, g) (x, y) -> (AppTy f x, AppTy g y))
+    <$> checkCo l
+    <*> checkCo r
+  checkCo (ExactRecord rs) =
+    (\(as, bs) -> (ExactRowsTy as, ExactRowsTy bs)) . unzip
+    <$> for rs (\(t, c) -> (\(a, b) -> ((t, a), (t, b))) <$> checkCo c)
+  checkCo (Record c rs) =
+    (\(a, b) (as, bs) -> (RowsTy a as, RowsTy b bs))
+    <$> checkCo c
+    <*> fmap unzip (for rs (\(t, c) -> (\(a, b) -> ((t, a), (t, b))) <$> checkCo c))
+  checkCo (Projection rs rs') =
+    (\(as, bs) (ss, ts) ->
+       let first = unionBy ((==) `on` fst) as ss
+       in (ExactRowsTy first, RowsTy (ExactRowsTy bs) ts))
+    <$> fmap unzip (for rs (\(t, c) -> (\(a, b) -> ((t, a), (t, b))) <$> checkCo c))
+    <*> fmap unzip (for rs' (\(t, c) -> (\(a, b) -> ((t, a), (t, b))) <$> checkCo c))
+  checkCo co@CoercionVar{} = pushError (InvalidCoercion co)
+  checkCo (Symmetry x) = swap <$> checkCo x
+  checkCo (Domain x) =
+    checkCo x `thenError` \(f, t) -> (,)
+      <$> (case f of
+             ForallTy _ a _ -> pure a
+             _ -> pushError (TypeMismatch (ForallTy Irrelevant unknownTyvar unknownTyvar) f))
+      <*> (case t of
+             ForallTy _ a _ -> pure a
+             _ -> pushError (TypeMismatch (ForallTy Irrelevant unknownTyvar unknownTyvar) t))
+  checkCo (Codomain x) =
+    checkCo x `thenError` \(f, t) -> (,)
+      <$> (case f of
+             ForallTy _ _ a -> pure a
+             _ -> pushError (TypeMismatch (ForallTy Irrelevant unknownTyvar unknownTyvar) f))
+      <*> (case t of
+             ForallTy _ _ a -> pure a
+             _ -> pushError (TypeMismatch (ForallTy Irrelevant unknownTyvar unknownTyvar) t))
+  checkCo (Quantified v l r) =
+    (\(f, g) (x, y) -> (ForallTy v f x, ForallTy v g y)) <$> checkCo l <*> checkCo r
+
+checkPattern :: forall a. IsVar a => Scope a -> Type a -> Pattern a -> Errors (CoreErrors a) ()
+checkPattern s = checkPat where
+  checkPat :: Type a -> Pattern a -> Errors (CoreErrors a) ()
+  checkPat ty' (Capture a ty)
+    | ty `apartOpen` ty' = pushError (TypeMismatch ty ty')
+    | varInfo a /= ValueVar = pushError (InfoIllegal a ValueVar (varInfo a))
+    | otherwise = pure ()
+  checkPat (RowsTy _ _) (PatLit RecNil) = pure mempty
+  checkPat ty' (PatLit l) =
+    let ty = litTy l
+        ty :: Type a
+    in when (ty `apart` ty') (pushError (TypeMismatch ty ty'))
+    $> mempty
+  checkPat ty' (Constr a) =
+    case VarMap.lookup (toVar a) (vars s) of
+      Nothing -> pushError (NoSuchVar a)
+      Just (ty, inf)
+        -- Ensure types line up
+        | inst ty `apartOpen` ty' -> pushError (TypeMismatch ty' (inst ty))
+        -- Ensure we're matching on a constructor
+        | inf /= varInfo a -> pushError (InfoMismatch a inf (varInfo a))
+        | inf /= DataConVar  -> pushError (InfoMismatch a DataConVar (varInfo a))
+        | otherwise -> pure mempty
+  checkPat ty' (Destr a p) =
+    case VarMap.lookup (toVar a) (vars s) of
+      Nothing -> pushError (NoSuchVar a)
+      Just (ty, inf)
+        -- Ensure we're matching on a constructor
+        | inf /= varInfo a -> pushError (InfoMismatch a inf (varInfo a))
+        | inf /= DataConVar  -> pushError (InfoMismatch a DataConVar (varInfo a))
+        -- Ensure types line up
+        | ForallTy Irrelevant x r <- inst ty
+        , Just s <- r `unify` ty'
+        -- TODO: Do we need Relevant as well?
+        -> checkPat (substituteInType s x) p
+        | otherwise -> pushError (TypeMismatch (ForallTy Irrelevant unknownTyvar ty') (inst ty))
+  checkPat ty@(RowsTy NilTy ts) (PatExtend f fs) | f /= PatLit RecNil =
+    let (outer, inner) = partition (\(l, _) -> any ((== l) . fst) fs) ts
+    in checkPat (RowsTy NilTy inner) f
+    *> for_ fs (\(t, p) -> case find ((==t) . fst) outer of
+         Nothing -> pushError (TypeMismatch (RowsTy NilTy [(t, unknownTyvar)]) ty)
+         Just (_, ty) -> checkPat ty p)
+  checkPat ty@(RowsTy ext ts) (PatExtend f fs) =
+       checkPat ext f
+    *> for_ fs (\(t, p) -> case find ((==t) . fst) ts of
+         Nothing -> pushError (TypeMismatch (RowsTy ext [(t, unknownTyvar)]) ty)
+         Just (_, ty) -> checkPat ty p)
+  checkPat t (PatExtend _ fs) =
+    pushError (TypeMismatch (RowsTy unknownTyvar (map (\(a, _) -> (a, unknownTyvar)) fs)) t)
+  checkPat (ValuesTy ts) (PatValues ps) | length ts == length ps =
+    traverse_ (uncurry checkPat) (zip ts ps)
+  checkPat t (PatValues ps) =
+    pushError (TypeMismatch (ValuesTy (replicate (length ps) unknownTyvar)) t)
+
+  inst (ForallTy (Relevant _) _ t) = inst t
+  inst t = t
+
+checkNoUnboxed :: Type a -> Errors (CoreErrors a) ()
+checkNoUnboxed ValuesTy{} = pushError IllegalUnbox
 checkNoUnboxed _ = pure ()
 
 unknownVar :: IsVar a => a
@@ -416,17 +453,41 @@ unknownVar = fromVar (CoVar (-100) "?" ValueVar)
 unknownTyvar :: IsVar a => Type a
 unknownTyvar = VarTy unknownVar
 
-tryContext :: (Pretty b, MonadError (CoreError a) m, MonadWriter [CoreError a] m)
-            => b -> m () -> m ()
-tryContext c m = m `catchError` (tell . pure . wrapContext c)
+-- | Throw an error within an applicative
+pushError :: CoreError a -> Errors (CoreErrors a) b
+pushError = failure . pure
 
-withContext :: (Pretty b, MonadError (CoreError a) m)
-            => m c -> b -> m c
-withContext m c = m `catchError` (throwError . wrapContext c)
+-- | Effectively the monad bind operation for 'Error', but without
+-- following the monad laws.
+thenError :: Errors e a -> (a -> Errors e b) -> Errors e b
+thenError m f = case runErrors m of
+                  Left e -> failure e
+                  Right x -> f x
 
-wrapContext :: Pretty b => b -> CoreError a -> CoreError a
-wrapContext _ e@ArisingIn{} = e
-wrapContext c e = ArisingIn e c
+-- | Throw an error within an error monad
+chuckError :: MonadError (CoreErrors a) m => CoreError a -> m b
+chuckError = throwError . pure
+
+-- | Lift an 'Errors' into an error monad
+liftError :: MonadError (CoreErrors a) m => Errors (CoreErrors a) b -> m b
+liftError m = case runErrors m of
+                Left e -> throwError e
+                Right x -> pure x
+
+gatherError :: MonadWriter LintResult m => ExceptT (CoreErrors a) m b -> m (Maybe b, CoreErrors a)
+gatherError m = do
+  res <- runExceptT m
+  case res of
+    Left e -> tell (Sum (Seq.length e)) >> pure (Nothing, e)
+    Right x -> pure (Just x, mempty)
+
+gatherError' :: MonadWriter LintResult m => ExceptT (CoreErrors a) m () -> m (CoreErrors a)
+gatherError' = fmap snd . gatherError
+
+forMA :: (Monoid m, Applicative f) => [a] -> (a -> f (b, m)) -> f ([b], m)
+forMA vs f = foldr (\x a ->
+                      (\(a, b) (a', b') -> (a : a', b <> b'))
+                      <$> f x <*> a) (pure mempty) vs
 
 litTy :: IsVar a => Literal -> Type a
 litTy (Int _) = fromVar <$> tyInt
