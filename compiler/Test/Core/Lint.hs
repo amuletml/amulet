@@ -84,8 +84,8 @@ testLint f file = do
       CSuccess c -> do
         c' <- f c
         case runLintOK (checkStmt emptyScope c') of
-          Right _ -> pure $ pure ()
-          Left es -> pure $ assertFailure $ "Core lint failed: " ++ displayS (pretty es)
+          Nothing -> pure $ pure ()
+          Just (_, es) -> pure $ assertFailure $ "Core lint failed: " ++ displayS (pretty es)
       CParse es -> pure $ assertFailure $ displayS $ vsep $ map (\e -> string "Parse error: " <+> pretty e <+> " at " <+> pretty (annotation e)) es
       CResolve e -> pure $ assertFailure $ "Resolution error: " ++ displayS (pretty e)
       CInfer e -> pure $ assertFailure $ "Type error: " ++ displayS (pretty e)

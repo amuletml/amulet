@@ -3,8 +3,6 @@ module Core.Simplify
   ( optimise
   ) where
 
-import Data.List
-
 -- import Core.Optimise.Newtype
 import Core.Optimise.DeadCode
 import Core.Optimise.Sinking
@@ -24,31 +22,29 @@ lintPasses = True
 
 optmOnce :: [Stmt CoVar] -> Namey [Stmt CoVar]
 optmOnce = passes where
-  passes = foldr1 (>=>) $ linted
-           [ pure
+  passes :: [Stmt CoVar] -> Namey [Stmt CoVar]
+  passes = foldr1 (>=>)
+           [ linted "Reduce" $ pure . reducePass
+           , linted "Inline"   inlineVariablePass
 
-           , pure . reducePass
-           , inlineVariablePass
+           , linted "Dead code" $ pure . deadCodePass
+           , linted "Match Join"   matchJoinPass
 
-           , pure . deadCodePass
-           , matchJoinPass
+           , linted "Sinking" $ pure . sinkingPass . tagFreeSet
 
-           , pure . sinkingPass . tagFreeSet
-
-           , pure . reducePass
-           , pure
+           , linted "Reduce" $ pure . reducePass
            ]
 
-  linted :: [[Stmt CoVar] -> Namey [Stmt CoVar]] -> [[Stmt CoVar] -> Namey [Stmt CoVar]]
-  linted
+  linted :: Functor f => String -> ([Stmt CoVar] -> f [Stmt CoVar]) -> [Stmt CoVar] -> f [Stmt CoVar]
+  linted pass fn
     | lintPasses
-    = intersperse (pure . (runLint =<< checkStmt emptyScope))
-    | otherwise = id
+    = fmap (runLint pass =<< checkStmt emptyScope) . fn
+    | otherwise = fn
 
 -- | Run the optimiser multiple times over the input core.
 optimise :: [Stmt CoVar] -> Namey [Stmt CoVar]
-optimise = go 25 where
+optimise = go 25 . (runLint "Lower" =<< checkStmt emptyScope) where
   go :: Integer -> [Stmt CoVar] -> Namey [Stmt CoVar]
   go k sts
-    | k > 0 = go (k - 1) . (runLint =<< checkStmt emptyScope) =<< optmOnce sts
+    | k > 0 = go (k - 1) =<< optmOnce sts
     | otherwise = pure sts

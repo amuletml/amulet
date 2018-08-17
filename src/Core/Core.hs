@@ -3,6 +3,7 @@
 -- | Amulet's explicitly-typed intermediate representation
 module Core.Core where
 
+import Text.Pretty.Annotation
 import Text.Pretty.Semantic
 
 import qualified Data.VarSet as VarSet
@@ -179,24 +180,24 @@ instance Pretty a => Pretty (Atom a) where
   pretty (Ref v ty) = pretty v <> scomment (string ":[" <> pretty ty <> string "]")
   pretty (Lit l) = pretty l
 
-instance Pretty a => Pretty (Term a) where
-  pretty (Atom a) = pretty a
-  pretty (App f x) = pretty f <+> pretty x
-  pretty (TyApp f t) = pretty f <+> braces (pretty t)
+instance (Annotation b, Pretty a) => Pretty (AnnTerm b a) where
+  pretty (AnnAtom an a) = annotated an $ pretty a
+  pretty (AnnApp an f x) = annotated an $ pretty f <+> pretty x
+  pretty (AnnTyApp an f t) = annotated an $ pretty f <+> braces (pretty t)
 
-  pretty (Lam (TypeArgument v t) c)
-    = soperator (char 'Λ') <+> parens (pretty v <+> colon <+> pretty t) <> nest 2 (dot </> pretty c)
-  pretty (Lam (TermArgument v t) c)
-    = soperator (char 'λ') <+> parens (pretty v <+> colon <+> pretty t) <> nest 2 (dot </> pretty c)
+  pretty (AnnLam an (TypeArgument v t) c)
+    = annotated an $ soperator (char 'Λ') <+> parens (pretty v <+> colon <+> pretty t) <> nest 2 (dot </> pretty c)
+  pretty (AnnLam an (TermArgument v t) c)
+    = annotated an $ soperator (char 'λ') <+> parens (pretty v <+> colon <+> pretty t) <> nest 2 (dot </> pretty c)
 
-  pretty (Let (One x) e) = keyword "let" <+> braces (space <> pprLet1 x <> space) <+> keyword "in" <#> pretty e
-  pretty (Let (Many xs) e) = keyword "let rec" <+> pprLet xs </> (keyword "in" <+> pretty e)
-  pretty (Match e ps) = keyword "match" <+> pretty e <+> pprArms ps
-  pretty (Extend x rs) = braces $ pretty x <+> pipe <+> prettyRows rs where
+  pretty (AnnLet an (One x) e) = annotated an $ keyword "let" <+> braces (space <> pprLet1 x <> space) <+> keyword "in" <#> pretty e
+  pretty (AnnLet an (Many xs) e) = annotated an $ keyword "let rec" <+> pprLet xs </> (keyword "in" <+> pretty e)
+  pretty (AnnMatch an e ps) = annotated an $ keyword "match" <+> pretty e <+> pprArms ps
+  pretty (AnnExtend an x rs) = annotated an $ braces $ pretty x <+> pipe <+> prettyRows rs where
     prettyRows :: [(Text, Type a, Atom a)] -> Doc
     prettyRows = hsep . punctuate comma . map (\(x, t, v) -> text x <+> colon <+> pretty t <+> equals <+> pretty v)
-  pretty (Values xs) = soperator (string "(|") <+> (hsep . punctuate comma . map pretty $ xs) <+> soperator (string "|)")
-  pretty (Cast a phi) = parens $ pretty a <+> soperator (string "|>") <+> pretty phi
+  pretty (AnnValues an xs) = annotated an $ soperator (string "(|") <+> (hsep . punctuate comma . map pretty $ xs) <+> soperator (string "|)")
+  pretty (AnnCast an a phi) = annotated an $ parens $ pretty a <+> soperator (string "|>") <+> pretty phi
 
 instance Pretty a => Pretty (Coercion a) where
   pretty (SameRepr a b) = pretty a <+> soperator (char '~') <+> pretty b
@@ -211,16 +212,16 @@ instance Pretty a => Pretty (Coercion a) where
   pretty (Quantified Irrelevant dom c) = pretty dom <+> arrow <+> pretty c
   pretty (CoercionVar x) = pretty x
 
-pprLet :: Pretty a => [(a, Type a, Term a)] -> Doc
+pprLet :: (Annotation b, Pretty a) => [(a, Type a, AnnTerm b a)] -> Doc
 pprLet = braces' . vsep . map (indent 2) . punctuate semi . map pprLet1
 
-pprLet1 :: Pretty a => (a, Type a, Term a) -> Doc
+pprLet1 :: (Annotation b, Pretty a) => (a, Type a, AnnTerm b a) -> Doc
 pprLet1 (a, b, c) = pretty a <+> colon <+> pretty b <+> nest 2 (equals </> pretty c)
 
 pprBegin :: [Doc] -> Doc
 pprBegin = braces' . vsep . map (indent 2) . punctuate semi
 
-pprArms :: Pretty a => [Arm a] -> Doc
+pprArms :: (Annotation b, Pretty a) => [AnnArm b a] -> Doc
 pprArms = braces' . vsep . map (indent 2) . punctuate semi . map one where
   one (Arm a b c _ ts) = pretty a <+> brackets (hsep (punctuate comma (map pprTv ts))) <+> colon <+> pretty b <+> nest 2 (arrow </> pretty c)
   pprTv (a, t) = stypeVar (squote <> pretty a) <+> colon <+> pretty t
@@ -279,7 +280,7 @@ instance Pretty Literal where
   pretty (Int l) = sliteral (integer l)
   pretty (Str s) = sstring (dquotes (text s))
 
-instance Pretty a => Pretty (Stmt a) where
+instance (Annotation b, Pretty a) => Pretty (AnnStmt b a) where
   pretty (Foreign v t _) = pretty v <+> colon <+> pretty t <+> equals <+> keyword "foreign"
   pretty (StmtLet (One x)) = keyword "let" <+> pprLet1 x
   pretty (StmtLet (Many xs)) = keyword "let rec" <+> pprLet xs
