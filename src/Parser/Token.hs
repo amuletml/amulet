@@ -1,3 +1,13 @@
+-- | Handles tokens and token ranges within a lexer stream.
+--
+-- Tokens fall into one of four categories (or classes).
+--
+--  * Standard tokens, which represent a symbol or keyword.
+--  * Those with additional data, such as 'TcOp'.
+--  * Virtual tokens (those emitted by the "Parser.Context"), such as
+--    'TcVBegin'. These always start with @TCV@.
+--  * Trivial tokens (those normally treated as whitespace), such as
+--    'TcWhitespace'.
 module Parser.Token where
 
 import Data.Text (unpack, Text)
@@ -5,6 +15,9 @@ import Data.Position
 import Data.Spanned
 import Data.Span
 
+-- | The raw classification of a token without additional metadata. This
+-- is the underlying representation of what the lexer produces and the
+-- parser consumes.
 data TokenClass
   = TcArrow -- ^ A @->@ token.
   | TcEqual -- ^ A @=@ token.
@@ -166,7 +179,7 @@ data Token = Token !TokenClass !SourcePos !SourcePos deriving Show
 instance Spanned Token where
   annotation (Token _ s e) = mkSpanUnsafe s e
 
--- | Determine the friendly name of virtual token
+-- | Determine the friendly name of a virtual token
 friendlyName :: TokenClass -> String
 friendlyName TcVEnd = "end of block"
 friendlyName TcVSep = "end of block"

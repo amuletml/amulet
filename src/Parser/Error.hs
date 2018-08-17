@@ -1,5 +1,6 @@
-{-# LANGUAGE OverloadedStrings
-           , MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings, MultiParamTypeClasses #-}
+
+-- | Represents and handles errors within the parsing process
 module Parser.Error
   ( ParseError(..)
   ) where
@@ -15,6 +16,10 @@ import Text.Pretty
 import Parser.Token
 
 -- | An error in the parsing process
+--
+-- It's worth noting that not all errors are irrecoverable, though all
+-- suggest some form of incorrect code. One should use 'diagnosticKind'
+-- to determine how serious an error is.
 data ParseError
   -- | Represents an error with an arbitrary message. This is used by
   -- 'fail'

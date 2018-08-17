@@ -11,7 +11,7 @@
     * Determines what variable every identifier is pointing to, including
       module variables and handling ambiguous variables.
 
-    * Handles module definitions and `open`s.
+    * Handles module definitions and @open@s.
 
     * Prohibit some dubious constructs, such as patterns which bind the
       same identifier multiple times.
@@ -21,7 +21,6 @@
 -}
 module Syntax.Resolve
   ( resolveProgram
-  , runResolve
   , ResolveError(..)
   ) where
 
@@ -59,15 +58,17 @@ import Text.Pretty.Note
 -- | An error in the resolution process. Note that one error may be
 -- thrown multiple times.
 data ResolveError
-  = NotInScope (Var Parsed)
-  | NoSuchModule (Var Parsed)
-  | Ambiguous (Var Parsed) [Var Resolved]
-  | NonLinearPattern (Var Resolved) [Pattern Resolved]
-  | NonLinearRecord (Expr Parsed) T.Text
-  | EmptyMatch
-  | EmptyBegin
-  | IllegalImplicit (Pattern Parsed)
+  = NotInScope (Var Parsed) -- ^ This variable was not in scope
+  | NoSuchModule (Var Parsed) -- ^ This module could not be found
+  | Ambiguous (Var Parsed) [Var Resolved] -- ^ This reference could refer to more than one variable
+  | NonLinearPattern (Var Resolved) [Pattern Resolved] -- ^ This pattern declares one variable multiple times
+  | NonLinearRecord (Expr Parsed) T.Text -- ^ This record declares an entry multiple times
+  | EmptyMatch -- ^ This @match@ has no patterns
+  | EmptyBegin -- ^ This @begin@ block has no expressions
+  | IllegalImplicit (Pattern Parsed) -- ^ When performing a pattern-matching let within an implicit bind.
 
+  -- | A wrapper for other errors which adds some additional context,
+  -- such as a source position.
   | ArisingFrom ResolveError SomeReason
   deriving (Show)
 
@@ -115,12 +116,18 @@ type MonadResolve m = ( MonadError ResolveError m
                       , MonadNamey m
                       , MonadState ModuleScope m)
 
+-- | Resolve a program within a given 'Scope' and 'ModuleScope'
 resolveProgram :: MonadNamey m
-               => Scope -> ModuleScope -> [Toplevel Parsed]
+               => Scope -- ^ The scope in which to resolve this program
+               -> ModuleScope
+               -- ^ The current module scope. We return an updated
+               -- version of this if we declare or extend any modules.
+               -> [Toplevel Parsed] -- ^ The program to resolve
                -> m (Either [ResolveError] ([Toplevel Resolved], ModuleScope))
+               -- ^ The resolved program or a list of resolution errors
 resolveProgram scope modules = runResolve scope modules . resolveModule
 
--- | Run the resolver monad
+-- | Run the resolver monad.
 runResolve :: MonadNamey m
            => Scope -- ^ The initial state to resolve objects in
            -> ModuleScope -- ^ The scope for modules

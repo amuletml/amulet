@@ -456,8 +456,8 @@ lowerLet bs =
         go p = p
 
       patternExtract :: MonadLower m
-                     -- | The pattern's position, the pattern and all bound vars
                      => Span -> Pattern Typed -> [(CoVar, Type)]
+                     -- ^ The pattern's position, the pattern and all bound vars
                      -> Term -> Type -- ^ The variable we're binding from and its type
                      -> Type -- ^ The quantified variable we're binding to's type
                      -> (Var Typed, S.Ann Typed) -- ^ The pattern variable we're binding to
@@ -474,8 +474,8 @@ lowerLet bs =
       -- | Wrap an expression in a pattern match, generating the
       -- appropriate type lambdas and performing correct substitutions.
       patternWrap :: MonadLower m
-                     -- | The pattern's position, the pattern and all bound vars
                   => Span -> Pattern Typed -> [(CoVar, Type)]
+                     -- ^ The pattern's position, the pattern and all bound vars
                   -> Term -> Type -- ^ The variable we're binding from and its type
                   -> Type -- ^ The quantified variable we're binding to's type
                   -> Term -> Type -- ^ The inner term and its resulting type
