@@ -188,7 +188,7 @@ reduceTerm s (Match t bs) = {-# SCC "Reduce.fold_cases" #-}
         foldVar _ _ _ Nothing = Nothing
         foldVar vs v a (Just sol) = do
           vty <- snd <$> find ((==v) . fst) vs
-          aty <- approximateAtomType a
+          let aty = approximateAtomType a
           unifyWith sol vty aty
 
 -- Beta reduction (function case)

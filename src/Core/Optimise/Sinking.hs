@@ -38,6 +38,10 @@ data SinkState a = SinkState { sinkable :: [Sinkable a]
                              , arity :: A.ArityScope }
   deriving (Show)
 
+-- | Run the sinking pass on a series of statements with free variable
+-- information.
+--
+-- This is generally called after applying 'tagFreeSet' to the program.
 sinkingPass :: IsVar a => [AnnStmt VarSet.Set a] -> [Stmt a]
 sinkingPass = sinkStmts (SinkState [] A.emptyScope)
 

@@ -114,6 +114,9 @@ instance MonadNamey m => MonadNamey (ExceptT e m) where
 instance MonadNamey m => MonadNamey (Reader.ReaderT e m) where
   genName = lift genName
 
+-- | Generate an lowercase letter-based representation of a integer
+-- identifier. This is used to generate slightly more readable variable
+-- names.
 genAlnum :: Int -> T.Text
 genAlnum 0 = T.singleton 'a'
 genAlnum n = go (fromIntegral n) T.empty (floor (logBase 26 (fromIntegral n :: Double))) where

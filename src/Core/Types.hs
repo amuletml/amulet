@@ -21,15 +21,17 @@ import Data.Foldable
 import Data.Maybe
 import Data.List
 
+-- | Compute the arity of a function type. Namely, how many terms one can
+-- apply to it.
 arity :: Type a -> Int
 arity (ForallTy Relevant{} _ t) = arity t
 arity (ForallTy Irrelevant _ t) = 1 + arity t
 arity _ = 0
--- TODO Squid pls
 
-approximateAtomType :: IsVar a => Atom a -> Maybe (Type a)
-approximateAtomType (Ref _ t) = pure t
-approximateAtomType (Lit l) = pure . fmap fromVar $ case l of
+-- | Get the type of an atom.
+approximateAtomType :: IsVar a => Atom a -> Type a
+approximateAtomType (Ref _ t) = t
+approximateAtomType (Lit l) = fmap fromVar $ case l of
   Int{} -> tyInt
   Float{} -> tyFloat
   Str{} -> tyString
@@ -38,11 +40,13 @@ approximateAtomType (Lit l) = pure . fmap fromVar $ case l of
   Unit -> tyUnit
   RecNil -> ExactRowsTy []
 
+-- | Approximate the type of a term, returning 'Nothing' if there was a
+-- mismatch.
 approximateType :: IsVar a => Term a -> Maybe (Type a)
-approximateType (Atom a) = approximateAtomType a
+approximateType (Atom a) = pure (approximateAtomType a)
 approximateType (Cast _ phi) = snd <$> relates phi
 approximateType (App f _) = do
-  ForallTy _ _ d <- approximateAtomType f
+  let ForallTy _ _ d = approximateAtomType f
   pure d
 approximateType (Lam (TypeArgument v k) f) = ForallTy (Relevant v) k <$> approximateType f
 approximateType (Lam (TermArgument _ t) f) = ForallTy Irrelevant t <$> approximateType f
@@ -50,18 +54,21 @@ approximateType (Let _ e) = approximateType e
 approximateType (Match _ xs) = case xs of
   (x:_) -> approximateType (x ^. armBody)
   [] -> error "impossible approximateType empty match"
-approximateType (Extend e rs) = RowsTy <$> approximateAtomType e <*> traverse (\(x, _, t) -> (x,) <$> approximateAtomType t) rs
-approximateType (Values xs) = ValuesTy <$> traverse approximateAtomType xs
+approximateType (Extend e rs) = pure (RowsTy (approximateAtomType e) (map (\(x, _, t) -> (x, approximateAtomType t)) rs))
+approximateType (Values xs) = pure (ValuesTy (map approximateAtomType xs))
 approximateType (TyApp f at) = do
-  ForallTy (Relevant v) _ t <- approximateAtomType f
+  let ForallTy (Relevant v) _ t = approximateAtomType f
   let replace = transform go
       go (VarTy v') | v == v' = at
       go x = x
   pure (replace t)
 
+-- | Attempt to unify two types, returning a possible substitution
+-- mapping of type variables to replacement types.
 unify :: IsVar a => Type a -> Type a -> Maybe (VarMap.Map (Type a))
 unify = unifyWith mempty
 
+-- | Attempt to unify two types with an existing unification scheme.
 unifyWith :: IsVar a => VarMap.Map (Type a) -> Type a -> Type a -> Maybe (VarMap.Map (Type a))
 unifyWith m a b = execStateT (unify' a b) m
 
@@ -89,11 +96,17 @@ unify' (RowsTy NilTy []) NilTy = pure ()
 unify' NilTy (RowsTy NilTy []) = pure ()
 unify' _ _ = lift Nothing
 
+-- | Replace a type variable with a new type inside a type.
+--
+-- This is a more lightweight version of @Core.Optimise@'s
+-- @substituteInType@.
 replaceTy :: IsVar a => a -> Type a -> Type a -> Type a
 replaceTy var at = transform (go var) where
   go v (VarTy v') | v == v' = at
   go _ x = x
 
+-- | Determines if these two types unify under /closed/ variables. This
+-- effectively determines if the two types are equivalent.
 unifyClosed :: IsVar a => Type a -> Type a -> Bool
 unifyClosed = go mempty where
   go _ (ConTy a) (ConTy b) = a == b

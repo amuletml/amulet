@@ -1,4 +1,10 @@
 {-# LANGUAGE OverloadedStrings, ScopedTypeVariables #-}
+
+-- | This monster of a module declares any built-in variables, or
+-- variables the compiler has intrinsic knowledge of.
+--
+-- Any "internal" variable has a negative index which, like other
+-- indexes, should be unique.
 module Core.Builtin where
 
 import Data.Text ()

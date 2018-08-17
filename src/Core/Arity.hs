@@ -1,3 +1,19 @@
+-- | The "Core.Arity" module acts as a basic system for tracking the
+-- arity of various definitions and so the purity of them.
+--
+-- For instance, consider the following term:
+--
+-- > \x -> print x
+-- >       \y -> x + y
+--
+-- While the type may have arity 3, the tracker only considers this as
+-- arity 2.
+--
+-- We also disambiguate between impure and pure functions, though
+-- analysis of this is currently limited to constructors and
+-- builtins. For instance our above function can only be applied to one
+-- argument before side effects may occur. Meanwhile, @(+)@ can be
+-- applied to 2 without any side effect.
 module Core.Arity
   ( ArityScope
   , Arity(..)
@@ -66,6 +82,11 @@ isPureA :: Arity -> Bool
 isPureA (Arity a p) | p = a >= 0
                     | otherwise = a > 0
 
+-- | Extend the arity scope with a series of bindings.
+--
+-- This will add any term which has an arity greater than 0 - we need not
+-- consider terms which are strictly pure but have a arity of 0 (such as
+-- atoms) as references to them will already be pure.
 extendPureLets :: IsVar a => ArityScope -> [(a, Type a, AnnTerm b a)] -> ArityScope
 extendPureLets s vs = s { pureArity = foldr (\(v, _, e) p -> maybeInsert v (termArity s e) p) (pureArity s) vs }
   where
@@ -73,9 +94,10 @@ extendPureLets s vs = s { pureArity = foldr (\(v, _, e) p -> maybeInsert v (term
       | defArity a > 0 = VarMap.insert (toVar v) a m
       | otherwise = m
 
+-- | Extend the arity scope with all constructors defined within a type.
 extendPureCtors :: IsVar a => ArityScope -> [(a, Type a)] -> ArityScope
 extendPureCtors s cts = s {
-  pureArity = foldr (\(v, ty) p -> VarMap.insert (toVar v) (Arity (1 + typeArity ty) True) p) (pureArity s) cts }
+  pureArity = foldr (\(v, ty) p -> VarMap.insert (toVar v) (Arity (typeArity ty) True) p) (pureArity s) cts }
 
   where
     typeArity :: Type a -> Int

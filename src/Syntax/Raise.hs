@@ -6,7 +6,10 @@ import Control.Arrow
 import Syntax.Var
 import Syntax
 
-raiseT :: (Var p -> Var p') -- How to raise variables
+-- | Raise variables from one phase to another within a type.
+raiseT :: (Var p -> Var p')
+       -- ^ Raise a single variable. This will be a type variable, type
+       -- name or constructor.
        -> Type p -> Type p'
 raiseT v (TyCon n) = TyCon (v n)
 raiseT v (TyPromotedCon n) = TyPromotedCon (v n)
