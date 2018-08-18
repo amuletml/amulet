@@ -76,22 +76,22 @@ genOperator :: CoVar -> LuaStmt
 genOperator op | op == vLAZY =
   LuaLocal [ LuaName "__builtin_Lazy" ]
            [ LuaFunction [ eks ]
-             [ LuaReturn [LuaTable [ (LuaNumber 1, LuaRef eks)
-                                   , (LuaNumber 2, LuaFalse)
+             [ LuaReturn [LuaTable [ (LuaInteger 1, LuaRef eks)
+                                   , (LuaInteger 2, LuaFalse)
                                    , (LuaString "__tag", LuaString "lazy")
                                    ]] ] ] where
   eks = LuaName "x"
 genOperator op | op == vForce =
   LuaLocal [ LuaName "__builtin_force" ]
            [ LuaFunction [ eks ]
-             [ LuaIf (LuaRef (LuaIndex (LuaRef eks) (LuaNumber 2)))
-                [ LuaReturn [ LuaRef (LuaIndex (LuaRef eks) (LuaNumber 1)) ] ]
-                [ LuaAssign [ LuaIndex (LuaRef eks) (LuaNumber 1)
-                            , LuaIndex (LuaRef eks) (LuaNumber 2) ]
-                            [ LuaCall (LuaRef (LuaIndex (LuaRef eks) (LuaNumber 1)))
+             [ LuaIf (LuaRef (LuaIndex (LuaRef eks) (LuaInteger 2)))
+                [ LuaReturn [ LuaRef (LuaIndex (LuaRef eks) (LuaInteger 1)) ] ]
+                [ LuaAssign [ LuaIndex (LuaRef eks) (LuaInteger 1)
+                            , LuaIndex (LuaRef eks) (LuaInteger 2) ]
+                            [ LuaCall (LuaRef (LuaIndex (LuaRef eks) (LuaInteger 1)))
                                [ LuaRef (LuaName "__builtin_unit") ]
                             , LuaTrue]
-                  , LuaReturn [LuaRef (LuaIndex (LuaRef eks) (LuaNumber 1))] ] ] ] where
+                  , LuaReturn [LuaRef (LuaIndex (LuaRef eks) (LuaInteger 1))] ] ] ] where
   eks = LuaName "x"
 genOperator op =
   let name =  getVar op escapeScope
