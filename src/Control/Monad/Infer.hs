@@ -266,7 +266,7 @@ instance Pretty TypeError where
                         <+> nest 8 (prettyMotive _skolMotive <> comma)
             _ -> foldr ((<#>) . pretty . flip EscapedSkolems t . pure) empty esc
          , empty -- a line break
-         , note <+> string "in type" <+> verbatim (withoutSkol t)
+         , note <+> string "in type" <+> displayType t
          ]
 
   pretty (NotPromotable c x err) =
@@ -325,7 +325,7 @@ instance Note TypeError Style where
   formatNote f (ArisingFrom e@ArisingFrom{} _) = formatNote f e
   -- This one gets ~Special Handling~™
   formatNote f (ArisingFrom (SkolBinding (Skolem _ v _ m) t) rs) =
-    vsep [ indent 2 "Could not the rigid type variable" <+> sk (squote <> pretty v) <+> "with" <+> whatIs t
+    vsep [ indent 2 "Could not match the rigid type variable" <+> sk (squote <> pretty v) <+> "with" <+> whatIs t
          , empty
          , case m of
              ByAscription ex t ->

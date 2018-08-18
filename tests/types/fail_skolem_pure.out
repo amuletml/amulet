@@ -1,5 +1,5 @@
 fail_skolem_pure.ml[2:32 ..2:32]: error
-  Could not the rigid type variable 'a with the type 'f 'a
+  Could not match the rigid type variable 'a with the type 'f 'a
 
   • Arising in the expression
   │ 

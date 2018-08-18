@@ -366,6 +366,7 @@ reType r (TyRows t f) = TyRows <$> reType r t
                                <*> traverse (\(a, b) -> (a,) <$> reType r b) f
 reType r (TyExactRows f) = TyExactRows <$> traverse (\(a, b) -> (a,) <$> reType r b) f
 reType r (TyTuple ta tb) = TyTuple <$> reType r ta <*> reType r tb
+reType _ (TyWildcard _) = pure (TyWildcard Nothing)
 reType _ TyType = pure TyType
 
 reWholePattern :: forall m. MonadResolve m

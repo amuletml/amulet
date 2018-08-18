@@ -1,0 +1,13 @@
+wild05.ml[1:24 ..1:24]: error
+  Could not match the rigid type variable 'a with the type int
+
+  • Arising in the expression
+  │ 
+1 │ let f (x : 'a) : int = x
+  │ 
+
+  • When checking that this expression has type
+     forall 'a. 'a -> int
+  │ 
+1 │ let f (x : 'a) : int = x
+  │ 

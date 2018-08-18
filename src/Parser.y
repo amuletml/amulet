@@ -104,7 +104,7 @@ import Syntax
   '$sep'   { Token TcVSep _ _ }
 
 
-%expect 9
+%expect 10
 
 %%
 
@@ -350,6 +350,7 @@ TypeAtom :: { Located (Type Parsed) }
          | '(' Type ')'                           { lPos2 $1 $3 (getL $2) }
          | '{' List(TypeRow, ',') '}'             { lPos2 $1 $3 $ TyExactRows $2 }
          | '{' Type '|' List(TypeRow, ',') '}'    { lPos2 $1 $5 $ TyRows (getL $2) $4 }
+         | '_'                                    { lPos1 $1 (TyWildcard Nothing) }
 
 TypeRow :: { (T.Text, Type Parsed) }
   : ident ':' Type                                { (getIdent $1, getL $3) }

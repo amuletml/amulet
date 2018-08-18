@@ -61,7 +61,6 @@ makeLenses ''SolveScope
 
 type SolveM = NameyT (WriterT [TypeError] (StateT SolveState (ReaderT SolveScope (Except TypeError))))
 
-
 isRec :: String
 isRec = "A record type's hole can only be instanced to another record"
 
@@ -304,7 +303,7 @@ unify ta@(TyPromotedCon a) tb@(TyPromotedCon b)
   | a == b = pure (ReflCo tb)
   | otherwise = unequal ta tb
 
-unify (TySkol t@(Skolem sv _ _ _)) b = do
+unify skt@(TySkol t@(Skolem sv _ _ _)) b = do
   sub <- use (solveAssumptions . at sv)
   case sub of
     Just ty -> do
@@ -312,6 +311,7 @@ unify (TySkol t@(Skolem sv _ _ _)) b = do
       pure (AssumedCo (TySkol t) ty)
     Nothing -> case b of
       TyVar v -> bind v (TySkol t)
+      TyWildcard (Just tau) -> unify skt tau
       _ -> do
         canWe <- view bindSkol
         if canWe
@@ -325,6 +325,9 @@ unify b (TySkol t) = SymCo <$> unify (TySkol t) b
 
 unify (TyVar a) b = bind a b
 unify a (TyVar b) = SymCo <$> bind b a
+
+unify (TyWildcard (Just a)) b = unify a b
+unify a (TyWildcard (Just b)) = SymCo <$> unify b a
 
 unify (TyArr a b) (TyArr a' b') = ArrCo <$> unify a a' <*> unify b b'
 
@@ -434,7 +437,7 @@ subsumes' blame s (TyPi (Implicit b) c) (TyPi (Implicit a) d) = do
 
   pure (WrapFn (MkWrapCont wrap "co/contra subsumption for implicit functions"))
 
-subsumes' r s wt@(TyPi (Implicit t) t1) t2 | _TyVar `isn't` t2 = do
+subsumes' r s wt@(TyPi (Implicit t) t1) t2 | concretish t2 = do
   omega <- subsumes r s t1 t2
 
   sub <- use solveTySubst
@@ -618,6 +621,8 @@ freshSkol m ty u = do
 
 occurs :: Var Typed -> Type Typed -> Bool
 occurs _ (TyVar _) = False
+occurs _ (TyWildcard (Just (TyVar _))) = False
+occurs v (TyWildcard (Just t)) = occurs v t
 occurs x e = x `Set.member` ftv e
 
 capture :: MonadState b m => m a -> m (a, b)
@@ -631,6 +636,7 @@ capture m = do
 concretish :: Type Typed -> Bool
 concretish TyVar{} = False
 concretish (TyApp f x) = concretish f && concretish x
+concretish (TyWildcard t) = maybe False concretish t
 concretish _ = True
 
 catchy :: MonadError e m => m a -> m (Either e a)

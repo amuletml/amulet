@@ -12,6 +12,7 @@ raiseT :: (Var p -> Var p')
        -- name or constructor.
        -> Type p -> Type p'
 raiseT v (TyCon n) = TyCon (v n)
+raiseT v (TyWildcard n) = TyWildcard (raiseT v <$> n)
 raiseT v (TyPromotedCon n) = TyPromotedCon (v n)
 raiseT v (TySkol (Skolem n u t m)) = TySkol (Skolem (v n) (v u) (raiseT v t) (motive m)) where
   motive (BySubsumption a b) = BySubsumption (raiseT v a) (raiseT v b)

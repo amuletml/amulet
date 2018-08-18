@@ -10,7 +10,7 @@ module Syntax.Subst
   ( Subst
   , Substitutable
   , tyVarOcc, foldOccMap
-  , ftv
+  , ftv, nominalTvs
   , apply
   , compose
   , Map.fromList )
@@ -39,6 +39,7 @@ instance Ord (Var p) => Substitutable p (Type p) where
   ftv TySkol{} = mempty
   ftv TyType{} = mempty
   ftv (TyVar v) = Set.singleton v
+  ftv (TyWildcard v) = foldMap ftv v
   ftv (TyApp a b) = ftv a <> ftv b
   ftv (TyTuple a b) = ftv a <> ftv b
   ftv (TyRows rho rows) = ftv rho <> foldMap (ftv . snd) rows
@@ -49,6 +50,7 @@ instance Ord (Var p) => Substitutable p (Type p) where
   apply _ (TyCon a) = TyCon a
   apply _ (TySkol x) = TySkol x
   apply _ (TyPromotedCon x) = TyPromotedCon x
+  apply s (TyWildcard v) = mkWildTy (apply s <$> v)
   apply _ TyType = TyType
   apply s t@(TyVar v) = Map.findWithDefault t v s
   apply s (TyApp a b) = TyApp (apply s a) (apply s b)
@@ -144,6 +146,7 @@ tyVarOcc TyCon{} = mempty
 tyVarOcc TyPromotedCon{} = mempty
 tyVarOcc TySkol{} = mempty
 tyVarOcc TyType{} = mempty
+tyVarOcc TyWildcard{} = mempty
 tyVarOcc (TyVar v) = singletonOcc v
 tyVarOcc (TyApp a b) = tyVarOcc a <> tyVarOcc b
 tyVarOcc (TyTuple a b) = tyVarOcc a <> tyVarOcc b
@@ -157,3 +160,20 @@ tyVarOcc (TyPi binder t) = tyVarOcc' binder <> (tyVarOcc t `removeOccs` bound bi
   tyVarOcc' (Anon t) = tyVarOcc t
   tyVarOcc' (Implicit t) = tyVarOcc t
   tyVarOcc' (Invisible _ k) = maybe mempty tyVarOcc k
+
+nominalTvs :: Ord (Var p) => Type p -> Set.Set (Var p)
+nominalTvs TyCon{} = mempty
+nominalTvs TyPromotedCon{} = mempty
+nominalTvs TySkol{} = mempty
+nominalTvs TyType{} = mempty
+nominalTvs (TyVar v) = Set.singleton v
+nominalTvs (TyWildcard _) = mempty
+nominalTvs (TyApp a b) = nominalTvs a <> nominalTvs b
+nominalTvs (TyTuple a b) = nominalTvs a <> nominalTvs b
+nominalTvs (TyRows rho rows) = nominalTvs rho <> foldMap (nominalTvs . snd) rows
+nominalTvs (TyExactRows rows) = foldMap (nominalTvs . snd) rows
+nominalTvs (TyWithConstraints eq b) = foldMap (\(a, b) -> nominalTvs a <> nominalTvs b) eq <> nominalTvs b
+nominalTvs (TyPi binder t) = nominalOf binder <> (nominalTvs t Set.\\ bound binder) where
+  nominalOf (Anon t) = nominalTvs t
+  nominalOf (Implicit t) = nominalTvs t
+  nominalOf (Invisible _ k) = maybe mempty nominalTvs k
