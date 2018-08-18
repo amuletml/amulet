@@ -1,4 +1,3 @@
-{-# LANGUAGE TupleSections #-}
 module Core.Types
   ( arity
   , approximateType, approximateAtomType

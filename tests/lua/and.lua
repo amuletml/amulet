@@ -3,17 +3,17 @@ do
     __tag = "__builtin_unit"
   }
   local function __builtin_force (x)
-    if x[2.0] then
-      return x[1.0]
+    if x[2] then
+      return x[1]
     else
-      x[1.0], x[2.0] = x[1.0](__builtin_unit), true
-      return x[1.0]
+      x[1], x[2] = x[1](__builtin_unit), true
+      return x[1]
     end
   end
   local function __builtin_Lazy (x)
     return {
-      [1.0] = x,
-      [2.0] = false,
+      [1] = x,
+      [2] = false,
       __tag = "lazy"
     }
   end
