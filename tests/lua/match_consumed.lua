@@ -12,18 +12,18 @@ do
     }
   end
   local bottom = nil
-  local ds = (function ()
+  local dq = (function ()
+    local dm = bottom
+    local a = dm(1)
     local _do = bottom
-    local a = _do(1)
-    local dq = bottom
-    if dq.__tag == "None" then
-      local gb = _do(a)
-      local dn = bottom
-      return dn(gb)
-    elseif dq.__tag == "Some" then
-      local gc = _do(a + dq[1] * 2)
-      local dn = bottom
-      return dn(gc)
+    if _do.__tag == "None" then
+      local fz = dm(a)
+      local dl = bottom
+      return dl(fz)
+    elseif _do.__tag == "Some" then
+      local ga = dm(a + _do[1] * 2)
+      local dl = bottom
+      return dl(ga)
     end
   end)()
 end

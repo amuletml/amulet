@@ -77,11 +77,11 @@ errRef = Ref C.vError
                           (ForallTy Irrelevant C.tyString
                                  (VarTy C.tyvarA)))
 
-patternMatchingFail :: MonadLower m => Span -> Type -> Type -> m Arm
-patternMatchingFail w p t = do
+patternMatchingFail :: MonadLower m => String -> Span -> Type -> Type -> m Arm
+patternMatchingFail str w p t = do
   var <- fresh ValueVar
   tyApp <- fresh ValueVar
-  let err = Lit (Str (T.pack ("Pattern matching failure at " ++ show (pretty w))))
+  let err = Lit (Str (T.pack ("Pattern matching failure in " ++ str ++ " at " ++ show (pretty w))))
       errTy = ForallTy Irrelevant C.tyString t
   pure C.Arm { _armPtrn = C.Capture var p, _armTy = p
              , _armBody = C.Let (One (tyApp, errTy, C.TyApp errRef t))
@@ -140,7 +140,7 @@ lowerAt (Fun param bd an) (ForallTy Irrelevant a b) =
           ts <- patternTyvars p
           bd' <- lowerAtTerm bd b
           arg <- fresh ValueVar
-          fail <- patternMatchingFail (fst an) a b
+          fail <- patternMatchingFail "pattern-matching function" (fst an) a b
           pure (Lam (TermArgument arg a) (C.Match (Ref arg a) [ C.Arm { _armPtrn = p', _armTy = a, _armBody = bd'
                                                                       , _armVars = patternVars p', _armTyvars = ts }
                                                               , fail ]))
@@ -156,7 +156,7 @@ lowerAt (S.Match ex cs an) ty = do
     ex' <- lowerAtTerm ex ty
     pure C.Arm { _armPtrn = p', _armTy = mt, _armBody = ex'
                , _armVars = patternVars p', _armTyvars = ts }
-  fail <- patternMatchingFail (fst an) mt ty
+  fail <- patternMatchingFail "match expression" (fst an) mt ty
 
   pure $ C.Match ex' (cs' ++ [fail])
 lowerAt (Access r k _) ty = do
@@ -489,7 +489,7 @@ lowerLet bs =
         flip runContT pure $ do
           test' <- onAtom test ty
           genWrapper id mempty test' ty (requiredVars outerTy) $ \subst ptrnTy res -> do
-            fail <- patternMatchingFail pos ptrnTy innerTy
+            fail <- patternMatchingFail "let expression" pos ptrnTy innerTy
 
             -- We substitute the whole match to use our new type arguments, as it's
             -- easier than substituting each pattern + pattern binds

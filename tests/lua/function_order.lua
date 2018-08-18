@@ -3,12 +3,12 @@ do
     __tag = "__builtin_unit"
   }
   local bottom = nil
-  local dd = (function ()
+  local db = (function ()
+    local cy = bottom
+    local a = cy(1)
+    local b = cy(2)
+    local c = cy(3)
     local da = bottom
-    local a = da(1)
-    local b = da(2)
-    local c = da(3)
-    local dc = bottom
-    return dc(b)(c)(a)
+    return da(b)(c)(a)
   end)()
 end

@@ -40,5 +40,5 @@ do
     return go(1)
   end)()
   local bottom = nil
-  local ok = bottom(main)
+  local og = bottom(main)
 end
