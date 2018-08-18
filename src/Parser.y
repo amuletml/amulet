@@ -23,6 +23,9 @@ import Parser.Token
 import Syntax.Var
 import Syntax
 
+#undef __GLASGOW_HASKELL__
+#define __GLASGOW_HASKELL__ 709
+
 }
 
 %name parseTops Tops
@@ -293,7 +296,7 @@ Lit :: { Located Lit }
     | true                 { lPos1 $1 $ LiBool True }
     | false                { lPos1 $1 $ LiBool False }
 
--- An alternative to Pattern which uses TypeProd
+-- An alternative to Pattern which uses TypeProd 
 -- instead of Type
 MPattern :: { Pattern Parsed }
          : ArgP                   { $1 }
