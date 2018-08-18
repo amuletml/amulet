@@ -19,6 +19,7 @@ wellformed tp = case tp of
   TySkol{} -> pure ()
   TyType{} -> pure ()
   TyPromotedCon{} -> pure ()
+  TyWildcard{} -> pure ()
   TyPi a b -> do
     case a of
       Invisible _ k -> traverse_ wellformed k
@@ -72,6 +73,7 @@ skols TyCon{}  = mempty
 skols TyVar{}  = mempty
 skols TyType{} = mempty
 skols TyPromotedCon{}  = mempty
+skols TyWildcard{}  = mempty
 skols (TySkol x) = Set.singleton x
 skols (TyApp a b) = skols a <> skols b
 skols (TyPi b t)

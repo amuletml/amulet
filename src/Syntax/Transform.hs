@@ -13,6 +13,7 @@ transformType
 transformType ft = goT where
   transT (TyCon v) = TyCon v
   transT (TyVar v) = TyVar v
+  transT (TyWildcard v) = TyWildcard v
   transT (TyPromotedCon v) = TyPromotedCon v
   transT (TyPi x r) = TyPi (transB x) (goT r)
   transT (TyApp f x) = TyApp (goT f) (goT x)

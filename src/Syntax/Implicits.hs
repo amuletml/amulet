@@ -270,6 +270,7 @@ getHead t@TyTuple{} = (t, Seq.empty)
 getHead t@TySkol{} = (t, Seq.empty)
 getHead t@TyWithConstraints{} = (t, Seq.empty)
 getHead t@TyType = (t, Seq.empty)
+getHead t@TyWildcard{} = (t, Seq.empty)
 
 -- | Split the type of an implicit variable into its head and a set of
 -- obligations.
@@ -283,6 +284,9 @@ merge = Map.merge Map.preserveMissing Map.preserveMissing (Map.zipWithMatched (c
 matches :: Ord (Var p) => Type p -> Type p -> Bool
 matches TyVar{} _ = True
 matches _ TyVar{} = True
+
+matches TyWildcard{} _ = True
+matches _ TyWildcard{} = True
 
 matches (TyCon t) (TyCon t') = t == t'
 matches TyCon{} _ = False

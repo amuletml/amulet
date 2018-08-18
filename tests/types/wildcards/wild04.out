@@ -1,0 +1,7 @@
+wild04.ml[2:9 ..2:9]: error
+  Could not match expected type string with unit
+
+  Arising in the expression
+  │ 
+2 │ let y = x ^ ""
+  │ 

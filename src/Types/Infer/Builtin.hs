@@ -13,6 +13,7 @@ import Data.Data
 import Control.Monad.Infer
 import Control.Lens
 
+import Syntax.Transform
 import Syntax.Types
 import Syntax.Var
 import Syntax
@@ -162,6 +163,11 @@ litTy LiStr{} = tyString
 litTy LiBool{} = tyBool
 litTy LiUnit{} = tyUnit
 litTy LiFloat{} = tyFloat
+
+killWildcard :: Type Typed -> Type Typed
+killWildcard = transformType go where
+  go (TyWildcard (Just tau)) = killWildcard tau
+  go x = x
 
 -- A representation of an individual 'match' arm, for blaming type
 -- errors on:

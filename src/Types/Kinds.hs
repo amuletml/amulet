@@ -156,6 +156,15 @@ inferKind (TyVar v) = do
   k <- maybe freshTV pure =<< view (names . at v)
   pure (TyVar (TvName v), k)
 
+inferKind (TyWildcard (Just v)) = do
+  (v, k) <- inferKind v
+  pure (TyWildcard (Just v), k)
+
+inferKind (TyWildcard Nothing) = do
+  v <- freshTV
+  k <- freshTV
+  pure (TyWildcard (Just v), k)
+
 inferKind (TySkol sk) = do
   k <- maybe freshTV pure =<< view (names . at (sk ^. skolIdent))
   pure (raiseT TvName (TySkol sk), k)
@@ -271,7 +280,7 @@ isType t = do
   pure t
 
 closeOver :: MonadKind m => SomeReason -> Type Typed -> m (Type Typed)
-closeOver r a = kindVars <$> annotateKind r (forall (toList freevars) a) where
+closeOver r a = kindVars . killWildcard <$> annotateKind r (forall (toList freevars) a) where
   freevars = ftv a
   forall :: [Var p] -> Type p -> Type p
   forall [] a = a
@@ -303,11 +312,13 @@ promoteOrError TyVar{} = Nothing
 promoteOrError TySkol{} = Nothing
 promoteOrError TyPromotedCon{} = Nothing
 promoteOrError TyType{} = Nothing
+promoteOrError TyWildcard{} = Nothing
 
-generalise :: MonadInfer Typed m => SomeReason -> Type Typed -> m (Type Typed)
-generalise r ty =
+
+generalise :: MonadInfer Typed m => (Type Typed -> Set.Set (Var Typed)) -> SomeReason -> Type Typed -> m (Type Typed)
+generalise ftv r ty =
   let fv = ftv ty in do
     env <- view typeVars
     case Set.toList (fv `Set.difference` env) of
       [] -> pure ty
-      vs -> annotateKind r $ foldr (flip TyForall Nothing) ty vs
+      vs -> annotateKind r $ foldr (flip TyForall Nothing) (killWildcard ty) vs

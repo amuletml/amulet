@@ -53,4 +53,5 @@ tests = do
   lazy <- testGroup "Automatic laziness tests" <$> goldenDir result "tests/types/lazy/" ".ml"
   implicit <- testGroup "Implicit parameter tests" <$> goldenDir result "tests/types/implicits/" ".ml"
   letgen <- testGroup "Let generalization tests" <$> goldenDir result "tests/types/letgen/" ".ml"
-  pure (testGroup "Type inference" [ inference, gadts, rankn, lazy, implicit, letgen ])
+  wild <- testGroup "Type wildcard tests" <$> goldenDir result "tests/types/wildcards/" ".ml"
+  pure (testGroup "Type inference" [ inference, gadts, rankn, lazy, implicit, letgen, wild ])

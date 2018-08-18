@@ -3,7 +3,7 @@ fail_skolem_escape.ml[2:19 ..2:38]: error
   • Note: the variable b was rigidified because of the context, the type
           forall 'b. 'b -> 'a,
 
-  • Note: in type `'b`
+  • Note: in type b
   • Note: in the inferred type for escape_fail
 
   Arising in the expression

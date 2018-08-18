@@ -154,6 +154,8 @@ instance (Pretty (Var p)) => Pretty (Type p) where
   pretty (TySkol v) = stypeSkol (pretty (v ^. skolIdent) <> text "." <> pretty (v ^. skolVar))
 
   pretty (TyPi x e) = pretty x <+> pretty e
+  pretty (TyWildcard (Just t)) = soperator (string "'_") <> pretty t
+  pretty TyWildcard{} = skeyword (char '_')
 
   pretty (TyRows p rows) = enclose (lbrace <> space) (space <> rbrace)  $ pretty p <+> soperator pipe <+> hsep (punctuate comma (prettyRows colon rows)) 
   pretty (TyExactRows rows) = record (prettyRows colon rows)
@@ -236,6 +238,7 @@ applyCons x@TyVar{} = x
 applyCons x@TySkol{} = x
 applyCons x@TyType{} = x
 applyCons x@TyPromotedCon{} = x
+applyCons x@TyWildcard{} = x
 applyCons (TyPi a b) = TyPi (go a) (applyCons b) where
   go (Anon t) = Anon (applyCons t)
   go (Implicit t) = Implicit (applyCons t)
@@ -263,6 +266,7 @@ displayType = prettyType . dropKindVars mempty where
   dropKindVars s (TyPi q ty) = TyPi (apply s q) (dropKindVars s ty)
   dropKindVars _ x@TyPromotedCon{} = x
   dropKindVars s x@TyVar{} = apply s x
+  dropKindVars s x@TyWildcard{} = apply s x
   dropKindVars _ x@TyCon{} = x
   dropKindVars _ x@TySkol{} = x
   dropKindVars s (TyApp t y) = TyApp (dropKindVars s t) (dropKindVars s y)
@@ -278,6 +282,9 @@ displayType = prettyType . dropKindVars mempty where
   kindVarIn v (TyPi (Implicit a) b) = kindVarIn v a && kindVarIn v b
   kindVarIn _ TyPromotedCon{} = True
   kindVarIn v (TyVar x) = x /= v
+  kindVarIn v (TyWildcard x) = case x of
+    Just x -> kindVarIn v x
+    Nothing -> True
   kindVarIn _ TyCon{} = True
   kindVarIn _ TySkol{} = True
   kindVarIn v (TyApp t y) = kindVarIn v t && kindVarIn v y
@@ -289,6 +296,7 @@ displayType = prettyType . dropKindVars mempty where
 
 prettyType :: forall p. (Pretty (Var p), Ord (Var p)) => Type p -> Doc
 prettyType x@TyPromotedCon{} = pretty x
+prettyType x@TyWildcard{} = pretty x
 prettyType x@TyVar{} = pretty x
 prettyType x@TyCon{} = pretty x
 prettyType (TySkol v) = stypeSkol (pretty (v ^. skolVar))

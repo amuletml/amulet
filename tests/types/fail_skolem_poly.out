@@ -1,5 +1,5 @@
 fail_skolem_poly.ml[2:32 ..2:32]: error
-  Could not the rigid type variable 'a with the type int
+  Could not match the rigid type variable 'a with the type int
 
   • Arising in the expression
   │ 
@@ -12,7 +12,7 @@ fail_skolem_poly.ml[2:32 ..2:32]: error
 2 │ let poly_fail = poly (fun x -> x + 1)
   │ 
 fail_skolem_poly.ml[2:32 ..2:36]: error
-  Could not the rigid type variable 'a with the type int
+  Could not match the rigid type variable 'a with the type int
 
   • Arising in the expression
   │ 

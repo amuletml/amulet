@@ -6,6 +6,7 @@ import Control.Monad.State
 
 import qualified Data.Map.Strict as Map
 
+import Syntax.Subst
 import Syntax.Types
 import Syntax.Var
 import Syntax
@@ -47,7 +48,7 @@ approximate :: MonadInfer Typed m
             -> m (Origin, (Var Typed, Type Typed))
 approximate (Binding v e _ _) = do
   (ty, st) <- runStateT (approxType e) Supplied
-  ty' <- generalise (becauseExp e) ty
+  ty' <- generalise nominalTvs (becauseExp e) ty
   pure (st, (TvName v, if not (wasGuessed st) then ty' else ty))
 approximate Matching{} = error "approximate Matching{}"
 approximate ParsedBinding{} = error "ParsedBinding before TC"

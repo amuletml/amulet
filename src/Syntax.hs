@@ -187,6 +187,7 @@ data Type p
   | TyRows (Type p) [(Text, Type p)]  -- { α | foo : int, bar : string }
   | TyExactRows [(Text, Type p)] -- { foo : int, bar : string }
   | TyTuple (Type p) (Type p) -- (see note [1])
+  | TyWildcard (Maybe (Type p))
 
   -- Used internally:
   | TySkol (Skolem p)
@@ -341,6 +342,10 @@ _TyArr = prism (uncurry (TyPi . Anon)) go where
 isSkolemisable :: Type Typed -> Bool
 isSkolemisable (TyPi Invisible{} _) = True
 isSkolemisable _ = False
+
+mkWildTy :: Maybe (Type p) -> Type p
+mkWildTy (Just x@(TyWildcard _)) = x
+mkWildTy t = TyWildcard t
 
 instance Spanned (Ann p) => Spanned (Expr p) where
   annotation (VarRef _ a) = annotation a

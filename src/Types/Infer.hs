@@ -339,14 +339,14 @@ inferLetTy closeOver vs =
                  , Telescope Typed )
 
       tcOne (AcyclicSCC decl@(Binding var exp p ann)) = do
-        (origin, tv) <- approximate decl
+        (origin, tv@(_, ty)) <- approximate decl
         ((exp', ty), cs) <- listen $
           case origin of
             Supplied -> do
               let exp' (Ascription e _ _) = exp' e
                   exp' e = e
-              exp' <- check (exp' exp) (snd tv)
-              pure (exp', snd tv)
+              exp <- check (exp' exp) ty
+              pure (exp, ty)
             Guessed -> do
               (exp', ty) <- infer exp
               _ <- unify (becauseExp exp) ty (snd tv)
@@ -527,7 +527,7 @@ localGenStrat bg ex ty = do
        && maybe True Set.null (types ^. at (unTvName v) . to (fmap ftv))
 
   if Set.foldr ((&&) . generalisable) True (freeIn ex Set.\\ bg) && value ex
-     then generalise (becauseExp ex) ty
+     then generalise ftv (becauseExp ex) ty
      else annotateKind (becauseExp ex) ty
 
 closeOverStrat :: MonadInfer Typed m
