@@ -19,7 +19,7 @@ do
     return Mono0(2)
   end)()
   local bottom = nil
-  local cu = bottom({
+  local cq = bottom({
     _1 = main,
     _2 = main0
   })

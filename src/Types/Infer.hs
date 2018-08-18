@@ -169,6 +169,13 @@ infer (Fun p e an) = let blame = Arm (p ^. paramPat) e in do
 infer (Literal l an) = pure (Literal l (an, ty), ty) where
   ty = litTy l
 
+infer (Let ns b an) = do
+  (ns, ts, is) <- inferLetTy localGenStrat ns
+  let bvs = Set.fromList (map TvName (namesInScope (focus ts mempty)))
+  local (letBound %~ Set.union bvs) $ local (names %~ focus ts) $ local (implicits %~ mappend is) $ do
+    (b, ty) <- infer b
+    pure (Let ns b (an, ty), ty)
+
 infer ex@(Ascription e ty an) = do
   ty <- resolveKind (becauseExp ex) ty
   e <- check e ty

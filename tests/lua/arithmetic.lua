@@ -3,10 +3,10 @@ do
     __tag = "__builtin_unit"
   }
   local bottom = nil
-  local cg = (function ()
-    local ce = bottom
-    local cf = ce(1) + ce(2)
-    local cd = bottom
-    return cd(cf)
+  local ce = (function ()
+    local cc = bottom
+    local cd = cc(1) + cc(2)
+    local cb = bottom
+    return cb(cd)
   end)()
 end
