@@ -130,9 +130,9 @@ mapTele :: (Type p -> Type p) -> Telescope p -> Telescope p
 mapTele f (Telescope x) = Telescope (fmap f x)
 
 traverseTele :: Applicative f
-             => (Type p -> f (Type p))
+             => (Var Resolved -> Type p -> f (Type p))
              -> Telescope p -> f (Telescope p)
-traverseTele f (Telescope x) = Telescope <$> traverse f x
+traverseTele f (Telescope x) = Telescope <$> Map.traverseWithKey f x
 
 teleFromList :: Degrade p
              => [(Var p, Type p)] -> Telescope p

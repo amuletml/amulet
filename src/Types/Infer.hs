@@ -24,7 +24,7 @@ import Data.Char
 
 import Control.Monad.State
 import Control.Monad.Infer
-import Control.Arrow (first, second, (***))
+import Control.Arrow (first)
 import Control.Lens
 
 import Syntax.Resolve.Toplevel
@@ -45,6 +45,7 @@ import Types.Wellformed
 import Types.Unify
 
 import Text.Pretty.Semantic
+import Control.Exception (assert)
 
 -- | Solve for the types of bindings in a problem: Either @TypeDecl@s,
 -- @LetStmt@s, or @ForeignVal@s.
@@ -63,11 +64,15 @@ check (Hole v a) t = do
   pure (Hole (TvName v) (a, t))
 
 check (Let ns b an) t = do
-  (ns, ts, is) <- inferLetTy localGenStrat ns
+  (ns, ts, is, vars) <- inferLetTy localGenStrat ns
   let bvs = Set.fromList (map TvName (namesInScope (focus ts mempty)))
-  local (letBound %~ Set.union bvs) $ local (names %~ focus ts) $ local (implicits %~ mappend is) $ do
-    b <- check b t
-    pure (Let ns b (an, t))
+
+  local (typeVars %~ Set.union vars) $
+    local (letBound %~ Set.union bvs) $
+      local (names %~ focus ts) $
+        local (implicits %~ mappend is) $ do
+          b <- check b t
+          pure (Let ns b (an, t))
 
 check ex@(Fun pat e an) ty = do
   (dom, cod, _) <- quantifier (becauseExp ex) Don'tSkip ty
@@ -170,11 +175,14 @@ infer (Literal l an) = pure (Literal l (an, ty), ty) where
   ty = litTy l
 
 infer (Let ns b an) = do
-  (ns, ts, is) <- inferLetTy localGenStrat ns
+  (ns, ts, is, vars) <- inferLetTy localGenStrat ns
   let bvs = Set.fromList (map TvName (namesInScope (focus ts mempty)))
-  local (letBound %~ Set.union bvs) $ local (names %~ focus ts) $ local (implicits %~ mappend is) $ do
-    (b, ty) <- infer b
-    pure (Let ns b (an, ty), ty)
+  local (typeVars %~ Set.union vars) $
+    local (letBound %~ Set.union bvs) $
+      local (names %~ focus ts) $
+        local (implicits %~ mappend is) $ do
+          (b, ty) <- infer b
+          pure (Let ns b (an, ty), ty)
 
 infer ex@(Ascription e ty an) = do
   ty <- resolveKind (becauseExp ex) ty
@@ -262,9 +270,14 @@ inferRows rows = for rows $ \(Field n e s) -> do
 inferProg :: MonadInfer Typed m
           => [Toplevel Resolved] -> m ([Toplevel Typed], Env)
 inferProg (stmt@(LetStmt ns):prg) = do
-  (ns', ts, is) <- inferLetTy (closeOverStrat (BecauseOf stmt)) ns
-                   `catchError` (throwError . propagateBlame (BecauseOf stmt))
+  (ns', ts, is, vs) <- inferLetTy (closeOverStrat (BecauseOf stmt)) ns
+                         `catchError` (throwError . propagateBlame (BecauseOf stmt))
   let bvs = Set.fromList (map TvName (namesInScope (focus ts mempty)))
+
+  _ <- flip traverseTele ts $ \var ty -> do
+    skolCheck (TvName var) (BecauseOf stmt) ty
+    pure ty
+  assert (vs == mempty) pure ()
 
   local (letBound %~ Set.union bvs) . local (names %~ focus ts) . local (implicits %~ mappend is) $
     consFst (LetStmt ns') $
@@ -313,12 +326,10 @@ inferLetTy :: forall m. MonadInfer Typed m
            -> m ( [Binding Typed]
                 , Telescope Typed
                 , ImplicitScope Typed
+                , Set.Set (Var Typed)
                 )
 inferLetTy closeOver vs =
   let sccs = depOrder vs
-
-      blameSkol :: TypeError -> (Var Resolved, SomeReason) -> TypeError
-      blameSkol e (v, r) = propagateBlame r (Note e (string "in the inferred type for" <+> pretty v))
 
       figureOut :: (Var Resolved, SomeReason)
                 -> Expr Typed -> Type Typed
@@ -334,16 +345,11 @@ inferLetTy closeOver vs =
         skolCheck (TvName (fst blame)) (snd blame) vt
         pure (vt, solveEx vt x co)
 
-      skolCheck :: Var Typed -> SomeReason -> Type Typed -> m ()
-      skolCheck var exp ty = do
-        env <- view typeVars
-        let sks = Set.map (^. skolIdent) (skols ty)
-        unless (null (sks `Set.difference` env)) $
-          throwError (blameSkol (EscapedSkolems (Set.toList (skols ty)) ty) (unTvName var, exp))
 
       tcOne :: SCC (Binding Resolved)
             -> m ( [Binding Typed]
-                 , Telescope Typed )
+                 , Telescope Typed
+                 , Set.Set (Var Typed))
 
       tcOne (AcyclicSCC decl@(Binding var exp p ann)) = do
         (origin, tv@(_, ty)) <- approximate decl
@@ -359,7 +365,7 @@ inferLetTy closeOver vs =
               _ <- unify (becauseExp exp) ty (snd tv)
               pure (exp', ty)
         (tp, k) <- figureOut (var, becauseExp exp) exp' ty cs
-        pure ( [Binding (TvName var) (k exp') p (ann, tp)], one var (rename tp) )
+        pure ( [Binding (TvName var) (k exp') p (ann, tp)], one var (rename tp), mempty )
 
       tcOne (AcyclicSCC TypedMatching{}) = error "TypedMatching being TC'd"
       tcOne (AcyclicSCC b@(Matching p e ann)) = do
@@ -380,12 +386,11 @@ inferLetTy closeOver vs =
         let solved = closeOver mempty ex . apply solution
             ex = solveEx ty solution wraps e
 
-        tel' <- traverseTele solved tel
+        tel' <- traverseTele (const solved) tel
         ty <- solved ty
 
         let pat = transformPatternTyped id (apply solution) p
-
-        pure ( [TypedMatching pat ex (ann, ty) (teleToList tel')], tel' )
+        pure ( [TypedMatching pat ex (ann, ty) (teleToList tel')], tel', boundTvs pat tel' )
 
       tcOne (AcyclicSCC ParsedBinding{}) = error "ParsedBinding in TC (inferLetTy)"
 
@@ -411,7 +416,7 @@ inferLetTy closeOver vs =
           Right x -> pure x
           Left e -> throwError e
         let solveOne :: (Binding Typed, Type Typed)
-                     -> m (Binding Typed, Telescope Typed)
+                     -> m (Binding Typed, Telescope Typed, Set.Set (Var Typed))
             solveOne (Binding var exp p ann, given) =
               let figure :: Type Typed -> Type Typed
                   figure = apply solution
@@ -419,32 +424,42 @@ inferLetTy closeOver vs =
                   ty <- closeOver mempty exp (figure given)
                   skolCheck var (becauseExp exp) ty
                   pure ( Binding var (solveEx ty solution cs exp) p (fst ann, ty)
-                       , one var (rename ty) )
+                       , one var (rename ty) 
+                       , mempty )
 
             solveOne _ = error "solveOne non-Binding forbidden"
 
-            squish :: m [(Binding Typed, Telescope Typed)]
-                   -> m ([Binding Typed], Telescope Typed)
-            squish = fmap (second mconcat . unzip)
+            squish :: m [(Binding Typed, Telescope Typed, Set.Set (Var Typed))]
+                   -> m ([Binding Typed], Telescope Typed, Set.Set (Var Typed))
+            squish = fmap ((\(b, t, v) -> (b, mconcat t, mconcat v)) . unzip3)
         squish . traverse solveOne $ vs
 
       tc :: [SCC (Binding Resolved)]
-         -> m ( [Binding Typed] , Telescope Typed )
+         -> m ( [Binding Typed] , Telescope Typed, Set.Set (Var Typed) )
       tc (s:cs) = do
-        (vs', binds) <- tcOne s
-        fmap ((vs' ++) *** (binds <>)) . local (names %~ focus binds) $ tc cs
-      tc [] = pure ([], mempty)
+        (vs', binds, vars) <- tcOne s
+        fmap (\(bs, tel, vs) -> (vs' ++ bs, tel <> binds, vars <> vs)) . local (names %~ focus binds) . local (typeVars %~ Set.union vars) $ tc cs
+      tc [] = pure ([], mempty, mempty)
 
-      mkImplicits :: ([Binding Typed], Telescope Typed) -> m ([Binding Typed], Telescope Typed, ImplicitScope Typed)
-      mkImplicits (bs, t) = do
+      mkImplicits :: ([Binding Typed], Telescope Typed, Set.Set (Var Typed)) -> m ([Binding Typed], Telescope Typed, ImplicitScope Typed, Set.Set (Var Typed))
+      mkImplicits (bs, t, vars) = do
         let one :: Binding Typed -> m (ImplicitScope Typed)
             one b@(Binding v _ BindImplicit (_, t)) = do
               checkAmbiguous v t
                 `catchError` \e -> throwError (propagateBlame (BecauseOf b) e)
               pure (singleton v t)
             one _ = pure mempty
-        (bs, t,) <$> foldMapM one bs
+        (bs, t,, vars) <$> foldMapM one bs
    in mkImplicits =<< tc sccs
+
+skolCheck :: MonadInfer Typed m => Var Typed -> SomeReason -> Type Typed -> m ()
+skolCheck var exp ty = do
+  let blameSkol :: TypeError -> (Var Resolved, SomeReason) -> TypeError
+      blameSkol e (v, r) = propagateBlame r (Note e (string "in the inferred type for" <+> pretty v))
+      sks = Set.map (^. skolIdent) (skols ty)
+  env <- view typeVars
+  unless (null (sks `Set.difference` env)) $
+    throwError (blameSkol (EscapedSkolems (Set.toList (skols ty)) ty) (unTvName var, exp))
 
 solveEx :: Type Typed -> Subst Typed -> Map.Map (Var Typed) (Wrapper Typed) -> Expr Typed -> Expr Typed
 solveEx _ ss cs = transformExprTyped go id goType where

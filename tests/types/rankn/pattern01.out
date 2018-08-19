@@ -1,0 +1,3 @@
+exists : type
+It : {'a : type}. ('a * 'a -> int) -> exists
+f : exists -> int

@@ -1,0 +1,12 @@
+pattern02.ml[4:5 ..4:20]: error
+  Rigid type variable a has escaped its scope of 'a * ('a -> int) -> exists
+  • Note: the variable a was rigidified because it is an existential,
+          bound by the type of It, forall 'a. 'a * ('a -> int) -> exists,
+
+  • Note: in type a
+  • Note: in the inferred type for foo
+
+  Arising in the declaration
+  │ 
+4 │ let It (foo, finger) = It (1, fun x -> x)
+  │ 
