@@ -65,7 +65,7 @@ freeIn x = error (show x)
 
 bound :: (IsList m, Item m ~ Var p, Monoid m)
       => Pattern p -> m
-bound (Destructure _ x _) = maybe mempty bound x
+bound (Destructure _ x _) = foldMap bound x
 bound (PRecord vs _)      = foldMap (bound . snd) vs
 bound (PTuple ps _)       = foldMap bound ps
 bound (Capture p _)       = fromList [p]
@@ -76,7 +76,7 @@ bound (PWrapper _ p _)    = bound p
 
 boundWith :: (IsList m, Item m ~ (Var p, Ann p), Monoid m)
           => Pattern p -> m
-boundWith (Destructure _ x _) = maybe mempty boundWith x
+boundWith (Destructure _ x _) = foldMap boundWith x
 boundWith (PRecord vs _)      = foldMap (boundWith . snd) vs
 boundWith (PTuple ps _)       = foldMap boundWith ps
 boundWith (Capture p a)       = fromList [(p, a)]

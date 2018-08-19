@@ -182,7 +182,7 @@ bindingSites :: Pattern Typed -> Set.Set BindingSite
 bindingSites (Capture v (s, t)) = Set.singleton (BindingSite v s t)
 bindingSites Wildcard{} = mempty
 bindingSites PLiteral{} = mempty
-bindingSites (Destructure _ p _) = maybe mempty bindingSites p
+bindingSites (Destructure _ p _) = foldMap bindingSites p
 bindingSites (PType p _ _) = bindingSites p
 bindingSites (PRecord rs _) = foldMap (bindingSites . snd) rs
 bindingSites (PTuple ps _) = foldMap bindingSites ps
