@@ -1,0 +1,5 @@
+foo : type -> type
+Foo : {'a : type}. 'a -> foo 'a
+x : foo int
+given : {'a : type}. 'a => 'a
+bug : foo int
