@@ -437,7 +437,7 @@ subsumes' blame s (TyPi (Implicit b) c) (TyPi (Implicit a) d) = do
 
   pure (WrapFn (MkWrapCont wrap "co/contra subsumption for implicit functions"))
 
-subsumes' r s wt@(TyPi (Implicit t) t1) t2 | concretish t2 = do
+subsumes' r s wt@(TyPi (Implicit t) t1) t2 | prettyConcrete t2 = do
   omega <- subsumes r s t1 t2
 
   sub <- use solveTySubst
@@ -638,6 +638,11 @@ concretish TyVar{} = False
 concretish (TyApp f x) = concretish f && concretish x
 concretish (TyWildcard t) = maybe False concretish t
 concretish _ = True
+
+prettyConcrete :: Type Typed -> Bool
+prettyConcrete TyVar{} = False
+prettyConcrete (TyWildcard t) = maybe False prettyConcrete t
+prettyConcrete _ = True
 
 catchy :: MonadError e m => m a -> m (Either e a)
 catchy x = (Right <$> x) `catchError` (pure . Left)
