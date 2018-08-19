@@ -277,7 +277,7 @@ displayType = prettyType . dropKindVars mempty where
   dropKindVars _ TyType = TyType
 
   kindVarIn :: Var p -> Type p -> Bool
-  kindVarIn v (TyPi (Invisible _ k) t) = v `Set.member` maybe mempty ftv k || kindVarIn v t
+  kindVarIn v (TyPi (Invisible _ k) t) = v `Set.member` foldMap ftv k || kindVarIn v t
   kindVarIn v (TyPi (Anon a) b) = kindVarIn v a && kindVarIn v b
   kindVarIn v (TyPi (Implicit a) b) = kindVarIn v a && kindVarIn v b
   kindVarIn _ TyPromotedCon{} = True

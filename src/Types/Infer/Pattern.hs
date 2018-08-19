@@ -157,7 +157,7 @@ boundTvs p vs = pat p <> foldTele go vs where
 
   pat Wildcard{} = mempty
   pat Capture{} = mempty
-  pat (Destructure _ p _) = maybe mempty pat p
+  pat (Destructure _ p _) = foldMap pat p
   pat (PType _ t _) = ftv t
   pat (PRecord ps _) = foldMap (pat . snd) ps
   pat (PTuple ps _) = foldMap pat ps

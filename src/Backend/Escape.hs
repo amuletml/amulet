@@ -84,7 +84,7 @@ getEscaped v s = fromVar <$> Map.lookup v (fromEsc s)
 chars :: Map.Map Char T.Text
 chars = Map.fromList
   [ (':', "_colon")
-  , ('!', "_bang")
+  , ('!', "_pling")
   , ('#', "_pound")
   , ('$', "_dollar")
   , ('%', "_percent")

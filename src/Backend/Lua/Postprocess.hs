@@ -62,7 +62,7 @@ addOperators stmt =
     opsExpr (LuaBinOp l _ r) = opsExpr l <> opsExpr r
 
     opsVar :: LuaVar -> VarSet.Set
-    opsVar (LuaName t) = maybe mempty VarSet.singleton (Map.lookup t opNames)
+    opsVar (LuaName t) = foldMap VarSet.singleton (Map.lookup t opNames)
     opsVar (LuaIndex t k) = opsExpr t <> opsExpr k
 
     opNames = Map.filter (`VarMap.member` ops) (fromEsc escapeScope)

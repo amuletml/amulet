@@ -11,6 +11,7 @@
 - warning: {lhs: "mappend x y", rhs: x <> y}
 - warning: {lhs: "fmap f ask", rhs: asks f}
 - warning: {lhs: "f <$> ask", rhs: asks f}
+- warning: {lhs: "maybe mempty f x", rhs: foldMap f x}
 
 - ignore: {name: "Reduce duplication"}
 - ignore: {name: "Use camelCase"}
