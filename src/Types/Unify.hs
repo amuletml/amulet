@@ -256,18 +256,16 @@ bind var ty
   | occurs var ty = throwError (Occurs var ty)
   | TyVar var == ty = pure (ReflCo ty)
   | TyForall{} <- ty = throwError (Impredicative var ty)
-  | TyWithConstraints cs ty <- ty = do
-    traverse_ (uncurry unify) cs
-    bind var ty
   | otherwise = do
       env <- use solveTySubst
       assum <- use solveAssumptions
       noTouch <- view don'tTouch
       ty <- pure (apply env ty) -- shadowing
       when (occurs var ty) (throwError (Occurs var ty))
-      if var `Set.member` noTouch && var `Map.member` assum
-         then unify ty (apply env (assum Map.! var))
-         else -- Attempt to extend the environment, otherwise unify with existing type
+      if | var `Set.member` noTouch && var `Map.member` assum ->
+            unify ty (apply env (assum Map.! var))
+         | TyVar var == ty -> pure (ReflCo ty)
+         | otherwise ->
             case Map.lookup var env of
               Nothing -> do
                 if | var `Set.notMember` noTouch -> solveTySubst .= env `compose` Map.singleton var ty
