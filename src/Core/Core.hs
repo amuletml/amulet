@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleInstances, FlexibleContexts, ScopedTypeVariables,
-   DeriveFunctor, DeriveGeneric, PatternSynonyms, TemplateHaskell #-}
+   DeriveFunctor, DeriveGeneric, PatternSynonyms, TemplateHaskell,
+   DeriveAnyClass #-}
 -- | Amulet's explicitly-typed intermediate representation
 module Core.Core where
 
@@ -7,6 +8,7 @@ import Text.Pretty.Annotation
 import Text.Pretty.Semantic
 
 import qualified Data.VarSet as VarSet
+import Data.Hashable
 import Data.Function
 import Data.Triple
 import Data.Maybe
@@ -22,13 +24,13 @@ import GHC.Generics
 data Atom a
   = Ref a (Type a) -- ^ A reference to a variable, with an explicit type
   | Lit Literal -- ^ A literal.
-  deriving (Eq, Show, Ord, Functor, Generic)
+  deriving (Eq, Show, Ord, Functor, Generic, Hashable)
 
 -- | The domain of a lambda
 data Argument a
   = TermArgument a (Type a) -- ^ Computationally-relevant domain
   | TypeArgument a (Type a) -- ^ Type abstraction, erased at Emit-time.
-  deriving (Eq, Show, Ord, Functor, Generic)
+  deriving (Eq, Show, Ord, Functor, Generic, Hashable)
 
 -- | Terms.
 data AnnTerm b a
@@ -44,7 +46,7 @@ data AnnTerm b a
 
   | AnnTyApp b (Atom a) (Type a) -- ^ Eliminate a 'Lam' expecting a 'TypeArgument'
   | AnnCast b (Atom a) (Coercion a) -- ^ Cast an 'Atom' using some 'Coercion'.
-  deriving (Eq, Show, Ord, Functor, Generic)
+  deriving (Eq, Show, Ord, Functor, Generic, Hashable)
 
 -- | An 'AnnTerm' with '()' annotations.
 type Term = AnnTerm ()
@@ -91,7 +93,7 @@ pattern Cast a ty = AnnCast () a ty
 data AnnBinding b a
   = One (a, Type a, AnnTerm b a) -- ^ Acyclic binding group (no recursion)
   | Many [(a, Type a, AnnTerm b a)] -- ^ Cyclic, possibly mutually recursive binding groups
-  deriving (Eq, Show, Ord, Functor, Generic)
+  deriving (Eq, Show, Ord, Functor, Generic, Hashable)
 
 -- | An 'AnnBinding' with '()' annotations.
 type Binding = AnnBinding ()
@@ -104,7 +106,7 @@ data AnnArm b a = Arm
   , _armVars :: [(a, Type a)] -- ^ Bound value variables
   , _armTyvars :: [(a, Type a)] -- ^ Existential type variables
   }
-  deriving (Eq, Show, Ord, Functor, Generic)
+  deriving (Eq, Show, Ord, Functor, Generic, Hashable)
 
 -- | An 'Arm' with '()' annotations
 type Arm = AnnArm ()
@@ -117,7 +119,7 @@ data Pattern a
   | PatValues [Pattern a]
 
   | PatLit Literal
-  deriving (Eq, Show, Ord, Functor, Generic)
+  deriving (Eq, Show, Ord, Functor, Generic, Hashable)
 
 data Coercion a
   = SameRepr (Type a) (Type a)
@@ -133,7 +135,7 @@ data Coercion a
 
   | Domain (Coercion a)
   | Codomain (Coercion a)
-  deriving (Eq, Show, Ord, Functor, Generic)
+  deriving (Eq, Show, Ord, Functor, Generic, Hashable)
 
 data Literal
   = Int Integer
@@ -141,7 +143,7 @@ data Literal
   | Float Double
   | LitTrue | LitFalse
   | Unit | RecNil
-  deriving (Eq, Show, Ord)
+  deriving (Eq, Show, Ord, Generic, Hashable)
 
 data Type a
   = ConTy a -- A type constructor
@@ -152,19 +154,19 @@ data Type a
   | ValuesTy [Type a] -- ^ The type of unboxed tuples
   | NilTy -- ^ The type of empty records
   | StarTy -- ^ The type of types
-  deriving (Eq, Show, Ord, Functor, Generic)
+  deriving (Eq, Show, Ord, Functor, Generic, Hashable)
 
 pattern ExactRowsTy :: [(Text, Type a)] -> Type a
 pattern ExactRowsTy ts = RowsTy NilTy ts
 
 data BoundTv a = Irrelevant | Relevant a
-  deriving (Eq, Show, Ord, Functor, Generic)
+  deriving (Eq, Show, Ord, Functor, Generic, Hashable)
 
 data AnnStmt b a
   = Foreign a (Type a) Text
   | StmtLet (AnnBinding b a)
   | Type a [(a, Type a)]
-  deriving (Eq, Show, Ord, Functor, Generic)
+  deriving (Eq, Show, Ord, Functor, Generic, Hashable)
 
 makeLenses ''AnnArm
 makePrisms ''AnnStmt

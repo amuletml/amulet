@@ -9,8 +9,7 @@ module Data.VarMap
   , (<>), mempty
   ) where
 
-import qualified Data.IntMap.Strict as Map
-import qualified Data.IntMap.Merge.Strict as Map
+import qualified Data.HashMap.Strict as Map
 import qualified Data.Text as T
 import qualified Data.List as L
 import Data.Coerce
@@ -21,7 +20,7 @@ import Control.Arrow
 import Core.Var
 
 newtype Map a
-  = Map (Map.IntMap a)
+  = Map (Map.HashMap Int a)
   deriving (Eq, Show, Ord)
   deriving newtype (Semigroup, Monoid, Functor, Foldable)
 
@@ -41,7 +40,7 @@ member :: CoVar -> Map a -> Bool
 member (CoVar x _ _) (Map m) = Map.member x m
 
 findWithDefault :: a -> CoVar -> Map a -> a
-findWithDefault d (CoVar x _ _) (Map m) = Map.findWithDefault d x m
+findWithDefault d (CoVar x _ _) (Map m) = Map.lookupDefault d x m
 
 lookup :: CoVar -> Map a -> Maybe a
 lookup (CoVar x _ _) (Map m) = Map.lookup x m
@@ -56,10 +55,10 @@ singleton :: CoVar -> a ->  Map a
 singleton (CoVar x _ _) v = coerce (Map.singleton x v)
 
 unionSemigroup :: Semigroup a => Map a -> Map a -> Map a
-unionSemigroup (Map l) (Map r) = Map (Map.merge Map.preserveMissing Map.preserveMissing (Map.zipWithMatched (const (<>))) l r)
+unionSemigroup (Map l) (Map r) = Map (Map.unionWith (<>) l r)
 
 foldrWithKey :: (CoVar -> a -> b -> b) -> b -> Map a -> b
 foldrWithKey f b (Map m) = Map.foldrWithKey (f . create) b m
 
-create :: Map.Key -> CoVar
+create :: Int -> CoVar
 create i = CoVar i (T.singleton '?') ValueVar
