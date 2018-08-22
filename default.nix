@@ -36,28 +36,30 @@ let
   f = { mkDerivation, stdenv
       , mtl
       , syb
-      , text
+      , alex
       , base
-      , lens
-      , array
       , Diff
+      , lens
+      , text
+      , array
+      , happy
+      , hlint
       , hslua
       , HUnit
       , tasty
+      , hashable
       , hedgehog
-      , haskeline
       , directory
+      , haskeline
       , bytestring
       , containers
-      , transformers
       , pretty-show
-      , annotated-wl-pprint
       , tasty-hunit
-      , tasty-hedgehog_0_2_0_0
+      , transformers
       , tasty-ant-xml
-      , alex
-      , happy
-      , hlint
+      , annotated-wl-pprint
+      , unordered-containers
+      , tasty-hedgehog_0_2_0_0
       }:
       let alex' = haskell.lib.dontCheck alex;
           happy' = haskell.lib.dontCheck happy;
@@ -72,7 +74,8 @@ let
 
         libraryHaskellDepends = [
           annotated-wl-pprint array base bytestring containers lens
-          mtl pretty-show syb text transformers
+          mtl pretty-show syb text transformers hashable
+          unordered-containers
         ];
 
         executableHaskellDepends = [

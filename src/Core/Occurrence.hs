@@ -1,4 +1,5 @@
-{-# LANGUAGE ScopedTypeVariables, DeriveDataTypeable, ExplicitNamespaces #-}
+{-# LANGUAGE ScopedTypeVariables, DeriveDataTypeable,
+   ExplicitNamespaces, DeriveGeneric, DeriveAnyClass #-}
 
 {- | Similar to "Core.Free", but also tracking /how/ a variable is
    used. Namely, we annotate variables and bindings with 'Occurrence'.
@@ -24,6 +25,9 @@ import Data.Data
 
 import Text.Pretty.Semantic
 
+import Data.Hashable
+import GHC.Generics
+
 -- | The occurrence of a variable
 data Occurrence
   = Dead        -- ^ This variable is never used
@@ -31,7 +35,7 @@ data Occurrence
   | OnceLambda  -- ^ This variable is used once and is captured by a lambda
   | Multi       -- ^ This variable is used multiple times (or in multiple cases)
   | MultiLambda -- ^ This variable is used multiple times and is captured by a lambda
-  deriving (Show, Eq, Ord, Data)
+  deriving (Show, Eq, Ord, Data, Generic, Hashable)
 
 defOcc :: Occurrence
 defOcc = MultiLambda
@@ -64,7 +68,7 @@ data OccursVar v
   = OccursVar { underlying :: v
               , used :: !Occurrence
               }
-  deriving (Eq, Show, Ord, Data)
+  deriving (Eq, Show, Ord, Data, Generic, Hashable)
 
 instance IsVar a => IsVar (OccursVar a) where
   toVar = toVar . underlying

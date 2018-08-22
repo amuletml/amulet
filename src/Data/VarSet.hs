@@ -7,7 +7,7 @@ module Data.VarSet
   , (<>), mempty, isEmpty
   ) where
 
-import qualified Data.IntSet as Set
+import qualified Data.HashSet as Set
 import qualified Data.Text as T
 
 import Core.Var
@@ -15,7 +15,7 @@ import Core.Var
 import Data.Coerce
 
 newtype Set
-  = Set Set.IntSet
+  = Set (Set.HashSet Int)
   deriving (Eq, Show, Ord)
   deriving newtype (Semigroup, Monoid)
 
@@ -32,7 +32,7 @@ member :: CoVar -> Set -> Bool
 member (CoVar x _ _) set = Set.member x (coerce set)
 
 notMember :: CoVar -> Set -> Bool
-notMember (CoVar x _ _) set = Set.notMember x (coerce set)
+notMember (CoVar x _ _) set = not (Set.member x (coerce set))
 
 difference :: Set -> Set -> Set
 difference = coerce Set.difference

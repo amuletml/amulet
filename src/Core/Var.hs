@@ -1,4 +1,5 @@
-{-# LANGUAGE DeriveGeneric, DeriveDataTypeable, TemplateHaskell #-}
+{-# LANGUAGE DeriveGeneric, DeriveDataTypeable, TemplateHaskell,
+   DeriveAnyClass #-}
 
 -- | Core uses one variable type 'CoVar' across all types (terms, types,
 -- coercions). These are identified by a unique number, which allows for
@@ -6,6 +7,8 @@
 module Core.Var where
 
 import qualified Data.Text as T
+import Data.Hashable
+
 import Control.Lens
 import GHC.Generics
 import Text.Pretty.Semantic
@@ -17,7 +20,7 @@ data CoVar =
         , _covarName :: T.Text -- ^ The name of this variable.
         , _covarInfo :: VarInfo -- ^ Additional information about this variable.
         }
-  deriving (Show, Generic, Data)
+  deriving (Show, Generic, Data, Hashable)
 
 instance Eq CoVar where
   (CoVar a _ _) == (CoVar b _ _) = a == b
@@ -33,7 +36,7 @@ data VarInfo
   | TypeConVar
   | TypeVar
   | CastVar
-  deriving (Eq, Show, Ord, Generic, Data)
+  deriving (Eq, Show, Ord, Generic, Data, Hashable)
 
 makeLenses ''CoVar
 makePrisms ''VarInfo
@@ -44,7 +47,7 @@ instance Pretty CoVar where
 -- | Either a 'CoVar' or some alternative representation of it. This is
 -- used to allow functions which may operate on 'CoVar's or annotated
 -- alternatives.
-class (Eq a, Ord a, Pretty a, Show a) => IsVar a where
+class (Hashable a, Eq a, Ord a, Pretty a, Show a) => IsVar a where
   -- | Convert this variable into a 'CoVar'
   toVar :: a -> CoVar
   -- | Build this from a 'CoVar'
