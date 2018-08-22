@@ -4,6 +4,7 @@ module Core.Simplify
   ) where
 
 -- import Core.Optimise.Newtype
+import Core.Optimise.CommonExpElim
 import Core.Optimise.DeadCode
 import Core.Optimise.Sinking
 import Core.Optimise.Joinify
@@ -33,6 +34,7 @@ optmOnce = passes where
            , linted "Sinking" $ pure . sinkingPass . tagFreeSet
 
            , linted "Reduce" $ pure . reducePass
+           , linted "CSE" $ pure . csePass
            ]
 
   linted :: Functor f => String -> ([Stmt CoVar] -> f [Stmt CoVar]) -> [Stmt CoVar] -> f [Stmt CoVar]

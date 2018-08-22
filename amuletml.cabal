@@ -113,12 +113,14 @@ library amulet
   build-depends:       mtl >= 2.2 && < 2.3
                      , syb >= 0.7 && < 0.8
                      , text >= 1.2 && < 1.3
+                     , array >= 0.5 && < 0.6
                      , base >= 4.9 && < 4.12
                      , lens >= 4.15 && < 4.17
-                     , array >= 0.5 && < 0.6
+                     , hashable >= 1.2 && < 1.3
                      , containers >= 0.5 && < 0.6
                      , transformers >= 0.5 && < 0.6
                      , annotated-wl-pprint >= 0.7 && < 0.8
+                     , unordered-containers >= 0.2 && < 0.3
                      , pretty-show
 
   hs-source-dirs:      src
@@ -192,6 +194,7 @@ library amulet
                      , Core.Optimise.Newtype
                      , Core.Optimise.Joinify
                      , Core.Optimise.DeadCode
+                     , Core.Optimise.CommonExpElim
                      -- Backend
                      , Backend.Lua
                      , Backend.Lua.Emit
