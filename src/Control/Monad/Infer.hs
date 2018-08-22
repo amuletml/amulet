@@ -216,7 +216,6 @@ instance Pretty TypeError where
          ]
   pretty (NotEqual a b) = string "Could not match expected type" <+> displayType b <+> string "with" <+> displayType a
 
-  pretty (Occurs v t) = string "Occurs check:" <+> string "The type variable" <+> stypeVar (pretty v) </> indent 4 (string "occurs in the type" <+> displayType t)
   pretty (NotInScope e) = string "Variable not in scope:" <+> pretty e
   pretty (ArisingFrom er ex) = pretty er <#> empty <#> nest 4 (string "Arising in" <+> blameOf ex)
   pretty (FoundHole e s) = string "Found typed hole" <+> pretty e <+> "of type" <+> displayType s
@@ -242,6 +241,14 @@ instance Pretty TypeError where
     <#> missing rb ra
     | otherwise
     = string "\x1b[1;32minternal compiler error\x1b[0m: NoOverlap" <+> displayType ta <+> displayType tb
+
+  pretty (Occurs v t) =
+    vsep [ "The type variable" <+> stypeVar (squote <> pretty v) <+> "appears in the type" <+> displayType t
+         , empty
+         , bullet "Note: all solutions to"
+         , indent 4 (stypeVar (squote <> pretty v) <+> soperator (string "~") <+> displayType t)
+         , indent 2 "are infinite."
+         ]
 
   pretty (Impredicative v t)
     = vsep [ string "Illegal instantiation of type variable" <+> stypeVar (pretty v)
