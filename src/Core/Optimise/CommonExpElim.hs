@@ -54,5 +54,7 @@ cseTerm scope map' (Let (Many vs) body) =
 
 worthIt :: Term a -> Bool
 worthIt Lam{} = False
+worthIt Let{} = False
 worthIt Atom{} = False
+worthIt Match{} = False
 worthIt _ = True

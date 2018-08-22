@@ -29,11 +29,11 @@ optmOnce = passes where
            , linted "Inline"   inlineVariablePass
 
            , linted "Dead code" $ pure . deadCodePass
-           , linted "Match Join"   matchJoinPass
+           , linted "Match Join"  matchJoinPass
 
            , linted "Sinking" $ pure . sinkingPass . tagFreeSet
 
-           , linted "Reduce" $ pure . reducePass
+           , linted "Reduce #2" $ pure . reducePass
            , linted "CSE" $ pure . csePass
            ]
 
@@ -45,7 +45,7 @@ optmOnce = passes where
 
 -- | Run the optimiser multiple times over the input core.
 optimise :: [Stmt CoVar] -> Namey [Stmt CoVar]
-optimise = go 25 . (runLint "Lower" =<< checkStmt emptyScope) where
+optimise = go 10 . (runLint "Lower" =<< checkStmt emptyScope) where
   go :: Integer -> [Stmt CoVar] -> Namey [Stmt CoVar]
   go k sts
     | k > 0 = go (k - 1) =<< optmOnce sts
