@@ -19,7 +19,7 @@ module Core.Arity
   , Arity(..)
   , emptyScope, varArity
   , isPure
-  , extendPureLets, extendPureCtors
+  , extendPureLets, extendPureCtors, extendForeign
   ) where
 
 import Control.Lens
@@ -103,6 +103,12 @@ extendPureCtors s cts = s {
     typeArity :: Type a -> Int
     typeArity (ForallTy _ _ ty) = 1 + typeArity ty
     typeArity _ = 0
+
+extendForeign :: IsVar a => ArityScope -> (a, Type a) -> ArityScope
+extendForeign (ArityScope scope) (var, ty) = ArityScope (VarMap.insert (toVar var) (Arity (typeArity ty) False) scope)
+  where typeArity :: Type a -> Int
+        typeArity (ForallTy _ _ ty) = 1 + typeArity ty
+        typeArity _ = 0
 
 mapArity :: (Int -> Int) -> Arity -> Arity
 mapArity f (Arity a p) = Arity (f a) p

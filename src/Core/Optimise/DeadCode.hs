@@ -34,8 +34,9 @@ deadCodePass = snd . freeS emptyScope where
   freeS :: IsVar a => ArityScope -> [Stmt a] -> (VarSet.Set, [Stmt a])
   freeS _ [] = (mempty, mempty)
 
-  freeS s (x@(Foreign v _ _):xs) =
-    let (fxs, xs') = freeS s xs
+  freeS s (x@(Foreign v ty _):xs) =
+    let s' = extendForeign s (v, ty)
+        (fxs, xs') = freeS s' xs
      in if toVar v `VarSet.member` fxs
            then (toVar v `VarSet.delete` fxs, x:xs')
            else (fxs, xs')
