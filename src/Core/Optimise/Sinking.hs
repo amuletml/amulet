@@ -47,7 +47,9 @@ sinkingPass = sinkStmts (SinkState [] A.emptyScope)
 
 sinkStmts :: IsVar a => SinkState a -> [AnnStmt VarSet.Set a] -> [Stmt a]
 sinkStmts _ [] = []
-sinkStmts s (Foreign v ty bod:xs) = Foreign v ty bod:sinkStmts s xs
+sinkStmts s (Foreign v ty bod:xs) =
+  let s' = s { arity = A.extendForeign (arity s) (v, ty) }
+   in Foreign v ty bod:sinkStmts s' xs
 sinkStmts s (StmtLet (One v):xs) =
   let v' = third3 (sinkTerm s) v
       s' = s { arity = A.extendPureLets (arity s) [v] }
