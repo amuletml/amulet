@@ -3,6 +3,8 @@
     as: Set
   - name: [Data.Map, Data.Map.Strict]
     as: Map
+  - name: Debug.Trace
+    within: []
 
 - error: {lhs: "mapM f xs", rhs: traverse f xs}
 - error: {lhs: "forM x f", rhs: for x f}
