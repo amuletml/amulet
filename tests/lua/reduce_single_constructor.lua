@@ -15,10 +15,10 @@ do
   end
   local go0 = nil
   go0(__builtin_unit)
-  local main = Mono0(2)
+  local main0 = Mono0(2)
   local bottom = nil
   bottom({
     _1 = main,
-    _2 = main
+    _2 = main0
   })
 end

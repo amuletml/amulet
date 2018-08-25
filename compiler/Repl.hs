@@ -15,6 +15,7 @@ import Data.Traversable
 import Data.Foldable
 import Data.Spanned
 import Data.Functor
+import Data.Triple
 import Data.Maybe
 
 import qualified Foreign.Lua.Api.Types as L
@@ -46,16 +47,16 @@ import Parser.Error
 
 import qualified Core.Core as C
 import Core.Lower (runLowerWithCtors, lowerProg, lowerType)
-import Core.Occurrence
 import Core.Builtin (vLAZY, vForce)
 import Core.Core (Stmt)
+import Core.Occurrence
+import Core.Free
 import Core.Var
 
 import Control.Lens
 
 import qualified Backend.Lua.Postprocess as B
 import qualified Backend.Lua.Emit as B
-import qualified Backend.Escape as B
 import Backend.Lua.Syntax
 
 import Text.Pretty.Semantic
@@ -142,7 +143,8 @@ runRepl = do
       case core of
         Nothing -> pure ()
         Just (vs, prog, core, state') -> do
-          let (luaStmt, emit') = runState (B.emitStmt (tagOccursVar core)) (emitState state')
+          let core' = patchupUsage . tagFreeSet . tagOccursVar $ core
+              (luaStmt, emit') = runState (B.emitStmt core') (emitState state')
               luaExpr = LuaDo . map patchupLua . toList $ luaStmt
               luaSyntax = T.unpack . display . uncommentDoc . renderPretty 0.8 100 . pretty $ luaExpr
 
@@ -156,11 +158,12 @@ runRepl = do
               case code of
                 L.OK -> do
                   vs' <- for vs $ \(v, _) -> do
-                    repr <- valueRepr . L.getglobal . T.unpack . B.getVar v . B.topEscape $ emit'
+                    let Just vs = VarMap.lookup v . B.topVars $ emit'
+                    repr <- traverse (valueRepr . L.getglobal . T.unpack . \(LuaName n) -> n) vs
                     let CoVar id nam _ = v
                         var = S.TgName nam id
                     case inferScope state' ^. T.names . at var of
-                      Just ty -> pure (Just (pretty v <+> colon <+> nest 2 (displayType ty <+> equals </> pretty repr)))
+                      Just ty -> pure (Just (pretty v <+> colon <+> nest 2 (displayType ty <+> equals </> hsep (map pretty repr))))
                       Nothing -> pure Nothing
 
                   pure (vsep (catMaybes vs'))
@@ -241,13 +244,30 @@ runRepl = do
 isError :: Note a b => a -> Bool
 isError x = diagnosticKind x == ErrorMessage
 
--- We convert any top-level local declarations into global ones. This
+-- | We convert any top-level local declarations into global ones. This
 -- means they are accessible outside normal REPL invocations.
 patchupLua :: LuaStmt -> LuaStmt
 patchupLua (LuaLocal vs es)
   | length es < length vs = LuaAssign vs (es ++ replicate (length vs - length es) LuaNil)
   | otherwise = LuaAssign vs es
 patchupLua x = x
+
+-- | Patchup the usage of a series of statements to ensure every one is
+-- considered "used".
+--
+-- This guarantees we'll generate bindings for them all, and so they can
+-- be evaluated in the REPL.
+patchupUsage :: IsVar a => [C.AnnStmt b (OccursVar a)] -> [C.AnnStmt b(OccursVar a)]
+patchupUsage [] = []
+patchupUsage (s@C.Foreign{}:xs) = s:patchupUsage xs
+patchupUsage (s@C.Type{}:xs) = s:patchupUsage xs
+patchupUsage (C.StmtLet (C.One v):xs) = C.StmtLet (C.One (first3 patchupVarUsage v)):patchupUsage xs
+patchupUsage (C.StmtLet (C.Many v):xs) = C.StmtLet (C.Many (map (first3 patchupVarUsage) v)):patchupUsage xs
+
+-- | Patchup the usage of a single variable. See 'patchupUsage' for more
+-- information.
+patchupVarUsage :: OccursVar a -> OccursVar a
+patchupVarUsage (OccursVar v u) = OccursVar v (u <> Once)
 
 repl :: DebugMode -> IO ()
 repl mode = defaultState mode >>= evalStateT (runInputT defaultSettings runRepl)
