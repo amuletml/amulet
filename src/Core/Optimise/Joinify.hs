@@ -1,4 +1,25 @@
 {-# LANGUAGE FlexibleContexts, ScopedTypeVariables, TupleSections #-}
+
+{-| This module emulates join point conversion/match conversion using
+  normal lambdas.
+
+  Effectively we take a statement like so:
+
+  > let a = match A with ... -> ...
+  > match a with ...
+
+  and convert it into
+
+  > let t = \a -> match a with ...
+  > match A with ... -> t (...)
+
+  The idea here is that trivial "t"s will be inlined and so facilitate
+  match-of-match conversion.
+
+  This pass does introduce a reasonable amount of code duplication due to
+  later inlining, so it would be ideal to perform some further
+  evaluations to determine if such an optimisation is useful.
+-}
 module Core.Optimise.Joinify where
 
 import Control.Monad.Namey
@@ -9,19 +30,19 @@ import Data.Triple
 import Core.Optimise
 import Core.Types
 
+-- | Perform the match to join-point conversion pass.
 matchJoinPass :: forall m a. (MonadNamey m, IsVar a) => [Stmt a] -> m [Stmt a]
 matchJoinPass = traverse transS where
   transS (StmtLet (Many vars)) = StmtLet . Many <$> traverse (third3A transT) vars
   transS (StmtLet (One (v, t, e))) = StmtLet . One . (v, t, ) <$> transT e
   transS s = pure s
 
-  transA t@Ref{} = pure t
-  transA t@Lit{} = pure t
-
-  transT (Atom a) = Atom <$> transA a
-  transT (App f a) = App <$> transA f <*> transA a
-  transT (TyApp f t) = flip TyApp t <$> transA f
-  transT (Cast f t) = flip Cast t <$> transA f
+  transT t@Atom{} = pure t
+  transT t@App{} = pure t
+  transT t@TyApp{} = pure t
+  transT t@Cast{} = pure t
+  transT t@Extend{} = pure t
+  transT t@Values{} = pure t
 
   transT (Lam arg b) = Lam arg <$> transT b
   transT (Let (One (name, nameTy, Match sc as)) cont) = do
@@ -54,6 +75,4 @@ matchJoinPass = traverse transS where
     vs' <- traverse (third3A transT) vs
     Let (Many vs') <$> transT r
 
-  transT (Extend t rs) = Extend <$> transA t <*> traverse (third3A transA) rs
-  transT (Values xs) = Values <$> traverse transA xs
-  transT (Match t bs) = Match <$> transA t <*> traverse (armBody %%~ transT) bs
+  transT (Match t bs) = Match t <$> traverse (armBody %%~ transT) bs
