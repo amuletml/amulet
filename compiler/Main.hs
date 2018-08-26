@@ -12,11 +12,12 @@ import qualified Data.Text as T
 import Data.Position (SourceName)
 import Data.Functor.Identity
 import Data.Foldable
-import Data.Functor
 
 import Control.Monad.Infer (Env, TypeError, firstName)
 import Control.Monad.Namey
-import Control.Monad
+import Control.Monad.State
+
+import Backend.Lua.Syntax
 import Backend.Lua
 
 import Types.Infer (inferProgram, builtinsEnv)
@@ -118,9 +119,10 @@ test mode fs =
   case compile (if mode == D.TestTc then Don't else Do) fs of
     CSuccess es ast core opt lua env -> do
       traverse_ (`reportS` fs) es
-      if any isError es
-         then pure Nothing
-         else D.dump mode ast core opt lua builtinsEnv env $> Just (core, env)
+      guard (all (not . isError) es)
+      D.dump mode ast core opt lua builtinsEnv env
+
+      pure (pure (core, env))
     CParse es -> Nothing <$ traverse_ (`reportS` fs) es
     CResolve es -> Nothing <$ traverse_ (`reportS` fs) es
     CInfer es -> Nothing <$ traverse_ (`reportS` fs) es

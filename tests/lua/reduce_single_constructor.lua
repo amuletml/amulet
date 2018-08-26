@@ -14,12 +14,10 @@ do
     }
   end
   local go0 = nil
-  local main0 = (function ()
-    go0(__builtin_unit)
-    return Mono0(2)
-  end)()
+  go0(__builtin_unit)
+  local main0 = Mono0(2)
   local bottom = nil
-  local cq = bottom({
+  bottom({
     _1 = main,
     _2 = main0
   })

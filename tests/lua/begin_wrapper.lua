@@ -3,5 +3,5 @@ do
     __tag = "__builtin_unit"
   }
   local print = print
-  local main = print(false)
+  print(false)
 end

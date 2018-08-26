@@ -3,19 +3,12 @@ do
     __tag = "__builtin_unit"
   }
   local bottom = nil
-  local ci = (function ()
-    local cg = bottom
-    local a = cg(1)
-    local b = cg(2)
-    local c = cg(3)
-    local ch = {
-      _1 = b,
-      _2 = {
-        _1 = c,
-        _2 = a
-      }
+  local a = bottom(1)
+  bottom({
+    _1 = bottom(2),
+    _2 = {
+      _1 = bottom(3),
+      _2 = a
     }
-    local ce = bottom
-    return ce(ch)
-  end)()
+  })
 end

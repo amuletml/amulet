@@ -18,18 +18,11 @@ do
     }
   end
   local bottom = nil
-  local cy = (function ()
-    local cw = bottom
-    if cw(1) then
-      local cu = __builtin_Lazy(function (cq)
-        return cw(2)
-      end)
-      local cm = __builtin_force
-      local dt = cm(cu)
-      local cv = bottom
-      return cv(dt)
-    else
-      return bottom(false)
-    end
-  end)()
+  if bottom(1) then
+    bottom(__builtin_force(__builtin_Lazy(function (cq)
+      return bottom(2)
+    end)))
+  else
+    bottom(false)
+  end
 end

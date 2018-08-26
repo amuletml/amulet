@@ -13,7 +13,7 @@ do
   local d = dj._1
   local e = dj._2
   local bottom = nil
-  local ec = bottom({
+  bottom({
     a = 3,
     b = 5,
     c = 6,
