@@ -707,11 +707,11 @@ emitStmt (StmtLet (One (v, ty, e)):xs) = do
   (stmts<>) <$> emitStmt xs
 
 emitStmt (StmtLet (Many vs):xs) = do
-  TopEmitState { topArity = ari, topEscape = esc, topVars = vars } <- get
-
   binds <- traverse (\(v, ty, _) -> genVars pushTopScope v ty) vs
   modify (\s -> s { topArity = extendPureLets (topArity s) vs
                   , topVars = foldr (\(v, b) -> VarMap.insert (toVar . fst3 $ v) b) (topVars s) (zip vs binds) })
+
+  TopEmitState { topArity = ari, topEscape = esc, topVars = vars } <- get
 
   let graph :: EmittedGraph a = VarMap.mapWithKey (\v x -> EmittedUpvalue x [fromVar v] mempty) vars
       (stmt, esc') = foldl' (\(s, esc') ((_, _, e), v') ->
