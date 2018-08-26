@@ -1,0 +1,5 @@
+let () = ()
+let (_, _) = (1, 2)
+let (_, _) = ((1, 2) : int * int)
+let { a = _, b = b } = (3, 4)
+let (Some x) = Some 1

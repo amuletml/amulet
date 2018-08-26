@@ -1,4 +1,25 @@
 {
+{-| The parser for the Amulet compiler, as defined by a Happy grammar.
+
+  == Shift/reduce conflicts within the grammar
+  The grammar has several shift/reduce conflicts which are documented as
+  follows.
+
+  === In record expressions
+  When the input contains @{ foo : int ... }@, the parser does not know whether
+  @foo@ refers to a table key. Without further lookahead, the input could be a
+  record key (@{ foo : int = 2 }@) or an expression within an extension (@{ foo
+  : int with ...}@).
+
+  Currently the latter of these is chosen, as Happy always prefers to shift.
+
+  === In type annotations
+  @(2, 2) : int * int@ could be parsed as @[[(2, 2) : int]] * int@ or @(2, 2) :
+  [[int * int]]@.
+
+  This ambiguity only occurs for @*@ as it is considered an operator, and so
+  clashes with the second rule in @Expr@
+-}
 module Parser
   ( parseTops
   , parseRepl
@@ -106,8 +127,8 @@ import Syntax
   '$in'    { Token TcVIn _ _ }
   '$sep'   { Token TcVSep _ _ }
 
-
-%expect 10
+-- Please try to update the module documentation when this number changes.
+%expect 2
 
 %%
 
@@ -128,6 +149,7 @@ Top :: { Toplevel Parsed }
 
 
     | module qconid '=' begin Tops end         { Module (getName $2) $5 }
+    | module qconid '=' '$begin' Tops '$end'   { Module (getName $2) $5 }
     | module conid '=' begin Tops end          { Module (getName $2) $5 }
     | module conid '=' '$begin' Tops '$end'    { Module (getName $2) $5 }
     | module conid '=' Con                     { Open (getL $4) (Just (getIdent $2)) }
@@ -152,13 +174,16 @@ ReplSep :: { () }
     |        { () }
 
 Expr :: { Expr Parsed }
-     : ExprApp                                 { $1 }
-     | Expr Operator ExprApp                   { withPos2 $1 $3 $ BinOp $1 $2 $3 }
+     : ExprTyApp                               { $1 }
+     | Expr Operator ExprTyApp                 { withPos2 $1 $3 $ BinOp $1 $2 $3 }
+
+ExprTyApp :: { Expr Parsed }
+  : ExprApp                                    { $1 }
+  | ExprTyApp ':' Type                         { withPos2 $1 $3 $ Ascription $1 (getL $3) }
 
 ExprApp :: { Expr Parsed }
         : Expr0                                { $1 }
         | ExprApp Atom                         { withPos2 $1 $2 $ App $1 $2 }
-        | ExprApp ':' Type                     { withPos2 $1 $3 $ Ascription $1 (getL $3) }
 
 Expr0 :: { Expr Parsed }
       : fun ListE1(Parameter) '->' ExprBlock '$end' { respanFun $1 $4 $ foldr (\x y -> withPos2 x $4 $ Fun x y) $4 $2 }
@@ -249,8 +274,8 @@ Binding :: { Binding Parsed }
         | implicit PreBinding { implicitify $1 $2 }
 
 PreBinding :: { Binding Parsed }
-           : Pattern PostBinding               { withPos1 $1 $ Matching $1 $2 }
-           | Pattern ':' Type PostBinding      { withPos2 $1 $3 $ Matching $1 $ withPos2 $3 $4 $ Ascription $4 (getL $3) }
+           : BPattern PostBinding              { withPos1 $1 $ Matching $1 $2 }
+           | BPattern ':' Type PostBinding     { withPos2 $1 $3 $ Matching $1 $ withPos2 $3 $4 $ Ascription $4 (getL $3) }
 
            | BindName ListE1(Parameter) PostBinding
              { Binding (getL $1) (foldr (\x y -> withPos2 x $3 (Fun x y)) $3 $2) BindRegular (withPos1 $1 id) }
@@ -296,12 +321,24 @@ Lit :: { Located Lit }
     | true                 { lPos1 $1 $ LiBool True }
     | false                { lPos1 $1 $ LiBool False }
 
--- An alternative to Pattern which uses TypeProd 
--- instead of Type
+-- | An alternative to Pattern which uses TypeProd instead of Type, suitable for
+-- usage in match arms.
+--
+-- This ensures '->' does not occur on the top level of a type annotation, and
+-- so there is no conflict with the '->' in an arm.
 MPattern :: { Pattern Parsed }
          : ArgP                   { $1 }
          | Con ArgP               { withPos2 $1 $2 $ Destructure (getL $1) (Just $2) }
          | MPattern ':' TypeProd  { withPos2 $1 $3 $ PType $1 (getL $3) }
+
+-- | An alternative to Pattern without any type pattern, suitable for usage in
+-- bindings.
+--
+-- We place the type annotation on the expression instead of within the pattern,
+-- as that allows for easier desugaring later on.
+BPattern :: { Pattern Parsed }
+         : ArgP                   { $1 }
+         | Con ArgP               { withPos2 $1 $2 $ Destructure (getL $1) (Just $2) }
 
 Pattern :: { Pattern Parsed }
         : ArgP                    { $1 }
