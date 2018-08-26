@@ -3,7 +3,7 @@ do
     __tag = "__builtin_unit"
   }
   local bottom = nil
-  local s = bottom({
+  bottom({
     quote = "\"",
     line = "\n",
     tab = "\t",

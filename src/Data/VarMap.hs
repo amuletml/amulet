@@ -1,10 +1,11 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, DerivingStrategies, FlexibleInstances #-}
 module Data.VarMap
   ( Map
-  , fromList, toList
+  , fromList, toList, null
   , lookup, member, findWithDefault
   , insert, delete
-  , map, singleton, union, unionSemigroup
+  , map, mapWithKey, singleton, union, unionSemigroup
+  , difference, intersection
   , foldrWithKey
   , (<>), mempty
   ) where
@@ -13,7 +14,7 @@ import qualified Data.HashMap.Strict as Map
 import qualified Data.Text as T
 import qualified Data.List as L
 import Data.Coerce
-import Prelude hiding (lookup, map)
+import Prelude hiding (lookup, map, null)
 
 import Control.Arrow
 
@@ -23,6 +24,9 @@ newtype Map a
   = Map (Map.HashMap Int a)
   deriving (Eq, Show, Ord)
   deriving newtype (Semigroup, Monoid, Functor, Foldable)
+
+null :: Map a -> Bool
+null (Map m) = Map.null m
 
 insert :: CoVar -> a -> Map a -> Map a
 insert (CoVar x _ _) v (Map k) = Map (Map.insert x v k)
@@ -48,8 +52,20 @@ lookup (CoVar x _ _) (Map m) = Map.lookup x m
 union :: Map a -> Map a -> Map a
 union (Map a) (Map b) = Map (Map.union a b)
 
+difference :: Map a -> Map b -> Map a
+difference (Map a) (Map b) = Map (Map.difference a b)
+
+intersection :: Map a -> Map b -> Map a
+intersection (Map a) (Map b) = Map (Map.intersection a b)
+
 map :: (a -> b) -> Map a -> Map b
 map f (Map a) = Map (Map.map f a)
+
+mapWithKey :: (CoVar -> a -> b) -> Map a -> Map b
+mapWithKey f (Map a) = Map (Map.mapWithKey (f . create) a)
+
+-- filter :: (CoVar -> Bool) -> Map a -> Map a
+-- filter f (Map m) = Map (Map.filter (f . create) m)
 
 singleton :: CoVar -> a ->  Map a
 singleton (CoVar x _ _) v = coerce (Map.singleton x v)

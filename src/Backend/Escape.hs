@@ -75,7 +75,7 @@ pushVar v s = escapeVar (toVar v) where
 -- | Look up the escaped representation of a variable. This is a partial
 -- function and will error if it does not exist.
 getVar :: IsVar a => a -> EscapeScope -> T.Text
-getVar v s = fromMaybe (error ("Cannot find " ++ show v)) (Map.lookup (toVar v) (toEsc s))
+getVar v s = fromMaybe (error ("Cannot find " ++ show v ++ " in escape scope")) (Map.lookup (toVar v) (toEsc s))
 
 -- | Look up the variable for a given input string.
 getEscaped :: IsVar a => T.Text -> EscapeScope -> Maybe a

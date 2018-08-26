@@ -26,19 +26,17 @@ do
       [1] = x
     }
   end
-  local main = (function ()
-    local go
-    go = function (st)
-      if st > 5 then
-        return print("]")
-      else
-        io_write("'" .. to_string(st) .. "', ")
-        return go(st + 1)
-      end
+  local go
+  go = function (st)
+    if st > 5 then
+      return print("]")
+    else
+      io_write("'" .. to_string(st) .. "', ")
+      return go(st + 1)
     end
-    io_write("[")
-    return go(1)
-  end)()
+  end
+  io_write("[")
+  local main = go(1)
   local bottom = nil
-  local og = bottom(main)
+  bottom(main)
 end
