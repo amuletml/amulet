@@ -229,7 +229,7 @@ emitExpr var yield (AnnLet _ (Many vs) r) =
     -- Emit the body within the existing context
     emitExpr var yield r
 
-emitExpr var yield (AnnMatch _ test [Arm { _armPtrn = p, _armBody = body, _armVars = vs }])
+emitExpr var yield (AnnMatch _ test [arm@Arm { _armPtrn = p, _armBody = body, _armVars = vs }])
   | [(v, _)] <- filter (doesItOccur . fst) vs
   , usedWhen v == Once
   = do
@@ -242,15 +242,10 @@ emitExpr var yield (AnnMatch _ test [Arm { _armPtrn = p, _armBody = body, _armVa
       emitExpr var yield body
 
   | otherwise = do
-    ps <- patternBindings p <$> emitAtomMany test
-
-    let deps = freeInAtom test
-    modify (\s -> s { emitGraph = foldr (\(v, es) ->
-      VarMap.insert (toVar v) EmittedExpr { emitExprs = es
-                                          , emitVar = v
-                                          , emitTy = getTy v
-                                          , emitBinds = [v]
-                                          , emitDeps = deps }) (emitGraph s) ps})
+    test' <- emitAtomMany test
+    -- Push those patterns into the graph
+    graph' <- patternGraph test test' arm =<< gets emitGraph
+    modify (\s -> s { emitGraph = graph' })
 
     -- Emit the body within the existing context
     emitExpr var yield body
@@ -313,24 +308,13 @@ emitExpr var yield (AnnMatch _ test arms) = do
   })
 
   where
-    getTy vs v = maybe (error "Cannot find pattern variable") snd (find ((==v) . fst) vs)
-
-    genBranch test yield' Arm { _armPtrn = p, _armBody = b, _armVars = vs } = do
-      graph <- liftedGraph (extractAnn b)
+    genBranch test' yield' arm@Arm { _armPtrn = p, _armBody = b } = do
+      graph <- patternGraph test test' arm =<< liftedGraph (extractAnn b)
       scope <- ask
       escape <- gets emitEscape
 
-      -- We emit every pattern as an upvalue
-      let patDeps = VarSet.singleton (toVar var)
-      graph' <- foldrM (\(v, expr) g -> do
-        node <- if usedWhen v == Once
-                then pure $ EmittedExpr expr v (getTy vs v)
-                else uncurry EmittedStmt <$> genDeclare pushScope var (getTy vs v) expr
-        pure (VarMap.insert (toVar v) (node [v] patDeps) g))
-        graph (patternBindings p test)
-
-      let b' = fst3 $ emitTerm scope escape graph' yield' b
-      pure (patternTest escape p test, toList b')
+      let b' = fst3 $ emitTerm scope escape graph yield' b
+      pure (patternTest escape p test', toList b')
 
 -- Trivial terms. These will just be emitted inline.
 emitExpr var yield t@(AnnAtom _ x)    = withinExpr var yield t $ emitAtom x
@@ -761,6 +745,24 @@ patternBindings (PatExtend p rs) [vr] = patternBindings p [vr] ++ concatMap (ind
   index vr (var', pat) = patternBindings pat [LuaRef (LuaIndex vr (LuaString var'))]
 patternBindings (PatValues ps) vr = mconcat (zipWith (\p v -> patternBindings p [v]) ps vr)
 patternBindings _ _ = error "Mismatch between pattern and expression arity"
+
+-- | Generate a new graph for the provided set of patterns
+patternGraph :: ( Occurs a
+                , MonadReader (EmitScope a) m
+                , MonadState (EmitState a) m )
+             => Atom a -> [LuaExpr] -> AnnArm VarSet.Set a
+             -> EmittedGraph a
+             -> m (EmittedGraph a)
+patternGraph test test' Arm { _armPtrn = p, _armVars = vs } graph = do
+  let patDeps = freeInAtom test
+  foldrM (\(v, expr) g -> do
+    node <- if usedWhen v == Once
+            then pure $ EmittedExpr expr v (getTy v)
+            else uncurry EmittedStmt <$> genDeclare pushScope v (getTy v) expr
+    pure (VarMap.insert (toVar v) (node [v] patDeps) g))
+    graph (patternBindings p test')
+
+  where getTy v = maybe (error "Cannot find pattern variable") snd (find ((==v) . fst) vs)
 
 patternTest :: forall a. IsVar a => EscapeScope -> Pattern a -> [LuaExpr] ->  LuaExpr
 patternTest _ (Capture _ _) _       = LuaTrue
