@@ -53,73 +53,68 @@ data LuaExpr
   | LuaBitE Text
   deriving (Eq, Show, Ord)
 
-body :: [LuaStmt] -> Doc
-body = indent 2 . vsep . map pretty
+-- | Emit an indented block of objects, with a header and footer
+--
+-- We have this weird asymmetry of 'line' as we need to indent the first line
+-- line of the body but don't want to indent the footer.
+block :: Doc -> [Doc] -> Doc -> Doc
+block header body footer = header <> nest 2 (line <> vsep body) <> line <> footer
+
+-- | A variant of 'block' but with an empty footer
+headedBlock :: Doc -> [Doc] -> Doc
+headedBlock header body = block header body empty
 
 instance Pretty LuaStmt where
   pretty (LuaDo xs) =
-    vsep [ keyword "do"
-         , body xs
-         , keyword "end"
-         ]
+    block (keyword "do")
+          (map pretty xs)
+          (keyword "end")
   pretty (LuaAssign ns xs) = hsep (punctuate comma (map pretty ns)) <+> equals <+> hsep (punctuate comma (map pretty xs))
   pretty (LuaWhile c t) =
-    vsep [ keyword "while" <+> pretty c <+> keyword "do"
-         , body t
-         , keyword "end"
-         ]
+    block (keyword "while" <+> pretty c <+> keyword "do")
+          (map pretty t)
+          (keyword "end")
   pretty (LuaRepeat t c) =
-    vsep [ keyword "repeat"
-         , body t
-         , keyword "until" <+> pretty c
-         ]
+    block (keyword "repeat")
+          (map pretty t)
+          (keyword "until" <+> pretty c)
   pretty (LuaIf c t []) =
-    vsep [ keyword "if" <+> pretty c <+> keyword "then"
-         , body t
-         , keyword "end"
-         ]
+    block (keyword "if" <+> pretty c <+> keyword "then")
+          (map pretty t)
+          (keyword "end")
   pretty (LuaIf c t e) =
-    vsep [ keyword "if" <+> pretty c <+> keyword "then"
-         , body t
-         , keyword "else"
-         , body e
-         , keyword "end"
-         ]
+       headedBlock (keyword "if" <+> pretty c <+> keyword "then")
+                   (map pretty t)
+    <> headedBlock (keyword "else") (map pretty e)
+    <> keyword "end"
   pretty (LuaIfElse ((c,t):bs)) =
     let pprintElse [] = keyword "end"
         pprintElse [(LuaTrue, b)] =
-          vsep [ keyword "else"
-               , body b
-               , keyword "end"
-               ]
+             headedBlock (keyword "else") (map pretty b)
+          <> keyword "end"
         pprintElse ((c, b):xs) =
-          vsep [ keyword "elseif" <+> pretty c <+> keyword "then"
-               , body b
-               ]
-            <#> pprintElse xs
-     in vsep [ keyword "if" <+> pretty c <+> keyword "then"
-             , body t
-             ]
-        <#> pprintElse bs
+             headedBlock (keyword "elseif" <+> pretty c <+> keyword "then")
+                         (map pretty b)
+          <> pprintElse xs
+     in   headedBlock (keyword "if" <+> pretty c <+> keyword "then")
+                      (map pretty t)
+     <##> pprintElse bs
   pretty (LuaIfElse []) = error "impossible"
   pretty (LuaFornum v s e i b) =
-    vsep [ keyword "for" <+> text v <+> equals <+> keyword "do"
-       <+> pretty s <+> comma <+> pretty e <+> comma <+> pretty i
-         , body b
-         , keyword "end"
-         ]
+    block ( keyword "for" <+> text v <+> equals <+> keyword "do"
+        <+> pretty s <+> comma <+> pretty e <+> comma <+> pretty i )
+          (map pretty b)
+          (keyword "end")
   pretty (LuaFor vs es b) =
-    vsep [ keyword "for" <+> hsep (punctuate comma (map text vs))
-       <+> keyword "in" <+> hsep (punctuate comma (map pretty es))
-       <+> keyword "do"
-         , body b
-         , keyword "end"
-         ]
+    block ( keyword "for" <+> hsep (punctuate comma (map text vs))
+        <+> keyword "in" <+> hsep (punctuate comma (map pretty es))
+        <+> keyword "do" )
+         (map pretty b)
+         (keyword "end")
   pretty (LuaLocal [n] [LuaFunction a b]) =
-    vsep [ keyword "local function" <+> pretty n <+> tupled (map pretty a)
-         , body b
-         , keyword "end"
-         ]
+    funcBlock (keyword "local function" <+> pretty n <> tupled (map pretty a))
+              b
+              (keyword "end")
   pretty (LuaLocal vs []) = keyword "local" <+> hsep (punctuate comma (map pretty vs))
   pretty (LuaLocal vs xs) = keyword "local" <+> hsep (punctuate comma (map pretty vs))
                         <+> equals <+> hsep (punctuate comma (map pretty xs))
@@ -154,17 +149,26 @@ instance Pretty LuaExpr where
   pretty (LuaBinOp l o r) = pretty l <+> text o <+> pretty r
   pretty (LuaRef x) = pretty x
   pretty (LuaFunction a b) =
-    vsep [ keyword "function" <+> tupled (map pretty a)
-         , body b
-         , keyword "end"
-         ]
-  pretty (LuaTable ps) = enclose (lbrace <> line) (line <> rbrace) . indent 2 . vsep . punctuate comma $
-    map (\(k, v) -> key k <+> equals <+> pretty v) ps
-    where key (LuaString k) | validKey k = text k
-          key k = brackets (pretty k)
+    funcBlock (keyword "function" <> tupled (map pretty a))
+              b
+              (keyword "end")
+  pretty (LuaTable []) = lbrace <> rbrace
+  pretty (LuaTable ps) = group (block lbrace (punctuate comma . entries 1 $ ps) rbrace) where
+    entries _ [] = []
+    entries n ((LuaString k, v):es) | validKey k = text k <+> value v : entries n es
+    entries n ((LuaInteger k, v):es) | k == n = pretty v : entries (n + 1) es
+    entries n ((k,v):es) = brackets (pretty k) <+> value v : entries n es
+
+    value v = equals <+> pretty v
   pretty (LuaCall x@LuaFunction{} a) = parens (pretty x) <> tupled (map pretty a)
   pretty (LuaCall x a) = pretty x <> tupled (map pretty a)
   pretty (LuaBitE x) = text x
+
+-- | An alternative to 'block' which may group simple functions onto one line
+funcBlock :: Doc -> [LuaStmt] -> Doc -> Doc
+funcBlock header [] = group . block header []
+funcBlock header [r@LuaReturn{}] = group . block header [pretty r]
+funcBlock header body = block header (map pretty body)
 
 validKey :: Text -> Bool
 validKey t = case T.uncons t of

@@ -1,33 +1,14 @@
 do
-  local __builtin_unit = {
-    __tag = "__builtin_unit"
-  }
+  local __builtin_unit = { __tag = "__builtin_unit" }
   local io_write = io.write
   local print = print
   local to_string = tostring
-  local function Skip (x)
-    return {
-      __tag = "Skip",
-      [1] = x
-    }
-  end
-  local function Yield (x)
-    return {
-      __tag = "Yield",
-      [1] = x
-    }
-  end
-  local Done = {
-    __tag = "Done"
-  }
-  local function Stream (x)
-    return {
-      __tag = "Stream",
-      [1] = x
-    }
-  end
+  local function Skip(x) return { __tag = "Skip", x } end
+  local function Yield(x) return { __tag = "Yield", x } end
+  local Done = { __tag = "Done" }
+  local function Stream(x) return { __tag = "Stream", x } end
   local go
-  go = function (st)
+  go = function(st)
     if st > 5 then
       return print("]")
     else

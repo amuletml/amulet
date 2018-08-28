@@ -1,7 +1,5 @@
 do
-  local __builtin_unit = {
-    __tag = "__builtin_unit"
-  }
+  local __builtin_unit = { __tag = "__builtin_unit" }
   local bottom = nil
   local a = bottom(1)
   local b = bottom(2)
