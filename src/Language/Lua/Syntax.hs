@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Backend.Lua.Syntax
+module Language.Lua.Syntax
   ( LuaStmt(..)
   , LuaVar(..)
   , LuaExpr(..)

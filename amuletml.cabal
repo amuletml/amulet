@@ -199,9 +199,10 @@ library amulet
                      -- Backend
                      , Backend.Lua
                      , Backend.Lua.Emit
-                     , Backend.Lua.Syntax
                      , Backend.Lua.Postprocess
                      , Backend.Escape
+                     -- Lua
+                     , Language.Lua.Syntax
                      -- Infra
                      , Control.Monad.Infer
                      , Control.Monad.Namey

@@ -13,7 +13,7 @@ import qualified Data.Map as Map
 import qualified Data.VarMap as VarMap
 import qualified Data.VarSet as VarSet
 
-import Backend.Lua.Syntax
+import Language.Lua.Syntax
 import Backend.Lua.Emit
 import Backend.Escape
 import Core.Builtin

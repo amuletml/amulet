@@ -27,7 +27,7 @@ import Core.Types
 import Core.Core
 import Core.Var
 
-import Backend.Lua.Syntax
+import Language.Lua.Syntax
 import Backend.Escape
 
 -- | A magic variable used to represent the return value
