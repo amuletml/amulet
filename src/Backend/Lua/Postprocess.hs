@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, QuasiQuotes #-}
 
 {-|Handles post-processing the generated Lua sources, injecting any
  additional code which may be needed and (potentially) doing some basic
@@ -14,6 +14,8 @@ import qualified Data.VarMap as VarMap
 import qualified Data.VarSet as VarSet
 
 import Language.Lua.Syntax
+import Language.Lua.Quote
+
 import Backend.Lua.Emit
 import Backend.Escape
 import Core.Builtin
@@ -77,25 +79,19 @@ addOperators stmt =
 -- apply to binary operators.
 genOperator :: CoVar -> LuaStmt
 genOperator op | op == vLAZY =
-  LuaLocal [ LuaName "__builtin_Lazy" ]
-           [ LuaFunction [ eks ]
-             [ LuaReturn [LuaTable [ (LuaInteger 1, LuaRef eks)
-                                   , (LuaInteger 2, LuaFalse)
-                                   , (LuaString "__tag", LuaString "lazy")
-                                   ]] ] ] where
-  eks = LuaName "x"
+  [luaStmt|local __builtin_Lazy = function(x) return { x, false, __tag = "lazy" } end|]
+
 genOperator op | op == vForce =
-  LuaLocal [ LuaName "__builtin_force" ]
-           [ LuaFunction [ eks ]
-             [ LuaIf (LuaRef (LuaIndex (LuaRef eks) (LuaInteger 2)))
-                [ LuaReturn [ LuaRef (LuaIndex (LuaRef eks) (LuaInteger 1)) ] ]
-                [ LuaAssign [ LuaIndex (LuaRef eks) (LuaInteger 1)
-                            , LuaIndex (LuaRef eks) (LuaInteger 2) ]
-                            [ LuaCall (LuaRef (LuaIndex (LuaRef eks) (LuaInteger 1)))
-                               [ LuaRef (LuaName "__builtin_unit") ]
-                            , LuaTrue]
-                  , LuaReturn [LuaRef (LuaIndex (LuaRef eks) (LuaInteger 1))] ] ] ] where
-  eks = LuaName "x"
+  [luaStmt|
+   local __builtin_force = function(x)
+     if x[2] then
+       return x[1]
+     else
+       x[1], x[2] = x[1](__builtin_unit), true
+       return x[1]
+     end
+   end
+  |]
 genOperator op =
   let name =  getVar op escapeScope
   in LuaLocal [LuaName name]
