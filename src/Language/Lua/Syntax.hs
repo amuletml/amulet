@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, DeriveDataTypeable #-}
 module Language.Lua.Syntax
   ( LuaStmt(..)
   , LuaVar(..)
@@ -14,6 +14,7 @@ import qualified Data.Text.Lazy as L
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import Data.Text (Text)
+import Data.Generics hiding (empty)
 import Data.Char
 
 -- | A Lua statement
@@ -23,21 +24,23 @@ data LuaStmt
   | LuaWhile LuaExpr [LuaStmt]
   | LuaRepeat [LuaStmt] LuaExpr
   | LuaIf LuaExpr [LuaStmt] [LuaStmt]
-  | LuaFornum Text LuaExpr LuaExpr LuaExpr [LuaStmt]
-  | LuaFor [Text] [LuaExpr] [LuaStmt]
+  | LuaFornum LuaVar LuaExpr LuaExpr LuaExpr [LuaStmt]
+  | LuaFor [LuaVar] [LuaExpr] [LuaStmt]
   | LuaLocal [LuaVar] [LuaExpr]
   | LuaReturn [LuaExpr]
   | LuaIfElse [(LuaExpr, [LuaStmt])]
   | LuaBreak
   | LuaCallS LuaExpr [LuaExpr]
-  | LuaBit Text
-  deriving (Eq, Show, Ord)
+  | LuaBitS Text
+  | LuaQuoteS Text
+  deriving (Eq, Show, Ord, Typeable, Data)
 
 -- | A variable which can be set on the left hand side of a binder
 data LuaVar
   = LuaName Text
   | LuaIndex LuaExpr LuaExpr
-  deriving (Eq, Show, Ord)
+  | LuaQuoteV Text
+  deriving (Eq, Show, Ord, Typeable, Data)
 
 -- | A Lua expression
 data LuaExpr
@@ -51,7 +54,8 @@ data LuaExpr
   | LuaTable [(LuaExpr, LuaExpr)]
   | LuaBinOp LuaExpr Text LuaExpr
   | LuaBitE Text
-  deriving (Eq, Show, Ord)
+  | LuaQuoteE Text
+  deriving (Eq, Show, Ord, Typeable, Data)
 
 -- | Emit an indented block of objects, with a header and footer
 --
@@ -96,17 +100,17 @@ instance Pretty LuaStmt where
              headedBlock (keyword "elseif" <+> pretty c <+> keyword "then")
                          (map pretty b)
           <> pprintElse xs
-     in   headedBlock (keyword "if" <+> pretty c <+> keyword "then")
-                      (map pretty t)
-     <##> pprintElse bs
+     in headedBlock (keyword "if" <+> pretty c <+> keyword "then")
+                    (map pretty t)
+     <> pprintElse bs
   pretty (LuaIfElse []) = error "impossible"
   pretty (LuaFornum v s e i b) =
-    block ( keyword "for" <+> text v <+> equals <+> keyword "do"
+    block ( keyword "for" <+> pretty v <+> equals <+> keyword "do"
         <+> pretty s <+> comma <+> pretty e <+> comma <+> pretty i )
           (map pretty b)
           (keyword "end")
   pretty (LuaFor vs es b) =
-    block ( keyword "for" <+> hsep (punctuate comma (map text vs))
+    block ( keyword "for" <+> hsep (punctuate comma (map pretty vs))
         <+> keyword "in" <+> hsep (punctuate comma (map pretty es))
         <+> keyword "do" )
          (map pretty b)
@@ -118,7 +122,8 @@ instance Pretty LuaStmt where
   pretty (LuaLocal vs []) = keyword "local" <+> hsep (punctuate comma (map pretty vs))
   pretty (LuaLocal vs xs) = keyword "local" <+> hsep (punctuate comma (map pretty vs))
                         <+> equals <+> hsep (punctuate comma (map pretty xs))
-  pretty (LuaBit x) = text x
+  pretty (LuaBitS x) = text x
+  pretty (LuaQuoteS x) = "@" <> text x
   pretty LuaBreak = keyword "break"
   pretty (LuaReturn v) = keyword "return" <+> pretty v
   pretty (LuaCallS x@LuaFunction{} a) = parens (pretty x) <> tupled (map pretty a) <> semi
@@ -131,6 +136,7 @@ instance Pretty LuaVar where
   pretty (LuaIndex e (LuaString k))
     | validKey k = parens (pretty e) <> dot <> text k
   pretty (LuaIndex e k) = pretty e <> brackets (pretty k)
+  pretty (LuaQuoteV x) = "$" <> text x
 
 instance Pretty LuaExpr where
   pretty LuaTrue = sliteral (string "true")
@@ -163,6 +169,7 @@ instance Pretty LuaExpr where
   pretty (LuaCall x@LuaFunction{} a) = parens (pretty x) <> tupled (map pretty a)
   pretty (LuaCall x a) = pretty x <> tupled (map pretty a)
   pretty (LuaBitE x) = text x
+  pretty (LuaQuoteE x) = "%" <> text x
 
 -- | An alternative to 'block' which may group simple functions onto one line
 funcBlock :: Doc -> [LuaStmt] -> Doc -> Doc

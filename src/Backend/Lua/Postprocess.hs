@@ -43,7 +43,8 @@ addOperators stmt =
     opsStmt (LuaIfElse t) = foldMap (\(c, b) -> opsExpr c <> foldMap opsStmt b) t
     opsStmt LuaBreak = mempty
     opsStmt (LuaCallS f xs) = foldMap opsExpr (f:xs)
-    opsStmt LuaBit{} = mempty
+    opsStmt LuaBitS{} = mempty
+    opsStmt LuaQuoteS{} = mempty
 
     opsExpr :: LuaExpr -> VarSet.Set
     opsExpr LuaNil = mempty
@@ -54,6 +55,7 @@ addOperators stmt =
     opsExpr LuaInteger{} = mempty
     opsExpr LuaString{} = mempty
     opsExpr LuaBitE{} = mempty
+    opsExpr LuaQuoteE{} = mempty
 
     opsExpr (LuaCall f xs) = foldMap opsExpr (f:xs)
     opsExpr (LuaRef v) = opsVar v
@@ -64,6 +66,7 @@ addOperators stmt =
     opsVar :: LuaVar -> VarSet.Set
     opsVar (LuaName t) = foldMap VarSet.singleton (Map.lookup t opNames)
     opsVar (LuaIndex t k) = opsExpr t <> opsExpr k
+    opsVar LuaQuoteV{} = mempty
 
     opNames = Map.filter (`VarMap.member` ops) (fromEsc escapeScope)
                 `Map.union` Map.fromList [ ( "__builtin_Lazy", vLAZY ), ( "__builtin_force", vForce ) ]

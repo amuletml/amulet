@@ -417,7 +417,7 @@ emitExpr var yield (AnnExtend fv tbl exs) = do
       in LuaLocal [old] [tbl] <| copy var old <| mempty
 
     copy var tbl =
-      LuaFor [k, v] [LuaCall (LuaRef pairs) [LuaRef tbl]]
+      LuaFor [LuaName k, LuaName v] [LuaCall (LuaRef pairs) [LuaRef tbl]]
          [LuaAssign [LuaIndex (LuaRef var) (LuaRef (LuaName k))] [LuaRef (LuaName v)]]
 
 runNES :: ( MonadReader (EmitScope a) m

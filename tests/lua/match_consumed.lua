@@ -6,7 +6,6 @@ do
   local a = bottom(1)
   if bottom.__tag == "None" then
     bottom(bottom(a))
-
   elseif bottom.__tag == "Some" then
     bottom(bottom(a + bottom[1] * 2))
   end
