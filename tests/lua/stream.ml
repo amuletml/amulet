@@ -1,7 +1,6 @@
 external val io_write : string -> unit = "io.write" ;;
 external val print : string -> unit = "print" ;;
 external val to_string : 'a -> string = "tostring" ;;
-external val rem : int -> int -> int = "function(x, y) return x % y end"
 (* this type is a lie *)
 
 type step 's 'a =

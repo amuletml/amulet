@@ -1,6 +1,6 @@
-{-# LANGUAGE OverloadedStrings, DeriveDataTypeable #-}
+{-# LANGUAGE OverloadedStrings, DeriveDataTypeable, PatternSynonyms #-}
 module Language.Lua.Syntax
-  ( LuaStmt(..)
+  ( LuaStmt(..), pattern LuaIf
   , LuaVar(..)
   , LuaExpr(..)
   , keywords
@@ -23,16 +23,20 @@ data LuaStmt
   | LuaAssign [LuaVar] [LuaExpr]
   | LuaWhile LuaExpr [LuaStmt]
   | LuaRepeat [LuaStmt] LuaExpr
-  | LuaIf LuaExpr [LuaStmt] [LuaStmt]
   | LuaFornum LuaVar LuaExpr LuaExpr LuaExpr [LuaStmt]
   | LuaFor [LuaVar] [LuaExpr] [LuaStmt]
   | LuaLocal [LuaVar] [LuaExpr]
+  | LuaLocalFun LuaVar [LuaVar] [LuaStmt]
   | LuaReturn [LuaExpr]
   | LuaIfElse [(LuaExpr, [LuaStmt])]
   | LuaBreak
   | LuaCallS LuaExpr [LuaExpr]
   | LuaQuoteS Text
   deriving (Eq, Show, Ord, Typeable, Data)
+
+-- | A shorthand for a basic @if@/@else@ constructor
+pattern LuaIf :: LuaExpr -> [LuaStmt] -> [LuaStmt] -> LuaStmt
+pattern LuaIf c t f = LuaIfElse [(c, t), (LuaTrue, f)]
 
 -- | A variable which can be set on the left hand side of a binder
 data LuaVar
@@ -66,6 +70,10 @@ block header body footer = header <> nest 2 (line <> vsep body) <> line <> foote
 headedBlock :: Doc -> [Doc] -> Doc
 headedBlock header body = block header body empty
 
+-- | Build a series of function arguments
+args :: [Doc] -> Doc
+args = parens . hsep . punctuate comma
+
 instance Pretty LuaStmt where
   pretty (LuaDo xs) =
     block (keyword "do")
@@ -80,15 +88,6 @@ instance Pretty LuaStmt where
     block (keyword "repeat")
           (map pretty t)
           (keyword "until" <+> pretty c)
-  pretty (LuaIf c t []) =
-    block (keyword "if" <+> pretty c <+> keyword "then")
-          (map pretty t)
-          (keyword "end")
-  pretty (LuaIf c t e) =
-       headedBlock (keyword "if" <+> pretty c <+> keyword "then")
-                   (map pretty t)
-    <> headedBlock (keyword "else") (map pretty e)
-    <> keyword "end"
   pretty (LuaIfElse ((c,t):bs)) =
     let pprintElse [] = keyword "end"
         pprintElse [(LuaTrue, b)] =
@@ -113,8 +112,8 @@ instance Pretty LuaStmt where
         <+> keyword "do" )
          (map pretty b)
          (keyword "end")
-  pretty (LuaLocal [n] [LuaFunction a b]) =
-    funcBlock (keyword "local function" <+> pretty n <> tupled (map pretty a))
+  pretty (LuaLocalFun n a b) =
+    funcBlock (keyword "local function" <+> pretty n <> args (map pretty a))
               b
               (keyword "end")
   pretty (LuaLocal vs []) = keyword "local" <+> hsep (punctuate comma (map pretty vs))
@@ -123,8 +122,8 @@ instance Pretty LuaStmt where
   pretty (LuaQuoteS x) = "@" <> text x
   pretty LuaBreak = keyword "break"
   pretty (LuaReturn v) = keyword "return" <+> pretty v
-  pretty (LuaCallS x@LuaFunction{} a) = parens (pretty x) <> tupled (map pretty a) <> semi
-  pretty (LuaCallS x a) = pretty x <> tupled (map pretty a)
+  pretty (LuaCallS x@LuaFunction{} a) = parens (pretty x) <> args (map pretty a) <> semi
+  pretty (LuaCallS x a) = pretty x <> args (map pretty a)
 
 instance Pretty LuaVar where
   pretty (LuaName x) = text x
@@ -152,7 +151,7 @@ instance Pretty LuaExpr where
   pretty (LuaBinOp l o r) = pretty l <+> text o <+> pretty r
   pretty (LuaRef x) = pretty x
   pretty (LuaFunction a b) =
-    funcBlock (keyword "function" <> tupled (map pretty a))
+    funcBlock (keyword "function" <> args (map pretty a))
               b
               (keyword "end")
   pretty (LuaTable []) = lbrace <> rbrace
@@ -163,8 +162,8 @@ instance Pretty LuaExpr where
     entries n ((k,v):es) = brackets (pretty k) <+> value v : entries n es
 
     value v = equals <+> pretty v
-  pretty (LuaCall x@LuaFunction{} a) = parens (pretty x) <> tupled (map pretty a)
-  pretty (LuaCall x a) = pretty x <> tupled (map pretty a)
+  pretty (LuaCall x@LuaFunction{} a) = parens (pretty x) <> args (map pretty a)
+  pretty (LuaCall x a) = pretty x <> args (map pretty a)
   pretty (LuaQuoteE x) = "%" <> text x
 
 -- | An alternative to 'block' which may group simple functions onto one line

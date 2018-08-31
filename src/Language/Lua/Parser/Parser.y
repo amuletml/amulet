@@ -187,6 +187,8 @@ Stmt :: { LuaStmt }
   | for Ident '=' Expr ',' Expr ',' Expr do Stmts end { LuaFornum $2 $4 $6 $8 $10 }
   | for List1(Ident, ',') in List1(Expr, ',') do Stmts end { LuaFor $2 $4 $6 }
   | local List1(Ident, ',') '=' List1(Expr, ',') { LuaLocal $2 $4 }
+  | local function Ident '(' List(Ident, ',') ')' Stmts end { LuaLocalFun $3 $5 $7 }
+  | function Ident '(' List(Ident, ',') ')' Stmts end { LuaAssign [$2] [LuaFunction $4 $6] }
   | return List1(Expr, ',')             { LuaReturn $2 }
   | break                               { LuaBreak }
 
