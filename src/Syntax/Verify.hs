@@ -160,7 +160,10 @@ unguardedVars (VarRef v _)         = Set.singleton v
 unguardedVars (Begin es _)         = foldMap unguardedVars es
 unguardedVars (Let vs b _)         = (unguardedVars b <> foldMap (unguardedVars . view bindBody) vs)
                               Set.\\ foldMapOf (each . bindVariable) Set.singleton vs
-unguardedVars (App f x _)          = freeIn f <> unguardedVars x
+unguardedVars (App f x _) =
+  case f of
+    ExprWrapper _ (VarRef (TvName (TgInternal "force")) _) _ -> freeIn f <> freeIn x
+    _ -> freeIn f <> unguardedVars x
 unguardedVars Fun{}                = mempty
 unguardedVars (Record rs _)        = foldMap (unguardedVars . view fExpr) rs
 unguardedVars (Access e _ _)       = unguardedVars e
