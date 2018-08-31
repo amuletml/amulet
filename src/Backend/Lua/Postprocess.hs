@@ -45,7 +45,6 @@ addOperators stmt =
     opsStmt (LuaIfElse t) = foldMap (\(c, b) -> opsExpr c <> foldMap opsStmt b) t
     opsStmt LuaBreak = mempty
     opsStmt (LuaCallS f xs) = foldMap opsExpr (f:xs)
-    opsStmt LuaBitS{} = mempty
     opsStmt LuaQuoteS{} = mempty
 
     opsExpr :: LuaExpr -> VarSet.Set
@@ -56,7 +55,6 @@ addOperators stmt =
     opsExpr LuaNumber{} = mempty
     opsExpr LuaInteger{} = mempty
     opsExpr LuaString{} = mempty
-    opsExpr LuaBitE{} = mempty
     opsExpr LuaQuoteE{} = mempty
 
     opsExpr (LuaCall f xs) = foldMap opsExpr (f:xs)

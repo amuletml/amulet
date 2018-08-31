@@ -9,12 +9,12 @@ module Backend.Lua.Emit
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Arrow (first)
+import Control.Lens hiding ((<|), (|>))
 
 import qualified Data.VarMap as VarMap
 import qualified Data.VarSet as VarSet
 import Data.Sequence ((<|), (|>), Seq)
 import qualified Data.Text as T
-import Data.Functor.Identity
 import Data.Traversable
 import Data.Foldable
 import Data.Triple
@@ -27,7 +27,10 @@ import Core.Types
 import Core.Core
 import Core.Var
 
+import Language.Lua.Parser.Wrapper
+import Language.Lua.Parser.Parser
 import Language.Lua.Syntax
+
 import Backend.Escape
 
 -- | A magic variable used to represent the return value
@@ -642,18 +645,19 @@ emitStmt (Foreign n t s:xs) = do
   modify (\s -> s { topArity = extendForeign (topArity s) (n, t)
                   , topVars = VarMap.insert (toVar n) [LuaName n'] (topVars s) })
 
-  let stmts = if arity t > 1
+  let Right ex = runParser (SourcePos "_" 0 0) (s ^. lazy) parseExpr
+      stmts = if arity t > 1
               then
                 let ags = map LuaName $ take (arity t) alpha
                     mkF (a:ag) bd = LuaFunction [a] [LuaReturn [mkF ag bd]]
                     mkF [] bd = bd
-                in LuaLocal [LuaName (T.cons '_' n')] [LuaBitE s]
+                in LuaLocal [LuaName (T.cons '_' n')] [ex]
                 <| LuaLocal [LuaName n']
                      [mkF ags
                       (LuaCall (LuaRef (LuaName (T.cons '_' n')))
                        (map LuaRef ags))]
                 <| mempty
-              else LuaLocal [LuaName n'] [LuaBitE s] <| mempty
+              else LuaLocal [LuaName n'] [ex] <| mempty
 
   (stmts<>) <$> emitStmt xs
 

@@ -31,7 +31,6 @@ data LuaStmt
   | LuaIfElse [(LuaExpr, [LuaStmt])]
   | LuaBreak
   | LuaCallS LuaExpr [LuaExpr]
-  | LuaBitS Text
   | LuaQuoteS Text
   deriving (Eq, Show, Ord, Typeable, Data)
 
@@ -53,7 +52,6 @@ data LuaExpr
   | LuaFunction [LuaVar] [LuaStmt]
   | LuaTable [(LuaExpr, LuaExpr)]
   | LuaBinOp LuaExpr Text LuaExpr
-  | LuaBitE Text
   | LuaQuoteE Text
   deriving (Eq, Show, Ord, Typeable, Data)
 
@@ -122,7 +120,6 @@ instance Pretty LuaStmt where
   pretty (LuaLocal vs []) = keyword "local" <+> hsep (punctuate comma (map pretty vs))
   pretty (LuaLocal vs xs) = keyword "local" <+> hsep (punctuate comma (map pretty vs))
                         <+> equals <+> hsep (punctuate comma (map pretty xs))
-  pretty (LuaBitS x) = text x
   pretty (LuaQuoteS x) = "@" <> text x
   pretty LuaBreak = keyword "break"
   pretty (LuaReturn v) = keyword "return" <+> pretty v
@@ -168,7 +165,6 @@ instance Pretty LuaExpr where
     value v = equals <+> pretty v
   pretty (LuaCall x@LuaFunction{} a) = parens (pretty x) <> tupled (map pretty a)
   pretty (LuaCall x a) = pretty x <> tupled (map pretty a)
-  pretty (LuaBitE x) = text x
   pretty (LuaQuoteE x) = "%" <> text x
 
 -- | An alternative to 'block' which may group simple functions onto one line
