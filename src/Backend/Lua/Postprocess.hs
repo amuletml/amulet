@@ -37,10 +37,10 @@ addOperators stmt =
     opsStmt (LuaAssign vs xs) = foldMap opsVar vs <> foldMap opsExpr xs
     opsStmt (LuaWhile t b) = opsExpr t <> foldMap opsStmt b
     opsStmt (LuaRepeat b t) = opsExpr t <> foldMap opsStmt b
-    opsStmt (LuaIf c t f) = opsExpr c <> foldMap opsStmt t <> foldMap opsStmt f
     opsStmt (LuaFornum _ b e s bo) = opsExpr b <> opsExpr e <> opsExpr s <> foldMap opsStmt bo
     opsStmt (LuaFor _ g b) = foldMap opsExpr g <> foldMap opsStmt b
     opsStmt (LuaLocal _ e) = foldMap opsExpr e
+    opsStmt (LuaLocalFun _ _ b) = foldMap opsStmt b
     opsStmt (LuaReturn r) = foldMap opsExpr r
     opsStmt (LuaIfElse t) = foldMap (\(c, b) -> opsExpr c <> foldMap opsStmt b) t
     opsStmt LuaBreak = mempty
@@ -78,14 +78,14 @@ addOperators stmt =
 genOperator :: CoVar -> LuaStmt
 genOperator op | op == vLAZY =
   [luaStmt|
-    local __builtin_Lazy = function(x)
+    local function __builtin_Lazy(x)
       return { x, false, __tag = "lazy" }
     end
   |]
 
 genOperator op | op == vForce =
   [luaStmt|
-   local __builtin_force = function(x)
+   local function __builtin_force(x)
      if x[2] then
        return x[1]
      else
@@ -101,10 +101,9 @@ genOperator op | op == vForce =
   |]
 genOperator op =
   let name =  getVar op escapeScope
-  in LuaLocal [LuaName name]
-              [ LuaFunction [left]
-                [LuaReturn [LuaFunction [right]
-                            [LuaReturn [LuaBinOp (LuaRef left) (remapOp op) (LuaRef right)]]]] ]
+  in LuaLocalFun (LuaName name) [left]
+                 [LuaReturn [LuaFunction [right]
+                             [LuaReturn [LuaBinOp (LuaRef left) (remapOp op) (LuaRef right)]]]]
   where
     left  = LuaName "l"
     right = LuaName "r"

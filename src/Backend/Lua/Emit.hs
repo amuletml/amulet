@@ -580,17 +580,24 @@ genYield (YieldDeclare v ty) es = genDeclare pushScope v ty es
 genDeclare :: Monad m
             => (a -> m T.Text) -> a -> Type a -> [LuaExpr]
             -> m (Seq LuaStmt, [LuaVar])
-genDeclare escape v ty es =
-  case traverse getVar es of
-    -- If all expressions are variables, then just return them
-    Just vs -> pure (mempty, vs)
-    Nothing -> do
+genDeclare escape v ty es
+  -- If all expressions are variables, then just return them
+  | Just vs <- traverse getVar es = pure (mempty, vs)
+  -- Unpack tuples into multiple assignments
+  | ValuesTy ts <- ty = do
       v' <- escape v
-      pure $ case ty of
-        ValuesTy ts -> let (rs, lhs, rhs) = tupleVars v' 1 ts es
-                       in (pure (LuaLocal lhs rhs), rs)
-        _ -> let var = LuaName v'
-             in (pure (LuaLocal [var] es), [var])
+      let (rs, lhs, rhs) = tupleVars v' 1 ts es
+      pure (pure (LuaLocal lhs rhs), rs)
+  -- Generate @local function@ if needed, as it's a wee bit "nicer".
+  | [LuaFunction a b] <- es = do
+      v' <- escape v
+      let var = LuaName v'
+      pure (pure (LuaLocalFun var a b), [var])
+  -- Just do a normal binding
+  | otherwise = do
+      v' <- escape v
+      let var = LuaName v'
+      pure (pure (LuaLocal [var] es), [var])
 
   where
     -- | Get the variable from an expression
@@ -677,9 +684,9 @@ emitStmt (Type _ cs:xs) = do
       pure $
         if arity ty == 0
         then LuaLocal [LuaName var'] [LuaTable [(LuaString "__tag", LuaString var')]]
-        else LuaLocal [LuaName var'] [LuaFunction [LuaName "x"]
-                                       [LuaReturn [LuaTable [ (LuaString "__tag", LuaString var')
-                                                            , (LuaInteger 1, LuaRef (LuaName "x"))]]]]
+        else LuaLocalFun (LuaName var') [LuaName "x"]
+                                        [LuaReturn [LuaTable [ (LuaString "__tag", LuaString var')
+                                                             , (LuaInteger 1, LuaRef (LuaName "x"))]]]
 
 emitStmt (StmtLet (One (v, ty, e)):xs) = do
   TopEmitState { topArity = ari, topEscape = esc, topVars = vars } <- get
