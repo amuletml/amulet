@@ -12,8 +12,9 @@ import Control.Monad.State
 
 import Data.Foldable
 
+import Language.Lua.Syntax
+
 import Backend.Lua.Postprocess
-import Backend.Lua.Syntax
 import Backend.Lua.Emit
 
 import Core.Occurrence

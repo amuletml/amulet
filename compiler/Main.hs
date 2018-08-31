@@ -17,7 +17,7 @@ import Control.Monad.Infer (Env, TypeError, firstName)
 import Control.Monad.Namey
 import Control.Monad.State
 
-import Backend.Lua.Syntax
+import Language.Lua.Syntax
 import Backend.Lua
 
 import Types.Infer (inferProgram, builtinsEnv)

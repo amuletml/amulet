@@ -57,7 +57,7 @@ import Control.Lens
 
 import qualified Backend.Lua.Postprocess as B
 import qualified Backend.Lua.Emit as B
-import Backend.Lua.Syntax
+import Language.Lua.Syntax
 
 import Text.Pretty.Semantic
 import Text.Pretty.Note
