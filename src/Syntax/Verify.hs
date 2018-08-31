@@ -1,5 +1,6 @@
 {-# LANGUAGE ConstraintKinds, FlexibleContexts, FlexibleInstances,
-   UndecidableInstances, MultiParamTypeClasses, OverloadedStrings #-}
+   UndecidableInstances, MultiParamTypeClasses, OverloadedStrings,
+   ScopedTypeVariables #-}
 module Syntax.Verify where
 
 import qualified Data.Sequence as Seq
@@ -20,6 +21,10 @@ import Text.Pretty.Note
 import Syntax.Pretty
 import Syntax.Let
 
+import Language.Lua.Parser.Wrapper
+import Language.Lua.Parser.Parser
+import Language.Lua.Parser.Error
+
 type MonadVerify m = ( MonadWriter (Seq.Seq VerifyError) m, MonadState (Set.Set BindingSite) m )
 
 data BindingSite
@@ -35,10 +40,13 @@ data VerifyError
                     , unguarded :: [Var Typed]
                     }
   | DefinedUnused BindingSite
+  | ParseErrorInForeign { stmt :: Toplevel Typed
+                        , err :: ParseError }
 
 instance Spanned VerifyError where
   annotation (NonRecursiveRhs e _ _) = annotation e
   annotation (DefinedUnused b) = boundWhere b
+  annotation (ParseErrorInForeign _ e) = annotation e
 
 instance Pretty VerifyError where
   pretty (NonRecursiveRhs re ex xs) =
@@ -52,11 +60,23 @@ instance Pretty VerifyError where
     where plural | length xs == 1 = empty | otherwise = char 's'
   pretty (DefinedUnused (BindingSite v _ _)) =
     string "Bound locally but not used:" <+> squotes (pretty v)
+  pretty (ParseErrorInForeign var err) =
+    vsep [ "Invalid syntax in definition of foreign value" <+> pretty var
+         , pretty err ]
 
 instance Note VerifyError Style where
   diagnosticKind NonRecursiveRhs{} = ErrorMessage
+  diagnosticKind ParseErrorInForeign{} = ErrorMessage
   diagnosticKind DefinedUnused{} = WarningMessage
 
+  formatNote f (ParseErrorInForeign (ForeignVal var s _ (span, _)) err) = 
+    let SourcePos name _ _ = spanStart (annotation err)
+        spans = [( name, s )]
+     in vsep [ indent 2 "Syntax error in definition of" <+> (Right <$> skeyword (pretty var))
+             , f [span]
+             , empty
+             , format (fileSpans spans) err
+             ]
   formatNote f x = indent 2 (Right <$> pretty x) <#> f [annotation x]
 
 runVerify :: WriterT (Seq.Seq VerifyError) (State (Set.Set BindingSite)) () -> Either (Seq.Seq VerifyError) ()
@@ -72,10 +92,15 @@ runVerify = fixup . flip runState mempty . runWriterT where
        Right () -> probably others
        Left es -> Left (es Seq.>< Seq.fromList others)
 
-verifyProgram :: MonadVerify m => [Toplevel Typed] -> m ()
+verifyProgram :: forall m. MonadVerify m => [Toplevel Typed] -> m ()
 verifyProgram = traverse_ verifyStmt where
+  verifyStmt :: Toplevel Typed -> m ()
   verifyStmt st@(LetStmt vs) = verifyBindingGroup (flip const) (BecauseOf st) vs
-  verifyStmt ForeignVal{} = pure ()
+  verifyStmt st@(ForeignVal v d _ (_, _)) = 
+    case runParser (SourcePos ("definition of " ++ displayS (pretty v)) 1 1) (d ^. lazy) parseExpr of
+      Left e -> tell (Seq.singleton (ParseErrorInForeign st e))
+      Right _ -> pure ()
+
   verifyStmt TypeDecl{}   = pure ()
   verifyStmt (Module _ p) = verifyProgram p
   verifyStmt Open{}       = pure ()

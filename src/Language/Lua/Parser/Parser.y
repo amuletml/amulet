@@ -111,7 +111,7 @@ Ident :: { LuaVar }
 
 Var :: { LuaVar }
   : Ident                               { $1 }
-  | BaseExpr '.' ident                  { LuaIndex $1 (LuaRef . LuaName . getIdent $ $3) }
+  | BaseExpr '.' ident                  { LuaIndex $1 (LuaString . getIdent $ $3) }
   | BaseExpr '[' Expr ']'               { LuaIndex $1 $3 }
 
 BaseExpr :: { LuaExpr }
