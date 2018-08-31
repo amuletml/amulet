@@ -57,6 +57,7 @@ let
       , tasty-hunit
       , transformers
       , tasty-ant-xml
+      , template-haskell
       , annotated-wl-pprint
       , unordered-containers
       , tasty-hedgehog_0_2_0_0
@@ -74,7 +75,7 @@ let
 
         libraryHaskellDepends = [
           annotated-wl-pprint array base bytestring containers lens
-          mtl pretty-show syb text transformers hashable
+          mtl pretty-show syb text transformers template-haskell hashable
           unordered-containers
         ];
 

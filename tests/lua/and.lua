@@ -4,7 +4,12 @@ do
     if x[2] then
       return x[1]
     else
-      x[1], x[2] = x[1](__builtin_unit), true
+      local thunk = x[1]
+      x[1] = function()
+        error("loop while forcing thunk")
+      end
+      x[1] = thunk(__builtin_unit)
+      x[2] = true
       return x[1]
     end
   end

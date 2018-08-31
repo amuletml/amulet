@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, QuasiQuotes #-}
 
 {-|Handles post-processing the generated Lua sources, injecting any
  additional code which may be needed and (potentially) doing some basic
@@ -13,7 +13,9 @@ import qualified Data.Map as Map
 import qualified Data.VarMap as VarMap
 import qualified Data.VarSet as VarSet
 
-import Backend.Lua.Syntax
+import Language.Lua.Syntax
+import Language.Lua.Quote
+
 import Backend.Lua.Emit
 import Backend.Escape
 import Core.Builtin
@@ -43,7 +45,8 @@ addOperators stmt =
     opsStmt (LuaIfElse t) = foldMap (\(c, b) -> opsExpr c <> foldMap opsStmt b) t
     opsStmt LuaBreak = mempty
     opsStmt (LuaCallS f xs) = foldMap opsExpr (f:xs)
-    opsStmt LuaBit{} = mempty
+    opsStmt LuaBitS{} = mempty
+    opsStmt LuaQuoteS{} = mempty
 
     opsExpr :: LuaExpr -> VarSet.Set
     opsExpr LuaNil = mempty
@@ -54,6 +57,7 @@ addOperators stmt =
     opsExpr LuaInteger{} = mempty
     opsExpr LuaString{} = mempty
     opsExpr LuaBitE{} = mempty
+    opsExpr LuaQuoteE{} = mempty
 
     opsExpr (LuaCall f xs) = foldMap opsExpr (f:xs)
     opsExpr (LuaRef v) = opsVar v
@@ -64,6 +68,7 @@ addOperators stmt =
     opsVar :: LuaVar -> VarSet.Set
     opsVar (LuaName t) = foldMap VarSet.singleton (Map.lookup t opNames)
     opsVar (LuaIndex t k) = opsExpr t <> opsExpr k
+    opsVar LuaQuoteV{} = mempty
 
     opNames = Map.filter (`VarMap.member` ops) (fromEsc escapeScope)
                 `Map.union` Map.fromList [ ( "__builtin_Lazy", vLAZY ), ( "__builtin_force", vForce ) ]
@@ -74,25 +79,28 @@ addOperators stmt =
 -- apply to binary operators.
 genOperator :: CoVar -> LuaStmt
 genOperator op | op == vLAZY =
-  LuaLocal [ LuaName "__builtin_Lazy" ]
-           [ LuaFunction [ eks ]
-             [ LuaReturn [LuaTable [ (LuaInteger 1, LuaRef eks)
-                                   , (LuaInteger 2, LuaFalse)
-                                   , (LuaString "__tag", LuaString "lazy")
-                                   ]] ] ] where
-  eks = LuaName "x"
+  [luaStmt|
+    local __builtin_Lazy = function(x)
+      return { x, false, __tag = "lazy" }
+    end
+  |]
+
 genOperator op | op == vForce =
-  LuaLocal [ LuaName "__builtin_force" ]
-           [ LuaFunction [ eks ]
-             [ LuaIf (LuaRef (LuaIndex (LuaRef eks) (LuaInteger 2)))
-                [ LuaReturn [ LuaRef (LuaIndex (LuaRef eks) (LuaInteger 1)) ] ]
-                [ LuaAssign [ LuaIndex (LuaRef eks) (LuaInteger 1)
-                            , LuaIndex (LuaRef eks) (LuaInteger 2) ]
-                            [ LuaCall (LuaRef (LuaIndex (LuaRef eks) (LuaInteger 1)))
-                               [ LuaRef (LuaName "__builtin_unit") ]
-                            , LuaTrue]
-                  , LuaReturn [LuaRef (LuaIndex (LuaRef eks) (LuaInteger 1))] ] ] ] where
-  eks = LuaName "x"
+  [luaStmt|
+   local __builtin_force = function(x)
+     if x[2] then
+       return x[1]
+     else
+       local thunk = x[1]
+       x[1] = function()
+         error("loop while forcing thunk")
+       end
+       x[1] = thunk(__builtin_unit)
+       x[2] = true
+       return x[1]
+     end
+   end
+  |]
 genOperator op =
   let name =  getVar op escapeScope
   in LuaLocal [LuaName name]
