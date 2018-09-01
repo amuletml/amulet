@@ -626,7 +626,7 @@ patternTyvars = asks . flip (go . ctors)
                        Nothing -> Nothing
                        Just k -> case t of
                                    VarTy t' -> Just (t', k)
-                                   _ -> error ("must replace skolem tyvar with tyvar " ++ show (pretty t))
+                                   _ -> Nothing -- error ("must replace skolem tyvar with tyvar " ++ show (pretty t))
 
 mkTyvar, mkVal, mkType, mkCo, mkCon :: Var Resolved -> CoVar
 mkTyvar = mkVar TypeVar

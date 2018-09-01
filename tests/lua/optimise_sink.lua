@@ -5,7 +5,7 @@ do
   local bottom = nil
   bottom(function(x)
     if x.__tag == "Nil" then
-      return function(di) return { _1 = 1, _2 = x } end
+      return function(dm) return { _1 = 1, _2 = x } end
     elseif x.__tag == "Cons" then
       return function(x0) return { _1 = x0, _2 = Nil } end
     end
