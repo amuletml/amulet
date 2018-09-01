@@ -653,23 +653,7 @@ emitStmt (Foreign n t s:xs) = do
                   , topVars = VarMap.insert (toVar n) [LuaName n'] (topVars s) })
 
   let Right ex = runParser (SourcePos "_" 0 0) (s ^. lazy) parseExpr
-      stmts = if arity t > 1
-              then
-                let ags = map LuaName $ take (arity t) alpha
-                    mkF (a:ag) bd = LuaFunction [a] [LuaReturn [mkF ag bd]]
-                    mkF [] bd = bd
-                in LuaLocal [LuaName (T.cons '_' n')] [ex]
-                <| LuaLocal [LuaName n']
-                     [mkF ags
-                      (LuaCall (LuaRef (LuaName (T.cons '_' n')))
-                       (map LuaRef ags))]
-                <| mempty
-              else LuaLocal [LuaName n'] [ex] <| mempty
-
-  (stmts<>) <$> emitStmt xs
-
-  where alpha :: [T.Text]
-        alpha = map T.pack ([1..] >>= flip replicateM ['a'..'z'])
+  (LuaLocal [LuaName n'] [ex]<|) <$> emitStmt xs
 
 emitStmt (Type _ cs:xs) = do
   stmts <- foldr (<|) mempty <$> traverse emitConstructor cs
