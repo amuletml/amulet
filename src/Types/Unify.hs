@@ -532,10 +532,17 @@ subsumes' r s th@(TyExactRows rhas) tw@(TyRows rho rwant) = do
     pure (Map.singleton key (have, want, wrap))
 
   let diff = filter (not . flip Map.member matched . fst) rhas
-      matched_t = TyExactRows (Map.foldrWithKey (\k (_, w, _) -> (:) (k, w)) [] matched)
+      get_t (key, old) = (:) (key, case Map.lookup key matched of
+        Just (_, new, _) -> new
+        Nothing -> old)
+
+      matched_t = TyExactRows (foldr get_t [] rhas)
+      co = ProjCo diff (map (\(key, _, right) -> (key, ReflCo right)) matching)
 
   -- then produce a coercion to shrink the record.
-  cast <- probablyCast <$> unify rho (TyExactRows diff)
+  _ <- unify rho (TyExactRows diff)
+  let cast = probablyCast co
+  -- traceM (displayS (pretty (ExprWrapper cast (VarRef (TvName (TgInternal (T.pack "_"))) undefined) undefined)))
   exp <- TvName <$> genName
 
   let mkw ex = ExprWrapper cast ex (annotation ex, tw)
@@ -555,7 +562,10 @@ subsumes' r s th@(TyRows rho rhas) tw@(TyRows sigma rwant) = do
     pure (Map.singleton key (have, want, wrap))
 
   let diff = filter (not . flip Map.member matched . fst) rhas
-      matched_t = TyExactRows (Map.foldrWithKey (\k (_, w, _) -> (:) (k, w)) [] matched)
+      get_t (key, old) = (:) (key, case Map.lookup key matched of
+        Just (_, new, _) -> new
+        Nothing -> old)
+      matched_t = TyExactRows (foldr get_t [] rhas)
       new = case diff of
         [] -> rho
         _ -> TyRows rho diff
@@ -705,8 +715,10 @@ mkRecordWrapper :: Map.Map Text (Type Typed, Type Typed, Wrapper Typed)
                 -> Var Typed -> Expr Typed -> Expr Typed
 mkRecordWrapper matched matched_t th tw cont exp =
   let ref an = VarRef exp (an, th)
-      wrapField (Field k ex (an, _)) | (_, new, wrap) <- matched Map.! k
-        = Field k (ExprWrapper wrap ex (annotation ex, new)) (an, new)
+      wrapField (Field k ex (an, old)) =
+        case Map.lookup k matched of
+          Just (_, new, wrap) -> Field k (ExprWrapper wrap ex (annotation ex, new)) (an, new)
+          Nothing -> Field k ex (an, old)
 
       fakeField :: Ann Resolved -> Expr Typed -> Text -> (Type Typed, Type Typed, Wrapper Typed) -> [Field Typed]
       fakeField ant ex key (have, new, wrap)
