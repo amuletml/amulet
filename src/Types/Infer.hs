@@ -99,7 +99,11 @@ check ex@(Fun pat e an) ty = do
 check (If c t e an) ty = If <$> check c tyBool <*> check t ty <*> check e ty <*> pure (an, ty)
 
 check (Match t ps a) ty = do
-  (t, tt) <- infer t
+  tt <-
+    case ps of
+      ((p, _):_) -> view _2 <$> inferPattern p
+      _ -> view _2 <$> infer t
+  t <- check t tt
 
   ps <- for ps $ \(p, e) -> do
     (p', ms, cs) <- checkPattern p tt
@@ -109,13 +113,7 @@ check (Match t ps a) ty = do
       local (typeVars %~ Set.union tvs) $
         local (names %~ focus ms) (check e ty)
     pure (p', bd)
-  case ps of
-    ((p, _):_) -> do
-      sc <- case p of
-        PWrapper (w, t') _ _ -> pure $ ExprWrapper w t (annotation t, t')
-        _ -> pure t
-      pure (Match sc ps (a, ty))
-    _ -> pure (Match t ps (a, ty))
+  pure (Match t ps (a, ty))
 
 check e@(Access rc key a) ty = do
   rho <- freshTV
@@ -137,7 +135,7 @@ check e ty = do
   -- here: have t (inferred)
   --       want ty (given)
   c <- subsumes (becauseExp e) t ty
-  pure (ExprWrapper c e' (annotation e, ty))
+  pure (Ascription (ExprWrapper c e' (annotation e, ty)) ty (annotation e, ty))
 
 -- [Complete and Easy]: See https://www.cl.cam.ac.uk/~nk480/bidir.pdf
 
@@ -209,7 +207,11 @@ infer ex@(BinOp l o r a) = do
   pure (App (k2 (App (k1 o) l (a, c1))) r (a, c2), c2)
 
 infer ex@(Match t ps a) = do
-  (t', tt) <- infer t
+  tt <-
+    case ps of
+      ((p, _):_) -> view _2 <$> inferPattern p
+      _ -> view _2 <$> infer t
+  t' <- check t tt
   ty <- freshTV
   ps' <- for ps $ \(p, e) -> do
     (p', ms, cs) <- checkPattern p tt
