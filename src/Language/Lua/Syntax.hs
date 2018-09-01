@@ -59,6 +59,41 @@ data LuaExpr
   | LuaQuoteE Text
   deriving (Eq, Show, Ord, Typeable, Data)
 
+data Precedence
+  = PreRaw    -- ^ Raw expressions which never need to be wrapped variables, calls, etc...
+  | PreLit    -- ^ Literals, which should be wrapped when called
+  | PreOp Int -- ^ Precedence for operators
+  | PreWrap   -- ^ Expressions which always should be wrapped
+  deriving (Eq, Ord, Show)
+
+data Associativity = ALeft | ARight
+  deriving (Eq, Show)
+
+precedenceOf :: LuaExpr -> Precedence
+precedenceOf LuaCall{} = PreRaw
+precedenceOf LuaRef{} = PreRaw
+precedenceOf (LuaBinOp _ op _) = PreOp $ case op of
+  "^" -> 0
+  "*" -> 1; "/" -> 1; "%" -> 1
+  "+" -> 2; "-" -> 2
+  ".." -> 3
+  "==" -> 4; "~=" -> 4; "<" -> 4; ">" -> 4; ">=" -> 4; "<=" -> 4
+  "and" -> 5
+  "or" -> 6
+  _ -> 10
+precedenceOf _ = PreLit
+
+succPrec :: Precedence -> Precedence
+succPrec PreRaw    = PreRaw
+succPrec PreLit    = PreLit
+succPrec (PreOp x) = PreOp (x + 1)
+succPrec PreWrap   = PreWrap
+
+assocOf :: T.Text -> Associativity
+assocOf ".." = ARight
+assocOf "^"  = ARight
+assocOf _    = ALeft
+
 -- | Emit an indented block of objects, with a header and footer
 --
 -- We have this weird asymmetry of 'line' as we need to indent the first line
@@ -122,15 +157,12 @@ instance Pretty LuaStmt where
   pretty (LuaQuoteS x) = "@" <> text x
   pretty LuaBreak = keyword "break"
   pretty (LuaReturn v) = keyword "return" <+> pretty v
-  pretty (LuaCallS x@LuaFunction{} a) = parens (pretty x) <> args (map pretty a) <> semi
-  pretty (LuaCallS x a) = pretty x <> args (map pretty a)
+  pretty (LuaCallS x a) = prettyWith PreRaw x <> args (map pretty a)
 
 instance Pretty LuaVar where
   pretty (LuaName x) = text x
-  pretty (LuaIndex e@(LuaRef _) (LuaString k))
-    | validKey k = pretty e <> dot <> text k
   pretty (LuaIndex e (LuaString k))
-    | validKey k = parens (pretty e) <> dot <> text k
+    | validKey k = prettyWith PreRaw e <> dot <> text k
   pretty (LuaIndex e k) = pretty e <> brackets (pretty k)
   pretty (LuaQuoteV x) = "$" <> text x
 
@@ -148,7 +180,11 @@ instance Pretty LuaExpr where
              | otherwise = B.singleton x
   pretty (LuaNumber d) = sliteral (pretty d)
   pretty (LuaInteger d) = sliteral (pretty d)
-  pretty (LuaBinOp l o r) = pretty l <+> text o <+> pretty r
+  pretty e@(LuaBinOp l o r) =
+    let prec = precedenceOf e
+    in case assocOf o of
+        ALeft -> prettyWith prec l <+> text o <+> prettyWith (succPrec prec) r
+        ARight -> prettyWith (succPrec prec) l <+> text o <+> prettyWith prec r
   pretty (LuaRef x) = pretty x
   pretty (LuaFunction a b) =
     funcBlock (keyword "function" <> args (map pretty a))
@@ -162,9 +198,14 @@ instance Pretty LuaExpr where
     entries n ((k,v):es) = brackets (pretty k) <+> value v : entries n es
 
     value v = equals <+> pretty v
-  pretty (LuaCall x@LuaFunction{} a) = parens (pretty x) <> args (map pretty a)
-  pretty (LuaCall x a) = pretty x <> args (map pretty a)
+  pretty (LuaCall x a) = prettyWith PreRaw x <> args (map pretty a)
   pretty (LuaQuoteE x) = "%" <> text x
+
+prettyWith :: Precedence -> LuaExpr -> Doc
+prettyWith desired expr =
+  let actual = precedenceOf expr
+      expr' = pretty expr
+  in if actual > desired then parens expr' else expr'
 
 -- | An alternative to 'block' which may group simple functions onto one line
 funcBlock :: Doc -> [LuaStmt] -> Doc -> Doc
