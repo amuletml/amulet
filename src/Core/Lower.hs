@@ -348,8 +348,7 @@ lowerPat (PTuple xs _) =
 lowerPat (PLiteral l _) = pure (PatLit (lowerLiteral l))
 lowerPat (PWrapper _ p _) = lowerPat p
 
-
-lowerProg :: forall m. MonadLower m => [Toplevel Typed] -> m [Stmt]
+lowerProg :: MonadLower m => [Toplevel Typed] -> m [Stmt]
 lowerProg stmt = do
   stmt' <- lowerProg' stmt
   ops <- gets VarMap.toList
@@ -357,38 +356,37 @@ lowerProg stmt = do
   where
     genOp (op, var) = do
       let Just ty = VarMap.lookup op boxedTys
-      (body, ty') <- genWrapper id (Ref op ty) ty
+      (body, ty') <- lowerBoxedFun (Ref op ty) ty
       pure . StmtLet . One $ (var, ty', body)
 
-    genWrapper :: (Term -> Term) -> Atom -> Type -> m (Term, Type)
-    genWrapper build bod  (ForallTy (Relevant a) l r) = do
-      -- Generate forall wrapper
-      t <- fresh TypeVar
-      v <- fresh ValueVar
-
-      let r' = substituteInType (VarMap.singleton a (VarTy t)) r
-      (bod', ty') <- genWrapper (build . C.Let (One (v, r', TyApp bod (VarTy t))))
-                       (Ref v r') r'
-      pure ( Lam (TypeArgument t l) bod'
-           , ForallTy (Relevant a) l ty' )
-
-    genWrapper build bod (ForallTy Irrelevant t@(ValuesTy ts) r) = do
-      -- Generate nested functions for each unboxed argument
-      tvars <- traverse (\t -> (,t) <$> fresh ValueVar) ts
-      tvar  <- fresh ValueVar
-
-      pure ( foldr (\(v, ty) -> Lam (TermArgument v ty))
-             (build (C.Let (One (tvar, t, Values (map (uncurry Ref) tvars)))
-                     (C.App bod (Ref tvar t))))
-             tvars
-           , foldr (ForallTy Irrelevant) r ts )
-
-    genWrapper build bod ty = pure (build (Atom bod), ty)
-
 lowerProg' :: forall m. MonadLower m => [Toplevel Typed] -> m [Stmt]
+
 lowerProg' [] = pure []
+lowerProg' (Open _ _:prg) = lowerProg' prg
+lowerProg' (Module _ b:prg) = lowerProg' (b ++ prg)
+
 lowerProg' (ForeignVal (TvName v) ex tp _:prg) =
-  (Foreign (mkVal v) (lowerType tp) ex:) <$> lowerProg' prg
+  let tyB = lowerType tp
+      vB = mkVal v
+  in case unboxedTy tyB of
+       Nothing -> (Foreign vB tyB ex:) <$> lowerProg' prg
+       Just tyU -> do
+         vU <- freshFrom vB
+         (ex', _) <- lowerBoxedFun (Ref vU tyU) tyU
+         ([ Foreign vU tyU ex
+          , StmtLet (One (vB, tyB, ex'))
+          ]++) <$> lowerProg' prg
+
+  where
+    unboxedTy (ForallTy (Relevant v) l r) = ForallTy (Relevant v) l <$> unboxedTy r
+    unboxedTy (ForallTy Irrelevant l r) = unwrap [l] r
+    unboxedTy _ = Nothing
+
+    unwrap as (ForallTy Irrelevant a r) = unwrap (a:as) r
+    unwrap [_] _ = Nothing
+    unwrap as r = Just (ForallTy Irrelevant (ValuesTy (reverse as)) r)
+
+
 lowerProg' (LetStmt vs:prg) = do
   let env' = Map.fromList (foldMap lowerBind vs)
       lowerBind bind =
@@ -398,6 +396,7 @@ lowerProg' (LetStmt vs:prg) = do
   local (\s -> s { vars = env' }) $ do
     vs' <- lowerLet vs
     foldr ((.) . ((:) . C.StmtLet)) id vs' <$> lowerProg' prg
+
 lowerProg' (TypeDecl (TvName var) _ cons:prg) = do
   let cons' = map (\case
                        UnitCon (TvName p) (_, t) -> (p, mkCon p, lowerType t)
@@ -408,8 +407,6 @@ lowerProg' (TypeDecl (TvName var) _ cons:prg) = do
       scons = map (\(a, _, b) -> (a, b)) cons'
 
   (C.Type (mkType var) ccons:) <$> local (\s -> s { ctors = Map.union (Map.fromList scons) (ctors s) }) (lowerProg' prg)
-lowerProg' (Open _ _:prg) = lowerProg' prg
-lowerProg' (Module _ b:prg) = lowerProg' (b ++ prg)
 
 lowerLet :: MonadLower m => [S.Binding Typed] -> m [Binding CoVar]
 lowerLet bs =
@@ -534,6 +531,37 @@ lowerLet bs =
       genWrapper wrap subst bod ty _ res = wrap <$> res subst ty bod
 
   in concat <$> traverse lowerScc sccs
+
+-- | Generate a wrapper for some function which takes an unboxed tuple
+--
+-- This takes the original function's name and type, and returns the new
+-- name and type.
+lowerBoxedFun :: forall m. MonadLower m => Atom -> Type -> m (Term, Type)
+lowerBoxedFun = genWrapper id where
+  genWrapper :: (Term -> Term) -> Atom -> Type -> m (Term, Type)
+  genWrapper build bod (ForallTy (Relevant a) l r) = do
+    -- Generate forall wrapper
+    t <- fresh TypeVar
+    v <- fresh ValueVar
+
+    let r' = substituteInType (VarMap.singleton a (VarTy t)) r
+    (bod', ty') <- genWrapper (build . C.Let (One (v, r', TyApp bod (VarTy t))))
+                     (Ref v r') r'
+    pure ( Lam (TypeArgument t l) bod'
+         , ForallTy (Relevant a) l ty' )
+
+  genWrapper build bod (ForallTy Irrelevant t@(ValuesTy ts) r) = do
+    -- Generate nested functions for each unboxed argument
+    tvars <- traverse (\t -> (,t) <$> fresh ValueVar) ts
+    tvar  <- fresh ValueVar
+
+    pure ( foldr (\(v, ty) -> Lam (TermArgument v ty))
+           (build (C.Let (One (tvar, t, Values (map (uncurry Ref) tvars)))
+                   (C.App bod (Ref tvar t))))
+           tvars
+         , foldr (ForallTy Irrelevant) r ts )
+
+  genWrapper build bod ty = pure (build (Atom bod), ty)
 
 lowerPolyBind :: MonadLower m => Type -> Expr Typed -> m Term
 lowerPolyBind ty ex = doIt (needed ex ty) (go ty ex) (lowerExprTerm ex) where
