@@ -731,15 +731,19 @@ asStmt _ = mempty
 
 patternBindings :: Occurs a => Pattern a -> [LuaExpr] -> [(a, [LuaExpr])]
 patternBindings (PatLit _) _     = []
-patternBindings (Capture n _) v
+patternBindings PatWildcard _    = []
+patternBindings (Constr _) _     = []
+patternBindings (Destr _ p) [vr] = captureBinding p [LuaRef (LuaIndex vr (LuaInteger 1))]
+patternBindings (PatExtend p rs) [vr] = captureBinding p [vr] ++ concatMap (index vr) rs where
+  index vr (var', pat) = captureBinding pat [LuaRef (LuaIndex vr (LuaString var'))]
+patternBindings (PatValues ps) vr = mconcat (zipWith (\p v -> captureBinding p [v]) ps vr)
+patternBindings _ _ = error "Mismatch between pattern and expression arity"
+
+captureBinding :: Occurs a => Capture a -> [LuaExpr] -> [(a, [LuaExpr])]
+captureBinding (Capture n _) v
   | doesItOccur n = [(n, v)]
   | otherwise = []
-patternBindings (Constr _) _     = []
-patternBindings (Destr _ p) [vr] = patternBindings p [LuaRef (LuaIndex vr (LuaInteger 1))]
-patternBindings (PatExtend p rs) [vr] = patternBindings p [vr] ++ concatMap (index vr) rs where
-  index vr (var', pat) = patternBindings pat [LuaRef (LuaIndex vr (LuaString var'))]
-patternBindings (PatValues ps) vr = mconcat (zipWith (\p v -> patternBindings p [v]) ps vr)
-patternBindings _ _ = error "Mismatch between pattern and expression arity"
+
 
 -- | Generate a new graph for the provided set of patterns
 patternGraph :: ( Occurs a
@@ -760,23 +764,14 @@ patternGraph test test' Arm { _armPtrn = p, _armVars = vs } graph = do
   where getTy v = maybe (error "Cannot find pattern variable") snd (find ((==v) . fst) vs)
 
 patternTest :: forall a. IsVar a => EscapeScope -> Pattern a -> [LuaExpr] ->  LuaExpr
-patternTest _ (Capture _ _) _       = LuaTrue
-patternTest _ (PatLit RecNil) _     = LuaTrue
-patternTest _ (PatLit l)  [vr]      = LuaBinOp (emitLit l) "==" vr
-patternTest s (PatExtend p rs) [vr] = foldAnd (patternTest s p [vr] : map test rs) where
-  test (var', pat) = patternTest s pat [LuaRef (LuaIndex vr (LuaString var'))]
-patternTest s (Constr con) [vr]    = foldAnd [tag s con vr]
-patternTest s (Destr con p) [vr]   = foldAnd [tag s con vr, patternTest s p [LuaRef (LuaIndex vr (LuaInteger 1))]]
-patternTest s (PatValues ps) vr   = foldAnd (zipWith (\p v -> patternTest s p [v]) ps vr)
+patternTest _ PatWildcard _      = LuaTrue
+patternTest _ (PatLit RecNil) _  = LuaTrue
+patternTest _ PatExtend{} _      = LuaTrue
+patternTest _ PatValues{} _      = LuaTrue
+patternTest _ (PatLit l)  [vr]   = LuaBinOp (emitLit l) "==" vr
+patternTest s (Constr con) [vr]  = tag s con vr
+patternTest s (Destr con _) [vr] = tag s con vr
 patternTest _ _ _ = undefined
-
-foldAnd :: [LuaExpr] -> LuaExpr
-foldAnd = foldl1 k where
-  k l r
-    | r == LuaTrue = l
-    | l == LuaTrue = r
-    | r == LuaFalse || l == LuaFalse = LuaFalse
-    | otherwise = LuaBinOp l "and" r
 
 tag :: IsVar a => EscapeScope -> a -> LuaExpr -> LuaExpr
 tag scp con vr = LuaBinOp (LuaRef (LuaIndex vr (LuaString "__tag"))) "==" (LuaString (getVar con scp))

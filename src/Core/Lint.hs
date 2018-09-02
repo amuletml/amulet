@@ -388,11 +388,14 @@ checkCoercion s = checkCo where
 
 checkPattern :: forall a. IsVar a => Scope a -> Type a -> Pattern a -> Errors (CoreErrors a) ()
 checkPattern s = checkPat where
-  checkPat :: Type a -> Pattern a -> Errors (CoreErrors a) ()
-  checkPat ty' (Capture a ty)
+  checkCapture :: Type a -> Capture a -> Errors (CoreErrors a) ()
+  checkCapture ty' (Capture a ty)
     | ty `apartOpen` ty' = pushError (TypeMismatch ty ty')
     | varInfo a /= ValueVar = pushError (InfoIllegal a ValueVar (varInfo a))
     | otherwise = pure ()
+
+  checkPat :: Type a -> Pattern a -> Errors (CoreErrors a) ()
+  checkPat _ PatWildcard = pure mempty
   checkPat (RowsTy _ _) (PatLit RecNil) = pure mempty
   checkPat ty' (PatLit l) =
     let ty = litTy l
@@ -420,23 +423,23 @@ checkPattern s = checkPat where
         | ForallTy Irrelevant x r <- inst ty
         , Just s <- r `unify` ty'
         -- TODO: Do we need Relevant as well?
-        -> checkPat (substituteInType s x) p
+        -> checkCapture (substituteInType s x) p
         | otherwise -> pushError (TypeMismatch (ForallTy Irrelevant unknownTyvar ty') (inst ty))
-  checkPat ty@(RowsTy NilTy ts) (PatExtend f fs) | f /= PatLit RecNil =
+  checkPat ty@(RowsTy NilTy ts) (PatExtend f fs) =
     let (outer, inner) = partition (\(l, _) -> any ((== l) . fst) fs) ts
-    in checkPat (RowsTy NilTy inner) f
+    in checkCapture (RowsTy NilTy inner) f
     *> for_ fs (\(t, p) -> case find ((==t) . fst) outer of
          Nothing -> pushError (TypeMismatch (RowsTy NilTy [(t, unknownTyvar)]) ty)
-         Just (_, ty) -> checkPat ty p)
+         Just (_, ty) -> checkCapture ty p)
   checkPat ty@(RowsTy ext ts) (PatExtend f fs) =
-       checkPat ext f
+       checkCapture ext f
     *> for_ fs (\(t, p) -> case find ((==t) . fst) ts of
          Nothing -> pushError (TypeMismatch (RowsTy ext [(t, unknownTyvar)]) ty)
-         Just (_, ty) -> checkPat ty p)
+         Just (_, ty) -> checkCapture ty p)
   checkPat t (PatExtend _ fs) =
     pushError (TypeMismatch (RowsTy unknownTyvar (map (\(a, _) -> (a, unknownTyvar)) fs)) t)
   checkPat (ValuesTy ts) (PatValues ps) | length ts == length ps =
-    traverse_ (uncurry checkPat) (zip ts ps)
+    traverse_ (uncurry checkCapture) (zip ts ps)
   checkPat t (PatValues ps) =
     pushError (TypeMismatch (ValuesTy (replicate (length ps) unknownTyvar)) t)
 
@@ -505,9 +508,12 @@ uniOpen a b = isJust (unify a b)
 apartOpen a b = not (uniOpen a b)
 
 patternVars :: Pattern a -> [(a, Type a)]
-patternVars (Capture v ty) = [(v, ty)]
-patternVars (Destr _ p) = patternVars p
-patternVars (PatExtend p ps) = patternVars p ++ concatMap (patternVars . snd) ps
-patternVars (PatValues ps) = concatMap patternVars ps
+patternVars (Destr _ p) = [captureVars p]
+patternVars (PatExtend p ps) = captureVars p : map (captureVars . snd) ps
+patternVars (PatValues ps) = map captureVars ps
 patternVars Constr{} = []
 patternVars PatLit{} = []
+patternVars PatWildcard{} = []
+
+captureVars :: Capture a -> (a, Type a)
+captureVars (Capture v ty) = (v, ty)
