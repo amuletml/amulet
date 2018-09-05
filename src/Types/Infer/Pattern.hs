@@ -149,7 +149,7 @@ inferParameter (ImplParam p) = do
   (p, tau, t, cs) <- inferPattern p
   pure (ImplParam p, Implicit tau, t, cs)
 
-boundTvs :: forall p. Ord (Var p)
+boundTvs :: forall p. (Ord (Var p), Show (Var p))
          => Pattern p -> Telescope p -> Set.Set (Var p)
 boundTvs p vs = pat p <> foldTele go vs where
   go :: Type p -> Set.Set (Var p)
