@@ -276,9 +276,8 @@ inferProg (stmt@(LetStmt ns):prg) = do
                          `catchError` (throwError . propagateBlame (BecauseOf stmt))
   let bvs = Set.fromList (map TvName (namesInScope (focus ts mempty)))
 
-  _ <- flip traverseTele ts $ \var ty -> do
+  ts <- flip traverseTele ts $ \var ty ->
     skolCheck (TvName var) (BecauseOf stmt) ty
-    pure ty
   assert (vs == mempty) pure ()
 
   local (letBound %~ Set.union bvs) . local (names %~ focus ts) . local (implicits %~ mappend is) $
@@ -344,8 +343,8 @@ inferLetTy closeOver vs =
             ty' <- closeOver (Set.singleton (TvName (fst blame))) ex (apply x ty)
             pure (x, co, ty')
           Left e -> throwError (propagateBlame (snd blame) e)
-        skolCheck (TvName (fst blame)) (snd blame) vt
-        pure (vt, solveEx vt x co)
+        ty <- skolCheck (TvName (fst blame)) (snd blame) vt
+        pure (ty, solveEx ty x co)
 
 
       tcOne :: SCC (Binding Resolved)
@@ -424,7 +423,7 @@ inferLetTy closeOver vs =
                   figure = apply solution
                in do
                   ty <- closeOver mempty exp (figure given)
-                  skolCheck var (becauseExp exp) ty
+                  ty <- skolCheck var (becauseExp exp) ty
                   pure ( Binding var (solveEx ty solution cs exp) p (fst ann, ty)
                        , one var (rename ty) 
                        , mempty )
@@ -454,7 +453,7 @@ inferLetTy closeOver vs =
         (bs, t,, vars) <$> foldMapM one bs
    in mkImplicits =<< tc sccs
 
-skolCheck :: MonadInfer Typed m => Var Typed -> SomeReason -> Type Typed -> m ()
+skolCheck :: MonadInfer Typed m => Var Typed -> SomeReason -> Type Typed -> m (Type Typed)
 skolCheck var exp ty = do
   let blameSkol :: TypeError -> (Var Resolved, SomeReason) -> TypeError
       blameSkol e (v, r) = propagateBlame r (Note e (string "in the inferred type for" <+> pretty v))
@@ -462,6 +461,7 @@ skolCheck var exp ty = do
   env <- view typeVars
   unless (null (sks `Set.difference` env)) $
     throwError (blameSkol (EscapedSkolems (Set.toList (skols ty)) ty) (unTvName var, exp))
+  pure (deSkol ty)
 
 solveEx :: Type Typed -> Subst Typed -> Map.Map (Var Typed) (Wrapper Typed) -> Expr Typed -> Expr Typed
 solveEx _ ss cs = transformExprTyped go id goType where
@@ -539,7 +539,6 @@ rename = go 0 mempty mempty where
     go (c:cs) l = (ord c - 96) * (26 ^ l) + go cs (l - 1)
     go [] _ = 0
 
-
 localGenStrat :: MonadInfer Typed m
               => Set.Set (Var Typed) -> Expr Typed -> Type Typed -> m (Type Typed)
 localGenStrat bg ex ty = do
@@ -585,6 +584,27 @@ value BothSection{} = True
 value AccessSection{} = True
 value (OpenIn _ e _) = value e
 value (ExprWrapper _ e _) = value e
+
+deSkol :: Type Typed -> Type Typed
+deSkol = go mempty where
+  go acc (TyPi x k) =
+    case x of
+      Invisible v kind -> TyPi (Invisible v kind) (go (Set.insert v acc) k)
+      Implicit a -> TyPi (Implicit (go acc a)) (go acc k)
+      Anon a -> TyPi (Anon (go acc a)) (go acc k)
+  go acc ty@(TySkol (Skolem _ var _ _))
+    | var `Set.member` acc = TyVar var
+    | otherwise = ty
+  go _ x@TyCon{} = x
+  go _ x@TyVar{} = x
+  go _ x@TyPromotedCon{} = x
+  go acc (TyApp f x) = TyApp (go acc f) (go acc x)
+  go acc (TyRows t rs) = TyRows (go acc t) (map (_2 %~ go acc) rs)
+  go acc (TyExactRows rs) = TyExactRows (map (_2 %~ go acc) rs)
+  go acc (TyTuple a b) = TyTuple (go acc a) (go acc b)
+  go acc (TyWildcard x) = TyWildcard (go acc <$> x)
+  go acc (TyWithConstraints cs x) = TyWithConstraints (map (\(a, b) -> (go acc a, go acc b)) cs) (go acc x)
+  go _ TyType = TyType
 
 guardOnlyBindings :: MonadError TypeError m => [Binding Resolved] -> m ()
 guardOnlyBindings bs = go bs where

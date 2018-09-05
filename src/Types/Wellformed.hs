@@ -68,7 +68,7 @@ normType = flatten . uncurry collect . runWriter . spread . applyCons where
   flatten (TyTuple a b) = TyTuple (flatten a) (flatten b)
   flatten t = t
 
-skols :: Ord (Var p) => Type p -> Set.Set (Skolem p)
+skols :: (Show (Var p), Ord (Var p)) => Type p -> Set.Set (Skolem p)
 skols TyCon{}  = mempty
 skols TyVar{}  = mempty
 skols TyType{} = mempty
@@ -77,7 +77,7 @@ skols TyWildcard{}  = mempty
 skols (TySkol x) = Set.singleton x
 skols (TyApp a b) = skols a <> skols b
 skols (TyPi b t)
-  | Invisible _ k <- b = skols t <> foldMap skols k
+  | Invisible v k <- b = Set.filter (\(Skolem _ v' _ _) -> v /= v') (foldMap skols k <> skols t)
   | Anon a <- b = skols a <> skols t
   | Implicit a <- b = skols a <> skols t
 skols (TyRows r rs) = skols r <> foldMap (skols . snd) rs

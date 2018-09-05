@@ -256,6 +256,7 @@ bind var ty
   | occurs var ty = throwError (Occurs var ty)
   | TyVar var == ty = pure (ReflCo ty)
   | TyForall{} <- ty = throwError (Impredicative var ty)
+  | TyWildcard (Just (TyVar v)) <- ty, v == var = pure (ReflCo ty)
   | otherwise = do
       env <- use solveTySubst
       assum <- use solveAssumptions
@@ -301,6 +302,12 @@ unify ta@(TyPromotedCon a) tb@(TyPromotedCon b)
   | a == b = pure (ReflCo tb)
   | otherwise = unequal ta tb
 
+unify (TyVar a) b = bind a b
+unify a (TyVar b) = SymCo <$> bind b a
+
+unify (TyWildcard (Just a)) b = unify a b
+unify a (TyWildcard (Just b)) = SymCo <$> unify b a
+
 unify skt@(TySkol t@(Skolem sv _ _ _)) b = do
   sub <- use (solveAssumptions . at sv)
   case sub of
@@ -320,12 +327,6 @@ unify skt@(TySkol t@(Skolem sv _ _ _)) b = do
            else throwError (Occurs sv b)
            else throwError $ SkolBinding t b
 unify b (TySkol t) = SymCo <$> unify (TySkol t) b
-
-unify (TyVar a) b = bind a b
-unify a (TyVar b) = SymCo <$> bind b a
-
-unify (TyWildcard (Just a)) b = unify a b
-unify a (TyWildcard (Just b)) = SymCo <$> unify b a
 
 unify (TyArr a b) (TyArr a' b') = ArrCo <$> unify a a' <*> unify b b'
 
@@ -490,7 +491,7 @@ subsumes' _ _ (TyApp lazy ty') ty | lazy == tyLazy, lazySubOk ty' ty = do
 
 subsumes' _ _ ty' (TyApp lazy ty) | lazy == tyLazy, lazySubOk ty ty' = do
   co <- unify ty ty'
-  -- We have a thunk and want a value
+  -- We have a value and want a thunk
   let wrap ex
         | an <- annotation ex =
           App (ExprWrapper (TypeApp ty) (VarRef lAZYName (an, lAZYTy))
@@ -542,7 +543,6 @@ subsumes' r s th@(TyExactRows rhas) tw@(TyRows rho rwant) = do
   -- then produce a coercion to shrink the record.
   _ <- unify rho (TyExactRows diff)
   let cast = probablyCast co
-  -- traceM (displayS (pretty (ExprWrapper cast (VarRef (TvName (TgInternal (T.pack "_"))) undefined) undefined)))
   exp <- TvName <$> genName
 
   let mkw ex = ExprWrapper cast ex (annotation ex, tw)
