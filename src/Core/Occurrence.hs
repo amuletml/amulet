@@ -196,7 +196,7 @@ tagOccurTerm ann var = tagTerm where
 
   tagTerm (AnnValues an xs) =
     let (fvfs, xs') = unzip (map tagAtom xs)
-        fv = mconcat fvfs
+        fv = occConcat fvfs
     in (fv, AnnValues (ann an fv) xs')
 
   tagTerm (AnnTyApp an f ty) =
