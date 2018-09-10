@@ -331,6 +331,7 @@ normalisePattern p@S.Wildcard{} = p
 normalisePattern p@S.Capture{} = p
 normalisePattern p@S.PLiteral{} = p
 normalisePattern p@(S.Destructure _ Nothing _) = p
+normalisePattern (S.GadtPat p _ _) = normalisePattern p -- TODO: This!
 normalisePattern (S.Destructure v (Just p) a) = S.Destructure v (Just (normalisePattern p)) a
 normalisePattern (S.PRecord fs a) = S.PRecord (map (second normalisePattern) fs) a
 -- Reduce these cases to something else
@@ -375,6 +376,7 @@ patternVars' (S.Capture (TvName v) (_, ty)) = [(mkVal v, lowerType ty)]
 patternVars' (S.Destructure _ p _) = maybe [] patternVars' p
 patternVars' (S.PRecord fs _) = concatMap (patternVars' . snd) fs
 patternVars' (S.PWrapper _ p _) = patternVars' p
+patternVars' (S.GadtPat p _ _) = patternVars' p
 patternVars' (S.PType p _ _) = patternVars' p
 patternVars' (S.PTuple ps _) = concatMap patternVars' ps
 
@@ -394,6 +396,7 @@ patternTyvars' s = go where
   go (S.PTuple xs _) = concatMap go xs
   go (S.PLiteral _ _) = []
   go (S.PWrapper _ p _) = go p
+  go (S.GadtPat p _ _) = go p
 
   rootType fs (ForallTy Irrelevant f c) =
     let d = VarSet.difference (freeInTy f) (freeInTy c)

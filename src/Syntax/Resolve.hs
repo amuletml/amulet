@@ -394,6 +394,7 @@ rePattern :: MonadResolve m
                , [(Var Parsed, Var Resolved, Pattern Resolved)]
                , [(Var Parsed, Var Resolved, Pattern Resolved )])
 rePattern (Wildcard a) = pure (Wildcard a, [], [])
+rePattern GadtPat{} = error "Impossible"
 rePattern (Capture v a) = do
   v' <- tagVar v
   let p = Capture v' a

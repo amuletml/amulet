@@ -73,6 +73,7 @@ bound (PType p _ _)       = bound p
 bound Wildcard{}          = mempty
 bound PLiteral{}          = mempty
 bound (PWrapper _ p _)    = bound p
+bound (GadtPat p _ _)     = bound p
 
 boundWith :: (IsList m, Item m ~ (Var p, Ann p), Monoid m)
           => Pattern p -> m
@@ -84,6 +85,7 @@ boundWith (PType p _ _)       = boundWith p
 boundWith Wildcard{}          = mempty
 boundWith PLiteral{}          = mempty
 boundWith (PWrapper _ p _)    = boundWith p
+boundWith (GadtPat p _ _)     = boundWith p
 
 
 bindVariables :: (IsList (m (Var p)), Item (m (Var p)) ~ Var p, Monoid (m (Var p)))
