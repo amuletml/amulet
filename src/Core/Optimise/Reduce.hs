@@ -400,18 +400,17 @@ filterDeadArms s = goArm where
                  | otherwise -> goSum m as
       _ -> a : goSum m as
 
-  -- Build a set of all _other_ cases for the given type variable.
+  -- | Build a set of all _other_ cases for the given type variable.
   buildSumSet v =
     let Just ty = VarMap.lookup (toVar v) (cons s)
         Just cases = VarMap.lookup (toVar (unwrapTy ty)) (types s)
     in foldr (\(a, _) -> if a == v then id else VarSet.insert (toVar a)) mempty cases
 
-  -- Oh goodness, this is horrible. This attempts to extract
-  -- the type name from a constructor's type
+  -- | Extract the type name from a constructor's type. This is a little grim.
   unwrapTy (ForallTy _ _ t) = unwrapTy t
   unwrapTy (AppTy t _) = unwrapTy t
   unwrapTy (ConTy v) = v
-  unwrapTy ty = error (show ty)
+  unwrapTy ty = error ("Cannot extract type from constructor " ++ show ty)
 
 redundantCo :: IsVar a => Coercion a -> Bool
 redundantCo c

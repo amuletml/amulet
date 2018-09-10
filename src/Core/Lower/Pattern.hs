@@ -3,9 +3,13 @@
 {-| Lowers "Syntax"'s nested patterns into "Core"'s flattened patterns.
 
   This (hopefully) uses the algorithm as described in "Compiling Pattern
-  Matching to good Decision Trees".[1]
+  Matching to good Decision Trees"[1]. The heuristics used within this
+  implementation are taken from that paper, "When Do Match-Compilation
+  Heuristics Matter?"[2] and "Tree Pattern Matching for ML"[3].
 
   [1]: https://www.cs.tufts.edu/~nr/cs257/archive/luc-maranget/jun08.pdf
+  [2]: https://www.cs.tufts.edu/~nr/pubs/match.pdf
+  [3]: https://pdfs.semanticscholar.org/1cd6/f28306e62341c11511422752f9a427fcc0e4.pdf
 -}
 module Core.Lower.Pattern
   ( lowerMatch
@@ -172,7 +176,7 @@ lowerOne _ (PR arm pats vBind tyBind:_)
     addTrivial _ S.Wildcard{} o = o
     addTrivial _ _ _ = Nothing
 lowerOne tys rs =
-  let v = findBest neededPrefix Nothing vars
+  let v = findBest heuristic Nothing vars
       Just ty = VarMap.lookup v tys
   in lowerOneOf v ty tys rs
 
@@ -187,8 +191,16 @@ lowerOne tys rs =
           best = if s > s' then (v, s) else (v', s')
       in findBest h (Just best) vs
 
-    -- | Compute the needed prefix heuristic for a given variable. This
-    -- scores a column based on how many of the leading rows requires it.
+    -- | The general heuristic for the pattern matcher.
+    --
+    -- This tries several heuristics in order, using the next one in the
+    -- event of a draw.
+    heuristic :: CoVar -> (Int, Int, Int)
+    heuristic v = (neededPrefix v, branchingFactor v, arity v)
+
+    -- | Compute the needed prefix heuristic for a given row variable.
+    --
+    -- This scores a column based on how many of the leading rows requires it.
     neededPrefix :: CoVar -> Int
     neededPrefix var = go 0 rs where
       go n (PR _ ps _ _:rs)
@@ -197,8 +209,46 @@ lowerOne tys rs =
         = go (n + 1) rs
       go n _ = n
 
-    -- TODO: We should really add the "Small branching factor" and "Arity" checks
-    -- (namely
+    -- | Compute the "small branching factor" heuristic for a given row
+    -- variable.
+    --
+    -- This scores a column based on the number of distinct constructors
+    -- within it, favouring those with less distinct cases.
+    --
+    -- __TODO:__ This is not entirely correctly implemented, as we should
+    -- subtract one in the case where one or more constructors.
+    branchingFactor :: CoVar -> Int
+    branchingFactor var = -HSet.size (foldr go mempty rs) where
+      go (PR _ ps _ _) s
+        | Just p <- VarMap.lookup var ps
+        = HSet.insert (partialLower p) s
+      go _ s = s
+
+      partialLower S.Wildcard{} = PatWildcard
+      partialLower S.Capture{} = PatWildcard
+      partialLower (S.PLiteral l _) = PatLit (lowerLiteral l)
+      partialLower (S.GadtPat p _ _) = partialLower p
+      partialLower (S.Destructure (TvName v) _ _) = Constr (mkCon v)
+      partialLower (S.PRecord _ _) = PatExtend (Capture (CoVar 0 "?" ValueVar) (VarTy tyvarA)) []
+      partialLower p = error ("Unhandled pattern " ++ show p)
+
+    -- | Compute the "arity" heuristic for a given row variable.
+    --
+    -- This computes the total arity of the head constructor in each row
+    -- (1 for destructures, n for records, 0 for everything else). We
+    -- favour columns with lower arities.
+    arity :: CoVar -> Int
+    arity var = -foldr ((+) . go) 0 rs where
+      go (PR _ ps _ _)
+        | Just p <- VarMap.lookup var ps
+        = arityOf p
+      go _ = 0
+
+      arityOf (S.GadtPat p _ _) = arityOf p
+      arityOf (S.Destructure _ Nothing _) = 0
+      arityOf (S.Destructure _ Just{} _) = 1
+      arityOf (S.PRecord f _) = length f
+      arityOf _ = 0
 
 -- | Lower a series of pattern rows, branching on the provided variable
 -- and associated type.

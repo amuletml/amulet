@@ -60,7 +60,6 @@ wasGuessed _ = False
 
 approxPattern :: MonadInfer Typed m => Expr Resolved -> Pattern Resolved -> StateT Origin m (Type Typed)
 approxPattern _ Wildcard{} = guess
-approxPattern _ GadtPat{} = error "Impossible"
 approxPattern _ Capture{} = guess
 approxPattern _ Destructure{} = guess
 approxPattern r (PType _ t _) = resolveKind (becauseExp r) t
@@ -81,7 +80,8 @@ approxPattern _ (PLiteral l _) = case l of
   LiBool _ -> pure tyBool
   LiUnit -> pure tyUnit
 
-approxPattern _ PWrapper{} = error "approxPattern PWrapper"
+approxPattern _ PWrapper{} = error "Impossible PWrapper"
+approxPattern _ GadtPat{} = error "Impossible GadtPat"
 
 guess :: MonadInfer Typed m => StateT Origin m (Type Typed)
 guess = do
