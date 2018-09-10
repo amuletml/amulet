@@ -24,6 +24,7 @@ import qualified Data.HashSet as HSet
 import qualified Data.Map as Map
 import qualified Data.Text as T
 import Data.Foldable
+import Data.Triple
 import Data.Maybe
 
 import qualified Core.Core as C
@@ -136,7 +137,26 @@ flattenResult bodies (ArmMatch _ atom' children) = do
               let ty = ForallTy Irrelevant aty (fromJust (approximateType bod))
               in pure ( HMap.insert n (BodyLambda (\_ -> pure (App (Ref v ty) (Ref a' ty)))) bods
                       , Let (One (v, ty, Lam (TermArgument a aty) bod)) . build )
-            _ -> undefined -- TODO: Implement this
+            _ -> do
+              let aty = ValuesTy (map snd fv)
+                  ty = ForallTy Irrelevant aty (fromJust (approximateType bod))
+
+                  bod' = Match (Ref a aty)
+                    [ Arm { _armPtrn = PatValues (map (uncurry Capture) fv)
+                          , _armTy = aty
+                          , _armBody = bod
+                          , _armVars = fv
+                          , _armTyvars = [] } ]
+
+                  genApp vs = do
+                    tvar <- fresh ValueVar
+                    let tup = Values . flip map fv $ \(v, _) ->
+                          let Just (v', _, ty') = find ((==v) . snd3) vs
+                          in Ref v' ty'
+                    pure . Let (One (tvar, aty, tup)) $ App (Ref v ty) (Ref tvar aty)
+
+              pure ( HMap.insert n (BodyLambda genApp) bods
+                   , Let (One (v, ty, Lam (TermArgument a aty) bod')) . build )
 
 -- | Find a "good" variable to match against, and match against it using
 -- 'lowerOneOf'.

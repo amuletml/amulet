@@ -2,24 +2,42 @@ do
   local __builtin_unit = { __tag = "__builtin_unit" }
   local Nil = { __tag = "Nil" }
   local function Cons(x) return { __tag = "Cons", x } end
-  local bottom = nil
-  bottom(function(h)
-    local cs = h._1
-    local cr = h._2
-    if cs.__tag == "Nil" then
-      return 1
-    elseif cs.__tag == "Cons" then
-      if cr.__tag == "Nil" then
-        return 2
-      elseif cr.__tag == "Cons" then
-        return 3
-      end
-    else
-      if cr.__tag == "Nil" then
-        return 2
-      else
-        return error("Pattern matching failure in match expression at nested_match.ml[3:12 ..3:19]")
+  local zip
+  zip = function(f)
+    return function(xs)
+      return function(ys)
+        if xs.__tag == "Nil" then
+          return Cons({ _1 = 1, _2 = Nil })
+        elseif xs.__tag == "Cons" then
+          local hd = xs[1]
+          if ys.__tag == "Nil" then
+            return Cons({ _1 = 2, _2 = Nil })
+          elseif ys.__tag == "Cons" then
+            local he = ys[1]
+            local hj = he._1
+            local hi = he._2
+            local hg = hd._1
+            local hf = hd._2
+            if 0 == hg then
+              if 0 == hj then
+                return Cons({ _1 = 3, _2 = Nil })
+              else
+                return Cons({ _1 = f(hg)(hj), _2 = zip(f)(hf)(hi) })
+              end
+            else
+              return Cons({ _1 = f(hg)(hj), _2 = zip(f)(hf)(hi) })
+            end
+          end
+        else
+          if ys.__tag == "Nil" then
+            return Cons({ _1 = 2, _2 = Nil })
+          else
+            return error("Pattern matching failure in match expression at nested_match.ml[6:3 ..6:19]")
+          end
+        end
       end
     end
-  end)
+  end
+  local bottom = nil
+  bottom(zip)
 end
