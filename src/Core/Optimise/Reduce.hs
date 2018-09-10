@@ -9,6 +9,7 @@ module Core.Optimise.Reduce
 
 import qualified Data.VarMap as VarMap
 import qualified Data.VarSet as VarSet
+import qualified Data.HashSet as HSet
 import qualified Data.Text as T
 import Data.Triple
 import Data.List
@@ -150,18 +151,7 @@ reduceTerm s (Match _ (Arm { _armPtrn = PatWildcard, _armBody = body }:_)) = {-#
 reduceTerm s (Match t bs) = {-# SCC "Reduce.fold_cases" #-}
   case foldCases bs of
     Left  Arm { _armBody = b } -> b
-    Right bs' ->
-      case last bs' of
-        -- If we were really smart, we could strip _all_ cases which are shadowed by
-        -- another. For now, simply detect the case `error @a "Nope"`
-        Arm { _armPtrn = PatWildcard
-            , _armBody = Let (One (tyApp, _, TyApp (Ref err _) _))
-                        (App (Ref tyApp' _) (Lit _)) }
-          | isError err
-          , toVar tyApp == toVar tyApp'
-          , isComplete s (init bs ^.. each . armPtrn)
-          -> Match t (init bs')
-        _ -> Match t bs'
+    Right bs' -> Match t (filterDeadArms s bs')
 
   where foldCases [] = Right []
         foldCases (a@Arm { _armPtrn = p, _armBody = body }:xs) = case reducePattern s t p of
@@ -353,36 +343,68 @@ reducePattern s e (PatExtend (Capture r' _) fs) =
 
 reducePattern _ _ _ = PatternUnknown mempty
 
-isComplete :: IsVar a => Scope a -> [Pattern a] -> Bool
-isComplete s = isComplete' where
-  isComplete' :: IsVar a => [Pattern a] -> Bool
-  isComplete' [] = False
-  -- Trivial always-true captures
-  isComplete' (PatWildcard:_) = True
-  isComplete' (PatLit Unit:_) = True
-  isComplete' (PatLit RecNil:_) = True
-  isComplete' (PatExtend{}:_) = True
-  isComplete' (PatValues _:_) = True
-  -- Unbounded literals will never be complete unless we have a wildcard
-  isComplete' (PatLit (Int _):xs)   = isComplete' xs
-  isComplete' (PatLit (Str _):xs)   = isComplete' xs
-  isComplete' (PatLit (Float _):xs) = isComplete' xs
-  -- See if we've got the other case
-  isComplete' (PatLit LitTrue:xs)   = hasBool LitTrue  xs
-  isComplete' (PatLit LitFalse:xs)  = hasBool LitFalse xs
-  -- See if we've got all cases
-  isComplete' xs@(Destr v _:_)    = hasSumTy (buildSumTy v) xs
-  isComplete' xs@(Constr v:_)     = hasSumTy (buildSumTy v) xs
+-- | Remove arms which are shadowed by a previous one and so will never be executed
+filterDeadArms :: IsVar a => Scope a -> [Arm a] -> [Arm a]
+filterDeadArms s = goArm where
+  goArm [] = []
+  goArm (a@Arm { _armPtrn = p }:as) =
+    case p of
+      -- Trivial patterns which always match
+      PatWildcard   -> [a]
+      PatLit Unit   -> [a]
+      PatLit RecNil -> [a]
+      PatExtend{}   -> [a]
+      PatValues _   -> [a]
 
-  hasBool _ [] = False
-  hasBool _ (PatWildcard:_) = True
-  hasBool l (PatLit l':_) | l /= l' = True
-  hasBool p (_:xs) = hasBool p xs
+    -- Unbounded literals will never be complete unless we have a wildcard
+      PatLit l@Int{}   -> a : goLit (HSet.singleton l) as
+      PatLit l@Str{}   -> a : goLit (HSet.singleton l) as
+      PatLit l@Float{} -> a : goLit (HSet.singleton l) as
 
-  buildSumTy v =
+      -- See if we've got the other case
+      PatLit LitTrue  -> a : goBool LitTrue  as
+      PatLit LitFalse -> a : goBool LitFalse as
+
+      -- See if we've got all cases
+      Destr v _ -> a : goSum (buildSumSet v) as
+      Constr v  -> a : goSum (buildSumSet v) as
+
+  -- | Build a HashSet of literals, removing those we've already seen.
+  goLit _ [] = []
+  goLit v (a@Arm { _armPtrn = p }:as) =
+    case p of
+      PatWildcard -> [a]
+      PatLit l | HSet.member l v -> goLit v as
+               | otherwise -> a : goLit (HSet.insert l v) as
+      _ -> a : goLit v as
+
+  -- | Remove booleans we've already seen, and terminate if we have both true
+  -- and false.
+  goBool _ [] = []
+  goBool l (a@Arm { _armPtrn = p }:as) =
+    case p of
+      PatWildcard -> [a]
+      PatLit l' | l /= l' -> [a]
+      _ -> a : goBool l as
+
+  -- | Build a set of variables we've yet to seen, skipping cases which do not
+  -- appear in the set and terminating when it's empty.
+  goSum _ [] = []
+  goSum m _ | m == mempty = []
+  goSum m (a@Arm { _armPtrn = p }:as) =
+    case p of
+      PatWildcard -> [a]
+      Constr v   | VarSet.member (toVar v) m -> a : goSum (VarSet.delete (toVar v) m) as
+                 | otherwise -> goSum m as
+      Destr v _  | VarSet.member (toVar v) m -> a : goSum (VarSet.delete (toVar v) m) as
+                 | otherwise -> goSum m as
+      _ -> a : goSum m as
+
+  -- Build a set of all _other_ cases for the given type variable.
+  buildSumSet v =
     let Just ty = VarMap.lookup (toVar v) (cons s)
         Just cases = VarMap.lookup (toVar (unwrapTy ty)) (types s)
-    in foldr (\(a, _) -> VarSet.insert (toVar a)) mempty cases
+    in foldr (\(a, _) -> if a == v then id else VarSet.insert (toVar a)) mempty cases
 
   -- Oh goodness, this is horrible. This attempts to extract
   -- the type name from a constructor's type
@@ -390,12 +412,6 @@ isComplete s = isComplete' where
   unwrapTy (AppTy t _) = unwrapTy t
   unwrapTy (ConTy v) = v
   unwrapTy ty = error (show ty)
-
-  hasSumTy m [] = m == mempty
-  hasSumTy _ (PatWildcard:_) = True
-  hasSumTy m (Constr v:xs) = hasSumTy (VarSet.delete (toVar v) m) xs
-  hasSumTy m (Destr v _:xs) = hasSumTy (VarSet.delete (toVar v) m) xs
-  hasSumTy m (_:xs) = hasSumTy m xs
 
 redundantCo :: IsVar a => Coercion a -> Bool
 redundantCo c
