@@ -46,6 +46,7 @@ substitute m = term where
 substituteInTys :: forall a. IsVar a => VarMap.Map (Type a) -> Term a -> Term a
 substituteInTys = term where
   term :: VarMap.Map (Type a) -> Term a -> Term a
+  term m a | VarMap.null m = a
   term m (Atom a) = Atom (atom m a)
   term m (App f x) = App (atom m f) (atom m x)
   term m (Let (One (v, t, e)) x) = Let (One (v, gotype m t, term m e)) (term m x)
@@ -96,6 +97,7 @@ substituteInTys = term where
 -- | Substitute a type variable with some other type inside a type
 substituteInType :: IsVar a => VarMap.Map (Type a) -> Type a -> Type a
 substituteInType = gotype where
+  gotype m t | VarMap.null m = t
   gotype m x@(VarTy v) = VarMap.findWithDefault x (toVar v) m
   gotype _ x@ConTy{} = x
   gotype m (ForallTy v c t) = ForallTy v (gotype m c) (gotype (remove v m) t) where
