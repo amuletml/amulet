@@ -3,7 +3,7 @@ module Core.Simplify
   ( optimise
   ) where
 
--- import Core.Optimise.Newtype
+import Core.Optimise.Newtype
 import Core.Optimise.CommonExpElim
 import Core.Optimise.DeadCode
 import Core.Optimise.Sinking
@@ -22,7 +22,7 @@ lintPasses :: Bool
 lintPasses = True
 
 optmOnce :: [Stmt CoVar] -> Namey [Stmt CoVar]
-optmOnce = passes where
+optmOnce = passes <=< linted "Newtype" killNewtypePass where
   passes :: [Stmt CoVar] -> Namey [Stmt CoVar]
   passes = foldr1 (>=>)
            [ linted "Reduce" $ pure . reducePass
