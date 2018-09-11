@@ -95,6 +95,7 @@ tokens :-
   <0> "open"   { constTok TcOpen }
   <0> "lazy"   { constTok TcLazy }
   <0> "implicit" { constTok TcImplicit }
+  <0> "as"     { constTok TcAs }
 
   <0> ","      { constTok TcComma }
   <0> "."      { constTok TcDot }

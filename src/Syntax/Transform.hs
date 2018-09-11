@@ -168,6 +168,7 @@ transformPatternTyped fp ft = goP where
   transP (Wildcard a) = Wildcard (goA a)
   transP (Capture v a) = Capture v (goA a)
   transP (Destructure v p a) = Destructure v (goP <$> p) (goA a)
+  transP (PAs p v a) = PAs (goP p) v (goA a)
   transP (PType p t a) = PType (goP p) (goT t) (goA a)
   transP (PRecord fs a) = PRecord (map (second goP) fs) (goA a)
   transP (PTuple ps a) = PTuple (map goP ps) (goA a)

@@ -398,6 +398,11 @@ rePattern (Capture v a) = do
   v' <- tagVar v
   let p = Capture v' a
   pure (p, [(v, v', p)], [])
+rePattern (PAs p v a) = do
+  v' <- tagVar v
+  (p', vs, ts) <- rePattern p
+  let as = PAs p' v' a
+  pure (as, (v, v', as):vs, ts)
 rePattern r@(Destructure v Nothing a) = do
   v' <- lookupEx v `catchJunk` r
   pure (Destructure v' Nothing a, [], [])
