@@ -331,6 +331,7 @@ MPattern :: { Pattern Parsed }
          : ArgP                   { $1 }
          | Con ArgP               { withPos2 $1 $2 $ Destructure (getL $1) (Just $2) }
          | MPattern ':' TypeProd  { withPos2 $1 $3 $ PType $1 (getL $3) }
+         | MPattern as Var        { withPos2 $1 $3 $ PAs $1 (getL $3) }
 
 -- | An alternative to Pattern without any type pattern, suitable for usage in
 -- bindings.
@@ -340,6 +341,7 @@ MPattern :: { Pattern Parsed }
 BPattern :: { Pattern Parsed }
          : ArgP                   { $1 }
          | Con ArgP               { withPos2 $1 $2 $ Destructure (getL $1) (Just $2) }
+         | BPattern as Var        { withPos2 $1 $3 $ PAs $1 (getL $3) }
 
 Pattern :: { Pattern Parsed }
         : ArgP                    { $1 }

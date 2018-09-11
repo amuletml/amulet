@@ -248,6 +248,7 @@ lowerOne tys rs =
       partialLower (S.PSkolem p _ _) = partialLower p
       partialLower (S.Destructure (TvName v) _ _) = Constr (mkCon v)
       partialLower (S.PRecord _ _) = PatExtend (Capture (CoVar 0 "?" ValueVar) (VarTy tyvarA)) []
+      partialLower (S.PAs p _ _) = partialLower p
       partialLower p = error ("Unhandled pattern " ++ show p)
 
     -- | Compute the "arity" heuristic for a given row variable.
@@ -266,6 +267,7 @@ lowerOne tys rs =
       arityOf (S.Destructure _ Nothing _) = 0
       arityOf (S.Destructure _ Just{} _) = 1
       arityOf (S.PRecord f _) = length f
+      arityOf (S.PAs p _ _) = arityOf p
       arityOf _ = 0
 
 -- | Lower a series of pattern rows, branching on the provided variable
