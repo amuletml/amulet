@@ -1,5 +1,5 @@
 {-# LANGUAGE DeriveGeneric, DeriveDataTypeable, TemplateHaskell,
-   DeriveAnyClass #-}
+   DeriveAnyClass, OverloadedStrings #-}
 
 -- | Core uses one variable type 'CoVar' across all types (terms, types,
 -- coercions). These are identified by a unique number, which allows for
@@ -20,13 +20,16 @@ data CoVar =
         , _covarName :: T.Text -- ^ The name of this variable.
         , _covarInfo :: VarInfo -- ^ Additional information about this variable.
         }
-  deriving (Show, Generic, Data, Hashable)
+  deriving (Show, Generic, Data)
 
 instance Eq CoVar where
   (CoVar a _ _) == (CoVar b _ _) = a == b
 
 instance Ord CoVar where
   (CoVar a _ _) `compare` (CoVar b _ _) = a `compare` b
+
+instance Hashable CoVar where
+  hashWithSalt s (CoVar a _ _) = hashWithSalt s a
 
 -- | 'VarInfo' is used to store additional information about a variable,
 -- which is used to determine its kind.
@@ -42,7 +45,14 @@ makeLenses ''CoVar
 makePrisms ''VarInfo
 
 instance Pretty CoVar where
-  pretty (CoVar i v _) = text v <> scomment (string "#" <> string (show i))
+  pretty (CoVar i v k) = text v <> scomment (string "#" <> pretty k <> string (show i))
+
+instance Pretty VarInfo where
+  pretty ValueVar = text "v"
+  pretty DataConVar = text "D"
+  pretty TypeConVar = text "t"
+  pretty TypeVar = text "'t"
+  pretty CastVar = text "c"
 
 -- | Either a 'CoVar' or some alternative representation of it. This is
 -- used to allow functions which may operate on 'CoVar's or annotated
