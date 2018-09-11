@@ -215,6 +215,7 @@ bindingSites (PType p _ _) = bindingSites p
 bindingSites (PRecord rs _) = foldMap (bindingSites . snd) rs
 bindingSites (PTuple ps _) = foldMap bindingSites ps
 bindingSites (PWrapper _ p _) = bindingSites p
+bindingSites (PSkolem p _ _) = bindingSites p
 
 instance Ord BindingSite where
   BindingSite v _ _ `compare` BindingSite v' _ _ = v `compare` v'

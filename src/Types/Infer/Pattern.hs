@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts, ScopedTypeVariables, ViewPatterns, TupleSections #-}
+{-# LANGUAGE FlexibleContexts, ScopedTypeVariables, ViewPatterns, TupleSections, TypeFamilies #-}
 module Types.Infer.Pattern where
 
 import qualified Data.Map.Strict as Map
@@ -69,24 +69,27 @@ checkPattern (Capture v ann) ty = pure (Capture (TvName v) (ann, ty), one v ty, 
 checkPattern ex@(Destructure con ps ann) target =
   case ps of
     Nothing -> do
-      pty <- skolGadt con =<< lookupTy' con
+      (pty, sub) <- skolGadt con =<< lookupTy' con
       let (cs, ty) =
             case pty of
               TyWithConstraints cs ty -> (cs, ty)
               _ -> ([], pty)
       co <- unify (becausePat ex) target ty
-      wrapPattern (Destructure (TvName con) Nothing, mempty, cs) (ann, target) (ty, co)
+      (_1 %~ mkSkolPat sub) <$> wrapPattern (Destructure (TvName con) Nothing, mempty, cs) (ann, target) (ty, co)
     Just p ->
-      let go cs t = do
+      let go cs t sub = do
             (c, d, _) <- decompose (becausePat ex) _TyArr t
             (ps', b, cs') <- checkPattern p c
             co <- unify (becausePat ex) target d
-            wrapPattern (Destructure (TvName con) (Just ps'), b, cs ++ cs') (ann, target) (d, co)
+            (_1 %~ mkSkolPat sub) <$> wrapPattern (Destructure (TvName con) (Just ps'), b, cs ++ cs') (ann, target) (d, co)
       in do
-        t <- skolGadt con =<< lookupTy' con
+        (t, sub) <- skolGadt con =<< lookupTy' con
         case t of
-          TyWithConstraints cs ty -> go cs ty
-          _ -> go [] t
+          TyWithConstraints cs ty -> go cs ty sub
+          _ -> go [] t sub
+  where
+    mkSkolPat sub p | Map.null sub = p
+                    | otherwise = PSkolem p (Map.keys sub) (ann, target)
 checkPattern pt@(PRecord rows ann) ty = do
   rho <- freshTV
   (rowps, rowts, caps, cons) <- unzip4 <$> for rows (\(var, pat) -> do
@@ -156,6 +159,7 @@ boundTvs p vs = pat p <> foldTele go vs where
   go x = ftv x `Set.union` Set.map (^. skolIdent) (skols x)
 
   pat Wildcard{} = mempty
+  pat (PSkolem p _ _) = pat p
   pat Capture{} = mempty
   pat (Destructure _ p _) = foldMap pat p
   pat (PType _ t _) = ftv t
@@ -164,7 +168,7 @@ boundTvs p vs = pat p <> foldTele go vs where
   pat PLiteral{} = mempty
   pat (PWrapper _ p _) = pat p
 
-skolGadt :: MonadInfer Typed m => Var Resolved -> (Maybe a, Type Typed, Type Typed) -> m (Type Typed)
+skolGadt :: MonadInfer Typed m => Var Resolved -> (Maybe a, Type Typed, Type Typed) -> m (Type Typed, Subst Typed)
 skolGadt var (_, oty, ty) =
   let result (TyPi _ t) = result t
       result (TyWithConstraints _ t) = result t
@@ -183,7 +187,7 @@ skolGadt var (_, oty, ty) =
    in do
      vs <- for (Set.toList (ftv ty `Set.difference` fugitives)) $ \v ->
        (v,) <$> freshSkol (ByExistential (TvName var) oty) ty v
-     pure $ apply (Map.fromList vs) ty
+     pure (apply (Map.fromList vs) ty, Map.fromList vs)
 
 wrapPattern :: Applicative f => (Ann Typed -> Pattern Typed, Telescope Typed, [(Type Typed, Type Typed)])
             -> Ann Typed

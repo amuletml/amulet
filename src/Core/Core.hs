@@ -112,13 +112,15 @@ data AnnArm b a = Arm
 type Arm = AnnArm ()
 
 data Pattern a
-  = Capture a (Type a)
-  | Constr a
-  | Destr a (Pattern a)
-  | PatExtend (Pattern a) [(Text, Pattern a)]
-  | PatValues [Pattern a]
-
+  = Constr a
+  | Destr a (Capture a)
+  | PatExtend (Capture a) [(Text, Capture a)]
+  | PatValues [Capture a]
   | PatLit Literal
+  | PatWildcard
+  deriving (Eq, Show, Ord, Functor, Generic, Hashable)
+
+data Capture a = Capture a (Type a)
   deriving (Eq, Show, Ord, Functor, Generic, Hashable)
 
 data Coercion a
@@ -235,15 +237,18 @@ braces' :: Doc -> Doc
 braces' = enclose (lbrace <> linebreak) (linebreak <> rbrace)
 
 instance Pretty a => Pretty (Pattern a) where
-  pretty (Capture v ty) = pretty v <> scomment (string ":[" <> pretty ty <> string "]")
   pretty (Constr v) = pretty v
   pretty (Destr v p) = parens (pretty v <+> pretty p)
   pretty (PatExtend p rs) = braces $ pretty p <+> pipe <+> prettyRows rs where
-    prettyRows :: [(Text, Pattern a)] -> Doc
+    prettyRows :: [(Text, Capture a)] -> Doc
     prettyRows = hsep . punctuate comma . map (\(x, v) ->
       text x <+> equals <+> pretty v)
   pretty (PatValues xs) = soperator (string "(|") <+> (hsep . punctuate comma . map pretty $ xs) <+> soperator (string "|)")
   pretty (PatLit l) = pretty l
+  pretty PatWildcard = string "_"
+
+instance Pretty a => Pretty (Capture a) where
+  pretty (Capture v ty) = pretty v <> scomment (string ":[" <> pretty ty <> string "]")
 
 instance Pretty a => Pretty (Type a) where
   pretty (ConTy v) = stypeCon (pretty v)

@@ -46,6 +46,7 @@ substitute m = term where
 substituteInTys :: forall a. IsVar a => VarMap.Map (Type a) -> Term a -> Term a
 substituteInTys = term where
   term :: VarMap.Map (Type a) -> Term a -> Term a
+  term m a | VarMap.null m = a
   term m (Atom a) = Atom (atom m a)
   term m (App f x) = App (atom m f) (atom m x)
   term m (Let (One (v, t, e)) x) = Let (One (v, gotype m t, term m e)) (term m x)
@@ -81,12 +82,14 @@ substituteInTys = term where
               & armBody %~ term m
               & armVars %~ map (_2 %~ gotype m)
 
-  ptrn m (Capture a ty) = Capture a (gotype m ty)
   ptrn _ (Constr a) = Constr a
-  ptrn m (Destr a p) = Destr a (ptrn m p)
-  ptrn m (PatExtend f fs) = PatExtend (ptrn m f) (map (second (ptrn m)) fs)
-  ptrn m (PatValues xs) = PatValues (map (ptrn m) xs)
+  ptrn m (Destr a p) = Destr a (capture m p)
+  ptrn m (PatExtend f fs) = PatExtend (capture m f) (map (second (capture m)) fs)
+  ptrn m (PatValues xs) = PatValues (map (capture m) xs)
   ptrn _ l@PatLit{} = l
+  ptrn _ l@PatWildcard = l
+
+  capture m (Capture v ty) = Capture v (gotype m ty)
 
   gotype :: VarMap.Map (Type a) -> Type a -> Type a
   gotype = substituteInType
@@ -94,6 +97,7 @@ substituteInTys = term where
 -- | Substitute a type variable with some other type inside a type
 substituteInType :: IsVar a => VarMap.Map (Type a) -> Type a -> Type a
 substituteInType = gotype where
+  gotype m t | VarMap.null m = t
   gotype m x@(VarTy v) = VarMap.findWithDefault x (toVar v) m
   gotype _ x@ConTy{} = x
   gotype m (ForallTy v c t) = ForallTy v (gotype m c) (gotype (remove v m) t) where
@@ -196,12 +200,15 @@ refresh = refreshTerm mempty where
   refreshTerm s (Cast e c) = Cast <$> refreshAtom s e <*> pure (refreshCoercion s c)
 
   refreshPattern :: IsVar a => VarMap.Map a -> Pattern a -> Pattern a
-  refreshPattern s (Capture v ty) = Capture (get s v) (refreshType s ty)
   refreshPattern _ p@Constr{} = p
-  refreshPattern s (Destr c p) = Destr c (refreshPattern s p)
-  refreshPattern s (PatExtend p fs) = PatExtend (refreshPattern s p) (map (second (refreshPattern s)) fs)
-  refreshPattern s (PatValues xs) = PatValues (map (refreshPattern s) xs)
+  refreshPattern s (Destr c p) = Destr c (refreshCapture s p)
+  refreshPattern s (PatExtend p fs) = PatExtend (refreshCapture s p) (map (second (refreshCapture s)) fs)
+  refreshPattern s (PatValues xs) = PatValues (map (refreshCapture s) xs)
   refreshPattern _ p@PatLit{} = p
+  refreshPattern _ p@PatWildcard = p
+
+  refreshCapture :: IsVar a => VarMap.Map a -> Capture a -> Capture a
+  refreshCapture s (Capture v ty) = Capture (get s v) (refreshType s ty)
 
   refreshType :: IsVar a => VarMap.Map a -> Type a -> Type a
   refreshType s x@(VarTy v) = maybe x VarTy (VarMap.lookup (toVar v) s)

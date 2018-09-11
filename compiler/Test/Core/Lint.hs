@@ -7,6 +7,7 @@ import qualified Data.Text as T
 import Data.Position (SourceName)
 import Data.Foldable
 import Data.Spanned
+import Data.List
 
 import Control.Monad.Infer (TypeError, firstName)
 import Control.Monad.Namey
@@ -96,7 +97,7 @@ testLintSimplify = testLint optimise
 
 tests :: IO TestTree
 tests = do
-  folderLint <- map (testCase <*> testLintSimplify . ("tests/lint/"++)) <$> listDirectory "tests/lint/"
+  folderLint <- map (testCase <*> testLintSimplify . ("tests/lint/"++)) . sort <$> listDirectory "tests/lint/"
 
   pure $ testGroup "Test.Core.Lint"
     [ testGroup "Examples" [ testGroup "Lower" (map (testCase <*> testLintLower . ("examples/"++)) files)

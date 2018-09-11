@@ -7,8 +7,9 @@ module Core.Optimise.Reduce
   , reduceAtom
   ) where
 
-import qualified Data.Map.Strict as Map
 import qualified Data.VarMap as VarMap
+import qualified Data.VarSet as VarSet
+import qualified Data.HashSet as HSet
 import qualified Data.Text as T
 import Data.Triple
 import Data.List
@@ -145,23 +146,12 @@ reduceTerm _ (Let (One (v, vt, Match t [a])) r) =
   Match t [a & armBody %~ appendBody v vt r]
 
 -- Trivial matches
-reduceTerm s (Match t (Arm { _armPtrn = Capture v _, _armTy = ty, _armBody = body }:_)) = {-# SCC "Reduce.trivial_match" #-}
-  reduceTerm s $ Let (One (v, ty, Atom t)) body
+reduceTerm s (Match _ (Arm { _armPtrn = PatWildcard, _armBody = body }:_)) = {-# SCC "Reduce.trivial_match" #-}
+  reduceTerm s body
 reduceTerm s (Match t bs) = {-# SCC "Reduce.fold_cases" #-}
   case foldCases bs of
     Left  Arm { _armBody = b } -> b
-    Right bs' ->
-      case last bs' of
-        -- If we were really smart, we could strip _all_ cases which are shadowed by
-        -- another. For now, simply detect the case `error @a "Nope"`
-        Arm { _armPtrn = Capture _ _
-            , _armBody = Let (One (tyApp, _, TyApp (Ref err _) _))
-                        (App (Ref tyApp' _) (Lit _)) }
-          | isError err
-          , toVar tyApp == toVar tyApp'
-          , isComplete s (init bs ^.. each . armPtrn)
-          -> Match t (init bs')
-        _ -> Match t bs'
+    Right bs' -> Match t (filterDeadArms s bs')
 
   where foldCases [] = Right []
         foldCases (a@Arm { _armPtrn = p, _armBody = body }:xs) = case reducePattern s t p of
@@ -305,8 +295,8 @@ extract (PatternComplete s) = s
 
 reducePattern :: forall a. IsVar a => Scope a -> Atom a -> Pattern a -> PatternResult a
 
--- A capture always yield a complete pattern
-reducePattern _ term (Capture a _) = PatternComplete (VarMap.singleton (toVar a) term)
+-- A wildcard always yields a complete pattern
+reducePattern _ _ PatWildcard = PatternComplete mempty
 
 -- Literals are relatively easy to accept/reject
 reducePattern _ _ (PatLit RecNil) = PatternComplete mempty
@@ -323,23 +313,24 @@ reducePattern s (Ref v _) (Constr c)
   | Just (App (Ref c' _) _) <- lookupRawTerm s v
   , isCon s (lookupRawVar s c') = PatternFail
 
-reducePattern s (Ref v _) (Destr c a)
+reducePattern s (Ref v _) (Destr c (Capture a _))
   | Just (App (Ref c' _) a') <- lookupRawTerm s v
-  , lookupRawVar s c' == c = reducePattern s a' a
+  , lookupRawVar s c' == c = PatternComplete (VarMap.singleton (toVar a) a')
 
   | isCon s (lookupRawVar s v) = PatternFail
   | Just (App (Ref c' _) _) <- lookupRawTerm s v
   , isCon s (lookupRawVar s c') = PatternFail
 
 -- Attempt to reduce the field
-reducePattern s e (PatExtend rest fs) = foldr ((<>) . handle) (reducePattern s e rest) fs where
-  handle :: (T.Text, Pattern a) -> PatternResult a
-  handle (f, p) =
+reducePattern s e (PatExtend (Capture r' _) fs) =
+  foldr ((<>) . handle)
+        (PatternComplete (VarMap.singleton (toVar r') e))
+        fs where
+  handle :: (T.Text, Capture a) -> PatternResult a
+  handle (f, Capture v _) =
     case find ((==f) . fst3) fs' of
-      Nothing -> if allMatching p
-                    then PatternPartial mempty
-                    else PatternUnknown mempty
-      Just (_, _, e) -> reducePattern s e p
+      Nothing -> PatternPartial mempty
+      Just (_, _, e) -> PatternComplete (VarMap.singleton (toVar v) e)
 
   fs' = simplifyRecord e
 
@@ -350,75 +341,76 @@ reducePattern s e (PatExtend rest fs) = foldr ((<>) . handle) (reducePattern s e
       _ -> []
   simplifyRecord _ = []
 
-  allMatching (PatLit RecNil) = True
-  allMatching (PatLit Unit) = True
-  allMatching (Capture _ _) = True
-  allMatching (PatExtend r fs) = allMatching r && all (allMatching . snd) fs
-  allMatching (PatValues xs) = all allMatching xs
-  allMatching _ = False
-
 reducePattern _ _ _ = PatternUnknown mempty
 
-isComplete :: IsVar a => Scope a -> [Pattern a] -> Bool
-isComplete s = isComplete' where
-  isComplete' :: IsVar a => [Pattern a] -> Bool
-  isComplete' [] = False
-  -- Trivial always-true captures
-  isComplete' (Capture{}:_) = True
-  isComplete' (PatLit Unit:_) = True
-  isComplete' (PatLit RecNil:_) = True
+-- | Remove arms which are shadowed by a previous one and so will never be executed
+filterDeadArms :: IsVar a => Scope a -> [Arm a] -> [Arm a]
+filterDeadArms s = goArm where
+  goArm [] = []
+  goArm (a@Arm { _armPtrn = p }:as) =
+    case p of
+      -- Trivial patterns which always match
+      PatWildcard   -> [a]
+      PatLit Unit   -> [a]
+      PatLit RecNil -> [a]
+      PatExtend{}   -> [a]
+      PatValues _   -> [a]
 
-  isComplete' (PatLit (Int _):xs) = isComplete' xs
-  isComplete' (PatLit (Str _):xs) = isComplete' xs
-  isComplete' (PatLit (Float _):xs) = isComplete' xs
-  isComplete' (PatLit LitTrue:xs)    = hasBool LitTrue  xs
-  isComplete' (PatLit LitFalse:xs)   = hasBool LitFalse xs
+    -- Unbounded literals will never be complete unless we have a wildcard
+      PatLit l@Int{}   -> a : goLit (HSet.singleton l) as
+      PatLit l@Str{}   -> a : goLit (HSet.singleton l) as
+      PatLit l@Float{} -> a : goLit (HSet.singleton l) as
 
-  -- Trivial, always-true captures
-  isComplete' xs@(Destr v _:_)    = hasSumTy (buildSumTy v) xs
-  isComplete' xs@(Constr v:_)     = hasSumTy (buildSumTy v) xs
+      -- See if we've got the other case
+      PatLit LitTrue  -> a : goBool LitTrue  as
+      PatLit LitFalse -> a : goBool LitFalse as
 
-  -- Skip record types for now
-  isComplete' xs@(PatExtend{}:_) = hasRecord Map.empty xs
+      -- See if we've got all cases
+      Destr v _ -> a : goSum (buildSumSet v) as
+      Constr v  -> a : goSum (buildSumSet v) as
 
-  -- For unboxed tuples we simply determine if the first pattern is complete, or
-  -- if some later one could be. This is definitely not a complete check, but it
-  -- is correct.
-  isComplete' (PatValues ps:xs) = all (isComplete' . pure) ps || isComplete' xs
+  -- | Build a HashSet of literals, removing those we've already seen.
+  goLit _ [] = []
+  goLit v (a@Arm { _armPtrn = p }:as) =
+    case p of
+      PatWildcard -> [a]
+      PatLit l | HSet.member l v -> goLit v as
+               | otherwise -> a : goLit (HSet.insert l v) as
+      _ -> a : goLit v as
 
-  hasBool _ [] = False
-  hasBool _ (Capture _ _:_) = True
-  hasBool l (PatLit l':_) | l /= l' = True
-  hasBool p (_:xs) = hasBool p xs
+  -- | Remove booleans we've already seen, and terminate if we have both true
+  -- and false.
+  goBool _ [] = []
+  goBool l (a@Arm { _armPtrn = p }:as) =
+    case p of
+      PatWildcard -> [a]
+      PatLit l' | l /= l' -> [a]
+      _ -> a : goBool l as
 
-  buildSumTy v =
+  -- | Build a set of variables we've yet to seen, skipping cases which do not
+  -- appear in the set and terminating when it's empty.
+  goSum _ [] = []
+  goSum m _ | m == mempty = []
+  goSum m (a@Arm { _armPtrn = p }:as) =
+    case p of
+      PatWildcard -> [a]
+      Constr v   | VarSet.member (toVar v) m -> a : goSum (VarSet.delete (toVar v) m) as
+                 | otherwise -> goSum m as
+      Destr v _  | VarSet.member (toVar v) m -> a : goSum (VarSet.delete (toVar v) m) as
+                 | otherwise -> goSum m as
+      _ -> a : goSum m as
+
+  -- | Build a set of all _other_ cases for the given type variable.
+  buildSumSet v =
     let Just ty = VarMap.lookup (toVar v) (cons s)
         Just cases = VarMap.lookup (toVar (unwrapTy ty)) (types s)
-    in foldr (\(a, _) m -> Map.insert (toVar a) (Just []) m) Map.empty cases
+    in foldr (\(a, _) -> if a == v then id else VarSet.insert (toVar a)) mempty cases
 
-  -- Oh goodness, this is horrible. This attempts to extract
-  -- the type name from a constructor's type
+  -- | Extract the type name from a constructor's type. This is a little grim.
   unwrapTy (ForallTy _ _ t) = unwrapTy t
   unwrapTy (AppTy t _) = unwrapTy t
   unwrapTy (ConTy v) = v
-  unwrapTy ty = error (show ty)
-
-  hasSumTy m [] = Map.foldr (\ps r -> r && maybe True isComplete' ps) True m
-  hasSumTy _ (Capture{}:_) = True
-  hasSumTy m (Constr v:xs) = hasSumTy (Map.insert (toVar v) Nothing m) xs
-  hasSumTy m (Destr v b:xs) = hasSumTy (Map.adjust (\(Just ps) -> Just (b:ps)) (toVar v) m) xs
-  hasSumTy m (_:xs) = hasSumTy m xs
-
-  hasRecord :: IsVar a => Map.Map T.Text [Pattern a] -> [Pattern a] -> Bool
-  hasRecord m [] = Map.foldr (\ps r -> r && isComplete' ps) True m
-  hasRecord _ (Capture{}:_) = True
-  hasRecord m (e@PatExtend{}:xs) =
-    let m' = foldr (\(f, p) r -> Map.insertWith (++) f [p] r) m (flattenExtend e)
-    in hasRecord m' xs
-  hasRecord m (_:xs) = hasRecord m xs
-
-  flattenExtend (PatExtend p fs) = flattenExtend p ++ fs
-  flattenExtend _ = []
+  unwrapTy ty = error ("Cannot extract type from constructor " ++ show ty)
 
 redundantCo :: IsVar a => Coercion a -> Bool
 redundantCo c

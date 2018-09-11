@@ -32,4 +32,3 @@ tests = testGroup "Tests" <$> sequence
 
 main :: IO ()
 main = tests >>= defaultMainWithIngredients [ listingTests, consoleTestReporter `composeReporters` antXMLRunner ]
-

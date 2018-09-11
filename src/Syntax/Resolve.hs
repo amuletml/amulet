@@ -426,7 +426,8 @@ rePattern (PTuple ps a) = do
   (ps', vss, tss) <- unzip3 <$> traverse rePattern ps
   pure (PTuple ps' a, concat vss, concat tss)
 rePattern (PLiteral l a) = pure (PLiteral l a, [], [])
-rePattern PWrapper{} = undefined
+rePattern PWrapper{} = error "Impossible PWrapper"
+rePattern PSkolem{} = error "Impossible PSkolem"
 
 reBinding :: MonadResolve m
           => Binding Parsed
