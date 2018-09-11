@@ -37,11 +37,12 @@ do
     common_prefix = common_prefix,
     common_suffix = common_suffix,
     mixed_1 = function(l)
+      local er = l._1
       local eq = l._2
       local eu = eq._1
       local et = eq._2
-      if l._1 then
-        if 1 == eu then
+      if 1 == eu then
+        if true == er then
           return 1
         else
           if et.__tag == "Cons" then
@@ -50,15 +51,21 @@ do
             return error("Pattern matching failure in match expression at match_heuristic.ml[13:15 ..13:22]")
           end
         end
-      else
+      elseif 2 == eu then
         if et.__tag == "Nil" then
-          if 2 == eu then
+          if false == er then
             return 2
           else
             return error("Pattern matching failure in match expression at match_heuristic.ml[13:15 ..13:22]")
           end
         elseif et.__tag == "Cons" then
           return 3
+        end
+      else
+        if et.__tag == "Cons" then
+          return 3
+        else
+          return error("Pattern matching failure in match expression at match_heuristic.ml[13:15 ..13:22]")
         end
       end
     end
