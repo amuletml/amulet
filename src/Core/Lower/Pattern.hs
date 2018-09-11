@@ -39,7 +39,6 @@ import Core.Var
 
 import qualified Syntax as S
 import Syntax.Var (Var(..), Typed)
-import Syntax.Pretty()
 
 type ArmId = Int
 type ArmSet = HSet.HashSet ArmId
@@ -289,10 +288,16 @@ lowerOneOf :: forall m. MonadLower m
            => CoVar -> Type CoVar
            -> VarMap.Map (Type CoVar) -> [PatternRow]
            -> m ArmNode
-lowerOneOf var ty tys = go [] . map (\(PR arm pats vBind tyBind) ->
-                                       ( fromMaybe (S.Wildcard undefined) (VarMap.lookup var pats)
-                                       , PR arm (VarMap.delete var pats) vBind tyBind ))
+lowerOneOf var ty tys = go [] . map prepare
   where
+    prepare (PR arms pats vBind tyBind) =
+      let pat = fromMaybe (S.Wildcard undefined) (VarMap.lookup var pats)
+          (pat', vs) = unwrapAs pat
+      in ( pat', PR arms (VarMap.delete var pats) (vs ++ vBind) tyBind )
+
+    unwrapAs (S.PAs p (TvName v) _) = (VS var (mkVal v) ty:) <$> unwrapAs p
+    unwrapAs p = (p, [])
+
     go unc [] = lowerOne tys (reverse unc)
     go unc rs@((S.PRecord{},_):_) = goRows unc mempty rs
     go unc rs@((S.Destructure{},_):_) = goCtors unc mempty rs
@@ -391,7 +396,6 @@ lowerOneOf var ty tys = go [] . map (\(PR arm pats vBind tyBind) ->
     inst (ForallTy (Relevant _) _ t) = inst t
     inst t = t
 
-
 -- | Normalise patterns, reducing a couple of the more complex cases to
 -- their standard varieties.
 normalisePattern :: S.Pattern Typed -> S.Pattern Typed
@@ -402,6 +406,7 @@ normalisePattern p@S.PLiteral{} = p
 normalisePattern p@(S.Destructure _ Nothing _) = p
 normalisePattern (S.PSkolem p _ _) = normalisePattern p -- TODO: This!
 normalisePattern (S.Destructure v (Just p) a) = S.Destructure v (Just (normalisePattern p)) a
+normalisePattern (S.PAs p v a) = S.PAs (normalisePattern p) v a
 normalisePattern (S.PRecord fs a) = S.PRecord (map (second normalisePattern) fs) a
 -- Reduce these cases to something else
 normalisePattern (S.PWrapper _ p _) = normalisePattern p
@@ -418,6 +423,7 @@ normalisePattern (S.PTuple ps (pos, _)) = convert ps where
 -- if at all possible.
 freshFromPat :: MonadNamey m => S.Pattern Typed -> m CoVar
 freshFromPat (S.Capture (TvName v) _) = freshFrom (mkVal v)
+freshFromPat (S.PAs _ (TvName v) _) = freshFrom (mkVal v)
 freshFromPat _ = fresh ValueVar
 
 -- | If this is a "trivial" pattern (it does not require a branch in
@@ -443,6 +449,7 @@ patternVars' S.Wildcard{} = []
 patternVars' S.PLiteral{} = []
 patternVars' (S.Capture (TvName v) (_, ty)) = [(mkVal v, lowerType ty)]
 patternVars' (S.Destructure _ p _) = maybe [] patternVars' p
+patternVars' (S.PAs p (TvName v) (_, ty)) = (mkVal v, lowerType ty):patternVars' p
 patternVars' (S.PRecord fs _) = concatMap (patternVars' . snd) fs
 patternVars' (S.PWrapper _ p _) = patternVars' p
 patternVars' (S.PSkolem p _ _) = patternVars' p

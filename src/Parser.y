@@ -90,6 +90,7 @@ import Syntax
   module   { Token TcModule _ _ }
   open     { Token TcOpen _ _ }
   lazy     { Token TcLazy _ _ }
+  as       { Token TcAs _ _ }
 
   ','      { Token TcComma _ _ }
   '.'      { Token TcDot _ _ }
@@ -344,6 +345,7 @@ Pattern :: { Pattern Parsed }
         : ArgP                    { $1 }
         | Con ArgP                { withPos2 $1 $2 $ Destructure (getL $1) (Just $2) }
         | Pattern ':' Type        { withPos2 $1 $3 $ PType $1 (getL $3) }
+        | Pattern as Var          { withPos2 $1 $3 $ PAs $1 (getL $3) }
 
 ArgP :: { Pattern Parsed }
      : BindName                                   { withPos1 $1 $ Capture (getL $1) }

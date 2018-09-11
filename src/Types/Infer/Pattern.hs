@@ -66,6 +66,9 @@ checkPattern :: MonadInfer Typed m
                   )
 checkPattern (Wildcard ann) ty = pure (Wildcard (ann, ty), mempty, [])
 checkPattern (Capture v ann) ty = pure (Capture (TvName v) (ann, ty), one v ty, [])
+checkPattern (PAs p v ann) ty = do
+  (p', b, cs) <- checkPattern p ty
+  pure (PAs p' (TvName v) (ann, ty), one v ty <> b, cs)
 checkPattern ex@(Destructure con ps ann) target =
   case ps of
     Nothing -> do
@@ -162,6 +165,7 @@ boundTvs p vs = pat p <> foldTele go vs where
   pat (PSkolem p _ _) = pat p
   pat Capture{} = mempty
   pat (Destructure _ p _) = foldMap pat p
+  pat (PAs p _ _) = pat p
   pat (PType _ t _) = ftv t
   pat (PRecord ps _) = foldMap (pat . snd) ps
   pat (PTuple ps _) = foldMap pat ps
