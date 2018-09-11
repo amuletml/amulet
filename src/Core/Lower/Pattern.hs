@@ -232,12 +232,10 @@ lowerOne tys rs =
     --
     -- This scores a column based on the number of distinct constructors
     -- within it, favouring those with less distinct cases.
-    --
-    -- __TODO:__ This is not entirely correctly implemented, as we should
-    -- subtract one in the case where one or more constructors.
     branchingFactor :: CoVar -> Int
-    branchingFactor var = -HSet.size (foldr HSet.insert mempty ps) where
-      ps = map (maybe PatWildcard partialLower . VarMap.lookup var . rowPatterns) rs
+    branchingFactor var =
+      let hs = foldr (HSet.insert . maybe PatWildcard partialLower . VarMap.lookup var . rowPatterns) mempty rs
+      in -HSet.size hs - (if partialComplete hs then 0 else 1) where
 
       partialLower S.Wildcard{} = PatWildcard
       partialLower S.Capture{} = PatWildcard
@@ -247,6 +245,27 @@ lowerOne tys rs =
       partialLower (S.PRecord _ _) = PatExtend (Capture (CoVar 0 "?" ValueVar) (VarTy tyvarA)) []
       partialLower (S.PAs p _ _) = partialLower p
       partialLower p = error ("Unhandled pattern " ++ show p)
+
+      partialComplete hs = foldr ((||) . go) False hs where
+        -- Somewhat strange, but every pattern will contain this, meaning
+        -- every pattern is "complete".
+        go PatWildcard{} = False
+        -- Trivial patterns, always match
+        go PatExtend{} = True
+        go PatValues{} = True
+        go (PatLit Unit) = True
+        go (PatLit RecNil) = True
+        -- Unbounded literals are never complete
+        go (PatLit Int{}) = False
+        go (PatLit Str{}) = False
+        go (PatLit Float{}) = False
+        -- Booleans are complete if 'True' and 'False' appears
+        go (PatLit LitTrue) = HSet.member (PatLit LitFalse) hs
+        go (PatLit LitFalse) = HSet.member (PatLit LitTrue) hs
+        -- Skip these for now as that information isn't available
+        -- TODO: Completeness checking for constructor patterns
+        go Constr{} = False
+        go Destr{} = False
 
     -- | Compute the "arity" heuristic for a given row variable.
     --
