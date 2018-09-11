@@ -30,8 +30,8 @@ import Data.Foldable
 import Data.Maybe
 
 import qualified Core.Core as C
-import Core.Types (unify, approximateAtomType, approximateType)
 import Core.Optimise (substituteInType, substituteInTys, fresh, freshFrom)
+import Core.Types (unify, approximateAtomType, approximateType)
 import Core.Lower.Basic
 import Core.Builtin
 import Core.Core
@@ -236,11 +236,8 @@ lowerOne tys rs =
     -- __TODO:__ This is not entirely correctly implemented, as we should
     -- subtract one in the case where one or more constructors.
     branchingFactor :: CoVar -> Int
-    branchingFactor var = -HSet.size (foldr go mempty rs) where
-      go (PR _ ps _ _) s
-        | Just p <- VarMap.lookup var ps
-        = HSet.insert (partialLower p) s
-      go _ s = s
+    branchingFactor var = -HSet.size (foldr HSet.insert mempty ps) where
+      ps = map (maybe PatWildcard partialLower . VarMap.lookup var . rowPatterns) rs
 
       partialLower S.Wildcard{} = PatWildcard
       partialLower S.Capture{} = PatWildcard
@@ -433,6 +430,7 @@ freshFromPat _ = fresh ValueVar
 isTrivialPat :: S.Pattern Typed -> Bool
 isTrivialPat S.Wildcard{} = True
 isTrivialPat S.Capture{} = True
+isTrivialPat (S.PAs p _ _) = isTrivialPat p
 isTrivialPat _ = False
 
 patternVars :: Pattern CoVar -> [(CoVar, Type CoVar)]

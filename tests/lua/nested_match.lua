@@ -14,18 +14,18 @@ do
             return Cons({ _1 = 2, _2 = Nil })
           elseif ys.__tag == "Cons" then
             local he = ys[1]
-            local hj = he._1
-            local hi = he._2
-            local hg = hd._1
-            local hf = hd._2
-            if 0 == hg then
-              if 0 == hj then
+            local hg = he._1
+            local hf = he._2
+            local hj = hd._1
+            local hi = hd._2
+            if 0 == hj then
+              if 0 == hg then
                 return Cons({ _1 = 3, _2 = Nil })
               else
-                return Cons({ _1 = f(hg)(hj), _2 = zip(f)(hf)(hi) })
+                return Cons({ _1 = f(hj)(hg), _2 = zip(f)(hi)(hf) })
               end
             else
-              return Cons({ _1 = f(hg)(hj), _2 = zip(f)(hf)(hi) })
+              return Cons({ _1 = f(hj)(hg), _2 = zip(f)(hi)(hf) })
             end
           end
         end
