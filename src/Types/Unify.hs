@@ -552,29 +552,29 @@ subsumes' r s th@(TyRows rho rhas) tw@(TyRows sigma rwant) = do
   let matching = overlap rhas rwant
 
   -- We need to at *least* match all of the ones we want
-  when (length matching < length rwant || length rwant > length rhas) $
-    throwError (NoOverlap th tw)
+  if length matching < length rwant || length rwant > length rhas
+  then probablyCast <$> unify th tw
+  else do
+    matched <- fmap fold . for matching $ \(key, have, want) -> do
+      -- and make sure that the ones we have are subtypes of the ones we
+      -- want
+      wrap <- subsumes' (fieldBlame key r) s have want
+      pure (Map.singleton key (have, want, wrap))
 
-  matched <- fmap fold . for matching $ \(key, have, want) -> do
-    -- and make sure that the ones we have are subtypes of the ones we
-    -- want
-    wrap <- subsumes' (fieldBlame key r) s have want
-    pure (Map.singleton key (have, want, wrap))
+    let diff = filter (not . flip Map.member matched . fst) rhas
+        get_t (key, old) = (:) (key, case Map.lookup key matched of
+          Just (_, new, _) -> new
+          Nothing -> old)
+        matched_t = TyExactRows (foldr get_t [] rhas)
+        new = case diff of
+          [] -> rho
+          _ -> TyRows rho diff
 
-  let diff = filter (not . flip Map.member matched . fst) rhas
-      get_t (key, old) = (:) (key, case Map.lookup key matched of
-        Just (_, new, _) -> new
-        Nothing -> old)
-      matched_t = TyExactRows (foldr get_t [] rhas)
-      new = case diff of
-        [] -> rho
-        _ -> TyRows rho diff
+    cast <- probablyCast <$> unify sigma new
+    exp <- TvName <$> genName
 
-  cast <- probablyCast <$> unify sigma new
-  exp <- TvName <$> genName
-
-  let mkw ex = ExprWrapper cast ex (annotation ex, tw)
-  pure (WrapFn (MkWrapCont (mkRecordWrapper matched matched_t th tw mkw exp) "exact→poly record subsumption"))
+    let mkw ex = ExprWrapper cast ex (annotation ex, tw)
+    pure (WrapFn (MkWrapCont (mkRecordWrapper matched matched_t th tw mkw exp) "exact→poly record subsumption"))
 
 subsumes' r _ a b = probablyCast <$> unify a b `catchError` (throwError . reblame r)
 
@@ -732,7 +732,7 @@ mkRecordWrapper matched matched_t th tw cont exp =
       -- Bind the expression to a value so we don't duplicate work and
       -- rebuild the record
       wrapEx ex | an <- annotation ex =
-        Let [Binding exp ex BindRegular (an, th)] 
+        Let [Binding exp ex BindRegular (an, th)]
           (cont (Record (Map.foldMapWithKey (fakeField an (ref an)) matched) (an, matched_t)))
           (an, tw)
    in wrapEx
