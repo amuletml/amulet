@@ -185,6 +185,8 @@ library amulet
                      , Core.Free
                      , Core.Arity
                      , Core.Lower
+                     , Core.Lower.Basic
+                     , Core.Lower.Pattern
                      , Core.Types
                      , Core.Builtin
                      , Core.Optimise

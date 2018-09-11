@@ -102,11 +102,10 @@ goBinding ss m = traverse (third3A (fmap (substitute ss) . goTerm)) where
     Let (One (v, t, e')) <$> goTerm b
 
   goTerm (Match a x) = case newtypeMatch m x of
-    Just (phi, Arm { _armPtrn = Destr _ p, _armBody = bd, _armVars = vs, _armTyvars = tvs }) -> do
+    Just (phi, Arm { _armPtrn = Destr _ (Capture v ty), _armBody = bd }) -> do
       var <- fresh ValueVar
       let Just (_, castCodomain) = relates phi
-      bd' <- goTerm (Match (Ref (fromVar var) castCodomain) [Arm { _armPtrn = p, _armTy = castCodomain
-                                                                 , _armBody = bd, _armVars = vs, _armTyvars = tvs }])
+      bd' <- goTerm (Let (One (v, ty, Atom (Ref (fromVar var) castCodomain))) bd)
       pure $ Let (One (fromVar var, castCodomain, Cast a phi)) bd'
     _ -> Match a <$> traverse (armBody %%~ goTerm) x
 
