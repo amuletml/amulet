@@ -41,8 +41,6 @@ import qualified Syntax as S
 import Syntax.Var (Var(..), Typed)
 import Syntax.Pretty()
 
-import Debug.Trace
-
 type ArmId = Int
 type ArmSet = HSet.HashSet ArmId
 type ArmMap = HMap.HashMap ArmId
@@ -143,11 +141,12 @@ flattenResult bodies (ArmMatch _ atom' children) = do
           let buildLam aty bod' = foldr (Lam . uncurry TypeArgument) (Lam (TermArgument a aty) bod') tvs
               buildLamTy fty = foldr (uncurry (ForallTy . Relevant)) fty tvs
 
+              buildApp :: [VariableSubst] -> CoVar -> Type CoVar -> Atom CoVar -> m (Term CoVar)
               buildApp = buildApp' tvs
               buildApp' [] _ f fty arg = pure (App (Ref f fty) arg)
               buildApp' ((tv,_):tvs) ts f fty@(ForallTy (Relevant _) _ ftyr) arg = do
                 f' <- fresh ValueVar
-                let Just tv' = varFrom <$> find ((==tv) . varTo) (traceShow (ts, f) ts)
+                let Just tv' = varFrom <$> find ((==tv) . varTo) ts
                     fty' = substituteInType (VarMap.singleton tv (VarTy tv')) ftyr
                 Let (One (f', fty', TyApp (Ref f fty) (VarTy tv'))) <$> buildApp' tvs ts f' fty' arg
               buildApp' _ _ _ _ _ = error "Tyvar without a place to apply it"
@@ -247,7 +246,7 @@ lowerOne tys rs =
       partialLower S.Wildcard{} = PatWildcard
       partialLower S.Capture{} = PatWildcard
       partialLower (S.PLiteral l _) = PatLit (lowerLiteral l)
-      partialLower (S.GadtPat p _ _) = partialLower p
+      partialLower (S.PSkolem p _ _) = partialLower p
       partialLower (S.Destructure (TvName v) _ _) = Constr (mkCon v)
       partialLower (S.PRecord _ _) = PatExtend (Capture (CoVar 0 "?" ValueVar) (VarTy tyvarA)) []
       partialLower p = error ("Unhandled pattern " ++ show p)
@@ -264,7 +263,7 @@ lowerOne tys rs =
         = arityOf p
       go _ = 0
 
-      arityOf (S.GadtPat p _ _) = arityOf p
+      arityOf (S.PSkolem p _ _) = arityOf p
       arityOf (S.Destructure _ Nothing _) = 0
       arityOf (S.Destructure _ Just{} _) = 1
       arityOf (S.PRecord f _) = length f
@@ -401,7 +400,7 @@ normalisePattern p@S.Wildcard{} = p
 normalisePattern p@S.Capture{} = p
 normalisePattern p@S.PLiteral{} = p
 normalisePattern p@(S.Destructure _ Nothing _) = p
-normalisePattern (S.GadtPat p _ _) = normalisePattern p -- TODO: This!
+normalisePattern (S.PSkolem p _ _) = normalisePattern p -- TODO: This!
 normalisePattern (S.Destructure v (Just p) a) = S.Destructure v (Just (normalisePattern p)) a
 normalisePattern (S.PRecord fs a) = S.PRecord (map (second normalisePattern) fs) a
 -- Reduce these cases to something else
@@ -446,6 +445,6 @@ patternVars' (S.Capture (TvName v) (_, ty)) = [(mkVal v, lowerType ty)]
 patternVars' (S.Destructure _ p _) = maybe [] patternVars' p
 patternVars' (S.PRecord fs _) = concatMap (patternVars' . snd) fs
 patternVars' (S.PWrapper _ p _) = patternVars' p
-patternVars' (S.GadtPat p _ _) = patternVars' p
+patternVars' (S.PSkolem p _ _) = patternVars' p
 patternVars' (S.PType p _ _) = patternVars' p
 patternVars' (S.PTuple ps _) = concatMap patternVars' ps

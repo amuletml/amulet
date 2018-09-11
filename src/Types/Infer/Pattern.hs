@@ -70,25 +70,26 @@ checkPattern ex@(Destructure con ps ann) target =
   case ps of
     Nothing -> do
       (pty, sub) <- skolGadt con =<< lookupTy' con
-      let mkGadtPat p = GadtPat p (Map.keys sub) (ann, target)
-          (cs, ty) =
+      let (cs, ty) =
             case pty of
               TyWithConstraints cs ty -> (cs, ty)
               _ -> ([], pty)
       co <- unify (becausePat ex) target ty
-      (_1 %~ mkGadtPat) <$> wrapPattern (Destructure (TvName con) Nothing, mempty, cs) (ann, target) (ty, co)
+      (_1 %~ mkSkolPat sub) <$> wrapPattern (Destructure (TvName con) Nothing, mempty, cs) (ann, target) (ty, co)
     Just p ->
-      let mkGadtPat sub p = GadtPat p (Map.keys sub) (ann, target)
-          go cs t sub = do
+      let go cs t sub = do
             (c, d, _) <- decompose (becausePat ex) _TyArr t
             (ps', b, cs') <- checkPattern p c
             co <- unify (becausePat ex) target d
-            (_1 %~ mkGadtPat sub) <$> wrapPattern (Destructure (TvName con) (Just ps'), b, cs ++ cs') (ann, target) (d, co)
+            (_1 %~ mkSkolPat sub) <$> wrapPattern (Destructure (TvName con) (Just ps'), b, cs ++ cs') (ann, target) (d, co)
       in do
         (t, sub) <- skolGadt con =<< lookupTy' con
         case t of
           TyWithConstraints cs ty -> go cs ty sub
           _ -> go [] t sub
+  where
+    mkSkolPat sub p | Map.null sub = p
+                    | otherwise = PSkolem p (Map.keys sub) (ann, target)
 checkPattern pt@(PRecord rows ann) ty = do
   rho <- freshTV
   (rowps, rowts, caps, cons) <- unzip4 <$> for rows (\(var, pat) -> do
@@ -158,7 +159,7 @@ boundTvs p vs = pat p <> foldTele go vs where
   go x = ftv x `Set.union` Set.map (^. skolIdent) (skols x)
 
   pat Wildcard{} = mempty
-  pat (GadtPat p _ _) = pat p
+  pat (PSkolem p _ _) = pat p
   pat Capture{} = mempty
   pat (Destructure _ p _) = foldMap pat p
   pat (PType _ t _) = ftv t

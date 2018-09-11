@@ -427,7 +427,7 @@ rePattern (PTuple ps a) = do
   pure (PTuple ps' a, concat vss, concat tss)
 rePattern (PLiteral l a) = pure (PLiteral l a, [], [])
 rePattern PWrapper{} = error "Impossible PWrapper"
-rePattern GadtPat{} = error "Impossible GadtPat"
+rePattern PSkolem{} = error "Impossible PSkolem"
 
 reBinding :: MonadResolve m
           => Binding Parsed
