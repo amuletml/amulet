@@ -119,7 +119,7 @@ lowerAt (Fun param bd an) (ForallTy Irrelevant a b) =
         S.Capture (TvName v) _ -> Lam (TermArgument (mkVal v) a) <$> lowerAtTerm bd b
         _ -> do
           bd' <- lowerAtTerm bd b
-          arg <- fresh ValueVar
+          arg <- freshFromPat p
           fail <- patternMatchingError "pattern-matching function" (fst an) b
           Lam (TermArgument arg a) <$> lowerMatch' arg a [(p, bd'), (S.Wildcard undefined, fail)]
 
@@ -360,6 +360,8 @@ lowerLet bs =
       stripPtrn v n = transformPatternTyped go id where
         go (S.Capture v' a) | v == v' = S.Capture n a
                             | otherwise = S.Wildcard a
+        go (S.PAs p v' a) | v == v' = S.PAs p n a
+                          | otherwise = p
         go p = p
 
       patternExtract :: MonadLower m
