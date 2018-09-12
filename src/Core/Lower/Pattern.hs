@@ -14,6 +14,7 @@
 module Core.Lower.Pattern
   ( lowerMatch
   , lowerMatch'
+  , freshFromPat
   ) where
 
 import Control.Monad.Reader
@@ -374,23 +375,23 @@ lowerOneOf var ty tys = go [] . map prepare
              , VarMap.insert v p ps )
 
     -- | Build up a mapping of (constructors -> (contents variable, rows)).
-    goCtors :: [PatternRow] -> HMap.HashMap CoVar (Maybe (Capture CoVar), [PatternRow])
+    goCtors :: [PatternRow] -> VarMap.Map (Maybe (Capture CoVar), [PatternRow])
             -> [(S.Pattern Typed, PatternRow)]
             -> m ArmNode
     goCtors unc cases [] =
-      let arms = map buildCtor (HMap.toList cases) ++ [(PatWildcard, [], reverse unc)]
+      let arms = map buildCtor (VarMap.toList cases) ++ [(PatWildcard, [], reverse unc)]
           buildCtor (c, (Nothing, pats)) = (Constr c, [], reverse pats)
           buildCtor (c, (Just cap, pats)) = (Destr c cap, [cap], reverse pats)
       in build arms
     goCtors unc cases ((S.Destructure (TvName v) Nothing _,r):rs) =
       -- TODO: Work out whether we need to bind type variables at all.
       let v' = mkCon v
-          (c, cases') = fromMaybe (Nothing, unc) (HMap.lookup v' cases)
-      in goCtors unc (HMap.insert v' (c,r:cases') cases) rs
+          (c, cases') = fromMaybe (Nothing, unc) (VarMap.lookup v' cases)
+      in goCtors unc (VarMap.insert v' (c,r:cases') cases) rs
     goCtors unc cases (( S.Destructure (TvName v) (Just p) (_, cty)
                        , PR arm pats vBind tyBind ):rs) = do
       let v' = mkCon v
-      (Just cap@(Capture c _), cases') <- case HMap.lookup v' cases of
+      (Just cap@(Capture c _), cases') <- case VarMap.lookup v' cases of
         Nothing -> do
           ForallTy Irrelevant x r <- inst . fromJust <$> asks (Map.lookup v . ctors)
           let Just s = r `unify` lowerType cty
@@ -399,10 +400,10 @@ lowerOneOf var ty tys = go [] . map prepare
         Just x -> pure x
       -- TODO: Work out whether we need to bind type variables at all.
       let r' = PR arm (VarMap.insert c p pats) vBind tyBind
-      goCtors unc (HMap.insert v' (Just cap, r':cases') cases) rs
+      goCtors unc (VarMap.insert v' (Just cap, r':cases') cases) rs
     goCtors unc cases ((p, r):rs) =
       let r' = goGeneric p r
-          cases' = HMap.map (second (r':)) cases
+          cases' = VarMap.map (second (r':)) cases
       in goCtors (r':unc) cases' rs
 
     build pats = do
