@@ -141,7 +141,7 @@ check e ty = do
   -- here: have t (inferred)
   --       want ty (given)
   c <- subsumes (becauseExp e) t ty
-  pure (Ascription (ExprWrapper c e' (annotation e, ty)) ty (annotation e, ty))
+  pure (ExprWrapper c e' (annotation e, ty))
 
 -- [Complete and Easy]: See https://www.cl.cam.ac.uk/~nk480/bidir.pdf
 
