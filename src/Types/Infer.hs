@@ -276,9 +276,16 @@ inferProg (stmt@(LetStmt ns):prg) = do
                          `catchError` (throwError . propagateBlame (BecauseOf stmt))
   let bvs = Set.fromList (map TvName (namesInScope (focus ts mempty)))
 
-  ts <- flip traverseTele ts $ \var ty ->
-    skolCheck (TvName var) (BecauseOf stmt) ty
+  (ts, es) <- flip foldTeleM ts $ \var ty -> do
+    ty <- (Right <$> skolCheck (TvName var) (BecauseOf stmt) ty)
+            `catchError` \e -> pure (Left e)
+    case ty of
+      Left e -> pure (mempty, [e])
+      Right t -> pure (one var t, mempty)
   assert (vs == mempty) pure ()
+  case es of
+    [] -> pure ()
+    xs -> throwError (ManyErrors xs)
 
   local (letBound %~ Set.union bvs) . local (names %~ focus ts) . local (implicits %~ mappend is) $
     consFst (LetStmt ns') $
