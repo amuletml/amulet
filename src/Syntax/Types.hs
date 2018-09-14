@@ -3,7 +3,7 @@
    TypeFamilies, TemplateHaskell, MultiParamTypeClasses,
    FunctionalDependencies #-}
 module Syntax.Types
-  ( Telescope, one, foldTele, teleFromList, mapTele, traverseTele, teleToList
+  ( Telescope, one, foldTele, foldTeleM, teleFromList, mapTele, traverseTele, teleToList
   , Scope(..), namesInScope, inScope
   , Env, freeInEnv, difference, envOf, scopeFromList, toMap
   , names, typeVars, constructors, implicits, modules, letBound
@@ -122,6 +122,10 @@ instance Degrade Typed where
 
 one :: Degrade k => Var k -> Type p -> Telescope p
 one k t = Telescope (Map.singleton (degrade k) t)
+
+foldTeleM :: (Monad m, Monoid x, Degrade k) => (Var k -> Type p -> m x) -> Telescope p -> m x
+foldTeleM f = Map.foldrWithKey (\key t rest -> mappend <$> f (upgrade key) t <*> rest) (pure mempty) . getTele
+
 
 foldTele :: Monoid m => (Type p -> m) -> Telescope p -> m
 foldTele f x = foldMap f (getTele x)
