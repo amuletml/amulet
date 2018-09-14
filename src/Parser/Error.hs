@@ -3,6 +3,7 @@
 -- | Represents and handles errors within the parsing process
 module Parser.Error
   ( ParseError(..)
+  , Terminator(..)
   ) where
 
 import Data.Position
@@ -14,6 +15,12 @@ import Text.Pretty.Semantic (Pretty(..), Style)
 import Text.Pretty.Note
 import Text.Pretty
 import Parser.Token
+
+-- | How this token or construct was terminated
+data Terminator
+  = Newline
+  | Eof
+  deriving (Show, Eq)
 
 -- | An error in the parsing process
 --
@@ -31,13 +38,16 @@ data ParseError
   | UnexpectedEnd SourcePos
   -- | A string was not correctly terminated (due to a new line or the
   -- end of a file)
-  | UnclosedString SourcePos SourcePos
+  | UnclosedString SourcePos SourcePos Terminator
   -- | A comment was not correctly terminated (due to the end of the
   -- file).
   | UnclosedComment SourcePos SourcePos
 
   -- | An unexpected token appeared in the lexer stream
   | UnexpectedToken Token [String]
+
+  -- | An invalid escape code
+  | InvalidEscapeCode Span
 
   -- | __Warning:__ An @in@ was not aligned with its
   -- corresponding @let@
@@ -53,12 +63,15 @@ instance Pretty ParseError where
   pretty (UnexpectedCharacter _ c) | isPrint c = "Unexpected character '" <> string [c] <> "'"
                                    | otherwise = "Unexpected character" <+> shown c
   pretty (UnexpectedEnd _) = string "Unexpected end of input"
-  pretty (UnclosedString _ p) = "Unexpected end of input, expecting to close string started at" <+> prettyPos p
+  pretty (UnclosedString _ p Eof) = "Unexpected end of input, expecting to close string started at" <+> prettyPos p
+  pretty (UnclosedString _ p Newline) = "Unexpected new line, expecting to close string started at" <+> prettyPos p
   pretty (UnclosedComment _ p) = "Unexpected end of input, expecting to close comment started at" <+> prettyPos p
 
   pretty (UnexpectedToken (Token s _ _) []) = "Unexpected" <+> string (friendlyName s)
   pretty (UnexpectedToken (Token s _ _) [x]) = "Unexpected" <+> string (friendlyName s) <> ", expected" <+> string x
   pretty (UnexpectedToken (Token s _ _) xs) = "Unexpected" <+> string (friendlyName s) <> ", expected one of" <+> hsep (punctuate comma (map string xs))
+
+  pretty (InvalidEscapeCode _) = "Unknown escape code."
 
   pretty (UnalignedIn _ p) = "The in is misaligned with the corresponding 'let'" <+> parens ("located at" <+> prettyPos (spanStart p))
   pretty (UnindentContext _ p) = "Possible incorrect indentation" </> "This token is outside the context started at" <+> prettyPos (spanStart p)
@@ -68,10 +81,12 @@ instance Spanned ParseError where
 
   annotation (UnexpectedCharacter p _) = mkSpan1 p
   annotation (UnexpectedEnd p) = mkSpan1 p
-  annotation (UnclosedString p _) = mkSpan1 p
+  annotation (UnclosedString p _ _) = mkSpan1 p
   annotation (UnclosedComment p _) = mkSpan1 p
 
   annotation (UnexpectedToken t _) = annotation t
+
+  annotation (InvalidEscapeCode p) = p
 
   annotation (UnalignedIn p _) = p
   annotation (UnindentContext p _) = p
@@ -87,8 +102,11 @@ instance Note ParseError Style where
   formatNote f (UnalignedIn p i)
     = indent 2 "This `in` is misaligned with the corresponding `let`"
       <##> f [p, i]
-  formatNote f (UnclosedString p s)
-    = indent 2 "Unexpected end of input, expecting to close string"
+  formatNote f (UnclosedString p s Eof)
+    = indent 2 "Unexpected end of input, expecting `\"` to close string"
+      <##> f [mkSpan1 s, mkSpan1 p]
+  formatNote f (UnclosedString p s Newline)
+    = indent 2 "Unexpected new line, expecting `\"` to close string"
       <##> f [mkSpan1 s, mkSpan1 p]
   formatNote f (UnclosedComment p s)
     = indent 2 "Unexpected end of input, expecting to close comment"

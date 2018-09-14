@@ -482,7 +482,7 @@ fakeLetTys bs = do
           Matching p _ _ -> do
             let bound' :: Pattern p -> [Var p]
                 bound' = bound
-            tel <- flip (flip foldM mempty) (bound' p) $ \rest var -> do
+            tel <- flip (`foldM` mempty) (bound' p) $ \rest var -> do
               ty <- freshTV
               pure (one var ty <> rest)
             (<>) tel <$> go bs
