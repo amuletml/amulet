@@ -25,6 +25,8 @@ import Language.Lua.Parser.Wrapper
 import Language.Lua.Parser.Parser
 import Language.Lua.Parser.Error
 
+import Types.Infer.Builtin (tyUnit)
+
 type MonadVerify m = ( MonadWriter (Seq.Seq VerifyError) m, MonadState (Set.Set BindingSite) m )
 
 data BindingSite
@@ -42,11 +44,13 @@ data VerifyError
   | DefinedUnused BindingSite
   | ParseErrorInForeign { stmt :: Toplevel Typed
                         , err :: ParseError }
+  | NonUnitBegin (Expr Typed) (Type Typed)
 
 instance Spanned VerifyError where
   annotation (NonRecursiveRhs e _ _) = annotation e
   annotation (DefinedUnused b) = boundWhere b
   annotation (ParseErrorInForeign _ e) = annotation e
+  annotation (NonUnitBegin e _) = annotation e
 
 instance Pretty VerifyError where
   pretty (NonRecursiveRhs re ex xs) =
@@ -63,11 +67,20 @@ instance Pretty VerifyError where
   pretty (ParseErrorInForeign var err) =
     vsep [ "Invalid syntax in definition of foreign value" <+> pretty var
          , pretty err ]
+  pretty (NonUnitBegin ex ty) =
+    vsep [ "This statement discards a value of type"
+         , indent 2 (displayType ty)
+         , empty
+         , "Note: use a" <+> keyword "let" <+> "to silence this warning, as in"
+         , indent 2 $
+             keyword "let" <+> soperator (char '_') <+> equals <+> pretty ex
+         ]
 
 instance Note VerifyError Style where
   diagnosticKind NonRecursiveRhs{} = ErrorMessage
   diagnosticKind ParseErrorInForeign{} = ErrorMessage
   diagnosticKind DefinedUnused{} = WarningMessage
+  diagnosticKind NonUnitBegin{} = WarningMessage
 
   formatNote f (ParseErrorInForeign (ForeignVal var s _ (span, _)) err) = 
     let SourcePos name _ _ = spanStart (annotation err)
@@ -143,7 +156,12 @@ verifyExpr (Fun p x _) = do
       bindingSites' (ImplParam p) = bindingSites p
   modify (Set.union (bindingSites' p))
   verifyExpr x
-verifyExpr (Begin es _) = traverse_ verifyExpr es
+verifyExpr (Begin es _) =
+  for_ es $ \ex -> do
+    let ty = getType ex
+    verifyExpr ex
+    when (ty /= tyUnit) $
+      tell (Seq.singleton (NonUnitBegin ex ty))
 verifyExpr Literal{} = pure ()
 verifyExpr (Match e bs _) = do
   verifyExpr e

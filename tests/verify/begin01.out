@@ -1,0 +1,36 @@
+bind01.ml[2:3 ..2:7]: warning
+  This statement discards a value of type
+    int
+
+  Note: use a let to silence this warning, as in
+    let _ = + 1 2
+  │ 
+2 │   1 + 2
+  │ 
+bind01.ml[3:3 ..3:7]: warning
+  This statement discards a value of type
+    int
+
+  Note: use a let to silence this warning, as in
+    let _ = + 2 3
+  │ 
+3 │   2 + 3
+  │ 
+bind01.ml[4:3 ..4:7]: warning
+  This statement discards a value of type
+    int
+
+  Note: use a let to silence this warning, as in
+    let _ = + 4 5
+  │ 
+4 │   4 + 5
+  │ 
+bind01.ml[8:3 ..8:7]: warning
+  This statement discards a value of type
+    string
+
+  Note: use a let to silence this warning, as in
+    let _ = "foo"
+  │ 
+8 │   "foo"
+  │ 
