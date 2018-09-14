@@ -164,8 +164,11 @@ tokens :-
   <string> \\ \" { appendChar '\"' }
 
   <string> \\ x $hex+ { onStringM $ appendChar . chr . parseNum 16 . L.drop 2 }
+  <string> \\ [.\n]   { invalidEscape }
 
-  <string> [^\\\"] { onStringM append }
+  <string> [^\\\"]    { onStringM append }
+
+  <string> \n         { unclosedString }
 
 {
 
@@ -191,6 +194,17 @@ append c _ _ _ = do
   s <- getState
   setState $ s { stringBuffer = stringBuffer s <> B.fromLazyText c }
   lexerScan -- Don't emit a token, just continue
+
+invalidEscape :: Action Token
+invalidEscape (LI sp _ _ _) _ ep = do
+  tellErrors [InvalidEscapeCode (mkSpanUnsafe sp ep)]
+  lexerScan
+
+unclosedString :: Action Token
+unclosedString _ _ ep = do
+  s <- getState
+  tellErrors [UnclosedString ep (tokenStart s) Newline]
+  pure . fToken (tokenStart s) ep .  TcString . L.toStrict . B.toLazyText . stringBuffer $ s
 
 beginString, endString :: Action Token
 beginString (LI p _ _ _) _ _ = do
@@ -328,7 +342,7 @@ lexerScan = do
       code <- getStartCode
       case code of
         0 -> (\p -> Token TcEOF p p) <$> getPos
-        n | n == string -> failWith (UnclosedString (liPos inp) start)
+        n | n == string -> failWith (UnclosedString (liPos inp) start Eof)
         n | n == comment -> failWith (UnclosedComment (liPos inp) start)
         _ -> failWith (UnexpectedEnd (liPos inp))
     AlexError (LI p str _ _) ->

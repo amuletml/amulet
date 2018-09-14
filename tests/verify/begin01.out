@@ -1,4 +1,4 @@
-bind01.ml[2:3 ..2:7]: warning
+begin01.ml[2:3 ..2:7]: warning
   This statement discards a value of type
     int
 
@@ -7,7 +7,7 @@ bind01.ml[2:3 ..2:7]: warning
   │ 
 2 │   1 + 2
   │ 
-bind01.ml[3:3 ..3:7]: warning
+begin01.ml[3:3 ..3:7]: warning
   This statement discards a value of type
     int
 
@@ -16,7 +16,7 @@ bind01.ml[3:3 ..3:7]: warning
   │ 
 3 │   2 + 3
   │ 
-bind01.ml[4:3 ..4:7]: warning
+begin01.ml[4:3 ..4:7]: warning
   This statement discards a value of type
     int
 
@@ -25,7 +25,7 @@ bind01.ml[4:3 ..4:7]: warning
   │ 
 4 │   4 + 5
   │ 
-bind01.ml[8:3 ..8:7]: warning
+begin01.ml[8:3 ..8:7]: warning
   This statement discards a value of type
     string
 

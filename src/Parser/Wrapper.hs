@@ -15,6 +15,7 @@ module Parser.Wrapper
   , Action
   , alexInputPrevChar, alexGetByte
   , failWith, failWiths
+  , tellWarnings, tellErrors
   , getStartCode, setStartCode
   , getInput, setInput
   , getState, setState, mapState
@@ -64,7 +65,8 @@ data PState = PState { stringBuffer :: B.Builder  -- ^ Builder for string litera
                      , sIdx  :: !Int64     -- ^ Offset into the whole input
                      , sMode :: !Int       -- ^ Current startcode
 
-                     , sErrors :: [ParseError] -- ^ List of emitted warnings, with the head being the most recent
+                     , sErrors  :: [ParseError] -- ^ List of emitted warnings, with the head being the most recent
+                     , sErrored :: Bool         -- ^ Whether parsing failed somewhere
                      }
 
 -- | Extract the last consumed character
@@ -134,6 +136,14 @@ instance MonadWriter [ParseError] Parser where
     case unP m s of
       PFailed e -> PFailed e
       POK s' a -> POK s' (a, sErrors s')
+
+-- ^ Report one or more warnings within the parser
+tellWarnings :: [ParseError] -> Parser ()
+tellWarnings = tell
+
+-- ^ Report one or more critical errors within the parser
+tellErrors  :: [ParseError] -> Parser ()
+tellErrors x = tell x >> mapState (\s -> s { sErrored = True })
 
 -- | Abort the parse with an error
 failWith :: ParseError -> Parser a
@@ -207,12 +217,13 @@ runParser' trivial file input m =
                              , sIdx  = 0
                              , sMode = 0
 
-                             , sErrors = []
+                             , sErrors  = []
+                             , sErrored = False
                              }
   in case unP m defaultState of
        PFailed err -> (Nothing, reverse err)
-       POK s' a -> (Just a, reverse (sErrors s'))
-
+       POK s' a | sErrored s' -> (Nothing, reverse (sErrors s'))
+                | otherwise -> (Just a, reverse (sErrors s'))
 
 -- | Run the parser monad on a lexing function, returning a list of
 -- tokens and all warnings/errors.
