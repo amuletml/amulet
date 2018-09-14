@@ -67,6 +67,7 @@ data Constraint p
   | ConImplies  SomeReason (Type p) (Seq.Seq (Constraint p)) (Seq.Seq (Constraint p))
   | ConImplicit SomeReason (Var p)  (ImplicitScope p) (Type p) (Type p)
   | ConFail (Ann p) (Var p) (Type p) -- for holes. I hate it.
+  | DeferredError TypeError
 
 deriving instance (Show (Ann p), Show (Var p), Show (Expr p), Show (Type p))
   => Show (Constraint p)
@@ -117,12 +118,14 @@ instance (Show (Ann p), Show (Var p), Ord (Var p), Substitutable p (Type p)) => 
   ftv (ConImplies _ t a b) = ftv a `Set.union` ftv b `Set.union` ftv t
   ftv (ConImplicit _ _ s t t') = foldMap ftv (keys s) <> ftv t <> ftv t'
   ftv (ConFail _ _ t) = ftv t
+  ftv DeferredError{} = mempty
 
   apply s (ConUnify e v a b) = ConUnify e v (apply s a) (apply s b)
   apply s (ConSubsume e v t a b) = ConSubsume e v (mapTypes (apply s) t) (apply s a) (apply s b)
   apply s (ConImplies e t a b) = ConImplies e (apply s t) (apply s a) (apply s b)
   apply s (ConImplicit e t m i t') = ConImplicit e t (mapTypes (apply s) m) (apply s i) (apply s t')
   apply s (ConFail a e t) = ConFail a e (apply s t)
+  apply _ x@DeferredError{} = x
 
 instance Pretty (Var p) => Pretty (Constraint p) where
   pretty (ConUnify _ _ a b) = pretty a <+> soperator (char '~') <+> pretty b
@@ -132,7 +135,13 @@ instance Pretty (Var p) => Pretty (Constraint p) where
                             <#> indent 2 (vsep (punctuate comma (toList (fmap pretty b))))
   pretty (ConImplicit _ v _ t _) = pretty v <+> colon <+> pretty t <+> parens (keyword "implicitly")
   pretty ConFail{} = string "fail"
+  pretty DeferredError{} = string "deferred type error"
 
+instance Show TypeError where
+  show _ = "use pretty for displaying type errors"
+
+instance Eq TypeError where
+  _ == _ = False
 
 lookupTy :: (MonadError TypeError m, MonadReader Env m, MonadNamey m) => Var Resolved -> m (Type Typed)
 lookupTy x = do

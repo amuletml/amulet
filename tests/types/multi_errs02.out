@@ -1,0 +1,14 @@
+multi_errs02.ml[2:19 ..2:22]: error
+  Could not match expected type int with bool
+
+  Arising in the expression
+  │ 
+2 │   let foo x = 2 + true
+  │ 
+multi_errs02.ml[1:5 ..1:6]: error
+  Could not match expected type unit with int
+
+  Arising in the binding
+  │ 
+1 │ let () =
+  │ 

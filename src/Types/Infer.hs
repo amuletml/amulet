@@ -16,6 +16,7 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Text as T
 import qualified Data.Set as Set
+import Data.Reason
 import Data.Traversable
 import Data.Spanned
 import Data.Triple
@@ -64,7 +65,12 @@ check (Hole v a) t = do
   pure (Hole (TvName v) (a, t))
 
 check (Let ns b an) t = do
-  (ns, ts, is, vars) <- inferLetTy localGenStrat ns
+  (ns, ts, is, vars) <-
+    inferLetTy localGenStrat ns
+      `catchError` \e -> do
+        tell (Seq.singleton (DeferredError e))
+        fakeLetTys ns
+
   let bvs = Set.fromList (map TvName (namesInScope (focus ts mempty)))
 
   local (typeVars %~ Set.union vars) $
@@ -174,7 +180,12 @@ infer (Literal l an) = pure (Literal l (an, ty), ty) where
 
 infer (Let ns b an) = do
   (ns, ts, is, vars) <- inferLetTy localGenStrat ns
+    `catchError` \e -> do
+       tell (Seq.singleton (DeferredError e))
+       fakeLetTys ns
+
   let bvs = Set.fromList (map TvName (namesInScope (focus ts mempty)))
+
   local (typeVars %~ Set.union vars) $
     local (letBound %~ Set.union bvs) $
       local (names %~ focus ts) $
@@ -460,6 +471,26 @@ inferLetTy closeOver vs =
         (bs, t,, vars) <$> foldMapM one bs
    in mkImplicits =<< tc sccs
 
+fakeLetTys :: MonadInfer Typed m => [Binding Resolved] -> m ([Binding Typed], Telescope Typed, ImplicitScope Typed, Set.Set (Var Typed))
+fakeLetTys bs = do
+  let go (b:bs) =
+        case b of
+          Binding _ e _ _ -> do
+            (var, ty) <- snd <$> approximate b 
+            ty <- localGenStrat mempty e ty
+            (<>) (one var ty) <$> go bs
+          Matching p _ _ -> do
+            let bound' :: Pattern p -> [Var p]
+                bound' = bound
+            tel <- flip (flip foldM mempty) (bound' p) $ \rest var -> do
+              ty <- freshTV
+              pure (one var ty <> rest)
+            (<>) tel <$> go bs
+          _ -> error "impossible"
+      go [] = pure mempty
+  tele <- go bs
+  pure (mempty, tele, mempty, mempty)
+
 skolCheck :: MonadInfer Typed m => Var Typed -> SomeReason -> Type Typed -> m (Type Typed)
 skolCheck var exp ty = do
   let blameSkol :: TypeError -> (Var Resolved, SomeReason) -> TypeError
@@ -546,17 +577,19 @@ rename = go 0 mempty mempty where
     go (c:cs) l = (ord c - 96) * (26 ^ l) + go cs (l - 1)
     go [] _ = 0
 
-localGenStrat :: MonadInfer Typed m
-              => Set.Set (Var Typed) -> Expr Typed -> Type Typed -> m (Type Typed)
+localGenStrat :: forall p m. (Pretty (Var p), Respannable p, Ord (Var p), Degrade p, MonadInfer Typed m)
+              => Set.Set (Var Typed) -> Expr p -> Type Typed -> m (Type Typed)
 localGenStrat bg ex ty = do
   bound <- view letBound
   cons <- view constructors
   types <- view names
   let generalisable v =
-        (Set.member v bound || Set.member v cons)
+        (Set.member v bound || Set.member v cons || Set.member v builtinNames)
        && maybe True Set.null (types ^. at (unTvName v) . to (fmap ftv))
+      freeIn' :: Expr p -> Set.Set (Var Typed)
+      freeIn' = Set.mapMonotonic (upgrade . degrade) . freeIn
 
-  if Set.foldr ((&&) . generalisable) True (freeIn ex Set.\\ bg) && value ex
+  if Set.foldr ((&&) . generalisable) True (freeIn' ex Set.\\ bg) && value ex
      then generalise ftv (becauseExp ex) ty
      else annotateKind (becauseExp ex) ty
 

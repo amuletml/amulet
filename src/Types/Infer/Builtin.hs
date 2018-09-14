@@ -5,6 +5,7 @@ module Types.Infer.Builtin where
 
 import qualified Data.Sequence as Seq
 import qualified Data.Text as T
+import qualified Data.Set as Set
 import Data.Spanned
 import Data.Reason
 import Data.Maybe
@@ -27,6 +28,9 @@ tyBool = TyCon (TvName (TgInternal "bool"))
 tyUnit = TyCon (TvName (TgInternal "unit"))
 tyFloat = TyCon (TvName (TgInternal "float"))
 tyLazy = TyCon (TvName (TgName "lazy" (-34)))
+
+builtinNames :: Set.Set (Var Typed)
+builtinNames = Set.fromList . map TvName $ namesInScope (builtinsEnv ^. names)
 
 builtinsEnv :: Env
 builtinsEnv = envOf (scopeFromList builtin) where
@@ -156,6 +160,7 @@ rereason because = fmap go where
   go (ConImplicit _ v s t u) = ConImplicit because v s t u
   go (ConImplies _ u b a) = ConImplies because u b a
   go x@ConFail{} = x
+  go x@DeferredError{} = x
 
 litTy :: Lit -> Type Typed
 litTy LiInt{} = tyInt

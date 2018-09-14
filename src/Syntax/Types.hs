@@ -10,6 +10,7 @@ module Syntax.Types
   , Origin(..)
 
   , focus
+  , Degrade(..)
   ) where
 
 import qualified Data.Map.Strict as Map
