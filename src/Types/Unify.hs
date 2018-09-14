@@ -160,6 +160,10 @@ doSolve (ConImplicit because var scope t inner :<| xs) = do
       Left e -> tell [reblame because e]
       Right w -> solveCoSubst . at var ?= w
 
+doSolve (DeferredError e :<| cs) = do
+  tell [e]
+  doSolve cs
+
 doSolve (ConFail a v t :<| cs) = do
   doSolve cs
   sub <- use solveTySubst

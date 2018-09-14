@@ -13,7 +13,7 @@ import Syntax
 
 import GHC.Exts (IsList(..))
 
-depOrder :: (Show (Var p), Show (Ann p), Ord (Var p))
+depOrder :: Ord (Var p)
          => [Binding p]
          -> [SCC (Binding p)]
 depOrder binds = extra ++ stronglyConnComp nodes where
@@ -36,7 +36,7 @@ depOrder binds = extra ++ stronglyConnComp nodes where
 
   freeInMapped = Set.toList . Set.foldr (maybe id Set.insert . flip Map.lookup mapping) mempty . freeIn
 
-freeIn :: (Show (Var p), Show (Ann p), Ord (Var p)) => Expr p -> Set.Set (Var p)
+freeIn :: Ord (Var p) => Expr p -> Set.Set (Var p)
 freeIn (Ascription e _ _)   = freeIn e
 freeIn (RecordExt e rs _)   = freeIn e <> foldMap (freeIn . view fExpr) rs
 freeIn (BinOp a b c _)      = freeIn a <> freeIn b <> freeIn c
@@ -61,7 +61,10 @@ freeIn (LeftSection a b _)  = freeIn a <> freeIn b
 freeIn (RightSection a b _) = freeIn a <> freeIn b
 freeIn (BothSection b _)    = freeIn b
 freeIn AccessSection{}      = mempty
-freeIn x = error (show x)
+freeIn Function{} = error "ds Function freeIn"
+freeIn TupleSection{} = error "ds TupleSection freeIn"
+freeIn OpenIn{} = error "ds OpenIn freeIn"
+freeIn Syntax.Lazy{} = error "ds Lazy freeIn"
 
 bound :: (IsList m, Item m ~ Var p, Monoid m)
       => Pattern p -> m
