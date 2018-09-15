@@ -156,12 +156,13 @@ verifyExpr (Fun p x _) = do
       bindingSites' (ImplParam p) = bindingSites p
   modify (Set.union (bindingSites' p))
   verifyExpr x
-verifyExpr (Begin es _) =
-  for_ es $ \ex -> do
+verifyExpr (Begin es _) = do
+  for_ (init es) $ \ex -> do
     let ty = getType ex
     verifyExpr ex
     when (ty /= tyUnit) $
       tell (Seq.singleton (NonUnitBegin ex ty))
+  verifyExpr (last es)
 verifyExpr Literal{} = pure ()
 verifyExpr (Match e bs _) = do
   verifyExpr e

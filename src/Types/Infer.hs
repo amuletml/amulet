@@ -312,7 +312,7 @@ inferProg (decl@(TypeDecl n tvs cs):prg) = do
   (kind, retTy, tvs) <- resolveTyDeclKind (BecauseOf decl) n tvs cs
                           `catchError` (throwError . propagateBlame (BecauseOf decl))
 
-  local (names %~ focus (one n (rename kind))) $ do
+  local (names %~ focus (one n (fst (rename kind)))) $ do
      (ts, cs') <- unzip <$> for cs (\con ->
        inferCon retTy con `catchError` (throwError . propagateBlame (BecauseOf con)))
 
@@ -362,7 +362,8 @@ inferLetTy closeOver vs =
             pure (x, co, ty')
           Left e -> throwError (propagateBlame (snd blame) e)
         ty <- skolCheck (TvName (fst blame)) (snd blame) vt
-        pure (ty, solveEx ty x co)
+        let (tp, sub) = rename ty
+        pure (tp, solveEx tp (x <> sub) co)
 
 
       tcOne :: SCC (Binding Resolved)
@@ -383,8 +384,9 @@ inferLetTy closeOver vs =
               (exp', ty) <- infer exp
               _ <- unify (becauseExp exp) ty (snd tv)
               pure (exp', ty)
+
         (tp, k) <- figureOut (var, becauseExp exp) exp' ty cs
-        pure ( [Binding (TvName var) (k exp') p (ann, tp)], one var (rename tp), mempty )
+        pure ( [Binding (TvName var) (k exp') p (ann, tp)], one var tp, mempty )
 
       tcOne (AcyclicSCC TypedMatching{}) = error "TypedMatching being TC'd"
       tcOne (AcyclicSCC b@(Matching p e ann)) = do
@@ -442,8 +444,9 @@ inferLetTy closeOver vs =
                in do
                   ty <- closeOver mempty exp (figure given)
                   ty <- skolCheck var (becauseExp exp) ty
-                  pure ( Binding var (solveEx ty solution cs exp) p (fst ann, ty)
-                       , one var (rename ty) 
+                  (ty, sub) <- pure (rename ty)
+                  pure ( Binding var (solveEx ty (solution <> sub) cs exp) p (fst ann, ty)
+                       , one var ty
                        , mempty )
 
             solveOne _ = error "solveOne non-Binding forbidden"
@@ -554,14 +557,18 @@ viewOp v = v
 foldMapM :: (Foldable t, Monoid m, Monad f) => (a -> f m) -> t a -> f m
 foldMapM k = foldM ((.k) . fmap . mappend) mempty
 
-rename :: Type Typed -> Type Typed
+rename :: Type Typed -> (Type Typed, Subst Typed)
 rename = go 0 mempty mempty where
-  go :: Int -> Set.Set T.Text -> Subst Typed -> Type Typed -> Type Typed
+  go :: Int -> Set.Set T.Text -> Subst Typed -> Type Typed -> (Type Typed, Subst Typed)
   go n l s (TyPi (Invisible v k) t) =
     let (v', n', l') = new n l v
-     in TyPi (Invisible v' (fmap (apply s) k)) (go n' l' (Map.insert v (TyVar v') s) t)
-  go n l s (TyPi (Anon k) t) = TyPi (Anon (go n l s k)) (go n l s t)
-  go _ _ s tau = apply s tau
+        s' = Map.insert v (TyVar v') s
+        (ty, s'') = go n' l' s' t
+     in (TyPi (Invisible v' (fmap (apply s) k)) ty, s'')
+  go n l s (TyPi (Anon k) t) =
+    let (ty, sub) = go n l s t 
+     in (TyPi (Anon (fst (go n l s k))) ty, sub)
+  go _ _ s tau = (apply s tau, s)
 
   new v l var@(TvName (TgName vr n))
     | toIdx vr == n || vr `Set.member` l =
