@@ -69,20 +69,21 @@ toAnsi (NoteKind ErrorMessage) = BrightColour Red
 -- | A pretty printer for 'formatNote' and 'format', which displays the
 -- source code associated with each span argument.
 fileSpans :: FileMap -> [Span] -> NoteDoc b
-fileSpans files locs@(loc:_) =
-  let
-    locs' = overlapping (sortBy compareFiles locs)
+fileSpans files locs =
+  case overlapping . sortBy compareFiles . filter (/=internal) $ locs of
+    [] -> mempty
+    locs'@(loc:_) ->
+      let
+        startLine = spLine . spanStart . head $ locs'
+        endLine = spLine . spanEnd . last $ locs'
+        lines = T.lines (maybe T.empty snd (find ((==fileName loc) . fst) files))
 
-    startLine = spLine . spanStart . head $ locs'
-    endLine = spLine . spanEnd . last $ locs'
-    lines = T.lines (maybe T.empty snd (find ((==fileName loc) . fst) files))
+        lineWidth = 1 + floor (logBase 10 (fromIntegral endLine :: Double)) :: Int
+        putLine before body = annotate (Left LinePrefix) (text (T.justifyRight lineWidth ' ' before)
+                                                           <> space <> pipe <> space)
+                              <> body
 
-    lineWidth = 1 + floor (logBase 10 (fromIntegral endLine :: Double)) :: Int
-    putLine before body = annotate (Left LinePrefix) (text (T.justifyRight lineWidth ' ' before)
-                                                       <> space <> pipe <> space)
-                          <> body
-
-  in vsep (putLine mempty mempty : buildLines putLine startLine lines locs' ++ [ putLine mempty mempty ])
+      in vsep (putLine mempty mempty : buildLines putLine startLine lines locs' ++ [ putLine mempty mempty ])
   where
     pipe = char '│'
 
@@ -92,7 +93,6 @@ fileSpans files locs@(loc:_) =
           b' = spanStart b
       in (spLine a', spCol a') `compare` (spLine b', spCol b')
       | otherwise = error "cannot compare spans from different files"
-fileSpans _ [] = error "must have at least one span"
 
 buildLines :: (T.Text -> NoteDoc a -> NoteDoc a) -> Int -> [T.Text] -> [Span] -> [NoteDoc a]
 buildLines b s = go s . drop (s - 1) where

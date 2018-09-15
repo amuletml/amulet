@@ -51,7 +51,7 @@ instance IsTest GoldenTest where
     actual <- generator input <$> T.readFile (directory ++ input)
     expected <- (Just <$> T.readFile fullOutput) `catch` catchIO
 
-    case expected of
+    case actual `seq` expected of
       Nothing -> do
         T.writeFile fullOutput actual
         pure (testFailed "File does not exist, generated")

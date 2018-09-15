@@ -22,6 +22,7 @@
 module Syntax.Resolve
   ( resolveProgram
   , ResolveError(..)
+  , VarKind(..)
   ) where
 
 import Control.Monad.Except
@@ -55,14 +56,25 @@ import Syntax.Subst
 import Text.Pretty.Semantic hiding (group)
 import Text.Pretty.Note
 
+import Parser.Unicode
+
+data VarKind
+  = VarVar
+  | VarCtor
+  | VarType
+  | VarTyvar
+  | VarModule
+  deriving (Show, Eq)
+
 -- | An error in the resolution process. Note that one error may be
 -- thrown multiple times.
 data ResolveError
-  = NotInScope (Var Parsed) -- ^ This variable was not in scope
-  | NoSuchModule (Var Parsed) -- ^ This module could not be found
+  = NotInScope VarKind (Var Parsed)   [Var Parsed] -- ^ This object was not in scope
+
   | Ambiguous (Var Parsed) [Var Resolved] -- ^ This reference could refer to more than one variable
   | NonLinearPattern (Var Resolved) [Pattern Resolved] -- ^ This pattern declares one variable multiple times
   | NonLinearRecord (Expr Parsed) T.Text -- ^ This record declares an entry multiple times
+
   | EmptyMatch -- ^ This @match@ has no patterns
   | EmptyBegin -- ^ This @begin@ block has no expressions
   | IllegalImplicit (Pattern Parsed) -- ^ When performing a pattern-matching let within an implicit bind.
@@ -72,15 +84,24 @@ data ResolveError
   | ArisingFrom ResolveError SomeReason
   deriving (Show)
 
+instance Pretty VarKind where
+  pretty VarVar = "Variable"
+  pretty VarCtor = "Constructor"
+  pretty VarType = "Type"
+  pretty VarTyvar = "Type variable"
+  pretty VarModule = "Module"
+
 instance Pretty ResolveError where
-  pretty (NotInScope e) = "Variable not in scope:" <+> verbatim e
-  pretty (NoSuchModule e) = "Module not in scope:" <+> verbatim e
+  pretty (NotInScope k e _) = pretty k <+> "not in scope:" <+> verbatim e
+
   pretty (Ambiguous v _) = "Ambiguous reference to variable:" <+> verbatim v
   pretty (NonLinearPattern v _) = "Non-linear pattern (multiple definitions of" <+> verbatim v <+> ")"
+  pretty (NonLinearRecord _ t) = "Duplicate field" <+> stypeSkol (text t) <+> "in record" <#> empty
+
   pretty EmptyMatch = "Empty match expression"
   pretty EmptyBegin = "Empty begin expression"
-  pretty (NonLinearRecord _ t) = "Duplicate field" <+> stypeSkol (text t) <+> "in record" <#> empty
   pretty (IllegalImplicit p) = "Invalid pattern" <+> verbatim p <+> "for implicit binding (should be a simple capture)"
+
   pretty (ArisingFrom er ex) = pretty er <#> empty <#> nest 4 (string "Arising from use of" <+> blameOf ex </> pretty ex)
 
 instance Spanned ResolveError where
@@ -209,21 +230,21 @@ resolveModule (Module name body:rs) = do
   where modZip name name' v v' = zip (map (name<>) v) (map (name'<>) v')
 
 lookupVar :: MonadResolve m
-          => (Var Parsed -> ResolveError) -> Var Parsed -> Map.Map (Var Parsed) ScopeVariable
+          => Var Parsed -> VarKind -> Map.Map (Var Parsed) ScopeVariable
           -> m (Var Resolved)
-lookupVar err v m = case Map.lookup v m of
-    Nothing -> throwError (err v)
+lookupVar v k m = case Map.lookup v m of
+    Nothing -> throwError (NotInScope k v [])
     Just (SVar x) -> pure x
     Just (SAmbiguous vs) -> throwError (Ambiguous v vs)
 
 lookupEx :: MonadResolve m => Var Parsed -> m (Var Resolved)
-lookupEx v = asks varScope >>= lookupVar NotInScope v
+lookupEx v = asks varScope >>= lookupVar v (if isCtorVar v then VarCtor else VarVar)
 
 lookupTy :: MonadResolve m => Var Parsed -> m (Var Resolved)
-lookupTy v = asks tyScope >>= lookupVar NotInScope v
+lookupTy v = asks tyScope >>= lookupVar v (if isCtorVar v then VarCtor else VarType)
 
 lookupTyvar :: MonadResolve m => Var Parsed -> m (Var Resolved)
-lookupTyvar v = asks tyvarScope >>= lookupVar NotInScope v
+lookupTyvar v = asks tyvarScope >>= lookupVar v VarTyvar
 
 resolveTele :: (MonadResolve m, Reasonable f p) => f p -> [TyConArg Parsed] -> m ([TyConArg Resolved], [(Var Parsed, Var Resolved)])
 resolveTele r (TyVarArg v:as) = do
@@ -496,7 +517,7 @@ resolveOpen name as m = do
   stack <- asks modStack
   (ModuleScope modules) <- get
   case lookupModule name modules stack of
-    Nothing -> throwError $ NoSuchModule name
+    Nothing -> throwError $ NotInScope VarModule name []
     Just (name', Scope vars tys _ _) ->
       let prefix = case as of
                      Nothing -> id
@@ -526,3 +547,7 @@ catchJunk m r = m `catchError` \err -> tell (pure (wrapError r err)) $> junkVar
 
 reField :: MonadResolve m => Field Parsed -> m (Field Resolved)
 reField (Field n e s) = Field n <$> reExpr e <*> pure s
+
+isCtorVar :: Var Parsed -> Bool
+isCtorVar (Name t) = T.length t > 0 && classify (T.head t) == Upper
+isCtorVar (InModule _ v) = isCtorVar v

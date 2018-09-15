@@ -12,7 +12,7 @@
   which requires this special handling.
 -}
 module Parser.Unicode
-  ( UnicodeClass
+  ( UnicodeClass(..)
   , classify
   , asFakeWord
   ) where
