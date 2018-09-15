@@ -25,12 +25,3 @@ begin01.ml[4:3 ..4:7]: warning
   │ 
 4 │   4 + 5
   │ 
-begin01.ml[8:3 ..8:7]: warning
-  This statement discards a value of type
-    string
-
-  Note: use a let to silence this warning, as in
-    let _ = "foo"
-  │ 
-8 │   "foo"
-  │ 
