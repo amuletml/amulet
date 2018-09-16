@@ -218,6 +218,7 @@ library amulet
                      -- Infra
                      , Control.Monad.Infer
                      , Control.Monad.Namey
+                     , Control.Monad.Chronicles
   if os(linux)
     ghc-options: -optl-fuse-ld=gold
     extra-libraries: m, pthread
