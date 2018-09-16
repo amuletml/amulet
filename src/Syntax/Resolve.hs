@@ -25,8 +25,7 @@ module Syntax.Resolve
   , VarKind(..)
   ) where
 
-import Control.Monad.Except
-import Control.Monad.Writer
+import Control.Monad.Chronicle
 import Control.Monad.Reader
 import Control.Applicative hiding (empty)
 import Control.Monad.State
@@ -34,7 +33,6 @@ import Control.Monad.Namey
 import Control.Lens hiding (Lazy)
 
 import qualified Data.Map.Strict as Map
-import qualified Data.Sequence as Seq
 import qualified Data.Text as T
 import Data.Traversable
 import Data.Sequence (Seq)
@@ -45,6 +43,7 @@ import Data.Spanned
 import Data.Reason
 import Data.Triple
 import Data.Maybe
+import Data.These
 import Data.Span
 import Data.List
 
@@ -131,8 +130,7 @@ instance Note ResolveError Style where
     body (NonLinearRecord e _) = Just (f [annotation e])
     body _ = Nothing
 
-type MonadResolve m = ( MonadError ResolveError m
-                      , MonadWriter (Seq ResolveError) m
+type MonadResolve m = ( MonadChronicle (Seq ResolveError) m
                       , MonadReader Scope m
                       , MonadNamey m
                       , MonadState ModuleScope m)
@@ -152,13 +150,11 @@ resolveProgram scope modules = runResolve scope modules . resolveModule
 runResolve :: MonadNamey m
            => Scope -- ^ The initial state to resolve objects in
            -> ModuleScope -- ^ The scope for modules
-           -> StateT ModuleScope (ReaderT Scope (ExceptT ResolveError (WriterT (Seq ResolveError) m))) a
+           -> StateT ModuleScope (ReaderT Scope (ChronicleT (Seq ResolveError) m)) a
            -> m (Either [ResolveError] (a, ModuleScope))
-runResolve scope modules = fmap handle . runWriterT . runExceptT . flip runReaderT scope . flip runStateT modules
-  where handle (Left e, er) = Left (e:toList er)
-        handle (Right e, er) = case toList er of
-                                [] -> Right e
-                                er -> Left er
+runResolve scope modules
+  = (these (Left . toList) Right (\x _ -> Left (toList x))<$>)
+  . runChronicleT . flip runReaderT scope . flip runStateT modules
 
 -- | Resolve the whole program
 resolveModule :: MonadResolve m => [Toplevel Parsed] -> m [Toplevel Resolved]
@@ -204,8 +200,8 @@ resolveModule (d@(TypeDecl t vs cs):rs) = do
 
 resolveModule (r@(Open name as):rs) =
   -- Opens hard-fail, as anything inside it will probably fail to resolve
-  resolveOpen name as (\name' -> (Open name' as:) <$> resolveModule rs)
-  `catchError` (throwError . wrapError r)
+  retcon (wrapError r<$>) $
+    resolveOpen name as (\name' -> (Open name' as:) <$> resolveModule rs)
 
 resolveModule (Module name body:rs) = do
   fullName <- foldl (flip InModule) name <$> asks modStack
@@ -233,9 +229,9 @@ lookupVar :: MonadResolve m
           => Var Parsed -> VarKind -> Map.Map (Var Parsed) ScopeVariable
           -> m (Var Resolved)
 lookupVar v k m = case Map.lookup v m of
-    Nothing -> throwError (NotInScope k v [])
+    Nothing -> confess . pure $ NotInScope k v []
     Just (SVar x) -> pure x
-    Just (SAmbiguous vs) -> throwError (Ambiguous v vs)
+    Just (SAmbiguous vs) -> confess . pure $ Ambiguous v vs
 
 lookupEx :: MonadResolve m => Var Parsed -> m (Var Resolved)
 lookupEx v = asks varScope >>= lookupVar v (if isCtorVar v then VarCtor else VarVar)
@@ -279,7 +275,7 @@ reExpr (Fun p e a) = do
   (p', vs, ts) <- reWholePattern' p
   extendTyvarN ts . extendN vs $ Fun p' <$> reExpr e <*> pure a
 
-reExpr r@(Begin [] a) = tell (pure (wrapError r EmptyBegin)) $> junkExpr a
+reExpr r@(Begin [] a) = dictate (pure (wrapError r EmptyBegin)) $> junkExpr a
 reExpr (Begin es a) = Begin <$> traverse reExpr es <*> pure a
 
 reExpr (Literal l a) = pure (Literal l a)
@@ -296,7 +292,7 @@ reExpr (Match e ps a) = do
               ps
   pure (Match e' ps' a)
 
-reExpr r@(Function [] a) = tell (pure (ArisingFrom EmptyMatch (BecauseOf r))) $> junkExpr a
+reExpr r@(Function [] a) = dictate (pure (ArisingFrom EmptyMatch (BecauseOf r))) $> junkExpr a
 reExpr (Function ps a) =
   flip Function a <$> for ps (\(p, b) -> do
     (p', vs, ts) <- reWholePattern p
@@ -343,12 +339,12 @@ reExpr r@(Ascription e t a) = Ascription
 reExpr e@(Record fs a) = do
   let ls = map (view fName) fs
       dupes = mapMaybe (listToMaybe . tail) . group . sort $ ls
-  traverse_ (tell . Seq.singleton . NonLinearRecord e) dupes
+  traverse_ (dictate . pure . NonLinearRecord e) dupes
   Record <$> traverse reField fs <*> pure a
 reExpr ex@(RecordExt e fs a) = do
   let ls = map (view fName) fs
       dupes = mapMaybe (listToMaybe . tail) . group . sort $ ls
-  traverse_ (tell . Seq.singleton . NonLinearRecord ex) dupes
+  traverse_ (dictate . pure . NonLinearRecord ex) dupes
   RecordExt <$> reExpr e <*> traverse reField fs <*> pure a
 
 reExpr (Access e t a) = Access <$> reExpr e <*> pure t <*> pure a
@@ -362,8 +358,8 @@ reExpr (Tuple es a) = Tuple <$> traverse reExpr es <*> pure a
 reExpr (TupleSection es a) = TupleSection <$> traverse (traverse reExpr) es <*> pure a
 
 reExpr r@(OpenIn m e a) =
-  resolveOpen m Nothing (\m' -> OpenIn m' <$> reExpr e <*> pure a)
-  `catchError` (throwError . wrapError r)
+  retcon (wrapError r<$>) $
+    resolveOpen m Nothing (\m' -> OpenIn m' <$> reExpr e <*> pure a)
 
 reExpr (Lazy e a) = Lazy <$> reExpr e <*> pure a
 reExpr ExprWrapper{} = error "resolve cast"
@@ -403,7 +399,7 @@ reWholePattern p = do
   pure (p', map lim vs, map lim ts)
 
  where checkLinear :: [(Var Parsed, Var Resolved, Pattern Resolved)] -> m ()
-       checkLinear = traverse_ (\vs@((_,v, _):_) -> tell (pure (wrapError p (NonLinearPattern v (map thd3 vs)))))
+       checkLinear = traverse_ (\vs@((_,v, _):_) -> dictate . pure . wrapError p $ NonLinearPattern v (map thd3 vs))
                    . filter ((>1) . length)
                    . groupBy ((==) `on` fst3)
                    . sortOn fst3
@@ -472,7 +468,7 @@ reBinding (ParsedBinding p e pl a) =
     _ -> do
       case pl of
         BindRegular -> pure ()
-        BindImplicit -> tell . pure $ IllegalImplicit p
+        BindImplicit -> dictate . pure $ IllegalImplicit p
       reBinding (Matching p e a)
 reBinding TypedMatching{} = error "reBinding TypedMatching{}"
 
@@ -517,7 +513,7 @@ resolveOpen name as m = do
   stack <- asks modStack
   (ModuleScope modules) <- get
   case lookupModule name modules stack of
-    Nothing -> throwError $ NotInScope VarModule name []
+    Nothing -> confess . pure $ NotInScope VarModule name []
     Just (name', Scope vars tys _ _) ->
       let prefix = case as of
                      Nothing -> id
@@ -543,7 +539,14 @@ wrapError r e = ArisingFrom e (BecauseOf r)
 
 catchJunk :: (MonadResolve m, Reasonable e p)
           => m (Var Resolved) -> e p -> m (Var Resolved)
-catchJunk m r = m `catchError` \err -> tell (pure (wrapError r err)) $> junkVar
+catchJunk m r = m `catchError` \err -> dictate (wrapError r <$> err) $> junkVar
+
+catchError :: MonadChronicle c m => m a -> (c -> m a) -> m a
+catchError m f = do
+  e <- memento m
+  case e of
+    Right x -> pure x
+    Left e -> f e
 
 reField :: MonadResolve m => Field Parsed -> m (Field Resolved)
 reField (Field n e s) = Field n <$> reExpr e <*> pure s
