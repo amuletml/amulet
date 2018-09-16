@@ -194,8 +194,8 @@ instance (Annotation b, Pretty a) => Pretty (AnnTerm b a) where
   pretty (AnnLam an (TermArgument v t) c)
     = annotated an $ soperator (char 'λ') <+> parens (pretty v <+> colon <+> pretty t) <> nest 2 (dot </> pretty c)
 
-  pretty (AnnLet an (One x) e) = annotated an $ keyword "let" <+> braces (space <> pprLet1 x <> space) <+> keyword "in" <#> pretty e
-  pretty (AnnLet an (Many xs) e) = annotated an $ keyword "let rec" <+> pprLet xs </> (keyword "in" <+> pretty e)
+  pretty (AnnLet an (One x) e) = annotated an $ keyword "let" <+> pprLet1 x <#> keyword "in" <+> pretty e
+  pretty (AnnLet an (Many xs) e) = annotated an $ fill 20 (keyword "let rec") <#> indent 2 (pprLet xs) <#> (keyword "in" <+> pretty e)
   pretty (AnnMatch an e ps) = annotated an $ keyword "match" <+> pretty e <+> pprArms ps
   pretty (AnnExtend an x rs) = annotated an $ braces $ pretty x <+> pipe <+> prettyRows rs where
     prettyRows :: [(Text, Type a, Atom a)] -> Doc
@@ -217,7 +217,7 @@ instance Pretty a => Pretty (Coercion a) where
   pretty (CoercionVar x) = pretty x
 
 pprLet :: (Annotation b, Pretty a) => [(a, Type a, AnnTerm b a)] -> Doc
-pprLet = braces' . vsep . map (indent 2) . punctuate semi . map pprLet1
+pprLet = vsep . punctuate semi . map pprLet1
 
 pprLet1 :: (Annotation b, Pretty a) => (a, Type a, AnnTerm b a) -> Doc
 pprLet1 (a, b, c) = pretty a <+> colon <+> pretty b <+> nest 2 (equals </> pretty c)

@@ -1,14 +1,21 @@
 let x = 1
 and y = 2
 and z = 3
-let basic_record = { x = 1, y = 2, z = (3 : int) }
-let short_record = { x = x, y = y, z = (z : int) }
-let basic_extension = { basic_record with y = 3 }
-let short_extension = { short_record with y = y }
+let basic_record =
+  { x = 1, y = 2, z = (3 : int) }
+let short_record =
+  { x = x, y = y, z = (z : int) }
+let basic_extension =
+  { basic_record with y = 3 }
+let short_extension =
+  { short_record with y = y }
 let basic_pattern = function
-| { x = 1, y = y } -> y
+  | { x = 1, y = y } -> y
 let short_pattern = function
-| { x = x, y = y } -> y
-let record_type = (a : { x : int, y : int, z : int })
-let record_type_extension = (a : { 'a | x : int, y : int })
-let record_type_empty_extension = (a : { 'a |  })
+  | { x = x, y = y } -> y
+let record_type =
+  (a : { x : int, y : int, z : int })
+let record_type_extension =
+  (a : { 'a | x : int, y : int })
+let record_type_empty_extension =
+  (a : { 'a |  })
