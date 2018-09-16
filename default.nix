@@ -1,22 +1,22 @@
 let
-  rev = "cd960b965f2587efbe41061a4dfa10fc72a28781";
+  rev = "7c1b85cf6de1dc431e5736bff8adf01224e6abe5";
   pkgs = builtins.fetchTarball {
     url = "https://github.com/NixOS/nixpkgs/archive/${rev}.tar.gz";
-    sha256 = "0k2pk3y54kh2lz8yaj2438sqclayhsc0b2w262qb6iwyafby8pr0";
+    sha256 = "1i8nvc4r0zx263ch5k3b6nkg78sc9ggx2d4lzri6kmng315pcs05";
   };
   nixpkgs = import pkgs {
     config = {
       packageOverrides = pkgs_: with pkgs_; {
         haskell = haskell // {
           packages = haskell.packages // {
-            ghc842-profiling = haskell.packages.ghc842.override {
+            ghc843-profiling = haskell.packages.ghc843.override {
               overrides = self: super: {
                 mkDerivation = args: super.mkDerivation (args // {
                   enableLibraryProfiling = true;
                 });
               };
             };
-            ghc842 = haskell.packages.ghc842.override {
+            ghc843 = haskell.packages.ghc843.override {
               overrides = self: super: {
                 io-capture = haskell.lib.overrideCabal super.io-capture (old: rec {
                   doCheck = false;
@@ -28,7 +28,7 @@ let
       };
     };
   };
-in { compiler ? "ghc842", ci ? false }:
+in { compiler ? "ghc843", ci ? false }:
 
 let
   inherit (nixpkgs) pkgs haskell;
@@ -47,6 +47,7 @@ let
       , hslua
       , HUnit
       , tasty
+      , these
       , hashable
       , hedgehog
       , directory
@@ -60,7 +61,7 @@ let
       , template-haskell
       , annotated-wl-pprint
       , unordered-containers
-      , tasty-hedgehog_0_2_0_0
+      , tasty-hedgehog
       }:
       let alex' = haskell.lib.dontCheck alex;
           happy' = haskell.lib.dontCheck happy;
@@ -76,7 +77,7 @@ let
         libraryHaskellDepends = [
           annotated-wl-pprint array base bytestring containers lens
           mtl pretty-show syb text transformers template-haskell hashable
-          unordered-containers
+          unordered-containers these
         ];
 
         executableHaskellDepends = [
@@ -86,7 +87,7 @@ let
 
         testHaskellDepends = [
           base bytestring Diff directory hedgehog HUnit lens mtl
-          pretty-show tasty tasty-hedgehog_0_2_0_0 tasty-hunit text
+          pretty-show tasty tasty-hedgehog tasty-hunit text
           tasty-ant-xml
         ];
 
