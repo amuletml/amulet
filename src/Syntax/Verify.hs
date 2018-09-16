@@ -82,7 +82,7 @@ instance Note VerifyError Style where
   diagnosticKind DefinedUnused{} = WarningMessage
   diagnosticKind NonUnitBegin{} = WarningMessage
 
-  formatNote f (ParseErrorInForeign (ForeignVal var s _ (span, _)) err) = 
+  formatNote f (ParseErrorInForeign (ForeignVal var s _ (span, _)) err) =
     let SourcePos name _ _ = spanStart (annotation err)
         spans = [( name, s )]
      in vsep [ indent 2 "Syntax error in definition of" <+> (Right <$> skeyword (pretty var))
@@ -109,7 +109,7 @@ verifyProgram :: forall m. MonadVerify m => [Toplevel Typed] -> m ()
 verifyProgram = traverse_ verifyStmt where
   verifyStmt :: Toplevel Typed -> m ()
   verifyStmt st@(LetStmt vs) = verifyBindingGroup (flip const) (BecauseOf st) vs
-  verifyStmt st@(ForeignVal v d _ (_, _)) = 
+  verifyStmt st@(ForeignVal v d _ (_, _)) =
     case runParser (SourcePos ("definition of " ++ displayS (pretty v)) 1 1) (d ^. lazy) parseExpr of
       Left e -> tell (Seq.singleton (ParseErrorInForeign st e))
       Right _ -> pure ()
@@ -126,7 +126,7 @@ verifyBindingGroup k _ = traverse_ verifyScc . depOrder where
     modify (k (BindingSite v s t))
     verifyExpr e
   verifyScc (AcyclicSCC (TypedMatching p e _ _)) = do
-    traverse_ (modify . k) $ bindingSites p 
+    traverse_ (modify . k) $ bindingSites p
     verifyExpr e
 
   verifyScc (AcyclicSCC ParsedBinding{}) = error "ParsedBinding in *verify*"

@@ -19,6 +19,7 @@ module Control.Monad.Namey
 
 import qualified Control.Monad.Writer.Strict as StrictW
 import qualified Control.Monad.State.Strict as StrictS
+import qualified Control.Monad.Chronicle as Chronicle
 import qualified Control.Monad.Writer.Lazy as LazyW
 import qualified Control.Monad.State.Lazy as LazyS
 import qualified Control.Monad.Reader as Reader
@@ -112,6 +113,9 @@ instance MonadNamey m => MonadNamey (ExceptT e m) where
   genName = lift genName
 
 instance MonadNamey m => MonadNamey (Reader.ReaderT e m) where
+  genName = lift genName
+
+instance (Semigroup c, MonadNamey m) => MonadNamey (Chronicle.ChronicleT c m) where
   genName = lift genName
 
 -- | Generate an lowercase letter-based representation of a integer
