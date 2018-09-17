@@ -104,8 +104,10 @@ doSolve (ConUnify because v a b :<| xs) = do
   sub <- use solveTySubst
 
   -- traceM (displayS (pretty because <+> pretty (ConUnify because v (apply sub a) (apply sub b))))
-  co <- retcons (reblame because) $ unify (apply sub a) (apply sub b)
-  solveCoSubst . at v .= Just (Cast co)
+  co <- memento $ unify (apply sub a) (apply sub b)
+  case co of
+    Left e -> dictate (reblame because <$> e)
+    Right co -> solveCoSubst . at v .= Just (Cast co)
 
   doSolve xs
 doSolve (ConSubsume because v scope a b :<| xs) = do
@@ -161,8 +163,10 @@ doSolve (ConImplicit because var scope t inner :<| xs) = do
   let scope' = Imp.mapTypes (apply sub) scope
       t' = apply sub t
   when (Set.disjoint (ftv t') abort) $ do
-    w <- retcons (reblame because) $ solveImplicitConstraint 0 inner scope' t'
-    solveCoSubst . at var ?= w
+    w <- memento $ solveImplicitConstraint 0 inner scope' t'
+    case w of
+      Left e -> dictate (reblame because <$> e)
+      Right w -> solveCoSubst . at var ?= w
 
 doSolve (DeferredError e :<| cs) = do
   dictates e
@@ -172,7 +176,7 @@ doSolve (ConFail a v t :<| cs) = do
   doSolve cs
   sub <- use solveTySubst
   let ex = Hole (unTvName v) (fst a)
-  confesses . reblame (BecauseOf ex) $ foundHole v (apply sub t) sub
+  dictates . reblame (BecauseOf ex) $ foundHole v (apply sub t) sub
 
 solveImplicitConstraint :: forall m. MonadSolve m
                         => Int -> Type Typed -> Imp.ImplicitScope Typed -> Type Typed
