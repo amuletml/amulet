@@ -26,8 +26,9 @@ import qualified Data.Sequence as Seq
 
 inferExpr :: Expr Resolved -> Either [TypeError] (Type Typed)
 inferExpr e = flip Namey.evalNamey MonadInfer.firstName $ MonadInfer.runInfer builtinsEnv (infer e) >>= go where
-  go (Left e) = pure . Left $ e
-  go (Right ((_, t), cs)) = do
+  go (This e) = pure . Left $ e
+  go (These e _) = pure . Left $ e
+  go (That ((_, t), cs)) = do
     solved <- MonadInfer.runChronicleT $ solve cs
     pure $ case toEither solved of
       Left e -> Left (toList e)
@@ -35,8 +36,9 @@ inferExpr e = flip Namey.evalNamey MonadInfer.firstName $ MonadInfer.runInfer bu
 
 checkExpr :: Expr Resolved -> Type Typed -> Either [TypeError] ()
 checkExpr e t = flip Namey.evalNamey MonadInfer.firstName $ MonadInfer.runInfer builtinsEnv (check e t) >>= go where
-  go (Left e) = pure . Left $ e
-  go (Right (_, cs)) = do
+  go (This e) = pure . Left $ e
+  go (These e _) = pure . Left $ e
+  go (That (_, cs)) = do
     solved <- MonadInfer.runChronicleT $ solve cs
     pure $ case toEither solved of
       Left e -> Left (toList e)

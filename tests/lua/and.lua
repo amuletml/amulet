@@ -16,7 +16,7 @@ do
   local function __builtin_Lazy(x) return { x, false, __tag = "lazy" } end
   local bottom = nil
   if bottom(1) then
-    bottom(__builtin_force(__builtin_Lazy(function(cy) return bottom(2) end)))
+    bottom(__builtin_force(__builtin_Lazy(function(cq) return bottom(2) end)))
   else
     bottom(false)
   end

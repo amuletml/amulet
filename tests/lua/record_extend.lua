@@ -1,10 +1,10 @@
 do
   local __builtin_unit = { __tag = "__builtin_unit" }
   local bottom = nil
-  local ax = {}
+  local at = {}
   for k, v in pairs(bottom) do
-    ax[k] = v
+    at[k] = v
   end
-  ax.x = 1
-  bottom(ax)
+  at.x = 1
+  bottom(at)
 end

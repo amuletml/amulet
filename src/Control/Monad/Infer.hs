@@ -111,6 +111,8 @@ data TypeError where
   AmbiguousType :: (Ord (Var p), Pretty (Var p)) => Var p -> Type p -> Set.Set (Var p) -> TypeError
   PatternRecursive :: Binding Resolved -> [Binding Resolved] -> TypeError
 
+  DeadBranch :: TypeError -> TypeError
+
   NotPromotable :: Pretty (Var p) => Var p -> Type p -> Doc -> TypeError
 
 data WhyInstantiate = Expression | Subsumption
@@ -164,11 +166,8 @@ lookupTy' x = do
 runInfer :: MonadNamey m
          => Env
          -> ReaderT Env (WriterT (Seq.Seq (Constraint p)) (ChroniclesT TypeError m)) a
-         -> m (Either [TypeError] (a, Seq.Seq (Constraint p)))
-runInfer ct ac = unwrap <$> runChronicleT (runWriterT (runReaderT ac ct)) where
-  unwrap (This x) = Left (toList x)
-  unwrap (That x) = Right x
-  unwrap (These x _) = Left (toList x)
+         -> m (These [TypeError] (a, Seq.Seq (Constraint p)))
+runInfer ct ac = over here toList <$> runChronicleT (runWriterT (runReaderT ac ct)) where
 
 genNameFrom :: MonadNamey m => Text -> m (Var Resolved)
 genNameFrom t = do
@@ -332,6 +331,7 @@ instance Pretty TypeError where
         _ -> text "are quantified but do not appear"
 
   pretty (PatternRecursive _ _) = string "pattern recursive error should be formatNoted"
+  pretty DeadBranch{} = string "dead branch error should be formatNoted"
 
 instance Spanned TypeError where
   annotation (ArisingFrom e@ArisingFrom{} _) = annotation e
@@ -339,6 +339,8 @@ instance Spanned TypeError where
   annotation x = error (show (pretty x))
 
 instance Note TypeError Style where
+  diagnosticKind (ArisingFrom e _) = diagnosticKind e
+  diagnosticKind DeadBranch{} = WarningMessage
   diagnosticKind _ = ErrorMessage
 
   formatNote f (ArisingFrom e@ArisingFrom{} _) = formatNote f e
@@ -405,6 +407,11 @@ instance Note TypeError Style where
                   else empty
          , f (map annotation (take 3 bs))
          ]
+
+  formatNote f (ArisingFrom (DeadBranch e) r) =
+    formatNote f (ArisingFrom e r) <#>
+      vsep [ indent 2 "Note: This branch will never be executed,"
+           , indent 4 "because it has unsatisfiable constraints" ]
 
   formatNote f x = indent 2 (Right <$> pretty x) <#> f [annotation x]
 

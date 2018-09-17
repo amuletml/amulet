@@ -1,6 +1,6 @@
 do
   local __builtin_unit = { __tag = "__builtin_unit" }
   local bottom = nil
-  local bl = bottom(__builtin_unit)
-  bottom(bl.a + bl.b)
+  local bh = bottom(__builtin_unit)
+  bottom(bh.a + bh.b)
 end

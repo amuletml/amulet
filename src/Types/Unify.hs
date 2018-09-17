@@ -141,7 +141,7 @@ doSolve (ConImplies because not cs ts :<| xs) = do
       ts' = apply before ts
   do
     let go = local (bindSkol .~ True) . local (don'tTouch .~ mempty) $ doSolve cs'
-    ((), sub) <- capture go
+    ((), sub) <- retcon (fmap DeadBranch) $ capture go
 
     solveAssumptions .= (sub ^. solveAssumptions <> sub ^. solveTySubst)
 

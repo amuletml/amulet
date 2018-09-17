@@ -1,5 +1,5 @@
 foo : {'a : type}. 'a -> type
-Foo : {'v : type}. {'a : 'v}. int -> foo 'a
+Foo : {'s : type}. {'a : 's}. int -> foo 'a
 foo_int : foo int
 foo_string : foo string
 foo : {'a : type}. {'b : 'a}. foo 'b => foo 'b

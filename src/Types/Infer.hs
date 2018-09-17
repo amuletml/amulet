@@ -20,6 +20,7 @@ import Data.Reason
 import Data.Traversable
 import Data.Spanned
 import Data.Triple
+import Data.These
 import Data.Graph
 import Data.Char
 
@@ -51,7 +52,7 @@ import Debug.Trace
 
 -- | Solve for the types of bindings in a problem: Either @TypeDecl@s,
 -- @LetStmt@s, or @ForeignVal@s.
-inferProgram :: MonadNamey m => Env -> [Toplevel Resolved] -> m (Either [TypeError] ([Toplevel Typed], Env))
+inferProgram :: MonadNamey m => Env -> [Toplevel Resolved] -> m (These [TypeError] ([Toplevel Typed], Env))
 inferProgram env ct = fmap fst <$> runInfer env (inferProg ct)
 
 -- | Check an 'Expr'ession against a known 'Type', annotating it with
@@ -408,7 +409,7 @@ inferLetTy closeOver vs =
       tcOne (AcyclicSCC ParsedBinding{}) = error "ParsedBinding in TC (inferLetTy)"
 
       tcOne (CyclicSCC vars) = do
-        condemn $ guardOnlyBindings vars
+        () <- guardOnlyBindings vars
         (origins, tvs) <- unzip <$> traverse approximate vars
 
         (vs, cs) <- listen . local (names %~ focus (teleFromList tvs)) $
@@ -641,7 +642,8 @@ deSkol = go mempty where
   go acc (TyWithConstraints cs x) = TyWithConstraints (map (\(a, b) -> (go acc a, go acc b)) cs) (go acc x)
   go _ TyType = TyType
 
-guardOnlyBindings :: MonadChronicles TypeError m => [Binding Resolved] -> m ()
+guardOnlyBindings :: MonadChronicles TypeError m
+                  => [Binding Resolved] -> m ()
 guardOnlyBindings bs = go bs where
   go (Binding{}:xs) = go xs
   go (m@Matching{}:_) = do
