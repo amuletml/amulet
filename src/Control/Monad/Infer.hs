@@ -167,7 +167,8 @@ runInfer :: MonadNamey m
          => Env
          -> ReaderT Env (WriterT (Seq.Seq (Constraint p)) (ChroniclesT TypeError m)) a
          -> m (These [TypeError] (a, Seq.Seq (Constraint p)))
-runInfer ct ac = over here toList <$> runChronicleT (runWriterT (runReaderT ac ct)) where
+runInfer ct ac = over here toList <$>
+  runChronicleT (runWriterT (runReaderT ac ct))
 
 genNameFrom :: MonadNamey m => Text -> m (Var Resolved)
 genNameFrom t = do

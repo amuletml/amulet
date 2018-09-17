@@ -42,7 +42,6 @@ import Data.List
 import Data.Text (Text)
 
 import Text.Pretty.Semantic
-import Debug.Trace
 
 data SolveScope
   = SolveScope { _bindSkol :: Bool

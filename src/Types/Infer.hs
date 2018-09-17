@@ -48,7 +48,6 @@ import Types.Unify
 
 import Text.Pretty.Semantic
 import Control.Exception (assert)
-import Debug.Trace
 
 -- | Solve for the types of bindings in a problem: Either @TypeDecl@s,
 -- @LetStmt@s, or @ForeignVal@s.
@@ -646,7 +645,7 @@ guardOnlyBindings :: MonadChronicles TypeError m
                   => [Binding Resolved] -> m ()
 guardOnlyBindings bs = go bs where
   go (Binding{}:xs) = go xs
-  go (m@Matching{}:_) = do
+  go (m@Matching{}:_) =
     confesses (PatternRecursive m bs)
 
   go (ParsedBinding{}:_) = error "ParsedBinding in guardOnlyBindings"

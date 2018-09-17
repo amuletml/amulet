@@ -50,7 +50,7 @@ approximate (Binding v e _ _) = do
   (ty, st) <- runStateT (approxType e) Supplied
   ty' <- generalise nominalTvs (becauseExp e) ty
   pure (st, (TvName v, if not (wasGuessed st) then ty' else ty))
-approximate x@(Matching{}) = error (show x)
+approximate Matching{} = error "Matching before TC"
 approximate ParsedBinding{} = error "ParsedBinding before TC"
 approximate TypedMatching{} = error "TypedBinding before TC"
 

@@ -126,7 +126,7 @@ compileFromTo opt fs emit =
     CSuccess es tes _ _ _ lua _ -> do
       traverse_ (`reportS` fs) es
       traverse_ (`reportS` fs) tes
-      if (any isError es || any isError tes)
+      if any isError es || any isError tes
          then pure ()
          else emit lua
     CParse es -> traverse_ (`reportS` fs) es
