@@ -78,7 +78,7 @@ instance Pretty VerifyError where
 
 instance Note VerifyError Style where
   diagnosticKind NonRecursiveRhs{} = ErrorMessage
-  diagnosticKind ParseErrorInForeign{} = ErrorMessage
+  diagnosticKind ParseErrorInForeign{} = WarningMessage
   diagnosticKind DefinedUnused{} = WarningMessage
   diagnosticKind NonUnitBegin{} = WarningMessage
 

@@ -96,6 +96,7 @@ compile opt (file:files) = runIdentity . flip evalNameyT firstName $ do
                                            }
                                    , modScope'
                                    , env')
+                These errors (_, _) | any isError errors -> pure (Left (CInfer errors))
                 These errors (prog, env') ->
                   let x = runVerify (verifyProgram prog)
                       (var, tys) = extractToplevels parsed
