@@ -47,6 +47,7 @@ import Types.Unify
 
 import Text.Pretty.Semantic
 import Control.Exception (assert)
+import Debug.Trace
 
 -- | Solve for the types of bindings in a problem: Either @TypeDecl@s,
 -- @LetStmt@s, or @ForeignVal@s.
@@ -290,8 +291,9 @@ inferProg (stmt@(LetStmt ns):prg) = do
     ty <- memento $ skolCheck (TvName var) (BecauseOf stmt) ty
     case ty of
       Left e -> pure (mempty, [e])
-      Right t -> pure (one var t, mempty)
-  assert (vs == mempty) pure ()
+      Right t -> do
+        assert (vs == mempty) pure ()
+        pure (one var t, mempty)
   case es of
     [] -> pure ()
     xs -> confess (mconcat xs)
@@ -406,7 +408,7 @@ inferLetTy closeOver vs =
       tcOne (AcyclicSCC ParsedBinding{}) = error "ParsedBinding in TC (inferLetTy)"
 
       tcOne (CyclicSCC vars) = do
-        guardOnlyBindings vars
+        condemn $ guardOnlyBindings vars
         (origins, tvs) <- unzip <$> traverse approximate vars
 
         (vs, cs) <- listen . local (names %~ focus (teleFromList tvs)) $
@@ -642,7 +644,7 @@ deSkol = go mempty where
 guardOnlyBindings :: MonadChronicles TypeError m => [Binding Resolved] -> m ()
 guardOnlyBindings bs = go bs where
   go (Binding{}:xs) = go xs
-  go (m@Matching{}:_) =
+  go (m@Matching{}:_) = do
     confesses (PatternRecursive m bs)
 
   go (ParsedBinding{}:_) = error "ParsedBinding in guardOnlyBindings"

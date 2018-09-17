@@ -51,4 +51,4 @@ absolving l r = memento l >>= either (const r) pure
 --
 -- Note this does not catch non-fatal errors. Use 'retcon' for that.
 catchChronicle :: MonadChronicle c m => m a -> (c -> m a) -> m a
-catchChronicle m f = memento m >>= either f pure
+catchChronicle m f = memento (condemn m) >>= either f pure

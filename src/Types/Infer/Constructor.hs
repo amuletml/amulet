@@ -33,14 +33,14 @@ inferCon ret' con@(UnitCon nm ann) = do
 
 inferCon ret c@(GeneralisedCon nm cty ann) = do
 
-  cty <- resolveKind (BecauseOf c) cty
+  cty <- condemn $ resolveKind (BecauseOf c) cty
   var <- TvName <$> genName
   retcons (gadtConShape (cty, ret) (gadtConResult cty)) $
     solve (Seq.singleton (ConUnify (BecauseOf c) var (gadtConResult cty) ret))
 
   let generalise (TyPi q t) = TyPi q <$> generalise t
       generalise ty = do
-        (sub, _) <- solve (Seq.singleton (ConUnify (BecauseOf c) var ret ty))
+        (sub, _) <- condemn $ solve (Seq.singleton (ConUnify (BecauseOf c) var ret ty))
         tell (map (\(x, y) -> (TyVar x, y)) (Map.toAscList sub))
         pure ret
 
