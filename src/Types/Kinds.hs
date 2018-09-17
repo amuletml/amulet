@@ -10,6 +10,7 @@ module Types.Kinds
   where
 
 import Control.Monad.State.Strict
+import Control.Monad.Chronicles
 import Control.Monad.Infer
 import Control.Applicative
 import Control.Arrow
@@ -38,7 +39,7 @@ import Text.Pretty.Semantic
 type KindT m = StateT SomeReason (WriterT (Seq.Seq (Constraint Typed)) m)
 
 type MonadKind m =
-  ( MonadError TypeError m
+  ( MonadChronicles TypeError m
   , MonadReader Env m
   , MonadNamey m
   )
@@ -51,11 +52,8 @@ resolveKind reason otp = do
                         (t, _) <- secondA isType =<< inferKind t
                         pure t
                      in runWriterT (runStateT (cont otp) reason)
-  x <- genName
 
-  sub <- case solve x cs of
-    Left e -> throwError e
-    Right (x, _) -> pure x
+  (sub, _) <- solve cs
 
   let t = apply sub ty
   wellformed t
@@ -76,12 +74,7 @@ checkAgainstKind r t k = do
 annotateKind :: MonadKind m => SomeReason -> Type Typed -> m (Type Typed)
 annotateKind r ty = do
   ((ty, _), cs) <- runWriterT (runStateT (checkKind (raiseT unTvName ty) TyType) r)
-  x <- genName
-
-  sub <- case solve x cs of
-    Left e -> throwError e
-    Right (x, _) -> pure x
-
+  (sub, _) <- solve cs
   pure (apply sub ty)
 
 initialKind :: MonadKind m => [TyConArg Resolved] -> KindT m (Type Typed, Telescope Typed)
@@ -111,10 +104,9 @@ resolveTyDeclKind reason tycon args cons = do
     local (names %~ focus scope) $ do
       for_ cons $ \case
         UnitCon{} -> pure ()
-        c@(ArgCon _ t _) -> () <$ checkKind t TyType
-                                `catchError` \x -> throwError (propagateBlame (BecauseOf c) x)
-        c@(GeneralisedCon _ t _) -> inferGadtConKind c t tycon (mapMaybe argTvName args)
-                                      `catchError` \x -> throwError (propagateBlame (BecauseOf c) x)
+        c@(ArgCon _ t _) -> () <$ retcons (addBlame (BecauseOf c)) (checkKind t TyType)
+        c@(GeneralisedCon _ t _) -> condemn $
+          retcons (addBlame (BecauseOf c)) (inferGadtConKind c t tycon (mapMaybe argTvName args))
       pure kind
   let remake (TyVarArg v:as) (TyArr _ k) = TyVarArg (TvName v):remake as k
       remake (TyAnnArg v _:as) (TyArr k _) = TyAnnArg (TvName v) k:remake as k
@@ -127,17 +119,14 @@ solveForKind reason = solveK (closeOver reason) reason
 solveK :: MonadKind m => (Type Typed -> m (Type Typed)) -> SomeReason -> KindT m (Type Typed) -> m (Type Typed)
 solveK cont reason k = do
   ((kind, _), cs) <- runWriterT (runStateT k reason)
-  x <- genName
-
-  case solve x cs of
-    Left e -> throwError e
-    Right (x, _) -> cont (apply x kind)
+  (sub, _) <- solve cs
+  cont (apply sub kind)
 
 inferKind :: MonadKind m => Type Resolved -> KindT m (Type Typed, Kind Typed)
 inferKind (TyCon v) = do
   x <- view (names . at v)
   case x of
-    Nothing -> throwError (NotInScope v)
+    Nothing -> confesses (NotInScope v)
     Just k -> do
       (_, _, k) <- instantiate Expression k
       pure (TyCon (TvName v), k)
@@ -145,12 +134,12 @@ inferKind (TyCon v) = do
 inferKind (TyPromotedCon v) = do
   x <- view (names . at v)
   case x of
-    Nothing -> throwError (NotInScope v)
+    Nothing -> confesses (NotInScope v)
     Just k -> do
       (_, _, k) <- instantiate Expression k
       case promoteOrError k of
         Nothing -> pure (TyPromotedCon (TvName v), k)
-        Just err -> throwError (NotPromotable (TvName v) k err)
+        Just err -> confesses (NotPromotable (TvName v) k err)
 
 inferKind (TyVar v) = do
   k <- maybe freshTV pure =<< view (names . at v)
@@ -268,7 +257,7 @@ inferGadtConKind con typ tycon args = go typ (reverse (spine (gadtConResult typ)
              checkKind (TyVar (unTvName var)) k
   go _ _ = do
     tp <- checkKind typ TyType
-    throwError . flip ArisingFrom (BecauseOf con) $ gadtConShape
+    confesses . flip ArisingFrom (BecauseOf con) $ gadtConShape
       (tp, foldl TyApp (TyCon (TvName tycon)) (map TyVar args))
       (gadtConResult tp)
       (Malformed tp)

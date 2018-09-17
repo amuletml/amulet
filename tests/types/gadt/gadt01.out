@@ -6,3 +6,11 @@ gadt01.ml[3:16 ..3:23]: error
   │ 
 3 │ type gadt 'a = R : gadt
   │ 
+gadt01.ml[3:16 ..3:23]: error
+  Expected a type, but this has kind 'a -> type
+  Have you applied a type constructor to the wrong number of arguments?
+
+  Arising in the constructor
+  │ 
+3 │ type gadt 'a = R : gadt
+  │ 

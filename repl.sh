@@ -5,6 +5,8 @@ if [ -z ${IN_NIX_SHELL+a} ]; then
   exit 1
 fi
 
+WARN="-Wextra -Wall -Wno-name-shadowing -Wno-implicit-prelude -Wno-missing-import-lists -Wredundant-constraints -Wmonomorphism-restriction"
+
 # build lexers
 find src/ -type f -name '*.x' | while read -r fname; do
   source_mtime=$(stat -c %Y $fname)
@@ -33,4 +35,4 @@ done
 
 echo "Loading ghci.."
 
-exec ghci -i./src/:./compiler/ ./compiler/Main.hs $@
+exec ghci $WARN -i./src/:./compiler/ ./compiler/Main.hs $@

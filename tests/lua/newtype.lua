@@ -1,10 +1,10 @@
 do
   local __builtin_unit = { __tag = "__builtin_unit" }
-  local function Foo(fe) return fe end
+  local function Foo(fj) return fj end
   local function It(x) return { __tag = "It", x } end
   local bottom = nil
   bottom(Foo)
-  bottom(function(ff) return ff end)
+  bottom(function(fk) return fk end)
   bottom(It)
-  bottom(function(fg) return fg end)
+  bottom(function(fl) return fl end)
 end

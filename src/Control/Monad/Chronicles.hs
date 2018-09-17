@@ -7,6 +7,7 @@ module Control.Monad.Chronicles
   , Chronicles, ChroniclesT, MonadChronicles
   , dictates, confesses, retcons
   , recover, absolving
+  , catchChronicle
   ) where
 
 import Control.Monad.Chronicle
@@ -45,3 +46,9 @@ recover r m = do
 -- equivalent of @(<|>)@.
 absolving :: MonadChronicle c m => m a -> m a -> m a
 absolving l r = memento l >>= either (const r) pure
+
+-- | An equivalent of 'catchError' for 'MonadChronicle'.
+--
+-- Note this does not catch non-fatal errors. Use 'retcon' for that.
+catchChronicle :: MonadChronicle c m => m a -> (c -> m a) -> m a
+catchChronicle m f = memento (condemn m) >>= either f pure
