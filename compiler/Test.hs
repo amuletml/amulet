@@ -18,7 +18,7 @@ import qualified Test.Types.Check as TypesC
 import qualified Test.Core.Backend as Backend
 
 tests :: IO TestTree
-tests = testGroup "Tests" <$> sequence 
+tests = testGroup "Tests" <$> sequence
   [ pure (hedgehog Solver.tests)
 
   , Lint.tests

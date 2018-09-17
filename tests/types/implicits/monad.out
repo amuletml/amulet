@@ -1,5 +1,5 @@
 monad : (type -> type) -> type
-Monad : {'m : type -> type}. {'bs : type}. ({'a : type}. 'a -> 'm 'a * {'a : type}. {'b : 'bs}. 'm 'a -> ('a -> 'm 'b) -> 'm 'b) -> monad 'm
+Monad : {'m : type -> type}. {'bu : type}. ({'a : type}. 'a -> 'm 'a * {'a : type}. {'b : 'bu}. 'm 'a -> ('a -> 'm 'b) -> 'm 'b) -> monad 'm
 maybe : type -> type
 Just : {'a : type}. 'a -> maybe 'a
 Nothing : {'a : type}. maybe 'a

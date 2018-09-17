@@ -19,7 +19,7 @@ module Control.Monad.Infer
   , lookupTy, lookupTy', genNameFrom, runInfer, freeInEnv
   , difference, freshTV, refreshTV
   , instantiate
-  , SomeReason(..), Reasonable, propagateBlame
+  , SomeReason(..), Reasonable, addBlame
   , becauseExp, becausePat
   , WhyInstantiate(..)
 
@@ -29,8 +29,8 @@ module Control.Monad.Infer
   where
 
 import Control.Monad.Writer.Strict as M hiding ((<>))
+import Control.Monad.Chronicles as M
 import Control.Monad.Reader as M
-import Control.Monad.Except as M
 import Control.Monad.Namey as M
 import Control.Lens
 
@@ -38,7 +38,6 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
 import qualified Data.Text as T
-import Data.Bifunctor
 import Data.Function
 import Data.Typeable
 import Data.Foldable
@@ -46,6 +45,7 @@ import Data.Spanned
 import Data.Triple
 import Data.Reason
 import Data.Maybe
+import Data.These
 import Data.Text (Text)
 import Data.List
 import Data.Span
@@ -59,7 +59,11 @@ import Syntax.Pretty
 import Syntax.Types
 import Syntax.Subst
 
-type MonadInfer p m = (MonadError TypeError m, MonadReader Env m, MonadWriter (Seq.Seq (Constraint p)) m, MonadNamey m)
+type MonadInfer p m =
+  ( MonadChronicles TypeError m
+  , MonadReader Env m
+  , MonadWriter (Seq.Seq (Constraint p)) m
+  , MonadNamey m)
 
 data Constraint p
   = ConUnify    SomeReason (Var p)  (Type p) (Type p)
@@ -108,7 +112,6 @@ data TypeError where
   PatternRecursive :: Binding Resolved -> [Binding Resolved] -> TypeError
 
   NotPromotable :: Pretty (Var p) => Var p -> Type p -> Doc -> TypeError
-  ManyErrors :: [TypeError] -> TypeError
 
 data WhyInstantiate = Expression | Subsumption
 
@@ -143,28 +146,29 @@ instance Show TypeError where
 instance Eq TypeError where
   _ == _ = False
 
-lookupTy :: (MonadError TypeError m, MonadReader Env m, MonadNamey m) => Var Resolved -> m (Type Typed)
+lookupTy :: (MonadChronicles TypeError m, MonadReader Env m, MonadNamey m) => Var Resolved -> m (Type Typed)
 lookupTy x = do
   rs <- view (names . at x)
   case rs of
     Just t -> thd3 <$> instantiate Expression t
-    Nothing -> throwError (NotInScope x)
+    Nothing -> confesses (NotInScope x)
 
-lookupTy' :: (MonadError TypeError m, MonadReader Env m, MonadNamey m) => Var Resolved
+lookupTy' :: (MonadChronicles TypeError m, MonadReader Env m, MonadNamey m) => Var Resolved
           -> m (Maybe (Expr Typed -> Expr Typed), Type Typed, Type Typed)
 lookupTy' x = do
   rs <- view (names . at x)
   case rs of
     Just t -> instantiate Expression t
-    Nothing -> throwError (NotInScope x)
+    Nothing -> confesses (NotInScope x)
 
 runInfer :: MonadNamey m
          => Env
-         -> ReaderT Env (WriterT (Seq.Seq (Constraint p)) (ExceptT TypeError m)) a
+         -> ReaderT Env (WriterT (Seq.Seq (Constraint p)) (ChroniclesT TypeError m)) a
          -> m (Either [TypeError] (a, Seq.Seq (Constraint p)))
-runInfer ct ac = first unwrap <$> runExceptT (runWriterT (runReaderT ac ct))
-  where unwrap (ManyErrors es) = concatMap unwrap es
-        unwrap e = [e]
+runInfer ct ac = unwrap <$> runChronicleT (runWriterT (runReaderT ac ct)) where
+  unwrap (This x) = Left (toList x)
+  unwrap (That x) = Right x
+  unwrap (These x _) = Left (toList x)
 
 genNameFrom :: MonadNamey m => Text -> m (Var Resolved)
 genNameFrom t = do
@@ -233,7 +237,6 @@ instance Pretty TypeError where
   pretty (Suggestion te m) = pretty te <#> bullet (string "Suggestion:") <+> align (pretty m)
   pretty (CanNotInstance rec new) = string "Can not instance hole of record type" <+> align (verbatim rec </> string " to type " <+> verbatim new)
   pretty (Malformed tp) = string "The type" <+> verbatim tp <+> string "is malformed."
-  pretty (ManyErrors es) = vsep (map pretty es)
 
   pretty (NoOverlap ta tb)
     | TyExactRows ra <- ta
@@ -423,9 +426,9 @@ diff ra rb = map (stypeVar . string . T.unpack . fst) (deleteFirstsBy ((==) `on`
 squish :: (a -> c) -> Maybe (c -> c) -> Maybe (a -> c)
 squish f = Just . maybe f (.f)
 
-propagateBlame :: SomeReason -> TypeError -> TypeError
-propagateBlame x (ManyErrors xs) = ManyErrors (map (propagateBlame x) xs)
-propagateBlame x e = ArisingFrom e x
+addBlame :: SomeReason -> TypeError -> TypeError
+addBlame _ e@ArisingFrom{} = e
+addBlame x e = ArisingFrom e x
 
 withoutSkol :: Type p -> Type p
 withoutSkol = transformType go where

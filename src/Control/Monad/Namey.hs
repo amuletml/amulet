@@ -12,7 +12,7 @@
 -}
 module Control.Monad.Namey
   ( NameyT, runNameyT, evalNameyT
-  , Namey, runNamey
+  , Namey, runNamey, evalNamey
   , MonadNamey(..)
   , genAlnum
   ) where
@@ -87,6 +87,12 @@ runNamey :: NameyT Identity a -> Name -> (a, Name)
 runNamey (NameyT k) (TgName _ i) = second genVar $ StrictS.runState k i where
   genVar x = TgName (genAlnum x) x
 runNamey _ _ = undefined
+
+-- | Run the namey monad with some starting name, returning the result of
+-- the computation.
+evalNamey :: NameyT Identity a -> Name -> a
+evalNamey (NameyT k) (TgName _ i) = StrictS.evalState k i
+evalNamey _ _ = undefined
 
 instance Monad m => MonadNamey (NameyT m) where
   genName = NameyT $ do

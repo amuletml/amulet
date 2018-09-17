@@ -1,7 +1,6 @@
 {-# LANGUAGE FlexibleContexts, TypeFamilies, ScopedTypeVariables, UndecidableInstances #-}
 module Types.Wellformed (wellformed, arity, normType, skols, Skolem(..), checkAmbiguous) where
 
-import Control.Monad.Except
 import Control.Monad.Infer
 
 import qualified Data.Set as Set
@@ -12,7 +11,7 @@ import Data.List (unionBy)
 import Syntax.Pretty
 import Syntax.Subst
 
-wellformed :: (MonadError TypeError m, MonadReader Env m) => Type Typed -> m ()
+wellformed :: (MonadChronicles TypeError m, MonadReader Env m) => Type Typed -> m ()
 wellformed tp = case tp of
   TyCon{} -> pure ()
   TyVar{} -> pure ()
@@ -23,8 +22,8 @@ wellformed tp = case tp of
   TyPi a b -> do
     case a of
       Invisible _ k -> traverse_ wellformed k
-      Anon a -> wellformed a 
-      Implicit a -> wellformed a 
+      Anon a -> wellformed a
+      Implicit a -> wellformed a
     wellformed b
   TyApp a b -> wellformed a *> wellformed b
   TyTuple a b -> wellformed a *> wellformed b
@@ -33,7 +32,7 @@ wellformed tp = case tp of
       TyRows{} -> pure ()
       TyExactRows{} -> pure ()
       TyVar{} -> pure ()
-      _ -> throwError (CanNotInstance tp rho)
+      _ -> confesses (CanNotInstance tp rho)
     traverse_ (wellformed . snd) rows
   TyExactRows rows -> traverse_ (wellformed . snd) rows
   TyWithConstraints eqs b -> do
@@ -85,11 +84,11 @@ skols (TyExactRows rs) = foldMap (skols . snd) rs
 skols (TyTuple a b) = skols a <> skols b
 skols (TyWithConstraints cs a) = foldMap (\(x, y) -> skols x <> skols y) cs <> skols a
 
-checkAmbiguous :: MonadError TypeError m => Var Typed -> Type Typed -> m ()
+checkAmbiguous :: MonadChronicles TypeError m => Var Typed -> Type Typed -> m ()
 checkAmbiguous v tau = go mempty tau where
   go s (TyPi (Invisible v k) t) = go (Set.insert v (s <> foldMap ftv k)) t
   go s (TyPi (Implicit _) t) = go s t
   go s t = if not (Set.null (s Set.\\ fv))
-              then throwError (AmbiguousType v tau (s Set.\\ fv))
+              then confesses (AmbiguousType v tau (s Set.\\ fv))
               else pure ()
     where fv = ftv t

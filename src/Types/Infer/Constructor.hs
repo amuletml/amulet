@@ -35,19 +35,16 @@ inferCon ret c@(GeneralisedCon nm cty ann) = do
 
   cty <- resolveKind (BecauseOf c) cty
   var <- TvName <$> genName
-  x <- genName
-  case solve x (Seq.singleton (ConUnify (BecauseOf c) var (gadtConResult cty) ret)) of
-    Left e -> throwError (gadtConShape (cty, ret) (gadtConResult cty) e)
-    Right _ -> pure ()
+  retcons (gadtConShape (cty, ret) (gadtConResult cty)) $
+    solve (Seq.singleton (ConUnify (BecauseOf c) var (gadtConResult cty) ret))
 
-  let generalise ns (TyPi q t) = TyPi q <$> generalise ns t
-      generalise ns ty = case solve ns (Seq.singleton (ConUnify (BecauseOf c) var ret ty)) of
-        Right (x, _) -> do
-          tell (map (\(x, y) -> (TyVar x, y)) (Map.toAscList x))
-          pure ret
-        Left e -> throwError e
+  let generalise (TyPi q t) = TyPi q <$> generalise t
+      generalise ty = do
+        (sub, _) <- solve (Seq.singleton (ConUnify (BecauseOf c) var ret ty))
+        tell (map (\(x, y) -> (TyVar x, y)) (Map.toAscList sub))
+        pure ret
 
-  (cty, cons) <- runWriterT (generalise x cty)
+  (cty, cons) <- runWriterT (generalise cty)
   let (sub, keep) = partitionEithers (map (uncurry simplify) cons)
   overall <- closeOverGadt (BecauseOf c) keep (apply (mconcat sub) cty)
   pure ((TvName nm, overall), GeneralisedCon (TvName nm) overall (ann, overall))
