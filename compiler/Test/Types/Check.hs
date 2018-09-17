@@ -10,6 +10,7 @@ import Control.Lens ((^.), to, runIdentity)
 import qualified Data.Text.Lazy as L
 import qualified Data.Text as T
 import qualified Data.Map as Map
+import Data.These
 
 import Parser.Wrapper (runParser)
 import Parser
@@ -25,6 +26,11 @@ import Syntax.Pretty()
 import qualified Text.Pretty.Note as N
 import Text.Pretty.Semantic
 
+toEither :: These a b -> Either a b
+toEither (This e) = Left e
+toEither (These e _) = Left e
+toEither (That x) = Right x
+
 result :: String -> T.Text -> T.Text
 result file contents = runIdentity . flip evalNameyT firstName $ do
   let (Just parsed, _) = runParser file (L.fromStrict contents) parseTops
@@ -33,7 +39,8 @@ result file contents = runIdentity . flip evalNameyT firstName $ do
   inferred <- inferProgram builtinsEnv desugared
 
   pure . displayPlain
-       . either prettyErrs ((Right<$>) . reportEnv . snd) $ inferred
+       . either prettyErrs ((Right<$>) . reportEnv . snd)
+       . toEither $ inferred
 
   where
     reportEnv env =

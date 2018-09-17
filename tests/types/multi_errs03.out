@@ -12,3 +12,10 @@ multi_errs03.ml[1:5 ..1:6]: error
   │ 
 1 │ let () =
   │ 
+multi_errs03.ml[6:5 ..6:6]: error
+  Could not match expected type unit with string
+
+  Arising in the binding
+  │ 
+6 │ and () = "foo"
+  │ 

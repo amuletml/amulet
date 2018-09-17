@@ -12,6 +12,7 @@ import qualified Data.Text as T
 import Data.Position (SourceName)
 import Data.Functor.Identity
 import Data.Foldable
+import Data.These
 
 import Control.Monad.Infer (Env, TypeError, firstName)
 import Control.Monad.Namey
@@ -49,28 +50,29 @@ import qualified Debug as D
 import Repl
 
 data CompileResult
-  = CSuccess [VerifyError] [Toplevel Typed] [Stmt CoVar] [Stmt CoVar] LuaStmt Env
+  = CSuccess [VerifyError] [TypeError] [Toplevel Typed] [Stmt CoVar] [Stmt CoVar] LuaStmt Env
   | CParse   [ParseError]
   | CResolve [ResolveError]
   | CInfer   [TypeError]
 
+
 compile :: DoOptimise -> [(SourceName, T.Text)] -> CompileResult
 compile _ [] = error "Cannot compile empty input"
 compile opt (file:files) = runIdentity . flip evalNameyT firstName $ do
-  file' <- go (Right ([], [], RS.builtinScope, RS.emptyModules, builtinsEnv)) file
+  file' <- go (Right ([], [], [], RS.builtinScope, RS.emptyModules, builtinsEnv)) file
   files' <- foldlM go file' files
   case files' of
-    Right (ve, prg, _, _, env) -> do
+    Right (ve, te, prg, _, _, env) -> do
       lower <- runLowerT (lowerProg prg)
       optm <- case opt of
                 Do -> optimise lower
                 Don't -> pure (deadCodePass (reducePass lower))
-      pure (CSuccess ve prg lower optm (compileProgram optm) env)
+      pure (CSuccess ve te prg lower optm (compileProgram optm) env)
 
     Left err -> pure err
 
   where
-    go (Right (errs, tops, scope, modScope, env)) (name, file) =
+    go (Right (errs, tyerrs, tops, scope, modScope, env)) (name, file) =
       case runParser name (L.fromStrict file) parseTops of
         (Just parsed, _) -> do
           resolved <- resolveProgram scope modScope parsed
@@ -79,7 +81,7 @@ compile opt (file:files) = runIdentity . flip evalNameyT firstName $ do
               desugared <- desugarProgram resolved
               infered <- inferProgram env desugared
               case infered of
-                Right (prog, env') ->
+                That (prog, env') ->
                   let x = runVerify (verifyProgram prog)
                       (var, tys) = extractToplevels parsed
                       (var', tys') = extractToplevels resolved
@@ -87,13 +89,29 @@ compile opt (file:files) = runIdentity . flip evalNameyT firstName $ do
                         Left es -> toList es
                         Right () -> []
                    in pure $ Right ( errs ++ errs'
+                                   , tyerrs
                                    , tops ++ prog
                                    , scope { RS.varScope = RS.insertN' (RS.varScope scope) (zip var var')
                                            , RS.tyScope  = RS.insertN' (RS.tyScope scope)  (zip tys tys')
                                            }
                                    , modScope'
                                    , env')
-                Left e -> pure $ Left $ CInfer e
+                These errors (prog, env') ->
+                  let x = runVerify (verifyProgram prog)
+                      (var, tys) = extractToplevels parsed
+                      (var', tys') = extractToplevels resolved
+                      errs' = case x of
+                        Left es -> toList es
+                        Right () -> []
+                   in pure $ Right ( errs ++ errs'
+                                   , tyerrs ++ errors
+                                   , tops ++ prog
+                                   , scope { RS.varScope = RS.insertN' (RS.varScope scope) (zip var var')
+                                           , RS.tyScope  = RS.insertN' (RS.tyScope scope)  (zip tys tys')
+                                           }
+                                   , modScope'
+                                   , env')
+                This e -> pure $ Left $ CInfer e
             Left e -> pure $ Left $ CResolve e
         (Nothing, es) -> pure $ Left $ CParse es
     go x _ = pure x
@@ -105,9 +123,10 @@ compileFromTo :: DoOptimise
               -> IO ()
 compileFromTo opt fs emit =
   case compile opt fs of
-    CSuccess es _ _ _ lua _ -> do
+    CSuccess es tes _ _ _ lua _ -> do
       traverse_ (`reportS` fs) es
-      if any isError es
+      traverse_ (`reportS` fs) tes
+      if any isError es || any isError tes
          then pure ()
          else emit lua
     CParse es -> traverse_ (`reportS` fs) es
@@ -117,9 +136,11 @@ compileFromTo opt fs emit =
 test :: D.DebugMode -> [(FilePath, T.Text)] -> IO (Maybe ([Stmt CoVar], Env))
 test mode fs =
   case compile (if mode == D.TestTc then Don't else Do) fs of
-    CSuccess es ast core opt lua env -> do
+    CSuccess es tes ast core opt lua env -> do
       traverse_ (`reportS` fs) es
+      traverse_ (`reportS` fs) tes
       guard (all (not . isError) es)
+      guard (all (not . isError) tes)
       D.dump mode ast core opt lua builtinsEnv env
 
       pure (pure (core, env))

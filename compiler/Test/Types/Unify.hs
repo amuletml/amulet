@@ -8,6 +8,7 @@ import Test.Syntax.Gen
 import Test.Types.Util
 
 import Data.Function
+import Data.Foldable
 import Data.List
 
 import Control.Monad
@@ -20,7 +21,7 @@ prop_unifyMakesGoodCoercion :: Property
 prop_unifyMakesGoodCoercion = property $ do
   aty <- forAllWith (displayS . displayType) genType
   case unify aty aty of
-    Left e -> footnote (displayS (pretty e)) *> failure
+    Left e -> (footnote . displayS . pretty . toList $ e) *> failure
     Right x | (ca, cb) <- provenCoercion x -> do
       footnote . displayS $
           keyword "Given type:" <+> displayType aty

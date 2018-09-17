@@ -9,23 +9,23 @@ do
         if xs.__tag == "Nil" then
           return Cons({ _1 = 1, _2 = Nil })
         elseif xs.__tag == "Cons" then
-          local hd = xs[1]
+          local hh = xs[1]
           if ys.__tag == "Nil" then
             return Cons({ _1 = 2, _2 = Nil })
           elseif ys.__tag == "Cons" then
-            local he = ys[1]
-            local hg = he._1
-            local hf = he._2
-            local hj = hd._1
-            local hi = hd._2
-            if 0 == hj then
-              if 0 == hg then
+            local hi = ys[1]
+            local hk = hi._1
+            local hj = hi._2
+            local hn = hh._1
+            local hm = hh._2
+            if 0 == hn then
+              if 0 == hk then
                 return Cons({ _1 = 3, _2 = Nil })
               else
-                return Cons({ _1 = f(hj)(hg), _2 = zip(f)(hi)(hf) })
+                return Cons({ _1 = f(hn)(hk), _2 = zip(f)(hm)(hj) })
               end
             else
-              return Cons({ _1 = f(hj)(hg), _2 = zip(f)(hi)(hf) })
+              return Cons({ _1 = f(hn)(hk), _2 = zip(f)(hm)(hj) })
             end
           end
         end

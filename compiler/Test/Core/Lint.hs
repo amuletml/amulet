@@ -7,6 +7,7 @@ import qualified Data.Text as T
 import Data.Position (SourceName)
 import Data.Foldable
 import Data.Spanned
+import Data.These
 import Data.List
 
 import Control.Monad.Infer (TypeError, firstName)
@@ -42,6 +43,11 @@ data CompileResult
   | CResolve [ResolveError]
   | CInfer   [TypeError]
 
+toEither :: These a b -> Either a b
+toEither (This e) = Left e
+toEither (These e _) = Left e
+toEither (That x) = Right x
+
 compile :: MonadNamey m => [(SourceName, T.Text)] -> m CompileResult
 compile [] = error "Cannot compile empty input"
 compile (file:files) = do
@@ -59,7 +65,7 @@ compile (file:files) = do
           case resolved of
             Right (resolved, modScope') -> do
               desugared <- desugarProgram resolved
-              infered <- inferProgram env desugared
+              infered <- toEither <$> inferProgram env desugared
               case infered of
                 Right (prog, env') ->
                   let (var, tys) = extractToplevels parsed

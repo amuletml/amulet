@@ -16,6 +16,7 @@ import Data.Foldable
 import Data.Spanned
 import Data.Functor
 import Data.Triple
+import Data.These
 import Data.Maybe
 
 import qualified Foreign.Lua.Api.Types as L
@@ -188,7 +189,8 @@ runRepl = do
                           , [Stmt CoVar]
                           , ReplState))
     parseCore state input = do
-      let files = [("=stdin", T.pack input)]
+      let files :: [(String, T.Text)]
+          files = [("=stdin", T.pack input)]
           (parsed, parseMsg) = runParser "=stdin" (L.pack input) parseRepl
       liftIO $ traverse_ (`reportS`files) parseMsg
 
@@ -200,6 +202,37 @@ runRepl = do
                           Right e -> [S.LetStmt [S.Binding (S.Name "_") e S.BindRegular (annotation e)]]
 
           let rScope = resolveScope state
+          let cont modScope' resolved prog env' =
+                let es = case runVerify (verifyProgram prog) of
+                           Left es -> toList es
+                           Right () -> []
+                 in do
+                  liftIO $ traverse_ (`reportS`files) es
+                  if any isError es
+                     then pure Nothing
+                     else do
+                       let (var, tys) = R.extractToplevels parsed'
+                           (var', tys') = R.extractToplevels resolved
+                           ctors = fmap lowerType (Map.restrictKeys (env' ^. T.names . to toMap)
+                                                    (Set.mapMonotonic S.unTvName (env' ^. constructors)))
+
+                       lower <- runLowerWithCtors ctors (lowerProg prog)
+                       lastG <- genName
+                       case lower of
+                         [] -> error "lower returned no statements for the repl"
+                         _ -> pure ()
+                       pure $ Just ( case last lower of
+                                       (C.StmtLet (C.One (v, t, _))) -> [(v, t)]
+                                       (C.StmtLet (C.Many vs)) -> map (\(v, t, _) -> (v, t)) vs
+                                       _ -> []
+                                   , prog
+                                   , lower
+                                   , state { resolveScope = rScope { R.varScope = R.insertN' (R.varScope rScope) (zip var var')
+                                                                   , R.tyScope  = R.insertN' (R.tyScope rScope)  (zip tys tys')
+                                                                   }
+                                           , moduleScope = modScope'
+                                           , inferScope = env'
+                                           , lastName = lastG })
           resolved <- resolveProgram rScope (moduleScope state) parsed'
           case resolved of
             Left es -> liftIO $ traverse_ (`reportS`files) es $> Nothing
@@ -207,38 +240,13 @@ runRepl = do
               desugared <- desugarProgram resolved
               inferred <- inferProgram (inferScope state) desugared
               case inferred of
-                Left es -> liftIO $ traverse_ (`reportS`files) es $> Nothing
-                Right (prog, env') ->
-                  let es = case runVerify (verifyProgram prog) of
-                             Left es -> toList es
-                             Right () -> []
-                   in do
-                    liftIO $ traverse_ (`reportS`files) es
-                    if any isError es
-                       then pure Nothing
-                       else do
-                         let (var, tys) = R.extractToplevels parsed'
-                             (var', tys') = R.extractToplevels resolved
-                             ctors = fmap lowerType (Map.restrictKeys (env' ^. T.names . to toMap)
-                                                      (Set.mapMonotonic S.unTvName (env' ^. constructors)))
-
-                         lower <- runLowerWithCtors ctors (lowerProg prog)
-                         lastG <- genName
-                         case lower of
-                           [] -> error "lower returned no statements for the repl"
-                           _ -> pure ()
-                         pure $ Just ( case last lower of
-                                         (C.StmtLet (C.One (v, t, _))) -> [(v, t)]
-                                         (C.StmtLet (C.Many vs)) -> map (\(v, t, _) -> (v, t)) vs
-                                         _ -> []
-                                     , prog
-                                     , lower
-                                     , state { resolveScope = rScope { R.varScope = R.insertN' (R.varScope rScope) (zip var var')
-                                                                     , R.tyScope  = R.insertN' (R.tyScope rScope)  (zip tys tys')
-                                                                     }
-                                             , moduleScope = modScope'
-                                             , inferScope = env'
-                                             , lastName = lastG })
+                This es -> liftIO $ traverse_ (`reportS`files) es $> Nothing
+                That (prog, env') -> cont modScope' resolved prog env'
+                These es (prog, env') -> do
+                  liftIO $ traverse_ (`reportS`files) es
+                  if any isError es
+                     then pure Nothing
+                     else cont modScope' resolved prog env'
 
 
 isError :: Note a b => a -> Bool

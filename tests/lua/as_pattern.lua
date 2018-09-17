@@ -1,8 +1,8 @@
 do
   local __builtin_unit = { __tag = "__builtin_unit" }
   local bottom = nil
-  bottom(function(bx)
-    local b = bx.a
-    return b.a + b.b + bx.c
+  bottom(function(ca)
+    local b = ca.a
+    return b.a + b.b + ca.c
   end)
 end
