@@ -138,7 +138,7 @@ doSolve (ConImplies because not cs ts :<| xs) = do
   let not' = ftv (apply before not) <> ftv not
       cs' = apply before cs
       ts' = apply before ts
-  ((), sub) <- retcon (fmap DeadBranch) $ capture $ local (bindSkol .~ True) . local (don'tTouch .~ mempty) $ doSolve cs'
+  ((), sub) <- retcon (fmap DeadBranch) . capture . local (bindSkol .~ True) . local (don'tTouch .~ mempty) $ doSolve cs'
 
   solveAssumptions .= (sub ^. solveAssumptions <> sub ^. solveTySubst)
 
