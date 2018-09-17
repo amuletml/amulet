@@ -189,7 +189,8 @@ runRepl = do
                           , [Stmt CoVar]
                           , ReplState))
     parseCore state input = do
-      let files = [("=stdin", T.pack input)]
+      let files :: [(String, T.Text)]
+          files = [("=stdin", T.pack input)]
           (parsed, parseMsg) = runParser "=stdin" (L.pack input) parseRepl
       liftIO $ traverse_ (`reportS`files) parseMsg
 

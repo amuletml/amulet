@@ -138,23 +138,21 @@ doSolve (ConImplies because not cs ts :<| xs) = do
   let not' = ftv (apply before not) <> ftv not
       cs' = apply before cs
       ts' = apply before ts
-  do
-    let go = local (bindSkol .~ True) . local (don'tTouch .~ mempty) $ doSolve cs'
-    ((), sub) <- retcon (fmap DeadBranch) $ capture go
+  ((), sub) <- retcon (fmap DeadBranch) $ capture $ local (bindSkol .~ True) . local (don'tTouch .~ mempty) $ doSolve cs'
 
-    solveAssumptions .= (sub ^. solveAssumptions <> sub ^. solveTySubst)
+  solveAssumptions .= (sub ^. solveAssumptions <> sub ^. solveTySubst)
 
-    local (don'tTouch %~ Set.union not')
-      . retcons (addBlame because) . recover ()
-      $ doSolve (fmap (apply (sub ^. solveTySubst)) ts')
+  local (don'tTouch %~ Set.union not')
+    . retcons (addBlame because) . recover ()
+    $ doSolve (fmap (apply (sub ^. solveTySubst)) ts')
 
-    let leaky = Map.filterWithKey (\k _ -> k `Set.notMember` assumptionBound) (sub ^. solveTySubst)
-        assumptionBound = not'
+  let leaky = Map.filterWithKey (\k _ -> k `Set.notMember` assumptionBound) (sub ^. solveTySubst)
+      assumptionBound = not'
 
-    solveTySubst %= Map.union leaky
-    solveAssumptions .= assump
+  solveTySubst %= Map.union leaky
+  solveAssumptions .= assump
 
-    doSolve xs
+  doSolve xs
 
 doSolve (ConImplicit because var scope t inner :<| xs) = do
   doSolve xs
