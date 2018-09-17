@@ -535,7 +535,7 @@ subsumes' r s th@(TyExactRows rhas) tw@(TyExactRows rwant) = do
 
   exp <- TvName <$> genName
 
-  pure (WrapFn (MkWrapCont (mkRecordWrapper matched tw th tw id exp) "exact→exact record subsumption"))
+  pure (WrapFn (MkWrapCont (mkRecordWrapper rhas matched tw th tw id exp) "exact→exact record subsumption"))
 
 subsumes' r s th@(TyExactRows rhas) tw@(TyRows rho rwant) = do
   let matching = overlap rhas rwant
@@ -564,7 +564,7 @@ subsumes' r s th@(TyExactRows rhas) tw@(TyRows rho rwant) = do
   exp <- TvName <$> genName
 
   let mkw ex = ExprWrapper cast ex (annotation ex, tw)
-  pure (WrapFn (MkWrapCont (mkRecordWrapper matched matched_t th tw mkw exp) "exact→poly record subsumption"))
+  pure (WrapFn (MkWrapCont (mkRecordWrapper rhas matched matched_t th tw mkw exp) "exact→poly record subsumption"))
 
 subsumes' r s th@(TyRows rho rhas) tw@(TyRows sigma rwant) = do
   let matching = overlap rhas rwant
@@ -592,7 +592,7 @@ subsumes' r s th@(TyRows rho rhas) tw@(TyRows sigma rwant) = do
     exp <- TvName <$> genName
 
     let mkw ex = ExprWrapper cast ex (annotation ex, tw)
-    pure (WrapFn (MkWrapCont (mkRecordWrapper matched matched_t th tw mkw exp) "exact→poly record subsumption"))
+    pure (WrapFn (MkWrapCont (mkRecordWrapper rhas matched matched_t th tw mkw exp) "exact→poly record subsumption"))
 
 subsumes' r _ a b = probablyCast <$> retcons (reblame r) (unify a b)
 
@@ -719,32 +719,35 @@ select :: Respannable a => Text -> [Field a] -> Maybe (Expr a)
 select t = fmap go . find ((== t) . view fName) where
   go (Field _ e s) = respan (const (annotation s)) e
 
-mkRecordWrapper :: Map.Map Text (Type Typed, Type Typed, Wrapper Typed)
+mkRecordWrapper :: [(Text, Type Typed)]
+                -> Map.Map Text (Type Typed, Type Typed, Wrapper Typed)
                 -> Type Typed
                 -> Type Typed -> Type Typed
                 -> (Expr Typed -> Expr Typed)
                 -> Var Typed -> Expr Typed -> Expr Typed
-mkRecordWrapper matched matched_t th tw cont exp =
+mkRecordWrapper keys matched matched_t th tw cont exp =
   let ref an = VarRef exp (an, th)
       wrapField (Field k ex (an, old)) =
         case Map.lookup k matched of
           Just (_, new, wrap) -> Field k (ExprWrapper wrap ex (annotation ex, new)) (an, new)
           Nothing -> Field k ex (an, old)
 
-      fakeField :: Ann Resolved -> Expr Typed -> Text -> (Type Typed, Type Typed, Wrapper Typed) -> [Field Typed]
-      fakeField ant ex key (have, new, wrap)
-        = [Field key (ExprWrapper wrap (Access ex key (ant, have)) (ant, new)) (ant, new)]
+      fakeField :: Ann Resolved -> Expr Typed -> (Text, Type Typed) -> [Field Typed]
+      fakeField ant ex (key, have)
+        = case Map.lookup key matched of
+            Just (_, new, wrap) -> [Field key (ExprWrapper wrap (Access ex key (ant, have)) (ant, new)) (ant, new)]
+            Nothing -> [Field key (Access ex key (ant, have)) (ant, have)]
 
       -- Rebuild the literal in place, or
       wrapEx (Record rs (an, _)) = cont (Record (map wrapField rs) (an, matched_t))
       -- If we have a variable, use it directly, or
-      wrapEx ex@(VarRef _ (an, _)) = cont (Record (Map.foldMapWithKey (fakeField an ex) matched) (an, matched_t))
+      wrapEx ex@(VarRef _ (an, _)) = cont (Record (foldMap (fakeField an ex) keys) (an, matched_t))
 
       -- Bind the expression to a value so we don't duplicate work and
       -- rebuild the record
       wrapEx ex | an <- annotation ex =
         Let [Binding exp ex BindRegular (an, th)]
-          (cont (Record (Map.foldMapWithKey (fakeField an (ref an)) matched) (an, matched_t)))
+          (cont (Record (foldMap (fakeField an (ref an)) keys) (an, matched_t)))
           (an, tw)
    in wrapEx
 
