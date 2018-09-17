@@ -652,7 +652,10 @@ emitStmt (Foreign n t s:xs) = do
   modify (\s -> s { topArity = extendForeign (topArity s) (n, t)
                   , topVars = VarMap.insert (toVar n) [LuaName n'] (topVars s) })
 
-  let Right ex = runParser (SourcePos "_" 0 0) (s ^. lazy) parseExpr
+  let ex =
+        case runParser (SourcePos "_" 0 0) (s ^. lazy) parseExpr of
+          Right x -> x
+          Left _ -> LuaBitE s
   (LuaLocal [LuaName n'] [ex]<|) <$> emitStmt xs
 
 emitStmt (Type _ cs:xs) = do

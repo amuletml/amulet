@@ -57,6 +57,7 @@ data LuaExpr
   | LuaTable [(LuaExpr, LuaExpr)]
   | LuaBinOp LuaExpr Text LuaExpr
   | LuaQuoteE Text
+  | LuaBitE Text
   deriving (Eq, Show, Ord, Typeable, Data)
 
 data Precedence
@@ -200,6 +201,7 @@ instance Pretty LuaExpr where
     value v = equals <+> pretty v
   pretty (LuaCall x a) = prettyWith PreRaw x <> args (map pretty a)
   pretty (LuaQuoteE x) = "%" <> text x
+  pretty (LuaBitE x) = text x
 
 prettyWith :: Precedence -> LuaExpr -> Doc
 prettyWith desired expr =

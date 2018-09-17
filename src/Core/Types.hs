@@ -6,6 +6,7 @@ module Core.Types
   ) where
 
 import qualified Data.VarMap as VarMap
+import qualified Data.Text as T
 import Core.Builtin
 import Core.Core
 import Core.Var
@@ -82,10 +83,14 @@ unify' t'@(VarTy v) t
 unify' t (VarTy v) = unify' (VarTy v) t
 unify' (ConTy v) (ConTy v') = mempty <$ guard (v == v')
 unify' (ForallTy Irrelevant a b) (ForallTy Irrelevant a' b') = liftA2 (<>) (unify' a a') (unify' b b')
-unify' (RowsTy t ts) (RowsTy t' ts') = do
-  mgu_t <- unify' t t'
-  ts <- for (zip (sortOn fst ts) (sortOn fst ts')) $ \((_, t), (_, t')) -> unify' t t'
-  pure (mgu_t <> fold ts)
+unify' x@RowsTy{} y@RowsTy{} =
+  let (inner, rows) = getRows x
+      (inner', rows') = getRows y
+   in do
+     mgu <- unify' inner inner'
+     ts <- for (zip (sortOn fst rows) (sortOn fst rows')) $
+       \((_, t), (_, t')) -> unify' t t' 
+     pure (mgu <> fold ts)
 unify' (ForallTy (Relevant v) c t) (ForallTy (Relevant v') c' t') = liftA2 (<>) (unify' c c') (unify' t (replaceTy v' (VarTy v) t'))
 unify' (AppTy f t) (AppTy f' t') = liftA2 (<>) (unify' f f') (unify' t t')
 unify' (ValuesTy xs) (ValuesTy xs') = goTup xs xs' where
@@ -119,7 +124,15 @@ unifyClosed = go mempty where
     where s' = VarMap.delete (toVar v') s
   go s (ForallTy Irrelevant a r) (ForallTy Irrelevant a' r') = go s a a' && go s r r'
   go s (AppTy f x) (AppTy f' x') = go s f f' && go s x x'
-  go s (RowsTy f ts) (RowsTy f' ts') = go s f f' && and (zipWith (\(l, t) (l', t') -> l == l' && go s t t') (sortOn fst ts) (sortOn fst ts'))
+  go s (RowsTy f ts) (RowsTy f' ts') = and (zipWith (\(l, t) (l', t') -> l == l' && go s t t') (sortOn fst firsts) (sortOn fst seconds)) where
+    firsts =
+      let get (RowsTy f ts) = get f ++ ts
+          get NilTy = []
+       in get f ++ ts
+    seconds =
+      let get (RowsTy f ts) = get f ++ ts
+          get NilTy = []
+       in get f ++ ts
   go s (ValuesTy xs) (ValuesTy xs') = goTup s xs xs'
   go _ StarTy StarTy = True
   go _ NilTy NilTy = True
@@ -128,3 +141,9 @@ unifyClosed = go mempty where
   goTup _ [] [] = True
   goTup s (x:xs) (y:ys) = go s x y && goTup s xs ys
   goTup _ _ _ = False
+
+getRows :: Type a -> (Type a, [(T.Text, Type a)])
+getRows (RowsTy i ts) =
+  let (inner, ts') = getRows i
+   in (inner, ts' ++ ts)
+getRows x = (x, [])

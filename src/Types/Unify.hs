@@ -103,7 +103,7 @@ doSolve Empty = pure ()
 doSolve (ConUnify because v a b :<| xs) = do
   sub <- use solveTySubst
 
-  -- traceM (displayS (pretty because <+> pretty (ConUnify because v (apply sub a) (apply sub b))))
+  -- traceM (displayS (pretty (ConUnify because v (apply sub a) (apply sub b))))
   co <- memento $ unify (apply sub a) (apply sub b)
   case co of
     Left e -> do
@@ -115,7 +115,7 @@ doSolve (ConUnify because v a b :<| xs) = do
 doSolve (ConSubsume because v scope a b :<| xs) = do
   sub <- use solveTySubst
 
-  -- traceM (displayS (pretty because <+> pretty (ConSubsume because v scope (apply sub a) (apply sub b))))
+  -- traceM (displayS (pretty (ConSubsume because v scope (apply sub a) (apply sub b))))
   let a' = apply sub a
       cont :: m () = do
         sub <- use solveTySubst
@@ -571,7 +571,9 @@ subsumes' r s th@(TyRows rho rhas) tw@(TyRows sigma rwant) = do
 
   -- We need to at *least* match all of the ones we want
   if length matching < length rwant || length rwant > length rhas
-  then probablyCast <$> unify th tw
+  then do
+    _ <- unify th tw
+    pure (WrapFn (MkWrapCont (\ex -> Ascription (ExprWrapper (Cast (AssumedCo th tw)) ex (annotation ex, tw)) tw (annotation ex, tw)) "foo"))
   else do
     matched <- fmap fold . for matching $ \(key, have, want) -> do
       -- and make sure that the ones we have are subtypes of the ones we
@@ -591,7 +593,7 @@ subsumes' r s th@(TyRows rho rhas) tw@(TyRows sigma rwant) = do
     cast <- probablyCast <$> unify sigma new
     exp <- TvName <$> genName
 
-    let mkw ex = ExprWrapper cast ex (annotation ex, tw)
+    let mkw ex = Ascription (ExprWrapper cast ex (annotation ex, tw)) tw (annotation ex, tw)
     pure (WrapFn (MkWrapCont (mkRecordWrapper rhas matched matched_t th tw mkw exp) "exact→poly record subsumption"))
 
 subsumes' r _ a b = probablyCast <$> retcons (reblame r) (unify a b)

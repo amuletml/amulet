@@ -56,6 +56,7 @@ addOperators stmt =
     opsExpr LuaInteger{} = mempty
     opsExpr LuaString{} = mempty
     opsExpr LuaQuoteE{} = mempty
+    opsExpr LuaBitE{} = mempty
 
     opsExpr (LuaCall f xs) = foldMap opsExpr (f:xs)
     opsExpr (LuaRef v) = opsVar v
