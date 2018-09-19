@@ -27,7 +27,7 @@ $hex   = [0-9A-Fa-f]         -- Hexadecimal digits
 $upper = [A-Z] -- Uppercase characters
 $lower = [a-z] -- Lowercase characters
 
-$identHead = [$upper $lower '_'] -- Valid starting identifier characters
+$identHead = [$upper $lower \_] -- Valid starting identifier characters
 $identTail = [$identHead $digit] -- Valid remaining identifier characters
 
 tokens :-
