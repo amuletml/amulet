@@ -337,7 +337,7 @@ emitExpr var yield t@(AnnApp _ f e) = withinExpr var yield t $ do
           | Just op' <- getEscaped op esc, Just opv <- VarMap.lookup (op' :: CoVar) ops
           , [l, r] <- e'
             -> LuaBinOp l opv r
-        _ -> LuaCall f' e' ]
+        _ -> LuaCallE (LuaCall f' e') ]
 
 emitExpr var yield (AnnLam _ TypeArgument{} b) = emitExpr var yield b
 
@@ -420,7 +420,7 @@ emitExpr var yield (AnnExtend fv tbl exs) = do
       in LuaLocal [old] [tbl] <| copy var old <| mempty
 
     copy var tbl =
-      LuaFor [LuaName k, LuaName v] [LuaCall (LuaRef pairs) [LuaRef tbl]]
+      LuaFor [LuaName k, LuaName v] [LuaCallE (LuaCall (LuaRef pairs) [LuaRef tbl])]
          [LuaAssign [LuaIndex (LuaRef var) (LuaRef (LuaName k))] [LuaRef (LuaName v)]]
 
 runNES :: ( MonadReader (EmitScope a) m
@@ -729,7 +729,7 @@ pushScope' v = state (\s -> let e = nodeState s
 asStmt :: LuaExpr -> Seq LuaStmt
 asStmt (LuaTable fs) = foldr ((<>) . asStmt . snd) mempty fs
 asStmt (LuaBinOp a _ b) = asStmt a <> asStmt b
-asStmt (LuaCall f e) = pure (LuaCallS f e)
+asStmt (LuaCallE x) = pure (LuaCallS x)
 asStmt _ = mempty
 
 patternBindings :: Occurs a => Pattern a -> [LuaExpr] -> [(a, [LuaExpr])]

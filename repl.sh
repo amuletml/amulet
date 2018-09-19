@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -e
+
 if [ -z ${IN_NIX_SHELL+a} ]; then
   echo -e "This program should be run as \x1b[1;31mnix-shell . --run '$0'\x1b[0m."
   exit 1

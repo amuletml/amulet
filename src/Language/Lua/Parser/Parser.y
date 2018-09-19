@@ -78,12 +78,16 @@ import Language.Lua.Syntax
   '^'      { Token TcPow _ _ }
   '%'      { Token TcMod _ _ }
 
+  '..'     { Token TcConcat _ _ }
+
   '=='     { Token TCEq _ _ }
   '~='     { Token TCNe _ _ }
   '<'      { Token TcLt _ _ }
   '>'      { Token TcGt _ _ }
   '<='     { Token TcLe _ _ }
   '>='     { Token TcGe _ _ }
+
+  '#'      { Token TcLen _ _ }
 
   ident    { Token (TcIdentifier _) _ _ }
 
@@ -96,7 +100,7 @@ import Language.Lua.Syntax
   string   { Token (TcString  _) _ _ }
 
 %right '^'
-%right 'not' '#'
+%right UNOP
 %left '*' '/' '%'
 %left '+' '-'
 %right '..'
@@ -118,13 +122,16 @@ BaseExpr :: { LuaExpr }
   : Var                                 { LuaRef $1 }
   | qexpr                               { LuaQuoteE (getIdent $1) }
   | '(' Expr ')'                        { $2 }
-  | Call                                { $1 }
+  | Call                                { LuaCallE $1 }
 
-Call :: { LuaExpr }
-  : BaseExpr '(' List(Expr, ',') ')'    { LuaCall $1 $3 }
-  | BaseExpr string                     { LuaCall $1 [LuaString (getString $2)] }
-  | BaseExpr Table                      { LuaCall $1 [$2] }
-  -- TODO: We should technically include foo:bar() here too
+Call :: { LuaCall }
+  : BaseExpr Args                       { LuaCall $1 $2 }
+  | BaseExpr ':' ident Args             { LuaInvoke $1 (getIdent $3) $4 }
+
+Args :: { [LuaExpr] }
+  : '(' List(Expr, ',') ')'             { $2 }
+  | string                              { [LuaString (getString $1)] }
+  | Table                               { [$1] }
 
 Atom :: { LuaExpr }
   : BaseExpr                            { $1 }
@@ -153,13 +160,18 @@ Expr :: { LuaExpr }
   | Expr '^' Expr                       { LuaBinOp $1 (T.pack "^") $3 }
   | Expr '%' Expr                       { LuaBinOp $1 (T.pack "%") $3 }
 
+  | Expr '..' Expr                      { LuaBinOp $1 (T.pack "%") $3 }
+
   | Expr '==' Expr                      { LuaBinOp $1 (T.pack "==") $3 }
   | Expr '~=' Expr                      { LuaBinOp $1 (T.pack "~=") $3 }
   | Expr '<'  Expr                      { LuaBinOp $1 (T.pack "<")  $3 }
   | Expr '>'  Expr                      { LuaBinOp $1 (T.pack ">")  $3 }
   | Expr '<=' Expr                      { LuaBinOp $1 (T.pack "<=") $3 }
   | Expr '>=' Expr                      { LuaBinOp $1 (T.pack ">=") $3 }
-  -- TODO: '-' and not
+
+  | '-' Expr %prec UNOP                 { LuaUnOp (T.pack "-")      $2 }
+  | '#' Expr %prec UNOP                 { LuaUnOp (T.pack "#")      $2 }
+  | not Expr %prec UNOP                 { LuaUnOp (T.pack "not")    $2 }
 
 Table :: { LuaExpr }
   : '{' List(TablePair, ',') '}'        { LuaTable (buildTable $2) }
@@ -176,7 +188,7 @@ Stmts :: { [LuaStmt] }
 
 Stmt :: { LuaStmt }
   : qstmt                               { LuaQuoteS (getIdent $1) }
-  | Call                                { buildCallS $1 }
+  | Call                                { LuaCallS $1 }
 
   | do Stmts end                        { LuaDo $2 }
   | List1(Var, ',') '=' List1(Expr, ',') { LuaAssign $1 $3 }
@@ -227,8 +239,6 @@ buildTable = go 1 where
   go _ [] = []
   go n (Left x:xs) = (LuaInteger n, x):go (n + 1) xs
   go n (Right x:xs) = x:go n xs
-
-buildCallS (LuaCall f xs) = LuaCallS f xs
 
 getIdent (Token (TcIdentifier x) _ _) = x
 getIdent (Token (TcQuoteE x) _ _) = x

@@ -3,6 +3,7 @@ module Language.Lua.Syntax
   ( LuaStmt(..), pattern LuaIf
   , LuaVar(..)
   , LuaExpr(..)
+  , LuaCall(..)
   , keywords
   ) where
 
@@ -30,7 +31,7 @@ data LuaStmt
   | LuaReturn [LuaExpr]
   | LuaIfElse [(LuaExpr, [LuaStmt])]
   | LuaBreak
-  | LuaCallS LuaExpr [LuaExpr]
+  | LuaCallS LuaCall
   | LuaQuoteS Text
   deriving (Eq, Show, Ord, Typeable, Data)
 
@@ -47,7 +48,7 @@ data LuaVar
 
 -- | A Lua expression
 data LuaExpr
-  = LuaCall LuaExpr [LuaExpr]
+  = LuaCallE LuaCall
   | LuaNil | LuaTrue | LuaFalse | LuaDots
   | LuaRef LuaVar
   | LuaNumber Double
@@ -56,8 +57,14 @@ data LuaExpr
   | LuaFunction [LuaVar] [LuaStmt]
   | LuaTable [(LuaExpr, LuaExpr)]
   | LuaBinOp LuaExpr Text LuaExpr
+  | LuaUnOp Text LuaExpr
   | LuaQuoteE Text
   | LuaBitE Text
+  deriving (Eq, Show, Ord, Typeable, Data)
+
+data LuaCall
+  = LuaCall LuaExpr [LuaExpr]
+  | LuaInvoke LuaExpr Text [LuaExpr]
   deriving (Eq, Show, Ord, Typeable, Data)
 
 data Precedence
@@ -71,17 +78,18 @@ data Associativity = ALeft | ARight
   deriving (Eq, Show)
 
 precedenceOf :: LuaExpr -> Precedence
-precedenceOf LuaCall{} = PreRaw
+precedenceOf LuaCallE{} = PreRaw
 precedenceOf LuaRef{} = PreRaw
 precedenceOf (LuaBinOp _ op _) = PreOp $ case op of
   "^" -> 0
-  "*" -> 1; "/" -> 1; "%" -> 1
-  "+" -> 2; "-" -> 2
-  ".." -> 3
-  "==" -> 4; "~=" -> 4; "<" -> 4; ">" -> 4; ">=" -> 4; "<=" -> 4
-  "and" -> 5
-  "or" -> 6
+  "*" -> 2; "/" -> 2; "%" -> 2
+  "+" -> 3; "-" -> 3
+  ".." -> 4
+  "==" -> 5; "~=" -> 5; "<" -> 5; ">" -> 5; ">=" -> 5; "<=" -> 5
+  "and" -> 6
+  "or" -> 7
   _ -> 10
+precedenceOf LuaUnOp{} = PreOp 1
 precedenceOf _ = PreLit
 
 succPrec :: Precedence -> Precedence
@@ -158,7 +166,7 @@ instance Pretty LuaStmt where
   pretty (LuaQuoteS x) = "@" <> text x
   pretty LuaBreak = keyword "break"
   pretty (LuaReturn v) = keyword "return" <+> pretty v
-  pretty (LuaCallS x a) = prettyWith PreRaw x <> args (map pretty a)
+  pretty (LuaCallS x) = pretty x
 
 instance Pretty LuaVar where
   pretty (LuaName x) = text x
@@ -186,6 +194,9 @@ instance Pretty LuaExpr where
     in case assocOf o of
         ALeft -> prettyWith prec l <+> text o <+> prettyWith (succPrec prec) r
         ARight -> prettyWith (succPrec prec) l <+> text o <+> prettyWith prec r
+  pretty e@(LuaUnOp o x) = op o <> prettyWith (precedenceOf e) x where
+    op "not" = "not "
+    op o = text o
   pretty (LuaRef x) = pretty x
   pretty (LuaFunction a b) =
     funcBlock (keyword "function" <> args (map pretty a))
@@ -199,9 +210,13 @@ instance Pretty LuaExpr where
     entries n ((k,v):es) = brackets (pretty k) <+> value v : entries n es
 
     value v = equals <+> pretty v
-  pretty (LuaCall x a) = prettyWith PreRaw x <> args (map pretty a)
+  pretty (LuaCallE x) = pretty x
   pretty (LuaQuoteE x) = "%" <> text x
   pretty (LuaBitE x) = text x
+
+instance Pretty LuaCall where
+  pretty (LuaCall x a) = prettyWith PreRaw x <> args (map pretty a)
+  pretty (LuaInvoke x k a) = prettyWith PreRaw x <> ":" <> text k <> args (map pretty a)
 
 prettyWith :: Precedence -> LuaExpr -> Doc
 prettyWith desired expr =

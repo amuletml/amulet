@@ -46,8 +46,9 @@ data TokenClass
   | TcCSquare -- ^ A @]@ token.
 
   | TcAdd | TcSub | TcMul | TcDiv | TcPow | TcMod
-
+  | TcConcat
   | TCEq | TCNe | TcLt | TcGt | TcLe | TcGe
+  | TcLen
 
   | TcIdentifier Text -- ^ Identifiers (@foo@)
 
@@ -109,12 +110,16 @@ instance Show TokenClass where
   show TcPow = "^"
   show TcMod = "%"
 
+  show TcConcat = "..."
+
   show TCEq = "=="
   show TCNe = "~="
   show TcLt = "<"
   show TcGt = ">"
   show TcLe = "<="
   show TcGe = ">="
+
+  show TcLen = "#"
 
   show (TcIdentifier t) = unpack t
 

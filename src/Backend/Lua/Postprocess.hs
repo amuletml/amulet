@@ -44,7 +44,7 @@ addOperators stmt =
     opsStmt (LuaReturn r) = foldMap opsExpr r
     opsStmt (LuaIfElse t) = foldMap (\(c, b) -> opsExpr c <> foldMap opsStmt b) t
     opsStmt LuaBreak = mempty
-    opsStmt (LuaCallS f xs) = foldMap opsExpr (f:xs)
+    opsStmt (LuaCallS f) = opsCall f
     opsStmt LuaQuoteS{} = mempty
 
     opsExpr :: LuaExpr -> VarSet.Set
@@ -58,16 +58,20 @@ addOperators stmt =
     opsExpr LuaQuoteE{} = mempty
     opsExpr LuaBitE{} = mempty
 
-    opsExpr (LuaCall f xs) = foldMap opsExpr (f:xs)
+    opsExpr (LuaCallE f) = opsCall f
     opsExpr (LuaRef v) = opsVar v
     opsExpr (LuaFunction _ b) = foldMap opsStmt b
     opsExpr (LuaTable ks) = foldMap (\(k, v) -> opsExpr k <> opsExpr v) ks
     opsExpr (LuaBinOp l _ r) = opsExpr l <> opsExpr r
+    opsExpr (LuaUnOp _ x) = opsExpr x
 
     opsVar :: LuaVar -> VarSet.Set
     opsVar (LuaName t) = foldMap VarSet.singleton (Map.lookup t opNames)
     opsVar (LuaIndex t k) = opsExpr t <> opsExpr k
     opsVar LuaQuoteV{} = mempty
+
+    opsCall (LuaCall f xs) = foldMap opsExpr (f:xs)
+    opsCall (LuaInvoke f _ xs) = foldMap opsExpr (f:xs)
 
     opNames = Map.filter (`VarMap.member` ops) (fromEsc escapeScope)
                 `Map.union` Map.fromList [ ( "__builtin_Lazy", vLAZY ), ( "__builtin_force", vForce ) ]
