@@ -265,31 +265,18 @@ emitExpr var yield (AnnMatch _ test arms) = do
       pure (YieldStore v', pure (LuaLocal v' []), v')
 
   (deps, body) <- case arms of
-    (Arm { _armPtrn = PatLit LitTrue,  _armBody = ifs } :
-     Arm { _armPtrn = PatLit LitFalse, _armBody = els } :_) -> do
-      {-
-        Whilst this may seem a little weird special casing this, as we'll
-        generate near equivalent code in the general case, it does allow us to
-        merge the test with the definition, as we know it'll only be evaluated
-        once.
-      -}
-      (deps, test') <- runNES (freeInAtom test) (emitAtomS test)
-
-      ifs' <- emitLifted yield' ifs
-      els' <- emitLifted yield' els
-      pure (deps, LuaIf test' (toList ifs') (toList els'))
-
-    (Arm { _armPtrn = PatLit LitFalse, _armBody = els } :
-     Arm { _armPtrn = PatLit LitTrue,  _armBody = ifs } :_) -> do
-      {-
-        As above, but testing against `not EXPR`. In this case we just flip the
-        two branches
-      -}
-      (deps, test') <- runNES (freeInAtom test) (emitAtomS test)
-
-      ifs' <- emitLifted yield' ifs
-      els' <- emitLifted yield' els
-      pure (deps, LuaIf test' (toList ifs') (toList els'))
+    {-
+      Whilst this may seem a little weird special casing this, as we'll
+      generate near equivalent code in the general case, it does allow us to
+      merge the test with the definition, as we know it'll only be evaluated
+      once.
+    -}
+    (Arm { _armPtrn = PatLit LitTrue, _armBody = ifs }:arms')
+      | Just Arm { _armBody = els } <- find ((/=PatLit LitTrue) . _armPtrn) arms'
+      -> genIf yield' ifs els
+    (Arm { _armPtrn = PatLit LitFalse, _armBody = els }:arms')
+      | Just Arm { _armBody = ifs } <- find ((/=PatLit LitFalse) . _armPtrn) arms'
+      -> genIf yield' ifs els
 
     _ -> do
       {-
@@ -318,6 +305,13 @@ emitExpr var yield (AnnMatch _ test arms) = do
 
       let b' = fst3 $ emitTerm scope escape graph yield' b
       pure (patternTest escape p test', toList b')
+
+    genIf yield ifs els = do
+      (deps, test') <- runNES (freeInAtom test) (emitAtomS test)
+
+      ifs' <- emitLifted yield ifs
+      els' <- emitLifted yield els
+      pure (deps, LuaIf test' (toList ifs') (toList els'))
 
 -- Trivial terms. These will just be emitted inline.
 emitExpr var yield t@(AnnAtom _ x)    = withinExpr var yield t $ emitAtom x
