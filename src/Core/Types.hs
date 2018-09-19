@@ -21,6 +21,8 @@ import Data.Foldable
 import Data.Maybe
 import Data.List
 
+import Text.Pretty.Semantic
+
 -- | Compute the arity of a function type. Namely, how many terms one can
 -- apply to it.
 arity :: Type a -> Int
@@ -89,7 +91,7 @@ unify' x@RowsTy{} y@RowsTy{} =
    in do
      mgu <- unify' inner inner'
      ts <- for (zip (sortOn fst rows) (sortOn fst rows')) $
-       \((_, t), (_, t')) -> unify' t t' 
+       \((_, t), (_, t')) -> unify' t t'
      pure (mgu <> fold ts)
 unify' (ForallTy (Relevant v) c t) (ForallTy (Relevant v') c' t') = liftA2 (<>) (unify' c c') (unify' t (replaceTy v' (VarTy v) t'))
 unify' (AppTy f t) (AppTy f' t') = liftA2 (<>) (unify' f f') (unify' t t')
@@ -125,14 +127,13 @@ unifyClosed = go mempty where
   go s (ForallTy Irrelevant a r) (ForallTy Irrelevant a' r') = go s a a' && go s r r'
   go s (AppTy f x) (AppTy f' x') = go s f f' && go s x x'
   go s (RowsTy f ts) (RowsTy f' ts') = and (zipWith (\(l, t) (l', t') -> l == l' && go s t t') (sortOn fst firsts) (sortOn fst seconds)) where
-    firsts =
-      let get (RowsTy f ts) = get f ++ ts
-          get NilTy = []
-       in get f ++ ts
-    seconds =
-      let get (RowsTy f ts) = get f ++ ts
-          get NilTy = []
-       in get f ++ ts
+    get (RowsTy f ts) = get f ++ ts
+    get NilTy = []
+    get x = error ("Malformed record type" ++ show (pretty x))
+
+    firsts = get f ++ ts
+    seconds = get f' ++ ts'
+
   go s (ValuesTy xs) (ValuesTy xs') = goTup s xs xs'
   go _ StarTy StarTy = True
   go _ NilTy NilTy = True

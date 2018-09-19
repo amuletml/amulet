@@ -80,12 +80,16 @@ tokens :-
   <0> "^"        { constTok TcPow }
   <0> "%"        { constTok TcMod }
 
+  <0> ".."       { constTok TcConcat }
+
   <0> "=="       { constTok TCEq }
   <0> "~="       { constTok TCNe }
   <0> "<"        { constTok TcLt }
   <0> ">"        { constTok TcGt }
   <0> "<="       { constTok TcLe }
   <0> ">="       { constTok TcGe }
+
+  <0> "#"        { constTok TcLen }
 
   -- Numbers
   <0> $digit+                          { onString $ TcInteger . parseNum 10 }
