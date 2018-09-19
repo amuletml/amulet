@@ -56,14 +56,22 @@ emptyScope = ArityScope opArity
 -- | Compute the arity of a term
 atomArity :: IsVar a => ArityScope -> Atom a -> Arity
 atomArity s (Ref r _) = varArity r s
-atomArity _ (Lit _) = Arity 0 True
+atomArity _ (Lit _)   = Arity 0 True
 
 termArity :: IsVar a => ArityScope -> AnnTerm b a -> Arity
-termArity s (AnnAtom _ a) = atomArity s a
-termArity s (AnnApp   _ a _) = mapArity pred (atomArity s a)
+-- Lookup within the parent scope
+termArity s (AnnAtom _ a)     = atomArity s a
+termArity s (AnnApp   _ a _)  = mapArity pred (atomArity s a)
 termArity s (AnnTyApp  _ a _) = mapArity pred (atomArity s a)
-termArity s (AnnLam _ _ b) = mapArity succ (termArity s b)
-termArity _ _ = Arity 0 False
+termArity s (AnnLam _ _ b)    = mapArity succ (termArity s b)
+-- Always pure to evaluate
+termArity _ AnnExtend{}       = Arity 0 True
+termArity _ AnnValues{}       = Arity 0 True
+termArity _ AnnCast{}         = Arity 0 True
+-- Just terminate on these. While it would be technically possible to
+-- recurse arbitrarily deep, this will inevitably end up quadratic.
+termArity _ AnnLet{}          = Arity 0 False
+termArity _ AnnMatch{}        = Arity 0 False
 
 -- | Determine if the given term can be evaluated without side effects
 isPure :: IsVar a => ArityScope -> AnnTerm b a -> Bool
@@ -73,14 +81,22 @@ isPure _ AnnValues{} = True
 isPure _ AnnTyApp{}  = True
 isPure _ AnnCast{}   = True
 isPure _ AnnLam{}    = True
-isPure s (AnnLet _ (One v) e) = isPure s e && isPure s (thd3 v)
-isPure s (AnnLet _ (Many vs) e) = isPure s e && all (isPure s . thd3) vs
-isPure s (AnnMatch _ _ bs) = all (isPure s . view armBody) bs
 isPure s (AnnApp _ f _) = isPureA . mapArity pred $ atomArity s f
+isPure s (AnnMatch _ _ bs) = all (isPure s . view armBody) bs
+
+isPure s (AnnLet _ (One v) e) = isPure s (thd3 v) && isPure (extendPureLets s [v]) e
+isPure s (AnnLet _ (Many vs) e) =
+  let s' = extendPureLets s vs
+  in all (isPure s' . thd3) vs && isPure s' e
 
 isPureA :: Arity -> Bool
 isPureA (Arity a p) | p = a >= 0
                     | otherwise = a > 0
+
+maybeInsert :: IsVar a => a -> Arity -> VarMap.Map Arity -> VarMap.Map Arity
+maybeInsert v a m
+  | defArity a > 0 = VarMap.insert (toVar v) a m
+  | otherwise = m
 
 -- | Extend the arity scope with a series of bindings.
 --
@@ -89,10 +105,6 @@ isPureA (Arity a p) | p = a >= 0
 -- atoms) as references to them will already be pure.
 extendPureLets :: IsVar a => ArityScope -> [(a, Type a, AnnTerm b a)] -> ArityScope
 extendPureLets s vs = s { pureArity = foldr (\(v, _, e) p -> maybeInsert v (termArity s e) p) (pureArity s) vs }
-  where
-    maybeInsert v a m
-      | defArity a > 0 = VarMap.insert (toVar v) a m
-      | otherwise = m
 
 -- | Extend the arity scope with all constructors defined within a type.
 extendPureCtors :: IsVar a => ArityScope -> [(a, Type a)] -> ArityScope
