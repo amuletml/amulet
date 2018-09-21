@@ -58,6 +58,7 @@ import Control.Lens
 
 import qualified Backend.Lua.Postprocess as B
 import qualified Backend.Lua.Emit as B
+import qualified Backend.Escape as B
 import Language.Lua.Syntax
 
 import Text.Pretty.Semantic
@@ -84,7 +85,7 @@ defaultState mode = do
   state <- L.newstate
 
   let preamble = T.unpack . display . uncommentDoc . renderPretty 0.8 100 . pretty
-                . LuaDo . map (patchupLua . B.genOperator . fst)
+                . LuaDo . map (patchupLua B.defaultEmitState . B.genOperator . fst)
                 . ((vLAZY, undefined):) . ((vForce, undefined):)
                 $ VarMap.toList B.ops
 
@@ -146,7 +147,7 @@ runRepl = do
         Just (vs, prog, core, state') -> do
           let core' = patchupUsage . tagFreeSet . tagOccursVar $ core
               (luaStmt, emit') = runState (B.emitStmt core') (emitState state')
-              luaExpr = LuaDo . map patchupLua . toList $ luaStmt
+              luaExpr = LuaDo . map (patchupLua emit') . toList $ luaStmt
               luaSyntax = T.unpack . display . uncommentDoc . renderPretty 0.8 100 . pretty $ luaExpr
 
 
@@ -254,11 +255,23 @@ isError x = diagnosticKind x == ErrorMessage
 
 -- | We convert any top-level local declarations into global ones. This
 -- means they are accessible outside normal REPL invocations.
-patchupLua :: LuaStmt -> LuaStmt
-patchupLua (LuaLocal vs es)
-  | length es < length vs = LuaAssign vs (es ++ replicate (length vs - length es) LuaNil)
-  | otherwise = LuaAssign vs es
-patchupLua x = x
+patchupLua :: B.TopEmitState -> LuaStmt -> LuaStmt
+patchupLua s (LuaLocal vs [])
+  | all (isTopVar s) vs
+  = LuaAssign vs [LuaNil]
+patchupLua s (LuaLocal vs es)
+  | all (isTopVar s) vs
+  = LuaAssign vs es
+patchupLua s (LuaLocalFun v as ss)
+  | isTopVar s v
+  = LuaAssign [v] [LuaFunction as ss]
+patchupLua _ x = x
+
+isTopVar :: B.TopEmitState -> LuaVar -> Bool
+isTopVar s (LuaName v)
+  | Just _ <- B.getEscaped v (B.topEscape s) :: Maybe CoVar
+  = True
+isTopVar _ _ = False
 
 -- | Patchup the usage of a series of statements to ensure every one is
 -- considered "used".
