@@ -316,12 +316,17 @@ canTerminate TcEnd = True
 canTerminate TcIn = True
 canTerminate TcSemicolon = True
 canTerminate TcTopSep = True
+canTerminate TcAnd = True
 canTerminate _ = False
 
 terminates :: TokenClass -> [Context] -> Bool
 
 -- `in` terminates the `let` binding
 terminates TcIn (CtxLet{}:_) = True
+
+-- `and` terminates the `let` binding
+terminates TcAnd (CtxLet{}:_) = True
+terminates TcAnd (CtxStmtLet{}:_) = True
 
 -- `else` terminates the `then` context, so we want to pop everything until the
 -- nearest `if`.
