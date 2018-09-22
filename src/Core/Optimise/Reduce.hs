@@ -16,6 +16,7 @@ import Control.Arrow hiding ((<+>))
 import qualified Data.VarMap as VarMap
 import qualified Data.Text as T
 import Data.Triple
+import Data.Maybe
 import Data.List
 
 import Core.Optimise.Reduce.Base
@@ -29,7 +30,7 @@ reducePass :: (IsVar a, MonadNamey m) => [Stmt a] -> m [Stmt a]
 reducePass = runReduceN reduceStmts 4
 
 extendVar :: IsVar a => (a, Type a, Term a) -> ReduceScope a -> ReduceScope a
-extendVar (v, _, e) = vars %~ VarMap.insert (toVar v) e
+extendVar (v, _, e) = varScope %~ VarMap.insert (toVar v) (basicDef v e)
 
 extendVars :: IsVar a => [(a, Type a, Term a)] -> ReduceScope a -> ReduceScope a
 extendVars vs s = foldr extendVar s vs
@@ -46,9 +47,11 @@ reduceStmts (StmtLet (Many vs):ss) = do
   ss' <- local (extendVars vs') $ reduceStmts ss
   pure $ StmtLet (Many vs'):ss'
 reduceStmts (s@(Type v cases):ss) =
-  local ( (types %~ VarMap.insert (toVar v) cases)
-        . (ctors %~ VarMap.union (VarMap.fromList (map (first toVar) cases))) ) $
+  local ( (typeScope %~ VarMap.insert (toVar v) cases)
+        . (ctorScope %~ VarMap.union (VarMap.fromList (map buildCtor cases))) ) $
     (s:) <$> reduceStmts ss
+  where
+    buildCtor (def, sig) = (toVar def, (v, sig))
 
 -- | Simplify an atom within the current context
 --
@@ -56,7 +59,7 @@ reduceStmts (s@(Type v cases):ss) =
 reduceAtom :: MonadReduce a m => Atom a -> m (Atom a)
 reduceAtom a@(Ref v _) = do
   -- Beta reduction (let case)
-  v' <- asks (lookupBaseVar v)
+  v' <- asks (lookupTerm v)
   case v' of
     Just (Atom d) | trivialAtom d -> changed d
     _ -> pure a
@@ -108,7 +111,7 @@ reduceTerm (Cast a co) = do
       -- detect if it's redundant? This way we can remove /any/ casts
       -- of casts.
       | Ref v _ <- a'
-      , Just (Cast oa oco) <- lookupVar v s
+      , Just (Cast oa oco) <- lookupTerm v s
       , Just (l, r) <- relates co'
       , Just (l', r') <- relates oco
       , unifyClosed r l'
@@ -125,7 +128,7 @@ reduceTerm (App f x) = do
   if
     | Ref fv _ <- f'
     , Ref xv _ <- x'
-    , Just (Values xs) <- lookupVar xv s
+    , Just (Values xs) <- lookupTerm xv s
     , Just a' <- foldApply (toVar (lookupRawVar fv s)) xs
     -> changed a'
     | otherwise -> pure (App f' x')
@@ -175,7 +178,7 @@ reduceTermK (Let (One (v, ty, e)) rest) cont = reduceTermK e $ \e' -> do
         | Atom (Ref _ ty') <- rest'
         , ty `unifyClosed` ty'
         , Just tyName <- unwrapTy ty
-        , Just [_] <- VarMap.lookup (toVar tyName) (s ^. types)
+        , Just [_] <- VarMap.lookup (toVar tyName) (s ^. typeScope)
         -> changed e'
 
         -- Match commuting conversion for multiple arms
@@ -225,7 +228,7 @@ reduceTermK (Match test arms) cont = do
     Right arms' -> case filterDeadArms (_armPtrn . fst) s arms' of
       [(arm, subst)] -> Match test' . pure <$> reduceArm cont arm subst
       arms' -> do
-        arms'' <- traverse (uncurry (reduceArm pure)) arms'
+        arms'' <- reduceArms test' arms' []
         cont $ Match test' arms''
   where
     foldCases _ _ [] = Right []
@@ -236,17 +239,29 @@ reduceTermK (Match test arms) cont = do
         PatternPartial subst -> Right [(a, subst)]
         PatternComplete subst -> Left ((a, subst))
 
+    reduceArms :: Atom a -> [(Arm a, Subst a)] -> [Pattern a] -> m [Arm a]
+    reduceArms (Ref v _) ((a@Arm { _armPtrn = PatWildcard },subst):_) ps = do
+      a' <- local (varScope . at (toVar v) %~ extendNot ps) $ reduceArm pure a subst
+      pure [a']
+    reduceArms at ((arm,subst):as) ps = (:) <$> reduceArm pure arm subst <*> reduceArms at as (arm^.armPtrn:ps)
+    reduceArms _ [] _ = pure []
+
+    extendNot ps def =
+      let def' = fromMaybe unknownDef def
+      in Just def' { varNotAmong = ps ++ (varNotAmong def') }
+
     -- | Visit an arm with the provided continuation and substitution,
     -- applying them as needed.
-    reduceArm :: (Term a -> m (Term a)) -> Arm a -> Subst a -> m (Arm a)
+    reduceArm :: (Term a -> m (Term a)) -- ^ The continuation function
+              -> Arm a -> Subst a -> m (Arm a)
     reduceArm cont a@Arm { _armTyvars = [], _armBody = body } subst = do
       -- In the trivial case we can do a plain old substitution
-      body' <- local (vars %~ VarMap.union (VarMap.map Atom subst)) (reduceTermK body cont)
+      body' <- reduceBody cont subst body
       pure $ a & armBody .~ body'
-    reduceArm cont a@Arm{  _armVars = vs, _armBody = body } subst = do
+    reduceArm cont a@Arm{ _armVars = vs, _armBody = body } subst = do
       -- Otherwise we look up types and attempt to unify them.
-      let Just tySubst = VarMap.foldrWithKey (foldVar vs . fromVar) (Just mempty) subst
-      body' <- local (vars %~ VarMap.union (VarMap.map Atom subst)) (reduceTermK body cont)
+      let Just tySubst = foldr (foldVar vs) (Just mempty) subst
+      body' <- reduceBody cont subst body
 
       pure $ a
         & (armVars %~ map (second (substituteInType tySubst)))
@@ -254,9 +269,16 @@ reduceTermK (Match test arms) cont = do
         . (armTyvars %~ map (second (substituteInType tySubst)) . filter (not . flip VarMap.member tySubst . toVar . fst))
         . (armBody .~ substituteInTys tySubst body')
 
-    foldVar :: [(a, Type a)] -> a -> Atom a -> Maybe (VarMap.Map (Type a)) -> Maybe (VarMap.Map (Type a))
-    foldVar _ _ _ Nothing = Nothing
-    foldVar vs v a (Just sol) = do
+    reduceBody :: (Term a -> m (Term a)) -> Subst a -> Term a -> m (Term a)
+    reduceBody cont subst body =
+      local (varScope %~ VarMap.union (buildSub subst)) (reduceTermK body cont)
+
+    buildSub :: Subst a -> VarMap.Map (VarDef a)
+    buildSub = VarMap.fromList . map (\(var, a) -> (toVar var, basicDef var (Atom a)))
+
+    foldVar :: [(a, Type a)] -> (a, Atom a) -> Maybe (VarMap.Map (Type a)) -> Maybe (VarMap.Map (Type a))
+    foldVar _ _ Nothing = Nothing
+    foldVar vs (v, a) (Just sol) = do
       vty <- snd <$> find ((==v) . fst) vs
       let aty = approximateAtomType a
       unifyWith sol vty aty

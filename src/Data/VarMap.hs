@@ -1,15 +1,17 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, DerivingStrategies, FlexibleInstances #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, DerivingStrategies, FlexibleInstances, TypeFamilies #-}
 module Data.VarMap
   ( Map
   , fromList, toList, null
   , lookup, member, findWithDefault
   , insert, delete
   , map, mapWithKey, singleton, union, unionSemigroup
+  , alter
   , difference, intersection
   , foldrWithKey
   , (<>), mempty
   ) where
 
+import Control.Lens (At(..), Ixed(..), Index, IxValue)
 import qualified Data.HashMap.Strict as Map
 import Data.Coerce
 import Prelude hiding (lookup, map, null)
@@ -57,6 +59,9 @@ intersection (Map a) (Map b) = Map (Map.intersection a b)
 map :: (a -> b) -> Map a -> Map b
 map f (Map a) = Map (Map.map f a)
 
+alter :: (Maybe a -> Maybe a) -> CoVar -> Map a -> Map a
+alter f k (Map m) = Map (Map.alter f k m)
+
 mapWithKey :: (CoVar -> a -> b) -> Map a -> Map b
 mapWithKey f (Map a) = Map (Map.mapWithKey f a)
 
@@ -68,3 +73,12 @@ unionSemigroup (Map l) (Map r) = Map (Map.unionWith (<>) l r)
 
 foldrWithKey :: (CoVar -> a -> b -> b) -> b -> Map a -> b
 foldrWithKey f b (Map m) = Map.foldrWithKey f b m
+
+type instance Index (Map a) = CoVar
+type instance IxValue (Map a) = a
+
+instance Ixed (Map a) where
+  ix k f (Map m) = Map <$> ix k f m
+
+instance At (Map a) where
+  at k f (Map m) = Map <$> at k f m

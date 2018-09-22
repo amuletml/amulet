@@ -22,7 +22,7 @@ do
               if 0 == hk then
                 return Cons({ _1 = 3, _2 = Nil })
               else
-                return Cons({ _1 = f(hn)(hk), _2 = zip(f)(hm)(hj) })
+                return Cons({ _1 = f(0)(hk), _2 = zip(f)(hm)(hj) })
               end
             else
               return Cons({ _1 = f(hn)(hk), _2 = zip(f)(hm)(hj) })
