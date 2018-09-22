@@ -1,425 +1,272 @@
-{-# LANGUAGE OverloadedStrings, ScopedTypeVariables, ViewPatterns #-}
+{-# LANGUAGE
+  ConstraintKinds
+, FlexibleContexts
+, MultiWayIf
+, OverloadedStrings
+, ScopedTypeVariables
+, TemplateHaskell
+, ViewPatterns #-}
+module Core.Optimise.Reduce (reducePass) where
 
-module Core.Optimise.Reduce
-  ( Scope(..)
-  , reducePass
-  , reduceTerm
-  , reduceAtom
-  ) where
+import Control.Monad.Reader
+import Control.Monad.Namey
+import Control.Lens
+import Control.Arrow hiding ((<+>))
 
 import qualified Data.VarMap as VarMap
-import qualified Data.VarSet as VarSet
-import qualified Data.HashSet as HSet
 import qualified Data.Text as T
 import Data.Triple
 import Data.List
 
-import Control.Lens hiding (cons)
-import Control.Arrow
-
-import Core.Builtin
+import Core.Optimise.Reduce.Base
+import Core.Optimise.Reduce.Fold
+import Core.Optimise.Reduce.Pattern
 import Core.Optimise
+import Core.Builtin
 import Core.Types
 
-data Scope a = Scope { vars :: VarMap.Map (Term a)
-                     , types :: VarMap.Map [(a, Type a)]
-                     , cons :: VarMap.Map (Type a) }
-  deriving (Show)
+reducePass :: (IsVar a, MonadNamey m) => [Stmt a] -> m [Stmt a]
+reducePass = runReduceN reduceStmts 4
 
-isCon :: IsVar a => Scope a -> a -> Bool
-isCon s var = VarMap.member (toVar var) (cons s)
+extendVar :: IsVar a => (a, Type a, Term a) -> ReduceScope a -> ReduceScope a
+extendVar (v, _, e) = vars %~ VarMap.insert (toVar v) e
 
-lookupVar :: IsVar a => Scope a -> a -> Maybe (Term a)
-lookupVar s v = VarMap.lookup (toVar v) (vars s)
-
-lookupBaseVar :: forall a. IsVar a => Scope a -> a -> Maybe (Term a)
-lookupBaseVar s v = lookup v v where
-  lookup u v = case (var u, var v) of
-                 (Just (Atom (Ref u' _)), Just (Atom (Ref v' _)))
-                   | Just e@(Atom (Ref v'' _)) <- var v' ->
-                     if u' == v''
-                     then Just (smallest v'' e)
-                     else lookup u' v''
-                 (_, t) -> t
-
-  smallest v e = case var v of
-                   Just e'@(Atom (Ref v' _)) | v' < v -> e'
-                   _ -> e
-
-  var :: a -> Maybe (Term a)
-  var = flip VarMap.lookup (vars s) . toVar
-
-lookupRawVar :: IsVar a => Scope a -> a -> a
-lookupRawVar s v = case lookupBaseVar s v of
-                  Just (TyApp (Ref v' _) _) -> lookupRawVar s v'
-                  _ -> v
-
-lookupRawTerm :: IsVar a => Scope a -> a -> Maybe (Term a)
-lookupRawTerm s v = VarMap.lookup (toVar (lookupRawVar s v)) (vars s)
-
-extendVar :: IsVar a => (a, Type a, Term a) -> Scope a -> Scope a
-extendVar (v, _, e) s = s { vars = VarMap.insert (toVar v) e (vars s) }
-
-extendVars :: IsVar a => [(a, Type a, Term a)] -> Scope a -> Scope a
+extendVars :: IsVar a => [(a, Type a, Term a)] -> ReduceScope a -> ReduceScope a
 extendVars vs s = foldr extendVar s vs
 
-transformOver :: IsVar a => Scope a -> Term a -> Term a
-transformOver = transT where
-  mapA _ t@Ref{} = t
-  mapA _ t@Lit{} = t
+reduceStmts :: MonadReduce a m => [Stmt a] -> m [Stmt a]
+reduceStmts [] = pure []
+reduceStmts (s@Foreign{}:ss) = (s:) <$> reduceStmts ss
+reduceStmts (StmtLet (One var):ss) = do
+  var' <- third3A reduceTerm var
+  ss' <- local (extendVar var') (reduceStmts ss)
+  pure $ StmtLet (One var'):ss'
+reduceStmts (StmtLet (Many vs):ss) = do
+  vs' <- local (extendVars vs) $ traverse (third3A reduceTerm) vs
+  ss' <- local (extendVars vs') $ reduceStmts ss
+  pure $ StmtLet (Many vs'):ss'
+reduceStmts (s@(Type v cases):ss) =
+  local ( (types %~ VarMap.insert (toVar v) cases)
+        . (ctors %~ VarMap.union (VarMap.fromList (map (first toVar) cases))) ) $
+    (s:) <$> reduceStmts ss
 
-  transA s = reduceAtom s . mapA s
+-- | Simplify an atom within the current context
+--
+-- This doesn't do anything fancy: we just inline trivial variables.
+reduceAtom :: MonadReduce a m => Atom a -> m (Atom a)
+reduceAtom a@(Ref v _) = do
+  -- Beta reduction (let case)
+  v' <- asks (lookupBaseVar v)
+  case v' of
+    Just (Atom d) | trivialAtom d -> changed d
+    _ -> pure a
+reduceAtom a@Lit{} = pure a
 
-  mapT s (Atom a) = Atom (transA s a)
-  mapT s (App f a) = App (transA s f) (transA s a)
-  mapT s (Lam v b) = Lam v (transT s b)
-  mapT s (TyApp f t) = TyApp (transA s f) t
-  mapT s (Cast f t) = Cast (transA s f) t
-  mapT s (Extend t rs) = Extend (transA s t) (map (third3 (transA s)) rs)
-  mapT s (Values xs) = Values (map (transA s) xs)
-  mapT s (Let (One var) body) =
-    let var' = third3 (transT s) var
-        body' = transT (extendVar var' s) body
-     in Let (One var') body'
-  mapT s (Let (Many vars) body) =
-    let vars' = map (third3 (transT (extendVars vars s))) vars
-        body' = transT (extendVars vars' s) body
-     in Let (Many vars') body'
-  mapT s (Match test branches) =
-    let test' = transA s test
-        branches' = map (armBody %~ transT s) branches
-    in Match test' branches'
+-- | Simplify a term within the current context
+--
+-- This will simplify nested terms/atoms as well.
+reduceTerm :: forall a m. MonadReduce a m => Term a -> m (Term a)
 
-  transT s = reduceTerm s . mapT s
+reduceTerm (Atom a) = Atom <$> reduceAtom a
+reduceTerm (Values vs) = Values <$> traverse reduceAtom vs
+reduceTerm (TyApp a ty) = flip TyApp ty <$> reduceAtom a
 
-reducePass :: IsVar a => [Stmt a] -> [Stmt a]
-reducePass = reduceStmts (Scope mempty mempty mempty) where
-  reduceStmts _ [] = []
-  reduceStmts s (x@Foreign{}:xs) = x:reduceStmts s xs
-  reduceStmts s (StmtLet (One var):xs) =
-    let var' = third3 (transformOver s) var
-        xs' = reduceStmts (extendVar var' s) xs
-     in StmtLet (One var'):xs'
-  reduceStmts s (StmtLet (Many vars):xs) =
-    let vars' = map (third3 (transformOver (extendVars vars s))) vars
-        xs' = reduceStmts (extendVars vars' s) xs
-     in StmtLet (Many vars'):xs'
-  reduceStmts s (x@(Type v cases):xs) =
-    let s' = s { types = VarMap.insert (toVar v) cases (types s)
-               , cons = VarMap.union (VarMap.fromList (map (first toVar) cases)) (cons s) }
-    in x:reduceStmts s' xs
+reduceTerm (Extend e fs) = do
+  e' <- reduceAtom e
+  fs' <- traverse (third3A reduceAtom) fs
+  case fs' of
+    -- Eliminate empty extensions
 
-reduceAtom :: IsVar a => Scope a -> Atom a -> Atom a
+    -- TODO: Could we do an additional filter which removes redundant fields (for
+    -- cases where we can see the parent record and it's the same value).
+    [] -> changed $ Atom e'
+    _ -> pure $ Extend e' fs'
 
--- Beta reduction (let case)
-reduceAtom s a@(Ref v _) = {-# SCC "Reduce.beta_let" #-}
-  case lookupBaseVar s v of
-    Just (Atom d) | trivialAtom d -> d
-    _ -> a
+reduceTerm (Lam arg body) = do
+  body' <- reduceTerm body
+  case (arg, body) of
+    -- Eta conversion (function case)
+    (TermArgument var _, App r (Ref var' _))
+      | var == var' -> changed $ Atom r
+    (TypeArgument var _, TyApp r (VarTy var'))
+      | var == var' -> changed $ Atom r
 
-reduceAtom _ e = e
+    _ -> pure $ Lam arg body'
 
-reduceTerm :: forall a. IsVar a => Scope a -> Term a -> Term a
+reduceTerm (Cast a co) = do
+  a' <- reduceAtom a
+  if redundantCo co
+  then changed $ Atom a'
+  else do
+    let co' = squishCoercion co
+    s <- ask
+    if
+      -- If we point to another cast, and our one reverses theirs then
+      -- eliminate it.
 
--- Empty expressions
-reduceTerm _ (Extend e []) = {-# SCC "Reduce.empty_extend" #-} Atom e
+      -- TODO: Could we replace this so we chain the coercion, then
+      -- detect if it's redundant? This way we can remove /any/ casts
+      -- of casts.
+      | Ref v _ <- a'
+      , Just (Cast oa oco) <- lookupVar v s
+      , Just (l, r) <- relates co'
+      , Just (l', r') <- relates oco
+      , unifyClosed r l'
+      , unifyClosed l r'
+      -> changed $ Atom oa
 
--- Let of bottom conversion
-reduceTerm _ (Let (One (v, _, TyApp (Ref var errort) _)) (Let (One (_, _, App (Ref v' _) msg)) cont))
-  | v == v'
-  , isError var = {-# SCC "Reduce.let_bottom" #-}
-    let Just ty = approximateType cont
-        errTy = ForallTy Irrelevant tyString ty
+      | otherwise -> pure $ Cast a' co'
 
-        newerr = TyApp (Ref var errort) ty
-        errapp = App (Ref v errTy) msg
-     in Let (One (v, errTy, newerr)) errapp
+reduceTerm (App f x) = do
+  f' <- reduceAtom f
+  x' <- reduceAtom x
 
--- Let Commuting conversion
-reduceTerm s (Let (One (x, xt, Let (One (y, yt, yval)) xval)) rest) =
-  {-# SCC "Reduce.commute_let" #-}
-  reduceTerm s $ Let (One (y, yt, yval)) $ reduceTerm s (Let (One (x, xt, xval)) rest)
+  s <- ask
+  if
+    | Ref fv _ <- f'
+    , Ref xv _ <- x'
+    , Just (Values xs) <- lookupVar xv s
+    , Just a' <- foldApply (toVar (lookupRawVar fv s)) xs
+    -> changed a'
+    | otherwise -> pure (App f' x')
 
--- Match commuting conversion (trivial case)
-reduceTerm _ (Let (One (v, vt, Match t [a])) r) =
-  {-# SCC "Reduce.commute_match" #-}
-  Match t [a & armBody %~ appendBody v vt r]
+reduceTerm t@Match{} = reduceTermK t pure
+reduceTerm t@Let{}   = reduceTermK t pure
 
--- Trivial matches
-reduceTerm s (Match _ (Arm { _armPtrn = PatWildcard, _armBody = body }:_)) = {-# SCC "Reduce.trivial_match" #-}
-  reduceTerm s body
-reduceTerm s (Match t bs) = {-# SCC "Reduce.fold_cases" #-}
-  case foldCases bs of
-    Left  Arm { _armBody = b } -> b
-    Right bs' -> Match t (filterDeadArms s bs')
+-- | Reduce the provided term, running the continuation when reaching the
+-- "leaf" node.
+--
+-- This allows us to implement commuting conversion for lets and matches
+-- in a more intuitive manner.
+reduceTermK :: forall a m. MonadReduce a m
+            => Term a
+            -> (Term a -> m (Term a))
+            -> m (Term a)
 
-  where foldCases [] = Right []
-        foldCases (a@Arm { _armPtrn = p, _armBody = body }:xs) = case reducePattern s t p of
-          PatternFail -> foldCases xs
-          PatternUnknown subst -> Right (substArm a subst body:either pure id (foldCases xs))
-          PatternPartial subst -> Right [substArm a subst body]
-          PatternComplete subst -> Left (substArm a subst body)
+reduceTermK (Let (One (v, ty, e)) rest) cont = reduceTermK e $ \e' -> do
+  s <- ask
+  case e' of
+    -- Let of bottom conversion: we've errored here, so we can skip any
+    -- remaining code.
+    App (Ref f _) msg
+      | toVar (lookupRawVar f s) == vError
+      ->
+        let Just ty = approximateType rest -- TODO: Is this valid with our use of cont?
+            errTy = ForallTy Irrelevant (tyString :: Type a)
+            na = fromVar tyvarA :: a
+        in changed $
+          Let (One ( v, errTy ty
+                   , TyApp (Ref (fromVar vError) (ForallTy (Relevant na) StarTy (errTy (VarTy na)))) ty))
+            (App (Ref v (errTy ty)) msg)
 
-        substArm :: Arm a -> Subst a -> Term a -> Arm a
-        substArm a@Arm{_armTyvars = []} subst body
-          -- In the trivial case we can do a plain old substitution
-          = a & armBody .~ substitute subst body
-        substArm a@Arm{_armTyvars = ts, _armVars = vs} subst body
-          -- Otherwise we look up types and attempt to unify them.
-          = let Just tySubst = VarMap.foldrWithKey (foldVar vs . fromVar) (Just mempty) (subst :: VarMap.Map (Atom a))
-            in a { _armVars = map (second (substituteInType tySubst)) vs
-                 -- Substitute tyvars and remove those which have been remapped
-                 , _armTyvars = map (second (substituteInType tySubst)) $ filter (not . flip VarMap.member tySubst . toVar . fst) ts
-                 -- Substitute atoms and tyvars
-                 , _armBody = substituteInTys tySubst $ substitute subst body
-                 }
+    _ -> do
+      rest' <- local (extendVar (v, ty, e')) (reduceTermK rest cont)
+      s <- ask
+      if
+        -- If we're binding a trivial atom, then we can strip it - we'll have
+        -- inlined it elsewhere and so it's dead.
+        | Atom a <- e', trivialAtom a -> changed rest'
 
-        foldVar :: [(a, Type a)] -> a -> Atom a -> Maybe (VarMap.Map (Type a)) -> Maybe (VarMap.Map (Type a))
-        foldVar _ _ _ Nothing = Nothing
-        foldVar vs v a (Just sol) = do
-          vty <- snd <$> find ((==v) . fst) vs
-          let aty = approximateAtomType a
-          unifyWith sol vty aty
+        -- Eta conversion for simple lets
+        | Atom (Ref v' _) <- rest', v == v' -> changed e'
 
--- Beta reduction (function case)
--- reduceTerm s (App (Lam (TermArgument var ty) body) ex) = {-# SCC "Reduce.beta_function" #-}
---   reduceTerm s $ Let (One (var, ty, Atom ex)) body
--- reduceTerm s (TyApp (Lam (TypeArgument var _) body) tp) = {-# SCC "Reduce.beta_type_function" #-}
---   reduceTerm s (substituteInTys (VarMap.singleton (toVar var) tp) body)
+        -- Eta conversion for single constructor types
+        | Atom (Lit Unit) <- rest', ty == tyUnit -> changed e'
+        | Atom (Ref _ ty') <- rest'
+        , ty `unifyClosed` ty'
+        , Just tyName <- unwrapTy ty
+        , Just [_] <- VarMap.lookup (toVar tyName) (s ^. types)
+        -> changed e'
 
--- Eta conversion (function case)
-reduceTerm _ (Lam (TermArgument var _) (App r (Ref var' _)))
-  | var == var' = {-# SCC "Reduce.eta_term" #-} Atom r
-reduceTerm _ (Lam (TypeArgument var _) (TyApp r (VarTy var')))
-  | var == var' = {-# SCC "Reduce.eta_type" #-} Atom r
+        -- Match commuting conversion for multiple arms
+        | Match test arms <- e'
+        , Just restTy <- approximateType rest'
+        -> do
+            join <- fresh' ValueVar
+            let joinTy = ForallTy Irrelevant ty restTy
+                joinVar = Ref join joinTy
 
--- Eta reduction (let case)
-reduceTerm _ (Let (One (v, _, term)) (Atom (Ref v' _)))
-  | v == v' = {-# SCC "Reduce.eta_let" #-} term
+                shoveJoinArm :: Arm a -> m (Arm a) = armBody %%~ shoveJoin
+                shoveJoin (Let bind body) = Let bind <$> shoveJoin body
+                shoveJoin (Match t bs) = Match t <$> traverse shoveJoinArm bs
+                shoveJoin (Atom a) = pure (App joinVar a)
+                shoveJoin ex = do
+                  var <- fresh' ValueVar
+                  pure (Let (One (var, ty, ex)) (App joinVar (Ref var ty)))
 
-reduceTerm _ (Let (One (_, ty, term)) (Atom (Lit Unit)))
-  | ty == tyUnit = {-# SCC "Reduce.eta_let" #-} term
+            arms' <- traverse shoveJoinArm arms
+            changed $ Let (One (join, joinTy, Lam (TermArgument v ty) rest')) (Match test arms')
 
--- Eta reduction (let case) for single constructor types which
--- take no arguments
-reduceTerm s (Let (One (_, ty, term)) (Atom (Ref _ ty')))
-  -- We need the types to be equivalent and to have a single, no-args constructor
-  | ty `unifyClosed` ty'
-  , Just tyName <- unwrapTy ty
-  , Just [(_, unwrapTy -> Just _)] <- VarMap.lookup (toVar tyName) (types s)
-  = {-# SCC "Reduce.eta_let" #-} term
+        | otherwise -> pure (Let (One (v, ty, e')) rest')
+
+reduceTermK (Let (Many vs) rest) cont = do
+  -- We really can't do a lot with recursive lets sadly, so let's just
+  -- leave them for now.
+  vs' <- traverse (third3A reduceTerm) vs
+  rest' <- reduceTermK rest cont
+  pure (Let (Many vs') rest')
+
+reduceTermK (Match test arms) cont = do
+  test' <- reduceAtom test
+  s <- ask
+
+  -- We prune our pattern list, either removing the match if we can
+  -- eliminate all variables or replacing our match with the simplified
+  -- list.
+  --
+  -- If we have only one arm, we can pass our continuation in. Otherwise
+  -- we call it on the whole expression.
+  --
+  -- TODO: Work out a better way of handling continuations on multi-match
+  -- arms, as our current handling within the let case means we have to
+  -- walk down the entire tree.
+  case foldCases s test' arms of
+    Left (arm, subst) -> changing $ view armBody <$> reduceArm cont arm subst
+    Right arms' -> case filterDeadArms (_armPtrn . fst) s arms' of
+      [(arm, subst)] -> Match test' . pure <$> reduceArm cont arm subst
+      arms' -> do
+        arms'' <- traverse (uncurry (reduceArm pure)) arms'
+        cont $ Match test' arms''
   where
-    unwrapTy (ForallTy Relevant{} _ t) = unwrapTy t
-    unwrapTy (ConTy v) = Just v
-    unwrapTy _ = Nothing
+    foldCases _ _ [] = Right []
+    foldCases s t (a@Arm { _armPtrn = p }:as) =
+      case reducePattern s t p of
+        PatternFail -> foldCases s t as
+        PatternUnknown subst -> Right ((a, subst):either pure id (foldCases s t as))
+        PatternPartial subst -> Right [(a, subst)]
+        PatternComplete subst -> Left ((a, subst))
 
--- Coercion reduction
-reduceTerm s (Cast (Ref v _) c)
-  | Just (Cast a c') <- lookupVar s v
-  , Just (l, r) <- relates c
-  , Just (l', r') <- relates c'
-  , unifyClosed r l'
-  , unifyClosed l r'
-  = Atom a
+    -- | Visit an arm with the provided continuation and substitution,
+    -- applying them as needed.
+    reduceArm :: (Term a -> m (Term a)) -> Arm a -> Subst a -> m (Arm a)
+    reduceArm cont a@Arm { _armTyvars = [], _armBody = body } subst = do
+      -- In the trivial case we can do a plain old substitution
+      body' <- local (vars %~ VarMap.union (VarMap.map Atom subst)) (reduceTermK body cont)
+      pure $ a & armBody .~ body'
+    reduceArm cont a@Arm{  _armVars = vs, _armBody = body } subst = do
+      -- Otherwise we look up types and attempt to unify them.
+      let Just tySubst = VarMap.foldrWithKey (foldVar vs . fromVar) (Just mempty) subst
+      body' <- local (vars %~ VarMap.union (VarMap.map Atom subst)) (reduceTermK body cont)
 
-reduceTerm _ (Cast a co)
-  | redundantCo co = Atom a
-  | otherwise = Cast a (squishCoercion co)
+      pure $ a
+        & (armVars %~ map (second (substituteInType tySubst)))
+        -- Substitute tyvars and remove those which have been remapped
+        . (armTyvars %~ map (second (substituteInType tySubst)) . filter (not . flip VarMap.member tySubst . toVar . fst))
+        . (armBody .~ substituteInTys tySubst body')
 
--- Constant fold
-reduceTerm s e@(App (Ref v _) (Ref a _))
-  | Just (Values xs) <- lookupVar s a
-  , n <- toVar v
-  = case xs of
-      -- Primitive integer reductions
-      [Lit (Int l), Lit (Int r)] | n == vOpAdd -> num (l + r)
-      [Lit (Int l), Lit (Int r)] | n == vOpSub -> num (l - r)
-      [Lit (Int l), Lit (Int r)] | n == vOpMul -> num (l * r)
-      [Lit (Int l), Lit (Int r)] | n == vOpDiv -> num (l `div` r)
-      [Lit (Int l), Lit (Int r)] | n == vOpExp -> num (l ^ r)
-      [Lit (Int l), Lit (Int r)] | n == vOpLt -> bool (l < r)
-      [Lit (Int l), Lit (Int r)] | n == vOpGt -> bool (l > r)
-      [Lit (Int l), Lit (Int r)] | n == vOpLe -> bool (l <= r)
-      [Lit (Int l), Lit (Int r)] | n == vOpGe -> bool (l >= r)
+    foldVar :: [(a, Type a)] -> a -> Atom a -> Maybe (VarMap.Map (Type a)) -> Maybe (VarMap.Map (Type a))
+    foldVar _ _ _ Nothing = Nothing
+    foldVar vs v a (Just sol) = do
+      vty <- snd <$> find ((==v) . fst) vs
+      let aty = approximateAtomType a
+      unifyWith sol vty aty
 
-      -- Partial integer reductions
-      [x, Lit (Int 0)] | n == vOpAdd -> Atom x
-      [Lit (Int 0), x] | n == vOpAdd -> Atom x
-      [Lit (Int 0), x] | n == vOpSub -> Atom x
-      [x, Lit (Int 1)] | n == vOpMul -> Atom x
-      [Lit (Int 1), x] | n == vOpMul -> Atom x
-      [_, Lit (Int 0)] | n == vOpMul -> num 0
-      [Lit (Int 0), _] | n == vOpMul -> num 0
-      [x, Lit (Int 1)] | n == vOpDiv -> Atom x
-
-      -- Primitive string reductions
-      [Lit (Str l), Lit (Str r)]  | n == vOpConcat -> str (l `T.append` r)
-
-      -- Partial string reductions
-      [x, Lit (Str "")] | n == vOpConcat -> Atom x
-      [Lit (Str ""), x] | n == vOpConcat -> Atom x
-
-      _ -> e
-  where num = Atom . Lit . Int
-        str = Atom . Lit . Str
-        bool x = Atom (Lit (if x then LitTrue else LitFalse))
-
-reduceTerm _ e = e
-
-type Subst a = VarMap.Map (Atom a)
-
-data PatternResult a
-  = PatternFail
-  | PatternUnknown (Subst a)
-  | PatternPartial (Subst a)
-  | PatternComplete (Subst a)
-  deriving (Show)
-
-instance Ord a => Semigroup (PatternResult a) where
-  PatternFail <> _ = PatternFail
-  _ <> PatternFail = PatternFail
-
-  (PatternUnknown s) <> t = PatternUnknown (s <> extract t)
-  s <> (PatternUnknown t) = PatternUnknown (extract s <> t)
-
-  (PatternPartial s) <> t = PatternPartial (s <> extract t)
-  s <> (PatternPartial t) = PatternPartial (extract s <> t)
-
-  (PatternComplete s) <> (PatternComplete t) = PatternComplete (s <> t)
-
-extract :: PatternResult a -> Subst a
-extract PatternFail = mempty
-extract (PatternUnknown s) = s
-extract (PatternPartial s) = s
-extract (PatternComplete s) = s
-
-reducePattern :: forall a. IsVar a => Scope a -> Atom a -> Pattern a -> PatternResult a
-
--- A wildcard always yields a complete pattern
-reducePattern _ _ PatWildcard = PatternComplete mempty
-
--- Literals are relatively easy to accept/reject
-reducePattern _ _ (PatLit RecNil) = PatternComplete mempty
-reducePattern _ _ (PatLit Unit) = PatternComplete mempty
-reducePattern _ (Lit l') (PatLit l)
-  | l == l'   = PatternComplete mempty
-  | otherwise = PatternFail
-
--- If we're matching against a known constructor it is easy to accept or reject
-reducePattern s (Ref v _) (Constr c)
-  | lookupRawVar s v == c = PatternComplete mempty
-
-  | isCon s (lookupRawVar s v) = PatternFail
-  | Just (App (Ref c' _) _) <- lookupRawTerm s v
-  , isCon s (lookupRawVar s c') = PatternFail
-
-reducePattern s (Ref v _) (Destr c (Capture a _))
-  | Just (App (Ref c' _) a') <- lookupRawTerm s v
-  , lookupRawVar s c' == c = PatternComplete (VarMap.singleton (toVar a) a')
-
-  | isCon s (lookupRawVar s v) = PatternFail
-  | Just (App (Ref c' _) _) <- lookupRawTerm s v
-  , isCon s (lookupRawVar s c') = PatternFail
-
--- Attempt to reduce the field
-reducePattern s e (PatExtend (Capture r' _) fs) =
-  foldr ((<>) . handle)
-        (PatternComplete (VarMap.singleton (toVar r') e))
-        fs where
-  handle :: (T.Text, Capture a) -> PatternResult a
-  handle (f, Capture v _) =
-    case find ((==f) . fst3) fs' of
-      Nothing -> PatternPartial mempty
-      Just (_, _, e) -> PatternComplete (VarMap.singleton (toVar v) e)
-
-  fs' = simplifyRecord e
-
-  simplifyRecord (Ref v _) =
-    case lookupVar s v of
-      Just (Atom r) -> simplifyRecord r
-      Just (Extend r fs) -> fs ++ simplifyRecord r
-      _ -> []
-  simplifyRecord _ = []
-
-reducePattern _ _ _ = PatternUnknown mempty
-
--- | Remove arms which are shadowed by a previous one and so will never be executed
-filterDeadArms :: IsVar a => Scope a -> [Arm a] -> [Arm a]
-filterDeadArms s = goArm where
-  goArm [] = []
-  goArm (a@Arm { _armPtrn = p }:as) =
-    case p of
-      -- Trivial patterns which always match
-      PatWildcard   -> [a]
-      PatLit Unit   -> [a]
-      PatLit RecNil -> [a]
-      PatExtend{}   -> [a]
-      PatValues _   -> [a]
-
-    -- Unbounded literals will never be complete unless we have a wildcard
-      PatLit l@Int{}   -> a : goLit (HSet.singleton l) as
-      PatLit l@Str{}   -> a : goLit (HSet.singleton l) as
-      PatLit l@Float{} -> a : goLit (HSet.singleton l) as
-
-      -- See if we've got the other case
-      PatLit LitTrue  -> a : goBool LitTrue  as
-      PatLit LitFalse -> a : goBool LitFalse as
-
-      -- See if we've got all cases
-      Destr v _ -> a : goSum (buildSumSet v) as
-      Constr v  -> a : goSum (buildSumSet v) as
-
-  -- | Build a HashSet of literals, removing those we've already seen.
-  goLit _ [] = []
-  goLit v (a@Arm { _armPtrn = p }:as) =
-    case p of
-      PatWildcard -> [a]
-      PatLit l | HSet.member l v -> goLit v as
-               | otherwise -> a : goLit (HSet.insert l v) as
-      _ -> a : goLit v as
-
-  -- | Remove booleans we've already seen, and terminate if we have both true
-  -- and false.
-  goBool _ [] = []
-  goBool l (a@Arm { _armPtrn = p }:as) =
-    case p of
-      PatWildcard -> [a]
-      PatLit l' | l /= l' -> [a]
-      _ -> a : goBool l as
-
-  -- | Build a set of variables we've yet to seen, skipping cases which do not
-  -- appear in the set and terminating when it's empty.
-  goSum _ [] = []
-  goSum m _ | m == mempty = []
-  goSum m (a@Arm { _armPtrn = p }:as) =
-    case p of
-      PatWildcard -> [a]
-      Constr v   | VarSet.member (toVar v) m -> a : goSum (VarSet.delete (toVar v) m) as
-                 | otherwise -> goSum m as
-      Destr v _  | VarSet.member (toVar v) m -> a : goSum (VarSet.delete (toVar v) m) as
-                 | otherwise -> goSum m as
-      _ -> a : goSum m as
-
-  -- | Build a set of all _other_ cases for the given type variable.
-  buildSumSet v =
-    let Just ty = VarMap.lookup (toVar v) (cons s)
-        Just cases = VarMap.lookup (toVar (unwrapTy ty)) (types s)
-    in foldr (\(a, _) -> if a == v then id else VarSet.insert (toVar a)) mempty cases
-
-  -- | Extract the type name from a constructor's type. This is a little grim.
-  unwrapTy (ForallTy _ _ t) = unwrapTy t
-  unwrapTy (AppTy t _) = unwrapTy t
-  unwrapTy (ConTy v) = v
-  unwrapTy ty = error ("Cannot extract type from constructor " ++ show ty)
+reduceTermK t cont = reduceTerm t >>= cont
 
 redundantCo :: IsVar a => Coercion a -> Bool
 redundantCo c
   | Just (a, b) <- relates c = a == b
   | otherwise = False
-
-appendBody :: a -> Type a -> Term a -> Term a -> Term a
-appendBody v ty r (Let bind b) = Let bind (appendBody v ty r b)
-appendBody v ty r b = Let (One (v, ty, b)) r
 
 trivialAtom :: Atom a -> Bool
 trivialAtom Ref{} = True

@@ -7,7 +7,6 @@ import Core.Optimise.Newtype
 import Core.Optimise.CommonExpElim
 import Core.Optimise.DeadCode
 import Core.Optimise.Sinking
-import Core.Optimise.Joinify
 import Core.Optimise.Inline
 import Core.Optimise.Reduce
 import Core.Optimise
@@ -25,19 +24,18 @@ optmOnce :: [Stmt CoVar] -> Namey [Stmt CoVar]
 optmOnce = passes <=< linted "Newtype" killNewtypePass where
   passes :: [Stmt CoVar] -> Namey [Stmt CoVar]
   passes = foldr1 (>=>)
-           [ linted "Reduce" $ pure . reducePass
-           , linted "Inline"   inlineVariablePass
+           [ linted "Reduce" reducePass
+           , linted "Inline" inlineVariablePass
 
            , linted "Dead code" $ pure . deadCodePass
-           , linted "Match Join"  matchJoinPass
 
            , linted "Sinking" $ pure . sinkingPass . tagFreeSet
 
-           , linted "Reduce #2" $ pure . reducePass
-           , linted "CSE" $ pure . csePass
+           , linted "Reduce #2" reducePass
+           , linted "CSE"     $ pure . csePass
            ]
 
-  linted :: Functor f => String -> ([Stmt CoVar] -> f [Stmt CoVar]) -> [Stmt CoVar] -> f [Stmt CoVar]
+  linted :: Monad f => String -> ([Stmt CoVar] -> f [Stmt CoVar]) -> [Stmt CoVar] -> f [Stmt CoVar]
   linted pass fn
     | lintPasses
     = fmap (runLint pass =<< checkStmt emptyScope) . fn
