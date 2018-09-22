@@ -17,7 +17,7 @@ import Data.List
 
 import Core.Optimise.Reduce.Base
 
-type Subst a = VarMap.Map (Atom a)
+type Subst a = [(a, Atom a)]
 
 data PatternResult a
   = PatternFail -- ^ A pattern which did not match at all
@@ -66,7 +66,7 @@ reducePattern s (Ref v _) (Constr c)
 
 reducePattern s (Ref v _) (Destr c (Capture a _))
   | Just (App (Ref c' _) a') <- lookupRawTerm v s
-  , lookupRawVar c' s == c = PatternComplete (VarMap.singleton (toVar a) a')
+  , lookupRawVar c' s == c = PatternComplete [(a, a')]
 
   | isCtor (lookupRawVar v s) s = PatternFail
   | Just (App (Ref c' _) _) <- lookupRawTerm v s
@@ -75,22 +75,36 @@ reducePattern s (Ref v _) (Destr c (Capture a _))
 -- Attempt to reduce the field
 reducePattern s e (PatExtend (Capture r' _) fs) =
   foldr ((<>) . handle)
-        (PatternComplete (VarMap.singleton (toVar r') e))
+        (PatternComplete [(r', e)])
         fs where
   handle :: (T.Text, Capture a) -> PatternResult a
   handle (f, Capture v _) =
     case find ((==f) . fst3) fs' of
       Nothing -> PatternPartial mempty
-      Just (_, _, e) -> PatternComplete (VarMap.singleton (toVar v) e)
+      Just (_, _, e) -> PatternComplete [(v, e)]
 
   fs' = simplifyRecord e
 
   simplifyRecord (Ref v _) =
-    case lookupVar v s of
+    case lookupTerm v s of
       Just (Atom r) -> simplifyRecord r
       Just (Extend r fs) -> fs ++ simplifyRecord r
       _ -> []
   simplifyRecord _ = []
+
+reducePattern _ _ (PatValues []) = PatternComplete mempty
+reducePattern s (Ref v _) (PatValues cs)
+  | Just (Values vs) <- lookupTerm v s
+  = PatternComplete (zipWith (\(Capture c _) a -> (c,a)) cs vs)
+
+-- If we know this pattern doesn't match, then remove it
+reducePattern s (Ref v _) p
+  | VarDef { varNotAmong = ps } <- lookupVar v s
+  , p `elem` ps = PatternFail
+
+-- If we are matching against a literal, we know any usage of it within
+-- the branch will be that.
+reducePattern _ (Ref v _) (PatLit l) = PatternUnknown [(v, Lit l)]
 
 reducePattern _ _ _ = PatternUnknown mempty
 
@@ -153,7 +167,6 @@ filterDeadArms pat s = goArm where
 
   -- | Build a set of all _other_ cases for the given type variable.
   buildSumSet v =
-    let Just ty = VarMap.lookup (toVar v) (s ^. ctors)
-        Just v' = unwrapTy ty
-        Just cases = VarMap.lookup (toVar v') (s ^. types)
+    let Just (v', _) = VarMap.lookup (toVar v) (s ^. ctorScope)
+        Just cases = VarMap.lookup (toVar v') (s ^. typeScope)
     in foldr (\(a, _) -> if a == v then id else VarSet.insert (toVar a)) mempty cases
