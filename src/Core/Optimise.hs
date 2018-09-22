@@ -5,7 +5,7 @@ module Core.Optimise
   ( substitute, substituteInTys, substituteInType, substituteInCo
   , module Core.Core
   , module Core.Var
-  , refresh, fresh, freshFrom, freshFrom'
+  , refresh, fresh, fresh', freshFrom, freshFrom'
   , argVar
   ) where
 
@@ -255,8 +255,12 @@ freshFrom (CoVar _ name dat) = do
 freshFrom' :: (MonadNamey m, IsVar a) => a -> m a
 freshFrom' x = fromVar <$> freshFrom (toVar x)
 
--- | Create a new fresh variable
+-- | Create a fresh 'CoVar'
 fresh :: MonadNamey m => VarInfo -> m CoVar
 fresh k = do
   TgName nam x <- genName
   pure (CoVar x nam k)
+
+-- | Create a fresh variable
+fresh' :: (MonadNamey m, IsVar a) => VarInfo -> m a
+fresh' k = fromVar <$> fresh k
