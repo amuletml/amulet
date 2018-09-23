@@ -4,13 +4,19 @@
 , ScopedTypeVariables
 , TemplateHaskell #-}
 module Core.Optimise.Reduce.Base
-  ( module Core.Core
+  ( module Core.Occurrence
+  , module Core.Core
   , module Core.Var
 
   , DefInfo(..), VarDef(..)
   , unknownDef, basicDef, basicRecDef
   , ReduceScope
   , varScope, typeScope, ctorScope
+
+  , VarSub(..)
+  , ReduceState
+  , varSubst
+
   , MonadReduce
   , runReduce, runReduceN
 
@@ -21,15 +27,15 @@ module Core.Optimise.Reduce.Base
   , unwrapTy
   ) where
 
-import Control.Monad.Writer
-import Control.Monad.Reader
 import Control.Monad.Namey
-import Control.Arrow
+import Control.Monad.RWS
 import Control.Lens
 
 import qualified Data.VarMap as VarMap
+import qualified Data.VarSet as VarSet
 import Data.Maybe
 
+import Core.Occurrence
 import Core.Core
 import Core.Var
 
@@ -62,7 +68,7 @@ basicRecDef v t = VarDef (Just (DefInfo v t True)) []
 unknownDef :: VarDef a
 unknownDef = VarDef Nothing []
 
--- ^ A read-only scope within the reducer monad
+-- | A read-only scope within the reducer monad
 data ReduceScope a
   = RScope
   { _varScope  :: VarMap.Map (VarDef a)    -- ^ Lookup of variables to their definition.
@@ -71,26 +77,42 @@ data ReduceScope a
   }
   deriving (Show)
 
+-- | A substitution in the current scope
+data VarSub a
+  = SubTodo (AnnTerm VarSet.Set (OccursVar a)) -- ^ A substitution which has not been visited
+  | SubDone (Term a) -- ^ A substitution which has been visited but could not be inlined
+  deriving (Show)
+
+-- | A "mutable" state within the reducer monad
+data ReduceState a
+  = RState
+  { _varSubst :: VarMap.Map (VarSub a) -- ^ Potential candidates for inlined variables
+  }
+  deriving (Show)
+
 makeLenses ''ReduceScope
+makeLenses ''ReduceState
 
 type MonadReduce a m =
   ( IsVar a
   , MonadNamey m
   , MonadReader (ReduceScope a) m
+  , MonadState (ReduceState a) m
   , MonadWriter (Sum Int) m
   )
 
 -- | Run the reduce monad in the default scope, returning the modified
 -- expression and the number of changes made.
 runReduce :: MonadNamey m
-          => ReaderT (ReduceScope a) (WriterT (Sum Int) m) x
+          => RWST (ReduceScope a) (Sum Int) (ReduceState a) m x
           -> m (x, Int)
-runReduce = (second getSum<$>) . runWriterT . flip runReaderT emptyScope where
+runReduce m = fmap getSum <$> evalRWST m emptyScope emptyState where
   emptyScope = RScope mempty mempty mempty
+  emptyState = RState mempty
 
 -- | Run the reduce monad N times, or until no more changes occur.
 runReduceN :: MonadNamey m
-           => (x -> ReaderT (ReduceScope a) (WriterT (Sum Int) m) x)
+           => (x -> RWST (ReduceScope a) (Sum Int) (ReduceState a) m x)
            -> Int -> x
            -> m x
 runReduceN task = go where

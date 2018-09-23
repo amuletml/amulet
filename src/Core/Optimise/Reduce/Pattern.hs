@@ -17,7 +17,6 @@ import Data.Triple
 import Data.List
 
 import Core.Optimise.Reduce.Base
-import Core.Occurrence
 
 type Subst a = [(a, Atom a)]
 

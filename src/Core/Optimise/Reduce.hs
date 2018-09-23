@@ -9,8 +9,8 @@
 , ViewPatterns #-}
 module Core.Optimise.Reduce (reducePass) where
 
-import Control.Monad.Reader
 import Control.Monad.Namey
+import Control.Monad.RWS
 import Control.Lens
 import Control.Arrow hiding ((<+>))
 
@@ -26,7 +26,6 @@ import Core.Optimise.Reduce.Pattern
 import Core.Optimise.Reduce.Inline
 import Core.Optimise.Reduce.Base
 import Core.Optimise.Reduce.Fold
-import Core.Occurrence
 import Core.Optimise
 import Core.Builtin
 import Core.Types
@@ -95,7 +94,27 @@ reduceAtom (Ref v ty) = do
   v' <- asks (lookupTerm v)
   case v' of
     Just (Atom d) | trivialAtom d -> changed d
-    _ -> pure (Ref (underlying v) (underlying <$> ty))
+    Just _ -> pure basic
+
+    Nothing -> do
+      -- If we're not in the scope, maybe try the substitution one?
+      s <- gets (VarMap.lookup (toVar v) . view varSubst)
+      case s of
+        Just (SubTodo t) -> do
+          t' <- reduceTerm t
+          case t' of
+            Atom a -> do
+              -- If this is just an atom, remove it from the substitution scope and
+              -- do that
+              varSubst %= VarMap.delete (toVar v)
+              changed a
+            _ -> do
+              -- Otherwise put the done substitution in and continue
+              varSubst %= VarMap.insert (toVar v) (SubDone t')
+              pure basic
+        _ -> pure basic
+  where basic = (Ref (underlying v) (underlying <$> ty))
+
 reduceAtom (Lit l) = pure (Lit l)
 
 -- | Simplify a term within the current context
@@ -171,74 +190,120 @@ reduceTermK :: forall a m. MonadReduce a m
             -> (Term a -> m (Term a))
             -> m (Term a)
 
-reduceTermK (AnnApp _ f x) cont = do
-  f' <- reduceAtom f
-  x' <- reduceAtom x
-
-  s <- ask
-  if
-    -- Constant folding
-    | Ref fv _ <- f'
-    , Ref xv _ <- x'
-    , Just (Values xs) <- lookupTerm xv s
-    , Just a' <- foldApply (toVar (lookupRawVar fv s)) xs
-    -> changing $ cont a'
-
-    -- Inline
-    | Ref fv _ <- f'
-    , VarDef { varDef = Just DefInfo { defTerm = Lam (TermArgument v t) b
-                                     , defLoopBreak = False } } <- lookupVar fv s
-    , sizeTerm s b <= 500 -> do
-          b' <- refresh $ Let (One (v, t, Atom x')) b
-          changing $ reduceTermK (annotate b') cont
-
-    -- Nothing to do
-    | otherwise -> cont (App f' x')
-
-reduceTermK (AnnTyApp _ f t) cont = do
-  f' <- reduceAtom f
-  let t' = underlying <$> t
-
-  s <- ask
-  if
-    -- Inline
-    | Ref fv _ <- f'
-    , VarDef { varDef = Just DefInfo { defTerm = Lam (TypeArgument v _) b
-                                     , defLoopBreak = False } } <- lookupVar fv s
-    , isLambda b
-    , sizeTerm s b <= 500 -> do
-        b' <- refresh $ substituteInTys (VarMap.singleton (toVar v) t') b
-        changing $ reduceTermK (annotate b') cont
-
-    | otherwise -> cont $ TyApp f' t'
+reduceTermK (AnnApp _ f x) cont
+  | Ref fv _ <- f
+  = do
+      fs <- gets (VarMap.lookup (toVar fv) . view varSubst)
+      case fs of
+        Just (SubTodo (AnnLam an (TermArgument v ty) bod)) ->
+          let fx = freeInAtom x
+          in reduceTermK (AnnLet (VarSet.union an fx) (One (v, ty, AnnAtom fx x)) bod) cont
+        _ -> basic
+  | otherwise = basic
 
   where
+    basic = do
+      f' <- reduceAtom f
+      x' <- reduceAtom x
+
+      s <- ask
+      if
+        -- Constant folding
+        | Ref fv _ <- f'
+        , Ref xv _ <- x'
+        , Just (Values xs) <- lookupTerm xv s
+        , Just a' <- foldApply (toVar (lookupRawVar fv s)) xs
+        -> changing $ cont a'
+
+        -- Inline
+        | Ref fv _ <- f'
+        , VarDef { varDef = Just DefInfo { defTerm = Lam (TermArgument v t) b
+                                         , defLoopBreak = False } } <- lookupVar fv s
+        , sizeTerm s b <= 500 -> do
+              b' <- refresh $ Let (One (v, t, Atom x')) b
+              changing $ reduceTermK (annotate b') cont
+
+        -- Nothing to do
+        | otherwise -> cont (App f' x')
+
+reduceTermK (AnnTyApp _ f t) cont
+  | Ref fv _ <- f
+  = do
+      fs <- gets (VarMap.lookup (toVar fv) . view varSubst)
+      case fs of
+        Just (SubTodo (AnnLam _ (TypeArgument v _) bod)) ->
+          -- TODO: Do this inside!
+          let sub = VarMap.singleton (toVar v) t'
+          in substituteInTys sub <$> reduceTermK bod cont
+        _ -> basic
+
+  | otherwise = basic
+
+  where
+    t' = underlying <$> t
+    basic = do
+      f' <- reduceAtom f
+      s <- ask
+      if
+        -- Inline
+        | Ref fv _ <- f'
+        , VarDef { varDef = Just DefInfo { defTerm = Lam (TypeArgument v _) b
+                                         , defLoopBreak = False } } <- lookupVar fv s
+        , isLambda b
+        , sizeTerm s b <= 500 -> do
+            b' <- refresh $ substituteInTys (VarMap.singleton (toVar v) t') b
+            changing $ reduceTermK (annotate b') cont
+
+        | otherwise -> cont $ TyApp f' t'
+
     isLambda (Lam TermArgument{} _) = True
     isLambda (Lam TypeArgument{} b) = isLambda b
     isLambda _ = False
 
+reduceTermK (AnnLet _ (One (v, ty, e)) rest) cont
+  | AnnLam{} <- e
+  , usedWhen v == Once
+  = do
+      varSubst %= VarMap.insert (toVar v) (SubTodo e)
 
-reduceTermK (AnnLet _ (One (v, ty, e)) rest) cont = reduceTermK e $ \e' -> do
-  let v' = underlying v
-      ty' = underlying <$> ty
+      rest' <- reduceTermK rest cont
 
-  s <- ask
-  case e' of
-    -- Let of bottom conversion: we've errored here, so we can skip any
-    -- remaining code.
-    App (Ref f _) msg
-      | toVar (lookupRawVar f s) == vError
-      ->
-        let Just ty = fmap underlying <$> approximateType rest -- TODO: Is this valid with our use of cont?
-            errTy = ForallTy Irrelevant (tyString :: Type a)
-            na = fromVar tyvarA :: a
-        in changed $
-          Let (One ( v', errTy ty
-                   , TyApp (Ref (fromVar vError) (ForallTy (Relevant na) StarTy (errTy (VarTy na)))) ty))
-            (App (Ref v' (errTy ty)) msg)
+      se <- gets (VarMap.lookup (toVar v) . view varSubst)
+      varSubst %= VarMap.delete (toVar v)
+      case se of
+        Nothing -> changed rest'
+        Just (SubTodo _) -> reduceTermK e $ \e' -> considerE e' (pure rest')
+        Just (SubDone e') -> considerE e' (pure rest')
 
-    _ -> do
-      rest' <- local (extendVar (v', ty', e')) (reduceTermK rest cont)
+  | otherwise = reduceTermK e $ \e' -> do
+      considerE e' (local (extendVar (v', ty', e')) (reduceTermK rest cont))
+
+  where
+    v' = underlying v
+    ty' = underlying <$> ty
+
+    -- | Examine e and determine whether the remaining information needs to be
+    -- preserved
+    considerE e' rest' = do
+      s <- ask
+      case e' of
+        -- Let of bottom conversion: we've errored here, so we can skip any
+        -- remaining code.
+        App (Ref f _) msg
+          | toVar (lookupRawVar f s) == vError
+          ->
+            let Just ty = fmap underlying <$> approximateType rest -- TODO: Is this valid with our use of cont?
+                errTy = ForallTy Irrelevant (tyString :: Type a)
+                na = fromVar tyvarA :: a
+            in changed $
+              Let (One ( v', errTy ty
+                       , TyApp (Ref (fromVar vError) (ForallTy (Relevant na) StarTy (errTy (VarTy na)))) ty))
+                (App (Ref v' (errTy ty)) msg)
+
+        _ -> rest' >>= finalise e'
+
+    -- | Generate a binding from e' and rest'
+    finalise e' rest' = do
       s <- ask
       if
         -- If we're binding a trivial atom, then we can strip it - we'll have

@@ -16,7 +16,6 @@ import Data.List
 import Data.Ord
 
 import Core.Optimise.Reduce.Base
-import Core.Occurrence
 
 -- | The score of a variable used for determining loops
 --
