@@ -108,15 +108,15 @@ changed :: MonadReduce a m => x -> m x
 changed = (<$tell (Sum 1))
 
 -- | Determine if this variable is a constructor
-isCtor :: IsVar a => a -> ReduceScope a -> Bool
+isCtor :: IsVar v => v -> ReduceScope a -> Bool
 isCtor var = VarMap.member (toVar var) . view ctorScope
 
 -- | Look up a variable within the current scope
-lookupVar :: IsVar a => a -> ReduceScope a -> VarDef a
+lookupVar :: IsVar v => v -> ReduceScope a -> VarDef a
 lookupVar v = fromMaybe unknownDef . VarMap.lookup (toVar v) . view varScope
 
 -- | Look up a variable within the current scope
-lookupTerm :: IsVar a => a -> ReduceScope a -> Maybe (Term a)
+lookupTerm :: IsVar v => v -> ReduceScope a -> Maybe (Term a)
 lookupTerm v s =
   case VarMap.lookup (toVar v) (s ^. varScope) of
     Just VarDef { varDef = Just DefInfo { defTerm = t } } -> Just t

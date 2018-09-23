@@ -16,6 +16,7 @@ import Data.List
 import Data.Ord
 
 import Core.Optimise.Reduce.Base
+import Core.Occurrence
 
 -- | The score of a variable used for determining loops
 --
@@ -32,17 +33,17 @@ type Binder a = (a, Type a, AnnTerm VarSet.Set a)
 -- | Return a set of all loop breakers within this binding group
 loopBreakers :: forall a. IsVar a
              => ReduceScope a -- ^ The scope to resolve in
-             -> [Binder a] -- ^ The binders we're interested in
+             -> [Binder (OccursVar a)] -- ^ The binders we're interested in
              -> VarSet.Set -- ^ The set of loop breaker variables
 loopBreakers s = go . map (\b -> (b, extractAnn (thd3 b)))
   where
-    buildNode :: VarSet.Set -> (Binder a, VarSet.Set)
-              -> ((Binder a, VarSet.Set), CoVar, [CoVar])
+    buildNode :: VarSet.Set -> (Binder (OccursVar a), VarSet.Set)
+              -> ((Binder (OccursVar a), VarSet.Set), CoVar, [CoVar])
     buildNode vs (b, fv) =
       let fv' = VarSet.intersection fv vs
       in ((b, fv'), toVar (fst3 b), VarSet.toList fv')
 
-    go :: [(Binder a, VarSet.Set)] -> VarSet.Set
+    go :: [(Binder (OccursVar a), VarSet.Set)] -> VarSet.Set
     go nodes =
       let vs = VarSet.fromList (map (toVar . fst3 . fst) nodes)
           nodes' = map (buildNode vs) nodes
@@ -57,7 +58,7 @@ loopBreakers s = go . map (\b -> (b, extractAnn (thd3 b)))
 -- | Determine the score for this loop breaker
 loopScore :: IsVar a
           => ReduceScope a
-          -> Binder a -> VarSet.Set
+          -> Binder (OccursVar a) -> VarSet.Set
           -> LoopScore
 loopScore s (v, _, t) fv
   -- Self recursive definitions are wonderful. We'll never inline them
@@ -68,7 +69,7 @@ loopScore s (v, _, t) fv
   | isTrivialTerm t = scored 4
   -- Similarly, variables used once will /probably/ be inlined, so let's
   -- avoid them.
-  -- TODO: | usedWhen v == Once = scored 3
+  | usedWhen v == Once = scored 3
   -- If we're some form of constructor then we /may/ inline it due to
   -- pattern matches.
   | ctor ctorAtom t = scored 2
@@ -108,14 +109,14 @@ isTrivialAtom (Lit (Str t)) = T.length t <= 8
 isTrivialAtom (Lit _) = True
 
 -- | Determine the "size" of an atom, using a somewhat arbitrary set of values.
-sizeAtom :: IsVar a => ReduceScope a -> Atom a -> Int
-sizeAtom s (Ref v _) = if toVar v `VarMap.member` (s ^. ctorScope) then 0 else 5
+sizeAtom :: IsVar v => ReduceScope a -> Atom v -> Int
+sizeAtom s (Ref v _) = if isCtor v s then 0 else 5
 sizeAtom _ (Lit _) = 1
 
 -- | Determine the "size" of an term, using a somewhat arbitrary set of values.
 --
 -- This is used in order to score terms for inlining and loop breaking.
-sizeTerm :: IsVar a => ReduceScope a -> AnnTerm b a  -> Int
+sizeTerm :: IsVar v => ReduceScope a -> AnnTerm b v -> Int
 sizeTerm s (AnnAtom _ a) = sizeAtom s a
 sizeTerm s (AnnApp _ f x) = sizeAtom s f + sizeAtom s x + 2
 sizeTerm s (AnnLam _ TypeArgument{} b) = sizeTerm s b
