@@ -1,0 +1,14 @@
+lazy-let02.ml[4:3 ..5:5]: warning
+  Automatic thunking of lets does not cover bindings
+
+  • Note: the expression
+  │ 
+5 │   123
+  │ 
+  will be evaluated lazily, but this binding
+  │ 
+4 │   let _ = print "foo"
+  │ 
+  are strict.
+  • Note: if this is what you want, use lazy explicitly
+      to silence this warning.

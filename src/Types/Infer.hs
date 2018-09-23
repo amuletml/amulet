@@ -496,7 +496,7 @@ solveEx :: Type Typed -> Subst Typed -> Map.Map (Var Typed) (Wrapper Typed) -> E
 solveEx _ ss cs = transformExprTyped go id goType where
   go :: Expr Typed -> Expr Typed
   go (ExprWrapper w e a) = case goWrap w of
-    WrapFn w -> runWrapper w e
+    WrapFn w@(MkWrapCont _ desc) -> ExprWrapper (WrapFn (MkWrapCont id desc)) (runWrapper w e) a
     x -> ExprWrapper x e a
   go x = x
 
