@@ -182,8 +182,8 @@ filterDeadArms pat s = goArm where
 -- so can be eliminated), or a list of potential arms otherwise.
 simplifyArms :: IsVar a
              => ReduceScope a
-             -> Atom a -> [Arm a]
-             -> Either (Arm a, Subst a) [(Arm a, Subst a)]
+             -> Atom a -> [AnnArm b a]
+             -> Either (AnnArm b a, Subst a) [(AnnArm b a, Subst a)]
 simplifyArms s test arms = filterDeadArms (_armPtrn . fst) s <$> foldCases arms where
   foldCases [] = Right []
   foldCases (a@Arm { _armPtrn = p }:as) =

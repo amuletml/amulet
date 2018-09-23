@@ -14,8 +14,10 @@ import Control.Lens
 import Control.Arrow hiding ((<+>))
 
 import qualified Data.VarMap as VarMap
+import qualified Data.VarSet as VarSet
 import qualified Data.Text as T
 import Data.Triple
+import Data.Graph
 import Data.Maybe
 import Data.List
 
@@ -26,34 +28,42 @@ import Core.Optimise.Reduce.Fold
 import Core.Optimise
 import Core.Builtin
 import Core.Types
+import Core.Free
 
 import Core.Optimise.DeadCode
 
 reducePass :: (IsVar a, MonadNamey m) => [Stmt a] -> m [Stmt a]
-reducePass = runReduceN (fmap deadCodePass . reduceStmts) 4
+reducePass = runReduceN (fmap deadCodePass . reduceStmts . tagFreeSet) 4
 
 extendVar :: IsVar a => (a, Type a, Term a) -> ReduceScope a -> ReduceScope a
 extendVar (v, _, e) = varScope %~ VarMap.insert (toVar v) (basicDef v e)
 
 extendVars :: IsVar a => [(a, Type a, Term a)] -> ReduceScope a -> ReduceScope a
-extendVars vs s = foldr extend s vs where
+extendVars vs s = foldr extendVar s vs where
+
+extendVarsRec :: IsVar a => [(a, Type a, Term a)] -> ReduceScope a -> ReduceScope a
+extendVarsRec vs s = foldr extend s vs where
   extend (v, _, e) = varScope %~ VarMap.insert (toVar v) (basicRecDef v e)
 
-reduceStmts :: MonadReduce a m => [Stmt a] -> m [Stmt a]
+reduceStmts :: MonadReduce a m => [AnnStmt VarSet.Set a] -> m [Stmt a]
 reduceStmts [] = pure []
-reduceStmts (s@Foreign{}:ss) = (s:) <$> reduceStmts ss
+reduceStmts (Foreign v ty def:ss) = (Foreign v ty def:) <$> reduceStmts ss
 reduceStmts (StmtLet (One var):ss) = do
   var' <- third3A reduceTerm var
   ss' <- local (extendVar var') (reduceStmts ss)
   pure $ StmtLet (One var'):ss'
 reduceStmts (StmtLet (Many vs):ss) = do
-  vs' <- local (extendVars vs) $ traverse (third3A reduceTerm) vs
-  ss' <- local (extendVars vs') $ reduceStmts ss
-  pure $ StmtLet (Many vs'):ss'
-reduceStmts (s@(Type v cases):ss) =
+  breakers <- asks (flip loopBreakers vs)
+
+  vsn   <- traverse (third3A reduceTerm) . filter (flip VarSet.notMember breakers . toVar . fst3) $ vs
+  local (extendVars vsn) $ do
+    vse <- traverse (third3A reduceTerm) . filter (flip VarSet.member breakers . toVar . fst3) $ vs
+    ss' <- local (extendVarsRec vse) $ reduceStmts ss
+    pure (StmtLet (Many (vse ++ vsn)):ss')
+reduceStmts (Type v cases:ss) =
   local ( (typeScope %~ VarMap.insert (toVar v) cases)
         . (ctorScope %~ VarMap.union (VarMap.fromList (map buildCtor cases))) ) $
-    (s:) <$> reduceStmts ss
+    (Type v cases:) <$> reduceStmts ss
   where
     buildCtor (def, sig) = (toVar def, (v, sig))
 
@@ -72,12 +82,14 @@ reduceAtom a@Lit{} = pure a
 -- | Simplify a term within the current context
 --
 -- This will simplify nested terms/atoms as well.
-reduceTerm :: forall a m. MonadReduce a m => Term a -> m (Term a)
+reduceTerm :: forall a m. MonadReduce a m
+           => AnnTerm VarSet.Set a
+           -> m (Term a)
 
-reduceTerm (Atom a) = Atom <$> reduceAtom a
-reduceTerm (Values vs) = Values <$> traverse reduceAtom vs
+reduceTerm (AnnAtom _ a) = Atom <$> reduceAtom a
+reduceTerm (AnnValues _ vs) = Values <$> traverse reduceAtom vs
 
-reduceTerm (Extend e fs) = do
+reduceTerm (AnnExtend _ e fs) = do
   e' <- reduceAtom e
   fs' <- traverse (third3A reduceAtom) fs
   case fs' of
@@ -88,9 +100,9 @@ reduceTerm (Extend e fs) = do
     [] -> changed $ Atom e'
     _ -> pure $ Extend e' fs'
 
-reduceTerm (Lam arg body) = do
+reduceTerm (AnnLam _ arg body) = do
   body' <- reduceTerm body
-  case (arg, body) of
+  case (arg, body') of
     -- Eta conversion (function case)
     (TermArgument var _, App r (Ref var' _))
       | var == var' -> changed $ Atom r
@@ -99,7 +111,7 @@ reduceTerm (Lam arg body) = do
 
     _ -> pure $ Lam arg body'
 
-reduceTerm (Cast a co) = do
+reduceTerm (AnnCast _ a co) = do
   a' <- reduceAtom a
   if redundantCo co
   then changed $ Atom a'
@@ -123,10 +135,10 @@ reduceTerm (Cast a co) = do
 
       | otherwise -> pure $ Cast a' co'
 
-reduceTerm t@Match{} = reduceTermK t pure
-reduceTerm t@Let{}   = reduceTermK t pure
-reduceTerm t@App{}   = reduceTermK t pure
-reduceTerm t@TyApp{} = reduceTermK t pure
+reduceTerm t@AnnMatch{} = reduceTermK t pure
+reduceTerm t@AnnLet{}   = reduceTermK t pure
+reduceTerm t@AnnApp{}   = reduceTermK t pure
+reduceTerm t@AnnTyApp{} = reduceTermK t pure
 
 -- | Reduce the provided term, running the continuation when reaching the
 -- "leaf" node.
@@ -134,11 +146,11 @@ reduceTerm t@TyApp{} = reduceTermK t pure
 -- This allows us to implement commuting conversion for lets and matches
 -- in a more intuitive manner.
 reduceTermK :: forall a m. MonadReduce a m
-            => Term a
+            => AnnTerm VarSet.Set a
             -> (Term a -> m (Term a))
             -> m (Term a)
 
-reduceTermK (App f x) cont = do
+reduceTermK (AnnApp _ f x) cont = do
   f' <- reduceAtom f
   x' <- reduceAtom x
 
@@ -157,12 +169,12 @@ reduceTermK (App f x) cont = do
                                      , defLoopBreak = False } } <- lookupVar fv s
     , sizeTerm s b <= 500 -> do
           b' <- refresh $ Let (One (v, t, Atom x')) b
-          changing $ reduceTermK b' cont
+          changing $ reduceTermK (snd . tagFreeTerm (flip const) const $ b') cont
 
     -- Nothing to do
     | otherwise -> cont (App f' x')
 
-reduceTermK (TyApp f t) cont = do
+reduceTermK (AnnTyApp _ f t) cont = do
   f' <- reduceAtom f
 
   s <- ask
@@ -174,7 +186,7 @@ reduceTermK (TyApp f t) cont = do
     , isLambda b
     , sizeTerm s b <= 500 -> do
         b' <- refresh $ substituteInTys (VarMap.singleton (toVar v) t) b
-        changing $ reduceTermK b' cont
+        changing $ reduceTermK (snd . tagFreeTerm (flip const) const $ b') cont
 
     | otherwise -> cont $ TyApp f' t
 
@@ -184,7 +196,7 @@ reduceTermK (TyApp f t) cont = do
     isLambda _ = False
 
 
-reduceTermK (Let (One (v, ty, e)) rest) cont = reduceTermK e $ \e' -> do
+reduceTermK (AnnLet _ (One (v, ty, e)) rest) cont = reduceTermK e $ \e' -> do
   s <- ask
   case e' of
     -- Let of bottom conversion: we've errored here, so we can skip any
@@ -240,14 +252,32 @@ reduceTermK (Let (One (v, ty, e)) rest) cont = reduceTermK e $ \e' -> do
 
         | otherwise -> pure (Let (One (v, ty, e')) rest')
 
-reduceTermK (Let (Many vs) rest) cont = do
-  -- We really can't do a lot with recursive lets sadly, so let's just
-  -- leave them for now.
-  vs'   <- local (extendVars vs) $ traverse (third3A reduceTerm) vs
-  rest' <- local (extendVars vs') $ reduceTermK rest cont
-  pure (Let (Many vs') rest')
+reduceTermK (AnnLet f (Many vs) rest) cont =
+  case stronglyConnComp . map buildNode $ vs of
+    [] -> reduceTermK rest cont
+    [CyclicSCC vs] -> do
+      breakers <- asks (flip loopBreakers vs)
 
-reduceTermK (Match test arms) cont = do
+      -- We go over the non-loop breakers (which will never be inlined), reduce
+      -- them and then visit the loop breakers with these inlinable functions in
+      -- scope.
+      vsn   <- traverse (third3A reduceTerm) . filter (flip VarSet.notMember breakers . toVar . fst3) $ vs
+      local (extendVars vsn) $ do
+        vse <- traverse (third3A reduceTerm) . filter (flip VarSet.member breakers . toVar . fst3) $ vs
+        rest' <- local (extendVarsRec vse) $ reduceTermK rest cont
+        pure (Let (Many (vse ++ vsn)) rest')
+
+    -- If we can split the nodes up into something simpler, do so!
+    cs -> do
+      cs' <- changed $ foldr unwrapNode rest cs
+      reduceTermK cs' cont
+
+  where
+    buildNode n@(v, _, e) = (n, toVar v, VarSet.toList (extractAnn e))
+    unwrapNode (AcyclicSCC v) = AnnLet f (One v)
+    unwrapNode (CyclicSCC vs) = AnnLet f (Many vs)
+
+reduceTermK (AnnMatch _ test arms) cont = do
   test' <- reduceAtom test
   s <- ask
 
@@ -268,7 +298,7 @@ reduceTermK (Match test arms) cont = do
       arms'' <- reduceArms test' arms' []
       cont $ Match test' arms''
   where
-    reduceArms :: Atom a -> [(Arm a, Subst a)] -> [Pattern a] -> m [Arm a]
+    reduceArms :: Atom a -> [(AnnArm VarSet.Set a, Subst a)] -> [Pattern a] -> m [Arm a]
     reduceArms (Ref v _) ((a@Arm { _armPtrn = PatWildcard },subst):_) ps = do
       a' <- local (varScope . at (toVar v) %~ extendNot ps) $ reduceArm pure a subst
       pure [a']
@@ -282,7 +312,7 @@ reduceTermK (Match test arms) cont = do
     -- | Visit an arm with the provided continuation and substitution,
     -- applying them as needed.
     reduceArm :: (Term a -> m (Term a)) -- ^ The continuation function
-              -> Arm a -> Subst a -> m (Arm a)
+              -> AnnArm VarSet.Set a -> Subst a -> m (Arm a)
     reduceArm cont a@Arm { _armTyvars = [], _armBody = body } subst = do
       -- In the trivial case we can do a plain old substitution
       body' <- reduceBody cont subst body
@@ -298,7 +328,7 @@ reduceTermK (Match test arms) cont = do
         . (armTyvars %~ map (second (substituteInType tySubst)) . filter (not . flip VarMap.member tySubst . toVar . fst))
         . (armBody .~ substituteInTys tySubst body')
 
-    reduceBody :: (Term a -> m (Term a)) -> Subst a -> Term a -> m (Term a)
+    reduceBody :: (Term a -> m (Term a)) -> Subst a -> AnnTerm VarSet.Set a -> m (Term a)
     reduceBody cont subst body =
       local (varScope %~ VarMap.union (buildSub subst)) (reduceTermK body cont)
 
