@@ -18,6 +18,7 @@ import Control.Lens hiding (Lazy)
 import Text.Pretty.Semantic
 import Text.Pretty.Note
 
+import Syntax.Implicits (splitImplVarType, spine)
 import Syntax.Pretty
 import Syntax.Let
 
@@ -25,7 +26,7 @@ import Language.Lua.Parser.Wrapper
 import Language.Lua.Parser.Parser
 import Language.Lua.Parser.Error
 
-import Types.Infer.Builtin (tyUnit)
+import Types.Infer.Builtin (tyUnit, tyLazy)
 
 type MonadVerify m = ( MonadWriter (Seq.Seq VerifyError) m, MonadState (Set.Set BindingSite) m )
 
@@ -45,12 +46,14 @@ data VerifyError
   | ParseErrorInForeign { stmt :: Toplevel Typed
                         , err :: ParseError }
   | NonUnitBegin (Expr Typed) (Type Typed)
+  | LazyLet (Expr Typed) (Type Typed)
 
 instance Spanned VerifyError where
   annotation (NonRecursiveRhs e _ _) = annotation e
   annotation (DefinedUnused b) = boundWhere b
   annotation (ParseErrorInForeign _ e) = annotation e
   annotation (NonUnitBegin e _) = annotation e
+  annotation (LazyLet e _) = annotation e
 
 instance Pretty VerifyError where
   pretty (NonRecursiveRhs re ex xs) =
@@ -71,9 +74,12 @@ instance Pretty VerifyError where
     vsep [ "This statement discards a value of type"
          , indent 2 (displayType ty)
          , empty
-         , "Note: use a" <+> keyword "let" <+> "to silence this warning, as in"
+         , bullet "Note: use a" <+> keyword "let" <+> "to silence this warning, as in"
          , indent 2 $
              keyword "let" <+> soperator (char '_') <+> equals <+> pretty ex
+         ]
+  pretty (LazyLet _ _) =
+    vsep [ "Automatic thunking of" <+> keyword "let" <> "s does not cover bindings"
          ]
 
 instance Note VerifyError Style where
@@ -81,6 +87,7 @@ instance Note VerifyError Style where
   diagnosticKind ParseErrorInForeign{} = WarningMessage
   diagnosticKind DefinedUnused{} = WarningMessage
   diagnosticKind NonUnitBegin{} = WarningMessage
+  diagnosticKind LazyLet{} = WarningMessage
 
   formatNote f (ParseErrorInForeign (ForeignVal var s _ (span, _)) err) =
     let SourcePos name _ _ = spanStart (annotation err)
@@ -90,6 +97,21 @@ instance Note VerifyError Style where
              , empty
              , format (fileSpans spans) err
              ]
+
+  formatNote f (LazyLet (Let bs ex _) _) =
+    vsep
+      [ indent 2 "Automatic thunking of" <+> (Right <$> keyword "let") <> "s does not cover bindings"
+      , empty
+      , indent 2 $ bullet "Note: the expression"
+      , f [annotation ex]
+      , indent 2 "will be evaluated lazily, but" <+> (if length bs == 1 then "this" else "these")
+          <+> "binding" <> if length bs == 1 then "" else "s"
+      , f (fmap annotation bs)
+      , indent 2 "are" <+> (Right <$> highlight "strict.")
+      , indent 2 $ bullet "Note: if this is what you want, use" <+> (Right <$> keyword "lazy") <+> "explicitly"
+      , indent 6 "to silence this warning."
+      ]
+  formatNote _ LazyLet{} = error "impossible"
   formatNote f x = indent 2 (Right <$> pretty x) <#> f [annotation x]
 
 runVerify :: WriterT (Seq.Seq VerifyError) (State (Set.Set BindingSite)) () -> Either (Seq.Seq VerifyError) ()
@@ -146,7 +168,9 @@ verifyExpr :: MonadVerify m => Expr Typed -> m ()
 verifyExpr (VarRef v (s, t)) = do
   modify $ Set.delete (BindingSite v s t)
   pure ()
-verifyExpr ex@(Let vs e _) = do
+verifyExpr ex@(Let vs e (_, ty)) = do
+  when (isLazy ty && isWrappedThunk e && any nonTrivialRhs vs) $
+    tell (Seq.singleton (LazyLet ex ty))
   verifyBindingGroup Set.insert (BecauseOf ex) vs
   verifyExpr e
 verifyExpr (If c t e _) = traverse_ verifyExpr [c, t, e]
@@ -242,3 +266,46 @@ instance Ord BindingSite where
 
 instance Eq BindingSite where
   BindingSite v _ _ == BindingSite v' _ _ = v == v'
+
+isLazy :: Type Typed -> Bool
+isLazy ty = tyLazy == head (spine (fst (splitImplVarType ty)))
+isWrappedThunk :: Expr Typed -> Bool
+isWrappedThunk (ExprWrapper (WrapFn (MkWrapCont _ x)) _ _) =
+  x == "automatic thunking"
+isWrappedThunk _ = False
+
+nonTrivialRhs :: Binding Typed -> Bool
+nonTrivialRhs (TypedMatching _ e _ _) = nonTrivial e
+nonTrivialRhs (Binding _ e _ _) = nonTrivial e
+nonTrivialRhs _ = error "nonTrivialRHS pre-TC Bindings"
+
+nonTrivial :: Expr Typed -> Bool
+nonTrivial App{} = True
+nonTrivial BinOp{} = True
+nonTrivial (If c t e _) = nonTrivial c || nonTrivial t || nonTrivial e
+nonTrivial (Let vs e _) = nonTrivial e || any nonTrivialRhs vs
+nonTrivial (Begin es _) = any nonTrivial es
+nonTrivial (Match e cs _) = nonTrivial e || any (nonTrivial . snd) cs
+nonTrivial VarRef{} = False
+nonTrivial Fun{} = False
+nonTrivial Literal{} = False
+nonTrivial Function{} = False
+nonTrivial Hole{} = False
+nonTrivial (Ascription e _ _) = nonTrivial e
+nonTrivial (Record rs _) = any (nonTrivial . view fExpr) rs
+nonTrivial (RecordExt e rs _) = nonTrivial e || any (nonTrivial . view fExpr) rs
+nonTrivial (Access e _ _) = nonTrivial e
+nonTrivial LeftSection{} = False
+nonTrivial AccessSection{} = False
+nonTrivial RightSection{} = False
+nonTrivial BothSection{} = False
+nonTrivial (Parens e _) = nonTrivial e
+nonTrivial (Tuple es _) = any nonTrivial es
+nonTrivial TupleSection{} = False
+nonTrivial (OpenIn _ e _) = nonTrivial e
+nonTrivial Lazy{} = False
+nonTrivial (ExprWrapper w e _) =
+  case w of
+    WrapFn (MkWrapCont k _) -> nonTrivial (k e)
+    ExprApp a -> nonTrivial a || nonTrivial e
+    _ -> nonTrivial e
