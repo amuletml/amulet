@@ -7,7 +7,8 @@ module Core.Optimise.Reduce.Base
   ( module Core.Core
   , module Core.Var
 
-  , VarDef(..), unknownDef, basicDef
+  , DefInfo(..), VarDef(..)
+  , unknownDef, basicDef, basicRecDef
   , ReduceScope
   , varScope, typeScope, ctorScope
   , MonadReduce
@@ -32,17 +33,30 @@ import Data.Maybe
 import Core.Core
 import Core.Var
 
+-- | Information about a known definition
+data DefInfo a
+  = DefInfo
+  { defVar       :: a
+  , defTerm      :: Term a
+  , defLoopBreak :: !Bool
+  }
+  deriving (Show)
+
 -- | A definition within the current scope
 data VarDef a
   = VarDef
-  { varDef      :: Maybe (a, Term a)
+  { varDef      :: Maybe (DefInfo a)
   , varNotAmong :: [Pattern a]
   }
   deriving (Show)
 
 -- | A basic variable definition
 basicDef :: a -> Term a -> VarDef a
-basicDef v t = VarDef (Just (v, t)) []
+basicDef v t = VarDef (Just (DefInfo v t False)) []
+
+-- | A basic recursive variable definition
+basicRecDef :: a -> Term a -> VarDef a
+basicRecDef v t = VarDef (Just (DefInfo v t True)) []
 
 -- | Unknown variable definition
 unknownDef :: VarDef a
@@ -89,10 +103,11 @@ runReduceN task = go where
 changing :: MonadReduce a m => m x -> m x
 changing = (tell (Sum 1)>>)
 
--- | Return a changed term
+-- | Mark a term as having changed and return it
 changed :: MonadReduce a m => x -> m x
 changed = (<$tell (Sum 1))
 
+-- | Determine if this variable is a constructor
 isCtor :: IsVar a => a -> ReduceScope a -> Bool
 isCtor var = VarMap.member (toVar var) . view ctorScope
 
@@ -104,7 +119,7 @@ lookupVar v = fromMaybe unknownDef . VarMap.lookup (toVar v) . view varScope
 lookupTerm :: IsVar a => a -> ReduceScope a -> Maybe (Term a)
 lookupTerm v s =
   case VarMap.lookup (toVar v) (s ^. varScope) of
-    Just VarDef { varDef = Just (_, t) } -> Just t
+    Just VarDef { varDef = Just DefInfo { defTerm = t } } -> Just t
     _ -> Nothing
 
 -- | Find the raw version of the provided variable, that is the variable

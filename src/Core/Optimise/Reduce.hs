@@ -19,21 +19,25 @@ import Data.Triple
 import Data.Maybe
 import Data.List
 
+import Core.Optimise.Reduce.Pattern
+import Core.Optimise.Reduce.Inline
 import Core.Optimise.Reduce.Base
 import Core.Optimise.Reduce.Fold
-import Core.Optimise.Reduce.Pattern
 import Core.Optimise
 import Core.Builtin
 import Core.Types
 
+import Core.Optimise.DeadCode
+
 reducePass :: (IsVar a, MonadNamey m) => [Stmt a] -> m [Stmt a]
-reducePass = runReduceN reduceStmts 4
+reducePass = runReduceN (fmap deadCodePass . reduceStmts) 4
 
 extendVar :: IsVar a => (a, Type a, Term a) -> ReduceScope a -> ReduceScope a
 extendVar (v, _, e) = varScope %~ VarMap.insert (toVar v) (basicDef v e)
 
 extendVars :: IsVar a => [(a, Type a, Term a)] -> ReduceScope a -> ReduceScope a
-extendVars vs s = foldr extendVar s vs
+extendVars vs s = foldr extend s vs where
+  extend (v, _, e) = varScope %~ VarMap.insert (toVar v) (basicRecDef v e)
 
 reduceStmts :: MonadReduce a m => [Stmt a] -> m [Stmt a]
 reduceStmts [] = pure []
@@ -72,7 +76,6 @@ reduceTerm :: forall a m. MonadReduce a m => Term a -> m (Term a)
 
 reduceTerm (Atom a) = Atom <$> reduceAtom a
 reduceTerm (Values vs) = Values <$> traverse reduceAtom vs
-reduceTerm (TyApp a ty) = flip TyApp ty <$> reduceAtom a
 
 reduceTerm (Extend e fs) = do
   e' <- reduceAtom e
@@ -120,21 +123,10 @@ reduceTerm (Cast a co) = do
 
       | otherwise -> pure $ Cast a' co'
 
-reduceTerm (App f x) = do
-  f' <- reduceAtom f
-  x' <- reduceAtom x
-
-  s <- ask
-  if
-    | Ref fv _ <- f'
-    , Ref xv _ <- x'
-    , Just (Values xs) <- lookupTerm xv s
-    , Just a' <- foldApply (toVar (lookupRawVar fv s)) xs
-    -> changed a'
-    | otherwise -> pure (App f' x')
-
 reduceTerm t@Match{} = reduceTermK t pure
 reduceTerm t@Let{}   = reduceTermK t pure
+reduceTerm t@App{}   = reduceTermK t pure
+reduceTerm t@TyApp{} = reduceTermK t pure
 
 -- | Reduce the provided term, running the continuation when reaching the
 -- "leaf" node.
@@ -145,6 +137,52 @@ reduceTermK :: forall a m. MonadReduce a m
             => Term a
             -> (Term a -> m (Term a))
             -> m (Term a)
+
+reduceTermK (App f x) cont = do
+  f' <- reduceAtom f
+  x' <- reduceAtom x
+
+  s <- ask
+  if
+    -- Constant folding
+    | Ref fv _ <- f'
+    , Ref xv _ <- x'
+    , Just (Values xs) <- lookupTerm xv s
+    , Just a' <- foldApply (toVar (lookupRawVar fv s)) xs
+    -> changing $ cont a'
+
+    -- Inline
+    | Ref fv _ <- f'
+    , VarDef { varDef = Just DefInfo { defTerm = Lam (TermArgument v t) b
+                                     , defLoopBreak = False } } <- lookupVar fv s
+    , sizeTerm s b <= 500 -> do
+          b' <- refresh $ Let (One (v, t, Atom x')) b
+          changing $ reduceTermK b' cont
+
+    -- Nothing to do
+    | otherwise -> cont (App f' x')
+
+reduceTermK (TyApp f t) cont = do
+  f' <- reduceAtom f
+
+  s <- ask
+  if
+    -- Inline
+    | Ref fv _ <- f'
+    , VarDef { varDef = Just DefInfo { defTerm = Lam (TypeArgument v _) b
+                                     , defLoopBreak = False } } <- lookupVar fv s
+    , isLambda b
+    , sizeTerm s b <= 500 -> do
+        b' <- refresh $ substituteInTys (VarMap.singleton (toVar v) t) b
+        changing $ reduceTermK b' cont
+
+    | otherwise -> cont $ TyApp f' t
+
+  where
+    isLambda (Lam TermArgument{} _) = True
+    isLambda (Lam TypeArgument{} b) = isLambda b
+    isLambda _ = False
+
 
 reduceTermK (Let (One (v, ty, e)) rest) cont = reduceTermK e $ \e' -> do
   s <- ask
@@ -205,8 +243,8 @@ reduceTermK (Let (One (v, ty, e)) rest) cont = reduceTermK e $ \e' -> do
 reduceTermK (Let (Many vs) rest) cont = do
   -- We really can't do a lot with recursive lets sadly, so let's just
   -- leave them for now.
-  vs' <- traverse (third3A reduceTerm) vs
-  rest' <- reduceTermK rest cont
+  vs'   <- local (extendVars vs) $ traverse (third3A reduceTerm) vs
+  rest' <- local (extendVars vs') $ reduceTermK rest cont
   pure (Let (Many vs') rest')
 
 reduceTermK (Match test arms) cont = do
