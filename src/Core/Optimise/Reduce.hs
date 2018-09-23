@@ -261,22 +261,13 @@ reduceTermK (Match test arms) cont = do
   -- TODO: Work out a better way of handling continuations on multi-match
   -- arms, as our current handling within the let case means we have to
   -- walk down the entire tree.
-  case foldCases s test' arms of
+  case simplifyArms s test' arms of
     Left (arm, subst) -> changing $ view armBody <$> reduceArm cont arm subst
-    Right arms' -> case filterDeadArms (_armPtrn . fst) s arms' of
-      [(arm, subst)] -> Match test' . pure <$> reduceArm cont arm subst
-      arms' -> do
-        arms'' <- reduceArms test' arms' []
-        cont $ Match test' arms''
+    Right [(arm, subst)] -> Match test' . pure <$> reduceArm cont arm subst
+    Right arms' -> do
+      arms'' <- reduceArms test' arms' []
+      cont $ Match test' arms''
   where
-    foldCases _ _ [] = Right []
-    foldCases s t (a@Arm { _armPtrn = p }:as) =
-      case reducePattern s t p of
-        PatternFail -> foldCases s t as
-        PatternUnknown subst -> Right ((a, subst):either pure id (foldCases s t as))
-        PatternPartial subst -> Right [(a, subst)]
-        PatternComplete subst -> Left ((a, subst))
-
     reduceArms :: Atom a -> [(Arm a, Subst a)] -> [Pattern a] -> m [Arm a]
     reduceArms (Ref v _) ((a@Arm { _armPtrn = PatWildcard },subst):_) ps = do
       a' <- local (varScope . at (toVar v) %~ extendNot ps) $ reduceArm pure a subst

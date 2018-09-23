@@ -4,6 +4,7 @@ module Core.Optimise.Reduce.Pattern
   , PatternResult(..)
   , reducePattern
   , filterDeadArms
+  , simplifyArms
   ) where
 
 import Control.Lens
@@ -44,7 +45,10 @@ extract (PatternUnknown s) = s
 extract (PatternPartial s) = s
 extract (PatternComplete s) = s
 
-reducePattern :: forall a. IsVar a => ReduceScope a -> Atom a -> Pattern a -> PatternResult a
+reducePattern :: forall a. IsVar a
+              => ReduceScope a
+              -> Atom a -> Pattern a
+              -> PatternResult a
 
 -- A wildcard always yields a complete pattern
 reducePattern _ _ PatWildcard = PatternComplete mempty
@@ -170,3 +174,21 @@ filterDeadArms pat s = goArm where
     let Just (v', _) = VarMap.lookup (toVar v) (s ^. ctorScope)
         Just cases = VarMap.lookup (toVar v') (s ^. typeScope)
     in foldr (\(a, _) -> if a == v then id else VarSet.insert (toVar a)) mempty cases
+
+-- | Simplify the set of arms: first use 'reducePattern' to narrow down our
+-- selection of patterns, then eliminate dead arms with 'filterDeadArms'.
+--
+-- This either returns a single arm, if the match is known to be complete (and
+-- so can be eliminated), or a list of potential arms otherwise.
+simplifyArms :: IsVar a
+             => ReduceScope a
+             -> Atom a -> [Arm a]
+             -> Either (Arm a, Subst a) [(Arm a, Subst a)]
+simplifyArms s test arms = filterDeadArms (_armPtrn . fst) s <$> foldCases arms where
+  foldCases [] = Right []
+  foldCases (a@Arm { _armPtrn = p }:as) =
+    case reducePattern s test p of
+      PatternFail -> foldCases as
+      PatternUnknown subst -> Right ((a, subst):either pure id (foldCases as))
+      PatternPartial subst -> Right [(a, subst)]
+      PatternComplete subst -> Left (a, subst)
