@@ -47,14 +47,16 @@ freeSet = VarMap.foldrWithKey ins mempty where
   ins k _    s = VarSet.insert k s
 
 extendVar :: IsVar a => (a, Type a, Term a) -> ReduceScope a -> ReduceScope a
-extendVar (v, _, e) = varScope %~ VarMap.insert (toVar v) (basicDef v e)
+extendVar b@(v, _, e) = (varScope %~ VarMap.insert (toVar v) (basicDef v e))
+                      . (ariScope %~ flip extendPureLets [b])
 
 extendVars :: IsVar a => [(a, Type a, Term a)] -> ReduceScope a -> ReduceScope a
 extendVars vs s = foldr extendVar s vs where
 
 extendVarsRec :: IsVar a => [(a, Type a, Term a)] -> ReduceScope a -> ReduceScope a
 extendVarsRec vs s = foldr extend s vs where
-  extend (v, _, e) = varScope %~ VarMap.insert (toVar v) (basicRecDef v e)
+  extend b@(v, _, e) = (varScope %~ VarMap.insert (toVar v) (basicRecDef v e))
+                     . (ariScope %~ flip extendPureLets [b])
 
 mapVar :: Functor f
        => (AnnTerm b (OccursVar a) -> f (Term a))
@@ -64,12 +66,14 @@ mapVar f (v, ty, e) = (underlying v, underlying <$> ty, ) <$> f e
 
 reduceStmts :: MonadReduce a m => [AnnStmt VarSet.Set (OccursVar a)] -> m [Stmt a]
 reduceStmts [] = pure []
-reduceStmts (Foreign v ty def:ss) = (Foreign (underlying v) (underlying <$> ty) def:) <$> reduceStmts ss
+reduceStmts (Foreign v ty def:ss) = do
+  ss' <- local (ariScope %~ flip extendForeign (v, ty)) (reduceStmts ss)
+  pure (Foreign (underlying v) (underlying <$> ty) def:ss')
 reduceStmts (StmtLet (One var):ss) = do
   var' <- mapVar reduceTerm var
   ss' <- local (extendVar var') (reduceStmts ss)
   pure $ StmtLet (One var'):ss'
-reduceStmts (StmtLet (Many vs):ss) = do
+reduceStmts (StmtLet (Many vs):ss) = local (ariScope %~ flip extendPureLets vs) $ do
   breakers <- asks (flip loopBreakers vs)
 
   vsn   <- traverse (mapVar reduceTerm) . filter (flip VarSet.notMember breakers . toVar . fst3) $ vs
@@ -80,7 +84,8 @@ reduceStmts (StmtLet (Many vs):ss) = do
 reduceStmts (Type v cases:ss) = do
   let cases' = map (underlying *** fmap underlying) cases
   local ( (typeScope %~ VarMap.insert (toVar v) cases')
-        . (ctorScope %~ VarMap.union (VarMap.fromList (map buildCtor cases'))) ) $
+        . (ctorScope %~ VarMap.union (VarMap.fromList (map buildCtor cases')))
+        . (ariScope %~ flip extendPureCtors cases) ) $
     (Type (underlying v) cases':) <$> reduceStmts ss
   where
     buildCtor (def, sig) = (toVar def, (underlying v, sig))
@@ -260,23 +265,30 @@ reduceTermK (AnnTyApp _ f t) cont
     isLambda (Lam TypeArgument{} b) = isLambda b
     isLambda _ = False
 
-reduceTermK (AnnLet _ (One (v, ty, e)) rest) cont
-  | AnnLam{} <- e
-  , usedWhen v == Once
-  = do
+-- reduceTermK (AnnLet fa (One (va, tya, AnnLet fb bb rb)) ra) cont =
+--   flip reduceTermK cont $ AnnLet fb bb (AnnLet fa (One (va, tya, rb)) ra)
+
+reduceTermK (AnnLet _ (One b@(v, ty, e)) rest) cont = do
+  pureE <- asks (flip isPure e . view ariScope)
+  let used = usedWhen v
+  if
+    | Dead <- used, pureE -> reduceTermK rest cont
+    | Once <- used, pureE -> do
       varSubst %= VarMap.insert (toVar v) (SubTodo e)
 
-      rest' <- reduceTermK rest cont
+      rest' <- local (ariScope %~ flip extendPureLets [b])
+                 (reduceTermK rest cont)
 
       se <- gets (VarMap.lookup (toVar v) . view varSubst)
       varSubst %= VarMap.delete (toVar v)
       case se of
-        Nothing -> changed rest'
-        Just (SubTodo _) -> reduceTermK e $ \e' -> considerE e' (pure rest')
         Just (SubDone e') -> considerE e' (pure rest')
-
-  | otherwise = reduceTermK e $ \e' -> do
-      considerE e' (local (extendVar (v', ty', e')) (reduceTermK rest cont))
+        -- If it's no longer in the set, then it's either been visited or is now
+        -- considered dead.
+        _ -> changed rest'
+    | otherwise -> reduceTermK e $ \e' -> do
+      considerE e' (local (extendVar (v', ty', e'))
+                     (reduceTermK rest cont))
 
   where
     v' = underlying v
@@ -345,7 +357,7 @@ reduceTermK (AnnLet _ (One (v, ty, e)) rest) cont
 reduceTermK (AnnLet f (Many vs) rest) cont =
   case stronglyConnComp . map buildNode $ vs of
     [] -> reduceTermK rest cont
-    [CyclicSCC vs] -> do
+    [CyclicSCC vs] -> local (ariScope %~ flip extendPureLets vs) $ do
       breakers <- asks (flip loopBreakers vs)
 
       -- We go over the non-loop breakers (which will never be inlined), reduce

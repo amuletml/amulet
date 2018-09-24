@@ -5,13 +5,14 @@
 , TemplateHaskell #-}
 module Core.Optimise.Reduce.Base
   ( module Core.Occurrence
+  , module Core.Arity
   , module Core.Core
   , module Core.Var
 
   , DefInfo(..), VarDef(..)
   , unknownDef, basicDef, basicRecDef
   , ReduceScope
-  , varScope, typeScope, ctorScope
+  , varScope, typeScope, ctorScope, ariScope
 
   , VarSub(..)
   , ReduceState
@@ -35,7 +36,9 @@ import qualified Data.VarMap as VarMap
 import qualified Data.VarSet as VarSet
 import Data.Maybe
 
+import qualified Core.Arity as Arity
 import Core.Occurrence
+import Core.Arity hiding (Arity(..), emptyScope)
 import Core.Core
 import Core.Var
 
@@ -74,6 +77,7 @@ data ReduceScope a
   { _varScope  :: VarMap.Map (VarDef a)    -- ^ Lookup of variables to their definition.
   , _typeScope :: VarMap.Map [(a, Type a)] -- ^ Lookup of types to their list of constructors.
   , _ctorScope :: VarMap.Map (a, Type a)   -- ^ Lookup of constructors to their parent type and signature type.
+  , _ariScope :: ArityScope                -- ^ The current arity scope
   }
   deriving (Show)
 
@@ -107,7 +111,7 @@ runReduce :: MonadNamey m
           => RWST (ReduceScope a) (Sum Int) (ReduceState a) m x
           -> m (x, Int)
 runReduce m = fmap getSum <$> evalRWST m emptyScope emptyState where
-  emptyScope = RScope mempty mempty mempty
+  emptyScope = RScope mempty mempty mempty Arity.emptyScope
   emptyState = RState mempty
 
 -- | Run the reduce monad N times, or until no more changes occur.
