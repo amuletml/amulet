@@ -21,7 +21,7 @@ lintPasses :: Bool
 lintPasses = True
 
 optmOnce :: [Stmt CoVar] -> Namey [Stmt CoVar]
-optmOnce = passes <=< linted "Newtype" killNewtypePass where
+optmOnce = passes where
   passes :: [Stmt CoVar] -> Namey [Stmt CoVar]
   passes = foldr1 (>=>)
            [ linted "Reduce" reducePass
@@ -32,19 +32,24 @@ optmOnce = passes <=< linted "Newtype" killNewtypePass where
            , linted "Sinking" $ pure . sinkingPass . tagFreeSet
 
            , linted "Reduce #2" reducePass
-           , linted "CSE"     $ pure . csePass
            ]
 
-  linted :: Monad f => String -> ([Stmt CoVar] -> f [Stmt CoVar]) -> [Stmt CoVar] -> f [Stmt CoVar]
-  linted pass fn
-    | lintPasses
-    = fmap (runLint pass =<< checkStmt emptyScope) . fn
-    | otherwise = fn
+linted :: Monad f => String -> ([Stmt CoVar] -> f [Stmt CoVar]) -> [Stmt CoVar] -> f [Stmt CoVar]
+linted pass fn
+  | lintPasses
+  = fmap (runLint pass =<< checkStmt emptyScope) . fn
+  | otherwise = fn
 
 -- | Run the optimiser multiple times over the input core.
 optimise :: [Stmt CoVar] -> Namey [Stmt CoVar]
-optimise = go 10 . (runLint "Lower" =<< checkStmt emptyScope) where
+optimise = postpasses <=< go 10 <=< prepasses . (runLint "Lower" =<< checkStmt emptyScope) where
   go :: Integer -> [Stmt CoVar] -> Namey [Stmt CoVar]
   go k sts
     | k > 0 = go (k - 1) =<< optmOnce sts
     | otherwise = pure sts
+
+  prepasses :: [Stmt CoVar] -> Namey [Stmt CoVar]
+  prepasses = linted "Newtype" killNewtypePass
+
+  postpasses :: [Stmt CoVar] -> Namey [Stmt CoVar]
+  postpasses = linted "CSE" (pure . csePass)
