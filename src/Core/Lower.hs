@@ -111,7 +111,6 @@ lowerAt (S.If c t e _) ty = do
   pure $ C.Match c' [tc, te]
 lowerAt (Fun param bd an) (ForallTy Irrelevant a b) =
   let p = case param of
-        S.ImplParam p -> p
         S.PatParam p -> p
       operational (PType p _ _) = operational p
       operational p = p
@@ -168,7 +167,6 @@ lowerAt (ExprWrapper wrap e an) ty =
     S.TypeApp t -> do
       ex' <- lowerAtAtom e (lowerType (S.getType e))
       pure (C.TyApp ex' (lowerType t))
-    S.ExprApp x -> lowerExprTerm (S.App e x an)
     S.TypeLam (Skolem (TvName (TgName _ id)) (TvName (TgName n _)) _ _) k ->
       let ty' (ForallTy (Relevant v) _ t) = substituteInType (VarMap.singleton v (VarTy var)) t
           ty' x = x
@@ -324,15 +322,14 @@ lowerLet bs =
       lowerScc (CyclicSCC vs) = pure . Many <$> do
         -- Cyclic bindings will only ever be normal. Well, I
         -- jolly hope so anyway
-        for vs $ \(S.Binding (TvName var) ex _ (_, ty)) -> do
+        for vs $ \(S.Binding (TvName var) ex (_, ty)) -> do
           let ty' = lowerType ty
           (mkVal var,ty',) <$> lowerPolyBind ty' ex
 
-      lowerScc (AcyclicSCC (S.Binding (TvName var) ex _ (_, ty))) = pure . One <$> do
+      lowerScc (AcyclicSCC (S.Binding (TvName var) ex (_, ty))) = pure . One <$> do
         let ty' = lowerType ty
         (mkVal var, ty',) <$> lowerPolyBind ty' ex
 
-      lowerScc (AcyclicSCC S.ParsedBinding{}) = error "ParsedBinding{} in Lower"
       lowerScc (AcyclicSCC S.Matching{}) = error "Matching{} in Lower"
 
       lowerScc (AcyclicSCC (S.TypedMatching p ex (pos, ty) bound)) = do

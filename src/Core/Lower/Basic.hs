@@ -69,7 +69,6 @@ lowerType t@S.TyTuple{} = go t where
 lowerType (S.TyPi bind b)
   | S.Invisible v Nothing <- bind = ForallTy (Relevant (mkTyvar (S.unTvName v))) StarTy (lowerType b)
   | S.Invisible v (Just c) <- bind = ForallTy (Relevant (mkTyvar (S.unTvName v))) (lowerType c) (lowerType b)
-  | S.Implicit a <- bind = ForallTy Irrelevant (lowerType a) (lowerType b)
   | S.Anon a <- bind = ForallTy Irrelevant (lowerType a) (lowerType b)
 lowerType (S.TyApp a b) = AppTy (lowerType a) (lowerType b)
 lowerType (S.TyRows rho vs) = RowsTy (lowerType rho) (map (fmap lowerType) vs)

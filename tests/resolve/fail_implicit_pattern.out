@@ -1,12 +1,1 @@
-fail_implicit_pattern.ml[1:14 ..1:19]: error
-  Illegal implicit binding of pattern (a, b)
-
-  │ 
-1 │ let implicit (a, b) = (1, 2)
-  │ 
-
-  • Note: all implicit bindings must be of the form
-
-      let implicit f = ...
-
-    where f is an identifier or function.
+let implicit#0 (a#1, b#2) = (1, 2)

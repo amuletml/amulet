@@ -1,7 +1,0 @@
-modules-fail.ml[6:18 ..6:20]: error
-  Could not choose implicit value of type int
-
-  Arising in the expression
-  │ 
-6 │ let main : int = foo
-  │ 

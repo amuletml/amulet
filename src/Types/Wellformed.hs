@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleContexts, TypeFamilies, ScopedTypeVariables, UndecidableInstances #-}
-module Types.Wellformed (wellformed, arity, normType, skols, Skolem(..), checkAmbiguous) where
+module Types.Wellformed (wellformed, arity, normType, skols, Skolem(..)) where
 
 import Control.Monad.Infer
 
@@ -9,7 +9,6 @@ import Data.Function
 import Data.List (unionBy)
 
 import Syntax.Pretty
-import Syntax.Subst
 
 wellformed :: (MonadChronicles TypeError m, MonadReader Env m) => Type Typed -> m ()
 wellformed tp = case tp of
@@ -23,7 +22,6 @@ wellformed tp = case tp of
     case a of
       Invisible _ k -> traverse_ wellformed k
       Anon a -> wellformed a
-      Implicit a -> wellformed a
     wellformed b
   TyApp a b -> wellformed a *> wellformed b
   TyTuple a b -> wellformed a *> wellformed b
@@ -78,17 +76,7 @@ skols (TyApp a b) = skols a <> skols b
 skols (TyPi b t)
   | Invisible v k <- b = Set.filter (\(Skolem _ v' _ _) -> v /= v') (foldMap skols k <> skols t)
   | Anon a <- b = skols a <> skols t
-  | Implicit a <- b = skols a <> skols t
 skols (TyRows r rs) = skols r <> foldMap (skols . snd) rs
 skols (TyExactRows rs) = foldMap (skols . snd) rs
 skols (TyTuple a b) = skols a <> skols b
 skols (TyWithConstraints cs a) = foldMap (\(x, y) -> skols x <> skols y) cs <> skols a
-
-checkAmbiguous :: MonadChronicles TypeError m => Var Typed -> Type Typed -> m ()
-checkAmbiguous v tau = go mempty tau where
-  go s (TyPi (Invisible v k) t) = go (Set.insert v (s <> foldMap ftv k)) t
-  go s (TyPi (Implicit _) t) = go s t
-  go s t = if not (Set.null (s Set.\\ fv))
-              then confesses (AmbiguousType v tau (s Set.\\ fv))
-              else pure ()
-    where fv = ftv t

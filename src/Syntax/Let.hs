@@ -19,17 +19,13 @@ depOrder :: Ord (Var p)
 depOrder binds = extra ++ stronglyConnComp nodes where
   (extra, nodes, mapping) = foldr buildNode (mempty, mempty, mempty) binds
 
-  buildNode it@(Binding var ex _ _) (e, n, m) =
+  buildNode it@(Binding var ex _) (e, n, m) =
     ( e, (it, var, freeInMapped ex):n, Map.insert var var m )
   buildNode it@(Matching p ex _) (e, n, m) =
     case bound p of
       [] -> (AcyclicSCC it:e, n, m)
       vs@(var:_) -> (e, (it, var, freeInMapped ex):n, foldr (`Map.insert`var) m vs)
   buildNode it@(TypedMatching p ex _ _) (e, n, m) =
-    case bound p of
-      [] -> (AcyclicSCC it:e, n, m)
-      vs@(var:_) -> (e, (it, var, freeInMapped ex):n, foldr (`Map.insert`var) m vs)
-  buildNode it@(ParsedBinding p ex _ _) (e, n, m) =
     case bound p of
       [] -> (AcyclicSCC it:e, n, m)
       vs@(var:_) -> (e, (it, var, freeInMapped ex):n, foldr (`Map.insert`var) m vs)
@@ -46,7 +42,6 @@ freeIn (Let vs b _)         = (freeIn b <> foldMap (freeIn . view bindBody) vs) 
 freeIn (App f x _)          = freeIn f <> freeIn x
 freeIn (Fun p e _)          = freeIn e Set.\\ bound' p where
   bound' (PatParam p) = bound p
-  bound' (ImplParam p) = bound p
 freeIn (Record rs _)        = foldMap (freeIn . view fExpr) rs
 freeIn (Access e _ _)       = freeIn e
 freeIn (Match t ps _)       = freeIn t <> foldMap freeInBranch ps where
@@ -97,5 +92,4 @@ bindVariables :: (IsList (m (Var p)), Item (m (Var p)) ~ Var p, Monoid (m (Var p
               => Binding p -> m (Var p)
 bindVariables Binding { _bindVariable = v } = fromList [v]
 bindVariables Matching { _bindPattern = p } = bound p
-bindVariables ParsedBinding { _bindPattern = p } = bound p
 bindVariables TypedMatching { _bindPattern = p } = bound p
