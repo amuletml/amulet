@@ -7,4 +7,4 @@ open X.Y#1 as Z
 let a#3 = x#0
 open X#2
 let b#4 = X.Y.x#0
-let z#5 = X#2 . ({ a = X.Y.x#0 })
+let z#5 = X#2.({ a = X.Y.x#0 })

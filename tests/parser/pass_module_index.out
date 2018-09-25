@@ -1,0 +1,5 @@
+let () = begin
+    M.a;
+    M.(((a + b)));
+    f M.({ a = a, b = b })
+  end
