@@ -58,6 +58,10 @@ extendVarsRec vs s = foldr extend s vs where
   extend b@(v, _, e) = (varScope %~ VarMap.insert (toVar v) (basicRecDef v e))
                      . (ariScope %~ flip extendPureLets [b])
 
+extendBreakers :: VarSet.Set -> ReduceScope a -> ReduceScope a
+extendBreakers vs s = VarSet.foldr extend s vs where
+  extend v = varScope %~ VarMap.insert v unknownRecDef
+
 mapVar :: Functor f
        => (AnnTerm b (OccursVar a) -> f (Term a))
        -> (OccursVar a, Type (OccursVar a), AnnTerm b (OccursVar a))
@@ -76,8 +80,8 @@ reduceStmts (StmtLet (One var):ss) = do
 reduceStmts (StmtLet (Many vs):ss) = local (ariScope %~ flip extendPureLets vs) $ do
   breakers <- asks (flip loopBreakers vs)
 
-  vsn   <- traverse (mapVar reduceTerm) . filter (flip VarSet.notMember breakers . toVar . fst3) $ vs
-  local (extendVars vsn) $ do
+  vsn <- traverse (mapVar reduceTerm) . filter (flip VarSet.notMember breakers . toVar . fst3) $ vs
+  local (extendVars vsn . extendBreakers breakers) $ do
     vse <- traverse (mapVar reduceTerm) . filter (flip VarSet.member breakers . toVar . fst3) $ vs
     ss' <- local (extendVarsRec vse) $ reduceStmts ss
     pure (StmtLet (Many (vse ++ vsn)):ss')
@@ -147,14 +151,21 @@ reduceTerm (AnnExtend _ e fs) = do
 
 reduceTerm (AnnLam _ arg body) = do
   body' <- reduceTerm body
+  s <- ask
   case (underlying <$> arg, body') of
     -- Eta conversion (function case)
     (TermArgument var _, App r (Ref var' _))
-      | var == var' -> changed $ Atom r
+      | var == var', nonBreaker r s -> changed $ Atom r
     (TypeArgument var _, TyApp r (VarTy var'))
-      | var == var' -> changed $ Atom r
+      | var == var', nonBreaker r s -> changed $ Atom r
 
     (arg', _) -> pure $ Lam arg' body'
+
+  where
+    -- | Check if a definition is not a loop breaker - we don't want to
+    -- eta-reduce those.
+    nonBreaker (Ref v _) s = not . varLoopBreak . lookupVar v $ s
+    nonBreaker Lit{} _ = True
 
 reduceTerm (AnnCast _ a co) = do
   a' <- reduceAtom a
@@ -222,8 +233,8 @@ reduceTermK (AnnApp _ f x) cont
 
         -- Inline
         | Ref fv _ <- f'
-        , VarDef { varDef = Just DefInfo { defTerm = Lam (TermArgument v t) b
-                                         , defLoopBreak = False } } <- lookupVar fv s
+        , VarDef { varDef = Just DefInfo { defTerm = Lam (TermArgument v t) b }
+                 , varLoopBreak = False } <- lookupVar fv s
         , sizeTerm s b <= 500 -> do
               b' <- refresh $ Let (One (v, t, Atom x')) b
               changing $ reduceTermK (annotate b') cont
@@ -252,8 +263,8 @@ reduceTermK (AnnTyApp _ f t) cont
       if
         -- Inline
         | Ref fv _ <- f'
-        , VarDef { varDef = Just DefInfo { defTerm = Lam (TypeArgument v _) b
-                                         , defLoopBreak = False } } <- lookupVar fv s
+        , VarDef { varDef = Just DefInfo { defTerm = Lam (TypeArgument v _) b }
+                 , varLoopBreak = False } <- lookupVar fv s
         , isLambda b
         , sizeTerm s b <= 500 -> do
             b' <- refresh $ substituteInTys (VarMap.singleton (toVar v) t') b
@@ -372,12 +383,11 @@ reduceTermK (AnnLet f (Many vs) rest) cont =
     [] -> reduceTermK rest cont
     [CyclicSCC vs] -> local (ariScope %~ flip extendPureLets vs) $ do
       breakers <- asks (flip loopBreakers vs)
-
       -- We go over the non-loop breakers (which will never be inlined), reduce
       -- them and then visit the loop breakers with these inlinable functions in
       -- scope.
-      vsn   <- traverse (mapVar reduceTerm) . filter (flip VarSet.notMember breakers . toVar . fst3) $ vs
-      local (extendVars vsn) $ do
+      vsn <- traverse (mapVar reduceTerm) . filter (flip VarSet.notMember breakers . toVar . fst3) $ vs
+      local (extendVars vsn . extendBreakers breakers) $ do
         vse <- traverse (mapVar reduceTerm) . filter (flip VarSet.member breakers . toVar . fst3) $ vs
         rest' <- local (extendVarsRec vse) $ reduceTermK rest cont
         pure (Let (Many (vse ++ vsn)) rest')

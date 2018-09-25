@@ -10,7 +10,8 @@ module Core.Optimise.Reduce.Base
   , module Core.Var
 
   , DefInfo(..), VarDef(..)
-  , unknownDef, basicDef, basicRecDef
+  , basicDef, basicRecDef
+  , unknownDef, unknownRecDef
   , ReduceScope
   , varScope, typeScope, ctorScope, ariScope
 
@@ -47,7 +48,6 @@ data DefInfo a
   = DefInfo
   { defVar       :: a
   , defTerm      :: Term a
-  , defLoopBreak :: !Bool
   }
   deriving (Show)
 
@@ -56,20 +56,25 @@ data VarDef a
   = VarDef
   { varDef      :: Maybe (DefInfo a)
   , varNotAmong :: [Pattern a]
+  , varLoopBreak :: !Bool
   }
   deriving (Show)
 
 -- | A basic variable definition
 basicDef :: a -> Term a -> VarDef a
-basicDef v t = VarDef (Just (DefInfo v t False)) []
+basicDef v t = VarDef (Just (DefInfo v t)) [] False
 
 -- | A basic recursive variable definition
 basicRecDef :: a -> Term a -> VarDef a
-basicRecDef v t = VarDef (Just (DefInfo v t True)) []
+basicRecDef v t = VarDef (Just (DefInfo v t)) [] True
 
 -- | Unknown variable definition
 unknownDef :: VarDef a
-unknownDef = VarDef Nothing []
+unknownDef = VarDef Nothing [] False
+
+-- | Unknown variable definition
+unknownRecDef :: VarDef a
+unknownRecDef = VarDef Nothing [] True
 
 -- | A read-only scope within the reducer monad
 data ReduceScope a
