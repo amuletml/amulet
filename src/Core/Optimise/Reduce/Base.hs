@@ -4,12 +4,20 @@
 , ScopedTypeVariables
 , TemplateHaskell #-}
 module Core.Optimise.Reduce.Base
-  ( module Core.Core
+  ( module Core.Occurrence
+  , module Core.Arity
+  , module Core.Core
   , module Core.Var
 
-  , VarDef(..), unknownDef, basicDef
+  , DefInfo(..), VarDef(..)
+  , unknownDef, basicDef, basicRecDef
   , ReduceScope
-  , varScope, typeScope, ctorScope
+  , varScope, typeScope, ctorScope, ariScope
+
+  , VarSub(..)
+  , ReduceState
+  , varSubst
+
   , MonadReduce
   , runReduce, runReduceN
 
@@ -20,63 +28,95 @@ module Core.Optimise.Reduce.Base
   , unwrapTy
   ) where
 
-import Control.Monad.Writer
-import Control.Monad.Reader
 import Control.Monad.Namey
-import Control.Arrow
+import Control.Monad.RWS
 import Control.Lens
 
 import qualified Data.VarMap as VarMap
+import qualified Data.VarSet as VarSet
 import Data.Maybe
 
+import qualified Core.Arity as Arity
+import Core.Occurrence
+import Core.Arity hiding (Arity(..), emptyScope)
 import Core.Core
 import Core.Var
+
+-- | Information about a known definition
+data DefInfo a
+  = DefInfo
+  { defVar       :: a
+  , defTerm      :: Term a
+  , defLoopBreak :: !Bool
+  }
+  deriving (Show)
 
 -- | A definition within the current scope
 data VarDef a
   = VarDef
-  { varDef      :: Maybe (a, Term a)
+  { varDef      :: Maybe (DefInfo a)
   , varNotAmong :: [Pattern a]
   }
   deriving (Show)
 
 -- | A basic variable definition
 basicDef :: a -> Term a -> VarDef a
-basicDef v t = VarDef (Just (v, t)) []
+basicDef v t = VarDef (Just (DefInfo v t False)) []
+
+-- | A basic recursive variable definition
+basicRecDef :: a -> Term a -> VarDef a
+basicRecDef v t = VarDef (Just (DefInfo v t True)) []
 
 -- | Unknown variable definition
 unknownDef :: VarDef a
 unknownDef = VarDef Nothing []
 
--- ^ A read-only scope within the reducer monad
+-- | A read-only scope within the reducer monad
 data ReduceScope a
   = RScope
   { _varScope  :: VarMap.Map (VarDef a)    -- ^ Lookup of variables to their definition.
   , _typeScope :: VarMap.Map [(a, Type a)] -- ^ Lookup of types to their list of constructors.
   , _ctorScope :: VarMap.Map (a, Type a)   -- ^ Lookup of constructors to their parent type and signature type.
+  , _ariScope :: ArityScope                -- ^ The current arity scope
+  }
+  deriving (Show)
+
+-- | A substitution in the current scope
+data VarSub a
+  = SubTodo (AnnTerm VarSet.Set (OccursVar a)) -- ^ A substitution which has not been visited
+  | SubDone (Term a) -- ^ A substitution which has been visited but could not be inlined
+  deriving (Show)
+
+-- | A "mutable" state within the reducer monad
+data ReduceState a
+  = RState
+  { _varSubst :: VarMap.Map (VarSub a) -- ^ Potential candidates for inlined variables
   }
   deriving (Show)
 
 makeLenses ''ReduceScope
+makeLenses ''ReduceState
 
 type MonadReduce a m =
   ( IsVar a
   , MonadNamey m
   , MonadReader (ReduceScope a) m
+  , MonadState (ReduceState a) m
   , MonadWriter (Sum Int) m
   )
 
 -- | Run the reduce monad in the default scope, returning the modified
 -- expression and the number of changes made.
 runReduce :: MonadNamey m
-          => ReaderT (ReduceScope a) (WriterT (Sum Int) m) x
+          => RWST (ReduceScope a) (Sum Int) (ReduceState a) m x
           -> m (x, Int)
-runReduce = (second getSum<$>) . runWriterT . flip runReaderT emptyScope where
-  emptyScope = RScope mempty mempty mempty
+runReduce m = fmap getSum <$> evalRWST m emptyScope emptyState where
+  emptyScope = RScope mempty mempty mempty Arity.emptyScope
+  emptyState = RState mempty
 
 -- | Run the reduce monad N times, or until no more changes occur.
 runReduceN :: MonadNamey m
-           => (x -> ReaderT (ReduceScope a) (WriterT (Sum Int) m) x)
+           => (x -> RWST (ReduceScope a) (Sum Int) (ReduceState a) m x)
            -> Int -> x
            -> m x
 runReduceN task = go where
@@ -89,22 +129,23 @@ runReduceN task = go where
 changing :: MonadReduce a m => m x -> m x
 changing = (tell (Sum 1)>>)
 
--- | Return a changed term
+-- | Mark a term as having changed and return it
 changed :: MonadReduce a m => x -> m x
 changed = (<$tell (Sum 1))
 
-isCtor :: IsVar a => a -> ReduceScope a -> Bool
+-- | Determine if this variable is a constructor
+isCtor :: IsVar v => v -> ReduceScope a -> Bool
 isCtor var = VarMap.member (toVar var) . view ctorScope
 
 -- | Look up a variable within the current scope
-lookupVar :: IsVar a => a -> ReduceScope a -> VarDef a
+lookupVar :: IsVar v => v -> ReduceScope a -> VarDef a
 lookupVar v = fromMaybe unknownDef . VarMap.lookup (toVar v) . view varScope
 
 -- | Look up a variable within the current scope
-lookupTerm :: IsVar a => a -> ReduceScope a -> Maybe (Term a)
+lookupTerm :: IsVar v => v -> ReduceScope a -> Maybe (Term a)
 lookupTerm v s =
   case VarMap.lookup (toVar v) (s ^. varScope) of
-    Just VarDef { varDef = Just (_, t) } -> Just t
+    Just VarDef { varDef = Just DefInfo { defTerm = t } } -> Just t
     _ -> Nothing
 
 -- | Find the raw version of the provided variable, that is the variable

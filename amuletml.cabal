@@ -198,8 +198,8 @@ library amulet
                      , Core.Optimise.Reduce
                      , Core.Optimise.Reduce.Base
                      , Core.Optimise.Reduce.Fold
+                     , Core.Optimise.Reduce.Inline
                      , Core.Optimise.Reduce.Pattern
-                     , Core.Optimise.Inline
                      , Core.Optimise.Sinking
                      , Core.Optimise.Newtype
                      , Core.Optimise.DeadCode

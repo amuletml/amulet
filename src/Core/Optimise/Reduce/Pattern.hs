@@ -4,6 +4,7 @@ module Core.Optimise.Reduce.Pattern
   , PatternResult(..)
   , reducePattern
   , filterDeadArms
+  , simplifyArms
   ) where
 
 import Control.Lens
@@ -44,7 +45,10 @@ extract (PatternUnknown s) = s
 extract (PatternPartial s) = s
 extract (PatternComplete s) = s
 
-reducePattern :: forall a. IsVar a => ReduceScope a -> Atom a -> Pattern a -> PatternResult a
+reducePattern :: forall a. IsVar a
+              => ReduceScope a
+              -> Atom a -> Pattern a
+              -> PatternResult a
 
 -- A wildcard always yields a complete pattern
 reducePattern _ _ PatWildcard = PatternComplete mempty
@@ -109,7 +113,7 @@ reducePattern _ (Ref v _) (PatLit l) = PatternUnknown [(v, Lit l)]
 reducePattern _ _ _ = PatternUnknown mempty
 
 -- | Remove arms which are shadowed by a previous one and so will never be executed
-filterDeadArms :: IsVar a => (x -> Pattern a) -> ReduceScope a -> [x] -> [x]
+filterDeadArms :: forall a v x. (IsVar v, IsVar a) => (x -> Pattern v) -> ReduceScope a -> [x] -> [x]
 filterDeadArms pat s = goArm where
   goArm [] = []
   goArm (a:as) =
@@ -166,7 +170,26 @@ filterDeadArms pat s = goArm where
       _ -> a : goSum m as
 
   -- | Build a set of all _other_ cases for the given type variable.
+  buildSumSet :: v -> VarSet.Set
   buildSumSet v =
     let Just (v', _) = VarMap.lookup (toVar v) (s ^. ctorScope)
         Just cases = VarMap.lookup (toVar v') (s ^. typeScope)
-    in foldr (\(a, _) -> if a == v then id else VarSet.insert (toVar a)) mempty cases
+    in foldr (\(a, _) -> if toVar a == toVar v then id else VarSet.insert (toVar a)) mempty cases
+
+-- | Simplify the set of arms: first use 'reducePattern' to narrow down our
+-- selection of patterns, then eliminate dead arms with 'filterDeadArms'.
+--
+-- This either returns a single arm, if the match is known to be complete (and
+-- so can be eliminated), or a list of potential arms otherwise.
+simplifyArms :: IsVar a
+             => ReduceScope a
+             -> Atom a -> [AnnArm b (OccursVar a)]
+             -> Either (AnnArm b (OccursVar a), Subst a) [(AnnArm b (OccursVar a), Subst a)]
+simplifyArms s test arms = filterDeadArms (_armPtrn . fst) s <$> foldCases arms where
+  foldCases [] = Right []
+  foldCases (a@Arm { _armPtrn = p }:as) =
+    case reducePattern s test (underlying <$> p) of
+      PatternFail -> foldCases as
+      PatternUnknown subst -> Right ((a, subst):either pure id (foldCases as))
+      PatternPartial subst -> Right [(a, subst)]
+      PatternComplete subst -> Left (a, subst)

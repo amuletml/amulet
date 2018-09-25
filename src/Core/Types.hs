@@ -44,21 +44,21 @@ approximateAtomType (Lit l) = fmap fromVar $ case l of
 
 -- | Approximate the type of a term, returning 'Nothing' if there was a
 -- mismatch.
-approximateType :: IsVar a => Term a -> Maybe (Type a)
-approximateType (Atom a) = pure (approximateAtomType a)
-approximateType (Cast _ phi) = snd <$> relates phi
-approximateType (App f _) = do
+approximateType :: IsVar a => AnnTerm b a -> Maybe (Type a)
+approximateType (AnnAtom _ a) = pure (approximateAtomType a)
+approximateType (AnnCast _ _ phi) = snd <$> relates phi
+approximateType (AnnApp _ f _) = do
   let ForallTy _ _ d = approximateAtomType f
   pure d
-approximateType (Lam (TypeArgument v k) f) = ForallTy (Relevant v) k <$> approximateType f
-approximateType (Lam (TermArgument _ t) f) = ForallTy Irrelevant t <$> approximateType f
-approximateType (Let _ e) = approximateType e
-approximateType (Match _ xs) = case xs of
+approximateType (AnnLam _ (TypeArgument v k) f) = ForallTy (Relevant v) k <$> approximateType f
+approximateType (AnnLam _ (TermArgument _ t) f) = ForallTy Irrelevant t <$> approximateType f
+approximateType (AnnLet _ _ e) = approximateType e
+approximateType (AnnMatch _ _ xs) = case xs of
   (x:_) -> approximateType (x ^. armBody)
   [] -> error "impossible approximateType empty match"
-approximateType (Extend e rs) = pure (RowsTy (approximateAtomType e) (map (\(x, _, t) -> (x, approximateAtomType t)) rs))
-approximateType (Values xs) = pure (ValuesTy (map approximateAtomType xs))
-approximateType (TyApp f at) = do
+approximateType (AnnExtend _ e rs) = pure (RowsTy (approximateAtomType e) (map (\(x, _, t) -> (x, approximateAtomType t)) rs))
+approximateType (AnnValues _ xs) = pure (ValuesTy (map approximateAtomType xs))
+approximateType (AnnTyApp _ f at) = do
   let ForallTy (Relevant v) _ t = approximateAtomType f
   let replace = transform go
       go (VarTy v') | v == v' = at
