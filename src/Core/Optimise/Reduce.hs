@@ -265,15 +265,28 @@ reduceTermK (AnnTyApp _ f t) cont
     isLambda (Lam TypeArgument{} b) = isLambda b
     isLambda _ = False
 
--- reduceTermK (AnnLet fa (One (va, tya, AnnLet fb bb rb)) ra) cont =
---   flip reduceTermK cont $ AnnLet fb bb (AnnLet fa (One (va, tya, rb)) ra)
+reduceTermK (AnnLet fa (One (va, tya, AnnLet fb bb rb)) ra) cont =
+  -- TODO: Can we avoid this?
+  flip reduceTermK cont $ AnnLet fb bb (AnnLet fa (One (va, tya, rb)) ra)
 
 reduceTermK (AnnLet _ (One b@(v, ty, e)) rest) cont = do
-  pureE <- asks (flip isPure e . view ariScope)
+  s <- ask
   let used = usedWhen v
+      pures = isPure (s ^. ariScope) e
+      inlines = case e of
+        -- Applications are fine in the once case (will not duplicate work or code), as long as they
+        -- are pure. We also check they are not constructors, as those can never be inlined and the
+        -- pattern matcher will not see deferred definitions.
+        AnnApp _ (Ref f _) _   -> used == Once && pures && not (isCtor (lookupRawVar (underlying f) s) s)
+        AnnTyApp _ (Ref f _) _ -> used == Once && pures && not (isCtor (lookupRawVar (underlying f) s) s)
+        -- Lambdas are fine in the once or "once lambda" case as they'll not duplicate code and will
+        -- only be inlined if applied (and so not duplicate work).
+        AnnLam{} -> used == Once || used == OnceLambda
+        _ -> False
+
   if
-    | Dead <- used, pureE -> reduceTermK rest cont
-    | Once <- used, pureE -> do
+    | used == Dead, pures -> reduceTermK rest cont
+    | inlines -> do
       varSubst %= VarMap.insert (toVar v) (SubTodo e)
 
       rest' <- local (ariScope %~ flip extendPureLets [b])
