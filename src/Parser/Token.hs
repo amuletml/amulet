@@ -38,7 +38,6 @@ data TokenClass
   | TcEnd -- ^ An @end@ token.
   | TcIn -- ^ An @in@ token.
   | TcExternal -- ^ An @external@ token.
-  | TcImplicit -- ^ An @implicit@ token.
   | TcVal -- ^ A @val@ token.
   | TcTrue -- ^ A @true@ token.
   | TcFalse -- ^ A @false@ token.
@@ -117,7 +116,6 @@ instance Show TokenClass where
   show TcEnd = "end"
   show TcIn = "in"
   show TcExternal = "external"
-  show TcImplicit = "implicit"
   show TcVal = "val"
   show TcTrue = "true"
   show TcFalse = "false"

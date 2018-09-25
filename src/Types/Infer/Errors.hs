@@ -7,9 +7,9 @@ import qualified Data.Set as Set
 import Control.Monad.Infer
 import Control.Lens
 
+import Types.Infer.Builtin
 import Types.Wellformed -- skols
 
-import Syntax.Implicits
 import Syntax.Transform
 import Syntax.Pretty
 import Syntax.Subst
@@ -88,83 +88,3 @@ foundHole hole ht sub = helpMaybe (FoundHole hole ty) where
         oneEquality :: Skolem Typed -> [Doc]
      in string "The following equalities might be relevant:"
         <#> vsep (map bullet (concatMap oneEquality skolvars))
-
-noImplicitFound :: ImplicitScope Typed -> Type Typed -> TypeError
-noImplicitFound _ tau | not (null sks) = NoImplicit tau (<#> msg) where
-  sks = Set.toList (skols tau)
-  msg = vsep [ empty
-             , bullet (string "Where" <+> vcat (punctuate comma (map (displayType . TySkol) sks))
-                        <+> verb <+> string "rigid type variable" <> plural <> char ',')
-             , indent 4 (string "rigidified because" <+> prettyMotive (head sks ^. skolMotive))
-             ]
-
-  plural = case sks of
-    [_] -> empty
-    _ -> char 's'
-  verb = case sks of
-    [_] -> string "is a"
-    _ -> string "are"
-
-noImplicitFound _ tau = NoImplicit tau id
-
-ambiguousImplicits :: [Implicit Typed] -> Type Typed -> TypeError
-ambiguousImplicits cs tau | not (Set.null (ftv tau)) = NoImplicit tau (<#> ambiguous) where
-  ambiguous = vsep [ empty
-                   , bullet (string "Ambiguous type variable" <> plural <+> tvs <+> string "prevent" <> tense <+> string "choosing a value")
-                   , suggestion
-                   ]
-  suggestion = case cs of
-    ss@(ImplChoice _ s _ _ _:_) ->
-      vsep [ bullet $ string "Suggestion: use a type annotation to specify" <+> pronoun
-           , indent 14 (string "perhaps to the type" <+> displayType s)
-           , empty
-           ]
-       <#> let ss' = take 5 ss
-               trunc = if length ss' < length ss
-                          then parens (string "list truncated")
-                          else empty
-            in string "These" <+> keyword "relevant" <+> string "implicit values are in scope:" <+> trunc
-       <#> vsep (map displaySuggestion ss')
-    [] -> empty
-  tvs = hcat (punctuate comma (map (pretty . TyVar) vars))
-
-  vars = Set.toList (ftv tau)
-  plural = case vars of
-    [_] -> empty
-    _ -> char 's'
-  tense = case vars of
-    [_] -> char 's'
-    _ -> empty
-  pronoun = case vars of
-    [_] -> string "it"
-    _ -> string "them"
-ambiguousImplicits cs tau = NoImplicit tau (<#> candidates) where
-  candidates = vsep ( [ empty
-                      , bullet (string "The following candidates exist:")
-                      ]
-                   ++ map displaySuggestion cs)
-
-tooMuchRecursion :: Type Typed -> TypeError
-tooMuchRecursion tau = NoImplicit tau (<#> overflow) where
-  overflow = vsep [ string "Choosing a candidate took over 200 iterations."
-                  , bullet $ string "Suggestion: bind the choice with an" <+> keyword "implicit function" <> dot ]
-              <#> ambiguous
-  ambiguous
-    | not (Set.null (ftv tau))
-    = vsep [ empty
-           , bullet (string "Possible cause: ambiguous type variable" <> plural <+> tvs <+> string "prevent" <> tense <+> string "choosing a value.")
-           , indent 5 (string "Perhaps add a" <+> keyword "type annotation" <> string ", specifying the wanted type?")
-           ]
-    | otherwise = empty
-    where vars = Set.toList (ftv tau)
-          tvs = hsep (punctuate comma (map (pretty . TyVar) vars))
-          plural = case vars of
-            [_] -> empty
-            _ -> char 's'
-          tense = case vars of
-            [_] -> char 's'
-            _ -> empty
-
-displaySuggestion :: Implicit Typed -> Doc
-displaySuggestion (ImplChoice _ t _ Solved v) = bullet (pretty v <+> colon <+> displayType t)
-displaySuggestion (ImplChoice _ t _ Unsolved v) = bullet (pretty v <+> colon <+> displayType t <+> parens (string "bound locally"))

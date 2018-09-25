@@ -70,9 +70,8 @@ unify e a b = do
   pure (WrapVar x)
 
 subsumes e a b = do
-  i <- view implicits
   x <- TvName <$> genName
-  tell (Seq.singleton (ConSubsume e x i a b))
+  tell (Seq.singleton (ConSubsume e x a b))
   pure (WrapVar x)
 
 implies :: ( Reasonable f p
@@ -130,16 +129,6 @@ quantifier r s ty@TyForall{} = do
   (k', _, t) <- instantiate Expression ty
   (a, b, k) <- quantifier r s t
   pure (a, b, fromMaybe id k' . k)
-
-quantifier r DoSkip wty@(TyPi (Implicit tau) sigma) = do
-  x <- TvName <$> genName
-  i <- view implicits
-  tell (Seq.singleton (ConImplicit r x i tau sigma))
-
-  (dom, cod, k) <- quantifier r DoSkip sigma
-  let wrap ex = ExprWrapper (WrapVar x) (ExprWrapper (TypeAsc wty) ex (annotation ex, wty)) (annotation ex, sigma)
-  pure (dom, cod, k . wrap)
-
 quantifier _ _ (TyPi x b) = pure (x, b, id)
 quantifier r _ t = do
   (a, b) <- (,) <$> freshTV <*> freshTV
@@ -156,8 +145,7 @@ discharge _ t = pure (t, id)
 rereason :: SomeReason -> Seq.Seq (Constraint p) -> Seq.Seq (Constraint p)
 rereason because = fmap go where
   go (ConUnify _ v l r) = ConUnify because v l r
-  go (ConSubsume _ v s l r) = ConSubsume because v s l r
-  go (ConImplicit _ v s t u) = ConImplicit because v s t u
+  go (ConSubsume _ v l r) = ConSubsume because v l r
   go (ConImplies _ u b a) = ConImplies because u b a
   go x@ConFail{} = x
   go x@DeferredError{} = x
@@ -215,3 +203,23 @@ lAZYTy = TyForall (TvName (TgName "a" (-30))) (Just TyType) (lAZYTy' (TyVar (TvN
 forceTy', lAZYTy' :: Type Typed -> Type Typed
 forceTy' x = TyArr (TyApp tyLazy x) x
 lAZYTy' x = TyArr (TyArr tyUnit x) (TyApp tyLazy x)
+
+getHead :: Type p -> Type p
+getHead t@TyVar{} = t
+getHead t@TyCon{} = t
+getHead t@TyPromotedCon{} = t
+getHead t@TyApp{} = t
+getHead (TyPi b t) = case b of
+  Anon v -> TyArr v t -- regular function, do nothing
+  Invisible{} -> getHead t
+getHead t@TyRows{} = t
+getHead t@TyExactRows{} = t
+getHead t@TyTuple{} = t
+getHead t@TySkol{} = t
+getHead t@TyWithConstraints{} = t
+getHead t@TyType = t
+getHead t@TyWildcard{} = t
+
+spine :: Type p -> [Type p]
+spine (TyApp f x) = spine f `snoc` x
+spine t = [t]

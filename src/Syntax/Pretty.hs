@@ -80,7 +80,6 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
     go (Cast c) ex = parens (pretty ex <+> soperator (string "|>") <+> pretty c)
     go (TypeApp t) ex = pretty ex <+> braces (pretty t)
     go (TypeAsc _) ex = pretty ex
-    go (ExprApp t) ex = pretty ex <+> brackets (pretty t)
     go (wr Syntax.:> wi) ex = go wr (ExprWrapper wi ex undefined)
     go (WrapVar v) ex = pretty ex <+> soperator (char '_') <> pretty v
     go (WrapFn f) ex = pretty (runWrapper f ex)
@@ -131,7 +130,7 @@ instance Pretty Lit where
   pretty LiUnit = sliteral (parens empty)
 
 instance Pretty (Var p) => Pretty (Binding p) where
-  pretty (Binding n v p _) = i <> hsep (pretty n:map pretty args) <> sig <+> nest 2 (equals </> pretty rest') where
+  pretty (Binding n v _) = hsep (pretty n:map pretty args) <> sig <+> nest 2 (equals </> pretty rest') where
     (args, rest) = takeLambdas v
     (sig, rest') = case rest of
       Ascription e t _ -> (space <> colon <+> pretty t, e)
@@ -139,15 +138,8 @@ instance Pretty (Var p) => Pretty (Binding p) where
 
     takeLambdas (Fun p x _) = first (p:) . takeLambdas $ x
     takeLambdas x = ([], x)
-    i = case p of
-      BindImplicit -> keyword "implicit "
-      BindRegular -> empty
   pretty (Matching p e _) = pretty p <+> nest 2 (equals </> pretty e)
   pretty (TypedMatching p e _ _) = pretty p <+> equals <+> pretty e
-  pretty (ParsedBinding n e p _) = i <+> pretty n <+> equals <+> pretty e where
-    i = case p of
-      BindImplicit -> keyword "implicit "
-      BindRegular -> empty
 
 instance (Pretty (Var p)) => Pretty (Type p) where
   pretty (TyCon v) = stypeCon (pretty v)
@@ -181,14 +173,9 @@ instance (Pretty (Var p)) => Pretty (Type p) where
 
 instance Pretty (Var p) => Pretty (Parameter p) where
   pretty (PatParam p) = pretty p
-  pretty (ImplParam p) = char '?' <> pretty p
 
 instance Pretty (Var p) => Pretty (TyBinder p) where
   pretty (Anon t) = k t (pretty t) <+> arrow where
-    k TyPi{} = parens
-    k TyTuple{} = parens
-    k _ = id
-  pretty (Implicit t) = k t (pretty t) <+> soperator (string "=>") where
     k TyPi{} = parens
     k TyTuple{} = parens
     k _ = id
@@ -243,7 +230,6 @@ applyCons x@TyPromotedCon{} = x
 applyCons x@TyWildcard{} = x
 applyCons (TyPi a b) = TyPi (go a) (applyCons b) where
   go (Anon t) = Anon (applyCons t)
-  go (Implicit t) = Implicit (applyCons t)
   go (Invisible t k) = Invisible t (fmap applyCons k)
 applyCons (TyApp a b) = TyApp (applyCons a) (applyCons b)
 applyCons (TyRows r rs) = TyRows (applyCons r) (map (second applyCons) rs)
@@ -281,7 +267,6 @@ displayType = prettyType . dropKindVars mempty where
   kindVarIn :: Var p -> Type p -> Bool
   kindVarIn v (TyPi (Invisible _ k) t) = v `Set.member` foldMap ftv k || kindVarIn v t
   kindVarIn v (TyPi (Anon a) b) = kindVarIn v a && kindVarIn v b
-  kindVarIn v (TyPi (Implicit a) b) = kindVarIn v a && kindVarIn v b
   kindVarIn _ TyPromotedCon{} = True
   kindVarIn v (TyVar x) = x /= v
   kindVarIn v (TyWildcard x) = case x of
@@ -316,14 +301,10 @@ prettyType (TyPi x t) = uncurry prettyQuantifiers . second reverse $ unwind t [x
        Anon{}:_ ->
          let arg x = parenTuple x (prettyType x)
           in hsep (punctuate (space <> arrow) (map (arg . (^?! _Anon)) (q:these))) <+> arrow <+> prettyQuantifiers inner those
-       Implicit{}:_ ->
-         let arg x = parenTuple x (prettyType x)
-          in hsep (punctuate (space <> soperator (string "=>")) (map (arg . (^?! _Implicit)) (q:these))) <+> soperator (string "=>") <+> prettyQuantifiers inner those
        [] -> error "what?"
 
   sameAs Invisible{} Invisible{} = True
   sameAs Anon{} Anon{} = True
-  sameAs Implicit{} Implicit{} = True
   sameAs _ _ = False
 prettyType (TyApp x e) = parenTyFun x (displayType x) <+> parenTyArg e (displayType e)
 prettyType (TyRows p rows) = enclose (lbrace <> space) (space <> rbrace) $

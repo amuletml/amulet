@@ -18,7 +18,6 @@ import Control.Lens hiding (Lazy)
 import Text.Pretty.Semantic
 import Text.Pretty.Note
 
-import Syntax.Implicits (splitImplVarType, spine)
 import Syntax.Pretty
 import Syntax.Let
 
@@ -26,7 +25,7 @@ import Language.Lua.Parser.Wrapper
 import Language.Lua.Parser.Parser
 import Language.Lua.Parser.Error
 
-import Types.Infer.Builtin (tyUnit, tyLazy)
+import Types.Infer.Builtin (tyUnit, tyLazy, spine, getHead)
 
 type MonadVerify m = ( MonadWriter (Seq.Seq VerifyError) m, MonadState (Set.Set BindingSite) m )
 
@@ -144,20 +143,19 @@ verifyBindingGroup :: MonadVerify m
                    => (BindingSite -> Set.Set BindingSite -> Set.Set BindingSite)
                    -> SomeReason -> [Binding Typed] -> m ()
 verifyBindingGroup k _ = traverse_ verifyScc . depOrder where
-  verifyScc (AcyclicSCC (Binding v e _ (s, t))) = do
+  verifyScc (AcyclicSCC (Binding v e (s, t))) = do
     modify (k (BindingSite v s t))
     verifyExpr e
   verifyScc (AcyclicSCC (TypedMatching p e _ _)) = do
     traverse_ (modify . k) $ bindingSites p
     verifyExpr e
 
-  verifyScc (AcyclicSCC ParsedBinding{}) = error "ParsedBinding in *verify*"
   verifyScc (AcyclicSCC Matching{}) = error "Matching after TC"
 
   verifyScc (CyclicSCC vs) = do
     let vars = foldMapOf (each . bindVariable) Set.singleton vs
-    for_ vs $ \(Binding var _ _ (s, ty)) -> modify (k (BindingSite var s ty))
-    for_ vs $ \b@(Binding var ex _ (_, _)) -> do
+    for_ vs $ \(Binding var _ (s, ty)) -> modify (k (BindingSite var s ty))
+    for_ vs $ \b@(Binding var ex (_, _)) -> do
       let naked = unguardedVars ex
           blame = BecauseOf b
       verifyExpr ex
@@ -177,7 +175,6 @@ verifyExpr (If c t e _) = traverse_ verifyExpr [c, t, e]
 verifyExpr (App f x _) = verifyExpr f *> verifyExpr x
 verifyExpr (Fun p x _) = do
   let bindingSites' (PatParam p) = bindingSites p
-      bindingSites' (ImplParam p) = bindingSites p
   modify (Set.union (bindingSites' p))
   verifyExpr x
 verifyExpr (Begin es _) = do
@@ -215,9 +212,6 @@ verifyExpr (OpenIn _ e _) = verifyExpr e
 verifyExpr (ExprWrapper w e _) =
   case w of
     WrapFn (MkWrapCont k _) -> verifyExpr (k e)
-    ExprApp a -> do
-      verifyExpr a
-      verifyExpr e
     _ -> verifyExpr e
 
 unguardedVars :: Expr Typed -> Set.Set (Var Typed)
@@ -268,7 +262,8 @@ instance Eq BindingSite where
   BindingSite v _ _ == BindingSite v' _ _ = v == v'
 
 isLazy :: Type Typed -> Bool
-isLazy ty = tyLazy == head (spine (fst (splitImplVarType ty)))
+isLazy ty = tyLazy == head (spine (getHead ty))
+
 isWrappedThunk :: Expr Typed -> Bool
 isWrappedThunk (ExprWrapper (WrapFn (MkWrapCont _ x)) _ _) =
   x == "automatic thunking"
@@ -276,7 +271,7 @@ isWrappedThunk _ = False
 
 nonTrivialRhs :: Binding Typed -> Bool
 nonTrivialRhs (TypedMatching _ e _ _) = nonTrivial e
-nonTrivialRhs (Binding _ e _ _) = nonTrivial e
+nonTrivialRhs (Binding _ e _) = nonTrivial e
 nonTrivialRhs _ = error "nonTrivialRHS pre-TC Bindings"
 
 nonTrivial :: Expr Typed -> Bool
@@ -307,5 +302,4 @@ nonTrivial Lazy{} = False
 nonTrivial (ExprWrapper w e _) =
   case w of
     WrapFn (MkWrapCont k _) -> nonTrivial (k e)
-    ExprApp a -> nonTrivial a || nonTrivial e
     _ -> nonTrivial e

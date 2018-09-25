@@ -1,2 +1,0 @@
-let implicit x#0 = 3
-let main#1 = x#0

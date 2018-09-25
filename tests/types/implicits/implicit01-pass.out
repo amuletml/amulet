@@ -1,3 +1,0 @@
-x : int
-foo : int => int
-main : int

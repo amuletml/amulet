@@ -17,8 +17,6 @@ import Types.Infer.Builtin hiding (subsumes, unify)
 import Types.Infer.Errors
 import Types.Wellformed
 
-import qualified Syntax.Implicits as Imp
-import Syntax.Implicits (Obligation(..), Implicit(..), overlap)
 import Syntax.Pretty
 import Syntax.Subst
 import Syntax
@@ -37,7 +35,6 @@ import Data.Foldable
 import Data.Function
 import Data.Spanned
 import Data.Reason
-import Data.These
 import Data.List
 import Data.Text (Text)
 
@@ -53,7 +50,6 @@ data SolveState
   = SolveState { _solveTySubst :: Subst Typed
                , _solveAssumptions :: Subst Typed
                , _solveCoSubst :: Map.Map (Var Typed) (Wrapper Typed)
-               , _solveImplBail :: Set.Set (Var Typed)
                }
   deriving (Eq, Show, Ord)
 
@@ -79,7 +75,7 @@ runSolve :: MonadNamey m
          => Subst Typed
          -> StateT SolveState (ReaderT SolveScope m) b
          -> m (Subst Typed, Map.Map (Var Typed) (Wrapper Typed))
-runSolve s x = fix (runReaderT (runStateT act (SolveState s mempty mempty mempty)) emptyScope) where
+runSolve s x = fix (runReaderT (runStateT act (SolveState s mempty mempty)) emptyScope) where
   act = (,) <$> genName <*> x
   fix act = do
     (_, s) <- act
@@ -112,28 +108,19 @@ doSolve (ConUnify because v a b :<| xs) = do
     Right co -> solveCoSubst . at v ?= Cast co
 
   doSolve xs
-doSolve (ConSubsume because v scope a b :<| xs) = do
+doSolve (ConSubsume because v a b :<| xs) = do
   sub <- use solveTySubst
 
   -- traceM (displayS (pretty (ConSubsume because v scope (apply sub a) (apply sub b))))
   let a' = apply sub a
-      cont :: m () = do
-        sub <- use solveTySubst
-        co <- memento $ subsumes because scope a' (apply sub b)
-        case co of
-          Left e -> do
-            solveImplBail %= Set.union (ftv a' <> ftv (apply sub b))
-            dictate e
-            solveCoSubst . at v ?= IdWrap
-          Right co -> solveCoSubst . at v .= Just co
-
-  case a' of
-    TyPi (Implicit _) _ -> do
-      doSolve xs
-      cont
-    _ -> do
-      cont
-      doSolve xs
+  sub <- use solveTySubst
+  co <- memento $ subsumes because a' (apply sub b)
+  case co of
+    Left e -> do
+      dictate e
+      solveCoSubst . at v ?= IdWrap
+    Right co -> solveCoSubst . at v .= Just co
+  doSolve xs
 
 doSolve (ConImplies because not cs ts :<| xs) = do
   before <- use solveTySubst
@@ -157,18 +144,6 @@ doSolve (ConImplies because not cs ts :<| xs) = do
 
   doSolve xs
 
-doSolve (ConImplicit because var scope t inner :<| xs) = do
-  doSolve xs
-  sub <- use solveTySubst
-  abort <- use solveImplBail
-  let scope' = Imp.mapTypes (apply sub) scope
-      t' = apply sub t
-  when (Set.disjoint (ftv t') abort) $ do
-    w <- memento $ solveImplicitConstraint 0 inner scope' t'
-    case w of
-      Left e -> dictate (reblame because <$> e)
-      Right w -> solveCoSubst . at var ?= w
-
 doSolve (DeferredError e :<| cs) = do
   dictates e
   doSolve cs
@@ -178,98 +153,6 @@ doSolve (ConFail a v t :<| cs) = do
   sub <- use solveTySubst
   let ex = Hole (unTvName v) (fst a)
   dictates . reblame (BecauseOf ex) $ foundHole v (apply sub t) sub
-
-solveImplicitConstraint :: forall m. MonadSolve m
-                        => Int -> Type Typed -> Imp.ImplicitScope Typed -> Type Typed
-                        -> m (Wrapper Typed)
-solveImplicitConstraint x _ _ tau | x >= 200 = confesses (tooMuchRecursion tau)
-solveImplicitConstraint x inner scope t =
-  let isUnsolved t = (t ^. Imp.implSolved) == Imp.Unsolved
-      freeInHead t = ftv (t ^. Imp.implHead)
-      freeInPre t = flip foldMap (t ^. Imp.implPre) $ \case
-        Quantifier{} -> Set.empty
-        Implication t -> ftv t
-      isPolymorphic t = let tv (Quantifier (Invisible v _)) = [v]
-                            tv _ = mempty
-                            tvs = foldMap tv (t ^. Imp.implPre)
-                         in all (`Set.member` freeInHead t) tvs
-                         && all (`Set.member` freeInPre t) tvs
-                         && not (null tvs)
-      pickClosest t xs = groupBy (\a b -> fst a == fst b) (sortOn fst (map (matchDistance t) xs))
-      trySolved xs =
-        case partition isUnsolved xs of
-          ([c], _) -> useImplicit (x + 1) inner scope t c
-          _ -> retry xs
-      tryPoly xs =
-        case partition isPolymorphic xs of
-          ([c], _) -> do
-            let solvable (Quantifier _) = pure True
-                solvable (Implication tau) = do
-                  w <- memento (solveImplicitConstraint (x + 1) inner scope tau)
-                  case w of
-                    Left _ -> pure False
-                    Right _ -> pure True
-            weCan <- allM solvable (c ^. Imp.implPre)
-            unless weCan (retry xs)
-            useImplicit (x + 1) inner scope t c
-          _ -> retry xs
-      tryMoreSpecific xs =
-        case pickClosest t xs of
-          ([(_, c)]:_) -> useImplicit (x + 1) inner scope t c
-          _ -> confesses (ambiguousImplicits xs t)
-      retry :: [Implicit Typed] -> m a
-      retry xs = case xs of
-        [] -> confesses (noImplicitFound scope t)
-        _ -> confesses (ambiguousImplicits xs t)
-  in case Imp.lookup t scope of
-      [c] -> useImplicit x inner scope t c
-      -- [] -> throwError (noImplicitFound scope t)
-      xs -> trySolved xs `absolving` tryMoreSpecific xs `absolving` tryPoly xs
-
-useImplicit :: forall m. MonadSolve m
-            => Int -> Type Typed -> Imp.ImplicitScope Typed -> Type Typed -> Implicit Typed
-            -> m (Wrapper Typed)
-useImplicit x inner scope' ty (ImplChoice hdt oty os s imp) = go where
-  go :: m (Wrapper Typed)
-  go = do
-    (hdt, refresh) <- if s == Imp.Solved then refreshTy hdt else pure (hdt, mempty)
-    (cast, view solveTySubst -> sub) <-
-      capture . retcons (`Note` (string "when considering implicit value" <+> pretty imp)) $
-        unify hdt ty
-
-    let start e = VarRef imp (annotation e, oty)
-        mk _ [] = pure (\e -> ExprWrapper (probablyCast cast) e (annotation e, ty))
-        mk (TyPi (Invisible v _) t) (Quantifier (Invisible _ _):xs) = do
-          let tau = apply sub . apply refresh . TyVar $ v
-          let sub' = Map.singleton v tau
-
-          flip (.) (\ex -> ExprWrapper (TypeApp tau) ex (annotation ex, apply sub' t)) <$> mk (apply sub' t) xs
-        mk (TyPi (Implicit tau) t) (Implication _:os) = do
-          w <- solveImplicitConstraint (x + 1) t scope' tau
-          k' <- mk t os
-          pure (k' . (\ex -> ExprWrapper w ex (annotation ex, t)))
-        mk x (o:_) = error (show x ++ " missing " ++ show o)
-
-    wrap <- mk oty os
-    solveTySubst %= compose sub
-    let cont ex = ExprWrapper (ExprApp (wrap (start ex))) ex (annotation ex, inner)
-    pure (WrapFn (MkWrapCont cont ("implicit value for " ++ show ty)))
-
-matchDistance :: Type Typed -> Implicit Typed -> (Int, Implicit Typed)
-matchDistance t im =
-  let occm = tyVarOcc (im ^. Imp.implHead) <> foldMap (\case Quantifier{} -> mempty; Implication t -> tyVarOcc t) (im ^. Imp.implPre)
-      constraint = Seq.singleton (ConUnify (BecauseOf (undefined :: Expr Typed)) (TvName firstName) t (im ^. Imp.implHead))
-      distance =
-        case evalNamey (runChronicleT (solve constraint)) firstName of
-          This _ -> maxBound
-          These _ _ -> maxBound
-          That (s, _) ->
-            let weight v =
-                  case Map.lookup v s of
-                    Just _ -> 1
-                    Nothing -> 0
-             in foldOccMap (\v o x -> x + o * weight v) 0 occm
-   in (distance, im)
 
 bind :: MonadSolve m => Var Typed -> Type Typed -> m (Coercion Typed)
 bind var ty
@@ -350,9 +233,6 @@ unify b (TySkol t) = SymCo <$> unify (TySkol t) b
 
 unify (TyArr a b) (TyArr a' b') = ArrCo <$> unify a a' <*> unify b b'
 
-unify (TyPi (Implicit a) b) (TyPi (Implicit a') b') =
-  ArrCo <$> unify a a' <*> unify b b' -- Technically cheating but yay desugaring
-
 unify l@(TyApp a b) r@(TyApp a' b') =
   (AppCo <$> unify a a' <*> unify b b')
     `catchChronicle` (\e -> confess =<< for e rethrow)
@@ -420,58 +300,28 @@ unify (TyTuple a b) (TyTuple a' b') =
 unify TyType TyType = pure (ReflCo TyType)
 unify a b = confesses =<< unequal a b
 
-subsumes', subsumes :: MonadSolve m => SomeReason -> Imp.ImplicitScope Typed -> Type Typed -> Type Typed -> m (Wrapper Typed)
-subsumes blame s a b = do
+subsumes', subsumes :: MonadSolve m => SomeReason -> Type Typed -> Type Typed -> m (Wrapper Typed)
+subsumes blame a b = do
   x <- use solveTySubst
-  retcons (addBlame blame) $ subsumes' blame s (apply x a) (apply x b)
+  retcons (addBlame blame) $ subsumes' blame (apply x a) (apply x b)
 
-subsumes' b s t1 t2@TyPi{} | isSkolemisable t2 = do
-  sub <- use solveTySubst
-  (c, t2') <- skolemise (BySubsumption (apply sub t1) (apply sub t2)) t2
-  (Syntax.:>) c <$> subsumes b s t1 t2'
+subsumes' b t1 t2@TyPi{} | isSkolemisable t2 = do
+  (c, t2') <- skolemise (BySubsumption t1 t2) t2
+  (Syntax.:>) c <$> subsumes b t1 t2'
 
-subsumes' b s t1@TyPi{} t2 | isSkolemisable t1 = do
+subsumes' b t1@TyPi{} t2 | isSkolemisable t1 = do
   (cont, _, t1') <- instantiate Subsumption t1
   let wrap = maybe IdWrap (WrapFn . flip MkWrapCont "forall <= sigma; instantiation") cont
 
-  flip (Syntax.:>) wrap <$> subsumes b s t1' t2
+  flip (Syntax.:>) wrap <$> subsumes b t1' t2
 
-subsumes' blame s (TyPi (Implicit b) c) (TyPi (Implicit a) d) = do
-  wc <- recover IdWrap $ subsumes blame s c d
-  wa <- subsumes blame s a b
-  arg <- TvName <$> genName
-
-  let wrap ex | an <- annotation ex
-        = Fun (ImplParam (Capture arg (an, a)))
-              (ExprWrapper wc
-                (App ex
-                     (ExprWrapper wa
-                        (VarRef arg (an, a))
-                        (an, b))
-                     (an, c))
-                (an, d))
-              (an, TyPi (Implicit a) d)
-
-  pure (WrapFn (MkWrapCont wrap "co/contra subsumption for implicit functions"))
-
-subsumes' r s wt@(TyPi (Implicit t) t1) t2 | prettyConcrete t2 = do
-  omega <- subsumes r s t1 t2
-
-  sub <- use solveTySubst
-  w <- solveImplicitConstraint 0 wt s (apply sub t)
-  let wrap ex | an <- annotation ex
-        = ExprWrapper omega
-            (ExprWrapper (TypeAsc t1)
-              (ExprWrapper w ex (an, t1)) (an, t1)) (an, t2)
-   in pure (WrapFn (MkWrapCont wrap "implicit instantation"))
-
-subsumes' r s ot@(TyTuple a b) nt@(TyTuple a' b') = do
+subsumes' r ot@(TyTuple a b) nt@(TyTuple a' b') = do
   -- We must check that..
   (wb, wa) <- retcon Seq.reverse $ do
     -- The second components are related
-    wb <- recover IdWrap $ subsumes (secondBlame r) s b b'
+    wb <- recover IdWrap $ subsumes (secondBlame r) b b'
     -- The first components are related
-    wa <- recover IdWrap $ subsumes (firstBlame r) s a a'
+    wa <- recover IdWrap $ subsumes (firstBlame r) a a'
     pure (wb, wa)
   -- Thus "point-wise" subsumption
 
@@ -492,10 +342,10 @@ subsumes' r s ot@(TyTuple a b) nt@(TyTuple a' b') = do
                    (an, nt)
   pure (WrapFn (MkWrapCont cont "tuple re-packing"))
 
-subsumes' _ _ a@(TyApp lazy _) b@(TyApp lazy' _)
+subsumes' _ a@(TyApp lazy _) b@(TyApp lazy' _)
   | lazy == lazy', lazy' == tyLazy = probablyCast <$> unify a b
 
-subsumes' _ _ (TyApp lazy ty') ty | lazy == tyLazy, lazySubOk ty' ty = do
+subsumes' _ (TyApp lazy ty') ty | lazy == tyLazy, lazySubOk ty' ty = do
   co <- unify ty' ty
   -- We have a thunk and want a value
   let wrap ex
@@ -507,7 +357,7 @@ subsumes' _ _ (TyApp lazy ty') ty | lazy == tyLazy, lazySubOk ty' ty = do
               (an, ty)
   pure (WrapFn (MkWrapCont wrap "automatic forcing"))
 
-subsumes' _ _ ty' (TyApp lazy ty) | lazy == tyLazy, lazySubOk ty ty' = do
+subsumes' _ ty' (TyApp lazy ty) | lazy == tyLazy, lazySubOk ty ty' = do
   co <- unify ty ty'
   -- We have a value and want a thunk
   let wrap ex
@@ -521,7 +371,7 @@ subsumes' _ _ ty' (TyApp lazy ty) | lazy == tyLazy, lazySubOk ty ty' = do
               (an, TyApp lazy ty)
   pure (WrapFn (MkWrapCont wrap "automatic thunking"))
 
-subsumes' r s th@(TyExactRows rhas) tw@(TyExactRows rwant) = do
+subsumes' r th@(TyExactRows rhas) tw@(TyExactRows rwant) = do
   let matching = overlap rhas rwant
 
   -- All fields must be present in both records..
@@ -530,14 +380,14 @@ subsumes' r s th@(TyExactRows rhas) tw@(TyExactRows rwant) = do
 
   matched <- fmap fold . for matching $ \(key, have, want) -> do
     -- and have to be point-wise subtypes
-    wrap <- subsumes' (fieldBlame key r) s have want
+    wrap <- subsumes' (fieldBlame key r) have want
     pure (Map.singleton key (have, want, wrap))
 
   exp <- TvName <$> genName
 
   pure (WrapFn (MkWrapCont (mkRecordWrapper rhas matched tw th tw id exp) "exact→exact record subsumption"))
 
-subsumes' r s th@(TyExactRows rhas) tw@(TyRows rho rwant) = do
+subsumes' r th@(TyExactRows rhas) tw@(TyRows rho rwant) = do
   let matching = overlap rhas rwant
 
   -- We need to at *least* match all of the ones we want
@@ -547,7 +397,7 @@ subsumes' r s th@(TyExactRows rhas) tw@(TyRows rho rwant) = do
   matched <- fmap fold . for matching $ \(key, have, want) -> do
     -- and make sure that the ones we have are subtypes of the ones we
     -- want
-    wrap <- subsumes' (fieldBlame key r) s have want
+    wrap <- subsumes' (fieldBlame key r) have want
     pure (Map.singleton key (have, want, wrap))
 
   let diff = filter (not . flip Map.member matched . fst) rhas
@@ -566,7 +416,7 @@ subsumes' r s th@(TyExactRows rhas) tw@(TyRows rho rwant) = do
   let mkw ex = ExprWrapper cast ex (annotation ex, tw)
   pure (WrapFn (MkWrapCont (mkRecordWrapper rhas matched matched_t th tw mkw exp) "exact→poly record subsumption"))
 
-subsumes' r s th@(TyRows rho rhas) tw@(TyRows sigma rwant) = do
+subsumes' r th@(TyRows rho rhas) tw@(TyRows sigma rwant) = do
   let matching = overlap rhas rwant
 
   -- We need to at *least* match all of the ones we want
@@ -578,7 +428,7 @@ subsumes' r s th@(TyRows rho rhas) tw@(TyRows sigma rwant) = do
     matched <- fmap fold . for matching $ \(key, have, want) -> do
       -- and make sure that the ones we have are subtypes of the ones we
       -- want
-      wrap <- subsumes' (fieldBlame key r) s have want
+      wrap <- subsumes' (fieldBlame key r) have want
       pure (Map.singleton key (have, want, wrap))
 
     let diff = filter (not . flip Map.member matched . fst) rhas
@@ -596,12 +446,12 @@ subsumes' r s th@(TyRows rho rhas) tw@(TyRows sigma rwant) = do
     let mkw ex = Ascription (ExprWrapper cast ex (annotation ex, tw)) tw (annotation ex, tw)
     pure (WrapFn (MkWrapCont (mkRecordWrapper rhas matched matched_t th tw mkw exp) "exact→poly record subsumption"))
 
-subsumes' r _ a b = probablyCast <$> retcons (reblame r) (unify a b)
+subsumes' r a b = probablyCast <$> retcons (reblame r) (unify a b)
 
 -- | Shallowly skolemise a type, replacing any @forall@-bound 'TyVar's
 -- with fresh 'Skolem' constants.
 skolemise :: MonadNamey m => SkolemMotive Typed -> Type Typed -> m (Wrapper Typed, Type Typed)
-skolemise motive ty@TyPi{} | Just (tv, k, t) <- isSkolemisableTyBinder ty = do
+skolemise motive ty@(TyPi (Invisible tv k) t) = do
   sk <- freshSkol motive ty tv
   (wrap, ty) <- skolemise motive (apply (Map.singleton tv sk) t)
   kind <- case k of
@@ -611,10 +461,6 @@ skolemise motive ty@TyPi{} | Just (tv, k, t) <- isSkolemisableTyBinder ty = do
       getSkol _ = error "not a skolem from freshSkol"
   pure (TypeLam (getSkol sk) kind Syntax.:> wrap, ty)
 skolemise _ ty = pure (IdWrap, ty)
-
-isSkolemisableTyBinder :: Type Typed -> Maybe (Var Typed, Maybe (Type Typed), Type Typed)
-isSkolemisableTyBinder (TyPi (Invisible v k) c) = Just (v, k, c)
-isSkolemisableTyBinder _ = Nothing
 
 -- Which coercions are safe to remove *here*?
 isReflexiveCo :: Coercion Typed -> Bool
@@ -665,20 +511,6 @@ concretish TyVar{} = False
 concretish (TyApp f x) = concretish f && concretish x
 concretish (TyWildcard t) = maybe False concretish t
 concretish _ = True
-
-prettyConcrete :: Type Typed -> Bool
-prettyConcrete TyVar{} = False
-prettyConcrete (TyWildcard t) = maybe False prettyConcrete t
-prettyConcrete _ = True
-
-allM :: (Monad m, Foldable t) => (a -> m Bool) -> t a -> m Bool
-allM p = foldM (\x b -> (&&) x <$> p b) True
-
-refreshTy :: (Substitutable Typed a, MonadNamey m) => a -> m (a, Subst Typed)
-refreshTy ty = do
-  vs <- for (Set.toList (ftv ty)) $ \v ->
-    (v,) <$> refreshTV v
-  pure (apply (Map.fromList vs) ty, Map.fromList vs)
 
 firstBlame, secondBlame :: SomeReason -> SomeReason
 firstBlame (It'sThis (BecauseOfExpr (Tuple (x:_) _) _)) = becauseExp x
@@ -748,13 +580,20 @@ mkRecordWrapper keys matched matched_t th tw cont exp =
       -- Bind the expression to a value so we don't duplicate work and
       -- rebuild the record
       wrapEx ex | an <- annotation ex =
-        Let [Binding exp ex BindRegular (an, th)]
+        Let [Binding exp ex (an, th)]
           (cont (Record (foldMap (fakeField an (ref an)) keys) (an, matched_t)))
           (an, tw)
    in wrapEx
 
 lazySubOk :: Type Typed -> Type Typed -> Bool
-lazySubOk tlazy tout = concretish tout || head (Imp.spine tout) == head (Imp.spine tlazy)
+lazySubOk tlazy tout = concretish tout || head (spine tout) == head (spine tlazy)
+
+overlap :: [(Text, Type p)] -> [(Text, Type p)] -> [(Text, Type p, Type p)]
+overlap xs ys
+  | inter <- filter ((/=) 1 . length) $ groupBy ((==) `on` fst) (sortOn fst (xs ++ ys))
+  = map get inter
+  where get [(t, a), (_, b)] = (t, a, b)
+        get _ = undefined
 
 newtype InField = InField Text
   deriving Show
