@@ -1,10 +1,18 @@
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ScopedTypeVariables, FlexibleContexts #-}
 module Core.Optimise.Reduce.Inline
-  ( loopBreakers
+  ( UsedAs(..)
+  , loopBreakers
   , sizeAtom
   , sizeTerm
+  , shouldInline
+
+  , gatherInlining
+  , buildUnknownInline
+  , buildKnownInline
   ) where
 
+import Control.Monad.RWS
+import Control.Arrow (first, (***))
 import Control.Lens
 
 import qualified Data.VarMap as VarMap
@@ -16,6 +24,14 @@ import Data.List
 import Data.Ord
 
 import Core.Optimise.Reduce.Base
+import Core.Optimise
+import Core.Types
+
+data UsedAs
+  = UsedOther
+  | UsedApply
+  | UsedMatch
+  deriving (Show)
 
 -- | The score of a variable used for determining loops
 --
@@ -108,22 +124,219 @@ isTrivialAtom (Lit (Str t)) = T.length t <= 8
 isTrivialAtom (Lit _) = True
 
 -- | Determine the "size" of an atom, using a somewhat arbitrary set of values.
+--
+-- Make sure you update the values in 'canInline' too when changing
+-- these.
 sizeAtom :: IsVar v => ReduceScope a -> Atom v -> Int
-sizeAtom s (Ref v _) = if isCtor v s then 0 else 5
+sizeAtom s (Ref v _) = if isCtor v s then 1 else 2
 sizeAtom _ (Lit _) = 1
 
 -- | Determine the "size" of an term, using a somewhat arbitrary set of values.
 --
 -- This is used in order to score terms for inlining and loop breaking.
+--
+-- Make sure you update the values in 'canInline' too when changing
+-- these.
 sizeTerm :: IsVar v => ReduceScope a -> AnnTerm b v -> Int
+
+-- Effectively free
 sizeTerm s (AnnAtom _ a) = sizeAtom s a
-sizeTerm s (AnnApp _ f x) = sizeAtom s f + sizeAtom s x + 2
+sizeTerm s (AnnTyApp _ t _) = sizeAtom s t
+sizeTerm s (AnnCast _ t _) = sizeAtom s t
+
+sizeTerm s (AnnApp _ f x) = 2 + sizeAtom s f + sizeAtom s x
+
 sizeTerm s (AnnLam _ TypeArgument{} b) = sizeTerm s b
-sizeTerm s (AnnLam _ TermArgument{} b) = 1 + sizeTerm s b
+sizeTerm s (AnnLam _ TermArgument{} b) = 10 + sizeTerm s b
+
 sizeTerm s (AnnLet _ (One v) e) = sizeTerm s (thd3 v) + sizeTerm s e
 sizeTerm s (AnnLet _ (Many vs) e) = sum (map (sizeTerm s . thd3) vs) + sizeTerm s e
 sizeTerm s (AnnMatch _ e bs) = sizeAtom s e + sum (map (sizeTerm s . view armBody) bs)
-sizeTerm s (AnnExtend _ e rs) = sizeAtom s e + sum (map (sizeAtom s . thd3) rs)
+
+sizeTerm s (AnnExtend _ e rs) = 10 + sizeAtom s e + sum (map (sizeAtom s . thd3) rs)
 sizeTerm s (AnnValues _ xs) = sum (map (sizeAtom s) xs)
-sizeTerm s (AnnTyApp _ t _) = sizeAtom s t
-sizeTerm s (AnnCast _ t _) = sizeAtom s t
+
+
+
+type InlineSet a v b = ([(a, Atom v)], [(a, Type v)], AnnTerm b a)
+
+shouldInline :: (IsVar v, IsVar u)
+             => ReduceScope a
+             -> ReduceState a
+             -> UsedAs
+             -> InlineSet v u b
+             -> Bool
+shouldInline s st usage (args, tyargs, rhs)
+  | rhsSize <= argSize + 10 = True
+  | not usefulUsed && VarSet.null usefulArgs = False
+  | otherwise = smallEnough
+
+  where
+    rhsSize = sizeTerm s rhs
+
+    -- | The size of this inlined function is less than what is required
+    -- to have it unapplied.
+    argSize
+      -- Include size of LHS and application
+      = foldr ((+) . (+4) . sizeAtom s . snd) 0 args
+      -- Include size of LHS
+      + 2 * length tyargs
+
+    -- | Whether the usage of the inlining's result can be considered
+    -- "useful".
+    usefulUsed =
+      case usage of
+        UsedOther -> False
+        UsedMatch -> True
+        UsedApply -> True
+
+    -- | If this atom has the potential to be useful
+    usefulAtom (Ref v _)
+      | Nothing <- VarMap.lookup (toVar v) (s ^. varScope)
+      , Nothing <- VarMap.lookup (toVar v) (st ^. varSubst)
+      , not (isCtor v s)
+      = False
+    usefulAtom _ = True
+
+    -- | The set of "useful" arguments
+    usefulArgs = foldr (\(v, a) c -> if usefulAtom a then VarSet.insert (toVar v) c else c) mempty args
+    usefulArgCount = VarSet.size usefulArgs
+
+    threshold = 100 :: Int
+
+    -- | Determine if this term is small enough to be inlined
+    smallEnough =
+      let -- The set of interesting variables is the union of interesting args and constructors
+          usefulVars = VarMap.foldrWithKey (\v _ -> VarSet.insert (toVar v)) usefulArgs (s ^. ctorScope)
+          -- Discount functions whose result is considered "interesting".
+          resDis = if usefulUsed && usefulResult usefulVars rhs
+                   then 40
+                   else 0 :: Int
+
+          argDis = VarSet.size (usefulUsage rhs) * 20
+      in rhsSize <= threshold
+      || rhsSize - resDis - argDis <= threshold
+
+    -- | Determine if this result looks "interesting"
+    --
+    -- Namely if we return an "inspectable" value (record, tuple, constructor,
+    -- lambda, non-boring argument).
+
+    -- These are guaranteed to be consumed (due to 'interestingUsage')
+    usefulResult _ AnnLam{} = True
+    usefulResult _ AnnExtend{} = True
+    usefulResult _ AnnValues{} = True
+    -- Basic usages of interesting variables are interesting
+    usefulResult c (AnnAtom _ a) = usefulResultA c a
+    usefulResult c (AnnApp _ f _) = usefulResultA c f
+    usefulResult c (AnnTyApp _ f _) = usefulResultA c f
+    usefulResult c (AnnCast _ f _) = usefulResultA c f
+    -- Ensure at least one arm is interesting
+    usefulResult c (AnnMatch _ _ arms)
+      = any (usefulResult c . view armBody) arms
+    -- Propagate interesting things onwards
+    usefulResult c (AnnLet _ (One (v, _, e)) rest) =
+      let c' = if usefulResult c e
+               then VarSet.insert (toVar v) c
+               else c
+      in usefulResult c' rest
+    usefulResult c (AnnLet _ Many{} rest) = usefulResult c rest
+
+    usefulResultA c (Ref v _) = VarSet.member (toVar v) c
+    usefulResultA _ Lit{} = True
+
+    -- | Find useful arguments which are used in an useful context
+    usefulUsage AnnExtend{} = mempty
+    usefulUsage AnnValues{} = mempty
+    usefulUsage AnnAtom{} = mempty
+    usefulUsage AnnCast{} = mempty
+    usefulUsage (AnnLam _ _ b) = usefulUsage b
+    usefulUsage (AnnLet _ (One (_, _, e)) rest) = usefulUsage e <!> usefulUsage rest
+    usefulUsage (AnnLet _ (Many vs) rest) = foldr ((<!>) . usefulUsage . thd3) (usefulUsage rest) vs
+    -- Applications or matches are considered interesting
+    usefulUsage (AnnMatch _ test arms) = foldr ((<!>) . usefulUsage . view armBody) (usefulUsageA test) arms
+    usefulUsage (AnnApp _ f _) = usefulUsageA f
+    usefulUsage (AnnTyApp _ f _) = usefulUsageA f
+
+    usefulUsageA (Ref v _)
+      | VarSet.member (toVar v) usefulArgs
+      = VarSet.singleton (toVar v)
+      | otherwise = mempty
+    usefulUsageA Lit{} = mempty
+
+    -- Short circuiting version of <>, which will ensure we don't inspect everything
+    -- if we've seen all variables
+    l <!> r = if VarSet.size l >= usefulArgCount then l else l <> r
+
+
+gatherInlining :: MonadReduce a m
+               => AnnTerm VarSet.Set (OccursVar a)
+               -> m (Maybe (Either (InlineSet (OccursVar a) (OccursVar a) VarSet.Set)
+                                   (InlineSet a (OccursVar a) ()) ))
+gatherInlining (AnnApp _ (Ref f _) x) = do
+  s <- gets (VarMap.lookup (toVar f) . view varSubst)
+  case s of
+    Just (SubTodo t) -> do
+      t' <- gatherInlining t
+      pure $ case t' of
+        Just (Left (vs, ts, AnnLam _ (TermArgument v _) bod)) ->
+          Just . Left $ ((v, x):vs, ts, bod)
+        Just (Right (vs, ts, Lam (TermArgument v _) bod)) ->
+          Just . Right $ ((v, x):vs, ts, bod)
+        _ -> Nothing
+    _ -> do
+      s <- asks (lookupVar (toVar f))
+      pure $ case s of
+        VarDef { varDef = Just DefInfo { defTerm = Lam (TermArgument v _) bod }
+               , varLoopBreak = False }
+          -> Just . Right $ ([(v, x)], mempty, bod)
+        _ -> Nothing
+gatherInlining (AnnTyApp _ (Ref f _) x) = do
+  s <- gets (VarMap.lookup (toVar f) . view varSubst)
+  case s of
+    Just (SubTodo t) -> do
+      t' <- gatherInlining t
+      pure $ case t' of
+        Just (Left (vs, ts, AnnLam _ (TypeArgument v _) bod)) ->
+          Just . Left $ (vs, (v, x):ts, bod)
+        Just (Right (vs, ts, Lam (TypeArgument v _) bod)) ->
+          Just . Right $ (vs, (v, x):ts, bod)
+        _ -> Nothing
+    _ -> do
+      s <- asks (lookupVar (toVar f))
+      pure $ case s of
+        VarDef { varDef = Just DefInfo { defTerm = Lam (TypeArgument v _) bod }
+               , varLoopBreak = False }
+          -> Just . Right $ (mempty, [(v, x)], bod)
+        _ -> Nothing
+gatherInlining t = pure . Just . Left $ (mempty, mempty, t)
+
+-- | Build up a set of terms for inlining when the terms have been
+-- annotated.
+buildKnownInline :: IsVar a
+              => InlineSet (OccursVar a) (OccursVar a) VarSet.Set
+              -> AnnTerm VarSet.Set (OccursVar a)
+buildKnownInline (vs, ts, rhs)
+  = substituteInTys (VarMap.fromList . map (first toVar) $ ts)
+  . foldr buildLet rhs
+  $ vs
+  where
+    buildLet (v, a) rest =
+      let ann = freeInAtom a
+      in AnnLet (ann <> VarSet.delete (toVar v) (extractAnn rest))
+                (One (v, approximateAtomType a, AnnAtom ann a))
+                rest
+
+-- | Build up a set of terms for inlining when the terms have not been
+-- annotated.
+buildUnknownInline :: IsVar a
+                   => InlineSet a (OccursVar a) ()
+                   -> Term a
+buildUnknownInline (vs, ts, rhs)
+  = substituteInTys (VarMap.fromList . map (toVar *** fmap underlying) $ ts)
+  . foldr buildLet rhs
+  $ vs
+  where
+    buildLet (v, a) rest =
+      let a' = underlying <$> a
+      in Let (One (v, approximateAtomType a', Atom a')) rest

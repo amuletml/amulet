@@ -1,20 +1,21 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, DerivingStrategies, FlexibleInstances, TypeFamilies #-}
 module Data.VarMap
   ( Map
-  , fromList, toList, null
+  , fromList, toList, null, size
   , lookup, member, findWithDefault
   , insert, delete
   , map, mapWithKey, singleton, union, unionSemigroup
   , alter
   , difference, intersection
-  , foldrWithKey
+  , foldrWithKey, foldr
   , (<>), mempty
   ) where
 
 import Control.Lens (At(..), Ixed(..), Index, IxValue)
 import qualified Data.HashMap.Strict as Map
+import qualified Prelude as P
 import Data.Coerce
-import Prelude hiding (lookup, map, null)
+import Prelude hiding (lookup, map, null, foldr)
 
 import Core.Var
 
@@ -26,6 +27,9 @@ newtype Map a
 null :: Map a -> Bool
 null (Map m) = Map.null m
 
+size :: Map a -> Int
+size (Map m) = Map.size m
+
 insert :: CoVar -> a -> Map a -> Map a
 insert x v (Map k) = Map (Map.insert x v k)
 
@@ -33,7 +37,7 @@ delete :: CoVar -> Map a -> Map a
 delete x (Map k) = Map (Map.delete x k)
 
 fromList :: [(CoVar, a)] -> Map a
-fromList = foldr (uncurry insert) mempty
+fromList = P.foldr (uncurry insert) mempty
 
 toList :: Map a -> [(CoVar, a)]
 toList (Map m) = Map.toList m
@@ -73,6 +77,9 @@ unionSemigroup (Map l) (Map r) = Map (Map.unionWith (<>) l r)
 
 foldrWithKey :: (CoVar -> a -> b -> b) -> b -> Map a -> b
 foldrWithKey f b (Map m) = Map.foldrWithKey f b m
+
+foldr :: (a -> b -> b) -> b -> Map a -> b
+foldr f b (Map m) = Map.foldr f b m
 
 type instance Index (Map a) = CoVar
 type instance IxValue (Map a) = a

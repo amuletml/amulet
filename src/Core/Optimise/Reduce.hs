@@ -206,22 +206,12 @@ reduceTermK :: forall a m. MonadReduce a m
             -> (Term a -> m (Term a))
             -> m (Term a)
 
-reduceTermK (AnnApp _ f x) cont
-  | Ref fv _ <- f
-  = do
-      fs <- gets (VarMap.lookup (toVar fv) . view varSubst)
-      case fs of
-        Just (SubTodo (AnnLam an (TermArgument v ty) bod)) ->
-          let fx = freeInAtom x
-          in reduceTermK (AnnLet (VarSet.union an fx) (One (v, ty, AnnAtom fx x)) bod) cont
-        _ -> basic
-  | otherwise = basic
-
+reduceTermK d@(AnnApp _ f x) cont
+  = inlineOr d UsedOther cont basic
   where
     basic = do
       f' <- reduceAtom f
       x' <- reduceAtom x
-
       s <- ask
       if
         -- Constant folding
@@ -231,50 +221,15 @@ reduceTermK (AnnApp _ f x) cont
         , Just a' <- foldApply (toVar (lookupRawVar fv s)) xs
         -> changing $ cont a'
 
-        -- Inline
-        | Ref fv _ <- f'
-        , VarDef { varDef = Just DefInfo { defTerm = Lam (TermArgument v t) b }
-                 , varLoopBreak = False } <- lookupVar fv s
-        , sizeTerm s b <= 500 -> do
-              b' <- refresh $ Let (One (v, t, Atom x')) b
-              changing $ reduceTermK (annotate b') cont
-
         -- Nothing to do
         | otherwise -> cont (App f' x')
 
-reduceTermK (AnnTyApp _ f t) cont
-  | Ref fv _ <- f
-  = do
-      fs <- gets (VarMap.lookup (toVar fv) . view varSubst)
-      case fs of
-        Just (SubTodo (AnnLam _ (TypeArgument v _) bod)) ->
-          -- TODO: Do this inside!
-          let sub = VarMap.singleton (toVar v) t'
-          in substituteInTys sub <$> reduceTermK bod cont
-        _ -> basic
-
-  | otherwise = basic
-
+reduceTermK d@(AnnTyApp _ f t) cont
+  = inlineOr d UsedOther cont basic
   where
-    t' = underlying <$> t
     basic = do
       f' <- reduceAtom f
-      s <- ask
-      if
-        -- Inline
-        | Ref fv _ <- f'
-        , VarDef { varDef = Just DefInfo { defTerm = Lam (TypeArgument v _) b }
-                 , varLoopBreak = False } <- lookupVar fv s
-        , isLambda b
-        , sizeTerm s b <= 500 -> do
-            b' <- refresh $ substituteInTys (VarMap.singleton (toVar v) t') b
-            changing $ reduceTermK (annotate b') cont
-
-        | otherwise -> cont $ TyApp f' t'
-
-    isLambda (Lam TermArgument{} _) = True
-    isLambda (Lam TypeArgument{} b) = isLambda b
-    isLambda _ = False
+      cont $ TyApp f' (underlying <$> t)
 
 reduceTermK (AnnLet fa (One (va, tya, AnnLet fb bb rb)) ra) cont =
   -- TODO: Can we avoid this?
@@ -471,6 +426,26 @@ reduceTermK (AnnMatch _ test arms) cont = do
       unifyWith sol vty aty
 
 reduceTermK t cont = reduceTerm t >>= cont
+
+inlineOr :: MonadReduce a m
+         => AnnTerm VarSet.Set (OccursVar a)
+         -> UsedAs
+         -> (Term a -> m (Term a))
+         -> m (Term a)
+         -> m (Term a)
+inlineOr t usage cont def = do
+  inline <- gatherInlining t
+  s <- ask
+  st <- get
+
+  case inline of
+    Just (Left inl) -> changing $ reduceTermK (buildKnownInline inl) cont
+    Just (Right inl)
+      | shouldInline s st usage inl
+      -> do
+          rhs' <- refresh $ buildUnknownInline inl
+          changing $ reduceTermK (annotate rhs') cont
+    _ -> def
 
 redundantCo :: IsVar a => Coercion a -> Bool
 redundantCo c
