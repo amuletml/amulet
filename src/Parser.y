@@ -78,7 +78,6 @@ import Syntax
   end      { Token TcEnd _ _ }
   in       { Token TcIn _ _ }
   external { Token TcExternal _ _ }
-  implicit { Token TcImplicit _ _ }
   val      { Token TcVal _ _ }
   true     { Token TcTrue _ _ }
   false    { Token TcFalse _ _ }
@@ -271,20 +270,16 @@ BindGroup :: { [Binding Parsed] }
           | BindGroup and Binding             { $3 : $1 }
 
 Binding :: { Binding Parsed }
-        : PreBinding { $1 }
-        | implicit PreBinding { implicitify $1 $2 }
+        : BPattern PostBinding              { withPos1 $1 $ Matching $1 $2 }
+        | BPattern ':' Type PostBinding     { withPos2 $1 $3 $ Matching $1 $ withPos2 $3 $4 $ Ascription $4 (getL $3) }
 
-PreBinding :: { Binding Parsed }
-           : BPattern PostBinding              { withPos1 $1 $ Matching $1 $2 }
-           | BPattern ':' Type PostBinding     { withPos2 $1 $3 $ Matching $1 $ withPos2 $3 $4 $ Ascription $4 (getL $3) }
+        | BindName ListE1(Parameter) PostBinding
+          { Binding (getL $1) (foldr (\x y -> withPos2 x $3 (Fun x y)) $3 $2) (withPos1 $1 id) }
+        | BindName ListE1(Parameter) ':' Type PostBinding
+          { Binding (getL $1) (foldr (\x y -> withPos2 x $5 (Fun x y)) (Ascription $5 (getL $4) (withPos2 $1 $5 id)) $2) (withPos2 $1 $4 id) }
 
-           | BindName ListE1(Parameter) PostBinding
-             { Binding (getL $1) (foldr (\x y -> withPos2 x $3 (Fun x y)) $3 $2) BindRegular (withPos1 $1 id) }
-           | BindName ListE1(Parameter) ':' Type PostBinding
-             { Binding (getL $1) (foldr (\x y -> withPos2 x $5 (Fun x y)) (Ascription $5 (getL $4) (withPos2 $1 $5 id)) $2) BindRegular (withPos2 $1 $4 id) }
-
-           | ArgP BindOp ArgP PostBinding
-             { Binding (getL $2) (withPos2 $1 $4 (Fun (PatParam $1) (withPos2 $3 $4 (Fun (PatParam $3) $4)))) BindRegular (withPos2 $1 $3 id) }
+        | ArgP BindOp ArgP PostBinding
+          { Binding (getL $2) (withPos2 $1 $4 (Fun (PatParam $1) (withPos2 $3 $4 (Fun (PatParam $3) $4)))) (withPos2 $1 $3 id) }
 
 PostBinding :: { Expr e }
   : '=' ExprBlock '$end'                       { $2 }
@@ -367,13 +362,11 @@ Arm :: { (Pattern Parsed, Expr Parsed) }
 
 Parameter :: { Parameter Parsed }
           : ArgP             { PatParam $1 }
-          | iident           { ImplParam (withPos1 $1 $ Capture (getName $1)) }
-          | '?(' Pattern ')' { ImplParam $2 }
 
 Type :: { Located (Type Parsed) }
      : TypeProd                                   { $1 }
      | TypeProd '->' Type                         { lPos2 $1 $3 $ TyPi (Anon (getL $1)) (getL $3) }
-     | TypeProd '=>' Type                         { lPos2 $1 $3 $ TyPi (Implicit (getL $1)) (getL $3) }
+--   | TypeProd '=>' Type                         { lPos2 $1 $3 $ TyPi (Implicit (getL $1)) (getL $3) }
      | forall ListE1(tyvar) '.' Type              { lPos2 $1 $4 $ forallTy (map getName $2) (getL $4) }
 
 TypeProd :: { Located (Type Parsed) }
@@ -493,11 +486,6 @@ getString (Token (TcString  x) _ _)    = x
 getL      (L x _)                    = x
 
 forallTy vs t = foldr TyPi t (map (flip Invisible Nothing) vs)
-
-implicitify :: Spanned a => a -> Binding Parsed -> Binding Parsed
-implicitify x (Binding a b _ c) = Binding a b BindImplicit (withPos1 x id <> c)
-implicitify x (Matching a b c) = ParsedBinding a b BindImplicit (withPos1 x id <> c)
-implicitify x (ParsedBinding a b _ c) = ParsedBinding a b BindImplicit (withPos1 x id <> c)
 
 respanFun :: (Spanned a, Spanned b) => a -> b -> Expr Parsed -> Expr Parsed
 respanFun s e (Fun p b _) = Fun p b (mkSpanUnsafe (spanStart (annotation s)) (spanEnd (annotation e)))

@@ -200,7 +200,7 @@ runRepl = do
         Just parsed -> do
           let parsed' = case parsed of
                           Left s -> [s]
-                          Right e -> [S.LetStmt [S.Binding (S.Name "_") e S.BindRegular (annotation e)]]
+                          Right e -> [S.LetStmt [S.Binding (S.Name "_") e (annotation e)]]
 
           let rScope = resolveScope state
           let cont modScope' resolved prog env' =

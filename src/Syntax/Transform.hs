@@ -30,7 +30,6 @@ transformType ft = goT where
   transM (ByExistential v ty) = ByExistential v (goT ty)
 
   transB (Anon t) = Anon (goT t)
-  transB (Implicit t) = Implicit (goT t)
   transB (Invisible x k) = Invisible x (fmap goT k)
 
   goT = transT . ft
@@ -91,8 +90,7 @@ transformExpr fe = goE where
   transE (ExprWrapper w e a) = ExprWrapper w (goE e) a
   transE (Lazy e a) = Lazy (goE e) a
 
-  goB (Binding v e p a) = Binding v (goE e) p a
-  goB (ParsedBinding v e p a) = ParsedBinding v (goE e) p a
+  goB (Binding v e a) = Binding v (goE e) a
   goB (TypedMatching v e a b) = TypedMatching v (goE e) a b
   goB (Matching p e a) = Matching p (goE e) a
 
@@ -135,15 +133,13 @@ transformExprTyped fe fc ft = goE where
   transE (ExprWrapper w e a) = ExprWrapper (goW w) (goE e) (goA a)
   transE (Lazy e a) = Lazy (goE e) (goA a)
 
-  transBind (Binding v e p a) = Binding v (goE e) p (goA a)
-  transBind (ParsedBinding v e p a) = ParsedBinding v (goE e) p (goA a)
+  transBind (Binding v e a) = Binding v (goE e) (goA a)
   transBind (Matching p e a) = Matching (goP p) (goE e) (goA a)
   transBind (TypedMatching p e a c) = TypedMatching (goP p) (goE e) (goA a) (map (second goT) c)
 
   goW (Cast c) = Cast (goC c)
   goW (TypeApp t) = TypeApp (goT t)
   goW (TypeAsc t) = TypeAsc (goT t)
-  goW (ExprApp t) = ExprApp (goE t)
   goW (WrapFn f) = WrapFn f
   goW (x :> y) = goW x :> goW y
   goW x@TypeLam{} = x
@@ -151,7 +147,6 @@ transformExprTyped fe fc ft = goE where
   goW IdWrap = IdWrap
 
   goPa (PatParam p) = PatParam (goP p)
-  goPa (ImplParam p) = ImplParam (goP p)
 
   goE = transE . fe
   goT = ft

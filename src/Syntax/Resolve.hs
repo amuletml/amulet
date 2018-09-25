@@ -269,9 +269,6 @@ reExpr (Fun p e a) = do
   let reWholePattern' (PatParam p) = do
         (p', vs, ts) <- reWholePattern p
         pure (PatParam p', vs, ts)
-      reWholePattern' (ImplParam p) = do
-        (p', vs, ts) <- reWholePattern p
-        pure (ImplParam p', vs, ts)
   (p', vs, ts) <- reWholePattern' p
   extendTyvarN ts . extendN vs $ Fun p' <$> reExpr e <*> pure a
 
@@ -377,7 +374,6 @@ reType r (TyPi (Invisible v k) ty) = do
   k <- traverse (reType r) k
   pure (TyPi (Invisible v' k) ty')
 reType r (TyPi (Anon f) x) = TyPi . Anon <$> reType r f <*> reType r x
-reType r (TyPi (Implicit f) x) = TyPi . Implicit <$> reType r f <*> reType r x
 reType r (TyApp f x) = TyApp <$> reType r f <*> reType r x
 reType r (TyRows t f) = TyRows <$> reType r t
                                <*> traverse (\(a, b) -> (a,) <$> reType r b) f
@@ -456,20 +452,12 @@ reBinding :: MonadResolve m
           -> m ( Expr Resolved -> Binding Resolved
                , [(Var Parsed, Var Resolved)]
                , [(Var Parsed, Var Resolved)] )
-reBinding (Binding v _ pl a) = do
+reBinding (Binding v _ a) = do
   v' <- tagVar v
-  pure ( \e' -> Binding v' e' pl a, [(v, v')], [])
+  pure ( \e' -> Binding v' e' a, [(v, v')], [])
 reBinding (Matching p _ a) = do
   (p', vs, ts) <- reWholePattern p
   pure ( \e' -> Matching p' e' a, vs, ts)
-reBinding (ParsedBinding p e pl a) =
-  case p of
-    Capture v _ -> reBinding (Binding v e pl a)
-    _ -> do
-      case pl of
-        BindRegular -> pure ()
-        BindImplicit -> dictates (IllegalImplicit p)
-      reBinding (Matching p e a)
 reBinding TypedMatching{} = error "reBinding TypedMatching{}"
 
 data Associativity = AssocLeft | AssocRight

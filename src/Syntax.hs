@@ -23,14 +23,10 @@ type family Ann a :: * where
   Ann Resolved = Span
   Ann Typed = (Span, Type Typed)
 
-data Plicity = BindImplicit | BindRegular
-  deriving (Eq, Show, Ord, Data, Typeable)
-
 data Binding p
   -- | @let implicit f x = ...@
   = Binding { _bindVariable :: Var p
             , _bindBody :: Expr p
-            , _bindPlicity :: Plicity
             , _bindAnn :: Ann p
             }
   -- | @let (a, b) = ...@
@@ -45,22 +41,13 @@ data Binding p
                   , _bindAnn :: Ann p -- fucking ghc, p ~ Typed
                   , _bindBindings :: [(Var Typed, Type Typed)]
                   }
-  -- | The parsed form of a binding.
-  --
-  -- This might contain nonsense like @let implicit (a, b) = ...@
-  | ParsedBinding { _bindPattern :: Pattern p
-                  , _bindBody :: Expr p
-                  , _bindPlicity :: Plicity
-                  , _bindAnn :: Ann p }
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Binding p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Binding p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Binding p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Binding p)
 
-data Parameter p
-  = PatParam { _paramPat :: Pattern p }
-  | ImplParam { _paramPat :: Pattern p }
+newtype Parameter p = PatParam { _paramPat :: Pattern p }
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Parameter p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Parameter p)
@@ -123,7 +110,6 @@ deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Fiel
 
 data Wrapper p
   = TypeApp (Type p)
-  | ExprApp (Expr p)
   | Cast (Coercion p)
   | TypeLam (Skolem p) (Type p)
   | (:>) (Wrapper p) (Wrapper p)
@@ -200,7 +186,6 @@ data Type p
 
 data TyBinder p
   = Anon { _tyBinderType :: Type p } -- a function type
-  | Implicit { _tyBinderType :: Type p } -- implicit function type
   | Invisible
     { _tyBinderVar :: Var p
     , _tyBinderArg :: Maybe (Type p) } -- a forall. type
@@ -383,7 +368,6 @@ instance Spanned (Ann p) => Spanned (Expr p) where
 
 instance (Data (Ann p), Data (Var p), Data p) => Spanned (Parameter p) where
   annotation (PatParam p) = annotation p
-  annotation (ImplParam p) = annotation p
 
 {- Note [1]: Tuple types vs tuple patterns/values
 

@@ -64,7 +64,7 @@ desugarProgram = traverse statement where
       Literal{} -> go vl
       _ -> do
         (Capture lv _, ref) <- fresh an
-        Let [Binding lv vl BindRegular an] <$> go ref <*> pure an
+        Let [Binding lv vl an] <$> go ref <*> pure an
 
   expr (RightSection vl op an) = expr (App op vl an)
   expr (BothSection o _) = pure o
@@ -79,7 +79,7 @@ desugarProgram = traverse statement where
   expr (TupleSection es a) = do
     es' <- traverse (traverse expr) es
     (args, binds, tuple) <- foldrM (buildTuple a) ([], [], []) es'
-    pure $ foldf (\(v, e) r -> Let [Binding v e BindRegular a] r a) binds
+    pure $ foldf (\(v, e) r -> Let [Binding v e a] r a) binds
          $ foldf (\v e -> Fun (PatParam v) e a) args
          $ Tuple tuple a
 
@@ -103,12 +103,9 @@ desugarProgram = traverse statement where
     (Capture v _, ref) <- fresh a
     pure (as, (v, e):vs, ref:tuple)
 
-  binding (Binding v e p a) = Binding v <$> expr e <*> pure p <*> pure a
+  binding (Binding v e a) = Binding v <$> expr e <*> pure a
 
-  binding (ParsedBinding (Capture v _) e p a) = Binding v <$> expr e <*> pure p <*> pure a
-  binding (ParsedBinding p e _ a) = Matching p <$> expr e <*> pure a
-
-  binding (Matching (Capture v _) e a) = Binding v <$> expr e <*> pure BindRegular <*> pure a
+  binding (Matching (Capture v _) e a) = Binding v <$> expr e <*> pure a
   binding (Matching (PType p t _) e a) = binding (Matching p (Ascription e t (annotation e)) a)
   binding (Matching p e a) = Matching p <$> expr e <*> pure a
   binding TypedMatching{} = error "TypedMatching{} desugar binding"

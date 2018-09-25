@@ -1,5 +1,0 @@
-foo : type -> type
-Foo : {'a : type}. 'a -> foo 'a
-foo_int : foo int
-bar : {'a : type}. foo 'a => 'a -> unit
-foo : {'a : type}. foo 'a => 'a -> unit

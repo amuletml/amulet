@@ -17,7 +17,6 @@ import Types.Kinds
 -- For polymorphic recursion, mostly
 approxType :: MonadInfer Typed m => Expr Resolved -> StateT Origin m (Type Typed)
 approxType r@(Fun p e _) = TyPi <$> approxParam p <*> approxType e where
-  approxParam (ImplParam p) = Implicit <$> approxPattern r p
   approxParam (PatParam p) = Anon <$> approxPattern r p
 
 approxType r@(Ascription _ t _) = resolveKind (becauseExp r) t
@@ -46,12 +45,11 @@ approxType _ = guess
 approximate :: MonadInfer Typed m
             => Binding Resolved
             -> m (Origin, (Var Typed, Type Typed))
-approximate (Binding v e _ _) = do
+approximate (Binding v e _) = do
   (ty, st) <- runStateT (approxType e) Supplied
   ty' <- generalise nominalTvs (becauseExp e) ty
   pure (st, (TvName v, if not (wasGuessed st) then ty' else ty))
 approximate Matching{} = error "Matching before TC"
-approximate ParsedBinding{} = error "ParsedBinding before TC"
 approximate TypedMatching{} = error "TypedBinding before TC"
 
 wasGuessed :: Origin -> Bool
