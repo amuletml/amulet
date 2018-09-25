@@ -72,7 +72,7 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
   pretty (Tuple es _) = parens (hsep (punctuate comma (map pretty es)))
   pretty (TupleSection es _) = parens (hsep (punctuate comma (map (maybe (string "") pretty) es)))
 
-  pretty (OpenIn v e _) = pretty v <+> string "." <+> parens (pretty e)
+  pretty (OpenIn v e _) = pretty v <> string "." <> parens (pretty e)
   pretty (Lazy e _) = keyword "lazy" <+> parenArg e
 
   pretty (ExprWrapper wrap ex _) = go wrap ex where

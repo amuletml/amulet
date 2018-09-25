@@ -183,7 +183,7 @@ ExprTyApp :: { Expr Parsed }
 
 ExprApp :: { Expr Parsed }
         : Expr0                                { $1 }
-        | ExprApp Atom                         { withPos2 $1 $2 $ App $1 $2 }
+        | ExprApp PreAtom                      { withPos2 $1 $2 $ App $1 $2 }
 
 Expr0 :: { Expr Parsed }
       : fun ListE1(Parameter) '->' ExprBlock '$end' { respanFun $1 $4 $ foldr (\x y -> withPos2 x $4 $ Fun x y) $4 $2 }
@@ -196,9 +196,16 @@ Expr0 :: { Expr Parsed }
       | match List1(Expr, ',') with '(' ')'
           { withPos2 $1 $3 $ Match (completeTuple Tuple $2) [] }
       | function ListE1(Arm) '$end'            { withPos1 $1 $ Function $2 }
-      | qdotid Atom                            { withPos2 $1 $2 $ OpenIn (getName $1) $2 }
-      | lazy Atom                              { withPos2 $1 $2 $ Lazy $2 }
-      | Atom                                   { $1 }
+      | lazy PreAtom                           { withPos2 $1 $2 $ Lazy $2 }
+      | PreAtom                                { $1 }
+
+-- | A 'prefixed' atom.
+--
+-- This is required in order to avoid shift-reduce conflicts: otherwise
+-- 'M. foo.bar' could be M.(foo.bar) or M.(foo).bar
+PreAtom :: { Expr Parsed }
+     : Atom                                   { $1 }
+     | qdotid Atom                            { withPos2 $1 $2 $ OpenIn (getName $1) $2 }
 
 Atom :: { Expr Parsed }
      : Var                                    { withPos1 $1 (VarRef (getL $1)) }
@@ -213,7 +220,6 @@ Atom :: { Expr Parsed }
          { withPos2 $1 $5 $ tupleExpr ($2:$4) }
      | '{' List(ExprRow, ',') '}'             { withPos2 $1 $3 $ Record $2 }
      | '{' Expr with List1(ExprRow, ',') '}'  { withPos2 $1 $5 $ RecordExt $2 $4 }
-
      | Atom access                            { withPos2 $1 $2 $ Access $1 (getIdent $2) }
 
 ExprBlock :: { Expr Parsed }
