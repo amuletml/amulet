@@ -7,7 +7,6 @@ import Core.Optimise.Newtype
 import Core.Optimise.CommonExpElim
 import Core.Optimise.DeadCode
 import Core.Optimise.Sinking
-import Core.Optimise.Inline
 import Core.Optimise.Reduce
 import Core.Optimise
 
@@ -25,8 +24,6 @@ optmOnce = passes where
   passes :: [Stmt CoVar] -> Namey [Stmt CoVar]
   passes = foldr1 (>=>)
            [ linted "Reduce" reducePass
-           , linted "Inline" inlineVariablePass
-
            , linted "Dead code" $ pure . deadCodePass
 
            , linted "Sinking" $ pure . sinkingPass . tagFreeSet
