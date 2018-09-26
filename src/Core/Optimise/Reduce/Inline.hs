@@ -283,7 +283,7 @@ gatherInlining (AnnApp _ (Ref f _) x) = do
           Just ( Left ((v, x):vs, ts, bod)
                , VarSet.insert (toVar f) rs )
         Just (Right (vs, ts, Lam (TermArgument v _) bod), rs) ->
-          Just (  Right $ ((v, x):vs, ts, bod)
+          Just (  Right ((v, x):vs, ts, bod)
                , VarSet.insert (toVar f) rs )
         _ -> Nothing
     _ -> do
@@ -291,7 +291,7 @@ gatherInlining (AnnApp _ (Ref f _) x) = do
       pure $ case s of
         VarDef { varDef = Just DefInfo { defTerm = Lam (TermArgument v _) bod }
                , varLoopBreak = False }
-          -> Just ( Right $ ([(v, x)], mempty, bod)
+          -> Just ( Right ([(v, x)], mempty, bod)
                   , mempty )
         _ -> Nothing
 gatherInlining (AnnTyApp _ (Ref f _) x) = do
