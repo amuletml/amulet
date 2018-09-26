@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts, ScopedTypeVariables, TupleSections #-}
+{-# LANGUAGE FlexibleContexts, ScopedTypeVariables #-}
 {-| The unboxing pass attempts to convert curried functions which take
   multiple arguments to uncurried functions taking unboxed tuples.
 
