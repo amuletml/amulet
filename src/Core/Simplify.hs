@@ -28,6 +28,7 @@ optmOnce = passes where
 
            , linted "Sinking" $ pure . sinkingPass . tagFreeSet
 
+           , linted "CSE" (pure . csePass)
            , linted "Reduce #2" reducePass
            ]
 
@@ -39,7 +40,7 @@ linted pass fn
 
 -- | Run the optimiser multiple times over the input core.
 optimise :: [Stmt CoVar] -> Namey [Stmt CoVar]
-optimise = postpasses <=< go 10 <=< prepasses . (runLint "Lower" =<< checkStmt emptyScope) where
+optimise = go 10 <=< prepasses . (runLint "Lower" =<< checkStmt emptyScope) where
   go :: Integer -> [Stmt CoVar] -> Namey [Stmt CoVar]
   go k sts
     | k > 0 = go (k - 1) =<< optmOnce sts
@@ -47,6 +48,3 @@ optimise = postpasses <=< go 10 <=< prepasses . (runLint "Lower" =<< checkStmt e
 
   prepasses :: [Stmt CoVar] -> Namey [Stmt CoVar]
   prepasses = linted "Newtype" killNewtypePass
-
-  postpasses :: [Stmt CoVar] -> Namey [Stmt CoVar]
-  postpasses = linted "CSE" (pure . csePass)

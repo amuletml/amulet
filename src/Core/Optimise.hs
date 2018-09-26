@@ -43,20 +43,20 @@ substitute m = term where
   arm = armBody %~ term
 
 -- | Substitute a type variable with some other type inside terms
-substituteInTys :: forall a. IsVar a => VarMap.Map (Type a) -> Term a -> Term a
+substituteInTys :: forall a b. IsVar a => VarMap.Map (Type a) -> AnnTerm b a -> AnnTerm b a
 substituteInTys = term where
-  term :: VarMap.Map (Type a) -> Term a -> Term a
+  term :: VarMap.Map (Type a) -> AnnTerm b a -> AnnTerm b a
   term m a | VarMap.null m = a
-  term m (Atom a) = Atom (atom m a)
-  term m (App f x) = App (atom m f) (atom m x)
-  term m (Let (One (v, t, e)) x) = Let (One (v, gotype m t, term m e)) (term m x)
-  term m (Let (Many vs) x) = Let (Many (map (trimap id (gotype m) (term m)) vs)) (term m x)
-  term m (Match x vs) = Match (atom m x) (map (arm m) vs)
-  term m (Extend e rs) = Extend (atom m e) (map (trimap id (gotype m) (atom m)) rs)
-  term m (Values xs) = Values (map (atom m) xs)
-  term m (TyApp f t) = TyApp (atom m f) (gotype m t)
-  term m (Cast f t) = Cast (atom m f) (coercion m t)
-  term m (Lam arg b) = Lam (go arg) (term (delete m) b) where
+  term m (AnnAtom z a) = AnnAtom z (atom m a)
+  term m (AnnApp z f x) = AnnApp z (atom m f) (atom m x)
+  term m (AnnLet z (One (v, t, e)) x) = AnnLet z (One (v, gotype m t, term m e)) (term m x)
+  term m (AnnLet z (Many vs) x) = AnnLet z (Many (map (trimap id (gotype m) (term m)) vs)) (term m x)
+  term m (AnnMatch z x vs) = AnnMatch z (atom m x) (map (arm m) vs)
+  term m (AnnExtend z e rs) = AnnExtend z (atom m e) (map (trimap id (gotype m) (atom m)) rs)
+  term m (AnnValues z xs) = AnnValues z (map (atom m) xs)
+  term m (AnnTyApp z f t) = AnnTyApp z (atom m f) (gotype m t)
+  term m (AnnCast z f t) = AnnCast z (atom m f) (coercion m t)
+  term m (AnnLam z arg b) = AnnLam z (go arg) (term (delete m) b) where
     go (TermArgument v t) = TermArgument v (gotype m t)
     go (TypeArgument v t) = TypeArgument v (gotype m t)
     delete = case arg of
