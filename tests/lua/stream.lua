@@ -7,8 +7,7 @@ do
   local function Yield(x) return { __tag = "Yield", x } end
   local Done = { __tag = "Done" }
   local function Stream(x) return { __tag = "Stream", x } end
-  local go
-  go = function(st)
+  local function go(st)
     if st > 5 then
       return print("]")
     else

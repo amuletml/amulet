@@ -77,14 +77,30 @@ reduceStmts (StmtLet (One var):ss) = do
   var' <- mapVar reduceTerm' var
   ss' <- local (extendVar var') (reduceStmts ss)
   pure $ StmtLet (One var'):ss'
-reduceStmts (StmtLet (Many vs):ss) = local (ariScope %~ flip extendPureLets vs) $ do
-  breakers <- asks (flip loopBreakers vs)
+reduceStmts (StmtLet (Many vs):ss) =
+  case stronglyConnComp . map buildNode $ vs of
+    [] -> reduceStmts ss
+    [CyclicSCC vs] -> local (ariScope %~ flip extendPureLets vs) $ do
+      breakers <- asks (flip loopBreakers vs)
+      -- We go over the non-loop breakers (which will never be inlined), reduce
+      -- them and then visit the loop breakers with these inlinable functions in
+      -- scope.
+      vsn <- traverse (mapVar reduceTerm') . filter (flip VarSet.notMember breakers . toVar . fst3) $ vs
+      local (extendVars vsn . extendBreakers breakers) $ do
+        vse <- traverse (mapVar reduceTerm') . filter (flip VarSet.member breakers . toVar . fst3) $ vs
+        ss' <- local (extendVarsRec vse) $ reduceStmts ss
+        pure (StmtLet (Many (vse ++ vsn)):ss')
 
-  vsn <- traverse (mapVar reduceTerm') . filter (flip VarSet.notMember breakers . toVar . fst3) $ vs
-  local (extendVars vsn . extendBreakers breakers) $ do
-    vse <- traverse (mapVar reduceTerm') . filter (flip VarSet.member breakers . toVar . fst3) $ vs
-    ss' <- local (extendVarsRec vse) $ reduceStmts ss
-    pure (StmtLet (Many (vse ++ vsn)):ss')
+    -- If we can split the nodes up into something simpler, do so!
+    cs -> do
+      cs' <- changed $ foldr ((:) . unwrapNode) ss cs
+      reduceStmts cs'
+
+  where
+    buildNode n@(v, _, e) = (n, toVar v, VarSet.toList (extractAnn e))
+    unwrapNode (AcyclicSCC v) = StmtLet (One v)
+    unwrapNode (CyclicSCC vs) = StmtLet (Many vs)
+
 reduceStmts (Type v cases:ss) = do
   let cases' = map (underlying *** fmap underlying) cases
   local ( (typeScope %~ VarMap.insert (toVar v) cases')

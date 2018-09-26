@@ -2,8 +2,7 @@ do
   local __builtin_unit = { __tag = "__builtin_unit" }
   local Nil = { __tag = "Nil" }
   local function Cons(x) return { __tag = "Cons", x } end
-  local zip, zip0
-  zip = function(jx_1, jx_2, jx_3)
+  local function zip(jx_1, jx_2, jx_3)
     if jx_2.__tag == "Nil" then
       return Cons({ _1 = 1, _2 = Nil })
     elseif jx_2.__tag == "Cons" then
@@ -28,7 +27,7 @@ do
       end
     end
   end
-  zip0 = function(f) return function(xs) return function(ys) return zip(f, xs, ys) end end end
+  local function zip0(f) return function(xs) return function(ys) return zip(f, xs, ys) end end end
   local bottom = nil
   bottom(zip0)
 end
