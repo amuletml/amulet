@@ -201,6 +201,7 @@ library amulet
                      , Core.Optimise.Reduce.Pattern
                      , Core.Optimise.Sinking
                      , Core.Optimise.Newtype
+                     , Core.Optimise.Unbox
                      , Core.Optimise.DeadCode
                      , Core.Optimise.CommonExpElim
                      -- Backend

@@ -3,11 +3,12 @@ module Core.Simplify
   ( optimise
   ) where
 
-import Core.Optimise.Newtype
 import Core.Optimise.CommonExpElim
+import Core.Optimise.Newtype
 import Core.Optimise.DeadCode
 import Core.Optimise.Sinking
 import Core.Optimise.Reduce
+import Core.Optimise.Unbox
 import Core.Optimise
 
 import Core.Free
@@ -25,6 +26,7 @@ optmOnce = passes where
   passes = foldr1 (>=>)
            [ linted "Reduce" reducePass
            , linted "Dead code" $ pure . deadCodePass
+           , linted "Unboxer"  unboxPass
 
            , linted "Sinking" $ pure . sinkingPass . tagFreeSet
 

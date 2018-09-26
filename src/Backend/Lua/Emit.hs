@@ -9,11 +9,11 @@ module Backend.Lua.Emit
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Arrow (first)
-import Control.Lens hiding ((<|), (|>))
+import Control.Lens
 
 import qualified Data.VarMap as VarMap
 import qualified Data.VarSet as VarSet
-import Data.Sequence ((<|), (|>), Seq)
+import Data.Sequence (Seq((:<|)))
 import qualified Data.Text as T
 import Data.Traversable
 import Data.Foldable
@@ -211,7 +211,9 @@ emitExpr var yield (AnnLet _ (Many vs) r) =
     graph <- gets emitGraph
     prev  <- gets emitPrev
     arity <- asks emitArity
-    let stmts = LuaLocal (foldMap snd binds) [] <| mconcat stmt
+    let stmts = case mconcat stmt of
+                  (LuaAssign [v] [LuaFunction args bod] :<| Empty) -> pure (LuaLocalFun v args bod)
+                  stmts -> LuaLocal (foldMap snd binds) [] <| stmts
         p = all (isPure arity . thd3) vs
         vss = VarSet.fromList (map (toVar . fst3) vs)
 
@@ -697,7 +699,10 @@ emitStmt (StmtLet (Many vs):xs) = do
   -- We don't strictly need to share escape scopes across expressions, but it helps us avoid shadowing
   modify (\s -> s { topEscape = esc' })
 
-  ((LuaLocal (mconcat binds) [] <| stmt) <>) <$> emitStmt xs
+  xs' <- emitStmt xs
+  pure $ case stmt of
+    (LuaAssign [v] [LuaFunction args bod] :<| Empty) -> LuaLocalFun v args bod <| xs'
+    _ -> LuaLocal (mconcat binds) [] <| stmt <> xs'
 
 -- | Push a new node into the emitting graph
 pushGraph :: (IsVar b, MonadState (EmitState a) m) => b -> EmittedNode a -> m ()

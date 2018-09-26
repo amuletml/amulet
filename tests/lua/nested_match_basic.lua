@@ -2,24 +2,20 @@ do
   local __builtin_unit = { __tag = "__builtin_unit" }
   local Nil = { __tag = "Nil" }
   local function Cons(x) return { __tag = "Cons", x } end
-  local zip
-  zip = function(f)
-    return function(xs)
-      return function(ys)
-        if xs.__tag == "Nil" then
-          return Cons({ _1 = 1, _2 = Nil })
-        elseif xs.__tag == "Cons" then
-          local gw = xs[1]
-          if ys.__tag == "Nil" then
-            return Cons({ _1 = 2, _2 = Nil })
-          elseif ys.__tag == "Cons" then
-            local gx = ys[1]
-            return Cons({ _1 = f(gw._1)(gx._1), _2 = zip(f)(gw._2)(gx._2) })
-          end
-        end
+  local function zip(ik_1, ik_2, ik_3)
+    if ik_2.__tag == "Nil" then
+      return Cons({ _1 = 1, _2 = Nil })
+    elseif ik_2.__tag == "Cons" then
+      local gw = ik_2[1]
+      if ik_3.__tag == "Nil" then
+        return Cons({ _1 = 2, _2 = Nil })
+      elseif ik_3.__tag == "Cons" then
+        local gx = ik_3[1]
+        return Cons({ _1 = ik_1(gw._1)(gx._1), _2 = zip(ik_1, gw._2, gx._2) })
       end
     end
   end
+  local function zip0(f) return function(xs) return function(ys) return zip(f, xs, ys) end end end
   local bottom = nil
-  bottom(zip)
+  bottom(zip0)
 end
