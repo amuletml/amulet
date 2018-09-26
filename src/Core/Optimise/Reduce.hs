@@ -193,8 +193,8 @@ reduceTerm u (AnnCast _ a co) = do
       , Just (Cast oa oco) <- lookupTerm v s
       , Just (l, r) <- relates co'
       , Just (l', r') <- relates oco
-      , unifyClosed r l'
-      , unifyClosed l r'
+      , r `unifyClosed` l'
+      , l `unifyClosed` r'
       -> changed $ Atom oa
 
       | otherwise -> pure $ Cast a' co'
@@ -467,7 +467,7 @@ inlineOr t usage cont def = do
 
 redundantCo :: IsVar a => Coercion a -> Bool
 redundantCo c
-  | Just (a, b) <- relates c = a == b
+  | Just (a, b) <- relates c = a `unifyClosed` b
   | otherwise = False
 
 trivialAtom :: Atom a -> Bool

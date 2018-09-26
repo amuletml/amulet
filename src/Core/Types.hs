@@ -21,8 +21,6 @@ import Data.Foldable
 import Data.Maybe
 import Data.List
 
-import Text.Pretty.Semantic
-
 -- | Compute the arity of a function type. Namely, how many terms one can
 -- apply to it.
 arity :: Type a -> Int
@@ -126,13 +124,16 @@ unifyClosed = go mempty where
     where s' = VarMap.delete (toVar v') s
   go s (ForallTy Irrelevant a r) (ForallTy Irrelevant a' r') = go s a a' && go s r r'
   go s (AppTy f x) (AppTy f' x') = go s f f' && go s x x'
-  go s (RowsTy f ts) (RowsTy f' ts') = and (zipWith (\(l, t) (l', t') -> l == l' && go s t t') (sortOn fst firsts) (sortOn fst seconds)) where
-    get (RowsTy f ts) = get f ++ ts
-    get NilTy = []
-    get x = error ("Malformed record type" ++ show (pretty x))
-
-    firsts = get f ++ ts
-    seconds = get f' ++ ts'
+  go s (RowsTy f ts) (RowsTy f' ts') =
+    let (rest, rows) = (++ts) <$> goRec f
+        (rest', rows') = (++ts') <$> goRec f'
+    in and (zipWith (\(l, t) (l', t') -> l == l' && go s t t')
+                    (sortOn fst rows)
+                    (sortOn fst rows')) &&
+       case (rest, rest') of
+         (Just t, Just t') -> go s t t'
+         (Nothing, Nothing) -> True
+         _ -> False
 
   go s (ValuesTy xs) (ValuesTy xs') = goTup s xs xs'
   go _ StarTy StarTy = True
@@ -142,6 +143,10 @@ unifyClosed = go mempty where
   goTup _ [] [] = True
   goTup s (x:xs) (y:ys) = go s x y && goTup s xs ys
   goTup _ _ _ = False
+
+  goRec (RowsTy f ts) = (++ts) <$> goRec f
+  goRec NilTy = (Nothing, [])
+  goRec x = (Just x, [])
 
 getRows :: Type a -> (Type a, [(T.Text, Type a)])
 getRows (RowsTy i ts) =
