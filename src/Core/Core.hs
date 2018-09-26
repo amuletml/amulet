@@ -24,7 +24,22 @@ import GHC.Generics
 data Atom a
   = Ref a (Type a) -- ^ A reference to a variable, with an explicit type
   | Lit Literal -- ^ A literal.
-  deriving (Eq, Show, Ord, Functor, Generic, Hashable)
+  deriving (Show, Functor, Generic)
+
+instance Eq a => Eq (Atom a) where
+  Ref a _ == Ref b _ = a == b
+  Lit a == Lit b = a == b
+  _ == _ = False
+
+instance Ord a => Ord (Atom a) where
+  Ref a _ `compare` Ref b _ = a `compare` b
+  Ref{} `compare` _ = LT
+  Lit a `compare` Lit b = a `compare` b
+  Lit{} `compare` _ = GT
+
+instance Hashable a => Hashable (Atom a) where
+  hashWithSalt s (Ref a _) = hashWithSalt s a
+  hashWithSalt s (Lit l) = hashWithSalt s l
 
 -- | The domain of a lambda
 data Argument a
