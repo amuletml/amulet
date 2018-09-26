@@ -1,6 +1,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, DerivingStrategies, FlexibleInstances #-}
 module Data.VarSet
   ( Set
+  , null, size
   , fromList, toList, singleton
   , foldr, filter
   , member, notMember
@@ -12,7 +13,7 @@ module Data.VarSet
 import qualified Data.HashSet as Set
 import qualified Data.List as L
 
-import Prelude hiding (foldr, filter)
+import Prelude hiding (foldr, filter, null)
 
 import Core.Var
 
@@ -22,6 +23,12 @@ newtype Set
   = Set (Set.HashSet CoVar)
   deriving (Eq, Show, Ord)
   deriving newtype (Semigroup, Monoid)
+
+null :: Set -> Bool
+null (Set s) = Set.null s
+
+size :: Set -> Int
+size (Set x) = Set.size x
 
 insert :: CoVar -> Set -> Set
 insert x (Set k) = Set (Set.insert x k)

@@ -54,8 +54,8 @@ data DefInfo a
 -- | A definition within the current scope
 data VarDef a
   = VarDef
-  { varDef      :: Maybe (DefInfo a)
-  , varNotAmong :: [Pattern a]
+  { varDef       :: Maybe (DefInfo a)
+  , varNotAmong  :: [Pattern a]
   , varLoopBreak :: !Bool
   }
   deriving (Show)
