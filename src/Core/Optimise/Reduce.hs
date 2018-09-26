@@ -439,10 +439,13 @@ inlineOr t usage cont def = do
   st <- get
 
   case inline of
-    Just (Left inl) -> changing $ reduceTermK (buildKnownInline inl) cont
-    Just (Right inl)
+    Just (Left inl, rs) -> do
+      VarSet.foldr (\v -> (*>) (varSubst %= VarMap.delete v)) (pure ()) rs
+      changing $ reduceTermK (buildKnownInline inl) cont
+    Just (Right inl, rs)
       | shouldInline s st usage inl
       -> do
+          VarSet.foldr (\v -> (*>) (varSubst %= VarMap.delete v)) (pure ()) rs
           rhs' <- refresh $ buildUnknownInline inl
           changing $ reduceTermK (annotate rhs') cont
     _ -> def

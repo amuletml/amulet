@@ -156,8 +156,6 @@ sizeTerm s (AnnMatch _ e bs) = sizeAtom s e + sum (map (sizeTerm s . view armBod
 sizeTerm s (AnnExtend _ e rs) = 10 + sizeAtom s e + sum (map (sizeAtom s . thd3) rs)
 sizeTerm s (AnnValues _ xs) = sum (map (sizeAtom s) xs)
 
-
-
 type InlineSet a v b = ([(a, Atom v)], [(a, Type v)], AnnTerm b a)
 
 shouldInline :: (IsVar v, IsVar u)
@@ -269,27 +267,32 @@ shouldInline s st usage (args, tyargs, rhs)
     l <!> r = if VarSet.size l >= usefulArgCount then l else l <> r
 
 
+-- | Gather information about a potential inlining candidate at this site
 gatherInlining :: MonadReduce a m
                => AnnTerm VarSet.Set (OccursVar a)
-               -> m (Maybe (Either (InlineSet (OccursVar a) (OccursVar a) VarSet.Set)
-                                   (InlineSet a (OccursVar a) ()) ))
+               -> m (Maybe ( Either (InlineSet (OccursVar a) (OccursVar a) VarSet.Set)
+                                    (InlineSet a (OccursVar a) ())
+                           , VarSet.Set ))
 gatherInlining (AnnApp _ (Ref f _) x) = do
   s <- gets (VarMap.lookup (toVar f) . view varSubst)
   case s of
     Just (SubTodo t) -> do
       t' <- gatherInlining t
       pure $ case t' of
-        Just (Left (vs, ts, AnnLam _ (TermArgument v _) bod)) ->
-          Just . Left $ ((v, x):vs, ts, bod)
-        Just (Right (vs, ts, Lam (TermArgument v _) bod)) ->
-          Just . Right $ ((v, x):vs, ts, bod)
+        Just (Left (vs, ts, AnnLam _ (TermArgument v _) bod), rs) ->
+          Just ( Left ((v, x):vs, ts, bod)
+               , VarSet.insert (toVar f) rs )
+        Just (Right (vs, ts, Lam (TermArgument v _) bod), rs) ->
+          Just (  Right $ ((v, x):vs, ts, bod)
+               , VarSet.insert (toVar f) rs )
         _ -> Nothing
     _ -> do
       s <- asks (lookupVar (toVar f))
       pure $ case s of
         VarDef { varDef = Just DefInfo { defTerm = Lam (TermArgument v _) bod }
                , varLoopBreak = False }
-          -> Just . Right $ ([(v, x)], mempty, bod)
+          -> Just ( Right $ ([(v, x)], mempty, bod)
+                  , mempty )
         _ -> Nothing
 gatherInlining (AnnTyApp _ (Ref f _) x) = do
   s <- gets (VarMap.lookup (toVar f) . view varSubst)
@@ -297,19 +300,21 @@ gatherInlining (AnnTyApp _ (Ref f _) x) = do
     Just (SubTodo t) -> do
       t' <- gatherInlining t
       pure $ case t' of
-        Just (Left (vs, ts, AnnLam _ (TypeArgument v _) bod)) ->
-          Just . Left $ (vs, (v, x):ts, bod)
-        Just (Right (vs, ts, Lam (TypeArgument v _) bod)) ->
-          Just . Right $ (vs, (v, x):ts, bod)
+        Just (Left (vs, ts, AnnLam _ (TypeArgument v _) bod), rs) ->
+          Just ( Left (vs, (v, x):ts, bod)
+               , VarSet.insert (toVar f) rs )
+        Just (Right (vs, ts, Lam (TypeArgument v _) bod), rs) ->
+          Just ( Right (vs, (v, x):ts, bod)
+               , VarSet.insert (toVar f) rs )
         _ -> Nothing
     _ -> do
       s <- asks (lookupVar (toVar f))
       pure $ case s of
         VarDef { varDef = Just DefInfo { defTerm = Lam (TypeArgument v _) bod }
                , varLoopBreak = False }
-          -> Just . Right $ (mempty, [(v, x)], bod)
+          -> Just (Right (mempty, [(v, x)], bod), mempty)
         _ -> Nothing
-gatherInlining t = pure . Just . Left $ (mempty, mempty, t)
+gatherInlining t = pure . Just $ (Left (mempty, mempty, t), mempty)
 
 -- | Build up a set of terms for inlining when the terms have been
 -- annotated.
