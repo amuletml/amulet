@@ -19,6 +19,7 @@ import Text.Pretty.Semantic
 import Text.Pretty.Note
 
 import Syntax.Pretty
+import Syntax.Subst
 import Syntax.Let
 
 import Language.Lua.Parser.Wrapper
@@ -27,7 +28,9 @@ import Language.Lua.Parser.Error
 
 import Types.Infer.Builtin (tyUnit, tyLazy, spine, getHead)
 
-type MonadVerify m = ( MonadWriter (Seq.Seq VerifyError) m, MonadState (Set.Set BindingSite) m )
+type MonadVerify m =
+  ( MonadWriter (Seq.Seq VerifyError) m
+  , MonadState (Set.Set BindingSite) m )
 
 data BindingSite
   = BindingSite { boundVar :: Var Typed
@@ -44,6 +47,9 @@ data VerifyError
   | DefinedUnused BindingSite
   | ParseErrorInForeign { stmt :: Toplevel Typed
                         , err :: ParseError }
+  | NonParametricForeign { stmt :: Toplevel Typed
+                         , typeOf :: Type Typed
+                         , var :: Var Typed }
   | NonUnitBegin (Expr Typed) (Type Typed)
   | LazyLet (Expr Typed) (Type Typed)
 
@@ -51,6 +57,7 @@ instance Spanned VerifyError where
   annotation (NonRecursiveRhs e _ _) = annotation e
   annotation (DefinedUnused b) = boundWhere b
   annotation (ParseErrorInForeign _ e) = annotation e
+  annotation (NonParametricForeign s _ _) = annotation s
   annotation (NonUnitBegin e _) = annotation e
   annotation (LazyLet e _) = annotation e
 
@@ -80,10 +87,20 @@ instance Pretty VerifyError where
   pretty (LazyLet _ _) =
     vsep [ "Automatic thunking of" <+> keyword "let" <> "s does not cover bindings"
          ]
+  pretty (NonParametricForeign _ ty var) =
+    vsep [ "Foreign value has implied non-parametric type"
+         , bullet "Note: the compiler could assume all functions returning otherwise"
+         , indent 8 "unused type variables are non-terminating for optimisation"
+         , empty
+         , bullet "Note: in this type, no terms of type" <+> stypeVar (pretty var) <+> "are inputs"
+         , indent 6 $ displayType ty
+         , indent 2 "and so no value of that type could be returned."
+         ]
 
 instance Note VerifyError Style where
   diagnosticKind NonRecursiveRhs{} = ErrorMessage
   diagnosticKind ParseErrorInForeign{} = WarningMessage
+  diagnosticKind NonParametricForeign{} = WarningMessage
   diagnosticKind DefinedUnused{} = WarningMessage
   diagnosticKind NonUnitBegin{} = WarningMessage
   diagnosticKind LazyLet{} = WarningMessage
@@ -130,10 +147,11 @@ verifyProgram :: forall m. MonadVerify m => [Toplevel Typed] -> m ()
 verifyProgram = traverse_ verifyStmt where
   verifyStmt :: Toplevel Typed -> m ()
   verifyStmt st@(LetStmt vs) = verifyBindingGroup (flip const) (BecauseOf st) vs
-  verifyStmt st@(ForeignVal v d _ (_, _)) =
+  verifyStmt st@(ForeignVal v d t (_, _)) = do
     case runParser (SourcePos ("definition of " ++ displayS (pretty v)) 1 1) (d ^. lazy) parseExpr of
       Left e -> tell (Seq.singleton (ParseErrorInForeign st e))
       Right _ -> pure ()
+    parametricity st t
 
   verifyStmt TypeDecl{}   = pure ()
   verifyStmt (Module _ p) = verifyProgram p
@@ -303,3 +321,26 @@ nonTrivial (ExprWrapper w e _) =
   case w of
     WrapFn (MkWrapCont k _) -> nonTrivial (k e)
     _ -> nonTrivial e
+
+parametricity :: forall m. MonadVerify m => Toplevel Typed -> Type Typed -> m ()
+parametricity stmt overall = go mempty overall where
+  go :: Set.Set (Var Typed) -> Type Typed -> m ()
+  go set (TyVar v)
+    | v `Set.member` set = tell (pure (NonParametricForeign stmt overall v))
+    | otherwise = pure ()
+
+  go set (TyPi binder cont) =
+    case binder of
+      Invisible v kind -> do
+        set <- case kind of
+          Just kind -> goArg set kind
+          _ -> pure set
+        go (Set.insert v set) cont
+      Anon v -> do
+        set <- goArg set v
+        go set cont
+
+  go _ _ = pure ()
+
+  goArg set (TyPi _ cont) = goArg set cont
+  goArg set t = pure (set `Set.difference` ftv t)
