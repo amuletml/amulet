@@ -242,18 +242,39 @@ reduceTermK u d@(AnnApp _ f x) cont
   where
     basic = do
       f' <- reduceAtom UsedApply f
-      x' <- reduceAtom' x
-      s <- ask
-      if
-        -- Constant folding
-        | Ref fv _ <- f'
-        , Ref xv _ <- x'
-        , Just (Values xs) <- lookupTerm xv s
-        , Just a' <- foldApply (toVar (lookupRawVar fv s)) xs
-        -> changing $ cont a'
 
-        -- Nothing to do
-        | otherwise -> cont (App f' x')
+      s <- ask
+      st <- get
+      if
+        -- Attempt to reduce forced lazy values. We only look in the
+        -- substitution set, and so can guarantee that they are only used once.
+        | Ref fV _ <- f', vForce == toVar (lookupRawVar fV s)
+        , Ref xV _ <- x
+        , Just (SubTodo (AnnApp _ (Ref lazyV _) (Ref lamV _))) <- VarMap.lookup (toVar xV) (st ^. varSubst)
+        -- Find the `lazy {'a}` application. Ideally we could use
+        -- 'lookupRawTerm', but this'll probably be in the application set.
+        , Just (SubTodo (AnnTyApp _ (Ref lazyV' _) _)) <- VarMap.lookup (toVar lazyV) (st ^. varSubst)
+        , toVar lazyV' == vLAZY
+        -- Find the deferred lambda
+        , Just (SubTodo (AnnLam lf (TermArgument la lat) lbod)) <- VarMap.lookup (toVar lamV) (st ^. varSubst)
+        -> do
+          varSubst %= VarMap.delete (toVar lamV) . VarMap.delete (toVar lazyV) . VarMap.delete (toVar xV)
+          reduceTermK u (AnnLet lf (One (la, lat, AnnAtom mempty (Lit Unit))) lbod) cont
+
+        | otherwise
+        -> do
+          x' <- reduceAtom' x
+          s <- ask
+          if
+            -- Constant folding
+            | Ref fv _ <- f'
+            , Ref xv _ <- x'
+            , Just (Values xs) <- lookupTerm xv s
+            , Just a' <- foldApply (toVar (lookupRawVar fv s)) xs
+            -> changing $ cont a'
+
+            -- Nothing to do
+            | otherwise -> cont (App f' x')
 
 reduceTermK _ d@(AnnTyApp _ f t) cont
   = inlineOr d UsedOther cont basic
@@ -308,6 +329,7 @@ reduceTermK u (AnnLet _ (One b@(v, ty, e)) rest) cont = do
     inlinableFn s st f =
       let f' = lookupRawVar (underlying f) s
       in if
+      | toVar f' == vLAZY -> True
       | isCtor f' s -> False
       | Nothing <- VarMap.lookup (toVar f') (s ^. varScope)
       , Nothing <- VarMap.lookup (toVar f') (st ^. varSubst)
