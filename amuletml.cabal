@@ -153,6 +153,7 @@ library amulet
                      , Syntax.Transform
                      -- Renamer
                      , Syntax.Resolve
+                     , Syntax.Resolve.Error
                      , Syntax.Resolve.Scope
                      , Syntax.Resolve.Toplevel
                      -- TC
