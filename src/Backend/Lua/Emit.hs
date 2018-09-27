@@ -11,6 +11,7 @@ import Control.Monad.State
 import Control.Arrow (first)
 import Control.Lens
 
+import qualified Data.Sequence as Seq
 import qualified Data.VarMap as VarMap
 import qualified Data.VarSet as VarSet
 import Data.Sequence (Seq((:<|)))
@@ -45,12 +46,11 @@ vReturn = CoVar (-100) "<<ret>>" ValueVar
 -- instead.
 data EmittedNode a
   = EmittedExpr
-    { emitExprs :: [LuaExpr]  -- ^ The expression(s) which will be emitted
-    , emitVar   :: a          -- ^ The variable which could be bound. Should only ever be one variable.
-    , emitTy    :: Type a     -- ^ The type of the variable to emit. Primarily used to handle unboxed tuples.
-    , emitBinds :: [a]        -- ^ The variables bound in the statement. Purely used when traversing the dependency
-                              -- graph.
-    , emitDeps  :: VarSet.Set -- ^ The dependencies for this node. Consuming it should assimilate them.
+    { emitExprs :: [LuaExpr]   -- ^ The expression(s) which will be emitted
+    , emitYield :: EmitYield a -- ^ The result we should be binding this to if consumed
+    , emitBinds :: [a]         -- ^ The variables bound in the statement. Purely used when traversing the dependency
+                               -- graph.
+    , emitDeps  :: VarSet.Set  -- ^ The dependencies for this node. Consuming it should assimilate them.
     }
   | EmittedStmt
     { emitStmts :: Seq LuaStmt -- ^ The statements required before this can be evaluated
@@ -126,10 +126,8 @@ liftedGraph = VarSet.foldr liftNode (pure mempty) where
     n <- emitVarBinds v
     VarMap.insert v (EmittedUpvalue n [fromVar v] mempty) <$> m
 
--- | Emit an expression within a child scope.
---
--- This will not modify the existing scope/state in any way, it's just a
--- convenience function to avoid having to extract values manually.
+-- | A wrapper for 'emitLiftedES' which converts the result to a sequence
+-- of 'LuaStmt's.
 emitLifted :: ( Occurs a
             , MonadReader (EmitScope a) m
             , MonadState (EmitState a) m )
@@ -141,10 +139,23 @@ emitLifted yield term = do
   escape <- gets emitEscape
   pure . fst3 $ emitTerm scope escape graph yield term
 
--- | Emit a term within the provided context.
+-- | Emit an term within a child scope.
 --
--- This builds up a graph of expressions/statements, then performs a
--- topological sort on the resulting nodes.
+-- This will not modify the existing scope/state in any way, it's just a
+-- convenience function to avoid having to extract values manually.
+emitLiftedES :: ( Occurs a
+                , MonadReader (EmitScope a) m
+                , MonadState (EmitState a) m )
+             => EmitYield a -> AnnTerm VarSet.Set a
+             -> m (Either [LuaExpr] (Seq LuaStmt))
+emitLiftedES yield term = do
+  graph <- liftedGraph (extractAnn term)
+  scope <- ask
+  escape <- gets emitEscape
+  pure $ emitTermES scope escape graph yield term
+
+-- | A wrapper for 'emitTermES' which converts the result to a sequence
+-- of 'LuaStmt's.
 emitTerm :: forall a. Occurs a
          => EmitScope a -> EscapeScope -> EmittedGraph a
          -> EmitYield a -> AnnTerm VarSet.Set a
@@ -159,27 +170,66 @@ emitTerm scope esc vars yield term =
           }
         $ emitExpr (fromVar vReturn) yield term >> emitVarBinds (fromVar vReturn)
 
-  in ( fst (flushGraph vReturn prev graph)
-     , bound, escapes )
-  where
-    flushGraph :: CoVar -> VarSet.Set -> EmittedGraph a
-               -> (Seq LuaStmt, EmittedGraph a)
-    flushGraph var extra g =
-      case VarMap.lookup var g of
-        Nothing -> (mempty, g)
-        Just node ->
-          let
-            stmts = case node of
-              EmittedUpvalue{} -> mempty
-              EmittedStmt { emitStmts = s } -> s
-              EmittedExpr { emitExprs = es } -> foldMap asStmt es
+  in ( fst $ flushGraph vReturn prev graph
+     , bound
+     , escapes )
 
-            -- Remove this from the graph
-            g' = foldr (VarMap.delete . toVar) g (emitBinds node)
+-- | Emit a term within the provided context.
+--
+-- This builds up a graph of expressions/statements, then performs a
+-- topological sort on the resulting nodes.
+emitTermES :: forall a. Occurs a
+           => EmitScope a -> EscapeScope -> EmittedGraph a
+           -> EmitYield a -> AnnTerm VarSet.Set a
+           -> Either [LuaExpr] (Seq LuaStmt)
+emitTermES scope esc vars yield term =
+  let (_, EmitState graph prev _)
+        = flip runReader scope
+        . flip runStateT EmitState
+          { emitGraph  = vars
+          , emitPrev   = mempty
+          , emitEscape = esc
+          }
+        $ emitExpr (fromVar vReturn) yield term
 
-          in first (<>stmts) $ VarSet.foldr
-               (\v (s, g) -> first (s<>) (flushGraph v mempty g))
-               (mempty, g') (emitDeps node <> extra)
+      Just retNode = VarMap.lookup vReturn graph
+      (stmts, _) = flushDeps retNode prev graph
+
+  in case (stmts, retNode) of
+       (Seq.Empty, EmittedExpr { emitExprs = es }) -> Left es
+       _ -> Right (stmts <> nodeStmts retNode)
+
+-- | Worker function to remove a node from a graph and emit all its
+-- dependencies, returning the sequence of statements and the modified
+-- graph.
+--
+-- This is used in 'emitTerm' and 'emitTermES'.
+flushGraph :: IsVar a => CoVar -> VarSet.Set -> EmittedGraph a
+           -> (Seq LuaStmt, EmittedGraph a)
+flushGraph var extra g =
+  case VarMap.lookup var g of
+    Nothing -> (mempty, g)
+    Just node -> first (<>nodeStmts node) (flushDeps node extra g)
+
+-- | Worker function to remove all of a node's dependencies and emit
+-- them, returning the statements and the modified graph.
+--
+-- This is used by 'emitTerm' and 'emitTermES'
+flushDeps :: IsVar a => EmittedNode a -> VarSet.Set -> EmittedGraph a
+          -> (Seq LuaStmt, EmittedGraph a)
+flushDeps node extra g =
+  let
+    -- Remove this from the graph
+    g' = foldr (VarMap.delete . toVar) g (emitBinds node)
+  in VarSet.foldr
+     (\v (s, g) -> first (s<>) (flushGraph v mempty g))
+     (mempty, g') (emitDeps node <> extra)
+
+-- | Extract the statements from this node.
+nodeStmts :: EmittedNode a -> Seq LuaStmt
+nodeStmts EmittedUpvalue{} = mempty
+nodeStmts EmittedStmt { emitStmts = s } = s
+nodeStmts EmittedExpr { emitExprs = es, emitYield = yield } = yieldStmt yield es
 
 -- | Emit a single expression within the current context
 --
@@ -286,15 +336,17 @@ emitExpr var yield (AnnMatch _ test arms) = do
         pattern multiple times, and so we need to emit it as a variable.
       -}
       test' <- emitAtomMany test
-      (freeInAtom test,) . LuaIfElse <$> for arms (genBranch test' yield')
+      (freeInAtom test,) . Right . LuaIfElse <$> for arms (genBranch test' yield')
+
+  let node = case body of
+        Left es -> EmittedExpr [es] yield
+        Right ss -> EmittedStmt (stmt |> ss) bound
 
   modify (\s -> s
-    { emitGraph = VarMap.insert (toVar var) EmittedStmt
-        { emitStmts = stmt |> body
-        , emitBound = bound
-        , emitBinds = [var]
-        , emitDeps  = deps <> foldMap (extractAnn . _armBody) arms <> emitPrev s
-        } (emitGraph s)
+    { emitGraph = VarMap.insert (toVar var) (node
+                    [var]
+                    (deps <> foldMap (extractAnn . _armBody) arms <> emitPrev s))
+                  (emitGraph s)
     -- For the time being, we just assume this expression is impure.
     , emitPrev = VarSet.singleton (toVar var)
   })
@@ -311,9 +363,17 @@ emitExpr var yield (AnnMatch _ test arms) = do
     genIf yield ifs els = do
       (deps, test') <- runNES (freeInAtom test) (emitAtomS test)
 
-      ifs' <- emitLifted yield ifs
-      els' <- emitLifted yield els
-      pure (deps, LuaIf test' (toList ifs') (toList els'))
+      ifs' <- emitLiftedES yield ifs
+      els' <- emitLiftedES yield els
+      pure . (deps,) $ case (ifs', els') of
+        -- Handle binary ops. Note we don't need to ensure e is not an
+        -- unboxed tuple, as we know this returns a boolean.
+        (Left [LuaTrue], Left [e]) -> Left $ LuaBinOp test' "or" e
+        (Left [e], Left [LuaFalse]) -> Left $ LuaBinOp test' "and" e
+        _ -> Right $ LuaIf test' (eitherStmts yield ifs') (eitherStmts yield els')
+
+    eitherStmts _ (Right ss) = toList ss
+    eitherStmts yield (Left es) = toList $ yieldStmt yield es
 
 -- Trivial terms. These will just be emitted inline.
 emitExpr var yield t@(AnnAtom _ x)    = withinExpr var yield t $ emitAtom x
@@ -446,22 +506,16 @@ withinExpr var yield term m = do
   -- Update the pure set if needed
   unless p (modify (\s -> s { emitPrev = VarSet.singleton (toVar var) }))
 
-  node <- case yield of
-    YieldDeclare v ty
-      | usedWhen v == Once
-      -> pure $ EmittedExpr result v ty
-    _ -> uncurry EmittedStmt <$> genYield yield result
+  pushGraph var (EmittedExpr result yield [var] deps')
 
-  pushGraph var (node [var] deps')
-
-emitAtomS :: ( IsVar a
+emitAtomS :: ( Occurs a
              , MonadState (NodeEmitState a) m)
           => Atom a
           -> m LuaExpr
 emitAtomS a = (\[x] -> x) <$> emitAtom a
 
 emitAtom :: forall a m.
-            ( IsVar a
+            ( Occurs a
             , MonadState (NodeEmitState a) m)
          => Atom a
          -> m [LuaExpr]
@@ -475,7 +529,7 @@ emitAtom (Ref (toVar -> v) _) = do
     Just EmittedStmt { emitBound = vs } -> pure (map LuaRef vs)
     Just EmittedUpvalue { emitBound = vs } -> pure (map LuaRef vs)
 
-    Just (EmittedExpr expr var ty binds deps) -> do
+    Just (EmittedExpr expr (YieldDeclare var ty) binds deps) | usedWhen var == Once -> do
       s <- get
       let var' = toVar var
           testEmitGraph' = VarMap.delete var' (emitGraph . nodeState $ s)
@@ -497,6 +551,11 @@ emitAtom (Ref (toVar -> v) _) = do
                           , nodeState = (nodeState s) { emitGraph = testEmitGraph' }
                           })
           pure expr
+    Just (EmittedExpr expr yield binds deps) -> do
+      (stmts, bound) <- genYield pushScope' yield expr
+      modify (\s -> let graph = VarMap.insert v (EmittedStmt stmts bound binds deps) (emitGraph . nodeState $ s)
+                    in s { nodeState = (nodeState s) { emitGraph = graph } })
+      pure (map LuaRef bound)
     where
       -- | Detect if the @emitted@ has a loop
       --
@@ -551,8 +610,8 @@ emitVarBinds v = do
     Nothing -> pure . LuaName <$> gets (getVar v . emitEscape)
     Just EmittedStmt { emitBound = vs } -> pure vs
     Just EmittedUpvalue { emitBound = vs } -> pure vs
-    Just (EmittedExpr expr var ty binds deps) -> do
-      (stmts, vs) <- genDeclare pushScope var ty expr
+    Just (EmittedExpr expr yield binds deps) -> do
+      (stmts, vs) <- genYield pushScope yield expr
       pushGraph v EmittedStmt { emitStmts = stmts
                               , emitBound = vs
                               , emitBinds = binds
@@ -560,13 +619,13 @@ emitVarBinds v = do
       pure vs
 
 -- | Generate the appropriate code for the provided yield.
-genYield :: (IsVar a, MonadState (EmitState a) m)
-          => EmitYield a -> [LuaExpr]
+genYield :: Monad m
+          => (a -> m T.Text) -> EmitYield a -> [LuaExpr]
           -> m (Seq LuaStmt, [LuaVar])
-genYield YieldReturn es = pure (pure (LuaReturn es), [])
-genYield YieldDiscard es = pure (foldMap asStmt es, [])
-genYield (YieldStore vs) es = pure (pure (LuaAssign vs es), vs)
-genYield (YieldDeclare v ty) es = genDeclare pushScope v ty es
+genYield _ YieldReturn es = pure (pure (LuaReturn es), [])
+genYield _ YieldDiscard es = pure (foldMap asStmt es, [])
+genYield _ (YieldStore vs) es = pure (pure (LuaAssign vs es), vs)
+genYield e (YieldDeclare v ty) es = genDeclare e v ty es
 
 -- | Emit a declaration for a variable and a collection of expressions
 --
@@ -731,6 +790,16 @@ asStmt (LuaBinOp a _ b) = asStmt a <> asStmt b
 asStmt (LuaCallE x) = pure (LuaCallS x)
 asStmt _ = mempty
 
+-- | Convert an expression and a yield context to a set of Lua statements.
+--
+-- Note, this assumes that the result of the expression is not directly
+-- used, and so 'YieldDeclare's will be treated like 'YieldDiscard'.
+yieldStmt :: EmitYield a -> [LuaExpr] -> Seq LuaStmt
+yieldStmt YieldReturn es = pure (LuaReturn es)
+yieldStmt (YieldStore vs) es = pure (LuaAssign vs es)
+yieldStmt YieldDiscard es = foldMap asStmt es
+yieldStmt (YieldDeclare _ _) es = foldMap asStmt es
+
 patternBindings :: Occurs a => Pattern a -> [LuaExpr] -> [(a, [LuaExpr])]
 patternBindings (PatLit _) _     = []
 patternBindings PatWildcard _    = []
@@ -758,8 +827,9 @@ patternGraph test test' Arm { _armPtrn = p, _armVars = vs } graph = do
   let patDeps = freeInAtom test
   foldrM (\(v, expr) g -> do
     node <- if usedWhen v == Once
-            then pure $ EmittedExpr expr v (getTy v)
+            then pure $ EmittedExpr expr (YieldDeclare v (getTy v))
             else uncurry EmittedStmt <$> genDeclare pushScope v (getTy v) expr
+    -- TODO: Group declarations where possible?
     pure (VarMap.insert (toVar v) (node [v] patDeps) g))
     graph (patternBindings p test')
 
