@@ -117,11 +117,11 @@ builtinVarList = vars where
          , op vOpApp
             (ForallTy (Relevant name) StarTy $
                ForallTy (Relevant name') StarTy $
-                 (VarTy name `arrTy` VarTy name') `arrTy` (VarTy name `arrTy` VarTy name'))
+                 ValuesTy [VarTy name `arrTy` VarTy name', VarTy name] `arrTy` VarTy name')
 
-         , (fromVar vError, ForallTy (Relevant name) StarTy $ tyString `arrTy` VarTy name)
-         , (fromVar vLAZY, ForallTy (Relevant name) StarTy $ (tyUnit `arrTy` VarTy name) `arrTy` AppTy tyLazy (VarTy name))
-         , (fromVar vForce, ForallTy (Relevant name) StarTy $ AppTy tyLazy (VarTy name) `arrTy` VarTy name)
+         , op vError (ForallTy (Relevant name) StarTy $ tyString `arrTy` VarTy name)
+         , op vLAZY (ForallTy (Relevant name) StarTy $ (tyUnit `arrTy` VarTy name) `arrTy` AppTy tyLazy (VarTy name))
+         , op vForce (ForallTy (Relevant name) StarTy $ AppTy tyLazy (VarTy name) `arrTy` VarTy name)
         ]
 
 isError :: IsVar a => a -> Bool

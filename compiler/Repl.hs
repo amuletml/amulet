@@ -48,7 +48,7 @@ import Parser.Error
 
 import qualified Core.Core as C
 import Core.Lower (runLowerWithCtors, lowerProg, lowerType)
-import Core.Builtin (vLAZY, vForce)
+import Core.Builtin (vLAZY, vForce, vOpApp)
 import Core.Core (Stmt)
 import Core.Occurrence
 import Core.Free
@@ -86,7 +86,10 @@ defaultState mode = do
 
   let preamble = T.unpack . display . uncommentDoc . renderPretty 0.8 100 . pretty
                 . LuaDo . map (patchupLua B.defaultEmitState . B.genOperator . fst)
-                . ((vLAZY, undefined):) . ((vForce, undefined):)
+                . ([ (vLAZY, undefined)
+                   , (vForce, undefined)
+                   , (vOpApp, undefined)
+                   ]++)
                 $ VarMap.toList B.ops
 
   -- Init our default libraries and operator functions
