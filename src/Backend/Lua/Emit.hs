@@ -809,5 +809,6 @@ escapeScope =
    . ((vError, "error"):)
    . ((vLAZY, "__builtin_Lazy"):)
    . ((vForce, "__builtin_force"):)
+   . ((vOpApp, "__builtin_app"):)
    . map (fmap escaper)
    $ VarMap.toList ops

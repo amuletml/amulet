@@ -79,7 +79,7 @@ instance Pretty Value where
   pretty (Table m) | isTuple m = parens (hsep (punctuate comma (map pretty vs))) where
     vs = getValues m
     getValues m = case m Map.! T.pack "_2" of
-      Table m' | isTuple m' -> (m Map.! T.pack "_2"):getValues m'
+      Table m' | isTuple m' -> (m Map.! T.pack "_1"):getValues m'
       _ -> [ m Map.! T.pack "_1", m Map.! T.pack "_2" ]
   pretty (Table m) = enclose (char '{' <> space) (space <> char '}') (hsep (punctuate comma vs)) where
     vs = map (\(k, v) -> text k <+> equals <+> pretty v) $ Map.toList m

@@ -81,6 +81,9 @@ tyvarA, tyvarB :: CoVar
 tyvarA = CoVar (-30) "a" TypeVar
 tyvarB = CoVar (-31) "b" TypeVar
 
+vOpApp :: CoVar
+vOpApp = CoVar (-32) "@@" ValueVar
+
 builtinVarList :: forall a b. (IsVar a, IsVar b) => [(a, Type b)]
 builtinVarList = vars where
   op x t = (fromVar x, t)
@@ -97,8 +100,9 @@ builtinVarList = vars where
 
   cmp = ForallTy (Relevant name) StarTy $ tupTy [VarTy name, VarTy name] `arrTy` tyBool
 
-  name :: b
+  name, name' :: b
   name = fromVar tyvarA
+  name' = fromVar tyvarB
 
   vars :: [(a, Type b)]
   vars = [ op vOpAdd intOp, op vOpSub intOp, op vOpMul intOp, op vOpDiv (tupTy [tyInt, tyInt] `arrTy` tyFloat), op vOpExp intOp
@@ -110,6 +114,10 @@ builtinVarList = vars where
          , op vOpConcat stringOp
 
          , op vOpEq cmp, op vOpNe cmp
+         , op vOpApp
+            (ForallTy (Relevant name) StarTy $
+               ForallTy (Relevant name') StarTy $
+                 (VarTy name `arrTy` VarTy name') `arrTy` (VarTy name `arrTy` VarTy name'))
 
          , (fromVar vError, ForallTy (Relevant name) StarTy $ tyString `arrTy` VarTy name)
          , (fromVar vLAZY, ForallTy (Relevant name) StarTy $ (tyUnit `arrTy` VarTy name) `arrTy` AppTy tyLazy (VarTy name))
