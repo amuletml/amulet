@@ -88,25 +88,10 @@ genOperator op | op == vLAZY =
     end
   |]
 
--- Note: The "obvious" definition for the type, i.e.
---
--- function(f)
---   return function(x)
---    return f(x)
---   end
--- end
---
--- allocates one closure we can avoid.
---
--- Saturated applications of this operator are just converted into
--- application nodes, and unsaturated applications should be uncommon
--- enough that we can give it a primitive instead of an inlineable
--- definition.
-
 genOperator op | op == vOpApp =
   [luaStmt|
-    local function __builtin_app(f)
-      return f
+    local function __builtin_app(f, x)
+      return f(x)
     end
   |]
 

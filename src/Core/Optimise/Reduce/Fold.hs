@@ -39,6 +39,8 @@ foldApply v xs =
     [x, Lit (Str "")] | v == vOpConcat -> atom x
     [Lit (Str ""), x] | v == vOpConcat -> atom x
 
+    [x, y] | v == vOpApp -> Just (App x y)
+
     _ -> Nothing
   where
     num = atom . Lit . Int

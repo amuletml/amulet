@@ -268,14 +268,15 @@ reduceTermK u (AnnLet fa (One (va, tya, AnnLet fb bb rb)) ra) cont =
 
 reduceTermK u (AnnLet _ (One b@(v, ty, e)) rest) cont = do
   s <- ask
+  st <- get
   let used = usedWhen v
       pures = isPure (s ^. ariScope) e
       inlines = case e of
         -- Applications are fine in the once case (will not duplicate work or code), as long as they
         -- are pure. We also check they are not constructors, as those can never be inlined and the
         -- pattern matcher will not see deferred definitions.
-        AnnApp _ (Ref f _) _   -> used == Once && pures && not (isCtor (lookupRawVar (underlying f) s) s)
-        AnnTyApp _ (Ref f _) _ -> used == Once && pures && not (isCtor (lookupRawVar (underlying f) s) s)
+        AnnApp _ (Ref f _) _   -> used == Once && pures && inlinableFn s st f
+        AnnTyApp _ (Ref f _) _ -> used == Once && pures && inlinableFn s st f
         -- Lambdas are fine in the once or "once lambda" case as they'll not duplicate code and will
         -- only be inlined if applied (and so not duplicate work).
         AnnLam{} -> used == Once || used == OnceLambda
@@ -303,6 +304,15 @@ reduceTermK u (AnnLet _ (One b@(v, ty, e)) rest) cont = do
   where
     v' = underlying v
     ty' = underlying <$> ty
+
+    inlinableFn s st f =
+      let f' = lookupRawVar (underlying f) s
+      in if
+      | isCtor f' s -> False
+      | Nothing <- VarMap.lookup (toVar f') (s ^. varScope)
+      , Nothing <- VarMap.lookup (toVar f') (st ^. varSubst)
+      -> False
+      | otherwise -> True
 
     -- | Examine e and determine whether the remaining information needs to be
     -- preserved
