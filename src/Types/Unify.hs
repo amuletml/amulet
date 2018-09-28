@@ -150,9 +150,12 @@ doSolve (DeferredError e :<| cs) = do
 
 doSolve (ConFail a v t :<| cs) = do
   doSolve cs
-  sub <- use solveTySubst
+  s <- use solveTySubst
+  s' <- use solveAssumptions
+
   let ex = Hole (unTvName v) (fst a)
-  dictates . reblame (BecauseOf ex) $ foundHole v (apply sub t) sub
+      sub = s `compose` s'
+  dictates . reblame (BecauseOf ex) $ foundHole v t sub
 
 bind :: MonadSolve m => Var Typed -> Type Typed -> m (Coercion Typed)
 bind var ty
