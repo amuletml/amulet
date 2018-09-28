@@ -159,30 +159,40 @@ doSolve (ConFail a v t :<| cs) = do
 
 bind :: MonadSolve m => Var Typed -> Type Typed -> m (Coercion Typed)
 bind var ty
-  | occurs var ty = confesses (Occurs var ty)
   | TyVar var == ty = pure (ReflCo ty)
-  | TyForall{} <- ty = confesses (Impredicative var ty)
+  -- /\ Var-var deletion
   | TyWildcard (Just (TyVar v)) <- ty, v == var = pure (ReflCo ty)
+  -- /\ Var-wildcard deletion (same as above, but with an indirection)
+  | TyForall{} <- ty = confesses (Impredicative var ty)
+  -- /\ Predicativity checking
   | otherwise = do
       env <- use solveTySubst
       assum <- use solveAssumptions
       noTouch <- view don'tTouch
-      ty <- pure (apply env ty) -- shadowing
-      when (occurs var ty) (confesses (Occurs var ty))
-      if | var `Set.member` noTouch && var `Map.member` assum ->
-            unify ty (apply env (assum Map.! var))
-         | TyVar var == ty -> pure (ReflCo ty)
+      ty <- pure (apply (env `compose` assum) ty) -- shadowing
+
+      when (occurs var ty) $
+        confesses (Occurs var ty)
+
+      if | TyVar var == ty -> pure (ReflCo ty)
          | otherwise ->
             case Map.lookup var env of
               Nothing -> do
-                if | var `Set.notMember` noTouch -> solveTySubst .= env `compose` Map.singleton var ty
+                if | var `Set.notMember` noTouch ->
+                     solveTySubst .= env `compose` Map.singleton var ty
+                     -- /\ We're allowed to bind the variable, so just
+                     -- do it.
+
                    | var `Set.member` noTouch, TyVar v <- ty, v `Set.notMember` noTouch ->
                      solveTySubst .= (env `compose` Map.singleton v (TyVar var))
+                     -- /\ The equality is of the form v1 := v2, where
+                     -- v1 is bad but v2 is free. So what we do is add
+                     -- v2 := v1 to the environment.
+
                    | otherwise -> confesses =<< unequal (TyVar var) ty
+                   -- No can do.
                 pure (ReflCo ty)
-              Just ty'
-                | ty' == ty -> pure (ReflCo (apply env ty'))
-                | otherwise -> unify ty (apply env ty')
+              Just ty' -> unify ty (apply env ty')
 
 -- FOR BOTH UNIFY AND SUBSUME:
 --  unify have want
