@@ -111,7 +111,7 @@ doSolve (ConUnify because v a b :<| xs) = do
 doSolve (ConSubsume because v a b :<| xs) = do
   sub <- use solveTySubst
 
-  -- traceM (displayS (pretty (ConSubsume because v scope (apply sub a) (apply sub b))))
+  -- traceM (displayS (pretty (ConSubsume because v (apply sub a) (apply sub b))))
   let a' = apply sub a
   sub <- use solveTySubst
   co <- memento $ subsumes because a' (apply sub b)
@@ -388,8 +388,8 @@ subsumes' r th@(TyExactRows rhas) tw@(TyExactRows rwant) = do
   let matching = overlap rhas rwant
 
   -- All fields must be present in both records..
-  when (length matching /= length rhas || length rhas /= length rwant) $
-    confesses (NoOverlap th tw)
+  unless (length matching <= length rhas && length rwant <= length matching) $
+    confesses (NoOverlap tw th)
 
   matched <- fmap fold . for matching $ \(key, have, want) -> do
     -- and have to be point-wise subtypes
