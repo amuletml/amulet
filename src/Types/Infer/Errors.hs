@@ -63,7 +63,7 @@ rewind :: Var Typed -> [Type Typed] -> Type Typed
 rewind x = foldl TyApp (TyCon x)
 
 foundHole :: Var Typed -> Type Typed -> Subst Typed -> TypeError
-foundHole hole ht sub = helpMaybe (FoundHole hole ty) where
+foundHole hole ht sub = helpMaybe (FoundHole hole (apply sub ty)) where
   unskolemise (TySkol v) = case sub ^. at (v ^. skolIdent) of
     Just t -> t
     _ -> TyVar (v ^. skolVar)
@@ -72,7 +72,7 @@ foundHole hole ht sub = helpMaybe (FoundHole hole ty) where
   go :: Type Typed -> Type Typed
   go = transformType unskolemise
 
-  ty = go ht
+  ty = go (apply sub ht)
   skolvars = Set.toList (skols ty)
 
   helpMaybe
