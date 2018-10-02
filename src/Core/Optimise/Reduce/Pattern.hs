@@ -181,14 +181,15 @@ filterDeadArms pat s = goArm where
 --
 -- This either returns a single arm, if the match is known to be complete (and
 -- so can be eliminated), or a list of potential arms otherwise.
-simplifyArms :: IsVar a
-             => ReduceScope a
-             -> Atom a -> [AnnArm b (OccursVar a)]
-             -> Either (AnnArm b (OccursVar a), Subst a) [(AnnArm b (OccursVar a), Subst a)]
-simplifyArms s test arms = filterDeadArms (_armPtrn . fst) s <$> foldCases arms where
+simplifyArms :: (IsVar v, IsVar a)
+             => (Pattern v -> Pattern a)
+             -> ReduceScope a
+             -> Atom a -> [AnnArm b v]
+             -> Either (AnnArm b v, Subst a) [(AnnArm b v, Subst a)]
+simplifyArms f s test arms = filterDeadArms (_armPtrn . fst) s <$> foldCases arms where
   foldCases [] = Right []
   foldCases (a@Arm { _armPtrn = p }:as) =
-    case reducePattern s test (underlying <$> p) of
+    case reducePattern s test (f p) of
       PatternFail -> foldCases as
       PatternUnknown subst -> Right ((a, subst):either pure id (foldCases as))
       PatternPartial subst -> Right [(a, subst)]
