@@ -4,9 +4,12 @@ module Core.Optimise.Reduce.Inline
   , loopBreakers
   , sizeAtom
   , sizeTerm
-  , shouldInline
 
+  , InlineVars
+  , InlineSubst
   , gatherInlining
+  , inlineSubst
+  , shouldInline
   , buildUnknownInline
   , buildKnownInline
   ) where
@@ -156,13 +159,21 @@ sizeTerm s (AnnMatch _ e bs) = sizeAtom s e + sum (map (sizeTerm s . view armBod
 sizeTerm s (AnnExtend _ e rs) = 10 + sizeAtom s e + sum (map (sizeAtom s . thd3) rs)
 sizeTerm s (AnnValues _ xs) = sum (map (sizeAtom s) xs)
 
-type InlineSet a v b = ([(a, Atom v)], [(a, Type v)], AnnTerm b a)
+type InlineVars a v b = ([(a, Atom v)], [(a, Type v)], AnnTerm b a)
+
+type InlineSubst a v b = (VarMap.Map (Atom v), VarMap.Map (Type v), AnnTerm b a)
+
+inlineSubst :: IsVar a => InlineVars a v b -> InlineSubst a v b
+inlineSubst (vs, ts, term) =
+  ( VarMap.fromList (map (first toVar) vs)
+  , VarMap.fromList (map (first toVar) ts)
+  , term )
 
 shouldInline :: (IsVar v, IsVar u)
              => ReduceScope a
              -> ReduceState a
              -> UsedAs
-             -> InlineSet v u b
+             -> InlineSubst v u b
              -> Bool
 shouldInline s st usage (args, tyargs, rhs)
   | rhsSize <= argSize + 10 = True
@@ -176,7 +187,7 @@ shouldInline s st usage (args, tyargs, rhs)
     -- to have it unapplied.
     argSize
       -- Include size of LHS and application
-      = foldr ((+) . (+4) . sizeAtom s . snd) 0 args
+      = foldr ((+) . (+4) . sizeAtom s) 0 args
       -- Include size of LHS
       + 2 * length tyargs
 
@@ -197,7 +208,7 @@ shouldInline s st usage (args, tyargs, rhs)
     usefulAtom _ = True
 
     -- | The set of "useful" arguments
-    usefulArgs = foldr (\(v, a) c -> if usefulAtom a then VarSet.insert (toVar v) c else c) mempty args
+    usefulArgs = VarMap.foldrWithKey (\v a c -> if usefulAtom a then VarSet.insert v c else c) mempty args
     usefulArgCount = VarSet.size usefulArgs
 
     threshold = 100 :: Int
@@ -270,8 +281,8 @@ shouldInline s st usage (args, tyargs, rhs)
 -- | Gather information about a potential inlining candidate at this site
 gatherInlining :: MonadReduce a m
                => AnnTerm VarSet.Set (OccursVar a)
-               -> m (Maybe ( Either (InlineSet (OccursVar a) (OccursVar a) VarSet.Set)
-                                    (InlineSet a (OccursVar a) ())
+               -> m (Maybe ( Either (InlineVars (OccursVar a) (OccursVar a) VarSet.Set)
+                                    (InlineVars a (OccursVar a) ())
                            , VarSet.Set ))
 gatherInlining (AnnApp _ (Ref f _) x) = do
   s <- gets (VarMap.lookup (toVar f) . view varSubst)
@@ -319,7 +330,7 @@ gatherInlining t = pure . Just $ (Left (mempty, mempty, t), mempty)
 -- | Build up a set of terms for inlining when the terms have been
 -- annotated.
 buildKnownInline :: IsVar a
-              => InlineSet (OccursVar a) (OccursVar a) VarSet.Set
+              => InlineVars (OccursVar a) (OccursVar a) VarSet.Set
               -> AnnTerm VarSet.Set (OccursVar a)
 buildKnownInline (vs, ts, rhs)
   = substituteInTys (VarMap.fromList . map (first toVar) $ ts)
@@ -335,7 +346,7 @@ buildKnownInline (vs, ts, rhs)
 -- | Build up a set of terms for inlining when the terms have not been
 -- annotated.
 buildUnknownInline :: IsVar a
-                   => InlineSet a (OccursVar a) ()
+                   => InlineVars a (OccursVar a) ()
                    -> Term a
 buildUnknownInline (vs, ts, rhs)
   = substituteInTys (VarMap.fromList . map (toVar *** fmap underlying) $ ts)
