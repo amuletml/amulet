@@ -434,7 +434,7 @@ reduceTermK _ (AnnMatch _ test arms) cont = do
   -- TODO: Work out a better way of handling continuations on multi-match
   -- arms, as our current handling within the let case means we have to
   -- walk down the entire tree.
-  case simplifyArms s test' arms of
+  case simplifyArms (underlying<$>) s test' arms of
     Left (arm, subst) -> changing $ view armBody <$> reduceArm cont arm subst
     Right [(arm, subst)] -> Match test' . pure <$> reduceArm cont arm subst
     Right arms' -> do
@@ -490,7 +490,7 @@ reduceTermK _ (AnnMatch _ test arms) cont = do
 
 reduceTermK u t cont = reduceTerm u t >>= cont
 
-inlineOr :: MonadReduce a m
+inlineOr :: forall a m. MonadReduce a m
          => AnnTerm VarSet.Set (OccursVar a)
          -> UsedAs
          -> (Term a -> m (Term a))
@@ -506,12 +506,37 @@ inlineOr t usage cont def = do
       VarSet.foldr (\v -> (*>) (varSubst %= VarMap.delete v)) (pure ()) rs
       changing $ reduceTermK usage (buildKnownInline inl) cont
     Just (Right inl, rs)
-      | shouldInline s st usage inl
+      | inl' <- (inlineMatches s (inlineSubst inl))
+      , shouldInline s st usage inl'
       -> do
           VarSet.foldr (\v -> (*>) (varSubst %= VarMap.delete v)) (pure ()) rs
           rhs' <- refresh $ buildUnknownInline inl
           changing $ reduceTermK usage (annotate rhs') cont
     _ -> def
+
+  where
+    -- | Reduce matches when they are the first expression in a function before
+    -- determining whether something should be inlined.
+    --
+    -- This doesn't need to be perfect, it's just a small tweak to catch a
+    -- couple of common cases (such as matching on unboxed tuples).
+    inlineMatches :: ReduceScope a
+                  -> InlineSubst a (OccursVar a) ()
+                  -> InlineSubst a (OccursVar a) ()
+    inlineMatches s (vs, ts, Match test@(Ref v _) arms)
+      | Just{} <- VarMap.lookup (toVar v) vs
+      = case simplifyArms id s test arms of
+          Left (arm, subst) -> inlineMatches
+            (s & (varScope %~ (flip substScope subst)))
+            (substVars vs subst, ts, arm ^. armBody)
+          Right arms' -> (vs, ts, Match test (map fst arms'))
+    inlineMatches _ x = x
+
+    substVars :: VarMap.Map (Atom (OccursVar a)) -> Subst a -> VarMap.Map (Atom (OccursVar a))
+    substVars = foldr (\(v, x) -> VarMap.insert (toVar v) ((flip OccursVar MultiLambda) <$> x))
+
+    substScope :: VarMap.Map (VarDef a) -> Subst a -> VarMap.Map (VarDef a)
+    substScope = foldr (\(v, x) -> VarMap.insert (toVar v) (basicDef v (Atom x)))
 
 redundantCo :: IsVar a => Coercion a -> Bool
 redundantCo c
