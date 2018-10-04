@@ -1,23 +1,28 @@
-{-# LANGUAGE OverloadedStrings, FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings, FlexibleContexts, ScopedTypeVariables #-}
 
 module Repl (repl) where
 
 import Control.Monad.State.Strict
+import Control.Exception
 
 import qualified Data.Text.Encoding as T
-import qualified Data.Map.Strict as Map
 import qualified Data.Text.Lazy as L
-import qualified Data.Set as Set
+import qualified Data.Text.IO as T
 import qualified Data.Text as T
 
+import qualified Data.Map.Strict as Map
 import qualified Data.VarMap as VarMap
+import qualified Data.Set as Set
 import Data.Traversable
+import Data.Bifunctor
 import Data.Foldable
+import Data.Position
 import Data.Spanned
 import Data.Functor
 import Data.Triple
 import Data.These
 import Data.Maybe
+import Data.List
 
 import qualified Foreign.Lua.Api.Types as L
 import qualified Foreign.Lua as L
@@ -41,10 +46,10 @@ import Control.Monad.Namey
 import qualified Types.Infer as I
 import Types.Infer (inferProgram)
 
-import Parser.Wrapper (runParser)
-import Parser (parseRepl)
+import Parser.Wrapper (Parser, runParser)
 import Parser.Token
 import Parser.Error
+import Parser
 
 import qualified Core.Core as C
 import Core.Lower (runLowerWithCtors, lowerProg, lowerType)
@@ -117,12 +122,16 @@ runRepl = do
   case line of
     Nothing -> pure ()
     Just "" -> runRepl
-    Just (':':cmd) -> execCommand cmd
-    Just line -> getInput line False >>= (lift . execString) >> runRepl
+    Just (':':cmd) -> uncurry execCommand . second (dropWhile (== ' ') . dropWhileEnd (== ' ')) . span (/=' ') $ cmd
+    Just line -> getInput line False >>= (lift . execString parseRepl' "=stdin" . T.pack) >> runRepl
 
   where
+    parseRepl' :: Parser (Either [S.Toplevel S.Parsed] (S.Expr S.Parsed))
+    parseRepl' = first pure <$> parseRepl
+
+    getInput :: String -> Bool -> InputT (StateT ReplState IO) String
     getInput input empty =
-      case runParser "=stdin" (L.pack input) parseRepl of
+      case runParser "=stdin" (L.pack input) parseRepl' of
         (Nothing, xs) ->
           case last xs of
             UnclosedString{} -> continue
@@ -138,13 +147,25 @@ runRepl = do
                   Just "" | empty -> pure input
                   Just line -> getInput (input ++ '\n':line) (line == "")
 
-    execCommand "quit" = pure ()
-    execCommand "q" = pure ()
-    execCommand _ = runRepl
+    execCommand :: String -> String -> InputT (StateT ReplState IO) ()
+    execCommand "quit" _    = pure ()
+    execCommand "q"    _    = pure ()
+    execCommand "l"    file = lift (loadFile file) >> runRepl
+    execCommand "load" file = lift (loadFile file) >> runRepl
+    execCommand cmd    _    = liftIO (putDoc ("Unknown command" <+> verbatim cmd)) >> runRepl
 
-    execString line = do
+    loadFile "" = liftIO . putDoc $ "Usage `:load [file]`"
+    loadFile file = do
+      contents <- liftIO . try . T.readFile $ file
+      case contents of
+        Right contents -> execString (Left <$> parseTops) file contents
+        Left (_ :: IOException) -> liftIO . putDoc $ "Cannot open" <+> verbatim file
+
+    execString :: Parser (Either [S.Toplevel S.Parsed] (S.Expr S.Parsed)) -> SourceName -> T.Text
+               -> StateT ReplState IO ()
+    execString parser name line = do
       state <- get
-      core <- flip evalNameyT (lastName state) $ parseCore state line
+      core <- flip evalNameyT (lastName state) $ parseCore state parser name line
       case core of
         Nothing -> pure ()
         Just (vs, prog, core, state') -> do
@@ -187,22 +208,23 @@ runRepl = do
 
 
     parseCore :: (MonadNamey m, MonadIO m)
-              => ReplState -> String
+              => ReplState
+              -> Parser (Either [S.Toplevel S.Parsed] (S.Expr S.Parsed)) -> SourceName -> T.Text
               -> m (Maybe ([(CoVar, C.Type CoVar)]
                           , [S.Toplevel S.Typed]
                           , [Stmt CoVar]
                           , ReplState))
-    parseCore state input = do
+    parseCore state parser name input = do
       let files :: [(String, T.Text)]
-          files = [("=stdin", T.pack input)]
-          (parsed, parseMsg) = runParser "=stdin" (L.pack input) parseRepl
+          files = [(name, input)]
+          (parsed, parseMsg) = runParser name (L.fromStrict input) parser
       liftIO $ traverse_ (`reportS`files) parseMsg
 
       case parsed of
         Nothing -> pure Nothing
         Just parsed -> do
           let parsed' = case parsed of
-                          Left s -> [s]
+                          Left s -> s
                           Right e -> [S.LetStmt [S.Binding (S.Name "_") e (annotation e)]]
 
           let rScope = resolveScope state
