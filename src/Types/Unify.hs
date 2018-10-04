@@ -105,7 +105,7 @@ doSolve (ConUnify because v a b :<| xs) = do
     Left e -> do
       dictate (reblame because <$> e)
       solveCoSubst . at v ?= IdWrap
-    Right co -> solveCoSubst . at v ?= Cast co
+    Right co -> solveCoSubst . at v ?= probablyCast co
 
   doSolve xs
 doSolve (ConSubsume because v a b :<| xs) = do
@@ -436,7 +436,7 @@ subsumes' r th@(TyRows rho rhas) tw@(TyRows sigma rwant) = do
   if length matching < length rwant || length rwant > length rhas
   then do
     _ <- unify th tw
-    pure (WrapFn (MkWrapCont (\ex -> Ascription (ExprWrapper (Cast (AssumedCo th tw)) ex (annotation ex, tw)) tw (annotation ex, tw)) "foo"))
+    pure (probablyCast (AssumedCo th tw))
   else do
     matched <- fmap fold . for matching $ \(key, have, want) -> do
       -- and make sure that the ones we have are subtypes of the ones we
@@ -456,7 +456,7 @@ subsumes' r th@(TyRows rho rhas) tw@(TyRows sigma rwant) = do
     cast <- probablyCast <$> unify sigma new
     exp <- TvName <$> genName
 
-    let mkw ex = Ascription (ExprWrapper cast ex (annotation ex, tw)) tw (annotation ex, tw)
+    let mkw ex = ExprWrapper cast ex (annotation ex, tw)
     pure (WrapFn (MkWrapCont (mkRecordWrapper rhas matched matched_t th tw mkw exp) "exact→poly record subsumption"))
 
 subsumes' r a b = probablyCast <$> retcons (reblame r) (unify a b)
@@ -579,22 +579,25 @@ mkRecordWrapper keys matched matched_t th tw cont exp =
           Just (_, new, wrap) -> Field k (ExprWrapper wrap ex (annotation ex, new)) (an, new)
           Nothing -> Field k ex (an, old)
 
-      fakeField :: Ann Resolved -> Expr Typed -> (Text, Type Typed) -> [Field Typed]
-      fakeField ant ex (key, have)
+      updateField :: Ann Resolved -> Expr Typed -> (Text, Type Typed) -> [Field Typed]
+      updateField ant ex (key, have)
         = case Map.lookup key matched of
+            Just (_, _, IdWrap) -> []
             Just (_, new, wrap) -> [Field key (ExprWrapper wrap (Access ex key (ant, have)) (ant, new)) (ant, new)]
-            Nothing -> [Field key (Access ex key (ant, have)) (ant, have)]
+            Nothing -> []
+
+      recordExt ex [] _ = ex
+      recordExt ex rs a = RecordExt ex rs a
 
       -- Rebuild the literal in place, or
       wrapEx (Record rs (an, _)) = cont (Record (map wrapField rs) (an, matched_t))
       -- If we have a variable, use it directly, or
-      wrapEx ex@(VarRef _ (an, _)) = cont (Record (foldMap (fakeField an ex) keys) (an, matched_t))
+      wrapEx ex@(VarRef _ (an, _)) = cont (recordExt ex (foldMap (updateField an ex) keys) (an, matched_t))
 
-      -- Bind the expression to a value so we don't duplicate work and
-      -- rebuild the record
+      -- Update the record in place
       wrapEx ex | an <- annotation ex =
         Let [Binding exp ex (an, th)]
-          (cont (Record (foldMap (fakeField an (ref an)) keys) (an, matched_t)))
+          (cont (recordExt (ref an) (foldMap (updateField an (ref an)) keys) (an, matched_t)))
           (an, tw)
    in wrapEx
 

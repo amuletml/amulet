@@ -196,10 +196,13 @@ verifyExpr (Fun p x _) = do
   modify (Set.union (bindingSites' p))
   verifyExpr x
 verifyExpr (Begin es _) = do
+  let unitish TyVar{} = True
+      unitish TyWildcard{} = True
+      unitish x = x == tyUnit
   for_ (init es) $ \ex -> do
     let ty = getType ex
     verifyExpr ex
-    when (ty /= tyUnit) $
+    unless (unitish ty) $
       tell (Seq.singleton (NonUnitBegin ex ty))
   verifyExpr (last es)
 verifyExpr Literal{} = pure ()
@@ -344,3 +347,4 @@ parametricity stmt overall = go mempty overall where
 
   goArg set (TyPi _ cont) = goArg set cont
   goArg set t = pure (set `Set.difference` ftv t)
+
