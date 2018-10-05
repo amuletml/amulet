@@ -68,7 +68,6 @@ data TokenClass
 
   | TcOp Text                     -- ^ Operators (@+@)
   | TcIdentifier Text             -- ^ Identifiers (@foo@)
-  | TcQIdentifier Text             -- ^ Identifiers (@?foo@)
   | TcOpIdent Text                -- ^ Backtick ops (@`foo`@)
   | TcConIdent Text               -- ^ Constructors (@Foo@)
   | TcIdentifierQual [Text] Text  -- ^ Qualified identifiers (@Foo.bar@)
@@ -94,7 +93,7 @@ data TokenClass
   | TcComment Text    -- ^ The body of a comment, including the `(*` and `*)`.
 
   | TcEOF -- ^ End of file
-  deriving Eq
+  deriving (Eq, Ord)
 
 instance Show TokenClass where
   show TcArrow = "->"
@@ -146,7 +145,6 @@ instance Show TokenClass where
 
   show (TcOp t) = unpack t
   show (TcIdentifier t) = unpack t
-  show (TcQIdentifier t) = '?':unpack t
   show (TcOpIdent t) = "`" ++ unpack t ++ "`"
   show (TcConIdent t) = unpack t
   show (TcIdentifierQual ms t) = concatMap (\m -> unpack m ++ ['.']) (reverse ms) ++ unpack t
