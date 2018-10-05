@@ -55,10 +55,8 @@ import Parser
 
 import qualified Core.Core as C
 import Core.Lower (runLowerWithCtors, lowerProg, lowerType)
-import Core.Builtin (vLAZY, vForce, vOpApp)
 import Core.Core (Stmt)
 import Core.Occurrence
-import Core.Free
 import Core.Var
 
 import Control.Lens
@@ -94,18 +92,13 @@ defaultState mode = do
   state <- L.newstate
 
   let preamble = T.unpack . display . uncommentDoc . renderPretty 0.8 100 . pretty
-                . LuaDo . map (patchupLua B.defaultEmitState . B.genOperator . fst)
-                . ([ (vLAZY, undefined)
-                   , (vForce, undefined)
-                   , (vOpApp, undefined)
-                   ]++)
-                $ VarMap.toList B.ops
+                . LuaDo . foldMap (map (patchupLua B.defaultEmitState) . snd . B.genBuiltin . fst)
+                $ VarMap.toList B.builtinVars
 
   -- Init our default libraries and operator functions
   L.runLuaWith state $ do
     L.openlibs
     L.OK <- L.dostring preamble
-    L.OK <- L.dostring "__builtin_unit = { __tag = '__builtin_unit' }"
     pure ()
 
   pure ReplState
@@ -336,7 +329,7 @@ parseCore state parser name input = do
 
 emitCore :: ReplState -> [Stmt CoVar] -> (B.TopEmitState, LuaStmt, String)
 emitCore state core =
-  let core' = patchupUsage . tagFreeSet . tagOccursVar $ core
+  let core' = patchupUsage . snd . tagOccurStmt (const occursSet) OccursVar $ core
       (luaStmt, emit') = runState (B.emitStmt core') (emitState state)
       luaExpr = LuaDo . map (patchupLua emit') . toList $ luaStmt
       luaSyntax = T.unpack . display . uncommentDoc . renderPretty 0.8 100 . pretty $ luaExpr

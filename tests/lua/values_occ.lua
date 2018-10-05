@@ -1,5 +1,4 @@
 do
-  local __builtin_unit = { __tag = "__builtin_unit" }
   local print = print
   local to_string = tostring
   local function Stream(x) return { __tag = "Stream", x } end

@@ -1,5 +1,4 @@
 do
-  local __builtin_unit = { __tag = "__builtin_unit" }
   local bottom = nil
   bottom({
     op = function(bt) return bt end,

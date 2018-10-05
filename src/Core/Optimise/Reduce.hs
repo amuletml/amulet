@@ -36,15 +36,10 @@ reducePass :: (IsVar a, MonadNamey m) => [Stmt a] -> m [Stmt a]
 reducePass = runReduceN ( fmap deadCodePass
                         . reduceStmts
                         . snd
-                        . tagOccurStmt (const freeSet) OccursVar ) 4
+                        . tagOccurStmt (const occursSet) OccursVar ) 4
 
 annotate :: IsVar a => Term a -> AnnTerm VarSet.Set (OccursVar a)
-annotate = snd . tagOccurTerm (const freeSet) OccursVar
-
-freeSet :: VarMap.Map Occurrence -> VarSet.Set
-freeSet = VarMap.foldrWithKey ins mempty where
-  ins _ Dead s = s
-  ins k _    s = VarSet.insert k s
+annotate = snd . tagOccurTerm (const occursSet) OccursVar
 
 extendVar :: IsVar a => (a, Type a, Term a) -> ReduceScope a -> ReduceScope a
 extendVar b@(v, _, e) = (varScope %~ VarMap.insert (toVar v) (basicDef v e))

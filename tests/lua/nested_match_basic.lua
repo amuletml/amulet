@@ -1,5 +1,4 @@
 do
-  local __builtin_unit = { __tag = "__builtin_unit" }
   local Nil = { __tag = "Nil" }
   local function Cons(x) return { __tag = "Cons", x } end
   local function zip(ik_1, ik_2, ik_3)

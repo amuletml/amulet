@@ -1,5 +1,4 @@
 do
-  local __builtin_unit = { __tag = "__builtin_unit" }
   local function _plus0(bx) return function(by) return bx + by end end
   local main = {
     _1 = _plus0,
