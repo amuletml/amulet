@@ -61,8 +61,8 @@ unify a b =
     These e _ -> Left e
     That (_, m) -> case m Map.! TvName (TgInternal "co") of
       Cast co -> Right co
-      _ -> error "not a coercion"
-
+      IdWrap -> Right (AssumedCo a b)
+      c -> error ("not a coercion " ++ show c)
 
 newtype Blame p = Blame Span
 
