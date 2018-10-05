@@ -1,6 +1,7 @@
-{-# LANGUAGE OverloadedStrings
-           , MultiParamTypeClasses
-           , FunctionalDependencies #-}
+{-# LANGUAGE
+  FunctionalDependencies
+, MultiParamTypeClasses
+, OverloadedStrings #-}
 
 -- | A series of utilities for generating annotating source positions
 -- with error messages.
@@ -8,12 +9,14 @@ module Text.Pretty.Note
   ( NoteKind(..)
   , NoteStyle(..)
   , NoteDoc
+  , Highlighted
   , Note(..)
   , FileMap
-  , fileSpans, format, toAnsi
+  , defaultHighlight, fileSpans, format, toAnsi
   ) where
 
 import qualified Data.Text as T
+import Data.Bifunctor
 import Data.Foldable
 import Data.Position
 import Data.Spanned
@@ -35,6 +38,10 @@ data NoteStyle
 
 -- | A document styled with either 'NoteKind' or 'a'.
 type NoteDoc a = Doc (Either NoteStyle a)
+
+-- | A highlighted string. Built from pairs of annotation functions and the
+-- corresponding text.
+type Highlighted a = [(T.Text -> NoteDoc a, T.Text)]
 
 -- | Some diagnostic "note" which can be reported
 class Spanned a => Note a b | a -> b where
@@ -66,10 +73,15 @@ toAnsi LineHighlight = AnsiStyles [BrightColour White, Underlined]
 toAnsi (NoteKind WarningMessage) = BrightColour Yellow
 toAnsi (NoteKind ErrorMessage) = BrightColour Red
 
+-- | The default highlighting function
+defaultHighlight :: T.Text -> Highlighted a
+defaultHighlight x = [(text, x)]
+
 -- | A pretty printer for 'formatNote' and 'format', which displays the
 -- source code associated with each span argument.
-fileSpans :: FileMap -> [Span] -> NoteDoc b
-fileSpans files locs =
+fileSpans :: FileMap -> (T.Text -> Highlighted a)
+          -> [Span] -> NoteDoc a
+fileSpans files hlight locs =
   case overlapping . sortBy compareFiles . filter (/=internal) $ locs of
     [] -> mempty
     locs'@(loc:_) ->
@@ -83,7 +95,7 @@ fileSpans files locs =
                                                            <> space <> pipe <> space)
                               <> body
 
-      in vsep (putLine mempty mempty : buildLines putLine startLine lines locs' ++ [ putLine mempty mempty ])
+      in vsep (putLine mempty mempty : buildLines hlight putLine startLine lines locs' ++ [ putLine mempty mempty ])
   where
     pipe = char '│'
 
@@ -94,16 +106,24 @@ fileSpans files locs =
       in (spLine a', spCol a') `compare` (spLine b', spCol b')
       | otherwise = error "cannot compare spans from different files"
 
-buildLines :: (T.Text -> NoteDoc a -> NoteDoc a) -> Int -> [T.Text] -> [Span] -> [NoteDoc a]
-buildLines b s = go s . drop (s - 1) where
+-- | Highlight some lines from the provided document.
+buildLines :: (T.Text -> Highlighted a)
+           -- ^ The highlighter function
+           -> (T.Text -> NoteDoc a -> NoteDoc a)
+           -- ^ Build a completed line from it's descriptor and contents
+           -> Int      -- ^ The line to start at
+           -> [T.Text] -- ^ Each line within the file
+           -> [Span]   -- ^ The spans to highlight
+           -> [NoteDoc a]
+buildLines hlight build start = go start . drop (start - 1) where
   go n (t:ts) (x:xs) = case spLine (spanStart x) - n of
     -- If we need this line then emit it
-    0 -> b (T.pack (show n)) (buildLine t n (x:xs)) :
+    0 -> build (T.pack (show n)) (buildLine (hlight t) n (x:xs)) :
          go (n + 1) ts (dropLines n (x:xs))
     -- If we need the next line, just emit this one plain
-    1 -> b (T.pack (show n)) (text t) : go (n + 1) ts (x:xs)
+    1 -> build (T.pack (show n)) (annDoc (hlight t)) : go (n + 1) ts (x:xs)
     -- Otherwise drop the required number of lines
-    m -> b mempty (string "...") : go (n + m) (drop m (t:ts)) (x:xs)
+    m -> build mempty (string "...") : go (n + m) (drop m (t:ts)) (x:xs)
   go _ _ [] = []
   go n [] xs = go n [mempty] xs
 
@@ -117,21 +137,37 @@ buildLines b s = go s . drop (s - 1) where
 
     where (f, s, e) = (fileName x, spanStart x, spanEnd x)
 
-buildLine :: T.Text -> Int -> [Span] -> NoteDoc a
+-- | Build a line, highlighting a series of provided spans
+buildLine :: Highlighted a -- ^ The current line's contents
+          -> Int -- ^ The current line number
+          -> [Span] -- ^ The spans to highlight. These may start before the
+                    -- current line and extend beyond it.
+          -> NoteDoc a
 buildLine = go 1 where
+  go :: Int -> Highlighted a -> Int -> [Span] -> NoteDoc a
   go c t l (x:xs) | spLine s <= l =
     let start = if spLine s < l then 1 else spCol s
-        len = if spLine e > l then T.length t else spCol e - start + 1
+        len = if spLine e > l then foldr ((+) . T.length . snd) 0 t else spCol e - start + 1
 
         (before, remaining) = splitPadded (start - c) t
         (body, after) = splitPadded len remaining
-    in text before <> annotate (Left LineHighlight) (text body) <> go (start + len) after l xs
+    in before <> annotate (Left LineHighlight) body <> go (start + len) after l xs
     where (s, e) = (spanStart x, spanEnd x)
-          splitPadded i t | i <= T.length t = T.splitAt i t
-                          | otherwise = (t <> T.replicate (i - T.length t) (T.singleton ' '), mempty)
-  go _ t _ _ = text t
+  go _ t _ _ = annDoc t
 
+  splitPadded :: Int -> Highlighted a -> (NoteDoc a, Highlighted a)
+  splitPadded i [] = (string (replicate i ' '), [])
+  splitPadded i ((a, t):ts)
+    | i <= T.length t =
+      let (t', rest) = T.splitAt i t
+      in (a t', (a, rest):ts)
+    | otherwise =
+      first (a t<>) (splitPadded (i - T.length t) ts)
 
+annDoc :: Highlighted a -> NoteDoc a
+annDoc = foldr ((<>) . uncurry ($)) mempty
+
+-- | Merge overlapping spans together into one.
 overlapping :: [Span] -> [Span]
 overlapping = go where
   go (x:y:xs)

@@ -34,7 +34,7 @@ toEither (That x) = Right x
 result :: String -> T.Text -> T.Text
 result file contents = fst . flip runNamey firstName $ do
   let (Just parsed, _) = runParser file (L.fromStrict contents) parseTops
-      prettyErrs = vsep . map (N.format (N.fileSpans [(file, contents)]))
+      prettyErrs = vsep . map (N.format (N.fileSpans [(file, contents)] N.defaultHighlight))
   Right (resolved, _) <- resolveProgram RS.builtinScope RS.emptyModules parsed
   desugared <- desugarProgram resolved
   Right (inferred, _) <- toEither <$> inferProgram builtinsEnv desugared

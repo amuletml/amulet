@@ -214,6 +214,7 @@ library amulet
                      -- Lua
                      , Language.Lua.Quote
                      , Language.Lua.Syntax
+                     , Language.Lua.Parser
                      , Language.Lua.Parser.Error
                      , Language.Lua.Parser.Lexer
                      , Language.Lua.Parser.Token

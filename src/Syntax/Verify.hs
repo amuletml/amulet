@@ -22,9 +22,7 @@ import Syntax.Pretty
 import Syntax.Subst
 import Syntax.Let
 
-import Language.Lua.Parser.Wrapper
-import Language.Lua.Parser.Parser
-import Language.Lua.Parser.Error
+import Language.Lua.Parser
 
 import Types.Infer.Builtin (tyUnit, tyLazy, spine, getHead)
 
@@ -111,7 +109,7 @@ instance Note VerifyError Style where
      in vsep [ indent 2 "Syntax error in definition of" <+> (Right <$> skeyword (pretty var))
              , f [span]
              , empty
-             , format (fileSpans spans) err
+             , format (fileSpans spans highlightLua) err
              ]
 
   formatNote f (LazyLet (Let bs ex _) _) =
@@ -148,7 +146,7 @@ verifyProgram = traverse_ verifyStmt where
   verifyStmt :: Toplevel Typed -> m ()
   verifyStmt st@(LetStmt vs) = verifyBindingGroup (flip const) (BecauseOf st) vs
   verifyStmt st@(ForeignVal v d t (_, _)) = do
-    case runParser (SourcePos ("definition of " ++ displayS (pretty v)) 1 1) (d ^. lazy) parseExpr of
+    case parseExpr (SourcePos ("definition of " ++ displayS (pretty v)) 1 1) (d ^. lazy) of
       Left e -> tell (Seq.singleton (ParseErrorInForeign st e))
       Right _ -> pure ()
     parametricity st t
