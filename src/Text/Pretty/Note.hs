@@ -127,15 +127,12 @@ buildLines hlight build start = go start . drop (start - 1) where
   go _ _ [] = []
   go n [] xs = go n [mempty] xs
 
-  -- Drop lines finishing before this one, and patch up the start position of
+  -- | Drop lines finishing before this one, and patch up the start position of
   -- any lines overlapping with it.
   dropLines _ [] = []
   dropLines n (x:xs)
-    | spLine e <= n = dropLines n xs
-    | spLine s <= n = mkSpanUnsafe (SourcePos f (n + 1) 1) (spanEnd x):xs
+    | spLine (spanStart x) <= n = dropLines n xs
     | otherwise = x:xs
-
-    where (f, s, e) = (fileName x, spanStart x, spanEnd x)
 
 -- | Build a line, highlighting a series of provided spans
 buildLine :: Int -- The current line's length
