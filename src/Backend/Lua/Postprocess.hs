@@ -5,13 +5,14 @@
  optimisations.
 -}
 module Backend.Lua.Postprocess
-  ( addOperators
-  , genOperator
+  ( addBuiltins
+  , genBuiltin
+  , builtinVars
   ) where
 
-import qualified Data.Map as Map
-import qualified Data.VarMap as VarMap
 import qualified Data.VarSet as VarSet
+import qualified Data.VarMap as VarMap
+import qualified Data.Map as Map
 
 import Language.Lua.Syntax
 import Language.Lua.Quote
@@ -22,16 +23,21 @@ import Core.Builtin
 import Core.Var
 
 
-{-|
-  Walks the Lua tree and identifies which operators are not fully applied
-  (and so their variable is referenced), injecting them into the program.
- -}
-addOperators :: [LuaStmt] -> [LuaStmt]
-addOperators stmt =
-  let ops = foldMap opsStmt stmt
-  in foldr ((:) . genOperator) stmt (VarSet.toList ops)
-
+-- | Walks the Lua tree and identifies which builtins are not fully
+-- applied (and so their variable is referenced), injecting them into the
+-- program.
+addBuiltins :: [LuaStmt] -> [LuaStmt]
+addBuiltins stmt = snd (genBuiltins (VarSet.toList (foldMap opsStmt stmt)) mempty stmt)
   where
+    genBuiltins :: [CoVar] -> VarSet.Set -> [LuaStmt] -> (VarSet.Set, [LuaStmt])
+    genBuiltins [] vs ss = (vs, ss)
+    genBuiltins (b:bs) vs ss
+      | b `VarSet.member` vs = genBuiltins bs vs ss
+      | otherwise =
+          let (deps, stmts) = genBuiltin b
+              (vs', ss') = genBuiltins deps vs (stmts ++ ss)
+          in genBuiltins bs vs' ss'
+
     opsStmt :: LuaStmt -> VarSet.Set
     opsStmt (LuaDo b) = foldMap opsStmt b
     opsStmt (LuaAssign vs xs) = foldMap opsVar vs <> foldMap opsExpr xs
@@ -73,49 +79,50 @@ addOperators stmt =
     opsCall (LuaCall f xs) = foldMap opsExpr (f:xs)
     opsCall (LuaInvoke f _ xs) = foldMap opsExpr (f:xs)
 
-    opNames = Map.filter (`VarMap.member` ops) (fromEsc escapeScope)
-                `Map.union` Map.fromList [ ( "__builtin_Lazy", vLAZY ), ( "__builtin_force", vForce ) ]
+    opNames =  Map.filter (`VarMap.member` builtinVars) (fromEsc escapeScope)
 
 -- | Generate the Lua definition for some built-in Amulet variable.
---
--- The name is a little misleading, as this this does not exclusively
--- apply to binary operators.
-genOperator :: CoVar -> LuaStmt
-genOperator op | op == vLAZY =
-  [luaStmt|
+genBuiltin :: CoVar -> ([CoVar], [LuaStmt])
+genBuiltin op | op == vLAZY =
+  ( []
+  , [luaStmts|
     local function __builtin_Lazy(x)
       return { x, false, __tag = "lazy" }
     end
-  |]
-
-genOperator op | op == vOpApp =
-  [luaStmt|
+  |] )
+genBuiltin op | op == vOpApp =
+  ( []
+  , [luaStmts|
     local function __builtin_app(f, x)
       return f(x)
     end
-  |]
-
-genOperator op | op == vForce =
-  [luaStmt|
+  |] )
+genBuiltin op | op == vForce =
+  ( [ vUnit ]
+  , [luaStmts|
+   local function __builtin_force_err()
+     error("Loop while forcing thunk")
+   end
    local function __builtin_force(x)
      if x[2] then
        return x[1]
      else
        local thunk = x[1]
-       x[1] = function()
-         error("loop while forcing thunk")
-       end
+       x[1] = __builtin_force_err
        x[1] = thunk(__builtin_unit)
        x[2] = true
        return x[1]
      end
    end
-  |]
-genOperator op =
+  |] )
+genBuiltin op | op == vUnit =
+  ( []
+  , [luaStmts|local  __builtin_unit = { __tag = "__builtin_unit" }|] )
+genBuiltin op =
   let name =  getVar op escapeScope
-  in LuaLocalFun (LuaName name) [left]
-                 [LuaReturn [LuaFunction [right]
-                             [LuaReturn [LuaBinOp (LuaRef left) (remapOp op) (LuaRef right)]]]]
+  in ( [], [LuaLocalFun (LuaName name) [left]
+              [LuaReturn [LuaFunction [right]
+                           [LuaReturn [LuaBinOp (LuaRef left) (remapOp op) (LuaRef right)]]]]] )
   where
     left  = LuaName "l"
     right = LuaName "r"

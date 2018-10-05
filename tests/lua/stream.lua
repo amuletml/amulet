@@ -1,5 +1,4 @@
 do
-  local __builtin_unit = { __tag = "__builtin_unit" }
   local io_write = io.write
   local print = print
   local to_string = tostring

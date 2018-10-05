@@ -8,6 +8,7 @@ module Core.Occurrence
   ( OccursVar(..)
   , Occurs(..)
   , Occurrence(..), OccursMap
+  , occursSet
   , tagOccursVar, tagOccursMap
   , tagOccurStmt, tagOccurTerm
   , doesItOccur, occurrenceIn
@@ -19,6 +20,7 @@ import Core.Core as C
 import Core.Var
 
 import qualified Data.VarMap as VarMap
+import qualified Data.VarSet as VarSet
 import Data.Triple
 import Data.Maybe
 import Data.Data
@@ -84,6 +86,12 @@ tagOccursVar = snd . tagOccurStmt const OccursVar
 -- | Tag each expression with its free variables and their occurrence.
 tagOccursMap :: IsVar a => [AnnStmt b a] -> [AnnStmt OccursMap a]
 tagOccursMap = snd . tagOccurStmt (flip const) const
+
+-- | Compute the occurrence set from an 'OccursMap'.
+occursSet :: OccursMap -> VarSet.Set
+occursSet = VarMap.foldrWithKey ins mempty where
+  ins _ Dead s = s
+  ins k _    s = VarSet.insert k s
 
 -- | Tag some statements with occurrence information
 tagOccurStmt :: forall a a' b b'. IsVar a

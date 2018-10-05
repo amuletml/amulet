@@ -1,5 +1,4 @@
 do
-  local __builtin_unit = { __tag = "__builtin_unit" }
   local function Foo(fj) return fj end
   local function It(x) return { __tag = "It", x } end
   local bottom = nil

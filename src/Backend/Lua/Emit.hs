@@ -3,7 +3,9 @@ module Backend.Lua.Emit
   ( emitStmt
   , TopEmitState(..)
   , defaultEmitState
-  , ops, remapOp, escapeScope
+  , ops, remapOp
+  , builtinVars
+  , escapeScope
   ) where
 
 import Control.Monad.Reader
@@ -870,14 +872,20 @@ ops = VarMap.fromList
 remapOp :: IsVar a => a -> T.Text
 remapOp v | v'@(CoVar _ n _) <- toVar v = fromMaybe n (VarMap.lookup v' ops)
 
+-- | All builtin variables which require some form of code generation
+builtinVars :: VarMap.Map T.Text
+builtinVars = ops `VarMap.union` VarMap.fromList
+  [ (vLAZY,  "__builtin_Lazy")
+  , (vForce, "__builtin_force")
+  , (vOpApp, "__builtin_app")
+  , (vUnit,  "__builtin_unit")
+  ]
+
 -- | The default 'EscapeScope' for the backend
 escapeScope :: EscapeScope
 escapeScope =
   let escaper = basicEscaper keywords
   in flip createEscape escaper
-   . ((vError, "error"):)
-   . ((vLAZY, "__builtin_Lazy"):)
-   . ((vForce, "__builtin_force"):)
-   . ((vOpApp, "__builtin_app"):)
    . map (fmap escaper)
-   $ VarMap.toList ops
+   . ((vError, "error"):)
+   $ VarMap.toList builtinVars
