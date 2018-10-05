@@ -1,6 +1,9 @@
 {-# LANGUAGE OverloadedStrings, FlexibleContexts, ScopedTypeVariables #-}
 
-module Repl (repl) where
+module Repl
+  ( repl
+  , replFrom
+  ) where
 
 import Control.Monad.State.Strict
 import Control.Exception
@@ -182,33 +185,6 @@ runRepl = do
         [] -> liftIO (putDoc "No files to reload")
         files -> loadFiles files
 
-    loadFiles files = do
-      -- Reset the state
-      dmode <- gets debugMode
-      state' <- liftIO (defaultState dmode)
-      put state' { currentFiles = files }
-
-      -- Load each file in turn
-      _ <- foldlM (go (length files)) True (zip [(1::Int)..] files)
-      pure ()
-      where
-        go _ False _ = pure False
-        go n True (i, file) = do
-          liftIO . putDoc $ "Loading [" <> shown i <> "/" <> shown n <> "]:" <+> verbatim file
-
-          contents <- liftIO . try . T.readFile $ file
-          case contents of
-            Right contents -> execFile file contents
-            Left (_ :: IOException) -> liftIO (putDoc ("Cannot open" <+> verbatim file)) $> False
-
-    emitCore :: ReplState -> [Stmt CoVar] -> (B.TopEmitState, LuaStmt, String)
-    emitCore state core =
-      let core' = patchupUsage . tagFreeSet . tagOccursVar $ core
-          (luaStmt, emit') = runState (B.emitStmt core') (emitState state)
-          luaExpr = LuaDo . map (patchupLua emit') . toList $ luaStmt
-          luaSyntax = T.unpack . display . uncommentDoc . renderPretty 0.8 100 . pretty $ luaExpr
-      in (emit', luaExpr, luaSyntax)
-
     execString :: SourceName -> T.Text
                -> StateT ReplState IO Bool
     execString name line = do
@@ -251,105 +227,6 @@ runRepl = do
           put state' { emitState = emit' }
           pure ok
 
-    execFile :: SourceName -> T.Text
-             -> StateT ReplState IO Bool
-    execFile name line = do
-      state <- get
-      core <- flip evalNameyT (lastName state) $ parseCore state (Left <$> parseTops) name line
-      case core of
-        Nothing -> pure False
-        Just (_, _, core, state') -> do
-          let (emit', _, luaSyntax) = emitCore state' core
-          ok <- liftIO $ do
-            res <- L.runLuaWith (luaState state') $ do
-              code <- L.dostring luaSyntax
-
-              case code of
-                L.OK -> pure (Right ())
-                _ -> do
-                  msg <- T.decodeLatin1 <$> L.tostring L.stackTop
-                  L.pop 1
-                  pure (Left (text msg <+> parens (shown code)))
-
-            hFlush stdout
-            hFlush stderr
-
-            case res of
-              Left err -> putDoc err $> False
-              Right () -> pure True
-
-          put state' { emitState = emit' }
-          pure ok
-
-
-    parseCore :: (MonadNamey m, MonadIO m)
-              => ReplState
-              -> Parser (Either [S.Toplevel S.Parsed] (S.Expr S.Parsed)) -> SourceName -> T.Text
-              -> m (Maybe ([(CoVar, C.Type CoVar)]
-                          , [S.Toplevel S.Typed]
-                          , [Stmt CoVar]
-                          , ReplState))
-    parseCore state parser name input = do
-      let files :: [(String, T.Text)]
-          files = [(name, input)]
-          (parsed, parseMsg) = runParser name (L.fromStrict input) parser
-      liftIO $ traverse_ (`reportS`files) parseMsg
-
-      case parsed of
-        Nothing -> pure Nothing
-        Just parsed -> do
-          let parsed' = case parsed of
-                          Left s -> s
-                          Right e -> [S.LetStmt [S.Binding (S.Name "_") e (annotation e)]]
-
-          let rScope = resolveScope state
-          let cont modScope' resolved prog env' =
-                let es = case runVerify (verifyProgram prog) of
-                           Left es -> toList es
-                           Right () -> []
-                 in do
-                  liftIO $ traverse_ (`reportS`files) es
-                  if any isError es
-                     then pure Nothing
-                     else do
-                       let (var, tys) = R.extractToplevels parsed'
-                           (var', tys') = R.extractToplevels resolved
-                           ctors = fmap lowerType (Map.restrictKeys (env' ^. T.names . to toMap)
-                                                    (Set.mapMonotonic S.unTvName (env' ^. constructors)))
-
-                       lower <- runLowerWithCtors ctors (lowerProg prog)
-                       lastG <- genName
-                       case lower of
-                         [] -> error "lower returned no statements for the repl"
-                         _ -> pure ()
-                       pure $ Just ( case last lower of
-                                       (C.StmtLet (C.One (v, t, _))) -> [(v, t)]
-                                       (C.StmtLet (C.Many vs)) -> map (\(v, t, _) -> (v, t)) vs
-                                       _ -> []
-                                   , prog
-                                   , lower
-                                   , state { resolveScope = rScope { R.varScope = R.insertN' (R.varScope rScope) (zip var var')
-                                                                   , R.tyScope  = R.insertN' (R.tyScope rScope)  (zip tys tys')
-                                                                   }
-                                           , moduleScope = modScope'
-                                           , inferScope = env'
-                                           , lastName = lastG })
-          resolved <- resolveProgram rScope (moduleScope state) parsed'
-          case resolved of
-            Left es -> liftIO $ traverse_ (`reportS`files) es $> Nothing
-            Right (resolved, modScope') -> do
-              desugared <- desugarProgram resolved
-              inferred <- inferProgram (inferScope state) desugared
-              case inferred of
-                This es -> liftIO $ traverse_ (`reportS`files) es $> Nothing
-                That (prog, env') -> cont modScope' resolved prog env'
-                These es (prog, env') -> do
-                  liftIO $ traverse_ (`reportS`files) es
-                  if any isError es
-                     then pure Nothing
-                     else cont modScope' resolved prog env'
-
-
 isError :: Note a b => a -> Bool
 isError x = diagnosticKind x == ErrorMessage
 
@@ -390,5 +267,136 @@ patchupUsage (C.StmtLet (C.Many v):xs) = C.StmtLet (C.Many (map (first3 patchupV
 patchupVarUsage :: OccursVar a -> OccursVar a
 patchupVarUsage (OccursVar v u) = OccursVar v (u <> Once)
 
+parseCore :: (MonadNamey m, MonadIO m)
+          => ReplState
+          -> Parser (Either [S.Toplevel S.Parsed] (S.Expr S.Parsed)) -> SourceName -> T.Text
+          -> m (Maybe ([(CoVar, C.Type CoVar)]
+                      , [S.Toplevel S.Typed]
+                      , [Stmt CoVar]
+                      , ReplState))
+parseCore state parser name input = do
+  let files :: [(String, T.Text)]
+      files = [(name, input)]
+      (parsed, parseMsg) = runParser name (L.fromStrict input) parser
+  liftIO $ traverse_ (`reportS`files) parseMsg
+
+  case parsed of
+    Nothing -> pure Nothing
+    Just parsed -> do
+      let parsed' = case parsed of
+                      Left s -> s
+                      Right e -> [S.LetStmt [S.Binding (S.Name "_") e (annotation e)]]
+
+      let rScope = resolveScope state
+      let cont modScope' resolved prog env' =
+            let es = case runVerify (verifyProgram prog) of
+                       Left es -> toList es
+                       Right () -> []
+             in do
+              liftIO $ traverse_ (`reportS`files) es
+              if any isError es
+                 then pure Nothing
+                 else do
+                   let (var, tys) = R.extractToplevels parsed'
+                       (var', tys') = R.extractToplevels resolved
+                       ctors = fmap lowerType (Map.restrictKeys (env' ^. T.names . to toMap)
+                                                (Set.mapMonotonic S.unTvName (env' ^. constructors)))
+
+                   lower <- runLowerWithCtors ctors (lowerProg prog)
+                   lastG <- genName
+                   case lower of
+                     [] -> error "lower returned no statements for the repl"
+                     _ -> pure ()
+                   pure $ Just ( case last lower of
+                                   (C.StmtLet (C.One (v, t, _))) -> [(v, t)]
+                                   (C.StmtLet (C.Many vs)) -> map (\(v, t, _) -> (v, t)) vs
+                                   _ -> []
+                               , prog
+                               , lower
+                               , state { resolveScope = rScope { R.varScope = R.insertN' (R.varScope rScope) (zip var var')
+                                                               , R.tyScope  = R.insertN' (R.tyScope rScope)  (zip tys tys')
+                                                               }
+                                       , moduleScope = modScope'
+                                       , inferScope = env'
+                                       , lastName = lastG })
+      resolved <- resolveProgram rScope (moduleScope state) parsed'
+      case resolved of
+        Left es -> liftIO $ traverse_ (`reportS`files) es $> Nothing
+        Right (resolved, modScope') -> do
+          desugared <- desugarProgram resolved
+          inferred <- inferProgram (inferScope state) desugared
+          case inferred of
+            This es -> liftIO $ traverse_ (`reportS`files) es $> Nothing
+            That (prog, env') -> cont modScope' resolved prog env'
+            These es (prog, env') -> do
+              liftIO $ traverse_ (`reportS`files) es
+              if any isError es
+                 then pure Nothing
+                 else cont modScope' resolved prog env'
+
+emitCore :: ReplState -> [Stmt CoVar] -> (B.TopEmitState, LuaStmt, String)
+emitCore state core =
+  let core' = patchupUsage . tagFreeSet . tagOccursVar $ core
+      (luaStmt, emit') = runState (B.emitStmt core') (emitState state)
+      luaExpr = LuaDo . map (patchupLua emit') . toList $ luaStmt
+      luaSyntax = T.unpack . display . uncommentDoc . renderPretty 0.8 100 . pretty $ luaExpr
+  in (emit', luaExpr, luaSyntax)
+
+
+-- | Reset the environment and load a series of files from environment
+loadFiles :: [FilePath] -> StateT ReplState IO ()
+loadFiles files = do
+  -- Reset the state
+  dmode <- gets debugMode
+  state' <- liftIO (defaultState dmode)
+  put state' { currentFiles = files }
+
+  -- Load each file in turn
+  _ <- foldlM (go (length files)) True (zip [(1::Int)..] files)
+  pure ()
+  where
+    go _ False _ = pure False
+    go n True (i, file) = do
+      liftIO . putDoc $ "Loading [" <> shown i <> "/" <> shown n <> "]:" <+> verbatim file
+
+      contents <- liftIO . try . T.readFile $ file
+      case contents of
+        Right contents -> execFile file contents
+        Left (_ :: IOException) -> liftIO (putDoc ("Cannot open" <+> verbatim file)) $> False
+
+execFile :: SourceName -> T.Text
+         -> StateT ReplState IO Bool
+execFile name line = do
+  state <- get
+  core <- flip evalNameyT (lastName state) $ parseCore state (Left <$> parseTops) name line
+  case core of
+    Nothing -> pure False
+    Just (_, _, core, state') -> do
+      let (emit', _, luaSyntax) = emitCore state' core
+      ok <- liftIO $ do
+        res <- L.runLuaWith (luaState state') $ do
+          code <- L.dostring luaSyntax
+
+          case code of
+            L.OK -> pure (Right ())
+            _ -> do
+              msg <- T.decodeLatin1 <$> L.tostring L.stackTop
+              L.pop 1
+              pure (Left (text msg <+> parens (shown code)))
+
+        hFlush stdout
+        hFlush stderr
+
+        case res of
+          Left err -> putDoc err $> False
+          Right () -> pure True
+
+      put state' { emitState = emit' }
+      pure ok
+
+
 repl :: DebugMode -> IO ()
 repl mode = defaultState mode >>= evalStateT (runInputT defaultSettings runRepl)
+
+replFrom :: DebugMode -> [FilePath] -> IO ()
+replFrom mode files = defaultState mode >>= evalStateT (loadFiles files >> runInputT defaultSettings runRepl)

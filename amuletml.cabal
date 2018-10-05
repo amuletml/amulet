@@ -23,6 +23,7 @@ executable amc
                      , amulet
                      , haskeline >= 0.7 && < 0.8
                      , containers >= 0.5 && < 0.6
+                     , optparse-applicative >= 0.14 && < 0.15
                      , pretty-show
 
   other-modules:       Repl
