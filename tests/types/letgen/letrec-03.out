@@ -3,13 +3,15 @@ letrec-03.ml[1:5 ..6:5]: error
 
   │ 
 1 │ let (a, b) = f x y
-  │ 
+  │     ^^^^^^
 
   Note: this binding is in the same recursive group as these
     and 2 other bindings.
 
   │ 
 2 │ and x = g y
+  │     ^
 3 │ and y = f x
+  │     ^
 4 │ and f = f h
-  │ 
+  │     ^

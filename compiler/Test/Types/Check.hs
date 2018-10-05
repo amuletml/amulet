@@ -50,7 +50,7 @@ result file contents = runIdentity . flip evalNameyT firstName $ do
 
     reportComponent (v, t) = pretty v <+> colon <+> pretty t
 
-    prettyErrs = vsep . map (N.format (N.fileSpans [(file, contents)]))
+    prettyErrs = vsep . map (N.format (N.fileSpans [(file, contents)] N.defaultHighlight))
 
 tests :: IO TestTree
 tests = do

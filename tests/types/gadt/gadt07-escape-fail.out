@@ -8,7 +8,7 @@ gadt07-escape-fail.ml[10:3 ..10:17]: error
   • Arising in the the expression
    │ 
 10 │   match hval with
-   │ 
+   │   ^^^^^^^^^^^^^^^
 gadt07-escape-fail.ml[10:3 ..10:17]: error
   Rigid type variable a has escaped its scope of exp 'a * exp 'a -> hidden
   • Note: the variable a was rigidified because it is an existential,
@@ -20,4 +20,4 @@ gadt07-escape-fail.ml[10:3 ..10:17]: error
   Arising in the expression
    │ 
 10 │   match hval with
-   │ 
+   │   ^^^^^^^^^^^^^^^

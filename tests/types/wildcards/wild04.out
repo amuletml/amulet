@@ -4,4 +4,4 @@ wild04.ml[2:9 ..2:9]: error
   Arising in the expression
   │ 
 2 │ let y = x ^ ""
-  │ 
+  │         ^

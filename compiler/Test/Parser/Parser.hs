@@ -22,7 +22,7 @@ result file contents =
                        string "(*" <##> indent 2 (prettyErrs es) <##> string "*)"
     (Nothing, es) -> displayPlain $ prettyErrs es
 
-  where prettyErrs = vsep . map (N.format (N.fileSpans [(file, contents)]))
+  where prettyErrs = vsep . map (N.format (N.fileSpans [(file, contents)] N.defaultHighlight))
 
 tests :: IO TestTree
 tests = testGroup "Test.Parser.Parser" <$> goldenDir result "tests/parser/" ".ml"

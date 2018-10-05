@@ -4,4 +4,4 @@ impredicative01-fail.ml[6:38 ..6:52]: error
   Arising in the expression
   │ 
 6 │ let foo : id (forall 'a. 'a -> 'a) = Id (fun x -> x)
-  │ 
+  │                                      ^^^^^^^^^^^^^^^

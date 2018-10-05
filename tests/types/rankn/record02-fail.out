@@ -9,4 +9,4 @@ record02-fail.ml[3:17 ..3:36]: error
   • Arising in the the field bar
   │ 
 3 │ let foo = Foo { bar = fun x -> x + 1 }
-  │ 
+  │                 ^^^^^^^^^^^^^^^^^^^^

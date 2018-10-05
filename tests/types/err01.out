@@ -4,4 +4,4 @@ err01.ml[8:11 ..8:12]: error
   Arising in the expression
   │ 
 8 │   enqueue go (start, stop)
-  │ 
+  │           ^^

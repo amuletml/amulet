@@ -3,11 +3,12 @@ letrec-02.ml[1:5 ..3:7]: error
 
   │ 
 1 │ let (f, g) = (foo, bar)
-  │ 
+  │     ^^^^^^
 
   Note: this binding is in the same recursive group as these
 
   │ 
 2 │ and foo = f
+  │     ^^^
 3 │ and bar = g
-  │ 
+  │     ^^^

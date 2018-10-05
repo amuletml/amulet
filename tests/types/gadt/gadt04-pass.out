@@ -6,4 +6,4 @@ gadt04-pass.ml[2:5 ..2:27]: error
   Arising in the constructor
   │ 
 2 │   | MkT : int -> (int -> t)
-  │ 
+  │     ^^^^^^^^^^^^^^^^^^^^^^^

@@ -64,7 +64,7 @@ data TokenClass
   | TcComment Text    -- ^ The body of a comment, including the `(*` and `*)`.
 
   | TcEOF -- ^ End of file
-  deriving Eq
+  deriving (Eq, Ord)
 
 instance Show TokenClass where
   show TcAnd = "and"

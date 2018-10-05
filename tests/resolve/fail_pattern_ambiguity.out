@@ -4,18 +4,18 @@ fail_pattern_ambiguity.ml[2:3 ..2:8]: error
   Arising from use of the pattern (a, a)
   │ 
 2 │ | (a, a) -> a + a
-  │ 
+  │    ^  ^
 fail_pattern_ambiguity.ml[2:13 ..2:13]: error
   Ambiguous reference to variable: `a`
 
   Arising from use of the expression a
   │ 
 2 │ | (a, a) -> a + a
-  │ 
+  │             ^
 fail_pattern_ambiguity.ml[2:17 ..2:17]: error
   Ambiguous reference to variable: `a`
 
   Arising from use of the expression a
   │ 
 2 │ | (a, a) -> a + a
-  │ 
+  │                 ^

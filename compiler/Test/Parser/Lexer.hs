@@ -29,7 +29,7 @@ result file contents =
           | otherwise
           = space <> string (show tc) <> writeToks l False ts
 
-        prettyErrs = vsep . map (N.format (N.fileSpans [(file, contents)]))
+        prettyErrs = vsep . map (N.format (N.fileSpans [(file, contents)] N.defaultHighlight))
 
 resultTrivial :: String -> T.Text -> T.Text
 resultTrivial file contents =
