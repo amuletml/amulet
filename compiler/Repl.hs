@@ -22,7 +22,6 @@ import Data.Functor
 import Data.Triple
 import Data.These
 import Data.Maybe
-import Data.List
 
 import qualified Foreign.Lua.Api.Types as L
 import qualified Foreign.Lua as L
@@ -83,6 +82,8 @@ data ReplState = ReplState
   , luaState     :: L.LuaState
 
   , debugMode    :: DebugMode
+
+  , currentFiles :: [FilePath]
   }
 
 defaultState :: DebugMode -> IO ReplState
@@ -114,6 +115,8 @@ defaultState mode = do
     , luaState     = state
 
     , debugMode    = mode
+
+    , currentFiles = []
     }
 
 runRepl :: InputT (StateT ReplState IO) ()
@@ -122,7 +125,7 @@ runRepl = do
   case line of
     Nothing -> pure ()
     Just "" -> runRepl
-    Just (':':cmd) -> uncurry execCommand . second (dropWhile (== ' ') . dropWhileEnd (== ' ')) . span (/=' ') $ cmd
+    Just (':':cmd) -> uncurry execCommand . span (/=' ') $ cmd
     Just line -> getInput line False >>= (lift . execString parseRepl' "=stdin" . T.pack) >> runRepl
 
   where
@@ -148,26 +151,63 @@ runRepl = do
                   Just line -> getInput (input ++ '\n':line) (line == "")
 
     execCommand :: String -> String -> InputT (StateT ReplState IO) ()
-    execCommand "quit" _    = pure ()
-    execCommand "q"    _    = pure ()
-    execCommand "l"    file = lift (loadFile file) >> runRepl
-    execCommand "load" file = lift (loadFile file) >> runRepl
-    execCommand cmd    _    = liftIO (putDoc ("Unknown command" <+> verbatim cmd)) >> runRepl
+    execCommand "quit" _ = pure ()
+    execCommand "q"    _ = pure ()
 
-    loadFile "" = liftIO . putDoc $ "Usage `:load [file]`"
-    loadFile file = do
-      contents <- liftIO . try . T.readFile $ file
-      case contents of
-        Right contents -> execString (Left <$> parseTops) file contents
-        Left (_ :: IOException) -> liftIO . putDoc $ "Cannot open" <+> verbatim file
+    execCommand "l"    arg = lift (loadCommand arg) >> runRepl
+    execCommand "load" arg = lift (loadCommand arg) >> runRepl
+
+    execCommand "r"      _ = lift reloadCommand >> runRepl
+    execCommand "reload" _ = lift reloadCommand >> runRepl
+
+    execCommand cmd _ = liftIO (putDoc ("Unknown command" <+> verbatim cmd)) >> runRepl
+
+    -- Split a string into arguments
+    parseArgs :: String -> [String]
+    parseArgs xs = let (ys, y) = parseArgs' xs
+                   in maybe ys (:ys) y
+
+    parseArgs' "" = ([], Nothing)
+    parseArgs' (' ':xs) = (parseArgs xs, Nothing)
+    parseArgs' ('\\':x:xs) = Just . (x:) . fromMaybe [] <$> parseArgs' xs
+    parseArgs' (x:xs) = Just . (x:) . fromMaybe [] <$> parseArgs' xs
+
+    loadCommand arg = case parseArgs arg of
+                        [] -> liftIO (putDoc "Usage `:load [file]`")
+                        files -> loadFiles files
+
+    reloadCommand = do
+      files <- gets currentFiles
+      case files of
+        [] -> liftIO (putDoc "No files to reload")
+        files -> loadFiles files
+
+    loadFiles files = do
+      -- Reset the state
+      dmode <- gets debugMode
+      state' <- liftIO (defaultState dmode)
+      put state' { currentFiles = files }
+
+      -- Load each file in turn
+      _ <- foldlM (go (length files)) True (zip [(1::Int)..] files)
+      pure ()
+      where
+        go _ False _ = pure False
+        go n True (i, file) = do
+          liftIO . putDoc $ "Loading [" <> shown i <> "/" <> shown n <> "]:" <+> verbatim file
+
+          contents <- liftIO . try . T.readFile $ file
+          case contents of
+            Right contents -> execString (Left <$> parseTops) file contents
+            Left (_ :: IOException) -> liftIO (putDoc ("Cannot open" <+> verbatim file)) $> False
 
     execString :: Parser (Either [S.Toplevel S.Parsed] (S.Expr S.Parsed)) -> SourceName -> T.Text
-               -> StateT ReplState IO ()
+               -> StateT ReplState IO Bool
     execString parser name line = do
       state <- get
       core <- flip evalNameyT (lastName state) $ parseCore state parser name line
       case core of
-        Nothing -> pure ()
+        Nothing -> pure False
         Just (vs, prog, core, state') -> do
           let core' = patchupUsage . tagFreeSet . tagOccursVar $ core
               (luaStmt, emit') = runState (B.emitStmt core') (emitState state')
@@ -175,10 +215,10 @@ runRepl = do
               luaSyntax = T.unpack . display . uncommentDoc . renderPretty 0.8 100 . pretty $ luaExpr
 
 
-          liftIO $ do
+          ok <- liftIO $ do
             dump (debugMode state') prog core core luaExpr (inferScope state) (inferScope state')
 
-            res <- L.runLuaWith (luaState state') $ do
+            (ok, res) <- L.runLuaWith (luaState state') $ do
               code <- L.dostring luaSyntax
 
               case code of
@@ -192,19 +232,21 @@ runRepl = do
                       Just ty -> pure (Just (pretty v <+> colon <+> nest 2 (displayType ty <+> equals </> hsep (map pretty repr))))
                       Nothing -> pure Nothing
 
-                  pure (vsep (catMaybes vs'))
+                  pure (True, vsep (catMaybes vs'))
                 _ -> do
                   msg <- T.decodeLatin1 <$> L.tostring L.stackTop
                   L.pop 1
 
-                  pure (text msg <+> parens (shown code))
+                  pure (False, text msg <+> parens (shown code))
 
             hFlush stdout
             hFlush stderr
 
             putDoc res
+            pure ok
 
           put state' { emitState = emit' }
+          pure ok
 
 
     parseCore :: (MonadNamey m, MonadIO m)
