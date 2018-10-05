@@ -122,7 +122,6 @@ tokens :-
 
   -- Identifiers
   <0> $lower $ident*                   { lexTok $ TcIdentifier }
-  <0> "?" $lower $ident*               { lexTok $ TcQIdentifier . T.tail }
   <0> $upper $ident*                   { lexTok $ TcConIdent }
 
   -- Module identifiers

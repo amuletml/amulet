@@ -108,7 +108,6 @@ import Syntax
 
   op       { Token (TcOp _) _ _ }
   ident    { Token (TcIdentifier _) _ _ }
-  iident   { Token (TcQIdentifier _) _ _ }
   opid     { Token (TcOpIdent _) _ _ }
   conid    { Token (TcConIdent _) _ _ }
   qident   { Token (TcIdentifierQual _ _) _ _ }
@@ -476,7 +475,6 @@ getIdent  (Token (TcTyvar x) _ _)      = x
 
 getName (Token (TcOp x) _ _)                = Name x
 getName (Token (TcIdentifier x) _ _)        = Name x
-getName (Token (TcQIdentifier x) _ _)       = Name x
 getName (Token (TcOpIdent x) _ _)           = Name x
 getName (Token (TcConIdent x) _ _)          = Name x
 getName (Token (TcIdentifierQual ms x) _ _) = foldl (flip InModule) (Name x) ms
