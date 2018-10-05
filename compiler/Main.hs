@@ -1,10 +1,9 @@
-{-# LANGUAGE RankNTypes, OverloadedStrings, ScopedTypeVariables, FlexibleContexts, LambdaCase #-}
+{-# LANGUAGE RankNTypes, OverloadedStrings, ScopedTypeVariables, FlexibleContexts #-}
 module Main where
 
 import System.Exit (ExitCode(..), exitWith)
-import System.Environment (getArgs)
 import System.IO (hPutStrLn, stderr)
-import System.Console.GetOpt
+import Options.Applicative hiding (ParseError)
 
 import qualified Data.Text.Lazy as L
 import qualified Data.Text.IO as T
@@ -118,15 +117,16 @@ compile opt (file:files) = runIdentity . flip evalNameyT firstName $ do
     go x _ = pure x
 
 
-compileFromTo :: DoOptimise
+compileFromTo :: DoOptimise -> D.DebugMode
               -> [(FilePath, T.Text)]
               -> (forall a. Pretty a => a -> IO ())
               -> IO ()
-compileFromTo opt fs emit =
+compileFromTo opt dbg fs emit =
   case compile opt fs of
-    CSuccess es tes _ _ _ lua _ -> do
+    CSuccess es tes ast core opt lua env -> do
       traverse_ (`reportS` fs) es
       traverse_ (`reportS` fs) tes
+      D.dump dbg ast core opt lua builtinsEnv env
       if any isError es || any isError tes
          then pure ()
          else emit lua
@@ -151,71 +151,63 @@ test mode fs =
 
 data DoOptimise = Do | Don't
 
-data CompilerOption = Test | TestTc | Out String | Optl Int
-  deriving (Show, Eq)
+data CompilerOptions
+  = CompilerOptions
+    { debugMode :: D.DebugMode
+    , output    :: Maybe FilePath
+    , forceRepl :: Bool
+    , optLevel  :: Int
+    , files     :: [FilePath]
+    }
+    deriving (Show)
 
 isError :: Note a b => a -> Bool
 isError x = diagnosticKind x == ErrorMessage
 
-flags :: [OptDescr CompilerOption]
-flags = [ Option ['t'] ["test"] (NoArg Test)
-          "Provides additional debug information on the output"
-        , Option [] ["test-tc"] (NoArg TestTc)
-          "Provides additional type check information on the output"
-        , Option ['o'] ["out"]  (ReqArg Out "[output]")
-          "Writes the generated Lua to a specific file."
-        , Option ['O'] ["optl"] (ReqArg (Optl . read) "[level]")
-          "Controls the optimisation level."
-        ]
+flags :: ParserInfo CompilerOptions
+flags = info
+  (( CompilerOptions
+     <$> ( flag' D.Test   (long "test" <> short 't' <> help "Provides additional debug information on the output")
+       <|> flag' D.TestTc (long "test-tc"           <> help "Provides additional type check information on the output")
+       <|> pure D.Void )
+
+     <*> (Just <$>
+           option str
+           ( long "out" <> short 'o' <> metavar "FILE"
+          <> help "Write the generated Lua to a specific file." )
+       <|> pure Nothing)
+
+     <*> switch
+        ( long "repl" <> short 'r'
+       <> help "Go to the REPL after loading each file" )
+
+     <*> option auto
+         ( long "opt" <> short 'O' <> metavar "LEVEL" <> value 1
+        <> help "Controls the optimisation level." )
+
+     <*> many (argument str (metavar "FILES..."))
+
+   ) <**> helper)
+  ( fullDesc
+ <> progDesc "The Amulet compiler and REPL" )
 
 main :: IO ()
 main = do
-  ags <- getArgs
-  case getOpt Permute flags ags of
-    ([] , [], [])       -> repl D.Void
-    ([Test] , [], [])   -> repl D.Test
-    ([TestTc] , [], []) -> repl D.TestTc
+  options <- execParser flags
+  case options of
+    CompilerOptions { debugMode = db, files = [] } -> repl db
+    CompilerOptions { debugMode = db, forceRepl = True, files = fs } -> replFrom db fs
 
-    ([], files, []) -> do
-      files' <- traverse T.readFile files
-      compileFromTo Do (zip files files') (putDoc . pretty)
-      pure ()
+    CompilerOptions { output = Just out, files = fs }
+      | out `elem` fs -> do
+          hPutStrLn stderr ("Cannot overwrite input file " ++ out)
+          exitWith (ExitFailure 1)
 
-    ([Optl n], files, []) -> do
-      let opt = if n == 0 then Don't else Do
-      files' <- traverse T.readFile files
-      compileFromTo opt (zip files files') (putDoc . pretty)
-      pure ()
-
-    ([Test], files, []) -> do
-      files' <- traverse T.readFile files
-      _ <- test D.Test (zip files files')
-      pure ()
-
-    ([TestTc], files, []) -> do
-      files' <- traverse T.readFile files
-      _ <- test D.TestTc (zip files files')
-      pure ()
-
-    (opts, files, []) | Just o <- findOut opts -> do
-      let opt = if Optl 0 `elem` opts then Don't else Do
-
-      when (o `elem` files) $ do
-        hPutStrLn stderr ("error: refusing to overwrite input file " ++ o)
-        exitWith (ExitFailure 1)
-
-      files' <- traverse T.readFile files
-      compileFromTo opt (zip files files') (T.writeFile o . T.pack . show . pretty)
-      pure ()
-
-    (_, _, []) -> do
-      hPutStrLn stderr (usageInfo "Invalid combination of flags" flags)
-      exitWith (ExitFailure 1)
-
-    (_, _, errs) -> do
-      hPutStrLn stderr (concat errs ++ usageInfo "amc: The Amulet compiler" flags)
-      exitWith (ExitFailure 1)
-
- where
-   findOut :: [CompilerOption] -> Maybe String
-   findOut = fmap (\(Out x) -> x) . find (\case { Out{} -> True; _ -> False })
+    CompilerOptions { debugMode = db, optLevel = opt, output = out, files = fs } -> do
+      fs' <- traverse T.readFile fs
+      let opt' = if opt >= 1 then Do else Don't
+          out' :: Pretty a => a -> IO ()
+          out' = case out of
+                   Nothing -> putDoc . pretty
+                   Just f -> T.writeFile f . T.pack . show . pretty
+      compileFromTo opt' db (zip fs fs') out'
