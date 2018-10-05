@@ -1,11 +1,12 @@
 fail_unterminated_string.ml[1:15 ..1:15]: error
   Unexpected new line, expecting `"` to close string
   │ 
-1 │ let x = "hello 
-  │ 
+1 │ let x = "hello
+  │         ^     ^
 fail_unterminated_string.ml[2:1 ..2:1]: error
   Unexpected end of input, expecting `"` to close string
   │ 
 1 │ let x = "hello
-2 │  
-  │ 
+  │         ^
+2 │ 
+  │ ^

@@ -4,4 +4,4 @@ record04-fail.ml[3:35 ..3:46]: error
   Arising in the field quux
   │ 
 3 │ let foo = Foo { bar = fun x -> x, quux = "foo" }
-  │ 
+  │                                   ^^^^^^^^^^^^

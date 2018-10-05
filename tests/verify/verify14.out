@@ -2,4 +2,4 @@ verify14.ml[5:7 ..5:7]: warning
   Bound locally but not used: 'y'
   │ 
 5 │   let y = f x
-  │ 
+  │       ^

@@ -8,7 +8,7 @@ nasty_cycle.ml[18:19 ..18:33]: error
   Arising in the expression
    │ 
 18 │       | Left p -> Right (Even2 p)
-   │ 
+   │                   ^^^^^^^^^^^^^^^
 nasty_cycle.ml[19:20 ..19:25]: error
   The type variable 's appears in the type S 's
 
@@ -19,4 +19,4 @@ nasty_cycle.ml[19:20 ..19:25]: error
   Arising in the expression
    │ 
 19 │       | Right p -> Left p
-   │ 
+   │                    ^^^^^^

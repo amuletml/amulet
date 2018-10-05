@@ -9,7 +9,7 @@ pattern02.ml[4:5 ..4:20]: error
   Arising in the declaration
   │ 
 4 │ let It (foo, finger) = It (1, fun x -> x)
-  │ 
+  │     ^^^^^^^^^^^^^^^^
 pattern02.ml[4:5 ..4:20]: error
   Rigid type variable a has escaped its scope of 'a * ('a -> int) -> exists
   • Note: the variable a was rigidified because it is an existential,
@@ -21,4 +21,4 @@ pattern02.ml[4:5 ..4:20]: error
   Arising in the declaration
   │ 
 4 │ let It (foo, finger) = It (1, fun x -> x)
-  │ 
+  │     ^^^^^^^^^^^^^^^^

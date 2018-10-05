@@ -16,7 +16,6 @@ module Text.Pretty.Note
   ) where
 
 import qualified Data.Text as T
-import Data.Bifunctor
 import Data.Foldable
 import Data.Position
 import Data.Spanned
@@ -69,7 +68,7 @@ format f x =
 -- | Convert a note style to an ANSI style
 toAnsi :: NoteStyle -> AnsiStyle
 toAnsi LinePrefix = BrightColour Blue
-toAnsi LineHighlight = AnsiStyles [BrightColour White, Underlined]
+toAnsi LineHighlight = AnsiStyles [BrightColour White]
 toAnsi (NoteKind WarningMessage) = BrightColour Yellow
 toAnsi (NoteKind ErrorMessage) = BrightColour Red
 
@@ -95,7 +94,7 @@ fileSpans files hlight locs =
                                                            <> space <> pipe <> space)
                               <> body
 
-      in vsep (putLine mempty mempty : buildLines hlight putLine startLine lines locs' ++ [ putLine mempty mempty ])
+      in vsep (putLine mempty mempty : buildLines hlight putLine startLine lines locs')
   where
     pipe = char '│'
 
@@ -118,8 +117,9 @@ buildLines :: (T.Text -> Highlighted a)
 buildLines hlight build start = go start . drop (start - 1) where
   go n (t:ts) (x:xs) = case spLine (spanStart x) - n of
     -- If we need this line then emit it
-    0 -> build (T.pack (show n)) (buildLine (hlight t) n (x:xs)) :
-         go (n + 1) ts (dropLines n (x:xs))
+    0 -> build (T.pack (show n)) (annDoc (hlight t))
+       : build mempty (buildLine (T.length t) n (x:xs))
+       : go (n + 1) ts (dropLines n (x:xs))
     -- If we need the next line, just emit this one plain
     1 -> build (T.pack (show n)) (annDoc (hlight t)) : go (n + 1) ts (x:xs)
     -- Otherwise drop the required number of lines
@@ -138,31 +138,21 @@ buildLines hlight build start = go start . drop (start - 1) where
     where (f, s, e) = (fileName x, spanStart x, spanEnd x)
 
 -- | Build a line, highlighting a series of provided spans
-buildLine :: Highlighted a -- ^ The current line's contents
+buildLine :: Int -- The current line's length
           -> Int -- ^ The current line number
           -> [Span] -- ^ The spans to highlight. These may start before the
                     -- current line and extend beyond it.
           -> NoteDoc a
-buildLine = go 1 where
-  go :: Int -> Highlighted a -> Int -> [Span] -> NoteDoc a
-  go c t l (x:xs) | spLine s <= l =
+buildLine tlen = go 1 where
+  go c l (x:xs) | spLine s <= l =
     let start = if spLine s < l then 1 else spCol s
-        len = if spLine e > l then foldr ((+) . T.length . snd) 0 t else spCol e - start + 1
+        len = if spLine e > l then tlen - start + 1 else spCol e - start + 1
 
-        (before, remaining) = splitPadded (start - c) t
-        (body, after) = splitPadded len remaining
-    in before <> annotate (Left LineHighlight) body <> go (start + len) after l xs
+        before = string (replicate (start - c) ' ')
+        body = string (replicate len '^')
+    in before <> annotate (Left LineHighlight) body <> go (start + len) l xs
     where (s, e) = (spanStart x, spanEnd x)
-  go _ t _ _ = annDoc t
-
-  splitPadded :: Int -> Highlighted a -> (NoteDoc a, Highlighted a)
-  splitPadded i [] = (string (replicate i ' '), [])
-  splitPadded i ((a, t):ts)
-    | i <= T.length t =
-      let (t', rest) = T.splitAt i t
-      in (a t', (a, rest):ts)
-    | otherwise =
-      first (a t<>) (splitPadded (i - T.length t) ts)
+  go _ _ _ = mempty
 
 annDoc :: Highlighted a -> NoteDoc a
 annDoc = foldr ((<>) . uncurry ($)) mempty

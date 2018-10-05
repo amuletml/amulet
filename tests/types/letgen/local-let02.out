@@ -4,11 +4,11 @@ local-let02.ml[6:15 ..6:15]: error
   Arising in the expression
   │ 
 6 │   h (fun x -> x ^ "")
-  │ 
+  │               ^
 local-let02.ml[6:15 ..6:20]: error
   Could not match expected type int with string
 
   Arising in the expression
   │ 
 6 │   h (fun x -> x ^ "")
-  │ 
+  │               ^^^^^^
