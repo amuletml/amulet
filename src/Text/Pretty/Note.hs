@@ -68,7 +68,7 @@ format f x =
 -- | Convert a note style to an ANSI style
 toAnsi :: NoteStyle -> AnsiStyle
 toAnsi LinePrefix = BrightColour Blue
-toAnsi LineHighlight = AnsiStyles [BrightColour White]
+toAnsi LineHighlight = BrightColour Red
 toAnsi (NoteKind WarningMessage) = BrightColour Yellow
 toAnsi (NoteKind ErrorMessage) = BrightColour Red
 
