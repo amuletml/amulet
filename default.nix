@@ -61,6 +61,7 @@ let
       , template-haskell
       , annotated-wl-pprint
       , unordered-containers
+      , optparse-applicative
       , tasty-hedgehog
       }:
       let alex' = haskell.lib.dontCheck alex;
@@ -82,7 +83,7 @@ let
 
         executableHaskellDepends = [
           mtl text base lens bytestring containers pretty-show hslua
-          haskeline
+          haskeline optparse-applicative
         ];
 
         testHaskellDepends = [
