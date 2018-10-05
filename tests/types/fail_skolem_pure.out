@@ -4,10 +4,10 @@ fail_skolem_pure.ml[2:32 ..2:32]: error
   • Arising in the expression
   │ 
 2 │ let pure_fail = pure (fun x -> x)
-  │ 
+  │                                ^
 
   • When checking that this expression has type
      forall 'a. 'a -> 'f 'a
   │ 
 2 │ let pure_fail = pure (fun x -> x)
-  │ 
+  │                       ^^^^^^^^^^

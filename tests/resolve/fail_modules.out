@@ -4,4 +4,4 @@ fail_modules.ml[4:9 ..4:9]: error
   Arising from use of the expression x
   │ 
 4 │ let y = x
-  │ 
+  │         ^

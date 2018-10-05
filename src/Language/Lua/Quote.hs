@@ -13,8 +13,7 @@ import qualified Language.Haskell.TH.Syntax as TH
 import qualified Language.Haskell.TH as TH
 import Language.Haskell.TH.Quote
 
-import Language.Lua.Parser.Wrapper
-import Language.Lua.Parser.Parser
+import Language.Lua.Parser
 import Language.Lua.Syntax
 
 import qualified Text.Pretty.Note as N
@@ -24,7 +23,9 @@ lua = luaQuote parseExpr
 luaStmt = luaQuote parseStmt
 luaStmts = luaQuote parseStmts
 
-luaQuote :: Data a => Parser a -> QuasiQuoter
+luaQuote :: Data a
+         => (SourcePos -> L.Text -> Either ParseError a)
+         -> QuasiQuoter
 luaQuote parser = QuasiQuoter
   { quoteExp = go (dataToExpQ (antis TH.varE liftTE))
   , quotePat = go (dataToPatQ (antis TH.varP liftTP))
@@ -38,9 +39,9 @@ luaQuote parser = QuasiQuoter
         pos = SourcePos (TH.loc_filename loc) line col
         spans = [( TH.loc_filename loc
                  , T.replicate (line - 1) "\n" <> T.replicate (col - 1) " " <> T.pack s)]
-    case runParser pos (L.pack s) parser of
+    case parser pos (L.pack s) of
       Right res -> build res
-      Left e -> fail . show . N.format (N.fileSpans spans) $ e
+      Left e -> fail . show . N.format (N.fileSpans spans highlightLua) $ e
 
   antis var other =
     const Nothing

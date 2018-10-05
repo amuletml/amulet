@@ -10,4 +10,4 @@ gadt02.ml[7:5 ..7:26]: error
   Arising in the constructor
   │ 
 7 │   | K2 : t2 int -> t2 bool
-  │ 
+  │     ^^^^^^^^^^^^^^^^^^^^^^

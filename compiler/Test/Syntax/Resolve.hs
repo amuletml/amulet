@@ -24,7 +24,7 @@ result file contents = fst . flip runNamey firstName $ do
   resolved <- resolveProgram RS.builtinScope RS.emptyModules parsed
   pure . displayPlainVerbose . either prettyErrs ((Right<$>) . pretty . fst) $ resolved
 
-  where prettyErrs = vsep . map (N.format (N.fileSpans [(file, contents)]))
+  where prettyErrs = vsep . map (N.format (N.fileSpans [(file, contents)] N.defaultHighlight))
 
 tests :: IO TestTree
 tests = testGroup "Tests.Syntax.Resolve" <$> goldenDir result "tests/resolve/" ".ml"

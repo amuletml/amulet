@@ -28,8 +28,7 @@ import Core.Types
 import Core.Core
 import Core.Var
 
-import Language.Lua.Parser.Wrapper
-import Language.Lua.Parser.Parser
+import Language.Lua.Parser
 import Language.Lua.Syntax
 
 import Backend.Escape
@@ -708,7 +707,7 @@ emitStmt (Foreign n t s:xs) = do
                   , topVars = VarMap.insert (toVar n) [LuaName n'] (topVars s) })
 
   let ex =
-        case runParser (SourcePos "_" 0 0) (s ^. lazy) parseExpr of
+        case parseExpr (SourcePos "_" 0 0) (s ^. lazy) of
           Right x -> x
           Left _ -> LuaBitE s
   (LuaLocal [LuaName n'] [ex]<|) <$> emitStmt xs
