@@ -126,7 +126,7 @@ runRepl = do
     Nothing -> pure ()
     Just "" -> runRepl
     Just (':':cmd) -> uncurry execCommand . span (/=' ') $ cmd
-    Just line -> getInput line False >>= (lift . execString parseRepl' "=stdin" . T.pack) >> runRepl
+    Just line -> getInput line False >>= (lift . execString "=stdin" . T.pack) >> runRepl
 
   where
     parseRepl' :: Parser (Either [S.Toplevel S.Parsed] (S.Expr S.Parsed))
@@ -162,7 +162,7 @@ runRepl = do
 
     execCommand cmd _ = liftIO (putDoc ("Unknown command" <+> verbatim cmd)) >> runRepl
 
-    -- Split a string into arguments
+    -- | Split a string into arguments
     parseArgs :: String -> [String]
     parseArgs xs = let (ys, y) = parseArgs' xs
                    in maybe ys (:ys) y
@@ -198,23 +198,26 @@ runRepl = do
 
           contents <- liftIO . try . T.readFile $ file
           case contents of
-            Right contents -> execString (Left <$> parseTops) file contents
+            Right contents -> execFile file contents
             Left (_ :: IOException) -> liftIO (putDoc ("Cannot open" <+> verbatim file)) $> False
 
-    execString :: Parser (Either [S.Toplevel S.Parsed] (S.Expr S.Parsed)) -> SourceName -> T.Text
+    emitCore :: ReplState -> [Stmt CoVar] -> (B.TopEmitState, LuaStmt, String)
+    emitCore state core =
+      let core' = patchupUsage . tagFreeSet . tagOccursVar $ core
+          (luaStmt, emit') = runState (B.emitStmt core') (emitState state)
+          luaExpr = LuaDo . map (patchupLua emit') . toList $ luaStmt
+          luaSyntax = T.unpack . display . uncommentDoc . renderPretty 0.8 100 . pretty $ luaExpr
+      in (emit', luaExpr, luaSyntax)
+
+    execString :: SourceName -> T.Text
                -> StateT ReplState IO Bool
-    execString parser name line = do
+    execString name line = do
       state <- get
-      core <- flip evalNameyT (lastName state) $ parseCore state parser name line
+      core <- flip evalNameyT (lastName state) $ parseCore state parseRepl' name line
       case core of
         Nothing -> pure False
         Just (vs, prog, core, state') -> do
-          let core' = patchupUsage . tagFreeSet . tagOccursVar $ core
-              (luaStmt, emit') = runState (B.emitStmt core') (emitState state')
-              luaExpr = LuaDo . map (patchupLua emit') . toList $ luaStmt
-              luaSyntax = T.unpack . display . uncommentDoc . renderPretty 0.8 100 . pretty $ luaExpr
-
-
+          let (emit', luaExpr, luaSyntax) = emitCore state' core
           ok <- liftIO $ do
             dump (debugMode state') prog core core luaExpr (inferScope state) (inferScope state')
 
@@ -244,6 +247,36 @@ runRepl = do
 
             putDoc res
             pure ok
+
+          put state' { emitState = emit' }
+          pure ok
+
+    execFile :: SourceName -> T.Text
+             -> StateT ReplState IO Bool
+    execFile name line = do
+      state <- get
+      core <- flip evalNameyT (lastName state) $ parseCore state (Left <$> parseTops) name line
+      case core of
+        Nothing -> pure False
+        Just (_, _, core, state') -> do
+          let (emit', _, luaSyntax) = emitCore state' core
+          ok <- liftIO $ do
+            res <- L.runLuaWith (luaState state') $ do
+              code <- L.dostring luaSyntax
+
+              case code of
+                L.OK -> pure (Right ())
+                _ -> do
+                  msg <- T.decodeLatin1 <$> L.tostring L.stackTop
+                  L.pop 1
+                  pure (Left (text msg <+> parens (shown code)))
+
+            hFlush stdout
+            hFlush stderr
+
+            case res of
+              Left err -> putDoc err $> False
+              Right () -> pure True
 
           put state' { emitState = emit' }
           pure ok
