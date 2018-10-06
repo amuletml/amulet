@@ -21,13 +21,14 @@ import Syntax
 
 import Text.Pretty.Semantic
 
-tyUnit, tyBool, tyInt, tyString, tyFloat, tyLazy :: Type Typed
+tyUnit, tyBool, tyInt, tyString, tyFloat, tyLazy, tyConstraint :: Type Typed
 tyInt = TyCon (TvName (TgInternal "int"))
 tyString = TyCon (TvName (TgInternal "string"))
 tyBool = TyCon (TvName (TgInternal "bool"))
 tyUnit = TyCon (TvName (TgInternal "unit"))
 tyFloat = TyCon (TvName (TgInternal "float"))
 tyLazy = TyCon (TvName (TgName "lazy" (-34)))
+tyConstraint = TyCon (TvName (TgInternal "constraint"))
 
 builtinNames :: Set.Set (Var Typed)
 builtinNames = Set.fromList . map TvName $ namesInScope (builtinsEnv ^. names)
@@ -73,7 +74,8 @@ unify e a b = do
 
 subsumes e a b = do
   x <- TvName <$> genName
-  tell (Seq.singleton (ConSubsume e x a b))
+  r <- view classes
+  tell (Seq.singleton (ConSubsume e r x a b))
   pure (WrapVar x)
 
 implies :: ( Reasonable f p
@@ -147,8 +149,9 @@ discharge _ t = pure (t, id)
 rereason :: SomeReason -> Seq.Seq (Constraint p) -> Seq.Seq (Constraint p)
 rereason because = fmap go where
   go (ConUnify _ v l r) = ConUnify because v l r
-  go (ConSubsume _ v l r) = ConSubsume because v l r
+  go (ConSubsume _ s v l r) = ConSubsume because s v l r
   go (ConImplies _ u b a) = ConImplies because u b a
+  go (ConImplicit _ s v t) = ConImplicit because s v t
   go x@ConFail{} = x
   go x@DeferredError{} = x
 

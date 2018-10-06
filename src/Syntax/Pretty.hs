@@ -173,7 +173,7 @@ instance (Pretty (Var p)) => Pretty (Type p) where
   pretty TyType = stypeCon (string "type")
 
 instance Pretty (Var p) => Pretty (Parameter p) where
-  pretty (PatParam p) = pretty p
+  pretty = pretty . view paramPat
 
 instance Pretty (Var p) => Pretty (TyBinder p) where
   pretty (Anon t) = k t (pretty t) <+> arrow where

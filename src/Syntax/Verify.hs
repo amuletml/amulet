@@ -191,6 +191,7 @@ verifyExpr (If c t e _) = traverse_ verifyExpr [c, t, e]
 verifyExpr (App f x _) = verifyExpr f *> verifyExpr x
 verifyExpr (Fun p x _) = do
   let bindingSites' (PatParam p) = bindingSites p
+      bindingSites' _ = mempty
   modify (Set.union (bindingSites' p))
   verifyExpr x
 verifyExpr (Begin es _) = do

@@ -209,7 +209,7 @@ checkKind (TyPi binder b) ek = do
   -- _ <- isType ek
   case binder of
     Anon t -> TyArr <$> checkKind t ek <*> checkKind b ek
-    Implicit t -> TyPi . Implicit <$> checkKind t ek <*> checkKind b ek
+    Implicit t -> TyPi . Implicit <$> checkKind t tyConstraint <*> checkKind b ek
 
     Invisible v (Just arg) -> do
       (arg, kind) <- inferKind arg

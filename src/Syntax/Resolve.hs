@@ -194,6 +194,7 @@ reExpr (Fun p e a) = do
   let reWholePattern' (PatParam p) = do
         (p', vs, ts) <- reWholePattern p
         pure (PatParam p', vs, ts)
+      reWholePattern' _ = error "EvParam resolve"
   (p', vs, ts) <- reWholePattern' p
   extendTyvarN ts . extendN vs $ Fun p' <$> reExpr e <*> pure a
 

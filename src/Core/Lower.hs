@@ -110,8 +110,7 @@ lowerAt (S.If c t e _) ty = do
       te = C.Arm (PatLit LitFalse)  C.tyBool e' [] []
   pure $ C.Match c' [tc, te]
 lowerAt (Fun param bd an) (ForallTy Irrelevant a b) =
-  let p = case param of
-        S.PatParam p -> p
+  let p = param ^. S.paramPat
       operational (PType p _ _) = operational p
       operational p = p
    in case operational p of

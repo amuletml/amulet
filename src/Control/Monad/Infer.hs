@@ -54,6 +54,7 @@ import Text.Pretty.Semantic
 import Text.Pretty.Note
 
 import Syntax.Transform
+import Syntax.Implicits
 import Syntax.Pretty
 import Syntax.Types
 import Syntax.Subst
@@ -65,9 +66,10 @@ type MonadInfer p m =
   , MonadNamey m)
 
 data Constraint p
-  = ConUnify    SomeReason (Var p)  (Type p) (Type p)
-  | ConSubsume  SomeReason (Var p)  (Type p) (Type p)
+  = ConUnify    SomeReason (Var p) (Type p) (Type p)
   | ConImplies  SomeReason (Type p) (Seq.Seq (Constraint p)) (Seq.Seq (Constraint p))
+  | ConSubsume  SomeReason (ImplicitScope p) (Var p) (Type p) (Type p)
+  | ConImplicit SomeReason (ImplicitScope p) (Var p) (Type p)
   | ConFail (Ann p) (Var p) (Type p) -- for holes. I hate it.
   | DeferredError TypeError
 
@@ -116,24 +118,27 @@ data TypeError where
 data WhyInstantiate = Expression | Subsumption
 
 instance (Show (Ann p), Show (Var p), Ord (Var p), Substitutable p (Type p)) => Substitutable p (Constraint p) where
-  ftv (ConUnify _ _ a b) = ftv a `Set.union` ftv b
-  ftv (ConSubsume _ _ a b) = ftv a `Set.union` ftv b
-  ftv (ConImplies _ t a b) = ftv a `Set.union` ftv b `Set.union` ftv t
+  ftv (ConUnify _ _ a b) = ftv a <> ftv b
+  ftv (ConSubsume _ s _ a b) = foldMap ftv (keys s) <> ftv a <> ftv b
+  ftv (ConImplicit _ s _ b) = foldMap ftv (keys s) <> ftv b
+  ftv (ConImplies _ t a b) = ftv a <> ftv b <> ftv t
   ftv (ConFail _ _ t) = ftv t
   ftv DeferredError{} = mempty
 
   apply s (ConUnify e v a b) = ConUnify e v (apply s a) (apply s b)
-  apply s (ConSubsume e v a b) = ConSubsume e v (apply s a) (apply s b)
+  apply s (ConSubsume e c v a b) = ConSubsume e (mapTypes (apply s) c) v (apply s a) (apply s b)
   apply s (ConImplies e t a b) = ConImplies e (apply s t) (apply s a) (apply s b)
+  apply s (ConImplicit r c v t) = ConImplicit r (mapTypes (apply s) c) v (apply s t)
   apply s (ConFail a e t) = ConFail a e (apply s t)
   apply _ x@DeferredError{} = x
 
 instance Pretty (Var p) => Pretty (Constraint p) where
   pretty (ConUnify _ _ a b) = pretty a <+> soperator (char '~') <+> pretty b
-  pretty (ConSubsume _ _ a b) = pretty a <+> soperator (string "<:") <+> pretty b
+  pretty (ConSubsume _ _ _ a b) = pretty a <+> soperator (string "<:") <+> pretty b
   pretty (ConImplies _ t a b) = brackets (pretty t) <+> hsep (punctuate comma (toList (fmap pretty a)))
                             <+> soperator (char '⊃')
                             <#> indent 2 (vsep (punctuate comma (toList (fmap pretty b))))
+  pretty (ConImplicit _ _ v t) = pretty v <+> colon <+> pretty t
   pretty ConFail{} = string "fail"
   pretty DeferredError{} = string "deferred type error"
 

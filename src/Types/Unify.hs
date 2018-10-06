@@ -17,6 +17,7 @@ import Types.Infer.Builtin hiding (subsumes, unify)
 import Types.Infer.Errors
 import Types.Wellformed
 
+import Syntax.Implicits hiding (overlap, spine)
 import Syntax.Pretty
 import Syntax.Subst
 import Syntax
@@ -35,7 +36,7 @@ import Data.Foldable
 import Data.Function
 import Data.Spanned
 import Data.Reason
-import Data.List
+import Data.List hiding (insert)
 import Data.Text (Text)
 
 import Text.Pretty.Semantic
@@ -108,19 +109,19 @@ doSolve (ConUnify because v a b :<| xs) = do
     Right co -> solveCoSubst . at v ?= probablyCast co
 
   doSolve xs
-doSolve (ConSubsume because v a b :<| xs) = do
+doSolve (ConSubsume because scope v a b :<| xs) = do
   sub <- use solveTySubst
 
   -- traceM (displayS (pretty (ConSubsume because v (apply sub a) (apply sub b))))
   let a' = apply sub a
   sub <- use solveTySubst
-  co <- memento $ subsumes because a' (apply sub b)
+  co <- memento $ subsumes because scope a' (apply sub b)
+  doSolve xs
   case co of
     Left e -> do
       dictate e
       solveCoSubst . at v ?= IdWrap
     Right co -> solveCoSubst . at v .= Just co
-  doSolve xs
 
 doSolve (ConImplies because not cs ts :<| xs) = do
   before <- use solveTySubst
@@ -156,6 +157,9 @@ doSolve (ConFail a v t :<| cs) = do
   let ex = Hole (unTvName v) (fst a)
       sub = s `compose` s'
   dictates . reblame (BecauseOf ex) $ foundHole v t sub
+
+doSolve (ConImplicit reason scope var cons :<| cs) = do
+  doSolve cs
 
 bind :: MonadSolve m => Var Typed -> Type Typed -> m (Coercion Typed)
 bind var ty
@@ -313,28 +317,36 @@ unify (TyTuple a b) (TyTuple a' b') =
 unify TyType TyType = pure (ReflCo TyType)
 unify a b = confesses =<< unequal a b
 
-subsumes', subsumes :: MonadSolve m => SomeReason -> Type Typed -> Type Typed -> m (Wrapper Typed)
-subsumes blame a b = do
+subsumes', subsumes :: MonadSolve m => SomeReason -> ImplicitScope Typed -> Type Typed -> Type Typed -> m (Wrapper Typed)
+subsumes blame scope a b = do
   x <- use solveTySubst
-  retcons (addBlame blame) $ subsumes' blame (apply x a) (apply x b)
+  retcons (addBlame blame) $ subsumes' blame scope (apply x a) (apply x b)
 
-subsumes' b t1 t2@TyPi{} | isSkolemisable t2 = do
-  (c, t2') <- skolemise (BySubsumption t1 t2) t2
-  (Syntax.:>) c <$> subsumes b t1 t2'
+subsumes' b s t1 t2@TyPi{} | isSkolemisable t2 = do
+  (c, t2', scope) <- skolemise (BySubsumption t1 t2) t2
+  (Syntax.:>) c <$> subsumes b (s <> scope) t1 t2'
 
-subsumes' b t1@TyPi{} t2 | isSkolemisable t1 = do
+subsumes' b s t1@(TyPi Invisible{} _) t2 = do
   (cont, _, t1') <- instantiate Subsumption t1
   let wrap = maybe IdWrap (WrapFn . flip MkWrapCont "forall <= sigma; instantiation") cont
 
-  flip (Syntax.:>) wrap <$> subsumes b t1' t2
+  flip (Syntax.:>) wrap <$> subsumes b s t1' t2
 
-subsumes' r ot@(TyTuple a b) nt@(TyTuple a' b') = do
+subsumes' r s (TyPi (Implicit t) t1) t2 | prettyConcrete t2 = do
+  var <- TvName <$> genName
+  omega <- subsumes' r s t1 t2
+  let con = ConImplicit r s var t
+      wrap = WrapVar var
+  doSolve (Seq.singleton con)
+  pure (wrap Syntax.:> omega)
+
+subsumes' r scope ot@(TyTuple a b) nt@(TyTuple a' b') = do
   -- We must check that..
   (wb, wa) <- retcon Seq.reverse $ do
     -- The second components are related
-    wb <- recover IdWrap $ subsumes (secondBlame r) b b'
+    wb <- recover IdWrap $ subsumes (secondBlame r) scope b b'
     -- The first components are related
-    wa <- recover IdWrap $ subsumes (firstBlame r) a a'
+    wa <- recover IdWrap $ subsumes (firstBlame r) scope a a'
     pure (wb, wa)
   -- Thus "point-wise" subsumption
 
@@ -355,10 +367,10 @@ subsumes' r ot@(TyTuple a b) nt@(TyTuple a' b') = do
                    (an, nt)
   pure (WrapFn (MkWrapCont cont "tuple re-packing"))
 
-subsumes' _ a@(TyApp lazy _) b@(TyApp lazy' _)
+subsumes' _ _ a@(TyApp lazy _) b@(TyApp lazy' _)
   | lazy == lazy', lazy' == tyLazy = probablyCast <$> unify a b
 
-subsumes' _ (TyApp lazy ty') ty | lazy == tyLazy, lazySubOk ty' ty = do
+subsumes' _ _ (TyApp lazy ty') ty | lazy == tyLazy, lazySubOk ty' ty = do
   co <- unify ty' ty
   -- We have a thunk and want a value
   let wrap ex
@@ -370,7 +382,7 @@ subsumes' _ (TyApp lazy ty') ty | lazy == tyLazy, lazySubOk ty' ty = do
               (an, ty)
   pure (WrapFn (MkWrapCont wrap "automatic forcing"))
 
-subsumes' _ ty' (TyApp lazy ty) | lazy == tyLazy, lazySubOk ty ty' = do
+subsumes' _ _ ty' (TyApp lazy ty) | lazy == tyLazy, lazySubOk ty ty' = do
   co <- unify ty ty'
   -- We have a value and want a thunk
   let wrap ex
@@ -384,7 +396,7 @@ subsumes' _ ty' (TyApp lazy ty) | lazy == tyLazy, lazySubOk ty ty' = do
               (an, TyApp lazy ty)
   pure (WrapFn (MkWrapCont wrap "automatic thunking"))
 
-subsumes' r th@(TyExactRows rhas) tw@(TyExactRows rwant) = do
+subsumes' r scope th@(TyExactRows rhas) tw@(TyExactRows rwant) = do
   let matching = overlap rhas rwant
 
   -- All fields must be present in both records..
@@ -393,14 +405,14 @@ subsumes' r th@(TyExactRows rhas) tw@(TyExactRows rwant) = do
 
   matched <- fmap fold . for matching $ \(key, have, want) -> do
     -- and have to be point-wise subtypes
-    wrap <- subsumes' (fieldBlame key r) have want
+    wrap <- subsumes' (fieldBlame key r) scope have want
     pure (Map.singleton key (have, want, wrap))
 
   exp <- TvName <$> genName
 
   pure (WrapFn (MkWrapCont (mkRecordWrapper rhas matched tw th tw id exp) "exact→exact record subsumption"))
 
-subsumes' r th@(TyExactRows rhas) tw@(TyRows rho rwant) = do
+subsumes' r scope th@(TyExactRows rhas) tw@(TyRows rho rwant) = do
   let matching = overlap rhas rwant
 
   -- We need to at *least* match all of the ones we want
@@ -410,7 +422,7 @@ subsumes' r th@(TyExactRows rhas) tw@(TyRows rho rwant) = do
   matched <- fmap fold . for matching $ \(key, have, want) -> do
     -- and make sure that the ones we have are subtypes of the ones we
     -- want
-    wrap <- subsumes' (fieldBlame key r) have want
+    wrap <- subsumes' (fieldBlame key r) scope have want
     pure (Map.singleton key (have, want, wrap))
 
   let diff = filter (not . flip Map.member matched . fst) rhas
@@ -429,7 +441,7 @@ subsumes' r th@(TyExactRows rhas) tw@(TyRows rho rwant) = do
   let mkw ex = ExprWrapper cast ex (annotation ex, tw)
   pure (WrapFn (MkWrapCont (mkRecordWrapper rhas matched matched_t th tw mkw exp) "exact→poly record subsumption"))
 
-subsumes' r th@(TyRows rho rhas) tw@(TyRows sigma rwant) = do
+subsumes' r scope th@(TyRows rho rhas) tw@(TyRows sigma rwant) = do
   let matching = overlap rhas rwant
 
   -- We need to at *least* match all of the ones we want
@@ -441,7 +453,7 @@ subsumes' r th@(TyRows rho rhas) tw@(TyRows sigma rwant) = do
     matched <- fmap fold . for matching $ \(key, have, want) -> do
       -- and make sure that the ones we have are subtypes of the ones we
       -- want
-      wrap <- subsumes' (fieldBlame key r) have want
+      wrap <- subsumes' (fieldBlame key r) scope have want
       pure (Map.singleton key (have, want, wrap))
 
     let diff = filter (not . flip Map.member matched . fst) rhas
@@ -459,21 +471,29 @@ subsumes' r th@(TyRows rho rhas) tw@(TyRows sigma rwant) = do
     let mkw ex = ExprWrapper cast ex (annotation ex, tw)
     pure (WrapFn (MkWrapCont (mkRecordWrapper rhas matched matched_t th tw mkw exp) "exact→poly record subsumption"))
 
-subsumes' r a b = probablyCast <$> retcons (reblame r) (unify a b)
+subsumes' r _ a b = probablyCast <$> retcons (reblame r) (unify a b)
 
 -- | Shallowly skolemise a type, replacing any @forall@-bound 'TyVar's
 -- with fresh 'Skolem' constants.
-skolemise :: MonadNamey m => SkolemMotive Typed -> Type Typed -> m (Wrapper Typed, Type Typed)
+skolemise :: MonadNamey m => SkolemMotive Typed -> Type Typed -> m (Wrapper Typed, Type Typed, ImplicitScope Typed)
 skolemise motive ty@(TyPi (Invisible tv k) t) = do
   sk <- freshSkol motive ty tv
-  (wrap, ty) <- skolemise motive (apply (Map.singleton tv sk) t)
+  (wrap, ty, scope) <- skolemise motive (apply (Map.singleton tv sk) t)
   kind <- case k of
     Nothing -> freshTV
     Just x -> pure x
   let getSkol (TySkol s) = s
       getSkol _ = error "not a skolem from freshSkol"
-  pure (TypeLam (getSkol sk) kind Syntax.:> wrap, ty)
-skolemise _ ty = pure (IdWrap, ty)
+  pure (TypeLam (getSkol sk) kind Syntax.:> wrap, ty, scope)
+skolemise motive wt@(TyPi (Implicit ity) t) = do
+  (omega, ty, scp) <- skolemise motive t
+  var <- TvName <$> genName
+  let scope = insert var ity scp
+      wrap ex | an <- annotation ex =
+        Fun (EvParam (Capture var (an, ity)))
+          (ExprWrapper omega ex (an, ty)) (an, wt)
+  pure (WrapFn (MkWrapCont wrap "constraint lambda"), ty, scope)
+skolemise _ ty = pure (IdWrap, ty, mempty)
 
 -- Which coercions are safe to remove *here*?
 isReflexiveCo :: Coercion Typed -> Bool
@@ -524,6 +544,11 @@ concretish TyVar{} = False
 concretish (TyApp f x) = concretish f && concretish x
 concretish (TyWildcard t) = maybe False concretish t
 concretish _ = True
+
+prettyConcrete :: Type Typed -> Bool
+prettyConcrete TyVar{} = False
+prettyConcrete (TyWildcard t) = maybe False prettyConcrete t
+prettyConcrete _ = True
 
 firstBlame, secondBlame :: SomeReason -> SomeReason
 firstBlame (It'sThis (BecauseOfExpr (Tuple (x:_) _) _)) = becauseExp x

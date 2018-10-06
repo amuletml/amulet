@@ -47,7 +47,9 @@ deriving instance (Show (Var p), Show (Ann p)) => Show (Binding p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Binding p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Binding p)
 
-newtype Parameter p = PatParam { _paramPat :: Pattern p }
+data Parameter p
+  = PatParam { _paramPat :: Pattern p }
+  | EvParam { _paramPat :: Pattern p }
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Parameter p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Parameter p)
@@ -329,6 +331,7 @@ _TyArr = prism (uncurry (TyPi . Anon)) go where
 
 isSkolemisable :: Type Typed -> Bool
 isSkolemisable (TyPi Invisible{} _) = True
+isSkolemisable (TyPi Implicit{} _) = True
 isSkolemisable _ = False
 
 mkWildTy :: Maybe (Type p) -> Type p
@@ -368,7 +371,7 @@ instance Spanned (Ann p) => Spanned (Expr p) where
   annotation (ExprWrapper _ _ a) = annotation a
 
 instance (Data (Ann p), Data (Var p), Data p) => Spanned (Parameter p) where
-  annotation (PatParam p) = annotation p
+  annotation = annotation . view paramPat
 
 {- Note [1]: Tuple types vs tuple patterns/values
 

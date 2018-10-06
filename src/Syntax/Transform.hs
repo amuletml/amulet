@@ -147,7 +147,7 @@ transformExprTyped fe fc ft = goE where
   goW x@WrapVar{} = x
   goW IdWrap = IdWrap
 
-  goPa (PatParam p) = PatParam (goP p)
+  goPa = paramPat %~ goP
 
   goE = transE . fe
   goT = ft

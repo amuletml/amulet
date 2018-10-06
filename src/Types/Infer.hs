@@ -57,8 +57,10 @@ inferProgram env ct = fmap fst <$> runInfer env (inferProg ct)
 -- appropriate 'Wrapper's, and performing /some/ level of desugaring.
 check :: forall m. MonadInfer Typed m => Expr Resolved -> Type Typed -> m (Expr Typed)
 check e ty@TyPi{} | isSkolemisable ty = do -- This is rule Decl∀L from [Complete and Easy]
-  (wrap, e) <- secondA (check e) =<< skolemise (ByAscription e ty) ty -- gotta be polymorphic - don't allow instantiation
-  pure (ExprWrapper wrap e (annotation e, ty))
+  (wrap, ty, scope) <- skolemise (ByAscription e ty) ty -- gotta be polymorphic - don't allow instantiation
+  local (classes %~ mappend scope) $ do
+    e <- check e ty
+    pure (ExprWrapper wrap e (annotation e, ty))
 
 check (Hole v a) t = do
   tell (Seq.singleton (ConFail (a, t) (TvName v) t))
@@ -152,12 +154,10 @@ infer (Fun p e an) = let blame = Arm (p ^. paramPat) e in do
   (p, dom, ms, cs) <- inferParameter p
   let tvs = boundTvs (p ^. paramPat) ms
   _ <- leakEqualities blame cs
-  case p of
-    PatParam _ -> do
-      (e, cod) <- local (typeVars %~ Set.union tvs) $
-        local (names %~ focus ms) $
-          infer e
-      pure (Fun p e (an, TyPi dom cod), TyPi dom cod)
+  (e, cod) <- local (typeVars %~ Set.union tvs) $
+    local (names %~ focus ms) $
+      infer e
+  pure (Fun p e (an, TyPi dom cod), TyPi dom cod)
 
 infer (Literal l an) = pure (Literal l (an, ty), ty) where
   ty = litTy l
@@ -301,7 +301,10 @@ inferProg (decl@(TypeDecl n tvs cs):prg) = do
        consFst (TypeDecl (TvName n) tvs cs') $
          inferProg prg
 
-inferProg (Open _ _:prg) = inferProg prg
+inferProg (Open mod pre:prg) = do
+  modImplicits <- view (modules . at (TvName mod) . non undefined)
+  local (classes %~ (<>modImplicits)) $
+    consFst (Open (TvName mod) pre) $ inferProg prg
 
 inferProg (Module name body:prg) = do
   (body', env) <- inferProg body
@@ -310,7 +313,8 @@ inferProg (Module name body:prg) = do
       vars' = map (\x -> (TvName x, env ^. names . at x . non (error ("value: " ++ show x)))) (vars ++ tys)
 
   -- Extend the current scope and module scope
-  local (names %~ focus (teleFromList vars')) $
+  local ( (names %~ focus (teleFromList vars'))
+        . (modules %~ (Map.insert (TvName name) (env ^. classes) . (<> (env ^. modules))))) $
     consFst (Module (TvName name) body') $
     inferProg prg
 
