@@ -53,7 +53,7 @@ resolveKind reason otp = do
                         pure t
                      in runWriterT (runStateT (cont otp) reason)
 
-  (sub, _) <- solve cs
+  (sub, _, _) <- solve cs
 
   let t = apply sub ty
   wellformed t
@@ -74,7 +74,7 @@ checkAgainstKind r t k = do
 annotateKind :: MonadKind m => SomeReason -> Type Typed -> m (Type Typed)
 annotateKind r ty = do
   ((ty, _), cs) <- runWriterT (runStateT (checkKind (raiseT unTvName ty) TyType) r)
-  (sub, _) <- solve cs
+  (sub, _, _) <- solve cs
   pure (apply sub ty)
 
 initialKind :: MonadKind m => [TyConArg Resolved] -> KindT m (Type Typed, Telescope Typed)
@@ -119,7 +119,7 @@ solveForKind reason = solveK (closeOver reason) reason
 solveK :: MonadKind m => (Type Typed -> m (Type Typed)) -> SomeReason -> KindT m (Type Typed) -> m (Type Typed)
 solveK cont reason k = do
   ((kind, _), cs) <- runWriterT (runStateT k reason)
-  (sub, _) <- solve cs
+  (sub, _, _) <- solve cs
   cont (apply sub kind)
 
 inferKind :: MonadKind m => Type Resolved -> KindT m (Type Typed, Kind Typed)

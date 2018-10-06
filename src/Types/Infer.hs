@@ -335,11 +335,28 @@ inferLetTy closeOver vs =
                 -> Seq.Seq (Constraint Typed)
                 -> m (Type Typed, Expr Typed -> Expr Typed)
       figureOut blame ex ty cs = do
-        (x, co) <- retcons (addBlame (snd blame)) (solve cs)
-        vt <- closeOver (Set.singleton (TvName (fst blame))) ex (apply x ty)
+        (x, co, cons) <- retcons (addBlame (snd blame)) (solve cs)
+        let wrapOne (ConImplicit _ _ var ty) ex | an <- annotation ex =
+              Fun (EvParam (Capture var (an, ty)))
+                ex (an, TyPi (Anon ty) (getType ex))
+            wrapOne _ ex = ex
+
+        let addCss [] ty = ty
+            addCss (ConImplicit _ _ _ ty:cs) r = TyPi (Implicit ty) (addCss cs r)
+            addCss (_:cs) r = addCss cs r
+
+        quant <-
+          if isFn ex then
+            pure $ appEndo (foldMap (Endo . wrapOne) cons)
+          else if length cons /= 0 then
+            confesses (UnsatClassCon (snd blame) (head cons) NotAFun)
+          else pure id
+
+        vt <- closeOver (Set.singleton (TvName (fst blame)))
+                ex (apply x (addCss cons ty))
         ty <- skolCheck (TvName (fst blame)) (snd blame) vt
         let (tp, sub) = rename ty
-        pure (tp, solveEx tp (x <> sub) co)
+        pure (tp, quant . solveEx tp (x <> sub) co)
 
 
       tcOne :: SCC (Binding Resolved)
@@ -376,9 +393,12 @@ inferLetTy closeOver vs =
           wrap <- subsumes (BecauseOf b) ety pty
           pure (ExprWrapper wrap e (annotation e, pty), p, pty, tel)
 
-        (solution, wraps) <- solve cs
+        (solution, wraps, cons) <- solve cs
         let solved = closeOver mempty ex . apply solution
             ex = solveEx ty solution wraps e
+
+        when (cons /= []) $
+          confesses (ArisingFrom (UnsatClassCon (BecauseOf b) (head cons) PatBinding) (BecauseOf b))
 
         tel' <- traverseTele (const solved) tel
         ty <- solved ty
@@ -403,7 +423,8 @@ inferLetTy closeOver vs =
                 _ <- unify (becauseExp exp) ty tyvar
                 pure (Binding (TvName var) exp' (ann, ty), ty)
 
-        (solution, cs) <- solve cs
+        (solution, cs, cons) <- solve cs
+        () <- error (show cons)
         let solveOne :: (Binding Typed, Type Typed)
                      -> m (Binding Typed, Telescope Typed, Set.Set (Var Typed))
             solveOne (Binding var exp ann, given) =
@@ -460,6 +481,14 @@ skolCheck var exp ty = do
   env <- view typeVars
   unless (null (sks `Set.difference` env)) $
     confesses (blameSkol (EscapedSkolems (Set.toList (skols ty)) ty) (unTvName var, exp))
+  let checkAmbiguous tau = go mempty tau where
+        go s (TyPi Invisible{} t) = go s t
+        go s (TyPi (Implicit v) t) = go (s <> ftv v) t
+        go s t = if not (Set.null (s Set.\\ fv))
+                    then confesses (AmbiguousType var tau (s Set.\\ fv))
+                    else pure ()
+          where fv = ftv t
+  checkAmbiguous (deSkol ty)
   pure (deSkol ty)
 
 solveEx :: Type Typed -> Subst Typed -> Map.Map (Var Typed) (Wrapper Typed) -> Expr Typed -> Expr Typed
@@ -563,6 +592,14 @@ value BothSection{} = True
 value AccessSection{} = True
 value (OpenIn _ e _) = value e
 value (ExprWrapper _ e _) = value e
+
+isFn :: Expr a -> Bool
+isFn Fun{} = True
+isFn (OpenIn _ e _) = isFn e
+isFn (Ascription e _ _) = isFn e
+isFn (ExprWrapper _ e _) = isFn e
+isFn _ = False
+
 
 deSkol :: Type Typed -> Type Typed
 deSkol = go mempty where

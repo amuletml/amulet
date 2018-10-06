@@ -22,6 +22,7 @@ module Control.Monad.Infer
   , SomeReason(..), Reasonable, addBlame
   , becauseExp, becausePat
   , WhyInstantiate(..)
+  , WhyUnsat(..)
 
   -- lenses:
   , names, typeVars
@@ -107,15 +108,17 @@ data TypeError where
   Malformed :: Pretty (Var p) => Type p -> TypeError
 
   -- Implicit parameters
-  NoImplicit :: (Ord (Var p), Pretty (Var p)) => Type p -> (Doc -> Doc) -> TypeError
   AmbiguousType :: (Ord (Var p), Pretty (Var p)) => Var p -> Type p -> Set.Set (Var p) -> TypeError
   PatternRecursive :: Binding Resolved -> [Binding Resolved] -> TypeError
 
   DeadBranch :: TypeError -> TypeError
 
+  UnsatClassCon :: SomeReason -> Constraint Typed -> WhyUnsat -> TypeError
+
   NotPromotable :: Pretty (Var p) => Var p -> Type p -> Doc -> TypeError
 
 data WhyInstantiate = Expression | Subsumption
+data WhyUnsat = NotAFun | PatBinding
 
 instance (Show (Ann p), Show (Var p), Ord (Var p), Substitutable p (Type p)) => Substitutable p (Constraint p) where
   ftv (ConUnify _ _ a b) = ftv a <> ftv b
@@ -316,23 +319,23 @@ instance Pretty TypeError where
    where whatIs (TySkol (Skolem _ v _ _)) = string "the rigid type variable" <+> stypeVar (squote <>pretty v)
          whatIs t = string "the type" <+> displayType (withoutSkol t)
 
-  pretty (NoImplicit tau doc) =
-    doc $ vsep [ "Could not choose implicit value of type" <+> displayType tau ]
-
   pretty (AmbiguousType v t (Set.toList -> vs)) =
-    vsep [ "Ambiguous type for implicit value" <+> skeyword (pretty v)
-         , bullet "Note: in the type" <+> displayType t <> comma
-         , indent 4 "the type variable" <> s <+> hsep (punctuate comma (map (pretty . TyVar) vs)) <+> quan <+> "in the head" ]
+    vsep [ "Ambiguous type for value:" <+> stypeSkol (pretty v)
+         , empty
+         , indent 2 $ displayType t
+         , empty
+         , bullet "Note:" <+> vars <+> "appears in a constraint,"
+         , indent 4 "but not in the consequent of the type"
+         ]
     where
-      s = case vs of
-        [_] -> text ""
-        _ -> text "s"
-      quan = case vs of
-        [_] -> text "is quantified but does not appear"
-        _ -> text "are quantified but do not appear"
+      vars = case vs of
+        [x] -> "The variable" <+> stypeSkol (pretty x)
+        xs -> "The variables"
+                <+> hsep (punctuate comma (map (stypeSkol . pretty) xs))
 
   pretty (PatternRecursive _ _) = string "pattern recursive error should be formatNoted"
   pretty DeadBranch{} = string "dead branch error should be formatNoted"
+  pretty UnsatClassCon{} = string "unsat class error should be formatNoted"
 
 instance Spanned TypeError where
   annotation (ArisingFrom e@ArisingFrom{} _) = annotation e
@@ -391,7 +394,7 @@ instance Note TypeError Style where
 
   formatNote f (ArisingFrom (PatternRecursive p [p']) _) | p == p' =
     vsep [ indent 2 "Recursive pattern bindings are not allowed"
-         , indent 2 "Note: this definition refers to itself" <+> (Right <$> highlight "directly")
+         , indent 2 $ bullet "Note: this definition refers to itself" <+> (Right <$> highlight "directly")
          , empty
          , f [annotation p]
          ]
@@ -401,7 +404,7 @@ instance Note TypeError Style where
          , empty
          , f [annotation p]
          , empty
-         , indent 2 "Note: this binding is in the same" <+> (Right <$> highlight "recursive group") <+> string "as these"
+         , indent 2 $ bullet "Note: this binding is in the same" <+> (Right <$> highlight "recursive group") <+> string "as these"
            <#> if length bs > 3
                   then vsep [ indent 4 "and" <+> int (length bs - 3) <+> "other binding" <> (if length bs - 3 /= 1 then "s." else ".")
                             , empty ]
@@ -411,8 +414,24 @@ instance Note TypeError Style where
 
   formatNote f (ArisingFrom (DeadBranch e) r) =
     formatNote f (ArisingFrom e r) <#>
-      vsep [ indent 2 "Note: This branch will never be executed,"
+      vsep [ indent 2 $ bullet "Note: This branch will never be executed,"
            , indent 4 "because it has unsatisfiable constraints" ]
+
+  formatNote f (ArisingFrom (UnsatClassCon _ (ConImplicit r _ _ t) NotAFun) r') =
+    vsep [ indent 2 "No instance for" <+> (Right <$> displayType t) <+> "arising from use of the expression"
+         , f [annotation r]
+         , indent 2 $ bullet "Note: this constraint was not quantified over"
+         , indent 4 "because the binding it would scope over is not a function"
+         , f [annotation r']
+         , indent 2 $ bullet "Possible fix: add a parameter, or a type signature"
+         ]
+
+  formatNote f (ArisingFrom (UnsatClassCon _ (ConImplicit _ _ _ t) PatBinding) r') =
+    vsep [ indent 2 "No instance for" <+> (Right <$> displayType t) <+> "arising in the binding"
+         , f [annotation r']
+         , indent 2 $ bullet "Note: this constraint can not be quantified over"
+         , indent 4 "because it is impossible to quantify over pattern bindings"
+         ]
 
   formatNote f x = indent 2 (Right <$> pretty x) <#> f [annotation x]
 

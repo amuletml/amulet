@@ -27,6 +27,7 @@ import qualified Data.Sequence as Seq
 import qualified Data.Text as T
 import qualified Data.Set as Set
 
+import qualified Data.List as L
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Traversable
 import Data.Semigroup
@@ -36,10 +37,12 @@ import Data.Foldable
 import Data.Function
 import Data.Spanned
 import Data.Reason
-import Data.List hiding (insert)
 import Data.Text (Text)
 
 import Text.Pretty.Semantic
+import Debug.Trace
+
+import Prelude hiding (lookup)
 
 data SolveScope
   = SolveScope { _bindSkol :: Bool
@@ -62,6 +65,7 @@ type MonadSolve m =
   , MonadState SolveState m
   , MonadReader SolveScope m
   , MonadChronicles TypeError m
+  , MonadWriter [Constraint Typed] m
   )
 
 isRec :: String
@@ -74,14 +78,14 @@ unifRow (t, a, b) = do
 
 runSolve :: MonadNamey m
          => Subst Typed
-         -> StateT SolveState (ReaderT SolveScope m) b
-         -> m (Subst Typed, Map.Map (Var Typed) (Wrapper Typed))
-runSolve s x = fix (runReaderT (runStateT act (SolveState s mempty mempty)) emptyScope) where
+         -> WriterT [Constraint Typed] (StateT SolveState (ReaderT SolveScope m)) b
+         -> m (Subst Typed, Map.Map (Var Typed) (Wrapper Typed), [Constraint Typed])
+runSolve s x = fix ((runReaderT (runStateT (runWriterT act) (SolveState s mempty mempty)) emptyScope)) where
   act = (,) <$> genName <*> x
   fix act = do
-    (_, s) <- act
+    ((_, cs), s) <- act
     let ss = s ^. solveTySubst
-    pure (fmap (apply ss) ss, s ^. solveCoSubst)
+    pure (fmap (apply ss) ss, s ^. solveCoSubst, cs)
   emptyScope = SolveScope False mempty
 
 -- | Solve a sequence of constraints, returning either a substitution
@@ -92,7 +96,7 @@ runSolve s x = fix (runReaderT (runStateT act (SolveState s mempty mempty)) empt
 -- particular instance of the solver is allowed to generate from.
 solve :: (MonadNamey m, MonadChronicles TypeError m)
       => Seq.Seq (Constraint Typed)
-      -> m (Subst Typed, Map.Map (Var Typed) (Wrapper Typed))
+      -> m (Subst Typed, Map.Map (Var Typed) (Wrapper Typed), [Constraint Typed])
 solve = runSolve mempty . doSolve
 
 doSolve :: forall m. MonadSolve m => Seq.Seq (Constraint Typed) -> m ()
@@ -112,7 +116,7 @@ doSolve (ConUnify because v a b :<| xs) = do
 doSolve (ConSubsume because scope v a b :<| xs) = do
   sub <- use solveTySubst
 
-  -- traceM (displayS (pretty (ConSubsume because v (apply sub a) (apply sub b))))
+  traceM (displayS (pretty (ConSubsume because scope v (apply sub a) (apply sub b))))
   let a' = apply sub a
   sub <- use solveTySubst
   co <- memento $ subsumes because scope a' (apply sub b)
@@ -158,7 +162,20 @@ doSolve (ConFail a v t :<| cs) = do
       sub = s `compose` s'
   dictates . reblame (BecauseOf ex) $ foundHole v t sub
 
-doSolve (ConImplicit reason scope var cons :<| cs) = do
+doSolve (ohno@(ConImplicit _ scope var cons) :<| cs) = do
+  sub <- use solveTySubst
+  cons <- pure (apply sub cons)
+  case lookup cons scope of
+    [] -> do
+      let wrap ex | an <- annotation ex, ty <- getType ex =
+            App ex (VarRef var (an, cons)) (an, ty)
+      solveCoSubst . at var ?= WrapFn (MkWrapCont wrap "expr app (deferred)")
+      tell [ohno]
+    [x] ->
+      let wrap ex | an <- annotation ex, ty <- getType ex =
+            App ex (VarRef (x ^. implVar) (an, cons)) (an, ty)
+       in solveCoSubst . at var ?= WrapFn (MkWrapCont wrap "expr app")
+    xs -> error ("this really shouldn't be possible: " ++ show xs)
   doSolve cs
 
 bind :: MonadSolve m => Var Typed -> Type Typed -> m (Coercion Typed)
@@ -278,8 +295,8 @@ unify (TyForall v (Just k) ty) (TyForall v' (Just k') ty') = do
 
 unify (TyRows rho arow) (TyRows sigma brow)
   | overlaps <- overlap arow brow
-  , rhoNew <- deleteFirstsBy ((==) `on` fst) (sortOn fst arow) (sortOn fst brow)
-  , sigmaNew <- deleteFirstsBy ((==) `on` fst) (sortOn fst brow) (sortOn fst arow) =
+  , rhoNew <- L.deleteFirstsBy ((==) `on` fst) (L.sortOn fst arow) (L.sortOn fst brow)
+  , sigmaNew <- L.deleteFirstsBy ((==) `on` fst) (L.sortOn fst brow) (L.sortOn fst arow) =
     do
       let mk t rs = if rs /= [] then TyRows t rs else t
       tau <- freshTV
@@ -295,7 +312,7 @@ unify ta@TyExactRows{} tb@TyRows{} = SymCo <$> unify tb ta
 
 unify tb@(TyRows rho brow) ta@(TyExactRows arow)
   | overlaps <- overlap brow arow
-  , rhoNew <- deleteFirstsBy ((==) `on` fst) (sortOn fst arow) (sortOn fst brow)
+  , rhoNew <- L.deleteFirstsBy ((==) `on` fst) (L.sortOn fst arow) (L.sortOn fst brow)
   = if | length overlaps < length brow -> confesses (NoOverlap tb ta)
        | otherwise -> do
           cs <- traverse unifRow overlaps
@@ -326,12 +343,6 @@ subsumes' b s t1 t2@TyPi{} | isSkolemisable t2 = do
   (c, t2', scope) <- skolemise (BySubsumption t1 t2) t2
   (Syntax.:>) c <$> subsumes b (s <> scope) t1 t2'
 
-subsumes' b s t1@TyPi{} t2 | isSkolemisable t1 = do
-  (cont, _, t1') <- instantiate Subsumption t1
-  let wrap = maybe IdWrap (WrapFn . flip MkWrapCont "forall <= sigma; instantiation") cont
-
-  flip (Syntax.:>) wrap <$> subsumes b s t1' t2
-
 subsumes' r s (TyPi (Implicit t) t1) t2 | prettyConcrete t2 = do
   var <- TvName <$> genName
   omega <- subsumes' r s t1 t2
@@ -339,6 +350,12 @@ subsumes' r s (TyPi (Implicit t) t1) t2 | prettyConcrete t2 = do
       wrap = WrapVar var
   doSolve (Seq.singleton con)
   pure (wrap Syntax.:> omega)
+
+subsumes' b s t1@TyPi{} t2 | isSkolemisable t1 = do
+  (cont, _, t1') <- instantiate Subsumption t1
+  let wrap = maybe IdWrap (WrapFn . flip MkWrapCont "forall <= sigma; instantiation") cont
+
+  flip (Syntax.:>) wrap <$> subsumes b s t1' t2
 
 subsumes' r scope ot@(TyTuple a b) nt@(TyTuple a' b') = do
   -- We must check that..
@@ -631,7 +648,7 @@ lazySubOk tlazy tout = concretish tout || head (spine tout) == head (spine tlazy
 
 overlap :: [(Text, Type p)] -> [(Text, Type p)] -> [(Text, Type p, Type p)]
 overlap xs ys
-  | inter <- filter ((/=) 1 . length) $ groupBy ((==) `on` fst) (sortOn fst (xs ++ ys))
+  | inter <- filter ((/=) 1 . length) $ L.groupBy ((==) `on` fst) (L.sortOn fst (xs ++ ys))
   = map get inter
   where get [(t, a), (_, b)] = (t, a, b)
         get _ = undefined
