@@ -311,7 +311,7 @@ prettyType (TyPi x t) = uncurry prettyQuantifiers . second reverse $ unwind t [x
        Implicit{}:_ ->
          let arg x = parenTuple x (prettyType x)
              arrow = soperator (string "=>")
-          in hsep (punctuate (space <> arrow) (map (arg . (^?! _Anon)) (q:these))) <+> arrow <+> prettyQuantifiers inner those
+          in hsep (punctuate (space <> arrow) (map (arg . (^?! _Implicit)) (q:these))) <+> arrow <+> prettyQuantifiers inner those
        [] -> error "what?"
 
   sameAs Invisible{} Invisible{} = True
