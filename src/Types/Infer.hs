@@ -189,6 +189,7 @@ infer ex@(App f x a) = do
       x <- check x d
       pure (App (k f) x (a, c), c)
     Invisible{} -> error "invalid invisible quantification in App"
+    Implicit{} -> error "invalid invisible quantification in App"
 
 infer ex@(BinOp l o r a) = do
   (o, ty) <- infer o
@@ -565,6 +566,7 @@ deSkol = go mempty where
     case x of
       Invisible v kind -> TyPi (Invisible v kind) (go (Set.insert v acc) k)
       Anon a -> TyPi (Anon (go acc a)) (go acc k)
+      Implicit a -> TyPi (Implicit (go acc a)) (go acc k)
   go acc ty@(TySkol (Skolem _ var _ _))
     | var `Set.member` acc = TyVar var
     | otherwise = ty

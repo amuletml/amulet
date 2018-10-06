@@ -211,9 +211,9 @@ getHead t@TyVar{} = t
 getHead t@TyCon{} = t
 getHead t@TyPromotedCon{} = t
 getHead t@TyApp{} = t
-getHead (TyPi b t) = case b of
-  Anon v -> TyArr v t -- regular function, do nothing
+getHead x@(TyPi b t) = case b of
   Invisible{} -> getHead t
+  _ -> x
 getHead t@TyRows{} = t
 getHead t@TyExactRows{} = t
 getHead t@TyTuple{} = t

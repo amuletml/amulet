@@ -371,7 +371,7 @@ Parameter :: { Parameter Parsed }
 Type :: { Located (Type Parsed) }
      : TypeProd                                   { $1 }
      | TypeProd '->' Type                         { lPos2 $1 $3 $ TyPi (Anon (getL $1)) (getL $3) }
---   | TypeProd '=>' Type                         { lPos2 $1 $3 $ TyPi (Implicit (getL $1)) (getL $3) }
+     | TypeProd '=>' Type                         { lPos2 $1 $3 $ TyPi (Implicit (getL $1)) (getL $3) }
      | forall ListE1(tyvar) '.' Type              { lPos2 $1 $4 $ forallTy (map getName $2) (getL $4) }
 
 TypeProd :: { Located (Type Parsed) }

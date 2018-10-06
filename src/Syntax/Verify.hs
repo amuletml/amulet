@@ -340,6 +340,9 @@ parametricity stmt overall = go mempty overall where
       Anon v -> do
         set <- goArg set v
         go set cont
+      Implicit v -> do
+        set <- goArg set v
+        go set cont
 
   go _ _ = pure ()
 

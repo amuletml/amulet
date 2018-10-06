@@ -167,6 +167,7 @@ inferKind (TyApp f x) = do
       x <- checkKind x d
       pure (TyApp f x, c)
     Invisible{} -> error "inferKind TyApp: visible argument to implicit quantifier"
+    Implicit{} -> error "inferKind TyApp: visible argument to implicit quantifier"
 
 inferKind (TyRows p rs) = do
   (p, k) <- secondA isType =<< inferKind p
@@ -208,6 +209,7 @@ checkKind (TyPi binder b) ek = do
   -- _ <- isType ek
   case binder of
     Anon t -> TyArr <$> checkKind t ek <*> checkKind b ek
+    Implicit t -> TyPi . Implicit <$> checkKind t ek <*> checkKind b ek
 
     Invisible v (Just arg) -> do
       (arg, kind) <- inferKind arg
@@ -291,6 +293,7 @@ promoteOrError TyExactRows{} = Just (string "mentions a tuple")
 promoteOrError (TyApp a b) = promoteOrError a <|> promoteOrError b
 promoteOrError (TyPi (Invisible _ a) b) = join (traverse promoteOrError a) <|> promoteOrError b
 promoteOrError (TyPi (Anon a) b) = promoteOrError a <|> promoteOrError b
+promoteOrError (TyPi Implicit{} _) = Just (string "has implicit parameters")
 promoteOrError TyCon{} = Nothing
 promoteOrError TyVar{} = Nothing
 promoteOrError TySkol{} = Nothing

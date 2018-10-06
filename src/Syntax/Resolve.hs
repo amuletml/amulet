@@ -299,6 +299,7 @@ reType r (TyPi (Invisible v k) ty) = do
   k <- traverse (reType r) k
   pure (TyPi (Invisible v' k) ty')
 reType r (TyPi (Anon f) x) = TyPi . Anon <$> reType r f <*> reType r x
+reType r (TyPi (Implicit f) x) = TyPi . Implicit <$> reType r f <*> reType r x
 reType r (TyApp f x) = TyApp <$> reType r f <*> reType r x
 reType r (TyRows t f) = TyRows <$> reType r t
                                <*> traverse (\(a, b) -> (a,) <$> reType r b) f

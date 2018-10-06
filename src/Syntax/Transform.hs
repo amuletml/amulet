@@ -30,6 +30,7 @@ transformType ft = goT where
   transM (ByExistential v ty) = ByExistential v (goT ty)
 
   transB (Anon t) = Anon (goT t)
+  transB (Implicit t) = Implicit (goT t)
   transB (Invisible x k) = Invisible x (fmap goT k)
 
   goT = transT . ft

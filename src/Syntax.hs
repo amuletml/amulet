@@ -186,6 +186,7 @@ data Type p
 
 data TyBinder p
   = Anon { _tyBinderType :: Type p } -- a function type
+  | Implicit { _tyBinderType :: Type p } -- a type with class obligations
   | Invisible
     { _tyBinderVar :: Var p
     , _tyBinderArg :: Maybe (Type p) } -- a forall. type
