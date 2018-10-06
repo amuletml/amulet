@@ -56,11 +56,11 @@ inferProgram env ct = fmap fst <$> runInfer env (inferProg ct)
 -- | Check an 'Expr'ession against a known 'Type', annotating it with
 -- appropriate 'Wrapper's, and performing /some/ level of desugaring.
 check :: forall m. MonadInfer Typed m => Expr Resolved -> Type Typed -> m (Expr Typed)
-check e ty@TyPi{} | isSkolemisable ty = do -- This is rule Decl∀L from [Complete and Easy]
-  (wrap, ty, scope) <- skolemise (ByAscription e ty) ty -- gotta be polymorphic - don't allow instantiation
+check e oty@TyPi{} | isSkolemisable oty = do -- This is rule Decl∀L from [Complete and Easy]
+  (wrap, ty, scope) <- skolemise (ByAscription e oty) oty -- gotta be polymorphic - don't allow instantiation
   local (classes %~ mappend scope) $ do
     e <- check e ty
-    pure (ExprWrapper wrap e (annotation e, ty))
+    pure (ExprWrapper wrap e (annotation e, oty))
 
 check (Hole v a) t = do
   tell (Seq.singleton (ConFail (a, t) (TvName v) t))
