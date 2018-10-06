@@ -28,7 +28,7 @@ tyBool = TyCon (TvName (TgInternal "bool"))
 tyUnit = TyCon (TvName (TgInternal "unit"))
 tyFloat = TyCon (TvName (TgInternal "float"))
 tyLazy = TyCon (TvName (TgName "lazy" (-34)))
-tyConstraint = TyCon (TvName (TgInternal "constraint"))
+tyConstraint = TyCon (TvName (TgName "constraint" (-37)))
 
 builtinNames :: Set.Set (Var Typed)
 builtinNames = Set.fromList . map TvName $ namesInScope (builtinsEnv ^. names)
@@ -58,7 +58,7 @@ builtinsEnv = envOf (scopeFromList builtin) where
       , op "@@" (TyForall a (Just TyType) $ TyForall b (Just TyType) $ (TyVar a `TyArr` TyVar b) `TyArr` (TyVar a `TyArr` TyVar b))
       , (TgInternal "lazy", TyForall a (Just TyType) $ (tyUnit `TyArr` TyVar a) `TyArr` TyApp tyLazy (TyVar a))
       , (TgInternal "force", TyForall a (Just TyType) $ TyApp tyLazy (TyVar a) `TyArr` TyVar a)
-      , tp "int", tp "string", tp "bool", tp "unit", tp "float", (TgName "lazy" (-34), TyArr TyType TyType), tp "constraint"
+      , tp "int", tp "string", tp "bool", tp "unit", tp "float", (TgName "lazy" (-34), TyArr TyType TyType), (TgName "constraint" (-37), TyType)
       ]
     where a = TvName (TgInternal "a")
           b = TvName (TgInternal "b")

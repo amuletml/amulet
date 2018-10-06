@@ -80,6 +80,7 @@ lowerType (S.TyRows rho vs) = RowsTy (lowerType rho) (map (fmap lowerType) vs)
 lowerType (S.TyExactRows []) = NilTy
 lowerType (S.TyExactRows vs) = ExactRowsTy (map (fmap lowerType) vs)
 lowerType (S.TyVar (TvName v)) = VarTy (mkTyvar v)
+lowerType (S.TyCon (TvName (TgName _ (-37)))) = StarTy
 lowerType (S.TyCon (TvName v)) = ConTy (mkType v)
 lowerType (S.TyPromotedCon (TvName v)) = ConTy (mkCon v) -- TODO this is in the wrong scope
 lowerType (S.TySkol (Skolem (TvName (TgName _ v)) (TvName (TgName n _)) _ _)) = VarTy (CoVar v n TypeVar)

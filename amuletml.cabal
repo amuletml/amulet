@@ -152,6 +152,7 @@ library amulet
                      , Syntax.Verify
                      , Syntax.Desugar
                      , Syntax.Transform
+                     , Syntax.Implicits
                      -- Renamer
                      , Syntax.Resolve
                      , Syntax.Resolve.Error
