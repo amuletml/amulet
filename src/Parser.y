@@ -175,7 +175,7 @@ MethodSigs :: { [(Var Parsed, Type Parsed)] }
   : List(MethodSig, TopSep) { $1 }
 
 MethodSig :: { (Var Parsed, Type Parsed) }
-  : val ident ':' Type { (getName $2, getL $4) }
+  : val BindName ':' Type { (getL $2, getL $4) }
 
 Methods :: { [Binding Parsed] }
   : List(Method, TopSep) { $1 }
