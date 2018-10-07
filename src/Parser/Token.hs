@@ -50,6 +50,8 @@ data TokenClass
   | TcOpen -- ^ An @open@ token.
   | TcLazy -- ^ A @lazy@ token.
   | TcAs   -- ^ An @as@ token.
+  | TcClass
+  | TcInstance
 
   | TcDot -- ^ A @.@ token.
   | TcComma -- ^ A @,@ token.
@@ -127,6 +129,8 @@ instance Show TokenClass where
   show TcOpen = "open"
   show TcLazy = "lazy"
   show TcAs = "as"
+  show TcClass = "class"
+  show TcInstance = "instance"
 
   show TcComma = ","
   show TcDot = "."

@@ -211,6 +211,18 @@ instance (Pretty (Var p)) => Pretty (Toplevel p) where
          , keyword "end"
          ]
 
+  pretty (Class v c h m _) =
+    vsep [ keyword "class" <+> maybe (parens mempty) pretty c <+> soperator (string "=>") <+> pretty v <+> hsep (map pretty h) <+> keyword "begin"
+         , indent 2 (align (vsep (map (\(v, t) -> keyword "val" <+> pretty v <+> colon <+> pretty t) m)))
+         , keyword "end"
+         ]
+
+  pretty (Instance _ c h m _) =
+    vsep [ keyword "instance" <+> maybe (parens mempty) pretty c <+> soperator (string "=>") <+> pretty h <+> keyword "begin"
+         , indent 2 (align (pretty m))
+         , keyword "end"
+         ]
+
 instance Pretty (Var p) => Pretty (TyConArg p) where
   pretty (TyVarArg var) = pretty var
   pretty (TyAnnArg v k) = parens (pretty v <+> colon <+> pretty k)

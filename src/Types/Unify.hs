@@ -40,7 +40,7 @@ import Data.Reason
 import Data.Text (Text)
 
 import Text.Pretty.Semantic
-import Debug.Trace
+import Text.Show.Pretty (ppShow)
 
 import Prelude hiding (lookup)
 
@@ -116,7 +116,7 @@ doSolve (ConUnify because v a b :<| xs) = do
 doSolve (ConSubsume because scope v a b :<| xs) = do
   sub <- use solveTySubst
 
-  traceM (displayS (pretty (ConSubsume because scope v (apply sub a) (apply sub b))))
+  -- traceM (displayS (pretty (ConSubsume because scope v (apply sub a) (apply sub b))))
   let a' = apply sub a
   sub <- use solveTySubst
   co <- memento $ subsumes because scope a' (apply sub b)
@@ -349,7 +349,7 @@ subsumes' r s (TyPi (Implicit t) t1) t2 | prettyConcrete t2 = do
   let con = ConImplicit r s var t
       wrap = WrapVar var
   doSolve (Seq.singleton con)
-  pure (wrap Syntax.:> omega)
+  pure (omega Syntax.:> wrap)
 
 subsumes' b s t1@TyPi{} t2 | isSkolemisable t1 = do
   (cont, _, t1') <- instantiate Subsumption t1

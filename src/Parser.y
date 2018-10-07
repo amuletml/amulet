@@ -90,6 +90,8 @@ import Syntax
   open     { Token TcOpen _ _ }
   lazy     { Token TcLazy _ _ }
   as       { Token TcAs _ _ }
+  class    { Token TcClass _ _ }
+  instance { Token TcInstance _ _ }
 
   ','      { Token TcComma _ _ }
   '.'      { Token TcDot _ _ }
@@ -152,7 +154,34 @@ Top :: { Toplevel Parsed }
     | module conid '=' begin Tops end          { Module (getName $2) $5 }
     | module conid '=' '$begin' Tops '$end'    { Module (getName $2) $5 }
     | module conid '=' Con                     { Open (getL $4) (Just (getIdent $2)) }
+
+    | class Type begin MethodSigs end
+      { withPos2 $1 $5 $ Class undefined (Just (getL $2)) [] $4 }
+
+    | class Type '$begin' MethodSigs '$end'
+      { withPos2 $1 $5 $ Class undefined (Just (getL $2)) [] $4 }
+
+    | instance Type begin Methods end
+      { withPos2 $1 $5 $ Instance undefined Nothing (getL $2) $4 }
+
+    | instance Type '$begin' Methods '$end'
+      { withPos2 $1 $5 $ Instance undefined Nothing (getL $2) $4 }
+
+
+--  | Instance                                 { $1 }
     | open Con                                 { Open (getL $2) Nothing }
+
+MethodSigs :: { [(Var Parsed, Type Parsed)] }
+  : List(MethodSig, TopSep) { $1 }
+
+MethodSig :: { (Var Parsed, Type Parsed) }
+  : val ident ':' Type { (getName $2, getL $4) }
+
+Methods :: { [Binding Parsed] }
+  : List(Method, TopSep) { $1 }
+
+Method :: { Binding Parsed }
+  : let Binding { $2 }
 
 TyConArg :: { TyConArg Parsed }
          : TyVar { TyVarArg (getL $1) }

@@ -254,6 +254,16 @@ data Toplevel p
   | Module (Var p) [Toplevel p]
   | Open { openName :: Var p
          , openAs :: Maybe T.Text }
+  | Class { className :: Var p
+          , classCtx :: Maybe (Type p)
+          , classParams :: [TyConArg p]
+          , classMethods :: [(Var p, Type p)]
+          , ann :: Ann p }
+  | Instance { instanceClass :: Var p
+             , instanceCtx :: Maybe (Type p)
+             , instanceHead :: Type p
+             , instanceMethods :: [Binding p]
+             , ann :: Ann p }
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Toplevel p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Toplevel p)

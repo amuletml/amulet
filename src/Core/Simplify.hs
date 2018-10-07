@@ -18,7 +18,7 @@ import Control.Monad.Namey
 import Control.Monad
 
 lintPasses :: Bool
-lintPasses = False
+lintPasses = True
 
 optmOnce :: [Stmt CoVar] -> Namey [Stmt CoVar]
 optmOnce = passes where
