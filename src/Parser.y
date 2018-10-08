@@ -155,11 +155,8 @@ Top :: { Toplevel Parsed }
     | module conid '=' '$begin' Tops '$end'    { Module (getName $2) $5 }
     | module conid '=' Con                     { Open (getL $4) (Just (getIdent $2)) }
 
-    | class Type begin MethodSigs end
-      { withPos2 $1 $5 $ Class undefined (Just (getL $2)) [] $4 }
-
-    | class Type '$begin' MethodSigs '$end'
-      { withPos2 $1 $5 $ Class undefined (Just (getL $2)) [] $4 }
+    | class Type begin MethodSigs end          {% fmap (withPos2 $1 $5) $ buildClass $2 $4 }
+    | class Type '$begin' MethodSigs '$end'    {% fmap (withPos2 $1 $5) $ buildClass $2 $4 }
 
     | instance Type begin Methods end
       { withPos2 $1 $5 $ Instance undefined Nothing (getL $2) $4 }
@@ -523,4 +520,22 @@ forallTy vs t = foldr TyPi t (map (flip Invisible Nothing) vs)
 respanFun :: (Spanned a, Spanned b) => a -> b -> Expr Parsed -> Expr Parsed
 respanFun s e (Fun p b _) = Fun p b (mkSpanUnsafe (spanStart (annotation s)) (spanEnd (annotation e)))
 respanFun _ _ _ = error "what"
+
+buildClass :: Located (Type Parsed) -> [(Var Parsed, Type Parsed)]
+           -> Parser (Span -> Toplevel Parsed)
+buildClass (L ty typ) ms =
+  case ty of
+    (TyPi (Implicit ctx) ty) -> do
+      (name, ts) <- go ty
+      pure (Class name (Just ctx) ts ms)
+    ty -> do
+      (name, ts) <- go ty
+      pure (Class name Nothing ts ms)
+  where
+    go :: Type Parsed -> Parser (Var Parsed, [TyConArg Parsed])
+    go (TyCon v) = pure (v, [])
+    go (TyApp rest (TyVar v)) = fmap (TyVarArg v:) <$> go rest
+    go ty = do
+      tellErrors [MalformedClass typ ty]
+      pure (undefined, [])
 }

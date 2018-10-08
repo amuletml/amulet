@@ -11,10 +11,12 @@ import Data.Spanned
 import Data.Span
 import Data.Char
 
-import Text.Pretty.Semantic (Pretty(..), Style)
+import Text.Pretty.Semantic (Pretty(..), Style, verbatim)
 import Text.Pretty.Note
 import Text.Pretty
 import Parser.Token
+
+import Syntax.Pretty
 
 -- | How this token or construct was terminated
 data Terminator
@@ -46,6 +48,9 @@ data ParseError
   -- | An unexpected token appeared in the lexer stream
   | UnexpectedToken Token [String]
 
+  -- | A malformed class declaration
+  | MalformedClass Span (Type Parsed)
+
   -- | An invalid escape code
   | InvalidEscapeCode Span
 
@@ -71,6 +76,8 @@ instance Pretty ParseError where
   pretty (UnexpectedToken (Token s _ _) [x]) = "Unexpected" <+> string (friendlyName s) <> ", expected" <+> string x
   pretty (UnexpectedToken (Token s _ _) xs) = "Unexpected" <+> string (friendlyName s) <> ", expected one of" <+> hsep (punctuate comma (map string xs))
 
+  pretty (MalformedClass _ ty) = "Malformed class name" <+> verbatim (pretty ty)
+
   pretty (InvalidEscapeCode _) = "Unknown escape code."
 
   pretty (UnalignedIn _ p) = "The in is misaligned with the corresponding 'let'" <+> parens ("located at" <+> prettyPos (spanStart p))
@@ -85,6 +92,8 @@ instance Spanned ParseError where
   annotation (UnclosedComment p _) = mkSpan1 p
 
   annotation (UnexpectedToken t _) = annotation t
+
+  annotation (MalformedClass p _) = p
 
   annotation (InvalidEscapeCode p) = p
 

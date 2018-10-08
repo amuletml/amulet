@@ -27,6 +27,8 @@ extractToplevel (TypeDecl v _ c) = (map ctor c, [v]) where
 extractToplevel (Open _ _) = ([], [])
 extractToplevel (Module v xs) = let (vs, ts) = extractToplevels xs
                                 in (map (v<>) vs, map (v<>) ts)
+extractToplevel (Class v _ _ ms _) = (v:map fst ms, [])
+extractToplevel Instance{} = ([], [])
 
 -- | Extract all top-level variables declared within a series of
 -- statements including those within child modules.
