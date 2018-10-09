@@ -523,8 +523,8 @@ respanFun _ _ _ = error "what"
 
 buildClass :: Located (Type Parsed) -> [(Var Parsed, Type Parsed)]
            -> Parser (Span -> Toplevel Parsed)
-buildClass (L ty typ) ms =
-  case ty of
+buildClass (L parsed typ) ms =
+  case parsed of
     (TyPi (Implicit ctx) ty) -> do
       (name, ts) <- go ty
       pure (Class name (Just ctx) ts ms)
@@ -536,6 +536,6 @@ buildClass (L ty typ) ms =
     go (TyCon v) = pure (v, [])
     go (TyApp rest (TyVar v)) = fmap (TyVarArg v:) <$> go rest
     go ty = do
-      tellErrors [MalformedClass typ ty]
+      tellErrors [MalformedClass typ parsed]
       pure (undefined, [])
 }

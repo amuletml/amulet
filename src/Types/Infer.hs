@@ -424,7 +424,7 @@ inferLetTy closeOver vs =
                 pure (Binding (TvName var) exp' (ann, ty), ty)
 
         (solution, cs, cons) <- solve cs
-        () <- error (show cons)
+        when (length cons >= 1) $ error (show cons)
         let solveOne :: (Binding Typed, Type Typed)
                      -> m (Binding Typed, Telescope Typed, Set.Set (Var Typed))
             solveOne (Binding var exp ann, given) =

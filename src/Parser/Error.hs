@@ -6,15 +6,18 @@ module Parser.Error
   , Terminator(..)
   ) where
 
+import Data.Text (pack)
 import Data.Position
 import Data.Spanned
 import Data.Span
 import Data.Char
 
-import Text.Pretty.Semantic (Pretty(..), Style, verbatim)
+import Text.Pretty.Semantic (Pretty(..), Style, verbatim, keyword, stypeVar, stypeCon)
 import Text.Pretty.Note
 import Text.Pretty
 import Parser.Token
+
+import Debug.Trace
 
 import Syntax.Pretty
 
@@ -76,7 +79,49 @@ instance Pretty ParseError where
   pretty (UnexpectedToken (Token s _ _) [x]) = "Unexpected" <+> string (friendlyName s) <> ", expected" <+> string x
   pretty (UnexpectedToken (Token s _ _) xs) = "Unexpected" <+> string (friendlyName s) <> ", expected one of" <+> hsep (punctuate comma (map string xs))
 
-  pretty (MalformedClass _ ty) = "Malformed class name" <+> verbatim (pretty ty)
+  pretty (MalformedClass _ ty) =
+    case traceShowId ty of
+      TyApp{} ->
+        let getRoot :: Type Parsed -> (Type Parsed, Int)
+            getRoot (TyApp f _) =
+              let (root, x) = getRoot (traceShowId f)
+               in (root, x + 1)
+            getRoot x = (x, 0)
+
+            root :: Type Parsed
+            depth :: Int
+            (root, depth) = getRoot ty
+
+            fakeAround :: Type Parsed -> Int -> Type Parsed
+            fakeAround t 0 = t
+            fakeAround t n = TyApp (fakeAround t (n - 1)) (TyVar (Name (pack ('a':show n))))
+         in case traceShow depth root of
+           c@TyCon{} ->
+             vsep [ "Malformed class declaration for" <+> displayType c
+                  , empty
+                  , "All class declarations must be of the form"
+                  , indent 2 $ displayType (fakeAround c depth)
+                  , if depth > 1
+                       then "where" <+> stypeVar (squote <> "a1")
+                        <> dot <> dot <> stypeVar (squote <> string ('a':show depth))
+                        <+> "are" <+> keyword "distinct" <+> "type variables"
+                       else empty
+                  ]
+           other ->
+             vsep [ "Malformed class declaration beginning with"
+                    <+> displayType other
+                  , empty
+                  , "All class declarations must be of the form"
+                  , indent 2 $ displayType (fakeAround other depth)
+                  , "where" <+> displayType other <+> "should be a" <+> stypeCon "type constructor"
+                    <> if depth > 1
+                         then comma
+                          <#> indent 2 ("and" <+> stypeVar (squote <> "a1")
+                                     <> dot <> dot <> stypeVar (squote <> string ('a':show depth))
+                                    <+> "are" <+> keyword "distinct" <+> "type variables")
+                         else empty
+                  ]
+      _ -> "Malformed class declaration" <+> displayType ty
 
   pretty (InvalidEscapeCode _) = "Unknown escape code."
 
