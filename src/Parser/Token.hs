@@ -49,9 +49,9 @@ data TokenClass
   | TcModule -- ^ A @module@ token.
   | TcOpen -- ^ An @open@ token.
   | TcLazy -- ^ A @lazy@ token.
+  | TcClass -- ^ A @class@ token.
+  | TcInstance -- ^ An @instance@ token.
   | TcAs   -- ^ An @as@ token.
-  | TcClass
-  | TcInstance
 
   | TcDot -- ^ A @.@ token.
   | TcComma -- ^ A @,@ token.
