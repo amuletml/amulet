@@ -40,7 +40,6 @@ import Data.Reason
 import Data.Text (Text)
 
 import Text.Pretty.Semantic
-import Text.Show.Pretty (ppShow)
 
 import Prelude hiding (lookup)
 
@@ -80,7 +79,7 @@ runSolve :: MonadNamey m
          => Subst Typed
          -> WriterT [Constraint Typed] (StateT SolveState (ReaderT SolveScope m)) b
          -> m (Subst Typed, Map.Map (Var Typed) (Wrapper Typed), [Constraint Typed])
-runSolve s x = fix ((runReaderT (runStateT (runWriterT act) (SolveState s mempty mempty)) emptyScope)) where
+runSolve s x = fix (runReaderT (runStateT (runWriterT act) (SolveState s mempty mempty)) emptyScope) where
   act = (,) <$> genName <*> x
   fix act = do
     ((_, cs), s) <- act
@@ -120,12 +119,12 @@ doSolve (ConSubsume because scope v a b :<| xs) = do
   let a' = apply sub a
   sub <- use solveTySubst
   co <- memento $ subsumes because scope a' (apply sub b)
-  doSolve xs
   case co of
     Left e -> do
       dictate e
       solveCoSubst . at v ?= IdWrap
     Right co -> solveCoSubst . at v .= Just co
+  doSolve xs
 
 doSolve (ConImplies because not cs ts :<| xs) = do
   before <- use solveTySubst
@@ -343,13 +342,15 @@ subsumes' b s t1 t2@TyPi{} | isSkolemisable t2 = do
   (c, t2', scope) <- skolemise (BySubsumption t1 t2) t2
   (Syntax.:>) c <$> subsumes b (s <> scope) t1 t2'
 
-subsumes' r s (TyPi (Implicit t) t1) t2 | prettyConcrete t2 = do
-  var <- TvName <$> genName
-  omega <- subsumes' r s t1 t2
-  let con = ConImplicit r s var t
-      wrap = WrapVar var
-  doSolve (Seq.singleton con)
-  pure (omega Syntax.:> wrap)
+subsumes' r s (TyPi (Implicit t) t1) t2
+  | prettyConcrete t2 = do
+      var <- TvName <$> genName
+      omega <- subsumes' r s t1 t2
+      let con = ConImplicit r s var t
+          wrap = WrapVar var
+      doSolve (Seq.singleton con)
+      pure (omega Syntax.:> wrap)
+  | otherwise = probablyCast <$> unify (TyPi (Implicit t) t1) t2
 
 subsumes' b s t1@TyPi{} t2 | isSkolemisable t1 = do
   (cont, _, t1') <- instantiate Subsumption t1

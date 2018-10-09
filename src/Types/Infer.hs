@@ -348,7 +348,7 @@ inferLetTy closeOver vs =
         quant <-
           if isFn ex then
             pure $ appEndo (foldMap (Endo . wrapOne) cons)
-          else if length cons /= 0 then
+          else if not (null cons) then
             confesses (UnsatClassCon (snd blame) (head cons) NotAFun)
           else pure id
 

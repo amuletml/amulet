@@ -114,6 +114,14 @@ decompose r p ty@TyForall{} = do
   (a, b, k) <- decompose r p t
   let cont = fromMaybe id k'
   pure (a, b, cont . k)
+decompose r p ty@(TyPi (Implicit cls) rest) = do
+  x <- TvName <$> genName
+  i <- view classes
+  tell (pure (ConImplicit r i x cls))
+
+  (a, b, k) <- decompose r p rest
+  let wrap ex = ExprWrapper (WrapVar x) (ExprWrapper (TypeAsc ty) ex (annotation ex, ty)) (annotation ex, rest)
+  pure (a, b, k . wrap)
 decompose r p t =
   case t ^? p of
     Just (a, b) -> pure (a, b, id)
@@ -133,6 +141,14 @@ quantifier r s ty@TyForall{} = do
   (k', _, t) <- instantiate Expression ty
   (a, b, k) <- quantifier r s t
   pure (a, b, fromMaybe id k' . k)
+quantifier r s ty@(TyPi (Implicit cls) rest) = do
+  x <- TvName <$> genName
+  i <- view classes
+  tell (pure (ConImplicit r i x cls))
+
+  (a, b, k) <- quantifier r s rest
+  let wrap ex = ExprWrapper (WrapVar x) (ExprWrapper (TypeAsc ty) ex (annotation ex, ty)) (annotation ex, rest)
+  pure (a, b, k . wrap)
 quantifier _ _ (TyPi x b) = pure (x, b, id)
 quantifier r _ t = do
   (a, b) <- (,) <$> freshTV <*> freshTV

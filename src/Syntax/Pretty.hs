@@ -146,7 +146,7 @@ instance (Pretty (Var p)) => Pretty (Type p) where
   pretty (TyCon v) = stypeCon (pretty v)
   pretty (TyPromotedCon v) = stypeCon (pretty v)
   pretty (TyVar v) = stypeVar (squote <> pretty v)
-  pretty (TySkol v) = stypeSkol (pretty (v ^. skolIdent) <> text "." <> pretty (v ^. skolVar))
+  pretty (TySkol v) = stypeSkol (pretty (v ^. skolIdent) <> squote <> pretty (v ^. skolVar))
 
   pretty (TyPi x e) = pretty x <+> pretty e
   pretty (TyWildcard (Just t)) = soperator (string "'_") <> pretty t
