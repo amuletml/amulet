@@ -53,6 +53,9 @@ data ParseError
 
   -- | A malformed class declaration
   | MalformedClass Span (Type Parsed)
+  -- | A malformed instanc declaration
+  | MalformedInstance Span (Type Parsed)
+
 
   -- | An invalid escape code
   | InvalidEscapeCode Span
@@ -123,6 +126,8 @@ instance Pretty ParseError where
                   ]
       _ -> "Malformed class declaration" <+> displayType ty
 
+  pretty (MalformedInstance _ ty) = "Malformed instance name" <+> verbatim (pretty ty)
+
   pretty (InvalidEscapeCode _) = "Unknown escape code."
 
   pretty (UnalignedIn _ p) = "The in is misaligned with the corresponding 'let'" <+> parens ("located at" <+> prettyPos (spanStart p))
@@ -139,6 +144,7 @@ instance Spanned ParseError where
   annotation (UnexpectedToken t _) = annotation t
 
   annotation (MalformedClass p _) = p
+  annotation (MalformedInstance p _) = p
 
   annotation (InvalidEscapeCode p) = p
 

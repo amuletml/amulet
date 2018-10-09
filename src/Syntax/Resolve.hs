@@ -150,6 +150,53 @@ resolveModule (Module name body:rs) = do
 
   where modZip name name' v v' = zip (map (name<>) v) (map (name'<>) v')
 
+resolveModule (t@(Class name ctx tvs ms ann):rs) = do
+  name' <- tagVar name
+  (tvs', tvss) <- resolveTele t tvs
+
+  extendTy (name, name') $ do
+    (ctx', ms') <- extendTyvarN tvss $ do
+      ctx' <- traverse (reType t) ctx
+      ms' <- zip <$> traverse (tagVar . fst) ms
+                 <*> traverse (reType t . snd) ms
+      pure (ctx', ms')
+
+    extendN (zipWith (\(v, _) (v', _) -> (v, v')) ms ms') $
+      (Class name' ctx' tvs' ms' ann:) <$> resolveModule rs
+
+resolveModule (t@(Instance cls ctx head ms ann):rs) = do
+  cls' <- lookupTy cls `catchJunk` t
+
+  let fvs = toList (foldMap ftv ctx <> ftv head)
+  fvs' <- traverse tagVar fvs
+
+  t' <- extendTyvarN (zip fvs fvs') $ do
+    ctx' <- traverse (reType t) ctx
+    head' <- reType t head
+
+    (ms', vs) <- unzip <$> traverse reMethod ms
+    ms'' <- extendN (concat vs) (sequence ms')
+
+    pure (Instance cls' ctx' head' ms'' ann)
+
+  (t':) <$> resolveModule rs
+
+  where
+    reMethod :: MonadResolve m
+             => Binding Parsed
+             -> m (m (Binding Resolved), [(Var Parsed, Var Resolved)])
+    reMethod (Binding var bod an) = do
+      var' <- tagVar var -- I don't know if this should be a fresh variable or
+                         -- use the same as the class one. Gah.
+      pure ( (\bod' -> Binding var' bod' an) <$> reExpr bod
+           , [(var, var')] )
+    reMethod b@(Matching pat bod an) = do
+      (pat', vs, ts) <- reWholePattern pat
+      when (length vs /= 1) (dictates (ArisingFrom IllegalMethod (BecauseOf b)))
+      pure ( (\bod' -> Matching pat' bod' an) <$> extendTyvarN ts (reExpr bod)
+           , vs )
+    reMethod TypedMatching{} = error "reBinding TypedMatching{}"
+
 lookupVar :: MonadResolve m
           => Var Parsed -> VarKind -> Map.Map (Var Parsed) ScopeVariable
           -> m (Var Resolved)

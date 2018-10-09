@@ -158,11 +158,8 @@ Top :: { Toplevel Parsed }
     | class Type begin MethodSigs end          {% fmap (withPos2 $1 $5) $ buildClass $2 $4 }
     | class Type '$begin' MethodSigs '$end'    {% fmap (withPos2 $1 $5) $ buildClass $2 $4 }
 
-    | instance Type begin Methods end
-      { withPos2 $1 $5 $ Instance undefined Nothing (getL $2) $4 }
-
-    | instance Type '$begin' Methods '$end'
-      { withPos2 $1 $5 $ Instance undefined Nothing (getL $2) $4 }
+    | instance Type begin Methods end          {% fmap (withPos2 $1 $5) $ buildInstance $2 $4 }
+    | instance Type '$begin' Methods '$end'    {% fmap (withPos2 $1 $5) $ buildInstance $2 $4 }
 
 
 --  | Instance                                 { $1 }
@@ -538,4 +535,22 @@ buildClass (L parsed typ) ms =
     go ty = do
       tellErrors [MalformedClass typ parsed]
       pure (undefined, [])
+
+buildInstance :: Located (Type Parsed) -> [Binding Parsed]
+           -> Parser (Span -> Toplevel Parsed)
+buildInstance (L ty typ) ms =
+  case ty of
+    (TyPi (Implicit ctx) ty) -> do
+      name <- go ty
+      pure (Instance name (Just ctx) ty ms)
+    ty -> do
+      name <- go ty
+      pure (Instance name Nothing ty ms)
+  where
+    go :: Type Parsed -> Parser (Var Parsed)
+    go (TyCon v) = pure v
+    go (TyApp rest _) = go rest
+    go ty = do
+      tellErrors [MalformedInstance typ ty]
+      pure undefined
 }

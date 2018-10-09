@@ -35,7 +35,7 @@ data ResolveError
 
   | EmptyMatch -- ^ This @match@ has no patterns
   | EmptyBegin -- ^ This @begin@ block has no expressions
-  | IllegalImplicit (Pattern Parsed) -- ^ When performing a pattern-matching let within an implicit bind.
+  | IllegalMethod -- ^ An illegal method within an @instance@
 
   -- | A wrapper for other errors which adds some additional context,
   -- such as a source position.
@@ -58,30 +58,17 @@ instance Pretty ResolveError where
 
   pretty EmptyMatch = "Empty match expression"
   pretty EmptyBegin = "Empty begin expression"
-  pretty (IllegalImplicit p) = "Invalid pattern" <+> verbatim p <+> "for implicit binding (should be a simple capture)"
+  pretty IllegalMethod = "Illegal pattern in instance method declaration"
 
   pretty (ArisingFrom er ex) = pretty er <#> empty <#> nest 4 (string "Arising from use of" <+> blameOf ex </> pretty ex)
 
 instance Spanned ResolveError where
   annotation (ArisingFrom _ x) = annotation x
   annotation (NonLinearRecord e _) = annotation e
-  annotation (IllegalImplicit p) = annotation p
   annotation _ = undefined
 
 instance Note ResolveError Style where
   diagnosticKind _ = ErrorMessage
-
-  formatNote f (IllegalImplicit pat) =
-    vsep [ indent 2 $ string "Illegal implicit binding of" <+> (Right <$> highlight "pattern" <+> pretty pat)
-         , empty
-         , f [annotation pat]
-         , empty
-         , indent 2 . bullet $ string "Note: all implicit bindings must be of the form"
-         , empty
-         , indent 6 $ (Right <$> keyword "let implicit") <+> char 'f' <+> (Right <$> equals) <+> string "..."
-         , empty
-         , indent 4 $ string "where" <+> (Right <$> stypeVar (char 'f')) <+> string "is an identifier or function."
-         ]
 
   formatNote f x = indent 2 (Right <$> pretty x) <#> fromJust (body x) where
     body (ArisingFrom er a) = body er <|> Just (f [annotation a])
