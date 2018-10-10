@@ -42,7 +42,6 @@ import Data.Text (Text)
 import Text.Pretty.Semantic
 
 import Prelude hiding (lookup)
-import Debug.Trace
 
 data SolveScope
   = SolveScope { _bindSkol :: Bool
@@ -104,7 +103,7 @@ doSolve Empty = pure ()
 doSolve (ConUnify because v a b :<| xs) = do
   sub <- use solveTySubst
 
-  traceM (displayS (pretty (ConUnify because v (apply sub a) (apply sub b))))
+  -- traceM (displayS (pretty (ConUnify because v (apply sub a) (apply sub b))))
   co <- memento $ unify (apply sub a) (apply sub b)
   case co of
     Left e -> do
@@ -116,7 +115,7 @@ doSolve (ConUnify because v a b :<| xs) = do
 doSolve (ConSubsume because scope v a b :<| xs) = do
   sub <- use solveTySubst
 
-  traceM (displayS (pretty (ConSubsume because scope v (apply sub a) (apply sub b))))
+  -- traceM (displayS (pretty (ConSubsume because scope v (apply sub a) (apply sub b))))
   let a' = apply sub a
   sub <- use solveTySubst
   doSolve xs
@@ -166,7 +165,6 @@ doSolve (ohno@(ConImplicit _ scope var cons) :<| cs) = do
   doSolve cs
   sub <- use solveTySubst
   cons <- pure (apply sub cons)
-  traceM (displayS (pretty cons))
   case lookup cons scope of
     [] -> do
       let wrap ex | an <- annotation ex, ty <- getType ex =

@@ -3,7 +3,7 @@
 module Syntax.Implicits
   ( ImplicitScope
   , Obligation(..), Sort(..)
-  , Implicit(..), implHead, implPre, implVar, implType
+  , Implicit(..), implHead, implPre, implVar, implType, implSort
   , lookup, keys, mapTypes, subTrie
   , insert, singleton
   , spine, splitImplVarType

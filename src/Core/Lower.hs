@@ -270,6 +270,8 @@ lowerProg' :: forall m. MonadLower m => [Toplevel Typed] -> m [Stmt]
 lowerProg' [] = pure []
 lowerProg' (Open _ _:prg) = lowerProg' prg
 lowerProg' (Module _ b:prg) = lowerProg' (b ++ prg)
+lowerProg' (Class{}:prg) = lowerProg' prg
+lowerProg' (Instance{}:prg) = lowerProg' prg
 
 lowerProg' (ForeignVal (TvName v) ex tp _:prg) =
   let tyB = lowerType tp
