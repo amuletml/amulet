@@ -13,6 +13,8 @@ module Types.Infer
   , infer, check
   ) where
 
+import Prelude hiding (lookup)
+
 import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Text as T
@@ -365,7 +367,7 @@ inferClass clss@(Class name ctx _ methods classAnn) = do
 
       pure ( (method, closed)
            , (method, withHead)
-           , (method, nameName (unTvName method), ty))
+           , (Anon, method, nameName (unTvName method), ty))
 
     let tele = one name k <> teleFromList decls
         unwind (TyTuple a b) = a:unwind b
@@ -376,23 +378,26 @@ inferClass clss@(Class name ctx _ methods classAnn) = do
     ctx <- traverse (\x -> checkAgainstKind (BecauseOf clss) x tyConstraint) ctx
     (fold -> scope, rows') <- fmap unzip . for (getContext ctx) $
       \obligation -> do
+        impty <- retcon (const mempty) $
+          closeOver (BecauseOf clss) $
+            TyPi (Implicit classConstraint) obligation
         var@(TgName name _) <- genNameWith (classCon' <> T.singleton '$')
-        pure ( singleton Superclass (TvName var) obligation
-             , (TvName var, name, obligation))
+        pure ( singleton Superclass (TvName var) impty
+             , (Implicit, TvName var, name, obligation))
 
     let inner :: Type Typed
-        inner = TyExactRows (map (\(_, x, y) -> (x, y)) rows
-                          ++ map (\(_, x, y) -> (x, y)) rows')
+        inner = TyExactRows (map (\(_, _, x, y) -> (x, y)) rows
+                          ++ map (\(_, _, x, y) -> (x, y)) rows')
 
     classConTy <- retcon (const mempty) $
       closeOver (BecauseOf clss) (TyArr inner classConstraint)
     let tyDecl :: Toplevel Typed
         tyDecl = TypeDecl name params
           [ArgCon classCon inner (classAnn, classConTy)]
-    let mkDecl :: (Var Typed, T.Text, Type Typed) -> m (Binding Typed)
-        mkDecl (var, label, theTy) = do
+    let mkDecl :: (Type Typed -> TyBinder Typed, Var Typed, T.Text, Type Typed) -> m (Binding Typed)
+        mkDecl (f, var, label, theTy) = do
           capture <- TvName <$> genName
-          let ty = TyArr classConstraint theTy
+          let ty = TyPi (f classConstraint) theTy
           let expr =
                 Fun (PatParam
                        (Destructure classCon
@@ -425,24 +430,38 @@ inferLetTy closeOver vs =
                 -> m (Type Typed, Expr Typed -> Expr Typed)
       figureOut blame ex ty cs = do
         (x, co, cons) <- retcons (addBlame (snd blame)) (solve cs)
-        let wrapOne (ConImplicit _ _ var ty) ex | an <- annotation ex =
-              Fun (EvParam (Capture var (an, ty)))
-                ex (an, TyPi (Anon ty) (getType ex))
-            wrapOne _ ex = ex
+        let wrapCons :: ImplicitScope Typed
+                     -> [Constraint Typed] -> Expr Typed -> Expr Typed
+            wrapCons scope (ConImplicit _ _ var ty:cs) ex
+              | [ImplChoice _ t [] v _] <- lookup ty scope
+              , an <- annotation ex =
+                wrapCons scope cs $
+                  Let [Binding var (VarRef v (an, t)) (an, t)]
+                    ex
+                    (an, getType ex)
+              | an <- annotation ex =
+                Fun (EvParam (Capture var (an, ty)))
+                  (wrapCons (insert InstSort var ty scope) cs ex)
+                  (an, TyPi (Anon ty) (getType ex))
+            wrapCons scope (_:cs) ex = wrapCons scope cs ex
+            wrapCons _ [] ex = ex
 
-        let addCss [] ty = ty
-            addCss (ConImplicit _ _ _ ty:cs) r = TyPi (Implicit ty) (addCss cs r)
-            addCss (_:cs) r = addCss cs r
+        let addCss _ [] ty = ty
+            addCss scope (ConImplicit _ _ var ty:cs) r
+              | [] <- lookup ty scope
+              = TyPi (Implicit ty) (addCss (insert InstSort var ty scope) cs r)
+              | otherwise = addCss scope cs r
+            addCss scope (_:cs) r = addCss scope cs r
 
         quant <-
           if isFn ex then
-            pure $ appEndo (foldMap (Endo . wrapOne) cons)
+            pure $ wrapCons mempty cons
           else if not (null cons) then
             confesses (UnsatClassCon (snd blame) (head cons) NotAFun)
           else pure id
 
         vt <- closeOver (Set.singleton (TvName (fst blame)))
-                ex (apply x (addCss cons ty))
+                ex (apply x (addCss mempty cons ty))
         ty <- skolCheck (TvName (fst blame)) (snd blame) vt
         let (tp, sub) = rename ty
         pure (tp, quant . solveEx tp (x <> sub) co)

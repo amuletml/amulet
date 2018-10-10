@@ -161,21 +161,48 @@ doSolve (ConFail a v t :<| cs) = do
       sub = s `compose` s'
   dictates . reblame (BecauseOf ex) $ foundHole v t sub
 
-doSolve (ohno@(ConImplicit _ scope var cons) :<| cs) = do
+doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
   doSolve cs
   sub <- use solveTySubst
   cons <- pure (apply sub cons)
+  scope <- pure (mapTypes (apply sub) scope)
   case lookup cons scope of
     [] -> do
       let wrap ex | an <- annotation ex, ty <- getType ex =
             App ex (VarRef var (an, cons)) (an, ty)
       solveCoSubst . at var ?= WrapFn (MkWrapCont wrap "expr app (deferred)")
       tell (pure (apply sub ohno))
-    [x] ->
-      let wrap ex | an <- annotation ex, ty <- getType ex =
-            App ex (VarRef (x ^. implVar) (an, cons)) (an, ty)
-       in solveCoSubst . at var ?= WrapFn (MkWrapCont wrap "expr app")
-    xs -> error ("this really shouldn't be possible: " ++ show xs)
+    (x:_) -> do
+      w <- useImplicit reason cons scope x
+      solveCoSubst . at var ?= w
+
+useImplicit :: forall m. MonadSolve m
+            => SomeReason -> Type Typed -> ImplicitScope Typed
+            -> Implicit Typed -> m (Wrapper Typed)
+useImplicit reason ty scope (ImplChoice hdt oty os imp _) = go where
+  go :: m (Wrapper Typed)
+  go = do
+    (hdt, refresh) <- refreshTy hdt
+    (cast, view solveTySubst -> sub) <- capture $ unify hdt ty
+
+    let start e = VarRef imp (annotation e, oty)
+        mk _ [] = pure (\e -> ExprWrapper (probablyCast cast) e (annotation e, ty))
+        mk (TyPi (Invisible v _) t) (Quantifier (Invisible _ _):xs) = do
+          let tau = apply sub . apply refresh . TyVar $ v
+          let sub' = Map.singleton v tau
+
+          flip (.) (\ex -> ExprWrapper (TypeApp tau) ex (annotation ex, apply sub' t)) <$> mk (apply sub' t) xs
+        mk (TyPi (Implicit tau) t) (Implication _:os) = do
+          var <- TvName <$> genName
+          doSolve (pure (ConImplicit reason scope var tau))
+          k' <- mk t os
+          pure (k' . (\ex -> ExprWrapper (WrapVar var) ex (annotation ex, t)))
+        mk x (o:_) = error (show x ++ " missing " ++ show o)
+
+    wrap <- mk oty os
+    solveTySubst %= compose sub
+    let cont ex = App ex (wrap (start ex)) (annotation ex, getType ex)
+    pure (WrapFn (MkWrapCont cont ("implicit value for " ++ show ty)))
 
 bind :: MonadSolve m => Var Typed -> Type Typed -> m (Coercion Typed)
 bind var ty
@@ -608,6 +635,12 @@ unequal a b = do
 select :: Respannable a => Text -> [Field a] -> Maybe (Expr a)
 select t = fmap go . find ((== t) . view fName) where
   go (Field _ e s) = respan (const (annotation s)) e
+
+refreshTy :: (Substitutable Typed a, MonadNamey m) => a -> m (a, Subst Typed)
+refreshTy ty = do
+  vs <- for (Set.toList (ftv ty)) $ \v ->
+    (v,) <$> refreshTV v
+  pure (apply (Map.fromList vs) ty, Map.fromList vs)
 
 mkRecordWrapper :: [(Text, Type Typed)]
                 -> Map.Map Text (Type Typed, Type Typed, Wrapper Typed)
