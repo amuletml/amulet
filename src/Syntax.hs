@@ -332,6 +332,8 @@ instance (Spanned (Constructor p), Spanned (Ann p)) => Spanned (Toplevel p) wher
   annotation (LetStmt (b:vs)) = sconcat (annotation b :| map annotation vs)
   annotation (TypeDecl _ _ (x:xs)) = sconcat (annotation x :| map annotation xs)
   annotation (ForeignVal _ _ _ x) = annotation x
+  annotation (Class _ _ _ _ x) = annotation x
+  annotation (Instance _ _ _ _ x) = annotation x
   annotation _ = internal
 
 _TyArr :: Prism' (Type p) (Type p, Type p)

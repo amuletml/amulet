@@ -2,7 +2,7 @@
    UndecidableInstances, ScopedTypeVariables, TemplateHaskell #-}
 module Syntax.Implicits
   ( ImplicitScope
-  , Obligation(..)
+  , Obligation(..), Sort(..)
   , Implicit(..), implHead, implPre, implVar, implType
   , lookup, keys, mapTypes, subTrie
   , insert, singleton
@@ -36,6 +36,9 @@ data Obligation p
   -- | An implicit parameter to an implicit value.
   | Implication (Type p)
 
+data Sort = InstSort | Superclass
+  deriving (Eq, Show, Ord)
+
 deriving instance (Show (Var p), Show (Ann p)) => Show (Obligation p)
 deriving instance Ord (Var p) => Ord (Obligation p)
 deriving instance Eq (Var p) => Eq (Obligation p)
@@ -48,6 +51,7 @@ data Implicit p
                , _implType :: Type p -- ^ The /entire/ type of the implicit parameter, with all quantifiers and such
                , _implPre :: [Obligation p] -- ^ The list of 'pre'conditions this choice implies
                , _implVar :: Var p -- ^ The actual implicit
+               , _implSort :: Sort
                }
 
 deriving instance (Show (Var p), Show (Ann p)) => Show (Implicit p)
@@ -80,11 +84,11 @@ deriving instance Eq (Var p) => Eq (ImplicitScope p)
 
 -- | Insert a choice for a *fully-known* (@Solved@) implicit parameter
 -- (the variable @v@) of type @tau@ at the given trie.
-insert :: forall p. Ord (Var p) => Var p -> Type p -> ImplicitScope p -> ImplicitScope p
-insert v ty = go ts implicit where
+insert :: forall p. Ord (Var p) => Sort -> Var p -> Type p -> ImplicitScope p -> ImplicitScope p
+insert sort v ty = go ts implicit where
   (head, obligations) = getHead ty
 
-  implicit = ImplChoice head ty (toList obligations) v
+  implicit = ImplChoice head ty (toList obligations) v sort
   ts = spine head
 
   go [] _ _ = error "empty spine (*very* malformed type?)"
@@ -189,7 +193,7 @@ mapTypes fn = go where
   goNode (Many t) = Many (go t)
   goNode (ManyMore xs t) = ManyMore (map goI xs) (go t)
 
-  goI (ImplChoice h t o v) = ImplChoice (fn h) (fn t) (map goO o) v
+  goI (ImplChoice h t o v s) = ImplChoice (fn h) (fn t) (map goO o) v s
 
   goO (Quantifier (Invisible v k)) = Quantifier (Invisible v (fn <$> k))
   goO (Quantifier _) = error "impossible quantifier"
@@ -206,8 +210,8 @@ subTrie = go where
   goNode _ _ = Nothing
 
 -- | Make a trie consisting of the only the one given implicit.
-singleton :: Ord (Var p) => Var p -> Type p -> ImplicitScope p
-singleton v t = insert v t mempty
+singleton :: Ord (Var p) => Sort -> Var p -> Type p -> ImplicitScope p
+singleton s v t = insert s v t mempty
 
 -- | Decompose a type into its main "spine" of left-nested applications.
 -- @

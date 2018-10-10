@@ -42,6 +42,7 @@ import Data.Text (Text)
 import Text.Pretty.Semantic
 
 import Prelude hiding (lookup)
+import Debug.Trace
 
 data SolveScope
   = SolveScope { _bindSkol :: Bool
@@ -54,7 +55,7 @@ data SolveState
                , _solveAssumptions :: Subst Typed
                , _solveCoSubst :: Map.Map (Var Typed) (Wrapper Typed)
                }
-  deriving (Eq, Show, Ord)
+  deriving (Eq, Show)
 
 makeLenses ''SolveState
 makeLenses ''SolveScope
@@ -103,7 +104,7 @@ doSolve Empty = pure ()
 doSolve (ConUnify because v a b :<| xs) = do
   sub <- use solveTySubst
 
-  -- traceM (displayS (pretty (ConUnify because v (apply sub a) (apply sub b))))
+  traceM (displayS (pretty (ConUnify because v (apply sub a) (apply sub b))))
   co <- memento $ unify (apply sub a) (apply sub b)
   case co of
     Left e -> do
@@ -115,16 +116,16 @@ doSolve (ConUnify because v a b :<| xs) = do
 doSolve (ConSubsume because scope v a b :<| xs) = do
   sub <- use solveTySubst
 
-  -- traceM (displayS (pretty (ConSubsume because scope v (apply sub a) (apply sub b))))
+  traceM (displayS (pretty (ConSubsume because scope v (apply sub a) (apply sub b))))
   let a' = apply sub a
   sub <- use solveTySubst
+  doSolve xs
   co <- memento $ subsumes because scope a' (apply sub b)
   case co of
     Left e -> do
       dictate e
       solveCoSubst . at v ?= IdWrap
     Right co -> solveCoSubst . at v .= Just co
-  doSolve xs
 
 doSolve (ConImplies because not cs ts :<| xs) = do
   before <- use solveTySubst
@@ -162,20 +163,21 @@ doSolve (ConFail a v t :<| cs) = do
   dictates . reblame (BecauseOf ex) $ foundHole v t sub
 
 doSolve (ohno@(ConImplicit _ scope var cons) :<| cs) = do
+  doSolve cs
   sub <- use solveTySubst
   cons <- pure (apply sub cons)
+  traceM (displayS (pretty cons))
   case lookup cons scope of
     [] -> do
       let wrap ex | an <- annotation ex, ty <- getType ex =
             App ex (VarRef var (an, cons)) (an, ty)
       solveCoSubst . at var ?= WrapFn (MkWrapCont wrap "expr app (deferred)")
-      tell [ohno]
+      tell (pure (apply sub ohno))
     [x] ->
       let wrap ex | an <- annotation ex, ty <- getType ex =
             App ex (VarRef (x ^. implVar) (an, cons)) (an, ty)
        in solveCoSubst . at var ?= WrapFn (MkWrapCont wrap "expr app")
     xs -> error ("this really shouldn't be possible: " ++ show xs)
-  doSolve cs
 
 bind :: MonadSolve m => Var Typed -> Type Typed -> m (Coercion Typed)
 bind var ty
@@ -506,7 +508,7 @@ skolemise motive ty@(TyPi (Invisible tv k) t) = do
 skolemise motive wt@(TyPi (Implicit ity) t) = do
   (omega, ty, scp) <- skolemise motive t
   var <- TvName <$> genName
-  let scope = insert var ity scp
+  let scope = insert InstSort var ity scp
       wrap ex | an <- annotation ex =
         Fun (EvParam (Capture var (an, ity)))
           (ExprWrapper omega ex (an, ty)) (an, wt)

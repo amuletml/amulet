@@ -16,7 +16,7 @@ module Control.Monad.Infer
   , Constraint(..)
   , Env
   , MonadInfer, Name
-  , lookupTy, lookupTy', genNameFrom, runInfer, freeInEnv
+  , lookupTy, lookupTy', genNameFrom, genNameWith, runInfer, freeInEnv
   , difference, freshTV, refreshTV
   , instantiate
   , SomeReason(..), Reasonable, addBlame
@@ -177,6 +177,11 @@ genNameFrom :: MonadNamey m => Text -> m (Var Resolved)
 genNameFrom t = do
   TgName _ n <- genName
   pure (TgName t n)
+
+genNameWith :: MonadNamey m => Text -> m (Var Resolved)
+genNameWith t = do
+  TgName e n <- genName
+  pure (TgName (t <> e) n)
 
 firstName :: Var Resolved
 firstName = TgName "a" 0

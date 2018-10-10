@@ -1,4 +1,5 @@
-{-# LANGUAGE FlexibleContexts, TupleSections, ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleContexts, TupleSections, ScopedTypeVariables,
+   ViewPatterns #-}
 module Types.Infer
   ( inferProgram
   , builtinsEnv
@@ -16,9 +17,10 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Text as T
 import qualified Data.Set as Set
-import Data.Reason
 import Data.Traversable
+import Data.Foldable
 import Data.Spanned
+import Data.Reason
 import Data.Triple
 import Data.These
 import Data.Graph
@@ -30,6 +32,7 @@ import Control.Arrow (first)
 import Control.Lens
 
 import Syntax.Resolve.Toplevel
+import Syntax.Implicits
 import Syntax.Transform
 import Syntax.Subst
 import Syntax.Types
@@ -37,12 +40,12 @@ import Syntax.Let
 import Syntax.Var
 import Syntax
 
-import Types.Kinds
 import Types.Infer.Constructor
 import Types.Infer.Pattern
 import Types.Infer.Builtin
 import Types.Infer.Outline
 import Types.Wellformed
+import Types.Kinds
 import Types.Unify
 
 import Text.Pretty.Semantic
@@ -306,6 +309,14 @@ inferProg (Open mod pre:prg) = do
   local (classes %~ (<>modImplicits)) $
     consFst (Open (TvName mod) pre) $ inferProg prg
 
+inferProg (c@(Class v _ _ _ _):prg) = do
+  (stmts, decls, clss, implicits) <- inferClass c
+  first (stmts ++) <$> do
+    local (names %~ focus decls) $
+      local (classDecs . at (TvName v) ?~ clss) $
+      local (classes %~ mappend implicits) $
+        inferProg prg
+
 inferProg (Module name body:prg) = do
   (body', env) <- inferProg body
 
@@ -319,6 +330,84 @@ inferProg (Module name body:prg) = do
     inferProg prg
 
 inferProg [] = asks ([],)
+
+inferClass :: forall m. MonadInfer Typed m
+           => Toplevel Resolved
+           -> m ( [Toplevel Typed]
+                , Telescope Typed
+                , Toplevel Typed
+                , ImplicitScope Typed )
+inferClass clss@(Class name ctx _ methods classAnn) = do
+  let nameName (TgInternal x) = x
+      nameName (TgName x _) = x
+
+  let toVar :: TyConArg Typed -> Type Typed
+      toVar (TyVarArg v) = TyVar v
+      toVar (TyAnnArg v _) = TyVar v
+
+  let classCon' =
+        T.cons (toUpper (T.head (nameName name)))
+          (T.tail (nameName name))
+  classCon <- TvName <$> genNameFrom classCon'
+
+  name <- pure (TvName name)
+  (k, params) <- resolveClassKind clss
+  let classConstraint = foldl TyApp (TyCon name) (map toVar params)
+
+  local (names %~ focus (one name k)) $ do
+    -- Infer the types for every method
+    (methods, decls, rows) <- fmap unzip3 . for methods $ \(method, ty) -> do
+      method <- pure (TvName method)
+      ty <- resolveKind (BecauseOf clss) ty
+      closed <- closeOver (BecauseOf clss) ty
+      withHead <- closeOver (BecauseOf clss) $
+        TyPi (Implicit classConstraint) ty
+
+      pure ( (method, closed)
+           , (method, withHead)
+           , (method, nameName (unTvName method), ty))
+
+    let tele = one name k <> teleFromList decls
+        unwind (TyTuple a b) = a:unwind b
+        unwind t = pure t
+        getContext Nothing = []
+        getContext (Just t) = unwind t
+
+    ctx <- traverse (\x -> checkAgainstKind (BecauseOf clss) x tyConstraint) ctx
+    (fold -> scope, rows') <- fmap unzip . for (getContext ctx) $
+      \obligation -> do
+        var@(TgName name _) <- genNameWith (classCon' <> T.singleton '$')
+        pure ( singleton Superclass (TvName var) obligation
+             , (TvName var, name, obligation))
+
+    let inner :: Type Typed
+        inner = TyExactRows (map (\(_, x, y) -> (x, y)) rows
+                          ++ map (\(_, x, y) -> (x, y)) rows')
+
+    classConTy <- retcon (const mempty) $
+      closeOver (BecauseOf clss) (TyArr inner classConstraint)
+    let tyDecl :: Toplevel Typed
+        tyDecl = TypeDecl name params
+          [ArgCon classCon inner (classAnn, classConTy)]
+    let mkDecl :: (Var Typed, T.Text, Type Typed) -> m (Binding Typed)
+        mkDecl (var, label, theTy) = do
+          capture <- TvName <$> genName
+          let ty = TyArr classConstraint theTy
+          let expr =
+                Fun (PatParam
+                       (Destructure classCon
+                         (Just (Capture capture (classAnn, inner)))
+                         (classAnn, classConstraint)))
+                 (Access (VarRef capture (classAnn, inner)) label (classAnn, ty))
+                 (classAnn, ty)
+          ty <- retcon (const mempty) $
+            closeOver (BecauseOf clss) ty
+          pure (Binding var expr (classAnn, ty))
+    decs <- traverse mkDecl (rows ++ rows')
+    pure ( tyDecl:map (LetStmt . pure) decs, tele
+         , Class name ctx params ((classCon, classConTy):methods) (classAnn, k)
+         , scope)
+inferClass _ = error "not a class"
 
 inferLetTy :: forall m. MonadInfer Typed m
            => (Set.Set (Var Typed) -> Expr Typed -> Type Typed -> m (Type Typed))
@@ -599,7 +688,6 @@ isFn (OpenIn _ e _) = isFn e
 isFn (Ascription e _ _) = isFn e
 isFn (ExprWrapper _ e _) = isFn e
 isFn _ = False
-
 
 deSkol :: Type Typed -> Type Typed
 deSkol = go mempty where

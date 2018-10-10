@@ -1,7 +1,7 @@
 {-# LANGUAGE ConstraintKinds, FlexibleContexts, LambdaCase #-}
 module Types.Kinds
   ( resolveKind
-  , resolveTyDeclKind
+  , resolveTyDeclKind, resolveClassKind
   , annotateKind
   , closeOver
   , checkAgainstKind, getKind, liftType
@@ -73,20 +73,39 @@ checkAgainstKind r t k = do
 
 annotateKind :: MonadKind m => SomeReason -> Type Typed -> m (Type Typed)
 annotateKind r ty = do
-  ((ty, _), cs) <- runWriterT (runStateT (checkKind (raiseT unTvName ty) TyType) r)
+  ((ty, _), cs) <- runWriterT (runStateT (fmap fst (inferKind (raiseT unTvName ty))) r)
   (sub, _, _) <- solve cs
   pure (apply sub ty)
 
-initialKind :: MonadKind m => [TyConArg Resolved] -> KindT m (Type Typed, Telescope Typed)
-initialKind (TyVarArg v:as) = do
-  (k, t) <- initialKind as
+initialKind :: MonadKind m => Type Typed -> [TyConArg Resolved] -> KindT m (Type Typed, Telescope Typed)
+initialKind k (TyVarArg v:as) = do
+  (k, t) <- initialKind k as
   ty <- freshTV
   pure (TyArr ty k, one v ty <> t)
-initialKind (TyAnnArg v k:as) = do
+initialKind ret (TyAnnArg v k:as) = do
   k <- checkKind k TyType
-  (s, t) <- initialKind as
+  (s, t) <- initialKind ret as
   pure (TyArr k s, t <> one v k)
-initialKind [] = pure (TyType, mempty)
+initialKind ret [] = pure (ret, mempty)
+
+resolveClassKind :: MonadKind m
+                 => Toplevel Resolved
+                 -> m (Type Typed, [TyConArg Typed])
+resolveClassKind stmt@(Class classcon ctx args methods _) = do
+  let reason = BecauseOf stmt
+  k <- solveForKind reason $ do
+    (kind, tele) <- initialKind tyConstraint args
+    let scope = one classcon kind <> tele
+    local (names %~ focus scope) $ do
+      traverse_ (flip checkKind tyConstraint) ctx
+      for_ methods $ \(_, ty) ->
+        checkKind ty TyType
+    pure kind
+  let remake (TyVarArg v:as) (TyArr _ k) = TyVarArg (TvName v):remake as k
+      remake (TyAnnArg v _:as) (TyArr k r) = TyAnnArg (TvName v) k:remake as r
+      remake _ _ = []
+  pure (k, remake args k)
+resolveClassKind _ = error "not a class"
 
 resolveTyDeclKind :: MonadKind m
                   => SomeReason
@@ -98,7 +117,7 @@ resolveTyDeclKind reason tycon args cons = do
       argTvName (TyAnnArg v _) = Just (TvName v)
       vs = mapMaybe argTvName args
   k <- solveForKind reason $ do
-    (kind, tele) <- initialKind args
+    (kind, tele) <- initialKind TyType args
     let scope = one tycon kind <> tele
 
     local (names %~ focus scope) $ do
