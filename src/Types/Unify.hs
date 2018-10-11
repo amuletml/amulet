@@ -40,7 +40,6 @@ import Data.Reason
 import Data.Text (Text)
 
 import Text.Pretty.Semantic
-import Debug.Trace
 
 import Prelude hiding (lookup)
 
@@ -105,7 +104,7 @@ doSolve Empty = pure ()
 doSolve (ConUnify because v a b :<| xs) = do
   sub <- use solveTySubst
 
-  traceM (displayS (pretty (ConUnify because v (apply sub a) (apply sub b))))
+  -- traceM (displayS (pretty (ConUnify because v (apply sub a) (apply sub b))))
   co <- memento $ unify (apply sub a) (apply sub b)
   case co of
     Left e -> do
@@ -117,7 +116,7 @@ doSolve (ConUnify because v a b :<| xs) = do
 doSolve (ConSubsume because scope v a b :<| xs) = do
   sub <- use solveTySubst
 
-  traceM (displayS (pretty (ConSubsume because scope v (apply sub a) (apply sub b))))
+  -- traceM (displayS (pretty (ConSubsume because scope v (apply sub a) (apply sub b))))
   let a' = apply sub a
   doSolve xs
   sub <- use solveTySubst
@@ -183,7 +182,6 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
                tell (pure (apply sub ohno))
       else case filter ((/= Superclass) . view implSort) $ lookup cons scope of
             [] -> do
-              traceM "deferring"
               let wrap ex | an <- annotation ex, ty <- getType ex =
                     App ex (VarRef var (an, cons)) (an, ty)
               solveCoSubst . at var ?= WrapFn (MkWrapCont wrap "expr app (deferred)")
@@ -199,7 +197,7 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
               tell (pure (apply sub ohno))
 
 allSameHead :: [Implicit Typed] -> Bool
-allSameHead (x:xs) = all (matches (x ^. implHead) . view implHead) (traceShowId xs)
+allSameHead (x:xs) = all (matches (x ^. implHead) . view implHead) xs
 allSameHead [] = True
 
 useImplicit :: forall m. MonadSolve m
