@@ -53,7 +53,6 @@ import Types.Unify
 
 import Text.Pretty.Semantic
 import Control.Exception (assert)
-import Debug.Trace
 
 -- | Solve for the types of bindings in a problem: Either @TypeDecl@s,
 -- @LetStmt@s, or @ForeignVal@s.
@@ -424,7 +423,7 @@ inferProg (inst@(Instance clss ctx instHead bindings ann):prg) = do
           (VarRef localInstanceName (ann, localInsnConTy))
           (ann, localInsnConTy)
       bind = Binding instanceName (Ascription fun globalInsnConTy (ann, globalInsnConTy)) (ann, globalInsnConTy)
-  traceM (displayS (pretty bind))
+  
   consFst (LetStmt [bind]) $
     local (classes %~ insert InstSort instanceName globalInsnConTy) $
       inferProg prg
@@ -617,8 +616,6 @@ inferLetTy closeOver vs =
 
         when (cons /= []) $
           confesses (ArisingFrom (UnsatClassCon (BecauseOf b) (head cons) PatBinding) (BecauseOf b))
-
-        traceM (show wraps')
 
         name <- TvName <$> genName
         let addLet (ConImplicit _ _ var ty:cs) ex | an <- annotation ex =
