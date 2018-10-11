@@ -40,12 +40,14 @@ import Data.Reason
 import Data.Text (Text)
 
 import Text.Pretty.Semantic
+import Debug.Trace
 
 import Prelude hiding (lookup)
 
 data SolveScope
   = SolveScope { _bindSkol :: Bool
                , _don'tTouch :: Set.Set (Var Typed)
+               , _depth :: Int
                }
   deriving (Eq, Show, Ord)
 
@@ -85,7 +87,7 @@ runSolve s x = fix (runReaderT (runStateT (runWriterT act) (SolveState s mempty 
     ((_, cs), s) <- act
     let ss = s ^. solveTySubst
     pure (fmap (apply ss) ss, s ^. solveCoSubst, cs)
-  emptyScope = SolveScope False mempty
+  emptyScope = SolveScope False mempty 0
 
 -- | Solve a sequence of constraints, returning either a substitution
 -- for both type variables (a 'Subst' 'Typed') and for 'Wrapper'
@@ -103,7 +105,7 @@ doSolve Empty = pure ()
 doSolve (ConUnify because v a b :<| xs) = do
   sub <- use solveTySubst
 
-  -- traceM (displayS (pretty (ConUnify because v (apply sub a) (apply sub b))))
+  traceM (displayS (pretty (ConUnify because v (apply sub a) (apply sub b))))
   co <- memento $ unify (apply sub a) (apply sub b)
   case co of
     Left e -> do
@@ -115,10 +117,10 @@ doSolve (ConUnify because v a b :<| xs) = do
 doSolve (ConSubsume because scope v a b :<| xs) = do
   sub <- use solveTySubst
 
-  -- traceM (displayS (pretty (ConSubsume because scope v (apply sub a) (apply sub b))))
+  traceM (displayS (pretty (ConSubsume because scope v (apply sub a) (apply sub b))))
   let a' = apply sub a
-  sub <- use solveTySubst
   doSolve xs
+  sub <- use solveTySubst
   co <- memento $ subsumes because scope a' (apply sub b)
   case co of
     Left e -> do
@@ -161,20 +163,44 @@ doSolve (ConFail a v t :<| cs) = do
       sub = s `compose` s'
   dictates . reblame (BecauseOf ex) $ foundHole v t sub
 
+doSolve (ConImplicit _ _ v x :<| cs) | x == tyUnit = do
+  doSolve cs
+  let wrap ex | an <- annotation ex, ty <- getType ex = App ex (Literal LiUnit (an, tyUnit)) (an, ty)
+  solveCoSubst . at v ?= WrapFn (MkWrapCont wrap "unit solution app")
+
 doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
   doSolve cs
   sub <- use solveTySubst
   cons <- pure (apply sub cons)
   scope <- pure (mapTypes (apply sub) scope)
-  case lookup cons scope of
-    [] -> do
-      let wrap ex | an <- annotation ex, ty <- getType ex =
-            App ex (VarRef var (an, cons)) (an, ty)
-      solveCoSubst . at var ?= WrapFn (MkWrapCont wrap "expr app (deferred)")
-      tell (pure (apply sub ohno))
-    (x:_) -> do
-      w <- useImplicit reason cons scope x
-      solveCoSubst . at var ?= w
+
+  x <- view depth
+  if x >= 10
+     then let wrap ex | an <- annotation ex, ty <- getType ex =
+                App ex (VarRef var (an, cons)) (an, ty)
+             in do
+               solveCoSubst . at var ?= WrapFn (MkWrapCont wrap "expr app (deferred)")
+               tell (pure (apply sub ohno))
+      else case filter ((/= Superclass) . view implSort) $ lookup cons scope of
+            [] -> do
+              traceM "deferring"
+              let wrap ex | an <- annotation ex, ty <- getType ex =
+                    App ex (VarRef var (an, cons)) (an, ty)
+              solveCoSubst . at var ?= WrapFn (MkWrapCont wrap "expr app (deferred)")
+              tell (pure (apply sub ohno))
+            xs | allSameHead xs, concreteUnderOne cons -> do
+              w <- local (depth %~ succ) $
+                useImplicit reason cons scope (head xs)
+              solveCoSubst . at var ?= w
+            _ -> do
+              let wrap ex | an <- annotation ex, ty <- getType ex =
+                    App ex (VarRef var (an, cons)) (an, ty)
+              solveCoSubst . at var ?= WrapFn (MkWrapCont wrap "expr app (deferred)")
+              tell (pure (apply sub ohno))
+
+allSameHead :: [Implicit Typed] -> Bool
+allSameHead (x:xs) = all (matches (x ^. implHead) . view implHead) (traceShowId xs)
+allSameHead [] = True
 
 useImplicit :: forall m. MonadSolve m
             => SomeReason -> Type Typed -> ImplicitScope Typed
@@ -594,6 +620,11 @@ prettyConcrete :: Type Typed -> Bool
 prettyConcrete TyVar{} = False
 prettyConcrete (TyWildcard t) = maybe False prettyConcrete t
 prettyConcrete _ = True
+
+concreteUnderOne :: Type Typed -> Bool
+concreteUnderOne TyVar{} = False
+concreteUnderOne (TyApp f x) = prettyConcrete f && concretish x
+concreteUnderOne _ = True
 
 firstBlame, secondBlame :: SomeReason -> SomeReason
 firstBlame (It'sThis (BecauseOfExpr (Tuple (x:_) _) _)) = becauseExp x

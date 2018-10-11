@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleContexts, TupleSections, ScopedTypeVariables,
-   ViewPatterns #-}
+   ViewPatterns, LambdaCase #-}
 module Types.Infer
   ( inferProgram
   , builtinsEnv
@@ -26,6 +26,7 @@ import Data.Reason
 import Data.Triple
 import Data.These
 import Data.Graph
+import Data.Maybe
 import Data.Char
 
 import Control.Monad.State
@@ -52,6 +53,7 @@ import Types.Unify
 
 import Text.Pretty.Semantic
 import Control.Exception (assert)
+import Debug.Trace
 
 -- | Solve for the types of bindings in a problem: Either @TypeDecl@s,
 -- @LetStmt@s, or @ForeignVal@s.
@@ -319,6 +321,114 @@ inferProg (c@(Class v _ _ _ _):prg) = do
       local (classes %~ mappend implicits) $
         inferProg prg
 
+inferProg (inst@(Instance clss ctx instHead bindings ann):prg) = do
+  Class clss _ classParams ((classCon, classConTy):methodSigs) classAnn <-
+    view (classDecs . at (TvName clss) . non undefined)
+  instanceName <- TvName <$> genName
+  localInstanceName <- TvName <$> genName
+  let toVar :: TyConArg Typed -> Type Typed
+      toVar (TyVarArg v) = TyVar v
+      toVar (TyAnnArg v _) = TyVar v
+
+      classHead :: Type Typed
+      classHead = foldl TyApp (TyCon clss) (map toVar classParams)
+  ctx <- case ctx of
+    Just x -> checkAgainstKind (BecauseOf inst) x tyConstraint
+    Nothing -> pure tyUnit
+
+  instHead <- checkAgainstKind (BecauseOf inst) instHead tyConstraint
+  globalInsnConTy <- retcon (const mempty) $
+    closeOver (BecauseOf inst) (TyPi (Implicit ctx) instHead)
+
+  (instHead, skolSub) <- skolFreeTy instHead
+  ctx <- pure (apply skolSub ctx)
+
+  (mappend skolSub -> sub, _, _) <- solve (pure (ConUnify (BecauseOf inst) undefined classHead instHead))
+  localInsnConTy <- retcon (const mempty) $
+    closeOver (BecauseOf inst) (TyPi (Implicit ctx) instHead)
+
+  (localAssums', instancePattern) <-
+    let mkBinds x | x == tyUnit = pure (mempty, PLiteral LiUnit (ann, tyUnit))
+        mkBinds (TyTuple a b) = do
+          var <- TvName <$> genName
+          (scope, pat) <- mkBinds b
+          pure (insert InstSort var a scope, PTuple [Capture var (ann, a), pat] (ann, TyTuple a b))
+        mkBinds x = do
+          var <- TvName <$> genName
+          pure (singleton InstSort var x, Capture var (ann, x))
+    in mkBinds ctx
+
+  let localAssums = insert InstSort localInstanceName localInsnConTy localAssums'
+
+  methodSigs <- fmap Map.fromList $ traverse (secondA (closeOver (BecauseOf inst) . apply sub)) methodSigs
+  (Map.fromList -> methodMap, methods) <- fmap unzip . local (classes %~ mappend localAssums) $
+    for bindings $ \case
+      bind@(Binding v e an) -> do
+        let sig = methodSigs Map.! TvName v
+
+        v' <- genNameFrom (nameName v)
+
+        (e, cs) <- listen $ check e sig
+        (sub, wrap, cons) <- solve cs
+        when (not (null cons)) $ 
+          confesses (addBlame (BecauseOf bind) (UnsatClassCon (BecauseOf e) (head cons) InstanceMethod))
+
+        pure ((nameName v, TvName v'), Binding (TvName v') (Ascription (solveEx sig sub wrap e) sig (an, sig)) (an, sig))
+      _ -> error "not possible: non-Binding method"
+
+  let findInner (TyPi Invisible{} k) = findInner k
+      findInner (TyPi (Anon x) _) = x
+      findInner _ = error "malfomed classConTy"
+      TyExactRows whatDo = apply sub (findInner classConTy)
+
+  scope <- mappend localAssums <$> view classes
+  (fields, cs) <- listen $ for whatDo $ \(name, ty) ->
+    if nameName (unTvName classCon) `T.isPrefixOf` name
+       then do
+         var <- TvName <$> genName
+         tell (pure (ConImplicit (BecauseOf inst) scope var ty))
+         pure (Field name
+                (ExprWrapper (WrapVar var)
+                  (Fun (EvParam (Capture var (ann, ty)))
+                    (VarRef var (ann, ty)) (ann, TyArr ty ty))
+                    (ann, ty))
+                (ann, ty))
+       else pure (Field name (VarRef (methodMap Map.! name) (ann, ty)) (ann, ty))
+
+  (solution, needed, unsolved) <- solve cs
+
+  when (not (null unsolved)) $
+    confesses (addBlame (BecauseOf inst) (UnsatClassCon (BecauseOf inst) (head unsolved) (InstanceClassCon (fst classAnn))))
+
+  let appArg (TyPi (Invisible v _) rest) ex =
+        appArg rest $ ExprWrapper (TypeApp (sub Map.! v)) ex (annotation ex, rest)
+      appArg _ ex = ex
+      getSkol (TySkol s) = s
+      getSkol _ = error "not a skol in skolSub"
+
+      addArg ty@(TyPi (Invisible v k) rest) ex =
+        addArg rest $ Ascription (ExprWrapper (TypeLam (getSkol (skolSub Map.! v)) (fromMaybe TyType k)) ex (ann, ty)) ty (ann, ty)
+      addArg _ ex = ex
+      fun = addArg globalInsnConTy $
+        Let [Binding localInstanceName
+              (Fun (EvParam (PType instancePattern ctx (ann, ctx)))
+                (Let methods
+                  (Ascription
+                    (App (appArg classConTy (VarRef classCon (ann, classConTy)))
+                      (solveEx (TyExactRows whatDo) solution needed (Record fields (ann, TyExactRows whatDo)))
+                      (ann, instHead))
+                    instHead (ann, instHead))
+                  (ann, instHead))
+                (ann, localInsnConTy))
+              (ann, localInsnConTy)]
+          (VarRef localInstanceName (ann, localInsnConTy))
+          (ann, localInsnConTy)
+      bind = Binding instanceName (Ascription fun globalInsnConTy (ann, globalInsnConTy)) (ann, globalInsnConTy)
+  traceM (displayS (pretty bind))
+  consFst (LetStmt [bind]) $
+    local (classes %~ insert InstSort instanceName globalInsnConTy) $
+      inferProg prg
+
 inferProg (Module name body:prg) = do
   (body', env) <- inferProg body
 
@@ -340,9 +450,6 @@ inferClass :: forall m. MonadInfer Typed m
                 , Toplevel Typed
                 , ImplicitScope Typed )
 inferClass clss@(Class name ctx _ methods classAnn) = do
-  let nameName (TgInternal x) = x
-      nameName (TgName x _) = x
-
   let toVar :: TyConArg Typed -> Type Typed
       toVar (TyVarArg v) = TyVar v
       toVar (TyAnnArg v _) = TyVar v
@@ -361,11 +468,10 @@ inferClass clss@(Class name ctx _ methods classAnn) = do
     (methods, decls, rows) <- fmap unzip3 . for methods $ \(method, ty) -> do
       method <- pure (TvName method)
       ty <- resolveKind (BecauseOf clss) ty
-      closed <- closeOver (BecauseOf clss) ty
       withHead <- closeOver (BecauseOf clss) $
         TyPi (Implicit classConstraint) ty
 
-      pure ( (method, closed)
+      pure ( (method, ty)
            , (method, withHead)
            , (Anon, method, nameName (unTvName method), ty))
 
@@ -430,6 +536,7 @@ inferLetTy closeOver vs =
                 -> m (Type Typed, Expr Typed -> Expr Typed)
       figureOut blame ex ty cs = do
         (x, co, cons) <- retcons (addBlame (snd blame)) (solve cs)
+        cons <- pure (fmap (apply x) cons)
         let wrapCons :: ImplicitScope Typed
                      -> [Constraint Typed] -> Expr Typed -> Expr Typed
             wrapCons scope (ConImplicit _ _ var ty:cs) ex
@@ -501,18 +608,35 @@ inferLetTy closeOver vs =
           wrap <- subsumes (BecauseOf b) ety pty
           pure (ExprWrapper wrap e (annotation e, pty), p, pty, tel)
 
-        (solution, wraps, cons) <- solve cs
+        (solution, wraps, deferred) <- solve cs
         let solved = closeOver mempty ex . apply solution
             ex = solveEx ty solution wraps e
 
+        deferred <- pure (fmap (apply solution) deferred)
+        (compose solution -> solution, wraps', cons) <- solve (Seq.fromList deferred)
+
         when (cons /= []) $
           confesses (ArisingFrom (UnsatClassCon (BecauseOf b) (head cons) PatBinding) (BecauseOf b))
+
+        traceM (show wraps')
+
+        name <- TvName <$> genName
+        let addLet (ConImplicit _ _ var ty:cs) ex | an <- annotation ex =
+              addLet cs $ Let [Binding var (ExprWrapper (wraps' Map.! var)
+                                  (Fun (EvParam (Capture name (an, ty))) (VarRef name (an, ty)) (an, TyArr ty ty))
+                                  (an, ty))
+                          (an, ty)]
+                ex (an, getType ex)
+            addLet (_:cs) ex = addLet cs ex
+            addLet [] ex = ex
 
         tel' <- traverseTele (const solved) tel
         ty <- solved ty
 
         let pat = transformPatternTyped id (apply solution) p
-        pure ( [TypedMatching pat ex (ann, ty) (teleToList tel')], tel', boundTvs pat tel' )
+            ex' = solveEx ty solution wraps' (addLet deferred ex)
+
+        pure ( [TypedMatching pat ex' (ann, ty) (teleToList tel')], tel', boundTvs pat tel' )
 
       tcOne (CyclicSCC vars) = do
         () <- guardOnlyBindings vars
@@ -738,3 +862,14 @@ guardOnlyBindings bs = go bs where
 
   go (TypedMatching{}:_) = error "TypedMatching in guardOnlyBindings"
   go [] = pure ()
+
+skolFreeTy :: MonadNamey m => Type Typed -> m (Type Typed, Subst Typed)
+skolFreeTy ty = do
+  vs <- for (Set.toList (ftv ty)) $ \v ->
+    (v,) <$> freshSkol (ByExistential v ty) ty v
+  pure (apply (Map.fromList vs) ty, Map.fromList vs)
+
+nameName :: Var Resolved -> T.Text
+nameName (TgInternal x) = x
+nameName (TgName x _) = x
+

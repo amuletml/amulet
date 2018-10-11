@@ -118,7 +118,7 @@ data TypeError where
   NotPromotable :: Pretty (Var p) => Var p -> Type p -> Doc -> TypeError
 
 data WhyInstantiate = Expression | Subsumption
-data WhyUnsat = NotAFun | PatBinding
+data WhyUnsat = NotAFun | PatBinding | InstanceMethod | InstanceClassCon Span
 
 instance (Show (Ann p), Show (Var p), Ord (Var p), Substitutable p (Type p)) => Substitutable p (Constraint p) where
   ftv (ConUnify _ _ a b) = ftv a <> ftv b
@@ -436,6 +436,21 @@ instance Note TypeError Style where
          , f [annotation r']
          , indent 2 $ bullet "Note: this constraint can not be quantified over"
          , indent 4 "because it is impossible to quantify over pattern bindings"
+         ]
+
+  formatNote f (ArisingFrom (UnsatClassCon _ (ConImplicit _ _ _ t) InstanceMethod) r') =
+    vsep [ indent 2 "No instance for" <+> (Right <$> displayType t) <+> "arising in the binding"
+         , f [annotation r']
+         , indent 2 $ bullet "Note: this constraint can not be quantified over"
+         , indent 4 "because it is a method in an instance."
+         , indent 2 $ bullet "Note: possible fix: add it to the instance context"
+         ]
+
+  formatNote f (ArisingFrom (UnsatClassCon _ (ConImplicit _ _ _ t) (InstanceClassCon ann)) r') =
+    vsep [ indent 2 "No instance for" <+> (Right <$> displayType t) <+> "arising in the binding"
+         , f [annotation r']
+         , indent 2 $ bullet "Note: this is required by the context of the class,"
+         , f [ann]
          ]
 
   formatNote f x = indent 2 (Right <$> pretty x) <#> f [annotation x]

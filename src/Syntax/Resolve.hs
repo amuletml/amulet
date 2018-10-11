@@ -186,15 +186,15 @@ resolveModule (t@(Instance cls ctx head ms ann):rs) = do
              => Binding Parsed
              -> m (m (Binding Resolved), [(Var Parsed, Var Resolved)])
     reMethod (Binding var bod an) = do
-      var' <- tagVar var -- I don't know if this should be a fresh variable or
-                         -- use the same as the class one. Gah.
+      var' <- lookupEx var
       pure ( (\bod' -> Binding var' bod' an) <$> reExpr bod
            , [(var, var')] )
-    reMethod b@(Matching pat bod an) = do
-      (pat', vs, ts) <- reWholePattern pat
-      when (length vs /= 1) (dictates (ArisingFrom IllegalMethod (BecauseOf b)))
-      pure ( (\bod' -> Matching pat' bod' an) <$> extendTyvarN ts (reExpr bod)
-           , vs )
+    reMethod (Matching (Capture var _) bod an) = do
+      var' <- lookupEx var
+      pure ( (\bod' -> Binding var' bod' an) <$> reExpr bod
+           , [(var, var')] )
+    reMethod b@Matching{} =
+      confesses (ArisingFrom IllegalMethod (BecauseOf b))
     reMethod TypedMatching{} = error "reBinding TypedMatching{}"
 
 lookupVar :: MonadResolve m

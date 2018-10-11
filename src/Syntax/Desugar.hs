@@ -30,6 +30,7 @@ desugarProgram :: forall m. MonadNamey m => [Toplevel Resolved] -> m [Toplevel R
 desugarProgram = traverse statement where
   statement (LetStmt vs) = LetStmt <$> traverse binding vs
   statement (Module v ss) = Module v <$> traverse statement ss
+  statement (Instance a b c m d) = Instance a b c <$> traverse binding m <*> pure d
   statement x = pure x
 
   expr x@Literal{} = pure x

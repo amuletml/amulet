@@ -40,7 +40,7 @@ import Core.Var
 import qualified Syntax as S
 import Syntax.Let
 import Syntax.Var (Var(..), Resolved, Typed)
-import Syntax (Expr(..), Pattern(..), Skolem(..), Toplevel(..), Constructor(..))
+import Syntax.Pretty (Expr(..), Pattern(..), Skolem(..), Toplevel(..), Constructor(..))
 import Syntax.Transform
 
 import Text.Pretty.Semantic (pretty)
@@ -252,7 +252,7 @@ lowerAnyway (RecordExt e xs _) = do
 lowerAnyway (Literal l _) = pure . Atom . Lit $ lowerLiteral l
 lowerAnyway (S.App f x _) = C.App <$> lowerExprAtom f <*> lowerExprAtom x
 
-lowerAnyway e = error ("can't lower " ++ show e ++ " without type")
+lowerAnyway e = error ("can't lower " ++ show (pretty e) ++ " without type")
 
 lowerProg :: MonadLower m => [Toplevel Typed] -> m [Stmt]
 lowerProg stmt = do
@@ -484,6 +484,7 @@ lowerPolyBind ty ex = doIt (needed ex ty) (go ty ex) (lowerExprTerm ex) where
     go S.TypeLam{} ac = ac + 1
     go (S.TypeLam{} S.:> xs) ac = go xs (ac + 1)
     go _ ac = ac
+  countLams (Ascription e _ _) = countLams e
   countLams _ = 0
 
 countForalls :: Type -> Integer
