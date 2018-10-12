@@ -174,7 +174,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
         (sub, wrap, deferred) <- solve cs
 
         deferred <- pure (fmap (apply sub) deferred)
-        (compose sub -> sub, wrap', cons) <- solve (Seq.fromList deferred)
+        (compose sub -> sub, wrap', cons) <- solveHard (Seq.fromList deferred)
 
         unless (null cons) $ 
           confesses (addBlame (BecauseOf bind) (UnsatClassCon (BecauseOf e) (head cons) InstanceMethod))

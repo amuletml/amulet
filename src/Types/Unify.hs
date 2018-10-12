@@ -5,7 +5,7 @@
 -- | This module implements the logic responsible for solving the
 -- sequence of @Constraint@s the type-checker generates for a particular
 -- binding groups.
-module Types.Unify (solve, skolemise, freshSkol, unifyPure) where
+module Types.Unify (solve, solveHard, skolemise, freshSkol, unifyPure) where
 
 import Control.Monad.Except
 import Control.Monad.State
@@ -49,6 +49,7 @@ data SolveScope
   = SolveScope { _bindSkol :: Bool
                , _don'tTouch :: Set.Set (Var Typed)
                , _depth :: Int
+               , _trySuper :: Bool
                }
   deriving (Eq, Show, Ord)
 
@@ -89,16 +90,17 @@ unifRow (t, a, b) = do
   pure (t, co)
 
 runSolve :: MonadNamey m
-         => Subst Typed
+         => Bool
+         -> Subst Typed
          -> WriterT [Constraint Typed] (StateT SolveState (ReaderT SolveScope m)) b
          -> m (Subst Typed, Map.Map (Var Typed) (Wrapper Typed), [Constraint Typed])
-runSolve s x = fix (runReaderT (runStateT (runWriterT act) (SolveState s mempty mempty)) emptyScope) where
+runSolve h s x = fix (runReaderT (runStateT (runWriterT act) (SolveState s mempty mempty)) emptyScope) where
   act = (,) <$> genName <*> x
   fix act = do
     ((_, cs), s) <- act
     let ss = s ^. solveTySubst
     pure (fmap (apply ss) ss, s ^. solveCoSubst, cs)
-  emptyScope = SolveScope False mempty 0
+  emptyScope = SolveScope False mempty 0 h
 
 -- | Solve a sequence of constraints, returning either a substitution
 -- for both type variables (a 'Subst' 'Typed') and for 'Wrapper'
@@ -109,7 +111,12 @@ runSolve s x = fix (runReaderT (runStateT (runWriterT act) (SolveState s mempty 
 solve :: (MonadNamey m, MonadChronicles TypeError m)
       => Seq.Seq (Constraint Typed)
       -> m (Subst Typed, Map.Map (Var Typed) (Wrapper Typed), [Constraint Typed])
-solve = runSolve mempty . doSolve
+solve = runSolve False mempty . doSolve
+
+solveHard :: (MonadNamey m, MonadChronicles TypeError m)
+      => Seq.Seq (Constraint Typed)
+      -> m (Subst Typed, Map.Map (Var Typed) (Wrapper Typed), [Constraint Typed])
+solveHard = runSolve True mempty . doSolve
 
 doSolve :: forall m. MonadSolve m => Seq.Seq (Constraint Typed) -> m ()
 doSolve Empty = pure ()
@@ -198,6 +205,7 @@ doSolve (ConImplicit why scope v (TyTuple a b) :<| cs) = do
 
 doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
   doSolve cs
+  super <- view trySuper
   sub <- use solveTySubst
   cons <- pure (apply sub cons)
   scope <- pure (mapTypes (apply sub) scope)
@@ -205,7 +213,7 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
   x <- view depth
   if x >= 25
      then confesses (ClassStackOverflow reason x cons)
-     else case filter ((/= Superclass) . view implSort) $ lookup cons scope of
+     else case filter ((|| super) . (/= Superclass) . view implSort) $ lookup cons scope of
            [] -> do
              solveCoSubst . at var ?= ExprApp (VarRef var (annotation reason, cons))
              tell (pure (apply sub ohno))

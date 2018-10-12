@@ -214,6 +214,19 @@ instantiate r tp@(TyPi (Anon co) od@dm) = do
         = Fun (PatParam (PType (Capture (TvName var) (ann, co)) co (ann, co))) (cont (App e (VarRef (TvName var) (ann, co)) (ann, od))) (ann, ty)
 
   pure (Just lam, tp, ty)
+
+instantiate r tp@(TyPi (Implicit co) od@dm) = do
+  (wrap, _, dm) <- instantiate r dm
+  let cont = fromMaybe id wrap
+  var <- genName
+  let ty = TyPi (Implicit co) dm
+      lam :: Expr Typed -> Expr Typed
+      lam e | od == dm = e
+      lam e
+        | ann <- annotation e
+        = Fun (EvParam (PType (Capture (TvName var) (ann, co)) co (ann, co))) (cont (App e (VarRef (TvName var) (ann, co)) (ann, od))) (ann, ty)
+
+  pure (Just lam, tp, ty)
 instantiate _ ty = pure (Just id, ty, ty)
 
 freshTV :: MonadNamey m => m (Type Typed)
