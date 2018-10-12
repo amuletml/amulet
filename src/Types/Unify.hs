@@ -44,6 +44,7 @@ import Data.Text (Text)
 import Text.Pretty.Semantic
 
 import Prelude hiding (lookup)
+import Debug.Trace
 
 data SolveScope
   = SolveScope { _bindSkol :: Bool
@@ -116,7 +117,7 @@ doSolve Empty = pure ()
 doSolve (ConUnify because v a b :<| xs) = do
   sub <- use solveTySubst
 
-  -- traceM (displayS (pretty (ConUnify because v (apply sub a) (apply sub b))))
+  traceM (displayS (pretty (ConUnify because v (apply sub a) (apply sub b))))
   co <- memento $ unify (apply sub a) (apply sub b)
   case co of
     Left e -> do
@@ -128,7 +129,7 @@ doSolve (ConUnify because v a b :<| xs) = do
 doSolve (ConSubsume because scope v a b :<| xs) = do
   sub <- use solveTySubst
 
-  -- traceM (displayS (pretty (ConSubsume because scope v (apply sub a) (apply sub b))))
+  traceM (displayS (pretty (ConSubsume because scope v (apply sub a) (apply sub b))))
   let a' = apply sub a
   sub <- use solveTySubst
   co <- memento $ subsumes because scope a' (apply sub b)
@@ -178,6 +179,23 @@ doSolve (ConImplicit _ _ v x :<| cs) | x == tyUnit = do
   doSolve cs
   let wrap ex | an <- annotation ex, ty <- getType ex = App ex (Literal LiUnit (an, tyUnit)) (an, ty)
   solveCoSubst . at v ?= WrapFn (MkWrapCont wrap "unit solution app")
+
+doSolve (ConImplicit why scope v (TyTuple a b) :<| cs) = do
+  vara <- TvName <$> genName
+  varb <- TvName <$> genName
+  solveCoSubst . at v ?= ExprApp
+    (Tuple [ ExprWrapper (WrapVar vara)
+              (Fun (EvParam (Capture vara (annotation why, a)))
+                (VarRef vara (annotation why, a))
+                (annotation why, TyArr a a))
+              (annotation why, a)
+           , ExprWrapper (WrapVar varb)
+              (Fun (EvParam (Capture varb (annotation why, b)))
+                (VarRef varb (annotation why, b))
+                (annotation why, TyArr b b))
+              (annotation why, b)]
+           (annotation why, (TyTuple a b)))
+  doSolve (ConImplicit why scope vara a :< ConImplicit why scope varb b :<| cs)
 
 doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
   doSolve cs
@@ -404,6 +422,14 @@ subsumes' r s (TyPi (Implicit t) t1) t2
           wrap = WrapVar var
       doSolve (Seq.singleton con)
       pure (omega Syntax.:> wrap)
+  | TyVar{} <- t1, TyVar{} <- t2 = do
+      var <- TvName <$> genName
+      omega <- subsumes' r s t1 t2
+      let con = ConImplicit r s var t
+          wrap = WrapVar var
+      doSolve (Seq.singleton con)
+      pure (omega Syntax.:> wrap)
+
   | otherwise = probablyCast <$> unify (TyPi (Implicit t) t1) t2
 
 subsumes' b s t1@TyPi{} t2 | isSkolemisable t1 = do

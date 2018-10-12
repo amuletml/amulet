@@ -5,8 +5,9 @@ module Types.Infer.Class (inferClass, inferInstance, reduceClassContext) where
 import Prelude hiding (lookup)
 
 import qualified Data.Map.Strict as Map
-import qualified Data.Text as T
+import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
+import qualified Data.Text as T
 import Data.Traversable
 import Data.Foldable
 import Data.Spanned
@@ -170,11 +171,35 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
         v' <- genNameFrom (nameName v)
 
         (e, cs) <- listen $ check e sig
-        (sub, wrap, cons) <- solve cs
+        (sub, wrap, deferred) <- solve cs
+
+        deferred <- pure (fmap (apply sub) deferred)
+        (compose sub -> sub, wrap', cons) <- solve (Seq.fromList deferred)
+
         unless (null cons) $ 
           confesses (addBlame (BecauseOf bind) (UnsatClassCon (BecauseOf e) (head cons) InstanceMethod))
 
-        pure ((nameName v, TvName v'), Binding (TvName v') (Ascription (solveEx sig sub wrap e) sig (an, sig)) (an, sig))
+        name <- TvName <$> genName
+        let reify an ty var =
+              case wrap' Map.! var of
+                ExprApp v -> v
+                x -> ExprWrapper x
+                       (Fun (EvParam (Capture name (an, ty))) (VarRef name (an, ty)) (an, TyArr ty ty))
+                       (an, ty)
+            mkBind var (VarRef var' _) | var == var' = const []
+            mkBind v e = (:[]) . Binding v e
+            mkLet [] = const
+            mkLet xs = Let xs
+        let addLet (ConImplicit _ _ var ty:cs) ex | an <- annotation ex =
+              addLet cs $ mkLet (mkBind var (reify an ty var) (an, ty))
+                ex (an, getType ex)
+            addLet (_:cs) ex = addLet cs ex
+            addLet [] ex = ex
+            shove cs (ExprWrapper w e a) = ExprWrapper w (shove cs e) a
+            shove cs x = addLet cs x
+
+        pure ( (nameName v, TvName v')
+             , Binding (TvName v') (Ascription (solveEx sig sub (wrap <> wrap') (shove deferred e)) sig (an, sig)) (an, sig))
       _ -> error "not possible: non-Binding method"
 
   let findInner (TyPi Invisible{} k) = findInner k
@@ -189,10 +214,10 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
          var <- TvName <$> genName
          tell (pure (ConImplicit (BecauseOf inst) scope var ty))
          pure (Field name
-                (Ascription (ExprWrapper (WrapVar var)
+                (ExprWrapper (WrapVar var)
                   (Fun (EvParam (Capture var (ann, ty)))
                     (VarRef var (ann, ty)) (ann, TyArr ty ty))
-                    (ann, ty)) tyUnit (ann, ty))
+                    (ann, ty))
                 (ann, ty))
        else pure (Field name (VarRef (methodMap ! name) (ann, ty)) (ann, ty))
 
@@ -210,17 +235,15 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
       getSkol _ = error "not a skol in skolSub"
 
       addArg ty@(TyPi (Invisible v k) rest) ex =
-        addArg rest $ Ascription (ExprWrapper (TypeLam (getSkol (skolSub ! v)) (fromMaybe TyType k)) ex (ann, ty)) ty (ann, ty)
+        ExprWrapper (TypeLam (getSkol (skolSub ! v)) (fromMaybe TyType k)) (addArg rest ex) (ann, ty)
       addArg _ ex = ex
       fun = addArg globalInsnConTy $
         Let [Binding localInstanceName
               (Fun (EvParam (PType instancePattern ctx (ann, ctx)))
                 (Let methods
-                  (Ascription
-                    (App (appArg classConTy (VarRef classCon (ann, classConTy)))
-                      (solveEx (TyExactRows whatDo) solution needed (Record fields (ann, TyExactRows whatDo)))
-                      (ann, instHead))
-                    instHead (ann, instHead))
+                  (App (appArg classConTy (VarRef classCon (ann, classConTy)))
+                    (solveEx (TyExactRows whatDo) solution needed (Record fields (ann, TyExactRows whatDo)))
+                    (ann, instHead))
                   (ann, instHead))
                 (ann, localInsnConTy))
               (ann, localInsnConTy)]

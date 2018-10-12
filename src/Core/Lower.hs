@@ -481,7 +481,7 @@ lowerPolyBind ty ex = doIt (needed ex ty) (go ty ex) (lowerExprTerm ex) where
     Nothing -> b
 
   countLams :: Expr Typed -> Integer
-  countLams (ExprWrapper wrp _ _) = go wrp 0 where
+  countLams (ExprWrapper wrp e _) = go wrp (countLams e) where
     go S.TypeLam{} ac = ac + 1
     go (S.TypeLam{} S.:> xs) ac = go xs (ac + 1)
     go _ ac = ac
