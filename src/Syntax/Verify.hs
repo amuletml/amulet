@@ -231,9 +231,10 @@ verifyExpr (Tuple es _) = traverse_ verifyExpr es
 verifyExpr (TupleSection es _) = traverse_ (traverse_ verifyExpr) es
 verifyExpr (Lazy e _) = verifyExpr e
 verifyExpr (OpenIn _ e _) = verifyExpr e
-verifyExpr (ExprWrapper w e _) =
+verifyExpr (ExprWrapper w e a) =
   case w of
     WrapFn (MkWrapCont k _) -> verifyExpr (k e)
+    ExprApp x -> verifyExpr (App e x a)
     _ -> verifyExpr e
 
 unguardedVars :: Expr Typed -> Set.Set (Var Typed)

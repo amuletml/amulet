@@ -10,7 +10,7 @@ module Types.Infer
   , tyUnit
   , tyFloat
 
-  , infer, check, solveEx
+  , infer, check, solveEx, deSkol
   ) where
 
 import Prelude hiding (lookup)
@@ -34,3 +34,5 @@ check :: forall m. MonadInfer Typed m => Expr Resolved -> Type Typed -> m (Expr 
 infer :: MonadInfer Typed m => Expr Resolved -> m (Expr Typed, Type Typed)
 
 solveEx :: Type Typed -> Subst Typed -> Map.Map (Var Typed) (Wrapper Typed) -> Expr Typed -> Expr Typed
+
+deSkol :: Type Typed -> Type Typed

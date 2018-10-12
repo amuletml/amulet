@@ -160,6 +160,7 @@ lowerAt (ExprWrapper wrap e an) ty =
     S.WrapFn f -> lowerExprTerm (S.runWrapper f e)
     S.TypeAsc ty -> lowerExprTerm (Ascription e ty (fst an, ty))
     S.Cast S.ReflCo{} -> lowerAt e ty
+    S.ExprApp f -> lowerAt (S.App e f an) ty
     S.Cast c -> do
       ex' <- lowerExprAtom e
       pure (C.Cast ex' (squishCoercion (co c)))

@@ -27,7 +27,7 @@ module Syntax.Resolve
 
 import Control.Monad.Chronicles
 import Control.Monad.Reader
-import Control.Applicative hiding (empty)
+import Control.Applicative
 import Control.Monad.State
 import Control.Monad.Namey
 import Control.Lens hiding (Lazy)

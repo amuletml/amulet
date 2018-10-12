@@ -26,8 +26,9 @@ import Syntax.Pretty()
 import qualified Text.Pretty.Note as N
 import Text.Pretty.Semantic
 
-toEither :: These a b -> Either a b
+toEither :: These [a] b -> Either [a] b
 toEither (This e) = Left e
+toEither (These [] x) = Right x
 toEither (These e _) = Left e
 toEither (That x) = Right x
 
@@ -45,8 +46,8 @@ result file contents = runIdentity . flip evalNameyT firstName $ do
   where
     reportEnv env =
       let env' = difference env builtinsEnv
-      in  vsep $
-          map reportComponent (Map.toList (env' ^. names . to toMap))
+      in vsep $
+        map reportComponent (Map.toList (env' ^. names . to toMap))
 
     reportComponent (v, t) = pretty v <+> colon <+> pretty t
 

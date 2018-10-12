@@ -12,12 +12,13 @@ import Data.Foldable
 import Data.Spanned
 import Data.Reason
 import Data.Triple
-import Data.Graph
 import Data.Maybe
+import Data.List (sortOn)
 import Data.Char
 
 import Control.Monad.State
 import Control.Monad.Infer
+import Control.Arrow (second)
 import Control.Lens
 
 import Syntax.Implicits
@@ -140,7 +141,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
     [] -> pure ()
     (x:_) -> confesses (Overlap instHead (x ^. implSpan) ann)
 
-  (instHead, skolSub) <- skolFreeTy instHead
+  (instHead, skolSub) <- skolFreeTy (ByInstanceHead instHead ann) instHead
   ctx <- pure (apply skolSub ctx)
 
   (mappend skolSub -> sub, _, _) <- solve (pure (ConUnify (BecauseOf inst) undefined classHead instHead))
@@ -188,10 +189,10 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
          var <- TvName <$> genName
          tell (pure (ConImplicit (BecauseOf inst) scope var ty))
          pure (Field name
-                (ExprWrapper (WrapVar var)
+                (Ascription (ExprWrapper (WrapVar var)
                   (Fun (EvParam (Capture var (ann, ty)))
                     (VarRef var (ann, ty)) (ann, TyArr ty ty))
-                    (ann, ty))
+                    (ann, ty)) tyUnit (ann, ty))
                 (ann, ty))
        else pure (Field name (VarRef (methodMap ! name) (ann, ty)) (ann, ty))
 
@@ -241,35 +242,33 @@ reduceClassContext _ [ConImplicit _ _ var con] =
 reduceClassContext annot cons = do
   scope <- view classes
   let needed sub (ConImplicit _ _ var con:cs) = do
-        (con, sub') <- skolFreeTy (apply sub con)
+        (con, sub') <- skolFreeTy (ByConstraint con) (apply sub con)
         ((var, con):) <$> needed (sub `compose` sub') cs
       needed sub (_:cs) = needed sub cs
       needed _ [] = pure []
 
-  needs <- needed mempty cons
+  needs <- sortOn fst <$> needed mempty cons
 
   -- First, deduplicate the constraints eliminating any redundancy
-  let dedup :: ImplicitScope Typed -> [Need Typed] -> ([Binding Typed], [Need Typed])
+  let dedup :: ImplicitScope Typed -> [Need Typed] -> ([Binding Typed], [Need Typed], ImplicitScope Typed)
       dedup scope ((var, con):needs)
         | [ImplChoice _ t [] v _ _] <- lookup con scope =
-          let (bindings, needs') = dedup scope needs
-           in if var == v then (bindings, needs') else (Binding var (VarRef v (annot, t)) (annot, t):bindings, needs')
+          let (bindings, needs', scope') = dedup scope needs
+           in if var == v then (bindings, needs', scope') else (Binding var (VarRef v (annot, t)) (annot, t):bindings, needs', scope')
         | otherwise =
-          let (bindings, needs') = dedup (insert annot InstSort var con scope) needs
-           in (bindings, (var, con):needs')
-      dedup _ [] = ([], [])
-      (aliases, stillNeeded) = dedup mempty (reverse needs)
+          let (bindings, needs', scope') = dedup (insert annot InstSort var con scope) needs
+           in (bindings, (var, con):needs', scope')
+      dedup scope [] = ([], [], scope)
+      (aliases, stillNeeded, usable) = dedup mempty needs
 
   let simpl :: ImplicitScope Typed -> [Need Typed] -> ([Binding Typed], [Need Typed])
       simpl scp ((var, con):needs)
         | (implicit@(ImplChoice _ _ cs _ Superclass _):_) <- lookup con scope, all (entails scp) cs
         = let (bindings, needs') = simpl scp needs
            in (Binding var (useForSimpl annot (scope <> scp) implicit con) (annot, con):bindings, needs')
-        | otherwise =
-          let (bindings, needs') = simpl (insert annot InstSort var con scope) needs
-           in (bindings, (var, con):needs')
+        | otherwise = second ((var, con) :) (simpl scp needs)
       simpl _ [] = ([], [])
-      (simplif, stillNeeded') = simpl mempty stillNeeded
+      (simplif, stillNeeded') = simpl usable stillNeeded
 
   let addCtx ((_, con):cons) = TyPi (Implicit con) . addCtx cons
       addCtx [] = id
@@ -286,10 +285,10 @@ reduceClassContext annot cons = do
 fun :: Var Typed -> Type Typed -> Expr Typed -> Expr Typed
 fun v t e = Fun (EvParam (Capture v (annotation e, t))) e (annotation e, TyArr t (getType e))
 
-skolFreeTy :: MonadNamey m => Type Typed -> m (Type Typed, Subst Typed)
-skolFreeTy ty = do
+skolFreeTy :: MonadNamey m => SkolemMotive Typed -> Type Typed -> m (Type Typed, Subst Typed)
+skolFreeTy motive ty = do
   vs <- for (Set.toList (ftv ty)) $ \v ->
-    (v,) <$> freshSkol (ByExistential v ty) ty v
+    (v,) <$> freshSkol motive ty v
   pure (apply (Map.fromList vs) ty, Map.fromList vs)
 
 nameName :: Var Resolved -> T.Text

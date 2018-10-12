@@ -10,10 +10,10 @@ module Types.Infer
   , tyUnit
   , tyFloat
 
-  , infer, check, solveEx
+  , infer, check, solveEx, deSkol
   ) where
 
-import Prelude hiding (lookup)
+import Prelude
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
@@ -418,11 +418,18 @@ inferLetTy closeOver strategy vs =
           Propagate -> tell (Seq.fromList deferred)
 
         name <- TvName <$> genName
+        let reify an ty var =
+              case wraps' Map.! var of
+                ExprApp v -> v
+                _ -> ExprWrapper (wraps' Map.! var)
+                       (Fun (EvParam (Capture name (an, ty))) (VarRef name (an, ty)) (an, TyArr ty ty))
+                       (an, ty)
+            mkBind var (VarRef var' _) | var == var' = const []
+            mkBind v e = (:[]) . Binding v e
+            mkLet [] = const
+            mkLet xs = Let xs
         let addLet (ConImplicit _ _ var ty:cs) ex | an <- annotation ex =
-              addLet cs $ Let [Binding var (ExprWrapper (wraps' Map.! var)
-                                  (Fun (EvParam (Capture name (an, ty))) (VarRef name (an, ty)) (an, TyArr ty ty))
-                                  (an, ty))
-                          (an, ty)]
+              addLet cs $ mkLet (mkBind var (reify an ty var) (an, ty))
                 ex (an, getType ex)
             addLet (_:cs) ex = addLet cs ex
             addLet [] ex = ex
@@ -537,6 +544,7 @@ solveEx _ ss cs = transformExprTyped go id goType where
     AssumedCo a b | a == b -> IdWrap
     _ -> Cast c
   goWrap (TypeLam l t) = TypeLam l (goType t)
+  goWrap (ExprApp f) = ExprApp (go f)
   goWrap (x Syntax.:> y) = goWrap x Syntax.:> goWrap y
   goWrap (WrapVar v) = goWrap $ Map.findWithDefault err v cs where
     err = error $ "Unsolved wrapper variable " ++ show v ++ ". This is a bug"

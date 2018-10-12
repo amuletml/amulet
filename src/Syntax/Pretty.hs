@@ -79,6 +79,7 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
     go (TypeLam v t) ex = keyword "fun" <+> braces (pretty (TySkol v) <+> colon <+> pretty t) <> dot <+> pretty ex
     go (Cast c) ex = parens (pretty ex <+> soperator (string "|>") <+> pretty c)
     go (TypeApp t) ex = pretty ex <+> braces (pretty t)
+    go (ExprApp t) ex = pretty (App ex t undefined)
     go (TypeAsc _) ex = pretty ex
     go (wr Syntax.:> wi) ex = go wr (ExprWrapper wi ex undefined)
     go (WrapVar v) ex = pretty ex <+> soperator (char '_') <> pretty v
@@ -323,7 +324,8 @@ prettyType (TyPi x t) = uncurry prettyQuantifiers . second reverse $ unwind t [x
        Implicit{}:_ ->
          let arg x = parenTuple x (prettyType x)
              arrow = soperator (string "=>")
-          in hsep (punctuate (space <> arrow) (map (arg . (^?! _Implicit)) (q:these))) <+> arrow <+> prettyQuantifiers inner those
+             star = soperator (char '*')
+          in hsep (punctuate (space <> star) (map (arg . (^?! _Implicit)) (q:these))) <+> arrow <+> prettyQuantifiers inner those
        [] -> error "what?"
 
   sameAs Invisible{} Invisible{} = True
@@ -355,5 +357,7 @@ parenTuple _ = id
 prettyMotive :: SkolemMotive Typed -> Doc
 prettyMotive (ByAscription _ t) = string "of the context, the type" <#> displayType t
 prettyMotive (BySubsumption t1 t2) = string "of a requirement that" <+> displayType t1 <#> string "be as polymorphic as" <+> displayType t2
-prettyMotive (ByExistential v t) = string "it is an existential" <> comma <#> string "bound by the type of" <+> pretty v <> comma <+> displayType t
-
+prettyMotive (ByExistential v t) =
+  string "it is an existential" <> comma <#> string "bound by the type of" <+> pretty v <> comma <+> displayType t
+prettyMotive (ByInstanceHead head _) = string "it is bound in an instance head, namely" <#> displayType head
+prettyMotive (ByConstraint con) = string "it is mentioned in a type class constraint, namely" <#> displayType con

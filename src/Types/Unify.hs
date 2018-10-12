@@ -186,27 +186,19 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
   scope <- pure (mapTypes (apply sub) scope)
 
   x <- view depth
-  if x >= 10
-     then let wrap ex | an <- annotation ex, ty <- getType ex =
-                App ex (VarRef var (an, cons)) (an, ty)
-             in do
-               solveCoSubst . at var ?= WrapFn (MkWrapCont wrap "expr app (deferred)")
-               tell (pure (apply sub ohno))
-      else case filter ((/= Superclass) . view implSort) $ lookup cons scope of
-            [] -> do
-              let wrap ex | an <- annotation ex, ty <- getType ex =
-                    App ex (VarRef var (an, cons)) (an, ty)
-              solveCoSubst . at var ?= WrapFn (MkWrapCont wrap "expr app (deferred)")
-              tell (pure (apply sub ohno))
-            xs | allSameHead xs, concreteUnderOne cons -> do
-              w <- local (depth %~ succ) $
-                useImplicit reason cons scope (head xs)
-              solveCoSubst . at var ?= w
-            _ -> do
-              let wrap ex | an <- annotation ex, ty <- getType ex =
-                    App ex (VarRef var (an, cons)) (an, ty)
-              solveCoSubst . at var ?= WrapFn (MkWrapCont wrap "expr app (deferred)")
-              tell (pure (apply sub ohno))
+  if x >= 25
+     then confesses (ClassStackOverflow reason x cons)
+     else case filter ((/= Superclass) . view implSort) $ lookup cons scope of
+           [] -> do
+             solveCoSubst . at var ?= ExprApp (VarRef var (annotation reason, cons))
+             tell (pure (apply sub ohno))
+           xs | allSameHead xs, concreteUnderOne cons -> do
+             w <- local (depth %~ succ) $
+               useImplicit reason cons scope (head xs)
+             solveCoSubst . at var ?= w
+           _ -> do
+             solveCoSubst . at var ?= ExprApp (VarRef var (annotation reason, cons))
+             tell (pure (apply sub ohno))
 
 allSameHead :: [Implicit Typed] -> Bool
 allSameHead (x:xs) = all (matches (x ^. implHead) . view implHead) xs
@@ -221,7 +213,7 @@ useImplicit reason ty scope (ImplChoice hdt oty os imp _ _) = go where
     (hdt, refresh) <- refreshTy hdt
     (cast, view solveTySubst -> sub) <- capture $ unify hdt ty
 
-    let start e = VarRef imp (annotation e, oty)
+    let start = VarRef imp (annotation reason, oty)
         mk _ [] = pure (\e -> ExprWrapper (probablyCast cast) e (annotation e, ty))
         mk (TyPi (Invisible v _) t) (Quantifier (Invisible _ _):xs) = do
           let tau = apply sub . apply refresh . TyVar $ v
@@ -237,8 +229,7 @@ useImplicit reason ty scope (ImplChoice hdt oty os imp _ _) = go where
 
     wrap <- mk oty os
     solveTySubst %= compose sub
-    let cont ex = App ex (wrap (start ex)) (annotation ex, getType ex)
-    pure (WrapFn (MkWrapCont cont ("implicit value for " ++ show ty)))
+    pure (ExprApp (wrap start))
 
 bind :: MonadSolve m => Var Typed -> Type Typed -> m (Coercion Typed)
 bind var ty

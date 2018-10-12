@@ -28,6 +28,8 @@ transformType ft = goT where
   transM (ByAscription ex ty) = ByAscription ex (goT ty)
   transM (BySubsumption l r) = BySubsumption (goT l) (goT r)
   transM (ByExistential v ty) = ByExistential v (goT ty)
+  transM (ByConstraint ty) = ByConstraint (goT ty)
+  transM (ByInstanceHead ty a) = ByInstanceHead (goT ty) a
 
   transB (Anon t) = Anon (goT t)
   transB (Implicit t) = Implicit (goT t)
@@ -139,6 +141,7 @@ transformExprTyped fe fc ft = goE where
   transBind (TypedMatching p e a c) = TypedMatching (goP p) (goE e) (goA a) (map (second goT) c)
 
   goW (Cast c) = Cast (goC c)
+  goW (ExprApp c) = ExprApp (goE c)
   goW (TypeApp t) = TypeApp (goT t)
   goW (TypeAsc t) = TypeAsc (goT t)
   goW (WrapFn f) = WrapFn f

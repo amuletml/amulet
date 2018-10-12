@@ -117,6 +117,7 @@ data Wrapper p
   | (:>) (Wrapper p) (Wrapper p)
   | TypeAsc (Type p) -- invisible (to pretty-printer) ascription
   | WrapVar (Var p) -- Unsolved wrapper variable
+  | ExprApp (Expr p)
   | WrapFn (WrapCont p)
   | IdWrap
 
@@ -212,6 +213,8 @@ data SkolemMotive p
   = ByAscription (Expr Resolved) (Type p) -- what r phases?
   | BySubsumption (Type p) (Type p)
   | ByExistential (Var p) (Type p)
+  | ByInstanceHead (Type p) (Ann Resolved)
+  | ByConstraint (Type p)
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (SkolemMotive p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (SkolemMotive p)
@@ -299,7 +302,6 @@ pattern TyArr t t' <- TyPi (Anon t) t' where
 pattern TyForall :: Var p -> Maybe (Type p) -> Type p -> Type p
 pattern TyForall v k t' <- TyPi (Invisible v k) t' where
   TyForall v k ty = TyPi (Invisible v k) ty
-
 
 unTvName :: Var Typed -> Var Resolved
 unTvName (TvName x) = x

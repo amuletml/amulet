@@ -1,1 +1,4 @@
-
+eq : type -> constraint
+eq : {'a : type}. eq 'a => 'a -> 'a -> bool
+ord : type -> constraint
+lte : {'a : type}. ord 'a => 'a -> 'a -> bool

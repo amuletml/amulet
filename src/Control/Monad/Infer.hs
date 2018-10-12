@@ -115,11 +115,12 @@ data TypeError where
 
   UnsatClassCon :: SomeReason -> Constraint Typed -> WhyUnsat -> TypeError
   Overlap :: Type Typed -> Span -> Span -> TypeError
+  ClassStackOverflow :: SomeReason -> Int -> Type Typed -> TypeError
 
   NotPromotable :: Pretty (Var p) => Var p -> Type p -> Doc -> TypeError
 
 data WhyInstantiate = Expression | Subsumption
-data WhyUnsat = NotAFun | PatBinding | InstanceMethod | InstanceClassCon Span
+data WhyUnsat = NotAFun | PatBinding | InstanceMethod | InstanceClassCon Span | ConcreteDon'tQuantify
 
 instance (Show (Ann p), Show (Var p), Ord (Var p), Substitutable p (Type p)) => Substitutable p (Constraint p) where
   ftv (ConUnify _ _ a b) = ftv a <> ftv b
@@ -290,12 +291,18 @@ instance Pretty TypeError where
             [Skolem{..}] ->
               let skol = stypeVar (pretty _skolVar) in
               string "Rigid type variable" <+> skol <+> string "has escaped its scope of" <+> displayType _skolScope
-                  <#> note <+> string "the variable" <+> skol <+> string "was rigidified because"
-                        <+> nest 8 (prettyMotive _skolMotive <> comma)
+                  <#> rest skol _skolMotive
             _ -> foldr ((<#>) . pretty . flip EscapedSkolems t . pure) empty esc
          , empty -- a line break
-         , note <+> string "in type" <+> displayType t
+         , note <+> string "in the type" <+> displayType t
          ]
+    where rest skol x =
+            case x of
+              ByConstraint t ->
+                vsep [ note <+> "This variable was rigidified because of an ambiguous constraint:"
+                     , indent 4 $ displayType t ] 
+              _ -> note <+> string "the variable" <+>
+                   skol <+> string "was rigidified because" <+> nest 8 (prettyMotive x <> comma)
 
   pretty (NotPromotable c x err) =
     vsep [ string "The constructor" <+> pretty c <+> string "can not be used as a type"
@@ -321,6 +328,11 @@ instance Pretty TypeError where
                     , indent 2 $ string "bound by the constructor" <+> stypeCon (pretty c) <> ", which has type"
                     , indent 5 (displayType t)
                     ]
+             ByInstanceHead h _ ->
+               vsep [ bullet "Where the type variable" <+> stypeSkol (pretty v) <+> "is bound by the instance head"
+                    , indent 5 (displayType h)
+                    ]
+             ByConstraint{} -> error "Impossible"
            ]
    where whatIs (TySkol (Skolem _ v _ _)) = string "the rigid type variable" <+> stypeVar (squote <>pretty v)
          whatIs t = string "the type" <+> displayType (withoutSkol t)
@@ -339,6 +351,12 @@ instance Pretty TypeError where
         xs -> "The variables"
                 <+> hsep (punctuate comma (map (stypeSkol . pretty) xs))
 
+  pretty (ClassStackOverflow _ _ t) =
+    vsep [ "Stack overflow while looking for an instance of"
+         , indent 2 $ displayType t
+         , bullet "Note: the max depth of typeclass constraints is 25."
+         ]
+
   pretty (PatternRecursive _ _) = string "pattern recursive error should be formatNoted"
   pretty DeadBranch{} = string "dead branch error should be formatNoted"
   pretty UnsatClassCon{} = string "unsat class error should be formatNoted"
@@ -348,6 +366,7 @@ instance Spanned TypeError where
   annotation (ArisingFrom e@ArisingFrom{} _) = annotation e
   annotation (ArisingFrom _ x) = annotation x
   annotation (Overlap _ x _) = annotation x
+  annotation (ClassStackOverflow x _ _) = annotation x
   annotation x = error (show (pretty x))
 
 instance Note TypeError Style where
@@ -393,6 +412,14 @@ instance Note TypeError Style where
                     , indent 2 $ bullet "Arising in the" <+> (Right <$> blameOf rs)
                     , nest (-2) $ f [annotation rs]
                     ]
+             ByInstanceHead v t ->
+               vsep [ indent 2 "Where the type variable" <+> sk (pretty v) <+> "is bound by the instance being defined"
+                    , f [t]
+                    , empty
+                    , indent 2 $ bullet "Arising in the" <+> (Right <$> blameOf rs)
+                    , nest (-2) $ f [annotation rs]
+                    ]
+             ByConstraint{} -> error "Impossible"
            ]
    where whatIs (TySkol (Skolem _ v _ _)) = string "the type" <+> sv (squote <> pretty v)
          whatIs t = string "the type" <+> (Right <$> displayType (withoutSkol t))
@@ -428,9 +455,9 @@ instance Note TypeError Style where
   formatNote f (ArisingFrom (UnsatClassCon _ (ConImplicit r _ _ t) NotAFun) r') =
     vsep [ indent 2 "No instance for" <+> (Right <$> displayType t) <+> "arising from use of the expression"
          , f [annotation r]
-         , indent 2 $ bullet "Note: this constraint was not quantified over"
-         , indent 4 "because the binding it would scope over is not a function"
-         , f [annotation r']
+         , indent 2 $ bullet "Note: this constraint was not quantified over because"
+         , indent 4 "the binding it would scope over is not a function"
+         , if annotation r /= annotation r' then f [annotation r'] else empty
          , indent 2 $ bullet "Possible fix: add a parameter, or a type signature"
          ]
 

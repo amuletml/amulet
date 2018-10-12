@@ -1,1 +1,3 @@
-
+eq : type -> constraint
+eq : {'a : type}. eq 'a => 'a -> 'a -> bool
+foo : {'a : type}. {'b : type}. eq 'a => eq 'b => ('a * 'a) -> ('b * 'b) -> bool
