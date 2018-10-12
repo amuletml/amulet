@@ -13,7 +13,7 @@ import Data.Span
 
 import Control.Monad.Writer.Strict
 import Control.Monad.State.Strict
-import Control.Lens hiding (Lazy)
+import Control.Lens hiding (Lazy, (:>))
 
 import Text.Pretty.Semantic
 import Text.Pretty.Note
@@ -234,7 +234,8 @@ verifyExpr (OpenIn _ e _) = verifyExpr e
 verifyExpr (ExprWrapper w e a) =
   case w of
     WrapFn (MkWrapCont k _) -> verifyExpr (k e)
-    ExprApp x -> verifyExpr (App e x a)
+    ExprApp x -> verifyExpr x *> verifyExpr e
+    x :> y -> verifyExpr (ExprWrapper x (ExprWrapper y e a) a)
     _ -> verifyExpr e
 
 unguardedVars :: Expr Typed -> Set.Set (Var Typed)
