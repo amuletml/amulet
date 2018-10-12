@@ -44,7 +44,6 @@ import Data.Text (Text)
 import Text.Pretty.Semantic
 
 import Prelude hiding (lookup)
-import Debug.Trace
 
 data SolveScope
   = SolveScope { _bindSkol :: Bool
@@ -117,7 +116,7 @@ doSolve Empty = pure ()
 doSolve (ConUnify because v a b :<| xs) = do
   sub <- use solveTySubst
 
-  traceM (displayS (pretty (ConUnify because v (apply sub a) (apply sub b))))
+  -- traceM (displayS (pretty (ConUnify because v (apply sub a) (apply sub b))))
   co <- memento $ unify (apply sub a) (apply sub b)
   case co of
     Left e -> do
@@ -129,7 +128,7 @@ doSolve (ConUnify because v a b :<| xs) = do
 doSolve (ConSubsume because scope v a b :<| xs) = do
   sub <- use solveTySubst
 
-  traceM (displayS (pretty (ConSubsume because scope v (apply sub a) (apply sub b))))
+  -- traceM (displayS (pretty (ConSubsume because scope v (apply sub a) (apply sub b))))
   let a' = apply sub a
   sub <- use solveTySubst
   co <- memento $ subsumes because scope a' (apply sub b)
@@ -194,7 +193,7 @@ doSolve (ConImplicit why scope v (TyTuple a b) :<| cs) = do
                 (VarRef varb (annotation why, b))
                 (annotation why, TyArr b b))
               (annotation why, b)]
-           (annotation why, (TyTuple a b)))
+           (annotation why, TyTuple a b))
   doSolve (ConImplicit why scope vara a :< ConImplicit why scope varb b :<| cs)
 
 doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
