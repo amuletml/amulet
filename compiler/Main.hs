@@ -9,7 +9,6 @@ import qualified Data.Text.Lazy as L
 import qualified Data.Text.IO as T
 import qualified Data.Text as T
 import Data.Position (SourceName)
-import Data.Functor.Identity
 import Data.Foldable
 import Data.These
 
@@ -57,18 +56,20 @@ data CompileResult
 
 compile :: DoOptimise -> [(SourceName, T.Text)] -> CompileResult
 compile _ [] = error "Cannot compile empty input"
-compile opt (file:files) = runIdentity . flip evalNameyT firstName $ do
-  file' <- go (Right ([], [], [], RS.builtinScope, RS.emptyModules, builtinsEnv)) file
-  files' <- foldlM go file' files
-  case files' of
-    Right (ve, te, prg, _, _, env) -> do
-      lower <- runLowerT (lowerProg prg)
-      optm <- case opt of
+compile opt (file:files) =
+  let (res, name) = flip runNamey firstName $ do
+        file' <- go (Right ([], [], [], RS.builtinScope, RS.emptyModules, builtinsEnv)) file
+        foldlM go file' files
+  in case res of
+       Right (ve, te, prg, _, _, env) ->
+         -- We run these outside the main namey monad to allow these to be lazily evaluated.
+         let (lower, name') = flip runNamey name $ runLowerT (lowerProg prg)
+             (optm, _) = flip runNamey name' $ case opt of
                 Do -> optimise lower
                 Don't -> deadCodePass <$> reducePass lower
-      pure (CSuccess ve te prg lower optm (compileProgram optm) env)
-
-    Left err -> pure err
+             lua = compileProgram optm
+         in CSuccess ve te prg lower optm lua env
+       Left err -> err
 
   where
     go (Right (errs, tyerrs, tops, scope, modScope, env)) (name, file) =
@@ -134,9 +135,11 @@ compileFromTo opt dbg fs emit =
     CResolve es -> traverse_ (`reportS` fs) es
     CInfer es -> traverse_ (`reportS` fs) es
 
-test :: D.DebugMode -> [(FilePath, T.Text)] -> IO (Maybe ([Stmt CoVar], Env))
-test mode fs =
-  case compile (if mode == D.TestTc then Don't else Do) fs of
+test :: DoOptimise -> D.DebugMode
+     -> [(FilePath, T.Text)]
+     -> IO (Maybe ([Stmt CoVar], Env))
+test opt mode fs =
+  case compile opt fs of
     CSuccess es tes ast core opt lua env -> do
       traverse_ (`reportS` fs) es
       traverse_ (`reportS` fs) tes
@@ -203,11 +206,17 @@ main = do
           hPutStrLn stderr ("Cannot overwrite input file " ++ out)
           exitWith (ExitFailure 1)
 
-    CompilerOptions { debugMode = db, optLevel = opt, output = out, files = fs } -> do
+    CompilerOptions { debugMode = db, optLevel = opt, output = Nothing, files = fs } | db /= D.Void -> do
       fs' <- traverse T.readFile fs
+      let opt' = if opt >= 1 then Do else Don't
+      _ <- test opt' db (zip fs fs')
+      pure ()
+
+    CompilerOptions { debugMode = db, optLevel = opt, output = out, files = fs } -> do
       let opt' = if opt >= 1 then Do else Don't
           out' :: Pretty a => a -> IO ()
           out' = case out of
                    Nothing -> putDoc . pretty
                    Just f -> T.writeFile f . T.pack . show . pretty
+      fs' <- traverse T.readFile fs
       compileFromTo opt' db (zip fs fs') out'
