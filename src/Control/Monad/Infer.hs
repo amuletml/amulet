@@ -114,6 +114,7 @@ data TypeError where
   DeadBranch :: TypeError -> TypeError
 
   UnsatClassCon :: SomeReason -> Constraint Typed -> WhyUnsat -> TypeError
+  Overlap :: Type Typed -> Span -> Span -> TypeError
 
   NotPromotable :: Pretty (Var p) => Var p -> Type p -> Doc -> TypeError
 
@@ -341,10 +342,12 @@ instance Pretty TypeError where
   pretty (PatternRecursive _ _) = string "pattern recursive error should be formatNoted"
   pretty DeadBranch{} = string "dead branch error should be formatNoted"
   pretty UnsatClassCon{} = string "unsat class error should be formatNoted"
+  pretty Overlap{} = string "overlap error should be formatNoted"
 
 instance Spanned TypeError where
   annotation (ArisingFrom e@ArisingFrom{} _) = annotation e
   annotation (ArisingFrom _ x) = annotation x
+  annotation (Overlap _ x _) = annotation x
   annotation x = error (show (pretty x))
 
 instance Note TypeError Style where
@@ -451,6 +454,14 @@ instance Note TypeError Style where
          , f [annotation r']
          , indent 2 $ bullet "Note: this is required by the context of the class,"
          , f [ann]
+         ]
+
+  formatNote f (Overlap tau one two) =
+    vsep [ indent 2 "Overlapping instances for" <+> (Right <$> displayType tau)
+         , indent 2 $ bullet "Note: first defined here,"
+         , f [one]
+         , indent 3 "but also defined here"
+         , f [two]
          ]
 
   formatNote f x = indent 2 (Right <$> pretty x) <#> f [annotation x]

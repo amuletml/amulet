@@ -65,7 +65,7 @@ instance Pretty ResolveError where
 instance Spanned ResolveError where
   annotation (ArisingFrom _ x) = annotation x
   annotation (NonLinearRecord e _) = annotation e
-  annotation _ = undefined
+  annotation x = error (show x)
 
 instance Note ResolveError Style where
   diagnosticKind _ = ErrorMessage

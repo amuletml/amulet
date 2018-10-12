@@ -1,9 +1,9 @@
 do
   local bottom = nil
   bottom({
-    op = function(bt) return bt end,
+    op = function(bw) return bw end,
     app = 2,
     rsec = function(e) return e(2) end,
-    lsec = function(bu) return bu end
+    lsec = function(bx) return bx end
   })
 end

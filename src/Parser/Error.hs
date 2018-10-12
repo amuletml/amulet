@@ -17,8 +17,6 @@ import Text.Pretty.Note
 import Text.Pretty
 import Parser.Token
 
-import Debug.Trace
-
 import Syntax.Pretty
 
 -- | How this token or construct was terminated
@@ -83,11 +81,11 @@ instance Pretty ParseError where
   pretty (UnexpectedToken (Token s _ _) xs) = "Unexpected" <+> string (friendlyName s) <> ", expected one of" <+> hsep (punctuate comma (map string xs))
 
   pretty (MalformedClass _ ty) =
-    case traceShowId ty of
+    case ty of
       TyApp{} ->
         let getRoot :: Type Parsed -> (Type Parsed, Int)
             getRoot (TyApp f _) =
-              let (root, x) = getRoot (traceShowId f)
+              let (root, x) = getRoot f
                in (root, x + 1)
             getRoot x = (x, 0)
 
@@ -98,7 +96,7 @@ instance Pretty ParseError where
             fakeAround :: Type Parsed -> Int -> Type Parsed
             fakeAround t 0 = t
             fakeAround t n = TyApp (fakeAround t (n - 1)) (TyVar (Name (pack ('a':show n))))
-         in case traceShow depth root of
+         in case root of
            c@TyCon{} ->
              vsep [ "Malformed class declaration for" <+> displayType c
                   , empty

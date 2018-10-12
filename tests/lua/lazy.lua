@@ -17,7 +17,7 @@ do
   end
   local bottom = nil
   bottom({
-    _1 = __builtin_Lazy(function(aa) return 2 end),
+    _1 = __builtin_Lazy(function(ab) return 2 end),
     _2 = function(x) return __builtin_force(x) end
   })
 end

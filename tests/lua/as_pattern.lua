@@ -1,7 +1,7 @@
 do
-  local function main(cb)
-    local b = cb.a
-    return b.a + b.b + cb.c
+  local function main(ce)
+    local b = ce.a
+    return b.a + b.b + ce.c
   end
   local bottom = nil
   bottom(main)

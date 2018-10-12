@@ -163,6 +163,7 @@ library amulet
                      , Types.Kinds
                      , Types.Unify
                      , Types.Wellformed
+                     , Types.Infer.Class
                      , Types.Infer.Errors
                      , Types.Infer.Builtin
                      , Types.Infer.Outline

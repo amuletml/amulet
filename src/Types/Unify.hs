@@ -5,7 +5,7 @@
 -- | This module implements the logic responsible for solving the
 -- sequence of @Constraint@s the type-checker generates for a particular
 -- binding groups.
-module Types.Unify (solve, skolemise, freshSkol) where
+module Types.Unify (solve, skolemise, freshSkol, unifyPure) where
 
 import Control.Monad.Except
 import Control.Monad.State
@@ -37,6 +37,8 @@ import Data.Foldable
 import Data.Function
 import Data.Spanned
 import Data.Reason
+import Data.These
+import Data.Span (internal)
 import Data.Text (Text)
 
 import Text.Pretty.Semantic
@@ -70,6 +72,16 @@ type MonadSolve m =
 
 isRec :: String
 isRec = "A record type's hole can only be instanced to another record"
+
+unifyPure :: Type Typed -> Type Typed -> Maybe (Subst Typed)
+unifyPure a b = fst . flip runNamey firstName $ do
+  x <- runChronicleT $ do
+    (sub, _, _) <- solve (pure (ConUnify undefined undefined a b))
+    pure sub
+  case x of
+    These _ x -> pure (Just x)
+    That x -> pure (Just x)
+    _ -> pure Nothing
 
 unifRow :: MonadSolve m => (Text, Type Typed, Type Typed) -> m (Text, Coercion Typed)
 unifRow (t, a, b) = do
@@ -118,7 +130,6 @@ doSolve (ConSubsume because scope v a b :<| xs) = do
 
   -- traceM (displayS (pretty (ConSubsume because scope v (apply sub a) (apply sub b))))
   let a' = apply sub a
-  doSolve xs
   sub <- use solveTySubst
   co <- memento $ subsumes because scope a' (apply sub b)
   case co of
@@ -126,6 +137,7 @@ doSolve (ConSubsume because scope v a b :<| xs) = do
       dictate e
       solveCoSubst . at v ?= IdWrap
     Right co -> solveCoSubst . at v .= Just co
+  doSolve xs
 
 doSolve (ConImplies because not cs ts :<| xs) = do
   before <- use solveTySubst
@@ -203,7 +215,7 @@ allSameHead [] = True
 useImplicit :: forall m. MonadSolve m
             => SomeReason -> Type Typed -> ImplicitScope Typed
             -> Implicit Typed -> m (Wrapper Typed)
-useImplicit reason ty scope (ImplChoice hdt oty os imp _) = go where
+useImplicit reason ty scope (ImplChoice hdt oty os imp _ _) = go where
   go :: m (Wrapper Typed)
   go = do
     (hdt, refresh) <- refreshTy hdt
@@ -557,7 +569,7 @@ skolemise motive ty@(TyPi (Invisible tv k) t) = do
 skolemise motive wt@(TyPi (Implicit ity) t) = do
   (omega, ty, scp) <- skolemise motive t
   var <- TvName <$> genName
-  let scope = insert InstSort var ity scp
+  let scope = insert internal InstSort var ity scp
       wrap ex | an <- annotation ex =
         Fun (EvParam (Capture var (an, ity)))
           (ExprWrapper omega ex (an, ty)) (an, wt)

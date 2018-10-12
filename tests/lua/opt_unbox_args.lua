@@ -1,10 +1,10 @@
 do
-  local function fib_prime(dn_1, dn_2)
-    local cs_2 = 1
-    if dn_1 <= cs_2 then
-      return dn_2
+  local function fib_prime(ds_1, ds_2)
+    local cx_2 = 1
+    if ds_1 <= cx_2 then
+      return ds_2
     else
-      return fib_prime(dn_1 - cs_2, dn_2 * dn_1)
+      return fib_prime(ds_1 - cx_2, ds_2 * ds_1)
     end
   end
   local bottom = nil

@@ -185,12 +185,12 @@ resolveModule (t@(Instance cls ctx head ms ann):rs) = do
     reMethod :: MonadResolve m
              => Binding Parsed
              -> m (m (Binding Resolved), [(Var Parsed, Var Resolved)])
-    reMethod (Binding var bod an) = do
-      var' <- lookupEx var
+    reMethod b@(Binding var bod an) = do
+      var' <- retcons (wrapError b) $ lookupEx var
       pure ( (\bod' -> Binding var' bod' an) <$> reExpr bod
            , [(var, var')] )
-    reMethod (Matching (Capture var _) bod an) = do
-      var' <- lookupEx var
+    reMethod b@(Matching (Capture var _) bod an) = do
+      var' <- retcons (wrapError b) $ lookupEx var
       pure ( (\bod' -> Binding var' bod' an) <$> reExpr bod
            , [(var, var')] )
     reMethod b@Matching{} =

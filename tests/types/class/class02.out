@@ -1,0 +1,24 @@
+class02.ml[1:1 ..4:3]: error
+  Expected a type, but this has kind 'i -> 'j
+  Have you applied a type constructor to the wrong number of arguments?
+
+  Arising in the declaration
+  │ 
+1 │ class show 'a begin
+  │ ^^^^^^^^^^^^^^^^^^^
+class02.ml[1:1 ..4:3]: error
+  Expected a type, but this has kind 'ah -> 'ai
+  Have you applied a type constructor to the wrong number of arguments?
+
+  Arising in the declaration
+  │ 
+1 │ class show 'a begin
+  │ ^^^^^^^^^^^^^^^^^^^
+class02.ml[1:1 ..4:3]: error
+  Expected a type, but this has kind 'au -> 'av
+  Have you applied a type constructor to the wrong number of arguments?
+
+  Arising in the declaration
+  │ 
+1 │ class show 'a begin
+  │ ^^^^^^^^^^^^^^^^^^^

@@ -2,5 +2,5 @@ class () => semigroup#0 a#1 begin
   val <>#2 : 'a#1 -> 'a#1 -> 'a#1
 end
 instance () => semigroup#0 int begin
-  <>#3 = ((+))
+  <>#2 = ((+))
 end

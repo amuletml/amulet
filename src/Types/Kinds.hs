@@ -97,11 +97,11 @@ resolveClassKind stmt@(Class classcon ctx args methods _) = do
     (kind, tele) <- initialKind tyConstraint args
     let scope = one classcon kind <> tele
     local (names %~ focus scope) $ do
-      traverse_ (flip checkKind tyConstraint) ctx
+      traverse_ (`checkKind` tyConstraint) ctx
       for_ methods $ \(_, ty) ->
         checkKind ty TyType
     pure kind
-  let remake (TyVarArg v:as) (TyArr _ k) = TyVarArg (TvName v):remake as k
+  let remake (TyVarArg v:as) (TyArr k r) = TyAnnArg (TvName v) k:remake as r
       remake (TyAnnArg v _:as) (TyArr k r) = TyAnnArg (TvName v) k:remake as r
       remake _ _ = []
   pure (k, remake args k)
@@ -127,8 +127,8 @@ resolveTyDeclKind reason tycon args cons = do
         c@(GeneralisedCon _ t _) -> condemn $
           retcons (addBlame (BecauseOf c)) (inferGadtConKind c t tycon (mapMaybe argTvName args))
       pure kind
-  let remake (TyVarArg v:as) (TyArr _ k) = TyVarArg (TvName v):remake as k
-      remake (TyAnnArg v _:as) (TyArr k _) = TyAnnArg (TvName v) k:remake as k
+  let remake (TyVarArg v:as) (TyArr k r) = TyAnnArg (TvName v) k:remake as r
+      remake (TyAnnArg v _:as) (TyArr k r) = TyAnnArg (TvName v) k:remake as r
       remake _ _ = []
   pure (k, foldl TyApp (TyCon (TvName tycon)) (map TyVar vs), remake args k)
 
@@ -227,7 +227,7 @@ checkKind (TyPi binder b) ek = do
   reason <- get
   -- _ <- isType ek
   case binder of
-    Anon t -> TyArr <$> checkKind t ek <*> checkKind b ek
+    Anon t -> TyArr <$> checkKind t TyType <*> checkKind b ek
     Implicit t -> TyPi . Implicit <$> checkKind t tyConstraint <*> checkKind b ek
 
     Invisible v (Just arg) -> do
@@ -286,22 +286,28 @@ isType t = do
   pure t
 
 closeOver :: MonadKind m => SomeReason -> Type Typed -> m (Type Typed)
-closeOver r a = kindVars . killWildcard <$> annotateKind r (forall (toList freevars) a) where
-  freevars = ftv a
-  forall :: [Var p] -> Type p -> Type p
-  forall [] a = a
-  forall vs a = foldr (flip TyForall Nothing) a vs
+closeOver r a = do
+  names <- view names
+  let freevars = ftv a
+  let forall :: [Var Typed] -> Type Typed -> Type Typed
+      forall [] a = a
+      forall vs a = foldr addForall a vs
 
-  kindVars = squish . second toList . runWriter . split where
-    squish (x, []) = x
-    squish (x, vs) = foldr (flip TyForall (Just TyType)) x vs
+      addForall v t
+        | unTvName v `inScope` names = TyForall v (Just (names ^. at (unTvName v) . non undefined)) t
+        | otherwise = TyForall v Nothing t
 
-    split (TyForall v (Just t@(TyVar x)) ty)
-      | v `Set.member` freevars = do
-        tell (Set.singleton x)
-        TyForall v (Just t) <$> split ty
-      | otherwise = TyForall v (Just t) <$> split ty
-    split t = pure t
+  let kindVars = squish . second toList . runWriter . split where
+        squish (x, []) = x
+        squish (x, vs) = foldr (flip TyForall (Just TyType)) x vs
+
+        split (TyForall v (Just t@(TyVar x)) ty)
+          | v `Set.member` freevars = do
+            tell (Set.singleton x)
+            TyForall v (Just t) <$> split ty
+          | otherwise = TyForall v (Just t) <$> split ty
+        split t = pure t
+  kindVars . killWildcard <$> annotateKind r (forall (toList freevars) a)
 
 
 promoteOrError :: Type Typed -> Maybe Doc
