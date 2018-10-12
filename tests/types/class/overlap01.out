@@ -1,0 +1,10 @@
+overlap01.ml[4:1 ..4:36]: error
+  Overlapping instances for foo unit
+  • Note: first defined here,
+  │ 
+4 │ instance foo 'a begin let x = () end
+  │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   but also defined here
+  │ 
+5 │ instance foo () begin let x = () end
+  │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

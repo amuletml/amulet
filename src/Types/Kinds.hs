@@ -103,6 +103,7 @@ resolveClassKind stmt@(Class classcon ctx args methods _) = do
     pure kind
   let remake (TyVarArg v:as) (TyArr k r) = TyAnnArg (TvName v) k:remake as r
       remake (TyAnnArg v _:as) (TyArr k r) = TyAnnArg (TvName v) k:remake as r
+      remake cs (TyPi Invisible{} x) = remake cs x
       remake _ _ = []
   pure (k, remake args k)
 resolveClassKind _ = error "not a class"

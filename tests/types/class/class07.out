@@ -1,0 +1,12 @@
+class07.ml[9:9 ..9:32]: error
+  Rigid type variable a has escaped its scope of read 'a
+  • Note: This variable was rigidified because of an ambiguous constraint:
+      read 'a
+
+  • Note: in the type forall 'ci. show a * read a * show ci => 'ci -> string
+  • Note: in the inferred type for foo
+
+  Arising in the expression
+  │ 
+9 │ let foo x = show (read (show x))
+  │         ^^^^^^^^^^^^^^^^^^^^^^^^
