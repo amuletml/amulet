@@ -14,7 +14,7 @@ gadt07-escape-fail.ml[10:3 ..10:17]: error
   • Note: the variable a was rigidified because it is an existential,
           bound by the type of MkHid, forall 'a. exp 'a * exp 'a -> hidden,
 
-  • Note: in type exp a
+  • Note: in the type exp a
   • Note: in the inferred type for weird
 
   Arising in the expression
