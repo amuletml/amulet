@@ -1,27 +1,27 @@
 do
   local Nil = { __tag = "Nil" }
   local function Cons(x) return { __tag = "Cons", x } end
-  local function zip(kd_1, kd_2, kd_3)
-    if kd_2.__tag == "Nil" then
+  local function zip(kg_1, kg_2, kg_3)
+    if kg_2.__tag == "Nil" then
       return Cons({ _1 = 1, _2 = Nil })
-    elseif kd_2.__tag == "Cons" then
-      local hn = kd_2[1]
-      if kd_3.__tag == "Nil" then
+    elseif kg_2.__tag == "Cons" then
+      local hq = kg_2[1]
+      if kg_3.__tag == "Nil" then
         return Cons({ _1 = 2, _2 = Nil })
-      elseif kd_3.__tag == "Cons" then
-        local ho = kd_3[1]
-        local ht = ho._1
-        local hs = ho._2
-        local hq = hn._1
-        local hp = hn._2
-        if 0 == hq then
+      elseif kg_3.__tag == "Cons" then
+        local ht = hq._1
+        local hs = hq._2
+        local hr = kg_3[1]
+        local hw = hr._1
+        local hv = hr._2
+        if 0 == hw then
           if 0 == ht then
             return Cons({ _1 = 3, _2 = Nil })
           else
-            return Cons({ _1 = kd_1(0)(ht), _2 = zip(kd_1, hp, hs) })
+            return Cons({ _1 = kg_1(ht)(0), _2 = zip(kg_1, hs, hv) })
           end
         else
-          return Cons({ _1 = kd_1(hq)(ht), _2 = zip(kd_1, hp, hs) })
+          return Cons({ _1 = kg_1(ht)(hw), _2 = zip(kg_1, hs, hv) })
         end
       end
     end

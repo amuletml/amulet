@@ -379,7 +379,7 @@ inferLetTy closeOver strategy vs =
             addLet (_:cs) ex = addLet cs ex
             addLet [] ex = ex
 
-        (context, wrapper) <- reduceClassContext (annotation ex) cons
+        (context, wrapper, _) <- reduceClassContext (annotation ex) cons
 
         when (not (isFn ex) && not (null cons)) $
           confesses (UnsatClassCon (snd blame) (head cons) NotAFun)
@@ -389,7 +389,7 @@ inferLetTy closeOver strategy vs =
         ty <- skolCheck (TvName (fst blame)) (snd blame) vt
         let (tp, sub) = rename ty
 
-        pure (tp, wrapper . solveEx tp (x <> sub) (co <> wraps') . addLet deferred)
+        pure (tp, wrapper Full . solveEx tp (x <> sub) (co <> wraps') . addLet deferred)
 
 
       tcOne :: SCC (Binding Resolved)
@@ -468,7 +468,7 @@ inferLetTy closeOver strategy vs =
         () <- guardOnlyBindings vars
         (origins, tvs) <- unzip <$> traverse approximate vars
 
-        (vs, cs) <- listen . local (names %~ focus (teleFromList tvs)) $
+        (bindings, cs) <- listen . local (names %~ focus (teleFromList tvs)) $
           ifor (zip tvs vars) $ \i ((_, tyvar), Binding var exp ann) ->
             case origins !! i of
               Supplied -> do
@@ -481,27 +481,111 @@ inferLetTy closeOver strategy vs =
                 _ <- unify (becauseExp exp) ty tyvar
                 pure (Binding (TvName var) exp' (ann, ty), ty)
 
-        (solution, cs, cons) <- solve cs
-        unless (null cons) $ error (show cons)
-        let solveOne :: (Binding Typed, Type Typed)
-                     -> m (Binding Typed, Telescope Typed, Set.Set (Var Typed))
-            solveOne (Binding var exp ann, given) =
-              let figure :: Type Typed -> Type Typed
-                  figure = apply solution
-               in do
-                  ty <- closeOver mempty exp (figure given)
-                  ty <- skolCheck var (becauseExp exp) ty
-                  (ty, sub) <- pure (rename ty)
-                  pure ( Binding var (solveEx ty (solution <> sub) cs exp) (fst ann, ty)
-                       , one var ty
-                       , mempty )
+        (solution, wrap, cons) <- solve cs
+        let deferred = fmap (apply solution) cons
+        (compose solution -> solution, mappend wrap -> wrap, cons) <- solveHard (Seq.fromList deferred)
 
-            solveOne _ = error "solveOne non-Binding forbidden"
+        if null cons
+           then do
+             let solveOne :: (Binding Typed, Type Typed) -> m ( Binding Typed )
+                 solveOne (Binding var exp an, ty) = do
+                   ty <- closeOver mempty exp (apply solution ty)
+                   pure ( Binding var
+                           (solveEx ty solution wrap exp)
+                           (fst an, ty)
+                        )
+                 solveOne _ = undefined
+             bs <- traverse solveOne bindings
+             let makeTele (Binding var _ (_, ty):bs) = one var ty <> makeTele bs
+                 makeTele _ = mempty
+                 makeTele :: [Binding Typed] -> Telescope Typed
+             pure (bs, makeTele bs, mempty)
+           else do
+             name <- TvName <$> genName
+             let reify an ty var =
+                   case wrap Map.! var of
+                     ExprApp v -> v
+                     _ -> ExprWrapper (wrap Map.! var)
+                            (Fun (EvParam (Capture name (an, ty))) (VarRef name (an, ty)) (an, TyArr ty ty))
+                            (an, ty)
 
-            squish :: m [(Binding Typed, Telescope Typed, Set.Set (Var Typed))]
-                   -> m ([Binding Typed], Telescope Typed, Set.Set (Var Typed))
-            squish = fmap ((\(b, t, v) -> (b, mconcat t, mconcat v)) . unzip3)
-        squish . traverse solveOne $ vs
+                 mkBind var (VarRef var' _) | var == var' = const []
+                 mkBind v e = (:[]) . Binding v e
+
+                 mkLet [] = const
+                 mkLet xs = Let xs
+
+             let addLet (ConImplicit _ _ var ty:cs) ex | an <- annotation ex =
+                   addLet cs $ mkLet (mkBind var (reify an ty var) (an, ty))
+                     ex (an, getType ex)
+                 addLet (_:cs) ex = addLet cs ex
+                 addLet [] ex = ex
+
+             recVar <- TvName <$> genName
+             innerNames <- fmap Map.fromList . for tvs $ \(v, _) ->
+               (v,) . TvName <$> genNameFrom (T.cons '$' (nameName (unTvName v)))
+             let renameInside (VarRef v a) | Just x <- Map.lookup v innerNames = VarRef x a
+                 renameInside x = x
+
+             let solveOne :: (Binding Typed, Type Typed)
+                          -> m ( (T.Text, Var Typed, Ann Resolved, Type Typed), Binding Typed, Field Typed )
+                 solveOne (Binding var exp an, ty) = do
+                   let nm = nameName (unTvName var)
+                   ty <- pure (apply solution ty)
+
+                   pure ( (nm, var, fst an, ty)
+                        , Binding (innerNames Map.! var)
+                           (Ascription (transformExprTyped renameInside id id (solveEx ty solution wrap exp)) ty (fst an, ty))
+                           (fst an, ty)
+                        , Field nm (VarRef (innerNames Map.! var) (fst an, ty)) (fst an, ty)
+                        )
+                 solveOne _ = undefined
+
+             (info, inners, fields) <- unzip3 <$> traverse solveOne bindings
+             let (blamed:_) = inners
+                 an = annotation blamed
+                 recTy = TyExactRows rows
+                 rows = map (\(t, _, _, ty) -> (t, ty)) info
+
+             (context, wrapper, needed) <- reduceClassContext (annotation blamed) cons
+
+             closed <- closeOver (Set.fromList (map fst tvs)) (Record fields (an, recTy)) $
+               context recTy
+             tyLams <- mkTypeLambdas (ByConstraint recTy) closed
+
+             let record =
+                   Binding recVar
+                     (Ascription
+                       (ExprWrapper tyLams
+                         (wrapper Full (addLet deferred (Let inners (Record fields (an, recTy)) (an, recTy))))
+                         (an, closed))
+                       closed (an, closed))
+                     (an, closed)
+                 makeOne (nm, var, an, ty) = do
+                   ty' <- closeOver (Set.fromList (map fst tvs)) (Record fields (an, recTy)) $
+                     context ty
+                   let lineUp c (TyForall v _ rest) ex =
+                         lineUp c rest $ ExprWrapper (TypeApp (TyVar v)) ex (annotation ex, rest)
+                       lineUp ((v, t):cs) (TyPi (Implicit _) rest) ex =
+                         lineUp cs rest $ App ex (VarRef v (annotation ex, t)) (annotation ex, rest)
+                       lineUp _ _ e = e
+                       lineUp :: [(Var Typed, Type Typed)] -> Type Typed -> Expr Typed -> Expr Typed
+                   pure $ Binding var
+                     (ExprWrapper tyLams
+                       (wrapper Thin
+                         (Access
+                             (ExprWrapper (TypeAsc recTy)
+                               (lineUp needed closed (VarRef recVar (an, closed)))
+                               (an, recTy))
+                             nm (an, ty)))
+                       (an, ty'))
+                     (an, ty')
+
+             getters <- traverse makeOne info
+             let makeTele (Binding var _ (_, ty):bs) = one var ty <> makeTele bs
+                 makeTele _ = mempty
+                 makeTele :: [Binding Typed] -> Telescope Typed
+             pure (record:getters, makeTele getters, mempty)
 
       tc :: [SCC (Binding Resolved)]
          -> m ( [Binding Typed] , Telescope Typed, Set.Set (Var Typed) )
@@ -692,3 +776,18 @@ guardOnlyBindings bs = go bs where
   go (TypedMatching{}:_) = error "TypedMatching in guardOnlyBindings"
   go [] = pure ()
 
+nameName :: Var Resolved -> T.Text
+nameName (TgInternal x) = x
+nameName (TgName x _) = x
+
+mkTypeLambdas :: MonadNamey m => SkolemMotive Typed -> Type Typed -> m (Wrapper Typed)
+mkTypeLambdas motive ty@(TyPi (Invisible tv k) t) = do
+  sk <- freshSkol motive ty tv
+  wrap <- mkTypeLambdas motive (apply (Map.singleton tv sk) t)
+  kind <- case k of
+    Nothing -> freshTV
+    Just x -> pure x
+  let getSkol (TySkol s) = s
+      getSkol _ = error "not a skolem from freshSkol"
+  pure (TypeLam (getSkol sk) kind Syntax.:> wrap)
+mkTypeLambdas _ _ = pure IdWrap

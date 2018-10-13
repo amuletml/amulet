@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleContexts, TupleSections, ScopedTypeVariables,
    ViewPatterns, LambdaCase #-}
-module Types.Infer.Class (inferClass, inferInstance, reduceClassContext) where
+module Types.Infer.Class (WrapFlavour(..), inferClass, inferInstance, reduceClassContext) where
 
 import Prelude hiding (lookup)
 
@@ -52,7 +52,6 @@ inferClass clss@(Class name ctx _ methods classAnn) = do
         T.cons (toUpper (T.head (nameName name)))
           (T.tail (nameName name))
   classCon <- TvName <$> genNameFrom classCon'
-  dummyClassCon <- TvName <$> genNameFrom (classCon' <> T.pack "_dummy")
 
   name <- pure (TvName name)
   (k, params) <- resolveClassKind clss
@@ -95,13 +94,10 @@ inferClass clss@(Class name ctx _ methods classAnn) = do
 
     classConTy <- retcon (const mempty) $
       closeOver (BecauseOf clss) (TyArr inner classConstraint)
-    dummyConTy <- retcon (const mempty) $
-      closeOver (BecauseOf clss) (TyArr tyUnit classConstraint)
 
     let tyDecl :: Toplevel Typed
         tyDecl = TypeDecl name params
           [ ArgCon classCon inner (classAnn, classConTy)
-          , ArgCon dummyClassCon tyUnit (classAnn, dummyConTy)
           ]
 
     let mkDecl :: (Type Typed -> TyBinder Typed, Var Typed, T.Text, Type Typed) -> m (Binding Typed)
@@ -265,11 +261,11 @@ inferInstance _ = error "not an instance"
 reduceClassContext :: forall m. MonadInfer Typed m
                    => Ann Resolved
                    -> [Constraint Typed]
-                   -> m (Type Typed -> Type Typed, Expr Typed -> Expr Typed)
+                   -> m (Type Typed -> Type Typed, WrapFlavour -> Expr Typed -> Expr Typed, [Need Typed])
 
-reduceClassContext _ [] = pure (id, id)
+reduceClassContext _ [] = pure (id, const id, mempty)
 reduceClassContext _ [ConImplicit _ _ var con] =
-  pure (TyPi (Implicit con), fun var con)
+  pure (TyPi (Implicit con), const (fun var con), [(var, con)])
 reduceClassContext annot cons = do
   scope <- view classes
   let needed sub (ConImplicit _ _ var con:cs) = do
@@ -301,20 +297,17 @@ reduceClassContext annot cons = do
       simpl _ [] = ([], [])
       (simplif, stillNeeded') = simpl usable stillNeeded
 
-  let addCtx [(_, con)] rest = TyPi (Implicit con) rest
-      addCtx ((_, con):ts) rest = TyPi (Implicit (foldr TyTuple con (map snd ts))) rest
-      addCtx [] rest = rest
+  let addCtx ((_, con):cons) = TyPi (Implicit con) . addCtx cons
+      addCtx [] = id
 
-  let addFns [] e = e
-      addFns [(var, con)] e = Fun (EvParam (Capture var (annotation e, con))) e (annotation e, TyPi (Implicit con) (getType e))
-      addFns xs@((_, con):ts) e =
-        let ty = foldr TyTuple con (map snd ts)
-         in Fun (EvParam (PTuple (map (\(v, t) -> Capture v (annotation e, t)) xs) (annotation e, ty)))
-             e (annotation e, TyPi (Implicit ty) (getType e))
-
+  let addFns ((var, con):cons) = fun var con . addFns cons
+      addFns [] = id
   let addLet ex = mkLet (aliases ++ simplif) ex (annotation ex, getType ex)
 
-  pure (addCtx stillNeeded', addFns stillNeeded' . addLet)
+  let wrap flv =
+        addFns stillNeeded' . (case flv of { Full -> addLet; _ -> id })
+
+  pure (addCtx stillNeeded', wrap, stillNeeded')
 
 fun :: Var Typed -> Type Typed -> Expr Typed -> Expr Typed
 fun v t e = Fun (EvParam (Capture v (annotation e, t))) e (annotation e, TyArr t (getType e))
@@ -357,3 +350,4 @@ mkLet xs = Let xs
 m ! k = fromMaybe (error ("Key " ++ show k ++ " not in map")) (Map.lookup k m)
 
 type Need t = (Var t, Type t)
+data WrapFlavour = Thin | Full

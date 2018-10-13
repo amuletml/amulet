@@ -104,13 +104,11 @@ testLintSimplify = testLint optimise
 tests :: IO TestTree
 tests = do
   folderLint <- map (testCase <*> testLintSimplify . ("tests/lint/"++)) . sort <$> listDirectory "tests/lint/"
-  classLint <- map (testCase <*> testLintSimplify . ("tests/types/class/"++)) . sort <$> listDirectory "tests/types/class/"
 
   pure $ testGroup "Test.Core.Lint"
     [ testGroup "Examples" [ testGroup "Lower" (map (testCase <*> testLintLower . ("examples/"++)) files)
                            , testGroup "Simplify" (map (testCase <*> testLintSimplify . ("examples/"++)) files) ]
     , testGroup "Test folder" folderLint
-    , testGroup "Type class linting tests" folderLint
     ]
 
 files :: [String]

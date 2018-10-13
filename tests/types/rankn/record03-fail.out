@@ -1,6 +1,6 @@
 record03-fail.ml[5:20 ..5:24]: error
   No overlap between exact record { bar : forall 'a. 'a -> 'a }
-           and polymorphic record { 'ax | baz : 'aw }
+           and polymorphic record { 'az | baz : 'ay }
   • Note: no fields match
   • The following fields are missing: baz
 

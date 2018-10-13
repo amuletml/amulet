@@ -61,7 +61,7 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
   pretty (Record [] _) = braces empty
   pretty (Record rows _) = record (map (\(Field n v _) -> text n <+> equals <+> pretty v) rows)
   pretty (RecordExt var rows _) = enclose (char '{' <> space) (space <> char '}') $ pretty var <+> keyword "with" <+> hsep (punctuate comma (prettyRows' equals rows))
-  pretty (Access e f _) = pretty e <> dot <> text f
+  pretty (Access e f _) = parenArg e <> dot <> text f
 
   pretty (LeftSection op vl _) = parens $ pretty op <+> pretty vl
   pretty (RightSection op vl _) = parens $ pretty vl <+> pretty op
