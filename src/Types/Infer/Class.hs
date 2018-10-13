@@ -52,6 +52,7 @@ inferClass clss@(Class name ctx _ methods classAnn) = do
         T.cons (toUpper (T.head (nameName name)))
           (T.tail (nameName name))
   classCon <- TvName <$> genNameFrom classCon'
+  dummyClassCon <- TvName <$> genNameFrom (classCon' <> T.pack "_dummy")
 
   name <- pure (TvName name)
   (k, params) <- resolveClassKind clss
@@ -94,9 +95,15 @@ inferClass clss@(Class name ctx _ methods classAnn) = do
 
     classConTy <- retcon (const mempty) $
       closeOver (BecauseOf clss) (TyArr inner classConstraint)
+    dummyConTy <- retcon (const mempty) $
+      closeOver (BecauseOf clss) (TyArr tyUnit classConstraint)
+
     let tyDecl :: Toplevel Typed
         tyDecl = TypeDecl name params
-          [ArgCon classCon inner (classAnn, classConTy)]
+          [ ArgCon classCon inner (classAnn, classConTy)
+          , ArgCon dummyClassCon tyUnit (classAnn, dummyConTy)
+          ]
+
     let mkDecl :: (Type Typed -> TyBinder Typed, Var Typed, T.Text, Type Typed) -> m (Binding Typed)
         mkDecl (f, var, label, theTy) = do
           capture <- TvName <$> genName
@@ -119,10 +126,13 @@ inferClass _ = error "not a class"
 
 inferInstance :: forall m. MonadInfer Typed m => Toplevel Resolved -> m (Toplevel Typed, Var Typed, Type Typed)
 inferInstance inst@(Instance clss ctx instHead bindings ann) = do
+  let classCon' =
+        T.cons (toUpper (T.head (nameName clss)))
+          (T.tail (nameName clss))
   Class clss _ classParams ((classCon, classConTy):methodSigs) classAnn <-
     view (classDecs . at (TvName clss) . non undefined)
-  instanceName <- TvName <$> genName
-  localInstanceName <- TvName <$> genName
+  instanceName <- TvName <$> genNameWith (T.pack "$d" <> classCon')
+  localInstanceName <- TvName <$> genNameWith (T.pack "$l" <> classCon')
   let toVar :: TyConArg Typed -> Type Typed
       toVar (TyVarArg v) = TyVar v
       toVar (TyAnnArg v _) = TyVar v
@@ -188,8 +198,6 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
                        (an, ty)
             mkBind var (VarRef var' _) | var == var' = const []
             mkBind v e = (:[]) . Binding v e
-            mkLet [] = const
-            mkLet xs = Let xs
         let addLet (ConImplicit _ _ var ty:cs) ex | an <- annotation ex =
               addLet cs $ mkLet (mkBind var (reify an ty var) (an, ty))
                 ex (an, getType ex)
@@ -240,7 +248,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
       fun = addArg globalInsnConTy $
         Let [Binding localInstanceName
               (Fun (EvParam (PType instancePattern ctx (ann, ctx)))
-                (Let methods
+                (mkLet methods
                   (App (appArg classConTy (VarRef classCon (ann, classConTy)))
                     (solveEx (TyExactRows whatDo) solution needed (Record fields (ann, TyExactRows whatDo)))
                     (ann, instHead))
@@ -293,15 +301,18 @@ reduceClassContext annot cons = do
       simpl _ [] = ([], [])
       (simplif, stillNeeded') = simpl usable stillNeeded
 
-  let addCtx ((_, con):cons) = TyPi (Implicit con) . addCtx cons
-      addCtx [] = id
+  let addCtx [(_, con)] rest = TyPi (Implicit con) rest
+      addCtx ((_, con):ts) rest = TyPi (Implicit (foldr TyTuple con (map snd ts))) rest
+      addCtx [] rest = rest
 
-  let addFns ((var, con):cons) = fun var con . addFns cons
-      addFns [] = id
+  let addFns [] e = e
+      addFns [(var, con)] e = Fun (EvParam (Capture var (annotation e, con))) e (annotation e, TyPi (Implicit con) (getType e))
+      addFns xs@((_, con):ts) e =
+        let ty = foldr TyTuple con (map snd ts)
+         in Fun (EvParam (PTuple (map (\(v, t) -> Capture v (annotation e, t)) xs) (annotation e, ty)))
+             e (annotation e, TyPi (Implicit ty) (getType e))
 
   let addLet ex = mkLet (aliases ++ simplif) ex (annotation ex, getType ex)
-      mkLet [] x _ = x
-      mkLet xs x t = Let xs x t
 
   pure (addCtx stillNeeded', addFns stillNeeded' . addLet)
 
@@ -337,6 +348,10 @@ useForSimpl span scope (ImplChoice head oty pre var _ _) ty =
           wrap [] ex _ = ex
           wrap x _ t = error (displayS (string "badly-typed implicit" <+> shown x <+> pretty t))
       in wrap pre (VarRef var (span, oty)) oty
+
+mkLet :: [Binding p] -> Expr p -> Ann p -> Expr p
+mkLet [] = const
+mkLet xs = Let xs
 
 (!) :: (Show k, Ord k, HasCallStack) => Map.Map k v -> k -> v
 m ! k = fromMaybe (error ("Key " ++ show k ++ " not in map")) (Map.lookup k m)

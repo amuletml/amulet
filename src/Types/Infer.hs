@@ -323,7 +323,10 @@ inferProg (c@(Class v _ _ _ _):prg) = do
 
 inferProg (inst@Instance{}:prg) = do
   (stmt, instName, instTy) <- inferInstance inst
-  consFst stmt . local (classes %~ insert (annotation inst) InstSort instName instTy) $ inferProg prg
+  let addFst (LetStmt []) = id
+      addFst stmt@(LetStmt _) = consFst stmt
+      addFst _ = undefined
+  addFst stmt . local (classes %~ insert (annotation inst) InstSort instName instTy) $ inferProg prg
 
 inferProg (Module name body:prg) = do
   (body', env) <- inferProg body
