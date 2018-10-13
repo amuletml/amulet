@@ -116,6 +116,8 @@ data TypeError where
   UnsatClassCon :: SomeReason -> Constraint Typed -> WhyUnsat -> TypeError
   Overlap :: Type Typed -> Span -> Span -> TypeError
   ClassStackOverflow :: SomeReason -> Int -> Type Typed -> TypeError
+  WrongClass :: Binding Resolved -> Var Typed -> TypeError
+  UndefinedMethods :: Type Typed -> [(Text, Type Typed)] -> Span -> TypeError
 
   NotPromotable :: Pretty (Var p) => Var p -> Type p -> Doc -> TypeError
 
@@ -370,6 +372,20 @@ instance Pretty TypeError where
          , bullet "Note: the max depth of typeclass constraints is 25."
          ]
 
+  pretty (WrongClass (Binding v _ _) c) =
+    vsep [ "Method" <+> pretty v <+> "is not a member of the class" <+> stypeCon (pretty c) ]
+  pretty (WrongClass _ _) = error "Impossible"
+
+  pretty (UndefinedMethods h [(x, _)] _) = 
+    vsep [ "Missing implementation for method" <+> stypeSkol (text x)
+         , indent 2 "in an instance for" <+> displayType h ]
+
+  pretty (UndefinedMethods h xs _) = 
+    vsep [ "Missing implementation of methods in instance for" <+> displayType h
+         , "Namely:"
+         , vsep (map (\(n, t) -> indent 2 . bullet $ keyword "val" <+> text n <+> colon <+> displayType t) xs) ]
+
+
   pretty (PatternRecursive _ _) = string "pattern recursive error should be formatNoted"
   pretty DeadBranch{} = string "dead branch error should be formatNoted"
   pretty UnsatClassCon{} = string "unsat class error should be formatNoted"
@@ -380,6 +396,8 @@ instance Spanned TypeError where
   annotation (ArisingFrom _ x) = annotation x
   annotation (Overlap _ x _) = annotation x
   annotation (ClassStackOverflow x _ _) = annotation x
+  annotation (WrongClass b _) = annotation b
+  annotation (UndefinedMethods _ _ x) = annotation x
   annotation x = error (show (pretty x))
 
 instance Note TypeError Style where

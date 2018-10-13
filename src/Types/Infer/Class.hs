@@ -172,7 +172,9 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
   (Map.fromList -> methodMap, methods) <- fmap unzip . local (classes %~ mappend localAssums) $
     for bindings $ \case
       bind@(Binding v e an) -> do
-        let sig = methodSigs ! TvName v
+        sig <- case Map.lookup (TvName v) methodSigs of
+          Just x -> pure x
+          Nothing -> confesses (WrongClass bind clss)
 
         v' <- genNameFrom (nameName v)
 
@@ -210,6 +212,10 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
       findInner (TyPi (Anon x) _) = x
       findInner _ = error "malfomed classConTy"
       TyExactRows whatDo = apply sub (findInner classConTy)
+
+  let needed = Map.fromList . filter (not . T.isPrefixOf (nameName (unTvName classCon)) . fst) $ whatDo
+      diff = Map.toList (needed `Map.difference` methodMap)
+  unless (null diff) $ confesses (UndefinedMethods instHead diff ann)
 
   scope <- mappend localAssums <$> view classes
   (fields, cs) <- listen $ for whatDo $ \(name, ty) ->
