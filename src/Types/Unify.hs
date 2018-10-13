@@ -184,6 +184,7 @@ doSolve (ConFail a v t :<| cs) = do
 doSolve (ConImplicit _ _ v x :<| cs) | x == tyUnit = do
   doSolve cs
   let wrap ex | an <- annotation ex, ty <- getType ex = App ex (Literal LiUnit (an, tyUnit)) (an, ty)
+      wrap :: Expr Typed -> Expr Typed
   solveCoSubst . at v ?= WrapFn (MkWrapCont wrap "unit solution app")
 
 doSolve (ConImplicit why scope v (TyTuple a b) :<| cs) = do
@@ -344,6 +345,8 @@ unify skt@(TySkol t@(Skolem sv _ _ _)) b = do
 unify b (TySkol t) = SymCo <$> unify (TySkol t) b
 
 unify (TyArr a b) (TyArr a' b') = ArrCo <$> unify a a' <*> unify b b'
+unify (TyPi (Implicit a) b) (TyPi (Implicit a') b') =
+  ArrCo <$> unify a a' <*> unify b b' -- Technically cheating but yay desugaring
 
 unify l@(TyApp a b) r@(TyApp a' b') =
   (AppCo <$> unify a a' <*> unify b b')
@@ -426,16 +429,22 @@ subsumes' r s (TyPi (Implicit t) t1) t2
       var <- TvName <$> genName
       omega <- subsumes' r s t1 t2
       let con = ConImplicit r s var t
-          wrap = WrapVar var
       doSolve (Seq.singleton con)
-      pure (omega Syntax.:> wrap)
+      let wrap ex | an <- annotation ex
+            = ExprWrapper omega
+                (ExprWrapper (TypeAsc t1)
+                  (ExprWrapper (WrapVar var) ex (an, t1)) (an, t1)) (an, t2)
+       in pure (WrapFn (MkWrapCont wrap "implicit instantation"))
   | TyVar{} <- t1, TyVar{} <- t2 = do
       var <- TvName <$> genName
       omega <- subsumes' r s t1 t2
       let con = ConImplicit r s var t
-          wrap = WrapVar var
       doSolve (Seq.singleton con)
-      pure (omega Syntax.:> wrap)
+      let wrap ex | an <- annotation ex
+            = ExprWrapper omega
+                (ExprWrapper (TypeAsc t1)
+                  (ExprWrapper (WrapVar var) ex (an, t1)) (an, t1)) (an, t2)
+       in pure (WrapFn (MkWrapCont wrap "implicit instantation"))
 
   | otherwise = probablyCast <$> unify (TyPi (Implicit t) t1) t2
 

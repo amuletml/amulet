@@ -141,14 +141,16 @@ quantifier r s ty@TyForall{} = do
   (k', _, t) <- instantiate Expression ty
   (a, b, k) <- quantifier r s t
   pure (a, b, fromMaybe id k' . k)
-quantifier r s ty@(TyPi (Implicit cls) rest) = do
+
+quantifier r _ wty@(TyPi (Implicit tau) sigma) = do
   x <- TvName <$> genName
   i <- view classes
-  tell (pure (ConImplicit r i x cls))
+  tell (Seq.singleton (ConImplicit r i x tau))
 
-  (a, b, k) <- quantifier r s rest
-  let wrap ex = ExprWrapper (WrapVar x) (ExprWrapper (TypeAsc ty) ex (annotation ex, ty)) (annotation ex, rest)
-  pure (a, b, k . wrap)
+  (dom, cod, k) <- quantifier r DoSkip sigma
+  let wrap ex = ExprWrapper (WrapVar x) (ExprWrapper (TypeAsc wty) ex (annotation ex, wty)) (annotation ex, sigma)
+  pure (dom, cod, k . wrap)
+
 quantifier _ _ (TyPi x b) = pure (x, b, id)
 quantifier r _ t = do
   (a, b) <- (,) <$> freshTV <*> freshTV

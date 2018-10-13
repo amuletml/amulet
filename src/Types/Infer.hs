@@ -355,8 +355,26 @@ inferLetTy closeOver strategy vs =
                 -> Seq.Seq (Constraint Typed)
                 -> m (Type Typed, Expr Typed -> Expr Typed)
       figureOut blame ex ty cs = do
-        (x, co, cons) <- retcons (addBlame (snd blame)) (solve cs)
-        cons <- pure (fmap (apply x) cons)
+        (x, co, deferred) <- retcons (addBlame (snd blame)) (solve cs)
+        deferred <- pure (fmap (apply x) deferred)
+        (compose x -> x, wraps', cons) <- solveHard (Seq.fromList deferred)
+
+        name <- TvName <$> genName
+        let reify an ty var =
+              case wraps' Map.! var of
+                ExprApp v -> v
+                _ -> ExprWrapper (wraps' Map.! var)
+                       (Fun (EvParam (Capture name (an, ty))) (VarRef name (an, ty)) (an, TyArr ty ty))
+                       (an, ty)
+            mkBind var (VarRef var' _) | var == var' = const []
+            mkBind v e = (:[]) . Binding v e
+            mkLet [] = const
+            mkLet xs = Let xs
+        let addLet (ConImplicit _ _ var ty:cs) ex | an <- annotation ex =
+              addLet cs $ mkLet (mkBind var (reify an ty var) (an, ty))
+                ex (an, getType ex)
+            addLet (_:cs) ex = addLet cs ex
+            addLet [] ex = ex
 
         (context, wrapper) <- reduceClassContext (annotation ex) cons
 
@@ -367,7 +385,8 @@ inferLetTy closeOver strategy vs =
                 ex (apply x (context ty))
         ty <- skolCheck (TvName (fst blame)) (snd blame) vt
         let (tp, sub) = rename ty
-        pure (tp, wrapper . solveEx tp (x <> sub) co)
+
+        pure (tp, wrapper . solveEx tp (x <> sub) (co <> wraps') . addLet deferred)
 
 
       tcOne :: SCC (Binding Resolved)
@@ -409,7 +428,7 @@ inferLetTy closeOver strategy vs =
             ex = solveEx ty solution wraps e
 
         deferred <- pure (fmap (apply solution) deferred)
-        (compose solution -> solution, wraps', cons) <- solve (Seq.fromList deferred)
+        (compose solution -> solution, wraps', cons) <- solveHard (Seq.fromList deferred)
 
         case strategy of
           Fail ->

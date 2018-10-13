@@ -75,13 +75,13 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
   pretty (OpenIn v e _) = pretty v <> string "." <> parens (pretty e)
   pretty (Lazy e _) = keyword "lazy" <+> parenArg e
 
-  pretty (ExprWrapper wrap ex _) = go wrap ex where
+  pretty (ExprWrapper wrap ex an) = go wrap ex where
     go (TypeLam v t) ex = keyword "fun" <+> braces (pretty (TySkol v) <+> colon <+> pretty t) <> dot <+> pretty ex
     go (Cast c) ex = parens (pretty ex <+> soperator (string "|>") <+> pretty c)
     go (TypeApp t) ex = pretty ex <+> braces (pretty t)
-    go (ExprApp t) ex = pretty ex <+> brackets (pretty t)
+    go (ExprApp t) ex = pretty (App ex t undefined)
     go (TypeAsc _) ex = pretty ex
-    go (wr Syntax.:> wi) ex = go wr (ExprWrapper wi ex undefined)
+    go (wr Syntax.:> wi) ex = go wr (ExprWrapper wi ex an)
     go (WrapVar v) ex = pretty ex <+> soperator (char '_') <> pretty v
     go (WrapFn f) ex = pretty (runWrapper f ex)
     go IdWrap ex = pretty ex
