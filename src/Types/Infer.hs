@@ -490,9 +490,10 @@ inferLetTy closeOver strategy vs =
              let solveOne :: (Binding Typed, Type Typed) -> m ( Binding Typed )
                  solveOne (Binding var exp an, ty) = do
                    ty <- closeOver mempty exp (apply solution ty)
+                   (new, sub) <- pure $ rename ty
                    pure ( Binding var
-                           (solveEx ty solution wrap exp)
-                           (fst an, ty)
+                           (solveEx new (sub `compose` solution) wrap exp)
+                           (fst an, new)
                         )
                  solveOne _ = undefined
              bs <- traverse solveOne bindings
@@ -549,8 +550,9 @@ inferLetTy closeOver strategy vs =
 
              (context, wrapper, needed) <- reduceClassContext (annotation blamed) cons
 
-             closed <- closeOver (Set.fromList (map fst tvs)) (Record fields (an, recTy)) $
+             closed <- skolCheck recVar (BecauseOf blamed) <=< closeOver (Set.fromList (map fst tvs)) (Record fields (an, recTy)) $
                context recTy
+             (closed, _) <- pure $ rename closed
              tyLams <- mkTypeLambdas (ByConstraint recTy) closed
 
              let record =
@@ -562,8 +564,9 @@ inferLetTy closeOver strategy vs =
                        closed (an, closed))
                      (an, closed)
                  makeOne (nm, var, an, ty) = do
-                   ty' <- closeOver (Set.fromList (map fst tvs)) (Record fields (an, recTy)) $
+                   ty' <- skolCheck recVar (BecauseOf blamed) <=< closeOver (Set.fromList (map fst tvs)) (Record fields (an, recTy)) $
                      context ty
+                   (ty', _) <- pure $ rename ty'
                    let lineUp c (TyForall v _ rest) ex =
                          lineUp c rest $ ExprWrapper (TypeApp (TyVar v)) ex (annotation ex, rest)
                        lineUp ((v, t):cs) (TyPi (Implicit _) rest) ex =
