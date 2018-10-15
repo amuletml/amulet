@@ -35,7 +35,9 @@ data ResolveError
 
   | EmptyMatch -- ^ This @match@ has no patterns
   | EmptyBegin -- ^ This @begin@ block has no expressions
-  | IllegalMethod -- ^ An illegal method within an @instance@
+
+  | IllegalMethod -- ^ An malformed method within an @instance@
+  | NonTerminatingContext [(Var Resolved, (Int, Int))] -- ^ The context is "larger" than the head.
 
   -- | A wrapper for other errors which adds some additional context,
   -- such as a source position.
@@ -58,7 +60,20 @@ instance Pretty ResolveError where
 
   pretty EmptyMatch = "Empty match expression"
   pretty EmptyBegin = "Empty begin expression"
+
   pretty IllegalMethod = "Illegal pattern in instance method declaration"
+  pretty (NonTerminatingContext vs) =
+    "Class context is larger than the target class: instance checking will be non-terminating." <>
+    case vs of
+      [] -> mempty
+      [(v, (cn, hn))] -> line <> note <+> verbatim (TyVar v) <+> "appears" <+> times cn
+                       <+> "in the context, but only" <+> times hn <+> "in the class."
+      vs -> line <> note <+> "Type variables" <+> hsep (punctuate comma (map (verbatim . TyVar . fst) vs))
+            <+> "occur more times in the context than in the class."
+
+    where
+      times 1 = "once"
+      times n = shown n <+> "times"
 
   pretty (ArisingFrom er ex) = pretty er <#> empty <#> nest 4 (string "Arising from use of" <+> blameOf ex </> pretty ex)
 

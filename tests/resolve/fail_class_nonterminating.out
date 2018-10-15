@@ -1,0 +1,35 @@
+fail_class_nonterminating.ml[14:1 ..18:8]: error
+  Class context is larger than the target class: instance checking will be non-terminating.
+
+  Arising from use of the declaration
+      instance show 'a * show (list 'b) => show ('a * 'b) begin
+        show (a, b) =
+          (((("(" ^ show a) ^ ", ") ^ show b) ^ ")")
+      end
+   │ 
+14 │ instance show 'a * show (list 'b) => show ('a * 'b)
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+fail_class_nonterminating.ml[18:1 ..22:8]: error
+  Class context is larger than the target class: instance checking will be non-terminating.
+  • Note: `'b#14` appears 2 times in the context, but only once in the class.
+
+  Arising from use of the declaration
+      instance show 'a * show 'b * show 'b => show ('a * 'b) begin
+        show (a, b) =
+          (((("(" ^ show a) ^ ", ") ^ show b) ^ ")")
+      end
+   │ 
+18 │ instance show 'a * show 'b * show 'b => show ('a * 'b)
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+fail_class_nonterminating.ml[22:1 ..24:1]: error
+  Class context is larger than the target class: instance checking will be non-terminating.
+  • Note: Type variables `'a#17`, `'b#18` occur more times in the context than in the class.
+
+  Arising from use of the declaration
+      instance show 'a * show 'a * show 'b * show 'b => show ('a * 'b) begin
+        show (a, b) =
+          (((("(" ^ show a) ^ ", ") ^ show b) ^ ")")
+      end
+   │ 
+22 │ instance show 'a * show 'a * show 'b * show 'b => show ('a * 'b)
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
