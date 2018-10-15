@@ -10,20 +10,8 @@ pipeline {
       }
     }
     stage('Configure Cabal project') {
-      parallel {
-        stage('Configure Cabal project') {
-          steps {
-            sh 'nix-shell . --run \'cabal new-configure --enable-tests --disable-profiling --ghc-options="-Werror -fhide-source-paths"\' --arg ci true'
-          }
-        }
-        stage('Run hlint') {
-          steps {
-            timestamps() {
-              sh 'nix-shell . --run "hlint --git" --arg ci true'
-            }
-
-          }
-        }
+      steps {
+        sh 'nix-shell . --run \'cabal new-configure --enable-tests --disable-profiling --ghc-options="-Werror -fhide-source-paths"\' --arg ci true'
       }
     }
     stage('Build Amulet') {
@@ -45,6 +33,14 @@ pipeline {
         stage('Build Compiler') {
           steps {
             sh 'nix-shell . --run \'cabal new-build -j6 exe:amc\' --arg ci true'
+          }
+        }
+        stage('Run hlint') {
+          steps {
+            timestamps() {
+              sh 'nix-shell . --run "hlint --git" --arg ci true'
+            }
+
           }
         }
       }

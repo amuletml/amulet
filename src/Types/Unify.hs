@@ -37,6 +37,7 @@ import Data.Foldable
 import Data.Function
 import Data.Spanned
 import Data.Reason
+import Data.Maybe
 import Data.These
 import Data.Span (internal)
 import Data.Text (Text)
@@ -233,29 +234,12 @@ allSameHead [] = True
 useImplicit :: forall m. MonadSolve m
             => SomeReason -> Type Typed -> ImplicitScope Typed
             -> Implicit Typed -> m (Wrapper Typed)
-useImplicit reason ty scope (ImplChoice hdt oty os imp _ _) = go where
+useImplicit reason ty scope (ImplChoice _ oty _ imp _ _) = go where
   go :: m (Wrapper Typed)
   go = do
-    (hdt, refresh) <- refreshTy hdt
-    (cast, view solveTySubst -> sub) <- capture $ unify hdt ty
-
+    w <- subsumes' reason scope oty ty
     let start = VarRef imp (annotation reason, oty)
-        mk _ [] = pure (\e -> ExprWrapper (probablyCast cast) e (annotation e, ty))
-        mk (TyPi (Invisible v _) t) (Quantifier (Invisible _ _):xs) = do
-          let tau = apply sub . apply refresh . TyVar $ v
-          let sub' = Map.singleton v tau
-
-          flip (.) (\ex -> ExprWrapper (TypeApp tau) ex (annotation ex, apply sub' t)) <$> mk (apply sub' t) xs
-        mk (TyPi (Implicit tau) t) (Implication _:os) = do
-          var <- TvName <$> genName
-          doSolve (pure (ConImplicit reason scope var tau))
-          k' <- mk t os
-          pure (k' . (\ex -> ExprWrapper (WrapVar var) ex (annotation ex, t)))
-        mk x (o:_) = error (show x ++ " missing " ++ show o)
-
-    wrap <- mk oty os
-    solveTySubst %= compose sub
-    pure (ExprApp (wrap start))
+    pure (ExprApp (ExprWrapper w start (annotation reason, ty)))
 
 bind :: MonadSolve m => Var Typed -> Type Typed -> m (Coercion Typed)
 bind var ty
@@ -433,8 +417,8 @@ subsumes' r s (TyPi (Implicit t) t1) t2
       let wrap ex | an <- annotation ex
             = ExprWrapper omega
                 (ExprWrapper (TypeAsc t1)
-                  (ExprWrapper (WrapVar var) ex (an, t1)) (an, t1)) (an, t2)
-       in pure (WrapFn (MkWrapCont wrap "implicit instantation"))
+                   (ExprWrapper (WrapVar var) ex (an, t1)) (an, t1)) (an, t2)
+       in pure (WrapFn (MkWrapCont wrap ("implicit instantation " ++ show (pretty t))))
   | TyVar{} <- t1, TyVar{} <- t2 = do
       var <- TvName <$> genName
       omega <- subsumes' r s t1 t2
@@ -443,16 +427,17 @@ subsumes' r s (TyPi (Implicit t) t1) t2
       let wrap ex | an <- annotation ex
             = ExprWrapper omega
                 (ExprWrapper (TypeAsc t1)
-                  (ExprWrapper (WrapVar var) ex (an, t1)) (an, t1)) (an, t2)
-       in pure (WrapFn (MkWrapCont wrap "implicit instantation"))
+                   (ExprWrapper (WrapVar var) ex (an, t1)) (an, t1)) (an, t2)
+       in pure (WrapFn (MkWrapCont wrap ("implicit instantation " ++ show (pretty t))))
 
   | otherwise = probablyCast <$> unify (TyPi (Implicit t) t1) t2
 
 subsumes' b s t1@TyPi{} t2 | isSkolemisable t1 = do
   (cont, _, t1') <- instantiate Subsumption t1
-  let wrap = maybe IdWrap (WrapFn . flip MkWrapCont "forall <= sigma; instantiation") cont
-
-  flip (Syntax.:>) wrap <$> subsumes b s t1' t2
+  omega <- subsumes b s t1' t2
+  let inst = fromMaybe id cont
+      wrap ex = ExprWrapper omega (inst ex) (annotation ex, t2)
+  pure (WrapFn (MkWrapCont wrap ("instantiation " ++ show t1 ++ " => " ++ show t2)))
 
 subsumes' r scope ot@(TyTuple a b) nt@(TyTuple a' b') = do
   -- We must check that..
@@ -709,12 +694,6 @@ unequal a b = do
 select :: Respannable a => Text -> [Field a] -> Maybe (Expr a)
 select t = fmap go . find ((== t) . view fName) where
   go (Field _ e s) = respan (const (annotation s)) e
-
-refreshTy :: (Substitutable Typed a, MonadNamey m) => a -> m (a, Subst Typed)
-refreshTy ty = do
-  vs <- for (Set.toList (ftv ty)) $ \v ->
-    (v,) <$> refreshTV v
-  pure (apply (Map.fromList vs) ty, Map.fromList vs)
 
 mkRecordWrapper :: [(Text, Type Typed)]
                 -> Map.Map Text (Type Typed, Type Typed, Wrapper Typed)
