@@ -18,6 +18,7 @@ import Types.Kinds
 approxType :: MonadInfer Typed m => Expr Resolved -> StateT Origin m (Type Typed)
 approxType r@(Fun p e _) = TyPi <$> approxParam p <*> approxType e where
   approxParam (PatParam p) = Anon <$> approxPattern r p
+  approxParam (EvParam _) = error "approx EvParam"
 
 approxType r@(Ascription _ t _) = resolveKind (becauseExp r) t
 approxType (Match _ ((_, e):_) _) = approxType e

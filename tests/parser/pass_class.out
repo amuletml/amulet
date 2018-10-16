@@ -1,0 +1,6 @@
+class () => semigroup a begin
+  val <> : 'a -> 'a -> 'a
+end
+instance () => semigroup int begin
+  <> = ((+))
+end

@@ -1,6 +1,6 @@
 letrec-01.ml[1:5 ..1:10]: error
   Recursive pattern bindings are not allowed
-  Note: this definition refers to itself directly
+  • Note: this definition refers to itself directly
 
   │ 
 1 │ let (a, b) = (a, b)

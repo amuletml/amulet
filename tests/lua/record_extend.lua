@@ -1,9 +1,9 @@
 do
   local bottom = nil
-  local at = {}
+  local ay = {}
   for k, v in pairs(bottom) do
-    at[k] = v
+    ay[k] = v
   end
-  at.x = 1
-  bottom(at)
+  ay.x = 1
+  bottom(ay)
 end

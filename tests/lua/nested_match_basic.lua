@@ -1,16 +1,16 @@
 do
   local Nil = { __tag = "Nil" }
   local function Cons(x) return { __tag = "Cons", x } end
-  local function zip(ik_1, ik_2, ik_3)
-    if ik_2.__tag == "Nil" then
+  local function zip(it_1, it_2, it_3)
+    if it_2.__tag == "Nil" then
       return Cons({ _1 = 1, _2 = Nil })
-    elseif ik_2.__tag == "Cons" then
-      local gw = ik_2[1]
-      if ik_3.__tag == "Nil" then
+    elseif it_2.__tag == "Cons" then
+      local hf = it_2[1]
+      if it_3.__tag == "Nil" then
         return Cons({ _1 = 2, _2 = Nil })
-      elseif ik_3.__tag == "Cons" then
-        local gx = ik_3[1]
-        return Cons({ _1 = ik_1(gw._1)(gx._1), _2 = zip(ik_1, gw._2, gx._2) })
+      elseif it_3.__tag == "Cons" then
+        local hg = it_3[1]
+        return Cons({ _1 = it_1(hf._1)(hg._1), _2 = zip(it_1, hf._2, hg._2) })
       end
     end
   end

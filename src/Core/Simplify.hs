@@ -42,7 +42,7 @@ linted pass fn
 
 -- | Run the optimiser multiple times over the input core.
 optimise :: [Stmt CoVar] -> Namey [Stmt CoVar]
-optimise = go 10 <=< prepasses . (runLint "Lower" =<< checkStmt emptyScope) where
+optimise = go 10 <=< prepasses . if lintPasses then runLint "Lower" =<< checkStmt emptyScope else id where
   go :: Integer -> [Stmt CoVar] -> Namey [Stmt CoVar]
   go k sts
     | k > 0 = go (k - 1) =<< optmOnce sts

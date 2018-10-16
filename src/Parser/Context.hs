@@ -56,6 +56,10 @@ data Context
   | CtxModuleBodyUnresolved SourcePos SourcePos
   | CtxModuleBody SourcePos
 
+  | CtxClassHead SourcePos | CtxClassBody SourcePos
+
+  | CtxInstHead SourcePos | CtxInstBody SourcePos
+
   deriving (Show, Eq)
 
 -- | Represents a "working list" of tokens the context processor is
@@ -216,11 +220,49 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
     (TcBegin, CtxModuleBodyUnresolved mod eq:ck)
       | spLine tp == spLine eq || spCol tp == spCol mod
       -> pure ( Result tok Done
-              , CtxEmptyBlock Nothing : CtxModuleBody mod:ck )
+              , CtxEmptyBlock Nothing : CtxModuleBody mod : ck )
     -- Otherwise assume it's an implicit begin
     (_, CtxModuleBodyUnresolved mod eq:ck)
       -> pure (Result (Token TcVBegin eq eq) (Working tok)
-              , CtxEmptyBlock (Just TcVEnd) : CtxModuleBody mod :ck)
+              , CtxEmptyBlock (Just TcVEnd) : CtxModuleBody mod : ck)
+
+    -- Offside rule for classe blocks
+    (TcEnd, CtxClassBody offside:ck)
+      | spCol tp == spCol offside
+      -> pure (Result tok Done, ck)
+    (_, CtxClassBody offside:ck)
+      | spCol tp <= spCol offside
+      -> handleContext tok ck
+
+    -- We need to determine if we need to insert a begin or not for classes
+    (TcBegin, CtxClassHead cls:ck)
+      | spCol tp >= spCol cls
+      -> pure ( Result tok Done
+              , CtxEmptyBlock Nothing : CtxClassBody cls : ck )
+    -- Otherwise assume it's an implicit begin
+    (_, CtxClassHead cls:ck)
+      | spLine tp > spLine cls
+      -> pure (Result (Token TcVBegin tp tp) (Working tok)
+              , CtxEmptyBlock (Just TcVEnd) : CtxClassBody cls: ck)
+
+    -- Offside rule for instance blocks
+    (TcEnd, CtxInstBody offside:ck)
+      | spCol tp == spCol offside
+      -> pure (Result tok Done, ck)
+    (_, CtxInstBody offside:ck)
+      | spCol tp <= spCol offside
+      -> handleContext tok ck
+
+    -- We need to determine if we need to insert a begin or not for instance blocks
+    (TcBegin, CtxInstHead cls:ck)
+      | spCol tp >= spCol cls
+      -> pure ( Result tok Done
+              , CtxEmptyBlock Nothing : CtxInstBody cls : ck )
+    -- Otherwise assume it's an implicit begin
+    (_, CtxInstHead cls:ck)
+      | spLine tp > spLine cls
+      -> pure (Result (Token TcVBegin tp tp) (Working tok)
+              , CtxEmptyBlock (Just TcVEnd) : CtxInstBody cls: ck)
 
     -- @let ...@ ~~> Push an let context
     (TcLet, _) -> pure
@@ -263,7 +305,7 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
       ( Result tok Done
       , CtxEmptyBlock (Just TcVEnd):ck )
 
-    -- @if@ ~~> Push a if context
+    -- @if@ ~~> Push an if context
     (TcIf, _) -> pure (Result tok Done, CtxIf tp:c)
     -- @if@ ~~> Push a then context and a block
     (TcThen, _) -> pure
@@ -273,10 +315,14 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
       ( Result tok Done
       , CtxElseUnresolved tp : c )
 
+    -- @module@ ~~> Push a module context
     (TcModule, _) -> pure (Result tok Done, CtxModuleHead tp:c)
     (TcEqual, CtxModuleHead mod:ck) -> pure
       ( Result tok Done
       , CtxModuleBodyUnresolved mod te:ck)
+
+    (TcClass, _) -> pure (Result tok Done, CtxClassHead tp:c)
+    (TcInstance, _) -> pure (Result tok Done, CtxClassHead tp:c)
 
     -- @begin ...@ ~~> CtxEmptyBlock : CtxBracket(end)
     (TcBegin, _) -> pure
@@ -343,6 +389,8 @@ terminates TcComma (CtxBracket TcCSquare:_) = True
 
 -- Toplevel terminators
 terminates TcEnd (CtxModuleBody{}:_) = True
+terminates TcEnd (CtxClassBody{}:_) = True
+terminates TcEnd (CtxInstBody{}:_) = True
 
 -- Block level terminators
 terminates TcTopSep (CtxBlock{}:ck) = isToplevel ck
@@ -353,6 +401,8 @@ terminates _ _ = False
 isToplevel :: [Context] -> Bool
 isToplevel [] = True
 isToplevel (CtxModuleBody{}:_) = True
+isToplevel (CtxClassBody{}:_) = True
+isToplevel (CtxInstBody{}:_) = True
 isToplevel (CtxBlock{}:cks) = isToplevel cks
 isToplevel _ = False
 

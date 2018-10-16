@@ -27,7 +27,7 @@ module Syntax.Resolve
 
 import Control.Monad.Chronicles
 import Control.Monad.Reader
-import Control.Applicative hiding (empty)
+import Control.Applicative
 import Control.Monad.State
 import Control.Monad.Namey
 import Control.Lens hiding (Lazy)
@@ -150,6 +150,53 @@ resolveModule (Module name body:rs) = do
 
   where modZip name name' v v' = zip (map (name<>) v) (map (name'<>) v')
 
+resolveModule (t@(Class name ctx tvs ms ann):rs) = do
+  name' <- tagVar name
+  (tvs', tvss) <- resolveTele t tvs
+
+  extendTy (name, name') $ do
+    (ctx', ms') <- extendTyvarN tvss $ do
+      ctx' <- traverse (reType t) ctx
+      ms' <- zip <$> traverse (tagVar . fst) ms
+                 <*> traverse (reType t . snd) ms
+      pure (ctx', ms')
+
+    extendN (zipWith (\(v, _) (v', _) -> (v, v')) ms ms') $
+      (Class name' ctx' tvs' ms' ann:) <$> resolveModule rs
+
+resolveModule (t@(Instance cls ctx head ms ann):rs) = do
+  cls' <- lookupTy cls `catchJunk` t
+
+  let fvs = toList (foldMap ftv ctx <> ftv head)
+  fvs' <- traverse tagVar fvs
+
+  t' <- extendTyvarN (zip fvs fvs') $ do
+    ctx' <- traverse (reType t) ctx
+    head' <- reType t head
+
+    (ms', vs) <- unzip <$> traverse reMethod ms
+    ms'' <- extendN (concat vs) (sequence ms')
+
+    pure (Instance cls' ctx' head' ms'' ann)
+
+  (t':) <$> resolveModule rs
+
+  where
+    reMethod :: MonadResolve m
+             => Binding Parsed
+             -> m (m (Binding Resolved), [(Var Parsed, Var Resolved)])
+    reMethod b@(Binding var bod an) = do
+      var' <- retcons (wrapError b) $ lookupEx var
+      pure ( (\bod' -> Binding var' bod' an) <$> reExpr bod
+           , [(var, var')] )
+    reMethod b@(Matching (Capture var _) bod an) = do
+      var' <- retcons (wrapError b) $ lookupEx var
+      pure ( (\bod' -> Binding var' bod' an) <$> reExpr bod
+           , [(var, var')] )
+    reMethod b@Matching{} =
+      confesses (ArisingFrom IllegalMethod (BecauseOf b))
+    reMethod TypedMatching{} = error "reBinding TypedMatching{}"
+
 lookupVar :: MonadResolve m
           => Var Parsed -> VarKind -> Map.Map (Var Parsed) ScopeVariable
           -> m (Var Resolved)
@@ -194,6 +241,7 @@ reExpr (Fun p e a) = do
   let reWholePattern' (PatParam p) = do
         (p', vs, ts) <- reWholePattern p
         pure (PatParam p', vs, ts)
+      reWholePattern' _ = error "EvParam resolve"
   (p', vs, ts) <- reWholePattern' p
   extendTyvarN ts . extendN vs $ Fun p' <$> reExpr e <*> pure a
 
@@ -299,6 +347,7 @@ reType r (TyPi (Invisible v k) ty) = do
   k <- traverse (reType r) k
   pure (TyPi (Invisible v' k) ty')
 reType r (TyPi (Anon f) x) = TyPi . Anon <$> reType r f <*> reType r x
+reType r (TyPi (Implicit f) x) = TyPi . Implicit <$> reType r f <*> reType r x
 reType r (TyApp f x) = TyApp <$> reType r f <*> reType r x
 reType r (TyRows t f) = TyRows <$> reType r t
                                <*> traverse (\(a, b) -> (a,) <$> reType r b) f

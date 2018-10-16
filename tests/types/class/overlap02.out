@@ -1,0 +1,10 @@
+overlap02.ml[2:1 ..2:25]: error
+  Overlapping instances for foo unit
+  • Note: first defined here,
+  │ 
+2 │ instance foo () begin end
+  │ ^^^^^^^^^^^^^^^^^^^^^^^^^
+   but also defined here
+  │ 
+3 │ instance foo () begin end
+  │ ^^^^^^^^^^^^^^^^^^^^^^^^^

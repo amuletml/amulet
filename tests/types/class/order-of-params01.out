@@ -1,0 +1,4 @@
+show : type -> constraint
+show : {'a : type}. show 'a => 'a -> string
+show_cat : {'a : type}. {'b : type}. show 'a => show 'b => 'a -> 'b -> string
+foo : {'a : type}. (unit -> string -> 'a) -> 'a

@@ -152,6 +152,7 @@ library amulet
                      , Syntax.Verify
                      , Syntax.Desugar
                      , Syntax.Transform
+                     , Syntax.Implicits
                      -- Renamer
                      , Syntax.Resolve
                      , Syntax.Resolve.Error
@@ -162,6 +163,7 @@ library amulet
                      , Types.Kinds
                      , Types.Unify
                      , Types.Wellformed
+                     , Types.Infer.Class
                      , Types.Infer.Errors
                      , Types.Infer.Builtin
                      , Types.Infer.Outline

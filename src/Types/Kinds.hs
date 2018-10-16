@@ -1,7 +1,7 @@
 {-# LANGUAGE ConstraintKinds, FlexibleContexts, LambdaCase #-}
 module Types.Kinds
   ( resolveKind
-  , resolveTyDeclKind
+  , resolveTyDeclKind, resolveClassKind
   , annotateKind
   , closeOver
   , checkAgainstKind, getKind, liftType
@@ -53,7 +53,7 @@ resolveKind reason otp = do
                         pure t
                      in runWriterT (runStateT (cont otp) reason)
 
-  (sub, _) <- solve cs
+  (sub, _, _) <- solve cs
 
   let t = apply sub ty
   wellformed t
@@ -73,20 +73,40 @@ checkAgainstKind r t k = do
 
 annotateKind :: MonadKind m => SomeReason -> Type Typed -> m (Type Typed)
 annotateKind r ty = do
-  ((ty, _), cs) <- runWriterT (runStateT (checkKind (raiseT unTvName ty) TyType) r)
-  (sub, _) <- solve cs
+  ((ty, _), cs) <- runWriterT (runStateT (fmap fst (inferKind (raiseT unTvName ty))) r)
+  (sub, _, _) <- solve cs
   pure (apply sub ty)
 
-initialKind :: MonadKind m => [TyConArg Resolved] -> KindT m (Type Typed, Telescope Typed)
-initialKind (TyVarArg v:as) = do
-  (k, t) <- initialKind as
+initialKind :: MonadKind m => Type Typed -> [TyConArg Resolved] -> KindT m (Type Typed, Telescope Typed)
+initialKind k (TyVarArg v:as) = do
+  (k, t) <- initialKind k as
   ty <- freshTV
   pure (TyArr ty k, one v ty <> t)
-initialKind (TyAnnArg v k:as) = do
+initialKind ret (TyAnnArg v k:as) = do
   k <- checkKind k TyType
-  (s, t) <- initialKind as
+  (s, t) <- initialKind ret as
   pure (TyArr k s, t <> one v k)
-initialKind [] = pure (TyType, mempty)
+initialKind ret [] = pure (ret, mempty)
+
+resolveClassKind :: MonadKind m
+                 => Toplevel Resolved
+                 -> m (Type Typed, [TyConArg Typed])
+resolveClassKind stmt@(Class classcon ctx args methods _) = do
+  let reason = BecauseOf stmt
+  k <- solveForKind reason $ do
+    (kind, tele) <- initialKind tyConstraint args
+    let scope = one classcon kind <> tele
+    local (names %~ focus scope) $ do
+      traverse_ (`checkKind` tyConstraint) ctx
+      for_ methods $ \(_, ty) ->
+        checkKind ty TyType
+    pure kind
+  let remake (TyVarArg v:as) (TyArr k r) = TyAnnArg (TvName v) k:remake as r
+      remake (TyAnnArg v _:as) (TyArr k r) = TyAnnArg (TvName v) k:remake as r
+      remake cs (TyPi Invisible{} x) = remake cs x
+      remake _ _ = []
+  pure (k, remake args k)
+resolveClassKind _ = error "not a class"
 
 resolveTyDeclKind :: MonadKind m
                   => SomeReason
@@ -98,7 +118,7 @@ resolveTyDeclKind reason tycon args cons = do
       argTvName (TyAnnArg v _) = Just (TvName v)
       vs = mapMaybe argTvName args
   k <- solveForKind reason $ do
-    (kind, tele) <- initialKind args
+    (kind, tele) <- initialKind TyType args
     let scope = one tycon kind <> tele
 
     local (names %~ focus scope) $ do
@@ -108,8 +128,8 @@ resolveTyDeclKind reason tycon args cons = do
         c@(GeneralisedCon _ t _) -> condemn $
           retcons (addBlame (BecauseOf c)) (inferGadtConKind c t tycon (mapMaybe argTvName args))
       pure kind
-  let remake (TyVarArg v:as) (TyArr _ k) = TyVarArg (TvName v):remake as k
-      remake (TyAnnArg v _:as) (TyArr k _) = TyAnnArg (TvName v) k:remake as k
+  let remake (TyVarArg v:as) (TyArr k r) = TyAnnArg (TvName v) k:remake as r
+      remake (TyAnnArg v _:as) (TyArr k r) = TyAnnArg (TvName v) k:remake as r
       remake _ _ = []
   pure (k, foldl TyApp (TyCon (TvName tycon)) (map TyVar vs), remake args k)
 
@@ -119,7 +139,7 @@ solveForKind reason = solveK (closeOver reason) reason
 solveK :: MonadKind m => (Type Typed -> m (Type Typed)) -> SomeReason -> KindT m (Type Typed) -> m (Type Typed)
 solveK cont reason k = do
   ((kind, _), cs) <- runWriterT (runStateT k reason)
-  (sub, _) <- solve cs
+  (sub, _, _) <- solve cs
   cont (apply sub kind)
 
 inferKind :: MonadKind m => Type Resolved -> KindT m (Type Typed, Kind Typed)
@@ -167,6 +187,7 @@ inferKind (TyApp f x) = do
       x <- checkKind x d
       pure (TyApp f x, c)
     Invisible{} -> error "inferKind TyApp: visible argument to implicit quantifier"
+    Implicit{} -> error "inferKind TyApp: visible argument to implicit quantifier"
 
 inferKind (TyRows p rs) = do
   (p, k) <- secondA isType =<< inferKind p
@@ -207,7 +228,8 @@ checkKind (TyPi binder b) ek = do
   reason <- get
   -- _ <- isType ek
   case binder of
-    Anon t -> TyArr <$> checkKind t ek <*> checkKind b ek
+    Anon t -> TyArr <$> checkKind t TyType <*> checkKind b ek
+    Implicit t -> TyPi . Implicit <$> checkKind t tyConstraint <*> checkKind b ek
 
     Invisible v (Just arg) -> do
       (arg, kind) <- inferKind arg
@@ -265,22 +287,28 @@ isType t = do
   pure t
 
 closeOver :: MonadKind m => SomeReason -> Type Typed -> m (Type Typed)
-closeOver r a = kindVars . killWildcard <$> annotateKind r (forall (toList freevars) a) where
-  freevars = ftv a
-  forall :: [Var p] -> Type p -> Type p
-  forall [] a = a
-  forall vs a = foldr (flip TyForall Nothing) a vs
+closeOver r a = do
+  names <- view names
+  let freevars = ftv a
+  let forall :: [Var Typed] -> Type Typed -> Type Typed
+      forall [] a = a
+      forall vs a = foldr addForall a vs
 
-  kindVars = squish . second toList . runWriter . split where
-    squish (x, []) = x
-    squish (x, vs) = foldr (flip TyForall (Just TyType)) x vs
+      addForall v t
+        | unTvName v `inScope` names = TyForall v (Just (names ^. at (unTvName v) . non undefined)) t
+        | otherwise = TyForall v Nothing t
 
-    split (TyForall v (Just t@(TyVar x)) ty)
-      | v `Set.member` freevars = do
-        tell (Set.singleton x)
-        TyForall v (Just t) <$> split ty
-      | otherwise = TyForall v (Just t) <$> split ty
-    split t = pure t
+  let kindVars = squish . second toList . runWriter . split where
+        squish (x, []) = x
+        squish (x, vs) = foldr (flip TyForall (Just TyType)) x vs
+
+        split (TyForall v (Just t@(TyVar x)) ty)
+          | v `Set.member` freevars = do
+            tell (Set.singleton x)
+            TyForall v (Just t) <$> split ty
+          | otherwise = TyForall v (Just t) <$> split ty
+        split t = pure t
+  kindVars . killWildcard <$> annotateKind r (forall (toList freevars) a)
 
 
 promoteOrError :: Type Typed -> Maybe Doc
@@ -291,6 +319,7 @@ promoteOrError TyExactRows{} = Just (string "mentions a tuple")
 promoteOrError (TyApp a b) = promoteOrError a <|> promoteOrError b
 promoteOrError (TyPi (Invisible _ a) b) = join (traverse promoteOrError a) <|> promoteOrError b
 promoteOrError (TyPi (Anon a) b) = promoteOrError a <|> promoteOrError b
+promoteOrError (TyPi Implicit{} _) = Just (string "has implicit parameters")
 promoteOrError TyCon{} = Nothing
 promoteOrError TyVar{} = Nothing
 promoteOrError TySkol{} = Nothing

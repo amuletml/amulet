@@ -47,7 +47,9 @@ deriving instance (Show (Var p), Show (Ann p)) => Show (Binding p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Binding p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Binding p)
 
-newtype Parameter p = PatParam { _paramPat :: Pattern p }
+data Parameter p
+  = PatParam { _paramPat :: Pattern p }
+  | EvParam { _paramPat :: Pattern p }
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Parameter p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Parameter p)
@@ -115,6 +117,7 @@ data Wrapper p
   | (:>) (Wrapper p) (Wrapper p)
   | TypeAsc (Type p) -- invisible (to pretty-printer) ascription
   | WrapVar (Var p) -- Unsolved wrapper variable
+  | ExprApp (Expr p)
   | WrapFn (WrapCont p)
   | IdWrap
 
@@ -186,6 +189,7 @@ data Type p
 
 data TyBinder p
   = Anon { _tyBinderType :: Type p } -- a function type
+  | Implicit { _tyBinderType :: Type p } -- a type with class obligations
   | Invisible
     { _tyBinderVar :: Var p
     , _tyBinderArg :: Maybe (Type p) } -- a forall. type
@@ -209,6 +213,8 @@ data SkolemMotive p
   = ByAscription (Expr Resolved) (Type p) -- what r phases?
   | BySubsumption (Type p) (Type p)
   | ByExistential (Var p) (Type p)
+  | ByInstanceHead (Type p) (Ann Resolved)
+  | ByConstraint (Type p)
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (SkolemMotive p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (SkolemMotive p)
@@ -251,6 +257,16 @@ data Toplevel p
   | Module (Var p) [Toplevel p]
   | Open { openName :: Var p
          , openAs :: Maybe T.Text }
+  | Class { className :: Var p
+          , classCtx :: Maybe (Type p)
+          , classParams :: [TyConArg p]
+          , classMethods :: [(Var p, Type p)]
+          , ann :: Ann p }
+  | Instance { instanceClass :: Var p
+             , instanceCtx :: Maybe (Type p)
+             , instanceHead :: Type p
+             , instanceMethods :: [Binding p]
+             , ann :: Ann p }
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Toplevel p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Toplevel p)
@@ -287,7 +303,6 @@ pattern TyForall :: Var p -> Maybe (Type p) -> Type p -> Type p
 pattern TyForall v k t' <- TyPi (Invisible v k) t' where
   TyForall v k ty = TyPi (Invisible v k) ty
 
-
 unTvName :: Var Typed -> Var Resolved
 unTvName (TvName x) = x
 
@@ -319,6 +334,8 @@ instance (Spanned (Constructor p), Spanned (Ann p)) => Spanned (Toplevel p) wher
   annotation (LetStmt (b:vs)) = sconcat (annotation b :| map annotation vs)
   annotation (TypeDecl _ _ (x:xs)) = sconcat (annotation x :| map annotation xs)
   annotation (ForeignVal _ _ _ x) = annotation x
+  annotation (Class _ _ _ _ x) = annotation x
+  annotation (Instance _ _ _ _ x) = annotation x
   annotation _ = internal
 
 _TyArr :: Prism' (Type p) (Type p, Type p)
@@ -328,6 +345,7 @@ _TyArr = prism (uncurry (TyPi . Anon)) go where
 
 isSkolemisable :: Type Typed -> Bool
 isSkolemisable (TyPi Invisible{} _) = True
+isSkolemisable (TyPi Implicit{} _) = True
 isSkolemisable _ = False
 
 mkWildTy :: Maybe (Type p) -> Type p
@@ -367,7 +385,7 @@ instance Spanned (Ann p) => Spanned (Expr p) where
   annotation (ExprWrapper _ _ a) = annotation a
 
 instance (Data (Ann p), Data (Var p), Data p) => Spanned (Parameter p) where
-  annotation (PatParam p) = annotation p
+  annotation = annotation . view paramPat
 
 {- Note [1]: Tuple types vs tuple patterns/values
 

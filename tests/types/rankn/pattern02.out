@@ -3,7 +3,7 @@ pattern02.ml[4:5 ..4:20]: error
   • Note: the variable a was rigidified because it is an existential,
           bound by the type of It, forall 'a. 'a * ('a -> int) -> exists,
 
-  • Note: in type a
+  • Note: in the type a
   • Note: in the inferred type for foo
 
   Arising in the declaration
@@ -15,7 +15,7 @@ pattern02.ml[4:5 ..4:20]: error
   • Note: the variable a was rigidified because it is an existential,
           bound by the type of It, forall 'a. 'a * ('a -> int) -> exists,
 
-  • Note: in type a -> int
+  • Note: in the type a -> int
   • Note: in the inferred type for finger
 
   Arising in the declaration

@@ -1,0 +1,30 @@
+module Automatic = $begin
+
+
+
+
+
+  class semigroup 'a
+    $begin val ( <> ) : 'a -> 'a -> 'a
+
+
+  $end $sep instance semigroup int
+    $begin let ( <> ) = ( + )
+
+$end $end $end $sep module Explicit = $begin
+
+
+
+
+
+
+
+
+  class semigroup 'a begin
+    val ( <> ) : 'a -> 'a -> 'a
+  end
+
+  $sep instance semigroup int begin
+    let ( <> ) = ( + )
+  $end end
+$end <eof>

@@ -40,7 +40,7 @@ import Core.Var
 import qualified Syntax as S
 import Syntax.Let
 import Syntax.Var (Var(..), Resolved, Typed)
-import Syntax (Expr(..), Pattern(..), Skolem(..), Toplevel(..), Constructor(..))
+import Syntax.Pretty (Expr(..), Pattern(..), Skolem(..), Toplevel(..), Constructor(..))
 import Syntax.Transform
 
 import Text.Pretty.Semantic (pretty)
@@ -110,8 +110,7 @@ lowerAt (S.If c t e _) ty = do
       te = C.Arm (PatLit LitFalse)  C.tyBool e' [] []
   pure $ C.Match c' [tc, te]
 lowerAt (Fun param bd an) (ForallTy Irrelevant a b) =
-  let p = case param of
-        S.PatParam p -> p
+  let p = param ^. S.paramPat
       operational (PType p _ _) = operational p
       operational p = p
    in case operational p of
@@ -161,6 +160,7 @@ lowerAt (ExprWrapper wrap e an) ty =
     S.WrapFn f -> lowerExprTerm (S.runWrapper f e)
     S.TypeAsc ty -> lowerExprTerm (Ascription e ty (fst an, ty))
     S.Cast S.ReflCo{} -> lowerAt e ty
+    S.ExprApp f -> lowerAt (S.App e f an) ty
     S.Cast c -> do
       ex' <- lowerExprAtom e
       pure (C.Cast ex' (squishCoercion (co c)))
@@ -253,7 +253,7 @@ lowerAnyway (RecordExt e xs _) = do
 lowerAnyway (Literal l _) = pure . Atom . Lit $ lowerLiteral l
 lowerAnyway (S.App f x _) = C.App <$> lowerExprAtom f <*> lowerExprAtom x
 
-lowerAnyway e = error ("can't lower " ++ show e ++ " without type")
+lowerAnyway e = error ("can't lower " ++ show (pretty e) ++ " without type")
 
 lowerProg :: MonadLower m => [Toplevel Typed] -> m [Stmt]
 lowerProg stmt = do
@@ -271,6 +271,8 @@ lowerProg' :: forall m. MonadLower m => [Toplevel Typed] -> m [Stmt]
 lowerProg' [] = pure []
 lowerProg' (Open _ _:prg) = lowerProg' prg
 lowerProg' (Module _ b:prg) = lowerProg' (b ++ prg)
+lowerProg' (Class{}:prg) = lowerProg' prg
+lowerProg' (Instance{}:prg) = lowerProg' prg
 
 lowerProg' (ForeignVal (TvName v) ex tp _:prg) =
   let tyB = lowerType tp
@@ -479,10 +481,11 @@ lowerPolyBind ty ex = doIt (needed ex ty) (go ty ex) (lowerExprTerm ex) where
     Nothing -> b
 
   countLams :: Expr Typed -> Integer
-  countLams (ExprWrapper wrp _ _) = go wrp 0 where
+  countLams (ExprWrapper wrp e _) = go wrp (countLams e) where
     go S.TypeLam{} ac = ac + 1
     go (S.TypeLam{} S.:> xs) ac = go xs (ac + 1)
     go _ ac = ac
+  countLams (Ascription e _ _) = countLams e
   countLams _ = 0
 
 countForalls :: Type -> Integer

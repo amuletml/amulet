@@ -22,6 +22,7 @@ wellformed tp = case tp of
     case a of
       Invisible _ k -> traverse_ wellformed k
       Anon a -> wellformed a
+      Implicit a -> wellformed a
     wellformed b
   TyApp a b -> wellformed a *> wellformed b
   TyTuple a b -> wellformed a *> wellformed b
@@ -74,9 +75,12 @@ skols TyWildcard{}  = mempty
 skols (TySkol x) = Set.singleton x
 skols (TyApp a b) = skols a <> skols b
 skols (TyPi b t)
-  | Invisible v k <- b = Set.filter (\(Skolem _ v' _ _) -> v /= v') (foldMap skols k <> skols t)
+  | Invisible v k <- b =
+    Set.filter (\(Skolem _ v' _ _) -> v /= v') (foldMap skols k <> skols t)
   | Anon a <- b = skols a <> skols t
+  | Implicit a <- b = skols a <> skols t
 skols (TyRows r rs) = skols r <> foldMap (skols . snd) rs
 skols (TyExactRows rs) = foldMap (skols . snd) rs
 skols (TyTuple a b) = skols a <> skols b
-skols (TyWithConstraints cs a) = foldMap (\(x, y) -> skols x <> skols y) cs <> skols a
+skols (TyWithConstraints cs a) =
+  foldMap (\(x, y) -> skols x <> skols y) cs <> skols a

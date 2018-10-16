@@ -1,0 +1,5 @@
+toomany01.ml[9:7 ..9:9]: error
+  Method bar is not a member of the class foo
+  │ 
+9 │   let bar = ()
+  │       ^^^

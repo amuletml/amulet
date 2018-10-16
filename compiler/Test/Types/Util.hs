@@ -32,7 +32,7 @@ inferExpr e = flip Namey.evalNamey MonadInfer.firstName $ MonadInfer.runInfer bu
     solved <- MonadInfer.runChronicleT $ solve cs
     pure $ case toEither solved of
       Left e -> Left (toList e)
-      Right (x, _) -> Right (apply x t)
+      Right (x, _, _) -> Right (apply x t)
 
 checkExpr :: Expr Resolved -> Type Typed -> Either [TypeError] ()
 checkExpr e t = flip Namey.evalNamey MonadInfer.firstName $ MonadInfer.runInfer builtinsEnv (check e t) >>= go where
@@ -59,7 +59,7 @@ unify a b =
   in case flip Namey.evalNamey MonadInfer.firstName . MonadInfer.runChronicleT . solve $ task of
     This e -> Left e
     These e _ -> Left e
-    That (_, m) -> case m Map.! TvName (TgInternal "co") of
+    That (_, m, _) -> case m Map.! TvName (TgInternal "co") of
       Cast co -> Right co
       IdWrap -> Right (AssumedCo a b)
       c -> error ("not a coercion " ++ show c)
