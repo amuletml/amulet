@@ -32,7 +32,6 @@ import Control.Monad.State
 import Control.Monad.Namey
 import Control.Lens hiding (Lazy)
 
-import qualified Data.Map.Merge.Strict as Map
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import Data.Traversable
@@ -81,14 +80,6 @@ runResolve :: MonadNamey m
 runResolve scope modules
   = (these (Left . toList) Right (\x _ -> Left (toList x))<$>)
   . runChronicleT . flip runReaderT scope . flip runStateT modules
-
-data ClassOcc = ClassOcc (Map.Map (Var Resolved) Int) Int
-
-instance Semigroup ClassOcc where
-  (ClassOcc m n) <> (ClassOcc m' n') = ClassOcc (Map.merge Map.preserveMissing Map.preserveMissing (Map.zipWithMatched (const (+))) m m') (n + n')
-
-instance Monoid ClassOcc where
-  mempty = ClassOcc mempty 0
 
 -- | Resolve the whole program
 resolveModule :: MonadResolve m => [Toplevel Parsed] -> m [Toplevel Resolved]
@@ -183,16 +174,6 @@ resolveModule (t@(Instance cls ctx head ms ann):rs) = do
     ctx' <- traverse (reType t) ctx
     head' <- reType t head
 
-    let (ClassOcc ctxOc ctxN) = foldMap (countOcc cls' mempty) ctx'
-        (ClassOcc hedOc hedN) = countOcc cls' oneOcc head'
-
-        extOc = Map.merge Map.dropMissing Map.dropMissing
-                  (Map.zipWithMaybeMatched (\_ ctx head -> if ctx > head then Just (ctx, head) else Nothing))
-                  ctxOc hedOc
-
-    -- when (not (Map.null extOc) || ctxN > hedN) $
-    --   dictates (ArisingFrom (NonTerminatingContext (Map.toList extOc)) (BecauseOf t))
-
     (ms', vs) <- unzip <$> traverse reMethod ms
     ms'' <- extendN (concat vs) (sequence ms')
 
@@ -215,28 +196,6 @@ resolveModule (t@(Instance cls ctx head ms ann):rs) = do
     reMethod b@Matching{} =
       confesses (ArisingFrom IllegalMethod (BecauseOf b))
     reMethod TypedMatching{} = error "reBinding TypedMatching{}"
-
-    countOcc :: Var Resolved -> ClassOcc -> Type Resolved -> ClassOcc
-    countOcc v _ (TyCon v')
-      | v == v' = mempty
-      | otherwise = oneOcc
-    countOcc v _ TyPromotedCon{} = oneOcc
-    countOcc _ _ (TyVar v) = ClassOcc (Map.singleton v 1) 1
-    countOcc v tup (TyApp f x) = countOcc v tup f <> countOcc v tup x
-    countOcc v tup (TyPi (Implicit a) x) = countOcc v tup a <> countOcc v tup x
-    countOcc v tup (TyPi (Invisible _ c) x) = foldMap (countOcc v tup) c <> countOcc v tup x
-    -- Technically constructors
-    countOcc v tup (TyPi (Anon a) x) = countOcc v tup a <> countOcc v tup x <> oneOcc
-    countOcc v tup (TyRows t ts) = foldr ((<>) . countOcc v tup . snd) (countOcc v tup t) ts <> oneOcc
-    countOcc v tup (TyExactRows ts) = foldMap (countOcc v tup . snd) ts <> oneOcc
-    countOcc v tup (TyTuple l r) = countOcc v tup l <> countOcc v tup r <> tup
-    -- Some of the messier types
-    countOcc v tup (TyWildcard t) = foldMap (countOcc v tup) t
-    countOcc _ _ TyType = mempty
-    countOcc _ _ TySkol{} = error "Invalid TySkol in resolve"
-    countOcc _ _ TyWithConstraints{} = error "Invalid TyWithConstraints in resolve"
-
-    oneOcc = ClassOcc mempty 1
 
 lookupVar :: MonadResolve m
           => Var Parsed -> VarKind -> Map.Map (Var Parsed) ScopeVariable
