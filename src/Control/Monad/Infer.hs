@@ -115,7 +115,7 @@ data TypeError where
 
   UnsatClassCon :: SomeReason -> Constraint Typed -> WhyUnsat -> TypeError
   Overlap :: Type Typed -> Span -> Span -> TypeError
-  ClassStackOverflow :: SomeReason -> Int -> Type Typed -> TypeError
+  ClassStackOverflow :: SomeReason -> [Type Typed] -> Type Typed -> TypeError
   WrongClass :: Binding Resolved -> Var Typed -> TypeError
   UndefinedMethods :: Type Typed -> [(Text, Type Typed)] -> Span -> TypeError
 
@@ -366,10 +366,12 @@ instance Pretty TypeError where
         xs -> "The variables"
                 <+> hsep (punctuate comma (map (stypeSkol . pretty) xs))
 
-  pretty (ClassStackOverflow _ _ t) =
+  pretty (ClassStackOverflow _ xs t) =
     vsep [ "Stack overflow while looking for an instance of"
          , indent 2 $ displayType t
          , bullet "Note: the max depth of typeclass constraints is 25."
+         , bullet "Here are the first five entries on the stack:"
+         , vsep (map (indent 2 . bullet . displayType) (take 5 (reverse xs)))
          ]
 
   pretty (WrongClass (Binding v _ _) c) =

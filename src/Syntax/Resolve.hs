@@ -183,13 +183,15 @@ resolveModule (t@(Instance cls ctx head ms ann):rs) = do
     ctx' <- traverse (reType t) ctx
     head' <- reType t head
 
-    let (ClassOcc ctxOc ctxN) = foldMap countOcc ctx'
-        (ClassOcc hedOc hedN) = countOcc head'
+    let (ClassOcc ctxOc ctxN) = foldMap (countOcc cls' mempty) ctx'
+        (ClassOcc hedOc hedN) = countOcc cls' oneOcc head'
 
-        extOc = Map.merge Map.dropMissing Map.dropMissing (Map.zipWithMaybeMatched (\_ ctx head -> if ctx > head then Just (ctx, head) else Nothing)) ctxOc hedOc
+        extOc = Map.merge Map.dropMissing Map.dropMissing
+                  (Map.zipWithMaybeMatched (\_ ctx head -> if ctx > head then Just (ctx, head) else Nothing))
+                  ctxOc hedOc
 
-    when (not (Map.null extOc) || ctxN >= hedN) $
-      dictates (ArisingFrom (NonTerminatingContext (Map.toList extOc)) (BecauseOf t))
+    -- when (not (Map.null extOc) || ctxN > hedN) $
+    --   dictates (ArisingFrom (NonTerminatingContext (Map.toList extOc)) (BecauseOf t))
 
     (ms', vs) <- unzip <$> traverse reMethod ms
     ms'' <- extendN (concat vs) (sequence ms')
@@ -214,23 +216,25 @@ resolveModule (t@(Instance cls ctx head ms ann):rs) = do
       confesses (ArisingFrom IllegalMethod (BecauseOf b))
     reMethod TypedMatching{} = error "reBinding TypedMatching{}"
 
-    countOcc :: Type Resolved -> ClassOcc
-    countOcc TyCon{} = oneOcc
-    countOcc TyPromotedCon{} = oneOcc
-    countOcc (TyVar v) = ClassOcc (Map.singleton v 1) 1
-    countOcc (TyApp f x) = countOcc f <> countOcc x
-    countOcc (TyPi (Implicit a) x) = countOcc a <> countOcc x
-    countOcc (TyPi (Invisible _ c) x) = foldMap countOcc c <> countOcc x
+    countOcc :: Var Resolved -> ClassOcc -> Type Resolved -> ClassOcc
+    countOcc v _ (TyCon v')
+      | v == v' = mempty
+      | otherwise = oneOcc
+    countOcc v _ TyPromotedCon{} = oneOcc
+    countOcc _ _ (TyVar v) = ClassOcc (Map.singleton v 1) 1
+    countOcc v tup (TyApp f x) = countOcc v tup f <> countOcc v tup x
+    countOcc v tup (TyPi (Implicit a) x) = countOcc v tup a <> countOcc v tup x
+    countOcc v tup (TyPi (Invisible _ c) x) = foldMap (countOcc v tup) c <> countOcc v tup x
     -- Technically constructors
-    countOcc (TyPi (Anon a) x) = countOcc a <> countOcc x <> oneOcc
-    countOcc (TyRows t ts) = foldr ((<>) . countOcc . snd) (countOcc t) ts <> oneOcc
-    countOcc (TyExactRows ts) = foldMap (countOcc . snd) ts <> oneOcc
-    countOcc (TyTuple l r) = countOcc l <> countOcc r <> oneOcc
+    countOcc v tup (TyPi (Anon a) x) = countOcc v tup a <> countOcc v tup x <> oneOcc
+    countOcc v tup (TyRows t ts) = foldr ((<>) . countOcc v tup . snd) (countOcc v tup t) ts <> oneOcc
+    countOcc v tup (TyExactRows ts) = foldMap (countOcc v tup . snd) ts <> oneOcc
+    countOcc v tup (TyTuple l r) = countOcc v tup l <> countOcc v tup r <> tup
     -- Some of the messier types
-    countOcc (TyWildcard t) = foldMap countOcc t
-    countOcc TyType = mempty
-    countOcc TySkol{} = error "Invalid TySkol in resolve"
-    countOcc TyWithConstraints{} = error "Invalid TyWithConstraints in resolve"
+    countOcc v tup (TyWildcard t) = foldMap (countOcc v tup) t
+    countOcc _ _ TyType = mempty
+    countOcc _ _ TySkol{} = error "Invalid TySkol in resolve"
+    countOcc _ _ TyWithConstraints{} = error "Invalid TyWithConstraints in resolve"
 
     oneOcc = ClassOcc mempty 1
 
