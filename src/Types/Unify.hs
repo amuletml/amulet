@@ -234,7 +234,7 @@ allSameHead (x:xs) = all (matches (x ^. implHead) . view implHead) xs
 allSameHead [] = True
 
 pickBestPossible :: [Implicit Typed] -> Implicit Typed
-pickBestPossible = head . L.sortBy (comparing (length . view implPre))
+pickBestPossible = minimumBy (comparing (length . view implPre))
 
 useImplicit :: forall m. MonadSolve m
             => SomeReason -> Type Typed -> ImplicitScope Typed
