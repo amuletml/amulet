@@ -41,6 +41,7 @@ import Data.Maybe
 import Data.These
 import Data.Span (internal)
 import Data.Text (Text)
+import Data.Ord
 
 import Text.Pretty.Semantic
 
@@ -49,7 +50,7 @@ import Prelude hiding (lookup)
 data SolveScope
   = SolveScope { _bindSkol :: Bool
                , _don'tTouch :: Set.Set (Var Typed)
-               , _depth :: Int
+               , _depth :: [Type Typed]
                , _trySuper :: Bool
                }
   deriving (Eq, Show, Ord)
@@ -101,7 +102,7 @@ runSolve h s x = fix (runReaderT (runStateT (runWriterT act) (SolveState s mempt
     ((_, cs), s) <- act
     let ss = s ^. solveTySubst
     pure (fmap (apply ss) ss, s ^. solveCoSubst, cs)
-  emptyScope = SolveScope False mempty 0 h
+  emptyScope = SolveScope False mempty [] h
 
 -- | Solve a sequence of constraints, returning either a substitution
 -- for both type variables (a 'Subst' 'Typed') and for 'Wrapper'
@@ -211,17 +212,18 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
   sub <- use solveTySubst
   cons <- pure (apply sub cons)
   scope <- pure (mapTypes (apply sub) scope)
+  -- traceM (displayS (pretty (apply sub ohno)))
 
   x <- view depth
-  if x >= 25
+  if length x >= 25
      then confesses (ClassStackOverflow reason x cons)
      else case filter ((|| super) . (/= Superclass) . view implSort) $ lookup cons scope of
            [] -> do
              solveCoSubst . at var ?= ExprApp (VarRef var (annotation reason, cons))
              tell (pure (apply sub ohno))
            xs | allSameHead xs, concreteUnderOne cons -> do
-             w <- local (depth %~ succ) $
-               useImplicit reason cons scope (head xs)
+             w <- local (depth %~ (cons :)) $
+               useImplicit reason cons scope (pickBestPossible xs)
              solveCoSubst . at var ?= w
            _ -> do
              solveCoSubst . at var ?= ExprApp (VarRef var (annotation reason, cons))
@@ -230,6 +232,9 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
 allSameHead :: [Implicit Typed] -> Bool
 allSameHead (x:xs) = all (matches (x ^. implHead) . view implHead) xs
 allSameHead [] = True
+
+pickBestPossible :: [Implicit Typed] -> Implicit Typed
+pickBestPossible = head . L.sortBy (comparing (length . view implPre))
 
 useImplicit :: forall m. MonadSolve m
             => SomeReason -> Type Typed -> ImplicitScope Typed
