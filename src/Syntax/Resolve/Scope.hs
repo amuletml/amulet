@@ -56,7 +56,9 @@ builtinScope = Scope
                                   , "+.", "-.", "*.", "/.", "**.", "^."
                                   , "<", ">", ">=", "<=", "==", "<>"
                                   , "@@", "lazy", "force" ]
-               , tyScope    = Map.insert (Name "lazy") (SVar (TgName "lazy" (-34))) $ build [ "int", "string", "bool", "unit", "float" ]
+               , tyScope    = Map.insert (Name "constraint") (SVar (TgName "constraint" (-37))) $
+                                Map.insert (Name "lazy") (SVar (TgName "lazy" (-34))) $
+                                  build [ "int", "string", "bool", "unit", "float" ]
                , tyvarScope = mempty
                , modStack = []
                }

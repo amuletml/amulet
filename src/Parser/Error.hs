@@ -6,15 +6,18 @@ module Parser.Error
   , Terminator(..)
   ) where
 
+import Data.Text (pack)
 import Data.Position
 import Data.Spanned
 import Data.Span
 import Data.Char
 
-import Text.Pretty.Semantic (Pretty(..), Style)
+import Text.Pretty.Semantic (Pretty(..), Style, verbatim, keyword, stypeVar, stypeCon)
 import Text.Pretty.Note
 import Text.Pretty
 import Parser.Token
+
+import Syntax.Pretty
 
 -- | How this token or construct was terminated
 data Terminator
@@ -46,6 +49,12 @@ data ParseError
   -- | An unexpected token appeared in the lexer stream
   | UnexpectedToken Token [String]
 
+  -- | A malformed class declaration
+  | MalformedClass Span (Type Parsed)
+  -- | A malformed instanc declaration
+  | MalformedInstance Span (Type Parsed)
+
+
   -- | An invalid escape code
   | InvalidEscapeCode Span
 
@@ -71,6 +80,52 @@ instance Pretty ParseError where
   pretty (UnexpectedToken (Token s _ _) [x]) = "Unexpected" <+> string (friendlyName s) <> ", expected" <+> string x
   pretty (UnexpectedToken (Token s _ _) xs) = "Unexpected" <+> string (friendlyName s) <> ", expected one of" <+> hsep (punctuate comma (map string xs))
 
+  pretty (MalformedClass _ ty) =
+    case ty of
+      TyApp{} ->
+        let getRoot :: Type Parsed -> (Type Parsed, Int)
+            getRoot (TyApp f _) =
+              let (root, x) = getRoot f
+               in (root, x + 1)
+            getRoot x = (x, 0)
+
+            root :: Type Parsed
+            depth :: Int
+            (root, depth) = getRoot ty
+
+            fakeAround :: Type Parsed -> Int -> Type Parsed
+            fakeAround t 0 = t
+            fakeAround t n = TyApp (fakeAround t (n - 1)) (TyVar (Name (pack ('a':show n))))
+         in case root of
+           c@TyCon{} ->
+             vsep [ "Malformed class declaration for" <+> displayType c
+                  , empty
+                  , "All class declarations must be of the form"
+                  , indent 2 $ displayType (fakeAround c depth)
+                  , if depth > 1
+                       then "where" <+> stypeVar (squote <> "a1")
+                        <> dot <> dot <> stypeVar (squote <> string ('a':show depth))
+                        <+> "are" <+> keyword "distinct" <+> "type variables"
+                       else empty
+                  ]
+           other ->
+             vsep [ "Malformed class declaration beginning with"
+                    <+> displayType other
+                  , empty
+                  , "All class declarations must be of the form"
+                  , indent 2 $ displayType (fakeAround other depth)
+                  , "where" <+> displayType other <+> "should be a" <+> stypeCon "type constructor"
+                    <> if depth > 1
+                         then comma
+                          <#> indent 2 ("and" <+> stypeVar (squote <> "a1")
+                                     <> dot <> dot <> stypeVar (squote <> string ('a':show depth))
+                                    <+> "are" <+> keyword "distinct" <+> "type variables")
+                         else empty
+                  ]
+      _ -> "Malformed class declaration" <+> displayType ty
+
+  pretty (MalformedInstance _ ty) = "Malformed instance name" <+> verbatim (pretty ty)
+
   pretty (InvalidEscapeCode _) = "Unknown escape code."
 
   pretty (UnalignedIn _ p) = "The in is misaligned with the corresponding 'let'" <+> parens ("located at" <+> prettyPos (spanStart p))
@@ -85,6 +140,9 @@ instance Spanned ParseError where
   annotation (UnclosedComment p _) = mkSpan1 p
 
   annotation (UnexpectedToken t _) = annotation t
+
+  annotation (MalformedClass p _) = p
+  annotation (MalformedInstance p _) = p
 
   annotation (InvalidEscapeCode p) = p
 

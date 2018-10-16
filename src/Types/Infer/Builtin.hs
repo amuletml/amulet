@@ -21,13 +21,14 @@ import Syntax
 
 import Text.Pretty.Semantic
 
-tyUnit, tyBool, tyInt, tyString, tyFloat, tyLazy :: Type Typed
+tyUnit, tyBool, tyInt, tyString, tyFloat, tyLazy, tyConstraint :: Type Typed
 tyInt = TyCon (TvName (TgInternal "int"))
 tyString = TyCon (TvName (TgInternal "string"))
 tyBool = TyCon (TvName (TgInternal "bool"))
 tyUnit = TyCon (TvName (TgInternal "unit"))
 tyFloat = TyCon (TvName (TgInternal "float"))
 tyLazy = TyCon (TvName (TgName "lazy" (-34)))
+tyConstraint = TyCon (TvName (TgName "constraint" (-37)))
 
 builtinNames :: Set.Set (Var Typed)
 builtinNames = Set.fromList . map TvName $ namesInScope (builtinsEnv ^. names)
@@ -57,7 +58,7 @@ builtinsEnv = envOf (scopeFromList builtin) where
       , op "@@" (TyForall a (Just TyType) $ TyForall b (Just TyType) $ (TyVar a `TyArr` TyVar b) `TyArr` (TyVar a `TyArr` TyVar b))
       , (TgInternal "lazy", TyForall a (Just TyType) $ (tyUnit `TyArr` TyVar a) `TyArr` TyApp tyLazy (TyVar a))
       , (TgInternal "force", TyForall a (Just TyType) $ TyApp tyLazy (TyVar a) `TyArr` TyVar a)
-      , tp "int", tp "string", tp "bool", tp "unit", tp "float", (TgName "lazy" (-34), TyArr TyType TyType)
+      , tp "int", tp "string", tp "bool", tp "unit", tp "float", (TgName "lazy" (-34), TyArr TyType TyType), (TgName "constraint" (-37), TyType)
       ]
     where a = TvName (TgInternal "a")
           b = TvName (TgInternal "b")
@@ -73,7 +74,8 @@ unify e a b = do
 
 subsumes e a b = do
   x <- TvName <$> genName
-  tell (Seq.singleton (ConSubsume e x a b))
+  r <- view classes
+  tell (Seq.singleton (ConSubsume e r x a b))
   pure (WrapVar x)
 
 implies :: ( Reasonable f p
@@ -112,6 +114,14 @@ decompose r p ty@TyForall{} = do
   (a, b, k) <- decompose r p t
   let cont = fromMaybe id k'
   pure (a, b, cont . k)
+decompose r p ty@(TyPi (Implicit cls) rest) = do
+  x <- TvName <$> genName
+  i <- view classes
+  tell (pure (ConImplicit r i x cls))
+
+  (a, b, k) <- decompose r p rest
+  let wrap ex = ExprWrapper (WrapVar x) (ExprWrapper (TypeAsc ty) ex (annotation ex, ty)) (annotation ex, rest)
+  pure (a, b, k . wrap)
 decompose r p t =
   case t ^? p of
     Just (a, b) -> pure (a, b, id)
@@ -131,6 +141,16 @@ quantifier r s ty@TyForall{} = do
   (k', _, t) <- instantiate Expression ty
   (a, b, k) <- quantifier r s t
   pure (a, b, fromMaybe id k' . k)
+
+quantifier r _ wty@(TyPi (Implicit tau) sigma) = do
+  x <- TvName <$> genName
+  i <- view classes
+  tell (Seq.singleton (ConImplicit r i x tau))
+
+  (dom, cod, k) <- quantifier r DoSkip sigma
+  let wrap ex = ExprWrapper (WrapVar x) (ExprWrapper (TypeAsc wty) ex (annotation ex, wty)) (annotation ex, sigma)
+  pure (dom, cod, k . wrap)
+
 quantifier _ _ (TyPi x b) = pure (x, b, id)
 quantifier r _ t = do
   (a, b) <- (,) <$> freshTV <*> freshTV
@@ -147,8 +167,9 @@ discharge _ t = pure (t, id)
 rereason :: SomeReason -> Seq.Seq (Constraint p) -> Seq.Seq (Constraint p)
 rereason because = fmap go where
   go (ConUnify _ v l r) = ConUnify because v l r
-  go (ConSubsume _ v l r) = ConSubsume because v l r
+  go (ConSubsume _ s v l r) = ConSubsume because s v l r
   go (ConImplies _ u b a) = ConImplies because u b a
+  go (ConImplicit _ s v t) = ConImplicit because s v t
   go x@ConFail{} = x
   go x@DeferredError{} = x
 
@@ -211,9 +232,9 @@ getHead t@TyVar{} = t
 getHead t@TyCon{} = t
 getHead t@TyPromotedCon{} = t
 getHead t@TyApp{} = t
-getHead (TyPi b t) = case b of
-  Anon v -> TyArr v t -- regular function, do nothing
+getHead x@(TyPi b t) = case b of
   Invisible{} -> getHead t
+  _ -> x
 getHead t@TyRows{} = t
 getHead t@TyExactRows{} = t
 getHead t@TyTuple{} = t

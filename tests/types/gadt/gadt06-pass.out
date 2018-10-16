@@ -1,7 +1,7 @@
 exp : type
 ast : type -> type -> type
-Var : {'a : type}. {'b : type}. {'tag : type}. ('a ~ exp, 'b ~ 'tag) ⊃ string -> ast 'a 'b
-Tag : {'b : type}. {'a : type}. {'tag : type}. ('b ~ 'tag) ⊃ ('tag * ast 'a 'tag) -> ast 'a 'b
+Var : {'a : 'bo}. {'b : 'bp}. {'tag : type}. ('a ~ exp, 'b ~ 'tag) ⊃ string -> ast 'a 'b
+Tag : {'b : 'cz}. {'a : type}. {'tag : type}. ('b ~ 'tag) ⊃ ('tag * ast 'a 'tag) -> ast 'a 'b
 foo : type
 Foo : int -> foo
 convert : {'a : type}. {'tag : type}. ast 'a 'tag -> ast 'a foo

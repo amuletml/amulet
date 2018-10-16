@@ -1,4 +1,4 @@
 t : type -> type -> type
-T : {'t : type}. {'a : type}. ('t ~ unit) ⊃ 'a -> t 't 'a
+T : {'t : 'au}. {'a : type}. ('t ~ unit) ⊃ 'a -> t 't 'a
 foo : {'a : type}. {'t : type}. ('a -> 'a) -> t 't 'a -> t 't 'a
 bar : {'t : type}. t 't int -> t 't int

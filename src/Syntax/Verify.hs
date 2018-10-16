@@ -13,7 +13,7 @@ import Data.Span
 
 import Control.Monad.Writer.Strict
 import Control.Monad.State.Strict
-import Control.Lens hiding (Lazy)
+import Control.Lens hiding (Lazy, (:>))
 
 import Text.Pretty.Semantic
 import Text.Pretty.Note
@@ -145,6 +145,8 @@ verifyProgram :: forall m. MonadVerify m => [Toplevel Typed] -> m ()
 verifyProgram = traverse_ verifyStmt where
   verifyStmt :: Toplevel Typed -> m ()
   verifyStmt st@(LetStmt vs) = verifyBindingGroup (flip const) (BecauseOf st) vs
+  verifyStmt Class{} = pure ()
+  verifyStmt Instance{} = pure ()
   verifyStmt st@(ForeignVal v d t (_, _)) = do
     case parseExpr (SourcePos ("definition of " ++ displayS (pretty v)) 1 1) (d ^. lazy) of
       Left e -> tell (Seq.singleton (ParseErrorInForeign st e))
@@ -191,6 +193,7 @@ verifyExpr (If c t e _) = traverse_ verifyExpr [c, t, e]
 verifyExpr (App f x _) = verifyExpr f *> verifyExpr x
 verifyExpr (Fun p x _) = do
   let bindingSites' (PatParam p) = bindingSites p
+      bindingSites' _ = mempty
   modify (Set.union (bindingSites' p))
   verifyExpr x
 verifyExpr (Begin es _) = do
@@ -228,9 +231,11 @@ verifyExpr (Tuple es _) = traverse_ verifyExpr es
 verifyExpr (TupleSection es _) = traverse_ (traverse_ verifyExpr) es
 verifyExpr (Lazy e _) = verifyExpr e
 verifyExpr (OpenIn _ e _) = verifyExpr e
-verifyExpr (ExprWrapper w e _) =
+verifyExpr (ExprWrapper w e a) =
   case w of
     WrapFn (MkWrapCont k _) -> verifyExpr (k e)
+    ExprApp x -> verifyExpr x *> verifyExpr e
+    x :> y -> verifyExpr (ExprWrapper x (ExprWrapper y e a) a)
     _ -> verifyExpr e
 
 unguardedVars :: Expr Typed -> Set.Set (Var Typed)
@@ -338,6 +343,9 @@ parametricity stmt overall = go mempty overall where
           _ -> pure set
         go (Set.insert v set) cont
       Anon v -> do
+        set <- goArg set v
+        go set cont
+      Implicit v -> do
         set <- goArg set v
         go set cont
 

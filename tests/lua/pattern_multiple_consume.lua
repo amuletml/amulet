@@ -1,6 +1,6 @@
 do
-  local function main(aq)
-    local x = aq.x
+  local function main(au)
+    local x = au.x
     return x + main({ x = x })
   end
   main({ x = 1 })

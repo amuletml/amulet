@@ -1,8 +1,8 @@
 print : string -> unit
 repr : type -> type
-Unit : {'a : type}. ('a ~ unit) ⊃ repr 'a
-Pair : {'a : type}. {'a : type}. {'b : type}. ('a ~ 'a * 'b) ⊃ (repr 'a * repr 'b) -> repr 'a
-Int : {'a : type}. ('a ~ int) ⊃ repr 'a
+Unit : {'a : 'cc}. ('a ~ unit) ⊃ repr 'a
+Pair : {'a : 'dd}. {'a : type}. {'b : type}. ('a ~ 'a * 'b) ⊃ (repr 'a * repr 'b) -> repr 'a
+Int : {'a : 'ec}. ('a ~ int) ⊃ repr 'a
 option : type -> type
 Some : {'a : type}. 'a -> option 'a
 None : {'a : type}. option 'a

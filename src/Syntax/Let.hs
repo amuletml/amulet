@@ -40,8 +40,7 @@ freeIn (VarRef v _)         = Set.singleton v
 freeIn (Begin es _)         = foldMap freeIn es
 freeIn (Let vs b _)         = (freeIn b <> foldMap (freeIn . view bindBody) vs) Set.\\ foldMapOf (each . bindVariable) Set.singleton vs
 freeIn (App f x _)          = freeIn f <> freeIn x
-freeIn (Fun p e _)          = freeIn e Set.\\ bound' p where
-  bound' (PatParam p) = bound p
+freeIn (Fun p e _)          = freeIn e Set.\\ bound (p ^. paramPat)
 freeIn (Record rs _)        = foldMap (freeIn . view fExpr) rs
 freeIn (Access e _ _)       = freeIn e
 freeIn (Match t ps _)       = freeIn t <> foldMap freeInBranch ps where
@@ -50,7 +49,11 @@ freeIn Literal{}            = mempty
 freeIn Hole{}               = mempty
 freeIn (If a b c _)         = freeIn a <> freeIn b <> freeIn c
 freeIn (Tuple es _)         = foldMap freeIn es
-freeIn (ExprWrapper _ e _)  = freeIn e -- wrappers only bind type arguments
+freeIn (ExprWrapper w e _)  =
+  case w of
+    x Syntax.:> y -> freeIn (ExprWrapper x (ExprWrapper y e undefined) undefined)
+    ExprApp x -> freeIn x <> freeIn e
+    _ -> freeIn e
 freeIn (Parens e _)         = freeIn e
 freeIn (LeftSection a b _)  = freeIn a <> freeIn b
 freeIn (RightSection a b _) = freeIn a <> freeIn b

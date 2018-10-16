@@ -43,8 +43,9 @@ data CompileResult
   | CResolve [ResolveError]
   | CInfer   [TypeError]
 
-toEither :: These a b -> Either a b
+toEither :: These [a] b -> Either [a] b
 toEither (This e) = Left e
+toEither (These [] x) = Right x
 toEither (These e _) = Left e
 toEither (That x) = Right x
 

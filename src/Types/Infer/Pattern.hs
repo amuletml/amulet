@@ -136,6 +136,9 @@ checkParameter :: MonadInfer Typed m
 checkParameter (PatParam p) t = do
   (p, t, cs) <- checkPattern p t
   pure (PatParam p, t, cs)
+checkParameter (EvParam p) t = do
+  (p, t, cs) <- checkPattern p t
+  pure (EvParam p, t, cs)
 
 inferParameter :: MonadInfer Typed m
                => Parameter Resolved
@@ -147,6 +150,9 @@ inferParameter :: MonadInfer Typed m
 inferParameter (PatParam p) = do
   (p, tau, t, cs) <- inferPattern p
   pure (PatParam p, Anon tau, t, cs)
+inferParameter (EvParam p) = do
+  (p, tau, t, cs) <- inferPattern p
+  pure (EvParam p, Anon tau, t, cs)
 
 boundTvs :: forall p. (Ord (Var p), Show (Var p))
          => Pattern p -> Telescope p -> Set.Set (Var p)

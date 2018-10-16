@@ -90,6 +90,8 @@ import Syntax
   open     { Token TcOpen _ _ }
   lazy     { Token TcLazy _ _ }
   as       { Token TcAs _ _ }
+  class    { Token TcClass _ _ }
+  instance { Token TcInstance _ _ }
 
   ','      { Token TcComma _ _ }
   '.'      { Token TcDot _ _ }
@@ -152,7 +154,28 @@ Top :: { Toplevel Parsed }
     | module conid '=' begin Tops end          { Module (getName $2) $5 }
     | module conid '=' '$begin' Tops '$end'    { Module (getName $2) $5 }
     | module conid '=' Con                     { Open (getL $4) (Just (getIdent $2)) }
+
+    | class Type begin MethodSigs end          {% fmap (withPos2 $1 $5) $ buildClass $2 $4 }
+    | class Type '$begin' MethodSigs '$end'    {% fmap (withPos2 $1 $5) $ buildClass $2 $4 }
+
+    | instance Type begin Methods end          {% fmap (withPos2 $1 $5) $ buildInstance $2 $4 }
+    | instance Type '$begin' Methods '$end'    {% fmap (withPos2 $1 $5) $ buildInstance $2 $4 }
+
+
+--  | Instance                                 { $1 }
     | open Con                                 { Open (getL $2) Nothing }
+
+MethodSigs :: { [(Var Parsed, Type Parsed)] }
+  : List(MethodSig, TopSep) { $1 }
+
+MethodSig :: { (Var Parsed, Type Parsed) }
+  : val BindName ':' Type { (getL $2, getL $4) }
+
+Methods :: { [Binding Parsed] }
+  : List(Method, TopSep) { $1 }
+
+Method :: { Binding Parsed }
+  : let Binding { $2 }
 
 TyConArg :: { TyConArg Parsed }
          : TyVar { TyVarArg (getL $1) }
@@ -371,7 +394,7 @@ Parameter :: { Parameter Parsed }
 Type :: { Located (Type Parsed) }
      : TypeProd                                   { $1 }
      | TypeProd '->' Type                         { lPos2 $1 $3 $ TyPi (Anon (getL $1)) (getL $3) }
---   | TypeProd '=>' Type                         { lPos2 $1 $3 $ TyPi (Implicit (getL $1)) (getL $3) }
+     | TypeProd '=>' Type                         { lPos2 $1 $3 $ TyPi (Implicit (getL $1)) (getL $3) }
      | forall ListE1(tyvar) '.' Type              { lPos2 $1 $4 $ forallTy (map getName $2) (getL $4) }
 
 TypeProd :: { Located (Type Parsed) }
@@ -494,4 +517,40 @@ forallTy vs t = foldr TyPi t (map (flip Invisible Nothing) vs)
 respanFun :: (Spanned a, Spanned b) => a -> b -> Expr Parsed -> Expr Parsed
 respanFun s e (Fun p b _) = Fun p b (mkSpanUnsafe (spanStart (annotation s)) (spanEnd (annotation e)))
 respanFun _ _ _ = error "what"
+
+buildClass :: Located (Type Parsed) -> [(Var Parsed, Type Parsed)]
+           -> Parser (Span -> Toplevel Parsed)
+buildClass (L parsed typ) ms =
+  case parsed of
+    (TyPi (Implicit ctx) ty) -> do
+      (name, ts) <- go ty
+      pure (Class name (Just ctx) ts ms)
+    ty -> do
+      (name, ts) <- go ty
+      pure (Class name Nothing ts ms)
+  where
+    go :: Type Parsed -> Parser (Var Parsed, [TyConArg Parsed])
+    go (TyCon v) = pure (v, [])
+    go (TyApp rest (TyVar v)) = fmap (TyVarArg v:) <$> go rest
+    go ty = do
+      tellErrors [MalformedClass typ parsed]
+      pure (undefined, [])
+
+buildInstance :: Located (Type Parsed) -> [Binding Parsed]
+           -> Parser (Span -> Toplevel Parsed)
+buildInstance (L ty typ) ms =
+  case ty of
+    (TyPi (Implicit ctx) ty) -> do
+      name <- go ty
+      pure (Instance name (Just ctx) ty ms)
+    ty -> do
+      name <- go ty
+      pure (Instance name Nothing ty ms)
+  where
+    go :: Type Parsed -> Parser (Var Parsed)
+    go (TyCon v) = pure v
+    go (TyApp rest _) = go rest
+    go ty = do
+      tellErrors [MalformedInstance typ ty]
+      pure undefined
 }

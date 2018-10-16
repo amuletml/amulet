@@ -49,6 +49,8 @@ data TokenClass
   | TcModule -- ^ A @module@ token.
   | TcOpen -- ^ An @open@ token.
   | TcLazy -- ^ A @lazy@ token.
+  | TcClass -- ^ A @class@ token.
+  | TcInstance -- ^ An @instance@ token.
   | TcAs   -- ^ An @as@ token.
 
   | TcDot -- ^ A @.@ token.
@@ -127,6 +129,8 @@ instance Show TokenClass where
   show TcOpen = "open"
   show TcLazy = "lazy"
   show TcAs = "as"
+  show TcClass = "class"
+  show TcInstance = "instance"
 
   show TcComma = ","
   show TcDot = "."

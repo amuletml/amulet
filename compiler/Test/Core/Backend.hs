@@ -24,18 +24,18 @@ import Backend.Lua
 import Syntax.Pretty()
 import Text.Pretty.Semantic
 
-toEither :: These a b -> Either a b
+toEither :: These [a] b -> Either [a] b
 toEither (This e) = Left e
+toEither (These [] x) = Right x
 toEither (These e _) = Left e
 toEither (That x) = Right x
 
-
 result :: String -> T.Text -> T.Text
-result file contents = fst . flip runNamey firstName $ do
+result file contents = flip evalNamey firstName $ do
   let (Just parsed, _) = runParser file (L.fromStrict contents) parseTops
   Right (resolved, _) <- resolveProgram RS.builtinScope RS.emptyModules parsed
   desugared <- desugarProgram resolved
-  Right (inferred, _) <- toEither <$> inferProgram builtinsEnv desugared
+  Right (inferred, _) <- toEither <$>  inferProgram builtinsEnv desugared
   lower <- runLowerT (lowerProg inferred)
   optm <- optimise lower
   pure . display . uncommentDoc . renderPretty 0.8 120 . (<##>empty)

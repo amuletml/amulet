@@ -48,7 +48,7 @@ testLexer fs = for_ fs $ \(name, file) ->
             . fmap (either N.toAnsi S.toAnsi)
             . S.filterSimpleDoc (either (const True) S.uncommentFilter)
             . S.renderPretty 0.4 100
-            . N.format (N.fileSpans fs)
+            . N.format (N.fileSpans fs N.defaultHighlight)
 
 main :: IO ()
 main = do

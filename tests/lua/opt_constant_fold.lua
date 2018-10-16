@@ -1,8 +1,8 @@
 do
   local bottom = nil
-  bottom(function(je)
-    local i = je.i
-    local s = je.s
+  bottom(function(jf)
+    local i = jf.i
+    local s = jf.s
     return {
       int_add_c = 5,
       int_sub_c = -1,
@@ -32,7 +32,7 @@ do
       bol_ne_c = true,
       uni_eq = true,
       uni_ne = false,
-      app = je.fn(je.x),
+      app = jf.fn(jf.x),
       int_eq_u = true,
       int_ne_u = false,
       str_eq_u = true,

@@ -1,0 +1,2 @@
+show : type -> constraint
+show : {'a : type}. show 'a => 'a -> string
