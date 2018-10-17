@@ -16,3 +16,6 @@ instance multiline string
   => multiline int
   let foo = 1
   let bar = 2
+
+class multi 'a 'b 'c
+instance multi int string () begin end
