@@ -1,41 +1,38 @@
-external val print : 'a -> unit = "print"    ;;
-external val write : string -> unit = "io.write" ;;
-external val string_of : 'a -> string = "tostring" ;;
+external val print : 'a -> unit = "print"
+external val write : string -> unit = "io.write"
+external val string_of : 'a -> string = "tostring"
 
-let compose f g x = f (g x) ;;
+let compose f g x = f (g x)
 
 type list 'a =
   | Nil
-  | Cons of 'a * list 'a ;;
+  | Cons of 'a * list 'a
 
-let id x = x ;;
+let id x = x
 
 let map f =
-  let go cont xs =
-    match xs with
+  let go cont = function
     | Nil -> cont Nil
     | Cons (h, t) -> go (compose cont (fun x -> Cons (f h, x))) t
-  in go id ;;
+  go id
 
 let print_list xs =
   let inner xs k =
     match xs with
-    | Cons (h, t) -> begin
-      write "Cons (";
-      write (string_of h);
-      write ", ";
+    | Cons (h, t) ->
+      write "Cons ("
+      write (string_of h)
+      write ", "
       inner t (compose k (fun _ -> write ")"))
-    end
-    | Nil -> begin
-      write "Nil)";
+    | Nil ->
+      write "Nil)"
       k ()
-    end
-  in inner xs (fun _ -> print "") ;;
+  inner xs (fun _ -> print "")
 
 let range start stop =
   if start == stop then
-      Nil
-    else
-      Cons (start, range (start + 1) stop) ;;
+    Nil
+  else
+    Cons (start, range (start + 1) stop)
 
-let main _ = print_list (map (+ 1) (range 1 10))
+let () = print_list (map (+ 1) (range 1 10))
