@@ -523,18 +523,18 @@ buildClass :: Located (Type Parsed) -> [(Var Parsed, Type Parsed)]
 buildClass (L parsed typ) ms =
   case parsed of
     (TyPi (Implicit ctx) ty) -> do
-      (name, ts) <- go ty
+      (name, ts) <- go [] ty
       pure (Class name (Just ctx) ts ms)
     ty -> do
-      (name, ts) <- go ty
+      (name, ts) <- go [] ty
       pure (Class name Nothing ts ms)
   where
-    go :: Type Parsed -> Parser (Var Parsed, [TyConArg Parsed])
-    go (TyCon v) = pure (v, [])
-    go (TyApp rest (TyVar v)) = fmap (TyVarArg v:) <$> go rest
-    go ty = do
+    go :: [TyConArg Parsed] -> Type Parsed -> Parser (Var Parsed, [TyConArg Parsed])
+    go ts (TyCon v) = pure (v, ts)
+    go ts (TyApp rest (TyVar v)) = go (TyVarArg v:ts) rest
+    go ts ty = do
       tellErrors [MalformedClass typ parsed]
-      pure (undefined, [])
+      pure (undefined, ts)
 
 buildInstance :: Located (Type Parsed) -> [Binding Parsed]
            -> Parser (Span -> Toplevel Parsed)

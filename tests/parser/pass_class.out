@@ -17,3 +17,9 @@ end
 instance multiline string => multiline int begin
   foo = 1 bar = 2
 end
+class () => multi a b c begin
+  
+end
+instance () => multi int string unit begin
+  
+end
