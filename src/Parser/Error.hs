@@ -54,7 +54,6 @@ data ParseError
   -- | A malformed instanc declaration
   | MalformedInstance Span (Type Parsed)
 
-
   -- | An invalid escape code
   | InvalidEscapeCode Span
 

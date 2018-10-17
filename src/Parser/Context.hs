@@ -226,24 +226,30 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
       -> pure (Result (Token TcVBegin eq eq) (Working tok)
               , CtxEmptyBlock (Just TcVEnd) : CtxModuleBody mod : ck)
 
-    -- Offside rule for classe blocks
+    -- Offside rule for class blocks
     (TcEnd, CtxClassBody offside:ck)
       | spCol tp == spCol offside
       -> pure (Result tok Done, ck)
     (_, CtxClassBody offside:ck)
       | spCol tp <= spCol offside
       -> handleContext tok ck
+    -- For empty classes, we need to add @begin@ and @end@
+    (_, CtxClassHead offside:ck)
+      | (if tk == TcBegin then spCol tp + 1 else spCol tp) <= spCol offside
+      -> pure (Result (Token TcVBegin tp tp) (Result (Token TcVEnd tp tp) (Working tok))
+              , ck)
 
     -- We need to determine if we need to insert a begin or not for classes
     (TcBegin, CtxClassHead cls:ck)
       | spCol tp >= spCol cls
       -> pure ( Result tok Done
               , CtxEmptyBlock Nothing : CtxClassBody cls : ck )
-    -- Otherwise assume it's an implicit begin
-    (_, CtxClassHead cls:ck)
-      | spLine tp > spLine cls
+    -- If it's part of the body, add an implicit begin. Note that we explicitly
+    -- check its a val, so we don't handle multi-line class names.
+    (TcVal, CtxClassHead cls:ck)
+      | spCol tp > spCol cls
       -> pure (Result (Token TcVBegin tp tp) (Working tok)
-              , CtxEmptyBlock (Just TcVEnd) : CtxClassBody cls: ck)
+              , CtxEmptyBlock (Just TcVEnd) : CtxClassBody cls : ck)
 
     -- Offside rule for instance blocks
     (TcEnd, CtxInstBody offside:ck)
@@ -252,15 +258,21 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
     (_, CtxInstBody offside:ck)
       | spCol tp <= spCol offside
       -> handleContext tok ck
+    -- For empty instances, we need to add @begin@ and @end@
+    (_, CtxInstHead offside:ck)
+      | (if tk == TcBegin then spCol tp + 1 else spCol tp) <= spCol offside
+      -> pure (Result (Token TcVBegin tp tp) (Result (Token TcVEnd tp tp) (Working tok))
+              , ck )
 
     -- We need to determine if we need to insert a begin or not for instance blocks
     (TcBegin, CtxInstHead cls:ck)
       | spCol tp >= spCol cls
       -> pure ( Result tok Done
               , CtxEmptyBlock Nothing : CtxInstBody cls : ck )
-    -- Otherwise assume it's an implicit begin
-    (_, CtxInstHead cls:ck)
-      | spLine tp > spLine cls
+    -- If it's part of the body, add an implicit begin. Note that we explicitly
+    -- check its a @let@, so we don't handle multi-line class names.
+    (TcLet, CtxInstHead cls:ck)
+      | spCol tp > spCol cls
       -> pure (Result (Token TcVBegin tp tp) (Working tok)
               , CtxEmptyBlock (Just TcVEnd) : CtxInstBody cls: ck)
 
@@ -322,7 +334,7 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
       , CtxModuleBodyUnresolved mod te:ck)
 
     (TcClass, _) -> pure (Result tok Done, CtxClassHead tp:c)
-    (TcInstance, _) -> pure (Result tok Done, CtxClassHead tp:c)
+    (TcInstance, _) -> pure (Result tok Done, CtxInstHead tp:c)
 
     -- @begin ...@ ~~> CtxEmptyBlock : CtxBracket(end)
     (TcBegin, _) -> pure
