@@ -1,6 +1,19 @@
+class () => empty  begin
+  
+end
+instance () => empty int begin
+  
+end
 class () => semigroup a begin
   val <> : 'a -> 'a -> 'a
 end
 instance () => semigroup int begin
   <> = ((+))
+end
+class () => multiline a begin
+  val foo : 'a
+  val bar : 'a
+end
+instance multiline string => multiline int begin
+  foo = 1 bar = 2
 end

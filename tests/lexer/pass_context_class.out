@@ -1,30 +1,53 @@
 module Automatic = $begin
+  class empty
+  $begin $end $sep instance empty int
 
-
-
-
-
-  class semigroup 'a
+  $begin $end $sep class semigroup 'a
     $begin val ( <> ) : 'a -> 'a -> 'a
-
 
   $end $sep instance semigroup int
     $begin let ( <> ) = ( + )
 
+  $end $end $sep class multiline
+    'a
+    $begin val foo : 'a
+    $sep val bar : 'a
+
+  $end $sep instance multiline string
+    => multiline int
+    $begin let foo = 1
+    $end $sep let bar = 2
+
 $end $end $end $sep module Explicit = $begin
+  class empty begin
+  end
 
+  $sep instance empty begin
+  end
 
+  $sep class empty'
+  begin end
 
+  $sep instance empty'
+  begin end
 
-
-
-
-
-  class semigroup 'a begin
+  $sep class semigroup 'a begin
     val ( <> ) : 'a -> 'a -> 'a
   end
 
   $sep instance semigroup int begin
     let ( <> ) = ( + )
+  $end end
+
+  $sep class multiline
+    'a begin
+    val foo : 'a ;;
+    val bar : 'a
+  end
+
+  $sep instance multiline string
+    => multiline int begin
+    let foo = 1 $end ;;
+    let bar = 2
   $end end
 $end <eof>
