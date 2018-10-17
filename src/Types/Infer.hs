@@ -369,15 +369,6 @@ inferLetTy closeOver strategy vs =
                 _ -> ExprWrapper (wraps' Map.! var)
                        (Fun (EvParam (Capture name (an, ty))) (VarRef name (an, ty)) (an, TyArr ty ty))
                        (an, ty)
-            mkBind var (VarRef var' _) | var == var' = const []
-            mkBind v e = (:[]) . Binding v e
-            mkLet [] = const
-            mkLet xs = Let xs
-        let addLet (ConImplicit _ _ var ty:cs) ex | an <- annotation ex =
-              addLet cs $ mkLet (mkBind var (reify an ty var) (an, ty))
-                ex (an, getType ex)
-            addLet (_:cs) ex = addLet cs ex
-            addLet [] ex = ex
 
         (context, wrapper, _) <- reduceClassContext (annotation ex) cons
 
@@ -389,7 +380,7 @@ inferLetTy closeOver strategy vs =
         ty <- skolCheck (TvName (fst blame)) (snd blame) vt
         let (tp, sub) = rename ty
 
-        pure (tp, wrapper Full . solveEx tp (x <> sub) (co <> wraps') . addLet deferred)
+        pure (tp, wrapper Full . solveEx tp (x <> sub) (co <> wraps') . addLet reify deferred)
 
 
       tcOne :: SCC (Binding Resolved)
@@ -447,21 +438,11 @@ inferLetTy closeOver strategy vs =
                 _ -> ExprWrapper (wraps' Map.! var)
                        (Fun (EvParam (Capture name (an, ty))) (VarRef name (an, ty)) (an, TyArr ty ty))
                        (an, ty)
-            mkBind var (VarRef var' _) | var == var' = const []
-            mkBind v e = (:[]) . Binding v e
-            mkLet [] = const
-            mkLet xs = Let xs
-        let addLet (ConImplicit _ _ var ty:cs) ex | an <- annotation ex =
-              addLet cs $ mkLet (mkBind var (reify an ty var) (an, ty))
-                ex (an, getType ex)
-            addLet (_:cs) ex = addLet cs ex
-            addLet [] ex = ex
-
         tel' <- traverseTele (const solved) tel
         ty <- solved ty
 
         let pat = transformPatternTyped id (apply solution) p
-            ex' = solveEx ty solution wraps' (addLet deferred ex)
+            ex' = solveEx ty solution wraps' (addLet reify deferred ex)
 
         pure ( [TypedMatching pat ex' (ann, ty) (teleToList tel')], tel', boundTvs pat tel' )
 
@@ -495,18 +476,6 @@ inferLetTy closeOver strategy vs =
                        (Fun (EvParam (Capture name (an, ty))) (VarRef name (an, ty)) (an, TyArr ty ty))
                        (an, ty)
 
-            mkBind var (VarRef var' _) | var == var' = const []
-            mkBind v e = (:[]) . Binding v e
-
-            mkLet [] = const
-            mkLet xs = Let xs
-        let addLet (ConImplicit _ _ var ty:cs) ex | an <- annotation ex =
-              addLet cs $ mkLet (mkBind var (reify an ty var) (an, ty))
-                ex (an, getType ex)
-            addLet (_:cs) ex = addLet cs ex
-            addLet [] ex = ex
-        -- error (ppShow (wrap, wrap'))
-
         if null cons
            then do
              let solveOne :: (Binding Typed, Type Typed) -> m ( Binding Typed )
@@ -520,8 +489,8 @@ inferLetTy closeOver strategy vs =
                  solveOne _ = undefined
 
                  shoveLets (ExprWrapper w e a) = ExprWrapper w (shoveLets e) a
-                 shoveLets (Fun x e a) = Fun x (shoveLets e) a
-                 shoveLets e = addLet deferred e
+                 shoveLets (Fun x@EvParam{} e a) = Fun x (shoveLets e) a
+                 shoveLets e = addLet reify deferred e
              bs <- traverse solveOne bindings
              let makeTele (Binding var _ (_, ty):bs) = one var ty <> makeTele bs
                  makeTele _ = mempty
@@ -565,7 +534,7 @@ inferLetTy closeOver strategy vs =
                    Binding recVar
                      (Ascription
                        (ExprWrapper tyLams
-                         (wrapper Full (addLet deferred (Let inners (Record fields (an, recTy)) (an, recTy))))
+                         (wrapper Full (addLet reify deferred (Let inners (Record fields (an, recTy)) (an, recTy))))
                          (an, closed))
                        closed (an, closed))
                      (an, closed)
@@ -716,6 +685,25 @@ localGenStrat bg ex ty = do
   if Set.foldr ((&&) . generalisable) True (freeIn' ex Set.\\ bg) && value ex
      then generalise ftv (becauseExp ex) ty
      else annotateKind (becauseExp ex) ty
+
+type Reify p = (Ann Resolved -> Type p -> Var p -> Expr p)
+addLet :: Reify Typed -> [Constraint Typed] -> Expr Typed -> Expr Typed
+addLet reify = shove where
+  addLet (ConImplicit _ _ var ty:cs) ex | an <- annotation ex =
+    addLet cs $ mkLet (mkBind var (reify an ty var) (an, ty))
+                    ex (an, getType ex)
+  addLet (_:cs) ex = addLet cs ex
+  addLet [] ex = ex
+
+  shove cs (ExprWrapper w e a) = ExprWrapper w (shove cs e) a
+  shove cs (Fun x@EvParam{} e a) = Fun x (shove cs e) a
+  shove cs e = addLet cs e
+
+  mkLet [] = const
+  mkLet cs = Let cs
+
+  mkBind var (VarRef var' _) | var == var' = const []
+  mkBind v e = (:[]) . Binding v e
 
 closeOverStrat :: MonadInfer Typed m
                => SomeReason

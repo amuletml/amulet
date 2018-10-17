@@ -46,7 +46,6 @@ import Data.Ord
 import Text.Pretty.Semantic
 
 import Prelude hiding (lookup)
--- import Debug.Trace
 
 data SolveScope
   = SolveScope { _bindSkol :: Bool
@@ -155,7 +154,6 @@ doSolve (ConImplies because not cs ts :<| xs) = do
   let not' = ftv (apply before not) <> ftv not
       cs' = apply before cs
       ts' = apply before ts
-  -- traceM (displayS (pretty (ConImplies because not cs' ts')))
   ((), sub) <- retcon (fmap DeadBranch) . capture . local (bindSkol .~ True) . local (don'tTouch .~ mempty) $ doSolve cs'
 
   solveAssumptions .= (sub ^. solveAssumptions <> sub ^. solveTySubst)
@@ -207,6 +205,21 @@ doSolve (ConImplicit why scope v (TyTuple a b) :<| cs) = do
               (annotation why, b)]
            (annotation why, TyTuple a b))
   doSolve (ConImplicit why scope vara a :< ConImplicit why scope varb b :<| cs)
+
+doSolve (ohno@(ConImplicit reason scope var con@TyPi{}) :<| cs) = do
+  doSolve cs
+  sub <- use solveTySubst
+  con <- pure (apply sub con)
+  scope <- pure (mapTypes (apply sub) scope)
+
+  let (head, _) = splitImplVarType con
+  case filter ((/= Superclass) . view implSort) $ lookup head scope of
+    xs | allSameHead xs, concreteUnderOne con -> do
+      w <- local (depth %~ (con:)) $
+        useImplicit reason con scope (pickBestPossible xs)
+      solveCoSubst . at var ?= w
+    _ -> dictates (addBlame reason (UnsatClassCon reason (apply sub ohno) It'sQuantified))
+  -- traceM (displayS (pretty head))
 
 doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
   doSolve cs

@@ -81,7 +81,7 @@ deriving instance (Eq (Ann p), Eq (Var p), Eq (Expr p), Eq (Type p))
   => Eq (Constraint p)
 
 data TypeError where
-  NotEqual :: (Pretty (Var p), Ord (Var p)) => Type p -> Type p -> TypeError
+  NotEqual :: (Show (Var p), Pretty (Var p), Ord (Var p)) => Type p -> Type p -> TypeError
   Occurs :: (Pretty (Var p), Ord (Var p)) => Var p -> Type p -> TypeError
 
   NotInScope :: Var Resolved -> TypeError
@@ -118,11 +118,12 @@ data TypeError where
   ClassStackOverflow :: SomeReason -> [Type Typed] -> Type Typed -> TypeError
   WrongClass :: Binding Resolved -> Var Typed -> TypeError
   UndefinedMethods :: Type Typed -> [(Text, Type Typed)] -> Span -> TypeError
+  InvalidContext :: String -> Span -> Type Resolved -> TypeError
 
   NotPromotable :: Pretty (Var p) => Var p -> Type p -> Doc -> TypeError
 
 data WhyInstantiate = Expression | Subsumption
-data WhyUnsat = NotAFun | PatBinding | InstanceMethod | InstanceClassCon Span | ConcreteDon'tQuantify
+data WhyUnsat = NotAFun | PatBinding | InstanceMethod | InstanceClassCon Span | ConcreteDon'tQuantify | It'sQuantified
 
 instance (Show (Ann p), Show (Var p), Ord (Var p), Substitutable p (Type p)) => Substitutable p (Constraint p) where
   ftv (ConUnify _ _ a b) = ftv a <> ftv b
@@ -241,12 +242,14 @@ refreshTV (TvName v) = TyVar . TvName <$> genNameFrom nm where
     TgName x _ -> x
 
 instance Pretty TypeError where
-  pretty (NotEqual b@TyArr{} a) =
+  pretty (NotEqual a b@TyArr{}) =
     let thing = case a of
           TyType -> string "type constructor"
+          x | show (pretty x) == "constraint#-37" -> string "type class constructor"
           _ -> string "function"
      in vcat [ string "Could not match type" <+> displayType a <+> string "with" <+> displayType b
-             , string "Have you applied a" <+> thing <+> "to the wrong number of arguments?"
+             , empty
+             , string "Have you applied a" <+> thing </> "to the wrong number of arguments?"
              ]
   pretty (NotEqual TyType b) =
     vcat [ string "Expected a type, but this has kind" <+> displayType b
@@ -387,6 +390,10 @@ instance Pretty TypeError where
          , "Namely:"
          , vsep (map (\(n, t) -> indent 2 . bullet $ keyword "val" <+> text n <+> colon <+> displayType t) xs) ]
 
+  pretty (InvalidContext what _ ty) =
+    vsep [ "Invalid type in context for" <+> string what <+> "declaration:"
+         , indent 4 (displayType ty)
+         ]
 
   pretty (PatternRecursive _ _) = string "pattern recursive error should be formatNoted"
   pretty DeadBranch{} = string "dead branch error should be formatNoted"
@@ -398,8 +405,9 @@ instance Spanned TypeError where
   annotation (ArisingFrom _ x) = annotation x
   annotation (Overlap _ x _) = annotation x
   annotation (ClassStackOverflow x _ _) = annotation x
-  annotation (WrongClass b _) = annotation b
+  annotation (WrongClass x _) = annotation x
   annotation (UndefinedMethods _ _ x) = annotation x
+  annotation (InvalidContext _ x _) = annotation x
   annotation x = error (show (pretty x))
 
 instance Note TypeError Style where
@@ -510,10 +518,16 @@ instance Note TypeError Style where
          ]
 
   formatNote f (ArisingFrom (UnsatClassCon _ (ConImplicit _ _ _ t) (InstanceClassCon ann)) r') =
-    vsep [ indent 2 "No instance for" <+> (Right <$> displayType t) <+> "arising in the binding"
+    vsep [ indent 2 "No instance for" <+> (Right <$> displayType t) <+> "arising in the instance declaration"
          , f [annotation r']
          , indent 2 $ bullet "Note: this is required by the context of the class,"
          , f [ann]
+         ]
+
+  formatNote f (ArisingFrom (UnsatClassCon _ (ConImplicit _ _ _ t) It'sQuantified) r') =
+    vsep [ indent 2 "No instance for" <+> (Right <$> displayType t) <+> "arising in" <+> (Right <$> blameOf r')
+         , f [annotation r']
+         , indent 2 $ bullet "Note: This constraint can not be quantified over because it is of higher rank"
          ]
 
   formatNote f (Overlap tau one two) =

@@ -78,7 +78,7 @@ inferClass clss@(Class name ctx _ methods classAnn) = do
         getContext Nothing = []
         getContext (Just t) = unwind t
 
-    ctx <- traverse (\x -> checkAgainstKind (BecauseOf clss) x tyConstraint) ctx
+    ctx <- traverse (\x -> validContext "class" classAnn x *> checkAgainstKind (BecauseOf clss) x tyConstraint) ctx
     (fold -> scope, rows') <- fmap unzip . for (getContext ctx) $
       \obligation -> do
         impty <- silence $
@@ -105,7 +105,7 @@ inferClass clss@(Class name ctx _ methods classAnn) = do
           capture <- TvName <$> genName
           let ty = TyPi (f classConstraint) theTy
           let expr =
-                Fun (PatParam
+                Fun (EvParam
                        (Destructure classCon
                          (Just (Capture capture (classAnn, inner)))
                          (classAnn, classConstraint)))
@@ -127,16 +127,26 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
           (T.tail (nameName clss))
   Class clss _ classParams ((classCon, classConTy):methodSigs) classAnn <-
     view (classDecs . at (TvName clss) . non undefined)
+
   instanceName <- TvName <$> genNameWith (T.pack "$d" <> classCon')
   localInstanceName <- TvName <$> genNameWith (T.pack "$l" <> classCon')
+
   let toVar :: TyConArg Typed -> Type Typed
       toVar (TyVarArg v) = TyVar v
       toVar (TyAnnArg v _) = TyVar v
 
       classHead :: Type Typed
       classHead = foldl TyApp (TyCon clss) (map toVar classParams)
+
+  -- Make sure we have a valid context.
+  -- **Note**: Instances with no context are given a tyUnit context so
+  -- that the dictionaries can be recursive. We do this instead of using
+  -- locally recursive instance methods because that's easier to
+  -- desugar.
   ctx <- case ctx of
-    Just x -> checkAgainstKind (BecauseOf inst) x tyConstraint
+    Just x -> do
+      validContext "instance" ann x
+      checkAgainstKind (BecauseOf inst) x tyConstraint
     Nothing -> pure tyUnit
 
   instHead <- checkAgainstKind (BecauseOf inst) instHead tyConstraint
@@ -312,9 +322,12 @@ reduceClassContext annot cons = do
   let addFns ((var, con):cons) = fun var con . addFns cons
       addFns [] = id
   let addLet ex = mkLet (aliases ++ simplif) ex (annotation ex, getType ex)
+      shove (ExprWrapper w e a) = ExprWrapper w (shove e) a
+      shove (Fun x@EvParam{} e a) = Fun x (shove e) a
+      shove x = addLet x
 
   let wrap flv =
-        addFns stillNeeded' . (case flv of { Full -> addLet; _ -> id })
+        addFns stillNeeded' . (case flv of { Full -> shove; _ -> id })
 
   pure (addCtx stillNeeded', wrap, stillNeeded')
 
@@ -357,6 +370,28 @@ mkLet xs = Let xs
 
 (!) :: (Show k, Ord k, HasCallStack) => Map.Map k v -> k -> v
 m ! k = fromMaybe (error ("Key " ++ show k ++ " not in map")) (Map.lookup k m)
+
+validContext :: MonadChronicles TypeError m => String -> Ann Resolved -> Type Resolved -> m ()
+validContext what ann t@(TyApp f _)
+  | TyCon{} <- f = pure ()
+  | otherwise = validContext "" ann f `catchChronicle` \_ -> confesses (InvalidContext what ann t)
+
+validContext what ann (TyTuple a b) = do
+  validContext what ann a
+  validContext what ann b
+
+validContext _ _ TyCon{} = pure ()
+validContext what ann t@TyPromotedCon{} = confesses (InvalidContext what ann t)
+validContext w a t@TyVar{} = confesses (InvalidContext w a t)
+validContext w a t@TyArr{} = confesses (InvalidContext w a t)
+validContext w a t@(TyPi _ x) =
+  validContext w a x `catchChronicle` \_ -> confesses (InvalidContext w a t)
+validContext w a t@TyRows{} = confesses (InvalidContext w a t)
+validContext w a t@TyExactRows{} = confesses (InvalidContext w a t)
+validContext w a t@TyWildcard{} = confesses (InvalidContext w a t)
+validContext w a t@TySkol{} = confesses (InvalidContext w a t)
+validContext w a t@TyWithConstraints{} = confesses (InvalidContext w a t)
+validContext w a t@TyType{} = confesses (InvalidContext w a t)
 
 type Need t = (Var t, Type t)
 data WrapFlavour = Thin | Full

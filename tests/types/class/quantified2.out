@@ -1,0 +1,10 @@
+&& : bool -> bool -> bool
+eq : type -> constraint
+.== : {'a : type}. eq 'a => 'a -> 'a -> bool
+id : type -> type
+Id : {'a : type}. 'a -> id 'a
+option : type -> type
+Some : {'a : type}. 'a -> option 'a
+None : {'a : type}. option 'a
+rose : (type -> type) -> type -> type
+Branch : {'f : type -> type}. {'a : type}. ('a * 'f (rose 'f 'a)) -> rose 'f 'a
