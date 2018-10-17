@@ -191,6 +191,7 @@ runRepl = do
             dump (debugMode state') prog core core luaExpr (inferScope state) (inferScope state')
 
             (ok, res) <- L.runLuaWith (luaState state') $ do
+              _ <- L.dostring "-- time out hook\nlocal function f() error('Timed out!', 3) end; debug.sethook(f, '', 1e6)"
               code <- L.dostring luaSyntax
 
               case code of

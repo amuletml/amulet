@@ -46,6 +46,7 @@ import Data.Ord
 import Text.Pretty.Semantic
 
 import Prelude hiding (lookup)
+-- import Debug.Trace
 
 data SolveScope
   = SolveScope { _bindSkol :: Bool
@@ -154,6 +155,7 @@ doSolve (ConImplies because not cs ts :<| xs) = do
   let not' = ftv (apply before not) <> ftv not
       cs' = apply before cs
       ts' = apply before ts
+  -- traceM (displayS (pretty (ConImplies because not cs' ts')))
   ((), sub) <- retcon (fmap DeadBranch) . capture . local (bindSkol .~ True) . local (don'tTouch .~ mempty) $ doSolve cs'
 
   solveAssumptions .= (sub ^. solveAssumptions <> sub ^. solveTySubst)
@@ -212,7 +214,6 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
   sub <- use solveTySubst
   cons <- pure (apply sub cons)
   scope <- pure (mapTypes (apply sub) scope)
-  -- traceM (displayS (pretty (apply sub ohno)))
 
   x <- view depth
   if length x >= 25
@@ -292,9 +293,12 @@ unify (TySkol x) (TySkol y)
   | x == y = pure (ReflCo (TySkol y))
   | otherwise = do
     sub <- use solveAssumptions
-    let assumption = sub ^. at (x ^. skolIdent) <|> sub ^. at (y ^. skolIdent)
+    let assumption = (Right <$> sub ^. at (x ^. skolIdent)) <|> (Left <$> sub ^. at (y ^. skolIdent))
     case assumption of
-      Just{} -> pure (AssumedCo (TySkol x) (TySkol y))
+      Just assum ->
+        case assum of
+          Right x -> unify x (TySkol y)
+          Left y -> unify (TySkol x) y
       Nothing -> do
         canWe <- view bindSkol
         if canWe
