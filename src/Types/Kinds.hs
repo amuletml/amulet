@@ -66,10 +66,8 @@ liftType :: MonadKind m => SomeReason -> Type Resolved -> m (Type Typed)
 liftType r t = solveK pure r (fst <$> inferKind t)
 
 checkAgainstKind :: MonadInfer Typed m => SomeReason -> Type Resolved -> Type Typed -> m (Type Typed)
-checkAgainstKind r t k = do
-  ((k, _), x) <- runWriterT (runStateT (checkKind t k) r)
-  tell x
-  pure k
+checkAgainstKind r t k = solveK pure r $
+  checkKind t k
 
 annotateKind :: MonadKind m => SomeReason -> Type Typed -> m (Type Typed)
 annotateKind r ty = do
@@ -287,7 +285,7 @@ isType t = do
   pure t
 
 closeOver :: MonadKind m => SomeReason -> Type Typed -> m (Type Typed)
-closeOver r a = do
+closeOver r a = silence $ do
   names <- view names
   let freevars = ftv a
   let forall :: [Var Typed] -> Type Typed -> Type Typed
