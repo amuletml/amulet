@@ -6,18 +6,19 @@ module Control.Monad.Chronicles
   ( module Control.Monad.Chronicle
   , Chronicles, ChroniclesT, MonadChronicles
   , dictates, confesses, retcons
-  , recover, absolving
+  , dictate, confess
+  , recover, absolving, silence
   , catchChronicle
   ) where
 
-import Control.Monad.Chronicle
+import qualified Control.Monad.Chronicle as M
+import Control.Monad.Chronicle hiding (dictate, confess) 
 
-import Data.Sequence (Seq)
+import Data.Sequence (Seq, null)
+import Prelude hiding (null)
 
 type ChroniclesT c = ChronicleT (Seq c)
-
 type Chronicles c = Chronicle (Seq c)
-
 type MonadChronicles c = MonadChronicle (Seq c)
 
 -- | 'dictate' a single value
@@ -28,6 +29,16 @@ dictates = dictate . pure
 confesses :: MonadChronicles c m => c -> m a
 confesses = confess . pure
 
+dictate :: MonadChronicles c m => Seq c -> m ()
+dictate c
+  | null c = pure ()
+  | otherwise = M.dictate c
+
+confess :: MonadChronicles c m => Seq c -> m a
+confess c
+  | null c = pure undefined
+  | otherwise = M.confess c
+
 -- | 'retcon' a single value
 retcons :: MonadChronicles c m => (c -> c) -> m a -> m a
 retcons f = retcon (f<$>)
@@ -37,7 +48,7 @@ recover :: MonadChronicle c m => a -> m a -> m a
 recover r m = do
   m' <- memento m
   case m' of
-    Left e -> dictate e >> pure r
+    Left e -> M.dictate e >> pure r
     Right x -> pure x
 
 -- | Like 'absolve', but with the ability to execute a monad action instead.
@@ -47,8 +58,15 @@ recover r m = do
 absolving :: MonadChronicle c m => m a -> m a -> m a
 absolving l r = memento l >>= either (const r) pure
 
+-- | Remove any record that a computation had. If it ended with
+-- 'confess', explode.
+silence :: MonadChronicle c m => m a -> m a
+silence = absolve se where
+  se = error "silence: computation ended with fatal error"
+
 -- | An equivalent of 'catchError' for 'MonadChronicle'.
 --
 -- Note this does not catch non-fatal errors. Use 'retcon' for that.
 catchChronicle :: MonadChronicle c m => m a -> (c -> m a) -> m a
-catchChronicle m f = memento (condemn m) >>= either f pure
+catchChronicle m f = memento (M.condemn m) >>= either f pure
+

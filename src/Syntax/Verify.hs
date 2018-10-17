@@ -259,7 +259,12 @@ unguardedVars Literal{}            = mempty
 unguardedVars Hole{}               = mempty
 unguardedVars (If a b c _)         = unguardedVars a <> unguardedVars b <> unguardedVars c
 unguardedVars (Tuple es _)         = foldMap unguardedVars es
-unguardedVars (ExprWrapper _ e _)  = unguardedVars e -- wrappers only bind type arguments
+unguardedVars (ExprWrapper w e a) =
+  case w of
+    WrapFn (MkWrapCont k _) -> unguardedVars (k e)
+    ExprApp x -> unguardedVars x <> unguardedVars e
+    x :> y -> unguardedVars (ExprWrapper x (ExprWrapper y e a) a)
+    _ -> unguardedVars e
 unguardedVars (Parens e _)         = unguardedVars e
 unguardedVars (LeftSection a b _)  = unguardedVars a <> unguardedVars b
 unguardedVars (RightSection a b _) = unguardedVars a <> unguardedVars b

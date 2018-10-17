@@ -133,7 +133,7 @@ instance Eq (WrapCont p) where _ == _ = False
 instance Ord (WrapCont p) where _ `compare` _ = GT
 
 instance Show (WrapCont p) where
-  show = desc
+  show = show . desc
 
 infixr 5 :>
 

@@ -81,7 +81,7 @@ inferClass clss@(Class name ctx _ methods classAnn) = do
     ctx <- traverse (\x -> checkAgainstKind (BecauseOf clss) x tyConstraint) ctx
     (fold -> scope, rows') <- fmap unzip . for (getContext ctx) $
       \obligation -> do
-        impty <- retcon (const mempty) $
+        impty <- silence $
           closeOver (BecauseOf clss) $
             TyPi (Implicit classConstraint) obligation
         var@(TgName name _) <- genNameWith (classCon' <> T.singleton '$')
@@ -92,7 +92,7 @@ inferClass clss@(Class name ctx _ methods classAnn) = do
         inner = TyExactRows (map (\(_, _, x, y) -> (x, y)) rows
                           ++ map (\(_, _, x, y) -> (x, y)) rows')
 
-    classConTy <- retcon (const mempty) $
+    classConTy <- silence $
       closeOver (BecauseOf clss) (TyArr inner classConstraint)
 
     let tyDecl :: Toplevel Typed
@@ -111,7 +111,7 @@ inferClass clss@(Class name ctx _ methods classAnn) = do
                          (classAnn, classConstraint)))
                  (Access (VarRef capture (classAnn, inner)) label (classAnn, ty))
                  (classAnn, ty)
-          ty <- retcon (const mempty) $
+          ty <- silence $
             closeOver (BecauseOf clss) ty
           pure (Binding var expr (classAnn, ty))
     decs <- traverse mkDecl (rows ++ rows')
@@ -140,7 +140,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
     Nothing -> pure tyUnit
 
   instHead <- checkAgainstKind (BecauseOf inst) instHead tyConstraint
-  globalInsnConTy <- retcon (const mempty) $
+  globalInsnConTy <- silence $
     closeOver (BecauseOf inst) (TyPi (Implicit ctx) instHead)
 
   scope <- view classes
@@ -149,10 +149,10 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
     (x:_) -> confesses (Overlap instHead (x ^. implSpan) ann)
 
   (instHead, skolSub) <- skolFreeTy (ByInstanceHead instHead ann) instHead
-  ctx <- pure (apply skolSub ctx)
+  (ctx, mappend skolSub -> skolSub) <- skolFreeTy (ByInstanceHead ctx ann) (apply skolSub ctx)
 
   (mappend skolSub -> sub, _, _) <- solve (pure (ConUnify (BecauseOf inst) undefined classHead instHead))
-  localInsnConTy <- retcon (const mempty) $
+  localInsnConTy <- silence $
     closeOver (BecauseOf inst) (TyPi (Implicit ctx) instHead)
 
   (localAssums', instancePattern) <-
@@ -241,12 +241,15 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
           Just x -> appArg rest $ ExprWrapper (TypeApp x) ex (annotation ex, rest)
           Nothing -> appArg rest $ ExprWrapper (TypeApp TyType) ex (annotation ex, rest)
       appArg _ ex = ex
-      getSkol (TySkol s) = s
-      getSkol _ = error "not a skol in skolSub"
 
       addArg ty@(TyPi (Invisible v k) rest) ex =
-        ExprWrapper (TypeLam (getSkol (skolSub ! v)) (fromMaybe TyType k)) (addArg rest ex) (ann, ty)
+        case Map.lookup v skolSub of
+          Just (TySkol s) -> ExprWrapper (TypeLam s (fromMaybe TyType k)) (addArg rest ex) (ann, ty)
+          _ ->
+            let fakeSkol = Skolem v v ty (ByConstraint ty)
+             in ExprWrapper (TypeLam fakeSkol (fromMaybe TyType k)) (addArg rest ex) (ann, ty)
       addArg _ ex = ex
+
       fun = addArg globalInsnConTy $
         Let [Binding localInstanceName
               (Fun (EvParam (PType instancePattern ctx (ann, ctx)))

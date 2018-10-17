@@ -270,7 +270,7 @@ inferRows rows = for rows $ \(Field n e s) -> do
 
 inferProg :: MonadInfer Typed m
           => [Toplevel Resolved] -> m ([Toplevel Typed], Env)
-inferProg (stmt@(LetStmt ns):prg) = do
+inferProg (stmt@(LetStmt ns):prg) = censor (const mempty) $ do
   (ns', ts, vs) <- retcons (addBlame (BecauseOf stmt)) (inferLetTy (closeOverStrat (BecauseOf stmt)) Fail ns)
   let bvs = Set.fromList (map TvName (namesInScope (focus ts mempty)))
 
@@ -314,7 +314,7 @@ inferProg (Open mod pre:prg) = do
     consFst (Open (TvName mod) pre) $ inferProg prg
 
 inferProg (c@(Class v _ _ _ _):prg) = do
-  (stmts, decls, clss, implicits) <- inferClass c
+  (stmts, decls, clss, implicits) <- condemn $ inferClass c
   first (stmts ++) <$> do
     local (names %~ focus decls) $
       local (classDecs . at (TvName v) ?~ clss) $
@@ -322,7 +322,7 @@ inferProg (c@(Class v _ _ _ _):prg) = do
         inferProg prg
 
 inferProg (inst@Instance{}:prg) = do
-  (stmt, instName, instTy) <- inferInstance inst
+  (stmt, instName, instTy) <- condemn $ inferInstance inst
   let addFst (LetStmt []) = id
       addFst stmt@(LetStmt _) = consFst stmt
       addFst _ = undefined
@@ -402,6 +402,7 @@ inferLetTy closeOver strategy vs =
         ((exp', ty), cs) <- listen $
           case origin of
             Supplied -> do
+              checkAmbiguous (TvName var) (becauseExp exp) ty
               let exp' (Ascription e _ _) = exp' e
                   exp' e = e
               exp <- check (exp' exp) ty
@@ -472,6 +473,7 @@ inferLetTy closeOver strategy vs =
           ifor (zip tvs vars) $ \i ((_, tyvar), Binding var exp ann) ->
             case origins !! i of
               Supplied -> do
+                checkAmbiguous (TvName var) (becauseExp exp) tyvar
                 let exp' (Ascription e _ _) = exp' e
                     exp' e = e
                 exp <- check (exp' exp) tyvar
@@ -482,8 +484,28 @@ inferLetTy closeOver strategy vs =
                 pure (Binding (TvName var) exp' (ann, ty), ty)
 
         (solution, wrap, cons) <- solve cs
+        name <- TvName <$> genName
+
         let deferred = fmap (apply solution) cons
-        (compose solution -> solution, mappend wrap -> wrap, cons) <- solveHard (Seq.fromList deferred)
+        (compose solution -> solution, wrap', cons) <- solveHard (Seq.fromList deferred)
+        let reify an ty var =
+              case wrap' Map.! var of
+                ExprApp v -> v
+                _ -> ExprWrapper (wrap Map.! var)
+                       (Fun (EvParam (Capture name (an, ty))) (VarRef name (an, ty)) (an, TyArr ty ty))
+                       (an, ty)
+
+            mkBind var (VarRef var' _) | var == var' = const []
+            mkBind v e = (:[]) . Binding v e
+
+            mkLet [] = const
+            mkLet xs = Let xs
+        let addLet (ConImplicit _ _ var ty:cs) ex | an <- annotation ex =
+              addLet cs $ mkLet (mkBind var (reify an ty var) (an, ty))
+                ex (an, getType ex)
+            addLet (_:cs) ex = addLet cs ex
+            addLet [] ex = ex
+        -- error (ppShow (wrap, wrap'))
 
         if null cons
            then do
@@ -492,36 +514,20 @@ inferLetTy closeOver strategy vs =
                    ty <- closeOver mempty exp (apply solution ty)
                    (new, sub) <- pure $ rename ty
                    pure ( Binding var
-                           (solveEx new (sub `compose` solution) wrap exp)
+                           (shoveLets (solveEx new (sub `compose` solution) (wrap <> wrap') exp))
                            (fst an, new)
                         )
                  solveOne _ = undefined
+
+                 shoveLets (ExprWrapper w e a) = ExprWrapper w (shoveLets e) a
+                 shoveLets (Fun x e a) = Fun x (shoveLets e) a
+                 shoveLets e = addLet deferred e
              bs <- traverse solveOne bindings
              let makeTele (Binding var _ (_, ty):bs) = one var ty <> makeTele bs
                  makeTele _ = mempty
                  makeTele :: [Binding Typed] -> Telescope Typed
              pure (bs, makeTele bs, mempty)
            else do
-             name <- TvName <$> genName
-             let reify an ty var =
-                   case wrap Map.! var of
-                     ExprApp v -> v
-                     _ -> ExprWrapper (wrap Map.! var)
-                            (Fun (EvParam (Capture name (an, ty))) (VarRef name (an, ty)) (an, TyArr ty ty))
-                            (an, ty)
-
-                 mkBind var (VarRef var' _) | var == var' = const []
-                 mkBind v e = (:[]) . Binding v e
-
-                 mkLet [] = const
-                 mkLet xs = Let xs
-
-             let addLet (ConImplicit _ _ var ty:cs) ex | an <- annotation ex =
-                   addLet cs $ mkLet (mkBind var (reify an ty var) (an, ty))
-                     ex (an, getType ex)
-                 addLet (_:cs) ex = addLet cs ex
-                 addLet [] ex = ex
-
              recVar <- TvName <$> genName
              innerNames <- fmap Map.fromList . for tvs $ \(v, _) ->
                (v,) . TvName <$> genNameFrom (T.cons '$' (nameName (unTvName v)))
@@ -628,15 +634,17 @@ skolCheck var exp ty = do
   env <- view typeVars
   unless (null (sks `Set.difference` env)) $
     confesses (blameSkol (EscapedSkolems (Set.toList (skols ty)) ty) (unTvName var, exp))
-  let checkAmbiguous tau = go mempty tau where
-        go s (TyPi Invisible{} t) = go s t
-        go s (TyPi (Implicit v) t) = go (s <> ftv v) t
-        go s t = if not (Set.null (s Set.\\ fv))
-                    then confesses (AmbiguousType var tau (s Set.\\ fv))
-                    else pure ()
-          where fv = ftv t
-  checkAmbiguous (deSkol ty)
+  checkAmbiguous var exp (deSkol ty)
   pure (deSkol ty)
+
+checkAmbiguous :: MonadInfer Typed m => Var Typed -> SomeReason -> Type Typed -> m ()
+checkAmbiguous var exp tau = go mempty tau where
+  go s (TyPi Invisible{} t) = go s t
+  go s (TyPi (Implicit v) t) = go (s <> ftv v) t
+  go s t = if not (Set.null (s Set.\\ fv))
+              then confesses (addBlame exp (AmbiguousType var tau (s Set.\\ fv)))
+              else pure ()
+    where fv = ftv t
 
 solveEx :: Type Typed -> Subst Typed -> Map.Map (Var Typed) (Wrapper Typed) -> Expr Typed -> Expr Typed
 solveEx _ ss cs = transformExprTyped go id goType where
