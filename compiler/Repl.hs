@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, FlexibleContexts, ScopedTypeVariables #-}
+{-# LANGUAGE OverloadedStrings, FlexibleContexts, ScopedTypeVariables, ViewPatterns #-}
 
 module Repl
   ( repl
@@ -25,6 +25,7 @@ import Data.Functor
 import Data.Triple
 import Data.These
 import Data.Maybe
+import Data.Char
 
 import qualified Foreign.Lua.Api.Types as L
 import qualified Foreign.Lua as L
@@ -156,6 +157,9 @@ runRepl = do
     execCommand "r"      _ = lift reloadCommand >> runRepl
     execCommand "reload" _ = lift reloadCommand >> runRepl
 
+    execCommand "t" arg = lift (typeCommand arg) >> runRepl
+    execCommand "type" arg = lift (typeCommand arg) >> runRepl
+
     execCommand cmd _ = liftIO (putDoc ("Unknown command" <+> verbatim cmd)) >> runRepl
 
     -- | Split a string into arguments
@@ -177,6 +181,18 @@ runRepl = do
       case files of
         [] -> liftIO (putDoc "No files to reload")
         files -> loadFiles files
+
+    typeCommand (dropWhile isSpace -> line) = do
+      state <- get
+      core <- flip evalNameyT (lastName state) $ parseCore state parseReplExpr "<interactive>" (T.pack line)
+      case core of
+        Just (((v, _ ):_), _, _, state') -> do
+          let CoVar id nam _ = v
+              var = S.TgName nam id
+          case inferScope state' ^. T.names . at var of
+            Just ty -> liftIO $ putDoc (string line <+> colon <+> displayType ty)
+            _ -> error "what"
+        _ -> pure ()
 
     execString :: SourceName -> T.Text
                -> StateT ReplState IO Bool
