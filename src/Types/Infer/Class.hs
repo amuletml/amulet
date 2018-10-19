@@ -149,7 +149,8 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
       checkAgainstKind (BecauseOf inst) x tyConstraint
     Nothing -> pure tyUnit
 
-  instHead <- checkAgainstKind (BecauseOf inst) instHead tyConstraint
+  instHead <- condemn $
+    checkAgainstKind (BecauseOf inst) instHead tyConstraint
   globalInsnConTy <- silence $
     closeOver (BecauseOf inst) (TyPi (Implicit ctx) instHead)
 

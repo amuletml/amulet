@@ -673,7 +673,7 @@ prettyConcrete _ = True
 
 concreteUnderOne :: Type Typed -> Bool
 concreteUnderOne TyVar{} = False
-concreteUnderOne (TyApp f x) = prettyConcrete f && concretish x
+concreteUnderOne (TyApp f x) = prettyConcrete f && concretish (head (spine x))
 concreteUnderOne _ = True
 
 firstBlame, secondBlame :: SomeReason -> SomeReason
