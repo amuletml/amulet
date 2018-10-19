@@ -23,6 +23,7 @@
 module Parser
   ( parseTops
   , parseRepl
+  , parseReplExpr
   ) where
 
 import Control.Arrow (second)
@@ -51,6 +52,7 @@ import Syntax
 
 %name parseTops Tops
 %name parseRepl Repl
+%name parseReplExpr ReplExpr
 
 %tokentype { Token }
 %monad { Parser } { (>>=) } { return }
@@ -189,6 +191,9 @@ Ctor :: { Constructor Parsed }
 Repl :: { Either (Toplevel Parsed) (Expr Parsed) }
      : Top   ReplSep                           { Left $1 }
      | Expr  ReplSep                           { Right $1 }
+
+ReplExpr :: { Either a (Expr Parsed) }
+  : Expr ReplSep { Right $1 }
 
 ReplSep :: { () }
     : ';;'   { () }
