@@ -60,7 +60,7 @@ pushVar :: IsVar a => a -> EscapeScope -> (T.Text, EscapeScope)
 pushVar v s = escapeVar (toVar v) where
   escapeVar v@(CoVar _ name _) =
     case Map.lookup v (toEsc s) of
-      Just _ -> error ("Variable already declared: " ++ show (pretty v))
+      Just n -> (n, s)
       Nothing -> pushFirst Nothing (escape s name)
 
   pushFirst :: Maybe Int -> T.Text -> (T.Text, EscapeScope)
