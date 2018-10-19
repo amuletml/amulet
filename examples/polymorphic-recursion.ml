@@ -1,13 +1,13 @@
-type list 'a = Nil | Cons of 'a * list 'a ;;
-type nested 'a = Epsilon | Sub of 'a * nested (list 'a) ;;
+type list 'a = Nil | Cons of 'a * list 'a
+type nested 'a = Epsilon | Sub of 'a * nested (list 'a)
 
 let length (x : nested 'a) : int =
   match x with
   | Epsilon -> 0
-  | Sub (_, xs) -> 1 + length xs ;;
+  | Sub (_, xs) -> 1 + length xs
 
-let nested = Sub (1, Sub (Cons (1, Nil), Epsilon)) ;;
+let nested = Sub (1, Sub (Cons (1, Nil), Epsilon))
 
-external val print : forall 'a. 'a -> unit = "print" ;;
+external val print : forall 'a. 'a -> unit = "print"
 
-let main () = print (length nested)
+let () = print (length nested)

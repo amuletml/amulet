@@ -1,7 +1,5 @@
 external val print : string -> () = "print"
-external val num_to_string' : int -> string = "tostring"
-
-let implicit num_to_string : int -> string = num_to_string'
+external val num_to_string : int -> string = "tostring"
 
 let x |> f = f x
 
@@ -26,7 +24,7 @@ let take n (xs : list 'a) : list 'a =
      then Nil
      else x :: take (n - 1) xs
 
-let list_to_string ?(to_string : 'a -> string) = function
+let list_to_string (to_string : 'a -> string) = function
   | Nil -> "[]"
   | Cons (x, xs) ->
      match force xs with
@@ -39,5 +37,5 @@ let list_to_string ?(to_string : 'a -> string) = function
 let fibs = 0 :: 1 :: zip_with (+) fibs (tail fibs)
 
 let () = take 20 fibs
-         |> list_to_string
+         |> list_to_string num_to_string
          |> print
