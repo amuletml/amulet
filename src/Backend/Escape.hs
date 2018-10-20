@@ -20,7 +20,6 @@ import Data.Tuple
 
 import Numeric (showHex)
 
-import Text.Pretty.Semantic
 import Core.Var
 
 -- | A two-way mapping of 'CoVar's to their escaped representation.
