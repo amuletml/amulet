@@ -4,10 +4,10 @@ module Repl.Display where
 import qualified Data.Map.Strict as Map
 import qualified Data.Text.Encoding as T
 import qualified Data.Text as T
+import Data.Maybe
 import Data.Char
 
-import qualified Foreign.Lua.Types.Error as L
-import qualified Foreign.Lua.Api.Types as L
+import qualified Foreign.Lua.Core.Error as L
 import qualified Foreign.Lua as L
 
 import Text.Pretty.Semantic
@@ -28,10 +28,10 @@ valueRepr getVal = do
   t <- L.ltype L.stackTop
   case t of
     L.TypeString ->
-      String . T.decodeLatin1
+      String . T.decodeLatin1 . fromJust
         <$> L.tostring L.stackTop
     L.TypeNumber -> do
-      num <- L.tonumber L.stackTop
+      num <- fromJust <$> L.tonumber L.stackTop
       pure . Number $ if isInt num 7
                          then Left (floor num)
                          else Right . fromRational . toRational $ num
@@ -44,11 +44,11 @@ valueRepr getVal = do
       L.pushnil
       let loop :: L.Lua Bool -> L.Lua (Map.Map T.Text Value)
           loop cont = do
-            weDo <- cont `L.catchLuaError` const (pure False)
+            weDo <- cont `L.catchException` const (pure False)
             if weDo
                then do
                  L.pushvalue (-2)
-                 k <- T.decodeLatin1 <$> L.tostring L.stackTop
+                 k <- T.decodeLatin1 . fromJust <$> L.tostring L.stackTop
                  L.pop 1
                  v <- valueRepr (pure ())
                  Map.insert k v <$> loop cont
@@ -87,5 +87,5 @@ instance Pretty Value where
 isTuple :: Map.Map T.Text Value -> Bool
 isTuple m = Map.size m == 2 && "_1" `Map.member` m && "_2" `Map.member` m
 
-isInt :: L.LuaNumber -> Integer -> Bool
+isInt :: L.Number -> Integer -> Bool
 isInt x n = round (10 ^ n * (x - fromIntegral (round x :: Integer))) == (0 :: Integer)

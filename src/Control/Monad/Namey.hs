@@ -1,6 +1,7 @@
 {-# LANGUAGE DerivingStrategies, GeneralizedNewtypeDeriving,
    FlexibleContexts, FlexibleInstances, MultiParamTypeClasses,
    UndecidableInstances #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 
 {-| The compiler often needs a source of fresh variables, such as when
   performing optimisations or creating new type variables during
@@ -25,6 +26,7 @@ import qualified Control.Monad.Writer.Lazy as LazyW
 import qualified Control.Monad.State.Lazy as LazyS
 import qualified Control.Monad.RWS.Lazy as LazyRWS
 import qualified Control.Monad.Reader as Reader
+import qualified Control.Monad.Fail as Fail
 import Control.Monad.State.Class
 import Control.Monad.IO.Class
 import Control.Monad.Except
@@ -56,6 +58,7 @@ newtype NameyT m a =
   , StrictW.MonadWriter w
   , MonadError e
   , MonadIO
+  , Fail.MonadFail
   )
 
 -- | The namey monad
@@ -66,7 +69,7 @@ instance MonadState s m => MonadState s (NameyT m) where
   put = lift . StrictS.put
 
 -- | A source of fresh variable names
-class Monad m => MonadNamey m where
+class Fail.MonadFail m => MonadNamey m where
   -- | Get a fresh variable
   genName :: m Name
 
@@ -96,7 +99,7 @@ evalNamey :: NameyT Identity a -> Name -> a
 evalNamey (NameyT k) (TgName _ i) = StrictS.evalState k i
 evalNamey _ _ = undefined
 
-instance Monad m => MonadNamey (NameyT m) where
+instance Fail.MonadFail m => MonadNamey (NameyT m) where
   genName = NameyT $ do
     x <- get
     put (x + 1)
@@ -146,3 +149,10 @@ genAlnum n = go (fromIntegral n) T.empty (floor (logBase 26 (fromIntegral n :: D
               0 -> 1
               x -> x
      in go (n `mod'` (26 ^ p)) (T.snoc out (chr (96 + m))) (p - 1)
+
+-- Ugh orphans:
+instance (Semigroup c, Fail.MonadFail m) => Fail.MonadFail (Chronicle.ChronicleT c m) where
+  fail x = lift $ Fail.fail x
+
+instance Fail.MonadFail Identity where
+  fail x = error $ "MonadFail identity: fail " ++ x

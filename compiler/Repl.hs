@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings, FlexibleContexts, ScopedTypeVariables, ViewPatterns #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 
 module Repl
   ( repl
@@ -6,6 +7,7 @@ module Repl
   ) where
 
 import Control.Monad.State.Strict
+import Control.Monad.Fail
 import Control.Exception
 
 import qualified Data.Text.Encoding as T
@@ -14,6 +16,7 @@ import qualified Data.Text.IO as T
 import qualified Data.Text as T
 
 import qualified Data.Map.Strict as Map
+import qualified Data.ByteString as Bs
 import qualified Data.VarMap as VarMap
 import qualified Data.Set as Set
 import Data.Traversable
@@ -27,7 +30,7 @@ import Data.These
 import Data.Maybe
 import Data.Char
 
-import qualified Foreign.Lua.Api.Types as L
+import qualified Foreign.Lua.Core.Types as L
 import qualified Foreign.Lua as L
 
 import System.Console.Haskeline hiding (display)
@@ -74,6 +77,10 @@ import Repl.Display
 import Errors
 import Debug
 
+-- Aghh MonadFail!
+instance MonadFail L.Lua where
+  fail x = error $ "MonadFail L.Lua: fail " ++ x
+
 data ReplState = ReplState
   { resolveScope :: R.Scope
   , moduleScope  :: R.ModuleScope
@@ -81,7 +88,7 @@ data ReplState = ReplState
   , emitState    :: B.TopEmitState
   , lastName     :: S.Name
 
-  , luaState     :: L.LuaState
+  , luaState     :: L.State
 
   , debugMode    :: DebugMode
 
@@ -92,14 +99,15 @@ defaultState :: DebugMode -> IO ReplState
 defaultState mode = do
   state <- L.newstate
 
-  let preamble = T.unpack . display . uncommentDoc . renderPretty 0.8 100 . pretty
+  let preamble = display . uncommentDoc . renderPretty 0.8 100 . pretty
                 . LuaDo . foldMap (map (patchupLua B.defaultEmitState) . snd . B.genBuiltin . fst)
                 $ VarMap.toList B.builtinVars
 
   -- Init our default libraries and operator functions
-  L.runLuaWith state $ do
+  L.runWith state $ do
+    _ <- L.dostring "-- time out hook\nlocal function f() error('Timed out!', 3) end; debug.sethook(f, '', 1e6)"
     L.openlibs
-    L.OK <- L.dostring preamble
+    L.OK <- L.dostring (T.encodeUtf8 preamble)
     pure ()
 
   pure ReplState
@@ -186,7 +194,7 @@ runRepl = do
       state <- get
       core <- flip evalNameyT (lastName state) $ parseCore state parseReplExpr "<interactive>" (T.pack line)
       case core of
-        Just (((v, _ ):_), _, _, state') -> do
+        Just ((v, _ ):_, _, _, state') -> do
           let CoVar id nam _ = v
               var = S.TgName nam id
           case inferScope state' ^. T.names . at var of
@@ -206,8 +214,7 @@ runRepl = do
           ok <- liftIO $ do
             dump (debugMode state') prog core core luaExpr (inferScope state) (inferScope state')
 
-            (ok, res) <- L.runLuaWith (luaState state') $ do
-              _ <- L.dostring "-- time out hook\nlocal function f() error('Timed out!', 3) end; debug.sethook(f, '', 1e6)"
+            (ok, res) <- L.runWith (luaState state') $ do
               code <- L.dostring luaSyntax
 
               case code of
@@ -223,7 +230,7 @@ runRepl = do
 
                   pure (True, vsep (catMaybes vs'))
                 _ -> do
-                  msg <- T.decodeLatin1 <$> L.tostring L.stackTop
+                  msg <- T.decodeLatin1 . fromJust <$> L.tostring L.stackTop
                   L.pop 1
 
                   pure (False, text msg <+> parens (shown code))
@@ -344,12 +351,12 @@ parseCore state parser name input = do
                  then pure Nothing
                  else cont modScope' resolved prog env'
 
-emitCore :: ReplState -> [Stmt CoVar] -> (B.TopEmitState, LuaStmt, String)
+emitCore :: ReplState -> [Stmt CoVar] -> (B.TopEmitState, LuaStmt, Bs.ByteString)
 emitCore state core =
   let core' = patchupUsage . snd . tagOccurStmt (const occursSet) OccursVar $ core
       (luaStmt, emit') = runState (B.emitStmt core') (emitState state)
       luaExpr = LuaDo . map (patchupLua emit') . toList $ luaStmt
-      luaSyntax = T.unpack . display . uncommentDoc . renderPretty 0.8 100 . pretty $ luaExpr
+      luaSyntax = T.encodeUtf8 . display . uncommentDoc . renderPretty 0.8 100 . pretty $ luaExpr
   in (emit', luaExpr, luaSyntax)
 
 
@@ -384,13 +391,13 @@ execFile name line = do
     Just (_, _, core, state') -> do
       let (emit', _, luaSyntax) = emitCore state' core
       ok <- liftIO $ do
-        res <- L.runLuaWith (luaState state') $ do
+        res <- L.runWith (luaState state') $ do
           code <- L.dostring luaSyntax
 
           case code of
             L.OK -> pure (Right ())
             _ -> do
-              msg <- T.decodeLatin1 <$> L.tostring L.stackTop
+              msg <- T.decodeLatin1 . fromJust <$> L.tostring L.stackTop
               L.pop 1
               pure (Left (text msg <+> parens (shown code)))
 

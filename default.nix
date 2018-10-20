@@ -1,22 +1,22 @@
 let
-  rev = "7c1b85cf6de1dc431e5736bff8adf01224e6abe5";
+  rev = "0b97a9c4755ee71e64bac9408c766f13a930999a";
   pkgs = builtins.fetchTarball {
     url = "https://github.com/NixOS/nixpkgs/archive/${rev}.tar.gz";
-    sha256 = "1i8nvc4r0zx263ch5k3b6nkg78sc9ggx2d4lzri6kmng315pcs05";
+    sha256 = "030knsmkqy7fhpi8dsxhm76lvhak551bvzicgsnjidhwv063bw32";
   };
   nixpkgs = import pkgs {
     config = {
       packageOverrides = pkgs_: with pkgs_; {
         haskell = haskell // {
           packages = haskell.packages // {
-            ghc843-profiling = haskell.packages.ghc843.override {
+            ghc861-profiling = haskell.packages.ghc861.override {
               overrides = self: super: {
                 mkDerivation = args: super.mkDerivation (args // {
                   enableLibraryProfiling = true;
                 });
               };
             };
-            ghc843 = haskell.packages.ghc843.override {
+            ghc861 = haskell.packages.ghc861.override {
               overrides = self: super: {
                 io-capture = haskell.lib.overrideCabal super.io-capture (old: rec {
                   doCheck = false;
@@ -28,7 +28,7 @@ let
       };
     };
   };
-in { compiler ? "ghc843", ci ? false }:
+in { compiler ? "ghc861", ci ? false }:
 
 let
   inherit (nixpkgs) pkgs haskell;

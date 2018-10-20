@@ -30,17 +30,10 @@ pipeline {
             }
           }
         }
-        stage('Build Compiler') {
+        stage('Check code style') {
           steps {
             sh 'nix-shell . --run \'cabal new-build -j6 exe:amc\' --arg ci true'
-          }
-        }
-        stage('Run hlint') {
-          steps {
-            timestamps() {
-              sh 'nix-shell . --run "hlint --git" --arg ci true'
-            }
-
+            sh 'nix-shell . --run "hlint --git" --arg ci true'
           }
         }
       }
