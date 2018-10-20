@@ -105,7 +105,6 @@ defaultState mode = do
 
   -- Init our default libraries and operator functions
   L.runWith state $ do
-    _ <- L.dostring "-- time out hook\nlocal function f() error('Timed out!', 3) end; debug.sethook(f, '', 1e6)"
     L.openlibs
     L.OK <- L.dostring (T.encodeUtf8 preamble)
     pure ()
@@ -215,7 +214,9 @@ runRepl = do
             dump (debugMode state') prog core core luaExpr (inferScope state) (inferScope state')
 
             (ok, res) <- L.runWith (luaState state') $ do
-              code <- L.dostring luaSyntax
+              _ <- L.dostring "-- time out hook\nlocal function f() error('Timed out!', 3) end; debug.sethook(f, '', 1e6)"
+              _ <- L.loadbuffer luaSyntax "<interactive>"
+              code <- L.pcall 0 L.multret Nothing
 
               case code of
                 L.OK -> do
