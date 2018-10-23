@@ -123,7 +123,7 @@ data TypeError where
   NotPromotable :: Pretty (Var p) => Var p -> Type p -> Doc -> TypeError
 
 data WhyInstantiate = Expression | Subsumption
-data WhyUnsat = NotAFun | PatBinding | InstanceMethod | InstanceClassCon Span | ConcreteDon'tQuantify | It'sQuantified
+data WhyUnsat = NotAFun | PatBinding | InstanceMethod (Type Typed) | InstanceClassCon Span | ConcreteDon'tQuantify | It'sQuantified
 
 instance (Show (Ann p), Show (Var p), Ord (Var p), Substitutable p (Type p)) => Substitutable p (Constraint p) where
   ftv (ConUnify _ _ a b) = ftv a <> ftv b
@@ -312,7 +312,7 @@ instance Pretty TypeError where
                   <#> rest skol _skolMotive
             _ -> foldr ((<#>) . pretty . flip EscapedSkolems t . pure) empty esc
          , empty -- a line break
-         , note <+> string "in the type" <+> displayType t
+         , note <+> nest 4 (string "in the type" </> displayType t)
          ]
     where rest skol x =
             case x of
@@ -509,12 +509,18 @@ instance Note TypeError Style where
          , indent 4 "because it is impossible to quantify over pattern bindings"
          ]
 
-  formatNote f (ArisingFrom (UnsatClassCon _ (ConImplicit _ _ _ t) InstanceMethod) r') =
-    vsep [ indent 2 "No instance for" <+> (Right <$> displayType t) <+> "arising in the binding"
-         , f [annotation r']
+  formatNote f (ArisingFrom (UnsatClassCon _ (ConImplicit _ _ _ t) (InstanceMethod ctx)) r') =
+    vsep [ nest 4 $
+            indent 2 "Could not deduce" <+> (Right <$> displayType t)
+              <+> "from the context" </> (Right <$> displayType ctx)
+         , empty
          , indent 2 $ bullet "Note: this constraint can not be quantified over"
-         , indent 4 "because it is a method in an instance."
-         , indent 2 $ bullet "Note: possible fix: add it to the instance context"
+         , indent 4 "because it derived from a method in an instance."
+         , empty
+         , indent 2 $ bullet "Possible fix: add it to the instance context"
+         , empty
+         , indent 2 "Arising in the" <+> (Right <$> blameOf r')
+         , f [annotation r']
          ]
 
   formatNote f (ArisingFrom (UnsatClassCon _ (ConImplicit _ _ _ t) (InstanceClassCon ann)) r') =

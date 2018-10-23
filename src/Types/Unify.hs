@@ -219,7 +219,6 @@ doSolve (ohno@(ConImplicit reason scope var con@TyPi{}) :<| cs) = do
         useImplicit reason con scope (pickBestPossible xs)
       solveCoSubst . at var ?= w
     _ -> dictates (addBlame reason (UnsatClassCon reason (apply sub ohno) It'sQuantified))
-  -- traceM (displayS (pretty head))
 
 doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
   doSolve cs
@@ -428,7 +427,7 @@ subsumes blame scope a b = do
 
 subsumes' b s t1 t2@TyPi{} | isSkolemisable t2 = do
   (c, t2', scope) <- skolemise (BySubsumption t1 t2) t2
-  (Syntax.:>) c <$> subsumes b (s <> scope) t1 t2'
+  (Syntax.:>) c <$> subsumes b (scope <> s) t1 t2'
 
 subsumes' r s (TyPi (Implicit t) t1) t2
   | prettyConcrete t2 = do
