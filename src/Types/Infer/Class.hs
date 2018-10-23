@@ -195,8 +195,9 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
         deferred <- pure (fmap (apply sub) deferred)
         (compose sub -> sub, wrap', cons) <- solveHard (Seq.fromList deferred)
 
-        unless (null cons) $ 
-          confesses (addBlame (BecauseOf bind) (UnsatClassCon (BecauseOf e) (head cons) InstanceMethod))
+        unless (null cons) $ do
+          let (c@(ConImplicit reason _ _ _):_) = reverse cons
+          confesses (addBlame reason (UnsatClassCon reason c (InstanceMethod ctx)))
 
         name <- TvName <$> genName
         let reify an ty var =

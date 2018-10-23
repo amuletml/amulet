@@ -3,7 +3,8 @@ class07.ml[9:9 ..9:32]: error
   • Note: This variable was rigidified because of an ambiguous constraint:
       show 'a
 
-  • Note: in the type forall 'ci. show a * read a * show ci => 'ci -> string
+  • Note: in the type
+      forall 'ci. show 'a * read 'a * show 'ci => 'ci -> string
   • Note: in the inferred type for foo
 
   Arising in the expression
