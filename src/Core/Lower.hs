@@ -40,7 +40,7 @@ import Core.Var
 import qualified Syntax as S
 import Syntax.Let
 import Syntax.Var (Var(..), Resolved, Typed)
-import Syntax.Pretty (Expr(..), Pattern(..), Skolem(..), Toplevel(..), Constructor(..))
+import Syntax.Pretty (Expr(..), Pattern(..), Skolem(..), Toplevel(..), Constructor(..), Arm(..))
 import Syntax.Transform
 
 import Text.Pretty.Semantic (pretty)
@@ -127,7 +127,7 @@ lowerAt (Begin xs _) t = lowerAtTerm (last xs) t >>= flip (foldrM bind) (init xs
   build a (b, c) = (a, c, b)
 lowerAt (S.Match ex cs an) ty = do
   (ex', _) <- lowerBothAtom ex
-  cs' <- traverse (\(pat, e) -> (pat,) <$> lowerAtTerm e ty) cs
+  cs' <- traverse (\(Arm pat _ e) -> (pat,) <$> lowerAtTerm e ty) cs -- TODO: Implement me!
   fail <- patternMatchingError "match expression" (fst an) ty
   lowerMatch ex' (cs' ++ [(S.Wildcard undefined, fail)])
 lowerAt (Access r k _) ty = do

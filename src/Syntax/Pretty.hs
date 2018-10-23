@@ -54,8 +54,8 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
     vsep [ keyword "begin", indent 2 (vsep (punctuate semi (map pretty e))), keyword "end" ]
   pretty (Literal l _) = pretty l
   pretty (BinOp l o r _) = parens (pretty l <+> pretty o <+> pretty r)
-  pretty (Match t bs _) = vsep ((keyword "match" <+> pretty t <+> keyword "with"):prettyMatches bs)
-  pretty (Function bs _) = vsep (keyword "function":prettyMatches bs)
+  pretty (Match t bs _) = vsep ((keyword "match" <+> pretty t <+> keyword "with"):map pretty bs)
+  pretty (Function bs _) = vsep (keyword "function":map pretty bs)
   pretty (Hole v _) = "_" <> pretty v -- A typed hole
   pretty (Ascription e t _) = parens $ pretty e <+> colon <+> pretty t
   pretty (Record [] _) = braces empty
@@ -101,8 +101,10 @@ instance Pretty (Var p) => Pretty (Coercion p) where
     where pprRow xs = hsep (punctuate comma (map (\(n, v) -> text n <+> colon <+> pretty v) xs))
   pretty (ForallCo v c cs) = keyword "∀" <> parens (pretty v <+> colon <+> pretty c) <> dot <+> pretty cs
 
-prettyMatches :: (Pretty (Var p)) => [(Pattern p, Expr p)] -> [Doc]
-prettyMatches = map (\(a, b) -> pipe <+> nest 4 (pretty a <+> arrow </> pretty b))
+instance Pretty (Var p) => Pretty (Arm p) where
+  pretty (Arm p g b) = pipe <+> nest 4 (pretty p <+> prettyGuard g <> arrow </> pretty b) where
+    prettyGuard Nothing = mempty
+    prettyGuard (Just g) = pretty g <+> mempty
 
 prettyRows :: Pretty x => Doc -> [(Text, x)] -> [Doc]
 prettyRows sep = map (\(n, v) -> text n <+> sep <+> pretty v) . sortOn fst

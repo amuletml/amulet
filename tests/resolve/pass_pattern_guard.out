@@ -1,0 +1,2 @@
+let _ = function
+  | x#0 (x#0 > 2) -> ()

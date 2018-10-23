@@ -64,8 +64,8 @@ data Expr p
   | Fun (Parameter p) (Expr p) (Ann p)
   | Begin [Expr p] (Ann p)
   | Literal Lit (Ann p)
-  | Match (Expr p) [(Pattern p, Expr p)] (Ann p)
-  | Function [(Pattern p, Expr p)] (Ann p)
+  | Match (Expr p) [Arm p] (Ann p)
+  | Function [Arm p] (Ann p)
   | BinOp (Expr p) (Expr p) (Expr p) (Ann p)
   | Hole (Var p) (Ann p)
   | Ascription (Expr p) (Type p) (Ann p)
@@ -98,6 +98,19 @@ deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Expr p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Expr p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Expr p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Expr p)
+
+data Arm p
+  = Arm { armPat :: Pattern p
+        , armGuard :: Maybe (Expr p)
+        , armExp :: Expr p
+        }
+
+deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Arm p)
+deriving instance (Show (Var p), Show (Ann p)) => Show (Arm p)
+deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Arm p)
+deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Arm p)
+instance (Spanned (Expr p), Spanned (Pattern p)) => Spanned (Arm p) where
+  annotation (Arm p _ e) = annotation p <> annotation e
 
 data Field p =
   Field { _fName :: Text
@@ -314,6 +327,7 @@ getType = snd . head . catMaybes . gmapQ get where
 
 makePrisms ''Expr
 makePrisms ''Type
+makePrisms ''Arm
 makePrisms ''Pattern
 makePrisms ''Toplevel
 makePrisms ''TyBinder

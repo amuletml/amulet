@@ -51,6 +51,7 @@ data TokenClass
   | TcLazy -- ^ A @lazy@ token.
   | TcClass -- ^ A @class@ token.
   | TcInstance -- ^ An @instance@ token.
+  | TcWhen -- ^ A @when@ token.
   | TcAs   -- ^ An @as@ token.
 
   | TcDot -- ^ A @.@ token.
@@ -131,6 +132,7 @@ instance Show TokenClass where
   show TcAs = "as"
   show TcClass = "class"
   show TcInstance = "instance"
+  show TcWhen = "when"
 
   show TcComma = ","
   show TcDot = "."

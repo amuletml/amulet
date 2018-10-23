@@ -1,0 +1,7 @@
+fail_pattern_guard.ml[2:10 ..2:10]: error
+  Could not match expected type bool with int
+
+  Arising in the expression
+  │ 
+2 │ | _ when 2 -> ()
+  │          ^

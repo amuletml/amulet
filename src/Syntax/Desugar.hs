@@ -1,4 +1,5 @@
-{-# LANGUAGE FlexibleContexts, ScopedTypeVariables, OverloadedStrings #-}
+{-# LANGUAGE FlexibleContexts, ScopedTypeVariables
+           , OverloadedStrings, TupleSections #-}
 
 {- | The desugar process is run before the type checker in order to
    simplify the number of cases it needs to handle.
@@ -20,7 +21,6 @@ import Control.Lens hiding (Lazy)
 
 import Data.Foldable
 import Data.Spanned
-import Data.Triple
 
 import Syntax.Var
 import Syntax
@@ -42,12 +42,12 @@ desugarProgram = traverse statement where
   expr (App f x a) = App <$> expr f <*> expr x <*> pure a
   expr (Fun p b a) = Fun p <$> expr b <*> pure a
   expr (Begin es a) = Begin <$> traverse expr es <*> pure a
-  expr (Match e bs a) = Match <$> expr e <*> traverse (secondA expr) bs <*> pure a
-  expr (Function [(p, b)] a) = Fun (PatParam p) <$> expr b <*> pure a
+  expr (Match e bs a) = Match <$> expr e <*> traverse arm bs <*> pure a
+  expr (Function [Arm p Nothing b] a) = Fun (PatParam p) <$> expr b <*> pure a
   expr (Function bs a) = do
     (cap, rhs) <- fresh a
     Fun (PatParam cap) <$>
-      (Match <$> expr rhs <*> traverse (secondA expr) bs <*> pure a)
+      (Match <$> expr rhs <*> traverse arm bs <*> pure a)
       <*> pure a
   -- Special case @@ so we can work on skolem variables
   expr (BinOp l (VarRef (TgInternal "@@") _) r a) = App <$> expr l <*> expr r <*> pure a
@@ -110,6 +110,8 @@ desugarProgram = traverse statement where
   binding (Matching (PType p t _) e a) = binding (Matching p (Ascription e t (annotation e)) a)
   binding (Matching p e a) = Matching p <$> expr e <*> pure a
   binding TypedMatching{} = error "TypedMatching{} desugar binding"
+
+  arm (Arm p g e) = Arm p <$> traverse expr g <*> expr e
 
   foldf f xs v = foldr f v xs
 

@@ -209,12 +209,14 @@ verifyExpr (Begin es _) = do
 verifyExpr Literal{} = pure ()
 verifyExpr (Match e bs _) = do
   verifyExpr e
-  for_ bs $ \(pat, body) -> do
+  for_ bs $ \(Arm pat guard body) -> do
     modify (Set.union (bindingSites pat))
+    maybe (pure ()) verifyExpr guard
     verifyExpr body
 verifyExpr (Function bs _) =
-  for_ bs $ \(pat, body) -> do
+  for_ bs $ \(Arm pat guard body) -> do
     modify (Set.union (bindingSites pat))
+    maybe (pure ()) verifyExpr guard
     verifyExpr body
 verifyExpr (BinOp l o r _) = traverse_ verifyExpr [l, o, r]
 verifyExpr Hole{} = pure ()
@@ -254,7 +256,7 @@ unguardedVars Fun{}                = mempty
 unguardedVars (Record rs _)        = foldMap (unguardedVars . view fExpr) rs
 unguardedVars (Access e _ _)       = unguardedVars e
 unguardedVars (Match t ps _)       = unguardedVars t <> foldMap unguardedVarsBranch ps where
-  unguardedVarsBranch (p, e)       = unguardedVars e Set.\\ bound p
+  unguardedVarsBranch (Arm p g e)  = (foldMap unguardedVars g <> unguardedVars e) Set.\\ bound p
 unguardedVars Literal{}            = mempty
 unguardedVars Hole{}               = mempty
 unguardedVars (If a b c _)         = unguardedVars a <> unguardedVars b <> unguardedVars c
@@ -309,7 +311,7 @@ nonTrivial BinOp{} = True
 nonTrivial (If c t e _) = nonTrivial c || nonTrivial t || nonTrivial e
 nonTrivial (Let vs e _) = nonTrivial e || any nonTrivialRhs vs
 nonTrivial (Begin es _) = any nonTrivial es
-nonTrivial (Match e cs _) = nonTrivial e || any (nonTrivial . snd) cs
+nonTrivial (Match e cs _) = nonTrivial e || any (\(Arm _ g a) -> nonTrivial a || maybe False nonTrivial g) cs
 nonTrivial VarRef{} = False
 nonTrivial Fun{} = False
 nonTrivial Literal{} = False
@@ -358,4 +360,3 @@ parametricity stmt overall = go mempty overall where
 
   goArg set (TyPi _ cont) = goArg set cont
   goArg set t = pure (set `Set.difference` ftv t)
-

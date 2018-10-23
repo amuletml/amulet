@@ -94,7 +94,7 @@ check ex@(Fun pat e an) ty = do
   _ <- unify (becauseExp ex) domain (_tyBinderType tau)
   let tvs = boundTvs (p ^. paramPat) vs
 
-  implies (Arm (pat ^. paramPat) e) domain cs $
+  implies (Arm (pat ^. paramPat) Nothing e) domain cs $
     case dom of
       Anon{} -> do
         e <- local (typeVars %~ Set.union tvs) . local (names %~ focus vs) $
@@ -107,18 +107,20 @@ check (If c t e an) ty = If <$> check c tyBool <*> check t ty <*> check e ty <*>
 check (Match t ps a) ty = do
   tt <-
     case ps of
-      ((p, _):_) -> view _2 <$> inferPattern p
+      (Arm p _ _:_) -> view _2 <$> inferPattern p
       _ -> view _2 <$> infer t
   t <- check t tt
 
-  ps <- for ps $ \(p, e) -> do
+  ps <- for ps $ \(Arm p g e) -> do
     (p', ms, cs) <- checkPattern p tt
     let tvs = boundTvs p' ms
 
-    bd <- implies (Arm p e) tt cs $
-      local (typeVars %~ Set.union tvs) $
-        local (names %~ focus ms) (check e ty)
-    pure (p', bd)
+    implies (Arm p g e) tt cs
+      . local (typeVars %~ Set.union tvs)
+      . local (names %~ focus ms) $ do
+        g' <- traverse (flip check tyBool) g
+        e' <- check e ty
+        pure (Arm p' g' e')
   pure (Match t ps (a, ty))
 
 check e@(Access rc key a) ty = do
@@ -155,7 +157,7 @@ infer (VarRef k a) = do
     Nothing -> pure (VarRef (TvName k) (a, old), old)
     Just cont -> pure (cont' (cont (VarRef (TvName k) (a, old))), new)
 
-infer (Fun p e an) = let blame = Arm (p ^. paramPat) e in do
+infer (Fun p e an) = let blame = Arm (p ^. paramPat) Nothing e in do
   (p, dom, ms, cs) <- inferParameter p
   let tvs = boundTvs (p ^. paramPat) ms
   _ <- leakEqualities blame cs
@@ -208,18 +210,18 @@ infer ex@(BinOp l o r a) = do
 infer ex@(Match t ps a) = do
   tt <-
     case ps of
-      ((p, _):_) -> view _2 <$> inferPattern p
+      (Arm p _ _:_) -> view _2 <$> inferPattern p
       _ -> view _2 <$> infer t
   t' <- check t tt
   ty <- freshTV
-  ps' <- for ps $ \(p, e) -> do
+  ps' <- for ps $ \(Arm p g e) -> do
     (p', ms, cs) <- checkPattern p tt
     let tvs = boundTvs p' ms
     leakEqualities ex cs
-    e' <- local (typeVars %~ Set.union tvs) $
-      local (names %~ focus ms) $
-        check e ty
-    pure (p', e')
+    local (typeVars %~ Set.union tvs) . local (names %~ focus ms) $ do
+      e' <- check e ty
+      g' <- traverse (flip check tyBool) g
+      pure (Arm p' g' e')
   pure (Match t' ps' (a, ty), ty)
 
 infer (Record rows a) = do
