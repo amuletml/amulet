@@ -157,11 +157,11 @@ resolveModule (t@(Class name ctx tvs ms ann):rs) = do
   extendTy (name, name') $ do
     (ctx', ms') <- extendTyvarN tvss $ do
       ctx' <- traverse (reType t) ctx
-      ms' <- zip <$> traverse (tagVar . fst) ms
-                 <*> traverse (reType t . snd) ms
+      ms' <- for ms $ \m@(MethodSig name ty an) ->
+        MethodSig <$> tagVar name <*> reType m ty <*> pure an
       pure (ctx', ms')
 
-    extendN (zipWith (\(v, _) (v', _) -> (v, v')) ms ms') $
+    extendN (zipWith (\(MethodSig v _ _) (MethodSig v' _ _) -> (v, v')) ms ms') $
       (Class name' ctx' tvs' ms' ann:) <$> resolveModule rs
 
 resolveModule (t@(Instance cls ctx head ms ann):rs) = do

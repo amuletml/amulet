@@ -168,11 +168,11 @@ Top :: { Toplevel Parsed }
 --  | Instance                                 { $1 }
     | open Con                                 { Open (getL $2) Nothing }
 
-MethodSigs :: { [(Var Parsed, Type Parsed)] }
+MethodSigs :: { [MethodSig Parsed] }
   : List(MethodSig, TopSep) { $1 }
 
-MethodSig :: { (Var Parsed, Type Parsed) }
-  : val BindName ':' Type { (getL $2, getL $4) }
+MethodSig :: { MethodSig Parsed }
+  : val BindName ':' Type { withPos2 $1 $4 $ MethodSig (getL $2) (getL $4) }
 
 Methods :: { [Binding Parsed] }
   : List(Method, TopSep) { $1 }
@@ -527,7 +527,7 @@ respanFun :: (Spanned a, Spanned b) => a -> b -> Expr Parsed -> Expr Parsed
 respanFun s e (Fun p b _) = Fun p b (mkSpanUnsafe (spanStart (annotation s)) (spanEnd (annotation e)))
 respanFun _ _ _ = error "what"
 
-buildClass :: Located (Type Parsed) -> [(Var Parsed, Type Parsed)]
+buildClass :: Located (Type Parsed) -> [MethodSig Parsed]
            -> Parser (Span -> Toplevel Parsed)
 buildClass (L parsed typ) ms =
   case parsed of

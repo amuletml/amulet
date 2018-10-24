@@ -1,20 +1,10 @@
-class02.ml[1:1 ..4:3]: error
+class02.ml[3:3 ..3:27]: error
   Could not match type type with 'i -> 'j
 
   Have you applied a type constructor
   to the wrong number of arguments?
 
-  Arising in the declaration
+  Arising in the method signature
   │ 
-1 │ class show 'a begin
-  │ ^^^^^^^^^^^^^^^^^^^
-class02.ml[1:1 ..4:3]: error
-  Could not match type type with 'ah -> 'ai
-
-  Have you applied a type constructor
-  to the wrong number of arguments?
-
-  Arising in the declaration
-  │ 
-1 │ class show 'a begin
-  │ ^^^^^^^^^^^^^^^^^^^
+3 │   val foo : 'a () -> string
+  │   ^^^^^^^^^^^^^^^^^^^^^^^^^

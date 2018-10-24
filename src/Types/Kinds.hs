@@ -96,8 +96,11 @@ resolveClassKind stmt@(Class classcon ctx args methods _) = do
     let scope = one classcon kind <> tele
     local (names %~ focus scope) $ do
       traverse_ (`checkKind` tyConstraint) ctx
-      for_ methods $ \(_, ty) ->
-        checkKind ty TyType
+      for_ methods $ \m@(MethodSig _ ty _) -> do
+        put (BecauseOf m)
+        retcons (addBlame (BecauseOf m)) $
+          checkKind ty TyType
+        <* put reason
     pure kind
   let remake (TyVarArg v:as) (TyArr k r) = TyAnnArg (TvName v) k:remake as r
       remake (TyAnnArg v _:as) (TyArr k r) = TyAnnArg (TvName v) k:remake as r

@@ -19,7 +19,7 @@ import Data.Char
 
 import Control.Monad.State
 import Control.Monad.Infer
-import Control.Arrow (second)
+import Control.Arrow (second, (&&&))
 import Control.Lens
 
 import Syntax.Implicits
@@ -62,13 +62,14 @@ inferClass clss@(Class name ctx _ methods classAnn) = do
 
   local (names %~ focus (one name k <> scope params)) $ do
     -- Infer the types for every method
-    (methods, decls, rows) <- fmap unzip3 . for methods $ \(method, ty) -> do
+    (methods, decls, rows) <- fmap unzip3 . for methods $ \meth@(MethodSig method ty an) -> do
       method <- pure (TvName method)
-      ty <- resolveKind (BecauseOf clss) ty
-      withHead <- closeOver (BecauseOf clss) $
+      ty <- silence $ -- Any errors will have been caught by the resolveClassKind
+        resolveKind (BecauseOf meth) ty
+      withHead <- closeOver (BecauseOf meth) $
         TyPi (Implicit classConstraint) ty
 
-      pure ( (method, ty)
+      pure ( (MethodSig method ty (an, ty))
            , (method, withHead)
            , (Anon, method, nameName (unTvName method), ty))
 
@@ -116,7 +117,7 @@ inferClass clss@(Class name ctx _ methods classAnn) = do
           pure (Binding var expr (classAnn, ty))
     decs <- traverse mkDecl (rows ++ rows')
     pure ( tyDecl:map (LetStmt . pure) decs, tele
-         , Class name ctx params ((classCon, classConTy):methods) (classAnn, k)
+         , Class name ctx params (MethodSig classCon classConTy (classAnn, classConTy):methods) (classAnn, k)
          , scope)
 inferClass _ = error "not a class"
 
@@ -125,7 +126,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
   let classCon' =
         T.cons (toUpper (T.head (nameName clss)))
           (T.tail (nameName clss))
-  Class clss _ classParams ((classCon, classConTy):methodSigs) classAnn <-
+  Class clss _ classParams ((MethodSig classCon classConTy _):methodSigs) classAnn <-
     view (classDecs . at (TvName clss) . non undefined)
 
   instanceName <- TvName <$> genNameWith (T.pack "$d" <> classCon')
@@ -179,7 +180,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
 
   let localAssums = insert ann InstSort localInstanceName localInsnConTy localAssums'
 
-  methodSigs <- Map.fromList <$> traverse (secondA (closeOver (BecauseOf inst) . apply sub)) methodSigs
+  methodSigs <- Map.fromList <$> traverse (secondA (closeOver (BecauseOf inst) . apply sub) . (view methName &&& view methTy)) methodSigs
   (Map.fromList -> methodMap, methods) <- fmap unzip . local (classes %~ mappend localAssums) $
     for bindings $ \case
       bind@(Binding v e an) -> do
