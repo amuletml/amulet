@@ -260,7 +260,7 @@ data Toplevel p
   | Class { className :: Var p
           , classCtx :: Maybe (Type p)
           , classParams :: [TyConArg p]
-          , classMethods :: [(Var p, Type p)]
+          , classMethods :: [MethodSig p]
           , ann :: Ann p }
   | Instance { instanceClass :: Var p
              , instanceCtx :: Maybe (Type p)
@@ -272,6 +272,17 @@ deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Toplevel p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Toplevel p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Toplevel p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Toplevel p)
+
+data MethodSig p =
+  MethodSig { _methName :: Var p
+            , _methTy :: Type p
+            , _methAnn :: Ann p
+            }
+
+deriving instance (Eq (Var p), Eq (Ann p)) => Eq (MethodSig p)
+deriving instance (Show (Var p), Show (Ann p)) => Show (MethodSig p)
+deriving instance (Ord (Var p), Ord (Ann p)) => Ord (MethodSig p)
+deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (MethodSig p)
 
 data TyConArg p
   = TyVarArg (Var p)
@@ -320,11 +331,12 @@ makePrisms ''TyBinder
 makePrisms ''Constructor
 makePrisms ''Lit
 
+makeLenses ''Field
 makeLenses ''Skolem
 makeLenses ''TyBinder
 makeLenses ''Binding
 makeLenses ''Parameter
-makeLenses ''Field
+makeLenses ''MethodSig
 
 instance Spanned (Ann p) => Spanned (Binding p) where
   annotation = annotation . _bindAnn
@@ -386,6 +398,9 @@ instance Spanned (Ann p) => Spanned (Expr p) where
 
 instance (Data (Ann p), Data (Var p), Data p) => Spanned (Parameter p) where
   annotation = annotation . view paramPat
+
+instance Spanned (Ann p) => Spanned (MethodSig p) where
+  annotation = annotation . view methAnn
 
 {- Note [1]: Tuple types vs tuple patterns/values
 

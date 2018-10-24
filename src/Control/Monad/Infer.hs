@@ -515,7 +515,7 @@ instance Note TypeError Style where
               <+> "from the context" </> (Right <$> displayType ctx)
          , empty
          , indent 2 $ bullet "Note: this constraint can not be quantified over"
-         , indent 4 "because it derived from a method in an instance."
+         , indent 4 "because it originated from a method in an instance."
          , empty
          , indent 2 $ bullet "Possible fix: add it to the instance context"
          , empty
