@@ -78,6 +78,9 @@ instance (Spanned (Ann p), Data p, Data (Ann p), Data (Var p), Pretty (Var p)) =
 instance (Spanned (Ann p), Pretty (Var p)) => Reasonable Binding p where
   blame _ = string "the" <+> highlight "binding"
 
+instance (Spanned (Ann p), Pretty (Var p)) => Reasonable MethodSig p where
+  blame _ = string "the" <+> highlight "method signature"
+
 instance Reasonable (Const SomeReason) p where
   blame = blameOf . getConst
 
