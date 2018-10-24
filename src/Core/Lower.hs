@@ -119,7 +119,8 @@ lowerAt (Fun param bd an) (ForallTy Irrelevant a b) =
           bd' <- lowerAtTerm bd b
           arg <- freshFromPat p
           fail <- patternMatchingError "pattern-matching function" (fst an) b
-          Lam (TermArgument arg a) <$> lowerMatch' arg a [(p, bd'), (S.Wildcard undefined, fail)]
+          Lam (TermArgument arg a) <$> lowerMatch' arg a [ (p, Nothing, bd')
+                                                         , (S.Wildcard undefined, Nothing, fail) ]
 
 lowerAt (Begin [x] _) t = lowerAt x t
 lowerAt (Begin xs _) t = lowerAtTerm (last xs) t >>= flip (foldrM bind) (init xs) where
@@ -127,9 +128,11 @@ lowerAt (Begin xs _) t = lowerAtTerm (last xs) t >>= flip (foldrM bind) (init xs
   build a (b, c) = (a, c, b)
 lowerAt (S.Match ex cs an) ty = do
   (ex', _) <- lowerBothAtom ex
-  cs' <- traverse (\(Arm pat _ e) -> (pat,) <$> lowerAtTerm e ty) cs -- TODO: Implement me!
+  cs' <- for cs (\(Arm pat g e) -> (pat,,)
+                  <$> traverse (`lowerAtTerm` C.tyBool) g
+                  <*> lowerAtTerm e ty)
   fail <- patternMatchingError "match expression" (fst an) ty
-  lowerMatch ex' (cs' ++ [(S.Wildcard undefined, fail)])
+  lowerMatch ex' (cs' ++ [(S.Wildcard undefined, Nothing, fail)])
 lowerAt (Access r k _) ty = do
   (r', rt) <- lowerBothAtom r
   (iv, var) <- (,) <$> fresh ValueVar <*> fresh ValueVar
@@ -396,7 +399,8 @@ lowerLet bs =
             -- We substitute the whole match to use our new type arguments, as it's
             -- easier than substituting each pattern + pattern binds
             fail <- patternMatchingError "let expression" pos innerTy
-            substituteInTys subst <$> lowerMatch res [(p, inner), (S.Wildcard undefined, fail)]
+            substituteInTys subst <$> lowerMatch res [ (p, Nothing, inner)
+                                                     , (S.Wildcard undefined, Nothing, fail) ]
 
       requiredVars :: Type -> VarSet.Set
       requiredVars (ForallTy (Relevant v) _ rest) = VarSet.insert v (requiredVars rest)

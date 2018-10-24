@@ -1,5 +1,4 @@
-{-# LANGUAGE FlexibleContexts, ScopedTypeVariables
-           , OverloadedStrings, TupleSections #-}
+{-# LANGUAGE FlexibleContexts, ScopedTypeVariables, OverloadedStrings #-}
 
 {- | The desugar process is run before the type checker in order to
    simplify the number of cases it needs to handle.

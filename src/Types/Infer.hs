@@ -118,7 +118,7 @@ check (Match t ps a) ty = do
     implies (Arm p g e) tt cs
       . local (typeVars %~ Set.union tvs)
       . local (names %~ focus ms) $ do
-        g' <- traverse (flip check tyBool) g
+        g' <- traverse (`check` tyBool) g
         e' <- check e ty
         pure (Arm p' g' e')
   pure (Match t ps (a, ty))
@@ -220,7 +220,7 @@ infer ex@(Match t ps a) = do
     leakEqualities ex cs
     local (typeVars %~ Set.union tvs) . local (names %~ focus ms) $ do
       e' <- check e ty
-      g' <- traverse (flip check tyBool) g
+      g' <- traverse (`check` tyBool) g
       pure (Arm p' g' e')
   pure (Match t' ps' (a, ty), ty)
 
