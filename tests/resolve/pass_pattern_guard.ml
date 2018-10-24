@@ -1,2 +1,2 @@
-let _ = function
+let f = function
 | x when x > 2 -> ()

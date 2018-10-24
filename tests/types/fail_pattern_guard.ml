@@ -1,2 +1,2 @@
-let _ = function
+let f = function
 | _ when 2 -> ()

@@ -1,2 +1,2 @@
-let _ = function
-  | x#0 (x#0 > 2) -> ()
+let f#0 = function
+  | x#1 (x#1 > 2) -> ()
