@@ -10,10 +10,9 @@ do
   local function go(st)
     if st > 5 then
       return print("]")
-    else
-      io_write("'" .. to_string(st) .. "', ")
-      return go(st + 1)
     end
+    io_write("'" .. to_string(st) .. "', ")
+    return go(st + 1)
   end
   local main = go(1)
   local bottom = nil
