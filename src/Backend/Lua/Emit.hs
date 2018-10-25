@@ -374,13 +374,23 @@ emitExpr var yield t@(AnnMatch _ test arms) = do
         -- unboxed tuple, as we know this returns a boolean.
         (Left [LuaTrue], Left [e]) -> Left $ LuaBinOp test' "or" e
         (Left [e], Left [LuaFalse]) -> Left $ LuaBinOp test' "and" e
-        (Left [LuaFalse], Left [LuaTrue]) -> Left $ LuaUnOp "not" test'
+        (Left [LuaFalse], Left [LuaTrue]) -> Left $ negate test'
         -- If we return a single expression, try to generate some
         -- slightly nicer code.
         (Left{}, _) | YieldReturn <- yield -> Right . Seq.fromList $
-          LuaIfElse [(test', eitherStmts yield ifs')] :eitherStmts yield els'
+          LuaIfElse [(test', eitherStmts yield ifs')] : eitherStmts yield els'
+        (_, Left{}) | YieldReturn <- yield -> Right . Seq.fromList $
+          LuaIfElse [(negate test', eitherStmts yield els')] : eitherStmts yield ifs'
 
         _ -> Right . pure $ LuaIf test' (eitherStmts yield ifs') (eitherStmts yield els')
+
+    negate :: LuaExpr -> LuaExpr
+    negate (LuaUnOp "not" x) = x
+    negate (LuaBinOp a "==" b) = LuaBinOp a "~=" b
+    negate (LuaBinOp a "~=" b) = LuaBinOp a "==" b
+    negate (LuaBinOp a "and" b) = LuaBinOp (negate a) "or" (negate b)
+    negate (LuaBinOp a "or" b) = LuaBinOp (negate a) "and" (negate b)
+    negate x = LuaUnOp "not" x
 
     eitherStmts _ (Right ss) = toList ss
     eitherStmts yield (Left es) = toList $ yieldStmt yield es
