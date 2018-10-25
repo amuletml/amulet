@@ -242,7 +242,7 @@ nodeStmts EmittedExpr { emitExprs = es, emitYield = yield } = yieldStmt yield es
 -- Most of the code for that is performed using 'withinExpr', but some
 -- non-trivial terms (record extensions, matches) roll their own as we
 -- generate statements instead.
-emitExpr :: ( Occurs a
+emitExpr :: forall a m. ( Occurs a
             , MonadReader (EmitScope a) m
             , MonadState (EmitState a) m )
          => a -> EmitYield a -> AnnTerm VarSet.Set a
@@ -256,7 +256,7 @@ emitExpr var yield (AnnLet _ (One (v, ty, e)) r) = do
 
 emitExpr var yield (AnnLet _ (Many vs) r) =
   local (\s -> s { emitArity = extendPureLets (emitArity s) vs }) $ do
-    binds <- traverse (\(v, ty, _) -> (v,) <$> genVars pushScope v ty) vs
+    binds <- traverse (\(v, ty, _) -> (v,) <$> genVars pushScope v ty (Just r)) vs
     stmt <- traverse (\((_, _, e), (_, v')) -> emitLifted (YieldStore v') e) (zip vs binds)
 
     graph <- gets emitGraph
@@ -308,13 +308,13 @@ emitExpr var yield (AnnMatch _ test [arm@Arm { _armPtrn = p, _armBody = body, _a
 
   where getTy v = maybe (error "Cannot find pattern variable") snd (find ((==v) . fst) vs)
 
-emitExpr var yield (AnnMatch _ test arms) = do
+emitExpr var yield t@(AnnMatch _ test arms) = do
   (yield', stmt, bound) <- case yield of
     YieldReturn -> pure (YieldReturn, mempty, mempty)
     YieldDiscard -> pure (YieldDiscard, mempty, mempty)
     YieldStore vs -> pure (YieldStore vs, mempty, vs)
     YieldDeclare v ty -> do
-      v' <- genVars pushScope v ty
+      v' <- genVars pushScope v ty (Just t)
       pure (YieldStore v', pure (LuaLocal v' []), v')
 
   (deps, body) <- case arms of
@@ -337,11 +337,11 @@ emitExpr var yield (AnnMatch _ test arms) = do
         pattern multiple times, and so we need to emit it as a variable.
       -}
       test' <- emitAtomMany test
-      (freeInAtom test,) . Right . LuaIfElse <$> for arms (genBranch test' yield')
+      (freeInAtom test,) . Right . pure . LuaIfElse <$> for arms (genBranch test' yield')
 
   let node = case body of
         Left es -> EmittedExpr [es] yield
-        Right ss -> EmittedStmt (stmt |> ss) bound
+        Right ss -> EmittedStmt (stmt <> ss) bound
 
   modify (\s -> s
     { emitGraph = VarMap.insert (toVar var) (node
@@ -361,6 +361,9 @@ emitExpr var yield (AnnMatch _ test arms) = do
       let b' = fst3 $ emitTerm scope escape graph yield' b
       pure (patternTest escape p test', toList b')
 
+    genIf :: EmitYield a
+          -> AnnTerm VarSet.Set a -> AnnTerm VarSet.Set a
+          -> m (VarSet.Set, Either LuaExpr (Seq LuaStmt))
     genIf yield ifs els = do
       (deps, test') <- runNES (freeInAtom test) (emitAtomS test)
 
@@ -371,7 +374,13 @@ emitExpr var yield (AnnMatch _ test arms) = do
         -- unboxed tuple, as we know this returns a boolean.
         (Left [LuaTrue], Left [e]) -> Left $ LuaBinOp test' "or" e
         (Left [e], Left [LuaFalse]) -> Left $ LuaBinOp test' "and" e
-        _ -> Right $ LuaIf test' (eitherStmts yield ifs') (eitherStmts yield els')
+        (Left [LuaFalse], Left [LuaTrue]) -> Left $ LuaUnOp "not" test'
+        -- If we return a single expression, try to generate some
+        -- slightly nicer code.
+        (Left{}, _) | YieldReturn <- yield -> Right . Seq.fromList $
+          LuaIfElse [(test', eitherStmts yield ifs')] :eitherStmts yield els'
+
+        _ -> Right . pure $ LuaIf test' (eitherStmts yield ifs') (eitherStmts yield els')
 
     eitherStmts _ (Right ss) = toList ss
     eitherStmts yield (Left es) = toList $ yieldStmt yield es
@@ -403,8 +412,7 @@ emitExpr var yield t@(AnnLam fv (TermArgument v ty) e) = do
   graph <- liftedGraph fv
   escape <- gets emitEscape
 
-  let (v', escape') = pushVar v escape
-      Identity vs = genVars (const (pure v')) v ty
+  let (vs, escape') = flip runState escape $ genVars (state . pushVar) v ty (Just e)
       graph' = VarMap.insert (toVar v) (EmittedUpvalue vs [v] mempty) graph
 
       term :: [LuaExpr] = pure . LuaFunction vs . toList . fst3 $ emitTerm scope escape' graph' YieldReturn e
@@ -680,15 +688,21 @@ genDeclare escape v ty es
 --
 -- This is effectively a simplified version of 'genDeclare' when you do
 -- not know the RHS.
-genVars :: Monad m
-            => (a -> m T.Text) -> a -> Type a
-            -> m [LuaVar]
-genVars es v (ValuesTy vs) = do
+genVars :: (IsVar a, Monad m)
+        => (a -> m T.Text) -- ^ The fresh variable generator function
+        -> a -> Type a -> Maybe (AnnTerm b a)
+        -- ^ The variable, its type and an optional body to extract the names from.
+        -> m [LuaVar]
+genVars es v ValuesTy{}
+  (Just (AnnMatch _ (Ref v' _) (Arm { _armPtrn = PatValues cs }:_)))
+  | toVar v == toVar v' = traverse extract cs where
+      extract (Capture n _) = LuaName <$> es n
+genVars es v (ValuesTy vs) _ = do
   v' <- es v
   let go _ [] = []
       go n (_:ts) = LuaName (v' <> T.pack ('_':show n)) : go (n + 1) ts
   pure (go (1 :: Int) vs)
-genVars es v _ = pure . LuaName <$> es v
+genVars es v _ _ = pure . LuaName <$> es v
 
 -- | Convert a literal into a Lua expression
 emitLit :: Literal -> LuaExpr
@@ -745,7 +759,7 @@ emitStmt (StmtLet (One (v, ty, e)):xs) = do
   (stmts<>) <$> emitStmt xs
 
 emitStmt (StmtLet (Many vs):xs) = do
-  binds <- traverse (\(v, ty, _) -> genVars pushTopScope v ty) vs
+  binds <- traverse (\(v, ty, _) -> genVars pushTopScope v ty Nothing) vs
   modify (\s -> s { topArity = extendPureLets (topArity s) vs
                   , topVars = foldr (\(v, b) -> VarMap.insert (toVar . fst3 $ v) b) (topVars s) (zip vs binds) })
 
