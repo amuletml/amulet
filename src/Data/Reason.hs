@@ -78,6 +78,9 @@ instance (Spanned (Ann p), Data p, Data (Ann p), Data (Var p), Pretty (Var p)) =
 instance (Spanned (Ann p), Pretty (Var p)) => Reasonable Binding p where
   blame _ = string "the" <+> highlight "binding"
 
+instance (Pretty (Var p), Reasonable Pattern p, Reasonable Expr p) => Reasonable Arm p where
+  blame _ = string "the pattern-matching clause"
+
 instance (Spanned (Ann p), Pretty (Var p)) => Reasonable MethodSig p where
   blame _ = string "the" <+> highlight "method signature"
 

@@ -94,6 +94,7 @@ import Syntax
   as       { Token TcAs _ _ }
   class    { Token TcClass _ _ }
   instance { Token TcInstance _ _ }
+  when     { Token TcWhen _ _ }
 
   ','      { Token TcComma _ _ }
   '.'      { Token TcDot _ _ }
@@ -131,7 +132,7 @@ import Syntax
   '$sep'   { Token TcVSep _ _ }
 
 -- Please try to update the module documentation when this number changes.
-%expect 2
+-- %expect 2
 
 %%
 
@@ -389,9 +390,12 @@ PatternRow :: { (T.Text, Pattern Parsed) }
   : ident '=' Pattern                             { (getIdent $1, $3) }
   | ident                                         { (getIdent $1, withPos1 $1 $ Capture(getName $1)) }
 
-Arm :: { (Pattern Parsed, Expr Parsed) }
-    : '|' List1(MPattern, ',') '->' ExprBlock  { (completeTuple PTuple $2, $4) }
+Arm :: { Arm Parsed }
+    : '|' List1(MPattern, ',') Guard '->' ExprBlock { Arm (completeTuple PTuple $2) $3 $5 }
 
+Guard :: { Maybe (Expr Parsed) }
+  :                                               { Nothing }
+  | when Expr                                     { Just $2 }
 
 Parameter :: { Parameter Parsed }
           : ArgP             { PatParam $1 }

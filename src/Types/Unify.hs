@@ -478,10 +478,13 @@ subsumes' r scope ot@(TyTuple a b) nt@(TyTuple a' b') = do
                  xs -> ExprWrapper wb (Tuple xs (an, b)) (an, b')
               ]
               (an, nt)
+      cont ex | IdWrap <- wa, IdWrap <- wb = ex
       cont ex
         | an <- annotation ex =
-          Match ex [ ( PTuple [ Capture elem (an, a), Capture elem' (an, b) ] (an, ot)
-                     , Tuple [ ExprWrapper wa (VarRef elem (an, a)) (an, a')
+          Match ex [ Arm
+                     ( PTuple [ Capture elem (an, a), Capture elem' (an, b) ] (an, ot) )
+                     Nothing
+                     ( Tuple [ ExprWrapper wa (VarRef elem (an, a)) (an, a')
                              , ExprWrapper wb (VarRef elem' (an, b)) (an, b') ]
                              (an, nt)) ]
                    (an, nt)

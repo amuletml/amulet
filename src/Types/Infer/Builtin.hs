@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings, FlexibleContexts, RankNTypes,
-   StandaloneDeriving, GADTs, UndecidableInstances,
-   DeriveDataTypeable, FlexibleInstances, MultiParamTypeClasses #-}
+   GADTs, UndecidableInstances, FlexibleInstances,
+   MultiParamTypeClasses #-}
 module Types.Infer.Builtin where
 
 import qualified Data.Sequence as Seq
@@ -9,7 +9,6 @@ import qualified Data.Set as Set
 import Data.Spanned
 import Data.Reason
 import Data.Maybe
-import Data.Data
 
 import Control.Monad.Infer
 import Control.Lens
@@ -18,8 +17,6 @@ import Syntax.Transform
 import Syntax.Types
 import Syntax.Var
 import Syntax
-
-import Text.Pretty.Semantic
 
 tyUnit, tyBool, tyInt, tyString, tyFloat, tyLazy, tyConstraint :: Type Typed
 tyInt = TyCon (TvName (TgInternal "int"))
@@ -185,30 +182,8 @@ killWildcard = transformType go where
   go (TyWildcard (Just tau)) = killWildcard tau
   go x = x
 
--- A representation of an individual 'match' arm, for blaming type
--- errors on:
-
 data SkipImplicit = DoSkip | Don'tSkip
   deriving (Eq, Show, Ord)
-
-data Arm p
-  = Arm { armPat :: Pattern p
-        , armExp :: Expr p
-        }
-
-deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Arm p)
-deriving instance (Show (Var p), Show (Ann p)) => Show (Arm p)
-deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Arm p)
-deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Arm p)
-
-instance (Spanned (Expr p), Spanned (Pattern p)) => Spanned (Arm p) where
-  annotation (Arm p e) = annotation p <> annotation e
-
-instance Pretty (Var p) => Pretty (Arm p) where
-  pretty (Arm p e) = pipe <+> pretty p <+> arrow <+> pretty e
-
-instance (Pretty (Var p), Reasonable Pattern p, Reasonable Expr p) => Reasonable Arm p where
-  blame _ = string "the pattern-matching clause"
 
 gadtConResult :: Type p -> Type p
 gadtConResult (TyForall _ _ t) = gadtConResult t

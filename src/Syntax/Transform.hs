@@ -69,8 +69,8 @@ transformExpr fe = goE where
   transE (Fun p b a) = Fun p (goE b) a
   transE (Begin es a) = Begin (map goE es) a
   transE (Literal l a) = Literal l a
-  transE (Match e bs a) = Match (goE e) (map (second goE) bs) a
-  transE (Function bs a) = Function (map (second goE) bs) a
+  transE (Match e bs a) = Match (goE e) (map goArm bs) a
+  transE (Function bs a) = Function (map goArm bs) a
   transE (BinOp l o r a) = BinOp (goE l) (goE o) (goE r) a
   transE (Hole v a) = Hole v a
   transE (Ascription e t a) = Ascription (goE e) t a
@@ -99,6 +99,8 @@ transformExpr fe = goE where
 
   goE = transE . fe
 
+  goArm (Arm p g e) = Arm p (goE <$> g) (goE e)
+
 transformExprTyped
   :: (Expr Typed -> Expr Typed)
   -> (Coercion Typed -> Coercion Typed)
@@ -112,8 +114,8 @@ transformExprTyped fe fc ft = goE where
   transE (Fun p b a) = Fun (goPa p) (goE b) (goA a)
   transE (Begin es a) = Begin (map goE es) (goA a)
   transE (Literal l a) = Literal l (goA a)
-  transE (Match e bs a) = Match (goE e) (map (goP *** goE) bs) (goA a)
-  transE (Function bs a) = Function (map (second goE) bs) a
+  transE (Match e bs a) = Match (goE e) (map goArm bs) (goA a)
+  transE (Function bs a) = Function (map goArm bs) a
   transE (BinOp l o r a) = BinOp (goE l) (goE o) (goE r) (goA a)
   transE (Hole v a) = Hole v (goA a)
   transE (Ascription e t a) = Ascription (goE e) (goT t) (goA a)
@@ -158,6 +160,8 @@ transformExprTyped fe fc ft = goE where
   goA (s, ty) = (s, goT ty)
 
   goP = transformPatternTyped id ft
+
+  goArm (Arm p g e) = Arm (goP p) (goE <$> g) (goE e)
 
 transformPatternTyped
   :: (Pattern Typed -> Pattern Typed)
