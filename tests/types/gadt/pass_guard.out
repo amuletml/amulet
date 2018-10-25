@@ -1,0 +1,3 @@
+foo : type -> type
+Foo : {'a : 'z}. ('a ~ bool) ⊃ foo 'a
+bar : {'a : type}. ('a * foo 'a) -> int

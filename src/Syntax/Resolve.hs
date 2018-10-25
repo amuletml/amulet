@@ -256,17 +256,11 @@ reExpr (Literal l a) = pure (Literal l a)
 --   pure (junkExpr a)
 reExpr (Match e ps a) = do
   e' <- reExpr e
-  ps' <- traverse (\(p, b) -> do
-                  (p', vs, ts) <- reWholePattern p
-                  (p',) <$> extendTyvarN ts (extendN vs (reExpr b)))
-              ps
+  ps' <- traverse reArm ps
   pure (Match e' ps' a)
 
 reExpr r@(Function [] a) = dictates (ArisingFrom EmptyMatch (BecauseOf r)) $> junkExpr a
-reExpr (Function ps a) =
-  flip Function a <$> for ps (\(p, b) -> do
-    (p', vs, ts) <- reWholePattern p
-    (p',) <$> extendTyvarN ts (extendN vs (reExpr b)))
+reExpr (Function ps a) = flip Function a <$> traverse reArm ps
 
 reExpr o@BinOp{} = do
   (es, os) <- reOp [] [] o
@@ -333,6 +327,14 @@ reExpr r@(OpenIn m e a) =
 
 reExpr (Lazy e a) = Lazy <$> reExpr e <*> pure a
 reExpr ExprWrapper{} = error "resolve cast"
+
+reArm :: MonadResolve m
+      => Arm Parsed -> m (Arm Resolved)
+reArm (Arm p g b) = do
+  (p', vs, ts) <- reWholePattern p
+  extendTyvarN ts . extendN vs $
+    Arm p' <$> traverse reExpr g <*> reExpr b
+
 
 reType :: (MonadResolve m, Reasonable a p)
        => a p -> Type Parsed -> m (Type Resolved)

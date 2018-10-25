@@ -69,7 +69,7 @@ inferClass clss@(Class name ctx _ methods classAnn) = do
       withHead <- closeOver (BecauseOf meth) $
         TyPi (Implicit classConstraint) ty
 
-      pure ( (MethodSig method ty (an, ty))
+      pure ( MethodSig method ty (an, ty)
            , (method, withHead)
            , (Anon, method, nameName (unTvName method), ty))
 
@@ -126,7 +126,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
   let classCon' =
         T.cons (toUpper (T.head (nameName clss)))
           (T.tail (nameName clss))
-  Class clss _ classParams ((MethodSig classCon classConTy _):methodSigs) classAnn <-
+  Class clss _ classParams (MethodSig classCon classConTy _:methodSigs) classAnn <-
     view (classDecs . at (TvName clss) . non undefined)
 
   instanceName <- TvName <$> genNameWith (T.pack "$d" <> classCon')

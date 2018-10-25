@@ -97,6 +97,7 @@ tokens :-
   <0> "as"     { constTok TcAs }
   <0> "class"     { constTok TcClass }
   <0> "instance"  { constTok TcInstance }
+  <0> "when"   { constTok TcWhen }
 
   <0> ","      { constTok TcComma }
   <0> "."      { constTok TcDot }

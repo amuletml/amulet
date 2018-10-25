@@ -24,15 +24,15 @@ do
       end
     }
   end
-  local function _dollarlTraversablebin(cil)
+  local function _dollarlTraversablebin(cij)
     return {
       traverse = function(bkh)
         local cah = bkh["Applicative$kp"]
         return function(k)
           return function(cy)
             if cy.__tag == "Cons" then
-              local cif = cy[1]
-              return bkh["<*>"](cah["<$>"](_colon_colon)(k(cif._1)))(_dollarlTraversablebin(__builtin_unit).traverse(bkh)(k)(cif._2))
+              local cid = cy[1]
+              return bkh["<*>"](cah["<$>"](_colon_colon)(k(cid._1)))(_dollarlTraversablebin(__builtin_unit).traverse(bkh)(k)(cid._2))
             elseif cy.__tag == "Nil" then
               return bkh.pure(Nil)
             end
@@ -41,13 +41,13 @@ do
       end
     }
   end
-  local function _dollarlMonoidbmy(cjb)
+  local function _dollarlMonoidbmy(ciz)
     return {
       ["×"] = function(x)
         return function(ys)
           if x.__tag == "Cons" then
-            local civ = x[1]
-            return Cons({ _1 = civ._1, _2 = _dollarlMonoidbmy(__builtin_unit)["×"](civ._2)(ys) })
+            local cit = x[1]
+            return Cons({ _1 = cit._1, _2 = _dollarlMonoidbmy(__builtin_unit)["×"](cit._2)(ys) })
           elseif x.__tag == "Nil" then
             return ys
           end
@@ -56,14 +56,14 @@ do
       zero = Nil
     }
   end
-  local cmk = _dollardApplicativeaff(_dollarlMonoidbmy(__builtin_unit))
-  local cah = cmk["Applicative$kp"]
-  local ckl = { _1 = 1, _2 = __builtin_unit }
+  local cmi = _dollardApplicativeaff(_dollarlMonoidbmy(__builtin_unit))
+  local cah = cmi["Applicative$kp"]
+  local ckj = { _1 = 1, _2 = __builtin_unit }
   local bxs = _dollardApplicativeaff(_dollarlMonoidbmy(__builtin_unit))
   writeln(_dollarlShowasy({
     show = function(x) return tostring(x) end
   }).show(_dollarlTraversablebin(__builtin_unit).traverse(bxs)(function(cde)
     local b = cde._2
     return cah["<$>"](function(cu) return { _1 = cu, _2 = b } end)(Cons({ _1 = cde._1, _2 = Nil }))
-  end)(Cons({ _1 = ckl, _2 = Cons({ _1 = ckl, _2 = Cons({ _1 = ckl, _2 = Nil }) }) }))))
+  end)(Cons({ _1 = ckj, _2 = Cons({ _1 = ckj, _2 = Cons({ _1 = ckj, _2 = Nil }) }) }))))
 end
