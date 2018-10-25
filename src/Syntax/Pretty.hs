@@ -104,7 +104,7 @@ instance Pretty (Var p) => Pretty (Coercion p) where
 instance Pretty (Var p) => Pretty (Arm p) where
   pretty (Arm p g b) = pipe <+> nest 4 (pretty p <+> prettyGuard g <> arrow </> pretty b) where
     prettyGuard Nothing = mempty
-    prettyGuard (Just g) = pretty g <+> mempty
+    prettyGuard (Just g) = keyword "when" <+> pretty g <+> mempty
 
 prettyRows :: Pretty x => Doc -> [(Text, x)] -> [Doc]
 prettyRows sep = map (\(n, v) -> text n <+> sep <+> pretty v) . sortOn fst
