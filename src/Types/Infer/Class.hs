@@ -90,8 +90,11 @@ inferClass clss@(Class name ctx _ methods classAnn) = do
              , (Implicit, TvName var, name, obligation))
 
     let inner :: Type Typed
-        inner = TyExactRows (map (\(_, _, x, y) -> (x, y)) rows
-                          ++ map (\(_, _, x, y) -> (x, y)) rows')
+        inner =
+          let rs = map (\(_, _, x, y) -> (x, y)) rows ++ map (\(_, _, x, y) -> (x, y)) rows'
+           in case rs of
+             [(_, x)] -> x
+             _ -> TyExactRows rs
 
     classConTy <- silence $
       closeOver (BecauseOf clss) (TyArr inner classConstraint)
@@ -115,7 +118,24 @@ inferClass clss@(Class name ctx _ methods classAnn) = do
           ty <- silence $
             closeOver (BecauseOf clss) ty
           pure (Binding var expr (classAnn, ty))
-    decs <- traverse mkDecl (rows ++ rows')
+
+        newtypeClassDecl :: (Type Typed -> TyBinder Typed, Var Typed, T.Text, Type Typed) -> m (Binding Typed)
+        newtypeClassDecl (f, var, _, theTy) = do
+          capture <- TvName <$> genName
+          let ty = TyPi (f classConstraint) theTy
+          let expr =
+                Fun (EvParam
+                       (Destructure classCon
+                         (Just (Capture capture (classAnn, inner)))
+                         (classAnn, classConstraint)))
+                 (VarRef capture (classAnn, inner))
+                 (classAnn, ty)
+          ty <- silence $
+            closeOver (BecauseOf clss) ty
+          pure (Binding var expr (classAnn, ty))
+    decs <- case rows ++ rows' of
+      [one] -> pure <$> newtypeClassDecl one
+      rest -> traverse mkDecl rest
     pure ( tyDecl:map (LetStmt . pure) decs, tele
          , Class name ctx params (MethodSig classCon classConTy (classAnn, classConTy):methods) (classAnn, k)
          , scope)
@@ -126,7 +146,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
   let classCon' =
         T.cons (toUpper (T.head (nameName clss)))
           (T.tail (nameName clss))
-  Class clss _ classParams (MethodSig classCon classConTy _:methodSigs) classAnn <-
+  Class clss _ classParams (MethodSig classCon classConTy _:methodSigs') classAnn <-
     view (classDecs . at (TvName clss) . non undefined)
 
   instanceName <- TvName <$> genNameWith (T.pack "$d" <> classCon')
@@ -180,7 +200,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
 
   let localAssums = insert ann InstSort localInstanceName localInsnConTy localAssums'
 
-  methodSigs <- Map.fromList <$> traverse (secondA (closeOver (BecauseOf inst) . apply sub) . (view methName &&& view methTy)) methodSigs
+  methodSigs <- Map.fromList <$> traverse (secondA (closeOver (BecauseOf inst) . apply sub) . (view methName &&& view methTy)) methodSigs'
   (Map.fromList -> methodMap, methods) <- fmap unzip . local (classes %~ mappend localAssums) $
     for bindings $ \case
       bind@(Binding v e an) -> do
@@ -224,7 +244,13 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
   let findInner (TyPi Invisible{} k) = findInner k
       findInner (TyPi (Anon x) _) = x
       findInner _ = error "malfomed classConTy"
-      TyExactRows whatDo = apply sub (findInner classConTy)
+      whatDo = case apply sub (findInner classConTy) of
+        TyExactRows rs -> rs
+        x ->
+          let name = case methodSigs' of
+                (x:_) -> x ^. methName . to unTvName . to nameName
+                [] -> nameName (unTvName classCon)
+           in [(name, x)]
 
   let needed = Map.fromList . filter (not . T.isPrefixOf (nameName (unTvName classCon)) . fst) $ whatDo
       diff = Map.toList (needed `Map.difference` methodMap)
@@ -263,12 +289,16 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
              in ExprWrapper (TypeLam fakeSkol (fromMaybe TyType k)) (addArg rest ex) (ann, ty)
       addArg _ ex = ex
 
+      inside = case whatDo of
+        [(_, one)] -> solveEx one solution needed (fields ^. to head . fExpr)
+        _ -> solveEx (TyExactRows whatDo) solution needed (Record fields (ann, TyExactRows whatDo))
+
       fun = addArg globalInsnConTy $
         Let [Binding localInstanceName
               (Fun (EvParam (PType instancePattern ctx (ann, ctx)))
                 (mkLet methods
                   (App (appArg classConTy (VarRef classCon (ann, classConTy)))
-                    (solveEx (TyExactRows whatDo) solution needed (Record fields (ann, TyExactRows whatDo)))
+                    inside
                     (ann, instHead))
                   (ann, instHead))
                 (ann, localInsnConTy))
