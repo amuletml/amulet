@@ -13,8 +13,9 @@ import Core.Var
 
 import Control.Lens
 
-import Control.Monad.State
+import Control.Monad.State.Strict
 import Control.Applicative
+import Control.Arrow
 
 import Data.Traversable
 import Data.Foldable
@@ -108,10 +109,19 @@ unify' _ _ = lift Nothing
 -- This is a more lightweight version of @Core.Optimise@'s
 -- @substituteInType@.
 replaceTy :: IsVar a => a -> Type a -> Type a -> Type a
-replaceTy var at = transform (go var) where
-  go v (VarTy v') | v == v' = at
-  go _ x = x
-
+replaceTy var at ty =
+  case ty of
+    VarTy t
+      | toVar t == toVar var -> at
+      | otherwise -> ty
+    ForallTy (Relevant x) a b ->
+      ForallTy (Relevant x) (replaceTy var at a) $
+        if var == x then b else replaceTy var at b
+    ForallTy _ a b -> ForallTy Irrelevant (replaceTy var at a) (replaceTy var at b)
+    AppTy a b -> AppTy (replaceTy var at a) (replaceTy var at b)
+    RowsTy t ts -> RowsTy (replaceTy var at t) (map (second (replaceTy var at)) ts)
+    ValuesTy ts -> ValuesTy (map (replaceTy var at) ts)
+    _ -> ty
 -- | Determines if these two types unify under /closed/ variables. This
 -- effectively determines if the two types are equivalent.
 unifyClosed :: IsVar a => Type a -> Type a -> Bool
