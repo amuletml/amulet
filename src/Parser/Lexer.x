@@ -111,7 +111,7 @@ tokens :-
   <0> "?"      { constTok TcQuestion }
   <0> "{"      { constTok TcOBrace }
   <0> "}"      { constTok TcCBrace }
-  H0> "["      { constTok TcOSquare }
+  <0> "["      { constTok TcOSquare }
   <0> "]"      { constTok TcCSquare }
 
   -- Numbers
