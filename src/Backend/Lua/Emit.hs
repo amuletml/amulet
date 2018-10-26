@@ -22,6 +22,7 @@ import Data.Traversable
 import Data.Foldable
 import Data.Triple
 import Data.Maybe
+import Data.List (partition)
 
 import Core.Occurrence
 import Core.Builtin
@@ -382,7 +383,11 @@ emitExpr var yield t@(AnnMatch _ test arms) = do
         (_, Left{}) | YieldReturn <- yield -> Right . Seq.fromList $
           LuaIfElse [(negate test', eitherStmts yield els')] : eitherStmts yield ifs'
 
-        _ -> Right . pure $ LuaIf test' (eitherStmts yield ifs') (eitherStmts yield els')
+        _ ->
+          Right . pure $ case (eitherStmts yield ifs', eitherStmts yield els') of
+            (ifs'', Empty) -> LuaIfElse [(test', ifs'')]
+            (Empty, els'') -> LuaIfElse [(negate test', els'')]
+            (ifs'', els'') -> LuaIf test' ifs'' els''
 
     negate :: LuaExpr -> LuaExpr
     negate (LuaUnOp "not" x) = x
@@ -849,23 +854,45 @@ patternGraph :: ( Occurs a
              -> EmittedGraph a
              -> m (EmittedGraph a)
 patternGraph test test' Arm { _armPtrn = p, _armVars = vs } graph = do
-  let patDeps = freeInAtom test
-  foldrM (\(v, expr) g -> do
-    node <- if usedWhen v == Once
-            then pure $ EmittedExpr expr (YieldDeclare v (getTy v))
-            else uncurry EmittedStmt <$> genDeclare pushScope v (getTy v) expr
-    -- TODO: Group declarations where possible?
-    pure (VarMap.insert (toVar v) (node [v] patDeps) g))
-    graph (patternBindings p test')
+  let deps = freeInAtom test
+      (once, many) = partition ((==Once) . usedWhen . fst) (patternBindings p test')
 
-  where getTy v = maybe (error "Cannot find pattern variable") snd (find ((==v) . fst) vs)
+  graph' <- case many of
+    [] -> pure graph
+    [(v, expr)] -> do
+      (body, vars) <- genDeclare pushScope v (getTy v) expr
+      pure (VarMap.insert (toVar v) (EmittedStmt body vars [v] deps) graph)
+
+    many@((vFst, _):ps) -> do
+      -- If we've got multiple patterns which will be bound, we can merge them into one binding, with all other nodes
+      -- just pointing to the first one.
+      stmts <- traverse (\(v, expr) -> genDeclare pushScope v (getTy v) expr) many
+      let (_, vsFst) = head stmts
+
+      pure $ foldr
+        (\((v, _), (_, vs)) -> VarMap.insert (toVar v) (EmittedStmt mempty vs [v] (VarSet.singleton (toVar vFst))))
+        (VarMap.insert (toVar vFst) (EmittedStmt (foldr (mergeLocs . fst) mempty stmts) vsFst [vFst] deps) graph)
+        (zip ps (tail stmts))
+
+  -- Boring expressions
+  pure $ foldr
+    (\(v, expr) -> VarMap.insert (toVar v) (EmittedExpr expr (YieldDeclare v (getTy v)) [v] deps))
+    graph' once
+
+  where
+    getTy v = maybe (error "Cannot find pattern variable") snd (find ((==v) . fst) vs)
+
+    -- | Merge two adjacent local definitions
+    mergeLocs (LuaLocal vs es :<| Empty) (LuaLocal vs' es' :<| rest)
+      | length vs == length es = LuaLocal (vs ++ vs') (es ++ es') <| rest
+    mergeLocs l r = l <> r
 
 patternTest :: forall a. IsVar a => EscapeScope -> Pattern a -> [LuaExpr] ->  LuaExpr
 patternTest _ PatWildcard _      = LuaTrue
 patternTest _ (PatLit RecNil) _  = LuaTrue
 patternTest _ PatExtend{} _      = LuaTrue
 patternTest _ PatValues{} _      = LuaTrue
-patternTest _ (PatLit l)  [vr]   = LuaBinOp (emitLit l) "==" vr
+patternTest _ (PatLit l)  [vr]   = LuaBinOp vr "==" (emitLit l)
 patternTest s (Constr con) [vr]  = tag s con vr
 patternTest s (Destr con _) [vr] = tag s con vr
 patternTest _ _ _ = undefined

@@ -1,8 +1,7 @@
 do
   local bottom = nil
   bottom(function(jf)
-    local i = jf.i
-    local s = jf.s
+    local i, s = jf.i, jf.s
     return {
       int_add_c = 5,
       int_sub_c = -1,

@@ -49,9 +49,9 @@ basicEscaper keywords name =
             else T.concatMap escapeChar name
   in esc
   where
-    escapeChar c | c > '\x7a' = T.pack ('_':showHex (ord c) "")
-                 | isAlpha c = T.singleton c
-                 | otherwise = fromMaybe T.empty (Map.lookup c chars)
+    escapeChar c | isAlpha c = T.singleton c
+                 | c <= '\x7f', Just t <- Map.lookup c chars = t
+                 | otherwise = T.pack ('_':showHex (ord c) "")
 
 -- | Push a variable into the escape scope, yielding the escaped name and
 -- the new scope.

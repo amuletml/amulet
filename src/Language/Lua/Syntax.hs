@@ -192,10 +192,14 @@ instance Pretty LuaExpr where
   pretty e@(LuaBinOp l o r) =
     let prec = precedenceOf e
     in case assocOf o of
-        ALeft -> prettyWith prec l <+> text o <+> prettyWith (succPrec prec) r
-        ARight -> prettyWith (succPrec prec) l <+> text o <+> prettyWith prec r
+        ALeft -> prettyWith prec l <+> op o <+> prettyWith (succPrec prec) r
+        ARight -> prettyWith (succPrec prec) l <+> op o <+> prettyWith prec r
+    where
+      op "and" = skeyword "and"
+      op "or" = skeyword "or"
+      op o = text o
   pretty e@(LuaUnOp o x) = op o <> prettyWith (precedenceOf e) x where
-    op "not" = "not "
+    op "not" = skeyword "not "
     op o = text o
   pretty (LuaRef x) = pretty x
   pretty (LuaFunction a b) =
