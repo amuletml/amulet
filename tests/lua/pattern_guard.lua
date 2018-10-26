@@ -6,8 +6,7 @@ do
       return Nil
     elseif o.__tag == "Cons" then
       local fq = o[1]
-      local x = fq._1
-      local xs = fq._2
+      local x, xs = fq._1, fq._2
       if f(x) then
         return Cons({ _1 = x, _2 = filter(f, xs) })
       end

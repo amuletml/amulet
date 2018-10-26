@@ -9,13 +9,11 @@ do
       if ys.__tag == "Nil" then
         return Cons({ _1 = 2, _2 = Nil })
       elseif ys.__tag == "Cons" then
-        local ht = hr._2
+        local hu, ht = hr._1, hr._2
         local hs = ys[1]
-        local hx = hs._1
-        local hw = hs._2
-        local hu = hr._1
-        if 0 == hu then
-          if 0 == hx then
+        local hx, hw = hs._1, hs._2
+        if hu == 0 then
+          if hx == 0 then
             return Cons({ _1 = 3, _2 = Nil })
           else
             return Cons({ _1 = f(0)(hx), _2 = zip(f, ht, hw) })

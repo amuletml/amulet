@@ -4,10 +4,10 @@ do
   local function common_prefix(j)
     local et = j._1
     local es = j._2
-    if 1 == et then
-      if 2 == es then
+    if et == 1 then
+      if es == 2 then
         return "foo"
-      elseif 3 == es then
+      elseif es == 3 then
         return "bar"
       else
         return error("Pattern matching failure in match expression at match_heuristic.ml[4:21 ..4:28]")
@@ -19,10 +19,10 @@ do
   local function common_suffix(k)
     local ex = k._1
     local ew = k._2
-    if 1 == ex then
-      if 2 == ew then
+    if ex == 1 then
+      if ew == 2 then
         return "foo"
-      elseif 3 == ew then
+      elseif ew == 3 then
         return "bar"
       else
         return error("Pattern matching failure in match expression at match_heuristic.ml[8:21 ..8:28]")
@@ -33,10 +33,9 @@ do
   end
   local function mixed_1(l)
     local fa = l._2
-    local fe = fa._1
-    local fd = fa._2
+    local fe, fd = fa._1, fa._2
     if l._1 then
-      if 1 == fe then
+      if fe == 1 then
         return 1
       else
         if fd.__tag == "Cons" then
@@ -47,7 +46,7 @@ do
       end
     else
       if fd.__tag == "Nil" then
-        if 2 == fe then
+        if fe == 2 then
           return 2
         else
           return error("Pattern matching failure in match expression at match_heuristic.ml[13:15 ..13:22]")
