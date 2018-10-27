@@ -58,9 +58,10 @@ import Parser.Error
 import Parser
 
 import qualified Core.Core as C
+import Core.Optimise.Newtype
+import Core.Occurrence
 import Core.Lower (runLowerWithCtors, lowerProg, lowerType)
 import Core.Core (Stmt)
-import Core.Occurrence
 import Core.Var
 
 import Control.Lens
@@ -231,10 +232,11 @@ runRepl = do
 
                   pure (True, vsep (catMaybes vs'))
                 _ -> do
-                  msg <- T.decodeLatin1 . fromJust <$> L.tostring L.stackTop
+                  val <- valueRepr (pure ())
                   L.pop 1
-
-                  pure (False, text msg <+> parens (shown code))
+                  case val of
+                    String str -> pure (False, text str <+> parens (shown code))
+                    _ -> pure (False, keyword "Error:" <+> pretty val)
 
             hFlush stdout
             hFlush stderr
@@ -320,7 +322,7 @@ parseCore state parser name input = do
                        ctors = fmap lowerType (Map.restrictKeys (env' ^. T.names . to toMap)
                                                 (Set.mapMonotonic S.unTvName (env' ^. constructors)))
 
-                   lower <- runLowerWithCtors ctors (lowerProg prog)
+                   lower <- killNewtypePass =<< runLowerWithCtors ctors (lowerProg prog)
                    lastG <- genName
                    case lower of
                      [] -> error "lower returned no statements for the repl"
@@ -389,18 +391,21 @@ execFile name line = do
   core <- flip evalNameyT (lastName state) $ parseCore state (Left <$> parseTops) name line
   case core of
     Nothing -> pure False
-    Just (_, _, core, state') -> do
-      let (emit', _, luaSyntax) = emitCore state' core
+    Just (_, prog, core, state') -> do
+      let (emit', luaExpr, luaSyntax) = emitCore state' core
       ok <- liftIO $ do
         res <- L.runWith (luaState state') $ do
           code <- L.dostring luaSyntax
 
+          liftIO $ dump (debugMode state') prog core core luaExpr (inferScope state) (inferScope state')
           case code of
             L.OK -> pure (Right ())
             _ -> do
-              msg <- T.decodeLatin1 . fromJust <$> L.tostring L.stackTop
+              val <- valueRepr (pure ())
               L.pop 1
-              pure (Left (text msg <+> parens (shown code)))
+              case val of
+                String str -> pure (Left (text str <+> parens (shown code)))
+                _ -> pure (Left (keyword "Error:" <+> pretty val))
 
         hFlush stdout
         hFlush stderr
