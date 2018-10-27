@@ -16,9 +16,9 @@ import Core.Optimise
 import Core.Types
 
 -- | Run the new-type elimination pass.
-killNewtypePass :: forall a. IsVar a => [Stmt a] -> Namey [Stmt a]
+killNewtypePass :: forall a m. (IsVar a, MonadNamey m) => [Stmt a] -> m [Stmt a]
 killNewtypePass = go mempty mempty where
-  go :: V.Map (Atom a) -> V.Map (Coercion a) -> [Stmt a] -> Namey [Stmt a]
+  go :: V.Map (Atom a) -> V.Map (Coercion a) -> [Stmt a] -> m [Stmt a]
   go ss m (Type n cs:xs) = case cs of
     [(var, tp)] | Just nt <- isNewtype tp -> do
       (con, phi, sub) <- newtypeWorker (var, tp) nt
@@ -59,7 +59,7 @@ newtypeMatch _ [] = Nothing
 -- results were backwards, so the solution wasn't being applied properly
 -- and the generated code was wrong.
 
-newtypeWorker :: forall a. IsVar a => (a, Type a) -> Spine a -> Namey (Stmt a, Coercion a, V.Map (Atom a))
+newtypeWorker :: forall a m. (IsVar a, MonadNamey m) => (a, Type a) -> Spine a -> m (Stmt a, Coercion a, V.Map (Atom a))
 newtypeWorker (cn, tp) (Spine tys cod) = do
   let CoVar nam id _ = toVar cn
       (Irrelevant, dom) = last tys
@@ -78,15 +78,15 @@ newtypeWorker (cn, tp) (Spine tys cod) = do
       work var ty = Cast (Ref var ty) phi
 
       work :: a -> Type a -> Term a
-      wrap :: [(BoundTv a, Type a)] -> (a -> Type a -> Term a) -> Namey (Term a)
+      wrap :: [(BoundTv a, Type a)] -> (a -> Type a -> Term a) -> m (Term a)
 
   wrapper <- wrap tys work
   let con = ( cname, tp, wrapper )
   pure (StmtLet (One con), phi, V.singleton (toVar cn) (Ref (fromVar (CoVar nam id ValueVar)) tp))
 
-goBinding :: forall a. IsVar a => V.Map (Atom a) -> V.Map (Coercion a) -> [(a, Type a, Term a)] -> Namey [(a, Type a, Term a)]
+goBinding :: forall a m. (IsVar a, MonadNamey m) => V.Map (Atom a) -> V.Map (Coercion a) -> [(a, Type a, Term a)] -> m [(a, Type a, Term a)]
 goBinding ss m = traverse (third3A (fmap (substitute ss) . goTerm)) where
-  goTerm :: Term a -> Namey (Term a)
+  goTerm :: Term a -> m (Term a)
   goTerm e@Atom{}   = pure e
   goTerm e@App{}    = pure e
   goTerm e@Extend{} = pure e

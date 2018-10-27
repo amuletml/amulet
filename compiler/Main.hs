@@ -30,6 +30,7 @@ import Syntax.Var (Typed)
 import Syntax (Toplevel)
 
 import Core.Optimise.Reduce (reducePass)
+import Core.Optimise.Newtype (killNewtypePass)
 import Core.Optimise.DeadCode (deadCodePass)
 import Core.Simplify (optimise)
 import Core.Lower (runLowerT, lowerProg)
@@ -66,7 +67,10 @@ compile opt (file:files) =
          let (lower, name') = flip runNamey name $ runLowerT (lowerProg prg)
              (optm, _) = flip runNamey name' $ case opt of
                 Do -> optimise lower
-                Don't -> deadCodePass <$> reducePass lower
+                Don't -> do
+                  noNewtype <- killNewtypePass lower
+                  reduce <- reducePass noNewtype
+                  pure (deadCodePass reduce)
              lua = compileProgram optm
          in CSuccess ve te prg lower optm lua env
        Left err -> err
