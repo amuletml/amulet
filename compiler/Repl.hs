@@ -222,7 +222,7 @@ runRepl = do
               case code of
                 L.OK -> do
                   vs' <- for vs $ \(v, _) -> do
-                    let Just vs = VarMap.lookup v . B.topVars $ emit'
+                    let Just vs = VarMap.lookup v (emit' ^. B.topVars)
                     repr <- traverse (valueRepr . L.getglobal . T.unpack . \(LuaName n) -> n) vs
                     let CoVar id nam _ = v
                         var = S.TgName nam id
@@ -266,7 +266,7 @@ patchupLua _ x = x
 
 isTopVar :: B.TopEmitState -> LuaVar -> Bool
 isTopVar s (LuaName v)
-  | Just _ <- B.getEscaped v (B.topEscape s) :: Maybe CoVar
+  | Just _ <- B.getEscaped v (s ^. B.topEscape) :: Maybe CoVar
   = True
 isTopVar _ _ = False
 
