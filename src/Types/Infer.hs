@@ -26,6 +26,7 @@ import Data.Triple
 import Data.These
 import Data.Graph
 import Data.Char
+import Data.Span
 
 import Control.Monad.State
 import Control.Monad.Infer
@@ -372,7 +373,8 @@ inferLetTy closeOver strategy vs =
                        (Fun (EvParam (Capture name (an, ty))) (VarRef name (an, ty)) (an, TyArr ty ty))
                        (an, ty)
 
-        (context, wrapper, _) <- reduceClassContext (annotation ex) cons
+        (deferred, renameExp) <- pure $ makeRename reify cons
+        (context, wrapper, _) <- reduceClassContext (annotation ex) deferred
 
         when (not (isFn ex) && not (null cons)) $
           confesses (UnsatClassCon (snd blame) (head cons) NotAFun)
@@ -382,7 +384,7 @@ inferLetTy closeOver strategy vs =
         ty <- skolCheck (TvName (fst blame)) (snd blame) vt
         let (tp, sub) = rename ty
 
-        pure (tp, wrapper Full . solveEx tp (x <> sub) (co <> wraps') . addLet reify deferred)
+        pure (tp, wrapper Full . solveEx tp (x <> sub) (co <> wraps') . addLet reify deferred . renameExp)
 
 
       tcOne :: SCC (Binding Resolved)
@@ -443,8 +445,10 @@ inferLetTy closeOver strategy vs =
         tel' <- traverseTele (const solved) tel
         ty <- solved ty
 
+        (deferred, rename) <- pure $ makeRename reify deferred
+
         let pat = transformPatternTyped id (apply solution) p
-            ex' = solveEx ty solution wraps' (addLet reify deferred ex)
+            ex' = solveEx ty solution wraps' (addLet reify deferred (rename ex))
 
         pure ( [TypedMatching pat ex' (ann, ty) (teleToList tel')], tel', boundTvs pat tel' )
 
@@ -477,6 +481,7 @@ inferLetTy closeOver strategy vs =
                 _ -> ExprWrapper (wrap Map.! var)
                        (Fun (EvParam (Capture name (an, ty))) (VarRef name (an, ty)) (an, TyArr ty ty))
                        (an, ty)
+        (deferred, renameExpr) <- pure $ makeRename reify deferred
 
         if null cons
            then do
@@ -485,7 +490,7 @@ inferLetTy closeOver strategy vs =
                    ty <- closeOver mempty exp (apply solution ty)
                    (new, sub) <- pure $ rename ty
                    pure ( Binding var
-                           (shoveLets (solveEx new (sub `compose` solution) (wrap <> wrap') exp))
+                           (shoveLets (solveEx new (sub `compose` solution) (wrap <> wrap') (renameExpr exp)))
                            (fst an, new)
                         )
                  solveOne _ = undefined
@@ -513,7 +518,7 @@ inferLetTy closeOver strategy vs =
 
                    pure ( (nm, var, fst an, ty)
                         , Binding (innerNames Map.! var)
-                           (Ascription (transformExprTyped renameInside id id (solveEx ty solution wrap exp)) ty (fst an, ty))
+                           (Ascription (transformExprTyped renameInside id id (solveEx ty solution wrap (renameExpr exp))) ty (fst an, ty))
                            (fst an, ty)
                         , Field nm (VarRef (innerNames Map.! var) (fst an, ty)) (fst an, ty)
                         )
@@ -688,7 +693,24 @@ localGenStrat bg ex ty = do
      then generalise ftv (becauseExp ex) ty
      else annotateKind (becauseExp ex) ty
 
+makeRename :: Reify Typed -> [Constraint Typed] -> ([Constraint Typed], Expr Typed -> Expr Typed)
+makeRename reify cons = (remaining, transformExprTyped renameInside id id) where
+  renameInside (VarRef v a) | Just x <- Map.lookup v renamed = VarRef x a
+  renameInside x = x
+
+  operational (ExprWrapper IdWrap e _) = e
+  operational (ExprWrapper (WrapFn k) e _) = operational $ runWrapper k e
+  operational e = e
+
+  choose con@(ConImplicit _ _ var ty) =
+    case operational (reify internal ty var) of
+      VarRef v _ -> (Map.singleton var v, mempty)
+      _ -> (mempty, [con])
+  choose _ = error "renaming for non-ConImplicit constraint"
+  (renamed, remaining) = foldMap choose cons
+
 type Reify p = (Ann Resolved -> Type p -> Var p -> Expr p)
+
 addLet :: Reify Typed -> [Constraint Typed] -> Expr Typed -> Expr Typed
 addLet reify = shove where
   addLet (ConImplicit _ _ var ty:cs) ex | an <- annotation ex =
