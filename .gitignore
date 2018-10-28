@@ -4,6 +4,7 @@
 *.lua
 *.prof
 *.svg
+!/assets/*svg
 
 src/Parser/Lexer.hs
 src/Parser.hs
