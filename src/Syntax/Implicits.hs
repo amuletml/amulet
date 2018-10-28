@@ -36,7 +36,7 @@ data Obligation p
   -- | An implicit parameter to an implicit value.
   | Implication (Type p)
 
-data Sort = InstSort | Superclass
+data Sort = InstSort | Superclass | LocalAssum
   deriving (Eq, Show, Ord)
 
 deriving instance (Show (Var p), Show (Ann p)) => Show (Obligation p)

@@ -30,7 +30,7 @@ import qualified Data.Set as Set
 import qualified Data.List as L
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Traversable
-import Data.Semigroup
+import Data.Semigroup hiding (First(..))
 import Data.Sequence (Seq ((:<|), Empty))
 import Data.Typeable
 import Data.Foldable
@@ -234,9 +234,10 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
            [] -> do
              solveCoSubst . at var ?= ExprApp (VarRef var (annotation reason, cons))
              tell (pure (apply sub ohno))
-           xs | allSameHead xs, concreteUnderOne cons -> do
+           xs | allSameHead xs, concreteUnderOne cons, xs <- filter (applicable scope) xs, not (null xs) -> do
+             let imp = pickBestPossible xs
              w <- local (depth %~ (cons :)) $
-               useImplicit reason cons scope (pickBestPossible xs)
+               useImplicit reason cons scope imp
              solveCoSubst . at var ?= w
            _ -> do
              solveCoSubst . at var ?= ExprApp (VarRef var (annotation reason, cons))
@@ -247,7 +248,8 @@ allSameHead (x:xs) = all (matches (x ^. implHead) . view implHead) xs
 allSameHead [] = True
 
 pickBestPossible :: [Implicit Typed] -> Implicit Typed
-pickBestPossible = minimumBy (comparing (length . view implPre))
+pickBestPossible [] = error "No choices"
+pickBestPossible xs = minimumBy (comparing (length . view implPre)) xs
 
 useImplicit :: forall m. MonadSolve m
             => SomeReason -> Type Typed -> ImplicitScope Typed
@@ -611,7 +613,7 @@ skolemise motive ty@(TyPi (Invisible tv k) t) = do
 skolemise motive wt@(TyPi (Implicit ity) t) = do
   (omega, ty, scp) <- skolemise motive t
   var <- TvName <$> genName
-  let scope = insert internal InstSort var ity scp
+  let scope = insert internal LocalAssum var ity scp
       wrap ex | an <- annotation ex =
         Fun (EvParam (Capture var (an, ity)))
           (ExprWrapper omega ex (an, ty)) (an, wt)
@@ -631,6 +633,21 @@ isReflexiveCo (ForallCo _ d c) = isReflexiveCo d && isReflexiveCo c
 isReflexiveCo AssumedCo{} = False
 isReflexiveCo ProjCo{} = False
 isReflexiveCo VarCo{} = False
+
+applicable :: ImplicitScope Typed -> Implicit Typed -> Bool
+applicable scp (ImplChoice _ _ cs _ s _) =
+  case s of
+    Superclass -> all (entails scp) cs
+    _ -> True
+  where
+    entails :: ImplicitScope Typed -> Obligation Typed -> Bool
+    entails _ (Quantifier _) = True
+    entails scp (Implication c) =
+      any isLocal (lookup c scp)
+
+    isLocal :: Implicit a -> Bool
+    isLocal x = x ^. implSort == LocalAssum
+
 
 probablyCast :: Coercion Typed -> Wrapper Typed
 probablyCast x

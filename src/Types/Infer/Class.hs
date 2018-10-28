@@ -35,6 +35,8 @@ import Types.Unify
 
 import Text.Pretty.Semantic
 
+import Text.Show.Pretty
+
 import GHC.Stack
 
 inferClass :: forall m. MonadInfer Typed m
@@ -192,10 +194,10 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
         mkBinds (TyTuple a b) = do
           var <- TvName <$> genName
           (scope, pat) <- mkBinds b
-          pure (insert ann InstSort var a scope, PTuple [Capture var (ann, a), pat] (ann, TyTuple a b))
+          pure (insert ann LocalAssum var a scope, PTuple [Capture var (ann, a), pat] (ann, TyTuple a b))
         mkBinds x = do
           var <- TvName <$> genName
-          pure (singleton ann InstSort var x, Capture var (ann, x))
+          pure (singleton ann LocalAssum var x, Capture var (ann, x))
     in mkBinds ctx
 
   let localAssums = insert ann InstSort localInstanceName localInsnConTy localAssums'
@@ -211,7 +213,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
         v' <- genNameFrom (nameName v)
 
         (e, cs) <- listen $ check e sig
-        (sub, wrap, deferred) <- solve cs
+        (sub, wrap, deferred) <- condemn $ solve cs
 
         deferred <- pure (fmap (apply sub) deferred)
         (compose sub -> sub, wrap', cons) <- solveHard (Seq.fromList deferred)
@@ -271,8 +273,10 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
        else pure (Field name (VarRef (methodMap ! name) (ann, ty)) (ann, ty))
 
   (solution, needed, unsolved) <- solve cs
+  (_, wrapper, unsolved') <-
+    reduceClassContext localAssums ann unsolved
 
-  unless (null unsolved) $
+  unless (null unsolved') $
     confesses (addBlame (BecauseOf inst) (UnsatClassCon (BecauseOf inst) (head unsolved) (InstanceClassCon (fst classAnn))))
 
   let appArg (TyPi (Invisible v _) rest) ex =
@@ -296,11 +300,11 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
       fun = addArg globalInsnConTy $
         Let [Binding localInstanceName
               (Fun (EvParam (PType instancePattern ctx (ann, ctx)))
-                (mkLet methods
+                (wrapper Full (mkLet methods
                   (App (appArg classConTy (VarRef classCon (ann, classConTy)))
                     inside
                     (ann, instHead))
-                  (ann, instHead))
+                  (ann, instHead)))
                 (ann, localInsnConTy))
               (ann, localInsnConTy)]
           (VarRef localInstanceName (ann, localInsnConTy))
@@ -310,15 +314,14 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
   pure (LetStmt [bind], instanceName, globalInsnConTy)
 inferInstance _ = error "not an instance"
 
-reduceClassContext :: forall m. MonadInfer Typed m
-                   => Ann Resolved
+reduceClassContext :: forall m. (MonadInfer Typed m, HasCallStack)
+                   => ImplicitScope Typed
+                   -> Ann Resolved
                    -> [Constraint Typed]
                    -> m (Type Typed -> Type Typed, WrapFlavour -> Expr Typed -> Expr Typed, [Need Typed])
 
-reduceClassContext _ [] = pure (id, const id, mempty)
-reduceClassContext _ [ConImplicit _ _ var con] =
-  pure (TyPi (Implicit con), const (fun var con), [(var, con)])
-reduceClassContext annot cons = do
+reduceClassContext _ _ [] = pure (id, const id, mempty)
+reduceClassContext extra annot cons = do
   scope <- view classes
   let needed sub (ConImplicit _ _ var con:cs) = do
         (con, sub') <- skolFreeTy (ByConstraint con) (apply sub con)
@@ -335,25 +338,32 @@ reduceClassContext annot cons = do
           let (bindings, needs', scope') = dedup scope needs
            in if var == v then (bindings, needs', scope') else (Binding var (VarRef v (annot, t)) (annot, t):bindings, needs', scope')
         | otherwise =
-          let (bindings, needs', scope') = dedup (insert annot InstSort var con scope) needs
+          let (bindings, needs', scope') = dedup (insert annot LocalAssum var con scope) needs
            in (bindings, (var, con):needs', scope')
       dedup scope [] = ([], [], scope)
       (aliases, stillNeeded, usable) = dedup mempty needs
 
   let simpl :: ImplicitScope Typed -> [Need Typed] -> ([Binding Typed], [Need Typed])
       simpl scp ((var, con):needs)
-        | (implicit@(ImplChoice _ _ cs _ Superclass _):_) <- lookup con scope, all (entails scp) cs
+        | superclasses <- filter ((== Superclass) . view implSort) $ lookup con scope
+        , First (Just implicit) <- foldMap (isUsable scp) superclasses
         = let (bindings, needs') = simpl scp needs
            in (Binding var (useForSimpl annot (scope <> scp) implicit con) (annot, con):bindings, needs')
         | otherwise = second ((var, con) :) (simpl scp needs)
       simpl _ [] = ([], [])
-      (simplif, stillNeeded') = simpl usable stillNeeded
+      (simplif, stillNeeded') = simpl (usable <> extra) stillNeeded
+
+      isUsable scp x@(ImplChoice _ _ cs _ _ _) =
+        if all (entails scp) cs
+           then First (Just x)
+           else First Nothing
 
   let addCtx ((_, con):cons) = TyPi (Implicit con) . addCtx cons
       addCtx [] = id
 
   let addFns ((var, con):cons) = fun var con . addFns cons
       addFns [] = id
+
   let addLet ex = mkLet (aliases ++ simplif) ex (annotation ex, getType ex)
       shove (ExprWrapper w e a) = ExprWrapper w (shove e) a
       shove (Fun x@EvParam{} e a) = Fun x (shove e) a
@@ -379,9 +389,10 @@ nameName (TgName x _) = x
 
 entails :: ImplicitScope Typed -> Obligation Typed -> Bool
 entails _ (Quantifier _) = True
-entails scp (Implication c) = not (null (lookup c scp))
+entails scp (Implication c) = any isLocal (lookup c scp) where
+  isLocal x = x ^. implSort == LocalAssum
 
-useForSimpl :: Ann Resolved -> ImplicitScope Typed -> Implicit Typed -> Type Typed -> Expr Typed
+useForSimpl :: HasCallStack => Ann Resolved -> ImplicitScope Typed -> Implicit Typed -> Type Typed -> Expr Typed
 useForSimpl span scope (ImplChoice head oty pre var _ _) ty =
   case unifyPure head ty of
     Nothing -> error "What?"
@@ -391,8 +402,10 @@ useForSimpl span scope (ImplChoice head oty pre var _ _) ty =
           wrap (Quantifier _:_) _ _ = error "malformed Quantifier"
           wrap (Implication v:cs) ex (TyPi (Implicit _) rest) =
             let v' = apply sub v
-                (x:_) = lookup v' scope
-             in wrap cs (App ex (useForSimpl span scope x v') (annotation ex, rest)) rest
+                choices = lookup v' scope
+             in case choices of
+               [] -> error $ "No choice for entailed implicit " ++ displayS (pretty v') ++ ppShow scope
+               (x:_) -> wrap cs (App ex (useForSimpl span scope x v') (annotation ex, rest)) rest
           wrap [] ex _ = ex
           wrap x _ t = error (displayS (string "badly-typed implicit" <+> shown x <+> pretty t))
       in wrap pre (VarRef var (span, oty)) oty

@@ -396,8 +396,8 @@ instance Pretty TypeError where
          ]
 
   pretty (PatternRecursive _ _) = string "pattern recursive error should be formatNoted"
-  pretty DeadBranch{} = string "dead branch error should be formatNoted"
-  pretty UnsatClassCon{} = string "unsat class error should be formatNoted"
+  pretty (DeadBranch e) = string "dead branch error should be formatNoted" <+> pretty e
+  pretty (UnsatClassCon _ t _) = string "unsatClassCon" <+> pretty t
   pretty Overlap{} = string "overlap error should be formatNoted"
 
 instance Spanned TypeError where
@@ -535,6 +535,8 @@ instance Note TypeError Style where
          , f [annotation r']
          , indent 2 $ bullet "Note: This constraint can not be quantified over because it is of higher rank"
          ]
+
+  formatNote f err@(UnsatClassCon r' _ _) = formatNote f (ArisingFrom err r')
 
   formatNote f (Overlap tau one two) =
     vsep [ indent 2 "Overlapping instances for" <+> (Right <$> displayType tau)

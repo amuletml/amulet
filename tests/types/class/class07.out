@@ -1,7 +1,7 @@
 class07.ml[9:9 ..9:32]: error
-  Rigid type variable a has escaped its scope of show 'a
+  Rigid type variable a has escaped its scope of read 'a
   • Note: This variable was rigidified because of an ambiguous constraint:
-      show 'a
+      read 'a
 
   • Note: in the type
       forall 'ci. show 'a * read 'a * show 'ci => 'ci -> string
