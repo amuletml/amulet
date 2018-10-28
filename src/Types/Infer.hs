@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleContexts, TupleSections, ScopedTypeVariables,
-   ViewPatterns #-}
+   ViewPatterns, LambdaCase #-}
 module Types.Infer
   ( inferProgram
   , builtinsEnv
@@ -373,17 +373,31 @@ inferLetTy closeOver strategy vs =
                        (Fun (EvParam (Capture name (an, ty))) (VarRef name (an, ty)) (an, TyArr ty ty))
                        (an, ty)
 
-        (context, wrapper, _) <- reduceClassContext mempty (annotation ex) deferred
+        (context, wrapper, solve) <-
+          case strategy of
+            Fail -> do
+              (context, wrapper, _) <- reduceClassContext mempty (annotation ex) deferred
 
-        when (not (isFn ex) && not (null cons)) $
-          confesses (addBlame (snd blame) (UnsatClassCon (snd blame) (head cons) NotAFun))
+              when (not (isFn ex) && not (null cons)) $
+                confesses (addBlame (snd blame) (UnsatClassCon (snd blame) (head cons) NotAFun))
+
+              pure (context, wrapper, \tp sub -> solveEx tp (x <> sub) (co <> wraps'))
+
+            Propagate -> do
+              tell (Seq.fromList cons)
+              let notSolvedHere =
+                    flip foldMap cons $ \case
+                      ConImplicit _ _ v _ -> Set.singleton v
+                      _ -> mempty
+                  wraps'' = Map.withoutKeys (co <> wraps') notSolvedHere
+              pure (id, flip const, \tp sub -> solveEx tp (x <> sub) wraps'')
 
         vt <- closeOver (Set.singleton (TvName (fst blame)))
                 ex (apply x (context ty))
         ty <- skolCheck (TvName (fst blame)) (snd blame) vt
         let (tp, sub) = rename ty
 
-        pure (tp, wrapper Full . solveEx tp (x <> sub) (co <> wraps') . substituteDeferredDicts reify deferred)
+        pure (tp, wrapper Full . solve tp sub . substituteDeferredDicts reify deferred)
 
 
       tcOne :: SCC (Binding Resolved)
@@ -635,8 +649,10 @@ solveEx _ ss cs = transformExprTyped go id goType where
   goWrap (TypeLam l t) = TypeLam l (goType t)
   goWrap (ExprApp f) = ExprApp (go f)
   goWrap (x Syntax.:> y) = goWrap x Syntax.:> goWrap y
-  goWrap (WrapVar v) = goWrap $ Map.findWithDefault err v cs where
-    err = error $ "Unsolved wrapper variable " ++ show v ++ ". This is a bug"
+  goWrap (WrapVar v) =
+    case Map.lookup v cs of
+      Just x -> goWrap x
+      Nothing -> WrapVar v
   goWrap IdWrap = IdWrap
   goWrap (WrapFn f) = WrapFn . flip MkWrapCont (desc f) $ solveEx undefined ss cs . runWrapper f
 
@@ -696,9 +712,6 @@ substituteDeferredDicts reify cons = transformExprTyped go id id where
   go (VarRef v _) | Just x <- Map.lookup v replaced = x
   go x = x
 
-  operational (ExprWrapper IdWrap e _) = e
-  operational (ExprWrapper (WrapFn k) e _) = operational $ runWrapper k e
-  operational e = e
 
   choose (ConImplicit _ _ var ty) =
     let ex = operational (reify internal ty var)
@@ -706,6 +719,11 @@ substituteDeferredDicts reify cons = transformExprTyped go id id where
   choose _ = error "Not a deferred ConImplicit in choose substituteDeferredDicts"
 
   replaced = foldMap choose cons
+
+operational :: Expr Typed -> Expr Typed
+operational (ExprWrapper IdWrap e _) = e
+operational (ExprWrapper (WrapFn k) e _) = operational $ runWrapper k e
+operational e = e
 
 closeOverStrat :: MonadInfer Typed m
                => SomeReason
