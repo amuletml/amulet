@@ -373,18 +373,17 @@ inferLetTy closeOver strategy vs =
                        (Fun (EvParam (Capture name (an, ty))) (VarRef name (an, ty)) (an, TyArr ty ty))
                        (an, ty)
 
-        (deferred, renameExp) <- pure $ makeRename reify cons
-        (context, wrapper, _) <- reduceClassContext (annotation ex) deferred
+        (context, wrapper, _) <- reduceClassContext mempty (annotation ex) deferred
 
         when (not (isFn ex) && not (null cons)) $
-          confesses (UnsatClassCon (snd blame) (head cons) NotAFun)
+          confesses (addBlame (snd blame) (UnsatClassCon (snd blame) (head cons) NotAFun))
 
         vt <- closeOver (Set.singleton (TvName (fst blame)))
                 ex (apply x (context ty))
         ty <- skolCheck (TvName (fst blame)) (snd blame) vt
         let (tp, sub) = rename ty
 
-        pure (tp, wrapper Full . solveEx tp (x <> sub) (co <> wraps') . addLet reify deferred . renameExp)
+        pure (tp, wrapper Full . solveEx tp (x <> sub) (co <> wraps') . substituteDeferredDicts reify deferred)
 
 
       tcOne :: SCC (Binding Resolved)
@@ -445,10 +444,8 @@ inferLetTy closeOver strategy vs =
         tel' <- traverseTele (const solved) tel
         ty <- solved ty
 
-        (deferred, rename) <- pure $ makeRename reify deferred
-
         let pat = transformPatternTyped id (apply solution) p
-            ex' = solveEx ty solution wraps' (addLet reify deferred (rename ex))
+            ex' = solveEx ty solution wraps' (substituteDeferredDicts reify deferred ex)
 
         pure ( [TypedMatching pat ex' (ann, ty) (teleToList tel')], tel', boundTvs pat tel' )
 
@@ -481,7 +478,6 @@ inferLetTy closeOver strategy vs =
                 _ -> ExprWrapper (wrap Map.! var)
                        (Fun (EvParam (Capture name (an, ty))) (VarRef name (an, ty)) (an, TyArr ty ty))
                        (an, ty)
-        (deferred, renameExpr) <- pure $ makeRename reify deferred
 
         if null cons
            then do
@@ -490,14 +486,14 @@ inferLetTy closeOver strategy vs =
                    ty <- closeOver mempty exp (apply solution ty)
                    (new, sub) <- pure $ rename ty
                    pure ( Binding var
-                           (shoveLets (solveEx new (sub `compose` solution) (wrap <> wrap') (renameExpr exp)))
+                           (shoveLets (solveEx new (sub `compose` solution) (wrap <> wrap') exp))
                            (fst an, new)
                         )
                  solveOne _ = undefined
 
                  shoveLets (ExprWrapper w e a) = ExprWrapper w (shoveLets e) a
                  shoveLets (Fun x@EvParam{} e a) = Fun x (shoveLets e) a
-                 shoveLets e = addLet reify deferred e
+                 shoveLets e = substituteDeferredDicts reify deferred e
              bs <- traverse solveOne bindings
              let makeTele (Binding var _ (_, ty):bs) = one var ty <> makeTele bs
                  makeTele _ = mempty
@@ -518,7 +514,7 @@ inferLetTy closeOver strategy vs =
 
                    pure ( (nm, var, fst an, ty)
                         , Binding (innerNames Map.! var)
-                           (Ascription (transformExprTyped renameInside id id (solveEx ty solution wrap (renameExpr exp))) ty (fst an, ty))
+                           (Ascription (transformExprTyped renameInside id id (solveEx ty solution wrap exp)) ty (fst an, ty))
                            (fst an, ty)
                         , Field nm (VarRef (innerNames Map.! var) (fst an, ty)) (fst an, ty)
                         )
@@ -530,7 +526,7 @@ inferLetTy closeOver strategy vs =
                  recTy = TyExactRows rows
                  rows = map (\(t, _, _, ty) -> (t, ty)) info
 
-             (context, wrapper, needed) <- reduceClassContext (annotation blamed) cons
+             (context, wrapper, needed) <- reduceClassContext mempty (annotation blamed) cons
 
              closed <- skolCheck recVar (BecauseOf blamed) <=< closeOver (Set.fromList (map fst tvs)) (Record fields (an, recTy)) $
                context recTy
@@ -541,7 +537,7 @@ inferLetTy closeOver strategy vs =
                    Binding recVar
                      (Ascription
                        (ExprWrapper tyLams
-                         (wrapper Full (addLet reify deferred (Let inners (Record fields (an, recTy)) (an, recTy))))
+                         (wrapper Full (substituteDeferredDicts reify deferred (Let inners (Record fields (an, recTy)) (an, recTy))))
                          (an, closed))
                        closed (an, closed))
                      (an, closed)
@@ -693,41 +689,23 @@ localGenStrat bg ex ty = do
      then generalise ftv (becauseExp ex) ty
      else annotateKind (becauseExp ex) ty
 
-makeRename :: Reify Typed -> [Constraint Typed] -> ([Constraint Typed], Expr Typed -> Expr Typed)
-makeRename reify cons = (remaining, transformExprTyped renameInside id id) where
-  renameInside (VarRef v a) | Just x <- Map.lookup v renamed = VarRef x a
-  renameInside x = x
+type Reify p = (Ann Resolved -> Type p -> Var p -> Expr p)
+
+substituteDeferredDicts :: Reify Typed -> [Constraint Typed] -> Expr Typed -> Expr Typed
+substituteDeferredDicts reify cons = transformExprTyped go id id where
+  go (VarRef v _) | Just x <- Map.lookup v replaced = x
+  go x = x
 
   operational (ExprWrapper IdWrap e _) = e
   operational (ExprWrapper (WrapFn k) e _) = operational $ runWrapper k e
   operational e = e
 
-  choose con@(ConImplicit _ _ var ty) =
-    case operational (reify internal ty var) of
-      VarRef v _ -> (Map.singleton var v, mempty)
-      _ -> (mempty, [con])
-  choose _ = error "renaming for non-ConImplicit constraint"
-  (renamed, remaining) = foldMap choose cons
+  choose (ConImplicit _ _ var ty) =
+    let ex = operational (reify internal ty var)
+     in Map.singleton var ex
+  choose _ = error "Not a deferred ConImplicit in choose substituteDeferredDicts"
 
-type Reify p = (Ann Resolved -> Type p -> Var p -> Expr p)
-
-addLet :: Reify Typed -> [Constraint Typed] -> Expr Typed -> Expr Typed
-addLet reify = shove where
-  addLet (ConImplicit _ _ var ty:cs) ex | an <- annotation ex =
-    addLet cs $ mkLet (mkBind var (reify an ty var) (an, ty))
-                    ex (an, getType ex)
-  addLet (_:cs) ex = addLet cs ex
-  addLet [] ex = ex
-
-  shove cs (ExprWrapper w e a) = ExprWrapper w (shove cs e) a
-  shove cs (Fun x@EvParam{} e a) = Fun x (shove cs e) a
-  shove cs e = addLet cs e
-
-  mkLet [] = const
-  mkLet cs = Let cs
-
-  mkBind var (VarRef var' _) | var == var' = const []
-  mkBind v e = (:[]) . Binding v e
+  replaced = foldMap choose cons
 
 closeOverStrat :: MonadInfer Typed m
                => SomeReason
