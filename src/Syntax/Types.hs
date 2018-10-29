@@ -8,7 +8,7 @@ module Syntax.Types
   , Env, freeInEnv, difference, envOf, scopeFromList, toMap
   , names, typeVars, constructors, letBound, classes, modules
   , classDecs
-  , ClassInfo(..), ciName, ciMethods, ciContext, ciConstructorName, ciConstructorTy, ciHead, ciClassSpan
+  , ClassInfo(..), ciName, ciMethods, ciContext, ciConstructorName, ciConstructorTy, ciHead, ciClassSpan, ciDefaults
   , Origin(..)
 
   , focus
@@ -95,6 +95,9 @@ data ClassInfo =
     , _ciConstructorTy :: Type Typed
       -- ^ The type of the constructor for this class
     , _ciClassSpan :: Ann Resolved
+      -- ^ The annotation of the class
+    , _ciDefaults :: Map.Map Text (Expr Resolved)
+      -- ^ Default methods
     }
   deriving (Eq, Show, Ord)
 

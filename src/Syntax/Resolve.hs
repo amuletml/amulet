@@ -168,7 +168,7 @@ resolveModule (t@(Class name ctx tvs ms ann):rs) = do
       name' <- tagVar name
       pure ( MethodSig name' <$> reType m ty <*> pure an
            , [(name, name')] )
-    reClassItem (DefaultMethod b an) = do
+    reClassItem (DefaultMethod b an) =
       pure ( DefaultMethod <$> (fst =<< reMethod b) <*> pure an
            , [] )
 

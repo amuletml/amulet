@@ -1,0 +1,12 @@
+default02-fail.ml[14:8 ..14:15]: error
+  No instance for eq 'a when checking that show_tail
+  is an implementation for type
+    forall 'a. show 'a => 'a -> string
+
+  • Note: default method implementations should always be applicable,
+    and thus can not have any extra constraints
+
+  Arising in the the expression
+   │ 
+14 │     if x `eq` x then
+   │        ^^^^^^^^

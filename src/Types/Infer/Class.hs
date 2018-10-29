@@ -13,7 +13,7 @@ import Data.Foldable
 import Data.Spanned
 import Data.Reason
 import Data.Maybe
-import Data.List (sortOn)
+import Data.List (sortOn, partition)
 import Data.Char
 
 import Control.Monad.State
@@ -61,9 +61,11 @@ inferClass clss@(Class name ctx _ methods classAnn) = do
       scope (_:cs) = scope cs
       scope [] = mempty
 
+      (signatures, defaults) = partition (\case { MethodSig{} -> True; DefaultMethod{} -> False }) methods
+
   local (names %~ focus (one name k <> scope params)) $ do
     -- Infer the types for every method
-    (decls, rows) <- fmap unzip . for methods $ \meth@(MethodSig method ty _) -> do
+    (decls, rows) <- fmap unzip . for signatures $ \meth@(MethodSig method ty _) -> do
       method <- pure (TvName method)
       ty <- silence $ -- Any errors will have been caught by the resolveClassKind
         resolveKind (BecauseOf meth) ty
@@ -74,8 +76,10 @@ inferClass clss@(Class name ctx _ methods classAnn) = do
            , (Anon, method, nameName (unTvName method), ty))
 
     let tele = one name k <> teleFromList decls
+
         unwind (TyTuple a b) = a:unwind b
         unwind t = pure t
+
         getContext Nothing = []
         getContext (Just t) = unwind t
 
@@ -88,6 +92,24 @@ inferClass clss@(Class name ctx _ methods classAnn) = do
         var@(TgName name _) <- genNameWith (classCon' <> T.singleton '$')
         pure ( singleton classAnn Superclass (TvName var) impty
              , (Implicit, TvName var, name, obligation))
+
+    (fold -> defaultMap) <-
+      local (classes %~ mappend scope) . local (names %~ focus tele) . for defaults $ \(DefaultMethod (Binding method exp _) _) -> do
+      let sig = tele ^. at method . non undefined
+
+      (_, cs) <- listen $
+        check exp sig
+
+      (sub, _, deferred) <- condemn $ solve cs
+
+      deferred <- pure (fmap (apply sub) deferred)
+      (_, _, cons) <- solveHard (Seq.fromList deferred)
+
+      unless (null cons) $ do
+        let (c@(ConImplicit reason _ _ _):_) = reverse cons
+        confesses (addBlame reason (UnsatClassCon reason c (BadDefault method sig)))
+
+      pure (Map.singleton (nameName method) exp)
 
     let inner :: Type Typed
         inner =
@@ -138,7 +160,7 @@ inferClass clss@(Class name ctx _ methods classAnn) = do
       [one] -> pure <$> newtypeClassDecl one
       rest -> traverse mkDecl rest
 
-    let info = ClassInfo name classConstraint methodMap contextMap classCon classConTy classAnn
+    let info = ClassInfo name classConstraint methodMap contextMap classCon classConTy classAnn defaultMap
         methodMap = Map.fromList (map (\(_, n, _, t) -> (n, t)) rows)
         contextMap = Map.fromList (map (\(_, _, l, t) -> (l, t)) rows')
 
@@ -149,7 +171,7 @@ inferClass _ = error "not a class"
 
 inferInstance :: forall m. MonadInfer Typed m => Toplevel Resolved -> m (Toplevel Typed, Var Typed, Type Typed)
 inferInstance inst@(Instance clss ctx instHead bindings ann) = do
-  ClassInfo clss classHead methodSigs classContext classCon classConTy classAnn <-
+  ClassInfo clss classHead methodSigs classContext classCon classConTy classAnn defaults <-
     view (classDecs . at (TvName clss) . non undefined)
 
   let classCon' = nameName (unTvName classCon)
@@ -200,7 +222,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
 
   methodSigs <- traverse (closeOver (BecauseOf inst) . apply sub) methodSigs
   classContext <- pure $ fmap (apply sub) classContext
-  let methodName = Map.mapKeys (nameName . unTvName) methodSigs
+  let methodNames = Map.mapKeys (nameName . unTvName) methodSigs
 
   (Map.fromList -> methodMap, methods) <- fmap unzip . local (classes %~ mappend localAssums) $
     for bindings $ \case
@@ -242,10 +264,50 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
              , Binding (TvName v') (Ascription (solveEx sig sub (wrap <> wrap') (shove deferred e)) sig (an, sig)) (an, sig))
       _ -> error "not possible: non-Binding method"
 
-  let diff = Map.toList (methodName `Map.difference` methodMap)
+  let needDefaults = methodNames `Map.difference` methodMap
+      definedHere = methodNames `Map.intersection` methodMap
+      needed = defaults `Map.intersection` needDefaults
+      diff = Map.toList (needDefaults `Map.difference` defaults)
   unless (null diff) $ confesses (UndefinedMethods instHead diff ann)
 
   scope <- mappend localAssums <$> view classes
+  (usedDefaults, defaultMethods) <- fmap unzip . local (classes %~ mappend localAssums) . for (Map.toList needed) $ \(name, expr) -> do
+    let ty = methodNames ! name
+        an = annotation expr
+
+    (e, cs) <- listen $ check expr ty
+    (sub, wrap, deferred) <- condemn $ solve cs
+
+    deferred <- pure (fmap (apply sub) deferred)
+    (compose sub -> sub, wrap', cons) <- solveHard (Seq.fromList deferred)
+
+    unless (null cons) $ do
+      let (c@(ConImplicit reason _ _ _):_) = reverse cons
+      confesses (addBlame reason (UnsatClassCon reason c (InstanceMethod ctx)))
+
+    capture <- TvName <$> genName
+    let reify an ty var =
+          case wrap' Map.! var of
+            ExprApp v -> v
+            x -> ExprWrapper x
+                   (Fun (EvParam (Capture capture (an, ty))) (VarRef capture (an, ty)) (an, TyArr ty ty))
+                   (an, ty)
+        mkBind var (VarRef var' _) | var == var' = const []
+        mkBind v e = (:[]) . Binding v e
+    let addLet (ConImplicit _ _ var ty:cs) ex | an <- annotation ex =
+          addLet cs $ mkLet (mkBind var (reify an ty var) (an, ty))
+            ex (an, getType ex)
+        addLet (_:cs) ex = addLet cs ex
+        addLet [] ex = ex
+        shove cs (ExprWrapper w e a) = ExprWrapper w (shove cs e) a
+        shove cs x = addLet cs x
+
+    var <- TvName <$> genNameFrom name
+    let expr = Ascription (solveEx ty sub (wrap <> wrap') (shove deferred e)) ty (an, ty)
+        bind = Binding var expr (an, ty)
+
+    pure (Field name (VarRef var (an, ty)) (an, ty), bind)
+
   (contextFields, cs) <- listen . for (Map.toList classContext) $ \(name, ty) -> do
     var <- TvName <$> genName
     tell (pure (ConImplicit (BecauseOf inst) scope var ty))
@@ -256,9 +318,9 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
                (ann, ty))
              (ann, ty))
 
-  let methodFields = map (\(name, ty) -> Field name (VarRef (methodMap ! name) (ann, ty)) (ann, ty)) (Map.toList methodName)
-      whatDo = Map.toList (methodName <> classContext)
-      fields = methodFields ++ contextFields
+  let methodFields = map (\(name, ty) -> Field name (VarRef (methodMap ! name) (ann, ty)) (ann, ty)) (Map.toList definedHere)
+      whatDo = Map.toList (methodNames <> classContext)
+      fields = methodFields ++ usedDefaults ++ contextFields
 
   (solution, needed, unsolved) <- solve cs
   (_, wrapper, unsolved') <-
@@ -288,7 +350,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
       fun = addArg globalInsnConTy $
         Let [Binding localInstanceName
               (Fun (EvParam (PType instancePattern ctx (ann, ctx)))
-                (wrapper Full (mkLet methods
+                (wrapper Full (mkLet (methods ++ defaultMethods)
                   (App (appArg classConTy (VarRef classCon (ann, classConTy)))
                     inside
                     (ann, instHead))
