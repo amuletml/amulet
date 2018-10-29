@@ -12,14 +12,13 @@ import Data.Traversable
 import Data.Foldable
 import Data.Spanned
 import Data.Reason
-import Data.Triple
 import Data.Maybe
 import Data.List (sortOn)
 import Data.Char
 
 import Control.Monad.State
 import Control.Monad.Infer
-import Control.Arrow (second, (&&&))
+import Control.Arrow (second)
 import Control.Lens
 
 import Syntax.Implicits
@@ -43,7 +42,7 @@ inferClass :: forall m. MonadInfer Typed m
            => Toplevel Resolved
            -> m ( [Toplevel Typed]
                 , Telescope Typed
-                , Toplevel Typed
+                , ClassInfo
                 , ImplicitScope Typed )
 inferClass clss@(Class name ctx _ methods classAnn) = do
   let toVar :: TyConArg Typed -> Type Typed
@@ -64,15 +63,14 @@ inferClass clss@(Class name ctx _ methods classAnn) = do
 
   local (names %~ focus (one name k <> scope params)) $ do
     -- Infer the types for every method
-    (methods, decls, rows) <- fmap unzip3 . for methods $ \meth@(MethodSig method ty an) -> do
+    (decls, rows) <- fmap unzip . for methods $ \meth@(MethodSig method ty _) -> do
       method <- pure (TvName method)
       ty <- silence $ -- Any errors will have been caught by the resolveClassKind
         resolveKind (BecauseOf meth) ty
       withHead <- closeOver (BecauseOf meth) $
         TyPi (Implicit classConstraint) ty
 
-      pure ( MethodSig method ty (an, ty)
-           , (method, withHead)
+      pure ( (method, withHead)
            , (Anon, method, nameName (unTvName method), ty))
 
     let tele = one name k <> teleFromList decls
@@ -135,31 +133,29 @@ inferClass clss@(Class name ctx _ methods classAnn) = do
           ty <- silence $
             closeOver (BecauseOf clss) ty
           pure (Binding var expr (classAnn, ty))
+
     decs <- case rows ++ rows' of
       [one] -> pure <$> newtypeClassDecl one
       rest -> traverse mkDecl rest
+
+    let info = ClassInfo name classConstraint methodMap contextMap classCon classConTy classAnn
+        methodMap = Map.fromList (map (\(_, n, _, t) -> (n, t)) rows)
+        contextMap = Map.fromList (map (\(_, _, l, t) -> (l, t)) rows')
+
     pure ( tyDecl:map (LetStmt . pure) decs, tele
-         , Class name ctx params (MethodSig classCon classConTy (classAnn, classConTy):methods) (classAnn, k)
+         , info
          , scope)
 inferClass _ = error "not a class"
 
 inferInstance :: forall m. MonadInfer Typed m => Toplevel Resolved -> m (Toplevel Typed, Var Typed, Type Typed)
 inferInstance inst@(Instance clss ctx instHead bindings ann) = do
-  let classCon' =
-        T.cons (toUpper (T.head (nameName clss)))
-          (T.tail (nameName clss))
-  Class clss _ classParams (MethodSig classCon classConTy _:methodSigs') classAnn <-
+  ClassInfo clss classHead methodSigs classContext classCon classConTy classAnn <-
     view (classDecs . at (TvName clss) . non undefined)
+
+  let classCon' = nameName (unTvName classCon)
 
   instanceName <- TvName <$> genNameWith (T.pack "$d" <> classCon')
   localInstanceName <- TvName <$> genNameWith (T.pack "$l" <> classCon')
-
-  let toVar :: TyConArg Typed -> Type Typed
-      toVar (TyVarArg v) = TyVar v
-      toVar (TyAnnArg v _) = TyVar v
-
-      classHead :: Type Typed
-      classHead = foldl TyApp (TyCon clss) (map toVar classParams)
 
   -- Make sure we have a valid context.
   -- **Note**: Instances with no context are given a tyUnit context so
@@ -202,7 +198,10 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
 
   let localAssums = insert ann InstSort localInstanceName localInsnConTy localAssums'
 
-  methodSigs <- Map.fromList <$> traverse (secondA (closeOver (BecauseOf inst) . apply sub) . (view methName &&& view methTy)) methodSigs'
+  methodSigs <- traverse (closeOver (BecauseOf inst) . apply sub) methodSigs
+  classContext <- pure $ fmap (apply sub) classContext
+  let methodName = Map.mapKeys (nameName . unTvName) methodSigs
+
   (Map.fromList -> methodMap, methods) <- fmap unzip . local (classes %~ mappend localAssums) $
     for bindings $ \case
       bind@(Binding v e an) -> do
@@ -243,41 +242,30 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
              , Binding (TvName v') (Ascription (solveEx sig sub (wrap <> wrap') (shove deferred e)) sig (an, sig)) (an, sig))
       _ -> error "not possible: non-Binding method"
 
-  let findInner (TyPi Invisible{} k) = findInner k
-      findInner (TyPi (Anon x) _) = x
-      findInner _ = error "malfomed classConTy"
-      whatDo = case apply sub (findInner classConTy) of
-        TyExactRows rs -> rs
-        x ->
-          let name = case methodSigs' of
-                (x:_) -> x ^. methName . to unTvName . to nameName
-                [] -> nameName (unTvName classCon)
-           in [(name, x)]
-
-  let needed = Map.fromList . filter (not . T.isPrefixOf (nameName (unTvName classCon)) . fst) $ whatDo
-      diff = Map.toList (needed `Map.difference` methodMap)
+  let diff = Map.toList (methodName `Map.difference` methodMap)
   unless (null diff) $ confesses (UndefinedMethods instHead diff ann)
 
   scope <- mappend localAssums <$> view classes
-  (fields, cs) <- listen $ for whatDo $ \(name, ty) ->
-    if nameName (unTvName classCon) `T.isPrefixOf` name
-       then do
-         var <- TvName <$> genName
-         tell (pure (ConImplicit (BecauseOf inst) scope var ty))
-         pure (Field name
-                (ExprWrapper (WrapVar var)
-                  (Fun (EvParam (Capture var (ann, ty)))
-                    (VarRef var (ann, ty)) (ann, TyArr ty ty))
-                    (ann, ty))
-                (ann, ty))
-       else pure (Field name (VarRef (methodMap ! name) (ann, ty)) (ann, ty))
+  (contextFields, cs) <- listen . for (Map.toList classContext) $ \(name, ty) -> do
+    var <- TvName <$> genName
+    tell (pure (ConImplicit (BecauseOf inst) scope var ty))
+    pure (Field name
+           (ExprWrapper (WrapVar var)
+             (Fun (EvParam (Capture var (ann, ty)))
+               (VarRef var (ann, ty)) (ann, TyArr ty ty))
+               (ann, ty))
+             (ann, ty))
+
+  let methodFields = map (\(name, ty) -> Field name (VarRef (methodMap ! name) (ann, ty)) (ann, ty)) (Map.toList methodName)
+      whatDo = Map.toList (methodName <> classContext)
+      fields = methodFields ++ contextFields
 
   (solution, needed, unsolved) <- solve cs
   (_, wrapper, unsolved') <-
     reduceClassContext localAssums ann unsolved
 
   unless (null unsolved') $
-    confesses (addBlame (BecauseOf inst) (UnsatClassCon (BecauseOf inst) (head unsolved) (InstanceClassCon (fst classAnn))))
+    confesses (addBlame (BecauseOf inst) (UnsatClassCon (BecauseOf inst) (head unsolved) (InstanceClassCon classAnn)))
 
   let appArg (TyPi (Invisible v _) rest) ex =
         case Map.lookup v sub of

@@ -101,7 +101,7 @@ let () =
 
   (* Some helper functions and values *)
   let angle = 360.0 /. float_of_int points
-  let angle_at (point : int) : float = rot_offset +. angle *. float_of_int point
+  let angle_at point = rot_offset +. angle *. float_of_int point
   let point_at r offset theta =
     angle_at theta |> (+.offset) |> Math.rad
     |> Math.polar r

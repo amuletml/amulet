@@ -145,7 +145,7 @@ instance Pretty (Var p) => Pretty (Binding p) where
   pretty (Matching p e _) = pretty p <+> nest 2 (equals </> pretty e)
   pretty (TypedMatching p e _ _) = pretty p <+> equals <+> pretty e
 
-instance Pretty (Var p) => Pretty (MethodSig p) where
+instance Pretty (Var p) => Pretty (ClassItem p) where
   pretty (MethodSig v t _) = keyword "val" <+> pretty v <+> colon <+> pretty t
 
 instance (Pretty (Var p)) => Pretty (Type p) where
