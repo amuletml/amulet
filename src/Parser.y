@@ -164,8 +164,8 @@ Top :: { Toplevel Parsed }
     | module conid '=' '$begin' Tops '$end'    { Module (getName $2) $5 }
     | module conid '=' Con                     { Open (getL $4) (Just (getIdent $2)) }
 
-    | class Type begin MethodSigs end          {% fmap (withPos2 $1 $5) $ buildClass $2 $4 }
-    | class Type '$begin' MethodSigs '$end'    {% fmap (withPos2 $1 $5) $ buildClass $2 $4 }
+    | class Type begin ClassItems end          {% fmap (withPos2 $1 $5) $ buildClass $2 $4 }
+    | class Type '$begin' ClassItems '$end'    {% fmap (withPos2 $1 $5) $ buildClass $2 $4 }
 
     | instance Type begin Methods end          {% fmap (withPos2 $1 $5) $ buildInstance $2 $4 }
     | instance Type '$begin' Methods '$end'    {% fmap (withPos2 $1 $5) $ buildInstance $2 $4 }
@@ -174,11 +174,12 @@ Top :: { Toplevel Parsed }
 --  | Instance                                 { $1 }
     | open Con                                 { Open (getL $2) Nothing }
 
-MethodSigs :: { [MethodSig Parsed] }
-  : List(MethodSig, TopSep) { $1 }
+ClassItems :: { [ClassItem Parsed] }
+  : List(ClassItem, TopSep) { $1 }
 
-MethodSig :: { MethodSig Parsed }
+ClassItem :: { ClassItem Parsed }
   : val BindName ':' Type { withPos2 $1 $4 $ MethodSig (getL $2) (getL $4) }
+  | let Binding { withPos2 $1 $2 $ DefaultMethod $2 }
 
 Methods :: { [Binding Parsed] }
   : List(Method, TopSep) { $1 }
@@ -549,7 +550,7 @@ respanFun :: (Spanned a, Spanned b) => a -> b -> Expr Parsed -> Expr Parsed
 respanFun s e (Fun p b _) = Fun p b (mkSpanUnsafe (spanStart (annotation s)) (spanEnd (annotation e)))
 respanFun _ _ _ = error "what"
 
-buildClass :: Located (Type Parsed) -> [MethodSig Parsed]
+buildClass :: Located (Type Parsed) -> [ClassItem Parsed]
            -> Parser (Span -> Toplevel Parsed)
 buildClass (L parsed typ) ms =
   case parsed of

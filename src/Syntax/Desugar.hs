@@ -30,7 +30,11 @@ desugarProgram = traverse statement where
   statement (LetStmt vs) = LetStmt <$> traverse binding vs
   statement (Module v ss) = Module v <$> traverse statement ss
   statement (Instance a b c m d) = Instance a b c <$> traverse binding m <*> pure d
+  statement (Class a b c m d) = Class a b c <$> traverse classItem m <*> pure d
   statement x = pure x
+
+  classItem x@MethodSig{} = pure x
+  classItem (DefaultMethod m a) = DefaultMethod <$> binding m <*> pure a
 
   expr x@Literal{} = pure x
   expr x@VarRef{} = pure x

@@ -19,3 +19,9 @@ instance multiline string
 
 class multi 'a 'b 'c
 instance multi int string () begin end
+
+class default 'a
+  val a : 'a
+  val b : 'a
+
+  let a = b

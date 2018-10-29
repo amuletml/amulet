@@ -8,6 +8,7 @@ module Syntax.Types
   , Env, freeInEnv, difference, envOf, scopeFromList, toMap
   , names, typeVars, constructors, letBound, classes, modules
   , classDecs
+  , ClassInfo(..), ciName, ciMethods, ciContext, ciConstructorName, ciConstructorTy, ciHead, ciClassSpan, ciDefaults
   , Origin(..)
 
   , focus
@@ -16,6 +17,7 @@ module Syntax.Types
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
+import Data.Text (Text)
 
 import Control.Arrow
 import Control.Lens
@@ -74,11 +76,33 @@ data Env
         , _constructors :: Set.Set (Var Typed)
         , _letBound     :: Set.Set (Var Typed)
         , _modules      :: Map.Map (Var Typed) (ImplicitScope Typed)
-        , _classDecs    :: Map.Map (Var Typed) (Toplevel Typed)
+        , _classDecs    :: Map.Map (Var Typed) ClassInfo
         }
   deriving (Eq, Show, Ord)
 
+data ClassInfo =
+  ClassInfo
+    { _ciName :: Var Typed
+      -- ^ The name of this class
+    , _ciHead :: Type Typed
+      -- ^ The head of this class (name applied to parameters)
+    , _ciMethods :: Map.Map (Var Typed) (Type Typed)
+      -- ^ A map of methods to their signatures
+    , _ciContext :: Map.Map Text (Type Typed)
+      -- ^ The superclasses of this class, 
+    , _ciConstructorName :: Var Typed
+      -- ^ The name of the constructor for this class
+    , _ciConstructorTy :: Type Typed
+      -- ^ The type of the constructor for this class
+    , _ciClassSpan :: Ann Resolved
+      -- ^ The annotation of the class
+    , _ciDefaults :: Map.Map Text (Expr Resolved)
+      -- ^ Default methods
+    }
+  deriving (Eq, Show, Ord)
+
 makeLenses ''Env
+makeLenses ''ClassInfo
 
 (\\) :: Ord (Var p) => Scope p f -> Scope p f -> Scope p f
 Scope x \\ Scope y = Scope (x Map.\\ y)
