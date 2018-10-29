@@ -23,3 +23,8 @@ end
 instance () => multi int string unit begin
   
 end
+class () => default a begin
+  val a : 'a
+  val b : 'a
+  let a = b
+end

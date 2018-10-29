@@ -155,14 +155,22 @@ resolveModule (t@(Class name ctx tvs ms ann):rs) = do
   (tvs', tvss) <- resolveTele t tvs
 
   extendTy (name, name') $ do
-    (ctx', ms') <- extendTyvarN tvss $ do
-      ctx' <- traverse (reType t) ctx
-      ms' <- for ms $ \m@(MethodSig name ty an) ->
-        MethodSig <$> tagVar name <*> reType m ty <*> pure an
-      pure (ctx', ms')
+    (ctx', (ms', vs')) <- extendTyvarN tvss $
+      (,) <$> traverse (reType t) ctx
+          <*> (unzip <$> traverse reClassItem ms)
 
-    extendN (zipWith (\(MethodSig v _ _) (MethodSig v' _ _) -> (v, v')) ms ms') $
-      (Class name' ctx' tvs' ms' ann:) <$> resolveModule rs
+    extendN (mconcat vs') $ do
+      ms'' <- extendTyvarN tvss (sequence ms')
+      (Class name' ctx' tvs' ms'' ann:) <$> resolveModule rs
+
+  where
+    reClassItem m@(MethodSig name ty an) = do
+      name' <- tagVar name
+      pure ( MethodSig name' <$> reType m ty <*> pure an
+           , [(name, name')] )
+    reClassItem (DefaultMethod b an) = do
+      pure ( DefaultMethod <$> (fst =<< reMethod b) <*> pure an
+           , [] )
 
 resolveModule (t@(Instance cls ctx head ms ann):rs) = do
   cls' <- lookupTy cls `catchJunk` t
@@ -180,22 +188,6 @@ resolveModule (t@(Instance cls ctx head ms ann):rs) = do
     pure (Instance cls' ctx' head' ms'' ann)
 
   (t':) <$> resolveModule rs
-
-  where
-    reMethod :: MonadResolve m
-             => Binding Parsed
-             -> m (m (Binding Resolved), [(Var Parsed, Var Resolved)])
-    reMethod b@(Binding var bod an) = do
-      var' <- retcons (wrapError b) $ lookupEx var
-      pure ( (\bod' -> Binding var' bod' an) <$> reExpr bod
-           , [(var, var')] )
-    reMethod b@(Matching (Capture var _) bod an) = do
-      var' <- retcons (wrapError b) $ lookupEx var
-      pure ( (\bod' -> Binding var' bod' an) <$> reExpr bod
-           , [(var, var')] )
-    reMethod b@Matching{} =
-      confesses (ArisingFrom IllegalMethod (BecauseOf b))
-    reMethod TypedMatching{} = error "reBinding TypedMatching{}"
 
 lookupVar :: MonadResolve m
           => Var Parsed -> VarKind -> Map.Map (Var Parsed) ScopeVariable
@@ -435,6 +427,21 @@ reBinding (Matching p _ a) = do
   (p', vs, ts) <- reWholePattern p
   pure ( \e' -> Matching p' e' a, vs, ts)
 reBinding TypedMatching{} = error "reBinding TypedMatching{}"
+
+reMethod :: MonadResolve m
+         => Binding Parsed
+         -> m (m (Binding Resolved), [(Var Parsed, Var Resolved)])
+reMethod b@(Binding var bod an) = do
+  var' <- retcons (wrapError b) $ lookupEx var
+  pure ( (\bod' -> Binding var' bod' an) <$> reExpr bod
+       , [(var, var')] )
+reMethod b@(Matching (Capture var _) bod an) = do
+  var' <- retcons (wrapError b) $ lookupEx var
+  pure ( (\bod' -> Binding var' bod' an) <$> reExpr bod
+       , [(var, var')] )
+reMethod b@Matching{} =
+  confesses (ArisingFrom IllegalMethod (BecauseOf b))
+reMethod TypedMatching{} = error "reBinding TypedMatching{}"
 
 data Associativity = AssocLeft | AssocRight
   deriving (Eq, Show)
