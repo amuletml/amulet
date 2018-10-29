@@ -3,9 +3,6 @@
   See `assets/logo.svg' or `assets/logo.png' for an example of the output *)
 
 let x |> f = f x
-let f <| x = f x
-let f >> g = fun x -> g (f x)
-let g << f = fun x -> g (f x)
 
 external val string_of_float : float -> string = "function(x) return (\"%g\"):format(x) end"
 external val float_of_int : int -> float = "function(x) return x end"
