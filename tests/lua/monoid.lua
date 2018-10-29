@@ -4,8 +4,8 @@ do
   local writeln = print
   local function _dollardApplicativeafh(aha)
     return {
-      pure = function(ccg) return aha.zero end,
       ["<*>"] = function(cbz) return function(cbw) return aha["×"](cbz)(cbw) end end,
+      pure = function(ccg) return aha.zero end,
       ["Applicative$kp"] = function(cbl) return function(cbi) return cbi end end
     }
   end
@@ -39,6 +39,7 @@ do
   end
   local function _dollarlMonoidbne(cin)
     return {
+      zero = Nil,
       ["×"] = function(x)
         return function(ys)
           if x.__tag == "Cons" then
@@ -48,8 +49,7 @@ do
             return ys
           end
         end
-      end,
-      zero = Nil
+      end
     }
   end
   local cjp = { _1 = 1, _2 = __builtin_unit }

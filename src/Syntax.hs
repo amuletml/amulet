@@ -273,7 +273,7 @@ data Toplevel p
   | Class { className :: Var p
           , classCtx :: Maybe (Type p)
           , classParams :: [TyConArg p]
-          , classMethods :: [MethodSig p]
+          , classMethods :: [ClassItem p]
           , ann :: Ann p }
   | Instance { instanceClass :: Var p
              , instanceCtx :: Maybe (Type p)
@@ -286,16 +286,19 @@ deriving instance (Show (Var p), Show (Ann p)) => Show (Toplevel p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Toplevel p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Toplevel p)
 
-data MethodSig p =
-  MethodSig { _methName :: Var p
-            , _methTy :: Type p
-            , _methAnn :: Ann p
-            }
+data ClassItem p
+  = MethodSig { _methName :: Var p
+              , _methTy :: Type p
+              , _methAnn :: Ann p
+              }
+  | DefaultMethod { _methodBinding :: Binding p
+                  , _methAnn :: Ann p
+                  }
 
-deriving instance (Eq (Var p), Eq (Ann p)) => Eq (MethodSig p)
-deriving instance (Show (Var p), Show (Ann p)) => Show (MethodSig p)
-deriving instance (Ord (Var p), Ord (Ann p)) => Ord (MethodSig p)
-deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (MethodSig p)
+deriving instance (Eq (Var p), Eq (Ann p)) => Eq (ClassItem p)
+deriving instance (Show (Var p), Show (Ann p)) => Show (ClassItem p)
+deriving instance (Ord (Var p), Ord (Ann p)) => Ord (ClassItem p)
+deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (ClassItem p)
 
 data TyConArg p
   = TyVarArg (Var p)
@@ -350,7 +353,7 @@ makeLenses ''Skolem
 makeLenses ''TyBinder
 makeLenses ''Binding
 makeLenses ''Parameter
-makeLenses ''MethodSig
+makeLenses ''ClassItem
 
 instance Spanned (Ann p) => Spanned (Binding p) where
   annotation = annotation . _bindAnn
@@ -413,7 +416,7 @@ instance Spanned (Ann p) => Spanned (Expr p) where
 instance (Data (Ann p), Data (Var p), Data p) => Spanned (Parameter p) where
   annotation = annotation . view paramPat
 
-instance Spanned (Ann p) => Spanned (MethodSig p) where
+instance Spanned (Ann p) => Spanned (ClassItem p) where
   annotation = annotation . view methAnn
 
 {- Note [1]: Tuple types vs tuple patterns/values

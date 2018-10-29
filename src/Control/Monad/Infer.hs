@@ -123,7 +123,13 @@ data TypeError where
   NotPromotable :: Pretty (Var p) => Var p -> Type p -> Doc -> TypeError
 
 data WhyInstantiate = Expression | Subsumption
-data WhyUnsat = NotAFun | PatBinding | InstanceMethod (Type Typed) | InstanceClassCon Span | ConcreteDon'tQuantify | It'sQuantified
+data WhyUnsat
+  = NotAFun
+  | PatBinding
+  | InstanceMethod (Type Typed)
+  | InstanceClassCon Span
+  | BadDefault (Var Resolved) (Type Typed)
+  | It'sQuantified
 
 instance (Show (Ann p), Show (Var p), Ord (Var p), Substitutable p (Type p)) => Substitutable p (Constraint p) where
   ftv (ConUnify _ _ a b) = ftv a <> ftv b
@@ -519,6 +525,22 @@ instance Note TypeError Style where
          , empty
          , indent 2 $ bullet "Possible fix: add it to the instance context"
          , empty
+         , indent 2 "Arising in the" <+> (Right <$> blameOf r')
+         , f [annotation r']
+         ]
+
+  formatNote f (ArisingFrom (UnsatClassCon _ (ConImplicit _ _ _ t) (BadDefault meth ty)) r') =
+    vsep [ nest 2 $
+            indent 2 "No instance for" <+> (Right <$> displayType t) <+> "when checking that" <+> (Right <$> stypeSkol (pretty meth))
+              </> "is an implementation for type"
+         , indent 4 (Right <$> displayType ty)
+
+         , empty
+
+         , indent 2 $ bullet "Note: default method implementations should always be applicable,"
+         , indent 4 "and thus can not have any extra constraints"
+         , empty
+
          , indent 2 "Arising in the" <+> (Right <$> blameOf r')
          , f [annotation r']
          ]

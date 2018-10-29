@@ -3,3 +3,9 @@ class semigroup 'a
 
 instance semigroup int
   let (<>) = (+)
+
+class default 'a
+  val a : 'a
+  val b : 'a
+
+  let a = b
