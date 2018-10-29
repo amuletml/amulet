@@ -1,0 +1,5 @@
+fail_record_empty_comma.ml[2:11 ..2:11]: error
+  Unexpected ,, expected '}'
+  │ 
+2 │ let a = { , }
+  │           ^

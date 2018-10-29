@@ -19,6 +19,12 @@
 
   This ambiguity only occurs for @*@ as it is considered an operator, and so
   clashes with the second rule in @Expr@
+
+  === In pattern guards
+
+  As we allow any expression within a guard, one can use type ascriptions, and
+  so have @when x : a -> b@. The @->@ could either be part of an arrow type or
+  the arm.
 -}
 module Parser
   ( parseTops
@@ -132,7 +138,7 @@ import Syntax
   '$sep'   { Token TcVSep _ _ }
 
 -- Please try to update the module documentation when this number changes.
--- %expect 2
+%expect 3
 
 %%
 
@@ -246,8 +252,8 @@ Atom :: { Expr Parsed }
      | '(' Section ')'                        { withPos2 $1 $3 $ Parens $2 }
      | '(' NullSection ',' List1(NullSection, ',') ')'
          { withPos2 $1 $5 $ tupleExpr ($2:$4) }
-     | '{' List(ExprRow, ',') '}'             { withPos2 $1 $3 $ Record $2 }
-     | '{' Expr with List1(ExprRow, ',') '}'  { withPos2 $1 $5 $ RecordExt $2 $4 }
+     | '{' ListT(ExprRow, ',') '}'            { withPos2 $1 $3 $ Record $2 }
+     | '{' Expr with List1T(ExprRow, ',') '}' { withPos2 $1 $5 $ RecordExt $2 $4 }
      | Atom access                            { withPos2 $1 $2 $ Access $1 (getIdent $2) }
 
 ExprBlock :: { Expr Parsed }
@@ -328,18 +334,34 @@ BindOp :: { Located (Var Parsed) }
        | op                                    { lPos1 $1 $ getName $1 }
        | opid                                  { lPos1 $1 $ getName $1 }
 
+-- | A list with a separator
 List(p, s)
     : {- Empty -}       { [] }
     | List1(p, s)       { $1 }
 
+-- | A non-empty list with a separator
 List1(p, s)
      : p                { [$1] }
      | p s List1(p, s)  { $1 : $3 }
 
+-- | A list with an optional trailing separator
+ListT(p, s)
+    -- We don't want to parse empty lists with a trailing comm
+  : {- Empty -}         { [] }
+  | List1T(p, s)        { $1 }
+
+-- | A non-empty list with an optional trailing separator
+List1T(p, s)
+  : p                   { [$1] }
+  | p s                 { [$1] }
+  | p s List1T(p, s)    { $1 : $3 }
+
+-- | A list with no separator
 ListE(p)
      : {- Empty -}      { [] }
      | ListE1(p)        { $1 }
 
+-- | A non-empty list with no separator
 ListE1(p)
      : p                { [$1] }
      | p ListE1(p)      { $1 : $2 }
@@ -382,7 +404,7 @@ ArgP :: { Pattern Parsed }
      : BindName                                   { withPos1 $1 $ Capture (getL $1) }
      | '_'                                        { withPos1 $1 $ Wildcard }
      | Con                                        { withPos1 $1 $ Destructure (getL $1) Nothing }
-     | '{' List(PatternRow, ',') '}'              { withPos2 $1 $3 $ PRecord $2 }
+     | '{' ListT(PatternRow, ',') '}'             { withPos2 $1 $3 $ PRecord $2 }
      | '(' List(Pattern, ',') ')'                 { withPos2 $1 $3 $ tuplePattern $2 }
      | Lit                                        { withPos1 $1 (PLiteral (getL $1)) }
 
@@ -422,8 +444,8 @@ TypeAtom :: { Located (Type Parsed) }
          | lazy                                   { lPos1 $1 $ TyCon (Name (T.pack "lazy")) }
          | '(' ')'                                { lPos2 $1 $2 $ TyCon (Name (T.pack "unit")) }
          | '(' Type ')'                           { lPos2 $1 $3 (getL $2) }
-         | '{' List(TypeRow, ',') '}'             { lPos2 $1 $3 $ TyExactRows $2 }
-         | '{' Type '|' List(TypeRow, ',') '}'    { lPos2 $1 $5 $ TyRows (getL $2) $4 }
+         | '{' ListT(TypeRow, ',') '}'            { lPos2 $1 $3 $ TyExactRows $2 }
+         | '{' Type '|' ListT(TypeRow, ',') '}'   { lPos2 $1 $5 $ TyRows (getL $2) $4 }
          | '_'                                    { lPos1 $1 (TyWildcard Nothing) }
 
 TypeRow :: { (T.Text, Type Parsed) }
