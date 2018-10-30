@@ -1,0 +1,10 @@
+& : {'a : type}. {'b : type}. {'c : type}. ('c -> 'b) -> ('a -> 'c) -> 'a -> 'b
+functor : (type -> type) -> constraint
+<$> : {'f : type -> type}. functor 'f => {'a : type}. {'b : type}. ('a -> 'b) -> 'f 'a -> 'f 'b
+fmap : {'f : type -> type}. {'a : type}. {'b : type}. functor 'f => ('a -> 'b) -> 'f 'a -> 'f 'b
+applicative : (type -> type) -> constraint
+pure : {'f : type -> type}. applicative 'f => {'a : type}. 'a -> 'f 'a
+<*> : {'f : type -> type}. applicative 'f => {'a : type}. {'b : type}. 'f ('a -> 'b) -> 'f 'a -> 'f 'b
+traversable : (type -> type) -> constraint
+traverse : {'t : type -> type}. traversable 't => {'a : type}. {'b : type}. {'f : type -> type}. applicative 'f => ('a -> 'f 'b) -> 't 'a -> 'f ('t 'b)
+sequence : {'t : type -> type}. traversable 't => {'a : type}. {'f : type -> type}. applicative 'f => 't ('f 'a) -> 'f ('t 'a)

@@ -234,7 +234,7 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
            [] -> do
              solveCoSubst . at var ?= ExprApp (VarRef var (annotation reason, cons))
              tell (pure (apply sub ohno))
-           xs | allSameHead xs, concreteUnderOne cons, xs <- filter (applicable scope) xs, not (null xs) -> do
+           xs | allSameHead xs, concreteUnderOne cons, xs <- filter (applicable cons scope) xs, not (null xs) -> do
              let imp = pickBestPossible xs
              w <- local (depth %~ (cons :)) $
                useImplicit reason cons scope imp
@@ -634,19 +634,20 @@ isReflexiveCo AssumedCo{} = False
 isReflexiveCo ProjCo{} = False
 isReflexiveCo VarCo{} = False
 
-applicable :: ImplicitScope Typed -> Implicit Typed -> Bool
-applicable scp (ImplChoice _ _ cs _ s _) =
+applicable :: Type Typed -> ImplicitScope Typed -> Implicit Typed -> Bool
+applicable wanted scp (ImplChoice head _ cs _ s _) =
   case s of
     Superclass -> all (entails scp) cs
     _ -> True
   where
     entails :: ImplicitScope Typed -> Obligation Typed -> Bool
-    entails _ (Quantifier _) = True
-    entails scp (Implication c) =
-      any isLocal (lookup c scp)
+    entails _ (Quantifier (Invisible v _)) = v `Map.member` sub
+    entails scp (Implication c) | c <- apply sub c =
+      any (applicable c scp) (lookup c scp)
+    entails _ _ = False
 
-    isLocal :: Implicit a -> Bool
-    isLocal x = x ^. implSort == LocalAssum
+    sub :: Subst Typed
+    Just sub = unifyPure head wanted
 
 
 probablyCast :: Coercion Typed -> Wrapper Typed

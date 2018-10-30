@@ -4,9 +4,9 @@ do
   local writeln = print
   local function _dollardApplicativeafh(aha)
     return {
-      ["<*>"] = function(cbz) return function(cbw) return aha["×"](cbz)(cbw) end end,
-      pure = function(ccg) return aha.zero end,
-      ["Applicative$kp"] = function(cbl) return function(cbi) return cbi end end
+      ["<*>"] = function(ccf) return function(ccc) return aha["×"](ccf)(ccc) end end,
+      pure = function(ccm) return aha.zero end,
+      ["Applicative$kp"] = function(cbr) return function(cbo) return cbo end end
     }
   end
   local Nil = { __tag = "Nil" }
@@ -15,21 +15,21 @@ do
   local function _dollarlShowate(auq)
     return function(cw)
       if cw.__tag == "Cons" then
-        local ced = cw[1]
-        return auq(ced._1) .. " :: " .. _dollarlShowate(auq)(ced._2)
+        local cej = cw[1]
+        return auq(cej._1) .. " :: " .. _dollarlShowate(auq)(cej._2)
       elseif cw.__tag == "Nil" then
         return "Nil"
       end
     end
   end
-  local function _dollarlTraversablebit(chx)
+  local function _dollarlTraversablebit(cid)
     return function(bkn)
-      local caf = bkn["Applicative$kp"]
+      local cal = bkn["Applicative$kp"]
       return function(k)
         return function(cy)
           if cy.__tag == "Cons" then
-            local chs = cy[1]
-            return bkn["<*>"](caf(_colon_colon)(k(chs._1)))(_dollarlTraversablebit(__builtin_unit)(bkn)(k)(chs._2))
+            local chy = cy[1]
+            return bkn["<*>"](cal(_colon_colon)(k(chy._1)))(_dollarlTraversablebit(__builtin_unit)(bkn)(k)(chy._2))
           elseif cy.__tag == "Nil" then
             return bkn.pure(Nil)
           end
@@ -37,14 +37,14 @@ do
       end
     end
   end
-  local function _dollarlMonoidbne(cin)
+  local function _dollarlMonoidbne(cit)
     return {
       zero = Nil,
       ["×"] = function(x)
         return function(ys)
           if x.__tag == "Cons" then
-            local cih = x[1]
-            return Cons({ _1 = cih._1, _2 = _dollarlMonoidbne(__builtin_unit)["×"](cih._2)(ys) })
+            local cin = x[1]
+            return Cons({ _1 = cin._1, _2 = _dollarlMonoidbne(__builtin_unit)["×"](cin._2)(ys) })
           elseif x.__tag == "Nil" then
             return ys
           end
@@ -52,10 +52,12 @@ do
       end
     }
   end
-  local cjp = { _1 = 1, _2 = __builtin_unit }
-  writeln(_dollarlShowate(function(x)
-    return tostring(x)
-  end)(_dollarlTraversablebit(__builtin_unit)(_dollardApplicativeafh(_dollarlMonoidbne(__builtin_unit)))(function(ccx)
-    return Cons({ _1 = ccx._1, _2 = Nil })
-  end)(Cons({ _1 = cjp, _2 = Cons({ _1 = cjp, _2 = Cons({ _1 = cjp, _2 = Nil }) }) }))))
+  local cle = _dollarlTraversablebit(__builtin_unit)(_dollardApplicativeafh(_dollarlMonoidbne(__builtin_unit)))
+  local cmf = _dollardApplicativeafh(_dollarlMonoidbne(__builtin_unit))
+  local cal = cmf["Applicative$kp"]
+  local cjv = { _1 = 1, _2 = __builtin_unit }
+  writeln(_dollarlShowate(function(x) return tostring(x) end)(cle(function(cdd)
+    local b = cdd._2
+    return cal(function(cu) return { _1 = cu, _2 = b } end)(Cons({ _1 = cdd._1, _2 = Nil }))
+  end)(Cons({ _1 = cjv, _2 = Cons({ _1 = cjv, _2 = Cons({ _1 = cjv, _2 = Nil }) }) }))))
 end
