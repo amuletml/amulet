@@ -103,7 +103,7 @@ inferClass clss@(Class name ctx _ methods classAnn) = do
       (sub, _, deferred) <- condemn $ solve cs
 
       deferred <- pure (fmap (apply sub) deferred)
-      (_, _, cons) <- solveHard (Seq.fromList deferred)
+      (_, _, cons) <- solve (Seq.fromList deferred)
 
       unless (null cons) $ do
         let (c@(ConImplicit reason _ _ _):_) = reverse cons
@@ -177,7 +177,6 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
   let classCon' = nameName (unTvName classCon)
 
   instanceName <- TvName <$> genNameWith (T.pack "$d" <> classCon')
-  localInstanceName <- TvName <$> genNameWith (T.pack "$l" <> classCon')
 
   -- Make sure we have a valid context.
   -- **Note**: Instances with no context are given a tyUnit context so
@@ -218,7 +217,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
           pure (singleton ann LocalAssum var x, Capture var (ann, x))
     in mkBinds ctx
 
-  let localAssums = insert ann InstSort localInstanceName localInsnConTy localAssums'
+  let localAssums = insert ann InstSort instanceName globalInsnConTy localAssums'
 
   methodSigs <- traverse (closeOver (BecauseOf inst) . apply sub) methodSigs
   classContext <- pure $ fmap (apply sub) classContext
@@ -237,7 +236,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
         (sub, wrap, deferred) <- condemn $ solve cs
 
         deferred <- pure (fmap (apply sub) deferred)
-        (compose sub -> sub, wrap', cons) <- solveHard (Seq.fromList deferred)
+        (compose sub -> sub, wrap', cons) <- solve (Seq.fromList deferred)
 
         unless (null cons) $ do
           let (c@(ConImplicit reason _ _ _):_) = reverse cons
@@ -279,7 +278,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
     (sub, wrap, deferred) <- condemn $ solve cs
 
     deferred <- pure (fmap (apply sub) deferred)
-    (compose sub -> sub, wrap', cons) <- solveHard (Seq.fromList deferred)
+    (compose sub -> sub, wrap', cons) <- solve (Seq.fromList deferred)
 
     unless (null cons) $ do
       let (c@(ConImplicit reason _ _ _):_) = reverse cons
@@ -348,17 +347,13 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
         _ -> solveEx (TyExactRows whatDo) solution needed (Record fields (ann, TyExactRows whatDo))
 
       fun = addArg globalInsnConTy $
-        Let [Binding localInstanceName
-              (Fun (EvParam (PType instancePattern ctx (ann, ctx)))
+              Fun (EvParam (PType instancePattern ctx (ann, ctx)))
                 (wrapper Full (mkLet (methods ++ defaultMethods)
                   (App (appArg classConTy (VarRef classCon (ann, classConTy)))
                     inside
                     (ann, instHead))
                   (ann, instHead)))
-                (ann, localInsnConTy))
-              (ann, localInsnConTy)]
-          (VarRef localInstanceName (ann, localInsnConTy))
-          (ann, localInsnConTy)
+                (ann, localInsnConTy)
       bind = Binding instanceName (Ascription fun globalInsnConTy (ann, globalInsnConTy)) (ann, globalInsnConTy)
 
   pure (LetStmt [bind], instanceName, globalInsnConTy)

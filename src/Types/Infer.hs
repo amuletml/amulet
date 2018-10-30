@@ -373,7 +373,7 @@ inferLetTy closeOver strategy vs =
       figureOut blame ex ty cs = do
         (x, co, deferred) <- retcons (addBlame (snd blame)) (solve cs)
         deferred <- pure (fmap (apply x) deferred)
-        (compose x -> x, wraps', cons) <- solveHard (Seq.fromList deferred)
+        (compose x -> x, wraps', cons) <- solve (Seq.fromList deferred)
 
         name <- TvName <$> genName
         let reify an ty var =
@@ -450,7 +450,7 @@ inferLetTy closeOver strategy vs =
             ex = solveEx ty solution wraps e
 
         deferred <- pure (fmap (apply solution) deferred)
-        (compose solution -> solution, wraps', cons) <- solveHard (Seq.fromList deferred)
+        (compose solution -> solution, wraps', cons) <- solve (Seq.fromList deferred)
 
         case strategy of
           Fail ->
@@ -495,7 +495,7 @@ inferLetTy closeOver strategy vs =
         name <- TvName <$> genName
 
         let deferred = fmap (apply solution) cons
-        (compose solution -> solution, wrap', cons) <- solveHard (Seq.fromList deferred)
+        (compose solution -> solution, wrap', cons) <- solve (Seq.fromList deferred)
         let reify an ty var =
               case wrap' Map.! var of
                 ExprApp v -> v
