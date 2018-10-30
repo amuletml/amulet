@@ -1,11 +1,11 @@
 {-# LANGUAGE MultiWayIf, FlexibleContexts, ScopedTypeVariables,
    TemplateHaskell, TupleSections, ViewPatterns,
-   LambdaCase, ConstraintKinds #-}
+   LambdaCase, ConstraintKinds, CPP #-}
 
 -- | This module implements the logic responsible for solving the
 -- sequence of @Constraint@s the type-checker generates for a particular
 -- binding groups.
-module Types.Unify (solve, solveHard, skolemise, freshSkol, unifyPure) where
+module Types.Unify (solve, skolemise, freshSkol, unifyPure) where
 
 import Control.Monad.Except
 import Control.Monad.State
@@ -47,11 +47,14 @@ import Text.Pretty.Semantic
 
 import Prelude hiding (lookup)
 
+#ifdef TRACE_TC
+import Debug.Trace
+#endif
+
 data SolveScope
   = SolveScope { _bindSkol :: Bool
                , _don'tTouch :: Set.Set (Var Typed)
                , _depth :: [Type Typed]
-               , _trySuper :: Bool
                }
   deriving (Eq, Show, Ord)
 
@@ -96,13 +99,13 @@ runSolve :: MonadNamey m
          -> Subst Typed
          -> WriterT [Constraint Typed] (StateT SolveState (ReaderT SolveScope m)) b
          -> m (Subst Typed, Map.Map (Var Typed) (Wrapper Typed), [Constraint Typed])
-runSolve h s x = fix (runReaderT (runStateT (runWriterT act) (SolveState s mempty mempty)) emptyScope) where
+runSolve _ s x = fix (runReaderT (runStateT (runWriterT act) (SolveState s mempty mempty)) emptyScope) where
   act = (,) <$> genName <*> x
   fix act = do
     ((_, cs), s) <- act
     let ss = s ^. solveTySubst
     pure (fmap (apply ss) ss, s ^. solveCoSubst, cs)
-  emptyScope = SolveScope False mempty [] h
+  emptyScope = SolveScope False mempty []
 
 -- | Solve a sequence of constraints, returning either a substitution
 -- for both type variables (a 'Subst' 'Typed') and for 'Wrapper'
@@ -113,19 +116,16 @@ runSolve h s x = fix (runReaderT (runStateT (runWriterT act) (SolveState s mempt
 solve :: (MonadNamey m, MonadChronicles TypeError m)
       => Seq.Seq (Constraint Typed)
       -> m (Subst Typed, Map.Map (Var Typed) (Wrapper Typed), [Constraint Typed])
-solve = runSolve False mempty . doSolve
-
-solveHard :: (MonadNamey m, MonadChronicles TypeError m)
-      => Seq.Seq (Constraint Typed)
-      -> m (Subst Typed, Map.Map (Var Typed) (Wrapper Typed), [Constraint Typed])
-solveHard = runSolve True mempty . doSolve
+solve = runSolve True mempty . doSolve
 
 doSolve :: forall m. MonadSolve m => Seq.Seq (Constraint Typed) -> m ()
 doSolve Empty = pure ()
 doSolve (ConUnify because v a b :<| xs) = do
   sub <- use solveTySubst
 
-  -- traceM (displayS (pretty (ConUnify because v (apply sub a) (apply sub b))))
+#ifdef TRACE_TC
+  traceM (displayS (pretty (ConUnify because v (apply sub a) (apply sub b))))
+#endif
   co <- memento $ unify (apply sub a) (apply sub b)
   case co of
     Left e -> do
@@ -137,7 +137,9 @@ doSolve (ConUnify because v a b :<| xs) = do
 doSolve (ConSubsume because scope v a b :<| xs) = do
   sub <- use solveTySubst
 
-  -- traceM (displayS (pretty (ConSubsume because scope v (apply sub a) (apply sub b))))
+#ifdef TRACE_TC
+  traceM (displayS (pretty (ConSubsume because scope v (apply sub a) (apply sub b))))
+#endif
   let a' = apply sub a
   sub <- use solveTySubst
   co <- memento $ subsumes because scope a' (apply sub b)
@@ -222,15 +224,18 @@ doSolve (ohno@(ConImplicit reason scope var con@TyPi{}) :<| cs) = do
 
 doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
   doSolve cs
-  super <- view trySuper
   sub <- use solveTySubst
   cons <- pure (apply sub cons)
   scope <- pure (mapTypes (apply sub) scope)
 
+#ifdef TRACE_TC
+  traceM (displayS (pretty (apply sub ohno)))
+#endif
+
   x <- view depth
   if length x >= 25
      then confesses (ClassStackOverflow reason x cons)
-     else case filter ((|| super) . (/= Superclass) . view implSort) $ lookup cons scope of
+     else case lookup cons scope of
            [] -> do
              solveCoSubst . at var ?= ExprApp (VarRef var (annotation reason, cons))
              tell (pure (apply sub ohno))
@@ -610,14 +615,22 @@ skolemise motive ty@(TyPi (Invisible tv k) t) = do
   let getSkol (TySkol s) = s
       getSkol _ = error "not a skolem from freshSkol"
   pure (TypeLam (getSkol sk) kind Syntax.:> wrap, ty, scope)
+
 skolemise motive wt@(TyPi (Implicit ity) t) = do
   (omega, ty, scp) <- skolemise motive t
-  var <- TvName <$> genName
-  let scope = insert internal LocalAssum var ity scp
-      wrap ex | an <- annotation ex =
-        Fun (EvParam (Capture var (an, ity)))
+  let go (TyTuple a b) = do
+        var <- TvName <$> genName
+        (pat, scope) <- go b
+        pure (Capture var (internal, a):pat, insert internal LocalAssum var a scope)
+      go x = do
+        var <- TvName <$> genName
+        pure ([Capture var (internal, x)], insert internal LocalAssum var x scp)
+  (pat, scope) <- go ity
+  let wrap ex | an <- annotation ex =
+        Fun (EvParam (PTuple pat (an, ity)))
           (ExprWrapper omega ex (an, ty)) (an, wt)
   pure (WrapFn (MkWrapCont wrap "constraint lambda"), ty, scope)
+
 skolemise _ ty = pure (IdWrap, ty, mempty)
 
 -- Which coercions are safe to remove *here*?
