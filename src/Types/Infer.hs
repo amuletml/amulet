@@ -139,6 +139,16 @@ check ex@(Ascription e ty an) goal = do
   c <- subsumes (becauseExp ex) ty goal
   pure (ExprWrapper c e (an, goal))
 
+check (Parens e _) ty = check e ty
+
+check AccessSection{} tau = error $ "check AccessSection : " ++ displayS (pretty tau) ++ " in TC (desugar didn't run?)"
+check RightSection{} tau = error $ "check RightSection : " ++ displayS (pretty tau) ++ " in TC (desugar didn't run?)"
+check LeftSection{} tau = error $ "check LeftSection : " ++ displayS (pretty tau) ++ " in TC (desugar didn't run?)"
+check BothSection{} tau = error $ "check BothSection : " ++ displayS (pretty tau) ++ " in TC (desugar didn't run?)"
+check TupleSection{} tau = error $ "check TupleSection : " ++ displayS (pretty tau) ++ " in TC (desugar didn't run?)"
+check Syntax.Lazy{} tau = error $ "check Syntax.Lazy : " ++ displayS (pretty tau) ++ " in TC (desugar didn't run?)"
+check OpenIn{} tau = error $ "check OpenIn : " ++ displayS (pretty tau) ++ " in TC (desugar didn't run?)"
+
 check e ty = do
   (e', t) <- infer e
   -- here: have t (inferred)
