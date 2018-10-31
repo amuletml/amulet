@@ -2,10 +2,11 @@
     PatternSynonyms, RankNTypes, ScopedTypeVariables, FlexibleContexts,
     ConstraintKinds, OverloadedStrings #-}
 module Core.Lower
-  ( runLowerT, runLowerWithCtors
+  ( LowerState, defaultState
+  , runLowerT, runLowerWithEnv
   , lowerExprTerm
   , lowerType
-  , lowerProg
+  , lowerProg, lowerProgEnv
   ) where
 
 import Control.Monad.Reader
@@ -39,7 +40,7 @@ import Core.Var
 
 import qualified Syntax as S
 import Syntax.Let
-import Syntax.Var (Var(..), Resolved, Typed)
+import Syntax.Var (Var(..), Typed)
 import Syntax.Pretty (Expr(..), Pattern(..), Skolem(..), Toplevel(..), Constructor(..), Arm(..))
 import Syntax.Transform
 
@@ -52,11 +53,19 @@ type Stmt = C.Stmt CoVar
 
 type Lower = ContT Term
 
-runLowerT :: MonadNamey m => ReaderT LowerState (StateT LowerTrack m) a -> m a
-runLowerT = runLowerWithCtors mempty
+defaultState :: LowerState
+defaultState = LS mempty mempty mempty
 
-runLowerWithCtors :: MonadNamey m => Map.Map (Var Resolved) Type -> ReaderT LowerState (StateT LowerTrack m) a -> m a
-runLowerWithCtors ct = flip evalStateT mempty . flip runReaderT (LS mempty ct)
+runLowerT :: MonadNamey m => ReaderT LowerState (StateT LowerTrack m) a -> m a
+runLowerT = runLowerWithEnv defaultState
+
+-- | Run lower with a given state
+-- to constructors.
+runLowerWithEnv :: MonadNamey m
+                  => LowerState
+                  -> ReaderT LowerState (StateT LowerTrack m) a
+                  -> m a
+runLowerWithEnv ls = flip evalStateT mempty . flip runReaderT ls
 
 errRef :: Atom
 errRef = Ref C.vError
@@ -200,10 +209,11 @@ lowerAnyway (S.VarRef (TvName v) (_, ty)) = do
   let lty = lowerType ty
   env <- asks vars
 
-  ctor <- asks (Map.member v . ctors)
+  ctor <- asks (VarMap.member (mkCon v) . ctors)
   let kind = if ctor then DataConVar else ValueVar
+      v' = mkVar kind v
 
-  case Map.lookup v env of
+  case VarMap.lookup v' env of
     -- If we've got a type which is different to our expected one then we strip
     -- off one forall and attempt to unify. Once we've found our unified type,
     -- we generate the appropriate type applications.
@@ -219,7 +229,7 @@ lowerAnyway (S.VarRef (TvName v) (_, ty)) = do
                          ftv <- fresh ValueVar
                          ContT $ \k ->
                            C.Let (One (ftv, newTy, TyApp prev tyuni)) <$> k (C.Ref ftv newTy, newTy)
-                         ) (C.Ref (mkVar kind v) fty, fty) vars
+                         ) (C.Ref v' fty, fty) vars
           -- Otherwise just add our variable to the stripped list
           addApps (ForallTy (Relevant a) _ ty') vars = addApps ty' (a:vars)
           addApps _ _ = error "impossible"
@@ -229,7 +239,6 @@ lowerAnyway (S.VarRef (TvName v) (_, ty)) = do
     -- This is horrible, and would be nicer as part of the stdlib, but this is
     -- the only solution for now.
     _ | TgInternal{} <- v
-      , v' <- mkVar kind v
       , Just _ <- VarMap.lookup v' boxedTys -> do
           injects <- get
           Atom . flip Ref lty <$> case VarMap.lookup v' injects of
@@ -240,7 +249,7 @@ lowerAnyway (S.VarRef (TvName v) (_, ty)) = do
               pure e
 
       -- Just emit as normal
-    _ -> pure (Atom (Ref (mkVar kind v) lty))
+    _ -> pure (Atom (Ref v' lty))
 
 lowerAnyway (S.Record xs _) = case xs of
   [] -> pure (Atom (Lit RecNil))
@@ -259,19 +268,25 @@ lowerAnyway (S.App f x _) = C.App <$> lowerExprAtom f <*> lowerExprAtom x
 lowerAnyway e = error ("can't lower " ++ show (pretty e) ++ " without type")
 
 lowerProg :: MonadLower m => [Toplevel Typed] -> m [Stmt]
-lowerProg stmt = do
-  stmt' <- lowerProg' stmt
+lowerProg = fmap snd . lowerProgEnv
+
+lowerProgEnv :: MonadLower m => [Toplevel Typed] -> m (LowerState, [Stmt])
+lowerProgEnv stmt = do
+  (ls, stmt') <- lowerProg' stmt
   ops <- gets VarMap.toList
-  foldrM (\x xs -> (:xs) <$> genOp x) stmt' ops
+  (ls,) <$> foldrM (\x xs -> (:xs) <$> genOp x) stmt' ops
   where
     genOp (op, var) = do
       let Just ty = VarMap.lookup op boxedTys
       (body, ty') <- lowerBoxedFun (Ref op ty) ty
       pure . StmtLet . One $ (var, ty', body)
 
-lowerProg' :: forall m. MonadLower m => [Toplevel Typed] -> m [Stmt]
+(<$$>) :: (Functor f1, Functor f2) => (a -> b) -> f1 (f2 a) -> f1 (f2 b)
+(<$$>) = (<$>) . fmap
 
-lowerProg' [] = pure []
+lowerProg' :: forall m. MonadLower m => [Toplevel Typed] -> m (LowerState, [Stmt])
+
+lowerProg' [] = asks (,[])
 lowerProg' (Open _ _:prg) = lowerProg' prg
 lowerProg' (Module _ b:prg) = lowerProg' (b ++ prg)
 lowerProg' (Class{}:prg) = lowerProg' prg
@@ -281,13 +296,13 @@ lowerProg' (ForeignVal (TvName v) ex tp _:prg) =
   let tyB = lowerType tp
       vB = mkVal v
   in case unboxedTy tyB of
-       Nothing -> (Foreign vB tyB ex:) <$> lowerProg' prg
+       Nothing -> (Foreign vB tyB ex:) <$$> lowerProg' prg
        Just tyU -> do
          vU <- freshFrom vB
          (ex', _) <- lowerBoxedFun (Ref vU tyU) tyU
          ([ Foreign vU tyU ex
           , StmtLet (One (vB, tyB, ex'))
-          ]++) <$> lowerProg' prg
+          ]++) <$$> lowerProg' prg
 
   where
     unboxedTy (ForallTy (Relevant v) l r) = ForallTy (Relevant v) l <$> unboxedTy r
@@ -300,14 +315,14 @@ lowerProg' (ForeignVal (TvName v) ex tp _:prg) =
 
 
 lowerProg' (LetStmt vs:prg) = do
-  let env' = Map.fromList (foldMap lowerBind vs)
+  let env' = VarMap.fromList (foldMap lowerBind vs)
       lowerBind bind =
         let ty = lowerType (bind ^. (S.bindAnn . _2))
-        in map (\(TvName v) -> (v, ty)) (bindVariables bind)
+        in map (\(TvName v) -> (mkVal v, ty)) (bindVariables bind)
 
   local (\s -> s { vars = env' }) $ do
     vs' <- lowerLet vs
-    foldr ((.) . ((:) . C.StmtLet)) id vs' <$> lowerProg' prg
+    foldr ((.) . ((:) . C.StmtLet)) id vs' <$$> lowerProg' prg
 
 lowerProg' (TypeDecl (TvName var) _ cons:prg) = do
   let cons' = map (\case
@@ -316,9 +331,14 @@ lowerProg' (TypeDecl (TvName var) _ cons:prg) = do
                        GeneralisedCon (TvName p) t _ -> (p, mkCon p, lowerType t))
                 cons
       ccons = map (\(_, a, b) -> (a, b)) cons'
-      scons = map (\(a, _, b) -> (a, b)) cons'
+      scons = map (\(a, _, b) -> (mkCon a, b)) cons'
 
-  (C.Type (mkType var) ccons:) <$> local (\s -> s { ctors = Map.union (Map.fromList scons) (ctors s) }) (lowerProg' prg)
+      conset = VarSet.fromList (map fst scons)
+
+  (C.Type (mkType var) ccons:) <$$> local (\s ->
+    s { ctors = VarMap.union (VarMap.fromList scons) (ctors s)
+      , types = VarMap.insert (mkType var) conset (types s)
+      }) (lowerProg' prg)
 
 lowerLet :: MonadLower m => [S.Binding Typed] -> m [Binding CoVar]
 lowerLet bs =

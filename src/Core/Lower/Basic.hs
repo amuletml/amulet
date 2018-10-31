@@ -13,6 +13,7 @@ import Control.Monad.Namey
 import Control.Monad.State
 
 import qualified Data.VarMap as VarMap
+import qualified Data.VarSet as VarSet
 import qualified Data.Map as Map
 import qualified Data.Text as T
 import Data.Maybe
@@ -29,8 +30,9 @@ import Syntax (Lit(..), Skolem(..))
 
 data LowerState
   = LS
-    { vars  :: Map.Map (Var Resolved) (C.Type CoVar)
-    , ctors :: Map.Map (Var Resolved) (C.Type CoVar)
+    { vars  :: VarMap.Map (C.Type CoVar)
+    , ctors :: VarMap.Map (C.Type CoVar)
+    , types :: VarMap.Map VarSet.Set
     } deriving (Eq, Show)
 
 type LowerTrack = VarMap.Map CoVar

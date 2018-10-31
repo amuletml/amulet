@@ -422,7 +422,6 @@ checkPattern s = checkPat where
         -- Ensure types line up
         | ForallTy Irrelevant x r <- inst ty
         , Just s <- r `unify` ty'
-        -- TODO: Do we need Relevant as well?
         -> checkCapture (substituteInType s x) p
         | otherwise -> pushError (TypeMismatch (ForallTy Irrelevant unknownTyvar ty') (inst ty))
   checkPat ty@(RowsTy NilTy ts) (PatExtend f fs) =

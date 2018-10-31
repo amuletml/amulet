@@ -15,10 +15,8 @@ import qualified Data.Text.Lazy as L
 import qualified Data.Text.IO as T
 import qualified Data.Text as T
 
-import qualified Data.Map.Strict as Map
 import qualified Data.ByteString as Bs
 import qualified Data.VarMap as VarMap
-import qualified Data.Set as Set
 import Data.Traversable
 import Data.Bifunctor
 import Data.Foldable
@@ -42,7 +40,6 @@ import Syntax.Resolve (resolveProgram)
 import Syntax.Desugar (desugarProgram)
 import Syntax.Verify
 import Syntax.Pretty (displayType)
-import Syntax.Types (constructors, toMap)
 import qualified Syntax.Var as S
 import qualified Syntax as S
 
@@ -58,9 +55,9 @@ import Parser.Error
 import Parser
 
 import qualified Core.Core as C
+import qualified Core.Lower as L
 import Core.Optimise.Newtype
 import Core.Occurrence
-import Core.Lower (runLowerWithCtors, lowerProg, lowerType)
 import Core.Core (Stmt)
 import Core.Var
 
@@ -88,6 +85,7 @@ data ReplState = ReplState
   , inferScope   :: T.Env
   , emitState    :: B.TopEmitState
   , lastName     :: S.Name
+  , lowerState   :: L.LowerState
 
   , luaState     :: L.State
 
@@ -116,6 +114,7 @@ defaultState mode = do
     , inferScope   = I.builtinsEnv
     , emitState    = B.defaultEmitState
     , lastName     = S.TgName (T.pack "a") 1
+    , lowerState   = L.defaultState
 
     , luaState     = state
 
@@ -308,6 +307,7 @@ parseCore state parser name input = do
                       Right e -> [S.LetStmt [S.Binding (S.Name "_") e (annotation e)]]
 
       let rScope = resolveScope state
+          lEnv = lowerState state
       let cont modScope' resolved prog env' =
             let es = case runVerify (verifyProgram prog) of
                        Left es -> toList es
@@ -319,25 +319,25 @@ parseCore state parser name input = do
                  else do
                    let (var, tys) = R.extractToplevels parsed'
                        (var', tys') = R.extractToplevels resolved
-                       ctors = fmap lowerType (Map.restrictKeys (env' ^. T.names . to toMap)
-                                                (Set.mapMonotonic S.unTvName (env' ^. constructors)))
 
-                   lower <- killNewtypePass =<< runLowerWithCtors ctors (lowerProg prog)
+                   (lEnv', lower) <- L.runLowerWithEnv lEnv (L.lowerProgEnv prog)
+                   lower' <- killNewtypePass lower
                    lastG <- genName
-                   case lower of
+                   case lower' of
                      [] -> error "lower returned no statements for the repl"
                      _ -> pure ()
-                   pure $ Just ( case last lower of
+                   pure $ Just ( case last lower' of
                                    (C.StmtLet (C.One (v, t, _))) -> [(v, t)]
                                    (C.StmtLet (C.Many vs)) -> map (\(v, t, _) -> (v, t)) vs
                                    _ -> []
                                , prog
-                               , lower
+                               , lower'
                                , state { resolveScope = rScope { R.varScope = R.insertN' (R.varScope rScope) (zip var var')
                                                                , R.tyScope  = R.insertN' (R.tyScope rScope)  (zip tys tys')
                                                                }
                                        , moduleScope = modScope'
                                        , inferScope = env'
+                                       , lowerState = lEnv'
                                        , lastName = lastG })
       resolved <- resolveProgram rScope (moduleScope state) parsed'
       case resolved of
