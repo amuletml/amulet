@@ -225,14 +225,16 @@ lowerOne :: MonadLower m
          => VarMap.Map (Type CoVar) -> [PatternRow]
          -> m ArmNode
 lowerOne _ [] = error "Cannot have an empty match"
-lowerOne tys rss =
-  let v = findBest heuristic Nothing vars
+lowerOne tys rss = do
+  state <- ask
+
+  let v = findBest (heuristic state) Nothing vars
       Just ty = VarMap.lookup v tys
-  in if complete
-     then pure ArmComplete
-          { nodeArms    = foldr (HSet.insert . leafArm) mempty rMatching
-          , nodeSuccess = rMatching }
-     else lowerOneOf rMatching v ty tys rs
+  if complete
+  then pure ArmComplete
+       { nodeArms    = foldr (HSet.insert . leafArm) mempty rMatching
+       , nodeSuccess = rMatching }
+  else lowerOneOf rMatching v ty tys rs
 
   where
     (rMatching, rs, complete) = trimMatching rss
@@ -262,8 +264,8 @@ lowerOne tys rss =
     --
     -- This tries several heuristics in order, using the next one in the
     -- event of a draw.
-    heuristic :: CoVar -> (Int, Int, Int)
-    heuristic v = (neededPrefix v, branchingFactor v, arity v)
+    heuristic :: LowerState -> CoVar -> (Int, Int, Int)
+    heuristic state v = (neededPrefix v, branchingFactor state v, arity v)
 
     -- | Compute the needed prefix heuristic for a given row variable.
     --
@@ -281,8 +283,8 @@ lowerOne tys rss =
     --
     -- This scores a column based on the number of distinct constructors
     -- within it, favouring those with less distinct cases.
-    branchingFactor :: CoVar -> Int
-    branchingFactor var =
+    branchingFactor :: LowerState -> CoVar -> Int
+    branchingFactor state var =
       let hs = foldr (HSet.insert . maybe PatWildcard partialLower . VarMap.lookup var . rowPatterns) mempty rs
       in -HSet.size hs - (if partialComplete hs then 0 else 1) where
 
@@ -311,10 +313,22 @@ lowerOne tys rss =
         -- Booleans are complete if 'True' and 'False' appears
         go (PatLit LitTrue) = HSet.member (PatLit LitFalse) hs
         go (PatLit LitFalse) = HSet.member (PatLit LitTrue) hs
-        -- Skip these for now as that information isn't available
-        -- TODO: Completeness checking for constructor patterns
-        go Constr{} = False
-        go Destr{} = False
+        -- Ensure all constructors are present
+        go (Constr v) = allCtors hs v
+        go (Destr v _) = allCtors hs v
+
+      allCtors hs = maybe False (VarSet.foldr ((&&) . flip HSet.member hs . Constr) True)  . getCtors
+
+      getCtors :: CoVar -> Maybe VarSet.Set
+      getCtors v = do
+        ctor <- VarMap.lookup v (ctors state)
+        ty <- getType ctor
+        VarMap.lookup ty (types state)
+
+      getType (ForallTy _ _ t) = getType t
+      getType (ConTy a) = pure a
+      getType (AppTy f _) = getType f
+      getType _ = Nothing
 
     -- | Compute the "arity" heuristic for a given row variable.
     --
@@ -439,7 +453,7 @@ lowerOneOf preLeafs var ty tys = go [] . map prepare
       let v' = mkCon v
       (Just cap@(Capture c _), cases') <- case VarMap.lookup v' cases of
         Nothing -> do
-          ForallTy Irrelevant x r <- inst . fromJust <$> asks (Map.lookup v . ctors)
+          ForallTy Irrelevant x r <- inst . fromJust <$> asks (VarMap.lookup (mkType v) . ctors)
           let Just s = r `unify` lowerType cty
               ty' = substituteInType s x
           (,unc) . Just . flip Capture ty' <$> freshFromPat p
