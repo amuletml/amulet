@@ -318,6 +318,7 @@ reExpr r@(OpenIn m e a) =
     resolveOpen m Nothing (\m' -> OpenIn m' <$> reExpr e <*> pure a)
 
 reExpr (Lazy e a) = Lazy <$> reExpr e <*> pure a
+reExpr (Vta e t a) = Vta <$> reExpr e <*> reType e t <*> pure a
 reExpr ExprWrapper{} = error "resolve cast"
 
 reArm :: MonadResolve m

@@ -1,5 +1,5 @@
 impredicative01-fail.ml[6:38 ..6:52]: error
-  Could not match expected type id (forall 'a. 'a -> 'a) with id ('af -> 'af)
+  Could not match expected type id (forall 'a. 'a -> 'a) with id ('ag -> 'ag)
 
   Arising in the expression
   │ 

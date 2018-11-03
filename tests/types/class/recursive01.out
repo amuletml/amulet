@@ -1,4 +1,4 @@
 show : type -> constraint
 show : {'a : type}. show 'a => 'a -> string
-foo : {'a : type}. {'b : 'da}. show 'a => 'a -> 'b
-bar : {'a : type}. {'b : 'dk}. show 'a => 'a -> 'b
+foo : {'a : type}. {'b : 'db}. show 'a => 'a -> 'b
+bar : {'a : type}. {'b : 'dl}. show 'a => 'a -> 'b

@@ -120,6 +120,8 @@ data TypeError where
   UndefinedMethods :: Type Typed -> [(Text, Type Typed)] -> Span -> TypeError
   InvalidContext :: String -> Span -> Type Resolved -> TypeError
 
+  CanNotVta :: Type Typed -> Type Resolved -> TypeError
+
   NotPromotable :: Pretty (Var p) => Var p -> Type p -> Doc -> TypeError
 
 data WhyInstantiate = Expression | Subsumption
@@ -399,6 +401,11 @@ instance Pretty TypeError where
   pretty (InvalidContext what _ ty) =
     vsep [ "Invalid type in context for" <+> string what <+> "declaration:"
          , indent 4 (displayType ty)
+         ]
+
+  pretty (CanNotVta ty arg) =
+    vsep [ "Can not apply expression of type" <+> displayType ty
+         , indent 2 "to visible type argument" <+> displayType arg
          ]
 
   pretty (PatternRecursive _ _) = string "pattern recursive error should be formatNoted"

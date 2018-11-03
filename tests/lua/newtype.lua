@@ -1,9 +1,9 @@
 do
-  local function Foo(fr) return fr end
+  local function Foo(fv) return fv end
   local function It(x) return { __tag = "It", x } end
   local bottom = nil
   bottom(Foo)
-  bottom(function(fs) return fs end)
+  bottom(function(fw) return fw end)
   bottom(It)
-  bottom(function(ft) return ft end)
+  bottom(function(fx) return fx end)
 end

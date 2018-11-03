@@ -1,0 +1,2 @@
+sized : {'e : type}. 'e -> constraint
+size : {'e : type}. {'a : 'e}. sized 'a => int

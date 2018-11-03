@@ -59,6 +59,7 @@ freeIn (LeftSection a b _)  = freeIn a <> freeIn b
 freeIn (RightSection a b _) = freeIn a <> freeIn b
 freeIn (BothSection b _)    = freeIn b
 freeIn AccessSection{}      = mempty
+freeIn (Vta e _ _)          = freeIn e
 freeIn Function{} = error "ds Function freeIn"
 freeIn TupleSection{} = error "ds TupleSection freeIn"
 freeIn OpenIn{} = error "ds OpenIn freeIn"
