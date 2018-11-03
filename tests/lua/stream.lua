@@ -6,7 +6,6 @@ do
   local function Yield(x) return { __tag = "Yield", x } end
   local Done = { __tag = "Done" }
   local function Stream(x) return { __tag = "Stream", x } end
-  io_write("[")
   local function go(st)
     if st > 5 then
       return print("]")
@@ -14,6 +13,7 @@ do
     io_write("'" .. to_string(st) .. "', ")
     return go(st + 1)
   end
+  io_write("[")
   local main = go(1)
   local bottom = nil
   bottom(main)

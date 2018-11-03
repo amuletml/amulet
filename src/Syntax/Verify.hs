@@ -232,6 +232,7 @@ verifyExpr (Parens e _) = verifyExpr e
 verifyExpr (Tuple es _) = traverse_ verifyExpr es
 verifyExpr (TupleSection es _) = traverse_ (traverse_ verifyExpr) es
 verifyExpr (Lazy e _) = verifyExpr e
+verifyExpr (Vta e _ _) = verifyExpr e
 verifyExpr (OpenIn _ e _) = verifyExpr e
 verifyExpr (ExprWrapper w e a) =
   case w of
@@ -318,6 +319,7 @@ nonTrivial Literal{} = False
 nonTrivial Function{} = False
 nonTrivial Hole{} = False
 nonTrivial (Ascription e _ _) = nonTrivial e
+nonTrivial (Vta e _ _) = nonTrivial e
 nonTrivial (Record rs _) = any (nonTrivial . view fExpr) rs
 nonTrivial (RecordExt e rs _) = nonTrivial e || any (nonTrivial . view fExpr) rs
 nonTrivial (Access e _ _) = nonTrivial e

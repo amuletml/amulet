@@ -5,8 +5,8 @@ do
     if o.__tag == "Nil" then
       return Nil
     elseif o.__tag == "Cons" then
-      local fq = o[1]
-      local x, xs = fq._1, fq._2
+      local fs = o[1]
+      local x, xs = fs._1, fs._2
       if f(x) then
         return Cons({ _1 = x, _2 = filter(f, xs) })
       end

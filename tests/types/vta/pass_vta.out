@@ -1,0 +1,14 @@
+id : {'a : type}. 'a -> 'a
+var : int -> int
+asc : int -> int
+let' : int -> int
+let' : int -> int
+let' : int -> int
+let' : int -> int
+begin' : int -> int
+foo : {'a : type}. 'a -> {'b : type}. 'b -> 'b
+rankn : int -> int
+rankn : int
+rankn : int
+bar : ({'a : type}. 'a -> unit) -> unit
+baz : {'a : type}. {'b : type}. 'a -> 'b -> unit

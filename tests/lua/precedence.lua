@@ -1,5 +1,5 @@
 do
   local bottom = nil
-  local function main(bs) return (bs.a + bs.b) * bs.c end
+  local function main(bt) return (bt.a + bt.b) * bt.c end
   bottom(main)
 end

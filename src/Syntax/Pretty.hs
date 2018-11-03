@@ -74,6 +74,7 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
 
   pretty (OpenIn v e _) = pretty v <> string "." <> parens (pretty e)
   pretty (Lazy e _) = keyword "lazy" <+> parenArg e
+  pretty (Vta e t _) = parenFun e <+> keyword "as" <+> pretty t
 
   pretty (ExprWrapper wrap ex an) = go wrap ex where
     go (TypeLam v t) ex = keyword "fun" <+> braces (pretty (TySkol v) <+> colon <+> pretty t) <> dot <+> pretty ex
@@ -309,7 +310,7 @@ displayType = prettyType . dropKindVars mempty where
 
 prettyType :: forall p. (Pretty (Var p), Ord (Var p)) => Type p -> Doc
 prettyType x@TyPromotedCon{} = pretty x
-prettyType x@TyWildcard{} = pretty x
+prettyType TyWildcard{} = skeyword (char '_')
 prettyType x@TyVar{} = pretty x
 prettyType x@TyCon{} = pretty x
 prettyType (TySkol v) = stypeSkol (squote <> pretty (v ^. skolVar))

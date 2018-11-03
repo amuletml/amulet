@@ -123,6 +123,7 @@ instance Respannable Parsed where
   respan k (BinOp l o r a) = BinOp l o r (k a)
   respan k (Hole v a) = Hole v (k a)
   respan k (Ascription e t a) = Ascription e t (k a)
+  respan k (Vta e t a) = Vta e t (k a)
 
   respan k (Record fs a) = Record fs (k a)
   respan k (RecordExt f fs a) = RecordExt f fs (k a)
@@ -156,6 +157,7 @@ instance Respannable Resolved where
   respan k (BinOp l o r a) = BinOp l o r (k a)
   respan k (Hole v a) = Hole v (k a)
   respan k (Ascription e t a) = Ascription e t (k a)
+  respan k (Vta e t a) = Vta e t (k a)
 
   respan k (Record fs a) = Record fs (k a)
   respan k (RecordExt f fs a) = RecordExt f fs (k a)
@@ -189,6 +191,7 @@ instance Respannable Typed where
   respan k (BinOp l o r a) = BinOp l o r (k (fst a), snd a)
   respan k (Hole v a) = Hole v (k (fst a), snd a)
   respan k (Ascription e t a) = Ascription e t (k (fst a), snd a)
+  respan k (Vta e t a) = Vta e t (k (fst a), snd a)
 
   respan k (Record fs a) = Record fs (k (fst a), snd a)
   respan k (RecordExt f fs a) = RecordExt f fs (k (fst a), snd a)

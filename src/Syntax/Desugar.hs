@@ -92,6 +92,7 @@ desugarProgram = traverse statement where
     pure $ App (VarRef (TgInternal "lazy") a)
                (Fun (PatParam (PLiteral LiUnit a)) e a)
                a
+  expr (Vta e t a) = Vta <$> expr e <*> pure t <*> pure a
   expr (OpenIn _ e _) = expr e
 
   buildTuple :: Ann Resolved
