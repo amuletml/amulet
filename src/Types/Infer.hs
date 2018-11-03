@@ -23,6 +23,7 @@ import Data.Traversable
 import Data.Spanned
 import Data.Reason
 import Data.Triple
+import Data.Maybe
 import Data.These
 import Data.Graph
 import Data.Char
@@ -88,7 +89,7 @@ check (Let ns b an) t = do
         pure (Let ns b (an, t))
 
 check ex@(Fun pat e an) ty = do
-  (dom, cod, _) <- quantifier (becauseExp ex) Don'tSkip ty
+  (dom, cod, _) <- quantifier (becauseExp ex) ty
   let domain = _tyBinderType dom
 
   (p, tau, vs, cs) <- inferParameter pat
@@ -191,7 +192,7 @@ infer (Let ns b an) = do
   local (typeVars %~ Set.union vars) $
     local (letBound %~ Set.union bvs) $
       local (names %~ focus ts) $ do
-        (b, ty) <- infer b
+        (b, ty) <- infer' b
         pure (Let ns b (an, ty), ty)
 
 infer ex@(Ascription e ty an) = do
@@ -199,32 +200,34 @@ infer ex@(Ascription e ty an) = do
   e <- check e ty
   pure (Ascription (correct ty e) ty (an, ty), ty)
 
-infer ex@(App f x a) = do
-  (f, ot) <- infer f
-  (dom, c, k) <- quantifier (becauseExp ex) DoSkip ot
-  case dom of
-    Anon d -> do
-      x <- check x d
-      pure (App (k f) x (a, c), c)
-    Invisible{} -> error "invalid invisible quantification in App"
-    Implicit{} -> error "invalid invisible quantification in App"
-
 infer ex@(BinOp l o r a) = do
   (o, ty) <- infer o
 
-  (Anon lt, c1, k1) <- quantifier (becauseExp ex) DoSkip ty
-  (Anon rt, c2, k2) <- quantifier (becauseExp ex) DoSkip c1
+  (Anon lt, c1, k1) <- quantifier (becauseExp ex) ty
+  (Anon rt, c2, k2) <- quantifier (becauseExp ex) c1
 
   (l, r) <- (,) <$> check l lt <*> check r rt
   pure (App (k2 (App (k1 o) l (a, c1))) r (a, c2), c2)
+
+infer ex@App{} = do
+  (ex, ty) <- inferApp ex
+  (k, _, ty) <- instantiate Expression ty
+  pure (fromMaybe id k ex, ty)
+
+infer ex@Vta{} = do
+  (ex, ty) <- inferApp ex
+  (k, _, ty) <- instantiate Expression ty
+  pure (fromMaybe id k ex, ty)
 
 infer ex@(Match t ps a) = do
   tt <-
     case ps of
       (Arm p _ _:_) -> view _2 <$> inferPattern p
       _ -> view _2 <$> infer t
+
   t' <- check t tt
   ty <- freshTV
+
   ps' <- for ps $ \(Arm p g e) -> do
     (p', ms, cs) <- checkPattern p tt
     let tvs = boundTvs p' ms
@@ -266,13 +269,49 @@ infer (Begin xs a) = do
   let start = init xs
       end = last xs
   start <- traverse (fmap fst . infer) start
-  (end, t) <- infer end
+  (end, t) <- infer' end
   pure (Begin (start ++ [end]) (a, t), t)
 
 infer ex = do
   x <- freshTV
   ex' <- check ex x
   pure (ex', x)
+
+-- | Infer a 'Type' for an 'Expr'ession without instantiating variables
+infer' :: MonadInfer Typed m => Expr Resolved -> m (Expr Typed, Type Typed)
+infer' (VarRef k a) = do
+  (_, ty, _) <- lookupTy' k
+  pure (VarRef (TvName k) (a, ty), ty)
+infer' ex@App{} = inferApp ex
+infer' ex@Vta{} = inferApp ex
+infer' x = infer x
+
+inferApp :: MonadInfer Typed m => Expr Resolved -> m (Expr Typed, Type Typed)
+inferApp ex@(App f x a) = do
+  (f, ot) <- infer' f
+  (dom, c, k) <- quantifier (becauseExp ex) ot
+  case dom of
+    Anon d -> do
+      x <- check x d
+      pure (App (k f) x (a, c), c)
+    Invisible{} -> error "invalid invisible quantification in App"
+    Implicit{} -> error "invalid invisible quantification in App"
+
+inferApp ex@(Vta f x a) = do
+  (f, ot) <- infer' f
+  (dom, c) <- retcons (addBlame (becauseExp ex)) $
+    firstForall x ot
+  case dom of
+    Invisible v kind -> do
+      x <- case kind of
+        Just k -> checkAgainstKind (becauseExp ex) x k
+        Nothing -> resolveKind (becauseExp ex) x
+      let ty = apply (Map.singleton v x) c
+      pure (ExprWrapper (TypeApp x) f (a, ty), ty)
+    Implicit{} -> error "invalid implicit quantification in Vta"
+    Anon{} -> error "invalid arrow type in Vta"
+
+inferApp _ = error "not an application"
 
 inferRows :: MonadInfer Typed m
           => [Field Resolved]
@@ -740,6 +779,10 @@ closeOverStrat :: MonadInfer Typed m
                -> Set.Set (Var Typed) -> Expr Typed -> Type Typed -> m (Type Typed)
 closeOverStrat r _ _ = closeOver r
 
+firstForall :: MonadInfer Typed m => Type Resolved -> Type Typed -> m (TyBinder Typed, Type Typed)
+firstForall _ (TyPi x@Invisible{} k) = pure (x, k)
+firstForall a e = confesses (CanNotVta e a)
+
 value :: Expr a -> Bool
 value Fun{} = True
 value Literal{} = True
@@ -759,6 +802,7 @@ value Match{} = False
 value BinOp{} = False
 value Hole{} = False
 value (Ascription e _ _) = value e
+value (Vta e _ _) = value e
 value Access{} = False
 value LeftSection{} = True
 value RightSection{} = True

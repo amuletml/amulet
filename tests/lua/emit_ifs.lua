@@ -6,14 +6,14 @@ do
   local function _bar_bar(a) return function(b) return a or b end end
   local function _not(a) return not a end
   bottom({ ands = _amp_amp, ors = _bar_bar, ["not"] = _not })
-  bottom(function(gh)
+  bottom(function(gs)
     if bool then
       return print("L")
     end
     print("R")
     return print("R")
   end)
-  bottom(function(gs)
+  bottom(function(hd)
     if not bool then
       return print("R")
     end

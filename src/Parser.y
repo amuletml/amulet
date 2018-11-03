@@ -110,7 +110,7 @@ import Syntax
   '('      { Token TcOParen _ _ }
   '?('     { Token TcQParen _ _ }
   ')'      { Token TcCParen _ _ }
-  '@{'     { Token TcAtBrace _ _ }
+  '@'      { Token TcAt _ _ }
   '?'      { Token TcQuestion _ _ }
   '{'      { Token TcOBrace _ _ }
   '}'      { Token TcCBrace _ _ }
@@ -209,16 +209,17 @@ ReplSep :: { () }
     |        { () }
 
 Expr :: { Expr Parsed }
-     : ExprTyApp                               { $1 }
-     | Expr Operator ExprTyApp                 { withPos2 $1 $3 $ BinOp $1 $2 $3 }
+     : ExprTyApp                { $1 }
+     | Expr Operator ExprTyApp  { withPos2 $1 $3 $ BinOp $1 $2 $3 }
 
 ExprTyApp :: { Expr Parsed }
   : ExprApp                                    { $1 }
   | ExprTyApp ':' Type                         { withPos2 $1 $3 $ Ascription $1 (getL $3) }
 
 ExprApp :: { Expr Parsed }
-        : Expr0                                { $1 }
-        | ExprApp PreAtom                      { withPos2 $1 $2 $ App $1 $2 }
+        : Expr0                    { $1 }
+        | ExprApp PreAtom          { withPos2 $1 $2 $ App $1 $2 }
+        | ExprApp '@' TypeAtom     { withPos2 $1 $3 $ Vta $1 (getL $3) }
 
 Expr0 :: { Expr Parsed }
       : fun ListE1(Parameter) '->' ExprBlock '$end' { respanFun $1 $4 $ foldr (\x y -> withPos2 x $4 $ Fun x y) $4 $2 }

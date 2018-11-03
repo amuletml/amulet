@@ -92,6 +92,7 @@ transformExpr fe = goE where
 
   transE (ExprWrapper w e a) = ExprWrapper w (goE e) a
   transE (Lazy e a) = Lazy (goE e) a
+  transE (Vta e t a) = Vta (goE e) t a
 
   goB (Binding v e a) = Binding v (goE e) a
   goB (TypedMatching v e a b) = TypedMatching v (goE e) a b
@@ -119,6 +120,7 @@ transformExprTyped fe fc ft = goE where
   transE (BinOp l o r a) = BinOp (goE l) (goE o) (goE r) (goA a)
   transE (Hole v a) = Hole v (goA a)
   transE (Ascription e t a) = Ascription (goE e) (goT t) (goA a)
+  transE (Vta e t a) = Vta (goE e) (goT t) (goA a)
 
   transE (Record fs a) = Record (map (over fExpr goE) fs) (goA a)
   transE (RecordExt f fs a) = RecordExt (goE f) (map (over fExpr goE) fs) (goA a)
@@ -196,6 +198,7 @@ correct ty (Function bs a) = Function bs (fst a, ty)
 correct ty (BinOp l o r a) = BinOp l o r (fst a, ty)
 correct ty (Hole v a) = Hole v (fst a, ty)
 correct ty (Ascription e t a) = Ascription e t (fst a, ty)
+correct ty (Vta e t a) = Ascription e t (fst a, ty)
 
 correct ty (Record fs a) = Record fs (fst a, ty)
 correct ty (RecordExt f fs a) = RecordExt f fs (fst a, ty)

@@ -1,7 +1,7 @@
 do
   local bottom = nil
-  bottom(function(jf)
-    local i, s = jf.i, jf.s
+  bottom(function(jg)
+    local i, s = jg.i, jg.s
     return {
       int_add_c = 5,
       int_sub_c = -1,
@@ -31,7 +31,7 @@ do
       bol_ne_c = true,
       uni_eq = true,
       uni_ne = false,
-      app = jf.fn(jf.x),
+      app = jg.fn(jg.x),
       int_eq_u = true,
       int_ne_u = false,
       str_eq_u = true,

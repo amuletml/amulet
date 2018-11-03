@@ -92,6 +92,9 @@ data Expr p
   -- Laziness
   | Lazy (Expr p) (Ann p)
 
+  -- Visible type application
+  | Vta (Expr p) (Type p) (Ann p)
+
   | ExprWrapper (Wrapper p) (Expr p) (Ann p)
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Expr p)
@@ -410,6 +413,7 @@ instance Spanned (Ann p) => Spanned (Expr p) where
 
   annotation (OpenIn _ _ a) = annotation a
   annotation (Lazy _ a) = annotation a
+  annotation (Vta _ _ a) = annotation a
 
   annotation (ExprWrapper _ _ a) = annotation a
 

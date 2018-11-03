@@ -183,7 +183,7 @@ inferKind (TySkol sk) = do
 
 inferKind (TyApp f x) = do
   reason <- get
-  (f, (dom, c, _)) <- secondA (quantifier reason Don'tSkip) =<< inferKind f
+  (f, (dom, c, _)) <- secondA (quantifier reason) =<< inferKind f
 
   case dom of
     Anon d -> do

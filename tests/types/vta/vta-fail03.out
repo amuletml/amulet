@@ -1,0 +1,8 @@
+vta-fail03.ml[1:13 ..1:18]: error
+  Can not apply expression of type 'k
+    to visible type argument int
+
+  Arising in the expression
+  │ 
+1 │ let foo x = x @int
+  │             ^^^^^^

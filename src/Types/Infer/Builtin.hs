@@ -3,18 +3,19 @@
    MultiParamTypeClasses #-}
 module Types.Infer.Builtin where
 
+import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Text as T
 import qualified Data.Set as Set
 import Data.Spanned
 import Data.Reason
-import Data.Maybe
 
 import Control.Monad.Infer
 import Control.Lens
 
 import Syntax.Transform
 import Syntax.Types
+import Syntax.Subst
 import Syntax.Var
 import Syntax
 
@@ -106,11 +107,19 @@ decompose :: MonadInfer Typed m
           -> Prism' (Type Typed) (Type Typed, Type Typed)
           -> Type Typed
           -> m (Type Typed, Type Typed, Expr Typed -> Expr Typed)
-decompose r p ty@TyForall{} = do
-  (k', _, t) <- instantiate Expression ty
-  (a, b, k) <- decompose r p t
-  let cont = fromMaybe id k'
-  pure (a, b, cont . k)
+decompose r p (TyForall v _ rest) = do
+  var <- refreshTV v
+  let map = Map.singleton v var
+      exp ex | an <- annotation ex =
+        ExprWrapper (TypeApp var) ex (an, apply map rest)
+  (a, b, k) <- decompose r p rest
+  pure (a, b, k . exp)
+
+decompose r p ty@TyWithConstraints{} = do
+  (rest, k) <- discharge (Const r) ty
+  (a, b, k') <- decompose r p rest
+  pure (a, b, k' . k)
+
 decompose r p ty@(TyPi (Implicit cls) rest) = do
   x <- TvName <$> genName
   i <- view classes
@@ -131,25 +140,33 @@ decompose r p t =
 -- instantiating 'TyForall's and discharging 'Implicit' binders.
 quantifier :: MonadInfer Typed m
            => SomeReason
-           -> SkipImplicit
            -> Type Typed
            -> m (TyBinder Typed, Type Typed, Expr Typed -> Expr Typed)
-quantifier r s ty@TyForall{} = do
-  (k', _, t) <- instantiate Expression ty
-  (a, b, k) <- quantifier r s t
-  pure (a, b, fromMaybe id k' . k)
 
-quantifier r _ wty@(TyPi (Implicit tau) sigma) = do
+quantifier r (TyForall v _ rest) = do
+  var <- refreshTV v
+  let map = Map.singleton v var
+      exp ex | an <- annotation ex =
+        ExprWrapper (TypeApp var) ex (an, apply map rest)
+  (a, b, k) <- quantifier r (apply map rest)
+  pure (a, b, k . exp)
+
+quantifier r ty@TyWithConstraints{} = do
+  (rest, k) <- discharge (Const r) ty
+  (a, b, k') <- quantifier r rest
+  pure (a, b, k' . k)
+
+quantifier r wty@(TyPi (Implicit tau) sigma) = do
   x <- TvName <$> genName
   i <- view classes
   tell (Seq.singleton (ConImplicit r i x tau))
 
-  (dom, cod, k) <- quantifier r DoSkip sigma
+  (dom, cod, k) <- quantifier r sigma
   let wrap ex = ExprWrapper (WrapVar x) (ExprWrapper (TypeAsc wty) ex (annotation ex, wty)) (annotation ex, sigma)
   pure (dom, cod, k . wrap)
 
-quantifier _ _ (TyPi x b) = pure (x, b, id)
-quantifier r _ t = do
+quantifier _ (TyPi x b) = pure (x, b, id)
+quantifier r t = do
   (a, b) <- (,) <$> freshTV <*> freshTV
   k <- subsumes r t (TyPi (Anon a) b)
   pure (Anon a, b, \x -> ExprWrapper k x (annotation x, TyPi (Anon a) b))

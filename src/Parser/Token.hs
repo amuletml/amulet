@@ -62,7 +62,7 @@ data TokenClass
   | TcQParen -- ^ A @?(@ token.
   | TcOParen -- ^ A @(@ token.
   | TcCParen -- ^ A @)@ token.
-  | TcAtBrace -- ^ A @@{@ token.
+  | TcAt -- ^ A @@{@ token.
   | TcQuestion -- ^ A @?@ token.
   | TcOBrace -- ^ A @{@ token.
   | TcCBrace -- ^ A @}@ token.
@@ -142,7 +142,7 @@ instance Show TokenClass where
   show TcQParen = "?("
   show TcOParen = "("
   show TcCParen = ")"
-  show TcAtBrace = "@{"
+  show TcAt = "@"
   show TcQuestion = "?"
   show TcOBrace = "{"
   show TcCBrace = "}"
