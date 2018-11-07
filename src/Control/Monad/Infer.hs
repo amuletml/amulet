@@ -222,7 +222,7 @@ instantiate r tp@(TyPi (Anon co) od@dm) = do
       lam e | od == dm = e
       lam e
         | ann <- annotation e
-        = Fun (PatParam (PType (Capture (TvName var) (ann, co)) co (ann, co))) (cont (App e (VarRef (TvName var) (ann, co)) (ann, od))) (ann, ty)
+        = Fun (PatParam (PType (Capture var (ann, co)) co (ann, co))) (cont (App e (VarRef var (ann, co)) (ann, od))) (ann, ty)
 
   pure (Just lam, tp, ty)
 
@@ -235,16 +235,16 @@ instantiate r tp@(TyPi (Implicit co) od@dm) = do
       lam e | od == dm = e
       lam e
         | ann <- annotation e
-        = Fun (EvParam (PType (Capture (TvName var) (ann, co)) co (ann, co))) (cont (App e (VarRef (TvName var) (ann, co)) (ann, od))) (ann, ty)
+        = Fun (EvParam (PType (Capture var (ann, co)) co (ann, co))) (cont (App e (VarRef var (ann, co)) (ann, od))) (ann, ty)
 
   pure (Just lam, tp, ty)
 instantiate _ ty = pure (Just id, ty, ty)
 
 freshTV :: MonadNamey m => m (Type Typed)
-freshTV = TyVar . TvName <$> genName
+freshTV = TyVar <$> genName
 
 refreshTV :: MonadNamey m => Var Typed -> m (Type Typed)
-refreshTV (TvName v) = TyVar . TvName <$> genNameFrom nm where
+refreshTV v = TyVar <$> genNameFrom nm where
   nm = case v of
     TgInternal x -> x
     TgName x _ -> x

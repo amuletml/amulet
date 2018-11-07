@@ -49,7 +49,7 @@ approximate :: MonadInfer Typed m
 approximate (Binding v e _) = do
   (ty, st) <- runStateT (approxType e) Supplied
   ty' <- generalise nominalTvs (becauseExp e) ty
-  pure (st, (TvName v, if not (wasGuessed st) then ty' else ty))
+  pure (st, (v, if not (wasGuessed st) then ty' else ty))
 approximate Matching{} = error "Matching before TC"
 approximate TypedMatching{} = error "TypedBinding before TC"
 

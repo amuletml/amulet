@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleContexts, TupleSections, ScopedTypeVariables,
-   ViewPatterns, LambdaCase #-}
+   ViewPatterns, LambdaCase, TypeFamilies #-}
 module Types.Infer.Class (WrapFlavour(..), inferClass, inferInstance, reduceClassContext) where
 
 import Prelude hiding (lookup)
@@ -52,9 +52,8 @@ inferClass clss@(Class name ctx _ methods classAnn) = do
   let classCon' =
         T.cons (toUpper (T.head (nameName name)))
           (T.tail (nameName name))
-  classCon <- TvName <$> genNameFrom classCon'
+  classCon <- genNameFrom classCon'
 
-  name <- pure (TvName name)
   (k, params) <- resolveClassKind clss
   let classConstraint = foldl TyApp (TyCon name) (map toVar params)
       scope (TyAnnArg v k:cs) = one v k <> scope cs
@@ -66,14 +65,13 @@ inferClass clss@(Class name ctx _ methods classAnn) = do
   local (names %~ focus (one name k <> scope params)) $ do
     -- Infer the types for every method
     (decls, rows) <- fmap unzip . for signatures $ \meth@(MethodSig method ty _) -> do
-      method <- pure (TvName method)
       ty <- silence $ -- Any errors will have been caught by the resolveClassKind
         resolveKind (BecauseOf meth) ty
       withHead <- closeOver (BecauseOf meth) $
         TyPi (Implicit classConstraint) ty
 
       pure ( (method, withHead)
-           , (Anon, method, nameName (unTvName method), ty))
+           , (Anon, method, nameName method, ty))
 
     let tele = one name k <> teleFromList decls
 
@@ -90,8 +88,8 @@ inferClass clss@(Class name ctx _ methods classAnn) = do
           closeOver (BecauseOf clss) $
             TyPi (Implicit classConstraint) obligation
         var@(TgName name _) <- genNameWith (classCon' <> T.singleton '$')
-        pure ( singleton classAnn Superclass (TvName var) impty
-             , (Implicit, TvName var, name, obligation))
+        pure ( singleton classAnn Superclass var impty
+             , (Implicit, var, name, obligation))
 
     (fold -> defaultMap) <-
       local (classes %~ mappend scope) . local (names %~ focus tele) . for defaults $ \(DefaultMethod (Binding method exp _) _) -> do
@@ -128,7 +126,7 @@ inferClass clss@(Class name ctx _ methods classAnn) = do
 
     let mkDecl :: (Type Typed -> TyBinder Typed, Var Typed, T.Text, Type Typed) -> m (Binding Typed)
         mkDecl (f, var, label, theTy) = do
-          capture <- TvName <$> genName
+          capture <- genName
           let ty = TyPi (f classConstraint) theTy
           let expr =
                 Fun (EvParam
@@ -143,7 +141,7 @@ inferClass clss@(Class name ctx _ methods classAnn) = do
 
         newtypeClassDecl :: (Type Typed -> TyBinder Typed, Var Typed, T.Text, Type Typed) -> m (Binding Typed)
         newtypeClassDecl (f, var, _, theTy) = do
-          capture <- TvName <$> genName
+          capture <- genName
           let ty = TyPi (f classConstraint) theTy
           let expr =
                 Fun (EvParam
@@ -172,11 +170,11 @@ inferClass _ = error "not a class"
 inferInstance :: forall m. MonadInfer Typed m => Toplevel Resolved -> m (Toplevel Typed, Var Typed, Type Typed)
 inferInstance inst@(Instance clss ctx instHead bindings ann) = do
   ClassInfo clss classHead methodSigs classContext classCon classConTy classAnn defaults <-
-    view (classDecs . at (TvName clss) . non undefined)
+    view (classDecs . at clss . non undefined)
 
-  let classCon' = nameName (unTvName classCon)
+  let classCon' = nameName classCon
 
-  instanceName <- TvName <$> genNameWith (T.pack "$d" <> classCon')
+  instanceName <- genNameWith (T.pack "$d" <> classCon')
 
   -- Make sure we have a valid context.
   -- **Note**: Instances with no context are given a tyUnit context so
@@ -209,11 +207,11 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
   (localAssums', instancePattern) <-
     let mkBinds x | x == tyUnit = pure (mempty, PLiteral LiUnit (ann, tyUnit))
         mkBinds (TyTuple a b) = do
-          var <- TvName <$> genName
+          var <- genName
           (scope, pat) <- mkBinds b
           pure (insert ann LocalAssum var a scope, PTuple [Capture var (ann, a), pat] (ann, TyTuple a b))
         mkBinds x = do
-          var <- TvName <$> genName
+          var <- genName
           pure (singleton ann LocalAssum var x, Capture var (ann, x))
     in mkBinds ctx
 
@@ -221,12 +219,12 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
 
   methodSigs <- traverse (closeOver (BecauseOf inst) . apply sub) methodSigs
   classContext <- pure $ fmap (apply sub) classContext
-  let methodNames = Map.mapKeys (nameName . unTvName) methodSigs
+  let methodNames = Map.mapKeys nameName methodSigs
 
   (Map.fromList -> methodMap, methods) <- fmap unzip . local (classes %~ mappend localAssums) $
     for bindings $ \case
       bind@(Binding v e an) -> do
-        sig <- case Map.lookup (TvName v) methodSigs of
+        sig <- case Map.lookup v methodSigs of
           Just x -> pure x
           Nothing -> confesses (WrongClass bind clss)
 
@@ -242,7 +240,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
           let (c@(ConImplicit reason _ _ _):_) = reverse cons
           confesses (addBlame reason (UnsatClassCon reason c (InstanceMethod ctx)))
 
-        name <- TvName <$> genName
+        name <- genName
         let reify an ty var =
               case wrap' Map.! var of
                 ExprApp v -> v
@@ -259,8 +257,8 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
             shove cs (ExprWrapper w e a) = ExprWrapper w (shove cs e) a
             shove cs x = addLet cs x
 
-        pure ( (nameName v, TvName v')
-             , Binding (TvName v') (Ascription (solveEx sig sub (wrap <> wrap') (shove deferred e)) sig (an, sig)) (an, sig))
+        pure ( (nameName v, v')
+             , Binding v' (Ascription (solveEx sig sub (wrap <> wrap') (shove deferred e)) sig (an, sig)) (an, sig))
       _ -> error "not possible: non-Binding method"
 
   let needDefaults = methodNames `Map.difference` methodMap
@@ -284,7 +282,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
       let (c@(ConImplicit reason _ _ _):_) = reverse cons
       confesses (addBlame reason (UnsatClassCon reason c (InstanceMethod ctx)))
 
-    capture <- TvName <$> genName
+    capture <- genName
     let reify an ty var =
           case wrap' Map.! var of
             ExprApp v -> v
@@ -301,14 +299,14 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
         shove cs (ExprWrapper w e a) = ExprWrapper w (shove cs e) a
         shove cs x = addLet cs x
 
-    var <- TvName <$> genNameFrom name
+    var <- genNameFrom name
     let expr = Ascription (solveEx ty sub (wrap <> wrap') (shove deferred e)) ty (an, ty)
         bind = Binding var expr (an, ty)
 
     pure (Field name (VarRef var (an, ty)) (an, ty), bind)
 
   (contextFields, cs) <- listen . for (Map.toList classContext) $ \(name, ty) -> do
-    var <- TvName <$> genName
+    var <- genName
     tell (pure (ConImplicit (BecauseOf inst) scope var ty))
     pure (Field name
            (ExprWrapper (WrapVar var)

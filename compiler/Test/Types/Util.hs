@@ -46,7 +46,7 @@ checkExpr e t = flip Namey.evalNamey MonadInfer.firstName $ MonadInfer.runInfer 
 
 equivalent, disjoint :: Type Typed -> Type Typed -> Bool
 equivalent a b =
-  let task = Seq.singleton (ConUnify (BecauseOf (Blame internal)) (TvName (TgInternal "co")) a b)
+  let task = Seq.singleton (ConUnify (BecauseOf (Blame internal)) (TgInternal "co") a b)
   in case flip Namey.evalNamey MonadInfer.firstName . MonadInfer.runChronicleT . solve $ task of
     That{} -> True
     _ -> False
@@ -55,11 +55,11 @@ disjoint a b = not (a `equivalent` b)
 
 unify :: Type Typed -> Type Typed -> Either (Seq TypeError) (Coercion Typed)
 unify a b =
-  let task = Seq.singleton (ConUnify (BecauseOf (Blame internal)) (TvName (TgInternal "co")) a b)
+  let task = Seq.singleton (ConUnify (BecauseOf (Blame internal)) (TgInternal "co") a b)
   in case flip Namey.evalNamey MonadInfer.firstName . MonadInfer.runChronicleT . solve $ task of
     This e -> Left e
     These e _ -> Left e
-    That (_, m, _) -> case m Map.! TvName (TgInternal "co") of
+    That (_, m, _) -> case m Map.! TgInternal "co" of
       Cast co -> Right co
       IdWrap -> Right (AssumedCo a b)
       c -> error ("not a coercion " ++ show c)
