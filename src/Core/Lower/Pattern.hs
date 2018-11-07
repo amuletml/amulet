@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, TupleSections, ScopedTypeVariables, FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings, TupleSections, ScopedTypeVariables, FlexibleContexts, TypeFamilies #-}
 
 {-| Lowers "Syntax"'s nested patterns into "Core"'s flattened patterns.
 
@@ -40,7 +40,7 @@ import Core.Core
 import Core.Var
 
 import qualified Syntax as S
-import Syntax.Var (Var(..), Typed)
+import Syntax.Var (Typed)
 
 type ArmId = Int
 type ArmSet = HSet.HashSet ArmId
@@ -246,7 +246,7 @@ lowerOne tys rss = do
       = first3 (ArmLeaf arm vBind' tyBind:) (if guarded then trimMatching rs else ([], [], True))
     trimMatching rs = ([], rs, False)
 
-    addTrivial v (S.Capture (TvName v') (_, ty)) o = (VS v (mkVal v') (lowerType ty):) <$> o
+    addTrivial v (S.Capture v' (_, ty)) o = (VS v (mkVal v') (lowerType ty):) <$> o
     addTrivial _ S.Wildcard{} o = o
     addTrivial _ _ _ = Nothing
 
@@ -292,7 +292,7 @@ lowerOne tys rss = do
       partialLower S.Capture{} = PatWildcard
       partialLower (S.PLiteral l _) = PatLit (lowerLiteral l)
       partialLower (S.PSkolem p _ _) = partialLower p
-      partialLower (S.Destructure (TvName v) _ _) = Constr (mkCon v)
+      partialLower (S.Destructure v _ _) = Constr (mkCon v)
       partialLower (S.PRecord _ _) = PatExtend (Capture (CoVar 0 "?" ValueVar) (VarTy tyvarA)) []
       partialLower (S.PAs p _ _) = partialLower p
       partialLower p = error ("Unhandled pattern " ++ show p)
@@ -374,7 +374,7 @@ lowerOneOf preLeafs var ty tys = go [] . map prepare
           (pat', vs) = unwrapAs pat
       in ( pat', PR arms (VarMap.delete var pats) gd (vs ++ vBind) tyBind )
 
-    unwrapAs (S.PAs p (TvName v) _) = (VS var (mkVal v) ty:) <$> unwrapAs p
+    unwrapAs (S.PAs p v _) = (VS var (mkVal v) ty:) <$> unwrapAs p
     unwrapAs p = (p, [])
 
     go unc [] = lowerOne tys (reverse unc)
@@ -385,7 +385,7 @@ lowerOneOf preLeafs var ty tys = go [] . map prepare
 
     -- | The fallback handler for "generic" fields
     goGeneric (S.Wildcard _) r = r
-    goGeneric (S.Capture (TvName v) _) (PR arm ps gd vBind tyBind)
+    goGeneric (S.Capture v _) (PR arm ps gd vBind tyBind)
       = PR arm ps gd (VS var (mkVal v) ty:vBind) tyBind
     goGeneric p _ = error ("Unhandled pattern " ++ show p)
 
@@ -443,12 +443,12 @@ lowerOneOf preLeafs var ty tys = go [] . map prepare
           buildCtor (c, (Nothing, pats)) = (Constr c, [], reverse pats)
           buildCtor (c, (Just cap, pats)) = (Destr c cap, [cap], reverse pats)
       in build arms
-    goCtors unc cases ((S.Destructure (TvName v) Nothing _,r):rs) =
+    goCtors unc cases ((S.Destructure v Nothing _,r):rs) =
       -- TODO: Work out whether we need to bind type variables at all.
       let v' = mkCon v
           (c, cases') = fromMaybe (Nothing, unc) (VarMap.lookup v' cases)
       in goCtors unc (VarMap.insert v' (c,r:cases') cases) rs
-    goCtors unc cases (( S.Destructure (TvName v) (Just p) (_, cty)
+    goCtors unc cases (( S.Destructure v (Just p) (_, cty)
                        , PR arm pats gd vBind tyBind ):rs) = do
       let v' = mkCon v
       (Just cap@(Capture c _), cases') <- case VarMap.lookup v' cases of
@@ -501,8 +501,8 @@ normalisePattern (S.PTuple ps (pos, _)) = convert ps where
 -- | Make a fresh variable from a pattern. This attempts to reuse names
 -- if at all possible.
 freshFromPat :: MonadNamey m => S.Pattern Typed -> m CoVar
-freshFromPat (S.Capture (TvName v) _) = freshFrom (mkVal v)
-freshFromPat (S.PAs _ (TvName v) _) = freshFrom (mkVal v)
+freshFromPat (S.Capture v _) = freshFrom (mkVal v)
+freshFromPat (S.PAs _ v _) = freshFrom (mkVal v)
 freshFromPat _ = fresh ValueVar
 
 -- | If this is a "trivial" pattern (it does not require a branch in
@@ -527,9 +527,9 @@ captureVars (Capture v ty) = (v, ty)
 patternVars' :: S.Pattern Typed -> [(CoVar, Type CoVar)]
 patternVars' S.Wildcard{} = []
 patternVars' S.PLiteral{} = []
-patternVars' (S.Capture (TvName v) (_, ty)) = [(mkVal v, lowerType ty)]
+patternVars' (S.Capture v (_, ty)) = [(mkVal v, lowerType ty)]
 patternVars' (S.Destructure _ p _) = maybe [] patternVars' p
-patternVars' (S.PAs p (TvName v) (_, ty)) = (mkVal v, lowerType ty):patternVars' p
+patternVars' (S.PAs p v (_, ty)) = (mkVal v, lowerType ty):patternVars' p
 patternVars' (S.PRecord fs _) = concatMap (patternVars' . snd) fs
 patternVars' (S.PWrapper _ p _) = patternVars' p
 patternVars' (S.PSkolem p _ _) = patternVars' p

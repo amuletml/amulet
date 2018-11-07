@@ -22,7 +22,7 @@ import Text.Pretty.Semantic
 -- with their position in the original code.
 newtype Parsed = Parsed Parsed deriving Data
 
--- | The parsed phrase is used after we have resolved variables, and
+-- | The resolved phrase is used after we have resolved variables, and
 -- during desugaring.
 --
 -- We do not provide any additional annotations, but do uniquify
@@ -43,58 +43,51 @@ newtype Typed = Typed Typed deriving Data
 type Name = Var Resolved
 
 -- | A variable at a given phase of compilation.
-data family Var a
+type family Var p :: * where
+  Var Parsed = VarParsed
+  Var Resolved = VarResolved
+  Var Typed = VarResolved
 
 -- | Parsed variables are little more than identifiers: they do not have
 -- a concept of scope.
-data instance Var Parsed
+data VarParsed
   = Name Text -- ^ An unqualified identifier
-  | InModule Text (Var Parsed) -- ^ An identifier in a module
+  | InModule Text VarParsed -- ^ An identifier in a module
   deriving (Eq, Show, Ord, Data)
 
-instance Semigroup (Var Parsed) where
+instance Semigroup VarParsed where
   (Name t) <> v = InModule t v
   (InModule m n) <> v = InModule m (n <> v)
 
 -- | A resolved variable. These no longer keep track of which module they
 -- belong to, and thus simply hold a 'T.Text' value.
-data instance Var Resolved
+data VarResolved
   = TgName Text {-# UNPACK #-} !Int -- ^ A user-defined name
   | TgInternal Text -- ^ A variable provided by the compiler
   deriving (Show, Data)
 
-instance Semigroup (Var Resolved) where
+instance Semigroup VarResolved where
   _ <> x@(TgInternal _) = x
   (TgInternal _) <> _ = error "Nonsensical module"
   (TgName x _) <> (TgName y i) = TgName (T.concat [x, T.pack ".", y]) i
 
-instance Eq (Var Resolved) where
+instance Eq VarResolved where
   (TgName _ a) == (TgName _ b) = a == b
   (TgInternal a) == (TgInternal b) = a == b
   _ == _ = False
 
-instance Ord (Var Resolved) where
+instance Ord VarResolved where
   (TgName _ a) `compare` (TgName _ b) = a `compare` b
   (TgInternal a) `compare` (TgInternal b) = a `compare` b
 
   (TgName _ _) `compare` (TgInternal _) = GT
   (TgInternal _) `compare` (TgName _ _) = LT
 
--- | A typed variable.
-newtype instance Var Typed
-  = TvName (Var Resolved)
-  deriving (Show, Data, Eq, Ord)
-
-instance Semigroup (Var Typed) where
-  (TvName x) <> (TvName y) = TvName (x <> y)
-
-instance Pretty (Var Parsed) where
+instance Pretty VarParsed where
   pretty (Name v) = text v
   pretty (InModule t v) = text t <> dot <> pretty v
 
-instance Pretty (Var Resolved) where
+instance Pretty VarResolved where
   pretty (TgName v i) = text v <> scomment (string "#" <> string (show i))
   pretty (TgInternal v) = text v
 
-instance Pretty (Var Typed) where
-  pretty (TvName v) = pretty v

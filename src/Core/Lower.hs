@@ -1,6 +1,6 @@
 {-# LANGUAGE LambdaCase, TupleSections, ExplicitNamespaces,
     PatternSynonyms, RankNTypes, ScopedTypeVariables, FlexibleContexts,
-    ConstraintKinds, OverloadedStrings #-}
+    ConstraintKinds, OverloadedStrings, TypeFamilies #-}
 module Core.Lower
   ( LowerState, defaultState
   , runLowerT, runLowerWithEnv
@@ -40,7 +40,7 @@ import Core.Var
 
 import qualified Syntax as S
 import Syntax.Let
-import Syntax.Var (Var(..), Typed)
+import Syntax.Var (Var, Typed, VarResolved(..))
 import Syntax.Pretty (Expr(..), Pattern(..), Skolem(..), Toplevel(..), Constructor(..), Arm(..))
 import Syntax.Transform
 
@@ -123,7 +123,7 @@ lowerAt (Fun param bd an) (ForallTy Irrelevant a b) =
       operational (PType p _ _) = operational p
       operational p = p
    in case operational p of
-        S.Capture (TvName v) _ -> Lam (TermArgument (mkVal v) a) <$> lowerAtTerm bd b
+        S.Capture v _ -> Lam (TermArgument (mkVal v) a) <$> lowerAtTerm bd b
         _ -> do
           bd' <- lowerAtTerm bd b
           arg <- freshFromPat p
@@ -179,7 +179,7 @@ lowerAt (ExprWrapper wrap e an) ty =
     S.TypeApp t -> do
       ex' <- lowerAtAtom e (lowerType (S.getType e))
       pure (C.TyApp ex' (lowerType t))
-    S.TypeLam (Skolem (TvName (TgName _ id)) (TvName (TgName n _)) _ _) k ->
+    S.TypeLam (Skolem (TgName _ id) (TgName n _) _ _) k ->
       let ty' (ForallTy (Relevant v) _ t) = substituteInType (VarMap.singleton v (VarTy var)) t
           ty' x = x
           var = CoVar id n TypeVar
@@ -189,7 +189,7 @@ lowerAt (ExprWrapper wrap e an) ty =
     S.WrapVar v -> error $ "Unsolved wrapper variable " ++ show v ++ ". This is a bug"
     S.IdWrap -> lowerAt e ty
   where
-    co (S.VarCo (TvName x)) = CoercionVar (mkCo x)
+    co (S.VarCo x) = CoercionVar (mkCo x)
     co (S.ReflCo t) = SameRepr (lowerType t) (lowerType t)
     co (S.AssumedCo t t') = SameRepr (lowerType t) (lowerType t')
     co (S.SymCo c) = Symmetry (co c)
@@ -199,13 +199,13 @@ lowerAt (ExprWrapper wrap e an) ty =
     co (S.RowsCo c rs) = C.Record (co c) (map (second co) rs)
     co (S.ExactRowsCo rs) = C.ExactRecord (map (second co) rs)
     co (S.ProjCo rs rs') = Projection (map (second mkReflexive) rs) (map (second co) rs')
-    co (S.ForallCo (TvName v) cd rs) = C.Quantified (Relevant (mkCo v)) (co cd) (co rs)
+    co (S.ForallCo v cd rs) = C.Quantified (Relevant (mkCo v)) (co cd) (co rs)
     mkReflexive = join SameRepr . lowerType
 
 lowerAt e _ = lowerAnyway e
 
 lowerAnyway :: MonadLower m => Expr Typed -> Lower m Term
-lowerAnyway (S.VarRef (TvName v) (_, ty)) = do
+lowerAnyway (S.VarRef v (_, ty)) = do
   let lty = lowerType ty
   env <- asks vars
 
@@ -292,7 +292,7 @@ lowerProg' (Module _ b:prg) = lowerProg' (b ++ prg)
 lowerProg' (Class{}:prg) = lowerProg' prg
 lowerProg' (Instance{}:prg) = lowerProg' prg
 
-lowerProg' (ForeignVal (TvName v) ex tp _:prg) =
+lowerProg' (ForeignVal v ex tp _:prg) =
   let tyB = lowerType tp
       vB = mkVal v
   in case unboxedTy tyB of
@@ -318,17 +318,17 @@ lowerProg' (LetStmt vs:prg) = do
   let env' = VarMap.fromList (foldMap lowerBind vs)
       lowerBind bind =
         let ty = lowerType (bind ^. (S.bindAnn . _2))
-        in map (\(TvName v) -> (mkVal v, ty)) (bindVariables bind)
+        in map (\v -> (mkVal v, ty)) (bindVariables bind)
 
   local (\s -> s { vars = env' }) $ do
     vs' <- lowerLet vs
     foldr ((.) . ((:) . C.StmtLet)) id vs' <$$> lowerProg' prg
 
-lowerProg' (TypeDecl (TvName var) _ cons:prg) = do
+lowerProg' (TypeDecl var _ cons:prg) = do
   let cons' = map (\case
-                       UnitCon (TvName p) (_, t) -> (p, mkCon p, lowerType t)
-                       ArgCon (TvName p) _ (_, t) -> (p, mkCon p, lowerType t)
-                       GeneralisedCon (TvName p) t _ -> (p, mkCon p, lowerType t))
+                       UnitCon p (_, t) -> (p, mkCon p, lowerType t)
+                       ArgCon p _ (_, t) -> (p, mkCon p, lowerType t)
+                       GeneralisedCon p t _ -> (p, mkCon p, lowerType t))
                 cons
       ccons = map (\(_, a, b) -> (a, b)) cons'
       scons = map (\(a, _, b) -> (mkCon a, b)) cons'
@@ -347,11 +347,11 @@ lowerLet bs =
       lowerScc (CyclicSCC vs) = pure . Many <$> do
         -- Cyclic bindings will only ever be normal. Well, I
         -- jolly hope so anyway
-        for vs $ \(S.Binding (TvName var) ex (_, ty)) -> do
+        for vs $ \(S.Binding var ex (_, ty)) -> do
           let ty' = lowerType ty
           (mkVal var,ty',) <$> lowerPolyBind ty' ex
 
-      lowerScc (AcyclicSCC (S.Binding (TvName var) ex (_, ty))) = pure . One <$> do
+      lowerScc (AcyclicSCC (S.Binding var ex (_, ty))) = pure . One <$> do
         let ty' = lowerType ty
         (mkVal var, ty',) <$> lowerPolyBind ty' ex
 
@@ -393,11 +393,11 @@ lowerLet bs =
                      -> Type -- ^ The quantified variable we're binding to's type
                      -> (Var Typed, S.Ann Typed) -- ^ The pattern variable we're binding to
                      -> m (Binding CoVar)
-      patternExtract pos p test ty outerTy (TvName var, (_, innerTy)) = do
+      patternExtract pos p test ty outerTy (var, (_, innerTy)) = do
         let var' = mkVal var
             innerTy' = lowerType innerTy
         pvar@(CoVar vn vt _) <- freshFrom var'
-        let p' = stripPtrn (TvName var) (TvName (TgName vt vn)) p
+        let p' = stripPtrn var (TgName vt vn) p
 
         -- Generate `let x = match test with | ... x' ... -> x`
         One  . (var', outerTy, ) <$> patternWrap pos p' test ty outerTy (Atom (Ref pvar innerTy')) innerTy'

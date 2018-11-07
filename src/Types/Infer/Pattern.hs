@@ -65,10 +65,10 @@ checkPattern :: MonadInfer Typed m
                   , [(Type Typed, Type Typed)]
                   )
 checkPattern (Wildcard ann) ty = pure (Wildcard (ann, ty), mempty, [])
-checkPattern (Capture v ann) ty = pure (Capture (TvName v) (ann, ty), one v ty, [])
+checkPattern (Capture v ann) ty = pure (Capture v (ann, ty), one v ty, [])
 checkPattern (PAs p v ann) ty = do
   (p', b, cs) <- checkPattern p ty
-  pure (PAs p' (TvName v) (ann, ty), one v ty <> b, cs)
+  pure (PAs p' v (ann, ty), one v ty <> b, cs)
 checkPattern ex@(Destructure con ps ann) target =
   case ps of
     Nothing -> do
@@ -78,13 +78,13 @@ checkPattern ex@(Destructure con ps ann) target =
               TyWithConstraints cs ty -> (cs, ty)
               _ -> ([], pty)
       co <- unify (becausePat ex) target ty
-      (_1 %~ mkSkolPat sub) <$> wrapPattern (Destructure (TvName con) Nothing, mempty, cs) (ann, target) (ty, co)
+      (_1 %~ mkSkolPat sub) <$> wrapPattern (Destructure con Nothing, mempty, cs) (ann, target) (ty, co)
     Just p ->
       let go cs t sub = do
             (c, d, _) <- decompose (becausePat ex) _TyArr t
             (ps', b, cs') <- checkPattern p c
             co <- unify (becausePat ex) target d
-            (_1 %~ mkSkolPat sub) <$> wrapPattern (Destructure (TvName con) (Just ps'), b, cs ++ cs') (ann, target) (d, co)
+            (_1 %~ mkSkolPat sub) <$> wrapPattern (Destructure con (Just ps'), b, cs ++ cs') (ann, target) (d, co)
       in do
         (t, sub) <- skolGadt con =<< lookupTy' con
         case t of
@@ -189,7 +189,7 @@ skolGadt var (_, oty, ty) =
       fugitives = mentioned `Set.union` foldMap (ftv . snd) freed
    in do
      vs <- for (Set.toList (ftv ty `Set.difference` fugitives)) $ \v ->
-       (v,) <$> freshSkol (ByExistential (TvName var) oty) ty v
+       (v,) <$> freshSkol (ByExistential var oty) ty v
      pure (apply (Map.fromList vs) ty, Map.fromList vs)
 
 wrapPattern :: Applicative f => (Ann Typed -> Pattern Typed, Telescope Typed, [(Type Typed, Type Typed)])

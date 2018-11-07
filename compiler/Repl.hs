@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, FlexibleContexts, ScopedTypeVariables, ViewPatterns #-}
+{-# LANGUAGE OverloadedStrings, FlexibleContexts, ScopedTypeVariables, ViewPatterns, TypeFamilies #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
 module Repl

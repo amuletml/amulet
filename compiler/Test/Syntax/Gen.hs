@@ -33,7 +33,7 @@ genType =
     , TyApp <$> genType <*> genType
     , do
         v <- genVar
-        TyForall (TvName v) . Just <$> genType <*> genType
+        TyForall v . Just <$> genType <*> genType
     , do
         n <- Gen.int (Range.linear 1 10)
         let alpha = map singleton $ cycle ['a'..'z']
