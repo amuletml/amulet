@@ -15,7 +15,7 @@ import Types.Infer.Builtin
 import Types.Kinds
 
 -- For polymorphic recursion, mostly
-approxType :: MonadInfer Typed m => Expr Resolved -> StateT Origin m (Type Typed)
+approxType :: MonadInfer Typed m => Expr Desugared -> StateT Origin m (Type Typed)
 approxType r@(Fun p e _) = TyPi <$> approxParam p <*> approxType e where
   approxParam (PatParam p) = Anon <$> approxPattern r p
   approxParam (EvParam _) = error "approx EvParam"
@@ -44,7 +44,7 @@ approxType (App (VarRef v _) (Fun (PatParam (PLiteral LiUnit _)) e _) _) | v == 
 approxType _ = guess
 
 approximate :: MonadInfer Typed m
-            => Binding Resolved
+            => Binding Desugared
             -> m (Origin, (Var Typed, Type Typed))
 approximate (Binding v e _) = do
   (ty, st) <- runStateT (approxType e) Supplied
@@ -57,7 +57,7 @@ wasGuessed :: Origin -> Bool
 wasGuessed Guessed = True
 wasGuessed _ = False
 
-approxPattern :: MonadInfer Typed m => Expr Resolved -> Pattern Resolved -> StateT Origin m (Type Typed)
+approxPattern :: MonadInfer Typed m => Expr Desugared -> Pattern Desugared -> StateT Origin m (Type Typed)
 approxPattern _ Wildcard{} = guess
 approxPattern _ Capture{} = guess
 approxPattern _ Destructure{} = guess
@@ -88,7 +88,7 @@ guess = do
   put Guessed
   lift freshTV
 
-builtinOps :: Map.Map (Var Resolved) (Type Typed)
+builtinOps :: Map.Map (Var Desugared) (Type Typed)
 builtinOps =
   Map.fromList
     [ (TgInternal "+", tyInt)

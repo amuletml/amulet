@@ -27,11 +27,11 @@ import Syntax
 import Types.Infer.Builtin
 import Types.Kinds
 
-inferProgram :: MonadNamey m => Env -> [Toplevel Resolved] -> m (These [TypeError] ([Toplevel Typed], Env))
+inferProgram :: MonadNamey m => Env -> [Toplevel Desugared] -> m (These [TypeError] ([Toplevel Typed], Env))
 
-check :: forall m. MonadInfer Typed m => Expr Resolved -> Type Typed -> m (Expr Typed)
+check :: forall m. MonadInfer Typed m => Expr Desugared -> Type Typed -> m (Expr Typed)
 
-infer :: MonadInfer Typed m => Expr Resolved -> m (Expr Typed, Type Typed)
+infer :: MonadInfer Typed m => Expr Desugared -> m (Expr Typed, Type Typed)
 
 solveEx :: Type Typed -> Subst Typed -> Map.Map (Var Typed) (Wrapper Typed) -> Expr Typed -> Expr Typed
 

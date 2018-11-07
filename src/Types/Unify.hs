@@ -111,7 +111,7 @@ runSolve _ s x = fix (runReaderT (runStateT (runWriterT act) (SolveState s mempt
 -- for both type variables (a 'Subst' 'Typed') and for 'Wrapper'
 -- variables.
 --
--- The 'Var' 'Resolved' parameter is the first fresh name this
+-- The 'Var' 'Desugared' parameter is the first fresh name this
 -- particular instance of the solver is allowed to generate from.
 solve :: (MonadNamey m, MonadChronicles TypeError m)
       => Seq.Seq (Constraint Typed)
@@ -181,7 +181,7 @@ doSolve (ConFail a v t :<| cs) = do
   s <- use solveTySubst
   s' <- use solveAssumptions
 
-  let ex :: Expr Resolved = Hole v (fst a)
+  let ex :: Expr Desugared = Hole v (fst a)
       sub = s `compose` s'
   dictates . reblame (BecauseOf ex) $ foundHole v t sub
 
@@ -763,7 +763,7 @@ mkRecordWrapper keys matched matched_t th tw cont exp =
           Just (_, new, wrap) -> Field k (ExprWrapper wrap ex (annotation ex, new)) (an, new)
           Nothing -> Field k ex (an, old)
 
-      updateField :: Ann Resolved -> Expr Typed -> (Text, Type Typed) -> [Field Typed]
+      updateField :: Ann Desugared -> Expr Typed -> (Text, Type Typed) -> [Field Typed]
       updateField ant ex (key, have)
         = case Map.lookup key matched of
             Just (_, _, IdWrap) -> []

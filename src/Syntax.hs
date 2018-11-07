@@ -21,6 +21,7 @@ import Control.Lens hiding (Lazy)
 type family Ann a :: * where
   Ann Parsed = Span
   Ann Resolved = Span
+  Ann Desugared = Span
   Ann Typed = (Span, Type Typed)
 
 data Binding p
@@ -226,10 +227,10 @@ deriving instance (Show (Var p), Show (Ann p)) => Show (Skolem p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Skolem p)
 
 data SkolemMotive p
-  = ByAscription (Expr Resolved) (Type p) -- what r phases?
+  = ByAscription (Expr Desugared) (Type p) -- what r phases?
   | BySubsumption (Type p) (Type p)
   | ByExistential (Var p) (Type p)
-  | ByInstanceHead (Type p) (Ann Resolved)
+  | ByInstanceHead (Type p) (Ann Desugared)
   | ByConstraint (Type p)
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (SkolemMotive p)

@@ -19,7 +19,7 @@ import Syntax
 
 inferCon :: MonadInfer Typed m
          => Type Typed
-         -> Constructor Resolved
+         -> Constructor Desugared
          -> m ( (Var Typed, Type Typed)
               , Constructor Typed)
 inferCon ret con@(ArgCon nm t ann) = do

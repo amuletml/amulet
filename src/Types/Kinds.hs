@@ -46,7 +46,7 @@ type MonadKind m =
 
 type Kind = Type
 
-resolveKind :: MonadKind m => SomeReason -> Type Resolved -> m (Type Typed)
+resolveKind :: MonadKind m => SomeReason -> Type Desugared -> m (Type Typed)
 resolveKind reason otp = do
   ((ty, _), cs) <- let cont t = do
                         (t, _) <- secondA isType =<< inferKind t
@@ -59,13 +59,13 @@ resolveKind reason otp = do
   wellformed t
   pure t
 
-getKind :: MonadKind m => SomeReason -> Type Resolved -> m (Kind Typed)
+getKind :: MonadKind m => SomeReason -> Type Desugared -> m (Kind Typed)
 getKind r t = solveK pure r (snd <$> inferKind t)
 
-liftType :: MonadKind m => SomeReason -> Type Resolved -> m (Type Typed)
+liftType :: MonadKind m => SomeReason -> Type Desugared -> m (Type Typed)
 liftType r t = solveK pure r (fst <$> inferKind t)
 
-checkAgainstKind :: MonadInfer Typed m => SomeReason -> Type Resolved -> Type Typed -> m (Type Typed)
+checkAgainstKind :: MonadInfer Typed m => SomeReason -> Type Desugared -> Type Typed -> m (Type Typed)
 checkAgainstKind r t k = solveK pure r $
   checkKind t k
 
@@ -75,7 +75,7 @@ annotateKind r ty = do
   (sub, _, _) <- solve cs
   pure (apply sub ty)
 
-initialKind :: MonadKind m => Type Typed -> [TyConArg Resolved] -> KindT m (Type Typed, Telescope Typed)
+initialKind :: MonadKind m => Type Typed -> [TyConArg Desugared] -> KindT m (Type Typed, Telescope Typed)
 initialKind k (TyVarArg v:as) = do
   (k, t) <- initialKind k as
   ty <- freshTV
@@ -87,7 +87,7 @@ initialKind ret (TyAnnArg v k:as) = do
 initialKind ret [] = pure (ret, mempty)
 
 resolveClassKind :: MonadKind m
-                 => Toplevel Resolved
+                 => Toplevel Desugared
                  -> m (Type Typed, [TyConArg Typed])
 resolveClassKind stmt@(Class classcon ctx args methods _) = do
   let reason = BecauseOf stmt
@@ -113,8 +113,8 @@ resolveClassKind _ = error "not a class"
 
 resolveTyDeclKind :: MonadKind m
                   => SomeReason
-                  -> Var Resolved -> [TyConArg Resolved]
-                  -> [Constructor Resolved]
+                  -> Var Desugared -> [TyConArg Desugared]
+                  -> [Constructor Desugared]
                   -> m (Type Typed, Type Typed, [TyConArg Typed])
 resolveTyDeclKind reason tycon args cons = do
   let argTvName (TyVarArg v)   = Just v
@@ -145,7 +145,7 @@ solveK cont reason k = do
   (sub, _, _) <- solve cs
   cont (apply sub kind)
 
-inferKind :: MonadKind m => Type Resolved -> KindT m (Type Typed, Kind Typed)
+inferKind :: MonadKind m => Type Desugared -> KindT m (Type Typed, Kind Typed)
 inferKind (TyCon v) = do
   x <- view (names . at v)
   case x of
@@ -214,7 +214,7 @@ inferKind t = do
   pure (t, x)
 
 checkKind :: MonadKind m
-          => Type Resolved -> Kind Typed -> KindT m (Type Typed)
+          => Type Desugared -> Kind Typed -> KindT m (Type Typed)
 checkKind (TyExactRows rs) k = do
   rs <- for rs $ \(row, ty) -> do
     ty <- checkKind ty k
@@ -256,13 +256,13 @@ checkKind ty u = do
   pure t
 
 inferGadtConKind :: MonadKind m
-                 => Constructor Resolved
-                 -> Type Resolved
-                 -> Var Resolved
+                 => Constructor Desugared
+                 -> Type Desugared
+                 -> Var Desugared
                  -> [Var Typed]
                  -> KindT m ()
 inferGadtConKind con typ tycon args = go typ (reverse (spine (gadtConResult typ))) where
-  spine :: Type Resolved -> [Type Resolved]
+  spine :: Type Desugared -> [Type Desugared]
   spine (TyApp f x) = x:spine f
   spine x = [x]
 

@@ -22,7 +22,7 @@ import Syntax.Var
 import Syntax
 
 inferPattern :: MonadInfer Typed m
-             => Pattern Resolved
+             => Pattern Desugared
              -> m ( Pattern Typed -- the pattern
                   , Type Typed -- type of what the pattern matches
                   , Telescope Typed -- captures
@@ -58,7 +58,7 @@ inferPattern p = do
   pure (p', x, vs, cs)
 
 checkPattern :: MonadInfer Typed m
-             => Pattern Resolved
+             => Pattern Desugared
              -> Type Typed
              -> m ( Pattern Typed
                   , Telescope Typed
@@ -127,7 +127,7 @@ checkPattern pt ty = do
   pure (PWrapper (co, ty') p (annotation p, ty), binds, cs)
 
 checkParameter :: MonadInfer Typed m
-               => Parameter Resolved
+               => Parameter Desugared
                -> Type Typed
                -> m ( Parameter Typed
                     , Telescope Typed
@@ -141,7 +141,7 @@ checkParameter (EvParam p) t = do
   pure (EvParam p, t, cs)
 
 inferParameter :: MonadInfer Typed m
-               => Parameter Resolved
+               => Parameter Desugared
                -> m ( Parameter Typed -- the pattern
                     , TyBinder Typed -- binder for the pattern
                     , Telescope Typed -- captures
@@ -171,7 +171,7 @@ boundTvs p vs = pat p <> foldTele go vs where
   pat PLiteral{} = mempty
   pat (PWrapper _ p _) = pat p
 
-skolGadt :: MonadInfer Typed m => Var Resolved -> (Maybe a, Type Typed, Type Typed) -> m (Type Typed, Subst Typed)
+skolGadt :: MonadInfer Typed m => Var Desugared -> (Maybe a, Type Typed, Type Typed) -> m (Type Typed, Subst Typed)
 skolGadt var (_, oty, ty) =
   let result (TyPi _ t) = result t
       result (TyWithConstraints _ t) = result t

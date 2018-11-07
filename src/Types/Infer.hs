@@ -57,12 +57,12 @@ import Control.Exception (assert)
 
 -- | Solve for the types of bindings in a problem: Either @TypeDecl@s,
 -- @LetStmt@s, or @ForeignVal@s.
-inferProgram :: MonadNamey m => Env -> [Toplevel Resolved] -> m (These [TypeError] ([Toplevel Typed], Env))
+inferProgram :: MonadNamey m => Env -> [Toplevel Desugared] -> m (These [TypeError] ([Toplevel Typed], Env))
 inferProgram env ct = fmap fst <$> runInfer env (inferProg ct)
 
 -- | Check an 'Expr'ession against a known 'Type', annotating it with
 -- appropriate 'Wrapper's, and performing /some/ level of desugaring.
-check :: forall m. MonadInfer Typed m => Expr Resolved -> Type Typed -> m (Expr Typed)
+check :: forall m. MonadInfer Typed m => Expr Desugared -> Type Typed -> m (Expr Typed)
 check e oty@TyPi{} | isSkolemisable oty = do -- This is rule Decl∀L from [Complete and Easy]
   (wrap, ty, scope) <- skolemise (ByAscription e oty) oty -- gotta be polymorphic - don't allow instantiation
   local (classes %~ mappend scope) $ do
@@ -162,9 +162,9 @@ check e ty = do
 -- | Infer a 'Type' for an 'Expr'ession provided no other information
 -- than the environment, producing an 'Expr'ession annotated with
 -- 'Wrapper's where nescessary.
-infer :: MonadInfer Typed m => Expr Resolved -> m (Expr Typed, Type Typed)
+infer :: MonadInfer Typed m => Expr Desugared -> m (Expr Typed, Type Typed)
 infer (VarRef k a) = do
-  (cont, old, (new, cont')) <- third3A (discharge (VarRef k a :: Expr Resolved)) =<< lookupTy' k
+  (cont, old, (new, cont')) <- third3A (discharge (VarRef k a :: Expr Desugared)) =<< lookupTy' k
   case cont of
     Nothing -> pure (VarRef k (a, old), old)
     Just cont -> pure (cont' (cont (VarRef k (a, old))), new)
@@ -278,7 +278,7 @@ infer ex = do
   pure (ex', x)
 
 -- | Infer a 'Type' for an 'Expr'ession without instantiating variables
-infer' :: MonadInfer Typed m => Expr Resolved -> m (Expr Typed, Type Typed)
+infer' :: MonadInfer Typed m => Expr Desugared -> m (Expr Typed, Type Typed)
 infer' (VarRef k a) = do
   (_, ty, _) <- lookupTy' k
   pure (VarRef k (a, ty), ty)
@@ -286,7 +286,7 @@ infer' ex@App{} = inferApp ex
 infer' ex@Vta{} = inferApp ex
 infer' x = infer x
 
-inferApp :: MonadInfer Typed m => Expr Resolved -> m (Expr Typed, Type Typed)
+inferApp :: MonadInfer Typed m => Expr Desugared -> m (Expr Typed, Type Typed)
 inferApp ex@(App f x a) = do
   (f, ot) <- infer' f
   (dom, c, k) <- quantifier (becauseExp ex) ot
@@ -314,14 +314,14 @@ inferApp ex@(Vta f x a) = do
 inferApp _ = error "not an application"
 
 inferRows :: MonadInfer Typed m
-          => [Field Resolved]
+          => [Field Desugared]
           -> m [(Field Typed, (T.Text, Type Typed))]
 inferRows rows = for rows $ \(Field n e s) -> do
   (e, t) <- infer e
   pure (Field n e (s, t), (n, t))
 
 inferProg :: MonadInfer Typed m
-          => [Toplevel Resolved] -> m ([Toplevel Typed], Env)
+          => [Toplevel Desugared] -> m ([Toplevel Typed], Env)
 inferProg (stmt@(LetStmt ns):prg) = censor (const mempty) $ do
   (ns', ts, vs) <- retcons (addBlame (BecauseOf stmt)) (inferLetTy (closeOverStrat (BecauseOf stmt)) Fail ns)
   let bvs = Set.fromList (namesInScope (focus ts mempty))
@@ -397,7 +397,7 @@ inferProg [] = asks ([],)
 inferLetTy :: forall m. MonadInfer Typed m
            => (Set.Set (Var Typed) -> Expr Typed -> Type Typed -> m (Type Typed))
            -> PatternStrat
-           -> [Binding Resolved]
+           -> [Binding Desugared]
            -> m ( [Binding Typed]
                 , Telescope Typed
                 , Set.Set (Var Typed)
@@ -405,7 +405,7 @@ inferLetTy :: forall m. MonadInfer Typed m
 inferLetTy closeOver strategy vs =
   let sccs = depOrder vs
 
-      figureOut :: (Var Resolved, SomeReason)
+      figureOut :: (Var Desugared, SomeReason)
                 -> Expr Typed -> Type Typed
                 -> Seq.Seq (Constraint Typed)
                 -> m (Type Typed, Expr Typed -> Expr Typed)
@@ -449,7 +449,7 @@ inferLetTy closeOver strategy vs =
         pure (tp, wrapper Full . solve tp sub . substituteDeferredDicts reify deferred)
 
 
-      tcOne :: SCC (Binding Resolved)
+      tcOne :: SCC (Binding Desugared)
             -> m ( [Binding Typed]
                  , Telescope Typed
                  , Set.Set (Var Typed))
@@ -570,7 +570,7 @@ inferLetTy closeOver strategy vs =
                  renameInside x = x
 
              let solveOne :: (Binding Typed, Type Typed)
-                          -> m ( (T.Text, Var Typed, Ann Resolved, Type Typed), Binding Typed, Field Typed )
+                          -> m ( (T.Text, Var Typed, Ann Desugared, Type Typed), Binding Typed, Field Typed )
                  solveOne (Binding var exp an, ty) = do
                    let nm = nameName var
                    ty <- pure (apply solution ty)
@@ -631,7 +631,7 @@ inferLetTy closeOver strategy vs =
                  makeTele :: [Binding Typed] -> Telescope Typed
              pure (record:getters, makeTele getters, mempty)
 
-      tc :: [SCC (Binding Resolved)]
+      tc :: [SCC (Binding Desugared)]
          -> m ( [Binding Typed] , Telescope Typed, Set.Set (Var Typed) )
       tc (s:cs) = do
         (vs', binds, vars) <- tcOne s
@@ -639,7 +639,7 @@ inferLetTy closeOver strategy vs =
       tc [] = pure ([], mempty, mempty)
    in tc sccs
 
-fakeLetTys :: MonadInfer Typed m => [Binding Resolved] -> m ([Binding Typed], Telescope Typed, Set.Set (Var Typed))
+fakeLetTys :: MonadInfer Typed m => [Binding Desugared] -> m ([Binding Typed], Telescope Typed, Set.Set (Var Typed))
 fakeLetTys bs = do
   let go (b:bs) =
         case b of
@@ -663,7 +663,7 @@ data PatternStrat = Fail | Propagate
 
 skolCheck :: MonadInfer Typed m => Var Typed -> SomeReason -> Type Typed -> m (Type Typed)
 skolCheck var exp ty = do
-  let blameSkol :: TypeError -> (Var Resolved, SomeReason) -> TypeError
+  let blameSkol :: TypeError -> (Var Desugared, SomeReason) -> TypeError
       blameSkol e (v, r) = addBlame r (Note e (string "in the inferred type for" <+> pretty v))
       sks = Set.map (^. skolIdent) (skols ty)
   env <- view typeVars
@@ -738,7 +738,7 @@ rename = go 0 mempty mempty where
     go (c:cs) l = (ord c - 96) * (26 ^ l) + go cs (l - 1)
     go [] _ = 0
 
-localGenStrat :: forall p m. (Var p ~ VarResolved, Respannable (Ann p), MonadInfer Typed m)
+localGenStrat :: forall p m. (Var p ~ Var Desugared, Respannable (Ann p), MonadInfer Typed m)
               => Set.Set (Var Typed) -> Expr p -> Type Typed -> m (Type Typed)
 localGenStrat bg ex ty = do
   bound <- view letBound
@@ -752,7 +752,7 @@ localGenStrat bg ex ty = do
      then generalise ftv (becauseExp ex) ty
      else annotateKind (becauseExp ex) ty
 
-type Reify p = (Ann Resolved -> Type p -> Var p -> Expr p)
+type Reify p = (Ann Desugared -> Type p -> Var p -> Expr p)
 
 substituteDeferredDicts :: Reify Typed -> [Constraint Typed] -> Expr Typed -> Expr Typed
 substituteDeferredDicts reify cons = transformExprTyped go id id where
@@ -777,7 +777,7 @@ closeOverStrat :: MonadInfer Typed m
                -> Set.Set (Var Typed) -> Expr Typed -> Type Typed -> m (Type Typed)
 closeOverStrat r _ _ = closeOver r
 
-firstForall :: MonadInfer Typed m => Type Resolved -> Type Typed -> m (TyBinder Typed, Type Typed)
+firstForall :: MonadInfer Typed m => Type Desugared -> Type Typed -> m (TyBinder Typed, Type Typed)
 firstForall _ (TyPi x@Invisible{} k) = pure (x, k)
 firstForall a e = confesses (CanNotVta e a)
 
@@ -838,7 +838,7 @@ deSkol = go mempty where
   go _ TyType = TyType
 
 guardOnlyBindings :: MonadChronicles TypeError m
-                  => [Binding Resolved] -> m ()
+                  => [Binding Desugared] -> m ()
 guardOnlyBindings bs = go bs where
   go (Binding{}:xs) = go xs
   go (m@Matching{}:_) =
@@ -847,7 +847,7 @@ guardOnlyBindings bs = go bs where
   go (TypedMatching{}:_) = error "TypedMatching in guardOnlyBindings"
   go [] = pure ()
 
-nameName :: Var Resolved -> T.Text
+nameName :: Var Desugared -> T.Text
 nameName (TgInternal x) = x
 nameName (TgName x _) = x
 

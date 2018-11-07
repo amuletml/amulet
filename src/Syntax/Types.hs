@@ -92,9 +92,9 @@ data ClassInfo =
       -- ^ The name of the constructor for this class
     , _ciConstructorTy :: Type Typed
       -- ^ The type of the constructor for this class
-    , _ciClassSpan :: Ann Resolved
+    , _ciClassSpan :: Ann Desugared
       -- ^ The annotation of the class
-    , _ciDefaults :: Map.Map Text (Expr Resolved)
+    , _ciDefaults :: Map.Map Text (Expr Desugared)
       -- ^ Default methods
     }
   deriving (Eq, Show, Ord)
