@@ -329,7 +329,8 @@ promoteOrError TySkol{} = Nothing
 promoteOrError TyPromotedCon{} = Nothing
 promoteOrError TyType{} = Nothing
 promoteOrError TyWildcard{} = Nothing
-
+promoteOrError (TyParens p) = promoteOrError p
+promoteOrError (TyOperator l _ r) = promoteOrError l <|> promoteOrError r
 
 generalise :: MonadInfer Typed m
            => (Type Typed -> Set.Set (Var Typed)) -> SomeReason -> Type Typed -> m (Type Typed)

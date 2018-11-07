@@ -502,6 +502,7 @@ validContext w a t@TyWildcard{} = confesses (InvalidContext w a t)
 validContext w a t@TySkol{} = confesses (InvalidContext w a t)
 validContext w a t@TyWithConstraints{} = confesses (InvalidContext w a t)
 validContext w a t@TyType{} = confesses (InvalidContext w a t)
+validContext w a (TyParens t) = validContext w a t
 
 type Need t = (Var t, Type t)
 data WrapFlavour = Thin | Full

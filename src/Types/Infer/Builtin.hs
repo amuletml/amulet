@@ -236,6 +236,8 @@ getHead t@TySkol{} = t
 getHead t@TyWithConstraints{} = t
 getHead t@TyType = t
 getHead t@TyWildcard{} = t
+getHead t@TyOperator{} = t
+getHead (TyParens t) = getHead t
 
 spine :: Type p -> [Type p]
 spine (TyApp f x) = spine f `snoc` x
