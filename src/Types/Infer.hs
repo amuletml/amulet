@@ -738,7 +738,7 @@ rename = go 0 mempty mempty where
     go (c:cs) l = (ord c - 96) * (26 ^ l) + go cs (l - 1)
     go [] _ = 0
 
-localGenStrat :: forall p m. (Var p ~ VarResolved, Respannable p, MonadInfer Typed m)
+localGenStrat :: forall p m. (Var p ~ VarResolved, Respannable (Ann p), MonadInfer Typed m)
               => Set.Set (Var Typed) -> Expr p -> Type Typed -> m (Type Typed)
 localGenStrat bg ex ty = do
   bound <- view letBound

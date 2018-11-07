@@ -42,7 +42,7 @@ instance Eq SomeReason where
   _ == _ = False
 
 data ConcreteReason where
-  BecauseOfExpr :: forall p. (Pretty (Var p), Respannable p) => Expr p -> String -> ConcreteReason
+  BecauseOfExpr :: forall p. (Pretty (Var p), Respannable (Ann p)) => Expr p -> String -> ConcreteReason
   BecauseOfPat :: forall p. (Pretty (Var p), Spanned (Ann p), Data (Var p), Data (Ann p), Data p) => Pattern p -> ConcreteReason
 
 instance Show ConcreteReason where
@@ -101,113 +101,51 @@ blameOf (It'sThis x) = case x of
   BecauseOfExpr _ s -> string "the" <+> highlight s
   BecauseOfPat e -> blame e
 
-becauseExp :: (Pretty (Var p), Respannable p) => Expr p -> SomeReason
+becauseExp :: (Pretty (Var p), Respannable (Ann p)) => Expr p -> SomeReason
 becauseExp = It'sThis . flip BecauseOfExpr "expression"
 
 becausePat :: forall p. (Pretty (Var p), Spanned (Ann p), Data (Var p), Data (Ann p), Data p) => Pattern p -> SomeReason
 becausePat = It'sThis . BecauseOfPat
 
-class Spanned (Ann p) => Respannable p where
-  respan :: (Span -> Span) -> Expr p -> Expr p
+class Spanned a => Respannable a where
+  respan :: (Span -> Span) -> a -> a
 
-instance Respannable Parsed where
-  respan k (VarRef v a) = VarRef v (k a)
-  respan k (Let vs r a) = Let vs r (k a)
-  respan k (If c t f a) = If c t f (k a)
-  respan k (App f x a) = App f x (k a)
-  respan k (Fun p b a) = Fun p b (k a)
-  respan k (Begin es a) = Begin es (k a)
-  respan k (Literal l a) = Literal l (k a)
-  respan k (Match e bs a) = Match e bs (k a)
-  respan k (Function bs a) = Function bs (k a)
-  respan k (BinOp l o r a) = BinOp l o r (k a)
-  respan k (Hole v a) = Hole v (k a)
-  respan k (Ascription e t a) = Ascription e t (k a)
-  respan k (Vta e t a) = Vta e t (k a)
+instance Respannable (Ann p) => Respannable (Expr p) where
+  respan k (VarRef v a) = VarRef v (respan k a)
+  respan k (Let vs r a) = Let vs r (respan k a)
+  respan k (If c t f a) = If c t f (respan k a)
+  respan k (App f x a) = App f x (respan k a)
+  respan k (Fun p b a) = Fun p b (respan k a)
+  respan k (Begin es a) = Begin es (respan k a)
+  respan k (Literal l a) = Literal l (respan k a)
+  respan k (Match e bs a) = Match e bs (respan k a)
+  respan k (Function bs a) = Function bs (respan k a)
+  respan k (BinOp l o r a) = BinOp l o r (respan k a)
+  respan k (Hole v a) = Hole v (respan k a)
+  respan k (Ascription e t a) = Ascription e t (respan k a)
+  respan k (Vta e t a) = Vta e t (respan k a)
 
-  respan k (Record fs a) = Record fs (k a)
-  respan k (RecordExt f fs a) = RecordExt f fs (k a)
-  respan k (Access e f a) = Access e f (k a)
+  respan k (Record fs a) = Record fs (respan k a)
+  respan k (RecordExt f fs a) = RecordExt f fs (respan k a)
+  respan k (Access e f a) = Access e f (respan k a)
 
-  respan k (LeftSection o r a) = LeftSection o r (k a)
-  respan k (RightSection l o a) = RightSection l o (k a)
-  respan k (BothSection o a) = BothSection o (k a)
-  respan k (AccessSection t a) = AccessSection t (k a)
-  respan k (Parens e a) = Parens e (k a)
+  respan k (LeftSection o r a) = LeftSection o r (respan k a)
+  respan k (RightSection l o a) = RightSection l o (respan k a)
+  respan k (BothSection o a) = BothSection o (respan k a)
+  respan k (AccessSection t a) = AccessSection t (respan k a)
+  respan k (Parens e a) = Parens e (respan k a)
 
-  respan k (Tuple es a) = Tuple es (k a)
-  respan k (TupleSection es a) = TupleSection es (k a)
+  respan k (Tuple es a) = Tuple es (respan k a)
+  respan k (TupleSection es a) = TupleSection es (respan k a)
 
-  respan k (OpenIn n e a) = OpenIn n e (k a)
+  respan k (OpenIn n e a) = OpenIn n e (respan k a)
 
-  respan k (Lazy e a) = Lazy e (k a)
+  respan k (Lazy e a) = Lazy e (respan k a)
 
-  respan k (ExprWrapper w e a) = ExprWrapper w e (k a)
+  respan k (ExprWrapper w e a) = ExprWrapper w e (respan k a)
 
-instance Respannable Resolved where
-  respan k (VarRef v a) = VarRef v (k a)
-  respan k (Let vs r a) = Let vs r (k a)
-  respan k (If c t f a) = If c t f (k a)
-  respan k (App f x a) = App f x (k a)
-  respan k (Fun p b a) = Fun p b (k a)
-  respan k (Begin es a) = Begin es (k a)
-  respan k (Literal l a) = Literal l (k a)
-  respan k (Match e bs a) = Match e bs (k a)
-  respan k (Function bs a) = Function bs (k a)
-  respan k (BinOp l o r a) = BinOp l o r (k a)
-  respan k (Hole v a) = Hole v (k a)
-  respan k (Ascription e t a) = Ascription e t (k a)
-  respan k (Vta e t a) = Vta e t (k a)
+instance Respannable Span where
+  respan = id
 
-  respan k (Record fs a) = Record fs (k a)
-  respan k (RecordExt f fs a) = RecordExt f fs (k a)
-  respan k (Access e f a) = Access e f (k a)
-
-  respan k (LeftSection o r a) = LeftSection o r (k a)
-  respan k (RightSection l o a) = RightSection l o (k a)
-  respan k (BothSection o a) = BothSection o (k a)
-  respan k (AccessSection t a) = AccessSection t (k a)
-  respan k (Parens e a) = Parens e (k a)
-
-  respan k (Tuple es a) = Tuple es (k a)
-  respan k (TupleSection es a) = TupleSection es (k a)
-
-  respan k (OpenIn n e a) = OpenIn n e (k a)
-
-  respan k (Lazy e a) = Lazy e (k a)
-
-  respan k (ExprWrapper w e a) = ExprWrapper w e (k a)
-
-instance Respannable Typed where
-  respan k (VarRef v a) = VarRef v (k (fst a), snd a)
-  respan k (Let vs r a) = Let vs r (k (fst a), snd a)
-  respan k (If c t f a) = If c t f (k (fst a), snd a)
-  respan k (App f x a) = App f x (k (fst a), snd a)
-  respan k (Fun p b a) = Fun p b (k (fst a), snd a)
-  respan k (Begin es a) = Begin es (k (fst a), snd a)
-  respan k (Literal l a) = Literal l (k (fst a), snd a)
-  respan k (Match e bs a) = Match e bs (k (fst a), snd a)
-  respan k (Function bs a) = Function bs (k (fst a), snd a)
-  respan k (BinOp l o r a) = BinOp l o r (k (fst a), snd a)
-  respan k (Hole v a) = Hole v (k (fst a), snd a)
-  respan k (Ascription e t a) = Ascription e t (k (fst a), snd a)
-  respan k (Vta e t a) = Vta e t (k (fst a), snd a)
-
-  respan k (Record fs a) = Record fs (k (fst a), snd a)
-  respan k (RecordExt f fs a) = RecordExt f fs (k (fst a), snd a)
-  respan k (Access e f a) = Access e f (k (fst a), snd a)
-
-  respan k (LeftSection o r a) = LeftSection o r (k (fst a), snd a)
-  respan k (RightSection l o a) = RightSection l o (k (fst a), snd a)
-  respan k (BothSection o a) = BothSection o (k (fst a), snd a)
-  respan k (AccessSection t a) = AccessSection t (k (fst a), snd a)
-  respan k (Parens e a) = Parens e (k (fst a), snd a)
-
-  respan k (Tuple es a) = Tuple es (k (fst a), snd a)
-  respan k (TupleSection es a) = TupleSection es (k (fst a), snd a)
-
-  respan k (OpenIn n e a) = OpenIn n e (k (fst a), snd a)
-
-  respan k (Lazy e a) = Lazy e (k (fst a), snd a)
-
-  respan k (ExprWrapper w e a) = ExprWrapper w e (k (fst a), snd a)
+instance Respannable a => Respannable (a, b) where
+  respan f (a, b) = (respan f a, b)

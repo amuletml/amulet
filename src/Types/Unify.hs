@@ -746,7 +746,7 @@ unequal a b = do
   x <- use solveTySubst
   pure (NotEqual (apply x a) (apply x b))
 
-select :: Respannable a => Text -> [Field a] -> Maybe (Expr a)
+select :: Respannable (Ann a) => Text -> [Field a] -> Maybe (Expr a)
 select t = fmap go . find ((== t) . view fName) where
   go (Field _ e s) = respan (const (annotation s)) e
 
