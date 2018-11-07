@@ -23,6 +23,7 @@ import Types.Infer (inferProgram, builtinsEnv)
 
 import Syntax.Resolve (ResolveError, resolveProgram)
 import qualified Syntax.Resolve.Scope as RS
+import qualified Syntax.Pretty as S
 import Syntax.Resolve.Toplevel (extractToplevels)
 import Syntax.Desugar (desugarProgram)
 import Syntax.Verify
@@ -47,6 +48,33 @@ import Parser (parseTops)
 import Errors (reportS)
 import qualified Debug as D
 import Repl
+
+import Syntax.Verify.Pattern
+
+testPat :: IO ()
+testPat = do
+  x <- T.readFile "test.ml"
+  let (CSuccess _ _ [_, S.LetStmt [ S.Binding { S._bindBody = S.Fun _ (S.Match e as _) _ } ]] _ _ _ env) = compile Don't [("test.ml", x)]
+      alt = emptyAlt (S.TgName "" 100) (S.getType e)
+
+  _ <- foldlM (\alts (S.Arm pat guard _) -> do
+    putDoc (pretty pat)
+
+    let (Covering cov alts') = covering env pat alts
+
+    putStrLn "  Covered"
+    case cov of
+      Just x -> putDoc . indent 4 . pretty $ altAbs x
+      Nothing -> pure ()
+
+    let alts'' = case guard of
+                 Nothing -> alts'
+                 Just{} -> alts
+    putStrLn "  Uncovered"
+    putDoc . indent 4 . vsep . map (pretty . altAbs) . toList $ alts''
+
+    pure alts') (pure alt) as
+  pure ()
 
 data CompileResult
   = CSuccess [VerifyError] [TypeError] [Toplevel Typed] [Stmt CoVar] [Stmt CoVar] LuaStmt Env
@@ -85,37 +113,39 @@ compile opt (file:files) =
               desugared <- desugarProgram resolved
               infered <- inferProgram env desugared
               case infered of
-                That (prog, env') ->
-                  let x = runVerify (verifyProgram prog)
+                That (prog, env') -> do
+                  verifyV <- genName
+                  let x = runVerify env' verifyV (verifyProgram prog)
                       (var, tys) = extractToplevels parsed
                       (var', tys') = extractToplevels resolved
                       errs' = case x of
                         Left es -> toList es
                         Right () -> []
-                   in pure $ Right ( errs ++ errs'
-                                   , tyerrs
-                                   , tops ++ prog
-                                   , scope { RS.varScope = RS.insertN' (RS.varScope scope) (zip var var')
-                                           , RS.tyScope  = RS.insertN' (RS.tyScope scope)  (zip tys tys')
-                                           }
-                                   , modScope'
-                                   , env')
+                  pure $ Right ( errs ++ errs'
+                               , tyerrs
+                               , tops ++ prog
+                               , scope { RS.varScope = RS.insertN' (RS.varScope scope) (zip var var')
+                                       , RS.tyScope  = RS.insertN' (RS.tyScope scope)  (zip tys tys')
+                                       }
+                               , modScope'
+                               , env' )
                 These errors (_, _) | any isError errors -> pure (Left (CInfer errors))
-                These errors (prog, env') ->
-                  let x = runVerify (verifyProgram prog)
+                These errors (prog, env') -> do
+                  verifyV <- genName
+                  let x = runVerify env' verifyV (verifyProgram prog)
                       (var, tys) = extractToplevels parsed
                       (var', tys') = extractToplevels resolved
                       errs' = case x of
                         Left es -> toList es
                         Right () -> []
-                   in pure $ Right ( errs ++ errs'
-                                   , tyerrs ++ errors
-                                   , tops ++ prog
-                                   , scope { RS.varScope = RS.insertN' (RS.varScope scope) (zip var var')
-                                           , RS.tyScope  = RS.insertN' (RS.tyScope scope)  (zip tys tys')
-                                           }
-                                   , modScope'
-                                   , env')
+                  pure $ Right ( errs ++ errs'
+                               , tyerrs ++ errors
+                               , tops ++ prog
+                               , scope { RS.varScope = RS.insertN' (RS.varScope scope) (zip var var')
+                                       , RS.tyScope  = RS.insertN' (RS.tyScope scope)  (zip tys tys')
+                                       }
+                               , modScope'
+                               , env' )
                 This e -> pure $ Left $ CInfer e
             Left e -> pure $ Left $ CResolve e
         (Nothing, es) -> pure $ Left $ CParse es

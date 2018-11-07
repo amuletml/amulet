@@ -5,7 +5,7 @@
 -- | This module implements the logic responsible for solving the
 -- sequence of @Constraint@s the type-checker generates for a particular
 -- binding groups.
-module Types.Unify (solve, skolemise, freshSkol, unifyPure, applicable) where
+module Types.Unify (solve, solveWith, skolemise, freshSkol, unifyPure, applicable) where
 
 import Control.Monad.Except
 import Control.Monad.State
@@ -116,7 +116,12 @@ runSolve _ s x = fix (runReaderT (runStateT (runWriterT act) (SolveState s mempt
 solve :: (MonadNamey m, MonadChronicles TypeError m)
       => Seq.Seq (Constraint Typed)
       -> m (Subst Typed, Map.Map (Var Typed) (Wrapper Typed), [Constraint Typed])
-solve = runSolve True mempty . doSolve
+solve = solveWith mempty
+
+solveWith :: (MonadNamey m, MonadChronicles TypeError m)
+      => Subst Typed -> Seq.Seq (Constraint Typed)
+      -> m (Subst Typed, Map.Map (Var Typed) (Wrapper Typed), [Constraint Typed])
+solveWith subst = runSolve True subst . doSolve
 
 doSolve :: forall m. MonadSolve m => Seq.Seq (Constraint Typed) -> m ()
 doSolve Empty = pure ()
