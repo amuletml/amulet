@@ -154,10 +154,8 @@ Top :: { Toplevel Parsed }
     | external val BindName ':' Type '=' string
       { withPos2 $1 $7 $ ForeignVal (getL $3) (getString $7) (getL $5) }
 
-    | type ident ListE(TyConArg)                          { TypeDecl (getName $2) $3 [] }
-    | type ident ListE(TyConArg) '=' List1(Ctor, '|')     { TypeDecl (getName $2) $3 $5 }
-    | type ident ListE(TyConArg) '=' '|' List1(Ctor, '|') { TypeDecl (getName $2) $3 $6 }
-
+    | type BindName ListE(TyConArg) TypeBody   { TypeDecl (getL $2) $3 $4 }
+    | type TyConArg BindOp TyConArg TypeBody   { TypeDecl (getL $3) [$2, $4] $5 }
 
     | module qconid '=' begin Tops end         { Module (getName $2) $5 }
     | module qconid '=' '$begin' Tops '$end'   { Module (getName $2) $5 }
@@ -174,6 +172,11 @@ Top :: { Toplevel Parsed }
 
 --  | Instance                                 { $1 }
     | open Con                                 { Open (getL $2) Nothing }
+
+TypeBody :: { [Constructor Parsed] }
+  :                                            { [] }
+  | '=' List1(Ctor, '|')                       { $2 }
+  | '=' '|' List1(Ctor, '|')                   { $3 }
 
 ClassItems :: { [ClassItem Parsed] }
   : List(ClassItem, TopSep) { $1 }
@@ -453,6 +456,11 @@ TypeOperator :: { Var Parsed  }
   | opid                                          { getName $1 }
   | qopid                                         { getName $1 }
 
+TypeOperatorF :: { Var Parsed }
+  : TypeOperator                                  { $1 }
+  | '->'                                          { Name $ T.pack "->" }
+  | '=>'                                          { Name $ T.pack "=>" }
+
 TypeAtom :: { Located (Type Parsed) }
          : Var                                    { lPos1 $1 $ TyCon (getL $1) }
          | TyVar                                  { lPos1 $1 $ TyVar (getL $1) }
@@ -461,6 +469,7 @@ TypeAtom :: { Located (Type Parsed) }
          | lazy                                   { lPos1 $1 $ TyCon (Name (T.pack "lazy")) }
          | '(' ')'                                { lPos2 $1 $2 $ TyCon (Name (T.pack "unit")) }
          | '(' Type ')'                           { lPos2 $1 $3 $ TyParens (getL $2) }
+         | '(' TypeOperatorF ')'                  { lPos2 $1 $3 $ TyParens (TyCon $2) }
          | '{' ListT(TypeRow, ',') '}'            { lPos2 $1 $3 $ TyExactRows $2 }
          | '{' Type '|' ListT(TypeRow, ',') '}'   { lPos2 $1 $5 $ TyRows (getL $2) $4 }
          | '_'                                    { lPos1 $1 (TyWildcard Nothing) }
