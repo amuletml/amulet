@@ -443,7 +443,7 @@ inferLetTy closeOver strategy vs =
 
         vt <- closeOver (Set.singleton (fst blame))
                 ex (apply x (context ty))
-        ty <- skolCheck (fst blame) (snd blame) vt
+        ty <- uncurry skolCheck blame vt
         let (tp, sub) = rename ty
 
         pure (tp, wrapper Full . solve tp sub . substituteDeferredDicts reify deferred)
