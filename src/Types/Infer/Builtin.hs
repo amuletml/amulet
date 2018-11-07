@@ -33,9 +33,9 @@ builtinNames = Set.fromList $ namesInScope (builtinsEnv ^. names)
 
 builtinsEnv :: Env
 builtinsEnv = envOf (scopeFromList builtin) where
-  op :: T.Text -> Type Typed -> (Var Resolved, Type Typed)
+  op :: T.Text -> Type Typed -> (Var Desugared, Type Typed)
   op x t = (TgInternal x, t)
-  tp :: T.Text -> (Var Resolved, Type Typed)
+  tp :: T.Text -> (Var Desugared, Type Typed)
   tp x = (TgInternal x, TyType)
 
   intOp = tyInt `TyArr` (tyInt `TyArr` tyInt)

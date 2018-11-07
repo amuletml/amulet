@@ -29,6 +29,10 @@ newtype Parsed = Parsed Parsed deriving Data
 -- variables, effectively eliminating the concept of modules.
 newtype Resolved = Resolved Resolved deriving Data
 
+-- | The desugared phrase is used after we have resolved variables and
+-- desugared terms.
+newtype Desugared = Desugared Desugared deriving Data
+
 -- | This is used after (and during) type checking, before we need to
 -- lower to core.
 --
@@ -46,6 +50,7 @@ type Name = Var Resolved
 type family Var p :: * where
   Var Parsed = VarParsed
   Var Resolved = VarResolved
+  Var Desugared = VarResolved
   Var Typed = VarResolved
 
 -- | Parsed variables are little more than identifiers: they do not have

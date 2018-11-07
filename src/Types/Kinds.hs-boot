@@ -21,22 +21,22 @@ type MonadKind m =
 type Kind = Type
 
 resolveKind :: MonadKind m
-            => SomeReason -> Type Resolved -> m (Type Typed)
+            => SomeReason -> Type Desugared -> m (Type Typed)
 
 getKind :: MonadKind m
-        => SomeReason -> Type Resolved -> m (Kind Typed)
+        => SomeReason -> Type Desugared -> m (Kind Typed)
 
 checkAgainstKind :: MonadInfer Typed m
-                 => SomeReason -> Type Resolved -> Type Typed
+                 => SomeReason -> Type Desugared -> Type Typed
                  -> m (Type Typed)
 
 annotateKind :: MonadKind m => SomeReason -> Type Typed -> m (Type Typed)
 
 resolveTyDeclKind :: MonadKind m
                   => SomeReason
-                  -> Var Resolved -> [Var Resolved]
-                  -> [Constructor Resolved]
+                  -> Var Desugared -> [Var Desugared]
+                  -> [Constructor Desugared]
                   -> m (Type Typed)
 
 closeOver :: MonadKind m => SomeReason -> Type Typed -> m (Type Typed)
-liftType :: MonadKind m => SomeReason -> Type Resolved -> m (Type Typed)
+liftType :: MonadKind m => SomeReason -> Type Desugared -> m (Type Typed)

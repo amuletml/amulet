@@ -39,7 +39,7 @@ import Text.Show.Pretty
 import GHC.Stack
 
 inferClass :: forall m. MonadInfer Typed m
-           => Toplevel Resolved
+           => Toplevel Desugared
            -> m ( [Toplevel Typed]
                 , Telescope Typed
                 , ClassInfo
@@ -167,7 +167,7 @@ inferClass clss@(Class name ctx _ methods classAnn) = do
          , scope)
 inferClass _ = error "not a class"
 
-inferInstance :: forall m. MonadInfer Typed m => Toplevel Resolved -> m (Toplevel Typed, Var Typed, Type Typed)
+inferInstance :: forall m. MonadInfer Typed m => Toplevel Desugared -> m (Toplevel Typed, Var Typed, Type Typed)
 inferInstance inst@(Instance clss ctx instHead bindings ann) = do
   ClassInfo clss classHead methodSigs classContext classCon classConTy classAnn defaults <-
     view (classDecs . at clss . non undefined)
@@ -359,7 +359,7 @@ inferInstance _ = error "not an instance"
 
 reduceClassContext :: forall m. (MonadInfer Typed m, HasCallStack)
                    => ImplicitScope Typed
-                   -> Ann Resolved
+                   -> Ann Desugared
                    -> [Constraint Typed]
                    -> m (Type Typed -> Type Typed, WrapFlavour -> Expr Typed -> Expr Typed, [Need Typed])
 
@@ -426,7 +426,7 @@ skolFreeTy motive ty = do
     (v,) <$> freshSkol motive ty v
   pure (apply (Map.fromList vs) ty, Map.fromList vs)
 
-nameName :: Var Resolved -> T.Text
+nameName :: Var Desugared -> T.Text
 nameName (TgInternal x) = x
 nameName (TgName x _) = x
 
@@ -435,7 +435,7 @@ entails _ (Quantifier _) = True
 entails scp (Implication c) = any isLocal (lookup c scp) where
   isLocal x = x ^. implSort == LocalAssum
 
-useForSimpl :: HasCallStack => Ann Resolved -> ImplicitScope Typed -> Implicit Typed -> Type Typed -> Expr Typed
+useForSimpl :: HasCallStack => Ann Desugared -> ImplicitScope Typed -> Implicit Typed -> Type Typed -> Expr Typed
 useForSimpl span scope (ImplChoice head oty pre var _ _) ty =
   case unifyPure head ty of
     Nothing -> error "What?"
@@ -460,7 +460,7 @@ mkLet xs = Let xs
 (!) :: (Show k, Ord k, HasCallStack) => Map.Map k v -> k -> v
 m ! k = fromMaybe (error ("Key " ++ show k ++ " not in map")) (Map.lookup k m)
 
-validContext :: MonadChronicles TypeError m => String -> Ann Resolved -> Type Resolved -> m ()
+validContext :: MonadChronicles TypeError m => String -> Ann Desugared -> Type Desugared -> m ()
 validContext what ann t@(TyApp f _)
   | TyCon{} <- f = pure ()
   | otherwise = validContext "" ann f `catchChronicle` \_ -> confesses (InvalidContext what ann t)

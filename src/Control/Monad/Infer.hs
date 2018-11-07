@@ -84,7 +84,7 @@ data TypeError where
   NotEqual :: (Show (Var p), Pretty (Var p), Ord (Var p)) => Type p -> Type p -> TypeError
   Occurs :: (Pretty (Var p), Ord (Var p)) => Var p -> Type p -> TypeError
 
-  NotInScope :: Var Resolved -> TypeError
+  NotInScope :: Var Desugared -> TypeError
   FoundHole :: Var Typed -> Type Typed -> TypeError
 
   Impredicative :: (Pretty (Var p), Ord (Var p)) => Var p -> Type p -> TypeError
@@ -109,18 +109,18 @@ data TypeError where
 
   -- Implicit parameters
   AmbiguousType :: (Ord (Var p), Pretty (Var p)) => Var p -> Type p -> Set.Set (Var p) -> TypeError
-  PatternRecursive :: Binding Resolved -> [Binding Resolved] -> TypeError
+  PatternRecursive :: Binding Desugared -> [Binding Desugared] -> TypeError
 
   DeadBranch :: TypeError -> TypeError
 
   UnsatClassCon :: SomeReason -> Constraint Typed -> WhyUnsat -> TypeError
   Overlap :: Type Typed -> Span -> Span -> TypeError
   ClassStackOverflow :: SomeReason -> [Type Typed] -> Type Typed -> TypeError
-  WrongClass :: Binding Resolved -> Var Typed -> TypeError
+  WrongClass :: Binding Desugared -> Var Typed -> TypeError
   UndefinedMethods :: Type Typed -> [(Text, Type Typed)] -> Span -> TypeError
-  InvalidContext :: String -> Span -> Type Resolved -> TypeError
+  InvalidContext :: String -> Span -> Type Desugared -> TypeError
 
-  CanNotVta :: Type Typed -> Type Resolved -> TypeError
+  CanNotVta :: Type Typed -> Type Desugared -> TypeError
 
   NotPromotable :: Pretty (Var p) => Var p -> Type p -> Doc -> TypeError
 
@@ -130,7 +130,7 @@ data WhyUnsat
   | PatBinding
   | InstanceMethod (Type Typed)
   | InstanceClassCon Span
-  | BadDefault (Var Resolved) (Type Typed)
+  | BadDefault (Var Desugared) (Type Typed)
   | It'sQuantified
 
 instance (Show (Ann p), Show (Var p), Ord (Var p), Substitutable p (Type p)) => Substitutable p (Constraint p) where
@@ -164,14 +164,14 @@ instance Show TypeError where
 instance Eq TypeError where
   _ == _ = False
 
-lookupTy :: (MonadChronicles TypeError m, MonadReader Env m, MonadNamey m) => Var Resolved -> m (Type Typed)
+lookupTy :: (MonadChronicles TypeError m, MonadReader Env m, MonadNamey m) => Var Desugared -> m (Type Typed)
 lookupTy x = do
   rs <- view (names . at x)
   case rs of
     Just t -> thd3 <$> instantiate Expression t
     Nothing -> confesses (NotInScope x)
 
-lookupTy' :: (MonadChronicles TypeError m, MonadReader Env m, MonadNamey m) => Var Resolved
+lookupTy' :: (MonadChronicles TypeError m, MonadReader Env m, MonadNamey m) => Var Desugared
           -> m (Maybe (Expr Typed -> Expr Typed), Type Typed, Type Typed)
 lookupTy' x = do
   rs <- view (names . at x)
@@ -186,17 +186,17 @@ runInfer :: MonadNamey m
 runInfer ct ac = over here toList <$>
   runChronicleT (runWriterT (runReaderT ac ct))
 
-genNameFrom :: MonadNamey m => Text -> m (Var Resolved)
+genNameFrom :: MonadNamey m => Text -> m (Var Desugared)
 genNameFrom t = do
   TgName _ n <- genName
   pure (TgName t n)
 
-genNameWith :: MonadNamey m => Text -> m (Var Resolved)
+genNameWith :: MonadNamey m => Text -> m (Var Desugared)
 genNameWith t = do
   TgName e n <- genName
   pure (TgName (t <> e) n)
 
-firstName :: Var Resolved
+firstName :: Var Desugared
 firstName = TgName "a" 0
 
 instantiate :: MonadNamey m

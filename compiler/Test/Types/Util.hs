@@ -24,7 +24,7 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 
 
-inferExpr :: Expr Resolved -> Either [TypeError] (Type Typed)
+inferExpr :: Expr Desugared -> Either [TypeError] (Type Typed)
 inferExpr e = flip Namey.evalNamey MonadInfer.firstName $ MonadInfer.runInfer builtinsEnv (infer e) >>= go where
   go (This e) = pure . Left $ e
   go (These e _) = pure . Left $ e
@@ -34,7 +34,7 @@ inferExpr e = flip Namey.evalNamey MonadInfer.firstName $ MonadInfer.runInfer bu
       Left e -> Left (toList e)
       Right (x, _, _) -> Right (apply x t)
 
-checkExpr :: Expr Resolved -> Type Typed -> Either [TypeError] ()
+checkExpr :: Expr Desugared -> Type Typed -> Either [TypeError] ()
 checkExpr e t = flip Namey.evalNamey MonadInfer.firstName $ MonadInfer.runInfer builtinsEnv (check e t) >>= go where
   go (This e) = pure . Left $ e
   go (These e _) = pure . Left $ e
