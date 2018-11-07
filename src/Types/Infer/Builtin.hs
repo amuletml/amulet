@@ -20,16 +20,16 @@ import Syntax.Var
 import Syntax
 
 tyUnit, tyBool, tyInt, tyString, tyFloat, tyLazy, tyConstraint :: Type Typed
-tyInt = TyCon (TvName (TgInternal "int"))
-tyString = TyCon (TvName (TgInternal "string"))
-tyBool = TyCon (TvName (TgInternal "bool"))
-tyUnit = TyCon (TvName (TgInternal "unit"))
-tyFloat = TyCon (TvName (TgInternal "float"))
-tyLazy = TyCon (TvName (TgName "lazy" (-34)))
-tyConstraint = TyCon (TvName (TgName "constraint" (-37)))
+tyInt = TyCon (TgInternal "int")
+tyString = TyCon (TgInternal "string")
+tyBool = TyCon (TgInternal "bool")
+tyUnit = TyCon (TgInternal "unit")
+tyFloat = TyCon (TgInternal "float")
+tyLazy = TyCon (TgName "lazy" (-34))
+tyConstraint = TyCon (TgName "constraint" (-37))
 
 builtinNames :: Set.Set (Var Typed)
-builtinNames = Set.fromList . map TvName $ namesInScope (builtinsEnv ^. names)
+builtinNames = Set.fromList $ namesInScope (builtinsEnv ^. names)
 
 builtinsEnv :: Env
 builtinsEnv = envOf (scopeFromList builtin) where
@@ -45,7 +45,7 @@ builtinsEnv = envOf (scopeFromList builtin) where
   floatCmp = tyInt `TyArr` (tyInt `TyArr` tyBool)
 
   cmp = TyForall name (Just TyType) $ TyVar name `TyArr` (TyVar name `TyArr` tyBool)
-    where name = TvName (TgInternal "a")-- TODO: This should use TvName/TvFresh instead
+    where name = TgInternal "a"-- TODO: This should use TvName/TvFresh instead
   builtin
     = [ op "+" intOp, op "-" intOp, op "*" intOp, op "/" (tyInt `TyArr` (tyInt `TyArr` tyFloat)), op "**" intOp
       , op "+." floatOp, op "-." floatOp, op "*." floatOp, op "/." floatOp, op "**." floatOp
@@ -58,20 +58,20 @@ builtinsEnv = envOf (scopeFromList builtin) where
       , (TgInternal "force", TyForall a (Just TyType) $ TyApp tyLazy (TyVar a) `TyArr` TyVar a)
       , tp "int", tp "string", tp "bool", tp "unit", tp "float", (TgName "lazy" (-34), TyArr TyType TyType), (TgName "constraint" (-37), TyType)
       ]
-    where a = TvName (TgInternal "a")
-          b = TvName (TgInternal "b")
+    where a = TgInternal "a"
+          b = TgInternal "b"
 
 unify, subsumes :: ( MonadInfer Typed m )
                 => SomeReason
                 -> Type Typed
                 -> Type Typed -> m (Wrapper Typed)
 unify e a b = do
-  x <- TvName <$> genName
+  x <- genName
   tell (Seq.singleton (ConUnify e x a b))
   pure (WrapVar x)
 
 subsumes e a b = do
-  x <- TvName <$> genName
+  x <- genName
   r <- view classes
   tell (Seq.singleton (ConSubsume e r x a b))
   pure (WrapVar x)
@@ -86,7 +86,7 @@ implies :: ( Reasonable f p
 implies _ _ [] k = k
 implies e t cs k = do
   vs <- replicateM (length cs) genName
-  let eqToCon v (a, b) = ConUnify (BecauseOf e) (TvName v) a b
+  let eqToCon v (a, b) = ConUnify (BecauseOf e) v a b
       eqToCons = zipWith eqToCon vs
 
       wrap :: Seq.Seq (Constraint Typed) -> Seq.Seq (Constraint Typed)
@@ -121,7 +121,7 @@ decompose r p ty@TyWithConstraints{} = do
   pure (a, b, k' . k)
 
 decompose r p ty@(TyPi (Implicit cls) rest) = do
-  x <- TvName <$> genName
+  x <- genName
   i <- view classes
   tell (pure (ConImplicit r i x cls))
 
@@ -157,7 +157,7 @@ quantifier r ty@TyWithConstraints{} = do
   pure (a, b, k' . k)
 
 quantifier r wty@(TyPi (Implicit tau) sigma) = do
-  x <- TvName <$> genName
+  x <- genName
   i <- view classes
   tell (Seq.singleton (ConImplicit r i x tau))
 
@@ -208,12 +208,12 @@ gadtConResult (TyArr _ t) = t
 gadtConResult t = t
 
 forceName, lAZYName :: Var Typed
-lAZYName = TvName (TgName "lazy" (-35))
-forceName = TvName (TgName "force" (-36))
+lAZYName = TgName "lazy" (-35)
+forceName = TgName "force" (-36)
 
 forceTy, lAZYTy :: Type Typed
-forceTy = TyForall (TvName (TgName "a" (-30))) (Just TyType) (forceTy' (TyVar (TvName (TgName "a" (-30)))))
-lAZYTy = TyForall (TvName (TgName "a" (-30))) (Just TyType) (lAZYTy' (TyVar (TvName (TgName "a" (-30)))))
+forceTy = TyForall (TgName "a" (-30)) (Just TyType) (forceTy' (TyVar (TgName "a" (-30))))
+lAZYTy = TyForall (TgName "a" (-30)) (Just TyType) (lAZYTy' (TyVar (TgName "a" (-30))))
 
 forceTy', lAZYTy' :: Type Typed -> Type Typed
 forceTy' x = TyArr (TyApp tyLazy x) x

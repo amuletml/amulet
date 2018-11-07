@@ -333,9 +333,6 @@ pattern TyForall :: Var p -> Maybe (Type p) -> Type p -> Type p
 pattern TyForall v k t' <- TyPi (Invisible v k) t' where
   TyForall v k ty = TyPi (Invisible v k) ty
 
-unTvName :: Var Typed -> Var Resolved
-unTvName (TvName x) = x
-
 getType :: Data (f Typed) => f Typed -> Type Typed
 getType = snd . head . catMaybes . gmapQ get where
   get d = fmap (`asTypeOf` (undefined :: (Span, Type Typed))) (cast d)

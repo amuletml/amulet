@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleContexts, TupleSections, ScopedTypeVariables,
-   ViewPatterns, LambdaCase #-}
+   ViewPatterns, LambdaCase, TypeFamilies #-}
 module Types.Infer
   ( inferProgram
   , builtinsEnv
@@ -70,8 +70,8 @@ check e oty@TyPi{} | isSkolemisable oty = do -- This is rule Decl∀L from [Comp
     pure (ExprWrapper wrap e (annotation e, oty))
 
 check (Hole v a) t = do
-  tell (Seq.singleton (ConFail (a, t) (TvName v) t))
-  pure (Hole (TvName v) (a, t))
+  tell (Seq.singleton (ConFail (a, t) v t))
+  pure (Hole v (a, t))
 
 check (Let ns b an) t = do
   (ns, ts, vars) <-
@@ -80,7 +80,7 @@ check (Let ns b an) t = do
         tell (DeferredError <$> e)
         fakeLetTys ns
 
-  let bvs = Set.fromList (map TvName (namesInScope (focus ts mempty)))
+  let bvs = Set.fromList (namesInScope (focus ts mempty))
 
   local (typeVars %~ Set.union vars) $
     local (letBound %~ Set.union bvs) $
@@ -164,10 +164,10 @@ check e ty = do
 -- 'Wrapper's where nescessary.
 infer :: MonadInfer Typed m => Expr Resolved -> m (Expr Typed, Type Typed)
 infer (VarRef k a) = do
-  (cont, old, (new, cont')) <- third3A (discharge (VarRef k a)) =<< lookupTy' k
+  (cont, old, (new, cont')) <- third3A (discharge (VarRef k a :: Expr Resolved)) =<< lookupTy' k
   case cont of
-    Nothing -> pure (VarRef (TvName k) (a, old), old)
-    Just cont -> pure (cont' (cont (VarRef (TvName k) (a, old))), new)
+    Nothing -> pure (VarRef k (a, old), old)
+    Just cont -> pure (cont' (cont (VarRef k (a, old))), new)
 
 infer (Fun p e an) = let blame = Arm (p ^. paramPat) Nothing e in do
   (p, dom, ms, cs) <- inferParameter p
@@ -187,7 +187,7 @@ infer (Let ns b an) = do
        tell (DeferredError <$> e)
        fakeLetTys ns
 
-  let bvs = Set.fromList (map TvName (namesInScope (focus ts mempty)))
+  let bvs = Set.fromList (namesInScope (focus ts mempty))
 
   local (typeVars %~ Set.union vars) $
     local (letBound %~ Set.union bvs) $
@@ -281,7 +281,7 @@ infer ex = do
 infer' :: MonadInfer Typed m => Expr Resolved -> m (Expr Typed, Type Typed)
 infer' (VarRef k a) = do
   (_, ty, _) <- lookupTy' k
-  pure (VarRef (TvName k) (a, ty), ty)
+  pure (VarRef k (a, ty), ty)
 infer' ex@App{} = inferApp ex
 infer' ex@Vta{} = inferApp ex
 infer' x = infer x
@@ -324,10 +324,10 @@ inferProg :: MonadInfer Typed m
           => [Toplevel Resolved] -> m ([Toplevel Typed], Env)
 inferProg (stmt@(LetStmt ns):prg) = censor (const mempty) $ do
   (ns', ts, vs) <- retcons (addBlame (BecauseOf stmt)) (inferLetTy (closeOverStrat (BecauseOf stmt)) Fail ns)
-  let bvs = Set.fromList (map TvName (namesInScope (focus ts mempty)))
+  let bvs = Set.fromList (namesInScope (focus ts mempty))
 
   (ts, es) <- flip foldTeleM ts $ \var ty -> do
-    ty <- memento $ skolCheck (TvName var) (BecauseOf stmt) ty
+    ty <- memento $ skolCheck var (BecauseOf stmt) ty
     case ty of
       Left e -> pure (mempty, [e])
       Right t -> do
@@ -343,8 +343,8 @@ inferProg (stmt@(LetStmt ns):prg) = censor (const mempty) $ do
 
 inferProg (st@(ForeignVal v d t ann):prg) = do
   t' <- resolveKind (BecauseOf st) t
-  local (names %~ focus (one v t')) . local (letBound %~ Set.insert (TvName v)) $
-    consFst (ForeignVal (TvName v) d t' (ann, t')) $
+  local (names %~ focus (one v t')) . local (letBound %~ Set.insert v) $
+    consFst (ForeignVal v d t' (ann, t')) $
       inferProg prg
 
 inferProg (decl@(TypeDecl n tvs cs):prg) = do
@@ -357,19 +357,19 @@ inferProg (decl@(TypeDecl n tvs cs):prg) = do
     (ts, cs') <- unzip <$> local (names %~ focus (scope tvs)) (for cs (\con -> retcons (addBlame (BecauseOf con)) (inferCon retTy con)))
 
     local (names %~ focus (teleFromList ts)) . local (constructors %~ Set.union (Set.fromList (map fst ts))) $
-      consFst (TypeDecl (TvName n) tvs cs') $
+      consFst (TypeDecl n tvs cs') $
         inferProg prg
 
 inferProg (Open mod pre:prg) = do
-  modImplicits <- view (modules . at (TvName mod) . non undefined)
+  modImplicits <- view (modules . at mod . non undefined)
   local (classes %~ (<>modImplicits)) $
-    consFst (Open (TvName mod) pre) $ inferProg prg
+    consFst (Open mod pre) $ inferProg prg
 
 inferProg (c@(Class v _ _ _ _):prg) = do
   (stmts, decls, clss, implicits) <- condemn $ inferClass c
   first (stmts ++) <$> do
     local (names %~ focus decls) $
-      local (classDecs . at (TvName v) ?~ clss) $
+      local (classDecs . at v ?~ clss) $
       local (classes %~ mappend implicits) $
         inferProg prg
 
@@ -384,12 +384,12 @@ inferProg (Module name body:prg) = do
   (body', env) <- inferProg body
 
   let (vars, tys) = extractToplevels body
-      vars' = map (\x -> (TvName x, env ^. names . at x . non (error ("value: " ++ show x)))) (vars ++ tys)
+      vars' = map (\x -> (x, env ^. names . at x . non (error ("value: " ++ show x)))) (vars ++ tys)
 
   -- Extend the current scope and module scope
   local ( (names %~ focus (teleFromList vars'))
-        . (modules %~ (Map.insert (TvName name) (env ^. classes) . (<> (env ^. modules))))) $
-    consFst (Module (TvName name) body') $
+        . (modules %~ (Map.insert name (env ^. classes) . (<> (env ^. modules))))) $
+    consFst (Module name body') $
     inferProg prg
 
 inferProg [] = asks ([],)
@@ -414,7 +414,7 @@ inferLetTy closeOver strategy vs =
         deferred <- pure (fmap (apply x) deferred)
         (compose x -> x, wraps', cons) <- solve (Seq.fromList deferred)
 
-        name <- TvName <$> genName
+        name <- genName
         let reify an ty var =
               case wraps' Map.! var of
                 ExprApp v -> v
@@ -441,9 +441,9 @@ inferLetTy closeOver strategy vs =
                   wraps'' = Map.withoutKeys (co <> wraps') notSolvedHere
               pure (id, flip const, \tp sub -> solveEx tp (x <> sub) wraps'')
 
-        vt <- closeOver (Set.singleton (TvName (fst blame)))
+        vt <- closeOver (Set.singleton (fst blame))
                 ex (apply x (context ty))
-        ty <- skolCheck (TvName (fst blame)) (snd blame) vt
+        ty <- skolCheck (fst blame) (snd blame) vt
         let (tp, sub) = rename ty
 
         pure (tp, wrapper Full . solve tp sub . substituteDeferredDicts reify deferred)
@@ -459,7 +459,7 @@ inferLetTy closeOver strategy vs =
         ((exp', ty), cs) <- listen $
           case origin of
             Supplied -> do
-              checkAmbiguous (TvName var) (becauseExp exp) ty
+              checkAmbiguous var (becauseExp exp) ty
               let exp' (Ascription e _ _) = exp' e
                   exp' e = e
               exp <- check (exp' exp) ty
@@ -470,7 +470,7 @@ inferLetTy closeOver strategy vs =
               pure (exp', ty)
 
         (tp, k) <- figureOut (var, becauseExp exp) exp' ty cs
-        pure ( [Binding (TvName var) (k exp') (ann, tp)], one var tp, mempty )
+        pure ( [Binding var (k exp') (ann, tp)], one var tp, mempty )
 
       tcOne (AcyclicSCC TypedMatching{}) = error "TypedMatching being TC'd"
       tcOne (AcyclicSCC b@(Matching p e ann)) = do
@@ -497,7 +497,7 @@ inferLetTy closeOver strategy vs =
               confesses (ArisingFrom (UnsatClassCon (BecauseOf b) (head cons) PatBinding) (BecauseOf b))
           Propagate -> tell (Seq.fromList deferred)
 
-        name <- TvName <$> genName
+        name <- genName
         let reify an ty var =
               case wraps' Map.! var of
                 ExprApp v -> v
@@ -520,18 +520,18 @@ inferLetTy closeOver strategy vs =
           ifor (zip tvs vars) $ \i ((_, tyvar), Binding var exp ann) ->
             case origins !! i of
               Supplied -> do
-                checkAmbiguous (TvName var) (becauseExp exp) tyvar
+                checkAmbiguous var (becauseExp exp) tyvar
                 let exp' (Ascription e _ _) = exp' e
                     exp' e = e
                 exp <- check (exp' exp) tyvar
-                pure (Binding (TvName var) exp (ann, tyvar), tyvar)
+                pure (Binding var exp (ann, tyvar), tyvar)
               Guessed -> do
                 (exp', ty) <- infer exp
                 _ <- unify (becauseExp exp) ty tyvar
-                pure (Binding (TvName var) exp' (ann, ty), ty)
+                pure (Binding var exp' (ann, ty), ty)
 
         (solution, wrap, cons) <- solve cs
-        name <- TvName <$> genName
+        name <- genName
 
         let deferred = fmap (apply solution) cons
         (compose solution -> solution, wrap', cons) <- solve (Seq.fromList deferred)
@@ -563,16 +563,16 @@ inferLetTy closeOver strategy vs =
                  makeTele :: [Binding Typed] -> Telescope Typed
              pure (bs, makeTele bs, mempty)
            else do
-             recVar <- TvName <$> genName
+             recVar <- genName
              innerNames <- fmap Map.fromList . for tvs $ \(v, _) ->
-               (v,) . TvName <$> genNameFrom (T.cons '$' (nameName (unTvName v)))
+               (v,) <$> genNameFrom (T.cons '$' (nameName v))
              let renameInside (VarRef v a) | Just x <- Map.lookup v innerNames = VarRef x a
                  renameInside x = x
 
              let solveOne :: (Binding Typed, Type Typed)
                           -> m ( (T.Text, Var Typed, Ann Resolved, Type Typed), Binding Typed, Field Typed )
                  solveOne (Binding var exp an, ty) = do
-                   let nm = nameName (unTvName var)
+                   let nm = nameName var
                    ty <- pure (apply solution ty)
 
                    pure ( (nm, var, fst an, ty)
@@ -668,7 +668,7 @@ skolCheck var exp ty = do
       sks = Set.map (^. skolIdent) (skols ty)
   env <- view typeVars
   unless (null (sks `Set.difference` env)) $
-    confesses (blameSkol (EscapedSkolems (Set.toList (skols ty)) ty) (unTvName var, exp))
+    confesses (blameSkol (EscapedSkolems (Set.toList (skols ty)) ty) (var, exp))
   checkAmbiguous var exp (deSkol ty)
   pure (deSkol ty)
 
@@ -724,21 +724,21 @@ rename = go 0 mempty mempty where
      in (TyPi (Anon (fst (go n l s k))) ty, sub)
   go _ _ s tau = (apply s tau, s)
 
-  new v l var@(TvName (TgName vr n))
+  new v l var@(TgName vr n)
     | toIdx vr == n || vr `Set.member` l =
       let name = genAlnum v
        in if Set.member name l
              then new (v + 1) l var
-             else (TvName (TgName name n), v + 1, Set.insert name l)
-    | otherwise = (TvName (TgName vr n), v, Set.insert vr l)
+             else (TgName name n, v + 1, Set.insert name l)
+    | otherwise = (TgName vr n, v, Set.insert vr l)
 
-  new _ _ (TvName TgInternal{}) = error "TgInternal in rename"
+  new _ _ TgInternal{} = error "TgInternal in rename"
 
   toIdx t = go (T.unpack t) (T.length t - 1) - 1 where
     go (c:cs) l = (ord c - 96) * (26 ^ l) + go cs (l - 1)
     go [] _ = 0
 
-localGenStrat :: forall p m. (Pretty (Var p), Respannable p, Ord (Var p), Degrade p, MonadInfer Typed m)
+localGenStrat :: forall p m. (Var p ~ VarResolved, Respannable p, MonadInfer Typed m)
               => Set.Set (Var Typed) -> Expr p -> Type Typed -> m (Type Typed)
 localGenStrat bg ex ty = do
   bound <- view letBound
@@ -746,11 +746,9 @@ localGenStrat bg ex ty = do
   types <- view names
   let generalisable v =
         (Set.member v bound || Set.member v cons || Set.member v builtinNames)
-       && maybe True Set.null (types ^. at (unTvName v) . to (fmap ftv))
-      freeIn' :: Expr p -> Set.Set (Var Typed)
-      freeIn' = Set.mapMonotonic (upgrade . degrade) . freeIn
+       && maybe True Set.null (types ^. at v . to (fmap ftv))
 
-  if Set.foldr ((&&) . generalisable) True (freeIn' ex Set.\\ bg) && value ex
+  if Set.foldr ((&&) . generalisable) True (freeIn ex Set.\\ bg) && value ex
      then generalise ftv (becauseExp ex) ty
      else annotateKind (becauseExp ex) ty
 

@@ -12,14 +12,12 @@ module Syntax.Types
   , Origin(..)
 
   , focus
-  , Degrade(..)
   ) where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
 
-import Control.Arrow
 import Control.Lens
 
 import Syntax.Implicits
@@ -89,7 +87,7 @@ data ClassInfo =
     , _ciMethods :: Map.Map (Var Typed) (Type Typed)
       -- ^ A map of methods to their signatures
     , _ciContext :: Map.Map Text (Type Typed)
-      -- ^ The superclasses of this class, 
+      -- ^ The superclasses of this class,
     , _ciConstructorName :: Var Typed
       -- ^ The name of the constructor for this class
     , _ciConstructorTy :: Type Typed
@@ -137,23 +135,11 @@ inScope v (Scope m) = v `Map.member` m
 focus :: Telescope t -> Scope Resolved (Type t) -> Scope Resolved (Type t)
 focus m s = Scope (getScope s <> getTele m)
 
-class Degrade r where
-  degrade :: Var r -> Var Resolved
-  upgrade :: Var Resolved -> Var r
+one :: Var Resolved -> Type p -> Telescope p
+one k t = Telescope (Map.singleton k t)
 
-instance Degrade Resolved where
-  degrade = id
-  upgrade = id
-
-instance Degrade Typed where
-  degrade = unTvName
-  upgrade = TvName
-
-one :: Degrade k => Var k -> Type p -> Telescope p
-one k t = Telescope (Map.singleton (degrade k) t)
-
-foldTeleM :: (Monad m, Monoid x, Degrade k) => (Var k -> Type p -> m x) -> Telescope p -> m x
-foldTeleM f = Map.foldrWithKey (\key t rest -> mappend <$> f (upgrade key) t <*> rest) (pure mempty) . getTele
+foldTeleM :: (Monad m, Monoid x) => (Var Resolved -> Type p -> m x) -> Telescope p -> m x
+foldTeleM f = Map.foldrWithKey (\key t rest -> mappend <$> f key t <*> rest) (pure mempty) . getTele
 
 
 foldTele :: Monoid m => (Type p -> m) -> Telescope p -> m
@@ -167,12 +153,11 @@ traverseTele :: Applicative f
              -> Telescope p -> f (Telescope p)
 traverseTele f (Telescope x) = Telescope <$> Map.traverseWithKey f x
 
-teleFromList :: Degrade p
-             => [(Var p, Type p)] -> Telescope p
-teleFromList = Telescope . Map.fromList . map (first degrade)
+teleFromList :: [(Var Resolved, Type p)] -> Telescope p
+teleFromList = Telescope . Map.fromList
 
-teleToList :: Degrade p => Telescope p -> [(Var p, Type p)]
-teleToList = map (first upgrade) . Map.toList . getTele
+teleToList :: Telescope p -> [(Var Resolved, Type p)]
+teleToList = Map.toList . getTele
 
 toMap :: Scope p f -> Map.Map (Var p) f
 toMap = getScope

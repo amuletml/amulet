@@ -1,4 +1,4 @@
-{-# LANGUAGE ConstraintKinds, FlexibleContexts, LambdaCase #-}
+{-# LANGUAGE ConstraintKinds, FlexibleContexts, LambdaCase, TypeFamilies #-}
 module Types.Kinds
   ( resolveKind
   , resolveTyDeclKind, resolveClassKind
@@ -71,7 +71,7 @@ checkAgainstKind r t k = solveK pure r $
 
 annotateKind :: MonadKind m => SomeReason -> Type Typed -> m (Type Typed)
 annotateKind r ty = do
-  ((ty, _), cs) <- runWriterT (runStateT (fmap fst (inferKind (raiseT unTvName ty))) r)
+  ((ty, _), cs) <- runWriterT (runStateT (fmap fst (inferKind (raiseT id ty))) r)
   (sub, _, _) <- solve cs
   pure (apply sub ty)
 
@@ -104,8 +104,8 @@ resolveClassKind stmt@(Class classcon ctx args methods _) = do
           put reason
         _ -> pure ()
     pure kind
-  let remake (TyVarArg v:as) (TyArr k r) = TyAnnArg (TvName v) k:remake as r
-      remake (TyAnnArg v _:as) (TyArr k r) = TyAnnArg (TvName v) k:remake as r
+  let remake (TyVarArg v:as) (TyArr k r) = TyAnnArg v k:remake as r
+      remake (TyAnnArg v _:as) (TyArr k r) = TyAnnArg v k:remake as r
       remake cs (TyPi Invisible{} x) = remake cs x
       remake _ _ = []
   pure (k, remake args k)
@@ -117,8 +117,8 @@ resolveTyDeclKind :: MonadKind m
                   -> [Constructor Resolved]
                   -> m (Type Typed, Type Typed, [TyConArg Typed])
 resolveTyDeclKind reason tycon args cons = do
-  let argTvName (TyVarArg v)   = Just (TvName v)
-      argTvName (TyAnnArg v _) = Just (TvName v)
+  let argTvName (TyVarArg v)   = Just v
+      argTvName (TyAnnArg v _) = Just v
       vs = mapMaybe argTvName args
   k <- solveForKind reason $ do
     (kind, tele) <- initialKind TyType args
@@ -131,10 +131,10 @@ resolveTyDeclKind reason tycon args cons = do
         c@(GeneralisedCon _ t _) -> condemn $
           retcons (addBlame (BecauseOf c)) (inferGadtConKind c t tycon (mapMaybe argTvName args))
       pure kind
-  let remake (TyVarArg v:as) (TyArr k r) = TyAnnArg (TvName v) k:remake as r
-      remake (TyAnnArg v _:as) (TyArr k r) = TyAnnArg (TvName v) k:remake as r
+  let remake (TyVarArg v:as) (TyArr k r) = TyAnnArg v k:remake as r
+      remake (TyAnnArg v _:as) (TyArr k r) = TyAnnArg v k:remake as r
       remake _ _ = []
-  pure (k, foldl TyApp (TyCon (TvName tycon)) (map TyVar vs), remake args k)
+  pure (k, foldl TyApp (TyCon tycon) (map TyVar vs), remake args k)
 
 solveForKind :: MonadKind m => SomeReason -> KindT m (Type Typed) -> m (Type Typed)
 solveForKind reason = solveK (closeOver reason) reason
@@ -152,7 +152,7 @@ inferKind (TyCon v) = do
     Nothing -> confesses (NotInScope v)
     Just k -> do
       (_, _, k) <- instantiate Expression k
-      pure (TyCon (TvName v), k)
+      pure (TyCon v, k)
 
 inferKind (TyPromotedCon v) = do
   x <- view (names . at v)
@@ -161,12 +161,12 @@ inferKind (TyPromotedCon v) = do
     Just k -> do
       (_, _, k) <- instantiate Expression k
       case promoteOrError k of
-        Nothing -> pure (TyPromotedCon (TvName v), k)
-        Just err -> confesses (NotPromotable (TvName v) k err)
+        Nothing -> pure (TyPromotedCon v, k)
+        Just err -> confesses (NotPromotable v k err)
 
 inferKind (TyVar v) = do
   k <- maybe freshTV pure =<< view (names . at v)
-  pure (TyVar (TvName v), k)
+  pure (TyVar v, k)
 
 inferKind (TyWildcard (Just v)) = do
   (v, k) <- inferKind v
@@ -179,7 +179,7 @@ inferKind (TyWildcard Nothing) = do
 
 inferKind (TySkol sk) = do
   k <- maybe freshTV pure =<< view (names . at (sk ^. skolIdent))
-  pure (raiseT TvName (TySkol sk), k)
+  pure (raiseT id (TySkol sk), k)
 
 inferKind (TyApp f x) = do
   reason <- get
@@ -239,14 +239,14 @@ checkKind (TyPi binder b) ek = do
       _ <- subsumes reason ek kind
       b <- local (names %~ focus (one v arg)) $
         checkKind b ek
-      let bind = Invisible (TvName v) (Just arg)
+      let bind = Invisible v (Just arg)
       pure $ TyPi bind b
 
     Invisible v Nothing -> do
       x <- freshTV
       b <- local (names %~ focus (one v x)) $
         checkKind b ek
-      let bind = Invisible (TvName v) (Just x)
+      let bind = Invisible v (Just x)
       pure $ TyPi bind b
 
 checkKind ty u = do
@@ -268,18 +268,18 @@ inferGadtConKind con typ tycon args = go typ (reverse (spine (gadtConResult typ)
 
   go ty (hd:apps)
     | TyCon hd <- hd, hd == tycon =
-      let fv = map TvName $ toList (foldMap ftv apps)
+      let fv = toList (foldMap ftv apps)
        in do
          fresh <- replicateM (length fv) freshTV
          local (names %~ focus (teleFromList (zip fv fresh))) $ do
            _ <- checkKind ty TyType
            for_ (zip args apps) $ \(var, arg) -> do
              (_, k) <- inferKind arg
-             checkKind (TyVar (unTvName var)) k
+             checkKind (TyVar var) k
   go _ _ = do
     tp <- checkKind typ TyType
     confesses . flip ArisingFrom (BecauseOf con) $ gadtConShape
-      (tp, foldl TyApp (TyCon (TvName tycon)) (map TyVar args))
+      (tp, foldl TyApp (TyCon tycon) (map TyVar args))
       (gadtConResult tp)
       (Malformed tp)
 
@@ -298,7 +298,7 @@ closeOver r a = silence $ do
       forall vs a = foldr addForall a vs
 
       addForall v t
-        | unTvName v `inScope` names = TyForall v (Just (names ^. at (unTvName v) . non undefined)) t
+        | v `inScope` names = TyForall v (Just (names ^. at v . non undefined)) t
         | otherwise = TyForall v Nothing t
 
   let kindVars = squish . second toList . runWriter . split where

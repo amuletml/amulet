@@ -1,6 +1,6 @@
 {-# LANGUAGE MultiWayIf, FlexibleContexts, ScopedTypeVariables,
    TemplateHaskell, TupleSections, ViewPatterns,
-   LambdaCase, ConstraintKinds, CPP #-}
+   LambdaCase, ConstraintKinds, CPP, TypeFamilies #-}
 
 -- | This module implements the logic responsible for solving the
 -- sequence of @Constraint@s the type-checker generates for a particular
@@ -181,7 +181,7 @@ doSolve (ConFail a v t :<| cs) = do
   s <- use solveTySubst
   s' <- use solveAssumptions
 
-  let ex = Hole (unTvName v) (fst a)
+  let ex :: Expr Resolved = Hole v (fst a)
       sub = s `compose` s'
   dictates . reblame (BecauseOf ex) $ foundHole v t sub
 
@@ -192,8 +192,8 @@ doSolve (ConImplicit _ _ v x :<| cs) | x == tyUnit = do
   solveCoSubst . at v ?= WrapFn (MkWrapCont wrap "unit solution app")
 
 doSolve (ConImplicit why scope v (TyTuple a b) :<| cs) = do
-  vara <- TvName <$> genName
-  varb <- TvName <$> genName
+  vara <- genName
+  varb <- genName
   solveCoSubst . at v ?= ExprApp
     (Tuple [ ExprWrapper (WrapVar vara)
               (Fun (EvParam (Capture vara (annotation why, a)))
@@ -438,7 +438,7 @@ subsumes' b s t1 t2@TyPi{} | isSkolemisable t2 = do
 
 subsumes' r s (TyPi (Implicit t) t1) t2
   | prettyConcrete t2 = do
-      var <- TvName <$> genName
+      var <- genName
       omega <- subsumes' r s t1 t2
       let con = ConImplicit r s var t
       doSolve (Seq.singleton con)
@@ -448,7 +448,7 @@ subsumes' r s (TyPi (Implicit t) t1) t2
                    (ExprWrapper (WrapVar var) ex (an, t1)) (an, t1)) (an, t2)
        in pure (WrapFn (MkWrapCont wrap ("implicit instantation " ++ show (pretty t))))
   | TyVar{} <- t1, TyVar{} <- t2 = do
-      var <- TvName <$> genName
+      var <- genName
       omega <- subsumes' r s t1 t2
       let con = ConImplicit r s var t
       doSolve (Seq.singleton con)
@@ -477,7 +477,7 @@ subsumes' r scope ot@(TyTuple a b) nt@(TyTuple a' b') = do
     pure (wb, wa)
   -- Thus "point-wise" subsumption
 
-  [elem, elem'] <- fmap TvName <$> replicateM 2 genName
+  [elem, elem'] <- replicateM 2 genName
   let cont (Tuple (e:es) (an, _)) =
         Tuple [ ExprWrapper wa e (an, a')
               , case es of
@@ -538,7 +538,7 @@ subsumes' r scope th@(TyExactRows rhas) tw@(TyExactRows rwant) = do
     wrap <- subsumes' (fieldBlame key r) scope have want
     pure (Map.singleton key (have, want, wrap))
 
-  exp <- TvName <$> genName
+  exp <- genName
 
   pure (WrapFn (MkWrapCont (mkRecordWrapper rhas matched tw th tw id exp) "exact→exact record subsumption"))
 
@@ -566,7 +566,7 @@ subsumes' r scope th@(TyExactRows rhas) tw@(TyRows rho rwant) = do
   -- then produce a coercion to shrink the record.
   _ <- unify rho (TyExactRows diff)
   let cast = probablyCast co
-  exp <- TvName <$> genName
+  exp <- genName
 
   let mkw ex = ExprWrapper cast ex (annotation ex, tw)
   pure (WrapFn (MkWrapCont (mkRecordWrapper rhas matched matched_t th tw mkw exp) "exact→poly record subsumption"))
@@ -596,7 +596,7 @@ subsumes' r scope th@(TyRows rho rhas) tw@(TyRows sigma rwant) = do
           _ -> TyRows rho diff
 
     cast <- probablyCast <$> unify sigma new
-    exp <- TvName <$> genName
+    exp <- genName
 
     let mkw ex = ExprWrapper cast ex (annotation ex, tw)
     pure (WrapFn (MkWrapCont (mkRecordWrapper rhas matched matched_t th tw mkw exp) "exact→poly record subsumption"))
@@ -619,11 +619,11 @@ skolemise motive ty@(TyPi (Invisible tv k) t) = do
 skolemise motive wt@(TyPi (Implicit ity) t) = do
   (omega, ty, scp) <- skolemise motive t
   let go (TyTuple a b) = do
-        var <- TvName <$> genName
+        var <- genName
         (pat, scope) <- go b
         pure (Capture var (internal, a):pat, insert internal LocalAssum var a scope)
       go x = do
-        var <- TvName <$> genName
+        var <- genName
         pure ([Capture var (internal, x)], insert internal LocalAssum var x scp)
   (pat, scope) <- go ity
   let wrap ex | an <- annotation ex =
@@ -676,7 +676,7 @@ probablyCast x
 -- @
 freshSkol :: MonadNamey m => SkolemMotive Typed -> Type Typed -> Var Typed -> m (Type Typed)
 freshSkol m ty u = do
-  var <- TvName <$> genName
+  var <- genName
   pure (TySkol (Skolem var u ty m))
 
 occurs :: Var Typed -> Type Typed -> Bool
