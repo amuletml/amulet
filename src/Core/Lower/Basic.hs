@@ -87,8 +87,10 @@ lowerType (S.TyCon v) = ConTy (mkType v)
 lowerType (S.TyPromotedCon v) = ConTy (mkCon v) -- TODO this is in the wrong scope
 lowerType (S.TySkol (Skolem (TgName _ v) (TgName n _) _ _)) = VarTy (CoVar v n TypeVar)
 lowerType (S.TySkol _) = error "impossible lowerType TySkol"
+lowerType (S.TyOperator l o r) = (ConTy (mkType o) `AppTy` lowerType l) `AppTy` lowerType r
 lowerType (S.TyWildcard (Just t)) = lowerType t
 lowerType (S.TyWildcard _) = error "impossible lowerType TyWildcard"
+lowerType (S.TyParens t) = lowerType t
 lowerType (S.TyWithConstraints _ t) = lowerType t
 lowerType S.TyType = StarTy
 

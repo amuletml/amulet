@@ -138,7 +138,7 @@ import Syntax
   '$sep'   { Token TcVSep _ _ }
 
 -- Please try to update the module documentation when this number changes.
-%expect 3
+%expect 7 -- TODO: Update this?
 
 %%
 
@@ -433,18 +433,25 @@ Parameter :: { Parameter Parsed }
           : ArgP             { PatParam $1 }
 
 Type :: { Located (Type Parsed) }
-     : TypeProd                                   { $1 }
-     | TypeProd '->' Type                         { lPos2 $1 $3 $ TyPi (Anon (getL $1)) (getL $3) }
-     | TypeProd '=>' Type                         { lPos2 $1 $3 $ TyPi (Implicit (getL $1)) (getL $3) }
-     | forall ListE1(tyvar) '.' Type              { lPos2 $1 $4 $ forallTy (map getName $2) (getL $4) }
+  : TypeProd                                      { $1 }
+  | TypeProd '->' Type                            { lPos2 $1 $3 $ TyPi (Anon (getL $1)) (getL $3) }
+  | TypeProd '=>' Type                            { lPos2 $1 $3 $ TyPi (Implicit (getL $1)) (getL $3) }
+  | forall ListE1(tyvar) '.' Type                 { lPos2 $1 $4 $ forallTy (map getName $2) (getL $4) }
 
 TypeProd :: { Located (Type Parsed) }
-         : TypeApp                                { $1 }
-         | TypeApp '*' TypeProd                   { lPos2 $1 $3 $ TyTuple (getL $1) (getL $3) }
+  : TypeApp                                       { $1 }
+  | TypeProd TypeOperator TypeApp                 { lPos2 $1 $3 $ TyOperator (getL $1) $2 (getL $3) }
 
-TypeApp  :: { Located (Type Parsed) }
-         : TypeAtom                               { $1 }
-         | TypeApp TypeAtom                       { lPos2 $1 $2 $ TyApp (getL $1) (getL $2) }
+TypeApp :: { Located (Type Parsed) }
+  : TypeAtom                                      { $1 }
+  | TypeApp TypeAtom                              { lPos2 $1 $2 $ TyApp (getL $1) (getL $2) }
+
+TypeOperator :: { Var Parsed  }
+  : '*'                                           { Name $ T.pack "*" }
+  | '~'                                           { Name $ T.pack "~" }
+  | op                                            { getName $1 }
+  | opid                                          { getName $1 }
+  | qopid                                         { getName $1 }
 
 TypeAtom :: { Located (Type Parsed) }
          : Var                                    { lPos1 $1 $ TyCon (getL $1) }
@@ -453,7 +460,7 @@ TypeAtom :: { Located (Type Parsed) }
          | type                                   { lPos1 $1 TyType }
          | lazy                                   { lPos1 $1 $ TyCon (Name (T.pack "lazy")) }
          | '(' ')'                                { lPos2 $1 $2 $ TyCon (Name (T.pack "unit")) }
-         | '(' Type ')'                           { lPos2 $1 $3 (getL $2) }
+         | '(' Type ')'                           { lPos2 $1 $3 $ TyParens (getL $2) }
          | '{' ListT(TypeRow, ',') '}'            { lPos2 $1 $3 $ TyExactRows $2 }
          | '{' Type '|' ListT(TypeRow, ',') '}'   { lPos2 $1 $5 $ TyRows (getL $2) $4 }
          | '_'                                    { lPos1 $1 (TyWildcard Nothing) }
@@ -537,15 +544,11 @@ getIdent  (Token (TcConIdent x) _ _)   = x
 getIdent  (Token (TcAccess x) _ _)     = x
 getIdent  (Token (TcTyvar x) _ _)      = x
 
-getName (Token (TcOp x) _ _)                = Name x
-getName (Token (TcIdentifier x) _ _)        = Name x
-getName (Token (TcOpIdent x) _ _)           = Name x
-getName (Token (TcConIdent x) _ _)          = Name x
 getName (Token (TcIdentifierQual ms x) _ _) = foldl (flip InModule) (Name x) ms
 getName (Token (TcOpIdentQual ms x) _ _)    = foldl (flip InModule) (Name x) ms
 getName (Token (TcConIdentQual ms x) _ _)   = foldl (flip InModule) (Name x) ms
 getName (Token (TcDotQual ms) _ _)          = foldl (flip InModule) (Name (last ms)) (init ms)
-getName (Token (TcTyvar x) _ _)             = Name x
+getName x                                   = Name (getIdent x)
 
 getHole   (Token (TcHole x) _ _)       = x
 getInt    (Token (TcInteger x) _ _)    = x

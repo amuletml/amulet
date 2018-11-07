@@ -195,7 +195,9 @@ data Type p
   | TyRows (Type p) [(Text, Type p)]  -- { α | foo : int, bar : string }
   | TyExactRows [(Text, Type p)] -- { foo : int, bar : string }
   | TyTuple (Type p) (Type p) -- (see note [1])
+  | TyOperator (Type p) (Var p) (Type p)
   | TyWildcard (Maybe (Type p))
+  | TyParens (Type p) -- | @(xyz)@, just useful for resetting precedence. Removed after the resolver.
 
   -- Used internally:
   | TySkol (Skolem p)
