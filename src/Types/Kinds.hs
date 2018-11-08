@@ -164,6 +164,20 @@ inferKind (TyPromotedCon v) = do
         Nothing -> pure (TyPromotedCon v, k)
         Just err -> confesses (NotPromotable v k err)
 
+inferKind (TyOperator left op right) = do
+  reason <- get
+  kind <- view (names . at op)
+  ty <- case kind of
+    Nothing -> confesses (NotInScope op)
+    Just k ->
+      view _3 <$> instantiate Expression k
+
+  (Anon lt, c1, _) <- quantifier reason ty
+  (Anon rt, c2, _) <- quantifier reason c1
+  left <- checkKind left lt
+  right <- checkKind right rt
+  pure (TyOperator left op right, c2)
+
 inferKind (TyVar v) = do
   k <- maybe freshTV pure =<< view (names . at v)
   pure (TyVar v, k)

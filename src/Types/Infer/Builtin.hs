@@ -19,7 +19,7 @@ import Syntax.Subst
 import Syntax.Var
 import Syntax
 
-tyUnit, tyBool, tyInt, tyString, tyFloat, tyLazy, tyConstraint :: Type Typed
+tyUnit, tyBool, tyInt, tyString, tyFloat, tyLazy, tyConstraint, tyArrow :: Type Typed
 tyInt = TyCon (TgInternal "int")
 tyString = TyCon (TgInternal "string")
 tyBool = TyCon (TgInternal "bool")
@@ -27,6 +27,7 @@ tyUnit = TyCon (TgInternal "unit")
 tyFloat = TyCon (TgInternal "float")
 tyLazy = TyCon (TgName "lazy" (-34))
 tyConstraint = TyCon (TgName "constraint" (-37))
+tyArrow = TyCon (TgName "->" (-38))
 
 builtinNames :: Set.Set (Var Typed)
 builtinNames = Set.fromList $ namesInScope (builtinsEnv ^. names)
@@ -57,6 +58,7 @@ builtinsEnv = envOf (scopeFromList builtin) where
          TyForall b (Just TyType) $ (TyVar a `TyArr` TyVar b) `TyArr` (TyVar a `TyArr` TyVar b)
       , (TgInternal "lazy", TyForall a (Just TyType) $ (tyUnit `TyArr` TyVar a) `TyArr` TyApp tyLazy (TyVar a))
       , (TgInternal "force", TyForall a (Just TyType) $ TyApp tyLazy (TyVar a) `TyArr` TyVar a)
+      , (TgName "->" (-38), TyArr TyType (TyArr TyType TyType))
       , tp "int", tp "string", tp "bool", tp "unit", tp "float"
       , (TgName "lazy" (-34), TyArr TyType TyType), (TgName "constraint" (-37), TyType)
       ]
@@ -168,6 +170,7 @@ quantifier r wty@(TyPi (Implicit tau) sigma) = do
   pure (dom, cod, k . wrap)
 
 quantifier _ (TyPi x b) = pure (x, b, id)
+quantifier _ (TyApp (TyApp (TyCon (TgName _ (-38))) l) r) = pure (Anon l, r, id)
 quantifier r t = do
   (a, b) <- (,) <$> freshTV <*> freshTV
   k <- subsumes r t (TyPi (Anon a) b)

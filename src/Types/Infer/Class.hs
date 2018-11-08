@@ -490,6 +490,10 @@ validContext what ann (TyTuple a b) = do
   validContext what ann a
   validContext what ann b
 
+validContext what ann (TyOperator a _ b) = do
+  validContext what ann a
+  validContext what ann b
+
 validContext _ _ TyCon{} = pure ()
 validContext what ann t@TyPromotedCon{} = confesses (InvalidContext what ann t)
 validContext w a t@TyVar{} = confesses (InvalidContext w a t)

@@ -1,6 +1,6 @@
 {-# LANGUAGE MultiWayIf, FlexibleContexts, ScopedTypeVariables,
    TemplateHaskell, TupleSections, ViewPatterns,
-   LambdaCase, ConstraintKinds, CPP, TypeFamilies #-}
+   LambdaCase, ConstraintKinds, CPP, TypeFamilies, OverloadedStrings #-}
 
 -- | This module implements the logic responsible for solving the
 -- sequence of @Constraint@s the type-checker generates for a particular
@@ -364,6 +364,16 @@ unify skt@(TySkol t@(Skolem sv _ _ _)) b = do
            else confesses (Occurs sv b)
            else confesses (SkolBinding t b)
 unify b (TySkol t) = SymCo <$> unify (TySkol t) b
+
+-- ((->) a b) = a -> b
+unify (TyApp (TyApp (TyCon v) l) r) (TyArr l' r')
+  | TgName _ (-38) <- v = ArrCo <$> unify l l' <*> unify r r'
+
+unify (TyArr l r) (TyApp (TyApp (TyCon v) l') r')
+  | TgName _ (-38) <- v = ArrCo <$> unify l l' <*> unify r r'
+
+unify (TyApp f g) (TyArr l r) = ArrCo <$> unify f (TyApp (TyCon (TgName "->" (-38))) l) <*> unify g r
+unify (TyArr l r) (TyApp f g) = ArrCo <$> unify (TyApp (TyCon (TgName "->" (-38))) l) f <*> unify r g
 
 unify (TyArr a b) (TyArr a' b') = ArrCo <$> unify a a' <*> unify b b'
 unify (TyPi (Implicit a) b) (TyPi (Implicit a') b') =

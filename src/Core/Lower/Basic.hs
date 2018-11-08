@@ -77,6 +77,7 @@ lowerType (S.TyPi bind b)
     ForallTy Irrelevant (lowerType a) (lowerType b)
   | S.Implicit a <- bind =
     ForallTy Irrelevant (lowerType a) (lowerType b)
+lowerType (S.TyApp (S.TyApp (S.TyCon (TgName _ (-38))) l) r) = ForallTy Irrelevant (lowerType l) (lowerType r)
 lowerType (S.TyApp a b) = AppTy (lowerType a) (lowerType b)
 lowerType (S.TyRows rho vs) = RowsTy (lowerType rho) (map (fmap lowerType) vs)
 lowerType (S.TyExactRows []) = NilTy

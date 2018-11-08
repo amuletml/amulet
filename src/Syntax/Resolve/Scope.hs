@@ -58,6 +58,7 @@ builtinScope = Scope
                                   , "@@", "lazy", "force" ]
                , tyScope    = Map.fromList [ (Name "constraint", SVar (TgName "constraint" (-37)))
                                            , (Name "lazy", SVar (TgName "lazy" (-34)))
+                                           , (Name "->", SVar (TgName "->" (-38)))
                                            ] `Map.union`
                               build [ "int", "string", "bool", "unit", "float"
                                     , "=>", "*", "->"
