@@ -1,8 +1,6 @@
 vta-fail04.ml[1:9 ..1:38]: error
-  Can not apply expression of type 'f -> 'f
-    to visible type argument int
-
-  Arising in the expression
   │ 
 1 │ let _ = (let 1 = 1 in fun x -> x) @int
   │         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  Can not apply expression of type 'f -> 'f
+    to visible type argument int

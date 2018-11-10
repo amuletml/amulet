@@ -1,13 +1,11 @@
 gadt04-fail.ml[2:5 ..2:26]: error
-  The type `int * int -> t` is malformed.
-  • Note: The type int * int -> t
-            is not an instance of the type being declared
-  • Note: It must end in a reference to t
-            but it ends in a tuple
-  • Suggestion: did you mean a function, like
-                  int -> int -> t?
-
-  Arising in the constructor
   │ 
 2 │   | MkT : int * (int -> t)
   │     ^^^^^^^^^^^^^^^^^^^^^^
+  The type `int * int -> t` is malformed.
+  • Note: The type int * int -> t
+      is not an instance of the type being declared
+  • Note: It must end in a reference to t
+      but it ends in a tuple
+  • Suggestion: did you mean a function, like
+                  int -> int -> t?

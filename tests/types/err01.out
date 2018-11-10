@@ -1,7 +1,5 @@
 err01.ml[8:11 ..8:12]: error
-  Could not match expected type option ((int * int) * 'b) with option (int * int)
-
-  Arising in the expression
   │ 
 8 │   enqueue go (start, stop)
   │           ^^
+  Could not match expected type option ((int * int) * 'b) with option (int * int)

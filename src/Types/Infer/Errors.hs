@@ -26,12 +26,12 @@ gadtConShape (t, _) (TyArr c d) oerr = k . fix . flip Note (string "Generalised 
 gadtConShape (_, t) ty oerr = k . fix . flip Note (itShouldBe <#> itIs) . flip Note msg $ err where
   msg = string "The type"
     <+> nest 2 (pretty ty
-      </> string "is not an instance of the type being declared")
+      </> indent 2 (string "is not an instance of the type being declared"))
   itShouldBe = case t of
     TyApp{} -> string "It must end in an application like" <+> pretty t
     TyCon{} -> string "It must end in a reference to" <+> pretty t
     _ -> error "malformed"
-  itIs = indent 2 $ string "but it ends in a" <> case ty of
+  itIs = indent 4 $ string "but it ends in a" <> case ty of
     TyTuple{} -> empty <+> keyword "tuple"
     TyRows{} -> empty <+> keyword "polymorphic record"
     TyExactRows{} -> empty <+> keyword "record"

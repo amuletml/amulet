@@ -1,12 +1,9 @@
 fail_skolem_escape.ml[2:19 ..2:38]: error
-  Rigid type variable b has escaped its scope of forall 'b. 'b -> 'a
-  • Note: the variable b was rigidified because of the context, the type
-          forall 'b. 'b -> 'a,
-
-  • Note: in the type 'b
-  • Note: in the inferred type for escape_fail
-
-  Arising in the expression
   │ 
 2 │ let escape_fail = escapes (fun x -> x)
   │                   ^^^^^^^^^^^^^^^^^^^^
+  Rigid type variable b has escaped its scope of forall 'b. 'b -> 'a
+  • Note: the variable b was rigidified because of the context, the type
+          forall 'b. 'b -> 'a,
+  • Note: in the inferred type for escape_fail,
+      'b

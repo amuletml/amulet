@@ -1,21 +1,15 @@
 multi_errs02.ml[2:19 ..2:22]: error
-  Could not match expected type int with bool
-
-  Arising in the expression
   │ 
 2 │   let foo x = 2 + true
   │                   ^^^^
+  Could not match expected type int with bool
 multi_errs02.ml[1:5 ..1:6]: error
-  Could not match expected type unit with int
-
-  Arising in the binding
   │ 
 1 │ let () =
   │     ^^
+  Could not match expected type unit with int
 multi_errs02.ml[7:5 ..7:6]: error
-  Could not match expected type unit with string
-
-  Arising in the binding
   │ 
 7 │ let () = "foo"
   │     ^^
+  Could not match expected type unit with string

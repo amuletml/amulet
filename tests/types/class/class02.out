@@ -1,10 +1,7 @@
 class02.ml[3:3 ..3:27]: error
-  Could not match type type with 'i -> 'j
-
-  Have you applied a type constructor
-  to the wrong number of arguments?
-
-  Arising in the method signature
   │ 
 3 │   val foo : 'a () -> string
   │   ^^^^^^^^^^^^^^^^^^^^^^^^^
+  Could not match actual type type with expected type 'i -> 'j
+
+  Have you applied a type constructor to the wrong number of arguments?

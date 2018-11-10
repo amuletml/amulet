@@ -1,8 +1,6 @@
 vta-class02.ml[12:9 ..12:21]: error
-  Can not apply expression of type sized _ => int
-    to visible type argument unit
-
-  Arising in the expression
    │ 
 12 │ let 0 = size @_ @unit
    │         ^^^^^^^^^^^^^
+  Can not apply expression of type sized _ => int
+    to visible type argument unit
