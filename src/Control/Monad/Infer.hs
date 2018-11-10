@@ -255,9 +255,9 @@ instance Pretty TypeError where
           TyType -> string "type constructor"
           x | show (pretty x) == "constraint#-37" -> string "type class constructor"
           _ -> string "function"
-     in vcat [ string "Could not match type" <+> displayType a <+> string "with" <+> displayType b
+     in vcat [ string "Could not match actual type" <+> displayType a <+> string "with expected type" <+> displayType b
              , empty
-             , string "Have you applied a" <+> thing </> "to the wrong number of arguments?"
+             , string "Have you applied a" <+> thing <+> "to the wrong number of arguments?"
              ]
   pretty (NotEqual TyType b) =
     vcat [ string "Expected a type, but this has kind" <+> displayType b
@@ -266,10 +266,10 @@ instance Pretty TypeError where
   pretty (NotEqual a b) = string "Could not match expected type" <+> displayType b <+> string "with" <+> displayType a
 
   pretty (NotInScope e) = string "Variable not in scope:" <+> pretty e
-  pretty (ArisingFrom er ex) = pretty er <#> empty <#> nest 4 (string "Arising in" <+> blameOf ex)
+  pretty (ArisingFrom er _) = pretty er
   pretty (FoundHole e s) = string "Found typed hole" <+> pretty e <+> "of type" <+> displayType s
 
-  pretty (Note te m) = pretty te <#> note <+> align (pretty m)
+  pretty (Note te m) = pretty te <#> note <+> pretty m
   pretty (Suggestion te m) = pretty te <#> bullet (string "Suggestion:") <+> align (pretty m)
   pretty (CanNotInstance rec new) = string "Can not instance hole of record type" <+> align (verbatim rec </> string " to type " <+> verbatim new)
   pretty (Malformed tp) = string "The type" <+> verbatim tp <+> string "is malformed."
@@ -312,6 +312,9 @@ instance Pretty TypeError where
                    </> string "with a polymorphic type constitutes" <+> stypeCon (string "impredicative polymorphism"))
            ]
 
+  pretty (EscapedSkolems [skol] _) | ByConstraint con <- _skolMotive skol =
+    vsep [ "The constraint" <+> displayType con <+> "is ambiguous" ]
+
   pretty (EscapedSkolems esc t) =
     vsep [ case esc of
             [Skolem{..}] ->
@@ -319,8 +322,6 @@ instance Pretty TypeError where
               string "Rigid type variable" <+> skol <+> string "has escaped its scope of" <+> displayType _skolScope
                   <#> rest skol _skolMotive
             _ -> foldr ((<#>) . pretty . flip EscapedSkolems t . pure) empty esc
-         , empty -- a line break
-         , note <+> nest 4 (string "in the type" </> displayType t)
          ]
     where rest skol x =
             case x of
@@ -575,7 +576,7 @@ instance Note TypeError Style where
          , f [two]
          ]
 
-  formatNote f x = indent 2 (Right <$> pretty x) <#> f [annotation x]
+  formatNote f x = f [annotation x] <#> indent 2 (Right <$> pretty x)
 
 missing :: [(Text, b)] -> [(Text, b)] -> Doc
 missing ra rb

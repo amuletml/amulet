@@ -1,20 +1,14 @@
 gadt01.ml[3:16 ..3:23]: error
-  Could not match type type with 'd -> type
-
-  Have you applied a type constructor
-  to the wrong number of arguments?
-
-  Arising in the declaration
   │ 
 3 │ type gadt 'a = R : gadt
   │                ^^^^^^^^
+  Could not match actual type type with expected type 'd -> type
+
+  Have you applied a type constructor to the wrong number of arguments?
 gadt01.ml[3:16 ..3:23]: error
-  Could not match type type with 'a -> type
-
-  Have you applied a type constructor
-  to the wrong number of arguments?
-
-  Arising in the constructor
   │ 
 3 │ type gadt 'a = R : gadt
   │                ^^^^^^^^
+  Could not match actual type type with expected type 'a -> type
+
+  Have you applied a type constructor to the wrong number of arguments?

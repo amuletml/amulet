@@ -1,7 +1,5 @@
 vta-fail01.ml[3:17 ..3:21]: error
-  Could not match expected type int with string
-
-  Arising in the expression
   │ 
 3 │ let _ = id @int "foo"
   │                 ^^^^^
+  Could not match expected type int with string

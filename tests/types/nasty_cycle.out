@@ -1,22 +1,18 @@
 nasty_cycle.ml[18:19 ..18:33]: error
-  The type variable 's appears in the type S 's
-
-  • Note: all solutions to
-      's ~ S 's
-    are infinite.
-
-  Arising in the expression
    │ 
 18 │       | Left p -> Right (Even2 p)
    │                   ^^^^^^^^^^^^^^^
-nasty_cycle.ml[19:20 ..19:25]: error
   The type variable 's appears in the type S 's
 
   • Note: all solutions to
       's ~ S 's
     are infinite.
-
-  Arising in the expression
+nasty_cycle.ml[19:20 ..19:25]: error
    │ 
 19 │       | Right p -> Left p
    │                    ^^^^^^
+  The type variable 's appears in the type S 's
+
+  • Note: all solutions to
+      's ~ S 's
+    are infinite.

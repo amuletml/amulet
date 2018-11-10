@@ -41,7 +41,7 @@ import Syntax.Subst
 import Syntax.Types
 import Syntax.Let
 import Syntax.Var
-import Syntax
+import Syntax.Pretty as Syntax
 
 import Types.Infer.Constructor
 import Types.Infer.Pattern
@@ -664,7 +664,7 @@ data PatternStrat = Fail | Propagate
 skolCheck :: MonadInfer Typed m => Var Typed -> SomeReason -> Type Typed -> m (Type Typed)
 skolCheck var exp ty = do
   let blameSkol :: TypeError -> (Var Desugared, SomeReason) -> TypeError
-      blameSkol e (v, r) = addBlame r (Note e (string "in the inferred type for" <+> pretty v))
+      blameSkol e (v, r) = addBlame r (Note e (string "in the inferred type for" <+> pretty v <> comma <#> indent 4 (displayType ty)))
       sks = Set.map (^. skolIdent) (skols ty)
   env <- view typeVars
   unless (null (sks `Set.difference` env)) $
