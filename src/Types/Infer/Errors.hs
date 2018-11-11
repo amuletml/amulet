@@ -17,10 +17,12 @@ import Syntax.Subst
 import Text.Pretty.Semantic
 
 gadtConShape :: (Type Typed, Type Typed) -> Type Typed -> TypeError -> TypeError
-gadtConShape (t, _) (TyArr c d) oerr = k . fix . flip Note (string "Generalised constructors can not be curried") $ err where
+gadtConShape (t, _) (TyArr c d) oerr = k . fix . flip Note curry $ err where
+  curry = string "Generalised constructors can not be curried"
   fix = case t of
     TyArr x _ -> flip Suggestion (string "Perhaps use a tuple:" <+> verbatim (TyArr (TyTuple x c) d))
-    TyForall v k (TyArr x _) -> flip Suggestion (string "Perhaps use a tuple:" <+> verbatim (TyForall v k (TyArr (TyTuple x c) d)))
+    TyForall v k (TyArr x _) ->
+      flip Suggestion (string "Perhaps use a tuple:" <+> verbatim (TyForall v k (TyArr (TyTuple x c) d)))
     _ -> id
   (err, k) = getErr oerr
 gadtConShape (_, t) ty oerr = k . fix . flip Note (itShouldBe <#> itIs) . flip Note msg $ err where
@@ -41,15 +43,23 @@ gadtConShape (_, t) ty oerr = k . fix . flip Note (itShouldBe <#> itIs) . flip N
     _ -> empty
 
   fix = case ty of
-    TyTuple a b -> flip Suggestion (string "did you mean a function," <+> nest 2 (string "like" </> pretty (TyArr a b) <> char '?'))
+    TyTuple a b ->
+      flip Suggestion $
+        string "did you mean a function,"
+          <+> nest 2 (string "like" </> pretty (TyArr a b) <> char '?')
     TyCon v -> case spine t of
-      TyCon v':_ | v == v' -> flip Suggestion (string "did you mean to saturate it with respect to universals,"
-                                           <#> string "as in" <+> pretty t <> char '?')
-      [TyCon v'] | v /= v' -> flip Suggestion (string "did you mean to use" <+> pretty v' <+> string "instead of" <+> pretty v <> char '?')
+      TyCon v':_ | v == v' ->
+        flip Suggestion $
+          string "did you mean to saturate it with respect to universals,"
+            <#> string "as in" <+> pretty t <> char '?'
+      [TyCon v'] | v /= v' ->
+        flip Suggestion $
+          string "did you mean to use" <+> pretty v' <+> string "instead of" <+> pretty v <> char '?'
       _ -> id
     TyApp{} -> case (spine ty, spine t) of
       (TyCon v':xs, TyCon v:_) | v /= v' ->
-        flip Suggestion (string "did you mean" <+> pretty (rewind v xs) </> string "instead of" <+> pretty ty <> char '?')
+        flip Suggestion $
+          string "did you mean" <+> pretty (rewind v xs) </> string "instead of" <+> pretty ty <> char '?'
       _ -> id
     _ -> id
   (err, k) = getErr oerr

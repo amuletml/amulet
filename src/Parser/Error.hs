@@ -71,13 +71,18 @@ instance Pretty ParseError where
   pretty (UnexpectedCharacter _ c) | isPrint c = "Unexpected character '" <> string [c] <> "'"
                                    | otherwise = "Unexpected character" <+> shown c
   pretty (UnexpectedEnd _) = string "Unexpected end of input"
-  pretty (UnclosedString _ p Eof) = "Unexpected end of input, expecting to close string started at" <+> prettyPos p
-  pretty (UnclosedString _ p Newline) = "Unexpected new line, expecting to close string started at" <+> prettyPos p
-  pretty (UnclosedComment _ p) = "Unexpected end of input, expecting to close comment started at" <+> prettyPos p
+  pretty (UnclosedString _ p Eof) =
+    "Unexpected end of input, expecting to close string started at" <+> prettyPos p
+  pretty (UnclosedString _ p Newline) =
+    "Unexpected new line, expecting to close string started at" <+> prettyPos p
+  pretty (UnclosedComment _ p) =
+    "Unexpected end of input, expecting to close comment started at" <+> prettyPos p
 
   pretty (UnexpectedToken (Token s _ _) []) = "Unexpected" <+> string (friendlyName s)
-  pretty (UnexpectedToken (Token s _ _) [x]) = "Unexpected" <+> string (friendlyName s) <> ", expected" <+> string x
-  pretty (UnexpectedToken (Token s _ _) xs) = "Unexpected" <+> string (friendlyName s) <> ", expected one of" <+> hsep (punctuate comma (map string xs))
+  pretty (UnexpectedToken (Token s _ _) [x]) =
+    "Unexpected" <+> string (friendlyName s) <> ", expected" <+> string x
+  pretty (UnexpectedToken (Token s _ _) xs) =
+    "Unexpected" <+> string (friendlyName s) <> ", expected one of" <+> hsep (punctuate comma (map string xs))
 
   pretty (MalformedClass _ ty) =
     case ty of
@@ -127,8 +132,11 @@ instance Pretty ParseError where
 
   pretty (InvalidEscapeCode _) = "Unknown escape code."
 
-  pretty (UnalignedIn _ p) = "The in is misaligned with the corresponding 'let'" <+> parens ("located at" <+> prettyPos (spanStart p))
-  pretty (UnindentContext _ p) = "Possible incorrect indentation" </> "This token is outside the context started at" <+> prettyPos (spanStart p)
+  pretty (UnalignedIn _ p) =
+    "The in is misaligned with the corresponding 'let'" <+> parens ("located at" <+> prettyPos (spanStart p))
+  pretty (UnindentContext _ p) =
+    "Possible incorrect indentation" 
+    </> "This token is outside the context started at" <+> prettyPos (spanStart p)
 
 instance Spanned ParseError where
   annotation (Failure p _) = mkSpan1 p

@@ -63,8 +63,8 @@ inferProgram env ct = fmap fst <$> runInfer env (inferProg ct)
 -- | Check an 'Expr'ession against a known 'Type', annotating it with
 -- appropriate 'Wrapper's, and performing /some/ level of desugaring.
 check :: forall m. MonadInfer Typed m => Expr Desugared -> Type Typed -> m (Expr Typed)
-check e oty@TyPi{} | isSkolemisable oty = do -- This is rule Decl∀L from [Complete and Easy]
-  (wrap, ty, scope) <- skolemise (ByAscription e oty) oty -- gotta be polymorphic - don't allow instantiation
+check e oty@TyPi{} | isSkolemisable oty = do
+  (wrap, ty, scope) <- skolemise (ByAscription e oty) oty
   local (classes %~ mappend scope) $ do
     e <- check e ty
     pure (ExprWrapper wrap e (annotation e, oty))
@@ -142,13 +142,20 @@ check ex@(Ascription e ty an) goal = do
 
 check (Parens e _) ty = check e ty
 
-check AccessSection{} tau = error $ "check AccessSection : " ++ displayS (pretty tau) ++ " in TC (desugar didn't run?)"
-check RightSection{} tau = error $ "check RightSection : " ++ displayS (pretty tau) ++ " in TC (desugar didn't run?)"
-check LeftSection{} tau = error $ "check LeftSection : " ++ displayS (pretty tau) ++ " in TC (desugar didn't run?)"
-check BothSection{} tau = error $ "check BothSection : " ++ displayS (pretty tau) ++ " in TC (desugar didn't run?)"
-check TupleSection{} tau = error $ "check TupleSection : " ++ displayS (pretty tau) ++ " in TC (desugar didn't run?)"
-check Syntax.Lazy{} tau = error $ "check Syntax.Lazy : " ++ displayS (pretty tau) ++ " in TC (desugar didn't run?)"
-check OpenIn{} tau = error $ "check OpenIn : " ++ displayS (pretty tau) ++ " in TC (desugar didn't run?)"
+check AccessSection{} tau =
+  error $ "check AccessSection : " ++ displayS (pretty tau) ++ " in TC (desugar didn't run?)"
+check RightSection{} tau =
+  error $ "check RightSection : " ++ displayS (pretty tau) ++ " in TC (desugar didn't run?)"
+check LeftSection{} tau =
+  error $ "check LeftSection : " ++ displayS (pretty tau) ++ " in TC (desugar didn't run?)"
+check BothSection{} tau =
+  error $ "check BothSection : " ++ displayS (pretty tau) ++ " in TC (desugar didn't run?)"
+check TupleSection{} tau =
+  error $ "check TupleSection : " ++ displayS (pretty tau) ++ " in TC (desugar didn't run?)"
+check Syntax.Lazy{} tau =
+  error $ "check Syntax.Lazy : " ++ displayS (pretty tau) ++ " in TC (desugar didn't run?)"
+check OpenIn{} tau =
+  error $ "check OpenIn : " ++ displayS (pretty tau) ++ " in TC (desugar didn't run?)"
 
 check e ty = do
   (e', t) <- infer e
@@ -354,11 +361,13 @@ inferProg (decl@(TypeDecl n tvs cs):prg) = do
       scope (_:cs) = scope cs
       scope [] = mempty
   local (names %~ focus (one n (fst (rename kind)))) $ do
-    (ts, cs') <- unzip <$> local (names %~ focus (scope tvs)) (for cs (\con -> retcons (addBlame (BecauseOf con)) (inferCon retTy con)))
+    (ts, cs') <- unzip <$> local (names %~ focus (scope tvs))
+      (for cs (\con -> retcons (addBlame (BecauseOf con)) (inferCon retTy con)))
 
-    local (names %~ focus (teleFromList ts)) . local (constructors %~ Set.union (Set.fromList (map fst ts))) $
-      consFst (TypeDecl n tvs cs') $
-        inferProg prg
+    local (names %~ focus (teleFromList ts)) .
+      local (constructors %~ Set.union (Set.fromList (map fst ts))) $
+        consFst (TypeDecl n tvs cs') $
+          inferProg prg
 
 inferProg (Open mod pre:prg) = do
   modImplicits <- view (modules . at mod . non undefined)
@@ -577,7 +586,9 @@ inferLetTy closeOver strategy vs =
 
                    pure ( (nm, var, fst an, ty)
                         , Binding (innerNames Map.! var)
-                           (Ascription (transformExprTyped renameInside id id (solveEx ty solution wrap exp)) ty (fst an, ty))
+                           (Ascription
+                             (transformExprTyped renameInside id id (solveEx ty solution wrap exp))
+                             ty (fst an, ty))
                            (fst an, ty)
                         , Field nm (VarRef (innerNames Map.! var) (fst an, ty)) (fst an, ty)
                         )
@@ -591,8 +602,9 @@ inferLetTy closeOver strategy vs =
 
              (context, wrapper, needed) <- reduceClassContext mempty (annotation blamed) cons
 
-             closed <- skolCheck recVar (BecauseOf blamed) <=< closeOver (Set.fromList (map fst tvs)) (Record fields (an, recTy)) $
-               context recTy
+             closed <- skolCheck recVar (BecauseOf blamed) <=<
+               closeOver (Set.fromList (map fst tvs)) (Record fields (an, recTy)) $
+                 context recTy
              (closed, _) <- pure $ rename closed
              tyLams <- mkTypeLambdas (ByConstraint recTy) closed
 
@@ -600,13 +612,16 @@ inferLetTy closeOver strategy vs =
                    Binding recVar
                      (Ascription
                        (ExprWrapper tyLams
-                         (wrapper Full (substituteDeferredDicts reify deferred (Let inners (Record fields (an, recTy)) (an, recTy))))
+                         (wrapper Full
+                           (substituteDeferredDicts reify deferred
+                             (Let inners (Record fields (an, recTy)) (an, recTy))))
                          (an, closed))
                        closed (an, closed))
                      (an, closed)
                  makeOne (nm, var, an, ty) = do
-                   ty' <- skolCheck recVar (BecauseOf blamed) <=< closeOver (Set.fromList (map fst tvs)) (Record fields (an, recTy)) $
-                     context ty
+                   ty' <- skolCheck recVar (BecauseOf blamed)
+                     <=< closeOver (Set.fromList (map fst tvs)) (Record fields (an, recTy)) $
+                      context ty
                    (ty', _) <- pure $ rename ty'
                    let lineUp c (TyForall v _ rest) ex =
                          lineUp c rest $ ExprWrapper (TypeApp (TyVar v)) ex (annotation ex, rest)
@@ -635,11 +650,14 @@ inferLetTy closeOver strategy vs =
          -> m ( [Binding Typed] , Telescope Typed, Set.Set (Var Typed) )
       tc (s:cs) = do
         (vs', binds, vars) <- tcOne s
-        fmap (\(bs, tel, vs) -> (vs' ++ bs, tel <> binds, vars <> vs)) . local (names %~ focus binds) . local (typeVars %~ Set.union vars) $ tc cs
+        fmap (\(bs, tel, vs) -> (vs' ++ bs, tel <> binds, vars <> vs))
+          . local (names %~ focus binds) . local (typeVars %~ Set.union vars) $ tc cs
       tc [] = pure ([], mempty, mempty)
    in tc sccs
 
-fakeLetTys :: MonadInfer Typed m => [Binding Desugared] -> m ([Binding Typed], Telescope Typed, Set.Set (Var Typed))
+fakeLetTys :: MonadInfer Typed m
+           => [Binding Desugared]
+           -> m ([Binding Typed], Telescope Typed, Set.Set (Var Typed))
 fakeLetTys bs = do
   let go (b:bs) =
         case b of
@@ -664,7 +682,9 @@ data PatternStrat = Fail | Propagate
 skolCheck :: MonadInfer Typed m => Var Typed -> SomeReason -> Type Typed -> m (Type Typed)
 skolCheck var exp ty = do
   let blameSkol :: TypeError -> (Var Desugared, SomeReason) -> TypeError
-      blameSkol e (v, r) = addBlame r (Note e (string "in the inferred type for" <+> pretty v <> comma <#> indent 4 (displayType ty)))
+      blameSkol e (v, r) =
+        addBlame r . Note e $
+          string "in the inferred type for" <+> pretty v <> comma <#> indent 4 (displayType ty)
       sks = Set.map (^. skolIdent) (skols ty)
   env <- view typeVars
   unless (null (sks `Set.difference` env)) $

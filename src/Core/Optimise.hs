@@ -195,7 +195,8 @@ refresh = refreshTerm mempty where
           v' <- freshFrom' v
           pure (VarMap.insert (toVar v) v' m)
 
-  refreshTerm s (Extend e bs) = Extend <$> refreshAtom s e <*> traverse (trimapA pure (pure . refreshType s) (refreshAtom s)) bs
+  refreshTerm s (Extend e bs) =
+    Extend <$> refreshAtom s e <*> traverse (trimapA pure (pure . refreshType s) (refreshAtom s)) bs
   refreshTerm s (Values xs) = Values <$> traverse (refreshAtom s) xs
   refreshTerm s (Cast e c) = Cast <$> refreshAtom s e <*> pure (refreshCoercion s c)
 
@@ -232,7 +233,8 @@ refresh = refreshTerm mempty where
   refreshCoercion s (Application f x) = Application (refreshCoercion s f) (refreshCoercion s x)
   refreshCoercion s (ExactRecord rs) = ExactRecord (map (second (refreshCoercion s)) rs)
   refreshCoercion s (Record c rs) = Record (refreshCoercion s c) (map (second (refreshCoercion s)) rs)
-  refreshCoercion s (Projection rs rs') = Projection (map (second (refreshCoercion s)) rs) (map (second (refreshCoercion s)) rs')
+  refreshCoercion s (Projection rs rs') =
+    Projection (map (second (refreshCoercion s)) rs) (map (second (refreshCoercion s)) rs')
   refreshCoercion s x@(CoercionVar v) = maybe x CoercionVar (VarMap.lookup (toVar v) s)
   refreshCoercion s (Quantified v a c) = Quantified v (refreshCoercion s a) (refreshCoercion s c)
 

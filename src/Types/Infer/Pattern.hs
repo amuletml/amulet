@@ -84,7 +84,8 @@ checkPattern ex@(Destructure con ps ann) target =
             (c, d, _) <- decompose (becausePat ex) _TyArr t
             (ps', b, cs') <- checkPattern p c
             co <- unify (becausePat ex) target d
-            (_1 %~ mkSkolPat sub) <$> wrapPattern (Destructure con (Just ps'), b, cs ++ cs') (ann, target) (d, co)
+            (_1 %~ mkSkolPat sub) <$>
+              wrapPattern (Destructure con (Just ps'), b, cs ++ cs') (ann, target) (d, co)
       in do
         (t, sub) <- skolGadt con =<< lookupTy' con
         case t of
@@ -171,7 +172,8 @@ boundTvs p vs = pat p <> foldTele go vs where
   pat PLiteral{} = mempty
   pat (PWrapper _ p _) = pat p
 
-skolGadt :: MonadInfer Typed m => Var Desugared -> (Maybe a, Type Typed, Type Typed) -> m (Type Typed, Subst Typed)
+skolGadt :: MonadInfer Typed m
+         => Var Desugared -> (Maybe a, Type Typed, Type Typed) -> m (Type Typed, Subst Typed)
 skolGadt var (_, oty, ty) =
   let result (TyPi _ t) = result t
       result (TyWithConstraints _ t) = result t

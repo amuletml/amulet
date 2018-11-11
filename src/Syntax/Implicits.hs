@@ -48,7 +48,8 @@ deriving instance Eq (Var p) => Eq (Obligation p)
 data Implicit p
   -- | The choice for this implicit parameter
   = ImplChoice { _implHead :: Type p -- ^ The 'head' of the implicit parameter, i.e. the return type
-               , _implType :: Type p -- ^ The /entire/ type of the implicit parameter, with all quantifiers and such
+               , _implType :: Type p
+                  -- ^ The /entire/ type of the implicit parameter, with all quantifiers and such
                , _implPre :: [Obligation p] -- ^ The list of 'pre'conditions this choice implies
                , _implVar :: Var p -- ^ The actual implicit
                , _implSort :: Sort -- ^ What kind of implicit is this? (instance, superclass axiom)

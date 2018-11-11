@@ -250,7 +250,8 @@ endComment (LI _ str _ _) len ep = do
     -- Return to normal parsing and, if desired, emit a comment token
     setState $ s { commentDepth = 0, stringBuffer = mempty, sMode = 0 }
     if trivials s
-    then pure $! Token (TcComment . L.toStrict . B.toLazyText $ stringBuffer s <> B.fromLazyText (L.take len str))
+    then pure $! Token (TcComment . L.toStrict . B.toLazyText $ stringBuffer s
+                        <> B.fromLazyText (L.take len str))
                        (tokenStart s) ep
     else lexerScan
 addComment (LI _ str _ _) len _ = do

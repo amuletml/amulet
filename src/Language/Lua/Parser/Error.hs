@@ -52,7 +52,8 @@ instance Pretty ParseError where
 
   pretty (UnexpectedToken (Token s _ _) []) = "Unexpected" <+> string (show s)
   pretty (UnexpectedToken (Token s _ _) [x]) = "Unexpected" <+> string (show s) <> ", expected" <+> string x
-  pretty (UnexpectedToken (Token s _ _) xs) = "Unexpected" <+> string (show s) <> ", expected one of" <+> hsep (punctuate comma (map string xs))
+  pretty (UnexpectedToken (Token s _ _) xs) =
+    "Unexpected" <+> string (show s) <> ", expected one of" <+> hsep (punctuate comma (map string xs))
 
 instance Spanned ParseError where
   annotation (Failure p _) = mkSpan1 p

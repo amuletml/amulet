@@ -23,10 +23,11 @@ import Numeric (showHex)
 import Core.Var
 
 -- | A two-way mapping of 'CoVar's to their escaped representation.
-data EscapeScope = EscapeScope { toEsc   :: Map.Map CoVar T.Text -- ^ The mapping of core variables to escaped ones
-                               , fromEsc :: Map.Map T.Text CoVar -- ^ The mapping of escaped variables to core ones
-                               , escape  :: T.Text -> T.Text     -- ^ The function responsible for escaping vars
-                               }
+data EscapeScope =
+  EscapeScope { toEsc   :: Map.Map CoVar T.Text -- ^ The mapping of core variables to escaped ones
+              , fromEsc :: Map.Map T.Text CoVar -- ^ The mapping of escaped variables to core ones
+              , escape  :: T.Text -> T.Text     -- ^ The function responsible for escaping vars
+              }
 
 instance Show EscapeScope where
   show EscapeScope { toEsc = l } = "EscapeScope " ++ show l

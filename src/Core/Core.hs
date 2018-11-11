@@ -210,12 +210,14 @@ instance (Annotation b, Pretty a) => Pretty (AnnTerm b a) where
     = annotated an $ soperator (char 'λ') <+> parens (pretty v <+> colon <+> pretty t) <> nest 2 (dot </> pretty c)
 
   pretty (AnnLet an (One x) e) = annotated an $ keyword "let" <+> pprLet1 x <#> keyword "in" <+> pretty e
-  pretty (AnnLet an (Many xs) e) = annotated an $ fill 20 (keyword "let rec") <#> indent 2 (pprLet xs) <#> (keyword "in" <+> pretty e)
+  pretty (AnnLet an (Many xs) e) =
+    annotated an $ fill 20 (keyword "let rec") <#> indent 2 (pprLet xs) <#> (keyword "in" <+> pretty e)
   pretty (AnnMatch an e ps) = annotated an $ keyword "match" <+> pretty e <+> pprArms ps
   pretty (AnnExtend an x rs) = annotated an $ braces $ pretty x <+> pipe <+> prettyRows rs where
     prettyRows :: [(Text, Type a, Atom a)] -> Doc
     prettyRows = hsep . punctuate comma . map (\(x, t, v) -> text x <+> colon <+> pretty t <+> equals <+> pretty v)
-  pretty (AnnValues an xs) = annotated an $ soperator (string "(|") <+> (hsep . punctuate comma . map pretty $ xs) <+> soperator (string "|)")
+  pretty (AnnValues an xs) =
+    annotated an $ soperator (string "(|") <+> (hsep . punctuate comma . map pretty $ xs) <+> soperator (string "|)")
   pretty (AnnCast an a phi) = annotated an $ parens $ pretty a <+> soperator (string "|>") <+> pretty phi
 
 instance Pretty a => Pretty (Coercion a) where
@@ -223,7 +225,9 @@ instance Pretty a => Pretty (Coercion a) where
   pretty (Application c c') = pretty c <+> pretty c'
   pretty (Record r s) = enclose (lbrace <> space) (space <> rbrace) (pretty r <+> hsep (punctuate comma (map pprCoRow s)))
   pretty (ExactRecord r) = enclose (lbrace <> space) (space <> rbrace) (hsep (punctuate comma (map pprCoRow r)))
-  pretty (Projection _ rs') = enclose (lbrace <> space) (space <> rbrace) (keyword "proj" <+> hsep (punctuate comma (map pprCoRow rs')))
+  pretty (Projection _ rs') =
+    enclose (lbrace <> space) (space <> rbrace)
+      (keyword "proj" <+> hsep (punctuate comma (map pprCoRow rs')))
   pretty (Domain f) = keyword "dom" <+> parens (pretty f)
   pretty (Codomain f) = keyword "cod" <+> parens (pretty f)
   pretty (Symmetry f) = keyword "sym" <+> parens (pretty f)
@@ -242,7 +246,9 @@ pprBegin = braces' . vsep . map (indent 2) . punctuate semi
 
 pprArms :: (Annotation b, Pretty a) => [AnnArm b a] -> Doc
 pprArms = braces' . vsep . map (indent 2) . punctuate semi . map one where
-  one (Arm a b c _ ts) = pretty a <+> brackets (hsep (punctuate comma (map pprTv ts))) <+> colon <+> pretty b <+> nest 2 (arrow </> pretty c)
+  one (Arm a b c _ ts) =
+    pretty a <+> brackets (hsep (punctuate comma (map pprTv ts)))
+    <+> colon <+> pretty b <+> nest 2 (arrow </> pretty c)
   pprTv (a, t) = stypeVar (squote <> pretty a) <+> colon <+> pretty t
 
 pprCoRow :: Pretty a => (Text, Coercion a) -> Doc
@@ -322,7 +328,8 @@ freeIn (AnnApp _ f x) = freeInAtom f <> freeInAtom x
 freeIn (AnnLam _ (TermArgument v _) e) = VarSet.delete (toVar v) (freeIn e)
 freeIn (AnnLam _ TypeArgument{} e) = freeIn e
 freeIn (AnnLet _ (One v) e) = VarSet.difference (freeIn e <> freeIn (thd3 v)) (VarSet.singleton (toVar (fst3 v)))
-freeIn (AnnLet _ (Many vs) e) = VarSet.difference (freeIn e <> foldMap (freeIn . thd3) vs) (VarSet.fromList (map (toVar . fst3) vs))
+freeIn (AnnLet _ (Many vs) e) =
+  VarSet.difference (freeIn e <> foldMap (freeIn . thd3) vs) (VarSet.fromList (map (toVar . fst3) vs))
 freeIn (AnnMatch _ e bs) = freeInAtom e <> foldMap freeInBranch bs where
   freeInBranch x = foldr (VarSet.delete . toVar . fst) (freeIn (x ^. armBody)) (x ^. armVars)
 freeIn (AnnExtend _ c rs) = freeInAtom c <> foldMap (freeInAtom . thd3) rs

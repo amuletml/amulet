@@ -151,7 +151,8 @@ TopSep :: { () }
 
 Top :: { Toplevel Parsed }
     : let BindGroup                             { LetStmt (reverse $2) }
-    | external val BindName ':' Type '=' string    { withPos2 $1 $7 $ ForeignVal (getL $3) (getString $7) (getL $5) }
+    | external val BindName ':' Type '=' string
+      { withPos2 $1 $7 $ ForeignVal (getL $3) (getString $7) (getL $5) }
 
     | type ident ListE(TyConArg)                          { TypeDecl (getName $2) $3 [] }
     | type ident ListE(TyConArg) '=' List1(Ctor, '|')     { TypeDecl (getName $2) $3 $5 }
@@ -222,7 +223,8 @@ ExprApp :: { Expr Parsed }
         | ExprApp '@' TypeAtom     { withPos2 $1 $3 $ Vta $1 (getL $3) }
 
 Expr0 :: { Expr Parsed }
-      : fun ListE1(Parameter) '->' ExprBlock '$end' { respanFun $1 $4 $ foldr (\x y -> withPos2 x $4 $ Fun x y) $4 $2 }
+      : fun ListE1(Parameter) '->' ExprBlock '$end'
+        { respanFun $1 $4 $ foldr (\x y -> withPos2 x $4 $ Fun x y) $4 $2 }
       | let BindGroup ExprIn ExprBlock '$end'  { withPos2 $1 $4 $ Let (reverse $2) $4 }
       | let open Con ExprIn ExprBlock '$end'   { withPos2 $1 $5 $ OpenIn (getL $3) $5 }
       | if Expr then ExprBlock else ExprBlock '$end'
@@ -289,7 +291,8 @@ NullSection :: { Maybe (Expr Parsed) }
 
 ExprRow :: { Field Parsed }
   : ident OptType '=' Expr                    { withPos2 $1 $4 $ Field (getIdent $1) $ $2 $4 }
-  | ident OptType                             { withPos1 $1    $ Field (getIdent $1) $ $2 $ withPos1 $1 $ VarRef (getName $1) }
+  | ident OptType
+    { withPos1 $1    $ Field (getIdent $1) $ $2 $ withPos1 $1 $ VarRef (getName $1) }
 
 OptType :: { Expr Parsed -> Expr Parsed }
   :                                           { id }
@@ -313,15 +316,20 @@ BindGroup :: { [Binding Parsed] }
 
 Binding :: { Binding Parsed }
         : BPattern PostBinding              { withPos1 $1 $ Matching $1 $2 }
-        | BPattern ':' Type PostBinding     { withPos2 $1 $3 $ Matching $1 $ withPos2 $3 $4 $ Ascription $4 (getL $3) }
+        | BPattern ':' Type PostBinding
+          { withPos2 $1 $3 $ Matching $1 $ withPos2 $3 $4 $ Ascription $4 (getL $3) }
 
         | BindName ListE1(Parameter) PostBinding
           { Binding (getL $1) (foldr (\x y -> withPos2 x $3 (Fun x y)) $3 $2) (withPos1 $1 id) }
         | BindName ListE1(Parameter) ':' Type PostBinding
-          { Binding (getL $1) (foldr (\x y -> withPos2 x $5 (Fun x y)) (Ascription $5 (getL $4) (withPos2 $1 $5 id)) $2) (withPos2 $1 $4 id) }
+          { Binding (getL $1)
+             (foldr (\x y -> withPos2 x $5 (Fun x y)) (Ascription $5 (getL $4) (withPos2 $1 $5 id)) $2)
+             (withPos2 $1 $4 id) }
 
         | ArgP BindOp ArgP PostBinding
-          { Binding (getL $2) (withPos2 $1 $4 (Fun (PatParam $1) (withPos2 $3 $4 (Fun (PatParam $3) $4)))) (withPos2 $1 $3 id) }
+          { Binding (getL $2)
+              (withPos2 $1 $4 (Fun (PatParam $1) (withPos2 $3 $4 (Fun (PatParam $3) $4))))
+              (withPos2 $1 $3 id) }
 
 PostBinding :: { Expr e }
   : '=' ExprBlock '$end'                       { $2 }

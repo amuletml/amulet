@@ -55,7 +55,8 @@ approximateType (AnnLet _ _ e) = approximateType e
 approximateType (AnnMatch _ _ xs) = case xs of
   (x:_) -> approximateType (x ^. armBody)
   [] -> error "impossible approximateType empty match"
-approximateType (AnnExtend _ e rs) = pure (RowsTy (approximateAtomType e) (map (\(x, _, t) -> (x, approximateAtomType t)) rs))
+approximateType (AnnExtend _ e rs) =
+  pure (RowsTy (approximateAtomType e) (map (\(x, _, t) -> (x, approximateAtomType t)) rs))
 approximateType (AnnValues _ xs) = pure (ValuesTy (map approximateAtomType xs))
 approximateType (AnnTyApp _ f at) = do
   let ForallTy (Relevant v) _ t = approximateAtomType f
@@ -92,7 +93,8 @@ unify' x@RowsTy{} y@RowsTy{} =
      ts <- for (zip (sortOn fst rows) (sortOn fst rows')) $
        \((_, t), (_, t')) -> unify' t t'
      pure (mgu <> fold ts)
-unify' (ForallTy (Relevant v) c t) (ForallTy (Relevant v') c' t') = liftA2 (<>) (unify' c c') (unify' t (replaceTy v' (VarTy v) t'))
+unify' (ForallTy (Relevant v) c t) (ForallTy (Relevant v') c' t') =
+  liftA2 (<>) (unify' c c') (unify' t (replaceTy v' (VarTy v) t'))
 unify' (AppTy f t) (AppTy f' t') = liftA2 (<>) (unify' f f') (unify' t t')
 unify' (ValuesTy xs) (ValuesTy xs') = goTup xs xs' where
   goTup [] [] = lift (Just mempty)

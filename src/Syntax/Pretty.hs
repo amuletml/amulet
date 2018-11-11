@@ -1,4 +1,5 @@
-{-# LANGUAGE FlexibleContexts, UndecidableInstances, FlexibleInstances, OverloadedStrings, ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleContexts, UndecidableInstances
+  , FlexibleInstances, OverloadedStrings, ScopedTypeVariables #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 module Syntax.Pretty
   ( module Syntax
@@ -60,7 +61,10 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
   pretty (Ascription e t _) = parens $ pretty e <+> colon <+> pretty t
   pretty (Record [] _) = braces empty
   pretty (Record rows _) = record (map (\(Field n v _) -> text n <+> equals <+> pretty v) rows)
-  pretty (RecordExt var rows _) = enclose (char '{' <> space) (space <> char '}') $ pretty var <+> keyword "with" <+> hsep (punctuate comma (prettyRows' equals rows))
+  pretty (RecordExt var rows _) =
+    enclose (char '{' <> space)
+      (space <> char '}') $
+      pretty var <+> keyword "with" <+> hsep (punctuate comma (prettyRows' equals rows))
   pretty (Access e f _) = parenArg e <> dot <> text f
 
   pretty (LeftSection op vl _) = parens $ pretty op <+> pretty vl
@@ -77,7 +81,8 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
   pretty (Vta e t _) = parenFun e <+> keyword "as" <+> pretty t
 
   pretty (ExprWrapper wrap ex an) = go wrap ex where
-    go (TypeLam v t) ex = keyword "fun" <+> braces (pretty (TySkol v) <+> colon <+> pretty t) <> dot <+> pretty ex
+    go (TypeLam v t) ex =
+      keyword "fun" <+> braces (pretty (TySkol v) <+> colon <+> pretty t) <> dot <+> pretty ex
     go (Cast c) ex = parens (pretty ex <+> soperator (string "|>") <+> pretty c)
     go (TypeApp t) ex = pretty ex <+> braces (pretty t)
     go (ExprApp t) ex = pretty (App ex t undefined)
@@ -96,7 +101,9 @@ instance Pretty (Var p) => Pretty (Coercion p) where
   pretty (ArrCo f x) = pretty f <+> arrow <+> pretty x
   pretty (ProdCo f x) = pretty f <+> prod <+> pretty x
   pretty (ExactRowsCo rs) = record (map (\(n, v) -> text n <+> colon <+> pretty v) rs)
-  pretty (RowsCo c rs) = enclose (lbrace <> space) (space <> rbrace) (pretty c <+> pipe <+> hsep (punctuate comma (map (\(n, v) -> text n <+> colon <+> pretty v) rs)))
+  pretty (RowsCo c rs) =
+    enclose (lbrace <> space) (space <> rbrace)
+      (pretty c <+> pipe <+> hsep (punctuate comma (map (\(n, v) -> text n <+> colon <+> pretty v) rs)))
   pretty (ProjCo _ rs') =
     enclose (lbrace <> space) (space <> rbrace) $ keyword "proj" <+> pprRow rs'
     where pprRow xs = hsep (punctuate comma (map (\(n, v) -> text n <+> colon <+> pretty v) xs))
@@ -160,7 +167,9 @@ instance (Pretty (Var p)) => Pretty (Type p) where
   pretty (TyWildcard (Just t)) = soperator (string "'_") <> pretty t
   pretty TyWildcard{} = skeyword (char '_')
 
-  pretty (TyRows p rows) = enclose (lbrace <> space) (space <> rbrace)  $ pretty p <+> soperator pipe <+> hsep (punctuate comma (prettyRows colon rows))
+  pretty (TyRows p rows) =
+    enclose (lbrace <> space) (space <> rbrace) $
+      pretty p <+> soperator pipe <+> hsep (punctuate comma (prettyRows colon rows))
   pretty (TyExactRows rows) = record (prettyRows colon rows)
 
   pretty (TyApp x e) = pretty x <+> parenTyArg e (pretty e) where
@@ -175,8 +184,9 @@ instance (Pretty (Var p)) => Pretty (Type p) where
     | otherwise
     = pretty a <+> prod <+> pretty b
 
-  pretty (TyWithConstraints a b) = parens (hsep (punctuate comma (map prettyEq a))) <+> soperator (char '⊃') <+> pretty b where
-    prettyEq (a, b) = pretty a <+> soperator (char '~') <+> pretty b
+  pretty (TyWithConstraints a b) =
+    parens (hsep (punctuate comma (map prettyEq a))) <+> soperator (char '⊃') <+> pretty b
+    where prettyEq (a, b) = pretty a <+> soperator (char '~') <+> pretty b
 
   pretty TyType = stypeCon (string "type")
 
@@ -203,7 +213,8 @@ instance (Pretty (Var p)) => Pretty (Toplevel p) where
              <> case xs of
                   [] -> empty
                   _ -> line <> vsep (map prettyBind xs)
-  pretty (ForeignVal v d ty _) = keyword "foreign val" <+> pretty v <+> colon <+> pretty ty <+> equals <+> dquotes (text d)
+  pretty (ForeignVal v d ty _) =
+    keyword "foreign val" <+> pretty v <+> colon <+> pretty ty <+> equals <+> dquotes (text d)
   pretty (TypeDecl ty args []) = keyword "type" <+> pretty ty <+> hsep (map ((squote <>) . pretty) args)
   pretty (TypeDecl ty args ctors) = keyword "type" <+> pretty ty
                                 <+> hsep (map ((squote <>) . pretty) args)
@@ -220,13 +231,15 @@ instance (Pretty (Var p)) => Pretty (Toplevel p) where
          ]
 
   pretty (Class v c h m _) =
-    vsep [ keyword "class" <+> maybe (parens mempty) pretty c <+> soperator (string "=>") <+> pretty v <+> hsep (map pretty h) <+> keyword "begin"
+    vsep [ keyword "class" <+> maybe (parens mempty) pretty c
+            <+> soperator (string "=>") <+> pretty v <+> hsep (map pretty h) <+> keyword "begin"
          , indent 2 (align (vsep (map pretty m)))
          , keyword "end"
          ]
 
   pretty (Instance _ c h m _) =
-    vsep [ keyword "instance" <+> maybe (parens mempty) pretty c <+> soperator (string "=>") <+> pretty h <+> keyword "begin"
+    vsep [ keyword "instance" <+> maybe (parens mempty) pretty c
+            <+> soperator (string "=>") <+> pretty h <+> keyword "begin"
          , indent 2 (align (pretty m))
          , keyword "end"
          ]
@@ -324,15 +337,20 @@ prettyType (TyPi x t) = uncurry prettyQuantifiers . second reverse $ unwind t [x
     let (these, those) = span (sameAs q) qs
         these, those :: [TyBinder p]
      in case q:these of
-       Invisible{}:_ -> keyword "forall" <+> hsep (map (stypeVar . (char '\'' <>) . pretty . (^?! tyBinderVar)) (q:these)) <> dot <+> prettyQuantifiers inner those
+       Invisible{}:_ ->
+         keyword "forall"
+         <+> hsep (map (stypeVar . (char '\'' <>) . pretty . (^?! tyBinderVar)) (q:these))
+         <> dot <+> prettyQuantifiers inner those
        Anon{}:_ ->
          let arg x = parenTuple x (prettyType x)
-          in hsep (punctuate (space <> arrow) (map (arg . (^?! _Anon)) (q:these))) <+> arrow <+> prettyQuantifiers inner those
+          in hsep (punctuate (space <> arrow) (map (arg . (^?! _Anon)) (q:these)))
+             <+> arrow <+> prettyQuantifiers inner those
        Implicit{}:_ ->
          let arg x = parenTuple x (prettyType x)
              arrow = soperator (string "=>")
              star = soperator (char '*')
-          in hsep (punctuate (space <> star) (map (arg . (^?! _Implicit)) (q:these))) <+> arrow <+> prettyQuantifiers inner those
+          in hsep (punctuate (space <> star) (map (arg . (^?! _Implicit)) (q:these)))
+             <+> arrow <+> prettyQuantifiers inner those
        [] -> error "what?"
 
   sameAs Invisible{} Invisible{} = True
@@ -343,7 +361,8 @@ prettyType (TyApp x e) = parenTyFun x (displayType x) <+> parenTyArg e (displayT
 prettyType (TyRows p rows) = enclose (lbrace <> space) (space <> rbrace) $
   pretty p <+> soperator pipe <+> hsep (punctuate comma (displayRows rows))
 prettyType (TyExactRows rows) = record (displayRows rows)
-prettyType (TyTuple t s) = parenTyFun t (displayType t) <+> soperator (char '*') <+> parenTuple s (displayType s)
+prettyType (TyTuple t s) =
+  parenTyFun t (displayType t) <+> soperator (char '*') <+> parenTuple s (displayType s)
 prettyType t@TyWithConstraints{} = displayType (applyCons t)
 prettyType TyType = keyword "type"
 
@@ -363,8 +382,11 @@ parenTuple _ = id
 
 prettyMotive :: SkolemMotive Typed -> Doc
 prettyMotive (ByAscription _ t) = string "of the context, the type" <#> displayType t
-prettyMotive (BySubsumption t1 t2) = string "of a requirement that" <+> displayType t1 <#> string "be as polymorphic as" <+> displayType t2
+prettyMotive (BySubsumption t1 t2) =
+  string "of a requirement that" <+> displayType t1 <#> string "be as polymorphic as" <+> displayType t2
 prettyMotive (ByExistential v t) =
-  string "it is an existential" <> comma <#> string "bound by the type of" <+> pretty v <> comma <+> displayType t
+  string "it is an existential" <> comma
+  <#> string "bound by the type of" <+> pretty v <> comma <+> displayType t
 prettyMotive (ByInstanceHead head _) = string "it is bound in an instance head, namely" <#> displayType head
-prettyMotive (ByConstraint con) = string "it is mentioned in a type class constraint, namely" <#> displayType con
+prettyMotive (ByConstraint con) =
+  string "it is mentioned in a type class constraint, namely" <#> displayType con

@@ -105,7 +105,8 @@ builtinVarList = vars where
   name' = fromVar tyvarB
 
   vars :: [(a, Type b)]
-  vars = [ op vOpAdd intOp, op vOpSub intOp, op vOpMul intOp, op vOpDiv (tupTy [tyInt, tyInt] `arrTy` tyFloat), op vOpExp intOp
+  vars = [ op vOpAdd intOp, op vOpSub intOp
+         , op vOpMul intOp, op vOpDiv (tupTy [tyInt, tyInt] `arrTy` tyFloat), op vOpExp intOp
          , op vOpLt intCmp, op vOpGt intCmp, op vOpLe intCmp, op vOpGe intCmp
 
          , op vOpAddF floatOp, op vOpSubF floatOp, op vOpMulF floatOp, op vOpDivF floatOp, op vOpExpF floatOp
@@ -120,7 +121,8 @@ builtinVarList = vars where
                  ValuesTy [VarTy name `arrTy` VarTy name', VarTy name] `arrTy` VarTy name')
 
          , op vError (ForallTy (Relevant name) StarTy $ tyString `arrTy` VarTy name)
-         , op vLAZY (ForallTy (Relevant name) StarTy $ (tyUnit `arrTy` VarTy name) `arrTy` AppTy tyLazy (VarTy name))
+         , op vLAZY (ForallTy (Relevant name) StarTy $
+            (tyUnit `arrTy` VarTy name) `arrTy` AppTy tyLazy (VarTy name))
          , op vForce (ForallTy (Relevant name) StarTy $ AppTy tyLazy (VarTy name) `arrTy` VarTy name)
         ]
 

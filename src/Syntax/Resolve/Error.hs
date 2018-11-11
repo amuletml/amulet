@@ -60,7 +60,8 @@ instance Pretty ResolveError where
   pretty EmptyBegin = "Empty begin expression"
   pretty IllegalMethod = "Illegal pattern in instance method declaration"
 
-  pretty (ArisingFrom er ex) = pretty er <#> empty <#> nest 4 (string "Arising from use of" <+> blameOf ex </> pretty ex)
+  pretty (ArisingFrom er ex) =
+    pretty er <#> empty <#> nest 4 (string "Arising from use of" <+> blameOf ex </> pretty ex)
 
 instance Spanned ResolveError where
   annotation (ArisingFrom _ x) = annotation x

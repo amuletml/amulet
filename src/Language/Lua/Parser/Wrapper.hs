@@ -50,7 +50,8 @@ data AlexInput = LI { liPos  :: !SourcePos
 data PState = PState { stringBuffer :: B.Builder  -- ^ Builder for string literals
                      , stringChar   :: Char       -- ^ The starting character for the string
                      , tokenStart   :: !SourcePos -- ^ The position of the start of this token
-                     , trivials     :: Bool       -- ^ Whether "trivial" tokens such as whitespace and comments should be emitted.
+                     , trivials     :: Bool
+                     -- ^ Whether "trivial" tokens such as whitespace and comments should be emitted.
 
                      , sPos  :: !SourcePos -- ^ Current source position
                      , sText :: !L.Text    -- ^ Current input

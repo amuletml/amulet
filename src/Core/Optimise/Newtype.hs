@@ -59,7 +59,8 @@ newtypeMatch _ [] = Nothing
 -- results were backwards, so the solution wasn't being applied properly
 -- and the generated code was wrong.
 
-newtypeWorker :: forall a m. (IsVar a, MonadNamey m) => (a, Type a) -> Spine a -> m (Stmt a, Coercion a, V.Map (Atom a))
+newtypeWorker :: forall a m. (IsVar a, MonadNamey m)
+              => (a, Type a) -> Spine a -> m (Stmt a, Coercion a, V.Map (Atom a))
 newtypeWorker (cn, tp) (Spine tys cod) = do
   let CoVar nam id _ = toVar cn
       (Irrelevant, dom) = last tys
@@ -84,7 +85,8 @@ newtypeWorker (cn, tp) (Spine tys cod) = do
   let con = ( cname, tp, wrapper )
   pure (StmtLet (One con), phi, V.singleton (toVar cn) (Ref (fromVar (CoVar nam id ValueVar)) tp))
 
-goBinding :: forall a m. (IsVar a, MonadNamey m) => V.Map (Atom a) -> V.Map (Coercion a) -> [(a, Type a, Term a)] -> m [(a, Type a, Term a)]
+goBinding :: forall a m. (IsVar a, MonadNamey m)
+          => V.Map (Atom a) -> V.Map (Coercion a) -> [(a, Type a, Term a)] -> m [(a, Type a, Term a)]
 goBinding ss m = traverse (third3A (fmap (substitute ss) . goTerm)) where
   goTerm :: Term a -> m (Term a)
   goTerm e@Atom{}   = pure e

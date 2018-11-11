@@ -1,4 +1,10 @@
-{-# LANGUAGE GADTs, ConstraintKinds, MultiParamTypeClasses, FlexibleInstances, FlexibleContexts, UndecidableInstances, ScopedTypeVariables #-}
+{-# LANGUAGE GADTs
+  , ConstraintKinds
+  , MultiParamTypeClasses
+  , FlexibleInstances
+  , FlexibleContexts
+  , UndecidableInstances
+  , ScopedTypeVariables #-}
 
 -- | Represents a context associated with an error, such as what
 -- expression the error occurred in.
@@ -43,7 +49,8 @@ instance Eq SomeReason where
 
 data ConcreteReason where
   BecauseOfExpr :: forall p. (Pretty (Var p), Respannable (Ann p)) => Expr p -> String -> ConcreteReason
-  BecauseOfPat :: forall p. (Pretty (Var p), Spanned (Ann p), Data (Var p), Data (Ann p), Data p) => Pattern p -> ConcreteReason
+  BecauseOfPat :: forall p. (Pretty (Var p), Spanned (Ann p), Data (Var p), Data (Ann p), Data p)
+               => Pattern p -> ConcreteReason
 
 instance Show ConcreteReason where
   show (BecauseOfExpr _ _) = "expression blame"
@@ -104,7 +111,8 @@ blameOf (It'sThis x) = case x of
 becauseExp :: (Pretty (Var p), Respannable (Ann p)) => Expr p -> SomeReason
 becauseExp = It'sThis . flip BecauseOfExpr "expression"
 
-becausePat :: forall p. (Pretty (Var p), Spanned (Ann p), Data (Var p), Data (Ann p), Data p) => Pattern p -> SomeReason
+becausePat :: forall p. (Pretty (Var p), Spanned (Ann p), Data (Var p), Data (Ann p), Data p)
+           => Pattern p -> SomeReason
 becausePat = It'sThis . BecauseOfPat
 
 class Spanned a => Respannable a where

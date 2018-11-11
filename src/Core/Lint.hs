@@ -246,17 +246,18 @@ checkTerm s (Match e bs) = do
   (tye, es) <- gatherError . liftError $ checkAtom s e
 
   -- Build up our arms and verify they are well formed
-  (unzip -> (tys, bs'), es') <- forMA bs $ \Arm { _armPtrn = p, _armTy = ty, _armBody = r, _armVars = vs, _armTyvars = tvs } -> do
-    let pVars = patternVars p
-    (tyr, r') <- checkTerm (s { vars = foldr (uncurry insertVar) (vars s) pVars
-                              , tyVars = tyVars s <> foldMap (freeInTy . snd) pVars }) r
-    es <- gatherError' . liftError $
-      (case tye of
-         Just tye | ty `apart` tye -> pushError (TypeMismatch ty tye)
-         _ -> pure ())
-      *> when (vs /= patternVars p) (pushError (PatternMismatch (patternVars p) vs))
-      *> checkPattern s ty p
-    pure ((tyr, Arm p ty r' vs tvs), es)
+  (unzip -> (tys, bs'), es') <- forMA bs $
+    \Arm { _armPtrn = p, _armTy = ty, _armBody = r, _armVars = vs, _armTyvars = tvs } -> do
+      let pVars = patternVars p
+      (tyr, r') <- checkTerm (s { vars = foldr (uncurry insertVar) (vars s) pVars
+                                , tyVars = tyVars s <> foldMap (freeInTy . snd) pVars }) r
+      es <- gatherError' . liftError $
+        (case tye of
+           Just tye | ty `apart` tye -> pushError (TypeMismatch ty tye)
+           _ -> pure ())
+        *> when (vs /= patternVars p) (pushError (PatternMismatch (patternVars p) vs))
+        *> checkPattern s ty p
+      pure ((tyr, Arm p ty r' vs tvs), es)
 
   -- Verify the types are consistent
   let ty = foldr1 (<|>) tys

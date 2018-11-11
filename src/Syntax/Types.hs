@@ -8,7 +8,8 @@ module Syntax.Types
   , Env, freeInEnv, difference, envOf, scopeFromList, toMap
   , names, typeVars, constructors, letBound, classes, modules
   , classDecs
-  , ClassInfo(..), ciName, ciMethods, ciContext, ciConstructorName, ciConstructorTy, ciHead, ciClassSpan, ciDefaults
+  , ClassInfo(..), ciName, ciMethods, ciContext, ciConstructorName
+  , ciConstructorTy, ciHead, ciClassSpan, ciDefaults
   , Origin(..)
 
   , focus
@@ -110,7 +111,8 @@ instance Monoid Env where
   mempty = Env mempty mempty mempty mempty mempty mempty mempty
 
 instance Semigroup Env where
-  Env s i c d l m n <> Env s' i' c' d' l' m' n' = Env (s <> s') (i <> i') (c <> c') (d <> d') (l <> l') (m <> m') (n <> n')
+  Env s i c d l m n <> Env s' i' c' d' l' m' n' =
+    Env (s <> s') (i <> i') (c <> c') (d <> d') (l <> l') (m <> m') (n <> n')
 
 difference :: Env -> Env -> Env
 difference (Env ma _ mc md l _ cd) (Env ma' mi' mc' md' l' mm' cd') =

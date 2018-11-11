@@ -54,7 +54,8 @@ data PState = PState { stringBuffer :: B.Builder  -- ^ Builder for string litera
                      , commentDepth :: !Int       -- ^ Depth for current file
                      , modulePrefix :: [T.Text]   -- ^ List of module prefixes (in reversed order)
                      , tokenStart   :: !SourcePos -- ^ The position of the start of this token
-                     , trivials     :: Bool       -- ^ Whether "trivial" tokens such as whitespace and comments should be emitted.
+                     , trivials     :: Bool
+                       -- ^ Whether "trivial" tokens such as whitespace and comments should be emitted.
 
                      , context :: [Context]    -- ^ The current 'Context' stack
                      , pending :: PendingState -- ^ The tokens which are awaiting consumption or context handling
@@ -65,7 +66,8 @@ data PState = PState { stringBuffer :: B.Builder  -- ^ Builder for string litera
                      , sIdx  :: !Int64     -- ^ Offset into the whole input
                      , sMode :: !Int       -- ^ Current startcode
 
-                     , sErrors  :: [ParseError] -- ^ List of emitted warnings, with the head being the most recent
+                     , sErrors  :: [ParseError]
+                       -- ^ List of emitted warnings, with the head being the most recent
                      , sErrored :: Bool         -- ^ Whether parsing failed somewhere
                      }
 
