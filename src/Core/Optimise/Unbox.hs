@@ -113,7 +113,8 @@ buildBoxedWrapper :: forall m a. (IsVar a, MonadNamey m)
                   => a      -- ^ The worker's variable
                   -> Type a -- ^ The wrapper's variable
                   -> Term a -- ^ The original worker's definition
-                  -> m (Type a, Term a, Term a) -- ^ The worker's type and definition, plus the wrapper's definition.
+                  -> m (Type a, Term a, Term a)
+                  -- ^ The worker's type and definition, plus the wrapper's definition.
 buildBoxedWrapper = buildWrapper mempty mempty id mempty mempty mempty id where
   buildWrapper :: Seq (a, Type a) -- ^ The type arguments of the worker function
                -> Seq (a, Type a) -- ^ The value arguments of the worker function
@@ -121,8 +122,10 @@ buildBoxedWrapper = buildWrapper mempty mempty id mempty mempty mempty id where
 
                -> VarMap.Map (Type a) -- ^ A set of type variable substitutions to make
 
-               -> Seq (a, Type a) -- ^ The type arguments to be applied to the worker function within the wrapper
-               -> Seq (a, Type a) -- ^ The value arguments to be applied to the worker function within the wrapper
+               -> Seq (a, Type a)
+                  -- ^ The type arguments to be applied to the worker function within the wrapper
+               -> Seq (a, Type a)
+                  -- ^ The value arguments to be applied to the worker function within the wrapper
                -> (Term a -> Term a) -- ^ The builder for the wrapper's body. Used for unpacking tuples.
 
                -> a -> Type a -> Term a -- ^ The existing worker var/type/term

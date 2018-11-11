@@ -88,7 +88,8 @@ tagModule n = TgName (T.intercalate (T.singleton '.') (expand n)) <$> gen where
 
 -- | Insert one or more variables into a map. If multiple variables with
 -- the same name are defined, this will be considered as ambiguous.
-insertN :: Map.Map (Var Parsed) ScopeVariable -> [(Var Parsed, Var Resolved)] -> Map.Map (Var Parsed) ScopeVariable
+insertN :: Map.Map (Var Parsed) ScopeVariable
+        -> [(Var Parsed, Var Resolved)] -> Map.Map (Var Parsed) ScopeVariable
 insertN scope = foldr (\case
                           [(v, v')] -> Map.insert v (SVar v')
                           vs@((v,_):_) -> Map.insert v (SAmbiguous (map snd vs))
@@ -98,7 +99,8 @@ insertN scope = foldr (\case
 
 -- | Insert one or more variables into a map. If a variable is declared
 -- multiple times, we will prefer the latest definition.
-insertN' :: Map.Map (Var Parsed) ScopeVariable -> [(Var Parsed, Var Resolved)] -> Map.Map (Var Parsed) ScopeVariable
+insertN' :: Map.Map (Var Parsed) ScopeVariable
+         -> [(Var Parsed, Var Resolved)] -> Map.Map (Var Parsed) ScopeVariable
 insertN' = foldl' (\s (v, v') -> Map.insert v (SVar v') s)
 
 -- | Create a scope with one variable and evaluate the provided monad

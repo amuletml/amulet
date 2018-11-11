@@ -372,7 +372,8 @@ lowerLet bs =
             pure <$> patternExtract pos p ex' ty' (lowerType (boundVarMap Map.! fst bind)) bind
           vs -> do
             var <- fresh ValueVar
-            let cont bind = patternExtract pos p (Atom (Ref var ty')) ty' (lowerType (boundVarMap Map.! fst bind)) bind
+            let cont bind =
+                  patternExtract pos p (Atom (Ref var ty')) ty' (lowerType (boundVarMap Map.! fst bind)) bind
             -- Generate `let a = expr`
             (One (var, ty', ex'):)
               <$> traverse cont vs

@@ -81,7 +81,9 @@ inferClass clss@(Class name ctx _ methods classAnn) = do
         getContext Nothing = []
         getContext (Just t) = unwind t
 
-    ctx <- traverse (\x -> validContext "class" classAnn x *> checkAgainstKind (BecauseOf clss) x tyConstraint) ctx
+    ctx <- for ctx $ \x -> do
+      validContext "class" classAnn x
+      checkAgainstKind (BecauseOf clss) x tyConstraint
     (fold -> scope, rows') <- fmap unzip . for (getContext ctx) $
       \obligation -> do
         impty <- silence $
@@ -92,7 +94,9 @@ inferClass clss@(Class name ctx _ methods classAnn) = do
              , (Implicit, var, name, obligation))
 
     (fold -> defaultMap) <-
-      local (classes %~ mappend scope) . local (names %~ focus tele) . for defaults $ \(DefaultMethod (Binding method exp _) _) -> do
+      local (classes %~ mappend scope)
+      . local (names %~ focus tele)
+      . for defaults $ \(DefaultMethod (Binding method exp _) _) -> do
       let sig = tele ^. at method . non undefined
 
       (_, cs) <- listen $
@@ -258,7 +262,11 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
             shove cs x = addLet cs x
 
         pure ( (nameName v, v')
-             , Binding v' (Ascription (solveEx sig sub (wrap <> wrap') (shove deferred e)) sig (an, sig)) (an, sig))
+             , Binding v'
+                (Ascription
+                  (solveEx sig sub (wrap <> wrap') (shove deferred e))
+                    sig (an, sig))
+                  (an, sig))
       _ -> error "not possible: non-Binding method"
 
   let needDefaults = methodNames `Map.difference` methodMap
@@ -268,7 +276,9 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
   unless (null diff) $ confesses (UndefinedMethods instHead diff ann)
 
   scope <- mappend localAssums <$> view classes
-  (usedDefaults, defaultMethods) <- fmap unzip . local (classes %~ mappend localAssums) . for (Map.toList needed) $ \(name, expr) -> do
+  (usedDefaults, defaultMethods) <- fmap unzip
+    . local (classes %~ mappend localAssums)
+    . for (Map.toList needed) $ \(name, expr) -> do
     let ty = methodNames ! name
         an = annotation expr
 
@@ -315,7 +325,8 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
                (ann, ty))
              (ann, ty))
 
-  let methodFields = map (\(name, ty) -> Field name (VarRef (methodMap ! name) (ann, ty)) (ann, ty)) (Map.toList definedHere)
+  let methodFields = flip map (Map.toList definedHere) $ \(name, ty) ->
+        Field name (VarRef (methodMap ! name) (ann, ty)) (ann, ty)
       whatDo = Map.toList (methodNames <> classContext)
       fields = methodFields ++ usedDefaults ++ contextFields
 
@@ -324,7 +335,8 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
     reduceClassContext localAssums ann unsolved
 
   unless (null unsolved') $
-    confesses (addBlame (BecauseOf inst) (UnsatClassCon (BecauseOf inst) (head unsolved) (InstanceClassCon classAnn)))
+    confesses (addBlame (BecauseOf inst)
+      (UnsatClassCon (BecauseOf inst) (head unsolved) (InstanceClassCon classAnn)))
 
   let appArg (TyPi (Invisible v _) rest) ex =
         case Map.lookup v sub of
@@ -379,7 +391,9 @@ reduceClassContext extra annot cons = do
       dedup scope ((var, con):needs)
         | [ImplChoice _ t [] v _ _] <- lookup con scope =
           let (bindings, needs', scope') = dedup scope needs
-           in if var == v then (bindings, needs', scope') else (Binding var (VarRef v (annot, t)) (annot, t):bindings, needs', scope')
+           in if var == v
+             then (bindings, needs', scope')
+             else (Binding var (VarRef v (annot, t)) (annot, t):bindings, needs', scope')
         | otherwise =
           let (bindings, needs', scope') = dedup (insert annot LocalAssum var con scope) needs
            in (bindings, (var, con):needs', scope')

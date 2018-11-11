@@ -206,7 +206,8 @@ lookupTy v = asks tyScope >>= lookupVar v (if isCtorVar v then VarCtor else VarT
 lookupTyvar :: MonadResolve m => Var Parsed -> m (Var Resolved)
 lookupTyvar v = asks tyvarScope >>= lookupVar v VarTyvar
 
-resolveTele :: (MonadResolve m, Reasonable f p) => f p -> [TyConArg Parsed] -> m ([TyConArg Resolved], [(Var Parsed, Var Resolved)])
+resolveTele :: (MonadResolve m, Reasonable f p)
+            => f p -> [TyConArg Parsed] -> m ([TyConArg Resolved], [(Var Parsed, Var Resolved)])
 resolveTele r (TyVarArg v:as) = do
   v' <- tagVar v
   (as, vs) <- resolveTele r as

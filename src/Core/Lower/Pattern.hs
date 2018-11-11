@@ -94,7 +94,8 @@ lowerMatch a cases = do
   v <- fresh ValueVar
   Let (One (v, ty, Atom a)) <$> lowerMatch' v ty cases
 
-lowerMatch' :: forall m. MonadLower m => CoVar -> Type CoVar -> [(S.Pattern Typed, Maybe (Term CoVar), Term CoVar)] -> m (Term CoVar)
+lowerMatch' :: forall m. MonadLower m
+            => CoVar -> Type CoVar -> [(S.Pattern Typed, Maybe (Term CoVar), Term CoVar)] -> m (Term CoVar)
 lowerMatch' var ty cases = do
   let bodies :: ArmMap (ArmExpr m) = foldr (<>) mempty (zipWith (flip HMap.singleton . makeBody) cases [0..])
       guards :: ArmMap (ArmExpr m) = foldr (<>) mempty (zipWith makeGuard cases [0..])
@@ -467,7 +468,8 @@ lowerOneOf preLeafs var ty tys = go [] . map prepare
       in goCtors (r':unc) cases' rs
 
     build pats = do
-      nodes <- traverse (\(p, caps, r) -> (p,) <$> lowerOne (foldr (\(Capture v ty) -> VarMap.insert v ty) tys caps) r) pats
+      nodes <- traverse (\(p, caps, r) ->
+        (p,) <$> lowerOne (foldr (\(Capture v ty) -> VarMap.insert v ty) tys caps) r) pats
       let atom = Ref var ty
           allArms = foldr ((<>) . nodeArms . snd) mempty nodes
       pure (ArmMatch allArms preLeafs atom nodes)

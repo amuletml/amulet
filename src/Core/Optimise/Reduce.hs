@@ -441,7 +441,8 @@ reduceTermK _ (AnnMatch _ test arms) cont = do
     reduceArms (Ref v _) ((a@Arm { _armPtrn = PatWildcard },subst):_) ps = do
       a' <- local (varScope . at (toVar v) %~ extendNot ps) $ reduceArm pure a subst
       pure [a']
-    reduceArms at ((arm,subst):as) ps = (:) <$> reduceArm pure arm subst <*> reduceArms at as (fmap underlying (arm^.armPtrn):ps)
+    reduceArms at ((arm,subst):as) ps =
+      (:) <$> reduceArm pure arm subst <*> reduceArms at as (fmap underlying (arm^.armPtrn):ps)
     reduceArms _ [] _ = pure []
 
     extendNot ps def =
@@ -464,7 +465,8 @@ reduceTermK _ (AnnMatch _ test arms) cont = do
       pure $ (underlying <$> a)
         & (armVars %~ map (second (substituteInType tySubst)))
         -- Substitute tyvars and remove those which have been remapped
-        . (armTyvars %~ map (second (substituteInType tySubst)) . filter (not . flip VarMap.member tySubst . toVar . fst))
+        . (armTyvars %~ map (second (substituteInType tySubst))
+        . filter (not . flip VarMap.member tySubst . toVar . fst))
         . (armBody .~ substituteInTys tySubst body')
 
     reduceBody :: (Term a -> m (Term a)) -> Subst a -> AnnTerm VarSet.Set (OccursVar a) -> m (Term a)

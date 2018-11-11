@@ -331,7 +331,8 @@ promoteOrError TyType{} = Nothing
 promoteOrError TyWildcard{} = Nothing
 
 
-generalise :: MonadInfer Typed m => (Type Typed -> Set.Set (Var Typed)) -> SomeReason -> Type Typed -> m (Type Typed)
+generalise :: MonadInfer Typed m
+           => (Type Typed -> Set.Set (Var Typed)) -> SomeReason -> Type Typed -> m (Type Typed)
 generalise ftv r ty =
   let fv = ftv ty in do
     env <- view typeVars

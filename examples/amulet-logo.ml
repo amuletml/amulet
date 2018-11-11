@@ -69,7 +69,9 @@ module SVG =
          let points' = foldl (fun rest (x, y) -> rest ^ " " ^ show x ^ "," ^ show y) "" points
          "<path style=\"" ^ style ^ "\" d=\"M" ^ points' ^ " z\" />"
       | Text { style, text, position = (x, y) } ->
-         "<text style=\"" ^ style ^ "\" x=\"" ^ show x ^ "\" y=\"" ^ show y ^ "\" text-anchor=\"middle\">" ^ text ^ "</text>"
+         "<text style=\""
+         ^ style
+         ^ "\" x=\"" ^ show x ^ "\" y=\"" ^ show y ^ "\" text-anchor=\"middle\">" ^ text ^ "</text>"
 
   type svg = SVG of {
     viewbox : { x : float, y : float, width : float, height : float },

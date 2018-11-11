@@ -156,7 +156,10 @@ doSolve (ConImplies because not cs ts :<| xs) = do
   let not' = ftv (apply before not) <> ftv not
       cs' = apply before cs
       ts' = apply before ts
-  ((), sub) <- retcon (fmap DeadBranch) . capture . local (bindSkol .~ True) . local (don'tTouch .~ mempty) $ doSolve cs'
+
+  ((), sub) <- retcon (fmap DeadBranch) . capture .
+    local (bindSkol .~ True) . local (don'tTouch .~ mempty) $
+      doSolve cs'
 
   solveAssumptions .= (sub ^. solveAssumptions <> sub ^. solveTySubst)
 
@@ -239,7 +242,10 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
            [] -> do
              solveCoSubst . at var ?= ExprApp (VarRef var (annotation reason, cons))
              tell (pure (apply sub ohno))
-           xs | allSameHead xs, concreteUnderOne cons, xs <- filter (applicable cons scope) xs, not (null xs) -> do
+           xs | allSameHead xs
+              , concreteUnderOne cons
+              , xs <- filter (applicable cons scope) xs
+              , not (null xs) -> do
              let imp = pickBestPossible xs
              w <- local (depth %~ (cons :)) $
                useImplicit reason cons scope imp
@@ -427,7 +433,9 @@ unify (TyTuple a b) (TyTuple a' b') =
 unify TyType TyType = pure (ReflCo TyType)
 unify a b = confesses =<< unequal a b
 
-subsumes', subsumes :: MonadSolve m => SomeReason -> ImplicitScope Typed -> Type Typed -> Type Typed -> m (Wrapper Typed)
+subsumes', subsumes :: MonadSolve m
+                    => SomeReason -> ImplicitScope Typed
+                    -> Type Typed -> Type Typed -> m (Wrapper Typed)
 subsumes blame scope a b = do
   x <- use solveTySubst
   retcons (addBlame blame) $ subsumes' blame scope (apply x a) (apply x b)
@@ -569,7 +577,9 @@ subsumes' r scope th@(TyExactRows rhas) tw@(TyRows rho rwant) = do
   exp <- genName
 
   let mkw ex = ExprWrapper cast ex (annotation ex, tw)
-  pure (WrapFn (MkWrapCont (mkRecordWrapper rhas matched matched_t th tw mkw exp) "exact→poly record subsumption"))
+  pure (WrapFn
+          (MkWrapCont (mkRecordWrapper rhas matched matched_t th tw mkw exp)
+            "exact→poly record subsumption"))
 
 subsumes' r scope th@(TyRows rho rhas) tw@(TyRows sigma rwant) = do
   let matching = overlap rhas rwant
@@ -599,13 +609,17 @@ subsumes' r scope th@(TyRows rho rhas) tw@(TyRows sigma rwant) = do
     exp <- genName
 
     let mkw ex = ExprWrapper cast ex (annotation ex, tw)
-    pure (WrapFn (MkWrapCont (mkRecordWrapper rhas matched matched_t th tw mkw exp) "exact→poly record subsumption"))
+    pure (WrapFn
+            (MkWrapCont (mkRecordWrapper rhas matched matched_t th tw mkw exp)
+              "exact→poly record subsumption"))
 
 subsumes' r _ a b = probablyCast <$> retcons (reblame r) (unify a b)
 
 -- | Shallowly skolemise a type, replacing any @forall@-bound 'TyVar's
 -- with fresh 'Skolem' constants.
-skolemise :: MonadNamey m => SkolemMotive Typed -> Type Typed -> m (Wrapper Typed, Type Typed, ImplicitScope Typed)
+skolemise :: MonadNamey m
+          => SkolemMotive Typed
+          -> Type Typed -> m (Wrapper Typed, Type Typed, ImplicitScope Typed)
 skolemise motive ty@(TyPi (Invisible tv k) t) = do
   sk <- freshSkol motive ty tv
   (wrap, ty, scope) <- skolemise motive (apply (Map.singleton tv sk) t)
@@ -767,7 +781,8 @@ mkRecordWrapper keys matched matched_t th tw cont exp =
       updateField ant ex (key, have)
         = case Map.lookup key matched of
             Just (_, _, IdWrap) -> []
-            Just (_, new, wrap) -> [Field key (ExprWrapper wrap (Access ex key (ant, have)) (ant, new)) (ant, new)]
+            Just (_, new, wrap) ->
+              [Field key (ExprWrapper wrap (Access ex key (ant, have)) (ant, new)) (ant, new)]
             Nothing -> []
 
       recordExt ex [] _ = ex

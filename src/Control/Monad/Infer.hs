@@ -133,7 +133,8 @@ data WhyUnsat
   | BadDefault (Var Desugared) (Type Typed)
   | It'sQuantified
 
-instance (Show (Ann p), Show (Var p), Ord (Var p), Substitutable p (Type p)) => Substitutable p (Constraint p) where
+instance (Show (Ann p), Show (Var p), Ord (Var p), Substitutable p (Type p))
+          => Substitutable p (Constraint p) where
   ftv (ConUnify _ _ a b) = ftv a <> ftv b
   ftv (ConSubsume _ s _ a b) = foldMap ftv (keys s) <> ftv a <> ftv b
   ftv (ConImplicit _ s _ b) = foldMap ftv (keys s) <> ftv b
@@ -222,7 +223,8 @@ instantiate r tp@(TyPi (Anon co) od@dm) = do
       lam e | od == dm = e
       lam e
         | ann <- annotation e
-        = Fun (PatParam (PType (Capture var (ann, co)) co (ann, co))) (cont (App e (VarRef var (ann, co)) (ann, od))) (ann, ty)
+        = Fun (PatParam (PType (Capture var (ann, co)) co (ann, co)))
+           (cont (App e (VarRef var (ann, co)) (ann, od))) (ann, ty)
 
   pure (Just lam, tp, ty)
 
@@ -235,7 +237,8 @@ instantiate r tp@(TyPi (Implicit co) od@dm) = do
       lam e | od == dm = e
       lam e
         | ann <- annotation e
-        = Fun (EvParam (PType (Capture var (ann, co)) co (ann, co))) (cont (App e (VarRef var (ann, co)) (ann, od))) (ann, ty)
+        = Fun (EvParam (PType (Capture var (ann, co)) co (ann, co)))
+            (cont (App e (VarRef var (ann, co)) (ann, od))) (ann, ty)
 
   pure (Just lam, tp, ty)
 instantiate _ ty = pure (Just id, ty, ty)
@@ -255,7 +258,8 @@ instance Pretty TypeError where
           TyType -> string "type constructor"
           x | show (pretty x) == "constraint#-37" -> string "type class constructor"
           _ -> string "function"
-     in vcat [ string "Could not match actual type" <+> displayType a <+> string "with expected type" <+> displayType b
+     in vcat [ string "Could not match actual type" <+> displayType a
+               <+> string "with expected type" <+> displayType b
              , empty
              , string "Have you applied a" <+> thing <+> "to the wrong number of arguments?"
              ]
@@ -263,7 +267,8 @@ instance Pretty TypeError where
     vcat [ string "Expected a type, but this has kind" <+> displayType b
          , string "Have you applied a type constructor to the wrong number of arguments?"
          ]
-  pretty (NotEqual a b) = string "Could not match expected type" <+> displayType b <+> string "with" <+> displayType a
+  pretty (NotEqual a b) =
+    string "Could not match expected type" <+> displayType b <+> string "with" <+> displayType a
 
   pretty (NotInScope e) = string "Variable not in scope:" <+> pretty e
   pretty (ArisingFrom er _) = pretty er
@@ -271,21 +276,26 @@ instance Pretty TypeError where
 
   pretty (Note te m) = pretty te <#> note <+> pretty m
   pretty (Suggestion te m) = pretty te <#> bullet (string "Suggestion:") <+> align (pretty m)
-  pretty (CanNotInstance rec new) = string "Can not instance hole of record type" <+> align (verbatim rec </> string " to type " <+> verbatim new)
+  pretty (CanNotInstance rec new) =
+    string "Can not instance hole of record type"
+    <+> align (verbatim rec </> string " to type " <+> verbatim new)
   pretty (Malformed tp) = string "The type" <+> verbatim tp <+> string "is malformed."
 
   pretty (NoOverlap ta tb)
     | TyExactRows ra <- ta
     , TyRows _ rb <- tb
-    =   string "No overlap between exact record" <+> nest 9 (displayType ta </> string "and polymorphic record" <+> displayType tb)
+    = string "No overlap between exact record"
+      <+> nest 9 (displayType ta </> string "and polymorphic record" <+> displayType tb)
     <#> missing ra rb
     | TyExactRows rb <- tb
     , TyRows _ ra <- ta
-    =   string "No overlap between polymorphic record" <+> nest 21 (displayType ta </> string "and exact record" <+> displayType tb)
+    = string "No overlap between polymorphic record"
+      <+> nest 21 (displayType ta </> string "and exact record" <+> displayType tb)
     <#> missing ra rb
     | TyExactRows ra <- ta
     , TyExactRows rb <- tb
-    =  string "No overlap between exact records" <+> nest 29 (displayType ta </> string "and" <+> displayType tb)
+    = string "No overlap between exact records"
+    <+> nest 29 (displayType ta </> string "and" <+> displayType tb)
     <#> missing rb ra
     | otherwise
     = string "\x1b[1;32minternal compiler error\x1b[0m: NoOverlap" <+> displayType ta <+> displayType tb
@@ -309,7 +319,8 @@ instance Pretty TypeError where
            , indent 2 $ string "as argument to the type function" <+> displayType tf
            , note <+> string "instantiating a type variable"
            <+> nest 2 (parens (string "the argument to" <+> displayType tf)
-                   </> string "with a polymorphic type constitutes" <+> stypeCon (string "impredicative polymorphism"))
+                   </> string "with a polymorphic type constitutes"
+                   <+> stypeCon (string "impredicative polymorphism"))
            ]
 
   pretty (EscapedSkolems [skol] _) | ByConstraint con <- _skolMotive skol =
@@ -319,15 +330,16 @@ instance Pretty TypeError where
     vsep [ case esc of
             [Skolem{..}] ->
               let skol = stypeVar (pretty _skolVar) in
-              string "Rigid type variable" <+> skol <+> string "has escaped its scope of" <+> displayType _skolScope
-                  <#> rest skol _skolMotive
+              string "Rigid type variable" <+> skol
+                <+> string "has escaped its scope of" <+> displayType _skolScope
+                <#> rest skol _skolMotive
             _ -> foldr ((<#>) . pretty . flip EscapedSkolems t . pure) empty esc
          ]
     where rest skol x =
             case x of
               ByConstraint t ->
                 vsep [ note <+> "This variable was rigidified because of an ambiguous constraint:"
-                     , indent 4 $ displayType t ] 
+                     , indent 4 $ displayType t ]
               _ -> note <+> string "the variable" <+>
                    skol <+> string "was rigidified because" <+> nest 8 (prettyMotive x <> comma)
 
@@ -351,12 +363,15 @@ instance Pretty TypeError where
                     , indent 2 (string "can be made as polymorphic as")
                     , indent 5 (displayType t) ]
              ByExistential c t ->
-               vsep [ bullet $ string "Where the type variable" <+> stypeSkol (pretty v) <+> "is an" <+> keyword "existential" <> comma
-                    , indent 2 $ string "bound by the constructor" <+> stypeCon (pretty c) <> ", which has type"
+               vsep [ bullet $ string "Where the type variable"
+                        <+> stypeSkol (pretty v) <+> "is an" <+> keyword "existential" <> comma
+                    , indent 2 $ string "bound by the constructor"
+                        <+> stypeCon (pretty c) <> ", which has type"
                     , indent 5 (displayType t)
                     ]
              ByInstanceHead h _ ->
-               vsep [ bullet "Where the type variable" <+> stypeSkol (pretty v) <+> "is bound by the instance head"
+               vsep [ bullet "Where the type variable"
+                        <+> stypeSkol (pretty v) <+> "is bound by the instance head"
                     , indent 5 (displayType h)
                     ]
              ByConstraint{} -> error "Impossible"
@@ -390,11 +405,11 @@ instance Pretty TypeError where
     vsep [ "Method" <+> pretty v <+> "is not a member of the class" <+> stypeCon (pretty c) ]
   pretty (WrongClass _ _) = error "Impossible"
 
-  pretty (UndefinedMethods h [(x, _)] _) = 
+  pretty (UndefinedMethods h [(x, _)] _) =
     vsep [ "Missing implementation for method" <+> stypeSkol (text x)
          , indent 2 "in an instance for" <+> displayType h ]
 
-  pretty (UndefinedMethods h xs _) = 
+  pretty (UndefinedMethods h xs _) =
     vsep [ "Missing implementation of methods in instance for" <+> displayType h
          , "Namely:"
          , vsep (map (\(n, t) -> indent 2 . bullet $ keyword "val" <+> text n <+> colon <+> displayType t) xs) ]
@@ -432,7 +447,8 @@ instance Note TypeError Style where
   formatNote f (ArisingFrom e@ArisingFrom{} _) = formatNote f e
   -- This one gets ~Special Handling~™
   formatNote f (ArisingFrom (SkolBinding (Skolem _ v _ m) t) rs) =
-    vsep [ indent 2 "Could not match the rigid type variable" <+> sk (squote <> pretty v) <+> "with" <+> whatIs t
+    vsep [ indent 2 "Could not match the rigid type variable"
+            <+> sk (squote <> pretty v) <+> "with" <+> whatIs t
          , empty
          , case m of
              ByAscription ex t ->
@@ -458,7 +474,8 @@ instance Note TypeError Style where
                     , f [annotation rs]
                     ]
              ByExistential c t ->
-               vsep [ indent 2 $ string "Where the type variable" <+> sk (pretty v) <+> "is an" <+> sk "existential" <> comma
+               vsep [ indent 2 $ string "Where the type variable"
+                        <+> sk (pretty v) <+> "is an" <+> sk "existential" <> comma
                     , indent 2 $ string "bound by the constructor" <+> sc (pretty c) <> ", which has type"
                     , indent 5 (Right <$> displayType t)
 
@@ -468,7 +485,8 @@ instance Note TypeError Style where
                     , nest (-2) $ f [annotation rs]
                     ]
              ByInstanceHead v t ->
-               vsep [ indent 2 "Where the type variable" <+> sk (pretty v) <+> "is bound by the instance being defined"
+               vsep [ indent 2 "Where the type variable" <+> sk (pretty v)
+                        <+> "is bound by the instance being defined"
                     , f [t]
                     , empty
                     , indent 2 $ bullet "Arising in the" <+> (Right <$> blameOf rs)
@@ -494,9 +512,11 @@ instance Note TypeError Style where
          , empty
          , f [annotation p]
          , empty
-         , indent 2 $ bullet "Note: this binding is in the same" <+> (Right <$> highlight "recursive group") <+> string "as these"
+         , indent 2 $ bullet "Note: this binding is in the same"
+           <+> (Right <$> highlight "recursive group") <+> string "as these"
            <#> if length bs > 3
-                  then vsep [ indent 4 "and" <+> int (length bs - 3) <+> "other binding" <> (if length bs - 3 /= 1 then "s." else ".")
+                  then vsep [ indent 4 "and" <+> int (length bs - 3)
+                              <+> "other binding" <> (if length bs - 3 /= 1 then "s." else ".")
                             , empty ]
                   else empty
          , f (map annotation (take 3 bs))
@@ -539,7 +559,8 @@ instance Note TypeError Style where
 
   formatNote f (ArisingFrom (UnsatClassCon _ (ConImplicit _ _ _ t) (BadDefault meth ty)) r') =
     vsep [ nest 2 $
-            indent 2 "No instance for" <+> (Right <$> displayType t) <+> "when checking that" <+> (Right <$> stypeSkol (pretty meth))
+            indent 2 "No instance for" <+> (Right <$> displayType t)
+              <+> "when checking that" <+> (Right <$> stypeSkol (pretty meth))
               </> "is an implementation for type"
          , indent 4 (Right <$> displayType ty)
 
@@ -581,9 +602,10 @@ instance Note TypeError Style where
 missing :: [(Text, b)] -> [(Text, b)] -> Doc
 missing ra rb
   | length ra < length rb
-  =  bullet (string "Namely, the following fields are missing:") <+> hsep (punctuate comma (diff rb ra))
+  = bullet (string "Namely, the following fields are missing:") <+> hsep (punctuate comma (diff rb ra))
   | length ra > length rb
-  =  bullet (string "Namely, the following fields should not be present:") <+> hsep (punctuate comma (diff ra rb))
+  = bullet (string "Namely, the following fields should not be present:")
+  <+> hsep (punctuate comma (diff ra rb))
   | length ra == length rb
   = vsep [ bullet (string "Note: no fields match")
          , bullet (string "The following fields are missing:")
