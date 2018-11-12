@@ -40,7 +40,7 @@ inferCon ret c@(GeneralisedCon nm cty ann) = do
 
   let generalise (TyPi q t) = TyPi q <$> generalise t
       generalise ty = do
-        (sub, _, []) <- condemn $ solve (Seq.singleton (ConUnify (BecauseOf c) var ret ty))
+        ~(sub, _, []) <- condemn $ solve (Seq.singleton (ConUnify (BecauseOf c) var ret ty))
         tell (map (\(x, y) -> (TyVar x, y)) (Map.toAscList sub))
         pure ret
 

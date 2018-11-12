@@ -89,7 +89,7 @@ inferClass clss@(Class name ctx _ methods classAnn) = do
         impty <- silence $
           closeOver (BecauseOf clss) $
             TyPi (Implicit classConstraint) obligation
-        var@(TgName name _) <- genNameWith (classCon' <> T.singleton '$')
+        ~var@(TgName name _) <- genNameWith (classCon' <> T.singleton '$')
         pure ( singleton classAnn Superclass var impty
              , (Implicit, var, name, obligation))
 

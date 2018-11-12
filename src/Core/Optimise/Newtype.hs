@@ -30,7 +30,7 @@ killNewtypePass = go mempty mempty where
     xs' <- go ss m xs
     pure (StmtLet (Many vs'):xs')
   go ss m (StmtLet (One v):xs) = do
-    [v'] <- goBinding ss m [v]
+    ~[v'] <- goBinding ss m [v]
     xs' <- go ss m xs
     pure (StmtLet (One v'):xs')
 

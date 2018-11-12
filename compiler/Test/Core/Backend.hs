@@ -7,7 +7,6 @@ import Control.Monad.Infer
 
 import qualified Data.Text.Lazy as L
 import qualified Data.Text as T
-import Data.These
 
 import Parser.Wrapper (runParser)
 import Parser
@@ -24,18 +23,12 @@ import Backend.Lua
 import Syntax.Pretty()
 import Text.Pretty.Semantic
 
-toEither :: These [a] b -> Either [a] b
-toEither (This e) = Left e
-toEither (These [] x) = Right x
-toEither (These e _) = Left e
-toEither (That x) = Right x
-
 result :: String -> T.Text -> T.Text
-result file contents = flip evalNamey firstName $ do
-  let (Just parsed, _) = runParser file (L.fromStrict contents) parseTops
-  Right (resolved, _) <- resolveProgram RS.builtinScope RS.emptyModules parsed
+result f c = fst . flip runNamey firstName $ do
+  let parsed = requireJust f c $ runParser f (L.fromStrict c) parseTops
+  (resolved, _) <- requireRight f c <$> resolveProgram RS.builtinScope RS.emptyModules parsed
   desugared <- desugarProgram resolved
-  Right (inferred, _) <- toEither <$>  inferProgram builtinsEnv desugared
+  (inferred, _) <- requireThat f c <$> inferProgram builtinsEnv desugared
   lower <- runLowerT (lowerProg inferred)
   optm <- optimise lower
   pure . display . uncommentDoc . renderPretty 0.8 120 . (<##>empty)
