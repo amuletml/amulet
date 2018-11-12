@@ -59,6 +59,7 @@ builtinsEnv = envOf (scopeFromList builtin) where
       , (TgInternal "lazy", TyForall a (Just TyType) $ (tyUnit `TyArr` TyVar a) `TyArr` TyApp tyLazy (TyVar a))
       , (TgInternal "force", TyForall a (Just TyType) $ TyApp tyLazy (TyVar a) `TyArr` TyVar a)
       , (TgName "->" (-38), TyArr TyType (TyArr TyType TyType))
+      , (TgName "*" (-39), TyArr TyType (TyArr TyType (TyForall a (Just TyType) (TyVar a))))
       , tp "int", tp "string", tp "bool", tp "unit", tp "float"
       , (TgName "lazy" (-34), TyArr TyType TyType), (TgName "constraint" (-37), TyType)
       ]

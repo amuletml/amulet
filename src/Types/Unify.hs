@@ -440,8 +440,28 @@ unify ta@(TyExactRows arow) tb@(TyExactRows brow)
 
 unify x tp@TyRows{} = confesses (Note (CanNotInstance tp x) isRec)
 unify tp@TyRows{} x = confesses (Note (CanNotInstance tp x) isRec)
+
+-- ((*) a b) = a * b
+unify (TyApp (TyApp (TyCon v) l) r) (TyTuple l' r')
+  | TgName _ (-39) <- v = ProdCo <$> unify l l' <*> unify r r'
+
+unify (TyTuple l r) (TyApp (TyApp (TyCon v) l') r')
+  | TgName _ (-39) <- v = ProdCo <$> unify l l' <*> unify r r'
+
+unify (TyApp f g) (TyTuple l r) = ProdCo <$> unify f (TyApp (TyCon (TgName "*" (-39))) l) <*> unify g r
+unify (TyTuple l r) (TyApp f g) = ProdCo <$> unify (TyApp (TyCon (TgName "*" (-39))) l) f <*> unify r g
+
+unify (TyOperator l v r) (TyTuple l' r')
+  | TgName _ (-39) <- v = ProdCo <$> unify l l' <*> unify r r'
+
+unify (TyTuple l r) (TyOperator l' v r')
+  | TgName _ (-39) <- v = ProdCo <$> unify l l' <*> unify r r'
+
 unify (TyTuple a b) (TyTuple a' b') =
   ProdCo <$> unify a a' <*> unify b b'
+
+unify (TyOperator l v r) (TyApp f g) = AppCo <$> unify (TyApp (TyCon v) l) f <*> unify g r
+unify (TyApp f g) (TyOperator l v r) = AppCo <$> unify f (TyApp (TyCon v) l) <*> unify r g
 
 unify TyType TyType = pure (ReflCo TyType)
 unify a b = confesses =<< unequal a b

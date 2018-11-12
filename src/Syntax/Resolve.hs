@@ -372,7 +372,7 @@ reType r o@TyOperator{} = do
           in popUntil (op left sop right:es') os opre assoc
       popUntil es os _ _ = (es, os)
 
-      op l (TgInternal "*") r = TyTuple l r
+      op l (TgName _ (-39)) r = TyTuple l r
       op l o r = TyOperator l o r
 
 reType _ TyType = pure TyType

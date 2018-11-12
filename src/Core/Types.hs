@@ -1,3 +1,4 @@
+{-# LANGUAGE ViewPatterns #-}
 module Core.Types
   ( arity
   , approximateType, approximateAtomType
@@ -90,9 +91,20 @@ unify' (AppTy (AppTy (ConTy v) a) r) (ForallTy Irrelevant a' r') | toVar v == vA
 unify' (ForallTy Irrelevant a' r') (AppTy (AppTy (ConTy v) a) r) | toVar v == vArrow = liftA2 (<>) (unify' a a') (unify' r r')
 
 unify' (AppTy f g) (ForallTy Irrelevant c d) =
-  liftA2 (<>) (unify' f (AppTy (ConTy (fromVar vLazy)) c)) (unify' g d)
+  liftA2 (<>) (unify' f (AppTy (ConTy (fromVar vArrow)) c)) (unify' g d)
 unify' (ForallTy Irrelevant c d) (AppTy f g) =
-  liftA2 (<>) (unify' (AppTy (ConTy (fromVar vLazy)) c) f) (unify' d g)
+  liftA2 (<>) (unify' (AppTy (ConTy (fromVar vArrow)) c) f) (unify' d g)
+
+unify' (AppTy (AppTy (ConTy v) a) r) (RowsTy NilTy [(T.unpack -> "_1", a'), (T.unpack -> "_2", r')])
+  | toVar v == vProduct = liftA2 (<>) (unify' a a') (unify' r r')
+unify' (RowsTy NilTy [(T.unpack -> "_1", a'), (T.unpack -> "_2", r')]) (AppTy (AppTy (ConTy v) a) r)
+  | toVar v == vProduct = liftA2 (<>) (unify' a a') (unify' r r')
+
+unify' (RowsTy NilTy [(T.unpack -> "_1", c), (T.unpack -> "_2", d)]) (AppTy f g) =
+   liftA2 (<>) (unify' (AppTy (ConTy (fromVar vProduct)) c) f) (unify' d g)
+
+unify' (AppTy f g) (RowsTy NilTy [(T.unpack -> "_1", c), (T.unpack -> "_2", d)]) =
+   liftA2 (<>) (unify' (AppTy (ConTy (fromVar vProduct)) c) f) (unify' d g)
 
 unify' x@RowsTy{} y@RowsTy{} =
   let (inner, rows) = getRows x
@@ -144,8 +156,15 @@ unifyClosed = go mempty where
     | otherwise = go (VarMap.insert (toVar v) v' s') ty ty' && go s c c'
     where s' = VarMap.delete (toVar v') s
   go s (ForallTy Irrelevant a r) (ForallTy Irrelevant a' r') = go s a a' && go s r r'
+
   go s (AppTy (AppTy (ConTy v) a) r) (ForallTy Irrelevant a' r') | toVar v == vArrow = go s a a' && go s r r'
   go s (ForallTy Irrelevant a' r') (AppTy (AppTy (ConTy v) a) r) | toVar v == vArrow = go s a a' && go s r r'
+
+  go s (AppTy (AppTy (ConTy v) a) r) (RowsTy NilTy [(T.unpack -> "_1", a'), (T.unpack -> "_2", r')])
+    | toVar v == vProduct = go s a a' && go s r r'
+  go s (RowsTy NilTy [(T.unpack -> "_1", a'), (T.unpack -> "_2", r')]) (AppTy (AppTy (ConTy v) a) r)
+    | toVar v == vProduct = go s a a' && go s r r'
+
   go s (AppTy f x) (AppTy f' x') = go s f f' && go s x x'
   go s (RowsTy f ts) (RowsTy f' ts') =
     let (rest, rows) = (++ts) <$> goRec f

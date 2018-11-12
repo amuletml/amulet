@@ -12,14 +12,15 @@ import Data.Text ()
 import Core.Core
 import Core.Var
 
-vBool, vInt, vString, vFloat, vUnit, vLazy, vArrow :: CoVar
-vBool   = CoVar (-1) "bool" TypeConVar
-vInt    = CoVar (-2) "int" TypeConVar
-vString = CoVar (-3) "string" TypeConVar
-vFloat  = CoVar (-4) "float" TypeConVar
-vUnit   = CoVar (-5) "unit" TypeConVar
-vLazy   = CoVar (-34) "lazy" TypeConVar
+vBool, vInt, vString, vFloat, vUnit, vLazy, vArrow, vProduct :: CoVar
+vBool    = CoVar (-1) "bool" TypeConVar
+vInt     = CoVar (-2) "int" TypeConVar
+vString  = CoVar (-3) "string" TypeConVar
+vFloat   = CoVar (-4) "float" TypeConVar
+vUnit    = CoVar (-5) "unit" TypeConVar
+vLazy    = CoVar (-34) "lazy" TypeConVar
 vArrow   = CoVar (-38) "->" TypeConVar
+vProduct = CoVar (-39) "->" TypeConVar
 
 tyBool, tyInt, tyString, tyFloat, tyUnit, tyLazy :: IsVar a => Type a
 tyBool   = ConTy $ fromVar vBool
@@ -37,6 +38,7 @@ builtinTyList = [ fromVar vBool
                 , fromVar vFloat
                 , fromVar vLazy
                 , fromVar vArrow
+                , fromVar vProduct
                 ]
 
 vOpAdd, vOpSub, vOpMul, vOpDiv, vOpExp :: CoVar

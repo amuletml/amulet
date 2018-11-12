@@ -78,6 +78,8 @@ lowerType (S.TyPi bind b)
   | S.Implicit a <- bind =
     ForallTy Irrelevant (lowerType a) (lowerType b)
 lowerType (S.TyApp (S.TyApp (S.TyCon (TgName _ (-38))) l) r) = ForallTy Irrelevant (lowerType l) (lowerType r)
+lowerType (S.TyApp (S.TyApp (S.TyCon (TgName _ (-39))) l) r) =
+  lowerType (S.TyTuple l r)
 lowerType (S.TyApp a b) = AppTy (lowerType a) (lowerType b)
 lowerType (S.TyRows rho vs) = RowsTy (lowerType rho) (map (fmap lowerType) vs)
 lowerType (S.TyExactRows []) = NilTy
@@ -88,6 +90,7 @@ lowerType (S.TyCon v) = ConTy (mkType v)
 lowerType (S.TyPromotedCon v) = ConTy (mkCon v) -- TODO this is in the wrong scope
 lowerType (S.TySkol (Skolem (TgName _ v) (TgName n _) _ _)) = VarTy (CoVar v n TypeVar)
 lowerType (S.TySkol _) = error "impossible lowerType TySkol"
+lowerType (S.TyOperator l (TgName _ (-39)) r) = lowerType (S.TyTuple l r)
 lowerType (S.TyOperator l o r) = (ConTy (mkType o) `AppTy` lowerType l) `AppTy` lowerType r
 lowerType (S.TyWildcard (Just t)) = lowerType t
 lowerType (S.TyWildcard _) = error "impossible lowerType TyWildcard"
