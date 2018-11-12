@@ -2,6 +2,6 @@ class07.ml[9:9 ..9:32]: error
   │ 
 9 │ let foo x = show (read (show x))
   │         ^^^^^^^^^^^^^^^^^^^^^^^^
-  The constraint read 'a is ambiguous
+  The constraint show 'a is ambiguous
   • Note: in the inferred type for foo,
       forall 'ci. show 'a * read 'a * show 'ci => 'ci -> string

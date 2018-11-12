@@ -5,7 +5,7 @@
 -- | This module implements the logic responsible for solving the
 -- sequence of @Constraint@s the type-checker generates for a particular
 -- binding groups.
-module Types.Unify (solve, skolemise, freshSkol, unifyPure) where
+module Types.Unify (solve, skolemise, freshSkol, unifyPure, applicable) where
 
 import Control.Monad.Except
 import Control.Monad.State
@@ -85,7 +85,7 @@ unifyPure a b = fst . flip runNamey firstName $ do
     (sub, _, _) <- solve (pure (ConUnify undefined undefined a b))
     pure sub
   case x of
-    These _ x -> pure (Just x)
+    These e x | null e -> pure (Just x)
     That x -> pure (Just x)
     _ -> pure Nothing
 
@@ -138,7 +138,7 @@ doSolve (ConSubsume because scope v a b :<| xs) = do
   sub <- use solveTySubst
 
 #ifdef TRACE_TC
-  traceM (displayS (pretty (ConSubsume because scope v (apply sub a) (apply sub b))))
+  traceM (displayS (shown because <+> pretty because <+> pretty (ConSubsume because scope v (apply sub a) (apply sub b))))
 #endif
   let a' = apply sub a
   sub <- use solveTySubst
@@ -232,31 +232,34 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
   scope <- pure (mapTypes (apply sub) scope)
 
 #ifdef TRACE_TC
-  traceM (displayS (pretty (apply sub ohno)))
+  traceM (displayS (shown scope <+> pretty reason <+> pretty (apply sub ohno)))
 #endif
 
   x <- view depth
   if length x >= 25
      then confesses (ClassStackOverflow reason x cons)
      else case lookup cons scope of
-           [] -> do
-             solveCoSubst . at var ?= ExprApp (VarRef var (annotation reason, cons))
-             tell (pure (apply sub ohno))
            xs | allSameHead xs
-              , concreteUnderOne cons
-              , xs <- filter (applicable cons scope) xs
-              , not (null xs) -> do
-             let imp = pickBestPossible xs
+              , concreteUnderOne cons || hasExactMatch cons xs
+              , applic <- filter (applicable cons scope) xs
+              , not (null applic) -> do
+             let imp = pickBestPossible applic
              w <- local (depth %~ (cons :)) $
                useImplicit reason cons scope imp
              solveCoSubst . at var ?= w
            _ -> do
+#ifdef TRACE_TC
+             traceM "  propagated"
+#endif
              solveCoSubst . at var ?= ExprApp (VarRef var (annotation reason, cons))
              tell (pure (apply sub ohno))
 
 allSameHead :: [Implicit Typed] -> Bool
 allSameHead (x:xs) = all (matches (x ^. implHead) . view implHead) xs
 allSameHead [] = True
+
+hasExactMatch :: Type Typed -> [Implicit Typed] -> Bool
+hasExactMatch t = any ((== t) . view implHead)
 
 pickBestPossible :: [Implicit Typed] -> Implicit Typed
 pickBestPossible [] = error "No choices"
@@ -455,7 +458,7 @@ subsumes' r s (TyPi (Implicit t) t1) t2
                 (ExprWrapper (TypeAsc t1)
                    (ExprWrapper (WrapVar var) ex (an, t1)) (an, t1)) (an, t2)
        in pure (WrapFn (MkWrapCont wrap ("implicit instantation " ++ show (pretty t))))
-  | TyVar{} <- t1, TyVar{} <- t2 = do
+  | TyVar{} <- t1, TyVar{} <- t2, show r /= "pattern blame" = do
       var <- genName
       omega <- subsumes' r s t1 t2
       let con = ConImplicit r s var t
@@ -664,8 +667,8 @@ isReflexiveCo VarCo{} = False
 applicable :: Type Typed -> ImplicitScope Typed -> Implicit Typed -> Bool
 applicable wanted scp (ImplChoice head _ cs _ s _) =
   case s of
-    Superclass -> all (entails scp) cs
-    _ -> True
+    Superclass -> isJust (unifyPure wanted head) && all (entails scp) cs
+    _ -> isJust (unifyPure wanted head)
   where
     entails :: ImplicitScope Typed -> Obligation Typed -> Bool
     entails _ (Quantifier (Invisible v _)) = v `Map.member` sub

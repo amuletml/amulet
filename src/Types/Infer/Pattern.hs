@@ -2,6 +2,7 @@
 module Types.Infer.Pattern where
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
 
 import Control.Monad.Infer
@@ -31,7 +32,11 @@ inferPattern :: MonadInfer Typed m
 inferPattern pat@(PType p t ann) = do
   (p', pt, vs, cs) <- inferPattern p
   t' <- resolveKind (becausePat pat) t
-  _ <- subsumes (becausePat pat) t' pt
+  let keepPat ConImplicit{} = False
+      keepPat _ = True
+
+  _ <- censor (Seq.filter keepPat) $
+    subsumes (becausePat pat) t' pt
   case p' of
     Capture v _ -> pure (PType p' t' (ann, t'), t', one v t', cs)
     _ -> pure (PType p' t' (ann, t'), t', vs, cs)

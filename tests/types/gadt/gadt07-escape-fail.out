@@ -9,12 +9,3 @@ gadt07-escape-fail.ml[10:3 ..10:17]: error
    │ 
 10 │   match hval with
    │   ^^^^^^^^^^^^^^^
-gadt07-escape-fail.ml[10:3 ..10:17]: error
-   │ 
-10 │   match hval with
-   │   ^^^^^^^^^^^^^^^
-  Rigid type variable a has escaped its scope of exp 'a * exp 'a -> hidden
-  • Note: the variable a was rigidified because it is an existential,
-          bound by the type of MkHid, forall 'a. exp 'a * exp 'a -> hidden,
-  • Note: in the inferred type for weird,
-      exp 'a
