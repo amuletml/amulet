@@ -196,12 +196,16 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
   globalInsnConTy <- silence $
     closeOver (BecauseOf inst) (TyPi (Implicit ctx) instHead)
 
+
+  (instHead, skolSub) <- skolFreeTy (ByInstanceHead instHead ann) instHead
+
   scope <- view classes
-  case filter ((/= Superclass) . view implSort) $ lookup instHead scope of
+  let overlapping = filter ((/= Superclass) . view implSort) . filter (applicable instHead scope) $
+        lookup instHead scope
+  case overlapping of
     [] -> pure ()
     (x:_) -> confesses (Overlap instHead (x ^. implSpan) ann)
 
-  (instHead, skolSub) <- skolFreeTy (ByInstanceHead instHead ann) instHead
   (ctx, mappend skolSub -> skolSub) <- skolFreeTy (ByInstanceHead ctx ann) (apply skolSub ctx)
 
   (mappend skolSub -> sub, _, _) <- solve (pure (ConUnify (BecauseOf inst) undefined classHead instHead))
@@ -415,8 +419,11 @@ reduceClassContext extra annot cons = do
            then First (Just x)
            else First Nothing
 
-  let addCtx ((_, con):cons) = TyPi (Implicit con) . addCtx cons
-      addCtx [] = id
+  let addCtx' ((_, con):cons) = TyPi (Implicit con) . addCtx cons
+      addCtx' [] = id
+
+      addCtx ctx (TyPi x@Invisible{} k) = TyPi x (addCtx ctx k)
+      addCtx ctx ty = addCtx' ctx ty
 
   let addFns ((var, con):cons) = fun var con . addFns cons
       addFns [] = id

@@ -55,6 +55,7 @@ import Types.Unify
 import Text.Pretty.Semantic
 import Control.Exception (assert)
 
+
 -- | Solve for the types of bindings in a problem: Either @TypeDecl@s,
 -- @LetStmt@s, or @ForeignVal@s.
 inferProgram :: MonadNamey m => Env -> [Toplevel Desugared] -> m (These [TypeError] ([Toplevel Typed], Env))
@@ -419,9 +420,9 @@ inferLetTy closeOver strategy vs =
                 -> Seq.Seq (Constraint Typed)
                 -> m (Type Typed, Expr Typed -> Expr Typed)
       figureOut blame ex ty cs = do
-        (x, co, deferred) <- retcons (addBlame (snd blame)) (solve cs)
+        (x, co, deferred) <- condemn $ retcons (addBlame (snd blame)) (solve cs)
         deferred <- pure (fmap (apply x) deferred)
-        (compose x -> x, wraps', cons) <- solve (Seq.fromList deferred)
+        (compose x -> x, wraps', cons) <- condemn $ solve (Seq.fromList deferred)
 
         name <- genName
         let reify an ty var =
@@ -434,12 +435,12 @@ inferLetTy closeOver strategy vs =
         (context, wrapper, solve) <-
           case strategy of
             Fail -> do
-              (context, wrapper, _) <- reduceClassContext mempty (annotation ex) deferred
+              (context, wrapper, _) <- reduceClassContext mempty (annotation ex) cons
 
               when (not (isFn ex) && not (null cons)) $
                 confesses (addBlame (snd blame) (UnsatClassCon (snd blame) (head cons) NotAFun))
 
-              pure (context, wrapper, \tp sub -> solveEx tp (x <> sub) (co <> wraps'))
+              pure (context, wrapper, \tp sub -> solveEx tp (x <> sub) (wraps' <> co))
 
             Propagate -> do
               tell (Seq.fromList cons)
