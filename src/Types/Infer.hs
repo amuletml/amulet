@@ -456,7 +456,7 @@ inferLetTy closeOver strategy vs =
         ty <- uncurry skolCheck blame vt
         let (tp, sub) = rename ty
 
-        pure (tp, wrapper Full . substituteDeferredDicts reify deferred . solve tp sub)
+        pure (tp, wrapper Full . solve tp sub . substituteDeferredDicts reify deferred)
 
 
       tcOne :: SCC (Binding Desugared)
@@ -518,7 +518,7 @@ inferLetTy closeOver strategy vs =
         ty <- solved ty
 
         let pat = transformPatternTyped id (apply solution) p
-            ex' = substituteDeferredDicts reify deferred $ solveEx ty solution wraps' ex
+            ex' = solveEx ty solution wraps' $ substituteDeferredDicts reify deferred ex
 
         pure ( [TypedMatching pat ex' (ann, ty) (teleToList tel')], tel', boundTvs pat tel' )
 
