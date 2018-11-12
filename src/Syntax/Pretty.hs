@@ -184,6 +184,10 @@ instance (Pretty (Var p)) => Pretty (Type p) where
     | otherwise
     = pretty a <+> prod <+> pretty b
 
+  pretty (TyOperator l o r) = pretty l <+> pretty o <+> pretty r
+
+  pretty (TyParens t) = parens $ pretty t
+
   pretty (TyWithConstraints a b) =
     parens (hsep (punctuate comma (map prettyEq a))) <+> soperator (char '⊃') <+> pretty b
     where prettyEq (a, b) = pretty a <+> soperator (char '~') <+> pretty b
@@ -274,6 +278,8 @@ applyCons (TyApp a b) = TyApp (applyCons a) (applyCons b)
 applyCons (TyRows r rs) = TyRows (applyCons r) (map (second applyCons) rs)
 applyCons (TyExactRows rs) = TyExactRows (map (second applyCons) rs)
 applyCons (TyTuple a b) = TyTuple (applyCons a) (applyCons b)
+applyCons (TyParens t) = TyParens (applyCons t)
+applyCons (TyOperator l o r) = TyOperator (applyCons l) o (applyCons r)
 applyCons (TyWithConstraints cs a) =
   let eq (TyVar a, t) = Map.singleton a t
       eq _ = Map.empty
@@ -301,6 +307,8 @@ displayType = prettyType . dropKindVars mempty where
   dropKindVars s (TyExactRows rs) = TyExactRows (map (second (dropKindVars s)) rs)
   dropKindVars m (TyTuple s t) = TyTuple (dropKindVars m s) (dropKindVars m t)
   dropKindVars s (TyWithConstraints cs t) = TyWithConstraints cs (dropKindVars s t)
+  dropKindVars s (TyParens t) = TyParens (dropKindVars s t)
+  dropKindVars s (TyOperator l o r) = TyOperator (dropKindVars s l) o (dropKindVars s r)
   dropKindVars _ TyType = TyType
 
   kindVarIn :: Var p -> Type p -> Bool
@@ -313,12 +321,14 @@ displayType = prettyType . dropKindVars mempty where
     Just x -> kindVarIn v x
     Nothing -> True
   kindVarIn _ TyCon{} = True
+  kindVarIn _ TyOperator{} = True
   kindVarIn _ TySkol{} = True
   kindVarIn v (TyApp t y) = kindVarIn v t && kindVarIn v y
   kindVarIn v (TyRows t rs) = kindVarIn v t && all (kindVarIn v . snd) rs
   kindVarIn v (TyExactRows rs) = all (kindVarIn v . snd) rs
   kindVarIn v (TyTuple t y) = kindVarIn v t && kindVarIn v y
   kindVarIn v (TyWithConstraints _ t) = kindVarIn v t
+  kindVarIn v (TyParens t) = kindVarIn v t
   kindVarIn _ TyType = True
 
 prettyType :: forall p. (Pretty (Var p), Ord (Var p)) => Type p -> Doc
@@ -364,6 +374,8 @@ prettyType (TyExactRows rows) = record (displayRows rows)
 prettyType (TyTuple t s) =
   parenTyFun t (displayType t) <+> soperator (char '*') <+> parenTuple s (displayType s)
 prettyType t@TyWithConstraints{} = displayType (applyCons t)
+prettyType (TyParens t) = parens $ prettyType t
+prettyType (TyOperator l o r) = prettyType l <+> pretty o <+> prettyType r
 prettyType TyType = keyword "type"
 
 displayRows :: (Ord (Var p), Pretty (Var p)) => [(Text, Type p)] -> [Doc]
