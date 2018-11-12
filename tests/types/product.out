@@ -1,0 +1,2 @@
+functor : (type -> type) -> constraint
+map : {'f : type -> type}. functor 'f => {'a : type}. {'b : type}. ('a -> 'b) -> 'f 'a -> 'f 'b

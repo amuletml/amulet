@@ -37,6 +37,8 @@ wellformed tp = case tp of
   TyWithConstraints eqs b -> do
     for_ eqs $ \(a, b) -> wellformed a *> wellformed b
     wellformed b
+  TyParens t -> wellformed t
+  TyOperator l _ r -> wellformed l *> wellformed r
 
 arity :: Type p -> Int
 arity (TyArr _ t) = 1 + arity t
@@ -84,3 +86,5 @@ skols (TyExactRows rs) = foldMap (skols . snd) rs
 skols (TyTuple a b) = skols a <> skols b
 skols (TyWithConstraints cs a) =
   foldMap (\(x, y) -> skols x <> skols y) cs <> skols a
+skols (TyParens t) = skols t
+skols (TyOperator l _ r) = skols l <> skols r

@@ -243,6 +243,8 @@ getHead t@TySkol{} = (t, Seq.empty)
 getHead t@TyWithConstraints{} = (t, Seq.empty)
 getHead t@TyType = (t, Seq.empty)
 getHead t@TyWildcard{} = (t, Seq.empty)
+getHead (TyParens t) = getHead t
+getHead t@TyOperator{} = (t, Seq.empty)
 
 -- | Split the type of an implicit variable into its head and a set of
 -- obligations.
@@ -254,6 +256,9 @@ merge = Map.merge Map.preserveMissing Map.preserveMissing (Map.zipWithMatched (c
 -- | Does there exist a substitution that can make a the same as b?
 -- (Conservative check.)
 matches :: Ord (Var p) => Type p -> Type p -> Bool
+matches (TyParens x) x' = matches x x'
+matches x (TyParens x') = matches x x'
+
 matches TyVar{} _ = True
 matches _ TyVar{} = True
 
@@ -268,6 +273,9 @@ matches TyPromotedCon{} _ = False
 
 matches (TyApp f x) (TyApp f' x') = f `matches` f' && x `matches` x'
 matches TyApp{} _ = False
+
+matches (TyOperator l o r) x' = matches ((TyCon o `TyApp` l) `TyApp` r) x'
+matches x (TyOperator l o r) = matches x ((TyCon o `TyApp` l) `TyApp` r)
 
 matches (TyPi b t) (TyPi b' t') = t `matches` t' && b `matchesBinder` b' where
   matchesBinder (Anon t) (Anon t') = t `matches` t'

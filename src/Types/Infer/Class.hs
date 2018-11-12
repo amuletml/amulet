@@ -490,6 +490,10 @@ validContext what ann (TyTuple a b) = do
   validContext what ann a
   validContext what ann b
 
+validContext what ann (TyOperator a _ b) = do
+  validContext what ann a
+  validContext what ann b
+
 validContext _ _ TyCon{} = pure ()
 validContext what ann t@TyPromotedCon{} = confesses (InvalidContext what ann t)
 validContext w a t@TyVar{} = confesses (InvalidContext w a t)
@@ -502,6 +506,7 @@ validContext w a t@TyWildcard{} = confesses (InvalidContext w a t)
 validContext w a t@TySkol{} = confesses (InvalidContext w a t)
 validContext w a t@TyWithConstraints{} = confesses (InvalidContext w a t)
 validContext w a t@TyType{} = confesses (InvalidContext w a t)
+validContext w a (TyParens t) = validContext w a t
 
 type Need t = (Var t, Type t)
 data WrapFlavour = Thin | Full

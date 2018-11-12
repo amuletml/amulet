@@ -518,7 +518,7 @@ inferLetTy closeOver strategy vs =
         ty <- solved ty
 
         let pat = transformPatternTyped id (apply solution) p
-            ex' = solveEx ty solution wraps' (substituteDeferredDicts reify deferred ex)
+            ex' = solveEx ty solution wraps' $ substituteDeferredDicts reify deferred ex
 
         pure ( [TypedMatching pat ex' (ann, ty) (teleToList tel')], tel', boundTvs pat tel' )
 
@@ -856,6 +856,8 @@ deSkol = go mempty where
   go acc (TyTuple a b) = TyTuple (go acc a) (go acc b)
   go acc (TyWildcard x) = TyWildcard (go acc <$> x)
   go acc (TyWithConstraints cs x) = TyWithConstraints (map (\(a, b) -> (go acc a, go acc b)) cs) (go acc x)
+  go acc (TyOperator l o r) = TyOperator (go acc l) o (go acc r)
+  go acc (TyParens p) = TyParens $ go acc p
   go _ TyType = TyType
 
 guardOnlyBindings :: MonadChronicles TypeError m

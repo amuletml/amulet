@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts, ScopedTypeVariables, OverloadedStrings #-}
+{-# LANGUAGE FlexibleContexts, ScopedTypeVariables, OverloadedStrings, TypeFamilies #-}
 
 {- | The desugar process is run before the type checker in order to
    simplify the number of cases it needs to handle.
@@ -138,6 +138,8 @@ desugarProgram = traverse statement where
   ty (TyWildcard t) = TyWildcard (ty <$> t)
   ty TySkol{} = error "TySkol in desugar"
   ty TyWithConstraints{} = error "TywithConstraints in desugar"
+  ty (TyParens t) = ty t
+  ty (TyOperator l o r) = TyOperator (ty l) o (ty r)
   ty TyType = TyType
 
   binder :: TyBinder Resolved -> TyBinder Desugared

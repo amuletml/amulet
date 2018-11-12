@@ -164,6 +164,20 @@ inferKind (TyPromotedCon v) = do
         Nothing -> pure (TyPromotedCon v, k)
         Just err -> confesses (NotPromotable v k err)
 
+inferKind (TyOperator left op right) = do
+  reason <- get
+  kind <- view (names . at op)
+  ty <- case kind of
+    Nothing -> confesses (NotInScope op)
+    Just k ->
+      view _3 <$> instantiate Expression k
+
+  (Anon lt, c1, _) <- quantifier reason ty
+  (Anon rt, c2, _) <- quantifier reason c1
+  left <- checkKind left lt
+  right <- checkKind right rt
+  pure (TyOperator left op right, c2)
+
 inferKind (TyVar v) = do
   k <- maybe freshTV pure =<< view (names . at v)
   pure (TyVar v, k)
@@ -264,6 +278,7 @@ inferGadtConKind :: MonadKind m
 inferGadtConKind con typ tycon args = go typ (reverse (spine (gadtConResult typ))) where
   spine :: Type Desugared -> [Type Desugared]
   spine (TyApp f x) = x:spine f
+  spine (TyOperator l o r) = [r, l, TyCon o]
   spine x = [x]
 
   go ty (hd:apps)
@@ -329,7 +344,8 @@ promoteOrError TySkol{} = Nothing
 promoteOrError TyPromotedCon{} = Nothing
 promoteOrError TyType{} = Nothing
 promoteOrError TyWildcard{} = Nothing
-
+promoteOrError (TyParens p) = promoteOrError p
+promoteOrError (TyOperator l _ r) = promoteOrError l <|> promoteOrError r
 
 generalise :: MonadInfer Typed m
            => (Type Typed -> Set.Set (Var Typed)) -> SomeReason -> Type Typed -> m (Type Typed)

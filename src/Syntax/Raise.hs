@@ -31,3 +31,5 @@ raiseT v (TyPi binder t) = TyPi (go binder) (raiseT v t) where
   go (Implicit t) = Implicit (raiseT v t)
   go (Invisible var k) = Invisible (v var) (fmap (raiseT v) k)
 raiseT _ TyType = TyType
+raiseT v (TyOperator l o r) = TyOperator (raiseT v l) (v o) (raiseT v r)
+raiseT v (TyParens t) = raiseT v t

@@ -20,6 +20,8 @@ transformType ft = goT where
   transT (TyRows f fs) = TyRows (goT f) (map (second goT) fs)
   transT (TyExactRows fs) = TyExactRows (map (second goT) fs)
   transT (TyTuple l r) = TyTuple (goT l) (goT r)
+  transT (TyOperator l o r) = TyOperator (goT l) o (goT r)
+  transT (TyParens t) = TyParens (goT t)
 
   transT (TySkol (Skolem i v ty m)) = TySkol (Skolem i v (goT ty) (transM m))
   transT (TyWithConstraints cons ty) = TyWithConstraints (map (goT***goT) cons) (goT ty)

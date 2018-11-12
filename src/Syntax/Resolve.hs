@@ -3,6 +3,7 @@
   , OverloadedStrings
   , MultiParamTypeClasses
   , TupleSections
+  , TypeFamilies
   , ScopedTypeVariables #-}
 
 {- | The resolver is the first step after parsing. It performs several key
@@ -269,7 +270,7 @@ reExpr o@BinOp{} = do
         (es', ops') <- reOp es ops l
 
         o'@(VarRef op _) <- reExpr o
-        let (opre, oass) = varPrecedence op
+        let (opre, oass) = precedenceOf precedence op
 
         let (es'', ops'') = popUntil es' ops' opre oass
         reOp es'' ((o', opre):ops'') r
@@ -350,6 +351,30 @@ reType r (TyRows t f) = TyRows <$> reType r t
 reType r (TyExactRows f) = TyExactRows <$> traverse (\(a, b) -> (a,) <$> reType r b) f
 reType r (TyTuple ta tb) = TyTuple <$> reType r ta <*> reType r tb
 reType _ (TyWildcard _) = pure (TyWildcard Nothing)
+reType r (TyParens t) = TyParens <$> reType r t
+reType r o@TyOperator{} = do
+  (es, os) <- reOp [] [] o
+  let ([x], []) = popUntil es os 0 AssocLeft
+  pure x
+    where
+      reOp es ops (TyOperator lhs o rhs) = do
+        (es', ops') <- reOp es ops lhs
+        o' <- lookupTy o `catchJunk` r
+
+        let (opre, oass) = precedenceOf opPrecedence o'
+            (es'', ops'') = popUntil es' ops' opre oass
+        reOp es'' ((o', opre):ops'') rhs
+      reOp es ops e = (,ops) . (:es) <$> reType r e
+
+      popUntil es ((sop, spre):os) opre assoc
+        | (assoc == AssocLeft && spre >= opre) || (assoc == AssocRight && spre > opre)
+        = let (right:left:es') = es
+          in popUntil (op left sop right:es') os opre assoc
+      popUntil es os _ _ = (es, os)
+
+      op l (TgName _ (-39)) r = TyTuple l r
+      op l o r = TyOperator l o r
+
 reType _ TyType = pure TyType
 
 reWholePattern :: forall m. MonadResolve m
@@ -448,9 +473,9 @@ reMethod TypedMatching{} = error "reBinding TypedMatching{}"
 data Associativity = AssocLeft | AssocRight
   deriving (Eq, Show)
 
-varPrecedence :: Var Resolved -> (Int, Associativity)
-varPrecedence (TgName n _) = precedence n
-varPrecedence (TgInternal n) = precedence n
+precedenceOf :: (T.Text -> (Int, Associativity)) -> Var Resolved -> (Int, Associativity)
+precedenceOf f (TgName n _) = f n
+precedenceOf f (TgInternal n) = f n
 
 precedence :: T.Text -> (Int, Associativity)
 precedence t
@@ -480,6 +505,11 @@ precedence t
   | T.isPrefixOf "|" t = (5, AssocLeft)
 
   | otherwise = (11, AssocLeft)
+
+opPrecedence :: T.Text -> (Int, Associativity)
+opPrecedence t
+  | T.isPrefixOf "*" t  = (9, AssocRight)
+  | otherwise = precedence t
 
 resolveOpen :: MonadResolve m => Var Parsed -> Maybe T.Text -> (Var Resolved -> m a) -> m a
 resolveOpen name as m = do
