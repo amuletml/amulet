@@ -19,12 +19,12 @@ import qualified Text.Pretty.Note as N
 import Text.Pretty.Semantic
 
 result :: String -> T.Text -> T.Text
-result file contents = fst . flip runNamey firstName $ do
-  let (Just parsed, _) = runParser file (L.fromStrict contents) parseTops
+result f c = fst . flip runNamey firstName $ do
+  let parsed = requireJust f c $ runParser f (L.fromStrict c) parseTops
   resolved <- resolveProgram RS.builtinScope RS.emptyModules parsed
   pure . displayPlainVerbose . either prettyErrs ((Right<$>) . pretty . fst) $ resolved
 
-  where prettyErrs = vsep . map (N.format (N.fileSpans [(file, contents)] N.defaultHighlight))
+  where prettyErrs = vsep . map (N.format (N.fileSpans [(f, c)] N.defaultHighlight))
 
 tests :: IO TestTree
 tests = testGroup "Tests.Syntax.Resolve" <$> goldenDir result "tests/resolve/" ".ml"
