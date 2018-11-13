@@ -172,8 +172,8 @@ inferKind (TyOperator left op right) = do
     Just k ->
       view _3 <$> instantiate Expression k
 
-  (Anon lt, c1, _) <- quantifier reason ty
-  (Anon rt, c2, _) <- quantifier reason c1
+  ~(Anon lt, c1, _) <- quantifier reason ty
+  ~(Anon rt, c2, _) <- quantifier reason c1
   left <- checkKind left lt
   right <- checkKind right rt
   pure (TyOperator left op right, c2)
