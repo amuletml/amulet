@@ -269,7 +269,7 @@ reExpr o@BinOp{} = do
       reOp es ops (BinOp l o@VarRef{} r _) = do
         (es', ops') <- reOp es ops l
 
-        o'@(VarRef op _) <- reExpr o
+        ~o'@(VarRef op _) <- reExpr o
         let (opre, oass) = precedenceOf precedence op
 
         let (es'', ops'') = popUntil es' ops' opre oass

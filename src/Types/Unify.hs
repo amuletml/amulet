@@ -518,7 +518,7 @@ subsumes' r scope ot@(TyTuple a b) nt@(TyTuple a' b') = do
     pure (wb, wa)
   -- Thus "point-wise" subsumption
 
-  [elem, elem'] <- replicateM 2 genName
+  ~[elem, elem'] <- replicateM 2 genName
   let cont (Tuple (e:es) (an, _)) =
         Tuple [ ExprWrapper wa e (an, a')
               , case es of

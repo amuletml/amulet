@@ -211,8 +211,8 @@ infer ex@(Ascription e ty an) = do
 infer ex@(BinOp l o r a) = do
   (o, ty) <- infer o
 
-  (Anon lt, c1, k1) <- quantifier (becauseExp ex) ty
-  (Anon rt, c2, k2) <- quantifier (becauseExp ex) c1
+  ~(Anon lt, c1, k1) <- quantifier (becauseExp ex) ty
+  ~(Anon rt, c2, k2) <- quantifier (becauseExp ex) c1
 
   (l, r) <- (,) <$> check l lt <*> check r rt
   pure (App (k2 (App (k1 o) l (a, c1))) r (a, c2), c2)

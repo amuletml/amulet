@@ -73,7 +73,7 @@ desugarProgram = traverse statement where
       VarRef{} -> pure $ go vl'
       Literal{} -> pure $ go vl'
       _ -> do
-        (Capture lv _, ref) <- fresh an
+        ~(Capture lv _, ref) <- fresh an
         pure $ Let [Binding lv vl' an] (go ref) an
 
   expr (RightSection vl op an) = expr (App op vl an)
@@ -111,7 +111,7 @@ desugarProgram = traverse statement where
   buildTuple _ (Just e@VarRef{}) (as, vs, tuple) = pure (as, vs, e:tuple)
   buildTuple _ (Just e@Literal{}) (as, vs, tuple) = pure (as, vs, e:tuple)
   buildTuple a (Just e) (as, vs, tuple) = do
-    (Capture v _, ref) <- fresh a
+    ~(Capture v _, ref) <- fresh a
     pure (as, (v, e):vs, ref:tuple)
 
   binding (Binding v e a) = Binding v <$> expr e <*> pure a

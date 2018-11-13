@@ -452,9 +452,9 @@ lowerOneOf preLeafs var ty tys = go [] . map prepare
     goCtors unc cases (( S.Destructure v (Just p) (_, cty)
                        , PR arm pats gd vBind tyBind ):rs) = do
       let v' = mkCon v
-      (Just cap@(Capture c _), cases') <- case VarMap.lookup v' cases of
+      ~(Just cap@(Capture c _), cases') <- case VarMap.lookup v' cases of
         Nothing -> do
-          ForallTy Irrelevant x r <- inst . fromJust <$> asks (VarMap.lookup (mkType v) . ctors)
+          ~(ForallTy Irrelevant x r) <- inst . fromJust <$> asks (VarMap.lookup (mkType v) . ctors)
           let Just s = r `unify` lowerType cty
               ty' = substituteInType s x
           (,unc) . Just . flip Capture ty' <$> freshFromPat p
