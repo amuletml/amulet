@@ -1,116 +1,105 @@
 pattern_totality.ml[10:9 ..10:17]: warning
   Non-exhaustive patterns in expression
-  • Note: The following patterns are not included
-
-    • Some _
    │ 
 10 │   let f None = ()
    │         ^^^^^^^^^
+  • Note: The following patterns are not covered
+      Some _
 pattern_totality.ml[11:10 ..11:21]: warning
   Non-exhaustive patterns in expression
-  • Note: The following patterns are not included
-
-    • None
    │ 
 11 │   let f (Some _) = ()
    │          ^^^^^^^^^^^^
+  • Note: The following patterns are not covered
+      None
 pattern_totality.ml[16:7 ..16:18]: warning
-  Redundant pattern in expression.
-  • Note: This case is covered by all previous patterns and so can be removed
+  Redundant pattern in expression
    │ 
 16 │     | Some _ -> ()
    │       ^^^^^^^^^^^^
+  • Note: This case is covered by all previous patterns and so can be removed
 pattern_totality.ml[37:11 ..37:18]: warning
   Non-exhaustive patterns in expression
-  • Note: The following patterns are not included
-
-    • Any _
    │ 
 37 │   let _ = function
    │           ^^^^^^^^
+  • Note: The following patterns are not covered
+      Any _
 pattern_totality.ml[41:38 ..41:45]: warning
   Non-exhaustive patterns in expression
-  • Note: The following patterns are not included
-
-    • Unit _
-    • Any _
    │ 
 41 │   let f : forall 'a. term 'a -> () = function
    │                                      ^^^^^^^^
+  • Note: The following patterns are not covered
+      Unit _ | Any _
 pattern_totality.ml[48:7 ..48:17]: warning
-  Redundant pattern in expression.
-  • Note: This case is covered by all previous patterns and so can be removed
+  Redundant pattern in expression
    │ 
 48 │     | Any _ -> ()
    │       ^^^^^^^^^^^
+  • Note: This case is covered by all previous patterns and so can be removed
 pattern_totality.ml[55:11 ..55:18]: warning
   Non-exhaustive patterns in expression
-  • Note: The following patterns are not included
-
-    • { x = _, y = _ }
    │ 
 55 │   let _ = function
    │           ^^^^^^^^
+  • Note: The following patterns are not covered
+      { x = _, y = _ }
 pattern_totality.ml[62:7 ..62:21]: warning
-  Redundant pattern in expression.
-  • Note: This case is covered by all previous patterns and so can be removed
+  Redundant pattern in expression
    │ 
 62 │     | { y = 0 } -> ()
    │       ^^^^^^^^^^^^^^^
+  • Note: This case is covered by all previous patterns and so can be removed
 pattern_totality.ml[69:11 ..69:18]: warning
   Non-exhaustive patterns in expression
-  • Note: The following patterns are not included
-
-    • (_, _)
    │ 
 69 │   let _ = function
    │           ^^^^^^^^
+  • Note: The following patterns are not covered
+      (_, _)
 pattern_totality.ml[73:11 ..73:18]: warning
   Non-exhaustive patterns in expression
-  • Note: The following patterns are not included
-
-    • (None, Some _)
-    • (Some _, None)
    │ 
 73 │   let _ = function
    │           ^^^^^^^^
+  • Note: The following patterns are not covered
+      (None, Some _) | (Some _, None)
 pattern_totality.ml[80:7 ..80:18]: warning
-  Redundant pattern in expression.
-  • Note: This case is covered by all previous patterns and so can be removed
+  Redundant pattern in expression
    │ 
 80 │     | (_, _) -> ()
    │       ^^^^^^^^^^^^
+  • Note: This case is covered by all previous patterns and so can be removed
 pattern_totality.ml[93:11 ..93:18]: warning
   Non-exhaustive patterns in expression
-  • Note: The following patterns are not included
-
-    • false
    │ 
 93 │   let _ = function
    │           ^^^^^^^^
+  • Note: The following patterns are not covered
+      false
 pattern_totality.ml[95:11 ..95:18]: warning
   Non-exhaustive patterns in expression
-  • Note: The following patterns are not included
-
-    • _
    │ 
 95 │   let _ = function
    │           ^^^^^^^^
+  • Note: The following patterns are not covered
+      _
 pattern_totality.ml[101:7 ..101:13]: warning
-  Redundant pattern in expression.
-  • Note: This case is covered by all previous patterns and so can be removed
+  Redundant pattern in expression
     │ 
 101 │     | _ -> ()
     │       ^^^^^^^
-pattern_totality.ml[105:7 ..105:13]: warning
-  Redundant pattern in expression.
   • Note: This case is covered by all previous patterns and so can be removed
+pattern_totality.ml[105:7 ..105:13]: warning
+  Redundant pattern in expression
     │ 
 105 │     | _ -> ()
     │       ^^^^^^^
-pattern_totality.ml[108:7 ..108:13]: warning
-  Redundant pattern in expression.
   • Note: This case is covered by all previous patterns and so can be removed
+pattern_totality.ml[108:7 ..108:13]: warning
+  Redundant pattern in expression
     │ 
 108 │     | 0 -> ()
     │       ^^^^^^^
+  • Note: This case is covered by all previous patterns and so can be removed

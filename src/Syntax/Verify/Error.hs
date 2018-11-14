@@ -7,6 +7,7 @@ module Syntax.Verify.Error
 import Data.Spanned
 import Data.Reason
 import Data.Span
+import Data.List
 
 import Text.Pretty.Semantic
 import Text.Pretty.Note
@@ -101,14 +102,14 @@ instance Pretty VerifyError where
          , indent 2 "and so no value of that type could be returned."
          ]
   pretty (RedundantArm _) =
-    vsep [ "Redundant pattern in expression."
+    vsep [ "Redundant pattern in expression"
          , note <+> "This case is covered by all previous patterns and so can be removed"
          ]
   pretty (MissingPattern _ ps) =
     vsep [ "Non-exhaustive patterns in expression"
-         , note <+> "The following patterns are not included"
+         , note <+> "The following patterns are not covered"
          , empty
-         , indent 2 . vsep . map (bullet . pretty) $ ps ]
+         , indent 2 . hsep . intersperse pipe . map pretty $ ps ]
 
 instance Note VerifyError Style where
   diagnosticKind NonRecursiveRhs{} = ErrorMessage
@@ -143,4 +144,14 @@ instance Note VerifyError Style where
       , indent 6 "to silence this warning."
       ]
   formatNote _ LazyLet{} = error "impossible"
+  formatNote f (RedundantArm a) =
+    vsep [ indent 2 "Redundant pattern in expression"
+         , f [annotation a]
+         , indent 2 $ note <+> "This case is covered by all previous patterns and so can be removed"
+         ]
+  formatNote f (MissingPattern a ps) =
+    vsep [ indent 2 "Non-exhaustive patterns in expression"
+         , f [annotation a]
+         , indent 2 $ note <+> "The following patterns are not covered"
+         , indent 6 . fmap Right . hsep . intersperse pipe . map pretty $ ps ]
   formatNote f x = indent 2 (Right <$> pretty x) <#> f [annotation x]
