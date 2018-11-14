@@ -15,33 +15,38 @@ import Types.Infer.Builtin
 import Types.Kinds
 
 -- For polymorphic recursion, mostly
-approxType :: MonadInfer Typed m => Expr Desugared -> StateT Origin m (Type Typed)
-approxType r@(Fun p e _) = TyPi <$> approxParam p <*> approxType e where
+approxType, approxType' :: MonadInfer Typed m => Expr Desugared -> StateT Origin m (Type Typed)
+approxType r@(Ascription _ t _) = resolveKind (becauseExp r) t
+approxType ex = do
+  put Deduced
+  approxType' ex
+
+approxType' r@(Fun p e _) = TyPi <$> approxParam p <*> approxType' e where
   approxParam (PatParam p) = Anon <$> approxPattern r p
   approxParam (EvParam _) = error "approx EvParam"
 
-approxType r@(Ascription _ t _) = resolveKind (becauseExp r) t
-approxType (Match _ (Arm _ _ e:_) _) = approxType e
-approxType (If _ t _ _) = approxType t
-approxType (Begin xs _) = approxType (last xs)
-approxType (Let _ e _) = approxType e
+approxType' r@(Ascription _ t _) = resolveKind (becauseExp r) t
+approxType' (Match _ (Arm _ _ e:_) _) = approxType' e
+approxType' (If _ t _ _) = approxType' t
+approxType' (Begin xs _) = approxType' (last xs)
+approxType' (Let _ e _) = approxType' e
 
-approxType (Literal l _) = case l of
+approxType' (Literal l _) = case l of
   LiInt _ -> pure tyInt
   LiStr _ -> pure tyString
   LiFloat _ -> pure tyFloat
   LiBool _ -> pure tyBool
   LiUnit -> pure tyUnit
 
-approxType (Record vs _) = do
-  let one (Field r e _) = (r,) <$> approxType e
+approxType' (Record vs _) = do
+  let one (Field r e _) = (r,) <$> approxType' e
   TyExactRows <$> traverse one vs
 
-approxType (BinOp _ (VarRef o _) _ _) | o `Map.member` builtinOps = pure (builtinOps Map.! o)
-approxType (App (VarRef v _) (Fun (PatParam (PLiteral LiUnit _)) e _) _) | v == TgInternal "lazy" =
-  TyApp tyLazy <$> approxType e
+approxType' (BinOp _ (VarRef o _) _ _) | o `Map.member` builtinOps = pure (builtinOps Map.! o)
+approxType' (App (VarRef v _) (Fun (PatParam (PLiteral LiUnit _)) e _) _) | v == TgInternal "lazy" =
+  TyApp tyLazy <$> approxType' e
 
-approxType _ = guess
+approxType' _ = guess
 
 approximate :: MonadInfer Typed m
             => Binding Desugared

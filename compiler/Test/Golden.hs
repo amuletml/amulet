@@ -54,7 +54,7 @@ instance IsTest GoldenTest where
     case actual `seq` expected of
       Nothing -> do
         T.writeFile fullOutput actual
-        pure (testFailed "File does not exist, generated")
+        pure (testFailed (unlines ("File does not exist, generated":lines (T.unpack actual))))
       Just expected -> do
         let expected' = process expected
         let result' = process actual

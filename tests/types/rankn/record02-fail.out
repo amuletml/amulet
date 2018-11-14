@@ -6,7 +6,7 @@ record02-fail.ml[3:17 ..3:36]: error
     can be made as polymorphic as
      forall 'a. 'a -> 'a
 
-  • Arising in the the field bar
+  • Arising in the this field bar
   │ 
 3 │ let foo = Foo { bar = fun x -> x + 1 }
   │                 ^^^^^^^^^^^^^^^^^^^^

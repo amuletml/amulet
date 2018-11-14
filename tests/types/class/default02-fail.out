@@ -6,7 +6,7 @@ default02-fail.ml[14:8 ..14:15]: error
   • Note: default method implementations should always be applicable,
     and thus can not have any extra constraints
 
-  Arising in the the expression
+  Arising in the this expression
    │ 
 14 │     if x `eq` x then
    │        ^^^^^^^^
