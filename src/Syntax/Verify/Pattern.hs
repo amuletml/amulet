@@ -49,7 +49,6 @@ arise:
 -}
 module Syntax.Verify.Pattern
   ( Covering(..)
-  , MonadCover(..)
   , ValueAbs, altAbs
   , ValueAlt
   , emptyAlt
