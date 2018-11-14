@@ -2,9 +2,11 @@ multi_errs01.ml[2:19 ..2:22]: error
   │ 
 2 │   let foo x = 2 + true
   │                   ^^^^
-  Could not match expected type int with bool
+  Couldn't match actual type bool
+    with the type expected by the context, int
 multi_errs01.ml[1:5 ..1:6]: error
   │ 
 1 │ let () =
   │     ^^
-  Could not match expected type unit with int
+  Couldn't match actual type int
+    with the type expected by the context, unit

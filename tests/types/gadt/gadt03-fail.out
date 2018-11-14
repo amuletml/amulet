@@ -2,4 +2,5 @@ gadt03-fail.ml[7:12 ..7:19]: error
   │ 
 7 │ let show = function
   │            ^^^^^^^^
-  Could not match expected type bool with int
+  Couldn't match actual type int
+    with the type expected by the context, bool

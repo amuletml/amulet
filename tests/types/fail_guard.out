@@ -2,4 +2,5 @@ fail_guard.ml[2:10 ..2:10]: error
   │ 
 2 │ | _ when 2 -> ()
   │          ^
-  Could not match expected type bool with int
+  Couldn't match actual type int
+    with the type expected by the context, bool

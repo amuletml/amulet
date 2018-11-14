@@ -2,8 +2,8 @@ list : type -> type
 Nil : {'tys : 'bl}. ('tys ~ unit) ⊃ list 'tys
 Cons : {'tys : 'ck}. {'a : type}. {'b : type}. ('tys ~ 'a * 'b) ⊃ ('a * list 'b) -> list 'tys
 elem : {'a : type}. 'a -> 'a -> type
-Here : {'xs : 'ff}. {'x : 'ff}. {'xs : 'ff}. ('xs ~ 'x * 'xs) ⊃ elem 'x 'xs
-There : {'xs : 'gq}. {'x : 'gq}. {'xs : 'gq}. {'y : 'gq}. ('xs ~ 'y * 'xs) ⊃ elem 'x 'xs -> elem 'x 'xs
+Here : {'xs : 'a}. {'x : 'a}. {'xs : 'a}. ('xs ~ 'x * 'xs) ⊃ elem 'x 'xs
+There : {'xs : 'a}. {'x : 'a}. {'xs : 'a}. {'y : 'a}. ('xs ~ 'y * 'xs) ⊃ elem 'x 'xs -> elem 'x 'xs
 term : type -> type -> type
 Var : {'ctx : type}. {'ty : type}. elem 'ty 'ctx -> term 'ctx 'ty
 Lam : {'ty : 'mf}. {'a : type}. {'b : type}. {'ctx : type}. ('ty ~ 'a -> 'b) ⊃ term ('a * 'ctx) 'b -> term 'ctx 'ty

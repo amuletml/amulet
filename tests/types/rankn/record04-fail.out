@@ -2,4 +2,5 @@ record04-fail.ml[3:35 ..3:46]: error
   │ 
 3 │ let foo = Foo { bar = fun x -> x, quux = "foo" }
   │                                   ^^^^^^^^^^^^
-  Could not match expected type int with string
+  Couldn't match actual type string
+    with the type expected by the context, int

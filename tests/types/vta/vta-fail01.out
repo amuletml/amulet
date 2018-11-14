@@ -2,4 +2,5 @@ vta-fail01.ml[3:17 ..3:21]: error
   │ 
 3 │ let _ = id @int "foo"
   │                 ^^^^^
-  Could not match expected type int with string
+  Couldn't match actual type string
+    with the type expected by the context, int

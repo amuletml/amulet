@@ -2,13 +2,15 @@ gadt01.ml[3:16 ..3:23]: error
   │ 
 3 │ type gadt 'a = R : gadt
   │                ^^^^^^^^
-  Could not match actual type type with expected type 'd -> type
+  Couldn't match actual type 'd -> type
+    with the type expected by the context, type
 
-  Have you applied a type constructor to the wrong number of arguments?
+  • Did you forget some of the arguments to a type constructor?
 gadt01.ml[3:16 ..3:23]: error
   │ 
 3 │ type gadt 'a = R : gadt
   │                ^^^^^^^^
-  Could not match actual type type with expected type 'a -> type
+  Couldn't match actual type 'a -> type
+    with the type expected by the context, type
 
-  Have you applied a type constructor to the wrong number of arguments?
+  • Did you forget some of the arguments to a type constructor?
