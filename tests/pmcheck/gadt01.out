@@ -1,21 +1,14 @@
-gadt01.ml[7:13 ..7:26]: warning
+gadt01.ml[8:13 ..8:26]: warning
   Non-exhaustive patterns in expression
   │ 
-7 │     | T1 -> fun T1 -> true
+8 │     | T1 -> fun T1 -> true
   │             ^^^^^^^^^^^^^^
   • Note: The following patterns are not covered
       T2
-gadt01.ml[8:13 ..8:27]: warning
+gadt01.ml[9:13 ..9:27]: warning
   Non-exhaustive patterns in expression
   │ 
-8 │     | T2 -> fun T2 -> false
+9 │     | T2 -> fun T2 -> false
   │             ^^^^^^^^^^^^^^^
   • Note: The following patterns are not covered
       T1
-gadt01.ml[11:3 ..11:10]: warning
-  Non-exhaustive patterns in expression
-   │ 
-11 │   function
-   │   ^^^^^^^^
-  • Note: The following patterns are not covered
-      (T1, T2) | (T2, T1)

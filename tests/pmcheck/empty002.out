@@ -1,21 +1,21 @@
-empty002.ml[16:3 ..16:14]: warning
+empty002.ml[17:3 ..17:14]: warning
   Non-exhaustive patterns in expression
    │ 
-16 │   match x with ()
+17 │   match x with ()
    │   ^^^^^^^^^^^^
   • Note: The following patterns are not covered
       _
-empty002.ml[19:3 ..19:14]: warning
+empty002.ml[21:3 ..21:14]: warning
   Non-exhaustive patterns in expression
    │ 
-19 │   match x with ()
+21 │   match x with ()
    │   ^^^^^^^^^^^^
   • Note: The following patterns are not covered
       _
-empty002.ml[22:3 ..22:14]: warning
+empty002.ml[25:3 ..25:14]: warning
   Non-exhaustive patterns in expression
    │ 
-22 │   match x with ()
+25 │   match x with ()
    │   ^^^^^^^^^^^^
   • Note: The following patterns are not covered
       _

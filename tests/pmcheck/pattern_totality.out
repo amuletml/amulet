@@ -57,14 +57,14 @@ pattern_totality.ml[69:11 ..69:18]: warning
 69 │   let _ = function
    │           ^^^^^^^^
   • Note: The following patterns are not covered
-      (_, _)
+      _, _
 pattern_totality.ml[73:11 ..73:18]: warning
   Non-exhaustive patterns in expression
    │ 
 73 │   let _ = function
    │           ^^^^^^^^
   • Note: The following patterns are not covered
-      (None, Some _) | (Some _, None)
+      None, Some _ | Some _, None
 pattern_totality.ml[80:7 ..80:18]: warning
   Redundant pattern in expression
    │ 
