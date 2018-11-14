@@ -136,21 +136,25 @@ instance Pretty (Var p) => Pretty (ValueAbs p) where
   pretty (VDestructure k _ Nothing) = stypeCon (pretty k)
   pretty (VDestructure k _ (Just p)) = stypeCon (pretty k) <+>
     case p of
-      VDestructure _ _ Just{} -> parens (pretty p)
-      VTuple{} -> parens (pretty p)
-      _ -> pretty p
+      VDestructure _ _ Just{} -> parens (prettyIn p)
+      _ -> prettyIn p
   pretty (VRecord fs)
     -- Should we filter out wildcard fields here?
     = enclose (lbrace <> space) (space <> rbrace)
     . hsep . punctuate comma
-    . map (\(n, v) -> text n <+> equals <+> pretty v)
+    . map (\(n, v) -> text n <+> equals <+> prettyIn v)
     . Map.toList $ fs
   pretty t@VTuple{} = hsep . punctuate comma . extract $ t where
-    extract (VTuple l r) = pretty l : extract r
-    extract p = [pretty p]
+    extract (VTuple l r) = prettyIn l : extract r
+    extract p = [prettyIn p]
 
   pretty (VLiteral l) = pretty l
   pretty VNotLiteral{} = skeyword "_"
+
+-- | Pretty-print an internal value
+prettyIn :: Pretty (Var p) => ValueAbs p -> Doc
+prettyIn v@VTuple{} = parens (pretty v)
+prettyIn v = pretty v
 
 -- | Wraps the state of one pattern alternative, capturing constraints,
 -- substitution sets and the latest fresh variable.
