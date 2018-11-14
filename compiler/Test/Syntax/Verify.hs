@@ -38,4 +38,7 @@ result f c = fst . flip runNamey firstName $ do
     Right () -> pure T.empty
 
 tests :: IO TestTree
-tests = testGroup "Verification tests" <$> goldenDir result "tests/verify/" ".ml"
+tests = do
+  verify <- testGroup "Verification tests" <$> goldenDir result "tests/verify/" ".ml"
+  pmcheck <- testGroup "Pattern-matching checking" <$> goldenDir result "tests/pmcheck/" ".ml"
+  pure (testGroup "'Verify' tests" [verify, pmcheck])
