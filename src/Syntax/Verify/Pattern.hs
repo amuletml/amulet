@@ -72,6 +72,7 @@ import Syntax.Subst
 import Syntax.Types
 
 import Types.Unify
+import Types.Infer.Pattern (skolGadt)
 
 import Text.Pretty.Semantic hiding (empty)
 
@@ -214,23 +215,24 @@ covering' env = go where
     | otherwise = uncover (v, patPair xs)
   go ((Destructure{}, v@VDestructure{}) :*: xs) = uncover (v, patPair xs)
 
-  -- ConVar for constructors: We always perform the UConVar implementation here
-  -- (namely we find every possible case.
+  -- ConVar for constructors: We always peform the UConVar implementation here -
+  -- namely we find every possible case.
   go ((p@(Destructure k _ _), VVariable v vTy) :*: xs) = msum . flip map (toList ctors) $ \k -> do
-    (cs, arg, res) <- do
-      let Just (vs, _, cs, arg, res) = unwrapCtor <$> env ^. (names . at k)
-      subst <- Map.fromList . zip vs <$> traverse refreshTV vs
-      pure (map (bimap (apply subst) (apply subst)) cs, apply subst <$> arg, apply subst res)
+    (pty, _) <- skolGadt k =<< instantiate Expression (fromJust (env ^. (names . at k)))
+    let (cs, ty) = case pty of
+                     TyWithConstraints cs ty -> (cs, ty)
+                     _ -> ([], pty)
+        (arg, res) = unwrapCtor ty
 
     -- Unify our result with the child, including any additional GADT constraints.
-    constrain (ConUnify undefined undefined res vTy:map (uncurry $ ConUnify undefined undefined) cs)
+    constrain (mkUni res vTy:map (uncurry mkUni) cs)
 
-    u <- case arg of
-      Just argTy -> do
+    case arg of
+      Nothing -> onVar p v (VDestructure k Nothing) xs
+      Just arg -> do
         v' <- genName
-        pure $ VDestructure k (Just (VVariable v' argTy))
-      Nothing -> pure $ VDestructure k Nothing
-    onVar p v u xs
+        onVar p v (VDestructure k (Just (VVariable v' arg))) xs
+
     where
       ctors = let ty = maybe (error $ "Cannot find type of " ++ show k) typeName (env ^. (names . at k))
                   cs = fromMaybe (error $ "Cannot find constructors for " ++ show ty) (env ^. (types . at ty))
@@ -277,7 +279,7 @@ covering' env = go where
   -- abstractions and then visit as normal.
   go ((p@(PTuple _ (_, ty)), VVariable v vTy) :*: xs) = do
     (ty1, ty2) <- tupleTy ty
-    constrain [ConUnify undefined undefined vTy ty]
+    constrain [mkUni vTy ty]
 
     u1 <- flip VVariable ty1 <$> genName
     u2 <- flip VVariable ty2 <$> genName
@@ -290,7 +292,7 @@ covering' env = go where
   -- ConVar for records: This always matches, so we build up a child value for
   -- each field and visit as normal.
   go ((p@(PRecord _ (_, ty)), VVariable v vTy) :*: xs) = do
-    constrain [ConUnify undefined undefined vTy ty]
+    constrain [mkUni vTy ty]
     us <- traverse (\ty -> flip VVariable ty <$> genName) (rowTy ty)
     onVar p v (VRecord us) xs
   go ((PRecord{}, _) :*: _) = error "Mismatch on PTuple"
@@ -320,7 +322,7 @@ covering' env = go where
   tupleTy (TyTuple t1 t2) = pure (t1, t2)
   tupleTy ty = do
     v1 <- freshTV; v2 <- freshTV
-    constrain [ConUnify undefined undefined ty (TyTuple v1 v2)]
+    constrain [mkUni ty (TyTuple v1 v2)]
     pure (v1, v2)
 
   rowTy (TyVar _) = mempty
@@ -339,22 +341,15 @@ covering' env = go where
     (us', (u', xs')) <- foldRecord fs us ((p, u) :*: xs)
     pure (Map.insert f u' us', xs')
 
--- | Unwrap a constructor, returning the quantified variables,
--- constraints, optional argument and result type.
-unwrapCtor :: Type p -> ([Var p], [Type p], [(Type p, Type p)], Maybe (Type p), Type p)
+-- | Unwrap a constructor, returning the argument and result type
+unwrapCtor :: Type p -> (Maybe (Type p), Type p)
 unwrapCtor (TyPi bind res) = case bind of
-  Anon arg -> ([], [], [], Just arg, res)
-  Implicit i ->
-    let (vs, is, cs, arg, ret) = unwrapCtor res
-    in (vs, i:is, cs, arg, ret)
-  Invisible v _ ->
-    let (vs, is, cs, arg, ret) = unwrapCtor res
-    in (v:vs, is, cs, arg, ret)
-unwrapCtor (TyWithConstraints cs' t) =
-  let (vs, is, cs, arg, ret) = unwrapCtor t
-  in (vs, is, cs' ++ cs, arg, ret)
+  Anon arg -> (Just arg, res)
+  Implicit _ -> unwrapCtor res
+  Invisible _ _ -> unwrapCtor res
+unwrapCtor (TyWithConstraints _ t) = unwrapCtor t
 unwrapCtor (TyParens t) = unwrapCtor t
-unwrapCtor t = ([], [], [], Nothing, t)
+unwrapCtor t = (Nothing, t)
 
 -- | Get the name of this type constructor
 typeName :: Show (Type p) => Type p -> Var p
@@ -365,6 +360,10 @@ typeName (TyWithConstraints _ t) = typeName t
 typeName (TyParens t) = typeName t
 typeName (TyOperator _ t _) = t
 typeName t = error ("Unknown type " ++ show t)
+
+-- | Make a unification constraint
+mkUni :: Type Typed -> Type Typed -> Constraint Typed
+mkUni = ConUnify undefined undefined
 
 -- | Add one or more type constraints into the current environment,
 -- failing if an error occurs.
