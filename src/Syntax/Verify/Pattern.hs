@@ -409,15 +409,10 @@ inhabited' env = go mempty where
       Just (TyVar v') | Set.member v' c' -> inhb
       Just t' -> go c' t'
 
-  go c t@TyApp{}
-    | hasCtors t = do
-        (_, arg) <- constructors env t t
-        maybe inhb (go c) arg
-    | otherwise = inhb
-
+  go c t@TyApp{} = ctorCheck c t
+  go c t@TyCon{} = ctorCheck c t
   -- We don't really have the concept of uninhabited types, so we assume
   -- type names are.
-  go _ TyCon{} = inhb
   go _ TyPromotedCon{} = inhb
   -- For now, we'll just assume all Pi types are inhabited
   go _ TyPi{} = inhb
@@ -433,10 +428,23 @@ inhabited' env = go mempty where
   go c (TyWithConstraints _ t) = go c t
   go _ TyType = inhb
 
-  -- | Determines if a type has at least one constructor
-  hasCtors (TyCon v) = maybe True (not . null) (env ^. (types . at v))
-  hasCtors (TyApp f _) = hasCtors f
-  hasCtors _ = False
+  -- | Determines if a type has at least one constructor. We pass in a
+  -- set of previously visited type constructors, to avoid getting into
+  -- loops.
+  checkCtors c (TyCon v)
+    | v `Set.notMember` c, maybe False (not . null) (env ^. (types . at v))
+    = Just v
+    | otherwise = Nothing
+  checkCtors c (TyApp f _) = checkCtors c f
+  checkCtors _ _ = Nothing
+
+  -- | A naive check to determine if a constructor is inhabited.
+  ctorCheck c t
+    | Just v <- checkCtors c t = do
+        let c' = Set.insert v c
+        (_, arg) <- constructors env t t
+        maybe inhb (go c') arg
+    | otherwise = inhb
 
 -- | Make a unification constraint
 mkUni :: Type Typed -> Type Typed -> Constraint Typed
@@ -445,14 +453,17 @@ mkUni = ConUnify undefined undefined
 -- | Add one or more type constraints into the current environment,
 -- failing if an error occurs.
 constrain :: (MonadPlus m, MonadNamey m, MonadState CoverState m) => [Constraint Typed] -> m ()
-constrain css = do
+constrain css = maybe empty put =<< doConstrain css
+
+doConstrain :: (MonadNamey m, MonadState CoverState m) => [Constraint Typed] -> m (Maybe CoverState)
+doConstrain css = do
   (sub, cs) <- get
   x <- runChronicleT . solveImplies sub . (cs<>) $ Seq.fromList css
-  case x of
-    These Seq.Empty (sub', cs') -> put (sub', Seq.fromList cs')
-    That (sub', cs') ->  put (sub', Seq.fromList cs')
-    These _ _ -> empty
-    This _ -> empty
+  pure $ case x of
+    These Seq.Empty (sub', cs') -> Just (sub', Seq.fromList cs')
+    That (sub', cs') ->  Just (sub', Seq.fromList cs')
+    These _ _ -> Nothing
+    This _ -> Nothing
 
 -- | Require a variable to match a given pattern
 --
