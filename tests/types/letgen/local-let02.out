@@ -2,9 +2,11 @@ local-let02.ml[6:15 ..6:15]: error
   │ 
 6 │   h (fun x -> x ^ "")
   │               ^
-  Could not match expected type string with int
+  Couldn't match actual type int
+    with the type expected by the context, string
 local-let02.ml[6:15 ..6:20]: error
   │ 
 6 │   h (fun x -> x ^ "")
   │               ^^^^^^
-  Could not match expected type int with string
+  Couldn't match actual type string
+    with the type expected by the context, int

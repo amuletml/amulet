@@ -250,7 +250,7 @@ checkKind (TyPi binder b) ek = do
 
     Invisible v (Just arg) -> do
       (arg, kind) <- inferKind arg
-      _ <- subsumes reason ek kind
+      _ <- subsumes reason kind ek
       b <- local (names %~ focus (one v arg)) $
         checkKind b ek
       let bind = Invisible v (Just arg)
@@ -266,7 +266,7 @@ checkKind (TyPi binder b) ek = do
 checkKind ty u = do
   reason <- get
   (t, k) <- inferKind ty
-  _ <- subsumes reason u k
+  _ <- subsumes reason k u
   pure t
 
 inferGadtConKind :: MonadKind m
@@ -301,7 +301,7 @@ inferGadtConKind con typ tycon args = go typ (reverse (spine (gadtConResult typ)
 isType :: MonadKind m => Kind Typed -> KindT m (Kind Typed)
 isType t = do
   blame <- get
-  _ <- unify blame TyType t
+  _ <- unify blame t TyType
   pure t
 
 closeOver :: MonadKind m => SomeReason -> Type Typed -> m (Type Typed)

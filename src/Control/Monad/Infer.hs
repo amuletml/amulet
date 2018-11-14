@@ -9,6 +9,7 @@
   , ScopedTypeVariables
   , RecordWildCards
   , ViewPatterns
+  , NamedFieldPuns
   #-}
 module Control.Monad.Infer
   ( module M, firstName
@@ -81,7 +82,11 @@ deriving instance (Eq (Ann p), Eq (Var p), Eq (Expr p), Eq (Type p))
   => Eq (Constraint p)
 
 data TypeError where
-  NotEqual :: (Show (Var p), Pretty (Var p), Ord (Var p)) => Type p -> Type p -> TypeError
+  NotEqual :: (Show (Var p), Pretty (Var p), Ord (Var p))
+           => { actual :: Type p
+              , expected :: Type p }
+           -> TypeError
+
   Occurs :: (Pretty (Var p), Ord (Var p)) => Var p -> Type p -> TypeError
 
   NotInScope :: Var Desugared -> TypeError
@@ -254,22 +259,21 @@ refreshTV v = TyVar <$> genNameFrom nm where
     TgName x _ -> x
 
 instance Pretty TypeError where
-  pretty (NotEqual a b@TyArr{}) =
-    let thing = case a of
-          TyType -> string "type constructor"
-          x | show (pretty x) == "constraint#-37" -> string "type class constructor"
-          _ -> string "function"
-     in vcat [ string "Could not match actual type" <+> displayType a
-               <+> string "with expected type" <+> displayType b
-             , empty
-             , string "Have you applied a" <+> thing <+> "to the wrong number of arguments?"
-             ]
-  pretty (NotEqual TyType b) =
-    vcat [ string "Expected a type, but this has kind" <+> displayType b
-         , string "Have you applied a type constructor to the wrong number of arguments?"
-         ]
-  pretty (NotEqual a b) =
-    string "Could not match expected type" <+> displayType b <+> string "with" <+> displayType a
+  pretty NotEqual{ expected, actual } =
+    vsep
+      $ [ nest 2 $ "Couldn't match" <+> highlight "actual" <+> "type" <+> displayType actual
+           </> "with the" <+> highlight "type expected by the context," <+> displayType expected
+        ]
+     ++ case (expected, actual) of
+          (TyArr{}, TyArr{}) -> []
+          (TyArr{}, t) ->
+            [ empty, bullet "Did you apply a" <+> describe t <+> "to too many arguments?" ]
+          (t, TyArr{}) ->
+            [ empty, bullet "Did you forget some of the arguments to a" <+> describe t <> "?" ]
+          (_, _) -> []
+    where
+      describe TyType = "type constructor"
+      describe _ = "function"
 
   pretty (NotInScope e) = string "Variable not in scope:" <+> pretty e
   pretty (ArisingFrom er _) = pretty er

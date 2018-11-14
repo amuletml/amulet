@@ -1,8 +1,8 @@
 unsafe_coerce : {'a : type}. {'b : type}. 'a -> 'b
 foo : {'a : type}. 'a -> type
-Foo : {'al : type}. {'a : 'al}. int -> foo 'a
-fooable : {'at : type}. 'at -> constraint
-foo : {'at : type}. {'a : 'at}. fooable 'a => foo 'a
+Foo : {'a : type}. {'a : 'a}. int -> foo 'a
+fooable : {'a : type}. 'a -> constraint
+foo : {'a : type}. {'a : 'a}. fooable 'a => foo 'a
 gift : {'a : type}. 'a -> type -> type
-Give : {'dt : type}. {'a : 'dt}. {'b : type}. (fooable 'a => 'b) -> gift 'a 'b
-with_foo : {'a : type}. {'b : 'a}. {'c : type}. {'d : 'ig}. foo 'b -> (fooable 'b => 'c) -> 'd
+Give : {'a : type}. {'a : 'a}. {'b : type}. (fooable 'a => 'b) -> gift 'a 'b
+with_foo : {'a : type}. {'b : 'a}. {'c : type}. {'d : 'id}. foo 'b -> (fooable 'b => 'c) -> 'd

@@ -470,7 +470,7 @@ inferLetTy closeOver strategy vs =
                  , Set.Set (Var Typed))
 
       tcOne (AcyclicSCC decl@(Binding var exp ann)) = do
-        (origin, tv@(_, ty)) <- approximate decl
+        (origin, tv@(_, ty)) <- condemn $ approximate decl
         ((exp', ty, shouldAddContext), cs) <- listen $
           case origin of
             Guessed -> do

@@ -1,6 +1,6 @@
 show : type -> constraint
 show : {'a : type}. show 'a => 'a -> string
 box : {'a : type}. ('a -> type) -> 'a -> type
-Box : {'f : 'cc -> type}. {'a : 'cc}. 'f 'a -> box 'f 'a
+Box : {'f : 'a -> type}. {'a : 'a}. 'f 'a -> box 'f 'a
 id : type -> type
 Id : {'a : type}. 'a -> id 'a

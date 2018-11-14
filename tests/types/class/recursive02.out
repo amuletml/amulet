@@ -2,5 +2,5 @@ show : type -> constraint
 show : {'a : type}. show 'a => 'a -> string
 dostuff : type -> constraint
 stuff : {'a : type}. dostuff 'a => 'a -> unit
-foo : {'a : type}. {'b : 'gb}. dostuff 'a => 'a -> 'b
-bar : {'a : type}. {'b : 'gl}. dostuff 'a => 'a -> 'b
+foo : {'a : type}. {'b : 'fz}. dostuff 'a => 'a -> 'b
+bar : {'a : type}. {'b : 'gj}. dostuff 'a => 'a -> 'b

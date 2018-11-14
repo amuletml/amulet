@@ -2,6 +2,7 @@ class02.ml[3:3 ..3:27]: error
   │ 
 3 │   val foo : 'a () -> string
   │   ^^^^^^^^^^^^^^^^^^^^^^^^^
-  Could not match actual type type with expected type 'i -> 'j
+  Couldn't match actual type type
+    with the type expected by the context, 'i -> 'j
 
-  Have you applied a type constructor to the wrong number of arguments?
+  • Did you apply a type constructor to too many arguments?
