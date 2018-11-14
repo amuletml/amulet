@@ -131,6 +131,7 @@ data WhyUnsat
   | InstanceMethod (Type Typed)
   | InstanceClassCon Span
   | BadDefault (Var Desugared) (Type Typed)
+  | GivenContextNotEnough (Type Typed)
   | It'sQuantified
 
 instance (Show (Ann p), Show (Var p), Ord (Var p), Substitutable p (Type p))
@@ -556,6 +557,21 @@ instance Note TypeError Style where
          , indent 2 "Arising in the" <+> (Right <$> blameOf r')
          , f [annotation r']
          ]
+
+  formatNote f (ArisingFrom (UnsatClassCon _ (ConImplicit why _ v tau) (GivenContextNotEnough ctx)) _) =
+    vsep [ f [annotation why]
+         , msg
+         , indent 2 $ bullet "Possible fix: add it to the type signature for" <+> (Right <$> pretty v)
+         , empty
+         ]
+    where
+      msg | TyCon (TgInternal "unit") <- ctx =
+              indent 2 "No instance for" <+> (Right <$> displayType tau)
+                <+> "arising from a use of" <+> (Right <$> blameOf why)
+          | otherwise =
+              indent 2 "Could not deduce" <+> (Right <$> displayType tau)
+                <+> "from the context" <+> (Right <$> displayType ctx)
+
 
   formatNote f (ArisingFrom (UnsatClassCon _ (ConImplicit _ _ _ t) (BadDefault meth ty)) r') =
     vsep [ nest 2 $

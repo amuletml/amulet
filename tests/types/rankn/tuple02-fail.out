@@ -6,7 +6,7 @@ tuple02-fail.ml[1:42 ..1:52]: error
     can be made as polymorphic as
      forall 'a. 'a -> 'a
 
-  • Arising in the the expression
+  • Arising in the this expression
   │ 
 1 │ let foo : (forall 'a. 'a -> 'a) * int = (fun 0 -> (), 1)
   │                                          ^^^^^^^^^^^

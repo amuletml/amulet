@@ -415,11 +415,12 @@ inferLetTy :: forall m. MonadInfer Typed m
 inferLetTy closeOver strategy vs =
   let sccs = depOrder vs
 
-      figureOut :: (Var Desugared, SomeReason)
+      figureOut :: Bool
+                -> (Var Desugared, SomeReason)
                 -> Expr Typed -> Type Typed
                 -> Seq.Seq (Constraint Typed)
                 -> m (Type Typed, Expr Typed -> Expr Typed)
-      figureOut blame ex ty cs = do
+      figureOut canAdd blame ex ty cs = do
         (x, co, deferred) <- condemn $ retcons (addBlame (snd blame)) (solve cs)
         deferred <- pure (fmap (apply x) deferred)
         (compose x -> x, wraps', cons) <- condemn $ solve (Seq.fromList deferred)
@@ -435,8 +436,12 @@ inferLetTy closeOver strategy vs =
         (context, wrapper, solve) <-
           case strategy of
             Fail -> do
-              (context, wrapper, _) <- reduceClassContext mempty (annotation ex) cons
+              (context, wrapper, needed) <- reduceClassContext mempty (annotation ex) cons
 
+              when (not (null needed) && not canAdd) $
+                let fakeCon = ConImplicit (head needed ^. _3) undefined (fst blame) (head needed ^. _2)
+                 in confesses . addBlame (snd blame) $
+                   UnsatClassCon (snd blame) fakeCon (GivenContextNotEnough (getTypeContext ty))
               when (not (isFn ex) && not (null cons)) $
                 confesses (addBlame (snd blame) (UnsatClassCon (snd blame) (head cons) NotAFun))
 
@@ -466,20 +471,20 @@ inferLetTy closeOver strategy vs =
 
       tcOne (AcyclicSCC decl@(Binding var exp ann)) = do
         (origin, tv@(_, ty)) <- approximate decl
-        ((exp', ty), cs) <- listen $
+        ((exp', ty, shouldAddContext), cs) <- listen $
           case origin of
-            Supplied -> do
+            Guessed -> do
+              (exp', ty) <- infer exp
+              _ <- unify (becauseExp exp) ty (snd tv)
+              pure (exp', ty, True)
+            ex -> do
               checkAmbiguous var (becauseExp exp) ty
               let exp' (Ascription e _ _) = exp' e
                   exp' e = e
               exp <- check (exp' exp) ty
-              pure (exp, ty)
-            Guessed -> do
-              (exp', ty) <- infer exp
-              _ <- unify (becauseExp exp) ty (snd tv)
-              pure (exp', ty)
+              pure (exp, ty, ex == Deduced)
 
-        (tp, k) <- figureOut (var, becauseExp exp) exp' ty cs
+        (tp, k) <- figureOut shouldAddContext (var, becauseExp exp) exp' ty cs
         pure ( [Binding var (k exp') (ann, tp)], one var tp, mempty )
 
       tcOne (AcyclicSCC TypedMatching{}) = error "TypedMatching being TC'd"
@@ -529,16 +534,16 @@ inferLetTy closeOver strategy vs =
         (bindings, cs) <- listen . local (names %~ focus (teleFromList tvs)) $
           ifor (zip tvs vars) $ \i ((_, tyvar), Binding var exp ann) ->
             case origins !! i of
-              Supplied -> do
+              Guessed -> do
+                (exp', ty) <- infer exp
+                _ <- unify (becauseExp exp) ty tyvar
+                pure (Binding var exp' (ann, ty), ty)
+              _ -> do
                 checkAmbiguous var (becauseExp exp) tyvar
                 let exp' (Ascription e _ _) = exp' e
                     exp' e = e
                 exp <- check (exp' exp) tyvar
                 pure (Binding var exp (ann, tyvar), tyvar)
-              Guessed -> do
-                (exp', ty) <- infer exp
-                _ <- unify (becauseExp exp) ty tyvar
-                pure (Binding var exp' (ann, ty), ty)
 
         (solution, wrap, cons) <- solve cs
         name <- genName
@@ -626,10 +631,10 @@ inferLetTy closeOver strategy vs =
                    (ty', _) <- pure $ rename ty'
                    let lineUp c (TyForall v _ rest) ex =
                          lineUp c rest $ ExprWrapper (TypeApp (TyVar v)) ex (annotation ex, rest)
-                       lineUp ((v, t):cs) (TyPi (Implicit _) rest) ex =
+                       lineUp ((v, t, _):cs) (TyPi (Implicit _) rest) ex =
                          lineUp cs rest $ App ex (VarRef v (annotation ex, t)) (annotation ex, rest)
                        lineUp _ _ e = e
-                       lineUp :: [(Var Typed, Type Typed)] -> Type Typed -> Expr Typed -> Expr Typed
+                       lineUp :: [(Var Typed, Type Typed, SomeReason)] -> Type Typed -> Expr Typed -> Expr Typed
                    pure $ Binding var
                      (ExprWrapper tyLams
                        (wrapper Thin
@@ -885,3 +890,13 @@ mkTypeLambdas motive ty@(TyPi (Invisible tv k) t) = do
       getSkol _ = error "not a skolem from freshSkol"
   pure (TypeLam (getSkol sk) kind Syntax.:> wrap)
 mkTypeLambdas _ _ = pure IdWrap
+
+getTypeContext :: Type Typed -> Type Typed
+getTypeContext ty =
+  case getCtxParts ty of
+    [] -> tyUnit
+    (x:xs) -> foldr TyTuple x xs
+  where
+    getCtxParts (TyPi (Implicit v) t) = v:getCtxParts t
+    getCtxParts (TyPi _ t) = getCtxParts t
+    getCtxParts _ = []

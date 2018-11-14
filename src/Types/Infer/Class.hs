@@ -382,17 +382,17 @@ reduceClassContext :: forall m. (MonadInfer Typed m, HasCallStack)
 reduceClassContext _ _ [] = pure (id, const id, mempty)
 reduceClassContext extra annot cons = do
   scope <- view classes
-  let needed sub (ConImplicit _ _ var con:cs) = do
+  let needed sub (ConImplicit r _ var con:cs) = do
         (con, sub') <- skolFreeTy (ByConstraint con) (apply sub con)
-        ((var, con):) <$> needed (sub `compose` sub') cs
+        ((var, con, r):) <$> needed (sub `compose` sub') cs
       needed sub (_:cs) = needed sub cs
       needed _ [] = pure []
 
-  needs <- sortOn fst <$> needed mempty cons
+  needs :: [Need Typed] <- sortOn (view _1) <$> needed mempty cons
 
   -- First, deduplicate the constraints eliminating any redundancy
   let dedup :: ImplicitScope Typed -> [Need Typed] -> ([Binding Typed], [Need Typed], ImplicitScope Typed)
-      dedup scope ((var, con):needs)
+      dedup scope ((var, con, r):needs)
         | [ImplChoice _ t [] v _ _] <- lookup con scope =
           let (bindings, needs', scope') = dedup scope needs
            in if var == v
@@ -400,17 +400,17 @@ reduceClassContext extra annot cons = do
              else (Binding var (VarRef v (annot, t)) (annot, t):bindings, needs', scope')
         | otherwise =
           let (bindings, needs', scope') = dedup (insert annot LocalAssum var con scope) needs
-           in (bindings, (var, con):needs', scope')
+           in (bindings, (var, con, r):needs', scope')
       dedup scope [] = ([], [], scope)
       (aliases, stillNeeded, usable) = dedup mempty needs
 
   let simpl :: ImplicitScope Typed -> [Need Typed] -> ([Binding Typed], [Need Typed])
-      simpl scp ((var, con):needs)
+      simpl scp ((var, con, why):needs)
         | superclasses <- filter ((== Superclass) . view implSort) $ lookup con scope
         , First (Just implicit) <- foldMap (isUsable scp) superclasses
         = let (bindings, needs') = simpl scp needs
            in (Binding var (useForSimpl annot (scope <> scp) implicit con) (annot, con):bindings, needs')
-        | otherwise = second ((var, con) :) (simpl scp needs)
+        | otherwise = second ((var, con, why) :) (simpl scp needs)
       simpl _ [] = ([], [])
       (simplif, stillNeeded') = simpl (usable <> extra) stillNeeded
 
@@ -419,14 +419,17 @@ reduceClassContext extra annot cons = do
            then First (Just x)
            else First Nothing
 
-  let addCtx' ((_, con):cons) = TyPi (Implicit con) . addCtx cons
+  let addCtx' ((_, con, _):cons) = TyPi (Implicit con) . addCtx cons
       addCtx' [] = id
 
       addCtx ctx (TyPi x@Invisible{} k) = TyPi x (addCtx ctx k)
       addCtx ctx ty = addCtx' ctx ty
 
-  let addFns ((var, con):cons) = fun var con . addFns cons
+  let addFns ((var, con, _):cons) = fun var con . addFns cons
       addFns [] = id
+
+      shoveFn cs (ExprWrapper w e a) = ExprWrapper w (shoveFn cs e) a
+      shoveFn cs e = addFns cs e
 
   let addLet ex = mkLet (aliases ++ simplif) ex (annotation ex, getType ex)
       shove (ExprWrapper w e a) = ExprWrapper w (shove e) a
@@ -434,7 +437,7 @@ reduceClassContext extra annot cons = do
       shove x = addLet x
 
   let wrap flv =
-        addFns stillNeeded' . (case flv of { Full -> shove; _ -> id })
+        shoveFn stillNeeded' . (case flv of { Full -> shove; _ -> id })
 
   pure (addCtx stillNeeded', wrap, stillNeeded')
 
@@ -508,5 +511,5 @@ validContext w a t@TyWithConstraints{} = confesses (InvalidContext w a t)
 validContext w a t@TyType{} = confesses (InvalidContext w a t)
 validContext w a (TyParens t) = validContext w a t
 
-type Need t = (Var t, Type t)
+type Need t = (Var t, Type t, SomeReason)
 data WrapFlavour = Thin | Full

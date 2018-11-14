@@ -105,7 +105,7 @@ instance Pretty (Const SomeReason a) where
 blameOf :: SomeReason -> Doc
 blameOf (BecauseOf (x :: f p)) = blame x
 blameOf (It'sThis x) = case x of
-  BecauseOfExpr _ s -> string "the" <+> highlight s
+  BecauseOfExpr _ s -> string "this" <+> highlight s
   BecauseOfPat e -> blame e
 
 becauseExp :: (Pretty (Var p), Respannable (Ann p)) => Expr p -> SomeReason

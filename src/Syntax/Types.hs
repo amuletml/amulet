@@ -167,4 +167,5 @@ toMap = getScope
 data Origin
   = Supplied -- the programmer supplied this type
   | Guessed -- the compiler invented this type
-  deriving Show
+  | Deduced -- the programmer almost supplied this type
+  deriving (Show, Eq)

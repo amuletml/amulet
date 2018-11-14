@@ -1,7 +1,7 @@
 wild05.ml[1:24 ..1:24]: error
   Could not match the rigid type variable 'a with the type int
 
-  • Arising in the expression
+  • Arising in this expression
   │ 
 1 │ let f (x : 'a) : int = x
   │                        ^
