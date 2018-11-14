@@ -20,18 +20,6 @@ pattern_totality.ml[16:7 ..16:18]: warning
    │ 
 16 │     | Some _ -> ()
    │       ^^^^^^^^^^^^
-pattern_totality.ml[32:7 ..32:17]: warning
-  Redundant pattern in expression.
-  • Note: This case is covered by all previous patterns and so can be removed
-   │ 
-32 │     | Int _ -> ()
-   │       ^^^^^^^^^^^
-pattern_totality.ml[34:7 ..34:18]: warning
-  Redundant pattern in expression.
-  • Note: This case is covered by all previous patterns and so can be removed
-   │ 
-34 │     | Unit _ -> ()
-   │       ^^^^^^^^^^^^
 pattern_totality.ml[37:11 ..37:18]: warning
   Non-exhaustive patterns in expression
   • Note: The following patterns are not included
@@ -40,16 +28,11 @@ pattern_totality.ml[37:11 ..37:18]: warning
    │ 
 37 │   let _ = function
    │           ^^^^^^^^
-pattern_totality.ml[42:7 ..42:17]: warning
-  Redundant pattern in expression.
-  • Note: This case is covered by all previous patterns and so can be removed
-   │ 
-42 │     | Int _ -> ()
-   │       ^^^^^^^^^^^
 pattern_totality.ml[41:38 ..41:45]: warning
   Non-exhaustive patterns in expression
   • Note: The following patterns are not included
 
+    • Unit _
     • Any _
    │ 
 41 │   let f : forall 'a. term 'a -> () = function

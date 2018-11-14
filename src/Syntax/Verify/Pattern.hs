@@ -215,7 +215,7 @@ covering' env = go where
     | otherwise = uncover (v, patPair xs)
   go ((Destructure{}, v@VDestructure{}) :*: xs) = uncover (v, patPair xs)
 
-  -- ConVar for constructors: We always peform the UConVar implementation here -
+  -- ConVar for constructors: We always perform the UConVar implementation here -
   -- namely we find every possible case.
   go ((p@(Destructure k _ _), VVariable v vTy) :*: xs) = msum . flip map (toList ctors) $ \k -> do
     (pty, _) <- skolGadt k =<< instantiate Expression (fromJust (env ^. (names . at k)))
@@ -225,7 +225,7 @@ covering' env = go where
         (arg, res) = unwrapCtor ty
 
     -- Unify our result with the child, including any additional GADT constraints.
-    constrain (mkUni res vTy:map (uncurry mkUni) cs)
+    constrain [ConImplies undefined vTy (Seq.fromList $ mkUni res vTy:map (uncurry mkUni) cs) empty]
 
     case arg of
       Nothing -> onVar p v (VDestructure k Nothing) xs
