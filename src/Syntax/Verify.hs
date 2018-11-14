@@ -282,13 +282,13 @@ verifyMatch m ty bs = do
   (env, sv) <- ask
 
   unc <- foldlM (\alts a@(Arm pat guard _) -> do
-    let (Covering cov alts') = covering env pat alts
+    let cov  = covering env pat alts
     -- If the covered set is empty, this arm is redundant
-    when (Seq.null cov) (tell . pure $ RedundantArm a)
+    when (Seq.null (covered cov)) (tell . pure $ RedundantArm a)
     -- Return the filtered uncovered set if this pattern has no guard,
     -- otherwise use the original uncovered set.
     pure $ case guard of
-      Nothing -> alts'
+      Nothing -> uncovered cov
       Just{} -> alts)
     (pure $ emptyAlt sv ty) bs
 

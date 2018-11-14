@@ -44,7 +44,7 @@ arise:
 
 -}
 module Syntax.Verify.Pattern
-  ( Covering(..)
+  ( Covering, covered, uncovered
   , ValueAbs, altAbs
   , ValueAlt
   , emptyAlt
@@ -78,24 +78,44 @@ import Text.Pretty.Semantic hiding (empty)
 -- | Represents both the covered and uncovered set of a computation.
 --
 -- This could be thought of as a unification of the list and maybe monad.
-data Covering a =
-  Covering { covered :: Seq.Seq a
-           , uncovered :: Seq.Seq a
-           }
+data Covering a
+  = Covering { covered'   :: Seq.Seq a
+             , uncovered' :: Seq.Seq a
+             }
+  -- | Represents a "pure" version of the covered set. We use this to
+  -- represent values constructed via "pure" (and so both the covered and
+  -- uncovered sets are identical).
+  | PureCovering { pureCover :: (Seq.Seq a) }
   deriving (Show, Functor)
 
+covered, uncovered :: Covering a -> Seq.Seq a
+covered (Covering c _) = c
+covered (PureCovering c) = c
+uncovered (Covering _ u) = u
+uncovered (PureCovering u) = u
+
 instance Applicative Covering where
-  pure x = Covering (pure x) (pure x)
+  pure x = PureCovering (pure x)
+  (PureCovering f) <*> (PureCovering x) = PureCovering (f <*> x)
   (Covering fc fu) <*> (Covering xc xu) = Covering (fc <*> xc) (fu <*> xu)
+  (Covering fc fu) <*> (PureCovering x) = Covering (fc <*> x) (fu <*> x)
+  (PureCovering f) <*> (Covering xc xu) = Covering (f <*> xc) (f <*> xu)
 
 instance Alternative Covering where
-  empty = Covering empty empty
+  empty = PureCovering empty
+  (PureCovering l) <|> (PureCovering r) = PureCovering (l <|> r)
   (Covering lc lu) <|> (Covering rc ru) = Covering (lc <|> rc) (lu <|> ru)
+  (Covering lc lu) <|> (PureCovering r) = Covering (lc <|> r) (lu <|> r)
+  (PureCovering l) <|> (Covering rc ru) = Covering (l <|> rc) (l <|> ru)
+
   some (Covering c u) = Covering (some c) (some u)
+  some (PureCovering x) = PureCovering (some x)
   many (Covering c u) = Covering (many c) (many u)
+  many (PureCovering x) = PureCovering (many x)
 
 instance Monad Covering where
   (Covering c u) >>= f = Covering (c >>= covered . f) (u >>= uncovered . f)
+  (PureCovering x) >>= f = asum (f <$> x)
 
 instance MonadPlus Covering where
 
