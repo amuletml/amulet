@@ -1,15 +1,11 @@
 {-# LANGUAGE
-  ConstraintKinds
-, DeriveFunctor
+  DeriveFunctor
 , FlexibleContexts
 , FlexibleInstances
 , GADTs
 , OverloadedStrings
-, RankNTypes
-, ScopedTypeVariables
 , StandaloneDeriving
 , TupleSections
-, TypeFamilies
 , UndecidableInstances #-}
 
 {- | Helpers for pattern totality checking
