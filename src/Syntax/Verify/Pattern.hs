@@ -68,12 +68,10 @@ import Data.These
 import Data.Maybe
 
 import Syntax.Pretty
-import Syntax.Subst
 import Syntax.Types
 
 import Types.Unify
 import Types.Infer.Pattern (skolGadt)
-import Types.Infer.Builtin (tyUnit)
 
 import Text.Pretty.Semantic hiding (empty)
 
@@ -122,7 +120,7 @@ instance (Monad (t m), MonadCover m, MonadTrans t) => MonadCover (t m) where
 -- covered and uncovered by a given pattern.
 data ValueAbs p
   = VVariable (Var p) (Type p)
-  | VDestructure (Var p) (Seq.Seq (Constraint Typed)) (Maybe (ValueAbs p))
+  | VDestructure (Var p) (Maybe (ValueAbs p))
   | VRecord (Map.Map T.Text (ValueAbs p))
   | VTuple (ValueAbs p) (ValueAbs p)
 
@@ -133,10 +131,10 @@ deriving instance (Show (Var p), Show (Ann p)) => Show (ValueAbs p)
 
 instance Pretty (Var p) => Pretty (ValueAbs p) where
   pretty VVariable{} = skeyword "_"
-  pretty (VDestructure k _ Nothing) = stypeCon (pretty k)
-  pretty (VDestructure k _ (Just p)) = stypeCon (pretty k) <+>
+  pretty (VDestructure k Nothing) = stypeCon (pretty k)
+  pretty (VDestructure k (Just p)) = stypeCon (pretty k) <+>
     case p of
-      VDestructure _ _ Just{} -> parens (prettyIn p)
+      VDestructure _ Just{} -> parens (prettyIn p)
       _ -> prettyIn p
   pretty (VRecord fs)
     -- Should we filter out wildcard fields here?
@@ -162,7 +160,7 @@ data ValueAlt p
   = ValueAlt
   { altAbs :: ValueAbs p
   , altTyc :: Seq.Seq (Constraint p)
-  , altSub :: Subst p
+  , altSub :: SolveState
   , altFresh :: Int
   }
 
@@ -170,8 +168,8 @@ deriving instance (Show (Var p), Show (Ann p)) => Show (ValueAlt p)
 
 -- | Construct an empty pattern alternative state from a fresh variable,
 -- and the type of the test variable.
-emptyAlt :: Var p ~ Var Resolved => Var p -> Type p -> ValueAlt p
-emptyAlt v@(TgName _ i) ty = ValueAlt (VVariable v ty) mempty mempty (i + 1)
+emptyAlt :: Var Typed -> Type Typed -> ValueAlt Typed
+emptyAlt v@(TgName _ i) ty = ValueAlt (VVariable v ty) mempty emptyState (i + 1)
 emptyAlt _ _ = error "Require TgName for emptyAlt"
 
 -- | A type-safe list of constraints between patterns and value
@@ -185,10 +183,6 @@ data PatPair a where
 
 infixr 9 :*:
 
-instance Pretty (PatPair a) where
-  pretty Nil = "()"
-  pretty ((a, b) :*: xs) = pretty a <+> "<->" <+> pretty b <+> ":*:" <+> pretty xs
-
 -- | Extract the pattern part of a 'PatPair', suitable for building an
 -- uncovered set.
 patPair :: PatPair a -> a
@@ -196,7 +190,7 @@ patPair Nil = ()
 patPair ((_, x) :*: xs) = (x, patPair xs)
 
 -- | The type of the covering monad
-type CoveringM = StateT (Subst Typed, Seq.Seq (Constraint Typed)) (NameyT Covering)
+type CoveringM = StateT (SolveState, Seq.Seq (Constraint Typed)) (NameyT Covering)
 
 -- | Run the value abstraction monad.
 covering :: Env -> Pattern Typed
@@ -208,49 +202,40 @@ covering env p xs = msum . flip fmap xs $ \(ValueAlt v tc sub i) -> do
                                            $ covering' env ((p, v) :*: Nil)
   pure $ ValueAlt v' tc' sub' i'
 
-covering' :: Env -> PatPair (a, ()) -> CoveringM (a, ())
-covering' env x = do (cs, r) <- go x
-                     constrain cs
-                     pure r
-  where
-  go :: PatPair a -> CoveringM (Seq.Seq (Constraint Typed), a)
+covering' :: Env -> PatPair a -> CoveringM a
+covering' env = go where
+  go :: PatPair a -> CoveringM a
 
   -- Nil
-  go Nil = cover (mempty, ())
+  go Nil = cover ()
 
   -- ConCon for constructors: If the constructors are the same, just
   -- recurse. Otherwise, that constructor is uncovered.
-  go ((Destructure k (Just p) _, v@(VDestructure k' cs (Just u))) :*: xs)
-    | k == k' = bimap (pure . ConImplies undefined tyUnit cs) (first (VDestructure k' cs . Just))
-                <$> go ((p, u):*:xs)
-    | otherwise = uncover (empty, (v, patPair xs))
-  go ((Destructure k Nothing _, v@(VDestructure k' cs Nothing)) :*: xs)
-    | k == k' = bimap (pure . ConImplies undefined tyUnit cs) (VDestructure k' cs Nothing,)
-                <$> go xs
-    | otherwise = uncover (empty, (v, patPair xs))
-  go ((Destructure{}, v@VDestructure{}) :*: xs) = uncover (empty, (v, patPair xs))
+  go ((Destructure k (Just p) _, v@(VDestructure k' (Just u))) :*: xs)
+    | k == k' = first (VDestructure k' . Just) <$> go ((p, u):*:xs)
+    | otherwise = uncover (v, patPair xs)
+  go ((Destructure k Nothing _, v@(VDestructure k' Nothing)) :*: xs)
+    | k == k' = (VDestructure k' Nothing,) <$> go xs
+    | otherwise = uncover (v, patPair xs)
+  go ((Destructure{}, v@VDestructure{}) :*: xs) = uncover (v, patPair xs)
 
   -- ConVar for constructors: We always perform the UConVar implementation here -
   -- namely we find every possible case.
   go ((p@(Destructure k _ _), VVariable v vTy) :*: xs) = msum . flip map (toList ctors) $ \k -> do
     (pty, _) <- skolGadt k =<< instantiate Expression (fromJust (env ^. (names . at k)))
-    let (pcs, ty) = case pty of
+    let (cs, ty) = case pty of
                      TyWithConstraints cs ty -> (cs, ty)
                      _ -> ([], pty)
         (arg, res) = unwrapCtor ty
-        cs = Seq.fromList $ mkUni res vTy:map (uncurry mkUni) pcs
 
-    -- Perform an initial constraint on this type, to exclude any impossible cases.
-    constrain . pure $ ConImplies undefined tyUnit cs empty
+    -- Unify our result with the child, including any additional GADT constraints.
+    constrain (mkUni res vTy:map (uncurry mkUni) cs)
 
-    u <- case arg of
-      Nothing -> pure $ VDestructure k cs Nothing
+    case arg of
+      Nothing -> onVar p v (VDestructure k Nothing) xs
       Just arg -> do
         v' <- genName
-        pure $ VDestructure k cs (Just (VVariable v' arg))
-
-    -- And wrap any constraints inside this one
-    first (pure . ConImplies undefined tyUnit cs) <$> onVar p v u xs
+        onVar p v (VDestructure k (Just (VVariable v' arg))) xs
 
     where
       ctors = let ty = maybe (error $ "Cannot find type of " ++ show k) typeName (env ^. (names . at k))
@@ -261,8 +246,8 @@ covering' env x = do (cs, r) <- go x
 
   -- ConCon for literals
   go ((PLiteral li _, v@(VLiteral li')) :*: xs)
-    | li == li' = fmap (v,) <$> go xs
-    | otherwise = uncover (empty, (v, patPair xs))
+    | li == li' = (v,) <$> go xs
+    | otherwise = uncover (v, patPair xs)
 
   -- ConCon for bounded literals: Like normal constructors, we can just enumerate each value.
   go ((p@(PLiteral LiUnit{} _), VVariable v _) :*: xs) = onVar p v (VLiteral LiUnit) xs
@@ -282,7 +267,7 @@ covering' env x = do (cs, r) <- go x
     | li `Set.notMember` lis
       =   onVar p v (VLiteral li) xs
       <|> onVar p v (VNotLiteral v (Set.insert li lis)) xs
-    | otherwise = uncover (empty, (n, patPair xs))
+    | otherwise = uncover (n, patPair xs)
 
   go ((PLiteral{}, _) :*: _) = error "Mismatch on PLiteral"
 
@@ -290,16 +275,13 @@ covering' env x = do (cs, r) <- go x
   -- up. Thus we represent them as pairs, and hope it all works out.
   go ((PTuple [p] _, u) :*: xs) = go ((p, u) :*: xs)
   -- ConCon for tuples: This always matches, so we just visit the children.
-  go ((PTuple (p1:p2) (a, ty), VTuple u1 u2) :*: xs) = do
-    (_, ty2) <- tupleTy ty
-    (c1, (u1', (u2', xs'))) <- go ((p1, u1) :*: (mkTuple p2 (a, ty2), u2) :*: xs)
-    pure (c1, (VTuple u1' u2', xs'))
+  go ((PTuple (p1:p2) _, VTuple u1 u2) :*: xs) = do
+    (u1', (u2', xs')) <- go ((p1, u1) :*: (mkTuple p2 undefined, u2) :*: xs)
+    pure (VTuple u1' u2', xs')
   -- ConVar for tuples: This always matches, so we just build up child value
   -- abstractions and then visit as normal.
-  go ((p@(PTuple _ (_, ty)), VVariable v vTy) :*: xs) = do
-    (ty1, ty2) <- tupleTy ty
-    constrain . pure $ mkUni vTy ty
-
+  go ((p@(PTuple _ _), VVariable v vTy) :*: xs) = do
+    (ty1, ty2) <- tupleTy vTy
     u1 <- flip VVariable ty1 <$> genName
     u2 <- flip VVariable ty2 <$> genName
     onVar p v (VTuple u1 u2) xs
@@ -307,21 +289,21 @@ covering' env x = do (cs, r) <- go x
   go ((PTuple{}, _) :*: _) = error "Mismatch on PTuple"
 
   -- ConCon for records: This always matches, so we just visit each field.
-  go ((PRecord ps _, VRecord us') :*: xs) = fmap (first VRecord) <$> foldRecord ps us' xs
+  go ((PRecord ps _, VRecord us') :*: xs) = first VRecord <$> foldRecord ps us' xs
   -- ConVar for records: This always matches, so we build up a child value for
   -- each field and visit as normal.
   go ((p@(PRecord _ (_, ty)), VVariable v vTy) :*: xs) = do
-    constrain . pure $ mkUni vTy ty
+    constrain [mkUni vTy ty]
     us <- traverse (\ty -> flip VVariable ty <$> genName) (rowTy ty)
     onVar p v (VRecord us) xs
   go ((PRecord{}, _) :*: _) = error "Mismatch on PTuple"
 
   -- Var: Match the remaining patterns, extend the environment, and unify the
   -- bound variable with the abstraction.
-  go ((Wildcard _, u) :*: xs) = fmap (u,) <$> go xs
+  go ((Wildcard _, u) :*: xs) = (u,) <$> go xs
   go ((Capture v _, u) :*: xs) = do
     constrainVal v u
-    fmap (u,) <$> go xs
+    (u,) <$> go xs
   go ((PAs p v _, u) :*: xs) = onVar p v u xs
 
   -- Boring wrappers
@@ -331,8 +313,7 @@ covering' env x = do (cs, r) <- go x
 
   -- | Add a unification constraint between a variable and value
   -- abstraction, then continue matching
-  onVar :: Pattern Typed -> Var Typed -> ValueAbs Typed -> PatPair a
-        -> CoveringM (Seq.Seq (Constraint Typed), (ValueAbs Typed, a))
+  onVar :: Pattern Typed -> Var Typed -> ValueAbs Typed -> PatPair a -> CoveringM (ValueAbs Typed, a)
   onVar p v u xs = constrainVal v u >> go ((p, u) :*: xs)
 
   mkTuple [] _ = error "Empty tuple"
@@ -342,7 +323,7 @@ covering' env x = do (cs, r) <- go x
   tupleTy (TyTuple t1 t2) = pure (t1, t2)
   tupleTy ty = do
     v1 <- freshTV; v2 <- freshTV
-    constrain . pure $ mkUni ty (TyTuple v1 v2)
+    constrain [mkUni ty (TyTuple v1 v2)]
     pure (v1, v2)
 
   rowTy (TyVar _) = mempty
@@ -354,12 +335,12 @@ covering' env x = do (cs, r) <- go x
 
   -- | Visit over each field in a record
   foldRecord :: [(T.Text, Pattern Typed)] -> Map.Map T.Text (ValueAbs Typed)
-             -> PatPair a -> CoveringM (Seq.Seq (Constraint Typed), (Map.Map T.Text (ValueAbs Typed), a))
-  foldRecord [] vs xs = fmap (vs,) <$> go xs
+             -> PatPair a -> CoveringM (Map.Map T.Text (ValueAbs Typed), a)
+  foldRecord [] vs xs = (vs,) <$> go xs
   foldRecord ((f, p):fs) us xs = do
     let u = fromMaybe (error $ "Cannot find field " ++ show f ++ " in record") (Map.lookup f us)
-    (cs, (us', (u', xs'))) <- foldRecord fs us ((p, u) :*: xs)
-    pure (cs, (Map.insert f u' us', xs'))
+    (us', (u', xs')) <- foldRecord fs us ((p, u) :*: xs)
+    pure (Map.insert f u' us', xs')
 
 -- | Unwrap a constructor, returning the argument and result type
 unwrapCtor :: Type p -> (Maybe (Type p), Type p)
@@ -387,13 +368,13 @@ mkUni = ConUnify undefined undefined
 
 -- | Add one or more type constraints into the current environment,
 -- failing if an error occurs.
-constrain :: (Seq.Seq (Constraint Typed)) -> CoveringM ()
+constrain :: [Constraint Typed] -> CoveringM ()
 constrain css = do
   (sub, cs) <- get
-  x <- runChronicleT . solveWith sub $ cs <> css
+  x <- runChronicleT . solveImplies sub . (cs<>) $ Seq.fromList css
   case x of
-    These Seq.Empty (sub', _, cs') -> put (sub', Seq.fromList cs')
-    That (sub', _, cs') -> put (sub', Seq.fromList cs')
+    These Seq.Empty (sub', cs') -> put (sub', Seq.fromList cs')
+    That (sub', cs') ->  put (sub', Seq.fromList cs')
     These _ _ -> empty
     This _ -> empty
 
