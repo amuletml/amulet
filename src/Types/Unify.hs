@@ -7,6 +7,7 @@
 -- binding groups.
 module Types.Unify
   ( SolveState, emptyState
+  , typeWithin
   , solve, solveImplies
   , skolemise, freshSkol
   , unifyPure
@@ -84,6 +85,10 @@ type MonadSolve m =
   , MonadChronicles TypeError m
   , MonadWriter [Constraint Typed] m
   )
+
+
+typeWithin :: Var Typed -> SolveState -> Maybe (Type Typed)
+typeWithin v s = s ^. (solveTySubst . at v) <|> s ^. (solveAssumptions . at v)
 
 isRec :: String
 isRec = "A record type's hole can only be instanced to another record"

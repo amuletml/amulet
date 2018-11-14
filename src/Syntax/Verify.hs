@@ -278,6 +278,11 @@ parametricity stmt overall = go mempty overall where
 
 -- | Verify a series of patterns are total
 verifyMatch :: MonadVerify m => Expr Typed -> Type Typed -> [Arm Typed] -> m ()
+verifyMatch m ty [] = do
+  (env, sv) <- ask
+  when (inhabited env sv ty) $
+    tell . pure $ MissingPattern m [VVariable sv ty]
+
 verifyMatch m ty bs = do
   (env, sv) <- ask
 

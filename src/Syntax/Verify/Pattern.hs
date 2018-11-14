@@ -4,6 +4,7 @@
 , FlexibleInstances
 , GADTs
 , OverloadedStrings
+, ScopedTypeVariables
 , StandaloneDeriving
 , TupleSections
 , UndecidableInstances #-}
@@ -45,10 +46,11 @@ arise:
 -}
 module Syntax.Verify.Pattern
   ( Covering, covered, uncovered
-  , ValueAbs, altAbs
-  , ValueAlt
+  , ValueAbs(..)
+  , ValueAlt, altAbs
   , emptyAlt
   , covering
+  , inhabited
   ) where
 
 import Control.Monad.State.Strict
@@ -368,21 +370,73 @@ constructors env kty vty = do
   pure (k, arg)
 
   where
+    -- | Get the constructors for a given type
     ctors :: Type Typed -> Set.Set (Var Typed)
     ctors (TyCon v) = fromMaybe (error $ "Cannot find constructors for " ++ show v) (env ^. (types . at v))
     ctors (TyApp f _) = ctors f
-
     ctors t = error $ "Cannot get type name from " ++ show (pretty t)
 
--- | Unwrap a constructor, returning the argument and result type
-unwrapCtor :: Type p -> (Maybe (Type p), Type p)
-unwrapCtor (TyPi bind res) = case bind of
-  Anon arg -> (Just arg, res)
-  Implicit _ -> unwrapCtor res
-  Invisible _ _ -> unwrapCtor res
-unwrapCtor (TyWithConstraints _ t) = unwrapCtor t
-unwrapCtor (TyParens t) = unwrapCtor t
-unwrapCtor t = (Nothing, t)
+    -- | Unwrap a constructor, returning the argument and result type
+    unwrapCtor :: Type p -> (Maybe (Type p), Type p)
+    unwrapCtor (TyPi bind res) = case bind of
+      Anon arg -> (Just arg, res)
+      Implicit _ -> unwrapCtor res
+      Invisible _ _ -> unwrapCtor res
+    unwrapCtor (TyWithConstraints _ t) = unwrapCtor t
+    unwrapCtor (TyParens t) = unwrapCtor t
+    unwrapCtor t = (Nothing, t)
+
+-- | Determines if a given type is inhabited
+inhabited :: Env -> Var Resolved -> Type Typed -> Bool
+inhabited env v
+  = not . Seq.null
+  . flip evalNameyT v
+  . flip evalStateT (emptyState, empty)
+  . inhabited' env
+
+inhabited' :: forall m. (MonadPlus m, MonadNamey m, MonadState CoverState m)
+           => Env -> Type Typed -> m ()
+inhabited' env = go mempty where
+  inhb :: m () = pure ()
+
+  go :: Set.Set (Var Typed) -> Type Typed -> m ()
+  go c (TyVar v) = do
+    let c' = Set.insert v c
+    t' <- gets (typeWithin v . fst)
+    case t' of
+      -- If there's no substitution, or a loop in the substitution, assume it's inhabited.
+      Nothing -> inhb
+      Just (TyVar v') | Set.member v' c' -> inhb
+      Just t' -> go c' t'
+
+  go c t@TyApp{}
+    | hasCtors t = do
+        (_, arg) <- constructors env t t
+        maybe inhb (go c) arg
+    | otherwise = inhb
+
+  -- We don't really have the concept of uninhabited types, so we assume
+  -- type names are.
+  go _ TyCon{} = inhb
+  go _ TyPromotedCon{} = inhb
+  -- For now, we'll just assume all Pi types are inhabited
+  go _ TyPi{} = inhb
+  -- All the boring types: just determine if the children are inhabited
+  go c (TyRows f fs) = go c f >> traverse_ (go c . snd) fs
+  go c (TyExactRows fs) = traverse_ (go c . snd) fs
+  go c (TyTuple l r) = go c l >> go c r
+  go c (TyOperator l v r) = go c (TyApp (TyApp (TyCon v) l) r)
+  go c (TyWildcard t) = maybe inhb (go c) t
+  go c (TyParens t) = go c t
+
+  go _ TySkol{} = inhb
+  go c (TyWithConstraints _ t) = go c t
+  go _ TyType = inhb
+
+  -- | Determines if a type has at least one constructor
+  hasCtors (TyCon v) = maybe True (not . null) (env ^. (types . at v))
+  hasCtors (TyApp f _) = hasCtors f
+  hasCtors _ = False
 
 -- | Make a unification constraint
 mkUni :: Type Typed -> Type Typed -> Constraint Typed
