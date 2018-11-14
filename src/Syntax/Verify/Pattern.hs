@@ -68,7 +68,7 @@ import Data.These
 import Data.Maybe
 
 import Syntax.Pretty
-import Syntax.Types
+import Syntax.Types hiding (constructors)
 
 import Types.Unify
 import Types.Infer.Pattern (skolGadt)
@@ -79,7 +79,7 @@ import Text.Pretty.Semantic hiding (empty)
 --
 -- This could be thought of as a unification of the list and maybe monad.
 data Covering a =
-  Covering { covered :: Maybe a
+  Covering { covered :: Seq.Seq a
            , uncovered :: Seq.Seq a
            }
   deriving (Show, Functor)
@@ -189,8 +189,10 @@ patPair :: PatPair a -> a
 patPair Nil = ()
 patPair ((_, x) :*: xs) = (x, patPair xs)
 
+type CoverState = (SolveState, Seq.Seq (Constraint Typed))
+
 -- | The type of the covering monad
-type CoveringM = StateT (SolveState, Seq.Seq (Constraint Typed)) (NameyT Covering)
+type CoveringM = StateT CoverState (NameyT Covering)
 
 -- | Run the value abstraction monad.
 covering :: Env -> Pattern Typed
@@ -221,26 +223,13 @@ covering' env = go where
 
   -- ConVar for constructors: We always perform the UConVar implementation here -
   -- namely we find every possible case.
-  go ((p@(Destructure k _ _), VVariable v vTy) :*: xs) = msum . flip map (toList ctors) $ \k -> do
-    (pty, _) <- skolGadt k =<< instantiate Expression (fromJust (env ^. (names . at k)))
-    let (cs, ty) = case pty of
-                     TyWithConstraints cs ty -> (cs, ty)
-                     _ -> ([], pty)
-        (arg, res) = unwrapCtor ty
-
-    -- Unify our result with the child, including any additional GADT constraints.
-    constrain (mkUni res vTy:map (uncurry mkUni) cs)
-
+  go ((p@(Destructure _ _ (_, ty)), VVariable v vTy) :*: xs) = do
+    (k, arg) <- constructors env ty vTy
     case arg of
       Nothing -> onVar p v (VDestructure k Nothing) xs
       Just arg -> do
         v' <- genName
         onVar p v (VDestructure k (Just (VVariable v' arg))) xs
-
-    where
-      ctors = let ty = maybe (error $ "Cannot find type of " ++ show k) typeName (env ^. (names . at k))
-                  cs = fromMaybe (error $ "Cannot find constructors for " ++ show ty) (env ^. (types . at ty))
-              in cs
 
   go ((Destructure{}, _) :*: _) = error "Mismatch on Destructure"
 
@@ -342,6 +331,29 @@ covering' env = go where
     (us', (u', xs')) <- foldRecord fs us ((p, u) :*: xs)
     pure (Map.insert f u' us', xs')
 
+-- | Return all constructors matching this constraint
+constructors :: (MonadPlus m, MonadState CoverState m, MonadNamey m)
+             => Env -> Type Typed -> Type Typed
+             -> m (Var Typed, Maybe (Type Typed))
+constructors env kty vty = do
+  k <- asum . map pure . toList . ctors $ kty
+  (pty, _) <- skolGadt k =<< instantiate Expression (fromJust (env ^. (names . at k)))
+  let (cs, ty) = case pty of
+                   TyWithConstraints cs ty -> (cs, ty)
+                   _ -> ([], pty)
+      (arg, res) = unwrapCtor ty
+
+  -- Unify our result with the child, including any additional GADT constraints.
+  constrain (mkUni res vty:map (uncurry mkUni) cs)
+  pure (k, arg)
+
+  where
+    ctors :: Type Typed -> Set.Set (Var Typed)
+    ctors (TyCon v) = fromMaybe (error $ "Cannot find constructors for " ++ show v) (env ^. (types . at v))
+    ctors (TyApp f _) = ctors f
+
+    ctors t = error $ "Cannot get type name from " ++ show (pretty t)
+
 -- | Unwrap a constructor, returning the argument and result type
 unwrapCtor :: Type p -> (Maybe (Type p), Type p)
 unwrapCtor (TyPi bind res) = case bind of
@@ -352,23 +364,13 @@ unwrapCtor (TyWithConstraints _ t) = unwrapCtor t
 unwrapCtor (TyParens t) = unwrapCtor t
 unwrapCtor t = (Nothing, t)
 
--- | Get the name of this type constructor
-typeName :: Show (Type p) => Type p -> Var p
-typeName (TyPi _ res) = typeName res
-typeName (TyCon t) = t
-typeName (TyApp f _) = typeName f
-typeName (TyWithConstraints _ t) = typeName t
-typeName (TyParens t) = typeName t
-typeName (TyOperator _ t _) = t
-typeName t = error ("Unknown type " ++ show t)
-
 -- | Make a unification constraint
 mkUni :: Type Typed -> Type Typed -> Constraint Typed
 mkUni = ConUnify undefined undefined
 
 -- | Add one or more type constraints into the current environment,
 -- failing if an error occurs.
-constrain :: [Constraint Typed] -> CoveringM ()
+constrain :: (MonadPlus m, MonadNamey m, MonadState CoverState m) => [Constraint Typed] -> m ()
 constrain css = do
   (sub, cs) <- get
   x <- runChronicleT . solveImplies sub . (cs<>) $ Seq.fromList css
