@@ -160,7 +160,7 @@ Expr :: { LuaExpr }
   | Expr '^' Expr                       { LuaBinOp $1 (T.pack "^") $3 }
   | Expr '%' Expr                       { LuaBinOp $1 (T.pack "%") $3 }
 
-  | Expr '..' Expr                      { LuaBinOp $1 (T.pack "%") $3 }
+  | Expr '..' Expr                      { LuaBinOp $1 (T.pack "..") $3 }
 
   | Expr '==' Expr                      { LuaBinOp $1 (T.pack "==") $3 }
   | Expr '~=' Expr                      { LuaBinOp $1 (T.pack "~=") $3 }

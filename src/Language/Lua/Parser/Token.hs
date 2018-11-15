@@ -110,7 +110,7 @@ instance Show TokenClass where
   show TcPow = "^"
   show TcMod = "%"
 
-  show TcConcat = "..."
+  show TcConcat = ".."
 
   show TCEq = "=="
   show TCNe = "~="
