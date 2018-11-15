@@ -280,7 +280,6 @@ reduceTermK _ d@(AnnTyApp _ f t) cont
       cont $ TyApp f' (underlying <$> t)
 
 reduceTermK u (AnnLet fa (One (va, tya, AnnLet fb bb rb)) ra) cont =
-  -- TODO: Can we avoid this?
   flip (reduceTermK u) cont $ AnnLet fb bb (AnnLet fa (One (va, tya, rb)) ra)
 
 reduceTermK u (AnnLet _ (One b@(v, ty, e)) rest) cont = do

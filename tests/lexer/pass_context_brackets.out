@@ -1,3 +1,6 @@
 
-let paren_fn = ( fun x -> x $end , 1 )
+let _ = ( fun x -> x $end , 1 )
+
+
+$end $sep let _ = ( fun x -> x $end )
 $end <eof>

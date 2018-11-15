@@ -117,7 +117,6 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
           Just x -> pure (Result (Token x tp te) (Working tok), cks)
 
     -- If we've got an in, then pop our let context and push a block
-    -- TODO: Consider where this rule should occur, or warn if the indentation is funky.
     (TcIn, CtxLet offside:cks) -> do
       -- If we're on the same line then it can be anywhere. Otherwise the
       -- in should line up with the let.
@@ -126,7 +125,7 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
 
       pure ( Result tok Done
            , CtxEmptyBlock (Just TcVEnd):cks )
-    -- TODO: Pop other contexts if this occurs
+
     (_, CtxBracket tk':cks) | tk == tk' -> pure (Result tok Done, cks)
 
     -- Offside rule for blocks
