@@ -113,8 +113,6 @@ deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Arm p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Arm p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Arm p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Arm p)
-instance (Spanned (Expr p), Spanned (Pattern p)) => Spanned (Arm p) where
-  annotation (Arm p _ e) = annotation p <> annotation e
 
 data Field p =
   Field { _fName :: Text
@@ -176,7 +174,6 @@ deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Pattern p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Pattern p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Pattern p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Pattern p)
-instance (Data (Var p), Data (Ann p), Data p) => Spanned (Pattern p)
 
 data Lit
   = LiFloat Double
@@ -419,7 +416,22 @@ instance Spanned (Ann p) => Spanned (Expr p) where
 
   annotation (ExprWrapper _ _ a) = annotation a
 
-instance (Data (Ann p), Data (Var p), Data p) => Spanned (Parameter p) where
+instance Spanned (Ann p) => Spanned (Pattern p) where
+  annotation (Wildcard a) = annotation a
+  annotation (Capture _ a) = annotation a
+  annotation (Destructure _ _ a) = annotation a
+  annotation (PAs _ _ a) = annotation a
+  annotation (PType _ _ a) = annotation a
+  annotation (PRecord _ a) = annotation a
+  annotation (PTuple _ a) = annotation a
+  annotation (PLiteral _ a) = annotation a
+  annotation (PWrapper _ _ a) = annotation a
+  annotation (PSkolem _ _ a) = annotation a
+
+instance Spanned (Ann p) => Spanned (Arm p) where
+  annotation (Arm p _ e) = annotation p <> annotation e
+
+instance Spanned (Ann p) => Spanned (Parameter p) where
   annotation = annotation . view paramPat
 
 instance Spanned (Ann p) => Spanned (ClassItem p) where

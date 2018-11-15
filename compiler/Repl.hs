@@ -308,37 +308,37 @@ parseCore state parser name input = do
 
       let rScope = resolveScope state
           lEnv = lowerState state
-      let cont modScope' resolved prog env' =
-            let es = case runVerify (verifyProgram prog) of
+      let cont modScope' resolved prog env' = do
+            verifyV <- genName
+            let es = case runVerify env' verifyV (verifyProgram prog) of
                        Left es -> toList es
                        Right () -> []
-             in do
-              liftIO $ traverse_ (`reportS`files) es
-              if any isError es
-                 then pure Nothing
-                 else do
-                   let (var, tys) = R.extractToplevels parsed'
-                       (var', tys') = R.extractToplevels resolved
+            liftIO $ traverse_ (`reportS`files) es
+            if any isError es
+               then pure Nothing
+               else do
+                 let (var, tys) = R.extractToplevels parsed'
+                     (var', tys') = R.extractToplevels resolved
 
-                   (lEnv', lower) <- L.runLowerWithEnv lEnv (L.lowerProgEnv prog)
-                   lower' <- killNewtypePass lower
-                   lastG <- genName
-                   case lower' of
-                     [] -> error "lower returned no statements for the repl"
-                     _ -> pure ()
-                   pure $ Just ( case last lower' of
-                                   (C.StmtLet (C.One (v, t, _))) -> [(v, t)]
-                                   (C.StmtLet (C.Many vs)) -> map (\(v, t, _) -> (v, t)) vs
-                                   _ -> []
-                               , prog
-                               , lower'
-                               , state { resolveScope = rScope { R.varScope = R.insertN' (R.varScope rScope) (zip var var')
-                                                               , R.tyScope  = R.insertN' (R.tyScope rScope)  (zip tys tys')
-                                                               }
-                                       , moduleScope = modScope'
-                                       , inferScope = env'
-                                       , lowerState = lEnv'
-                                       , lastName = lastG })
+                 (lEnv', lower) <- L.runLowerWithEnv lEnv (L.lowerProgEnv prog)
+                 lower' <- killNewtypePass lower
+                 lastG <- genName
+                 case lower' of
+                   [] -> error "lower returned no statements for the repl"
+                   _ -> pure ()
+                 pure $ Just ( case last lower' of
+                                 (C.StmtLet (C.One (v, t, _))) -> [(v, t)]
+                                 (C.StmtLet (C.Many vs)) -> map (\(v, t, _) -> (v, t)) vs
+                                 _ -> []
+                             , prog
+                             , lower'
+                             , state { resolveScope = rScope { R.varScope = R.insertN' (R.varScope rScope) (zip var var')
+                                                             , R.tyScope  = R.insertN' (R.tyScope rScope)  (zip tys tys')
+                                                             }
+                                     , moduleScope = modScope'
+                                     , inferScope = env'
+                                     , lowerState = lEnv'
+                                     , lastName = lastG })
       resolved <- resolveProgram rScope (moduleScope state) parsed'
       case resolved of
         Left es -> liftIO $ traverse_ (`reportS`files) es $> Nothing

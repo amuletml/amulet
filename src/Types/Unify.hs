@@ -5,7 +5,14 @@
 -- | This module implements the logic responsible for solving the
 -- sequence of @Constraint@s the type-checker generates for a particular
 -- binding groups.
-module Types.Unify (solve, skolemise, freshSkol, unifyPure, applicable) where
+module Types.Unify
+  ( SolveState, emptyState
+  , typeWithin
+  , solve, solveImplies
+  , skolemise, freshSkol
+  , unifyPure
+  , applicable
+  ) where
 
 import Control.Monad.Except
 import Control.Monad.State
@@ -65,6 +72,9 @@ data SolveState
                }
   deriving (Eq, Show)
 
+emptyState :: SolveState
+emptyState = SolveState mempty mempty mempty
+
 makeLenses ''SolveState
 makeLenses ''SolveScope
 
@@ -75,6 +85,10 @@ type MonadSolve m =
   , MonadChronicles TypeError m
   , MonadWriter [Constraint Typed] m
   )
+
+
+typeWithin :: Var Typed -> SolveState -> Maybe (Type Typed)
+typeWithin v s = s ^. (solveTySubst . at v) <|> s ^. (solveAssumptions . at v)
 
 isRec :: String
 isRec = "A record type's hole can only be instanced to another record"
@@ -96,16 +110,15 @@ unifRow (t, a, b) = do
 
 runSolve :: MonadNamey m
          => Bool
-         -> Subst Typed
-         -> WriterT [Constraint Typed] (StateT SolveState (ReaderT SolveScope m)) b
-         -> m (Subst Typed, Map.Map (Var Typed) (Wrapper Typed), [Constraint Typed])
-runSolve _ s x = fix (runReaderT (runStateT (runWriterT act) (SolveState s mempty mempty)) emptyScope) where
+         -> SolveState
+         -> WriterT [Constraint Typed] (StateT SolveState (ReaderT SolveScope m)) a
+         -> m ([Constraint Typed], SolveState)
+runSolve skol s x = runReaderT (runStateT (execWriterT act) s) emptyScope where
   act = (,) <$> genName <*> x
-  fix act = do
-    ((_, cs), s) <- act
-    let ss = s ^. solveTySubst
-    pure (fmap (apply ss) ss, s ^. solveCoSubst, cs)
-  emptyScope = SolveScope False mempty []
+  emptyScope = SolveScope skol mempty []
+
+  --   let ss = s ^. solveTySubst
+    -- pure (fmap (apply ss) ss, s ^. solveCoSubst, cs)
 
 -- | Solve a sequence of constraints, returning either a substitution
 -- for both type variables (a 'Subst' 'Typed') and for 'Wrapper'
@@ -116,7 +129,18 @@ runSolve _ s x = fix (runReaderT (runStateT (runWriterT act) (SolveState s mempt
 solve :: (MonadNamey m, MonadChronicles TypeError m)
       => Seq.Seq (Constraint Typed)
       -> m (Subst Typed, Map.Map (Var Typed) (Wrapper Typed), [Constraint Typed])
-solve = runSolve True mempty . doSolve
+solve cs = do
+  (cs', s) <- runSolve False emptyState (doSolve cs)
+  let ss = s ^. solveTySubst
+  pure (fmap (apply ss) ss, s ^. solveCoSubst, cs')
+
+solveImplies :: (MonadNamey m, MonadChronicles TypeError m)
+             => SolveState -> Seq.Seq (Constraint Typed)
+             -> m (SolveState, [Constraint Typed])
+solveImplies s cs = do
+  (cs', s') <- runSolve True s . doSolve . apply (s ^. solveTySubst) $ cs
+  pure ( s' & solveAssumptions %~ (<>(s ^. solveTySubst))
+       , apply (s ^. solveTySubst) cs' )
 
 doSolve :: forall m. MonadSolve m => Seq.Seq (Constraint Typed) -> m ()
 doSolve Empty = pure ()

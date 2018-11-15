@@ -177,7 +177,7 @@ boundTvs p vs = pat p <> foldTele go vs where
   pat PLiteral{} = mempty
   pat (PWrapper _ p _) = pat p
 
-skolGadt :: MonadInfer Typed m
+skolGadt :: MonadNamey m
          => Var Desugared -> (Maybe a, Type Typed, Type Typed) -> m (Type Typed, Subst Typed)
 skolGadt var (_, oty, ty) =
   let result (TyPi _ t) = result t
