@@ -40,5 +40,5 @@ result f c = fst . flip runNamey firstName $ do
 tests :: IO TestTree
 tests = do
   verify <- testGroup "Verification tests" <$> goldenDir result "tests/verify/" ".ml"
-  pmcheck <- testGroup "Pattern-matching checking" <$> goldenDir result "tests/pmcheck/" ".ml"
+  pmcheck <- testGroup "Pattern-matching checking" <$> goldenDir result "tests/verify/pmcheck/" ".ml"
   pure (testGroup "'Verify' tests" [verify, pmcheck])
