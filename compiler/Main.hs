@@ -85,37 +85,39 @@ compile opt (file:files) =
               desugared <- desugarProgram resolved
               infered <- inferProgram env desugared
               case infered of
-                That (prog, env') ->
-                  let x = runVerify (verifyProgram prog)
+                That (prog, env') -> do
+                  verifyV <- genName
+                  let x = runVerify env' verifyV (verifyProgram prog)
                       (var, tys) = extractToplevels parsed
                       (var', tys') = extractToplevels resolved
                       errs' = case x of
                         Left es -> toList es
                         Right () -> []
-                   in pure $ Right ( errs ++ errs'
-                                   , tyerrs
-                                   , tops ++ prog
-                                   , scope { RS.varScope = RS.insertN' (RS.varScope scope) (zip var var')
-                                           , RS.tyScope  = RS.insertN' (RS.tyScope scope)  (zip tys tys')
-                                           }
-                                   , modScope'
-                                   , env')
+                  pure $ Right ( errs ++ errs'
+                               , tyerrs
+                               , tops ++ prog
+                               , scope { RS.varScope = RS.insertN' (RS.varScope scope) (zip var var')
+                                       , RS.tyScope  = RS.insertN' (RS.tyScope scope)  (zip tys tys')
+                                       }
+                               , modScope'
+                               , env' )
                 These errors (_, _) | any isError errors -> pure (Left (CInfer errors))
-                These errors (prog, env') ->
-                  let x = runVerify (verifyProgram prog)
+                These errors (prog, env') -> do
+                  verifyV <- genName
+                  let x = runVerify env' verifyV (verifyProgram prog)
                       (var, tys) = extractToplevels parsed
                       (var', tys') = extractToplevels resolved
                       errs' = case x of
                         Left es -> toList es
                         Right () -> []
-                   in pure $ Right ( errs ++ errs'
-                                   , tyerrs ++ errors
-                                   , tops ++ prog
-                                   , scope { RS.varScope = RS.insertN' (RS.varScope scope) (zip var var')
-                                           , RS.tyScope  = RS.insertN' (RS.tyScope scope)  (zip tys tys')
-                                           }
-                                   , modScope'
-                                   , env')
+                  pure $ Right ( errs ++ errs'
+                               , tyerrs ++ errors
+                               , tops ++ prog
+                               , scope { RS.varScope = RS.insertN' (RS.varScope scope) (zip var var')
+                                       , RS.tyScope  = RS.insertN' (RS.tyScope scope)  (zip tys tys')
+                                       }
+                               , modScope'
+                               , env' )
                 This e -> pure $ Left $ CInfer e
             Left e -> pure $ Left $ CResolve e
         (Nothing, es) -> pure $ Left $ CParse es

@@ -156,10 +156,13 @@ library amulet
                      , Syntax.Types
                      , Syntax.Subst
                      , Syntax.Pretty
-                     , Syntax.Verify
                      , Syntax.Desugar
                      , Syntax.Transform
                      , Syntax.Implicits
+                     -- Verifier
+                     , Syntax.Verify
+                     , Syntax.Verify.Error
+                     , Syntax.Verify.Pattern
                      -- Renamer
                      , Syntax.Resolve
                      , Syntax.Resolve.Error

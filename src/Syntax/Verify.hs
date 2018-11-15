@@ -1,135 +1,52 @@
 {-# LANGUAGE ConstraintKinds, FlexibleContexts, FlexibleInstances,
    UndecidableInstances, MultiParamTypeClasses, OverloadedStrings,
    ScopedTypeVariables #-}
-module Syntax.Verify where
+module Syntax.Verify
+  ( VerifyError(..)
+  , BindingSite(..)
+  , runVerify
+  , verifyProgram
+  ) where
 
 import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
 import Data.Foldable
-import Data.Spanned
 import Data.Reason
 import Data.Graph
-import Data.Span
 
 import Control.Monad.Writer.Strict
 import Control.Monad.State.Strict
+import Control.Monad.Reader
 import Control.Lens hiding (Lazy, (:>))
 
 import Text.Pretty.Semantic
-import Text.Pretty.Note
+
+import Syntax.Verify.Pattern
+import Syntax.Verify.Error
 
 import Syntax.Pretty
 import Syntax.Subst
+import Syntax.Types
 import Syntax.Let
 
 import Language.Lua.Parser
 
 import Types.Infer.Builtin (tyUnit, tyLazy, spine, getHead)
 
+data VerifyScope = VerifyScope Env AbsState
+
 type MonadVerify m =
   ( MonadWriter (Seq.Seq VerifyError) m
+  , MonadReader VerifyScope m
   , MonadState (Set.Set BindingSite) m )
 
-data BindingSite
-  = BindingSite { boundVar :: Var Typed
-                , boundWhere :: Span
-                , boundType :: Type Typed
-                }
-  deriving Show
-
-data VerifyError
-  = NonRecursiveRhs { why :: SomeReason
-                    , var :: Var Typed
-                    , unguarded :: [Var Typed]
-                    }
-  | DefinedUnused BindingSite
-  | ParseErrorInForeign { stmt :: Toplevel Typed
-                        , err :: ParseError }
-  | NonParametricForeign { stmt :: Toplevel Typed
-                         , typeOf :: Type Typed
-                         , var :: Var Typed }
-  | NonUnitBegin (Expr Typed) (Type Typed)
-  | LazyLet (Expr Typed) (Type Typed)
-
-instance Spanned VerifyError where
-  annotation (NonRecursiveRhs e _ _) = annotation e
-  annotation (DefinedUnused b) = boundWhere b
-  annotation (ParseErrorInForeign _ e) = annotation e
-  annotation (NonParametricForeign s _ _) = annotation s
-  annotation (NonUnitBegin e _) = annotation e
-  annotation (LazyLet e _) = annotation e
-
-instance Pretty VerifyError where
-  pretty (NonRecursiveRhs re ex xs) =
-    vsep [ "Invalid recursive right-hand side for variable" <+> skeyword (pretty ex)
-         , if null xs
-              then empty
-              else note <+> "because evaluation of the variable" <> plural
-                        <+> hsep (punctuate comma (map pretty xs)) <+> "is not delayed"
-         , nest 4 ("Arising from use of" <+> blameOf re)
-         ]
-    where plural | length xs == 1 = empty | otherwise = char 's'
-  pretty (DefinedUnused (BindingSite v _ _)) =
-    string "Bound locally but not used:" <+> squotes (pretty v)
-  pretty (ParseErrorInForeign var err) =
-    vsep [ "Invalid syntax in definition of foreign value" <+> pretty var
-         , pretty err ]
-  pretty (NonUnitBegin ex ty) =
-    vsep [ "This statement discards a value of type"
-         , indent 2 (displayType ty)
-         , empty
-         , bullet "Note: use a" <+> keyword "let" <+> "to silence this warning, as in"
-         , indent 2 $
-             keyword "let" <+> soperator (char '_') <+> equals <+> pretty ex
-         ]
-  pretty (LazyLet _ _) =
-    vsep [ "Automatic thunking of" <+> keyword "let" <> "s does not cover bindings"
-         ]
-  pretty (NonParametricForeign _ ty var) =
-    vsep [ "Foreign value has implied non-parametric type"
-         , bullet "Note: the compiler could assume all functions returning otherwise"
-         , indent 8 "unused type variables are non-terminating for optimisation"
-         , empty
-         , bullet "Note: in this type, no terms of type" <+> stypeVar (pretty var) <+> "are inputs"
-         , indent 6 $ displayType ty
-         , indent 2 "and so no value of that type could be returned."
-         ]
-
-instance Note VerifyError Style where
-  diagnosticKind NonRecursiveRhs{} = ErrorMessage
-  diagnosticKind ParseErrorInForeign{} = WarningMessage
-  diagnosticKind NonParametricForeign{} = WarningMessage
-  diagnosticKind DefinedUnused{} = WarningMessage
-  diagnosticKind NonUnitBegin{} = WarningMessage
-  diagnosticKind LazyLet{} = WarningMessage
-
-  formatNote f (ParseErrorInForeign (ForeignVal var s _ (span, _)) err) =
-    let SourcePos name _ _ = spanStart (annotation err)
-        spans = [( name, s )]
-     in vsep [ indent 2 "Syntax error in definition of" <+> (Right <$> skeyword (pretty var))
-             , f [span]
-             , empty
-             , format (fileSpans spans highlightLua) err
-             ]
-
-  formatNote f (LazyLet (Let bs ex _) _) =
-    vsep
-      [ indent 2 "Automatic thunking of" <+> (Right <$> keyword "let") <> "s does not cover bindings"
-      , empty
-      , indent 2 $ bullet "Note: the expression"
-      , f [annotation ex]
-      , indent 2 "will be evaluated lazily, but" <+> (if length bs == 1 then "this" else "these")
-          <+> "binding" <> if length bs == 1 then "" else "s"
-      , f (fmap annotation bs)
-      , indent 2 "are" <+> (Right <$> highlight "strict.")
-      , indent 2 $ bullet "Note: if this is what you want, use" <+> (Right <$> keyword "lazy") <+> "explicitly"
-      , indent 6 "to silence this warning."
-      ]
-  formatNote _ LazyLet{} = error "impossible"
-  formatNote f x = indent 2 (Right <$> pretty x) <#> f [annotation x]
-
-runVerify :: WriterT (Seq.Seq VerifyError) (State (Set.Set BindingSite)) () -> Either (Seq.Seq VerifyError) ()
-runVerify = fixup . flip runState mempty . runWriterT where
+runVerify :: Env
+          -> Var Resolved
+          -> WriterT (Seq.Seq VerifyError) (StateT (Set.Set BindingSite) (Reader VerifyScope)) () -> Either (Seq.Seq VerifyError) ()
+runVerify env var = fixup
+                  . flip runReader (VerifyScope env (emptyAbsState var))
+                  . flip runStateT mempty
+                  . runWriterT where
   fixup (((), w), st) =
     let errs | Seq.null w = Right () | otherwise = Left w
         others = if Set.null st
@@ -191,11 +108,8 @@ verifyExpr ex@(Let vs e (_, ty)) = do
   verifyExpr e
 verifyExpr (If c t e _) = traverse_ verifyExpr [c, t, e]
 verifyExpr (App f x _) = verifyExpr f *> verifyExpr x
-verifyExpr (Fun p x _) = do
-  let bindingSites' (PatParam p) = bindingSites p
-      bindingSites' _ = mempty
-  modify (Set.union (bindingSites' p))
-  verifyExpr x
+verifyExpr m@(Fun (PatParam p) x _) = verifyMatch m (getType p) [Arm p Nothing x]
+verifyExpr (Fun _ x _) = verifyExpr x
 verifyExpr (Begin es _) = do
   let unitish TyVar{} = True
       unitish TyWildcard{} = True
@@ -207,17 +121,12 @@ verifyExpr (Begin es _) = do
       tell (Seq.singleton (NonUnitBegin ex ty))
   verifyExpr (last es)
 verifyExpr Literal{} = pure ()
-verifyExpr (Match e bs _) = do
+verifyExpr m@(Match e bs _) = do
   verifyExpr e
-  for_ bs $ \(Arm pat guard body) -> do
-    modify (Set.union (bindingSites pat))
-    maybe (pure ()) verifyExpr guard
-    verifyExpr body
-verifyExpr (Function bs _) =
-  for_ bs $ \(Arm pat guard body) -> do
-    modify (Set.union (bindingSites pat))
-    maybe (pure ()) verifyExpr guard
-    verifyExpr body
+  verifyMatch m (getType e) bs
+verifyExpr m@(Function bs (_, ty)) = do
+  let (TyPi (Anon arg) _) = ty
+  verifyMatch m arg bs
 verifyExpr (BinOp l o r _) = traverse_ verifyExpr [l, o, r]
 verifyExpr Hole{} = pure ()
 verifyExpr (Ascription e _ _) = verifyExpr e
@@ -286,12 +195,6 @@ bindingSites (PRecord rs _) = foldMap (bindingSites . snd) rs
 bindingSites (PTuple ps _) = foldMap bindingSites ps
 bindingSites (PWrapper _ p _) = bindingSites p
 bindingSites (PSkolem p _ _) = bindingSites p
-
-instance Ord BindingSite where
-  BindingSite v _ _ `compare` BindingSite v' _ _ = v `compare` v'
-
-instance Eq BindingSite where
-  BindingSite v _ _ == BindingSite v' _ _ = v == v'
 
 isLazy :: Type Typed -> Bool
 isLazy ty = tyLazy == head (spine (getHead ty))
@@ -362,3 +265,37 @@ parametricity stmt overall = go mempty overall where
 
   goArg set (TyPi _ cont) = goArg set cont
   goArg set t = pure (set `Set.difference` ftv t)
+
+-- | Verify a series of patterns are total
+verifyMatch :: MonadVerify m => Expr Typed -> Type Typed -> [Arm Typed] -> m ()
+verifyMatch m ty [] = do
+  VerifyScope env as <- ask
+  when (inhabited env as ty) $
+    tell . pure $ MissingPattern m [VVariable undefined ty]
+
+verifyMatch m ty bs = do
+  VerifyScope env va <- ask
+
+  unc <- foldlM (\alts a@(Arm pat guard body) -> do
+    let cov  = covering env pat alts
+    -- If the covered set is empty, this arm is redundant
+    va' <- case covered cov of
+      Seq.Empty -> do
+        tell . pure $ RedundantArm a
+        pure va
+      (va', _) Seq.:<| Seq.Empty -> pure va'
+      _ -> error "Covered set must have 0-1 entries"
+
+    local (\(VerifyScope env _) -> VerifyScope env va') $ do
+      modify (Set.union (bindingSites pat))
+      maybe (pure ()) verifyExpr guard
+      verifyExpr body
+
+    -- Return the filtered uncovered set if this pattern has no guard,
+    -- otherwise use the original uncovered set.
+    pure $ case guard of
+      Nothing -> uncovered cov
+      Just{} -> alts)
+    (pure $ emptyAlt va ty) bs
+
+  unless (null unc) (tell . pure . MissingPattern m . map snd . toList $ unc)

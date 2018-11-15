@@ -1,0 +1,21 @@
+empty001.ml[3:12 ..3:23]: warning
+  Non-exhaustive patterns in expression
+  │ 
+3 │   fun x -> match x with ()
+  │            ^^^^^^^^^^^^
+  • Note: The following patterns are not covered
+      _
+empty001.ml[9:3 ..9:14]: warning
+  Non-exhaustive patterns in expression
+  │ 
+9 │   match x with ()
+  │   ^^^^^^^^^^^^
+  • Note: The following patterns are not covered
+      _
+empty001.ml[14:3 ..14:14]: warning
+  Non-exhaustive patterns in expression
+   │ 
+14 │   match x with ()
+   │   ^^^^^^^^^^^^
+  • Note: The following patterns are not covered
+      _

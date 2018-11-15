@@ -31,10 +31,14 @@ result f c = fst . flip runNamey firstName $ do
 
   (resolved, _) <- requireRight f c <$> resolveProgram RS.builtinScope RS.emptyModules parsed
   desugared <- desugarProgram resolved
-  (inferred, _) <- requireThat f c <$> inferProgram builtinsEnv desugared
-  case runVerify (verifyProgram inferred) of
+  (inferred, env) <- requireThat f c <$> inferProgram builtinsEnv desugared
+  v <- genName
+  case runVerify env v (verifyProgram inferred) of
     Left es -> pure (displayPlain (prettyErrs (toList es)))
     Right () -> pure T.empty
 
 tests :: IO TestTree
-tests = testGroup "Verification tests" <$> goldenDir result "tests/verify/" ".ml"
+tests = do
+  verify <- testGroup "Verification tests" <$> goldenDir result "tests/verify/" ".ml"
+  pmcheck <- testGroup "Pattern-matching checking" <$> goldenDir result "tests/verify/pmcheck/" ".ml"
+  pure (testGroup "'Verify' tests" [verify, pmcheck])

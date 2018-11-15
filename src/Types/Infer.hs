@@ -364,9 +364,11 @@ inferProg (decl@(TypeDecl n tvs cs):prg) = do
   local (names %~ focus (one n (fst (rename kind)))) $ do
     (ts, cs') <- unzip <$> local (names %~ focus (scope tvs))
       (for cs (\con -> retcons (addBlame (BecauseOf con)) (inferCon retTy con)))
+    let ts' = Set.fromList (map fst ts)
 
-    local (names %~ focus (teleFromList ts)) .
-      local (constructors %~ Set.union (Set.fromList (map fst ts))) $
+    local ( (names %~ focus (teleFromList ts))
+          . (types %~ Map.insert n ts')
+          . (constructors %~ Set.union ts') ) $
         consFst (TypeDecl n tvs cs') $
           inferProg prg
 
@@ -398,6 +400,7 @@ inferProg (Module name body:prg) = do
 
   -- Extend the current scope and module scope
   local ( (names %~ focus (teleFromList vars'))
+        . (types %~ (<>(env ^. types)))
         . (modules %~ (Map.insert name (env ^. classes) . (<> (env ^. modules))))) $
     consFst (Module name body') $
     inferProg prg

@@ -6,7 +6,7 @@ module Syntax.Types
   ( Telescope, one, foldTele, foldTeleM, teleFromList, mapTele, traverseTele, teleToList
   , Scope(..), namesInScope, inScope
   , Env, freeInEnv, difference, envOf, scopeFromList, toMap
-  , names, typeVars, constructors, letBound, classes, modules
+  , names, typeVars, constructors, types, letBound, classes, modules
   , classDecs
   , ClassInfo(..), ciName, ciMethods, ciContext, ciConstructorName
   , ciConstructorTy, ciHead, ciClassSpan, ciDefaults
@@ -73,6 +73,7 @@ data Env
         , _classes      :: ImplicitScope Typed
         , _typeVars     :: Set.Set (Var Typed)
         , _constructors :: Set.Set (Var Typed)
+        , _types        :: Map.Map (Var Typed) (Set.Set (Var Typed))
         , _letBound     :: Set.Set (Var Typed)
         , _modules      :: Map.Map (Var Typed) (ImplicitScope Typed)
         , _classDecs    :: Map.Map (Var Typed) ClassInfo
@@ -108,22 +109,22 @@ Scope x \\ Scope y = Scope (x Map.\\ y)
 
 instance Monoid Env where
   mappend = (<>)
-  mempty = Env mempty mempty mempty mempty mempty mempty mempty
+  mempty = Env mempty mempty mempty mempty mempty mempty mempty mempty
 
 instance Semigroup Env where
-  Env s i c d l m n <> Env s' i' c' d' l' m' n' =
-    Env (s <> s') (i <> i') (c <> c') (d <> d') (l <> l') (m <> m') (n <> n')
+  Env s i c t d l m n <> Env s' i' c' t' d' l' m' n' =
+    Env (s <> s') (i <> i') (c <> c') (t <> t') (d <> d') (l <> l') (m <> m') (n <> n')
 
 difference :: Env -> Env -> Env
-difference (Env ma _ mc md l _ cd) (Env ma' mi' mc' md' l' mm' cd') =
+difference (Env ma _ mc md me l _ cd) (Env ma' mi' mc' md' me' l' mm' cd') =
   Env (ma \\ ma') mi' (mc Set.\\ mc')
-    (md Set.\\ md') (l Set.\\ l') mm' (cd Map.\\ cd')
+    (md Set.\\ md') (me Map.\\ me') (l Set.\\ l') mm' (cd Map.\\ cd')
 
 freeInEnv :: Env -> Set.Set (Var Typed)
 freeInEnv = foldMap ftv . view names
 
 envOf :: Scope Resolved (Type Typed) -> Env
-envOf a = Env a mempty mempty mempty mempty mempty mempty
+envOf a = Env a mempty mempty mempty mempty mempty mempty mempty
 
 scopeFromList :: Ord (Var p) => [(Var p, f)] -> Scope p f
 scopeFromList = Scope . Map.fromList
