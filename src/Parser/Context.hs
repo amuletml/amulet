@@ -56,8 +56,13 @@ data Context
   | CtxModuleBodyUnresolved SourcePos SourcePos
   | CtxModuleBody SourcePos
 
+  -- | The head of a type definition and its body
+  | CtxTypeHead SourcePos | CtxTypeBody SourcePos
+
+  -- | The head of a class definition and its body
   | CtxClassHead SourcePos | CtxClassBody SourcePos
 
+  -- | The head of an instance and its body
   | CtxInstHead SourcePos | CtxInstBody SourcePos
 
   deriving (Show, Eq)
@@ -277,6 +282,19 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
       -> pure (Result (Token TcVBegin tp tp) (Working tok)
               , CtxEmptyBlock (Just TcVEnd) : CtxInstBody cls: ck)
 
+    -- Offside rule for type declarations. We allow the pipe to be aligned to
+    -- the current context.
+    (_, CtxTypeBody offside:ck)
+      | (if tk == TcPipe then spCol tp + 1 else spCol tp) <= spCol offside
+      -> handleContext tok ck
+    -- @type ... =@ ~~> Replace type head with type body context
+    (TcEqual, CtxTypeHead offside:ck)
+      | spCol tp >= spCol offside
+      -> pure (Result tok Done, CtxTypeBody offside:ck)
+    -- Offside rule for type headers
+    (_, CtxTypeHead offside:ck)
+      | spCol tp <= spCol offside -> handleContext tok ck
+
     -- @let ...@ ~~> Push an let context
     (TcLet, _) -> pure
       ( Result tok Done
@@ -334,8 +352,12 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
       ( Result tok Done
       , CtxModuleBodyUnresolved mod te:ck)
 
+    -- @class@ ~~> Push a class context
     (TcClass, _) -> pure (Result tok Done, CtxClassHead tp:c)
+    -- @instance@ ~~> Push an instance context
     (TcInstance, _) -> pure (Result tok Done, CtxInstHead tp:c)
+    -- @type@ ~~> Push a type context
+    (TcType, _) -> pure (Result tok Done, CtxTypeHead tp:c)
 
     -- @begin ...@ ~~> CtxEmptyBlock : CtxBracket(end)
     (TcBegin, _) -> pure
@@ -416,6 +438,8 @@ isToplevel [] = True
 isToplevel (CtxModuleBody{}:_) = True
 isToplevel (CtxClassBody{}:_) = True
 isToplevel (CtxInstBody{}:_) = True
+isToplevel (CtxTypeHead{}:_) = True
+isToplevel (CtxTypeBody{}:_) = True
 isToplevel (CtxBlock{}:cks) = isToplevel cks
 isToplevel _ = False
 
