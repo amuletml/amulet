@@ -41,6 +41,11 @@ arise:
    do not need to generate as many free type variables, and can rely less
    on the unifier. The paper[1] discusses some ways of doing this.
 
+ - Improve out handling of uninhabited types. Our checking of
+   inhabitedness is rather naive, and just ducks out on recursive types,
+   even if they are trivially uninhabited (say, type a = A of a). We
+   should also check whether types are inhabited on non-empty arms.
+
 [1]: https://www.microsoft.com/en-us/research/wp-content/uploads/2016/08/gadtpm-acm.pdf
 
 -}
