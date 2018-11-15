@@ -33,15 +33,20 @@ import Language.Lua.Parser
 
 import Types.Infer.Builtin (tyUnit, tyLazy, spine, getHead)
 
+data VerifyScope = VerifyScope Env AbsState
+
 type MonadVerify m =
   ( MonadWriter (Seq.Seq VerifyError) m
-  , MonadReader (Env, VarResolved) m
+  , MonadReader VerifyScope m
   , MonadState (Set.Set BindingSite) m )
 
 runVerify :: Env
           -> Var Resolved
-          -> WriterT (Seq.Seq VerifyError) (StateT (Set.Set BindingSite) (Reader (Env, Var Resolved))) () -> Either (Seq.Seq VerifyError) ()
-runVerify env var = fixup . flip runReader (env, var) . flip runStateT mempty . runWriterT where
+          -> WriterT (Seq.Seq VerifyError) (StateT (Set.Set BindingSite) (Reader VerifyScope)) () -> Either (Seq.Seq VerifyError) ()
+runVerify env var = fixup
+                  . flip runReader (VerifyScope env (emptyAbsState var))
+                  . flip runStateT mempty
+                  . runWriterT where
   fixup (((), w), st) =
     let errs | Seq.null w = Right () | otherwise = Left w
         others = if Set.null st
@@ -103,14 +108,8 @@ verifyExpr ex@(Let vs e (_, ty)) = do
   verifyExpr e
 verifyExpr (If c t e _) = traverse_ verifyExpr [c, t, e]
 verifyExpr (App f x _) = verifyExpr f *> verifyExpr x
-verifyExpr m@(Fun p x _) = do
-  let bindingSites' (PatParam p) = bindingSites p
-      bindingSites' _ = mempty
-  modify (Set.union (bindingSites' p))
-  case p of
-    PatParam p -> verifyMatch m (getType p) [Arm p Nothing x]
-    _ -> pure ()
-  verifyExpr x
+verifyExpr m@(Fun (PatParam p) x _) = verifyMatch m (getType p) [Arm p Nothing x]
+verifyExpr (Fun _ x _) = verifyExpr x
 verifyExpr (Begin es _) = do
   let unitish TyVar{} = True
       unitish TyWildcard{} = True
@@ -125,18 +124,9 @@ verifyExpr Literal{} = pure ()
 verifyExpr m@(Match e bs _) = do
   verifyExpr e
   verifyMatch m (getType e) bs
-  for_ bs $ \(Arm pat guard body) -> do
-    modify (Set.union (bindingSites pat))
-    maybe (pure ()) verifyExpr guard
-    verifyExpr body
 verifyExpr m@(Function bs (_, ty)) = do
   let (TyPi (Anon arg) _) = ty
   verifyMatch m arg bs
-
-  for_ bs $ \(Arm pat guard body) -> do
-    modify (Set.union (bindingSites pat))
-    maybe (pure ()) verifyExpr guard
-    verifyExpr body
 verifyExpr (BinOp l o r _) = traverse_ verifyExpr [l, o, r]
 verifyExpr Hole{} = pure ()
 verifyExpr (Ascription e _ _) = verifyExpr e
@@ -279,22 +269,33 @@ parametricity stmt overall = go mempty overall where
 -- | Verify a series of patterns are total
 verifyMatch :: MonadVerify m => Expr Typed -> Type Typed -> [Arm Typed] -> m ()
 verifyMatch m ty [] = do
-  (env, sv) <- ask
-  when (inhabited env sv ty) $
-    tell . pure $ MissingPattern m [VVariable sv ty]
+  VerifyScope env as <- ask
+  when (inhabited env as ty) $
+    tell . pure $ MissingPattern m [VVariable undefined ty]
 
 verifyMatch m ty bs = do
-  (env, sv) <- ask
+  VerifyScope env va <- ask
 
-  unc <- foldlM (\alts a@(Arm pat guard _) -> do
+  unc <- foldlM (\alts a@(Arm pat guard body) -> do
     let cov  = covering env pat alts
     -- If the covered set is empty, this arm is redundant
-    when (Seq.null (covered cov)) (tell . pure $ RedundantArm a)
+    va' <- case covered cov of
+      Seq.Empty -> do
+        tell . pure $ RedundantArm a
+        pure va
+      (va', _) Seq.:<| Seq.Empty -> pure va'
+      _ -> error "Covered set must have 0-1 entries"
+
+    local (\(VerifyScope env _) -> VerifyScope env va') $ do
+      modify (Set.union (bindingSites pat))
+      maybe (pure ()) verifyExpr guard
+      verifyExpr body
+
     -- Return the filtered uncovered set if this pattern has no guard,
     -- otherwise use the original uncovered set.
     pure $ case guard of
       Nothing -> uncovered cov
       Just{} -> alts)
-    (pure $ emptyAlt sv ty) bs
+    (pure $ emptyAlt va ty) bs
 
-  unless (null unc) (tell . pure . MissingPattern m . map altAbs . toList $ unc)
+  unless (null unc) (tell . pure . MissingPattern m . map snd . toList $ unc)

@@ -24,4 +24,3 @@ let bar : forall 'a. baz 'a => f 'a -> () = function
       match baz a with
       | G1 -> ()
   | _ -> ()
-

@@ -47,8 +47,8 @@ arise:
 module Syntax.Verify.Pattern
   ( Covering, covered, uncovered
   , ValueAbs(..)
-  , ValueAlt, altAbs
-  , emptyAlt
+  , AbsState
+  , emptyAbsState, emptyAlt
   , covering
   , inhabited
   ) where
@@ -178,21 +178,24 @@ prettyIn v = pretty v
 
 -- | Wraps the state of one pattern alternative, capturing constraints,
 -- substitution sets and the latest fresh variable.
-data ValueAlt p
-  = ValueAlt
-  { altAbs :: ValueAbs p
-  , altTyc :: Seq.Seq (Constraint p)
-  , altSub :: SolveState
-  , altFresh :: Int
+data AbsState
+  = AbsState
+  { altSub :: SolveState
+  , altTyc :: Seq.Seq (Constraint Typed)
+  , altFresh :: VarResolved
   }
+  deriving (Show)
 
-deriving instance (Show (Var p), Show (Ann p)) => Show (ValueAlt p)
+-- | Construct an empty pattern abstraction state from a fresh variable,
+emptyAbsState :: Var Typed -> AbsState
+emptyAbsState = AbsState emptyState mempty
 
--- | Construct an empty pattern alternative state from a fresh variable,
--- and the type of the test variable.
-emptyAlt :: Var Typed -> Type Typed -> ValueAlt Typed
-emptyAlt v@(TgName _ i) ty = ValueAlt (VVariable v ty) mempty emptyState (i + 1)
-emptyAlt _ _ = error "Require TgName for emptyAlt"
+-- | Construct an empty value abstraction from a abstraction state and
+-- the type of the test variable.
+emptyAlt :: AbsState -> Type Typed -> (AbsState, ValueAbs Typed)
+emptyAlt alt ty =
+  let v@(TgName _ i) = altFresh alt
+  in (alt { altFresh = TgName "a" (i + 1) }, VVariable v ty)
 
 -- | A type-safe list of constraints between patterns and value
 -- abstractions.
@@ -218,13 +221,13 @@ type CoveringM = StateT CoverState (NameyT Covering)
 
 -- | Run the value abstraction monad.
 covering :: Env -> Pattern Typed
-         -> Seq.Seq (ValueAlt Typed)
-         -> Covering (ValueAlt Typed)
-covering env p xs = msum . flip fmap xs $ \(ValueAlt v tc sub i) -> do
-  ~(((v', ()), (sub', tc')), TgName _ i') <- flip runNameyT (TgName "a" i)
-                                           . flip runStateT (sub, tc)
-                                           $ covering' env ((p, v) :*: Nil)
-  pure $ ValueAlt v' tc' sub' i'
+         -> Seq.Seq (AbsState, ValueAbs Typed)
+         -> Covering (AbsState, ValueAbs Typed)
+covering env p xs = msum . flip fmap xs $ \(AbsState st cs i, v) -> do
+  (((v', ()), (st', cs')), i') <- flip runNameyT i
+                                . flip runStateT (st, cs)
+                                $ covering' env ((p, v) :*: Nil)
+  pure (AbsState st' cs' i', v')
 
 covering' :: Env -> PatPair a -> CoveringM a
 covering' env = go where
@@ -387,11 +390,11 @@ constructors env kty vty = do
     unwrapCtor t = (Nothing, t)
 
 -- | Determines if a given type is inhabited
-inhabited :: Env -> Var Resolved -> Type Typed -> Bool
-inhabited env v
+inhabited :: Env -> AbsState -> Type Typed -> Bool
+inhabited env (AbsState st cs i)
   = not . Seq.null
-  . flip evalNameyT v
-  . flip evalStateT (emptyState, empty)
+  . flip evalNameyT i
+  . flip evalStateT (st, cs)
   . inhabited' env
 
 inhabited' :: forall m. (MonadPlus m, MonadNamey m, MonadState CoverState m)
