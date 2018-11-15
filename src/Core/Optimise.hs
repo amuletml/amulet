@@ -96,11 +96,13 @@ substituteInTys = term where
 
 -- | Substitute a type variable with some other type inside a type
 substituteInType :: IsVar a => VarMap.Map (Type a) -> Type a -> Type a
-substituteInType = gotype where
-  gotype m t | VarMap.null m = t
+substituteInType = goMaybe where
+  goMaybe m t | VarMap.null m = t
+              | otherwise = gotype m t
+
   gotype m x@(VarTy v) = VarMap.findWithDefault x (toVar v) m
   gotype _ x@ConTy{} = x
-  gotype m (ForallTy v c t) = ForallTy v (gotype m c) (gotype (remove v m) t) where
+  gotype m (ForallTy v c t) = ForallTy v (gotype m c) (goMaybe (remove v m) t) where
     remove (Relevant var) m = VarMap.delete (toVar var) m
     remove Irrelevant m = m
   gotype m (AppTy f x) = AppTy (gotype m f) (gotype m x)
@@ -112,7 +114,10 @@ substituteInType = gotype where
 
 -- | Substitute a type variable with some other type inside a coercion
 substituteInCo :: IsVar a => VarMap.Map (Type a) -> Coercion a -> Coercion a
-substituteInCo m = coercion where
+substituteInCo m c
+  | VarMap.null m = c
+  | otherwise = coercion c where
+
   coercion (SameRepr t t') = SameRepr (gotype t) (gotype t')
   coercion (Domain c) = Domain (coercion c)
   coercion (Codomain c) = Codomain (coercion c)
@@ -129,116 +134,84 @@ substituteInCo m = coercion where
 -- | Refresh every closed variable within a term, replacing it with some
 -- fresh variable.
 refresh :: (MonadNamey m, IsVar a) => Term a -> m (Term a)
-refresh = refreshTerm mempty where
-  refreshAtom :: (MonadNamey m, IsVar a) => VarMap.Map a -> Atom a -> m (Atom a)
-  refreshAtom s (Ref v ty) =
-    let v' = fromMaybe v (VarMap.lookup (toVar v) s)
-        ty' = refreshType s ty
-    in pure (Ref v' ty')
-  refreshAtom _ a@Lit{} = pure a
+refresh = refreshTerm mempty mempty where
+  refreshTerm :: (MonadNamey m, IsVar a)
+              => VarMap.Map (Atom a) -> VarMap.Map (Type a)
+              -> Term a -> m (Term a)
+  refreshTerm vm tm (Atom a) = pure $ Atom (substAtom vm tm a)
+  refreshTerm vm tm (App f x) = pure $ App (substAtom vm tm f) (substAtom vm tm x)
+  refreshTerm vm tm (TyApp f ty) = pure $ TyApp (substAtom vm tm f) (substituteInType tm ty)
+  refreshTerm vm tm (Extend e bs) = pure $
+    Extend (substAtom vm tm e) (map (trimap id (substituteInType tm) (substAtom vm tm)) bs)
+  refreshTerm vm tm (Values xs) = pure $ Values (map (substAtom vm tm) xs)
+  refreshTerm vm tm (Cast e c) = pure $ Cast (substAtom vm tm e) (substituteInCo tm c)
 
-  refreshArg :: (MonadNamey m, IsVar a) => VarMap.Map a -> Argument a -> m (Argument a, a)
-  refreshArg s (TermArgument n ty) = do
-    let ty' = refreshType s ty
-    v' <- freshFrom' n
-    pure (TermArgument v' ty', v')
-  refreshArg s (TypeArgument n ty) = do
-    let ty' = refreshType s ty
-    v' <- freshFrom' n
-    pure (TypeArgument v' ty', v')
-
-  refreshTerm :: (MonadNamey m, IsVar a) => VarMap.Map a -> Term a -> m (Term a)
-  refreshTerm s (Atom a) = Atom <$> refreshAtom s a
-  refreshTerm s (App f x) = App <$> refreshAtom s f <*> refreshAtom s x
-  refreshTerm s (TyApp f ty) = TyApp <$> refreshAtom s f <*> pure (refreshType s ty)
-  refreshTerm s (Lam arg b) = do
-    (arg', v') <- refreshArg s arg
-    Lam arg' <$> refreshTerm (VarMap.insert (argVar arg) v' s) b
-  refreshTerm s (Let (One (v, ty, e)) b) = do
+  refreshTerm vm tm (Lam (TermArgument v ty) b) = do
     v' <- freshFrom' v
-    let s' = VarMap.insert (toVar v) v' s
-    e' <- refreshTerm s' e
-    Let (One (v', refreshType s' ty, e')) <$> refreshTerm s' b
-  refreshTerm s (Let (Many vs) b) = do
-    s' <- foldrM (\(v, _, _) m -> do
-                     v' <- freshFrom' v
-                     pure (VarMap.insert (toVar v) v' m)) s vs
-    vs' <- traverse (trimapA (pure . get s') (pure . refreshType s') (refreshTerm s')) vs
-    Let (Many vs') <$> refreshTerm s' b
-  refreshTerm s (Match e branches) = Match <$> refreshAtom s e <*> refreshArms s branches where
-    refreshArm :: (IsVar a, MonadNamey m) => VarMap.Map a -> Arm a -> m (Arm a, VarMap.Map a)
-    refreshArm s a@Arm{ _armPtrn = test, _armBody = branch } = do
-      s' <- refreshVs (a ^. armTyvars) s >>= refreshVs (a ^. armVars)
-      branch' <- refreshTerm s' branch
-      pure ( Arm { _armPtrn = refreshPattern s' test
-                 , _armTy = refreshType s' (a ^. armTy)
+    let ty' = substituteInType tm ty
+        vm' = VarMap.insert (toVar v) (Ref v' ty') vm
+    Lam (TermArgument v' ty') <$> refreshTerm vm' tm b
+  refreshTerm vm tm (Lam (TypeArgument v ty) b) = do
+    v' <- freshFrom' v
+    let ty' = substituteInType tm ty
+        tm' = VarMap.insert (toVar v) (VarTy v') tm
+    Lam (TypeArgument v' ty') <$> refreshTerm vm tm' b
+
+  refreshTerm vm tm (Let (One (v, ty, e)) b) = do
+    v' <- freshFrom' v
+    let ty' = substituteInType tm ty
+        vm' = VarMap.insert (toVar v) (Ref v' ty') vm
+    e' <- refreshTerm vm' tm e
+    Let (One (v', ty', e')) <$> refreshTerm vm' tm b
+  refreshTerm vm tm (Let (Many vs) r) = do
+    (vm', vs') <- foldrM (\(v, ty, b) (m, vs') -> do
+      v' <- freshFrom' v
+      let ty' = substituteInType tm ty
+      pure ( VarMap.insert (toVar v) (Ref v' ty') m
+           , (v', ty', b):vs' )) (vm, []) vs
+
+    vs'' <- traverse (third3A (refreshTerm vm' tm)) vs'
+    Let (Many vs'') <$> refreshTerm vm' tm r
+
+  refreshTerm vm tm (Match e branches) = Match (substAtom vm tm e) <$> traverse (refreshArm vm tm) branches where
+    refreshArm :: (IsVar a, MonadNamey m)
+               => VarMap.Map (Atom a) -> VarMap.Map (Type a)
+               -> Arm a -> m (Arm a)
+    refreshArm vm tm a = do
+      (tm', ts) <- foldrM (\(v, ty) (tm, ts) -> do
+        v' <- freshFrom' v
+        let ty' = substituteInType tm ty
+        pure (VarMap.insert (toVar v) (VarTy v') tm, (v', ty'):ts)) (tm, []) (a ^. armTyvars)
+      (vm', vs) <- foldrM (\(v, ty) (vm, vs) -> do
+        v' <- freshFrom' v
+        let ty' = substituteInType tm' ty
+        pure (VarMap.insert (toVar v) (Ref v' ty') vm, (v', ty'):vs)) (vm, []) (a ^. armVars)
+
+      branch' <- refreshTerm vm' tm' (a ^. armBody)
+      pure ( Arm { _armPtrn = substPattern vm' (a ^. armPtrn)
+                 , _armTy = substituteInType tm' (a ^. armTy)
                  , _armBody = branch'
-                 , _armVars = map (\(v, ty) -> (get s' v, refreshType s' ty)) (a ^. armVars)
-                 , _armTyvars = map (\(v, ty) -> (get s' v, refreshType s' ty)) (a ^. armTyvars)
-                 }
-           , s' )
+                 , _armVars = vs
+                 , _armTyvars = ts } )
 
-    refreshArms :: (IsVar a, MonadNamey m) => VarMap.Map a -> [Arm a] -> m [Arm a]
-    refreshArms s (a:as) = do
-      (a', s) <- refreshArm s a
-      (a':) <$> refreshArms s as
-    refreshArms _ [] = pure []
+  substAtom :: IsVar a
+            => VarMap.Map (Atom a) -> VarMap.Map (Type a)
+            -> Atom a -> Atom a
+  substAtom vm tm (Ref v ty) = fromMaybe (Ref v (substituteInType tm ty)) (VarMap.lookup (toVar v) vm)
+  substAtom _ _ a@Lit{} = a
 
-    refreshVs :: (MonadNamey m, IsVar a) => [(a, Type a)] -> VarMap.Map a -> m (VarMap.Map a)
-    refreshVs = flip (foldrM refreshV)
+  substPattern :: IsVar a => VarMap.Map (Atom a) -> Pattern a -> Pattern a
+  substPattern _ p@Constr{} = p
+  substPattern vm (Destr c p) = Destr c (substCapture vm p)
+  substPattern vm (PatExtend p fs) = PatExtend (substCapture vm p) (map (second (substCapture vm)) fs)
+  substPattern vm (PatValues xs) = PatValues (map (substCapture vm) xs)
+  substPattern _ p@PatLit{} = p
+  substPattern _ p@PatWildcard = p
 
-    refreshV :: (MonadNamey m, IsVar a) => (a, Type a) -> VarMap.Map a -> m (VarMap.Map a)
-    refreshV (v, _) m =
-      case VarMap.lookup (toVar v) m of
-        Just{} -> pure m
-        Nothing -> do
-          v' <- freshFrom' v
-          pure (VarMap.insert (toVar v) v' m)
-
-  refreshTerm s (Extend e bs) =
-    Extend <$> refreshAtom s e <*> traverse (trimapA pure (pure . refreshType s) (refreshAtom s)) bs
-  refreshTerm s (Values xs) = Values <$> traverse (refreshAtom s) xs
-  refreshTerm s (Cast e c) = Cast <$> refreshAtom s e <*> pure (refreshCoercion s c)
-
-  refreshPattern :: IsVar a => VarMap.Map a -> Pattern a -> Pattern a
-  refreshPattern _ p@Constr{} = p
-  refreshPattern s (Destr c p) = Destr c (refreshCapture s p)
-  refreshPattern s (PatExtend p fs) = PatExtend (refreshCapture s p) (map (second (refreshCapture s)) fs)
-  refreshPattern s (PatValues xs) = PatValues (map (refreshCapture s) xs)
-  refreshPattern _ p@PatLit{} = p
-  refreshPattern _ p@PatWildcard = p
-
-  refreshCapture :: IsVar a => VarMap.Map a -> Capture a -> Capture a
-  refreshCapture s (Capture v ty) = Capture (get s v) (refreshType s ty)
-
-  refreshType :: IsVar a => VarMap.Map a -> Type a -> Type a
-  refreshType s x@(VarTy v) = maybe x VarTy (VarMap.lookup (toVar v) s)
-  refreshType _ x@ConTy{} = x
-  refreshType s (ForallTy Irrelevant c t) = ForallTy Irrelevant (refreshType s c) (refreshType s t)
-  refreshType s (ForallTy b@(Relevant v) c t) =
-    let s' = VarMap.delete (toVar v) s
-    in ForallTy b (refreshType s c) (refreshType s' t)
-  refreshType s (AppTy f x) = AppTy (refreshType s f) (refreshType s x)
-  refreshType s (RowsTy v rs) = RowsTy (refreshType s v) (map (second (refreshType s)) rs)
-  refreshType s (ExactRowsTy rs) = ExactRowsTy (map (second (refreshType s)) rs)
-  refreshType s (ValuesTy xs) = ValuesTy (map (refreshType s) xs)
-  refreshType _ StarTy = StarTy
-  refreshType _ NilTy = NilTy
-
-  refreshCoercion :: IsVar a => VarMap.Map a -> Coercion a -> Coercion a
-  refreshCoercion s (SameRepr t t') = SameRepr (refreshType s t) (refreshType s t')
-  refreshCoercion s (Domain c) = Domain (refreshCoercion s c)
-  refreshCoercion s (Codomain c) = Codomain (refreshCoercion s c)
-  refreshCoercion s (Symmetry c) = Symmetry (refreshCoercion s c)
-  refreshCoercion s (Application f x) = Application (refreshCoercion s f) (refreshCoercion s x)
-  refreshCoercion s (ExactRecord rs) = ExactRecord (map (second (refreshCoercion s)) rs)
-  refreshCoercion s (Record c rs) = Record (refreshCoercion s c) (map (second (refreshCoercion s)) rs)
-  refreshCoercion s (Projection rs rs') =
-    Projection (map (second (refreshCoercion s)) rs) (map (second (refreshCoercion s)) rs')
-  refreshCoercion s x@(CoercionVar v) = maybe x CoercionVar (VarMap.lookup (toVar v) s)
-  refreshCoercion s (Quantified v a c) = Quantified v (refreshCoercion s a) (refreshCoercion s c)
-
-  get s v = fromJust (VarMap.lookup (toVar v) s)
+  substCapture :: IsVar a => VarMap.Map (Atom a) -> Capture a -> Capture a
+  substCapture vm (Capture v _) =
+    let Just (Ref v' ty') = VarMap.lookup (toVar v) vm
+    in Capture v' ty'
 
 -- | Get the variable bound by the given argument
 argVar :: IsVar a => Argument a -> CoVar
