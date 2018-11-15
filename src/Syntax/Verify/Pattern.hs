@@ -395,14 +395,13 @@ inhabited env (AbsState st cs i)
   = not . Seq.null
   . flip evalNameyT i
   . flip evalStateT (st, cs)
-  . inhabited' env
+  . go mempty where
 
-inhabited' :: forall m. (MonadPlus m, MonadNamey m, MonadState CoverState m)
-           => Env -> Type Typed -> m ()
-inhabited' env = go mempty where
-  inhb :: m () = pure ()
+  inhb :: Monad m => m ()
+  inhb = pure ()
 
-  go :: Set.Set (Var Typed) -> Type Typed -> m ()
+  go :: (MonadPlus m, MonadNamey m, MonadState CoverState m)
+     => Set.Set (Var Typed) -> Type Typed -> m ()
   go c (TyVar v) = do
     let c' = Set.insert v c
     t' <- gets (typeWithin v . fst)
@@ -442,6 +441,8 @@ inhabited' env = go mempty where
   checkCtors _ _ = Nothing
 
   -- | A naive check to determine if a constructor is inhabited.
+  ctorCheck :: (MonadPlus m, MonadNamey m, MonadState CoverState m)
+            => Set.Set (Var Typed) -> Type Typed -> m ()
   ctorCheck c t
     | Just v <- checkCtors c t = do
         let c' = Set.insert v c
