@@ -296,7 +296,10 @@ matches TyRows{} _ = False
 matches (TyExactRows vs) (TyExactRows vs') = length vs' == length vs && all m (overlap vs vs') where
   m (_, a, b) = a `matches` b
 
-matches TyExactRows{} _ = False -- TODO
+matches (TyExactRows vs') (TyRows _ vs) = length vs' >= length vs && all m (overlap vs vs') where
+  m (_, a, b) = a `matches` b
+
+matches TyExactRows{} _ = False
 
 matches (TyTuple a b) (TyTuple a' b') = matches a a' && matches b b'
 matches TyTuple{} _ = False
