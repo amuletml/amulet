@@ -462,17 +462,15 @@ mkUni = ConUnify undefined undefined
 -- | Add one or more type constraints into the current environment,
 -- failing if an error occurs.
 constrain :: (MonadPlus m, MonadNamey m, MonadState CoverState m) => [Constraint Typed] -> m ()
-constrain css = maybe empty put =<< doConstrain css
-
-doConstrain :: (MonadNamey m, MonadState CoverState m) => [Constraint Typed] -> m (Maybe CoverState)
-doConstrain css = do
-  (sub, cs) <- get
-  x <- runChronicleT . solveImplies sub . (cs<>) $ Seq.fromList css
-  pure $ case x of
-    These Seq.Empty (sub', cs') -> Just (sub', Seq.fromList cs')
-    That (sub', cs') ->  Just (sub', Seq.fromList cs')
-    These _ _ -> Nothing
-    This _ -> Nothing
+constrain css = maybe empty put =<< doConstrain css where
+  doConstrain css = do
+    (sub, cs) <- get
+    x <- runChronicleT . solveImplies sub . (cs<>) $ Seq.fromList css
+    pure $ case x of
+      These Seq.Empty (sub', cs') -> Just (sub', Seq.fromList cs')
+      That (sub', cs') ->  Just (sub', Seq.fromList cs')
+      These _ _ -> Nothing
+      This _ -> Nothing
 
 -- | Require a variable to match a given pattern
 --

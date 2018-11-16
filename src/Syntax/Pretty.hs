@@ -322,7 +322,7 @@ displayType = prettyType . dropKindVars mempty where
     Nothing -> True
   kindVarIn _ TyCon{} = True
   kindVarIn _ TyOperator{} = True
-  kindVarIn _ TySkol{} = True
+  kindVarIn v (TySkol (Skolem _ x _ _)) = x /= v
   kindVarIn v (TyApp t y) = kindVarIn v t && kindVarIn v y
   kindVarIn v (TyRows t rs) = kindVarIn v t && all (kindVarIn v . snd) rs
   kindVarIn v (TyExactRows rs) = all (kindVarIn v . snd) rs

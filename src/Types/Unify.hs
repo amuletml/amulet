@@ -486,6 +486,8 @@ unify (TyTuple a b) (TyTuple a' b') =
 
 unify (TyOperator l v r) (TyApp f g) = AppCo <$> unify (TyApp (TyCon v) l) f <*> unify g r
 unify (TyApp f g) (TyOperator l v r) = AppCo <$> unify f (TyApp (TyCon v) l) <*> unify r g
+unify (TyOperator l v r) (TyOperator l' v' r')
+  | v == v' = AppCo <$> unify l l' <*> unify r r'
 
 unify TyType TyType = pure (ReflCo TyType)
 unify a b = confesses =<< unequal a b
