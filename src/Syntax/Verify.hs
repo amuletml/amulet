@@ -24,7 +24,7 @@ import Text.Pretty.Semantic
 import Syntax.Verify.Pattern
 import Syntax.Verify.Error
 
-import Syntax.Builtin (tyUnit, tyLazy)
+import Syntax.Builtin (tyUnit, tyLazy, forceName)
 import Syntax.Pretty
 import Syntax.Subst
 import Syntax.Types
@@ -161,7 +161,7 @@ unguardedVars (Let vs b _)         = (unguardedVars b <> foldMap (unguardedVars 
                               Set.\\ foldMapOf (each . bindVariable) Set.singleton vs
 unguardedVars (App f x _) =
   case f of
-    ExprWrapper _ (VarRef (TgInternal "force") _) _ -> freeIn f <> freeIn x
+    ExprWrapper _ (VarRef v _) _ | v == forceName -> freeIn f <> freeIn x
     _ -> freeIn f <> unguardedVars x
 unguardedVars Fun{}                = mempty
 unguardedVars (Record rs _)        = foldMap (unguardedVars . view fExpr) rs

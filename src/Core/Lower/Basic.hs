@@ -14,12 +14,8 @@ import Control.Monad.State
 
 import qualified Data.VarMap as VarMap
 import qualified Data.VarSet as VarSet
-import qualified Data.Map as Map
-import qualified Data.Text as T
-import Data.Maybe
 
 import qualified Core.Core as C
-import qualified Core.Builtin as C
 import Core.Core hiding (Atom, Term, Stmt, Type, Pattern, Arm)
 import Core.Var
 
@@ -52,16 +48,7 @@ mkCon = mkVar DataConVar
 -- | Make a core variable from a "Syntax" variable and a given kind.
 mkVar :: VarInfo -> Var Resolved -> CoVar
 mkVar k (TgName t i) = CoVar i t k
-mkVar k (TgInternal name) = CoVar (builtin name) name k where
-  builtin name = fromMaybe (error ("Cannot find builtin " ++ show name)) (Map.lookup name builtins)
-
-  builtins = Map.fromList (map ex C.builtinTyList
-                           ++ map (ex . fst) (C.builtinVarList :: [(CoVar, C.Type CoVar)])
-                           ++ map ex [C.tyvarA, C.tyvarB]
-                          )
-
-  ex :: CoVar -> (T.Text, Int)
-  ex (CoVar v n _) = (n, v)
+mkVar _ n@TgInternal{} = error ("Cannot convert " ++ show n ++ " to CoVar")
 
 -- | Lower a type from "Syntax" to one in "Core.Core".
 lowerType :: S.Type Typed -> C.Type CoVar

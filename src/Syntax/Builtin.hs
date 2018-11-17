@@ -10,6 +10,7 @@ module Syntax.Builtin
   , tyLazy, tyConstraint, tyArrow
 
   , forceName, lAZYName, forceTy, lAZYTy, forceTy', lAZYTy'
+  , opAppName
   ) where
 
 import qualified Data.Map as Map
@@ -25,29 +26,29 @@ import qualified Core.Builtin as C
 import Core.Var
 
 tyUnitName, tyBoolName, tyIntName, tyStringName, tyFloatName, tyLazyName, tyConstraintName, tyArrowName, tyTupleName :: Var Typed
-tyIntName = TgInternal "int"
-tyStringName = TgInternal "string"
-tyBoolName = TgInternal "bool"
-tyUnitName = TgInternal "unit"
-tyFloatName = TgInternal "float"
-tyLazyName = ofCore C.vLazy
-tyConstraintName = TgName "constraint" (-37)
-tyArrowName = ofCore C.vArrow
-tyTupleName = ofCore C.vProduct
+tyIntName    = ofCore C.vInt
+tyStringName = ofCore C.vString
+tyBoolName   = ofCore C.vBool
+tyUnitName   = ofCore C.vUnit
+tyFloatName  = ofCore C.vFloat
+tyLazyName   = ofCore C.vLazy
+tyArrowName  = ofCore C.vArrow
+tyTupleName  = ofCore C.vProduct
+tyConstraintName = TgInternal "constraint"
 
 tyUnit, tyBool, tyInt, tyString, tyFloat, tyLazy, tyConstraint, tyArrow :: Type Typed
-tyInt = TyCon tyIntName
+tyInt    = TyCon tyIntName
 tyString = TyCon tyStringName
-tyBool = TyCon tyBoolName
-tyUnit = TyCon tyUnitName
-tyFloat = TyCon tyFloatName
-tyLazy = TyCon tyLazyName
+tyBool   = TyCon tyBoolName
+tyUnit   = TyCon tyUnitName
+tyFloat  = TyCon tyFloatName
+tyLazy   = TyCon tyLazyName
+tyArrow  = TyCon tyArrowName
 tyConstraint = TyCon tyConstraintName
-tyArrow = TyCon tyArrowName
 
 forceName, lAZYName :: Var Typed
-forceName = TgInternal "force"
-lAZYName = TgInternal "lazy"
+forceName = ofCore C.vForce
+lAZYName  = ofCore C.vLAZY
 
 forceTy, lAZYTy :: Type Typed
 forceTy = a *. TyApp tyLazy (TyVar a) ~> TyVar a
@@ -57,6 +58,9 @@ forceTy', lAZYTy' :: Type Typed -> Type Typed
 forceTy' x = TyApp tyLazy x ~> x
 lAZYTy' x = TyArr tyUnit x ~> TyApp tyLazy x
 
+opAppName :: Var Typed
+opAppName = ofCore C.vOpApp
+
 data BuiltinModule = BM
   { vars    :: [(Var Resolved, Type Typed)]
   , types   :: [(Var Resolved, Type Typed)]
@@ -65,25 +69,23 @@ data BuiltinModule = BM
 
 builtins :: BuiltinModule
 builtins =
-  BM { vars = [ intOp "+", intOp "-", intOp "*", opOf "/" (tyInt ~> tyInt ~> tyFloat), intOp "**"
-              , intCmp "<", intCmp ">", intCmp ">=", intCmp "<="
+  BM { vars = [ intOp C.vOpAdd, intOp C.vOpSub, intOp C.vOpMul, opOf C.vOpDiv (tyInt ~> tyInt ~> tyFloat), intOp C.vOpExp
+              , intCmp C.vOpLt, intCmp C.vOpGt, intCmp C.vOpLe, intCmp C.vOpGe
 
-              , floatOp "+.", floatOp "-.", floatOp "*.", floatOp "/.", floatOp "**."
-              , floatCmp "<.", floatCmp ">.", floatCmp ">=.", floatCmp "<=."
+              , floatOp C.vOpAddF, floatOp C.vOpSubF, floatOp C.vOpMulF, floatOp C.vOpDivF, floatOp C.vOpExpF
+              , floatCmp C.vOpLtF, floatCmp C.vOpGtF, floatCmp C.vOpLeF, floatCmp C.vOpGeF
 
-              , stringOp "^"
+              , stringOp C.vOpConcat
 
-              , cmp "==", cmp "<>"
-              , opOf "@@" $ a *. b *. (TyVar a ~> TyVar b) ~> TyVar a ~> TyVar b
-
+              , cmp C.vOpEq, cmp C.vOpNe
+              , (opAppName, a *. b *. (TyVar a ~> TyVar b) ~> TyVar a ~> TyVar b)
               , (lAZYName, lAZYTy), (forceName, forceTy)
               ]
 
-     , types = [ tp "int", tp "string", tp "bool", tp "unit", tp "float"
-
+     , types = [ tp C.vBool, tp C.vInt, tp C.vString, tp C.vFloat, tp C.vUnit
+               , (tyLazyName, TyType ~> TyType)
                , (tyArrowName, TyType ~> TyType ~> TyType)
                , (tyTupleName, TyType ~> TyType ~> a *. TyVar a)
-               , (tyLazyName, TyType ~> TyType)
                , (tyConstraintName, TyType)
                ]
      , modules = []
@@ -92,8 +94,8 @@ builtins =
   where
 
     -- Helper functions for operators
-    opOf x t = (TgInternal x, t)
-    op t x = (TgInternal x, t)
+    opOf x t = (ofCore x, t)
+    op t x = (ofCore x, t)
 
     intOp = op $ tyInt ~> tyInt ~> tyInt
     floatOp = op $ tyFloat ~> tyFloat ~> tyFloat
@@ -103,7 +105,7 @@ builtins =
     cmp = op $ a *.TyVar a ~> TyVar a ~> tyBool
 
     -- Helper functions for types
-    tp x = (TgInternal x, TyType)
+    tp x = (ofCore x, TyType)
 
 
 builtinResolve :: R.Scope
@@ -143,5 +145,5 @@ infixr *.
 
 -- Some internal variables
 a, b :: Var Resolved
-a = TgInternal "a"
-b = TgInternal "b"
+a = ofCore C.tyvarA
+b = ofCore C.tyvarB

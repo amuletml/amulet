@@ -21,6 +21,7 @@ import Data.Bifunctor
 import Data.Foldable
 import Data.Spanned
 
+import Syntax.Builtin
 import Syntax.Var
 import Syntax
 
@@ -57,7 +58,7 @@ desugarProgram = traverse statement where
       (Match rhs <$> traverse arm bs <*> pure a)
       <*> pure a
   -- Special case @@ so we can work on skolem variables
-  expr (BinOp l (VarRef (TgInternal "@@") _) r a) = App <$> expr l <*> expr r <*> pure a
+  expr (BinOp l (VarRef v _) r a) | v == opAppName = App <$> expr l <*> expr r <*> pure a
   expr (BinOp l o r a) = BinOp <$> expr l <*> expr o <*> expr r <*> pure a
   expr (Ascription e t a) = Ascription <$> expr e <*> pure (ty t) <*> pure a
   expr (Record rs a) = Record <$> traverse field rs <*> pure a
@@ -95,7 +96,7 @@ desugarProgram = traverse statement where
 
   expr (Lazy e a) = do
     e <- expr e
-    pure $ App (VarRef (TgInternal "lazy") a)
+    pure $ App (VarRef lAZYName a)
                (Fun (PatParam (PLiteral LiUnit a)) e a)
                a
   expr (Vta e t a) = Vta <$> expr e <*> pure (ty t) <*> pure a

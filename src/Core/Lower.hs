@@ -238,7 +238,7 @@ lowerAnyway (S.VarRef v (_, ty)) = do
     -- If we're accessing a natively boxed operator, generate some stubs for it.
     -- This is horrible, and would be nicer as part of the stdlib, but this is
     -- the only solution for now.
-    _ | TgInternal{} <- v
+    _ | TgName _ n <- v, n < 0
       , Just _ <- VarMap.lookup v' boxedTys -> do
           injects <- get
           Atom . flip Ref lty <$> case VarMap.lookup v' injects of
