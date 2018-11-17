@@ -1,11 +1,10 @@
-{-# LANGUAGE OverloadedStrings, FlexibleContexts, RankNTypes,
+{-# LANGUAGE FlexibleContexts, RankNTypes,
    GADTs, UndecidableInstances, FlexibleInstances,
    MultiParamTypeClasses #-}
 module Types.Infer.Builtin where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
-import qualified Data.Text as T
 import qualified Data.Set as Set
 import Data.Spanned
 import Data.Reason
@@ -14,57 +13,14 @@ import Control.Monad.Infer
 import Control.Lens
 
 import Syntax.Transform
+import Syntax.Builtin
 import Syntax.Types
 import Syntax.Subst
 import Syntax.Var
 import Syntax
 
-tyUnit, tyBool, tyInt, tyString, tyFloat, tyLazy, tyConstraint, tyArrow :: Type Typed
-tyInt = TyCon (TgInternal "int")
-tyString = TyCon (TgInternal "string")
-tyBool = TyCon (TgInternal "bool")
-tyUnit = TyCon (TgInternal "unit")
-tyFloat = TyCon (TgInternal "float")
-tyLazy = TyCon (TgName "lazy" (-34))
-tyConstraint = TyCon (TgName "constraint" (-37))
-tyArrow = TyCon (TgName "->" (-38))
-
 builtinNames :: Set.Set (Var Typed)
-builtinNames = Set.fromList $ namesInScope (builtinsEnv ^. names)
-
-builtinsEnv :: Env
-builtinsEnv = envOf (scopeFromList builtin) where
-  op :: T.Text -> Type Typed -> (Var Desugared, Type Typed)
-  op x t = (TgInternal x, t)
-  tp :: T.Text -> (Var Desugared, Type Typed)
-  tp x = (TgInternal x, TyType)
-
-  intOp = tyInt `TyArr` (tyInt `TyArr` tyInt)
-  floatOp = tyFloat `TyArr` (tyFloat `TyArr` tyFloat)
-  stringOp = tyString `TyArr` (tyString `TyArr` tyString)
-  intCmp = tyInt `TyArr` (tyInt `TyArr` tyBool)
-  floatCmp = tyInt `TyArr` (tyInt `TyArr` tyBool)
-
-  cmp = TyForall name (Just TyType) $ TyVar name `TyArr` (TyVar name `TyArr` tyBool)
-    where name = TgInternal "a"-- TODO: This should use TvName/TvFresh instead
-  builtin
-    = [ op "+" intOp, op "-" intOp, op "*" intOp, op "/" (tyInt `TyArr` (tyInt `TyArr` tyFloat)), op "**" intOp
-      , op "+." floatOp, op "-." floatOp, op "*." floatOp, op "/." floatOp, op "**." floatOp
-      , op "^" stringOp
-      , op "<" intCmp, op ">" intCmp, op ">=" intCmp, op "<=" intCmp
-      , op "<." floatCmp, op ">." floatCmp, op ">=." floatCmp, op "<=." floatCmp
-      , op "==" cmp, op "<>" cmp
-      , op "@@" $ TyForall a (Just TyType) $
-         TyForall b (Just TyType) $ (TyVar a `TyArr` TyVar b) `TyArr` (TyVar a `TyArr` TyVar b)
-      , (TgInternal "lazy", TyForall a (Just TyType) $ (tyUnit `TyArr` TyVar a) `TyArr` TyApp tyLazy (TyVar a))
-      , (TgInternal "force", TyForall a (Just TyType) $ TyApp tyLazy (TyVar a) `TyArr` TyVar a)
-      , (TgName "->" (-38), TyArr TyType (TyArr TyType TyType))
-      , (TgName "*" (-39), TyArr TyType (TyArr TyType (TyForall a (Just TyType) (TyVar a))))
-      , tp "int", tp "string", tp "bool", tp "unit", tp "float"
-      , (TgName "lazy" (-34), TyArr TyType TyType), (TgName "constraint" (-37), TyType)
-      ]
-    where a = TgInternal "a"
-          b = TgInternal "b"
+builtinNames = Set.fromList $ namesInScope (builtinEnv ^. names)
 
 unify, subsumes :: ( MonadInfer Typed m )
                 => SomeReason
@@ -212,18 +168,6 @@ gadtConResult :: Type p -> Type p
 gadtConResult (TyForall _ _ t) = gadtConResult t
 gadtConResult (TyArr _ t) = t
 gadtConResult t = t
-
-forceName, lAZYName :: Var Typed
-lAZYName = TgName "lazy" (-35)
-forceName = TgName "force" (-36)
-
-forceTy, lAZYTy :: Type Typed
-forceTy = TyForall (TgName "a" (-30)) (Just TyType) (forceTy' (TyVar (TgName "a" (-30))))
-lAZYTy = TyForall (TgName "a" (-30)) (Just TyType) (lAZYTy' (TyVar (TgName "a" (-30))))
-
-forceTy', lAZYTy' :: Type Typed -> Type Typed
-forceTy' x = TyArr (TyApp tyLazy x) x
-lAZYTy' x = TyArr (TyArr tyUnit x) (TyApp tyLazy x)
 
 getHead :: Type p -> Type p
 getHead t@TyVar{} = t

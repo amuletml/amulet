@@ -24,6 +24,7 @@ import Text.Pretty.Semantic
 import Syntax.Verify.Pattern
 import Syntax.Verify.Error
 
+import Syntax.Builtin (tyUnit, tyLazy)
 import Syntax.Pretty
 import Syntax.Subst
 import Syntax.Types
@@ -31,7 +32,7 @@ import Syntax.Let
 
 import Language.Lua.Parser
 
-import Types.Infer.Builtin (tyUnit, tyLazy, spine, getHead)
+import Types.Infer.Builtin (spine, getHead)
 
 data VerifyScope = VerifyScope Env AbsState
 

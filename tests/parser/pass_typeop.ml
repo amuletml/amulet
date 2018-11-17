@@ -8,6 +8,5 @@ let _ : int || int = ()
 let _ : (&&) int int = ()
 
 (* Test builtin ones *)
-let _ : (=>) = ()
 let _ : (->) = ()
 let _ : ( *) = ()

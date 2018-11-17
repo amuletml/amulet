@@ -51,6 +51,7 @@ import Data.List
 import Syntax.Resolve.Toplevel
 import Syntax.Resolve.Scope
 import Syntax.Resolve.Error
+import Syntax.Builtin
 import Syntax.Pretty
 import Syntax.Subst
 
@@ -244,10 +245,6 @@ reExpr (Begin es a) = Begin <$> traverse reExpr es <*> pure a
 
 reExpr (Literal l a) = pure (Literal l a)
 
--- reExpr r@(Match e [] a) = do
---   _ <- reExpr e
---   tell (pure (ArisingFrom EmptyMatch (BecauseOf r)))
---   pure (junkExpr a)
 reExpr (Match e ps a) = do
   e' <- reExpr e
   ps' <- traverse reArm ps
@@ -372,8 +369,9 @@ reType r o@TyOperator{} = do
           in popUntil (op left sop right:es') os opre assoc
       popUntil es os _ _ = (es, os)
 
-      op l (TgName _ (-39)) r = TyTuple l r
-      op l o r = TyOperator l o r
+      op l o r
+        | o == tyTupleName = TyTuple l r
+        | otherwise = TyOperator l o r
 
 reType _ TyType = pure TyType
 

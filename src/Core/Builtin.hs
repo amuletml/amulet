@@ -20,7 +20,7 @@ vFloat   = CoVar (-4) "float" TypeConVar
 vUnit    = CoVar (-5) "unit" TypeConVar
 vLazy    = CoVar (-34) "lazy" TypeConVar
 vArrow   = CoVar (-38) "->" TypeConVar
-vProduct = CoVar (-39) "->" TypeConVar
+vProduct = CoVar (-39) "*" TypeConVar
 
 tyBool, tyInt, tyString, tyFloat, tyUnit, tyLazy :: IsVar a => Type a
 tyBool   = ConTy $ fromVar vBool

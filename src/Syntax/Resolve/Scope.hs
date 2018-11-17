@@ -6,7 +6,7 @@ module Syntax.Resolve.Scope
   ( Scope(..)
   , ScopeVariable(..)
   , ModuleScope(..)
-  , builtinScope, emptyScope, emptyModules
+  , emptyScope, emptyModules
   , tagVar, tagModule
   , extend, extendN
   , extendTy, extendTyN
@@ -48,27 +48,6 @@ data Scope = Scope
 --
 -- There is only one 'ModuleScope' for the resolution process.
 newtype ModuleScope = ModuleScope (Map.Map (Var Parsed) (Var Resolved, Scope))
-
--- | A collection of all built-in variables
-builtinScope :: Scope
-builtinScope = Scope
-               { varScope = build [ "+", "-", "*", "/", "**", "^"
-                                  , "+.", "-.", "*.", "/.", "**.", "^."
-                                  , "<", ">", ">=", "<=", "==", "<>"
-                                  , "@@", "lazy", "force" ]
-               , tyScope    = Map.fromList [ (Name "constraint", SVar (TgName "constraint" (-37)))
-                                           , (Name "lazy", SVar (TgName "lazy" (-34)))
-                                           , (Name "->", SVar (TgName "->" (-38)))
-                                           , (Name "*", SVar (TgName "*" (-39)))
-                                           ] `Map.union`
-                              build [ "int", "string", "bool", "unit", "float"
-                                    , "=>"
-                                    ]
-               , tyvarScope = mempty
-               , modStack = []
-               }
-  where build :: [T.Text] -> Map.Map (Var Parsed) ScopeVariable
-        build = foldr (\v -> Map.insert (Name v) (SVar (TgInternal v))) mempty
 
 -- | An empty scope, suitable for a new module
 emptyScope :: Scope

@@ -6,6 +6,7 @@ import Control.Monad.State
 
 import qualified Data.Map.Strict as Map
 
+import Syntax.Builtin
 import Syntax.Subst
 import Syntax.Types
 import Syntax.Var
@@ -31,12 +32,7 @@ approxType' (If _ t _ _) = approxType' t
 approxType' (Begin xs _) = approxType' (last xs)
 approxType' (Let _ e _) = approxType' e
 
-approxType' (Literal l _) = case l of
-  LiInt _ -> pure tyInt
-  LiStr _ -> pure tyString
-  LiFloat _ -> pure tyFloat
-  LiBool _ -> pure tyBool
-  LiUnit -> pure tyUnit
+approxType' (Literal l _) = pure (litTy l)
 
 approxType' (Record vs _) = do
   let one (Field r e _) = (r,) <$> approxType' e
