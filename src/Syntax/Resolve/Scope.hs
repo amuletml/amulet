@@ -42,12 +42,14 @@ data Scope = Scope
                -- | The current module we are resolving in
              , modStack    :: [T.Text]
              }
+  deriving (Show)
 
 -- | A mapping of fully-qualified module names to the variables within
 -- them.
 --
 -- There is only one 'ModuleScope' for the resolution process.
 newtype ModuleScope = ModuleScope (Map.Map (Var Parsed) (Var Resolved, Scope))
+  deriving (Show)
 
 -- | An empty scope, suitable for a new module
 emptyScope :: Scope

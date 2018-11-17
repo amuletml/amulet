@@ -1,4 +1,14 @@
 {-# LANGUAGE OverloadedStrings #-}
+
+{-| A shared source of builtin varibles for the resolver and type checker.
+
+This largely defines variables in terms of those defined in
+"Core.Builtin". We use 'TgName', along with core's variable IDs in order
+to make lowering easier, and ensure core and syntax remain consistent.
+
+For variables which will be removed by the time lowering occurs (such as
+TC or resolver specific names), one may use 'TgInternal'.
+-}
 module Syntax.Builtin
   ( builtinResolve, builtinModules
   , builtinEnv
@@ -67,29 +77,35 @@ data BuiltinModule = BM
   , modules :: [(Var Resolved, BuiltinModule)]
   }
 
+instance Semigroup BuiltinModule where
+  (BM v t m) <> (BM v' t' m') = BM (v <> v') (t <> t') (m <> m')
+
+instance Monoid BuiltinModule where
+  mempty = BM { vars = mempty, types = mempty, modules = mempty }
+
 builtins :: BuiltinModule
 builtins =
-  BM { vars = [ intOp C.vOpAdd, intOp C.vOpSub, intOp C.vOpMul, opOf C.vOpDiv (tyInt ~> tyInt ~> tyFloat), intOp C.vOpExp
-              , intCmp C.vOpLt, intCmp C.vOpGt, intCmp C.vOpLe, intCmp C.vOpGe
+  mempty
+  { vars = [ intOp C.vOpAdd, intOp C.vOpSub, intOp C.vOpMul, opOf C.vOpDiv (tyInt ~> tyInt ~> tyFloat), intOp C.vOpExp
+           , intCmp C.vOpLt, intCmp C.vOpGt, intCmp C.vOpLe, intCmp C.vOpGe
 
-              , floatOp C.vOpAddF, floatOp C.vOpSubF, floatOp C.vOpMulF, floatOp C.vOpDivF, floatOp C.vOpExpF
-              , floatCmp C.vOpLtF, floatCmp C.vOpGtF, floatCmp C.vOpLeF, floatCmp C.vOpGeF
+           , floatOp C.vOpAddF, floatOp C.vOpSubF, floatOp C.vOpMulF, floatOp C.vOpDivF, floatOp C.vOpExpF
+           , floatCmp C.vOpLtF, floatCmp C.vOpGtF, floatCmp C.vOpLeF, floatCmp C.vOpGeF
 
-              , stringOp C.vOpConcat
+           , stringOp C.vOpConcat
 
-              , cmp C.vOpEq, cmp C.vOpNe
-              , (opAppName, a *. b *. (TyVar a ~> TyVar b) ~> TyVar a ~> TyVar b)
-              , (lAZYName, lAZYTy), (forceName, forceTy)
-              ]
+           , cmp C.vOpEq, cmp C.vOpNe
+           , (opAppName, a *. b *. (TyVar a ~> TyVar b) ~> TyVar a ~> TyVar b)
+           , (lAZYName, lAZYTy), (forceName, forceTy)
+           ]
 
-     , types = [ tp C.vBool, tp C.vInt, tp C.vString, tp C.vFloat, tp C.vUnit
-               , (tyLazyName, TyType ~> TyType)
-               , (tyArrowName, TyType ~> TyType ~> TyType)
-               , (tyTupleName, TyType ~> TyType ~> a *. TyVar a)
-               , (tyConstraintName, TyType)
-               ]
-     , modules = []
-     }
+  , types = [ tp C.vBool, tp C.vInt, tp C.vString, tp C.vFloat, tp C.vUnit
+            , (tyLazyName, TyType ~> TyType)
+            , (tyArrowName, TyType ~> TyType ~> TyType)
+            , (tyTupleName, TyType ~> TyType ~> a *. TyVar a)
+            , (tyConstraintName, TyType)
+            ]
+  }
 
   where
 
@@ -107,24 +123,37 @@ builtins =
     -- Helper functions for types
     tp x = (ofCore x, TyType)
 
-
+-- | The builtin scope and module list for the resolver
 builtinResolve :: R.Scope
 builtinModules :: R.ModuleScope
-(builtinResolve, builtinModules) = go builtins where
-  go (BM vs ts _) =
-    -- TODO: Handle modules
-    ( R.Scope
-      { R.varScope = buildVars vs
-      , R.tyScope = buildVars ts
-      , R.tyvarScope = mempty, R.modStack = mempty }
-    , R.ModuleScope mempty )
+(builtinResolve, builtinModules) = R.ModuleScope <$> go builtins where
+  go :: BuiltinModule -> (R.Scope, Map.Map (Var Parsed) (Var Resolved, R.Scope))
+  go (BM vs ts ms) =
+    let scp = R.Scope
+              { R.varScope = buildVars vs
+              , R.tyScope = buildVars ts
+              , R.tyvarScope = mempty, R.modStack = mempty }
+
+    in foldr (\(n, mod) (scp, ms) ->
+                let (scp', ms') = go mod
+                    n' = getName n
+                in ( R.Scope
+                     { R.varScope = R.varScope scp <> nest n' (R.varScope scp')
+                     , R.tyScope  = R.tyScope scp  <> nest n' (R.tyScope scp')
+                     , R.tyvarScope = mempty, R.modStack = mempty
+                     }
+                   , ms <> nest n' ms' <> Map.singleton (Name n') (n, scp')) )
+       (scp, mempty) ms
 
   buildVars :: [(Var Resolved, Type Typed)] -> Map.Map (Var Parsed) R.ScopeVariable
   buildVars = foldr (\(var, _) -> Map.insert (Name (getName var)) (R.SVar var)) mempty
 
+  nest n = Map.mapKeys (InModule n)
+
   getName (TgInternal x) = x
   getName (TgName x _) = x
 
+-- | The builtin scope for type inference
 builtinEnv :: T.Env
 builtinEnv = go builtins where
   go (BM vs ts ms) = foldr ((<>) . go . snd) (T.envOf (T.scopeFromList vs <> T.scopeFromList ts)) ms
@@ -143,7 +172,8 @@ v *. t = TyForall v (Just TyType) t
 infixr ~>
 infixr *.
 
--- Some internal variables
+-- | Some internal type variables. These do not need to be unique as they
+-- are bound by a forall.
 a, b :: Var Resolved
 a = ofCore C.tyvarA
 b = ofCore C.tyvarB
