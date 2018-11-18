@@ -1,8 +1,8 @@
 class () => semigroup#0 a#1 begin
   val <>#2 : 'a#1 -> 'a#1 -> 'a#1
 end
-instance () => semigroup#0 int begin
-  <>#2 = ((+))
+instance () => semigroup#0 int#-2 begin
+  <>#2 = ((+#-6))
 end
 class () => default#3 a#4 begin
   val a#5 : 'a#4

@@ -3,9 +3,11 @@ module Types.Infer.Outline (approximate) where
 
 import Control.Monad.Infer
 import Control.Monad.State
+import Control.Lens
 
 import qualified Data.Map.Strict as Map
 
+import Syntax.Builtin
 import Syntax.Subst
 import Syntax.Types
 import Syntax.Var
@@ -31,20 +33,16 @@ approxType' (If _ t _ _) = approxType' t
 approxType' (Begin xs _) = approxType' (last xs)
 approxType' (Let _ e _) = approxType' e
 
-approxType' (Literal l _) = case l of
-  LiInt _ -> pure tyInt
-  LiStr _ -> pure tyString
-  LiFloat _ -> pure tyFloat
-  LiBool _ -> pure tyBool
-  LiUnit -> pure tyUnit
+approxType' (Literal l _) = pure (litTy l)
 
 approxType' (Record vs _) = do
   let one (Field r e _) = (r,) <$> approxType' e
   TyExactRows <$> traverse one vs
 
-approxType' (BinOp _ (VarRef o _) _ _) | o `Map.member` builtinOps = pure (builtinOps Map.! o)
-approxType' (App (VarRef v _) (Fun (PatParam (PLiteral LiUnit _)) e _) _) | v == TgInternal "lazy" =
-  TyApp tyLazy <$> approxType' e
+approxType' (BinOp _ (VarRef o _) _ _)
+  | Just ty <- o `Map.lookup` builtinOps = pure ty
+approxType' (App (VarRef v _) (Fun (PatParam (PLiteral LiUnit _)) e _) _)
+  | v == lAZYName = TyApp tyLazy <$> approxType' e
 
 approxType' _ = guess
 
@@ -94,27 +92,7 @@ guess = do
   lift freshTV
 
 builtinOps :: Map.Map (Var Desugared) (Type Typed)
-builtinOps =
-  Map.fromList
-    [ (TgInternal "+", tyInt)
-    , (TgInternal "-", tyInt)
-    , (TgInternal "*", tyInt)
-    , (TgInternal "/", tyFloat)
-    , (TgInternal "**", tyInt)
-    , (TgInternal "+.", tyFloat)
-    , (TgInternal "-.", tyFloat)
-    , (TgInternal "*.", tyFloat)
-    , (TgInternal "/.", tyFloat)
-    , (TgInternal "**.", tyFloat)
-    , (TgInternal "^", tyString)
-    , (TgInternal ">", tyBool)
-    , (TgInternal "<", tyBool)
-    , (TgInternal ">=", tyBool)
-    , (TgInternal "<=", tyBool)
-    , (TgInternal ">.", tyBool)
-    , (TgInternal "<.", tyBool)
-    , (TgInternal ">=.", tyBool)
-    , (TgInternal "<=.", tyBool)
-    , (TgInternal "==", tyBool)
-    , (TgInternal "<>", tyBool)
-    ]
+builtinOps = Map.mapMaybe extract . getScope $ builtinEnv ^. names where
+  extract (TyArr _ (TyArr _ r@TyCon{})) = Just r
+  extract (TyForall _ _ r) = extract r
+  extract _ = Nothing

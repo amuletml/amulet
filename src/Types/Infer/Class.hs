@@ -22,13 +22,13 @@ import Control.Arrow (second)
 import Control.Lens
 
 import Syntax.Implicits
+import Syntax.Builtin
 import Syntax.Subst
 import Syntax.Types
 import Syntax.Var
 import Syntax
 
 import {-# SOURCE #-} Types.Infer
-import Types.Infer.Builtin
 import Types.Kinds
 import Types.Unify
 

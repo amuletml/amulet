@@ -25,6 +25,7 @@ import Types.Infer.Errors
 import Types.Wellformed
 
 import Syntax.Implicits hiding (overlap, spine)
+import Syntax.Builtin
 import Syntax.Pretty
 import Syntax.Subst
 import Syntax
@@ -391,13 +392,13 @@ unify b (TySkol t) = SymCo <$> unify (TySkol t) b
 
 -- ((->) a b) = a -> b
 unify (TyApp (TyApp (TyCon v) l) r) (TyArr l' r')
-  | TgName _ (-38) <- v = ArrCo <$> unify l l' <*> unify r r'
+  | v == tyArrowName = ArrCo <$> unify l l' <*> unify r r'
 
 unify (TyArr l r) (TyApp (TyApp (TyCon v) l') r')
-  | TgName _ (-38) <- v = ArrCo <$> unify l l' <*> unify r r'
+  | v == tyArrowName = ArrCo <$> unify l l' <*> unify r r'
 
-unify (TyApp f g) (TyArr l r) = ArrCo <$> unify f (TyApp (TyCon (TgName "->" (-38))) l) <*> unify g r
-unify (TyArr l r) (TyApp f g) = ArrCo <$> unify (TyApp (TyCon (TgName "->" (-38))) l) f <*> unify r g
+unify (TyApp f g) (TyArr l r) = ArrCo <$> unify f (TyApp (TyCon tyArrowName) l) <*> unify g r
+unify (TyArr l r) (TyApp f g) = ArrCo <$> unify (TyApp (TyCon tyArrowName) l) f <*> unify r g
 
 unify (TyArr a b) (TyArr a' b') = ArrCo <$> unify a a' <*> unify b b'
 unify (TyPi (Implicit a) b) (TyPi (Implicit a') b') =
@@ -467,19 +468,19 @@ unify tp@TyRows{} x = confesses (Note (CanNotInstance tp x) isRec)
 
 -- ((*) a b) = a * b
 unify (TyApp (TyApp (TyCon v) l) r) (TyTuple l' r')
-  | TgName _ (-39) <- v = ProdCo <$> unify l l' <*> unify r r'
+  | v == tyTupleName = ProdCo <$> unify l l' <*> unify r r'
 
 unify (TyTuple l r) (TyApp (TyApp (TyCon v) l') r')
-  | TgName _ (-39) <- v = ProdCo <$> unify l l' <*> unify r r'
+  | v == tyTupleName = ProdCo <$> unify l l' <*> unify r r'
 
-unify (TyApp f g) (TyTuple l r) = ProdCo <$> unify f (TyApp (TyCon (TgName "*" (-39))) l) <*> unify g r
-unify (TyTuple l r) (TyApp f g) = ProdCo <$> unify (TyApp (TyCon (TgName "*" (-39))) l) f <*> unify r g
+unify (TyApp f g) (TyTuple l r) = ProdCo <$> unify f (TyApp (TyCon tyTupleName) l) <*> unify g r
+unify (TyTuple l r) (TyApp f g) = ProdCo <$> unify (TyApp (TyCon tyTupleName) l) f <*> unify r g
 
 unify (TyOperator l v r) (TyTuple l' r')
-  | TgName _ (-39) <- v = ProdCo <$> unify l l' <*> unify r r'
+  | v == tyTupleName = ProdCo <$> unify l l' <*> unify r r'
 
 unify (TyTuple l r) (TyOperator l' v r')
-  | TgName _ (-39) <- v = ProdCo <$> unify l l' <*> unify r r'
+  | v == tyTupleName = ProdCo <$> unify l l' <*> unify r r'
 
 unify (TyTuple a b) (TyTuple a' b') =
   ProdCo <$> unify a a' <*> unify b b'

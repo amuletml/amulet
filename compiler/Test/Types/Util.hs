@@ -4,6 +4,7 @@ module Test.Types.Util where
 import Types.Infer
 import Types.Unify
 
+import Syntax.Builtin
 import Syntax.Subst
 import Syntax.Var
 import Syntax
@@ -25,7 +26,7 @@ import qualified Data.Sequence as Seq
 
 
 inferExpr :: Expr Desugared -> Either [TypeError] (Type Typed)
-inferExpr e = flip Namey.evalNamey MonadInfer.firstName $ MonadInfer.runInfer builtinsEnv (infer e) >>= go where
+inferExpr e = flip Namey.evalNamey MonadInfer.firstName $ MonadInfer.runInfer builtinEnv (infer e) >>= go where
   go (This e) = pure . Left $ e
   go (These e _) = pure . Left $ e
   go (That ((_, t), cs)) = do
@@ -35,7 +36,7 @@ inferExpr e = flip Namey.evalNamey MonadInfer.firstName $ MonadInfer.runInfer bu
       Right (x, _, _) -> Right (apply x t)
 
 checkExpr :: Expr Desugared -> Type Typed -> Either [TypeError] ()
-checkExpr e t = flip Namey.evalNamey MonadInfer.firstName $ MonadInfer.runInfer builtinsEnv (check e t) >>= go where
+checkExpr e t = flip Namey.evalNamey MonadInfer.firstName $ MonadInfer.runInfer builtinEnv (check e t) >>= go where
   go (This e) = pure . Left $ e
   go (These e _) = pure . Left $ e
   go (That (_, cs)) = do

@@ -14,19 +14,15 @@ import Control.Monad.State
 
 import qualified Data.VarMap as VarMap
 import qualified Data.VarSet as VarSet
-import qualified Data.Map as Map
-import qualified Data.Text as T
-import Data.Maybe
 
 import qualified Core.Core as C
-import qualified Core.Builtin as C
 import Core.Core hiding (Atom, Term, Stmt, Type, Pattern, Arm)
 import Core.Var
 
+import qualified Syntax.Builtin as Bi
 import qualified Syntax as S
 import Syntax.Var (VarResolved(..), Var, Resolved, Typed)
 import Syntax (Lit(..), Skolem(..))
-
 
 data LowerState
   = LS
@@ -52,16 +48,7 @@ mkCon = mkVar DataConVar
 -- | Make a core variable from a "Syntax" variable and a given kind.
 mkVar :: VarInfo -> Var Resolved -> CoVar
 mkVar k (TgName t i) = CoVar i t k
-mkVar k (TgInternal name) = CoVar (builtin name) name k where
-  builtin name = fromMaybe (error ("Cannot find builtin " ++ show name)) (Map.lookup name builtins)
-
-  builtins = Map.fromList (map ex C.builtinTyList
-                           ++ map (ex . fst) (C.builtinVarList :: [(CoVar, C.Type CoVar)])
-                           ++ map ex [C.tyvarA, C.tyvarB]
-                          )
-
-  ex :: CoVar -> (T.Text, Int)
-  ex (CoVar v n _) = (n, v)
+mkVar _ n@TgInternal{} = error ("Cannot convert " ++ show n ++ " to CoVar")
 
 -- | Lower a type from "Syntax" to one in "Core.Core".
 lowerType :: S.Type Typed -> C.Type CoVar
@@ -77,21 +64,23 @@ lowerType (S.TyPi bind b)
     ForallTy Irrelevant (lowerType a) (lowerType b)
   | S.Implicit a <- bind =
     ForallTy Irrelevant (lowerType a) (lowerType b)
-lowerType (S.TyApp (S.TyApp (S.TyCon (TgName _ (-38))) l) r) = ForallTy Irrelevant (lowerType l) (lowerType r)
-lowerType (S.TyApp (S.TyApp (S.TyCon (TgName _ (-39))) l) r) =
-  lowerType (S.TyTuple l r)
+lowerType (S.TyApp (S.TyApp (S.TyCon v) l) r)
+  | v == Bi.tyArrowName = ForallTy Irrelevant (lowerType l) (lowerType r)
+  | v == Bi.tyTupleName = lowerType (S.TyTuple l r)
 lowerType (S.TyApp a b) = AppTy (lowerType a) (lowerType b)
 lowerType (S.TyRows rho vs) = RowsTy (lowerType rho) (map (fmap lowerType) vs)
 lowerType (S.TyExactRows []) = NilTy
 lowerType (S.TyExactRows vs) = ExactRowsTy (map (fmap lowerType) vs)
 lowerType (S.TyVar v) = VarTy (mkTyvar v)
-lowerType (S.TyCon (TgName _ (-37))) = StarTy
-lowerType (S.TyCon v) = ConTy (mkType v)
+lowerType (S.TyCon v)
+  | v == Bi.tyConstraintName = StarTy
+  | otherwise = ConTy (mkType v)
 lowerType (S.TyPromotedCon v) = ConTy (mkCon v) -- TODO this is in the wrong scope
 lowerType (S.TySkol (Skolem (TgName _ v) (TgName n _) _ _)) = VarTy (CoVar v n TypeVar)
 lowerType (S.TySkol _) = error "impossible lowerType TySkol"
-lowerType (S.TyOperator l (TgName _ (-39)) r) = lowerType (S.TyTuple l r)
-lowerType (S.TyOperator l o r) = (ConTy (mkType o) `AppTy` lowerType l) `AppTy` lowerType r
+lowerType (S.TyOperator l o r)
+  | o == Bi.tyTupleName = lowerType (S.TyTuple l r)
+  | otherwise = (ConTy (mkType o) `AppTy` lowerType l) `AppTy` lowerType r
 lowerType (S.TyWildcard (Just t)) = lowerType t
 lowerType (S.TyWildcard _) = error "impossible lowerType TyWildcard"
 lowerType (S.TyParens t) = lowerType t
