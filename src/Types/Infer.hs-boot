@@ -2,13 +2,7 @@
    ViewPatterns, LambdaCase #-}
 module Types.Infer
   ( inferProgram
-  , builtinsEnv
   , closeOver
-  , tyString
-  , tyInt
-  , tyBool
-  , tyUnit
-  , tyFloat
 
   , infer, check, solveEx, deSkol
   ) where
@@ -24,7 +18,6 @@ import Syntax.Subst
 import Syntax.Var
 import Syntax
 
-import Types.Infer.Builtin
 import Types.Kinds
 
 inferProgram :: MonadNamey m => Env -> [Toplevel Desugared] -> m (These [TypeError] ([Toplevel Typed], Env))

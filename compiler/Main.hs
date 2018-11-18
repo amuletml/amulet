@@ -19,12 +19,13 @@ import Control.Monad.State
 import Language.Lua.Syntax
 import Backend.Lua
 
-import Types.Infer (inferProgram, builtinsEnv)
+import Types.Infer (inferProgram)
 
 import Syntax.Resolve (ResolveError, resolveProgram)
 import qualified Syntax.Resolve.Scope as RS
 import Syntax.Resolve.Toplevel (extractToplevels)
 import Syntax.Desugar (desugarProgram)
+import qualified Syntax.Builtin as Bi
 import Syntax.Verify
 import Syntax.Var (Typed)
 import Syntax (Toplevel)
@@ -59,7 +60,7 @@ compile :: DoOptimise -> [(SourceName, T.Text)] -> CompileResult
 compile _ [] = error "Cannot compile empty input"
 compile opt (file:files) =
   let (res, name) = flip runNamey firstName $ do
-        file' <- go (Right ([], [], [], RS.builtinScope, RS.emptyModules, builtinsEnv)) file
+        file' <- go (Right ([], [], [], Bi.builtinResolve, Bi.builtinModules, Bi.builtinEnv)) file
         foldlM go file' files
   in case res of
        Right (ve, te, prg, _, _, env) ->
@@ -133,7 +134,7 @@ compileFromTo opt dbg fs emit =
     CSuccess es tes ast core opt lua env -> do
       traverse_ (`reportS` fs) es
       traverse_ (`reportS` fs) tes
-      D.dump dbg ast core opt lua builtinsEnv env
+      D.dump dbg ast core opt lua Bi.builtinEnv env
       if any isError es || any isError tes
          then pure ()
          else emit lua
@@ -151,7 +152,7 @@ test opt mode fs =
       traverse_ (`reportS` fs) tes
       guard (all (not . isError) es)
       guard (all (not . isError) tes)
-      D.dump mode ast core opt lua builtinsEnv env
+      D.dump mode ast core opt lua Bi.builtinEnv env
 
       pure (pure (core, env))
     CParse es -> Nothing <$ traverse_ (`reportS` fs) es

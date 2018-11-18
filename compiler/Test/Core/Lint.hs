@@ -13,12 +13,13 @@ import Data.List
 import Control.Monad.Infer (TypeError, firstName)
 import Control.Monad.Namey
 
-import Types.Infer (inferProgram, builtinsEnv)
+import Types.Infer (inferProgram)
 
 import Syntax.Resolve (ResolveError, resolveProgram)
-import qualified Syntax.Resolve.Scope as RS
 import Syntax.Resolve.Toplevel (extractToplevels)
+import qualified Syntax.Resolve.Scope as RS
 import Syntax.Desugar (desugarProgram)
+import Syntax.Builtin
 
 import Core.Lower (runLowerT, lowerProg)
 import Core.Core (Stmt)
@@ -52,7 +53,7 @@ toEither (That x) = Right x
 compile :: MonadNamey m => [(SourceName, T.Text)] -> m CompileResult
 compile [] = error "Cannot compile empty input"
 compile (file:files) = do
-  file' <- go (Right ([], RS.builtinScope, RS.emptyModules, builtinsEnv)) file
+  file' <- go (Right ([], builtinResolve, builtinModules, builtinEnv)) file
   files' <- foldlM go file' files
   case files' of
     Right (prg, _, _, _) -> CSuccess <$> runLowerT (lowerProg prg)

@@ -57,6 +57,7 @@ import Text.Pretty.Note
 
 import Syntax.Transform
 import Syntax.Implicits
+import Syntax.Builtin
 import Syntax.Pretty
 import Syntax.Types
 import Syntax.Subst
@@ -569,7 +570,7 @@ instance Note TypeError Style where
          , empty
          ]
     where
-      msg | TyCon (TgInternal "unit") <- ctx =
+      msg | TyCon v <- ctx, v == tyUnitName =
               indent 2 "No instance for" <+> (Right <$> displayType tau)
                 <+> "arising from a use of" <+> (Right <$> blameOf why)
           | otherwise =

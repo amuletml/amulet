@@ -28,6 +28,7 @@ import Types.Infer.Builtin
 import Types.Infer.Errors
 import Types.Unify (solve)
 
+import Syntax.Builtin
 import Syntax.Subst
 import Syntax.Types
 import Syntax.Raise

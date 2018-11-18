@@ -73,7 +73,7 @@ data VarResolved
 
 instance Semigroup VarResolved where
   _ <> x@(TgInternal _) = x
-  (TgInternal _) <> _ = error "Nonsensical module"
+  (TgInternal x) <> (TgName y i) = TgName (T.concat [x, T.pack ".", y]) i
   (TgName x _) <> (TgName y i) = TgName (T.concat [x, T.pack ".", y]) i
 
 instance Eq VarResolved where
@@ -95,4 +95,3 @@ instance Pretty VarParsed where
 instance Pretty VarResolved where
   pretty (TgName v i) = text v <> scomment (string "#" <> string (show i))
   pretty (TgInternal v) = text v
-

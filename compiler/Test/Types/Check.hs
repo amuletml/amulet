@@ -15,10 +15,10 @@ import Parser.Wrapper (runParser)
 import Parser
 
 import Syntax.Resolve (resolveProgram)
-import Types.Infer (inferProgram, builtinsEnv)
-import qualified Syntax.Resolve.Scope as RS
+import Types.Infer (inferProgram)
 import Syntax.Desugar (desugarProgram)
 import Syntax.Types (difference, toMap)
+import Syntax.Builtin
 
 import Syntax.Pretty()
 
@@ -28,10 +28,10 @@ import Text.Pretty.Semantic
 result :: String -> T.Text -> T.Text
 result f c = runIdentity . flip evalNameyT firstName $ do
   let parsed = requireJust f c $ runParser f (L.fromStrict c) parseTops
-  (resolved, _) <- requireRight f c <$> resolveProgram RS.builtinScope RS.emptyModules parsed
+  (resolved, _) <- requireRight f c <$> resolveProgram builtinResolve builtinModules parsed
 
   desugared <- desugarProgram resolved
-  inferred <- inferProgram builtinsEnv desugared
+  inferred <- inferProgram builtinEnv desugared
 
   pure . displayPlain
        . either prettyErrs ((Right<$>) . reportEnv . snd)
@@ -39,7 +39,7 @@ result f c = runIdentity . flip evalNameyT firstName $ do
 
   where
     reportEnv env =
-      let env' = difference env builtinsEnv
+      let env' = difference env builtinEnv
       in vsep $
         map reportComponent (Map.toList (env' ^. names . to toMap))
 

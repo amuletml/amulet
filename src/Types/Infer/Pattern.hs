@@ -17,6 +17,7 @@ import Types.Infer.Builtin
 import Types.Wellformed
 import Types.Unify (freshSkol)
 
+import Syntax.Builtin
 import Syntax.Types
 import Syntax.Subst
 import Syntax.Var

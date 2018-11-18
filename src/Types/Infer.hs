@@ -2,13 +2,7 @@
    ViewPatterns, LambdaCase, TypeFamilies #-}
 module Types.Infer
   ( inferProgram
-  , builtinsEnv
   , closeOver
-  , tyString
-  , tyInt
-  , tyBool
-  , tyUnit
-  , tyFloat
 
   , infer, check, solveEx, deSkol
   ) where
@@ -37,6 +31,7 @@ import Control.Lens
 import Syntax.Resolve.Toplevel
 import Syntax.Implicits
 import Syntax.Transform
+import Syntax.Builtin
 import Syntax.Subst
 import Syntax.Types
 import Syntax.Let

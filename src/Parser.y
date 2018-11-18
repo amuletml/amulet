@@ -459,7 +459,6 @@ TypeOperator :: { Var Parsed  }
 TypeOperatorF :: { Var Parsed }
   : TypeOperator                                  { $1 }
   | '->'                                          { Name $ T.pack "->" }
-  | '=>'                                          { Name $ T.pack "=>" }
 
 TypeAtom :: { Located (Type Parsed) }
          : Var                                    { lPos1 $1 $ TyCon (getL $1) }

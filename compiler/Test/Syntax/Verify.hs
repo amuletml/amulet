@@ -12,14 +12,13 @@ import Data.Foldable
 import Parser.Wrapper (runParser)
 import Parser
 
-import qualified Syntax.Resolve.Scope as RS
 import Syntax.Resolve (resolveProgram)
 import Syntax.Desugar (desugarProgram)
 import Syntax.Verify
-
+import Syntax.Builtin
 import Syntax.Pretty()
 
-import Types.Infer (inferProgram, builtinsEnv)
+import Types.Infer (inferProgram)
 
 import qualified Text.Pretty.Note as N
 import Text.Pretty.Semantic
@@ -29,9 +28,9 @@ result f c = fst . flip runNamey firstName $ do
   let parsed = requireJust f c $ runParser f (L.fromStrict c) parseTops
       prettyErrs = vsep . map (N.format (N.fileSpans [(f, c)] N.defaultHighlight))
 
-  (resolved, _) <- requireRight f c <$> resolveProgram RS.builtinScope RS.emptyModules parsed
+  (resolved, _) <- requireRight f c <$> resolveProgram builtinResolve builtinModules parsed
   desugared <- desugarProgram resolved
-  (inferred, env) <- requireThat f c <$> inferProgram builtinsEnv desugared
+  (inferred, env) <- requireThat f c <$> inferProgram builtinEnv desugared
   v <- genName
   case runVerify env v (verifyProgram inferred) of
     Left es -> pure (displayPlain (prettyErrs (toList es)))

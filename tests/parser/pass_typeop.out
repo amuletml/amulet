@@ -5,6 +5,5 @@ type && 'a 'b =
   | And of 'a * 'b
 let _ = (() : int || int)
 let _ = (() : (&&) int int)
-let _ = (() : (=>))
 let _ = (() : (->))
 let _ = (() : (*))

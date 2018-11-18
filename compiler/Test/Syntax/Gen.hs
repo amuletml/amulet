@@ -1,7 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Test.Syntax.Gen ( genType ) where
 
-import Types.Infer.Builtin (tyUnit, tyBool, tyInt, tyString, tyLazy)
+import Syntax.Builtin
 import Syntax.Var
 import Syntax
 

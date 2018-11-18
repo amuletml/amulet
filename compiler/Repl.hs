@@ -34,8 +34,9 @@ import qualified Foreign.Lua as L
 import System.Console.Haskeline hiding (display)
 import System.IO
 
-import qualified Syntax.Resolve.Scope as R
 import qualified Syntax.Resolve.Toplevel as R
+import qualified Syntax.Resolve.Scope as R
+import qualified Syntax.Builtin as Bi
 import Syntax.Resolve (resolveProgram)
 import Syntax.Desugar (desugarProgram)
 import Syntax.Verify
@@ -46,7 +47,6 @@ import qualified Syntax as S
 import qualified Control.Monad.Infer as T
 import Control.Monad.Namey
 
-import qualified Types.Infer as I
 import Types.Infer (inferProgram)
 
 import Parser.Wrapper (Parser, runParser)
@@ -109,9 +109,9 @@ defaultState mode = do
     pure ()
 
   pure ReplState
-    { resolveScope = R.builtinScope
-    , moduleScope  = R.emptyModules
-    , inferScope   = I.builtinsEnv
+    { resolveScope = Bi.builtinResolve
+    , moduleScope  = Bi.builtinModules
+    , inferScope   = Bi.builtinEnv
     , emitState    = B.defaultEmitState
     , lastName     = S.TgName (T.pack "a") 1
     , lowerState   = L.defaultState
