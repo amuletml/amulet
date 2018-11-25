@@ -97,16 +97,8 @@ data ReplState = ReplState
 defaultState :: DebugMode -> IO ReplState
 defaultState mode = do
   state <- L.newstate
-
-  let preamble = display . uncommentDoc . renderPretty 0.8 100 . pretty
-                . LuaDo . foldMap (map (patchupLua B.defaultEmitState) . snd . B.genBuiltin . fst)
-                $ VarMap.toList B.builtinVars
-
-  -- Init our default libraries and operator functions
-  L.runWith state $ do
-    L.openlibs
-    L.OK <- L.dostring (T.encodeUtf8 preamble)
-    pure ()
+  -- Init our default libraries
+  L.runWith state L.openlibs
 
   pure ReplState
     { resolveScope = Bi.builtinResolve
@@ -366,7 +358,7 @@ parseCore state parser name input = do
 emitCore :: ReplState -> [Stmt CoVar] -> (B.TopEmitState, LuaStmt, Bs.ByteString)
 emitCore state core =
   let core' = patchupUsage . snd . tagOccurStmt (const occursSet) OccursVar $ core
-      (luaStmt, emit') = runState (B.emitStmt core') (emitState state)
+      (luaStmt, emit') = uncurry B.addBuiltins $ runState (B.emitStmt core') (emitState state)
       luaExpr = LuaDo . map (patchupLua emit') . toList $ luaStmt
       luaSyntax = T.encodeUtf8 . display . uncommentDoc . renderPretty 0.8 100 . pretty $ luaExpr
   in (emit', luaExpr, luaSyntax)

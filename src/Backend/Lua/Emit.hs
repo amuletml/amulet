@@ -4,12 +4,9 @@
 , TemplateHaskell #-}
 module Backend.Lua.Emit
   ( emitStmt
-  , TopEmitState(..), topVars, topArity, topEscape
+  , TopEmitState(..), topVars, topArity, topEscape, topExVars
   , LuaSimple, unsimple
   , defaultEmitState
-  , ops, remapOp
-  , builtinVars
-  , escapeScope
   ) where
 
 import Control.Monad.Reader
@@ -25,11 +22,9 @@ import qualified Data.Text as T
 import Data.Traversable
 import Data.Foldable
 import Data.Triple
-import Data.Maybe
 import Data.List (partition)
 
 import Core.Occurrence
-import Core.Builtin
 import Core.Arity
 import Core.Types
 import Core.Core
@@ -38,6 +33,7 @@ import Core.Var
 import Language.Lua.Parser
 import Language.Lua.Syntax
 
+import Backend.Lua.Builtin
 import Backend.Escape
 
 -- | A magic variable used to represent the return value
@@ -45,19 +41,17 @@ vReturn :: CoVar
 vReturn = CoVar (-100) "<<ret>>" ValueVar
 
 data VarDecl
-     -- ^ A foreign function whose body should be inlined when used
-  = VarInline
-    { _topArgs :: [T.Text] -- ^ The arguments to this function, in order
-    , _topOrd  :: [Int]    -- ^ The order that arguments are evaluated. The first item contains the index of
-                           -- the argument to evaluate first, and so on...
-    , _topBody :: [LuaStmt] -- ^ The body of this function. We make some assumptions about this (it has no
-                            -- branches, it won't contain other function) in order, things are evaulated once,
-                            -- in order to simplify substitution.
-    }
-  -- | A "normal" toplevel declaration, which should just be referenced
-  -- by variable.
+     -- ^ A foreign function whose body should be inlined when used.
+  = VarInline Int ([LuaExpr] -> [LuaExpr])
+    -- | A "normal" toplevel declaration, which should just be referenced
+    -- by variable.
   | VarUpvalue
-  deriving Show
+
+instance Show VarDecl where
+  show (VarInline n f) =
+    let e = f $ map (LuaRef . LuaName . T.pack . ("arg"++) . show) [1..n]
+    in "VarInline(" ++ show e  ++ ")"
+  show VarUpvalue = "VarUpvalue"
 
 -- | A wrapper for "simple" Lua expressions
 --
@@ -106,6 +100,7 @@ data TopEmitState = TopEmitState
   { _topVars   :: VarMap.Map (VarDecl, [LuaSimple])
   , _topArity  :: ArityScope
   , _topEscape :: EscapeScope
+  , _topExVars :: ExtraVars
   }
   deriving Show
 
@@ -151,7 +146,10 @@ makeLenses ''NodeEmitState
 
 -- | The default (initial) state for the emitter.
 defaultEmitState :: TopEmitState
-defaultEmitState = TopEmitState mempty emptyScope escapeScope
+defaultEmitState
+  = TopEmitState
+      (VarMap.map (bimap (uncurry VarInline) (pure . simpleVar)) builtinBuilders)
+      emptyScope builtinEscape builtinVars
 
 liftedGraph :: forall a m.
                ( IsVar a
@@ -161,8 +159,12 @@ liftedGraph :: forall a m.
 liftedGraph = VarSet.foldr liftNode (pure mempty) where
   liftNode :: CoVar -> m (EmittedGraph a) -> m (EmittedGraph a)
   liftNode v m = do
-    n <- emitVarBinds v
-    VarMap.insert v (EmittedUpvalue VarUpvalue n [fromVar v]) <$> m
+    existing <- uses emitGraph (VarMap.lookup v)
+    case existing of
+      Just n@EmittedUpvalue{} -> VarMap.insert v n <$> m
+      _ -> do
+        n <- emitVarBinds v
+        VarMap.insert v (EmittedUpvalue VarUpvalue n [fromVar v]) <$> m
 
 -- | A wrapper for 'emitLiftedES' which converts the result to a sequence
 -- of 'LuaStmt's.
@@ -444,16 +446,15 @@ emitExpr var yield t@(AnnApp _ f e) = withinExpr var yield t $ do
   e' <- emitAtom e
   f' <- emitAtomS f
 
-  esc <- use (nodeState . emitEscape)
-  pure
-    [ case f' of
-        -- Attempt to reduce applications of binary functions to the operators
-        -- themselves.
-        LuaRef (LuaName op)
-          | Just op' <- getEscaped op esc, Just opv <- VarMap.lookup (op' :: CoVar) ops
-          , [l, r] <- e'
-            -> LuaBinOp l opv r
-        _ -> LuaCallE (LuaCall f' e') ]
+  state <- use nodeState
+  pure $ case f' of
+    -- Attempt to inline native definitions and binary operators
+    LuaRef (LuaName name)
+      | Just name' <- getEscaped name (state ^. emitEscape)
+      , Just EmittedUpvalue { emitTop = VarInline a b } <- state ^. (emitGraph . at name')
+      , length e' == a
+        -> b e'
+    _ -> [LuaCallE (LuaCall f' e')]
 
 emitExpr var yield (AnnLam _ TypeArgument{} b) = emitExpr var yield b
 
@@ -947,44 +948,3 @@ patternTest _ _ _ = undefined
 
 tag :: IsVar a => EscapeScope -> a -> LuaExpr -> LuaExpr
 tag scp con vr = LuaBinOp (LuaRef (LuaIndex vr (LuaString "__tag"))) "==" (LuaString (getVar con scp))
-
--- | A mapping from Amulet binary operators to their Lua equivalent.
-ops :: VarMap.Map T.Text
-ops = VarMap.fromList
-  [ (vOpAdd, "+"),  (vOpAddF, "+")
-  , (vOpSub, "-"),  (vOpSubF, "-")
-  , (vOpMul, "*"),  (vOpMulF, "*")
-  , (vOpDiv, "/"),  (vOpDivF, "/")
-  , (vOpExp, "^"),  (vOpExpF, "^")
-  , (vOpLt,  "<"),  (vOpLtF,  "<")
-  , (vOpGt,  ">"),  (vOpGtF,  "<")
-  , (vOpLe,  "<="), (vOpLeF,  "<=")
-  , (vOpGe,  ">="), (vOpGeF,  ">=")
-
-  , (vOpConcat, "..")
-
-  , (vOpEq, "==")
-  , (vOpNe, "~=")
-  ]
-
--- | Remap an Amulet binary op to the equivalent Lua operator
-remapOp :: IsVar a => a -> T.Text
-remapOp v | v'@(CoVar _ n _) <- toVar v = fromMaybe n (VarMap.lookup v' ops)
-
--- | All builtin variables which require some form of code generation
-builtinVars :: VarMap.Map T.Text
-builtinVars = ops `VarMap.union` VarMap.fromList
-  [ (vLAZY,  "__builtin_Lazy")
-  , (vForce, "__builtin_force")
-  , (vOpApp, "__builtin_app")
-  , (vUnit,  "__builtin_unit")
-  ]
-
--- | The default 'EscapeScope' for the backend
-escapeScope :: EscapeScope
-escapeScope =
-  let escaper = basicEscaper keywords
-  in flip createEscape escaper
-   . map (fmap escaper)
-   . ((vError, "error"):)
-   $ VarMap.toList builtinVars
