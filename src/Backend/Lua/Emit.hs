@@ -45,7 +45,7 @@ vReturn = CoVar (-100) "<<ret>>" ValueVar
 
 data VarDecl
      -- ^ A foreign function whose body should be inlined when used.
-  = VarInline Int ([LuaExpr] -> [LuaExpr])
+  = VarInline Int ([LuaExpr] -> (Seq LuaStmt, [LuaExpr]))
     -- | A "normal" toplevel declaration, which should just be referenced
     -- by variable.
   | VarUpvalue
@@ -445,19 +445,22 @@ emitExpr var yield t@(AnnAtom _ x)    = withinExpr var yield t $ emitAtom x
 emitExpr var yield t@(AnnTyApp _ x _) = withinExpr var yield t $ emitAtom x
 emitExpr var yield t@(AnnCast _ x _)  = withinExpr var yield t $ emitAtom x
 
-emitExpr var yield t@(AnnApp _ f e) = withinExpr var yield t $ do
+emitExpr var yield t@(AnnApp _ f e) = withinTerm var t $ do
   e' <- emitAtom e
   f' <- emitAtomS f
 
   state <- use nodeState
-  pure $ case f' of
+  case f' of
     -- Attempt to inline native definitions and binary operators
     LuaRef (LuaName name)
       | Just name' <- getEscaped name (state ^. emitEscape)
       , Just EmittedUpvalue { emitTop = VarInline a b } <- state ^. (emitGraph . at name')
-      , length e' == a
-        -> b e'
-    _ -> [LuaCallE (LuaCall f' e')]
+      , length e' == a -> case b e' of
+          (Seq.Empty, es) -> pure $ EmittedExpr es yield
+          (ss, es) -> do
+            (ss', vals) <- genYield pushScope' yield es
+            pure $ EmittedStmt (ss <> ss') vals
+    _ -> pure $ EmittedExpr [LuaCallE (LuaCall f' e')] yield
 
 emitExpr var yield (AnnLam _ TypeArgument{} b) = emitExpr var yield b
 
@@ -558,7 +561,15 @@ withinExpr :: ( Occurs a
          => a -> EmitYield a -> AnnTerm VarSet.Set a
          -> StateT (NodeEmitState a) m [LuaExpr]
          -> m ()
-withinExpr var yield term m = do
+withinExpr var yield term m = withinTerm var term $ flip EmittedExpr yield <$> m
+
+withinTerm :: ( Occurs a
+            , MonadReader (EmitScope a) m
+            , MonadState (EmitState a) m )
+         => a -> AnnTerm VarSet.Set a
+         -> StateT (NodeEmitState a) m ([a] -> VarSet.Set -> EmittedNode a)
+         -> m ()
+withinTerm var term m = do
   ari <- view emitArity
   prev <- use emitPrev
 
@@ -569,7 +580,7 @@ withinExpr var yield term m = do
   -- Update the pure set if needed
   unless p (emitPrev .= VarSet.singleton (toVar var))
 
-  pushGraph var (EmittedExpr result yield [var] deps')
+  pushGraph var (result [var] deps')
 
 emitAtomS :: ( Occurs a
              , MonadState (NodeEmitState a) m)
@@ -784,14 +795,20 @@ emitStmt (Foreign n t s:xs) = do
   def <- case ex of
     LuaRef{} -> normalDef
 
-    LuaFunction as r@[LuaReturn es]
+    LuaFunction as bod
       | length as == basicArity t
-      , shouldInline as r -> do
+      , shouldInline as bod -> do
           -- We've got an expression which can be inlined, push a 'VarInline'!
+          let inline = case last bod of
+                LuaReturn rs -> \xs ->
+                  let s' = Map.fromList $ zip as xs
+                  in (substStmt s' <$> Seq.fromList (init bod), map (substExpr s') rs)
+                _ -> \xs ->
+                  let s' = Map.fromList $ zip as xs
+                  in (substStmt s' <$> Seq.fromList bod, [])
+
           topVars %= VarMap.insert (toVar n)
-            ( VarInline (length as) (\xs ->
-                let s' = Map.fromList $ zip as xs
-                in map (substExpr s') es)
+            ( VarInline (length as) inline
             , simpleVars [LuaName n'])
           -- This one may never be visited normally, so we'll push the
           -- extra-variable version of it instead.

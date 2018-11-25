@@ -2,6 +2,7 @@
 module Backend.Lua.Inline
   ( shouldInline
   , substExpr
+  , substStmt
   ) where
 
 import Control.Monad.State.Strict
@@ -45,23 +46,11 @@ shouldInline args stmts =
   sizeStmt :: ( MonadState InlineState m
               , Alternative m )
            => LuaStmt -> m (Sum Int)
-  -- These mess with scoping, so we'll just skip for now
-  sizeStmt LuaDo{} = empty
-  sizeStmt LuaLocal{} = empty
-  sizeStmt LuaLocalFun{} = empty
-  -- Anything which messes with control flow isn't worth bothering with.
-  sizeStmt LuaWhile{} = empty
-  sizeStmt LuaRepeat{} = empty
-  sizeStmt LuaFornum{} = empty
-  sizeStmt LuaFor{} = empty
-  sizeStmt LuaIfElse{} = empty
-  sizeStmt LuaBreak{} = empty
-  -- Impossible!
-  sizeStmt LuaQuoteS{} = empty
-
   sizeStmt (LuaReturn r) = foldMapM sizeExpr r
   sizeStmt (LuaCallS c) = sizeCall c
   sizeStmt (LuaAssign as vs) = (<>) <$> foldMapM sizeAssign as <*> foldMapM sizeExpr vs
+  -- For now we'll just skip these
+  sizeStmt _ = empty
 
   -- We skip assignments to arguments, otherwise all is good
   sizeAssign v@LuaName{} | Set.member v allVars = empty
@@ -124,7 +113,13 @@ shouldInline args stmts =
 
 -- | Substitute a series of variables within a Lua statement.
 substStmt :: Map.Map LuaVar LuaExpr -> LuaStmt -> LuaStmt
-substStmt = error "No, u"
+substStmt s = go where
+  go (LuaReturn rs) = LuaReturn (map goE rs)
+  go (LuaCallS c) = LuaCallS (substCall s c)
+  go (LuaAssign as rs) = LuaAssign (map (substVar s) as) (map goE rs)
+  go _ = error "substStmt not defined for this type"
+
+  goE = substExpr s
 
 substVar :: Map.Map LuaVar LuaExpr -> LuaVar -> LuaVar
 substVar _ v@LuaName{} = v

@@ -44,13 +44,13 @@ builtinVars :: ExtraVars
 builtinVars = VarMap.fromList $ map (\(v, _, d, _, s) -> (v, (d, Seq.fromList s))) builtins
 
 -- | All native "builders"
-builtinBuilders :: VarMap.Map ((Int, [LuaExpr] -> [LuaExpr]), LuaVar)
+builtinBuilders :: VarMap.Map ((Int, [LuaExpr] -> (Seq LuaStmt, [LuaExpr])), LuaVar)
 builtinBuilders = foldr go mempty builtins where
   go (_, _, _, Nothing, _) m = m
   go (v, n, _, Just b, _)  m = VarMap.insert v (b, LuaName n) m
 
 builtins :: [( CoVar, T.Text, [CoVar]
-             , Maybe (Int, [LuaExpr] -> [LuaExpr])
+             , Maybe (Int, [LuaExpr] -> (Seq LuaStmt, [LuaExpr]))
              , [LuaStmt] )]
 builtins =
   [ ( vLAZY, "__builtin_Lazy", [], Nothing
@@ -96,7 +96,7 @@ builtins =
           name_ = LuaName name
           inner = LuaBinOp (LuaRef left) op (LuaRef right)
       in ( var, name, []
-         , Just (2, \[l, r] -> [LuaBinOp l op r])
+         , Just (2, \[l, r] -> (mempty, [LuaBinOp l op r]))
          , [luaStmts|local function $name_($left, $right) return %inner end|] )
     left  = LuaName "l"
     right = LuaName "r"
