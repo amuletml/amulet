@@ -1,5 +1,4 @@
 do
-  local bottom = nil
   (nil)({
     op = function(ci) return ci end,
     app = 2,

@@ -15,7 +15,6 @@ do
       return x[1]
     end
   end
-  local bottom = nil
   (nil)({
     _1 = __builtin_Lazy(function(ae) return 2 end),
     _2 = function(x) return __builtin_force(x) end

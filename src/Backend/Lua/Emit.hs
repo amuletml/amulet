@@ -1,7 +1,7 @@
 {-# LANGUAGE
   OverloadedStrings, NamedFieldPuns, FlexibleContexts
 , TupleSections, ViewPatterns, ScopedTypeVariables
-, TemplateHaskell #-}
+, TemplateHaskell, QuasiQuotes #-}
 module Backend.Lua.Emit
   ( emitStmt
   , TopEmitState(..), topVars, topArity, topEscape, topExVars
@@ -32,6 +32,7 @@ import Core.Var
 
 import Language.Lua.Parser
 import Language.Lua.Syntax
+import Language.Lua.Quote
 
 import Backend.Lua.Builtin
 import Backend.Escape
@@ -767,31 +768,35 @@ emitStmt (Foreign n t s:xs) = do
   let ex = case parseExpr (SourcePos "_" 0 0) (s ^. lazy) of
         Right x -> x
         Left _ -> LuaBitE s
-      decl = case ex of
-        LuaRef{} -> (VarUpvalue, simpleVars [LuaName n'])
-        _ | Just ex' <- simpleOf ex -> (VarUpvalue, [ex'])
-        _ -> (VarUpvalue, simpleVars [LuaName n'])
 
-  topVars %= VarMap.insert (toVar n) decl
+      normalDef :: m (Seq LuaStmt)
+      normalDef = do
+        topVars %= VarMap.insert (toVar n) (VarUpvalue, simpleVars [LuaName n'])
+        pure . pure $ LuaLocal [LuaName n'] [ex]
 
-  (LuaLocal [LuaName n'] [ex]<|) <$> emitStmt xs
+  def <- case ex of
+    LuaRef{} -> normalDef
+    _ | Just ex' <- simpleOf ex -> do
+        topVars %= VarMap.insert (toVar n) (VarUpvalue, [ex'])
+        pure mempty
+    _ -> normalDef
+  (def<>) <$> emitStmt xs
 
 emitStmt (Type _ cs:xs) = do
-  stmts <- foldr (<|) mempty <$> traverse emitConstructor cs
+  traverse_ emitConstructor cs
   topArity %= flip extendPureCtors cs
-  (stmts<>) <$> emitStmt xs
+  emitStmt xs
 
   where
     emitConstructor (var, ty) = do
       var' <- pushTopScope var
+      let tag = LuaString var'
+          name = LuaName var'
+          ctor = if arity ty == 0
+                 then [luaStmts|local $name = { __tag = %tag }|]
+                 else [luaStmts|local function $name(x) return { __tag = %tag, x } end|]
       topVars %= VarMap.insert (toVar var) (VarUpvalue, [simpleVar (LuaName var')])
-
-      pure $
-        if arity ty == 0
-        then LuaLocal [LuaName var'] [LuaTable [(LuaString "__tag", LuaString var')]]
-        else LuaLocalFun (LuaName var') [LuaName "x"]
-                                        [LuaReturn [LuaTable [ (LuaString "__tag", LuaString var')
-                                                             , (LuaInteger 1, LuaRef (LuaName "x"))]]]
+      topExVars %= VarMap.insert (toVar var) ([], Seq.fromList ctor)
 
 emitStmt (StmtLet (One (v, ty, e)):xs) = do
   TopEmitState { _topArity = ari, _topEscape = esc, _topVars = vars } <- get

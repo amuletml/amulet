@@ -1,7 +1,5 @@
 do
-  local bottom = nil
   local print = print
-  local bool = true
   local function _amp_amp(a) return function(b) return a and b end end
   local function _bar_bar(a) return function(b) return a or b end end
   local function _not(a) return not a end

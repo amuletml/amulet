@@ -1,5 +1,4 @@
 do
-  local bottom = nil
   (nil)(function(jg)
     local i, s = jg.i, jg.s
     return {

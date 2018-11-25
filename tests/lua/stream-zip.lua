@@ -1,12 +1,12 @@
 do
+  local None = { __tag = "None" }
+  local function Some(x) return { __tag = "Some", x } end
+  local Done = { __tag = "Done" }
+  local function Yield(x) return { __tag = "Yield", x } end
+  local function Skip(x) return { __tag = "Skip", x } end
+  local function Stream(x) return { __tag = "Stream", x } end
   local print = print
   local to_string = tostring
-  local function Skip(x) return { __tag = "Skip", x } end
-  local function Yield(x) return { __tag = "Yield", x } end
-  local Done = { __tag = "Done" }
-  local function Stream(x) return { __tag = "Stream", x } end
-  local function Some(x) return { __tag = "Some", x } end
-  local None = { __tag = "None" }
   local function zip(bfv)
     local bfx = bfv[1]
     local f, start = bfx._1, bfx._2

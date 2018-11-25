@@ -1,5 +1,4 @@
 do
-  local bottom = nil
   local ba = {}
   local __o = nil
   for k, v in pairs(__o) do

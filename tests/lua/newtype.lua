@@ -1,7 +1,6 @@
 do
-  local function Foo(fv) return fv end
   local function It(x) return { __tag = "It", x } end
-  local bottom = nil
+  local function Foo(fv) return fv end
   (nil)(Foo)
   (nil)(function(fw) return fw end)
   (nil)(It)

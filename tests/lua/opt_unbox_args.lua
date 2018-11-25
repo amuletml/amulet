@@ -5,6 +5,5 @@ do
     end
     return fib_prime(x - 1, acc * x)
   end
-  local bottom = nil
   (nil)(fib_prime(10, 1))
 end
