@@ -17,6 +17,7 @@ import Control.Lens
 import qualified Data.Sequence as Seq
 import qualified Data.VarMap as VarMap
 import qualified Data.VarSet as VarSet
+import qualified Data.Map as Map
 import Data.Sequence (Seq((:<|)))
 import qualified Data.Text as T
 import Data.Traversable
@@ -35,6 +36,7 @@ import Language.Lua.Syntax
 import Language.Lua.Quote
 
 import Backend.Lua.Builtin
+import Backend.Lua.Inline
 import Backend.Escape
 
 -- | A magic variable used to represent the return value
@@ -774,11 +776,33 @@ emitStmt (Foreign n t s:xs) = do
         topVars %= VarMap.insert (toVar n) (VarUpvalue, simpleVars [LuaName n'])
         pure . pure $ LuaLocal [LuaName n'] [ex]
 
+      basicArity (ForallTy Irrelevant (ValuesTy ts) _) = length ts
+      basicArity (ForallTy Irrelevant _ _) = 1
+      basicArity (ForallTy Relevant{} _ r) = basicArity r
+      basicArity _ = -1
+
   def <- case ex of
     LuaRef{} -> normalDef
+
+    LuaFunction as r@[LuaReturn es]
+      | length as == basicArity t
+      , shouldInline as r -> do
+          -- We've got an expression which can be inlined, push a 'VarInline'!
+          topVars %= VarMap.insert (toVar n)
+            ( VarInline (length as) (\xs ->
+                let s' = Map.fromList $ zip as xs
+                in map (substExpr s') es)
+            , simpleVars [LuaName n'])
+          -- This one may never be visited normally, so we'll push the
+          -- extra-variable version of it instead.
+          topExVars %= VarMap.insert (toVar n) ([], pure $ LuaLocal [LuaName n'] [ex])
+          pure mempty
+
     _ | Just ex' <- simpleOf ex -> do
-        topVars %= VarMap.insert (toVar n) (VarUpvalue, [ex'])
-        pure mempty
+          -- We're a simple expression, so we're guaranteed to never see this!
+          topVars %= VarMap.insert (toVar n) (VarUpvalue, [ex'])
+          pure mempty
+
     _ -> normalDef
   (def<>) <$> emitStmt xs
 

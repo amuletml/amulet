@@ -222,6 +222,7 @@ library amulet
                      -- Backend
                      , Backend.Lua
                      , Backend.Lua.Emit
+                     , Backend.Lua.Inline
                      , Backend.Lua.Builtin
                      , Backend.Lua.Postprocess
                      , Backend.Escape
