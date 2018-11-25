@@ -2,10 +2,13 @@ do
   local None = { __tag = "None" }
   local function Some(x) return { __tag = "Some", x } end
   local bottom = nil
-  local a = bottom(1)
-  if bottom.__tag == "None" then
-    bottom(bottom(a))
-  elseif bottom.__tag == "Some" then
-    bottom(bottom(a + bottom[1] * 2))
+  local eb = nil
+  local ea = nil
+  local ed = nil
+  local a = eb(1)
+  if ed.__tag == "None" then
+    ea(eb(a))
+  elseif ed.__tag == "Some" then
+    ea(eb(a + ed[1] * 2))
   end
 end

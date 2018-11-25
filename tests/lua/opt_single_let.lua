@@ -4,5 +4,5 @@ do
   local Z = { __tag = "Z" }
   local function g(x) return x(__builtin_unit) end
   local bottom = nil
-  bottom({ f = f, g = g })
+  (nil)({ f = f, g = g })
 end

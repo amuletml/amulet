@@ -16,5 +16,5 @@ do
   end
   local function zip0(f) return function(xs) return function(ys) return zip(f, xs, ys) end end end
   local bottom = nil
-  bottom(zip0)
+  (nil)(zip0)
 end

@@ -1,6 +1,6 @@
 do
   local bottom = nil
-  bottom({
+  (nil)({
     op = function(ci) return ci end,
     app = 2,
     rsec = function(e) return e(2) end,

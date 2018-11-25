@@ -43,6 +43,23 @@ import Backend.Escape
 vReturn :: CoVar
 vReturn = CoVar (-100) "<<ret>>" ValueVar
 
+data VarDecl
+     -- ^ A foreign function whose body should be inlined when used
+  = VarInline
+    { _topArgs :: [T.Text] -- ^ The arguments to this function, in order
+    , _topOrd  :: [Int]    -- ^ The order that arguments are evaluated. The first item contains the index of
+                           -- the argument to evaluate first, and so on...
+    , _topBody :: [LuaStmt] -- ^ The body of this function. We make some assumptions about this (it has no
+                            -- branches, it won't contain other function) in order, things are evaulated once,
+                            -- in order to simplify substitution.
+    }
+    -- | A binding to some constant (normally nil or a literal).
+  | VarEmbed LuaExpr
+  -- | A "normal" toplevel declaration, which should just be referenced
+  -- by variable.
+  | VarUpvalue
+  deriving Show
+
 -- | A node in the  graph of emitted expressions and statements
 --
 -- 'EmittedExpr's should be merged inline into another expression if
@@ -51,36 +68,37 @@ vReturn = CoVar (-100) "<<ret>>" ValueVar
 -- instead.
 data EmittedNode a
   = EmittedExpr
-    { emitExprs :: [LuaExpr]   -- ^ The expression(s) which will be emitted
-    , emitYield :: EmitYield a -- ^ The result we should be binding this to if consumed
-    , emitBinds :: [a]         -- ^ The variables bound in the statement. Purely used when traversing the dependency
-                               -- graph.
-    , emitDeps  :: VarSet.Set  -- ^ The dependencies for this node. Consuming it should assimilate them.
+    { emitExprs  :: [LuaExpr]   -- ^ The expression(s) which will be emitted
+    , emitYield  :: EmitYield a -- ^ The result we should be binding this to if consumed
+    , _emitBinds :: [a]         -- ^ The variables bound in the statement. Used when traversing the dependency
+                                -- graph.
+    , _emitDeps  :: VarSet.Set  -- ^ The dependencies for this node. Consuming it should assimilate them.
     }
   | EmittedStmt
-    { emitStmts :: Seq LuaStmt -- ^ The statements required before this can be evaluated
-    , emitBound :: [LuaVar]    -- ^ The variable(s) bound.
-    , emitBinds :: [a]         -- ^ The variables bound in the statement. Purely used when traversing graphs.
-    , emitDeps  :: VarSet.Set  -- ^ The dependencies for this node. Consuming need not assimilate them.
+    { emitStmts  :: Seq LuaStmt -- ^ The statements required before this can be evaluated
+    , emitBound  :: [LuaVar]    -- ^ The variable(s) bound.
+    , _emitBinds  :: [a]        -- ^ The variables bound in the statement. Used when traversing the dependency
+                                -- graph.
+    , _emitDeps  :: VarSet.Set  -- ^ The dependencies for this node. Consuming need not assimilate them.
     }
   | EmittedUpvalue
-    { emitBound :: [LuaVar]    -- ^ The variable(s) bound.
-    , emitBinds :: [a]         -- ^ The variable bound in this statement. Purely used when traversing graphs.
-    , emitDeps  :: VarSet.Set  -- ^ An empty set of dependencies for this node
+    { emitTop    :: VarDecl     -- ^ The top level declaration to consume
+    , emitBound  :: [LuaVar]    -- ^ The variable(s) bound.
+    , _emitBinds :: [a]         -- ^ The variables bound in the statement. Used when traversing the dependency graph.
     }
-  deriving (Show)
+  deriving Show
 
 -- | The graph of all 'EmittedNode's.
 type EmittedGraph a = VarMap.Map (EmittedNode a)
 
 -- | The top-level emitting state. This is substantially simpler than the
--- more general 'EmitState' as it need node maintain an expression graph.
+-- more general 'EmitState' as it need not maintain an expression graph.
 data TopEmitState = TopEmitState
-  { _topVars   :: VarMap.Map [LuaVar]
+  { _topVars   :: VarMap.Map (VarDecl, [LuaVar])
   , _topArity  :: ArityScope
   , _topEscape :: EscapeScope
   }
-  deriving (Show)
+  deriving Show
 
 -- | The current state for the expression/term emitter. This is thread
 -- through a 'MonadState' instance.
@@ -89,14 +107,14 @@ data EmitState a = EmitState
   , _emitPrev   :: VarSet.Set
   , _emitEscape :: EscapeScope
   }
-  deriving (Show)
+  deriving Show
 
 -- | The current scope for the expression/term emitter. This is thread
 -- through a 'MonadReader' instance.
 newtype EmitScope a = EmitScope
   { _emitArity :: ArityScope
   }
-  deriving (Show)
+  deriving Show
 
 -- | Controls how one of more variables should be returned from a
 -- statement
@@ -105,7 +123,7 @@ data EmitYield a
   | YieldDiscard -- ^ Discard this expression
   | YieldStore [LuaVar] -- ^ Assign this expression(s) to these variables
   | YieldDeclare a (Type a) -- ^ Declare this variable
-  deriving (Show)
+  deriving Show
 
 -- | The state for emitting a single node.
 --
@@ -116,6 +134,7 @@ data NodeEmitState a = NES
   , _nodeDeps  :: VarSet.Set
   }
 
+makeLenses ''EmittedNode
 makeLenses ''TopEmitState
 makeLenses ''EmitState
 makeLenses ''EmitScope
@@ -134,7 +153,7 @@ liftedGraph = VarSet.foldr liftNode (pure mempty) where
   liftNode :: CoVar -> m (EmittedGraph a) -> m (EmittedGraph a)
   liftNode v m = do
     n <- emitVarBinds v
-    VarMap.insert v (EmittedUpvalue n [fromVar v] mempty) <$> m
+    VarMap.insert v (EmittedUpvalue VarUpvalue n [fromVar v]) <$> m
 
 -- | A wrapper for 'emitLiftedES' which converts the result to a sequence
 -- of 'LuaStmt's.
@@ -230,16 +249,16 @@ flushDeps :: IsVar a => EmittedNode a -> VarSet.Set -> EmittedGraph a
 flushDeps node extra g =
   let
     -- Remove this from the graph
-    g' = foldr (VarMap.delete . toVar) g (emitBinds node)
+    g' = foldr (VarMap.delete . toVar) g (node ^. emitBinds)
   in VarSet.foldr
      (\v (s, g) -> first (s<>) (flushGraph v mempty g))
-     (mempty, g') (emitDeps node <> extra)
+     (mempty, g') (node ^. emitDeps <> extra)
 
 -- | Extract the statements from this node.
 nodeStmts :: EmittedNode a -> Seq LuaStmt
-nodeStmts EmittedUpvalue{} = mempty
 nodeStmts EmittedStmt { emitStmts = s } = s
 nodeStmts EmittedExpr { emitExprs = es, emitYield = yield } = yieldStmt yield es
+nodeStmts EmittedUpvalue{} = mempty
 
 -- | Emit a single expression within the current context
 --
@@ -435,7 +454,7 @@ emitExpr var yield t@(AnnLam fv (TermArgument v ty) e) = do
   escape <- use emitEscape
 
   let (vs, escape') = flip runState escape $ genVars (state . pushVar) v ty (Just e)
-      graph' = VarMap.insert (toVar v) (EmittedUpvalue vs [v] mempty) graph
+      graph' = VarMap.insert (toVar v) (EmittedUpvalue VarUpvalue vs [v]) graph
 
       term :: [LuaExpr] = pure . LuaFunction vs . toList . fst3 $ emitTerm scope escape' graph' YieldReturn e
   withinExpr var yield t (pure term)
@@ -554,10 +573,15 @@ emitAtom (Lit l) = pure [emitLit l]
 emitAtom (Ref (toVar -> v) _) = do
   existing <- uses (nodeState . emitGraph) (VarMap.lookup v)
   case existing of
-    -- Statements and upvalues are easy: the dependency is already in the
-    -- graph so we don't need to do any checks.
+    -- Statements are easy: the dependency is already in the graph so we
+    -- don't need to do any checks.
     Nothing -> pure . LuaRef . LuaName <$> uses (nodeState . emitEscape) (getVar v)
     Just EmittedStmt { emitBound = vs } -> pure (map LuaRef vs)
+
+    -- Upvalues are a wee bit more complex, as we need to handle the "top
+    -- simple" case, where we inline simple expressions.
+    Just EmittedUpvalue { emitTop = VarEmbed e } -> pure [e]
+    -- Otherwise just fall back to the normal variables.
     Just EmittedUpvalue { emitBound = vs } -> pure (map LuaRef vs)
 
     Just (EmittedExpr expr (YieldDeclare var ty) binds deps) | usedWhen var == Once -> do
@@ -569,8 +593,8 @@ emitAtom (Ref (toVar -> v) _) = do
           (stmts, vs) <- genDeclare pushScope' var ty expr
           let existing' = EmittedStmt { emitStmts = stmts
                                       , emitBound = vs
-                                      , emitBinds = binds
-                                      , emitDeps  = deps
+                                      , _emitBinds = binds
+                                      , _emitDeps  = deps
                                       }
           nodeState . emitGraph %= VarMap.insert var' existing'
           pure (map LuaRef vs)
@@ -605,8 +629,8 @@ emitAtom (Ref (toVar -> v) _) = do
         else case VarMap.lookup v remaining of
                Nothing -> Just remaining
                Just e -> hasLoop (VarSet.insert v visiting)
-                                 (emitDeps e)
-                                 (foldr (VarMap.delete . toVar) remaining (emitBinds e))
+                                 (e ^. emitDeps)
+                                 (foldr (VarMap.delete . toVar) remaining (e ^. emitBinds))
 
 -- | A variant of 'emitAtom' which always binds expressions.
 --
@@ -640,8 +664,8 @@ emitVarBinds v = do
       (stmts, vs) <- genYield pushScope yield expr
       pushGraph v EmittedStmt { emitStmts = stmts
                               , emitBound = vs
-                              , emitBinds = binds
-                              , emitDeps  = deps }
+                              , _emitBinds = binds
+                              , _emitDeps  = deps }
       pure vs
 
 -- | Generate the appropriate code for the provided yield.
@@ -736,13 +760,25 @@ emitStmt :: forall a m. (Occurs a, MonadState TopEmitState m)
 emitStmt [] = pure mempty
 emitStmt (Foreign n t s:xs) = do
   n' <- pushTopScope n
-  topArity %= flip extendForeign (n, t)
-  topVars %= VarMap.insert (toVar n) [LuaName n']
 
   let ex =
         case parseExpr (SourcePos "_" 0 0) (s ^. lazy) of
           Right x -> x
           Left _ -> LuaBitE s
+      decl = case ex of
+               -- Trivial expressions can be embedded, which makes it a
+               -- tad cheaper than upvalue access.
+               LuaNil -> VarEmbed ex
+               LuaTrue -> VarEmbed ex
+               LuaFalse -> VarEmbed ex
+               LuaInteger{} -> VarEmbed ex
+               LuaString x | T.length x <= T.length n'
+                           , T.length x <= 16 -> VarEmbed ex
+               _ -> VarUpvalue
+
+  topArity %= flip extendForeign (n, t)
+  topVars %= VarMap.insert (toVar n) (decl, [LuaName n'])
+
   (LuaLocal [LuaName n'] [ex]<|) <$> emitStmt xs
 
 emitStmt (Type _ cs:xs) = do
@@ -753,7 +789,7 @@ emitStmt (Type _ cs:xs) = do
   where
     emitConstructor (var, ty) = do
       var' <- pushTopScope var
-      topVars %= VarMap.insert (toVar var) [LuaName var']
+      topVars %= VarMap.insert (toVar var) (VarUpvalue, [LuaName var'])
 
       pure $
         if arity ty == 0
@@ -767,22 +803,22 @@ emitStmt (StmtLet (One (v, ty, e)):xs) = do
   let yield = if usedWhen v == Dead then YieldDiscard else YieldDeclare v ty
       (stmts, binds, esc') =
         emitTerm (EmitScope ari) esc
-                 (VarMap.mapWithKey (\v x -> EmittedUpvalue x [fromVar v] mempty) vars)
+                 (VarMap.mapWithKey (\v (d, b) -> EmittedUpvalue d b [fromVar v]) vars)
                  yield e
 
   topArity  %= flip extendPureLets [(v, ty, e)]
-  topVars   %= VarMap.insert (toVar v) binds
+  topVars   %= VarMap.insert (toVar v) (VarUpvalue, binds)
   topEscape .= esc'
   (stmts<>) <$> emitStmt xs
 
 emitStmt (StmtLet (Many vs):xs) = do
   binds <- traverse (\(v, ty, _) -> genVars pushTopScope v ty Nothing) vs
   topArity %= flip extendPureLets vs
-  topVars  %= \x -> foldr (\(v, b) -> VarMap.insert (toVar . fst3 $ v) b) x (zip vs binds)
+  topVars  %= \x -> foldr (\(v, b) -> VarMap.insert (toVar . fst3 $ v) (VarUpvalue, b)) x (zip vs binds)
 
   TopEmitState { _topArity = ari, _topEscape = esc, _topVars = vars } <- get
 
-  let graph :: EmittedGraph a = VarMap.mapWithKey (\v x -> EmittedUpvalue x [fromVar v] mempty) vars
+  let graph :: EmittedGraph a = VarMap.mapWithKey (\v (d, b) -> EmittedUpvalue d b [fromVar v]) vars
       (stmt, esc') = foldl' (\(s, esc') ((_, _, e), v') ->
         let (s', _, esc'') = emitTerm (EmitScope ari) esc' graph (YieldStore v') e
         in (s <> s', esc'')) (mempty, esc) (zip vs binds)

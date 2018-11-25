@@ -7,5 +7,5 @@ do
     return fib_prime(x - db_2, acc * x)
   end
   local bottom = nil
-  bottom(fib_prime(10, 1))
+  (nil)(fib_prime(10, 1))
 end

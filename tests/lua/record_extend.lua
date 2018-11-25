@@ -1,9 +1,10 @@
 do
   local bottom = nil
   local ba = {}
-  for k, v in pairs(bottom) do
+  local __o = nil
+  for k, v in pairs(__o) do
     ba[k] = v
   end
   ba.x = 1
-  bottom(ba)
+  (nil)(ba)
 end

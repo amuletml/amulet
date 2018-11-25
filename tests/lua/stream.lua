@@ -16,5 +16,5 @@ do
   io_write("[")
   local main = go(1)
   local bottom = nil
-  bottom(main)
+  (nil)(main)
 end

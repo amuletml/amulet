@@ -9,5 +9,5 @@ do
     end
   end
   local bottom = nil
-  bottom(main)
+  (nil)(main)
 end

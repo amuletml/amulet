@@ -1,8 +1,10 @@
 do
   local bottom = nil
-  if bottom(1) then
-    bottom(bottom(2))
+  local bh = nil
+  local bg = nil
+  if bh(1) then
+    bg(bh(2))
   else
-    bottom(bottom(3))
+    bg(bh(3))
   end
 end

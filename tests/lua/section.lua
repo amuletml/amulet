@@ -8,5 +8,5 @@ do
     }
   }
   local bottom = nil
-  bottom(main)
+  (nil)(main)
 end

@@ -221,7 +221,7 @@ runRepl = do
               case code of
                 L.OK -> do
                   vs' <- for vs $ \(v, _) -> do
-                    let Just vs = VarMap.lookup v (emit' ^. B.topVars)
+                    let Just (_, vs) = VarMap.lookup v (emit' ^. B.topVars)
                     repr <- traverse (valueRepr . L.getglobal . T.unpack . \(LuaName n) -> n) vs
                     let CoVar id nam _ = v
                         var = S.TgName nam id

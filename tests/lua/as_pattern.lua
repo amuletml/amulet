@@ -4,5 +4,5 @@ do
     return b.a + b.b + ch.c
   end
   local bottom = nil
-  bottom(main)
+  (nil)(main)
 end

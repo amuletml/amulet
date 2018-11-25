@@ -15,5 +15,5 @@ do
   end
   local function filter0(f) return function(o) return filter(f, o) end end
   local bottom = nil
-  bottom(filter0)
+  (nil)(filter0)
 end

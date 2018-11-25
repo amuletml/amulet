@@ -57,5 +57,5 @@ do
     end
   end
   local bottom = nil
-  bottom({ common_prefix = common_prefix, common_suffix = common_suffix, mixed_1 = mixed_1 })
+  (nil)({ common_prefix = common_prefix, common_suffix = common_suffix, mixed_1 = mixed_1 })
 end
