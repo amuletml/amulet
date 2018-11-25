@@ -1,5 +1,3 @@
-{-# LANGUAGE OverloadedStrings, QuasiQuotes #-}
-
 {-|Handles post-processing the generated Lua sources, injecting any
  additional code which may be needed.
 
