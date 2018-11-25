@@ -7,14 +7,14 @@ do
   local function _not(a) return not a end
   (nil)({ ands = _amp_amp, ors = _bar_bar, ["not"] = _not })
   (nil)(function(gs)
-    if bool then
+    if true then
       return print("L")
     end
     print("R")
     return print("R")
   end)
   (nil)(function(hd)
-    if not bool then
+    if not true then
       return print("R")
     end
     print("L")

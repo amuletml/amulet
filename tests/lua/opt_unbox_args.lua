@@ -1,10 +1,9 @@
 do
   local function fib_prime(x, acc)
-    local db_2 = 1
-    if x <= db_2 then
+    if x <= 1 then
       return acc
     end
-    return fib_prime(x - db_2, acc * x)
+    return fib_prime(x - 1, acc * x)
   end
   local bottom = nil
   (nil)(fib_prime(10, 1))

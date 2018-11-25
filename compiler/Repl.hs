@@ -222,7 +222,7 @@ runRepl = do
                 L.OK -> do
                   vs' <- for vs $ \(v, _) -> do
                     let Just (_, vs) = VarMap.lookup v (emit' ^. B.topVars)
-                    repr <- traverse (valueRepr . L.getglobal . T.unpack . \(LuaName n) -> n) vs
+                    repr <- traverse (valueRepr . evalExpr . B.unsimple) vs
                     let CoVar id nam _ = v
                         var = S.TgName nam id
                     case inferScope state' ^. T.names . at var of
@@ -245,6 +245,15 @@ runRepl = do
 
           put state' { emitState = emit' }
           pure ok
+
+    evalExpr (LuaRef (LuaName n)) = L.getglobal (T.unpack n)
+    evalExpr LuaNil = L.pushnil
+    evalExpr LuaTrue = L.pushboolean True
+    evalExpr LuaFalse = L.pushboolean True
+    evalExpr (LuaInteger n) = L.pushinteger (fromIntegral n)
+    evalExpr (LuaNumber n) = L.pushnumber (L.Number n)
+    evalExpr (LuaString s) = L.pushstring (T.encodeUtf8 s)
+    evalExpr s = error ("Not a simple expression: " ++ show s)
 
 isError :: Note a b => a -> Bool
 isError x = diagnosticKind x == ErrorMessage

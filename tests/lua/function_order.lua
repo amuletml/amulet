@@ -1,8 +1,7 @@
 do
   local bottom = nil
-  local dk = nil
-  local a = dk(1)
-  local b = dk(2)
-  local c = dk(3)
+  local a = (nil)(1)
+  local b = (nil)(2)
+  local c = (nil)(3)
   (nil)(b)(c)(a)
 end

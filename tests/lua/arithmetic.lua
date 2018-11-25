@@ -1,5 +1,4 @@
 do
   local bottom = nil
-  local cr = nil
-  (nil)(cr(1) + cr(2))
+  (nil)((nil)(1) + (nil)(2))
 end
