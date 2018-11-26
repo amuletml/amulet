@@ -70,7 +70,7 @@ let
       in mkDerivation rec {
         pname = "amuletml";
         version = "0.1.0.0";
-        src = ./.;
+        src = if pkgs.lib.inNixShell then null else ./.;
 
         isLibrary = false;
         isExecutable = true;
