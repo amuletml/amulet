@@ -1,4 +1,3 @@
 do
-  local bottom = nil
-  bottom(bottom(1) + bottom(2))
+  (nil)((nil)(1) + (nil)(2))
 end

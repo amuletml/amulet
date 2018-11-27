@@ -1,6 +1,6 @@
 do
-  local Nil = { __tag = "Nil" }
   local function Cons(x) return { __tag = "Cons", x } end
+  local Nil = { __tag = "Nil" }
   local function filter(f, o)
     if o.__tag == "Nil" then
       return Nil
@@ -14,6 +14,5 @@ do
     end
   end
   local function filter0(f) return function(o) return filter(f, o) end end
-  local bottom = nil
-  bottom(filter0)
+  (nil)(filter0)
 end

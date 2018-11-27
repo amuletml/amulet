@@ -7,6 +7,5 @@ do
       _2 = { _1 = function(d) return d / 2 end, _2 = function(e) return e.foo end }
     }
   }
-  local bottom = nil
-  bottom(main)
+  (nil)(main)
 end

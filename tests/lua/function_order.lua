@@ -1,7 +1,6 @@
 do
-  local bottom = nil
-  local a = bottom(1)
-  local b = bottom(2)
-  local c = bottom(3)
-  bottom(b)(c)(a)
+  local a = (nil)(1)
+  local b = (nil)(2)
+  local c = (nil)(3)
+  (nil)(b)(c)(a)
 end

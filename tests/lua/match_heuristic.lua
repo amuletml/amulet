@@ -1,6 +1,4 @@
 do
-  local Nil = { __tag = "Nil" }
-  local function Cons(x) return { __tag = "Cons", x } end
   local function common_prefix(j)
     local eu = j._1
     local et = j._2
@@ -56,6 +54,5 @@ do
       end
     end
   end
-  local bottom = nil
-  bottom({ common_prefix = common_prefix, common_suffix = common_suffix, mixed_1 = mixed_1 })
+  (nil)({ common_prefix = common_prefix, common_suffix = common_suffix, mixed_1 = mixed_1 })
 end

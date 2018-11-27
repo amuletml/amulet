@@ -1,5 +1,7 @@
 do
   local __builtin_unit = { __tag = "__builtin_unit" }
+  local Nil = { __tag = "Nil" }
+  local function Cons(x) return { __tag = "Cons", x } end
   local tostring = tostring
   local writeln = print
   local function _dollardApplicativeafj(ahb)
@@ -9,8 +11,6 @@ do
       ["Applicative$kp"] = _dollardApplicativeafj(ahb)["Applicative$kp"]
     }
   end
-  local Nil = { __tag = "Nil" }
-  local function Cons(x) return { __tag = "Cons", x } end
   local function _colon_colon(x) return function(y) return Cons({ _1 = x, _2 = y }) end end
   local function _dollardShowatm(auy)
     return function(cw)

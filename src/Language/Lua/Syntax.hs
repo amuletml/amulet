@@ -172,7 +172,7 @@ instance Pretty LuaVar where
   pretty (LuaName x) = text x
   pretty (LuaIndex e (LuaString k))
     | validKey k = prettyWith PreRaw e <> dot <> text k
-  pretty (LuaIndex e k) = pretty e <> brackets (pretty k)
+  pretty (LuaIndex e k) = prettyWith PreRaw e <> brackets (pretty k)
   pretty (LuaQuoteV x) = "$" <> text x
 
 instance Pretty LuaExpr where

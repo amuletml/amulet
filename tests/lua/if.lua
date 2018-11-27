@@ -1,8 +1,7 @@
 do
-  local bottom = nil
-  if bottom(1) then
-    bottom(bottom(2))
+  if (nil)(1) then
+    (nil)((nil)(2))
   else
-    bottom(bottom(3))
+    (nil)((nil)(3))
   end
 end

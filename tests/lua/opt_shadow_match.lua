@@ -6,6 +6,5 @@ do
       return 4
     end
   end
-  local bottom = nil
-  bottom(main)
+  (nil)(main)
 end
