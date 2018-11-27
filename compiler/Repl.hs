@@ -97,16 +97,8 @@ data ReplState = ReplState
 defaultState :: DebugMode -> IO ReplState
 defaultState mode = do
   state <- L.newstate
-
-  let preamble = display . uncommentDoc . renderPretty 0.8 100 . pretty
-                . LuaDo . foldMap (map (patchupLua B.defaultEmitState) . snd . B.genBuiltin . fst)
-                $ VarMap.toList B.builtinVars
-
-  -- Init our default libraries and operator functions
-  L.runWith state $ do
-    L.openlibs
-    L.OK <- L.dostring (T.encodeUtf8 preamble)
-    pure ()
+  -- Init our default libraries
+  L.runWith state L.openlibs
 
   pure ReplState
     { resolveScope = Bi.builtinResolve
@@ -221,8 +213,8 @@ runRepl = do
               case code of
                 L.OK -> do
                   vs' <- for vs $ \(v, _) -> do
-                    let Just vs = VarMap.lookup v (emit' ^. B.topVars)
-                    repr <- traverse (valueRepr . L.getglobal . T.unpack . \(LuaName n) -> n) vs
+                    let Just (_, vs) = VarMap.lookup v (emit' ^. B.topVars)
+                    repr <- traverse (valueRepr . evalExpr . B.unsimple) vs
                     let CoVar id nam _ = v
                         var = S.TgName nam id
                     case inferScope state' ^. T.names . at var of
@@ -245,6 +237,15 @@ runRepl = do
 
           put state' { emitState = emit' }
           pure ok
+
+    evalExpr (LuaRef (LuaName n)) = L.getglobal (T.unpack n)
+    evalExpr LuaNil = L.pushnil
+    evalExpr LuaTrue = L.pushboolean True
+    evalExpr LuaFalse = L.pushboolean True
+    evalExpr (LuaInteger n) = L.pushinteger (fromIntegral n)
+    evalExpr (LuaNumber n) = L.pushnumber (L.Number n)
+    evalExpr (LuaString s) = L.pushstring (T.encodeUtf8 s)
+    evalExpr s = error ("Not a simple expression: " ++ show s)
 
 isError :: Note a b => a -> Bool
 isError x = diagnosticKind x == ErrorMessage
@@ -357,7 +358,7 @@ parseCore state parser name input = do
 emitCore :: ReplState -> [Stmt CoVar] -> (B.TopEmitState, LuaStmt, Bs.ByteString)
 emitCore state core =
   let core' = patchupUsage . snd . tagOccurStmt (const occursSet) OccursVar $ core
-      (luaStmt, emit') = runState (B.emitStmt core') (emitState state)
+      (luaStmt, emit') = uncurry B.addBuiltins $ runState (B.emitStmt core') (emitState state)
       luaExpr = LuaDo . map (patchupLua emit') . toList $ luaStmt
       luaSyntax = T.encodeUtf8 . display . uncommentDoc . renderPretty 0.8 100 . pretty $ luaExpr
   in (emit', luaExpr, luaSyntax)

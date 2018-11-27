@@ -23,7 +23,7 @@ import Core.Var
 -- statement
 compileProgram :: IsVar a => [Stmt a] -> LuaStmt
 compileProgram
-  = LuaDo
-  . addBuiltins
-  . toList . flip evalState defaultEmitState . emitStmt
+  = LuaDo . toList . fst
+  . uncurry addBuiltins
+  . flip runState defaultEmitState . emitStmt
   . snd. tagOccurStmt (const occursSet) OccursVar

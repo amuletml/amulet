@@ -1,6 +1,5 @@
 do
-  local bottom = nil
-  bottom(function(jg)
+  (nil)(function(jg)
     local i, s = jg.i, jg.s
     return {
       int_add_c = 5,
