@@ -11,7 +11,6 @@ module Backend.Lua.Emit
 
 import Control.Monad.Reader
 import Control.Monad.State
-import Control.Arrow (first)
 import Control.Lens
 
 import qualified Data.Sequence as Seq
@@ -21,6 +20,7 @@ import qualified Data.Map as Map
 import Data.Sequence (Seq((:<|)))
 import qualified Data.Text as T
 import Data.Traversable
+import Data.Bifunctor
 import Data.Foldable
 import Data.Triple
 import Data.List (partition)
@@ -483,47 +483,45 @@ emitExpr var yield t@(AnnValues _ xs) =
   withinExpr var yield t $
     foldrM (\e es -> (:es) <$> emitAtomS e) mempty xs
 
-emitExpr var yield t@(AnnExtend _ (Lit RecNil) fs) =
+emitExpr var yield t@(AnnExtend _ (Lit RecNil) fs) = do
   {-
     Record literals are nice and simple to generate, and can just be
     emitted as expressions.
-
-    TODO: Choose an optimal ordering of expressions
   -}
+  graph <- use emitGraph
   withinExpr var yield t $
-    pure . LuaTable <$> foldrM emitRow mempty fs
+    pure . LuaTable <$> foldrM emitRow mempty (sortAtoms graph thd3 fs)
   where emitRow (f, _, e) es = (:es) . (LuaString f,) <$> emitAtomS e
 
-emitExpr var yield (AnnExtend fv tbl exs) = do
+emitExpr var yield (AnnExtend fv tbl fs) = do
   {-
     Record extensions have to be emitted as a statement. We build up a
     statement list first, and then.
-
-    TODO: Choose an optimal ordering of expressions and potentially
-    inline some statements.
   -}
 
+  graph <- use emitGraph
+  let fs' = sortAtoms graph thd3 fs
   (deps, node) <- runNES fv $ case yield of
     YieldDiscard -> do
-      exs' <- traverse (emitAtom . thd3) exs
+      exs' <- traverse (emitAtom . thd3) fs'
       tbl' <- emitAtom tbl
       pure $ EmittedStmt (foldMap (foldMap asStmt) (tbl':exs')) []
 
     YieldStore vs -> do
       let vs' = head vs
-      exs' <- foldrM (emitRow vs') mempty exs
+      exs' <- foldrM (emitRow vs') mempty fs'
       tbl' <- emitAtomS tbl
       pure $ EmittedStmt (LuaAssign vs [LuaTable []] <| emitCopy vs' tbl' <> exs') (simpleVars vs)
 
     YieldReturn -> do
       let vs' = LuaName (T.pack "__n")
-      exs' <- foldrM (emitRow vs') mempty exs
+      exs' <- foldrM (emitRow vs') mempty fs'
       tbl' <- emitAtomS tbl
       pure $ EmittedStmt (LuaLocal [vs'] [LuaTable []] <| emitCopy vs' tbl' <> exs') []
 
     YieldDeclare var' _ -> do
       vs' <- LuaName <$> pushScope' var'
-      exs' <- foldrM (emitRow vs') mempty exs
+      exs' <- foldrM (emitRow vs') mempty fs'
       tbl' <- emitAtomS tbl
       pure $ EmittedStmt (LuaLocal [vs'] [LuaTable []] <| emitCopy vs' tbl' <> exs') [simpleVar vs']
 
@@ -925,6 +923,54 @@ simpleVar = LuaSimp . LuaRef
 
 simpleVars :: [LuaVar] -> [LuaSimple]
 simpleVars = map simpleVar
+
+-- | Sort a series of atoms in such a way that we can minimise the number
+-- of temporary variables required to emit this.
+--
+-- This code is a little sub-optimal, as it will lose the original
+-- ordering, even when it doesn't need to. Ideally we could build a
+-- partial ordering of the "interesting" terms, and then merge that with
+-- the original list.
+sortAtoms :: forall a b. Occurs a => EmittedGraph a -> (b -> Atom a) -> [b] -> [b]
+sortAtoms graph ex atoms =
+  let (lits, vars) = spanVars atoms
+  in if VarMap.size vars <= 1
+     then atoms
+     else sortVars vars ++ lits
+  where
+    -- | Split atoms into variables nodes and "boring" literals.
+    spanVars :: [b] -> ([b], VarMap.Map b)
+    spanVars [] = mempty
+    spanVars (x:xs) =
+      (case ex x of
+          Ref v _
+            | Just (EmittedExpr _ (YieldDeclare var _) _ deps) <- VarMap.lookup (toVar v) graph
+            , usedWhen var == Once
+            , not (VarSet.null deps)
+            -> second (VarMap.insert (toVar v) x)
+          _ -> first (x:)) (spanVars xs)
+
+    sortVars :: VarMap.Map b -> [b]
+    sortVars vs =
+      let (_, pend, xs) = VarMap.foldrWithKey (\k _ -> sortVisit k) (mempty, vs, []) vs
+      in if VarMap.null pend then reverse xs
+         else error "Pending map should be empty"
+
+    sortVisit :: CoVar -- ^ The variable to visit
+              -> (VarSet.Set, VarMap.Map b, [b]) -- ^ The visited set, the pending nodes, and the current queue
+              -> (VarSet.Set, VarMap.Map b, [b]) -- ^ Resulting list of pending nodes and the current queue
+    sortVisit var skip@(visited, pend, xs)
+      | VarMap.null pend = skip
+      | VarSet.member var visited = skip
+      | otherwise = case VarMap.lookup var graph of
+          Nothing -> skip
+          Just node ->
+            let visited' = foldr (VarSet.insert . toVar) visited (node ^. emitBinds)
+                pend' = foldr (VarMap.delete . toVar) pend (node ^. emitBinds)
+
+                (visited'', pend'', xs') = VarSet.foldr sortVisit (visited', pend', xs) (node ^. emitDeps)
+            in ( visited'', pend''
+               , foldr (maybe id (:) . flip VarMap.lookup pend . toVar) xs' (node ^. emitBinds) )
 
 patternBindings :: Occurs a => Pattern a -> [LuaExpr] -> [(a, [LuaExpr])]
 patternBindings (PatLit _) _     = []

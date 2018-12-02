@@ -6,9 +6,9 @@ do
   local writeln = print
   local function _dollardApplicativeafj(ahb)
     return {
-      ["<*>"] = function(cdj) return function(cdg) return ahb["×"](cdj)(cdg) end end,
       pure = function(cdq) return ahb.zero end,
-      ["Applicative$kp"] = _dollardApplicativeafj(ahb)["Applicative$kp"]
+      ["Applicative$kp"] = _dollardApplicativeafj(ahb)["Applicative$kp"],
+      ["<*>"] = function(cdj) return function(cdg) return ahb["×"](cdj)(cdg) end end
     }
   end
   local function _colon_colon(x) return function(y) return Cons({ _1 = x, _2 = y }) end end
@@ -43,7 +43,7 @@ do
         return function(ys)
           if x.__tag == "Cons" then
             local cjw = x[1]
-            return Cons({ _1 = cjw._1, _2 = _dollardMonoidbnt(__builtin_unit)["×"](cjw._2)(ys) })
+            return Cons({ _2 = _dollardMonoidbnt(__builtin_unit)["×"](cjw._2)(ys), _1 = cjw._1 })
           elseif x.__tag == "Nil" then
             return ys
           end
