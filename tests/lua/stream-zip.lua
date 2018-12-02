@@ -14,6 +14,7 @@ do
       local bfr = bfp[1]
       local g = bfr._1
       return Stream({
+        _2 = { _1 = start, _2 = { _1 = bfr._2, _2 = None } },
         _1 = function(bfb)
           local bfd = bfb._2
           local sb = bfd._1
@@ -23,12 +24,12 @@ do
             local x0 = x[1]
             local bee = g(sb)
             if bee.__tag == "Skip" then
-              return Skip({ _1 = sa, _2 = { _1 = bee[1], _2 = Some(x0) } })
+              return Skip({ _1 = sa, _2 = { _2 = Some(x0), _1 = bee[1] } })
             elseif bee.__tag == "Yield" then
               local bev = bee[1]
               return Yield({
-                _1 = { _1 = x0, _2 = bev._1 },
-                _2 = { _1 = sa, _2 = { _1 = bev._2, _2 = None } }
+                _2 = { _1 = sa, _2 = { _1 = bev._2, _2 = None } },
+                _1 = { _1 = x0, _2 = bev._1 }
               })
             elseif bee.__tag == "Done" then
               return Done
@@ -36,16 +37,15 @@ do
           elseif x.__tag == "None" then
             local bdl = f(sa)
             if bdl.__tag == "Skip" then
-              return Skip({ _1 = bdl[1], _2 = { _1 = sb, _2 = None } })
+              return Skip({ _2 = { _1 = sb, _2 = None }, _1 = bdl[1] })
             elseif bdl.__tag == "Yield" then
               local bea = bdl[1]
-              return Skip({ _1 = bea._2, _2 = { _1 = sb, _2 = Some(bea._1) } })
+              return Skip({ _2 = { _1 = sb, _2 = Some(bea._1) }, _1 = bea._2 })
             elseif bdl.__tag == "Done" then
               return Done
             end
           end
-        end,
-        _2 = { _1 = start, _2 = { _1 = bfr._2, _2 = None } }
+        end
       })
     end
   end
