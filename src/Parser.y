@@ -237,6 +237,7 @@ Expr0 :: { Expr Parsed }
       | match List1(Expr, ',') with '(' ')'
           { withPos2 $1 $3 $ Match (completeTuple Tuple $2) [] }
       | function ListE1(Arm) '$end'            { withPos1 $1 $ Function $2 }
+      | function '(' ')'                       { withPos1 $1 $ Function [] }
       | lazy PreAtom                           { withPos2 $1 $2 $ Lazy $2 }
       | PreAtom                                { $1 }
 
