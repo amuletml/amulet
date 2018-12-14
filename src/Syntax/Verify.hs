@@ -284,8 +284,7 @@ verifyMatch m ty bs = do
       Seq.Empty -> do
         tell . pure $ RedundantArm a
         pure va
-      (va', _) Seq.:<| Seq.Empty -> pure va'
-      _ -> error "Covered set must have 0-1 entries"
+      (va', _) Seq.:<| _ -> pure va'
 
     local (\(VerifyScope env _) -> VerifyScope env va') $ do
       modify (Set.union (bindingSites pat))
