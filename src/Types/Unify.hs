@@ -855,7 +855,7 @@ mkRecordWrapper keys matched matched_t th tw cont exp =
 
       -- Update the record in place
       wrapEx ex | an <- annotation ex =
-        Let [Binding exp ex (an, th)]
+        Let [Binding exp ex False (an, th)]
           (cont (recordExt (ref an) (foldMap (updateField an (ref an)) keys) (an, matched_t)))
           (an, tw)
    in wrapEx

@@ -79,9 +79,10 @@ verifyBindingGroup :: MonadVerify m
                    => (BindingSite -> Set.Set BindingSite -> Set.Set BindingSite)
                    -> SomeReason -> [Binding Typed] -> m ()
 verifyBindingGroup k _ = traverse_ verifyScc . depOrder where
-  verifyScc (AcyclicSCC (Binding v e (s, t))) = do
-    modify (k (BindingSite v s t))
-    verifyExpr e
+  verifyScc (AcyclicSCC (Binding v e c (s, t))) =
+    when c $ do
+      modify (k (BindingSite v s t))
+      verifyExpr e
   verifyScc (AcyclicSCC (TypedMatching p e _ _)) = do
     traverse_ (modify . k) $ bindingSites p
     verifyExpr e
@@ -90,8 +91,9 @@ verifyBindingGroup k _ = traverse_ verifyScc . depOrder where
 
   verifyScc (CyclicSCC vs) = do
     let vars = foldMapOf (each . bindVariable) Set.singleton vs
-    for_ vs $ \(Binding var _ (s, ty)) -> modify (k (BindingSite var s ty))
-    for_ vs $ \b@(Binding var ex (_, _)) -> do
+    for_ vs $ \(Binding var _ c (s, ty)) ->
+      when c $ modify (k (BindingSite var s ty))
+    for_ vs $ \b@(Binding var ex c (_, _)) -> when c $ do
       let naked = unguardedVars ex
           blame = BecauseOf b
       verifyExpr ex
@@ -207,7 +209,7 @@ isWrappedThunk _ = False
 
 nonTrivialRhs :: Binding Typed -> Bool
 nonTrivialRhs (TypedMatching _ e _ _) = nonTrivial e
-nonTrivialRhs (Binding _ e _) = nonTrivial e
+nonTrivialRhs (Binding _ e _ _) = nonTrivial e
 nonTrivialRhs _ = error "nonTrivialRHS pre-TC Bindings"
 
 nonTrivial :: Expr Typed -> Bool

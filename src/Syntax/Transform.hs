@@ -96,7 +96,7 @@ transformExpr fe = goE where
   transE (Lazy e a) = Lazy (goE e) a
   transE (Vta e t a) = Vta (goE e) t a
 
-  goB (Binding v e a) = Binding v (goE e) a
+  goB (Binding v e c a) = Binding v (goE e) c a
   goB (TypedMatching v e a b) = TypedMatching v (goE e) a b
   goB (Matching p e a) = Matching p (goE e) a
 
@@ -142,7 +142,7 @@ transformExprTyped fe fc ft = goE where
   transE (ExprWrapper w e a) = ExprWrapper (goW w) (goE e) (goA a)
   transE (Lazy e a) = Lazy (goE e) (goA a)
 
-  transBind (Binding v e a) = Binding v (goE e) (goA a)
+  transBind (Binding v e b a) = Binding v (goE e) b (goA a)
   transBind (Matching p e a) = Matching (goP p) (goE e) (goA a)
   transBind (TypedMatching p e a c) = TypedMatching (goP p) (goE e) (goA a) (map (second goT) c)
 

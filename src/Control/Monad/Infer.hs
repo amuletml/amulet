@@ -407,7 +407,7 @@ instance Pretty TypeError where
          , vsep (map (indent 2 . bullet . displayType) (take 5 (reverse xs)))
          ]
 
-  pretty (WrongClass (Binding v _ _) c) =
+  pretty (WrongClass (Binding v _ _ _) c) =
     vsep [ "Method" <+> pretty v <+> "is not a member of the class" <+> stypeCon (pretty c) ]
   pretty (WrongClass _ _) = error "Impossible"
 

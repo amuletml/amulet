@@ -96,7 +96,7 @@ inferClass clss@(Class name ctx _ methods classAnn) = do
     (fold -> defaultMap) <-
       local (classes %~ mappend scope)
       . local (names %~ focus tele)
-      . for defaults $ \(DefaultMethod (Binding method exp _) _) -> do
+      . for defaults $ \(DefaultMethod (Binding method exp _ _) _) -> do
       let sig = tele ^. at method . non undefined
 
       (_, cs) <- listen $
@@ -141,7 +141,7 @@ inferClass clss@(Class name ctx _ methods classAnn) = do
                  (classAnn, ty)
           ty <- silence $
             closeOver (BecauseOf clss) ty
-          pure (Binding var expr (classAnn, ty))
+          pure (Binding var expr True (classAnn, ty))
 
         newtypeClassDecl :: (Type Typed -> TyBinder Typed, Var Typed, T.Text, Type Typed) -> m (Binding Typed)
         newtypeClassDecl (f, var, _, theTy) = do
@@ -156,7 +156,7 @@ inferClass clss@(Class name ctx _ methods classAnn) = do
                  (classAnn, ty)
           ty <- silence $
             closeOver (BecauseOf clss) ty
-          pure (Binding var expr (classAnn, ty))
+          pure (Binding var expr False (classAnn, ty))
 
     decs <- case rows ++ rows' of
       [one] -> pure <$> newtypeClassDecl one
@@ -231,7 +231,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
 
   (Map.fromList -> methodMap, methods) <- fmap unzip . local (classes %~ mappend localAssums) $
     for bindings $ \case
-      bind@(Binding v e an) -> do
+      bind@(Binding v e _ an) -> do
         sig <- case Map.lookup v methodSigs of
           Just x -> pure x
           Nothing -> confesses (WrongClass bind clss)
@@ -256,7 +256,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
                        (Fun (EvParam (Capture name (an, ty))) (VarRef name (an, ty)) (an, TyArr ty ty))
                        (an, ty)
             mkBind var (VarRef var' _) | var == var' = const []
-            mkBind v e = (:[]) . Binding v e
+            mkBind v e = (:[]) . Binding v e False
         let addLet (ConImplicit _ _ var ty:cs) ex | an <- annotation ex =
               addLet cs $ mkLet (mkBind var (reify an ty var) (an, ty))
                 ex (an, getType ex)
@@ -270,7 +270,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
                 (Ascription
                   (solveEx sig sub (wrap <> wrap') (shove deferred e))
                     sig (an, sig))
-                  (an, sig))
+                True (an, sig))
       _ -> error "not possible: non-Binding method"
 
   let needDefaults = methodNames `Map.difference` methodMap
@@ -304,7 +304,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
                    (Fun (EvParam (Capture capture (an, ty))) (VarRef capture (an, ty)) (an, TyArr ty ty))
                    (an, ty)
         mkBind var (VarRef var' _) | var == var' = const []
-        mkBind v e = (:[]) . Binding v e
+        mkBind v e = (:[]) . Binding v e False
     let addLet (ConImplicit _ _ var ty:cs) ex | an <- annotation ex =
           addLet cs $ mkLet (mkBind var (reify an ty var) (an, ty))
             ex (an, getType ex)
@@ -315,7 +315,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
 
     var <- genNameFrom name
     let expr = Ascription (solveEx ty sub (wrap <> wrap') (shove deferred e)) ty (an, ty)
-        bind = Binding var expr (an, ty)
+        bind = Binding var expr False (an, ty)
 
     pure (Field name (VarRef var (an, ty)) (an, ty), bind)
 
@@ -368,7 +368,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
                     (ann, instHead))
                   (ann, instHead)))
                 (ann, localInsnConTy)
-      bind = Binding instanceName (Ascription fun globalInsnConTy (ann, globalInsnConTy)) (ann, globalInsnConTy)
+      bind = Binding instanceName (Ascription fun globalInsnConTy (ann, globalInsnConTy)) True (ann, globalInsnConTy)
 
   pure (LetStmt [bind], instanceName, globalInsnConTy)
 inferInstance _ = error "not an instance"
@@ -397,7 +397,7 @@ reduceClassContext extra annot cons = do
           let (bindings, needs', scope') = dedup scope needs
            in if var == v
              then (bindings, needs', scope')
-             else (Binding var (VarRef v (annot, t)) (annot, t):bindings, needs', scope')
+             else (Binding var (VarRef v (annot, t)) False (annot, t):bindings, needs', scope')
         | otherwise =
           let (bindings, needs', scope') = dedup (insert annot LocalAssum var con scope) needs
            in (bindings, (var, con, r):needs', scope')
@@ -409,7 +409,7 @@ reduceClassContext extra annot cons = do
         | superclasses <- filter ((== Superclass) . view implSort) $ lookup con scope
         , First (Just implicit) <- foldMap (isUsable scp) superclasses
         = let (bindings, needs') = simpl scp needs
-           in (Binding var (useForSimpl annot (scope <> scp) implicit con) (annot, con):bindings, needs')
+           in (Binding var (useForSimpl annot (scope <> scp) implicit con) False (annot, con):bindings, needs')
         | otherwise = second ((var, con, why) :) (simpl scp needs)
       simpl _ [] = ([], [])
       (simplif, stillNeeded') = simpl (usable <> extra) stillNeeded
