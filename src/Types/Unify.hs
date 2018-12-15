@@ -5,6 +5,7 @@
 -- | This module implements the logic responsible for solving the
 -- sequence of @Constraint@s the type-checker generates for a particular
 -- binding groups.
+#define TRACE_TC
 module Types.Unify
   ( SolveState, emptyState
   , typeWithin
@@ -56,6 +57,7 @@ import Text.Pretty.Semantic
 import Prelude hiding (lookup)
 
 #ifdef TRACE_TC
+import Text.Show.Pretty (ppShow)
 import Debug.Trace
 #endif
 
@@ -163,7 +165,7 @@ doSolve (ConSubsume because scope v a b :<| xs) = do
   sub <- use solveTySubst
 
 #ifdef TRACE_TC
-  traceM (displayS (shown because <+> pretty because <+> pretty (ConSubsume because scope v (apply sub a) (apply sub b))))
+  traceM (displayS (pretty (ConSubsume because scope v (apply sub a) (apply sub b))))
 #endif
   let a' = apply sub a
   sub <- use solveTySubst
@@ -257,11 +259,11 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
   scope <- pure (mapTypes (apply sub) scope)
 
 #ifdef TRACE_TC
-  traceM (displayS (shown scope <+> pretty reason <+> pretty (apply sub ohno)))
+  traceM (displayS (pretty (apply sub ohno)))
 #endif
 
   x <- view depth
-  if length x >= 25
+  if length x >= 10
      then confesses (ClassStackOverflow reason x cons)
      else case lookup cons scope of
            xs | allSameHead xs
@@ -269,6 +271,11 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
               , applic <- filter (applicable cons scope) xs
               , not (null applic) -> do
              let imp = pickBestPossible applic
+
+#ifdef TRACE_TC
+             traceM (displayS (pretty var <+> pretty (imp ^. implVar) <+> pretty (imp ^. implType)))
+#endif
+
              w <- local (depth %~ (cons :)) $
                useImplicit reason cons scope imp
              solveCoSubst . at var ?= w
@@ -288,7 +295,16 @@ hasExactMatch t = any ((== t) . view implHead)
 
 pickBestPossible :: [Implicit Typed] -> Implicit Typed
 pickBestPossible [] = error "No choices"
-pickBestPossible xs = minimumBy (comparing (length . view implPre)) xs
+pickBestPossible xs =
+  let all@(x:_) = L.groupBy ((==) `on` (length . view implPre)) (L.sortBy (comparing (length . view implPre)) xs)
+      best = L.sortBy (comparing specificity) x
+      specificity t = countConstructors (t ^. implHead)
+   in
+#ifdef TRACE_TC
+      trace (ppShow best) $
+      trace (ppShow all) $
+#endif
+      head best
 
 useImplicit :: forall m. MonadSolve m
             => SomeReason -> Type Typed -> ImplicitScope Typed
@@ -869,6 +885,25 @@ overlap xs ys
   = map get inter
   where get [(t, a), (_, b)] = (t, a, b)
         get _ = undefined
+
+countConstructors :: Type Typed -> Down (Sum Int)
+countConstructors TyCon{} = 1
+countConstructors TyVar{} = 0
+countConstructors (TyApp f x) = countConstructors f + countConstructors x
+countConstructors (TyPi (Anon l) r) = 1 + countConstructors l + countConstructors r
+countConstructors (TyPi (Implicit l) r) = countConstructors l + countConstructors r
+countConstructors (TyPi (Invisible _ k) r) = foldMap countConstructors k + countConstructors r
+countConstructors (TyTuple l r) = 1 + countConstructors l + countConstructors r
+countConstructors (TyOperator l _ r) = 1 + countConstructors l + countConstructors r
+countConstructors TySkol{} = 1
+countConstructors TyType{} = 1
+countConstructors TyWildcard{} = 0
+countConstructors TyPromotedCon{} = 1
+countConstructors (TyParens t) = countConstructors t
+countConstructors (TyRows r rs) = countConstructors r + foldMap (countConstructors . snd) rs
+countConstructors (TyExactRows rs) = foldMap (countConstructors . snd) rs
+countConstructors _ = 0
+
 
 newtype InField = InField Text
   deriving Show
