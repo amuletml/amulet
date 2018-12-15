@@ -28,6 +28,7 @@ data Binding p
   -- | @let implicit f x = ...@
   = Binding { _bindVariable :: Var p
             , _bindBody :: Expr p
+            , _bindVerify :: Bool
             , _bindAnn :: Ann p
             }
   -- | @let (a, b) = ...@

@@ -305,7 +305,7 @@ parseCore state parser name input = do
     Just parsed -> do
       let parsed' = case parsed of
                       Left s -> s
-                      Right e -> [S.LetStmt [S.Binding (S.Name "_") e (annotation e)]]
+                      Right e -> [S.LetStmt [S.Binding (S.Name "_") e True (annotation e)]]
 
       let rScope = resolveScope state
           lEnv = lowerState state

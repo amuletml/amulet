@@ -445,9 +445,9 @@ reBinding :: MonadResolve m
           -> m ( Expr Resolved -> Binding Resolved
                , [(Var Parsed, Var Resolved)]
                , [(Var Parsed, Var Resolved)] )
-reBinding (Binding v _ a) = do
+reBinding (Binding v _ c a) = do
   v' <- tagVar v
-  pure ( \e' -> Binding v' e' a, [(v, v')], [])
+  pure ( \e' -> Binding v' e' c a, [(v, v')], [])
 reBinding (Matching p _ a) = do
   (p', vs, ts) <- reWholePattern p
   pure ( \e' -> Matching p' e' a, vs, ts)
@@ -456,13 +456,13 @@ reBinding TypedMatching{} = error "reBinding TypedMatching{}"
 reMethod :: MonadResolve m
          => Binding Parsed
          -> m (m (Binding Resolved), [(Var Parsed, Var Resolved)])
-reMethod b@(Binding var bod an) = do
+reMethod b@(Binding var bod c an) = do
   var' <- retcons (wrapError b) $ lookupEx var
-  pure ( (\bod' -> Binding var' bod' an) <$> reExpr bod
+  pure ( (\bod' -> Binding var' bod' c an) <$> reExpr bod
        , [(var, var')] )
 reMethod b@(Matching (Capture var _) bod an) = do
   var' <- retcons (wrapError b) $ lookupEx var
-  pure ( (\bod' -> Binding var' bod' an) <$> reExpr bod
+  pure ( (\bod' -> Binding var' bod' True an) <$> reExpr bod
        , [(var, var')] )
 reMethod b@Matching{} =
   confesses (ArisingFrom IllegalMethod (BecauseOf b))

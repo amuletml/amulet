@@ -142,7 +142,7 @@ instance Pretty Lit where
   pretty LiUnit = sliteral (parens empty)
 
 instance Pretty (Var p) => Pretty (Binding p) where
-  pretty (Binding n v _) = hsep (pretty n:map pretty args) <> sig <+> nest 2 (equals </> pretty rest') where
+  pretty (Binding n v _ _) = hsep (pretty n:map pretty args) <> sig <+> nest 2 (equals </> pretty rest') where
     (args, rest) = takeLambdas v
     (sig, rest') = case rest of
       Ascription e t _ -> (space <> colon <+> pretty t, e)
