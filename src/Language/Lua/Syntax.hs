@@ -185,6 +185,7 @@ instance Pretty LuaExpr where
     escape '\n' = "\\n"
     escape '"' = "\\\""
     escape '\t' = "\\t"
+    escape '\\' = "\\\\"
     escape x | x < ' ' = "\\" <> B.decimal (ord x)
              | otherwise = B.singleton x
   pretty (LuaNumber d) = sliteral (pretty d)
