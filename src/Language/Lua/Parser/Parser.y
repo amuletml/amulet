@@ -100,7 +100,6 @@ import Language.Lua.Syntax
   string   { Token (TcString  _) _ _ }
 
 %right '^'
-%right UNOP
 %left '*' '/' '%'
 %left '+' '-'
 %right '..'
@@ -115,18 +114,18 @@ Ident :: { LuaVar }
 
 Var :: { LuaVar }
   : Ident                               { $1 }
-  | BaseExpr '.' ident                  { LuaIndex $1 (LuaString . getIdent $ $3) }
-  | BaseExpr '[' Expr ']'               { LuaIndex $1 $3 }
+  | SimpleExpr '.' ident                { LuaIndex $1 (LuaString . getIdent $ $3) }
+  | SimpleExpr '[' Expr ']'             { LuaIndex $1 $3 }
 
-BaseExpr :: { LuaExpr }
+SimpleExpr :: { LuaExpr }
   : Var                                 { LuaRef $1 }
   | qexpr                               { LuaQuoteE (getIdent $1) }
   | '(' Expr ')'                        { $2 }
   | Call                                { LuaCallE $1 }
 
 Call :: { LuaCall }
-  : BaseExpr Args                       { LuaCall $1 $2 }
-  | BaseExpr ':' ident Args             { LuaInvoke $1 (getIdent $3) $4 }
+  : SimpleExpr Args                     { LuaCall $1 $2 }
+  | SimpleExpr ':' ident Args           { LuaInvoke $1 (getIdent $3) $4 }
 
 Args :: { [LuaExpr] }
   : '(' List(Expr, ',') ')'             { $2 }
@@ -134,7 +133,7 @@ Args :: { [LuaExpr] }
   | Table                               { [$1] }
 
 Atom :: { LuaExpr }
-  : BaseExpr                            { $1 }
+  : SimpleExpr                          { $1 }
   | Table                               { $1 }
 
   | nil                                 { LuaNil }
@@ -148,7 +147,7 @@ Atom :: { LuaExpr }
   | function '(' List(Ident, ',') ')' Stmts end { LuaFunction  $3 $5 }
 
 Expr :: { LuaExpr }
-  : Atom                                { $1 }
+  : Expr2                               { $1 }
 
   | Expr and Expr                       { LuaBinOp $1 (T.pack "and") $3 }
   | Expr or  Expr                       { LuaBinOp $1 (T.pack "or")  $3 }
@@ -157,7 +156,6 @@ Expr :: { LuaExpr }
   | Expr '-' Expr                       { LuaBinOp $1 (T.pack "-") $3 }
   | Expr '*' Expr                       { LuaBinOp $1 (T.pack "*") $3 }
   | Expr '/' Expr                       { LuaBinOp $1 (T.pack "/") $3 }
-  | Expr '^' Expr                       { LuaBinOp $1 (T.pack "^") $3 }
   | Expr '%' Expr                       { LuaBinOp $1 (T.pack "%") $3 }
 
   | Expr '..' Expr                      { LuaBinOp $1 (T.pack "..") $3 }
@@ -169,9 +167,16 @@ Expr :: { LuaExpr }
   | Expr '<=' Expr                      { LuaBinOp $1 (T.pack "<=") $3 }
   | Expr '>=' Expr                      { LuaBinOp $1 (T.pack ">=") $3 }
 
-  | '-' Expr %prec UNOP                 { LuaUnOp (T.pack "-")      $2 }
-  | '#' Expr %prec UNOP                 { LuaUnOp (T.pack "#")      $2 }
-  | not Expr %prec UNOP                 { LuaUnOp (T.pack "not")    $2 }
+-- We need a a separate expression case in order to handle unary operator precedence
+Expr2 :: { LuaExpr }
+  : Atom                                { $1 }
+
+  | Expr2 '^' Expr2                     { LuaBinOp $1 (T.pack "^") $3 }
+
+  | '-' Expr2                           { LuaUnOp (T.pack "-")      $2 }
+  | '#' Expr2                           { LuaUnOp (T.pack "#")      $2 }
+  | not Expr2                           { LuaUnOp (T.pack "not")    $2 }
+
 
 Table :: { LuaExpr }
   : '{' List(TablePair, ',') '}'        { LuaTable (buildTable $2) }
@@ -188,7 +193,7 @@ Stmts :: { [LuaStmt] }
 
 Stmt :: { LuaStmt }
   : qstmt                               { LuaQuoteS (getIdent $1) }
-  | Call                                { LuaCallS $1 }
+  | SimpleExpr                          {% toStatement $1 }
 
   | do Stmts end                        { LuaDo $2 }
   | List1(Var, ',') '=' List1(Expr, ',') { LuaAssign $1 $3 }
@@ -248,5 +253,8 @@ getIdent (Token (TcQuoteV x) _ _) = x
 getInt    (Token (TcInteger x) _ _)    = x
 getFloat  (Token (TcFloat x) _ _)      = x
 getString (Token (TcString  x) _ _)    = x
+
+toStatement (LuaCallE c) = pure (LuaCallS c)
+toStatement e = failWith MalformedStatement
 
 }

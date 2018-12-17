@@ -39,6 +39,8 @@ data ParseError
 
   -- | An unexpected token appeared in the lexer stream
   | UnexpectedToken Token [String]
+  -- | An expression, where a statement was expected
+  | MalformedStatement
   deriving (Show)
 
 instance Pretty ParseError where
@@ -55,6 +57,8 @@ instance Pretty ParseError where
   pretty (UnexpectedToken (Token s _ _) xs) =
     "Unexpected" <+> string (show s) <> ", expected one of" <+> hsep (punctuate comma (map string xs))
 
+  pretty MalformedStatement = "Malformed statement: received an expression instead"
+
 instance Spanned ParseError where
   annotation (Failure p _) = mkSpan1 p
 
@@ -64,6 +68,7 @@ instance Spanned ParseError where
   annotation (UnclosedComment p _) = mkSpan1 p
 
   annotation (UnexpectedToken t _) = annotation t
+  annotation MalformedStatement = internal
 
 prettyPos :: SourcePos -> Doc a
 prettyPos p = shown (spLine p) <> colon <> shown (spCol p)
