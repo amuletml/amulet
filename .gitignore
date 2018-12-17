@@ -13,6 +13,7 @@ src/Language/Lua/Parser/Parser.hs
 src/**/*.info
 
 !/tests/lua/*.lua
+!/tests/lua_parse/*.lua
 
 cabal.project.local*
 .ghc*
