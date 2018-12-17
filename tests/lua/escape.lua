@@ -1,3 +1,3 @@
 do
-  (nil)({ quote = "\"", line = "\n", tab = "\t", hex = "\17" })
+  (nil)({ quote = "\"", slash = "\\", line = "\n", tab = "\t", hex = "\17" })
 end
