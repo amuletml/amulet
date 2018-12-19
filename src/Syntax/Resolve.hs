@@ -319,6 +319,23 @@ reExpr r@(OpenIn m e a) =
 
 reExpr (Lazy e a) = Lazy <$> reExpr e <*> pure a
 reExpr (Vta e t a) = Vta <$> reExpr e <*> reType e t <*> pure a
+
+reExpr (ListComp e qs a) =
+  let go (CompGuard e:qs) acc = do
+        e <- reExpr e
+        go qs (CompGuard e:acc)
+      go (CompGen b e an:qs) acc = do
+        e <- reExpr e
+        (b, es, ts) <- reWholePattern b
+        extendTyvarN ts . extendN es $
+          go qs (CompGen b e an:acc)
+      go (CompLet bs an:qs) acc =do
+        (bs', vs, ts) <- unzip3 <$> traverse reBinding bs
+        extendTyvarN (concat ts) . extendN (concat vs) $ do
+          bs <- traverse (uncurry (flip (<$>) . reExpr . view bindBody)) (zip bs bs')
+          go qs (CompLet bs an:acc)
+      go [] acc = ListComp <$> reExpr e <*> pure (reverse acc) <*> pure a
+  in go qs []
 reExpr ExprWrapper{} = error "resolve cast"
 
 reArm :: MonadResolve m

@@ -101,6 +101,9 @@ desugarProgram = traverse statement where
                a
   expr (Vta e t a) = Vta <$> expr e <*> pure (ty t) <*> pure a
   expr (ListExp e t) = ListExp <$> traverse expr e <*> pure t
+  expr (ListComp _ [] an) = pure $ ListExp [] an
+  expr (ListComp e qs an) = transListComp (e, qs, an) (ListExp [] an)
+
   expr (OpenIn _ e _) = expr e
 
   buildTuple :: Ann Desugared
@@ -181,6 +184,47 @@ desugarProgram = traverse statement where
   ctor (UnitCon v a) = UnitCon v a
   ctor (ArgCon v t a) = ArgCon v (ty t) a
   ctor (GeneralisedCon v t a) = GeneralisedCon v (ty t) a
+
+  transListComp :: (Expr Resolved, [CompStmt Resolved], Ann Resolved)
+                -> Expr Desugared -> m (Expr Desugared)
+  transListComp (ex, CompGen v l1 _:qs, an) l2 = do
+    h <- genName
+    (cus, us) <- fresh an
+    (cus', us') <- fresh an
+    (cx, x) <- fresh an
+    l1 <- expr l1
+    success <- transListComp (ex, qs, an) (App (VarRef h an) us' an)
+    pure $
+      Let [ Binding h
+              (Fun (PatParam cus)
+                (Match us
+                  [ Arm { armPat = consPat cx cus' an
+                        , armGuard = Nothing
+                        , armExp =
+                            Match x
+                              [ Arm { armPat = pat v
+                                    , armGuard = Nothing
+                                    , armExp = success }
+                              , Arm { armPat = Wildcard an
+                                    , armGuard = Nothing
+                                    , armExp = App (VarRef h an) us' an
+                                    }
+                              ] an
+                        }
+                  , Arm { armPat = Wildcard an
+                        , armGuard = Nothing
+                        , armExp = l2 } ] an)
+                  an) True an ]
+        (App (VarRef h an) l1 an)
+        an
+  transListComp (ex, CompLet bs _:qs, an) l =
+    Let <$> traverse binding bs <*> transListComp (ex, qs, an) l <*> pure an
+  transListComp (ex, CompGuard e:qs, an) l =
+    If <$> expr e <*> transListComp (ex, qs, an) l <*> pure l <*> pure an
+  transListComp (ex, [], an) l = cons <$> expr ex <*> pure l <*> pure an
+
+  consPat p ps an = Destructure cONSName (Just (PTuple [p, ps] an)) an
+  cons x xs an = App (VarRef cONSName an) (Tuple [x, xs] an) an
 
   foldf f xs v = foldr f v xs
 

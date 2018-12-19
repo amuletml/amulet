@@ -80,6 +80,8 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
   pretty (Lazy e _) = keyword "lazy" <+> parenArg e
   pretty (Vta e t _) = parenFun e <+> keyword "as" <+> pretty t
   pretty (ListExp es _) = brackets (hsep (punctuate comma (map pretty es)))
+  pretty (ListComp e qs _) =
+    brackets (pretty e <+> pipe <+> hsep (punctuate comma (map pretty qs)))
 
   pretty (ExprWrapper wrap ex an) = go wrap ex where
     go (TypeLam v t) ex =
@@ -92,6 +94,18 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
     go (WrapVar v) ex = pretty ex <+> soperator (char '_') <> pretty v
     go (WrapFn f) ex = pretty (runWrapper f ex)
     go IdWrap ex = pretty ex
+
+instance Pretty (Var p) => Pretty (CompStmt p) where
+  pretty (CompGen p e _) = pretty p <+> soperator (string "<-") <+> pretty e
+  pretty (CompLet [] _) = keyword "let" <> braces mempty
+  pretty (CompLet (x:xs) _) =
+    let prettyBind x = keyword "and" <+> pretty x
+     in keyword "let" <+> pretty x
+            <+> case xs of
+              [] -> empty
+              _ -> hsep (map prettyBind xs)
+  pretty (CompGuard e) = pretty e
+
 
 instance Pretty (Var p) => Pretty (Coercion p) where
   pretty (VarCo x) = stypeSkol (pretty x)
