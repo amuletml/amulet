@@ -5,7 +5,7 @@
   The grammar has several shift/reduce conflicts which are documented as
   follows.
 
-  === In record expressions
+  === In record expressions (+1)
   When the input contains @{ foo : int ... }@, the parser does not know whether
   @foo@ refers to a table key. Without further lookahead, the input could be a
   record key (@{ foo : int = 2 }@) or an expression within an extension (@{ foo
@@ -13,18 +13,20 @@
 
   Currently the latter of these is chosen, as Happy always prefers to shift.
 
-  === In type annotations
-  @(2, 2) : int * int@ could be parsed as @[[(2, 2) : int]] * int@ or @(2, 2) :
-  [[int * int]]@.
+  === In type annotations and ascriptions (+6)
 
-  This ambiguity only occurs for @*@ as it is considered an operator, and so
-  clashes with the second rule in @Expr@
+  There's several cases where type ascriptions cause ambiguities. As
+  these fall into one state, we'll group them here:
 
-  === In pattern guards
+  Operators after type ascriptions on expressions could refer to the
+  expression or type. For instanece, @a : int * int@ could be parsed as
+  @(a : int) * int@ or @a : (int * int)@. Currently the latter is chosen.
 
-  As we allow any expression within a guard, one can use type ascriptions, and
-  so have @when x : a -> b@. The @->@ could either be part of an arrow type or
-  the arm.
+  There is also potential for a conflict for expressions within pattern
+  guards. For @| _ when a -> b@, the arrow could either be part of an
+  arrow type in the ascription, or the separator of the pattern arm. In
+  this case, the former is chosen.
+
 -}
 module Parser
   ( parseTops
@@ -110,10 +112,8 @@ import Syntax
   ';;'     { Token TcTopSep _ _ }
   ';'      { Token TcSemicolon _ _ }
   '('      { Token TcOParen _ _ }
-  '?('     { Token TcQParen _ _ }
   ')'      { Token TcCParen _ _ }
   '@'      { Token TcAt _ _ }
-  '?'      { Token TcQuestion _ _ }
   '{'      { Token TcOBrace _ _ }
   '}'      { Token TcCBrace _ _ }
   '['      { Token TcOSquare _ _ }
@@ -140,13 +140,19 @@ import Syntax
   '$sep'   { Token TcVSep _ _ }
 
 -- Please try to update the module documentation when this number changes.
-%expect 18 -- TODO: No seriously, get this down to something sane.
+%expect 7
 
 %%
 
 Tops :: { [Toplevel Parsed] }
      : List1(Top, TopSep)                      { $1 }
 
+-- An access modifier for top-level definitions
+--
+-- We inline this within let binding groups to remove a shift/reduce
+-- within the REPL for let binding groups. (We do not know if let should
+-- be followed by an Access or not). It's slightly absurd that inlining
+-- the production works, but at the same time makes perfect sense.
 Access :: { TopAccess }
   :                                            { Public }
   | private                                    { Private }
@@ -156,7 +162,10 @@ TopSep :: { () }
     | '$sep' { () }
 
 Top :: { Toplevel Parsed }
-    : let Access BindGroup                     { LetStmt $2 (reverse $3) }
+    -- See comment on 'Access' as to why this is inlined
+    : let BindGroup                            { LetStmt Public (reverse $2) }
+    | let private BindGroup                    { LetStmt Private (reverse $3) }
+
     | external Access val BindName ':' Type '=' string
       { withPos2 $1 $8 $ ForeignVal $2 (getL $4) (getString $8) (getL $6) }
 

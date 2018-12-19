@@ -61,11 +61,9 @@ data TokenClass
   | TcColon -- ^ A @:@ token.
   | TcSemicolon -- ^ A @;@ token.
   | TcTopSep -- ^ A @;;@ token.
-  | TcQParen -- ^ A @?(@ token.
   | TcOParen -- ^ A @(@ token.
   | TcCParen -- ^ A @)@ token.
   | TcAt -- ^ A @@{@ token.
-  | TcQuestion -- ^ A @?@ token.
   | TcOBrace -- ^ A @{@ token.
   | TcCBrace -- ^ A @}@ token.
   | TcOSquare -- ^ A @[@ token.
@@ -143,11 +141,9 @@ instance Show TokenClass where
   show TcColon = ":"
   show TcSemicolon = ";"
   show TcTopSep = ";;"
-  show TcQParen = "?("
   show TcOParen = "("
   show TcCParen = ")"
   show TcAt = "@"
-  show TcQuestion = "?"
   show TcOBrace = "{"
   show TcCBrace = "}"
   show TcOSquare = "["

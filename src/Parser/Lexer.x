@@ -106,11 +106,9 @@ tokens :-
   <0> ":"      { constTok TcColon }
   <0> ";" ";"  { constTok TcTopSep }
   <0> ";"      { constTok TcSemicolon }
-  <0> "?("     { constTok TcQParen }
   <0> "("      { constTok TcOParen }
   <0> ")"      { constTok TcCParen }
   <0> "@"      { constTok TcAt }
-  <0> "?"      { constTok TcQuestion }
   <0> "{"      { constTok TcOBrace }
   <0> "}"      { constTok TcCBrace }
   <0> "["      { constTok TcOSquare }
