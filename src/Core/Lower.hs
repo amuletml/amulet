@@ -301,7 +301,7 @@ lowerProg' (Module _ b:prg) = lowerProg' (b ++ prg)
 lowerProg' (Class{}:prg) = lowerProg' prg
 lowerProg' (Instance{}:prg) = lowerProg' prg
 
-lowerProg' (ForeignVal v ex tp _:prg) =
+lowerProg' (ForeignVal _ v ex tp _:prg) =
   let tyB = lowerType tp
       vB = mkVal v
   in case unboxedTy tyB of
@@ -323,7 +323,7 @@ lowerProg' (ForeignVal v ex tp _:prg) =
     unwrap as r = Just (ForallTy Irrelevant (ValuesTy (reverse as)) r)
 
 
-lowerProg' (LetStmt vs:prg) = do
+lowerProg' (LetStmt _ vs:prg) = do
   let env' = VarMap.fromList (foldMap lowerBind vs)
       lowerBind bind =
         let ty = lowerType (bind ^. (S.bindAnn . _2))
@@ -333,7 +333,7 @@ lowerProg' (LetStmt vs:prg) = do
     vs' <- lowerLet vs
     foldr ((.) . ((:) . C.StmtLet)) id vs' <$$> lowerProg' prg
 
-lowerProg' (TypeDecl var _ cons:prg) = do
+lowerProg' (TypeDecl _ var _ cons:prg) = do
   let cons' = map (\case
                        UnitCon p (_, t) -> (p, mkCon p, lowerType t)
                        ArgCon p _ (_, t) -> (p, mkCon p, lowerType t)

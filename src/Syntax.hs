@@ -284,10 +284,14 @@ deriving instance (Show (Var p), Show (Ann p)) => Show (Coercion p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Coercion p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Coercion p)
 
+-- | An accessibility modifier of a top-level declaration
+data TopAccess = Public | Private
+  deriving (Eq, Ord, Show, Data)
+
 data Toplevel p
-  = LetStmt [Binding p]
-  | ForeignVal (Var p) Text (Type p) (Ann p)
-  | TypeDecl (Var p) [TyConArg p] [Constructor p]
+  = LetStmt TopAccess [Binding p]
+  | ForeignVal TopAccess (Var p) Text (Type p) (Ann p)
+  | TypeDecl TopAccess (Var p) [TyConArg p] [Constructor p]
   | Module (Var p) [Toplevel p]
   | Open { openName :: Var p
          , openAs :: Maybe T.Text }
@@ -377,10 +381,10 @@ instance Spanned (Ann p) => Spanned (Binding p) where
   annotation = annotation . _bindAnn
 
 instance (Spanned (Constructor p), Spanned (Ann p)) => Spanned (Toplevel p) where
-  annotation (LetStmt [b]) = annotation b
-  annotation (LetStmt (b:vs)) = sconcat (annotation b :| map annotation vs)
-  annotation (TypeDecl _ _ (x:xs)) = sconcat (annotation x :| map annotation xs)
-  annotation (ForeignVal _ _ _ x) = annotation x
+  annotation (LetStmt _ [b]) = annotation b
+  annotation (LetStmt _ (b:vs)) = sconcat (annotation b :| map annotation vs)
+  annotation (TypeDecl _ _ _ (x:xs)) = sconcat (annotation x :| map annotation xs)
+  annotation (ForeignVal _ _ _ _ x) = annotation x
   annotation (Class _ _ _ _ x) = annotation x
   annotation (Instance _ _ _ _ x) = annotation x
   annotation _ = internal

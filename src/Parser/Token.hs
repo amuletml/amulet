@@ -53,6 +53,7 @@ data TokenClass
   | TcClass -- ^ A @class@ token.
   | TcInstance -- ^ An @instance@ token.
   | TcWhen -- ^ A @when@ token.
+  | TcPrivate -- ^ A @private@ token.
   | TcAs   -- ^ An @as@ token.
 
   | TcDot -- ^ A @.@ token.
@@ -135,6 +136,7 @@ instance Show TokenClass where
   show TcClass = "class"
   show TcInstance = "instance"
   show TcWhen = "when"
+  show TcPrivate = "private"
 
   show TcComma = ","
   show TcDot = "."

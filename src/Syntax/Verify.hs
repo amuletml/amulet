@@ -62,10 +62,10 @@ runVerify env var = fixup
 verifyProgram :: forall m. MonadVerify m => [Toplevel Typed] -> m ()
 verifyProgram = traverse_ verifyStmt where
   verifyStmt :: Toplevel Typed -> m ()
-  verifyStmt st@(LetStmt vs) = verifyBindingGroup (flip const) (BecauseOf st) vs
+  verifyStmt st@(LetStmt _ vs) = verifyBindingGroup (flip const) (BecauseOf st) vs
   verifyStmt Class{} = pure ()
   verifyStmt Instance{} = pure ()
-  verifyStmt st@(ForeignVal v d t (_, _)) = do
+  verifyStmt st@(ForeignVal _ v d t (_, _)) = do
     case parseExpr (SourcePos ("definition of " ++ displayS (pretty v)) 1 1) (d ^. lazy) of
       Left e -> tell (Seq.singleton (ParseErrorInForeign st e))
       Right _ -> pure ()

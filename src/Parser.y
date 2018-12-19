@@ -102,6 +102,7 @@ import Syntax
   class    { Token TcClass _ _ }
   instance { Token TcInstance _ _ }
   when     { Token TcWhen _ _ }
+  private  { Token TcPrivate _ _ }
 
   ','      { Token TcComma _ _ }
   '.'      { Token TcDot _ _ }
@@ -139,24 +140,28 @@ import Syntax
   '$sep'   { Token TcVSep _ _ }
 
 -- Please try to update the module documentation when this number changes.
-%expect 7 -- TODO: Update this?
+%expect 18 -- TODO: No seriously, get this down to something sane.
 
 %%
 
 Tops :: { [Toplevel Parsed] }
      : List1(Top, TopSep)                      { $1 }
 
+Access :: { TopAccess }
+  :                                            { Public }
+  | private                                    { Private }
+
 TopSep :: { () }
     : ';;'   { () }
     | '$sep' { () }
 
 Top :: { Toplevel Parsed }
-    : let BindGroup                             { LetStmt (reverse $2) }
-    | external val BindName ':' Type '=' string
-      { withPos2 $1 $7 $ ForeignVal (getL $3) (getString $7) (getL $5) }
+    : let Access BindGroup                     { LetStmt $2 (reverse $3) }
+    | external Access val BindName ':' Type '=' string
+      { withPos2 $1 $8 $ ForeignVal $2 (getL $4) (getString $8) (getL $6) }
 
-    | type BindName ListE(TyConArg) TypeBody   { TypeDecl (getL $2) $3 $4 }
-    | type TyConArg BindOp TyConArg TypeBody   { TypeDecl (getL $3) [$2, $4] $5 }
+    | type Access BindName ListE(TyConArg) TypeBody { TypeDecl $2 (getL $3) $4 $5 }
+    | type Access TyConArg BindOp TyConArg TypeBody { TypeDecl $2 (getL $4) [$3, $5] $6 }
 
     | module qconid '=' begin Tops end         { Module (getName $2) $5 }
     | module qconid '=' '$begin' Tops '$end'   { Module (getName $2) $5 }
@@ -170,8 +175,6 @@ Top :: { Toplevel Parsed }
     | instance Type begin Methods end          {% fmap (withPos2 $1 $5) $ buildInstance $2 $4 }
     | instance Type '$begin' Methods '$end'    {% fmap (withPos2 $1 $5) $ buildInstance $2 $4 }
 
-
---  | Instance                                 { $1 }
     | open Con                                 { Open (getL $2) Nothing }
 
 TypeBody :: { [Constructor Parsed] }
