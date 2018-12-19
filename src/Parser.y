@@ -262,6 +262,7 @@ Atom :: { Expr Parsed }
          { withPos2 $1 $5 $ tupleExpr ($2:$4) }
      | '{' ListT(ExprRow, ',') '}'            { withPos2 $1 $3 $ Record $2 }
      | '{' Expr with List1T(ExprRow, ',') '}' { withPos2 $1 $5 $ RecordExt $2 $4 }
+     | '[' List(Expr, ',') ']'                { withPos2 $1 $3 $ ListExp $2 }
      | Atom access                            { withPos2 $1 $2 $ Access $1 (getIdent $2) }
 
 ExprBlock :: { Expr Parsed }
@@ -423,6 +424,7 @@ ArgP :: { Pattern Parsed }
      | '{' ListT(PatternRow, ',') '}'             { withPos2 $1 $3 $ PRecord $2 }
      | '(' List(Pattern, ',') ')'                 { withPos2 $1 $3 $ tuplePattern $2 }
      | Lit                                        { withPos1 $1 (PLiteral (getL $1)) }
+     | '[' List(Pattern, ',') ']'                 { withPos2 $1 $3 $ PList $2 }
 
 PatternRow :: { (T.Text, Pattern Parsed) }
   : ident '=' Pattern                             { (getIdent $1, $3) }

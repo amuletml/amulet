@@ -54,7 +54,6 @@ let f & g = fun x -> f (g x)
 let first k (a, b) = (,b) <$> k a
 let second k (a, b) = (a,) <$> k b
 
-type list 'a = Nil | Cons of 'a * list 'a
 let (::) x y = Cons (x, y)
 
 instance show 'a => show (list 'a) begin
@@ -98,5 +97,5 @@ let foldMapOf l f = getConst & l (Const & f)
 let toListOf l = foldMapOf l (fun x -> x :: Nil)
 
 let () =
-  let xs = (1, ()) :: (1, ()) :: (1, ()) :: Nil
+  let xs = [(1, ()), (1, ()), (1, ())]
   print (toListOf (traverse & first) xs)

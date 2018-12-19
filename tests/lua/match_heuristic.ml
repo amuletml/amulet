@@ -1,5 +1,3 @@
-type list 'a = Nil | Cons of 'a * list 'a
-
 (* Tests the small branching factor heuristic *)
 let common_prefix = function
   | 1, 2 -> "foo"

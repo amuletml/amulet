@@ -1,9 +1,11 @@
 {-# OPTIONS_GHC -fprof-auto #-}
 {-# LANGUAGE
-  ConstraintKinds
-, FlexibleContexts
-, ScopedTypeVariables
-, TemplateHaskell #-}
+    ConstraintKinds
+  , FlexibleContexts
+  , ScopedTypeVariables
+  , TemplateHaskell
+  , OverloadedStrings
+  #-}
 module Core.Optimise.Reduce.Base
   ( module Core.Occurrence
   , module Core.Arity
@@ -39,6 +41,7 @@ import qualified Data.VarSet as VarSet
 import Data.Maybe
 
 import qualified Core.Arity as Arity
+import Core.Builtin
 import Core.Occurrence
 import Core.Arity hiding (Arity(..), emptyScope)
 import Core.Core
@@ -94,7 +97,7 @@ data VarSub a
   deriving (Show)
 
 -- | A "mutable" state within the reducer monad
-data ReduceState a
+newtype ReduceState a
   = RState
   { _varSubst :: VarMap.Map (VarSub a) -- ^ Potential candidates for inlined variables
   }
@@ -113,15 +116,34 @@ type MonadReduce a m =
 
 -- | Run the reduce monad in the default scope, returning the modified
 -- expression and the number of changes made.
-runReduce :: MonadNamey m
+runReduce :: forall m a x. (MonadNamey m, IsVar a)
           => RWST (ReduceScope a) (Sum Int) (ReduceState a) m x
           -> m (x, Int)
 runReduce m = fmap getSum <$> evalRWST m emptyScope emptyState where
-  emptyScope = RScope mempty mempty mempty Arity.emptyScope
+  emptyScope = RScope mempty builtinTys builtinCtors Arity.emptyScope
   emptyState = RState mempty
 
+  arrTy = ForallTy Irrelevant
+  prodTy a b = RowsTy NilTy [("_1", a), ("_2", b)]
+  name :: a
+  name = fromVar tyvarA
+
+  builtinTys :: VarMap.Map [(a, Type a)]
+  builtinTys = VarMap.fromList
+    [(fromVar vList,
+      [ (fromVar vCONS, ForallTy (Relevant name) StarTy $
+          VarTy name `prodTy` AppTy tyList (VarTy name) `arrTy` AppTy tyList (VarTy name))
+      , (fromVar vNIL, ForallTy (Relevant name) StarTy $ AppTy tyList (VarTy name)) ])
+    ]
+
+  builtinCtors :: VarMap.Map (a, Type a)
+  builtinCtors = VarMap.fromList
+    [ (vCONS, (fromVar vList, ForallTy (Relevant name) StarTy $
+          VarTy name `prodTy` AppTy tyList (VarTy name) `arrTy` AppTy tyList (VarTy name)))
+    , (vNIL, (fromVar vList, ForallTy (Relevant name) StarTy $ AppTy tyList (VarTy name))) ]
+
 -- | Run the reduce monad N times, or until no more changes occur.
-runReduceN :: MonadNamey m
+runReduceN :: (MonadNamey m, IsVar a)
            => (x -> RWST (ReduceScope a) (Sum Int) (ReduceState a) m x)
            -> Int -> x
            -> m x

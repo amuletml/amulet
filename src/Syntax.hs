@@ -97,6 +97,9 @@ data Expr p
   -- Visible type application
   | Vta (Expr p) (Type p) (Ann p)
 
+  -- Lists
+  | ListExp [Expr p] (Ann p)
+
   | ExprWrapper (Wrapper p) (Expr p) (Ann p)
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Expr p)
@@ -167,6 +170,7 @@ data Pattern p
   | PType (Pattern p) (Type p) (Ann p)
   | PRecord [(Text, Pattern p)] (Ann p)
   | PTuple [Pattern p] (Ann p)
+  | PList [Pattern p] (Ann p)
   | PLiteral Lit (Ann p)
   | PWrapper (Wrapper p, Type p) (Pattern p) (Ann p)
   | PSkolem (Pattern p) [Var p] (Ann p)
@@ -414,6 +418,7 @@ instance Spanned (Ann p) => Spanned (Expr p) where
   annotation (OpenIn _ _ a) = annotation a
   annotation (Lazy _ a) = annotation a
   annotation (Vta _ _ a) = annotation a
+  annotation (ListExp _ a) = annotation a
 
   annotation (ExprWrapper _ _ a) = annotation a
 
@@ -428,6 +433,7 @@ instance Spanned (Ann p) => Spanned (Pattern p) where
   annotation (PLiteral _ a) = annotation a
   annotation (PWrapper _ _ a) = annotation a
   annotation (PSkolem _ _ a) = annotation a
+  annotation (PList _ a) = annotation a
 
 instance Spanned (Ann p) => Spanned (Arm p) where
   annotation (Arm p _ e) = annotation p <> annotation e

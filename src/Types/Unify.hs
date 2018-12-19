@@ -5,7 +5,6 @@
 -- | This module implements the logic responsible for solving the
 -- sequence of @Constraint@s the type-checker generates for a particular
 -- binding groups.
-#define TRACE_TC
 module Types.Unify
   ( SolveState, emptyState
   , typeWithin
@@ -296,15 +295,10 @@ hasExactMatch t = any ((== t) . view implHead)
 pickBestPossible :: [Implicit Typed] -> Implicit Typed
 pickBestPossible [] = error "No choices"
 pickBestPossible xs =
-  let all@(x:_) = L.groupBy ((==) `on` (length . view implPre)) (L.sortBy (comparing (length . view implPre)) xs)
-      best = L.sortBy (comparing specificity) x
+  let ~(x:_) = L.groupBy ((==) `on` (length . view implPre)) (L.sortOn (length . view implPre) xs)
+      best = L.sortOn specificity x
       specificity t = countConstructors (t ^. implHead)
-   in
-#ifdef TRACE_TC
-      trace (ppShow best) $
-      trace (ppShow all) $
-#endif
-      head best
+   in head best
 
 useImplicit :: forall m. MonadSolve m
             => SomeReason -> Type Typed -> ImplicitScope Typed
@@ -413,19 +407,18 @@ unify (TyApp (TyApp (TyCon v) l) r) (TyArr l' r')
 unify (TyArr l r) (TyApp (TyApp (TyCon v) l') r')
   | v == tyArrowName = ArrCo <$> unify l l' <*> unify r r'
 
-unify (TyApp f g) (TyArr l r) = ArrCo <$> unify f (TyApp (TyCon tyArrowName) l) <*> unify g r
-unify (TyArr l r) (TyApp f g) = ArrCo <$> unify (TyApp (TyCon tyArrowName) l) f <*> unify r g
+unify x@(TyApp f g) y@(TyArr l r) =
+  rethrow x y $ ArrCo <$> unify f (TyApp (TyCon tyArrowName) l) <*> unify g r
+
+unify x@(TyArr l r) y@(TyApp f g) =
+  rethrow x y $ ArrCo <$> unify (TyApp (TyCon tyArrowName) l) f <*> unify r g
 
 unify (TyArr a b) (TyArr a' b') = ArrCo <$> unify a a' <*> unify b b'
 unify (TyPi (Implicit a) b) (TyPi (Implicit a') b') =
   ArrCo <$> unify a a' <*> unify b b' -- Technically cheating but yay desugaring
 
 unify l@(TyApp a b) r@(TyApp a' b') =
-  (AppCo <$> unify a a' <*> unify b b')
-    `catchChronicle` (\e -> confess =<< for e rethrow)
-  where
-    rethrow NotEqual{} = unequal l r
-    rethrow x = pure x
+  rethrow l r $ AppCo <$> unify a a' <*> unify b b'
 
 unify ta@(TyCon a) tb@(TyCon b)
   | a == b = pure (ReflCo tb)
@@ -489,8 +482,10 @@ unify (TyApp (TyApp (TyCon v) l) r) (TyTuple l' r')
 unify (TyTuple l r) (TyApp (TyApp (TyCon v) l') r')
   | v == tyTupleName = ProdCo <$> unify l l' <*> unify r r'
 
-unify (TyApp f g) (TyTuple l r) = ProdCo <$> unify f (TyApp (TyCon tyTupleName) l) <*> unify g r
-unify (TyTuple l r) (TyApp f g) = ProdCo <$> unify (TyApp (TyCon tyTupleName) l) f <*> unify r g
+unify x@(TyApp f g) y@(TyTuple l r) =
+  rethrow x y $ ProdCo <$> unify f (TyApp (TyCon tyTupleName) l) <*> unify g r
+unify x@(TyTuple l r) y@(TyApp f g) =
+  rethrow x y $ ProdCo <$> unify (TyApp (TyCon tyTupleName) l) f <*> unify r g
 
 unify (TyOperator l v r) (TyTuple l' r')
   | v == tyTupleName = ProdCo <$> unify l l' <*> unify r r'
@@ -501,8 +496,11 @@ unify (TyTuple l r) (TyOperator l' v r')
 unify (TyTuple a b) (TyTuple a' b') =
   ProdCo <$> unify a a' <*> unify b b'
 
-unify (TyOperator l v r) (TyApp f g) = AppCo <$> unify (TyApp (TyCon v) l) f <*> unify g r
-unify (TyApp f g) (TyOperator l v r) = AppCo <$> unify f (TyApp (TyCon v) l) <*> unify r g
+unify x@(TyOperator l v r) y@(TyApp f g) =
+  rethrow x y $ AppCo <$> unify (TyApp (TyCon v) l) f <*> unify g r
+unify x@(TyApp f g) y@(TyOperator l v r) =
+  rethrow x y $ AppCo <$> unify f (TyApp (TyCon v) l) <*> unify r g
+
 unify (TyOperator l v r) (TyOperator l' v' r')
   | v == v' = AppCo <$> unify l l' <*> unify r r'
 
@@ -757,6 +755,14 @@ probablyCast :: Coercion Typed -> Wrapper Typed
 probablyCast x
   | isReflexiveCo x = IdWrap
   | otherwise = Cast x
+
+rethrow :: MonadSolve m => Type Typed -> Type Typed -> m a -> m a
+rethrow l r cont =
+  condemn cont
+    `catchChronicle` \e -> confess =<< for e go
+  where
+    go NotEqual{} = unequal l r
+    go x = pure x
 
 -- | Make a fresh 'Skolem' constant, with the given 'SkolemMotive', for
 -- a 'Var' in the 'Type'.

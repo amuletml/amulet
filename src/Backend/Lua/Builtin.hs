@@ -63,6 +63,14 @@ builtins =
         return { x, false, __tag = "lazy" }
       end
       |] )
+  , ( vNIL, "Nil", [], Nothing
+    , [luaStmts| local Nil = { __tag = "Nil" } |] )
+  , ( vCONS, "Cons", [], Nothing
+    , [luaStmts|
+      local function Cons(x)
+        return { x, __tag = "Cons" }
+      end
+      |] )
   , ( vForce, "__builtin_force", [vUnit], Nothing
     , [luaStmts|
        local function __builtin_force_err()

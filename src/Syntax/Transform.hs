@@ -95,6 +95,7 @@ transformExpr fe = goE where
   transE (ExprWrapper w e a) = ExprWrapper w (goE e) a
   transE (Lazy e a) = Lazy (goE e) a
   transE (Vta e t a) = Vta (goE e) t a
+  transE (ListExp e a) = ListExp (map goE e) a
 
   goB (Binding v e c a) = Binding v (goE e) c a
   goB (TypedMatching v e a b) = TypedMatching v (goE e) a b
@@ -141,6 +142,7 @@ transformExprTyped fe fc ft = goE where
 
   transE (ExprWrapper w e a) = ExprWrapper (goW w) (goE e) (goA a)
   transE (Lazy e a) = Lazy (goE e) (goA a)
+  transE (ListExp e a) = ListExp (map goE e) (goA a)
 
   transBind (Binding v e b a) = Binding v (goE e) b (goA a)
   transBind (Matching p e a) = Matching (goP p) (goE e) (goA a)
@@ -179,6 +181,7 @@ transformPatternTyped fp ft = goP where
   transP (PType p t a) = PType (goP p) (goT t) (goA a)
   transP (PRecord fs a) = PRecord (map (second goP) fs) (goA a)
   transP (PTuple ps a) = PTuple (map goP ps) (goA a)
+  transP (PList ps a) = PList (map goP ps) (goA a)
   transP (PLiteral l a) = PLiteral l (goA a)
   transP (PWrapper c p a) = PWrapper c (goP p) (goA a)
   transP (PSkolem p a ann) = PSkolem (goP p) a (goA ann)
@@ -218,5 +221,6 @@ correct ty (TupleSection es a) = TupleSection es (fst a, ty)
 correct ty (OpenIn n e a) = OpenIn n e (fst a, ty)
 
 correct ty (Lazy e a) = Lazy e (fst a, ty)
+correct ty (ListExp e a) = ListExp e (fst a, ty)
 
 correct ty (ExprWrapper w e a) = ExprWrapper w e (fst a, ty)

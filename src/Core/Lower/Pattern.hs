@@ -492,6 +492,7 @@ normalisePattern (S.PRecord fs a) = S.PRecord (map (second normalisePattern) fs)
 -- Reduce these cases to something else
 normalisePattern (S.PWrapper _ p _) = normalisePattern p
 normalisePattern (S.PType p _ _) = normalisePattern p
+normalisePattern S.PList{} = error "PList is handled by desugar"
 normalisePattern (S.PTuple ps (pos, _)) = convert ps where
   convert [] = error "Empty tuple"
   convert [x] = normalisePattern x
@@ -537,3 +538,4 @@ patternVars' (S.PWrapper _ p _) = patternVars' p
 patternVars' (S.PSkolem p _ _) = patternVars' p
 patternVars' (S.PType p _ _) = patternVars' p
 patternVars' (S.PTuple ps _) = concatMap patternVars' ps
+patternVars' S.PList{} = error "PList is handled by desugar"

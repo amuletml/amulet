@@ -146,6 +146,7 @@ verifyExpr (TupleSection es _) = traverse_ (traverse_ verifyExpr) es
 verifyExpr (Lazy e _) = verifyExpr e
 verifyExpr (Vta e _ _) = verifyExpr e
 verifyExpr (OpenIn _ e _) = verifyExpr e
+verifyExpr (ListExp e _) = traverse_ verifyExpr e
 verifyExpr (ExprWrapper w e a) =
   case w of
     WrapFn (MkWrapCont k _) -> verifyExpr (k e)
@@ -198,6 +199,7 @@ bindingSites (PRecord rs _) = foldMap (bindingSites . snd) rs
 bindingSites (PTuple ps _) = foldMap bindingSites ps
 bindingSites (PWrapper _ p _) = bindingSites p
 bindingSites (PSkolem p _ _) = bindingSites p
+bindingSites PList{} = error "PList is handled by desugar"
 
 isLazy :: Type Typed -> Bool
 isLazy ty = tyLazy == head (spine (getHead ty))
@@ -235,6 +237,7 @@ nonTrivial RightSection{} = False
 nonTrivial BothSection{} = False
 nonTrivial (Parens e _) = nonTrivial e
 nonTrivial (Tuple es _) = any nonTrivial es
+nonTrivial (ListExp es _) = any nonTrivial es
 nonTrivial TupleSection{} = False
 nonTrivial (OpenIn _ e _) = nonTrivial e
 nonTrivial Lazy{} = False

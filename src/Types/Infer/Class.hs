@@ -279,7 +279,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
       diff = Map.toList (needDefaults `Map.difference` defaults)
   unless (null diff) $ confesses (UndefinedMethods instHead diff ann)
 
-  scope <- mappend localAssums <$> view classes
+  scope <- mappend localAssums' <$> view classes
   (usedDefaults, defaultMethods) <- fmap unzip
     . local (classes %~ mappend localAssums)
     . for (Map.toList needed) $ \(name, expr) -> do

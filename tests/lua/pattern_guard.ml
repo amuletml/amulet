@@ -1,5 +1,3 @@
-type list 'a = Nil | Cons of 'a * list 'a
-
 let a :: b = Cons (a, b)
 
 let filter f = function
