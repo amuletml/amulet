@@ -1,55 +1,55 @@
 do
-  local function common_prefix(j)
-    local eu = j._1
-    local et = j._2
-    if eu == 1 then
-      if et == 2 then
+  local function common_prefix(f)
+    local dj = f._1
+    local di = f._2
+    if dj == 1 then
+      if di == 2 then
         return "foo"
-      elseif et == 3 then
+      elseif di == 3 then
         return "bar"
       else
-        return error("Pattern matching failure in match expression at match_heuristic.ml[4:21 ..4:28]")
+        return error("Pattern matching failure in match expression at match_heuristic.ml[2:21 ..2:28]")
       end
     else
-      return error("Pattern matching failure in match expression at match_heuristic.ml[4:21 ..4:28]")
+      return error("Pattern matching failure in match expression at match_heuristic.ml[2:21 ..2:28]")
     end
   end
-  local function common_suffix(k)
-    local ey = k._1
-    local ex = k._2
-    if ey == 1 then
-      if ex == 2 then
+  local function common_suffix(g)
+    local dn = g._1
+    local dm = g._2
+    if dn == 1 then
+      if dm == 2 then
         return "foo"
-      elseif ex == 3 then
+      elseif dm == 3 then
         return "bar"
       else
-        return error("Pattern matching failure in match expression at match_heuristic.ml[8:21 ..8:28]")
+        return error("Pattern matching failure in match expression at match_heuristic.ml[6:21 ..6:28]")
       end
     else
-      return error("Pattern matching failure in match expression at match_heuristic.ml[8:21 ..8:28]")
+      return error("Pattern matching failure in match expression at match_heuristic.ml[6:21 ..6:28]")
     end
   end
-  local function mixed_1(l)
-    local fb = l._2
-    local ff, fe = fb._1, fb._2
-    if l._1 then
-      if ff == 1 then
+  local function mixed_1(h)
+    local dq = h._2
+    local du, dt = dq._1, dq._2
+    if h._1 then
+      if du == 1 then
         return 1
       else
-        if fe.__tag == "Cons" then
+        if dt.__tag == "Cons" then
           return 3
         else
-          return error("Pattern matching failure in match expression at match_heuristic.ml[13:15 ..13:22]")
+          return error("Pattern matching failure in match expression at match_heuristic.ml[11:15 ..11:22]")
         end
       end
     else
-      if fe.__tag == "Nil" then
-        if ff == 2 then
+      if dt.__tag == "Nil" then
+        if du == 2 then
           return 2
         else
-          return error("Pattern matching failure in match expression at match_heuristic.ml[13:15 ..13:22]")
+          return error("Pattern matching failure in match expression at match_heuristic.ml[11:15 ..11:22]")
         end
-      elseif fe.__tag == "Cons" then
+      elseif dt.__tag == "Cons" then
         return 3
       end
     end

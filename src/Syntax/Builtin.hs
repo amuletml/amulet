@@ -17,13 +17,18 @@ module Syntax.Builtin
   , tyLazyName, tyConstraintName, tyArrowName, tyTupleName
 
   , tyUnit, tyBool, tyInt, tyString, tyFloat
-  , tyLazy, tyConstraint, tyArrow
+  , tyLazy, tyConstraint, tyArrow, tyList
 
   , forceName, lAZYName, forceTy, lAZYTy, forceTy', lAZYTy'
+
+  , cONSName, nILName, cONSTy, nILTy, cONSTy', nILTy'
   , opAppName
   ) where
 
+import Control.Lens
+
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 import qualified Data.Text ()
 
 import qualified Syntax.Resolve.Scope as R
@@ -35,7 +40,7 @@ import Syntax
 import qualified Core.Builtin as C
 import Core.Var
 
-tyUnitName, tyBoolName, tyIntName, tyStringName, tyFloatName, tyLazyName, tyConstraintName, tyArrowName, tyTupleName :: Var Typed
+tyUnitName, tyBoolName, tyIntName, tyStringName, tyFloatName, tyLazyName, tyConstraintName, tyArrowName, tyTupleName, tyListName :: Var Typed
 tyIntName    = ofCore C.vInt
 tyStringName = ofCore C.vString
 tyBoolName   = ofCore C.vBool
@@ -44,9 +49,10 @@ tyFloatName  = ofCore C.vFloat
 tyLazyName   = ofCore C.vLazy
 tyArrowName  = ofCore C.vArrow
 tyTupleName  = ofCore C.vProduct
+tyListName  = ofCore C.vList
 tyConstraintName = TgInternal "constraint"
 
-tyUnit, tyBool, tyInt, tyString, tyFloat, tyLazy, tyConstraint, tyArrow :: Type Typed
+tyUnit, tyBool, tyInt, tyString, tyFloat, tyLazy, tyConstraint, tyArrow, tyList :: Type Typed
 tyInt    = TyCon tyIntName
 tyString = TyCon tyStringName
 tyBool   = TyCon tyBoolName
@@ -54,19 +60,28 @@ tyUnit   = TyCon tyUnitName
 tyFloat  = TyCon tyFloatName
 tyLazy   = TyCon tyLazyName
 tyArrow  = TyCon tyArrowName
+tyList   = TyCon tyListName
 tyConstraint = TyCon tyConstraintName
 
 forceName, lAZYName :: Var Typed
 forceName = ofCore C.vForce
 lAZYName  = ofCore C.vLAZY
 
-forceTy, lAZYTy :: Type Typed
+cONSName, nILName :: Var Typed
+cONSName = ofCore C.vCONS
+nILName  = ofCore C.vNIL
+
+forceTy, lAZYTy, cONSTy, nILTy :: Type Typed
 forceTy = a *. TyApp tyLazy (TyVar a) ~> TyVar a
 lAZYTy = a *. (tyUnit ~> TyVar a) ~> TyApp tyLazy (TyVar a)
+cONSTy = a *. TyTuple (TyVar a) (TyApp tyList (TyVar a)) ~> TyApp tyList (TyVar a)
+nILTy = a *. TyApp tyList (TyVar a)
 
-forceTy', lAZYTy' :: Type Typed -> Type Typed
+forceTy', lAZYTy', cONSTy', nILTy' :: Type Typed -> Type Typed
 forceTy' x = TyApp tyLazy x ~> x
 lAZYTy' x = TyArr tyUnit x ~> TyApp tyLazy x
+cONSTy' x = TyTuple x (TyApp tyList x) ~> TyApp tyList x
+nILTy' = TyApp tyList
 
 opAppName :: Var Typed
 opAppName = ofCore C.vOpApp
@@ -75,13 +90,14 @@ data BuiltinModule = BM
   { vars    :: [(Var Resolved, Type Typed)]
   , types   :: [(Var Resolved, Type Typed)]
   , modules :: [(Var Resolved, BuiltinModule)]
+  , constructors :: Map.Map (Var Resolved) (Set.Set (Var Typed))
   }
 
 instance Semigroup BuiltinModule where
-  (BM v t m) <> (BM v' t' m') = BM (v <> v') (t <> t') (m <> m')
+  (BM v t m c) <> (BM v' t' m' c') = BM (v <> v') (t <> t') (m <> m') (c <> c')
 
 instance Monoid BuiltinModule where
-  mempty = BM { vars = mempty, types = mempty, modules = mempty }
+  mempty = BM { vars = mempty, types = mempty, modules = mempty, constructors = mempty }
 
 builtins :: BuiltinModule
 builtins =
@@ -97,6 +113,7 @@ builtins =
            , cmp C.vOpEq, cmp C.vOpNe
            , (opAppName, a *. b *. (TyVar a ~> TyVar b) ~> TyVar a ~> TyVar b)
            , (lAZYName, lAZYTy), (forceName, forceTy)
+           , (cONSName, cONSTy), (nILName, nILTy)
            ]
 
   , types = [ tp C.vBool, tp C.vInt, tp C.vString, tp C.vFloat, tp C.vUnit
@@ -104,7 +121,11 @@ builtins =
             , (tyArrowName, TyType ~> TyType ~> TyType)
             , (tyTupleName, TyType ~> TyType ~> a *. TyVar a)
             , (tyConstraintName, TyType)
+            , (tyListName, TyType ~> TyType)
             ]
+  , constructors = Map.fromList
+      [ (tyListName, Set.fromList [cONSName, nILName] )
+      ]
   }
 
   where
@@ -128,7 +149,7 @@ builtinResolve :: R.Scope
 builtinModules :: R.ModuleScope
 (builtinResolve, builtinModules) = R.ModuleScope <$> go builtins where
   go :: BuiltinModule -> (R.Scope, Map.Map (Var Parsed) (Var Resolved, R.Scope))
-  go (BM vs ts ms) =
+  go (BM vs ts ms _) =
     let scp = R.Scope
               { R.varScope = buildVars vs
               , R.tyScope = buildVars ts
@@ -156,7 +177,9 @@ builtinModules :: R.ModuleScope
 -- | The builtin scope for type inference
 builtinEnv :: T.Env
 builtinEnv = go builtins where
-  go (BM vs ts ms) = foldr ((<>) . go . snd) (T.envOf (T.scopeFromList vs <> T.scopeFromList ts)) ms
+  go (BM vs ts ms cs) =
+    foldr ((<>) . go . snd) (T.envOf (T.scopeFromList vs <> T.scopeFromList ts)) ms
+      & T.types %~ mappend cs
 
 -- | Construct a syntax variable from a core one
 ofCore :: CoVar -> Var Resolved

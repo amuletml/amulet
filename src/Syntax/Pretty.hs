@@ -79,6 +79,7 @@ instance (Pretty (Var p)) => Pretty (Expr p) where
   pretty (OpenIn v e _) = pretty v <> string "." <> parens (pretty e)
   pretty (Lazy e _) = keyword "lazy" <+> parenArg e
   pretty (Vta e t _) = parenFun e <+> keyword "as" <+> pretty t
+  pretty (ListExp es _) = brackets (hsep (punctuate comma (map pretty es)))
 
   pretty (ExprWrapper wrap ex an) = go wrap ex where
     go (TypeLam v t) ex =
@@ -129,6 +130,7 @@ instance (Pretty (Var p)) => Pretty (Pattern p) where
   pretty (PType p x _) = parens $ pretty p <+> colon <+> pretty x
   pretty (PRecord rows _) = record (prettyRows equals rows)
   pretty (PTuple ps _) = parens (hsep (punctuate comma (map pretty ps)))
+  pretty (PList ps _) = brackets (hsep (punctuate comma (map pretty ps)))
   pretty (PLiteral l _) = pretty l
   pretty (PWrapper _ p _) = pretty p
   pretty (PSkolem p _ _) = pretty p

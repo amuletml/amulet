@@ -54,7 +54,16 @@ type Stmt = C.Stmt CoVar
 type Lower = ContT Term
 
 defaultState :: LowerState
-defaultState = LS mempty mempty mempty
+defaultState = LS mempty ctors  mempty where
+  ctors :: VarMap.Map (C.Type CoVar)
+  ctors = VarMap.fromList
+           [ (C.vCONS,
+              ForallTy (Relevant name) StarTy $
+                VarTy name `prodTy` AppTy C.tyList (VarTy name) `arrTy` AppTy C.tyList (VarTy name))
+           , (C.vNIL, ForallTy (Relevant name) StarTy $ AppTy C.tyList (VarTy name))]
+  name = C.tyvarA
+  arrTy = ForallTy Irrelevant
+  prodTy a b = RowsTy NilTy [("_1", a), ("_2", b)]
 
 runLowerT :: MonadNamey m => ReaderT LowerState (StateT LowerTrack m) a -> m a
 runLowerT = runLowerWithEnv defaultState

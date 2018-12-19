@@ -100,6 +100,7 @@ desugarProgram = traverse statement where
                (Fun (PatParam (PLiteral LiUnit a)) e a)
                a
   expr (Vta e t a) = Vta <$> expr e <*> pure (ty t) <*> pure a
+  expr (ListExp e t) = ListExp <$> traverse expr e <*> pure t
   expr (OpenIn _ e _) = expr e
 
   buildTuple :: Ann Desugared
@@ -160,6 +161,10 @@ desugarProgram = traverse statement where
   pat (PLiteral l a) = PLiteral l a
   pat (PWrapper (w, t) p a) = PWrapper (wrapper w, ty t) (pat p) a
   pat (PSkolem p v a) = PSkolem (pat p) v a
+  pat (PList ps a) = build ps where
+    build [] = Destructure nILName Nothing a
+    build (x:xs) =
+      Destructure cONSName (Just (PTuple [pat x, build xs] a)) a
 
   tyA :: TyConArg Resolved -> TyConArg Desugared
   tyA (TyVarArg v) = TyVarArg v

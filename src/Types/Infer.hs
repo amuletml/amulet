@@ -184,6 +184,21 @@ infer (Fun p e an) = let blame = Arm (p ^. paramPat) Nothing e in do
 infer (Literal l an) = pure (Literal l (an, ty), ty) where
   ty = litTy l
 
+infer (ListExp es an) = do
+  t <- freshTV
+  es <- traverse (`check` t) es
+  let build [] =
+        ExprWrapper (TypeApp t) (VarRef nILName (an, nILTy))
+          (an, ty)
+      build (x:xs) =
+        App (ExprWrapper (TypeApp t)
+              (VarRef cONSName (an, cONSTy)) (an, cONSTy' t))
+          (Tuple [x, build xs]
+            (an, TyTuple t ty))
+          (an, ty)
+      ty = TyApp tyList t
+  pure (build es, ty)
+
 infer (Let ns b an) = do
   (ns, ts, vars) <- inferLetTy localGenStrat Propagate ns
     `catchChronicle` \e -> do
@@ -838,6 +853,7 @@ value LeftSection{} = True
 value RightSection{} = True
 value BothSection{} = True
 value AccessSection{} = True
+value ListExp{} = True
 value (OpenIn _ e _) = value e
 value (ExprWrapper _ e _) = value e
 

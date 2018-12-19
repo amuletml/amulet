@@ -35,6 +35,11 @@ find src/ -type f -name '*.y' | while read -r fname; do
   fi
 done
 
+if [[ $1 == "parser" ]]; then
+  exit 0
+fi
+
+
 echo "Loading ghci.."
 
 exec ghci $WARN -i./src/:./compiler/ ./compiler/Main.hs $@

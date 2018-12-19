@@ -310,6 +310,7 @@ reExpr (AccessSection t a) = pure (AccessSection t a)
 reExpr (Parens e a) = flip Parens a <$> reExpr e
 
 reExpr (Tuple es a) = Tuple <$> traverse reExpr es <*> pure a
+reExpr (ListExp es a) = ListExp <$> traverse reExpr es <*> pure a
 reExpr (TupleSection es a) = TupleSection <$> traverse (traverse reExpr) es <*> pure a
 
 reExpr r@(OpenIn m e a) =
@@ -436,6 +437,9 @@ rePattern (PRecord f a) = do
 rePattern (PTuple ps a) = do
   (ps', vss, tss) <- unzip3 <$> traverse rePattern ps
   pure (PTuple ps' a, concat vss, concat tss)
+rePattern (PList ps a) = do
+  (ps', vss, tss) <- unzip3 <$> traverse rePattern ps
+  pure (PList ps' a, concat vss, concat tss)
 rePattern (PLiteral l a) = pure (PLiteral l a, [], [])
 rePattern PWrapper{} = error "Impossible PWrapper"
 rePattern PSkolem{} = error "Impossible PSkolem"

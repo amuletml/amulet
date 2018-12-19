@@ -12,7 +12,7 @@ import Data.Text ()
 import Core.Core
 import Core.Var
 
-vBool, vInt, vString, vFloat, vUnit, vLazy, vArrow, vProduct :: CoVar
+vBool, vInt, vString, vFloat, vUnit, vLazy, vArrow, vProduct, vList :: CoVar
 vBool    = CoVar (-1) "bool" TypeConVar
 vInt     = CoVar (-2) "int" TypeConVar
 vString  = CoVar (-3) "string" TypeConVar
@@ -21,14 +21,16 @@ vUnit    = CoVar (-5) "unit" TypeConVar
 vLazy    = CoVar (-34) "lazy" TypeConVar
 vArrow   = CoVar (-38) "->" TypeConVar
 vProduct = CoVar (-39) "*" TypeConVar
+vList    = CoVar (-40) "list" TypeConVar
 
-tyBool, tyInt, tyString, tyFloat, tyUnit, tyLazy :: IsVar a => Type a
+tyBool, tyInt, tyString, tyFloat, tyUnit, tyLazy, tyList :: IsVar a => Type a
 tyBool   = ConTy $ fromVar vBool
 tyInt    = ConTy $ fromVar vInt
 tyString = ConTy $ fromVar vString
 tyUnit   = ConTy $ fromVar vUnit
 tyFloat  = ConTy $ fromVar vFloat
 tyLazy   = ConTy $ fromVar vLazy
+tyList   = ConTy $ fromVar vList
 
 builtinTyList :: IsVar a => [a]
 builtinTyList = [ fromVar vBool
@@ -39,6 +41,7 @@ builtinTyList = [ fromVar vBool
                 , fromVar vLazy
                 , fromVar vArrow
                 , fromVar vProduct
+                , fromVar vList
                 ]
 
 vOpAdd, vOpSub, vOpMul, vOpDiv, vOpExp :: CoVar
@@ -88,12 +91,17 @@ tyvarB = CoVar (-31) "b" TypeVar
 vOpApp :: CoVar
 vOpApp = CoVar (-32) "@@" ValueVar
 
+vCONS, vNIL :: CoVar
+vCONS = CoVar (-41) "Cons" DataConVar
+vNIL = CoVar (-42) "Nil" DataConVar
+
 builtinVarList :: forall a b. (IsVar a, IsVar b) => [(a, Type b)]
 builtinVarList = vars where
   op x t = (fromVar x, t)
 
   tupTy = ValuesTy
   arrTy = ForallTy Irrelevant
+  prodTy a b = RowsTy NilTy [("_1", a), ("_2", b)]
 
   intOp, floatOp, stringOp, intCmp, floatCmp :: Type b
   intOp = tupTy [tyInt, tyInt] `arrTy` tyInt
@@ -128,7 +136,10 @@ builtinVarList = vars where
          , op vLAZY (ForallTy (Relevant name) StarTy $
             (tyUnit `arrTy` VarTy name) `arrTy` AppTy tyLazy (VarTy name))
          , op vForce (ForallTy (Relevant name) StarTy $ AppTy tyLazy (VarTy name) `arrTy` VarTy name)
-        ]
+         , op vCONS (ForallTy (Relevant name) StarTy $
+                      VarTy name `prodTy` AppTy tyList (VarTy name) `arrTy` AppTy tyList (VarTy name))
+         , op vNIL (ForallTy (Relevant name) StarTy $ AppTy tyList (VarTy name))
+         ]
 
 isError :: IsVar a => a -> Bool
 isError = (==vError) . toVar

@@ -177,6 +177,7 @@ boundTvs p vs = pat p <> foldTele go vs where
   pat (PTuple ps _) = foldMap pat ps
   pat PLiteral{} = mempty
   pat (PWrapper _ p _) = pat p
+  pat PList{} = error "PList is handled by desugar"
 
 skolGadt :: MonadNamey m
          => Var Desugared -> (Maybe a, Type Typed, Type Typed) -> m (Type Typed, Subst Typed)

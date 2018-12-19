@@ -329,6 +329,7 @@ covering' env = go where
   go ((PType p _ _, u) :*: xs) = go ((p, u) :*: xs)
   go ((PSkolem p _ _, u) :*: xs) = go ((p, u) :*: xs)
   go ((PWrapper _ p _, u) :*: xs) = go ((p, u) :*: xs)
+  go ((PList{}, _) :*: _) = error "PList is handled by desugar"
 
   -- | Add a unification constraint between a variable and value
   -- abstraction, then continue matching
