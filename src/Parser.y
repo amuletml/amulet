@@ -147,12 +147,12 @@ import Syntax
 Tops :: { [Toplevel Parsed] }
      : List1(Top, TopSep)                      { $1 }
 
--- An access modifier for top-level definitions
+-- | An access modifier for top-level definitions
 --
--- We inline this within let binding groups to remove a shift/reduce
--- within the REPL for let binding groups. (We do not know if let should
--- be followed by an Access or not). It's slightly absurd that inlining
--- the production works, but at the same time makes perfect sense.
+-- We inline this within let binding groups and modules to remove a
+-- shift/reduce conflict.  We do not know if let/module should be
+-- followed by an Access or not). It's slightly absurd that inlining the
+-- production works, but at the same time makes perfect sense.
 Access :: { TopAccess }
   :                                            { Public }
   | private                                    { Private }
@@ -172,19 +172,20 @@ Top :: { Toplevel Parsed }
     | type Access BindName ListE(TyConArg) TypeBody { TypeDecl $2 (getL $3) $4 $5 }
     | type Access TyConArg BindOp TyConArg TypeBody { TypeDecl $2 (getL $4) [$3, $5] $6 }
 
-    | module qconid '=' begin Tops end         { Module (getName $2) $5 }
-    | module qconid '=' '$begin' Tops '$end'   { Module (getName $2) $5 }
-    | module conid '=' begin Tops end          { Module (getName $2) $5 }
-    | module conid '=' '$begin' Tops '$end'    { Module (getName $2) $5 }
+    | module Access qconid '=' Begin(Tops)     { Module $2 (getName $3) (getL $5) }
+    | module conid '=' Begin(Tops)             { Module Public (getName $2) (getL $4) }
+    | module private conid '=' Begin(Tops)     { Module Private (getName $3) (getL $5) }
     | module conid '=' Con                     { Open (getL $4) (Just (getIdent $2)) }
 
-    | class Type begin ClassItems end          {% fmap (withPos2 $1 $5) $ buildClass $2 $4 }
-    | class Type '$begin' ClassItems '$end'    {% fmap (withPos2 $1 $5) $ buildClass $2 $4 }
-
-    | instance Type begin Methods end          {% fmap (withPos2 $1 $5) $ buildInstance $2 $4 }
-    | instance Type '$begin' Methods '$end'    {% fmap (withPos2 $1 $5) $ buildInstance $2 $4 }
+    -- Note, we use fmap rather than <$>, as Happy's parser really doesn't like that.
+    | class Access Type Begin(ClassItems)      {% fmap (withPos2 $1 $4) $ buildClass $2 $3 (getL $4) }
+    | instance Type Begin(Methods)             {% fmap (withPos2 $1 $3) $ buildInstance $2 (getL $3) }
 
     | open Con                                 { Open (getL $2) Nothing }
+
+Begin(a)
+  : begin a end                             { lPos2 $1 $3 $2 }
+  | '$begin' a '$end'                       { lPos2 $1 $3 $2 }
 
 TypeBody :: { [Constructor Parsed] }
   :                                            { [] }
@@ -594,16 +595,16 @@ respanFun :: (Spanned a, Spanned b) => a -> b -> Expr Parsed -> Expr Parsed
 respanFun s e (Fun p b _) = Fun p b (mkSpanUnsafe (spanStart (annotation s)) (spanEnd (annotation e)))
 respanFun _ _ _ = error "what"
 
-buildClass :: Located (Type Parsed) -> [ClassItem Parsed]
+buildClass :: TopAccess -> Located (Type Parsed) -> [ClassItem Parsed]
            -> Parser (Span -> Toplevel Parsed)
-buildClass (L parsed typ) ms =
+buildClass am (L parsed typ) ms =
   case parsed of
     (TyPi (Implicit ctx) ty) -> do
       (name, ts) <- go [] ty
-      pure (Class name (Just ctx) ts ms)
+      pure (Class name am (Just ctx) ts ms)
     ty -> do
       (name, ts) <- go [] ty
-      pure (Class name Nothing ts ms)
+      pure (Class name am Nothing ts ms)
   where
     go :: [TyConArg Parsed] -> Type Parsed -> Parser (Var Parsed, [TyConArg Parsed])
     go ts (TyCon v) = pure (v, ts)

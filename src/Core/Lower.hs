@@ -297,7 +297,7 @@ lowerProg' :: forall m. MonadLower m => [Toplevel Typed] -> m (LowerState, [Stmt
 
 lowerProg' [] = asks (,[])
 lowerProg' (Open _ _:prg) = lowerProg' prg
-lowerProg' (Module _ b:prg) = lowerProg' (b ++ prg)
+lowerProg' (Module _ _ b:prg) = lowerProg' (b ++ prg)
 lowerProg' (Class{}:prg) = lowerProg' prg
 lowerProg' (Instance{}:prg) = lowerProg' prg
 

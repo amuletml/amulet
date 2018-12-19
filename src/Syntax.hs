@@ -292,10 +292,11 @@ data Toplevel p
   = LetStmt TopAccess [Binding p]
   | ForeignVal TopAccess (Var p) Text (Type p) (Ann p)
   | TypeDecl TopAccess (Var p) [TyConArg p] [Constructor p]
-  | Module (Var p) [Toplevel p]
+  | Module TopAccess (Var p) [Toplevel p]
   | Open { openName :: Var p
          , openAs :: Maybe T.Text }
   | Class { className :: Var p
+          , classAccess :: TopAccess
           , classCtx :: Maybe (Type p)
           , classParams :: [TyConArg p]
           , classMethods :: [ClassItem p]
@@ -385,7 +386,7 @@ instance (Spanned (Constructor p), Spanned (Ann p)) => Spanned (Toplevel p) wher
   annotation (LetStmt _ (b:vs)) = sconcat (annotation b :| map annotation vs)
   annotation (TypeDecl _ _ _ (x:xs)) = sconcat (annotation x :| map annotation xs)
   annotation (ForeignVal _ _ _ _ x) = annotation x
-  annotation (Class _ _ _ _ x) = annotation x
+  annotation (Class _ _ _ _ _ x) = annotation x
   annotation (Instance _ _ _ _ x) = annotation x
   annotation _ = internal
 

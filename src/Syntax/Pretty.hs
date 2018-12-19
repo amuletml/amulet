@@ -252,14 +252,14 @@ instance (Pretty (Var p)) => Pretty (Toplevel p) where
   pretty (Open m Nothing) = keyword "open" <+> pretty m
   pretty (Open m (Just a)) = keyword "open" <+> pretty m <+> keyword "as" <+> text a
 
-  pretty (Module m bod) =
-    vsep [ keyword "module" <+> pretty m <+> equals <+> keyword "begin"
+  pretty (Module am m bod) =
+    vsep [ keyword "module" <+> prettyAcc am <> pretty m <+> equals <+> keyword "begin"
          , indent 2 (align (pretty bod))
          , keyword "end"
          ]
 
-  pretty (Class v c h m _) =
-    vsep [ keyword "class" <+> maybe (parens mempty) pretty c
+  pretty (Class v am c h m _) =
+    vsep [ keyword "class" <+> prettyAcc am <> maybe (parens mempty) pretty c
             <+> soperator (string "=>") <+> pretty v <+> hsep (map pretty h) <+> keyword "begin"
          , indent 2 (align (vsep (map pretty m)))
          , keyword "end"

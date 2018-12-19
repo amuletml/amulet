@@ -71,9 +71,9 @@ verifyProgram = traverse_ verifyStmt where
       Right _ -> pure ()
     parametricity st t
 
-  verifyStmt TypeDecl{}   = pure ()
-  verifyStmt (Module _ p) = verifyProgram p
-  verifyStmt Open{}       = pure ()
+  verifyStmt TypeDecl{} = pure ()
+  verifyStmt (Module _ _ p) = verifyProgram p
+  verifyStmt Open{} = pure ()
 
 verifyBindingGroup :: MonadVerify m
                    => (BindingSite -> Set.Set BindingSite -> Set.Set BindingSite)

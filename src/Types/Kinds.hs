@@ -90,7 +90,7 @@ initialKind ret [] = pure (ret, mempty)
 resolveClassKind :: MonadKind m
                  => Toplevel Desugared
                  -> m (Type Typed, [TyConArg Typed])
-resolveClassKind stmt@(Class classcon ctx args methods _) = do
+resolveClassKind stmt@(Class classcon _ ctx args methods _) = do
   let reason = BecauseOf stmt
   k <- solveForKind reason $ do
     (kind, tele) <- initialKind tyConstraint args

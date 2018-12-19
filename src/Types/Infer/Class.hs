@@ -44,7 +44,7 @@ inferClass :: forall m. MonadInfer Typed m
                 , Telescope Typed
                 , ClassInfo
                 , ImplicitScope Typed )
-inferClass clss@(Class name ctx _ methods classAnn) = do
+inferClass clss@(Class name _ ctx _ methods classAnn) = do
   let toVar :: TyConArg Typed -> Type Typed
       toVar (TyVarArg v) = TyVar v
       toVar (TyAnnArg v _) = TyVar v

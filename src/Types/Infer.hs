@@ -387,7 +387,7 @@ inferProg (Open mod pre:prg) = do
   local (classes %~ (<>modImplicits)) $
     consFst (Open mod pre) $ inferProg prg
 
-inferProg (c@(Class v _ _ _ _):prg) = do
+inferProg (c@(Class v _ _ _ _ _):prg) = do
   (stmts, decls, clss, implicits) <- condemn $ inferClass c
   first (stmts ++) <$> do
     local (names %~ focus decls) $
@@ -402,7 +402,7 @@ inferProg (inst@Instance{}:prg) = do
       addFst _ = undefined
   addFst stmt . local (classes %~ insert (annotation inst) InstSort instName instTy) $ inferProg prg
 
-inferProg (Module name body:prg) = do
+inferProg (Module am name body:prg) = do
   (body', env) <- inferProg body
 
   let (vars, tys) = extractToplevels body
@@ -412,7 +412,7 @@ inferProg (Module name body:prg) = do
   local ( (names %~ focus (teleFromList vars'))
         . (types %~ (<>(env ^. types)))
         . (modules %~ (Map.insert name (env ^. classes) . (<> (env ^. modules))))) $
-    consFst (Module name body') $
+    consFst (Module am name body') $
     inferProg prg
 
 inferProg [] = asks ([],)

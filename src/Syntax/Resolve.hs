@@ -131,7 +131,7 @@ resolveModule (r@(Open name as):rs) =
   retcons (wrapError r) $
     resolveOpen name as (\name' -> (Open name' as:) <$> resolveModule rs)
 
-resolveModule (Module name body:rs) = do
+resolveModule (Module am name body:rs) = do
   fullName <- foldl (flip InModule) name <$> asks modStack
   body' <- extendM name $ resolveModule body
 
@@ -148,12 +148,12 @@ resolveModule (Module name body:rs) = do
   put $ ModuleScope $ Map.insert fullName (name', scope') modules
 
   extendN (modZip name name' vars vars') $ extendTyN (modZip name name' tys tys') $ (:)
-    <$> pure (Module name' body')
+    <$> pure (Module am name' body')
     <*> resolveModule rs
 
   where modZip name name' v v' = zip (map (name<>) v) (map (name'<>) v')
 
-resolveModule (t@(Class name ctx tvs ms ann):rs) = do
+resolveModule (t@(Class name am ctx tvs ms ann):rs) = do
   name' <- tagVar name
   (tvs', tvss) <- resolveTele t tvs
 
@@ -164,7 +164,7 @@ resolveModule (t@(Class name ctx tvs ms ann):rs) = do
 
     extendN (mconcat vs') $ do
       ms'' <- extendTyvarN tvss (sequence ms')
-      (Class name' ctx' tvs' ms'' ann:) <$> resolveModule rs
+      (Class name' am ctx' tvs' ms'' ann:) <$> resolveModule rs
 
   where
     reClassItem m@(MethodSig name ty an) = do
