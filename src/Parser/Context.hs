@@ -102,7 +102,7 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
     -- If we've got the end of stream, then pop contexts and push the
     -- appropriate ending tokens.
     (TcEOF, ck:cks) ->
-      case insertFor ck of
+      case insertFor tk ck of
         Nothing -> handleContext tok cks
         Just x -> pure (Result (Token x te te) (Working tok), cks)
 
@@ -112,7 +112,7 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
       | case tk of
           TcTopSep -> not (terminates tk c)
           _ -> canTerminate tk && not (terminates tk c) && multiAny (terminates tk) cks
-      -> case insertFor ck of
+      -> case insertFor tk ck of
           Nothing -> handleContext tok cks
           Just x -> pure (Result (Token x tp te) (Working tok), cks)
 
@@ -294,7 +294,7 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
     (_, CtxTypeHead offside:ck)
       | spCol tp <= spCol offside -> handleContext tok ck
 
-    -- @let ...@ ~~> Push an let context
+    -- @let ...@ ~~> Push a let context
     (TcLet, _) -> pure
       ( Result tok Done
       , ( if isToplevel c
@@ -378,13 +378,16 @@ isOp TcOpIdent{} = True
 isOp TcOpIdentQual{} = True
 isOp _ = False
 
-insertFor :: Context -> Maybe TokenClass
-insertFor (CtxBlock _ _ t) = t
-insertFor CtxLet{} = Just TcVIn
-insertFor CtxStmtLet{} = Nothing
-insertFor CtxMatchArms{} = Just TcVEnd
-insertFor CtxIf{} = Just TcVEnd
-insertFor _ = Nothing
+insertFor :: TokenClass -> Context -> Maybe TokenClass
+insertFor _ (CtxBlock _ _ t) = t
+insertFor t CtxLet{} =
+  if t == TcCSquare || t == TcComma
+     then Just TcVIn 
+     else Nothing -- No closing token for list comprehensions
+insertFor _ CtxStmtLet{} = Nothing
+insertFor _ CtxMatchArms{} = Just TcVEnd
+insertFor _ CtxIf{} = Just TcVEnd
+insertFor _ _ = Nothing
 
 canTerminate :: TokenClass -> Bool
 canTerminate TcCBrace = True
@@ -403,6 +406,8 @@ terminates :: TokenClass -> [Context] -> Bool
 
 -- `in` terminates the `let` binding
 terminates TcIn (CtxLet{}:_) = True
+terminates TcCSquare (CtxLet{}:_) = True
+terminates TcComma (CtxLet{}:_) = True
 
 -- `and` terminates the `let` binding
 terminates TcAnd (CtxLet{}:_) = True

@@ -263,7 +263,7 @@ Atom :: { Expr Parsed }
          { withPos2 $1 $5 $ tupleExpr ($2:$4) }
      | '{' ListT(ExprRow, ',') '}'            { withPos2 $1 $3 $ Record $2 }
      | '{' Expr with List1T(ExprRow, ',') '}' { withPos2 $1 $5 $ RecordExt $2 $4 }
-     | '[' Expr '|' List(CompStmt, ',') ']'   { withPos2 $1 $5 $ ListComp $2 $4 }
+     | '[' Expr '|' List1(CompStmt, ',') ']'   { withPos2 $1 $5 $ ListComp $2 $4 }
      | '[' List(Expr, ',') ']'                { withPos2 $1 $3 $ ListExp $2 }
      | Atom access                            { withPos2 $1 $2 $ Access $1 (getIdent $2) }
 

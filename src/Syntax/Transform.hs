@@ -96,10 +96,15 @@ transformExpr fe = goE where
   transE (Lazy e a) = Lazy (goE e) a
   transE (Vta e t a) = Vta (goE e) t a
   transE (ListExp e a) = ListExp (map goE e) a
+  transE (ListComp e qs a) = ListComp (goE e) (map goQ qs) a
 
   goB (Binding v e c a) = Binding v (goE e) c a
   goB (TypedMatching v e a b) = TypedMatching v (goE e) a b
   goB (Matching p e a) = Matching p (goE e) a
+
+  goQ (CompGuard e) = CompGuard (goE e)
+  goQ (CompGen p e a) = CompGen p (goE e) a
+  goQ (CompLet b a) = CompLet (map goB b) a
 
   goE = transE . fe
 
@@ -143,6 +148,7 @@ transformExprTyped fe fc ft = goE where
   transE (ExprWrapper w e a) = ExprWrapper (goW w) (goE e) (goA a)
   transE (Lazy e a) = Lazy (goE e) (goA a)
   transE (ListExp e a) = ListExp (map goE e) (goA a)
+  transE (ListComp e qs a) = ListComp (transE e) (map goQ qs) (goA a)
 
   transBind (Binding v e b a) = Binding v (goE e) b (goA a)
   transBind (Matching p e a) = Matching (goP p) (goE e) (goA a)
@@ -157,6 +163,10 @@ transformExprTyped fe fc ft = goE where
   goW x@TypeLam{} = x
   goW x@WrapVar{} = x
   goW IdWrap = IdWrap
+
+  goQ (CompGuard e) = CompGuard (goE e)
+  goQ (CompGen p e a) = CompGen p (goE e) a
+  goQ (CompLet b a) = CompLet (map transBind b) a
 
   goPa = paramPat %~ goP
 
@@ -222,5 +232,6 @@ correct ty (OpenIn n e a) = OpenIn n e (fst a, ty)
 
 correct ty (Lazy e a) = Lazy e (fst a, ty)
 correct ty (ListExp e a) = ListExp e (fst a, ty)
+correct ty (ListComp e qs a) = ListComp e qs (fst a, ty)
 
 correct ty (ExprWrapper w e a) = ExprWrapper w e (fst a, ty)
