@@ -205,12 +205,11 @@ desugarProgram = traverse statement where
                                ( Arm { armPat = pat v
                                    , armGuard = Nothing
                                    , armExp = success }
-                               : if refutable (pat v)
-                                    then [ Arm { armPat = Wildcard an
-                                             , armGuard = Nothing
-                                             , armExp = App (VarRef h an) us' an
-                                               } ]
-                                    else [])
+                               : [ Arm { armPat = Wildcard an
+                                       , armGuard = Nothing
+                                       , armExp = App (VarRef h an) us' an
+                                       }
+                                 | refutable (pat v) ]
                               an
                         }
                   , Arm { armPat = Wildcard an
