@@ -209,7 +209,7 @@ desugarProgram = traverse statement where
                                        , armGuard = Nothing
                                        , armExp = App (VarRef h an) us' an
                                        }
-                                 | refutable (pat v) ]
+                                 | refutable (pat v) ] )
                               an
                         }
                   , Arm { armPat = Wildcard an
