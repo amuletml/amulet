@@ -166,13 +166,13 @@ fakeShow, fakeSHOW :: IsVar a => Term a
 fakeShow =
   Lam (TypeArgument (fromVar tyvarA) StarTy) $
     Lam (TermArgument (fromVar argvarX) (AppTy tyShow (VarTy (fromVar tyvarA)))) $
-      (Cast (Ref (fromVar argvarX) (AppTy tyShow (VarTy (fromVar tyvarA))))
+      Cast (Ref (fromVar argvarX) (AppTy tyShow (VarTy (fromVar tyvarA))))
         (SameRepr (AppTy tyShow (VarTy (fromVar tyvarA)))
-          (ArrTy (VarTy (fromVar tyvarA)) tyString)))
+          (ArrTy (VarTy (fromVar tyvarA)) tyString))
 fakeSHOW =
   Lam (TypeArgument (fromVar tyvarA) StarTy) $
     Lam (TermArgument (fromVar argvarX) (ArrTy (VarTy (fromVar tyvarA)) tyString)) $
-      (Cast (Ref (fromVar argvarX) (ArrTy (VarTy (fromVar tyvarA)) tyString))
+      Cast (Ref (fromVar argvarX) (ArrTy (VarTy (fromVar tyvarA)) tyString))
         (Symmetry
           (SameRepr (AppTy tyShow (VarTy (fromVar tyvarA)))
-            (ArrTy (VarTy (fromVar tyvarA)) tyString))))
+            (ArrTy (VarTy (fromVar tyvarA)) tyString)))
