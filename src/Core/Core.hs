@@ -176,6 +176,9 @@ data Type a
 pattern ExactRowsTy :: [(Text, Type a)] -> Type a
 pattern ExactRowsTy ts = RowsTy NilTy ts
 
+pattern ArrTy :: Type a -> Type a -> Type a
+pattern ArrTy l r = ForallTy Irrelevant l r
+
 data BoundTv a = Irrelevant | Relevant a
   deriving (Eq, Show, Ord, Functor, Generic, Hashable)
 

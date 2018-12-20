@@ -120,13 +120,26 @@ runReduce :: forall m a x. (MonadNamey m, IsVar a)
           => RWST (ReduceScope a) (Sum Int) (ReduceState a) m x
           -> m (x, Int)
 runReduce m = fmap getSum <$> evalRWST m emptyScope emptyState where
-  emptyScope = RScope mempty builtinTys builtinCtors Arity.emptyScope
+  emptyScope = RScope builtinVars builtinTys builtinCtors Arity.emptyScope
   emptyState = RState mempty
 
   arrTy = ForallTy Irrelevant
   prodTy a b = RowsTy NilTy [("_1", a), ("_2", b)]
   name :: a
   name = fromVar tyvarA
+
+  builtinVars :: VarMap.Map (VarDef a)
+  builtinVars = VarMap.fromList
+    [ ( fromVar vOpShow
+      , VarDef { varDef = Just (DefInfo (fromVar vOpShow) fakeShow)
+               , varNotAmong = []
+               , varLoopBreak = False }
+      )
+    , ( fromVar vSHOW
+      , VarDef { varDef = Just (DefInfo (fromVar vSHOW) fakeSHOW)
+               , varNotAmong = []
+               , varLoopBreak = False }
+      ) ]
 
   builtinTys :: VarMap.Map [(a, Type a)]
   builtinTys = VarMap.fromList

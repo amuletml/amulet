@@ -140,6 +140,7 @@ opArity = VarMap.fromList . map (flip Arity True <$>) $
     , (vOpGe,  1), (vOpGeF,  1)
     , (vLAZY,  2)
     , (vCONS,  2), (vNIL, 1)
+    , (vSHOW,  2), (vOpShow, 2)
 
     , (vOpConcat,  1)
 

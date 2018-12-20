@@ -12,7 +12,7 @@ import Data.Text ()
 import Core.Core
 import Core.Var
 
-vBool, vInt, vString, vFloat, vUnit, vLazy, vArrow, vProduct, vList :: CoVar
+vBool, vInt, vString, vFloat, vUnit, vLazy, vArrow, vProduct, vList, vShow :: CoVar
 vBool    = CoVar (-1) "bool" TypeConVar
 vInt     = CoVar (-2) "int" TypeConVar
 vString  = CoVar (-3) "string" TypeConVar
@@ -22,8 +22,10 @@ vLazy    = CoVar (-34) "lazy" TypeConVar
 vArrow   = CoVar (-38) "->" TypeConVar
 vProduct = CoVar (-39) "*" TypeConVar
 vList    = CoVar (-40) "list" TypeConVar
+vShow    = CoVar (-43) "show" TypeConVar
 
-tyBool, tyInt, tyString, tyFloat, tyUnit, tyLazy, tyList :: IsVar a => Type a
+tyBool, tyInt, tyString, tyFloat, tyUnit, tyLazy, tyList, tyShow
+  :: IsVar a => Type a
 tyBool   = ConTy $ fromVar vBool
 tyInt    = ConTy $ fromVar vInt
 tyString = ConTy $ fromVar vString
@@ -31,6 +33,7 @@ tyUnit   = ConTy $ fromVar vUnit
 tyFloat  = ConTy $ fromVar vFloat
 tyLazy   = ConTy $ fromVar vLazy
 tyList   = ConTy $ fromVar vList
+tyShow   = ConTy $ fromVar vShow
 
 builtinTyList :: IsVar a => [a]
 builtinTyList = [ fromVar vBool
@@ -42,6 +45,7 @@ builtinTyList = [ fromVar vBool
                 , fromVar vArrow
                 , fromVar vProduct
                 , fromVar vList
+                , fromVar vShow
                 ]
 
 vOpAdd, vOpSub, vOpMul, vOpDiv, vOpExp :: CoVar
@@ -50,6 +54,7 @@ vOpSub = CoVar (-7) "-" ValueVar
 vOpMul = CoVar (-8) "*" ValueVar
 vOpDiv = CoVar (-9) "/" ValueVar
 vOpExp = CoVar (-10) "**" ValueVar
+
 
 vOpLt, vOpGt, vOpLe, vOpGe :: CoVar
 vOpLt = CoVar (-11) "<" ValueVar
@@ -84,16 +89,19 @@ vLAZY, vForce :: CoVar
 vLAZY = CoVar (-35) "lazy" ValueVar
 vForce = CoVar (-36) "force" ValueVar
 
-tyvarA, tyvarB :: CoVar
+tyvarA, tyvarB, argvarX :: CoVar
 tyvarA = CoVar (-30) "a" TypeVar
 tyvarB = CoVar (-31) "b" TypeVar
+argvarX = CoVar (-46) "x" ValueVar
 
-vOpApp :: CoVar
+vOpApp, vOpShow :: CoVar
 vOpApp = CoVar (-32) "@@" ValueVar
+vOpShow = CoVar (-44) "show" ValueVar
 
-vCONS, vNIL :: CoVar
+vCONS, vNIL, vSHOW :: CoVar
 vCONS = CoVar (-41) "Cons" DataConVar
 vNIL = CoVar (-42) "Nil" DataConVar
+vSHOW = CoVar (-45) "Show" ValueVar
 
 builtinVarList :: forall a b. (IsVar a, IsVar b) => [(a, Type b)]
 builtinVarList = vars where
@@ -133,13 +141,38 @@ builtinVarList = vars where
                  ValuesTy [VarTy name `arrTy` VarTy name', VarTy name] `arrTy` VarTy name')
 
          , op vError (ForallTy (Relevant name) StarTy $ tyString `arrTy` VarTy name)
+
          , op vLAZY (ForallTy (Relevant name) StarTy $
             (tyUnit `arrTy` VarTy name) `arrTy` AppTy tyLazy (VarTy name))
          , op vForce (ForallTy (Relevant name) StarTy $ AppTy tyLazy (VarTy name) `arrTy` VarTy name)
+
          , op vCONS (ForallTy (Relevant name) StarTy $
                       VarTy name `prodTy` AppTy tyList (VarTy name) `arrTy` AppTy tyList (VarTy name))
          , op vNIL (ForallTy (Relevant name) StarTy $ AppTy tyList (VarTy name))
+
+         , op vOpShow $
+             ForallTy (Relevant name) StarTy $
+               AppTy tyShow (VarTy name) `arrTy` (VarTy name `arrTy` tyString)
+
+         , op vSHOW $
+             ForallTy (Relevant name) StarTy $
+               (VarTy name `arrTy` tyString) `arrTy` AppTy tyShow (VarTy name)
          ]
 
 isError :: IsVar a => a -> Bool
 isError = (==vError) . toVar
+
+fakeShow, fakeSHOW :: IsVar a => Term a
+fakeShow =
+  Lam (TypeArgument (fromVar tyvarA) StarTy) $
+    Lam (TermArgument (fromVar argvarX) (AppTy tyShow (VarTy (fromVar tyvarA)))) $
+      (Cast (Ref (fromVar argvarX) (AppTy tyShow (VarTy (fromVar tyvarA))))
+        (SameRepr (AppTy tyShow (VarTy (fromVar tyvarA)))
+          (ArrTy (VarTy (fromVar tyvarA)) tyString)))
+fakeSHOW =
+  Lam (TypeArgument (fromVar tyvarA) StarTy) $
+    Lam (TermArgument (fromVar argvarX) (ArrTy (VarTy (fromVar tyvarA)) tyString)) $
+      (Cast (Ref (fromVar argvarX) (ArrTy (VarTy (fromVar tyvarA)) tyString))
+        (Symmetry
+          (SameRepr (AppTy tyShow (VarTy (fromVar tyvarA)))
+            (ArrTy (VarTy (fromVar tyvarA)) tyString))))

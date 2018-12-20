@@ -71,6 +71,10 @@ builtins =
         return { x, __tag = "Cons" }
       end
       |] )
+  , ( vSHOW, "Show", [], Nothing
+    , [luaStmts| local function Show(x) return x end |] )
+  , ( vOpShow, "show", [], Nothing
+    , [luaStmts| local function show(x) return x end |] )
   , ( vForce, "__builtin_force", [vUnit], Nothing
     , [luaStmts|
        local function __builtin_trap()
