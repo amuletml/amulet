@@ -26,7 +26,7 @@ pipeline {
         stage('Run tests') {
           steps {
             timestamps () {
-              sh 'nix-shell . --run "cabal new-run test:tests -- --xml junit.xml " --arg ci true'
+              sh 'nix-shell . --run "cabal new-run test:tests -- --xml junit.xml --num-threads 4 --display t" --arg ci true'
             }
           }
         }
