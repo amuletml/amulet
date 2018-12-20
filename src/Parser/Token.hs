@@ -20,6 +20,7 @@ import Data.Span
 -- parser consumes.
 data TokenClass
   = TcArrow -- ^ A @->@ token.
+  | TcGenerator -- ^ A @<-@ token.
   | TcEqual -- ^ A @=@ token.
   | TcForall -- ^ A @forall@ token.
   | TcImplies -- ^ A @=>@ token.
@@ -100,6 +101,7 @@ data TokenClass
 
 instance Show TokenClass where
   show TcArrow = "->"
+  show TcGenerator = "<-"
   show TcEqual = "="
   show TcForall = "forall"
   show TcImplies = "=>"

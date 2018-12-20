@@ -65,6 +65,7 @@ tokens :-
 
   -- Builtin keywords and symbols
   <0> "->"     { constTok TcArrow }
+  <0> "<-"     { constTok TcGenerator }
   <0> "="      { constTok TcEqual }
   <0> "forall" { constTok TcForall }
   <0> "=>"     { constTok TcImplies }

@@ -99,6 +99,7 @@ data Expr p
 
   -- Lists
   | ListExp [Expr p] (Ann p)
+  | ListComp (Expr p) [CompStmt p] (Ann p)
 
   | ExprWrapper (Wrapper p) (Expr p) (Ann p)
 
@@ -106,6 +107,16 @@ deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Expr p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Expr p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Expr p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Expr p)
+
+data CompStmt p
+  = CompGen (Pattern p) (Expr p) (Ann p)
+  | CompLet [Binding p] (Ann p)
+  | CompGuard (Expr p) 
+
+deriving instance (Eq (Var p), Eq (Ann p)) => Eq (CompStmt p)
+deriving instance (Show (Var p), Show (Ann p)) => Show (CompStmt p)
+deriving instance (Ord (Var p), Ord (Ann p)) => Ord (CompStmt p)
+deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (CompStmt p)
 
 data Arm p
   = Arm { armPat :: Pattern p
@@ -419,6 +430,7 @@ instance Spanned (Ann p) => Spanned (Expr p) where
   annotation (Lazy _ a) = annotation a
   annotation (Vta _ _ a) = annotation a
   annotation (ListExp _ a) = annotation a
+  annotation (ListComp _ _ a) = annotation a
 
   annotation (ExprWrapper _ _ a) = annotation a
 

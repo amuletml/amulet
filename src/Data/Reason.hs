@@ -133,6 +133,7 @@ instance Respannable (Ann p) => Respannable (Expr p) where
   respan k (Ascription e t a) = Ascription e t (respan k a)
   respan k (Vta e t a) = Vta e t (respan k a)
   respan k (ListExp e a) = ListExp e (respan k a)
+  respan k (ListComp e qs a) = ListComp e qs (respan k a)
 
   respan k (Record fs a) = Record fs (respan k a)
   respan k (RecordExt f fs a) = RecordExt f fs (respan k a)

@@ -854,6 +854,7 @@ value RightSection{} = True
 value BothSection{} = True
 value AccessSection{} = True
 value ListExp{} = True
+value ListComp{} = False
 value (OpenIn _ e _) = value e
 value (ExprWrapper _ e _) = value e
 

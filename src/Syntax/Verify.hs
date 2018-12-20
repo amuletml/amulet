@@ -147,6 +147,7 @@ verifyExpr (Lazy e _) = verifyExpr e
 verifyExpr (Vta e _ _) = verifyExpr e
 verifyExpr (OpenIn _ e _) = verifyExpr e
 verifyExpr (ListExp e _) = traverse_ verifyExpr e
+verifyExpr (ListComp e _ _) = verifyExpr e
 verifyExpr (ExprWrapper w e a) =
   case w of
     WrapFn (MkWrapCont k _) -> verifyExpr (k e)
@@ -238,6 +239,7 @@ nonTrivial BothSection{} = False
 nonTrivial (Parens e _) = nonTrivial e
 nonTrivial (Tuple es _) = any nonTrivial es
 nonTrivial (ListExp es _) = any nonTrivial es
+nonTrivial ListComp{} = False
 nonTrivial TupleSection{} = False
 nonTrivial (OpenIn _ e _) = nonTrivial e
 nonTrivial Lazy{} = False
