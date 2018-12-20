@@ -63,6 +63,13 @@ freeIn (BothSection b _) = freeIn b
 freeIn AccessSection{} = mempty
 freeIn (Vta e _ _) = freeIn e
 freeIn (ListExp e _) = foldMap freeIn e
+freeIn (ListComp e qs _) = freeIn e <> go qs where
+  go (CompGen p e _:qs) = (freeIn e <> go qs) `Set.difference` bound p
+  go (CompLet bs _:qs) =
+    (foldMap (freeIn . view bindBody) bs <> go qs)
+      `Set.difference` foldMapOf (each . bindVariable) Set.singleton bs
+  go (CompGuard e:qs) = freeIn e <> go qs
+  go [] = mempty
 freeIn Function{} = error "ds Function freeIn"
 freeIn TupleSection{} = error "ds TupleSection freeIn"
 freeIn OpenIn{} = error "ds OpenIn freeIn"

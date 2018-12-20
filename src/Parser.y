@@ -68,6 +68,7 @@ import Syntax
 
 %token
   '->'     { Token TcArrow _ _ }
+  '<-'     { Token TcGenerator _ _ }
   '='      { Token TcEqual _ _ }
   forall   { Token TcForall _ _ }
   '=>'     { Token TcImplies _ _ }
@@ -263,7 +264,13 @@ Atom :: { Expr Parsed }
      | '{' ListT(ExprRow, ',') '}'            { withPos2 $1 $3 $ Record $2 }
      | '{' Expr with List1T(ExprRow, ',') '}' { withPos2 $1 $5 $ RecordExt $2 $4 }
      | '[' List(Expr, ',') ']'                { withPos2 $1 $3 $ ListExp $2 }
+     | '[' Expr '|' List1(CompStmt, ',') ']'   { withPos2 $1 $5 $ ListComp $2 $4 }
      | Atom access                            { withPos2 $1 $2 $ Access $1 (getIdent $2) }
+
+CompStmt :: { CompStmt Parsed }
+  : let BindGroup                             { withPos1 $1 $ CompLet (reverse $2) }
+  | with Pattern '<-' Expr                    { withPos2 $1 $4 $ CompGen $2 $4 }
+  | Expr                                      { CompGuard $1 }
 
 ExprBlock :: { Expr Parsed }
           : List1(Expr, ExprSep)              { completeTuple Begin $1 }

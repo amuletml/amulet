@@ -1,3 +1,7 @@
 import Text.Show.Pretty (ppShow, pPrint)
 :seti -XOverloadedStrings -XFlexibleContexts
 :set -interactive-print pPrint
+
+:def r! const (pure (unlines [ ":!./repl.sh reload", "::r" ]))
+:def reload! const (pure (unlines [ ":!./repl.sh reload", "::r" ]))
+:def source readFile

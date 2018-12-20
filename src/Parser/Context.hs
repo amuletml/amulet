@@ -37,10 +37,16 @@ data Context
   | CtxEmptyBlock (Maybe TokenClass)
   | CtxBlock SourcePos Bool (Maybe TokenClass)
 
+  -- | The terms between a @match@ and a @with@ token.
   | CtxMatch SourcePos
+  -- | An empty @match@ or @function@ expression
   | CtxMatchEmptyArms
+  -- | A @match@ or @function@ expression with at least one arm. The
+  -- position marks the location of the first arm.
   | CtxMatchArms SourcePos
 
+  -- | The arguments of a @fun@. Namely, everything between @fun@ and
+  -- @->@.
   | CtxFun SourcePos
 
   -- | The if context spans the entire if block. then spans from @then@
@@ -64,6 +70,13 @@ data Context
 
   -- | The head of an instance and its body
   | CtxInstHead SourcePos | CtxInstBody SourcePos
+
+  -- | The body of a list expression. This will be inside a @CtxBracket@,
+  -- so is only used as a marker.
+  | CtxList
+  -- | The body of a list comprehension. This will be inside a
+  -- @CtxBracket@, so is only used as a marker.
+  | CtxListComprehension
 
   deriving (Show, Eq)
 
@@ -294,10 +307,10 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
     (_, CtxTypeHead offside:ck)
       | spCol tp <= spCol offside -> handleContext tok ck
 
-    -- @let ...@ ~~> Push an let context
+    -- @let ...@ ~~> Push a let context
     (TcLet, _) -> pure
       ( Result tok Done
-      , ( if isToplevel c
+      , ( if isToplevel c || isListComprehension c
           then CtxStmtLet tp
           else CtxLet tp ):c )
     -- @let ...@ = ~~> Push a block context
@@ -365,10 +378,15 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
     -- @(@, @{@, @[@  ~~> CtxBracket()|}|])
     (TcOParen, _) -> pure (Result tok Done, CtxBracket TcCParen:c)
     (TcOBrace, _) -> pure (Result tok Done, CtxBracket TcCBrace:c)
-    (TcOSquare, _) -> pure (Result tok Done, CtxBracket TcCSquare:c)
+    (TcOSquare, _) -> pure (Result tok Done, CtxList:CtxBracket TcCSquare:c)
+
+    -- @[ ... | @ ~~> CtxListComprehension
+    (TcPipe, CtxList:ck) -> pure (Result tok Done, CtxListComprehension:ck)
 
     _ -> pure (Result tok Done, c)
 
+-- | If this token can be considered an operator. Namely, if it can be
+-- aligned on the current offside line.
 isOp :: TokenClass -> Bool
 isOp TcDot = True
 isOp TcComma = True
@@ -378,6 +396,7 @@ isOp TcOpIdent{} = True
 isOp TcOpIdentQual{} = True
 isOp _ = False
 
+-- | What token must be inserted to close this context
 insertFor :: Context -> Maybe TokenClass
 insertFor (CtxBlock _ _ t) = t
 insertFor CtxLet{} = Just TcVIn
@@ -386,6 +405,10 @@ insertFor CtxMatchArms{} = Just TcVEnd
 insertFor CtxIf{} = Just TcVEnd
 insertFor _ = Nothing
 
+-- | If this token may terminate some context.
+--
+-- This is just an optimisation so we don't need to check 'terminates'
+-- for every token.
 canTerminate :: TokenClass -> Bool
 canTerminate TcCBrace = True
 canTerminate TcCParen = True
@@ -399,10 +422,16 @@ canTerminate TcTopSep = True
 canTerminate TcAnd = True
 canTerminate _ = False
 
+-- | If this 'TokenClass' may terminate the current context.
+--
+-- Note, this should /not/ check the parent contexts. That will be done
+-- within the actual context checker.
 terminates :: TokenClass -> [Context] -> Bool
 
 -- `in` terminates the `let` binding
 terminates TcIn (CtxLet{}:_) = True
+terminates TcCSquare (CtxLet{}:_) = True
+terminates TcComma (CtxLet{}:_) = True
 
 -- `and` terminates the `let` binding
 terminates TcAnd (CtxLet{}:_) = True
@@ -430,8 +459,12 @@ terminates TcEnd (CtxInstBody{}:_) = True
 terminates TcTopSep (CtxBlock{}:ck) = isToplevel ck
 terminates TcSemicolon (CtxBlock{}:ck) = not (isToplevel ck)
 
+-- List comprehension statement terminator
+terminates TcComma (CtxListComprehension:_) = True
+
 terminates _ _ = False
 
+-- | Is this context's immediate parent the top-level?
 isToplevel :: [Context] -> Bool
 isToplevel [] = True
 isToplevel (CtxModuleBody{}:_) = True
@@ -442,11 +475,17 @@ isToplevel (CtxTypeBody{}:_) = True
 isToplevel (CtxBlock{}:cks) = isToplevel cks
 isToplevel _ = False
 
+-- | Is this context's immediate parent a list comprehension?
+isListComprehension :: [Context] -> Bool
+isListComprehension (CtxListComprehension:_) = True
+isListComprehension _ = False
+
 isIfContinue :: TokenClass -> Bool
 isIfContinue TcThen = True
 isIfContinue TcElse = True
 isIfContinue _ = False
 
+-- | Determines if any tail of the list matches the predicate.
 multiAny :: ([a] -> Bool) -> [a] -> Bool
 multiAny _ [] = False
 multiAny f x@(_:xs) = f x || multiAny f xs
