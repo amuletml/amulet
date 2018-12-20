@@ -409,7 +409,7 @@ reduceClassContext extra annot cons = do
         | superclasses <- filter ((== Superclass) . view implSort) $ lookup con scope
         , First (Just implicit) <- foldMap (isUsable scp) superclasses
         = let (bindings, needs') = simpl scp needs
-           in (Binding var (useForSimpl annot (scope <> scp) implicit con) False (annot, con):bindings, needs')
+           in (Binding var (useForSimpl annot scp implicit con) False (annot, con):bindings, needs')
         | otherwise = second ((var, con, why) :) (simpl scp needs)
       simpl _ [] = ([], [])
       (simplif, stillNeeded') = simpl (usable <> extra) stillNeeded
