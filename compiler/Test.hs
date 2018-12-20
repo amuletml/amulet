@@ -1,12 +1,13 @@
 module Main where
 
-import Test.Tasty.Ingredients.ConsoleReporter
 import Test.Tasty.Ingredients.Basic
 import Test.Tasty.Runners.AntXML
 import Test.Tasty.Ingredients
 import Test.Tasty
 
 import Test.Util
+import Test.Reporter
+
 import qualified Test.Types.Unify as Solver
 import qualified Test.Core.Lint as Lint
 
@@ -33,4 +34,5 @@ tests = testGroup "Tests" <$> sequence
   ]
 
 main :: IO ()
-main = tests >>= defaultMainWithIngredients [ listingTests, consoleTestReporter `composeReporters` antXMLRunner ]
+main = tests >>= defaultMainWithIngredients [ listingTests
+                                            , boringReporter `composeReporters` antXMLRunner ]
