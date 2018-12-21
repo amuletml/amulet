@@ -73,7 +73,7 @@ builtins =
       |] )
   , ( vForce, "__builtin_force", [vUnit], Nothing
     , [luaStmts|
-       local function __builtin_force_err()
+       local function __builtin_trap()
          error("Loop while forcing thunk")
        end
        local function __builtin_force(x)
@@ -81,7 +81,7 @@ builtins =
            return x[1]
          else
            local thunk = x[1]
-           x[1] = __builtin_force_err
+           x[1] = __builtin_trap
            x[1] = thunk(__builtin_unit)
            x[2] = true
            return x[1]
