@@ -71,6 +71,11 @@ instance Pretty Value where
   pretty Nil{}       = sliteral . string $ "()"
   pretty (Boolean x) = sliteral . string $ if x then "true" else "false"
   pretty (Opaque x)  = enclose (char '<') (char '>') (keyword x)
+
+  pretty (Constructor "Cons" (Just (Table m))) = -- display prettier infix notation for cons
+    pretty (m Map.! "_1") <+> soperator (string "::") <+> pretty (m Map.! "_2")
+  pretty (Constructor "Nil" Nothing) = brackets mempty
+
   pretty (Constructor x Nothing) = stypeCon (text x)
   pretty (Constructor x (Just t)) = colour (text x) <+> parensIf t where
     parensIf x@Constructor{} = parens (pretty x)
