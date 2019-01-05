@@ -32,10 +32,13 @@ data Context
   | CtxStmtLet SourcePos
   -- | An expression level let definition
   | CtxLet SourcePos
-  -- | A list of sequences. The bool represents whether a separator is
-  -- needed
+  -- | A list of sequences.
   | CtxEmptyBlock (Maybe TokenClass)
-  | CtxBlock SourcePos Bool (Maybe TokenClass)
+  | CtxBlock { blockStart :: SourcePos -- ^ The position of the first token within this block
+             , blockSep :: Bool -- ^ Whether this block is awaiting a separator.
+             , blockEmpty :: Bool -- ^ Whether this block is empty. Namely, whether we've seen a separator yet.
+             , blockTerm :: Maybe TokenClass -- ^ The terminator for this block.
+             }
 
   -- | The terms between a @match@ and a @with@ token.
   | CtxMatch SourcePos
@@ -58,7 +61,7 @@ data Context
 
   -- | Anything between a module and the =, then the actual contents of
   -- the module
-  | CtxModuleHead SourcePos
+  | CtxModuleHead Bool SourcePos
   | CtxModuleBodyUnresolved SourcePos SourcePos
   | CtxModuleBody SourcePos
 
@@ -93,7 +96,7 @@ data PendingState
 
 -- | The starting context for a set of top-level statements
 defaultContext :: [Context]
-defaultContext = [CtxBlock (SourcePos "" 0 1) False Nothing]
+defaultContext = [CtxBlock (SourcePos "" 0 1) False True Nothing]
 
 -- | Track our current context stack. This consumes a token and builds up
 -- the context stack, returning any additional tokens which should be
@@ -110,7 +113,7 @@ handleContextBlock :: (Applicative f, MonadWriter (f ParseError) m)
 handleContextBlock needsSep  tok@(Token tk tp te) c =
   case (tk, c) of
     -- If we've got an empty block then we need to define the first position
-    (_, CtxEmptyBlock end:cks) -> handleContext tok (CtxBlock tp False end:cks)
+    (_, CtxEmptyBlock end:cks) -> handleContext tok (CtxBlock tp False True end:cks)
 
     -- If we've got the end of stream, then pop contexts and push the
     -- appropriate ending tokens.
@@ -142,7 +145,7 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
     (_, CtxBracket tk':cks) | tk == tk' -> pure (Result tok Done, cks)
 
     -- Offside rule for blocks
-    (_, CtxBlock offside _ end:cks)
+    (_, CtxBlock offside _ _ end:cks)
       | spCol tp < spCol offside
       -> case end of
            Nothing -> handleContext tok cks
@@ -150,19 +153,19 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
 
     -- If we're inside a context which doesn't need a separator,
     -- then convert it into one which does.
-    (_, CtxBlock offside False end:cks) ->
-      handleContextBlock False tok (CtxBlock offside True end:cks)
+    (_, CtxBlock offside False first end:cks) ->
+      handleContextBlock False tok (CtxBlock offside True first end:cks)
 
     -- Explicitly allow `;`/`;;` inside blocks
-    (_, CtxBlock offside True end:cks)
+    (_, CtxBlock offside True _ end:cks)
       | needsSep
       , tk == TcTopSep && isToplevel cks
       -> pure ( Result tok Done
-              , CtxBlock offside False end:cks)
+              , CtxBlock offside False False end:cks)
       | needsSep
       , tk == TcSemicolon && not (isToplevel cks)
       -> pure ( Result tok Done
-              , CtxBlock offside False end:cks)
+              , CtxBlock offside False False end:cks)
 
     -- Offside rule for blocks, for tokens which are aligned with the current
     -- context and are not operators
@@ -172,12 +175,12 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
     --   foo
     --   |> bar
     -- @
-    (_, CtxBlock offside True end:cks)
+    (_, CtxBlock offside True _ end:cks)
       | needsSep
       , spCol tp == spCol offside && spLine tp /= spLine offside
       , not (isOp tk)
       -> pure ( Result (Token TcVSep tp te) (Working tok)
-              , CtxBlock offside False end:cks)
+              , CtxBlock offside False False end:cks)
 
     -- Offside rule for statement lets: just pop the context
     (_, CtxStmtLet offside:cks)
@@ -221,6 +224,15 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
     (_, CtxElseUnresolved _:ck)
       -> handleContext tok
            (CtxEmptyBlock Nothing : CtxElse tp:ck)
+
+    -- Offside rule for leading modules.
+    --
+    -- If we see a token aligned with a leading module declaration, we
+    -- inject an @= $begin@ and switch to a module body.
+    (_, CtxModuleHead True mod:ck)
+      | spCol tp <= spCol mod
+      -> pure ( Result (Token TcEqual tp tp) $ Result (Token TcVBegin tp tp) $ Working tok
+              , CtxEmptyBlock (Just TcVEnd) : CtxModuleBody mod : ck )
 
     -- Offside rule for modules
     (TcEnd, CtxModuleBody offside:ck)
@@ -358,9 +370,13 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
       ( Result tok Done
       , CtxElseUnresolved tp : c )
 
+    -- @module@ at top of file ~~> Push a module context which doesn't require an equal
+    (TcModule, [CtxBlock{ blockEmpty = True }]) -> pure (Result tok Done, CtxModuleHead True tp:c)
+
     -- @module@ ~~> Push a module context
-    (TcModule, _) -> pure (Result tok Done, CtxModuleHead tp:c)
-    (TcEqual, CtxModuleHead mod:ck) -> pure
+    (TcModule, _) -> pure (Result tok Done, CtxModuleHead False tp:c)
+    -- @module ... =@ ~~> Push a module body
+    (TcEqual, CtxModuleHead _ mod:ck) -> pure
       ( Result tok Done
       , CtxModuleBodyUnresolved mod te:ck)
 
@@ -398,7 +414,7 @@ isOp _ = False
 
 -- | What token must be inserted to close this context
 insertFor :: Context -> Maybe TokenClass
-insertFor (CtxBlock _ _ t) = t
+insertFor CtxBlock { blockTerm = t } = t
 insertFor CtxLet{} = Just TcVIn
 insertFor CtxStmtLet{} = Nothing
 insertFor CtxMatchArms{} = Just TcVEnd
