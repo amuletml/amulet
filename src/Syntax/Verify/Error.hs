@@ -17,6 +17,7 @@ import Syntax.Pretty
 
 import Language.Lua.Parser
 
+-- | Bound variable within a term or expression
 data BindingSite
   = BindingSite { boundVar :: Var Typed
                 , boundWhere :: Span
