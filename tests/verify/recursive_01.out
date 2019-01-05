@@ -1,7 +1,12 @@
-verify11.ml[2:5 ..2:5]: error
+recursive_01.ml[4:5 ..4:5]: error
   Invalid recursive right-hand side for variable g
   • Note: because evaluation of the variable f is not delayed
   Arising from use of the binding
   │ 
-2 │ and g = f
+4 │ and g = f
   │     ^
+recursive_01.ml[2:7 ..2:7]: warning
+  Bound locally but not used: 'y'
+  │ 
+2 │   let y = 1
+  │       ^

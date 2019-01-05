@@ -1,9 +1,9 @@
-verify04.ml[3:6 ..3:6]: warning
+unused_pat_01.ml[3:6 ..3:6]: warning
   Bound locally but not used: 'a'
   │ 
 3 │   | (a, b) -> 0
   │      ^
-verify04.ml[3:9 ..3:9]: warning
+unused_pat_01.ml[3:9 ..3:9]: warning
   Bound locally but not used: 'b'
   │ 
 3 │   | (a, b) -> 0
