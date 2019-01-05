@@ -1,11 +1,11 @@
-verify15.ml[7:7 ..7:7]: error
+recursive_02.ml[7:7 ..7:7]: error
   Invalid recursive right-hand side for variable f
   • Note: because evaluation of the variable g is not delayed
   Arising from use of the binding
   │ 
 7 │   let f = (fun _ -> g) 1
   │       ^
-verify15.ml[8:7 ..8:7]: error
+recursive_02.ml[8:7 ..8:7]: error
   Invalid recursive right-hand side for variable g
   • Note: because evaluation of the variable f is not delayed
   Arising from use of the binding
