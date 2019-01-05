@@ -92,11 +92,11 @@ precedenceOf (LuaBinOp _ op _) = PreOp $ case op of
 precedenceOf LuaUnOp{} = PreOp 1
 precedenceOf _ = PreLit
 
-succPrec :: Precedence -> Precedence
-succPrec PreRaw    = PreRaw
-succPrec PreLit    = PreLit
-succPrec (PreOp x) = PreOp (x + 1)
-succPrec PreWrap   = PreWrap
+decrPrec :: Precedence -> Precedence
+decrPrec PreRaw    = PreRaw
+decrPrec PreLit    = PreLit
+decrPrec (PreOp x) = PreOp (x - 1)
+decrPrec PreWrap   = PreWrap
 
 assocOf :: T.Text -> Associativity
 assocOf ".." = ARight
@@ -193,8 +193,8 @@ instance Pretty LuaExpr where
   pretty e@(LuaBinOp l o r) =
     let prec = precedenceOf e
     in case assocOf o of
-        ALeft -> prettyWith prec l <+> op o <+> prettyWith (succPrec prec) r
-        ARight -> prettyWith (succPrec prec) l <+> op o <+> prettyWith prec r
+        ALeft -> prettyWith prec l <+> op o <+> prettyWith (decrPrec prec) r
+        ARight -> prettyWith (decrPrec prec) l <+> op o <+> prettyWith prec r
     where
       op "and" = skeyword "and"
       op "or" = skeyword "or"
