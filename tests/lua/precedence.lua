@@ -1,4 +1,12 @@
 do
-  local function main(bt) return (bt.a + bt.b) * bt.c end
+  local function main(fo)
+    local a, b, c = fo.a, fo.b, fo.c
+    (nil)((a + b) * c)
+    (nil)(a * (b + c))
+    (nil)(a ^ b * c)
+    (nil)(a * b ^ c)
+    (nil)(a * (b / c))
+    return (nil)(a * b / c)
+  end
   (nil)(main)
 end
