@@ -1,0 +1,10 @@
+unused_let_top_04.ml[1:14 ..1:14]: warning
+  Bound locally but not used: 'a'
+  │ 
+1 │ let private (a, b) = (1, 2)
+  │              ^
+unused_let_top_04.ml[1:17 ..1:17]: warning
+  Bound locally but not used: 'b'
+  │ 
+1 │ let private (a, b) = (1, 2)
+  │                 ^

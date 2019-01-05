@@ -1,0 +1,5 @@
+unused_let_top_03.ml[1:13 ..1:13]: warning
+  Bound locally but not used: 'x'
+  │ 
+1 │ let private x = 1
+  │             ^

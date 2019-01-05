@@ -49,20 +49,17 @@ runVerify env var = fixup
                   . flip runStateT mempty
                   . runWriterT where
   fixup (((), w), st) =
-    let errs | Seq.null w = Right () | otherwise = Left w
-        others = if Set.null st
-                    then []
-                    else map DefinedUnused (Set.elems st)
-        probably [] = Right ()
-        probably xs = Left (Seq.fromList xs)
-     in case errs of
-       Right () -> probably others
-       Left es -> Left (es Seq.>< Seq.fromList others)
+    let errs = w <> Seq.fromList (map DefinedUnused (Set.elems st))
+     in if Seq.null errs then Right () else Left errs
 
 verifyProgram :: forall m. MonadVerify m => [Toplevel Typed] -> m ()
 verifyProgram = traverse_ verifyStmt where
   verifyStmt :: Toplevel Typed -> m ()
-  verifyStmt st@(LetStmt _ vs) = verifyBindingGroup (flip const) (BecauseOf st) vs
+  verifyStmt st@(LetStmt am vs) = verifyBindingGroup addBind (BecauseOf st) vs where
+    addBind :: BindingSite -> Set.Set BindingSite -> Set.Set BindingSite
+    addBind = case am of
+      Private -> Set.insert
+      Public -> flip const
   verifyStmt Class{} = pure ()
   verifyStmt Instance{} = pure ()
   verifyStmt st@(ForeignVal _ v d t (_, _)) = do
@@ -75,6 +72,7 @@ verifyProgram = traverse_ verifyStmt where
   verifyStmt (Module _ _ p) = verifyProgram p
   verifyStmt Open{} = pure ()
 
+-- | Verify a recursive definition is well-formed
 verifyBindingGroup :: MonadVerify m
                    => (BindingSite -> Set.Set BindingSite -> Set.Set BindingSite)
                    -> SomeReason -> [Binding Typed] -> m ()

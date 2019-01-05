@@ -1,3 +1,1 @@
-type foo = Foo of lazy foo
-
-let x : foo = Foo x
+let (a, b) = (1, 2)
