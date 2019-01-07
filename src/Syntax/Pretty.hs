@@ -225,18 +225,26 @@ instance Pretty (Var p) => Pretty (TyBinder p) where
   pretty (Invisible v (Just k)) = braces (stypeVar (squote <> pretty v) <+> colon <+> pretty k) <> dot
   pretty (Invisible v Nothing)  = stypeVar (squote <> pretty v) <> dot
 
+instance Pretty TopAccess where
+  pretty Public = keyword "public"
+  pretty Private = keyword "private"
+
+prettyAcc :: TopAccess -> Doc
+prettyAcc Public = empty
+prettyAcc x = pretty x <+> empty
+
 instance (Pretty (Var p)) => Pretty (Toplevel p) where
-  pretty (LetStmt []) = string "empty let?"
-  pretty (LetStmt (x:xs)) =
+  pretty (LetStmt _ []) = string "empty let?"
+  pretty (LetStmt m (x:xs)) =
     let prettyBind x = keyword "and" <+> pretty x
-     in keyword "let" <+> pretty x
+     in keyword "let" <+> prettyAcc m <> pretty x
              <> case xs of
                   [] -> empty
                   _ -> line <> vsep (map prettyBind xs)
-  pretty (ForeignVal v d ty _) =
-    keyword "foreign val" <+> pretty v <+> colon <+> pretty ty <+> equals <+> dquotes (text d)
-  pretty (TypeDecl ty args []) = keyword "type" <+> pretty ty <+> hsep (map ((squote <>) . pretty) args)
-  pretty (TypeDecl ty args ctors) = keyword "type" <+> pretty ty
+  pretty (ForeignVal m v d ty _) =
+    keyword "foreign" <+> prettyAcc m <> keyword "val" <+> pretty v <+> colon <+> pretty ty <+> equals <+> dquotes (text d)
+  pretty (TypeDecl m ty args []) = keyword "type" <+> prettyAcc m <> pretty ty <+> hsep (map ((squote <>) . pretty) args)
+  pretty (TypeDecl m ty args ctors) = keyword "type" <+> prettyAcc m <> pretty ty
                                 <+> hsep (map ((squote <>) . pretty) args)
                                 <+> equals
                                 <#> indent 2 (vsep (map ((pipe <+>) . pretty) ctors))
@@ -244,14 +252,14 @@ instance (Pretty (Var p)) => Pretty (Toplevel p) where
   pretty (Open m Nothing) = keyword "open" <+> pretty m
   pretty (Open m (Just a)) = keyword "open" <+> pretty m <+> keyword "as" <+> text a
 
-  pretty (Module m bod) =
-    vsep [ keyword "module" <+> pretty m <+> equals <+> keyword "begin"
+  pretty (Module am m bod) =
+    vsep [ keyword "module" <+> prettyAcc am <> pretty m <+> equals <+> keyword "begin"
          , indent 2 (align (pretty bod))
          , keyword "end"
          ]
 
-  pretty (Class v c h m _) =
-    vsep [ keyword "class" <+> maybe (parens mempty) pretty c
+  pretty (Class v am c h m _) =
+    vsep [ keyword "class" <+> prettyAcc am <> maybe (parens mempty) pretty c
             <+> soperator (string "=>") <+> pretty v <+> hsep (map pretty h) <+> keyword "begin"
          , indent 2 (align (vsep (map pretty m)))
          , keyword "end"

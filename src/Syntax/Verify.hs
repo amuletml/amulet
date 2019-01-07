@@ -49,32 +49,30 @@ runVerify env var = fixup
                   . flip runStateT mempty
                   . runWriterT where
   fixup (((), w), st) =
-    let errs | Seq.null w = Right () | otherwise = Left w
-        others = if Set.null st
-                    then []
-                    else map DefinedUnused (Set.elems st)
-        probably [] = Right ()
-        probably xs = Left (Seq.fromList xs)
-     in case errs of
-       Right () -> probably others
-       Left es -> Left (es Seq.>< Seq.fromList others)
+    let errs = w <> Seq.fromList (map DefinedUnused (Set.elems st))
+     in if Seq.null errs then Right () else Left errs
 
 verifyProgram :: forall m. MonadVerify m => [Toplevel Typed] -> m ()
 verifyProgram = traverse_ verifyStmt where
   verifyStmt :: Toplevel Typed -> m ()
-  verifyStmt st@(LetStmt vs) = verifyBindingGroup (flip const) (BecauseOf st) vs
+  verifyStmt st@(LetStmt am vs) = verifyBindingGroup addBind (BecauseOf st) vs where
+    addBind :: BindingSite -> Set.Set BindingSite -> Set.Set BindingSite
+    addBind = case am of
+      Private -> Set.insert
+      Public -> flip const
   verifyStmt Class{} = pure ()
   verifyStmt Instance{} = pure ()
-  verifyStmt st@(ForeignVal v d t (_, _)) = do
+  verifyStmt st@(ForeignVal _ v d t (_, _)) = do
     case parseExpr (SourcePos ("definition of " ++ displayS (pretty v)) 1 1) (d ^. lazy) of
       Left e -> tell (Seq.singleton (ParseErrorInForeign st e))
       Right _ -> pure ()
     parametricity st t
 
-  verifyStmt TypeDecl{}   = pure ()
-  verifyStmt (Module _ p) = verifyProgram p
-  verifyStmt Open{}       = pure ()
+  verifyStmt TypeDecl{} = pure ()
+  verifyStmt (Module _ _ p) = verifyProgram p
+  verifyStmt Open{} = pure ()
 
+-- | Verify a recursive definition is well-formed
 verifyBindingGroup :: MonadVerify m
                    => (BindingSite -> Set.Set BindingSite -> Set.Set BindingSite)
                    -> SomeReason -> [Binding Typed] -> m ()
@@ -189,6 +187,7 @@ unguardedVars (BothSection b _)    = unguardedVars b
 unguardedVars AccessSection{}      = mempty
 unguardedVars x = error (show x)
 
+-- | Get all binding sites within a pattern
 bindingSites :: Pattern Typed -> Set.Set BindingSite
 bindingSites (Capture v (s, t)) = Set.singleton (BindingSite v s t)
 bindingSites (PAs p v (s, t)) = Set.insert (BindingSite v s t) (bindingSites p)
@@ -202,6 +201,7 @@ bindingSites (PWrapper _ p _) = bindingSites p
 bindingSites (PSkolem p _ _) = bindingSites p
 bindingSites PList{} = error "PList is handled by desugar"
 
+-- | Is this of type lazy?
 isLazy :: Type Typed -> Bool
 isLazy ty = tyLazy == head (spine (getHead ty))
 
@@ -210,11 +210,14 @@ isWrappedThunk (ExprWrapper (WrapFn (MkWrapCont _ x)) _ _) =
   x == "automatic thunking"
 isWrappedThunk _ = False
 
+-- | Determine if the right-hand-side of a binding is non-trivial.
 nonTrivialRhs :: Binding Typed -> Bool
 nonTrivialRhs (TypedMatching _ e _ _) = nonTrivial e
 nonTrivialRhs (Binding _ e _ _) = nonTrivial e
 nonTrivialRhs _ = error "nonTrivialRHS pre-TC Bindings"
 
+-- | Determining if an expression is non-trivial. Namely, evaluating it
+-- may have side-effects.
 nonTrivial :: Expr Typed -> Bool
 nonTrivial App{} = True
 nonTrivial BinOp{} = True
@@ -248,7 +251,11 @@ nonTrivial (ExprWrapper w e _) =
     WrapFn (MkWrapCont k _) -> nonTrivial (k e)
     _ -> nonTrivial e
 
-parametricity :: forall m. MonadVerify m => Toplevel Typed -> Type Typed -> m ()
+-- | Verify a foreign definition is parametric.
+parametricity :: forall m. MonadVerify m
+              => Toplevel Typed -- ^ The top-level definition, used for error reporting
+              -> Type Typed -- ^ The type to verify.
+              -> m ()
 parametricity stmt overall = go mempty overall where
   go :: Set.Set (Var Typed) -> Type Typed -> m ()
   go set (TyVar v)
@@ -275,12 +282,15 @@ parametricity stmt overall = go mempty overall where
   goArg set t = pure (set `Set.difference` ftv t)
 
 -- | Verify a series of patterns are total
-verifyMatch :: MonadVerify m => Expr Typed -> Type Typed -> [Arm Typed] -> m ()
+verifyMatch :: MonadVerify m
+            => Expr Typed -- ^ The match expression, used for error reporting
+            -> Type Typed -- ^ The type of the term to match against
+            -> [Arm Typed] -- ^ The arms within the current match
+            -> m ()
 verifyMatch m ty [] = do
   VerifyScope env as <- ask
   when (inhabited env as ty) $
     tell . pure $ MissingPattern m [VVariable undefined ty]
-
 verifyMatch m ty bs = do
   VerifyScope env va <- ask
 

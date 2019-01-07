@@ -340,7 +340,7 @@ inferRows rows = for rows $ \(Field n e s) -> do
 
 inferProg :: MonadInfer Typed m
           => [Toplevel Desugared] -> m ([Toplevel Typed], Env)
-inferProg (stmt@(LetStmt ns):prg) = censor (const mempty) $ do
+inferProg (stmt@(LetStmt am ns):prg) = censor (const mempty) $ do
   (ns', ts, vs) <- retcons (addBlame (BecauseOf stmt)) (inferLetTy (closeOverStrat (BecauseOf stmt)) Fail ns)
   let bvs = Set.fromList (namesInScope (focus ts mempty))
 
@@ -356,16 +356,16 @@ inferProg (stmt@(LetStmt ns):prg) = censor (const mempty) $ do
     xs -> confess (mconcat xs)
 
   local (letBound %~ Set.union bvs) . local (names %~ focus ts) $
-    consFst (LetStmt ns') $
+    consFst (LetStmt am ns') $
       inferProg prg
 
-inferProg (st@(ForeignVal v d t ann):prg) = do
+inferProg (st@(ForeignVal am v d t ann):prg) = do
   t' <- resolveKind (BecauseOf st) t
   local (names %~ focus (one v t')) . local (letBound %~ Set.insert v) $
-    consFst (ForeignVal v d t' (ann, t')) $
+    consFst (ForeignVal am v d t' (ann, t')) $
       inferProg prg
 
-inferProg (decl@(TypeDecl n tvs cs):prg) = do
+inferProg (decl@(TypeDecl am n tvs cs):prg) = do
   (kind, retTy, tvs) <- retcons (addBlame (BecauseOf decl)) $
                           resolveTyDeclKind (BecauseOf decl) n tvs cs
   let scope (TyAnnArg v k:vs) = one v k <> scope vs
@@ -379,7 +379,7 @@ inferProg (decl@(TypeDecl n tvs cs):prg) = do
     local ( (names %~ focus (teleFromList ts))
           . (types %~ Map.insert n ts')
           . (constructors %~ Set.union ts') ) $
-        consFst (TypeDecl n tvs cs') $
+        consFst (TypeDecl am n tvs cs') $
           inferProg prg
 
 inferProg (Open mod pre:prg) = do
@@ -387,7 +387,7 @@ inferProg (Open mod pre:prg) = do
   local (classes %~ (<>modImplicits)) $
     consFst (Open mod pre) $ inferProg prg
 
-inferProg (c@(Class v _ _ _ _):prg) = do
+inferProg (c@(Class v _ _ _ _ _):prg) = do
   (stmts, decls, clss, implicits) <- condemn $ inferClass c
   first (stmts ++) <$> do
     local (names %~ focus decls) $
@@ -397,12 +397,12 @@ inferProg (c@(Class v _ _ _ _):prg) = do
 
 inferProg (inst@Instance{}:prg) = do
   (stmt, instName, instTy) <- condemn $ inferInstance inst
-  let addFst (LetStmt []) = id
-      addFst stmt@(LetStmt _) = consFst stmt
+  let addFst (LetStmt _ []) = id
+      addFst stmt@LetStmt{} = consFst stmt
       addFst _ = undefined
   addFst stmt . local (classes %~ insert (annotation inst) InstSort instName instTy) $ inferProg prg
 
-inferProg (Module name body:prg) = do
+inferProg (Module am name body:prg) = do
   (body', env) <- inferProg body
 
   let (vars, tys) = extractToplevels body
@@ -410,9 +410,10 @@ inferProg (Module name body:prg) = do
 
   -- Extend the current scope and module scope
   local ( (names %~ focus (teleFromList vars'))
-        . (types %~ (<>(env ^. types)))
+        . (types %~ (<> (env ^. types)))
+        . (classDecs %~ (<> (env ^. classDecs)))
         . (modules %~ (Map.insert name (env ^. classes) . (<> (env ^. modules))))) $
-    consFst (Module name body') $
+    consFst (Module am name body') $
     inferProg prg
 
 inferProg [] = asks ([],)

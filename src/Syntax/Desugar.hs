@@ -29,13 +29,13 @@ import Syntax
 desugarProgram :: forall m. MonadNamey m => [Toplevel Resolved] -> m [Toplevel Desugared]
 desugarProgram = traverse statement where
   statement :: Toplevel Resolved -> m (Toplevel Desugared)
-  statement (LetStmt vs) = LetStmt <$> traverse binding vs
-  statement (Module v ss) = Module v <$> traverse statement ss
+  statement (LetStmt am vs) = LetStmt am <$> traverse binding vs
+  statement (Module am v ss) = Module am v <$> traverse statement ss
   statement (Instance a b c m d) = Instance a (ty <$> b) (ty c) <$> traverse binding m <*> pure d
-  statement (Class a b c m d) = Class a (ty <$> b) (tyA <$> c) <$> traverse classItem m <*> pure d
+  statement (Class am a b c m d) = Class am a (ty <$> b) (tyA <$> c) <$> traverse classItem m <*> pure d
   statement (Open v a) = pure $ Open v a
-  statement (ForeignVal v x t a) = pure $ ForeignVal v x (ty t) a
-  statement (TypeDecl v arg cs) = pure $ TypeDecl v (map tyA arg) (map ctor cs)
+  statement (ForeignVal am v x t a) = pure $ ForeignVal am v x (ty t) a
+  statement (TypeDecl am v arg cs) = pure $ TypeDecl am v (map tyA arg) (map ctor cs)
 
   classItem (MethodSig v t a) = pure $ MethodSig v (ty t) a
   classItem (DefaultMethod m a) = DefaultMethod <$> binding m <*> pure a

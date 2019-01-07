@@ -87,16 +87,16 @@ runResolve scope modules
 resolveModule :: MonadResolve m => [Toplevel Parsed] -> m [Toplevel Resolved]
 resolveModule [] = pure []
 
-resolveModule (LetStmt bs:rs) = do
+resolveModule (LetStmt am bs:rs) = do
   (bs', vs, ts) <- unzip3 <$> traverse reBinding bs
   extendTyvarN (concat ts) . extendN (concat vs) $ (:)
-    <$> (LetStmt <$> traverse (uncurry (flip (<$>) . reExpr . view bindBody)) (zip bs bs'))
+    <$> (LetStmt am <$> traverse (uncurry (flip (<$>) . reExpr . view bindBody)) (zip bs bs'))
     <*> resolveModule rs
 
-resolveModule (r@(ForeignVal v t ty a):rs) = do
+resolveModule (r@(ForeignVal am v t ty a):rs) = do
   v' <- tagVar v
   extend (v, v') $ (:)
-    <$> (ForeignVal
+    <$> (ForeignVal am
           <$> lookupEx v `catchJunk` r
           <*> pure t
           <*> reType r (wrap ty)
@@ -104,13 +104,14 @@ resolveModule (r@(ForeignVal v t ty a):rs) = do
     <*> resolveModule rs
 
   where wrap x = foldr (TyPi . flip Invisible Nothing) x (toList (ftv x))
-resolveModule (d@(TypeDecl t vs cs):rs) = do
+resolveModule (d@(TypeDecl am t vs cs):rs) = do
   t'  <- tagVar t
   (vs', sc) <- resolveTele d vs
   let c = map extractCons cs
   c' <- traverse tagVar c
   extendTy (t, t') $ extendN (zip c c') $ (:)
-    . TypeDecl t' vs' <$> traverse (resolveCons sc) (zip cs c')
+    . TypeDecl am t' vs'
+    <$> traverse (resolveCons sc) (zip cs c')
     <*> resolveModule rs
 
   where resolveCons _ (UnitCon _ a, v') = pure $ UnitCon v' a
@@ -130,7 +131,7 @@ resolveModule (r@(Open name as):rs) =
   retcons (wrapError r) $
     resolveOpen name as (\name' -> (Open name' as:) <$> resolveModule rs)
 
-resolveModule (Module name body:rs) = do
+resolveModule (Module am name body:rs) = do
   fullName <- foldl (flip InModule) name <$> asks modStack
   body' <- extendM name $ resolveModule body
 
@@ -147,12 +148,12 @@ resolveModule (Module name body:rs) = do
   put $ ModuleScope $ Map.insert fullName (name', scope') modules
 
   extendN (modZip name name' vars vars') $ extendTyN (modZip name name' tys tys') $ (:)
-    <$> pure (Module name' body')
+    <$> pure (Module am name' body')
     <*> resolveModule rs
 
   where modZip name name' v v' = zip (map (name<>) v) (map (name'<>) v')
 
-resolveModule (t@(Class name ctx tvs ms ann):rs) = do
+resolveModule (t@(Class name am ctx tvs ms ann):rs) = do
   name' <- tagVar name
   (tvs', tvss) <- resolveTele t tvs
 
@@ -163,7 +164,7 @@ resolveModule (t@(Class name ctx tvs ms ann):rs) = do
 
     extendN (mconcat vs') $ do
       ms'' <- extendTyvarN tvss (sequence ms')
-      (Class name' ctx' tvs' ms'' ann:) <$> resolveModule rs
+      (Class name' am ctx' tvs' ms'' ann:) <$> resolveModule rs
 
   where
     reClassItem m@(MethodSig name ty an) = do
