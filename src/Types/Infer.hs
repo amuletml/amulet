@@ -410,7 +410,8 @@ inferProg (Module am name body:prg) = do
 
   -- Extend the current scope and module scope
   local ( (names %~ focus (teleFromList vars'))
-        . (types %~ (<>(env ^. types)))
+        . (types %~ (<> (env ^. types)))
+        . (classDecs %~ (<> (env ^. classDecs)))
         . (modules %~ (Map.insert name (env ^. classes) . (<> (env ^. modules))))) $
     consFst (Module am name body') $
     inferProg prg
