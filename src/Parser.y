@@ -150,7 +150,7 @@ Tops :: { [Toplevel Parsed] }
 -- | An access modifier for top-level definitions
 --
 -- We inline this within let binding groups and modules to remove a
--- shift/reduce conflict.  We do not know if let/module should be
+-- shift/reduce conflict.  We do not know if let should be
 -- followed by an Access or not). It's slightly absurd that inlining the
 -- production works, but at the same time makes perfect sense.
 Access :: { TopAccess }
@@ -169,16 +169,18 @@ Top :: { Toplevel Parsed }
     | external Access val BindName ':' Type '=' string
       { withPos2 $1 $8 $ ForeignVal $2 (getL $4) (getString $8) (getL $6) }
 
-    | type Access BindName ListE(TyConArg) TypeBody { TypeDecl $2 (getL $3) $4 $5 }
-    | type Access TyConArg BindOp TyConArg TypeBody { TypeDecl $2 (getL $4) [$3, $5] $6 }
+    | Access type BindName ListE(TyConArg) TypeBody { TypeDecl $1 (getL $3) $4 $5 }
+    | Access type TyConArg BindOp TyConArg TypeBody { TypeDecl $1 (getL $4) [$3, $5] $6 }
 
-    | module Access qconid '=' Begin(Tops)     { Module $2 (getName $3) (getL $5) }
+    | module qconid '=' Begin(Tops)            { Module Public (getName $2) (getL $4) }
+    | private module qconid '=' Begin(Tops)    { Module Private (getName $3) (getL $5) }
     | module conid '=' Begin(Tops)             { Module Public (getName $2) (getL $4) }
-    | module private conid '=' Begin(Tops)     { Module Private (getName $3) (getL $5) }
+    | private module conid '=' Begin(Tops)     { Module Private (getName $3) (getL $5) }
     | module conid '=' Con                     { Open (getL $4) (Just (getIdent $2)) }
 
     -- Note, we use fmap rather than <$>, as Happy's parser really doesn't like that.
-    | class Access Type Begin(ClassItems)      {% fmap (withPos2 $1 $4) $ buildClass $2 $3 (getL $4) }
+    | class Type Begin(ClassItems)             {% fmap (withPos2 $1 $3) $ buildClass Public $2 (getL $3) }
+    | private class Type Begin(ClassItems)     {% fmap (withPos2 $1 $4) $ buildClass Private $3 (getL $4) }
     | instance Type Begin(Methods)             {% fmap (withPos2 $1 $3) $ buildInstance $2 (getL $3) }
 
     | open Con                                 { Open (getL $2) Nothing }
