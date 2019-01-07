@@ -44,7 +44,7 @@ inferClass :: forall m. MonadInfer Typed m
                 , Telescope Typed
                 , ClassInfo
                 , ImplicitScope Typed )
-inferClass clss@(Class name ctx _ methods classAnn) = do
+inferClass clss@(Class name _ ctx _ methods classAnn) = do
   let toVar :: TyConArg Typed -> Type Typed
       toVar (TyVarArg v) = TyVar v
       toVar (TyAnnArg v _) = TyVar v
@@ -124,7 +124,7 @@ inferClass clss@(Class name ctx _ methods classAnn) = do
       closeOver (BecauseOf clss) (TyArr inner classConstraint)
 
     let tyDecl :: Toplevel Typed
-        tyDecl = TypeDecl name params
+        tyDecl = TypeDecl Public name params
           [ ArgCon classCon inner (classAnn, classConTy)
           ]
 
@@ -166,7 +166,7 @@ inferClass clss@(Class name ctx _ methods classAnn) = do
         methodMap = Map.fromList (map (\(_, n, _, t) -> (n, t)) rows)
         contextMap = Map.fromList (map (\(_, _, l, t) -> (l, t)) rows')
 
-    pure ( tyDecl:map (LetStmt . pure) decs, tele
+    pure ( tyDecl:map (LetStmt Public . pure) decs, tele
          , info
          , scope)
 inferClass _ = error "not a class"
@@ -370,7 +370,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
                 (ann, localInsnConTy)
       bind = Binding instanceName (Ascription fun globalInsnConTy (ann, globalInsnConTy)) True (ann, globalInsnConTy)
 
-  pure (LetStmt [bind], instanceName, globalInsnConTy)
+  pure (LetStmt Public [bind], instanceName, globalInsnConTy)
 inferInstance _ = error "not an instance"
 
 reduceClassContext :: forall m. (MonadInfer Typed m, HasCallStack)

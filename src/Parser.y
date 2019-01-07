@@ -5,7 +5,7 @@
   The grammar has several shift/reduce conflicts which are documented as
   follows.
 
-  === In record expressions
+  === In record expressions (+1)
   When the input contains @{ foo : int ... }@, the parser does not know whether
   @foo@ refers to a table key. Without further lookahead, the input could be a
   record key (@{ foo : int = 2 }@) or an expression within an extension (@{ foo
@@ -13,18 +13,20 @@
 
   Currently the latter of these is chosen, as Happy always prefers to shift.
 
-  === In type annotations
-  @(2, 2) : int * int@ could be parsed as @[[(2, 2) : int]] * int@ or @(2, 2) :
-  [[int * int]]@.
+  === In type annotations and ascriptions (+6)
 
-  This ambiguity only occurs for @*@ as it is considered an operator, and so
-  clashes with the second rule in @Expr@
+  There's several cases where type ascriptions cause ambiguities. As
+  these fall into one state, we'll group them here:
 
-  === In pattern guards
+  Operators after type ascriptions on expressions could refer to the
+  expression or type. For instanece, @a : int * int@ could be parsed as
+  @(a : int) * int@ or @a : (int * int)@. Currently the latter is chosen.
 
-  As we allow any expression within a guard, one can use type ascriptions, and
-  so have @when x : a -> b@. The @->@ could either be part of an arrow type or
-  the arm.
+  There is also potential for a conflict for expressions within pattern
+  guards. For @| _ when a -> b@, the arrow could either be part of an
+  arrow type in the ascription, or the separator of the pattern arm. In
+  this case, the former is chosen.
+
 -}
 module Parser
   ( parseTops
@@ -102,6 +104,7 @@ import Syntax
   class    { Token TcClass _ _ }
   instance { Token TcInstance _ _ }
   when     { Token TcWhen _ _ }
+  private  { Token TcPrivate _ _ }
 
   ','      { Token TcComma _ _ }
   '.'      { Token TcDot _ _ }
@@ -109,10 +112,8 @@ import Syntax
   ';;'     { Token TcTopSep _ _ }
   ';'      { Token TcSemicolon _ _ }
   '('      { Token TcOParen _ _ }
-  '?('     { Token TcQParen _ _ }
   ')'      { Token TcCParen _ _ }
   '@'      { Token TcAt _ _ }
-  '?'      { Token TcQuestion _ _ }
   '{'      { Token TcOBrace _ _ }
   '}'      { Token TcCBrace _ _ }
   '['      { Token TcOSquare _ _ }
@@ -139,40 +140,54 @@ import Syntax
   '$sep'   { Token TcVSep _ _ }
 
 -- Please try to update the module documentation when this number changes.
-%expect 7 -- TODO: Update this?
+%expect 7
 
 %%
 
 Tops :: { [Toplevel Parsed] }
      : List1(Top, TopSep)                      { $1 }
 
+-- | An access modifier for top-level definitions
+--
+-- We inline this within let binding groups and modules to remove a
+-- shift/reduce conflict.  We do not know if let should be
+-- followed by an Access or not). It's slightly absurd that inlining the
+-- production works, but at the same time makes perfect sense.
+Access :: { TopAccess }
+  :                                            { Public }
+  | private                                    { Private }
+
 TopSep :: { () }
     : ';;'   { () }
     | '$sep' { () }
 
 Top :: { Toplevel Parsed }
-    : let BindGroup                             { LetStmt (reverse $2) }
-    | external val BindName ':' Type '=' string
-      { withPos2 $1 $7 $ ForeignVal (getL $3) (getString $7) (getL $5) }
+    -- See comment on 'Access' as to why this is inlined
+    : let BindGroup                            { LetStmt Public (reverse $2) }
+    | let private BindGroup                    { LetStmt Private (reverse $3) }
 
-    | type BindName ListE(TyConArg) TypeBody   { TypeDecl (getL $2) $3 $4 }
-    | type TyConArg BindOp TyConArg TypeBody   { TypeDecl (getL $3) [$2, $4] $5 }
+    | external Access val BindName ':' Type '=' string
+      { withPos2 $1 $8 $ ForeignVal $2 (getL $4) (getString $8) (getL $6) }
 
-    | module qconid '=' begin Tops end         { Module (getName $2) $5 }
-    | module qconid '=' '$begin' Tops '$end'   { Module (getName $2) $5 }
-    | module conid '=' begin Tops end          { Module (getName $2) $5 }
-    | module conid '=' '$begin' Tops '$end'    { Module (getName $2) $5 }
+    | Access type BindName ListE(TyConArg) TypeBody { TypeDecl $1 (getL $3) $4 $5 }
+    | Access type TyConArg BindOp TyConArg TypeBody { TypeDecl $1 (getL $4) [$3, $5] $6 }
+
+    | module qconid '=' Begin(Tops)            { Module Public (getName $2) (getL $4) }
+    | private module qconid '=' Begin(Tops)    { Module Private (getName $3) (getL $5) }
+    | module conid '=' Begin(Tops)             { Module Public (getName $2) (getL $4) }
+    | private module conid '=' Begin(Tops)     { Module Private (getName $3) (getL $5) }
     | module conid '=' Con                     { Open (getL $4) (Just (getIdent $2)) }
 
-    | class Type begin ClassItems end          {% fmap (withPos2 $1 $5) $ buildClass $2 $4 }
-    | class Type '$begin' ClassItems '$end'    {% fmap (withPos2 $1 $5) $ buildClass $2 $4 }
+    -- Note, we use fmap rather than <$>, as Happy's parser really doesn't like that.
+    | class Type Begin(ClassItems)             {% fmap (withPos2 $1 $3) $ buildClass Public $2 (getL $3) }
+    | private class Type Begin(ClassItems)     {% fmap (withPos2 $1 $4) $ buildClass Private $3 (getL $4) }
+    | instance Type Begin(Methods)             {% fmap (withPos2 $1 $3) $ buildInstance $2 (getL $3) }
 
-    | instance Type begin Methods end          {% fmap (withPos2 $1 $5) $ buildInstance $2 $4 }
-    | instance Type '$begin' Methods '$end'    {% fmap (withPos2 $1 $5) $ buildInstance $2 $4 }
-
-
---  | Instance                                 { $1 }
     | open Con                                 { Open (getL $2) Nothing }
+
+Begin(a)
+  : begin a end                             { lPos2 $1 $3 $2 }
+  | '$begin' a '$end'                       { lPos2 $1 $3 $2 }
 
 TypeBody :: { [Constructor Parsed] }
   :                                            { [] }
@@ -582,16 +597,16 @@ respanFun :: (Spanned a, Spanned b) => a -> b -> Expr Parsed -> Expr Parsed
 respanFun s e (Fun p b _) = Fun p b (mkSpanUnsafe (spanStart (annotation s)) (spanEnd (annotation e)))
 respanFun _ _ _ = error "what"
 
-buildClass :: Located (Type Parsed) -> [ClassItem Parsed]
+buildClass :: TopAccess -> Located (Type Parsed) -> [ClassItem Parsed]
            -> Parser (Span -> Toplevel Parsed)
-buildClass (L parsed typ) ms =
+buildClass am (L parsed typ) ms =
   case parsed of
     (TyPi (Implicit ctx) ty) -> do
       (name, ts) <- go [] ty
-      pure (Class name (Just ctx) ts ms)
+      pure (Class name am (Just ctx) ts ms)
     ty -> do
       (name, ts) <- go [] ty
-      pure (Class name Nothing ts ms)
+      pure (Class name am Nothing ts ms)
   where
     go :: [TyConArg Parsed] -> Type Parsed -> Parser (Var Parsed, [TyConArg Parsed])
     go ts (TyCon v) = pure (v, ts)

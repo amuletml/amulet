@@ -53,6 +53,7 @@ data TokenClass
   | TcClass -- ^ A @class@ token.
   | TcInstance -- ^ An @instance@ token.
   | TcWhen -- ^ A @when@ token.
+  | TcPrivate -- ^ A @private@ token.
   | TcAs   -- ^ An @as@ token.
 
   | TcDot -- ^ A @.@ token.
@@ -60,11 +61,9 @@ data TokenClass
   | TcColon -- ^ A @:@ token.
   | TcSemicolon -- ^ A @;@ token.
   | TcTopSep -- ^ A @;;@ token.
-  | TcQParen -- ^ A @?(@ token.
   | TcOParen -- ^ A @(@ token.
   | TcCParen -- ^ A @)@ token.
   | TcAt -- ^ A @@{@ token.
-  | TcQuestion -- ^ A @?@ token.
   | TcOBrace -- ^ A @{@ token.
   | TcCBrace -- ^ A @}@ token.
   | TcOSquare -- ^ A @[@ token.
@@ -135,17 +134,16 @@ instance Show TokenClass where
   show TcClass = "class"
   show TcInstance = "instance"
   show TcWhen = "when"
+  show TcPrivate = "private"
 
   show TcComma = ","
   show TcDot = "."
   show TcColon = ":"
   show TcSemicolon = ";"
   show TcTopSep = ";;"
-  show TcQParen = "?("
   show TcOParen = "("
   show TcCParen = ")"
   show TcAt = "@"
-  show TcQuestion = "?"
   show TcOBrace = "{"
   show TcCBrace = "}"
   show TcOSquare = "["

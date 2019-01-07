@@ -96,20 +96,19 @@ tokens :-
   <0> "open"   { constTok TcOpen }
   <0> "lazy"   { constTok TcLazy }
   <0> "as"     { constTok TcAs }
-  <0> "class"     { constTok TcClass }
-  <0> "instance"  { constTok TcInstance }
+  <0> "class"    { constTok TcClass }
+  <0> "instance" { constTok TcInstance }
   <0> "when"   { constTok TcWhen }
+  <0> "private"  { constTok TcPrivate }
 
   <0> ","      { constTok TcComma }
   <0> "."      { constTok TcDot }
   <0> ":"      { constTok TcColon }
   <0> ";" ";"  { constTok TcTopSep }
   <0> ";"      { constTok TcSemicolon }
-  <0> "?("     { constTok TcQParen }
   <0> "("      { constTok TcOParen }
   <0> ")"      { constTok TcCParen }
   <0> "@"      { constTok TcAt }
-  <0> "?"      { constTok TcQuestion }
   <0> "{"      { constTok TcOBrace }
   <0> "}"      { constTok TcCBrace }
   <0> "["      { constTok TcOSquare }

@@ -17,6 +17,7 @@ import Syntax.Pretty
 
 import Language.Lua.Parser
 
+-- | Bound variable within a term or expression
 data BindingSite
   = BindingSite { boundVar :: Var Typed
                 , boundWhere :: Span
@@ -121,7 +122,7 @@ instance Note VerifyError Style where
   diagnosticKind RedundantArm{} = WarningMessage
   diagnosticKind MissingPattern{} = WarningMessage
 
-  formatNote f (ParseErrorInForeign (ForeignVal var s _ (span, _)) err) =
+  formatNote f (ParseErrorInForeign (ForeignVal _ var s _ (span, _)) err) =
     let SourcePos name _ _ = spanStart (annotation err)
         spans = [( name, s )]
      in vsep [ indent 2 "Syntax error in definition of" <+> (Right <$> skeyword (pretty var))
