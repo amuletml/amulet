@@ -498,11 +498,11 @@ inferLetTy closeOver strategy vs =
               pure (exp, ty, ex == Deduced)
 
         (tp, k) <- figureOut shouldAddContext (var, becauseExp exp) exp' ty cs
-        let extra =
-              case origin of
-                Deduced -> \e -> ExprWrapper (TypeAsc tp) e (ann, tp)
-                _ -> id
-        pure ( [Binding var (extra (k exp')) True (ann, tp)], one var tp, mempty )
+        -- let extra =
+        --       case origin of
+        --         Deduced -> \e -> ExprWrapper (TypeAsc tp) e (ann, tp)
+        --         _ -> id
+        pure ( [Binding var (k exp') True (ann, tp)], one var tp, mempty )
 
       tcOne (AcyclicSCC TypedMatching{}) = error "TypedMatching being TC'd"
       tcOne (AcyclicSCC b@(Matching p e ann)) = do
