@@ -465,7 +465,7 @@ useForSimpl span scope (ImplChoice head oty pre var _ _) ty =
     Nothing -> error "What?"
     Just sub ->
       let wrap (Quantifier (Invisible v _):cs) ex (TyPi (Invisible _ _) rest) =
-            wrap cs (ExprWrapper (TypeApp (sub ! v)) ex (annotation ex, rest)) rest
+            wrap cs (ExprWrapper (TypeApp (Map.findWithDefault TyType v sub)) ex (annotation ex, rest)) rest
           wrap (Quantifier _:_) _ _ = error "malformed Quantifier"
           wrap (Implication v:cs) ex (TyPi (Implicit _) rest) =
             let v' = apply sub v
