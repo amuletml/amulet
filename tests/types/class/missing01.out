@@ -2,5 +2,6 @@ missing01.ml[5:1 ..5:22]: error
   │ 
 5 │ instance foo begin end
   │ ^^^^^^^^^^^^^^^^^^^^^^
-  Missing implementation for method x
-    in an instance for foo
+  Missing implementation of methods in instance for foo
+  Namely, there must be an implementation for at least
+    x

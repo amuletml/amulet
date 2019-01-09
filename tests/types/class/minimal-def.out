@@ -1,0 +1,7 @@
+minimal-def.ml[21:1 ..21:26]: error
+   │ 
+21 │ instance foo int begin end
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  Missing implementation of methods in instance for foo int
+  Namely, there must be an implementation for at least
+    i, j, either f or g, and one of k, l or m

@@ -57,6 +57,7 @@ import Text.Pretty.Note
 
 import Syntax.Transform
 import Syntax.Implicits
+import Syntax.Boolean
 import Syntax.Builtin
 import Syntax.Pretty
 import Syntax.Types
@@ -123,7 +124,7 @@ data TypeError where
   Overlap :: Type Typed -> Span -> Span -> TypeError
   ClassStackOverflow :: SomeReason -> [Type Typed] -> Type Typed -> TypeError
   WrongClass :: Binding Desugared -> Var Typed -> TypeError
-  UndefinedMethods :: Type Typed -> [(Text, Type Typed)] -> Span -> TypeError
+  UndefinedMethods :: Type Typed -> Formula Text -> Span -> TypeError
   InvalidContext :: String -> Span -> Type Desugared -> TypeError
 
   CanNotVta :: Type Typed -> Type Desugared -> TypeError
@@ -411,14 +412,11 @@ instance Pretty TypeError where
     vsep [ "Method" <+> pretty v <+> "is not a member of the class" <+> stypeCon (pretty c) ]
   pretty (WrongClass _ _) = error "Impossible"
 
-  pretty (UndefinedMethods h [(x, _)] _) =
-    vsep [ "Missing implementation for method" <+> stypeSkol (text x)
-         , indent 2 "in an instance for" <+> displayType h ]
-
   pretty (UndefinedMethods h xs _) =
     vsep [ "Missing implementation of methods in instance for" <+> displayType h
-         , "Namely:"
-         , vsep (map (\(n, t) -> indent 2 . bullet $ keyword "val" <+> text n <+> colon <+> displayType t) xs) ]
+         , "Namely, there must be an implementation for at least"
+         , indent 2 (align (pretty (fmap TgInternal xs)))
+         ]
 
   pretty (InvalidContext what _ ty) =
     vsep [ "Invalid type in context for" <+> string what <+> "declaration:"

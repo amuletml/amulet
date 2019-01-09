@@ -12,6 +12,7 @@ import Data.Traversable
 import Data.Foldable
 import Data.Spanned
 import Data.Reason
+import Data.Graph
 import Data.Maybe
 import Data.List (sortOn, partition)
 import Data.Char
@@ -23,8 +24,10 @@ import Control.Lens
 
 import Syntax.Implicits
 import Syntax.Builtin
+import Syntax.Boolean
 import Syntax.Subst
 import Syntax.Types
+import Syntax.Let
 import Syntax.Var
 import Syntax
 
@@ -162,7 +165,9 @@ inferClass clss@(Class name _ ctx _ methods classAnn) = do
       [one] -> pure <$> newtypeClassDecl one
       rest -> traverse mkDecl rest
 
-    let info = ClassInfo name classConstraint methodMap contextMap classCon classConTy classAnn defaultMap
+    let info =
+          ClassInfo name classConstraint methodMap contextMap classCon classConTy classAnn defaultMap
+          (makeMinimalFormula methodMap defaultMap)
         methodMap = Map.fromList (map (\(_, n, _, t) -> (n, t)) rows)
         contextMap = Map.fromList (map (\(_, _, l, t) -> (l, t)) rows')
 
@@ -173,7 +178,7 @@ inferClass _ = error "not a class"
 
 inferInstance :: forall m. MonadInfer Typed m => Toplevel Desugared -> m (Toplevel Typed, Var Typed, Type Typed)
 inferInstance inst@(Instance clss ctx instHead bindings ann) = do
-  ClassInfo clss classHead methodSigs classContext classCon classConTy classAnn defaults <-
+  ClassInfo clss classHead methodSigs classContext classCon classConTy classAnn defaults minimal <-
     view (classDecs . at clss . non undefined)
 
   let classCon' = nameName classCon
@@ -276,8 +281,11 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
   let needDefaults = methodNames `Map.difference` methodMap
       definedHere = methodNames `Map.intersection` methodMap
       needed = defaults `Map.intersection` needDefaults
-      diff = Map.toList (needDefaults `Map.difference` defaults)
-  unless (null diff) $ confesses (UndefinedMethods instHead diff ann)
+
+  case satisfy (`Map.member` definedHere) minimal of
+    Sat -> pure ()
+    Unsat xs -> confesses (UndefinedMethods instHead xs ann)
+
 
   scope <- mappend localAssums' <$> view classes
   (usedDefaults, defaultMethods) <- fmap unzip
@@ -513,3 +521,31 @@ validContext w a (TyParens t) = validContext w a t
 
 type Need t = (Var t, Type t, SomeReason)
 data WrapFlavour = Thin | Full
+
+-- | Build a boolean formula (in CNF) representing the smallest set of
+-- methods nescessary for an implementation of the class not to diverge
+-- indirectly.
+makeMinimalFormula :: Map.Map (Var Resolved) (Type Typed)
+                   -> Map.Map T.Text (Expr Desugared)
+                   -> Formula T.Text
+makeMinimalFormula signatures' defaults = mkAnd (sccs' ++ noDefaults) where
+  signatures = Map.mapKeys nameName signatures'
+
+  -- Methods without a default must be implemented
+  noDefaults = map Var (Map.keys (signatures `Map.difference` defaults))
+
+  methodRefs e =
+    Set.map nameName (freeIn e) `Set.intersection` Map.keysSet signatures
+
+  sccs :: [SCC T.Text]
+  sccs = stronglyConnComp (map build (Map.toList defaults))
+
+  sccs' :: [Formula T.Text]
+  sccs' = flip map sccs $ \case
+    AcyclicSCC _ -> mkAnd [] -- A method with no other references is a usable default by itself.
+    CyclicSCC xs -> mkOr (map Var xs)
+      -- If you have a cycle f → g → f, you can implement either f (and
+      -- use the default g) or g (and use the default f) to
+      -- break the cycle.
+
+  build (x, e) = (x, x, Set.toList (x `Set.delete` methodRefs e))
