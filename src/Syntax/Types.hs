@@ -9,7 +9,7 @@ module Syntax.Types
   , names, typeVars, constructors, types, letBound, classes, modules
   , classDecs
   , ClassInfo(..), ciName, ciMethods, ciContext, ciConstructorName
-  , ciConstructorTy, ciHead, ciClassSpan, ciDefaults
+  , ciConstructorTy, ciHead, ciClassSpan, ciDefaults, ciMinimal
   , Origin(..)
 
   , focus
@@ -22,6 +22,7 @@ import Data.Text (Text)
 import Control.Lens
 
 import Syntax.Implicits
+import Syntax.Boolean
 import Syntax.Pretty
 import Syntax.Subst
 
@@ -98,6 +99,7 @@ data ClassInfo =
       -- ^ The annotation of the class
     , _ciDefaults :: Map.Map Text (Expr Desugared)
       -- ^ Default methods
+    , _ciMinimal :: Formula Text
     }
   deriving (Eq, Show, Ord)
 

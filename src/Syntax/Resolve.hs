@@ -34,6 +34,7 @@ import Control.Monad.Namey
 import Control.Lens hiding (Lazy)
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import qualified Data.Text as T
 import Data.Traversable
 import Data.Sequence (Seq)
@@ -160,20 +161,21 @@ resolveModule (t@(Class name am ctx tvs ms ann):rs) = do
   extendTy (name, name') $ do
     (ctx', (ms', vs')) <- extendTyvarN tvss $
       (,) <$> traverse (reType t) ctx
-          <*> (unzip <$> traverse reClassItem ms)
+          <*> (unzip <$> traverse (reClassItem (map fst tvss)) ms)
 
     extendN (mconcat vs') $ do
       ms'' <- extendTyvarN tvss (sequence ms')
       (Class name' am ctx' tvs' ms'' ann:) <$> resolveModule rs
 
   where
-    reClassItem m@(MethodSig name ty an) = do
+    reClassItem tvs' m@(MethodSig name ty an) = do
       name' <- tagVar name
-      pure ( MethodSig name' <$> reType m ty <*> pure an
+      pure ( MethodSig name' <$> reType m (wrap tvs' ty) <*> pure an
            , [(name, name')] )
-    reClassItem (DefaultMethod b an) =
+    reClassItem _ (DefaultMethod b an) =
       pure ( DefaultMethod <$> (fst =<< reMethod b) <*> pure an
            , [] )
+    wrap tvs' x = foldr (TyPi . flip Invisible Nothing) x (ftv x `Set.difference` Set.fromList tvs')
 
 resolveModule (t@(Instance cls ctx head ms ann):rs) = do
   cls' <- lookupTy cls `catchJunk` t

@@ -164,6 +164,7 @@ library amulet
                      , Syntax.Builtin
                      , Syntax.Transform
                      , Syntax.Implicits
+                     , Syntax.Boolean
                      -- Verifier
                      , Syntax.Verify
                      , Syntax.Verify.Error
