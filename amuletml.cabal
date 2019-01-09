@@ -61,6 +61,7 @@ test-suite tests
                      , tasty-hedgehog >= 0.2 && < 0.3
   other-modules:       Test.Golden
                      , Test.Reporter
+                     , Test.Rerun
                      , Test.Util
 
                      , Test.Core.Lint

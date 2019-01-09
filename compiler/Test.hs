@@ -5,8 +5,9 @@ import Test.Tasty.Runners.AntXML
 import Test.Tasty.Ingredients
 import Test.Tasty
 
-import Test.Util
 import Test.Reporter
+import Test.Rerun
+import Test.Util
 
 import qualified Test.Types.Unify as Solver
 import qualified Test.Core.Lint as Lint
@@ -34,5 +35,9 @@ tests = testGroup "Tests" <$> sequence
   ]
 
 main :: IO ()
-main = tests >>= defaultMainWithIngredients [ listingTests
-                                            , boringReporter `composeReporters` antXMLRunner ]
+main = tests >>= defaultMainWithIngredients ingredients where
+  ingredients =
+    [ rerunning
+      [ listingTests
+      , boringReporter `composeReporters` antXMLRunner ]
+    ]
