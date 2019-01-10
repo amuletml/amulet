@@ -1,24 +1,28 @@
 {-# LANGUAGE OverloadedStrings, FlexibleContexts, LambdaCase, TupleSections #-}
 module Test.Rerun (rerunning) where
 
-import Data.Foldable (asum)
-import Data.Maybe
-import Data.Monoid
-import Data.Proxy (Proxy(..))
-import Data.Typeable (Typeable)
-import System.IO.Error (catchIOError, isDoesNotExistError)
-import Text.Read
-
 import Control.Concurrent.STM
-
-import Control.Monad.State
 import Control.Monad.Reader
-import qualified Data.IntMap as IntMap
+import Control.Monad.State
+
 import qualified Data.Map.Strict as Map
+import qualified Data.IntMap as IntMap
+import Data.Foldable
+import Data.Monoid
+import Data.Maybe
+import Data.Proxy
+
+import System.IO.Error
+import System.FilePath
+import System.Directory
 
 import Test.Tasty.Options
 import Test.Tasty.Runners hiding (Ap(..))
 import Test.Tasty.Providers
+
+import Text.Read
+
+import Type.Reflection
 
 newtype RerunFile = RerunFile FilePath
   deriving (Show, Eq, Typeable)
@@ -77,11 +81,7 @@ rerunning ingredients =
   ([ Option (Proxy :: Proxy RerunFile)
    , Option (Proxy :: Proxy PreserveLog)
    , Option (Proxy :: Proxy RerunFilter)
-   ] ++ existingOptions) (doRerun ingredients) where
-
-  existingOptions = flip concatMap ingredients $ \case
-      TestReporter options _ -> options
-      TestManager options _ -> options
+   ] ++ ingredientsOptions ingredients) (doRerun ingredients)
 
 doRerun :: [Ingredient] -> OptionSet -> TestTree -> Maybe (IO Bool)
 doRerun ingredients options testTree = Just $ do
@@ -129,7 +129,8 @@ doRerun ingredients options testTree = Just $ do
 
     -- | Save the state to a file
     saveState :: RerunState -> IO ()
-    saveState results =
+    saveState results = do
+      createDirectoryIfMissing True (takeDirectory stateFile)
       writeFile stateFile (show results)
 
     -- | Get all results for the given 'StatusMap'
