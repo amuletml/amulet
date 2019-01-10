@@ -41,9 +41,10 @@ instance IsOption PreserveLog where
   parseValue _ = Nothing
   optionCLParser = flagCLParser Nothing PreserveLog
 
--- TODO: Potentially have a "repeat" version, which runs successful/failed tests, but not
--- ones which didn't run previous times.
-data RerunFilter = RerunFailed | RerunAll
+data RerunFilter
+  = RerunAll -- ^ Rerun all tests
+  | RerunFailed -- ^ Only rerun tests which failed last time
+  | RerunSame -- ^ Rerun whatever tests ran last time
   deriving (Show, Eq, Typeable)
 
 instance IsOption RerunFilter where
@@ -52,10 +53,11 @@ instance IsOption RerunFilter where
   defaultValue = RerunAll
   parseValue "all" = Just RerunAll
   parseValue "failed" = Just RerunFailed
+  parseValue "same" = Just RerunFailed
   parseValue _ = Nothing
   optionCLParser = flagCLParser (Just 'R') RerunFailed
 
-data TestResult = ResultOk | ResultErr | ResultNew
+data TestResult = ResultOk | ResultErr | ResultNotRun
   deriving (Read, Show)
 
 type RerunState = Map.Map [TestName] TestResult
@@ -63,9 +65,10 @@ type RerunState = Map.Map [TestName] TestResult
 -- | Determine if the 'TestResult' matches the current 'RerunFilter'
 resultMatches :: RerunFilter -> TestResult -> Bool
 resultMatches RerunAll _ = True
-resultMatches RerunFailed ResultOk = False
-resultMatches RerunFailed ResultNew = False
 resultMatches RerunFailed ResultErr = True
+resultMatches RerunFailed _ = False
+resultMatches RerunSame ResultNotRun = True
+resultMatches RerunSame _ = False
 
 -- | Allows rerunning the tests. One should wrap all other ingredients with this one.
 rerunning :: [Ingredient] -> Ingredient
@@ -98,15 +101,11 @@ doRerun ingredients options testTree = Just $ do
           when (preserve == UpdateLog) $ do
             results <- getResults status
             let newState = extractState results filteredTestTree
-            -- TODO: Should we merge with the old state here? We could potentially
-            -- partition the test tree, and add back all elements which didn't match our
-            -- filter.
             saveState newState
 
           pure outcome
 
-      -- We can't actually monitor the tests in this case.
-      -- TODO: Warn?
+      -- We can't actually monitor the tests in this case, so just run as normal.
       tryIngredientMonitored (TestManager _ f) = f options filteredTestTree
 
   -- If nobody ran the tests then ideally we'd return Nothing. However, we needed IO in
@@ -119,7 +118,8 @@ doRerun ingredients options testTree = Just $ do
     filter = lookupOption options :: RerunFilter
 
     -- | Determine if the provided test name matches the provided filter.
-    filterMatches state name = resultMatches filter . fromMaybe ResultNew $ Map.lookup name state
+    filterMatches :: RerunState -> [TestName]  -> Bool
+    filterMatches state = resultMatches filter . fromMaybe ResultNotRun . flip Map.lookup state
 
     -- | Load the state from a file
     loadState :: IO (Maybe RerunState)
@@ -129,8 +129,7 @@ doRerun ingredients options testTree = Just $ do
 
     -- | Save the state to a file
     saveState :: RerunState -> IO ()
-    saveState results = do
-      -- createDirectoryIfMissing True path -- TODO: Get parent directory - we'll require filepath's splitFileName
+    saveState results =
       writeFile stateFile (show results)
 
     -- | Get all results for the given 'StatusMap'
@@ -140,7 +139,7 @@ doRerun ingredients options testTree = Just $ do
     getResult :: Status -> TestResult
     getResult (Done (Result Success _ _ _)) = ResultOk
     getResult (Done (Result Failure{} _ _ _)) = ResultErr
-    getResult _ = error "Test should have been run"
+    getResult _ = ResultNotRun
 
     -- | Extract the 'RerunState' from the filtered test tree + extracted results.
     extractState :: IntMap.IntMap TestResult -> TestTree -> RerunState
