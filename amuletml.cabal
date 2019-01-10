@@ -63,6 +63,7 @@ test-suite tests
                      , optparse-applicative >= 0.14 && < 0.15
   other-modules:       Test.Golden
                      , Test.Reporter
+                     , Test.Options
                      , Test.Rerun
                      , Test.Util
 

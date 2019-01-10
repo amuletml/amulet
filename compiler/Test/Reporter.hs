@@ -17,6 +17,8 @@ import Test.Tasty.Ingredients
 import Test.Tasty.Providers
 import Test.Tasty.Runners hiding (Ap(..))
 import Test.Tasty.Options
+import Test.Options
+
 import Text.Printf
 
 import Text.Pretty.Ansi
@@ -33,10 +35,11 @@ instance IsOption TestDisplay where
   optionName = "display"
   optionHelp = "What information to output when running tests"
   defaultValue = None
-  parseValue "t" = Just Tests
-  parseValue "g" = Just Groups
-  parseValue "n" = Just None
-  parseValue _ = Nothing
+  parseValue = parsePrefix
+   [ ("tests", Tests)
+   , ("groups", Groups)
+   , ("none", None)
+   ]
 
 newtype Timing = Timing Bool
   deriving (Show, Eq, Typeable)

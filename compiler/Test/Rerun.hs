@@ -19,6 +19,7 @@ import System.Directory
 import Test.Tasty.Options
 import Test.Tasty.Runners hiding (Ap(..))
 import Test.Tasty.Providers
+import Test.Options
 
 import Text.Read
 
@@ -40,9 +41,9 @@ instance IsOption PreserveLog where
   optionName = "rerun-preserve"
   optionHelp = "Do not update the rerun state file for this run"
   defaultValue = UpdateLog
-  parseValue "preserve" = Just PreserveLog
-  parseValue "update" = Just UpdateLog
-  parseValue _ = Nothing
+  parseValue = parsePrefix
+    [ ("preserve", PreserveLog)
+    , ("update", UpdateLog) ]
   optionCLParser = flagCLParser Nothing PreserveLog
 
 data RerunFilter
@@ -55,10 +56,11 @@ instance IsOption RerunFilter where
   optionName = "rerun"
   optionHelp = "Rerun all tests which are new or failed in the last run."
   defaultValue = RerunAll
-  parseValue "all" = Just RerunAll
-  parseValue "failed" = Just RerunFailed
-  parseValue "same" = Just RerunFailed
-  parseValue _ = Nothing
+  parseValue = parsePrefix
+    [ ("all", RerunAll)
+    , ("failed", RerunFailed)
+    , ("same", RerunSame)
+    ]
   optionCLParser = flagCLParser (Just 'R') RerunFailed
 
 data TestResult = ResultOk | ResultErr | ResultNotRun
