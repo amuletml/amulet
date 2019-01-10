@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, FlexibleContexts, LambdaCase, TupleSections #-}
+{-# LANGUAGE OverloadedStrings, FlexibleContexts, TupleSections #-}
 module Test.Rerun (rerunning) where
 
 import Control.Concurrent.STM
