@@ -17,6 +17,8 @@ import Test.Tasty.Ingredients
 import Test.Tasty.Providers
 import Test.Tasty.Runners hiding (Ap(..))
 import Test.Tasty.Options
+import Test.Options
+
 import Text.Printf
 
 import Text.Pretty.Ansi
@@ -30,22 +32,23 @@ data TestDisplay = Tests | Groups | None
   deriving (Show, Eq, Typeable)
 
 instance IsOption TestDisplay where
-  defaultValue = None
-  parseValue "t" = Just Tests
-  parseValue "g" = Just Groups
-  parseValue "n" = Just None
-  parseValue _ = Nothing
   optionName = "display"
   optionHelp = "What information to output when running tests"
+  defaultValue = None
+  parseValue = parsePrefix
+   [ ("tests", Tests)
+   , ("groups", Groups)
+   , ("none", None)
+   ]
 
 newtype Timing = Timing Bool
   deriving (Show, Eq, Typeable)
 
 instance IsOption Timing where
-  defaultValue = Timing False
-  parseValue = fmap Timing . safeReadBool
   optionName = "timing"
   optionHelp = "Show times to run tests"
+  defaultValue = Timing False
+  parseValue = fmap Timing . safeReadBool
   optionCLParser = flagCLParser (Just 't') (Timing True)
 
 boringReporter :: Ingredient

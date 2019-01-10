@@ -48,6 +48,7 @@ let
       , HUnit
       , tasty
       , these
+      , filepath
       , hashable
       , hedgehog
       , directory
@@ -87,7 +88,7 @@ let
         ];
 
         testHaskellDepends = [
-          base bytestring Diff directory hedgehog HUnit lens mtl
+          base bytestring Diff directory filepath hedgehog HUnit lens mtl
           pretty-show tasty tasty-hedgehog tasty-hunit text
           tasty-ant-xml
         ];
