@@ -501,6 +501,7 @@ precedenceOf f (TgInternal n) = f n
 
 precedence :: T.Text -> (Int, Associativity)
 precedence t
+  | T.isPrefixOf "@@" t = (2, AssocRight)
   | T.isPrefixOf "**" t = (10, AssocRight)
 
   | T.isPrefixOf "*" t = (9, AssocLeft)
