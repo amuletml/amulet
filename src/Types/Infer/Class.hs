@@ -323,8 +323,9 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
         shove cs x = addLet cs x
 
     var <- genNameFrom name
-    let expr = Ascription (solveEx ty sub (wrap <> wrap') (shove deferred e)) ty (an, ty)
-        bind = Binding var expr False (an, ty)
+    let expr = solveEx ty sub (wrap <> wrap') (shove deferred e)
+    body <- expandEta ty expr
+    let bind = Binding var body False (an, ty)
 
     pure (Field name (VarRef var (an, ty)) (an, ty), bind)
 
@@ -555,3 +556,27 @@ makeMinimalFormula signatures' defaults = mkAnd (sccs' ++ noDefaults) where
       -- break the cycle.
 
   build (x, e) = (x, x, Set.toList (x `Set.delete` methodRefs e))
+
+expandEta :: MonadNamey m => Type Typed -> Expr Typed -> m (Expr Typed)
+expandEta ty ex = go ty ex where
+  an = annotation ex
+
+  go (TyPi (Anon a) b) ex = do
+    x <- genName
+    inside <- go b (App ex (VarRef x (an, a)) (an, b))
+    pure $
+      Fun (EvParam (Capture x (an, a)))
+        inside (an, TyArr a b)
+  go (TyPi (Implicit a) b) ex = do
+    x <- genName
+    inside <- go b (App ex (VarRef x (an, a)) (an, b))
+    pure $
+      Fun (EvParam (Capture x (an, a)))
+        inside (an, TyArr a b)
+  go (TyPi (Invisible v (fromMaybe TyType -> k)) b) ex = do
+    ~x@(TySkol sk) <- freshSkol undefined k v
+    inside <- go b (ExprWrapper (TypeApp x) ex (an, b))
+    pure $
+      ExprWrapper (TypeLam sk k)
+        inside (an, TyPi (Invisible v (Just k)) b)
+  go _ e = pure e
