@@ -4,57 +4,57 @@ do
   local __builtin_unit = { __tag = "__builtin_unit" }
   local tostring = tostring
   local writeln = print
-  local function _dollardApplicativeaff(agx)
+  local function _dollardApplicativeafe(agw)
     return {
-      pure = function(cbs) return agx.zero end,
-      ["<*>"] = function(cbl) return function(cbi) return agx["×"](cbl)(cbi) end end,
-      ["Applicative$kl"] = function(cax) return function(cau) return cau end end
+      ["<*>"] = function(cbi) return function(cbf) return agw["×"](cbi)(cbf) end end,
+      pure = function(cbp) return agw.zero end,
+      ["Applicative$kl"] = function(cau) return function(car) return car end end
     }
   end
   local function _colon_colon(x) return function(y) return Cons({ _1 = x, _2 = y }) end end
-  local function _dollardShowary(atk)
+  local function _dollardShowarv(ath)
     return function(cs)
       if cs.__tag == "Nil" then
         return "Nil"
       elseif cs.__tag == "Cons" then
-        local cdq = cs[1]
-        return atk(cdq._1) .. " :: " .. _dollardShowary(atk)(cdq._2)
+        local cdn = cs[1]
+        return ath(cdn._1) .. " :: " .. _dollardShowarv(ath)(cdn._2)
       end
     end
   end
-  local function _dollardTraversablebhp(chl)
-    return function(chi)
+  local function _dollardTraversablebhm(chi)
+    return function(chf)
       return function(k)
         return function(cu)
           if cu.__tag == "Nil" then
-            return chi.pure(Nil)
+            return chf.pure(Nil)
           elseif cu.__tag == "Cons" then
-            local che = cu[1]
-            return chi["<*>"](chi["Applicative$kl"](_colon_colon)(k(che._1)))(_dollardTraversablebhp(__builtin_unit)(chi)(k)(che._2))
+            local chb = cu[1]
+            return chf["<*>"](chf["Applicative$kl"](_colon_colon)(k(chb._1)))(_dollardTraversablebhm(__builtin_unit)(chf)(k)(chb._2))
           end
         end
       end
     end
   end
-  local function _dollardMonoidbmf(cic)
+  local function _dollardMonoidbmc(chz)
     return {
       ["×"] = function(x)
         return function(ys)
           if x.__tag == "Nil" then
             return ys
           elseif x.__tag == "Cons" then
-            local chw = x[1]
-            return Cons({ _2 = _dollardMonoidbmf(__builtin_unit)["×"](chw._2)(ys), _1 = chw._1 })
+            local cht = x[1]
+            return Cons({ _1 = cht._1, _2 = _dollardMonoidbmc(__builtin_unit)["×"](cht._2)(ys) })
           end
         end
       end,
       zero = Nil
     }
   end
-  local cje = { _1 = 1, _2 = __builtin_unit }
-  writeln(_dollardShowary(function(x)
+  local cjb = { _1 = 1, _2 = __builtin_unit }
+  writeln(_dollardShowarv(function(x)
     return tostring(x)
-  end)(_dollardTraversablebhp(__builtin_unit)(_dollardApplicativeaff(_dollardMonoidbmf(__builtin_unit)))(function(ccj)
-    return Cons({ _1 = ccj._1, _2 = Nil })
-  end)(Cons({ _1 = cje, _2 = Cons({ _1 = cje, _2 = Cons({ _1 = cje, _2 = Nil }) }) }))))
+  end)(_dollardTraversablebhm(__builtin_unit)(_dollardApplicativeafe(_dollardMonoidbmc(__builtin_unit)))(function(ccg)
+    return Cons({ _2 = Nil, _1 = ccg._1 })
+  end)(Cons({ _1 = cjb, _2 = Cons({ _1 = cjb, _2 = Cons({ _1 = cjb, _2 = Nil }) }) }))))
 end

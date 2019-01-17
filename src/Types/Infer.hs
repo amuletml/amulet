@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleContexts, TupleSections, ScopedTypeVariables,
-   ViewPatterns, LambdaCase, TypeFamilies #-}
+   ViewPatterns, LambdaCase, TypeFamilies, CPP #-}
 module Types.Infer
   ( inferProgram
   , closeOver
@@ -49,6 +49,10 @@ import Types.Unify
 
 import Text.Pretty.Semantic
 import Control.Exception (assert)
+
+#ifdef TRACE_TC
+import Debug.Trace
+#endif
 
 
 -- | Solve for the types of bindings in a problem: Either @TypeDecl@s,
@@ -172,14 +176,16 @@ infer (VarRef k a) = do
     Nothing -> pure (VarRef k (a, old), old)
     Just cont -> pure (cont' (cont (VarRef k (a, old))), new)
 
-infer (Fun p e an) = let blame = Arm (p ^. paramPat) Nothing e in do
-  (p, dom, ms, cs) <- inferParameter p
-  let tvs = boundTvs (p ^. paramPat) ms
-  _ <- leakEqualities blame cs
+infer (Fun (view paramPat -> p) e an) = do
+  (p, dom, ms, cs) <- inferPattern p
+  let tvs = boundTvs p ms
+
+  _ <- leakEqualities p cs
+
   (e, cod) <- local (typeVars %~ Set.union tvs) $
-    local (names %~ focus ms) $
-      infer e
-  pure (Fun p e (an, TyPi dom cod), TyPi dom cod)
+    local (names %~ focus ms) (infer e)
+
+  pure (Fun (PatParam p) e (an, TyArr dom cod), TyArr dom cod)
 
 infer (Literal l an) = pure (Literal l (an, ty), ty) where
   ty = litTy l

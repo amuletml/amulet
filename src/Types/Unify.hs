@@ -183,6 +183,10 @@ doSolve (ConImplies because not cs ts :<| xs) = do
       cs' = apply before cs
       ts' = apply before ts
 
+#ifdef TRACE_TC
+  traceM (displayS (pretty (ConImplies because not cs' ts')))
+#endif
+
   ((), sub) <- retcon (fmap DeadBranch) . capture .
     local (bindSkol .~ True) . local (don'tTouch .~ mempty) $
       doSolve cs'

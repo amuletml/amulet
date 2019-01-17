@@ -23,6 +23,7 @@ import Control.Arrow (second)
 import Control.Lens
 
 import Syntax.Implicits
+import Syntax.Transform
 import Syntax.Builtin
 import Syntax.Boolean
 import Syntax.Subst
@@ -201,7 +202,6 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
   globalInsnConTy <- silence $
     closeOver (BecauseOf inst) (TyPi (Implicit ctx) instHead)
 
-
   (instHead, skolSub) <- skolFreeTy (ByInstanceHead instHead ann) instHead
 
   scope <- view classes
@@ -233,8 +233,9 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
   methodSigs <- traverse (closeOver (BecauseOf inst) . apply sub) methodSigs
   classContext <- pure $ fmap (apply sub) classContext
   let methodNames = Map.mapKeys nameName methodSigs
+      addStuff = local (classes %~ mappend localAssums) . local (typeVars %~ mappend (Map.keysSet skolSub))
 
-  (Map.fromList -> methodMap, methods) <- fmap unzip . local (classes %~ mappend localAssums) $
+  (Map.fromList -> methodMap, methods) <- fmap unzip . addStuff $
     for bindings $ \case
       bind@(Binding v e _ an) -> do
         sig <- case Map.lookup v methodSigs of
@@ -427,7 +428,7 @@ reduceClassContext extra annot cons = do
            then First (Just x)
            else First Nothing
 
-  let addCtx' ((_, con, _):cons) = TyPi (Implicit con) . addCtx cons
+  let addCtx' ((_, con, _):cons) = TyPi (Implicit (deSkolFreeTy con)) . addCtx cons
       addCtx' [] = id
 
       addCtx ctx (TyPi x@Invisible{} k) = TyPi x (addCtx ctx k)
@@ -457,6 +458,11 @@ skolFreeTy motive ty = do
   vs <- for (Set.toList (ftv ty)) $ \v ->
     (v,) <$> freshSkol motive ty v
   pure (apply (Map.fromList vs) ty, Map.fromList vs)
+
+deSkolFreeTy :: Type Typed -> Type Typed
+deSkolFreeTy = transformType go where
+  go (TySkol v) = TyVar (v ^. skolVar)
+  go x = x
 
 nameName :: Var Desugared -> T.Text
 nameName (TgInternal x) = x
