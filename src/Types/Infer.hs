@@ -900,7 +900,7 @@ guardOnlyBindings :: MonadChronicles TypeError m
 guardOnlyBindings bs = go bs where
   go (Binding{}:xs) = go xs
   go (m@Matching{}:_) =
-    confesses (PatternRecursive m bs)
+    confesses (addBlame (BecauseOf m) (PatternRecursive m bs))
 
   go (TypedMatching{}:_) = error "TypedMatching in guardOnlyBindings"
   go [] = pure ()
