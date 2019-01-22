@@ -44,6 +44,7 @@ import Data.Semigroup
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.Text as T
 
+import Parser.Precedence
 import Parser.Wrapper
 import Parser.Context
 import Parser.Error
@@ -229,8 +230,11 @@ ReplSep :: { () }
     |        { () }
 
 Expr :: { Expr Parsed }
-     : ExprTyApp                { $1 }
-     | Expr Operator ExprTyApp  { withPos2 $1 $3 $ BinOp $1 $2 $3 }
+  : ExprOp                                     { fixupExpr $1 }
+
+ExprOp  :: { Expr Parsed }
+  : ExprTyApp                                  { $1 }
+  | ExprOp  Operator ExprTyApp                 { withPos2 $1 $3 $ BinOp $1 $2 $3 }
 
 ExprTyApp :: { Expr Parsed }
   : ExprApp                                    { $1 }
@@ -309,8 +313,8 @@ Section :: { Expr Parsed }
         : Expr                                { $1 }
         | access                              { withPos1 $1 $ AccessSection (getIdent $1) }
         | Operator                            { withPos1 $1 $ BothSection $1 }
-        | Expr Operator                       { withPos2 $1 $2 $ RightSection $1 $2 }
-        | Operator Expr                       { withPos2 $1 $2 $ LeftSection $1 $2 }
+        | ExprOp Operator                     { withPos2 $1 $2 $ RightSection (fixupExpr $1) $2 }
+        | Operator ExprOp                     { withPos2 $1 $2 $ LeftSection $1 (fixupExpr $2) }
 
 NullSection :: { Maybe (Expr Parsed) }
   :                                           { Nothing }
@@ -412,15 +416,15 @@ Lit :: { Located Lit }
     | true                 { lPos1 $1 $ LiBool True }
     | false                { lPos1 $1 $ LiBool False }
 
--- | An alternative to Pattern which uses TypeProd instead of Type, suitable for
--- usage in match arms.
+-- | An alternative to Pattern which uses TypeOp instead of Type,
+-- suitable for usage in match arms.
 --
 -- This ensures '->' does not occur on the top level of a type annotation, and
 -- so there is no conflict with the '->' in an arm.
 MPattern :: { Pattern Parsed }
          : ArgP                   { $1 }
          | Con ArgP               { withPos2 $1 $2 $ Destructure (getL $1) (Just $2) }
-         | MPattern ':' TypeProd  { withPos2 $1 $3 $ PType $1 (getL $3) }
+         | MPattern ':' TypeOp    { withPos2 $1 $3 $ PType $1 (getL $3) }
          | MPattern as Var        { withPos2 $1 $3 $ PAs $1 (getL $3) }
 
 -- | An alternative to Pattern without any type pattern, suitable for usage in
@@ -463,14 +467,17 @@ Parameter :: { Parameter Parsed }
           : ArgP             { PatParam $1 }
 
 Type :: { Located (Type Parsed) }
-  : TypeProd                                      { $1 }
-  | TypeProd '->' Type                            { lPos2 $1 $3 $ TyPi (Anon (getL $1)) (getL $3) }
-  | TypeProd '=>' Type                            { lPos2 $1 $3 $ TyPi (Implicit (getL $1)) (getL $3) }
+  : TypeOp                                        { $1 }
+  | TypeOp '->' Type                              { lPos2 $1 $3 $ TyPi (Anon (getL $1)) (getL $3) }
+  | TypeOp '=>' Type                              { lPos2 $1 $3 $ TyPi (Implicit (getL $1)) (getL $3) }
   | forall ListE1(tyvar) '.' Type                 { lPos2 $1 $4 $ forallTy (map getName $2) (getL $4) }
 
-TypeProd :: { Located (Type Parsed) }
+TypeOp :: { Located (Type Parsed) }
+  : TypeOp_                                       { fmap fixupType $1 }
+
+TypeOp_ :: { Located (Type Parsed) }
   : TypeApp                                       { $1 }
-  | TypeProd TypeOperator TypeApp                 { lPos2 $1 $3 $ TyOperator (getL $1) $2 (getL $3) }
+  | TypeOp_ TypeOperator TypeApp                  { lPos2 $1 $3 $ TyOperator (getL $1) $2 (getL $3) }
 
 TypeApp :: { Located (Type Parsed) }
   : TypeAtom                                      { $1 }
@@ -509,6 +516,9 @@ data Located a = L a Span
 
 instance Spanned (Located a) where
   annotation (L _ s) = s
+
+instance Functor Located where
+  fmap f (L a s) = L (f a) s
 
 lexer :: (Token -> Parser a) -> Parser a
 lexer = (lexerContextScan >>=)

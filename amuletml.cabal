@@ -111,6 +111,7 @@ executable lexer
                      , Parser.Context
                      , Parser.Wrapper
                      , Parser.Unicode
+                     , Parser.Precedence
 
                      , Syntax
                      , Syntax.Var
@@ -156,6 +157,7 @@ library amulet
                      , Parser.Context
                      , Parser.Wrapper
                      , Parser.Unicode
+                     , Parser.Precedence
                      -- the AST
                      , Syntax
                      , Syntax.Let
