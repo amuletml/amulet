@@ -10,7 +10,7 @@
    actions:
 
     * Determines what variable every identifier is pointing to, including
-      module variables and handling ambiguous variables.
+      a module's variables and handling ambiguous variables.
 
     * Handles module definitions and @open@s.
 
@@ -41,18 +41,15 @@ import Data.Sequence (Seq)
 import Data.Foldable
 import Data.Function
 import Data.Functor
-import Data.Spanned
 import Data.Reason
 import Data.Triple
 import Data.Maybe
 import Data.These
-import Data.Span
 import Data.List
 
 import Syntax.Resolve.Toplevel
 import Syntax.Resolve.Scope
 import Syntax.Resolve.Error
-import Syntax.Builtin
 import Syntax.Pretty
 import Syntax.Subst
 
@@ -256,39 +253,7 @@ reExpr (Match e ps a) = do
 reExpr r@(Function [] a) = dictates (ArisingFrom EmptyMatch (BecauseOf r)) $> junkExpr a
 reExpr (Function ps a) = flip Function a <$> traverse reArm ps
 
-reExpr o@BinOp{} = do
-  (es, os) <- reOp [] [] o
-  let ([x], []) = popUntil es os 0 AssocLeft
-  pure x
-    where
-      reOp :: MonadResolve m
-           => [Expr Resolved]
-           -> [(Expr Resolved, Int)]
-           -> Expr Parsed
-           -> m ([Expr Resolved], [(Expr Resolved, Int)])
-      reOp es ops (BinOp l o@VarRef{} r _) = do
-        (es', ops') <- reOp es ops l
-
-        ~o'@(VarRef op _) <- reExpr o
-        let (opre, oass) = precedenceOf precedence op
-
-        let (es'', ops'') = popUntil es' ops' opre oass
-        reOp es'' ((o', opre):ops'') r
-      reOp _ _ BinOp{} = error "BinOp with non-name operator"
-      reOp es ops e = (,ops) . (:es) <$> reExpr e
-
-      popUntil :: [Expr Resolved]
-               -> [(Expr Resolved, Int)]
-               -> Int -> Associativity
-               -> ([Expr Resolved], [(Expr Resolved, Int)])
-      popUntil es ((sop, spre):os) opre assoc
-        | (assoc == AssocLeft && spre >= opre) || (assoc == AssocRight && spre > opre)
-        = let (right:left:es') = es
-          in popUntil ( BinOp left sop right
-                              (mkSpanUnsafe (spanStart (annotation left)) (spanEnd (annotation right)))
-                        : es' ) os opre assoc
-      popUntil es os _ _ = (es, os)
-
+reExpr (BinOp l o r a) = BinOp <$> reExpr l <*> reExpr o <*> reExpr r <*> pure a
 reExpr (Hole v a) = Hole <$> tagVar v <*> pure a
 reExpr r@(Ascription e t a) = Ascription
                           <$> reExpr e
@@ -370,30 +335,7 @@ reType r (TyExactRows f) = TyExactRows <$> traverse (\(a, b) -> (a,) <$> reType 
 reType r (TyTuple ta tb) = TyTuple <$> reType r ta <*> reType r tb
 reType _ (TyWildcard _) = pure (TyWildcard Nothing)
 reType r (TyParens t) = TyParens <$> reType r t
-reType r o@TyOperator{} = do
-  (es, os) <- reOp [] [] o
-  let ([x], []) = popUntil es os 0 AssocLeft
-  pure x
-    where
-      reOp es ops (TyOperator lhs o rhs) = do
-        (es', ops') <- reOp es ops lhs
-        o' <- lookupTy o `catchJunk` r
-
-        let (opre, oass) = precedenceOf opPrecedence o'
-            (es'', ops'') = popUntil es' ops' opre oass
-        reOp es'' ((o', opre):ops'') rhs
-      reOp es ops e = (,ops) . (:es) <$> reType r e
-
-      popUntil es ((sop, spre):os) opre assoc
-        | (assoc == AssocLeft && spre >= opre) || (assoc == AssocRight && spre > opre)
-        = let (right:left:es') = es
-          in popUntil (op left sop right:es') os opre assoc
-      popUntil es os _ _ = (es, os)
-
-      op l o r
-        | o == tyTupleName = TyTuple l r
-        | otherwise = TyOperator l o r
-
+reType r (TyOperator tl o tr) = TyOperator <$> reType r tl <*> (lookupTy o `catchJunk` r) <*> reType r tr
 reType _ TyType = pure TyType
 
 reWholePattern :: forall m. MonadResolve m
@@ -491,48 +433,6 @@ reMethod b@(Matching (Capture var _) bod an) = do
 reMethod b@Matching{} =
   confesses (ArisingFrom IllegalMethod (BecauseOf b))
 reMethod TypedMatching{} = error "reBinding TypedMatching{}"
-
-data Associativity = AssocLeft | AssocRight
-  deriving (Eq, Show)
-
-precedenceOf :: (T.Text -> (Int, Associativity)) -> Var Resolved -> (Int, Associativity)
-precedenceOf f (TgName n _) = f n
-precedenceOf f (TgInternal n) = f n
-
-precedence :: T.Text -> (Int, Associativity)
-precedence t
-  | T.isPrefixOf "@@" t = (2, AssocRight)
-  | T.isPrefixOf "**" t = (10, AssocRight)
-
-  | T.isPrefixOf "*" t = (9, AssocLeft)
-  | T.isPrefixOf "/" t = (9, AssocLeft)
-  | T.isPrefixOf "%" t = (9, AssocLeft)
-
-  | T.isPrefixOf "+" t = (8, AssocLeft)
-  | T.isPrefixOf "-" t = (8, AssocLeft)
-
-  | T.isPrefixOf "::" t = (7, AssocRight)
-
-  | T.isPrefixOf "@" t = (6, AssocRight)
-  | T.isPrefixOf "^" t = (6, AssocRight)
-
-  | T.isPrefixOf "=" t = (5, AssocLeft)
-  | T.isPrefixOf "!" t = (5, AssocLeft)
-  | T.isPrefixOf "<" t = (5, AssocLeft)
-  | T.isPrefixOf ">" t = (5, AssocLeft)
-
-  | T.isPrefixOf "&&" t = (4, AssocLeft)
-  | T.isPrefixOf "||" t = (3, AssocLeft)
-
-  | T.isPrefixOf "&" t = (5, AssocLeft)
-  | T.isPrefixOf "|" t = (5, AssocLeft)
-
-  | otherwise = (11, AssocLeft)
-
-opPrecedence :: T.Text -> (Int, Associativity)
-opPrecedence t
-  | T.isPrefixOf "*" t  = (9, AssocRight)
-  | otherwise = precedence t
 
 resolveOpen :: MonadResolve m => Var Parsed -> Maybe T.Text -> (Var Resolved -> m a) -> m a
 resolveOpen name as m = do
