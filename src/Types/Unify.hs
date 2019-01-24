@@ -188,7 +188,7 @@ doSolve (ConImplies because not cs ts :<| xs) = do
   traceM (displayS (pretty (ConImplies because not cs' ts')))
 #endif
 
-  ((), sub) <- retcon (fmap DeadBranch) . capture .
+  ((), sub) <- retcon (fmap (addBlame because . DeadBranch)) . capture .
     local (bindSkol .~ True) . local (don'tTouch .~ mempty) $
       doSolve cs'
 
