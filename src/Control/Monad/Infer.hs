@@ -531,9 +531,9 @@ instance Note TypeError Style where
          ]
 
   formatNote f (ArisingFrom (DeadBranch e) r) =
-    formatNote f (ArisingFrom e r) <#>
-      vsep [ indent 2 $ bullet "Note: This branch will never be executed,"
-           , indent 4 "because it has unsatisfiable constraints" ]
+    vsep [ indent 2 $ "Note: This branch will never be executed,"
+         , indent 2 "because it has unsatisfiable constraints" ]
+     <#> formatNote f (ArisingFrom e r)
 
   formatNote f (ArisingFrom (UnsatClassCon _ (ConImplicit r _ _ t) NotAFun) r') =
     vsep [ indent 2 "No instance for" <+> (Right <$> displayType t) <+> "arising from use of the expression"

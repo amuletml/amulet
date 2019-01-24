@@ -1,0 +1,8 @@
+gadt-instance-fail.ml[21:18 ..21:30]: warning
+  Note: This branch will never be executed,
+  because it has unsatisfiable constraints
+   │ 
+21 │   let map_vec _ (Cons _) = Nil
+   │                  ^^^^^^^^^^^^^
+  Couldn't match actual type Z
+    with the type expected by the context, S 'n
