@@ -21,7 +21,7 @@ import Data.Spanned
 import Data.Span
 import Data.Data
 
-import Syntax.Pretty
+import Syntax
 
 import Text.Pretty.Semantic
 

@@ -36,7 +36,7 @@ import Syntax.Subst
 import Syntax.Types
 import Syntax.Let
 import Syntax.Var
-import Syntax.Pretty as Syntax
+import Syntax
 
 import Types.Infer.Constructor
 import Types.Infer.Pattern
@@ -64,7 +64,7 @@ inferProgram env ct = fmap fst <$> runInfer env (inferProg ct)
 -- appropriate 'Wrapper's, and performing /some/ level of desugaring.
 check :: forall m. MonadInfer Typed m => Expr Desugared -> Type Typed -> m (Expr Typed)
 check e oty@TyPi{} | isSkolemisable oty = do
-  (wrap, ty, scope) <- skolemise (ByAscription e oty) oty
+  (wrap, ty, scope) <- skolemise (ByAscription (annotation e) oty) oty
   local (classes %~ mappend scope) $ do
     e <- check e ty
     pure (ExprWrapper wrap e (annotation e, oty))

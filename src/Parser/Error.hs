@@ -17,7 +17,7 @@ import Text.Pretty.Note
 import Text.Pretty
 import Parser.Token
 
-import Syntax.Pretty
+import Syntax
 
 -- | How this token or construct was terminated
 data Terminator

@@ -26,7 +26,6 @@ import Types.Wellformed
 
 import Syntax.Implicits hiding (overlap, spine)
 import Syntax.Builtin
-import Syntax.Pretty
 import Syntax.Subst
 import Syntax
 

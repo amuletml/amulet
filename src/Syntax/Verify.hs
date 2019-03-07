@@ -25,10 +25,10 @@ import Syntax.Verify.Pattern
 import Syntax.Verify.Error
 
 import Syntax.Builtin (tyUnit, tyLazy, forceName)
-import Syntax.Pretty
 import Syntax.Subst
 import Syntax.Types
 import Syntax.Let
+import Syntax
 
 import Language.Lua.Parser
 

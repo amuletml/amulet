@@ -16,7 +16,6 @@ import Types.Infer (inferProgram)
 import Syntax.Resolve (resolveProgram)
 import Syntax.Desugar (desugarProgram)
 import Syntax.Builtin
-import Syntax.Pretty()
 
 import Core.Simplify
 import Core.Lower

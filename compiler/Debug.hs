@@ -7,8 +7,8 @@ module Debug
 import Control.Lens
 
 import Control.Monad.Infer
-import Syntax.Pretty
 import Syntax.Types
+import Syntax
 
 import Core.Core (Stmt)
 import Core.Var

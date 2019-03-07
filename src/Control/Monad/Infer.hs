@@ -59,9 +59,9 @@ import Syntax.Transform
 import Syntax.Implicits
 import Syntax.Boolean
 import Syntax.Builtin
-import Syntax.Pretty
 import Syntax.Types
 import Syntax.Subst
+import Syntax
 
 type MonadInfer p m =
   ( MonadChronicles TypeError m

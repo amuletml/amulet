@@ -15,7 +15,7 @@ import Control.Monad
 
 import Hedgehog
 
-import Syntax.Pretty
+import Syntax
 
 prop_unifyMakesGoodCoercion :: Property
 prop_unifyMakesGoodCoercion = property $ do

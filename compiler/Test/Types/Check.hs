@@ -20,8 +20,6 @@ import Syntax.Desugar (desugarProgram)
 import Syntax.Types (difference, toMap)
 import Syntax.Builtin
 
-import Syntax.Pretty()
-
 import qualified Text.Pretty.Note as N
 import Text.Pretty.Semantic
 

@@ -1,7 +1,7 @@
-{-# LANGUAGE FlexibleInstances, FlexibleContexts, UndecidableInstances,
-   StandaloneDeriving, GeneralizedNewtypeDeriving, DerivingStrategies,
-   TypeFamilies, TemplateHaskell, MultiParamTypeClasses,
-   FunctionalDependencies #-}
+{-# LANGUAGE FlexibleInstances, FlexibleContexts, UndecidableInstances
+  , StandaloneDeriving, GeneralizedNewtypeDeriving, DerivingStrategies
+  , TypeFamilies, TemplateHaskell, MultiParamTypeClasses
+  , FunctionalDependencies #-}
 module Syntax.Types
   ( Telescope, one, foldTele, foldTeleM, teleFromList, mapTele, traverseTele, teleToList
   , Scope(..), namesInScope, inScope
@@ -23,8 +23,8 @@ import Control.Lens
 
 import Syntax.Implicits
 import Syntax.Boolean
-import Syntax.Pretty
 import Syntax.Subst
+import Syntax
 
 -- A bag of bindings, returned from pattern match checking
 newtype Telescope p =

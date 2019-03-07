@@ -9,8 +9,6 @@ import qualified Data.Text as T
 import Parser.Wrapper (runParser)
 import Parser
 
-import Syntax.Pretty()
-
 import qualified Text.Pretty.Note as N
 import Text.Pretty.Semantic
 

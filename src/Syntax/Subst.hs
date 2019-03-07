@@ -24,8 +24,8 @@ import qualified Data.Set as Set
 import Control.Arrow (second)
 import Control.Lens
 
+import Syntax.Type
 import Syntax.Var
-import Syntax
 
 type Subst p = Map.Map (Var p) (Type p)
 

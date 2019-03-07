@@ -25,7 +25,7 @@ import Data.List hiding (insert, lookup)
 
 import Control.Lens
 
-import Syntax.Pretty hiding ((:>))
+import Syntax hiding ((:>))
 import Prelude hiding (lookup)
 
 -- | An obligation the solver needs to resolve if it chose this

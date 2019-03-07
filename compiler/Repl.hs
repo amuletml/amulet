@@ -40,7 +40,7 @@ import qualified Syntax.Builtin as Bi
 import Syntax.Resolve (resolveProgram)
 import Syntax.Desugar (desugarProgram)
 import Syntax.Verify
-import Syntax.Pretty (displayType)
+import Syntax (displayType)
 import qualified Syntax.Var as S
 import qualified Syntax as S
 
