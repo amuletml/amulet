@@ -56,8 +56,10 @@ import Text.Pretty.Semantic
 import Prelude hiding (lookup)
 
 #ifdef TRACE_TC
+
 import Text.Show.Pretty (ppShow)
 import Debug.Trace
+
 #endif
 
 data SolveScope
@@ -265,29 +267,26 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
   traceM (displayS (pretty (apply sub ohno)))
 #endif
 
-  x <- view depth
-  if length x >= 10
-     then confesses (ClassStackOverflow reason x cons)
-     else case lookup cons scope of
-           xs | allSameHead xs
-              , concreteUnderOne cons || hasExactMatch cons xs
-              , applic <- filter (applicable cons scope) xs
-              , not (null applic) -> do
-             let imp = pickBestPossible applic
+  case lookup cons scope of
+    xs | allSameHead xs
+       , concreteUnderOne cons || hasExactMatch cons xs
+       , applic <- filter (applicable cons scope) xs
+       , not (null applic) -> do
+      let imp = pickBestPossible applic
 
 #ifdef TRACE_TC
-             traceM (displayS (pretty var <+> pretty (imp ^. implVar) <+> pretty (imp ^. implType)))
+      traceM (displayS ("best possible:" <+> pretty var <+> pretty (imp ^. implVar) <+> pretty (imp ^. implType)))
 #endif
 
-             w <- local (depth %~ (cons :)) $
-               useImplicit reason cons scope imp
-             solveCoSubst . at var ?= w
-           _ -> do
+      w <- local (depth %~ (cons :)) $
+        useImplicit reason cons scope imp
+      solveCoSubst . at var ?= w
+    _ -> do
 #ifdef TRACE_TC
-             traceM "  propagated"
+      traceM "  propagated"
 #endif
-             solveCoSubst . at var ?= ExprApp (VarRef var (annotation reason, cons))
-             tell (pure (apply sub ohno))
+      solveCoSubst . at var ?= ExprApp (VarRef var (annotation reason, cons))
+      tell (pure (apply sub ohno))
 
 allSameHead :: [Implicit Typed] -> Bool
 allSameHead (x:xs) = all (matches (x ^. implHead) . view implHead) xs
@@ -310,6 +309,8 @@ useImplicit :: forall m. MonadSolve m
 useImplicit reason ty scope (ImplChoice _ oty _ imp _ _) = go where
   go :: m (Wrapper Typed)
   go = do
+    guardClassOverflow reason ty
+
     w <- subsumes' reason scope oty ty
     let start = VarRef imp (annotation reason, oty)
     pure (ExprApp (ExprWrapper w start (annotation reason, ty)))
@@ -913,6 +914,15 @@ countConstructors (TyParens t) = countConstructors t
 countConstructors (TyRows r rs) = countConstructors r + foldMap (countConstructors . snd) rs
 countConstructors (TyExactRows rs) = foldMap (countConstructors . snd) rs
 countConstructors _ = 0
+
+guardClassOverflow :: MonadSolve m => SomeReason -> Type Typed -> m ()
+guardClassOverflow why cons = do
+  x <- view depth
+#ifdef TRACE_TC
+  traceM (displayS ("class stack:" <+> vsep (map pretty x)))
+#endif
+  when (length x >= 10) $
+    confesses (ClassStackOverflow why x cons)
 
 
 newtype InField = InField Text
