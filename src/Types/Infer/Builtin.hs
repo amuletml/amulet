@@ -6,11 +6,13 @@ module Types.Infer.Builtin where
 import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
+import Data.Foldable
 import Data.Spanned
 import Data.Reason
 
 import Control.Monad.Infer
 import Control.Lens
+
 
 import Syntax.Transform
 import Syntax.Builtin
@@ -160,6 +162,27 @@ killWildcard :: Type Typed -> Type Typed
 killWildcard = transformType go where
   go (TyWildcard (Just tau)) = killWildcard tau
   go x = x
+
+checkWildcard :: MonadChronicles TypeError m => Reasonable f p => f p -> Type p -> m ()
+checkWildcard _ TyType{} = pure ()
+checkWildcard _ TyCon{} = pure ()
+checkWildcard _ TyVar{} = pure ()
+checkWildcard _ TyPromotedCon{} = pure ()
+checkWildcard _ TySkol{} = pure ()
+checkWildcard _ TyWithConstraints{} = pure ()
+checkWildcard e TyWildcard{} = confesses (WildcardNotAllowed (BecauseOf e))
+checkWildcard e (TyApp f x) = checkWildcard e f *> checkWildcard e x
+checkWildcard e (TyPi b x) = flip (*>) (checkWildcard e x) $
+  case b of
+    Anon t -> checkWildcard e t
+    Implicit t -> checkWildcard e t
+    Invisible _ t -> traverse_ (checkWildcard e) t
+checkWildcard e (TyRows t rs) = checkWildcard e t *> traverse_ (checkWildcard e . snd) rs
+checkWildcard e (TyExactRows rs) = traverse_ (checkWildcard e . snd) rs
+checkWildcard e (TyTuple a b) = checkWildcard e a *> checkWildcard e b
+checkWildcard e (TyOperator l _ r) = checkWildcard e l *> checkWildcard e r
+checkWildcard e (TyParens t) = checkWildcard e t
+
 
 data SkipImplicit = DoSkip | Don'tSkip
   deriving (Eq, Show, Ord)
