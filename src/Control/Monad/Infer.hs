@@ -130,6 +130,7 @@ data TypeError where
   CanNotVta :: Type Typed -> Type Desugared -> TypeError
 
   NotPromotable :: Pretty (Var p) => Var p -> Type p -> Doc -> TypeError
+  WildcardNotAllowed :: SomeReason -> TypeError
 
 data WhyInstantiate = Expression | Subsumption
 data WhyUnsat
@@ -428,6 +429,8 @@ instance Pretty TypeError where
          , indent 2 "to visible type argument" <+> displayType arg
          ]
 
+  pretty WildcardNotAllowed{} = "Type wildcard not allowed here"
+
   pretty (PatternRecursive _ _) = string "pattern recursive error should be formatNoted"
   pretty (DeadBranch e) = string "dead branch error should be formatNoted" <+> pretty e
   pretty (UnsatClassCon _ t _) = string "unsatClassCon" <+> pretty t
@@ -441,6 +444,7 @@ instance Spanned TypeError where
   annotation (WrongClass x _) = annotation x
   annotation (UndefinedMethods _ _ x) = annotation x
   annotation (InvalidContext _ x _) = annotation x
+  annotation (WildcardNotAllowed x) = annotation x
   annotation x = error (show (pretty x))
 
 instance Note TypeError Style where

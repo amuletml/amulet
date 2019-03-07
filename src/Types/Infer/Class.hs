@@ -33,6 +33,7 @@ import Syntax.Var
 import Syntax
 
 import {-# SOURCE #-} Types.Infer
+import Types.Infer.Builtin
 import Types.Kinds
 import Types.Unify
 
@@ -69,6 +70,7 @@ inferClass clss@(Class name _ ctx _ methods classAnn) = do
   local (names %~ focus (one name k <> scope params)) $ do
     -- Infer the types for every method
     (decls, rows) <- fmap unzip . for signatures $ \meth@(MethodSig method ty _) -> do
+      checkWildcard meth ty
       ty <- silence $ -- Any errors will have been caught by the resolveClassKind
         resolveKind (BecauseOf meth) ty
       withHead <- closeOver (BecauseOf meth) $
@@ -179,6 +181,9 @@ inferClass _ = error "not a class"
 
 inferInstance :: forall m. MonadInfer Typed m => Toplevel Desugared -> m (Toplevel Typed, Var Typed, Type Typed)
 inferInstance inst@(Instance clss ctx instHead bindings ann) = do
+  traverse_ (checkWildcard inst) ctx
+  checkWildcard inst instHead
+
   ClassInfo clss classHead methodSigs classContext classCon classConTy classAnn defaults minimal <-
     view (classDecs . at clss . non undefined)
 

@@ -22,7 +22,9 @@ inferCon :: MonadInfer Typed m
          -> Constructor Desugared
          -> m ( (Var Typed, Type Typed)
               , Constructor Typed)
+
 inferCon ret con@(ArgCon nm t ann) = do
+  checkWildcard con t
   ty' <- resolveKind (BecauseOf con) t
   res <- closeOver (BecauseOf con) $ TyArr ty' ret
   pure ((nm, res), ArgCon nm ty' (ann, res))
@@ -32,7 +34,7 @@ inferCon ret' con@(UnitCon nm ann) = do
   pure ((nm, ret), UnitCon nm (ann, ret))
 
 inferCon ret c@(GeneralisedCon nm cty ann) = do
-
+  checkWildcard c cty
   cty <- condemn $ resolveKind (BecauseOf c) cty
   var <- genName
   _ <- condemn . retcons (gadtConShape (cty, ret) (gadtConResult cty)) $
