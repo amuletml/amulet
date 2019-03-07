@@ -11,8 +11,8 @@ import Types.Infer.Builtin
 import Types.Wellformed -- skols
 
 import Syntax.Transform
-import Syntax.Pretty
 import Syntax.Subst
+import Syntax
 
 import Text.Pretty.Semantic
 

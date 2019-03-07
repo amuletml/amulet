@@ -16,7 +16,6 @@ import Syntax.Resolve (resolveProgram)
 import Syntax.Desugar (desugarProgram)
 import Syntax.Verify
 import Syntax.Builtin
-import Syntax.Pretty()
 
 import Types.Infer (inferProgram)
 

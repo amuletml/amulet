@@ -74,8 +74,8 @@ import Data.Foldable
 import Data.These
 import Data.Maybe
 
-import Syntax.Pretty
 import Syntax.Types hiding (constructors)
+import Syntax
 
 import Types.Unify
 import Types.Infer.Pattern (skolGadt)

@@ -12,7 +12,6 @@ import Parser.Wrapper (runParser)
 import Parser
 
 import Syntax.Resolve (resolveProgram)
-import Syntax.Pretty()
 import Syntax.Builtin
 
 import qualified Text.Pretty.Note as N

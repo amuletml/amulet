@@ -8,7 +8,7 @@ import Data.Foldable
 import Data.Function
 import Data.List (unionBy)
 
-import Syntax.Pretty
+import Syntax
 
 wellformed :: (MonadChronicles TypeError m, MonadReader Env m) => Type Typed -> m ()
 wellformed tp = case tp of

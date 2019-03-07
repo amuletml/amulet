@@ -50,8 +50,8 @@ import Data.List
 import Syntax.Resolve.Toplevel
 import Syntax.Resolve.Scope
 import Syntax.Resolve.Error
-import Syntax.Pretty
 import Syntax.Subst
+import Syntax
 
 import Parser.Unicode
 

@@ -11,7 +11,7 @@ import Data.Spanned
 import Data.Reason
 import Data.Maybe
 
-import Syntax.Pretty
+import Syntax
 
 import Text.Pretty.Semantic
 import Text.Pretty.Note

@@ -162,12 +162,15 @@ library amulet
                      , Syntax
                      , Syntax.Let
                      , Syntax.Var
+                     , Syntax.Type
+                     , Syntax.Expr
                      , Syntax.Raise
                      , Syntax.Types
                      , Syntax.Subst
                      , Syntax.Pretty
                      , Syntax.Desugar
                      , Syntax.Builtin
+                     , Syntax.Toplevel
                      , Syntax.Transform
                      , Syntax.Implicits
                      , Syntax.Boolean

@@ -41,8 +41,8 @@ import Core.Var
 import qualified Syntax as S
 import Syntax.Let
 import Syntax.Var (Var, Typed, VarResolved(..))
-import Syntax.Pretty (Expr(..), Pattern(..), Skolem(..), Toplevel(..), Constructor(..), Arm(..))
 import Syntax.Transform
+import Syntax (Expr(..), Pattern(..), Skolem(..), Toplevel(..), Constructor(..), Arm(..))
 
 import Text.Pretty.Semantic (pretty)
 

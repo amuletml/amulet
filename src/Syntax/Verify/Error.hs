@@ -13,7 +13,7 @@ import Text.Pretty.Semantic
 import Text.Pretty.Note
 
 import Syntax.Verify.Pattern
-import Syntax.Pretty
+import Syntax
 
 import Language.Lua.Parser
 
