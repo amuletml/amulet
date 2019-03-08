@@ -23,17 +23,17 @@ inferCon :: MonadInfer Typed m
          -> m ( (Var Typed, Type Typed)
               , Constructor Typed)
 
-inferCon ret con@(ArgCon nm t ann) = do
+inferCon ret con@(ArgCon ac nm t ann) = do
   checkWildcard con t
   ty' <- resolveKind (BecauseOf con) t
   res <- closeOver (BecauseOf con) $ TyArr ty' ret
-  pure ((nm, res), ArgCon nm ty' (ann, res))
+  pure ((nm, res), ArgCon ac nm ty' (ann, res))
 
-inferCon ret' con@(UnitCon nm ann) = do
+inferCon ret' con@(UnitCon ac nm ann) = do
   ret <- closeOver (BecauseOf con) ret'
-  pure ((nm, ret), UnitCon nm (ann, ret))
+  pure ((nm, ret), UnitCon ac nm (ann, ret))
 
-inferCon ret c@(GeneralisedCon nm cty ann) = do
+inferCon ret c@(GadtCon ac nm cty ann) = do
   checkWildcard c cty
   cty <- condemn $ resolveKind (BecauseOf c) cty
   var <- genName
@@ -49,7 +49,7 @@ inferCon ret c@(GeneralisedCon nm cty ann) = do
   (cty, cons) <- runWriterT (generalise cty)
   let (sub, keep) = partitionEithers (map (uncurry simplify) cons)
   overall <- closeOverGadt (BecauseOf c) keep (apply (mconcat sub) cty)
-  pure ((nm, overall), GeneralisedCon nm overall (ann, overall))
+  pure ((nm, overall), GadtCon ac nm overall (ann, overall))
 
 closeOverGadt :: MonadInfer Typed m => SomeReason -> [(Type Typed, Type Typed)] -> Type Typed -> m (Type Typed)
 closeOverGadt r cons cty =

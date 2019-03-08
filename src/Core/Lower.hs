@@ -335,9 +335,9 @@ lowerProg' (LetStmt _ vs:prg) = do
 
 lowerProg' (TypeDecl _ var _ cons:prg) = do
   let cons' = map (\case
-                       UnitCon p (_, t) -> (p, mkCon p, lowerType t)
-                       ArgCon p _ (_, t) -> (p, mkCon p, lowerType t)
-                       GeneralisedCon p t _ -> (p, mkCon p, lowerType t))
+                       UnitCon _ p (_, t) -> (p, mkCon p, lowerType t)
+                       ArgCon _ p _ (_, t) -> (p, mkCon p, lowerType t)
+                       GadtCon _ p t _ -> (p, mkCon p, lowerType t))
                 cons
       ccons = map (\(_, a, b) -> (a, b)) cons'
       scons = map (\(a, _, b) -> (mkCon a, b)) cons'
