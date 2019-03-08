@@ -10,6 +10,8 @@ import Syntax.Var
 import Syntax.Let
 import Syntax
 
+import Data.Maybe
+
 -- | Extract all top-level variables declared within a statement,
 -- including those within child modules, that are visible outside that
 -- module.
@@ -23,10 +25,14 @@ extractToplevel (LetStmt Public d) = (foldMap bindVariables d, [])
 extractToplevel (LetStmt Private _) = mempty
 extractToplevel (ForeignVal Public v _ _ _) = ([v], [])
 extractToplevel (ForeignVal Private _ _ _ _) = mempty
-extractToplevel (TypeDecl Public v _ c) = (map ctor c, [v]) where
-  ctor (UnitCon v _) = v
-  ctor (ArgCon v _ _) = v
-  ctor (GeneralisedCon v _ _) = v
+extractToplevel (TypeDecl Public v _ c) = (mapMaybe ctor c, [v]) where
+  ctor (UnitCon a v _) = access a v
+  ctor (ArgCon a v _ _) = access a v
+  ctor (GadtCon a v _ _) = access a v
+
+  access Public = Just
+  access _ = const Nothing
+
 extractToplevel (TypeDecl Private _ _ _) = mempty
 extractToplevel (Open _ _) = mempty
 extractToplevel (Module Public v xs) =

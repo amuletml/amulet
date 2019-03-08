@@ -213,9 +213,9 @@ TyConArg :: { TyConArg Parsed }
          | '(' TyVar ':' Type ')' { TyAnnArg (getL $2) (getL $4) }
 
 Ctor :: { Constructor Parsed }
-     : conid                                   { withPos1 $1 $ UnitCon (getName $1) }
-     | conid of Type                           { withPos2 $1 $3 $ ArgCon (getName $1) (getL $3) }
-     | conid ':' Type                          { withPos2 $1 $3 $ GeneralisedCon (getName $1) (getL $3) }
+     : Access conid                                   { withPos1 $2    $ UnitCon $1 (getName $2) }
+     | Access conid of Type                           { withPos2 $2 $4 $ ArgCon  $1 (getName $2) (getL $4) }
+     | Access conid ':' Type                          { withPos2 $2 $4 $ GadtCon $1 (getName $2) (getL $4) }
 
 Repl :: { Either (Toplevel Parsed) (Expr Parsed) }
      : Top   ReplSep                           { Left $1 }
@@ -270,21 +270,21 @@ PreAtom :: { Expr Parsed }
      | qdotid Atom                            { withPos2 $1 $2 $ OpenIn (getName $1) $2 }
 
 Atom :: { Expr Parsed }
-     : Var                                    { withPos1 $1 (VarRef (getL $1)) }
-     | Con                                    { withPos1 $1 (VarRef (getL $1)) }
-     | Lit                                    { withPos1 $1 (Literal (getL $1)) }
-     | hole                                   { withPos1 $1 (Hole (Name (getHole $1))) }
-     | '_'                                    { withPos1 $1 (Hole (Name (T.singleton '_'))) }
-     | begin List1(Expr, ExprSep) end         { withPos2 $1 $3 $ Begin $2 }
-     | '(' ')'                                { withPos2 $1 $2 $ Literal LiUnit }
-     | '(' Section ')'                        { withPos2 $1 $3 $ Parens $2 }
+     : Var                                     { withPos1 $1 (VarRef (getL $1)) }
+     | Con                                     { withPos1 $1 (VarRef (getL $1)) }
+     | Lit                                     { withPos1 $1 (Literal (getL $1)) }
+     | hole                                    { withPos1 $1 (Hole (Name (getHole $1))) }
+     | '_'                                     { withPos1 $1 (Hole (Name (T.singleton '_'))) }
+     | begin List1(Expr, ExprSep) end          { withPos2 $1 $3 $ Begin $2 }
+     | '(' ')'                                 { withPos2 $1 $2 $ Literal LiUnit }
+     | '(' Section ')'                         { withPos2 $1 $3 $ Parens $2 }
      | '(' NullSection ',' List1(NullSection, ',') ')'
          { withPos2 $1 $5 $ tupleExpr ($2:$4) }
-     | '{' ListT(ExprRow, ',') '}'            { withPos2 $1 $3 $ Record $2 }
-     | '{' Expr with List1T(ExprRow, ',') '}' { withPos2 $1 $5 $ RecordExt $2 $4 }
-     | '[' List(Expr, ',') ']'                { withPos2 $1 $3 $ ListExp $2 }
+     | '{' ListT(ExprRow, ',') '}'             { withPos2 $1 $3 $ Record $2 }
+     | '{' Expr with List1T(ExprRow, ',') '}'  { withPos2 $1 $5 $ RecordExt $2 $4 }
+     | '[' List(Expr, ',') ']'                 { withPos2 $1 $3 $ ListExp $2 }
      | '[' Expr '|' List1(CompStmt, ',') ']'   { withPos2 $1 $5 $ ListComp $2 $4 }
-     | Atom access                            { withPos2 $1 $2 $ Access $1 (getIdent $2) }
+     | Atom access                             { withPos2 $1 $2 $ Access $1 (getIdent $2) }
 
 CompStmt :: { CompStmt Parsed }
   : let BindGroup                             { withPos1 $1 $ CompLet (reverse $2) }

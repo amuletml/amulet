@@ -128,8 +128,8 @@ resolveTyDeclKind reason tycon args cons = do
     local (names %~ focus scope) $ do
       for_ cons $ \case
         UnitCon{} -> pure ()
-        c@(ArgCon _ t _) -> () <$ retcons (addBlame (BecauseOf c)) (checkKind t TyType)
-        c@(GeneralisedCon _ t _) -> condemn $
+        c@(ArgCon _ _ t _) -> () <$ retcons (addBlame (BecauseOf c)) (checkKind t TyType)
+        c@(GadtCon _ _ t _) -> condemn $
           retcons (addBlame (BecauseOf c)) (inferGadtConKind c t tycon (mapMaybe argTvName args))
       pure kind
   let remake (TyVarArg v:as) (TyArr k r) = TyAnnArg v k:remake as r

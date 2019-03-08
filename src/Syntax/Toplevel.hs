@@ -64,11 +64,11 @@ deriving instance (Ord (Var p), Ord (Ann p)) => Ord (ClassItem p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (ClassItem p)
 
 data Constructor p
-  = UnitCon (Var p) (Ann p)
+  = UnitCon TopAccess (Var p) (Ann p)
   -- In ArgCon, the Type p is the type of the (sole) argument
-  | ArgCon (Var p) (Type p) (Ann p)
-  -- In GeneralisedCon, the Type p is the type of the overall thing
-  | GeneralisedCon (Var p) (Type p) (Ann p)
+  | ArgCon TopAccess (Var p) (Type p) (Ann p)
+  -- In GadtCon, the Type p is the type of the overall thing
+  | GadtCon TopAccess (Var p) (Type p) (Ann p)
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Constructor p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Constructor p)
@@ -148,6 +148,10 @@ instance (Pretty (Var p)) => Pretty [Toplevel p] where
   pretty = vcat . map pretty
 
 instance (Pretty (Var p)) => Pretty (Constructor p) where
-  pretty (UnitCon p _) = pretty p
-  pretty (ArgCon p t _) = pretty p <+> keyword "of" <+> pretty t
-  pretty (GeneralisedCon p t _) = pretty p <+> colon <+> pretty t
+  pretty (UnitCon a p _) = prettyAccess a $ pretty p
+  pretty (ArgCon a p t _) = prettyAccess a $ pretty p <+> keyword "of" <+> pretty t
+  pretty (GadtCon a p t _) = prettyAccess a $ pretty p <+> colon <+> pretty t
+
+prettyAccess :: TopAccess -> Doc -> Doc
+prettyAccess Public x = x
+prettyAccess Private x = keyword "private" <+> x

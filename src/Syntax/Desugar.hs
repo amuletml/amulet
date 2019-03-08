@@ -184,9 +184,9 @@ desugarProgram = traverse statement where
   field (Field f e a) = Field f <$> expr e <*> pure a
 
   ctor :: Constructor Resolved -> Constructor Desugared
-  ctor (UnitCon v a) = UnitCon v a
-  ctor (ArgCon v t a) = ArgCon v (ty t) a
-  ctor (GeneralisedCon v t a) = GeneralisedCon v (ty t) a
+  ctor (UnitCon ac v a) = UnitCon ac v a
+  ctor (ArgCon ac v t a) = ArgCon ac v (ty t) a
+  ctor (GadtCon ac v t a) = GadtCon ac v (ty t) a
 
   transListComp :: (Expr Resolved, [CompStmt Resolved], Ann Resolved)
                 -> Expr Desugared -> m (Expr Desugared)

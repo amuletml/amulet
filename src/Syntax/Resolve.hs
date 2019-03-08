@@ -112,17 +112,17 @@ resolveModule (d@(TypeDecl am t vs cs):rs) = do
     <$> traverse (resolveCons sc) (zip cs c')
     <*> resolveModule rs
 
-  where resolveCons _ (UnitCon _ a, v') = pure $ UnitCon v' a
-        resolveCons vs (r@(ArgCon _ t a), v') = ArgCon v' <$> extendTyvarN vs (reType r t) <*> pure a
-        resolveCons _  (r@(GeneralisedCon _ t a), v') = do
+  where resolveCons _ (UnitCon ac _ a, v') = pure $ UnitCon ac v' a
+        resolveCons vs (r@(ArgCon ac _ t a), v') = ArgCon ac v' <$> extendTyvarN vs (reType r t) <*> pure a
+        resolveCons _  (r@(GadtCon ac _ t a), v') = do
           let fvs = toList (ftv t)
           fresh <- traverse tagVar fvs
           t' <- extendTyvarN (zip fvs fresh) (reType r t)
-          pure (GeneralisedCon v' t' a)
+          pure (GadtCon ac v' t' a)
 
-        extractCons (UnitCon v _) = v
-        extractCons (ArgCon v _ _) = v
-        extractCons (GeneralisedCon v _ _) = v
+        extractCons (UnitCon _ v _) = v
+        extractCons (ArgCon _ v _ _) = v
+        extractCons (GadtCon _ v _ _) = v
 
 resolveModule (r@(Open name as):rs) =
   -- Opens hard-fail, as anything inside it will probably fail to resolve
