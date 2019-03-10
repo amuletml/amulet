@@ -170,10 +170,11 @@ library amulet
                      , Syntax.Pretty
                      , Syntax.Desugar
                      , Syntax.Builtin
+                     , Syntax.Boolean
                      , Syntax.Toplevel
                      , Syntax.Transform
                      , Syntax.Implicits
-                     , Syntax.Boolean
+                     , Syntax.Expr.Instances
                      -- Verifier
                      , Syntax.Verify
                      , Syntax.Verify.Error

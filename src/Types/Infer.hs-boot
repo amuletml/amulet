@@ -4,7 +4,7 @@ module Types.Infer
   ( inferProgram
   , closeOver
 
-  , infer, check, solveEx, deSkol
+  , infer, check, solveEx
   ) where
 
 import Prelude hiding (lookup)
@@ -27,5 +27,3 @@ check :: forall m. MonadInfer Typed m => Expr Desugared -> Type Typed -> m (Expr
 infer :: MonadInfer Typed m => Expr Desugared -> m (Expr Typed, Type Typed)
 
 solveEx :: Type Typed -> Subst Typed -> Map.Map (Var Typed) (Wrapper Typed) -> Expr Typed -> Expr Typed
-
-deSkol :: Type Typed -> Type Typed

@@ -44,7 +44,7 @@ valueRepr getVal = do
       L.pushnil
       let loop :: L.Lua Bool -> L.Lua (Map.Map T.Text Value)
           loop cont = do
-            weDo <- cont `L.catchException` const (pure False)
+            weDo <- cont `L.catchException` \e -> False <$ L.liftIO (print e)
             if weDo
                then do
                  L.pushvalue (-2)

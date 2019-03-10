@@ -4,7 +4,7 @@ module Types.Infer
   ( inferProgram
   , closeOver
 
-  , infer, check, solveEx, deSkol
+  , infer, check, solveEx
   ) where
 
 import Prelude
@@ -193,17 +193,7 @@ infer (Literal l an) = pure (Literal l (an, ty), ty) where
 infer (ListExp es an) = do
   t <- freshTV
   es <- traverse (`check` t) es
-  let build [] =
-        ExprWrapper (TypeApp t) (VarRef nILName (an, nILTy))
-          (an, ty)
-      build (x:xs) =
-        App (ExprWrapper (TypeApp t)
-              (VarRef cONSName (an, cONSTy)) (an, cONSTy' t))
-          (Tuple [x, build xs]
-            (an, TyTuple t ty))
-          (an, ty)
-      ty = TyApp tyList t
-  pure (build es, ty)
+  pure (buildList an t es, TyApp tyList t)
 
 infer (Let ns b an) = do
   (ns, ts, vars) <- inferLetTy localGenStrat Propagate ns
@@ -689,6 +679,21 @@ inferLetTy closeOver strategy vs =
       tc [] = pure ([], mempty, mempty)
    in tc sccs
 
+buildList :: Ann Resolved -> Type Typed -> [Expr Typed] -> Expr Typed
+buildList an tau [] =
+  ExprWrapper (TypeApp tau)
+    (VarRef nILName (an, nILTy))
+    (an, ty)
+  where ty = TyApp tyList tau
+
+buildList an tau (x:xs) =
+  App (ExprWrapper (TypeApp tau)
+        (VarRef cONSName (an, cONSTy)) (an, cONSTy' tau))
+    (Tuple [x, buildList an tau xs]
+      (an, TyTuple tau ty))
+    (an, ty)
+  where ty = TyApp tyList tau
+
 fakeLetTys :: MonadInfer Typed m
            => [Binding Desugared]
            -> m ([Binding Typed], Telescope Typed, Set.Set (Var Typed))
@@ -711,6 +716,7 @@ fakeLetTys bs = do
   tele <- go bs
   pure (mempty, tele, mempty)
 
+
 data PatternStrat = Fail | Propagate
 
 skolCheck :: MonadInfer Typed m => Var Typed -> SomeReason -> Type Typed -> m (Type Typed)
@@ -723,8 +729,10 @@ skolCheck var exp ty = do
   env <- view typeVars
   unless (null (sks `Set.difference` env)) $
     confesses (blameSkol (EscapedSkolems (Set.toList (skols ty)) ty) (var, exp))
-  checkAmbiguous var exp (deSkol ty)
-  pure (deSkol ty)
+
+  let t = deSkol ty
+  checkAmbiguous var exp t
+  pure t
 
 checkAmbiguous :: MonadInfer Typed m => Var Typed -> SomeReason -> Type Typed -> m ()
 checkAmbiguous var exp tau = go mempty tau where
@@ -835,42 +843,6 @@ firstForall :: MonadInfer Typed m => Type Desugared -> Type Typed -> m (TyBinder
 firstForall _ (TyPi x@Invisible{} k) = pure (x, k)
 firstForall a e = confesses (CanNotVta e a)
 
-value :: Expr a -> Bool
-value Fun{} = True
-value Literal{} = True
-value Function{} = True
-value (Let _ e _) = value e
-value (Parens e _) = value e
-value Tuple{} = True
-value (Begin es _) = value (last es)
-value Syntax.Lazy{} = True
-value TupleSection{} = True
-value Record{} = True
-value RecordExt{} = True
-value VarRef{} = False
-value If{} = False
-value App{} = False
-value Match{} = False
-value BinOp{} = False
-value Hole{} = False
-value (Ascription e _ _) = value e
-value (Vta e _ _) = value e
-value Access{} = False
-value LeftSection{} = True
-value RightSection{} = True
-value BothSection{} = True
-value AccessSection{} = True
-value ListExp{} = True
-value ListComp{} = False
-value (OpenIn _ e _) = value e
-value (ExprWrapper _ e _) = value e
-
-isFn :: Expr a -> Bool
-isFn Fun{} = True
-isFn (OpenIn _ e _) = isFn e
-isFn (Ascription e _ _) = isFn e
-isFn (ExprWrapper _ e _) = isFn e
-isFn _ = False
 
 deSkol :: Type Typed -> Type Typed
 deSkol = go mempty where

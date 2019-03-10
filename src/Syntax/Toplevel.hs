@@ -17,6 +17,7 @@ import Data.Data
 
 import Text.Pretty.Semantic
 
+import Syntax.Expr.Instances ()
 import Syntax.Type
 import Syntax.Expr
 import Syntax.Var
