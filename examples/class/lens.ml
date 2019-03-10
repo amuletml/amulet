@@ -77,7 +77,6 @@ let second k (a, b) = (a,) <$> k b
 let l .~ b = runId & l (fun _ -> Identity b)
 let s ^. l = getConst (l Const s)
 
-type list 'a = Nil | Cons of 'a * list 'a
 let (::) x y = Cons (x, y)
 
 instance show 'a => show (list 'a) begin
@@ -87,17 +86,12 @@ instance show 'a => show (list 'a) begin
 end
 
 instance functor list begin
-  let (<$>) f = function
-    | Nil -> Nil
-    | Cons (x, xs) -> Cons (f x, f <$> xs)
+  let f <$> xs = [ f x | with x <- xs ]
 end
 
 instance applicative list begin
-  let pure x = x :: Nil
-  let f <*> x =
-    match f, x with
-    | Cons (f, fs), Cons (x, xs) -> f x :: (fs <*> xs)
-    | _, _ -> Nil
+  let pure x = [x]
+  let fs <*> xs = [ f x | with f <- fs, with x <- xs]
 end
 
 class traversable 't begin
@@ -118,14 +112,16 @@ instance monoid (list 'a) begin
 end
 
 let foldMapOf l f = getConst & l (Const & f)
-let toListOf l = foldMapOf l (fun x -> x :: Nil)
+let toListOf l = foldMapOf l (fun x -> [x])
 
-let f = toListOf (traverse & first) ((1, ()) :: Nil)
+let f = toListOf (traverse & first) [(1, ())]
 let f =
-  let xs = (1, ()) :: (1, ()) :: (1, ()) :: Nil
+  let xs = [(1, ()), (1, ()), (1, ())]
   print (toListOf (traverse & first) xs)
+
 let () =
   let p = (1, "foo")
   print (p |> second .~ 2)
-  let xs = p :: p :: p :: Nil
+  let xs = [p, p, p]
   print (toListOf (traverse & first) xs)
+  ()
