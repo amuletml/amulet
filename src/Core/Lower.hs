@@ -120,6 +120,7 @@ lowerAt (S.Let vs t _) ty = do
   vs' <- lowerLet vs
   let k = foldr ((.) . C.Let) id vs'
   k <$> lowerAtTerm t ty
+
 lowerAt (S.If c t e _) ty = do
   c' <- lowerAtAtom c C.tyBool
   t' <- lowerAtTerm t ty
@@ -127,6 +128,7 @@ lowerAt (S.If c t e _) ty = do
   let tc = C.Arm (PatLit LitTrue) C.tyBool t' [] []
       te = C.Arm (PatLit LitFalse)  C.tyBool e' [] []
   pure $ C.Match c' [tc, te]
+
 lowerAt (Fun param bd an) (ForallTy Irrelevant a b) =
   let p = param ^. S.paramPat
       operational (PType p _ _) = operational p
@@ -140,10 +142,13 @@ lowerAt (Fun param bd an) (ForallTy Irrelevant a b) =
           Lam (TermArgument arg a) <$> lowerMatch' arg a [ (p, Nothing, bd')
                                                          , (S.Wildcard undefined, Nothing, fail) ]
 
+lowerAt x@Fun{} t = error ("lower function " ++ show (pretty x) ++ " at " ++ show (pretty t))
+
 lowerAt (Begin [x] _) t = lowerAt x t
 lowerAt (Begin xs _) t = lowerAtTerm (last xs) t >>= flip (foldrM bind) (init xs) where
   bind e r = flip C.Let r . One <$> (build <$> fresh ValueVar <*> lowerBothTerm e)
   build a (b, c) = (a, c, b)
+
 lowerAt (S.Match ex cs an) ty = do
   (ex', _) <- lowerBothAtom ex
   cs' <- for cs (\(Arm pat g e) -> (pat,,)
@@ -151,6 +156,7 @@ lowerAt (S.Match ex cs an) ty = do
                   <*> lowerAtTerm e ty)
   fail <- patternMatchingError "match expression" (fst an) ty
   lowerMatch ex' (cs' ++ [(S.Wildcard undefined, Nothing, fail)])
+
 lowerAt (Access r k _) ty = do
   (r', rt) <- lowerBothAtom r
   (iv, var) <- (,) <$> fresh ValueVar <*> fresh ValueVar
