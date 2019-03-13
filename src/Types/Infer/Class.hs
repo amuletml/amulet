@@ -419,7 +419,7 @@ reduceClassContext extra annot cons = do
       dedup scope [] = ([], [], scope)
       (aliases, stillNeeded, usable) = dedup mempty needs
 
-  let simpl :: ImplicitScope Typed -> [Need Typed] -> ([Binding Typed], [Need Typed])
+      simpl :: ImplicitScope Typed -> [Need Typed] -> ([Binding Typed], [Need Typed])
       simpl scp ((var, con, why):needs)
         | superclasses <- filter ((== Superclass) . view implSort) $ lookup con scope
         , First (Just implicit) <- foldMap (isUsable scp) superclasses
@@ -434,30 +434,32 @@ reduceClassContext extra annot cons = do
            then First (Just x)
            else First Nothing
 
-  let addCtx' ((_, con, _):cons) = TyPi (Implicit (deSkolFreeTy con)) . addCtx cons
+      addCtx' ((_, con, _):cons) = TyPi (Implicit (deSkolFreeTy con)) . addCtx cons
       addCtx' [] = id
 
       addCtx ctx (TyPi x@Invisible{} k) = TyPi x (addCtx ctx k)
       addCtx ctx ty = addCtx' ctx ty
 
-  let addFns ((var, con, _):cons) = fun var con . addFns cons
+      addFns ((var, con, _):cons) = fun var con . addFns cons
       addFns [] = id
 
       shoveFn cs (ExprWrapper w e a) = ExprWrapper w (shoveFn cs e) a
       shoveFn cs e = addFns cs e
 
-  let addLet ex = mkLet (aliases ++ simplif) ex (annotation ex, getType ex)
+      addLet ex = mkLet (aliases ++ simplif) ex (annotation ex, getType ex)
       shove (ExprWrapper w e a) = ExprWrapper w (shove e) a
       shove (Fun x@EvParam{} e a) = Fun x (shove e) a
       shove x = addLet x
 
-  let wrap flv =
+      wrap flv =
         shoveFn stillNeeded' . (case flv of { Full -> shove; _ -> id })
 
   pure (addCtx stillNeeded', wrap, stillNeeded')
 
 fun :: Var Typed -> Type Typed -> Expr Typed -> Expr Typed
-fun v t e = Fun (EvParam (Capture v (annotation e, t))) e (annotation e, TyArr t (getType e))
+fun v t e = ExprWrapper (TypeAsc ty) (Fun (EvParam (Capture v (an, t))) e (an, ty)) (an, ty) where
+  ty = TyArr t (getType e)
+  an = annotation e
 
 skolFreeTy :: MonadNamey m => SkolemMotive Typed -> Type Typed -> m (Type Typed, Subst Typed)
 skolFreeTy motive ty = do

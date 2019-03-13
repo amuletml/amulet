@@ -452,6 +452,7 @@ inferLetTy closeOver strategy vs =
                 let fakeCon = ConImplicit (head needed ^. _3) undefined (fst blame) (head needed ^. _2)
                  in confesses . addBlame (snd blame) $
                    UnsatClassCon (snd blame) fakeCon (GivenContextNotEnough (getTypeContext ty))
+
               when (not (isFn ex) && not (null cons)) $
                 confesses (addBlame (snd blame) (UnsatClassCon (snd blame) (head cons) NotAFun))
 
