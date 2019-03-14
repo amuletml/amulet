@@ -39,7 +39,7 @@ import Types.Unify
 
 import Text.Pretty.Semantic
 
-import Text.Show.Pretty
+import Text.Show.Pretty hiding (reify)
 
 import GHC.Stack
 
@@ -218,10 +218,11 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
 
   (ctx, mappend skolSub -> skolSub) <- skolFreeTy (ByInstanceHead ctx ann) (apply skolSub ctx)
 
-  (mappend skolSub -> sub, _, _) <- solve (pure (ConUnify (BecauseOf inst) undefined classHead instHead))
+  (mappend skolSub -> instSub, _, _) <- solve (pure (ConUnify (BecauseOf inst) undefined classHead instHead))
   localInsnConTy <- silence $
     closeOver (BecauseOf inst) (TyPi (Implicit ctx) instHead)
 
+  fullCtx <- genName
   (localAssums', instancePattern) <-
     let mkBinds x | x == tyUnit = pure (mempty, PLiteral LiUnit (ann, tyUnit))
         mkBinds (TyTuple a b) = do
@@ -231,23 +232,26 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
         mkBinds x = do
           var <- genName
           pure (singleton ann LocalAssum var x, Capture var (ann, x))
-    in mkBinds ctx
+        addFull (as, p) = (as, PAs p fullCtx (ann, ctx)) 
+     in addFull <$> mkBinds ctx
 
   let localAssums = insert ann InstSort instanceName globalInsnConTy localAssums'
 
-  methodSigs <- traverse (closeOver (BecauseOf inst) . apply sub) methodSigs
-  classContext <- pure $ fmap (apply sub) classContext
+  methodSigs <- traverse (closeOver (BecauseOf inst) . apply instSub) methodSigs
+  classContext <- pure $ fmap (apply instSub) classContext
   let methodNames = Map.mapKeys nameName methodSigs
       addStuff = local (classes %~ mappend localAssums) . local (typeVars %~ mappend (Map.keysSet skolSub))
 
-  (Map.fromList -> methodMap, methods) <- fmap unzip . addStuff $
+  (Map.fromList -> methodMap, Map.fromList -> methodDef, methods) <- fmap unzip3 . addStuff $
     for bindings $ \case
       bind@(Binding v e _ an) -> do
         sig <- case Map.lookup v methodSigs of
           Just x -> pure x
           Nothing -> confesses (WrongClass bind clss)
 
-        v' <- genNameFrom (nameName v)
+        let bindGroupTy = transplantPi globalInsnConTy (TyArr ctx sig)
+
+        v' <- genNameFrom (T.cons '$' (nameName v))
 
         (e, cs) <- listen $ check e sig
         (sub, wrap, deferred) <- condemn $ solve cs
@@ -260,28 +264,24 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
           confesses (addBlame reason (UnsatClassCon reason c (InstanceMethod ctx)))
 
         name <- genName
-        let reify an ty var =
-              case wrap' Map.! var of
-                ExprApp v -> v
-                x -> ExprWrapper x
-                       (Fun (EvParam (Capture name (an, ty))) (VarRef name (an, ty)) (an, TyArr ty ty))
-                       (an, ty)
-            mkBind var (VarRef var' _) | var == var' = const []
-            mkBind v e = (:[]) . Binding v e False
-        let addLet (ConImplicit _ _ var ty:cs) ex | an <- annotation ex =
-              addLet cs $ mkLet (mkBind var (reify an ty var) (an, ty))
-                ex (an, getType ex)
-            addLet (_:cs) ex = addLet cs ex
-            addLet [] ex = ex
-            shove cs (ExprWrapper w e a) = ExprWrapper w (shove cs e) a
-            shove cs x = addLet cs x
+        let shove cs (ExprWrapper w e a) = ExprWrapper w (shove cs e) a
+            shove cs x = addLet wrap' name cs x
+            fakeExp =
+              App (appArg instSub bindGroupTy (VarRef v' (an, bindGroupTy)))
+                  (VarRef fullCtx (an, ctx))
+                  (an, sig)
 
         pure ( (nameName v, v')
+             , (nameName v, fakeExp)
              , Binding v'
-                (Ascription
-                  (solveEx sig sub (wrap <> wrap') (shove deferred e))
-                    sig (an, sig))
-                True (an, sig))
+                (addArg skolSub bindGroupTy
+                  (Fun (EvParam instancePattern)
+                    (Ascription
+                      (solveEx sig sub (wrap <> wrap') (shove deferred e))
+                        sig (an, sig))
+                  (an, TyArr ctx sig)))
+               True
+               (an, bindGroupTy))
       _ -> error "not possible: non-Binding method"
 
   let needDefaults = methodNames `Map.difference` methodMap
@@ -298,6 +298,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
     . local (classes %~ mappend localAssums)
     . for (Map.toList needed) $ \(name, expr) -> do
     let ty = methodNames ! name
+        bindGroupTy = transplantPi globalInsnConTy (TyArr ctx ty)
         an = annotation expr
 
     (e, cs) <- listen $ check expr ty
@@ -311,28 +312,21 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
       confesses (addBlame reason (UnsatClassCon reason c (InstanceMethod ctx)))
 
     capture <- genName
-    let reify an ty var =
-          case wrap' Map.! var of
-            ExprApp v -> v
-            x -> ExprWrapper x
-                   (Fun (EvParam (Capture capture (an, ty))) (VarRef capture (an, ty)) (an, TyArr ty ty))
-                   (an, ty)
-        mkBind var (VarRef var' _) | var == var' = const []
-        mkBind v e = (:[]) . Binding v e False
-    let addLet (ConImplicit _ _ var ty:cs) ex | an <- annotation ex =
-          addLet cs $ mkLet (mkBind var (reify an ty var) (an, ty))
-            ex (an, getType ex)
-        addLet (_:cs) ex = addLet cs ex
-        addLet [] ex = ex
-        shove cs (ExprWrapper w e a) = ExprWrapper w (shove cs e) a
-        shove cs x = addLet cs x
+    let shove cs (ExprWrapper w e a) = ExprWrapper w (shove cs e) a
+        shove cs x = addLet wrap' capture cs x
 
     var <- genNameFrom name
-    let expr = solveEx ty sub (wrap <> wrap') (shove deferred e)
-    body <- expandEta ty expr
-    let bind = Binding var body False (an, ty)
+    body <- expandEta ty $ solveEx ty sub (wrap <> wrap') (shove deferred e)
+    let bind = Binding var (addArg skolSub bindGroupTy fun) False (an, bindGroupTy)
+        fun = Fun (EvParam instancePattern)
+                body
+                (an, TyArr ctx ty)
+        fakeExp =
+          App (appArg instSub bindGroupTy (VarRef var (an, bindGroupTy)))
+              (VarRef fullCtx (an, ctx))
+              (an, ty)
 
-    pure (Field name (VarRef var (an, ty)) (an, ty), bind)
+    pure (Field name fakeExp (an, ty), bind)
 
   (contextFields, cs) <- listen . for (Map.toList classContext) $ \(name, ty) -> do
     var <- genName
@@ -345,7 +339,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
              (ann, ty))
 
   let methodFields = flip map (Map.toList definedHere) $ \(name, ty) ->
-        Field name (VarRef (methodMap ! name) (ann, ty)) (ann, ty)
+        Field name (methodDef ! name) (ann, ty)
       whatDo = Map.toList (methodNames <> classContext)
       fields = methodFields ++ usedDefaults ++ contextFields
 
@@ -357,36 +351,45 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
     confesses (addBlame (BecauseOf inst)
       (UnsatClassCon (BecauseOf inst) (head unsolved) (InstanceClassCon classAnn)))
 
-  let appArg (TyPi (Invisible v _) rest) ex =
-        case Map.lookup v sub of
-          Just x -> appArg rest $ ExprWrapper (TypeApp x) ex (annotation ex, rest)
-          Nothing -> appArg rest $ ExprWrapper (TypeApp TyType) ex (annotation ex, rest)
-      appArg _ ex = ex
-
-      addArg ty@(TyPi (Invisible v k) rest) ex =
-        case Map.lookup v skolSub of
-          Just (TySkol s) -> ExprWrapper (TypeLam s (fromMaybe TyType k)) (addArg rest ex) (ann, ty)
-          _ ->
-            let fakeSkol = Skolem v v ty (ByConstraint ty)
-             in ExprWrapper (TypeLam fakeSkol (fromMaybe TyType k)) (addArg rest ex) (ann, ty)
-      addArg _ ex = ex
-
-      inside = case whatDo of
+  let inside = case whatDo of
         [(_, one)] -> solveEx one solution needed (fields ^. to head . fExpr)
         _ -> solveEx (TyExactRows whatDo) solution needed (Record fields (ann, TyExactRows whatDo))
 
-      fun = addArg globalInsnConTy $
+      fun = addArg skolSub globalInsnConTy $
               Fun (EvParam (PType instancePattern ctx (ann, ctx)))
-                (wrapper Full (mkLet (methods ++ defaultMethods)
-                  (App (appArg classConTy (VarRef classCon (ann, classConTy)))
+                (wrapper Full
+                  (App (appArg instSub classConTy (VarRef classCon (ann, classConTy)))
                     inside
                     (ann, instHead))
-                  (ann, instHead)))
+                  )
                 (ann, localInsnConTy)
       bind = Binding instanceName (Ascription fun globalInsnConTy (ann, globalInsnConTy)) True (ann, globalInsnConTy)
 
-  pure (LetStmt Public [bind], instanceName, globalInsnConTy)
+  pure (LetStmt Public (methods ++ defaultMethods ++ [bind]), instanceName, globalInsnConTy)
 inferInstance _ = error "not an instance"
+
+addArg :: Map.Map (Var Typed) (Type Typed) -> Type Typed -> Expr Typed -> Expr Typed
+addArg skolSub ty@(TyPi (Invisible v k) rest) ex =
+  case Map.lookup v skolSub of
+    Just (TySkol s) ->
+      ExprWrapper (TypeLam s (fromMaybe TyType k))
+        (addArg skolSub rest ex)
+        (annotation ex, TyPi (Invisible v k) (getType ex))
+    _ ->
+      let fakeSkol = Skolem v v ty (ByConstraint ty)
+       in ExprWrapper (TypeLam fakeSkol (fromMaybe TyType k)) (addArg skolSub rest ex) (annotation ex, TyPi (Invisible v k) (getType ex))
+addArg _ _ ex = ex
+
+appArg :: Map.Map (Var Typed) (Type Typed) -> Type Typed -> Expr Typed -> Expr Typed
+appArg sub (TyPi (Invisible v _) rest) ex =
+  case Map.lookup v sub of
+    Just x -> appArg sub rest $ ExprWrapper (TypeApp x) ex (annotation ex, rest)
+    Nothing -> appArg sub rest $ ExprWrapper (TypeApp TyType) ex (annotation ex, rest)
+appArg _ _ ex = ex
+
+transplantPi :: Type Typed -> Type Typed -> Type Typed
+transplantPi (TyPi b@Invisible{} rest) ty = TyPi b (transplantPi rest ty)
+transplantPi _ t = t
 
 reduceClassContext :: forall m. (MonadInfer Typed m, HasCallStack)
                    => ImplicitScope Typed
@@ -455,6 +458,27 @@ reduceClassContext extra annot cons = do
         shoveFn stillNeeded' . (case flv of { Full -> shove; _ -> id })
 
   pure (addCtx stillNeeded', wrap, stillNeeded')
+
+addLet :: Map.Map (Var Typed) (Wrapper Typed) -> Var Typed -> [Constraint Typed] -> Expr Typed -> Expr Typed
+addLet wrap' name (ConImplicit _ _ var ty:cs) ex | an <- annotation ex =
+  addLet wrap' name cs $
+    mkLet (mkBind var (reify wrap' name an ty var) (an, ty))
+      ex (an, getType ex)
+
+addLet wrap' name (_:cs) ex = addLet wrap' name cs ex
+addLet _ _ [] ex = ex
+
+mkBind :: Var Typed -> Expr Typed -> Ann Typed -> [Binding Typed]
+mkBind var (VarRef var' _) | var == var' = const []
+mkBind v e = (:[]) . Binding v e False
+
+reify :: Map.Map (Var Typed) (Wrapper Typed) -> Var Typed -> Ann Resolved -> Type Typed -> Var Typed -> Expr Typed
+reify wrap' name an ty var =
+  case wrap' Map.! var of
+    ExprApp v -> v
+    x -> ExprWrapper x
+           (Fun (EvParam (Capture name (an, ty))) (VarRef name (an, ty)) (an, TyArr ty ty))
+           (an, ty)
 
 fun :: Var Typed -> Type Typed -> Expr Typed -> Expr Typed
 fun v t e = ExprWrapper (TypeAsc ty) (Fun (EvParam (Capture v (an, t))) e (an, ty)) (an, ty) where
