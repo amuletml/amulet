@@ -1,4 +1,4 @@
 print : int -> unit
-fix : {'a : type}. (lazy 'a -> 'a) -> 'a
+fix : Spec{'a : type}. (lazy 'a -> 'a) -> 'a
 fact : int -> int
 main : unit

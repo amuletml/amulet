@@ -1,2 +1,2 @@
 functor : (type -> type) -> constraint
-map : {'f : type -> type}. functor 'f => {'a : type}. {'b : type}. ('a -> 'b) -> 'f 'a -> 'f 'b
+map : Spec{'f : type -> type}. functor 'f => Spec{'a : type}. Spec{'b : type}. ('a -> 'b) -> 'f 'a -> 'f 'b

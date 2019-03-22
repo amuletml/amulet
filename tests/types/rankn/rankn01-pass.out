@@ -1,1 +1,1 @@
-magic : ({'a : type}. 'a * 'a -> int) -> int
+magic : (Spec{'a : type}. 'a * 'a -> int) -> int

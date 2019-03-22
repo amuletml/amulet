@@ -1,2 +1,2 @@
-external_id : {'a : type}. 'a -> 'a
+external_id : Spec{'a : type}. 'a -> 'a
 main : int

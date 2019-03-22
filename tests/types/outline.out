@@ -1,4 +1,4 @@
 nested : type -> type
-Nested : {'a : type}. (nested ('a * 'a) * nested ('a * 'a)) -> nested 'a
-One : {'a : type}. 'a -> nested 'a
-size : {'a : type}. nested 'a -> { count : int }
+Nested : Spec{'a : type}. (nested ('a * 'a) * nested ('a * 'a)) -> nested 'a
+One : Spec{'a : type}. 'a -> nested 'a
+size : Spec{'a : type}. nested 'a -> { count : int }

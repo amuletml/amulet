@@ -1,4 +1,4 @@
-{-# LANGUAGE LambdaCase, TupleSections, ExplicitNamespaces,
+{-# LANGUAGE LambdaCase, TupleSections, 
     PatternSynonyms, RankNTypes, ScopedTypeVariables, FlexibleContexts,
     ConstraintKinds, OverloadedStrings, TypeFamilies #-}
 module Core.Lower

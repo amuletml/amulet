@@ -56,9 +56,9 @@ lowerType t@S.TyTuple{} = go t where
   go (S.TyTuple a b) = ExactRowsTy [("_1", lowerType a), ("_2", lowerType b)]
   go x = lowerType x
 lowerType (S.TyPi bind b)
-  | S.Invisible v Nothing <- bind =
+  | S.Invisible v Nothing _ <- bind =
     ForallTy (Relevant (mkTyvar v)) StarTy (lowerType b)
-  | S.Invisible v (Just c) <- bind =
+  | S.Invisible v (Just c) _ <- bind =
     ForallTy (Relevant (mkTyvar v)) (lowerType c) (lowerType b)
   | S.Anon a <- bind =
     ForallTy Irrelevant (lowerType a) (lowerType b)

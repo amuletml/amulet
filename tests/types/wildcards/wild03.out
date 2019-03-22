@@ -1,1 +1,1 @@
-f : {'a : type}. 'a -> 'a
+f : Infer{'a : type}. 'a -> 'a

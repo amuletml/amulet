@@ -1,6 +1,6 @@
 do
-  (nil)(function(jg)
-    local i, s = jg.i, jg.s
+  (nil)(function(je)
+    local i, s = je.i, je.s
     return {
       int_add_c = 5,
       int_sub_c = -1,
@@ -30,7 +30,7 @@ do
       bol_ne_c = true,
       uni_eq = true,
       uni_ne = false,
-      app = jg.fn(jg.x),
+      app = je.fn(je.x),
       int_eq_u = true,
       int_ne_u = false,
       str_eq_u = true,

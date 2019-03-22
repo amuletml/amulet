@@ -320,7 +320,7 @@ bind var ty
   -- /\ Var-var deletion
   | TyWildcard (Just (TyVar v)) <- ty, v == var = pure (ReflCo ty)
   -- /\ Var-wildcard deletion (same as above, but with an indirection)
-  | TyForall{} <- ty = confesses (Impredicative var ty)
+  | TyPi (Invisible _ _ r) _ <- ty, r /= Req = confesses (Impredicative var ty)
   -- /\ Predicativity checking
   | otherwise = do
       env <- use solveTySubst
@@ -547,7 +547,7 @@ subsumes' r s (TyPi (Implicit t) t1) t2
   | otherwise = probablyCast <$> unify (TyPi (Implicit t) t1) t2
 
 subsumes' b s t1@TyPi{} t2 | isSkolemisable t1 = do
-  (cont, _, t1') <- instantiate Subsumption t1
+  (cont, _, t1') <- instantiate Strong Subsumption t1
   omega <- subsumes b s t1' t2
   let inst = fromMaybe id cont
       wrap ex = ExprWrapper omega (inst ex) (annotation ex, t2)
@@ -698,7 +698,7 @@ subsumes' r _ a b = probablyCast <$> retcons (reblame r) (unify a b)
 skolemise :: MonadNamey m
           => SkolemMotive Typed
           -> Type Typed -> m (Wrapper Typed, Type Typed, ImplicitScope Typed)
-skolemise motive ty@(TyPi (Invisible tv k) t) = do
+skolemise motive ty@(TyPi (Invisible tv k _) t) = do
   sk <- freshSkol motive ty tv
   (wrap, ty, scope) <- skolemise motive (apply (Map.singleton tv sk) t)
   kind <- case k of
@@ -746,7 +746,7 @@ applicable wanted scp (ImplChoice head _ cs _ s _) =
     _ -> isJust (unifyPure wanted head)
   where
     entails :: ImplicitScope Typed -> Obligation Typed -> Bool
-    entails _ (Quantifier (Invisible v _)) = v `Map.member` sub
+    entails _ (Quantifier (Invisible v _ _)) = v `Map.member` sub
     entails scp (Implication c) | c <- apply sub c =
       any (applicable c scp) (lookup c scp)
     entails _ _ = False
@@ -902,7 +902,7 @@ countConstructors TyVar{} = 0
 countConstructors (TyApp f x) = countConstructors f + countConstructors x
 countConstructors (TyPi (Anon l) r) = 1 + countConstructors l + countConstructors r
 countConstructors (TyPi (Implicit l) r) = countConstructors l + countConstructors r
-countConstructors (TyPi (Invisible _ k) r) = foldMap countConstructors k + countConstructors r
+countConstructors (TyPi (Invisible _ k _) r) = foldMap countConstructors k + countConstructors r
 countConstructors (TyTuple l r) = 1 + countConstructors l + countConstructors r
 countConstructors (TyOperator l _ r) = 1 + countConstructors l + countConstructors r
 countConstructors TySkol{} = 1

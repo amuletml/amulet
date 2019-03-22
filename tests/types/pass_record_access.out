@@ -1,5 +1,5 @@
-access : {'a : type}. { 'a | a : int } -> int
-access_2 : {'a : type}. { { 'a | b : int } | a : int } -> int
-access_match : {'a : type}. { { 'a | c : int } | a : int, b : int } -> int
-access_match_2 : {'a : type}. { 'a | a : int, b : int } -> int
-access_match_3 : {'a : type}. { { 'a | c : int } | a : int, b : int } -> int
+access : Infer{'a : type}. { 'a | a : int } -> int
+access_2 : Infer{'a : type}. { { 'a | b : int } | a : int } -> int
+access_match : Infer{'a : type}. { { 'a | c : int } | a : int, b : int } -> int
+access_match_2 : Infer{'a : type}. { 'a | a : int, b : int } -> int
+access_match_3 : Infer{'a : type}. { { 'a | c : int } | a : int, b : int } -> int

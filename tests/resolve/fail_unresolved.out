@@ -24,7 +24,7 @@ fail_unresolved.ml[21:9 ..21:54]: error
   Type variable not in scope: `foo_0`
 
   Arising from use of the expression
-      (() : 'foo_1. 'foo_2. 'bar_0. unit -> 'foo_0)
+      (() : Spec'foo_1. Spec'foo_2. Spec'bar_0. unit -> 'foo_0)
    │ 
 21 │ let _ : forall 'foo_1 'foo_2 'bar_0. () -> 'foo_0 = ()
    │         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

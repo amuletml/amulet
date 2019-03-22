@@ -101,7 +101,7 @@ resolveModule (r@(ForeignVal am v t ty a):rs) = do
           <*> pure a)
     <*> resolveModule rs
 
-  where wrap x = foldr (TyPi . flip Invisible Nothing) x (toList (ftv x))
+  where wrap x = foldr (TyPi . flip (flip Invisible Nothing) Spec) x (toList (ftv x))
 resolveModule (d@(TypeDecl am t vs cs):rs) = do
   t'  <- tagVar t
   (vs', sc) <- resolveTele d vs
@@ -172,7 +172,7 @@ resolveModule (t@(Class name am ctx tvs ms ann):rs) = do
     reClassItem _ (DefaultMethod b an) =
       pure ( DefaultMethod <$> (fst =<< reMethod b) <*> pure an
            , [] )
-    wrap tvs' x = foldr (TyPi . flip Invisible Nothing) x (ftv x `Set.difference` Set.fromList tvs')
+    wrap tvs' x = foldr (TyPi . flip (flip Invisible Nothing) Spec) x (ftv x `Set.difference` Set.fromList tvs')
 
 resolveModule (t@(Instance cls ctx head ms ann):rs) = do
   cls' <- lookupTy cls `catchJunk` t
@@ -321,11 +321,11 @@ reType r (TyVar v) = TyVar <$> (lookupTyvar v `catchJunk` r)
 reType r (TyPromotedCon v) = TyPromotedCon <$> (lookupEx v `catchJunk` r)
 reType _ v@TySkol{} = error ("impossible! resolving skol " ++ show v)
 reType _ v@TyWithConstraints{} = error ("impossible! resolving withcons " ++ show v)
-reType r (TyPi (Invisible v k) ty) = do
+reType r (TyPi (Invisible v k req) ty) = do
   v' <- tagVar v
   ty' <- extendTyvar (v, v') $ reType r ty
   k <- traverse (reType r) k
-  pure (TyPi (Invisible v' k) ty')
+  pure (TyPi (Invisible v' k req) ty')
 reType r (TyPi (Anon f) x) = TyPi . Anon <$> reType r f <*> reType r x
 reType r (TyPi (Implicit f) x) = TyPi . Implicit <$> reType r f <*> reType r x
 reType r (TyApp f x) = TyApp <$> reType r f <*> reType r x

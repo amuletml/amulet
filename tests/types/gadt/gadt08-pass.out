@@ -1,11 +1,11 @@
 list : type -> type
-Nil : {'a : type}. list 'a
-Cons : {'a : type}. ('a * list 'a) -> list 'a
-elem : {'a : type}. 'a -> list 'a -> type
-Here : {'xs : list 'a}. {'x : 'a}. {'xs : list 'a}. ('xs ~ Cons ('x * 'xs)) ⊃ elem 'x 'xs
-There : {'xs : list 'a}. {'x : 'a}. {'xs : list 'a}. {'y : 'a}. ('xs ~ Cons ('y * 'xs)) ⊃ elem 'x 'xs -> elem 'x 'xs
+Nil : Infer{'a : type}. list 'a
+Cons : Infer{'a : type}. ('a * list 'a) -> list 'a
+elem : Infer{'a : type}. 'a -> list 'a -> type
+Here : Spec{'xs : 'ez}. Spec{'x : 'a}. Spec{'xs : list 'a}. ('xs ~ Cons ('x * 'xs)) ⊃ elem 'x 'xs
+There : Spec{'xs : 'gq}. Spec{'x : 'a}. Spec{'xs : list 'a}. Spec{'y : 'a}. ('xs ~ Cons ('y * 'xs)) ⊃ elem 'x 'xs -> elem 'x 'xs
 product : list type -> type
-Unit : {'a : 'jd}. ('a ~ Nil) ⊃ product 'a
-Pair : {'a : 'kg}. {'a : type}. {'b : list type}. ('a ~ Cons ('a * 'b)) ⊃ ('a * product 'b) -> product 'a
-:: : {'a : type}. {'b : list type}. 'a -> product 'b -> product (Cons ('a * 'b))
+Unit : Spec{'a : 'jd}. ('a ~ Nil) ⊃ product 'a
+Pair : Spec{'a : 'kg}. Spec{'a : type}. Spec{'b : list type}. ('a ~ Cons ('a * 'b)) ⊃ ('a * product 'b) -> product 'a
+:: : Infer{'a : type}. Infer{'b : list type}. 'a -> product 'b -> product (Cons ('a * 'b))
 foo : product (Cons (int * Cons (unit * Cons (string * Cons (bool * Cons (float * Nil))))))

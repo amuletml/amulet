@@ -1,3 +1,3 @@
 foo : type -> type
-Foo : {'a : type}. 'a -> foo 'a
+Foo : Spec{'a : type}. 'a -> foo 'a
 main : unit * foo unit

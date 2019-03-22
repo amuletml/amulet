@@ -168,6 +168,7 @@ filterTestTree f = go' [] where
 
   go :: [TestName] -> TestTree -> Maybe TestTree
   go suf t@(SingleTest name _) = if f (name:suf) then Just t else Nothing
+  go suf (After dep exp t) = After dep exp <$> go suf t
   go suf (TestGroup name tests) =
     case mapMaybe (go (name:suf)) tests of
       [] -> Nothing

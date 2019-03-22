@@ -4,9 +4,9 @@ natural : type
 Z : natural
 S : natural -> natural
 nat : natural -> type
-Zero : {'n : 'cb}. ('n ~ Z) ⊃ nat 'n
-Succ : {'n : 'cy}. {'k : natural}. ('n ~ S 'k) ⊃ nat 'k -> nat 'n
+Zero : Spec{'n : 'cb}. ('n ~ Z) ⊃ nat 'n
+Succ : Spec{'n : 'cy}. Spec{'k : natural}. ('n ~ S 'k) ⊃ nat 'k -> nat 'n
 some_nat : type
-SomeNat : {'n : natural}. nat 'n -> some_nat
-with_natural : {'a : type}. int -> ({'n : natural}. nat 'n -> 'a) -> 'a
+SomeNat : Infer{'n : natural}. nat 'n -> some_nat
+with_natural : Infer{'a : type}. int -> (Spec{'n : natural}. nat 'n -> 'a) -> 'a
 main : unit

@@ -1,2 +1,2 @@
-poly : ({'a : type}. 'a -> 'a) -> unit
+poly : (Spec{'a : type}. 'a -> 'a) -> unit
 poly_pass : unit

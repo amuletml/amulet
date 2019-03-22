@@ -54,7 +54,6 @@ import Control.Exception (assert)
 import Debug.Trace
 #endif
 
-
 -- | Solve for the types of bindings in a problem: Either @TypeDecl@s,
 -- @LetStmt@s, or @ForeignVal@s.
 inferProgram :: MonadNamey m => Env -> [Toplevel Desugared] -> m (These [TypeError] ([Toplevel Typed], Env))
@@ -171,7 +170,7 @@ check e ty = do
 -- 'Wrapper's where nescessary.
 infer :: MonadInfer Typed m => Expr Desugared -> m (Expr Typed, Type Typed)
 infer (VarRef k a) = do
-  (cont, old, (new, cont')) <- third3A (discharge (VarRef k a :: Expr Desugared)) =<< lookupTy' k
+  (cont, old, (new, cont')) <- third3A (discharge (VarRef k a :: Expr Desugared)) =<< lookupTy' Strong k
   case cont of
     Nothing -> pure (VarRef k (a, old), old)
     Just cont -> pure (cont' (cont (VarRef k (a, old))), new)
@@ -225,12 +224,12 @@ infer ex@(BinOp l o r a) = do
 
 infer ex@App{} = do
   (ex, ty) <- inferApp ex
-  (k, _, ty) <- instantiate Expression ty
+  (k, _, ty) <- instantiate Strong Expression ty
   pure (fromMaybe id k ex, ty)
 
 infer ex@Vta{} = do
   (ex, ty) <- inferApp ex
-  (k, _, ty) <- instantiate Expression ty
+  (k, _, ty) <- instantiate Strong Expression ty
   pure (fromMaybe id k ex, ty)
 
 infer ex@(Match t ps a) = do
@@ -294,8 +293,8 @@ infer ex = do
 -- | Infer a 'Type' for an 'Expr'ession without instantiating variables
 infer' :: MonadInfer Typed m => Expr Desugared -> m (Expr Typed, Type Typed)
 infer' (VarRef k a) = do
-  (_, ty, _) <- lookupTy' k
-  pure (VarRef k (a, ty), ty)
+  (cont, old, ty) <- lookupTy' Weak k
+  pure (fromMaybe id cont (VarRef k (a, old)), ty)
 infer' ex@App{} = inferApp ex
 infer' ex@Vta{} = inferApp ex
 infer' x = infer x
@@ -308,6 +307,10 @@ inferApp ex@(App f x a) = do
     Anon d -> do
       x <- check x d
       pure (App (k f) x (a, c), c)
+    Invisible _ _ Req -> do
+      (_, t) <- infer x
+      b <- freshTV
+      confesses (NotEqual ot (TyArr t b))
     Invisible{} -> error "invalid invisible quantification in App"
     Implicit{} -> error "invalid invisible quantification in App"
 
@@ -316,12 +319,13 @@ inferApp ex@(Vta f x a) = do
   (dom, c) <- retcons (addBlame (becauseExp ex)) $
     firstForall x ot
   case dom of
-    Invisible v kind -> do
+    Invisible v kind r | r /= Infer{} -> do
       x <- case kind of
         Just k -> checkAgainstKind (becauseExp ex) x k
         Nothing -> resolveKind (becauseExp ex) x
       let ty = apply (Map.singleton v x) c
       pure (ExprWrapper (TypeApp x) f (a, ty), ty)
+    Invisible{} -> error "inferred forall should always be eliminated"
     Implicit{} -> error "invalid implicit quantification in Vta"
     Anon{} -> error "invalid arrow type in Vta"
 
@@ -367,9 +371,15 @@ inferProg (decl@(TypeDecl am n tvs cs):prg) = do
   let scope (TyAnnArg v k:vs) = one v k <> scope vs
       scope (_:cs) = scope cs
       scope [] = mempty
+
+  let vars =
+        flip foldMap tvs $ \case
+          TyVarArg v -> Set.singleton v
+          TyAnnArg v _ -> Set.singleton v
+
   local (names %~ focus (one n (fst (rename kind)))) $ do
     (ts, cs') <- unzip <$> local (names %~ focus (scope tvs))
-      (for cs (\con -> retcons (addBlame (BecauseOf con)) (inferCon retTy con)))
+      (for cs (\con -> retcons (addBlame (BecauseOf con)) (inferCon vars retTy con)))
     let ts' = Set.fromList (map fst ts)
 
     local ( (names %~ focus (teleFromList ts))
@@ -777,11 +787,11 @@ consFst = fmap . first . (:)
 rename :: Type Typed -> (Type Typed, Subst Typed)
 rename = go 0 mempty mempty where
   go :: Int -> Set.Set T.Text -> Subst Typed -> Type Typed -> (Type Typed, Subst Typed)
-  go n l s (TyPi (Invisible v k) t) =
+  go n l s (TyPi (Invisible v k req) t) =
     let (v', n', l') = new n l v
         s' = Map.insert v (TyVar v') s
         (ty, s'') = go n' l' s' t
-     in (TyPi (Invisible v' (fmap (apply s) k)) ty, s'')
+     in (TyPi (Invisible v' (fmap (apply s) k) req) ty, s'')
   go n l s (TyPi (Anon k) t) =
     let (ty, sub) = go n l s t
      in (TyPi (Anon (fst (go n l s k))) ty, sub)
@@ -849,7 +859,7 @@ deSkol :: Type Typed -> Type Typed
 deSkol = go mempty where
   go acc (TyPi x k) =
     case x of
-      Invisible v kind -> TyPi (Invisible v kind) (go (Set.insert v acc) k)
+      Invisible v kind req -> TyPi (Invisible v kind req) (go (Set.insert v acc) k)
       Anon a -> TyPi (Anon (go acc a)) (go acc k)
       Implicit a -> TyPi (Implicit (go acc a)) (go acc k)
   go acc ty@(TySkol (Skolem _ var _ _))
@@ -883,7 +893,7 @@ nameName (TgInternal x) = x
 nameName (TgName x _) = x
 
 mkTypeLambdas :: MonadNamey m => SkolemMotive Typed -> Type Typed -> m (Wrapper Typed)
-mkTypeLambdas motive ty@(TyPi (Invisible tv k) t) = do
+mkTypeLambdas motive ty@(TyPi (Invisible tv k _) t) = do
   sk <- freshSkol motive ty tv
   wrap <- mkTypeLambdas motive (apply (Map.singleton tv sk) t)
   kind <- case k of

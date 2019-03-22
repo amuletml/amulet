@@ -1,4 +1,4 @@
 id : type -> type
-Id : {'a : type}. 'a -> id 'a
-pure : {'a : type -> type}. ({'b : type}. 'b -> 'a 'b) -> 'a int
+Id : Spec{'a : type}. 'a -> id 'a
+pure : Infer{'a : type -> type}. (Spec{'b : type}. 'b -> 'a 'b) -> 'a int
 pure_pass : id int

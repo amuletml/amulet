@@ -154,7 +154,7 @@ desugarProgram = traverse statement where
   binder :: TyBinder Resolved -> TyBinder Desugared
   binder (Anon t) = Anon (ty t)
   binder (Implicit t) = Implicit (ty t)
-  binder (Invisible v t) = Invisible v (ty <$> t)
+  binder (Invisible v t req) = Invisible v (ty <$> t) req
 
   pat :: Pattern Resolved -> Pattern Desugared
   pat (Wildcard a) = Wildcard a

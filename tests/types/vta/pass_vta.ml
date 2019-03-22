@@ -1,4 +1,4 @@
-let id x = x
+let id (x : 'a) : 'a = x
 
 (* variable *)
 let var = id @int
@@ -24,5 +24,5 @@ let bar (x : forall 'a. 'a -> unit) =
   x @int 1
   x @string "foo"
 
-let baz x y = ()
+let baz (x : 'a) (y : 'b) = ()
 let _ = baz @int @int 1 2

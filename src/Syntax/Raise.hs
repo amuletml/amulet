@@ -7,6 +7,7 @@ import Syntax.Var
 import Syntax
 
 -- | Raise variables from one phase to another within a type.
+{-# DEPRECATED #-}
 raiseT :: (Var p -> Var p')
        -- ^ Raise a single variable. This will be a type variable, type
        -- name or constructor.
@@ -29,7 +30,7 @@ raiseT v (TyWithConstraints eq a) = TyWithConstraints (map (\(a, b) -> (raiseT v
 raiseT v (TyPi binder t) = TyPi (go binder) (raiseT v t) where
   go (Anon t) = Anon (raiseT v t)
   go (Implicit t) = Implicit (raiseT v t)
-  go (Invisible var k) = Invisible (v var) (fmap (raiseT v) k)
+  go (Invisible var k spec) = Invisible (v var) (fmap (raiseT v) k) spec
 raiseT _ TyType = TyType
 raiseT v (TyOperator l o r) = TyOperator (raiseT v l) (v o) (raiseT v r)
 raiseT v (TyParens t) = raiseT v t

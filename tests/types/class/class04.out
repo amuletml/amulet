@@ -1,2 +1,2 @@
 eq : type -> constraint
-eq : {'a : type}. eq 'a => 'a -> 'a -> bool
+eq : Spec{'a : type}. eq 'a => 'a -> 'a -> bool

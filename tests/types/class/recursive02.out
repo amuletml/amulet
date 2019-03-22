@@ -1,6 +1,6 @@
 show : type -> constraint
-show : {'a : type}. show 'a => 'a -> string
+show : Spec{'a : type}. show 'a => 'a -> string
 dostuff : type -> constraint
-stuff : {'a : type}. dostuff 'a => 'a -> unit
-foo : {'a : type}. {'b : 'fy}. dostuff 'a => 'a -> 'b
-bar : {'a : type}. {'b : 'gh}. dostuff 'a => 'a -> 'b
+stuff : Spec{'a : type}. dostuff 'a => 'a -> unit
+foo : Infer{'a : type}. Infer{'b : 'fs}. dostuff 'a => 'a -> 'b
+bar : Infer{'a : type}. Infer{'b : 'gb}. dostuff 'a => 'a -> 'b

@@ -368,7 +368,7 @@ constructors :: (MonadPlus m, MonadState CoverState m, MonadNamey m)
              -> m (Var Typed, Maybe (Type Typed))
 constructors env kty vty = do
   k <- asum . map pure . toList . ctors $ kty
-  (pty, _) <- skolGadt k =<< instantiate Expression (fromJust (env ^. (names . at k)))
+  (pty, _) <- skolGadt k =<< instantiate Strong Expression (fromJust (env ^. (names . at k)))
   let (cs, ty) = case pty of
                    TyWithConstraints cs ty -> (cs, ty)
                    _ -> ([], pty)
@@ -390,7 +390,7 @@ constructors env kty vty = do
     unwrapCtor (TyPi bind res) = case bind of
       Anon arg -> (Just arg, res)
       Implicit _ -> unwrapCtor res
-      Invisible _ _ -> unwrapCtor res
+      Invisible _ _ _ -> unwrapCtor res
     unwrapCtor (TyWithConstraints _ t) = unwrapCtor t
     unwrapCtor (TyParens t) = unwrapCtor t
     unwrapCtor t = (Nothing, t)

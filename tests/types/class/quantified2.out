@@ -1,10 +1,10 @@
 && : bool -> bool -> bool
 eq : type -> constraint
-.== : {'a : type}. eq 'a => 'a -> 'a -> bool
+.== : Spec{'a : type}. eq 'a => 'a -> 'a -> bool
 id : type -> type
-Id : {'a : type}. 'a -> id 'a
+Id : Spec{'a : type}. 'a -> id 'a
 option : type -> type
-Some : {'a : type}. 'a -> option 'a
-None : {'a : type}. option 'a
+Some : Spec{'a : type}. 'a -> option 'a
+None : Spec{'a : type}. option 'a
 rose : (type -> type) -> type -> type
-Branch : {'f : type -> type}. {'a : type}. ('a * 'f (rose 'f 'a)) -> rose 'f 'a
+Branch : Spec{'f : type -> type}. Spec{'a : type}. ('a * 'f (rose 'f 'a)) -> rose 'f 'a

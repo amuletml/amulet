@@ -264,7 +264,7 @@ parametricity stmt overall = go mempty overall where
 
   go set (TyPi binder cont) =
     case binder of
-      Invisible v kind -> do
+      Invisible v kind _ -> do
         set <- case kind of
           Just kind -> goArg set kind
           _ -> pure set

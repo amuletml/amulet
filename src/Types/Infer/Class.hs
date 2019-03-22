@@ -67,13 +67,18 @@ inferClass clss@(Class name _ ctx _ methods classAnn) = do
 
       (signatures, defaults) = partition (\case { MethodSig{} -> True; DefaultMethod{} -> False }) methods
 
+  let vars =
+        flip foldMap params $ \case
+          TyVarArg v -> Set.singleton v
+          TyAnnArg v _ -> Set.singleton v
+
   local (names %~ focus (one name k <> scope params)) $ do
     -- Infer the types for every method
     (decls, rows) <- fmap unzip . for signatures $ \meth@(MethodSig method ty _) -> do
       checkWildcard meth ty
       ty <- silence $ -- Any errors will have been caught by the resolveClassKind
         resolveKind (BecauseOf meth) ty
-      withHead <- closeOver (BecauseOf meth) $
+      withHead <- closeOver' vars (BecauseOf meth) $
         TyPi (Implicit classConstraint) ty
 
       pure ( (method, withHead)
@@ -93,7 +98,7 @@ inferClass clss@(Class name _ ctx _ methods classAnn) = do
     (fold -> scope, rows') <- fmap unzip . for (getContext ctx) $
       \obligation -> do
         impty <- silence $
-          closeOver (BecauseOf clss) $
+          closeOver' vars (BecauseOf clss) $
             TyPi (Implicit classConstraint) obligation
         ~var@(TgName name _) <- genNameWith (classCon' <> T.singleton '$')
         pure ( singleton classAnn Superclass var impty
@@ -127,7 +132,7 @@ inferClass clss@(Class name _ ctx _ methods classAnn) = do
              _ -> TyExactRows rs
 
     classConTy <- silence $
-      closeOver (BecauseOf clss) (TyArr inner classConstraint)
+      closeOver' vars (BecauseOf clss) (TyArr inner classConstraint)
 
     let tyDecl :: Toplevel Typed
         tyDecl = TypeDecl Public name params
@@ -146,7 +151,7 @@ inferClass clss@(Class name _ ctx _ methods classAnn) = do
                  (Access (VarRef capture (classAnn, inner)) label (classAnn, ty))
                  (classAnn, ty)
           ty <- silence $
-            closeOver (BecauseOf clss) ty
+            closeOver' vars (BecauseOf clss) ty
           pure (Binding var expr True (classAnn, ty))
 
         newtypeClassDecl :: (Type Typed -> TyBinder Typed, Var Typed, T.Text, Type Typed) -> m (Binding Typed)
@@ -161,7 +166,7 @@ inferClass clss@(Class name _ ctx _ methods classAnn) = do
                  (VarRef capture (classAnn, inner))
                  (classAnn, ty)
           ty <- silence $
-            closeOver (BecauseOf clss) ty
+            closeOver' vars (BecauseOf clss) ty
           pure (Binding var expr False (classAnn, ty))
 
     decs <- case rows ++ rows' of
@@ -369,19 +374,20 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
 inferInstance _ = error "not an instance"
 
 addArg :: Map.Map (Var Typed) (Type Typed) -> Type Typed -> Expr Typed -> Expr Typed
-addArg skolSub ty@(TyPi (Invisible v k) rest) ex =
+addArg skolSub ty@(TyPi (Invisible v k req) rest) ex =
   case Map.lookup v skolSub of
     Just (TySkol s) ->
       ExprWrapper (TypeLam s (fromMaybe TyType k))
         (addArg skolSub rest ex)
-        (annotation ex, TyPi (Invisible v k) (getType ex))
+        (annotation ex, TyPi (Invisible v k req) (getType ex))
     _ ->
       let fakeSkol = Skolem v v ty (ByConstraint ty)
-       in ExprWrapper (TypeLam fakeSkol (fromMaybe TyType k)) (addArg skolSub rest ex) (annotation ex, TyPi (Invisible v k) (getType ex))
+       in ExprWrapper (TypeLam fakeSkol (fromMaybe TyType k)) (addArg skolSub rest ex)
+            (annotation ex, TyPi (Invisible v k req) (getType ex))
 addArg _ _ ex = ex
 
 appArg :: Map.Map (Var Typed) (Type Typed) -> Type Typed -> Expr Typed -> Expr Typed
-appArg sub (TyPi (Invisible v _) rest) ex =
+appArg sub (TyPi (Invisible v _ _) rest) ex =
   case Map.lookup v sub of
     Just x -> appArg sub rest $ ExprWrapper (TypeApp x) ex (annotation ex, rest)
     Nothing -> appArg sub rest $ ExprWrapper (TypeApp TyType) ex (annotation ex, rest)
@@ -510,7 +516,7 @@ useForSimpl span scope (ImplChoice head oty pre var _ _) ty =
   case unifyPure head ty of
     Nothing -> error "What?"
     Just sub ->
-      let wrap (Quantifier (Invisible v _):cs) ex (TyPi (Invisible _ _) rest) =
+      let wrap (Quantifier (Invisible v _ _):cs) ex (TyPi Invisible{} rest) =
             wrap cs (ExprWrapper (TypeApp (Map.findWithDefault TyType v sub)) ex (annotation ex, rest)) rest
           wrap (Quantifier _:_) _ _ = error "malformed Quantifier"
           wrap (Implication v:cs) ex (TyPi (Implicit _) rest) =
@@ -604,10 +610,10 @@ expandEta ty ex = go ty ex where
     pure $
       Fun (EvParam (Capture x (an, a)))
         inside (an, TyArr a b)
-  go (TyPi (Invisible v (fromMaybe TyType -> k)) b) ex = do
+  go (TyPi (Invisible v (fromMaybe TyType -> k) req) b) ex = do
     ~x@(TySkol sk) <- freshSkol undefined k v
     inside <- go b (ExprWrapper (TypeApp x) ex (an, b))
     pure $
       ExprWrapper (TypeLam sk k)
-        inside (an, TyPi (Invisible v (Just k)) b)
+        inside (an, TyPi (Invisible v (Just k) req) b)
   go _ e = pure e

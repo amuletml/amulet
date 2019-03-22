@@ -49,7 +49,11 @@ data TyBinder p
   | Implicit { _tyBinderType :: Type p } -- ^ A type with class obligations
   | Invisible
     { _tyBinderVar :: Var p
-    , _tyBinderArg :: Maybe (Type p) } -- ^ A forall. type
+    , _tyBinderArg :: Maybe (Type p)
+    , _tyVisFlag :: Specificity } -- ^ A forall. type
+
+data Specificity = Infer | Spec | Req
+  deriving (Eq, Show, Ord, Data)
 
 deriving instance (Show (Var p), Show (Ann p)) => Show (TyBinder p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (TyBinder p)
@@ -114,8 +118,8 @@ pattern TyArr t t' <- TyPi (Anon t) t' where
   TyArr t ty = TyPi (Anon t) ty
 
 pattern TyForall :: Var p -> Maybe (Type p) -> Type p -> Type p
-pattern TyForall v k t' <- TyPi (Invisible v k) t' where
-  TyForall v k ty = TyPi (Invisible v k) ty
+pattern TyForall v k t' <- TyPi (Invisible v k _) t' where
+  TyForall v k ty = TyPi (Invisible v k Spec) ty
 
 -- | A type variable, with an optional type annotation.
 data TyConArg p
@@ -202,8 +206,8 @@ instance Pretty (Var p) => Pretty (TyBinder p) where
     k TyPi{} = parens
     k TyTuple{} = parens
     k _ = id
-  pretty (Invisible v (Just k)) = braces (stypeVar (squote <> pretty v) <+> colon <+> pretty k) <> dot
-  pretty (Invisible v Nothing)  = stypeVar (squote <> pretty v) <> dot
+  pretty (Invisible v (Just k) r) = shown r <> braces (stypeVar (squote <> pretty v) <+> colon <+> pretty k) <> dot
+  pretty (Invisible v Nothing r)  = shown r <> stypeVar (squote <> pretty v) <> dot
 
 instance Pretty (Var p) => Pretty (TyConArg p) where
   pretty (TyVarArg var) = pretty var

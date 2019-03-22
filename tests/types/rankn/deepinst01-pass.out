@@ -1,2 +1,2 @@
-foo : {'a : type}. 'a -> {'b : type}. 'b -> 'a
+foo : Spec{'a : type}. 'a -> Spec{'b : type}. 'b -> 'a
 main : unit
