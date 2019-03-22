@@ -1,2 +1,2 @@
-apply : {'row : type}. {'a : type}. {'b : type}. { 'row | apply : {'a : type}. {'b : type}. ('a -> 'b) -> 'a -> 'b } -> ('a -> 'b) -> 'a -> 'b
+apply : Spec{'row : type}. Spec{'a : type}. Spec{'b : type}. { 'row | apply : Spec{'a : type}. Spec{'b : type}. ('a -> 'b) -> 'a -> 'b } -> ('a -> 'b) -> 'a -> 'b
 main : int

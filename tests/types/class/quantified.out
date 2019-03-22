@@ -1,6 +1,6 @@
 show : type -> constraint
-show : {'a : type}. show 'a => 'a -> string
-box : {'a : type}. ('a -> type) -> 'a -> type
-Box : {'f : 'a -> type}. {'a : 'a}. 'f 'a -> box 'f 'a
+show : Spec{'a : type}. show 'a => 'a -> string
+box : Infer{'a : type}. ('a -> type) -> 'a -> type
+Box : Spec{'f : 'a -> type}. Spec{'a : 'a}. 'f 'a -> box 'f 'a
 id : type -> type
-Id : {'a : type}. 'a -> id 'a
+Id : Spec{'a : type}. 'a -> id 'a

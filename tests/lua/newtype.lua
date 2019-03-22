@@ -1,8 +1,8 @@
 do
   local function It(x) return { __tag = "It", x } end
-  local function Foo(fv) return fv end
+  local function Foo(fn) return fn end
   (nil)(Foo)
-  (nil)(function(fw) return fw end)
+  (nil)(function(fo) return fo end)
   (nil)(It)
-  (nil)(function(fx) return fx end)
+  (nil)(function(fp) return fp end)
 end

@@ -1,9 +1,9 @@
 do
-  local ba = {}
+  local ay = {}
   local __o = nil
   for k, v in pairs(__o) do
-    ba[k] = v
+    ay[k] = v
   end
-  ba.x = 1
-  (nil)(ba)
+  ay.x = 1
+  (nil)(ay)
 end

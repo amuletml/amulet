@@ -16,7 +16,7 @@ do
     end
   end
   (nil)({
-    _2 = function(x) return __builtin_force(x) end,
-    _1 = __builtin_Lazy(function(ae) return 2 end)
+    _1 = __builtin_Lazy(function(y) return 2 end),
+    _2 = function(x) return __builtin_force(x) end
   })
 end

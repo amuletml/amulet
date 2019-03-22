@@ -1,3 +1,3 @@
 foo : type -> constraint
-foo : {'a : type}. foo 'a => 'a -> int
-bar : {'a : type}. foo unit => 'a -> 'a
+foo : Spec{'a : type}. foo 'a => 'a -> int
+bar : Infer{'a : type}. foo unit => 'a -> 'a

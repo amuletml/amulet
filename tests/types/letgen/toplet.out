@@ -1,2 +1,2 @@
-id : {'a : type}. 'a -> 'a
+id : Infer{'a : type}. 'a -> 'a
 main : unit

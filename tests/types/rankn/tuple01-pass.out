@@ -1,4 +1,4 @@
-foo : {'a : type}. 'a -> 'a * {'a : type}. 'a -> int
-fst : {'a : type}. {'b : type}. ('a * 'b) -> 'a
-snd : {'a : type}. {'b : type}. ('a * 'b) -> 'b
+foo : Spec{'a : type}. 'a -> 'a * Spec{'a : type}. 'a -> int
+fst : Infer{'a : type}. Infer{'b : type}. ('a * 'b) -> 'a
+snd : Infer{'a : type}. Infer{'b : type}. ('a * 'b) -> 'b
 main : int

@@ -1,8 +1,8 @@
-unsafe_coerce : {'a : type}. {'b : type}. 'a -> 'b
-foo : {'a : type}. 'a -> type
-Foo : {'a : type}. {'a : 'a}. int -> foo 'a
-fooable : {'a : type}. 'a -> constraint
-foo : {'a : type}. {'a : 'a}. fooable 'a => foo 'a
-gift : {'a : type}. 'a -> type -> type
-Give : {'a : type}. {'a : 'a}. {'b : type}. (fooable 'a => 'b) -> gift 'a 'b
-with_foo : {'a : type}. {'b : 'a}. {'c : type}. {'d : 'id}. foo 'b -> (fooable 'b => 'c) -> 'd
+unsafe_coerce : Spec{'a : type}. Spec{'b : type}. 'a -> 'b
+foo : Infer{'a : type}. 'a -> type
+Foo : Infer{'a : type}. Spec{'a : 'a}. int -> foo 'a
+fooable : Infer{'a : type}. 'a -> constraint
+foo : Infer{'a : type}. Spec{'a : 'a}. fooable 'a => foo 'a
+gift : Infer{'a : type}. 'a -> type -> type
+Give : Infer{'a : type}. Spec{'a : 'a}. Spec{'b : type}. (fooable 'a => 'b) -> gift 'a 'b
+with_foo : Spec{'a : type}. Spec{'b : 'a}. Infer{'c : type}. Infer{'d : 'hv}. foo 'b -> (fooable 'b => 'c) -> 'd

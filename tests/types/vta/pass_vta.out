@@ -1,4 +1,4 @@
-id : {'a : type}. 'a -> 'a
+id : Spec{'a : type}. 'a -> 'a
 var : int -> int
 asc : int -> int
 let' : int -> int
@@ -6,9 +6,9 @@ let' : int -> int
 let' : int -> int
 let' : int -> int
 begin' : int -> int
-foo : {'a : type}. 'a -> {'b : type}. 'b -> 'b
+foo : Spec{'a : type}. 'a -> Spec{'b : type}. 'b -> 'b
 rankn : int -> int
 rankn : int
 rankn : int
-bar : ({'a : type}. 'a -> unit) -> unit
-baz : {'a : type}. {'b : type}. 'a -> 'b -> unit
+bar : (Spec{'a : type}. 'a -> unit) -> unit
+baz : Spec{'a : type}. Spec{'b : type}. 'a -> 'b -> unit

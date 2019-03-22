@@ -1,3 +1,3 @@
 foo : type -> constraint
-x : {'a : type}. foo 'a => 'a -> int
-y : {'a : type}. foo 'a => 'a -> int
+x : Spec{'a : type}. foo 'a => 'a -> int
+y : Spec{'a : type}. foo 'a => 'a -> int

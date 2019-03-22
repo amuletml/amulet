@@ -18,22 +18,23 @@ import Syntax.Var
 import Syntax
 
 inferCon :: MonadInfer Typed m
-         => Type Typed
+         => Set.Set (Var Typed)
+         -> Type Typed
          -> Constructor Desugared
          -> m ( (Var Typed, Type Typed)
               , Constructor Typed)
 
-inferCon ret con@(ArgCon ac nm t ann) = do
+inferCon vars ret con@(ArgCon ac nm t ann) = do
   checkWildcard con t
   ty' <- resolveKind (BecauseOf con) t
-  res <- closeOver (BecauseOf con) $ TyArr ty' ret
+  res <- closeOver' vars (BecauseOf con) $ TyArr ty' ret
   pure ((nm, res), ArgCon ac nm ty' (ann, res))
 
-inferCon ret' con@(UnitCon ac nm ann) = do
-  ret <- closeOver (BecauseOf con) ret'
+inferCon vars ret' con@(UnitCon ac nm ann) = do
+  ret <- closeOver' vars (BecauseOf con) ret'
   pure ((nm, ret), UnitCon ac nm (ann, ret))
 
-inferCon ret c@(GadtCon ac nm cty ann) = do
+inferCon vars ret c@(GadtCon ac nm cty ann) = do
   checkWildcard c cty
   cty <- condemn $ resolveKind (BecauseOf c) cty
   var <- genName
@@ -48,18 +49,25 @@ inferCon ret c@(GadtCon ac nm cty ann) = do
 
   (cty, cons) <- runWriterT (generalise cty)
   let (sub, keep) = partitionEithers (map (uncurry simplify) cons)
-  overall <- closeOverGadt (BecauseOf c) keep (apply (mconcat sub) cty)
+  overall <- closeOverGadt vars (BecauseOf c) keep (apply (mconcat sub) cty)
   pure ((nm, overall), GadtCon ac nm overall (ann, overall))
 
-closeOverGadt :: MonadInfer Typed m => SomeReason -> [(Type Typed, Type Typed)] -> Type Typed -> m (Type Typed)
-closeOverGadt r cons cty =
+closeOverGadt :: MonadInfer Typed m => Set.Set (Var Typed) -> SomeReason -> [(Type Typed, Type Typed)] -> Type Typed -> m (Type Typed)
+closeOverGadt vars r cons cty =
   let fv = ftv cty `Set.union` foldMap (\(x, y) -> ftv x `Set.union` ftv y) cons
+      fv :: Set.Set (Var Typed)
+
       pushCons [] t = t
       pushCons c (TyForall v k t) = TyForall v k (pushCons c t)
       pushCons c t = TyWithConstraints c t
 
       forall [] t = t
-      forall xs t = foldr (TyPi . flip Invisible Nothing) t xs
+      forall xs t = foldr (\var -> TyPi (Invisible var Nothing (vis var))) t xs
+
+      vis v
+        | v `Set.member` vars = Spec
+        | otherwise = Infer
+
    in annotateKind r $ if Set.null fv
          then pushCons cons cty
          else pushCons cons (forall (Set.toList fv) cty)

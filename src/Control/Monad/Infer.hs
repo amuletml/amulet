@@ -27,6 +27,7 @@ module Control.Monad.Infer
 
   -- lenses:
   , names, typeVars
+  , InstLevel(..)
   )
   where
 
@@ -174,19 +175,23 @@ instance Show TypeError where
 instance Eq TypeError where
   _ == _ = False
 
+data InstLevel = Weak | Strong
+  deriving (Eq)
+
 lookupTy :: (MonadChronicles TypeError m, MonadReader Env m, MonadNamey m) => Var Desugared -> m (Type Typed)
 lookupTy x = do
   rs <- view (names . at x)
   case rs of
-    Just t -> thd3 <$> instantiate Expression t
+    Just t -> thd3 <$> instantiate Strong Expression t
     Nothing -> confesses (NotInScope x)
 
-lookupTy' :: (MonadChronicles TypeError m, MonadReader Env m, MonadNamey m) => Var Desugared
+lookupTy' :: (MonadChronicles TypeError m, MonadReader Env m, MonadNamey m)
+          => InstLevel -> Var Desugared
           -> m (Maybe (Expr Typed -> Expr Typed), Type Typed, Type Typed)
-lookupTy' x = do
+lookupTy' str x = do
   rs <- view (names . at x)
   case rs of
-    Just t -> instantiate Expression t
+    Just t -> instantiate str Expression t
     Nothing -> confesses (NotInScope x)
 
 runInfer :: MonadNamey m
@@ -210,21 +215,22 @@ firstName :: Var Desugared
 firstName = TgName "a" 0
 
 instantiate :: MonadNamey m
-            => WhyInstantiate
+            => InstLevel
+            -> WhyInstantiate
             -> Type Typed
             -> m ( Maybe (Expr Typed -> Expr Typed)
                  , Type Typed
                  , Type Typed)
-instantiate r tp@(TyPi (Invisible v _) ty) = do
+instantiate str r tp@(TyPi (Invisible v _ spec) ty) | can str spec = do
   var <- refreshTV v
   let map = Map.singleton v var
 
       appThisTy e = ExprWrapper (TypeApp var) e (annotation e, apply map ty)
-  (k, _, t) <- instantiate r (apply map ty)
+  (k, _, t) <- instantiate str r (apply map ty)
   pure (squish appThisTy k, tp, t)
 
-instantiate r tp@(TyPi (Anon co) od@dm) = do
-  (wrap, _, dm) <- instantiate r dm
+instantiate str r tp@(TyPi (Anon co) od@dm) = do
+  (wrap, _, dm) <- instantiate str r dm
   let cont = fromMaybe id wrap
   var <- genName
   let ty = TyPi (Anon co) dm
@@ -237,8 +243,8 @@ instantiate r tp@(TyPi (Anon co) od@dm) = do
 
   pure (Just lam, tp, ty)
 
-instantiate r tp@(TyPi (Implicit co) od@dm) = do
-  (wrap, _, dm) <- instantiate r dm
+instantiate str r tp@(TyPi (Implicit co) od@dm) = do
+  (wrap, _, dm) <- instantiate str r dm
   let cont = fromMaybe id wrap
   var <- genName
   let ty = TyPi (Implicit co) dm
@@ -250,7 +256,15 @@ instantiate r tp@(TyPi (Implicit co) od@dm) = do
             (cont (App e (VarRef var (ann, co)) (ann, od))) (ann, ty)
 
   pure (Just lam, tp, ty)
-instantiate _ ty = pure (Just id, ty, ty)
+
+instantiate _ _ ty = pure (Just id, ty, ty)
+
+can :: InstLevel -> Specificity -> Bool
+can Strong x = case x of
+  Req -> False
+  _ -> True
+can Weak Infer = True
+can Weak _ = False
 
 freshTV :: MonadNamey m => m (Type Typed)
 freshTV = TyVar <$> genName
@@ -264,10 +278,9 @@ refreshTV v = TyVar <$> genNameFrom nm where
 instance Pretty TypeError where
   pretty NotEqual{ expected, actual } =
     vsep
-      $ [ nest 2 $ "Couldn't match" <+> highlight "actual" <+> "type" <+> displayType actual
-           </> "with the" <+> highlight "type expected by the context," <+> displayType expected
-        ]
-     ++ case (expected, actual) of
+      $ nest 2 ("Couldn't match" <+> highlight "actual" <+> "type" <+> displayType actual
+           </> "with the" <+> highlight "type expected by the context," <+> displayType expected)
+      : case (expected, actual) of
           (TyArr{}, TyArr{}) -> []
           (TyArr{}, t) ->
             [ empty, bullet "Did you apply a" <+> describe t <+> "to too many arguments?" ]
@@ -531,7 +544,7 @@ instance Note TypeError Style where
          ]
 
   formatNote f (ArisingFrom (DeadBranch e) r) =
-    vsep [ indent 2 $ "Note: This branch will never be executed,"
+    vsep [ indent 2 "Note: This branch will never be executed,"
          , indent 2 "because it has unsatisfiable constraints" ]
      <#> formatNote f (ArisingFrom e r)
 

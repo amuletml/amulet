@@ -470,7 +470,8 @@ Type :: { Located (Type Parsed) }
   : TypeOp                                        { $1 }
   | TypeOp '->' Type                              { lPos2 $1 $3 $ TyPi (Anon (getL $1)) (getL $3) }
   | TypeOp '=>' Type                              { lPos2 $1 $3 $ TyPi (Implicit (getL $1)) (getL $3) }
-  | forall ListE1(tyvar) '.' Type                 { lPos2 $1 $4 $ forallTy (map getName $2) (getL $4) }
+  | forall ListE1(tyvar) '.' Type                 { lPos2 $1 $4 $ forallTy Spec (map getName $2) (getL $4) }
+  | forall ListE1(tyvar) '->' Type                { lPos2 $1 $4 $ forallTy Req (map getName $2) (getL $4) }
 
 TypeOp :: { Located (Type Parsed) }
   : TypeOp_                                       { fmap fixupType $1 }
@@ -601,7 +602,7 @@ getFloat  (Token (TcFloat x) _ _)      = x
 getString (Token (TcString  x) _ _)    = x
 getL      (L x _)                    = x
 
-forallTy vs t = foldr TyPi t (map (flip Invisible Nothing) vs)
+forallTy spec vs t = foldr TyPi t (map (\v -> Invisible v Nothing spec) vs)
 
 respanFun :: (Spanned a, Spanned b) => a -> b -> Expr Parsed -> Expr Parsed
 respanFun s e (Fun p b _) = Fun p b (mkSpanUnsafe (spanStart (annotation s)) (spanEnd (annotation e)))

@@ -1,7 +1,6 @@
 {-# LANGUAGE FlexibleInstances
   , FlexibleContexts
   , UndecidableInstances
-  , MultiParamTypeClasses
   , FunctionalDependencies
   , TypeFamilies
   , ScopedTypeVariables
@@ -102,16 +101,16 @@ instance (Ord (Var p), Substitutable p a) => Substitutable p (Seq.Seq a) where
 instance Ord (Var p) => Substitutable p (TyBinder p) where
   ftv (Anon t) = ftv t
   ftv (Implicit t) = ftv t
-  ftv (Invisible _ k) = foldMap ftv k
+  ftv (Invisible _ k _) = foldMap ftv k
 
   apply s (Anon t) = Anon (apply s t)
   apply s (Implicit t) = Implicit (apply s t)
-  apply s (Invisible v k) = Invisible v (fmap (apply s) k)
+  apply s (Invisible v k spec) = Invisible v (fmap (apply s) k) spec
 
 bound :: TyBinder p -> Set.Set (Var p)
 bound Anon{} = Set.empty
 bound Implicit{} = Set.empty
-bound (Invisible v _) = Set.singleton v
+bound (Invisible v _ _) = Set.singleton v
 
 compose :: Ord (Var p) => Subst p -> Subst p -> Subst p
 s1 `compose` s2 = fmap (apply s1) s2 <> fmap (apply s2) s1
@@ -162,10 +161,10 @@ tyVarOcc (TyWithConstraints eq b) = foldMap (\(a, b) -> tyVarOcc a <> tyVarOcc b
 tyVarOcc (TyPi binder t) = tyVarOcc' binder <> (tyVarOcc t `removeOccs` bound binder) where
   bound Anon{} = Set.empty
   bound Implicit{} = Set.empty
-  bound (Invisible v _) = Set.singleton v
+  bound (Invisible v _ _) = Set.singleton v
   tyVarOcc' (Anon t) = tyVarOcc t
   tyVarOcc' (Implicit t) = tyVarOcc t
-  tyVarOcc' (Invisible _ k) = foldMap tyVarOcc k
+  tyVarOcc' (Invisible _ k _) = foldMap tyVarOcc k
 
 nominalTvs :: Ord (Var p) => Type p -> Set.Set (Var p)
 nominalTvs TyCon{} = mempty
@@ -184,4 +183,4 @@ nominalTvs (TyWithConstraints eq b) = foldMap (\(a, b) -> nominalTvs a <> nomina
 nominalTvs (TyPi binder t) = nominalOf binder <> (nominalTvs t Set.\\ bound binder) where
   nominalOf (Anon t) = nominalTvs t
   nominalOf (Implicit t) = nominalTvs t
-  nominalOf (Invisible _ k) = foldMap nominalTvs k
+  nominalOf (Invisible _ k _) = foldMap nominalTvs k

@@ -1,2 +1,2 @@
-escapes : {'a : type}. ({'b : type}. 'b -> 'a) -> 'a
+escapes : Infer{'a : type}. (Spec{'b : type}. 'b -> 'a) -> 'a
 escape_pass : int

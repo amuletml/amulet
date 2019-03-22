@@ -78,7 +78,7 @@ checkPattern (PAs p v ann) ty = do
 checkPattern ex@(Destructure con ps ann) target =
   case ps of
     Nothing -> do
-      (pty, sub) <- skolGadt con =<< lookupTy' con
+      (pty, sub) <- skolGadt con =<< lookupTy' Strong con
       let (cs, ty) =
             case pty of
               TyWithConstraints cs ty -> (cs, ty)
@@ -93,7 +93,7 @@ checkPattern ex@(Destructure con ps ann) target =
             (_1 %~ mkSkolPat sub) <$>
               wrapPattern (Destructure con (Just ps'), b, cs ++ cs') (ann, target) (d, co)
       in do
-        (t, sub) <- skolGadt con =<< lookupTy' con
+        (t, sub) <- skolGadt con =<< lookupTy' Strong con
         case t of
           TyWithConstraints cs ty -> go cs ty sub
           _ -> go [] t sub

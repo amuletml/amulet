@@ -1,5 +1,5 @@
 a : type -> constraint
-use : {'a : type}. a 'a => 'a -> unit
+use : Spec{'a : type}. a 'a => 'a -> unit
 b : type -> constraint
-reuse : {'a : type}. b 'a => 'a -> unit
-foo : {'a : type}. b 'a => 'a -> unit
+reuse : Spec{'a : type}. b 'a => 'a -> unit
+foo : Infer{'a : type}. b 'a => 'a -> unit

@@ -1,12 +1,12 @@
 print : string -> unit
 repr : type -> type
-Unit : {'a : 'cc}. ('a ~ unit) ⊃ repr 'a
-Pair : {'a : 'dd}. {'a : type}. {'b : type}. ('a ~ 'a * 'b) ⊃ (repr 'a * repr 'b) -> repr 'a
-Int : {'a : 'ec}. ('a ~ int) ⊃ repr 'a
+Unit : Spec{'a : 'cc}. ('a ~ unit) ⊃ repr 'a
+Pair : Spec{'a : 'dd}. Spec{'a : type}. Spec{'b : type}. ('a ~ 'a * 'b) ⊃ (repr 'a * repr 'b) -> repr 'a
+Int : Spec{'a : 'ec}. ('a ~ int) ⊃ repr 'a
 option : type -> type
-Some : {'a : type}. 'a -> option 'a
-None : {'a : type}. option 'a
-<$> : {'a : type}. {'b : type}. ('b -> 'a) -> option 'b -> option 'a
-<*> : {'a : type}. {'b : type}. option ('b -> 'a) -> option 'b -> option 'a
-cast : {'a : type}. {'b : type}. repr 'a -> repr 'b -> 'a -> option 'b
+Some : Spec{'a : type}. 'a -> option 'a
+None : Spec{'a : type}. option 'a
+<$> : Infer{'a : type}. Infer{'b : type}. ('b -> 'a) -> option 'b -> option 'a
+<*> : Infer{'a : type}. Infer{'b : type}. option ('b -> 'a) -> option 'b -> option 'a
+cast : Spec{'a : type}. Spec{'b : type}. repr 'a -> repr 'b -> 'a -> option 'b
 main : unit

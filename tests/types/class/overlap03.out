@@ -1,1 +1,1 @@
-foo : {'d : type}. 'd -> constraint
+foo : Infer{'d : type}. 'd -> constraint

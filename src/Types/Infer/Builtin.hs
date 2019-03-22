@@ -106,7 +106,7 @@ quantifier :: MonadInfer Typed m
            -> Type Typed
            -> m (TyBinder Typed, Type Typed, Expr Typed -> Expr Typed)
 
-quantifier r (TyForall v _ rest) = do
+quantifier r (TyPi (Invisible v _ req) rest) | req /= Req = do
   var <- refreshTV v
   let map = Map.singleton v var
       exp ex | an <- annotation ex =
@@ -176,7 +176,7 @@ checkWildcard e (TyPi b x) = flip (*>) (checkWildcard e x) $
   case b of
     Anon t -> checkWildcard e t
     Implicit t -> checkWildcard e t
-    Invisible _ t -> traverse_ (checkWildcard e) t
+    Invisible _ t _ -> traverse_ (checkWildcard e) t
 checkWildcard e (TyRows t rs) = checkWildcard e t *> traverse_ (checkWildcard e . snd) rs
 checkWildcard e (TyExactRows rs) = traverse_ (checkWildcard e . snd) rs
 checkWildcard e (TyTuple a b) = checkWildcard e a *> checkWildcard e b

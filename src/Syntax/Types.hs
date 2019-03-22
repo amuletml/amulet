@@ -1,7 +1,6 @@
 {-# LANGUAGE FlexibleInstances, FlexibleContexts, UndecidableInstances
   , StandaloneDeriving, GeneralizedNewtypeDeriving, DerivingStrategies
-  , TypeFamilies, TemplateHaskell, MultiParamTypeClasses
-  , FunctionalDependencies #-}
+  , TypeFamilies, TemplateHaskell, FunctionalDependencies #-}
 module Syntax.Types
   ( Telescope, one, foldTele, foldTeleM, teleFromList, mapTele, traverseTele, teleToList
   , Scope(..), namesInScope, inScope

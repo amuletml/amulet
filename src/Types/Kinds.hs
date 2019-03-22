@@ -3,7 +3,7 @@ module Types.Kinds
   ( resolveKind
   , resolveTyDeclKind, resolveClassKind
   , annotateKind
-  , closeOver
+  , closeOver, closeOver'
   , checkAgainstKind, getKind, liftType
   , generalise
   )
@@ -134,6 +134,7 @@ resolveTyDeclKind reason tycon args cons = do
       pure kind
   let remake (TyVarArg v:as) (TyArr k r) = TyAnnArg v k:remake as r
       remake (TyAnnArg v _:as) (TyArr k r) = TyAnnArg v k:remake as r
+      remake as (TyForall _ _ k) = remake as k
       remake _ _ = []
   pure (k, foldl TyApp (TyCon tycon) (map TyVar vs), remake args k)
 
@@ -152,7 +153,7 @@ inferKind (TyCon v) = do
   case x of
     Nothing -> confesses (NotInScope v)
     Just k -> do
-      (_, _, k) <- instantiate Expression k
+      (_, _, k) <- instantiate Strong Expression k
       pure (TyCon v, k)
 
 inferKind (TyPromotedCon v) = do
@@ -160,7 +161,7 @@ inferKind (TyPromotedCon v) = do
   case x of
     Nothing -> confesses (NotInScope v)
     Just k -> do
-      (_, _, k) <- instantiate Expression k
+      (_, _, k) <- instantiate Strong Expression k
       case promoteOrError k of
         Nothing -> pure (TyPromotedCon v, k)
         Just err -> confesses (NotPromotable v k err)
@@ -171,7 +172,7 @@ inferKind (TyOperator left op right) = do
   ty <- case kind of
     Nothing -> confesses (NotInScope op)
     Just k ->
-      view _3 <$> instantiate Expression k
+      view _3 <$> instantiate Strong Expression k
 
   ~(Anon lt, c1, _) <- quantifier reason ty
   ~(Anon rt, c2, _) <- quantifier reason c1
@@ -249,19 +250,19 @@ checkKind (TyPi binder b) ek = do
     Anon t -> TyArr <$> checkKind t TyType <*> checkKind b ek
     Implicit t -> TyPi . Implicit <$> checkKind t tyConstraint <*> checkKind b ek
 
-    Invisible v (Just arg) -> do
+    Invisible v (Just arg) r -> do
       (arg, kind) <- inferKind arg
       _ <- subsumes reason kind ek
       b <- local (names %~ focus (one v arg)) $
         checkKind b ek
-      let bind = Invisible v (Just arg)
+      let bind = Invisible v (Just arg) r
       pure $ TyPi bind b
 
-    Invisible v Nothing -> do
+    Invisible v Nothing r -> do
       x <- freshTV
       b <- local (names %~ focus (one v x)) $
         checkKind b ek
-      let bind = Invisible v (Just x)
+      let bind = Invisible v (Just x) r
       pure $ TyPi bind b
 
 checkKind ty u = do
@@ -314,8 +315,8 @@ closeOver r a = silence $ do
       forall vs a = foldr addForall a vs
 
       addForall v t
-        | v `inScope` names = TyForall v (Just (names ^. at v . non undefined)) t
-        | otherwise = TyForall v Nothing t
+        | v `inScope` names = TyPi (Invisible v (Just (names ^. at v . non undefined)) Infer) t
+        | otherwise = TyPi (Invisible v Nothing Infer) t
 
   let kindVars = squish . second toList . runWriter . split where
         squish (x, []) = x
@@ -329,6 +330,37 @@ closeOver r a = silence $ do
         split t = pure t
   kindVars . killWildcard <$> annotateKind r (forall (toList freevars) a)
 
+closeOver' :: MonadKind m => Set.Set (Var Typed) -> SomeReason -> Type Typed -> m (Type Typed)
+closeOver' vars r a = silence $ do
+  names <- view names
+  let freevars = ftv a
+
+      forall :: [Var Typed] -> Type Typed -> Type Typed
+      forall [] a = a
+      forall vs a = foldr addForall a vs
+
+      addForall v t
+        | v `inScope` names = TyPi (Invisible v (Just (names ^. at v . non undefined)) (vis v)) t
+        | otherwise = TyPi (Invisible v Nothing (vis v)) t
+
+      vis v
+        | v `Set.member` vars = Spec
+        | otherwise = Infer
+
+      kindVars = squish . second toList . runWriter . split where
+      squish (x, []) = x
+      squish (x, vs) = foldr (flip tyForall (Just TyType)) x vs
+
+      split (TyForall v (Just t@(TyVar x)) ty)
+        | v `Set.member` freevars = do
+          tell (Set.singleton x)
+          tyForall v (Just t) <$> split ty
+        | otherwise = tyForall v (Just t) <$> split ty
+      split t = pure t
+
+      tyForall t k b = TyPi (Invisible t k (vis t)) b
+  kindVars . killWildcard <$> annotateKind r (forall (toList freevars) a)
+
 
 promoteOrError :: Type Typed -> Maybe Doc
 promoteOrError TyWithConstraints{} = Just (string "mentions constraints")
@@ -336,7 +368,7 @@ promoteOrError TyTuple{} = Nothing
 promoteOrError TyRows{} = Just (string "mentions a tuple")
 promoteOrError TyExactRows{} = Just (string "mentions a tuple")
 promoteOrError (TyApp a b) = promoteOrError a <|> promoteOrError b
-promoteOrError (TyPi (Invisible _ a) b) = join (traverse promoteOrError a) <|> promoteOrError b
+promoteOrError (TyPi (Invisible _ a _) b) = join (traverse promoteOrError a) <|> promoteOrError b
 promoteOrError (TyPi (Anon a) b) = promoteOrError a <|> promoteOrError b
 promoteOrError (TyPi Implicit{} _) = Just (string "has implicit parameters")
 promoteOrError TyCon{} = Nothing

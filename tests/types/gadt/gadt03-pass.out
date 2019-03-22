@@ -1,5 +1,5 @@
-to_string : {'a : type}. 'a -> string
+to_string : Spec{'a : type}. 'a -> string
 term : type -> type
-B : {'a : 'as}. ('a ~ bool) ⊃ bool -> term 'a
-I : {'a : 'bm}. ('a ~ int) ⊃ int -> term 'a
-show : {'a : type}. term 'a -> string
+B : Spec{'a : 'as}. ('a ~ bool) ⊃ bool -> term 'a
+I : Spec{'a : 'bm}. ('a ~ int) ⊃ int -> term 'a
+show : Spec{'a : type}. term 'a -> string

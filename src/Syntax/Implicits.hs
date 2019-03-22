@@ -197,7 +197,8 @@ mapTypes fn = go where
 
   goI (ImplChoice h t o v s a) = ImplChoice (fn h) (fn t) (map goO o) v s a
 
-  goO (Quantifier (Invisible v k)) = Quantifier (Invisible v (fn <$> k))
+  goO (Quantifier (Invisible v k x))
+    | x /= Req = Quantifier (Invisible v (fn <$> k) Infer)
   goO (Quantifier _) = error "impossible quantifier"
   goO (Implication ts) = Implication (fn ts)
 
@@ -280,7 +281,7 @@ matches x (TyOperator l o r) = matches x ((TyCon o `TyApp` l) `TyApp` r)
 matches (TyPi b t) (TyPi b' t') = t `matches` t' && b `matchesBinder` b' where
   matchesBinder (Anon t) (Anon t') = t `matches` t'
   matchesBinder (Implicit t) (Implicit t') = t `matches` t'
-  matchesBinder (Invisible _ k) (Invisible _ k') = fromMaybe False (matches <$> k <*> k')
+  matchesBinder (Invisible _ k x) (Invisible _ k' x') = x == x' && fromMaybe False (matches <$> k <*> k')
   matchesBinder _ _ = False
 
 matches TyPi{} _ = False

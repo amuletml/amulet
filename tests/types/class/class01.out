@@ -1,2 +1,2 @@
 show : type -> constraint
-show : {'a : type}. show 'a => 'a -> string
+show : Spec{'a : type}. show 'a => 'a -> string
