@@ -81,14 +81,6 @@ test-suite tests
                      , Test.Parser.Lexer
                      , Test.Parser.Parser
 
-                     , Test.Lua.Parser
-  default-language:    Haskell2010
-  ghc-options:         -Wextra -Wall -Wno-name-shadowing
-                       -Wno-implicit-prelude -Wno-missing-import-lists
-  if os(linux)
-    ghc-options: -optl-fuse-ld=gold
-    extra-libraries: m, pthread
-
 executable lexer
   main-is:           Parser/Main.hs
   build-depends:       mtl >= 2.2 && < 2.3
