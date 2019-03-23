@@ -32,6 +32,9 @@ module Parser
   ( parseTops
   , parseRepl
   , parseReplExpr
+  , parseInfoVar
+
+  , Located, getL
   ) where
 
 import Control.Arrow (second)
@@ -62,6 +65,7 @@ import Syntax
 %name parseTops Tops
 %name parseRepl Repl
 %name parseReplExpr ReplExpr
+%name parseInfoVar Reference
 
 %tokentype { Token }
 %monad { Parser } { (>>=) } { return }
@@ -316,6 +320,13 @@ Section :: { Expr Parsed }
         | ExprOp Operator                     { withPos2 $1 $2 $ RightSection (fixupExpr $1) $2 }
         | Operator ExprOp                     { withPos2 $1 $2 $ LeftSection $1 (fixupExpr $2) }
 
+Reference :: { Located (Var Parsed) }
+  : Var             { $1 }
+  | Con             { $1 }
+  | '(' op ')'      { lPos2 $1 $3 $ getName $2 }
+  | '(' opid ')'    { lPos2 $1 $3 $ getName $2 }
+  | '(' qopid ')'   { lPos2 $1 $3 $ getName $2 }
+
 NullSection :: { Maybe (Expr Parsed) }
   :                                           { Nothing }
   | Section                                   { Just $1 }
@@ -514,6 +525,7 @@ TypeRow :: { (T.Text, Type Parsed) }
 {
 
 data Located a = L a Span
+  deriving (Eq, Show, Ord)
 
 instance Spanned (Located a) where
   annotation (L _ s) = s
