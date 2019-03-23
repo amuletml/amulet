@@ -17,6 +17,7 @@ import qualified Data.Text as T
 
 import qualified Data.ByteString as Bs
 import qualified Data.VarMap as VarMap
+
 import Data.Traversable
 import Data.Bifunctor
 import Data.Foldable
@@ -158,6 +159,9 @@ runRepl = do
     execCommand "t" arg = lift (typeCommand arg) >> runRepl
     execCommand "type" arg = lift (typeCommand arg) >> runRepl
 
+    execCommand "i" arg = lift (infoCommand arg) >> runRepl
+    execCommand "info" arg = lift (infoCommand arg) >> runRepl
+
     execCommand cmd _ = liftIO (putDoc ("Unknown command" <+> verbatim cmd)) >> runRepl
 
     -- | Split a string into arguments
@@ -179,6 +183,34 @@ runRepl = do
       case files of
         [] -> liftIO (putDoc "No files to reload")
         files -> loadFiles files
+
+    infoCommand (T.pack . dropWhile isSpace -> input) = do
+      state <- get
+      let files :: [(String, T.Text)]
+          files = [("<input>", input)]
+          (parsed, parseMsg) = runParser "<input>" (L.fromStrict input) parseInfoVar
+      liftIO $ traverse_ (`reportS`files) parseMsg
+      case parsed of
+        Nothing -> pure ()
+        Just var -> do
+          let prog = [ S.LetStmt S.Public
+                        [ S.Binding (S.Name "_")
+                            (S.VarRef (getL var) (annotation var))
+                            True (annotation var)
+                        ]
+                     ]
+              prog :: [S.Toplevel S.Parsed]
+
+          resolved <-
+            flip evalNameyT (lastName state) $
+              resolveProgram (resolveScope state) (moduleScope state) prog
+
+          case resolved of
+            Right ([ S.LetStmt _ [S.Binding _ (S.VarRef name _) _ _] ], _) ->
+              liftIO . putDoc . displayType $
+                (inferScope state ^. T.names . at name . non undefined)
+            _ -> liftIO . putDoc $ "Name not in scope:" <+> pretty (getL var)
+
 
     typeCommand (dropWhile isSpace -> line) = do
       state <- get
