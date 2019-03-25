@@ -1,6 +1,2 @@
-quantified-super.ml[3:1 ..4:3]: error
-  │ 
-3 │ class (forall 'b. foo 'b => bar 'b) => foo 'a begin
-  │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  Invalid type in context for class declaration:
-      forall 'b. foo 'b => bar 'b
+bar : Infer{'g : type}. 'g -> constraint
+foo : Infer{'g : type}. 'g -> constraint

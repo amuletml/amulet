@@ -93,7 +93,7 @@ inferClass clss@(Class name _ ctx _ methods classAnn) = do
         getContext (Just t) = unwind t
 
     ctx <- for ctx $ \x -> do
-      validClassCtx "class" classAnn x
+      validContext "class" classAnn x
       checkAgainstKind (BecauseOf clss) x tyConstraint
 
     (fold -> scope, rows') <- fmap unzip . for (getContext ctx) $
@@ -204,7 +204,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
   -- desugar.
   ctx <- case ctx of
     Just x -> do
-      validInstCtx "instance" ann x
+      validContext "instance" ann x
       checkAgainstKind (BecauseOf inst) x tyConstraint
     Nothing -> pure tyUnit
 
@@ -339,7 +339,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
     tell (pure (ConImplicit (BecauseOf inst) scope var ty))
     pure (Field name
            (ExprWrapper (WrapVar var)
-             (Fun (EvParam (Capture var (ann, ty)))
+             (Fun (EvParam (PType (Capture var (ann, ty)) ty (ann, ty)))
                (VarRef var (ann, ty)) (ann, TyArr ty ty))
                (ann, ty))
              (ann, ty))
@@ -537,58 +537,32 @@ mkLet xs = Let xs
 (!) :: (Show k, Ord k, HasCallStack) => Map.Map k v -> k -> v
 m ! k = fromMaybe (error ("Key " ++ show k ++ " not in map")) (Map.lookup k m)
 
-validInstCtx :: MonadChronicles TypeError m => String -> Ann Desugared -> Type Desugared -> m ()
-validInstCtx what ann t@(TyApp f _)
+validContext :: MonadChronicles TypeError m => String -> Ann Desugared -> Type Desugared -> m ()
+validContext what ann t@(TyApp f _)
   | TyCon{} <- f = pure ()
-  | otherwise = validInstCtx "" ann f `catchChronicle` \_ -> confesses (InvalidContext what ann t)
+  | otherwise = validContext "" ann f `catchChronicle` \_ -> confesses (InvalidContext what ann t)
 
-validInstCtx what ann (TyTuple a b) = do
-  validInstCtx what ann a
-  validInstCtx what ann b
+validContext what ann (TyTuple a b) = do
+  validContext what ann a
+  validContext what ann b
 
-validInstCtx what ann (TyOperator a _ b) = do
-  validInstCtx what ann a
-  validInstCtx what ann b
+validContext what ann (TyOperator a _ b) = do
+  validContext what ann a
+  validContext what ann b
 
-validInstCtx _ _ TyCon{} = pure ()
-validInstCtx what ann t@TyPromotedCon{} = confesses (InvalidContext what ann t)
-validInstCtx w a t@TyVar{} = confesses (InvalidContext w a t)
-validInstCtx w a t@TyArr{} = confesses (InvalidContext w a t)
-validInstCtx w a t@(TyPi _ x) =
-  validInstCtx w a x `catchChronicle` \_ -> confesses (InvalidContext w a t)
-validInstCtx w a t@TyRows{} = confesses (InvalidContext w a t)
-validInstCtx w a t@TyExactRows{} = confesses (InvalidContext w a t)
-validInstCtx w a t@TyWildcard{} = confesses (InvalidContext w a t)
-validInstCtx w a t@TySkol{} = confesses (InvalidContext w a t)
-validInstCtx w a t@TyWithConstraints{} = confesses (InvalidContext w a t)
-validInstCtx w a t@TyType{} = confesses (InvalidContext w a t)
-validInstCtx w a (TyParens t) = validInstCtx w a t
-
-validClassCtx :: MonadChronicles TypeError m => String -> Ann Desugared -> Type Desugared -> m ()
-validClassCtx what ann t@(TyApp f _)
-  | TyCon{} <- f = pure ()
-  | otherwise = validClassCtx "" ann f `catchChronicle` \_ -> confesses (InvalidContext what ann t)
-
-validClassCtx what ann (TyTuple a b) = do
-  validClassCtx what ann a
-  validClassCtx what ann b
-
-validClassCtx what ann (TyOperator a _ b) = do
-  validClassCtx what ann a
-  validClassCtx what ann b
-
-validClassCtx _ _ TyCon{} = pure ()
-validClassCtx what ann t@TyPromotedCon{} = confesses (InvalidContext what ann t)
-validClassCtx w a t@TyVar{} = confesses (InvalidContext w a t)
-validClassCtx w a t@TyArr{} = confesses (InvalidContext w a t)
-validClassCtx w a t@TyPi{} = confesses (InvalidContext w a t)
-validClassCtx w a t@TyRows{} = confesses (InvalidContext w a t)
-validClassCtx w a t@TyExactRows{} = confesses (InvalidContext w a t)
-validClassCtx w a t@TyWildcard{} = confesses (InvalidContext w a t)
-validClassCtx w a t@TySkol{} = confesses (InvalidContext w a t)
-validClassCtx w a t@TyWithConstraints{} = confesses (InvalidContext w a t)
-validClassCtx w a t@TyType{} = confesses (InvalidContext w a t)
-validClassCtx w a (TyParens t) = validClassCtx w a t
+validContext _ _ TyCon{} = pure ()
+validContext what ann t@TyPromotedCon{} = confesses (InvalidContext what ann t)
+validContext w a t@TyVar{} = confesses (InvalidContext w a t)
+validContext w a t@TyArr{} = confesses (InvalidContext w a t)
+validContext w a t@(TyPi _ x) =
+  validContext w a x `catchChronicle` \_ -> confesses (InvalidContext w a t)
+validContext w a t@TyRows{} = confesses (InvalidContext w a t)
+validContext w a t@TyExactRows{} = confesses (InvalidContext w a t)
+validContext w a t@TyWildcard{} = confesses (InvalidContext w a t)
+validContext w a t@TySkol{} = confesses (InvalidContext w a t)
+validContext w a t@TyWithConstraints{} = confesses (InvalidContext w a t)
+validContext w a t@TyType{} = confesses (InvalidContext w a t)
+validContext w a (TyParens t) = validContext w a t
 
 type Need t = (Var t, Type t, SomeReason)
 data WrapFlavour = Thin | Full
