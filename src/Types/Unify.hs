@@ -1,6 +1,7 @@
 {-# LANGUAGE MultiWayIf, FlexibleContexts, ScopedTypeVariables,
    TemplateHaskell, TupleSections, ViewPatterns,
    LambdaCase, ConstraintKinds, CPP, TypeFamilies, OverloadedStrings #-}
+{-# OPTIONS_GHC -Wno-unused-top-binds #-}
 
 -- | This module implements the logic responsible for solving the
 -- sequence of @Constraint@s the type-checker generates for a particular
@@ -18,7 +19,7 @@ import Control.Monad.Except
 import Control.Monad.State
 import Control.Applicative
 import Control.Monad.Infer
-import Control.Lens hiding (Empty)
+import Control.Lens hiding (Empty, (:>))
 
 import Types.Infer.Builtin hiding (subsumes, unify)
 import Types.Infer.Errors
@@ -57,7 +58,8 @@ import Prelude hiding (lookup)
 #ifdef TRACE_TC
 
 import Text.Show.Pretty (ppShow)
-import Debug.Trace
+import Syntax.Pretty
+import qualified Debug.Trace as Dbg
 
 #endif
 
@@ -248,12 +250,21 @@ doSolve (ohno@(ConImplicit reason scope var con@TyPi{}) :<| cs) = do
   con <- pure (apply sub con)
   scope <- pure (mapTypes (apply sub) scope)
 
-  let (head, _) = splitImplVarType con
-  case filter ((/= Superclass) . view implSort) $ lookup head scope of
+  (wrap, head, assum) <- skolemise (ByConstraint con) con
+
+  case lookup head (assum <> scope) of
     xs | allSameHead xs, concreteUnderOne con -> do
       w <- local (depth %~ (con:)) $
-        useImplicit reason con scope (pickBestPossible xs)
-      solveCoSubst . at var ?= w
+        useImplicit reason head (assum <> scope) (pickBestPossible xs)
+          `catchChronicle`
+            \_ -> confesses (addBlame reason (UnsatClassCon reason (apply sub ohno) It'sQuantified))
+
+      let wanted = ExprWrapper (wrap :> w) (identity head) (a, con)
+          identity t = Fun (EvParam (Capture var (a, t))) (VarRef var (a, t)) (a, TyArr t t)
+          a = annotation reason
+
+      solveCoSubst . at var ?= ExprApp wanted
+
     _ -> dictates (addBlame reason (UnsatClassCon reason (apply sub ohno) It'sQuantified))
 
 doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
@@ -262,9 +273,7 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
   cons <- pure (apply sub cons)
   scope <- pure (mapTypes (apply sub) scope)
 
-#ifdef TRACE_TC
   traceM (displayS (pretty (apply sub ohno)))
-#endif
 
   case lookup cons scope of
     xs | allSameHead xs
@@ -273,17 +282,25 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
        , not (null applic) -> do
       let imp = pickBestPossible applic
 
-#ifdef TRACE_TC
       traceM (displayS ("best possible:" <+> pretty var <+> pretty (imp ^. implVar) <+> pretty (imp ^. implType)))
-#endif
 
       w <- local (depth %~ (cons :)) $
         useImplicit reason cons scope imp
+          `catchChronicle`
+            \_ -> confesses (addBlame reason (UnsatClassCon reason (apply sub ohno) It'sQuantified))
       solveCoSubst . at var ?= w
+
+    -- TODO: see if sound
+    [imp] | not (concreteUnderOne cons), imp ^. implSort == LocalAssum -> do
+      traceM (displayS ("only possible:" <+> pretty var <+> pretty (imp ^. implVar) <+> pretty (imp ^. implType)))
+
+      w <- useImplicit reason cons scope imp
+          `catchChronicle`
+            \_ -> confesses (addBlame reason (UnsatClassCon reason (apply sub ohno) It'sQuantified))
+      solveCoSubst . at var ?= w
+
     _ -> do
-#ifdef TRACE_TC
       traceM "  propagated"
-#endif
       solveCoSubst . at var ?= ExprApp (VarRef var (annotation reason, cons))
       tell (pure (apply sub ohno))
 
@@ -312,7 +329,9 @@ useImplicit reason ty scope (ImplChoice _ oty _ imp _ _) = go where
 
     w <- subsumes' reason scope oty ty
     let start = VarRef imp (annotation reason, oty)
-    pure (ExprApp (ExprWrapper w start (annotation reason, ty)))
+    pure (ExprApp (Ascription (ExprWrapper w start (annotation reason, ty))
+                    ty
+                    (annotation reason, ty)))
 
 bind :: MonadSolve m => Var Typed -> Type Typed -> m (Coercion Typed)
 bind var ty
@@ -517,6 +536,12 @@ subsumes', subsumes :: MonadSolve m
 subsumes blame scope a b = do
   x <- use solveTySubst
   retcons (addBlame blame) $ subsumes' blame scope (apply x a) (apply x b)
+
+#ifdef TRACE_TC
+subsumes' _ _ t1 t2
+  | trace (displayS (hsep [displayType t1, soperator (char '≤'), displayType t2])) False
+  = undefined
+#endif
 
 subsumes' b s t1 t2@TyPi{} | isSkolemisable t2 = do
   (c, t2', scope) <- skolemise (BySubsumption t1 t2) t2
@@ -917,9 +942,7 @@ countConstructors _ = 0
 guardClassOverflow :: MonadSolve m => SomeReason -> Type Typed -> m ()
 guardClassOverflow why cons = do
   x <- view depth
-#ifdef TRACE_TC
   traceM (displayS ("class stack:" <+> vsep (map pretty x)))
-#endif
   when (length x >= 10) $
     confesses (ClassStackOverflow why x cons)
 
@@ -929,3 +952,21 @@ newtype InField = InField Text
 
 instance Pretty InField where
   pretty (InField t) = string "When checking the field" <+> skeyword (text t)
+
+traceM :: Applicative m => String -> m ()
+trace :: String -> a -> a
+traceShow :: Show a => a -> b -> b
+
+#ifdef TRACE_TC
+
+traceM = Dbg.traceM
+trace = Dbg.trace
+traceShow = Dbg.traceShow
+
+#else
+
+traceM _ = pure ()
+trace _ x = x
+traceShow a x = show a `seq` x
+
+#endif
