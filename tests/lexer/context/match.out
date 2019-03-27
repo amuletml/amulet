@@ -1,0 +1,25 @@
+
+let _ = match 1 with
+| _ -> 1
+
+
+$end $end $sep let _ = function
+| _ ->
+  1
+  $sep 1
+| _ -> 1
+
+
+$end $end $sep let _ = function
+| _ -> function
+  | _ -> 1
+$end | _ -> 1
+
+
+$end $end $sep let _ = function ( )
+
+
+$end $sep let _ =
+  let _ = match x with ( ) 2
+  $end $in ( match x with ( ) , 2 )
+$end $end <eof>

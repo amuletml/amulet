@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, OverloadedStrings #-}
 
 {-| In order to determine how indentation should be handled, we keep track
   of the current context we're in. For instance, if we're in a @let@
@@ -21,28 +21,35 @@ import Data.Position
 import Data.Spanned
 import Data.Span
 
+import Text.Pretty.Semantic
+
 import Parser.Error
 import Parser.Token
 
 -- | An element in the context stack.
 data Context
-  -- | @(@, @[@ and @{@ (closed by @)@, @]@ and @}@ respectively).
+  -- | Inside a matching pair of brackets (we store the required end
+  -- bracket). Used for @begin@/@end@, @()@, @[]@, @{}@.
   = CtxBracket TokenClass
-  -- | A top-level let definition
-  | CtxStmtLet SourcePos
-  -- | An expression level let definition
-  | CtxLet SourcePos
-  -- | A list of sequences.
+
+  -- | An empty sequence of terms. Used before pushing 'CtxBlock' when
+  -- you do not know where the next token will occur.
   | CtxEmptyBlock (Maybe TokenClass)
+  -- | A sequence of terms
   | CtxBlock { blockStart :: SourcePos -- ^ The position of the first token within this block
              , blockSep :: Bool -- ^ Whether this block is awaiting a separator.
              , blockEmpty :: Bool -- ^ Whether this block is empty. Namely, whether we've seen a separator yet.
              , blockTerm :: Maybe TokenClass -- ^ The terminator for this block.
              }
 
+  -- | A top-level let definition.
+  | CtxStmtLet SourcePos
+  -- | An expression level let definition.
+  | CtxLet SourcePos
+
   -- | The terms between a @match@ and a @with@ token.
   | CtxMatch SourcePos
-  -- | An empty @match@ or @function@ expression
+  -- | An empty @match@ or @function@ expression.
   | CtxMatchEmptyArms
   -- | A @match@ or @function@ expression with at least one arm. The
   -- position marks the location of the first arm.
@@ -52,36 +59,80 @@ data Context
   -- @->@.
   | CtxFun SourcePos
 
-  -- | The if context spans the entire if block. then spans from @then@
-  -- to the @else@ keword.
-  | CtxIf SourcePos | CtxThen SourcePos
-  -- | else unresolved marks an else block which has not yet seen a
-  -- token. This is used in order to merge `else if`.
-  | CtxElseUnresolved SourcePos | CtxElse SourcePos
+  -- | The if context spans the entire if block.
+  | CtxIf SourcePos
+  -- | Everything after a @then@ keyword but before a @else@.
+  | CtxThen SourcePos
+  -- | An @else@ block which has not yet seen a token. This is used in
+  -- order to provide special handling for @else if@.
+  | CtxElseUnresolved SourcePos
+  -- | The body of an @else@ block.
+  | CtxElse SourcePos
 
-  -- | Anything between a module and the =, then the actual contents of
-  -- the module
+  -- | Anything between @module@ and the @=@
   | CtxModuleHead Bool SourcePos
-  | CtxModuleBodyUnresolved SourcePos SourcePos
-  | CtxModuleBody SourcePos
+  -- | After the @=@ of a module, but before observing the actual contents.
+  | CtxModuleBodyUnresolved SourcePos
+  -- | The actual definition of a module. This always has a 'CtxBlock'
+  -- inside it.
+  | CtxModuleBody
 
-  -- | The head of a type definition and its body
-  | CtxTypeHead SourcePos | CtxTypeBody SourcePos
+  -- | The precursor to a type definition: everything between @type@ and
+  -- the @=@.
+  | CtxTypeHead SourcePos
+  -- | The actual body of a type definition.
+  | CtxTypeBody SourcePos
 
-  -- | The head of a class definition and its body
-  | CtxClassHead SourcePos | CtxClassBody SourcePos
+  -- | The head of a class definition, including signature.
+  | CtxClassHead SourcePos
+  -- | The body of a class definition.
+  | CtxClassBody
 
-  -- | The head of an instance and its body
-  | CtxInstHead SourcePos | CtxInstBody SourcePos
+  -- | The head of an instance definition.
+  | CtxInstHead SourcePos
+  -- | The body of an instance definition.
+  | CtxInstBody
 
-  -- | The body of a list expression. This will be inside a @CtxBracket@,
-  -- so is only used as a marker.
+  -- | The body of a list expression.
+  --
+  -- This will be inside a 'CtxBracket', so is only used as a marker.
   | CtxList
-  -- | The body of a list comprehension. This will be inside a
-  -- @CtxBracket@, so is only used as a marker.
+  -- | The body of a list comprehension.
+  --
+  -- This will be inside a 'CtxBracket', so is only used as a marker.
   | CtxListComprehension
 
   deriving (Show, Eq)
+
+
+source :: SourcePos -> Doc
+source (SourcePos _ l c) = shown l <> colon <> shown c
+
+instance Pretty Context where
+  pretty (CtxBracket b) = soperator . string . show $ b
+
+  pretty (CtxEmptyBlock Nothing) = stypeCon "EmptyBlock"
+  pretty (CtxEmptyBlock (Just x)) = stypeCon "EmptyBlock" <> brackets (shown x)
+  pretty (CtxBlock start sep empty Nothing) = stypeCon "Block" <> brackets ("sep=" <> shown sep <> ",empty=" <> shown empty) <> parens (source start)
+  pretty (CtxBlock start sep empty (Just x)) = stypeCon "Block" <> brackets (shown x <> ",sep=" <> shown sep <> ",empty=" <> shown empty) <> parens (source start)
+
+  pretty (CtxStmtLet sp) = stypeCon "StmtLet" <> parens (source sp)
+  pretty (CtxLet sp) = stypeCon "Let" <> parens (source sp)
+  pretty (CtxMatch sp) = stypeCon "Match" <> parens (source sp)
+  pretty CtxMatchEmptyArms = stypeCon "MatchEmptyArms"
+  pretty (CtxMatchArms sp) = stypeCon "MatchArms" <> parens (source sp)
+  pretty (CtxFun sp) = stypeCon "Fun" <> parens (source sp)
+  pretty (CtxIf sp) = stypeCon "If" <> parens (source sp)
+  pretty (CtxThen sp) = stypeCon "Then" <> parens (source sp)
+  pretty (CtxElse sp) = stypeCon "Else" <> parens (source sp)
+  pretty (CtxElseUnresolved sp) = stypeCon "ElseUnresolved" <> parens (source sp)
+
+  pretty (CtxModuleHead False sp) = stypeCon "ModuleHead" <> parens (source sp)
+  pretty (CtxModuleHead True sp) = stypeCon "ModuleHead" <> brackets "Top" <> parens (source sp)
+  pretty (CtxModuleBodyUnresolved sp) = stypeCon "ModuleUnresolved" <> parens (source sp)
+  pretty CtxModuleBody = stypeCon "Module"
+
+  pretty x = parens . string . show $ x
 
 -- | Represents a "working list" of tokens the context processor is
 -- currently handling.
@@ -93,6 +144,8 @@ data PendingState
   -- | Push a new token to the parser, with additional tokens which may
   -- need processing.
   | Result Token PendingState   deriving (Show)
+
+infixr `Result`
 
 -- | The starting context for a set of top-level statements
 defaultContext :: [Context]
@@ -131,16 +184,6 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
       -> case insertFor ck of
           Nothing -> handleContext tok cks
           Just x -> pure (Result (Token x tp te) (Working tok), cks)
-
-    -- If we've got an in, then pop our let context and push a block
-    (TcIn, CtxLet offside:cks) -> do
-      -- If we're on the same line then it can be anywhere. Otherwise the
-      -- in should line up with the let.
-      when (spLine tp /= spLine offside && spCol tp /= spCol offside) $
-        tell . pure $ UnalignedIn (annotation tok) (mkSpan1 offside)
-
-      pure ( Result tok Done
-           , CtxEmptyBlock (Just TcVEnd):cks )
 
     (_, CtxBracket tk':cks) | tk == tk' -> pure (Result tok Done, cks)
 
@@ -181,6 +224,16 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
       , not (isOp tk)
       -> pure ( Result (Token TcVSep tp te) (Working tok)
               , CtxBlock offside False False end:cks)
+
+    -- If we've got an in, then pop our let context and push a block
+    (TcIn, CtxLet offside:cks) -> do
+      -- If we're on the same line then it can be anywhere. Otherwise the
+      -- in should line up with the let.
+      when (spLine tp /= spLine offside && spCol tp /= spCol offside) $
+        tell . pure $ UnalignedIn (annotation tok) (mkSpan1 offside)
+
+      pure ( Result tok Done
+           , CtxEmptyBlock (Just TcVEnd):cks )
 
     -- Offside rule for statement lets: just pop the context
     (_, CtxStmtLet offside:cks)
@@ -231,80 +284,69 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
     -- inject an @= $begin@ and switch to a module body.
     (_, CtxModuleHead True mod:ck)
       | spCol tp <= spCol mod
-      -> pure ( Result (Token TcEqual tp tp) $ Result (Token TcVBegin tp tp) $ Working tok
-              , CtxEmptyBlock (Just TcVEnd) : CtxModuleBody mod : ck )
+      -> pure ( Token TcEqual tp tp `Result` Token TcVBegin tp tp `Result` Working tok
+              , CtxEmptyBlock (Just TcVEnd) : CtxModuleBody : ck )
 
     -- Offside rule for modules
-    (TcEnd, CtxModuleBody offside:ck)
-      | spCol tp == spCol offside
-      -> pure (Result tok Done, ck)
-    (_, CtxModuleBody offside:ck)
-      | spCol tp <= spCol offside
-      -> handleContext tok ck
+    (_, CtxModuleBody:ck) -> handleContext tok ck
 
-    -- We need to determine if we need to insert a begin or not
-    -- If we're followed by a constructor, assume it's a module import
-    (TcConIdent{}, CtxModuleBodyUnresolved{}:ck) -> pure (Result tok Done, ck)
-    (TcConIdentQual{}, CtxModuleBodyUnresolved{}:ck) -> pure (Result tok Done, ck)
-    -- Handle explicit begins
-    (TcBegin, CtxModuleBodyUnresolved mod eq:ck)
-      | spLine tp == spLine eq || spCol tp == spCol mod
+    -- @module ... = begin@ ~~> Push module + bracket
+    (TcBegin, CtxModuleBodyUnresolved mod:ck)
+      | spCol tp >= spCol mod
       -> pure ( Result tok Done
-              , CtxEmptyBlock Nothing : CtxModuleBody mod : ck )
-    -- Otherwise assume it's an implicit begin
-    (_, CtxModuleBodyUnresolved mod eq:ck)
-      -> pure (Result (Token TcVBegin eq eq) (Working tok)
-              , CtxEmptyBlock (Just TcVEnd) : CtxModuleBody mod : ck)
+              , CtxEmptyBlock Nothing : CtxModuleBody : CtxBracket TcEnd : ck )
+    -- @module ... = ?toplevel@ ~~> Add implicit begin and enter module.
+    (tc, CtxModuleBodyUnresolved mod:ck)
+      | spCol tp > spCol mod
+      , isTopTok tc
+      -> pure ( Token TcVBegin tp tp `Result` Working tok
+              , CtxEmptyBlock (Just TcVEnd) : CtxModuleBody : ck )
+    (_, CtxModuleBodyUnresolved _:ck)
+      -> handleContext tok ck
+    -- @module ... =@ ~~> Push a unresolved module body
+    (TcEqual, CtxModuleHead _ mod:ck)
+      -> pure ( Result tok Done
+              , CtxModuleBodyUnresolved mod : ck)
 
     -- Offside rule for class blocks
-    (TcEnd, CtxClassBody offside:ck)
-      | spCol tp == spCol offside
-      -> pure (Result tok Done, ck)
-    (_, CtxClassBody offside:ck)
-      | spCol tp <= spCol offside
-      -> handleContext tok ck
-    -- For empty classes, we need to add @begin@ and @end@
-    (_, CtxClassHead offside:ck)
-      | (if tk == TcBegin then spCol tp + 1 else spCol tp) <= spCol offside
-      -> pure (Result (Token TcVBegin tp tp) (Result (Token TcVEnd tp tp) (Working tok))
-              , ck)
+    (_, CtxClassBody:ck) -> handleContext tok ck
 
-    -- We need to determine if we need to insert a begin or not for classes
+    -- @class ... begin@ ~~> Push empty block + class + bracket
     (TcBegin, CtxClassHead cls:ck)
       | spCol tp >= spCol cls
       -> pure ( Result tok Done
-              , CtxEmptyBlock Nothing : CtxClassBody cls : ck )
-    -- If it's part of the body, add an implicit begin. Note that we explicitly
-    -- check its a val, so we don't handle multi-line class names.
-    (TcVal, CtxClassHead cls:ck)
+              , CtxEmptyBlock Nothing : CtxClassBody : CtxBracket TcEnd : ck )
+    -- @class ... ?toplevel@ ~~> Add implicit begin and enter class
+    (tc, CtxClassHead cls:ck)
       | spCol tp > spCol cls
-      -> pure (Result (Token TcVBegin tp tp) (Working tok)
-              , CtxEmptyBlock (Just TcVEnd) : CtxClassBody cls : ck)
+      , isTopTok tc
+      -> pure ( Token TcVBegin tp tp `Result` Working tok
+              , CtxEmptyBlock (Just TcVEnd) : CtxClassBody : ck )
+    -- Offside rule for empty classes
+    (_, CtxClassHead offside:ck)
+      | spCol tp <= spCol offside
+      -> pure ( Token TcVBegin tp tp `Result` Token TcVEnd tp tp `Result` Working tok
+              , ck)
 
     -- Offside rule for instance blocks
-    (TcEnd, CtxInstBody offside:ck)
-      | spCol tp == spCol offside
-      -> pure (Result tok Done, ck)
-    (_, CtxInstBody offside:ck)
-      | spCol tp <= spCol offside
-      -> handleContext tok ck
-    -- For empty instances, we need to add @begin@ and @end@
-    (_, CtxInstHead offside:ck)
-      | (if tk == TcBegin then spCol tp + 1 else spCol tp) <= spCol offside
-      -> pure (Result (Token TcVBegin tp tp) (Result (Token TcVEnd tp tp) (Working tok))
-              , ck )
+    (_, CtxInstBody:ck) -> handleContext tok ck
 
-    -- We need to determine if we need to insert a begin or not for instance blocks
+    -- @instance ... begin@ ~~> Push empty block + instance + bracket
     (TcBegin, CtxInstHead cls:ck)
       | spCol tp >= spCol cls
       -> pure ( Result tok Done
-              , CtxEmptyBlock Nothing : CtxInstBody cls : ck )
-    -- If it's part of the body, add an implicit begin. Note that we explicitly
-    -- check its a @let@, so we don't handle multi-line class names.
-    (TcLet, CtxInstHead cls:ck)
+              , CtxEmptyBlock Nothing : CtxInstBody : CtxBracket TcEnd : ck )
+    -- @instance ... ?toplevel@ ~~> Add implicit begin and enter instance
+    (tc, CtxInstHead cls:ck)
       | spCol tp > spCol cls
-      -> pure (Result (Token TcVBegin tp tp) (Working tok)
-              , CtxEmptyBlock (Just TcVEnd) : CtxInstBody cls: ck)
+      , isTopTok tc
+      -> pure ( Token TcVBegin tp tp `Result` Working tok
+              , CtxEmptyBlock (Just TcVEnd) : CtxInstBody : ck )
+    -- Offside rule for empty instancees
+    (_, CtxInstHead offside:ck)
+      | spCol tp <= spCol offside
+      -> pure ( Token TcVBegin tp tp `Result` Token TcVEnd tp tp `Result` Working tok
+              , ck)
 
     -- Offside rule for type declarations. We allow the pipe to be aligned to
     -- the current context.
@@ -374,16 +416,11 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
     (TcModule, [CtxBlock{ blockEmpty = True }]) -> pure (Result tok Done, CtxModuleHead True tp:c)
 
     -- @module@ ~~> Push a module context
-    (TcModule, _) -> pure (Result tok Done, CtxModuleHead False tp:c)
-    -- @module ... =@ ~~> Push a module body
-    (TcEqual, CtxModuleHead _ mod:ck) -> pure
-      ( Result tok Done
-      , CtxModuleBodyUnresolved mod te:ck)
-
+    (TcModule, _) -> pure (Result tok Done, CtxModuleHead False (getMarginAt tp c):c)
     -- @class@ ~~> Push a class context
-    (TcClass, _) -> pure (Result tok Done, CtxClassHead tp:c)
+    (TcClass, _) -> pure (Result tok Done, CtxClassHead (getMarginAt tp c):c)
     -- @instance@ ~~> Push an instance context
-    (TcInstance, _) -> pure (Result tok Done, CtxInstHead tp:c)
+    (TcInstance, _) -> pure (Result tok Done, CtxInstHead (getMarginAt tp c):c)
     -- @type@ ~~> Push a type context
     (TcType, _) -> pure (Result tok Done, CtxTypeHead tp:c)
 
@@ -500,6 +537,28 @@ isIfContinue :: TokenClass -> Bool
 isIfContinue TcThen = True
 isIfContinue TcElse = True
 isIfContinue _ = False
+
+-- | This token starts a top-level term
+isTopTok :: TokenClass -> Bool
+isTopTok TcClass = True
+isTopTok TcInstance = True
+isTopTok TcLet = True
+isTopTok TcModule = True
+isTopTok TcType = True
+isTopTok TcVal = True
+isTopTok TcPrivate = True
+isTopTok TcOpen = True
+isTopTok _ = False
+
+-- | Get the left most margin of the current context
+getMargin :: [Context] -> SourcePos
+getMargin (CtxBlock s _ _ _:_) = s
+getMargin (_:xs) = getMargin xs
+getMargin _ = error "Underflow when getting left margin"
+
+-- | Get the margin at a particular line.
+getMarginAt :: SourcePos -> [Context] -> SourcePos
+getMarginAt pos c = (getMargin c) { spLine = spLine pos }
 
 -- | Determines if any tail of the list matches the predicate.
 multiAny :: ([a] -> Bool) -> [a] -> Bool

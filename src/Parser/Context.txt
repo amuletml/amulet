@@ -1,0 +1,81 @@
+_       EmptyBlock              -> Replace with block @ tok
+eof     _                       -> Push close tokens
+_       _   | pops parent       -> Insert any closing tokens and pop
+
+_       Bracket | closing       -> Pop
+
+_       Block | offside         -> Insert terminator & Pop
+_       Block | Has separator   -> Replace with needing separator and continue skipping "needs separator" rules.
+;|;;    Block | Needs separator -> Replace with not needing separator
+_       Block | Needs separator, On offside rule -> Add $sep and continue without separator
+
+in      Let                     -> Replace let with an empty block
+
+_       StmtLet | Offside       -> Pop let
+_       Let | Offside           -> Add $in, replace let with block
+
+_       MatchArms | Offside     -> Add $end, pop
+
+_       If | Offside            -> Add $end, pop
+_       Then | Offside          -> Pop
+_       Else | Offside          -> Pop
+if      ElseUnresolved | Same line -> Replace with block:if:
+_       ElseUnresolved          -> Push else
+
+_       TypeBody | Offside      -> Pop
+=       TypeHead | Not offside  -> Replace with TypeBody
+_       TypeHead | Offside      -> Pop
+
+_       ModuleHead<I> | Offside -> Add =, $begin, Replace with EmptyBlock+ModuleBody
+
+        ModuleBody              -> Pop
+Begin   ModuleBodyUnresolved | Not offside -> Push Block+ModuleBody+Bracket
+_       ModuleBodyUnresolved | Not offside, Is toplevel -> Add $begin, Push Block+ModuleBody
+_       ModuleBodyUnresolved    -> Pop
+=       ModuleHead              -> Replace with ModuleBodyUnresolved
+
+        ClassBody               -> Pop
+begin   ClassHead | Not offside -> Replace with EmptyBlock+ClassBody+Bracket
+_       ClassHead | Not offside, Is toplevel -> Add $begin, replace with EmptyBlock+ClassBody
+_       ClassHead | Offside     -> Add $begin, $end, pop
+
+        InstBody                -> Pop
+begin   InstHead | Not offside  -> Replace with EmptyBlock+InstBody+Bracket
+_       InstHead | Not offside, Is toplevel -> Add $begin, replace with EmptyBlock+InstBody
+_       InstHead | Offside      -> Add $begin, $end, pop
+
+_       TypeBody | Offside      -> Pop
+=       TypeHead | Not offside  -> Replace with TypeBody
+_       TypeHead | Offside      -> Pop
+
+let     _                       -> Push a Let/StmtLet context
+equal   StmtLet                 -> Push an empty block
+equal   Let                     -> Push an empty block
+
+function _                      -> Push EmptyArms
+match   _                       -> Push Match
+with    Match                   -> Replace with EmptyArms
+
+|       EmptyArms               -> Replace with MatchArms@tok
+(       EmptyArms               -> Pop
+->      MatchArms               -> Push EmptyBlock
+
+fun     _                       -> Push Fun
+->      Fun                     -> Replace with EmptyBlock
+
+if      _                       -> Push If
+then    _                       -> Push Then
+else    _                       -> Push Else
+
+module  [Block<empty>]          -> Push ModuleHead[I]
+module  _                       -> Push ModuleHead
+
+class   _                       -> Push ClassHead
+instance _                      -> Push InstHead
+type    _                       -> Push LetHead
+
+begin   _                       -> Push Block+Bracket<end>
+({      _                       -> Push Bracket<_>
+
+[       _                       -> Push List+Bracket<]>
+|       List                    -> Replace ListComprehension

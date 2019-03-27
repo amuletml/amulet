@@ -1,0 +1,16 @@
+
+
+let x = 1 $end and y = 1
+
+$end $sep let x = 1
+$end and y = 1
+
+$end $sep let _ = let x = 1 $end and y = 1
+        $end $in 3
+
+$end $end $sep let _ = let x = 1
+        $end and y = 1
+        $end $in let x = 1 $end and y = 1
+        $end $in 1
+$end $end $end and _ = 1
+$end <eof>

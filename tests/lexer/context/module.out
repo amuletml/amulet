@@ -1,0 +1,26 @@
+
+module X =
+  $begin let _ = 1
+
+
+$end $end $sep module X = begin
+  let _ = 1
+$end end
+
+
+$sep module X =
+begin
+  let _ = 1
+$end end
+
+$sep module X =
+  begin
+    let _ = 1
+  $end end
+
+$sep module X = Y
+
+
+$sep private module Y =
+  $begin let a = 0
+$end $end <eof>

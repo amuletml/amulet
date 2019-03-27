@@ -18,6 +18,10 @@ module Automatic =
     let foo = 1
     let bar = 2
 
+  private class semigroup 'a
+    val (<>) : 'a -> 'a -> 'a
+
+
 module Explicit =
   class empty begin
   end
@@ -49,4 +53,8 @@ module Explicit =
     => multiline int begin
     let foo = 1 ;;
     let bar = 2
+  end
+
+  private class semigroup 'a begin
+    val (<>) : 'a -> 'a -> 'a
   end
