@@ -1,0 +1,51 @@
+
+let _ =
+  if true then
+    1
+    $sep 1
+  else
+    1
+    $sep 1
+
+
+$end $end $sep let _ =
+  if true
+  then
+    1
+  else
+    1
+
+
+$end $end $sep let _ =
+  if true then 1 else
+  if true then 1 else
+    1
+    $sep 1
+
+
+$end $end $end $sep let _ =
+  if true then
+    1
+  else if true then
+    1
+  else
+    1
+
+
+$end $end $end $sep let _ =
+  if true then
+    if true then
+      1
+    else
+      1
+  $end else
+    1
+
+
+
+
+
+
+
+
+$end $end <eof>

@@ -1,5 +1,5 @@
-module Automatic = $begin
-  class empty
+module Automatic =
+  $begin class empty
   $begin $end $sep instance empty int
 
   $begin $end $sep class semigroup 'a
@@ -18,8 +18,12 @@ module Automatic = $begin
     $begin let foo = 1
     $end $sep let bar = 2
 
-$end $end $end $sep module Explicit = $begin
-  class empty begin
+  $end $end $sep private class semigroup 'a
+    $begin val ( <> ) : 'a -> 'a -> 'a
+
+
+$end $end $sep module Explicit =
+  $begin class empty begin
   end
 
   $sep instance empty begin
@@ -50,4 +54,8 @@ $end $end $end $sep module Explicit = $begin
     let foo = 1 $end ;;
     let bar = 2
   $end end
+
+  $sep private class semigroup 'a begin
+    val ( <> ) : 'a -> 'a -> 'a
+  end
 $end <eof>

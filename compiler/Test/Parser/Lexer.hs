@@ -9,6 +9,7 @@ import Data.Position
 
 import Parser.Wrapper
 import Parser.Lexer
+import Parser
 
 import qualified Text.Pretty.Note as N
 import Text.Pretty.Semantic
@@ -37,8 +38,17 @@ resultTrivial file contents =
   in T.pack (concatMap (\(Token tc f t) -> "\"" <> show tc <> "\" " <> sp f <> "-" <> sp t <> "\n") toks)
   where sp (SourcePos _ l c) = show l ++ ":" ++ show c
 
+resultContext :: String -> T.Text -> T.Text
+resultContext file contents =
+  case runParser file (L.fromStrict contents) parseTops of
+    (Nothing, es) -> error . T.unpack . displayPlain . vsep . map prettyErr $ es
+    (Just _, _) -> result file contents
+
+  where prettyErr = N.format (N.fileSpans [(file, contents)] N.defaultHighlight)
+
 tests :: IO TestTree
 tests = testGroup "Lexer" <$> sequenceA
   [ testGroup "Normal" <$> goldenDir result "tests/lexer/" ".ml"
   , testGroup "Trivials" <$> goldenDir resultTrivial "tests/lexer/trivial/" ".ml"
+  , testGroup "Context" <$> goldenDir resultContext "tests/lexer/context/" ".ml"
   ]

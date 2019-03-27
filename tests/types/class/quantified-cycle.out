@@ -1,13 +1,6 @@
 quantified-cycle.ml[12:10 ..12:16]: error
+  No instance for c (t1 'a) arising in this expression
    │ 
 12 │ let () = meth T1
    │          ^^^^^^^
-  Stack overflow while looking for an instance of
-    c (t2 'a)
-  • Note: the max depth of typeclass constraints is 25.
-  • Here are the first five entries on the stack:
-    • c (t1 'a)
-    • forall 'a. c (t2 'a)
-    • forall 'a. c (t1 'a)
-    • forall 'a. c (t2 'a)
-    • forall 'a. c (t1 'a)
+  • Note: This constraint can not be quantified over because it is of higher rank

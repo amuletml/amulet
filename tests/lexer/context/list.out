@@ -1,0 +1,4 @@
+let _ = [ 1 , 2 , 3 ]
+
+$end $sep let _ = [ 1 | with _ <- 1 , let _ = 1 $end , with _ <- 1 ]
+$end <eof>
