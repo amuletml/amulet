@@ -103,10 +103,7 @@ prettyType (TyPi x t) = uncurry prettyQuantifiers . second reverse $ unwind t [x
          keyword "forall"
          <+> hsep (map (stypeVar . (char '\'' <>) . pretty . (^?! tyBinderVar)) (q:these))
          <> dot <+> prettyQuantifiers inner those
-       Invisible _ _ Infer:_ ->
-         keyword "forall"
-         <+> braces (hsep (map (stypeVar . (char '\'' <>) . pretty . (^?! tyBinderVar)) (q:these)))
-         <> dot <+> prettyQuantifiers inner those
+       Invisible _ _ Infer:_ -> prettyQuantifiers inner those
        Invisible _ _ Req:_ ->
          keyword "forall"
          <+> hsep (map (stypeVar . (char '\'' <>) . pretty . (^?! tyBinderVar)) (q:these))

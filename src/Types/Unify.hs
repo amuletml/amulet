@@ -255,9 +255,10 @@ doSolve (ohno@(ConImplicit reason scope var con@TyPi{}) :<| cs) = do
   case lookup head (assum <> scope) of
     xs | allSameHead xs, concreteUnderOne con -> do
       w <- local (depth %~ (con:)) $
-        useImplicit reason head (assum <> scope) (pickBestPossible xs)
-          `catchChronicle`
-            \_ -> confesses (addBlame reason (UnsatClassCon reason (apply sub ohno) It'sQuantified))
+        let imp = pickBestPossible xs
+         in useImplicit reason head (assum <> scope) imp
+              `catchChronicle`
+                \e -> confesses (usingFor imp con (headSeq e))
 
       let wanted = ExprWrapper (wrap :> w) (identity head) (a, con)
           identity t = Fun (EvParam (Capture var (a, t))) (VarRef var (a, t)) (a, TyArr t t)
@@ -287,7 +288,7 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
       w <- local (depth %~ (cons :)) $
         useImplicit reason cons scope imp
           `catchChronicle`
-            \_ -> confesses (addBlame reason (UnsatClassCon reason (apply sub ohno) It'sQuantified))
+            \e -> confesses (usingFor imp cons (headSeq e))
       solveCoSubst . at var ?= w
 
     -- TODO: see if sound
@@ -296,7 +297,7 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
 
       w <- useImplicit reason cons scope imp
           `catchChronicle`
-            \_ -> confesses (addBlame reason (UnsatClassCon reason (apply sub ohno) It'sQuantified))
+            \e -> confesses (usingFor imp cons (headSeq e))
       solveCoSubst . at var ?= w
 
     _ -> do
@@ -318,6 +319,22 @@ pickBestPossible xs =
       best = L.sortOn specificity x
       specificity t = countConstructors (t ^. implHead)
    in head best
+
+usingFor :: Implicit Typed -> Type Typed -> TypeError -> TypeError
+usingFor _ _ x@Note{} = x
+usingFor _ _ x@(ArisingFrom Note{} _) = x
+usingFor i ty e =
+  Note e . indent (-4) $
+    vsep [ mempty
+         , "When considering the instance"
+         , indent 2 $ displayType (i ^. implType)
+         , "as a solution for the constraint"
+         , indent 2 $ displayType ty
+         ]
+
+headSeq :: Seq.Seq a -> a
+headSeq (Seq.viewl -> (x Seq.:< _)) = x
+headSeq _ = undefined
 
 useImplicit :: forall m. MonadSolve m
             => SomeReason -> Type Typed -> ImplicitScope Typed
