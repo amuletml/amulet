@@ -6,6 +6,8 @@
 *.svg
 !/assets/*svg
 
+.stack-work
+
 src/Parser/Lexer.hs
 src/Parser.hs
 src/Language/Lua/Parser/Lexer.hs
