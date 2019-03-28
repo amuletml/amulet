@@ -3,21 +3,15 @@ pipeline {
   stages {
     stage('Build documentation') {
       steps {
-        sh 'nix-shell . --run true' /* fetch Nix dependencies first */
         timestamps() {
           sh 'pdflatex doc/tc.tex'
         }
       }
     }
-    stage('Configure Cabal project') {
-      steps {
-        sh 'nix-shell . --run \'cabal new-configure --enable-tests --disable-profiling --ghc-options="-Werror -fhide-source-paths"\' --arg ci true'
-      }
-    }
     stage('Build Amulet') {
       steps {
         timestamps() {
-          sh 'nix-shell . --run \'cabal new-build -j6 test:tests\' --arg ci true'
+          sh 'stack build --fast'
         }
       }
     }
@@ -26,14 +20,13 @@ pipeline {
         stage('Run tests') {
           steps {
             timestamps () {
-              sh 'nix-shell . --run "cabal new-run test:tests -- --xml junit.xml --num-threads 4 --display t" --arg ci true'
+              sh 'stack test --fast --test-arguments "--xml junit.xml --display t"'
             }
           }
         }
         stage('Check code style') {
           steps {
-            sh 'nix-shell . --run \'cabal new-build -j6 exe:amc\' --arg ci true'
-            sh 'nix-shell . --run "hlint --git" --arg ci true'
+            sh 'stack exec -- hlint --git'
           }
         }
       }
