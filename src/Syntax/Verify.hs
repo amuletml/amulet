@@ -78,7 +78,10 @@ verifyBindingGroup :: MonadVerify m
                    => (BindingSite -> Set.Set BindingSite -> Set.Set BindingSite)
                    -> SomeReason -> [Binding Typed] -> m ()
 verifyBindingGroup k _ = traverse_ verifyScc . depOrder where
-  verifyScc (AcyclicSCC (Binding v e c (s, t))) =
+  verifyScc (AcyclicSCC b@(Binding v e c (s, t))) = do
+    when (polymorphic t && nonTrivial e) $
+      tell (Seq.singleton (PolyValue (BecauseOf b) v t))
+
     when c $ do
       modify (k (BindingSite v s t))
       verifyExpr e
@@ -259,6 +262,13 @@ nonTrivial (ExprWrapper w e _) =
     _ -> nonTrivial e
 nonTrivial For{} = False
 nonTrivial While{} = False
+
+polymorphic :: Type Typed -> Bool
+polymorphic (TyPi v body) =
+  (case v of
+    Invisible{} -> True
+    _ -> False) || polymorphic body
+polymorphic _ = False
 
 -- | Verify a foreign definition is parametric.
 parametricity :: forall m. MonadVerify m

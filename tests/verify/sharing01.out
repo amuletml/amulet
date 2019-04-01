@@ -1,0 +1,11 @@
+sharing01.ml[3:5 ..3:5]: warning
+  Polymorphic values are not shared
+  │ 
+3 │ let x = ref None
+  │     ^
+  • Note: The variable x (of type ref (option 'a)) behaves as if
+    behaves as if it were a function, since it was generalised,
+    and is polymorphic.
+
+  • Suggestion: if this is not intentional, use a type annotation
+    constraint the type of x.
