@@ -11,7 +11,6 @@ module Syntax.Verify
 import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
 import Data.Foldable
-import Data.Spanned
 import Data.Reason
 import Data.Graph
 
@@ -156,10 +155,6 @@ verifyExpr (ExprWrapper w e a) =
     ExprApp x -> verifyExpr x *> verifyExpr e
     x :> y -> verifyExpr (ExprWrapper x (ExprWrapper y e a) a)
     _ -> verifyExpr e
-verifyExpr (For (v, a) b c d _) = do
-  modify $ Set.insert (BindingSite v (annotation a) (getType a))
-  traverse_ verifyExpr [a, b, c, d]
-verifyExpr (While b c _) = verifyExpr b *> verifyExpr c
 
 unguardedVars :: Expr Typed -> Set.Set (Var Typed)
 unguardedVars (Ascription e _ _)   = unguardedVars e
@@ -193,8 +188,6 @@ unguardedVars (LeftSection a b _)  = unguardedVars a <> unguardedVars b
 unguardedVars (RightSection a b _) = unguardedVars a <> unguardedVars b
 unguardedVars (BothSection b _)    = unguardedVars b
 unguardedVars AccessSection{}      = mempty
-unguardedVars (For (v, a) b c d _) = unguardedVars a <> (v `Set.delete` foldMap unguardedVars [b, c, d])
-unguardedVars (While c b _)        = unguardedVars c <> unguardedVars b
 unguardedVars x = error (show x)
 
 -- | Get all binding sites within a pattern
@@ -260,8 +253,6 @@ nonTrivial (ExprWrapper w e _) =
   case w of
     WrapFn (MkWrapCont k _) -> nonTrivial (k e)
     _ -> nonTrivial e
-nonTrivial For{} = False
-nonTrivial While{} = False
 
 polymorphic :: Type Typed -> Bool
 polymorphic (TyPi v body) =

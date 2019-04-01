@@ -100,9 +100,6 @@ tokens :-
   <0> "instance" { constTok TcInstance }
   <0> "when"   { constTok TcWhen }
   <0> "private"  { constTok TcPrivate }
-  <0> "for"      { constTok TcFor }
-  <0> "while"    { constTok TcWhile }
-  <0> "do"       { constTok TcDo }
 
   <0> ","      { constTok TcComma }
   <0> "."      { constTok TcDot }

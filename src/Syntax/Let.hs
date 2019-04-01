@@ -74,8 +74,6 @@ freeIn Function{} = error "ds Function freeIn"
 freeIn TupleSection{} = error "ds TupleSection freeIn"
 freeIn OpenIn{} = error "ds OpenIn freeIn"
 freeIn Syntax.Lazy{} = error "ds Lazy freeIn"
-freeIn (For (var, a) b c d _) = freeIn a <> (var `Set.delete` foldMap freeIn [b, c, d])
-freeIn (While a b _) = freeIn a <> freeIn b
 
 bound :: (IsList m, Item m ~ Var p, Monoid m)
       => Pattern p -> m

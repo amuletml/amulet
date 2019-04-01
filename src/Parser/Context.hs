@@ -47,11 +47,6 @@ data Context
   -- | An expression level let definition.
   | CtxLet SourcePos
 
-  -- | For loop
-  | CtxFor SourcePos
-  -- | While loop
-  | CtxWhile SourcePos
-
   -- | The terms between a @match@ and a @with@ token.
   | CtxMatch SourcePos
   -- | An empty @match@ or @function@ expression.
@@ -373,38 +368,6 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
           then CtxStmtLet tp
           else CtxLet tp ):c )
 
-    (TcWhile, _) -> pure
-      ( Result tok Done
-      , CtxWhile tp:c )
-
-    (TcFor, _) -> pure
-      ( Result tok Done
-      , CtxFor tp:c )
-
-    (_, CtxFor cls:ck)
-      | spLine tp > spLine cls && spCol tp > spCol cls
-      -> pure ( Token TcVBegin tp tp `Result` Working tok
-              , CtxEmptyBlock (Just TcVEnd) : ck )
-      | spLine tp > spLine cls && spCol tp <= spCol cls
-      -> pure ( Result tok Done, ck )
-
-    (_, CtxWhile cls:ck)
-      | spLine tp > spLine cls && spCol tp > spCol cls
-      -> pure ( Token TcVBegin tp tp `Result` Working tok
-              , CtxEmptyBlock (Just TcVEnd) : ck )
-      | spLine tp > spLine cls && spCol tp <= spCol cls
-      -> pure ( Result tok Done, ck )
-
-    (TcDo, CtxFor cls:cks)
-      | spCol tp >= spCol cls ->
-        pure ( Result tok Done
-             , CtxEmptyBlock Nothing:CtxBracket TcEnd:cks )
-
-    (TcDo, CtxWhile cls:cks)
-      | spCol tp >= spCol cls ->
-        pure ( Result tok Done
-             , CtxEmptyBlock Nothing:CtxBracket TcEnd:cks )
-
     -- @let ...@ = ~~> Push a block context
     (TcEqual, CtxStmtLet _:_) -> pure
       ( Result tok Done
@@ -494,8 +457,6 @@ insertFor CtxLet{} = Just TcVIn
 insertFor CtxStmtLet{} = Nothing
 insertFor CtxMatchArms{} = Just TcVEnd
 insertFor CtxIf{} = Just TcVEnd
-insertFor CtxWhile{} = Just TcVBegin
-insertFor CtxFor{} = Just TcVBegin
 insertFor _ = Nothing
 
 -- | If this token may terminate some context.
@@ -513,7 +474,6 @@ canTerminate TcIn = True
 canTerminate TcSemicolon = True
 canTerminate TcTopSep = True
 canTerminate TcAnd = True
-canTerminate TcDo = True
 canTerminate _ = False
 
 -- | If this 'TokenClass' may terminate the current context.
