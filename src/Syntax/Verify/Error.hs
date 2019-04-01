@@ -56,6 +56,8 @@ data VerifyError
   | RedundantArm (Arm Typed)
   -- | This case is missing several patterns
   | MissingPattern (Expr Typed) [ValueAbs Typed]
+  -- | Polymorphic values aren't shared
+  | PolyValue SomeReason (Var Typed) (Type Typed)
 
 instance Spanned VerifyError where
   annotation (NonRecursiveRhs e _ _) = annotation e
@@ -66,6 +68,7 @@ instance Spanned VerifyError where
   annotation (LazyLet e _) = annotation e
   annotation (RedundantArm a) = annotation a
   annotation (MissingPattern e _) = annotation e
+  annotation (PolyValue e _ _) = annotation e
 
 instance Pretty VerifyError where
   pretty (NonRecursiveRhs re ex xs) =
@@ -111,6 +114,7 @@ instance Pretty VerifyError where
          , note <+> "The following patterns are not covered"
          , empty
          , indent 2 . hsep . intersperse pipe . map pretty $ ps ]
+  pretty (PolyValue v _ _)  = "Polymorphic value" <+> pretty v <+> "behaves like a function"
 
 instance Note VerifyError Style where
   diagnosticKind NonRecursiveRhs{} = ErrorMessage
@@ -121,6 +125,7 @@ instance Note VerifyError Style where
   diagnosticKind LazyLet{} = WarningMessage
   diagnosticKind RedundantArm{} = WarningMessage
   diagnosticKind MissingPattern{} = WarningMessage
+  diagnosticKind PolyValue{} = WarningMessage
 
   formatNote f (ParseErrorInForeign (ForeignVal _ var s _ (span, _)) err) =
     let SourcePos name _ _ = spanStart (annotation err)
@@ -155,4 +160,27 @@ instance Note VerifyError Style where
          , f [annotation a]
          , indent 2 $ note <+> "The following patterns are not covered"
          , indent 6 . fmap Right . hsep . intersperse pipe . map pretty $ ps ]
+
+  formatNote f (PolyValue a var ty) =
+    vsep [ indent 2 $ "Polymorphic values are not shared"
+
+         , f [annotation a]
+
+         , indent 2 $ hsep
+            [ note, "The variable"
+            , Right <$> stypeSkol (pretty var)
+            , parens ("of type" <+> fmap Right (displayType ty))
+            , "behaves as if"
+            ]
+         , indent 4 "it were a function, since it was generalised,"
+         , indent 4 "and is polymorphic."
+
+         , mempty
+
+         , indent 2 . fmap Right . bullet $ "Suggestion: if this is not intentional, use a type annotation"
+         , indent 4 "constraint the type of"
+            <+> fmap Right (stypeSkol (pretty var))
+            <> char '.'
+         ] 
+
   formatNote f x = indent 2 (Right <$> pretty x) <#> f [annotation x]
