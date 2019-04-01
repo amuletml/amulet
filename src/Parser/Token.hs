@@ -56,10 +56,6 @@ data TokenClass
   | TcPrivate -- ^ A @private@ token.
   | TcAs   -- ^ An @as@ token.
 
-  | TcFor -- ^ A @for@ token.
-  | TcWhile -- ^ A @while@ token.
-  | TcDo -- ^ A @do@ token.
-
   | TcDot -- ^ A @.@ token.
   | TcComma -- ^ A @,@ token.
   | TcColon -- ^ A @:@ token.
@@ -139,9 +135,6 @@ instance Show TokenClass where
   show TcInstance = "instance"
   show TcWhen = "when"
   show TcPrivate = "private"
-  show TcFor = "for"
-  show TcWhile = "while"
-  show TcDo = "do"
 
   show TcComma = ","
   show TcDot = "."

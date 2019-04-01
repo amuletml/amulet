@@ -111,9 +111,6 @@ import Syntax
   instance { Token TcInstance _ _ }
   when     { Token TcWhen _ _ }
   private  { Token TcPrivate _ _ }
-  for      { Token TcFor _ _ }
-  while    { Token TcWhile _ _ }
-  do       { Token TcDo _ _ }
 
   ','      { Token TcComma _ _ }
   '.'      { Token TcDot _ _ }
@@ -265,18 +262,6 @@ Expr0 :: { Expr Parsed }
           { withPos2 $1 $3 $ Match (completeTuple Tuple $2) $4 }
       | match List1(Expr, ',') with '(' ')'
           { withPos2 $1 $3 $ Match (completeTuple Tuple $2) [] }
-
-      | for ident '=' Expr ',' Expr ',' Expr '$begin' ExprBlock '$end'
-        { withPos2 $1 $10 $ For (getName $2, $4) $6 $8 $10 }
-
-      | for ident '=' Expr ',' Expr ',' Expr do ExprBlock end
-        { withPos2 $1 $10 $ For (getName $2, $4) $6 $8 $10 }
-
-      | while Expr do ExprBlock end
-        { withPos2 $1 $4 $ While $2 $4 }
-
-      | while Expr '$begin' ExprBlock '$end'
-        { withPos2 $1 $4 $ While $2 $4 }
 
       | function ListE1(Arm) '$end'            { withPos1 $1 $ Function $2 }
       | function '(' ')'                       { withPos1 $1 $ Function [] }
