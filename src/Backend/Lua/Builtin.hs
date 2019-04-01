@@ -96,21 +96,24 @@ builtins =
     |] )
   , ( vUnit, "__builtin_unit", [], Nothing
     , [luaStmts|local __builtin_unit = { __tag = "__builtin_unit" }|] )
-  , ( vRef, "__builtin_ref", [], Nothing,
-      [luaStmts|
+  , ( vRef, "__builtin_ref", []
+    , Just (1, \[var] -> ( mempty, [ [lua| { %var, __tag = 'Ref' } |] ]))
+    , [luaStmts|
         local function __builtin_ref(x)
           return { x, __tag = 'Ref' }
         end
       |] )
-  , ( vAssign, "__builtin_swap", [vUnit], Nothing,
-      [luaStmts|
+  , ( vAssign, "__builtin_swap", [vUnit]
+    , Just (2, \[var, val] -> ( Seq.fromList [luaStmts| %var[1] = %val |]
+                              , [ [lua| __builtin_unit |] ]))
+    , [luaStmts|
         local function __builtin_swap(var, val)
           var[1] = val
           return __builtin_unit
         end
       |] )
-  , ( vDeref, "__builtin_deref", [], Nothing,
-      [luaStmts|
+  , ( vDeref, "__builtin_deref", [], Just (1, \[l] -> (mempty, [ [lua|%l[1]|] ]))
+    , [luaStmts| 
         local function __builtin_deref(var)
           return var[1]
         end

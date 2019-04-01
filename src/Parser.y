@@ -281,7 +281,6 @@ Expr0 :: { Expr Parsed }
       | function ListE1(Arm) '$end'            { withPos1 $1 $ Function $2 }
       | function '(' ')'                       { withPos1 $1 $ Function [] }
       | lazy PreAtom                           { withPos2 $1 $2 $ Lazy $2 }
-      | '!' PreAtom                            { makeBang $1 $2 }
       | PreAtom                                { $1 }
 
 -- | A 'prefixed' atom.
@@ -291,6 +290,7 @@ Expr0 :: { Expr Parsed }
 PreAtom :: { Expr Parsed }
      : Atom                                   { $1 }
      | qdotid Atom                            { withPos2 $1 $2 $ OpenIn (getName $1) $2 }
+     | '!' Atom                                { makeBang $1 $2 }
 
 Atom :: { Expr Parsed }
      : Var                                     { withPos1 $1 (VarRef (getL $1)) }
@@ -346,7 +346,7 @@ Reference :: { Located (Var Parsed) }
   | '(' op ')'      { lPos2 $1 $3 $ getName $2 }
   | '(' opid ')'    { lPos2 $1 $3 $ getName $2 }
   | '(' qopid ')'   { lPos2 $1 $3 $ getName $2 }
-  | '(' ! ')'       { lPos2 $1 $3 $ Name (T.pack "_!") }
+  | '(' '!' ')'       { lPos2 $1 $3 $ Name (T.pack "_!") }
 
 NullSection :: { Maybe (Expr Parsed) }
   :                                           { Nothing }
