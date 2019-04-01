@@ -96,6 +96,25 @@ builtins =
     |] )
   , ( vUnit, "__builtin_unit", [], Nothing
     , [luaStmts|local __builtin_unit = { __tag = "__builtin_unit" }|] )
+  , ( vRef, "__builtin_ref", [], Nothing,
+      [luaStmts|
+        local function __builtin_ref(x)
+          return { x, __tag = 'Ref' }
+        end
+      |] )
+  , ( vAssign, "__builtin_swap", [vUnit], Nothing,
+      [luaStmts|
+        local function __builtin_swap(var, val)
+          var[1] = val
+          return __builtin_unit
+        end
+      |] )
+  , ( vDeref, "__builtin_deref", [], Nothing,
+      [luaStmts|
+        local function __builtin_deref(var)
+          return var[1]
+        end
+      |] )
   ] ++ map genOp ops
 
   where

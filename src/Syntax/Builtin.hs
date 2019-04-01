@@ -15,11 +15,14 @@ module Syntax.Builtin
 
   , tyUnitName, tyBoolName, tyIntName, tyStringName, tyFloatName
   , tyLazyName, tyConstraintName, tyArrowName, tyTupleName
+  , tyRefName
 
   , tyUnit, tyBool, tyInt, tyString, tyFloat
   , tyLazy, tyConstraint, tyArrow, tyList
+  , tyRef
 
   , forceName, lAZYName, forceTy, lAZYTy, forceTy', lAZYTy'
+  , assignName, derefName, refName
 
   , cONSName, nILName, cONSTy, nILTy, cONSTy', nILTy'
   , opAppName
@@ -40,7 +43,7 @@ import Syntax
 import qualified Core.Builtin as C
 import Core.Var
 
-tyUnitName, tyBoolName, tyIntName, tyStringName, tyFloatName, tyLazyName, tyConstraintName, tyArrowName, tyTupleName, tyListName :: Var Typed
+tyUnitName, tyBoolName, tyIntName, tyStringName, tyFloatName, tyLazyName, tyConstraintName, tyArrowName, tyTupleName, tyListName, tyRefName :: Var Typed
 tyIntName    = ofCore C.vInt
 tyStringName = ofCore C.vString
 tyBoolName   = ofCore C.vBool
@@ -49,10 +52,11 @@ tyFloatName  = ofCore C.vFloat
 tyLazyName   = ofCore C.vLazy
 tyArrowName  = ofCore C.vArrow
 tyTupleName  = ofCore C.vProduct
-tyListName  = ofCore C.vList
+tyListName   = ofCore C.vList
+tyRefName    = ofCore C.vRefTy
 tyConstraintName = TgInternal "constraint"
 
-tyUnit, tyBool, tyInt, tyString, tyFloat, tyLazy, tyConstraint, tyArrow, tyList :: Type Typed
+tyUnit, tyBool, tyInt, tyString, tyFloat, tyLazy, tyConstraint, tyArrow, tyList, tyRef :: Type Typed
 tyInt    = TyCon tyIntName
 tyString = TyCon tyStringName
 tyBool   = TyCon tyBoolName
@@ -62,6 +66,7 @@ tyLazy   = TyCon tyLazyName
 tyArrow  = TyCon tyArrowName
 tyList   = TyCon tyListName
 tyConstraint = TyCon tyConstraintName
+tyRef = TyCon tyRefName
 
 forceName, lAZYName :: Var Typed
 forceName = ofCore C.vForce
@@ -70,6 +75,11 @@ lAZYName  = ofCore C.vLAZY
 cONSName, nILName :: Var Typed
 cONSName = ofCore C.vCONS
 nILName  = ofCore C.vNIL
+
+assignName, derefName, refName :: Var Typed
+assignName = ofCore C.vAssign
+derefName = ofCore C.vDeref
+refName = ofCore C.vRef
 
 forceTy, lAZYTy, cONSTy, nILTy :: Type Typed
 forceTy = a *. TyApp tyLazy (TyVar a) ~> TyVar a
@@ -114,6 +124,10 @@ builtins =
            , (opAppName, a *. b *. (TyVar a ~> TyVar b) ~> TyVar a ~> TyVar b)
            , (lAZYName, lAZYTy), (forceName, forceTy)
            , (cONSName, cONSTy), (nILName, nILTy)
+
+           , (assignName, a *. TyApp tyRef (TyVar a) ~> (TyVar a ~> tyUnit))
+           , (derefName, a *. TyApp tyRef (TyVar a) ~> TyVar a)
+           , (refName, a *. TyVar a ~> TyApp tyRef (TyVar a))
            ]
 
   , types = [ tp C.vBool, tp C.vInt, tp C.vString, tp C.vFloat, tp C.vUnit
@@ -122,6 +136,7 @@ builtins =
             , (tyTupleName, TyType ~> TyType ~> a *. TyVar a)
             , (tyConstraintName, TyType)
             , (tyListName, TyType ~> TyType)
+            , (tyRefName, TyType ~> TyType)
             ]
   , constructors = Map.fromList
       [ (tyListName, Set.fromList [cONSName, nILName] )

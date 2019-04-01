@@ -304,6 +304,15 @@ reExpr (ListComp e qs a) =
           go qs (CompLet bs an:acc)
       go [] acc = ListComp <$> reExpr e <*> pure (reverse acc) <*> pure a
   in go qs []
+
+reExpr (For (var, a) b c d an) = do
+  a <- reExpr a
+  v <- tagVar var
+  extend (var, v) $
+    For (v, a) <$> reExpr b <*> reExpr c <*> reExpr d <*> pure an
+
+reExpr (While b c a) = While <$> reExpr b <*> reExpr c <*> pure a
+
 reExpr ExprWrapper{} = error "resolve cast"
 
 reArm :: MonadResolve m

@@ -203,6 +203,7 @@ flags = info
 
 main :: IO ()
 main = do
+  putStrLn "Happy April Fools Day!"
   options <- execParser flags
   case options of
     CompilerOptions { debugMode = db, files = [] } -> repl db

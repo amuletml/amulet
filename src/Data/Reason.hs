@@ -154,6 +154,9 @@ instance Respannable (Ann p) => Respannable (Expr p) where
 
   respan k (ExprWrapper w e a) = ExprWrapper w e (respan k a)
 
+  respan k (For b c d e a) = For b c d e (respan k a)
+  respan k (While b c a) = While b c (respan k a)
+
 instance Respannable Span where
   respan = id
 

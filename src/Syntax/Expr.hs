@@ -102,6 +102,9 @@ data Expr p
 
   | ExprWrapper (Wrapper p) (Expr p) (Ann p)
 
+  | For (Var p, Expr p) (Expr p) (Expr p) (Expr p) (Ann p)
+  | While (Expr p) (Expr p) (Ann p)
+
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Expr p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Expr p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Expr p)
@@ -222,6 +225,8 @@ value ListExp{} = True
 value ListComp{} = False
 value (OpenIn _ e _) = value e
 value (ExprWrapper _ e _) = value e
+value For{} = False
+value While{} = False
 
 isFn :: Expr a -> Bool
 isFn Fun{} = True

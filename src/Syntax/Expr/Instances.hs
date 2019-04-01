@@ -52,6 +52,8 @@ instance Spanned (Ann p) => Spanned (Expr p) where
   annotation (ListComp _ _ a) = annotation a
 
   annotation (ExprWrapper _ _ a) = annotation a
+  annotation (For _ _ _ _ a) = annotation a
+  annotation (While _ _ a) = annotation a
 
 instance Spanned (Ann p) => Spanned (Pattern p) where
   annotation (Wildcard a) = annotation a
@@ -147,6 +149,14 @@ instance Pretty (Var p) => Pretty (Expr p) where
     go (WrapVar v) ex = pretty ex <+> soperator (char '_') <> pretty v
     go (WrapFn f) ex = pretty (runWrapper f ex)
     go IdWrap ex = pretty ex
+  pretty (For (var, init) test loop body _) =
+    vsep [ hsep [ keyword "for", pretty var <+> equals <+> pretty init, comma, pretty test, comma, pretty loop, keyword "do" ]
+         , indent 2 $ pretty body
+         , keyword "end" ]
+  pretty (While test body _) =
+    vsep [ hsep [ keyword "while", pretty test, keyword "do" ]
+         , indent 2 $ pretty body
+         , keyword "end" ]
 
 instance Pretty (Var p) => Pretty (CompStmt p) where
   pretty (CompGen p e _) = pretty p <+> soperator (string "<-") <+> pretty e
