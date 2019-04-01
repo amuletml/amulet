@@ -87,6 +87,7 @@ precedence t
   | T.isPrefixOf "@@" t = (2, AssocRight)
   | T.isPrefixOf "**" t = (10, AssocRight)
 
+
   | T.isPrefixOf "*" t = (9, AssocLeft)
   | T.isPrefixOf "/" t = (9, AssocLeft)
   | T.isPrefixOf "%" t = (9, AssocLeft)
@@ -94,7 +95,7 @@ precedence t
   | T.isPrefixOf "+" t = (8, AssocLeft)
   | T.isPrefixOf "-" t = (8, AssocLeft)
 
-  | T.isPrefixOf "::" t = (7, AssocRight)
+  | T.isPrefixOf ":" t = (7, AssocRight)
 
   | T.isPrefixOf "@" t = (6, AssocRight)
   | T.isPrefixOf "^" t = (6, AssocRight)

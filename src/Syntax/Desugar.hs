@@ -104,6 +104,46 @@ desugarProgram = traverse statement where
   expr (ListComp _ [] an) = pure $ ListExp [] an
   expr (ListComp e qs an) = transListComp (e, qs, an) (ListExp [] an)
 
+  expr (While cond body an) = do
+    body <- expr body
+    cond <- expr cond
+    ~(Capture go _, loop) <- fresh an
+
+    let loopfun =
+          Fun (PatParam (PLiteral LiUnit an))
+            (If cond
+                (Begin [ body
+                       , App loop (Literal LiUnit an) an
+                       ]
+                       an)
+                (Literal LiUnit an)
+                  an) an
+    pure $
+      Let [ Binding go loopfun False an ]
+        (App loop (Literal LiUnit an) an)
+        an
+
+  expr (For (bind, init) cond incr body an) = do
+    init <- expr init
+    cond <- expr cond
+    incr <- expr incr
+    body <- expr body
+    ~(Capture go _, go') <- fresh an
+
+    let loopfun =
+          Fun (PatParam (PLiteral LiUnit an))
+            (If cond
+              (Begin [ body, Let [ Matching (Wildcard an) incr an ] (App go' (Literal LiUnit an) an) an ] an)
+              (Literal LiUnit an)
+              an)
+            an
+    pure $
+      Let [ Binding bind init False (annotation init)
+          , Binding go loopfun False (annotation an)
+          ]
+        (App go' (Literal LiUnit an) an)
+        an
+
   expr (OpenIn _ e _) = expr e
 
   buildTuple :: Ann Desugared

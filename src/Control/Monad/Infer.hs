@@ -171,7 +171,7 @@ instance Pretty (Var p) => Pretty (Constraint p) where
   pretty DeferredError{} = string "deferred type error"
 
 instance Show TypeError where
-  show _ = "use pretty for displaying type errors"
+  show = show . pretty
 
 instance Eq TypeError where
   _ == _ = False

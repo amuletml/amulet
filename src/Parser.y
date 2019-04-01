@@ -28,6 +28,7 @@
   this case, the former is chosen.
 
 -}
+{-# LANGUAGE ViewPatterns #-}
 module Parser
   ( parseTops
   , parseRepl
@@ -110,6 +111,9 @@ import Syntax
   instance { Token TcInstance _ _ }
   when     { Token TcWhen _ _ }
   private  { Token TcPrivate _ _ }
+  for      { Token TcFor _ _ }
+  while    { Token TcWhile _ _ }
+  do       { Token TcDo _ _ }
 
   ','      { Token TcComma _ _ }
   '.'      { Token TcDot _ _ }
@@ -123,6 +127,7 @@ import Syntax
   '}'      { Token TcCBrace _ _ }
   '['      { Token TcOSquare _ _ }
   ']'      { Token TcCSquare _ _ }
+  '!'      { Token (TcOp (isBang -> True)) _ _ }
 
   op       { Token (TcOp _) _ _ }
   ident    { Token (TcIdentifier _) _ _ }
@@ -260,9 +265,23 @@ Expr0 :: { Expr Parsed }
           { withPos2 $1 $3 $ Match (completeTuple Tuple $2) $4 }
       | match List1(Expr, ',') with '(' ')'
           { withPos2 $1 $3 $ Match (completeTuple Tuple $2) [] }
+
+      | for ident '=' Expr ',' Expr ',' Expr '$begin' ExprBlock '$end'
+        { withPos2 $1 $10 $ For (getName $2, $4) $6 $8 $10 }
+
+      | for ident '=' Expr ',' Expr ',' Expr do ExprBlock end
+        { withPos2 $1 $10 $ For (getName $2, $4) $6 $8 $10 }
+
+      | while Expr do ExprBlock end
+        { withPos2 $1 $4 $ While $2 $4 }
+
+      | while Expr '$begin' ExprBlock '$end'
+        { withPos2 $1 $4 $ While $2 $4 }
+
       | function ListE1(Arm) '$end'            { withPos1 $1 $ Function $2 }
       | function '(' ')'                       { withPos1 $1 $ Function [] }
       | lazy PreAtom                           { withPos2 $1 $2 $ Lazy $2 }
+      | '!' PreAtom                            { makeBang $1 $2 }
       | PreAtom                                { $1 }
 
 -- | A 'prefixed' atom.
@@ -319,6 +338,7 @@ Section :: { Expr Parsed }
         | Operator                            { withPos1 $1 $ BothSection $1 }
         | ExprOp Operator                     { withPos2 $1 $2 $ RightSection (fixupExpr $1) $2 }
         | Operator ExprOp                     { withPos2 $1 $2 $ LeftSection $1 (fixupExpr $2) }
+        | '!'                                 { withPos1 $1 $ VarRef (Name (T.pack "_!")) }
 
 Reference :: { Located (Var Parsed) }
   : Var             { $1 }
@@ -326,6 +346,7 @@ Reference :: { Located (Var Parsed) }
   | '(' op ')'      { lPos2 $1 $3 $ getName $2 }
   | '(' opid ')'    { lPos2 $1 $3 $ getName $2 }
   | '(' qopid ')'   { lPos2 $1 $3 $ getName $2 }
+  | '(' ! ')'       { lPos2 $1 $3 $ Name (T.pack "_!") }
 
 NullSection :: { Maybe (Expr Parsed) }
   :                                           { Nothing }
@@ -638,6 +659,13 @@ buildClass am (L parsed typ) ms =
     go ts ty = do
       tellErrors [MalformedClass typ parsed]
       pure (undefined, ts)
+
+isBang :: T.Text -> Bool
+isBang t = t == T.singleton '!'
+
+makeBang :: _ -> Expr Parsed -> Expr Parsed
+makeBang bang expr = withPos2 bang expr $ App derefref expr where
+  derefref = withPos1 bang (VarRef (Name (T.pack "_!")))
 
 buildInstance :: Located (Type Parsed) -> [Binding Parsed]
            -> Parser (Span -> Toplevel Parsed)
