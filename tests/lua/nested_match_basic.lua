@@ -5,12 +5,12 @@ do
     if xs.__tag == "Nil" then
       return Cons({ _1 = 1, _2 = Nil })
     elseif xs.__tag == "Cons" then
-      local fm = xs[1]
+      local fn = xs[1]
       if ys.__tag == "Nil" then
         return Cons({ _1 = 2, _2 = Nil })
       elseif ys.__tag == "Cons" then
-        local fn = ys[1]
-        return Cons({ _1 = f(fm._1)(fn._1), _2 = zip(f, fm._2, fn._2) })
+        local fo = ys[1]
+        return Cons({ _1 = f(fn._1)(fo._1), _2 = zip(f, fn._2, fo._2) })
       end
     end
   end

@@ -78,12 +78,13 @@ verifyBindingGroup :: MonadVerify m
                    -> SomeReason -> [Binding Typed] -> m ()
 verifyBindingGroup k _ = traverse_ verifyScc . depOrder where
   verifyScc (AcyclicSCC b@(Binding v e c (s, t))) = do
-    when (polymorphic t && nonTrivial e) $
+    when (not (function t) && polymorphic t && nonTrivial e) $
       tell (Seq.singleton (PolyValue (BecauseOf b) v t))
 
     when c $ do
       modify (k (BindingSite v s t))
       verifyExpr e
+
   verifyScc (AcyclicSCC (TypedMatching p e _ _)) = do
     traverse_ (modify . k) $ bindingSites p
     verifyExpr e
@@ -94,10 +95,12 @@ verifyBindingGroup k _ = traverse_ verifyScc . depOrder where
     let vars = foldMapOf (each . bindVariable) Set.singleton vs
     for_ vs $ \(Binding var _ c (s, ty)) ->
       when c $ modify (k (BindingSite var s ty))
+
     for_ vs $ \b@(Binding var ex c (_, _)) -> when c $ do
       let naked = unguardedVars ex
           blame = BecauseOf b
       verifyExpr ex
+
       unless (naked `Set.disjoint` vars) $
         tell (Seq.singleton (NonRecursiveRhs blame var (Set.toList (naked `Set.intersection` vars))))
 
@@ -213,6 +216,20 @@ isWrappedThunk (ExprWrapper (WrapFn (MkWrapCont _ x)) _ _) =
   x == "automatic thunking"
 isWrappedThunk _ = False
 
+polymorphic :: Type Typed -> Bool
+polymorphic (TyPi v body) =
+  (case v of
+    Invisible{} -> True
+    _ -> False) || polymorphic body
+polymorphic _ = False
+
+function :: Type Typed -> Bool
+function (TyPi v body) =
+  case v of
+    Invisible{} -> function body
+    _ -> True
+function _ = False
+
 -- | Determine if the right-hand-side of a binding is non-trivial.
 nonTrivialRhs :: Binding Typed -> Bool
 nonTrivialRhs (TypedMatching _ e _ _) = nonTrivial e
@@ -253,13 +270,6 @@ nonTrivial (ExprWrapper w e _) =
   case w of
     WrapFn (MkWrapCont k _) -> nonTrivial (k e)
     _ -> nonTrivial e
-
-polymorphic :: Type Typed -> Bool
-polymorphic (TyPi v body) =
-  (case v of
-    Invisible{} -> True
-    _ -> False) || polymorphic body
-polymorphic _ = False
 
 -- | Verify a foreign definition is parametric.
 parametricity :: forall m. MonadVerify m
