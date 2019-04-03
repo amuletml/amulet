@@ -14,6 +14,7 @@ import qualified Data.Sequence as Seq
 import qualified Data.Text as T
 import qualified Data.Set as Set
 import Data.Traversable
+import Data.List (find)
 import Data.Spanned
 import Data.Reason
 import Data.Triple
@@ -439,7 +440,7 @@ inferLetTy closeOver strategy vs =
                 -> (Var Desugared, SomeReason)
                 -> Expr Typed -> Type Typed
                 -> Seq.Seq (Constraint Typed)
-                -> m (Type Typed, Expr Typed -> Expr Typed)
+                -> m (Type Typed, Expr Typed -> Expr Typed, Subst Typed)
       figureOut canAdd blame ex ty cs = do
         (x, co, deferred) <- condemn $ retcons (addBlame (snd blame)) (solve cs)
         deferred <- pure (fmap (apply x) deferred)
@@ -482,7 +483,7 @@ inferLetTy closeOver strategy vs =
         ty <- uncurry skolCheck blame vt
         let (tp, sub) = rename ty
 
-        pure (tp, wrapper Full . solve tp sub . substituteDeferredDicts reify deferred)
+        pure (tp, wrapper Full . solve tp sub . substituteDeferredDicts reify deferred, sub)
 
 
       tcOne :: SCC (Binding Desugared)
@@ -505,7 +506,7 @@ inferLetTy closeOver strategy vs =
               exp <- check (exp' exp) ty
               pure (exp, ty, ex == Deduced)
 
-        (tp, k) <- figureOut shouldAddContext (var, becauseExp exp) exp' ty cs
+        (tp, k, _) <- figureOut shouldAddContext (var, becauseExp exp) exp' ty cs
         -- let extra =
         --       case origin of
         --         Deduced -> \e -> ExprWrapper (TypeAsc tp) e (ann, tp)
@@ -551,6 +552,34 @@ inferLetTy closeOver strategy vs =
             ex' = solveEx ty solution wraps' $ substituteDeferredDicts reify deferred ex
 
         pure ( [TypedMatching pat ex' (ann, ty) (teleToList tel')], tel', boundTvs pat tel' )
+
+      tcOne (CyclicSCC [decl@(Binding _ exp _ ann)]) = do
+        (origin, (var, approx)) <- approximate decl
+        ((expr, ty), cons) <- listen . local (names %~ focus (one var approx)) $
+          case origin of
+            Guessed -> do
+              (exp, tau) <- infer exp
+              _ <- unify (BecauseOf decl) tau approx
+              pure (exp, tau)
+            _ -> do
+              exp <- check exp approx
+              pure (exp, approx)
+
+        (tp, k, sol) <- figureOut (origin /= Supplied) (var, becauseExp exp) expr ty cons
+        (fromMaybe id -> cont, old, new) <- instantiate Strong Expression $ apply sol ty
+
+        name <- genNameFrom (nameName var)
+        let inside = Let
+              [ Binding name (transformExprTyped renameInside id id expr) True (ann, old) ]
+              (cont (VarRef name (ann, old))) (ann, new)
+
+            renameInside (VarRef v a) | v == var = VarRef name a
+            renameInside x = x
+
+        pure ( [ Binding var (k inside) True (ann, tp) ]
+             , one var tp
+             , mempty )
+
 
       tcOne (CyclicSCC vars) = do
         () <- guardOnlyBindings vars
@@ -604,6 +633,15 @@ inferLetTy closeOver strategy vs =
                  makeTele :: [Binding Typed] -> Telescope Typed
              pure (bs, makeTele bs, mempty)
            else do
+             when (any (/= Guessed) origins || all (== Supplied) origins) $ do
+               let Just reason = fmap fst $
+                     find ((/= Guessed) . snd) (zip vars origins)
+                   Just reason' = fmap fst $
+                     find ((== Guessed) . snd) (zip vars origins)
+                   blame = BecauseOf reason
+                   blame' = BecauseOf reason'
+               confesses $ ArisingFrom (UnsatClassCon blame (head cons) (RecursiveDeduced blame')) blame
+
              recVar <- genName
              innerNames <- fmap Map.fromList . for tvs $ \(v, _) ->
                (v,) <$> genNameFrom (T.cons '$' (nameName v))
@@ -722,7 +760,7 @@ fakeLetTys bs = do
               ty <- freshTV
               pure (one var ty <> rest)
             (<>) tel <$> go bs
-          _ -> error "impossible"
+          p -> error ("fakeLetTys impossible: " ++ show (pretty p))
       go [] = pure mempty
   tele <- go bs
   pure (mempty, tele, mempty)
