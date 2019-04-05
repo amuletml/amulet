@@ -553,34 +553,6 @@ inferLetTy closeOver strategy vs =
 
         pure ( [TypedMatching pat ex' (ann, ty) (teleToList tel')], tel', boundTvs pat tel' )
 
-      tcOne (CyclicSCC [decl@(Binding _ exp _ ann)]) = do
-        (origin, (var, approx)) <- approximate decl
-        ((expr, ty), cons) <- listen . local (names %~ focus (one var approx)) $
-          case origin of
-            Guessed -> do
-              (exp, tau) <- infer exp
-              _ <- unify (BecauseOf decl) tau approx
-              pure (exp, tau)
-            _ -> do
-              exp <- check exp approx
-              pure (exp, approx)
-
-        (tp, k, sol) <- figureOut (origin /= Supplied) (var, becauseExp exp) expr ty cons
-        (fromMaybe id -> cont, old, new) <- instantiate Strong Expression $ apply sol ty
-
-        name <- genNameFrom (nameName var)
-        let inside = Let
-              [ Binding name (transformExprTyped renameInside id id expr) True (ann, old) ]
-              (cont (VarRef name (ann, old))) (ann, new)
-
-            renameInside (VarRef v a) | v == var = VarRef name a
-            renameInside x = x
-
-        pure ( [ Binding var (k inside) True (ann, tp) ]
-             , one var tp
-             , mempty )
-
-
       tcOne (CyclicSCC vars) = do
         () <- guardOnlyBindings vars
         (origins, tvs) <- unzip <$> traverse approximate vars
@@ -636,11 +608,8 @@ inferLetTy closeOver strategy vs =
              when (any (/= Guessed) origins || all (== Supplied) origins) $ do
                let Just reason = fmap fst $
                      find ((/= Guessed) . snd) (zip vars origins)
-                   Just reason' = fmap fst $
-                     find ((== Guessed) . snd) (zip vars origins)
                    blame = BecauseOf reason
-                   blame' = BecauseOf reason'
-               confesses $ ArisingFrom (UnsatClassCon blame (head cons) (RecursiveDeduced blame')) blame
+               confesses $ ArisingFrom (UnsatClassCon blame (head cons) RecursiveDeduced) blame
 
              recVar <- genName
              innerNames <- fmap Map.fromList . for tvs $ \(v, _) ->
