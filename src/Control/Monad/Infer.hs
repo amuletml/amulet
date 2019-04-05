@@ -138,7 +138,7 @@ data WhyInstantiate = Expression | Subsumption
 data WhyUnsat
   = NotAFun
   | PatBinding
-  | RecursiveDeduced SomeReason
+  | RecursiveDeduced 
   | InstanceMethod (Type Typed)
   | InstanceClassCon Span
   | BadDefault (Var Desugared) (Type Typed)
@@ -550,20 +550,16 @@ instance Note TypeError Style where
          , indent 2 "because it has unsatisfiable constraints" ]
      <#> formatNote f (ArisingFrom e r)
 
-  formatNote f (ArisingFrom (UnsatClassCon _ (ConImplicit r _ _ t) (RecursiveDeduced r'')) r') =
+  formatNote f (ArisingFrom (UnsatClassCon _ (ConImplicit r _ _ t) RecursiveDeduced) r') =
     vsep [ indent 2 "No instance for" <+> (Right <$> displayType t) <+> "arising from use of the expression"
          , f [annotation r]
          , mempty
          , indent 2 $ bullet "Note: this constraint was not quantified over because"
-         , indent 4 "recursive binding groups either:"
-         , indent 4 . bullet $ "have complete type signatures in all of their bindings"
-         , indent 6 "- or -"
-         , indent 4 . bullet $ "have no type signatures at all"
+         , indent 4 "recursive binding groups must have complete type signatures"
+         , indent 4 "in all of their bindings."
          , mempty
          , f [annotation r']
-         , indent 4 "This binding can not have a type signature, since"
-         , f [annotation r'']
-         , indent 4 "this binding does not have one."
+         , indent 3 "This binding should have had a complete type signature."
          ]
 
   formatNote f (ArisingFrom (UnsatClassCon _ (ConImplicit r _ _ t) NotAFun) r') =

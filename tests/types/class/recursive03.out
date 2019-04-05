@@ -5,16 +5,10 @@ recursive03.ml[18:5 ..18:23]: error
    │          ^^^^^^
 
   • Note: this constraint was not quantified over because
-    recursive binding groups either:
-    • have complete type signatures in all of their bindings
-      - or -
-    • have no type signatures at all
+    recursive binding groups must have complete type signatures
+    in all of their bindings.
 
    │ 
 18 │ let foo (x : 'a) : unit =
    │     ^^^^^^^^^^^^^^^^^^^
-    This binding can not have a type signature, since
-   │ 
-21 │ and bar x = foo x
-   │     ^^^
-    this binding does not have one.
+   This binding should have had a complete type signature.
