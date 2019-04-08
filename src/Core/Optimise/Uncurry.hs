@@ -28,7 +28,7 @@
   >   let t3 = (# x1, y1, z1 #)
   >   t2 t3
 -}
-module Core.Optimise.Unbox (unboxPass) where
+module Core.Optimise.Uncurry (uncurryPass) where
 
 import Control.Monad.Namey
 import Control.Lens ((%%~))
@@ -44,12 +44,12 @@ import Core.Optimise
 
 type Bind a = (a, Type a, Term a)
 
--- | Runs the unbox pass on the provided statements.
+-- | Runs the uncurry pass on the provided statements.
 --
 -- We need a fresh source of variables for workers and temporary
 -- variables, hence the 'MonadNamey'.
-unboxPass :: forall a m. (MonadNamey m, IsVar a) => [Stmt a] -> m [Stmt a]
-unboxPass = transS where
+uncurryPass :: forall a m. (MonadNamey m, IsVar a) => [Stmt a] -> m [Stmt a]
+uncurryPass = transS where
   transS [] = pure []
   transS (StmtLet (One var):ss) = do
     var' <- third3A transT var
