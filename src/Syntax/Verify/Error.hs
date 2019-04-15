@@ -162,7 +162,7 @@ instance Note VerifyError Style where
          , indent 6 . fmap Right . hsep . intersperse pipe . map pretty $ ps ]
 
   formatNote f (PolyValue a var ty) =
-    vsep [ indent 2 $ "Polymorphic values are not shared"
+    vsep [ indent 2 "Polymorphic values are not shared"
 
          , f [annotation a]
 

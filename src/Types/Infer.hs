@@ -606,7 +606,7 @@ inferLetTy closeOver strategy vs =
              pure (bs, makeTele bs, mempty)
            else do
              when (any (/= Guessed) origins || all (== Supplied) origins) $ do
-               let Just reason = fmap fst $
+               let Just reason = fst <$>
                      find ((/= Guessed) . snd) (zip vars origins)
                    blame = BecauseOf reason
                confesses $ ArisingFrom (UnsatClassCon blame (head cons) RecursiveDeduced) blame
