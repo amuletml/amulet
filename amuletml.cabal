@@ -34,6 +34,7 @@ executable amc
   default-language:    Haskell2010
 
   ghc-options: -Wextra -Wall -Wno-name-shadowing -Wno-implicit-prelude
+               -j +RTS -A32M -RTS
 
   if os(linux)
     ghc-options: -optl-fuse-ld=gold
@@ -82,8 +83,10 @@ test-suite tests
                      , Test.Parser.Parser
                      , Test.Lua.Parser
   default-language:    Haskell2010
+
   ghc-options:         -Wextra -Wall -Wno-name-shadowing
                        -Wno-implicit-prelude -Wno-missing-import-lists
+                       -j +RTS -A32M -RTS
   if os(linux)
     ghc-options: -optl-fuse-ld=gold
     extra-libraries: m, pthread
@@ -109,6 +112,7 @@ library
   ghc-options: -Wextra -Wall -Wno-name-shadowing
                -Wno-implicit-prelude -Wno-missing-import-lists
                -Wredundant-constraints -Wmonomorphism-restriction
+               -j +RTS -A32M -RTS
 
   build-tools: alex
              , happy
