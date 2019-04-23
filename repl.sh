@@ -36,4 +36,4 @@ fi
 
 echo "Loading ghci.."
 
-exec stack exec -- ghci $WARN -i./src/:./compiler/ ./compiler/Main.hs $@
+exec stack exec -- ghci -O0 -j +RTS -A128M -RTS -fhide-source-paths $WARN -i./src/:./compiler/ ./compiler/Main.hs $@
