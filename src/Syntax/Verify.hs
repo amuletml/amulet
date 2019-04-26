@@ -25,7 +25,6 @@ import Syntax.Verify.Pattern
 import Syntax.Verify.Error
 
 import Syntax.Builtin (tyUnit, tyLazy, forceName)
-import Syntax.Subst
 import Syntax.Types
 import Syntax.Let
 import Syntax
@@ -62,11 +61,10 @@ verifyProgram = traverse_ verifyStmt where
       Public -> flip const
   verifyStmt Class{} = pure ()
   verifyStmt Instance{} = pure ()
-  verifyStmt st@(ForeignVal _ v d t (_, _)) = do
+  verifyStmt st@(ForeignVal _ v d _ (_, _)) = do
     case parseExpr (SourcePos ("definition of " ++ displayS (pretty v)) 1 1) (d ^. lazy) of
       Left e -> tell (Seq.singleton (ParseErrorInForeign st e))
       Right _ -> pure ()
-    parametricity st t
 
   verifyStmt TypeDecl{} = pure ()
   verifyStmt (Module _ _ p) = verifyProgram p
@@ -77,10 +75,7 @@ verifyBindingGroup :: MonadVerify m
                    => (BindingSite -> Set.Set BindingSite -> Set.Set BindingSite)
                    -> SomeReason -> [Binding Typed] -> m ()
 verifyBindingGroup k _ = traverse_ verifyScc . depOrder where
-  verifyScc (AcyclicSCC b@(Binding v e c (s, t))) = do
-    when (not (function t) && polymorphic t && nonTrivial e) $
-      tell (Seq.singleton (PolyValue (BecauseOf b) v t))
-
+  verifyScc (AcyclicSCC (Binding v e c (s, t))) =
     when c $ do
       modify (k (BindingSite v s t))
       verifyExpr e
@@ -216,20 +211,6 @@ isWrappedThunk (ExprWrapper (WrapFn (MkWrapCont _ x)) _ _) =
   x == "automatic thunking"
 isWrappedThunk _ = False
 
-polymorphic :: Type Typed -> Bool
-polymorphic (TyPi v body) =
-  (case v of
-    Invisible{} -> True
-    _ -> False) || polymorphic body
-polymorphic _ = False
-
-function :: Type Typed -> Bool
-function (TyPi v body) =
-  case v of
-    Invisible{} -> function body
-    _ -> True
-function _ = False
-
 -- | Determine if the right-hand-side of a binding is non-trivial.
 nonTrivialRhs :: Binding Typed -> Bool
 nonTrivialRhs (TypedMatching _ e _ _) = nonTrivial e
@@ -270,36 +251,6 @@ nonTrivial (ExprWrapper w e _) =
   case w of
     WrapFn (MkWrapCont k _) -> nonTrivial (k e)
     _ -> nonTrivial e
-
--- | Verify a foreign definition is parametric.
-parametricity :: forall m. MonadVerify m
-              => Toplevel Typed -- ^ The top-level definition, used for error reporting
-              -> Type Typed -- ^ The type to verify.
-              -> m ()
-parametricity stmt overall = go mempty overall where
-  go :: Set.Set (Var Typed) -> Type Typed -> m ()
-  go set (TyVar v)
-    | v `Set.member` set = tell (pure (NonParametricForeign stmt overall v))
-    | otherwise = pure ()
-
-  go set (TyPi binder cont) =
-    case binder of
-      Invisible v kind _ -> do
-        set <- case kind of
-          Just kind -> goArg set kind
-          _ -> pure set
-        go (Set.insert v set) cont
-      Anon v -> do
-        set <- goArg set v
-        go set cont
-      Implicit v -> do
-        set <- goArg set v
-        go set cont
-
-  go _ _ = pure ()
-
-  goArg set (TyPi _ cont) = goArg set cont
-  goArg set t = pure (set `Set.difference` ftv t)
 
 -- | Verify a series of patterns are total
 verifyMatch :: MonadVerify m

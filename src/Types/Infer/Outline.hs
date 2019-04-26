@@ -44,6 +44,8 @@ approxType' (BinOp _ (VarRef o _) _ _)
 approxType' (App (VarRef v _) (Fun (PatParam (PLiteral LiUnit _)) e _) _)
   | v == lAZYName = TyApp tyLazy <$> approxType' e
 
+-- approxType' (ListExp (e:_) _) = TyApp tyList <$> approxType' e
+
 approxType' _ = guess
 
 approximate :: MonadInfer Typed m

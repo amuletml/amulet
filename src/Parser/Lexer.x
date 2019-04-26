@@ -347,9 +347,13 @@ lexerScan = do
         n | n == string -> failWith (UnclosedString (liPos inp) start Eof)
         n | n == comment -> failWith (UnclosedComment (liPos inp) start)
         _ -> failWith (UnexpectedEnd (liPos inp))
+
     AlexError (LI p str _ _) ->
-      let ch = L.head str
-      in failWith (UnexpectedCharacter p ch)
+      if L.null str
+         then failWith (UnexpectedEnd (liPos inp))
+         else let ch = L.head str
+               in failWith (UnexpectedCharacter p ch)
+
     AlexSkip  inp' _ -> do
       setInput inp'
       lexerScan
