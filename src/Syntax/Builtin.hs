@@ -153,7 +153,7 @@ builtins =
     floatOp = op $ tyFloat ~> tyFloat ~> tyFloat
     stringOp = op $ tyString ~> tyString ~> tyString
     intCmp = op $ tyInt ~> tyInt ~> tyBool
-    floatCmp = op $ tyInt ~> tyInt ~> tyBool
+    floatCmp = op $ tyFloat ~> tyFloat ~> tyBool
     cmp = op $ a *.TyVar a ~> TyVar a ~> tyBool
 
     -- Helper functions for types
