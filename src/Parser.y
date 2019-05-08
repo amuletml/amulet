@@ -387,6 +387,8 @@ PostBinding :: { Expr e }
 BindName :: { Located (Var Parsed) }
      : ident                                   { lPos1 $1 $ getName $1 }
      | '(' op ')'                              { lPos2 $1 $3 $ getName $2 }
+     | '(' '*' ')'                             { lPos1 $1 $ Name (T.pack "*") }
+     | '(' '~' ')'                             { lPos1 $1 $ Name (T.pack "~") }
 
 BindOp :: { Located (Var Parsed) }
        : '*'                                   { lPos1 $1 $ Name (T.pack "*") }
