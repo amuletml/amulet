@@ -143,6 +143,7 @@ data WhyUnsat
   | InstanceClassCon Span
   | BadDefault (Var Desugared) (Type Typed)
   | GivenContextNotEnough (Type Typed)
+  | TooConcrete (Type Typed)
   | It'sQuantified
 
 instance (Show (Ann p), Show (Var p), Ord (Var p), Substitutable p (Type p))
@@ -560,6 +561,11 @@ instance Note TypeError Style where
          , mempty
          , f [annotation r']
          , indent 3 "This binding should have had a complete type signature."
+         ]
+
+  formatNote f (ArisingFrom (UnsatClassCon _ (ConImplicit r _ _ t) (TooConcrete _)) _) =
+    vsep [ indent 2 "No instance for" <+> (Right <$> displayType t) <+> "arising from use of the expression"
+         , f [annotation r]
          ]
 
   formatNote f (ArisingFrom (UnsatClassCon _ (ConImplicit r _ _ t) NotAFun) r') =
