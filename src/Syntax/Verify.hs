@@ -25,13 +25,14 @@ import Syntax.Verify.Pattern
 import Syntax.Verify.Error
 
 import Syntax.Builtin (tyUnit, tyLazy, forceName)
+import Syntax.Implicits
 import Syntax.Types
 import Syntax.Let
 import Syntax
 
 import Language.Lua.Parser
 
-import Types.Infer.Builtin (spine, getHead)
+import Types.Infer.Builtin (getHead)
 
 data VerifyScope = VerifyScope Env AbsState
 
@@ -61,7 +62,7 @@ verifyProgram = traverse_ verifyStmt where
       Public -> flip const
   verifyStmt Class{} = pure ()
   verifyStmt Instance{} = pure ()
-  verifyStmt st@(ForeignVal _ v d _ (_, _)) = do
+  verifyStmt st@(ForeignVal _ v d _ (_, _)) =
     case parseExpr (SourcePos ("definition of " ++ displayS (pretty v)) 1 1) (d ^. lazy) of
       Left e -> tell (Seq.singleton (ParseErrorInForeign st e))
       Right _ -> pure ()

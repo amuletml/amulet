@@ -13,7 +13,6 @@ import Data.Reason
 import Control.Monad.Infer
 import Control.Lens
 
-
 import Syntax.Transform
 import Syntax.Builtin
 import Syntax.Types
@@ -209,7 +208,3 @@ getHead t@TyType = t
 getHead t@TyWildcard{} = t
 getHead t@TyOperator{} = t
 getHead (TyParens t) = getHead t
-
-spine :: Type p -> [Type p]
-spine (TyApp f x) = spine f `snoc` x
-spine t = [t]

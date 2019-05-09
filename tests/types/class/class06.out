@@ -1,3 +1,5 @@
-foo : type -> constraint
-foo : Spec{'a : type}. foo 'a => 'a -> int
-bar : Infer{'a : type}. foo unit => 'a -> 'a
+class06.ml[6:11 ..6:16]: error
+  No instance for foo unit arising from use of the expression
+  │ 
+6 │   let 0 = foo ()
+  │           ^^^^^^

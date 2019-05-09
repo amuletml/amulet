@@ -464,6 +464,10 @@ reduceClassContext extra annot cons = do
       wrap flv =
         shoveFn stillNeeded' . (case flv of { Full -> shove; _ -> id })
 
+  for_ stillNeeded $ \(var, ty, reason) ->
+    when (tooConcrete ty) $
+      confesses (addBlame reason (UnsatClassCon reason (ConImplicit reason scope var ty) (TooConcrete ty)))
+
   pure (addCtx stillNeeded', wrap, stillNeeded')
 
 addLet :: Map.Map (Var Typed) (Wrapper Typed) -> Var Typed -> [Constraint Typed] -> Expr Typed -> Expr Typed
@@ -563,6 +567,15 @@ validContext w a t@TySkol{} = confesses (InvalidContext w a t)
 validContext w a t@TyWithConstraints{} = confesses (InvalidContext w a t)
 validContext w a t@TyType{} = confesses (InvalidContext w a t)
 validContext w a (TyParens t) = validContext w a t
+
+tooConcrete :: Type Typed -> Bool
+tooConcrete (spine -> (x:xs)) = isIt x --> any isIt xs where
+  isIt TyCon{} = True
+  isIt _ = False
+  x --> y = not x || y
+
+tooConcrete _ = False
+
 
 type Need t = (Var t, Type t, SomeReason)
 data WrapFlavour = Thin | Full

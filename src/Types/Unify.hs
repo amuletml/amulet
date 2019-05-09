@@ -21,11 +21,10 @@ import Control.Applicative
 import Control.Monad.Infer
 import Control.Lens hiding (Empty, (:>))
 
-import Types.Infer.Builtin hiding (subsumes, unify)
 import Types.Infer.Errors
 import Types.Wellformed
 
-import Syntax.Implicits hiding (overlap, spine)
+import Syntax.Implicits hiding (overlap)
 import Syntax.Builtin
 import Syntax.Subst
 import Syntax

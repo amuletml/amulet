@@ -7,10 +7,10 @@ import qualified Data.Set as Set
 import Control.Monad.Infer
 import Control.Lens
 
-import Types.Infer.Builtin
 import Types.Wellformed -- skols
 
 import Syntax.Transform
+import Syntax.Implicits
 import Syntax.Subst
 import Syntax
 
