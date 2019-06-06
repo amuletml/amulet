@@ -1,4 +1,4 @@
-{-# LANGUAGE LambdaCase, TupleSections, 
+{-# LANGUAGE LambdaCase, TupleSections,
     PatternSynonyms, RankNTypes, ScopedTypeVariables, FlexibleContexts,
     ConstraintKinds, OverloadedStrings, TypeFamilies #-}
 module Core.Lower
@@ -21,12 +21,10 @@ import qualified Data.VarSet as VarSet
 import qualified Data.Map as Map
 import qualified Data.Text as T
 import Data.Traversable
-import Data.Function
 import Data.Foldable
 import Data.Maybe
 import Data.Graph
 import Data.Span
-import Data.List
 
 import qualified Core.Core as C
 import qualified Core.Builtin as C
@@ -159,17 +157,10 @@ lowerAt (S.Match ex cs an) ty = do
 
 lowerAt (Access r k _) ty = do
   (r', rt) <- lowerBothAtom r
-  (iv, var) <- (,) <$> fresh ValueVar <*> fresh ValueVar
-  let cotyRows t [] = t
-      cotyRows t xs = RowsTy t xs
-      inner =
-        case rt of
-          RowsTy t rs -> cotyRows t (deleteBy ((==) `on` fst) (k, undefined) rs)
-          ExactRowsTy rs -> ExactRowsTy (deleteBy ((==) `on` fst) (k, undefined) rs)
-          _ -> error ("not a row type " ++ show rt)
-      match = C.Arm { _armPtrn = PatExtend (C.Capture iv inner) [ (k, C.Capture var ty) ]
+  var <- fresh ValueVar
+  let match = C.Arm { _armPtrn = PatRecord [(k, C.Capture var ty)]
                     , _armTy = rt, _armBody = Atom (Ref var ty )
-                    , _armVars = [(iv, inner), (var, ty)], _armTyvars = []
+                    , _armVars = [(var, ty)], _armTyvars = []
                     }
   pure $ C.Match r' [match]
 

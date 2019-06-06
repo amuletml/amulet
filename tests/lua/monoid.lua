@@ -4,11 +4,11 @@ do
   local __builtin_unit = { __tag = "__builtin_unit" }
   local tostring = tostring
   local writeln = print
-  local function _dollardApplicativeaew(cbf)
+  local function _dollardApplicativeaew(cba)
     return {
-      pure = function(car) return cbf.zero end,
-      ["<*>"] = function(cai) return function(caf) return cbf["×"](cai)(caf) end end,
-      ["Applicative$kl"] = function(caq) return function(can) return can end end
+      pure = function(cam) return cba.zero end,
+      ["<*>"] = function(cad) return function(caa) return cba["×"](cad)(caa) end end,
+      ["Applicative$kl"] = function(cal) return function(cai) return cai end end
     }
   end
   local function _colon_colon(x) return function(y) return Cons({ _1 = x, _2 = y }) end end
@@ -16,34 +16,34 @@ do
     if cs.__tag == "Nil" then
       return "Nil"
     elseif cs.__tag == "Cons" then
-      local cdc = cs[1]
-      return ass(cdc._1) .. " :: " .. _dollarshow(ass, cdc._2)
+      local ccv = cs[1]
+      return ass(ccv._1) .. " :: " .. _dollarshow(ass, ccv._2)
     end
   end
-  local function _dollartraverse(bhn, chi, k, cu)
+  local function _dollartraverse(bhn, cgv, k, cu)
     if cu.__tag == "Nil" then
-      return chi.pure(Nil)
+      return cgv.pure(Nil)
     elseif cu.__tag == "Cons" then
-      local che = cu[1]
-      return chi["<*>"](chi["Applicative$kl"](_colon_colon)(k(che._1)))(_dollartraverse(__builtin_unit, chi, k, che._2))
+      local cgs = cu[1]
+      return cgv["<*>"](cgv["Applicative$kl"](_colon_colon)(k(cgs._1)))(_dollartraverse(__builtin_unit, cgv, k, cgs._2))
     end
   end
   local function _dollar_d7(blz, x, ys)
     if x.__tag == "Nil" then
       return ys
     elseif x.__tag == "Cons" then
-      local cif = x[1]
-      return Cons({ _2 = _dollar_d7(__builtin_unit, cif._2, ys), _1 = cif._1 })
+      local chs = x[1]
+      return Cons({ _1 = chs._1, _2 = _dollar_d7(__builtin_unit, chs._2, ys) })
     end
   end
-  local cjl = { _1 = 1, _2 = __builtin_unit }
+  local cix = { _1 = 1, _2 = __builtin_unit }
   writeln(_dollarshow(function(x)
     return tostring(x)
   end, _dollartraverse(__builtin_unit, _dollardApplicativeaew({
-    ["×"] = function(x) return function(ys) return _dollar_d7(__builtin_unit, x, ys) end end,
-    zero = Nil
-  }), function(cbq) return Cons({ _1 = cbq._1, _2 = Nil }) end, Cons({
-    _1 = cjl,
-    _2 = Cons({ _1 = cjl, _2 = Cons({ _1 = cjl, _2 = Nil }) })
+    zero = Nil,
+    ["×"] = function(x) return function(ys) return _dollar_d7(__builtin_unit, x, ys) end end
+  }), function(cbl) return Cons({ _1 = cbl._1, _2 = Nil }) end, Cons({
+    _1 = cix,
+    _2 = Cons({ _1 = cix, _2 = Cons({ _1 = cix, _2 = Nil }) })
   }))))
 end

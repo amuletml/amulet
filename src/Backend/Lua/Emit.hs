@@ -978,7 +978,7 @@ patternBindings (PatLit _) _     = []
 patternBindings PatWildcard _    = []
 patternBindings (Constr _) _     = []
 patternBindings (Destr _ p) [vr] = captureBinding p [LuaRef (LuaIndex vr (LuaInteger 1))]
-patternBindings (PatExtend p rs) [vr] = captureBinding p [vr] ++ concatMap (index vr) rs where
+patternBindings (PatRecord rs) [vr] = concatMap (index vr) rs where
   index vr (var', pat) = captureBinding pat [LuaRef (LuaIndex vr (LuaString var'))]
 patternBindings (PatValues ps) vr = mconcat (zipWith (\p v -> captureBinding p [v]) ps vr)
 patternBindings _ _ = error "Mismatch between pattern and expression arity"
@@ -1032,7 +1032,7 @@ patternGraph test test' Arm { _armPtrn = p, _armVars = vs } graph = do
 patternTest :: forall a. IsVar a => EscapeScope -> Pattern a -> [LuaExpr] ->  LuaExpr
 patternTest _ PatWildcard _      = LuaTrue
 patternTest _ (PatLit RecNil) _  = LuaTrue
-patternTest _ PatExtend{} _      = LuaTrue
+patternTest _ PatRecord{} _      = LuaTrue
 patternTest _ PatValues{} _      = LuaTrue
 patternTest _ (PatLit l)  [vr]   = LuaBinOp vr "==" (emitLit l)
 patternTest s (Constr con) [vr]  = tag s con vr

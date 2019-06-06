@@ -294,7 +294,7 @@ lowerOne tys rss = do
       partialLower (S.PLiteral l _) = PatLit (lowerLiteral l)
       partialLower (S.PSkolem p _ _) = partialLower p
       partialLower (S.Destructure v _ _) = Constr (mkCon v)
-      partialLower (S.PRecord _ _) = PatExtend (Capture (CoVar 0 "?" ValueVar) (VarTy tyvarA)) []
+      partialLower (S.PRecord _ _) = PatRecord []
       partialLower (S.PAs p _ _) = partialLower p
       partialLower p = error ("Unhandled pattern " ++ show p)
 
@@ -303,7 +303,7 @@ lowerOne tys rss = do
         -- every pattern is "complete".
         go PatWildcard{} = False
         -- Trivial patterns, always match
-        go PatExtend{} = True
+        go PatRecord{} = True
         go PatValues{} = True
         go (PatLit Unit) = True
         go (PatLit RecNil) = True
@@ -413,14 +413,7 @@ lowerOneOf preLeafs var ty tys = go [] . map prepare
            -> m ArmNode
     goRows unc fields [] = do
       let fields' = map (second (uncurry Capture)) (Map.toList fields)
-          ty' = case ty of
-                  RowsTy b rs ->
-                    case filter (flip Map.notMember fields . fst) rs of
-                      [] -> b
-                      rs' -> RowsTy b rs'
-                  _ -> NilTy
-      v <- flip Capture ty' <$> fresh ValueVar
-      build [(PatExtend v fields', v:map snd fields', reverse unc)]
+      build [(PatRecord fields', map snd fields', reverse unc)]
     goRows unc fields ((S.PRecord fs _,PR arm ps gd vBind tyBind):rs) = do
       (fields', ps') <- foldrM flattenField (fields, ps) fs
       goRows (PR arm ps' gd vBind tyBind:unc) fields' rs
@@ -518,7 +511,7 @@ isTrivialPat _ = False
 
 patternVars :: Pattern CoVar -> [(CoVar, Type CoVar)]
 patternVars (Destr _ p) = [captureVars p]
-patternVars (PatExtend p ps) = captureVars p : map (captureVars . snd) ps
+patternVars (PatRecord ps) = map (captureVars . snd) ps
 patternVars (PatValues ps) = map captureVars ps
 patternVars Constr{} = []
 patternVars PatLit{} = []
