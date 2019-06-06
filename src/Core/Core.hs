@@ -129,7 +129,7 @@ type Arm = AnnArm ()
 data Pattern a
   = Constr a
   | Destr a (Capture a)
-  | PatExtend (Capture a) [(Text, Capture a)]
+  | PatRecord [(Text, Capture a)]
   | PatValues [Capture a]
   | PatLit Literal
   | PatWildcard
@@ -260,7 +260,7 @@ braces' = enclose (lbrace <> linebreak) (linebreak <> rbrace)
 instance Pretty a => Pretty (Pattern a) where
   pretty (Constr v) = pretty v
   pretty (Destr v p) = parens (pretty v <+> pretty p)
-  pretty (PatExtend p rs) = braces $ pretty p <+> pipe <+> prettyRows rs where
+  pretty (PatRecord rs) = braces $ prettyRows rs where
     prettyRows :: [(Text, Capture a)] -> Doc
     prettyRows = hsep . punctuate comma . map (\(x, v) ->
       text x <+> equals <+> pretty v)

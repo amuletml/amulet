@@ -425,18 +425,16 @@ checkPattern s = checkPat where
         , Just s <- r `unify` ty'
         -> checkCapture (substituteInType s x) p
         | otherwise -> pushError (TypeMismatch (ForallTy Irrelevant unknownTyvar ty') (inst ty))
-  checkPat ty@(RowsTy NilTy ts) (PatExtend f fs) =
-    let (outer, inner) = partition (\(l, _) -> any ((== l) . fst) fs) ts
-    in checkCapture (RowsTy NilTy inner) f
-    *> for_ fs (\(t, p) -> case find ((==t) . fst) outer of
+  checkPat ty@(RowsTy NilTy ts) (PatRecord fs) =
+    let outer = filter (\(l, _) -> any ((== l) . fst) fs) ts
+    in for_ fs (\(t, p) -> case find ((==t) . fst) outer of
          Nothing -> pushError (TypeMismatch (RowsTy NilTy [(t, unknownTyvar)]) ty)
          Just (_, ty) -> checkCapture ty p)
-  checkPat ty@(RowsTy ext ts) (PatExtend f fs) =
-       checkCapture ext f
-    *> for_ fs (\(t, p) -> case find ((==t) . fst) ts of
-         Nothing -> pushError (TypeMismatch (RowsTy ext [(t, unknownTyvar)]) ty)
-         Just (_, ty) -> checkCapture ty p)
-  checkPat t (PatExtend _ fs) =
+  checkPat ty@(RowsTy ext ts) (PatRecord fs) =
+    for_ fs (\(t, p) -> case find ((==t) . fst) ts of
+      Nothing -> pushError (TypeMismatch (RowsTy ext [(t, unknownTyvar)]) ty)
+      Just (_, ty) -> checkCapture ty p)
+  checkPat t (PatRecord fs) =
     pushError (TypeMismatch (RowsTy unknownTyvar (map (\(a, _) -> (a, unknownTyvar)) fs)) t)
   checkPat (ValuesTy ts) (PatValues ps) | length ts == length ps =
     traverse_ (uncurry checkCapture) (zip ts ps)
@@ -509,7 +507,7 @@ apartOpen a b = not (uniOpen a b)
 
 patternVars :: Pattern a -> [(a, Type a)]
 patternVars (Destr _ p) = [captureVars p]
-patternVars (PatExtend p ps) = captureVars p : map (captureVars . snd) ps
+patternVars (PatRecord ps) = map (captureVars . snd) ps
 patternVars (PatValues ps) = map captureVars ps
 patternVars Constr{} = []
 patternVars PatLit{} = []

@@ -77,9 +77,9 @@ reducePattern s (Ref v _) (Destr c (Capture a _))
   , isCtor (lookupRawVar c' s) s = PatternFail
 
 -- Attempt to reduce the field
-reducePattern s e (PatExtend (Capture r' _) fs) =
+reducePattern s e (PatRecord fs) =
   foldr ((<>) . handle)
-        (PatternComplete [(r', e)])
+        (PatternComplete [])
         fs where
   handle :: (T.Text, Capture a) -> PatternResult a
   handle (f, Capture v _) =
@@ -122,7 +122,7 @@ filterDeadArms pat s = goArm where
       PatWildcard   -> [a]
       PatLit Unit   -> [a]
       PatLit RecNil -> [a]
-      PatExtend{}   -> [a]
+      PatRecord{}   -> [a]
       PatValues _   -> [a]
 
     -- Unbounded literals will never be complete unless we have a wildcard
