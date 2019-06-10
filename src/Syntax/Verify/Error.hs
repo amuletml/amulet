@@ -44,8 +44,6 @@ data VerifyError
   | ParseErrorInForeign { stmt :: Toplevel Typed
                         , err :: ParseError }
 
-  -- | An expression in a begin block which does not evaluate to a unit.
-  | NonUnitBegin (Expr Typed) (Type Typed)
   -- | Misleading laziness on let expressions
   | LazyLet (Expr Typed) (Type Typed)
   -- | A pattern which is shadowed by another
@@ -57,7 +55,6 @@ instance Spanned VerifyError where
   annotation (NonRecursiveRhs e _ _) = annotation e
   annotation (DefinedUnused b) = boundWhere b
   annotation (ParseErrorInForeign _ e) = annotation e
-  annotation (NonUnitBegin e _) = annotation e
   annotation (LazyLet e _) = annotation e
   annotation (RedundantArm a) = annotation a
   annotation (MissingPattern e _) = annotation e
@@ -77,14 +74,6 @@ instance Pretty VerifyError where
   pretty (ParseErrorInForeign var err) =
     vsep [ "Invalid syntax in definition of foreign value" <+> pretty var
          , pretty err ]
-  pretty (NonUnitBegin ex ty) =
-    vsep [ "This statement discards a value of type"
-         , indent 2 (displayType ty)
-         , empty
-         , bullet "Note: use a" <+> keyword "let" <+> "to silence this warning, as in"
-         , indent 2 $
-             keyword "let" <+> soperator (char '_') <+> equals <+> pretty ex
-         ]
   pretty (LazyLet _ _) =
     vsep [ "Automatic thunking of" <+> keyword "let" <> "s does not cover bindings"
          ]
@@ -103,7 +92,6 @@ instance Note VerifyError Style where
   diagnosticKind NonRecursiveRhs{} = ErrorMessage
   diagnosticKind ParseErrorInForeign{} = WarningMessage
   diagnosticKind DefinedUnused{} = WarningMessage
-  diagnosticKind NonUnitBegin{} = WarningMessage
   diagnosticKind LazyLet{} = WarningMessage
   diagnosticKind RedundantArm{} = WarningMessage
   diagnosticKind MissingPattern{} = WarningMessage

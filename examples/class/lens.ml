@@ -107,8 +107,8 @@ end
 instance monoid (list 'a) begin
   let zero = Nil
   let (×) x ys = match x with
-  | Nil -> ys
-  | Cons (x, xs) -> x :: (xs × ys)
+    | Nil -> ys
+    | Cons (x, xs) -> x :: (xs × ys)
 end
 
 let foldMapOf l f = getConst & l (Const & f)

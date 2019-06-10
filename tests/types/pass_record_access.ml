@@ -14,11 +14,11 @@ let access_match_3 x =
 let () =
   let x = { a = 0, b = 0, c = 0 }
 
-  access x
-  access_2 x
+  let _ = access x
+  let _ = access_2 x
 
-  access_match x
-  access_match_2 x
-  access_match_3 x
+  let _ = access_match x
+  let _ = access_match_2 x
+  let _ = access_match_3 x
 
   ()

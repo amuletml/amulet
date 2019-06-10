@@ -4,6 +4,12 @@ multi_errs03.ml[2:19 ..2:22]: error
   │                   ^^^^
   Couldn't match actual type bool
     with the type expected by the context, int
+multi_errs03.ml[3:3 ..3:11]: error
+  │ 
+3 │   foo "foo"
+  │   ^^^^^^^^^
+  Couldn't match actual type int
+    with the type expected by the context, unit
 multi_errs03.ml[1:5 ..1:6]: error
   │ 
 1 │ let () =

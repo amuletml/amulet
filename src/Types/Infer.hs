@@ -282,7 +282,7 @@ infer (Tuple xs an) =
 infer (Begin xs a) = do
   let start = init xs
       end = last xs
-  start <- traverse (fmap fst . infer) start
+  start <- traverse (`check` tyUnit) start
   (end, t) <- infer' end
   pure (Begin (start ++ [end]) (a, t), t)
 

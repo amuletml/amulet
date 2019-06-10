@@ -4,14 +4,14 @@ do
   local function _bar_bar(a) return function(b) return a or b end end
   local function _not(a) return not a end
   (nil)({ ands = _amp_amp, ors = _bar_bar, ["not"] = _not })
-  (nil)(function(fw)
+  (nil)(function(fy)
     if true then
       return print("L")
     end
     print("R")
     return print("R")
   end)
-  (nil)(function(gh)
+  (nil)(function(gj)
     if not true then
       return print("R")
     end

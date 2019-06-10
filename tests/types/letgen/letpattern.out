@@ -1,1 +1,6 @@
-main : {  }
+letpattern.ml[1:5 ..1:6]: error
+  │ 
+1 │ let () =
+  │     ^^
+  Couldn't match actual type {  }
+    with the type expected by the context, unit
