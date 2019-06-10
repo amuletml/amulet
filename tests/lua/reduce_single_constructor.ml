@@ -7,7 +7,7 @@ module NoArgs =
 
   let main =
     let other = Mono
-    go ()
+    let _ = go ()
     other
 
 (* A single constructor type with an argument should not be simplified *)
@@ -18,7 +18,7 @@ module WithArgs =
 
   let main =
     let other = Mono 2
-    go ()
+    let _ = go ()
     other
 
 external val bottom : 'a = "nil"

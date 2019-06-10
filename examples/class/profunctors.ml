@@ -42,22 +42,19 @@ class monoid 'm begin
   val zero : 'm
 end
 
-type arr 'a 'b = Arr of 'a -> 'b
-let shoot (Arr f) = f
-
 type forget 'r 'a 'b = Forget of 'a -> 'r
 let remember (Forget r) = r
 
-instance profunctor arr
-  let dimap f g (Arr h) = Arr (g & h & f)
+instance profunctor (->)
+  let dimap f g h = g & h & f
 
-instance strong arr
-  let first (Arr f) = Arr (fun (x, y) -> (f x, y))
-  let second (Arr f) = Arr (fun (x, y) -> (x, f y))
+instance strong (->)
+  let first f (x, y) = (f x, y)
+  let second f (x, y) = (x, f y)
 
-instance choice arr
-  let left (Arr f) = Arr (either (Left & f) Right)
-  let right (Arr f) = Arr (either Left (Right & f))
+instance choice (->)
+  let left f = either (Left & f) Right
+  let right f = either Left (Right & f)
 
 instance profunctor (forget 'r)
   let dimap f _ (Forget g) = Forget (g & f)
@@ -74,7 +71,7 @@ let lens get set =
   dimap (fork get id) (uncurry set) & first
 
 let view l = remember (l (Forget id))
-let over f = shoot & f & Arr
+let over f = f
 let set l b = over l (const b)
 
 type pair 'a 'b = Pair of 'a * 'b
@@ -88,4 +85,4 @@ let species x = lens (.species) (fun x r -> { r with species = x }) x
 let name x = lens (.name) (fun x r -> { r with name = x }) x
 
 let hydraz = { species = "human", name = "hydraz", age = 16 }
-let main = view name hydraz |> print
+let _ = view name hydraz |> print

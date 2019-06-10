@@ -1,4 +1,4 @@
 let id x = x
 let main =
-  id 1
+  let _ = id 1
   id ()

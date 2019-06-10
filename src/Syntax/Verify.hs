@@ -24,7 +24,7 @@ import Text.Pretty.Semantic
 import Syntax.Verify.Pattern
 import Syntax.Verify.Error
 
-import Syntax.Builtin (tyUnit, tyLazy, forceName)
+import Syntax.Builtin (tyLazy, forceName)
 import Syntax.Implicits
 import Syntax.Types
 import Syntax.Let
@@ -113,16 +113,7 @@ verifyExpr (If c t e _) = traverse_ verifyExpr [c, t, e]
 verifyExpr (App f x _) = verifyExpr f *> verifyExpr x
 verifyExpr m@(Fun (PatParam p) x _) = verifyMatch m (getType p) [Arm p Nothing x]
 verifyExpr (Fun _ x _) = verifyExpr x
-verifyExpr (Begin es _) = do
-  let unitish TyVar{} = True
-      unitish TyWildcard{} = True
-      unitish x = x == tyUnit
-  for_ (init es) $ \ex -> do
-    let ty = getType ex
-    verifyExpr ex
-    unless (unitish ty) $
-      tell (Seq.singleton (NonUnitBegin ex ty))
-  verifyExpr (last es)
+verifyExpr (Begin es _) = traverse_ verifyExpr es
 verifyExpr Literal{} = pure ()
 verifyExpr m@(Match e bs _) = do
   verifyExpr e

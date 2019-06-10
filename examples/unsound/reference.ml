@@ -15,7 +15,7 @@ external val print : string -> unit = "print"
 let r = ref None
 
 let () =
-  upd r (Some 1)
+  let _ = upd r (Some 1)
   match read r with
   | Some x -> print (x ())
 

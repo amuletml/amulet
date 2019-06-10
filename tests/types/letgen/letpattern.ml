@@ -1,8 +1,8 @@
-let main =
+let () =
   let (id, const) = (fun x -> x, fun x _ -> x)
-  id 1
-  id ()
-  id id
-  const 1 ()
-  const "foo" ()
+  let _ = id 1
+  let _ = id ()
+  let _ = id id
+  let _ = const 1 ()
+  let _ = const "foo" ()
   const {} ()

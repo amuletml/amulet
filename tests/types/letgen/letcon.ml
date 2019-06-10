@@ -3,5 +3,5 @@ type foo 'a =
 
 let main =
   let foo x = (x, Foo x)
-  foo 1
+  let _ = foo 1
   foo ()
