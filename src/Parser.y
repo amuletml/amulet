@@ -283,7 +283,7 @@ Atom :: { Expr Parsed }
      | Lit                                     { withPos1 $1 (Literal (getL $1)) }
      | hole                                    { withPos1 $1 (Hole (Name (getHole $1))) }
      | '_'                                     { withPos1 $1 (Hole (Name (T.singleton '_'))) }
-     | begin List1(Expr, ExprSep) end          { withPos2 $1 $3 $ Begin $2 }
+     | begin List1(CompStmt, ExprSep) end      { withPos2 $1 $3 $ DoExpr bindVar $2 }
      | '(' ')'                                 { withPos2 $1 $2 $ Literal LiUnit }
      | '(' Section ')'                         { withPos2 $1 $3 $ Parens $2 }
      | '(' NullSection ',' List1(NullSection, ',') ')'
@@ -602,6 +602,7 @@ tuplePattern [x] a = case x of
 tuplePattern xs a = PTuple xs a
 
 varE = VarRef . Name . T.pack
+bindVar = Name (T.pack ">>=")
 
 getIdent  (Token (TcOp x) _ _)         = x
 getIdent  (Token (TcIdentifier x) _ _) = x
