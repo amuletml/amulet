@@ -275,32 +275,42 @@ Expr0 :: { Expr Parsed }
 PreAtom :: { Expr Parsed }
      : Atom                                   { $1 }
      | qdotid Atom                            { withPos2 $1 $2 $ OpenIn (getName $1) $2 }
-     | '!' Atom                                { makeBang $1 $2 }
+     | '!' Atom                               { makeBang $1 $2 }
 
 Atom :: { Expr Parsed }
-     : Var                                     { withPos1 $1 (VarRef (getL $1)) }
-     | Con                                     { withPos1 $1 (VarRef (getL $1)) }
-     | Lit                                     { withPos1 $1 (Literal (getL $1)) }
-     | hole                                    { withPos1 $1 (Hole (Name (getHole $1))) }
-     | '_'                                     { withPos1 $1 (Hole (Name (T.singleton '_'))) }
-     | begin List1(Expr, ExprSep) end          { withPos2 $1 $3 $ Begin $2 }
-     | '(' ')'                                 { withPos2 $1 $2 $ Literal LiUnit }
-     | '(' Section ')'                         { withPos2 $1 $3 $ Parens $2 }
+     : Var                                    { withPos1 $1 (VarRef (getL $1)) }
+     | Con                                    { withPos1 $1 (VarRef (getL $1)) }
+     | Lit                                    { withPos1 $1 (Literal (getL $1)) }
+     | hole                                   { withPos1 $1 (Hole (Name (getHole $1))) }
+     | '_'                                    { withPos1 $1 (Hole (Name (T.singleton '_'))) }
+     | begin List1(CompStmt, ExprSep) end     { withPos2 $1 $3 $ DoExpr bindVar $2 }
+     | '(' ')'                                { withPos2 $1 $2 $ Literal LiUnit }
+     | '(' Section ')'                        { withPos2 $1 $3 $ Parens $2 }
      | '(' NullSection ',' List1(NullSection, ',') ')'
          { withPos2 $1 $5 $ tupleExpr ($2:$4) }
-     | '{' ListT(ExprRow, ',') '}'             { withPos2 $1 $3 $ Record $2 }
-     | '{' Expr with List1T(ExprRow, ',') '}'  { withPos2 $1 $5 $ RecordExt $2 $4 }
-     | '[' List(Expr, ',') ']'                 { withPos2 $1 $3 $ ListExp $2 }
-     | '[' Expr '|' List1(CompStmt, ',') ']'   { withPos2 $1 $5 $ ListComp $2 $4 }
-     | Atom access                             { withPos2 $1 $2 $ Access $1 (getIdent $2) }
+     | '{' ListT(ExprRow, ',') '}'            { withPos2 $1 $3 $ Record $2 }
+     | '{' Expr with List1T(ExprRow, ',') '}' { withPos2 $1 $5 $ RecordExt $2 $4 }
+     | '[' List(Expr, ',') ']'                { withPos2 $1 $3 $ ListExp $2 }
+     | '[' Expr '|' List1(CompStmt, ',') ']'  { withPos2 $1 $5 $ ListComp $2 $4 }
+     | Atom access                            { withPos2 $1 $2 $ Access $1 (getIdent $2) }
 
 CompStmt :: { CompStmt Parsed }
   : let BindGroup                             { withPos1 $1 $ CompLet (reverse $2) }
-  | with Pattern '<-' Expr                    { withPos2 $1 $4 $ CompGen $2 $4 }
+  | BasicStmt                                 { $1 }
   | Expr                                      { CompGuard $1 }
 
+BasicStmt :: { CompStmt Parsed }
+  : with Pattern '<-' Expr                    { withPos2 $1 $4 $ CompGen $2 $4 }
+
+-- | Computations which are not valid in an expression context. Allows us to
+-- produce somewhat more friendly error messages in the common case.
+ExprNonComp :: { Expr Parsed }
+  : Expr                                      { $1 }
+  | BasicStmt                                 {% tellErrors [MisplacedWith (annotation $1)]
+                                                 *> pure (withPos1 $1 (Literal LiUnit)) }
+
 ExprBlock :: { Expr Parsed }
-          : List1(Expr, ExprSep)              { completeTuple Begin $1 }
+  : List1(ExprNonComp, ExprSep)               { completeTuple Begin $1 }
 
 ExprSep :: { () }
         : ';'    { () }
@@ -602,6 +612,7 @@ tuplePattern [x] a = case x of
 tuplePattern xs a = PTuple xs a
 
 varE = VarRef . Name . T.pack
+bindVar = Name (T.pack ">>=")
 
 getIdent  (Token (TcOp x) _ _)         = x
 getIdent  (Token (TcIdentifier x) _ _) = x
