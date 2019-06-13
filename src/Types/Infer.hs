@@ -29,7 +29,6 @@ import Control.Monad.Infer
 import Control.Arrow (first)
 import Control.Lens
 
-import Syntax.Resolve.Toplevel
 import Syntax.Implicits
 import Syntax.Transform
 import Syntax.Builtin
@@ -412,11 +411,12 @@ inferProg (inst@Instance{}:prg) = do
 inferProg (Module am name body:prg) = do
   (body', env) <- inferProg body
 
-  let (vars, tys) = extractToplevels body
-      vars' = map (\x -> (x, env ^. names . at x . non (error ("value: " ++ show x)))) (vars ++ tys)
+  -- let (vars, tys) = extractToplevels body
+  --     vars' = map (\x -> (x, env ^. names . at x . non (error ("value: " ++ show x)))) (vars ++ tys)
+  --  TODO: investigate this
 
   -- Extend the current scope and module scope
-  local ( (names %~ focus (teleFromList vars'))
+  local ( (names %~ (<> (env ^. names)))
         . (types %~ (<> (env ^. types)))
         . (classDecs %~ (<> (env ^. classDecs)))
         . (modules %~ (Map.insert name (env ^. classes) . (<> (env ^. modules))))) $
