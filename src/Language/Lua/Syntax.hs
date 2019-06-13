@@ -248,4 +248,4 @@ keywords :: Set.Set T.Text
 keywords = Set.fromList [ "and", "break", "do", "else", "elseif", "end"
                         , "false", "for" , "function",  "if", "in", "local"
                         , "nil", "not", "or", "repeat", "return", "then"
-                        , "true", "until", "while" ]
+                        , "true", "until", "while", "goto" ]
