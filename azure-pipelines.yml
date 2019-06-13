@@ -1,0 +1,38 @@
+trigger:
+- master
+
+pr:
+  autoCancel: true
+  branches:
+    include:
+      - '*'
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+container: 'haskell:8.6.5'
+
+jobs:
+- job: Build
+  steps:
+  - script: stack build --fast
+    displayName: 'Build Amulet'
+
+- job: Test
+  steps:
+  - script: stack test --fast --test-arguments "--xml junit.xml --display t"
+    displayName: Run tests
+    dependsOn: Build
+
+  - task: PublishTestResults@2
+    condition: succeededOrFailed()
+    displayName: Publish test results
+    inputs:
+      testResultsFormat: 'JUnit'
+      testResultsFiles: 'junit.xml'
+
+- job: HLint
+  steps:
+  - script: stack exec -- hlint --git
+    displayName: Check code style
+    dependsOn: Build
