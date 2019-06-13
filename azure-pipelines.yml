@@ -42,5 +42,5 @@ jobs:
   pool: { vmImage: 'ubuntu-latest' }
   dependsOn: Build
   steps:
-  - script: stack exec -- hlint --git
+  - script: stack exec ==package=hlint -- hlint --git
     displayName: Check code style
