@@ -1,2 +1,2 @@
 sized : Infer{'e : type}. 'e -> constraint
-size : Infer{'e : type}. Spec{'a : 'e}. sized 'a => int
+size : Infer{'e : type}. Spec{'a : 'e}. sized 'a => Spec{'e : type}. int

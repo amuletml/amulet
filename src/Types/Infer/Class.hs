@@ -68,15 +68,21 @@ inferClass clss@(Class name _ ctx _ methods classAnn) = do
       (signatures, defaults) = partition (\case { MethodSig{} -> True; DefaultMethod{} -> False }) methods
 
   let vars =
-        flip foldMap params $ \case
+        (flip foldMap params $ \case
           TyVarArg v -> Set.singleton v
-          TyAnnArg v _ -> Set.singleton v
+          TyAnnArg v _ -> Set.singleton v)
+        <> forallVars k
+      forallVars (TyForall v _ t) = Set.singleton v <> forallVars t
+      forallVars _ = mempty
+
+  let addForallVars (TyForall v k t) ty = TyForall v k (addForallVars t ty)
+      addForallVars _ ty = ty
 
   local (names %~ focus (one name k <> scope params)) $ do
     -- Infer the types for every method
     (decls, rows) <- fmap unzip . for signatures $ \meth@(MethodSig method ty _) -> do
       checkWildcard meth ty
-      ty <- silence $ -- Any errors will have been caught by the resolveClassKind
+      ty <- silence . fmap (addForallVars k) $ -- Any errors will have been caught by the resolveClassKind
         resolveKind (BecauseOf meth) ty
       withHead <- closeOver' vars (BecauseOf meth) $
         TyPi (Implicit classConstraint) ty
