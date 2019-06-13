@@ -36,6 +36,7 @@ data ResolveError
   | EmptyMatch -- ^ This @match@ has no patterns
   | EmptyBegin -- ^ This @begin@ block has no expressions
   | IllegalMethod -- ^ An illegal method within an @instance@
+  | LastStmtNotExpr -- ^ Invalid statement in tail position
 
   -- | A wrapper for other errors which adds some additional context,
   -- such as a source position.
@@ -59,6 +60,7 @@ instance Pretty ResolveError where
   pretty EmptyMatch = "Empty match expression"
   pretty EmptyBegin = "Empty begin expression"
   pretty IllegalMethod = "Illegal pattern in instance method declaration"
+  pretty LastStmtNotExpr = "The last statement in a" <+> keyword "begin" <+> "block should be an expression"
 
   pretty (ArisingFrom er ex) =
     pretty er <#> empty <#> nest 4 (string "Arising from use of" <+> blameOf ex </> pretty ex)

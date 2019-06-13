@@ -97,10 +97,17 @@ data Context
   --
   -- This will be inside a 'CtxBracket', so is only used as a marker.
   | CtxList
+
   -- | The body of a list comprehension.
   --
   -- This will be inside a 'CtxBracket', so is only used as a marker.
   | CtxListComprehension
+
+  -- | The body of a monad computation
+  --
+  -- This has very similar semantics to 'CtxListComprehension', in which
+  -- lets are treated as statements instead.
+  | CtxMonad
 
   deriving (Show, Eq)
 
@@ -131,6 +138,10 @@ instance Pretty Context where
   pretty (CtxModuleHead True sp) = stypeCon "ModuleHead" <> brackets "Top" <> parens (source sp)
   pretty (CtxModuleBodyUnresolved sp) = stypeCon "ModuleUnresolved" <> parens (source sp)
   pretty CtxModuleBody = stypeCon "Module"
+
+  pretty CtxList = stypeCon "List"
+  pretty CtxListComprehension = "ListComprehension"
+  pretty CtxMonad = stypeCon "Monad"
 
   pretty x = parens . string . show $ x
 
@@ -364,7 +375,7 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
     -- @let ...@ ~~> Push a let context
     (TcLet, _) -> pure
       ( Result tok Done
-      , ( if isToplevel c || isListComprehension c
+      , ( if isToplevel c || isStatement c
           then CtxStmtLet tp
           else CtxLet tp ):c )
 
@@ -428,7 +439,7 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
     -- @begin ...@ ~~> CtxEmptyBlock : CtxBracket(end)
     (TcBegin, _) -> pure
       ( Result tok Done
-      , CtxEmptyBlock Nothing:CtxBracket TcEnd:c)
+      , CtxEmptyBlock Nothing:CtxMonad:CtxBracket TcEnd:c)
     -- @(@, @{@, @[@  ~~> CtxBracket()|}|])
     (TcOParen, _) -> pure (Result tok Done, CtxBracket TcCParen:c)
     (TcOBrace, _) -> pure (Result tok Done, CtxBracket TcCBrace:c)
@@ -510,8 +521,9 @@ terminates TcEnd (CtxClassBody{}:_) = True
 terminates TcEnd (CtxInstBody{}:_) = True
 
 -- Block level terminators
-terminates TcTopSep (CtxBlock{}:ck) = isToplevel ck
-terminates TcSemicolon (CtxBlock{}:ck) = not (isToplevel ck)
+terminates TcTopSep (CtxBlock{}:ck) | isToplevel ck = True
+terminates TcSemicolon (CtxBlock{}:ck) | not (isToplevel ck) = True
+terminates TcSemicolon (CtxBlock{}:CtxMonad:_) = True
 
 -- List comprehension statement terminator
 terminates TcComma (CtxListComprehension:_) = True
@@ -529,10 +541,12 @@ isToplevel (CtxTypeBody{}:_) = True
 isToplevel (CtxBlock{}:cks) = isToplevel cks
 isToplevel _ = False
 
--- | Is this context's immediate parent a list comprehension?
-isListComprehension :: [Context] -> Bool
-isListComprehension (CtxListComprehension:_) = True
-isListComprehension _ = False
+-- | Is this context's immediate parent "statement"-esque (@with@ and
+-- statement-style @let@s)?
+isStatement :: [Context] -> Bool
+isStatement (CtxListComprehension:_) = True
+isStatement (CtxBlock{}:CtxMonad:_) = True
+isStatement _ = False
 
 isIfContinue :: TokenClass -> Bool
 isIfContinue TcThen = True

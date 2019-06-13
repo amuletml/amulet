@@ -88,6 +88,9 @@ instance (Spanned (Ann p), Pretty (Var p)) => Reasonable Binding p where
 instance (Spanned (Ann p), Pretty (Var p)) => Reasonable Arm p where
   blame _ = string "the pattern-matching clause"
 
+instance (Spanned (Ann p), Pretty (Var p)) => Reasonable CompStmt p where
+  blame _ = string "the statement"
+
 instance (Spanned (Ann p), Pretty (Var p)) => Reasonable ClassItem p where
   blame MethodSig{} = string "the" <+> highlight "method signature"
   blame DefaultMethod{} = string "the" <+> highlight "default method"
@@ -134,6 +137,7 @@ instance Respannable (Ann p) => Respannable (Expr p) where
   respan k (Vta e t a) = Vta e t (respan k a)
   respan k (ListExp e a) = ListExp e (respan k a)
   respan k (ListComp e qs a) = ListComp e qs (respan k a)
+  respan k (DoExpr v qs a) = DoExpr v qs (respan k a)
 
   respan k (Record fs a) = Record fs (respan k a)
   respan k (RecordExt f fs a) = RecordExt f fs (respan k a)

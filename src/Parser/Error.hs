@@ -54,6 +54,9 @@ data ParseError
   -- | A malformed instanc declaration
   | MalformedInstance Span (Type Parsed)
 
+  -- | Attempting to use with in an invalid contxt
+  | MisplacedWith Span
+
   -- | An invalid escape code
   | InvalidEscapeCode Span
 
@@ -130,12 +133,16 @@ instance Pretty ParseError where
 
   pretty (MalformedInstance _ ty) = "Malformed instance name" <+> verbatim (pretty ty)
 
+  pretty (MisplacedWith _) = "Misplaced" <+> keyword "with" <+> "statement"
+    </> keyword "with" <+> "bindings may only appear within monadic" <+> keyword "begin" <> "/" <>
+        keyword "end" <+> "blocks. Is this statement correctly aligned?"
+
   pretty (InvalidEscapeCode _) = "Unknown escape code."
 
   pretty (UnalignedIn _ p) =
     "The in is misaligned with the corresponding 'let'" <+> parens ("located at" <+> prettyPos (spanStart p))
   pretty (UnindentContext _ p) =
-    "Possible incorrect indentation" 
+    "Possible incorrect indentation"
     </> "This token is outside the context started at" <+> prettyPos (spanStart p)
 
 instance Spanned ParseError where
@@ -150,6 +157,8 @@ instance Spanned ParseError where
 
   annotation (MalformedClass p _) = p
   annotation (MalformedInstance p _) = p
+
+  annotation (MisplacedWith p) = p
 
   annotation (InvalidEscapeCode p) = p
 
