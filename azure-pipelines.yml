@@ -32,6 +32,5 @@ jobs:
       testResultsFormat: 'JUnit'
       testResultsFiles: 'junit.xml'
 
-  steps:
   - script: stack exec ==package=hlint -- hlint --git
     displayName: Check code style
