@@ -68,9 +68,9 @@ inferClass clss@(Class name _ ctx _ methods classAnn) = do
       (signatures, defaults) = partition (\case { MethodSig{} -> True; DefaultMethod{} -> False }) methods
 
   let vars =
-        (flip foldMap params $ \case
+        foldMap (\case
           TyVarArg v -> Set.singleton v
-          TyAnnArg v _ -> Set.singleton v)
+          TyAnnArg v _ -> Set.singleton v) params
         <> forallVars k
       forallVars (TyForall v _ t) = Set.singleton v <> forallVars t
       forallVars _ = mempty
@@ -244,7 +244,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
         mkBinds x = do
           var <- genName
           pure (singleton ann LocalAssum var x, Capture var (ann, x))
-        addFull (as, p) = (as, PAs p fullCtx (ann, ctx)) 
+        addFull (as, p) = (as, PAs p fullCtx (ann, ctx))
      in addFull <$> mkBinds ctx
 
   let localAssums = insert ann InstSort instanceName globalInsnConTy localAssums'
