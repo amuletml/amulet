@@ -22,11 +22,6 @@ jobs:
   - script: stack build --fast
     displayName: 'Build Amulet'
 
-- job: Test
-  container: 'haskell'
-  pool: { vmImage: 'ubuntu-latest' }
-  dependsOn: Build
-  steps:
   - script: stack test --fast --test-arguments "--xml junit.xml --display t"
     displayName: Run tests
 
@@ -37,10 +32,6 @@ jobs:
       testResultsFormat: 'JUnit'
       testResultsFiles: 'junit.xml'
 
-- job: HLint
-  container: 'haskell'
-  pool: { vmImage: 'ubuntu-latest' }
-  dependsOn: Build
   steps:
   - script: stack exec ==package=hlint -- hlint --git
     displayName: Check code style
