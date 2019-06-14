@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts, NamedFieldPuns #-}
+{-# LANGUAGE FlexibleContexts #-}
 module Errors where
 
 import qualified Data.Text.Lazy as L
