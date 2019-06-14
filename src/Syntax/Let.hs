@@ -63,17 +63,26 @@ freeIn (BothSection b _) = freeIn b
 freeIn AccessSection{} = mempty
 freeIn (Vta e _ _) = freeIn e
 freeIn (ListExp e _) = foldMap freeIn e
-freeIn (ListComp e qs _) = freeIn e <> go qs where
-  go (CompGen p e _:qs) = (freeIn e <> go qs) `Set.difference` bound p
-  go (CompLet bs _:qs) =
-    (foldMap (freeIn . view bindBody) bs <> go qs)
-      `Set.difference` foldMapOf (each . bindVariable) Set.singleton bs
-  go (CompGuard e:qs) = freeIn e <> go qs
-  go [] = mempty
+freeIn (ListComp e qs _) = freeIn e <> freeInStmt qs
+freeIn (DoExpr v qs _) = freeInStmt qs <> bind where
+  bind
+    | any isGen qs = Set.singleton v
+    | otherwise = mempty
+  isGen CompGen{} = True
+  isGen _ = False
+
 freeIn Function{} = error "ds Function freeIn"
 freeIn TupleSection{} = error "ds TupleSection freeIn"
 freeIn OpenIn{} = error "ds OpenIn freeIn"
 freeIn Syntax.Lazy{} = error "ds Lazy freeIn"
+
+freeInStmt :: Ord (Var p) => [CompStmt p] -> Set.Set (Var p)
+freeInStmt (CompGen p e _:qs) = (freeIn e <> freeInStmt qs) `Set.difference` bound p
+freeInStmt (CompLet bs _:qs) =
+  (foldMap (freeIn . view bindBody) bs <> freeInStmt qs)
+    `Set.difference` foldMapOf (each . bindVariable) Set.singleton bs
+freeInStmt (CompGuard e:qs) = freeIn e <> freeInStmt qs
+freeInStmt [] = mempty
 
 bound :: (IsList m, Item m ~ Var p, Monoid m)
       => Pattern p -> m

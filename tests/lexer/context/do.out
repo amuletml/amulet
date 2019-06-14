@@ -1,0 +1,7 @@
+let ( ) = begin
+  let x = 0
+  $end $sep with x <- 0
+  $sep let x = 0
+  $end $sep 0
+end
+$end <eof>

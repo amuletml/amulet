@@ -50,6 +50,7 @@ instance Spanned (Ann p) => Spanned (Expr p) where
   annotation (Vta _ _ a) = annotation a
   annotation (ListExp _ a) = annotation a
   annotation (ListComp _ _ a) = annotation a
+  annotation (DoExpr _ _ a) = annotation a
 
   annotation (ExprWrapper _ _ a) = annotation a
 
@@ -71,6 +72,11 @@ instance Spanned (Ann p) => Spanned (Arm p) where
 
 instance Spanned (Ann p) => Spanned (Parameter p) where
   annotation = annotation . view paramPat
+
+instance Spanned (Ann p) => Spanned (CompStmt p) where
+  annotation (CompGuard ex) = annotation ex
+  annotation (CompLet _ a) = annotation a
+  annotation (CompGen _ _ a) = annotation a
 
 instance (Data (Var p), Data (Ann p), Data p) => Spanned (Wrapper p)
 
@@ -105,6 +111,8 @@ instance Pretty (Var p) => Pretty (Expr p) where
   pretty (App f x _) = parenFun f <+> parenArg x
   pretty (Fun v e _) = keyword "fun" <+> pretty v <+> arrow <+> pretty e
   pretty (Begin e _) =
+    vsep [ keyword "begin", indent 2 (vsep (punctuate semi (map pretty e))), keyword "end" ]
+  pretty (DoExpr _ e _) =
     vsep [ keyword "begin", indent 2 (vsep (punctuate semi (map pretty e))), keyword "end" ]
   pretty (Literal l _) = pretty l
   pretty (BinOp l o r _) = parens (pretty l <+> pretty o <+> pretty r)

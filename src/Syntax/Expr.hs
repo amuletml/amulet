@@ -99,6 +99,8 @@ data Expr p
   -- Lists
   | ListExp [Expr p] (Ann p)
   | ListComp (Expr p) [CompStmt p] (Ann p)
+  -- Monads
+  | DoExpr (Var p) [CompStmt p] (Ann p)
 
   | ExprWrapper (Wrapper p) (Expr p) (Ann p)
 
@@ -222,6 +224,10 @@ value ListExp{} = True
 value ListComp{} = False
 value (OpenIn _ e _) = value e
 value (ExprWrapper _ e _) = value e
+value (DoExpr _ e _) =
+  case e of
+    [CompGuard x] -> value x
+    _ -> False
 
 isFn :: Expr a -> Bool
 isFn Fun{} = True

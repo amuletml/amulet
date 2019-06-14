@@ -305,6 +305,30 @@ reExpr (ListComp e qs a) =
       go [] acc = ListComp <$> reExpr e <*> pure (reverse acc) <*> pure a
   in go qs []
 
+reExpr (DoExpr var qs a) =
+  let go (CompGuard e:qs) acc flag = do
+        e <- reExpr e
+        go qs (CompGuard e:acc) flag
+      go [r@CompGen{}] _ _ = confesses (ArisingFrom LastStmtNotExpr (BecauseOf r))
+      go [r@CompLet{}] _ _ = confesses (ArisingFrom LastStmtNotExpr (BecauseOf r))
+      go (r@(CompGen b e an):qs) acc flag = do
+        e <- reExpr e
+        (b, es, ts) <- reWholePattern b
+        extendTyvarN ts . extendN es $
+          go qs (CompGen b e an:acc) (flag <|> Just r)
+      go (CompLet bs an:qs) acc flag = do
+        (bs', vs, ts) <- unzip3 <$> traverse reBinding bs
+        extendTyvarN (concat ts) . extendN (concat vs) $ do
+          bs <- traverse (uncurry (flip (<$>) . reExpr . view bindBody)) (zip bs bs')
+          go qs (CompLet bs an:acc) flag
+      go [] acc flag = do
+        var <-
+          case flag of
+            Just r -> lookupEx var `catchJunk` r
+            Nothing -> pure undefined
+        pure $ DoExpr var (reverse acc) a
+  in go qs [] Nothing
+
 reExpr ExprWrapper{} = error "resolve cast"
 
 reArm :: MonadResolve m
@@ -313,7 +337,6 @@ reArm (Arm p g b) = do
   (p', vs, ts) <- reWholePattern p
   extendTyvarN ts . extendN vs $
     Arm p' <$> traverse reExpr g <*> reExpr b
-
 
 reType :: (MonadResolve m, Reasonable a p)
        => a p -> Type Parsed -> m (Type Resolved)

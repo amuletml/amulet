@@ -313,11 +313,15 @@ hasExactMatch t = any ((== t) . view implHead)
 
 pickBestPossible :: [Implicit Typed] -> Implicit Typed
 pickBestPossible [] = error "No choices"
-pickBestPossible xs =
-  let ~(x:_) = L.groupBy ((==) `on` (length . view implPre)) (L.sortOn (length . view implPre) xs)
-      best = L.sortOn specificity x
-      specificity t = countConstructors (t ^. implHead)
-   in head best
+pickBestPossible xs = head best where
+  ~(x:_) = L.groupBy ((==) `on` superclasses) (L.sortOn superclasses xs)
+  best = L.sortOn specificity x
+  specificity t = countConstructors (t ^. implHead)
+
+  superclasses = length . filter isSuperclass . view implPre
+
+  isSuperclass Implication{} = True
+  isSuperclass Quantifier{} = False
 
 usingFor :: Implicit Typed -> Type Typed -> TypeError -> TypeError
 usingFor _ _ x@Note{} = x

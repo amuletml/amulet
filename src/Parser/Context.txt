@@ -29,7 +29,7 @@ _       TypeHead | Offside      -> Pop
 _       ModuleHead<I> | Offside -> Add =, $begin, Replace with EmptyBlock+ModuleBody
 
         ModuleBody              -> Pop
-Begin   ModuleBodyUnresolved | Not offside -> Push Block+ModuleBody+Bracket
+begin   ModuleBodyUnresolved | Not offside -> Push Block+ModuleBody+Bracket
 _       ModuleBodyUnresolved | Not offside, Is toplevel -> Add $begin, Push Block+ModuleBody
 _       ModuleBodyUnresolved    -> Pop
 =       ModuleHead              -> Replace with ModuleBodyUnresolved
@@ -74,7 +74,7 @@ class   _                       -> Push ClassHead
 instance _                      -> Push InstHead
 type    _                       -> Push LetHead
 
-begin   _                       -> Push Block+Bracket<end>
+begin   _                       -> Push Block+Monad+Bracket<end>
 ({      _                       -> Push Bracket<_>
 
 [       _                       -> Push List+Bracket<]>

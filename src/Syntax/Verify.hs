@@ -138,13 +138,20 @@ verifyExpr (Lazy e _) = verifyExpr e
 verifyExpr (Vta e _ _) = verifyExpr e
 verifyExpr (OpenIn _ e _) = verifyExpr e
 verifyExpr (ListExp e _) = traverse_ verifyExpr e
-verifyExpr (ListComp e _ _) = verifyExpr e
+verifyExpr (ListComp e qs _) = verifyExpr e *> traverse_ verifyCompStmt qs
+verifyExpr (DoExpr _ qs _) = traverse_ verifyCompStmt qs
 verifyExpr (ExprWrapper w e a) =
   case w of
     WrapFn (MkWrapCont k _) -> verifyExpr (k e)
     ExprApp x -> verifyExpr x *> verifyExpr e
     x :> y -> verifyExpr (ExprWrapper x (ExprWrapper y e a) a)
     _ -> verifyExpr e
+
+verifyCompStmt :: MonadVerify m => CompStmt Typed -> m ()
+verifyCompStmt (CompGuard e) = verifyExpr e
+verifyCompStmt (CompGen _ e _) = verifyExpr e
+verifyCompStmt stmt@(CompLet bg _) =
+  verifyBindingGroup Set.insert (BecauseOf stmt) bg
 
 unguardedVars :: Expr Typed -> Set.Set (Var Typed)
 unguardedVars (Ascription e _ _)   = unguardedVars e
@@ -236,6 +243,7 @@ nonTrivial (Parens e _) = nonTrivial e
 nonTrivial (Tuple es _) = any nonTrivial es
 nonTrivial (ListExp es _) = any nonTrivial es
 nonTrivial ListComp{} = False
+nonTrivial DoExpr{} = False
 nonTrivial TupleSection{} = False
 nonTrivial (OpenIn _ e _) = nonTrivial e
 nonTrivial Lazy{} = False

@@ -1,0 +1,13 @@
+begin05.ml[10:3 ..10:3]: error
+   │ 
+10 │   2
+   │   ^
+  Couldn't match actual type int
+    with the type expected by the context, identity 'b
+begin05.ml[8:5 ..8:5]: error
+  No instance for monad identity arising in the binding
+  │ 
+8 │ let _ = begin
+  │     ^
+  • Note: this constraint can not be quantified over
+    because it is impossible to quantify over pattern bindings
