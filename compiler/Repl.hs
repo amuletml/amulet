@@ -214,7 +214,7 @@ runRepl = do
 
     typeCommand (dropWhile isSpace -> line) = do
       state <- get
-      core <- flip evalNameyT (lastName state) $ parseCore state parseReplExpr "<interactive>" (T.pack line)
+      core <- flip evalNameyT (lastName state) $ parseCore state (Right <$> parseReplExpr) "<interactive>" (T.pack line)
       case core of
         Just ((v, _ ):_, _, _, state') -> do
           let CoVar id nam _ = v
