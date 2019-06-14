@@ -18,12 +18,13 @@ executable amc
                      , text >= 1.2 && < 1.3
                      , base >= 4.9 && < 4.13
                      , lens >= 4.15 && < 4.18
-                     , these >= 0.7 && < 0.9
+                     , these >= 1 && < 1.1
                      , hslua >= 0.9 && < 1.1
                      , amuletml
                      , haskeline >= 0.7 && < 0.8
                      , containers >= 0.5 && < 0.7
                      , bytestring >= 0.10 && < 0.11
+                     , monad-chronicle >= 1 && < 1.1
                      , optparse-applicative >= 0.14 && < 0.15
                      , pretty-show
 
@@ -52,7 +53,7 @@ test-suite tests
                      , Diff >= 0.3.4 && < 0.4
                      , HUnit >= 1.6 && < 1.7
                      , tasty >= 1.0 && < 1.3
-                     , these >= 0.7 && < 0.9
+                     , these >= 1 && < 1.1
                      , amuletml
                      , filepath >= 1.4 && < 1.5
                      , hedgehog >= 0.5 && < 0.7
@@ -61,6 +62,7 @@ test-suite tests
                      , tasty-hunit >= 0.10 && < 0.11
                      , tasty-ant-xml >= 1.1 && < 1.2
                      , tasty-hedgehog >= 0.2 && < 0.3
+                     , monad-chronicle >= 1 && < 1.1
                      , optparse-applicative >= 0.14 && < 0.15
   other-modules:       Test.Golden
                      , Test.Reporter
@@ -98,10 +100,12 @@ library
                      , array >= 0.5 && < 0.6
                      , base >= 4.9 && < 4.13
                      , lens >= 4.15 && < 4.18
-                     , these >= 0.7 && < 0.9
+                     , these >= 1 && < 1.1
                      , hashable >= 1.2 && < 1.3
                      , containers >= 0.5 && < 0.7
+                     , these-lens >= 1 && < 1.1
                      , transformers >= 0.5 && < 0.6
+                     , monad-chronicle >= 1 && < 1.1
                      , template-haskell >= 2.13 && < 2.15
                      , annotated-wl-pprint >= 0.7 && < 0.8
                      , unordered-containers >= 0.2 && < 0.3

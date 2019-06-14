@@ -227,8 +227,8 @@ Repl :: { Either (Toplevel Parsed) (Expr Parsed) }
      : Top   ReplSep                           { Left $1 }
      | Expr  ReplSep                           { Right $1 }
 
-ReplExpr :: { Either a (Expr Parsed) }
-  : Expr ReplSep { Right $1 }
+ReplExpr :: { Expr Parsed }
+  : Expr ReplSep { $1 }
 
 ReplSep :: { () }
     : ';;'   { () }
@@ -391,7 +391,7 @@ Binding :: { Binding Parsed }
               True
               (withPos2 $1 $3 id) }
 
-PostBinding :: { Expr e }
+PostBinding :: { Expr Parsed }
   : '=' ExprBlock '$end'                       { $2 }
 
 BindName :: { Located (Var Parsed) }
