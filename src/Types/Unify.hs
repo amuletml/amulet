@@ -151,9 +151,7 @@ doSolve Empty = pure ()
 doSolve (ConUnify because v a b :<| xs) = do
   sub <- use solveTySubst
 
-#ifdef TRACE_TC
   traceM (displayS (pretty (ConUnify because v (apply sub a) (apply sub b))))
-#endif
   co <- memento $ unify (apply sub a) (apply sub b)
   case co of
     Left e -> do
@@ -165,9 +163,7 @@ doSolve (ConUnify because v a b :<| xs) = do
 doSolve (ConSubsume because scope v a b :<| xs) = do
   sub <- use solveTySubst
 
-#ifdef TRACE_TC
   traceM (displayS (pretty (ConSubsume because scope v (apply sub a) (apply sub b))))
-#endif
   let a' = apply sub a
   sub <- use solveTySubst
   co <- memento $ subsumes because scope a' (apply sub b)
@@ -185,9 +181,7 @@ doSolve (ConImplies because not cs ts :<| xs) = do
       cs' = apply before cs
       ts' = apply before ts
 
-#ifdef TRACE_TC
   traceM (displayS (pretty (ConImplies because not cs' ts')))
-#endif
 
   ((), sub) <- retcon (fmap (addBlame because . DeadBranch)) . capture .
     local (bindSkol .~ True) . local (don'tTouch .~ mempty) $
@@ -425,10 +419,12 @@ unify a (TyWildcard (Just b)) = SymCo <$> unify b a
 
 unify skt@(TySkol t@(Skolem sv _ _ _)) b = do
   sub <- use (solveAssumptions . at sv)
+  subst <- use solveAssumptions
   case sub of
     Just ty -> do
-      _ <- unify b ty
-      pure (AssumedCo (TySkol t) ty)
+      let ty' = apply subst ty
+      _ <- unify b ty'
+      pure (AssumedCo (TySkol t) ty')
     Nothing -> case b of
       TyVar v -> bind v (TySkol t)
       TyWildcard (Just tau) -> unify skt tau

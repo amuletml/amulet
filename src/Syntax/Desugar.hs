@@ -108,7 +108,7 @@ expr (ListComp e qs an) = transListComp (e, qs, an) (ListExp [] an)
 expr (DoExpr bind qs an) = begin <$> transDoExpr (VarRef bind an) qs where
   begin = flip Begin an . (:[])
 
-expr (OpenIn _ e _) = expr e
+expr (OpenIn mod e an) = OpenIn mod <$> expr e <*> pure an
 
 buildTuple :: forall m. MonadNamey m => Ann Desugared
            -> Maybe (Expr Desugared)

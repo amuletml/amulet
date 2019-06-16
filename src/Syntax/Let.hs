@@ -70,10 +70,10 @@ freeIn (DoExpr v qs _) = freeInStmt qs <> bind where
     | otherwise = mempty
   isGen CompGen{} = True
   isGen _ = False
+freeIn (OpenIn _ e _) = freeIn e
 
 freeIn Function{} = error "ds Function freeIn"
 freeIn TupleSection{} = error "ds TupleSection freeIn"
-freeIn OpenIn{} = error "ds OpenIn freeIn"
 freeIn Syntax.Lazy{} = error "ds Lazy freeIn"
 
 freeInStmt :: Ord (Var p) => [CompStmt p] -> Set.Set (Var p)

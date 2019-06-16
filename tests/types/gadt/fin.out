@@ -1,0 +1,6 @@
+fin.ml[11:14 ..11:18]: error
+   │ 
+11 │   | SS SZ -> FS FZ
+   │              ^^^^^
+  Couldn't match actual type fin (S (S 'k))
+    with the type expected by the context, fin 'n
