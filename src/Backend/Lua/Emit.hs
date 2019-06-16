@@ -767,7 +767,7 @@ emitLit (Float x) = LuaNumber x
 emitLit (Str str) = LuaString str
 emitLit LitTrue   = LuaTrue
 emitLit LitFalse  = LuaFalse
-emitLit Unit      = LuaRef (LuaName "__builtin_unit") -- Evil, but it works!
+emitLit Unit      = LuaNil -- LuaRef (LuaName "__builtin_unit") -- Evil, but it works!
 emitLit RecNil    = LuaTable []
 
 emitStmt :: forall a m. (Occurs a, MonadState TopEmitState m)

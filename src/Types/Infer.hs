@@ -153,8 +153,6 @@ check TupleSection{} tau =
   error $ "check TupleSection : " ++ displayS (pretty tau) ++ " in TC (desugar didn't run?)"
 check Syntax.Lazy{} tau =
   error $ "check Syntax.Lazy : " ++ displayS (pretty tau) ++ " in TC (desugar didn't run?)"
-check OpenIn{} tau =
-  error $ "check OpenIn : " ++ displayS (pretty tau) ++ " in TC (desugar didn't run?)"
 
 check e ty = do
   (e', t) <- infer e
@@ -284,6 +282,11 @@ infer (Begin xs a) = do
   start <- traverse (`check` tyUnit) start
   (end, t) <- infer' end
   pure (Begin (start ++ [end]) (a, t), t)
+
+infer (OpenIn mod expr _) = do
+  modImplicits <- view (modules . at mod . non undefined)
+  local (classes %~ (<>modImplicits)) $
+    infer expr
 
 infer ex = do
   x <- freshTV

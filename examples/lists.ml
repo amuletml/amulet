@@ -35,4 +35,4 @@ let range start stop =
   else
     Cons (start, range (start + 1) stop)
 
-let () = print_list (map (+ 1) (range 1 10))
+let _ = print_list (map (+ 1) (range 1 10))
