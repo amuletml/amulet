@@ -1,5 +1,5 @@
 class foo 'a begin
-  val x : ()
+  val x : 'a -> ()
 end
-instance foo 'a begin let x = () end
-instance foo () begin let x = () end
+instance foo 'a begin let x _ = () end
+instance foo () begin let x _ = () end

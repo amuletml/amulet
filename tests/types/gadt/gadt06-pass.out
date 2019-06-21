@@ -1,6 +1,6 @@
 exp : type
 ast : type -> type -> type
-Var : Spec{'a : 'bo}. Spec{'b : 'bp}. Spec{'tag : type}. ('a ~ exp, 'b ~ 'tag) ⊃ string -> ast 'a 'b
+Var : Spec{'a : 'bo}. Spec{'b : 'bp}. Infer{'tag : type}. ('a ~ exp, 'b ~ 'tag) ⊃ string -> ast 'a 'b
 Tag : Spec{'b : 'cz}. Spec{'a : type}. Spec{'tag : type}. ('b ~ 'tag) ⊃ ('tag * ast 'a 'tag) -> ast 'a 'b
 foo : type
 Foo : int -> foo

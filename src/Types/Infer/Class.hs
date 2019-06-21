@@ -67,23 +67,36 @@ inferClass clss@(Class name _ ctx _ methods classAnn) = do
 
       (signatures, defaults) = partition (\case { MethodSig{} -> True; DefaultMethod{} -> False }) methods
 
-  let vars =
-        foldMap (\case
-          TyVarArg v -> Set.singleton v
-          TyAnnArg v _ -> Set.singleton v) params
-        <> forallVars k
-      forallVars (TyForall v _ t) = Set.singleton v <> forallVars t
-      forallVars _ = mempty
+  let forallVars = getForallVars k
+      getForallVars (TyForall v _ t) = Set.singleton v <> getForallVars t
+      getForallVars _ = mempty
 
-  let addForallVars (TyForall v k t) ty = TyForall v k (addForallVars t ty)
+  let declaredVars =
+         foldMap (\case
+           TyVarArg v -> Set.singleton v
+           TyAnnArg v _ -> Set.singleton v) params
+
+      vars = declaredVars <> forallVars
+
+  let addForallVars (TyForall v k t) ty
+        | v `Set.member` forallVars && v `Set.member` ftv ty = TyPi (Invisible v k Infer) (addForallVars t ty)
+        | otherwise = addForallVars t ty
       addForallVars _ ty = ty
 
   local (names %~ focus (one name k <> scope params)) $ do
     -- Infer the types for every method
     (decls, rows) <- fmap unzip . for signatures $ \meth@(MethodSig method ty _) -> do
       checkWildcard meth ty
-      ty <- silence . fmap (addForallVars k) $ -- Any errors will have been caught by the resolveClassKind
+
+      kinded <- silence . fmap (addForallVars k) $ -- Any errors will have been caught by the resolveClassKind
         resolveKind (BecauseOf meth) ty
+
+      -- any free tvs are kind variables
+      let tv = Set.toList (ftv kinded `Set.difference` vars)
+          ty = foldr (\ v -> TyPi (Invisible v Nothing Infer)) kinded tv
+
+      checkValidMethodTy (BecauseOf meth) method declaredVars kinded
+
       withHead <- closeOver' vars (BecauseOf meth) $
         TyPi (Implicit classConstraint) ty
 
@@ -637,3 +650,13 @@ expandEta ty ex = go ty ex where
       ExprWrapper (TypeLam sk k)
         inside (an, TyPi (Invisible v (Just k) req) b)
   go _ e = pure e
+
+checkValidMethodTy :: MonadInfer Typed m
+                   => SomeReason
+                   -> Var Typed
+                   -> Set.Set (Var Typed)
+                   -> Type Typed
+                   -> m ()
+checkValidMethodTy reason method vars ty = unless (Set.null diff) err where
+  diff = vars `Set.difference` ftv ty
+  err = dictates (addBlame reason (AmbiguousMethodTy method ty diff))

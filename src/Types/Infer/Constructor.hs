@@ -53,12 +53,13 @@ inferCon vars ret c@(GadtCon ac nm cty ann) = do
   pure ((nm, overall), GadtCon ac nm overall (ann, overall))
 
 closeOverGadt :: MonadInfer Typed m => Set.Set (Var Typed) -> SomeReason -> [(Type Typed, Type Typed)] -> Type Typed -> m (Type Typed)
-closeOverGadt vars r cons cty =
+closeOverGadt cbv r cons cty =
   let fv = ftv cty `Set.union` foldMap (\(x, y) -> ftv x `Set.union` ftv y) cons
       fv :: Set.Set (Var Typed)
+      vars = cbv `Set.union` ftv cty
 
       pushCons [] t = t
-      pushCons c (TyForall v k t) = TyForall v k (pushCons c t)
+      pushCons c (TyPi (Invisible v k vis) t) = TyPi (Invisible v k vis) (pushCons c t)
       pushCons c t = TyWithConstraints c t
 
       forall [] t = t

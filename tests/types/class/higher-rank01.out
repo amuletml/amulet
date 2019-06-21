@@ -2,7 +2,7 @@ unsafe_coerce : Spec{'a : type}. Spec{'b : type}. 'a -> 'b
 foo : Infer{'a : type}. 'a -> type
 Foo : Infer{'a : type}. Spec{'a : 'a}. int -> foo 'a
 fooable : Infer{'a : type}. 'a -> constraint
-foo : Infer{'a : type}. Spec{'a : 'a}. fooable 'a => Spec{'a : type}. foo 'a
+foo : Infer{'a : type}. Spec{'a : 'a}. fooable 'a => foo 'a
 gift : Infer{'a : type}. 'a -> type -> type
 Give : Infer{'a : type}. Spec{'a : 'a}. Spec{'b : type}. (fooable 'a => 'b) -> gift 'a 'b
-with_foo : Spec{'a : type}. Spec{'b : 'a}. Infer{'c : type}. Infer{'d : 'hy}. foo 'b -> (fooable 'b => 'c) -> 'd
+with_foo : Infer{'a : type}. Spec{'b : 'a}. Spec{'c : type}. foo 'b -> (fooable 'b => 'c) -> 'c

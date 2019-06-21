@@ -318,15 +318,17 @@ closeOver r a = silence $ do
         | v `inScope` names = TyPi (Invisible v (Just (names ^. at v . non undefined)) Infer) t
         | otherwise = TyPi (Invisible v Nothing Infer) t
 
+      tyForall v k = TyPi (Invisible v k Infer)
+
   let kindVars = squish . second toList . runWriter . split where
         squish (x, []) = x
-        squish (x, vs) = foldr (flip TyForall (Just TyType)) x vs
+        squish (x, vs) = foldr (flip tyForall (Just TyType)) x vs
 
         split (TyForall v (Just t@(TyVar x)) ty)
           | v `Set.member` freevars = do
             tell (Set.singleton x)
-            TyForall v (Just t) <$> split ty
-          | otherwise = TyForall v (Just t) <$> split ty
+            tyForall v (Just t) <$> split ty
+          | otherwise = tyForall v (Just t) <$> split ty
         split t = pure t
   kindVars . killWildcard <$> annotateKind r (forall (toList freevars) a)
 

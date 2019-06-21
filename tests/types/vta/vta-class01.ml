@@ -1,9 +1,9 @@
 class sized 'a begin
-  val size : int
+  val size : 'proxy 'a -> int
 end
 
 instance sized unit begin
-  let size = 0
+  let size _ = 0
 end
 
-let 0 = size @unit
+let 0 = size @unit []

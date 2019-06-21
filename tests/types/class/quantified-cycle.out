@@ -13,6 +13,6 @@ quantified-cycle.ml[12:10 ..12:16]: error
     • forall 'a. c (t1 'a)
   • Note: 
       When considering the instance
-        forall 'a. (forall 'a. c (t1 'a)) => c (t2 'a)
+        (forall 'a. c (t1 'a)) => c (t2 'a)
       as a solution for the constraint
         forall 'a. c (t2 'a)

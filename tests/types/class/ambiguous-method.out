@@ -1,0 +1,7 @@
+ambiguous-method.ml[3:3 ..3:12]: error
+  │ 
+3 │   val y : 'b
+  │   ^^^^^^^^^^
+  Ambiguous type for method y
+  • Note: The variable a is bound in the class head
+  but doesn't appear in the method type

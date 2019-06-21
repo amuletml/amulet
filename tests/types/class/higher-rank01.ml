@@ -7,6 +7,6 @@ end
 
 type gift 'a 'b = Give of fooable 'a => 'b
 
-let with_foo (x : foo 'a) (k : fooable 'a => 'b) =
+let with_foo (x : foo 'a) (k : fooable 'a => 'b) : 'b =
   let gift = Give @'a @'b k
   unsafe_coerce gift x

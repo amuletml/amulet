@@ -2,9 +2,9 @@ functor : (type -> type) -> constraint
 map : Spec{'f : type -> type}. functor 'f => Spec{'a : type}. Spec{'b : type}. ('a -> 'b) -> 'f 'a -> 'f 'b
 foldable : (type -> type) -> constraint
 iapplicative : Infer{'in : type}. ('in -> 'in -> type -> type) -> constraint
-pure : Spec{'f : 'in -> 'in -> type -> type}. iapplicative 'f => Spec{'in : type}. Spec{'a : type}. Spec{'i : 'in}. 'a -> 'f 'i 'i 'a
-<*> : Spec{'f : 'in -> 'in -> type -> type}. iapplicative 'f => Spec{'in : type}. Spec{'a : type}. Spec{'b : type}. Spec{'i : 'in}. Spec{'j : 'in}. Spec{'k : 'in}. 'f 'i 'j ('a -> 'b) -> 'f 'j 'k 'a -> 'f 'i 'k 'b
+pure : Spec{'f : 'in -> 'in -> type -> type}. iapplicative 'f => Infer{'in : type}. Spec{'a : type}. Spec{'i : 'in}. 'a -> 'f 'i 'i 'a
+<*> : Spec{'f : 'in -> 'in -> type -> type}. iapplicative 'f => Infer{'in : type}. Spec{'a : type}. Spec{'b : type}. Spec{'i : 'in}. Spec{'j : 'in}. Spec{'k : 'in}. 'f 'i 'j ('a -> 'b) -> 'f 'j 'k 'a -> 'f 'i 'k 'b
 imonad : Infer{'uh : type}. ('uh -> 'uh -> type -> type) -> constraint
->>= : Spec{'m : 'uh -> 'uh -> type -> type}. imonad 'm => Spec{'uh : type}. Spec{'a : type}. Spec{'b : type}. Spec{'i : 'uh}. Spec{'j : 'uh}. Spec{'k : 'uh}. ('a -> 'm 'j 'k 'b) -> 'm 'i 'j 'a -> 'm 'i 'k 'b
+>>= : Spec{'m : 'uh -> 'uh -> type -> type}. imonad 'm => Infer{'uh : type}. Spec{'a : type}. Spec{'b : type}. Spec{'i : 'uh}. Spec{'j : 'uh}. Spec{'k : 'uh}. ('a -> 'm 'j 'k 'b) -> 'm 'i 'j 'a -> 'm 'i 'k 'b
 iio : Infer{'a : type}. Infer{'b : type}. 'b -> 'a -> type -> type
 IIO : Infer{'a : type}. Infer{'b : type}. Spec{'before : 'b}. Spec{'after : 'a}. Spec{'a : type}. (unit -> 'a) -> iio 'before 'after 'a
