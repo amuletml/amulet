@@ -1,6 +1,6 @@
 && : bool -> bool -> bool
 eq : type -> constraint
-.== : Spec{'a : type}. eq 'a => 'a -> 'a -> bool
+=.= : Spec{'a : type}. eq 'a => 'a -> 'a -> bool
 id : type -> type
 Id : Spec{'a : type}. 'a -> id 'a
 option : type -> type

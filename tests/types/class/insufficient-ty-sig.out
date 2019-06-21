@@ -1,6 +1,6 @@
 insufficient-ty-sig.ml[5:11 ..6:7]: error
   │ 
-6 │   (.==)
+6 │   (=.=)
   │    ^^^
   No instance for eq 'a arising from a use of this expression
   • Possible fix: add it to the type signature for foo
