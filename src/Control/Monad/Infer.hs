@@ -116,11 +116,11 @@ data TypeError where
 
   Malformed :: Pretty (Var p) => Type p -> TypeError
 
-  -- Implicit parameters
-  AmbiguousType :: (Ord (Var p), Pretty (Var p)) => Var p -> Type p -> Set.Set (Var p) -> TypeError
   PatternRecursive :: Binding Desugared -> [Binding Desugared] -> TypeError
-
   DeadBranch :: TypeError -> TypeError
+
+  AmbiguousType :: (Ord (Var p), Pretty (Var p)) => Var p -> Type p -> Set.Set (Var p) -> TypeError
+  AmbiguousMethodTy :: (Ord (Var p), Pretty (Var p)) => Var p -> Type p -> Set.Set (Var p) -> TypeError
 
   UnsatClassCon :: SomeReason -> Constraint Typed -> WhyUnsat -> TypeError
   Overlap :: Type Typed -> Span -> Span -> TypeError
@@ -404,7 +404,7 @@ instance Pretty TypeError where
          whatIs t = string "the type" <+> displayType (withoutSkol t)
 
   pretty (AmbiguousType v t (Set.toList -> vs)) =
-    vsep [ "Ambiguous type for value:" <+> stypeSkol (pretty v)
+    vsep [ "Ambiguous type for value" <+> stypeSkol (pretty v)
          , empty
          , indent 2 $ displayType t
          , empty
@@ -416,6 +416,21 @@ instance Pretty TypeError where
         [x] -> "The variable" <+> stypeSkol (pretty x)
         xs -> "The variables"
                 <+> hsep (punctuate comma (map (stypeSkol . pretty) xs))
+
+  pretty (AmbiguousMethodTy v _ (Set.toList -> vs)) =
+    vsep [ "Ambiguous type for method" <+> stypeSkol (pretty v)
+         , bullet "Note:" <+> vars <+> "bound in the class head"
+         , "but" <+> appear <+> "in the method type"
+         ]
+    where
+      vars = case vs of
+        [x] -> "The variable" <+> stypeSkol (pretty x) <+> "is"
+        xs -> "The variables"
+                <+> hsep (punctuate comma (map (stypeSkol . pretty) xs))
+                <+> "are"
+      appear = case vs of
+        [_] -> "doesn't appear"
+        _ -> "don't appear"
 
   pretty (ClassStackOverflow _ xs t) =
     vsep [ "Stack overflow while looking for an instance of"

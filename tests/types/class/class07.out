@@ -2,7 +2,7 @@ class07.ml[9:9 ..9:32]: error
   │ 
 9 │ let foo x = show (read (show x))
   │         ^^^^^^^^^^^^^^^^^^^^^^^^
-  Ambiguous type for value: foo
+  Ambiguous type for value foo
 
     show 'a * read 'a * show 'ci => 'ci -> string
 
