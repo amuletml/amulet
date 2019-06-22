@@ -45,8 +45,8 @@ $ident = [$unicodeDigit $unicodeGeneric $digit $upper $lower '_' '\''] -- Valid 
 
 -- Valid symbol characters. We're slightly more fluent with what we allow
 -- in non-head positions
-$symbolHead = [\: \! \# \$ \% \& \* \+ \. \/ \< \= \> \? \@ \\ \^ \| \- \~ $unicodeSymbol]
-$symbolTail = [$symbolHead \[ \]]
+$opHead = [\: \! \# \$ \% \& \* \+ \/ \< \= \> \? \@ \\ \^ \| \- \~ $unicodeSymbol]
+$opTail = [$opHead \.]
 
 tokens :-
   <0> $white+    { whitespace }
@@ -124,8 +124,8 @@ tokens :-
   <0> $digit+ \. $digit+ [Ee] [\+\-] $digit+ { onString $ TcFloat . parseDouble }
 
   -- Identifiers
-  <0> $lower $ident*                   { lexTok $ TcIdentifier }
-  <0> $upper $ident*                   { lexTok $ TcConIdent }
+  <0> $lower $ident*                   { lexTok TcIdentifier }
+  <0> $upper $ident*                   { lexTok TcConIdent }
 
   -- Module identifiers
   <0> $upper $ident* \.                { beginModule }
@@ -135,7 +135,8 @@ tokens :-
   <modP> ()                            { endModuleNull TcDotQual }
 
   -- Operators
-  <0> $symbolHead $symbolTail*         { lexOperator }
+  <0> $opHead $opTail*                 { lexOperator }
+  <0> \. $opHead $opTail*              { lexTok TcDotOp }
   <0> \` $lower $ident* \`             { lexTok $ TcOpIdent . T.init . T.tail }
 
   -- Module operators
@@ -144,9 +145,9 @@ tokens :-
   <modOp> $lower $ident* \`            { endModuleOp TcOpIdentQual }
 
   -- Other operators
-  <0> \_ $ident+                       { lexTok (TcHole . T.tail) }
-  <0> \. $lower $ident*                { lexTok (TcAccess . T.tail) }
-  <0> \' $lower $ident*                { lexTok (TcTyvar . T.tail) }
+  <0> \_ $ident+                       { lexTok $ TcHole . T.tail }
+  <0> \. $lower $ident*                { lexTok $ TcAccess . T.tail }
+  <0> \' $lower $ident*                { lexTok $ TcTyvar . T.tail }
 
   -- Strings
   <0> \"                               { beginString }

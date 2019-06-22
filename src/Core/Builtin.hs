@@ -89,7 +89,7 @@ vForce = CoVar (-36) "force" ValueVar
 
 vAssign, vDeref, vRef :: CoVar
 vAssign = CoVar (-44) ":=" ValueVar
-vDeref = CoVar (-45) "_!" ValueVar
+vDeref = CoVar (-45) "!" ValueVar
 vRef = CoVar (-46) "ref" ValueVar
 
 tyvarA, tyvarB :: CoVar

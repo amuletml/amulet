@@ -57,6 +57,9 @@ data ParseError
   -- | Attempting to use with in an invalid contxt
   | MisplacedWith Span
 
+  -- | Attempting to bind a qualified name
+  | BindQualified (Var Parsed) Span
+
   -- | An invalid escape code
   | InvalidEscapeCode Span
 
@@ -137,6 +140,8 @@ instance Pretty ParseError where
     </> keyword "with" <+> "bindings may only appear within monadic" <+> keyword "begin" <> "/" <>
         keyword "end" <+> "blocks. Is this statement correctly aligned?"
 
+  pretty (BindQualified tok _) = "Attempting to bind a qualified variable" <+> verbatim (pretty tok)
+
   pretty (InvalidEscapeCode _) = "Unknown escape code."
 
   pretty (UnalignedIn _ p) =
@@ -159,6 +164,8 @@ instance Spanned ParseError where
   annotation (MalformedInstance p _) = p
 
   annotation (MisplacedWith p) = p
+
+  annotation (BindQualified _ p) = p
 
   annotation (InvalidEscapeCode p) = p
 
