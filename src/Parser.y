@@ -124,7 +124,7 @@ import Syntax
   '}'      { Token TcCBrace _ _ }
   '['      { Token TcOSquare _ _ }
   ']'      { Token TcCSquare _ _ }
-  '!'      { Token (TcOp (isBang -> True)) _ _ }
+  '!'      { Token TcBang _ _ }
 
   op       { Token (TcOp _) _ _ }
   ident    { Token (TcIdentifier _) _ _ }
@@ -135,6 +135,7 @@ import Syntax
   qconid   { Token (TcConIdentQual _ _) _ _ }
   qdotid   { Token (TcDotQual _) _ _ }
   access   { Token (TcAccess _) _ _ }
+  dotop    { Token (TcDotOp _) _ _ }
   tyvar    { Token (TcTyvar _) _ _ }
   hole     { Token (TcHole _) _ _ }
   int      { Token (TcInteger _) _ _ }
@@ -238,9 +239,18 @@ ReplSep :: { () }
 Expr :: { Expr Parsed }
   : ExprOp                                     { fixupExpr $1 }
 
-ExprOp  :: { Expr Parsed }
+ExprOp :: { Expr Parsed }
+  : ExprDotOp                                  { $1 }
+  | ExprOp Infix ExprDotOp                     { withPos2 $1 $3 $ BinOp $1 $2 $3 }
+
+ExprDotOp :: { Expr Parsed  }
   : ExprTyApp                                  { $1 }
-  | ExprOp  Operator ExprTyApp                 { withPos2 $1 $3 $ BinOp $1 $2 $3 }
+  | ExprDotOp '.' '(' Expr ')'                 { withPos2 $1 $5 $ BinOp $1 (withPos2 $2 $3 . VarRef . Name $ T.pack ".()") $4 }
+  | ExprDotOp '.' '{' Expr '}'                 { withPos2 $1 $5 $ BinOp $1 (withPos2 $2 $3 . VarRef . Name $ T.pack ".{}") $4 }
+  | ExprDotOp '.' '[' Expr ']'                 { withPos2 $1 $5 $ BinOp $1 (withPos2 $2 $3 . VarRef . Name $ T.pack ".[]") $4 }
+  | ExprDotOp dotop '(' Expr ')'               { withPos2 $1 $5 $ BinOp $1 (withPos2 $2 $3 . VarRef . Name $ getIdent $2 <> T.pack "()") $4 }
+  | ExprDotOp dotop '{' Expr '}'               { withPos2 $1 $5 $ BinOp $1 (withPos2 $2 $3 . VarRef . Name $ getIdent $2 <> T.pack "{}") $4 }
+  | ExprDotOp dotop '[' Expr ']'               { withPos2 $1 $5 $ BinOp $1 (withPos2 $2 $3 . VarRef . Name $ getIdent $2 <> T.pack "[]") $4 }
 
 ExprTyApp :: { Expr Parsed }
   : ExprApp                                    { $1 }
@@ -320,28 +330,41 @@ ExprIn :: { () }
         : in    { () }
         | '$in' { () }
 
+InfixName :: { Located (Var Parsed) }
+  : '*'                                       { lPos1 $1 . Name $ T.pack "*" }
+  | '~'                                       { lPos1 $1 . Name $ T.pack "~" }
+  | op                                        { lPos1 $1 $ getName $1 }
+  | opid                                      { lPos1 $1 $ getName $1 }
+  | qopid                                     { lPos1 $1 $ getName $1 }
+
+Infix :: { Expr Parsed }
+  : InfixName                                 { withPos1 $1 $ VarRef (getL $1) }
+
+OperatorName :: { Located (Var Parsed) }
+  : InfixName                                 { $1 }
+  | '!'                                       { lPos1 $1 . Name $ T.pack "!" }
+
+  | '.' '(' ')'                               { lPos2 $1 $3 . Name $ T.pack ".()" }
+  | '.' '{' '}'                               { lPos2 $1 $3 . Name $ T.pack ".{}" }
+  | '.' '[' ']'                               { lPos2 $1 $3 . Name $ T.pack ".[]" }
+  | dotop '(' ')'                             { lPos2 $1 $3 . Name $ getIdent $1 <> T.pack "()" }
+  | dotop '{' '}'                             { lPos2 $1 $3 . Name $ getIdent $1 <> T.pack "{}" }
+  | dotop '[' ']'                             { lPos2 $1 $3 . Name $ getIdent $1 <> T.pack "[]" }
+
 Operator :: { Expr Parsed }
-         : '*'                                { withPos1 $1 $ varE "*" }
-         | '~'                                { withPos1 $1 $ varE "~" }
-         | op                                 { withPos1 $1 $ VarRef (getName $1) }
-         | opid                               { withPos1 $1 $ VarRef (getName $1) }
-         | qopid                              { withPos1 $1 $ VarRef (getName $1) }
+  : OperatorName                              { withPos1 $1 $ VarRef (getL $1) }
 
 Section :: { Expr Parsed }
         : Expr                                { $1 }
         | access                              { withPos1 $1 $ AccessSection (getIdent $1) }
         | Operator                            { withPos1 $1 $ BothSection $1 }
-        | ExprOp Operator                     { withPos2 $1 $2 $ RightSection (fixupExpr $1) $2 }
-        | Operator ExprOp                     { withPos2 $1 $2 $ LeftSection $1 (fixupExpr $2) }
-        | '!'                                 { withPos1 $1 $ VarRef (Name (T.pack "_!")) }
+        | ExprOp Infix                        { withPos2 $1 $2 $ RightSection (fixupExpr $1) $2 }
+        | Infix ExprOp                        { withPos2 $1 $2 $ LeftSection $1 (fixupExpr $2) }
 
 Reference :: { Located (Var Parsed) }
-  : Var             { $1 }
-  | Con             { $1 }
-  | '(' op ')'      { lPos2 $1 $3 $ getName $2 }
-  | '(' opid ')'    { lPos2 $1 $3 $ getName $2 }
-  | '(' qopid ')'   { lPos2 $1 $3 $ getName $2 }
-  | '(' '!' ')'       { lPos2 $1 $3 $ Name (T.pack "_!") }
+  : Var                                       { $1 }
+  | Con                                       { $1 }
+  | '(' OperatorName    ')'                   { $2 }
 
 NullSection :: { Maybe (Expr Parsed) }
   :                                           { Nothing }
@@ -395,16 +418,11 @@ PostBinding :: { Expr Parsed }
   : '=' ExprBlock '$end'                       { $2 }
 
 BindName :: { Located (Var Parsed) }
-     : ident                                   { lPos1 $1 $ getName $1 }
-     | '(' op ')'                              { lPos2 $1 $3 $ getName $2 }
-     | '(' '*' ')'                             { lPos1 $1 $ Name (T.pack "*") }
-     | '(' '~' ')'                             { lPos1 $1 $ Name (T.pack "~") }
+  : ident                                      { lPos1 $1 $ getName $1 }
+  | '(' OperatorName ')'                       {% checkUnqualified $2 }
 
 BindOp :: { Located (Var Parsed) }
-       : '*'                                   { lPos1 $1 $ Name (T.pack "*") }
-       | '~'                                   { lPos1 $1 $ Name (T.pack "~") }
-       | op                                    { lPos1 $1 $ getName $1 }
-       | opid                                  { lPos1 $1 $ getName $1 }
+  : InfixName                                  {% checkUnqualified $1 }
 
 -- | A list with a separator
 List(p, s)
@@ -514,11 +532,7 @@ TypeApp :: { Located (Type Parsed) }
   | TypeApp TypeAtom                              { lPos2 $1 $2 $ TyApp (getL $1) (getL $2) }
 
 TypeOperator :: { Var Parsed  }
-  : '*'                                           { Name $ T.pack "*" }
-  | '~'                                           { Name $ T.pack "~" }
-  | op                                            { getName $1 }
-  | opid                                          { getName $1 }
-  | qopid                                         { getName $1 }
+  : InfixName                                     { getL $1 }
 
 TypeOperatorF :: { Var Parsed }
   : TypeOperator                                  { $1 }
@@ -611,7 +625,6 @@ tuplePattern [x] a = case x of
   _ -> x
 tuplePattern xs a = PTuple xs a
 
-varE = VarRef . Name . T.pack
 bindVar = Name (T.pack ">>=")
 
 getIdent  (Token (TcOp x) _ _)         = x
@@ -619,6 +632,7 @@ getIdent  (Token (TcIdentifier x) _ _) = x
 getIdent  (Token (TcOpIdent x) _ _)    = x
 getIdent  (Token (TcConIdent x) _ _)   = x
 getIdent  (Token (TcAccess x) _ _)     = x
+getIdent  (Token (TcDotOp x) _ _)      = x
 getIdent  (Token (TcTyvar x) _ _)      = x
 
 getName (Token (TcIdentifierQual ms x) _ _) = foldl (flip InModule) (Name x) ms
@@ -663,7 +677,7 @@ isBang t = t == T.singleton '!'
 
 makeBang :: _ -> Expr Parsed -> Expr Parsed
 makeBang bang expr = withPos2 bang expr $ App derefref expr where
-  derefref = withPos1 bang (VarRef (Name (T.pack "_!")))
+  derefref = withPos1 bang (VarRef (Name (T.pack "!")))
 
 buildInstance :: Located (Type Parsed) -> [Binding Parsed]
            -> Parser (Span -> Toplevel Parsed)
@@ -682,4 +696,9 @@ buildInstance (L ty typ) ms =
     go ty = do
       tellErrors [MalformedInstance typ ty]
       pure undefined
+
+checkUnqualified :: Located (Var Parsed) -> Parser (Located (Var Parsed))
+checkUnqualified v@(L Name{} _) = pure v
+checkUnqualified v@(L name loc) = tellErrors [BindQualified name loc] >> pure v
+
 }

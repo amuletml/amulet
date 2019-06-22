@@ -59,6 +59,7 @@ data TokenClass
   | TcDot -- ^ A @.@ token.
   | TcComma -- ^ A @,@ token.
   | TcColon -- ^ A @:@ token.
+  | TcBang -- ^ A @!@ token.
   | TcSemicolon -- ^ A @;@ token.
   | TcTopSep -- ^ A @;;@ token.
   | TcOParen -- ^ A @(@ token.
@@ -79,6 +80,7 @@ data TokenClass
   | TcDotQual [Text]              -- ^ Qualified module, used for "let open ..." (@Foo.@)
   | TcTyvar Text                  -- ^ Type variable (@'foo@)
   | TcAccess Text                 -- ^ Record access (@.foo@)
+  | TcDotOp Text                  -- ^ Dot operators (@.+@)
   | TcHole Text                   -- ^ Hole (@_foo@)
 
   | TcInteger Integer -- ^ Integer literal
@@ -139,6 +141,7 @@ instance Show TokenClass where
   show TcComma = ","
   show TcDot = "."
   show TcColon = ":"
+  show TcBang = "!"
   show TcSemicolon = ";"
   show TcTopSep = ";;"
   show TcOParen = "("
@@ -157,6 +160,7 @@ instance Show TokenClass where
   show (TcConIdentQual ms t) = concatMap (\m -> unpack m ++ ['.']) (reverse ms) ++ unpack t
   show (TcOpIdentQual ms t) = "`" ++ concatMap (\m -> unpack m ++ ['.']) (reverse ms) ++ unpack t ++ "`"
   show (TcDotQual ms) = concatMap (\m -> unpack m ++ ['.']) ms
+  show (TcDotOp m) = unpack m
   show (TcTyvar t) = '\'':unpack t
   show (TcAccess t) = '.':unpack t
   show (TcHole t) = '_':unpack t
