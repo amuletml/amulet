@@ -1,0 +1,6 @@
+fail_value_restriction.ml[9:10 ..9:11]: error
+  │ 
+9 │   print (!r)
+  │          ^^
+  Couldn't match actual type option int
+    with the type expected by the context, string

@@ -1,5 +1,5 @@
 to_string : Spec{'a : type}. 'a -> string
 term : type -> type
-B : Spec{'a : 'as}. ('a ~ bool) ⊃ bool -> term 'a
-I : Spec{'a : 'bm}. ('a ~ int) ⊃ int -> term 'a
+B : Infer{'as : type}. Infer{'a : 'as}. ('a ~ bool) ⊃ bool -> term 'a
+I : Infer{'bm : type}. Infer{'a : 'bm}. ('a ~ int) ⊃ int -> term 'a
 show : Spec{'a : type}. term 'a -> string
