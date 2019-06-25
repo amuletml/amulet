@@ -134,6 +134,8 @@ data TypeError where
   NotPromotable :: Pretty (Var p) => Var p -> Type p -> Doc -> TypeError
   WildcardNotAllowed :: SomeReason -> TypeError
 
+  NotValue :: SomeReason -> Type Typed -> TypeError
+
 data WhyInstantiate = Expression | Subsumption
 data WhyUnsat
   = NotAFun
@@ -460,6 +462,13 @@ instance Pretty TypeError where
          , indent 2 "to visible type argument" <+> displayType arg
          ]
 
+  pretty (NotValue _ t) =
+    vsep [ "Since evaluating this expression may have side-effects"
+         , "it can not be used in a context where the polymorphic type"
+         , indent 2 (displayType t)
+         , "is required."
+         ]
+
   pretty WildcardNotAllowed{} = "Type wildcard not allowed here"
 
   pretty (PatternRecursive _ _) = string "pattern recursive error should be formatNoted"
@@ -476,6 +485,7 @@ instance Spanned TypeError where
   annotation (UndefinedMethods _ _ x) = annotation x
   annotation (InvalidContext _ x _) = annotation x
   annotation (WildcardNotAllowed x) = annotation x
+  annotation (NotValue x _) = annotation x
   annotation x = error (show (pretty x))
 
 instance Note TypeError Style where

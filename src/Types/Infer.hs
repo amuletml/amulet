@@ -63,6 +63,11 @@ inferProgram env ct = fmap fst <$> runInfer env (inferProg ct)
 -- appropriate 'Wrapper's, and performing /some/ level of desugaring.
 check :: forall m. MonadInfer Typed m => Expr Desugared -> Type Typed -> m (Expr Typed)
 check e oty@TyPi{} | isSkolemisable oty = do
+  let reason = BecauseOf e
+
+  unless (value e) $
+    dictates (addBlame reason (NotValue reason oty))
+
   (wrap, ty, scope) <- skolemise (ByAscription (annotation e) oty) oty
   local (classes %~ mappend scope) $ do
     e <- check e ty
@@ -858,7 +863,10 @@ operational e = e
 closeOverStrat :: MonadInfer Typed m
                => SomeReason
                -> Set.Set (Var Typed) -> Expr Typed -> Type Typed -> m (Type Typed)
-closeOverStrat r _ _ = closeOver r
+closeOverStrat r _ e =
+  if value e
+     then closeOver r
+     else annotateKind r
 
 firstForall :: MonadInfer Typed m => Type Desugared -> Type Typed -> m (TyBinder Typed, Type Typed)
 firstForall _ (TyPi x@Invisible{} k) = pure (x, k)

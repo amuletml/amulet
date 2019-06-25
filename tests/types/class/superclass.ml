@@ -19,7 +19,7 @@ class functor 't => traversable 't begin
     forall 'a 'f. applicative 'f => 
       't ('f 'a) -> 'f ('t 'a)
 
-  let sequence = traverse (fun x -> x)
+  let sequence x = traverse (fun x -> x) x
   let traverse f = sequence & fmap f
 end
 

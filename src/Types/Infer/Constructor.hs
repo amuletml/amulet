@@ -53,7 +53,7 @@ inferCon vars ret c@(GadtCon ac nm cty ann) = do
   pure ((nm, overall), GadtCon ac nm overall (ann, overall))
 
 closeOverGadt :: MonadInfer Typed m => Set.Set (Var Typed) -> SomeReason -> [(Type Typed, Type Typed)] -> Type Typed -> m (Type Typed)
-closeOverGadt cbv r cons cty =
+closeOverGadt cbv r cons cty = do
   let fv = ftv cty `Set.union` foldMap (\(x, y) -> ftv x `Set.union` ftv y) cons
       fv :: Set.Set (Var Typed)
       vars = cbv `Set.union` ftv cty
@@ -69,9 +69,15 @@ closeOverGadt cbv r cons cty =
         | v `Set.member` vars = Spec
         | otherwise = Infer
 
-   in annotateKind r $ if Set.null fv
-         then pushCons cons cty
-         else pushCons cons (forall (Set.toList fv) cty)
+  ty <- closeOver r $
+    if Set.null fv
+       then pushCons cons cty
+       else pushCons cons (forall (Set.toList fv) cty)
+
+  let fv = ftv ty
+      forall [] t = t
+      forall xs t = foldr (\var -> TyPi (Invisible var (Just TyType) (vis var))) t xs
+  pure (forall (Set.toList fv) ty)
 
 
 -- A bit of a hack for better aesthetics

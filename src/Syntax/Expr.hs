@@ -7,9 +7,11 @@ module Syntax.Expr where
 
 import Control.Lens hiding (Lazy, (:>))
 
+import qualified Data.Text as T
 import Data.Text (Text)
 import Data.Typeable
 import Data.Data
+import Data.Char
 
 import Syntax.Type
 import Syntax.Var
@@ -195,32 +197,34 @@ makeLenses ''Parameter
 makeLenses ''Binding
 makeLenses ''Field
 
-value :: Expr a -> Bool
+value :: Var a ~ Var Resolved => Expr a -> Bool
 value Fun{} = True
 value Literal{} = True
 value Function{} = True
-value (Let _ e _) = value e
+value (Let bs e _) = value e && all valueb bs where
+  valueb x = value (x ^. bindBody)
 value (Parens e _) = value e
-value Tuple{} = True
-value (Begin es _) = value (last es)
+value (Tuple es _) = all value es
+value (Begin es _) = all value es
 value Lazy{} = True
 value TupleSection{} = True
-value Record{} = True
-value RecordExt{} = True
-value VarRef{} = False
-value If{} = False
-value App{} = False
+value (Record rs _) = all (value . view fExpr) rs
+value (RecordExt e rs _) = value e && all (value . view fExpr) rs
+value VarRef{} = True
+value (If c t e _) = all value [c, t, e]
+value (App f x _) = value x && conVarRef f
+value (Match e [] _) = value e
 value Match{} = False
 value BinOp{} = False
 value Hole{} = False
 value (Ascription e _ _) = value e
 value (Vta e _ _) = value e
-value Access{} = False
+value (Access e _ _) = value e
 value LeftSection{} = True
 value RightSection{} = True
 value BothSection{} = True
 value AccessSection{} = True
-value ListExp{} = True
+value (ListExp xs _) = all value xs
 value ListComp{} = False
 value (OpenIn _ e _) = value e
 value (ExprWrapper _ e _) = value e
@@ -235,3 +239,20 @@ isFn (OpenIn _ e _) = isFn e
 isFn (Ascription e _ _) = isFn e
 isFn (ExprWrapper _ e _) = isFn e
 isFn _ = False
+
+conVarRef :: Var a ~ Var Resolved => Expr a -> Bool
+conVarRef (VarRef t _) =
+  case t of
+    TgName t _ -> isUpper (T.head t)
+    TgInternal t -> isUpper (T.head t)
+conVarRef (Begin [x] _) = conVarRef x
+conVarRef (If c t e _) = value c && all conVarRef [t, e]
+conVarRef (Ascription e _ _) = conVarRef e
+conVarRef (OpenIn _ e _) = conVarRef e
+conVarRef (ExprWrapper _ e _) = conVarRef e
+conVarRef (Vta e _ _) = conVarRef e
+conVarRef (DoExpr _ e _) =
+  case e of
+    [CompGuard x] -> conVarRef x
+    _ -> False
+conVarRef _ = False

@@ -17,5 +17,5 @@ let foo (f : forall 'a. show 'a => 'a -> string) =
 
 let f & g = fun x -> f (g x)
 
-let _ = foo (("a" ^) & show)
-let _ = foo (("a" ^) & show_diff)
+let _ = foo (fun x -> (("a" ^) & show) x)
+let _ = foo (fun x -> (("a" ^) & show) x)
