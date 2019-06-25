@@ -672,9 +672,6 @@ buildClass am (L parsed typ) ms =
       tellErrors [MalformedClass typ parsed]
       pure (undefined, ts)
 
-isBang :: T.Text -> Bool
-isBang t = t == T.singleton '!'
-
 makeBang :: _ -> Expr Parsed -> Expr Parsed
 makeBang bang expr = withPos2 bang expr $ App derefref expr where
   derefref = withPos1 bang (VarRef (Name (T.pack "!")))

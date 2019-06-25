@@ -301,6 +301,7 @@ lexOperator (LI sp str _ _) len ep =
       -- We perform some special handling of a couple of fancy operators
       tok | str' == "∀" = TcForall
           | str' == "→" = TcArrow
+          | str' == "!" = TcBang
           | otherwise = TcOp str'
   in pure (Token tok sp ep)
 
