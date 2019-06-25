@@ -82,7 +82,7 @@ builtins =
          else
            local thunk = x[1]
            x[1] = __builtin_trap
-           x[1] = thunk(__builtin_unit)
+           x[1] = thunk()
            x[2] = true
            return x[1]
          end
