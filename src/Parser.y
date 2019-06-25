@@ -236,6 +236,9 @@ ReplSep :: { () }
     | '$sep' { () }
     |        { () }
 
+Exprs :: { Expr Parsed }
+  : List1(Expr, ',')                           { completeTuple Tuple $1 }
+
 Expr :: { Expr Parsed }
   : ExprOp                                     { fixupExpr $1 }
 
@@ -245,12 +248,12 @@ ExprOp :: { Expr Parsed }
 
 ExprDotOp :: { Expr Parsed  }
   : ExprTyApp                                  { $1 }
-  | ExprDotOp '.' '(' Expr ')'                 { withPos2 $1 $5 $ BinOp $1 (withPos2 $2 $3 . VarRef . Name $ T.pack ".()") $4 }
-  | ExprDotOp '.' '{' Expr '}'                 { withPos2 $1 $5 $ BinOp $1 (withPos2 $2 $3 . VarRef . Name $ T.pack ".{}") $4 }
-  | ExprDotOp '.' '[' Expr ']'                 { withPos2 $1 $5 $ BinOp $1 (withPos2 $2 $3 . VarRef . Name $ T.pack ".[]") $4 }
-  | ExprDotOp dotop '(' Expr ')'               { withPos2 $1 $5 $ BinOp $1 (withPos2 $2 $3 . VarRef . Name $ getIdent $2 <> T.pack "()") $4 }
-  | ExprDotOp dotop '{' Expr '}'               { withPos2 $1 $5 $ BinOp $1 (withPos2 $2 $3 . VarRef . Name $ getIdent $2 <> T.pack "{}") $4 }
-  | ExprDotOp dotop '[' Expr ']'               { withPos2 $1 $5 $ BinOp $1 (withPos2 $2 $3 . VarRef . Name $ getIdent $2 <> T.pack "[]") $4 }
+  | ExprDotOp '.' '(' Exprs ')'                { withPos2 $1 $5 $ BinOp $1 (withPos2 $2 $3 . VarRef . Name $ T.pack ".()") $4 }
+  | ExprDotOp '.' '{' Exprs '}'                { withPos2 $1 $5 $ BinOp $1 (withPos2 $2 $3 . VarRef . Name $ T.pack ".{}") $4 }
+  | ExprDotOp '.' '[' Exprs ']'                { withPos2 $1 $5 $ BinOp $1 (withPos2 $2 $3 . VarRef . Name $ T.pack ".[]") $4 }
+  | ExprDotOp dotop '(' Exprs ')'              { withPos2 $1 $5 $ BinOp $1 (withPos2 $2 $3 . VarRef . Name $ getIdent $2 <> T.pack "()") $4 }
+  | ExprDotOp dotop '{' Exprs '}'              { withPos2 $1 $5 $ BinOp $1 (withPos2 $2 $3 . VarRef . Name $ getIdent $2 <> T.pack "{}") $4 }
+  | ExprDotOp dotop '[' Exprs ']'              { withPos2 $1 $5 $ BinOp $1 (withPos2 $2 $3 . VarRef . Name $ getIdent $2 <> T.pack "[]") $4 }
 
 ExprTyApp :: { Expr Parsed }
   : ExprApp                                    { $1 }
@@ -268,11 +271,8 @@ Expr0 :: { Expr Parsed }
       | let open Con ExprIn ExprBlock '$end'   { withPos2 $1 $5 $ OpenIn (getL $3) $5 }
       | if Expr then ExprBlock else ExprBlock '$end'
           { withPos2 $1 $6 $ If $2 $4 $6 }
-      | match List1(Expr, ',') with ListE1(Arm) '$end'
-          { withPos2 $1 $3 $ Match (completeTuple Tuple $2) $4 }
-      | match List1(Expr, ',') with '(' ')'
-          { withPos2 $1 $3 $ Match (completeTuple Tuple $2) [] }
-
+      | match Exprs with ListE1(Arm) '$end'    { withPos2 $1 $3 $ Match $2 $4 }
+      | match Exprs with '(' ')'               { withPos2 $1 $3 $ Match $2 [] }
       | function ListE1(Arm) '$end'            { withPos1 $1 $ Function $2 }
       | function '(' ')'                       { withPos1 $1 $ Function [] }
       | lazy PreAtom                           { withPos2 $1 $2 $ Lazy $2 }
