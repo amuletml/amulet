@@ -1,0 +1,1 @@
+instance 'a begin end
