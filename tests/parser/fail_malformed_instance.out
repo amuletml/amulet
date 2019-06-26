@@ -1,0 +1,5 @@
+fail_malformed_instance.ml[1:10 ..1:11]: error
+  Malformed instance name 'a
+  │ 
+1 │ instance 'a begin end
+  │          ^^

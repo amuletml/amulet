@@ -692,7 +692,7 @@ buildInstance (L ty typ) ms =
     go (TyApp rest _) = go rest
     go ty = do
       tellErrors [MalformedInstance typ ty]
-      pure undefined
+      pure (Name (error "malformed instance"))
 
 checkUnqualified :: Located (Var Parsed) -> Parser (Located (Var Parsed))
 checkUnqualified v@(L Name{} _) = pure v
