@@ -17,7 +17,6 @@ import Control.Arrow hiding ((<+>))
 
 import qualified Data.VarMap as VarMap
 import qualified Data.VarSet as VarSet
-import qualified Data.Text as T
 import Data.Triple
 import Data.Graph
 import Data.Maybe
@@ -116,7 +115,7 @@ reduceAtom u (Ref v ty) = do
   -- Beta reduction (let case)
   v' <- asks (lookupTerm v)
   case v' of
-    Just (Atom d) | trivialAtom d -> changed d
+    Just (Atom d) | isTrivialAtom d -> changed d
     Just _ -> pure basic
 
     Nothing -> do
@@ -357,7 +356,7 @@ reduceTermK u (AnnLet _ (One b@(v, ty, e)) rest) cont = do
       if
         -- If we're binding a trivial atom, then we can strip it - we'll have
         -- inlined it elsewhere and so it's dead.
-        | Atom a <- e', trivialAtom a -> changed rest'
+        | Atom a <- e', isTrivialAtom a -> changed rest'
 
         -- Eta conversion for simple lets
         | Atom (Ref ov _) <- rest', ov == v' -> changed e'
@@ -470,10 +469,14 @@ reduceTermK _ (AnnMatch _ test arms) cont = do
 
     reduceBody :: (Term a -> m (Term a)) -> Subst a -> AnnTerm VarSet.Set (OccursVar a) -> m (Term a)
     reduceBody cont subst body =
-      local (varScope %~ VarMap.union (buildSub subst)) (reduceTermK UsedOther body cont)
-
-    buildSub :: Subst a -> VarMap.Map (VarDef a)
-    buildSub = VarMap.fromList . map (\(var, a) -> (toVar var, basicDef var (Atom a)))
+      let (sub, binds) = foldr
+            (\(var, a) (sub, binds) ->
+               (VarMap.insert (toVar var) (basicDef var (Atom a)) sub,
+                if isTrivialAtom a
+                then binds
+                else Let (One (var, approximateAtomType a, Atom a)) . binds))
+            (mempty, id) subst
+      in binds <$> local (varScope %~ VarMap.union sub) (reduceTermK UsedOther body cont)
 
     underlies :: Functor f => [(OccursVar a, f (OccursVar a))] -> [(a, f a)]
     underlies = map (\(a, b) -> (underlying a, underlying <$> b))
@@ -539,8 +542,3 @@ redundantCo :: IsVar a => Coercion a -> Bool
 redundantCo c
   | Just (a, b) <- relates c = a `unifyClosed` b
   | otherwise = False
-
-trivialAtom :: Atom a -> Bool
-trivialAtom Ref{} = True
-trivialAtom (Lit (Str t)) = T.length t <= 8
-trivialAtom (Lit _) = True

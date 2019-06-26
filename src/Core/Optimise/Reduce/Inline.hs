@@ -2,6 +2,8 @@
 module Core.Optimise.Reduce.Inline
   ( UsedAs(..)
   , loopBreakers
+  , isTrivialAtom
+  , isTrivialTerm
   , sizeAtom
   , sizeTerm
 
