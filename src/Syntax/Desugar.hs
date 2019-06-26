@@ -242,15 +242,9 @@ transDoExpr bind = go where
     pure $ BinOp e bind cont an
   go (CompLet bg an:qs) = Let <$> traverse binding bg <*> go qs <*> pure an
   go [CompGuard e] = expr e
-  go (CompGuard e:qs) = do
-    let an = annotation e
-    let unitt =
-          case tyUnit of
-            TyCon t -> TyCon t
-            _ -> undefined
-        unitt :: Type Desugared
-    e <- expr e
-    Let [ Matching (PType (Wildcard an) unitt an) e an ] <$> go qs <*> pure an
+  go (CompGuard e:qs) = 
+    let begin a b = Begin [ a, b ]
+     in begin <$> expr e <*> go qs <*> pure (annotation e)
   go [] = undefined
 
 consPat :: (Var p ~ VarResolved) => Pattern p -> Pattern p -> Ann p -> Pattern p

@@ -165,8 +165,8 @@ instance (Show (Ann p), Show (Var p), Ord (Var p), Substitutable p (Type p))
   apply _ x@DeferredError{} = x
 
 instance Pretty (Var p) => Pretty (Constraint p) where
-  pretty (ConUnify _ _ a b) = pretty a <+> soperator (char '~') <+> pretty b
-  pretty (ConSubsume _ _ _ a b) = pretty a <+> soperator (string "<:") <+> pretty b
+  pretty (ConUnify _ v a b) = pretty v <+> colon <+> pretty a <+> soperator (char '~') <+> pretty b
+  pretty (ConSubsume _ _ v a b) = pretty v <+> colon <+> pretty a <+> soperator (string "<:") <+> pretty b
   pretty (ConImplies _ t a b) = brackets (pretty t) <+> hsep (punctuate comma (toList (fmap pretty a)))
                             <+> soperator (char '⊃')
                             <#> indent 2 (vsep (punctuate comma (toList (fmap pretty b))))
