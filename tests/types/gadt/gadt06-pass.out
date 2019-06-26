@@ -1,7 +1,7 @@
 exp : type
 ast : type -> type -> type
-Var : Infer{'bo : type}. Infer{'bp : type}. Infer{'a : 'bo}. Infer{'b : 'bp}. Infer{'tag : type}. ('a ~ exp, 'b ~ 'tag) ⊃ string -> ast 'a 'b
-Tag : Infer{'cz : type}. Infer{'b : 'cz}. Spec{'a : type}. Spec{'tag : type}. ('b ~ 'tag) ⊃ ('tag * ast 'a 'tag) -> ast 'a 'b
+Var : Infer{'bo : type}. Infer{'bp : type}. Spec{'a : 'bo}. Spec{'b : 'bp}. Infer{'tag : type}. ('a ~ exp, 'b ~ 'tag) ⊃ string -> ast 'a 'b
+Tag : Infer{'cz : type}. Spec{'b : 'cz}. Spec{'a : type}. Spec{'tag : type}. ('b ~ 'tag) ⊃ ('tag * ast 'a 'tag) -> ast 'a 'b
 foo : type
 Foo : int -> foo
 convert : Spec{'a : type}. Spec{'tag : type}. ast 'a 'tag -> ast 'a foo

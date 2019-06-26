@@ -1,11 +1,11 @@
 list : type -> type
-Nil : Infer{'bl : type}. Infer{'tys : 'bl}. ('tys ~ unit) ⊃ list 'tys
-Cons : Infer{'ck : type}. Infer{'tys : 'ck}. Spec{'a : type}. Spec{'b : type}. ('tys ~ 'a * 'b) ⊃ ('a * list 'b) -> list 'tys
+Nil : Infer{'bl : type}. Spec{'tys : 'bl}. ('tys ~ unit) ⊃ list 'tys
+Cons : Infer{'ck : type}. Spec{'tys : 'ck}. Spec{'a : type}. Spec{'b : type}. ('tys ~ 'a * 'b) ⊃ ('a * list 'b) -> list 'tys
 elem : Infer{'a : type}. 'a -> 'a -> type
-Here : Infer{'fd : type}. Infer{'a : type}. Infer{'xs : 'fd}. Infer{'x : 'a}. Infer{'xs : 'a}. ('xs ~ 'x * 'xs) ⊃ elem 'x 'xs
-There : Infer{'go : type}. Infer{'a : type}. Infer{'xs : 'go}. Infer{'x : 'a}. Infer{'xs : 'a}. Infer{'y : 'a}. ('xs ~ 'y * 'xs) ⊃ elem 'x 'xs -> elem 'x 'xs
+Here : Infer{'fd : type}. Infer{'a : type}. Spec{'xs : 'fd}. Spec{'x : 'a}. Infer{'xs : 'a}. ('xs ~ 'x * 'xs) ⊃ elem 'x 'xs
+There : Infer{'go : type}. Infer{'a : type}. Spec{'xs : 'go}. Spec{'x : 'a}. Spec{'xs : 'a}. Infer{'y : 'a}. ('xs ~ 'y * 'xs) ⊃ elem 'x 'xs -> elem 'x 'xs
 term : type -> type -> type
 Var : Spec{'ctx : type}. Spec{'ty : type}. elem 'ty 'ctx -> term 'ctx 'ty
-Lam : Infer{'mf : type}. Infer{'ty : 'mf}. Spec{'a : type}. Spec{'b : type}. Spec{'ctx : type}. ('ty ~ 'a -> 'b) ⊃ term ('a * 'ctx) 'b -> term 'ctx 'ty
-App : Infer{'od : type}. Infer{'ty : 'od}. Spec{'a : type}. Spec{'b : type}. Spec{'ctx : type}. ('ty ~ 'b) ⊃ (term 'ctx ('a -> 'b) * term 'ctx 'a) -> term 'ctx 'ty
+Lam : Infer{'mf : type}. Spec{'ty : 'mf}. Spec{'a : type}. Spec{'b : type}. Spec{'ctx : type}. ('ty ~ 'a -> 'b) ⊃ term ('a * 'ctx) 'b -> term 'ctx 'ty
+App : Infer{'od : type}. Spec{'ty : 'od}. Spec{'a : type}. Spec{'b : type}. Spec{'ctx : type}. ('ty ~ 'b) ⊃ (term 'ctx ('a -> 'b) * term 'ctx 'a) -> term 'ctx 'ty
 const : Infer{'a : type}. Infer{'ctx : type}. Infer{'b : type}. term 'ctx ('a -> 'b -> 'a)
