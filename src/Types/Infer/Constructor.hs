@@ -69,7 +69,7 @@ closeOverGadt cbv r cons cty = do
         | v `Set.member` vars = Spec
         | otherwise = Infer
 
-  ty <- closeOver r $
+  ty <- annotateKind r $
     if Set.null fv
        then pushCons cons cty
        else pushCons cons (forall (Set.toList fv) cty)

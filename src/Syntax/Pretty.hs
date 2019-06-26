@@ -85,7 +85,9 @@ displayType = prettyType . dropKindVars mempty where
 
 prettyType :: forall p. (Pretty (Var p), Ord (Var p)) => Type p -> Doc
 prettyType x@TyPromotedCon{} = pretty x
-prettyType TyWildcard{} = skeyword (char '_')
+prettyType (TyWildcard x) = case x of
+  Just ty -> displayType ty
+  Nothing -> skeyword (char '_')
 prettyType x@TyVar{} = pretty x
 prettyType x@TyCon{} = pretty x
 prettyType (TySkol v) = stypeSkol (squote <> pretty (v ^. skolVar))
