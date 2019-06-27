@@ -1,7 +1,6 @@
-resolver: nightly-2019-06-12
+resolver: nightly-2019-06-27
 
 extra-deps:
-  - hlint-2.1.24
   - monad-chronicle-1@sha256:b6e3a0378059e42cb48726d8ad41b27a8a0d8c2cb293cb6d2e2c039d64609ab6
   - these-lens-1@sha256:72258586b3780d328d7c676c63b8312fc6ba3b1ed47e3b5382f9dcaa924d70ac
 
