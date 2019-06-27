@@ -506,8 +506,6 @@ terminates :: TokenClass -> [Context] -> Bool
 
 -- `in` terminates the `let` binding
 terminates TcIn (CtxLet{}:_) = True
-terminates TcCSquare (CtxLet{}:_) = True
-terminates TcComma (CtxLet{}:_) = True
 
 -- `and` terminates the `let` binding
 terminates TcAnd (CtxLet{}:_) = True
