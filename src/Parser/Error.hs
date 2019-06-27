@@ -134,7 +134,7 @@ instance Pretty ParseError where
                   ]
       _ -> "Malformed class declaration" <+> displayType ty
 
-  pretty (MalformedInstance _ ty) = "Malformed instance name" <+> (pretty ty)
+  pretty (MalformedInstance _ ty) = "Malformed instance name" <+> pretty ty
 
   pretty (MisplacedWith _) = "Misplaced" <+> keyword "with" <+> "statement"
     </> keyword "with" <+> "bindings may only appear within monadic" <+> keyword "begin" <> "/" <>
