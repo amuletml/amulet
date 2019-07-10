@@ -237,12 +237,12 @@ runRepl = do
             dump (debugMode state') prog core core luaExpr (inferScope state) (inferScope state')
 
             (ok, res) <- L.runWith (luaState state') $ do
-              _ <- L.dostring "-- time out hook\nlocal function f() error('Timed out!', 3) end; debug.sethook(f, '', 1e6)"
-              _ <- L.loadbuffer luaSyntax "<interactive>"
-              code <- L.pcall 0 L.multret Nothing
+              L.OK <- L.dostring "-- time out hook\nlocal function f() error('Timed out!', 3) end; debug.sethook(f, '', 1e6)"
+              L.OK <- L.loadbuffer luaSyntax ('=':name)
+              res <- L.try $ L.call 0 L.multret
 
-              case code of
-                L.OK -> do
+              case res of
+                Right () -> do
                   vs' <- for vs $ \(v, _) -> do
                     let Just (_, vs) = VarMap.lookup v (emit' ^. B.topVars)
                     repr <- traverse (valueRepr . evalExpr . B.unsimple) vs
@@ -253,12 +253,7 @@ runRepl = do
                       Nothing -> pure Nothing
 
                   pure (True, vsep (catMaybes vs'))
-                _ -> do
-                  val <- valueRepr (pure ())
-                  L.pop 1
-                  case val of
-                    String str -> pure (False, text str <+> parens (shown code))
-                    _ -> pure (False, keyword "Error:" <+> pretty val)
+                Left (L.Exception msg) -> pure (False, string msg)
 
             hFlush stdout
             hFlush stderr
