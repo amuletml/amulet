@@ -1,5 +1,7 @@
 let fⅣ = 2
 
+$end $sep let f💎 = 2
+
 $end $sep let a • b = a + b
 
 $end $sep forall ->
