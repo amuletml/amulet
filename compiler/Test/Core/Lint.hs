@@ -121,6 +121,7 @@ files =
 
   , "church-lists.ml"
   , "coroutines.ml"
+  , "external.ml"
   , "guess.ml"
   , "id.ml"
   , "lazy-list.ml"
