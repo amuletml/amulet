@@ -41,7 +41,7 @@ $hex   = [0-9A-Fa-f]         -- Hexadecimal digits
 $upper = [$unicodeUpper A-Z] -- Uppercase characters
 $lower = [$unicodeLower a-z] -- Lowercase characters
 
-$ident = [$unicodeDigit $unicodeGeneric $digit $upper $lower '_' '\''] -- Valid identifier characters
+$ident = [$unicodeDigit $unicodeGeneric $unicodeSymbol $digit $upper $lower '_' '\''] -- Valid identifier characters
 
 -- Valid symbol characters. We're slightly more fluent with what we allow
 -- in non-head positions
