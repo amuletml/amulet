@@ -25,8 +25,9 @@ import qualified Data.Text as T
 import Data.Maybe
 
 import Text.Pretty hiding (putDoc, displayDecorated, hPutDoc)
-
 import System.IO (Handle, stdout)
+
+import System.Info
 
 -- | A colour usable in an ANSI escape sequence
 data Colour = Black | Red | Green | Yellow | Blue | Magenta | Cyan | White
@@ -49,7 +50,10 @@ data TermState = TS { colour    :: Maybe Colour
 
 -- | Render an ANSI document to stdout
 putDoc :: Doc AnsiStyle -> IO ()
-putDoc = hPutDoc stdout
+putDoc =
+  if os == "mingw32"
+     then putDocWithoutColour
+     else hPutDoc stdout
 
 -- | Render a plain-text document to stdout
 putDocWithoutColour :: Doc AnsiStyle -> IO ()
