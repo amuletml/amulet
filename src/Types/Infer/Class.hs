@@ -369,10 +369,8 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
       fields = methodFields ++ usedDefaults ++ contextFields
 
   (solution, needed, unsolved) <- solve cs
-  (_, wrapper, unsolved') <-
-    reduceClassContext localAssums ann unsolved
 
-  unless (null unsolved') $
+  unless (null unsolved) $
     confesses (addBlame (BecauseOf inst)
       (UnsatClassCon (BecauseOf inst) (head unsolved) (InstanceClassCon classAnn)))
 
@@ -382,11 +380,9 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
 
       fun = addArg skolSub globalInsnConTy $
               Fun (EvParam (PType instancePattern ctx (ann, ctx)))
-                (wrapper Full
                   (App (appArg instSub classConTy (VarRef classCon (ann, classConTy)))
                     inside
                     (ann, instHead))
-                  )
                 (ann, localInsnConTy)
       bind = Binding instanceName (Ascription fun globalInsnConTy (ann, globalInsnConTy)) True (ann, globalInsnConTy)
 
