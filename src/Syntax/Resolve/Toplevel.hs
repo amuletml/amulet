@@ -25,7 +25,7 @@ extractToplevel (LetStmt Public d) = (foldMap bindVariables d, [])
 extractToplevel (LetStmt Private _) = mempty
 extractToplevel (ForeignVal Public v _ _ _) = ([v], [])
 extractToplevel (ForeignVal Private _ _ _ _) = mempty
-extractToplevel (TypeDecl Public v _ c) = (mapMaybe ctor c, [v]) where
+extractToplevel (TypeDecl Public v _ c _) = (maybe [] (mapMaybe ctor) c, [v]) where
   ctor (UnitCon a v _) = access a v
   ctor (ArgCon a v _ _) = access a v
   ctor (GadtCon a v _ _) = access a v
@@ -33,7 +33,7 @@ extractToplevel (TypeDecl Public v _ c) = (mapMaybe ctor c, [v]) where
   access Public = Just
   access _ = const Nothing
 
-extractToplevel (TypeDecl Private _ _ _) = mempty
+extractToplevel (TypeDecl Private _ _ _ _) = mempty
 extractToplevel (Open _ _) = mempty
 extractToplevel (Module Public v xs) =
   let (vs, ts) = extractToplevels xs

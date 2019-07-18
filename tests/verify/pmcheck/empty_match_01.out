@@ -12,10 +12,3 @@ empty_match_01.ml[9:3 ..9:14]: warning
   │   ^^^^^^^^^^^^
   • Note: The following patterns are not covered
       _
-empty_match_01.ml[14:3 ..14:14]: warning
-  Non-exhaustive patterns in expression
-   │ 
-14 │   match x with ()
-   │   ^^^^^^^^^^^^
-  • Note: The following patterns are not covered
-      _

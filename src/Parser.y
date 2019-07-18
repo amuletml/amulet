@@ -177,8 +177,8 @@ Top :: { Toplevel Parsed }
     | external Access val BindName ':' Type '=' string
       { withPos2 $1 $8 $ ForeignVal $2 (getL $4) (getString $8) (getL $6) }
 
-    | Access type BindName ListE(TyConArg) TypeBody { TypeDecl $1 (getL $3) $4 $5 }
-    | Access type TyConArg BindOp TyConArg TypeBody { TypeDecl $1 (getL $4) [$3, $5] $6 }
+    | Access type BindName ListE(TyConArg) TypeBody { withPos2 $2 $3 $ TypeDecl $1 (getL $3) $4 $5 }
+    | Access type TyConArg BindOp TyConArg TypeBody { withPos2 $2 $4 $ TypeDecl $1 (getL $4) [$3, $5] $6 }
 
     | module qconid '=' Begin(Tops)            { Module Public (getName $2) (getL $4) }
     | private module qconid '=' Begin(Tops)    { Module Private (getName $3) (getL $5) }
@@ -197,10 +197,11 @@ Begin(a)
   : begin a end                             { lPos2 $1 $3 $2 }
   | '$begin' a '$end'                       { lPos2 $1 $3 $2 }
 
-TypeBody :: { [Constructor Parsed] }
-  :                                            { [] }
-  | '=' List1(Ctor, '|')                       { $2 }
-  | '=' '|' List1(Ctor, '|')                   { $3 }
+TypeBody :: { Maybe [Constructor Parsed] }
+  :                                            { Nothing }
+  | '=' List1(Ctor, '|')                       { Just $2 }
+  | '=' '|' List1(Ctor, '|')                   { Just $3 }
+  | '=' '|'                                    { Just [] }
 
 ClassItems :: { [ClassItem Parsed] }
   : List(ClassItem, TopSep) { $1 }

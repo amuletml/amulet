@@ -373,9 +373,9 @@ inferProg (st@(ForeignVal am v d t ann):prg) = do
     consFst (ForeignVal am v d t' (ann, t')) $
       inferProg prg
 
-inferProg (decl@(TypeDecl am n tvs cs):prg) = do
+inferProg (decl@(TypeDecl am n tvs cs ann):prg) = do
   (kind, retTy, tvs) <- retcons (addBlame (BecauseOf decl)) $
-                          resolveTyDeclKind (BecauseOf decl) n tvs cs
+                          resolveTyDeclKind (BecauseOf decl) n tvs (fromMaybe [] cs)
   let scope (TyAnnArg v k:vs) = one v k <> scope vs
       scope (_:cs) = scope cs
       scope [] = mempty
@@ -385,16 +385,22 @@ inferProg (decl@(TypeDecl am n tvs cs):prg) = do
           TyVarArg v -> Set.singleton v
           TyAnnArg v _ -> Set.singleton v
 
-  local (names %~ focus (one n (fst (rename kind)))) $ do
-    (ts, cs') <- unzip <$> local (names %~ focus (scope tvs))
-      (for cs (\con -> retcons (addBlame (BecauseOf con)) (inferCon vars retTy con)))
-    let ts' = Set.fromList (map fst ts)
-
-    local ( (names %~ focus (teleFromList ts))
-          . (types %~ Map.insert n ts')
-          . (constructors %~ Set.union ts') ) $
-        consFst (TypeDecl am n tvs cs') $
+  let cont cs =
+        consFst (TypeDecl am n tvs cs (ann, undefined)) $
           inferProg prg
+
+  local (names %~ focus (one n (fst (rename kind)))) $
+    case cs of
+      Nothing -> cont Nothing
+      Just cs -> do
+        (ts, cs') <- unzip <$> local (names %~ focus (scope tvs))
+          (for cs (\con -> retcons (addBlame (BecauseOf con)) (inferCon vars retTy con)))
+
+        let ts' = Set.fromList (map fst ts)
+        local ( (names %~ focus (teleFromList ts))
+                . (types %~ Map.insert n ts')
+                . (constructors %~ Set.union ts') ) $
+          cont (Just cs')
 
 inferProg (Open mod pre:prg) = do
   modImplicits <- view (modules . at mod . non undefined)

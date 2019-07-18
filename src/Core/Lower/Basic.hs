@@ -28,6 +28,7 @@ data LowerState
   = LS
     { vars  :: VarMap.Map (C.Type CoVar)
     , ctors :: VarMap.Map (C.Type CoVar)
+    -- | The map of types to their constructors /if they have any/.
     , types :: VarMap.Map VarSet.Set
     } deriving (Eq, Show)
 
