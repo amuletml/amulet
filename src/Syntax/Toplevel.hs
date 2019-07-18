@@ -29,7 +29,7 @@ data TopAccess = Public | Private
 data Toplevel p
   = LetStmt TopAccess [Binding p]
   | ForeignVal TopAccess (Var p) Text (Type p) (Ann p)
-  | TypeDecl TopAccess (Var p) [TyConArg p] [Constructor p]
+  | TypeDecl TopAccess (Var p) [TyConArg p] (Maybe [Constructor p]) (Ann p)
   | Module TopAccess (Var p) [Toplevel p]
   | Open { openName :: Var p
          , openAs :: Maybe Text }
@@ -85,7 +85,8 @@ makeLenses ''ClassItem
 instance (Spanned (Constructor p), Spanned (Ann p)) => Spanned (Toplevel p) where
   annotation (LetStmt _ [b]) = annotation b
   annotation (LetStmt _ (b:vs)) = sconcat (annotation b :| map annotation vs)
-  annotation (TypeDecl _ _ _ (x:xs)) = sconcat (annotation x :| map annotation xs)
+  annotation (TypeDecl _ _ _ (Just cs) x) = sconcat (annotation x :| map annotation cs)
+  annotation (TypeDecl _ _ _ Nothing x) = annotation x
   annotation (ForeignVal _ _ _ _ x) = annotation x
   annotation (Class _ _ _ _ _ x) = annotation x
   annotation (Instance _ _ _ _ x) = annotation x
@@ -116,12 +117,12 @@ instance (Pretty (Var p)) => Pretty (Toplevel p) where
                   _ -> line <> vsep (map prettyBind xs)
   pretty (ForeignVal m v d ty _) =
     keyword "foreign" <+> prettyAcc m <> keyword "val" <+> pretty v <+> colon <+> pretty ty <+> equals <+> dquotes (text d)
-  pretty (TypeDecl m ty args []) = keyword "type" <+> prettyAcc m <> pretty ty <+> hsep (map ((squote <>) . pretty) args)
-  pretty (TypeDecl m ty args ctors) = keyword "type" <+> prettyAcc m <> pretty ty
-                                <+> hsep (map ((squote <>) . pretty) args)
-                                <+> equals
-                                <#> indent 2 (vsep (map ((pipe <+>) . pretty) ctors))
-
+  pretty (TypeDecl m ty args ctors _) =
+    let ct = case ctors of
+          Nothing -> mempty
+          Just [] -> equals <+> pipe
+          Just cs -> equals <#> indent 2 (vsep (map ((pipe <+>) . pretty) cs))
+    in keyword "type" <+> prettyAcc m <> pretty ty <+> hsep (map ((squote <>) . pretty) args) <+> ct
   pretty (Open m Nothing) = keyword "open" <+> pretty m
   pretty (Open m (Just a)) = keyword "open" <+> pretty m <+> keyword "as" <+> text a
 
