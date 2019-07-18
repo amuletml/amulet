@@ -109,7 +109,7 @@ resolveModule (d@(TypeDecl am t vs cs ann):rs) = do
   c' <- traverse tagVar c
   extendTy (t, t') $ extendN (zip c c') $ do
     body <- TypeDecl am t' vs'
-      <$> (maybe (pure Nothing) (fmap Just . traverse (resolveCons sc) . zip c') cs)
+      <$> maybe (pure Nothing) (fmap Just . traverse (resolveCons sc) . zip c') cs
       <*> pure ann
     (body:) <$> resolveModule rs
 

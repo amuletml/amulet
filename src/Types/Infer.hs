@@ -389,7 +389,7 @@ inferProg (decl@(TypeDecl am n tvs cs ann):prg) = do
         consFst (TypeDecl am n tvs cs (ann, undefined)) $
           inferProg prg
 
-  local (names %~ focus (one n (fst (rename kind)))) $ do
+  local (names %~ focus (one n (fst (rename kind)))) $
     case cs of
       Nothing -> cont Nothing
       Just cs -> do

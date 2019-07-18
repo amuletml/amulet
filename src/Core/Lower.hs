@@ -330,7 +330,7 @@ lowerProg' (LetStmt _ vs:prg) = do
     vs' <- lowerLet vs
     foldr ((.) . ((:) . C.StmtLet)) id vs' <$$> lowerProg' prg
 
-lowerProg' (TypeDecl _ var _ Nothing _:prg) = do
+lowerProg' (TypeDecl _ var _ Nothing _:prg) =
   (C.Type (mkType var) []:) <$$> lowerProg' prg
 lowerProg' (TypeDecl _ var _ (Just cons) _:prg) = do
   let cons' = map (\case
