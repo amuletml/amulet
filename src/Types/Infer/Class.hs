@@ -156,8 +156,8 @@ inferClass clss@(Class name _ ctx _ methods classAnn) = do
 
     let tyDecl :: Toplevel Typed
         tyDecl = TypeDecl Public name params
-          [ ArgCon Private classCon inner (classAnn, classConTy)
-          ]
+          (Just [ArgCon Private classCon inner (classAnn, classConTy)])
+          (classAnn, undefined)
 
     let mkDecl :: (Type Typed -> TyBinder Typed, Var Typed, T.Text, Type Typed) -> m (Binding Typed)
         mkDecl (f, var, label, theTy) = do

@@ -27,7 +27,7 @@ import Syntax
 
 -- | Desugar a program into a more simple representation
 desugarProgram :: forall m. MonadNamey m => [Toplevel Resolved] -> m [Toplevel Desugared]
-desugarProgram = traverse statement 
+desugarProgram = traverse statement
 
 statement :: forall m. MonadNamey m => Toplevel Resolved -> m (Toplevel Desugared)
 statement (LetStmt am vs) = LetStmt am <$> traverse binding vs
@@ -36,7 +36,7 @@ statement (Instance a b c m d) = Instance a (ty <$> b) (ty c) <$> traverse bindi
 statement (Class am a b c m d) = Class am a (ty <$> b) (tyA <$> c) <$> traverse classItem m <*> pure d
 statement (Open v a) = pure $ Open v a
 statement (ForeignVal am v x t a) = pure $ ForeignVal am v x (ty t) a
-statement (TypeDecl am v arg cs) = pure $ TypeDecl am v (map tyA arg) (map ctor cs)
+statement (TypeDecl am v arg cs a) = pure $ TypeDecl am v (map tyA arg) (map ctor <$> cs) a
 
 classItem :: forall m. MonadNamey m => ClassItem Resolved -> m (ClassItem Desugared)
 classItem (MethodSig v t a) = pure $ MethodSig v (ty t) a
@@ -242,7 +242,7 @@ transDoExpr bind = go where
     pure $ BinOp e bind cont an
   go (CompLet bg an:qs) = Let <$> traverse binding bg <*> go qs <*> pure an
   go [CompGuard e] = expr e
-  go (CompGuard e:qs) = 
+  go (CompGuard e:qs) =
     let begin a b = Begin [ a, b ]
      in begin <$> expr e <*> go qs <*> pure (annotation e)
   go [] = undefined

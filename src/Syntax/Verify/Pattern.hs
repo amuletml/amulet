@@ -436,21 +436,24 @@ inhabited env (AbsState st cs i)
   go c (TyWithConstraints _ t) = go c t
   go _ TyType = inhb
 
-  -- | Determines if a type has at least one constructor. We pass in a
-  -- set of previously visited type constructors, to avoid getting into
+  -- | Returns the type name if this type is concrete (defined as has 0 or more
+  -- constructors, rather than being abstract).
+  --
+  -- We pass in a set of previously visited type names to avoid getting into
   -- loops.
-  checkCtors c (TyCon v)
-    | v `Set.notMember` c, maybe False (not . null) (env ^. (types . at v))
+  concreteTy c (TyCon v)
+    | v `Set.notMember` c
+    , isJust (env ^. (types . at v))
     = Just v
     | otherwise = Nothing
-  checkCtors c (TyApp f _) = checkCtors c f
-  checkCtors _ _ = Nothing
+  concreteTy c (TyApp f _) = concreteTy c f
+  concreteTy _ _ = Nothing
 
   -- | A naive check to determine if a constructor is inhabited.
   ctorCheck :: (MonadPlus m, MonadNamey m, MonadState CoverState m)
             => Set.Set (Var Typed) -> Type Typed -> m ()
   ctorCheck c t
-    | Just v <- checkCtors c t = do
+    | Just v <- concreteTy c t = do
         let c' = Set.insert v c
         (_, arg) <- constructors env t t
         maybe inhb (go c') arg

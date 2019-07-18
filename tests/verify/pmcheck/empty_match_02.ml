@@ -1,4 +1,4 @@
-type a = A of a
+type a = |
 type b = B1 | B2
 
 type c 'a =

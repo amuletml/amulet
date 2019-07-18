@@ -102,19 +102,20 @@ resolveModule (r@(ForeignVal am v t ty a):rs) = do
     <*> resolveModule rs
 
   where wrap x = foldr (TyPi . flip (flip Invisible Nothing) Spec) x (toList (ftv x))
-resolveModule (d@(TypeDecl am t vs cs):rs) = do
+resolveModule (d@(TypeDecl am t vs cs ann):rs) = do
   t'  <- tagVar t
   (vs', sc) <- resolveTele d vs
-  let c = map extractCons cs
+  let c = maybe [] (map extractCons) cs
   c' <- traverse tagVar c
-  extendTy (t, t') $ extendN (zip c c') $ (:)
-    . TypeDecl am t' vs'
-    <$> traverse (resolveCons sc) (zip cs c')
-    <*> resolveModule rs
+  extendTy (t, t') $ extendN (zip c c') $ do
+    body <- TypeDecl am t' vs'
+      <$> (maybe (pure Nothing) (fmap Just . traverse (resolveCons sc) . zip c') cs)
+      <*> pure ann
+    (body:) <$> resolveModule rs
 
-  where resolveCons _ (UnitCon ac _ a, v') = pure $ UnitCon ac v' a
-        resolveCons vs (r@(ArgCon ac _ t a), v') = ArgCon ac v' <$> extendTyvarN vs (reType r t) <*> pure a
-        resolveCons _  (r@(GadtCon ac _ t a), v') = do
+  where resolveCons _  (v', UnitCon ac _ a) = pure $ UnitCon ac v' a
+        resolveCons vs (v', r@(ArgCon ac _ t a)) = ArgCon ac v' <$> extendTyvarN vs (reType r t) <*> pure a
+        resolveCons _  (v', r@(GadtCon ac _ t a)) = do
           let fvs = toList (ftv t)
           fresh <- traverse tagVar fvs
           t' <- extendTyvarN (zip fvs fresh) (reType r t)
