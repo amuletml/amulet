@@ -28,7 +28,7 @@ escaper :: T.Text -> T.Text
 escaper = basicEscaper keywords
 
 -- | The default 'EscapeScope' for the backend.
-builtinEscape:: EscapeScope
+builtinEscape :: EscapeScope
 builtinEscape
   = flip createEscape escaper
   . ((vError, "error"):)
