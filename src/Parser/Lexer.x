@@ -154,19 +154,21 @@ tokens :-
 
   <string> \" { endString }
 
-  <string> \\ a { appendChar '\a' }
-  <string> \\ b { appendChar '\b' }
-  <string> \\ f { appendChar '\f' }
-  <string> \\ n { appendChar '\n' }
-  <string> \\ r { appendChar '\r' }
-  <string> \\ v { appendChar '\v' }
-  <string> \\ t { appendChar '\t' }
+  <string> \\ a  { appendChar '\a' }
+  <string> \\ b  { appendChar '\b' }
+  <string> \\ f  { appendChar '\f' }
+  <string> \\ n  { appendChar '\n' }
+  <string> \\ \n { appendChar '\n' }
+  <string> \\ r  { appendChar '\r' }
+  <string> \\ v  { appendChar '\v' }
+  <string> \\ t  { appendChar '\t' }
 
   <string> \\ \\ { appendChar '\\' }
   <string> \\ \" { appendChar '\"' }
 
   <string> \\ x $hex+ { onStringM $ appendChar . chr . parseNum 16 . L.drop 2 }
-  <string> \\ [.\n]   { invalidEscape }
+
+  <string> \\ .       { invalidEscape }
 
   <string> [^\\\"]    { onStringM append }
 
