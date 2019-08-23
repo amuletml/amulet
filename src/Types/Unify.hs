@@ -627,20 +627,21 @@ subsumes' r scope ot@(TyTuple a b) nt@(TyTuple a' b') = do
 subsumes' _ _ a@(TyApp lazy _) b@(TyApp lazy' _)
   | lazy == lazy', lazy' == tyLazy = probablyCast <$> unify a b
 
-subsumes' _ _ (TyApp lazy ty') ty | lazy == tyLazy, lazySubOk ty' ty = do
-  co <- unify ty' ty
+subsumes' r scope (TyApp lazy ty') ty | lazy == tyLazy, lazySubOk ty' ty = do
+  co <- subsumes' r scope ty' ty
   -- We have a thunk and want a value
   let wrap ex
         | an <- annotation ex =
           -- ... so force it
-          App (ExprWrapper (TypeApp ty) (VarRef forceName (an, forceTy))
-                (an, forceTy' ty))
-              (ExprWrapper (probablyCast (AppCo (ReflCo tyLazy) co)) ex (an, TyApp lazy ty))
-              (an, ty)
+          ExprWrapper co
+            (App (ExprWrapper (TypeApp ty') (VarRef forceName (an, forceTy)) (an, forceTy' ty'))
+              ex
+              (an, ty'))
+            (an, ty)
   pure (WrapFn (MkWrapCont wrap "automatic forcing"))
 
-subsumes' _ _ ty' (TyApp lazy ty) | lazy == tyLazy, lazySubOk ty ty' = do
-  co <- unify ty ty'
+subsumes' r scope ty' (TyApp lazy ty) | lazy == tyLazy, lazySubOk ty ty' = do
+  co <- subsumes' r scope ty ty'
   -- We have a value and want a thunk
   let wrap ex
         | an <- annotation ex =
@@ -648,7 +649,7 @@ subsumes' _ _ ty' (TyApp lazy ty) | lazy == tyLazy, lazySubOk ty ty' = do
                 (an, lAZYTy' ty))
               -- So put it in a function to delay evaluation!
               (Fun (PatParam (PLiteral LiUnit (an, tyUnit)))
-                (ExprWrapper (probablyCast co) ex (an, ty'))
+                (ExprWrapper co ex (an, ty'))
                 (an, TyArr tyUnit ty))
               (an, TyApp lazy ty)
   pure (WrapFn (MkWrapCont wrap "automatic thunking"))
@@ -928,7 +929,14 @@ mkRecordWrapper keys matched matched_t th tw cont exp =
    in wrapEx
 
 lazySubOk :: Type Typed -> Type Typed -> Bool
-lazySubOk tlazy tout = concretish tout || head (spine tout) == head (spine tlazy)
+lazySubOk tlazy tout =
+     concretish tout
+  || head (spine tout) == head (spine tlazy)
+  || (record tout && record tlazy)
+  where
+    record TyRows{} = True
+    record TyExactRows{} = True
+    record _ = False
 
 overlap :: [(Text, Type p)] -> [(Text, Type p)] -> [(Text, Type p, Type p)]
 overlap xs ys
