@@ -8,11 +8,6 @@ fail_escape.ml[1:6 ..1:7]: error
   │ 
 1 │ "\#  \0 \
   │      ^^
-fail_escape.ml[1:9 ..1:9]: error
-  Unknown escape code.
-  │ 
-1 │ "\#  \0 \
-  │         ^
 fail_escape.ml[2:1 ..2:1]: error
   Unexpected end of input, expecting `"` to close string
   │ 
