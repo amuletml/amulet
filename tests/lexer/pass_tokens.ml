@@ -4,6 +4,8 @@
 
   (* Strings *)
   "" "x" "\a" "\"" "\n\\\"\n" "\x23"
+  "\
+  Hello"
 
   (* Identifiers *)
   foo Foo
