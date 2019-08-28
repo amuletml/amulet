@@ -39,7 +39,6 @@ import Backend.Lua.Builtin
 import Backend.Lua.Inline
 import Backend.Escape
 
-
 -- | A magic variable used to represent the return value
 vReturn :: CoVar
 vReturn = CoVar (-100) "<<ret>>" ValueVar
@@ -93,6 +92,10 @@ data EmittedNode a
     , emitVals   :: [LuaSimple] -- ^ Each value or variable declared by this node.
     , _emitBinds :: [a]         -- ^ The variables bound in the statement. Used when traversing the dependency graph.
     }
+  | EmittedConsumed
+    { _emitDeps  :: VarSet.Set  -- ^ The dependencies for this node.
+    , _emitBinds :: [a]
+    }
   deriving Show
 
 -- | The graph of all 'EmittedNode's.
@@ -112,6 +115,8 @@ data TopEmitState = TopEmitState
 -- through a 'MonadState' instance.
 data EmitState a = EmitState
   { _emitGraph  :: EmittedGraph a
+  -- | The set of variables this term should depend on. These will be the
+  -- variables bound by the previous non-pure term.
   , _emitPrev   :: VarSet.Set
   , _emitEscape :: EscapeScope
   }
@@ -138,8 +143,9 @@ data EmitYield a
 -- This is a wrapper for 'EmitState', but also tracking dependencies for
 -- this node. One generally uses 'runNES' in order to evaluate this.
 data NodeEmitState a = NES
-  { _nodeState :: EmitState a
-  , _nodeDeps  :: VarSet.Set
+  { _nodeState  :: EmitState a
+  , _nodeWithin :: a
+  , _nodeDeps   :: VarSet.Set
   }
 
 makeLenses ''EmittedNode
@@ -274,6 +280,7 @@ nodeStmts :: EmittedNode a -> Seq LuaStmt
 nodeStmts EmittedStmt { emitStmts = s } = s
 nodeStmts EmittedExpr { emitExprs = es, emitYield = yield } = yieldStmt yield es
 nodeStmts EmittedUpvalue{} = mempty
+nodeStmts EmittedConsumed{} = mempty
 
 -- | Emit a single expression within the current context
 --
@@ -407,7 +414,7 @@ emitExpr var yield t@(AnnMatch _ test arms) = do
           -> AnnTerm VarSet.Set a -> AnnTerm VarSet.Set a
           -> m (VarSet.Set, Either LuaExpr (Seq LuaStmt))
     genIf yield ifs els = do
-      (deps, test') <- runNES (freeInAtom test) (emitAtomS test)
+      (deps, test') <- runNES var (freeInAtom test) (emitAtomS test)
 
       ifs' <- emitLiftedES yield ifs
       els' <- emitLiftedES yield els
@@ -502,7 +509,7 @@ emitExpr var yield (AnnExtend fv tbl fs) = do
 
   graph <- use emitGraph
   let fs' = sortAtoms graph thd3 fs
-  (deps, node) <- runNES fv $ case yield of
+  (deps, node) <- runNES var fv $ case yield of
     YieldDiscard -> do
       exs' <- traverse (emitAtom . thd3) fs'
       tbl' <- emitAtom tbl
@@ -546,11 +553,11 @@ emitExpr var yield (AnnExtend fv tbl fs) = do
 
 runNES :: ( MonadReader (EmitScope a) m
           , MonadState (EmitState a) m )
-       => VarSet.Set -> StateT (NodeEmitState a) m b
+       => a -> VarSet.Set -> StateT (NodeEmitState a) m b
        -> m (VarSet.Set, b)
-runNES deps m = do
+runNES v deps m = do
   s <- get
-  (a, NES s' deps') <- runStateT m (NES s deps)
+  (a, NES s' _ deps') <- runStateT m (NES s v deps)
   put s'
   pure (deps', a)
 
@@ -574,7 +581,7 @@ withinTerm var term m = do
 
   let p = isPure ari term
       deps = extractAnn term <> (if p then mempty else prev)
-  (deps', result) <- runNES deps m
+  (deps', result) <- runNES var deps m
 
   -- Update the pure set if needed
   unless p (emitPrev .= VarSet.singleton (toVar var))
@@ -604,9 +611,10 @@ emitAtom (Ref (toVar -> v) _) = do
 
     Just (EmittedExpr expr (YieldDeclare var ty) binds deps) | usedWhen var == Once -> do
       let var' = toVar var
+      within <- use nodeWithin
       testEmitGraph' <- uses (nodeState . emitGraph) (VarMap.delete var')
       deps' <- uses nodeDeps (VarSet.delete var' . VarSet.union deps)
-      case hasLoop (VarSet.singleton var') deps' testEmitGraph' of
+      case hasLoop var' (VarSet.singleton var') deps' testEmitGraph' of
         Nothing -> do
           (stmts, vals) <- genDeclare pushScope' var ty expr
           let existing' = EmittedStmt { emitStmts  = stmts
@@ -618,35 +626,46 @@ emitAtom (Ref (toVar -> v) _) = do
           pure (map unsimple vals)
         Just{} -> do
           nodeDeps .= deps'
-          nodeState . emitGraph .= testEmitGraph'
+          let existing = EmittedConsumed { _emitBinds = binds
+                                         , _emitDeps = VarSet.singleton (toVar within)
+                                         }
+          nodeState . emitGraph .= VarMap.insert var' existing testEmitGraph'
           pure expr
     Just (EmittedExpr expr yield binds deps) -> do
       (stmts, vals) <- genYield pushScope' yield expr
       (nodeState . emitGraph) %= VarMap.insert v (EmittedStmt stmts vals binds deps)
       pure (map unsimple vals)
+    Just (EmittedConsumed _ deps) -> error (show v ++ " was consumed into " ++ show deps)
     where
       -- | Detect if the @emitted@ has a loop
       --
       -- TODO: Convert this to a breadth first search - loops are
       -- /probably/ going to be close to the start so there's no point
       -- looping up to the top of the expression tree.
-      hasLoop :: VarSet.Set -- ^ The set of nodes on the visiting stack
+      hasLoop :: CoVar -- ^ The "top" of the graph, namely the variable whose
+                       -- dependencies we're visiting.
+              -> VarSet.Set -- ^ The set of nodes on the visiting stack
               -> VarSet.Set -- ^ The set of nodes we're about to visit
               -> EmittedGraph a -- ^ A map of nodes and their edges which have not been visited
               -> Maybe (EmittedGraph a) -- ^ The remaining nodes/edges which have not been visited
-      hasLoop visiting toVisit emitted = VarSet.foldr (\v emitted ->
+      hasLoop top visiting toVisit emitted = VarSet.foldr (\v emitted ->
         -- Effectively foldrM, but we don't have an instance for it.
         case emitted of
           Nothing -> Nothing
-          Just x -> hasLoop' visiting v x) (Just emitted) toVisit
+          Just x -> hasLoop' top visiting v x) (Just emitted) toVisit
 
-      hasLoop' :: VarSet.Set -> CoVar -> EmittedGraph a
+      hasLoop' :: CoVar -> VarSet.Set -> CoVar -> EmittedGraph a
               -> Maybe (EmittedGraph a)
-      hasLoop' visiting v remaining =
+      hasLoop' top visiting v remaining =
         if VarSet.member v visiting then Nothing
         else case VarMap.lookup v remaining of
+               -- If we're not in the graph, skip.
                Nothing -> Just remaining
-               Just e -> hasLoop (VarSet.insert v visiting)
+               -- If we're a node which has been embedded into the top node then skip.
+               -- I'm not 100% sure this is correct.
+               Just (EmittedConsumed deps _) | VarSet.member top deps -> Just remaining
+               Just e -> hasLoop top
+                                 (VarSet.insert v visiting)
                                  (e ^. emitDeps)
                                  (foldr (VarMap.delete . toVar) remaining (e ^. emitBinds))
 
@@ -678,6 +697,7 @@ emitVarBinds v = do
     Nothing -> pure . simpleVar . LuaName <$> uses emitEscape (getVar v)
     Just EmittedStmt { emitVals = vs } -> pure vs
     Just EmittedUpvalue { emitVals = vs } -> pure vs
+    Just (EmittedConsumed _ deps) -> error (show v ++ " was consumed into " ++ show deps)
     Just (EmittedExpr expr yield binds deps) -> do
       (stmts, vs) <- genYield pushScope yield expr
       pushGraph v EmittedStmt { emitStmts  = stmts
