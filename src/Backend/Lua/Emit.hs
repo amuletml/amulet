@@ -1,7 +1,7 @@
 {-# LANGUAGE
   OverloadedStrings, NamedFieldPuns, FlexibleContexts
-, TupleSections, ViewPatterns, ScopedTypeVariables
-, TemplateHaskell, QuasiQuotes #-}
+, FlexibleInstances, TupleSections, ViewPatterns
+, ScopedTypeVariables, TemplateHaskell, QuasiQuotes #-}
 module Backend.Lua.Emit
   ( emitStmt
   , TopEmitState(..), topVars, topArity, topEscape, topExVars
@@ -41,7 +41,6 @@ import Backend.Escape
 
 import Text.Dot
 import Text.Pretty.Semantic
-import Debug.Trace
 
 -- | A magic variable used to represent the return value
 vReturn :: CoVar
@@ -165,6 +164,12 @@ toGraph = Graph DirectedGraph
     genNode (EmittedExpr expr _ _ _) = vsep . map pretty $ expr
     genNode (EmittedStmt stmt _ _ _) = vsep . map pretty . toList $ stmt
     genNode EmittedUpvalue{} = "Upvalue"
+
+instance IsVar a => Pretty (VarMap.Map (EmittedNode a)) where
+  pretty = drawGraph disp . toGraph where
+    disp (CoVar id name _) = text name <> "_" <> int' id
+    int' x | x < 0 = "_" <> int (-x)
+           | otherwise = int x
 
 -- | The default (initial) state for the emitter.
 defaultEmitState :: TopEmitState
