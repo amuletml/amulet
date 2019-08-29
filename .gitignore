@@ -16,6 +16,7 @@ src/**/*.info
 
 !/tests/lua/*.lua
 !/tests/lua_parse/*.lua
+!/tests/lua_no_opt/*.lua
 
 cabal.project.local*
 .ghc*
