@@ -19,6 +19,8 @@ import qualified Data.Text.Lazy.Builder as B
 import qualified Data.Text.Lazy as L
 import qualified Data.Text as T
 
+import Text.Show.Pretty (ppShow)
+
 import qualified Text.PrettyPrint.Annotated.Leijen as P
 import Text.PrettyPrint.Annotated.Leijen hiding (text, display, (<>), (<$>), (<$$>))
 
@@ -45,7 +47,7 @@ text = string . T.unpack
 
 -- | Build a document from some 'show'able value.
 shown :: Show b => b -> Doc a
-shown = string . show
+shown = string . ppShow
 
 -- | Prepend a bullet to a document.
 bullet :: Doc a -> Doc a

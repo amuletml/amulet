@@ -1,7 +1,7 @@
 {-# LANGUAGE
   OverloadedStrings, NamedFieldPuns, FlexibleContexts
-, TupleSections, ViewPatterns, ScopedTypeVariables
-, TemplateHaskell, QuasiQuotes #-}
+, FlexibleInstances, TupleSections, ViewPatterns
+, ScopedTypeVariables, TemplateHaskell, QuasiQuotes #-}
 module Backend.Lua.Emit
   ( emitStmt
   , TopEmitState(..), topVars, topArity, topEscape, topExVars
@@ -39,6 +39,8 @@ import Backend.Lua.Builtin
 import Backend.Lua.Inline
 import Backend.Escape
 
+import Text.Dot
+import Text.Pretty.Semantic
 
 -- | A magic variable used to represent the return value
 vReturn :: CoVar
@@ -77,21 +79,21 @@ data EmittedNode a
   = EmittedExpr
     { emitExprs  :: [LuaExpr]   -- ^ The expression(s) which will be emitted
     , emitYield  :: EmitYield a -- ^ The result we should be binding this to if consumed
-    , _emitBinds :: [a]         -- ^ The variables bound in the statement. Used when traversing the dependency
+    , _emitBinds :: VarSet.Set  -- ^ The variables bound in the statement. Used when traversing the dependency
                                 -- graph.
     , _emitDeps  :: VarSet.Set  -- ^ The dependencies for this node. Consuming it should assimilate them.
     }
   | EmittedStmt
     { emitStmts  :: Seq LuaStmt -- ^ The statements required before this can be evaluated
     , emitVals   :: [LuaSimple] -- ^ Each value or variable declared by this node.
-    , _emitBinds :: [a]         -- ^ The variables bound in the statement. Used when traversing the dependency
+    , _emitBinds :: VarSet.Set  -- ^ The variables bound in the statement. Used when traversing the dependency
                                 -- graph.
     , _emitDeps  :: VarSet.Set  -- ^ The dependencies for this node. Consuming need not assimilate them.
     }
   | EmittedUpvalue
     { emitTop    :: VarDecl     -- ^ The top level declaration to consume
     , emitVals   :: [LuaSimple] -- ^ Each value or variable declared by this node.
-    , _emitBinds :: [a]         -- ^ The variables bound in the statement. Used when traversing the dependency graph.
+    , _emitBinds :: VarSet.Set  -- ^ A singleton set, containing this variable's upvalue.
     }
   deriving Show
 
@@ -112,6 +114,8 @@ data TopEmitState = TopEmitState
 -- through a 'MonadState' instance.
 data EmitState a = EmitState
   { _emitGraph  :: EmittedGraph a
+  -- | The set of variables this term should depend on. These will be the
+  -- variables bound by the previous non-pure term.
   , _emitPrev   :: VarSet.Set
   , _emitEscape :: EscapeScope
   }
@@ -138,8 +142,9 @@ data EmitYield a
 -- This is a wrapper for 'EmitState', but also tracking dependencies for
 -- this node. One generally uses 'runNES' in order to evaluate this.
 data NodeEmitState a = NES
-  { _nodeState :: EmitState a
-  , _nodeDeps  :: VarSet.Set
+  { _nodeState  :: EmitState a
+  , _nodeDeps   :: VarSet.Set
+  , _nodeMerged :: VarSet.Set
   }
 
 makeLenses ''EmittedNode
@@ -147,6 +152,24 @@ makeLenses ''TopEmitState
 makeLenses ''EmitState
 makeLenses ''EmitScope
 makeLenses ''NodeEmitState
+
+toGraph :: EmittedGraph a -> Graph CoVar
+toGraph = Graph DirectedGraph
+        . VarMap.foldrWithKey (\v node xs -> gen v node ++ xs) []
+  where
+    gen _ EmittedUpvalue{} = []
+    gen var node = Node (defaultInfo { label = Just (display . renderPretty 0.8 100 $ pretty var <> ":=" <> genNode node) }) var
+                   : VarSet.foldr (\var' xs -> Edge defaultInfo var var' : xs) [] (node ^. emitDeps)
+
+    genNode (EmittedExpr expr _ _ _) = vsep . map pretty $ expr
+    genNode (EmittedStmt stmt _ _ _) = vsep . map pretty . toList $ stmt
+    genNode EmittedUpvalue{} = "Upvalue"
+
+instance IsVar a => Pretty (VarMap.Map (EmittedNode a)) where
+  pretty = drawGraph disp . toGraph where
+    disp (CoVar id name _) = text name <> "_" <> int' id
+    int' x | x < 0 = "_" <> int (-x)
+           | otherwise = int x
 
 -- | The default (initial) state for the emitter.
 defaultEmitState :: TopEmitState
@@ -168,7 +191,7 @@ liftedGraph = VarSet.foldr liftNode (pure mempty) where
       Just n@EmittedUpvalue{} -> VarMap.insert v n <$> m
       _ -> do
         n <- emitVarBinds v
-        VarMap.insert v (EmittedUpvalue VarUpvalue n [fromVar v]) <$> m
+        VarMap.insert v (EmittedUpvalue VarUpvalue n (VarSet.singleton v)) <$> m
 
 -- | A wrapper for 'emitLiftedES' which converts the result to a sequence
 -- of 'LuaStmt's.
@@ -264,7 +287,7 @@ flushDeps :: IsVar a => EmittedNode a -> VarSet.Set -> EmittedGraph a
 flushDeps node extra g =
   let
     -- Remove this from the graph
-    g' = foldr (VarMap.delete . toVar) g (node ^. emitBinds)
+    g' = VarSet.foldr VarMap.delete g (node ^. emitBinds)
   in VarSet.foldr
      (\v (s, g) -> first (s<>) (flushGraph v mempty g))
      (mempty, g') (node ^. emitDeps <> extra)
@@ -318,7 +341,7 @@ emitExpr var yield (AnnLet _ (Many vs) r) =
                `VarSet.difference` vss
 
         -- Add us to every node
-        vs' = map fst3 vs
+        vs' = VarSet.fromList (map (toVar . fst3) vs)
         graph' = foldr (\(v, v') -> VarMap.insert (toVar v) (EmittedStmt stmts (simpleVars v') vs' deps)) graph binds
 
     -- Update the graph and impure set if needed
@@ -360,7 +383,7 @@ emitExpr var yield t@(AnnMatch _ test arms) = do
       v' <- genVars pushScope v ty (Just t)
       pure (YieldStore v', pure (LuaLocal v' []), v')
 
-  (deps, body) <- case arms of
+  (deps, binds, body) <- case arms of
     {-
       Whilst this may seem a little weird special casing this, as we'll
       generate near equivalent code in the general case, it does allow us to
@@ -380,7 +403,7 @@ emitExpr var yield t@(AnnMatch _ test arms) = do
         pattern multiple times, and so we need to emit it as a variable.
       -}
       test' <- emitAtomMany test
-      (freeInAtom test,) . Right . pure . LuaIfElse <$> for arms (genBranch test' yield')
+      (freeInAtom test,mempty,) . Right . pure . LuaIfElse <$> for arms (genBranch test' yield')
 
   let node = case body of
         Left es -> EmittedExpr [es] yield
@@ -388,11 +411,10 @@ emitExpr var yield t@(AnnMatch _ test arms) = do
 
   -- Add this node to the graph, depending on the arm body, and the previous impure node.
   prev <- use emitPrev
-  emitGraph %= VarMap.insert (toVar var)
-    (node [var]
-          (deps <> foldMap (extractAnn . _armBody) arms <> prev))
+  pushGraph (node (VarSet.insert (toVar var) binds)
+                  (deps <> foldMap (extractAnn . _armBody) arms <> prev))
     -- For the time being, we just assume this expression is impure.
-  emitPrev .= VarSet.singleton (toVar var)
+  emitPrev .= one var
 
   where
     genBranch test' yield' arm@Arm { _armPtrn = p, _armBody = b } = do
@@ -405,13 +427,13 @@ emitExpr var yield t@(AnnMatch _ test arms) = do
 
     genIf :: EmitYield a
           -> AnnTerm VarSet.Set a -> AnnTerm VarSet.Set a
-          -> m (VarSet.Set, Either LuaExpr (Seq LuaStmt))
+          -> m (VarSet.Set, VarSet.Set, Either LuaExpr (Seq LuaStmt))
     genIf yield ifs els = do
-      (deps, test') <- runNES (freeInAtom test) (emitAtomS test)
+      (deps, binds, test') <- runNES (freeInAtom test) (emitAtomS test)
 
       ifs' <- emitLiftedES yield ifs
       els' <- emitLiftedES yield els
-      pure . (deps,) $ case (ifs', els') of
+      pure . (deps,binds,) $ case (ifs', els') of
         -- Handle binary ops. Note we don't need to ensure e is not an
         -- unboxed tuple, as we know this returns a boolean.
         (Left [LuaTrue], Left [e]) -> Left $ LuaBinOp test' "or" e
@@ -471,7 +493,7 @@ emitExpr var yield t@(AnnLam fv (TermArgument v ty) e) = do
   escape <- use emitEscape
 
   let (vs, escape') = flip runState escape $ genVars (state . pushVar) v ty (Just e)
-      graph' = VarMap.insert (toVar v) (EmittedUpvalue VarUpvalue (simpleVars vs) [v]) graph
+      graph' = VarMap.insert (toVar v) (EmittedUpvalue VarUpvalue (simpleVars vs) (one v)) graph
 
       term :: [LuaExpr] = pure . LuaFunction vs . toList . fst3 $ emitTerm scope escape' graph' YieldReturn e
   withinExpr var yield t (pure term)
@@ -502,7 +524,7 @@ emitExpr var yield (AnnExtend fv tbl fs) = do
 
   graph <- use emitGraph
   let fs' = sortAtoms graph thd3 fs
-  (deps, node) <- runNES fv $ case yield of
+  (deps, binds, node) <- runNES fv $ case yield of
     YieldDiscard -> do
       exs' <- traverse (emitAtom . thd3) fs'
       tbl' <- emitAtom tbl
@@ -526,7 +548,7 @@ emitExpr var yield (AnnExtend fv tbl fs) = do
       tbl' <- emitAtomS tbl
       pure $ EmittedStmt (LuaLocal [vs'] [LuaTable []] <| emitCopy vs' tbl' <> exs') [simpleVar vs']
 
-  pushGraph var (node [var] deps)
+  pushGraph (node (VarSet.insert (toVar var) binds) deps)
 
   where
     k = T.pack "k"
@@ -547,12 +569,12 @@ emitExpr var yield (AnnExtend fv tbl fs) = do
 runNES :: ( MonadReader (EmitScope a) m
           , MonadState (EmitState a) m )
        => VarSet.Set -> StateT (NodeEmitState a) m b
-       -> m (VarSet.Set, b)
+       -> m (VarSet.Set, VarSet.Set, b)
 runNES deps m = do
   s <- get
-  (a, NES s' deps') <- runStateT m (NES s deps)
+  (a, NES s' deps' binds) <- runStateT m (NES s deps mempty)
   put s'
-  pure (deps', a)
+  pure (deps', binds, a)
 
 withinExpr :: ( Occurs a
             , MonadReader (EmitScope a) m
@@ -566,20 +588,23 @@ withinTerm :: ( Occurs a
             , MonadReader (EmitScope a) m
             , MonadState (EmitState a) m )
          => a -> AnnTerm VarSet.Set a
-         -> StateT (NodeEmitState a) m ([a] -> VarSet.Set -> EmittedNode a)
+         -> StateT (NodeEmitState a) m (VarSet.Set -> VarSet.Set -> EmittedNode a)
          -> m ()
 withinTerm var term m = do
   ari <- view emitArity
   prev <- use emitPrev
 
+  -- We add the previous term as a dependency if we're impure (obviously), or if
+  -- we're the last term in a block. Yes, this is an ugly hack - ideally it'd be
+  -- done in emitTerm.
   let p = isPure ari term
-      deps = extractAnn term <> (if p then mempty else prev)
-  (deps', result) <- runNES deps m
+      deps = extractAnn term <> (if not p || toVar var == vReturn then prev else mempty)
+  (deps', binds, result) <- runNES deps m
 
   -- Update the pure set if needed
-  unless p (emitPrev .= VarSet.singleton (toVar var))
+  unless p (emitPrev .= one var)
 
-  pushGraph var (result [var] deps')
+  pushGraph (result (VarSet.insert (toVar var) binds) deps')
 
 emitAtomS :: ( Occurs a
              , MonadState (NodeEmitState a) m)
@@ -603,21 +628,24 @@ emitAtom (Ref (toVar -> v) _) = do
     Just EmittedUpvalue { emitVals = vs } -> pure (map unsimple vs)
 
     Just (EmittedExpr expr (YieldDeclare var ty) binds deps) | usedWhen var == Once -> do
+      when (VarSet.notMember (toVar var) binds) (pure $ error "Variable mismatch")
+
       let var' = toVar var
-      testEmitGraph' <- uses (nodeState . emitGraph) (VarMap.delete var')
-      deps' <- uses nodeDeps (VarSet.delete var' . VarSet.union deps)
+      testEmitGraph' <- uses (nodeState . emitGraph) (\s -> VarSet.foldr VarMap.delete s binds)
+      deps' <- uses nodeDeps (flip VarSet.difference binds . VarSet.union deps)
       case hasLoop (VarSet.singleton var') deps' testEmitGraph' of
         Nothing -> do
           (stmts, vals) <- genDeclare pushScope' var ty expr
-          let existing' = EmittedStmt { emitStmts  = stmts
-                                      , emitVals   = vals
-                                      , _emitBinds = binds
-                                      , _emitDeps  = deps
-                                      }
-          nodeState . emitGraph %= VarMap.insert var' existing'
+          let node = EmittedStmt { emitStmts  = stmts
+                                 , emitVals   = vals
+                                 , _emitBinds = binds
+                                 , _emitDeps  = deps
+                                 }
+          nodeState . emitGraph %= \g -> VarSet.foldr (flip VarMap.insert node) g binds
           pure (map unsimple vals)
         Just{} -> do
           nodeDeps .= deps'
+          nodeMerged %= VarSet.union binds
           nodeState . emitGraph .= testEmitGraph'
           pure expr
     Just (EmittedExpr expr yield binds deps) -> do
@@ -645,10 +673,13 @@ emitAtom (Ref (toVar -> v) _) = do
       hasLoop' visiting v remaining =
         if VarSet.member v visiting then Nothing
         else case VarMap.lookup v remaining of
+               -- If we're not in the graph, skip.
                Nothing -> Just remaining
+               -- If we're a node which has been embedded into the top node then skip.
+               -- I'm not 100% sure this is correct.
                Just e -> hasLoop (VarSet.insert v visiting)
                                  (e ^. emitDeps)
-                                 (foldr (VarMap.delete . toVar) remaining (e ^. emitBinds))
+                                 (VarSet.foldr VarMap.delete remaining (e ^. emitBinds))
 
 -- | A variant of 'emitAtom' which always binds expressions.
 --
@@ -680,10 +711,10 @@ emitVarBinds v = do
     Just EmittedUpvalue { emitVals = vs } -> pure vs
     Just (EmittedExpr expr yield binds deps) -> do
       (stmts, vs) <- genYield pushScope yield expr
-      pushGraph v EmittedStmt { emitStmts  = stmts
-                              , emitVals   = vs
-                              , _emitBinds = binds
-                              , _emitDeps  = deps }
+      pushGraph EmittedStmt { emitStmts  = stmts
+                            , emitVals   = vs
+                            , _emitBinds = binds
+                            , _emitDeps  = deps }
       pure vs
 
 -- | Generate the appropriate code for the provided yield.
@@ -843,7 +874,7 @@ emitStmt (StmtLet (One (v, ty, e)):xs) = do
   let yield = if usedWhen v == Dead then YieldDiscard else YieldDeclare v ty
       (stmts, binds, esc') =
         emitTerm (EmitScope ari) esc
-                 (VarMap.mapWithKey (\v (d, b) -> EmittedUpvalue d b [fromVar v]) vars)
+                 (VarMap.mapWithKey (\v (d, b) -> EmittedUpvalue d b (VarSet.singleton v)) vars)
                  yield e
 
   topArity  %= flip extendPureLets [(v, ty, e)]
@@ -858,7 +889,7 @@ emitStmt (StmtLet (Many vs):xs) = do
 
   TopEmitState { _topArity = ari, _topEscape = esc, _topVars = vars } <- get
 
-  let graph :: EmittedGraph a = VarMap.mapWithKey (\v (d, b) -> EmittedUpvalue d b [fromVar v]) vars
+  let graph :: EmittedGraph a = VarMap.mapWithKey (\v (d, b) -> EmittedUpvalue d b (VarSet.singleton v)) vars
       (stmt, esc') = foldl' (\(s, esc') ((_, _, e), v') ->
         let (s', _, esc'') = emitTerm (EmitScope ari) esc' graph (YieldStore v') e
         in (s <> s', esc'')) (mempty, esc) (zip vs binds)
@@ -872,8 +903,8 @@ emitStmt (StmtLet (Many vs):xs) = do
     _ -> LuaLocal (mconcat binds) [] <| stmt <> xs'
 
 -- | Push a new node into the emitting graph
-pushGraph :: (IsVar b, MonadState (EmitState a) m) => b -> EmittedNode a -> m ()
-pushGraph var node = emitGraph %= VarMap.insert (toVar var) node
+pushGraph :: MonadState (EmitState a) m => EmittedNode a -> m ()
+pushGraph node = emitGraph %= \g -> VarSet.foldr (flip VarMap.insert node . toVar) g (node ^. emitBinds)
 
 -- | Push a variable into the current scope
 pushScope :: (IsVar a, MonadState (EmitState a) m) => a -> m T.Text
@@ -966,12 +997,12 @@ sortAtoms graph ex atoms =
       | otherwise = case VarMap.lookup var graph of
           Nothing -> skip
           Just node ->
-            let visited' = foldr (VarSet.insert . toVar) visited (node ^. emitBinds)
-                pend' = foldr (VarMap.delete . toVar) pend (node ^. emitBinds)
+            let visited' = VarSet.foldr VarSet.insert visited (node ^. emitBinds)
+                pend' = VarSet.foldr VarMap.delete pend (node ^. emitBinds)
 
                 (visited'', pend'', xs') = VarSet.foldr sortVisit (visited', pend', xs) (node ^. emitDeps)
             in ( visited'', pend''
-               , foldr (maybe id (:) . flip VarMap.lookup pend . toVar) xs' (node ^. emitBinds) )
+               , VarSet.foldr (maybe id (:) . flip VarMap.lookup pend) xs' (node ^. emitBinds) )
 
 patternBindings :: Occurs a => Pattern a -> [LuaExpr] -> [(a, [LuaExpr])]
 patternBindings (PatLit _) _     = []
@@ -1003,7 +1034,7 @@ patternGraph test test' Arm { _armPtrn = p, _armVars = vs } graph = do
     [] -> pure graph
     [(v, expr)] -> do
       (body, vars) <- genDeclare pushScope v (getTy v) expr
-      pure (VarMap.insert (toVar v) (EmittedStmt body vars [v] deps) graph)
+      pure (VarMap.insert (toVar v) (EmittedStmt body vars (one v) deps) graph)
 
     many@((vFst, _):ps) -> do
       -- If we've got multiple patterns which will be bound, we can merge them into one binding, with all other nodes
@@ -1012,13 +1043,13 @@ patternGraph test test' Arm { _armPtrn = p, _armVars = vs } graph = do
       let (_, vsFst) = head stmts
 
       pure $ foldr
-        (\((v, _), (_, vs)) -> VarMap.insert (toVar v) (EmittedStmt mempty vs [v] (VarSet.singleton (toVar vFst))))
-        (VarMap.insert (toVar vFst) (EmittedStmt (foldr (mergeLocs . fst) mempty stmts) vsFst [vFst] deps) graph)
+        (\((v, _), (_, vs)) -> VarMap.insert (toVar v) (EmittedStmt mempty vs (one v) (one vFst)))
+        (VarMap.insert (toVar vFst) (EmittedStmt (foldr (mergeLocs . fst) mempty stmts) vsFst (one vFst) deps) graph)
         (zip ps (tail stmts))
 
   -- Boring expressions
   pure $ foldr
-    (\(v, expr) -> VarMap.insert (toVar v) (EmittedExpr expr (YieldDeclare v (getTy v)) [v] deps))
+    (\(v, expr) -> VarMap.insert (toVar v) (EmittedExpr expr (YieldDeclare v (getTy v)) (one v) deps))
     graph' once
 
   where
@@ -1041,3 +1072,6 @@ patternTest _ _ _ = undefined
 
 tag :: IsVar a => EscapeScope -> a -> LuaExpr -> LuaExpr
 tag scp con vr = LuaBinOp (LuaRef (LuaIndex vr (LuaString "__tag"))) "==" (LuaString (getVar con scp))
+
+one :: IsVar a => a -> VarSet.Set
+one = VarSet.singleton . toVar
