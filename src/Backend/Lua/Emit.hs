@@ -594,8 +594,11 @@ withinTerm var term m = do
   ari <- view emitArity
   prev <- use emitPrev
 
+  -- We add the previous term as a dependency if we're impure (obviously), or if
+  -- we're the last term in a block. Yes, this is an ugly hack - ideally it'd be
+  -- done in emitTerm.
   let p = isPure ari term
-      deps = extractAnn term <> (if p then mempty else prev)
+      deps = extractAnn term <> (if not p || toVar var == vReturn then prev else mempty)
   (deps', binds, result) <- runNES deps m
 
   -- Update the pure set if needed
