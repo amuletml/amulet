@@ -34,6 +34,10 @@ extractToplevel (TypeDecl Public v _ c _) = (maybe [] (mapMaybe ctor) c, [v]) wh
   access _ = const Nothing
 
 extractToplevel (TypeDecl Private _ _ _ _) = mempty
+
+extractToplevel (TySymDecl Private _ _ _ _) = mempty
+extractToplevel (TySymDecl Public v _ _ _) = (mempty, [v])
+
 extractToplevel (Open _ _) = mempty
 extractToplevel (Module Public v xs) =
   let (vs, ts) = extractToplevels xs

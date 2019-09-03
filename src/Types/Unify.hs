@@ -641,7 +641,7 @@ subsumes' r scope (TyApp lazy ty') ty | lazy == tyLazy, lazySubOk ty' ty = do
   pure (WrapFn (MkWrapCont wrap "automatic forcing"))
 
 subsumes' r scope ty' (TyApp lazy ty) | lazy == tyLazy, lazySubOk ty ty' = do
-  co <- subsumes' r scope ty ty'
+  wp <- subsumes' r scope ty ty'
   -- We have a value and want a thunk
   let wrap ex
         | an <- annotation ex =
@@ -649,7 +649,7 @@ subsumes' r scope ty' (TyApp lazy ty) | lazy == tyLazy, lazySubOk ty ty' = do
                 (an, lAZYTy' ty))
               -- So put it in a function to delay evaluation!
               (Fun (PatParam (PLiteral LiUnit (an, tyUnit)))
-                (ExprWrapper co ex (an, ty'))
+                (ExprWrapper wp ex (an, ty'))
                 (an, TyArr tyUnit ty))
               (an, TyApp lazy ty)
   pure (WrapFn (MkWrapCont wrap "automatic thunking"))

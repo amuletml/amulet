@@ -1,0 +1,6 @@
+syn08.ml[4:1 ..4:30]: error
+  │ 
+4 │ instance x (foo int) begin end
+  │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  Type synonym foo appears with one argument,
+  but in its definition it has 2

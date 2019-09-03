@@ -6,8 +6,9 @@ module Syntax.Types
   , Scope(..), namesInScope, inScope
   , Env, freeInEnv, difference, envOf, scopeFromList, toMap
   , names, typeVars, constructors, types, letBound, classes, modules
-  , classDecs
+  , classDecs, tySyms
   , ClassInfo(..), ciName, ciMethods, ciContext, ciConstructorName
+  , TySymInfo(..), tsName, tsArgs, tsExpansion, tsKind, TySyms
   , ciConstructorTy, ciHead, ciClassSpan, ciDefaults, ciMinimal
   , Origin(..)
 
@@ -75,10 +76,28 @@ data Env
         , _constructors :: Set.Set (Var Typed)
         , _types        :: Map.Map (Var Typed) (Set.Set (Var Typed))
         , _letBound     :: Set.Set (Var Typed)
-        , _modules      :: Map.Map (Var Typed) (ImplicitScope Typed)
+        , _modules      :: Map.Map (Var Typed) (ImplicitScope Typed, TySyms)
         , _classDecs    :: Map.Map (Var Typed) ClassInfo
+        , _tySyms       :: TySyms
         }
   deriving (Eq, Show, Ord)
+
+type TySyms = Map.Map (Var Typed) TySymInfo
+
+
+data TySymInfo =
+  TySymInfo
+    { _tsName      :: Var Typed
+      -- ^ The name of the type synonym
+    , _tsExpansion :: Type Typed
+      -- ^ The expansion of the type synonym, with free variables
+    , _tsArgs      :: [Var Typed]
+      -- ^ The arguments to the type synonym in order
+    , _tsKind      :: Type Typed
+      -- ^ The kind of the type synoynm
+    }
+  deriving (Eq, Show, Ord)
+
 
 data ClassInfo =
   ClassInfo
@@ -104,28 +123,29 @@ data ClassInfo =
 
 makeLenses ''Env
 makeLenses ''ClassInfo
+makeLenses ''TySymInfo
 
 (\\) :: Ord (Var p) => Scope p f -> Scope p f -> Scope p f
 Scope x \\ Scope y = Scope (x Map.\\ y)
 
 instance Monoid Env where
   mappend = (<>)
-  mempty = Env mempty mempty mempty mempty mempty mempty mempty mempty
+  mempty = Env mempty mempty mempty mempty mempty mempty mempty mempty mempty
 
 instance Semigroup Env where
-  Env s i c t d l m n <> Env s' i' c' t' d' l' m' n' =
-    Env (s <> s') (i <> i') (c <> c') (t <> t') (d <> d') (l <> l') (m <> m') (n <> n')
+  Env s i c t d l m n o <> Env s' i' c' t' d' l' m' n' o' =
+    Env (s <> s') (i <> i') (c <> c') (t <> t') (d <> d') (l <> l') (m <> m') (n <> n') (o <> o')
 
 difference :: Env -> Env -> Env
-difference (Env ma _ mc md me l _ cd) (Env ma' mi' mc' md' me' l' mm' cd') =
+difference (Env ma _ mc md me l _ cd td) (Env ma' mi' mc' md' me' l' mm' cd' td') =
   Env (ma \\ ma') mi' (mc Set.\\ mc')
-    (md Set.\\ md') (me Map.\\ me') (l Set.\\ l') mm' (cd Map.\\ cd')
+    (md Set.\\ md') (me Map.\\ me') (l Set.\\ l') mm' (cd Map.\\ cd') (td Map.\\ td')
 
 freeInEnv :: Env -> Set.Set (Var Typed)
 freeInEnv = foldMap ftv . view names
 
 envOf :: Scope Resolved (Type Typed) -> Env
-envOf a = Env a mempty mempty mempty mempty mempty mempty mempty
+envOf a = Env a mempty mempty mempty mempty mempty mempty mempty mempty
 
 scopeFromList :: Ord (Var p) => [(Var p, f)] -> Scope p f
 scopeFromList = Scope . Map.fromList

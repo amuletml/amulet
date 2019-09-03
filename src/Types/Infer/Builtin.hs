@@ -28,11 +28,17 @@ unify, subsumes :: ( MonadInfer Typed m )
                 -> Type Typed
                 -> Type Typed -> m (Wrapper Typed)
 unify e a b = do
+  a <- expandType a
+  b <- expandType b
+
   x <- genName
   tell (Seq.singleton (ConUnify e x a b))
   pure (WrapVar x)
 
 subsumes e a b = do
+  a <- expandType a
+  b <- expandType b
+
   x <- genName
   r <- view classes
   tell (Seq.singleton (ConSubsume e r x a b))
@@ -182,7 +188,6 @@ checkWildcard e (TyTuple a b) = checkWildcard e a *> checkWildcard e b
 checkWildcard e (TyOperator l _ r) = checkWildcard e l *> checkWildcard e r
 checkWildcard e (TyParens t) = checkWildcard e t
 
-
 data SkipImplicit = DoSkip | Don'tSkip
   deriving (Eq, Show, Ord)
 
@@ -208,3 +213,47 @@ getHead t@TyType = t
 getHead t@TyWildcard{} = t
 getHead t@TyOperator{} = t
 getHead (TyParens t) = getHead t
+
+apps :: Type p -> [Type p]
+apps = reverse . go where
+  go (TyApp f x) = x:go f
+  go t = [t]
+
+expandTypeWith :: TySyms -> Type Typed -> Type Typed
+expandTypeWith syms t@TyApp{}
+  | (TyCon v:xs) <- apps t =
+    case syms ^. at v of
+      Nothing -> foldl TyApp (TyCon v) (map (expandTypeWith syms) xs)
+      Just t ->
+        let exp = map (expandTypeWith syms) xs
+            sub = Map.fromList $ zip (t ^. tsArgs) exp
+            rest = drop (length (t ^. tsArgs)) exp
+         in foldl TyApp (expandTypeWith syms (apply sub (t ^. tsExpansion))) rest
+  | otherwise = foldl TyApp (expandTypeWith syms (head (apps t))) (map (expandTypeWith syms) (tail (apps t)))
+expandTypeWith syms (TyCon v) =
+  case syms ^. at v of
+    Just t -> expandTypeWith syms (t ^. tsExpansion)
+    Nothing -> TyCon v
+
+expandTypeWith syms (TyOperator l o r) = expandTypeWith syms (TyApp (TyApp (TyCon o) l) r)
+
+expandTypeWith _ x@TyVar{} = x
+expandTypeWith _ x@TyPromotedCon{} = x
+expandTypeWith _ x@TySkol{} = x
+
+expandTypeWith s (TyTuple a b) = TyTuple (expandTypeWith s a) (expandTypeWith s b)
+expandTypeWith s (TyPi b r) = TyPi b' (expandTypeWith s r) where
+  b' = case b of
+    Anon t -> Anon (expandTypeWith s t)
+    Implicit t -> Implicit (expandTypeWith s t)
+    Invisible v k vis -> Invisible v (expandTypeWith s <$> k) vis
+expandTypeWith s (TyRows t ts) = TyRows (expandTypeWith s t) (map (_2 %~ expandTypeWith s) ts)
+expandTypeWith s (TyExactRows ts) = TyExactRows (map (_2 %~ expandTypeWith s) ts)
+expandTypeWith s (TyWildcard t) = TyWildcard (expandTypeWith s <$> t)
+expandTypeWith s (TyParens t) = TyParens (expandTypeWith s t)
+expandTypeWith s (TyWithConstraints cs t) =
+  TyWithConstraints (map ((_1 %~ expandTypeWith s) . (_2 %~ expandTypeWith s)) cs) (expandTypeWith s t)
+expandTypeWith _ TyType = TyType
+
+expandType :: MonadReader Env m => Type Typed -> m (Type Typed)
+expandType t = expandTypeWith <$> view tySyms <*> pure t

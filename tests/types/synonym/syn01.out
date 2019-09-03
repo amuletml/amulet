@@ -1,0 +1,2 @@
+two_of : Infer{'a : type}. 'a -> 'a
+x : int * int

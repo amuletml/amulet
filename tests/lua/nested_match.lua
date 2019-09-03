@@ -5,21 +5,21 @@ do
     if xs.__tag == "Nil" then
       return Cons({ _1 = 1, _2 = Nil })
     elseif xs.__tag == "Cons" then
-      local fs = xs[1]
+      local ge = xs[1]
       if ys.__tag == "Nil" then
         return Cons({ _1 = 2, _2 = Nil })
       elseif ys.__tag == "Cons" then
-        local ft = ys[1]
-        local fx, fw = ft._1, ft._2
-        local fv, fu = fs._1, fs._2
-        if fv == 0 then
-          if fx == 0 then
+        local gf = ys[1]
+        local gj, gi = gf._1, gf._2
+        local gh, gg = ge._1, ge._2
+        if gh == 0 then
+          if gj == 0 then
             return Cons({ _1 = 3, _2 = Nil })
           else
-            return Cons({ _1 = f(0)(fx), _2 = zip(f, fu, fw) })
+            return Cons({ _1 = f(0)(gj), _2 = zip(f, gg, gi) })
           end
         else
-          return Cons({ _1 = f(fv)(fx), _2 = zip(f, fu, fw) })
+          return Cons({ _1 = f(gh)(gj), _2 = zip(f, gg, gi) })
         end
       end
     end

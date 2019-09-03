@@ -37,6 +37,7 @@ statement (Class am a b c m d) = Class am a (ty <$> b) (tyA <$> c) <$> traverse 
 statement (Open v a) = pure $ Open v a
 statement (ForeignVal am v x t a) = pure $ ForeignVal am v x (ty t) a
 statement (TypeDecl am v arg cs a) = pure $ TypeDecl am v (map tyA arg) (map ctor <$> cs) a
+statement (TySymDecl am v arg exp a) = pure $ TySymDecl am v (map tyA arg) (ty exp) a
 
 classItem :: forall m. MonadNamey m => ClassItem Resolved -> m (ClassItem Desugared)
 classItem (MethodSig v t a) = pure $ MethodSig v (ty t) a
