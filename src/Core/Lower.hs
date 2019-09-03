@@ -297,6 +297,7 @@ lowerProg' (Open _ _:prg) = lowerProg' prg
 lowerProg' (Module _ _ b:prg) = lowerProg' (b ++ prg)
 lowerProg' (Class{}:prg) = lowerProg' prg
 lowerProg' (Instance{}:prg) = lowerProg' prg
+lowerProg' (TySymDecl{}:prg) = lowerProg' prg
 
 lowerProg' (ForeignVal _ v ex tp _:prg) =
   let tyB = lowerType tp

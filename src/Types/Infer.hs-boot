@@ -16,6 +16,7 @@ import Control.Monad.Infer
 
 import Syntax.Subst
 import Syntax.Var
+import Syntax.Types (TySyms)
 import Syntax
 
 import Types.Kinds
@@ -26,4 +27,4 @@ check :: forall m. MonadInfer Typed m => Expr Desugared -> Type Typed -> m (Expr
 
 infer :: MonadInfer Typed m => Expr Desugared -> m (Expr Typed, Type Typed)
 
-solveEx :: Type Typed -> Subst Typed -> Map.Map (Var Typed) (Wrapper Typed) -> Expr Typed -> Expr Typed
+solveEx :: TySyms -> Subst Typed -> Map.Map (Var Typed) (Wrapper Typed) -> Expr Typed -> Expr Typed

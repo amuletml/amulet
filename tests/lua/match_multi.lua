@@ -1,4 +1,4 @@
 do
-  local bm = (nil)(nil)
-  (nil)(bm.a + bm.b)
+  local bp = (nil)(nil)
+  (nil)(bp.a + bp.b)
 end

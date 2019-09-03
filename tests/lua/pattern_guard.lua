@@ -5,8 +5,8 @@ do
     if k.__tag == "Nil" then
       return Nil
     elseif k.__tag == "Cons" then
-      local ed = k[1]
-      local x, xs = ed._1, ed._2
+      local en = k[1]
+      local x, xs = en._1, en._2
       if f(x) then
         return Cons({ _1 = x, _2 = filter(f, xs) })
       end

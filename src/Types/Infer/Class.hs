@@ -229,6 +229,8 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
 
   instHead <- condemn $
     checkAgainstKind (BecauseOf inst) instHead tyConstraint
+  instHead <- expandType instHead
+
   globalInsnConTy <- silence $
     closeOver (BecauseOf inst) (TyPi (Implicit ctx) instHead)
 
@@ -302,7 +304,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
                 (addArg skolSub bindGroupTy
                   (Fun (EvParam instancePattern)
                     (Ascription
-                      (solveEx sig sub (wrap <> wrap') (shove deferred e))
+                      (solveEx mempty sub (wrap <> wrap') (shove deferred e))
                         sig (an, sig))
                   (an, TyArr ctx sig)))
                True
@@ -341,7 +343,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
         shove cs x = addLet wrap' capture cs x
 
     var <- genNameFrom name
-    body <- expandEta ty $ solveEx ty sub (wrap <> wrap') (shove deferred e)
+    body <- expandEta ty $ solveEx mempty sub (wrap <> wrap') (shove deferred e)
     let bind = Binding var (addArg skolSub bindGroupTy fun) False (an, bindGroupTy)
         fun = Fun (EvParam instancePattern)
                 body
@@ -375,8 +377,8 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
       (UnsatClassCon (BecauseOf inst) (head unsolved) (InstanceClassCon classAnn)))
 
   let inside = case whatDo of
-        [(_, one)] -> solveEx one solution needed (fields ^. to head . fExpr)
-        _ -> solveEx (TyExactRows whatDo) solution needed (Record fields (ann, TyExactRows whatDo))
+        [(_, _)] -> solveEx mempty solution needed (fields ^. to head . fExpr)
+        _ -> solveEx mempty solution needed (Record fields (ann, TyExactRows whatDo))
 
       fun = addArg skolSub globalInsnConTy $
               Fun (EvParam (PType instancePattern ctx (ann, ctx)))

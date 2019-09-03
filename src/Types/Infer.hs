@@ -137,7 +137,7 @@ check e@(Access rc key a) ty = do
 
 -- This is _very_ annoying, but we need it for nested ascriptions
 check ex@(Ascription e ty an) goal = do
-  ty <- resolveKind (becauseExp ex) ty
+  ty <- expandType =<< resolveKind (becauseExp ex) ty
   e <- check e ty
   -- here: have ty (given)
   --       want goal (given)
@@ -174,9 +174,12 @@ check e ty = do
 infer :: MonadInfer Typed m => Expr Desugared -> m (Expr Typed, Type Typed)
 infer (VarRef k a) = do
   (cont, old, (new, cont')) <- third3A (discharge (VarRef k a :: Expr Desugared)) =<< lookupTy' Strong k
+  old <- expandType old
   case cont of
     Nothing -> pure (VarRef k (a, old), old)
-    Just cont -> pure (cont' (cont (VarRef k (a, old))), new)
+    Just cont -> do
+      new <- expandType new
+      pure (cont' (cont (VarRef k (a, old))), new)
 
 infer (Fun (view paramPat -> p) e an) = do
   (p, dom, ms, cs) <- inferPattern p
@@ -289,8 +292,8 @@ infer (Begin xs a) = do
   pure (Begin (start ++ [end]) (a, t), t)
 
 infer (OpenIn mod expr _) = do
-  modImplicits <- view (modules . at mod . non undefined)
-  local (classes %~ (<>modImplicits)) $
+  (modImplicits, modTysym) <- view (modules . at mod . non undefined)
+  local (classes %~ (<>modImplicits)) . local (tySyms %~ (<> modTysym)) $
     infer expr
 
 infer ex = do
@@ -302,6 +305,7 @@ infer ex = do
 infer' :: MonadInfer Typed m => Expr Desugared -> m (Expr Typed, Type Typed)
 infer' (VarRef k a) = do
   (cont, old, ty) <- lookupTy' Weak k
+  ty <- expandType ty
   pure (fromMaybe id cont (VarRef k (a, old)), ty)
 infer' ex@App{} = inferApp ex
 infer' ex@Vta{} = inferApp ex
@@ -358,6 +362,7 @@ inferProg (stmt@(LetStmt am ns):prg) = censor (const mempty) $ do
       Left e -> pure (mempty, [e])
       Right t -> do
         assert (vs == mempty) pure ()
+        t <- expandType t
         pure (one var t, mempty)
   case es of
     [] -> pure ()
@@ -372,6 +377,18 @@ inferProg (st@(ForeignVal am v d t ann):prg) = do
   local (names %~ focus (one v t')) . local (letBound %~ Set.insert v) $
     consFst (ForeignVal am v d t' (ann, t')) $
       inferProg prg
+
+inferProg (decl@(TySymDecl am n tvs exp ann):prg) = do
+  (kind, exp, tvs) <- resolveTySymDeclKind (BecauseOf decl) n tvs exp
+
+  let td = TypeDecl am n tvs Nothing (ann, kind)
+      argv (TyAnnArg v _:xs) = v:argv xs
+      argv (TyVarArg v:xs) = v:argv xs
+      argv [] = []
+      info = TySymInfo n exp (argv tvs) kind
+
+  local (names %~ focus (one n (fst (rename kind)))) . local (tySyms . at n ?~ info)  $
+    consFst td $ inferProg prg
 
 inferProg (decl@(TypeDecl am n tvs cs ann):prg) = do
   (kind, retTy, tvs) <- retcons (addBlame (BecauseOf decl)) $
@@ -403,8 +420,8 @@ inferProg (decl@(TypeDecl am n tvs cs ann):prg) = do
           cont (Just cs')
 
 inferProg (Open mod pre:prg) = do
-  modImplicits <- view (modules . at mod . non undefined)
-  local (classes %~ (<>modImplicits)) $
+  (modImplicits, modTysym) <- view (modules . at mod . non undefined)
+  local (classes %~ (<>modImplicits)) . local (tySyms %~ (<> modTysym)) $
     consFst (Open mod pre) $ inferProg prg
 
 inferProg (c@(Class v _ _ _ _ _):prg) = do
@@ -433,7 +450,7 @@ inferProg (Module am name body:prg) = do
   local ( (names %~ (<> (env ^. names)))
         . (types %~ (<> (env ^. types)))
         . (classDecs %~ (<> (env ^. classDecs)))
-        . (modules %~ (Map.insert name (env ^. classes) . (<> (env ^. modules))))) $
+        . (modules %~ (Map.insert name (env ^. classes, env ^. tySyms) . (<> (env ^. modules))))) $
     consFst (Module am name body') $
     inferProg prg
 
@@ -468,6 +485,8 @@ inferLetTy closeOver strategy vs =
                        (Fun (EvParam (Capture name (an, ty))) (VarRef name (an, ty)) (an, TyArr ty ty))
                        (an, ty)
 
+        ts <- view tySyms
+
         (context, wrapper, solve) <-
           case strategy of
             Fail -> do
@@ -481,7 +500,7 @@ inferLetTy closeOver strategy vs =
               when (not (isFn ex) && not (null cons)) $
                 confesses (addBlame (snd blame) (UnsatClassCon (snd blame) (head cons) NotAFun))
 
-              pure (context, wrapper, \tp sub -> solveEx tp (x <> sub) (wraps' <> co))
+              pure (context, wrapper, \_ sub -> solveEx ts (x <> sub) (wraps' <> co))
 
             Propagate -> do
               tell (Seq.fromList cons)
@@ -490,7 +509,7 @@ inferLetTy closeOver strategy vs =
                       ConImplicit _ _ v _ -> Set.singleton v
                       _ -> mempty
                   wraps'' = Map.withoutKeys (co <> wraps') notSolvedHere
-              pure (id, flip const, \tp sub -> solveEx tp (x <> sub) wraps'')
+              pure (id, flip const, \_ sub -> solveEx ts (x <> sub) wraps'')
 
         vt <- closeOver (Set.singleton (fst blame))
                 ex (apply x (context ty))
@@ -540,8 +559,9 @@ inferLetTy closeOver strategy vs =
           pure (ExprWrapper wrap e (annotation e, pty), p, pty, tel)
 
         (solution, wraps, deferred) <- solve cs
+        tys <- view tySyms
         let solved = closeOver mempty ex . apply solution
-            ex = solveEx ty solution wraps e
+            ex = solveEx tys solution wraps e
 
         deferred <- pure (fmap (apply solution) deferred)
         (compose solution -> solution, wraps', cons) <- solve (Seq.fromList deferred)
@@ -561,9 +581,10 @@ inferLetTy closeOver strategy vs =
                        (an, ty)
         tel' <- traverseTele (const solved) tel
         ty <- solved ty
+        tys <- view tySyms
 
         let pat = transformPatternTyped id (apply solution) p
-            ex' = solveEx ty solution wraps' $ substituteDeferredDicts reify deferred ex
+            ex' = solveEx tys solution wraps' $ substituteDeferredDicts reify deferred ex
 
         pure ( [TypedMatching pat ex' (ann, ty) (teleToList tel')], tel', boundTvs pat tel' )
 
@@ -597,6 +618,7 @@ inferLetTy closeOver strategy vs =
                        (Fun (EvParam (Capture name (an, ty))) (VarRef name (an, ty)) (an, TyArr ty ty))
                        (an, ty)
 
+        tys <- view tySyms
         if null cons
            then do
              let solveOne :: (Binding Typed, Type Typed) -> m ( Binding Typed )
@@ -604,7 +626,7 @@ inferLetTy closeOver strategy vs =
                    ty <- closeOver mempty exp (apply solution ty)
                    (new, sub) <- pure $ rename ty
                    pure ( Binding var
-                           (shoveLets (solveEx new (sub `compose` solution) (wrap <> wrap') exp))
+                           (shoveLets (solveEx tys (sub `compose` solution) (wrap <> wrap') exp))
                            True
                            (fst an, new)
                         )
@@ -640,7 +662,7 @@ inferLetTy closeOver strategy vs =
                    pure ( (nm, var, fst an, ty)
                         , Binding (innerNames Map.! var)
                            (Ascription
-                             (transformExprTyped renameInside id id (solveEx ty solution wrap exp))
+                             (transformExprTyped renameInside id id (solveEx tys solution wrap exp))
                              ty (fst an, ty))
                            True
                            (fst an, ty)
@@ -706,10 +728,14 @@ inferLetTy closeOver strategy vs =
          -> m ( [Binding Typed] , Telescope Typed, Set.Set (Var Typed) )
       tc (s:cs) = do
         (vs', binds, vars) <- tcOne s
+        vs' <- traverse expandTyBindings vs'
         fmap (\(bs, tel, vs) -> (vs' ++ bs, tel <> binds, vars <> vs))
           . local (names %~ focus binds) . local (typeVars %~ Set.union vars) $ tc cs
       tc [] = pure ([], mempty, mempty)
    in tc sccs
+
+expandTyBindings :: MonadReader Env m => Binding Typed -> m (Binding Typed)
+expandTyBindings = bindAnn %%~ secondA expandType
 
 buildList :: Ann Resolved -> Type Typed -> [Expr Typed] -> Expr Typed
 buildList an tau [] =
@@ -775,8 +801,9 @@ checkAmbiguous var exp tau = go mempty tau where
               else pure ()
     where fv = ftv t
 
-solveEx :: Type Typed -> Subst Typed -> Map.Map (Var Typed) (Wrapper Typed) -> Expr Typed -> Expr Typed
-solveEx _ ss cs = transformExprTyped go id goType where
+
+solveEx :: TySyms -> Subst Typed -> Map.Map (Var Typed) (Wrapper Typed) -> Expr Typed -> Expr Typed
+solveEx syms ss cs = transformExprTyped go id goType where
   go :: Expr Typed -> Expr Typed
   go (ExprWrapper w e a) = case goWrap w of
     WrapFn w@(MkWrapCont _ desc) -> ExprWrapper (WrapFn (MkWrapCont id desc)) (runWrapper w e) a
@@ -797,7 +824,7 @@ solveEx _ ss cs = transformExprTyped go id goType where
       Just x -> goWrap x
       Nothing -> WrapVar v
   goWrap IdWrap = IdWrap
-  goWrap (WrapFn f) = WrapFn . flip MkWrapCont (desc f) $ solveEx undefined ss cs . runWrapper f
+  goWrap (WrapFn f) = WrapFn . flip MkWrapCont (desc f) $ solveEx syms ss cs . runWrapper f
 
   goType :: Type Typed -> Type Typed
   goType = apply ss

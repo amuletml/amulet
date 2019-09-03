@@ -1,11 +1,11 @@
 do
   local function common_prefix(f)
-    local di = f._1
-    local dh = f._2
-    if di == 1 then
-      if dh == 2 then
+    local _do = f._1
+    local dn = f._2
+    if _do == 1 then
+      if dn == 2 then
         return "foo"
-      elseif dh == 3 then
+      elseif dn == 3 then
         return "bar"
       else
         return error("Pattern matching failure in match expression at match_heuristic.ml[2:21 ..2:28]")
@@ -15,12 +15,12 @@ do
     end
   end
   local function common_suffix(g)
-    local dl = g._1
-    local dk = g._2
-    if dl == 1 then
-      if dk == 2 then
+    local dr = g._1
+    local dq = g._2
+    if dr == 1 then
+      if dq == 2 then
         return "foo"
-      elseif dk == 3 then
+      elseif dq == 3 then
         return "bar"
       else
         return error("Pattern matching failure in match expression at match_heuristic.ml[6:21 ..6:28]")
@@ -30,26 +30,26 @@ do
     end
   end
   local function mixed_1(h)
-    local dn = h._2
-    local dq, dp = dn._1, dn._2
+    local dt = h._2
+    local dw, dv = dt._1, dt._2
     if h._1 then
-      if dq == 1 then
+      if dw == 1 then
         return 1
       else
-        if dp.__tag == "Cons" then
+        if dv.__tag == "Cons" then
           return 3
         else
           return error("Pattern matching failure in match expression at match_heuristic.ml[11:15 ..11:22]")
         end
       end
     else
-      if dp.__tag == "Nil" then
-        if dq == 2 then
+      if dv.__tag == "Nil" then
+        if dw == 2 then
           return 2
         else
           return error("Pattern matching failure in match expression at match_heuristic.ml[11:15 ..11:22]")
         end
-      elseif dp.__tag == "Cons" then
+      elseif dv.__tag == "Cons" then
         return 3
       end
     end

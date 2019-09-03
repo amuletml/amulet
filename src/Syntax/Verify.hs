@@ -60,12 +60,16 @@ verifyProgram = traverse_ verifyStmt where
     addBind = case am of
       Private -> Set.insert
       Public -> flip const
-  verifyStmt Class{} = pure ()
-  verifyStmt Instance{} = pure ()
+
   verifyStmt st@(ForeignVal _ v d _ (_, _)) =
     case parseExpr (SourcePos ("definition of " ++ displayS (pretty v)) 1 1) (d ^. lazy) of
       Left e -> tell (Seq.singleton (ParseErrorInForeign st e))
       Right _ -> pure ()
+
+  verifyStmt Class{} = pure ()
+  verifyStmt Instance{} = pure ()
+  verifyStmt TySymDecl{} = pure ()
+
 
   verifyStmt TypeDecl{} = pure ()
   verifyStmt (Module _ _ p) = verifyProgram p

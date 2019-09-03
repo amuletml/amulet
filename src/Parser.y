@@ -180,6 +180,11 @@ Top :: { Toplevel Parsed }
     | Access type BindName ListE(TyConArg) TypeBody { withPos2 $2 $3 $ TypeDecl $1 (getL $3) $4 $5 }
     | Access type TyConArg BindOp TyConArg TypeBody { withPos2 $2 $4 $ TypeDecl $1 (getL $4) [$3, $5] $6 }
 
+    | Access type BindName ListE(TyConArg) '<-' Type
+        { withPos2 $2 $3 $ TySymDecl $1 (getL $3) $4 (getL $6) }
+    | Access type TyConArg BindOp TyConArg '<-' Type
+        { withPos2 $2 $4 $ TySymDecl $1 (getL $4) [$3, $5] (getL $7) }
+
     | module qconid '=' Begin(Tops)            { Module Public (getName $2) (getL $4) }
     | private module qconid '=' Begin(Tops)    { Module Private (getName $3) (getL $5) }
     | module conid '=' Begin(Tops)             { Module Public (getName $2) (getL $4) }

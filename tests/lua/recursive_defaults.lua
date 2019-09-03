@@ -1,10 +1,10 @@
 do
   local use = print
-  local function _dollardShowci(fj)
+  local function _dollardShowcx(gb)
     return {
-      show = function(fb) return "()" end,
-      ["show'"] = function(dz) return _dollardShowci(nil).show(dz) end
+      show = function(ft) return "()" end,
+      ["show'"] = function(eq) return _dollardShowcx(nil).show(eq) end
     }
   end
-  use(_dollardShowci(nil).show)
+  use(_dollardShowcx(nil).show)
 end

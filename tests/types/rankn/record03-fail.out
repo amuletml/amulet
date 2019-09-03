@@ -3,6 +3,6 @@ record03-fail.ml[5:20 ..5:24]: error
 5 │ let main (Foo r) = r.baz 1
   │                    ^^^^^
   No overlap between exact record { bar : forall 'a. 'a -> 'a }
-           and polymorphic record { 'az | baz : 'ay }
+           and polymorphic record { 'be | baz : 'bd }
   • Note: no fields match
   • The following fields are missing: baz
