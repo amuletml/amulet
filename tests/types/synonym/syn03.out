@@ -1,0 +1,3 @@
+two_of : Infer{'a : type}. 'a -> 'a
+foo : list (int * int)
+bar : list (int * int) -> unit

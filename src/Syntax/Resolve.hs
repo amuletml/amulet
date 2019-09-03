@@ -102,6 +102,15 @@ resolveModule (r@(ForeignVal am v t ty a):rs) = do
     <*> resolveModule rs
 
   where wrap x = foldr (TyPi . flip (flip Invisible Nothing) Spec) x (toList (ftv x))
+
+resolveModule (d@(TySymDecl am t vs ty ann):rs) = do
+  t' <- tagVar t
+  (vs', sc) <- resolveTele d vs
+  extendTyvarN sc $ do
+    decl <- TySymDecl am t' vs' <$> reType d ty <*> pure ann
+    extendTy (t, t') $
+      (decl:) <$> resolveModule rs
+
 resolveModule (d@(TypeDecl am t vs cs ann):rs) = do
   t'  <- tagVar t
   (vs', sc) <- resolveTele d vs

@@ -1,4 +1,4 @@
 show : type -> constraint
 show : Spec{'a : type}. show 'a => 'a -> string
-foo : Infer{'a : type}. Infer{'b : 'cv}. show 'a => 'a -> 'b
-bar : Infer{'a : type}. Infer{'b : 'de}. show 'a => 'a -> 'b
+foo : Infer{'a : type}. Infer{'b : type}. show 'a => 'a -> 'b
+bar : Infer{'a : type}. Infer{'b : type}. show 'a => 'a -> 'b

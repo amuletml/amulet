@@ -30,6 +30,7 @@ data Toplevel p
   = LetStmt TopAccess [Binding p]
   | ForeignVal TopAccess (Var p) Text (Type p) (Ann p)
   | TypeDecl TopAccess (Var p) [TyConArg p] (Maybe [Constructor p]) (Ann p)
+  | TySymDecl TopAccess (Var p) [TyConArg p] (Type p) (Ann p)
   | Module TopAccess (Var p) [Toplevel p]
   | Open { openName :: Var p
          , openAs :: Maybe Text }
@@ -107,7 +108,7 @@ prettyAcc :: TopAccess -> Doc
 prettyAcc Public = empty
 prettyAcc x = pretty x <+> empty
 
-instance (Pretty (Var p)) => Pretty (Toplevel p) where
+instance Pretty (Var p) => Pretty (Toplevel p) where
   pretty (LetStmt _ []) = string "empty let?"
   pretty (LetStmt m (x:xs)) =
     let prettyBind x = keyword "and" <+> pretty x
@@ -125,6 +126,9 @@ instance (Pretty (Var p)) => Pretty (Toplevel p) where
     in keyword "type" <+> prettyAcc m <> pretty ty <+> hsep (map ((squote <>) . pretty) args) <+> ct
   pretty (Open m Nothing) = keyword "open" <+> pretty m
   pretty (Open m (Just a)) = keyword "open" <+> pretty m <+> keyword "as" <+> text a
+
+  pretty (TySymDecl m ty args exp _) =
+    keyword "type" <+> prettyAcc m <> pretty ty <+> hsep (map ((squote <>) . pretty) args) <+> pretty exp
 
   pretty (Module am m bod) =
     vsep [ keyword "module" <+> prettyAcc am <> pretty m <+> equals <+> keyword "begin"

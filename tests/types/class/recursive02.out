@@ -2,5 +2,5 @@ show : type -> constraint
 show : Spec{'a : type}. show 'a => 'a -> string
 dostuff : type -> constraint
 stuff : Spec{'a : type}. dostuff 'a => 'a -> unit
-foo : Infer{'a : type}. Infer{'b : 'ft}. dostuff 'a => 'a -> 'b
-bar : Infer{'a : type}. Infer{'b : 'gc}. dostuff 'a => 'a -> 'b
+foo : Infer{'a : type}. Infer{'b : type}. dostuff 'a => 'a -> 'b
+bar : Infer{'a : type}. Infer{'b : type}. dostuff 'a => 'a -> 'b

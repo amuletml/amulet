@@ -1,0 +1,4 @@
+~> : Infer{'a : type}. ('a -> type) -> ('a -> type) -> type
+id : type -> type
+Id : Spec{'x : type}. 'x -> id 'x
+foo : Spec{'a : type}. Spec{'x : 'a}. id 'x -> list 'x

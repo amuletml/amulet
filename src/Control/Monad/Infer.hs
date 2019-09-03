@@ -135,6 +135,7 @@ data TypeError where
   WildcardNotAllowed :: SomeReason -> TypeError
 
   NotValue :: SomeReason -> Type Typed -> TypeError
+  UnsaturatedTS :: SomeReason -> TySymInfo -> Int -> TypeError
 
 data WhyInstantiate = Expression | Subsumption
 data WhyUnsat
@@ -469,12 +470,25 @@ instance Pretty TypeError where
          , "is required."
          ]
 
+  pretty (UnsaturatedTS _ info n) =
+    vsep [ "Type synonym" <+> stypeCon (pretty (info ^. tsName)) <+> "appears with" <+> nargs <> comma
+         , "but in its definition it has" <+> sliteral (int (length (info ^. tsArgs)))
+         ]
+    where
+      nargs =
+        case n of
+          0 -> "no arguments"
+          1 -> "one argument"
+          x -> sliteral (int x) <+> "arguments"
+
+
   pretty WildcardNotAllowed{} = "Type wildcard not allowed here"
 
   pretty (PatternRecursive _ _) = string "pattern recursive error should be formatNoted"
   pretty (DeadBranch e) = string "dead branch error should be formatNoted" <+> pretty e
   pretty (UnsatClassCon _ t _) = string "unsatClassCon" <+> pretty t
   pretty Overlap{} = string "overlap error should be formatNoted"
+
 
 instance Spanned TypeError where
   annotation (ArisingFrom e@ArisingFrom{} _) = annotation e
@@ -486,6 +500,7 @@ instance Spanned TypeError where
   annotation (InvalidContext _ x _) = annotation x
   annotation (WildcardNotAllowed x) = annotation x
   annotation (NotValue x _) = annotation x
+  annotation (UnsaturatedTS x _ _) = annotation x
   annotation x = error (show (pretty x))
 
 instance Note TypeError Style where
