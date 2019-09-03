@@ -1,8 +1,8 @@
 print : string -> unit
 repr : type -> type
-Unit : Infer{'cc : type}. Spec{'a : 'cc}. ('a ~ unit) ⊃ repr 'a
-Pair : Infer{'dd : type}. Spec{'a : 'dd}. Spec{'a : type}. Spec{'b : type}. ('a ~ 'a * 'b) ⊃ (repr 'a * repr 'b) -> repr 'a
-Int : Infer{'ec : type}. Spec{'a : 'ec}. ('a ~ int) ⊃ repr 'a
+Unit : Infer{'cf : type}. Spec{'a : 'cf}. ('a ~ unit) ⊃ repr 'a
+Pair : Infer{'dh : type}. Spec{'a : 'dh}. Spec{'a : type}. Spec{'b : type}. ('a ~ 'a * 'b) ⊃ (repr 'a * repr 'b) -> repr 'a
+Int : Infer{'eh : type}. Spec{'a : 'eh}. ('a ~ int) ⊃ repr 'a
 option : type -> type
 Some : Spec{'a : type}. 'a -> option 'a
 None : Spec{'a : type}. option 'a

@@ -1,6 +1,6 @@
 do
-  local function main(ff)
-    local a, b, c = ff.a, ff.b, ff.c
+  local function main(fi)
+    local a, b, c = fi.a, fi.b, fi.c
     (nil)((a + b) * c)
     (nil)(a * (b + c))
     (nil)(a ^ b * c)
