@@ -294,8 +294,9 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
             \e -> confesses (usingFor imp cons (headSeq e))
       solveCoSubst . at var ?= w
 
-    _ -> do
-      traceM "  propagated"
+    xs -> do
+      traceM (show (map (pretty . view implType) xs))
+      traceM "  => propagated"
       solveCoSubst . at var ?= ExprApp (VarRef var (annotation reason, cons))
       tell (pure (apply sub ohno))
 
@@ -360,7 +361,7 @@ fundepsAllow impl cons
     (_:params) = apps cons
 
     p --> q = not p || q
-    concreteP = concreteUnderOne . (params !!)
+    concreteP = concretish . head . spine . (params !!)
 
     apps = reverse . go where
       go (TyApp f x) = x:go f

@@ -94,6 +94,7 @@ makePrisms ''Toplevel
 makePrisms ''Constructor
 
 makeLenses ''ClassItem
+makeLenses ''Fundep
 
 instance (Spanned (Constructor p), Spanned (Ann p)) => Spanned (Toplevel p) where
   annotation (LetStmt _ [b]) = annotation b
