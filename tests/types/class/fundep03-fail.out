@@ -1,0 +1,11 @@
+fundep03-fail.ml[36:17 ..36:59]: error
+  No instance for add (S (S Z)) (S (S (S Z))) 'l arising from use of the expression
+   │ 
+36 │ let onetofive = append (1 :: 2 :: Nil) (3 :: 4 :: 5 :: Nil)
+   │                 ^^^^^^^^^^^^^^^^^^^^^^
+  • Note: this constraint was not quantified over because
+    the binding it would scope over is not a function
+   │ 
+36 │ let onetofive = append (1 :: 2 :: Nil) (3 :: 4 :: 5 :: Nil)
+   │                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  • Possible fix: add a parameter, or a type signature

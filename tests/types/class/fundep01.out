@@ -1,0 +1,11 @@
+generic : Infer{'ad : type}. type -> ('ad -> type) -> constraint
+into : Spec{'a : type}. Spec{'rep : 'ad -> type}. generic 'a 'rep => Infer{'ad : type}. Spec{'k : 'ad}. 'a -> 'rep 'k
+k1 : Infer{'a : type}. type -> 'a -> type
+K1 : Spec{'a : type}. Spec{'x : 'a}. 'a -> k1 'a 'x
+foo : type
+Foo : int -> foo
+gshow : Infer{'hu : type}. ('hu -> type) -> constraint
+gshow : Spec{'f : 'hu -> type}. gshow 'f => Infer{'hu : type}. Spec{'x : 'hu}. 'f 'x -> string
+show : type -> constraint
+show : Spec{'a : type}. show 'a => 'a -> string
+genericShow : Infer{'a : type}. Infer{'f : 'ad -> type}. gshow 'f => generic 'a 'f => 'a -> string

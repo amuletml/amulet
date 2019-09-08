@@ -74,8 +74,8 @@ type MonadInfer p m =
 data Constraint p
   = ConUnify    SomeReason (Var p) (Type p) (Type p)
   | ConImplies  SomeReason (Type p) (Seq.Seq (Constraint p)) (Seq.Seq (Constraint p))
-  | ConSubsume  SomeReason (ImplicitScope p) (Var p) (Type p) (Type p)
-  | ConImplicit SomeReason (ImplicitScope p) (Var p) (Type p)
+  | ConSubsume  SomeReason (ImplicitScope ClassInfo p) (Var p) (Type p) (Type p)
+  | ConImplicit SomeReason (ImplicitScope ClassInfo p) (Var p) (Type p)
   | ConFail (Ann p) (Var p) (Type p) -- for holes. I hate it.
   | DeferredError TypeError
 
@@ -137,6 +137,8 @@ data TypeError where
   NotValue :: SomeReason -> Type Typed -> TypeError
   UnsaturatedTS :: SomeReason -> TySymInfo -> Int -> TypeError
 
+  NotCovered :: Span -> Span -> [Type Typed] -> [Var Typed] -> TypeError
+
 data WhyInstantiate = Expression | Subsumption
 data WhyUnsat
   = NotAFun
@@ -166,7 +168,7 @@ instance (Show (Ann p), Show (Var p), Ord (Var p), Substitutable p (Type p))
   apply _ x@DeferredError{} = x
 
 instance Pretty (Var p) => Pretty (Constraint p) where
-  pretty (ConUnify _ v a b) = pretty v <+> colon <+> pretty a <+> soperator (char '~') <+> pretty b
+  pretty (ConUnify _ _ a b) = pretty a <+> soperator (char '~') <+> pretty b
   pretty (ConSubsume _ _ v a b) = pretty v <+> colon <+> pretty a <+> soperator (string "<:") <+> pretty b
   pretty (ConImplies _ t a b) = brackets (pretty t) <+> hsep (punctuate comma (toList (fmap pretty a)))
                             <+> soperator (char '⊃')
@@ -488,7 +490,7 @@ instance Pretty TypeError where
   pretty (DeadBranch e) = string "dead branch error should be formatNoted" <+> pretty e
   pretty (UnsatClassCon _ t _) = string "unsatClassCon" <+> pretty t
   pretty Overlap{} = string "overlap error should be formatNoted"
-
+  pretty NotCovered{} = string "coverage condition error should be formatNoted"
 
 instance Spanned TypeError where
   annotation (ArisingFrom e@ArisingFrom{} _) = annotation e
@@ -501,6 +503,7 @@ instance Spanned TypeError where
   annotation (WildcardNotAllowed x) = annotation x
   annotation (NotValue x _) = annotation x
   annotation (UnsaturatedTS x _ _) = annotation x
+  annotation (NotCovered x _ _ _) = annotation x
   annotation x = error (show (pretty x))
 
 instance Note TypeError Style where
@@ -692,6 +695,24 @@ instance Note TypeError Style where
          , indent 3 "but also defined here"
          , f [two]
          ]
+
+  formatNote f (NotCovered inst fd types vars) =
+    vsep [ f [inst]
+         , indent 2 "Illegal instance declaration:"
+         , indent 4 $ "the" <+> (Right <$> tys)
+         , indent 4 $ does <+> "determine the" <+> (Right <$> vs)
+         , f [fd]
+         , indent 2 "Note: needed because of this functional dependency"
+         ]
+    where
+      (tys, does) = case types of
+        [] -> undefined
+        [x] -> ("type" <+> pretty x, "doesn't")
+        xs -> ("types" <+> hsep (punctuate comma (map pretty xs)), "don't")
+      vs = case vars of
+        [] -> undefined
+        [x] -> "variable" <+> skeyword (pretty x)
+        xs -> "variables" <+> hsep (map (skeyword . pretty) xs)
 
   formatNote f x = f [annotation x] <#> indent 2 (Right <$> pretty x)
 

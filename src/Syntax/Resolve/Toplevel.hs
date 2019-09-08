@@ -43,10 +43,10 @@ extractToplevel (Module Public v xs) =
   let (vs, ts) = extractToplevels xs
   in (map (v<>) vs, map (v<>) ts)
 extractToplevel (Module Private _ _) = mempty
-extractToplevel (Class v Public _ _ ms _) = (foldMap getName ms, [v]) where
+extractToplevel (Class v Public _ _ _ ms _) = (foldMap getName ms, [v]) where
   getName (MethodSig v _ _) = [v]
   getName (DefaultMethod b _) = bindVariables b
-extractToplevel (Class _ Private _ _ _ _) = mempty
+extractToplevel (Class _ Private _ _ _ _ _) = mempty
 extractToplevel Instance{} = ([], [])
 
 -- | Extract all top-level variables declared within a series of

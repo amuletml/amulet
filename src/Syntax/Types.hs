@@ -9,7 +9,7 @@ module Syntax.Types
   , classDecs, tySyms
   , ClassInfo(..), ciName, ciMethods, ciContext, ciConstructorName
   , TySymInfo(..), tsName, tsArgs, tsExpansion, tsKind, TySyms
-  , ciConstructorTy, ciHead, ciClassSpan, ciDefaults, ciMinimal
+  , ciConstructorTy, ciHead, ciClassSpan, ciDefaults, ciMinimal, ciFundep
   , Origin(..)
 
   , focus
@@ -71,12 +71,12 @@ instance Ord (Var p) => At (Scope p f) where
 
 data Env
   = Env { _names        :: Scope Resolved (Type Typed)
-        , _classes      :: ImplicitScope Typed
+        , _classes      :: ImplicitScope ClassInfo Typed
         , _typeVars     :: Set.Set (Var Typed)
         , _constructors :: Set.Set (Var Typed)
         , _types        :: Map.Map (Var Typed) (Set.Set (Var Typed))
         , _letBound     :: Set.Set (Var Typed)
-        , _modules      :: Map.Map (Var Typed) (ImplicitScope Typed, TySyms)
+        , _modules      :: Map.Map (Var Typed) (ImplicitScope ClassInfo Typed, TySyms)
         , _classDecs    :: Map.Map (Var Typed) ClassInfo
         , _tySyms       :: TySyms
         }
@@ -118,6 +118,9 @@ data ClassInfo =
     , _ciDefaults :: Map.Map Text (Expr Desugared)
       -- ^ Default methods
     , _ciMinimal :: Formula Text
+      -- ^ Minimal definition
+    , _ciFundep :: [([Int], [Int], Ann Resolved)]
+      -- ^ Functional dependencies
     }
   deriving (Eq, Show, Ord)
 
