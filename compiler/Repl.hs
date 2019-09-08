@@ -212,17 +212,35 @@ runRepl = do
             _ -> liftIO . putDoc $ "Name not in scope:" <+> pretty (getL var)
 
 
-    typeCommand (dropWhile isSpace -> line) = do
+    typeCommand (dropWhile isSpace -> input) = do
       state <- get
-      core <- flip evalNameyT (lastName state) $ parseCore state (Right <$> parseReplExpr) "<interactive>" (T.pack line)
-      case core of
-        Just ((v, _ ):_, _, _, state') -> do
-          let CoVar id nam _ = v
-              var = S.TgName nam id
-          case inferScope state' ^. T.names . at var of
-            Just ty -> liftIO $ putDoc (string line <+> colon <+> displayType ty)
-            _ -> error "what"
-        _ -> pure ()
+      let files :: [(String, T.Text)]
+          files = [("<input>", T.pack input)]
+          (parsed, parseMsg) = runParser "<input>" (L.pack input) parseReplExpr
+      liftIO $ traverse_ (`reportS`files) parseMsg
+      case parsed of
+        Nothing -> pure ()
+        Just parsed -> flip evalNameyT (lastName state) $ do
+          let ann = annotation parsed
+              prog :: [S.Toplevel S.Parsed]
+              prog = [ S.LetStmt S.Public [ S.Matching (S.Wildcard ann) parsed ann ] ]
+
+          resolved <- resolveProgram (resolveScope state) (moduleScope state) prog
+          case resolved of
+            Left es -> liftIO $ traverse_ (`reportS`files) es
+            Right (resolved, _) -> do
+              desugared <- desugarProgram resolved
+              inferred <- inferProgram (inferScope state) desugared
+              let (prog, es) = case inferred of
+                    This es -> (Nothing, es)
+                    That (prog, _) -> (Just prog, [])
+                    These es (prog, _) -> if any isError es then (Nothing, es) else (Just prog, es)
+              liftIO $ traverse_ (`reportS`files) es
+              case prog of
+                Nothing -> pure ()
+                Just [S.LetStmt _ [ S.TypedMatching _ body _ _ ]] ->
+                  liftIO $ putDoc (string input <+> colon <+> displayType (S.getType body))
+                Just _ -> error "impossible"
 
     execString :: SourceName -> T.Text
                -> StateT ReplState IO Bool
