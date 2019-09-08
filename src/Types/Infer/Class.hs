@@ -453,6 +453,7 @@ reduceClassContext extra annot cons = do
              then (bindings, needs', scope')
              else (Binding var (VarRef v (annot, t)) False (annot, t):bindings, needs', scope')
         | otherwise =
+          -- see comment in 'fundepsAllow' for why this can be undefined
           let (bindings, needs', scope') = dedup (insert annot LocalAssum var con undefined scope) needs
            in (bindings, (var, con, r):needs', scope')
       dedup scope [] = ([], [], scope)

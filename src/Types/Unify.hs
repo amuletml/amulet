@@ -348,6 +348,9 @@ useImplicit reason ty scope (ImplChoice _ oty _ imp _ _ _) = go where
                     ty
                     (annotation reason, ty)))
 
+-- 'ImplChoice's for which 'implSort' /= 'InstSort' never have their
+-- 'implClass' forced. That means that 'Superclass' and 'LocalAssum'
+-- evidence can have 'undefined' implClass'.
 fundepsAllow :: Implicit ClassInfo Typed -> Type Typed -> Bool
 fundepsAllow impl cons
   | impl ^. implSort /= InstSort || null (impl ^. implClass . ciFundep) = False

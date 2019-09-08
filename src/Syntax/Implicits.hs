@@ -54,8 +54,11 @@ data Implicit info p
                , _implVar :: Var p -- ^ The actual implicit
                , _implSort :: Sort -- ^ What kind of implicit is this? (instance, superclass axiom)
                , _implSpan :: Ann Resolved -- ^ Where was this implicit defined?
-               , _implClass :: info  -- ^ Class information for the implicit
+               , _implClass :: info 
+                 -- ^ Class information for the implicit
+                 -- Invariant: 'implClass' is only defined if 'implSort' == 'InstSort'
                }
+
 
 deriving instance (Show info, Show (Var p), Show (Ann p)) => Show (Implicit info p)
 deriving instance (Ord info, Ord (Var p)) => Ord (Implicit info p)
