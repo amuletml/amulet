@@ -987,7 +987,7 @@ guardClassOverflow :: MonadSolve m => SomeReason -> Type Typed -> m ()
 guardClassOverflow why cons = do
   x <- view depth
   traceM (displayS ("class stack:" <+> vsep (map pretty x)))
-  when (length x >= 10) $
+  when (length x >= 50) $
     confesses (ClassStackOverflow why x cons)
 
 

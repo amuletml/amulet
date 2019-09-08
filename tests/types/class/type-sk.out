@@ -1,0 +1,30 @@
+k0 : type
+s0 : type
+app : Infer{'a : type}. Infer{'b : type}. 'b -> 'a -> type
+lit : Infer{'a : type}. 'a -> type
+x0 : type
+y0 : type
+z0 : type
+x : type
+y : type
+z : type
+stop : type
+more : type
+combine : Infer{'ex : type}. Infer{'ey : type}. Infer{'ez : type}. 'ez -> 'ey -> 'ex -> constraint
+eval1 : Infer{'mt : type}. Infer{'mu : type}. Infer{'mv : type}. 'mv -> 'mu -> 'mt -> constraint
+evalaux : Infer{'chj : type}. Infer{'chk : type}. Infer{'chl : type}. 'chl -> 'chk -> 'chj -> constraint
+eval : Infer{'cpm : type}. Infer{'cpn : type}. 'cpn -> 'cpm -> constraint
+eval : Spec{'x : type}. Spec{'y : type}. eval 'x 'y => 'x -> 'y
+bot : Spec{'a : type}. 'a
+kk0 : type
+ks0 : type
+z : type
+succ0 : type
+foldn : Infer{'b : type}. 'b -> type
+succ : Infer{'a : type}. 'a -> type
+one : type
+two : type
+three : type
+plus0 : type
+plus : Infer{'a : type}. Infer{'b : type}. 'b -> 'a -> type
+x0 : app (lit x0) (app (lit x0) (app (lit x0) (app (lit x0) (lit y0))))
