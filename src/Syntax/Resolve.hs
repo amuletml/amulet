@@ -161,18 +161,19 @@ resolveModule (Module am name body:rs) = do
 
   where modZip name name' v v' = zip (map (name<>) v) (map (name'<>) v')
 
-resolveModule (t@(Class name am ctx tvs ms ann):rs) = do
+resolveModule (t@(Class name am ctx tvs fds ms ann):rs) = do
   name' <- tagVar name
   (tvs', tvss) <- resolveTele t tvs
 
   extendTy (name, name') $ do
-    (ctx', (ms', vs')) <- extendTyvarN tvss $
-      (,) <$> traverse (reType t) ctx
-          <*> (unzip <$> traverse (reClassItem (map fst tvss)) ms)
+    (ctx', fds', (ms', vs')) <- extendTyvarN tvss $
+      (,,) <$> traverse (reType t) ctx
+           <*> traverse reFd fds
+           <*> (unzip <$> traverse (reClassItem (map fst tvss)) ms)
 
     extendN (mconcat vs') $ do
       ms'' <- extendTyvarN tvss (sequence ms')
-      (Class name' am ctx' tvs' ms'' ann:) <$> resolveModule rs
+      (Class name' am ctx' tvs' fds' ms'' ann:) <$> resolveModule rs
 
   where
     reClassItem tvs' m@(MethodSig name ty an) = do
@@ -183,6 +184,7 @@ resolveModule (t@(Class name am ctx tvs ms ann):rs) = do
       pure ( DefaultMethod <$> (fst =<< reMethod b) <*> pure an
            , [] )
     wrap tvs' x = foldr (TyPi . flip (flip Invisible Nothing) Spec) x (ftv x `Set.difference` Set.fromList tvs')
+    reFd (Fundep f t a) = Fundep <$> traverse lookupTyvar f <*> traverse lookupTyvar t <*> pure a
 
 resolveModule (t@(Instance cls ctx head ms ann):rs) = do
   cls' <- lookupTy cls `catchJunk` t

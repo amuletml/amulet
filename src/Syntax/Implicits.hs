@@ -3,7 +3,7 @@
 module Syntax.Implicits
   ( ImplicitScope
   , Obligation(..), Sort(..)
-  , Implicit(..), implHead, implPre, implVar, implType, implSort, implSpan
+  , Implicit(..), implHead, implPre, implVar, implType, implSort, implSpan, implClass
   , lookup, keys, mapTypes, subTrie
   , insert, singleton
   , spine, splitImplVarType
@@ -45,7 +45,7 @@ deriving instance Eq (Var p) => Eq (Obligation p)
 
 -- | A concrete representation of /one/ implicit parameter, stored in an
 -- implicit parameter scope (a trie, indexed by the 'head').
-data Implicit p
+data Implicit info p
   -- | The choice for this implicit parameter
   = ImplChoice { _implHead :: Type p -- ^ The 'head' of the implicit parameter, i.e. the return type
                , _implType :: Type p
@@ -54,43 +54,47 @@ data Implicit p
                , _implVar :: Var p -- ^ The actual implicit
                , _implSort :: Sort -- ^ What kind of implicit is this? (instance, superclass axiom)
                , _implSpan :: Ann Resolved -- ^ Where was this implicit defined?
+               , _implClass :: info 
+                 -- ^ Class information for the implicit
+                 -- Invariant: 'implClass' is only defined if 'implSort' == 'InstSort'
                }
 
-deriving instance (Show (Var p), Show (Ann p)) => Show (Implicit p)
-deriving instance Ord (Var p) => Ord (Implicit p)
-deriving instance Eq (Var p) => Eq (Implicit p)
+
+deriving instance (Show info, Show (Var p), Show (Ann p)) => Show (Implicit info p)
+deriving instance (Ord info, Ord (Var p)) => Ord (Implicit info p)
+deriving instance (Eq info, Eq (Var p)) => Eq (Implicit info p)
 
 makeLenses ''Implicit
 
 -- | A node in the trie of implicits
-data Node p
+data Node info p
   -- | We're done
-  = One (Implicit p)
+  = One (Implicit info p)
   -- | There are multiple choices to consider
-  | Some [Implicit p]
+  | Some [Implicit info p]
   -- | There are more to go
-  | Many (ImplicitScope p)
+  | Many (ImplicitScope info p)
   -- | There are choices to consider, but there are also more to go
-  | ManyMore [Implicit p] (ImplicitScope p)
+  | ManyMore [Implicit info p] (ImplicitScope info p)
 
-deriving instance (Show (Var p), Show (Ann p)) => Show (Node p)
-deriving instance Ord (Var p) => Ord (Node p)
-deriving instance Eq (Var p) => Eq (Node p)
+deriving instance (Show info, Show (Var p), Show (Ann p)) => Show (Node info p)
+deriving instance (Ord info, Ord (Var p)) => Ord (Node info p)
+deriving instance (Eq info, Eq (Var p)) => Eq (Node info p)
 
 -- | A trie of implicit choices.
-newtype ImplicitScope p = Trie (Map.Map (Type p) (Node p))
+newtype ImplicitScope info p = Trie (Map.Map (Type p) (Node info p))
 
-deriving instance (Show (Var p), Show (Ann p)) => Show (ImplicitScope p)
-deriving instance Ord (Var p) => Ord (ImplicitScope p)
-deriving instance Eq (Var p) => Eq (ImplicitScope p)
+deriving instance (Show info, Show (Var p), Show (Ann p)) => Show (ImplicitScope info p)
+deriving instance (Ord info, Ord (Var p)) => Ord (ImplicitScope info p)
+deriving instance (Eq info, Eq (Var p)) => Eq (ImplicitScope info p)
 
 -- | Insert a choice for a *fully-known* (@Solved@) implicit parameter
 -- (the variable @v@) of type @tau@ at the given trie.
-insert :: forall p. Ord (Var p) => Ann Resolved -> Sort -> Var p -> Type p -> ImplicitScope p -> ImplicitScope p
-insert annot sort v ty = go ts implicit where
+insert :: forall i p. Ord (Var p) => Ann Resolved -> Sort -> Var p -> Type p -> i -> ImplicitScope i p -> ImplicitScope i p
+insert annot sort v ty info = go ts implicit where
   (head, obligations) = getHead ty
 
-  implicit = ImplChoice head ty (toList obligations) v sort annot
+  implicit = ImplChoice head ty (toList obligations) v sort annot info
   ts = spine head
 
   go [] _ _ = error "empty spine (*very* malformed type?)"
@@ -101,7 +105,7 @@ insert annot sort v ty = go ts implicit where
             join _ _ = Nothing
 
   go (x:xs) i (Trie l) = Trie (Map.alter (insert' xs i) x l) where
-    insert' :: [Type p] -> Implicit p -> Maybe (Node p) -> Maybe (Node p)
+    insert' :: [Type p] -> Implicit i p -> Maybe (Node i p) -> Maybe (Node i p)
     insert' xs i (Just (Many t)) = Just (Many (go xs i t))
     insert' xs i (Just (One t)) = Just (ManyMore [t] (go xs i mempty))
     insert' xs i (Just (Some ts)) = Just (ManyMore ts (go xs i mempty))
@@ -109,10 +113,10 @@ insert annot sort v ty = go ts implicit where
     insert' xs i Nothing = Just (Many (go xs i (Trie Map.empty)))
 
 -- | Find a type in a trie by conservative fuzzy search.
-lookup :: forall p. Ord (Var p) => Type p -> ImplicitScope p -> [Implicit p]
+lookup :: forall i p. Ord (Var p) => Type p -> ImplicitScope i p -> [Implicit i p]
 lookup ty = go ts where
   ts = spine ty
-  go :: [Type p] -> ImplicitScope p -> [Implicit p]
+  go :: [Type p] -> ImplicitScope i p -> [Implicit i p]
   go [x] (Trie m) = case find x m of
     Just (One x) -> [x]
     Just (Some xs) -> xs
@@ -126,19 +130,19 @@ lookup ty = go ts where
     _ -> []
   go [] Trie{} = error "badly-kinded type (empty spine?)"
 
-  find :: Type p -> Map.Map (Type p) (Node p) -> Maybe (Node p)
+  find :: Type p -> Map.Map (Type p) (Node i p) -> Maybe (Node i p)
   find w = fixup . toList . Map.filterWithKey (\k _ -> w `matches` k) where
     fixup []  = Nothing
     fixup [x] = Just x
     fixup (x:xs) = Just (sconcat (x :| xs))
 
-instance Ord (Var p) => Monoid (ImplicitScope p) where
+instance Ord (Var p) => Monoid (ImplicitScope i p) where
   mempty = Trie mempty
 
-instance Ord (Var p) => Semigroup (ImplicitScope p) where
+instance Ord (Var p) => Semigroup (ImplicitScope i p) where
   Trie m <> Trie m' = Trie (merge m m')
 
-instance Ord (Var p) => Semigroup (Node p) where
+instance Ord (Var p) => Semigroup (Node i p) where
   One x <> One y = Some [x, y]
   One x <> Some xs = Some (x:xs)
   One x <> ManyMore xs t = ManyMore (x:xs) t
@@ -161,7 +165,7 @@ instance Ord (Var p) => Semigroup (Node p) where
 
 -- | Compute the set of keys in a scope. Note that this operation takes
 -- time proportional to the number of elements in the trie!
-keys :: forall p. Ord (Var p) => ImplicitScope p -> Set.Set (Type p)
+keys :: forall i p. Ord (Var p) => ImplicitScope i p -> Set.Set (Type p)
 keys = go where
   go (Trie m) = foldMap goNode m
 
@@ -173,7 +177,7 @@ keys = go where
 -- | Map a function over the elements of a trie. Note that, because of
 -- the way they are stored, the function will be applied many times to
 -- distinct parts of possibly the same type.
-mapTypes :: forall p. (Ord (Var p)) => (Type p -> Type p) -> ImplicitScope p -> ImplicitScope p
+mapTypes :: forall i p. (Ord (Var p)) => (Type p -> Type p) -> ImplicitScope i p -> ImplicitScope i p
 mapTypes fn = go where
   go (Trie m) = Trie (Map.foldrWithKey (\k x r -> makeTrie (change fn k) (goNode x) `merge` r) mempty m)
 
@@ -185,7 +189,7 @@ mapTypes fn = go where
            then [k']
            else sp'
 
-  makeTrie :: [Type p] -> Node p -> Map.Map (Type p) (Node p)
+  makeTrie :: [Type p] -> Node i p -> Map.Map (Type p) (Node i p)
   makeTrie [x] n = Map.singleton x n
   makeTrie (x:xs) n = Map.singleton x (Many (Trie (makeTrie xs n)))
   makeTrie [] _ = error "a node was left dangling while balancing trie"
@@ -195,7 +199,7 @@ mapTypes fn = go where
   goNode (Many t) = Many (go t)
   goNode (ManyMore xs t) = ManyMore (map goI xs) (go t)
 
-  goI (ImplChoice h t o v s a) = ImplChoice (fn h) (fn t) (map goO o) v s a
+  goI (ImplChoice h t o v s a i) = ImplChoice (fn h) (fn t) (map goO o) v s a i
 
   goO (Quantifier (Invisible v k x))
     | x /= Req = Quantifier (Invisible v (fn <$> k) Infer)
@@ -204,7 +208,7 @@ mapTypes fn = go where
 
 -- | Find the 'Many' node located at the end of the provided spine
 -- section in the scope.
-subTrie :: forall p. Ord (Var p) => [Type p] -> ImplicitScope p -> Maybe (ImplicitScope p)
+subTrie :: forall i p. Ord (Var p) => [Type p] -> ImplicitScope i p -> Maybe (ImplicitScope i p)
 subTrie = go where
   go (x:xs) (Trie m) = goNode xs (Map.lookup x m)
   go [] t = Just t
@@ -213,8 +217,8 @@ subTrie = go where
   goNode _ _ = Nothing
 
 -- | Make a trie consisting of the only the one given implicit.
-singleton :: Ord (Var p) => Ann Resolved -> Sort -> Var p -> Type p -> ImplicitScope p
-singleton a s v t = insert a s v t mempty
+singleton :: Ord (Var p) => Ann Resolved -> Sort -> Var p -> Type p -> i -> ImplicitScope i p
+singleton a s v t i = insert a s v t i mempty
 
 -- | Decompose a type into its main "spine" of left-nested applications.
 -- @
@@ -251,7 +255,7 @@ getHead t@TyOperator{} = (t, Seq.empty)
 -- obligations.
 splitImplVarType = getHead
 
-merge :: Ord (Var p) => Map.Map (Type p) (Node p) -> Map.Map (Type p) (Node p) -> Map.Map (Type p) (Node p)
+merge :: Ord (Var p) => Map.Map (Type p) (Node i p) -> Map.Map (Type p) (Node i p) -> Map.Map (Type p) (Node i p)
 merge = Map.merge Map.preserveMissing Map.preserveMissing (Map.zipWithMatched (const (<>)))
 
 -- | Does there exist a substitution that can make a the same as b?

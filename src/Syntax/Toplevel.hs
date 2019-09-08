@@ -38,6 +38,7 @@ data Toplevel p
           , classAccess :: TopAccess
           , classCtx :: Maybe (Type p)
           , classParams :: [TyConArg p]
+          , classDeps :: [Fundep p]
           , classMethods :: [ClassItem p]
           , ann :: Ann p }
   | Instance { instanceClass :: Var p
@@ -65,6 +66,17 @@ deriving instance (Show (Var p), Show (Ann p)) => Show (ClassItem p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (ClassItem p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (ClassItem p)
 
+data Fundep p =
+  Fundep { _fdFrom :: [Var p]
+         , _fdTo :: [Var p]
+         , _fdAnn :: Ann p
+         }
+
+deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Fundep p)
+deriving instance (Show (Var p), Show (Ann p)) => Show (Fundep p)
+deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Fundep p)
+deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Fundep p)
+
 data Constructor p
   = UnitCon TopAccess (Var p) (Ann p)
   -- In ArgCon, the Type p is the type of the (sole) argument
@@ -89,7 +101,7 @@ instance (Spanned (Constructor p), Spanned (Ann p)) => Spanned (Toplevel p) wher
   annotation (TypeDecl _ _ _ (Just cs) x) = sconcat (annotation x :| map annotation cs)
   annotation (TypeDecl _ _ _ Nothing x) = annotation x
   annotation (ForeignVal _ _ _ _ x) = annotation x
-  annotation (Class _ _ _ _ _ x) = annotation x
+  annotation (Class _ _ _ _ _ _ x) = annotation x
   annotation (Instance _ _ _ _ x) = annotation x
   annotation _ = internal
 
@@ -99,6 +111,12 @@ instance Spanned (Ann p) => Spanned (ClassItem p) where
 instance Pretty (Var p) => Pretty (ClassItem p) where
   pretty (MethodSig v t _) = keyword "val" <+> pretty v <+> colon <+> pretty t
   pretty (DefaultMethod b _) = keyword "let" <+> pretty b
+
+instance Pretty (Var p) => Pretty (Fundep p) where
+  pretty (Fundep from to _) = hsep (punctuate comma (map k from))
+                          <+> arrow
+                          <+> hsep (punctuate comma (map k to))
+    where k x = stypeVar $ squote <> pretty x
 
 instance Pretty TopAccess where
   pretty Public = keyword "public"
@@ -136,12 +154,14 @@ instance Pretty (Var p) => Pretty (Toplevel p) where
          , keyword "end"
          ]
 
-  pretty (Class v am c h m _) =
+  pretty (Class v am c h fd m _) =
     vsep [ keyword "class" <+> prettyAcc am <> maybe (parens mempty) pretty c
-            <+> soperator (string "=>") <+> pretty v <+> hsep (map pretty h) <+> keyword "begin"
+            <+> soperator (string "=>") <+> pretty v <+> hsep (map pretty h) <+> fds
+            <+> keyword "begin"
          , indent 2 (align (vsep (map pretty m)))
          , keyword "end"
          ]
+    where fds = case fd of { [] -> empty; _ -> pipe <+> hsep (map pretty fd) }
 
   pretty (Instance _ c h m _) =
     vsep [ keyword "instance" <+> maybe (parens mempty) pretty c
