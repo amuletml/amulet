@@ -78,6 +78,8 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
 
       vars = declaredVars <> forallVars
 
+      determined = foldMap (Set.fromList . view fdTo) fundeps
+
   let addForallVars (TyForall v k t) ty
         | v `Set.member` forallVars && v `Set.member` ftv ty = TyPi (Invisible v k Infer) (addForallVars t ty)
         | otherwise = addForallVars t ty
@@ -95,7 +97,7 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
       let tv = Set.toList (ftv kinded `Set.difference` vars)
           ty = foldr (\ v -> TyPi (Invisible v Nothing Infer)) kinded tv
 
-      checkValidMethodTy (BecauseOf meth) method declaredVars kinded
+      checkValidMethodTy (BecauseOf meth) method (declaredVars Set.\\ determined) kinded
 
       withHead <- closeOver' vars (BecauseOf meth) $
         TyPi (Implicit classConstraint) ty
@@ -246,7 +248,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
 
   checkFundeps ctx ann fundeps instHead
 
-  (instHead, skolSub) <- skolFreeTy (ByInstanceHead instHead ann) instHead
+  (instHead, skolSub) <- skolFreeTy mempty (ByInstanceHead instHead ann) instHead
 
   scope <- view classes
   let overlapping = filter ((/= Superclass) . view implSort) . filter (applicable instHead scope) $
@@ -255,7 +257,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
     [] -> pure ()
     (x:_) -> confesses (Overlap instHead (x ^. implSpan) ann)
 
-  (ctx, mappend skolSub -> skolSub) <- skolFreeTy (ByInstanceHead ctx ann) (apply skolSub ctx)
+  (ctx, mappend skolSub -> skolSub) <- skolFreeTy mempty (ByInstanceHead ctx ann) (apply skolSub ctx)
 
   (mappend skolSub -> instSub, _, _) <- solve (pure (ConUnify (BecauseOf inst) undefined classHead instHead))
   localInsnConTy <- silence $
@@ -431,13 +433,21 @@ reduceClassContext :: forall m. (MonadInfer Typed m, HasCallStack)
                    => ImplicitScope ClassInfo Typed
                    -> Ann Desugared
                    -> [Constraint Typed]
-                   -> m (Type Typed -> Type Typed, WrapFlavour -> Expr Typed -> Expr Typed, [Need Typed])
+                   -> m ( Type Typed -> Type Typed
+                        , WrapFlavour -> Expr Typed -> Expr Typed
+                        , [Need Typed], Subst Typed)
 
-reduceClassContext _ _ [] = pure (id, const id, mempty)
+reduceClassContext _ _ [] = pure (id, const id, mempty, mempty)
 reduceClassContext extra annot cons = do
   scope <- view classes
   let needed sub (ConImplicit r _ var con:cs) = do
-        (con, sub') <- skolFreeTy (ByConstraint con) (apply sub con)
+        don't_skol <-
+          case apps con of
+            TyCon v:args -> do
+              fds <- view (classDecs . at v . non undefined . ciFundep)
+              pure (foldMap (ftv . map (args !!)) (map (view _2) fds))
+            _ -> pure mempty
+        (con, sub') <- skolFreeTy don't_skol (ByConstraint con) (apply sub con)
         ((var, con, r):) <$> needed (sub `compose` sub') cs
       needed sub (_:cs) = needed sub cs
       needed _ [] = pure []
@@ -445,21 +455,30 @@ reduceClassContext extra annot cons = do
   needs :: [Need Typed] <- sortOn (view _1) <$> needed mempty cons
 
   -- First, deduplicate the constraints eliminating any redundancy
-  let dedup :: ImplicitScope ClassInfo Typed -> [Need Typed] -> ([Binding Typed], [Need Typed], ImplicitScope ClassInfo Typed)
+  let dedup :: ImplicitScope ClassInfo Typed
+            -> [Need Typed]
+            -> ( [Binding Typed]
+               , [Need Typed]
+               , ImplicitScope ClassInfo Typed
+               , Subst Typed
+               )
       dedup scope ((var, con, r):needs)
         | [ImplChoice _ t [] v _ _ _] <- lookup con scope =
-          let (bindings, needs', scope') = dedup scope needs
+          let (bindings, needs', scope', more_sub) = dedup scope needs
+              Just here_sub = unifyPure con t
+              sub = more_sub <> here_sub
            in if var == v
-             then (bindings, needs', scope')
-             else (Binding var (VarRef v (annot, t)) False (annot, t):bindings, needs', scope')
+                then (bindings, needs', scope', sub)
+                else ( Binding var (VarRef v (annot, apply sub t)) False (annot, apply sub t):bindings
+                     , needs', scope', sub )
         | otherwise =
           -- see comment in 'fundepsAllow' for why this can be undefined
-          let (bindings, needs', scope') = dedup (insert annot LocalAssum var con undefined scope) needs
-           in (bindings, (var, con, r):needs', scope')
-      dedup scope [] = ([], [], scope)
-      (aliases, stillNeeded, usable) = dedup mempty needs
+          let (bindings, needs', scope', sub) = dedup (insert annot LocalAssum var con undefined scope) needs
+           in (bindings, (var, con, r):needs', scope', sub)
+      dedup scope [] = ([], [], scope, mempty)
+      (aliases, stillNeeded, usable, substitution) = dedup mempty needs
 
-      simpl :: ImplicitScope ClassInfo Typed -> [Need Typed] -> ([Binding Typed], [Need Typed])
+  let simpl :: ImplicitScope ClassInfo Typed -> [Need Typed] -> ([Binding Typed], [Need Typed])
       simpl scp ((var, con, why):needs)
         | superclasses <- filter ((== Superclass) . view implSort) $ lookup con scope
         , First (Just implicit) <- foldMap (isUsable scp) superclasses
@@ -498,7 +517,7 @@ reduceClassContext extra annot cons = do
     when (tooConcrete ty) $
       confesses (addBlame reason (UnsatClassCon reason (ConImplicit reason scope var ty) (TooConcrete ty)))
 
-  pure (addCtx stillNeeded', wrap, stillNeeded')
+  pure (addCtx stillNeeded' . apply substitution, wrap, stillNeeded', substitution)
 
 addLet :: Map.Map (Var Typed) (Wrapper Typed) -> Var Typed -> [Constraint Typed] -> Expr Typed -> Expr Typed
 addLet wrap' name (ConImplicit _ _ var ty:cs) ex | an <- annotation ex =
@@ -526,9 +545,9 @@ fun v t e = ExprWrapper (TypeAsc ty) (Fun (EvParam (Capture v (an, t))) e (an, t
   ty = TyArr t (getType e)
   an = annotation e
 
-skolFreeTy :: MonadNamey m => SkolemMotive Typed -> Type Typed -> m (Type Typed, Subst Typed)
-skolFreeTy motive ty = do
-  vs <- for (Set.toList (ftv ty)) $ \v ->
+skolFreeTy :: MonadNamey m => Set.Set (Var Typed) -> SkolemMotive Typed -> Type Typed -> m (Type Typed, Subst Typed)
+skolFreeTy exclude motive ty = do
+  vs <- for (Set.toList (ftv ty Set.\\ exclude)) $ \v ->
     (v,) <$> freshSkol motive ty v
   pure (apply (Map.fromList vs) ty, Map.fromList vs)
 

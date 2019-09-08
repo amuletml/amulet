@@ -488,10 +488,10 @@ inferLetTy closeOver strategy vs =
 
         ts <- view tySyms
 
-        (context, wrapper, solve) <-
+        (context, wrapper, solve, reduce_sub) <-
           case strategy of
             Fail -> do
-              (context, wrapper, needed) <- reduceClassContext mempty (annotation ex) cons
+              (context, wrapper, needed, sub') <- reduceClassContext mempty (annotation ex) cons
 
               when (not (null needed) && not canAdd) $
                 let fakeCon = ConImplicit (head needed ^. _3) undefined (fst blame) (head needed ^. _2)
@@ -501,7 +501,7 @@ inferLetTy closeOver strategy vs =
               when (not (isFn ex) && not (null cons)) $
                 confesses (addBlame (snd blame) (UnsatClassCon (snd blame) (head cons) NotAFun))
 
-              pure (context, wrapper, \_ sub -> solveEx ts (x <> sub) (wraps' <> co))
+              pure (context, wrapper, \_ sub -> solveEx ts (x `compose` sub `compose` sub') (wraps' <> co), sub')
 
             Propagate -> do
               tell (Seq.fromList cons)
@@ -510,10 +510,10 @@ inferLetTy closeOver strategy vs =
                       ConImplicit _ _ v _ -> Set.singleton v
                       _ -> mempty
                   wraps'' = Map.withoutKeys (co <> wraps') notSolvedHere
-              pure (id, flip const, \_ sub -> solveEx ts (x <> sub) wraps'')
+              pure (id, flip const, \_ sub -> solveEx ts (x <> sub) wraps'', mempty)
 
         vt <- closeOver (Set.singleton (fst blame))
-                ex (apply x (context ty))
+                ex (apply (x `compose` reduce_sub) (context ty))
         ty <- uncurry skolCheck blame vt
         let (tp, sub) = rename ty
 
@@ -654,30 +654,32 @@ inferLetTy closeOver strategy vs =
              let renameInside (VarRef v a) | Just x <- Map.lookup v innerNames = VarRef x a
                  renameInside x = x
 
-             let solveOne :: (Binding Typed, Type Typed)
+             let solveOne :: Subst Typed
+                          -> (Binding Typed, Type Typed)
                           -> m ( (T.Text, Var Typed, Ann Desugared, Type Typed), Binding Typed, Field Typed )
-                 solveOne (Binding var exp _ an, ty) = do
+                 solveOne sub (Binding var exp _ an, ty) = do
                    let nm = nameName var
-                   ty <- pure (apply solution ty)
+                   ty <- pure (apply (solution <> sub) ty)
 
                    pure ( (nm, var, fst an, ty)
                         , Binding (innerNames Map.! var)
                            (Ascription
-                             (transformExprTyped renameInside id id (solveEx tys solution wrap exp))
+                             (transformExprTyped renameInside id id (solveEx tys (solution <> sub) wrap exp))
                              ty (fst an, ty))
                            True
                            (fst an, ty)
                         , Field nm (VarRef (innerNames Map.! var) (fst an, ty)) (fst an, ty)
                         )
-                 solveOne _ = undefined
+                 solveOne _ _ = undefined
 
-             (info, inners, fields) <- unzip3 <$> traverse solveOne bindings
-             let (blamed:_) = inners
+             let (blamed:_) = vars
                  an = annotation blamed
-                 recTy = TyExactRows rows
-                 rows = map (\(t, _, _, ty) -> (t, ty)) info
 
-             (context, wrapper, needed) <- reduceClassContext mempty (annotation blamed) cons
+             (context, wrapper, needed, sub') <- reduceClassContext mempty (annotation blamed) cons
+
+             (info, inners, fields) <- unzip3 <$> traverse (solveOne sub') bindings
+             let rows = map (\(t, _, _, ty) -> (t, ty)) info
+                 recTy = TyExactRows rows
 
              closed <- skolCheck recVar (BecauseOf blamed) <=<
                closeOver (Set.fromList (map fst tvs)) (Record fields (an, recTy)) $
