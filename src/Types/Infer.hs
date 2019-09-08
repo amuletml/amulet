@@ -424,7 +424,8 @@ inferProg (Open mod pre:prg) = do
   local (classes %~ (<>modImplicits)) . local (tySyms %~ (<> modTysym)) $
     consFst (Open mod pre) $ inferProg prg
 
-inferProg (c@(Class v _ _ _ _ _):prg) = do
+inferProg (c@Class{}:prg) = do
+  let v = className c
   (stmts, decls, clss, implicits) <- condemn $ inferClass c
   first (stmts ++) <$> do
     local (names %~ focus decls) $
@@ -433,11 +434,11 @@ inferProg (c@(Class v _ _ _ _ _):prg) = do
         inferProg prg
 
 inferProg (inst@Instance{}:prg) = do
-  (stmt, instName, instTy) <- condemn $ inferInstance inst
+  (stmt, instName, instTy, ci) <- condemn $ inferInstance inst
   let addFst (LetStmt _ []) = id
       addFst stmt@LetStmt{} = consFst stmt
       addFst _ = undefined
-  addFst stmt . local (classes %~ insert (annotation inst) InstSort instName instTy) $ inferProg prg
+  addFst stmt . local (classes %~ insert (annotation inst) InstSort instName instTy ci) $ inferProg prg
 
 inferProg (Module am name body:prg) = do
   (body', env) <- inferProg body
@@ -792,13 +793,22 @@ skolCheck var exp ty = do
   checkAmbiguous var exp t
   pure t
 
-checkAmbiguous :: MonadInfer Typed m => Var Typed -> SomeReason -> Type Typed -> m ()
-checkAmbiguous var exp tau = go mempty tau where
-  go s (TyPi Invisible{} t) = go s t
-  go s (TyPi (Implicit v) t) = go (s <> ftv v) t
-  go s t = if not (Set.null (s Set.\\ fv))
-              then confesses (addBlame exp (AmbiguousType var tau (s Set.\\ fv)))
-              else pure ()
+checkAmbiguous :: forall m. MonadInfer Typed m => Var Typed -> SomeReason -> Type Typed -> m ()
+checkAmbiguous var exp tau = go mempty mempty tau where
+  go :: Set.Set (Var Typed) -> Set.Set (Var Typed) -> Type Typed -> m ()
+  go ok s (TyPi Invisible{} t) = go ok s t
+  go ok s (TyPi (Implicit v) t)
+    | (TyCon clss:args) <- apps v = do
+        ci <- view (classDecs . at clss . non undefined)
+        let fds = ci ^. ciFundep
+            det (_, x, _) = x
+            fundep_ok = foldMap (ftv . (args !!)) (foldMap det fds)
+        go (ok <> fundep_ok) (s <> ftv v) t
+    | otherwise = go ok (s <> ftv v) t
+  go ok s t =
+    if not (Set.null (s Set.\\ (fv <> ok)))
+        then confesses (addBlame exp (AmbiguousType var tau (s Set.\\ fv)))
+        else pure ()
     where fv = ftv t
 
 

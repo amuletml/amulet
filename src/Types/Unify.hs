@@ -27,6 +27,7 @@ import Types.Wellformed
 import Syntax.Implicits hiding (overlap)
 import Syntax.Builtin
 import Syntax.Subst
+import Syntax.Types
 import Syntax
 
 import qualified Data.Map.Strict as Map
@@ -235,7 +236,7 @@ doSolve (ConImplicit why scope v (TyTuple a b) :<| cs) = do
                 (annotation why, TyArr b b))
               (annotation why, b)]
            (annotation why, TyTuple a b))
-  doSolve (ConImplicit why scope vara a :< ConImplicit why scope varb b :<| cs)
+  doSolve (ConImplicit why scope vara b :< ConImplicit why scope varb a :<| cs)
 
 doSolve (ohno@(ConImplicit reason scope var con@TyPi{}) :<| cs) = do
   doSolve cs
@@ -285,7 +286,7 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
       solveCoSubst . at var ?= w
 
     -- TODO: see if sound
-    [imp] | not (concreteUnderOne cons), imp ^. implSort == LocalAssum -> do
+    [imp] | not (concreteUnderOne cons), imp ^. implSort == LocalAssum || fundepsAllow imp cons -> do
       traceM (displayS ("only possible:" <+> pretty var <+> pretty (imp ^. implVar) <+> pretty (imp ^. implType)))
 
       w <- useImplicit reason cons scope imp
@@ -298,14 +299,14 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
       solveCoSubst . at var ?= ExprApp (VarRef var (annotation reason, cons))
       tell (pure (apply sub ohno))
 
-allSameHead :: [Implicit Typed] -> Bool
+allSameHead :: [Implicit ClassInfo Typed] -> Bool
 allSameHead (x:xs) = all (matches (x ^. implHead) . view implHead) xs
 allSameHead [] = True
 
-hasExactMatch :: Type Typed -> [Implicit Typed] -> Bool
+hasExactMatch :: Type Typed -> [Implicit ClassInfo Typed] -> Bool
 hasExactMatch t = any ((== t) . view implHead)
 
-pickBestPossible :: [Implicit Typed] -> Implicit Typed
+pickBestPossible :: [Implicit ClassInfo Typed] -> Implicit ClassInfo Typed
 pickBestPossible [] = error "No choices"
 pickBestPossible xs = head best where
   ~(x:_) = L.groupBy ((==) `on` superclasses) (L.sortOn superclasses xs)
@@ -317,7 +318,7 @@ pickBestPossible xs = head best where
   isSuperclass Implication{} = True
   isSuperclass Quantifier{} = False
 
-usingFor :: Implicit Typed -> Type Typed -> TypeError -> TypeError
+usingFor :: Implicit ClassInfo Typed -> Type Typed -> TypeError -> TypeError
 usingFor _ _ x@Note{} = x
 usingFor _ _ x@(ArisingFrom Note{} _) = x
 usingFor i ty e =
@@ -334,9 +335,9 @@ headSeq (Seq.viewl -> (x Seq.:< _)) = x
 headSeq _ = undefined
 
 useImplicit :: forall m. MonadSolve m
-            => SomeReason -> Type Typed -> ImplicitScope Typed
-            -> Implicit Typed -> m (Wrapper Typed)
-useImplicit reason ty scope (ImplChoice _ oty _ imp _ _) = go where
+            => SomeReason -> Type Typed -> ImplicitScope ClassInfo Typed
+            -> Implicit ClassInfo Typed -> m (Wrapper Typed)
+useImplicit reason ty scope (ImplChoice _ oty _ imp _ _ _) = go where
   go :: m (Wrapper Typed)
   go = do
     guardClassOverflow reason ty
@@ -346,6 +347,21 @@ useImplicit reason ty scope (ImplChoice _ oty _ imp _ _) = go where
     pure (ExprApp (Ascription (ExprWrapper w start (annotation reason, ty))
                     ty
                     (annotation reason, ty)))
+
+fundepsAllow :: Implicit ClassInfo Typed -> Type Typed -> Bool
+fundepsAllow impl cons
+  | impl ^. implSort /= InstSort || null (impl ^. implClass . ciFundep) = False
+  | otherwise = all fine (impl ^. implClass . ciFundep)
+  where
+    fine (from, to, _) = any (not . concreteP) to --> all concreteP from
+    (_:params) = apps cons
+
+    p --> q = not p || q
+    concreteP = concreteUnderOne . (params !!)
+
+    apps = reverse . go where
+      go (TyApp f x) = x:go f
+      go t = [t]
 
 bind :: MonadSolve m => Var Typed -> Type Typed -> m (Coercion Typed)
 bind var ty
@@ -547,7 +563,7 @@ unify TyType TyType = pure (ReflCo TyType)
 unify a b = confesses =<< unequal a b
 
 subsumes', subsumes :: MonadSolve m
-                    => SomeReason -> ImplicitScope Typed
+                    => SomeReason -> ImplicitScope ClassInfo Typed
                     -> Type Typed -> Type Typed -> m (Wrapper Typed)
 subsumes blame scope a b = do
   x <- use solveTySubst
@@ -739,7 +755,7 @@ subsumes' r _ a b = probablyCast <$> retcons (reblame r) (unify a b)
 -- with fresh 'Skolem' constants.
 skolemise :: MonadNamey m
           => SkolemMotive Typed
-          -> Type Typed -> m (Wrapper Typed, Type Typed, ImplicitScope Typed)
+          -> Type Typed -> m (Wrapper Typed, Type Typed, ImplicitScope ClassInfo Typed)
 skolemise motive ty@(TyPi (Invisible tv k _) t) = do
   sk <- freshSkol motive ty tv
   (wrap, ty, scope) <- skolemise motive (apply (Map.singleton tv sk) t)
@@ -755,10 +771,10 @@ skolemise motive wt@(TyPi (Implicit ity) t) = do
   let go (TyTuple a b) = do
         var <- genName
         (pat, scope) <- go b
-        pure (Capture var (internal, a):pat, insert internal LocalAssum var a scope)
+        pure (Capture var (internal, a):pat, insert internal LocalAssum var a undefined scope)
       go x = do
         var <- genName
-        pure ([Capture var (internal, x)], insert internal LocalAssum var x scp)
+        pure ([Capture var (internal, x)], insert internal LocalAssum var x undefined scp)
   (pat, scope) <- go ity
   let wrap ex | an <- annotation ex =
         Fun (EvParam (PTuple pat (an, ity)))
@@ -781,13 +797,13 @@ isReflexiveCo AssumedCo{} = False
 isReflexiveCo ProjCo{} = False
 isReflexiveCo VarCo{} = False
 
-applicable :: Type Typed -> ImplicitScope Typed -> Implicit Typed -> Bool
-applicable wanted scp (ImplChoice head _ cs _ s _) =
+applicable :: Type Typed -> ImplicitScope ClassInfo Typed -> Implicit ClassInfo Typed -> Bool
+applicable wanted scp (ImplChoice head _ cs _ s _ _) =
   case s of
     Superclass -> isJust (unifyPure wanted head) && all (entails scp) cs
     _ -> isJust (unifyPure wanted head)
   where
-    entails :: ImplicitScope Typed -> Obligation Typed -> Bool
+    entails :: ImplicitScope ClassInfo Typed -> Obligation Typed -> Bool
     entails _ (Quantifier (Invisible v _ _)) = v `Map.member` sub
     entails scp (Implication c) | c <- apply sub c =
       any (applicable c scp) (lookup c scp)

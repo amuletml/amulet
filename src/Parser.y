@@ -192,8 +192,11 @@ Top :: { Toplevel Parsed }
     | module conid '=' Con                     { Open (getL $4) (Just (getIdent $2)) }
 
     -- Note, we use fmap rather than <$>, as Happy's parser really doesn't like that.
-    | class Type Begin(ClassItems)             {% fmap (withPos2 $1 $3) $ buildClass Public $2 (getL $3) }
-    | private class Type Begin(ClassItems)     {% fmap (withPos2 $1 $4) $ buildClass Private $3 (getL $4) }
+    | class Type Fundeps Begin(ClassItems) 
+        {% fmap (withPos2 $1 $4) $ buildClass Public $2 $3 (getL $4) }
+    | private class Type Fundeps Begin(ClassItems)
+        {% fmap (withPos2 $1 $5) $ buildClass Private $3 $4 (getL $5) }
+
     | instance Type Begin(Methods)             {% fmap (withPos2 $1 $3) $ buildInstance $2 (getL $3) }
 
     | open Con                                 { Open (getL $2) Nothing }
@@ -214,6 +217,13 @@ ClassItems :: { [ClassItem Parsed] }
 ClassItem :: { ClassItem Parsed }
   : val BindName ':' Type { withPos2 $1 $4 $ MethodSig (getL $2) (getL $4) }
   | let Binding { withPos2 $1 $2 $ DefaultMethod $2 }
+
+Fundeps :: { [Fundep Parsed] }
+  : '|' List1(Fundep, ',') { $2 }
+  |                        { [] }
+
+Fundep :: { Fundep Parsed }
+  : ListE1(TyVar) '->' ListE1(TyVar) { withPos2 (head $1) (last $3) $ Fundep (map getL $1) (map getL $3) }
 
 Methods :: { [Binding Parsed] }
   : List(Method, TopSep) { $1 }
@@ -659,16 +669,16 @@ respanFun :: (Spanned a, Spanned b) => a -> b -> Expr Parsed -> Expr Parsed
 respanFun s e (Fun p b _) = Fun p b (mkSpanUnsafe (spanStart (annotation s)) (spanEnd (annotation e)))
 respanFun _ _ _ = error "what"
 
-buildClass :: TopAccess -> Located (Type Parsed) -> [ClassItem Parsed]
-           -> Parser (Span -> Toplevel Parsed)
-buildClass am (L parsed typ) ms =
+buildClass :: TopAccess -> Located (Type Parsed) -> [Fundep Parsed]
+           -> [ClassItem Parsed] -> Parser (Span -> Toplevel Parsed)
+buildClass am (L parsed typ) fundep ms =
   case parsed of
     (TyPi (Implicit ctx) ty) -> do
       (name, ts) <- go [] ty
-      pure (Class name am (Just ctx) ts ms)
+      pure (Class name am (Just ctx) ts fundep ms)
     ty -> do
       (name, ts) <- go [] ty
-      pure (Class name am Nothing ts ms)
+      pure (Class name am Nothing ts fundep ms)
   where
     go :: [TyConArg Parsed] -> Type Parsed -> Parser (Var Parsed, [TyConArg Parsed])
     go ts (TyCon v) = pure (v, ts)

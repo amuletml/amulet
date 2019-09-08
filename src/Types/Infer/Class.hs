@@ -48,8 +48,8 @@ inferClass :: forall m. MonadInfer Typed m
            -> m ( [Toplevel Typed]
                 , Telescope Typed
                 , ClassInfo
-                , ImplicitScope Typed )
-inferClass clss@(Class name _ ctx _ methods classAnn) = do
+                , ImplicitScope ClassInfo Typed )
+inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
   let toVar :: TyConArg Typed -> Type Typed
       toVar (TyVarArg v) = TyVar v
       toVar (TyAnnArg v _) = TyVar v
@@ -121,7 +121,7 @@ inferClass clss@(Class name _ ctx _ methods classAnn) = do
           closeOver' vars (BecauseOf clss) $
             TyPi (Implicit classConstraint) obligation
         ~var@(TgName name _) <- genNameWith (classCon' <> T.singleton '$')
-        pure ( singleton classAnn Superclass var impty
+        pure ( singleton classAnn Superclass var impty undefined
              , (Implicit, var, name, obligation))
 
     (fold -> defaultMap) <-
@@ -193,9 +193,19 @@ inferClass clss@(Class name _ ctx _ methods classAnn) = do
       [one] -> pure <$> newtypeClassDecl one
       rest -> traverse mkDecl rest
 
+    let mkMap n (TyAnnArg (TgName _ k) _:xs) = Map.insert k n (mkMap (n + 1) xs)
+        mkMap _ [] = mempty
+        mkMap _ _ = undefined
+
+        paramMap = mkMap 0 params
+        get (TgName _ k) = paramMap Map.! k
+        get _ = undefined
+        makeFundep (Fundep from to ann) = (map get from, map get to, ann)
+
     let info =
           ClassInfo name classConstraint methodMap contextMap classCon classConTy classAnn defaultMap
           (makeMinimalFormula methodMap defaultMap)
+          (map makeFundep fundeps)
         methodMap = Map.fromList (map (\(_, n, _, t) -> (n, t)) rows)
         contextMap = Map.fromList (map (\(_, _, l, t) -> (l, t)) rows')
 
@@ -204,12 +214,12 @@ inferClass clss@(Class name _ ctx _ methods classAnn) = do
          , scope)
 inferClass _ = error "not a class"
 
-inferInstance :: forall m. MonadInfer Typed m => Toplevel Desugared -> m (Toplevel Typed, Var Typed, Type Typed)
+inferInstance :: forall m. MonadInfer Typed m => Toplevel Desugared -> m (Toplevel Typed, Var Typed, Type Typed, ClassInfo)
 inferInstance inst@(Instance clss ctx instHead bindings ann) = do
   traverse_ (checkWildcard inst) ctx
   checkWildcard inst instHead
 
-  ClassInfo clss classHead methodSigs classContext classCon classConTy classAnn defaults minimal <-
+  info@(ClassInfo clss classHead methodSigs classContext classCon classConTy classAnn defaults minimal fundeps) <-
     view (classDecs . at clss . non undefined)
 
   let classCon' = nameName classCon
@@ -234,6 +244,8 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
   globalInsnConTy <- silence $
     closeOver (BecauseOf inst) (TyPi (Implicit ctx) instHead)
 
+  checkFundeps ctx ann fundeps instHead
+
   (instHead, skolSub) <- skolFreeTy (ByInstanceHead instHead ann) instHead
 
   scope <- view classes
@@ -255,14 +267,14 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
         mkBinds (TyTuple a b) = do
           var <- genName
           (scope, pat) <- mkBinds b
-          pure (insert ann LocalAssum var a scope, PTuple [Capture var (ann, a), pat] (ann, TyTuple a b))
+          pure (insert ann LocalAssum var a undefined scope, PTuple [Capture var (ann, a), pat] (ann, TyTuple a b))
         mkBinds x = do
           var <- genName
-          pure (singleton ann LocalAssum var x, Capture var (ann, x))
+          pure (singleton ann LocalAssum var x undefined, Capture var (ann, x))
         addFull (as, p) = (as, PAs p fullCtx (ann, ctx))
      in addFull <$> mkBinds ctx
 
-  let localAssums = insert ann InstSort instanceName globalInsnConTy localAssums'
+  let localAssums = insert ann InstSort instanceName globalInsnConTy info localAssums'
 
   methodSigs <- traverse (closeOver (BecauseOf inst) . apply instSub) methodSigs
   classContext <- pure $ fmap (apply instSub) classContext
@@ -388,7 +400,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
                 (ann, localInsnConTy)
       bind = Binding instanceName (Ascription fun globalInsnConTy (ann, globalInsnConTy)) True (ann, globalInsnConTy)
 
-  pure (LetStmt Public (methods ++ defaultMethods ++ [bind]), instanceName, globalInsnConTy)
+  pure (LetStmt Public (methods ++ defaultMethods ++ [bind]), instanceName, globalInsnConTy, info)
 inferInstance _ = error "not an instance"
 
 addArg :: Map.Map (Var Typed) (Type Typed) -> Type Typed -> Expr Typed -> Expr Typed
@@ -416,7 +428,7 @@ transplantPi (TyPi b@Invisible{} rest) ty = TyPi b (transplantPi rest ty)
 transplantPi _ t = t
 
 reduceClassContext :: forall m. (MonadInfer Typed m, HasCallStack)
-                   => ImplicitScope Typed
+                   => ImplicitScope ClassInfo Typed
                    -> Ann Desugared
                    -> [Constraint Typed]
                    -> m (Type Typed -> Type Typed, WrapFlavour -> Expr Typed -> Expr Typed, [Need Typed])
@@ -433,20 +445,20 @@ reduceClassContext extra annot cons = do
   needs :: [Need Typed] <- sortOn (view _1) <$> needed mempty cons
 
   -- First, deduplicate the constraints eliminating any redundancy
-  let dedup :: ImplicitScope Typed -> [Need Typed] -> ([Binding Typed], [Need Typed], ImplicitScope Typed)
+  let dedup :: ImplicitScope ClassInfo Typed -> [Need Typed] -> ([Binding Typed], [Need Typed], ImplicitScope ClassInfo Typed)
       dedup scope ((var, con, r):needs)
-        | [ImplChoice _ t [] v _ _] <- lookup con scope =
+        | [ImplChoice _ t [] v _ _ _] <- lookup con scope =
           let (bindings, needs', scope') = dedup scope needs
            in if var == v
              then (bindings, needs', scope')
              else (Binding var (VarRef v (annot, t)) False (annot, t):bindings, needs', scope')
         | otherwise =
-          let (bindings, needs', scope') = dedup (insert annot LocalAssum var con scope) needs
+          let (bindings, needs', scope') = dedup (insert annot LocalAssum var con undefined scope) needs
            in (bindings, (var, con, r):needs', scope')
       dedup scope [] = ([], [], scope)
       (aliases, stillNeeded, usable) = dedup mempty needs
 
-      simpl :: ImplicitScope Typed -> [Need Typed] -> ([Binding Typed], [Need Typed])
+      simpl :: ImplicitScope ClassInfo Typed -> [Need Typed] -> ([Binding Typed], [Need Typed])
       simpl scp ((var, con, why):needs)
         | superclasses <- filter ((== Superclass) . view implSort) $ lookup con scope
         , First (Just implicit) <- foldMap (isUsable scp) superclasses
@@ -456,7 +468,7 @@ reduceClassContext extra annot cons = do
       simpl _ [] = ([], [])
       (simplif, stillNeeded') = simpl (usable <> extra) stillNeeded
 
-      isUsable scp x@(ImplChoice _ _ cs _ _ _) =
+      isUsable scp x@(ImplChoice _ _ cs _ _ _ _) =
         if all (entails scp) cs
            then First (Just x)
            else First Nothing
@@ -528,13 +540,13 @@ nameName :: Var Desugared -> T.Text
 nameName (TgInternal x) = x
 nameName (TgName x _) = x
 
-entails :: ImplicitScope Typed -> Obligation Typed -> Bool
+entails :: ImplicitScope ClassInfo Typed -> Obligation Typed -> Bool
 entails _ (Quantifier _) = True
 entails scp (Implication c) = any isLocal (lookup c scp) where
   isLocal x = x ^. implSort == LocalAssum
 
-useForSimpl :: HasCallStack => Ann Desugared -> ImplicitScope Typed -> Implicit Typed -> Type Typed -> Expr Typed
-useForSimpl span scope (ImplChoice head oty pre var _ _) ty =
+useForSimpl :: HasCallStack => Ann Desugared -> ImplicitScope ClassInfo Typed -> Implicit ClassInfo Typed -> Type Typed -> Expr Typed
+useForSimpl span scope (ImplChoice head oty pre var _ _ _) ty =
   case unifyPure head ty of
     Nothing -> error "What?"
     Just sub ->
@@ -624,6 +636,57 @@ makeMinimalFormula signatures' defaults = mkAnd (sccs' ++ noDefaults) where
       -- break the cycle.
 
   build (x, e) = (x, x, Set.toList (x `Set.delete` methodRefs e))
+
+checkFundeps :: forall m. MonadInfer Typed m => Type Typed -> Ann Resolved -> [([Int], [Int], Ann Resolved)] -> Type Typed -> m ()
+checkFundeps context ann fds ty = do
+  let (clss:args) = apps ty
+  let go (cty:rest) = do
+        (needs, gets) <- impliedByContextEntry cty
+        (needs', gets') <- go rest
+        pure ((needs <> needs') Set.\\ (gets <> gets'), gets <> gets')
+      go [] = pure mempty
+      go :: [Type Typed] -> m (Set.Set (Var Typed), Set.Set (Var Typed))
+
+  scope <- view classes
+  (ctx_from, ctx_to) <- go (splitContext context)
+
+  for_ fds $ \(from, to, fda) -> do
+    let fv_f = foldMap ftv (map (args !!) from)
+        fv_t = foldMap ftv (map (args !!) to) Set.\\ gottem
+        to_set = Set.fromList to
+        gottem =
+          if ctx_from `Set.isSubsetOf` fv_f
+             then ctx_to
+             else mempty
+
+    unless (fv_t `Set.isSubsetOf` fv_f) $
+      confesses $ NotCovered ann fda (map (args !!) from) (Set.toList (fv_t Set.\\ fv_f))
+
+    let stub i x | i `Set.member` to_set = freshTV
+                 | otherwise = pure x
+    stubbed <- itraverse stub args
+
+    let overlapping = filter ((/= Superclass) . view implSort) . filter (applicable instHead scope) $
+          lookup instHead scope
+        instHead = foldl TyApp clss stubbed
+
+    case overlapping of
+      [] -> pure ()
+      (x:_) -> confesses (Overlap instHead (x ^. implSpan) ann)
+
+splitContext :: Type Typed -> [Type Typed]
+splitContext (TyTuple a b) = a:splitContext b
+splitContext t = [t]
+
+impliedByContextEntry :: MonadInfer Typed m => Type Typed -> m (Set.Set (Var Typed), Set.Set (Var Typed))
+impliedByContextEntry x
+  | (TyCon clss:args) <- apps x, args /= [] = do
+     ci <- view (classDecs . at clss . non (error ("no class info for " ++ show clss)))
+     let fds = ci ^. ciFundep
+         det (_, x, _) = x
+         need (x, _, _) = x
+     pure (foldMap (ftv . (args !!)) (foldMap need fds), foldMap (ftv . (args !!)) (foldMap det fds))
+  | otherwise = pure mempty
 
 expandEta :: MonadNamey m => Type Typed -> Expr Typed -> m (Expr Typed)
 expandEta ty ex = go ty ex where
