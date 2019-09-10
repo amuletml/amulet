@@ -37,10 +37,6 @@ import Types.Infer.Builtin
 import Types.Kinds
 import Types.Unify
 
-import Text.Pretty.Semantic
-
-import Text.Show.Pretty hiding (reify)
-
 import GHC.Stack
 
 inferClass :: forall m. MonadInfer Typed m
@@ -482,8 +478,11 @@ reduceClassContext extra annot cons = do
       simpl scp ((var, con, why):needs)
         | superclasses <- filter ((== Superclass) . view implSort) $ lookup con scope
         , First (Just implicit) <- foldMap (isUsable scp) superclasses
-        = let (bindings, needs') = simpl scp needs
-           in (Binding var (useForSimpl annot scp implicit con) False (annot, con):bindings, needs')
+        = case useForSimpl annot scp implicit con of
+            Just expr ->
+              let (bindings, needs') = simpl scp needs
+               in (Binding var expr False (annot, con):bindings, needs')
+            Nothing -> second ((var, con, why) :) (simpl scp needs)
         | otherwise = second ((var, con, why) :) (simpl scp needs)
       simpl _ [] = ([], [])
       (simplif, stillNeeded') = simpl (usable <> extra) stillNeeded
@@ -565,7 +564,13 @@ entails _ (Quantifier _) = True
 entails scp (Implication c) = any isLocal (lookup c scp) where
   isLocal x = x ^. implSort == LocalAssum
 
-useForSimpl :: HasCallStack => Ann Desugared -> ImplicitScope ClassInfo Typed -> Implicit ClassInfo Typed -> Type Typed -> Expr Typed
+useForSimpl :: HasCallStack
+            => Ann Desugared
+            -> ImplicitScope ClassInfo Typed
+            -> Implicit ClassInfo Typed
+            -> Type Typed
+            -> Maybe (Expr Typed)
+
 useForSimpl span scope (ImplChoice head oty pre var _ _ _) ty =
   case unifyPure head ty of
     Nothing -> error "What?"
@@ -577,10 +582,12 @@ useForSimpl span scope (ImplChoice head oty pre var _ _ _) ty =
             let v' = apply sub v
                 choices = lookup v' scope
              in case choices of
-               [] -> error $ "No choice for entailed implicit " ++ displayS (pretty v') ++ ppShow scope
-               (x:_) -> wrap cs (App ex (useForSimpl span scope x v') (annotation ex, rest)) rest
-          wrap [] ex _ = ex
-          wrap x _ t = error (displayS (string "badly-typed implicit" <+> shown x <+> pretty t))
+               [] -> Nothing
+               (x:_) -> do
+                 x <- useForSimpl span scope x v'
+                 wrap cs (App ex x (annotation ex, rest)) rest
+          wrap [] ex _ = Just ex
+          wrap _ _ _ = Nothing
       in wrap pre (VarRef var (span, oty)) oty
 
 mkLet :: [Binding p] -> Expr p -> Ann p -> Expr p
