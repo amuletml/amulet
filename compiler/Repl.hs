@@ -57,6 +57,7 @@ import Parser
 
 import qualified Core.Core as C
 import qualified Core.Lower as L
+import Core.Optimise.Newtype
 import Core.Occurrence
 import Core.Core (Stmt)
 import Core.Var
@@ -366,6 +367,7 @@ parseCore state parser name input = do
                      (var', tys') = R.extractToplevels resolved
 
                  (lEnv', lower) <- L.runLowerWithEnv lEnv (L.lowerProgEnv prog)
+                 lower <- killNewtypePass lower
                  lastG <- genName
                  case lower of
                    [] -> error "lower returned no statements for the repl"
