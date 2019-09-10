@@ -48,7 +48,7 @@ import qualified Syntax as S
 import qualified Control.Monad.Infer as T
 import Control.Monad.Namey
 
-import Types.Infer (inferProgram)
+import Types.Infer (inferProgram, inferExpr)
 
 import Parser.Wrapper (Parser, runParser)
 import Parser.Token
@@ -230,18 +230,17 @@ runRepl = do
           case resolved of
             Left es -> liftIO $ traverse_ (`reportS`files) es
             Right (resolved, _) -> do
-              desugared <- desugarProgram resolved
-              inferred <- inferProgram (inferScope state) desugared
-              let (prog, es) = case inferred of
+              ~[S.LetStmt _ [ S.Matching _ desugared _ ]] <- desugarProgram resolved
+              inferred <- inferExpr (inferScope state) desugared
+              let (ty, es) = case inferred of
                     This es -> (Nothing, es)
-                    That (prog, _) -> (Just prog, [])
-                    These es (prog, _) -> if any isError es then (Nothing, es) else (Just prog, es)
+                    That ty -> (Just ty, [])
+                    These es ty -> if any isError es then (Nothing, es) else (Just ty, es)
               liftIO $ traverse_ (`reportS`files) es
-              case prog of
+              case ty of
                 Nothing -> pure ()
-                Just [S.LetStmt _ [ S.TypedMatching _ body _ _ ]] ->
-                  liftIO $ putDoc (string input <+> colon <+> displayType (S.getType body))
-                Just _ -> error "impossible"
+                Just t ->
+                  liftIO $ putDoc (string input <+> colon <+> displayType t)
 
     execString :: SourceName -> T.Text
                -> StateT ReplState IO Bool
