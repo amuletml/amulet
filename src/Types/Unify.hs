@@ -286,7 +286,8 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
       solveCoSubst . at var ?= w
 
     -- TODO: see if sound
-    [imp] | not (concreteUnderOne cons), imp ^. implSort == LocalAssum || fundepsAllow imp cons -> do
+    (filter ((/= Superclass) . view implSort) -> [imp])
+      | not (concreteUnderOne cons), imp ^. implSort == LocalAssum || fundepsAllow imp cons -> do
       traceM (displayS ("only possible:" <+> pretty var <+> pretty (imp ^. implVar) <+> pretty (imp ^. implType)))
 
       w <- useImplicit reason cons scope imp
@@ -357,10 +358,9 @@ fundepsAllow impl cons
   | impl ^. implSort /= InstSort || null (impl ^. implClass . ciFundep) = False
   | otherwise = all fine (impl ^. implClass . ciFundep)
   where
-    fine (from, to, _) = any (not . concreteP) to --> all concreteP from
+    fine (from, _, _) = all concreteP from
     (_:params) = apps cons
 
-    p --> q = not p || q
     concreteP = concretish . head . spine . (params !!)
 
     apps = reverse . go where
@@ -867,9 +867,12 @@ prettyConcrete (TyWildcard t) = maybe False prettyConcrete t
 prettyConcrete _ = True
 
 concreteUnderOne :: Type Typed -> Bool
-concreteUnderOne TyVar{} = False
-concreteUnderOne (TyApp f x) = prettyConcrete f && concretish (head (spine x))
-concreteUnderOne _ = True
+concreteUnderOne t =
+  all prettyConcrete (apps t)
+  where
+    apps = reverse . go
+    go (TyApp f x) = x:go f
+    go t = [t]
 
 firstBlame, secondBlame :: SomeReason -> SomeReason
 firstBlame (It'sThis (BecauseOfExpr (Tuple (x:_) _) _)) = becauseExp x
