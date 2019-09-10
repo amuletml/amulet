@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleContexts, TupleSections, ScopedTypeVariables,
    ViewPatterns, LambdaCase, TypeFamilies, CPP #-}
 module Types.Infer
-  ( inferProgram
+  ( inferProgram, inferExpr
   , closeOver
 
   , infer, check, solveEx
@@ -58,6 +58,24 @@ import Debug.Trace
 -- @LetStmt@s, or @ForeignVal@s.
 inferProgram :: MonadNamey m => Env -> [Toplevel Desugared] -> m (These [TypeError] ([Toplevel Typed], Env))
 inferProgram env ct = fmap fst <$> runInfer env (inferProg ct)
+
+-- | Infer the type of a single expression, including any residual
+-- constraints as context in the resulting type, generalise over it, and
+-- 'rename' it to make it prettier.
+--
+-- Used in the REPL.
+inferExpr :: MonadNamey m => Env -> Expr Desugared -> m (These [TypeError] (Type Typed))
+inferExpr env exp = fmap fst <$> runInfer env (inferOne exp) where
+  inferOne :: forall m. MonadInfer Typed m => Expr Desugared -> m (Type Typed)
+  inferOne expr = do
+    ((expr, ty), cs) <- listen $ infer expr
+    (sub, _, deferred) <- condemn $ retcons (addBlame (becauseExp expr)) (solve cs)
+    deferred <- pure (fmap (apply sub) deferred)
+    (compose sub -> sub, _, cons) <- condemn $ solve (Seq.fromList deferred)
+    (context, _, _, compose sub -> sub) <- reduceClassContext mempty (annotation expr) cons
+
+    vt <- closeOverStrat (becauseExp expr) mempty expr (apply sub (context ty))
+    pure (fst (rename vt))
 
 -- | Check an 'Expr'ession against a known 'Type', annotating it with
 -- appropriate 'Wrapper's, and performing /some/ level of desugaring.
