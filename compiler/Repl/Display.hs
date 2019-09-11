@@ -72,8 +72,9 @@ instance Pretty Value where
   pretty (Boolean x) = sliteral . string $ if x then "true" else "false"
   pretty (Opaque x)  = enclose (char '<') (char '>') (keyword x)
 
-  pretty (Constructor "Cons" (Just (Table m))) = -- display prettier infix notation for cons
-    pretty (m Map.! "_1") <+> soperator (string "::") <+> pretty (m Map.! "_2")
+  pretty (Constructor "Cons" (Just (Table m))) = p (m Map.! "_1") <+> soperator (string "::") <+> pretty (m Map.! "_2") where
+    p x@(Constructor "Cons" _) = parens (pretty x)
+    p x = pretty x
   pretty (Constructor "Nil" Nothing) = brackets mempty
 
   pretty (Constructor x Nothing) = stypeCon (text x)
