@@ -45,13 +45,15 @@ basicEscaper :: Set.Set T.Text -- ^ A set of keywords. Namely, invalid identifie
              -> T.Text -- ^ The escaped string
 basicEscaper keywords name =
   let Just (t, ts) = T.uncons name
-      esc = if isAlpha t && T.all (\x -> x == '_' || isAlphaNum x) ts
+      esc = if isAscAlpha t && T.all (\x -> x == '_' || isAscAlphaNum x) ts
             then (if name `Set.member` keywords then T.cons '_' else id) name
             else T.concatMap escapeChar name
   in esc
   where
-    escapeChar c | isAlpha c = T.singleton c
-                 | c <= '\x7f', Just t <- Map.lookup c chars = t
+    isAscAlpha c = isAscii c && isAlpha c
+    isAscAlphaNum c = isAscii c && isAlphaNum c
+    escapeChar c | isAscAlpha c = T.singleton c
+                 | isAscii c, Just t <- Map.lookup c chars = t
                  | otherwise = T.pack ('_':showHex (ord c) "")
 
 -- | Push a variable into the escape scope, yielding the escaped name and
