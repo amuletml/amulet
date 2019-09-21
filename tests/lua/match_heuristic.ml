@@ -13,5 +13,5 @@ let mixed_1 = function
   | false, 2, Nil -> 2
   | _, _, Cons _ -> 3
 
-external val bottom : 'a = "nil"
-let () = bottom { common_prefix, common_suffix, mixed_1 }
+external val ignore : 'a -> () = "nil"
+let () = ignore { common_prefix, common_suffix, mixed_1 }

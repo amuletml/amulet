@@ -8,5 +8,5 @@ let g x =
   let Z = x ()
   Z
 
-external val bottom : 'a = "nil"
-let () = bottom { f, g }
+external val ignore : 'a -> () = "nil"
+let () = ignore { f, g }

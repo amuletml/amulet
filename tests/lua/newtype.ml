@@ -16,5 +16,5 @@ let main (x : forall 'a. 'a -> unit) =
   x It (* Doesn't get inlined *)
   x Mk (* Mk's worker has a type argument, so it'll get inlined *)
 
-external val bottom : 'a = "nil"
-let () = main bottom
+external val ignore : 'a -> () = "nil"
+let () = main ignore

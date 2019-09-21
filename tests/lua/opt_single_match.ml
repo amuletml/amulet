@@ -6,5 +6,5 @@ type z = Z
 let g = function
   | (x : z) -> x
 
-external val bottom : 'a = "nil"
-let () = bottom { f, g }
+external val ignore : 'a -> () = "nil"
+let () = ignore { f, g }

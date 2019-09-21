@@ -1,7 +1,7 @@
 let id x = x
 
-external val bottom : 'a = "nil"
-let () = bottom { op = (@@)
+external val ignore : 'a -> () = "nil"
+let () = ignore { op = (@@)
                 , app = id @@ 2
                 , rsec = (@@2)
                 , lsec = (id@@)

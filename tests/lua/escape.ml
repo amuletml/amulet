@@ -1,6 +1,6 @@
-external val bottom : 'a -> () = "nil"
+external val ignore : 'a -> () = "nil"
 
-let () = bottom
+let () = ignore
            { quote = "\""
            , slash = "\\"
            , line  =  "\n"

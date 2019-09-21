@@ -1,6 +1,6 @@
-external val bottom : 'a = "print"
+external val ignore : 'a -> () = "nil"
 
-let () = bottom @@ fun f ->
+let () = ignore @@ fun f ->
   let a = f 1
   { b = f 2,
     a = a }

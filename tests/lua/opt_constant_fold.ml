@@ -1,5 +1,5 @@
-external val bottom : 'a -> () = "nil"
-let () = bottom (fun { i, s, u, fn, x }->
+external val ignore : 'a -> () = "nil"
+let () = ignore (fun { i, s, u, fn, x }->
   { int_add_c = 2 + 3
   , int_sub_c = 2 - 3
   , int_mul_c = 2 * 3

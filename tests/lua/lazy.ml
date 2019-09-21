@@ -1,3 +1,3 @@
-external val bottom : 'a -> () = "nil"
+external val ignore : 'a -> () = "nil"
 
-let () = bottom (lazy 2, fun x -> force x)
+let () = ignore (lazy 2, fun x -> force x)

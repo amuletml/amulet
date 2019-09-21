@@ -7,5 +7,5 @@ let main x =
          | 0 -> 3
          | _ -> 4
 
-external val bottom : 'a = "nil"
-let () = bottom main
+external val ignore : 'a -> () = "nil"
+let () = ignore main

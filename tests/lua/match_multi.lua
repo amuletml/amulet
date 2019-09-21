@@ -1,4 +1,7 @@
 do
-  local bp = (nil)(nil)
-  (nil)(bp.a + bp.b)
+  local function main(f)
+    local bm = f(nil)
+    return bm.a + bm.b
+  end
+  (nil)(main)
 end

@@ -4,5 +4,5 @@ let main f =
   let c = (+) a
   c b
 
-external val bottom : 'a = "nil"
-let () = bottom (main bottom)
+external val ignore : 'a -> () = "nil"
+let () = ignore main

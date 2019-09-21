@@ -21,5 +21,5 @@ module WithArgs =
     let _ = go ()
     other
 
-external val bottom : 'a = "nil"
-let () = bottom (NoArgs.main, WithArgs.main)
+external val ignore : 'a -> () = "nil"
+let () = ignore (NoArgs.main, WithArgs.main)

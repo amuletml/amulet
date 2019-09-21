@@ -8,8 +8,8 @@
       enough to look through everything.
 *)
 
-external val bottom : 'a = "nil"
+external val ignore : 'a -> () = "nil"
 let () =
   let semigroup_unit = { append = fun _ () -> () }
-  bottom ( semigroup_unit.append () ()
+  ignore ( semigroup_unit.append () ()
          , semigroup_unit.append () () )

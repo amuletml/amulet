@@ -5,5 +5,5 @@ let filter f = function
   | Cons (x, xs) when f x -> x :: filter f xs
   | Cons (_, xss) -> filter f xss
 
-external val bottom : 'a -> () = "nil"
-let () = bottom filter
+external val ignore : 'a -> () = "nil"
+let () = ignore filter

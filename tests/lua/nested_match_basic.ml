@@ -6,5 +6,5 @@ let zip f xs ys =
   | _, Nil -> [2]
   | Cons (x, xs), Cons (y, ys) -> f x y :: zip f xs ys
 
-external val bottom : 'a = "nil"
-let () = bottom zip
+external val ignore : 'a -> () = "nil"
+let () = ignore zip

@@ -10,6 +10,5 @@ let main f =
   let c = f 3
   ( b, c, a )
 
-
-external val bottom : 'a = "nil"
-let () = bottom (main bottom)
+external val ignore : 'a -> () = "nil"
+let () = ignore main
