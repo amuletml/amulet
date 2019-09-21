@@ -1,5 +1,0 @@
-fail_span.ml[1:12 ..1:16]: error
-  Unexpected "foo", expected one of forall, '_', type, lazy, '(', '{', identifier, constructor, type variable
-  │ 
-1 │ let main : "foo" = 1
-  │            ^^^^^

@@ -357,6 +357,7 @@ reType r (TyVar v) = TyVar <$> (lookupTyvar v `catchJunk` r)
 reType r (TyPromotedCon v) = TyPromotedCon <$> (lookupEx v `catchJunk` r)
 reType _ v@TySkol{} = error ("impossible! resolving skol " ++ show v)
 reType _ v@TyWithConstraints{} = error ("impossible! resolving withcons " ++ show v)
+reType _ (TyLit v) = pure (TyLit v)
 reType r (TyPi (Invisible v k req) ty) = do
   v' <- tagVar v
   ty' <- extendTyvar (v, v') $ reType r ty

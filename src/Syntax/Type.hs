@@ -41,8 +41,8 @@ data Type p
   | TySkol (Skolem p)
   | TyWithConstraints [(Type p, Type p)] (Type p)
 
-  -- Dependent type stuff
   | TyType -- yeah, type : type, fight me
+  | TyLit Lit
 
 data TyBinder p
   = Anon { _tyBinderType :: Type p } -- ^ A function type
@@ -196,6 +196,7 @@ instance (Pretty (Var p)) => Pretty (Type p) where
     where prettyEq (a, b) = pretty a <+> soperator (char '~') <+> pretty b
 
   pretty TyType = stypeCon (string "type")
+  pretty (TyLit v) = pretty v
 
 instance Pretty (Var p) => Pretty (TyBinder p) where
   pretty (Anon t) = k t (pretty t) <+> arrow where

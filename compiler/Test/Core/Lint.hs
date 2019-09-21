@@ -129,5 +129,5 @@ files =
   , "peano.ml"
   , "pipe.ml"
   , "polymorphic-recursion.ml"
-  -- , "skolems.ml"
+  , "mini-servant.ml"
   ]

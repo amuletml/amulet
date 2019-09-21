@@ -566,6 +566,8 @@ TypeAtom :: { Located (Type Parsed) }
          | '{' ListT(TypeRow, ',') '}'            { lPos2 $1 $3 $ TyExactRows $2 }
          | '{' Type '|' ListT(TypeRow, ',') '}'   { lPos2 $1 $5 $ TyRows (getL $2) $4 }
          | '_'                                    { lPos1 $1 (TyWildcard Nothing) }
+         | string                                 { lPos1 $1 $ TyLit (LiStr (getString $1)) }
+         | int                                    { lPos1 $1 $ TyLit (LiInt (getInt $1)) }
 
 TypeRow :: { (T.Text, Type Parsed) }
   : ident ':' Type                                { (getIdent $1, getL $3) }

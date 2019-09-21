@@ -248,13 +248,13 @@ infer ex@(BinOp l o r a) = do
 
 infer ex@App{} = do
   (ex, ty) <- inferApp ex
-  (k, _, ty) <- instantiate Strong Expression ty
-  pure (fromMaybe id k ex, ty)
+  (k, ty) <- instantiateTc (becauseExp ex) ty
+  pure (k ex, ty)
 
 infer ex@Vta{} = do
   (ex, ty) <- inferApp ex
-  (k, _, ty) <- instantiate Strong Expression ty
-  pure (fromMaybe id k ex, ty)
+  (k, ty) <- instantiateTc (becauseExp ex) ty
+  pure (k ex, ty)
 
 infer ex@(Match t ps a) = do
   tt <-
@@ -371,7 +371,7 @@ inferRows rows = for rows $ \(Field n e s) -> do
 inferProg :: MonadInfer Typed m
           => [Toplevel Desugared] -> m ([Toplevel Typed], Env)
 inferProg (stmt@(LetStmt am ns):prg) = censor (const mempty) $ do
-  (ns', ts, vs) <- retcons (addBlame (BecauseOf stmt)) (inferLetTy (closeOverStrat (BecauseOf stmt)) Fail ns)
+  (ns', ts, _) <- retcons (addBlame (BecauseOf stmt)) (inferLetTy (closeOverStrat (BecauseOf stmt)) Fail ns)
   let bvs = Set.fromList (namesInScope (focus ts mempty))
 
   (ts, es) <- flip foldTeleM ts $ \var ty -> do
@@ -379,7 +379,6 @@ inferProg (stmt@(LetStmt am ns):prg) = censor (const mempty) $ do
     case ty of
       Left e -> pure (mempty, [e])
       Right t -> do
-        assert (vs == mempty) pure ()
         t <- expandType t
         pure (one var t, mempty)
   case es of
@@ -501,7 +500,7 @@ inferLetTy closeOver strategy vs =
               case wraps' Map.! var of
                 ExprApp v -> v
                 _ -> ExprWrapper (wraps' Map.! var)
-                       (Fun (EvParam (Capture name (an, ty))) (VarRef name (an, ty)) (an, TyArr ty ty))
+                       (Fun (EvParam (PType (Capture name (an, ty)) ty (an, ty))) (VarRef name (an, ty)) (an, TyArr ty ty))
                        (an, ty)
 
         ts <- view tySyms
@@ -596,7 +595,7 @@ inferLetTy closeOver strategy vs =
               case wraps' Map.! var of
                 ExprApp v -> v
                 _ -> ExprWrapper (wraps' Map.! var)
-                       (Fun (EvParam (Capture name (an, ty))) (VarRef name (an, ty)) (an, TyArr ty ty))
+                       (Fun (EvParam (PType (Capture name (an, ty)) ty (an, ty))) (VarRef name (an, ty)) (an, TyArr ty ty))
                        (an, ty)
         tel' <- traverseTele (const solved) tel
         ty <- solved ty
@@ -634,7 +633,7 @@ inferLetTy closeOver strategy vs =
               case wrap' Map.! var of
                 ExprApp v -> v
                 _ -> ExprWrapper (wrap Map.! var)
-                       (Fun (EvParam (Capture name (an, ty))) (VarRef name (an, ty)) (an, TyArr ty ty))
+                       (Fun (EvParam (PType (Capture name (an, ty)) ty (an, ty))) (VarRef name (an, ty)) (an, TyArr ty ty))
                        (an, ty)
 
         tys <- view tySyms
@@ -816,14 +815,18 @@ skolCheck var exp ty = do
 checkAmbiguous :: forall m. MonadInfer Typed m => Var Typed -> SomeReason -> Type Typed -> m ()
 checkAmbiguous var exp tau = go mempty mempty tau where
   go :: Set.Set (Var Typed) -> Set.Set (Var Typed) -> Type Typed -> m ()
+  go ok s (TyPi (Invisible v _ Req) t) = go (Set.insert v ok) s t
   go ok s (TyPi Invisible{} t) = go ok s t
   go ok s (TyPi (Implicit v) t)
     | (TyCon clss:args) <- apps v = do
-        ci <- view (classDecs . at clss . non undefined)
-        let fds = ci ^. ciFundep
-            det (_, x, _) = x
-            fundep_ok = foldMap (ftv . (args !!)) (foldMap det fds)
-        go (ok <> fundep_ok) (s <> ftv v) t
+        ci <- view (classDecs . at clss)
+        case ci of
+          Just ci ->
+            let fds = ci ^. ciFundep
+                det (_, x, _) = x
+                fundep_ok = foldMap (ftv . (args !!)) (foldMap det fds)
+             in go (ok <> fundep_ok) (s <> ftv v) t
+          Nothing -> go ok (s <> ftv v) t
     | otherwise = go ok (s <> ftv v) t
   go ok s t =
     if not (Set.null (s Set.\\ (fv <> ok)))
@@ -947,6 +950,7 @@ deSkol = go mempty where
     | var `Set.member` acc = TyVar var
     | otherwise = ty
   go _ x@TyCon{} = x
+  go _ x@TyLit{} = x
   go _ x@TyVar{} = x
   go _ x@TyPromotedCon{} = x
   go acc (TyApp f x) = TyApp (go acc f) (go acc x)
@@ -994,3 +998,23 @@ getTypeContext ty =
     getCtxParts (TyPi (Implicit v) t) = v:getCtxParts t
     getCtxParts (TyPi _ t) = getCtxParts t
     getCtxParts _ = []
+
+instantiateTc :: MonadInfer Typed m
+              => SomeReason
+              -> Type Typed
+              -> m ( Expr Typed -> Expr Typed
+                   , Type Typed )
+instantiateTc r tau = do
+  (fromMaybe id -> f, _, ty) <- instantiate Strong Expression tau
+  (g, ty) <- go ty
+  pure (f . g, ty)
+  where
+    go ty@(TyPi (Implicit tau) sigma) = do
+      x <- genName
+      i <- view classes
+      tell (Seq.singleton (ConImplicit r i x tau))
+      (k, sigma) <- go sigma 
+      let wrap ex =
+            ExprWrapper (WrapVar x) (ExprWrapper (TypeAsc ty) ex (annotation ex, ty)) (annotation ex, sigma)
+      pure (k . wrap, sigma)
+    go x = pure (id, x)

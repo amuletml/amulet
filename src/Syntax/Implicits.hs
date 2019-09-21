@@ -1,10 +1,10 @@
 {-# LANGUAGE StandaloneDeriving, FlexibleContexts, FlexibleInstances,
-   UndecidableInstances, ScopedTypeVariables, TemplateHaskell #-}
+   UndecidableInstances, ScopedTypeVariables, TemplateHaskell, MultiParamTypeClasses #-}
 module Syntax.Implicits
   ( ImplicitScope
   , Obligation(..), Sort(..)
   , Implicit(..), implHead, implPre, implVar, implType, implSort, implSpan, implClass
-  , lookup, keys, mapTypes, subTrie
+  , lookup, keys, subTrie
   , insert, singleton
   , spine, splitImplVarType
   , matches, overlap
@@ -27,6 +27,8 @@ import Control.Lens
 
 import Syntax hiding ((:>))
 import Prelude hiding (lookup)
+
+import Syntax.Subst
 
 -- | An obligation the solver needs to resolve if it chose this
 -- implicit parameter.
@@ -88,8 +90,28 @@ deriving instance (Show info, Show (Var p), Show (Ann p)) => Show (ImplicitScope
 deriving instance (Ord info, Ord (Var p)) => Ord (ImplicitScope info p)
 deriving instance (Eq info, Eq (Var p)) => Eq (ImplicitScope info p)
 
+instance Ord (Var p) => Substitutable p (ImplicitScope i p) where
+  ftv = foldMap ftv . keys
+  apply m (Trie trie) = Trie $ fmap (apply m) trie
+
+instance Ord (Var p) => Substitutable p (Node i p) where
+  ftv (One i) = ftv i
+  ftv (Some is) = ftv is
+  ftv (Many t) = ftv t
+  ftv (ManyMore is m) = ftv is <> ftv m
+
+  apply m (One impl) = One (apply m impl)
+  apply m (Some is) = Some (apply m is)
+  apply m (Many t) = Many (apply m t)
+  apply m (ManyMore is t) = ManyMore (apply m is) (apply m t)
+
+instance Ord (Var p) => Substitutable p (Implicit i p) where
+  ftv i = ftv (i ^. implType) Set.\\ boundByImpl i
+  apply m i = i & implHead %~ apply m' where
+    m' = m `Map.withoutKeys` boundByImpl i
+
 -- | Insert a choice for a *fully-known* (@Solved@) implicit parameter
--- (the variable @v@) of type @tau@ at the given trie.
+-- (the vriable @v@) of type @tau@ at the given trie.
 insert :: forall i p. Ord (Var p) => Ann Resolved -> Sort -> Var p -> Type p -> i -> ImplicitScope i p -> ImplicitScope i p
 insert annot sort v ty info = go ts implicit where
   (head, obligations) = getHead ty
@@ -174,37 +196,6 @@ keys = go where
   goNode (Many t) = go t
   goNode (ManyMore xs t) = foldMapOf (each . implHead) Set.singleton xs <> go t
 
--- | Map a function over the elements of a trie. Note that, because of
--- the way they are stored, the function will be applied many times to
--- distinct parts of possibly the same type.
-mapTypes :: forall i p. (Ord (Var p)) => (Type p -> Type p) -> ImplicitScope i p -> ImplicitScope i p
-mapTypes fn = go where
-  go (Trie m) = Trie (Map.foldrWithKey (\k x r -> makeTrie (change fn k) (goNode x) `merge` r) mempty m)
-
-  change fn k =
-    let sp = spine k
-        k' = fn k
-        sp' = spine k'
-     in if sp == sp'
-           then [k']
-           else sp'
-
-  makeTrie :: [Type p] -> Node i p -> Map.Map (Type p) (Node i p)
-  makeTrie [x] n = Map.singleton x n
-  makeTrie (x:xs) n = Map.singleton x (Many (Trie (makeTrie xs n)))
-  makeTrie [] _ = error "a node was left dangling while balancing trie"
-
-  goNode (One x) = One (goI x)
-  goNode (Some xs) = Some (map goI xs)
-  goNode (Many t) = Many (go t)
-  goNode (ManyMore xs t) = ManyMore (map goI xs) (go t)
-
-  goI (ImplChoice h t o v s a i) = ImplChoice (fn h) (fn t) (map goO o) v s a i
-
-  goO (Quantifier (Invisible v k x))
-    | x /= Req = Quantifier (Invisible v (fn <$> k) Infer)
-  goO (Quantifier _) = error "impossible quantifier"
-  goO (Implication ts) = Implication (fn ts)
 
 -- | Find the 'Many' node located at the end of the provided spine
 -- section in the scope.
@@ -247,6 +238,7 @@ getHead t@TyTuple{} = (t, Seq.empty)
 getHead t@TySkol{} = (t, Seq.empty)
 getHead t@TyWithConstraints{} = (t, Seq.empty)
 getHead t@TyType = (t, Seq.empty)
+getHead t@TyLit{} = (t, Seq.empty)
 getHead t@TyWildcard{} = (t, Seq.empty)
 getHead (TyParens t) = getHead t
 getHead t@TyOperator{} = (t, Seq.empty)
@@ -272,6 +264,9 @@ matches _ TyWildcard{} = True
 
 matches (TyCon t) (TyCon t') = t == t'
 matches TyCon{} _ = False
+
+matches (TyLit t) (TyLit t') = t == t'
+matches TyLit{} _ = False
 
 matches (TyPromotedCon t) (TyPromotedCon t') = t == t'
 matches TyPromotedCon{} _ = False
@@ -322,3 +317,8 @@ overlap xs ys
   = map get inter
   where get [(t, a), (_, b)] = (t, a, b)
         get _ = undefined
+
+boundByImpl :: Ord (Var p) => Implicit i p -> Set.Set (Var p)
+boundByImpl = foldMap fv . view implPre where
+  fv (Quantifier v) = Set.singleton (v ^?! tyBinderVar)
+  fv _ = mempty

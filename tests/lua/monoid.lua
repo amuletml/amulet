@@ -3,46 +3,46 @@ do
   local Nil = { __tag = "Nil" }
   local tostring = tostring
   local writeln = print
-  local function _dollardApplicativeais(chu)
+  local function _dollardApplicativeait(cia)
     return {
-      pure = function(chg) return chu.zero end,
-      ["<*>"] = function(cgx) return function(cgu) return chu["×"](cgx)(cgu) end end,
-      ["Applicative$ma"] = function(cgf) return function(cgc) return cgc end end
+      pure = function(chm) return cia.zero end,
+      ["<*>"] = function(chd) return function(cha) return cia["×"](chd)(cha) end end,
+      ["Applicative$ma"] = function(cgl) return function(cgi) return cgi end end
     }
   end
   local function _colon_colon(x) return function(y) return Cons({ _1 = x, _2 = y }) end end
-  local function _dollarshow(axo, cs)
+  local function _dollarshow(axr, cs)
     if cs.__tag == "Nil" then
       return "Nil"
     elseif cs.__tag == "Cons" then
-      local cjp = cs[1]
-      return axo(cjp._1) .. " :: " .. _dollarshow(axo, cjp._2)
+      local cjv = cs[1]
+      return axr(cjv._1) .. " :: " .. _dollarshow(axr, cjv._2)
     end
   end
-  local function _dollartraverse(bnq, cnp, k, cu)
+  local function _dollartraverse(bnu, cnv, k, cu)
     if cu.__tag == "Nil" then
-      return cnp.pure(Nil)
+      return cnv.pure(Nil)
     elseif cu.__tag == "Cons" then
-      local cnm = cu[1]
-      return cnp["<*>"](cnp["Applicative$ma"](_colon_colon)(k(cnm._1)))(_dollartraverse(nil, cnp, k, cnm._2))
+      local cns = cu[1]
+      return cnv["<*>"](cnv["Applicative$ma"](_colon_colon)(k(cns._1)))(_dollartraverse(nil, cnv, k, cns._2))
     end
   end
-  local function _dollar_d7(bsg, x, ys)
+  local function _dollar_d7(bsk, x, ys)
     if x.__tag == "Nil" then
       return ys
     elseif x.__tag == "Cons" then
-      local com = x[1]
-      return Cons({ _1 = com._1, _2 = _dollar_d7(nil, com._2, ys) })
+      local cos = x[1]
+      return Cons({ _2 = _dollar_d7(nil, cos._2, ys), _1 = cos._1 })
     end
   end
-  local cpr = { _1 = 1, _2 = nil }
+  local cpx = { _1 = 1, _2 = nil }
   writeln(_dollarshow(function(x)
     return tostring(x)
-  end, _dollartraverse(nil, _dollardApplicativeais({
-    zero = Nil,
-    ["×"] = function(x) return function(ys) return _dollar_d7(nil, x, ys) end end
-  }), function(cif) return Cons({ _1 = cif._1, _2 = Nil }) end, Cons({
-    _1 = cpr,
-    _2 = Cons({ _1 = cpr, _2 = Cons({ _1 = cpr, _2 = Nil }) })
+  end, _dollartraverse(nil, _dollardApplicativeait({
+    ["×"] = function(x) return function(ys) return _dollar_d7(nil, x, ys) end end,
+    zero = Nil
+  }), function(cil) return Cons({ _2 = Nil, _1 = cil._1 }) end, Cons({
+    _1 = cpx,
+    _2 = Cons({ _1 = cpx, _2 = Cons({ _1 = cpx, _2 = Nil }) })
   }))))
 end

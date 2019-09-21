@@ -12,7 +12,7 @@ import Data.Text ()
 import Core.Core
 import Core.Var
 
-vBool, vInt, vString, vFloat, vUnit, vLazy, vArrow, vProduct, vList, vRefTy :: CoVar
+vBool, vInt, vString, vFloat, vUnit, vLazy, vArrow, vProduct, vList, vRefTy, vKStrTy, vKIntTy :: CoVar
 vBool    = CoVar (-1) "bool" TypeConVar
 vInt     = CoVar (-2) "int" TypeConVar
 vString  = CoVar (-3) "string" TypeConVar
@@ -23,8 +23,10 @@ vArrow   = CoVar (-38) "->" TypeConVar
 vProduct = CoVar (-39) "*" TypeConVar
 vList    = CoVar (-40) "list" TypeConVar
 vRefTy   = CoVar (-43) "ref" TypeConVar
+vKStrTy  = CoVar (-49) "known_string" TypeConVar
+vKIntTy  = CoVar (-50) "known_int" TypeConVar
 
-tyBool, tyInt, tyString, tyFloat, tyUnit, tyLazy, tyList, tyRef :: IsVar a => Type a
+tyBool, tyInt, tyString, tyFloat, tyUnit, tyLazy, tyList, tyRef, tyKStr, tyKInt :: IsVar a => Type a
 tyBool   = ConTy $ fromVar vBool
 tyInt    = ConTy $ fromVar vInt
 tyString = ConTy $ fromVar vString
@@ -33,6 +35,8 @@ tyFloat  = ConTy $ fromVar vFloat
 tyLazy   = ConTy $ fromVar vLazy
 tyList   = ConTy $ fromVar vList
 tyRef    = ConTy $ fromVar vRefTy
+tyKStr   = ConTy $ fromVar vKStrTy
+tyKInt   = ConTy $ fromVar vKIntTy
 
 builtinTyList :: IsVar a => [a]
 builtinTyList = [ fromVar vBool
@@ -45,6 +49,8 @@ builtinTyList = [ fromVar vBool
                 , fromVar vProduct
                 , fromVar vList
                 , fromVar vRefTy
+                , fromVar vKStrTy
+                , fromVar vKIntTy
                 ]
 
 vOpAdd, vOpSub, vOpMul, vOpDiv, vOpExp :: CoVar
@@ -87,14 +93,10 @@ vLAZY, vForce :: CoVar
 vLAZY = CoVar (-35) "lazy" ValueVar
 vForce = CoVar (-36) "force" ValueVar
 
-vAssign, vDeref, vRef :: CoVar
-vAssign = CoVar (-44) ":=" ValueVar
-vDeref = CoVar (-45) "!" ValueVar
-vRef = CoVar (-46) "ref" ValueVar
-
-tyvarA, tyvarB :: CoVar
+tyvarA, tyvarB, argvarX :: CoVar
 tyvarA = CoVar (-30) "a" TypeVar
 tyvarB = CoVar (-31) "b" TypeVar
+argvarX = CoVar (-53) "x" ValueVar
 
 vOpApp :: CoVar
 vOpApp = CoVar (-32) "@@" ValueVar
@@ -102,6 +104,19 @@ vOpApp = CoVar (-32) "@@" ValueVar
 vCONS, vNIL :: CoVar
 vCONS = CoVar (-41) "Cons" DataConVar
 vNIL = CoVar (-42) "Nil" DataConVar
+
+vAssign, vDeref, vRef :: CoVar
+vAssign = CoVar (-44) ":=" ValueVar
+vDeref = CoVar (-45) "!" ValueVar
+vRef = CoVar (-46) "ref" ValueVar
+
+vStrVal, vIntVal :: CoVar
+vStrVal = CoVar (-47) "string_value" ValueVar
+vIntVal = CoVar (-48) "int_value" ValueVar
+
+vKSTR, vKINT :: CoVar
+vKSTR = CoVar (-51) "$KnownString" ValueVar
+vKINT = CoVar (-52) "$KnownInt" ValueVar
 
 builtinVarList :: forall a b. (IsVar a, IsVar b) => [(a, Type b)]
 builtinVarList = vars where
@@ -150,7 +165,26 @@ builtinVarList = vars where
          , op vRef (ForallTy (Relevant name) StarTy $ VarTy name `arrTy` AppTy tyRef (VarTy name))
          , op vAssign (ForallTy (Relevant name) StarTy $ ValuesTy [AppTy tyRef (VarTy name), VarTy name] `arrTy` tyUnit)
          , op vDeref (ForallTy (Relevant name) StarTy $ AppTy tyRef (VarTy name) `arrTy` VarTy name)
+
+         , op vStrVal (ForallTy (Relevant name) tyString $ AppTy tyKStr (VarTy name) `arrTy` tyString)
+         , op vKSTR (ForallTy (Relevant name) tyString $ tyString `arrTy` AppTy tyKStr (VarTy name))
+
+         , op vIntVal (ForallTy (Relevant name) tyInt $ AppTy tyKInt (VarTy name) `arrTy` tyInt)
+         , op vKINT (ForallTy (Relevant name) tyInt $ tyInt `arrTy` AppTy tyKInt (VarTy name))
          ]
 
 isError :: IsVar a => a -> Bool
 isError = (==vError) . toVar
+
+fakeStrVal, fakeKSTR :: IsVar a => Term a
+fakeStrVal =
+  Lam (TypeArgument (fromVar tyvarA) tyString) $
+    Lam (TermArgument (fromVar argvarX) (AppTy tyKStr (VarTy (fromVar tyvarA)))) $
+      (Cast (Ref (fromVar argvarX) (AppTy tyKStr (VarTy (fromVar tyvarA))))
+        (SameRepr (AppTy tyKStr (VarTy (fromVar tyvarA))) tyString))
+
+fakeKSTR =
+  Lam (TypeArgument (fromVar tyvarA) tyString) $
+    Lam (TermArgument (fromVar argvarX) (AppTy tyKStr (VarTy (fromVar tyvarA)))) $
+      (Cast (Ref (fromVar argvarX) (AppTy tyKStr (VarTy (fromVar tyvarA))))
+        (Symmetry (SameRepr (AppTy tyKStr (VarTy (fromVar tyvarA))) tyString)))

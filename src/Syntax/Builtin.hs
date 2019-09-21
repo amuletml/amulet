@@ -15,17 +15,21 @@ module Syntax.Builtin
 
   , tyUnitName, tyBoolName, tyIntName, tyStringName, tyFloatName
   , tyLazyName, tyConstraintName, tyArrowName, tyTupleName
-  , tyRefName
+  , tyRefName, tyKStrName, tyKIntName
 
   , tyUnit, tyBool, tyInt, tyString, tyFloat
   , tyLazy, tyConstraint, tyArrow, tyList
-  , tyRef
+  , tyRef, tyKStr, tyKInt
 
   , forceName, lAZYName, forceTy, lAZYTy, forceTy', lAZYTy'
   , assignName, derefName, refName
 
   , cONSName, nILName, cONSTy, nILTy, cONSTy', nILTy'
   , opAppName
+
+  , strValName, strValTy, intValName, intValTy
+  , knownStrName, knownStrTy, knownStrTy'
+  , knownIntName, knownIntTy, knownIntTy'
   ) where
 
 import Control.Lens
@@ -43,7 +47,7 @@ import Syntax
 import qualified Core.Builtin as C
 import Core.Var
 
-tyUnitName, tyBoolName, tyIntName, tyStringName, tyFloatName, tyLazyName, tyConstraintName, tyArrowName, tyTupleName, tyListName, tyRefName :: Var Typed
+tyUnitName, tyBoolName, tyIntName, tyStringName, tyFloatName, tyLazyName, tyConstraintName, tyArrowName, tyTupleName, tyListName, tyRefName, tyKStrName, tyKIntName :: Var Typed 
 tyIntName    = ofCore C.vInt
 tyStringName = ofCore C.vString
 tyBoolName   = ofCore C.vBool
@@ -54,19 +58,23 @@ tyArrowName  = ofCore C.vArrow
 tyTupleName  = ofCore C.vProduct
 tyListName   = ofCore C.vList
 tyRefName    = ofCore C.vRefTy
+tyKStrName   = ofCore C.vKStrTy
+tyKIntName   = ofCore C.vKIntTy
 tyConstraintName = TgInternal "constraint"
 
-tyUnit, tyBool, tyInt, tyString, tyFloat, tyLazy, tyConstraint, tyArrow, tyList, tyRef :: Type Typed
-tyInt    = TyCon tyIntName
-tyString = TyCon tyStringName
-tyBool   = TyCon tyBoolName
-tyUnit   = TyCon tyUnitName
-tyFloat  = TyCon tyFloatName
-tyLazy   = TyCon tyLazyName
-tyArrow  = TyCon tyArrowName
-tyList   = TyCon tyListName
+tyUnit, tyBool, tyInt, tyString, tyFloat, tyLazy, tyConstraint, tyArrow, tyList, tyRef, tyKStr, tyKInt :: Type Typed
+tyInt        = TyCon tyIntName
+tyString     = TyCon tyStringName
+tyBool       = TyCon tyBoolName
+tyUnit       = TyCon tyUnitName
+tyFloat      = TyCon tyFloatName
+tyLazy       = TyCon tyLazyName
+tyArrow      = TyCon tyArrowName
+tyList       = TyCon tyListName
 tyConstraint = TyCon tyConstraintName
-tyRef = TyCon tyRefName
+tyRef        = TyCon tyRefName
+tyKStr       = TyCon tyKStrName
+tyKInt       = TyCon tyKIntName
 
 forceName, lAZYName :: Var Typed
 forceName = ofCore C.vForce
@@ -95,6 +103,24 @@ nILTy' = TyApp tyList
 
 opAppName :: Var Typed
 opAppName = ofCore C.vOpApp
+
+strValName, knownStrName :: Var Typed
+strValName = ofCore C.vStrVal
+knownStrName = ofCore C.vKSTR
+
+intValName, knownIntName :: Var Typed
+intValName = ofCore C.vIntVal
+knownIntName = ofCore C.vKINT
+
+strValTy, knownStrTy, intValTy, knownIntTy :: Type Typed
+strValTy = TyPi (Invisible a (Just tyString) Req) $ TyPi (Implicit (TyApp tyKStr (TyVar a))) tyString
+knownStrTy = TyPi (Invisible a (Just tyString) Infer) $ tyString ~> TyApp tyKStr (TyVar a)
+intValTy = TyPi (Invisible a (Just tyInt) Req) $ TyPi (Implicit (TyApp tyKInt (TyVar a))) tyInt
+knownIntTy = TyPi (Invisible a (Just tyInt) Infer) $ tyInt ~> TyApp tyKInt (TyVar a)
+
+knownStrTy', knownIntTy' :: Type Typed -> Type Typed
+knownStrTy' a = tyString ~> TyApp tyKStr a
+knownIntTy' a = tyInt ~> TyApp tyKInt a
 
 data BuiltinModule = BM
   { vars    :: [(Var Resolved, Type Typed)]
@@ -128,6 +154,8 @@ builtins =
            , (assignName, a *. TyApp tyRef (TyVar a) ~> (TyVar a ~> tyUnit))
            , (derefName, a *. TyApp tyRef (TyVar a) ~> TyVar a)
            , (refName, a *. TyVar a ~> TyApp tyRef (TyVar a))
+           , (strValName, strValTy)
+           , (intValName, intValTy)
            ]
 
   , types = [ tp C.vBool, tp C.vInt, tp C.vString, tp C.vFloat, tp C.vUnit
@@ -141,6 +169,12 @@ builtins =
   , constructors = Map.fromList
       [ (tyListName, Set.fromList [cONSName, nILName] )
       ]
+  , modules =
+      [ ( TgInternal "Amc"
+        , mempty { vars = [ (strValName, strValTy), (intValName, intValTy) ]
+                 , types = [ (tyKStrName, tyString ~> tyConstraint), (tyKIntName, tyInt ~> tyConstraint) ]
+                 }
+        ) ]
   }
 
   where

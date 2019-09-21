@@ -95,3 +95,21 @@ instance Pretty VarParsed where
 instance Pretty VarResolved where
   pretty (TgName v i) = text v <> scomment (string "#" <> string (show i))
   pretty (TgInternal v) = text v
+
+-- | A literal value
+data Lit
+  = LiFloat Double
+  | LiInt Integer
+  | LiStr Text
+  | LiBool Bool
+  | LiUnit
+  deriving (Eq, Show, Ord, Data, Typeable)
+
+instance Pretty Lit where
+  pretty (LiStr s) = sstring (dquotes (text s))
+  pretty (LiInt s) = sliteral (integer s)
+  pretty (LiFloat s) = sliteral (double s)
+  pretty (LiBool True) = sliteral (string "true")
+  pretty (LiBool False) = sliteral (string "false")
+  pretty LiUnit = sliteral (parens empty)
+

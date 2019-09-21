@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleInstances, FlexibleContexts, ScopedTypeVariables,
    DeriveFunctor, DeriveGeneric, PatternSynonyms, TemplateHaskell,
-   DeriveAnyClass #-}
+   DeriveAnyClass, DeriveDataTypeable #-}
 -- | Amulet's explicitly-typed intermediate representation
 module Core.Core where
 
@@ -15,6 +15,9 @@ import Data.Maybe
 import Data.Text (Text)
 import Data.List
 import Core.Var
+
+import Data.Typeable (Typeable)
+import Data.Data (Data)
 
 import Control.Lens
 
@@ -160,7 +163,7 @@ data Literal
   | Float Double
   | LitTrue | LitFalse
   | Unit | RecNil
-  deriving (Eq, Show, Ord, Generic, Hashable)
+  deriving (Eq, Show, Ord, Generic, Hashable, Data, Typeable)
 
 data Type a
   = ConTy a -- A type constructor

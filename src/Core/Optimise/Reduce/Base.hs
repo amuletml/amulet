@@ -120,7 +120,7 @@ runReduce :: forall m a x. (MonadNamey m, IsVar a)
           => RWST (ReduceScope a) (Sum Int) (ReduceState a) m x
           -> m (x, Int)
 runReduce m = fmap getSum <$> evalRWST m emptyScope emptyState where
-  emptyScope = RScope mempty builtinTys builtinCtors Arity.emptyScope
+  emptyScope = RScope builtinVars builtinTys builtinCtors Arity.emptyScope
   emptyState = RState mempty
 
   arrTy = ForallTy Irrelevant
@@ -141,6 +141,19 @@ runReduce m = fmap getSum <$> evalRWST m emptyScope emptyState where
     [ (vCONS, (fromVar vList, ForallTy (Relevant name) StarTy $
           VarTy name `prodTy` AppTy tyList (VarTy name) `arrTy` AppTy tyList (VarTy name)))
     , (vNIL, (fromVar vList, ForallTy (Relevant name) StarTy $ AppTy tyList (VarTy name))) ]
+
+  builtinVars :: VarMap.Map (VarDef a)
+  builtinVars = VarMap.fromList
+    [ ( fromVar vStrVal
+      , VarDef { varDef = Just (DefInfo (fromVar vStrVal) fakeStrVal)
+               , varNotAmong = []
+               , varLoopBreak = False }
+      )
+    , ( fromVar vKSTR
+      , VarDef { varDef = Just (DefInfo (fromVar vKSTR) fakeKSTR)
+               , varNotAmong = []
+               , varLoopBreak = False }
+      ) ]
 
 -- | Run the reduce monad N times, or until no more changes occur.
 runReduceN :: (MonadNamey m, IsVar a)
