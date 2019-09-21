@@ -1,6 +1,11 @@
 do
-  local a = (nil)(1)
-  local b = (nil)(2)
-  local c = (nil)(3)
-  (nil)(b)(c)(a)
+  local function main(f)
+    return function(g)
+      local a = f(1)
+      local b = f(2)
+      local c = f(3)
+      return g(b)(c)(a)
+    end
+  end
+  (nil)(main)
 end

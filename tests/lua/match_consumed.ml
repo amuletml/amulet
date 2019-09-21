@@ -12,5 +12,5 @@ let main f x =
           | Some x -> x * 2
   in f (a + b)
 
-external val bottom : 'a = "nil"
-let () = bottom (main bottom bottom)
+external val ignore : 'a -> () = "nil"
+let () = ignore main

@@ -1,3 +1,3 @@
-external val bottom : 'a -> () = "nil"
+external val ignore : 'a -> () = "nil"
 
-let () = bottom (fun π -> π)
+let () = ignore (fun π -> π)

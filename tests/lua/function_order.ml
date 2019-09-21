@@ -4,5 +4,5 @@ let main (f : int -> int) g =
   let c = f 3
   g b c a
 
-external val bottom : 'a = "nil"
-let () = main bottom bottom
+external val ignore : 'a -> () = "nil"
+let () = ignore main

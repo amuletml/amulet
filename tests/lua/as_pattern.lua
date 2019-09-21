@@ -1,7 +1,7 @@
 do
-  local function main(ch)
-    local b = ch.a
-    return b.a + b.b + ch.c
+  local function main(cg)
+    local b = cg.a
+    return b.a + b.b + cg.c
   end
   (nil)(main)
 end

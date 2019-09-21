@@ -39,5 +39,5 @@ let main = range (1, 5) |> dump_stream to_string
  * generate code for them)
  *)
 
-external val bottom : 'a = "nil"
-let () = bottom main
+external val ignore : 'a -> () = "nil"
+let () = ignore main

@@ -1,3 +1,4 @@
 do
-  (nil)((nil)(1) + (nil)(2))
+  local function main(f) return f(1) + f(2) end
+  (nil)(main)
 end
