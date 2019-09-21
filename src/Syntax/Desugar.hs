@@ -142,6 +142,7 @@ wrapper = error "Wrapper during desugaring"
 
 ty :: Type Resolved -> Type Desugared
 ty (TyCon v) = TyCon v
+ty (TyLit v) = TyLit v
 ty (TyVar v) = TyVar v
 ty (TyPromotedCon v) = TyPromotedCon v
 ty (TyApp f x) = TyApp (ty f) (ty x)

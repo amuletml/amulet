@@ -18,6 +18,7 @@ wellformed tp = case tp of
   TyType{} -> pure ()
   TyPromotedCon{} -> pure ()
   TyWildcard{} -> pure ()
+  TyLit{} -> pure ()
   TyPi a b -> do
     case a of
       Invisible _ k _ -> traverse_ wellformed k
@@ -70,6 +71,7 @@ normType = flatten . uncurry collect . runWriter . spread . applyCons where
 
 skols :: (Show (Var p), Ord (Var p)) => Type p -> Set.Set (Skolem p)
 skols TyCon{}  = mempty
+skols TyLit{}  = mempty
 skols TyVar{}  = mempty
 skols TyType{} = mempty
 skols TyPromotedCon{}  = mempty

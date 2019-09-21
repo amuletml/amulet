@@ -160,6 +160,7 @@ library
                      , Types.Kinds
                      , Types.Unify
                      , Types.Wellformed
+                     , Types.Unify.Magic
                      , Types.Infer.Class
                      , Types.Infer.Errors
                      , Types.Infer.Builtin

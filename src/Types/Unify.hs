@@ -6,6 +6,7 @@
 -- | This module implements the logic responsible for solving the
 -- sequence of @Constraint@s the type-checker generates for a particular
 -- binding groups.
+-- #define TRACE_TC
 module Types.Unify
   ( SolveState, emptyState
   , typeWithin
@@ -52,6 +53,8 @@ import Data.Text (Text)
 import Data.Ord
 
 import Text.Pretty.Semantic
+
+import Types.Unify.Magic
 
 import Prelude hiding (lookup)
 
@@ -236,13 +239,13 @@ doSolve (ConImplicit why scope v (TyTuple a b) :<| cs) = do
                 (annotation why, TyArr b b))
               (annotation why, b)]
            (annotation why, TyTuple a b))
-  doSolve (ConImplicit why scope vara b :< ConImplicit why scope varb a :<| cs)
+  doSolve (ConImplicit why scope varb b :< ConImplicit why scope vara a :<| cs)
 
 doSolve (ohno@(ConImplicit reason scope var con@TyPi{}) :<| cs) = do
   doSolve cs
   sub <- use solveTySubst
   con <- pure (apply sub con)
-  scope <- pure (mapTypes (apply sub) scope)
+  scope <- pure (apply sub scope)
 
   (wrap, head, assum) <- skolemise (ByConstraint con) con
 
@@ -255,7 +258,7 @@ doSolve (ohno@(ConImplicit reason scope var con@TyPi{}) :<| cs) = do
                 \e -> confesses (usingFor imp con (headSeq e))
 
       let wanted = ExprWrapper (wrap :> w) (identity head) (a, con)
-          identity t = Fun (EvParam (Capture var (a, t))) (VarRef var (a, t)) (a, TyArr t t)
+          identity t = Fun (EvParam (PType (Capture var (a, t)) t (a, t))) (VarRef var (a, t)) (a, TyArr t t)
           a = annotation reason
 
       solveCoSubst . at var ?= ExprApp wanted
@@ -266,7 +269,7 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
   doSolve cs
   sub <- use solveTySubst
   cons <- pure (apply sub cons)
-  scope <- pure (mapTypes (apply sub) scope)
+  scope <- pure (apply sub scope)
 
   traceM (displayS (pretty (apply sub ohno)))
 
@@ -295,11 +298,18 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
             \e -> confesses (usingFor imp cons (headSeq e))
       solveCoSubst . at var ?= w
 
-    xs -> do
-      traceM (show (map (pretty . view implType) xs))
-      traceM "  => propagated"
-      solveCoSubst . at var ?= ExprApp (VarRef var (annotation reason, cons))
-      tell (pure (apply sub ohno))
+    _ ->
+      case head (apps cons) of
+        TyCon v | Just solve <- magicClass v -> do
+          w <- solve (apply sub cons)
+          case w of
+            Just solution -> solveCoSubst . at var ?= solution (annotation reason)
+            Nothing -> do
+              solveCoSubst . at var ?= ExprApp (VarRef var (annotation reason, cons))
+              tell (pure (apply sub ohno))
+        _ -> do
+          solveCoSubst . at var ?= ExprApp (VarRef var (annotation reason, cons))
+          tell (pure (apply sub ohno))
 
 allSameHead :: [Implicit ClassInfo Typed] -> Bool
 allSameHead (x:xs) = all (matches (x ^. implHead) . view implHead) xs
@@ -363,9 +373,10 @@ fundepsAllow impl cons
 
     concreteP = concretish . head . spine . (params !!)
 
-    apps = reverse . go where
-      go (TyApp f x) = x:go f
-      go t = [t]
+apps :: Type Typed -> [Type Typed]
+apps = reverse . go where
+  go (TyApp f x) = x:go f
+  go t = [t]
 
 bind :: MonadSolve m => Var Typed -> Type Typed -> m (Coercion Typed)
 bind var ty

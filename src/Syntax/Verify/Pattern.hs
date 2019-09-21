@@ -423,6 +423,7 @@ inhabited env (AbsState st cs i)
   -- type names are.
   go _ TyPromotedCon{} = inhb
   -- For now, we'll just assume all Pi types are inhabited
+  -- XXX: matheus: they all are
   go _ TyPi{} = inhb
   -- All the boring types: just determine if the children are inhabited
   go c (TyRows f fs) = go c f >> traverse_ (go c . snd) fs
@@ -435,6 +436,7 @@ inhabited env (AbsState st cs i)
   go _ TySkol{} = inhb
   go c (TyWithConstraints _ t) = go c t
   go _ TyType = inhb
+  go _ TyLit{} = inhb
 
   -- | Returns the type name if this type is concrete (defined as has 0 or more
   -- constructors, rather than being abstract).

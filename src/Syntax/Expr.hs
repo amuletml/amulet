@@ -16,15 +16,6 @@ import Data.Char
 import Syntax.Type
 import Syntax.Var
 
--- | A literal value
-data Lit
-  = LiFloat Double
-  | LiInt Integer
-  | LiStr Text
-  | LiBool Bool
-  | LiUnit
-  deriving (Eq, Show, Ord, Data, Typeable)
-
 data Binding p
   -- | @let implicit f x = ...@
   = Binding { _bindVariable :: Var p

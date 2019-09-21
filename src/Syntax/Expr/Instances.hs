@@ -186,14 +186,6 @@ instance (Pretty (Var p)) => Pretty (Pattern p) where
   pretty (PWrapper _ p _) = pretty p
   pretty (PSkolem p _ _) = pretty p
 
-instance Pretty Lit where
-  pretty (LiStr s) = sstring (dquotes (text s))
-  pretty (LiInt s) = sliteral (integer s)
-  pretty (LiFloat s) = sliteral (double s)
-  pretty (LiBool True) = sliteral (string "true")
-  pretty (LiBool False) = sliteral (string "false")
-  pretty LiUnit = sliteral (parens empty)
-
 instance Pretty (Var p) => Pretty (Binding p) where
   pretty (Binding n v _ _) = hsep (pretty n:map pretty args) <> sig <+> nest 2 (equals </> pretty rest') where
     (args, rest) = takeLambdas v
