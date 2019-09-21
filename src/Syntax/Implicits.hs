@@ -111,7 +111,7 @@ instance Ord (Var p) => Substitutable p (Implicit i p) where
     m' = m `Map.withoutKeys` boundByImpl i
 
 -- | Insert a choice for a *fully-known* (@Solved@) implicit parameter
--- (the vriable @v@) of type @tau@ at the given trie.
+-- (the variable @v@) of type @tau@ at the given trie.
 insert :: forall i p. Ord (Var p) => Ann Resolved -> Sort -> Var p -> Type p -> i -> ImplicitScope i p -> ImplicitScope i p
 insert annot sort v ty info = go ts implicit where
   (head, obligations) = getHead ty
