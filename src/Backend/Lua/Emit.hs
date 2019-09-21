@@ -392,10 +392,23 @@ emitExpr var yield t@(AnnMatch _ test arms) = do
     -}
     (Arm { _armPtrn = PatLit LitTrue, _armBody = ifs }:arms')
       | Just Arm { _armBody = els } <- find ((/=PatLit LitTrue) . _armPtrn) arms'
-      -> genIf yield' ifs els
+      -> genBoolIf yield' ifs els
     (Arm { _armPtrn = PatLit LitFalse, _armBody = els }:arms')
       | Just Arm { _armBody = ifs } <- find ((/=PatLit LitFalse) . _armPtrn) arms'
-      -> genIf yield' ifs els
+      -> genBoolIf yield' ifs els
+
+    {-
+      If we're an if block with two cases, then try to generate them inline. We
+      have the weird guard, as we want to handle matches of two cases, but also
+      the edge-case where we've patterns after a wildcard (such as if the
+      optimiser hasn't run).
+    -}
+    (ifs : els@Arm { _armPtrn = elsPat } : rest) | (elsPat == PatWildcard || null rest)
+      -> do
+        test' <- emitAtomMany test
+        (pat, ifs') <- genBranchES test' yield' ifs
+        (_, els') <- genBranchES test' yield' els
+        pure . (freeInAtom test,mempty,) . Right $ genIf yield' pat ifs' els'
 
     _ -> do
       {-
@@ -417,6 +430,14 @@ emitExpr var yield t@(AnnMatch _ test arms) = do
   emitPrev .= one var
 
   where
+    genBranchES test' yield' arm@Arm { _armPtrn = p, _armBody = b } = do
+      graph <- patternGraph test test' arm =<< liftedGraph (extractAnn b)
+      scope <- ask
+      escape <- use emitEscape
+
+      let b' = emitTermES scope escape graph yield' b
+      pure (patternTest escape p test', b')
+
     genBranch test' yield' arm@Arm { _armPtrn = p, _armBody = b } = do
       graph <- patternGraph test test' arm =<< liftedGraph (extractAnn b)
       scope <- ask
@@ -425,10 +446,12 @@ emitExpr var yield t@(AnnMatch _ test arms) = do
       let b' = fst3 $ emitTerm scope escape graph yield' b
       pure (patternTest escape p test', toList b')
 
-    genIf :: EmitYield a
-          -> AnnTerm VarSet.Set a -> AnnTerm VarSet.Set a
-          -> m (VarSet.Set, VarSet.Set, Either LuaExpr (Seq LuaStmt))
-    genIf yield ifs els = do
+    -- | Generate a boolean if statement, trying to reduce to an expression if
+    -- possible.
+    genBoolIf :: EmitYield a
+              -> AnnTerm VarSet.Set a -> AnnTerm VarSet.Set a
+              -> m (VarSet.Set, VarSet.Set, Either LuaExpr (Seq LuaStmt))
+    genBoolIf yield ifs els = do
       (deps, binds, test') <- runNES (freeInAtom test) (emitAtomS test)
 
       ifs' <- emitLiftedES yield ifs
@@ -439,18 +462,24 @@ emitExpr var yield t@(AnnMatch _ test arms) = do
         (Left [LuaTrue], Left [e]) -> Left $ LuaBinOp test' "or" e
         (Left [e], Left [LuaFalse]) -> Left $ LuaBinOp test' "and" e
         (Left [LuaFalse], Left [LuaTrue]) -> Left $ negate test'
-        -- If we return a single expression, try to generate some
-        -- slightly nicer code.
-        (Left{}, _) | YieldReturn <- yield -> Right . Seq.fromList $
-          LuaIfElse [(test', eitherStmts yield ifs')] : eitherStmts yield els'
-        (_, Left{}) | YieldReturn <- yield -> Right . Seq.fromList $
-          LuaIfElse [(negate test', eitherStmts yield els')] : eitherStmts yield ifs'
+        _ -> Right $ genIf yield test' ifs' els'
 
-        _ ->
-          Right . pure $ case (eitherStmts yield ifs', eitherStmts yield els') of
-            (ifs'', Empty) -> LuaIfElse [(test', ifs'')]
-            (Empty, els'') -> LuaIfElse [(negate test', els'')]
-            (ifs'', els'') -> LuaIf test' ifs'' els''
+    -- | Generate a shorter if statement where possible.
+    genIf :: EmitYield a
+          -> LuaExpr -> Either [LuaExpr] (Seq LuaStmt) -> Either [LuaExpr] (Seq LuaStmt)
+          -> Seq LuaStmt
+    genIf yield test ifs@Left{} els | YieldReturn <- yield
+      = Seq.fromList
+      $ LuaIfElse [(test, eitherStmts yield ifs)] : eitherStmts yield els
+    genIf yield test ifs els@Left{} | YieldReturn <- yield
+      = Seq.fromList
+      $ LuaIfElse [(negate test, eitherStmts yield els)] : eitherStmts yield ifs
+
+    genIf yield test ifs els =
+      pure $ case (eitherStmts yield ifs, eitherStmts yield els) of
+               (ifs, Empty) -> LuaIfElse [(test, ifs)]
+               (Empty, els) -> LuaIfElse [(negate test, els)]
+               (ifs, els) -> LuaIf test ifs els
 
     negate :: LuaExpr -> LuaExpr
     negate (LuaUnOp "not" x) = x

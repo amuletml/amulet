@@ -34,7 +34,7 @@ do
             elseif ben.__tag == "Done" then
               return Done
             end
-          elseif x.__tag == "None" then
+          else
             local bdv = f(sa)
             if bdv.__tag == "Skip" then
               return Skip({ _1 = bdv[1], _2 = { _1 = sb, _2 = None } })

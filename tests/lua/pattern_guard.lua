@@ -4,14 +4,13 @@ do
   local function filter(f, k)
     if k.__tag == "Nil" then
       return Nil
-    elseif k.__tag == "Cons" then
-      local en = k[1]
-      local x, xs = en._1, en._2
-      if f(x) then
-        return Cons({ _1 = x, _2 = filter(f, xs) })
-      end
-      return filter(f, xs)
     end
+    local en = k[1]
+    local x, xs = en._1, en._2
+    if f(x) then
+      return Cons({ _1 = x, _2 = filter(f, xs) })
+    end
+    return filter(f, xs)
   end
   local function filter0(f) return function(k) return filter(f, k) end end
   (nil)(filter0)
