@@ -48,7 +48,6 @@ import Types.Kinds
 import Types.Unify
 
 import Text.Pretty.Semantic
-import Control.Exception (assert)
 
 #ifdef TRACE_TC
 import Debug.Trace

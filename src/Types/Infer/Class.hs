@@ -758,4 +758,4 @@ checkValidMethodTy reason method vars ty = unless (Set.null diff) err where
 fixHeadVars :: forall m. MonadInfer Typed m => Map.Map (Var Resolved) (Type Typed) -> m ()
 fixHeadVars = (() <$) .  Map.traverseWithKey fixone where
   fixone :: Var Resolved -> Type Typed -> m (Wrapper Typed)
-  fixone var ty = unify undefined (TyVar var) ty
+  fixone var = unify undefined (TyVar var)

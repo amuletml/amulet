@@ -153,7 +153,18 @@ runReduce m = fmap getSum <$> evalRWST m emptyScope emptyState where
       , VarDef { varDef = Just (DefInfo (fromVar vKSTR) fakeKSTR)
                , varNotAmong = []
                , varLoopBreak = False }
-      ) ]
+      )
+    , ( fromVar vIntVal
+      , VarDef { varDef = Just (DefInfo (fromVar vIntVal) fakeIntVal)
+               , varNotAmong = []
+               , varLoopBreak = False }
+      )
+    , ( fromVar vKINT
+      , VarDef { varDef = Just (DefInfo (fromVar vKINT) fakeKINT)
+               , varNotAmong = []
+               , varLoopBreak = False }
+      )
+    ]
 
 -- | Run the reduce monad N times, or until no more changes occur.
 runReduceN :: (MonadNamey m, IsVar a)

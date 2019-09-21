@@ -154,8 +154,6 @@ builtins =
            , (assignName, a *. TyApp tyRef (TyVar a) ~> (TyVar a ~> tyUnit))
            , (derefName, a *. TyApp tyRef (TyVar a) ~> TyVar a)
            , (refName, a *. TyVar a ~> TyApp tyRef (TyVar a))
-           , (strValName, strValTy)
-           , (intValName, intValTy)
            ]
 
   , types = [ tp C.vBool, tp C.vInt, tp C.vString, tp C.vFloat, tp C.vUnit
@@ -166,9 +164,11 @@ builtins =
             , (tyListName, TyType ~> TyType)
             , (tyRefName, TyType ~> TyType)
             ]
+
   , constructors = Map.fromList
       [ (tyListName, Set.fromList [cONSName, nILName] )
       ]
+
   , modules =
       [ ( TgInternal "Amc"
         , mempty { vars = [ (strValName, strValTy), (intValName, intValTy) ]
@@ -229,6 +229,8 @@ builtinEnv = go builtins where
   go (BM vs ts ms cs) =
     foldr ((<>) . go . snd) (T.envOf (T.scopeFromList vs <> T.scopeFromList ts)) ms
       & T.types %~ mappend cs
+      & T.modules %~ mappend (fake ms)
+  fake ms = Map.fromList (ms & map (_2 .~ mempty))
 
 -- | Construct a syntax variable from a core one
 ofCore :: CoVar -> Var Resolved
