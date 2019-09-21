@@ -18,6 +18,7 @@ import Text.Pretty.Semantic
 
 applyCons :: Ord (Var p) => Type p -> Type p
 applyCons x@TyCon{} = x
+applyCons x@TyLit{} = x
 applyCons x@TyVar{} = x
 applyCons x@TySkol{} = x
 applyCons x@TyType{} = x
@@ -54,6 +55,7 @@ displayType = prettyType . dropKindVars mempty where
   dropKindVars s x@TyWildcard{} = apply s x
   dropKindVars _ x@TyCon{} = x
   dropKindVars _ x@TySkol{} = x
+  dropKindVars _ x@TyLit{} = x
   dropKindVars s (TyApp t y) = TyApp (dropKindVars s t) (dropKindVars s y)
   dropKindVars s (TyRows t rs) = TyRows (dropKindVars s t) (map (second (dropKindVars s)) rs)
   dropKindVars s (TyExactRows rs) = TyExactRows (map (second (dropKindVars s)) rs)
@@ -74,6 +76,7 @@ displayType = prettyType . dropKindVars mempty where
     Nothing -> True
   kindVarIn _ TyCon{} = True
   kindVarIn _ TyOperator{} = True
+  kindVarIn _ TyLit{} = True
   kindVarIn v (TySkol (Skolem _ x _ _)) = x /= v
   kindVarIn v (TyApp t y) = kindVarIn v t && kindVarIn v y
   kindVarIn v (TyRows t rs) = kindVarIn v t && all (kindVarIn v . snd) rs
@@ -136,6 +139,7 @@ prettyType t@TyWithConstraints{} = displayType (applyCons t)
 prettyType (TyParens t) = parens $ prettyType t
 prettyType (TyOperator l o r) = prettyType l <+> pretty o <+> prettyType r
 prettyType TyType = keyword "type"
+prettyType (TyLit l) = pretty l
 
 displayRows :: (Ord (Var p), Pretty (Var p)) => [(Text, Type p)] -> [Doc]
 displayRows = map (\(n, v) -> text n <+> colon <+> displayType v) . sortOn fst

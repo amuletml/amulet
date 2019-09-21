@@ -1,1 +1,1 @@
-let main : "foo" = 1
+let main : match = 1

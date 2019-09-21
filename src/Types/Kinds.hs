@@ -195,6 +195,8 @@ inferKind (TyCon v) = do
       (_, _, k) <- instantiate Strong Expression k
       pure (TyCon v, k)
 
+inferKind (TyLit l) = pure (TyLit l, litTy l)
+
 inferKind (TyPromotedCon v) = do
   x <- view (names . at v)
   case x of
@@ -446,6 +448,7 @@ promoteOrError TySkol{} = Nothing
 promoteOrError TyPromotedCon{} = Nothing
 promoteOrError TyType{} = Nothing
 promoteOrError TyWildcard{} = Nothing
+promoteOrError TyLit{} = Nothing
 promoteOrError (TyParens p) = promoteOrError p
 promoteOrError (TyOperator l _ r) = promoteOrError l <|> promoteOrError r
 

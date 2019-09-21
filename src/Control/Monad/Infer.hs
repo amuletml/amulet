@@ -161,9 +161,9 @@ instance (Show (Ann p), Show (Var p), Ord (Var p), Substitutable p (Type p))
   ftv DeferredError{} = mempty
 
   apply s (ConUnify e v a b) = ConUnify e v (apply s a) (apply s b)
-  apply s (ConSubsume e c v a b) = ConSubsume e (mapTypes (apply s) c) v (apply s a) (apply s b)
+  apply s (ConSubsume e c v a b) = ConSubsume e (apply s c) v (apply s a) (apply s b)
   apply s (ConImplies e t a b) = ConImplies e (apply s t) (apply s a) (apply s b)
-  apply s (ConImplicit r c v t) = ConImplicit r (mapTypes (apply s) c) v (apply s t)
+  apply s (ConImplicit r c v t) = ConImplicit r (apply s c) v (apply s t)
   apply s (ConFail a e t) = ConFail a e (apply s t)
   apply _ x@DeferredError{} = x
 

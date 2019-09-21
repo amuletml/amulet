@@ -118,6 +118,30 @@ builtins =
           return var[1]
         end
       |] )
+  , ( vStrVal, "__builtin_strval", [], Nothing
+    , [luaStmts|
+        local function __builtin_strval(x)
+          return x
+        end
+      |] )
+  , ( vKSTR, "__builtin_kstr", [], Nothing
+    , [luaStmts|
+        local function __builtin_kstr(x)
+          return x
+        end
+      |] )
+  , ( vIntVal, "__builtin_intval", [], Nothing
+    , [luaStmts|
+        local function __builtin_intval(x)
+          return x
+        end
+      |] )
+  , ( vKINT, "__builtin_kint", [], Nothing
+    , [luaStmts|
+        local function __builtin_kint(x)
+          return x
+        end
+      |] )
   ] ++ map genOp ops
 
   where

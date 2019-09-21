@@ -34,3 +34,4 @@ raiseT v (TyPi binder t) = TyPi (go binder) (raiseT v t) where
 raiseT _ TyType = TyType
 raiseT v (TyOperator l o r) = TyOperator (raiseT v l) (v o) (raiseT v r)
 raiseT v (TyParens t) = raiseT v t
+raiseT _ (TyLit l) = TyLit l

@@ -12,6 +12,7 @@ transformType
   -> Type p -> Type p
 transformType ft = goT where
   transT (TyCon v) = TyCon v
+  transT (TyLit v) = TyLit v
   transT (TyVar v) = TyVar v
   transT (TyWildcard v) = TyWildcard v
   transT (TyPromotedCon v) = TyPromotedCon v

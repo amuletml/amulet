@@ -290,7 +290,9 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
 
         v' <- genNameFrom (T.cons '$' (nameName v))
 
-        (e, cs) <- listen $ check e sig
+        (e, cs) <- listen $ do
+          fixHeadVars skolSub
+          check e sig
         (sub, wrap, deferred) <- condemn $ solve cs
 
         deferred <- pure (fmap (apply sub) deferred)
@@ -540,7 +542,7 @@ reify wrap' name an ty var =
            (an, ty)
 
 fun :: Var Typed -> Type Typed -> Expr Typed -> Expr Typed
-fun v t e = ExprWrapper (TypeAsc ty) (Fun (EvParam (Capture v (an, t))) e (an, ty)) (an, ty) where
+fun v t e = ExprWrapper (TypeAsc ty) (Fun (EvParam (PType (Capture v (an, t)) t (an, t))) e (an, ty)) (an, ty) where
   ty = TyArr t (getType e)
   an = annotation e
 
@@ -622,6 +624,7 @@ validContext w a t@TyWildcard{} = confesses (InvalidContext w a t)
 validContext w a t@TySkol{} = confesses (InvalidContext w a t)
 validContext w a t@TyWithConstraints{} = confesses (InvalidContext w a t)
 validContext w a t@TyType{} = confesses (InvalidContext w a t)
+validContext w a t@TyLit{} = confesses (InvalidContext w a t)
 validContext w a (TyParens t) = validContext w a t
 
 tooConcrete :: Type Typed -> Bool
@@ -708,11 +711,14 @@ splitContext t = [t]
 impliedByContextEntry :: MonadInfer Typed m => Type Typed -> m (Set.Set (Var Typed), Set.Set (Var Typed))
 impliedByContextEntry x
   | (TyCon clss:args) <- apps x, args /= [] = do
-     ci <- view (classDecs . at clss . non (error ("no class info for " ++ show clss)))
-     let fds = ci ^. ciFundep
-         det (_, x, _) = x
-         need (x, _, _) = x
-     pure (foldMap (ftv . (args !!)) (foldMap need fds), foldMap (ftv . (args !!)) (foldMap det fds))
+     ci <- view (classDecs . at clss)
+     case ci of
+       Just info ->
+         let fds = info ^. ciFundep
+             det (_, x, _) = x
+             need (x, _, _) = x
+          in pure (foldMap (ftv . (args !!)) (foldMap need fds), foldMap (ftv . (args !!)) (foldMap det fds))
+       Nothing -> pure mempty
   | otherwise = pure mempty
 
 expandEta :: MonadNamey m => Type Typed -> Expr Typed -> m (Expr Typed)
@@ -748,3 +754,8 @@ checkValidMethodTy :: MonadInfer Typed m
 checkValidMethodTy reason method vars ty = unless (Set.null diff) err where
   diff = vars `Set.difference` ftv ty
   err = dictates (addBlame reason (AmbiguousMethodTy method ty diff))
+
+fixHeadVars :: forall m. MonadInfer Typed m => Map.Map (Var Resolved) (Type Typed) -> m ()
+fixHeadVars = (() <$) .  Map.traverseWithKey fixone where
+  fixone :: Var Resolved -> Type Typed -> m (Wrapper Typed)
+  fixone var = unify undefined (TyVar var)

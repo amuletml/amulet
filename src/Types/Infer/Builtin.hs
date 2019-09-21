@@ -170,6 +170,7 @@ killWildcard = transformType go where
 
 checkWildcard :: MonadChronicles TypeError m => Reasonable f p => f p -> Type p -> m ()
 checkWildcard _ TyType{} = pure ()
+checkWildcard _ TyLit{} = pure ()
 checkWildcard _ TyCon{} = pure ()
 checkWildcard _ TyVar{} = pure ()
 checkWildcard _ TyPromotedCon{} = pure ()
@@ -199,6 +200,7 @@ gadtConResult t = t
 getHead :: Type p -> Type p
 getHead t@TyVar{} = t
 getHead t@TyCon{} = t
+getHead t@TyLit{} = t
 getHead t@TyPromotedCon{} = t
 getHead t@TyApp{} = t
 getHead x@(TyPi b t) = case b of
@@ -240,6 +242,7 @@ expandTypeWith syms (TyOperator l o r) = expandTypeWith syms (TyApp (TyApp (TyCo
 expandTypeWith _ x@TyVar{} = x
 expandTypeWith _ x@TyPromotedCon{} = x
 expandTypeWith _ x@TySkol{} = x
+expandTypeWith _ x@TyLit{} = x
 
 expandTypeWith s (TyTuple a b) = TyTuple (expandTypeWith s a) (expandTypeWith s b)
 expandTypeWith s (TyPi b r) = TyPi b' (expandTypeWith s r) where
