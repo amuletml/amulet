@@ -23,3 +23,8 @@ let () = bottom @@ fun () ->
 let () = if bool then print "Hello" else ()
 
 let () = if bool then () else print "Hello"
+
+let () = bottom @@ function
+  | 0 -> ()
+  | _ -> print "Not 0"
+         print "Extra text"
