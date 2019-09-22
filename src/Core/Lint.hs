@@ -398,6 +398,7 @@ checkPattern s = checkPat where
   checkPat :: Type a -> Pattern a -> Errors (CoreErrors a) ()
   checkPat _ PatWildcard = pure mempty
   checkPat (RowsTy _ _) (PatLit RecNil) = pure mempty
+  checkPat NilTy (PatLit RecNil) = pure mempty
   checkPat ty' (PatLit l) =
     let ty = litTy l
         ty :: Type a
@@ -425,6 +426,8 @@ checkPattern s = checkPat where
         , Just s <- r `unify` ty'
         -> checkCapture (substituteInType s x) p
         | otherwise -> pushError (TypeMismatch (ForallTy Irrelevant unknownTyvar ty') (inst ty))
+  checkPat (RowsTy _ _) (PatRecord []) = pure mempty
+  checkPat NilTy (PatRecord []) = pure mempty
   checkPat ty@(RowsTy NilTy ts) (PatRecord fs) =
     let outer = filter (\(l, _) -> any ((== l) . fst) fs) ts
     in for_ fs (\(t, p) -> case find ((==t) . fst) outer of
