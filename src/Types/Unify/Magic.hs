@@ -41,11 +41,11 @@ solveKnownLit _ _ _ _ _ _ _ = error "kind error in solveKnownString"
 solveRowCons :: MonadSolve m => Solver m
 solveRowCons blame ty =
   case apps ty of
-    [ _, record@TyVar{}, tau, TyLit (LiStr key), new ] | isRows new -> do
+    [ _, record@TyVar{}, TyLit (LiStr key), tau, new ] | isRows new -> do
       x <- genName
       tell [ ConUnify blame x (TyRows record [ (key, tau )]) new ]
       pure (pure (solution record tau key new))
-    [ _, record, tau, TyLit (LiStr key), new ] | isRows record -> do
+    [ _, record, TyLit (LiStr key), tau, new ] | isRows record -> do
       x <- genName
       let (innermost, ks) = getRows record
       case innermost of

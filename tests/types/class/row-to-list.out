@@ -1,0 +1,7 @@
+proxy : Infer{'a : type}. 'a -> type
+Proxy : Infer{'a : type}. Spec{'a : 'a}. proxy 'a
+nil : type
+cons : Infer{'a : type}. string -> type -> 'a -> type
+list_to_row : Infer{'bc : type}. Infer{'bd : type}. 'bd -> 'bc -> constraint
+list_to_row : Spec{'a : type}. Spec{'r : 'a}. Spec{'rec : type}. list_to_row 'r 'rec => proxy 'r -> 'rec -> 'rec
+x : { x : int, y : string }

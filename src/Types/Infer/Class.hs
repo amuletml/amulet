@@ -217,7 +217,12 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
   traverse_ (checkWildcard inst) ctx
   checkWildcard inst instHead
 
-  info@(ClassInfo clss classHead methodSigs classContext classCon classConTy classAnn defaults minimal fundeps) <-
+  info <- view (classDecs . at clss . non undefined)
+  () <- case info of
+    MagicInfo{} -> confesses (MagicInstance clss (BecauseOf inst))
+    _ -> pure ()
+
+  ~info@(ClassInfo clss classHead methodSigs classContext classCon classConTy classAnn defaults minimal fundeps) <-
     view (classDecs . at clss . non undefined)
 
   let classCon' = nameName classCon

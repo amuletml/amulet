@@ -204,7 +204,7 @@ builtinVarList = vars where
                  ForallTy (Relevant ttype) StarTy $
                    ForallTy (Relevant new) StarTy $
                      tupTy
-                      [ appsTy [tyRowCons, VarTy record, VarTy ttype, VarTy key, VarTy new ]
+                      [ appsTy [tyRowCons, VarTy record, VarTy key, VarTy ttype, VarTy new ]
                       , VarTy ttype
                       , VarTy record ]
                       `arrTy` VarTy new
@@ -215,7 +215,7 @@ builtinVarList = vars where
                  ForallTy (Relevant ttype) StarTy $
                    ForallTy (Relevant new) StarTy $
                      tupTy
-                      [ appsTy [tyRowCons, VarTy record, VarTy ttype, VarTy key, VarTy new ]
+                      [ appsTy [tyRowCons, VarTy record, VarTy key, VarTy ttype, VarTy new ]
                       , VarTy new ]
                       `arrTy` ExactRowsTy [ ("_1", VarTy ttype), ("_2", VarTy record) ]
 
