@@ -99,29 +99,30 @@ data TySymInfo =
   deriving (Eq, Show, Ord)
 
 
-data ClassInfo =
-  ClassInfo
-    { _ciName :: Var Typed
-      -- ^ The name of this class
-    , _ciHead :: Type Typed
-      -- ^ The head of this class (name applied to parameters)
-    , _ciMethods :: Map.Map (Var Typed) (Type Typed)
-      -- ^ A map of methods to their signatures
-    , _ciContext :: Map.Map Text (Type Typed)
-      -- ^ The superclasses of this class,
-    , _ciConstructorName :: Var Typed
-      -- ^ The name of the constructor for this class
-    , _ciConstructorTy :: Type Typed
-      -- ^ The type of the constructor for this class
-    , _ciClassSpan :: Ann Desugared
-      -- ^ The annotation of the class
-    , _ciDefaults :: Map.Map Text (Expr Desugared)
-      -- ^ Default methods
-    , _ciMinimal :: Formula Text
-      -- ^ Minimal definition
-    , _ciFundep :: [([Int], [Int], Ann Resolved)]
-      -- ^ Functional dependencies
-    }
+data ClassInfo
+  = ClassInfo
+      { _ciName :: Var Typed
+        -- ^ The name of this class
+      , _ciHead :: Type Typed
+        -- ^ The head of this class (name applied to parameters)
+      , _ciMethods :: Map.Map (Var Typed) (Type Typed)
+        -- ^ A map of methods to their signatures
+      , _ciContext :: Map.Map Text (Type Typed)
+        -- ^ The superclasses of this class,
+      , _ciConstructorName :: Var Typed
+        -- ^ The name of the constructor for this class
+      , _ciConstructorTy :: Type Typed
+        -- ^ The type of the constructor for this class
+      , _ciClassSpan :: Ann Desugared
+        -- ^ The annotation of the class
+      , _ciDefaults :: Map.Map Text (Expr Desugared)
+        -- ^ Default methods
+      , _ciMinimal :: Formula Text
+        -- ^ Minimal definition
+      , _ciFundep :: [([Int], [Int], Ann Resolved)]
+        -- ^ Functional dependencies
+      }
+  | MagicInfo { _ciFundep :: [([Int], [Int], Ann Resolved)] }
   deriving (Eq, Show, Ord)
 
 makeLenses ''Env

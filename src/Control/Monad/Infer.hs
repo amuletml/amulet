@@ -128,6 +128,7 @@ data TypeError where
   WrongClass :: Binding Desugared -> Var Typed -> TypeError
   UndefinedMethods :: Type Typed -> Formula Text -> Span -> TypeError
   InvalidContext :: String -> Span -> Type Desugared -> TypeError
+  MagicInstance :: Var Typed -> SomeReason -> TypeError
 
   CanNotVta :: Type Typed -> Type Desugared -> TypeError
 
@@ -150,6 +151,8 @@ data WhyUnsat
   | GivenContextNotEnough (Type Typed)
   | TooConcrete (Type Typed)
   | It'sQuantified
+  | MagicErrors [TypeError]
+  deriving Show
 
 instance (Show (Ann p), Show (Var p), Ord (Var p), Substitutable p (Type p))
           => Substitutable p (Constraint p) where
@@ -484,11 +487,14 @@ instance Pretty TypeError where
           x -> sliteral (int x) <+> "arguments"
 
 
+  pretty (UnsatClassCon _ (ConImplicit _ _ _ t) _) = string "No instance for" <+> pretty t
+  pretty UnsatClassCon{} = undefined
+
+  pretty (MagicInstance clss _) = "Can not make instance of built-in class" <+> stypeCon (pretty clss)
   pretty WildcardNotAllowed{} = "Type wildcard not allowed here"
 
   pretty (PatternRecursive _ _) = string "pattern recursive error should be formatNoted"
   pretty (DeadBranch e) = string "dead branch error should be formatNoted" <+> pretty e
-  pretty (UnsatClassCon _ t _) = string "unsatClassCon" <+> pretty t
   pretty Overlap{} = string "overlap error should be formatNoted"
   pretty NotCovered{} = string "coverage condition error should be formatNoted"
 
@@ -504,6 +510,7 @@ instance Spanned TypeError where
   annotation (NotValue x _) = annotation x
   annotation (UnsaturatedTS x _ _) = annotation x
   annotation (NotCovered x _ _ _) = annotation x
+  annotation (MagicInstance _ x) = annotation x
   annotation x = error (show (pretty x))
 
 instance Note TypeError Style where
@@ -684,6 +691,13 @@ instance Note TypeError Style where
     vsep [ indent 2 "No instance for" <+> (Right <$> displayType t) <+> "arising in" <+> (Right <$> blameOf r')
          , f [annotation r']
          , indent 2 $ bullet "Note: This constraint can not be quantified over because it is of higher rank"
+         ]
+
+  formatNote f (ArisingFrom (UnsatClassCon _ (ConImplicit _ _ _ t) (MagicErrors es)) r') =
+    vsep [ indent 2 "No instance for" <+> (Right <$> displayType t) <+> "arising in" <+> (Right <$> blameOf r')
+         , f [annotation r']
+         , indent 2 $ bullet "Because:"
+         , vsep (map (formatNote f) es)
          ]
 
   formatNote f err@(UnsatClassCon r' _ _) = formatNote f (ArisingFrom err r')

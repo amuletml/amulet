@@ -1,0 +1,13 @@
+row-cons-fail.ml[1:9 ..1:39]: error
+  No instance for row_cons 'record "y" 'type { x : int } arising in this expression
+  │ 
+1 │ let x = Amc.restrict_row @"y" { x = 1 }
+  │         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  • Because:
+  │ 
+1 │ let x = Amc.restrict_row @"y" { x = 1 }
+  │         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  No overlap between polymorphic record { 'record | y : 'type }
+                       and exact record { x : int }
+  • Note: no fields match
+  • The following fields are missing: x

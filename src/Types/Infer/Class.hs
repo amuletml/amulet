@@ -217,7 +217,12 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
   traverse_ (checkWildcard inst) ctx
   checkWildcard inst instHead
 
-  info@(ClassInfo clss classHead methodSigs classContext classCon classConTy classAnn defaults minimal fundeps) <-
+  info <- view (classDecs . at clss . non undefined)
+  () <- case info of
+    MagicInfo{} -> confesses (MagicInstance clss (BecauseOf inst))
+    _ -> pure ()
+
+  ~info@(ClassInfo clss classHead methodSigs classContext classCon classConTy classAnn defaults minimal fundeps) <-
     view (classDecs . at clss . non undefined)
 
   let classCon' = nameName classCon
@@ -277,7 +282,8 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
   methodSigs <- traverse (closeOver (BecauseOf inst) . apply instSub) methodSigs
   classContext <- pure $ fmap (apply instSub) classContext
   let methodNames = Map.mapKeys nameName methodSigs
-      addStuff = local (classes %~ mappend localAssums) . local (typeVars %~ mappend (Map.keysSet skolSub))
+      skolVars = Set.fromList (map ((\(TySkol x) -> x ^. skolIdent) . snd) (Map.toList skolSub))
+      addStuff = local (classes %~ mappend localAssums) . local (typeVars %~ mappend (skolVars <> Map.keysSet skolSub))
 
   (Map.fromList -> methodMap, Map.fromList -> methodDef, methods) <- fmap unzip3 . addStuff $
     for bindings $ \case
@@ -442,8 +448,11 @@ reduceClassContext extra annot cons = do
         don't_skol <-
           case apps con of
             TyCon v:args -> do
-              fds <- view (classDecs . at v . non undefined . ciFundep)
-              pure (foldMap (ftv . map (args !!)) (map (view _2) fds))
+              fds <- view (classDecs . at v) 
+              case fds of
+                Just (view ciFundep -> fds) ->
+                  pure (foldMap (ftv . map (args !!)) (map (view _2) fds))
+                Nothing -> pure mempty
             _ -> pure mempty
         (con, sub') <- skolFreeTy don't_skol (ByConstraint con) (apply sub con)
         ((var, con, r):) <$> needed (sub `compose` sub') cs
