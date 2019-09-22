@@ -488,7 +488,7 @@ instance Pretty TypeError where
 
 
   pretty (UnsatClassCon _ (ConImplicit _ _ _ t) _) = string "No instance for" <+> pretty t
-  pretty (UnsatClassCon _ _ _) = undefined
+  pretty UnsatClassCon{} = undefined
 
   pretty (MagicInstance clss _) = "Can not make instance of built-in class" <+> stypeCon (pretty clss)
   pretty WildcardNotAllowed{} = "Type wildcard not allowed here"
