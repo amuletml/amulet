@@ -93,7 +93,9 @@ instance Pretty VarParsed where
   pretty (InModule t v) = text t <> dot <> pretty v
 
 instance Pretty VarResolved where
-  pretty (TgName v i) = text v <> scomment (string "#" <> string (show i))
+  pretty (TgName v i)
+    | i < 0 = text v
+    | otherwise = text v <> scomment (string "#" <> string (show i))
   pretty (TgInternal v) = text v
 
 -- | A literal value

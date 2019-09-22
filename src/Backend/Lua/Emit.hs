@@ -25,6 +25,7 @@ import Data.Foldable
 import Data.Triple
 import Data.List (partition)
 
+import qualified Core.Builtin as B
 import Core.Occurrence
 import Core.Arity
 import Core.Types
@@ -44,7 +45,7 @@ import Text.Pretty.Semantic
 
 -- | A magic variable used to represent the return value
 vReturn :: CoVar
-vReturn = CoVar (-100) "<<ret>>" ValueVar
+vReturn = B.backendRet
 
 data VarDecl
      -- ^ A foreign function whose body should be inlined when used.
@@ -562,38 +563,30 @@ emitExpr var yield (AnnExtend fv tbl fs) = do
     YieldStore vs -> do
       let vs' = head vs
       exs' <- foldrM (emitRow vs') mempty fs'
-      tbl' <- emitAtomS tbl
-      pure $ EmittedStmt (LuaAssign vs [LuaTable []] <| emitCopy vs' tbl' <> exs') (simpleVars vs)
+      tbl' <- copy =<< emitAtomS tbl
+      pure $ EmittedStmt (LuaAssign vs [tbl'] <| exs') (simpleVars vs)
 
     YieldReturn -> do
       let vs' = LuaName (T.pack "__n")
       exs' <- foldrM (emitRow vs') mempty fs'
-      tbl' <- emitAtomS tbl
-      pure $ EmittedStmt (LuaLocal [vs'] [LuaTable []] <| emitCopy vs' tbl' <> exs') []
+      tbl' <- copy =<< emitAtomS tbl
+      pure $ EmittedStmt ((LuaLocal [vs'] [tbl'] <| exs') |> LuaReturn [LuaRef vs']) []
 
     YieldDeclare var' _ -> do
       vs' <- LuaName <$> pushScope' var'
       exs' <- foldrM (emitRow vs') mempty fs'
-      tbl' <- emitAtomS tbl
-      pure $ EmittedStmt (LuaLocal [vs'] [LuaTable []] <| emitCopy vs' tbl' <> exs') [simpleVar vs']
+      tbl' <- copy =<< emitAtomS tbl
+      pure $ EmittedStmt (LuaLocal [vs'] [tbl'] <| exs') [simpleVar vs']
 
   pushGraph (node (VarSet.insert (toVar var) binds) deps)
 
   where
-    k = T.pack "k"
-    v = T.pack "v"
-    pairs = LuaName (T.pack "pairs")
-
     emitRow var (f, _, e) es = (<|es) . LuaAssign [LuaIndex (LuaRef var) (LuaString f)] <$> emitAtom e
 
-    emitCopy var (LuaRef v@LuaName{}) = pure (copy var v)
-    emitCopy var tbl =
-      let old = LuaName (T.pack "__o")
-      in LuaLocal [old] [tbl] <| copy var old <| mempty
+    copy expr = do
+      clone <- uses (nodeState . emitEscape) (getVar B.backendClone)
+      pure (LuaCallE (LuaCall (LuaRef (LuaName clone)) [expr]))
 
-    copy var tbl =
-      LuaFor [LuaName k, LuaName v] [LuaCallE (LuaCall (LuaRef pairs) [LuaRef tbl])]
-         [LuaAssign [LuaIndex (LuaRef var) (LuaRef (LuaName k))] [LuaRef (LuaName v)]]
 
 runNES :: ( MonadReader (EmitScope a) m
           , MonadState (EmitState a) m )

@@ -81,8 +81,25 @@ let snd' (Pair (_, x)) = x
 let first' x = lens fst' (fun x (Pair (_, y)) -> Pair (x, y)) x
 let second' x = lens snd' (fun y (Pair (x, _)) -> Pair (x, y)) x
 
-let species x = lens (.species) (fun x r -> { r with species = x }) x
-let name x = lens (.name) (fun x r -> { r with name = x }) x
+type proxy 'a = Proxy
+
+class Amc.row_cons 'record 'key 'type 'new => has_lens 'record 'key 'type 'new | 'key 'new -> 'record 'type begin
+  val rlens : forall 'p. strong 'p => proxy 'key -> 'p 'type 'type -> 'p 'new 'new
+end
+
+instance Amc.known_string 'key * Amc.row_cons 'record 'key 'type 'new => has_lens 'record 'key 'type 'new begin
+  let rlens _ =
+    let view r =
+      let (x, _) = Amc.restrict_row @'key r
+      x
+    let set x r =
+      let (_, r') = Amc.restrict_row @'key r
+      Amc.extend_row @'key x r'
+    lens view set
+end
+
+let r : forall 'key -> forall 'record 'type 'new 'p. Amc.known_string 'key * has_lens 'record 'key 'type 'new * strong 'p => 'p 'type 'type -> 'p 'new 'new =
+  fun x -> rlens @'record (Proxy : proxy 'key) x
 
 let hydraz = { species = "human", name = "hydraz", age = 16 }
-let _ = view name hydraz |> print
+let _ = view (r @"name") hydraz |> print

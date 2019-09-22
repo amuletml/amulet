@@ -1,2 +1,2 @@
 let f#0 = function
-  | x#1 when (x#1 >#-12 2) -> ()
+  | x#1 when (x#1 > 2) -> ()

@@ -19,7 +19,7 @@ module Syntax.Builtin
 
   , tyUnit, tyBool, tyInt, tyString, tyFloat
   , tyLazy, tyConstraint, tyArrow, tyList
-  , tyRef, tyKStr, tyKInt
+  , tyRef, tyKStr, tyKInt, tyRowCons
 
   , forceName, lAZYName, forceTy, lAZYTy, forceTy', lAZYTy'
   , assignName, derefName, refName
@@ -30,6 +30,9 @@ module Syntax.Builtin
   , strValName, strValTy, intValName, intValTy
   , knownStrName, knownStrTy, knownStrTy'
   , knownIntName, knownIntTy, knownIntTy'
+
+  , rowConsName, extendName, restrictName, rOWCONSName
+  , rowConsTy, rowConsTy', rowConsTy'', rowConsTy''', rowConsTy''''
   ) where
 
 import Control.Lens
@@ -40,6 +43,8 @@ import qualified Data.Text ()
 
 import qualified Syntax.Resolve.Scope as R
 import qualified Syntax.Types as T
+
+import Data.Span
 
 import Syntax.Var
 import Syntax
@@ -62,7 +67,7 @@ tyKStrName   = ofCore C.vKStrTy
 tyKIntName   = ofCore C.vKIntTy
 tyConstraintName = TgInternal "constraint"
 
-tyUnit, tyBool, tyInt, tyString, tyFloat, tyLazy, tyConstraint, tyArrow, tyList, tyRef, tyKStr, tyKInt :: Type Typed
+tyUnit, tyBool, tyInt, tyString, tyFloat, tyLazy, tyConstraint, tyArrow, tyList, tyRef, tyKStr, tyKInt, tyRowCons :: Type Typed
 tyInt        = TyCon tyIntName
 tyString     = TyCon tyStringName
 tyBool       = TyCon tyBoolName
@@ -75,6 +80,7 @@ tyConstraint = TyCon tyConstraintName
 tyRef        = TyCon tyRefName
 tyKStr       = TyCon tyKStrName
 tyKInt       = TyCon tyKIntName
+tyRowCons    = TyCon rowConsName
 
 forceName, lAZYName :: Var Typed
 forceName = ofCore C.vForce
@@ -122,18 +128,39 @@ knownStrTy', knownIntTy' :: Type Typed -> Type Typed
 knownStrTy' a = tyString ~> TyApp tyKStr a
 knownIntTy' a = tyInt ~> TyApp tyKInt a
 
+rowConsName, rOWCONSName :: Var Typed
+rowConsName = ofCore C.vRowCons
+rOWCONSName = ofCore C.vROWCONS
+
+extendName, restrictName :: Var Typed
+extendName = ofCore C.vExtend
+restrictName = ofCore C.vRestrict
+
+rowConsTy :: Type Typed
+rowConsTy = TyPi (Invisible key (Just tyString) Infer) $ record *. ttype *. new *. tyString ~> foldl1 TyApp [tyRowCons, TyVar record, TyVar key, TyVar ttype, TyVar new ]
+
+rowConsTy' :: Type Typed -> Type Typed
+rowConsTy'' :: Type Typed -> Type Typed -> Type Typed
+rowConsTy''' :: Type Typed -> Type Typed -> Type Typed -> Type Typed
+rowConsTy'''' :: Type Typed -> Type Typed -> Type Typed -> Type Typed -> Type Typed
+rowConsTy' x = record *. ttype *. new *. tyString ~> foldl1 TyApp [tyRowCons, TyVar record, x, TyVar ttype, TyVar new ]
+rowConsTy'' x y = ttype *. new *. tyString ~> foldl1 TyApp [tyRowCons, y, x, TyVar ttype, TyVar new ]
+rowConsTy''' x y z = new *. tyString ~> foldl1 TyApp [tyRowCons, y, x, z, TyVar new ]
+rowConsTy'''' x y z a = tyString ~> foldl1 TyApp [tyRowCons, y, x, z, a ]
+
 data BuiltinModule = BM
   { vars    :: [(Var Resolved, Type Typed)]
   , types   :: [(Var Resolved, Type Typed)]
   , modules :: [(Var Resolved, BuiltinModule)]
   , constructors :: Map.Map (Var Resolved) (Set.Set (Var Typed))
+  , classes :: [(Var Resolved, T.ClassInfo)]
   }
 
 instance Semigroup BuiltinModule where
-  (BM v t m c) <> (BM v' t' m' c') = BM (v <> v') (t <> t') (m <> m') (c <> c')
+  (BM v t m c ci) <> (BM v' t' m' c' ci') = BM (v <> v') (t <> t') (m <> m') (c <> c') (ci <> ci')
 
 instance Monoid BuiltinModule where
-  mempty = BM { vars = mempty, types = mempty, modules = mempty, constructors = mempty }
+  mempty = BM { vars = mempty, types = mempty, modules = mempty, constructors = mempty, classes = mempty }
 
 builtins :: BuiltinModule
 builtins =
@@ -171,8 +198,34 @@ builtins =
 
   , modules =
       [ ( TgInternal "Amc"
-        , mempty { vars = [ (strValName, strValTy), (intValName, intValTy) ]
-                 , types = [ (tyKStrName, tyString ~> tyConstraint), (tyKIntName, tyInt ~> tyConstraint) ]
+        , mempty { vars = [ (strValName, strValTy)
+                          , (intValName, intValTy)
+                          , ( extendName
+                            , TyPi (Invisible key (Just tyString) Req) $
+                              TyPi (Invisible record (Just TyType) Spec) $
+                              TyPi (Invisible ttype (Just TyType) Spec) $
+                              TyPi (Invisible new (Just TyType) Spec) $
+                              TyPi (Implicit (foldl1 TyApp [tyRowCons, TyVar record, TyVar key, TyVar ttype, TyVar new ] )) $
+                                TyVar ttype ~> TyVar record ~> TyVar new
+                            )
+                          , ( restrictName
+                            , TyPi (Invisible key (Just tyString) Req) $
+                              TyPi (Invisible record (Just TyType) Spec) $
+                              TyPi (Invisible ttype (Just TyType) Spec) $
+                              TyPi (Invisible new (Just TyType) Spec) $
+                              TyPi (Implicit (foldl1 TyApp [tyRowCons, TyVar record, TyVar key, TyVar ttype, TyVar new ] )) $
+                                TyVar new ~> (TyVar ttype `TyTuple` TyVar record)
+                            )
+                          ]
+                 , types = [ (tyKStrName, tyString ~> tyConstraint)
+                           , (tyKIntName, tyInt ~> tyConstraint)
+                           , (rowConsName, TyType ~> tyString ~> TyType ~> TyType ~> tyConstraint)
+                           ]
+                 , classes = [ (tyKStrName, T.MagicInfo [])
+                             , (tyKIntName, T.MagicInfo [])
+                             , (rowConsName, T.MagicInfo [ ( [0, 1, 2], [3], internal )
+                                                         , ( [1, 3], [2, 0], internal ) ])
+                             ]
                  }
         ) ]
   }
@@ -198,7 +251,7 @@ builtinResolve :: R.Scope
 builtinModules :: R.ModuleScope
 (builtinResolve, builtinModules) = R.ModuleScope <$> go builtins where
   go :: BuiltinModule -> (R.Scope, Map.Map (Var Parsed) (Var Resolved, R.Scope))
-  go (BM vs ts ms _) =
+  go (BM vs ts ms _ _) =
     let scp = R.Scope
               { R.varScope = buildVars vs
               , R.tyScope = buildVars ts
@@ -226,10 +279,11 @@ builtinModules :: R.ModuleScope
 -- | The builtin scope for type inference
 builtinEnv :: T.Env
 builtinEnv = go builtins where
-  go (BM vs ts ms cs) =
+  go (BM vs ts ms cs ci) =
     foldr ((<>) . go . snd) (T.envOf (T.scopeFromList vs <> T.scopeFromList ts)) ms
       & T.types %~ mappend cs
       & T.modules %~ mappend (fake ms)
+      & T.classDecs %~ mappend (Map.fromList ci)
   fake ms = Map.fromList (ms & map (_2 .~ mempty))
 
 -- | Construct a syntax variable from a core one
@@ -248,6 +302,11 @@ infixr *.
 
 -- | Some internal type variables. These do not need to be unique as they
 -- are bound by a forall.
-a, b :: Var Resolved
+a, b, record, ttype, key, new :: Var Resolved
 a = ofCore C.tyvarA
 b = ofCore C.tyvarB
+record = ofCore C.tyvarRecord
+ttype = ofCore C.tyvarType
+key = ofCore C.tyvarKey
+new = ofCore C.tyvarNew
+

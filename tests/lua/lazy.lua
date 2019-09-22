@@ -1,5 +1,4 @@
 do
-  local function __builtin_Lazy(x) return { x, false, __tag = "lazy" } end
   local __builtin_unit = { __tag = "__builtin_unit" }
   local function __builtin_trap()
     error("Loop while forcing thunk")
@@ -15,6 +14,7 @@ do
       return x[1]
     end
   end
+  local function __builtin_Lazy(x) return { x, false, __tag = "lazy" } end
   (nil)({
     _2 = function(x) return __builtin_force(x) end,
     _1 = __builtin_Lazy(function(z) return 2 end)

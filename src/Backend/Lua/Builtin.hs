@@ -113,35 +113,72 @@ builtins =
         end
       |] )
   , ( vDeref, "__builtin_deref", [], Just (1, \[l] -> (mempty, [ [lua|%l[1]|] ]))
-    , [luaStmts| 
+    , [luaStmts|
         local function __builtin_deref(var)
           return var[1]
         end
       |] )
-  , ( vStrVal, "__builtin_strval", [], Nothing
+  , ( vStrVal, "__builtin_strval", [], Just (1, \[l] -> (mempty, [ [lua|%l|] ]))
     , [luaStmts|
         local function __builtin_strval(x)
           return x
         end
       |] )
-  , ( vKSTR, "__builtin_kstr", [], Nothing
+  , ( vKSTR, "__builtin_kstr", [], Just (1, \[l] -> (mempty, [ [lua|%l|] ]))
     , [luaStmts|
         local function __builtin_kstr(x)
           return x
         end
       |] )
-  , ( vIntVal, "__builtin_intval", [], Nothing
+  , ( vIntVal, "__builtin_intval", [], Just (1, \[l] -> (mempty, [ [lua|%l|] ]))
     , [luaStmts|
         local function __builtin_intval(x)
           return x
         end
       |] )
-  , ( vKINT, "__builtin_kint", [], Nothing
+  , ( vKINT, "__builtin_kint", [], Just (1, \[l] -> (mempty, [ [lua|%l|] ]))
     , [luaStmts|
         local function __builtin_kint(x)
           return x
         end
       |] )
+  , ( vROWCONS, "__builtin_rowcons", [], Just (1, \[l] -> (mempty, [ [lua|%l|] ]))
+    , [luaStmts|
+        local function __builtin_rowcons(x)
+          return x
+        end
+      |] )
+  , ( backendClone, "__builtin_clone", [], Nothing
+    , [luaStmts|
+         local function __builtin_clone(record)
+          local new = {}
+          for k, v in pairs(record) do
+            new[k] = v
+          end
+          return new
+         end
+      |] )
+  , ( vExtend, "__builtin_extend", [ backendClone ], Nothing
+    , [luaStmts|
+        local function __builtin_extend(key, value, record)
+          local new = __builtin_clone(record)
+          new[key] = value
+          return new
+        end
+      |] )
+  , ( vRestrict, "__builtin_restrict", [ backendClone ]
+    , Just (2, \[key, t] -> (mempty, [[lua| { _1 = %t[%key], _2 = %t }|]]))
+    , [luaStmts|
+        local function __builtin_restrict(key, record)
+          local new = __builtin_clone(record)
+          new[key] = nil
+          return { _1 = record[key], _2 = new }
+        end
+      |] )
+    -- Note: the definition generates records that look correct
+    -- according to the type, but since the type system prevents
+    -- accessing a removed key, it's fine for us /not/ to remove it.
+    -- Hence the inline definition just returning the original record.
   ] ++ map genOp ops
 
   where

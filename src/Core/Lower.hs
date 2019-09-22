@@ -542,4 +542,5 @@ boxedTys = VarMap.fromList
     , C.vOpEq, C.vOpNe
 
     , C.vOpApp, C.vAssign
+    , C.vExtend, C.vRestrict
     ]
