@@ -1,9 +1,13 @@
 do
-  local function __builtin_extend(key, value, record)
+  local function __builtin_clone(record)
     local new = {}
     for k, v in pairs(record) do
       new[k] = v
     end
+    return new
+  end
+  local function __builtin_extend(key, value, record)
+    local new = __builtin_clone(record)
     new[key] = value
     return new
   end

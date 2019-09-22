@@ -29,8 +29,9 @@ vStrVal, vIntVal :: CoVar
 vKSTR, vKINT :: CoVar
 vExtend, vRestrict, vROWCONS :: CoVar
 tyvarRecord, tyvarNew, tyvarKey, tyvarType :: CoVar
+backendRet, backendClone :: CoVar
 
-[ vBool, vInt, vString, vFloat, vUnit, vLazy, vArrow, vProduct, vList, vRefTy, vKStrTy, vKIntTy, vRowCons, vOpAdd, vOpSub, vOpMul, vOpDiv, vOpExp, vOpLt, vOpGt, vOpLe, vOpGe, vOpAddF, vOpSubF, vOpMulF, vOpDivF, vOpExpF, vOpLtF, vOpGtF, vOpLeF, vOpGeF, vOpConcat, vOpEq, vOpNe, vError, vLAZY, vForce, tyvarA, tyvarB, argvarX, vOpApp, vCONS, vNIL, vAssign, vDeref, vRef, vStrVal, vIntVal, vExtend, vRestrict, vKSTR, vKINT, vROWCONS, tyvarRecord, tyvarNew, tyvarKey, tyvarType ] = makeBuiltins 
+[ vBool, vInt, vString, vFloat, vUnit, vLazy, vArrow, vProduct, vList, vRefTy, vKStrTy, vKIntTy, vRowCons, vOpAdd, vOpSub, vOpMul, vOpDiv, vOpExp, vOpLt, vOpGt, vOpLe, vOpGe, vOpAddF, vOpSubF, vOpMulF, vOpDivF, vOpExpF, vOpLtF, vOpGtF, vOpLeF, vOpGeF, vOpConcat, vOpEq, vOpNe, vError, vLAZY, vForce, tyvarA, tyvarB, argvarX, vOpApp, vCONS, vNIL, vAssign, vDeref, vRef, vStrVal, vIntVal, vExtend, vRestrict, vKSTR, vKINT, vROWCONS, tyvarRecord, tyvarNew, tyvarKey, tyvarType, backendRet, backendClone ] = makeBuiltins
   [ ("bool", TypeConVar)
   , ("int", TypeConVar)
   , ("string", TypeConVar)
@@ -106,6 +107,10 @@ tyvarRecord, tyvarNew, tyvarKey, tyvarType :: CoVar
   , ("new", TypeVar)
   , ("key", TypeVar)
   , ("type", TypeVar)
+
+  -- Backend specific variables
+  , ("<ret>", ValueVar)
+  , ("<clone>", ValueVar)
   ]
 
 tyBool, tyInt, tyString, tyFloat, tyUnit, tyLazy, tyList, tyRef, tyKStr, tyKInt, tyRowCons :: IsVar a => Type a

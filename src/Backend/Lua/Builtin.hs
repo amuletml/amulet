@@ -113,7 +113,7 @@ builtins =
         end
       |] )
   , ( vDeref, "__builtin_deref", [], Just (1, \[l] -> (mempty, [ [lua|%l[1]|] ]))
-    , [luaStmts| 
+    , [luaStmts|
         local function __builtin_deref(var)
           return var[1]
         end
@@ -148,24 +148,29 @@ builtins =
           return x
         end
       |] )
-  , ( vExtend, "__builtin_extend", [], Nothing
+  , ( backendClone, "__builtin_clone", [], Nothing
     , [luaStmts|
-        local function __builtin_extend(key, value, record)
+         local function __builtin_clone(record)
           local new = {}
           for k, v in pairs(record) do
             new[k] = v
           end
+          return new
+         end
+      |] )
+  , ( vExtend, "__builtin_extend", [ backendClone ], Nothing
+    , [luaStmts|
+        local function __builtin_extend(key, value, record)
+          local new = __builtin_clone(record)
           new[key] = value
           return new
         end
       |] )
-  , ( vRestrict, "__builtin_restrict", [], Just (2, \[key, t] -> (mempty, [[lua| { _1 = %t[%key], _2 = %t }|]]))
+  , ( vRestrict, "__builtin_restrict", [ backendClone ]
+    , Just (2, \[key, t] -> (mempty, [[lua| { _1 = %t[%key], _2 = %t }|]]))
     , [luaStmts|
         local function __builtin_restrict(key, record)
-          local new = {}
-          for k, v in pairs(record) do
-            new[k] = v
-          end
+          local new = __builtin_clone(record)
           new[key] = nil
           return { _1 = record[key], _2 = new }
         end
