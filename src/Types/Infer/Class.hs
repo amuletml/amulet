@@ -282,7 +282,8 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
   methodSigs <- traverse (closeOver (BecauseOf inst) . apply instSub) methodSigs
   classContext <- pure $ fmap (apply instSub) classContext
   let methodNames = Map.mapKeys nameName methodSigs
-      addStuff = local (classes %~ mappend localAssums) . local (typeVars %~ mappend (Map.keysSet skolSub))
+      skolVars = Set.fromList (map ((\(TySkol x) -> x ^. skolIdent) . snd) (Map.toList skolSub))
+      addStuff = local (classes %~ mappend localAssums) . local (typeVars %~ mappend (skolVars <> Map.keysSet skolSub))
 
   (Map.fromList -> methodMap, Map.fromList -> methodDef, methods) <- fmap unzip3 . addStuff $
     for bindings $ \case

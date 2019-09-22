@@ -247,7 +247,7 @@ doSolve (ohno@(ConImplicit reason scope var con@TyPi{}) :<| cs) = do
   con <- pure (apply sub con)
   scope <- pure (apply sub scope)
 
-  (wrap, head, assum) <- skolemise (ByConstraint con) con
+  (wrap, head, assum, _) <- skolemise (ByConstraint con) con
 
   case lookup head (assum <> scope) of
     xs | allSameHead xs, concreteUnderOne con -> do
@@ -589,7 +589,7 @@ subsumes' _ _ t1 t2
 #endif
 
 subsumes' b s t1 t2@TyPi{} | isSkolemisable t2 = do
-  (c, t2', scope) <- skolemise (BySubsumption t1 t2) t2
+  (c, t2', scope, _) <- skolemise (BySubsumption t1 t2) t2
   (Syntax.:>) c <$> subsumes b (scope <> s) t1 t2'
 
 subsumes' r s (TyPi (Implicit t) t1) t2
@@ -768,19 +768,20 @@ subsumes' r _ a b = probablyCast <$> retcons (reblame r) (unify a b)
 -- with fresh 'Skolem' constants.
 skolemise :: MonadNamey m
           => SkolemMotive Typed
-          -> Type Typed -> m (Wrapper Typed, Type Typed, ImplicitScope ClassInfo Typed)
+          -> Type Typed
+          -> m (Wrapper Typed, Type Typed, ImplicitScope ClassInfo Typed, [(Var Typed, Type Typed)])
 skolemise motive ty@(TyPi (Invisible tv k _) t) = do
   sk <- freshSkol motive ty tv
-  (wrap, ty, scope) <- skolemise motive (apply (Map.singleton tv sk) t)
+  (wrap, ty, scope, vs) <- skolemise motive (apply (Map.singleton tv sk) t)
   kind <- case k of
     Nothing -> freshTV
     Just x -> pure x
   let getSkol (TySkol s) = s
       getSkol _ = error "not a skolem from freshSkol"
-  pure (TypeLam (getSkol sk) kind Syntax.:> wrap, ty, scope)
+  pure (TypeLam (getSkol sk) kind Syntax.:> wrap, ty, scope, (tv, sk):vs)
 
 skolemise motive wt@(TyPi (Implicit ity) t) = do
-  (omega, ty, scp) <- skolemise motive t
+  (omega, ty, scp, vs) <- skolemise motive t
   let go (TyTuple a b) = do
         var <- genName
         (pat, scope) <- go b
@@ -792,9 +793,9 @@ skolemise motive wt@(TyPi (Implicit ity) t) = do
   let wrap ex | an <- annotation ex =
         Fun (EvParam (PTuple pat (an, ity)))
           (ExprWrapper omega ex (an, ty)) (an, wt)
-  pure (WrapFn (MkWrapCont wrap "constraint lambda"), ty, scope)
+  pure (WrapFn (MkWrapCont wrap "constraint lambda"), ty, scope, vs)
 
-skolemise _ ty = pure (IdWrap, ty, mempty)
+skolemise _ ty = pure (IdWrap, ty, mempty, [])
 
 -- Which coercions are safe to remove *here*?
 isReflexiveCo :: Coercion Typed -> Bool

@@ -85,9 +85,16 @@ check e oty@TyPi{} | isSkolemisable oty = do
   unless (value e) $
     dictates (addBlame reason (NotValue reason oty))
 
-  (wrap, ty, scope) <- skolemise (ByAscription (annotation e) oty) oty
+  (wrap, ty, scope, vs) <- skolemise (ByAscription (annotation e) oty) oty
+
+  tvs <- view typeVars
   local (classes %~ mappend scope) $ do
-    e <- check e ty
+    (e, cs) <- censor (const mempty) . listen $ check e ty
+    (_, as) <- censor (const mempty) . listen . for vs $ \(a, b) ->
+      unless (Set.member a tvs) $
+        () <$ unify (becauseExp e) (TyVar a) b
+
+    tell (Seq.singleton (ConImplies reason tyUnit as cs))
     pure (ExprWrapper wrap e (annotation e, oty))
 
 check (Hole v a) t = do
@@ -826,11 +833,12 @@ checkAmbiguous var exp tau = go mempty mempty tau where
                 fundep_ok = foldMap (ftv . (args !!)) (foldMap det fds)
              in go (ok <> fundep_ok) (s <> ftv v) t
           Nothing -> go ok (s <> ftv v) t
+    | TyTuple a b <- v = go ok s (TyPi (Implicit a) (TyPi (Implicit b) t))
     | otherwise = go ok (s <> ftv v) t
   go ok s t =
     if not (Set.null (s Set.\\ (fv <> ok)))
-        then confesses (addBlame exp (AmbiguousType var tau (s Set.\\ fv)))
-        else pure ()
+       then confesses (addBlame exp (AmbiguousType var tau (s Set.\\ (fv <> ok))))
+       else pure ()
     where fv = ftv t
 
 
@@ -1005,7 +1013,7 @@ instantiateTc :: MonadInfer Typed m
 instantiateTc r tau = do
   (fromMaybe id -> f, _, ty) <- instantiate Strong Expression tau
   (g, ty) <- go ty
-  pure (f . g, ty)
+  pure (g . f, ty)
   where
     go ty@(TyPi (Implicit tau) sigma) = do
       x <- genName

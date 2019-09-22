@@ -267,10 +267,11 @@ reExpr (Function ps a) = flip Function a <$> traverse reArm ps
 
 reExpr (BinOp l o r a) = BinOp <$> reExpr l <*> reExpr o <*> reExpr r <*> pure a
 reExpr (Hole v a) = Hole <$> tagVar v <*> pure a
-reExpr r@(Ascription e t a) = Ascription
-                          <$> reExpr e
-                          <*> reType r t
-                          <*> pure a
+reExpr r@(Ascription e t a) = do
+  t <- reType r t
+  let boundByT (TyPi (Invisible v@(TgName p _) _ _) t) = (Name p, v):boundByT t
+      boundByT _ = []
+  Ascription <$> extendTyvarN (boundByT t) (reExpr e) <*> pure t <*> pure a
 reExpr e@(Record fs a) = do
   let ls = map (view fName) fs
       dupes = mapMaybe (listToMaybe . tail) . group . sort $ ls

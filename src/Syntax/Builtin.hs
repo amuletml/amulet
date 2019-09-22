@@ -224,7 +224,7 @@ builtins =
                  , classes = [ (tyKStrName, T.MagicInfo [])
                              , (tyKIntName, T.MagicInfo [])
                              , (rowConsName, T.MagicInfo [ ( [0, 1, 2], [3], internal )
-                                                         , ( [1, 2, 3], [0], internal ) ])
+                                                         , ( [1, 3], [2, 0], internal ) ])
                              ]
                  }
         ) ]
