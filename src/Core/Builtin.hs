@@ -205,8 +205,8 @@ builtinVarList = vars where
                    ForallTy (Relevant new) StarTy $
                      tupTy
                       [ appsTy [tyRowCons, VarTy record, VarTy ttype, VarTy key, VarTy new ]
-                      , VarTy record
-                      , VarTy ttype ]
+                      , VarTy ttype
+                      , VarTy record ]
                       `arrTy` VarTy new
 
          , op vRestrict $

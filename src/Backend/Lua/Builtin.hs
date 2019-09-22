@@ -150,7 +150,7 @@ builtins =
       |] )
   , ( vExtend, "__builtin_extend", [], Nothing
     , [luaStmts|
-        local function __builtin_extend(key, record, value)
+        local function __builtin_extend(key, value, record)
           local new = {}
           for k, v in pairs(record) do
             new[k] = v

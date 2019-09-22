@@ -2,6 +2,7 @@
 module Types.Unify.Magic (magicClass, apps) where
 
 import Control.Monad.Infer
+import Control.Lens
 
 import Syntax.Builtin
 import Syntax.Var
@@ -46,7 +47,10 @@ solveRowCons blame ty =
       pure (pure (solution record tau key new))
     [ _, record, tau, TyLit (LiStr key), new ] | isRows record -> do
       x <- genName
-      tell [ ConUnify blame x (TyRows record [ (key, tau) ]) new ]
+      let (innermost, ks) = getRows record
+      case innermost of
+        Just t -> tell [ ConUnify blame x (TyRows t ((key, tau):(ks `without` key)) ) new ]
+        _      -> tell [ ConUnify blame x (TyExactRows ((key, tau):(ks `without` key)) ) new ]
       pure (pure (solution record tau key new))
     _ -> pure Nothing
   where
@@ -66,6 +70,11 @@ solveRowCons blame ty =
           keyt = TyLit (LiStr key)
        in ExprApp solution
     span = annotation blame
+    xs `without` b = filter ((/= b) . fst) xs
+
+    getRows (TyExactRows rs) = (Nothing, rs)
+    getRows (TyRows t rs) = getRows t & _2 %~ (rs ++)
+    getRows t = (Just t, [])
 
 apps :: Type Typed -> [Type Typed]
 apps = reverse . go where

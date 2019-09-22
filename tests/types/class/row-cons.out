@@ -1,5 +1,6 @@
-x : { { x : int } | y : int }
-y : { { x : int } | x : int }
-z : { { x : int } | x : bool }
+x : { x : int, y : int }
+y : { x : int }
+z : { x : bool }
 z : int * {  }
 z : int * { x : int }
+sound : bool * {  }

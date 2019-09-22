@@ -203,7 +203,7 @@ builtins =
                               TyPi (Invisible ttype (Just TyType) Spec) $
                               TyPi (Invisible new (Just TyType) Spec) $
                               TyPi (Implicit (foldl1 TyApp [tyRowCons, TyVar record, TyVar ttype, TyVar key, TyVar new ] )) $
-                                TyVar record ~> TyVar ttype ~> TyVar new
+                                TyVar ttype ~> TyVar record ~> TyVar new
                             )
                           , ( restrictName
                             , TyPi (Invisible key (Just tyString) Req) $
