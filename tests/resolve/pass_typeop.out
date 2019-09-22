@@ -2,8 +2,8 @@ type ||#0 'a#1 'b#2 =
   | Left#3 of 'a#1
   | Right#4 of 'a#1
 type &&#5 'a#6 'b#7 =
-  | And#8 of 'a#6 *#-39 'b#7
-let _ = (() : int#-2 ||#0 int#-2)
-let _ = (() : (&&#5) int#-2 int#-2)
-let _ = (() : (->#-38))
-let _ = (() : (*#-39))
+  | And#8 of 'a#6 * 'b#7
+let _ = (() : int ||#0 int)
+let _ = (() : (&&#5) int int)
+let _ = (() : (->))
+let _ = (() : (*))

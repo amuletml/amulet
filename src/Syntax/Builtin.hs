@@ -19,7 +19,7 @@ module Syntax.Builtin
 
   , tyUnit, tyBool, tyInt, tyString, tyFloat
   , tyLazy, tyConstraint, tyArrow, tyList
-  , tyRef, tyKStr, tyKInt
+  , tyRef, tyKStr, tyKInt, tyRowCons
 
   , forceName, lAZYName, forceTy, lAZYTy, forceTy', lAZYTy'
   , assignName, derefName, refName
@@ -30,6 +30,9 @@ module Syntax.Builtin
   , strValName, strValTy, intValName, intValTy
   , knownStrName, knownStrTy, knownStrTy'
   , knownIntName, knownIntTy, knownIntTy'
+
+  , rowConsName, extendName, restrictName, rOWCONSName
+  , rowConsTy, rowConsTy', rowConsTy'', rowConsTy''', rowConsTy''''
   ) where
 
 import Control.Lens
@@ -62,7 +65,7 @@ tyKStrName   = ofCore C.vKStrTy
 tyKIntName   = ofCore C.vKIntTy
 tyConstraintName = TgInternal "constraint"
 
-tyUnit, tyBool, tyInt, tyString, tyFloat, tyLazy, tyConstraint, tyArrow, tyList, tyRef, tyKStr, tyKInt :: Type Typed
+tyUnit, tyBool, tyInt, tyString, tyFloat, tyLazy, tyConstraint, tyArrow, tyList, tyRef, tyKStr, tyKInt, tyRowCons :: Type Typed
 tyInt        = TyCon tyIntName
 tyString     = TyCon tyStringName
 tyBool       = TyCon tyBoolName
@@ -75,6 +78,7 @@ tyConstraint = TyCon tyConstraintName
 tyRef        = TyCon tyRefName
 tyKStr       = TyCon tyKStrName
 tyKInt       = TyCon tyKIntName
+tyRowCons    = TyCon rowConsName
 
 forceName, lAZYName :: Var Typed
 forceName = ofCore C.vForce
@@ -121,6 +125,26 @@ knownIntTy = TyPi (Invisible a (Just tyInt) Infer) $ tyInt ~> TyApp tyKInt (TyVa
 knownStrTy', knownIntTy' :: Type Typed -> Type Typed
 knownStrTy' a = tyString ~> TyApp tyKStr a
 knownIntTy' a = tyInt ~> TyApp tyKInt a
+
+rowConsName, rOWCONSName :: Var Typed
+rowConsName = ofCore C.vRowCons
+rOWCONSName = ofCore C.vROWCONS
+
+extendName, restrictName :: Var Typed
+extendName = ofCore C.vExtend
+restrictName = ofCore C.vRestrict
+
+rowConsTy :: Type Typed
+rowConsTy = TyPi (Invisible key (Just tyString) Infer) $ record *. ttype *. new *. tyString ~> foldl1 TyApp [tyRowCons, TyVar record, TyVar ttype, TyVar key, TyVar new ]
+
+rowConsTy' :: Type Typed -> Type Typed
+rowConsTy'' :: Type Typed -> Type Typed -> Type Typed
+rowConsTy''' :: Type Typed -> Type Typed -> Type Typed -> Type Typed
+rowConsTy'''' :: Type Typed -> Type Typed -> Type Typed -> Type Typed -> Type Typed
+rowConsTy' x = record *. ttype *. new *. tyString ~> foldl1 TyApp [tyRowCons, TyVar record, TyVar ttype, x, TyVar new ]
+rowConsTy'' x y = ttype *. new *. tyString ~> foldl1 TyApp [tyRowCons, y, TyVar ttype, x, TyVar new ]
+rowConsTy''' x y z = new *. tyString ~> foldl1 TyApp [tyRowCons, y, z, x, TyVar new ]
+rowConsTy'''' x y z a = tyString ~> foldl1 TyApp [tyRowCons, y, z, x, a ]
 
 data BuiltinModule = BM
   { vars    :: [(Var Resolved, Type Typed)]
@@ -171,8 +195,29 @@ builtins =
 
   , modules =
       [ ( TgInternal "Amc"
-        , mempty { vars = [ (strValName, strValTy), (intValName, intValTy) ]
-                 , types = [ (tyKStrName, tyString ~> tyConstraint), (tyKIntName, tyInt ~> tyConstraint) ]
+        , mempty { vars = [ (strValName, strValTy)
+                          , (intValName, intValTy)
+                          , ( extendName
+                            , TyPi (Invisible key (Just tyString) Req) $
+                              TyPi (Invisible record (Just TyType) Spec) $
+                              TyPi (Invisible ttype (Just TyType) Spec) $
+                              TyPi (Invisible new (Just TyType) Spec) $
+                              TyPi (Implicit (foldl1 TyApp [tyRowCons, TyVar record, TyVar ttype, TyVar key, TyVar new ] )) $
+                                TyVar record ~> TyVar ttype ~> TyVar new
+                            )
+                          , ( restrictName
+                            , TyPi (Invisible key (Just tyString) Req) $
+                              TyPi (Invisible record (Just TyType) Spec) $
+                              TyPi (Invisible ttype (Just TyType) Spec) $
+                              TyPi (Invisible new (Just TyType) Spec) $
+                              TyPi (Implicit (foldl1 TyApp [tyRowCons, TyVar record, TyVar ttype, TyVar key, TyVar new ] )) $
+                                TyVar new ~> (TyVar ttype `TyTuple` TyVar record)
+                            )
+                          ]
+                 , types = [ (tyKStrName, tyString ~> tyConstraint)
+                           , (tyKIntName, tyInt ~> tyConstraint)
+                           , (rowConsName, TyType ~> TyType ~> tyString ~> TyType ~> tyConstraint)
+                           ]
                  }
         ) ]
   }
@@ -248,6 +293,11 @@ infixr *.
 
 -- | Some internal type variables. These do not need to be unique as they
 -- are bound by a forall.
-a, b :: Var Resolved
+a, b, record, ttype, key, new :: Var Resolved
 a = ofCore C.tyvarA
 b = ofCore C.tyvarB
+record = ofCore C.tyvarRecord
+ttype = ofCore C.tyvarType
+key = ofCore C.tyvarKey
+new = ofCore C.tyvarNew
+

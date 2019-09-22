@@ -150,6 +150,7 @@ data WhyUnsat
   | GivenContextNotEnough (Type Typed)
   | TooConcrete (Type Typed)
   | It'sQuantified
+  | MagicErrors [TypeError]
 
 instance (Show (Ann p), Show (Var p), Ord (Var p), Substitutable p (Type p))
           => Substitutable p (Constraint p) where
@@ -684,6 +685,13 @@ instance Note TypeError Style where
     vsep [ indent 2 "No instance for" <+> (Right <$> displayType t) <+> "arising in" <+> (Right <$> blameOf r')
          , f [annotation r']
          , indent 2 $ bullet "Note: This constraint can not be quantified over because it is of higher rank"
+         ]
+
+  formatNote f (ArisingFrom (UnsatClassCon _ (ConImplicit _ _ _ t) (MagicErrors es)) r') =
+    vsep [ indent 2 "No instance for" <+> (Right <$> displayType t) <+> "arising in" <+> (Right <$> blameOf r')
+         , f [annotation r']
+         , indent 2 $ bullet "Because:"
+         , vsep (map (formatNote f) es)
          ]
 
   formatNote f err@(UnsatClassCon r' _ _) = formatNote f (ArisingFrom err r')

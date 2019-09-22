@@ -301,9 +301,12 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
     _ ->
       case head (apps cons) of
         TyCon v | Just solve <- magicClass v -> do
-          w <- solve (apply sub cons)
+          (w, cs) <- censor (const mempty) $ listen $ solve reason (apply sub cons)
+          doSolve (Seq.fromList cs)
+            `catchChronicle`
+              \e -> confesses (ArisingFrom (UnsatClassCon reason (apply sub ohno) (MagicErrors (toList e))) reason)
           case w of
-            Just solution -> solveCoSubst . at var ?= solution (annotation reason)
+            Just solution -> solveCoSubst . at var ?= solution
             Nothing -> do
               solveCoSubst . at var ?= ExprApp (VarRef var (annotation reason, cons))
               tell (pure (apply sub ohno))
@@ -372,11 +375,6 @@ fundepsAllow impl cons
     (_:params) = apps cons
 
     concreteP = concretish . head . spine . (params !!)
-
-apps :: Type Typed -> [Type Typed]
-apps = reverse . go where
-  go (TyApp f x) = x:go f
-  go t = [t]
 
 bind :: MonadSolve m => Var Typed -> Type Typed -> m (Coercion Typed)
 bind var ty

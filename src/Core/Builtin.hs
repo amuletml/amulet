@@ -7,36 +7,119 @@
 -- indexes, should be unique.
 module Core.Builtin where
 
-import Data.Text ()
+import Data.Text (Text)
 
 import Core.Core
 import Core.Var
 
-vBool, vInt, vString, vFloat, vUnit, vLazy, vArrow, vProduct, vList, vRefTy, vKStrTy, vKIntTy :: CoVar
-vBool    = CoVar (-1) "bool" TypeConVar
-vInt     = CoVar (-2) "int" TypeConVar
-vString  = CoVar (-3) "string" TypeConVar
-vFloat   = CoVar (-4) "float" TypeConVar
-vUnit    = CoVar (-5) "unit" TypeConVar
-vLazy    = CoVar (-34) "lazy" TypeConVar
-vArrow   = CoVar (-38) "->" TypeConVar
-vProduct = CoVar (-39) "*" TypeConVar
-vList    = CoVar (-40) "list" TypeConVar
-vRefTy   = CoVar (-43) "ref" TypeConVar
-vKStrTy  = CoVar (-49) "known_string" TypeConVar
-vKIntTy  = CoVar (-50) "known_int" TypeConVar
+vBool, vInt, vString, vFloat, vUnit, vLazy, vArrow, vProduct, vList, vRefTy, vKStrTy, vKIntTy, vRowCons :: CoVar
+vOpAdd, vOpSub, vOpMul, vOpDiv, vOpExp :: CoVar
+vOpLt, vOpGt, vOpLe, vOpGe :: CoVar
+vOpAddF, vOpSubF, vOpMulF, vOpDivF, vOpExpF :: CoVar
+vOpLtF, vOpGtF, vOpLeF, vOpGeF :: CoVar
+vOpConcat :: CoVar
+vOpEq, vOpNe :: CoVar
+vError :: CoVar
+vLAZY, vForce :: CoVar
+tyvarA, tyvarB, argvarX :: CoVar
+vOpApp :: CoVar
+vCONS, vNIL :: CoVar
+vAssign, vDeref, vRef :: CoVar
+vStrVal, vIntVal :: CoVar
+vKSTR, vKINT :: CoVar
+vExtend, vRestrict, vROWCONS :: CoVar
+tyvarRecord, tyvarNew, tyvarKey, tyvarType :: CoVar
 
-tyBool, tyInt, tyString, tyFloat, tyUnit, tyLazy, tyList, tyRef, tyKStr, tyKInt :: IsVar a => Type a
-tyBool   = ConTy $ fromVar vBool
-tyInt    = ConTy $ fromVar vInt
-tyString = ConTy $ fromVar vString
-tyUnit   = ConTy $ fromVar vUnit
-tyFloat  = ConTy $ fromVar vFloat
-tyLazy   = ConTy $ fromVar vLazy
-tyList   = ConTy $ fromVar vList
-tyRef    = ConTy $ fromVar vRefTy
-tyKStr   = ConTy $ fromVar vKStrTy
-tyKInt   = ConTy $ fromVar vKIntTy
+[ vBool, vInt, vString, vFloat, vUnit, vLazy, vArrow, vProduct, vList, vRefTy, vKStrTy, vKIntTy, vRowCons, vOpAdd, vOpSub, vOpMul, vOpDiv, vOpExp, vOpLt, vOpGt, vOpLe, vOpGe, vOpAddF, vOpSubF, vOpMulF, vOpDivF, vOpExpF, vOpLtF, vOpGtF, vOpLeF, vOpGeF, vOpConcat, vOpEq, vOpNe, vError, vLAZY, vForce, tyvarA, tyvarB, argvarX, vOpApp, vCONS, vNIL, vAssign, vDeref, vRef, vStrVal, vIntVal, vExtend, vRestrict, vKSTR, vKINT, vROWCONS, tyvarRecord, tyvarNew, tyvarKey, tyvarType ] = makeBuiltins 
+  [ ("bool", TypeConVar)
+  , ("int", TypeConVar)
+  , ("string", TypeConVar)
+  , ("float", TypeConVar)
+  , ("unit", TypeConVar)
+  , ("lazy", TypeConVar)
+  , ("->", TypeConVar)
+  , ("*", TypeConVar)
+  , ("list", TypeConVar)
+  , ("ref", TypeConVar)
+  , ("known_string", TypeConVar)
+  , ("known_int", TypeConVar)
+  , ("row_cons", TypeConVar)
+
+  , ("+", ValueVar)
+  , ("-", ValueVar)
+  , ("*", ValueVar)
+  , ("/", ValueVar)
+  , ("**", ValueVar)
+
+  , ("<", ValueVar)
+  , (">", ValueVar)
+  , ("<=", ValueVar)
+  , (">=", ValueVar)
+
+  , ("+.", ValueVar)
+  , ("-.", ValueVar)
+  , ("*.", ValueVar)
+  , ("/.", ValueVar)
+  , ("**.", ValueVar)
+
+  , ("<.", ValueVar)
+  , (">.", ValueVar)
+  , ("<=.", ValueVar)
+  , (">=.", ValueVar)
+
+  , ("^", ValueVar)
+
+  , ("==", ValueVar)
+  , ("<>", ValueVar)
+
+  , ("error", ValueVar)
+
+  , ("lazy", ValueVar)
+  , ("force", ValueVar)
+
+  , ("a", TypeVar)
+  , ("b", TypeVar)
+  , ("x", ValueVar)
+
+  , ("@@", ValueVar)
+
+-- Lists
+  , ("Cons", DataConVar)
+  , ("Nil", DataConVar)
+
+-- References
+  , (":=", ValueVar)
+  , ("!", ValueVar)
+  , ("ref", ValueVar)
+
+-- Type:fire: classes
+  , ("string_value", ValueVar)
+  , ("int_value", ValueVar)
+  , ("extend_row", ValueVar)
+  , ("restrict_row", ValueVar)
+
+  , ("$KnownString", ValueVar)
+  , ("$KnownInt", ValueVar)
+  , ("$RowCons", ValueVar)
+
+  , ("record", TypeVar)
+  , ("new", TypeVar)
+  , ("key", TypeVar)
+  , ("type", TypeVar)
+  ]
+
+tyBool, tyInt, tyString, tyFloat, tyUnit, tyLazy, tyList, tyRef, tyKStr, tyKInt, tyRowCons :: IsVar a => Type a
+tyBool    = ConTy $ fromVar vBool
+tyInt     = ConTy $ fromVar vInt
+tyString  = ConTy $ fromVar vString
+tyUnit    = ConTy $ fromVar vUnit
+tyFloat   = ConTy $ fromVar vFloat
+tyLazy    = ConTy $ fromVar vLazy
+tyList    = ConTy $ fromVar vList
+tyRef     = ConTy $ fromVar vRefTy
+tyKStr    = ConTy $ fromVar vKStrTy
+tyKInt    = ConTy $ fromVar vKIntTy
+tyRowCons = ConTy $ fromVar vRowCons
 
 builtinTyList :: IsVar a => [a]
 builtinTyList = [ fromVar vBool
@@ -51,72 +134,8 @@ builtinTyList = [ fromVar vBool
                 , fromVar vRefTy
                 , fromVar vKStrTy
                 , fromVar vKIntTy
+                , fromVar vRowCons
                 ]
-
-vOpAdd, vOpSub, vOpMul, vOpDiv, vOpExp :: CoVar
-vOpAdd = CoVar (-6) "+" ValueVar
-vOpSub = CoVar (-7) "-" ValueVar
-vOpMul = CoVar (-8) "*" ValueVar
-vOpDiv = CoVar (-9) "/" ValueVar
-vOpExp = CoVar (-10) "**" ValueVar
-
-vOpLt, vOpGt, vOpLe, vOpGe :: CoVar
-vOpLt = CoVar (-11) "<" ValueVar
-vOpGt = CoVar (-12) ">" ValueVar
-vOpLe = CoVar (-13) "<=" ValueVar
-vOpGe = CoVar (-14) ">=" ValueVar
-
-vOpAddF, vOpSubF, vOpMulF, vOpDivF, vOpExpF :: CoVar
-vOpAddF = CoVar (-15) "+." ValueVar
-vOpSubF = CoVar (-16) "-." ValueVar
-vOpMulF = CoVar (-17) "*." ValueVar
-vOpDivF = CoVar (-18) "/." ValueVar
-vOpExpF = CoVar (-19) "**." ValueVar
-
-vOpLtF, vOpGtF, vOpLeF, vOpGeF :: CoVar
-vOpLtF = CoVar (-20) "<." ValueVar
-vOpGtF = CoVar (-21) ">." ValueVar
-vOpLeF = CoVar (-22) "<=." ValueVar
-vOpGeF = CoVar (-23) ">=." ValueVar
-
-vOpConcat :: CoVar
-vOpConcat = CoVar (-24) "^" ValueVar
-
-vOpEq, vOpNe :: CoVar
-vOpEq = CoVar (-25) "==" ValueVar
-vOpNe = CoVar (-26) "<>" ValueVar
-
-vError :: CoVar
-vError = CoVar (-29) "error" ValueVar
-
-vLAZY, vForce :: CoVar
-vLAZY = CoVar (-35) "lazy" ValueVar
-vForce = CoVar (-36) "force" ValueVar
-
-tyvarA, tyvarB, argvarX :: CoVar
-tyvarA = CoVar (-30) "a" TypeVar
-tyvarB = CoVar (-31) "b" TypeVar
-argvarX = CoVar (-53) "x" ValueVar
-
-vOpApp :: CoVar
-vOpApp = CoVar (-32) "@@" ValueVar
-
-vCONS, vNIL :: CoVar
-vCONS = CoVar (-41) "Cons" DataConVar
-vNIL = CoVar (-42) "Nil" DataConVar
-
-vAssign, vDeref, vRef :: CoVar
-vAssign = CoVar (-44) ":=" ValueVar
-vDeref = CoVar (-45) "!" ValueVar
-vRef = CoVar (-46) "ref" ValueVar
-
-vStrVal, vIntVal :: CoVar
-vStrVal = CoVar (-47) "string_value" ValueVar
-vIntVal = CoVar (-48) "int_value" ValueVar
-
-vKSTR, vKINT :: CoVar
-vKSTR = CoVar (-51) "$KnownString" ValueVar
-vKINT = CoVar (-52) "$KnownInt" ValueVar
 
 builtinVarList :: forall a b. (IsVar a, IsVar b) => [(a, Type b)]
 builtinVarList = vars where
@@ -135,9 +154,16 @@ builtinVarList = vars where
 
   cmp = ForallTy (Relevant name) StarTy $ tupTy [VarTy name, VarTy name] `arrTy` tyBool
 
-  name, name' :: b
+  name, name', record, ttype, key, new :: b
   name = fromVar tyvarA
   name' = fromVar tyvarB
+  record = fromVar tyvarRecord
+  ttype = fromVar tyvarType
+  key = fromVar tyvarKey
+  new = fromVar tyvarNew
+
+  appsTy :: [Type b] -> Type b
+  appsTy = foldl1 AppTy
 
   vars :: [(a, Type b)]
   vars = [ op vOpAdd intOp, op vOpSub intOp
@@ -171,6 +197,34 @@ builtinVarList = vars where
 
          , op vIntVal (ForallTy (Relevant name) tyInt $ AppTy tyKInt (VarTy name) `arrTy` tyInt)
          , op vKINT (ForallTy (Relevant name) tyInt $ tyInt `arrTy` AppTy tyKInt (VarTy name))
+
+         , op vExtend $
+             ForallTy (Relevant key) tyString $
+               ForallTy (Relevant record) StarTy $
+                 ForallTy (Relevant ttype) StarTy $
+                   ForallTy (Relevant new) StarTy $
+                     tupTy
+                      [ appsTy [tyRowCons, VarTy record, VarTy ttype, VarTy key, VarTy new ]
+                      , VarTy record
+                      , VarTy ttype ]
+                      `arrTy` VarTy new
+
+         , op vRestrict $
+             ForallTy (Relevant key) tyString $
+               ForallTy (Relevant record) StarTy $
+                 ForallTy (Relevant ttype) StarTy $
+                   ForallTy (Relevant new) StarTy $
+                     tupTy
+                      [ appsTy [tyRowCons, VarTy record, VarTy ttype, VarTy key, VarTy new ]
+                      , VarTy new ]
+                      `arrTy` ExactRowsTy [ ("_1", VarTy ttype), ("_2", VarTy record) ]
+
+         , op vROWCONS $
+            ForallTy (Relevant key) tyString $
+              ForallTy (Relevant record) StarTy $
+                ForallTy (Relevant ttype) StarTy $
+                  ForallTy (Relevant new) StarTy $
+                    tyString `arrTy` appsTy [tyRowCons, VarTy record, VarTy ttype, VarTy key, VarTy new ]
          ]
 
 isError :: IsVar a => a -> Bool
@@ -200,3 +254,7 @@ fakeKINT =
     Lam (TermArgument (fromVar argvarX) (AppTy tyKInt (VarTy (fromVar tyvarA)))) $
       Cast (Ref (fromVar argvarX) (AppTy tyKInt (VarTy (fromVar tyvarA))))
         (Symmetry (SameRepr (AppTy tyKInt (VarTy (fromVar tyvarA))) tyInt))
+
+makeBuiltins :: [ (Text, VarInfo) ] -> [CoVar]
+makeBuiltins xs = zipWith go xs [-1, -2 ..] where
+  go (name, t) id = CoVar id name t

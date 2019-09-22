@@ -442,8 +442,11 @@ reduceClassContext extra annot cons = do
         don't_skol <-
           case apps con of
             TyCon v:args -> do
-              fds <- view (classDecs . at v . non undefined . ciFundep)
-              pure (foldMap (ftv . map (args !!)) (map (view _2) fds))
+              fds <- view (classDecs . at v) 
+              case fds of
+                Just (view ciFundep -> fds) ->
+                  pure (foldMap (ftv . map (args !!)) (map (view _2) fds))
+                Nothing -> pure mempty
             _ -> pure mempty
         (con, sub') <- skolFreeTy don't_skol (ByConstraint con) (apply sub con)
         ((var, con, r):) <$> needed (sub `compose` sub') cs

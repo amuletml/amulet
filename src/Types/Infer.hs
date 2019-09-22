@@ -912,11 +912,10 @@ substituteDeferredDicts reify cons = transformExprTyped go id id where
   go (VarRef v _) | Just x <- Map.lookup v replaced = x
   go x = x
 
-
   choose (ConImplicit _ _ var ty) =
     let ex = operational (reify internal ty var)
      in Map.singleton var ex
-  choose _ = error "Not a deferred ConImplicit in choose substituteDeferredDicts"
+  choose t = error ("Not a deferred ConImplicit in choose substituteDeferredDicts " ++ show (pretty t))
 
   replaced = foldMap choose cons
 
