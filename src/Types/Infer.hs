@@ -516,6 +516,12 @@ inferLetTy closeOver strategy vs =
             Fail -> do
               (context, wrapper, needed, sub') <- reduceClassContext mempty (annotation ex) cons
 
+              let needsLet = co `Map.restrictKeys` freeIn ex
+                  addOne (v, ExprApp e) ex =
+                    Let [ Binding v e False (annotation ex, getType e) ] ex (annotation ex, getType ex)
+                  addOne _ ex = ex
+                  addFreeDicts ex = foldr addOne ex (Map.toList needsLet)
+
               when (not (null needed) && not canAdd) $
                 let fakeCon = ConImplicit (head needed ^. _3) undefined (fst blame) (head needed ^. _2)
                  in confesses . addBlame (snd blame) $
@@ -524,7 +530,10 @@ inferLetTy closeOver strategy vs =
               when (not (isFn ex) && not (null cons)) $
                 confesses (addBlame (snd blame) (UnsatClassCon (snd blame) (head cons) NotAFun))
 
-              pure (context, wrapper, \_ sub -> solveEx ts (x `compose` sub `compose` sub') (wraps' <> co), sub')
+              pure ( context
+                   , wrapper
+                   , \_ sub -> solveEx ts (x `compose` sub `compose` sub') (wraps' <> co) . addFreeDicts
+                   , sub' )
 
             Propagate -> do
               tell (Seq.fromList cons)
@@ -862,7 +871,7 @@ solveEx syms ss cs = transformExprTyped go id goType where
   goWrap (WrapVar v) =
     case Map.lookup v cs of
       Just x -> goWrap x
-      Nothing -> WrapVar v
+      _ -> WrapVar v
   goWrap IdWrap = IdWrap
   goWrap (WrapFn f) = WrapFn . flip MkWrapCont (desc f) $ solveEx syms ss cs . runWrapper f
 
