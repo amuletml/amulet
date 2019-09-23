@@ -106,6 +106,9 @@ instance (Spanned (Constructor p), Spanned (Ann p)) => Spanned (Toplevel p) wher
   annotation (Instance _ _ _ _ x) = annotation x
   annotation _ = internal
 
+instance Spanned (Ann p) => Spanned (Fundep p) where
+  annotation = annotation . view fdAnn
+
 instance Spanned (Ann p) => Spanned (ClassItem p) where
   annotation = annotation . view methAnn
 

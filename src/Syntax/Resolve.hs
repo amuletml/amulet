@@ -184,7 +184,9 @@ resolveModule (t@(Class name am ctx tvs fds ms ann):rs) = do
       pure ( DefaultMethod <$> (fst =<< reMethod b) <*> pure an
            , [] )
     wrap tvs' x = foldr (TyPi . flip (flip Invisible Nothing) Spec) x (ftv x `Set.difference` Set.fromList tvs')
-    reFd (Fundep f t a) = Fundep <$> traverse lookupTyvar f <*> traverse lookupTyvar t <*> pure a
+    reFd fd@(Fundep f t a) = Fundep <$> traverse tv f <*> traverse tv t <*> pure a where
+      tv x = lookupTyvar x `catchJunk` fd
+
 
 resolveModule (t@(Instance cls ctx head ms ann):rs) = do
   cls' <- lookupTy cls `catchJunk` t
