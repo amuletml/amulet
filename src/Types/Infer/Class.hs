@@ -523,8 +523,9 @@ reduceClassContext extra annot cons = do
       wrap flv =
         shoveFn stillNeeded' . (case flv of { Full -> shove; _ -> id })
 
-  for_ stillNeeded $ \(var, ty, reason) ->
-    when (tooConcrete ty) $
+  for_ stillNeeded $ \(var, ty, reason) -> do
+    c <- tooConcrete ty
+    when c $
       confesses (addBlame reason (UnsatClassCon reason (ConImplicit reason scope var ty) (TooConcrete ty)))
 
   pure (addCtx stillNeeded' . apply substitution, wrap, stillNeeded', substitution)
@@ -636,14 +637,27 @@ validContext w a t@TyType{} = confesses (InvalidContext w a t)
 validContext w a t@TyLit{} = confesses (InvalidContext w a t)
 validContext w a (TyParens t) = validContext w a t
 
-tooConcrete :: Type Typed -> Bool
-tooConcrete (spine -> (x:xs)) = isIt x --> any isIt xs where
-  isIt TyCon{} = True
-  isIt _ = False
-  x --> y = not x || y
+tooConcrete :: MonadInfer Typed m => Type Typed -> m Bool
+tooConcrete (apps -> (TyCon clss:xs)) = do
+  x <- view (classDecs . at clss)
+  case x of
+    Just info -> pure $
+      if null (info ^. ciFundep)
+         then any isCon xs
+         else any notOk (info ^. ciFundep)
+    Nothing -> pure False
+  where
+    notOk (from, _, _) = all (isCon . (xs !!)) from
 
-tooConcrete _ = False
+    isCon TyCon{} = True
+    isCon TyTuple{} = True
+    isCon TyRows{} = True
+    isCon TyExactRows{} = True
+    isCon TyPromotedCon{} = True
+    isCon TyLit{} = True
+    isCon _ = False
 
+tooConcrete _ = pure False
 
 type Need t = (Var t, Type t, SomeReason)
 data WrapFlavour = Thin | Full

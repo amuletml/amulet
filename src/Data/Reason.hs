@@ -95,6 +95,9 @@ instance (Spanned (Ann p), Pretty (Var p)) => Reasonable ClassItem p where
   blame MethodSig{} = string "the" <+> highlight "method signature"
   blame DefaultMethod{} = string "the" <+> highlight "default method"
 
+instance (Spanned (Ann p), Pretty (Var p)) => Reasonable Fundep p where
+  blame _ = string "the functional dependency"
+
 instance Reasonable (Const SomeReason) p where
   blame = blameOf . getConst
 

@@ -6,7 +6,6 @@
 -- | This module implements the logic responsible for solving the
 -- sequence of @Constraint@s the type-checker generates for a particular
 -- binding groups.
--- #define TRACE_TC
 module Types.Unify
   ( SolveState, emptyState
   , typeWithin
@@ -308,6 +307,7 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
           case w of
             Just solution -> solveCoSubst . at var ?= solution
             Nothing -> do
+              traceM " => quantifiying over magic class"
               solveCoSubst . at var ?= ExprApp (VarRef var (annotation reason, cons))
               tell (pure (apply sub ohno))
         _ -> do
@@ -437,6 +437,10 @@ unify (TySkol x) (TySkol y)
            else confesses (SkolBinding x (TySkol y))
 
 unify ta@(TyPromotedCon a) tb@(TyPromotedCon b)
+  | a == b = pure (ReflCo tb)
+  | otherwise = confesses =<< unequal ta tb
+
+unify ta@(TyLit a) tb@(TyLit b)
   | a == b = pure (ReflCo tb)
   | otherwise = confesses =<< unequal ta tb
 
