@@ -1,33 +1,95 @@
-holes.ml[4:27 ..4:27]: error
-  │ 
-4 │   let foo (x : 'a) : 'a = _
-  │                           ^
-  Found typed hole _ of type 'a
-  • Valid replacements include:
-      • x
-holes.ml[7:5 ..7:5]: error
-  │ 
-7 │     _
-  │     ^
-  Found typed hole _ of type 'a * 'b -> 'b * 'a
-  • Valid replacements include:
-      • fun (x, y) -> (y, x)
-holes.ml[10:5 ..10:5]: error
+holes.ml[10:47 ..10:47]: error
    │ 
-10 │     _
-   │     ^
-  Found typed hole _ of type ('a -> 'b) -> 'a -> 'b
+10 │   let or_in1 : forall 'a 'b. 'a -> 'a || 'b = _
+   │                                               ^
+  Found typed hole _ of type 'a -> || 'a 'b
   • Valid replacements include:
-      • fun g -> fun z -> g z
-holes.ml[13:5 ..13:5]: error
+      • fun y -> In1 y
+holes.ml[11:47 ..11:47]: error
    │ 
-13 │     _
-   │     ^
-  Found typed hole _ of type ('b -> 'c) -> ('a -> 'b) -> 'a -> 'c
+11 │   let or_in2 : forall 'a 'b. 'b -> 'a || 'b = _
+   │                                               ^
+  Found typed hole _ of type 'b -> || 'a 'b
   • Valid replacements include:
-      • fun h -> fun f -> fun y -> h (f y)
-holes.ml[16:5 ..16:5]: error
+      • fun y -> In2 y
+holes.ml[13:79 ..13:79]: error
    │ 
-16 │     _
-   │     ^
-  Found typed hole _ of type ('p -> 'q) -> ('p -> void) -> 'q -> void
+13 │   let or_elim : forall 'a 'b 'r. ('a -> 'r) -> ('b -> 'r) -> 'a || 'b -> 'r = _
+   │                                                                               ^
+  Found typed hole _ of type ('a -> 'r) -> ('b -> 'r) -> || 'a 'b -> 'r
+  • Valid replacements include:
+      • fun f -> fun g -> function
+      | (In1 z) -> f z
+      | (In2 x) -> g x
+holes.ml[15:54 ..15:54]: error
+   │ 
+15 │   let or_swap : forall 'a 'b. 'a || 'b -> 'b || 'a = _
+   │                                                      ^
+  Found typed hole _ of type || 'a 'b -> || 'b 'a
+  • Valid replacements include:
+      • function
+      | (In1 y) -> In2 y
+      | (In2 x) -> In1 x
+holes.ml[17:53 ..17:53]: error
+   │ 
+17 │   let and_in : forall 'a 'b. 'a -> 'b -> 'a && 'b = _
+   │                                                     ^
+  Found typed hole _ of type 'a -> 'b -> && 'a 'b
+  • Valid replacements include:
+      • fun y -> fun z -> And (y, z)
+holes.ml[18:72 ..18:72]: error
+   │ 
+18 │   let and_elim : forall 'a 'b 'r. 'a && 'b -> ('a -> 'b -> 'r) -> 'r = _
+   │                                                                        ^
+  Found typed hole _ of type && 'a 'b -> ('a -> 'b -> 'r) -> 'r
+  • Valid replacements include:
+      • fun (And (y, z)) -> fun f -> f y z
+holes.ml[20:50 ..20:50]: error
+   │ 
+20 │   let and_p1 : forall 'a 'b 'r. 'a && 'b -> 'a = _
+   │                                                  ^
+  Found typed hole _ of type && 'a 'b -> 'a
+  • Valid replacements include:
+      • fun (And (y, z)) -> y
+holes.ml[21:50 ..21:50]: error
+   │ 
+21 │   let and_p2 : forall 'a 'b 'r. 'a && 'b -> 'a = _
+   │                                                  ^
+  Found typed hole _ of type && 'a 'b -> 'a
+  • Valid replacements include:
+      • fun (And (z, x)) -> z
+holes.ml[23:55 ..23:55]: error
+   │ 
+23 │   let and_swap : forall 'a 'b. 'a && 'b -> 'b && 'a = _
+   │                                                       ^
+  Found typed hole _ of type && 'a 'b -> && 'b 'a
+  • Valid replacements include:
+      • fun (And (x, y)) -> And (y, x)
+holes.ml[25:73 ..25:73]: error
+   │ 
+25 │   let contrapositive : forall 'p 'q. ('p -> 'q) -> (not 'q -> not 'p) = _
+   │                                                                         ^
+  Found typed hole _ of type ('p -> 'q) -> not 'q -> not 'p
+  • Valid replacements include:
+      • fun f -> fun (Not f) -> Not (fun x -> f (f x))
+holes.ml[26:58 ..26:58]: error
+   │ 
+26 │   let noncontradiction : forall 'p. not ('p && not 'p) = _
+   │                                                          ^
+  Found typed hole _ of type not (&& 'p (not 'p))
+  • Valid replacements include:
+      • Not (fun (And (z, (Not h))) -> h z)
+holes.ml[27:59 ..27:59]: error
+   │ 
+27 │   let not_not_lem : forall 'p. not (not ('p || not 'p)) = _
+   │                                                           ^
+  Found typed hole _ of type not (not (|| 'p (not 'p)))
+  • Valid replacements include:
+      • Not (fun (Not h) -> h (In2 (Not (fun x -> h (In1 x)))))
+holes.ml[28:42 ..28:42]: error
+   │ 
+28 │   let ex_falso : forall 'a. void -> 'a = _
+   │                                          ^
+  Found typed hole _ of type void -> 'a
+  • Valid replacements include:
+      • function ()

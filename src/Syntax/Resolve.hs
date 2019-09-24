@@ -264,7 +264,6 @@ reExpr (Match e ps a) = do
   ps' <- traverse reArm ps
   pure (Match e' ps' a)
 
-reExpr r@(Function [] a) = dictates (ArisingFrom EmptyMatch (BecauseOf r)) $> junkExpr a
 reExpr (Function ps a) = flip Function a <$> traverse reArm ps
 
 reExpr (BinOp l o r a) = BinOp <$> reExpr l <*> reExpr o <*> reExpr r <*> pure a

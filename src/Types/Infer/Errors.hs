@@ -1,4 +1,3 @@
-{-# LANGUAGE ViewPatterns #-}
 module Types.Infer.Errors where
 --
 import Control.Monad.Infer

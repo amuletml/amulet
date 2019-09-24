@@ -1,4 +1,6 @@
-{-# LANGUAGE TemplateHaskell, ViewPatterns, FlexibleContexts, TupleSections, ConstraintKinds, OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell, ViewPatterns, FlexibleContexts
+           , TupleSections, ConstraintKinds, OverloadedStrings
+           , CPP #-}
 module Types.Holes (findHoleCandidate) where
 
 import qualified Data.Map.Strict as Map
@@ -29,24 +31,33 @@ import Types.Unify
 
 import Types.Infer.Pattern
 
+#ifdef TRACE_TC
+import Debug.Trace
+import Text.Pretty.Semantic hiding (fill)
+#endif
+
 data PsScope =
   PsScope { _psVars :: Map.Map (Type Typed) [Expr Typed]
           , _psEnv :: Env
-          , _psAnn :: Span
+          , _psAnn :: !Span
           , _psInScope :: Set.Set (Var Typed)
+          , _psDepth :: !Int
           }
 
-type MonadPs m = (MonadNamey m, MonadReader PsScope m, MonadLogic m, MonadFail m)
+type MonadPs m = (MonadNamey m, MonadReader PsScope m, MonadLogic m, MonadFail m, Alternative m)
 
 makeLenses ''PsScope
 
 findHoleCandidate :: MonadNamey m => Subst Typed -> Span -> Env -> Type Typed -> m [Expr Typed]
-findHoleCandidate _ ann env t = observeManyT 10 $ runReaderT (fill t) (PsScope mempty env ann nms) where
+findHoleCandidate _ ann env t = observeManyT 10 $ runReaderT (fill t) (PsScope mempty env ann nms 0) where
   nms :: Set.Set (Var Typed)
   nms = env ^. names . to namesInScope . to Set.fromAscList
 
 -- | Compute an expression that has the given type.
 fill :: MonadPs m => Type Typed -> m (Expr Typed)
+#ifdef TRACE_TC
+fill t | trace ("fill " ++ displayS (pretty t)) False = undefined
+#endif
 -- Let's get the impossible cases over with first:
 fill TyLit{} = fail "findHoleCandidate: Kind error (TyLit)"
 fill TyPromotedCon{} = fail "findHoleCandidate: Kind error (TyPromotedCon)"
@@ -59,13 +70,15 @@ fill t@TySkol{} = pick t
 
 -- Introduce a new variable for the domain type and fill the function
 -- body
-fill ty@(domain :-> codomain) = fake [ty] $ \[a] ->
-  assume domain $ \pat ->
-    Fun (PatParam pat) <$> fill codomain <*> pure a
+fill ty@(domain :-> codomain) = fake [ty] $ \[a] -> do
+  is_sum <- isSum domain
+  if is_sum
+     then makeFunction domain codomain
+     else assume domain $ \pat -> Fun (PatParam pat) <$> fill codomain <*> pure a
 
 -- Special cases for concrete types we know about:
-fill ty@(appsView -> [con, xs]) | con == tyList =
-    pickLocal ty -- Try a known list
+fill ty@(TyApps con [xs]) | con == tyList =
+    knownImplication ty -- Try a known list
   `interleave`
     fake [ty] (pure . ListExp [] . head) -- Try nil
   `interleave`
@@ -76,7 +89,7 @@ fill ty@(appsView -> [con, xs]) | con == tyList =
         pure (App (VarRef cONSName cons) (Tuple [head, tail] tuple) list)
 
 -- Try to thunk a value corresponding to the type inside the `lazy`
-fill ty@(appsView -> [con, xs]) | con == tyLazy =
+fill ty@(TyApps con [xs]) | con == tyLazy =
   fake [ty] $ \[lazy] -> Lazy <$> fill xs <*> pure lazy
 
 -- Let us not choose arbitrary literals, but pick them from scope
@@ -85,13 +98,18 @@ fill t | t == tyInt = pick t
 fill t | t == tyString = pick t
 fill t | t == tyFloat = pick t
 fill t | t == tyFloat = pick t
-fill t | t == tyBool = pick t
+
+-- Booleans are finite so we can enumerate them.
+fill t | t == tyBool = fake [t] $ \[a] ->
+  explore [ Literal (LiBool True) a
+          , Literal (LiBool False) a
+          ]
 
 -- This one is easy, though.
 fill t | t == tyUnit = fake [t] $ pure . Literal LiUnit . head
 
 -- Sum types: we need to try each constructor.
-fill ty@(TyApps (TyCon con) _) = once (pickLocal ty) <|> do
+fill ty@(TyApps (TyCon con) _) = once (knownImplication ty) <|> do
   -- Search all constructors for the type..
   con <- explore =<< view (psEnv . types . at con . non mempty . to Set.toList)
 
@@ -141,6 +159,38 @@ fill ty@(TyExactRows xs) = fake [ty] $ \[ann] -> do
 
 fill _ = fail ""
 
+makeFunction :: MonadPs m => Type Typed -> Type Typed -> m (Expr Typed)
+makeFunction domain@(TyApps (TyCon t) _) body_t = fake [domain] $ \[ann] -> do
+  cons <- view (psEnv . types . at t . non undefined . to Set.toList)
+
+  arms <- for cons $ \con -> do
+    (ty, _) <- skolGadt con =<<
+       instantiate Strong Expression =<<
+         view (psEnv . names . at con . non undefined)
+    ([], ty) <- pure $ splitConstrainedType ty
+
+    case ty of
+      dom :-> cod -> do
+        guard (nonRec t dom)
+        Just sub <- pure $ unifyPure cod domain
+        assume (apply sub dom) $ \pat ->
+          Arm (Destructure con (Just pat) ann) Nothing <$> fill body_t
+
+      _ -> Arm (Destructure con Nothing ann) Nothing <$> fill body_t
+
+  pure $ Function arms ann
+
+makeFunction _ _ = undefined
+
+-- | Is this type constructor a sum type constructor?
+isSum :: MonadReader PsScope m => Type Typed -> m Bool
+isSum (TyApps (TyCon t) _) = do
+  x <- view (psEnv . types . at t)
+  pure $ case x of
+    Just t -> Set.size t /= 1
+    Nothing -> False
+isSum _ = pure False
+
 -- | Compute all the possible variables with a matching type /that the
 -- TC knows about/. This is a potentially huge number of variables if we
 -- go by the typical @t ~ t'@ relationship, so we use the 'Eq' instance
@@ -151,16 +201,21 @@ tcVars ty = fake [ty] $ \[a] -> do
   letBound <- view (psEnv . letBound)
   pure [ VarRef x a | (x, ty') <- all, x `Set.notMember` letBound, ty == ty' ]
 
-knownImplication :: MonadPs m => Type Typed -> m (Expr Typed)
+
+pick, knownImplication :: MonadPs m => Type Typed -> m (Expr Typed)
+pick t = knownImplication t `interleave` (explore =<< tcVars t) `interleave` tcKnownImplication t
+
 knownImplication ty = fake [ty] $ \[app] -> do
+  guard . (< 20) =<< view psDepth
   all <- Map.toList <$> view psVars
 
   (fun, args, sub) <- explore
     [ (ex, mapMaybe (fmap (apply sub) . isArg) args, sub)
-    | (TyArrs args ret, (ex:_)) <- all
-    , Just sub <- [unifyPure ret ty] ]
+    | (TyArrs args ret, ex:_) <- all
+    , Just sub <- [unifyPure ret ty]
+    ]
 
-  local (psVars %~ Map.mapKeys (apply sub)) $
+  local (psVars %~ Map.mapKeys (apply sub)) . local (psDepth %~ succ) $
     foldl (mkApp app) fun <$> traverse fill args
 
 tcKnownImplication :: MonadPs m => Type Typed -> m (Expr Typed)
@@ -168,22 +223,17 @@ tcKnownImplication ty = fake [ty] $ \[app] -> do
   an <- view psAnn
   all <- view (psEnv . names . to scopeToList)
 
-  (fun, tc_ty) <- explore $ [ (VarRef x (an, tc_ty), tc_ty) | (x, tc_ty@TyPi{}) <- all ]
+  (fun, tc_ty) <- explore [ (VarRef x (an, tc_ty), tc_ty) | (x, tc_ty@TyPi{}) <- all ]
   (_, _, TyArrs (mapMaybe isArg -> args) cod) <- instantiate Strong Expression tc_ty
 
   Just _ <- pure $ unifyPure cod ty
 
   foldl (mkApp app) fun <$> traverse fill args
 
-pick, pickLocal :: MonadPs m => Type Typed -> m (Expr Typed)
-pick t = pickLocal t `interleave` (explore =<< tcVars t) `interleave` tcKnownImplication t
-
-pickLocal t = knownImplication t
 
 -- | Exhaustively explore a list of choices.
 explore :: MonadLogic m => [a] -> m a
-explore [] = mzero
-explore (x:xs) = pure x `interleave` explore xs
+explore = foldr (interleave . pure) mzero
 
 fake :: MonadReader PsScope m => [Type Typed] -> ([Ann Typed] -> m a) -> m a
 fake t k = k . (flip zip t . repeat) =<< view psAnn
@@ -198,25 +248,29 @@ variable domain k = fake [domain] $ \[a] -> do
 
   let ref = VarRef x a
 
+#ifdef TRACE_TC
+  traceM (displayS ("assume" <+> pretty ref <+> colon <+> pretty domain))
+#endif
+
   local (psVars . at domain %~ insert ref) . local (psInScope %~ Set.insert x) $
     k ref (Capture x a)
 
 -- | A generalised version of 'variable' that will decompose product
 -- types.
-assume :: (MonadReader PsScope m, MonadNamey m) => Type Typed -> (Pattern Typed -> m a) -> m a
+assume :: MonadPs m => Type Typed -> (Pattern Typed -> m a) -> m a
 assume ty@TyTuple{} k = go [] (untup ty) k where
   untup (TyTuple a b) = a:untup b
   untup t = [t]
 
-  go pats (x:xs) k = variable x $ \_ pat -> go (pat:pats) xs k
+  go pats (x:xs) k = assume x $ \pat -> go (pat:pats) xs k
   go pats [] k = fake [ty] $ \[tuple] -> k (PTuple (reverse pats) tuple)
 
 assume ty@(TyRows _ xs) k = go [] xs k where
-  go pats ((label, t):xs) k = variable t $ \_ pat -> go ((label, pat):pats) xs k
+  go pats ((label, t):xs) k = assume t $ \pat -> go ((label, pat):pats) xs k
   go pats [] k = fake [ty] $ \[record] -> k (PRecord (reverse pats) record)
 
 assume ty@(TyExactRows xs) k = go [] xs k where
-  go pats ((label, t):xs) k = variable t $ \_ pat -> go ((label, pat):pats) xs k
+  go pats ((label, t):xs) k = assume t $ \pat -> go ((label, pat):pats) xs k
   go pats [] k = fake [ty] $ \[record] -> k (PRecord (reverse pats) record)
 
 assume ty@(TyApps (TyCon c) xs) k = fake [ty] $ \[pat] -> do
@@ -226,6 +280,8 @@ assume ty@(TyApps (TyCon c) xs) k = fake [ty] $ \[pat] -> do
       ~(dom :-> TyApps _ tyvars, _) <- skolGadt con =<<
         instantiate Strong Expression =<<
           view (psEnv . names . at con . non undefined)
+
+      guard (nonRec c dom)
 
       let x `u` y = fromMaybe mempty (unifyPure x y)
           sub = foldr1 compose (zipWith u tyvars xs)
@@ -268,3 +324,18 @@ genNameWithHint vars ty =
     hint = hints ty
     discriminate (TgName x i) = TgName (x <> T.pack (show i)) i
     discriminate _ = undefined
+
+nonRec :: Var Typed -> Type Typed -> Bool
+nonRec v (TyApps (TyCon x) _) = x /= v
+nonRec v (TyTuple a b) = nonRec v a && nonRec v b
+nonRec v (TyPi _ b) = nonRec v b
+nonRec _ TyVar{} = True
+nonRec _ TySkol{} = True
+nonRec _ TyPromotedCon{} = True
+nonRec _ TyLit{} = True
+nonRec _ TyType{} = True
+nonRec v (TyRows t xs) = nonRec v t && all (nonRec v . snd) xs
+nonRec v (TyExactRows xs) = all (nonRec v . snd) xs
+nonRec v (TyParens p) = nonRec v p
+nonRec v (TyOperator l v' r) = v /= v' && nonRec v l && nonRec v r
+nonRec _ _ = error "nonRec: that's a weird type you have there."

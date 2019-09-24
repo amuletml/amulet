@@ -117,6 +117,7 @@ instance Pretty (Var p) => Pretty (Expr p) where
   pretty (Literal l _) = pretty l
   pretty (BinOp l o r _) = parens (pretty l <+> pretty o <+> pretty r)
   pretty (Match t bs _) = vsep ((keyword "match" <+> pretty t <+> keyword "with"):map pretty bs)
+  pretty (Function [] _) = keyword "function" <+> parens mempty
   pretty (Function bs _) = vsep (keyword "function":map pretty bs)
   pretty (Hole v _) = "_" <> pretty v -- A typed hole
   pretty (Ascription e t _) = parens $ pretty e <+> colon <+> pretty t
