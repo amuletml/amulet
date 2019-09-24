@@ -18,7 +18,7 @@ let _ =
   let and_elim : forall 'a 'b 'r. 'a && 'b -> ('a -> 'b -> 'r) -> 'r = _
 
   let and_p1 : forall 'a 'b 'r. 'a && 'b -> 'a = _
-  let and_p2 : forall 'a 'b 'r. 'a && 'b -> 'a = _
+  let and_p2 : forall 'a 'b 'r. 'a && 'b -> 'b = _
 
   let and_swap : forall 'a 'b. 'a && 'b -> 'b && 'a = _
 

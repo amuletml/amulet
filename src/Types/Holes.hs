@@ -23,6 +23,8 @@ import Syntax.Types
 import Syntax.Var
 import Syntax
 
+import Data.List (elemIndex)
+import Data.Text (Text)
 import Data.Traversable
 import Data.Maybe
 import Data.Span
@@ -40,7 +42,7 @@ data PsScope =
   PsScope { _psVars :: Map.Map (Type Typed) [Expr Typed]
           , _psEnv :: Env
           , _psAnn :: !Span
-          , _psInScope :: Set.Set (Var Typed)
+          , _psInScope :: Set.Set Text
           , _psDepth :: !Int
           }
 
@@ -50,8 +52,9 @@ makeLenses ''PsScope
 
 findHoleCandidate :: MonadNamey m => Subst Typed -> Span -> Env -> Type Typed -> m [Expr Typed]
 findHoleCandidate _ ann env t = observeManyT 10 $ runReaderT (fill t) (PsScope mempty env ann nms 0) where
-  nms :: Set.Set (Var Typed)
-  nms = env ^. names . to namesInScope . to Set.fromAscList
+  nms = env ^. names . to namesInScope . to (map getName) . to Set.fromAscList
+  getName (TgName x _) = x
+  getName (TgInternal x) = x
 
 -- | Compute an expression that has the given type.
 fill :: MonadPs m => Type Typed -> m (Expr Typed)
@@ -244,7 +247,7 @@ variable :: (MonadReader PsScope m, MonadNamey m) => Type Typed -> (Expr Typed -
 variable domain k = fake [domain] $ \[a] -> do
   vars <- view psInScope
 
-  x <- genNameWithHint vars domain
+  (x, name) <- genNameWithHint vars domain
 
   let ref = VarRef x a
 
@@ -252,7 +255,7 @@ variable domain k = fake [domain] $ \[a] -> do
   traceM (displayS ("assume" <+> pretty ref <+> colon <+> pretty domain))
 #endif
 
-  local (psVars . at domain %~ insert ref) . local (psInScope %~ Set.insert x) $
+  local (psVars . at domain %~ insert ref) . local (psInScope %~ Set.insert name) $
     k ref (Capture x a)
 
 -- | A generalised version of 'variable' that will decompose product
@@ -307,23 +310,29 @@ isArg _ = Nothing
 mkApp :: Ann Typed -> Expr Typed -> Expr Typed -> Expr Typed
 mkApp ann f x = App f x ann
 
-genNameWithHint :: MonadNamey m => Set.Set (Var Typed) -> Type Typed -> m (Var Typed)
+genNameWithHint :: MonadNamey m => Set.Set Text -> Type Typed -> m (Var Typed, Text)
 genNameWithHint vars ty =
   do
     ~(TgName _ id) <- genName
     let ourname = TgName (hint !! (id `mod` length hint)) id
+        name = hint !! (id `mod` length hint)
 
-    pure $ if ourname `Set.member` vars
-       then discriminate ourname
-       else ourname
+    pure $ if name `Set.member` vars
+              then (discriminate hint ourname, name)
+              else (ourname, name)
   where
     hints ty = case ty of
       TyPi{} -> ["f", "g", "h"]
       TyApps t [x] | t == tyList -> map (`T.snoc` 's') $ hints x
       _ -> ["x", "y", "z"]
     hint = hints ty
-    discriminate (TgName x i) = TgName (x <> T.pack (show i)) i
-    discriminate _ = undefined
+
+    discriminate hints (TgName x i)
+      | x `Set.notMember` vars = TgName x i
+      | Just i <- x `elemIndex` hints =
+        discriminate hints $ TgName (hints !! (succ i `mod` length hints)) i
+      | otherwise = TgName (x <> T.pack (show i)) i
+    discriminate _ _ = undefined
 
 nonRec :: Var Typed -> Type Typed -> Bool
 nonRec v (TyApps (TyCon x) _) = x /= v
