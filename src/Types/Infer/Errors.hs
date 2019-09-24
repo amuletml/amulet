@@ -1,13 +1,10 @@
 {-# LANGUAGE ViewPatterns #-}
 module Types.Infer.Errors where
-
--- import qualified Data.Map.Strict as Map
-import qualified Data.Set as Set
-
+--
 import Control.Monad.Infer
 import Control.Lens
 
-import Types.Wellformed -- skols
+import {-# SOURCE #-} Types.Holes
 
 import Syntax.Transform
 import Syntax.Implicits
@@ -72,29 +69,13 @@ getErr x = (x, id)
 rewind :: Var Typed -> [Type Typed] -> Type Typed
 rewind x = foldl TyApp (TyCon x)
 
-foundHole :: Var Typed -> Type Typed -> Subst Typed -> TypeError
-foundHole hole ht sub = helpMaybe (FoundHole hole (apply sub ty)) where
-  unskolemise (TySkol v) = case sub ^. at (v ^. skolIdent) of
-    Just t -> t
-    _ -> TyVar (v ^. skolVar)
-  unskolemise x = x
+foundHole :: MonadNamey m => Env -> Ann Typed -> Var Typed -> Type Typed -> Subst Typed -> m TypeError
+foundHole env ann hole ht sub =
+  FoundHole hole (apply sub hole_t) <$> findHoleCandidate sub (ann ^. _1) env (apply sub hole_t)
+  where
+    unskolemise k (TySkol v) = case sub ^. at (v ^. skolIdent) of
+      Just t -> apply sub t
+      _ -> k v
+    unskolemise _ x = x
 
-  go :: Type Typed -> Type Typed
-  go = transformType unskolemise
-
-  ty = go (apply sub ht)
-  skolvars = Set.toList (skols ty)
-
-  helpMaybe
-    | null skolvars = id
-    | otherwise = (`Note` help)
-
-  help :: Doc
-  help =
-    let oneEquality (view skolIdent -> x) =
-          case sub ^. at x of
-            Just ty -> pure (pretty x <+> soperator (char '~') <+> pretty ty)
-            Nothing -> []
-        oneEquality :: Skolem Typed -> [Doc]
-     in string "The following equalities might be relevant:"
-        <#> vsep (map bullet (concatMap oneEquality skolvars))
+    hole_t = transformType (unskolemise TySkol) (apply sub ht)

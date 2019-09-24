@@ -446,7 +446,7 @@ reduceClassContext extra annot cons = do
   scope <- view classes
   let needed sub (ConImplicit r _ var con:cs) = do
         don't_skol <-
-          case apps con of
+          case appsView con of
             TyCon v:args -> do
               fds <- view (classDecs . at v) 
               case fds of
@@ -638,7 +638,7 @@ validContext w a t@TyLit{} = confesses (InvalidContext w a t)
 validContext w a (TyParens t) = validContext w a t
 
 tooConcrete :: MonadInfer Typed m => Type Typed -> m Bool
-tooConcrete (apps -> (TyCon clss:xs)) = do
+tooConcrete (appsView -> (TyCon clss:xs)) = do
   x <- view (classDecs . at clss)
   case x of
     Just info -> pure $
@@ -692,7 +692,7 @@ makeMinimalFormula signatures' defaults = mkAnd (sccs' ++ noDefaults) where
 
 checkFundeps :: forall m. MonadInfer Typed m => Type Typed -> Ann Resolved -> [([Int], [Int], Ann Resolved)] -> Type Typed -> m ()
 checkFundeps context ann fds ty = do
-  let (clss:args) = apps ty
+  let (clss:args) = appsView ty
   let go (cty:rest) = do
         (needs, gets) <- impliedByContextEntry cty
         (needs', gets') <- go rest
@@ -733,7 +733,7 @@ splitContext t = [t]
 
 impliedByContextEntry :: MonadInfer Typed m => Type Typed -> m (Set.Set (Var Typed), Set.Set (Var Typed))
 impliedByContextEntry x
-  | (TyCon clss:args) <- apps x, args /= [] = do
+  | (TyCon clss:args) <- appsView x, args /= [] = do
      ci <- view (classDecs . at clss)
      case ci of
        Just info ->

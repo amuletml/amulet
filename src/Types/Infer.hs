@@ -98,7 +98,8 @@ check e oty@TyPi{} | isSkolemisable oty = do
     pure (ExprWrapper wrap e (annotation e, oty))
 
 check (Hole v a) t = do
-  tell (Seq.singleton (ConFail (a, t) v t))
+  env <- ask
+  tell (Seq.singleton (ConFail env (a, t) v t))
   pure (Hole v (a, t))
 
 check (Let ns b an) t = do
@@ -466,10 +467,6 @@ inferProg (inst@Instance{}:prg) = do
 inferProg (Module am name body:prg) = do
   (body', env) <- inferProg body
 
-  -- let (vars, tys) = extractToplevels body
-  --     vars' = map (\x -> (x, env ^. names . at x . non (error ("value: " ++ show x)))) (vars ++ tys)
-  --  TODO: investigate this
-
   -- Extend the current scope and module scope
   local ( (names %~ (<> (env ^. names)))
         . (types %~ (<> (env ^. types)))
@@ -833,7 +830,7 @@ checkAmbiguous var exp tau = go mempty mempty tau where
   go ok s (TyPi (Invisible v _ Req) t) = go (Set.insert v ok) s t
   go ok s (TyPi Invisible{} t) = go ok s t
   go ok s (TyPi (Implicit v) t)
-    | (TyCon clss:args) <- apps v = do
+    | (TyCon clss:args) <- appsView v = do
         ci <- view (classDecs . at clss)
         case ci of
           Just ci ->

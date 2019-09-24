@@ -1,0 +1,33 @@
+holes.ml[4:27 ..4:27]: error
+  │ 
+4 │   let foo (x : 'a) : 'a = _
+  │                           ^
+  Found typed hole _ of type 'a
+  • Valid replacements include:
+      • x
+holes.ml[7:5 ..7:5]: error
+  │ 
+7 │     _
+  │     ^
+  Found typed hole _ of type 'a * 'b -> 'b * 'a
+  • Valid replacements include:
+      • fun (x, y) -> (y, x)
+holes.ml[10:5 ..10:5]: error
+   │ 
+10 │     _
+   │     ^
+  Found typed hole _ of type ('a -> 'b) -> 'a -> 'b
+  • Valid replacements include:
+      • fun g -> fun z -> g z
+holes.ml[13:5 ..13:5]: error
+   │ 
+13 │     _
+   │     ^
+  Found typed hole _ of type ('b -> 'c) -> ('a -> 'b) -> 'a -> 'c
+  • Valid replacements include:
+      • fun h -> fun f -> fun y -> h (f y)
+holes.ml[16:5 ..16:5]: error
+   │ 
+16 │     _
+   │     ^
+  Found typed hole _ of type ('p -> 'q) -> ('p -> void) -> 'q -> void

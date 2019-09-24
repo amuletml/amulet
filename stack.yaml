@@ -1,4 +1,4 @@
-resolver: nightly-2019-06-27
+resolver: lts-14.7
 
 extra-deps:
   - monad-chronicle-1@sha256:b6e3a0378059e42cb48726d8ad41b27a8a0d8c2cb293cb6d2e2c039d64609ab6

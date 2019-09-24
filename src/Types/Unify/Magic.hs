@@ -1,5 +1,5 @@
 {-# LANGUAGE ConstraintKinds, FlexibleContexts #-}
-module Types.Unify.Magic (magicClass, apps) where
+module Types.Unify.Magic (magicClass) where
 
 import Control.Monad.Infer
 import Control.Lens
@@ -40,7 +40,7 @@ solveKnownLit _ _ _ _ _ _ _ = error "kind error in solveKnownString"
 
 solveRowCons :: MonadSolve m => Solver m
 solveRowCons blame ty =
-  case apps ty of
+  case appsView ty of
     [ _, record@TyVar{}, TyLit (LiStr key), tau, new ] | isRows new -> do
       x <- genName
       tell [ ConUnify blame x (TyRows record [ (key, tau )]) new ]
@@ -75,11 +75,6 @@ solveRowCons blame ty =
     getRows (TyExactRows rs) = (Nothing, rs)
     getRows (TyRows t rs) = getRows t & _2 %~ (rs ++)
     getRows t = (Just t, [])
-
-apps :: Type Typed -> [Type Typed]
-apps = reverse . go where
-  go (TyApp f x) = x:go f
-  go t = [t]
 
 isRows :: Type p -> Bool
 isRows TyExactRows{} = True

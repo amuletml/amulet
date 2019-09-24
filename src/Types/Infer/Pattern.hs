@@ -23,6 +23,9 @@ import Syntax.Subst
 import Syntax.Var
 import Syntax
 
+import Text.Pretty.Semantic (pretty)
+import Debug.Trace (traceShow)
+
 inferPattern :: MonadInfer Typed m
              => Pattern Desugared
              -> m ( Pattern Typed -- the pattern
@@ -195,7 +198,7 @@ skolGadt var (_, oty, ty) =
         | otherwise = []
       free _ = []
       freed = concatMap free (related ty)
-      fugitives = mentioned `Set.union` foldMap (ftv . snd) freed
+      fugitives = mentioned -- `Set.union` foldMap (ftv . snd) freed
    in do
      vs <- for (Set.toList (ftv ty `Set.difference` fugitives)) $ \v ->
        (v,) <$> freshSkol (ByExistential var oty) ty v

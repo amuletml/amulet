@@ -216,14 +216,10 @@ getHead t@TyWildcard{} = t
 getHead t@TyOperator{} = t
 getHead (TyParens t) = getHead t
 
-apps :: Type p -> [Type p]
-apps = reverse . go where
-  go (TyApp f x) = x:go f
-  go t = [t]
 
 expandTypeWith :: TySyms -> Type Typed -> Type Typed
 expandTypeWith syms t@TyApp{}
-  | (TyCon v:xs) <- apps t =
+  | (TyCon v:xs) <- appsView t =
     case syms ^. at v of
       Nothing -> foldl TyApp (TyCon v) (map (expandTypeWith syms) xs)
       Just t ->
@@ -231,7 +227,8 @@ expandTypeWith syms t@TyApp{}
             sub = Map.fromList $ zip (t ^. tsArgs) exp
             rest = drop (length (t ^. tsArgs)) exp
          in foldl TyApp (expandTypeWith syms (apply sub (t ^. tsExpansion))) rest
-  | otherwise = foldl TyApp (expandTypeWith syms (head (apps t))) (map (expandTypeWith syms) (tail (apps t)))
+  | (x:xs) <- appsView t = foldl TyApp (expandTypeWith syms x) (map (expandTypeWith syms) xs)
+  | otherwise = undefined
 expandTypeWith syms (TyCon v) =
   case syms ^. at v of
     Just t -> expandTypeWith syms (t ^. tsExpansion)
