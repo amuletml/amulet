@@ -28,4 +28,3 @@ let _ =
   let ex_falso : forall 'a. void -> 'a = _
 
   ()
-

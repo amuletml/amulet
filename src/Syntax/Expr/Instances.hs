@@ -109,7 +109,9 @@ instance Pretty (Var p) => Pretty (Expr p) where
                                        , keyword "else" <+> pretty e
                                        ])
   pretty (App f x _) = parenFun f <+> parenArg x
-  pretty (Fun v e _) = keyword "fun" <+> pretty v <+> arrow <+> pretty e
+  pretty f@Fun{} = keyword "fun" <+> funs f where
+    funs (Fun v e _) = pretty v <+> funs e
+    funs e = arrow <+> pretty e
   pretty (Begin e _) =
     vsep [ keyword "begin", indent 2 (vsep (punctuate semi (map pretty e))), keyword "end" ]
   pretty (DoExpr _ e _) =

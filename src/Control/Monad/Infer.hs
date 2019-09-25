@@ -309,7 +309,7 @@ instance Pretty TypeError where
   pretty (FoundHole e s cs) =
     vsep $ [ string "Found typed hole" <+> pretty e <+> "of type" <+> displayType s
            , bullet "Valid replacements include:"
-           ] ++ map (indent 4 . bullet . pretty) cs
+           ] ++ map (indent 4 . bullet . align . pretty) cs
 
   pretty (Note te m) = pretty te <#> note <+> pretty m
   pretty (Suggestion te m) = pretty te <#> bullet (string "Suggestion:") <+> align (pretty m)
