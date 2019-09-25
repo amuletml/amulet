@@ -1,6 +1,7 @@
 {-# LANGUAGE TemplateHaskell, ViewPatterns, FlexibleContexts
            , TupleSections, ConstraintKinds, OverloadedStrings
            , ScopedTypeVariables, CPP #-}
+#define TRACE_TC
 module Types.Holes (findHoleCandidate) where
 
 import qualified Data.Map.Strict as Map
@@ -98,10 +99,9 @@ fill ty@(TyApps con [xs]) | con == tyLazy =
 
 -- Let us not choose arbitrary literals, but pick them from scope
 -- instead.
-fill t | t == tyInt = pick t
-fill t | t == tyString = pick t
-fill t | t == tyFloat = pick t
-fill t | t == tyFloat = pick t
+fill t | t == tyInt = knownImplication t
+fill t | t == tyString = knownImplication t
+fill t | t == tyFloat = knownImplication t
 
 -- Booleans are finite so we can enumerate them.
 fill t | t == tyBool = fake [t] $ \[a] ->
