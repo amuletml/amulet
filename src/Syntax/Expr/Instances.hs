@@ -10,6 +10,7 @@ import Data.Bifunctor
 import Data.Spanned
 import Data.List
 import Data.Data
+import Data.Char
 
 import Syntax.Expr
 import Syntax.Type
@@ -96,7 +97,11 @@ parenArg f = case f of
   _ -> parenFun f
 
 instance Pretty (Var p) => Pretty (Expr p) where
-  pretty (VarRef v _) = pretty v
+  pretty (VarRef v _) =
+    let x = show (pretty v)
+     in if isUpper (head x)
+           then stypeCon (pretty v)
+           else pretty v
   pretty (Let [] _ _) = keyword "let" <+> braces mempty
   pretty (Let (x:xs) e _) =
     let prettyBind x = keyword "and" <+> pretty x

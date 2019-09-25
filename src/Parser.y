@@ -34,6 +34,7 @@ module Parser
   , parseRepl
   , parseReplExpr
   , parseInfoVar
+  , parseType
 
   , Located, getL
   ) where
@@ -67,6 +68,7 @@ import Syntax
 %name parseRepl Repl
 %name parseReplExpr ReplExpr
 %name parseInfoVar Reference
+%name parseType Type
 
 %tokentype { Token }
 %monad { Parser } { (>>=) } { return }

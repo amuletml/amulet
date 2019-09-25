@@ -405,7 +405,7 @@ inferProg (st@(ForeignVal am v d t ann):prg) = do
 inferProg (decl@(TySymDecl am n tvs exp ann):prg) = do
   (kind, exp, tvs) <- resolveTySymDeclKind (BecauseOf decl) n tvs exp
 
-  let td = TypeDecl am n tvs Nothing (ann, kind)
+  let td = TypeDecl am n tvs (Just [ArgCon am n exp (ann, kind)]) (ann, kind)
       argv (TyAnnArg v _:xs) = v:argv xs
       argv (TyVarArg v:xs) = v:argv xs
       argv [] = []

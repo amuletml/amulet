@@ -242,6 +242,7 @@ mkWildTy t = TyWildcard t
 appsView :: Type p -> [Type p]
 appsView = reverse . go where
   go (TyApp f x) = x:go f
+  go (TyOperator l o r) = [r, l, TyCon o]
   go t = [t]
 
 pattern TyApps :: Type p -> [Type p] -> Type p
