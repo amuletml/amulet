@@ -146,8 +146,8 @@ instance Pretty LuaStmt where
      <> pprintElse bs
   pretty (LuaIfElse []) = error "impossible"
   pretty (LuaFornum v s e i b) =
-    block ( keyword "for" <+> pretty v <+> equals <+> keyword "do"
-        <+> pretty s <+> comma <+> pretty e <+> comma <+> pretty i )
+    block ( keyword "for" <+> pretty v <+> equals
+        <+> pretty s <+> comma <+> pretty e <+> comma <+> pretty i <+> keyword "do" )
           (map pretty b)
           (keyword "end")
   pretty (LuaFor vs es b) =
