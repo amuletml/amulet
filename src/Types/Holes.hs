@@ -359,7 +359,7 @@ nonRec v (TyParens p) = nonRec v p
 nonRec v (TyOperator l v' r) = v /= v' && nonRec v l && nonRec v r
 nonRec _ _ = error "nonRec: that's a weird type you have there."
 
--- | A list of global, TC-knwon functions that are unlikely to be of
+-- | A list of global, TC-known functions that are unlikely to be of
 -- use.
 --
 -- In fact, it's impossible for 'tyTupleName' to be of use.
