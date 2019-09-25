@@ -1,6 +1,6 @@
 {-# LANGUAGE TemplateHaskell, ViewPatterns, FlexibleContexts
            , TupleSections, ConstraintKinds, OverloadedStrings
-           , CPP #-}
+           , ScopedTypeVariables, CPP #-}
 module Types.Holes (findHoleCandidate) where
 
 import qualified Data.Map.Strict as Map
@@ -56,7 +56,7 @@ findHoleCandidate _ ann env t = observeManyT 10 $ runReaderT (fill t) (PsScope m
   getName (TgInternal x) = x
 
 -- | Compute an expression that has the given type.
-fill :: MonadPs m => Type Typed -> m (Expr Typed)
+fill :: forall m. MonadPs m => Type Typed -> m (Expr Typed)
 #ifdef TRACE_TC
 fill t | trace (displayS (keyword "fill" <+> pretty t)) False = undefined
 #endif
@@ -74,10 +74,11 @@ fill t@TySkol{} = pick t
 -- body
 fill ty@(domain :-> codomain) = fake [ty] $ \[a] -> do
   is_sum <- isSum domain
-  let make_fun = assume domain $ \pat -> Fun (PatParam pat) <$> fill codomain <*> pure a
+  let makeFun :: m (Expr Typed)
+      makeFun = assume domain $ \pat -> Fun (PatParam pat) <$> fill codomain <*> pure a
   if is_sum
-     then makeFunction domain codomain <|> make_fun
-     else make_fun
+     then makeFunction domain codomain <|> makeFun
+     else makeFun
 
 -- Special cases for concrete types we know about:
 fill ty@(TyApps con [xs]) | con == tyList =

@@ -1,8 +1,8 @@
 resolver: lts-14.7
 
 extra-deps:
-  - monad-chronicle-1@sha256:b6e3a0378059e42cb48726d8ad41b27a8a0d8c2cb293cb6d2e2c039d64609ab6
-  - these-lens-1@sha256:72258586b3780d328d7c676c63b8312fc6ba3b1ed47e3b5382f9dcaa924d70ac
+  - monad-chronicle-1@sha256:94640ed9f2899a6143eb6ffe1fa3f26c8c6de2b873417501c77b74b326513815,1822
+  - these-lens-1@sha256:960f53c44201f5f67d0158162ce39cc7095b958d584d76a2aead358a54c137d3,1138
 
 flags:
   these:
