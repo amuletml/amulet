@@ -76,7 +76,7 @@ data Constraint p
   | ConImplies  SomeReason (Type p) (Seq.Seq (Constraint p)) (Seq.Seq (Constraint p))
   | ConSubsume  SomeReason (ImplicitScope ClassInfo p) (Var p) (Type p) (Type p)
   | ConImplicit SomeReason (ImplicitScope ClassInfo p) (Var p) (Type p)
-  | ConFail (Ann p) (Var p) (Type p) -- for holes. I hate it.
+  | ConFail Env (Ann p) (Var p) (Type p)
   | DeferredError TypeError
 
 deriving instance (Show (Ann p), Show (Var p), Show (Expr p), Show (Type p))
@@ -94,7 +94,7 @@ data TypeError where
   Occurs :: (Pretty (Var p), Ord (Var p)) => Var p -> Type p -> TypeError
 
   NotInScope :: Var Desugared -> TypeError
-  FoundHole :: Var Typed -> Type Typed -> TypeError
+  FoundHole :: Var Typed -> Type Typed -> [Expr Typed] -> TypeError
 
   Impredicative :: (Pretty (Var p), Ord (Var p)) => Var p -> Type p -> TypeError
   ImpredicativeApp :: (Pretty (Var p), Ord (Var p)) => Type p -> Type p -> TypeError
@@ -160,14 +160,14 @@ instance (Show (Ann p), Show (Var p), Ord (Var p), Substitutable p (Type p))
   ftv (ConSubsume _ s _ a b) = foldMap ftv (keys s) <> ftv a <> ftv b
   ftv (ConImplicit _ s _ b) = foldMap ftv (keys s) <> ftv b
   ftv (ConImplies _ t a b) = ftv a <> ftv b <> ftv t
-  ftv (ConFail _ _ t) = ftv t
+  ftv (ConFail _ _ _ t) = ftv t
   ftv DeferredError{} = mempty
 
   apply s (ConUnify e v a b) = ConUnify e v (apply s a) (apply s b)
   apply s (ConSubsume e c v a b) = ConSubsume e (apply s c) v (apply s a) (apply s b)
   apply s (ConImplies e t a b) = ConImplies e (apply s t) (apply s a) (apply s b)
   apply s (ConImplicit r c v t) = ConImplicit r (apply s c) v (apply s t)
-  apply s (ConFail a e t) = ConFail a e (apply s t)
+  apply s (ConFail env a e t) = ConFail env a e (apply s t)
   apply _ x@DeferredError{} = x
 
 instance Pretty (Var p) => Pretty (Constraint p) where
@@ -177,7 +177,7 @@ instance Pretty (Var p) => Pretty (Constraint p) where
                             <+> soperator (char '⊃')
                             <#> indent 2 (vsep (punctuate comma (toList (fmap pretty b))))
   pretty (ConImplicit _ _ v t) = pretty v <+> colon <+> pretty t
-  pretty ConFail{} = string "fail"
+  pretty (ConFail _ _ _ t) = stypeSkol "XXX HOLE: " <+> pretty t
   pretty DeferredError{} = string "deferred type error"
 
 instance Show TypeError where
@@ -304,10 +304,16 @@ instance Pretty TypeError where
 
   pretty (NotInScope e) = string "Variable not in scope:" <+> pretty e
   pretty (ArisingFrom er _) = pretty er
-  pretty (FoundHole e s) = string "Found typed hole" <+> pretty e <+> "of type" <+> displayType s
+
+  pretty (FoundHole e s []) = string "Found typed hole" <+> pretty e <+> "of type" <+> displayType s
+  pretty (FoundHole e s cs) =
+    vsep $ [ string "Found typed hole" <+> pretty e <+> "of type" <+> displayType s
+           , bullet "Valid replacements include:"
+           ] ++ map (indent 4 . bullet . align . pretty) cs
 
   pretty (Note te m) = pretty te <#> note <+> pretty m
   pretty (Suggestion te m) = pretty te <#> bullet (string "Suggestion:") <+> align (pretty m)
+
   pretty (CanNotInstance rec new) =
     string "Can not instance hole of record type"
     <+> align (verbatim rec </> string " to type " <+> verbatim new)

@@ -40,9 +40,9 @@ let fold (f : 'a -> 'z -> 'z) (z : 'z) (xs : vect 'n 'a) : 'z =
   | Cons (x, xs) -> f x (fold f z xs)
 
 (* vect (s 'k) 'a -> 'a *)
-let head (Cons (x, _)) = x
+let head (Cons (x, _) : vect (S 'n) 'a) : 'a = x
 (* vect (s 'k) 'a -> vect 'k 'a *)
-let tail (Cons (_, xs)) = xs
+let tail (Cons (_, xs) : vect (S 'n) 'a) : vect 'n 'a = xs
 
 (* uses supplied type signature *)
 let eq_vect (eq_elt : 'a -> 'a -> bool) (x : vect 'n 'a) (y : vect 'm 'a) (Refl : eq 'n 'm) : bool =
@@ -91,7 +91,7 @@ let decide_lte (x : nat 'n) (y : nat 'm) : maybe (lte 'n 'm) =
 
 
 (* forall 'n . nat 'n -> unit *)
-let ppr_nat n : unit =
+let ppr_nat (n : nat 'n) : unit =
   match n with
   | Zero -> print "Zero"
   | Succ k ->

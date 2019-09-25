@@ -3,7 +3,7 @@
   , TypeFamilies, TemplateHaskell, FunctionalDependencies #-}
 module Syntax.Types
   ( Telescope, one, foldTele, foldTeleM, teleFromList, mapTele, traverseTele, teleToList
-  , Scope(..), namesInScope, inScope
+  , Scope(..), namesInScope, inScope, scopeToList
   , Env, freeInEnv, difference, envOf, scopeFromList, toMap
   , names, typeVars, constructors, types, letBound, classes, modules
   , classDecs, tySyms
@@ -157,6 +157,9 @@ scopeFromList = Scope . Map.fromList
 namesInScope :: Scope p f -> [Var p]
 namesInScope (Scope m) = Map.keys m
 
+scopeToList :: Scope p f -> [(Var p, f)]
+scopeToList (Scope m) = Map.toList m
+
 inScope :: Ord (Var p) => Var p -> Scope p f -> Bool
 inScope v (Scope m) = v `Map.member` m
 
@@ -168,7 +171,6 @@ one k t = Telescope (Map.singleton k t)
 
 foldTeleM :: (Monad m, Monoid x) => (Var Resolved -> Type p -> m x) -> Telescope p -> m x
 foldTeleM f = Map.foldrWithKey (\key t rest -> mappend <$> f key t <*> rest) (pure mempty) . getTele
-
 
 foldTele :: Monoid m => (Type p -> m) -> Telescope p -> m
 foldTele f x = foldMap f (getTele x)
@@ -195,3 +197,11 @@ data Origin
   | Guessed -- the compiler invented this type
   | Deduced -- the programmer almost supplied this type
   deriving (Show, Eq)
+
+instance Substitutable Typed Env where
+  ftv = view typeVars
+
+  apply sub env = env & names %~ go
+                      & classes %~ apply sub
+    where go (Scope m) = Scope (fmap (apply sub) m)
+

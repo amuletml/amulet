@@ -238,7 +238,7 @@ inferKind (TySkol sk) = do
   k <- maybe freshTV pure =<< view (names . at (sk ^. skolIdent))
   pure (raiseT id (TySkol sk), k)
 
-inferKind t@TyApp{} | TyCon v:xs <- apps t = do
+inferKind t@TyApp{} | TyCon v:xs <- appsView t = do
   info <- view (tySyms . at v)
   reason <- get
   ki <-

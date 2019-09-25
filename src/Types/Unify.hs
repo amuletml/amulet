@@ -11,7 +11,7 @@ module Types.Unify
   , typeWithin
   , solve, solveImplies
   , skolemise, freshSkol
-  , unifyPure
+  , unifyPure_v, unifyPure
   , applicable
   ) where
 
@@ -101,9 +101,12 @@ isRec :: String
 isRec = "A record type's hole can only be instanced to another record"
 
 unifyPure :: Type Typed -> Type Typed -> Maybe (Subst Typed)
-unifyPure a b = fst . flip runNamey firstName $ do
+unifyPure a b = unifyPure_v [(a, b)]
+
+unifyPure_v :: [(Type Typed, Type Typed)] -> Maybe (Subst Typed)
+unifyPure_v ts = fst . flip runNamey firstName $ do
   x <- runChronicleT $ do
-    (sub, _, _) <- solve (pure (ConUnify undefined undefined a b))
+    (sub, _, _) <- solve (fmap (uncurry (ConUnify undefined undefined)) (Seq.fromList ts))
     pure sub
   case x of
     These e x | null e -> pure (Just x)
@@ -178,6 +181,7 @@ doSolve (ConSubsume because scope v a b :<| xs) = do
   doSolve xs
 
 doSolve (ConImplies because not cs ts :<| xs) = do
+  doSolve xs
   before <- use solveTySubst
   assump <- use solveAssumptions
   let not' = ftv (apply before not) <> ftv not
@@ -202,20 +206,18 @@ doSolve (ConImplies because not cs ts :<| xs) = do
   solveTySubst %= Map.union leaky
   solveAssumptions .= assump
 
-  doSolve xs
-
 doSolve (DeferredError e :<| cs) = do
   dictates e
   doSolve cs
 
-doSolve (ConFail a v t :<| cs) = do
+doSolve (ConFail env a v t :<| cs) = do
   doSolve cs
   s <- use solveTySubst
   s' <- use solveAssumptions
 
   let ex :: Expr Desugared = Hole v (fst a)
       sub = s `compose` s'
-  dictates . reblame (BecauseOf ex) $ foundHole v t sub
+  dictates . reblame (BecauseOf ex) =<< foundHole (apply sub env) a v t sub
 
 doSolve (ConImplicit _ _ v x :<| cs) | x == tyUnit = do
   doSolve cs
@@ -298,7 +300,7 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
       solveCoSubst . at var ?= w
 
     _ ->
-      case head (apps cons) of
+      case head (appsView cons) of
         TyCon v | Just solve <- magicClass v -> do
           (w, cs) <- censor (const mempty) $ listen $ solve reason (apply sub cons)
           doSolve (Seq.fromList cs)
@@ -372,7 +374,7 @@ fundepsAllow impl cons
   | otherwise = all fine (impl ^. implClass . ciFundep)
   where
     fine (from, _, _) = all concreteP from
-    (_:params) = apps cons
+    (_:params) = appsView cons
 
     concreteP = concretish . head . spine . (params !!)
 
@@ -881,12 +883,7 @@ prettyConcrete (TyWildcard t) = maybe False prettyConcrete t
 prettyConcrete _ = True
 
 concreteUnderOne :: Type Typed -> Bool
-concreteUnderOne t =
-  all prettyConcrete (apps t)
-  where
-    apps = reverse . go
-    go (TyApp f x) = x:go f
-    go t = [t]
+concreteUnderOne t = all prettyConcrete (appsView t)
 
 firstBlame, secondBlame :: SomeReason -> SomeReason
 firstBlame (It'sThis (BecauseOfExpr (Tuple (x:_) _) _)) = becauseExp x
