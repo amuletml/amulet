@@ -1,7 +1,6 @@
 {-# LANGUAGE TemplateHaskell, ViewPatterns, FlexibleContexts
            , TupleSections, ConstraintKinds, OverloadedStrings
            , CPP #-}
--- #define TRACE_TC
 module Types.Holes (findHoleCandidate) where
 
 import qualified Data.Map.Strict as Map
@@ -127,11 +126,17 @@ fill ty@(TyApps (TyCon con) _) = once (knownImplication ty) <|> do
     dom :-> cod -> do
       Just sub <- pure $ unifyPure_v ((ty, cod):cons)
       -- Alright, let's apply it: Fill the domain recursively.
+#ifdef TRACE_TC
+      traceM (displayS (keyword "introduce" <+> pretty con))
+#endif
       once $ fake [cty, ty] $ \[cann, app] ->
         App (VarRef con cann) <$> fill (apply sub dom) <*> pure app
 
     cod -> do
       Just _ <- pure $ unifyPure_v ((ty, cod):cons)
+#ifdef TRACE_TC
+      traceM (displayS (keyword "use constructor" <+> pretty con))
+#endif
       -- We're done, since this is a unit constructor.
       once $ fake [ty] $ pure . VarRef con . head
 
