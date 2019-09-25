@@ -1,6 +1,7 @@
 {-# LANGUAGE TemplateHaskell, ViewPatterns, FlexibleContexts
            , TupleSections, ConstraintKinds, OverloadedStrings
            , ScopedTypeVariables, CPP #-}
+#define TRACE_TC
 module Types.Holes (findHoleCandidate) where
 
 import qualified Data.Map.Strict as Map
@@ -25,6 +26,7 @@ import Syntax
 
 import Data.Text (Text)
 import Data.Traversable
+import Data.Spanned
 import Data.Maybe
 import Data.Span
 
@@ -60,6 +62,11 @@ fill :: forall m. MonadPs m => Type Typed -> m (Expr Typed)
 #ifdef TRACE_TC
 fill t | trace (displayS (keyword "fill" <+> pretty t)) False = undefined
 #endif
+
+fill t@TyPi{} | isSkolemisable t = fake [t] $ \[a] -> do
+  (_, t, _, _) <- skolemise (ByAscription (annotation a) t) t
+  fill t
+
 -- Let's get the impossible cases over with first:
 fill TyLit{} = fail "findHoleCandidate: Kind error (TyLit)"
 fill TyPromotedCon{} = fail "findHoleCandidate: Kind error (TyPromotedCon)"
@@ -216,8 +223,13 @@ knownImplication ty = fake [ty] $ \[app] -> do
     | (TyArrs args ret, ex:_) <- all
     , Just sub <- [unifyPure ret ty]
     ]
+
+-- If we need the type we want to fill to be able to call this function
+-- then it's not very useful
+  guard (ty `Set.notMember` Set.fromList args)
+
 #ifdef TRACE_TC
-  traceM (displayS (keyword "considering" <+> string "function" <+> pretty fun))
+  traceM (displayS (keyword "considering" <+> string "function" <+> pretty fun <+> colon <+> pretty ty))
 #endif
 
   local (psVars %~ Map.mapKeys (apply sub)) . local (psDepth %~ succ) $
@@ -231,13 +243,18 @@ tcKnownImplication ty = fake [ty] $ \[app] -> do
   (fun, tc_ty) <- explore [ (VarRef x (an, tc_ty), tc_ty) | (x, tc_ty@TyPi{}) <- all, x `Set.notMember` unhelpful ]
   (_, _, TyArrs (mapMaybe isArg -> args) cod) <- instantiate Strong Expression tc_ty
 
-  Just _ <- pure $ unifyPure cod ty
+  Just sub <- pure $ unifyPure cod ty
+  let to_fill = map (apply sub) args
+      oblig = Set.fromList to_fill
+
+  guard (ty `Set.notMember` oblig)
 
 #ifdef TRACE_TC
-  traceM (displayS (keyword "considering" <+> string "TC-known function" <+> pretty fun))
+  traceM (displayS (keyword "considering" <+> string "TC-known function" <+> pretty fun <+> colon <+> pretty tc_ty))
 #endif
 
-  foldl (mkApp app) fun <$> traverse fill args
+  local (psVars %~ Map.mapKeys (apply sub)) . local (psDepth %~ succ) $
+    foldl (mkApp app) fun <$> traverse fill to_fill
 
 
 -- | Exhaustively explore a list of choices.
@@ -286,10 +303,11 @@ assume ty@(TyApps (TyCon c) xs) k = fake [ty] $ \[pat] -> do
   cs <- view (psEnv . types . at c . non mempty . to Set.toList)
   case cs of
     [con] -> do
-      ~(dom :-> TyApps _ tyvars, _) <- skolGadt con =<<
+      ~(dom :-> TyApps _ tyvars, sub) <- skolGadt con =<<
         instantiate Strong Expression =<<
           view (psEnv . names . at con . non undefined)
 
+      guard (not (isSkolemisable dom))
       guard (nonRec c dom)
 
       let x `u` y = fromMaybe mempty (unifyPure x y)
@@ -298,6 +316,10 @@ assume ty@(TyApps (TyCon c) xs) k = fake [ty] $ \[pat] -> do
       assume (apply sub dom) $ \inner ->
         k (Destructure con (Just inner) pat)
     _ -> variable ty (const k)
+
+assume t@TyPi{} k = do
+  (_, _, t) <- instantiate Strong Expression t
+  variable t (const k)
 
 assume t k = variable t (const k)
 
@@ -357,4 +379,4 @@ nonRec _ _ = error "nonRec: that's a weird type you have there."
 -- In fact, it's impossible for 'tyTupleName' to be of use.
 unhelpful :: Set.Set (Var Typed)
 unhelpful = Set.fromList
-  [ forceName, opAppName, derefName, tyTupleName, intValName, strValName ]
+  [ forceName, opAppName, derefName, tyTupleName, intValName, strValName, extendName, restrictName ]
