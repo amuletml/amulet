@@ -23,7 +23,6 @@ import Syntax.Types
 import Syntax.Var
 import Syntax
 
-import Data.List (elemIndex)
 import Data.Text (Text)
 import Data.Traversable
 import Data.Maybe
@@ -59,7 +58,7 @@ findHoleCandidate _ ann env t = observeManyT 10 $ runReaderT (fill t) (PsScope m
 -- | Compute an expression that has the given type.
 fill :: MonadPs m => Type Typed -> m (Expr Typed)
 #ifdef TRACE_TC
-fill t | trace ("fill " ++ displayS (pretty t)) False = undefined
+fill t | trace (displayS (keyword "fill" <+> pretty t)) False = undefined
 #endif
 -- Let's get the impossible cases over with first:
 fill TyLit{} = fail "findHoleCandidate: Kind error (TyLit)"
@@ -252,7 +251,7 @@ variable domain k = fake [domain] $ \[a] -> do
   let ref = VarRef x a
 
 #ifdef TRACE_TC
-  traceM (displayS ("assume" <+> pretty ref <+> colon <+> pretty domain))
+  traceM (displayS (keyword "assume" <+> pretty x <+> colon <+> pretty domain))
 #endif
 
   local (psVars . at domain %~ insert ref) . local (psInScope %~ Set.insert name) $
@@ -316,23 +315,19 @@ genNameWithHint vars ty =
     ~(TgName _ id) <- genName
     let ourname = TgName (hint !! (id `mod` length hint)) id
         name = hint !! (id `mod` length hint)
+        hint = hints ty
 
     pure $ if name `Set.member` vars
-              then (discriminate hint ourname, name)
+              then (discriminate ourname, name)
               else (ourname, name)
   where
     hints ty = case ty of
       TyPi{} -> ["f", "g", "h"]
       TyApps t [x] | t == tyList -> map (`T.snoc` 's') $ hints x
-      _ -> ["x", "y", "z"]
-    hint = hints ty
+      _ -> ["x", "y", "z", "a", "b", "c"]
 
-    discriminate hints (TgName x i)
-      | x `Set.notMember` vars = TgName x i
-      | Just i <- x `elemIndex` hints =
-        discriminate hints $ TgName (hints !! (succ i `mod` length hints)) i
-      | otherwise = TgName (x <> T.pack (show i)) i
-    discriminate _ _ = undefined
+    discriminate (TgName x i) = TgName (x <> T.pack (show i)) i
+    discriminate _ = undefined
 
 nonRec :: Var Typed -> Type Typed -> Bool
 nonRec v (TyApps (TyCon x) _) = x /= v
