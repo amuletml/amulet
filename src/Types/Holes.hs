@@ -365,4 +365,4 @@ nonRec _ _ = error "nonRec: that's a weird type you have there."
 -- In fact, it's impossible for 'tyTupleName' to be of use.
 unhelpful :: Set.Set (Var Typed)
 unhelpful = Set.fromList
-  [ forceName, opAppName, derefName, tyTupleName ]
+  [ forceName, opAppName, derefName, tyTupleName, intValName, strValName ]
