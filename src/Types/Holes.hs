@@ -1,6 +1,7 @@
 {-# LANGUAGE TemplateHaskell, ViewPatterns, FlexibleContexts
            , TupleSections, ConstraintKinds, OverloadedStrings
            , CPP #-}
+#define TRACE_TC
 module Types.Holes (findHoleCandidate) where
 
 import qualified Data.Map.Strict as Map
@@ -74,9 +75,10 @@ fill t@TySkol{} = pick t
 -- body
 fill ty@(domain :-> codomain) = fake [ty] $ \[a] -> do
   is_sum <- isSum domain
+  let make_fun = assume domain $ \pat -> Fun (PatParam pat) <$> fill codomain <*> pure a
   if is_sum
-     then makeFunction domain codomain
-     else assume domain $ \pat -> Fun (PatParam pat) <$> fill codomain <*> pure a
+     then makeFunction domain codomain <|> make_fun
+     else make_fun
 
 -- Special cases for concrete types we know about:
 fill ty@(TyApps con [xs]) | con == tyList =
