@@ -1,6 +1,7 @@
 {-# LANGUAGE TemplateHaskell, ViewPatterns, FlexibleContexts
            , TupleSections, ConstraintKinds, OverloadedStrings
            , CPP #-}
+-- #define TRACE_TC
 module Types.Holes (findHoleCandidate) where
 
 import qualified Data.Map.Strict as Map
@@ -217,6 +218,9 @@ knownImplication ty = fake [ty] $ \[app] -> do
     | (TyArrs args ret, ex:_) <- all
     , Just sub <- [unifyPure ret ty]
     ]
+#ifdef TRACE_TC
+  traceM (displayS (keyword "considering" <+> string "function" <+> pretty fun))
+#endif
 
   local (psVars %~ Map.mapKeys (apply sub)) . local (psDepth %~ succ) $
     foldl (mkApp app) fun <$> traverse fill args
@@ -226,10 +230,14 @@ tcKnownImplication ty = fake [ty] $ \[app] -> do
   an <- view psAnn
   all <- view (psEnv . names . to scopeToList)
 
-  (fun, tc_ty) <- explore [ (VarRef x (an, tc_ty), tc_ty) | (x, tc_ty@TyPi{}) <- all ]
+  (fun, tc_ty) <- explore [ (VarRef x (an, tc_ty), tc_ty) | (x, tc_ty@TyPi{}) <- all, x `Set.notMember` unhelpful ]
   (_, _, TyArrs (mapMaybe isArg -> args) cod) <- instantiate Strong Expression tc_ty
 
   Just _ <- pure $ unifyPure cod ty
+
+#ifdef TRACE_TC
+  traceM (displayS (keyword "considering" <+> string "TC-known function" <+> pretty fun))
+#endif
 
   foldl (mkApp app) fun <$> traverse fill args
 
@@ -344,3 +352,11 @@ nonRec v (TyExactRows xs) = all (nonRec v . snd) xs
 nonRec v (TyParens p) = nonRec v p
 nonRec v (TyOperator l v' r) = v /= v' && nonRec v l && nonRec v r
 nonRec _ _ = error "nonRec: that's a weird type you have there."
+
+-- | A list of global, TC-knwon functions that are unlikely to be of
+-- use.
+--
+-- In fact, it's impossible for 'tyTupleName' to be of use.
+unhelpful :: Set.Set (Var Typed)
+unhelpful = Set.fromList
+  [ forceName, opAppName, derefName, tyTupleName ]
