@@ -1,7 +1,6 @@
 {-# LANGUAGE TemplateHaskell, ViewPatterns, FlexibleContexts
            , TupleSections, ConstraintKinds, OverloadedStrings
            , ScopedTypeVariables, CPP #-}
-#define TRACE_TC
 module Types.Holes (findHoleCandidate) where
 
 import qualified Data.Map.Strict as Map
@@ -69,7 +68,7 @@ fill t@TyPi{} | isSkolemisable t = fake [t] $ \[a] -> do
 
 -- Let's get the impossible cases over with first:
 fill TyLit{} = fail "findHoleCandidate: Kind error (TyLit)"
-fill TyPromotedCon{} = fail "findHoleCandidate: Kind error (TyPromotedCon)"
+-- fill TyPromotedCon{} = fail "findHoleCandidate: Kind error (TyPromotedCon)"
 fill TyType{} = fail "findHoleCandidate: Kind error (TyType)"
 -- Type variables are complicated, so we only deal with skolemised types:
 fill TyVar{} = fail "findHoleCandidate: don't know how to deal with type variables"
@@ -193,6 +192,7 @@ makeFunction _ _ = undefined
 
 -- | Is this type constructor a sum type constructor?
 isSum :: MonadReader PsScope m => Type Typed -> m Bool
+isSum (TyOperator l o r) = isSum (TyApps (TyCon o) [l, r])
 isSum (TyApps (TyCon t) _) = do
   x <- view (psEnv . types . at t)
   pure $ case x of
@@ -239,8 +239,9 @@ tcKnownImplication :: MonadPs m => Type Typed -> m (Expr Typed)
 tcKnownImplication ty = fake [ty] $ \[app] -> do
   an <- view psAnn
   all <- view (psEnv . names . to scopeToList)
+  lb <- view (psEnv . letBound)
 
-  (fun, tc_ty) <- explore [ (VarRef x (an, tc_ty), tc_ty) | (x, tc_ty@TyPi{}) <- all, x `Set.notMember` unhelpful ]
+  (fun, tc_ty) <- explore [ (VarRef x (an, tc_ty), tc_ty) | (x, tc_ty@TyPi{}) <- all, x `Set.notMember` unhelpful, x `Set.notMember` lb ]
   (_, _, TyArrs (mapMaybe isArg -> args) cod) <- instantiate Strong Expression tc_ty
 
   Just sub <- pure $ unifyPure cod ty
@@ -303,18 +304,21 @@ assume ty@(TyApps (TyCon c) xs) k = fake [ty] $ \[pat] -> do
   cs <- view (psEnv . types . at c . non mempty . to Set.toList)
   case cs of
     [con] -> do
-      ~(dom :-> TyApps _ tyvars, sub) <- skolGadt con =<<
+      ~(ty, _) <- skolGadt con =<<
         instantiate Strong Expression =<<
           view (psEnv . names . at con . non undefined)
 
-      guard (not (isSkolemisable dom))
-      guard (nonRec c dom)
+      case ty of
+        dom :-> TyApps _ tyvars -> do
+          guard (not (isSkolemisable dom))
+          guard (nonRec c dom)
 
-      let x `u` y = fromMaybe mempty (unifyPure x y)
-          sub = foldr1 compose (zipWith u tyvars xs)
+          let x `u` y = fromMaybe mempty (unifyPure x y)
+              sub = foldr1 compose (zipWith u tyvars xs)
 
-      assume (apply sub dom) $ \inner ->
-        k (Destructure con (Just inner) pat)
+          assume (apply sub dom) $ \inner ->
+            k (Destructure con (Just inner) pat)
+        _ -> k (Destructure con Nothing pat)
     _ -> variable ty (const k)
 
 assume t@TyPi{} k = do
