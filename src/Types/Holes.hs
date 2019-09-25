@@ -1,7 +1,6 @@
 {-# LANGUAGE TemplateHaskell, ViewPatterns, FlexibleContexts
            , TupleSections, ConstraintKinds, OverloadedStrings
            , ScopedTypeVariables, CPP #-}
-#define TRACE_TC
 module Types.Holes (findHoleCandidate) where
 
 import qualified Data.Map.Strict as Map
@@ -153,13 +152,6 @@ fill ty@(TyTuple a b) = do
   fake [ty] $ pure . Tuple [x, y] . head
 
 -- To fill a record, we just fill each of the named fields.
-fill ty@(TyRows _ xs) = fake [ty] $ \[ann] -> do
-  rs <- for xs $ \(label, ty) ->
-    fake [ty] $ \[field] ->
-      Field label <$> fill ty <*> pure field
-
-  pure (Record rs ann)
-
 fill ty@(TyExactRows xs) = fake [ty] $ \[ann] -> do
   rs <- for xs $ \(label, ty) ->
     fake [ty] $ \[field] ->
