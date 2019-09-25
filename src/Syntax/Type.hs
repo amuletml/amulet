@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable, FlexibleContexts, PatternSynonyms
   , StandaloneDeriving, TemplateHaskell, TypeFamilies
-  , UndecidableInstances #-}
+  , UndecidableInstances, ViewPatterns #-}
 
 -- | The core types to represent types within Amulet's syntax.
 module Syntax.Type where
@@ -116,6 +116,10 @@ deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Coer
 pattern TyArr :: Type p -> Type p -> Type p
 pattern TyArr t t' <- TyPi (Anon t) t' where
   TyArr t ty = TyPi (Anon t) ty
+
+pattern (:->) :: Type p -> Type p -> Type p
+pattern t :-> t' <- TyPi (Anon t) t' where
+  t :-> ty = TyPi (Anon t) ty
 
 pattern TyForall :: Var p -> Maybe (Type p) -> Type p -> Type p
 pattern TyForall v k t' <- TyPi (Invisible v k _) t' where
@@ -234,3 +238,23 @@ isSkolemisable _ = False
 mkWildTy :: Maybe (Type p) -> Type p
 mkWildTy (Just x@(TyWildcard _)) = x
 mkWildTy t = TyWildcard t
+
+appsView :: Type p -> [Type p]
+appsView = reverse . go where
+  go (TyApp f x) = x:go f
+  go t = [t]
+
+pattern TyApps :: Type p -> [Type p] -> Type p
+pattern TyApps head xs <- (appsView -> (head:xs)) where
+  TyApps head xs = foldl TyApp head xs
+
+pattern TyArrs :: [TyBinder p] -> Type p -> Type p
+pattern TyArrs quant xs <- (arrsView -> (quant, xs)) where
+  TyArrs [] cod = cod
+  TyArrs (x:xs) cod = TyPi x (TyArrs xs cod)
+
+arrsView :: Type p -> ([TyBinder p], Type p)
+arrsView (TyPi q t) =
+  let (qs, t') = arrsView t
+   in (q:qs, t')
+arrsView t = ([], t)

@@ -25,6 +25,7 @@ import qualified Control.Monad.Writer.Lazy as LazyW
 import qualified Control.Monad.State.Lazy as LazyS
 import qualified Control.Monad.RWS.Lazy as LazyRWS
 import qualified Control.Monad.Reader as Reader
+import qualified Control.Monad.Logic as Logic
 import Control.Monad.State.Class
 import Control.Monad.IO.Class
 import Control.Monad.Except
@@ -121,6 +122,9 @@ instance MonadNamey m => MonadNamey (ExceptT e m) where
   genName = lift genName
 
 instance MonadNamey m => MonadNamey (Reader.ReaderT e m) where
+  genName = lift genName
+
+instance MonadNamey m => MonadNamey (Logic.LogicT m) where
   genName = lift genName
 
 instance (Semigroup c, MonadNamey m) => MonadNamey (Chronicle.ChronicleT c m) where

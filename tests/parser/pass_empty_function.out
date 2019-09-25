@@ -1,2 +1,2 @@
-let main x = let a = (function, 3)
-  in function
+let main x = let a = (function (), 3)
+  in function ()

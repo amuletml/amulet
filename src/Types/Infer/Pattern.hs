@@ -186,18 +186,9 @@ skolGadt var (_, oty, ty) =
       result (TyWithConstraints _ t) = result t
       result t = t
 
-      related (TyWithConstraints cs _) = cs
-      related _ = []
-
       mentioned = ftv (result ty)
-      free (TyVar v, t)
-        | v `Set.member` mentioned = [(v, t)]
-        | otherwise = []
-      free _ = []
-      freed = concatMap free (related ty)
-      fugitives = mentioned `Set.union` foldMap (ftv . snd) freed
    in do
-     vs <- for (Set.toList (ftv ty `Set.difference` fugitives)) $ \v ->
+     vs <- for (Set.toList (ftv ty `Set.difference` mentioned)) $ \v ->
        (v,) <$> freshSkol (ByExistential var oty) ty v
      pure (apply (Map.fromList vs) ty, Map.fromList vs)
 
