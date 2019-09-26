@@ -1,3 +1,3 @@
 foo : type -> type
-Foo : Infer{'aa : type}. Spec{'a : 'aa}. ('a ~ bool) ⊃ foo 'a
+Foo : Infer{'z : type}. Spec{'a : 'z}. ('a ~ bool) ⊃ foo 'a
 bar : Spec{'a : type}. ('a * foo 'a) -> int

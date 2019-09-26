@@ -37,7 +37,10 @@ killNewtypePass = go mempty mempty where
   go _ _ [] = pure []
 
 isNewtype :: IsVar a => Type a -> Maybe (Spine a)
-isNewtype (ForallTy Irrelevant from to) = Just $ Spine [(Irrelevant, from)] to
+isNewtype (ForallTy Irrelevant from to) =
+  case isNewtype to of 
+    Just _ -> Nothing
+    _ -> Just $ Spine [(Irrelevant, from)] to
 isNewtype (ForallTy (Relevant var) k t) = do
   (Spine tys res) <- isNewtype t
   guard (var `occursInTy` res)
@@ -104,7 +107,7 @@ goBinding ss m = traverse (third3A (fmap (substitute ss) . goTerm)) where
     Let (One (v, t, e')) <$> goTerm b
 
   goTerm (Match a x) = case newtypeMatch m x of
-    Just (phi, Arm { _armPtrn = Destr _ (Capture v ty), _armBody = bd }) -> do
+    Just (phi, Arm { _armPtrn = Destr _ [Capture v ty], _armBody = bd }) -> do
       var <- fresh ValueVar
       let Just (_, castCodomain) = relates phi
       bd' <- goTerm (Let (One (v, ty, Atom (Ref (fromVar var) castCodomain))) bd)

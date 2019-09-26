@@ -176,8 +176,7 @@ data Pattern p
   | PTuple [Pattern p] (Ann p)
   | PList [Pattern p] (Ann p)
   | PLiteral Lit (Ann p)
-  | PWrapper (Wrapper p, Type p) (Pattern p) (Ann p)
-  | PSkolem (Pattern p) [Var p] (Ann p)
+  | PGadtCon (Var p) [Var p] [(Var p, Type p)] (Maybe (Pattern p)) (Ann p)
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Pattern p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Pattern p)

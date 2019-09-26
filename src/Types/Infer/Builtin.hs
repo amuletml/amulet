@@ -195,8 +195,7 @@ data SkipImplicit = DoSkip | Don'tSkip
   deriving (Eq, Show, Ord)
 
 gadtConResult :: Type p -> Type p
-gadtConResult (TyForall _ _ t) = gadtConResult t
-gadtConResult (TyArr _ t) = t
+gadtConResult (TyPi _ t) = gadtConResult t
 gadtConResult t = t
 
 getHead :: Type p -> Type p

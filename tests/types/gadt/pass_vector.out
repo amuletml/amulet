@@ -2,8 +2,8 @@ natural : type
 Z : natural
 S : natural -> natural
 vect : natural -> type -> type
-Nil : Infer{'cc : type}. Spec{'n : 'cc}. Spec{'a : type}. ('n ~ Z) ⊃ vect 'n 'a
-Cons : Infer{'dl : type}. Spec{'n : 'dl}. Spec{'a : type}. Spec{'k : natural}. ('n ~ S 'k) ⊃ ('a * vect 'k 'a) -> vect 'n 'a
+Nil : Infer{'cb : type}. Spec{'n : 'cb}. Spec{'a : type}. ('n ~ Z) ⊃ vect 'n 'a
+Cons : Infer{'dj : type}. Spec{'n : 'dj}. Spec{'a : type}. Spec{'k : natural}. ('n ~ S 'k) ⊃ ('a * vect 'k 'a) -> vect 'n 'a
 head : Spec{'a : type}. Spec{'n : natural}. vect (S 'n) 'a -> 'a
 tail : Spec{'a : type}. Spec{'n : natural}. vect (S 'n) 'a -> vect 'n 'a
 main : int

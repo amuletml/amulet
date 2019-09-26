@@ -163,7 +163,7 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
           let ty = TyPi (f classConstraint) theTy
           let expr =
                 Fun (EvParam
-                       (Destructure classCon
+                       (PGadtCon classCon [] []
                          (Just (Capture capture (classAnn, inner)))
                          (classAnn, classConstraint)))
                  (Access (VarRef capture (classAnn, inner)) label (classAnn, ty))
@@ -178,7 +178,7 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
           let ty = TyPi (f classConstraint) theTy
           let expr =
                 Fun (EvParam
-                       (Destructure classCon
+                       (PGadtCon classCon [] []
                          (Just (Capture capture (classAnn, inner)))
                          (classAnn, classConstraint)))
                  (VarRef capture (classAnn, inner))

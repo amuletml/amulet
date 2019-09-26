@@ -1,0 +1,5 @@
+show : type -> constraint
+show : Spec{'a : type}. show 'a => 'a -> string
+show_box : type
+Box : Spec{'a : type}. show 'a => 'a -> show_box
+xs : list show_box

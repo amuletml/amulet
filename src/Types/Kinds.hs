@@ -346,14 +346,9 @@ inferGadtConKind :: MonadKind m
                  -> Var Desugared
                  -> [Var Typed]
                  -> KindT m ()
-inferGadtConKind con typ tycon args = go typ (reverse (spine (gadtConResult typ))) where
-  spine :: Type Desugared -> [Type Desugared]
-  spine (TyApp f x) = x:spine f
-  spine (TyOperator l o r) = [r, l, TyCon o]
-  spine x = [x]
-
-  go ty (hd:apps)
-    | TyCon hd <- hd, hd == tycon =
+inferGadtConKind con typ tycon args = go typ (gadtConResult typ) where
+  go ty (TyApps (TyCon hd) apps)
+    | hd == tycon =
       let fv = toList (foldMap ftv apps)
        in do
          fresh <- replicateM (length fv) freshTV

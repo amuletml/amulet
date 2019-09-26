@@ -1,47 +1,47 @@
 do
   local None = { __tag = "None" }
-  local function Some(x) return { __tag = "Some", x } end
+  local function Some(a) return { __tag = "Some", a } end
   local Done = { __tag = "Done" }
-  local function Yield(x) return { __tag = "Yield", x } end
-  local function Skip(x) return { __tag = "Skip", x } end
-  local function Stream(x) return { __tag = "Stream", x } end
+  local function Yield(a) return { __tag = "Yield", a } end
+  local function Skip(a) return { __tag = "Skip", a } end
+  local function Stream(a) return { __tag = "Stream", a } end
   local print = print
   local to_string = tostring
-  local function zip(bga)
-    local bgc = bga[1]
-    local f, start = bgc._1, bgc._2
-    return function(bfv)
-      local bfx = bfv[1]
-      local g = bfx._1
+  local function zip(bfz)
+    local bgb = bfz[1]
+    local f, start = bgb._1, bgb._2
+    return function(bfu)
+      local bfw = bfu[1]
+      local g = bfw._1
       return Stream({
-        _2 = { _1 = start, _2 = { _2 = None, _1 = bfx._2 } },
-        _1 = function(bfj)
-          local bfl = bfj._2
-          local sb = bfl._1
-          local x = bfl._2
-          local sa = bfj._1
+        _2 = { _1 = start, _2 = { _2 = None, _1 = bfw._2 } },
+        _1 = function(bfi)
+          local bfk = bfi._2
+          local sb = bfk._1
+          local x = bfk._2
+          local sa = bfi._1
           if x.__tag == "Some" then
-            local ben = g(sb)
+            local bem = g(sb)
             local x0 = x[1]
-            if ben.__tag == "Skip" then
-              return Skip({ _1 = sa, _2 = { _1 = ben[1], _2 = Some(x0) } })
-            elseif ben.__tag == "Yield" then
-              local bfe = ben[1]
+            if bem.__tag == "Skip" then
+              return Skip({ _1 = sa, _2 = { _1 = bem[1], _2 = Some(x0) } })
+            elseif bem.__tag == "Yield" then
+              local bfd = bem[1]
               return Yield({
-                _1 = { _1 = x0, _2 = bfe._1 },
-                _2 = { _1 = sa, _2 = { _2 = None, _1 = bfe._2 } }
+                _2 = { _1 = sa, _2 = { _2 = None, _1 = bfd._2 } },
+                _1 = { _1 = x0, _2 = bfd._1 }
               })
-            elseif ben.__tag == "Done" then
+            elseif bem.__tag == "Done" then
               return Done
             end
           else
-            local bdv = f(sa)
-            if bdv.__tag == "Skip" then
-              return Skip({ _1 = bdv[1], _2 = { _1 = sb, _2 = None } })
-            elseif bdv.__tag == "Yield" then
-              local bek = bdv[1]
-              return Skip({ _2 = { _1 = sb, _2 = Some(bek._1) }, _1 = bek._2 })
-            elseif bdv.__tag == "Done" then
+            local bdu = f(sa)
+            if bdu.__tag == "Skip" then
+              return Skip({ _1 = bdu[1], _2 = { _1 = sb, _2 = None } })
+            elseif bdu.__tag == "Yield" then
+              local bej = bdu[1]
+              return Skip({ _1 = bej._2, _2 = { _1 = sb, _2 = Some(bej._1) } })
+            elseif bdu.__tag == "Done" then
               return Done
             end
           end
@@ -49,7 +49,7 @@ do
       })
     end
   end
-  local baw = zip(Stream({
+  local bav = zip(Stream({
     _1 = function(n)
       if n > 100 then
         return Done
@@ -66,18 +66,18 @@ do
     end,
     _2 = 100
   }))[1]
-  local go = baw._1
+  local go = bav._1
   local function go0(ac, st)
-    local bae = go(st)
-    if bae.__tag == "Skip" then
-      return go0(ac, bae[1])
-    elseif bae.__tag == "Yield" then
-      local bao = bae[1]
-      local x = bao._1
-      return go0(x._1 + x._2 + ac, bao._2)
-    elseif bae.__tag == "Done" then
+    local bad = go(st)
+    if bad.__tag == "Skip" then
+      return go0(ac, bad[1])
+    elseif bad.__tag == "Yield" then
+      local ban = bad[1]
+      local x = ban._1
+      return go0(x._1 + x._2 + ac, ban._2)
+    elseif bad.__tag == "Done" then
       return ac
     end
   end
-  print(to_string(go0(0, baw._2)))
+  print(to_string(go0(0, bav._2)))
 end

@@ -60,6 +60,11 @@ gadtConShape (_, t) ty oerr = k . fix . flip Note (itShouldBe <#> itIs) . flip N
     _ -> id
   (err, k) = getErr oerr
 
+gadtConManyArgs :: Constructor Desugared -> TypeError
+gadtConManyArgs c@(GadtCon _ _ t _) = ArisingFrom (Malformed t) (BecauseOf c) `Note` tooManyArgs where
+  tooManyArgs = string "Generalised constructors must have either 0 or 1 argument."
+gadtConManyArgs _ = undefined
+
 getErr :: TypeError -> (TypeError, TypeError -> TypeError)
 getErr (ArisingFrom e blame) = case getErr e of
   (e, k) -> (e, flip ArisingFrom blame . k)

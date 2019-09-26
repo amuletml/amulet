@@ -121,14 +121,14 @@ check ex@(Fun pat e an) ty = do
   (dom, cod, _) <- quantifier (becauseExp ex) ty
   let domain = _tyBinderType dom
 
-  (p, tau, vs, cs) <- inferParameter pat
+  (p, tau, vs, cs, is) <- inferParameter pat
   _ <- unify (becauseExp ex) domain (_tyBinderType tau)
   let tvs = boundTvs (p ^. paramPat) vs
 
   implies (Arm (pat ^. paramPat) Nothing e) domain cs $
     case dom of
       Anon{} -> do
-        e <- local (typeVars %~ Set.union tvs) . local (names %~ focus vs) $
+        e <- local (typeVars %~ Set.union tvs) . local (names %~ focus vs) . local (classes %~ mappend is) $
           check e cod
         pure (Fun p e (an, ty))
       _ -> error "invalid quantifier in check Fun"
@@ -143,12 +143,14 @@ check (Match t ps a) ty = do
   t <- check t tt
 
   ps <- for ps $ \(Arm p g e) -> do
-    (p', ms, cs) <- checkPattern p tt
+    (p', ms, cs, is) <- checkPattern p tt
     let tvs = boundTvs p' ms
 
     implies (Arm p g e) tt cs
       . local (typeVars %~ Set.union tvs)
-      . local (names %~ focus ms) $ do
+      . local (names %~ focus ms)
+      . local (classes %~ mappend is)
+      $ do
         g' <- traverse (`check` tyBool) g
         e' <- check e ty
         pure (Arm p' g' e')
@@ -207,12 +209,12 @@ infer (VarRef k a) = do
       pure (cont' (cont (VarRef k (a, old))), new)
 
 infer (Fun (view paramPat -> p) e an) = do
-  (p, dom, ms, cs) <- inferPattern p
+  (p, dom, ms, cs, is) <- inferPattern p
   let tvs = boundTvs p ms
 
   _ <- leakEqualities p cs
 
-  (e, cod) <- local (typeVars %~ Set.union tvs) $
+  (e, cod) <- local (typeVars %~ Set.union tvs) . local (classes %~ mappend is) $
     local (names %~ focus ms) (infer e)
 
   pure (Fun (PatParam p) e (an, TyArr dom cod), TyArr dom cod)
@@ -273,10 +275,10 @@ infer ex@(Match t ps a) = do
   ty <- freshTV
 
   ps' <- for ps $ \(Arm p g e) -> do
-    (p', ms, cs) <- checkPattern p tt
+    (p', ms, cs, is) <- checkPattern p tt
     let tvs = boundTvs p' ms
     leakEqualities ex cs
-    local (typeVars %~ Set.union tvs) . local (names %~ focus ms) $ do
+    local (typeVars %~ Set.union tvs) . local (names %~ focus ms) . local (classes %~ mappend is) $ do
       e' <- check e ty
       g' <- traverse (`check` tyBool) g
       pure (Arm p' g' e')
@@ -580,7 +582,7 @@ inferLetTy closeOver strategy vs =
       tcOne (AcyclicSCC b@(Matching p e ann)) = do
         ((e, p, ty, tel), cs) <- listen $ do
           (e, ety) <- infer e
-          (p, pty, tel, cs) <- inferPattern p
+          (p, pty, tel, cs, _) <- inferPattern p
           leakEqualities b cs
 
           -- here: have expression type (inferred)
