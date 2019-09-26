@@ -30,7 +30,7 @@ inferExpr e = flip Namey.evalNamey MonadInfer.firstName $ MonadInfer.runInfer bu
   go (This e) = pure . Left $ e
   go (These e _) = pure . Left $ e
   go (That ((_, t), cs)) = do
-    solved <- MonadInfer.runChronicleT $ solve cs
+    solved <- MonadInfer.runChronicleT $ solve cs mempty
     pure $ case toEither solved of
       Left e -> Left (toList e)
       Right (x, _, _) -> Right (apply x t)
@@ -40,7 +40,7 @@ checkExpr e t = flip Namey.evalNamey MonadInfer.firstName $ MonadInfer.runInfer 
   go (This e) = pure . Left $ e
   go (These e _) = pure . Left $ e
   go (That (_, cs)) = do
-    solved <- MonadInfer.runChronicleT $ solve cs
+    solved <- MonadInfer.runChronicleT $ solve cs mempty
     pure $ case toEither solved of
       Left e -> Left (toList e)
       Right _ -> pure ()
@@ -48,22 +48,22 @@ checkExpr e t = flip Namey.evalNamey MonadInfer.firstName $ MonadInfer.runInfer 
 equivalent, disjoint :: Type Typed -> Type Typed -> Bool
 equivalent a b =
   let task = Seq.singleton (ConUnify (BecauseOf (Blame internal)) mempty (TgInternal "co") a b)
-  in case flip Namey.evalNamey MonadInfer.firstName . MonadInfer.runChronicleT . solve $ task of
-    That{} -> True
-    _ -> False
+   in case flip Namey.evalNamey MonadInfer.firstName . MonadInfer.runChronicleT . flip solve mempty $ task of
+     That{} -> True
+     _ -> False
 
 disjoint a b = not (a `equivalent` b)
 
 unify :: Type Typed -> Type Typed -> Either (Seq TypeError) (Coercion Typed)
 unify a b =
   let task = Seq.singleton (ConUnify (BecauseOf (Blame internal)) mempty (TgInternal "co") a b)
-  in case flip Namey.evalNamey MonadInfer.firstName . MonadInfer.runChronicleT . solve $ task of
-    This e -> Left e
-    These e _ -> Left e
-    That (_, m, _) -> case m Map.! TgInternal "co" of
-      Cast co -> Right co
-      IdWrap -> Right (AssumedCo a b)
-      c -> error ("not a coercion " ++ show c)
+   in case flip Namey.evalNamey MonadInfer.firstName . MonadInfer.runChronicleT . flip solve mempty $ task of
+        This e -> Left e
+        These e _ -> Left e
+        That (_, m, _) -> case m Map.! TgInternal "co" of
+          Cast co -> Right co
+          IdWrap -> Right (AssumedCo a b)
+          c -> error ("not a coercion " ++ show c)
 
 newtype Blame p = Blame Span
 

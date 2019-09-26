@@ -54,7 +54,7 @@ resolveKind reason otp = do
                         expandType t
                      in runWriterT (runStateT (cont otp) reason)
 
-  (sub, _, _) <- solve cs
+  (sub, _, _) <- solve cs =<< view classDecs
 
   let t = apply sub ty
   wellformed t
@@ -73,7 +73,7 @@ checkAgainstKind r t k = solveK pure r $
 annotateKind :: MonadKind m => SomeReason -> Type Typed -> m (Type Typed)
 annotateKind r ty = do
   ((ty, _), cs) <- runWriterT (runStateT (fmap fst (inferKind (raiseT id ty))) r)
-  (sub, _, _) <- solve cs
+  (sub, _, _) <- solve cs =<< view classDecs
   pure (apply sub ty)
 
 initialKind :: MonadKind m => Type Typed -> [TyConArg Desugared] -> KindT m (Type Typed, Telescope Typed)
@@ -167,7 +167,7 @@ solveForKind2 :: MonadKind m => SomeReason -> KindT m (Type Typed, Kind Typed) -
 solveForKind2 reason = solveK cont reason where
   solveK cont reason k = do
     (((typ_e, kind), _), cs) <- runWriterT (runStateT k reason)
-    (sub, _, _) <- solve cs
+    (sub, _, _) <- solve cs =<< view classDecs
     cont (apply sub typ_e, apply sub kind)
 
   cont (t, k) = (,) t <$> closeOver reason k
@@ -175,7 +175,7 @@ solveForKind2 reason = solveK cont reason where
 solveK :: MonadKind m => (Type Typed -> m (Type Typed)) -> SomeReason -> KindT m (Type Typed) -> m (Type Typed)
 solveK cont reason k = do
   ((kind, _), cs) <- runWriterT (runStateT k reason)
-  (sub, _, _) <- solve cs
+  (sub, _, _) <- solve cs =<< view classDecs
   cont =<< expandType (apply sub kind)
 
 inferKind :: MonadKind m => Type Desugared -> KindT m (Type Typed, Kind Typed)

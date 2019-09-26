@@ -233,7 +233,7 @@ isFn _ = False
 conVarRef :: Var a ~ Var Resolved => Expr a -> Bool
 conVarRef (VarRef t _) =
   case t of
-    TgName t _ -> isUpper (T.head t)
+    TgName t i -> i == (-36) || isUpper (T.head t) -- -36 is lAZYName
     TgInternal t -> isUpper (T.head t)
 conVarRef (Begin [x] _) = conVarRef x
 conVarRef (If c t e _) = value c && all conVarRef [t, e]

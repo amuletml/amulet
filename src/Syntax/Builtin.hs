@@ -203,7 +203,7 @@ builtins =
             , (tyConstraintName, TyType)
             , (tyListName, TyType ~> TyType)
             , (tyRefName, TyType ~> TyType)
-            , (tyEqName, TyType ~> TyType ~> tyConstraint)
+            , (tyEqName, a *. TyVar a ~> TyVar a ~> tyConstraint)
             ]
 
   , constructors = Map.fromList

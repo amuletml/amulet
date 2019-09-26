@@ -68,9 +68,9 @@ inferExpr env exp = fmap fst <$> runInfer env (inferOne exp) where
   inferOne :: forall m. MonadInfer Typed m => Expr Desugared -> m (Type Typed)
   inferOne expr = do
     ((expr, ty), cs) <- listen $ infer expr
-    (sub, _, deferred) <- condemn $ retcons (addBlame (becauseExp expr)) (solve cs)
+    (sub, _, deferred) <- condemn $ retcons (addBlame (becauseExp expr)) (solve cs (env ^. classDecs))
     deferred <- pure (fmap (apply sub) deferred)
-    (compose sub -> sub, _, cons) <- condemn $ solve (Seq.fromList deferred)
+    (compose sub -> sub, _, cons) <- condemn $ solve (Seq.fromList deferred) (env ^. classDecs)
     (context, _, _, compose sub -> sub) <- reduceClassContext mempty (annotation expr) cons
 
     vt <- closeOverStrat (becauseExp expr) mempty expr (apply sub (context ty))
@@ -496,9 +496,10 @@ inferLetTy closeOver strategy vs =
                 -> Seq.Seq (Constraint Typed)
                 -> m (Type Typed, Expr Typed -> Expr Typed, Subst Typed)
       figureOut canAdd blame ex ty cs = do
-        (x, co, deferred) <- condemn $ retcons (addBlame (snd blame)) (solve cs)
+        c <- view classDecs
+        (x, co, deferred) <- condemn $ retcons (addBlame (snd blame)) (solve cs c)
         deferred <- pure (fmap (apply x) deferred)
-        (compose x -> x, wraps', cons) <- condemn $ solve (Seq.fromList deferred)
+        (compose x -> x, wraps', cons) <- condemn $ solve (Seq.fromList deferred) c
 
         name <- genName
         let reify an ty var =
@@ -590,13 +591,13 @@ inferLetTy closeOver strategy vs =
           wrap <- subsumes (BecauseOf b) ety pty
           pure (ExprWrapper wrap e (annotation e, pty), p, pty, tel)
 
-        (solution, wraps, deferred) <- solve cs
+        (solution, wraps, deferred) <- solve cs =<< view classDecs
         tys <- view tySyms
         let solved = closeOver mempty ex . apply solution
             ex = solveEx tys solution wraps e
 
         deferred <- pure (fmap (apply solution) deferred)
-        (compose solution -> solution, wraps', cons) <- solve (Seq.fromList deferred)
+        (compose solution -> solution, wraps', cons) <- solve (Seq.fromList deferred) =<< view classDecs
 
         case strategy of
           Fail ->
@@ -638,11 +639,11 @@ inferLetTy closeOver strategy vs =
                 exp <- check (exp' exp) tyvar
                 pure (Binding var exp True (ann, tyvar), tyvar)
 
-        (solution, wrap, cons) <- solve cs
+        (solution, wrap, cons) <- solve cs =<< view classDecs
         name <- genName
 
         let deferred = fmap (apply solution) cons
-        (compose solution -> solution, wrap', cons) <- solve (Seq.fromList deferred)
+        (compose solution -> solution, wrap', cons) <- solve (Seq.fromList deferred) =<< view classDecs
         let reify an ty var =
               case wrap' Map.! var of
                 ExprApp v -> v

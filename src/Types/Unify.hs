@@ -71,6 +71,7 @@ data SolveScope
   = SolveScope { _bindSkol :: Bool
                , _don'tTouch :: Set.Set (Var Typed)
                , _depth :: [Type Typed]
+               , _classInfo :: Map.Map (Var Typed) ClassInfo
                }
   deriving (Eq, Show, Ord)
 
@@ -107,7 +108,7 @@ unifyPure a b = unifyPure_v [(a, b)]
 unifyPure_v :: [(Type Typed, Type Typed)] -> Maybe (Subst Typed)
 unifyPure_v ts = fst . flip runNamey firstName $ do
   x <- runChronicleT $ do
-    (sub, _, _) <- solve (fmap (uncurry (ConUnify undefined mempty undefined)) (Seq.fromList ts))
+    (sub, _, _) <- solve (fmap (uncurry (ConUnify undefined mempty undefined)) (Seq.fromList ts)) mempty
     pure sub
   case x of
     These e x | null e -> pure (Just x)
@@ -121,12 +122,13 @@ unifRow scope (t, a, b) = do
 
 runSolve :: MonadNamey m
          => Bool
+         -> Map.Map (Var Typed) ClassInfo
          -> SolveState
          -> WriterT [Constraint Typed] (StateT SolveState (ReaderT SolveScope m)) a
          -> m ([Constraint Typed], SolveState)
-runSolve skol s x = runReaderT (runStateT (execWriterT act) s) emptyScope where
+runSolve skol info s x = runReaderT (runStateT (execWriterT act) s) emptyScope where
   act = (,) <$> genName <*> x
-  emptyScope = SolveScope skol mempty []
+  emptyScope = SolveScope skol mempty [] info
 
   --   let ss = s ^. solveTySubst
     -- pure (fmap (apply ss) ss, s ^. solveCoSubst, cs)
@@ -139,17 +141,18 @@ runSolve skol s x = runReaderT (runStateT (execWriterT act) s) emptyScope where
 -- particular instance of the solver is allowed to generate from.
 solve :: (MonadNamey m, MonadChronicles TypeError m)
       => Seq.Seq (Constraint Typed)
+      -> Map.Map (Var Typed) ClassInfo
       -> m (Subst Typed, Map.Map (Var Typed) (Wrapper Typed), [Constraint Typed])
-solve cs = do
-  (cs', s) <- runSolve False emptyState (doSolve cs)
+solve cs info = do
+  (cs', s) <- runSolve False info emptyState (doSolve cs)
   let ss = s ^. solveTySubst
   pure (fmap (apply ss) ss, s ^. solveCoSubst, cs')
 
 solveImplies :: (MonadNamey m, MonadChronicles TypeError m)
-             => SolveState -> Seq.Seq (Constraint Typed)
+             => SolveState -> Map.Map (Var Typed) ClassInfo -> Seq.Seq (Constraint Typed)
              -> m (SolveState, [Constraint Typed])
-solveImplies s cs = do
-  (cs', s') <- runSolve True s . doSolve . apply (s ^. solveTySubst) $ cs
+solveImplies s info cs = do
+  (cs', s') <- runSolve True info s . doSolve . apply (s ^. solveTySubst) $ cs
   pure ( s' & solveAssumptions %~ (<>(s ^. solveTySubst))
        , apply (s ^. solveTySubst) cs' )
 
@@ -253,22 +256,21 @@ doSolve (ohno@(ConImplicit reason scope var con@TyPi{}) :<| cs) = do
   scope <- pure (apply sub scope)
 
   (wrap, head, assum, _) <- skolemise (ByConstraint con) con
+  traceM (displayS ("quantified constraint. Solving:" <+> pretty head))
+  var' <- genName
 
-  case lookup head (assum <> scope) of
-    xs | allSameHead xs, concreteUnderOne con -> do
-      w <- local (depth %~ (con:)) $
-        let imp = pickBestPossible xs
-         in useImplicit reason head (assum <> scope) imp
-              `catchChronicle`
-                \e -> confesses (usingFor imp con (headSeq e))
+  doSolve (Seq.singleton (ConImplicit reason (scope <> assum) var' head))
 
+  x <- use (solveCoSubst . at var')
+  case x of
+    Nothing -> dictates (addBlame reason (UnsatClassCon reason (apply sub ohno) It'sQuantified))
+    Just w -> do
       let wanted = ExprWrapper (wrap :> w) (identity head) (a, con)
           identity t = Fun (EvParam (PType (Capture var (a, t)) t (a, t))) (VarRef var (a, t)) (a, TyArr t t)
           a = annotation reason
 
       solveCoSubst . at var ?= ExprApp wanted
 
-    _ -> dictates (addBlame reason (UnsatClassCon reason (apply sub ohno) It'sQuantified))
 
 doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
   doSolve cs
@@ -462,15 +464,16 @@ unify scope (TySkol x) (TySkol y)
   | x == y = pure (ReflCo (TySkol y))
   | otherwise = do
     sub <- use solveAssumptions
+    info <- view classInfo
     let assumption = (Right <$> sub ^. at (x ^. skolIdent)) <|> (Left <$> sub ^. at (y ^. skolIdent))
     case assumption of
       Just assum ->
         case assum of
           Right x -> unify scope x (TySkol y)
           Left y -> unify scope (TySkol x) y
-      Nothing ->
-        case lookupEquality scope (TySkol x) (TySkol y) of
-          (x:_) -> pure (VarCo (x ^. implVar))
+      Nothing -> do
+        case lookupEquality info scope (TySkol x) (TySkol y) of
+          (x:_) -> pure x
           _ -> do
             canWe <- view bindSkol
             if canWe
@@ -496,6 +499,7 @@ unify scope a (TyWildcard (Just b)) = SymCo <$> unify scope b a
 unify scope skt@(TySkol t@(Skolem sv _ _ _)) b = do
   sub <- use (solveAssumptions . at sv)
   subst <- use solveAssumptions
+  info <- view classInfo
   case sub of
     Just ty -> do
       let ty' = apply subst ty
@@ -505,8 +509,8 @@ unify scope skt@(TySkol t@(Skolem sv _ _ _)) b = do
       TyVar v -> bind scope v (TySkol t)
       TyWildcard (Just tau) -> unify scope skt tau
       _ ->
-        case lookupEquality scope skt b of
-          (x:_) -> pure (VarCo (x ^. implVar))
+        case lookupEquality info scope skt b of
+          (x:_) -> pure x
           _ -> do
             canWe <- view bindSkol
             if canWe
@@ -625,10 +629,51 @@ unify scope (TyOperator l v r) (TyOperator l' v' r')
 unify _ TyType TyType = pure (ReflCo TyType)
 unify _ a b = confesses =<< unequal a b
 
-lookupEquality :: ImplicitScope ClassInfo Typed -> Type Typed -> Type Typed -> [Implicit ClassInfo Typed]
-lookupEquality scope a b =
-  let choices = lookup (TyApps tyEq [a, b]) scope <> lookup (TyApps tyEq [b, a]) scope
-   in assert (all ((== LocalAssum) . view implSort) choices) choices
+lookupEquality :: Map.Map (Var Typed) ClassInfo
+               -> ImplicitScope ClassInfo Typed
+               -> Type Typed
+               -> Type Typed
+               -> [Coercion Typed]
+lookupEquality class_info scope a b = normal <|> fundepEquality where
+  -- Try instances a ~ b (which must be LocalAssum).
+  normal =
+    let choices = filter ((/= Superclass) . view implSort) $
+          lookup (TyApps tyEq [a, b]) scope <> lookup (TyApps tyEq [b, a]) scope
+     in assert (all ((== LocalAssum) . view implSort) choices) (map (VarCo . (^. implVar)) choices)
+
+  bsClass v i = foldl TyApp (TyCon v) (replicate i (TyVar (TgInternal "_")))
+
+  fundepEquality =
+    let
+      all_instances = Set.toList (keys scope)
+
+      inst_pairs =
+            [ (x, y) | x@(TyApps (TyCon c) _) <- all_instances, y@(TyApps (TyCon c') _) <- all_instances, c == c', x /= y ]
+        <|> [ (x, y) | TyTuple x y <- all_instances, let TyApps (TyCon c) _ = x, let TyApps (TyCon c') _ = y, c == c' ]
+
+      pair_fds =
+        [ (xs, tail (appsView y), need, det)
+        | (x, y) <- inst_pairs
+        , let TyApps (TyCon class_tc) xs = x
+        , let Just clss = class_info ^. at class_tc
+        , (need, det, _) <- clss ^. ciFundep
+        ]
+
+      implied_eqs =
+        [ (AssumedCo (ta !! det) (tb !! det))
+        -- TODO: We shouldn't blindly assume equalities here, even
+        -- though Lint will be happy with that. The principled thing to
+        -- do is have each fundep add a coercion axiom with type:
+        --   forall 'a 'b 'c 'd. 'a ~ 'b -> c 'a 'c -> c 'a 'd -> 'c ~ 'd
+        -- then we use that here.
+        | (ta, tb, needs, dets) <- pair_fds
+        , flip all needs $ \idx ->
+               prettyConcrete (ta !! idx)
+            && prettyConcrete (tb !! idx)
+            && ta !! idx == tb !! idx
+        , det <- dets
+        ]
+     in implied_eqs
 
 subsumes', subsumes :: MonadSolve m
                     => SomeReason -> ImplicitScope ClassInfo Typed

@@ -103,6 +103,7 @@ expr (Lazy e a) = do
   pure $ App (VarRef lAZYName a)
              (Fun (PatParam (PLiteral LiUnit a)) e a)
              a
+
 expr (Vta e t a) = Vta <$> expr e <*> pure (ty t) <*> pure a
 expr (ListExp e t) = ListExp <$> traverse expr e <*> pure t
 expr (ListComp _ [] an) = pure $ ListExp [] an

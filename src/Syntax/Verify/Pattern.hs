@@ -486,7 +486,7 @@ constrain :: (MonadPlus m, MonadNamey m, MonadState CoverState m) => [Constraint
 constrain css = maybe empty put =<< doConstrain css where
   doConstrain css = do
     (sub, cs) <- get
-    x <- runChronicleT . solveImplies sub . (cs<>) $ Seq.fromList css
+    x <- runChronicleT . solveImplies sub mempty . (cs<>) $ Seq.fromList css
     pure $ case x of
       These Seq.Empty (sub', cs') -> Just (sub', Seq.fromList cs')
       That (sub', cs') ->  Just (sub', Seq.fromList cs')

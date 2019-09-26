@@ -131,10 +131,10 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
       (_, cs) <- listen $
         check exp sig
 
-      (sub, _, deferred) <- condemn $ solve cs
+      (sub, _, deferred) <- condemn $ solve cs =<< view classDecs
 
       deferred <- pure (fmap (apply sub) deferred)
-      (_, _, cons) <- solve (Seq.fromList deferred)
+      (_, _, cons) <- solve (Seq.fromList deferred) =<< view classDecs
 
       unless (null cons) $ do
         let (c@(ConImplicit reason _ _ _):_) = reverse cons
@@ -260,7 +260,9 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
 
   (ctx, mappend skolSub -> skolSub) <- skolFreeTy mempty (ByInstanceHead ctx ann) (apply skolSub ctx)
 
-  (mappend skolSub -> instSub, _, _) <- solve (pure (ConUnify (BecauseOf inst) scope undefined classHead instHead))
+  (mappend skolSub -> instSub, _, _) <-
+    solve (pure (ConUnify (BecauseOf inst) scope undefined classHead instHead))
+        =<< view classDecs
   localInsnConTy <- silence $
     closeOver (BecauseOf inst) (TyPi (Implicit ctx) instHead)
 
@@ -299,10 +301,10 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
         (e, cs) <- listen $ do
           fixHeadVars skolSub
           check e sig
-        (sub, wrap, deferred) <- condemn $ solve cs
+        (sub, wrap, deferred) <- condemn $ solve cs =<< view classDecs
 
         deferred <- pure (fmap (apply sub) deferred)
-        (compose sub -> sub, wrap', cons) <- solve (Seq.fromList deferred)
+        (compose sub -> sub, wrap', cons) <- solve (Seq.fromList deferred) =<< view classDecs
 
         unless (null cons) $ do
           let (c@(ConImplicit reason _ _ _):_) = reverse cons
@@ -346,10 +348,10 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
         an = annotation expr
 
     (e, cs) <- listen $ check expr ty
-    (sub, wrap, deferred) <- condemn $ solve cs
+    (sub, wrap, deferred) <- condemn $ solve cs =<< view classDecs
 
     deferred <- pure (fmap (apply sub) deferred)
-    (compose sub -> sub, wrap', cons) <- solve (Seq.fromList deferred)
+    (compose sub -> sub, wrap', cons) <- solve (Seq.fromList deferred) =<< view classDecs
 
     unless (null cons) $ do
       let (c@(ConImplicit reason _ _ _):_) = reverse cons
@@ -387,7 +389,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
       whatDo = Map.toList (methodNames <> classContext)
       fields = methodFields ++ usedDefaults ++ contextFields
 
-  (solution, needed, unsolved) <- solve cs
+  (solution, needed, unsolved) <- solve cs =<< view classDecs
 
   unless (null unsolved) $
     confesses (addBlame (BecauseOf inst)
@@ -611,7 +613,7 @@ m ! k = fromMaybe (error ("Key " ++ show k ++ " not in map")) (Map.lookup k m)
 validContext :: MonadChronicles TypeError m => String -> Ann Desugared -> Type Desugared -> m ()
 
 validContext what ann t@(TyApps f xs@(_:_))
-  | TyCon v <- f, v == tyEqName = unless (what == "instance") $ confesses (InvalidContext what ann t)
+  -- | TyCon v <- f, v == tyEqName = unless (what == "instance") $ confesses (InvalidContext what ann t)
   | TyCon{} <- f = pure ()
   | otherwise = traverse_ (validContext what ann) xs `catchChronicle` \_ -> confesses (InvalidContext what ann t)
 
