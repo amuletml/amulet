@@ -3,4 +3,4 @@ gadt04-pass.ml[2:5 ..2:27]: error
 2 │   | MkT : int -> (int -> t)
   │     ^^^^^^^^^^^^^^^^^^^^^^^
   The type `int -> int -> t` is malformed.
-  • Note: Generalised constructors must have either 0 or 1 argument.
+  • Note: Generalised constructors must have fewer than two arguments.
