@@ -30,8 +30,9 @@ vKSTR, vKINT :: CoVar
 vExtend, vRestrict, vROWCONS :: CoVar
 tyvarRecord, tyvarNew, tyvarKey, tyvarType :: CoVar
 backendRet, backendClone :: CoVar
+vEq, vEQ :: CoVar
 
-[ vBool, vInt, vString, vFloat, vUnit, vLazy, vArrow, vProduct, vList, vRefTy, vKStrTy, vKIntTy, vRowCons, vOpAdd, vOpSub, vOpMul, vOpDiv, vOpExp, vOpLt, vOpGt, vOpLe, vOpGe, vOpAddF, vOpSubF, vOpMulF, vOpDivF, vOpExpF, vOpLtF, vOpGtF, vOpLeF, vOpGeF, vOpConcat, vOpEq, vOpNe, vError, vLAZY, vForce, tyvarA, tyvarB, argvarX, vOpApp, vCONS, vNIL, vAssign, vDeref, vRef, vStrVal, vIntVal, vExtend, vRestrict, vKSTR, vKINT, vROWCONS, tyvarRecord, tyvarNew, tyvarKey, tyvarType, backendRet, backendClone ] = makeBuiltins
+[ vBool, vInt, vString, vFloat, vUnit, vLazy, vArrow, vProduct, vList, vRefTy, vKStrTy, vKIntTy, vRowCons, vOpAdd, vOpSub, vOpMul, vOpDiv, vOpExp, vOpLt, vOpGt, vOpLe, vOpGe, vOpAddF, vOpSubF, vOpMulF, vOpDivF, vOpExpF, vOpLtF, vOpGtF, vOpLeF, vOpGeF, vOpConcat, vOpEq, vOpNe, vError, vLAZY, vForce, tyvarA, tyvarB, argvarX, vOpApp, vCONS, vNIL, vAssign, vDeref, vRef, vStrVal, vIntVal, vExtend, vRestrict, vKSTR, vKINT, vROWCONS, tyvarRecord, tyvarNew, tyvarKey, tyvarType, vEq, vEQ, backendRet, backendClone ] = makeBuiltins
   [ ("bool", TypeConVar)
   , ("int", TypeConVar)
   , ("string", TypeConVar)
@@ -107,13 +108,15 @@ backendRet, backendClone :: CoVar
   , ("new", TypeVar)
   , ("key", TypeVar)
   , ("type", TypeVar)
+  , ("~", TypeConVar)
+  , ("$Refl", ValueVar)
 
   -- Backend specific variables
   , ("<ret>", ValueVar)
   , ("<clone>", ValueVar)
   ]
 
-tyBool, tyInt, tyString, tyFloat, tyUnit, tyLazy, tyList, tyRef, tyKStr, tyKInt, tyRowCons :: IsVar a => Type a
+tyBool, tyInt, tyString, tyFloat, tyUnit, tyLazy, tyList, tyRef, tyKStr, tyKInt, tyRowCons, tyEq :: IsVar a => Type a
 tyBool    = ConTy $ fromVar vBool
 tyInt     = ConTy $ fromVar vInt
 tyString  = ConTy $ fromVar vString
@@ -125,6 +128,7 @@ tyRef     = ConTy $ fromVar vRefTy
 tyKStr    = ConTy $ fromVar vKStrTy
 tyKInt    = ConTy $ fromVar vKIntTy
 tyRowCons = ConTy $ fromVar vRowCons
+tyEq      = ConTy $ fromVar vEq
 
 builtinTyList :: IsVar a => [a]
 builtinTyList = [ fromVar vBool
@@ -140,6 +144,7 @@ builtinTyList = [ fromVar vBool
                 , fromVar vKStrTy
                 , fromVar vKIntTy
                 , fromVar vRowCons
+                , fromVar vEq
                 ]
 
 builtinVarList :: forall a b. (IsVar a, IsVar b) => [(a, Type b)]
@@ -230,6 +235,7 @@ builtinVarList = vars where
                 ForallTy (Relevant ttype) StarTy $
                   ForallTy (Relevant new) StarTy $
                     tyString `arrTy` appsTy [tyRowCons, VarTy record, VarTy ttype, VarTy key, VarTy new ]
+         , op vEQ $ ForallTy (Relevant name) StarTy $ appsTy [ tyEq, VarTy name, VarTy name ] 
          ]
 
 isError :: IsVar a => a -> Bool

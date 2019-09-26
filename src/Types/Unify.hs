@@ -21,6 +21,8 @@ import Control.Applicative
 import Control.Monad.Infer
 import Control.Lens hiding (Empty, (:>))
 
+import Control.Exception (assert)
+
 import Types.Infer.Errors
 import Types.Wellformed
 
@@ -93,7 +95,6 @@ type MonadSolve m =
   , MonadWriter [Constraint Typed] m
   )
 
-
 typeWithin :: Var Typed -> SolveState -> Maybe (Type Typed)
 typeWithin v s = s ^. (solveTySubst . at v) <|> s ^. (solveAssumptions . at v)
 
@@ -106,16 +107,16 @@ unifyPure a b = unifyPure_v [(a, b)]
 unifyPure_v :: [(Type Typed, Type Typed)] -> Maybe (Subst Typed)
 unifyPure_v ts = fst . flip runNamey firstName $ do
   x <- runChronicleT $ do
-    (sub, _, _) <- solve (fmap (uncurry (ConUnify undefined undefined)) (Seq.fromList ts))
+    (sub, _, _) <- solve (fmap (uncurry (ConUnify undefined mempty undefined)) (Seq.fromList ts))
     pure sub
   case x of
     These e x | null e -> pure (Just x)
     That x -> pure (Just x)
     _ -> pure Nothing
 
-unifRow :: MonadSolve m => (Text, Type Typed, Type Typed) -> m (Text, Coercion Typed)
-unifRow (t, a, b) = do
-  co <- retcons (flip Note (InField t)) (unify a b)
+unifRow :: MonadSolve m => ImplicitScope ClassInfo Typed -> (Text, Type Typed, Type Typed) -> m (Text, Coercion Typed)
+unifRow scope (t, a, b) = do
+  co <- retcons (flip Note (InField t)) (unify scope a b)
   pure (t, co)
 
 runSolve :: MonadNamey m
@@ -154,11 +155,13 @@ solveImplies s cs = do
 
 doSolve :: forall m. MonadSolve m => Seq.Seq (Constraint Typed) -> m ()
 doSolve Empty = pure ()
-doSolve (ConUnify because v a b :<| xs) = do
+doSolve (ConUnify because scope v a b :<| xs) = do
   sub <- use solveTySubst
+  scope <- pure (apply sub scope)
 
-  traceM (displayS (pretty (ConUnify because v (apply sub a) (apply sub b))))
-  co <- memento $ unify (apply sub a) (apply sub b)
+  traceM (displayS (pretty (ConUnify because scope v (apply sub a) (apply sub b))))
+
+  co <- memento $ unify scope (apply sub a) (apply sub b)
   case co of
     Left e -> do
       dictate (reblame because <$> e)
@@ -166,6 +169,7 @@ doSolve (ConUnify because v a b :<| xs) = do
     Right co -> solveCoSubst . at v ?= probablyCast co
 
   doSolve xs
+
 doSolve (ConSubsume because scope v a b :<| xs) = do
   sub <- use solveTySubst
 
@@ -297,12 +301,13 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
       w <- useImplicit reason cons scope imp
           `catchChronicle`
             \e -> confesses (usingFor imp cons (headSeq e))
+      traceM "path 2"
       solveCoSubst . at var ?= w
 
     _ ->
       case head (appsView cons) of
         TyCon v | Just solve <- magicClass v -> do
-          (w, cs) <- censor (const mempty) $ listen $ solve reason (apply sub cons)
+          (w, cs) <- censor (const mempty) $ listen $ solve reason scope (apply sub cons)
           doSolve (Seq.fromList cs)
             `catchChronicle`
               \e -> confesses (ArisingFrom (UnsatClassCon reason (apply sub ohno) (MagicErrors (toList e))) reason)
@@ -378,8 +383,8 @@ fundepsAllow impl cons
 
     concreteP = concretish . head . spine . (params !!)
 
-bind :: MonadSolve m => Var Typed -> Type Typed -> m (Coercion Typed)
-bind var ty
+bind :: MonadSolve m => ImplicitScope ClassInfo Typed -> Var Typed -> Type Typed -> m (Coercion Typed)
+bind scope var ty
   | TyVar var == ty = pure (ReflCo ty)
   -- /\ Var-var deletion
   | TyWildcard (Just (TyVar v)) <- ty, v == var = pure (ReflCo ty)
@@ -413,14 +418,14 @@ bind var ty
                    | otherwise -> confesses =<< unequal (TyVar var) ty
                    -- No can do.
                 pure (ReflCo ty)
-              Just ty' -> unify ty (apply env ty')
+              Just ty' -> unify scope ty (apply env ty')
 
 -- FOR BOTH UNIFY AND SUBSUME:
 --  unify have want
 --  subsume k have want
 -- i.e. The irst argument is the type *we have*.
-unify :: MonadSolve m => Type Typed -> Type Typed -> m (Coercion Typed)
-unify (TySkol x) (TySkol y)
+unify :: MonadSolve m => ImplicitScope ClassInfo Typed -> Type Typed -> Type Typed -> m (Coercion Typed)
+unify scope (TySkol x) (TySkol y)
   | x == y = pure (ReflCo (TySkol y))
   | otherwise = do
     sub <- use solveAssumptions
@@ -428,158 +433,169 @@ unify (TySkol x) (TySkol y)
     case assumption of
       Just assum ->
         case assum of
-          Right x -> unify x (TySkol y)
-          Left y -> unify (TySkol x) y
-      Nothing -> do
-        canWe <- view bindSkol
-        if canWe
-           then do
-             solveAssumptions . at (x ^. skolIdent) ?= TySkol y
-             pure (AssumedCo (TySkol x) (TySkol y))
-           else confesses (SkolBinding x (TySkol y))
+          Right x -> unify scope x (TySkol y)
+          Left y -> unify scope (TySkol x) y
+      Nothing ->
+        case lookupEquality scope (TySkol x) (TySkol y) of
+          (x:_) -> pure (VarCo (x ^. implVar))
+          _ -> do
+            canWe <- view bindSkol
+            if canWe
+               then do
+                 solveAssumptions . at (x ^. skolIdent) ?= TySkol y
+                 pure (AssumedCo (TySkol x) (TySkol y))
+               else confesses (SkolBinding x (TySkol y))
 
-unify ta@(TyPromotedCon a) tb@(TyPromotedCon b)
+unify _ ta@(TyPromotedCon a) tb@(TyPromotedCon b)
   | a == b = pure (ReflCo tb)
   | otherwise = confesses =<< unequal ta tb
 
-unify ta@(TyLit a) tb@(TyLit b)
+unify _ ta@(TyLit a) tb@(TyLit b)
   | a == b = pure (ReflCo tb)
   | otherwise = confesses =<< unequal ta tb
 
-unify (TyVar a) b = bind a b
-unify a (TyVar b) = SymCo <$> bind b a
+unify scope (TyVar a) b = bind scope a b
+unify scope a (TyVar b) = SymCo <$> bind scope b a
 
-unify (TyWildcard (Just a)) b = unify a b
-unify a (TyWildcard (Just b)) = SymCo <$> unify b a
+unify scope (TyWildcard (Just a)) b = unify scope a b
+unify scope a (TyWildcard (Just b)) = SymCo <$> unify scope b a
 
-unify skt@(TySkol t@(Skolem sv _ _ _)) b = do
+unify scope skt@(TySkol t@(Skolem sv _ _ _)) b = do
   sub <- use (solveAssumptions . at sv)
   subst <- use solveAssumptions
   case sub of
     Just ty -> do
       let ty' = apply subst ty
-      _ <- unify b ty'
+      _ <- unify scope b ty'
       pure (AssumedCo (TySkol t) ty')
     Nothing -> case b of
-      TyVar v -> bind v (TySkol t)
-      TyWildcard (Just tau) -> unify skt tau
-      _ -> do
-        canWe <- view bindSkol
-        if canWe
-           then if t `Set.notMember` skols b
-           then do
-             solveAssumptions . at sv ?= b
-             pure (AssumedCo (TySkol t) b)
-           else confesses (Occurs sv b)
-           else confesses (SkolBinding t b)
-unify b (TySkol t) = SymCo <$> unify (TySkol t) b
+      TyVar v -> bind scope v (TySkol t)
+      TyWildcard (Just tau) -> unify scope skt tau
+      _ ->
+        case lookupEquality scope skt b of
+          (x:_) -> pure (VarCo (x ^. implVar))
+          _ -> do
+            canWe <- view bindSkol
+            if canWe
+               then if t `Set.notMember` skols b
+               then do
+                 solveAssumptions . at sv ?= b
+                 pure (AssumedCo (TySkol t) b)
+               else confesses (Occurs sv b)
+               else confesses (SkolBinding t b)
+unify scope b (TySkol t) = SymCo <$> unify scope (TySkol t) b
 
 -- ((->) a b) = a -> b
-unify (TyApp (TyApp (TyCon v) l) r) (TyArr l' r')
-  | v == tyArrowName = ArrCo <$> unify l l' <*> unify r r'
+unify scope (TyApp (TyApp (TyCon v) l) r) (TyArr l' r')
+  | v == tyArrowName = ArrCo <$> unify scope l l' <*> unify scope r r'
 
-unify (TyArr l r) (TyApp (TyApp (TyCon v) l') r')
-  | v == tyArrowName = ArrCo <$> unify l l' <*> unify r r'
+unify scope (TyArr l r) (TyApp (TyApp (TyCon v) l') r')
+  | v == tyArrowName = ArrCo <$> unify scope l l' <*> unify scope r r'
 
-unify x@(TyApp f g) y@(TyArr l r) =
-  rethrow x y $ ArrCo <$> unify f (TyApp (TyCon tyArrowName) l) <*> unify g r
+unify scope x@(TyApp f g) y@(TyArr l r) =
+  rethrow x y $ ArrCo <$> unify scope f (TyApp (TyCon tyArrowName) l) <*> unify scope g r
 
-unify x@(TyArr l r) y@(TyApp f g) =
-  rethrow x y $ ArrCo <$> unify (TyApp (TyCon tyArrowName) l) f <*> unify r g
+unify scope x@(TyArr l r) y@(TyApp f g) =
+  rethrow x y $ ArrCo <$> unify scope (TyApp (TyCon tyArrowName) l) f <*> unify scope r g
 
-unify (TyArr a b) (TyArr a' b') = ArrCo <$> unify a a' <*> unify b b'
-unify (TyPi (Implicit a) b) (TyPi (Implicit a') b') =
-  ArrCo <$> unify a a' <*> unify b b' -- Technically cheating but yay desugaring
+unify scope (TyArr a b) (TyArr a' b') = ArrCo <$> unify scope a a' <*> unify scope b b'
+unify scope (TyPi (Implicit a) b) (TyPi (Implicit a') b') =
+  ArrCo <$> unify scope a a' <*> unify scope b b' -- Technically cheating but yay desugaring
 
-unify l@(TyApp a b) r@(TyApp a' b') =
-  rethrow l r $ AppCo <$> unify a a' <*> unify b b'
+unify scope l@(TyApp a b) r@(TyApp a' b') =
+  rethrow l r $ AppCo <$> unify scope a a' <*> unify scope b b'
 
-unify ta@(TyCon a) tb@(TyCon b)
+unify _ ta@(TyCon a) tb@(TyCon b)
   | a == b = pure (ReflCo tb)
   | otherwise = confesses =<< unequal ta tb
 
-unify (TyForall v Nothing ty) (TyForall v' Nothing ty') = do
+unify scope (TyForall v Nothing ty) (TyForall v' Nothing ty') = do
   fresh <- freshTV
   let (TyVar tv) = fresh
 
   ForallCo tv (ReflCo TyType) <$>
-    unify (apply (Map.singleton v fresh) ty) (apply (Map.singleton v' fresh) ty')
+    unify scope (apply (Map.singleton v fresh) ty) (apply (Map.singleton v' fresh) ty')
 
-unify (TyForall v (Just k) ty) (TyForall v' (Just k') ty') = do
-  c <- unify k k'
+unify scope (TyForall v (Just k) ty) (TyForall v' (Just k') ty') = do
+  c <- unify scope k k'
   fresh <- freshTV
   let (TyVar tv) = fresh
 
   ForallCo tv c <$>
-    unify (apply (Map.singleton v fresh) ty) (apply (Map.singleton v' fresh) ty')
+    unify scope (apply (Map.singleton v fresh) ty) (apply (Map.singleton v' fresh) ty')
 
-unify (TyRows rho arow) (TyRows sigma brow)
+unify scope (TyRows rho arow) (TyRows sigma brow)
   | overlaps <- overlap arow brow
   , rhoNew <- L.deleteFirstsBy ((==) `on` fst) (L.sortOn fst arow) (L.sortOn fst brow)
   , sigmaNew <- L.deleteFirstsBy ((==) `on` fst) (L.sortOn fst brow) (L.sortOn fst arow) =
     do
       let mk t rs = if rs /= [] then TyRows t rs else t
       tau <- freshTV
-      cs <- traverse unifRow overlaps
+      cs <- traverse (unifRow scope) overlaps
       if null sigmaNew && null rhoNew
-         then RowsCo <$> unify rho sigma <*> pure cs
+         then RowsCo <$> unify scope rho sigma <*> pure cs
          else do
-           co <- unify rho (mk tau sigmaNew) -- yes
-           _ <- unify sigma (mk tau rhoNew) -- it's backwards
+           co <- unify scope rho (mk tau sigmaNew) -- yes
+           _ <- unify scope sigma (mk tau rhoNew) -- it's backwards
            pure (RowsCo co cs)
 
-unify ta@TyExactRows{} tb@TyRows{} = SymCo <$> unify tb ta
+unify scope ta@TyExactRows{} tb@TyRows{} = SymCo <$> unify scope tb ta
 
-unify tb@(TyRows rho brow) ta@(TyExactRows arow)
+unify scope tb@(TyRows rho brow) ta@(TyExactRows arow)
   | overlaps <- overlap brow arow
   , rhoNew <- L.deleteFirstsBy ((==) `on` fst) (L.sortOn fst arow) (L.sortOn fst brow)
   = if | length overlaps < length brow -> confesses (NoOverlap tb ta)
        | otherwise -> do
-          cs <- traverse unifRow overlaps
-          _ <- unify rho (TyExactRows rhoNew)
+          cs <- traverse (unifRow scope) overlaps
+          _ <- unify scope rho (TyExactRows rhoNew)
           pure (SymCo (ProjCo rhoNew cs))
 
-unify ta@(TyExactRows arow) tb@(TyExactRows brow)
+unify scope ta@(TyExactRows arow) tb@(TyExactRows brow)
   | overlaps <- overlap arow brow
   = do when (length overlaps /= length arow || length overlaps /= length brow)
          $ confesses (NoOverlap ta tb)
-       cs <- traverse unifRow overlaps
+       cs <- traverse (unifRow scope) overlaps
        pure (ExactRowsCo cs)
 
-unify x tp@TyRows{} = confesses (Note (CanNotInstance tp x) isRec)
-unify tp@TyRows{} x = confesses (Note (CanNotInstance tp x) isRec)
+unify _ x tp@TyRows{} = confesses (Note (CanNotInstance tp x) isRec)
+unify _ tp@TyRows{} x = confesses (Note (CanNotInstance tp x) isRec)
 
 -- ((*) a b) = a * b
-unify (TyApp (TyApp (TyCon v) l) r) (TyTuple l' r')
-  | v == tyTupleName = ProdCo <$> unify l l' <*> unify r r'
+unify scope (TyApp (TyApp (TyCon v) l) r) (TyTuple l' r')
+  | v == tyTupleName = ProdCo <$> unify scope l l' <*> unify scope r r'
 
-unify (TyTuple l r) (TyApp (TyApp (TyCon v) l') r')
-  | v == tyTupleName = ProdCo <$> unify l l' <*> unify r r'
+unify scope (TyTuple l r) (TyApp (TyApp (TyCon v) l') r')
+  | v == tyTupleName = ProdCo <$> unify scope l l' <*> unify scope r r'
 
-unify x@(TyApp f g) y@(TyTuple l r) =
-  rethrow x y $ ProdCo <$> unify f (TyApp (TyCon tyTupleName) l) <*> unify g r
-unify x@(TyTuple l r) y@(TyApp f g) =
-  rethrow x y $ ProdCo <$> unify (TyApp (TyCon tyTupleName) l) f <*> unify r g
+unify scope x@(TyApp f g) y@(TyTuple l r) =
+  rethrow x y $ ProdCo <$> unify scope f (TyApp (TyCon tyTupleName) l) <*> unify scope g r
+unify scope x@(TyTuple l r) y@(TyApp f g) =
+  rethrow x y $ ProdCo <$> unify scope (TyApp (TyCon tyTupleName) l) f <*> unify scope r g
 
-unify (TyOperator l v r) (TyTuple l' r')
-  | v == tyTupleName = ProdCo <$> unify l l' <*> unify r r'
+unify scope (TyOperator l v r) (TyTuple l' r')
+  | v == tyTupleName = ProdCo <$> unify scope l l' <*> unify scope r r'
 
-unify (TyTuple l r) (TyOperator l' v r')
-  | v == tyTupleName = ProdCo <$> unify l l' <*> unify r r'
+unify scope (TyTuple l r) (TyOperator l' v r')
+  | v == tyTupleName = ProdCo <$> unify scope l l' <*> unify scope r r'
 
-unify (TyTuple a b) (TyTuple a' b') =
-  ProdCo <$> unify a a' <*> unify b b'
+unify scope (TyTuple a b) (TyTuple a' b') =
+  ProdCo <$> unify scope a a' <*> unify scope b b'
 
-unify x@(TyOperator l v r) y@(TyApp f g) =
-  rethrow x y $ AppCo <$> unify (TyApp (TyCon v) l) f <*> unify g r
-unify x@(TyApp f g) y@(TyOperator l v r) =
-  rethrow x y $ AppCo <$> unify f (TyApp (TyCon v) l) <*> unify r g
+unify scope x@(TyOperator l v r) y@(TyApp f g) =
+  rethrow x y $ AppCo <$> unify scope (TyApp (TyCon v) l) f <*> unify scope g r
+unify scope x@(TyApp f g) y@(TyOperator l v r) =
+  rethrow x y $ AppCo <$> unify scope f (TyApp (TyCon v) l) <*> unify scope r g
 
-unify (TyOperator l v r) (TyOperator l' v' r')
-  | v == v' = AppCo <$> unify l l' <*> unify r r'
+unify scope (TyOperator l v r) (TyOperator l' v' r')
+  | v == v' = AppCo <$> unify scope l l' <*> unify scope r r'
 
-unify TyType TyType = pure (ReflCo TyType)
-unify a b = confesses =<< unequal a b
+unify _ TyType TyType = pure (ReflCo TyType)
+unify _ a b = confesses =<< unequal a b
+
+lookupEquality :: ImplicitScope ClassInfo Typed -> Type Typed -> Type Typed -> [Implicit ClassInfo Typed]
+lookupEquality scope a b =
+  let choices = lookup (TyApps tyEq [a, b]) scope <> lookup (TyApps tyEq [b, a]) scope
+   in assert (all ((== LocalAssum) . view implSort) choices) choices
 
 subsumes', subsumes :: MonadSolve m
                     => SomeReason -> ImplicitScope ClassInfo Typed
@@ -620,7 +636,7 @@ subsumes' r s (TyPi (Implicit t) t1) t2
                    (ExprWrapper (WrapVar var) ex (an, t1)) (an, t1)) (an, t2)
        in pure (WrapFn (MkWrapCont wrap ("implicit instantation " ++ show (pretty t))))
 
-  | otherwise = probablyCast <$> unify (TyPi (Implicit t) t1) t2
+  | otherwise = probablyCast <$> unify s (TyPi (Implicit t) t1) t2
 
 subsumes' b s t1@TyPi{} t2 | isSkolemisable t1 = do
   (cont, _, t1') <- instantiate Strong Subsumption t1
@@ -659,8 +675,8 @@ subsumes' r scope ot@(TyTuple a b) nt@(TyTuple a' b') = do
                    (an, nt)
   pure (WrapFn (MkWrapCont cont "tuple re-packing"))
 
-subsumes' _ _ a@(TyApp lazy _) b@(TyApp lazy' _)
-  | lazy == lazy', lazy' == tyLazy = probablyCast <$> unify a b
+subsumes' _ s a@(TyApp lazy _) b@(TyApp lazy' _)
+  | lazy == lazy', lazy' == tyLazy = probablyCast <$> unify s a b
 
 subsumes' r scope (TyApp lazy ty') ty | lazy == tyLazy, lazySubOk ty' ty = do
   co <- subsumes' r scope ty' ty
@@ -727,7 +743,7 @@ subsumes' r scope th@(TyExactRows rhas) tw@(TyRows rho rwant) = do
       co = ProjCo diff (map (\(key, _, right) -> (key, ReflCo right)) matching)
 
   -- then produce a coercion to shrink the record.
-  _ <- unify rho (TyExactRows diff)
+  _ <- unify scope rho (TyExactRows diff)
   let cast = probablyCast co
   exp <- genName
 
@@ -742,7 +758,7 @@ subsumes' r scope th@(TyRows rho rhas) tw@(TyRows sigma rwant) = do
   -- We need to at *least* match all of the ones we want
   if length matching < length rwant || length rwant > length rhas
   then do
-    _ <- unify th tw
+    _ <- unify scope th tw
     pure (probablyCast (AssumedCo th tw))
   else do
     matched <- fmap fold . for matching $ \(key, have, want) -> do
@@ -760,7 +776,7 @@ subsumes' r scope th@(TyRows rho rhas) tw@(TyRows sigma rwant) = do
           [] -> rho
           _ -> TyRows rho diff
 
-    cast <- probablyCast <$> unify sigma new
+    cast <- probablyCast <$> unify scope sigma new
     exp <- genName
 
     let mkw ex = ExprWrapper cast ex (annotation ex, tw)
@@ -768,7 +784,7 @@ subsumes' r scope th@(TyRows rho rhas) tw@(TyRows sigma rwant) = do
             (MkWrapCont (mkRecordWrapper rhas matched matched_t th tw mkw exp)
               "exact→poly record subsumption"))
 
-subsumes' r _ a b = probablyCast <$> retcons (reblame r) (unify a b)
+subsumes' r s a b = probablyCast <$> retcons (reblame r) (unify s a b)
 
 -- | Shallowly skolemise a type, replacing any @forall@-bound 'TyVar's
 -- with fresh 'Skolem' constants.

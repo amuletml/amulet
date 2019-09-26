@@ -463,7 +463,7 @@ inhabited env (AbsState st cs i)
 
 -- | Make a unification constraint
 mkUni :: Type Typed -> Type Typed -> Constraint Typed
-mkUni = ConUnify undefined undefined
+mkUni = ConUnify undefined mempty undefined
 
 -- | Add one or more type constraints into the current environment,
 -- failing if an error occurs.

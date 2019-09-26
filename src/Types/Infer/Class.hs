@@ -260,7 +260,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
 
   (ctx, mappend skolSub -> skolSub) <- skolFreeTy mempty (ByInstanceHead ctx ann) (apply skolSub ctx)
 
-  (mappend skolSub -> instSub, _, _) <- solve (pure (ConUnify (BecauseOf inst) undefined classHead instHead))
+  (mappend skolSub -> instSub, _, _) <- solve (pure (ConUnify (BecauseOf inst) scope undefined classHead instHead))
   localInsnConTy <- silence $
     closeOver (BecauseOf inst) (TyPi (Implicit ctx) instHead)
 
@@ -336,7 +336,6 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
   case satisfy (`Map.member` definedHere) minimal of
     Sat -> pure ()
     Unsat xs -> confesses (UndefinedMethods instHead xs ann)
-
 
   scope <- mappend localAssums' <$> view classes
   (usedDefaults, defaultMethods) <- fmap unzip
@@ -610,9 +609,10 @@ mkLet xs = Let xs
 m ! k = fromMaybe (error ("Key " ++ show k ++ " not in map")) (Map.lookup k m)
 
 validContext :: MonadChronicles TypeError m => String -> Ann Desugared -> Type Desugared -> m ()
-validContext what ann t@(TyApp f _)
+validContext what ann t@(TyApps f xs)
+  | TyCon v <- f, v == tyEqName = unless (what == "instance") $ confesses (InvalidContext what ann t)
   | TyCon{} <- f = pure ()
-  | otherwise = validContext "" ann f `catchChronicle` \_ -> confesses (InvalidContext what ann t)
+  | otherwise = traverse_ (validContext what ann) xs `catchChronicle` \_ -> confesses (InvalidContext what ann t)
 
 validContext what ann (TyTuple a b) = do
   validContext what ann a

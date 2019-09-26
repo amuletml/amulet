@@ -366,7 +366,11 @@ checkCoercion s = checkCo where
        in (ExactRowsTy first, RowsTy (ExactRowsTy bs) ts))
     <$> fmap unzip (for rs (\(t, c) -> (\(a, b) -> ((t, a), (t, b))) <$> checkCo c))
     <*> fmap unzip (for rs' (\(t, c) -> (\(a, b) -> ((t, a), (t, b))) <$> checkCo c))
-  checkCo co@CoercionVar{} = pushError (InvalidCoercion co)
+  checkCo (CoercionVar x) =
+    case VarMap.lookup (toVar x) (vars s) of
+      Just (AppTy (AppTy _ l) r, _) -> pure (l, r)
+      _ -> pushError (InvalidCoercion (CoercionVar x))
+
   checkCo (Symmetry x) = swap <$> checkCo x
   checkCo (Domain x) =
     checkCo x `thenError` \(f, t) -> (,)
