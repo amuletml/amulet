@@ -206,7 +206,7 @@ bindingSites PList{} = error "PList is handled by desugar"
 
 -- | Is this of type lazy?
 isLazy :: Type Typed -> Bool
-isLazy ty = tyLazy == head (spine (getHead ty))
+isLazy ty = tyLazy == head (appsView (getHead ty))
 
 isWrappedThunk :: Expr Typed -> Bool
 isWrappedThunk (ExprWrapper (WrapFn (MkWrapCont _ x)) _ _) =

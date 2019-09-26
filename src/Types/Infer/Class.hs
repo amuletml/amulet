@@ -119,7 +119,7 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
           closeOver' vars (BecauseOf clss) $
             TyPi (Implicit classConstraint) obligation
         ~var@(TgName name _) <- genNameWith (classCon' <> T.singleton '$')
-        pure ( singleton classAnn Superclass var impty undefined
+        pure ( singleton classAnn Superclass var impty (MagicInfo [])
              , (Implicit, var, name, obligation))
 
     (fold -> defaultMap) <-
@@ -270,10 +270,10 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
         mkBinds (TyTuple a b) = do
           var <- genName
           (scope, pat) <- mkBinds b
-          pure (insert ann LocalAssum var a undefined scope, PTuple [Capture var (ann, a), pat] (ann, TyTuple a b))
+          pure (insert ann LocalAssum var a (MagicInfo []) scope, PTuple [Capture var (ann, a), pat] (ann, TyTuple a b))
         mkBinds x = do
           var <- genName
-          pure (singleton ann LocalAssum var x undefined, Capture var (ann, x))
+          pure (singleton ann LocalAssum var x (MagicInfo []), Capture var (ann, x))
         addFull (as, p) = (as, PAs p fullCtx (ann, ctx))
      in addFull <$> mkBinds ctx
 
@@ -479,7 +479,7 @@ reduceClassContext extra annot cons = do
                      , needs', scope', sub )
         | otherwise =
           -- see comment in 'fundepsAllow' for why this can be undefined
-          let (bindings, needs', scope', sub) = dedup (insert annot LocalAssum var con undefined scope) needs
+          let (bindings, needs', scope', sub) = dedup (insert annot LocalAssum var con (MagicInfo []) scope) needs
            in (bindings, (var, con, r):needs', scope', sub)
       dedup scope [] = ([], [], scope, mempty)
       (aliases, stillNeeded, usable, substitution) = dedup mempty needs

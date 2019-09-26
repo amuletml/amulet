@@ -278,8 +278,12 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
 
   traceM (displayS (pretty (apply sub ohno)))
 
-  case lookup cons scope of
-    xs | allSameHead xs
+  let possible = lookup cons scope
+  traceM ("considering between: " ++ show (map (pretty . view implType) possible))
+  -- traceM (ppShow scope)
+
+  case possible of
+    xs | True, allSameHead xs
        , concreteUnderOne cons || hasExactMatch cons xs
        , applic <- filter (applicable cons scope) xs
        , not (null applic) -> do
@@ -381,7 +385,7 @@ fundepsAllow impl cons
     fine (from, _, _) = all concreteP from
     (_:params) = appsView cons
 
-    concreteP = concretish . head . spine . (params !!)
+    concreteP = concretish . head . appsView . (params !!)
 
 bind :: MonadSolve m => ImplicitScope ClassInfo Typed -> Var Typed -> Type Typed -> m (Coercion Typed)
 bind scope var ty
@@ -807,10 +811,10 @@ skolemise motive wt@(TyPi (Implicit ity) t) = do
   let go (TyTuple a b) = do
         var <- genName
         (pat, scope) <- go b
-        pure (Capture var (internal, a):pat, insert internal LocalAssum var a undefined scope)
+        pure (Capture var (internal, a):pat, insert internal LocalAssum var a (MagicInfo []) scope)
       go x = do
         var <- genName
-        pure ([Capture var (internal, x)], insert internal LocalAssum var x undefined scp)
+        pure ([Capture var (internal, x)], insert internal LocalAssum var x (MagicInfo []) scp)
   (pat, scope) <- go ity
   let wrap ex | an <- annotation ex =
         Fun (EvParam (PTuple pat (an, ity)))
@@ -840,13 +844,13 @@ applicable wanted scp (ImplChoice head _ cs _ s _ _) =
     _ -> isJust (unifyPure wanted head)
   where
     entails :: ImplicitScope ClassInfo Typed -> Obligation Typed -> Bool
-    entails _ (Quantifier (Invisible v _ _)) = v `Map.member` sub
+    entails _ (Quantifier (Invisible v _ _)) = v `Set.notMember` ftv head || v `Map.member` sub
     entails scp (Implication c) | c <- apply sub c =
       any (applicable c scp) (lookup c scp)
     entails _ _ = False
 
     sub :: Subst Typed
-    Just sub = unifyPure head wanted
+    Just sub = unifyPure wanted head
 
 
 probablyCast :: Coercion Typed -> Wrapper Typed
@@ -981,7 +985,7 @@ mkRecordWrapper keys matched matched_t th tw cont exp =
 lazySubOk :: Type Typed -> Type Typed -> Bool
 lazySubOk tlazy tout =
      concretish tout
-  || head (spine tout) == head (spine tlazy)
+  || head (appsView tout) == head (appsView tlazy)
   || (record tout && record tlazy)
   where
     record TyRows{} = True
