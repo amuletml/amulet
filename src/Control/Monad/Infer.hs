@@ -575,7 +575,7 @@ instance Note TypeError Style where
                     ]
              ByConstraint p -> 
                vsep [ indent 2 $ "Where the type variable" <+> sk (pretty v)
-                    , indent 2 $ "was made rigid because of a quantified constraint:"
+                    , indent 2 "was made rigid because of a quantified constraint:"
                     , indent 2 (Right <$> displayType p)
                     ]
            ]

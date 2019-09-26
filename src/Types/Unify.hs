@@ -471,7 +471,7 @@ unify scope (TySkol x) (TySkol y)
         case assum of
           Right x -> unify scope x (TySkol y)
           Left y -> unify scope (TySkol x) y
-      Nothing -> do
+      Nothing ->
         case lookupEquality info scope (TySkol x) (TySkol y) of
           (x:_) -> pure x
           _ -> do
@@ -660,7 +660,7 @@ lookupEquality class_info scope a b = normal <|> fundepEquality where
         ]
 
       implied_eqs =
-        [ (AssumedCo (ta !! det) (tb !! det))
+        [ AssumedCo (ta !! det) (tb !! det)
         -- TODO: We shouldn't blindly assume equalities here, even
         -- though Lint will be happy with that. The principled thing to
         -- do is have each fundep add a coercion axiom with type:
