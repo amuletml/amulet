@@ -63,7 +63,7 @@ instance Pretty ResolveError where
   pretty LastStmtNotExpr = "The last statement in a" <+> keyword "begin" <+> "block should be an expression"
 
   pretty (ArisingFrom er ex) =
-    pretty er <#> empty <#> nest 4 (string "Arising from use of" <+> blameOf ex </> pretty ex)
+    pretty er <#> empty <#> nest 4 (string "Arising from use of" <+> blameOf ex)
 
 instance Spanned ResolveError where
   annotation (ArisingFrom _ x) = annotation x
