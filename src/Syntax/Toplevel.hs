@@ -101,6 +101,7 @@ instance (Spanned (Constructor p), Spanned (Ann p)) => Spanned (Toplevel p) wher
   annotation (LetStmt _ (b:vs)) = sconcat (annotation b :| map annotation vs)
   annotation (TypeDecl _ _ _ (Just cs) x) = sconcat (annotation x :| map annotation cs)
   annotation (TypeDecl _ _ _ Nothing x) = annotation x
+  annotation (TySymDecl _ _ _ _ x) = annotation x
   annotation (ForeignVal _ _ _ _ x) = annotation x
   annotation (Class _ _ _ _ _ _ x) = annotation x
   annotation (Instance _ _ _ _ x) = annotation x

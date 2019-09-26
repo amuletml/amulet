@@ -9,7 +9,7 @@ import Control.Monad.Namey
 import Control.Lens
 
 import Parser.Wrapper (runParser)
-import Parser (parseType, getL)
+import Parser (parseType, getL, Located)
 
 import qualified Data.Text.Lazy as L
 import Data.Text.Lazy (Text)
@@ -37,8 +37,9 @@ import Types.Holes
 
 import Errors
 
-import Data.Span
+import Data.Spanned
 import Data.These
+import Data.Span
 
 main :: IO ()
 main = do
@@ -58,8 +59,8 @@ prover = do
 
 handleSentence :: Text -> InputT IO ()
 handleSentence sentence =
-  case runParser "=stdin" sentence parseType of
-    (Just t, _) -> flip evalNameyT (TgName "a" 0) $ proveSentence (`reportS` files) (propVarToTv (getL t))
+  case runParser "<input>" sentence parseType of
+    (Just t, _) -> flip evalNameyT (TgName "a" 0) $ proveSentence (`reportS` files) (fmap propVarToTv t)
     (Nothing, es) -> liftIO $ traverse_ (`reportS` files) es
   *> prover
   where files = [("<input>", L.toStrict sentence)]
@@ -70,10 +71,11 @@ propVarToTv = transformType go where
   go x = x
 
 proveSentence :: (forall a. Note a Style => a -> IO ())
-              -> Type Parsed -> NameyT (InputT IO) ()
-proveSentence report t = do
-  let prog = [ TySymDecl Public (Name "_") [] (foldr addForall t (ftv t)) internal ]
+              -> Located (Type Parsed) -> NameyT (InputT IO) ()
+proveSentence report tau = do
+  let prog = [ TySymDecl Public (Name "_") [] (foldr addForall t (ftv t)) (annotation tau) ]
       addForall v = TyForall v (Just TyType)
+      t = getL tau
   x <- resolveProgram rScope builtinModules prog
   case x of
     Left es -> liftIO $ traverse_ report es
@@ -85,25 +87,26 @@ proveSentence report t = do
         That (p, _) -> solve p
   where
     solve [ TypeDecl _ _ _ (Just [ArgCon _ _ ty _]) _ ] = do
-      candidates <- findHoleCandidate mempty internal env ty
+      candidates <- findHoleCandidate mempty (annotation tau) env ty
       if not (null candidates)
          then liftIO $ putDoc (keyword "yes." <#> indent 2 (pretty (head candidates)))
          else liftIO $ putDoc (keyword "probably not.")
     solve _ = undefined
 
 rScope :: R.Scope
-rScope = builtinResolve { R.tyScope = addBuiltins (R.tyScope builtinResolve) } where
-  addBuiltins x = foldr (\v m -> Map.insert (Name v) (R.SVar (TgInternal v)) m) x builtins
+rScope = R.emptyScope { R.tyScope = made } where
+  made = foldr (\v m -> Map.insert (Name (fst v)) (R.SVar (snd v)) m) mempty builtins
+  i x = (x, TgInternal x)
   builtins =
-    Set.fromList [ "+", "not", "ff", "tt", "<->" ]
+    Set.fromList [ i "+", i "not", i "ff", i "tt", i "<->", ("->", tyArrowName), ("*", tyTupleName) ]
 
 env :: Env
 env =
-  builtinEnv & types %~ mappend tys
-             & names %~ focus (teleFromList bindings)
-             & constructors %~ mappend cons
+  mempty & types %~ mappend tys
+         & names %~ focus (teleFromList bindings)
+         & constructors %~ mappend cons
   where
-    cons = Set.fromList [TgInternal "L", TgInternal "R", TgInternal "Not", TgInternal "T"]
+    cons = Set.fromList [TgInternal "L", TgInternal "R", TgInternal "Not", TgInternal "T", TgInternal "Equiv"]
     tys = Map.fromList [ (TgInternal "+", Set.fromList [TgInternal "L", TgInternal "R"])
                        , (TgInternal "not", Set.fromList [TgInternal "Not"])
                        , (TgInternal "ff", mempty)
@@ -112,6 +115,8 @@ env =
                        ]
 
     bindings = [ (TgInternal "+", TyType :-> TyType :-> TyType) 
+               , (tyTupleName, TyType :-> TyType :-> TyType)
+               , (tyArrowName, TyType :-> TyType :-> TyType)
                , ( TgInternal "L"
                  , TyForall a (Just TyType) $
                    TyForall b (Just TyType) $
