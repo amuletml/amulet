@@ -110,7 +110,7 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
         getContext (Just t) = unwind t
 
     ctx <- for ctx $ \x -> do
-      validContext "class" classAnn x
+      () <- validContext "class" classAnn x
       checkAgainstKind (BecauseOf clss) x tyConstraint
 
     (fold -> scope, rows') <- fmap unzip . for (getContext ctx) $
@@ -236,7 +236,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
   -- desugar.
   ctx <- case ctx of
     Just x -> do
-      validContext "instance" ann x
+      () <- validContext "instance" ann x
       checkAgainstKind (BecauseOf inst) x tyConstraint
     Nothing -> pure tyUnit
 
@@ -609,17 +609,18 @@ mkLet xs = Let xs
 m ! k = fromMaybe (error ("Key " ++ show k ++ " not in map")) (Map.lookup k m)
 
 validContext :: MonadChronicles TypeError m => String -> Ann Desugared -> Type Desugared -> m ()
-validContext what ann t@(TyApps f xs)
+
+validContext what ann t@(TyApps f xs@(_:_))
   | TyCon v <- f, v == tyEqName = unless (what == "instance") $ confesses (InvalidContext what ann t)
   | TyCon{} <- f = pure ()
   | otherwise = traverse_ (validContext what ann) xs `catchChronicle` \_ -> confesses (InvalidContext what ann t)
 
 validContext what ann (TyTuple a b) = do
-  validContext what ann a
+  () <- validContext what ann a
   validContext what ann b
 
 validContext what ann (TyOperator a _ b) = do
-  validContext what ann a
+  () <- validContext what ann a
   validContext what ann b
 
 validContext _ _ TyCon{} = pure ()

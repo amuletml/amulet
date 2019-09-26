@@ -282,6 +282,8 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
   traceM ("considering between: " ++ show (map (pretty . view implType) possible))
   -- traceM (ppShow scope)
 
+  ignored <- freshTV
+
   case possible of
     xs | True, allSameHead xs
        , concreteUnderOne cons || hasExactMatch cons xs
@@ -305,8 +307,35 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
       w <- useImplicit reason cons scope imp
           `catchChronicle`
             \e -> confesses (usingFor imp cons (headSeq e))
-      traceM "path 2"
       solveCoSubst . at var ?= w
+
+    _ | let tup = TyTuple cons ignored, [imp] <- lookup tup scope -> do
+      traceM (displayS ("decomposing tuple:" <+> pretty (imp ^. implType)))
+      w <- useImplicit reason tup scope imp
+            `catchChronicle` \e -> confesses (usingFor imp cons (headSeq e))
+      v <- genName
+
+      let pi1 = ExprWrapper w
+                  (Fun (PatParam (PTuple [Capture v (an, cons), Wildcard (an, ignored)]
+                                    (an, tup)))
+                    (VarRef v (an, cons)) (an, tup :-> cons))
+                  (an, cons)
+          an = annotation reason
+      solveCoSubst . at var ?= ExprApp pi1
+
+    _ | let tup = TyTuple ignored cons, [imp] <- lookup tup scope -> do
+      traceM (displayS ("decomposing tuple:" <+> pretty (imp ^. implType)))
+      w <- useImplicit reason tup scope imp
+            `catchChronicle` \e -> confesses (usingFor imp cons (headSeq e))
+      v <- genName
+
+      let pi1 = ExprWrapper w
+                  (Fun (PatParam (PTuple [Capture v (an, cons), Wildcard (an, ignored)]
+                                    (an, tup)))
+                    (VarRef v (an, cons)) (an, tup :-> cons))
+                  (an, cons)
+          an = annotation reason
+      solveCoSubst . at var ?= ExprApp pi1
 
     _ ->
       case head (appsView cons) of

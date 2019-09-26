@@ -1,0 +1,6 @@
+dict : constraint -> type
+Dict : Spec{'c : constraint}. 'c => dict 'c
+:- : constraint -> constraint -> type
+Sub : Spec{'p : constraint}. Spec{'q : constraint}. ('p => dict 'q) -> :- 'p 'q
+weaken1 : Spec{'a : constraint}. Spec{'b : constraint}. :- ('a * 'b) 'a
+weaken2 : Spec{'a : constraint}. Spec{'b : constraint}. :- ('a * 'b) 'b
