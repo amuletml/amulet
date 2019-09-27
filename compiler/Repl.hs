@@ -32,7 +32,7 @@ import Data.Char
 import qualified Foreign.Lua.Core.Types as L
 import qualified Foreign.Lua as L
 
-import System.Console.Haskeline hiding (display, bracket, throwTo)
+import System.Console.Haskeline hiding (display, bracket, throwTo, catch)
 import System.IO
 
 import qualified Syntax.Resolve.Toplevel as R
@@ -550,7 +550,10 @@ startServer port state = Net.withSocketsDo $ do
       hSetEncoding handle utf8
 
       theLine <- T.hGetLine handle
+        `catch` \(_ :: SomeException) -> pure mempty
       () <- evalStateT (handleReplLine theLine) (state { outputHandle = handle })
+        `catch`
+          \(e :: SomeException) -> hPutStr handle ("Haskell error: " ++ show e)
 
       hFlush handle
       hClose handle
