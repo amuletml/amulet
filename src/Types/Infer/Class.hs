@@ -616,7 +616,7 @@ validContext what ann t@(TyApps f xs@(_:_))
   -- | TyCon v <- f, v == tyEqName = unless (what == "instance") $ confesses (InvalidContext what ann t)
   | TyCon{} <- f = pure ()
   | otherwise = traverse_ (validContext what ann) xs `catchChronicle` \_ -> confesses (InvalidContext what ann t)
-validContext _ _ TyApp{} = error "Imposible TyApp - handled by TyApps"
+validContext _ _ TyApp{} = error "Impossible TyApp - handled by TyApps"
 
 validContext what ann (TyTuple a b) = do
   () <- validContext what ann a
