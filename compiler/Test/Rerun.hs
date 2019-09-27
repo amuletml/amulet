@@ -31,7 +31,7 @@ newtype RerunFile = RerunFile FilePath
 instance IsOption RerunFile where
   optionName = "rerun-file"
   optionHelp = "The path to which the test runner's state should be saved"
-  defaultValue = RerunFile "dist-newstyle/.rerun"
+  defaultValue = RerunFile ".stack-work/.rerun"
   parseValue = Just . RerunFile
 
 data PreserveLog = PreserveLog | UpdateLog
