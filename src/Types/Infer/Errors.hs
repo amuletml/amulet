@@ -6,7 +6,6 @@ import Control.Lens
 import {-# SOURCE #-} Types.Holes
 
 import Syntax.Transform
-import Syntax.Implicits
 import Syntax.Subst
 import Syntax
 

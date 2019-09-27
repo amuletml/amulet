@@ -53,7 +53,7 @@ import Syntax
 import qualified Core.Builtin as C
 import Core.Var
 
-tyUnitName, tyBoolName, tyIntName, tyStringName, tyFloatName, tyLazyName, tyConstraintName, tyArrowName, tyTupleName, tyListName, tyRefName, tyKStrName, tyKIntName, tyEqName :: Var Typed 
+tyUnitName, tyBoolName, tyIntName, tyStringName, tyFloatName, tyLazyName, tyConstraintName, tyArrowName, tyTupleName, tyListName, tyRefName, tyKStrName, tyKIntName, tyEqName :: Var Typed
 tyIntName    = ofCore C.vInt
 tyStringName = ofCore C.vString
 tyBoolName   = ofCore C.vBool
@@ -325,4 +325,3 @@ record = ofCore C.tyvarRecord
 ttype = ofCore C.tyvarType
 key = ofCore C.tyvarKey
 new = ofCore C.tyvarNew
-

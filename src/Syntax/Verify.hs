@@ -25,7 +25,6 @@ import Syntax.Verify.Pattern
 import Syntax.Verify.Error
 
 import Syntax.Builtin (tyLazy, forceName)
-import Syntax.Implicits
 import Syntax.Types
 import Syntax.Let
 import Syntax

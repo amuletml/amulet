@@ -136,7 +136,7 @@ quantifier r wty@(TyPi (Implicit tau) sigma) = do
   pure (dom, cod, k . wrap)
 
 quantifier _ (TyPi x b) = pure (x, b, id)
-quantifier _ (TyApp (TyApp (TyCon (TgName _ (-38))) l) r) = pure (Anon l, r, id)
+quantifier _ (TyApp (TyApp (TyCon n) l) r) | n == tyArrowName = pure (Anon l, r, id)
 quantifier r t = do
   (a, b) <- (,) <$> freshTV <*> freshTV
   k <- subsumes r t (TyPi (Anon a) b)

@@ -87,7 +87,7 @@ fill ty@(domain :-> codomain) = fake [ty] $ \[a] -> do
      else makeFun
 
 -- Special cases for concrete types we know about:
-fill ty@(TyApps con [xs]) | con == tyList =
+fill ty@(TyApps con [_]) | con == tyList =
     knownImplication ty -- Try a known list
   `interleave`
     fake [ty] (pure . ListExp [] . head) -- Try nil
@@ -354,11 +354,3 @@ nonRec v (TyExactRows xs) = all (nonRec v . snd) xs
 nonRec v (TyParens p) = nonRec v p
 nonRec v (TyOperator l v' r) = v /= v' && nonRec v l && nonRec v r
 nonRec _ _ = error "nonRec: that's a weird type you have there."
-
--- | A list of global, TC-known functions that are unlikely to be of
--- use.
---
--- In fact, it's impossible for 'tyTupleName' to be of use.
-unhelpful :: Set.Set (Var Typed)
-unhelpful = Set.fromList
-  [ forceName, opAppName, derefName, tyTupleName, intValName, strValName, extendName, restrictName ]

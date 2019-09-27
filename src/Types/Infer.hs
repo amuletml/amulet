@@ -32,6 +32,7 @@ import Control.Lens
 import Syntax.Implicits
 import Syntax.Transform
 import Syntax.Builtin
+import Syntax.Value
 import Syntax.Subst
 import Syntax.Types
 import Syntax.Let
