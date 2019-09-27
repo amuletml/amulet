@@ -6,7 +6,6 @@ import Control.Lens
 import {-# SOURCE #-} Types.Holes
 
 import Syntax.Transform
-import Syntax.Implicits
 import Syntax.Subst
 import Syntax
 
@@ -43,7 +42,7 @@ gadtConShape (_, t) ty oerr = k . fix . flip Note (itShouldBe <#> itIs) . flip N
       flip Suggestion $
         string "did you mean a function,"
           <+> nest 2 (string "like" </> pretty (TyArr a b) <> char '?')
-    TyCon v -> case spine t of
+    TyCon v -> case appsView t of
       TyCon v':_ | v == v' ->
         flip Suggestion $
           string "did you mean to saturate it with respect to universals,"
@@ -52,13 +51,18 @@ gadtConShape (_, t) ty oerr = k . fix . flip Note (itShouldBe <#> itIs) . flip N
         flip Suggestion $
           string "did you mean to use" <+> pretty v' <+> string "instead of" <+> pretty v <> char '?'
       _ -> id
-    TyApp{} -> case (spine ty, spine t) of
+    TyApp{} -> case (appsView ty, appsView t) of
       (TyCon v':xs, TyCon v:_) | v /= v' ->
         flip Suggestion $
           string "did you mean" <+> pretty (rewind v xs) </> string "instead of" <+> pretty ty <> char '?'
       _ -> id
     _ -> id
   (err, k) = getErr oerr
+
+gadtConManyArgs :: Constructor Desugared -> TypeError
+gadtConManyArgs c@(GadtCon _ _ t _) = ArisingFrom (Malformed t) (BecauseOf c) `Note` tooManyArgs where
+  tooManyArgs = string "Generalised constructors must have either 0 or 1 arguments."
+gadtConManyArgs _ = undefined
 
 getErr :: TypeError -> (TypeError, TypeError -> TypeError)
 getErr (ArisingFrom e blame) = case getErr e of

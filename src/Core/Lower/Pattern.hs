@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, TupleSections, ScopedTypeVariables, FlexibleContexts, TypeFamilies #-}
+{-# LANGUAGE OverloadedStrings, TupleSections, ScopedTypeVariables, FlexibleContexts, TypeFamilies, ViewPatterns #-}
 
 {-| Lowers "Syntax"'s nested patterns into "Core"'s flattened patterns.
 
@@ -19,6 +19,7 @@ module Core.Lower.Pattern
 
 import Control.Monad.Reader
 import Control.Monad.Namey
+import Control.Lens
 
 import qualified Data.HashMap.Strict as HMap
 import qualified Data.VarMap as VarMap
@@ -292,7 +293,7 @@ lowerOne tys rss = do
       partialLower S.Wildcard{} = PatWildcard
       partialLower S.Capture{} = PatWildcard
       partialLower (S.PLiteral l _) = PatLit (lowerLiteral l)
-      partialLower (S.PSkolem p _ _) = partialLower p
+      partialLower (S.PGadtCon v _ _ _ _) = Constr (mkCon v)
       partialLower (S.Destructure v _ _) = Constr (mkCon v)
       partialLower (S.PRecord _ _) = PatRecord []
       partialLower (S.PAs p _ _) = partialLower p
@@ -340,7 +341,7 @@ lowerOne tys rss = do
     arity var = -foldr ((+) . go) 0 rs where
       go = maybe 0 arityOf . VarMap.lookup var . rowPatterns
 
-      arityOf (S.PSkolem p _ _) = arityOf p
+      arityOf (S.PGadtCon _ _ vs p _) = length vs + length p
       arityOf (S.Destructure _ Nothing _) = 0
       arityOf (S.Destructure _ Just{} _) = 1
       arityOf (S.PRecord f _) = length f
@@ -381,6 +382,7 @@ lowerOneOf preLeafs var ty tys = go [] . map prepare
     go unc [] = lowerOne tys (reverse unc)
     go unc rs@((S.PRecord{},_):_) = goRows unc mempty rs
     go unc rs@((S.Destructure{},_):_) = goCtors unc mempty rs
+    go unc rs@((S.PGadtCon{},_):_) = goCtors unc mempty rs
     go unc rs@((S.PLiteral{},_):_) = goLiterals unc mempty rs
     go unc ((p, r):rs) = go (goGeneric p r:unc) rs
 
@@ -429,32 +431,36 @@ lowerOneOf preLeafs var ty tys = go [] . map prepare
              , VarMap.insert v p ps )
 
     -- | Build up a mapping of (constructors -> (contents variable, rows)).
-    goCtors :: [PatternRow] -> VarMap.Map (Maybe (Capture CoVar), [PatternRow])
+    goCtors :: [PatternRow] -> VarMap.Map ([Capture CoVar], [PatternRow])
             -> [(S.Pattern Typed, PatternRow)]
             -> m ArmNode
     goCtors unc cases [] =
       let arms = map buildCtor (VarMap.toList cases) ++ [(PatWildcard, [], reverse unc)]
-          buildCtor (c, (Nothing, pats)) = (Constr c, [], reverse pats)
-          buildCtor (c, (Just cap, pats)) = (Destr c cap, [cap], reverse pats)
+          buildCtor (c, ([], pats)) = (Constr c, [], reverse pats)
+          buildCtor (c, (cap, pats)) = (Destr c cap, cap, reverse pats)
       in build arms
-    goCtors unc cases ((S.Destructure v Nothing _,r):rs) =
+
+    goCtors unc cases ((S.PGadtCon v _ cvars Nothing _,r):rs) =
       -- TODO: Work out whether we need to bind type variables at all.
       let v' = mkCon v
-          (c, cases') = fromMaybe (Nothing, unc) (VarMap.lookup v' cases)
+          (c, cases') = fromMaybe (map makeCap cvars, unc) (VarMap.lookup v' cases)
       in goCtors unc (VarMap.insert v' (c,r:cases') cases) rs
-    goCtors unc cases (( S.Destructure v (Just p) (_, cty)
+
+    goCtors unc cases (( S.PGadtCon v _ cvars (Just p) (_, cty)
                        , PR arm pats gd vBind tyBind ):rs) = do
       let v' = mkCon v
-      ~(Just cap@(Capture c _), cases') <- case VarMap.lookup v' cases of
+      (cap@(Capture c _), cases') <- case VarMap.lookup v' cases of
         Nothing -> do
-          ~(ForallTy Irrelevant x r) <- inst . fromJust <$> asks (VarMap.lookup (mkType v) . ctors)
+          ~(dropNForalls (length cvars) -> ForallTy Irrelevant x r) <-
+              inst . fromJust <$> asks (VarMap.lookup (mkType v) . ctors)
           let Just s = r `unify` lowerType cty
               ty' = substituteInType s x
-          (,unc) . Just . flip Capture ty' <$> freshFromPat p
-        Just x -> pure x
+          (,unc) . flip Capture ty' <$> freshFromPat p
+        Just (co, rows) -> pure (head co, rows)
       -- TODO: Work out whether we need to bind type variables at all.
       let r' = PR arm (VarMap.insert c p pats) gd vBind tyBind
-      goCtors unc (VarMap.insert v' (Just cap, r':cases') cases) rs
+      goCtors unc (VarMap.insert v' (map makeCap cvars ++ [cap], r':cases') cases) rs
+
     goCtors unc cases ((p, r):rs) =
       let r' = goGeneric p r
           cases' = VarMap.map (second (r':)) cases
@@ -470,6 +476,8 @@ lowerOneOf preLeafs var ty tys = go [] . map prepare
     inst (ForallTy (Relevant _) _ t) = inst t
     inst t = t
 
+    makeCap (v, t) = Capture (mkVal v) (lowerType t)
+
 -- | Normalise patterns, reducing a couple of the more complex cases to
 -- their standard varieties.
 normalisePattern :: S.Pattern Typed -> S.Pattern Typed
@@ -478,12 +486,11 @@ normalisePattern p@S.Wildcard{} = p
 normalisePattern p@S.Capture{} = p
 normalisePattern p@S.PLiteral{} = p
 normalisePattern p@(S.Destructure _ Nothing _) = p
-normalisePattern (S.PSkolem p _ _) = normalisePattern p -- TODO: This!
+normalisePattern (S.PGadtCon v vs vs' p a) = S.PGadtCon v vs vs' (normalisePattern <$> p) a
 normalisePattern (S.Destructure v (Just p) a) = S.Destructure v (Just (normalisePattern p)) a
 normalisePattern (S.PAs p v a) = S.PAs (normalisePattern p) v a
 normalisePattern (S.PRecord fs a) = S.PRecord (map (second normalisePattern) fs) a
 -- Reduce these cases to something else
-normalisePattern (S.PWrapper _ p _) = normalisePattern p
 normalisePattern (S.PType p _ _) = normalisePattern p
 normalisePattern S.PList{} = error "PList is handled by desugar"
 normalisePattern (S.PTuple ps (pos, _)) = convert ps where
@@ -510,7 +517,7 @@ isTrivialPat (S.PAs p _ _) = isTrivialPat p
 isTrivialPat _ = False
 
 patternVars :: Pattern CoVar -> [(CoVar, Type CoVar)]
-patternVars (Destr _ p) = [captureVars p]
+patternVars (Destr _ p) = map captureVars p
 patternVars (PatRecord ps) = map (captureVars . snd) ps
 patternVars (PatValues ps) = map captureVars ps
 patternVars Constr{} = []
@@ -527,8 +534,12 @@ patternVars' (S.Capture v (_, ty)) = [(mkVal v, lowerType ty)]
 patternVars' (S.Destructure _ p _) = maybe [] patternVars' p
 patternVars' (S.PAs p v (_, ty)) = (mkVal v, lowerType ty):patternVars' p
 patternVars' (S.PRecord fs _) = concatMap (patternVars' . snd) fs
-patternVars' (S.PWrapper _ p _) = patternVars' p
-patternVars' (S.PSkolem p _ _) = patternVars' p
+patternVars' (S.PGadtCon _ _ vs p _) = map ((_1 %~ mkVal) . (_2 %~ lowerType)) vs <> foldMap patternVars' p
 patternVars' (S.PType p _ _) = patternVars' p
 patternVars' (S.PTuple ps _) = concatMap patternVars' ps
 patternVars' S.PList{} = error "PList is handled by desugar"
+
+dropNForalls :: Int -> Type a -> Type a
+dropNForalls 0 t = t
+dropNForalls x (ForallTy _ _ t) = dropNForalls (x - 1) t
+dropNForalls _ _ = undefined

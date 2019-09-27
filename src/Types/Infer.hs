@@ -32,6 +32,7 @@ import Control.Lens
 import Syntax.Implicits
 import Syntax.Transform
 import Syntax.Builtin
+import Syntax.Value
 import Syntax.Subst
 import Syntax.Types
 import Syntax.Let
@@ -68,9 +69,9 @@ inferExpr env exp = fmap fst <$> runInfer env (inferOne exp) where
   inferOne :: forall m. MonadInfer Typed m => Expr Desugared -> m (Type Typed)
   inferOne expr = do
     ((expr, ty), cs) <- listen $ infer expr
-    (sub, _, deferred) <- condemn $ retcons (addBlame (becauseExp expr)) (solve cs)
+    (sub, _, deferred) <- condemn $ retcons (addBlame (becauseExp expr)) (solve cs (env ^. classDecs))
     deferred <- pure (fmap (apply sub) deferred)
-    (compose sub -> sub, _, cons) <- condemn $ solve (Seq.fromList deferred)
+    (compose sub -> sub, _, cons) <- condemn $ solve (Seq.fromList deferred) (env ^. classDecs)
     (context, _, _, compose sub -> sub) <- reduceClassContext mempty (annotation expr) cons
 
     vt <- closeOverStrat (becauseExp expr) mempty expr (apply sub (context ty))
@@ -121,14 +122,14 @@ check ex@(Fun pat e an) ty = do
   (dom, cod, _) <- quantifier (becauseExp ex) ty
   let domain = _tyBinderType dom
 
-  (p, tau, vs, cs) <- inferParameter pat
+  (p, tau, vs, cs, is) <- inferParameter pat
   _ <- unify (becauseExp ex) domain (_tyBinderType tau)
   let tvs = boundTvs (p ^. paramPat) vs
 
   implies (Arm (pat ^. paramPat) Nothing e) domain cs $
     case dom of
       Anon{} -> do
-        e <- local (typeVars %~ Set.union tvs) . local (names %~ focus vs) $
+        e <- local (typeVars %~ Set.union tvs) . local (names %~ focus vs) . local (classes %~ mappend is) $
           check e cod
         pure (Fun p e (an, ty))
       _ -> error "invalid quantifier in check Fun"
@@ -143,12 +144,14 @@ check (Match t ps a) ty = do
   t <- check t tt
 
   ps <- for ps $ \(Arm p g e) -> do
-    (p', ms, cs) <- checkPattern p tt
+    (p', ms, cs, is) <- checkPattern p tt
     let tvs = boundTvs p' ms
 
     implies (Arm p g e) tt cs
       . local (typeVars %~ Set.union tvs)
-      . local (names %~ focus ms) $ do
+      . local (names %~ focus ms)
+      . local (classes %~ mappend is)
+      $ do
         g' <- traverse (`check` tyBool) g
         e' <- check e ty
         pure (Arm p' g' e')
@@ -207,12 +210,12 @@ infer (VarRef k a) = do
       pure (cont' (cont (VarRef k (a, old))), new)
 
 infer (Fun (view paramPat -> p) e an) = do
-  (p, dom, ms, cs) <- inferPattern p
+  (p, dom, ms, cs, is) <- inferPattern p
   let tvs = boundTvs p ms
 
   _ <- leakEqualities p cs
 
-  (e, cod) <- local (typeVars %~ Set.union tvs) $
+  (e, cod) <- local (typeVars %~ Set.union tvs) . local (classes %~ mappend is) $
     local (names %~ focus ms) (infer e)
 
   pure (Fun (PatParam p) e (an, TyArr dom cod), TyArr dom cod)
@@ -273,10 +276,10 @@ infer ex@(Match t ps a) = do
   ty <- freshTV
 
   ps' <- for ps $ \(Arm p g e) -> do
-    (p', ms, cs) <- checkPattern p tt
+    (p', ms, cs, is) <- checkPattern p tt
     let tvs = boundTvs p' ms
     leakEqualities ex cs
-    local (typeVars %~ Set.union tvs) . local (names %~ focus ms) $ do
+    local (typeVars %~ Set.union tvs) . local (names %~ focus ms) . local (classes %~ mappend is) $ do
       e' <- check e ty
       g' <- traverse (`check` tyBool) g
       pure (Arm p' g' e')
@@ -494,9 +497,10 @@ inferLetTy closeOver strategy vs =
                 -> Seq.Seq (Constraint Typed)
                 -> m (Type Typed, Expr Typed -> Expr Typed, Subst Typed)
       figureOut canAdd blame ex ty cs = do
-        (x, co, deferred) <- condemn $ retcons (addBlame (snd blame)) (solve cs)
+        c <- view classDecs
+        (x, co, deferred) <- condemn $ retcons (addBlame (snd blame)) (solve cs c)
         deferred <- pure (fmap (apply x) deferred)
-        (compose x -> x, wraps', cons) <- condemn $ solve (Seq.fromList deferred)
+        (compose x -> x, wraps', cons) <- condemn $ solve (Seq.fromList deferred) c
 
         name <- genName
         let reify an ty var =
@@ -580,7 +584,7 @@ inferLetTy closeOver strategy vs =
       tcOne (AcyclicSCC b@(Matching p e ann)) = do
         ((e, p, ty, tel), cs) <- listen $ do
           (e, ety) <- infer e
-          (p, pty, tel, cs) <- inferPattern p
+          (p, pty, tel, cs, _) <- inferPattern p
           leakEqualities b cs
 
           -- here: have expression type (inferred)
@@ -588,13 +592,13 @@ inferLetTy closeOver strategy vs =
           wrap <- subsumes (BecauseOf b) ety pty
           pure (ExprWrapper wrap e (annotation e, pty), p, pty, tel)
 
-        (solution, wraps, deferred) <- solve cs
+        (solution, wraps, deferred) <- solve cs =<< view classDecs
         tys <- view tySyms
         let solved = closeOver mempty ex . apply solution
             ex = solveEx tys solution wraps e
 
         deferred <- pure (fmap (apply solution) deferred)
-        (compose solution -> solution, wraps', cons) <- solve (Seq.fromList deferred)
+        (compose solution -> solution, wraps', cons) <- solve (Seq.fromList deferred) =<< view classDecs
 
         case strategy of
           Fail ->
@@ -636,11 +640,11 @@ inferLetTy closeOver strategy vs =
                 exp <- check (exp' exp) tyvar
                 pure (Binding var exp True (ann, tyvar), tyvar)
 
-        (solution, wrap, cons) <- solve cs
+        (solution, wrap, cons) <- solve cs =<< view classDecs
         name <- genName
 
         let deferred = fmap (apply solution) cons
-        (compose solution -> solution, wrap', cons) <- solve (Seq.fromList deferred)
+        (compose solution -> solution, wrap', cons) <- solve (Seq.fromList deferred) =<< view classDecs
         let reify an ty var =
               case wrap' Map.! var of
                 ExprApp v -> v

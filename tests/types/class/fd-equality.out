@@ -1,0 +1,6 @@
+dict : constraint -> type
+Dict : Spec{'c : constraint}. 'c => dict 'c
+:- : constraint -> constraint -> type
+Sub : Spec{'p : constraint}. Spec{'q : constraint}. ('p => unit -> dict 'q) -> :- 'p 'q
+class_fd : Infer{'ck : type}. Infer{'cl : type}. 'cl -> 'ck -> constraint
+fd : Spec{'cl : type}. Spec{'a : type}. Spec{'b : 'cl}. Spec{'c : 'a}. Spec{'d : 'a}. :- (class_fd 'b 'c * class_fd 'b 'd) (~ 'c 'd)

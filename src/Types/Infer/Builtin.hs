@@ -32,7 +32,8 @@ unify e a b = do
   b <- expandType b
 
   x <- genName
-  tell (Seq.singleton (ConUnify e x a b))
+  r <- view classes
+  tell (Seq.singleton (ConUnify e r x a b))
   pure (WrapVar x)
 
 subsumes e a b = do
@@ -53,8 +54,9 @@ implies :: ( Reasonable f p
         -> m a
 implies _ _ [] k = k
 implies e t cs k = do
+  c <- view classes
   vs <- replicateM (length cs) genName
-  let eqToCon v (a, b) = ConUnify (BecauseOf e) v a b
+  let eqToCon v (a, b) = ConUnify (BecauseOf e) c v a b
       eqToCons = zipWith eqToCon vs
 
       wrap :: Seq.Seq (Constraint Typed) -> Seq.Seq (Constraint Typed)
@@ -134,7 +136,7 @@ quantifier r wty@(TyPi (Implicit tau) sigma) = do
   pure (dom, cod, k . wrap)
 
 quantifier _ (TyPi x b) = pure (x, b, id)
-quantifier _ (TyApp (TyApp (TyCon (TgName _ (-38))) l) r) = pure (Anon l, r, id)
+quantifier _ (TyApp (TyApp (TyCon n) l) r) | n == tyArrowName = pure (Anon l, r, id)
 quantifier r t = do
   (a, b) <- (,) <$> freshTV <*> freshTV
   k <- subsumes r t (TyPi (Anon a) b)
@@ -149,7 +151,7 @@ discharge _ t = pure (t, id)
 
 rereason :: SomeReason -> Seq.Seq (Constraint p) -> Seq.Seq (Constraint p)
 rereason because = fmap go where
-  go (ConUnify _ v l r) = ConUnify because v l r
+  go (ConUnify _ c v l r) = ConUnify because c v l r
   go (ConSubsume _ s v l r) = ConSubsume because s v l r
   go (ConImplies _ u b a) = ConImplies because u b a
   go (ConImplicit _ s v t) = ConImplicit because s v t
@@ -193,8 +195,7 @@ data SkipImplicit = DoSkip | Don'tSkip
   deriving (Eq, Show, Ord)
 
 gadtConResult :: Type p -> Type p
-gadtConResult (TyForall _ _ t) = gadtConResult t
-gadtConResult (TyArr _ t) = t
+gadtConResult (TyPi _ t) = gadtConResult t
 gadtConResult t = t
 
 getHead :: Type p -> Type p

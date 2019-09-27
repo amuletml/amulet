@@ -3,43 +3,43 @@ do
   local Nil = { __tag = "Nil" }
   local tostring = tostring
   local writeln = print
-  local function _dollardApplicativeaja(cis)
+  local function _dollardApplicativeajd(cjy)
     return {
-      pure = function(cie) return cis.zero end,
-      ["<*>"] = function(chv) return function(chs) return cis["×"](chv)(chs) end end,
-      ["Applicative$ma"] = function(chd) return function(cha) return cha end end
+      pure = function(cjk) return cjy.zero end,
+      ["<*>"] = function(cjb) return function(ciy) return cjy["×"](cjb)(ciy) end end,
+      ["Applicative$ma"] = function(cij) return function(cig) return cig end end
     }
   end
   local function _colon_colon(x) return function(y) return Cons({ _1 = x, _2 = y }) end end
-  local function _dollarshow(ayb, cs)
+  local function _dollarshow(ayl, cs)
     if cs.__tag == "Nil" then
       return "Nil"
     end
-    local ckn = cs[1]
-    return ayb(ckn._1) .. " :: " .. _dollarshow(ayb, ckn._2)
+    local clt = cs[1]
+    return ayl(clt._1) .. " :: " .. _dollarshow(ayl, clt._2)
   end
-  local function _dollartraverse(boj, con, k, cu)
+  local function _dollartraverse(boz, cpt, k, cu)
     if cu.__tag == "Nil" then
-      return con.pure(Nil)
+      return cpt.pure(Nil)
     end
-    local cok = cu[1]
-    return con["<*>"](con["Applicative$ma"](_colon_colon)(k(cok._1)))(_dollartraverse(nil, con, k, cok._2))
+    local cpq = cu[1]
+    return cpt["<*>"](cpt["Applicative$ma"](_colon_colon)(k(cpq._1)))(_dollartraverse(nil, cpt, k, cpq._2))
   end
-  local function _dollar_d7(btc, x, ys)
+  local function _dollar_d7(bty, x, ys)
     if x.__tag == "Nil" then
       return ys
     end
-    local cpk = x[1]
-    return Cons({ _2 = _dollar_d7(nil, cpk._2, ys), _1 = cpk._1 })
+    local cqq = x[1]
+    return Cons({ _2 = _dollar_d7(nil, cqq._2, ys), _1 = cqq._1 })
   end
-  local cqp = { _1 = 1, _2 = nil }
+  local crv = { _1 = 1, _2 = nil }
   writeln(_dollarshow(function(x)
     return tostring(x)
-  end, _dollartraverse(nil, _dollardApplicativeaja({
+  end, _dollartraverse(nil, _dollardApplicativeajd({
     ["×"] = function(x) return function(ys) return _dollar_d7(nil, x, ys) end end,
     zero = Nil
-  }), function(cjd) return Cons({ _1 = cjd._1, _2 = Nil }) end, Cons({
-    _1 = cqp,
-    _2 = Cons({ _1 = cqp, _2 = Cons({ _1 = cqp, _2 = Nil }) })
+  }), function(ckj) return Cons({ _1 = ckj._1, _2 = Nil }) end, Cons({
+    _1 = crv,
+    _2 = Cons({ _1 = crv, _2 = Cons({ _1 = crv, _2 = Nil }) })
   }))))
 end

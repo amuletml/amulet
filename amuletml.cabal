@@ -159,6 +159,7 @@ library
                      , Syntax.Raise
                      , Syntax.Types
                      , Syntax.Subst
+                     , Syntax.Value
                      , Syntax.Pretty
                      , Syntax.Desugar
                      , Syntax.Builtin

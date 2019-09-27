@@ -10,6 +10,7 @@ import Control.Applicative.Lift
 import Control.Monad.Writer
 import Control.Monad.Except
 import Control.Applicative
+import Control.Lens
 
 import qualified Data.VarMap as VarMap
 import qualified Data.VarSet as VarSet
@@ -366,7 +367,11 @@ checkCoercion s = checkCo where
        in (ExactRowsTy first, RowsTy (ExactRowsTy bs) ts))
     <$> fmap unzip (for rs (\(t, c) -> (\(a, b) -> ((t, a), (t, b))) <$> checkCo c))
     <*> fmap unzip (for rs' (\(t, c) -> (\(a, b) -> ((t, a), (t, b))) <$> checkCo c))
-  checkCo co@CoercionVar{} = pushError (InvalidCoercion co)
+  checkCo (CoercionVar x) =
+    case VarMap.lookup (toVar x) (vars s) of
+      Just (AppTy (AppTy _ l) r, _) -> pure (l, r)
+      _ -> pushError (InvalidCoercion (CoercionVar x))
+
   checkCo (Symmetry x) = swap <$> checkCo x
   checkCo (Domain x) =
     checkCo x `thenError` \(f, t) -> (,)
@@ -422,9 +427,9 @@ checkPattern s = checkPat where
         | inf /= varInfo a -> pushError (InfoMismatch a inf (varInfo a))
         | inf /= DataConVar  -> pushError (InfoMismatch a DataConVar (varInfo a))
         -- Ensure types line up
-        | ForallTy Irrelevant x r <- inst ty
+        | (qs, r) <- splitForallTy $ inst ty
         , Just s <- r `unify` ty'
-        -> checkCapture (substituteInType s x) p
+        -> () <$ zipWithM checkCapture (map (substituteInType s) qs) p
         | otherwise -> pushError (TypeMismatch (ForallTy Irrelevant unknownTyvar ty') (inst ty))
   checkPat (RowsTy _ _) (PatRecord []) = pure mempty
   checkPat NilTy (PatRecord []) = pure mempty
@@ -446,6 +451,8 @@ checkPattern s = checkPat where
 
   inst (ForallTy (Relevant _) _ t) = inst t
   inst t = t
+  splitForallTy (ForallTy Irrelevant q t) = splitForallTy t & _1 %~ (q:)
+  splitForallTy t = ([], t)
 
 checkNoUnboxed :: Type a -> Errors (CoreErrors a) ()
 checkNoUnboxed ValuesTy{} = pushError IllegalUnbox
@@ -509,7 +516,7 @@ uniOpen a b = isJust (unify a b)
 apartOpen a b = not (uniOpen a b)
 
 patternVars :: Pattern a -> [(a, Type a)]
-patternVars (Destr _ p) = [captureVars p]
+patternVars (Destr _ p) = map captureVars p
 patternVars (PatRecord ps) = map (captureVars . snd) ps
 patternVars (PatValues ps) = map captureVars ps
 patternVars Constr{} = []

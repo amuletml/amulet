@@ -68,7 +68,7 @@ reducePattern s (Ref v _) (Constr c)
   | Just (App (Ref c' _) _) <- lookupRawTerm v s
   , isCtor (lookupRawVar c' s) s = PatternFail
 
-reducePattern s (Ref v _) (Destr c (Capture a _))
+reducePattern s (Ref v _) (Destr c [Capture a _])
   | Just (App (Ref c' _) a') <- lookupRawTerm v s
   , lookupRawVar c' s == c = PatternComplete [(a, a')]
 

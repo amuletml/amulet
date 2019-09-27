@@ -87,26 +87,27 @@ fill ty@(domain :-> codomain) = fake [ty] $ \[a] -> do
      else makeFun
 
 -- Special cases for concrete types we know about:
-fill ty@(TyApps con [xs]) | con == tyList =
+fill ty@(TyApps con [_]) | con == tyList =
     knownImplication ty -- Try a known list
   `interleave`
     fake [ty] (pure . ListExp [] . head) -- Try nil
-  `interleave`
-    do -- Try consing
-      head <- fill xs
-      tail <- fill ty
-      fake [ty, TyTuple xs ty, cONSTy] $ \[list, tuple, cons] ->
-        pure (App (VarRef cONSName cons) (Tuple [head, tail] tuple) list)
 
 -- Try to thunk a value corresponding to the type inside the `lazy`
 fill ty@(TyApps con [xs]) | con == tyLazy =
   fake [ty] $ \[lazy] -> Lazy <$> fill xs <*> pure lazy
 
+-- Make a reference of the inner type or try existing
+fill ty@(TyApps con [xs]) | con == tyRef =
+    pick ty
+  `interleave`
+    do fake [xs] $ \[an] ->
+         App (VarRef refName an) <$> fill xs <*> pure an
+
 -- Let us not choose arbitrary literals, but pick them from scope
 -- instead.
-fill t | t == tyInt = knownImplication t
-fill t | t == tyString = knownImplication t
-fill t | t == tyFloat = knownImplication t
+fill t | t == tyInt = knownImplication t `interleave` (explore =<< tcVars t)
+fill t | t == tyString = knownImplication t `interleave` (explore =<< tcVars t)
+fill t | t == tyFloat = knownImplication t `interleave` (explore =<< tcVars t)
 
 -- Booleans are finite so we can enumerate them.
 fill t | t == tyBool = fake [t] $ \[a] ->
@@ -118,9 +119,9 @@ fill t | t == tyBool = fake [t] $ \[a] ->
 fill t | t == tyUnit = fake [t] $ pure . Literal LiUnit . head
 
 -- Sum types: we need to try each constructor.
-fill ty@(TyApps (TyCon con) _) = once (knownImplication ty) <|> do
+fill ty@(TyApps (TyCon ty_v) _) = once (knownImplication ty) <|> do
   -- Search all constructors for the type..
-  con <- explore =<< view (psEnv . types . at con . non mempty . to Set.toList)
+  con <- explore =<< view (psEnv . types . at ty_v . non mempty . to Set.toList)
 
   (_, cty, inst_ty) <- instantiate Strong Expression =<<
     view (psEnv . names . at con . non (error "no type for bound constructor?"))
@@ -130,6 +131,7 @@ fill ty@(TyApps (TyCon con) _) = once (knownImplication ty) <|> do
   -- them to the solver.
   case con_t of
     dom :-> cod -> do
+      guard (nonRec ty_v dom)
       Just sub <- pure $ unifyPure_v ((ty, cod):cons)
       -- Alright, let's apply it: Fill the domain recursively.
 #ifdef TRACE_TC
@@ -210,9 +212,8 @@ tcVars ty = fake [ty] $ \[a] -> do
   letBound <- view (psEnv . letBound)
   pure [ VarRef x a | (x, ty') <- all, x `Set.notMember` letBound, ty == ty' ]
 
-
 pick, knownImplication :: MonadPs m => Type Typed -> m (Expr Typed)
-pick t = knownImplication t `interleave` (explore =<< tcVars t) `interleave` tcKnownImplication t
+pick t = knownImplication t `interleave` (explore =<< tcVars t)
 
 knownImplication ty = fake [ty] $ \[app] -> do
   guard . (< 20) =<< view psDepth
@@ -234,29 +235,6 @@ knownImplication ty = fake [ty] $ \[app] -> do
 
   local (psVars %~ Map.mapKeys (apply sub)) . local (psDepth %~ succ) $
     foldl (mkApp app) fun <$> traverse fill args
-
-tcKnownImplication :: MonadPs m => Type Typed -> m (Expr Typed)
-tcKnownImplication ty = fake [ty] $ \[app] -> do
-  an <- view psAnn
-  all <- view (psEnv . names . to scopeToList)
-  lb <- view (psEnv . letBound)
-
-  (fun, tc_ty) <- explore [ (VarRef x (an, tc_ty), tc_ty) | (x, tc_ty@TyPi{}) <- all, x `Set.notMember` unhelpful, x `Set.notMember` lb ]
-  (_, _, TyArrs (mapMaybe isArg -> args) cod) <- instantiate Strong Expression tc_ty
-
-  Just sub <- pure $ unifyPure cod ty
-  let to_fill = map (apply sub) args
-      oblig = Set.fromList to_fill
-
-  guard (ty `Set.notMember` oblig)
-
-#ifdef TRACE_TC
-  traceM (displayS (keyword "considering" <+> string "TC-known function" <+> pretty fun <+> colon <+> pretty tc_ty))
-#endif
-
-  local (psVars %~ Map.mapKeys (apply sub)) . local (psDepth %~ succ) $
-    foldl (mkApp app) fun <$> traverse fill to_fill
-
 
 -- | Exhaustively explore a list of choices.
 explore :: MonadLogic m => [a] -> m a
@@ -376,11 +354,3 @@ nonRec v (TyExactRows xs) = all (nonRec v . snd) xs
 nonRec v (TyParens p) = nonRec v p
 nonRec v (TyOperator l v' r) = v /= v' && nonRec v l && nonRec v r
 nonRec _ _ = error "nonRec: that's a weird type you have there."
-
--- | A list of global, TC-known functions that are unlikely to be of
--- use.
---
--- In fact, it's impossible for 'tyTupleName' to be of use.
-unhelpful :: Set.Set (Var Typed)
-unhelpful = Set.fromList
-  [ forceName, opAppName, derefName, tyTupleName, intValName, strValName, extendName, restrictName ]

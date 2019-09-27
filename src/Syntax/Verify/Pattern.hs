@@ -251,6 +251,14 @@ covering' env = go where
     | otherwise = uncover (v, patPair xs)
   go ((Destructure{}, v@VDestructure{}) :*: xs) = uncover (v, patPair xs)
 
+  go ((PGadtCon k _ _ (Just p) _, v@(VDestructure k' (Just u))) :*: xs)
+    | k == k' = first (VDestructure k' . Just) <$> go ((p, u):*:xs)
+    | otherwise = uncover (v, patPair xs)
+  go ((PGadtCon k _ _ Nothing _, v@(VDestructure k' Nothing)) :*: xs)
+    | k == k' = (VDestructure k' Nothing,) <$> go xs
+    | otherwise = uncover (v, patPair xs)
+  go ((PGadtCon{}, v@VDestructure{}) :*: xs) = uncover (v, patPair xs)
+
   -- ConVar for constructors: We always perform the UConVar implementation here -
   -- namely we find every possible case.
   go ((p@(Destructure _ _ (_, ty)), VVariable v vTy) :*: xs) = do
@@ -261,7 +269,16 @@ covering' env = go where
         v' <- genName
         onVar p v (VDestructure k (Just (VVariable v' arg))) xs
 
+  go ((p@(PGadtCon _ _ _ _ (_, ty)), VVariable v vTy) :*: xs) = do
+    (k, arg) <- constructors env ty vTy
+    case arg of
+      Nothing -> onVar p v (VDestructure k Nothing) xs
+      Just arg -> do
+        v' <- genName
+        onVar p v (VDestructure k (Just (VVariable v' arg))) xs
+
   go ((Destructure{}, _) :*: _) = error "Mismatch on Destructure"
+  go ((PGadtCon{}, _) :*: _) = error "Mismatch on PGadtCon"
 
   -- ConCon for literals
   go ((PLiteral li _, v@(VLiteral li')) :*: xs)
@@ -327,8 +344,6 @@ covering' env = go where
 
   -- Boring wrappers
   go ((PType p _ _, u) :*: xs) = go ((p, u) :*: xs)
-  go ((PSkolem p _ _, u) :*: xs) = go ((p, u) :*: xs)
-  go ((PWrapper _ p _, u) :*: xs) = go ((p, u) :*: xs)
   go ((PList{}, _) :*: _) = error "PList is handled by desugar"
 
   -- | Add a unification constraint between a variable and value
@@ -463,7 +478,7 @@ inhabited env (AbsState st cs i)
 
 -- | Make a unification constraint
 mkUni :: Type Typed -> Type Typed -> Constraint Typed
-mkUni = ConUnify undefined undefined
+mkUni = ConUnify undefined mempty undefined
 
 -- | Add one or more type constraints into the current environment,
 -- failing if an error occurs.
@@ -471,7 +486,7 @@ constrain :: (MonadPlus m, MonadNamey m, MonadState CoverState m) => [Constraint
 constrain css = maybe empty put =<< doConstrain css where
   doConstrain css = do
     (sub, cs) <- get
-    x <- runChronicleT . solveImplies sub . (cs<>) $ Seq.fromList css
+    x <- runChronicleT . solveImplies sub mempty . (cs<>) $ Seq.fromList css
     pure $ case x of
       These Seq.Empty (sub', cs') -> Just (sub', Seq.fromList cs')
       That (sub', cs') ->  Just (sub', Seq.fromList cs')

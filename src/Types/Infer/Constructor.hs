@@ -7,6 +7,7 @@ import qualified Data.Set as Set
 import Data.Either
 
 import Control.Monad.Infer
+import Control.Lens
 
 import Types.Kinds
 import Types.Infer.Builtin
@@ -14,6 +15,7 @@ import Types.Infer.Errors
 import Types.Unify
 
 import Syntax.Subst
+import Syntax.Types
 import Syntax.Var
 import Syntax
 
@@ -38,12 +40,11 @@ inferCon vars ret c@(GadtCon ac nm cty ann) = do
   checkWildcard c cty
   cty <- condemn $ resolveKind (BecauseOf c) cty
   var <- genName
-  _ <- condemn . retcons (gadtConShape (cty, ret) (gadtConResult cty)) $
-    solve (Seq.singleton (ConUnify (BecauseOf c) var (gadtConResult cty) ret))
+  when (countAnon cty > 1) $ dictates (gadtConManyArgs c)
 
   let generalise (TyPi q t) = TyPi q <$> generalise t
       generalise ty = do
-        ~(sub, _, []) <- condemn $ solve (Seq.singleton (ConUnify (BecauseOf c) var ret ty))
+        ~(sub, _, []) <- condemn $ solve (Seq.singleton (ConUnify (BecauseOf c) mempty var ret ty)) =<< view classDecs
         tell (map (\(x, y) -> (TyVar x, y)) (Map.toAscList sub))
         pure ret
 
@@ -85,3 +86,8 @@ simplify :: Type Typed -> Type Typed -> Either (Map.Map (Var Typed) (Type Typed)
 simplify (TyVar v@(TgName x _)) b@(TyVar (TgName y _))
   | x == y = Left (Map.singleton v b)
 simplify x y = Right (x, y)
+
+countAnon :: Type p -> Int
+countAnon (TyPi Anon{} t) = 1 + countAnon t
+countAnon (TyPi _ t) = countAnon t
+countAnon _ = 0

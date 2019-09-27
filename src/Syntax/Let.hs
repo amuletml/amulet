@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts, TypeFamilies #-}
+{-# LANGUAGE FlexibleContexts, TypeFamilies, TupleSections #-}
 module Syntax.Let where
 
 import qualified Data.Set as Set
@@ -93,10 +93,9 @@ bound (PTuple ps _) = foldMap bound ps
 bound (PList ps _) = foldMap bound ps
 bound (Capture p _) = fromList [p]
 bound (PType p _ _) = bound p
+bound (PGadtCon _ _ vs p _) = fromList (map fst vs) <> foldMap bound p
 bound Wildcard{} = mempty
 bound PLiteral{} = mempty
-bound (PWrapper _ p _) = bound p
-bound (PSkolem p _ _) = bound p
 
 boundWith :: (IsList m, Item m ~ (Var p, Ann p), Monoid m)
           => Pattern p -> m
@@ -107,10 +106,9 @@ boundWith (PList ps _) = foldMap boundWith ps
 boundWith (Capture p a) = fromList [(p, a)]
 boundWith (PAs p v a) = fromList [(v, a)] <> boundWith p
 boundWith (PType p _ _) = boundWith p
+boundWith (PGadtCon _ _ vs p a) = fromList (map ((,a) . fst) vs) <> foldMap boundWith p
 boundWith Wildcard{} = mempty
 boundWith PLiteral{} = mempty
-boundWith (PWrapper _ p _) = boundWith p
-boundWith (PSkolem p _ _) = boundWith p
 
 
 bindVariables :: (IsList (m (Var p)), Item (m (Var p)) ~ Var p, Monoid (m (Var p)))

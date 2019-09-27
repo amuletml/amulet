@@ -85,8 +85,7 @@ approxPattern _ (PLiteral l _) = case l of
   LiBool _ -> pure tyBool
   LiUnit -> pure tyUnit
 
-approxPattern _ PWrapper{} = error "Impossible PWrapper"
-approxPattern _ PSkolem{} = error "Impossible PSkolem"
+approxPattern _ PGadtCon{} = error "Impossible PWrapper"
 approxPattern _ PList{} = error "Impossible PList"
 
 guess :: MonadInfer Typed m => StateT Origin m (Type Typed)

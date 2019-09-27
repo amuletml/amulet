@@ -1,0 +1,5 @@
+conbox02-fail.ml[15:28 ..15:32]: error
+  No instance for show int arising from use of the expression
+   │ 
+15 │ let xs = [ Box (), Box "", Box 1 ]
+   │                            ^^^^^

@@ -6,7 +6,7 @@ module Syntax.Implicits
   , Implicit(..), implHead, implPre, implVar, implType, implSort, implSpan, implClass
   , lookup, keys, subTrie
   , insert, singleton
-  , spine, splitImplVarType
+  , splitImplVarType
   , matches, overlap
   )
   where
@@ -92,7 +92,26 @@ deriving instance (Eq info, Eq (Var p)) => Eq (ImplicitScope info p)
 
 instance Ord (Var p) => Substitutable p (ImplicitScope i p) where
   ftv = foldMap ftv . keys
-  apply m (Trie trie) = Trie $ fmap (apply m) trie
+  apply m (Trie trie) = Trie . rebalance $ fmap (apply m) trie where
+    rebalance :: Map.Map (Type p) (Node i p) -> Map.Map (Type p) (Node i p)
+    rebalance = Map.fromListWith (<>) . go . Map.toList
+
+    go :: [(Type p, Node i p)] -> [(Type p, Node i p)]
+    go ((k, v):rest) =
+      if length (appsView new) == length (appsView k)
+         then (new, v):go rest
+         else
+           case appsView new of
+             -- [x] -> (x, v):go rest
+             (x:xs) -> (x, makeTrie xs v):go rest
+             [] -> error "empty spine"
+      where new = apply m' k
+            m' = m `Map.withoutKeys` don'tSubstitute v
+    go [] = []
+
+    makeTrie :: [Type p] -> Node i p -> Node i p
+    makeTrie [] n = n
+    makeTrie (x:xs) n = Many (Trie (Map.singleton x (makeTrie xs n)))
 
 instance Ord (Var p) => Substitutable p (Node i p) where
   ftv (One i) = ftv i
@@ -107,7 +126,7 @@ instance Ord (Var p) => Substitutable p (Node i p) where
 
 instance Ord (Var p) => Substitutable p (Implicit i p) where
   ftv i = ftv (i ^. implType) Set.\\ boundByImpl i
-  apply m i = i & implHead %~ apply m' where
+  apply m i = i & implHead %~ apply m' & implType %~ apply m' where
     m' = m `Map.withoutKeys` boundByImpl i
 
 -- | Insert a choice for a *fully-known* (@Solved@) implicit parameter
@@ -117,7 +136,7 @@ insert annot sort v ty info = go ts implicit where
   (head, obligations) = getHead ty
 
   implicit = ImplChoice head ty (toList obligations) v sort annot info
-  ts = spine head
+  ts = appsView head
 
   go [] _ _ = error "empty spine (*very* malformed type?)"
   go [x] i (Trie m) = Trie (Map.alter (`join` i) x m)
@@ -136,8 +155,8 @@ insert annot sort v ty info = go ts implicit where
 
 -- | Find a type in a trie by conservative fuzzy search.
 lookup :: forall i p. Ord (Var p) => Type p -> ImplicitScope i p -> [Implicit i p]
-lookup ty = go ts where
-  ts = spine ty
+lookup ty = go ts  where
+  ts = appsView ty
   go :: [Type p] -> ImplicitScope i p -> [Implicit i p]
   go [x] (Trie m) = case find x m of
     Just (One x) -> [x]
@@ -147,8 +166,8 @@ lookup ty = go ts where
   go (x:xs) (Trie m) = case find x m of
     Just (Many m) -> go xs m
     Just (ManyMore ss m) -> ss ++ go xs m
-    Just (One x) -> [x] -- discard xs
-    Just (Some xs) -> xs -- discard xs
+    Just (One x) -> [x]
+    Just (Some xs) -> xs
     _ -> []
   go [] Trie{} = error "badly-kinded type (empty spine?)"
 
@@ -211,13 +230,6 @@ subTrie = go where
 singleton :: Ord (Var p) => Ann Resolved -> Sort -> Var p -> Type p -> i -> ImplicitScope i p
 singleton a s v t i = insert a s v t i mempty
 
--- | Decompose a type into its main "spine" of left-nested applications.
--- @
---  spine (f x y (a b)) = [ f, x, y, a b ]
--- @
-spine :: Type p -> [Type p]
-spine (TyApp f x) = spine f `snoc` x
-spine t = [t]
 
 getHead, splitImplVarType :: Type p -> (Type p, Seq.Seq (Obligation p))
 getHead t@TyVar{} = (t, Seq.empty)
@@ -317,6 +329,10 @@ overlap xs ys
   = map get inter
   where get [(t, a), (_, b)] = (t, a, b)
         get _ = undefined
+
+don'tSubstitute :: Ord (Var p) => Node i p -> Set.Set (Var p)
+don'tSubstitute (One i) = boundByImpl i
+don'tSubstitute _ = mempty
 
 boundByImpl :: Ord (Var p) => Implicit i p -> Set.Set (Var p)
 boundByImpl = foldMap fv . view implPre where
