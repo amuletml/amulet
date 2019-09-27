@@ -163,50 +163,53 @@ data DoOptimise = Do | Don't
 
 data CompilerOptions
   = CompilerOptions
-    { debugMode :: D.DebugMode
-    , output    :: Maybe FilePath
-    , forceRepl :: Bool
-    , optLevel  :: Int
-    , files     :: [FilePath]
+    { debugMode   :: D.DebugMode
+    , output      :: Maybe FilePath
+    , forceRepl   :: Bool
+    , optLevel    :: Int
+    , replCommand :: Maybe String
+    , serverPort  :: Int
+    , files       :: [FilePath]
     }
-    deriving (Show)
+  deriving (Show)
 
 isError :: Note a b => a -> Bool
 isError x = diagnosticKind x == ErrorMessage
 
 flags :: ParserInfo CompilerOptions
-flags = info
-  (( CompilerOptions
-     <$> ( flag' D.Test   (long "test" <> short 't' <> help "Provides additional debug information on the output")
-       <|> flag' D.TestTc (long "test-tc"           <> help "Provides additional type check information on the output")
-       <|> pure D.Void )
+flags = flip info (fullDesc <> progDesc "The Amulet compiler and REPL") . flip (<**>) helper $
+  CompilerOptions
+   <$> ( flag' D.Test   (long "test" <> short 't' <> help "Provides additional debug information on the output")
+     <|> flag' D.TestTc (long "test-tc"           <> help "Provides additional type check information on the output")
+     <|> pure D.Void )
 
-     <*> (Just <$>
-           option str
-           ( long "out" <> short 'o' <> metavar "FILE"
-          <> help "Write the generated Lua to a specific file." )
-       <|> pure Nothing)
+   <*> (Just <$>
+         option str
+         ( long "out" <> short 'o' <> metavar "FILE"
+        <> help "Write the generated Lua to a specific file." )
+     <|> pure Nothing)
 
-     <*> switch
-        ( long "repl" <> short 'r'
-       <> help "Go to the REPL after loading each file" )
+   <*> switch ( long "repl" <> short 'r' <> help "Go to the REPL after loading each file" )
 
-     <*> option auto
-         ( long "opt" <> short 'O' <> metavar "LEVEL" <> value 1
-        <> help "Controls the optimisation level." )
+   <*> option auto ( long "opt" <> short 'O' <> metavar "LEVEL" <> value 1 <> help "Controls the optimisation level." )
 
-     <*> many (argument str (metavar "FILES..."))
+   <*> (Just <$>
+         option str
+         ( long "client" <> short 'c' <> metavar "COMMAND"
+        <> help "Connect to another running REPL to execute the command" )
+     <|> pure Nothing)
 
-   ) <**> helper)
-  ( fullDesc
- <> progDesc "The Amulet compiler and REPL" )
+   <*> option auto ( long "port" <> metavar "PORT" <> value 5478 <> help "Port to use for the REPL server. (Default: 5478)" )
+
+   <*> many (argument str (metavar "FILES..."))
 
 main :: IO ()
 main = do
   options <- execParser flags
   case options of
-    CompilerOptions { debugMode = db, files = [] } -> repl db
-    CompilerOptions { debugMode = db, forceRepl = True, files = fs } -> replFrom db fs
+    CompilerOptions { replCommand = Just str, serverPort = i } -> runRemoteReplCommand i str
+    CompilerOptions { debugMode = db, files = [], serverPort = i } -> repl i db
+    CompilerOptions { debugMode = db, forceRepl = True, files = fs, serverPort = i } -> replFrom i db fs
 
     CompilerOptions { output = Just out, files = fs }
       | out `elem` fs -> do

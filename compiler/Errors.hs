@@ -10,17 +10,22 @@ import Text.Pretty.Semantic
 import qualified Text.Pretty.Ansi as A
 import qualified Text.Pretty.Note as N
 
+import System.IO
+
 import Parser.Wrapper
 import Parser.Lexer
 import Parser.Token
 
 reportS :: N.Note a Style => a -> [(SourceName, T.Text)] -> IO ()
-reportS err fs = T.putStrLn
-                 . A.displayDecorated
-                 . fmap (either N.toAnsi toAnsi)
-                 . filterSimpleDoc (either (const True) uncommentFilter)
-                 . renderPretty 0.4 100
-                 . N.format (N.fileSpans fs highlightAmulet) $ err
+reportS err fs = hReport stdout fs err
+
+hReport :: N.Note a Style => Handle -> [(SourceName, T.Text)] -> a -> IO ()
+hReport h fs = T.hPutStrLn h
+             . A.displayDecorated
+             . fmap (either N.toAnsi toAnsi)
+             . filterSimpleDoc (either (const True) uncommentFilter)
+             . renderPretty 0.4 100
+             . N.format (N.fileSpans fs highlightAmulet)
 
 highlightAmulet :: T.Text -> N.Highlighted Style
 highlightAmulet t =
