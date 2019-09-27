@@ -64,8 +64,7 @@ instance Spanned (Ann p) => Spanned (Pattern p) where
   annotation (PRecord _ a) = annotation a
   annotation (PTuple _ a) = annotation a
   annotation (PLiteral _ a) = annotation a
-  annotation (PWrapper _ _ a) = annotation a
-  annotation (PSkolem _ _ a) = annotation a
+  annotation (PGadtCon _ _ _ _ a) = annotation a
   annotation (PList _ a) = annotation a
 
 instance Spanned (Ann p) => Spanned (Arm p) where
@@ -191,8 +190,8 @@ instance (Pretty (Var p)) => Pretty (Pattern p) where
   pretty (PTuple ps _) = parens (hsep (punctuate comma (map pretty ps)))
   pretty (PList ps _) = brackets (hsep (punctuate comma (map pretty ps)))
   pretty (PLiteral l _) = pretty l
-  pretty (PWrapper _ p _) = pretty p
-  pretty (PSkolem p _ _) = pretty p
+  pretty (PGadtCon v _ vs p _) = parens $ pretty v <+> hsep (map (pretty . fst) vs) <> spc <> foldMap pretty p where
+    spc = foldMap (const (char ' ')) p
 
 instance Pretty (Var p) => Pretty (Binding p) where
   pretty (Binding n v _ _) = hsep (pretty n:map pretty args) <> sig <+> nest 2 (equals </> pretty rest') where

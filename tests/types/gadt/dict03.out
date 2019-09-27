@@ -1,0 +1,7 @@
+dict : constraint -> type
+Dict : Spec{'c : constraint}. 'c => dict 'c
+:- : constraint -> constraint -> type
+Sub : Spec{'p : constraint}. Spec{'q : constraint}. ('p => dict 'q) -> :- 'p 'q
+ord : Infer{'cd : type}. 'cd -> constraint
+eq : Infer{'cd : type}. 'cd -> constraint
+foo : Spec{'cd : type}. Spec{'a : 'cd}. :- (eq 'a) (ord 'a)

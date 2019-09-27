@@ -15,11 +15,11 @@ module Syntax.Builtin
 
   , tyUnitName, tyBoolName, tyIntName, tyStringName, tyFloatName
   , tyLazyName, tyConstraintName, tyArrowName, tyTupleName
-  , tyRefName, tyKStrName, tyKIntName
+  , tyRefName, tyKStrName, tyKIntName, tyEqName
 
   , tyUnit, tyBool, tyInt, tyString, tyFloat
   , tyLazy, tyConstraint, tyArrow, tyList
-  , tyRef, tyKStr, tyKInt, tyRowCons
+  , tyRef, tyKStr, tyKInt, tyRowCons, tyEq
 
   , forceName, lAZYName, forceTy, lAZYTy, forceTy', lAZYTy'
   , assignName, derefName, refName
@@ -33,6 +33,7 @@ module Syntax.Builtin
 
   , rowConsName, extendName, restrictName, rOWCONSName
   , rowConsTy, rowConsTy', rowConsTy'', rowConsTy''', rowConsTy''''
+  , rEFLName, rEFLTy, rEFLTy'
   ) where
 
 import Control.Lens
@@ -52,7 +53,7 @@ import Syntax
 import qualified Core.Builtin as C
 import Core.Var
 
-tyUnitName, tyBoolName, tyIntName, tyStringName, tyFloatName, tyLazyName, tyConstraintName, tyArrowName, tyTupleName, tyListName, tyRefName, tyKStrName, tyKIntName :: Var Typed 
+tyUnitName, tyBoolName, tyIntName, tyStringName, tyFloatName, tyLazyName, tyConstraintName, tyArrowName, tyTupleName, tyListName, tyRefName, tyKStrName, tyKIntName, tyEqName :: Var Typed
 tyIntName    = ofCore C.vInt
 tyStringName = ofCore C.vString
 tyBoolName   = ofCore C.vBool
@@ -65,9 +66,10 @@ tyListName   = ofCore C.vList
 tyRefName    = ofCore C.vRefTy
 tyKStrName   = ofCore C.vKStrTy
 tyKIntName   = ofCore C.vKIntTy
+tyEqName     = ofCore C.vEq
 tyConstraintName = TgInternal "constraint"
 
-tyUnit, tyBool, tyInt, tyString, tyFloat, tyLazy, tyConstraint, tyArrow, tyList, tyRef, tyKStr, tyKInt, tyRowCons :: Type Typed
+tyUnit, tyBool, tyInt, tyString, tyFloat, tyLazy, tyConstraint, tyArrow, tyList, tyRef, tyKStr, tyKInt, tyRowCons, tyEq :: Type Typed
 tyInt        = TyCon tyIntName
 tyString     = TyCon tyStringName
 tyBool       = TyCon tyBoolName
@@ -81,6 +83,7 @@ tyRef        = TyCon tyRefName
 tyKStr       = TyCon tyKStrName
 tyKInt       = TyCon tyKIntName
 tyRowCons    = TyCon rowConsName
+tyEq         = TyCon tyEqName
 
 forceName, lAZYName :: Var Typed
 forceName = ofCore C.vForce
@@ -136,8 +139,9 @@ extendName, restrictName :: Var Typed
 extendName = ofCore C.vExtend
 restrictName = ofCore C.vRestrict
 
+
 rowConsTy :: Type Typed
-rowConsTy = TyPi (Invisible key (Just tyString) Infer) $ record *. ttype *. new *. tyString ~> foldl1 TyApp [tyRowCons, TyVar record, TyVar key, TyVar ttype, TyVar new ]
+rowConsTy = TyPi (Invisible key (Just tyString) Infer) $ record *. ttype *. new *. tyString ~> TyApps tyRowCons [TyVar record, TyVar key, TyVar ttype, TyVar new]
 
 rowConsTy' :: Type Typed -> Type Typed
 rowConsTy'' :: Type Typed -> Type Typed -> Type Typed
@@ -147,6 +151,15 @@ rowConsTy' x = record *. ttype *. new *. tyString ~> foldl1 TyApp [tyRowCons, Ty
 rowConsTy'' x y = ttype *. new *. tyString ~> foldl1 TyApp [tyRowCons, y, x, TyVar ttype, TyVar new ]
 rowConsTy''' x y z = new *. tyString ~> foldl1 TyApp [tyRowCons, y, x, z, TyVar new ]
 rowConsTy'''' x y z a = tyString ~> foldl1 TyApp [tyRowCons, y, x, z, a ]
+
+rEFLName :: Var Typed
+rEFLName = ofCore C.vEQ
+
+rEFLTy :: Type Typed
+rEFLTy = a *. TyApps tyEq [TyVar a, TyVar a]
+
+rEFLTy' :: Type Typed -> Type Typed
+rEFLTy' x = TyApps tyEq [x, x]
 
 data BuiltinModule = BM
   { vars    :: [(Var Resolved, Type Typed)]
@@ -190,11 +203,14 @@ builtins =
             , (tyConstraintName, TyType)
             , (tyListName, TyType ~> TyType)
             , (tyRefName, TyType ~> TyType)
+            , (tyEqName, a *. TyVar a ~> TyVar a ~> tyConstraint)
             ]
 
   , constructors = Map.fromList
       [ (tyListName, Set.fromList [cONSName, nILName] )
       ]
+
+  , classes = [ (tyEqName, T.MagicInfo []) ]
 
   , modules =
       [ ( TgInternal "Amc"
@@ -309,4 +325,3 @@ record = ofCore C.tyvarRecord
 ttype = ofCore C.tyvarType
 key = ofCore C.tyvarKey
 new = ofCore C.tyvarNew
-

@@ -175,6 +175,7 @@ builtins =
           return { _1 = record[key], _2 = new }
         end
       |] )
+  , ( vEQ, "nil", [], Just (0, \[] -> (mempty, [[lua|nil|]])), [] )
     -- Note: the definition generates records that look correct
     -- according to the type, but since the type system prevents
     -- accessing a removed key, it's fine for us /not/ to remove it.

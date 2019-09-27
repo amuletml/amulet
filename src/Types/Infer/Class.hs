@@ -110,7 +110,7 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
         getContext (Just t) = unwind t
 
     ctx <- for ctx $ \x -> do
-      validContext "class" classAnn x
+      () <- validContext "class" classAnn x
       checkAgainstKind (BecauseOf clss) x tyConstraint
 
     (fold -> scope, rows') <- fmap unzip . for (getContext ctx) $
@@ -119,7 +119,7 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
           closeOver' vars (BecauseOf clss) $
             TyPi (Implicit classConstraint) obligation
         ~var@(TgName name _) <- genNameWith (classCon' <> T.singleton '$')
-        pure ( singleton classAnn Superclass var impty undefined
+        pure ( singleton classAnn Superclass var impty (MagicInfo [])
              , (Implicit, var, name, obligation))
 
     (fold -> defaultMap) <-
@@ -131,10 +131,10 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
       (_, cs) <- listen $
         check exp sig
 
-      (sub, _, deferred) <- condemn $ solve cs
+      (sub, _, deferred) <- condemn $ solve cs =<< view classDecs
 
       deferred <- pure (fmap (apply sub) deferred)
-      (_, _, cons) <- solve (Seq.fromList deferred)
+      (_, _, cons) <- solve (Seq.fromList deferred) =<< view classDecs
 
       unless (null cons) $ do
         let (c@(ConImplicit reason _ _ _):_) = reverse cons
@@ -163,7 +163,7 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
           let ty = TyPi (f classConstraint) theTy
           let expr =
                 Fun (EvParam
-                       (Destructure classCon
+                       (PGadtCon classCon [] []
                          (Just (Capture capture (classAnn, inner)))
                          (classAnn, classConstraint)))
                  (Access (VarRef capture (classAnn, inner)) label (classAnn, ty))
@@ -178,7 +178,7 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
           let ty = TyPi (f classConstraint) theTy
           let expr =
                 Fun (EvParam
-                       (Destructure classCon
+                       (PGadtCon classCon [] []
                          (Just (Capture capture (classAnn, inner)))
                          (classAnn, classConstraint)))
                  (VarRef capture (classAnn, inner))
@@ -236,7 +236,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
   -- desugar.
   ctx <- case ctx of
     Just x -> do
-      validContext "instance" ann x
+      () <- validContext "instance" ann x
       checkAgainstKind (BecauseOf inst) x tyConstraint
     Nothing -> pure tyUnit
 
@@ -260,7 +260,9 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
 
   (ctx, mappend skolSub -> skolSub) <- skolFreeTy mempty (ByInstanceHead ctx ann) (apply skolSub ctx)
 
-  (mappend skolSub -> instSub, _, _) <- solve (pure (ConUnify (BecauseOf inst) undefined classHead instHead))
+  (mappend skolSub -> instSub, _, _) <-
+    solve (pure (ConUnify (BecauseOf inst) scope undefined classHead instHead))
+        =<< view classDecs
   localInsnConTy <- silence $
     closeOver (BecauseOf inst) (TyPi (Implicit ctx) instHead)
 
@@ -270,10 +272,10 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
         mkBinds (TyTuple a b) = do
           var <- genName
           (scope, pat) <- mkBinds b
-          pure (insert ann LocalAssum var a undefined scope, PTuple [Capture var (ann, a), pat] (ann, TyTuple a b))
+          pure (insert ann LocalAssum var a (MagicInfo []) scope, PTuple [Capture var (ann, a), pat] (ann, TyTuple a b))
         mkBinds x = do
           var <- genName
-          pure (singleton ann LocalAssum var x undefined, Capture var (ann, x))
+          pure (singleton ann LocalAssum var x (MagicInfo []), Capture var (ann, x))
         addFull (as, p) = (as, PAs p fullCtx (ann, ctx))
      in addFull <$> mkBinds ctx
 
@@ -299,10 +301,10 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
         (e, cs) <- listen $ do
           fixHeadVars skolSub
           check e sig
-        (sub, wrap, deferred) <- condemn $ solve cs
+        (sub, wrap, deferred) <- condemn $ solve cs =<< view classDecs
 
         deferred <- pure (fmap (apply sub) deferred)
-        (compose sub -> sub, wrap', cons) <- solve (Seq.fromList deferred)
+        (compose sub -> sub, wrap', cons) <- solve (Seq.fromList deferred) =<< view classDecs
 
         unless (null cons) $ do
           let (c@(ConImplicit reason _ _ _):_) = reverse cons
@@ -337,7 +339,6 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
     Sat -> pure ()
     Unsat xs -> confesses (UndefinedMethods instHead xs ann)
 
-
   scope <- mappend localAssums' <$> view classes
   (usedDefaults, defaultMethods) <- fmap unzip
     . local (classes %~ mappend localAssums)
@@ -347,10 +348,10 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
         an = annotation expr
 
     (e, cs) <- listen $ check expr ty
-    (sub, wrap, deferred) <- condemn $ solve cs
+    (sub, wrap, deferred) <- condemn $ solve cs =<< view classDecs
 
     deferred <- pure (fmap (apply sub) deferred)
-    (compose sub -> sub, wrap', cons) <- solve (Seq.fromList deferred)
+    (compose sub -> sub, wrap', cons) <- solve (Seq.fromList deferred) =<< view classDecs
 
     unless (null cons) $ do
       let (c@(ConImplicit reason _ _ _):_) = reverse cons
@@ -388,7 +389,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
       whatDo = Map.toList (methodNames <> classContext)
       fields = methodFields ++ usedDefaults ++ contextFields
 
-  (solution, needed, unsolved) <- solve cs
+  (solution, needed, unsolved) <- solve cs =<< view classDecs
 
   unless (null unsolved) $
     confesses (addBlame (BecauseOf inst)
@@ -480,7 +481,7 @@ reduceClassContext extra annot cons = do
                      , needs', scope', sub )
         | otherwise =
           -- see comment in 'fundepsAllow' for why this can be undefined
-          let (bindings, needs', scope', sub) = dedup (insert annot LocalAssum var con undefined scope) needs
+          let (bindings, needs', scope', sub) = dedup (insert annot LocalAssum var con (MagicInfo []) scope) needs
            in (bindings, (var, con, r):needs', scope', sub)
       dedup scope [] = ([], [], scope, mempty)
       (aliases, stillNeeded, usable, substitution) = dedup mempty needs
@@ -610,16 +611,19 @@ mkLet xs = Let xs
 m ! k = fromMaybe (error ("Key " ++ show k ++ " not in map")) (Map.lookup k m)
 
 validContext :: MonadChronicles TypeError m => String -> Ann Desugared -> Type Desugared -> m ()
-validContext what ann t@(TyApp f _)
+
+validContext what ann t@(TyApps f xs@(_:_))
+  -- | TyCon v <- f, v == tyEqName = unless (what == "instance") $ confesses (InvalidContext what ann t)
   | TyCon{} <- f = pure ()
-  | otherwise = validContext "" ann f `catchChronicle` \_ -> confesses (InvalidContext what ann t)
+  | otherwise = traverse_ (validContext what ann) xs `catchChronicle` \_ -> confesses (InvalidContext what ann t)
+validContext _ _ TyApp{} = error "Imposible TyApp - handled by TyApps"
 
 validContext what ann (TyTuple a b) = do
-  validContext what ann a
+  () <- validContext what ann a
   validContext what ann b
 
 validContext what ann (TyOperator a _ b) = do
-  validContext what ann a
+  () <- validContext what ann a
   validContext what ann b
 
 validContext _ _ TyCon{} = pure ()

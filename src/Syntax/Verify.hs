@@ -25,7 +25,6 @@ import Syntax.Verify.Pattern
 import Syntax.Verify.Error
 
 import Syntax.Builtin (tyLazy, forceName)
-import Syntax.Implicits
 import Syntax.Types
 import Syntax.Let
 import Syntax
@@ -201,13 +200,12 @@ bindingSites (Destructure _ p _) = foldMap bindingSites p
 bindingSites (PType p _ _) = bindingSites p
 bindingSites (PRecord rs _) = foldMap (bindingSites . snd) rs
 bindingSites (PTuple ps _) = foldMap bindingSites ps
-bindingSites (PWrapper _ p _) = bindingSites p
-bindingSites (PSkolem p _ _) = bindingSites p
+bindingSites (PGadtCon _ _ _ p _) = foldMap bindingSites p
 bindingSites PList{} = error "PList is handled by desugar"
 
 -- | Is this of type lazy?
 isLazy :: Type Typed -> Bool
-isLazy ty = tyLazy == head (spine (getHead ty))
+isLazy ty = tyLazy == head (appsView (getHead ty))
 
 isWrappedThunk :: Expr Typed -> Bool
 isWrappedThunk (ExprWrapper (WrapFn (MkWrapCont _ x)) _ _) =

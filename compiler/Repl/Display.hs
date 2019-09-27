@@ -18,7 +18,7 @@ data Value
   | Nil
   | Boolean Bool
   | Table (Map.Map T.Text Value)
-  | Constructor T.Text (Maybe Value)
+  | Constructor T.Text [Value]
   | Opaque String -- a description of the opaque value
   deriving (Eq, Show, Ord)
 
@@ -58,7 +58,7 @@ valueRepr getVal = do
                 then case tab Map.! T.pack "__tag" of
                        String x -> if x == T.pack "__builtin_unit"
                                       then Nil
-                                      else Constructor x (Map.lookup (T.pack "1") tab)
+                                      else Constructor x (map snd (Map.toList (Map.delete (T.pack "__tag") tab)))
                        _ -> error "Malformed constructor value when converting from Lua"
                 else Table tab
     _ -> pure $ Opaque "foreign value"
@@ -72,13 +72,12 @@ instance Pretty Value where
   pretty (Boolean x) = sliteral . string $ if x then "true" else "false"
   pretty (Opaque x)  = enclose (char '<') (char '>') (keyword x)
 
-  pretty (Constructor "Cons" (Just (Table m))) = p (m Map.! "_1") <+> soperator (string "::") <+> pretty (m Map.! "_2") where
+  pretty (Constructor "Cons" [Table m]) = p (m Map.! "_1") <+> soperator (string "::") <+> pretty (m Map.! "_2") where
     p x@(Constructor "Cons" _) = parens (pretty x)
     p x = pretty x
-  pretty (Constructor "Nil" Nothing) = brackets mempty
+  pretty (Constructor "Nil" []) = brackets mempty
 
-  pretty (Constructor x Nothing) = stypeCon (text x)
-  pretty (Constructor x (Just t)) = colour (text x) <+> parensIf t where
+  pretty (Constructor x ts) = colour (text x) <+> hsep (map parensIf ts) where
     parensIf x@Constructor{} = parens (pretty x)
     parensIf x = pretty x
     colour = if isLower (T.head x) then stypeSkol else stypeCon

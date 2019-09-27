@@ -442,8 +442,7 @@ rePattern (PList ps a) = do
   (ps', vss, tss) <- unzip3 <$> traverse rePattern ps
   pure (PList ps' a, concat vss, concat tss)
 rePattern (PLiteral l a) = pure (PLiteral l a, [], [])
-rePattern PWrapper{} = error "Impossible PWrapper"
-rePattern PSkolem{} = error "Impossible PSkolem"
+rePattern PGadtCon{} = error "Impossible PGadtCon"
 
 reBinding :: MonadResolve m
           => Binding Parsed

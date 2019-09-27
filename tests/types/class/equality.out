@@ -1,0 +1,2 @@
+safeCoerce : Spec{'a : type}. Spec{'b : type}. ~ 'a 'b => 'a -> 'b
+foo : int

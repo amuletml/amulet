@@ -1,0 +1,8 @@
+dict : constraint -> type
+Dict : Spec{'c : constraint}. 'c => dict 'c
+show : type -> constraint
+show : Spec{'a : type}. show 'a => 'a -> string
+foo : dict (show unit)
+bar : unit -> dict (show int)
+with_d : Spec{'a : type}. Spec{'c : type -> constraint}. Spec{'b : type}. dict ('c 'a) -> 'a -> (Spec{'d : type}. 'c 'd => 'd -> 'b) -> 'b
+x : string

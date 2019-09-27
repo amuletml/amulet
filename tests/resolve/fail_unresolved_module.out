@@ -2,5 +2,4 @@ internal: error
   Module not in scope: `X.Z`
 
   Arising from use of the declaration
-      open X.Z
 

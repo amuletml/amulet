@@ -1,0 +1,6 @@
+undecidable-super-class.ml[1:1 ..1:37]: error
+  │ 
+1 │ class 'a * 'b => andc 'a 'b begin end
+  │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  Invalid type in context for class declaration:
+      'a

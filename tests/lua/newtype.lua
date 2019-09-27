@@ -1,9 +1,9 @@
 do
-  local function It(x) return { __tag = "It", x } end
-  local function Mk(x) return { __tag = "Mk", x } end
-  local function Foo(gm) return gm end
+  local function It(a) return { __tag = "It", a } end
+  local function Mk(a) return { __tag = "Mk", a } end
+  local function Foo(gk) return gk end
   (nil)(Foo)
-  (nil)(function(gn) return gn end)
+  (nil)(function(gl) return gl end)
   (nil)(It)
   (nil)(Mk)
 end

@@ -83,7 +83,7 @@ substituteInTys = term where
               & armVars %~ map (_2 %~ gotype m)
 
   ptrn _ (Constr a) = Constr a
-  ptrn m (Destr a p) = Destr a (capture m p)
+  ptrn m (Destr a p) = Destr a (map (capture m) p)
   ptrn m (PatRecord fs) = PatRecord (map (second (capture m)) fs)
   ptrn m (PatValues xs) = PatValues (map (capture m) xs)
   ptrn _ l@PatLit{} = l
@@ -202,7 +202,7 @@ refresh = refreshTerm mempty mempty where
 
   substPattern :: IsVar a => VarMap.Map (Atom a) -> Pattern a -> Pattern a
   substPattern _ p@Constr{} = p
-  substPattern vm (Destr c p) = Destr c (substCapture vm p)
+  substPattern vm (Destr c p) = Destr c (map (substCapture vm) p)
   substPattern vm (PatRecord fs) = PatRecord (map (second (substCapture vm)) fs)
   substPattern vm (PatValues xs) = PatValues (map (substCapture vm) xs)
   substPattern _ p@PatLit{} = p

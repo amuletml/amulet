@@ -103,6 +103,7 @@ expr (Lazy e a) = do
   pure $ App (VarRef lAZYName a)
              (Fun (PatParam (PLiteral LiUnit a)) e a)
              a
+
 expr (Vta e t a) = Vta <$> expr e <*> pure (ty t) <*> pure a
 expr (ListExp e t) = ListExp <$> traverse expr e <*> pure t
 expr (ListComp _ [] an) = pure $ ListExp [] an
@@ -174,8 +175,7 @@ pat (PType p t a) = PType (pat p) (ty t) a
 pat (PRecord fs a) = PRecord (map (second pat) fs) a
 pat (PTuple ts a) = PTuple (map pat ts) a
 pat (PLiteral l a) = PLiteral l a
-pat (PWrapper (w, t) p a) = PWrapper (wrapper w, ty t) (pat p) a
-pat (PSkolem p v a) = PSkolem (pat p) v a
+pat PGadtCon{} = undefined
 pat (PList ps a) = build ps where
   build [] = Destructure nILName Nothing a
   build (x:xs) =
@@ -269,8 +269,7 @@ refutable (PAs p _ _) = refutable p
 refutable (PType p _ _) = refutable p
 refutable (PRecord rs _) = any (refutable . snd) rs
 refutable (PTuple ps _) = any refutable ps
-refutable PWrapper{} = undefined
-refutable PSkolem{} = undefined
+refutable PGadtCon{} = undefined
 
 fresh :: MonadNamey m => Ann Desugared -> m (Pattern Desugared, Expr Desugared)
 fresh an = do

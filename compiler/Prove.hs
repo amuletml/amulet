@@ -39,7 +39,6 @@ import Errors
 
 import Data.Spanned
 import Data.These
-import Data.Span
 
 main :: IO ()
 main = do

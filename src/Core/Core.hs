@@ -131,7 +131,7 @@ type Arm = AnnArm ()
 
 data Pattern a
   = Constr a
-  | Destr a (Capture a)
+  | Destr a [Capture a]
   | PatRecord [(Text, Capture a)]
   | PatValues [Capture a]
   | PatLit Literal

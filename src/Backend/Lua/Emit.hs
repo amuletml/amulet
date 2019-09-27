@@ -885,11 +885,13 @@ emitStmt (Type _ cs:xs) = do
       var' <- pushTopScope var
       let tag = LuaString var'
           name = LuaName var'
-          ctor = if arity ty == 0
-                 then [luaStmts|local $name = { __tag = %tag }|]
-                 else [luaStmts|local function $name(x) return { __tag = %tag, x } end|]
+          ctor = makeConstructor tag (arity ty)
+          conbind =
+            case ctor of
+              LuaFunction v ss -> LuaLocalFun name v ss
+              _ -> [luaStmt| local $name = %ctor |]
       topVars %= VarMap.insert (toVar var) (VarUpvalue, [simpleVar (LuaName var')])
-      topExVars %= VarMap.insert (toVar var) ([], Seq.fromList ctor)
+      topExVars %= VarMap.insert (toVar var) ([], Seq.singleton conbind)
 
 emitStmt (StmtLet (One (v, ty, e)):xs) = do
   TopEmitState { _topArity = ari, _topEscape = esc, _topVars = vars } <- get
@@ -923,6 +925,13 @@ emitStmt (StmtLet (Many vs):xs) = do
   pure $ case stmt of
     (LuaAssign [v] [LuaFunction args bod] :<| Empty) -> LuaLocalFun v args bod <| xs'
     _ -> LuaLocal (mconcat binds) [] <| stmt <> xs'
+
+makeConstructor :: LuaExpr -> Int -> LuaExpr
+makeConstructor tag = go names 1 [] where
+  go _ _ ac 0 = LuaTable ((LuaString "__tag", tag):reverse ac)
+  go (x:xs) idx ac n = LuaFunction [x] [ LuaReturn [go xs (idx + 1) ((LuaInteger idx, LuaRef x):ac) (n - 1)] ]
+  go _ _ _ _ = error ""
+  names = map (LuaName . T.pack) ([1..] >>= flip replicateM ['a'..'z'])
 
 -- | Push a new node into the emitting graph
 pushGraph :: MonadState (EmitState a) m => EmittedNode a -> m ()
@@ -1030,7 +1039,9 @@ patternBindings :: Occurs a => Pattern a -> [LuaExpr] -> [(a, [LuaExpr])]
 patternBindings (PatLit _) _     = []
 patternBindings PatWildcard _    = []
 patternBindings (Constr _) _     = []
-patternBindings (Destr _ p) [vr] = captureBinding p [LuaRef (LuaIndex vr (LuaInteger 1))]
+patternBindings (Destr _ ps) [vr] = do
+  (p, i) <- zip ps [1..]
+  captureBinding p [LuaRef (LuaIndex vr (LuaInteger i))]
 patternBindings (PatRecord rs) [vr] = concatMap (index vr) rs where
   index vr (var', pat) = captureBinding pat [LuaRef (LuaIndex vr (LuaString var'))]
 patternBindings (PatValues ps) vr = mconcat (zipWith (\p v -> captureBinding p [v]) ps vr)

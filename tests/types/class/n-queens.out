@@ -35,8 +35,8 @@ addq_all : Infer{'geh : type}. Infer{'gei : type}. Infer{'gej : type}. Infer{'ge
 addqueens : Infer{'gga : type}. Infer{'ggb : type}. Infer{'ggc : type}. Infer{'ggd : type}. 'ggd -> 'ggc -> 'ggb -> 'gga -> constraint
 addq_if : Infer{'ght : type}. Infer{'ghu : type}. Infer{'ghv : type}. Infer{'ghw : type}. Infer{'ghx : type}. 'ghx -> 'ghw -> 'ghv -> 'ghu -> 'ght -> constraint
 snat : nat -> type
-SZ : Infer{'hfu : type}. Spec{'n : 'hfu}. ('n ~ Z) ⊃ snat 'n
-SS : Infer{'hgs : type}. Spec{'n : 'hgs}. Spec{'n : nat}. ('n ~ S 'n) ⊃ snat 'n -> snat 'n
+SZ : Infer{'hft : type}. Spec{'n : 'hft}. ('n ~ Z) ⊃ snat 'n
+SS : Infer{'hgq : type}. Spec{'n : 'hgq}. Spec{'n : nat}. ('n ~ S 'n) ⊃ snat 'n -> snat 'n
 solution : nat -> type -> constraint
 solution : Spec{'n : nat}. Spec{'c : type}. solution 'n 'c => snat 'n -> 'c
 x : cons (queen (S (S (S Z))) (S Z)) (cons (queen (S (S Z)) (S (S (S Z)))) (cons (queen (S Z) Z) (cons (queen Z (S (S Z))) nil)))

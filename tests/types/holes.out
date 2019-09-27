@@ -11,7 +11,7 @@ holes.ml[11:47 ..11:47]: error
    │                                               ^
   Found typed hole _ of type 'b -> || 'a 'b
   • Valid replacements include:
-      • fun y -> In2 y
+      • fun b -> In2 b
 holes.ml[13:79 ..13:79]: error
    │ 
 13 │   let or_elim : forall 'a 'b 'r. ('a -> 'r) -> ('b -> 'r) -> 'a || 'b -> 'r = _
@@ -28,7 +28,7 @@ holes.ml[15:54 ..15:54]: error
   Found typed hole _ of type || 'a 'b -> || 'b 'a
   • Valid replacements include:
       • function
-        | (In1 b) -> In2 b
+        | (In1 y) -> In2 y
         | (In2 c) -> In1 c
 holes.ml[17:53 ..17:53]: error
    │ 
@@ -36,14 +36,14 @@ holes.ml[17:53 ..17:53]: error
    │                                                     ^
   Found typed hole _ of type 'a -> 'b -> && 'a 'b
   • Valid replacements include:
-      • fun a b -> And (a, b)
+      • fun x y -> And (x, y)
 holes.ml[18:72 ..18:72]: error
    │ 
 18 │   let and_elim : forall 'a 'b 'r. 'a && 'b -> ('a -> 'b -> 'r) -> 'r = _
    │                                                                        ^
   Found typed hole _ of type && 'a 'b -> ('a -> 'b -> 'r) -> 'r
   • Valid replacements include:
-      • fun (And (a, b)) g -> g a b
+      • fun (And (x, y)) g -> g x y
 holes.ml[20:50 ..20:50]: error
    │ 
 20 │   let and_p1 : forall 'a 'b 'r. 'a && 'b -> 'a = _
@@ -57,7 +57,7 @@ holes.ml[21:50 ..21:50]: error
    │                                                  ^
   Found typed hole _ of type && 'a 'b -> 'b
   • Valid replacements include:
-      • fun (And (c, x)) -> x
+      • fun (And (z, a)) -> a
 holes.ml[23:55 ..23:55]: error
    │ 
 23 │   let and_swap : forall 'a 'b. 'a && 'b -> 'b && 'a = _
@@ -85,7 +85,7 @@ holes.ml[27:59 ..27:59]: error
    │                                                           ^
   Found typed hole _ of type not (not (|| 'p (not 'p)))
   • Valid replacements include:
-      • Not (fun (Not f) -> f (In2 (Not (fun a -> f (In1 a)))))
+      • Not (fun (Not f) -> f (In2 (Not (fun x -> f (In1 x)))))
 holes.ml[28:42 ..28:42]: error
    │ 
 28 │   let ex_falso : forall 'a. void -> 'a = _
