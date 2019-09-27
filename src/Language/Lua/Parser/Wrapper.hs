@@ -111,7 +111,6 @@ instance Monad Parser where
   (P m) >>= k = P $ \s -> case m s of
     POK s' a -> unP (k a) s'
     PFailed e -> PFailed e
-  fail = MonadFail.fail
 
 instance MonadFail Parser where
   fail msg = P $ \s -> PFailed (Failure (sPos s) msg)
