@@ -641,8 +641,6 @@ lookupEquality class_info scope a b = normal <|> fundepEquality where
           lookup (TyApps tyEq [a, b]) scope <> lookup (TyApps tyEq [b, a]) scope
      in assert (all ((== LocalAssum) . view implSort) choices) (map (VarCo . (^. implVar)) choices)
 
-  bsClass v i = foldl TyApp (TyCon v) (replicate i (TyVar (TgInternal "_")))
-
   fundepEquality =
     let
       all_instances = Set.toList (keys scope)

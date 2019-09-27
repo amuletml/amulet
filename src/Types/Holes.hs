@@ -104,9 +104,9 @@ fill ty@(TyApps con [xs]) | con == tyLazy =
 
 -- Let us not choose arbitrary literals, but pick them from scope
 -- instead.
-fill t | t == tyInt = knownImplication t
-fill t | t == tyString = knownImplication t
-fill t | t == tyFloat = knownImplication t
+fill t | t == tyInt = knownImplication t `interleave` (explore =<< tcVars t)
+fill t | t == tyString = knownImplication t `interleave` (explore =<< tcVars t)
+fill t | t == tyFloat = knownImplication t `interleave` (explore =<< tcVars t)
 
 -- Booleans are finite so we can enumerate them.
 fill t | t == tyBool = fake [t] $ \[a] ->
@@ -118,9 +118,9 @@ fill t | t == tyBool = fake [t] $ \[a] ->
 fill t | t == tyUnit = fake [t] $ pure . Literal LiUnit . head
 
 -- Sum types: we need to try each constructor.
-fill ty@(TyApps (TyCon con) _) = once (knownImplication ty) <|> do
+fill ty@(TyApps (TyCon ty_v) _) = once (knownImplication ty) <|> do
   -- Search all constructors for the type..
-  con <- explore =<< view (psEnv . types . at con . non mempty . to Set.toList)
+  con <- explore =<< view (psEnv . types . at ty_v . non mempty . to Set.toList)
 
   (_, cty, inst_ty) <- instantiate Strong Expression =<<
     view (psEnv . names . at con . non (error "no type for bound constructor?"))
@@ -130,6 +130,7 @@ fill ty@(TyApps (TyCon con) _) = once (knownImplication ty) <|> do
   -- them to the solver.
   case con_t of
     dom :-> cod -> do
+      guard (nonRec ty_v dom)
       Just sub <- pure $ unifyPure_v ((ty, cod):cons)
       -- Alright, let's apply it: Fill the domain recursively.
 #ifdef TRACE_TC
@@ -209,7 +210,6 @@ tcVars ty = fake [ty] $ \[a] -> do
   all <- view (psEnv . names . to scopeToList)
   letBound <- view (psEnv . letBound)
   pure [ VarRef x a | (x, ty') <- all, x `Set.notMember` letBound, ty == ty' ]
-
 
 pick, knownImplication :: MonadPs m => Type Typed -> m (Expr Typed)
 pick t = knownImplication t `interleave` (explore =<< tcVars t) `interleave` tcKnownImplication t
