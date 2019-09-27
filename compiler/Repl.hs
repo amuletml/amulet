@@ -500,22 +500,22 @@ repl port mode = replFrom port mode []
 
 replFrom :: Int -> DebugMode -> [FilePath] -> IO ()
 replFrom port mode files = do
-  state <- defaultState mode
+  state <- execStateT (loadFiles files) =<< defaultState mode
   hSetBuffering stdout LineBuffering
 
   tid <-
     if port /= 0
-       then forkIO $ startServer port files state
+       then forkIO $ startServer port state
        else myThreadId
 
-  evalStateT (loadFiles files >> runInputT defaultSettings (runRepl (Just tid))) state
+  evalStateT (runInputT defaultSettings (runRepl (Just tid))) state
 
 finish :: MonadIO m => Listener -> m ()
 finish Nothing = pure ()
 finish (Just i) = liftIO $ throwTo i ThreadKilled
 
-startServer :: Int -> [FilePath] -> ReplState -> IO ()
-startServer port files state = Net.withSocketsDo $ do
+startServer :: Int -> ReplState -> IO ()
+startServer port state = Net.withSocketsDo $ do
   let getSock = do
         (addr:_) <-
           Net.getAddrInfo (Just (Net.defaultHints { Net.addrFlags = [ Net.AI_NUMERICHOST
@@ -543,21 +543,14 @@ startServer port files state = Net.withSocketsDo $ do
            | otherwise -> () <$ execString "=<remote command>" line
 
 
-  nulldev <- openFile "/dev/null" WriteMode
-  bracket getSock Net.close $ \sock -> do
-    state <- execStateT (loadFiles files) (state { outputHandle = nulldev })
+  bracket getSock Net.close $ \sock -> forever $ do
+    (conn, _) <- Net.accept sock
+    forkIO $ do
+      handle <- Net.socketToHandle conn ReadWriteMode
+      hSetEncoding handle utf8
 
-    let loop st = do
-          (conn, _) <- Net.accept sock
-          handle <- Net.socketToHandle conn ReadWriteMode
-          hSetEncoding handle utf8
+      theLine <- T.hGetLine handle
+      () <- evalStateT (handleReplLine theLine) (state { outputHandle = handle })
 
-          theLine <- T.hGetLine handle
-          st <- execStateT (handleReplLine theLine) (st { outputHandle = handle })
-
-          hFlush handle
-          hClose handle
-
-          loop st
-
-    loop state
+      hFlush handle
+      hClose handle
