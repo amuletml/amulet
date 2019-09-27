@@ -16,8 +16,8 @@ executable amc
   hs-source-dirs:      compiler
   build-depends:       mtl >= 2.2 && < 2.3
                      , text >= 1.2 && < 1.3
-                     , base >= 4.9 && < 4.13
-                     , lens >= 4.15 && < 4.18
+                     , base >= 4.9 && < 4.14
+                     , lens >= 4.15 && < 4.19
                      , these >= 1 && < 1.1
                      , hslua >= 0.9 && < 1.1
                      , amuletml
@@ -25,7 +25,7 @@ executable amc
                      , containers >= 0.5 && < 0.7
                      , bytestring >= 0.10 && < 0.11
                      , monad-chronicle >= 1 && < 1.1
-                     , optparse-applicative >= 0.14 && < 0.15
+                     , optparse-applicative >= 0.14 && < 0.16
                      , pretty-show
 
   other-modules:       Repl
@@ -45,9 +45,9 @@ executable amc-prove
   main-is:             Prove.hs
   hs-source-dirs:      compiler
   build-depends:       amuletml
-                     , base >= 4.9 && < 4.13
+                     , base >= 4.9 && < 4.14
                      , text >= 1.2 && < 1.3
-                     , lens >= 4.15 && < 4.18
+                     , lens >= 4.15 && < 4.19
                      , these >= 1 && < 1.1
                      , haskeline >= 0.7 && < 0.8
                      , containers >= 0.5 && < 0.7
@@ -68,8 +68,8 @@ test-suite tests
   build-depends:       mtl >= 2.2 && < 2.3
                      , stm >= 2.5 && < 2.6
                      , text >= 1.2 && < 1.3
-                     , base >= 4.9 && < 4.13
-                     , lens >= 4.15 && < 4.18
+                     , base >= 4.9 && < 4.14
+                     , lens >= 4.15 && < 4.19
                      , Diff >= 0.3.4 && < 0.4
                      , HUnit >= 1.6 && < 1.7
                      , tasty >= 1.0 && < 1.3
@@ -83,7 +83,7 @@ test-suite tests
                      , tasty-ant-xml >= 1.1 && < 1.2
                      , tasty-hedgehog >= 1.0 && < 1.1
                      , monad-chronicle >= 1 && < 1.1
-                     , optparse-applicative >= 0.14 && < 0.15
+                     , optparse-applicative >= 0.14 && < 0.16
   other-modules:       Test.Golden
                      , Test.Reporter
                      , Test.Options
@@ -118,15 +118,15 @@ library
                      , syb >= 0.7 && < 0.8
                      , text >= 1.2 && < 1.3
                      , array >= 0.5 && < 0.6
-                     , base >= 4.9 && < 4.13
-                     , lens >= 4.15 && < 4.18
+                     , base >= 4.9 && < 4.14
+                     , lens >= 4.15 && < 4.19
                      , these >= 1 && < 1.1
-                     , hashable >= 1.2 && < 1.3
+                     , hashable >= 1.2 && < 1.4
                      , containers >= 0.5 && < 0.7
                      , these-lens >= 1 && < 1.1
                      , transformers >= 0.5 && < 0.6
                      , monad-chronicle >= 1 && < 1.1
-                     , template-haskell >= 2.13 && < 2.15
+                     , template-haskell >= 2.13 && < 2.16
                      , annotated-wl-pprint >= 0.7 && < 0.8
                      , unordered-containers >= 0.2 && < 0.3
                      , logict >= 0.7 && < 0.8

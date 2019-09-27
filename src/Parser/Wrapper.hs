@@ -23,7 +23,6 @@ module Parser.Wrapper
   , runParser, runLexer, runLexerTrivial
   ) where
 
-import Control.Monad.Fail as MonadFail
 import Control.Monad.Writer
 
 import qualified Data.Text.Lazy.Builder as B
@@ -123,7 +122,6 @@ instance Monad Parser where
   (P m) >>= k = P $ \s -> case m s of
     POK s' a -> unP (k a) s'
     PFailed e -> PFailed e
-  fail = MonadFail.fail
 
 instance MonadFail Parser where
   fail msg = P $ \s -> PFailed (Failure (sPos s) msg:sErrors s)
