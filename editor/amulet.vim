@@ -15,6 +15,7 @@ if has('nvim-0.3.2')
 endif
 
 let b:autostart_amc = has('nvim') ? 1 : 0
+let b:amc_deps = []
 
 hi! AmuletError cterm=underline ctermfg=red
 hi! AmuletWarn cterm=underline ctermfg=yellow
@@ -91,7 +92,7 @@ function! AmuletLoad(verbose, qf)
   let file = expand("%:p")
 
   try
-    let out = split(s:CallAmc(":l", file), '\n')
+    let out = split(call("s:CallAmc", [":l"] + b:amc_deps + [file]), '\n')
   catch /version/
     echo "Your version of amc is too old to have client/server support"
   catch /amc/
@@ -213,9 +214,32 @@ function! AmuletEval(mode)
   end
 endfunction
 
+function! AmuletDep(...)
+  for path in a:000
+    if filereadable(path)
+      call add(b:amc_deps, path)
+    else
+      echo "File " . file . " not readable by current user"
+    endif
+  endfor
+  if a:0 >= 1
+    call AmuletLoad(1, '')
+  endif
+endfunction
+
+function! AmuletParseDeps()
+  let b:amc_deps = []
+  let deplist = []
+  silent keeppatterns %s/(\* amulet\.vim: \(.*\) \*)/\=add(deplist,submatch(1))/gne
+  call call('AmuletDep', deplist)
+endfunction
+
 nnoremap <buffer> <silent> <LocalLeader>t :call AmuletType()<ENTER>
 nnoremap <buffer> <silent> <LocalLeader>l :call AmuletLoad(1,'')<ENTER>
 nnoremap <buffer> <silent> <LocalLeader>L :call AmuletLoad(0,'qf')<ENTER>
 vnoremap <buffer> <silent> <LocalLeader>e :call AmuletEval('v')<ENTER>
 nnoremap <buffer> <silent> <LocalLeader>e :call AmuletEval('n')<ENTER>
 command! -nargs=? AmuletStartServer :call AmuletStart(<args>)
+command! -complete=file -nargs=+ AmuletDepend :call AmuletDep(<f-args>)
+command! -nargs=0 AmuletFindDepends :call AmuletParseDeps()
+cnoreabbr amcdep AmuletDepend
