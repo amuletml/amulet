@@ -12,13 +12,36 @@ let b:did_ftplugin = 1
 
 function! s:CallAmc(...)
   let cmd = shellescape(join(a:000))
-  return system('amc --client ' . cmd)
+  let res = system('amc --client ' . cmd)
+  if res =~ "Failed to connect to server on port"
+    throw "Couldn't connect to a running amc"
+  else
+    return res
+  endif
 endfunction
+
+if has('nvim-0.3.2')
+  let s:vtext_ns = nvim_create_namespace('amulet')
+endif
 
 hi! AmuletError cterm=underline ctermfg=red
 hi! AmuletWarn cterm=underline ctermfg=yellow
+hi! AmuletErrorVtxt ctermfg=red cterm=italic
+hi! AmuletWarnVtxt ctermfg=yellow cterm=italic
 sign define amuletError   text=! texthl=AmuletError
 sign define amuletWarning text=* texthl=AmuletWarn
+
+function! s:HighlightRange(group, line, start_col, length)
+  " Vim columns are 1-indexed, but nvim's are 0-indexed
+  if has('nvim-0.3.2')
+    let start_col = str2nr(a:start_col) - 1
+    let end_col = str2nr(a:length) + start_col
+    let line = str2nr(a:line) - 1
+    call nvim_buf_add_highlight(bufnr(), s:vtext_ns, a:group, line, start_col, end_col)
+  else
+    call matchaddpos(a:group, [ [a:line, a:start_col, a:length] ])
+  end
+endfunction
 
 " Trashes both qflist and matches
 function! AmuletLoad(verbose, qf)
@@ -28,12 +51,22 @@ function! AmuletLoad(verbose, qf)
   call setqflist([])
 
   let file = expand("%:p")
-  let out = split(s:CallAmc(":l", file), '\n')
+
+  try
+    let out = split(s:CallAmc(":l", file), '\n')
+  catch /amc/
+    echo "Failed to connect to a running amc"
+    return -1
+  endtry
+
   let err_msg_pat = "\\v^" . file
   let nerrors = 0
   let nwarns = 0
 
   execute "sign unplace * file=" . expand("%p")
+  if has('nvim-0.3.2')
+    call nvim_buf_clear_namespace(0, s:vtext_ns, 0, -1)
+  endif
 
   if len(out) > 1
     let idx = 0
@@ -54,26 +87,32 @@ function! AmuletLoad(verbose, qf)
         let range = matchlist(line, "\\v\\[([0-9]+):([0-9]+) ..([0-9]+):([0-9]+)")
         let lineno = range[1]
 
-        if range[1] == range[3]
-          if match(line, "warning$")
-            call matchaddpos("AmuletWarn", [ [lineno, range[2], range[4] - range[2] + 1] ])
-            execute "sign place " . idx . " line=" . lineno . " name=amuletWarning"
-          else
-            call matchaddpos("AmuletError", [ [lineno, range[2], range[4] - range[2] + 1] ])
-            execute "sign place " . idx . " line=" . lineno . " name=amuletError"
-          end
-        endif
-
+        let err_msg = out[err_msg_idx]
         if err_msg_idx == idx + 1
-          caddexpr expand("%:p") . ":" . lineno . ":" . out[err_msg_idx]
           let idx += 1
         else
-          let err_msg_list = map(out[err_msg_idx:next - 1], "trim(v:val)")
-          caddexpr expand("%:p") . ":" . lineno . ":" . join(err_msg_list)
+          let err_msg = join(map(out[err_msg_idx:next - 1], "trim(v:val)"))
           let idx = next
         endif
 
-        if match(line, "warning$")
+        caddexpr expand("%:p") . ":" . lineno . ":" . err_msg
+
+        if range[1] == range[3]
+          let group = "AmuletError"
+          let sign = "amuletError"
+          if match(line, "warning$") != -1
+            let group = "AmuletWarn"
+            let sign = "amuletWarning"
+          end
+
+          call s:HighlightRange(group, lineno, range[2], range[4] - range[2] + 1)
+          execute "sign place " . idx . " line=" . lineno . " name=" . sign
+          if has('nvim-0.3.2')
+            call nvim_buf_set_virtual_text(0, s:vtext_ns, str2nr(lineno - 1), [[err_msg, group . "vtxt"]], {})
+          endif
+        endif
+
+        if match(line, "warning$") != -1
           let nwarns += 1
         else
           let nerrors += 1
@@ -83,22 +122,13 @@ function! AmuletLoad(verbose, qf)
       endif
     endwhile
 
-    if nerrors == 1
-      let errs = "error"
-    else
-      let errs = "errors"
-    end
-
-    if nwarns == 1
-      let warns = "warning"
-    else
-      let warns = "warnings"
-    end
+    let errs = (nerrors == 1) ? "error" : "errors"
+    let warns = (nwarns == 1) ? "warning" : "warnings"
 
     if (nerrors == 0) && a:verbose
       echo "Beware: " . nwarns . " " . warns
     elseif nerrors != 0
-      echo "Compilation failed with " . nerrors . " " . errs . " " . " and " . nwarns . " " . warns
+      echo "Compilation failed with " . nerrors . " " . errs . " and " . nwarns . " " . warns
     end
     if (nerrors != 0 || nwarns != 0) && a:qf == 'qf'
       copen
@@ -108,7 +138,7 @@ function! AmuletLoad(verbose, qf)
     if a:verbose
       echo "Loaded " . expand("%p") . " successfully."
     end
-    return 1
+    return 0
   endif
 endfunction
 
