@@ -542,9 +542,13 @@ unify scope (TyPi (Implicit a) b) (TyPi (Implicit a') b') =
 unify scope l@(TyApp a b) r@(TyApp a' b') =
   rethrow l r $ AppCo <$> unify scope a a' <*> unify scope b b'
 
-unify _ ta@(TyCon a) tb@(TyCon b)
+unify scope ta@(TyCon a) tb@(TyCon b)
   | a == b = pure (ReflCo tb)
-  | otherwise = confesses =<< unequal ta tb
+  | otherwise = do
+      i <- view classInfo
+      case lookupEquality i scope ta tb of
+        (x:_) -> pure x
+        _ -> confesses =<< unequal ta tb
 
 unify scope (TyForall v Nothing ty) (TyForall v' Nothing ty') = do
   fresh <- freshTV
@@ -646,8 +650,10 @@ lookupEquality class_info scope a b = normal <|> fundepEquality where
       all_instances = Set.toList (keys scope)
 
       inst_pairs =
-            [ (x, y) | x@(TyApps (TyCon c) _) <- all_instances, y@(TyApps (TyCon c') _) <- all_instances, c == c', x /= y ]
-        <|> [ (x, y) | TyTuple x y <- all_instances, let TyApps (TyCon c) _ = x, let TyApps (TyCon c') _ = y, c == c' ]
+            [ (x, y) | x@(TyApps (TyCon c) _) <- all_instances
+                     , y@(TyApps (TyCon c') _) <- all_instances, c == c', x /= y ]
+        <|> [ (x, y) | TyTuple x y <- all_instances
+                     , let TyApps (TyCon c) _ = x, let TyApps (TyCon c') _ = y, c == c' ]
 
       pair_fds =
         [ (xs, tail (appsView y), need, det)
