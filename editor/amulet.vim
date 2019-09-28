@@ -73,6 +73,8 @@ function! s:CallAmc(...)
     else
       throw "Couldn't connect to a running amc"
     end
+  elseif res =~ "Invalid option `--client`"
+    throw "Installed version of amc doesn't have client/server support"
   else
     return res
   endif
@@ -90,6 +92,8 @@ function! AmuletLoad(verbose, qf)
 
   try
     let out = split(s:CallAmc(":l", file), '\n')
+  catch /version/
+    echo "Your version of amc is too old to have client/server support"
   catch /amc/
     echo "Failed to connect to a running amc"
     return -1
