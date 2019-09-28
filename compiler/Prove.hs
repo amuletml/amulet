@@ -45,6 +45,7 @@ main = do
   x <- getArgs
   case x of
     [] -> putDoc ("Welcome to" <+> keyword "amc-prove") *> runInputT defaultSettings prover
+    [x] -> handleSentence (L.pack x)
     _ -> putDoc proverHelp
 
 prover :: InputT IO ()
@@ -54,14 +55,13 @@ prover = do
     Nothing -> pure ()
     Just x | ":q" `isPrefixOf` x -> pure ()
     Just x | ":h" `isPrefixOf` x -> liftIO (putDoc proverHelp) *> prover
-    Just t -> handleSentence (L.pack t)
+    Just t -> handleSentence (L.pack t) *> prover
 
-handleSentence :: Text -> InputT IO ()
+handleSentence :: MonadIO m => Text -> m ()
 handleSentence sentence =
   case runParser "<input>" sentence parseType of
     (Just t, _) -> flip evalNameyT (TgName "a" 0) $ proveSentence (`reportS` files) (fmap propVarToTv t)
     (Nothing, es) -> liftIO $ traverse_ (`reportS` files) es
-  *> prover
   where files = [("<input>", L.toStrict sentence)]
 
 propVarToTv :: Type Parsed -> Type Parsed
@@ -69,8 +69,9 @@ propVarToTv = transformType go where
   go (TyPromotedCon v) = TyVar v
   go x = x
 
-proveSentence :: (forall a. Note a Style => a -> IO ())
-              -> Located (Type Parsed) -> NameyT (InputT IO) ()
+proveSentence :: MonadIO m
+              => (forall a. Note a Style => a -> IO ())
+              -> Located (Type Parsed) -> NameyT m ()
 proveSentence report tau = do
   let prog = [ TySymDecl Public (Name "_") [] (foldr addForall t (ftv t)) (annotation tau) ]
       addForall v = TyForall v (Just TyType)
