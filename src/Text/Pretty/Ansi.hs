@@ -25,7 +25,7 @@ import qualified Data.Text as T
 import Data.Maybe
 
 import Text.Pretty hiding (putDoc, displayDecorated, hPutDoc)
-import System.IO (Handle, stdout)
+import System.IO (Handle, stdout, hIsTerminalDevice)
 
 import System.Info
 
@@ -61,7 +61,10 @@ putDocWithoutColour = T.putStrLn . display . renderPretty 0.4 100
 
 -- | Render an ANSI document to a given handle
 hPutDoc :: Handle -> Doc AnsiStyle -> IO ()
-hPutDoc h = T.hPutStrLn h . displayDecorated . renderPretty 0.4 100
+hPutDoc h doc = do
+  term <- hIsTerminalDevice h
+  let disp = if term then displayDecorated else display
+  T.hPutStrLn h . disp . renderPretty 0.4 100 $ doc
 
 -- | Convert an ANSI document to a text value, including the appropriate
 -- escape sequences.
