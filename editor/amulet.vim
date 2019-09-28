@@ -10,19 +10,11 @@ setlocal commentstring=(*\ %s\ *)
 
 let b:did_ftplugin = 1
 
-function! s:CallAmc(...)
-  let cmd = shellescape(join(a:000))
-  let res = system('amc --client ' . cmd)
-  if res =~ "Failed to connect to server on port"
-    throw "Couldn't connect to a running amc"
-  else
-    return res
-  endif
-endfunction
-
 if has('nvim-0.3.2')
   let s:vtext_ns = nvim_create_namespace('amulet')
 endif
+
+let b:autostart_amc = has('nvim') ? 1 : 0
 
 hi! AmuletError cterm=underline ctermfg=red
 hi! AmuletWarn cterm=underline ctermfg=yellow
@@ -42,6 +34,50 @@ function! s:HighlightRange(group, line, start_col, length)
     call matchaddpos(a:group, [ [a:line, a:start_col, a:length] ])
   end
 endfunction
+
+function! AmuletStart(...)
+  if has('nvim')
+    if exists("b:amulet_pid")
+      return 0
+    end
+    let b:amulet_pid = jobstart(["amc", "--port", a:0 == 1 ? a:1 : 6000])
+    let b:amulet_port = a:0 == 1 ? a:1 : 6000
+  else
+    echo "Having vim manage the compiler is only supported on nvim"
+  end
+endfunction
+
+function! AmuletStop()
+  if has('nvim')
+    if exists("b:amulet_pid")
+      call jobstop(b:amulet_pid)
+      unlet b:amulet_pid b:amulet_port
+    end
+  else
+    echo "Having vim manage the compiler is only supported on nvim"
+  end
+endfunction
+
+function! s:CallAmc(...)
+  let cmd = shellescape(join(a:000))
+
+  if exists("b:amulet_pid")
+    let cmd = cmd . " --port " . b:amulet_port
+  end
+
+  let res = system('amc --client ' . cmd)
+  if res =~ "Failed to connect to server on port"
+    if has('nvim') && b:autostart_amc == 1
+      call AmuletStart()
+      return call("s:CallAmc", a:000)
+    else
+      throw "Couldn't connect to a running amc"
+    end
+  else
+    return res
+  endif
+endfunction
+
 
 " Trashes both qflist and matches
 function! AmuletLoad(verbose, qf)
@@ -178,3 +214,4 @@ nnoremap <buffer> <silent> <LocalLeader>l :call AmuletLoad(1,'')<ENTER>
 nnoremap <buffer> <silent> <LocalLeader>L :call AmuletLoad(0,'qf')<ENTER>
 vnoremap <buffer> <silent> <LocalLeader>e :call AmuletEval('v')<ENTER>
 nnoremap <buffer> <silent> <LocalLeader>e :call AmuletEval('n')<ENTER>
+command! -nargs=? AmuletStartServer :call AmuletStart(<args>)
