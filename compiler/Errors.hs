@@ -9,6 +9,7 @@ import Data.Position
 import Text.Pretty.Semantic
 import qualified Text.Pretty.Ansi as A
 import qualified Text.Pretty.Note as N
+import qualified Text.Pretty as P
 
 import System.IO
 
@@ -20,12 +21,16 @@ reportS :: N.Note a Style => a -> [(SourceName, T.Text)] -> IO ()
 reportS err fs = hReport stdout fs err
 
 hReport :: N.Note a Style => Handle -> [(SourceName, T.Text)] -> a -> IO ()
-hReport h fs = T.hPutStrLn h
-             . A.displayDecorated
-             . fmap (either N.toAnsi toAnsi)
-             . filterSimpleDoc (either (const True) uncommentFilter)
-             . renderPretty 0.4 100
-             . N.format (N.fileSpans fs highlightAmulet)
+hReport h fs err = do
+  x <- hIsTerminalDevice h
+  let k = if x then A.displayDecorated else P.display
+  T.hPutStrLn h
+    . k
+    . fmap (either N.toAnsi toAnsi)
+    . filterSimpleDoc (either (const True) uncommentFilter)
+    . renderPretty 0.4 100
+    . N.format (N.fileSpans fs highlightAmulet)
+    $ err
 
 highlightAmulet :: T.Text -> N.Highlighted Style
 highlightAmulet t =

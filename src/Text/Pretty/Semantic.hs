@@ -37,7 +37,7 @@ import Text.Pretty.Ansi (Colour(..), AnsiStyle(..))
 import qualified Text.Pretty.Ansi as A
 import qualified Text.Pretty as P
 
-import System.IO (Handle, stdout)
+import System.IO (Handle, stdout, hIsTerminalDevice)
 
 -- | A document annotated with the semantic 'Style'
 type Doc = P.Doc Style
@@ -78,7 +78,10 @@ putDocWithoutColour = T.putStrLn . P.display . renderAnsi
 -- | Render a document to a given handle using ANSI escape sequences to
 -- colour it.
 hPutDoc :: Handle -> Doc -> IO ()
-hPutDoc h = T.hPutStrLn h . A.displayDecorated . renderAnsi
+hPutDoc h doc = do
+  x <- hIsTerminalDevice h
+  let k = if x then A.displayDecorated else P.display
+  T.hPutStrLn h . k . renderAnsi $ doc
 
 -- | Convert a document to a text value, using ANSI escape sequences to
 -- colour it.

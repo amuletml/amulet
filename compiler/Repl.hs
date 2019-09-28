@@ -32,7 +32,7 @@ import Data.Char
 import qualified Foreign.Lua.Core.Types as L
 import qualified Foreign.Lua as L
 
-import System.Console.Haskeline hiding (display, bracket, throwTo, catch)
+import System.Console.Haskeline hiding (display, bracket, throwTo)
 import System.IO
 
 import qualified Syntax.Resolve.Toplevel as R
@@ -491,6 +491,7 @@ runRemoteReplCommand port command = Net.withSocketsDo $ do
       handle <- Net.socketToHandle sock ReadWriteMode
       hSetEncoding handle utf8
       T.hPutStrLn handle (T.pack command)
+      T.hPutStrLn handle mempty
       T.putStr =<< T.hGetContents handle
     Left (_ :: SomeException) ->
       putStrLn $ "Failed to connect to server on port " ++ show port
@@ -503,57 +504,67 @@ replFrom port mode files = do
   state <- execStateT (loadFiles files) =<< defaultState mode
   hSetBuffering stdout LineBuffering
 
+  ready <- newEmptyMVar
   tid <-
     if port /= 0
-       then forkIO $ startServer port state
+       then forkIO $ startServer ready port state
        else myThreadId
 
+  takeMVar ready
   evalStateT (runInputT defaultSettings (runRepl (Just tid))) state
 
 finish :: MonadIO m => Listener -> m ()
 finish Nothing = pure ()
 finish (Just i) = liftIO $ throwTo i ThreadKilled
 
-startServer :: Int -> ReplState -> IO ()
-startServer port state = Net.withSocketsDo $ do
-  let getSock = do
-        (addr:_) <-
-          Net.getAddrInfo (Just (Net.defaultHints { Net.addrFlags = [ Net.AI_NUMERICHOST
-                                                                    , Net.AI_PASSIVE 
-                                                                    ]
-                                                  , Net.addrSocketType = Net.Stream }))
-                          (Just "127.0.0.1")
-                          (Just (show port))
-        sock <- Net.socket Net.AF_INET Net.Stream Net.defaultProtocol
-        x <- try $ do
-          Net.setSocketOption sock Net.ReuseAddr 1
-          Net.bind sock (Net.addrAddress addr)
-          Net.listen sock 4
-        case x of
-          Left (_ :: SomeException) -> do
-            putStrLn $ "Failed to start REPL server on port " ++ show port
-            killThread =<< myThreadId
-          Right () -> pure ()
-        putStrLn $ "Listening on port " ++ show port
-        pure sock
+startServer :: MVar () -> Int -> ReplState -> IO ()
+startServer ready port state = Net.withSocketsDo $ bracket getSock Net.close (work state) where
+  getSock = do
+    (addr:_) <-
+      Net.getAddrInfo (Just (Net.defaultHints { Net.addrFlags = [ Net.AI_NUMERICHOST
+                                                                , Net.AI_PASSIVE 
+                                                                ]
+                                              , Net.addrSocketType = Net.Stream }))
+                      (Just "127.0.0.1")
+                      (Just (show port))
+    sock <- Net.socket Net.AF_INET Net.Stream Net.defaultProtocol
+    x <- try $ do
+      Net.setSocketOption sock Net.ReuseAddr 1
+      Net.bind sock (Net.addrAddress addr)
+      Net.listen sock 4
+    case x of
+      Left (_ :: SomeException) -> do
+        putStrLn $ "Failed to start REPL server on port " ++ show port
+        killThread =<< myThreadId
+      Right () -> pure ()
+    putStrLn $ "Listening on port " ++ show port
+    putMVar ready ()
+    pure sock
 
-      handleReplLine line =
-        if | T.null line -> pure ()
-           | ':' == T.head line -> uncurry (execCommand Nothing) . span (/=' ') $ T.unpack (T.tail line)
-           | otherwise -> () <$ execString "=<remote command>" line
+  handleReplLine line =
+    if | T.null line -> pure ()
+       | ':' == T.head line -> uncurry (execCommand Nothing) . span (/=' ') $ T.unpack (T.tail line)
+       | otherwise -> () <$ execString "=<remote command>" line
 
+  handleLines handle = do
+    eof <- liftIO $ hIsEOF handle
+    if eof then
+      pure ()
+    else do
+      line <- liftIO $ T.hGetLine handle
+      if T.null line then
+        pure ()
+      else do
+        handleReplLine line
+        handleLines handle
 
-  bracket getSock Net.close $ \sock -> forever $ do
+  work state sock = do
     (conn, _) <- Net.accept sock
-    forkIO $ do
-      handle <- Net.socketToHandle conn ReadWriteMode
-      hSetEncoding handle utf8
+    handle <- Net.socketToHandle conn ReadWriteMode
+    hSetEncoding handle utf8
 
-      theLine <- T.hGetLine handle
-        `catch` \(_ :: SomeException) -> pure mempty
-      () <- evalStateT (handleReplLine theLine) (state { outputHandle = handle })
-        `catch`
-          \(e :: SomeException) -> hPutStr handle ("Haskell error: " ++ show e)
+    state <- execStateT (handleLines handle) (state { outputHandle = handle })
 
-      hFlush handle
-      hClose handle
+    hClose handle
+
+    work state sock
