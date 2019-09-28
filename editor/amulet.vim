@@ -29,7 +29,7 @@ function! s:HighlightRange(group, line, start_col, length)
     let start_col = str2nr(a:start_col) - 1
     let end_col = str2nr(a:length) + start_col
     let line = str2nr(a:line) - 1
-    call nvim_buf_add_highlight(bufnr(), s:vtext_ns, a:group, line, start_col, end_col)
+    call nvim_buf_add_highlight(bufnr(''), s:vtext_ns, a:group, line, start_col, end_col)
   else
     call matchaddpos(a:group, [ [a:line, a:start_col, a:length] ])
   end
@@ -81,7 +81,7 @@ endfunction
 
 " Trashes both qflist and matches
 function! AmuletLoad(verbose, qf)
-  let our_bufnr = bufnr()
+  let our_bufnr = bufnr('')
   silent write
   call clearmatches()
   call setqflist([])
