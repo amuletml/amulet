@@ -19,6 +19,6 @@ install:
 - stack --no-terminal --install-ghc test --only-dependencies
 
 script:
-- stack --no-terminal build --fast
-- stack --no-terminal test --fast --test-arguments "--xml junit.xml --display t"
+- stack --no-terminal build --fast --ghc-options "-Werror -fmax-pmcheck-iterations=5000000"
+- stack --no-terminal test --fast --ghc-options "-Werror -fmax-pmcheck-iterations=5000000" --test-arguments "--xml junit.xml --display t"
 - stack --no-terminal exec --package=hlint -- hlint --git

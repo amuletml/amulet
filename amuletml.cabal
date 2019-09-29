@@ -141,8 +141,8 @@ library
                -Wredundant-constraints -Wmonomorphism-restriction
                -j +RTS -A32M -RTS
 
-  build-tools: alex
-             , happy
+  build-tool-depends: alex:alex >= 3.2.4 && < 4.0
+                    , happy:happy >= 1.19.12 && < 2.0
 
   exposed-modules:     Parser
                      , Parser.Error

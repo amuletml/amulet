@@ -10,8 +10,8 @@ import Syntax.Var
 import Syntax
 
 import qualified Control.Monad.Infer as MonadInfer
-import Control.Monad.Infer (Constraint(..), SomeReason(..), TypeError)
 import qualified Control.Monad.Namey as Namey
+import Control.Monad.Infer (Constraint(..), TypeError)
 
 import Text.Pretty.Semantic
 import Data.Sequence (Seq)
