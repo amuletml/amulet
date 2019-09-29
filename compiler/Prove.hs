@@ -46,14 +46,16 @@ import Errors
 import Data.Spanned
 import Data.These
 
+import System.IO
+
 #ifdef WITH_SERVER
 import qualified Data.ByteString as Bs
 
 import Network.HTTP.Toolkit as Http
 import Network.Socket as Net
 
+import System.Posix.Types
 import System.Posix.Files
-import System.IO
 import System.Exit
 
 import Control.Concurrent
@@ -77,10 +79,13 @@ startServer path = Net.withSocketsDo $ do
   unlink path
 
   sock <- Net.socket AF_UNIX Stream defaultProtocol
+
   flip catch (\e -> print (e :: SomeException) *> exitFailure) $ do
     Net.setSocketOption sock ReuseAddr 1
     Net.bind sock (SockAddrUnix path)
     Net.listen sock 4
+
+  setFileMode path (CMode 0o666)
 
   bracket (pure ()) (\() -> unlink path) $ \() -> do
     forever $ do
