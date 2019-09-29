@@ -98,8 +98,8 @@ lowerMatch a cases = do
 lowerMatch' :: forall m. MonadLower m
             => CoVar -> Type CoVar -> [(S.Pattern Typed, Maybe (Term CoVar), Term CoVar)] -> m (Term CoVar)
 lowerMatch' var ty cases = do
-  let bodies :: ArmMap (ArmExpr m) = foldr (<>) mempty (zipWith (flip HMap.singleton . makeBody) cases [0..])
-      guards :: ArmMap (ArmExpr m) = foldr (<>) mempty (zipWith makeGuard cases [0..])
+  let bodies :: ArmMap (ArmExpr m) = mconcat (zipWith (flip HMap.singleton . makeBody) cases [0..])
+      guards :: ArmMap (ArmExpr m) = mconcat (zipWith makeGuard cases [0..])
   arms <- lowerOne (VarMap.singleton var ty) $
     zipWith (\(pat, g, _) arm ->
                 PR { rowArm      = arm
