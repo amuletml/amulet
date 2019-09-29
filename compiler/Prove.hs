@@ -1,4 +1,5 @@
-{-# LANGUAGE OverloadedStrings, RankNTypes, FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings, RankNTypes, FlexibleContexts,
+   ScopedTypeVariables, TypeApplications, CPP, RecordWildCards #-}
 module Main where
 
 import System.Console.Haskeline hiding (display)
@@ -6,12 +7,17 @@ import System.Environment
 
 import Control.Monad.IO.Class
 import Control.Monad.Namey
+import Control.Monad
 import Control.Lens
 
 import Parser.Wrapper (runParser)
 import Parser (parseType, getL, Located)
 
 import qualified Data.Text.Lazy as L
+
+import qualified Data.Text.Encoding as T
+import qualified Data.Text.IO as T
+
 import Data.Text.Lazy (Text)
 import Data.Foldable
 import Data.List
@@ -40,13 +46,73 @@ import Errors
 import Data.Spanned
 import Data.These
 
+#ifdef WITH_SERVER
+import qualified Data.ByteString as Bs
+
+import Network.HTTP.Toolkit as Http
+import Network.Socket as Net
+
+import System.Posix.Files
+import System.IO
+import System.Exit
+
+import Control.Concurrent
+import GHC.IO.Exception
+#endif
+
 main :: IO ()
 main = do
   x <- getArgs
   case x of
     [] -> putDoc ("Welcome to" <+> keyword "amc-prove") *> runInputT defaultSettings prover
-    [x] -> handleSentence (L.pack x)
+#ifdef WITH_SERVER
+    ["serve", sock] -> startServer sock
+#endif
+    ("prove":x@(_:_)) -> handleSentence stdout (L.pack (unwords x))
     _ -> putDoc proverHelp
+
+#ifdef WITH_SERVER
+startServer :: String -> IO ()
+startServer path = Net.withSocketsDo $ do
+  unlink path
+
+  sock <- Net.socket AF_UNIX Stream defaultProtocol
+  flip catch (\e -> print (e :: SomeException) *> exitFailure) $ do
+    Net.setSocketOption sock ReuseAddr 1
+    Net.bind sock (SockAddrUnix path)
+    Net.listen sock 4
+
+  bracket (pure ()) (\() -> unlink path) $ \() -> do
+    forever $ do
+      (sock, _) <- Net.accept sock
+      _ <- forkIO $ handleSocketSentence (Net.socketToHandle sock ReadWriteMode)
+      pure ()
+
+  where
+    handleSocketSentence geth = bracket geth hClose $ \handle -> do
+      Http.Request{..} <- Http.readRequest False =<< Http.inputStreamFromHandle handle
+      unless (requestMethod == "POST") $ do
+        Http.simpleResponse (Bs.hPutStr handle) (toEnum 405) [] "Please use POST"
+        exitFailure
+
+      unless (("Host", "prove") `elem` requestHeaders) $ do
+        Http.simpleResponse (Bs.hPutStr handle) (toEnum 404) [] "Not found: please request /prove"
+        exitFailure
+
+      body <- T.decodeUtf8 <$> Http.consumeBody requestBody
+
+      T.hPutStr handle "HTTP/1.1 200 OK\r\n"
+      T.hPutStr handle "Content-Type: text/plain\r\n\r\n"
+      handleSentence handle . L.fromStrict $ body
+      hClose handle
+
+    unlink path =
+      removeLink path
+        `catch` \e ->
+          case ioe_type e of
+            NoSuchThing -> pure ()
+            _ -> print e *> exitFailure
+#endif
 
 prover :: InputT IO ()
 prover = do
@@ -55,13 +121,13 @@ prover = do
     Nothing -> pure ()
     Just x | ":q" `isPrefixOf` x -> pure ()
     Just x | ":h" `isPrefixOf` x -> liftIO (putDoc proverHelp) *> prover
-    Just t -> handleSentence (L.pack t) *> prover
+    Just t -> handleSentence stdout (L.pack t) *> prover
 
-handleSentence :: MonadIO m => Text -> m ()
-handleSentence sentence =
+handleSentence :: MonadIO m => Handle -> Text -> m ()
+handleSentence handle sentence =
   case runParser "<input>" sentence parseType of
-    (Just t, _) -> flip evalNameyT (TgName "a" 0) $ proveSentence (`reportS` files) (fmap propVarToTv t)
-    (Nothing, es) -> liftIO $ traverse_ (`reportS` files) es
+    (Just t, _) -> flip evalNameyT (TgName "a" 0) $ proveSentence (hReport handle files) handle (fmap propVarToTv t)
+    (Nothing, es) -> liftIO $ traverse_ (hReport handle files) es
   where files = [("<input>", L.toStrict sentence)]
 
 propVarToTv :: Type Parsed -> Type Parsed
@@ -71,8 +137,9 @@ propVarToTv = transformType go where
 
 proveSentence :: MonadIO m
               => (forall a. Note a Style => a -> IO ())
+              -> Handle
               -> Located (Type Parsed) -> NameyT m ()
-proveSentence report tau = do
+proveSentence report stdout tau = do
   let prog = [ TySymDecl Public (Name "_") [] (foldr addForall t (ftv t)) (annotation tau) ]
       addForall v = TyForall v (Just TyType)
       t = getL tau
@@ -89,8 +156,8 @@ proveSentence report tau = do
     solve [ TypeDecl _ _ _ (Just [ArgCon _ _ ty _]) _ ] = do
       candidates <- findHoleCandidate mempty (annotation tau) env ty
       if not (null candidates)
-         then liftIO $ putDoc (keyword "yes." <#> indent 2 (pretty (head candidates)))
-         else liftIO $ putDoc (keyword "probably not.")
+         then liftIO $ hPutDoc stdout (keyword "yes." <#> indent 2 (pretty (head candidates)))
+         else liftIO $ hPutDoc stdout (keyword "probably not.")
     solve _ = undefined
 
 rScope :: R.Scope
@@ -150,6 +217,12 @@ env =
 proverHelp :: Doc
 proverHelp = vsep
   [ "A prover for" <+> keyword "constructive quantifier-free first-order logic" <+> "based on amc's hole-filling."
+  , empty
+  , indent 2 "To prove a single proposition, run" <+> keyword "prove P"
+#ifdef WITH_SERVER
+  , indent 2 "Run with" <+> keyword "serve [path]" <+> "to open an HTTP server on the UNIX domain socket <path>"
+  , indent 2 "If [path] exists, it will be unlinked. It will also be unlinked when the server stops."
+#endif
   , empty
   , indent 2 . align $ 
       vsep [ bullet $ "Write propositional variables in" <+> stypeCon "UPPERCASE"
