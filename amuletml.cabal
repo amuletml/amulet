@@ -10,6 +10,10 @@ category:            Development
 build-type:          Simple
 cabal-version:       >=2.0
 
+flag amc-prove-server
+  description: Compile amc-prove with http server support
+  default:     False
+  manual:      True
 
 executable amc
   main-is:             Main.hs
@@ -61,7 +65,16 @@ executable amc-prove
   if os(linux)
     ghc-options: -optl-fuse-ld=gold
     extra-libraries: m, pthread
+
+  if flag(amc-prove-server)
+    build-depends: network    >= 3.1 && < 3.2
+                 , unix       >= 2.7 && < 2.8
+                 , http-kit   >= 0.5 && < 0.6
+                 , bytestring >= 0.10 && < 0.11
+    cpp-options:   -DWITH_SERVER
+
   default-language:    Haskell2010
+
 
 test-suite tests
   type:                exitcode-stdio-1.0
