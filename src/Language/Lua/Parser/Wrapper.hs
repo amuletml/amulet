@@ -23,7 +23,6 @@ module Language.Lua.Parser.Wrapper
   , runParser
   ) where
 
-import Control.Monad.Fail as MonadFail
 import Control.Monad.Writer
 
 import qualified Data.Text.Lazy.Builder as B

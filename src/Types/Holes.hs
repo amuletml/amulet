@@ -11,7 +11,6 @@ import Control.Monad.Reader
 import Control.Monad.Namey
 import Control.Monad.Logic
 import Control.Monad.Infer
-import Control.Monad.Fail (MonadFail)
 
 import Control.Applicative
 
