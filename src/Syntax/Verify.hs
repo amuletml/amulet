@@ -1,6 +1,6 @@
 {-# LANGUAGE ConstraintKinds, FlexibleContexts, FlexibleInstances,
    UndecidableInstances, MultiParamTypeClasses, OverloadedStrings,
-   ScopedTypeVariables #-}
+   ScopedTypeVariables, TupleSections #-}
 module Syntax.Verify
   ( VerifyError(..)
   , BindingSite(..)
@@ -267,12 +267,16 @@ verifyMatch m ty [] = do
 verifyMatch m ty bs = do
   VerifyScope env va <- ask
 
-  unc <- foldlM (\alts a@(Arm pat guard body) -> do
+  (_, unc) <- foldlM (\(i :: Int, alts) (a@(Arm pat guard body)) -> do
     let cov  = covering env pat alts
     -- If the covered set is empty, this arm is redundant
     va' <- case covered cov of
       Seq.Empty -> do
-        tell . pure $ RedundantArm a
+        let b = case bs of
+                  [_] -> BecauseMatch
+                  _ | i == 0 -> BecauseArm
+                  _ -> Shadowed
+        tell . pure $ RedundantArm a b
         pure va
       (va', _) Seq.:<| _ -> pure va'
 
@@ -283,9 +287,9 @@ verifyMatch m ty bs = do
 
     -- Return the filtered uncovered set if this pattern has no guard,
     -- otherwise use the original uncovered set.
-    pure $ case guard of
+    pure . (i + 1,) $ case guard of
       Nothing -> uncovered cov
       Just{} -> alts)
-    (pure $ emptyAlt va ty) bs
+    (0, pure $ emptyAlt va ty) bs
 
   unless (null unc) (tell . pure . MissingPattern m . map snd . toList $ unc)

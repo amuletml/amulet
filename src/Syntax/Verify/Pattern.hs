@@ -98,11 +98,13 @@ data Covering a
 covered, uncovered :: Covering a -> Seq.Seq a
 covered (Covering c _) = c
 covered (PureCovering c) = c
+
 uncovered (Covering _ u) = u
 uncovered (PureCovering u) = u
 
 instance Applicative Covering where
   pure x = PureCovering (pure x)
+
   (PureCovering f) <*> (PureCovering x) = PureCovering (f <*> x)
   (Covering fc fu) <*> (Covering xc xu) = Covering (fc <*> xc) (fu <*> xu)
   (Covering fc fu) <*> (PureCovering x) = Covering (fc <*> x) (fu <*> x)
@@ -110,15 +112,11 @@ instance Applicative Covering where
 
 instance Alternative Covering where
   empty = PureCovering empty
+
   (PureCovering l) <|> (PureCovering r) = PureCovering (l <|> r)
   (Covering lc lu) <|> (Covering rc ru) = Covering (lc <|> rc) (lu <|> ru)
   (Covering lc lu) <|> (PureCovering r) = Covering (lc <|> r) (lu <|> r)
   (PureCovering l) <|> (Covering rc ru) = Covering (l <|> rc) (l <|> ru)
-
-  some (Covering c u) = Covering (some c) (some u)
-  some (PureCovering x) = PureCovering (some x)
-  many (Covering c u) = Covering (many c) (many u)
-  many (PureCovering x) = PureCovering (many x)
 
 instance Monad Covering where
   (Covering c u) >>= f = Covering (c >>= covered . f) (u >>= uncovered . f)
@@ -263,6 +261,7 @@ covering' env = go where
   -- namely we find every possible case.
   go ((p@(Destructure _ _ (_, ty)), VVariable v vTy) :*: xs) = do
     (k, arg) <- constructors env ty vTy
+    guardAll xs
     case arg of
       Nothing -> onVar p v (VDestructure k Nothing) xs
       Just arg -> do
@@ -271,6 +270,7 @@ covering' env = go where
 
   go ((p@(PGadtCon _ _ _ _ (_, ty)), VVariable v vTy) :*: xs) = do
     (k, arg) <- constructors env ty vTy
+    guardAll xs
     case arg of
       Nothing -> onVar p v (VDestructure k Nothing) xs
       Just arg -> do
@@ -336,9 +336,12 @@ covering' env = go where
 
   -- Var: Match the remaining patterns, extend the environment, and unify the
   -- bound variable with the abstraction.
-  go ((Wildcard _, u) :*: xs) = (u,) <$> go xs
-  go ((Capture v _, u) :*: xs) = do
+  go ((w@(Wildcard _), u) :*: xs) = do
+    guardInhabited (getType w)
+    (u,) <$> go xs
+  go ((w@(Capture v _), u) :*: xs) = do
     constrainVal v u
+    guardInhabited (getType w)
     (u,) <$> go xs
   go ((PAs p v _, u) :*: xs) = onVar p v u xs
 
@@ -367,6 +370,20 @@ covering' env = go where
   rowTy (TyParens t) = rowTy t
   rowTy (TyWithConstraints _ t) = rowTy t
   rowTy t = error $ "Cannot get row from "++ show t
+
+  -- | Abort if this type is uninhabited.
+  guardInhabited :: Type Typed -> CoveringM ()
+  guardInhabited ty = do
+    (solve, cs) <- get
+    name <- genName
+    unless (inhabited env (AbsState solve cs name) ty) mzero
+
+  -- | Abort if the remaining pairs are uninhabited.
+  guardAll :: PatPair a -> CoveringM ()
+  guardAll Nil = pure ()
+  guardAll ((x, _) :*: xs) = do
+    guardInhabited (getType x)
+    guardAll xs
 
   -- | Visit over each field in a record
   foldRecord :: [(T.Text, Pattern Typed)] -> Map.Map T.Text (ValueAbs Typed)
