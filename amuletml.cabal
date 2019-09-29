@@ -197,6 +197,7 @@ library
                      , Types.Holes
                      , Types.Kinds
                      , Types.Unify
+                     , Types.Infer.Let
                      , Types.Wellformed
                      , Types.Unify.Magic
                      , Types.Infer.Class
