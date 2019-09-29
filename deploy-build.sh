@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -e
+
 build () {
   stack build \
     --ghc-options "-optc-static -optl-static" \
