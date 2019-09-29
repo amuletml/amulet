@@ -1,5 +1,10 @@
 {-# LANGUAGE OverloadedStrings, RankNTypes, FlexibleContexts,
    ScopedTypeVariables, CPP #-}
+
+#ifdef WITH_SERVER
+{-# LANGUAGE RecordWildCards #-}
+#endif
+
 module Main where
 
 import System.Console.Haskeline hiding (display)
@@ -45,6 +50,11 @@ import Data.These
 import System.IO
 
 #ifdef WITH_SERVER
+import Control.Monad
+
+import qualified Data.Text.Encoding as T
+import qualified Data.Text.IO as T
+
 import qualified Data.ByteString as Bs
 
 import Network.HTTP.Toolkit as Http
@@ -182,7 +192,7 @@ env =
                        , (TgInternal "<->", Set.fromList [TgInternal "Equiv"])
                        ]
 
-    bindings = [ (TgInternal "+", TyType :-> TyType :-> TyType) 
+    bindings = [ (TgInternal "+", TyType :-> TyType :-> TyType)
                , (tyTupleName, TyType :-> TyType :-> TyType)
                , (tyArrowName, TyType :-> TyType :-> TyType)
                , ( TgInternal "L"
@@ -225,7 +235,7 @@ proverHelp = vsep
   , indent 2 "If [path] exists, it will be unlinked. It will also be unlinked when the server stops."
 #endif
   , empty
-  , indent 2 . align $ 
+  , indent 2 . align $
       vsep [ bullet $ "Write propositional variables in" <+> stypeCon "UPPERCASE"
            , bullet $ "The logical connectives ∧ (AND) and ∨ (OR) are written infix as * and +"
               <#> indent 4 (hsep [ stypeCon "P" <+> soperator "+" <+> stypeCon "Q"
