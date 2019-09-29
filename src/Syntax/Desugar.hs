@@ -58,7 +58,7 @@ expr (Match e bs a) = Match <$> expr e <*> traverse arm bs <*> pure a
 expr (Function [Arm p Nothing b] a) = Fun (PatParam (pat p)) <$> expr b <*> pure a
 expr (Function bs a) = do
   (cap, rhs) <- fresh a
-  Fun (PatParam cap) <$>
+  Fun (EvParam cap) <$>
     (Match rhs <$> traverse arm bs <*> pure a)
     <*> pure a
 -- Special case @@ so we can work on skolem variables

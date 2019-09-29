@@ -1,14 +1,11 @@
 (* non-exhaustive *)
-let f1 : forall 'a. int -> 'a =
-  fun x -> match x with ()
+let f1 : forall 'a. int -> 'a = function ()
 
 type foo = A | B
 
 (* non-exhaustive *)
-let f2 (x : foo) =
-  match x with ()
+let f2 : foo -> () = function ()
 
 (* exhaustive *)
 type void = |
-let f3 (x : void) =
-  match x with ()
+let f3 : void -> () = function ()

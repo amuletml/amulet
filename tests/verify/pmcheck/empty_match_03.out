@@ -1,0 +1,6 @@
+empty_match_03.ml[4:3 ..4:9]: warning
+  Redundant pattern in expression
+  │ 
+4 │ | _ -> ()
+  │   ^^^^^^^
+  • Note: This can be replaced by an empty match.

@@ -1,7 +1,7 @@
-empty_match_02.ml[21:3 ..21:14]: warning
+empty_match_02.ml[19:34 ..19:41]: warning
   Non-exhaustive patterns in expression
    │ 
-21 │   match x with ()
-   │   ^^^^^^^^^^^^
+19 │ let f2 : t1 b -> forall 'a. 'a = function ()
+   │                                  ^^^^^^^^
   • Note: The following patterns are not covered
       _

@@ -2,6 +2,7 @@
 module Syntax.Verify.Error
   ( BindingSite(..)
   , VerifyError(..)
+  , WhyRedundant(..)
   ) where
 
 import Data.Spanned
@@ -31,6 +32,16 @@ instance Ord BindingSite where
 instance Eq BindingSite where
   BindingSite v _ _ == BindingSite v' _ _ = v == v'
 
+data WhyRedundant
+  = Shadowed -- ^ This arm is shadowed by a previous one.
+  | BecauseMatch -- ^ This whole match expression is redundant.
+  | BecauseArm -- ^ This specific arm is redundant.
+
+instance Pretty WhyRedundant where
+  pretty Shadowed = "This case is covered by all previous patterns and so can be removed"
+  pretty BecauseMatch = "This can be replaced by an empty match."
+  pretty BecauseArm = "This case can never occur."
+
 data VerifyError
   -- | Recursive binding groups which cannot be evaluated, as they depend
   -- on themselves.
@@ -47,7 +58,7 @@ data VerifyError
   -- | Misleading laziness on let expressions
   | LazyLet (Expr Typed) (Type Typed)
   -- | A pattern which is shadowed by another
-  | RedundantArm (Arm Typed)
+  | RedundantArm (Arm Typed) WhyRedundant
   -- | This case is missing several patterns
   | MissingPattern (Expr Typed) [ValueAbs Typed]
 
@@ -56,7 +67,7 @@ instance Spanned VerifyError where
   annotation (DefinedUnused b) = boundWhere b
   annotation (ParseErrorInForeign _ e) = annotation e
   annotation (LazyLet e _) = annotation e
-  annotation (RedundantArm a) = annotation a
+  annotation (RedundantArm a _) = annotation a
   annotation (MissingPattern e _) = annotation e
 
 instance Pretty VerifyError where
@@ -78,9 +89,9 @@ instance Pretty VerifyError where
     vsep [ "Automatic thunking of" <+> keyword "let" <> "s does not cover bindings"
          ]
 
-  pretty (RedundantArm _) =
+  pretty (RedundantArm _ b) =
     vsep [ "Redundant pattern in expression"
-         , note <+> "This case is covered by all previous patterns and so can be removed"
+         , note <+> pretty b
          ]
   pretty (MissingPattern _ ps) =
     vsep [ "Non-exhaustive patterns in expression"
@@ -119,10 +130,10 @@ instance Note VerifyError Style where
       , indent 6 "to silence this warning."
       ]
   formatNote _ LazyLet{} = error "impossible"
-  formatNote f (RedundantArm a) =
+  formatNote f (RedundantArm a b) =
     vsep [ indent 2 "Redundant pattern in expression"
          , f [annotation a]
-         , indent 2 $ note <+> "This case is covered by all previous patterns and so can be removed"
+         , indent 2 $ note <+> (Right <$> pretty b)
          ]
   formatNote f (MissingPattern a ps) =
     vsep [ indent 2 "Non-exhaustive patterns in expression"
