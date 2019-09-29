@@ -974,7 +974,7 @@ deSkol = go mempty where
   go acc (TyExactRows rs) = TyExactRows (map (_2 %~ go acc) rs)
   go acc (TyTuple a b) = TyTuple (go acc a) (go acc b)
   go acc (TyWildcard x) = TyWildcard (go acc <$> x)
-  go acc (TyWithConstraints cs x) = TyWithConstraints (map (\(a, b) -> (go acc a, go acc b)) cs) (go acc x)
+  go acc (TyWithConstraints cs x) = TyWithConstraints (map (bimap (go acc) (go acc)) cs) (go acc x)
   go acc (TyOperator l o r) = TyOperator (go acc l) o (go acc r)
   go acc (TyParens p) = TyParens $ go acc p
   go _ TyType = TyType
@@ -997,9 +997,7 @@ mkTypeLambdas :: MonadNamey m => SkolemMotive Typed -> Type Typed -> m (Wrapper 
 mkTypeLambdas motive ty@(TyPi (Invisible tv k _) t) = do
   sk <- freshSkol motive ty tv
   wrap <- mkTypeLambdas motive (apply (Map.singleton tv sk) t)
-  kind <- case k of
-    Nothing -> freshTV
-    Just x -> pure x
+  kind <- maybe freshTV pure k
   let getSkol (TySkol s) = s
       getSkol _ = error "not a skolem from freshSkol"
   pure (TypeLam (getSkol sk) kind Syntax.:> wrap)

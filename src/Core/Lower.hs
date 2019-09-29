@@ -510,9 +510,7 @@ lowerPolyBind ty ex = doIt (needed ex ty) (go ty ex) (lowerExprTerm ex) where
     | countForalls ty > countLams ex = Just (countForalls ty - countLams ex)
     | otherwise = Nothing -- trust tc
 
-  doIt x a b = case x of
-    Just n -> a n
-    Nothing -> b
+  doIt x a b = maybe b a x
 
   countLams :: Expr Typed -> Integer
   countLams (ExprWrapper wrp e _) = go wrp (countLams e) where

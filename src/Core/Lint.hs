@@ -355,7 +355,7 @@ checkCoercion s = checkCo where
     <$> checkCo l
     <*> checkCo r
   checkCo (ExactRecord rs) =
-    (\(as, bs) -> (ExactRowsTy as, ExactRowsTy bs)) . unzip
+    bimap ExactRowsTy ExactRowsTy . unzip
     <$> for rs (\(t, c) -> (\(a, b) -> ((t, a), (t, b))) <$> checkCo c)
   checkCo (Record c rs) =
     (\(a, b) (as, bs) -> (RowsTy a as, RowsTy b bs))
