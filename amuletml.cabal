@@ -44,7 +44,7 @@ executable amc
                -j +RTS -A32M -RTS -threaded
 
   if os(linux)
-    ghc-options: -optl-fuse-ld=gold
+    ghc-options: -optl-fuse-ld=lld
     extra-libraries: m, pthread
 
 executable amc-prove
@@ -63,7 +63,7 @@ executable amc-prove
                -j +RTS -A32M -RTS
 
   if os(linux)
-    ghc-options: -optl-fuse-ld=gold
+    ghc-options: -optl-fuse-ld=lld
     extra-libraries: m, pthread
 
   if flag(amc-prove-server)
@@ -125,7 +125,7 @@ test-suite tests
                        -Wno-implicit-prelude -Wno-missing-import-lists
                        -j +RTS -A32M -RTS
   if os(linux)
-    ghc-options: -optl-fuse-ld=gold
+    ghc-options: -optl-fuse-ld=lld
     extra-libraries: m, pthread
 
 library
@@ -265,5 +265,5 @@ library
                      , Control.Monad.Namey
                      , Control.Monad.Chronicles
   if os(linux)
-    ghc-options: -optl-fuse-ld=gold
+    ghc-options: -optl-fuse-ld=lld
     extra-libraries: m, pthread
