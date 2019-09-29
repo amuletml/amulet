@@ -4,6 +4,7 @@ module Types.Infer.Constructor (inferCon) where
 import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
+import Data.Bifunctor
 import Data.Either
 
 import Control.Monad.Infer
@@ -45,7 +46,7 @@ inferCon vars ret c@(GadtCon ac nm cty ann) = do
   let generalise (TyPi q t) = TyPi q <$> generalise t
       generalise ty = do
         ~(sub, _, []) <- condemn $ solve (Seq.singleton (ConUnify (BecauseOf c) mempty var ret ty)) =<< view classDecs
-        tell (map (\(x, y) -> (TyVar x, y)) (Map.toAscList sub))
+        tell (map (first TyVar) (Map.toAscList sub))
         pure ret
 
   (cty, cons) <- runWriterT (generalise cty)

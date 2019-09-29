@@ -1,7 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Syntax.Raise (raiseT) where
 
-import Control.Arrow
+import Data.Bifunctor
 
 import Syntax.Var
 import Syntax
@@ -26,7 +26,7 @@ raiseT v (TyApp x y) = TyApp (raiseT v x) (raiseT v y)
 raiseT v (TyTuple x y) = TyTuple (raiseT v x) (raiseT v y)
 raiseT v (TyRows rho rows) = TyRows (raiseT v rho) (map (second (raiseT v)) rows)
 raiseT v (TyExactRows rows) = TyExactRows (map (second (raiseT v)) rows)
-raiseT v (TyWithConstraints eq a) = TyWithConstraints (map (\(a, b) -> (raiseT v a, raiseT v b)) eq) (raiseT v a)
+raiseT v (TyWithConstraints eq a) = TyWithConstraints (map (bimap (raiseT v) (raiseT v)) eq) (raiseT v a)
 raiseT v (TyPi binder t) = TyPi (go binder) (raiseT v t) where
   go (Anon t) = Anon (raiseT v t)
   go (Implicit t) = Implicit (raiseT v t)

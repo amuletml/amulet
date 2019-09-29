@@ -479,9 +479,7 @@ resolveOpen name as m = do
   case lookupModule name modules stack of
     Nothing -> confesses (NotInScope VarModule name [])
     Just (name', Scope vars tys _ _) ->
-      let prefix = case as of
-                     Nothing -> id
-                     Just v -> InModule v
+      let prefix = maybe id InModule as
       in
         local (\s -> s { varScope = Map.mapKeys prefix vars `Map.union` varScope s
                        , tyScope  = Map.mapKeys prefix tys  `Map.union` tyScope s }) (m name')

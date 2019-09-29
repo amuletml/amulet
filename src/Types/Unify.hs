@@ -877,9 +877,7 @@ skolemise :: MonadNamey m
 skolemise motive ty@(TyPi (Invisible tv k _) t) = do
   sk <- freshSkol motive ty tv
   (wrap, ty, scope, vs) <- skolemise motive (apply (Map.singleton tv sk) t)
-  kind <- case k of
-    Nothing -> freshTV
-    Just x -> pure x
+  kind <- maybe freshTV pure k
   let getSkol (TySkol s) = s
       getSkol _ = error "not a skolem from freshSkol"
   pure (TypeLam (getSkol sk) kind Syntax.:> wrap, ty, scope, (tv, sk):vs)

@@ -1,4 +1,4 @@
-dist: xenial
+dist: bionic
 language: generic
 
 cache:
@@ -9,6 +9,7 @@ addons:
   apt:
     packages:
       - libgmp-dev
+      - lld-6.0
 
 before_install:
 - mkdir -p ~/.local/bin

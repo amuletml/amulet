@@ -19,8 +19,8 @@ import qualified Data.Map.Merge.Strict as Map
 import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
+import Data.Bifunctor
 
-import Control.Arrow (second)
 import Control.Lens
 
 import Syntax.Type
@@ -62,7 +62,7 @@ instance Ord (Var p) => Substitutable p (Type p) where
     s' = foldr Map.delete s (Set.toList (bound binder))
   apply s (TyRows rho rows) = TyRows (apply s rho) (map (second (apply s)) rows)
   apply s (TyExactRows rows) = TyExactRows  (map (second (apply s)) rows)
-  apply s (TyWithConstraints eq b) = TyWithConstraints (map (\(a, b) -> (apply s a, apply s b)) eq) (apply s b)
+  apply s (TyWithConstraints eq b) = TyWithConstraints (map (bimap (apply s) (apply s)) eq) (apply s b)
   apply s (TyParens t) = TyParens (apply s t)
   apply s (TyOperator l o r) = TyOperator (apply s l) o (apply s r)
 
