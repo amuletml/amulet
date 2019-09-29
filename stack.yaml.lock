@@ -18,9 +18,16 @@ packages:
       sha256: b81a5b7a4144dc1cad896e7ba5d3295400820576537dbc37a582fcf588d25a79
   original:
     hackage: these-lens-1@sha256:960f53c44201f5f67d0158162ce39cc7095b958d584d76a2aead358a54c137d3,1138
+- completed:
+    hackage: ghc-lib-parser-8.8.0.20190723@sha256:34ffe7ca5e6ba21eb6bf2c118046e8891a9a79007eb3db48052124d3a7186bfd,8377
+    pantry-tree:
+      size: 21278
+      sha256: 11a975bdba0758d435e8cca162f0a5f1f0ab0355b0ca335ca75f1503e8d495bb
+  original:
+    hackage: ghc-lib-parser-8.8.0.20190723@sha256:34ffe7ca5e6ba21eb6bf2c118046e8891a9a79007eb3db48052124d3a7186bfd,8377
 snapshots:
 - completed:
-    size: 523700
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/14/7.yaml
-    sha256: 8e3f3c894be74d71fa4bf085e0a8baae7e4d7622d07ea31a52736b80f8b9bb1a
-  original: lts-14.7
+    size: 329708
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/nightly/2019/9/29.yaml
+    sha256: ecbe5193ed2c0f2773327a3dac9337bae7736c3b473eb7f8a73c35cc05896894
+  original: nightly-2019-09-29

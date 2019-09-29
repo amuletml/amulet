@@ -21,4 +21,4 @@ install:
 script:
 - stack --no-terminal build --fast
 - stack --no-terminal test --fast --test-arguments "--xml junit.xml --display t"
-- stack --resolver lts-14.7 --no-terminal exec --package=hlint -- hlint --git
+- stack --no-terminal exec --package=hlint -- hlint --git
