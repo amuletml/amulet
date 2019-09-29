@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings, RankNTypes, FlexibleContexts,
-   ScopedTypeVariables, TypeApplications, CPP, RecordWildCards #-}
+   ScopedTypeVariables, CPP #-}
 module Main where
 
 import System.Console.Haskeline hiding (display)
@@ -7,16 +7,12 @@ import System.Environment
 
 import Control.Monad.IO.Class
 import Control.Monad.Namey
-import Control.Monad
 import Control.Lens
 
 import Parser.Wrapper (runParser)
 import Parser (parseType, getL, Located)
 
 import qualified Data.Text.Lazy as L
-
-import qualified Data.Text.Encoding as T
-import qualified Data.Text.IO as T
 
 import Data.Text.Lazy (Text)
 import Data.Foldable

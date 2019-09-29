@@ -267,7 +267,7 @@ verifyMatch m ty [] = do
 verifyMatch m ty bs = do
   VerifyScope env va <- ask
 
-  (_, unc) <- foldlM (\(i :: Int, alts) (a@(Arm pat guard body)) -> do
+  (_, unc) <- foldlM (\(i :: Int, alts) a@(Arm pat guard body) -> do
     let cov  = covering env pat alts
     -- If the covered set is empty, this arm is redundant
     va' <- case covered cov of
