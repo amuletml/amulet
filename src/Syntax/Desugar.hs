@@ -55,7 +55,6 @@ expr (App f x a) = App <$> expr f <*> expr x <*> pure a
 expr (Fun p b a) = Fun (param p) <$> expr b <*> pure a
 expr (Begin es a) = Begin <$> traverse expr es <*> pure a
 expr (Match e bs a) = Match <$> expr e <*> traverse arm bs <*> pure a
-expr (Function [Arm p Nothing b] a) = Fun (PatParam (pat p)) <$> expr b <*> pure a
 expr (Function bs a) = do
   (cap, rhs) <- fresh a
   Fun (EvParam cap) <$>

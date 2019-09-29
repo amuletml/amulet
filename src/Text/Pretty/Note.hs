@@ -26,7 +26,10 @@ import Text.Pretty.Ansi
 import Text.Pretty
 
 -- | The severity of a note
-data NoteKind = WarningMessage | ErrorMessage
+data NoteKind
+  = NoteMessage
+  | WarningMessage
+  | ErrorMessage
   deriving (Show, Eq, Ord)
 
 -- | The document style for a note
@@ -60,6 +63,7 @@ format :: Note a b => ([Span] -> NoteDoc b) -> a -> NoteDoc b
 format f x =
   let a = annotation x
       c = case diagnosticKind x of
+            NoteMessage -> annotate (NoteKind NoteMessage) "note"
             WarningMessage -> annotate (NoteKind WarningMessage) "warning"
             ErrorMessage -> annotate (NoteKind ErrorMessage) "error"
       body = formatNote f x
@@ -69,6 +73,7 @@ format f x =
 toAnsi :: NoteStyle -> AnsiStyle
 toAnsi LinePrefix = BrightColour Blue
 toAnsi LineHighlight = BrightColour Red
+toAnsi (NoteKind NoteMessage) = BrightColour Cyan
 toAnsi (NoteKind WarningMessage) = BrightColour Yellow
 toAnsi (NoteKind ErrorMessage) = BrightColour Red
 

@@ -62,6 +62,11 @@ data VerifyError
   -- | This case is missing several patterns
   | MissingPattern (Expr Typed) [ValueAbs Typed]
 
+  -- | This match expression can be rewritten as a `let`.
+  | MatchToLet (Pattern Typed) (Expr Typed)
+  -- | This function expression can be rewritten as a `fun`.
+  | MatchToFun (Pattern Typed) (Expr Typed)
+
 instance Spanned VerifyError where
   annotation (NonRecursiveRhs e _ _) = annotation e
   annotation (DefinedUnused b) = boundWhere b
@@ -69,6 +74,8 @@ instance Spanned VerifyError where
   annotation (LazyLet e _) = annotation e
   annotation (RedundantArm a _) = annotation a
   annotation (MissingPattern e _) = annotation e
+  annotation (MatchToLet _ e) = annotation e
+  annotation (MatchToFun _ e) = annotation e
 
 instance Pretty VerifyError where
   pretty (NonRecursiveRhs re ex xs) =
@@ -99,6 +106,17 @@ instance Pretty VerifyError where
          , empty
          , indent 2 . hsep . intersperse pipe . map pretty $ ps ]
 
+  pretty (MatchToLet a _) =
+    vsep [ keyword "match" <+> "with a single arm can be rewritten using" <+> keyword "let" <> "."
+         , note <+> "Replace with" <+> keyword "let" <+> pretty a <+> equals <+> "…"
+         ]
+
+  pretty (MatchToFun a _) =
+    vsep [ keyword "function" <+> "with a single arm can be rewritten using" <+> keyword "fun" <> "."
+         , note <+> "Replace with" <+> keyword "fun" <+> pretty a <+> arrow <+> "…"
+         ]
+
+
 instance Note VerifyError Style where
   diagnosticKind NonRecursiveRhs{} = ErrorMessage
   diagnosticKind ParseErrorInForeign{} = WarningMessage
@@ -106,6 +124,8 @@ instance Note VerifyError Style where
   diagnosticKind LazyLet{} = WarningMessage
   diagnosticKind RedundantArm{} = WarningMessage
   diagnosticKind MissingPattern{} = WarningMessage
+  diagnosticKind MatchToLet{} = NoteMessage
+  diagnosticKind MatchToFun{} = NoteMessage
 
   formatNote f (ParseErrorInForeign (ForeignVal _ var s _ (span, _)) err) =
     let SourcePos name _ _ = spanStart (annotation err)
@@ -140,5 +160,17 @@ instance Note VerifyError Style where
          , f [annotation a]
          , indent 2 $ note <+> "The following patterns are not covered"
          , indent 6 . fmap Right . hsep . intersperse pipe . map pretty $ ps ]
+
+  formatNote f (MatchToLet a e) =
+    vsep [ Right <$> keyword "match" <+> "with a single arm can be rewritten using" <+> keyword "let" <> "."
+         , f [annotation e]
+         , Right <$> note <+> "Replace with" <+> keyword "let" <+> pretty a <+> equals <+> "…"
+         ]
+
+  formatNote f (MatchToFun a e) =
+    vsep [ Right <$> keyword "function" <+> "with a single arm can be rewritten using" <+> keyword "fun" <> "."
+         , f [annotation e]
+         , Right <$> note <+> "Replace with" <+> keyword "fun" <+> pretty a <+> arrow <+> "…"
+         ]
 
   formatNote f x = indent 2 (Right <$> pretty x) <#> f [annotation x]
