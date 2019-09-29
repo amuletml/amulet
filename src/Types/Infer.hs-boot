@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleContexts, TupleSections, ScopedTypeVariables,
-   ViewPatterns, LambdaCase #-}
+   ViewPatterns, LambdaCase, TypeFamilies #-}
 module Types.Infer
   ( inferProgram
   , closeOver

@@ -156,7 +156,7 @@ solveImplies s info cs = do
   pure ( s' & solveAssumptions %~ (<>(s ^. solveTySubst))
        , apply (s ^. solveTySubst) cs' )
 
-doSolve :: forall m. MonadSolve m => Seq.Seq (Constraint Typed) -> m ()
+doSolve :: forall m. MonadSolve m => Seq.Seq (Constraint Typed) -> m () -- {{{
 doSolve Empty = pure ()
 doSolve (ConUnify because scope v a b :<| xs) = do
   sub <- use solveTySubst
@@ -187,7 +187,7 @@ doSolve (ConSubsume because scope v a b :<| xs) = do
     Right co -> solveCoSubst . at v .= Just co
   doSolve xs
 
-doSolve (ConImplies because not cs ts :<| xs) = do
+doSolve (ConImplies because not cs ts :<| xs) = do -- {{{
   doSolve xs
   before <- use solveTySubst
   assump <- use solveAssumptions
@@ -211,7 +211,7 @@ doSolve (ConImplies because not cs ts :<| xs) = do
       assumptionBound = not'
 
   solveTySubst %= Map.union leaky
-  solveAssumptions .= assump
+  solveAssumptions .= assump -- }}}
 
 doSolve (DeferredError e :<| cs) = do
   dictates e
@@ -232,7 +232,7 @@ doSolve (ConImplicit _ _ v x :<| cs) | x == tyUnit = do
       wrap :: Expr Typed -> Expr Typed
   solveCoSubst . at v ?= WrapFn (MkWrapCont wrap "unit solution app")
 
-doSolve (ConImplicit why scope v (TyTuple a b) :<| cs) = do
+doSolve (ConImplicit why scope v (TyTuple a b) :<| cs) = do -- {{{
   vara <- genName
   varb <- genName
   solveCoSubst . at v ?= ExprApp
@@ -247,9 +247,9 @@ doSolve (ConImplicit why scope v (TyTuple a b) :<| cs) = do
                 (annotation why, TyArr b b))
               (annotation why, b)]
            (annotation why, TyTuple a b))
-  doSolve (ConImplicit why scope varb b :< ConImplicit why scope vara a :<| cs)
+  doSolve (ConImplicit why scope varb b :< ConImplicit why scope vara a :<| cs) -- }}}
 
-doSolve (ohno@(ConImplicit reason scope var con@TyPi{}) :<| cs) = do
+doSolve (ohno@(ConImplicit reason scope var con@TyPi{}) :<| cs) = do -- {{{
   doSolve cs
   sub <- use solveTySubst
   con <- pure (apply sub con)
@@ -269,10 +269,9 @@ doSolve (ohno@(ConImplicit reason scope var con@TyPi{}) :<| cs) = do
           identity t = Fun (EvParam (PType (Capture var (a, t)) t (a, t))) (VarRef var (a, t)) (a, TyArr t t)
           a = annotation reason
 
-      solveCoSubst . at var ?= ExprApp wanted
+      solveCoSubst . at var ?= ExprApp wanted -- }}}
 
-
-doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
+doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do -- {{{
   doSolve cs
   sub <- use solveTySubst
   cons <- pure (apply sub cons)
@@ -355,6 +354,9 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do
         _ -> do
           solveCoSubst . at var ?= ExprApp (VarRef var (annotation reason, cons))
           tell (pure (apply sub ohno))
+--- }}}
+
+-- }}}
 
 allSameHead :: [Implicit ClassInfo Typed] -> Bool
 allSameHead (x:xs) = all (matches (x ^. implHead) . view implHead) xs
@@ -418,7 +420,7 @@ fundepsAllow impl cons
 
     concreteP = concretish . head . appsView . (params !!)
 
-bind :: MonadSolve m => ImplicitScope ClassInfo Typed -> Var Typed -> Type Typed -> m (Coercion Typed)
+bind :: MonadSolve m => ImplicitScope ClassInfo Typed -> Var Typed -> Type Typed -> m (Coercion Typed) --- {{{
 bind scope var ty
   | TyVar var == ty = pure (ReflCo ty)
   -- /\ Var-var deletion
@@ -454,13 +456,14 @@ bind scope var ty
                    -- No can do.
                 pure (ReflCo ty)
               Just ty' -> unify scope ty (apply env ty')
+--- }}}
 
 -- FOR BOTH UNIFY AND SUBSUME:
 --  unify have want
 --  subsume k have want
 -- i.e. The irst argument is the type *we have*.
-unify :: MonadSolve m => ImplicitScope ClassInfo Typed -> Type Typed -> Type Typed -> m (Coercion Typed)
-unify scope (TySkol x) (TySkol y)
+unify :: MonadSolve m => ImplicitScope ClassInfo Typed -> Type Typed -> Type Typed -> m (Coercion Typed) -- {{{
+unify scope (TySkol x) (TySkol y) -- {{{
   | x == y = pure (ReflCo (TySkol y))
   | otherwise = do
     sub <- use solveAssumptions
@@ -481,6 +484,7 @@ unify scope (TySkol x) (TySkol y)
                  solveAssumptions . at (x ^. skolIdent) ?= TySkol y
                  pure (AssumedCo (TySkol x) (TySkol y))
                else confesses (SkolBinding x (TySkol y))
+-- }}}
 
 unify _ ta@(TyPromotedCon a) tb@(TyPromotedCon b)
   | a == b = pure (ReflCo tb)
@@ -496,7 +500,7 @@ unify scope a (TyVar b) = SymCo <$> bind scope b a
 unify scope (TyWildcard (Just a)) b = unify scope a b
 unify scope a (TyWildcard (Just b)) = SymCo <$> unify scope b a
 
-unify scope skt@(TySkol t@(Skolem sv _ _ _)) b = do
+unify scope skt@(TySkol t@(Skolem sv _ _ _)) b = do -- {{{
   sub <- use (solveAssumptions . at sv)
   subst <- use solveAssumptions
   info <- view classInfo
@@ -520,7 +524,7 @@ unify scope skt@(TySkol t@(Skolem sv _ _ _)) b = do
                  pure (AssumedCo (TySkol t) b)
                else confesses (Occurs sv b)
                else confesses (SkolBinding t b)
-unify scope b (TySkol t) = SymCo <$> unify scope (TySkol t) b
+unify scope b (TySkol t) = SymCo <$> unify scope (TySkol t) b -- }}}
 
 -- ((->) a b) = a -> b
 unify scope (TyApp (TyApp (TyCon v) l) r) (TyArr l' r')
@@ -631,13 +635,13 @@ unify scope (TyOperator l v r) (TyOperator l' v' r')
   | v == v' = AppCo <$> unify scope l l' <*> unify scope r r'
 
 unify _ TyType TyType = pure (ReflCo TyType)
-unify _ a b = confesses =<< unequal a b
+unify _ a b = confesses =<< unequal a b -- }}}
 
 lookupEquality :: Map.Map (Var Typed) ClassInfo
                -> ImplicitScope ClassInfo Typed
                -> Type Typed
                -> Type Typed
-               -> [Coercion Typed]
+               -> [Coercion Typed] -- {{{
 lookupEquality class_info scope a b = normal <|> fundepEquality where
   -- Try instances a ~ b (which must be LocalAssum).
   normal =
@@ -678,10 +682,11 @@ lookupEquality class_info scope a b = normal <|> fundepEquality where
         , det <- dets
         ]
      in implied_eqs
+-- }}}
 
 subsumes', subsumes :: MonadSolve m
                     => SomeReason -> ImplicitScope ClassInfo Typed
-                    -> Type Typed -> Type Typed -> m (Wrapper Typed)
+                    -> Type Typed -> Type Typed -> m (Wrapper Typed) -- {{{
 subsumes blame scope a b = do
   x <- use solveTySubst
   retcons (addBlame blame) $ subsumes' blame scope (apply x a) (apply x b)
@@ -696,7 +701,7 @@ subsumes' b s t1 t2@TyPi{} | isSkolemisable t2 = do
   (c, t2', scope, _) <- skolemise (BySubsumption t1 t2) t2
   (Syntax.:>) c <$> subsumes b (scope <> s) t1 t2'
 
-subsumes' r s (TyPi (Implicit t) t1) t2
+subsumes' r s (TyPi (Implicit t) t1) t2 -- {{{
   | prettyConcrete t2 = do
       var <- genName
       omega <- subsumes' r s t1 t2
@@ -716,7 +721,7 @@ subsumes' r s (TyPi (Implicit t) t1) t2
             = ExprWrapper omega
                 (ExprWrapper (TypeAsc t1)
                    (ExprWrapper (WrapVar var) ex (an, t1)) (an, t1)) (an, t2)
-       in pure (WrapFn (MkWrapCont wrap ("implicit instantation " ++ show (pretty t))))
+       in pure (WrapFn (MkWrapCont wrap ("implicit instantation " ++ show (pretty t)))) -- }}}
 
   | otherwise = probablyCast <$> unify s (TyPi (Implicit t) t1) t2
 
@@ -727,7 +732,7 @@ subsumes' b s t1@TyPi{} t2 | isSkolemisable t1 = do
       wrap ex = ExprWrapper omega (inst ex) (annotation ex, t2)
   pure (WrapFn (MkWrapCont wrap ("instantiation " ++ show t1 ++ " => " ++ show t2)))
 
-subsumes' r scope ot@(TyTuple a b) nt@(TyTuple a' b') = do
+subsumes' r scope ot@(TyTuple a b) nt@(TyTuple a' b') = do -- {{{
   -- We must check that..
   (wb, wa) <- retcon Seq.reverse $ do
     -- The second components are related
@@ -755,7 +760,7 @@ subsumes' r scope ot@(TyTuple a b) nt@(TyTuple a' b') = do
                              , ExprWrapper wb (VarRef elem' (an, b)) (an, b') ]
                              (an, nt)) ]
                    (an, nt)
-  pure (WrapFn (MkWrapCont cont "tuple re-packing"))
+  pure (WrapFn (MkWrapCont cont "tuple re-packing")) -- }}}
 
 subsumes' _ s a@(TyApp lazy _) b@(TyApp lazy' _)
   | lazy == lazy', lazy' == tyLazy = probablyCast <$> unify s a b
@@ -803,7 +808,7 @@ subsumes' r scope th@(TyExactRows rhas) tw@(TyExactRows rwant) = do
 
   pure (WrapFn (MkWrapCont (mkRecordWrapper rhas matched tw th tw id exp) "exact→exact record subsumption"))
 
-subsumes' r scope th@(TyExactRows rhas) tw@(TyRows rho rwant) = do
+subsumes' r scope th@(TyExactRows rhas) tw@(TyRows rho rwant) = do -- {{{
   let matching = overlap rhas rwant
 
   -- We need to at *least* match all of the ones we want
@@ -832,9 +837,9 @@ subsumes' r scope th@(TyExactRows rhas) tw@(TyRows rho rwant) = do
   let mkw ex = ExprWrapper cast ex (annotation ex, tw)
   pure (WrapFn
           (MkWrapCont (mkRecordWrapper rhas matched matched_t th tw mkw exp)
-            "exact→poly record subsumption"))
+            "exact→poly record subsumption")) -- }}}
 
-subsumes' r scope th@(TyRows rho rhas) tw@(TyRows sigma rwant) = do
+subsumes' r scope th@(TyRows rho rhas) tw@(TyRows sigma rwant) = do -- {{{
   let matching = overlap rhas rwant
 
   -- We need to at *least* match all of the ones we want
@@ -866,7 +871,9 @@ subsumes' r scope th@(TyRows rho rhas) tw@(TyRows sigma rwant) = do
             (MkWrapCont (mkRecordWrapper rhas matched matched_t th tw mkw exp)
               "exact→poly record subsumption"))
 
-subsumes' r s a b = probablyCast <$> retcons (reblame r) (unify s a b)
+subsumes' r s a b = probablyCast <$> retcons (reblame r) (unify s a b) -- }}}
+
+-- }}}
 
 -- | Shallowly skolemise a type, replacing any @forall@-bound 'TyVar's
 -- with fresh 'Skolem' constants.
@@ -1124,3 +1131,5 @@ trace _ x = x
 traceShow a x = show a `seq` x
 
 #endif
+
+-- vim: fdm=marker
