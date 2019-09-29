@@ -85,6 +85,7 @@ endfunction
 " Trashes both qflist and matches
 function! AmuletLoad(verbose, qf)
   let our_bufnr = bufnr('')
+  let ourpos = getpos('.')
   silent write
   call clearmatches()
   call setqflist([])
@@ -174,29 +175,25 @@ function! AmuletLoad(verbose, qf)
     if (nerrors != 0 || nwarns != 0) && a:qf == 'qf'
       copen
     end
+    call setpos('.', ourpos)
     return nerrors
   else
     if a:verbose
       echo "Loaded " . expand("%p") . " successfully."
     end
+    call setpos('.', ourpos)
     return 0
   endif
 endfunction
 
 function! AmuletType()
-  let ok = AmuletLoad(0, '')
-  if ok == 0
-    echo trim(s:CallAmc(":t", expand("<cword>")))
-  else
-  end
+  let ourpos = getpos('.')
+  echo trim(s:CallAmc(":t", expand("<cword>")))
+  call setpos('.', ourpos)
 endfunction
 
 function! AmuletEval(mode)
-  let ok = AmuletLoad(0, '')
-  if ok != 0
-    return
-  end
-
+  let ourpos = getpos('.')
   if a:mode == 'v'
     let [line_start, column_start] = getpos("'<")[1:2]
     let [line_end, column_end] = getpos("'>")[1:2]
@@ -212,6 +209,7 @@ function! AmuletEval(mode)
     redraw
     echo trim(s:CallAmc(expr))
   end
+  call setpos('.', ourpos)
 endfunction
 
 function! AmuletDep(...)
@@ -222,9 +220,7 @@ function! AmuletDep(...)
       echo "File " . file . " not readable by current user"
     endif
   endfor
-  if a:0 >= 1
-    call AmuletLoad(1, '')
-  endif
+  call AmuletLoad(1, '')
 endfunction
 
 function! AmuletParseDeps()
