@@ -143,7 +143,7 @@ prover = do
     Just t -> handleSentence (pure ()) stdout (L.pack t) *> prover
 
 handleSentence :: MonadIO m => IO () -> Handle -> Text -> m ()
-handleSentence success handle sentence = do
+handleSentence success handle sentence =
   case runParser "<input>" sentence parseType of
     (Just t, _) -> flip evalNameyT (TgName "a" 0) $
       proveSentence (hReport handle files) success handle (fmap propVarToTv t)
