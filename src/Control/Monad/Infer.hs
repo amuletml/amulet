@@ -483,7 +483,7 @@ instance Pretty TypeError where
          ]
 
   pretty (UnsaturatedTS _ info n) =
-    vsep [ "Type synonym" <+> stypeCon (pretty (info ^. tsName)) <+> "appears with" <+> nargs <> comma
+    vsep [ "Type" <+> thing <+> stypeCon (pretty (info ^. tsName)) <+> "appears with" <+> nargs <> comma
          , "but in its definition it has" <+> sliteral (int (length (info ^. tsArgs)))
          ]
     where
@@ -492,6 +492,9 @@ instance Pretty TypeError where
           0 -> "no arguments"
           1 -> "one argument"
           x -> sliteral (int x) <+> "arguments"
+      thing = case info of
+        TySymInfo{} -> keyword "synonym"
+        TyFamInfo{} -> keyword "function"
 
 
   pretty (UnsatClassCon _ (ConImplicit _ _ _ t) _) = string "No instance for" <+> pretty t

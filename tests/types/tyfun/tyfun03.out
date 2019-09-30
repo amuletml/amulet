@@ -1,0 +1,6 @@
+x : type -> type
+Xi : Infer{'al : type}. Spec{'a : 'al}. ('a ~ int) ⊃ x 'a
+Xb : Infer{'ay : type}. Spec{'a : 'ay}. ('a ~ bool) ⊃ x 'a
+Xs : Infer{'bl : type}. Spec{'a : 'bl}. ('a ~ string) ⊃ x 'a
+collapse : type -> type
+collapse : Spec{'a : type}. x 'a -> x (collapse 'a)

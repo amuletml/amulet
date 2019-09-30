@@ -5,8 +5,8 @@ do
     if k.__tag == "Nil" then
       return Nil
     end
-    local en = k[1]
-    local x, xs = en._1, en._2
+    local ek = k[1]
+    local x, xs = ek._1, ek._2
     if f(x) then
       return Cons({ _1 = x, _2 = filter(f, xs) })
     end

@@ -111,6 +111,26 @@ resolveModule (d@(TySymDecl am t vs ty ann):rs) = do
     extendTy (t, t') $
       (decl:) <$> resolveModule rs
 
+
+resolveModule (d@(TypeFunDecl am tau args kindsig eqs ann):rest) = do
+  tau' <- tagVar tau
+  (args, _) <- resolveTele d args
+  extendTy (tau, tau') $ do
+    eqs <- for eqs $ \clause@(TyFunClause lhs@(TyApps t xs) rhs ann) -> do
+      when (t /= TyCon tau) $
+        confesses (ArisingFrom (TFClauseWrongHead t tau) (BecauseOf clause))
+      when (length xs /= length args) $
+        confesses (ArisingFrom (TFClauseWrongArity (length xs) (length args)) (BecauseOf clause))
+
+      let fv = Set.toList (ftv lhs)
+      fv' <- traverse tagVar fv
+      extendTyvarN (zip fv fv') $
+        (\x y -> TyFunClause x y ann) <$> reType clause lhs <*> reType clause rhs
+
+    kindsig <- traverse (reType d) kindsig
+    (TypeFunDecl am tau' args kindsig eqs ann:) <$> resolveModule rest
+
+
 resolveModule (d@(TypeDecl am t vs cs ann):rs) = do
   t'  <- tagVar t
   (vs', sc) <- resolveTele d vs
@@ -204,6 +224,7 @@ resolveModule (t@(Instance cls ctx head ms ann):rs) = do
     pure (Instance cls' ctx' head' ms'' ann)
 
   (t':) <$> resolveModule rs
+
 
 lookupVar :: MonadResolve m
           => Var Parsed -> VarKind -> Map.Map (Var Parsed) ScopeVariable

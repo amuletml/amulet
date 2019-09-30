@@ -126,7 +126,7 @@ pattern t :-> t' <- TyPi (Anon t) t' where
 
 pattern TyForall :: Var p -> Maybe (Type p) -> Type p -> Type p
 pattern TyForall v k t' <- TyPi (Invisible v k _) t' where
-  TyForall v k ty = TyPi (Invisible v k Spec) ty
+  TyForall v k ty = TyPi (Invisible v k Infer) ty
 
 -- | A type variable, with an optional type annotation.
 data TyConArg p
@@ -241,6 +241,11 @@ isSkolemisable (TyPi Invisible{} _) = True
 isSkolemisable (TyPi Implicit{} _) = True
 isSkolemisable _ = False
 
+isInstantiatable :: Type Typed -> Bool
+isInstantiatable (TyPi (Invisible _ _ r) _) = r /= Req
+isInstantiatable (TyPi Implicit{} _) = True
+isInstantiatable _ = False
+
 mkWildTy :: Maybe (Type p) -> Type p
 mkWildTy (Just x@(TyWildcard _)) = x
 mkWildTy t = TyWildcard t
@@ -250,6 +255,22 @@ appsView = reverse . go where
   go (TyApp f x) = x:go f
   go (TyOperator l o r) = [r, l, TyCon o]
   go t = [t]
+
+isReflexiveCo :: Coercion p -> Bool
+isReflexiveCo ReflCo{} = True
+isReflexiveCo (SymCo c) = isReflexiveCo c
+isReflexiveCo (AppCo a b) = isReflexiveCo a && isReflexiveCo b
+isReflexiveCo (ArrCo a b) = isReflexiveCo a && isReflexiveCo b
+isReflexiveCo (ProdCo a b) = isReflexiveCo a && isReflexiveCo b
+isReflexiveCo (ExactRowsCo rs) = all (isReflexiveCo . snd) rs
+isReflexiveCo (RowsCo c rs) = isReflexiveCo c && all (isReflexiveCo . snd) rs
+isReflexiveCo (ForallCo _ d c) = isReflexiveCo d && isReflexiveCo c
+isReflexiveCo AssumedCo{} = False
+isReflexiveCo ProjCo{} = False
+isReflexiveCo VarCo{} = False
+isReflexiveCo P1{} = False
+isReflexiveCo P2{} = False
+isReflexiveCo MvCo{} = False
 
 pattern TyApps :: Type p -> [Type p] -> Type p
 pattern TyApps head xs <- (appsView -> (head:xs)) where

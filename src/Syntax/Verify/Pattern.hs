@@ -71,14 +71,16 @@ import qualified Data.Set as Set
 import qualified Data.Text as T
 import Data.Bifunctor
 import Data.Foldable
+import Data.Reason
 import Data.These
 import Data.Maybe
 
 import Syntax.Types hiding (constructors)
 import Syntax
 
-import Types.Unify
+import Types.Infer.Builtin (expandTypeWith)
 import Types.Infer.Pattern (skolGadt)
+import Types.Unify
 
 import Text.Pretty.Semantic hiding (empty)
 
@@ -407,7 +409,7 @@ constructors env kty vty = do
       (arg, res) = unwrapCtor ty
 
   -- Unify our result with the child, including any additional GADT constraints.
-  constrain (mkUni res vty:map (uncurry mkUni) cs)
+  constrain (mkUni res (expandTypeWith (env ^. tySyms) vty):map (uncurry mkUni) cs)
   pure (k, arg)
 
   where
@@ -433,7 +435,9 @@ inhabited env (AbsState st cs i)
   = not . Seq.null
   . flip evalNameyT i
   . flip evalStateT (st, cs)
-  . go mempty where
+  . go mempty
+  -- . expandTypeWith (env ^. tySyms)
+  where
 
   inhb :: Monad m => m ()
   inhb = pure ()
@@ -495,7 +499,7 @@ inhabited env (AbsState st cs i)
 
 -- | Make a unification constraint
 mkUni :: Type Typed -> Type Typed -> Constraint Typed
-mkUni = ConUnify undefined mempty undefined
+mkUni = ConUnify (It'sThis BecauseInternal) mempty undefined
 
 -- | Add one or more type constraints into the current environment,
 -- failing if an error occurs.

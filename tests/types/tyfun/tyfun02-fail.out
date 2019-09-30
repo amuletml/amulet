@@ -1,0 +1,5 @@
+tyfun02-fail.ml[14:10 ..14:11]: error
+  No instance for collapse 'a ~ string arising from use of the expression
+   │ 
+14 │   | _ -> Xs
+   │          ^^

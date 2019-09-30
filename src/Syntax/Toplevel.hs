@@ -34,6 +34,7 @@ data Toplevel p
   | Module TopAccess (Var p) [Toplevel p]
   | Open { openName :: Var p
          , openAs :: Maybe Text }
+
   | Class { className :: Var p
           , classAccess :: TopAccess
           , classCtx :: Maybe (Type p)
@@ -41,16 +42,33 @@ data Toplevel p
           , classDeps :: [Fundep p]
           , classMethods :: [ClassItem p]
           , ann :: Ann p }
+
   | Instance { instanceClass :: Var p
              , instanceCtx :: Maybe (Type p)
              , instanceHead :: Type p
              , instanceMethods :: [Binding p]
              , ann :: Ann p }
 
+  | TypeFunDecl { tyfunAccess :: TopAccess
+                , tyfunName :: Var p
+                , tyfunArgs :: [TyConArg p]
+                , tyfunKindSig :: Maybe (Type p)
+                , tyfunEqs :: [TyFunClause p]
+                , ann :: Ann p
+                }
+
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Toplevel p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Toplevel p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Toplevel p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Toplevel p)
+
+data TyFunClause p = TyFunClause (Type p) (Type p) (Ann p)
+
+deriving instance (Eq (Var p), Eq (Ann p)) => Eq (TyFunClause p)
+deriving instance (Show (Var p), Show (Ann p)) => Show (TyFunClause p)
+deriving instance (Ord (Var p), Ord (Ann p)) => Ord (TyFunClause p)
+deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (TyFunClause p)
+
 
 data ClassItem p
   = MethodSig { _methName :: Var p
@@ -105,10 +123,14 @@ instance (Spanned (Constructor p), Spanned (Ann p)) => Spanned (Toplevel p) wher
   annotation (ForeignVal _ _ _ _ x) = annotation x
   annotation (Class _ _ _ _ _ _ x) = annotation x
   annotation (Instance _ _ _ _ x) = annotation x
+  annotation x@TypeFunDecl{} = annotation (ann x)
   annotation _ = internal
 
 instance Spanned (Ann p) => Spanned (Fundep p) where
   annotation = annotation . view fdAnn
+
+instance Spanned (Ann p) => Spanned (TyFunClause p) where
+  annotation (TyFunClause _ _ x) = annotation x
 
 instance Spanned (Ann p) => Spanned (ClassItem p) where
   annotation = annotation . view methAnn
@@ -151,7 +173,7 @@ instance Pretty (Var p) => Pretty (Toplevel p) where
   pretty (Open m (Just a)) = keyword "open" <+> pretty m <+> keyword "as" <+> text a
 
   pretty (TySymDecl m ty args exp _) =
-    keyword "type" <+> prettyAcc m <> pretty ty <+> hsep (map ((squote <>) . pretty) args) <+> pretty exp
+    prettyAcc m <+> keyword "type" <> pretty ty <+> hsep (map ((squote <>) . pretty) args) <+> pretty exp
 
   pretty (Module am m bod) =
     vsep [ keyword "module" <+> prettyAcc am <> pretty m <+> equals <+> keyword "begin"
@@ -174,6 +196,15 @@ instance Pretty (Var p) => Pretty (Toplevel p) where
          , indent 2 (align (pretty m))
          , keyword "end"
          ]
+
+  pretty (TypeFunDecl ac name args kindsig equations _) =
+    prettyAcc ac <+> keyword "type function" <+> pretty name <+> hsep (map ((squote <>) . pretty) args) <> ks <+> keyword "begin"
+      <#> indent 2 (align (vsep (map pretty equations)))
+      <#> keyword "end"
+    where ks = foldMap ((colon <+>) . pretty) kindsig
+
+instance Pretty (Var p) => Pretty (TyFunClause p) where
+  pretty (TyFunClause lhs rhs _) = pretty lhs <+> equals <+> pretty rhs
 
 instance (Pretty (Var p)) => Pretty [Toplevel p] where
   pretty = vcat . map pretty

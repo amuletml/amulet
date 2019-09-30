@@ -8,6 +8,7 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Bifunctor
 import Data.Text (Text)
+import Data.Char
 import Data.List
 
 import Syntax.Subst
@@ -129,6 +130,7 @@ prettyType (TyPi x t) = uncurry prettyQuantifiers . second reverse $ unwind t [x
   sameAs Anon{} Anon{} = True
   sameAs Implicit{} Implicit{} = True
   sameAs _ _ = False
+prettyType (TyApp (TyApp (TyCon v) l) r) | isOpName (displayS (pretty v)) = prettyType (TyOperator l v r)
 prettyType (TyApp x e) = parenTyFun x (displayType x) <+> parenTyArg e (displayType e)
 prettyType (TyRows p rows) = enclose (lbrace <> space) (space <> rbrace) $
   pretty p <+> soperator pipe <+> hsep (punctuate comma (displayRows rows))
@@ -154,6 +156,9 @@ parenTyFun _ = id
 
 parenTuple TyPi{} = parens
 parenTuple _ = id
+
+isOpName :: [Char] -> Bool
+isOpName = not . isAlphaNum . head
 
 prettyMotive :: SkolemMotive Typed -> Doc
 prettyMotive (ByAscription _ t) = string "of the context, the type" <#> displayType t

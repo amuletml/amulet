@@ -44,11 +44,9 @@ import Types.Unify
 
 import Text.Pretty.Semantic
 
-#define TRACE_TC
 #ifdef TRACE_TC
 import Debug.Trace
 #endif
-#undef TRACE_TC
 
 -- | Solve for the types of bindings in a problem: Either @TypeDecl@s,
 -- @LetStmt@s, or @ForeignVal@s.
@@ -65,9 +63,9 @@ inferExpr env exp = fmap fst <$> runInfer env (inferOne exp) where
   inferOne :: forall m. MonadInfer Typed m => Expr Desugared -> m (Type Typed)
   inferOne expr = do
     ((expr, ty), cs) <- listen $ infer expr
-    (sub, _, deferred) <- condemn $ retcons (addBlame (becauseExp expr)) (solve cs (env ^. classDecs))
+    (sub, _, deferred) <- condemn $ retcons (addBlame (becauseExp expr)) $ solve cs =<< getSolveInfo
     deferred <- pure (fmap (apply sub) deferred)
-    (compose sub -> sub, _, cons) <- condemn $ solve (Seq.fromList deferred) (env ^. classDecs)
+    (compose sub -> sub, _, cons) <- condemn $ solve (Seq.fromList deferred) =<< getSolveInfo
     (context, _, _, compose sub -> sub) <- reduceClassContext mempty (annotation expr) cons
 
     vt <- closeOverStrat (becauseExp expr) mempty expr (apply sub (context ty))
@@ -254,21 +252,16 @@ infer ex@(BinOp l o r a) = do
 
 infer ex@App{} = do
   (ex, ty) <- inferApp ex
-  (k, ty) <- instantiateTc (becauseExp ex) ty
+  (k, ty) <- secondA expandType =<< instantiateTc (becauseExp ex) ty
   pure (k ex, ty)
 
 infer ex@Vta{} = do
   (ex, ty) <- inferApp ex
-  (k, ty) <- instantiateTc (becauseExp ex) ty
+  (k, ty) <- secondA expandType =<< instantiateTc (becauseExp ex) ty
   pure (k ex, ty)
 
 infer ex@(Match t ps a) = do
-  tt <-
-    case ps of
-      (Arm p _ _:_) -> view _2 <$> inferPattern p
-      _ -> view _2 <$> infer t
-
-  t' <- check t tt
+  (t', tt) <- infer t
   ty <- freshTV
 
   ps' <- for ps $ \(Arm p g e) -> do
@@ -462,6 +455,24 @@ inferProg (inst@Instance{}:prg) = do
       addFst stmt@LetStmt{} = consFst stmt
       addFst _ = undefined
   addFst stmt . local (classes %~ insert (annotation inst) InstSort instName instTy ci) $ inferProg prg
+
+inferProg (decl@(TypeFunDecl am tau arguments kindsig equations ann):prg) = do
+  (kind, equations, arguments) <- resolveTyFunDeclKind (BecauseOf decl) tau arguments kindsig equations
+  let tfinfo =
+        TyFamInfo { _tsName = tau
+                  , _tsEquations = map make_eq equations
+                  , _tsArgs = map arg_name arguments
+                  , _tsKind = kind
+                  }
+      fakeDecl = TypeDecl am tau arguments (Just []) (ann, kind)
+      make_eq (TyFunClause (TyApps _ lhs) rhs _) = (lhs, rhs)
+      make_eq _ = undefined
+      arg_name (TyAnnArg v _) = v
+      arg_name _ = undefined
+
+  local (tySyms %~ Map.insert tau tfinfo) $
+    local (names %~ focus (one tau kind)) $
+      consFst fakeDecl $ inferProg prg
 
 inferProg (Module am name body:prg) = do
   (body', env) <- inferProg body

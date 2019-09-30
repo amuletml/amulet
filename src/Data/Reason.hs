@@ -51,6 +51,7 @@ data ConcreteReason where
   BecauseOfExpr :: forall p. (Pretty (Var p), Respannable (Ann p)) => Expr p -> String -> ConcreteReason
   BecauseOfPat :: forall p. (Pretty (Var p), Spanned (Ann p), Data (Var p), Data (Ann p), Data p)
                => Pattern p -> ConcreteReason
+  BecauseInternal :: ConcreteReason
 
 instance Show ConcreteReason where
   show (BecauseOfExpr _ _) = "expression blame"
@@ -59,10 +60,12 @@ instance Show ConcreteReason where
 instance Spanned ConcreteReason where
   annotation (BecauseOfExpr e _) = annotation e
   annotation (BecauseOfPat e) = annotation e
+  annotation _ = internal
 
 instance Pretty ConcreteReason where
   pretty (BecauseOfExpr e _) = pretty e
   pretty (BecauseOfPat e) = pretty e
+  pretty BecauseInternal = keyword "internal compiler error"
 
 -- | A type which can be blamed for an error
 class (Spanned (f p), Pretty (f p)) => Reasonable f p where
@@ -97,6 +100,9 @@ instance (Spanned (Ann p), Pretty (Var p)) => Reasonable ClassItem p where
 
 instance (Spanned (Ann p), Pretty (Var p)) => Reasonable Fundep p where
   blame _ = string "the functional dependency"
+
+instance (Spanned (Ann p), Pretty (Var p)) => Reasonable TyFunClause p where
+  blame _ = string "the type function clause"
 
 instance Reasonable (Const SomeReason) p where
   blame = blameOf . getConst

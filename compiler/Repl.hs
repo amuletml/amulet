@@ -508,10 +508,13 @@ replFrom port mode files = do
   tid <-
     if port /= 0
        then forkIO $ startServer ready port state
-       else myThreadId
+       else do
+         putMVar ready ()
+         myThreadId
 
   takeMVar ready
-  evalStateT (runInputT defaultSettings (runRepl (Just tid))) state
+  bracket (pure ()) (const (killThread tid)) $ \() ->
+    evalStateT (runInputT defaultSettings (runRepl (Just tid))) state
 
 finish :: MonadIO m => Listener -> m ()
 finish Nothing = pure ()

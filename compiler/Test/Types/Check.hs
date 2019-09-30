@@ -56,4 +56,5 @@ tests = do
   clss <- testGroup "Type class tests" <$> goldenDir result "tests/types/class/" ".ml"
   vta <- testGroup "Visible type application tests" <$> goldenDir result "tests/types/vta/" ".ml"
   syn <- testGroup "Type synonym tests " <$> goldenDir result "tests/types/synonym/" ".ml"
-  pure (testGroup "Type inference" [ inference, gadts, rankn, lazy, letgen, wild, clss, vta, syn ])
+  tyfun <- testGroup "Type function tests " <$> goldenDir result "tests/types/tyfun/" ".ml"
+  pure (testGroup "Type inference" [ inference, gadts, rankn, lazy, letgen, wild, clss, vta, syn, tyfun ])
