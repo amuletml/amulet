@@ -4,7 +4,7 @@ type 'p :- 'q = Sub of ('p => unit -> dict 'q)
 type function discrim 'a 'b begin
   discrim 'a 'a = int
   discrim 'a 'b = string
-end ;;
+end
 
 class trivial begin end
 instance trivial begin end

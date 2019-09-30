@@ -6,7 +6,7 @@ type x 'a =
 type function collapse 'a begin
   collapse int = int
   collapse 'a = string
-end ;;
+end
 
 let collapse (x : x 'a) : x (collapse 'a) =
   match x with

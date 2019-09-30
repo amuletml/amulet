@@ -1,7 +1,7 @@
 type function f 'a : type begin
   f int = string
   f string = int
-end ;;
+end
 
 type ev 'a =
   | Int : int -> ev int
