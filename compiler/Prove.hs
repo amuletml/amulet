@@ -76,7 +76,7 @@ main = do
 #ifdef WITH_SERVER
     ["serve", sock] -> startServer sock
 #endif
-    ("prove":x@(_:_)) -> handleSentence stdout (L.pack (unwords x))
+    ("prove":x@(_:_)) -> handleSentence (pure ()) stdout (L.pack (unwords x))
     _ -> putDoc proverHelp
 
 #ifdef WITH_SERVER
@@ -112,10 +112,18 @@ startServer path = Net.withSocketsDo $ do
 
       body <- T.decodeUtf8 <$> Http.consumeBody requestBody
 
-      T.hPutStr handle "HTTP/1.1 200 OK\r\n"
-      T.hPutStr handle "Content-Type: text/plain\r\n\r\n"
-      handleSentence handle . L.fromStrict $ body
-      hClose handle
+      tid <- forkIO $ do
+        let success = do
+              T.hPutStr handle "HTTP/1.1 200 OK\r\n"
+              T.hPutStr handle "Content-Type: text/plain\r\n\r\n"
+        handleSentence success handle . L.fromStrict $ body
+        hClose handle
+      threadDelay 3000000
+      killThread tid
+      o <- hIsOpen handle
+      when o $ do
+        T.hPutStr handle "HTTP/1.1 418 Request timed out\r\n\r\n"
+        hClose handle
 
     unlink path =
       removeLink path
@@ -132,12 +140,13 @@ prover = do
     Nothing -> pure ()
     Just x | ":q" `isPrefixOf` x -> pure ()
     Just x | ":h" `isPrefixOf` x -> liftIO (putDoc proverHelp) *> prover
-    Just t -> handleSentence stdout (L.pack t) *> prover
+    Just t -> handleSentence (pure ()) stdout (L.pack t) *> prover
 
-handleSentence :: MonadIO m => Handle -> Text -> m ()
-handleSentence handle sentence =
+handleSentence :: MonadIO m => IO () -> Handle -> Text -> m ()
+handleSentence success handle sentence = do
   case runParser "<input>" sentence parseType of
-    (Just t, _) -> flip evalNameyT (TgName "a" 0) $ proveSentence (hReport handle files) handle (fmap propVarToTv t)
+    (Just t, _) -> flip evalNameyT (TgName "a" 0) $
+      proveSentence (hReport handle files) success handle (fmap propVarToTv t)
     (Nothing, es) -> liftIO $ traverse_ (hReport handle files) es
   where files = [("<input>", L.toStrict sentence)]
 
@@ -148,9 +157,10 @@ propVarToTv = transformType go where
 
 proveSentence :: MonadIO m
               => (forall a. Note a Style => a -> IO ())
+              -> IO ()
               -> Handle
               -> Located (Type Parsed) -> NameyT m ()
-proveSentence report stdout tau = do
+proveSentence report success stdout tau = do
   let prog = [ TySymDecl Public (Name "_") [] (foldr addForall t (ftv t)) (annotation tau) ]
       addForall v = TyForall v (Just TyType)
       t = getL tau
@@ -166,6 +176,7 @@ proveSentence report stdout tau = do
   where
     solve [ TypeDecl _ _ _ (Just [ArgCon _ _ ty _]) _ ] = do
       candidates <- findHoleCandidate mempty (annotation tau) env ty
+      liftIO success
       if not (null candidates)
          then liftIO $ hPutDoc stdout (keyword "yes." <#> indent 2 (pretty (head candidates)))
          else liftIO $ hPutDoc stdout (keyword "probably not.")
