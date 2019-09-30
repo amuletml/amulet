@@ -1,6 +1,6 @@
-empty_match_03.ml[4:3 ..4:9]: warning
+empty_match_03.ml[3:26 ..3:32]: warning
   Redundant pattern in expression
   │ 
-4 │ | _ -> ()
-  │   ^^^^^^^
+3 │ let f : void -> () = fun _ -> ()
+  │                          ^^^^^^^
   • Note: This can be replaced by an empty match.

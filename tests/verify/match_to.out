@@ -1,0 +1,14 @@
+match_to.ml[4:9 ..4:16]: warning
+  Non-exhaustive patterns in expression
+  │ 
+4 │ let _ = function
+  │         ^^^^^^^^
+  • Note: The following patterns are not covered
+      false
+match_to.ml[12:3 ..12:16]: warning
+  Non-exhaustive patterns in expression
+   │ 
+12 │   match g x with
+   │   ^^^^^^^^^^^^^^
+  • Note: The following patterns are not covered
+      false
