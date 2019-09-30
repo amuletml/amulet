@@ -24,7 +24,6 @@ let _ =
 
   let contrapositive : forall 'p 'q. ('p -> 'q) -> (not 'q -> not 'p) = _
   let noncontradiction : forall 'p. not ('p && not 'p) = _
-  let not_not_lem : forall 'p. not (not ('p || not 'p)) = _
   let ex_falso : forall 'a. void -> 'a = _
 
   ()

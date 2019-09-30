@@ -43,6 +43,7 @@ data PsScope =
           , _psAnn :: !Span
           , _psInScope :: Set.Set Text
           , _psDepth :: !Int
+          , _psMask :: Set.Set (Expr Typed)
           }
 
 type MonadPs m = (MonadNamey m, MonadReader PsScope m, MonadLogic m, MonadFail m, Alternative m)
@@ -50,10 +51,11 @@ type MonadPs m = (MonadNamey m, MonadReader PsScope m, MonadLogic m, MonadFail m
 makeLenses ''PsScope
 
 findHoleCandidate :: MonadNamey m => Subst Typed -> Span -> Env -> Type Typed -> m [Expr Typed]
-findHoleCandidate _ ann env t = observeManyT 10 $ runReaderT (fill t) (PsScope mempty env ann nms 0) where
+findHoleCandidate _ ann env t = observeManyT 10 $ runReaderT (fill t) empty where
   nms = env ^. names . to namesInScope . to (map getName) . to Set.fromAscList
   getName (TgName x _) = x
   getName (TgInternal x) = x
+  empty = PsScope mempty env ann nms 0 mempty
 
 -- | Compute an expression that has the given type.
 fill :: forall m. MonadPs m => Type Typed -> m (Expr Typed)
@@ -224,6 +226,9 @@ knownImplication ty = fake [ty] $ \[app] -> do
     , Just sub <- [unifyPure ret ty]
     ]
 
+  when (not (null args)) $
+    guard . isNothing =<< view (psMask . at fun)
+
 -- If we need the type we want to fill to be able to call this function
 -- then it's not very useful
   guard (ty `Set.notMember` Set.fromList args)
@@ -232,7 +237,7 @@ knownImplication ty = fake [ty] $ \[app] -> do
   traceM (displayS (keyword "considering" <+> string "function" <+> pretty fun <+> colon <+> pretty ty))
 #endif
 
-  local (psVars %~ Map.mapKeys (apply sub)) . local (psDepth %~ succ) $
+  local (psVars %~ Map.mapKeys (apply sub)) . local (psDepth %~ succ) . local (psMask %~ Set.insert fun) $
     foldl (mkApp app) fun <$> traverse fill args
 
 -- | Exhaustively explore a list of choices.
