@@ -226,7 +226,7 @@ knownImplication ty = fake [ty] $ \[app] -> do
     , Just sub <- [unifyPure ret ty]
     ]
 
-  when (not (null args)) $
+  unless (null args) $
     guard . isNothing =<< view (psMask . at fun)
 
 -- If we need the type we want to fill to be able to call this function
