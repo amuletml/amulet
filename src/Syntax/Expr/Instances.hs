@@ -211,4 +211,3 @@ instance Pretty (Var p) => Pretty (Parameter p) where
 
 prettyRows' :: Pretty (Var p) => Doc -> [Field p] -> [Doc]
 prettyRows' sep = map (\(Field n v _) -> text n <+> sep <+> pretty v) . sortOn (view fName)
-

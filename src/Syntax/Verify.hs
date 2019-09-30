@@ -114,16 +114,23 @@ verifyExpr ex@(Let vs e (_, ty)) = do
   verifyExpr e
 verifyExpr (If c t e _) = traverse_ verifyExpr [c, t, e]
 verifyExpr (App f x _) = verifyExpr f *> verifyExpr x
-verifyExpr m@(Fun (PatParam p) x _) = verifyMatch m (getType p) [Arm p Nothing x]
+verifyExpr m@(Fun (PatParam p) x _) = verifyMatch (const $ pure ()) m (getType p) [Arm p Nothing x]
+verifyExpr m@(Fun (EvParam _) (Match e bs _) _) = do
+  -- Handle desugared `function`p.
+  verifyExpr e
+  verifyMatch
+    (\(Arm p _ _) -> tell . pure $ MatchToFun p m)
+    m (getType e) bs
+
 verifyExpr (Fun _ x _) = verifyExpr x
 verifyExpr (Begin es _) = traverse_ verifyExpr es
 verifyExpr Literal{} = pure ()
 verifyExpr m@(Match e bs _) = do
   verifyExpr e
-  verifyMatch m (getType e) bs
-verifyExpr m@(Function bs (_, ty)) = do
-  let (TyPi (Anon arg) _) = ty
-  verifyMatch m arg bs
+  verifyMatch
+    (\(Arm p _ _) -> tell . pure $ MatchToLet p m)
+    m (getType e) bs
+verifyExpr Function{} = error "Impossible: Function has been desugared."
 verifyExpr (BinOp l o r _) = traverse_ verifyExpr [l, o, r]
 verifyExpr Hole{} = pure ()
 verifyExpr (Ascription e _ _) = verifyExpr e
@@ -256,29 +263,31 @@ nonTrivial (ExprWrapper w e _) =
 
 -- | Verify a series of patterns are total
 verifyMatch :: MonadVerify m
-            => Expr Typed -- ^ The match expression, used for error reporting
+            => (Arm Typed -> m ())
+            -- ^ An additional function to call on well-formed matches of one case.
+            -> Expr Typed -- ^ The match expression, used for error reporting
             -> Type Typed -- ^ The type of the term to match against
             -> [Arm Typed] -- ^ The arms within the current match
             -> m ()
-verifyMatch m ty [] = do
+verifyMatch _ m ty [] = do
   VerifyScope env as <- ask
   when (inhabited env as ty) $
     tell . pure $ MissingPattern m [VVariable undefined ty]
-verifyMatch m ty bs = do
+verifyMatch rep m ty bs = do
   VerifyScope env va <- ask
 
-  (_, unc) <- foldlM (\(i :: Int, alts) a@(Arm pat guard body) -> do
+  (_, err, unc) <- foldlM (\(i :: Int, err, alts) a@(Arm pat guard body) -> do
     let cov  = covering env pat alts
     -- If the covered set is empty, this arm is redundant
-    va' <- case covered cov of
+    (va', err) <- case covered cov of
       Seq.Empty -> do
         let b = case bs of
                   [_] -> BecauseMatch
                   _ | i == 0 -> BecauseArm
                   _ -> Shadowed
         tell . pure $ RedundantArm a b
-        pure va
-      (va', _) Seq.:<| _ -> pure va'
+        pure (va, True)
+      (va', _) Seq.:<| _ -> pure (va', err)
 
     local (\(VerifyScope env _) -> VerifyScope env va') $ do
       modify (Set.union (bindingSites pat))
@@ -287,9 +296,12 @@ verifyMatch m ty bs = do
 
     -- Return the filtered uncovered set if this pattern has no guard,
     -- otherwise use the original uncovered set.
-    pure . (i + 1,) $ case guard of
+    pure . (i + 1, err, ) $ case guard of
       Nothing -> uncovered cov
       Just{} -> alts)
-    (0, pure $ emptyAlt va ty) bs
+    (0, False, pure $ emptyAlt va ty) bs
 
-  unless (null unc) (tell . pure . MissingPattern m . map snd . toList $ unc)
+  case (unc, bs) of
+    (Seq.Empty, [a]) | err -> rep a
+    (Seq.Empty, _) -> pure ()
+    (_, _) -> tell . pure . MissingPattern m . map snd . toList $ unc

@@ -1,4 +1,3 @@
 type void = |
 
-let f : void -> () = function
-| _ -> ()
+let f : void -> () = fun _ -> ()
