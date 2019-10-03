@@ -64,8 +64,6 @@ substituteInTys = term where
       _ -> id
 
   coercion m (SameRepr t t') = SameRepr (gotype m t) (gotype m t')
-  coercion m (Domain c) = Domain (coercion m c)
-  coercion m (Codomain c) = Codomain (coercion m c)
   coercion m (Symmetry c) = Symmetry (coercion m c)
   coercion m (Application f x) = Application (coercion m f) (coercion m x)
   coercion m (ExactRecord rs) = ExactRecord (map (second (coercion m)) rs)
@@ -73,6 +71,7 @@ substituteInTys = term where
   coercion m (Projection rs rs') = Projection (map (second (coercion m)) rs) (map (second (coercion m)) rs')
   coercion _ (CoercionVar x) = CoercionVar x
   coercion m (Quantified v co c) = Quantified v (coercion m co) (coercion m c)
+  coercion _ (Nth co i) = Nth co i
 
   atom m (Ref v t) = Ref v (gotype m t)
   atom _ x@Lit{} = x
@@ -119,8 +118,6 @@ substituteInCo m c
   | otherwise = coercion c where
 
   coercion (SameRepr t t') = SameRepr (gotype t) (gotype t')
-  coercion (Domain c) = Domain (coercion c)
-  coercion (Codomain c) = Codomain (coercion c)
   coercion (Symmetry c) = Symmetry (coercion c)
   coercion (Application f x) = Application (coercion f) (coercion x)
   coercion (ExactRecord rs) = ExactRecord (map (second coercion) rs)
@@ -128,6 +125,7 @@ substituteInCo m c
   coercion (Projection rs rs') = Projection (map (second coercion) rs) (map (second coercion) rs')
   coercion (CoercionVar x) = CoercionVar x
   coercion (Quantified v a c) = Quantified v (coercion a) (coercion c)
+  coercion (Nth co i) = Nth co i
 
   gotype = substituteInType m
 

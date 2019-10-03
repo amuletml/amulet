@@ -94,7 +94,8 @@ deriving instance Ord (Var p) => Ord (Type p)
 deriving instance Eq (Var p) => Eq (Type p)
 
 data Coercion p
-  = VarCo (Var p)
+  = VarCo (Var p) -- coercion variable
+  | MvCo (Var p) -- coercion metavariable
   | ReflCo (Type p) -- <T> : T ~ T
   | SymCo (Coercion p) -- sym (X : T ~ S) : S ~ T
   | AppCo (Coercion p) (Coercion p) -- (f : B ~ D) (x : A ~ C) : B A ~ D C
@@ -107,6 +108,8 @@ data Coercion p
   | AssumedCo (Type p) (Type p) -- <A, B> : A ~ B
   | ForallCo (Var p) (Coercion p) (Coercion p)
     -- (forall (v : x : c ~ d). phi : a ~ b) : forall (v : c). a ~ forall (v : d). b
+  | P1 (Var p) -- { _1 : a ~ b, _2 : c ~ d }.1 : a ~ b
+  | P2 (Var p) -- { _1 : a ~ b, _2 : c ~ d }.2 : a ~ b
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Coercion p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Coercion p)
@@ -143,6 +146,7 @@ makeLenses ''TyBinder
 
 instance Pretty (Var p) => Pretty (Coercion p) where
   pretty (VarCo x) = stypeSkol (pretty x)
+  pretty (MvCo x) = stypeSkol (pretty x)
   pretty (ReflCo t) = enclose (char '<') (char '>') (pretty t)
   pretty (AssumedCo a b) = enclose (char '<') (char '>') (pretty a <> comma <+> pretty b)
   pretty (SymCo x) = keyword "sym" <+> pretty x
@@ -157,6 +161,8 @@ instance Pretty (Var p) => Pretty (Coercion p) where
     enclose (lbrace <> space) (space <> rbrace) $ keyword "proj" <+> pprRow rs'
     where pprRow xs = hsep (punctuate comma (map (\(n, v) -> text n <+> colon <+> pretty v) xs))
   pretty (ForallCo v c cs) = keyword "∀" <> parens (pretty v <+> colon <+> pretty c) <> dot <+> pretty cs
+  pretty (P1 c) = pretty c <> keyword ".1"
+  pretty (P2 c) = pretty c <> keyword ".2"
 
 record :: [Doc] -> Doc
 record = enclose (lbrace <> space) (space <> rbrace) . hsep . punctuate comma

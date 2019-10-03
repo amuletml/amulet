@@ -67,7 +67,6 @@ instance Ord (Var p) => Substitutable p (Type p) where
   apply s (TyOperator l o r) = TyOperator (apply s l) o (apply s r)
 
 instance Ord (Var p) => Substitutable p (Coercion p) where
-  ftv VarCo{} = mempty
   ftv (ReflCo t) = ftv t
   ftv (AssumedCo t t') = ftv t <> ftv t'
   ftv (SymCo c) = ftv c
@@ -78,8 +77,15 @@ instance Ord (Var p) => Substitutable p (Coercion p) where
   ftv (RowsCo c rs) = ftv c <> foldMap (ftv . snd) rs
   ftv (ProjCo rs rs') = foldMap (ftv . snd) rs <> foldMap (ftv . snd) rs'
   ftv (ForallCo v t cs) = ftv t <> v `Set.delete` ftv cs
+  ftv VarCo{} = mempty
+  ftv P1{} = mempty
+  ftv P2{} = mempty
+  ftv MvCo{} = mempty
 
   apply _ x@VarCo{} = x
+  apply _ x@P1{} = x
+  apply _ x@P2{} = x
+  apply _ x@MvCo{} = x
   apply s (ReflCo t) = ReflCo (apply s t)
   apply s (AssumedCo t t') = AssumedCo (apply s t) (apply s t')
   apply s (SymCo x) = SymCo (apply s x)

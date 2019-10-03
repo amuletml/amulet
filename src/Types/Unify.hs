@@ -1,6 +1,6 @@
 {-# LANGUAGE MultiWayIf, FlexibleContexts, ScopedTypeVariables,
    TemplateHaskell, TupleSections, ViewPatterns,
-   LambdaCase, ConstraintKinds, CPP, TypeFamilies, OverloadedStrings #-}
+   LambdaCase, ConstraintKinds, CPP, TypeFamilies, OverloadedStrings, RecordWildCards #-}
 {-# OPTIONS_GHC -Wno-unused-top-binds #-}
 
 -- | This module implements the logic responsible for solving the
@@ -463,6 +463,11 @@ bind scope var ty
 --  subsume k have want
 -- i.e. The irst argument is the type *we have*.
 unify :: MonadSolve m => ImplicitScope ClassInfo Typed -> Type Typed -> Type Typed -> m (Coercion Typed) -- {{{
+
+#ifdef TRACE_TC
+unify a b | trace (displayS (keyword "unify:" <+> pretty a <+> soperator (char '~') <+> pretty b)) False = undefined
+#endif
+
 unify scope (TySkol x) (TySkol y) -- {{{
   | x == y = pure (ReflCo (TySkol y))
   | otherwise = do
@@ -646,8 +651,20 @@ lookupEquality class_info scope a b = normal <|> fundepEquality where
   -- Try instances a ~ b (which must be LocalAssum).
   normal =
     let choices = filter ((/= Superclass) . view implSort) $
-          lookup (TyApps tyEq [a, b]) scope <> lookup (TyApps tyEq [b, a]) scope
-     in assert (all ((== LocalAssum) . view implSort) choices) (map (VarCo . (^. implVar)) choices)
+          find (TyApps tyEq [a, b]) scope <> find (TyApps tyEq [b, a]) scope
+     in assert (all ((== LocalAssum) . view implSort) choices) (map makeCo choices)
+
+  makeCo ImplChoice{..} =
+    case _implClass of
+      Proj1 -> P1 _implVar
+      Proj2 -> P2 _implVar
+      Var   -> VarCo _implVar
+
+  find t scope = used Var   (lookup t scope)
+             <|> used Proj1 (lookup (TyTuple t a) scope)
+             <|> used Proj2 (lookup (TyTuple a t) scope)
+    where a = TyVar (TgInternal "a")
+          used x = map (implClass .~ x)
 
   fundepEquality =
     let
@@ -919,6 +936,8 @@ isReflexiveCo (ForallCo _ d c) = isReflexiveCo d && isReflexiveCo c
 isReflexiveCo AssumedCo{} = False
 isReflexiveCo ProjCo{} = False
 isReflexiveCo VarCo{} = False
+isReflexiveCo P1{} = False
+isReflexiveCo P2{} = False
 
 applicable :: Type Typed -> ImplicitScope ClassInfo Typed -> Implicit ClassInfo Typed -> Bool
 applicable wanted scp (ImplChoice head _ cs _ s _ _) =
@@ -1113,6 +1132,8 @@ newtype InField = InField Text
 
 instance Pretty InField where
   pretty (InField t) = string "When checking the field" <+> skeyword (text t)
+
+data UsedEq = Var | Proj1 | Proj2 deriving (Eq, Show, Ord)
 
 traceM :: Applicative m => String -> m ()
 trace :: String -> a -> a
