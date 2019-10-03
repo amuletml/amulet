@@ -199,7 +199,7 @@ builtins =
   , types = [ tp C.vBool, tp C.vInt, tp C.vString, tp C.vFloat, tp C.vUnit
             , (tyLazyName, TyType ~> TyType)
             , (tyArrowName, TyType ~> TyType ~> TyType)
-            , (tyTupleName, TyType ~> TyType ~> a *. TyVar a)
+            , (tyTupleName, TyType ~> TyType ~> TyType)
             , (tyConstraintName, TyType)
             , (tyListName, TyType ~> TyType)
             , (tyRefName, TyType ~> TyType)

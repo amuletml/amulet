@@ -47,6 +47,9 @@ transformCoercion
   -> Coercion p -> Coercion p
 transformCoercion fc ft = goC where
   transC (VarCo c) = VarCo c
+  transC (P1 c) = P1 c
+  transC (P2 c) = P2 c
+  transC (MvCo c) = P2 c
   transC (ReflCo l) = ReflCo (goT l)
   transC (AssumedCo l r) = AssumedCo (goT l) (goT r)
   transC (AppCo f x) = AppCo (goC f) (goC x)

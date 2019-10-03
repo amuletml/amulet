@@ -152,9 +152,7 @@ data Coercion a
   | Projection [(Text, Coercion a)] [(Text, Coercion a)]
 
   | CoercionVar a
-
-  | Domain (Coercion a)
-  | Codomain (Coercion a)
+  | Nth a Int
   deriving (Eq, Show, Ord, Functor, Generic, Hashable)
 
 data Literal
@@ -231,12 +229,11 @@ instance Pretty a => Pretty (Coercion a) where
   pretty (Projection _ rs') =
     enclose (lbrace <> space) (space <> rbrace)
       (keyword "proj" <+> hsep (punctuate comma (map pprCoRow rs')))
-  pretty (Domain f) = keyword "dom" <+> parens (pretty f)
-  pretty (Codomain f) = keyword "cod" <+> parens (pretty f)
   pretty (Symmetry f) = keyword "sym" <+> parens (pretty f)
   pretty (Quantified (Relevant v) dom c) = keyword "∀" <> (pretty v <+> colon <+> pretty dom) <> dot <+> pretty c
   pretty (Quantified Irrelevant dom c) = pretty dom <+> arrow <+> pretty c
   pretty (CoercionVar x) = pretty x
+  pretty (Nth a i) = pretty a <> dot <> sliteral (int i)
 
 pprLet :: (Annotation b, Pretty a) => [(a, Type a, AnnTerm b a)] -> Doc
 pprLet = vsep . punctuate semi . map pprLet1
@@ -384,6 +381,7 @@ occursInTy _ NilTy = False
 relates :: Coercion a -> Maybe (Type a, Type a)
 relates (SameRepr a b) = Just (a, b)
 relates (CoercionVar _) = Nothing
+relates Nth{} = Nothing
 relates (Application f x) = do
   (f, g) <- relates f
   (x, y) <- relates x
@@ -417,12 +415,6 @@ relates (Projection rs rs') = do
 relates (Symmetry x) = do
   (a, b) <- relates x
   pure (b, a)
-relates (Domain x) = do
-  (ForallTy _ a _, ForallTy _ b _) <- relates x
-  pure (a, b)
-relates (Codomain x) = do
-  (ForallTy _ _ a, ForallTy _ _ b) <- relates x
-  pure (a, b)
 relates (Quantified v co c) = do
   (a, b) <- relates c
   (c, d) <- relates co

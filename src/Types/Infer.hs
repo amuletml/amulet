@@ -44,9 +44,11 @@ import Types.Unify
 
 import Text.Pretty.Semantic
 
+#define TRACE_TC
 #ifdef TRACE_TC
 import Debug.Trace
 #endif
+#undef TRACE_TC
 
 -- | Solve for the types of bindings in a problem: Either @TypeDecl@s,
 -- @LetStmt@s, or @ForeignVal@s.
@@ -535,10 +537,12 @@ solveEx syms ss cs = transformExprTyped go id goType where
 
   goWrap (TypeApp t) = TypeApp (goType t)
   goWrap (TypeAsc t) = TypeAsc (goType t)
-  goWrap (Cast c) = case c of
-    ReflCo{} -> IdWrap
-    AssumedCo a b | a == b -> IdWrap
-    _ -> Cast c
+  goWrap (Cast c) = Cast (goCast c) where
+    goCast = transformCoercion go goType
+    go (MvCo v) = case Map.lookup v cs of
+      Just (Cast c) -> c
+      _ -> error "coercion metavariable not solved to cast"
+    go x = x
   goWrap (TypeLam l t) = TypeLam l (goType t)
   goWrap (ExprApp f) = ExprApp (go f)
   goWrap (x Syntax.:> y) = goWrap x Syntax.:> goWrap y

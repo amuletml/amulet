@@ -367,28 +367,18 @@ checkCoercion s = checkCo where
        in (ExactRowsTy first, RowsTy (ExactRowsTy bs) ts))
     <$> fmap unzip (for rs (\(t, c) -> (\(a, b) -> ((t, a), (t, b))) <$> checkCo c))
     <*> fmap unzip (for rs' (\(t, c) -> (\(a, b) -> ((t, a), (t, b))) <$> checkCo c))
+
   checkCo (CoercionVar x) =
     case VarMap.lookup (toVar x) (vars s) of
       Just (AppTy (AppTy _ l) r, _) -> pure (l, r)
       _ -> pushError (InvalidCoercion (CoercionVar x))
 
+  checkCo (Nth co i) =
+    case VarMap.lookup (toVar co) (vars s) of
+      Just (ExactRowsTy rs, _) | (_, AppTy (AppTy _ l) r) <- rs !! i -> pure (l, r)
+      _ -> pushError (InvalidCoercion (Nth co i))
+
   checkCo (Symmetry x) = swap <$> checkCo x
-  checkCo (Domain x) =
-    checkCo x `thenError` \(f, t) -> (,)
-      <$> (case f of
-             ForallTy _ a _ -> pure a
-             _ -> pushError (TypeMismatch (ForallTy Irrelevant unknownTyvar unknownTyvar) f))
-      <*> (case t of
-             ForallTy _ a _ -> pure a
-             _ -> pushError (TypeMismatch (ForallTy Irrelevant unknownTyvar unknownTyvar) t))
-  checkCo (Codomain x) =
-    checkCo x `thenError` \(f, t) -> (,)
-      <$> (case f of
-             ForallTy _ _ a -> pure a
-             _ -> pushError (TypeMismatch (ForallTy Irrelevant unknownTyvar unknownTyvar) f))
-      <*> (case t of
-             ForallTy _ _ a -> pure a
-             _ -> pushError (TypeMismatch (ForallTy Irrelevant unknownTyvar unknownTyvar) t))
   checkCo (Quantified v l r) =
     (\(f, g) (x, y) -> (ForallTy v f x, ForallTy v g y)) <$> checkCo l <*> checkCo r
 
@@ -467,13 +457,6 @@ unknownTyvar = VarTy unknownVar
 -- | Throw an error within an applicative
 pushError :: CoreError a -> Errors (CoreErrors a) b
 pushError = failure . pure
-
--- | Effectively the monad bind operation for 'Error', but without
--- following the monad laws.
-thenError :: Errors e a -> (a -> Errors e b) -> Errors e b
-thenError m f = case runErrors m of
-                  Left e -> failure e
-                  Right x -> f x
 
 -- | Throw an error within an error monad
 chuckError :: MonadError (CoreErrors a) m => CoreError a -> m b

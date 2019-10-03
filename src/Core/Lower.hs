@@ -194,21 +194,25 @@ lowerAt (ExprWrapper wrap e an) ty =
     ws S.:> wy -> lowerAt (ExprWrapper ws (ExprWrapper wy e an) an) ty
     S.WrapVar v -> error $ "Unsolved wrapper variable " ++ show v ++ ". This is a bug"
     S.IdWrap -> lowerAt e ty
-  where
-    co (S.VarCo x) = CoercionVar (mkCo x)
-    co (S.ReflCo t) = SameRepr (lowerType t) (lowerType t)
-    co (S.AssumedCo t t') = SameRepr (lowerType t) (lowerType t')
-    co (S.SymCo c) = Symmetry (co c)
-    co (S.AppCo a b) = Application (co a) (co b)
-    co (S.ArrCo a b) = C.Quantified Irrelevant (co a) (co b)
-    co (S.ProdCo a b) = ExactRecord [("_1", co a), ("_2", co b)]
-    co (S.RowsCo c rs) = C.Record (co c) (map (second co) rs)
-    co (S.ExactRowsCo rs) = C.ExactRecord (map (second co) rs)
-    co (S.ProjCo rs rs') = Projection (map (second mkReflexive) rs) (map (second co) rs')
-    co (S.ForallCo v cd rs) = C.Quantified (Relevant (mkCo v)) (co cd) (co rs)
-    mkReflexive = join SameRepr . lowerType
 
 lowerAt e _ = lowerAnyway e
+
+co :: S.Coercion Typed -> Coercion CoVar
+co (S.VarCo x) = CoercionVar (mkCo x)
+co (S.ReflCo t) = SameRepr (lowerType t) (lowerType t)
+co (S.AssumedCo t t') = SameRepr (lowerType t) (lowerType t')
+co (S.SymCo c) = Symmetry (co c)
+co (S.AppCo a b) = Application (co a) (co b)
+co (S.ArrCo a b) = C.Quantified Irrelevant (co a) (co b)
+co (S.ProdCo a b) = ExactRecord [("_1", co a), ("_2", co b)]
+co (S.RowsCo c rs) = C.Record (co c) (map (second co) rs)
+co (S.ExactRowsCo rs) = C.ExactRecord (map (second co) rs)
+co (S.ProjCo rs rs') = Projection (map (second mkReflexive) rs) (map (second co) rs') where
+  mkReflexive = join SameRepr . lowerType
+co (S.ForallCo v cd rs) = C.Quantified (Relevant (mkCo v)) (co cd) (co rs)
+co (S.P1 v) = Nth (mkCo v) 0
+co (S.P2 v) = Nth (mkCo v) 1
+co S.MvCo{} = error "Unsolved coercion metavariable"
 
 lowerAnyway :: MonadLower m => Expr Typed -> Lower m Term
 lowerAnyway (S.VarRef v (_, ty)) = do
