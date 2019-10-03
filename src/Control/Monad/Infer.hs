@@ -92,6 +92,7 @@ data TypeError where
            -> TypeError
 
   Occurs :: (Pretty (Var p), Ord (Var p)) => Var p -> Type p -> TypeError
+  CustomTypeError :: Doc -> TypeError
 
   NotInScope :: Var Desugared -> TypeError
   FoundHole :: Var Typed -> Type Typed -> [Expr Typed] -> TypeError
@@ -305,6 +306,8 @@ instance Pretty TypeError where
 
   pretty (NotInScope e) = string "Variable not in scope:" <+> pretty e
   pretty (ArisingFrom er _) = pretty er
+
+  pretty (CustomTypeError e) = e
 
   pretty (FoundHole e s []) = string "Found typed hole" <+> pretty e <+> "of type" <+> displayType s
   pretty (FoundHole e s cs) =

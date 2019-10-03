@@ -1,19 +1,23 @@
 {-# LANGUAGE ConstraintKinds, FlexibleContexts #-}
-module Types.Unify.Magic (magicClass) where
+module Types.Unify.Magic (magicClass, magicTyFun) where
 
 import Control.Monad.Infer
 import Control.Lens
 
 import Syntax.Implicits
 import Syntax.Builtin
+import Syntax.Pretty
 import Syntax.Types
 import Syntax.Var
 import Syntax
 
 import Data.Spanned
 
+import Text.Pretty.Semantic
+
 type Solver m = SomeReason -> ImplicitScope ClassInfo Typed -> Type Typed -> m (Maybe (Wrapper Typed))
 type MonadSolve m = (MonadNamey m, MonadWriter [Constraint Typed] m, MonadChronicles TypeError m)
+type TfSolver m = ImplicitScope ClassInfo Typed -> [Type Typed] -> Type Typed -> m (Maybe (Coercion Typed))
 
 magicClass :: MonadSolve m => Var Typed -> Maybe (Solver m)
 magicClass v
@@ -21,6 +25,7 @@ magicClass v
   | v == tyKIntName = Just (solveKnownLit knownIntName knownIntTy knownIntTy' tyKInt tyInt)
   | v == rowConsName = Just solveRowCons
   | v == tyEqName = Just solveEq
+  | v == tyTypeError_n = Just (\_ _ (TyApps _ [a]) -> solveTypeError a)
   | otherwise = Nothing
 
 solveEq :: MonadSolve m => Solver m
@@ -94,3 +99,19 @@ isRows :: Type p -> Bool
 isRows TyExactRows{} = True
 isRows TyRows{} = True
 isRows _ = False
+
+magicTyFun :: MonadSolve m => Var Typed -> Maybe (TfSolver m)
+magicTyFun v
+  | v == tyTypeError_n = Just (\_ [a] _ -> solveTypeError a)
+  | otherwise = Nothing
+
+solveTypeError :: MonadSolve m => Type Typed -> m a
+solveTypeError msg = confesses . CustomTypeError . toTypeError $ msg where
+  toTypeError :: Type Typed -> Doc
+  toTypeError (TyApps (TyCon v) [a, b])
+    | v == tyVCat_n = toTypeError a <#> toTypeError b
+    | v == tyHCat_n = toTypeError a <+> toTypeError b
+  toTypeError (TyApps (TyPromotedCon v) [a])
+    | v == tyeString_n, TyLit (LiStr a) <- a = text a
+    | v == tyShowType_n = displayType a
+  toTypeError x = error (displayS (pretty x) ++ "Kind error in solveTypeError")

@@ -391,6 +391,8 @@ pickBestPossible xs = head best where
 usingFor :: Implicit ClassInfo Typed -> Type Typed -> TypeError -> TypeError
 usingFor _ _ x@Note{} = x
 usingFor _ _ x@(ArisingFrom Note{} _) = x
+usingFor _ _ x@CustomTypeError{} = x
+usingFor _ _ x@(ArisingFrom CustomTypeError{} _) = x
 usingFor i ty e =
   Note e . indent (-4) $
     vsep [ mempty
@@ -476,7 +478,7 @@ bind scope var ty
 unify :: MonadSolve m => ImplicitScope ClassInfo Typed -> Type Typed -> Type Typed -> m (Coercion Typed) -- {{{
 
 #ifdef TRACE_TC
-unify a b | trace (displayS (keyword "unify:" <+> pretty a <+> soperator (char '~') <+> pretty b)) False = undefined
+unify _ a b | trace (displayS (keyword "unify:" <+> pretty a <+> soperator (char '~') <+> pretty b)) False = undefined
 #endif
 
 unify scope (TySkol x) (TySkol y) -- {{{
@@ -721,6 +723,7 @@ unifyTyFunApp' info scope args tb = do
               (TyApps tyEq [TyApps (TyCon (info ^. tsName)) args, tb])]
       pure (VarCo var)
 
+tyFunByEval (TyFamInfo tn _ _ _) scope args tb | traceShow args True, Just solve <- magicTyFun tn = solve scope args tb
 tyFunByEval (TyFamInfo tn eqs _ _) scope args tb = do
   info <- view solveInfo
   assum <- use solveAssumptions
@@ -1285,7 +1288,6 @@ reblame_con r = map go where
   go (ConImplicit _ a b c) = ConImplicit r a b c
   go x@ConFail{} = x
   go x@DeferredError{} = x
-
 
 newtype InField = InField Text
   deriving Show

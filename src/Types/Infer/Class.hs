@@ -610,7 +610,7 @@ mkLet xs = Let xs
 (!) :: (Show k, Ord k, HasCallStack) => Map.Map k v -> k -> v
 m ! k = fromMaybe (error ("Key " ++ show k ++ " not in map")) (Map.lookup k m)
 
-validContext :: MonadChronicles TypeError m => String -> Ann Desugared -> Type Desugared -> m ()
+validContext :: MonadChronicles TypeError m => Set.Set (Var Typed) String -> Ann Desugared -> Type Desugared -> m ()
 
 validContext what ann t@(TyApps f xs@(_:_))
   -- | TyCon v <- f, v == tyEqName = unless (what == "instance") $ confesses (InvalidContext what ann t)

@@ -34,6 +34,7 @@ module Syntax.Builtin
   , rowConsName, extendName, restrictName, rOWCONSName
   , rowConsTy, rowConsTy', rowConsTy'', rowConsTy''', rowConsTy''''
   , rEFLName, rEFLTy, rEFLTy'
+  , tyTypeError_n, tyeString_n, tyHCat_n, tyVCat_n, tyShowType_n
   ) where
 
 import Control.Lens
@@ -68,6 +69,17 @@ tyKStrName   = ofCore C.vKStrTy
 tyKIntName   = ofCore C.vKIntTy
 tyEqName     = ofCore C.vEq
 tyConstraintName = TgInternal "constraint"
+
+tyTypeError_n, tyErrMsg_n, tyeString_n, tyHCat_n, tyVCat_n, tyShowType_n :: Var Typed
+tyErrMsg :: Type Typed
+tyTypeError_n = ofCore C.tcTypeError
+tyErrMsg_n = ofCore C.tcErrKind
+tyeString_n = ofCore C.tcString
+tyHCat_n = ofCore C.tcHCat
+tyVCat_n = ofCore C.tcVCat
+tyShowType_n = ofCore C.tcShowType
+
+tyErrMsg = TyCon tyErrMsg_n
 
 tyUnit, tyBool, tyInt, tyString, tyFloat, tyLazy, tyConstraint, tyArrow, tyList, tyRef, tyKStr, tyKInt, tyRowCons, tyEq :: Type Typed
 tyInt        = TyCon tyIntName
@@ -167,13 +179,14 @@ data BuiltinModule = BM
   , modules :: [(Var Resolved, BuiltinModule)]
   , constructors :: Map.Map (Var Resolved) (Set.Set (Var Typed))
   , classes :: [(Var Resolved, T.ClassInfo)]
+  , families :: [(Var Resolved, T.TySymInfo)]
   }
 
 instance Semigroup BuiltinModule where
-  (BM v t m c ci) <> (BM v' t' m' c' ci') = BM (v <> v') (t <> t') (m <> m') (c <> c') (ci <> ci')
+  (BM v t m c ci fi) <> (BM v' t' m' c' ci' fi') = BM (v <> v') (t <> t') (m <> m') (c <> c') (ci <> ci') (fi <> fi')
 
 instance Monoid BuiltinModule where
-  mempty = BM { vars = mempty, types = mempty, modules = mempty, constructors = mempty, classes = mempty }
+  mempty = BM { vars = mempty, types = mempty, modules = mempty, constructors = mempty, classes = mempty, families = mempty }
 
 builtins :: BuiltinModule
 builtins =
@@ -232,18 +245,35 @@ builtins =
                               TyPi (Implicit (foldl1 TyApp [tyRowCons, TyVar record, TyVar key, TyVar ttype, TyVar new ] )) $
                                 TyVar new ~> (TyVar ttype `TyTuple` TyVar record)
                             )
+                          , ( tyeString_n, tyString ~> tyErrMsg )
+                          , ( tyHCat_n, tyErrMsg ~> tyErrMsg ~> tyErrMsg )
+                          , ( tyVCat_n, tyErrMsg ~> tyErrMsg ~> tyErrMsg )
+                          , ( tyShowType_n, a *. TyVar a ~> tyErrMsg )
+                          , ( tyTypeError_n, a *. tyErrMsg ~> TyVar a )
                           ]
                  , types = [ (tyKStrName, tyString ~> tyConstraint)
                            , (tyKIntName, tyInt ~> tyConstraint)
                            , (rowConsName, TyType ~> tyString ~> TyType ~> TyType ~> tyConstraint)
+                           , (tyErrMsg_n, TyType)
+                           , (tyeString_n, tyString ~> tyErrMsg )
+                           , (tyHCat_n, tyErrMsg ~> tyErrMsg ~> tyErrMsg )
+                           , (tyVCat_n, tyErrMsg ~> tyErrMsg ~> tyErrMsg )
+                           , (tyShowType_n, a *. TyVar a ~> tyErrMsg )
+                           , (tyTypeError_n, a *. tyErrMsg ~> TyVar a )
                            ]
                  , classes = [ (tyKStrName, T.MagicInfo [])
                              , (tyKIntName, T.MagicInfo [])
                              , (rowConsName, T.MagicInfo [ ( [0, 1, 2], [3], internal )
                                                          , ( [1, 3], [2, 0], internal ) ])
                              ]
+                 , constructors = Map.fromList [(tyErrMsg_n, Set.fromList [tyeString_n, tyHCat_n, tyVCat_n, tyShowType_n])]
                  }
         ) ]
+  , families = [ (tyTypeError_n, T.TyFamInfo { T._tsName = tyTypeError_n
+                                             , T._tsEquations = []
+                                             , T._tsArgs = [a]
+                                             , T._tsKind = a *. tyErrMsg ~> TyVar a
+                                             }) ]
   }
 
   where
@@ -267,7 +297,7 @@ builtinResolve :: R.Scope
 builtinModules :: R.ModuleScope
 (builtinResolve, builtinModules) = R.ModuleScope <$> go builtins where
   go :: BuiltinModule -> (R.Scope, Map.Map (Var Parsed) (Var Resolved, R.Scope))
-  go (BM vs ts ms _ _) =
+  go (BM vs ts ms _ _ _) =
     let scp = R.Scope
               { R.varScope = buildVars vs
               , R.tyScope = buildVars ts
@@ -295,11 +325,12 @@ builtinModules :: R.ModuleScope
 -- | The builtin scope for type inference
 builtinEnv :: T.Env
 builtinEnv = go builtins where
-  go (BM vs ts ms cs ci) =
+  go (BM vs ts ms cs ci fi) =
     foldr ((<>) . go . snd) (T.envOf (T.scopeFromList vs <> T.scopeFromList ts)) ms
       & T.types %~ mappend cs
       & T.modules %~ mappend (fake ms)
       & T.classDecs %~ mappend (Map.fromList ci)
+      & T.tySyms %~ mappend (Map.fromList fi)
   fake ms = Map.fromList (ms & map (_2 .~ mempty))
 
 -- | Construct a syntax variable from a core one

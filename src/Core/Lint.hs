@@ -318,8 +318,7 @@ checkType :: IsVar a => Scope a -> Type a -> Errors (CoreErrors a) ()
 checkType s (ConTy v) =
   case VarMap.lookup (toVar v) (types s) of
     Nothing -> pushError (NoSuchVar v)
-    Just inf | inf /= varInfo v -> pushError (InfoMismatch v inf (varInfo v))
-             | not (isTypeInfo inf) -> pushError (InfoIllegal v TypeConVar inf)
+    Just inf | not (isTypeInfo inf) -> pushError (InfoIllegal v TypeConVar inf)
              | otherwise -> pure ()
 checkType _ (VarTy v)
   | varInfo v /= TypeVar = pushError (InfoIllegal v TypeVar (varInfo v))
