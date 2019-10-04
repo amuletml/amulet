@@ -14,6 +14,7 @@ module Control.Monad.Namey
   ( NameyT, runNameyT, evalNameyT
   , Namey, runNamey, evalNamey
   , MonadNamey(..)
+  , genNameFrom, genNameWith
   , genAlnum
   ) where
 
@@ -150,3 +151,15 @@ genAlnum n = go (fromIntegral n) T.empty (floor (logBase 26 (fromIntegral n :: D
               0 -> 1
               x -> x
      in go (n `mod'` (26 ^ p)) (T.snoc out (chr (96 + m))) (p - 1)
+
+-- | Generate a fresh var with a specific name.
+genNameFrom :: MonadNamey m => T.Text -> m (Var Desugared)
+genNameFrom t = do
+  ~(TgName _ n) <- genName
+  pure (TgName t n)
+
+-- | Generate a fresh var prepended with another name.
+genNameWith :: MonadNamey m => T.Text -> m (Var Desugared)
+genNameWith t = do
+  ~(TgName e n) <- genName
+  pure (TgName (t <> e) n)

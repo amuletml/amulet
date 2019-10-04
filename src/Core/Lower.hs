@@ -188,7 +188,7 @@ lowerAt (ExprWrapper wrap e an) ty =
     S.TypeLam (Skolem (TgName _ id) (TgName n _) _ _) k ->
       let ty' (ForallTy (Relevant v) _ t) = substituteInType (VarMap.singleton v (VarTy var)) t
           ty' x = x
-          var = CoVar id n TypeVar
+          var = CoVar id (Just n) TypeVar
        in Lam (TypeArgument var (lowerType k)) <$> lowerAtTerm e (ty' ty)
     S.TypeLam _ _ -> error "impossible lowerAt TypeLam"
     ws S.:> wy -> lowerAt (ExprWrapper ws (ExprWrapper wy e an) an) ty
@@ -414,8 +414,8 @@ lowerLet bs =
       patternExtract pos p test ty outerTy (var, (_, innerTy)) = do
         let var' = mkVal var
             innerTy' = lowerType innerTy
-        pvar@(CoVar vn vt _) <- freshFrom var'
-        let p' = stripPtrn var (TgName vt vn) p
+        pvar@(CoVar vn _ _) <- freshFrom var'
+        let p' = stripPtrn var (TgName (covarDisplayName pvar) vn) p
 
         -- Generate `let x = match test with | ... x' ... -> x`
         One  . (var', outerTy, ) <$> patternWrap pos p' test ty outerTy (Atom (Ref pvar innerTy')) innerTy'

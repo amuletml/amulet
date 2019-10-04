@@ -10,14 +10,16 @@ import qualified Data.Text as T
 import Data.Hashable
 
 import Control.Lens
-import GHC.Generics
+import Control.Monad.Namey
+
 import Text.Pretty.Semantic
+import GHC.Generics
 import Data.Data
 
 -- | The core variable type
 data CoVar =
   CoVar { _covarId :: {-# UNPACK #-} !Int -- ^ The unique identifier for this variable.
-        , _covarName :: T.Text -- ^ The name of this variable.
+        , _covarName :: Maybe T.Text -- ^ The name of this variable.
         , _covarInfo :: VarInfo -- ^ Additional information about this variable.
         }
   deriving (Show, Generic, Data)
@@ -44,8 +46,12 @@ data VarInfo
 makeLenses ''CoVar
 makePrisms ''VarInfo
 
+covarDisplayName :: CoVar -> T.Text
+covarDisplayName (CoVar i Nothing _) = genAlnum i
+covarDisplayName (CoVar _ (Just n) _) = n
+
 instance Pretty CoVar where
-  pretty (CoVar i v k) = text v <> scomment (string "#" <> pretty k <> string (show i))
+  pretty v@(CoVar i _ k) = text (covarDisplayName v) <> scomment (string "#" <> pretty k <> shown i)
 
 instance Pretty VarInfo where
   pretty ValueVar = text "v"

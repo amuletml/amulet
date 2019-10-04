@@ -283,4 +283,4 @@ fakeKINT =
 
 makeBuiltins :: [ (Text, VarInfo) ] -> [CoVar]
 makeBuiltins xs = zipWith go xs [-1, -2 ..] where
-  go (name, t) id = CoVar id name t
+  go (name, t) id = CoVar id (Just name) t

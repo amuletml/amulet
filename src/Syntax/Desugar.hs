@@ -17,6 +17,7 @@ module Syntax.Desugar (desugarProgram) where
 
 import Control.Monad.Namey
 
+import Data.Text (Text)
 import Data.Bifunctor
 import Data.Foldable
 import Data.Spanned
@@ -61,7 +62,11 @@ expr (Fun p b a) = Fun (param p) <$> expr b <*> pure a
 expr (Begin es a) = Begin <$> traverse expr es <*> pure a
 expr (Match e bs a) = Match <$> expr e <*> traverse arm bs <*> pure a
 expr (Function bs a) = do
-  (cap, rhs) <- fresh a
+  let name = case bs of
+               [] -> "bot"
+               [Arm b _ _] | Just n <- getPatternName b -> n
+               _ -> "x"
+  (cap, rhs) <- fresh name a
   Fun (EvParam cap) <$>
     (Match rhs <$> traverse arm bs <*> pure a)
     <*> pure a
@@ -74,7 +79,7 @@ expr (RecordExt e rs a) = RecordExt <$> expr e <*> traverse field rs <*> pure a
 expr (Access e k a) = Access <$> expr e <*> pure k <*> pure a
 
 expr (LeftSection op vl an) = do
-  (cap, rhs) <- fresh an
+  (cap, rhs) <- fresh "r" an
   op' <- expr op
   vl' <- expr vl
   let go lhs = Fun (PatParam cap) (BinOp rhs op' lhs an) an
@@ -82,14 +87,14 @@ expr (LeftSection op vl an) = do
     VarRef{} -> pure $ go vl'
     Literal{} -> pure $ go vl'
     _ -> do
-      ~(Capture lv _, ref) <- fresh an
+      ~(Capture lv _, ref) <- fresh "x" an
       pure $ Let [Binding lv vl' False an] (go ref) an
 
 expr (RightSection vl op an) = expr (App op vl an)
 expr (BothSection o _) = expr o
 
 expr (AccessSection k a) = do
-  (cap, ref) <- fresh a
+  (cap, ref) <- fresh "tbl" a
   pure (Fun (PatParam cap) (Access ref k a) a)
 
 expr (Parens e _) = expr e
@@ -122,12 +127,12 @@ buildTuple :: forall m. MonadNamey m => Ann Desugared
            -> ([Pattern Desugared], [(Var Desugared, Expr Desugared)], [Expr Desugared])
            -> m ([Pattern Desugared], [(Var Desugared, Expr Desugared)], [Expr Desugared])
 buildTuple a Nothing (as, vs, tuple) = do
-  (p, v) <- fresh a
+  (p, v) <- fresh "a" a
   pure (p:as, vs, v:tuple)
 buildTuple _ (Just e@VarRef{}) (as, vs, tuple) = pure (as, vs, e:tuple)
 buildTuple _ (Just e@Literal{}) (as, vs, tuple) = pure (as, vs, e:tuple)
 buildTuple a (Just e) (as, vs, tuple) = do
-  ~(Capture v _, ref) <- fresh a
+  ~(Capture v _, ref) <- fresh "x" a
   pure (as, (v, e):vs, ref:tuple)
 
 binding :: forall m. MonadNamey m => Binding Resolved -> m (Binding Desugared)
@@ -206,9 +211,9 @@ transListComp :: forall m. MonadNamey m
               -> Expr Desugared -> m (Expr Desugared)
 transListComp (ex, CompGen v l1 an:qs, an') l2 = do
   h <- genName
-  (cus, us) <- fresh an
-  (cus', us') <- fresh an
-  (cx, x) <- fresh an
+  (cus, us) <- fresh "xss" an
+  (cus', us') <- fresh "xs" an
+  (cx, x) <- fresh "x" an
   l1 <- expr l1
   success <- transListComp (ex, qs, an) (App (VarRef h an) us' an)
   pure $
@@ -275,7 +280,13 @@ refutable (PRecord rs _) = any (refutable . snd) rs
 refutable (PTuple ps _) = any refutable ps
 refutable PGadtCon{} = undefined
 
-fresh :: MonadNamey m => Ann Desugared -> m (Pattern Desugared, Expr Desugared)
-fresh an = do
-  var <- genName
+fresh :: MonadNamey m => Text -> Ann Desugared -> m (Pattern Desugared, Expr Desugared)
+fresh n an = do
+  var <- genNameFrom n
   pure (Capture var an, VarRef var an)
+
+getPatternName :: Pattern Resolved -> Maybe Text
+getPatternName (Capture (TgName n _) _) = Just n
+getPatternName (PAs _ (TgName n _) _) = Just n
+getPatternName (PType p _ _) = getPatternName p
+getPatternName _ = Nothing

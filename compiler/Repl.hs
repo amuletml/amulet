@@ -282,8 +282,8 @@ execString name line = do
               vs' <- for vs $ \(v, _) -> do
                 let Just (_, vs) = VarMap.lookup v (emit' ^. B.topVars)
                 repr <- traverse (valueRepr . evalExpr . B.unsimple) vs
-                let CoVar id nam _ = v
-                    var = S.TgName nam id
+                let CoVar id _ _ = v
+                    var = S.TgName (covarDisplayName v) id
                 case inferScope state' ^. T.names . at var of
                   Just ty -> pure (Just (pretty v <+> colon <+> nest 2 (displayType ty <+> equals </> hsep (map pretty repr))))
                   Nothing -> pure Nothing

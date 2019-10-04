@@ -48,7 +48,7 @@ mkCon = mkVar DataConVar
 
 -- | Make a core variable from a "Syntax" variable and a given kind.
 mkVar :: VarInfo -> Var Resolved -> CoVar
-mkVar k (TgName t i) = CoVar i t k
+mkVar k (TgName n i) = CoVar i (Just n) k
 mkVar _ n@TgInternal{} = error ("Cannot convert " ++ show n ++ " to CoVar")
 
 -- | Lower a type from "Syntax" to one in "Core.Core".
@@ -77,7 +77,7 @@ lowerType (S.TyCon v)
   | v == Bi.tyConstraintName = StarTy
   | otherwise = ConTy (mkType v)
 lowerType (S.TyPromotedCon v) = ConTy (mkCon v) -- TODO this is in the wrong scope
-lowerType (S.TySkol (Skolem (TgName _ v) (TgName n _) _ _)) = VarTy (CoVar v n TypeVar)
+lowerType (S.TySkol (Skolem (TgName _ v) (TgName n _) _ _)) = VarTy (CoVar v (Just n) TypeVar)
 lowerType (S.TySkol _) = error "impossible lowerType TySkol"
 lowerType (S.TyOperator l o r)
   | o == Bi.tyTupleName = lowerType (S.TyTuple l r)
