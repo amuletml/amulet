@@ -187,6 +187,10 @@ Top :: { Toplevel Parsed }
     | Access type TyConArg BindOp TyConArg '<-' Type
         { withPos2 $2 $4 $ TySymDecl $1 (getL $4) [$3, $5] (getL $7) }
 
+    | Access type function BindName ListE1(TyConArg) TyFunKindSig Begin(TyFunBody)
+      -- 1    2     3       4       5               6             7
+        { withPos2 $2 $7 $ TypeFunDecl $1 (getL $4) $5 $6 (getL $7) }
+
     | module qconid '=' Begin(Tops)            { Module Public (getName $2) (getL $4) }
     | private module qconid '=' Begin(Tops)    { Module Private (getName $3) (getL $5) }
     | module conid '=' Begin(Tops)             { Module Public (getName $2) (getL $4) }
@@ -202,6 +206,16 @@ Top :: { Toplevel Parsed }
     | instance Type Begin(Methods)             {% fmap (withPos2 $1 $3) $ buildInstance $2 (getL $3) }
 
     | open Con                                 { Open (getL $2) Nothing }
+
+TyFunBody :: { [TyFunClause Parsed] }
+  : List(TyFunEq, TopSep) { $1 }
+
+TyFunEq :: { TyFunClause Parsed }
+  : Type '=' Type { withPos2 $1 $3 $ TyFunClause (getL $1) (getL $3) }
+
+TyFunKindSig :: { Maybe (Type Parsed) }
+  : ':' Type { Just (getL $2) }
+  |          { Nothing }
 
 Begin(a)
   : begin a end                             { lPos2 $1 $3 $2 }

@@ -1,11 +1,12 @@
 {-# LANGUAGE ConstraintKinds, FlexibleContexts, LambdaCase, TypeFamilies #-}
 module Types.Kinds
   ( resolveKind
-  , resolveTyDeclKind, resolveClassKind, resolveTySymDeclKind
+  , resolveTyDeclKind, resolveClassKind, resolveTySymDeclKind, resolveTyFunDeclKind
   , annotateKind
   , closeOver, closeOver'
   , checkAgainstKind, getKind, liftType
   , generalise
+  , checkKind
   )
   where
 
@@ -26,7 +27,7 @@ import Data.Maybe
 import Types.Wellformed (wellformed)
 import Types.Infer.Builtin
 import Types.Infer.Errors
-import Types.Unify (solve)
+import Types.Unify (solve, getSolveInfo)
 
 import Syntax.Builtin
 import Syntax.Subst
@@ -54,7 +55,7 @@ resolveKind reason otp = do
                         expandType t
                      in runWriterT (runStateT (cont otp) reason)
 
-  (sub, _, _) <- solve cs =<< view classDecs
+  (sub, _, _) <- solve cs =<< getSolveInfo
 
   let t = apply sub ty
   wellformed t
@@ -73,7 +74,7 @@ checkAgainstKind r t k = solveK pure r $
 annotateKind :: MonadKind m => SomeReason -> Type Typed -> m (Type Typed)
 annotateKind r ty = do
   ((ty, _), cs) <- runWriterT (runStateT (fmap fst (inferKind (raiseT id ty))) r)
-  (sub, _, _) <- solve cs =<< view classDecs
+  (sub, _, _) <- solve cs =<< getSolveInfo
   pure (apply sub ty)
 
 initialKind :: MonadKind m => Type Typed -> [TyConArg Desugared] -> KindT m (Type Typed, Telescope Typed)
@@ -86,6 +87,52 @@ initialKind ret (TyAnnArg v k:as) = do
   (s, t) <- initialKind ret as
   pure (TyArr k s, t <> one v k)
 initialKind ret [] = pure (ret, mempty)
+
+resolveTyFunDeclKind :: (MonadReader Env m,
+                         MonadChronicle (Seq.Seq TypeError) m, MonadNamey m)
+                     => SomeReason
+                     -> Var Typed
+                     -> [TyConArg Desugared]
+                     -> Maybe (Type Desugared)
+                     -> [TyFunClause Desugared]
+                     -> m (Type Typed, [TyFunClause Typed], [TyConArg Typed])
+resolveTyFunDeclKind reason name arguments kindsig equations = do
+  (k, eqs, arguments) <- solveK $ do
+    return_kind <- case kindsig of
+      Nothing -> freshTV
+      Just t -> expandType =<< checkKind t TyType
+
+    (args, argts) <- fmap unzip . for arguments $ \case
+      TyAnnArg v t -> do
+        t <- expandType =<< checkKind t TyType
+        pure (TyAnnArg v t, t)
+      TyVarArg v -> do
+        t <- freshTV
+        pure (TyAnnArg v t, t)
+
+    let initk (TyAnnArg _ k:xs) = TyArr k <$> initk xs
+        initk (_:_) = undefined
+        initk [] = pure return_kind
+    kind <- initk args
+
+    eqs <- local (names %~ focus (one name kind)) $
+      for equations $ \(TyFunClause ty@(TyApps (TyCon con) xs) rhs an) -> do
+        tvs <- for (Set.toList (ftv ty)) $ \v -> (,) v <$> freshTV
+        local (names %~ focus (teleFromList tvs)) $ do
+          ty <- TyApps (TyCon con) <$> traverse (uncurry checkKind) (zip xs argts)
+          rhs <- checkKind rhs return_kind
+          pure (TyFunClause ty rhs (an, kind))
+    pure (kind, eqs, args)
+  pure (k, eqs, arguments)
+ where
+   solveK k = do
+     (((kind, equations, args), _), cs) <- runWriterT (runStateT k reason)
+     (sub, _, _) <- solve cs =<< getSolveInfo
+     pure ( apply sub kind
+          , map (\(TyFunClause lhs rhs (ann, kind)) -> TyFunClause (apply sub lhs) (apply sub rhs) (ann, apply sub kind)) equations
+          , map (apply_arg sub) args)
+   apply_arg sub (TyAnnArg v t) = TyAnnArg v (apply sub t)
+   apply_arg _ _ = undefined
 
 resolveClassKind :: MonadKind m
                  => Toplevel Desugared
@@ -167,7 +214,7 @@ solveForKind2 :: MonadKind m => SomeReason -> KindT m (Type Typed, Kind Typed) -
 solveForKind2 reason = solveK cont reason where
   solveK cont reason k = do
     (((typ_e, kind), _), cs) <- runWriterT (runStateT k reason)
-    (sub, _, _) <- solve cs =<< view classDecs
+    (sub, _, _) <- solve cs =<< getSolveInfo
     cont (apply sub typ_e, apply sub kind)
 
   cont (t, k) = (,) t <$> closeOver reason k
@@ -175,7 +222,7 @@ solveForKind2 reason = solveK cont reason where
 solveK :: MonadKind m => (Type Typed -> m (Type Typed)) -> SomeReason -> KindT m (Type Typed) -> m (Type Typed)
 solveK cont reason k = do
   ((kind, _), cs) <- runWriterT (runStateT k reason)
-  (sub, _, _) <- solve cs =<< view classDecs
+  (sub, _, _) <- solve cs =<< getSolveInfo
   cont =<< expandType (apply sub kind)
 
 inferKind :: MonadKind m => Type Desugared -> KindT m (Type Typed, Kind Typed)
@@ -454,4 +501,4 @@ generalise ftv r ty =
     env <- view typeVars
     case Set.toList (fv `Set.difference` env) of
       [] -> pure ty
-      vs -> annotateKind r $ foldr (flip TyForall Nothing) (killWildcard ty) vs
+      vs -> annotateKind r $ foldr (\v rest -> TyPi (Invisible v Nothing Spec) rest) (killWildcard ty) vs

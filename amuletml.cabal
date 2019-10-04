@@ -205,6 +205,7 @@ library
                      , Types.Infer.Builtin
                      , Types.Infer.Outline
                      , Types.Infer.Pattern
+                     , Types.Infer.Function
                      , Types.Infer.Constructor
                      -- Pretty
                      , Text.Dot

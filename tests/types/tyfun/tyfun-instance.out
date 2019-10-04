@@ -1,0 +1,6 @@
+tyfun-instance.ml[7:1 ..7:26]: error
+  │ 
+7 │ instance bar foo begin end
+  │ ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  Type function foo appears with no arguments,
+  but in its definition it has 1

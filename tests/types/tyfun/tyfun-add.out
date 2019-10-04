@@ -1,0 +1,11 @@
+nat : type
+Z : nat
+S : nat -> nat
++ : nat -> nat -> nat
+pi : nat -> type
+SZ : Infer{'cv : type}. Spec{'number : 'cv}. ('number ~ Z) ⊃ pi 'number
+SS : Infer{'ds : type}. Spec{'number : 'ds}. Spec{'n : nat}. ('number ~ S 'n) ⊃ pi 'n -> pi 'number
+~~ : Infer{'a : type}. 'a -> 'a -> type
+Refl : Infer{'a : type}. Spec{'a : 'a}. Spec{'b : 'a}. ~ 'a 'b => ~~ 'a 'b
+add_zero_right : Spec{'n : nat}. pi 'n -> ~~ (+ 'n Z) 'n
+add_succ_right : Spec{'n : nat}. Spec{'m : nat}. pi 'n -> pi 'm -> ~~ (+ 'n (S 'm)) (S (+ 'n 'm))

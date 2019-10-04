@@ -21,6 +21,7 @@ raiseT v (TySkol (Skolem n u t m)) = TySkol (Skolem (v n) (v u) (raiseT v t) (mo
   motive (ByExistential a t) = ByExistential (v a) (raiseT v t)
   motive (ByConstraint t) = ByConstraint (raiseT v t)
   motive (ByInstanceHead t a) = ByInstanceHead (raiseT v t) a
+  motive (ByTyFunLhs t a) = ByTyFunLhs (raiseT v t) a
 raiseT v (TyVar n) = TyVar (v n)
 raiseT v (TyApp x y) = TyApp (raiseT v x) (raiseT v y)
 raiseT v (TyTuple x y) = TyTuple (raiseT v x) (raiseT v y)

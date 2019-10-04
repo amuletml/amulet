@@ -8,7 +8,7 @@ module Syntax.Types
   , names, typeVars, constructors, types, letBound, classes, modules
   , classDecs, tySyms
   , ClassInfo(..), ciName, ciMethods, ciContext, ciConstructorName
-  , TySymInfo(..), tsName, tsArgs, tsExpansion, tsKind, TySyms
+  , TySymInfo(..), tsName, tsArgs, tsExpansion, tsKind, TySyms, tsEquations
   , ciConstructorTy, ciHead, ciClassSpan, ciDefaults, ciMinimal, ciFundep
   , Origin(..)
 
@@ -85,17 +85,27 @@ data Env
 type TySyms = Map.Map (Var Typed) TySymInfo
 
 
-data TySymInfo =
-  TySymInfo
-    { _tsName      :: Var Typed
-      -- ^ The name of the type synonym
-    , _tsExpansion :: Type Typed
-      -- ^ The expansion of the type synonym, with free variables
-    , _tsArgs      :: [Var Typed]
-      -- ^ The arguments to the type synonym in order
-    , _tsKind      :: Type Typed
-      -- ^ The kind of the type synoynm
-    }
+data TySymInfo
+  = TySymInfo
+      { _tsName      :: Var Typed
+        -- ^ The name of the type synonym
+      , _tsExpansion :: Type Typed
+        -- ^ The expansion of the type synonym, with free variables
+      , _tsArgs      :: [Var Typed]
+        -- ^ The arguments to the type synonym in order
+      , _tsKind      :: Type Typed
+        -- ^ The kind of the type synoynm
+      }
+  | TyFamInfo
+      { _tsName       :: Var Typed
+        -- ^ The name of this type family
+      , _tsEquations  :: [([Type Typed], Type Typed, Var Typed)]
+        -- ^ The equations to this type family
+      , _tsArgs       :: [Var Typed]
+        -- ^ The arguments to this type family, in order
+      , _tsKind       :: Type Typed
+        -- ^ The return kind of this type family
+      }
   deriving (Eq, Show, Ord)
 
 

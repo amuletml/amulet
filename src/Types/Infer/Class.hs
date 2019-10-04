@@ -1,6 +1,12 @@
 {-# LANGUAGE FlexibleContexts, TupleSections, ScopedTypeVariables,
    ViewPatterns, LambdaCase, TypeFamilies #-}
-module Types.Infer.Class (WrapFlavour(..), inferClass, inferInstance, reduceClassContext) where
+module Types.Infer.Class
+  ( WrapFlavour(..)
+  , inferClass
+  , inferInstance
+  , reduceClassContext
+  , skolFreeTy
+  ) where
 
 import Prelude hiding (lookup)
 
@@ -131,10 +137,10 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
       (_, cs) <- listen $
         check exp sig
 
-      (sub, _, deferred) <- condemn $ solve cs =<< view classDecs
+      (sub, _, deferred) <- condemn $ solve cs =<< getSolveInfo
 
       deferred <- pure (fmap (apply sub) deferred)
-      (_, _, cons) <- solve (Seq.fromList deferred) =<< view classDecs
+      (_, _, cons) <- solve (Seq.fromList deferred) =<< getSolveInfo
 
       unless (null cons) $ do
         let (c@(ConImplicit reason _ _ _):_) = reverse cons
@@ -256,13 +262,13 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
         lookup instHead scope
   case overlapping of
     [] -> pure ()
-    (x:_) -> confesses (Overlap instHead (x ^. implSpan) ann)
+    (x:_) -> confesses (Overlap Overinst instHead (x ^. implSpan) ann)
 
   (ctx, mappend skolSub -> skolSub) <- skolFreeTy mempty (ByInstanceHead ctx ann) (apply skolSub ctx)
 
   (mappend skolSub -> instSub, _, _) <-
     solve (pure (ConUnify (BecauseOf inst) scope undefined classHead instHead))
-        =<< view classDecs
+      =<< getSolveInfo
   localInsnConTy <- silence $
     closeOver (BecauseOf inst) (TyPi (Implicit ctx) instHead)
 
@@ -301,10 +307,10 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
         (e, cs) <- listen $ do
           fixHeadVars skolSub
           check e sig
-        (sub, wrap, deferred) <- condemn $ solve cs =<< view classDecs
+        (sub, wrap, deferred) <- condemn $ solve cs =<< getSolveInfo
 
         deferred <- pure (fmap (apply sub) deferred)
-        (compose sub -> sub, wrap', cons) <- solve (Seq.fromList deferred) =<< view classDecs
+        (compose sub -> sub, wrap', cons) <- solve (Seq.fromList deferred) =<< getSolveInfo
 
         unless (null cons) $ do
           let (c@(ConImplicit reason _ _ _):_) = reverse cons
@@ -348,10 +354,10 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
         an = annotation expr
 
     (e, cs) <- listen $ check expr ty
-    (sub, wrap, deferred) <- condemn $ solve cs =<< view classDecs
+    (sub, wrap, deferred) <- condemn $ solve cs =<< getSolveInfo
 
     deferred <- pure (fmap (apply sub) deferred)
-    (compose sub -> sub, wrap', cons) <- solve (Seq.fromList deferred) =<< view classDecs
+    (compose sub -> sub, wrap', cons) <- solve (Seq.fromList deferred) =<< getSolveInfo
 
     unless (null cons) $ do
       let (c@(ConImplicit reason _ _ _):_) = reverse cons
@@ -389,7 +395,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
       whatDo = Map.toList (methodNames <> classContext)
       fields = methodFields ++ usedDefaults ++ contextFields
 
-  (solution, needed, unsolved) <- solve cs =<< view classDecs
+  (solution, needed, unsolved) <- solve cs =<< getSolveInfo
 
   unless (null unsolved) $
     confesses (addBlame (BecauseOf inst)
@@ -729,7 +735,7 @@ checkFundeps context ann fds ty = do
 
     case overlapping of
       [] -> pure ()
-      (x:_) -> confesses (Overlap instHead (x ^. implSpan) ann)
+      (x:_) -> confesses (Overlap Overinst instHead (x ^. implSpan) ann)
 
 splitContext :: Type Typed -> [Type Typed]
 splitContext (TyTuple a b) = a:splitContext b

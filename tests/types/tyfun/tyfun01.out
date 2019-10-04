@@ -1,0 +1,12 @@
+f : type -> type
+ev : type -> type
+Int : Infer{'bk : type}. Spec{'a : 'bk}. ('a ~ int) ⊃ int -> ev 'a
+Str : Infer{'cf : type}. Spec{'a : 'cf}. ('a ~ string) ⊃ string -> ev 'a
+foo : Spec{'a : type}. ev 'a -> f 'a
+dict : constraint -> type
+Dict : Spec{'c : constraint}. 'c => dict 'c
+:- : constraint -> constraint -> type
+Sub : Spec{'p : constraint}. Spec{'q : constraint}. ('p => unit -> dict 'q) -> :- 'p 'q
+tf_equality1 : Spec{'a : type}. :- (~ 'a int) (~ (f 'a) string)
+tf_equality2 : Spec{'a : type}. :- (~ 'a string) (~ (f 'a) int)
+tf_refl : Spec{'a : type}. dict (~ (f 'a) (f 'a))

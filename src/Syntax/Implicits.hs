@@ -206,14 +206,14 @@ instance Ord (Var p) => Semigroup (Node i p) where
 
 -- | Compute the set of keys in a scope. Note that this operation takes
 -- time proportional to the number of elements in the trie!
-keys :: forall i p. Ord (Var p) => ImplicitScope i p -> Set.Set (Type p)
+keys :: forall i p. Ord (Var p) => ImplicitScope i p -> Map.Map (Type p) [Implicit i p]
 keys = go where
   go (Trie m) = foldMap goNode m
 
-  goNode (One x) = x ^. implHead & Set.singleton
-  goNode (Some xs) = foldMapOf (each . implHead) Set.singleton xs
+  goNode (One x) = Map.singleton (x ^. implHead) [x]
+  goNode (Some xs) = foldMapOf each (\i -> Map.singleton (i ^. implHead) [i]) xs
   goNode (Many t) = go t
-  goNode (ManyMore xs t) = foldMapOf (each . implHead) Set.singleton xs <> go t
+  goNode (ManyMore xs t) = foldMapOf each (\i -> Map.singleton (i ^. implHead) [i]) xs <> go t
 
 
 -- | Find the 'Many' node located at the end of the provided spine

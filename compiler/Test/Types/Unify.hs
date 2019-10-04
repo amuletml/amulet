@@ -44,6 +44,10 @@ prop_disjointTypesDon'tUnify = property $ do
 provenCoercion :: Coercion Typed -> (Type Typed, Type Typed)
 provenCoercion (ReflCo a) = (a, a)
 provenCoercion VarCo{} = undefined
+provenCoercion MvCo{} = undefined
+provenCoercion P1{} = undefined
+provenCoercion P2{} = undefined
+provenCoercion InstCo{} = undefined
 provenCoercion (SymCo c)
   | (a, b) <- provenCoercion c = (b, a)
 provenCoercion (AppCo c c')

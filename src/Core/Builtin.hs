@@ -32,7 +32,9 @@ tyvarRecord, tyvarNew, tyvarKey, tyvarType :: CoVar
 backendRet, backendClone :: CoVar
 vEq, vEQ :: CoVar
 
-[ vBool, vInt, vString, vFloat, vUnit, vLazy, vArrow, vProduct, vList, vRefTy, vKStrTy, vKIntTy, vRowCons, vOpAdd, vOpSub, vOpMul, vOpDiv, vOpExp, vOpLt, vOpGt, vOpLe, vOpGe, vOpAddF, vOpSubF, vOpMulF, vOpDivF, vOpExpF, vOpLtF, vOpGtF, vOpLeF, vOpGeF, vOpConcat, vOpEq, vOpNe, vError, vLAZY, vForce, tyvarA, tyvarB, argvarX, vOpApp, vCONS, vNIL, vAssign, vDeref, vRef, vStrVal, vIntVal, vExtend, vRestrict, vKSTR, vKINT, vROWCONS, tyvarRecord, tyvarNew, tyvarKey, tyvarType, vEq, vEQ, backendRet, backendClone ] = makeBuiltins
+tcTypeError, tcErrKind, tcString, tcHCat, tcVCat, tcShowType :: CoVar
+
+[ vBool, vInt, vString, vFloat, vUnit, vLazy, vArrow, vProduct, vList, vRefTy, vKStrTy, vKIntTy, vRowCons, vOpAdd, vOpSub, vOpMul, vOpDiv, vOpExp, vOpLt, vOpGt, vOpLe, vOpGe, vOpAddF, vOpSubF, vOpMulF, vOpDivF, vOpExpF, vOpLtF, vOpGtF, vOpLeF, vOpGeF, vOpConcat, vOpEq, vOpNe, vError, vLAZY, vForce, tyvarA, tyvarB, argvarX, vOpApp, vCONS, vNIL, vAssign, vDeref, vRef, vStrVal, vIntVal, vExtend, vRestrict, vKSTR, vKINT, vROWCONS, tyvarRecord, tyvarNew, tyvarKey, tyvarType, vEq, vEQ, backendRet, backendClone, tcTypeError, tcErrKind, tcString, tcHCat, tcVCat, tcShowType ] = makeBuiltins
   [ ("bool", TypeConVar)
   , ("int", TypeConVar)
   , ("string", TypeConVar)
@@ -114,6 +116,12 @@ vEq, vEQ :: CoVar
   -- Backend specific variables
   , ("<ret>", ValueVar)
   , ("<clone>", ValueVar)
+  , ("type_error", TypeConVar)
+  , ("ErrorMessage", DataConVar)
+  , ("String", DataConVar)
+  , (":<>:", DataConVar)
+  , (":<#>:", DataConVar)
+  , ("ShowType", DataConVar)
   ]
 
 tyBool, tyInt, tyString, tyFloat, tyUnit, tyLazy, tyList, tyRef, tyKStr, tyKInt, tyRowCons, tyEq :: IsVar a => Type a
@@ -145,6 +153,13 @@ builtinTyList = [ fromVar vBool
                 , fromVar vKIntTy
                 , fromVar vRowCons
                 , fromVar vEq
+
+                , fromVar tcShowType
+                , fromVar tcErrKind
+                , fromVar tcHCat
+                , fromVar tcVCat
+                , fromVar tcString
+                , fromVar tcTypeError
                 ]
 
 builtinVarList :: forall a b. (IsVar a, IsVar b) => [(a, Type b)]

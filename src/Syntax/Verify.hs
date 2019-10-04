@@ -31,7 +31,7 @@ import Syntax
 
 import Language.Lua.Parser
 
-import Types.Infer.Builtin (getHead)
+import Types.Infer.Builtin (getHead, expandTypeWith)
 
 data VerifyScope = VerifyScope Env AbsState
 
@@ -71,6 +71,7 @@ verifyProgram = traverse_ verifyStmt where
 
 
   verifyStmt TypeDecl{} = pure ()
+  verifyStmt TypeFunDecl{} = pure ()
   verifyStmt (Module _ _ p) = verifyProgram p
   verifyStmt Open{} = pure ()
 
@@ -275,6 +276,7 @@ verifyMatch _ m ty [] = do
     tell . pure $ MissingPattern m [VVariable undefined ty]
 verifyMatch rep m ty bs = do
   VerifyScope env va <- ask
+  ty <- pure $ expandTypeWith (env ^. tySyms) ty
 
   (_, err, unc) <- foldlM (\(i :: Int, err, alts) a@(Arm pat guard body) -> do
     let cov  = covering env pat alts

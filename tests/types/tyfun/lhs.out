@@ -1,0 +1,5 @@
+lhs.ml[3:3 ..3:24]: error
+  │ 
+3 │   bar (foo int) = string
+  │   ^^^^^^^^^^^^^^^^^^^^^^
+  Type synonym application foo int is illegal in LHS of type function equation

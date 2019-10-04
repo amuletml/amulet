@@ -33,6 +33,7 @@ transformType ft = goT where
   transM (ByExistential v ty) = ByExistential v (goT ty)
   transM (ByConstraint ty) = ByConstraint (goT ty)
   transM (ByInstanceHead ty a) = ByInstanceHead (goT ty) a
+  transM (ByTyFunLhs ty a) = ByTyFunLhs (goT ty) a
 
   transB (Anon t) = Anon (goT t)
   transB (Implicit t) = Implicit (goT t)
@@ -60,6 +61,7 @@ transformCoercion fc ft = goC where
   transC (ProjCo rs rs') = ProjCo (map (second goT) rs) (map (second goC) rs')
   transC (SymCo c) = SymCo (goC c)
   transC (ForallCo v a c) = ForallCo v (goC a) (goC c)
+  transC (InstCo ax ts) = InstCo ax (map goC ts)
 
   goT = transformType ft . ft
   goC = transC . fc

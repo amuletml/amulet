@@ -52,6 +52,7 @@ let     _                       -> Push a Let/StmtLet context
 equal   StmtLet                 -> Push an empty block
 equal   Let                     -> Push an empty block
 
+function TypeHead               -> Nothing
 function _                      -> Push EmptyArms
 match   _                       -> Push Match
 with    Match                   -> Replace with EmptyArms
@@ -72,7 +73,11 @@ module  _                       -> Push ModuleHead
 
 class   _                       -> Push ClassHead
 instance _                      -> Push InstHead
-type    _                       -> Push LetHead
+type    _                       -> Push TypeHead
+begin   TypeHead                -> Replace with Block+TypeFunBody
+_       TypeHead | Not offside, Is some top-level token
+                                -> Insert $begin, Replace with Block+TypeFunBody
+_       TypeFunBody             -> Pop
 
 begin   _                       -> Push Block+Monad+Bracket<end>
 ({      _                       -> Push Bracket<_>
