@@ -1,8 +1,8 @@
 do
   (nil)({
-    op = function(cj) return cj end,
+    op = function(tmp) return tmp end,
     app = 2,
-    rsec = function(e) return e(2) end,
-    lsec = function(ck) return ck end
+    rsec = function(r) return r(2) end,
+    lsec = function(tmp) return tmp end
   })
 end

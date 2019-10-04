@@ -3,15 +3,15 @@ do
   local print = print
   local to_string = tostring
   local function sum_squares(xs)
-    local jq = xs[1]
-    local go = jq._1
+    local tmp = xs[1]
+    local go = tmp._1
     return Stream({
       _1 = function(st)
-        local kk = go(st)
-        local x = kk._1
-        return { _2 = kk._2, _1 = x * x }
+        local tmp0 = go(st)
+        local x = tmp0._1
+        return { _2 = tmp0._2, _1 = x * x }
       end,
-      _2 = jq._2
+      _2 = tmp._2
     })
   end
   print(to_string(sum_squares))

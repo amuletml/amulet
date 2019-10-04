@@ -335,7 +335,7 @@ builtinEnv = go builtins where
 
 -- | Construct a syntax variable from a core one
 ofCore :: CoVar -> Var Resolved
-ofCore (CoVar i n _) = TgName n i
+ofCore v@(CoVar i _ _) = TgName (covarDisplayName v) i
 
 -- Declare some syntactic sugar to make building types easier
 (~>) :: Type Typed -> Type Typed -> Type Typed

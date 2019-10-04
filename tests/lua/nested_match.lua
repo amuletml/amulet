@@ -5,20 +5,20 @@ do
     if xs.__tag == "Nil" then
       return Cons({ _1 = 1, _2 = Nil })
     end
-    local gj = xs[1]
+    local tmp = xs[1]
     if ys.__tag == "Nil" then
       return Cons({ _1 = 2, _2 = Nil })
     end
-    local gk = ys[1]
-    local go, gn = gk._1, gk._2
-    local gm, gl = gj._1, gj._2
-    if go ~= 0 then
-      return Cons({ _1 = f(gm)(go), _2 = zip(f, gl, gn) })
+    local tmp2 = ys[1]
+    local tmp3, tmp4 = tmp2._1, tmp2._2
+    local tmp0, tmp1 = tmp._1, tmp._2
+    if tmp3 ~= 0 then
+      return Cons({ _1 = f(tmp0)(tmp3), _2 = zip(f, tmp1, tmp4) })
     end
-    if gm == 0 then
+    if tmp0 == 0 then
       return Cons({ _1 = 3, _2 = Nil })
     end
-    return Cons({ _1 = f(gm)(0), _2 = zip(f, gl, gn) })
+    return Cons({ _1 = f(tmp0)(0), _2 = zip(f, tmp1, tmp4) })
   end
   local function zip0(f) return function(xs) return function(ys) return zip(f, xs, ys) end end end
   (nil)(zip0)

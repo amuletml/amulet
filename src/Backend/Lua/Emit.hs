@@ -168,7 +168,7 @@ toGraph = Graph DirectedGraph
 
 instance IsVar a => Pretty (VarMap.Map (EmittedNode a)) where
   pretty = drawGraph disp . toGraph where
-    disp (CoVar id name _) = text name <> "_" <> int' id
+    disp v@(CoVar id _ _) = text (covarDisplayName v) <> "_" <> int' id
     int' x | x < 0 = "_" <> int (-x)
            | otherwise = int x
 

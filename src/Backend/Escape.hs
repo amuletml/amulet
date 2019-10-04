@@ -63,7 +63,7 @@ pushVar v s = escapeVar (toVar v) where
   escapeVar v@(CoVar _ name _) =
     case Map.lookup v (toEsc s) of
       Just n -> (n, s)
-      Nothing -> pushFirst Nothing (escape s name)
+      Nothing -> pushFirst Nothing (escape s (fromMaybe "tmp" name))
 
   pushFirst :: Maybe Int -> T.Text -> (T.Text, EscapeScope)
   pushFirst prefix esc =

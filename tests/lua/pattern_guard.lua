@@ -1,17 +1,17 @@
 do
   local function Cons(x) return { x, __tag = "Cons" } end
   local Nil = { __tag = "Nil" }
-  local function filter(f, k)
-    if k.__tag == "Nil" then
+  local function filter(f, x)
+    if x.__tag == "Nil" then
       return Nil
     end
-    local eq = k[1]
-    local x, xs = eq._1, eq._2
-    if f(x) then
-      return Cons({ _1 = x, _2 = filter(f, xs) })
+    local tmp = x[1]
+    local x0, xs = tmp._1, tmp._2
+    if f(x0) then
+      return Cons({ _1 = x0, _2 = filter(f, xs) })
     end
     return filter(f, xs)
   end
-  local function filter0(f) return function(k) return filter(f, k) end end
+  local function filter0(f) return function(x) return filter(f, x) end end
   (nil)(filter0)
 end
