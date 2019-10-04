@@ -17,7 +17,7 @@ module Control.Monad.Infer
   , Constraint(..)
   , Env
   , MonadInfer, Name
-  , lookupTy, lookupTy', genNameFrom, genNameWith, runInfer, freeInEnv
+  , lookupTy, lookupTy', runInfer, freeInEnv
   , difference, freshTV, refreshTV
   , instantiate
   , SomeReason(..), Reasonable, addBlame
@@ -218,16 +218,6 @@ runInfer :: MonadNamey m
          -> m (These [TypeError] (a, Seq.Seq (Constraint p)))
 runInfer ct ac = over here toList <$>
   runChronicleT (runWriterT (runReaderT ac ct))
-
-genNameFrom :: MonadNamey m => Text -> m (Var Desugared)
-genNameFrom t = do
-  ~(TgName _ n) <- genName
-  pure (TgName t n)
-
-genNameWith :: MonadNamey m => Text -> m (Var Desugared)
-genNameWith t = do
-  ~(TgName e n) <- genName
-  pure (TgName (t <> e) n)
 
 firstName :: Var Desugared
 firstName = TgName "a" 0

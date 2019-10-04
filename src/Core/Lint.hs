@@ -465,7 +465,7 @@ checkNoUnboxed ValuesTy{} = pushError IllegalUnbox
 checkNoUnboxed _ = pure ()
 
 unknownVar :: IsVar a => a
-unknownVar = fromVar (CoVar (-100) "?" ValueVar)
+unknownVar = fromVar (CoVar (-100) (Just "?") ValueVar)
 
 unknownTyvar :: IsVar a => Type a
 unknownTyvar = VarTy unknownVar

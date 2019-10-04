@@ -8,8 +8,6 @@ module Backend.Lua.Builtin
   , builtinBuilders
   ) where
 
-import Control.Lens
-
 import qualified Data.VarMap as VarMap
 import qualified Data.Sequence as Seq
 import qualified Data.Text as T
@@ -184,7 +182,7 @@ builtins =
 
   where
     genOp (var, op) =
-      let name = escaper (var ^. covarName)
+      let name = escaper (covarDisplayName var)
           name_ = LuaName name
           inner = LuaBinOp (LuaRef left) op (LuaRef right)
       in ( var, name, []

@@ -4,14 +4,14 @@ do
   local function _bar_bar(a) return function(b) return a or b end end
   local function _not(a) return not a end
   (nil)({ ands = _amp_amp, ors = _bar_bar, ["not"] = _not })
-  (nil)(function(hk)
+  (nil)(function(tmp)
     if true then
       return print("L")
     end
     print("R")
     return print("R")
   end)
-  (nil)(function(hz)
+  (nil)(function(tmp)
     if not true then
       return print("R")
     end
@@ -24,8 +24,8 @@ do
   if not true then
     print("Hello")
   end
-  (nil)(function(n)
-    if n == 0 then
+  (nil)(function(x)
+    if x == 0 then
       return nil
     end
     print("Not 0")

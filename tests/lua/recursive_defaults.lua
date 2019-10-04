@@ -1,8 +1,8 @@
 do
   local use = print
-  local function _dollardShowcz(gf)
+  local function _dollardShowcz(tmp)
     return {
-      show = function(fx) return "()" end,
+      show = function(tmp0) return "()" end,
       ["show'"] = function(et) return _dollardShowcz(nil).show(et) end
     }
   end
