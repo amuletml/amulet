@@ -55,7 +55,6 @@ import Syntax.Subst
 import Syntax
 
 import Parser.Unicode
-import Debug.Trace
 
 type MonadResolve m = ( MonadChronicles ResolveError m
                       , MonadReader Scope m

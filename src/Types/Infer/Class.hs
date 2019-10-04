@@ -44,10 +44,9 @@ import Types.Infer.Builtin
 import Types.Kinds
 import Types.Unify
 
-import Debug.Trace
-
 import GHC.Stack
 
+extendTySyms :: Foldable t => t TySymInfo -> Map.Map VarResolved TySymInfo -> Map.Map VarResolved TySymInfo
 extendTySyms syms empty = foldr extend empty syms where
   extend info@(TyFamInfo name eqs args kind) = Map.alter go name where
     go Nothing = Just info
@@ -237,7 +236,8 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
         methodMap = Map.fromList (map (\(_, n, _, t) -> (n, t)) rows)
         contextMap = Map.fromList (map (\(_, _, l, t) -> (l, t)) rows')
 
-    pure ( assoct_defs ++ tyDecl:map (LetStmt Public . pure) decs, (tele <> mconcat assocty_tele)
+    pure ( assoct_defs ++ tyDecl:map (LetStmt Public . pure) decs
+         , tele <> mconcat assocty_tele
          , info
          , scope)
 inferClass _ = error "not a class"
@@ -357,6 +357,12 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
              ++ map ((\a -> TyApps tyEq [TyVar a, TyVar a]) . argName) args)
           close t = foldr (\v -> TyPi (Invisible v (Just TyType) Req)) t (ftv t)
       pure (info, axdef)
+
+  let made = foldr (Set.insert . view tsName) mempty tysyms
+
+  for_ (Map.toList assocTySigs) $ \(k, _) ->
+    when (k `Set.notMember` made) $
+      confesses (UndefinedTyFam k instHead ann)
 
   methodSigs <- traverse (closeOver (BecauseOf inst) . apply instSub) methodSigs
   classContext <- pure $ fmap (apply instSub) classContext

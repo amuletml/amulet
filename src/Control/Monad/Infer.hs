@@ -128,6 +128,7 @@ data TypeError where
   ClassStackOverflow :: SomeReason -> [Type Typed] -> Type Typed -> TypeError
   WrongClass :: InstanceItem Desugared -> Var Typed -> TypeError
   UndefinedMethods :: Type Typed -> Formula Text -> Span -> TypeError
+  UndefinedTyFam :: Var Typed -> Type Typed -> Span -> TypeError
   InvalidContext :: String -> Span -> Type Desugared -> TypeError
   MagicInstance :: Var Typed -> SomeReason -> TypeError
 
@@ -481,6 +482,11 @@ instance Pretty TypeError where
          , indent 2 (align (pretty (fmap TgInternal xs)))
          ]
 
+  pretty (UndefinedTyFam fam inst _) =
+    vsep [ "Missing definition of type family" <+> skeyword (pretty fam)
+             <+> "in an instance for" <+> displayType inst
+         ]
+
   pretty (InvalidContext what _ ty) =
     vsep [ "Invalid type in context for" <+> string what <+> "declaration:"
          , indent 4 (displayType ty)
@@ -537,6 +543,7 @@ instance Spanned TypeError where
   annotation (ClassStackOverflow x _ _) = annotation x
   annotation (WrongClass x _) = annotation x
   annotation (UndefinedMethods _ _ x) = annotation x
+  annotation (UndefinedTyFam _ _ x) = annotation x
   annotation (InvalidContext _ x _) = annotation x
   annotation (WildcardNotAllowed x) = annotation x
   annotation (NotValue x _) = annotation x
