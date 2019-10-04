@@ -19,7 +19,7 @@ import Data.Data
 -- | The core variable type
 data CoVar =
   CoVar { _covarId :: {-# UNPACK #-} !Int -- ^ The unique identifier for this variable.
-        , _covarName :: Maybe T.Text -- ^ The name of this variable
+        , _covarName :: Maybe T.Text -- ^ The name of this variable.
         , _covarInfo :: VarInfo -- ^ Additional information about this variable.
         }
   deriving (Show, Generic, Data)
