@@ -11,7 +11,7 @@ build-type:          Simple
 cabal-version:       >=2.0
 
 flag amc-prove-server
-  description: Compile amc-prove with http server support
+  description: Compile amc-prove with HTTP server support
   default:     False
   manual:      True
 
