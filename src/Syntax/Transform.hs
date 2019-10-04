@@ -33,6 +33,7 @@ transformType ft = goT where
   transM (ByExistential v ty) = ByExistential v (goT ty)
   transM (ByConstraint ty) = ByConstraint (goT ty)
   transM (ByInstanceHead ty a) = ByInstanceHead (goT ty) a
+  transM (ByTyFunLhs ty a) = ByTyFunLhs (goT ty) a
 
   transB (Anon t) = Anon (goT t)
   transB (Implicit t) = Implicit (goT t)

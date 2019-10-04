@@ -13,7 +13,6 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 
 import Data.Foldable
-import Data.Reason
 import Data.Maybe
 
 import Types.Infer.Builtin (checkWildcard)
@@ -25,8 +24,6 @@ import Syntax.Builtin
 import Syntax.Subst
 import Syntax.Types
 import Syntax
-
-import Text.Pretty.Semantic
 
 checkValidTypeFunction :: MonadInfer Typed m
                        => SomeReason -> Var Typed -> Type Typed -> [TyConArg Typed] -> [TyFunClause Typed] -> m ()
@@ -69,7 +66,7 @@ familyFree what tau = do
 
 terminates :: MonadInfer Typed m => [TyFunClause Typed] -> m ()
 terminates = traverse_ go where
-  go clause@(TyFunClause lhs rhs _) = do
+  go clause@(TyFunClause lhs rhs _) =
     let TyApps (TyCon con) argv = lhs
         argvs = recursiveCall con rhs
      in case argvs of
@@ -81,7 +78,7 @@ terminates = traverse_ go where
 (~<) :: Type Typed -> Type Typed -> Bool
 a ~< TyVar b = b `Set.member` ftv a && a /= TyVar b
 -- ↑ E.g.: S 'a ~< 'a
-TyApps head xs ~< term = any (== term) (head:xs)
+TyApps head xs ~< term = term `elem` (head:xs)
 -- ↑ E.g.: 'f int ~< int
 _ ~< _ = False
 

@@ -300,9 +300,12 @@ lowerProg' :: forall m. MonadLower m => [Toplevel Typed] -> m (LowerState, [Stmt
 lowerProg' [] = asks (,[])
 lowerProg' (Open _ _:prg) = lowerProg' prg
 lowerProg' (Module _ _ b:prg) = lowerProg' (b ++ prg)
+
+-- ∨ TC desugars all of these to TypeDecl + Let
 lowerProg' (Class{}:prg) = lowerProg' prg
 lowerProg' (Instance{}:prg) = lowerProg' prg
 lowerProg' (TySymDecl{}:prg) = lowerProg' prg
+lowerProg' (TypeFunDecl{}:prg) = lowerProg' prg
 
 lowerProg' (ForeignVal _ v ex tp _:prg) =
   let tyB = lowerType tp

@@ -421,6 +421,11 @@ instance Pretty TypeError where
                         <+> stypeSkol (pretty v) <+> "is bound by the instance head"
                     , indent 5 (displayType h)
                     ]
+             ByTyFunLhs h _ ->
+               vsep [ bullet "Where the type variable"
+                        <+> stypeSkol (pretty v) <+> "is bound by the LHS of a type funciton clause"
+                    , indent 5 (displayType h)
+                    ]
              ByConstraint{} -> error "Impossible"
            ]
    where whatIs (TySkol (Skolem _ v _ _)) = string "the rigid type variable" <+> stypeVar (squote <>pretty v)
@@ -589,6 +594,14 @@ instance Note TypeError Style where
              ByInstanceHead v t ->
                vsep [ indent 2 "Where the type variable" <+> sk (pretty v)
                         <+> "is bound by the instance being defined"
+                    , f [t]
+                    , empty
+                    , indent 2 $ bullet "Arising in the" <+> (Right <$> blameOf rs)
+                    , nest (-2) $ f [annotation rs]
+                    ]
+             ByTyFunLhs v t ->
+               vsep [ indent 2 "Where the type variable" <+> sk (pretty v)
+                        <+> "is bound by the LHS of a type function clause"
                     , f [t]
                     , empty
                     , indent 2 $ bullet "Arising in the" <+> (Right <$> blameOf rs)

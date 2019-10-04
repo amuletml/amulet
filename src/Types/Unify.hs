@@ -700,8 +700,8 @@ unifyTyFunApp TySymInfo{} _ _ _ = undefined
 unifyTyFunApp ti@(TyFamInfo tn _ _ _)   scope args tb@(TyApps (TyCon tn') args') | tn == tn' = do
   x <- memento $ foldl AppCo (ReflCo (TyCon tn)) <$> traverse (uncurry (unify scope)) (zip args args')
   case x of
-    Left _ -> traceM ("   Solving by evaluation") *> unifyTyFunApp' ti scope args tb
-    Right x -> traceM ("   Solved by purity") *> pure x
+    Left _ -> unifyTyFunApp' ti scope args tb
+    Right x -> pure x
 unifyTyFunApp ti scope args tb = unifyTyFunApp' ti scope args tb
 
 unifyTyFunApp' info scope args tb = do
@@ -712,9 +712,7 @@ unifyTyFunApp' info scope args tb = do
     Nothing -> case tb of
       TyApps (TyCon tn') their@(_:_) | Just (Right info') <- Map.lookup tn' solve_info -> do
         y <- tyFunByEval info' scope their (TyApps (TyCon (info ^. tsName)) args)
-        case y of
-          Just t -> pure t
-          Nothing -> don't
+        maybe don't pure y
       _ -> don't
   where
     don't = do
@@ -728,7 +726,7 @@ tyFunByEval (TyFamInfo tn eqs _ _) scope args tb = do
   info <- view solveInfo
   assum <- use solveAssumptions
   case lookupEquality info scope assum (TyApps (TyCon tn) args) tb of
-    (x:_) -> traceM "   Solved by lookupEquality" *> pure (Just x)
+    (x:_) -> pure (Just x)
     _ -> go [] eqs
 
   where
@@ -756,7 +754,7 @@ tyFunByEval (TyFamInfo tn eqs _ _) scope args tb = do
                _ <- unify scope (apply sub result) tb
                pure (Just (InstCo con cos))
 
-             else traceM "not apart" *> pure Nothing
+             else pure Nothing
 
         _ -> go (TyApps (TyCon tn) declared:skipped) eqs
     go _ [] = pure Nothing
@@ -1110,7 +1108,7 @@ applicable wanted scp (ImplChoice head _ cs _ s _ _) =
 
 
 probablyCast :: Coercion Typed -> Wrapper Typed
-probablyCast x = Cast x
+probablyCast = Cast
 
 rethrow :: MonadSolve m => Type Typed -> Type Typed -> m a -> m a
 rethrow l r cont =

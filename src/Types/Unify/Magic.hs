@@ -106,7 +106,7 @@ magicTyFun v
   | otherwise = Nothing
 
 solveTypeError :: MonadSolve m => Type Typed -> m a
-solveTypeError msg = confesses . CustomTypeError . toTypeError $ msg where
+solveTypeError = confesses . CustomTypeError . toTypeError where
   toTypeError :: Type Typed -> Doc
   toTypeError (TyApps (TyCon v) [a, b])
     | v == tyVCat_n = toTypeError a <#> toTypeError b

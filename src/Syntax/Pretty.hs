@@ -157,7 +157,7 @@ parenTyFun _ = id
 parenTuple TyPi{} = parens
 parenTuple _ = id
 
-isOpName :: [Char] -> Bool
+isOpName :: String -> Bool
 isOpName = not . isAlphaNum . head
 
 prettyMotive :: SkolemMotive Typed -> Doc

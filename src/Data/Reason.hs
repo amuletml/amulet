@@ -56,6 +56,7 @@ data ConcreteReason where
 instance Show ConcreteReason where
   show (BecauseOfExpr _ _) = "expression blame"
   show (BecauseOfPat _) = "pattern blame"
+  show BecauseInternal = "internal blame"
 
 instance Spanned ConcreteReason where
   annotation (BecauseOfExpr e _) = annotation e
@@ -119,6 +120,7 @@ blameOf (BecauseOf (x :: f p)) = blame x
 blameOf (It'sThis x) = case x of
   BecauseOfExpr _ s -> string "this" <+> highlight s
   BecauseOfPat e -> blame e
+  BecauseInternal -> keyword "internal compiler error"
 
 becauseExp :: (Pretty (Var p), Respannable (Ann p)) => Expr p -> SomeReason
 becauseExp = It'sThis . flip BecauseOfExpr "expression"
