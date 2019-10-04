@@ -216,5 +216,5 @@ makeClassScope _ [] = pure mempty
 makeClassScope an (Implicit ty:tys) = do
   v <- genName
   (vs, is) <- makeClassScope an tys
-  pure ((v, ty):vs, insert an LocalAssum v ty undefined is)
+  pure ((v, ty):vs, insert an LocalAssum v ty (MagicInfo []) is)
 makeClassScope an (_:tys) = makeClassScope an tys -- impossible but why not?

@@ -81,6 +81,7 @@ instance Ord (Var p) => Substitutable p (Coercion p) where
   ftv P1{} = mempty
   ftv P2{} = mempty
   ftv MvCo{} = mempty
+  ftv (InstCo _ ts) = foldMap ftv ts
 
   apply _ x@VarCo{} = x
   apply _ x@P1{} = x
@@ -97,6 +98,7 @@ instance Ord (Var p) => Substitutable p (Coercion p) where
   apply s (ProjCo rs rs') = ProjCo (map (second (apply s)) rs) (map (second (apply s)) rs')
   apply s (ForallCo v c cs) = ForallCo v (apply s c) (apply s' cs) where
     s' = Map.delete v s
+  apply s (InstCo ax ts) = InstCo ax (apply s ts)
 
 instance (Ord (Var p), Substitutable p a) => Substitutable p [a] where
   ftv = foldMap ftv

@@ -39,6 +39,8 @@ statement (Open v a) = pure $ Open v a
 statement (ForeignVal am v x t a) = pure $ ForeignVal am v x (ty t) a
 statement (TypeDecl am v arg cs a) = pure $ TypeDecl am v (map tyA arg) (map ctor <$> cs) a
 statement (TySymDecl am v arg exp a) = pure $ TySymDecl am v (map tyA arg) (ty exp) a
+statement (TypeFunDecl am v arg ks bd a) = pure $ TypeFunDecl am v (map tyA arg) (fmap ty ks) (map eq bd) a where
+  eq (TyFunClause f t a) = TyFunClause (ty f) (ty t) a
 
 classItem :: forall m. MonadNamey m => ClassItem Resolved -> m (ClassItem Desugared)
 classItem (MethodSig v t a) = pure $ MethodSig v (ty t) a
@@ -156,7 +158,7 @@ ty TyWithConstraints{} = error "TywithConstraints in desugar"
 ty (TyParens t) = ty t
 ty (TyOperator l o r)
   | o == tyTupleName = TyTuple (ty l) (ty r)
-  | otherwise = TyOperator (ty l) o (ty r)
+  | otherwise = TyApp (TyApp (TyCon o) (ty l)) (ty r)
 
 ty TyType = TyType
 

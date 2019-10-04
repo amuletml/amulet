@@ -72,6 +72,7 @@ substituteInTys = term where
   coercion _ (CoercionVar x) = CoercionVar x
   coercion m (Quantified v co c) = Quantified v (coercion m co) (coercion m c)
   coercion _ (Nth co i) = Nth co i
+  coercion m (Axiom ax co) = Axiom ax (map (coercion m) co)
 
   atom m (Ref v t) = Ref v (gotype m t)
   atom _ x@Lit{} = x
@@ -126,6 +127,7 @@ substituteInCo m c
   coercion (CoercionVar x) = CoercionVar x
   coercion (Quantified v a c) = Quantified v (coercion a) (coercion c)
   coercion (Nth co i) = Nth co i
+  coercion (Axiom ax co) = Axiom ax (map coercion co)
 
   gotype = substituteInType m
 

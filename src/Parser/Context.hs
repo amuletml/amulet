@@ -78,10 +78,12 @@ data Context
   | CtxModuleBody
 
   -- | The precursor to a type definition: everything between @type@ and
-  -- the @=@.
+  -- the @=@ (or @begin@).
   | CtxTypeHead SourcePos
   -- | The actual body of a type definition.
   | CtxTypeBody SourcePos
+  -- | The body of a type function definition.
+  | CtxTypeFunBody
 
   -- | The head of a class definition, including signature.
   | CtxClassHead SourcePos
@@ -353,11 +355,26 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
       , isTopTok tc
       -> pure ( Token TcVBegin tp tp `Result` Working tok
               , CtxEmptyBlock (Just TcVEnd) : CtxInstBody : ck )
-    -- Offside rule for empty instancees
+
+    -- Offside rule for empty instances
     (_, CtxInstHead offside:ck)
       | spCol tp <= spCol offside
       -> pure ( Token TcVBegin tp tp `Result` Token TcVEnd tp tp `Result` Working tok
               , ck)
+
+    -- @type function ... begin@ ~~> Replace type head with body context
+    (TcBegin, CtxTypeHead offside:ck)
+      | spCol tp >= spCol offside
+      -> pure (Result tok Done, CtxEmptyBlock Nothing : CtxTypeFunBody : CtxBracket TcEnd : ck)
+
+    (tc, CtxTypeHead cls:ck)
+      | spCol tp > spCol cls
+      , isTopTok tc && tc /= TcType
+      -> pure ( Token TcVBegin tp tp `Result` Working tok
+              , CtxEmptyBlock (Just TcVEnd) : CtxTypeFunBody : ck )
+
+    -- Offside rule for type function blocks
+    (_, CtxTypeFunBody:ck) -> handleContext tok ck
 
     -- Offside rule for type declarations. We allow the pipe to be aligned to
     -- the current context.
@@ -368,6 +385,7 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
     (TcEqual, CtxTypeHead offside:ck)
       | spCol tp >= spCol offside
       -> pure (Result tok Done, CtxTypeBody offside:ck)
+
     -- Offside rule for type headers
     (_, CtxTypeHead offside:ck)
       | spCol tp <= spCol offside -> handleContext tok ck
@@ -387,7 +405,8 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
       ( Result tok Done
       , CtxEmptyBlock (Just TcVEnd):c )
 
-    -- @function@ ~~> Push a function context
+    -- @function@ ~~> Push a function context, except in a type head
+    (TcFunction, CtxTypeHead cls:ck) -> pure (Result tok Done, CtxTypeHead cls:ck)
     (TcFunction, _) -> pure (Result tok Done, CtxMatchEmptyArms:c)
     -- match ~~> Push a match context
     (TcMatch, _) -> pure (Result tok Done, CtxMatch tp:c)
@@ -528,6 +547,7 @@ terminates TcComma (CtxBracket TcCSquare:_) = True
 terminates TcEnd (CtxModuleBody{}:_) = True
 terminates TcEnd (CtxClassBody{}:_) = True
 terminates TcEnd (CtxInstBody{}:_) = True
+terminates TcEnd (CtxTypeFunBody{}:_) = True
 
 -- Block level terminators
 terminates TcTopSep (CtxBlock{}:ck) | isToplevel ck = True
@@ -547,6 +567,7 @@ isToplevel (CtxClassBody{}:_) = True
 isToplevel (CtxInstBody{}:_) = True
 isToplevel (CtxTypeHead{}:_) = True
 isToplevel (CtxTypeBody{}:_) = True
+isToplevel (CtxTypeFunBody{}:_) = True
 isToplevel (CtxBlock{}:cks) = isToplevel cks
 isToplevel _ = False
 

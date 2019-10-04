@@ -76,6 +76,7 @@ data SkolemMotive p
   | ByExistential (Var p) (Type p)
   | ByInstanceHead (Type p) (Ann Desugared)
   | ByConstraint (Type p)
+  | ByTyFunLhs (Type p) (Ann Desugared)
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (SkolemMotive p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (SkolemMotive p)
@@ -92,6 +93,7 @@ deriving instance (Show (Var p), Show (Ann p)) => Show (Type p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Type p)
 deriving instance Ord (Var p) => Ord (Type p)
 deriving instance Eq (Var p) => Eq (Type p)
+instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Plated (Type p)
 
 data Coercion p
   = VarCo (Var p) -- coercion variable
@@ -110,6 +112,7 @@ data Coercion p
     -- (forall (v : x : c ~ d). phi : a ~ b) : forall (v : c). a ~ forall (v : d). b
   | P1 (Var p) -- { _1 : a ~ b, _2 : c ~ d }.1 : a ~ b
   | P2 (Var p) -- { _1 : a ~ b, _2 : c ~ d }.2 : a ~ b
+  | InstCo (Var p) [Coercion p]
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Coercion p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Coercion p)
@@ -126,7 +129,7 @@ pattern t :-> t' <- TyPi (Anon t) t' where
 
 pattern TyForall :: Var p -> Maybe (Type p) -> Type p -> Type p
 pattern TyForall v k t' <- TyPi (Invisible v k _) t' where
-  TyForall v k ty = TyPi (Invisible v k Spec) ty
+  TyForall v k ty = TyPi (Invisible v k Infer) ty
 
 -- | A type variable, with an optional type annotation.
 data TyConArg p
@@ -163,6 +166,7 @@ instance Pretty (Var p) => Pretty (Coercion p) where
   pretty (ForallCo v c cs) = keyword "∀" <> parens (pretty v <+> colon <+> pretty c) <> dot <+> pretty cs
   pretty (P1 c) = pretty c <> keyword ".1"
   pretty (P2 c) = pretty c <> keyword ".2"
+  pretty (InstCo ax t) = pretty ax <+> hsep (map (parens . pretty) t)
 
 record :: [Doc] -> Doc
 record = enclose (lbrace <> space) (space <> rbrace) . hsep . punctuate comma
@@ -241,6 +245,11 @@ isSkolemisable (TyPi Invisible{} _) = True
 isSkolemisable (TyPi Implicit{} _) = True
 isSkolemisable _ = False
 
+isInstantiatable :: Type Typed -> Bool
+isInstantiatable (TyPi (Invisible _ _ r) _) = r /= Req
+isInstantiatable (TyPi Implicit{} _) = True
+isInstantiatable _ = False
+
 mkWildTy :: Maybe (Type p) -> Type p
 mkWildTy (Just x@(TyWildcard _)) = x
 mkWildTy t = TyWildcard t
@@ -250,6 +259,23 @@ appsView = reverse . go where
   go (TyApp f x) = x:go f
   go (TyOperator l o r) = [r, l, TyCon o]
   go t = [t]
+
+isReflexiveCo :: Coercion p -> Bool
+isReflexiveCo ReflCo{} = True
+isReflexiveCo (SymCo c) = isReflexiveCo c
+isReflexiveCo (AppCo a b) = isReflexiveCo a && isReflexiveCo b
+isReflexiveCo (ArrCo a b) = isReflexiveCo a && isReflexiveCo b
+isReflexiveCo (ProdCo a b) = isReflexiveCo a && isReflexiveCo b
+isReflexiveCo (ExactRowsCo rs) = all (isReflexiveCo . snd) rs
+isReflexiveCo (RowsCo c rs) = isReflexiveCo c && all (isReflexiveCo . snd) rs
+isReflexiveCo (ForallCo _ d c) = isReflexiveCo d && isReflexiveCo c
+isReflexiveCo AssumedCo{} = False
+isReflexiveCo ProjCo{} = False
+isReflexiveCo VarCo{} = False
+isReflexiveCo P1{} = False
+isReflexiveCo P2{} = False
+isReflexiveCo MvCo{} = False
+isReflexiveCo InstCo{} = False
 
 pattern TyApps :: Type p -> [Type p] -> Type p
 pattern TyApps head xs <- (appsView -> (head:xs)) where

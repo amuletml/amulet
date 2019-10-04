@@ -8,14 +8,14 @@ do
     if k.__tag ~= "Cons" then
       return Nil
     end
-    local ns = k[1]
-    local m, l = ns._1, ns._2
+    local no = k[1]
+    local m, l = no._1, no._2
     local function n(o)
       if o.__tag ~= "Cons" then
         return j(l)
       end
-      local nd = o[1]
-      return Cons({ _2 = n(nd._2), _1 = { _1 = m, _2 = nd._1 } })
+      local mv = o[1]
+      return Cons({ _2 = n(mv._2), _1 = { _1 = m, _2 = mv._1 } })
     end
     return n(Cons({ _1 = 4, _2 = Cons({ _1 = 5, _2 = Cons({ _1 = 6, _2 = Nil }) }) }))
   end
@@ -24,8 +24,8 @@ do
     if s.__tag ~= "Cons" then
       return Nil
     end
-    local pe = s[1]
-    local u, t = pe._1, pe._2
+    local pl = s[1]
+    local u, t = pl._1, pl._2
     local b = u + 1
     local function v(w)
       if w.__tag == "Cons" then

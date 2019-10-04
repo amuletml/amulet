@@ -1,0 +1,5 @@
+tyfun-apart.ml[13:76 ..13:79]: error
+  No instance for discrim 'a 'b ~ string arising from use of the expression
+   │ 
+13 │ let no : forall 'a 'b. trivial :- (discrim 'a 'b ~ string) = Sub (fun _ -> Dict)
+   │                                                                            ^^^^

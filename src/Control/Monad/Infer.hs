@@ -13,7 +13,7 @@
   #-}
 module Control.Monad.Infer
   ( module M, firstName
-  , TypeError(..)
+  , TypeError(..), WhatOverlaps(..)
   , Constraint(..)
   , Env
   , MonadInfer, Name
@@ -92,6 +92,7 @@ data TypeError where
            -> TypeError
 
   Occurs :: (Pretty (Var p), Ord (Var p)) => Var p -> Type p -> TypeError
+  CustomTypeError :: Doc -> TypeError
 
   NotInScope :: Var Desugared -> TypeError
   FoundHole :: Var Typed -> Type Typed -> [Expr Typed] -> TypeError
@@ -123,7 +124,7 @@ data TypeError where
   AmbiguousMethodTy :: (Ord (Var p), Pretty (Var p)) => Var p -> Type p -> Set.Set (Var p) -> TypeError
 
   UnsatClassCon :: SomeReason -> Constraint Typed -> WhyUnsat -> TypeError
-  Overlap :: Type Typed -> Span -> Span -> TypeError
+  Overlap :: WhatOverlaps -> Type Typed -> Span -> Span -> TypeError
   ClassStackOverflow :: SomeReason -> [Type Typed] -> Type Typed -> TypeError
   WrongClass :: Binding Desugared -> Var Typed -> TypeError
   UndefinedMethods :: Type Typed -> Formula Text -> Span -> TypeError
@@ -139,6 +140,11 @@ data TypeError where
   UnsaturatedTS :: SomeReason -> TySymInfo -> Int -> TypeError
 
   NotCovered :: Span -> Span -> [Type Typed] -> [Var Typed] -> TypeError
+
+  MightNotTerminate :: TyFunClause Typed -> Type Typed -> Type Typed -> TypeError
+  TyFunInLhs :: SomeReason -> Type Typed -> TypeError
+
+data WhatOverlaps = Overinst | Overeq Bool
 
 data WhyInstantiate = Expression | Subsumption
 data WhyUnsat
@@ -306,6 +312,8 @@ instance Pretty TypeError where
   pretty (NotInScope e) = string "Variable not in scope:" <+> pretty e
   pretty (ArisingFrom er _) = pretty er
 
+  pretty (CustomTypeError e) = e
+
   pretty (FoundHole e s []) = string "Found typed hole" <+> pretty e <+> "of type" <+> displayType s
   pretty (FoundHole e s cs) =
     vsep $ [ string "Found typed hole" <+> pretty e <+> "of type" <+> displayType s
@@ -413,6 +421,11 @@ instance Pretty TypeError where
                         <+> stypeSkol (pretty v) <+> "is bound by the instance head"
                     , indent 5 (displayType h)
                     ]
+             ByTyFunLhs h _ ->
+               vsep [ bullet "Where the type variable"
+                        <+> stypeSkol (pretty v) <+> "is bound by the LHS of a type funciton clause"
+                    , indent 5 (displayType h)
+                    ]
              ByConstraint{} -> error "Impossible"
            ]
    where whatIs (TySkol (Skolem _ v _ _)) = string "the rigid type variable" <+> stypeVar (squote <>pretty v)
@@ -483,7 +496,7 @@ instance Pretty TypeError where
          ]
 
   pretty (UnsaturatedTS _ info n) =
-    vsep [ "Type synonym" <+> stypeCon (pretty (info ^. tsName)) <+> "appears with" <+> nargs <> comma
+    vsep [ "Type" <+> thing <+> stypeCon (pretty (info ^. tsName)) <+> "appears with" <+> nargs <> comma
          , "but in its definition it has" <+> sliteral (int (length (info ^. tsArgs)))
          ]
     where
@@ -492,7 +505,16 @@ instance Pretty TypeError where
           0 -> "no arguments"
           1 -> "one argument"
           x -> sliteral (int x) <+> "arguments"
+      thing = case info of
+        TySymInfo{} -> keyword "synonym"
+        TyFamInfo{} -> keyword "function"
 
+  pretty (MightNotTerminate _ lhs rhs) =
+    vsep [ "Recursive call" <+> displayType lhs <+> soperator (string "-->") <+> displayType rhs <+> "might not terminate"
+         ]
+
+  pretty (TyFunInLhs _ tau) =
+    vsep [ "Type synonym application" <+> displayType tau <+> "is illegal in LHS of type function equation" ]
 
   pretty (UnsatClassCon _ (ConImplicit _ _ _ t) _) = string "No instance for" <+> pretty t
   pretty UnsatClassCon{} = undefined
@@ -508,7 +530,7 @@ instance Pretty TypeError where
 instance Spanned TypeError where
   annotation (ArisingFrom e@ArisingFrom{} _) = annotation e
   annotation (ArisingFrom _ x) = annotation x
-  annotation (Overlap _ x _) = annotation x
+  annotation (Overlap _ _ x _) = annotation x
   annotation (ClassStackOverflow x _ _) = annotation x
   annotation (WrongClass x _) = annotation x
   annotation (UndefinedMethods _ _ x) = annotation x
@@ -518,11 +540,15 @@ instance Spanned TypeError where
   annotation (UnsaturatedTS x _ _) = annotation x
   annotation (NotCovered x _ _ _) = annotation x
   annotation (MagicInstance _ x) = annotation x
+  annotation (MightNotTerminate x _ _) = annotation x
+  annotation (TyFunInLhs x _) = annotation x
   annotation x = error (show (pretty x))
 
 instance Note TypeError Style where
   diagnosticKind (ArisingFrom e _) = diagnosticKind e
+  diagnosticKind (Overlap (Overeq True) _ _ _) = WarningMessage
   diagnosticKind DeadBranch{} = WarningMessage
+  diagnosticKind MightNotTerminate{} = WarningMessage
   diagnosticKind _ = ErrorMessage
 
   formatNote f (ArisingFrom e@ArisingFrom{} _) = formatNote f e
@@ -568,6 +594,14 @@ instance Note TypeError Style where
              ByInstanceHead v t ->
                vsep [ indent 2 "Where the type variable" <+> sk (pretty v)
                         <+> "is bound by the instance being defined"
+                    , f [t]
+                    , empty
+                    , indent 2 $ bullet "Arising in the" <+> (Right <$> blameOf rs)
+                    , nest (-2) $ f [annotation rs]
+                    ]
+             ByTyFunLhs v t ->
+               vsep [ indent 2 "Where the type variable" <+> sk (pretty v)
+                        <+> "is bound by the LHS of a type function clause"
                     , f [t]
                     , empty
                     , indent 2 $ bullet "Arising in the" <+> (Right <$> blameOf rs)
@@ -713,13 +747,17 @@ instance Note TypeError Style where
 
   formatNote f err@(UnsatClassCon r' _ _) = formatNote f (ArisingFrom err r')
 
-  formatNote f (Overlap tau one two) =
-    vsep [ indent 2 "Overlapping instances for" <+> (Right <$> displayType tau)
+  formatNote f (Overlap what tau one two) =
+    vsep [ indent 2 "Overlapping" <+> kw <+> "for" <+> (Right <$> displayType tau)
          , indent 2 $ bullet "Note: first defined here,"
          , f [one]
          , indent 3 "but also defined here"
          , f [two]
          ]
+    where
+      kw = Right <$> case what of
+        Overinst -> keyword "instances"
+        Overeq _ -> keyword "equations"
 
   formatNote f (NotCovered inst fd types vars) =
     vsep [ f [inst]

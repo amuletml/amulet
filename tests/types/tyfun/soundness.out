@@ -1,0 +1,5 @@
+soundness.ml[20:76 ..20:79]: error
+  No instance for discrim 'a 'b ~ string arising from use of the expression
+   │ 
+20 │ let no : forall 'a 'b. trivial :- (discrim 'a 'b ~ string) = Sub (fun _ -> Dict)
+   │                                                                            ^^^^

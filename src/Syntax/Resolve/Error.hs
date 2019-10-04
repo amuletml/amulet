@@ -38,6 +38,9 @@ data ResolveError
   | IllegalMethod -- ^ An illegal method within an @instance@
   | LastStmtNotExpr -- ^ Invalid statement in tail position
 
+  | TFClauseWrongHead (Type Parsed) (Var Parsed)
+  | TFClauseWrongArity Int Int
+
   -- | A wrapper for other errors which adds some additional context,
   -- such as a source position.
   | ArisingFrom ResolveError SomeReason
@@ -61,6 +64,14 @@ instance Pretty ResolveError where
   pretty EmptyBegin = "Empty begin expression"
   pretty IllegalMethod = "Illegal pattern in instance method declaration"
   pretty LastStmtNotExpr = "The last statement in a" <+> keyword "begin" <+> "block should be an expression"
+  pretty (TFClauseWrongHead t tau) =
+    vsep [ "The lhs of a type function equation must be headed by the type function constructor"
+         , "Expected" <+> pretty tau <+> "but got" <+> pretty t
+         ]
+  pretty (TFClauseWrongArity t tau) =
+    vsep [ "The lhs of a type function equation must have the same arity as the type function itself"
+         , "Expected" <+> int tau <+> "but got" <+> int t
+         ]
 
   pretty (ArisingFrom er ex) =
     pretty er <#> empty <#> nest 4 (string "Arising from use of" <+> blameOf ex)

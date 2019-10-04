@@ -1,0 +1,10 @@
+overlap.ml[2:3 ..2:18]: error
+  Overlapping equations for foo int
+  • Note: first defined here,
+  │ 
+2 │   foo int = string
+  │   ^^^^^^^^^^^^^^^^
+   but also defined here
+  │ 
+3 │   foo int = bool
+  │   ^^^^^^^^^^^^^^

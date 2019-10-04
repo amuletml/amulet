@@ -1,0 +1,5 @@
+tyfun-err01.ml[9:22 ..9:23]: error
+  │ 
+9 │ let foo : foo bool = ()
+  │                      ^^
+  Unexpected argument to foo: bool
