@@ -4,7 +4,8 @@
   , MultiParamTypeClasses
   , TupleSections
   , TypeFamilies
-  , ScopedTypeVariables #-}
+  , ScopedTypeVariables
+  , LambdaCase #-}
 
 {- | The resolver is the first step after parsing. It performs several key
    actions:
@@ -189,20 +190,36 @@ resolveModule (t@(Class name am ctx tvs fds ms ann):rs) = do
     (ctx', fds', (ms', vs')) <- extendTyvarN tvss $
       (,,) <$> traverse (reType t) ctx
            <*> traverse reFd fds
-           <*> (unzip <$> traverse (reClassItem (map fst tvss)) ms)
+           <*> reClassItem (map fst tvss) ms
 
-    extendN (mconcat vs') $ do
-      ms'' <- extendTyvarN tvss (sequence ms')
-      (Class name' am ctx' tvs' fds' ms'' ann:) <$> resolveModule rs
+    let typeNames = map fst . filter ((\case { AssocType{} -> True; _ -> False }) . snd) $ zip vs' ms
+        varNames = map fst . filter ((\case { AssocType{} -> False; _ -> True}) . snd) $ zip vs' ms
+
+    extendTyN typeNames . extendN varNames $ do
+      ms'' <- extendTyvarN tvss $ sequence ms'
+      (Class name' am ctx' tvs' fds' ms'' ann:) <$>
+        resolveModule rs
 
   where
-    reClassItem tvs' m@(MethodSig name ty an) = do
+    reClassItem tvs' (m@(MethodSig name ty an):rest) = do
+      (ra, rb) <- reClassItem tvs' rest
       name' <- tagVar name
-      pure ( MethodSig name' <$> reType m (wrap tvs' ty) <*> pure an
-           , [(name, name')] )
-    reClassItem _ (DefaultMethod b an) =
-      pure ( DefaultMethod <$> (fst =<< reMethod b) <*> pure an
-           , [] )
+      pure ( (MethodSig name' <$> reType m (wrap tvs' ty) <*> pure an):ra
+           , (name, name'):rb )
+    reClassItem tvs' (m@(AssocType name ty an):rest) = do
+      name' <- tagVar name
+      (ra, rb) <- reClassItem tvs' rest
+      pure ( (AssocType name' <$> reType m (wrap tvs' ty) <*> pure an):ra
+           , (name, name'):rb )
+    reClassItem tvs' (DefaultMethod b an:rest) = do
+      (ra, rb) <- reClassItem tvs' rest
+      pure ( (DefaultMethod <$> (fmap unMethodImpl . fst =<< reMethod (MethodImpl b)) <*> pure an):ra
+           , rb )
+    reClassItem _ [] = pure ([], [])
+
+    unMethodImpl (MethodImpl x) = x
+    unMethodImpl _ = undefined
+
     wrap tvs' x = foldr (TyPi . flip (flip Invisible Nothing) Spec) x (ftv x `Set.difference` Set.fromList tvs')
     reFd fd@(Fundep f t a) = Fundep <$> traverse tv f <*> traverse tv t <*> pure a where
       tv x = lookupTyvar x `catchJunk` fd
@@ -479,19 +496,27 @@ reBinding (Matching p _ a) = do
 reBinding TypedMatching{} = error "reBinding TypedMatching{}"
 
 reMethod :: MonadResolve m
-         => Binding Parsed
-         -> m (m (Binding Resolved), [(Var Parsed, Var Resolved)])
-reMethod b@(Binding var bod c an) = do
+         => InstanceItem Parsed
+         -> m (m (InstanceItem Resolved), [(Var Parsed, Var Resolved)])
+reMethod (MethodImpl b@(Binding var bod c an)) = do
   var' <- retcons (wrapError b) $ lookupEx var
-  pure ( (\bod' -> Binding var' bod' c an) <$> reExpr bod
+  pure ( (\bod' -> MethodImpl (Binding var' bod' c an)) <$> reExpr bod
        , [(var, var')] )
-reMethod b@(Matching (Capture var _) bod an) = do
+reMethod (MethodImpl b@(Matching (Capture var _) bod an)) = do
   var' <- retcons (wrapError b) $ lookupEx var
-  pure ( (\bod' -> Binding var' bod' True an) <$> reExpr bod
+  pure ( (\bod' -> MethodImpl (Binding var' bod' True an)) <$> reExpr bod
        , [(var, var')] )
-reMethod b@Matching{} =
+reMethod (MethodImpl b@Matching{}) =
   confesses (ArisingFrom IllegalMethod (BecauseOf b))
-reMethod TypedMatching{} = error "reBinding TypedMatching{}"
+
+reMethod b@(TypeImpl var args exp ann) = do
+  var' <- retcons (wrapError b) $ lookupTy var
+  (args, sc) <- resolveTele b args
+  exp <- extendTyvarN sc $
+    reType b exp
+  pure (pure (TypeImpl var' args exp ann), [(var, var')])
+
+reMethod (MethodImpl TypedMatching{}) = error "reBinding TypedMatching{}"
 
 resolveOpen :: MonadResolve m => Var Parsed -> Maybe T.Text -> (Var Resolved -> m a) -> m a
 resolveOpen name as m = do

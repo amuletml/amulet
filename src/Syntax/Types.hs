@@ -7,7 +7,7 @@ module Syntax.Types
   , Env, freeInEnv, difference, envOf, scopeFromList, toMap
   , names, typeVars, constructors, types, letBound, classes, modules
   , classDecs, tySyms
-  , ClassInfo(..), ciName, ciMethods, ciContext, ciConstructorName
+  , ClassInfo(..), ciName, ciMethods, ciContext, ciConstructorName, ciAssocTs
   , TySymInfo(..), tsName, tsArgs, tsExpansion, tsKind, TySyms, tsEquations
   , ciConstructorTy, ciHead, ciClassSpan, ciDefaults, ciMinimal, ciFundep
   , Origin(..)
@@ -117,6 +117,8 @@ data ClassInfo
         -- ^ The head of this class (name applied to parameters)
       , _ciMethods :: Map.Map (Var Typed) (Type Typed)
         -- ^ A map of methods to their signatures
+      , _ciAssocTs :: Map.Map (Var Typed) (Type Typed, Type Typed)
+        -- ^ A map of associated types to their (declared, actual) kinds
       , _ciContext :: Map.Map Text (Type Typed)
         -- ^ The superclasses of this class,
       , _ciConstructorName :: Var Typed

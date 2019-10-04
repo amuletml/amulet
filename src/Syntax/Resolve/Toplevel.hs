@@ -47,6 +47,7 @@ extractToplevel (Module Public v xs) =
 extractToplevel (Module Private _ _) = mempty
 extractToplevel (Class v Public _ _ _ ms _) = (foldMap getName ms, [v]) where
   getName (MethodSig v _ _) = [v]
+  getName (AssocType v _ _) = [v]
   getName (DefaultMethod b _) = bindVariables b
 extractToplevel (Class _ Private _ _ _ _ _) = mempty
 extractToplevel Instance{} = ([], [])

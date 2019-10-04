@@ -2,8 +2,8 @@ functor : (type -> type) -> constraint
 map : Spec{'f : type -> type}. functor 'f => Spec{'a : type}. Spec{'b : type}. ('a -> 'b) -> 'f 'a -> 'f 'b
 foldable : (type -> type) -> constraint
 iapplicative : Infer{'jt : type}. ('jt -> 'jt -> type -> type) -> constraint
-pure : Spec{'f : 'jt -> 'jt -> type -> type}. iapplicative 'f => Infer{'jt : type}. Spec{'a : type}. Spec{'i : 'jt}. 'a -> 'f 'i 'i 'a
 <*> : Spec{'f : 'jt -> 'jt -> type -> type}. iapplicative 'f => Infer{'jt : type}. Spec{'a : type}. Spec{'b : type}. Spec{'i : 'jt}. Spec{'j : 'jt}. Spec{'k : 'jt}. 'f 'i 'j ('a -> 'b) -> 'f 'j 'k 'a -> 'f 'i 'k 'b
+pure : Spec{'f : 'jt -> 'jt -> type -> type}. iapplicative 'f => Infer{'jt : type}. Spec{'a : type}. Spec{'i : 'jt}. 'a -> 'f 'i 'i 'a
 imonad : Infer{'xi : type}. ('xi -> 'xi -> type -> type) -> constraint
 >>= : Spec{'m : 'xi -> 'xi -> type -> type}. imonad 'm => Infer{'xi : type}. Spec{'a : type}. Spec{'b : type}. Spec{'i : 'xi}. Spec{'j : 'xi}. Spec{'k : 'xi}. ('a -> 'm 'j 'k 'b) -> 'm 'i 'j 'a -> 'm 'i 'k 'b
 iio : Infer{'a : type}. Infer{'b : type}. 'b -> 'a -> type -> type

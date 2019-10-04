@@ -233,6 +233,7 @@ ClassItems :: { [ClassItem Parsed] }
 ClassItem :: { ClassItem Parsed }
   : val BindName ':' Type { withPos2 $1 $4 $ MethodSig (getL $2) (getL $4) }
   | let Binding { withPos2 $1 $2 $ DefaultMethod $2 }
+  | type BindName ':' Type { withPos2 $1 $4 $ AssocType (getL $2) (getL $4) }
 
 Fundeps :: { [Fundep Parsed] }
   : '|' List1(Fundep, ',') { $2 }
@@ -241,11 +242,13 @@ Fundeps :: { [Fundep Parsed] }
 Fundep :: { Fundep Parsed }
   : ListE1(TyVar) '->' ListE1(TyVar) { withPos2 (head $1) (last $3) $ Fundep (map getL $1) (map getL $3) }
 
-Methods :: { [Binding Parsed] }
+Methods :: { [InstanceItem Parsed] }
   : List(Method, TopSep) { $1 }
 
-Method :: { Binding Parsed }
-  : let Binding { $2 }
+Method :: { InstanceItem Parsed }
+  : let Binding { MethodImpl $2 }
+  | type BindName ListE(TyConArg) '=' Type
+    { withPos2 $1 $5 $ TypeImpl (getL $2) $3 (getL $5) }
 
 TyConArg :: { TyConArg Parsed }
          : TyVar { TyVarArg (getL $1) }
@@ -715,7 +718,7 @@ makeBang :: _ -> Expr Parsed -> Expr Parsed
 makeBang bang expr = withPos2 bang expr $ App derefref expr where
   derefref = withPos1 bang (VarRef (Name (T.pack "!")))
 
-buildInstance :: Located (Type Parsed) -> [Binding Parsed]
+buildInstance :: Located (Type Parsed) -> [InstanceItem Parsed]
            -> Parser (Span -> Toplevel Parsed)
 buildInstance (L ty typ) ms =
   case ty of

@@ -126,8 +126,9 @@ data TypeError where
   UnsatClassCon :: SomeReason -> Constraint Typed -> WhyUnsat -> TypeError
   Overlap :: WhatOverlaps -> Type Typed -> Span -> Span -> TypeError
   ClassStackOverflow :: SomeReason -> [Type Typed] -> Type Typed -> TypeError
-  WrongClass :: Binding Desugared -> Var Typed -> TypeError
+  WrongClass :: InstanceItem Desugared -> Var Typed -> TypeError
   UndefinedMethods :: Type Typed -> Formula Text -> Span -> TypeError
+  UndefinedTyFam :: Var Typed -> Type Typed -> Span -> TypeError
   InvalidContext :: String -> Span -> Type Desugared -> TypeError
   MagicInstance :: Var Typed -> SomeReason -> TypeError
 
@@ -468,14 +469,22 @@ instance Pretty TypeError where
          , vsep (map (indent 2 . bullet . displayType) (take 5 (reverse xs)))
          ]
 
-  pretty (WrongClass (Binding v _ _ _) c) =
+  pretty (WrongClass name c) =
     vsep [ "Method" <+> pretty v <+> "is not a member of the class" <+> stypeCon (pretty c) ]
-  pretty (WrongClass _ _) = error "Impossible"
+      where gname (MethodImpl (Binding v _ _ _)) = v
+            gname (TypeImpl v _ _ _) = v
+            gname _ = undefined
+            v = gname name
 
   pretty (UndefinedMethods h xs _) =
     vsep [ "Missing implementation of methods in instance for" <+> displayType h
          , "Namely, there must be an implementation for at least"
          , indent 2 (align (pretty (fmap TgInternal xs)))
+         ]
+
+  pretty (UndefinedTyFam fam inst _) =
+    vsep [ "Missing definition of type family" <+> skeyword (pretty fam)
+             <+> "in an instance for" <+> displayType inst
          ]
 
   pretty (InvalidContext what _ ty) =
@@ -534,6 +543,7 @@ instance Spanned TypeError where
   annotation (ClassStackOverflow x _ _) = annotation x
   annotation (WrongClass x _) = annotation x
   annotation (UndefinedMethods _ _ x) = annotation x
+  annotation (UndefinedTyFam _ _ x) = annotation x
   annotation (InvalidContext _ x _) = annotation x
   annotation (WildcardNotAllowed x) = annotation x
   annotation (NotValue x _) = annotation x

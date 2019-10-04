@@ -46,7 +46,7 @@ data Toplevel p
   | Instance { instanceClass :: Var p
              , instanceCtx :: Maybe (Type p)
              , instanceHead :: Type p
-             , instanceMethods :: [Binding p]
+             , instanceMethods :: [InstanceItem p]
              , ann :: Ann p }
 
   | TypeFunDecl { tyfunAccess :: TopAccess
@@ -78,11 +78,28 @@ data ClassItem p
   | DefaultMethod { _methodBinding :: Binding p
                   , _methAnn :: Ann p
                   }
+  | AssocType { _methName :: Var p
+              , _methKind :: Type p
+              , _methAnn  :: Ann p
+              }
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (ClassItem p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (ClassItem p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (ClassItem p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (ClassItem p)
+
+data InstanceItem p
+  = MethodImpl (Binding p)
+  | TypeImpl { _typeName :: Var p
+             , _typeArgs :: [TyConArg p]
+             , _typeInst :: Type p
+             , _typeAnn :: Ann p
+             }
+
+deriving instance (Eq (Var p), Eq (Ann p)) => Eq (InstanceItem p)
+deriving instance (Show (Var p), Show (Ann p)) => Show (InstanceItem p)
+deriving instance (Ord (Var p), Ord (Ann p)) => Ord (InstanceItem p)
+deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (InstanceItem p)
 
 data Fundep p =
   Fundep { _fdFrom :: [Var p]
@@ -135,9 +152,14 @@ instance Spanned (Ann p) => Spanned (TyFunClause p) where
 instance Spanned (Ann p) => Spanned (ClassItem p) where
   annotation = annotation . view methAnn
 
+instance Spanned (Ann p) => Spanned (InstanceItem p) where
+  annotation (TypeImpl _ _ _ x) = annotation x
+  annotation (MethodImpl b) = annotation b
+
 instance Pretty (Var p) => Pretty (ClassItem p) where
   pretty (MethodSig v t _) = keyword "val" <+> pretty v <+> colon <+> pretty t
   pretty (DefaultMethod b _) = keyword "let" <+> pretty b
+  pretty (AssocType v k _) = keyword "type" <+> pretty v <+> colon <+> pretty k
 
 instance Pretty (Var p) => Pretty (Fundep p) where
   pretty (Fundep from to _) = hsep (punctuate comma (map k from))
@@ -213,6 +235,10 @@ instance (Pretty (Var p)) => Pretty (Constructor p) where
   pretty (UnitCon a p _) = prettyAccess a $ pretty p
   pretty (ArgCon a p t _) = prettyAccess a $ pretty p <+> keyword "of" <+> pretty t
   pretty (GadtCon a p t _) = prettyAccess a $ pretty p <+> colon <+> pretty t
+
+instance (Pretty (Var p)) => Pretty (InstanceItem p) where
+  pretty (MethodImpl b) = pretty b
+  pretty (TypeImpl v as t _) = keyword "type" <+> pretty v <+> hsep (map pretty as) <+> equals <+> pretty t
 
 prettyAccess :: TopAccess -> Doc -> Doc
 prettyAccess Public x = x
