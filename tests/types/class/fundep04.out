@@ -1,4 +1,4 @@
 collects : type -> type -> constraint
-empty : Spec{'c : type}. Spec{'e : type}. collects 'c 'e => 'c
 insert : Spec{'c : type}. Spec{'e : type}. collects 'c 'e => 'c -> 'e -> 'c
+empty : Spec{'c : type}. Spec{'e : type}. collects 'c 'e => 'c
 ins2 : Infer{'a : type}. Infer{'b : type}. collects 'a 'b => 'a -> 'b -> 'b -> 'a

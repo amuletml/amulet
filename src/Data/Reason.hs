@@ -98,12 +98,17 @@ instance (Spanned (Ann p), Pretty (Var p)) => Reasonable CompStmt p where
 instance (Spanned (Ann p), Pretty (Var p)) => Reasonable ClassItem p where
   blame MethodSig{} = string "the" <+> highlight "method signature"
   blame DefaultMethod{} = string "the" <+> highlight "default method"
+  blame AssocType{} = string "the" <+> highlight "associated type"
 
 instance (Spanned (Ann p), Pretty (Var p)) => Reasonable Fundep p where
   blame _ = string "the functional dependency"
 
 instance (Spanned (Ann p), Pretty (Var p)) => Reasonable TyFunClause p where
   blame _ = string "the type function clause"
+
+instance (Spanned (Ann p), Pretty (Var p)) => Reasonable InstanceItem p where
+  blame MethodImpl{} = string "the" <+> highlight "method implementation"
+  blame TypeImpl{} = string "the" <+> highlight "associated type definition"
 
 instance Reasonable (Const SomeReason) p where
   blame = blameOf . getConst

@@ -3,8 +3,8 @@ functor : (type -> type) -> constraint
 <$> : Spec{'f : type -> type}. functor 'f => Spec{'a : type}. Spec{'b : type}. ('a -> 'b) -> 'f 'a -> 'f 'b
 fmap : Infer{'f : type -> type}. Infer{'a : type}. Infer{'b : type}. functor 'f => ('a -> 'b) -> 'f 'a -> 'f 'b
 applicative : (type -> type) -> constraint
-pure : Spec{'f : type -> type}. applicative 'f => Spec{'a : type}. 'a -> 'f 'a
 <*> : Spec{'f : type -> type}. applicative 'f => Spec{'a : type}. Spec{'b : type}. 'f ('a -> 'b) -> 'f 'a -> 'f 'b
+pure : Spec{'f : type -> type}. applicative 'f => Spec{'a : type}. 'a -> 'f 'a
 traversable : (type -> type) -> constraint
-traverse : Spec{'t : type -> type}. traversable 't => Spec{'a : type}. Spec{'b : type}. Spec{'f : type -> type}. applicative 'f => ('a -> 'f 'b) -> 't 'a -> 'f ('t 'b)
 sequence : Spec{'t : type -> type}. traversable 't => Spec{'a : type}. Spec{'f : type -> type}. applicative 'f => 't ('f 'a) -> 'f ('t 'a)
+traverse : Spec{'t : type -> type}. traversable 't => Spec{'a : type}. Spec{'b : type}. Spec{'f : type -> type}. applicative 'f => ('a -> 'f 'b) -> 't 'a -> 'f ('t 'b)

@@ -5,7 +5,7 @@ instance () => semigroup#0 int begin
   <>#2 = ((+))
 end
 class () => default#3 a#4  begin
-  val a#5 : 'a#4
-  val b#6 : 'a#4
-  let a#5 = b#6
+  val a#6 : 'a#4
+  val b#5 : 'a#4
+  let a#6 = b#5
 end

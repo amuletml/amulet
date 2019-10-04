@@ -451,11 +451,14 @@ inferProg (c@Class{}:prg) = do
         inferProg prg
 
 inferProg (inst@Instance{}:prg) = do
-  (stmt, instName, instTy, ci) <- condemn $ inferInstance inst
+  (stmt, instName, instTy, ci, syms) <- condemn $ inferInstance inst
   let addFst (LetStmt _ []) = id
-      addFst stmt@LetStmt{} = consFst stmt
-      addFst _ = undefined
-  addFst stmt . local (classes %~ insert (annotation inst) InstSort instName instTy ci) $ inferProg prg
+      addFst stmt = consFst stmt
+
+  flip (foldr addFst) (reverse stmt)
+    . local (classes %~ insert (annotation inst) InstSort instName instTy ci)
+    . local (tySyms %~ extendTySyms syms)
+    $ inferProg prg
 
 inferProg (decl@(TypeFunDecl am tau arguments kindsig equations ann):prg) = do
   (kind, equations, arguments) <- resolveTyFunDeclKind (BecauseOf decl) tau arguments kindsig equations
