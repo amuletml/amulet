@@ -6,6 +6,7 @@ module Types.Infer.Class
   , inferInstance
   , reduceClassContext
   , skolFreeTy
+  , extendTySyms
   ) where
 
 import Prelude hiding (lookup)
@@ -43,7 +44,16 @@ import Types.Infer.Builtin
 import Types.Kinds
 import Types.Unify
 
+import Debug.Trace
+
 import GHC.Stack
+
+extendTySyms syms empty = foldr extend empty syms where
+  extend info@(TyFamInfo name eqs args kind) = Map.alter go name where
+    go Nothing = Just info
+    go (Just (TyFamInfo _ eqs' _ _)) = Just (TyFamInfo name (eqs ++ eqs') args kind)
+    go (Just TySymInfo{}) = error "Impossible inferInstance extend TySymInfo"
+  extend TySymInfo{} = error "Impossible inferInstance extend TySymInfo"
 
 inferClass :: forall m. MonadInfer Typed m
            => Toplevel Desugared
@@ -67,7 +77,8 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
       scope (_:cs) = scope cs
       scope [] = mempty
 
-      (signatures, defaults) = partition (\case { MethodSig{} -> True; DefaultMethod{} -> False }) methods
+      (declarations, defaults) = partition (\case { MethodSig{} -> True; DefaultMethod{} -> False; AssocType{} -> True }) methods
+      (signatures, assoctys) = partition (\case { MethodSig{} -> True; AssocType{} -> False; _ -> undefined }) declarations
 
   let forallVars = getForallVars k
       getForallVars (TyForall v _ t) = Set.singleton v <> getForallVars t
@@ -87,7 +98,20 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
         | otherwise = addForallVars t ty
       addForallVars _ ty = ty
 
-  local (names %~ focus (one name k <> scope params)) $ do
+  (assocts, assocty_tele, assoct_defs) <- fmap unzip3 . for assoctys $ \meth@(AssocType method ty ann) -> do
+    let replaceK by (TyPi b t) = TyPi b $ replaceK by t
+        replaceK by _ = by
+    checkWildcard meth ty
+
+    declared <- checkAgainstKind (BecauseOf meth) ty TyType
+    let ty = replaceK declared k
+
+    pure ( Map.singleton method (declared, ty)
+         , one method ty
+         , TypeDecl Private method [] (Just []) (ann, ty)
+         )
+
+  local (names %~ focus (one name k <> scope params <> mconcat assocty_tele)) $ do
     -- Infer the types for every method
     (decls, rows) <- fmap unzip . for signatures $ \meth@(MethodSig method ty _) -> do
       checkWildcard meth ty
@@ -207,18 +231,25 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
         makeFundep (Fundep from to ann) = (map get from, map get to, ann)
 
     let info =
-          ClassInfo name classConstraint methodMap contextMap classCon classConTy classAnn defaultMap
+          ClassInfo name classConstraint methodMap (mconcat assocts) contextMap classCon classConTy classAnn defaultMap
           (makeMinimalFormula methodMap defaultMap)
           (map makeFundep fundeps)
         methodMap = Map.fromList (map (\(_, n, _, t) -> (n, t)) rows)
         contextMap = Map.fromList (map (\(_, _, l, t) -> (l, t)) rows')
 
-    pure ( tyDecl:map (LetStmt Public . pure) decs, tele
+    pure ( assoct_defs ++ tyDecl:map (LetStmt Public . pure) decs, (tele <> mconcat assocty_tele)
          , info
          , scope)
 inferClass _ = error "not a class"
 
-inferInstance :: forall m. MonadInfer Typed m => Toplevel Desugared -> m (Toplevel Typed, Var Typed, Type Typed, ClassInfo)
+inferInstance :: forall m. MonadInfer Typed m
+              => Toplevel Desugared
+              -> m ( [Toplevel Typed]
+                   , Var Typed
+                   , Type Typed
+                   , ClassInfo
+                   , [TySymInfo]
+                   )
 inferInstance inst@(Instance clss ctx instHead bindings ann) = do
   traverse_ (checkWildcard inst) ctx
   checkWildcard inst instHead
@@ -228,7 +259,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
     MagicInfo{} -> confesses (MagicInstance clss (BecauseOf inst))
     _ -> pure ()
 
-  ~info@(ClassInfo clss classHead methodSigs classContext classCon classConTy classAnn defaults minimal fundeps) <-
+  ~info@(ClassInfo clss classHead methodSigs assocTySigs classContext classCon classConTy classAnn defaults minimal fundeps) <-
     view (classDecs . at clss . non undefined)
 
   let classCon' = nameName classCon
@@ -287,18 +318,62 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
 
   let localAssums = insert ann InstSort instanceName globalInsnConTy info localAssums'
 
+      method MethodImpl{} = True
+      method TypeImpl{} = False
+
+  let TyApps _ classArgs = classHead
+  (tysyms, axioms) <- fmap unzip . for (filter (not . method) bindings) $ \bind@(TypeImpl var args exp ann) -> do
+    (declared, global_t) <- case Map.lookup var assocTySigs of
+      Just x -> pure x
+      Nothing -> confesses (WrongClass bind clss)
+    let as (TyPi (Anon b) r) = b:as r
+        as (TyPi _ r) = as r
+        as _ = []
+
+        ret (TyPi _ r) = ret r
+        ret r = r
+
+        argts = zip (map argName args) (as declared)
+
+        argName (TyVarArg v) = v
+        argName (TyAnnArg v _) = v
+
+    local (names %~ focus (teleFromList argts)) $ do
+      exp <- checkAgainstKind (BecauseOf bind) exp (ret declared)
+      ax <- genName
+      con <- genName
+      let eq = [ ( instArgs ++ map (TyVar . argName) args
+                 , exp
+                 , con ) ]
+          TyApps _ instArgs = instHead
+          info = TyFamInfo var eq (replicate (length instArgs + length args) (TgInternal (T.pack "a"))) global_t
+
+      let axdef = TypeDecl Private ax [] (Just [axiom]) (ann, TyType)
+          axiom = GadtCon Private con axiom_t (ann, TyType)
+          axiom_t = close $
+            foldr (TyPi . Anon)
+              (TyApps tyEq [ TyApps (TyCon var) (instArgs ++ map (TyVar . argName) args), exp])
+              ( zipWith (\a b -> TyApps tyEq [a, b]) classArgs instArgs
+             ++ map ((\a -> TyApps tyEq [TyVar a, TyVar a]) . argName) args)
+          close t = foldr (\v -> TyPi (Invisible v (Just TyType) Req)) t (ftv t)
+      pure (info, axdef)
+
   methodSigs <- traverse (closeOver (BecauseOf inst) . apply instSub) methodSigs
   classContext <- pure $ fmap (apply instSub) classContext
+
   let methodNames = Map.mapKeys nameName methodSigs
       skolVars = Set.fromList (map ((\(TySkol x) -> x ^. skolIdent) . snd) (Map.toList skolSub))
-      addStuff = local (classes %~ mappend localAssums) . local (typeVars %~ mappend (skolVars <> Map.keysSet skolSub))
+
+      addStuff = local (classes %~ mappend localAssums)
+               . local (typeVars %~ mappend (skolVars <> Map.keysSet skolSub))
+               . local (tySyms %~ extendTySyms tysyms)
 
   (Map.fromList -> methodMap, Map.fromList -> methodDef, methods) <- fmap unzip3 . addStuff $
-    for bindings $ \case
-      bind@(Binding v e _ an) -> do
+    for (filter method bindings) $ \case
+      (MethodImpl bind@(Binding v e _ an)) -> do
         sig <- case Map.lookup v methodSigs of
           Just x -> pure x
-          Nothing -> confesses (WrongClass bind clss)
+          Nothing -> confesses (WrongClass (MethodImpl bind) clss)
 
         let bindGroupTy = transplantPi globalInsnConTy (TyArr ctx sig)
 
@@ -413,7 +488,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
                 (ann, localInsnConTy)
       bind = Binding instanceName (Ascription fun globalInsnConTy (ann, globalInsnConTy)) True (ann, globalInsnConTy)
 
-  pure (LetStmt Public (methods ++ defaultMethods ++ [bind]), instanceName, globalInsnConTy, info)
+  pure (LetStmt Public (methods ++ defaultMethods ++ [bind]):axioms, instanceName, globalInsnConTy, info, tysyms)
 inferInstance _ = error "not an instance"
 
 addArg :: Map.Map (Var Typed) (Type Typed) -> Type Typed -> Expr Typed -> Expr Typed

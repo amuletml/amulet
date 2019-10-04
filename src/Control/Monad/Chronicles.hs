@@ -17,6 +17,8 @@ import Control.Monad.Chronicle hiding (dictate, confess)
 import Data.Sequence (Seq, null)
 import Prelude hiding (null)
 
+import GHC.Stack
+
 type ChroniclesT c = ChronicleT (Seq c)
 type Chronicles c = Chronicle (Seq c)
 type MonadChronicles c = MonadChronicle (Seq c)
@@ -60,7 +62,7 @@ absolving l r = memento l >>= either (const r) pure
 
 -- | Remove any record that a computation had. If it ended with
 -- 'confess', explode.
-silence :: MonadChronicle c m => m a -> m a
+silence :: (HasCallStack, MonadChronicle c m) => m a -> m a
 silence = absolve se where
   se = error "silence: computation ended with fatal error"
 
