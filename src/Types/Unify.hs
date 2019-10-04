@@ -732,7 +732,7 @@ tyFunByEval (TyFamInfo tn eqs _ _) scope args tb = do
     _ -> go [] eqs
 
   where
-    go skipped ((declared', result'):eqs) = do
+    go skipped ((declared', result', con):eqs) = do
       info <- view solveInfo
       assum <- use solveAssumptions
 
@@ -743,7 +743,7 @@ tyFunByEval (TyFamInfo tn eqs _ _) scope args tb = do
       x <- ack (zip declared args)
 
       case x of
-        Just sub -> do
+        Just (sub, cos) -> do
           traceM (show (pretty (TyApps (TyCon tn) declared)))
 
           flat <- flatten assum info (TyApps (TyCon tn) (apply sub declared))
@@ -754,7 +754,7 @@ tyFunByEval (TyFamInfo tn eqs _ _) scope args tb = do
              then do
                traceM (displayS (keyword "[D]:" <+> pretty (apply sub result) <+> "~" <+> pretty tb))
                _ <- unify scope (apply sub result) tb
-               pure (Just (AssumedCo (TyApps (TyCon tn) args) tb))
+               pure (Just (InstCo con cos))
 
              else traceM "not apart" *> pure Nothing
 
@@ -763,12 +763,12 @@ tyFunByEval (TyFamInfo tn eqs _ _) scope args tb = do
 
     apart = (isNothing .) . unifyPure
 
-    ack :: [(Type Typed, Type Typed)] -> m (Maybe (Subst Typed))
+    ack :: [(Type Typed, Type Typed)] -> m (Maybe (Subst Typed, [Coercion Typed]))
     ack ts = do
       (x, state) <- capture $ memento $ traverse (uncurry (unify scope)) ts
       case x of
         Left _ -> pure Nothing
-        Right _ -> pure (pure (state ^. solveTySubst))
+        Right x -> pure (pure (state ^. solveTySubst, x))
 
 tyFunByEval _ _ _ _ = undefined
 
@@ -1110,9 +1110,7 @@ applicable wanted scp (ImplChoice head _ cs _ s _ _) =
 
 
 probablyCast :: Coercion Typed -> Wrapper Typed
-probablyCast x
-  | isReflexiveCo x = IdWrap
-  | otherwise = Cast x
+probablyCast x = Cast x
 
 rethrow :: MonadSolve m => Type Typed -> Type Typed -> m a -> m a
 rethrow l r cont =

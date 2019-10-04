@@ -3,11 +3,11 @@ do
   local Nil = { __tag = "Nil" }
   local tostring = tostring
   local writeln = print
-  local function _dollardApplicativeajd(cka)
+  local function _dollardApplicativeajd(cks)
     return {
-      ["<*>"] = function(cjd) return function(cja) return cka["×"](cjd)(cja) end end,
-      pure = function(cjm) return cka.zero end,
-      ["Applicative$ma"] = function(cil) return function(cii) return cii end end
+      ["<*>"] = function(cjs) return function(cjp) return cks["×"](cjs)(cjp) end end,
+      pure = function(ckd) return cks.zero end,
+      ["Applicative$ma"] = function(ciw) return function(cit) return cit end end
     }
   end
   local function _colon_colon(x) return function(y) return Cons({ _1 = x, _2 = y }) end end
@@ -15,31 +15,31 @@ do
     if cs.__tag == "Nil" then
       return "Nil"
     end
-    local clv = cs[1]
-    return aym(clv._1) .. " :: " .. _dollarshow(aym, clv._2)
+    local cmv = cs[1]
+    return aym(cmv._1) .. " :: " .. _dollarshow(aym, cmv._2)
   end
-  local function _dollartraverse(bpb, cpv, k, cu)
+  local function _dollartraverse(bpb, csi, k, cu)
     if cu.__tag == "Nil" then
-      return cpv.pure(Nil)
+      return csi.pure(Nil)
     end
-    local cps = cu[1]
-    return cpv["<*>"](cpv["Applicative$ma"](_colon_colon)(k(cps._1)))(_dollartraverse(nil, cpv, k, cps._2))
+    local csf = cu[1]
+    return csi["<*>"](csi["Applicative$ma"](_colon_colon)(k(csf._1)))(_dollartraverse(nil, csi, k, csf._2))
   end
   local function _dollar_d7(bua, x, ys)
     if x.__tag == "Nil" then
       return ys
     end
-    local cqs = x[1]
-    return Cons({ _2 = _dollar_d7(nil, cqs._2, ys), _1 = cqs._1 })
+    local ctn = x[1]
+    return Cons({ _1 = ctn._1, _2 = _dollar_d7(nil, ctn._2, ys) })
   end
-  local crx = { _1 = 1, _2 = nil }
+  local cux = { _1 = 1, _2 = nil }
   writeln(_dollarshow(function(x)
     return tostring(x)
   end, _dollartraverse(nil, _dollardApplicativeajd({
-    ["×"] = function(x) return function(ys) return _dollar_d7(nil, x, ys) end end,
-    zero = Nil
-  }), function(ckl) return Cons({ _1 = ckl._1, _2 = Nil }) end, Cons({
-    _1 = crx,
-    _2 = Cons({ _1 = crx, _2 = Cons({ _1 = crx, _2 = Nil }) })
+    zero = Nil,
+    ["×"] = function(x) return function(ys) return _dollar_d7(nil, x, ys) end end
+  }), function(cle) return Cons({ _1 = cle._1, _2 = Nil }) end, Cons({
+    _1 = cux,
+    _2 = Cons({ _1 = cux, _2 = Cons({ _1 = cux, _2 = Nil }) })
   }))))
 end

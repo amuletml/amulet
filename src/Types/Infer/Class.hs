@@ -1,6 +1,12 @@
 {-# LANGUAGE FlexibleContexts, TupleSections, ScopedTypeVariables,
    ViewPatterns, LambdaCase, TypeFamilies #-}
-module Types.Infer.Class (WrapFlavour(..), inferClass, inferInstance, reduceClassContext) where
+module Types.Infer.Class
+  ( WrapFlavour(..)
+  , inferClass
+  , inferInstance
+  , reduceClassContext
+  , skolFreeTy
+  ) where
 
 import Prelude hiding (lookup)
 
@@ -256,7 +262,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
         lookup instHead scope
   case overlapping of
     [] -> pure ()
-    (x:_) -> confesses (Overlap instHead (x ^. implSpan) ann)
+    (x:_) -> confesses (Overlap Overinst instHead (x ^. implSpan) ann)
 
   (ctx, mappend skolSub -> skolSub) <- skolFreeTy mempty (ByInstanceHead ctx ann) (apply skolSub ctx)
 
@@ -610,7 +616,7 @@ mkLet xs = Let xs
 (!) :: (Show k, Ord k, HasCallStack) => Map.Map k v -> k -> v
 m ! k = fromMaybe (error ("Key " ++ show k ++ " not in map")) (Map.lookup k m)
 
-validContext :: MonadChronicles TypeError m => Set.Set (Var Typed) String -> Ann Desugared -> Type Desugared -> m ()
+validContext :: MonadChronicles TypeError m => String -> Ann Desugared -> Type Desugared -> m ()
 
 validContext what ann t@(TyApps f xs@(_:_))
   -- | TyCon v <- f, v == tyEqName = unless (what == "instance") $ confesses (InvalidContext what ann t)
@@ -729,7 +735,7 @@ checkFundeps context ann fds ty = do
 
     case overlapping of
       [] -> pure ()
-      (x:_) -> confesses (Overlap instHead (x ^. implSpan) ann)
+      (x:_) -> confesses (Overlap Overinst instHead (x ^. implSpan) ann)
 
 splitContext :: Type Typed -> [Type Typed]
 splitContext (TyTuple a b) = a:splitContext b

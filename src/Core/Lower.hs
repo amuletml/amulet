@@ -213,6 +213,7 @@ co (S.ForallCo v cd rs) = C.Quantified (Relevant (mkCo v)) (co cd) (co rs)
 co (S.P1 v) = Nth (mkCo v) 0
 co (S.P2 v) = Nth (mkCo v) 1
 co S.MvCo{} = error "Unsolved coercion metavariable"
+co (S.InstCo ax ts) = Axiom (mkCo ax) (map co ts)
 
 lowerAnyway :: MonadLower m => Expr Typed -> Lower m Term
 lowerAnyway (S.VarRef v (_, ty)) = do

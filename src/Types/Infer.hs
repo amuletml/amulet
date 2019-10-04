@@ -35,6 +35,7 @@ import Syntax.Var
 import Syntax
 
 import Types.Infer.Constructor
+import Types.Infer.Function
 import Types.Infer.Pattern
 import Types.Infer.Builtin
 import Types.Infer.Class
@@ -458,15 +459,17 @@ inferProg (inst@Instance{}:prg) = do
 
 inferProg (decl@(TypeFunDecl am tau arguments kindsig equations ann):prg) = do
   (kind, equations, arguments) <- resolveTyFunDeclKind (BecauseOf decl) tau arguments kindsig equations
+  () <- checkValidTypeFunction (BecauseOf decl) tau kind arguments equations
+  cons <- makeTypeFunctionHIT arguments equations
   let tfinfo =
         TyFamInfo { _tsName = tau
-                  , _tsEquations = map make_eq equations
+                  , _tsEquations = zipWith make_eq equations cons
                   , _tsArgs = map arg_name arguments
                   , _tsKind = kind
                   }
-      fakeDecl = TypeDecl am tau arguments (Just []) (ann, kind)
-      make_eq (TyFunClause (TyApps _ lhs) rhs _) = (lhs, rhs)
-      make_eq _ = undefined
+      fakeDecl = TypeDecl am tau arguments (Just cons) (ann, kind)
+      make_eq (TyFunClause (TyApps _ lhs) rhs _) (GadtCon _ v _ _) = (lhs, rhs, v)
+      make_eq _ _ = undefined
       arg_name (TyAnnArg v _) = v
       arg_name _ = undefined
 
@@ -552,7 +555,7 @@ solveEx syms ss cs = transformExprTyped go id goType where
     goCast = transformCoercion go goType
     go (MvCo v) = case Map.lookup v cs of
       Just (Cast c) -> c
-      _ -> error "coercion metavariable not solved to cast"
+      x -> error ("coercion metavariable " ++ show v ++ " not solved to cast " ++ show x)
     go x = x
   goWrap (TypeLam l t) = TypeLam l (goType t)
   goWrap (ExprApp f) = ExprApp (go f)

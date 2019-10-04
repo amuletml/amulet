@@ -377,9 +377,25 @@ checkCoercion s = checkCo where
       Just (ExactRowsTy rs, _) | (_, AppTy (AppTy _ l) r) <- rs !! i -> pure (l, r)
       _ -> pushError (InvalidCoercion (Nth co i))
 
+  checkCo (Axiom ax i) =
+    case VarMap.lookup (toVar ax) (vars s) of
+      Just (pi, _) -> checkCoAx (Axiom ax i) pi i
+      _ -> pushError (InvalidCoercion (Axiom ax i))
+
   checkCo (Symmetry x) = swap <$> checkCo x
   checkCo (Quantified v l r) =
     (\(f, g) (x, y) -> (ForallTy v f x, ForallTy v g y)) <$> checkCo l <*> checkCo r
+
+  coAxT (ForallTy Irrelevant (AppTy (AppTy _ l) r) rest) = (l, r):coAxT rest
+  coAxT (ForallTy Relevant{} _ rest) = coAxT rest
+  coAxT (AppTy (AppTy _ l) r) = [(l, r)]
+  coAxT x = error (show x)
+
+  checkCoAx _ (coAxT -> ts) args =
+    (\() -> last ts)
+      <$> traverse_ checkCo' (zip ts args)
+  checkCo' ((a, b), co) = (\(l, r) -> if (a `apart` l) || (b `apart` r) then pushError (InvalidCoercion co) else pure ())
+    <$> checkCo co
 
 checkPattern :: forall a. IsVar a => Scope a -> Type a -> Pattern a -> Errors (CoreErrors a) ()
 checkPattern s = checkPat where

@@ -13,7 +13,7 @@
   #-}
 module Control.Monad.Infer
   ( module M, firstName
-  , TypeError(..)
+  , TypeError(..), WhatOverlaps(..)
   , Constraint(..)
   , Env
   , MonadInfer, Name
@@ -124,7 +124,7 @@ data TypeError where
   AmbiguousMethodTy :: (Ord (Var p), Pretty (Var p)) => Var p -> Type p -> Set.Set (Var p) -> TypeError
 
   UnsatClassCon :: SomeReason -> Constraint Typed -> WhyUnsat -> TypeError
-  Overlap :: Type Typed -> Span -> Span -> TypeError
+  Overlap :: WhatOverlaps -> Type Typed -> Span -> Span -> TypeError
   ClassStackOverflow :: SomeReason -> [Type Typed] -> Type Typed -> TypeError
   WrongClass :: Binding Desugared -> Var Typed -> TypeError
   UndefinedMethods :: Type Typed -> Formula Text -> Span -> TypeError
@@ -140,6 +140,11 @@ data TypeError where
   UnsaturatedTS :: SomeReason -> TySymInfo -> Int -> TypeError
 
   NotCovered :: Span -> Span -> [Type Typed] -> [Var Typed] -> TypeError
+
+  MightNotTerminate :: TyFunClause Typed -> Type Typed -> Type Typed -> TypeError
+  TyFunInLhs :: SomeReason -> Type Typed -> TypeError
+
+data WhatOverlaps = Overinst | Overeq Bool
 
 data WhyInstantiate = Expression | Subsumption
 data WhyUnsat
@@ -499,6 +504,12 @@ instance Pretty TypeError where
         TySymInfo{} -> keyword "synonym"
         TyFamInfo{} -> keyword "function"
 
+  pretty (MightNotTerminate _ lhs rhs) =
+    vsep [ "Recursive call" <+> displayType lhs <+> soperator (string "-->") <+> displayType rhs <+> "might not terminate"
+         ]
+
+  pretty (TyFunInLhs _ tau) =
+    vsep [ "Type synonym application" <+> displayType tau <+> "is illegal in LHS of type function equation" ]
 
   pretty (UnsatClassCon _ (ConImplicit _ _ _ t) _) = string "No instance for" <+> pretty t
   pretty UnsatClassCon{} = undefined
@@ -514,7 +525,7 @@ instance Pretty TypeError where
 instance Spanned TypeError where
   annotation (ArisingFrom e@ArisingFrom{} _) = annotation e
   annotation (ArisingFrom _ x) = annotation x
-  annotation (Overlap _ x _) = annotation x
+  annotation (Overlap _ _ x _) = annotation x
   annotation (ClassStackOverflow x _ _) = annotation x
   annotation (WrongClass x _) = annotation x
   annotation (UndefinedMethods _ _ x) = annotation x
@@ -524,11 +535,15 @@ instance Spanned TypeError where
   annotation (UnsaturatedTS x _ _) = annotation x
   annotation (NotCovered x _ _ _) = annotation x
   annotation (MagicInstance _ x) = annotation x
+  annotation (MightNotTerminate x _ _) = annotation x
+  annotation (TyFunInLhs x _) = annotation x
   annotation x = error (show (pretty x))
 
 instance Note TypeError Style where
   diagnosticKind (ArisingFrom e _) = diagnosticKind e
+  diagnosticKind (Overlap (Overeq True) _ _ _) = WarningMessage
   diagnosticKind DeadBranch{} = WarningMessage
+  diagnosticKind MightNotTerminate{} = WarningMessage
   diagnosticKind _ = ErrorMessage
 
   formatNote f (ArisingFrom e@ArisingFrom{} _) = formatNote f e
@@ -719,13 +734,17 @@ instance Note TypeError Style where
 
   formatNote f err@(UnsatClassCon r' _ _) = formatNote f (ArisingFrom err r')
 
-  formatNote f (Overlap tau one two) =
-    vsep [ indent 2 "Overlapping instances for" <+> (Right <$> displayType tau)
+  formatNote f (Overlap what tau one two) =
+    vsep [ indent 2 "Overlapping" <+> kw <+> "for" <+> (Right <$> displayType tau)
          , indent 2 $ bullet "Note: first defined here,"
          , f [one]
          , indent 3 "but also defined here"
          , f [two]
          ]
+    where
+      kw = Right <$> case what of
+        Overinst -> keyword "instances"
+        Overeq _ -> keyword "equations"
 
   formatNote f (NotCovered inst fd types vars) =
     vsep [ f [inst]

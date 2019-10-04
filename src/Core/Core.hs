@@ -153,6 +153,7 @@ data Coercion a
 
   | CoercionVar a
   | Nth a Int
+  | Axiom a [Coercion a]
   deriving (Eq, Show, Ord, Functor, Generic, Hashable)
 
 data Literal
@@ -234,6 +235,7 @@ instance Pretty a => Pretty (Coercion a) where
   pretty (Quantified Irrelevant dom c) = pretty dom <+> arrow <+> pretty c
   pretty (CoercionVar x) = pretty x
   pretty (Nth a i) = pretty a <> dot <> sliteral (int i)
+  pretty (Axiom co ts) = pretty (foldl Application (CoercionVar co) ts)
 
 pprLet :: (Annotation b, Pretty a) => [(a, Type a, AnnTerm b a)] -> Doc
 pprLet = vsep . punctuate semi . map pprLet1
@@ -382,6 +384,7 @@ relates :: Coercion a -> Maybe (Type a, Type a)
 relates (SameRepr a b) = Just (a, b)
 relates (CoercionVar _) = Nothing
 relates Nth{} = Nothing
+relates Axiom{} = Nothing
 relates (Application f x) = do
   (f, g) <- relates f
   (x, y) <- relates x

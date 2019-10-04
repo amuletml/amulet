@@ -168,5 +168,6 @@ prettyMotive (ByExistential v t) =
   string "it is an existential" <> comma
   <#> string "bound by the type of" <+> pretty v <> comma <+> displayType t
 prettyMotive (ByInstanceHead head _) = string "it is bound in an instance head, namely" <#> displayType head
+prettyMotive (ByTyFunLhs head _) = string "it is bound by the LHS of a type function equation, namely" <#> displayType head
 prettyMotive (ByConstraint con) =
   string "it is mentioned in a type class constraint, namely" <#> displayType con

@@ -99,7 +99,7 @@ data TySymInfo
   | TyFamInfo
       { _tsName       :: Var Typed
         -- ^ The name of this type family
-      , _tsEquations  :: [([Type Typed], Type Typed)]
+      , _tsEquations  :: [([Type Typed], Type Typed, Var Typed)]
         -- ^ The equations to this type family
       , _tsArgs       :: [Var Typed]
         -- ^ The arguments to this type family, in order

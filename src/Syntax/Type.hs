@@ -76,6 +76,7 @@ data SkolemMotive p
   | ByExistential (Var p) (Type p)
   | ByInstanceHead (Type p) (Ann Desugared)
   | ByConstraint (Type p)
+  | ByTyFunLhs (Type p) (Ann Desugared)
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (SkolemMotive p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (SkolemMotive p)
@@ -92,6 +93,7 @@ deriving instance (Show (Var p), Show (Ann p)) => Show (Type p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Type p)
 deriving instance Ord (Var p) => Ord (Type p)
 deriving instance Eq (Var p) => Eq (Type p)
+instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Plated (Type p)
 
 data Coercion p
   = VarCo (Var p) -- coercion variable
@@ -110,6 +112,7 @@ data Coercion p
     -- (forall (v : x : c ~ d). phi : a ~ b) : forall (v : c). a ~ forall (v : d). b
   | P1 (Var p) -- { _1 : a ~ b, _2 : c ~ d }.1 : a ~ b
   | P2 (Var p) -- { _1 : a ~ b, _2 : c ~ d }.2 : a ~ b
+  | InstCo (Var p) [Coercion p]
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Coercion p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Coercion p)
@@ -163,6 +166,7 @@ instance Pretty (Var p) => Pretty (Coercion p) where
   pretty (ForallCo v c cs) = keyword "∀" <> parens (pretty v <+> colon <+> pretty c) <> dot <+> pretty cs
   pretty (P1 c) = pretty c <> keyword ".1"
   pretty (P2 c) = pretty c <> keyword ".2"
+  pretty (InstCo ax t) = pretty ax <+> hsep (map (parens . pretty) t)
 
 record :: [Doc] -> Doc
 record = enclose (lbrace <> space) (space <> rbrace) . hsep . punctuate comma
@@ -271,6 +275,7 @@ isReflexiveCo VarCo{} = False
 isReflexiveCo P1{} = False
 isReflexiveCo P2{} = False
 isReflexiveCo MvCo{} = False
+isReflexiveCo InstCo{} = False
 
 pattern TyApps :: Type p -> [Type p] -> Type p
 pattern TyApps head xs <- (appsView -> (head:xs)) where
