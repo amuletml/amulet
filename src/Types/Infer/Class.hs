@@ -323,9 +323,6 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
 
   let TyApps _ classArgs = classHead
   (tysyms, axioms) <- fmap unzip . for (filter (not . method) bindings) $ \bind@(TypeImpl var args exp ann) -> do
-    (declared, global_t) <- case Map.lookup var assocTySigs of
-      Just x -> pure x
-      Nothing -> confesses (WrongClass bind clss)
     let as (TyPi (Anon b) r) = b:as r
         as (TyPi _ r) = as r
         as _ = []
@@ -333,16 +330,22 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
         ret (TyPi _ r) = ret r
         ret r = r
 
-        argts = zip (map argName args) (as declared)
-
         argName (TyVarArg v) = v
         argName (TyAnnArg v _) = v
 
+    (declared, global_t) <- case Map.lookup var assocTySigs of
+      Just x -> pure x
+      Nothing -> confesses (WrongClass bind clss)
+
+    padding_vars <- replicateM (length (as declared) - length args) genName
+    let argts = zip argvs (as declared)
+        argvs = map argName args ++ padding_vars
+
     local (names %~ focus (teleFromList argts)) $ do
-      exp <- checkAgainstKind (BecauseOf bind) exp (ret declared)
+      exp <- checkAgainstKind (BecauseOf bind) (foldl TyApp exp (map TyVar padding_vars)) (ret declared)
       ax <- genName
       con <- genName
-      let eq = [ ( instArgs ++ map (TyVar . argName) args
+      let eq = [ ( instArgs ++ map TyVar argvs
                  , exp
                  , con ) ]
           TyApps _ instArgs = instHead
@@ -352,9 +355,9 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
           axiom = GadtCon Private con axiom_t (ann, TyType)
           axiom_t = close $
             foldr (TyPi . Anon)
-              (TyApps tyEq [ TyApps (TyCon var) (instArgs ++ map (TyVar . argName) args), exp])
+              (TyApps tyEq [ TyApps (TyCon var) (instArgs ++ map TyVar argvs), exp])
               ( zipWith (\a b -> TyApps tyEq [a, b]) classArgs instArgs
-             ++ map ((\a -> TyApps tyEq [TyVar a, TyVar a]) . argName) args)
+             ++ map (\a -> TyApps tyEq [TyVar a, TyVar a]) argvs)
           close t = foldr (\v -> TyPi (Invisible v (Just TyType) Req)) t (ftv t)
       pure (info, axdef)
 

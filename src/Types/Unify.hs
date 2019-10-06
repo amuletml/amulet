@@ -666,7 +666,9 @@ unify scope ta@(TyApps (TyCon v) xs@(_:_)) b = do
         heads <- unify scope (TyApps (TyCon v) xs_a) f
         tails <- traverse (uncurry (unify scope)) (zip xs_b ys)
         pure (foldl AppCo heads tails)
-      _ -> confesses =<< unequal ta b
+      _ ->
+        (confesses =<< unequal ta b)
+          `catchChronicle` \_ -> fmap SymCo (unify scope b ta)
 
 unify scope a tb@(TyApps (TyCon _) (_:_)) = rethrow a tb $ SymCo <$> unify scope tb a
 
