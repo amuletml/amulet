@@ -370,7 +370,7 @@ checkCoercion s = checkCo where
   checkCo (CoercionVar x) =
     case VarMap.lookup (toVar x) (vars s) of
       Just (AppTy (AppTy _ l) r, _) -> pure (l, r)
-      _ -> pushError (InvalidCoercion (CoercionVar x))
+      _ -> pure (VarTy (fromVar tyvarA), VarTy (fromVar tyvarB))
 
   checkCo (Nth co i) =
     case VarMap.lookup (toVar co) (vars s) of

@@ -187,7 +187,11 @@ resolveModule (t@(Class name am ctx tvs fds ms ann):rs) = do
   (tvs', tvss) <- resolveTele t tvs
 
   extendTy (name, name') $ do
-    (ctx', fds', (ms', vs')) <- extendTyvarN tvss $
+    tyfuns <- fmap concat . for ms $ \case
+      AssocType name _ _ -> (:[]) . (name,) <$> tagVar name
+      _ -> pure []
+
+    (ctx', fds', (ms', vs')) <- extendTyvarN tvss . extendTyN tyfuns $
       (,,) <$> traverse (reType t) ctx
            <*> traverse reFd fds
            <*> reClassItem (map fst tvss) ms
@@ -207,7 +211,7 @@ resolveModule (t@(Class name am ctx tvs fds ms ann):rs) = do
       pure ( (MethodSig name' <$> reType m (wrap tvs' ty) <*> pure an):ra
            , (name, name'):rb )
     reClassItem tvs' (m@(AssocType name ty an):rest) = do
-      name' <- tagVar name
+      name' <- lookupTy name
       (ra, rb) <- reClassItem tvs' rest
       pure ( (AssocType name' <$> reType m (wrap tvs' ty) <*> pure an):ra
            , (name, name'):rb )

@@ -13,7 +13,6 @@ import Data.Reason
 import Data.Triple
 import Data.Graph
 import Data.Char
-import Data.Span
 
 import Control.Monad.State
 import Control.Monad.Infer
@@ -40,6 +39,39 @@ import Text.Pretty.Semantic
 
 import {-# SOURCE #-} Types.Infer
 
+solveFixpoint :: (MonadNamey m, MonadChronicles TypeError m)
+              => SomeReason
+              -> Seq.Seq (Constraint Typed)
+              -> Map.Map (Var Resolved) (Either ClassInfo TySymInfo)
+              -> m (Subst Typed, Map.Map (Var Resolved) (Wrapper Typed), [Constraint Typed])
+solveFixpoint blame = (fmap (_3 %~ reblame_con blame) . ) . go True (mempty, mempty) where
+  go True (sub, wraps) cs c = do
+    (compose sub -> sub, wraps', cons) <- solve cs c
+    let new_cons = apply sub cons
+
+    go (length cons < Seq.length cs && any isEquality new_cons) (sub, wraps' <> wraps) (Seq.fromList new_cons) c
+
+  go False (sub, wraps) cs c = do
+    (compose sub -> sub, wraps', cons) <- solve cs c
+    (compose sub -> sub, wraps'', cons) <- solve (Seq.fromList (apply sub cons)) c
+    pure (sub, wraps'' <> wraps' <> wraps, apply sub cons)
+
+  isEquality (ConImplicit _ _ _ (TyApps t as)) | t == tyEq && solvable as = True
+  isEquality _ = False
+
+  solvable [TyApps{}, TyVar{}] = True
+  solvable [TyVar{}, TyApps{}] = True
+  solvable _ = False
+
+  reblame_con r = map go where
+    go (ConUnify _ a b c d) = ConUnify r a b c d
+    go (ConSubsume _ a b c d) = ConSubsume r a b c d
+    go (ConImplies _ a b c) = ConImplies r a b c
+    go (ConImplicit (It'sThis BecauseInternal) a b c) = ConImplicit r a b c
+    go (ConImplicit r a b c) = ConImplicit r a b c
+    go x@ConFail{} = x
+    go x@DeferredError{} = x
+
 inferLetTy :: forall m. MonadInfer Typed m
            => (Set.Set (Var Typed) -> Expr Typed -> Type Typed -> m (Type Typed))
            -> PatternStrat
@@ -58,17 +90,7 @@ inferLetTy closeOver strategy vs =
                 -> m (Type Typed, Expr Typed -> Expr Typed, Subst Typed)
       figureOut canAdd blame ex ty cs = do
         c <- getSolveInfo
-        (x, co, deferred) <- condemn $ retcons (addBlame (snd blame)) (solve cs c)
-        deferred <- pure (fmap (apply x) deferred)
-        (compose x -> x, wraps', cons) <- condemn $ solve (Seq.fromList deferred) c
-
-        name <- genName
-        let reify an ty var =
-              case wraps' Map.! var of
-                ExprApp v -> v
-                _ -> ExprWrapper (wraps' Map.! var)
-                       (Fun (EvParam (PType (Capture name (an, ty)) ty (an, ty))) (VarRef name (an, ty)) (an, TyArr ty ty))
-                       (an, ty)
+        (x, wraps, cons) <- condemn $ retcons (addBlame (snd blame)) (solveFixpoint (snd blame) cs c)
 
         ts <- view tySyms
 
@@ -77,7 +99,7 @@ inferLetTy closeOver strategy vs =
             Fail -> do
               (context, wrapper, needed, sub') <- reduceClassContext mempty (annotation ex) cons
 
-              let needsLet = co `Map.restrictKeys` freeIn ex
+              let needsLet = wraps `Map.restrictKeys` freeIn ex
                   addOne (v, ExprApp e) ex =
                     Let [ Binding v e False (annotation ex, getType e) ] ex (annotation ex, getType ex)
                   addOne _ ex = ex
@@ -93,7 +115,7 @@ inferLetTy closeOver strategy vs =
 
               pure ( context
                    , wrapper
-                   , \_ sub -> solveEx ts (x `compose` sub `compose` sub') (wraps' <> co) . addFreeDicts
+                   , \_ sub -> solveEx ts (x `compose` sub `compose` sub') wraps . addFreeDicts
                    , sub' )
 
             Propagate -> do
@@ -102,7 +124,7 @@ inferLetTy closeOver strategy vs =
                     flip foldMap cons $ \case
                       ConImplicit _ _ v _ -> Set.singleton v
                       _ -> mempty
-                  wraps'' = Map.withoutKeys (co <> wraps') notSolvedHere
+                  wraps'' = Map.withoutKeys wraps notSolvedHere
               pure (id, flip const, \_ sub -> solveEx ts (x <> sub) wraps'', mempty)
 
         vt <- closeOver (Set.singleton (fst blame))
@@ -110,7 +132,7 @@ inferLetTy closeOver strategy vs =
         ty <- uncurry skolCheck blame vt
         let (tp, sub) = rename ty
 
-        pure (tp, wrapper Full . solve tp sub . substituteDeferredDicts reify deferred, sub)
+        pure (tp, wrapper Full . solve tp sub, sub)
 
 
       tcOne :: SCC (Binding Desugared)
@@ -152,33 +174,23 @@ inferLetTy closeOver strategy vs =
           wrap <- subsumes (BecauseOf b) ety pty
           pure (ExprWrapper wrap e (annotation e, pty), p, pty, tel)
 
-        (solution, wraps, deferred) <- solve cs =<< getSolveInfo
+        (solution, wraps, cons) <- solveFixpoint (BecauseOf b) cs =<< getSolveInfo
         tys <- view tySyms
         let solved = closeOver mempty ex . apply solution
             ex = solveEx tys solution wraps e
-
-        deferred <- pure (fmap (apply solution) deferred)
-        (compose solution -> solution, wraps', cons) <- solve (Seq.fromList deferred) =<< getSolveInfo
 
         case strategy of
           Fail ->
             when (cons /= []) $
               confesses (ArisingFrom (UnsatClassCon (BecauseOf b) (head cons) PatBinding) (BecauseOf b))
-          Propagate -> tell (Seq.fromList deferred)
+          Propagate -> tell (Seq.fromList cons)
 
-        name <- genName
-        let reify an ty var =
-              case wraps' Map.! var of
-                ExprApp v -> v
-                _ -> ExprWrapper (wraps' Map.! var)
-                       (Fun (EvParam (PType (Capture name (an, ty)) ty (an, ty))) (VarRef name (an, ty)) (an, TyArr ty ty))
-                       (an, ty)
         tel' <- traverseTele (const solved) tel
         ty <- solved ty
         tys <- view tySyms
 
         let pat = transformPatternTyped id (apply solution) p
-            ex' = solveEx tys solution wraps' $ substituteDeferredDicts reify deferred ex
+            ex' = solveEx tys solution wraps ex
 
         pure ( [TypedMatching pat ex' (ann, ty) (teleToList tel')], tel', boundTvs pat tel' )
 
@@ -200,17 +212,7 @@ inferLetTy closeOver strategy vs =
                 exp <- check (exp' exp) tyvar
                 pure (Binding var exp True (ann, tyvar), tyvar)
 
-        (solution, wrap, cons) <- solve cs =<< getSolveInfo
-        name <- genName
-
-        let deferred = fmap (apply solution) cons
-        (compose solution -> solution, wrap', cons) <- solve (Seq.fromList deferred) =<< getSolveInfo
-        let reify an ty var =
-              case wrap' Map.! var of
-                ExprApp v -> v
-                _ -> ExprWrapper (wrap Map.! var)
-                       (Fun (EvParam (PType (Capture name (an, ty)) ty (an, ty))) (VarRef name (an, ty)) (an, TyArr ty ty))
-                       (an, ty)
+        (solution, wrap, cons) <- solveFixpoint (It'sThis BecauseInternal) cs =<< getSolveInfo
 
         tys <- view tySyms
         if null cons
@@ -220,15 +222,12 @@ inferLetTy closeOver strategy vs =
                    ty <- closeOver mempty exp (apply solution ty)
                    (new, sub) <- pure $ rename ty
                    pure ( Binding var
-                           (shoveLets (solveEx tys (sub `compose` solution) (wrap <> wrap') exp))
+                           (solveEx tys (sub `compose` solution) wrap exp)
                            True
                            (fst an, new)
                         )
                  solveOne _ = undefined
 
-                 shoveLets (ExprWrapper w e a) = ExprWrapper w (shoveLets e) a
-                 shoveLets (Fun x@EvParam{} e a) = Fun x (shoveLets e) a
-                 shoveLets e = substituteDeferredDicts reify deferred e
              bs <- traverse solveOne bindings
              let makeTele (Binding var _ _ (_, ty):bs) = one var ty <> makeTele bs
                  makeTele _ = mempty
@@ -285,8 +284,7 @@ inferLetTy closeOver strategy vs =
                      (Ascription
                        (ExprWrapper tyLams
                          (wrapper Full
-                           (substituteDeferredDicts reify deferred
-                             (Let inners (Record fields (an, recTy)) (an, recTy))))
+                           (Let inners (Record fields (an, recTy)) (an, recTy)))
                          (an, closed))
                        closed (an, closed))
                      True
@@ -436,25 +434,6 @@ localGenStrat bg ex ty = do
      then generalise ftv (becauseExp ex) ty
      else annotateKind (becauseExp ex) ty
 
-type Reify p = (Ann Desugared -> Type p -> Var p -> Expr p)
-
-substituteDeferredDicts :: Reify Typed -> [Constraint Typed] -> Expr Typed -> Expr Typed
-substituteDeferredDicts reify cons = transformExprTyped go id id where
-  go (VarRef v _) | Just x <- Map.lookup v replaced = x
-  go x = x
-
-  choose (ConImplicit _ _ var ty) =
-    let ex = operational (reify internal ty var)
-     in Map.singleton var ex
-  choose t = error ("Not a deferred ConImplicit in choose substituteDeferredDicts " ++ show (pretty t))
-
-  replaced = foldMap choose cons
-
-
-operational :: Expr Typed -> Expr Typed
-operational (ExprWrapper IdWrap e _) = e
-operational (ExprWrapper (WrapFn k) e _) = operational $ runWrapper k e
-operational e = e
 
 deSkol :: Type Typed -> Type Typed
 deSkol = go mempty where
