@@ -655,15 +655,27 @@ unify scope (TyOperator l v r) (TyOperator l' v' r')
 
 unify scope ta@(TyApps (TyCon v) xs@(_:_)) b = do
   x <- view solveInfo
+  traceM (show (x ^. at v))
   case x ^. at v of
     Just (Right tf) -> unifyTyFunApp tf scope xs b
     _ -> case b of
+      TyApps (TyCon v) ys | Just (Right tf) <- x ^. at v -> SymCo <$> unify scope b ta
+
       TyApps f ys | length xs == length ys -> rethrow ta b $ do
         heads <- unify scope (TyCon v) f
         tails <- traverse (uncurry (unify scope)) (zip xs ys)
         pure (foldl AppCo heads tails)
+
       TyApps f ys | length ys < length xs -> rethrow ta b $ do
-        let (xs_a, xs_b) = splitAt (length ys) xs
+        case f of
+          TyCon{} -> confesses =<< unequal ta b
+          _ -> pure ()
+
+        let ys_l = length ys
+            xs_l = length xs
+            xs_a = take (xs_l - ys_l) xs
+            xs_b = drop (xs_l - ys_l) xs
+
         heads <- unify scope (TyApps (TyCon v) xs_a) f
         tails <- traverse (uncurry (unify scope)) (zip xs_b ys)
         pure (foldl AppCo heads tails)
@@ -674,7 +686,6 @@ unify scope ta@(TyApps (TyCon v) xs@(_:_)) b = do
 unify scope a tb@(TyApps (TyCon _) (_:_)) = rethrow a tb $ SymCo <$> unify scope tb a
 
 unify scope (TyApp f x) (TyApp g y) = AppCo <$> unify scope f g <*> unify scope x y
-
 
 unify _ TyType TyType = pure (ReflCo TyType)
 unify _ a b = confesses =<< unequal a b -- }}}
