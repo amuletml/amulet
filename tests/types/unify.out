@@ -1,0 +1,7 @@
+sum : Infer{'a : type}. Infer{'b : type}. ('b -> type) -> 'a -> 'b -> type
+L1 : Spec{'f : 'b -> type}. Spec{'g : 'a}. Spec{'a : 'b}. 'f 'a -> sum 'f 'g 'a
+k1 : Infer{'a : type}. type -> 'a -> type
+K1 : Spec{'c : type}. Spec{'a : 'a}. 'c -> k1 'c 'a
+m1 : Infer{'a : type}. ('a -> type) -> 'a -> type
+M1 : Spec{'f : 'a -> type}. Spec{'a : 'a}. 'f 'a -> m1 'f 'a
+f : Infer{'a : type}. Infer{'b : 'a}. Infer{'g : 'a}. 'a -> m1 (sum (m1 (k1 'a)) 'g) 'b
