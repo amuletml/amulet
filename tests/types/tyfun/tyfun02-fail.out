@@ -1,5 +1,7 @@
-tyfun02-fail.ml[14:10 ..14:11]: error
-  No instance for collapse 'a ~ string arising from use of the expression
+tyfun02-fail.ml[11:16 ..12:10]: error
    │ 
 14 │   | _ -> Xs
    │          ^^
+  No instance for collapse 'a ~ string arising from a use of this expression
+  • Possible fix: add it to the type signature for collapse
+

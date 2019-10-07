@@ -279,14 +279,14 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
 
   instHead <- condemn $
     checkAgainstKind (BecauseOf inst) instHead tyConstraint
-  instHead <- expandType instHead
+  oldInstHead <- expandType instHead
 
   globalInsnConTy <- silence $
     closeOver (BecauseOf inst) (TyPi (Implicit ctx) instHead)
 
   checkFundeps ctx ann fundeps instHead
 
-  (instHead, skolSub) <- skolFreeTy mempty (ByInstanceHead instHead ann) instHead
+  (instHead, skolSub) <- skolFreeTy mempty (ByInstanceHead instHead ann) oldInstHead
 
   scope <- view classes
   let overlapping = filter ((/= Superclass) . view implSort) . filter (applicable instHead scope) $
@@ -345,10 +345,10 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
       exp <- checkAgainstKind (BecauseOf bind) (foldl TyApp exp (map TyVar padding_vars)) (ret declared)
       ax <- genName
       con <- genName
-      let eq = [ ( instArgs ++ map TyVar argvs
+      let eq = [ ( instArgs ++ map (TyVar . argName) args
                  , exp
                  , con ) ]
-          TyApps _ instArgs = instHead
+          TyApps _ instArgs = oldInstHead
           info = TyFamInfo var eq (replicate (length instArgs + length args) (TgInternal (T.pack "a"))) global_t
 
       let axdef = TypeDecl Private ax [] (Just [axiom]) (ann, TyType)
@@ -479,7 +479,9 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
       whatDo = Map.toList (methodNames <> classContext)
       fields = methodFields ++ usedDefaults ++ contextFields
 
-  (solution, needed, unsolved) <- solve cs =<< getSolveInfo
+  (solution, needed, unsolved) <-
+    local (tySyms %~ extendTySyms tysyms) $
+      solve cs =<< getSolveInfo
 
   unless (null unsolved) $
     confesses (addBlame (BecauseOf inst)
@@ -732,6 +734,7 @@ validContext w a t@TyLit{} = confesses (InvalidContext w a t)
 validContext w a (TyParens t) = validContext w a t
 
 tooConcrete :: MonadInfer Typed m => Type Typed -> m Bool
+tooConcrete (TyApps t _) | t == tyEq = pure False
 tooConcrete (appsView -> (TyCon clss:xs)) = do
   x <- view (classDecs . at clss)
   case x of

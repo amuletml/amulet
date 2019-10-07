@@ -145,13 +145,13 @@ resolveClassKind stmt@(Class classcon _ ctx args _ methods _) = do
         replaceK (TyPi b t) k = TyPi b (replaceK t k)
         replaceK _ k = k
     local (names %~ focus scope) $ do
-      traverse_ (`checkKind` tyConstraint) ctx
       tys <- fmap mconcat . for methods $ \case
         AssocType v ty _ -> do
           ty <- checkKind ty TyType
           pure (one v (replaceK kind ty))
         _ -> pure mempty
-      local (names %~ focus tys) $
+      local (names %~ focus tys) $ do
+        traverse_ (`checkKind` tyConstraint) ctx
         for_ methods $ \case
           m@(MethodSig _ ty _) -> do
             put (BecauseOf m)

@@ -49,6 +49,7 @@ import Data.Foldable
 import Data.Function
 import Data.Spanned
 import Data.Reason
+import Data.Either
 import Data.Maybe
 import Data.These
 import Data.Span (internal)
@@ -285,14 +286,14 @@ doSolve (ohno@(ConImplicit reason scope var con@TyPi{}) :<| cs) = do -- {{{
 doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do -- {{{
   doSolve cs
   sub <- use solveTySubst
-  cons <- pure (apply sub cons)
   scope <- pure (apply sub scope)
+  let old = apply sub cons
+  cons <- reduceTyFuns scope (apply sub cons)
 
   traceM (displayS (pretty (apply sub ohno)))
 
   let possible = lookup cons scope
   traceM ("considering between: " ++ show (map (pretty . view implType) possible))
-  -- traceM (ppShow scope)
 
   ignored <- freshTV
 
@@ -352,7 +353,7 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do -- {{{
     _ ->
       case head (appsView cons) of
         TyCon v | Just solve <- magicClass v -> do
-          (w, cs) <- censor (const mempty) $ listen $ solve reason scope (apply sub cons)
+          (w, cs) <- censor (const mempty) $ listen $ solve reason scope old
           doSolve (Seq.fromList cs)
             `catchChronicle`
               \e -> confesses (ArisingFrom (UnsatClassCon reason (apply sub ohno) (MagicErrors (toList e))) reason)
@@ -700,10 +701,12 @@ unifyTyFunApp ti _ args tb
 #endif
 unifyTyFunApp TySymInfo{} _ _ _ = undefined
 unifyTyFunApp ti@(TyFamInfo tn _ _ _)   scope args tb@(TyApps (TyCon tn') args') | tn == tn' = do
+  traceM "XXXXXX: SOLVED BY PURITY"
   x <- memento $ foldl AppCo (ReflCo (TyCon tn)) <$> traverse (uncurry (unify scope)) (zip args args')
   case x of
     Left _ -> unifyTyFunApp' ti scope args tb
     Right x -> pure x
+unifyTyFunApp ti scope args (TyVar v) = bind scope v (TyApps (TyCon (ti ^. tsName)) args)
 unifyTyFunApp ti scope args tb = unifyTyFunApp' ti scope args tb
 
 unifyTyFunApp' info scope args tb = do
@@ -723,8 +726,9 @@ unifyTyFunApp' info scope args tb = do
               (TyApps tyEq [TyApps (TyCon (info ^. tsName)) args, tb])]
       pure (VarCo var)
 
+-- tyFunByEval ti scope args (TyVar v) = pure <$> bind scope v (TyApps (TyCon (ti ^. tsName)) args)
 tyFunByEval (TyFamInfo tn _ _ _) scope args tb | traceShow args True, Just solve <- magicTyFun tn = solve scope args tb
-tyFunByEval (TyFamInfo tn eqs _ _) scope args tb = do
+tyFunByEval (TyFamInfo tn eqs relevant _) scope args tb = do
   info <- view solveInfo
   assum <- use solveAssumptions
   case lookupEquality info scope assum (TyApps (TyCon tn) args) tb of
@@ -732,7 +736,7 @@ tyFunByEval (TyFamInfo tn eqs _ _) scope args tb = do
     _ -> go [] eqs
 
   where
-    go skipped ((declared', result', con):eqs) = do
+    go skipped ((declared', result', con):eqs) | null eqs --> all prettyConcrete (take (length relevant) args) = do
       info <- view solveInfo
       assum <- use solveAssumptions
 
@@ -744,21 +748,22 @@ tyFunByEval (TyFamInfo tn eqs _ _) scope args tb = do
 
       case x of
         Just (sub, cos) -> do
-          traceM (show (pretty (TyApps (TyCon tn) declared)))
+          traceM (show sub)
 
-          flat <- flatten assum info (TyApps (TyCon tn) (apply sub declared))
+          (flat, _) <- flatten assum info (TyApps (TyCon tn) (apply sub declared))
           traceM (show (pretty flat))
 
           if all (apart flat) skipped
 
              then do
                traceM (displayS (keyword "[D]:" <+> pretty (apply sub result) <+> "~" <+> pretty tb))
-               _ <- unify scope (apply sub result) tb
+               _ <- unify scope tb (apply sub result)
                pure (Just (InstCo con cos))
 
              else pure Nothing
 
         _ -> go (TyApps (TyCon tn) declared:skipped) eqs
+    go skipped (_:eqs) = go skipped eqs
     go _ [] = pure Nothing
 
     apart = (isNothing .) . unifyPure
@@ -769,6 +774,8 @@ tyFunByEval (TyFamInfo tn eqs _ _) scope args tb = do
       case x of
         Left _ -> pure Nothing
         Right x -> pure (pure (state ^. solveTySubst, x))
+
+    p --> q = not p || q
 
 tyFunByEval _ _ _ _ = undefined
 
@@ -1061,11 +1068,32 @@ skolemise motive wt@(TyPi (Implicit ity) t) = do
 
 skolemise _ ty = pure (IdWrap, ty, mempty, [])
 
-flatten :: forall m. MonadNamey m => Subst Typed -> SolverInfo -> Type Typed -> m (Type Typed)
-flatten assum i = go 0 where
-  go :: Int -> Type Typed -> m (Type Typed)
-  go l (TyApps (TyCon v) as@(_:_))
-    | l > 0, Just (Right _) <- i ^. at v = freshTV
+reduceTyFuns :: MonadSolve m => ImplicitScope ClassInfo Typed -> Type Typed -> m (Type Typed)
+reduceTyFuns scope orig = do
+  assum <- use solveAssumptions
+  sub <- use solveTySubst
+  info <- view solveInfo
+
+  (tau, funs) <- (_1 %~ apply sub) <$> flatten assum info orig
+  traceM ("flattened: " ++ displayS (pretty tau))
+  let eqs = Map.toList funs
+
+  (_, state) <- censor (const mempty) . capture . for eqs $ \(var, TyApps (TyCon tyfun) args) -> do
+    let Just (Right tf) = Map.lookup tyfun info
+    unifyTyFunApp' tf scope args (TyVar var)
+
+  if null eqs
+     then pure orig
+     else pure (apply (state ^. solveTySubst) tau)
+
+flatten :: forall m. MonadNamey m => Subst Typed -> SolverInfo -> Type Typed -> m (Type Typed, Subst Typed)
+flatten assum i = runWriterT . go 0 where
+  go :: Int -> Type Typed -> WriterT (Subst Typed) m (Type Typed)
+  go l tau@(TyApps (TyCon v) as@(_:_))
+    | l > 0, Just (Right _) <- i ^. at v = do
+      ~v@(TyVar key) <- freshTV
+      tell (Map.singleton key tau)
+      pure v
     | otherwise = TyApps (TyCon v) <$> traverse (go (l + 1)) as
 
   go l (TyApp f x) = TyApp <$> go (l + 1) f <*> go (l + 1) x

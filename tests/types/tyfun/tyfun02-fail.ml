@@ -8,7 +8,7 @@ type function collapse 'a begin
   collapse 'a = string
 end
 
-let collapse (x : x 'a) : x (collapse 'a) =
-  match x with
+let collapse : forall 'a. x 'a -> x (collapse 'a) =
+  function
   | Xi -> Xi
   | _ -> Xs

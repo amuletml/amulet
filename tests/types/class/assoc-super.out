@@ -1,0 +1,8 @@
+eq : type -> constraint
+=== : Spec{'a : type}. eq 'a => 'a -> 'a -> bool
+collection : type -> constraint
+elem : type -> type
+memq : Spec{'a : type}. collection 'a => elem 'a -> 'a -> bool
+insert : Spec{'a : type}. collection 'a => elem 'a -> 'a -> 'a
+empty : Spec{'a : type}. collection 'a => 'a
+foo : list int
