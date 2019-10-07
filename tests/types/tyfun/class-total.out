@@ -1,0 +1,5 @@
+class-total.ml[6:3 ..6:27]: error
+  │ 
+6 │   type loop_t = list loop_t
+  │   ^^^^^^^^^^^^^^^^^^^^^^^^^
+  Recursive call loop_t --> loop_t might not terminate

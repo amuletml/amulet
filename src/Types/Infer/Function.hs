@@ -2,6 +2,7 @@
 module Types.Infer.Function
   ( checkValidTypeFunction
   , makeTypeFunctionHIT
+  , checkTypeFunTotality
   )
   where
 
@@ -16,8 +17,7 @@ import Data.Foldable
 import Data.Maybe
 
 import Types.Infer.Builtin (checkWildcard)
-import Types.Infer.Class
-import Types.Unify (unifyPure)
+import Types.Unify (unifyPure, skolFreeTy)
 
 import Syntax.Toplevel
 import Syntax.Builtin
@@ -64,7 +64,7 @@ familyFree what tau = do
     Just t -> confesses (TyFunInLhs what t)
     _ -> pure ()
 
-terminates :: MonadInfer Typed m => [TyFunClause Typed] -> m ()
+terminates, checkTypeFunTotality :: MonadInfer Typed m => [TyFunClause Typed] -> m ()
 terminates = traverse_ go where
   go clause@(TyFunClause lhs rhs _) =
     let TyApps (TyCon con) argv = lhs
@@ -74,6 +74,8 @@ terminates = traverse_ go where
        (call:_) ->
          unless (all (any (uncurry (~<)) . zip argv) argvs) $
            dictates (MightNotTerminate clause lhs (TyApps (TyCon con) call))
+
+checkTypeFunTotality = terminates
 
 (~<) :: Type Typed -> Type Typed -> Bool
 a ~< TyVar b = b `Set.member` ftv a && a /= TyVar b

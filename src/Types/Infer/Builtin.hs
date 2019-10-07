@@ -257,3 +257,4 @@ expandTypeWith _ TyType = TyType
 
 expandType :: MonadReader Env m => Type Typed -> m (Type Typed)
 expandType t = expandTypeWith <$> view tySyms <*> pure t
+

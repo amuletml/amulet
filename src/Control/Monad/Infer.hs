@@ -110,6 +110,8 @@ data TypeError where
   Note :: (Pretty x, Typeable x) => TypeError -> x -> TypeError
   Suggestion :: Pretty x => TypeError -> x -> TypeError
 
+  WarningError :: TypeError -> TypeError
+
   CanNotInstance :: Pretty (Var p)
                  => Type p {- record type -}
                  -> Type p {- instance -}
@@ -131,6 +133,7 @@ data TypeError where
   UndefinedTyFam :: Var Typed -> Type Typed -> Span -> TypeError
   InvalidContext :: String -> Span -> Type Desugared -> TypeError
   MagicInstance :: Var Typed -> SomeReason -> TypeError
+  NotAClass :: Var Typed -> TypeError
 
   CanNotVta :: Type Typed -> Type Desugared -> TypeError
 
@@ -144,6 +147,7 @@ data TypeError where
 
   MightNotTerminate :: TyFunClause Typed -> Type Typed -> Type Typed -> TypeError
   TyFunInLhs :: SomeReason -> Type Typed -> TypeError
+
 
 data WhatOverlaps = Overinst | Overeq Bool
 
@@ -466,6 +470,9 @@ instance Pretty TypeError where
             gname _ = undefined
             v = gname name
 
+  pretty (NotAClass name) =
+    vsep [ "Can not make an instance of" <+> pretty name <+> "because it is not a class" ]
+
   pretty (UndefinedMethods h xs _) =
     vsep [ "Missing implementation of methods in instance for" <+> displayType h
          , "Namely, there must be an implementation for at least"
@@ -515,6 +522,8 @@ instance Pretty TypeError where
   pretty (TyFunInLhs _ tau) =
     vsep [ "Type synonym application" <+> displayType tau <+> "is illegal in LHS of type function equation" ]
 
+  pretty (WarningError x) = pretty x
+
   pretty (UnsatClassCon _ (ConImplicit _ _ _ t) _) = string "No instance for" <+> pretty t
   pretty UnsatClassCon{} = undefined
 
@@ -542,6 +551,7 @@ instance Spanned TypeError where
   annotation (MagicInstance _ x) = annotation x
   annotation (MightNotTerminate x _ _) = annotation x
   annotation (TyFunInLhs x _) = annotation x
+  annotation (WarningError x) = annotation x
   annotation x = error (show (pretty x))
 
 instance Note TypeError Style where
@@ -549,6 +559,7 @@ instance Note TypeError Style where
   diagnosticKind (Overlap (Overeq True) _ _ _) = WarningMessage
   diagnosticKind DeadBranch{} = WarningMessage
   diagnosticKind MightNotTerminate{} = WarningMessage
+  diagnosticKind WarningError{} = ErrorMessage
   diagnosticKind _ = ErrorMessage
 
   formatNote f (ArisingFrom e@ArisingFrom{} _) = formatNote f e

@@ -10,7 +10,7 @@ module Types.Unify
   ( SolveState, emptyState
   , typeWithin
   , solve, solveImplies
-  , skolemise, freshSkol
+  , skolemise, freshSkol, skolFreeTy
   , unifyPure_v, unifyPure
   , applicable, getSolveInfo
   , prettyConcrete
@@ -659,7 +659,7 @@ unify scope ta@(TyApps (TyCon v) xs@(_:_)) b = do
   case x ^. at v of
     Just (Right tf) -> unifyTyFunApp tf scope xs b
     _ -> case b of
-      TyApps (TyCon v) ys | Just (Right tf) <- x ^. at v -> SymCo <$> unify scope b ta
+      TyApps (TyCon v) _ | Just (Right _) <- x ^. at v -> SymCo <$> unify scope b ta
 
       TyApps f ys | length xs == length ys -> rethrow ta b $ do
         heads <- unify scope (TyCon v) f
@@ -1078,6 +1078,12 @@ skolemise motive wt@(TyPi (Implicit ity) t) = do
   pure (WrapFn (MkWrapCont wrap "constraint lambda"), ty, scope, vs)
 
 skolemise _ ty = pure (IdWrap, ty, mempty, [])
+
+skolFreeTy :: MonadNamey m => Set.Set (Var Typed) -> SkolemMotive Typed -> Type Typed -> m (Type Typed, Subst Typed)
+skolFreeTy exclude motive ty = do
+  vs <- for (Set.toList (ftv ty Set.\\ exclude)) $ \v ->
+    (,) v <$> freshSkol motive ty v
+  pure (apply (Map.fromList vs) ty, Map.fromList vs)
 
 reduceTyFuns :: MonadSolve m => ImplicitScope ClassInfo Typed -> Type Typed -> m (Type Typed)
 reduceTyFuns scope orig = do
