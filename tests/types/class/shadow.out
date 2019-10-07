@@ -1,0 +1,5 @@
+shadow.ml[3:1 ..3:22]: error
+  │ 
+3 │ instance foo begin end
+  │ ^^^^^^^^^^^^^^^^^^^^^^
+  Can not make an instance of foo because it is not a class

@@ -5,7 +5,6 @@ module Types.Infer.Class
   , inferClass
   , inferInstance
   , reduceClassContext
-  , skolFreeTy
   , extendTySyms
   ) where
 
@@ -40,6 +39,7 @@ import Syntax.Var
 import Syntax
 
 import {-# SOURCE #-} Types.Infer
+import Types.Infer.Function
 import Types.Infer.Builtin
 import Types.Kinds
 import Types.Unify
@@ -254,7 +254,10 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
   traverse_ (checkWildcard inst) ctx
   checkWildcard inst instHead
 
-  info <- view (classDecs . at clss . non undefined)
+  info <- view (classDecs . at clss) >>= \case
+    Just t -> pure t
+    Nothing -> confesses (ArisingFrom (NotAClass clss) (BecauseOf inst))
+
   () <- case info of
     MagicInfo{} -> confesses (MagicInstance clss (BecauseOf inst))
     _ -> pure ()
@@ -350,6 +353,12 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
                  , con ) ]
           TyApps _ instArgs = oldInstHead
           info = TyFamInfo var eq (replicate (length instArgs + length args) (TgInternal (T.pack "a"))) global_t
+
+      let fake_clause = TyFunClause (TyApps (TyCon var) (instArgs ++ map (TyVar . argName) args))
+                            exp (ann, declared)
+
+      checkTypeFunTotality [fake_clause]
+        `catchChronicle` \e -> confess (WarningError <$> e)
 
       let axdef = TypeDecl Private ax [] (Just [axiom]) (ann, TyType)
           axiom = GadtCon Private con axiom_t (ann, TyType)
@@ -648,12 +657,6 @@ fun :: Var Typed -> Type Typed -> Expr Typed -> Expr Typed
 fun v t e = ExprWrapper (TypeAsc ty) (Fun (EvParam (PType (Capture v (an, t)) t (an, t))) e (an, ty)) (an, ty) where
   ty = TyArr t (getType e)
   an = annotation e
-
-skolFreeTy :: MonadNamey m => Set.Set (Var Typed) -> SkolemMotive Typed -> Type Typed -> m (Type Typed, Subst Typed)
-skolFreeTy exclude motive ty = do
-  vs <- for (Set.toList (ftv ty Set.\\ exclude)) $ \v ->
-    (v,) <$> freshSkol motive ty v
-  pure (apply (Map.fromList vs) ty, Map.fromList vs)
 
 deSkolFreeTy :: Type Typed -> Type Typed
 deSkolFreeTy = transformType go where
