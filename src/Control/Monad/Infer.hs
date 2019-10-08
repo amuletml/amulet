@@ -720,7 +720,7 @@ instance Note TypeError Style where
     where
       msg | TyCon v <- ctx, v == tyUnitName =
               indent 2 "No instance for" <+> (Right <$> displayType tau)
-                <+> "arising from this" <+> (Right <$> blameOf why)
+                <+> "arising from" <+> (Right <$> blameOf why)
           | otherwise =
               indent 2 "Could not deduce" <+> (Right <$> displayType tau)
                 <+> "from the context" <+> (Right <$> displayType ctx)

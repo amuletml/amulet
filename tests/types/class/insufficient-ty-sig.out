@@ -2,4 +2,4 @@ insufficient-ty-sig.ml[5:11 ..6:7]: error
   │ 
 6 │   (=.=)
   │    ^^^
-  No instance for eq 'a arising from this this expression
+  No instance for eq 'a arising from this expression

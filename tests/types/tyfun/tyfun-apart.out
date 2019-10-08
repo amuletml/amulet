@@ -2,4 +2,4 @@ tyfun-apart.ml[13:10 ..13:80]: error
    │ 
 13 │ let no : forall 'a 'b. trivial :- (discrim 'a 'b ~ string) = Sub (fun _ -> Dict)
    │                                                                            ^^^^
-  No instance for discrim 'a 'b ~ string arising from this this expression
+  No instance for discrim 'a 'b ~ string arising from this expression
