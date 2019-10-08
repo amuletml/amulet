@@ -152,7 +152,9 @@ handleSentence success handle sentence =
 
 propVarToTv :: Type Parsed -> Type Parsed
 propVarToTv = transformType go where
+  go :: Type Parsed -> Type Parsed
   go (TyPromotedCon v) = TyVar v
+  go (TyLit v) = TyVar (Name (displayT (pretty v)))
   go x = x
 
 proveSentence :: MonadIO m
