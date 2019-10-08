@@ -1,0 +1,5 @@
+constrained02-fail.ml[12:21 ..12:33]: error
+  No instance for c2 bool arising from use of the expression
+   │ 
+12 │ let foo x = fst (x, bot : f2 bool)
+   │                     ^^^^^^^^^^^^^

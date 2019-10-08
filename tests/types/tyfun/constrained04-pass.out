@@ -1,0 +1,2 @@
+c2 : Infer{'f : type}. 'f -> constraint
+f2 : Infer{'f : type}. 'f -> type

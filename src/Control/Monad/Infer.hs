@@ -65,6 +65,7 @@ import Syntax.Types
 import Syntax.Subst
 import Syntax
 
+
 type MonadInfer p m =
   ( MonadChronicles TypeError m
   , MonadReader Env m
@@ -133,6 +134,7 @@ data TypeError where
   UndefinedTyFam :: Var Typed -> Type Typed -> Span -> TypeError
   InvalidContext :: String -> Span -> Type Desugared -> TypeError
   MagicInstance :: Var Typed -> SomeReason -> TypeError
+  TypeFamInInstHead :: Type Typed -> Type Typed -> TypeError
   NotAClass :: Var Typed -> TypeError
 
   CanNotVta :: Type Typed -> Type Desugared -> TypeError
@@ -159,11 +161,13 @@ data WhyUnsat
   | InstanceMethod (Type Typed)
   | InstanceClassCon Span
   | BadDefault (Var Desugared) (Type Typed)
-  | GivenContextNotEnough (Type Typed)
+  | forall p. (Show (Ann p), Pretty (Type p), Var p ~ Var Resolved)
+      => GivenContextNotEnough (Type p)
   | TooConcrete (Type Typed)
   | It'sQuantified
   | MagicErrors [TypeError]
-  deriving Show
+
+deriving instance Show WhyUnsat
 
 instance (Show (Ann p), Show (Var p), Ord (Var p), Substitutable p (Type p))
           => Substitutable p (Constraint p) where
@@ -473,6 +477,10 @@ instance Pretty TypeError where
   pretty (NotAClass name) =
     vsep [ "Can not make an instance of" <+> pretty name <+> "because it is not a class" ]
 
+  pretty (TypeFamInInstHead fun _) =
+    vsep [ "Illegal type family application" <+> displayType fun
+            <+> "in instance head" ]
+
   pretty (UndefinedMethods h xs _) =
     vsep [ "Missing implementation of methods in instance for" <+> displayType h
          , "Namely, there must be an implementation for at least"
@@ -552,6 +560,7 @@ instance Spanned TypeError where
   annotation (MightNotTerminate x _ _) = annotation x
   annotation (TyFunInLhs x _) = annotation x
   annotation (WarningError x) = annotation x
+  annotation (UnsatClassCon x _ _) = annotation x
   annotation x = error (show (pretty x))
 
 instance Note TypeError Style where
@@ -704,16 +713,14 @@ instance Note TypeError Style where
          , f [annotation r']
          ]
 
-  formatNote f (ArisingFrom (UnsatClassCon _ (ConImplicit why _ v tau) (GivenContextNotEnough ctx)) _) =
+  formatNote f (ArisingFrom (UnsatClassCon _ (ConImplicit why _ _ tau) (GivenContextNotEnough ctx)) _) =
     vsep [ f [annotation why]
          , msg
-         , indent 2 $ bullet "Possible fix: add it to the type signature for" <+> (Right <$> pretty v)
-         , empty
          ]
     where
       msg | TyCon v <- ctx, v == tyUnitName =
               indent 2 "No instance for" <+> (Right <$> displayType tau)
-                <+> "arising from a use of" <+> (Right <$> blameOf why)
+                <+> "arising from this" <+> (Right <$> blameOf why)
           | otherwise =
               indent 2 "Could not deduce" <+> (Right <$> displayType tau)
                 <+> "from the context" <+> (Right <$> displayType ctx)

@@ -14,6 +14,7 @@ module Types.Unify
   , unifyPure_v, unifyPure
   , applicable, getSolveInfo
   , prettyConcrete
+  , removeTypeFamApps
   ) where
 
 import Control.Monad.Except
@@ -711,8 +712,7 @@ unifyTyFunApp ti _ args tb
       False = undefined
 #endif
 unifyTyFunApp TySymInfo{} _ _ _ = undefined
-unifyTyFunApp ti@(TyFamInfo tn _ _ _)   scope args tb@(TyApps (TyCon tn') args') | tn == tn' = do
-  traceM "XXXXXX: SOLVED BY PURITY"
+unifyTyFunApp ti@(TyFamInfo tn _ _ _ _)   scope args tb@(TyApps (TyCon tn') args') | tn == tn' = do
   x <- memento $ foldl AppCo (ReflCo (TyCon tn)) <$> traverse (uncurry (unify scope)) (zip args args')
   case x of
     Left _ -> unifyTyFunApp' ti scope args tb
@@ -738,10 +738,18 @@ unifyTyFunApp' info scope args tb = do
       pure (VarCo var)
 
 -- tyFunByEval ti scope args (TyVar v) = pure <$> bind scope v (TyApps (TyCon (ti ^. tsName)) args)
-tyFunByEval (TyFamInfo tn _ _ _) scope args tb | traceShow args True, Just solve <- magicTyFun tn = solve scope args tb
-tyFunByEval (TyFamInfo tn eqs relevant _) scope args tb = do
+tyFunByEval (TyFamInfo tn _ _ _ _) scope args tb | traceShow args True, Just solve <- magicTyFun tn = solve scope args tb
+tyFunByEval (TyFamInfo tn eqs relevant _ con) scope args tb = do
   info <- view solveInfo
   assum <- use solveAssumptions
+  () <- case con of
+    Just tau -> do
+      let Just sub = unifyPure_v (zip decl_args args)
+          TyApps _ decl_args = tau
+      var <- genName
+      tell [ConImplicit (It'sThis BecauseInternal) scope var (apply sub tau)]
+    Nothing -> pure ()
+
   case lookupEquality info scope assum (TyApps (TyCon tn) args) tb of
     (x:_) -> pure (Just x)
     _ -> go [] eqs
@@ -1102,6 +1110,11 @@ reduceTyFuns scope orig = do
   if null eqs
      then pure orig
      else pure (apply (state ^. solveTySubst) tau)
+
+removeTypeFamApps :: (MonadReader Env m, MonadNamey m) => Type Typed -> m (Type Typed, Subst Typed)
+removeTypeFamApps tau = do
+  x <- getSolveInfo
+  flatten mempty x tau
 
 flatten :: forall m. MonadNamey m => Subst Typed -> SolverInfo -> Type Typed -> m (Type Typed, Subst Typed)
 flatten assum i = runWriterT . go 0 where

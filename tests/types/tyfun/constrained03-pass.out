@@ -1,0 +1,4 @@
+c2 : Infer{'h : type}. 'h -> constraint
+f2 : Infer{'h : type}. 'h -> type
+c3 : type -> constraint
+foo : Spec{'a : type}. c3 'a => 'a -> f2 'a

@@ -11,9 +11,9 @@ z : type
 stop : type
 more : type
 combine : Infer{'ex : type}. Infer{'ey : type}. Infer{'ez : type}. 'ez -> 'ey -> 'ex -> constraint
-eval1 : Infer{'mt : type}. Infer{'mu : type}. Infer{'mv : type}. 'mv -> 'mu -> 'mt -> constraint
-evalaux : Infer{'chj : type}. Infer{'chk : type}. Infer{'chl : type}. 'chl -> 'chk -> 'chj -> constraint
-eval : Infer{'cpm : type}. Infer{'cpn : type}. 'cpn -> 'cpm -> constraint
+eval1 : Infer{'nc : type}. Infer{'nd : type}. Infer{'ne : type}. 'ne -> 'nd -> 'nc -> constraint
+evalaux : Infer{'cir : type}. Infer{'cis : type}. Infer{'cit : type}. 'cit -> 'cis -> 'cir -> constraint
+eval : Infer{'cqz : type}. Infer{'cra : type}. 'cra -> 'cqz -> constraint
 eval : Spec{'x : type}. Spec{'y : type}. eval 'x 'y => 'x -> 'y
 bot : Spec{'a : type}. 'a
 kk0 : type

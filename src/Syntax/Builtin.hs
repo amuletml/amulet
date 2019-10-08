@@ -273,6 +273,7 @@ builtins =
                                              , T._tsEquations = []
                                              , T._tsArgs = [a]
                                              , T._tsKind = a *. tyErrMsg ~> TyVar a
+                                             , T._tsConstraint = Nothing
                                              }) ]
   }
 

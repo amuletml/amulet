@@ -1,0 +1,13 @@
+constrained04.ml[10:3 ..10:17]: error
+  Could not deduce c2 'a from the context
+    unit
+
+  • Note: this constraint can not be quantified over
+    because it originated from a method in an instance.
+
+  • Possible fix: add it to the instance context
+
+  Arising in the the associated type definition
+   │ 
+10 │   type f2 = f2 'a
+   │   ^^^^^^^^^^^^^^^

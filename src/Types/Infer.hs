@@ -469,6 +469,7 @@ inferProg (decl@(TypeFunDecl am tau arguments kindsig equations ann):prg) = do
                   , _tsEquations = zipWith make_eq equations cons
                   , _tsArgs = map arg_name arguments
                   , _tsKind = kind
+                  , _tsConstraint = Nothing
                   }
       fakeDecl = TypeDecl am tau arguments (Just cons) (ann, kind)
       make_eq (TyFunClause (TyApps _ lhs) rhs _) (GadtCon _ v _ _) = (lhs, rhs, v)
