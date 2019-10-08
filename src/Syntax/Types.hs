@@ -8,7 +8,7 @@ module Syntax.Types
   , names, typeVars, constructors, types, letBound, classes, modules
   , classDecs, tySyms
   , ClassInfo(..), ciName, ciMethods, ciContext, ciConstructorName, ciAssocTs
-  , TySymInfo(..), tsName, tsArgs, tsExpansion, tsKind, TySyms, tsEquations
+  , TySymInfo(..), tsName, tsArgs, tsExpansion, tsKind, TySyms, tsEquations, tsConstraint
   , ciConstructorTy, ciHead, ciClassSpan, ciDefaults, ciMinimal, ciFundep
   , Origin(..)
 
@@ -105,6 +105,7 @@ data TySymInfo
         -- ^ The arguments to this type family, in order
       , _tsKind       :: Type Typed
         -- ^ The return kind of this type family
+      , _tsConstraint :: Maybe (Type Typed)
       }
   deriving (Eq, Show, Ord)
 

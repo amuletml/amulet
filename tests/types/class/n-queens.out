@@ -2,41 +2,41 @@ nil : Spec{'a : type}. 'a
 nil : type
 cons : Infer{'a : type}. Infer{'b : type}. 'b -> 'a -> type
 first : Infer{'jc : type}. Infer{'jd : type}. 'jd -> 'jc -> constraint
-list_cat : Infer{'nt : type}. Infer{'nu : type}. Infer{'nv : type}. 'nv -> 'nu -> 'nt -> constraint
-cat_all : Infer{'wb : type}. Infer{'wc : type}. 'wc -> 'wb -> constraint
+list_cat : Infer{'ny : type}. Infer{'nz : type}. Infer{'oa : type}. 'oa -> 'nz -> 'ny -> constraint
+cat_all : Infer{'wl : type}. Infer{'wm : type}. 'wm -> 'wl -> constraint
 t : type
 f : type
-not : Infer{'adk : type}. Infer{'adl : type}. 'adl -> 'adk -> constraint
-or : Infer{'agz : type}. Infer{'aha : type}. Infer{'ahb : type}. 'ahb -> 'aha -> 'agz -> constraint
-any_t : Infer{'aov : type}. Infer{'aow : type}. 'aow -> 'aov -> constraint
+not : Infer{'adz : type}. Infer{'aea : type}. 'aea -> 'adz -> constraint
+or : Infer{'aht : type}. Infer{'ahu : type}. Infer{'ahv : type}. 'ahv -> 'ahu -> 'aht -> constraint
+any_t : Infer{'apy : type}. Infer{'apz : type}. 'apz -> 'apy -> constraint
 nat : type
 Z : nat
 S : nat -> nat
-peq : Infer{'awx : type}. Infer{'awy : type}. Infer{'awz : type}. 'awz -> 'awy -> 'awx -> constraint
-plt : Infer{'bhv : type}. Infer{'bhw : type}. Infer{'bhx : type}. 'bhx -> 'bhw -> 'bhv -> constraint
-absdiff : Infer{'bst : type}. Infer{'bsu : type}. Infer{'bsv : type}. 'bsv -> 'bsu -> 'bst -> constraint
-range : Infer{'ceh : type}. Infer{'cei : type}. 'cei -> 'ceh -> constraint
-apply : Infer{'ckd : type}. Infer{'cke : type}. Infer{'ckf : type}. 'ckf -> 'cke -> 'ckd -> constraint
-conj1 : Infer{'cln : type}. 'cln -> constraint
-map : Infer{'cpi : type}. Infer{'cpj : type}. Infer{'cpk : type}. 'cpk -> 'cpj -> 'cpi -> constraint
-mapcat : Infer{'dab : type}. Infer{'dac : type}. Infer{'dad : type}. 'dad -> 'dac -> 'dab -> constraint
-appendif : Infer{'dij : type}. Infer{'dik : type}. Infer{'dil : type}. Infer{'dim : type}. 'dim -> 'dil -> 'dik -> 'dij -> constraint
-filter : Infer{'dpo : type}. Infer{'dpp : type}. Infer{'dpq : type}. 'dpq -> 'dpp -> 'dpo -> constraint
+peq : Infer{'ayh : type}. Infer{'ayi : type}. Infer{'ayj : type}. 'ayj -> 'ayi -> 'ayh -> constraint
+plt : Infer{'bjo : type}. Infer{'bjp : type}. Infer{'bjq : type}. 'bjq -> 'bjp -> 'bjo -> constraint
+absdiff : Infer{'buv : type}. Infer{'buw : type}. Infer{'bux : type}. 'bux -> 'buw -> 'buv -> constraint
+range : Infer{'cgs : type}. Infer{'cgt : type}. 'cgt -> 'cgs -> constraint
+apply : Infer{'cmt : type}. Infer{'cmu : type}. Infer{'cmv : type}. 'cmv -> 'cmu -> 'cmt -> constraint
+conj1 : Infer{'coe : type}. 'coe -> constraint
+map : Infer{'csc : type}. Infer{'csd : type}. Infer{'cse : type}. 'cse -> 'csd -> 'csc -> constraint
+mapcat : Infer{'dca : type}. Infer{'dcb : type}. Infer{'dcc : type}. 'dcc -> 'dcb -> 'dca -> constraint
+appendif : Infer{'dln : type}. Infer{'dlo : type}. Infer{'dlp : type}. Infer{'dlq : type}. 'dlq -> 'dlp -> 'dlo -> 'dln -> constraint
+filter : Infer{'dsx : type}. Infer{'dsy : type}. Infer{'dsz : type}. 'dsz -> 'dsy -> 'dsx -> constraint
 queen : Infer{'a : type}. Infer{'b : type}. 'b -> 'a -> type
 queen1 : Infer{'a : type}. 'a -> type
-queens_in : Infer{'eei : type}. Infer{'eej : type}. Infer{'eek : type}. 'eek -> 'eej -> 'eei -> constraint
-threatens : Infer{'ekp : type}. Infer{'ekq : type}. Infer{'ekr : type}. 'ekr -> 'ekq -> 'ekp -> constraint
+queens_in : Infer{'ehy : type}. Infer{'ehz : type}. Infer{'eia : type}. 'eia -> 'ehz -> 'ehy -> constraint
+threatens : Infer{'eoi : type}. Infer{'eoj : type}. Infer{'eok : type}. 'eok -> 'eoj -> 'eoi -> constraint
 threatens1 : Infer{'a : type}. 'a -> type
-safe : Infer{'feg : type}. Infer{'feh : type}. Infer{'fei : type}. 'fei -> 'feh -> 'feg -> constraint
+safe : Infer{'fie : type}. Infer{'fif : type}. Infer{'fig : type}. 'fig -> 'fif -> 'fie -> constraint
 safe1 : Infer{'a : type}. 'a -> type
-addqueen : Infer{'fps : type}. Infer{'fpt : type}. Infer{'fpu : type}. Infer{'fpv : type}. 'fpv -> 'fpu -> 'fpt -> 'fps -> constraint
-addqueen2 : Infer{'gab : type}. Infer{'gac : type}. 'gac -> 'gab -> type
-addq_all : Infer{'geh : type}. Infer{'gei : type}. Infer{'gej : type}. Infer{'gek : type}. 'gek -> 'gej -> 'gei -> 'geh -> constraint
-addqueens : Infer{'gga : type}. Infer{'ggb : type}. Infer{'ggc : type}. Infer{'ggd : type}. 'ggd -> 'ggc -> 'ggb -> 'gga -> constraint
-addq_if : Infer{'ght : type}. Infer{'ghu : type}. Infer{'ghv : type}. Infer{'ghw : type}. Infer{'ghx : type}. 'ghx -> 'ghw -> 'ghv -> 'ghu -> 'ght -> constraint
+addqueen : Infer{'ftv : type}. Infer{'ftw : type}. Infer{'ftx : type}. Infer{'fty : type}. 'fty -> 'ftx -> 'ftw -> 'ftv -> constraint
+addqueen2 : Infer{'a : type}. Infer{'b : type}. 'b -> 'a -> type
+addq_all : Infer{'gip : type}. Infer{'giq : type}. Infer{'gir : type}. Infer{'gis : type}. 'gis -> 'gir -> 'giq -> 'gip -> constraint
+addqueens : Infer{'gkj : type}. Infer{'gkk : type}. Infer{'gkl : type}. Infer{'gkm : type}. 'gkm -> 'gkl -> 'gkk -> 'gkj -> constraint
+addq_if : Infer{'gmd : type}. Infer{'gme : type}. Infer{'gmf : type}. Infer{'gmg : type}. Infer{'gmh : type}. 'gmh -> 'gmg -> 'gmf -> 'gme -> 'gmd -> constraint
 snat : nat -> type
-SZ : Infer{'hft : type}. Spec{'n : 'hft}. ('n ~ Z) ⊃ snat 'n
-SS : Infer{'hgq : type}. Spec{'n : 'hgq}. Spec{'n : nat}. ('n ~ S 'n) ⊃ snat 'n -> snat 'n
+SZ : Infer{'hkm : type}. Spec{'n : 'hkm}. ('n ~ Z) ⊃ snat 'n
+SS : Infer{'hlj : type}. Spec{'n : 'hlj}. Spec{'n : nat}. ('n ~ S 'n) ⊃ snat 'n -> snat 'n
 solution : nat -> type -> constraint
 solution : Spec{'n : nat}. Spec{'c : type}. solution 'n 'c => snat 'n -> 'c
 x : cons (queen (S (S (S Z))) (S Z)) (cons (queen (S (S Z)) (S (S (S Z)))) (cons (queen (S Z) Z) (cons (queen Z (S (S Z))) nil)))

@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts, TupleSections, ScopedTypeVariables,
+{-# LANGUAGE FlexibleContexts, ScopedTypeVariables,
    ViewPatterns, LambdaCase, TypeFamilies #-}
 module Types.Infer.Class
   ( WrapFlavour(..)
@@ -24,6 +24,7 @@ import Data.List (sortOn, partition)
 import Data.Char
 
 import Control.Monad.State
+import Control.Applicative
 import Control.Monad.Infer
 import Control.Arrow (second)
 import Control.Lens
@@ -32,6 +33,7 @@ import Syntax.Implicits
 import Syntax.Transform
 import Syntax.Builtin
 import Syntax.Boolean
+import Syntax.Raise
 import Syntax.Subst
 import Syntax.Types
 import Syntax.Let
@@ -48,9 +50,9 @@ import GHC.Stack
 
 extendTySyms :: Foldable t => t TySymInfo -> Map.Map VarResolved TySymInfo -> Map.Map VarResolved TySymInfo
 extendTySyms syms empty = foldr extend empty syms where
-  extend info@(TyFamInfo name eqs args kind) = Map.alter go name where
+  extend info@(TyFamInfo name eqs args kind con) = Map.alter go name where
     go Nothing = Just info
-    go (Just (TyFamInfo _ eqs' _ _)) = Just (TyFamInfo name (eqs ++ eqs') args kind)
+    go (Just (TyFamInfo _ eqs' _ _ con')) = Just (TyFamInfo name (eqs ++ eqs') args kind (con <|> con'))
     go (Just TySymInfo{}) = error "Impossible inferInstance extend TySymInfo"
   extend TySymInfo{} = error "Impossible inferInstance extend TySymInfo"
 
@@ -70,14 +72,16 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
           (T.tail (nameName name))
   classCon <- genNameFrom classCon'
 
-  (k, params) <- resolveClassKind clss
+  ((k, params), cs) <- listen $ resolveClassKind clss
+
   let classConstraint = foldl TyApp (TyCon name) (map toVar params)
-      scope (TyAnnArg v k:cs) = one v k <> scope cs
-      scope (_:cs) = scope cs
-      scope [] = mempty
+      mk_scope (TyAnnArg v k:cs) = one v k <> mk_scope cs
+      mk_scope (_:cs) = mk_scope cs
+      mk_scope [] = mempty
 
       (declarations, defaults) = partition (\case { MethodSig{} -> True; DefaultMethod{} -> False; AssocType{} -> True }) methods
       (signatures, assoctys) = partition (\case { MethodSig{} -> True; AssocType{} -> False; _ -> undefined }) declarations
+
 
   let forallVars = getForallVars k
       getForallVars (TyForall v _ t) = Set.singleton v <> getForallVars t
@@ -97,6 +101,13 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
         | otherwise = addForallVars t ty
       addForallVars _ ty = ty
 
+      getContext Nothing = []
+      getContext (Just t) = unwind t
+
+      unwind (TyTuple a b) = a:unwind b
+      unwind t = pure t
+
+
   (assocts, assocty_tele, assoct_defs) <- fmap unzip3 . for assoctys $ \meth@(AssocType method ty ann) -> do
     let replaceK by (TyPi b t) = TyPi b $ replaceK by t
         replaceK by _ = by
@@ -110,7 +121,25 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
          , TypeDecl Private method [] (Just []) (ann, ty)
          )
 
-  local (names %~ focus (one name k <> scope params <> mconcat assocty_tele)) $ do
+  ctx <- local (names %~ focus (mconcat assocty_tele <> one name k)) . for ctx $ \x -> do
+    () <- validContext "class" classAnn x
+    checkAgainstKind (BecauseOf clss) x tyConstraint
+
+  (fold -> scope, rows') <- local (names %~ focus (one name k <> mconcat assocty_tele)) . fmap unzip . for (getContext ctx) $
+    \obligation -> do
+      impty <-
+        closeOver' vars (BecauseOf clss) $
+          TyPi (Implicit classConstraint) obligation
+      ~var@(TgName name _) <- genNameWith (classCon' <> T.singleton '$')
+      pure ( singleton classAnn Superclass var impty (MagicInfo [])
+           , (Implicit, var, name, obligation))
+
+  (_, _, cs) <- solve (fmap (moreScope scope) cs) =<< getSolveInfo
+  unless (null cs) $
+    confesses (UnsatClassCon (BecauseOf clss) (head cs)
+                (GivenContextNotEnough (fromMaybe (TyCon tyUnitName) ctx)))
+
+  local (names %~ focus (one name k <> mk_scope params <> mconcat assocty_tele)) $ do
     -- Infer the types for every method
     (decls, rows) <- fmap unzip . for signatures $ \meth@(MethodSig method ty _) -> do
       checkWildcard meth ty
@@ -132,24 +161,6 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
 
     let tele = one name k <> teleFromList decls
 
-        unwind (TyTuple a b) = a:unwind b
-        unwind t = pure t
-
-        getContext Nothing = []
-        getContext (Just t) = unwind t
-
-    ctx <- for ctx $ \x -> do
-      () <- validContext "class" classAnn x
-      checkAgainstKind (BecauseOf clss) x tyConstraint
-
-    (fold -> scope, rows') <- fmap unzip . for (getContext ctx) $
-      \obligation -> do
-        impty <- silence $
-          closeOver' vars (BecauseOf clss) $
-            TyPi (Implicit classConstraint) obligation
-        ~var@(TgName name _) <- genNameWith (classCon' <> T.singleton '$')
-        pure ( singleton classAnn Superclass var impty (MagicInfo [])
-             , (Implicit, var, name, obligation))
 
     (fold -> defaultMap) <-
       local (classes %~ mappend scope)
@@ -284,6 +295,10 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
     checkAgainstKind (BecauseOf inst) instHead tyConstraint
   oldInstHead <- expandType instHead
 
+  (_, x) <- removeTypeFamApps oldInstHead
+  unless (Map.null x) $
+    confesses (ArisingFrom (TypeFamInInstHead (snd (head (Map.toList x))) instHead) (BecauseOf inst))
+
   globalInsnConTy <- silence $
     closeOver (BecauseOf inst) (TyPi (Implicit ctx) instHead)
 
@@ -325,6 +340,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
       method TypeImpl{} = False
 
   let TyApps _ classArgs = classHead
+
   (tysyms, axioms) <- fmap unzip . for (filter (not . method) bindings) $ \bind@(TypeImpl var args exp ann) -> do
     let as (TyPi (Anon b) r) = b:as r
         as (TyPi _ r) = as r
@@ -344,21 +360,35 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
     let argts = zip argvs (as declared)
         argvs = map argName args ++ padding_vars
 
-    local (names %~ focus (teleFromList argts)) $ do
-      exp <- checkAgainstKind (BecauseOf bind) (foldl TyApp exp (map TyVar padding_vars)) (ret declared)
+    local (names %~ focus (teleFromList argts)) . local (classes %~ mappend localAssums) $ do
+      (exp, cs) <- listen $
+        checkAgainstKind (BecauseOf bind) (foldl TyApp (apply (fmap unlift skolSub) exp) (map TyVar padding_vars)) (ret declared)
+
+
+      let fake_clause = TyFunClause (apply skolSub (TyApps (TyCon var) (instArgs ++ map (TyVar . argName) args)))
+                            exp (ann, declared)
+          TyApps _ instArgs = oldInstHead
+
+      checkTypeFunTotality [fake_clause]
+        `catchChronicle` \e -> confess (WarningError <$> e)
+
+      exp <- pure (deSkolFreeTy exp)
+
+      unless (Seq.null cs) $
+        confesses (addBlame (BecauseOf bind) (UnsatClassCon (BecauseOf bind) (cs `Seq.index` 0) (InstanceMethod ctx)))
+
       ax <- genName
       con <- genName
       let eq = [ ( instArgs ++ map (TyVar . argName) args
                  , exp
                  , con ) ]
-          TyApps _ instArgs = oldInstHead
-          info = TyFamInfo var eq (replicate (length instArgs + length args) (TgInternal (T.pack "a"))) global_t
 
-      let fake_clause = TyFunClause (TyApps (TyCon var) (instArgs ++ map (TyVar . argName) args))
-                            exp (ann, declared)
-
-      checkTypeFunTotality [fake_clause]
-        `catchChronicle` \e -> confess (WarningError <$> e)
+          info = TyFamInfo { _tsName = var
+                           , _tsEquations = eq
+                           , _tsArgs = replicate (length instArgs + length args) (TgInternal (T.pack "a"))
+                           , _tsKind = global_t
+                           , _tsConstraint = Just classHead
+                           }
 
       let axdef = TypeDecl Private ax [] (Just [axiom]) (ann, TyType)
           axiom = GadtCon Private con axiom_t (ann, TyType)
@@ -882,3 +912,10 @@ fixHeadVars :: forall m. MonadInfer Typed m => Map.Map (Var Resolved) (Type Type
 fixHeadVars = (() <$) .  Map.traverseWithKey fixone where
   fixone :: Var Resolved -> Type Typed -> m (Wrapper Typed)
   fixone var = unify undefined (TyVar var)
+
+unlift :: Type Typed -> Type Desugared
+unlift = raiseT id
+
+moreScope :: ImplicitScope ClassInfo Typed -> Constraint Typed -> Constraint Typed
+moreScope sc (ConImplicit r sc' v t) = ConImplicit r (sc <> sc') v t
+moreScope _ c = c

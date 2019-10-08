@@ -4,7 +4,7 @@ class07.ml[9:9 ..9:32]: error
   │         ^^^^^^^^^^^^^^^^^^^^^^^^
   Ambiguous type for value foo
 
-    show 'a * read 'a * show 'cy => 'cy -> string
+    show 'a * read 'a * show 'dc => 'dc -> string
 
   • Note: The variable a appears in a constraint,
       but not in the consequent of the type
