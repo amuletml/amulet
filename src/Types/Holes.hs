@@ -67,8 +67,6 @@ fill t@TyPi{} | isSkolemisable t = fake [t] $ \[a] -> do
   (_, t, _, _) <- skolemise (ByAscription (annotation a) t) t
   fill t
 
--- Let's get the impossible cases over with first:
-fill TyLit{} = fail "findHoleCandidate: Kind error (TyLit)"
 -- fill TyPromotedCon{} = fail "findHoleCandidate: Kind error (TyPromotedCon)"
 fill TyType{} = fail "findHoleCandidate: Kind error (TyType)"
 -- Type variables are complicated, so we only deal with skolemised types:
@@ -76,6 +74,7 @@ fill TyVar{} = fail "findHoleCandidate: don't know how to deal with type variabl
 
 -- Skolems are only possible if we have a variable in scope for them:
 fill t@TySkol{} = pick t
+fill t@TyLit{} = pick t
 
 -- Introduce a new variable for the domain type and fill the function
 -- body
@@ -123,6 +122,9 @@ fill t | t == tyUnit = fake [t] $ pure . Literal LiUnit . head
 fill ty@(TyApps (TyCon ty_v) _) = once (knownImplication ty) <|> do
   -- Search all constructors for the type..
   con <- explore =<< view (psEnv . types . at ty_v . non mempty . to Set.toList)
+#ifdef TRACE_TC
+  traceM (displayS (keyword "try" <+> pretty con))
+#endif
 
   (_, cty, inst_ty) <- instantiate Strong Expression =<<
     view (psEnv . names . at con . non (error "no type for bound constructor?"))
@@ -139,6 +141,9 @@ fill ty@(TyApps (TyCon ty_v) _) = once (knownImplication ty) <|> do
       traceM (displayS (keyword "introduce" <+> pretty con))
 #endif
       once $ fake [cty, ty] $ \[cann, app] ->
+#ifdef TRACE_TC
+        traceShow ty $
+#endif
         App (VarRef con cann) <$> fill (apply sub dom) <*> pure app
 
     cod -> do
