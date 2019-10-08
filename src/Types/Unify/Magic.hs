@@ -32,7 +32,7 @@ solveEq :: MonadSolve m => Solver m
 solveEq blame classes ty@(TyApps _ [a, b]) = do
   var <- genName
   tell [ ConUnify blame classes var (TyApps tyEq [a, a]) (TyApps tyEq [a, b]) ]
-  let refl = ExprWrapper (WrapVar var)
+  let refl = ExprWrapper (Cast (AssumedCo (TyApps tyEq [a, a]) (TyApps tyEq [a, b])))
                 (ExprWrapper (TypeApp a) (VarRef rEFLName (span, rEFLTy)) (span, rEFLTy' a))
                 (span, ty)
       span = annotation blame

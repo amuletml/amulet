@@ -71,6 +71,10 @@ import qualified Debug.Trace as Dbg
 
 #endif
 
+-- Number of inversions/type family reductions allowed to be done per
+-- constraint
+#define SOLVER_FUEL 20
+
 type SolverInfo = Map.Map (Var Typed) (Either ClassInfo TySymInfo)
 
 data SolveScope
@@ -85,11 +89,12 @@ data SolveState
   = SolveState { _solveTySubst :: Subst Typed
                , _solveAssumptions :: Subst Typed
                , _solveCoSubst :: Map.Map (Var Typed) (Wrapper Typed)
+               , _solveFuel :: Int
                }
   deriving (Eq, Show)
 
 emptyState :: SolveState
-emptyState = SolveState mempty mempty mempty
+emptyState = SolveState mempty mempty mempty SOLVER_FUEL
 
 makeLenses ''SolveState
 makeLenses ''SolveScope
@@ -177,7 +182,10 @@ doSolve (ConUnify because scope v a b :<| xs) = do
 
   traceM (displayS (keyword "[W]:" <+> pretty (ConUnify because scope v (apply sub a) (apply sub b))))
 
+  solveFuel .= SOLVER_FUEL
+
   co <- censor (reblame_con because) $ memento $ unify scope (apply sub a) (apply sub b)
+
   case co of
     Left e -> do
       dictate (reblame because <$> e)
@@ -192,7 +200,10 @@ doSolve (ConSubsume because scope v a b :<| xs) = do
   traceM (displayS (pretty (ConSubsume because scope v (apply sub a) (apply sub b))))
   let a' = apply sub a
   sub <- use solveTySubst
+
+  solveFuel .= SOLVER_FUEL
   co <- censor (reblame_con because) $ memento $ subsumes because scope a' (apply sub b)
+
   case co of
     Left e -> do
       dictate e
@@ -656,18 +667,24 @@ unify scope (TyOperator l v r) (TyOperator l' v' r')
 
 unify scope ta@(TyApps (TyCon v) xs@(_:_)) b = do
   x <- view solveInfo
+
   traceM (show (x ^. at v))
+
   case x ^. at v of
     Just (Right tf) -> unifyTyFunApp tf scope xs b
     _ -> case b of
-      TyApps (TyCon v) _ | Just (Right _) <- x ^. at v -> SymCo <$> unify scope b ta
+      TyApps (TyCon v') _
+        | Just (Right _) <- x ^. at v' -> do
+          doWork (unequal ta b)
+          SymCo <$> unify scope b ta
+        | v /= v' -> confesses =<< unequal ta b
 
-      TyApps f ys | length xs == length ys -> rethrow ta b $ do
+      TyApps f ys@(_:_) | length xs == length ys -> rethrow ta b $ do
         heads <- unify scope (TyCon v) f
         tails <- traverse (uncurry (unify scope)) (zip xs ys)
         pure (foldl AppCo heads tails)
 
-      TyApps f ys | length ys < length xs -> rethrow ta b $ do
+      TyApps f ys@(_:_) | length ys < length xs -> rethrow ta b $ do
         case f of
           TyCon{} -> confesses =<< unequal ta b
           _ -> pure ()
@@ -680,7 +697,8 @@ unify scope ta@(TyApps (TyCon v) xs@(_:_)) b = do
         heads <- unify scope (TyApps (TyCon v) xs_a) f
         tails <- traverse (uncurry (unify scope)) (zip xs_b ys)
         pure (foldl AppCo heads tails)
-      _ ->
+
+      _ -> 
         (confesses =<< unequal ta b)
           `catchChronicle` \_ -> fmap SymCo (unify scope b ta)
 
@@ -740,6 +758,7 @@ unifyTyFunApp' info scope args tb = do
 -- tyFunByEval ti scope args (TyVar v) = pure <$> bind scope v (TyApps (TyCon (ti ^. tsName)) args)
 tyFunByEval (TyFamInfo tn _ _ _ _) scope args tb | traceShow args True, Just solve <- magicTyFun tn = solve scope args tb
 tyFunByEval (TyFamInfo tn eqs relevant _ con) scope args tb = do
+  doWork (unequal (TyApps (TyCon tn) args) tb)
   info <- view solveInfo
   assum <- use solveAssumptions
   () <- case con of
@@ -1344,6 +1363,13 @@ reblame_con r = map go where
   go (ConImplicit _ a b c) = ConImplicit r a b c
   go x@ConFail{} = x
   go x@DeferredError{} = x
+
+doWork :: (MonadState SolveState m, MonadChronicles TypeError m) => m TypeError -> m ()
+doWork e = do
+  x <- use solveFuel
+  solveFuel .= (x - 1)
+  unless (x >= 0) $
+    confesses =<< e
 
 newtype InField = InField Text
   deriving Show
