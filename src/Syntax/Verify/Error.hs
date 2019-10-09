@@ -62,10 +62,14 @@ data VerifyError
   -- | This case is missing several patterns
   | MissingPattern (Expr Typed) [ValueAbs Typed]
 
-  -- | This match expression can be rewritten as a `let`.
+  -- | This match expression can be rewritten as a @let@.
   | MatchToLet (Pattern Typed) (Expr Typed)
-  -- | This function expression can be rewritten as a `fun`.
+  -- | This function expression can be rewritten as a @fun@.
   | MatchToFun (Pattern Typed) (Expr Typed)
+
+  -- | Top-level @ref α@ binding
+  | ToplevelRefBinding BindingSite
+
 
 instance Spanned VerifyError where
   annotation (NonRecursiveRhs e _ _) = annotation e
@@ -76,6 +80,7 @@ instance Spanned VerifyError where
   annotation (MissingPattern e _) = annotation e
   annotation (MatchToLet _ e) = annotation e
   annotation (MatchToFun _ e) = annotation e
+  annotation (ToplevelRefBinding (BindingSite _ s _)) = annotation s
 
 instance Pretty VerifyError where
   pretty (NonRecursiveRhs re ex xs) =
@@ -116,6 +121,12 @@ instance Pretty VerifyError where
          , note <+> "Replace with" <+> keyword "fun" <+> pretty a <+> arrow <+> "…"
          ]
 
+  pretty (ToplevelRefBinding (BindingSite _ _ t)) =
+    vsep [ "This top-level binding defines a reference"
+            <+> parens ("of type" <+> pretty t)
+         , note <+> "This is bad style."
+         ]
+
 
 instance Note VerifyError Style where
   diagnosticKind NonRecursiveRhs{} = ErrorMessage
@@ -126,6 +137,7 @@ instance Note VerifyError Style where
   diagnosticKind MissingPattern{} = WarningMessage
   diagnosticKind MatchToLet{} = NoteMessage
   diagnosticKind MatchToFun{} = NoteMessage
+  diagnosticKind ToplevelRefBinding{} = WarningMessage
 
   formatNote f (ParseErrorInForeign (ForeignVal _ var s _ (span, _)) err) =
     let SourcePos name _ _ = spanStart (annotation err)

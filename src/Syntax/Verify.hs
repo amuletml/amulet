@@ -24,7 +24,7 @@ import Text.Pretty.Semantic
 import Syntax.Verify.Pattern
 import Syntax.Verify.Error
 
-import Syntax.Builtin (tyLazy, forceName)
+import Syntax.Builtin (tyLazy, forceName, tyRefName)
 import Syntax.Types
 import Syntax.Let
 import Syntax
@@ -55,10 +55,15 @@ verifyProgram :: forall m. MonadVerify m => [Toplevel Typed] -> m ()
 verifyProgram = traverse_ verifyStmt where
   verifyStmt :: Toplevel Typed -> m ()
   verifyStmt st@(LetStmt am vs) = verifyBindingGroup addBind (BecauseOf st) vs where
-    addBind :: BindingSite -> Set.Set BindingSite -> Set.Set BindingSite
-    addBind = case am of
-      Private -> Set.insert
-      Public -> flip const
+    addBind :: BindingSite -> m ()
+    addBind b@(BindingSite _ _ tau) = do
+      when (am == Public) $
+        case tau of
+          TyApps (TyCon v) [_] | v == tyRefName -> tell (Seq.singleton (ToplevelRefBinding b))
+          _ -> pure ()
+      case am of
+        Private -> modify (Set.insert b)
+        Public -> pure ()
 
   verifyStmt st@(ForeignVal _ v d _ (_, _)) =
     case parseExpr (SourcePos ("definition of " ++ displayS (pretty v)) 1 1) (d ^. lazy) of
@@ -77,16 +82,16 @@ verifyProgram = traverse_ verifyStmt where
 
 -- | Verify a recursive definition is well-formed
 verifyBindingGroup :: MonadVerify m
-                   => (BindingSite -> Set.Set BindingSite -> Set.Set BindingSite)
+                   => (BindingSite -> m ())
                    -> SomeReason -> [Binding Typed] -> m ()
 verifyBindingGroup k _ = traverse_ verifyScc . depOrder where
   verifyScc (AcyclicSCC (Binding v e c (s, t))) =
     when c $ do
-      modify (k (BindingSite v s t))
+      k (BindingSite v s t)
       verifyExpr e
 
   verifyScc (AcyclicSCC (TypedMatching p e _ _)) = do
-    traverse_ (modify . k) $ bindingSites p
+    traverse_ k (bindingSites p)
     verifyExpr e
 
   verifyScc (AcyclicSCC Matching{}) = error "Matching after TC"
@@ -94,7 +99,7 @@ verifyBindingGroup k _ = traverse_ verifyScc . depOrder where
   verifyScc (CyclicSCC vs) = do
     let vars = foldMapOf (each . bindVariable) Set.singleton vs
     for_ vs $ \(Binding var _ c (s, ty)) ->
-      when c $ modify (k (BindingSite var s ty))
+      when c $ k (BindingSite var s ty)
 
     for_ vs $ \b@(Binding var ex c (_, _)) -> when c $ do
       let naked = unguardedVars ex
@@ -111,7 +116,7 @@ verifyExpr (VarRef v (s, t)) = do
 verifyExpr ex@(Let vs e (_, ty)) = do
   when (isLazy ty && isWrappedThunk e && any nonTrivialRhs vs) $
     tell (Seq.singleton (LazyLet ex ty))
-  verifyBindingGroup Set.insert (BecauseOf ex) vs
+  verifyBindingGroup (modify . Set.insert) (BecauseOf ex) vs
   verifyExpr e
 verifyExpr (If c t e _) = traverse_ verifyExpr [c, t, e]
 verifyExpr (App f x _) = verifyExpr f *> verifyExpr x
@@ -162,7 +167,7 @@ verifyCompStmt :: MonadVerify m => CompStmt Typed -> m ()
 verifyCompStmt (CompGuard e) = verifyExpr e
 verifyCompStmt (CompGen _ e _) = verifyExpr e
 verifyCompStmt stmt@(CompLet bg _) =
-  verifyBindingGroup Set.insert (BecauseOf stmt) bg
+  verifyBindingGroup (modify . Set.insert) (BecauseOf stmt) bg
 
 unguardedVars :: Expr Typed -> Set.Set (Var Typed)
 unguardedVars (Ascription e _ _)   = unguardedVars e
