@@ -1,0 +1,8 @@
+value.ml[3:33 ..3:47]: error
+  │ 
+3 │ let foo : forall 'a. 'a -> 'a = id (fun x -> x)
+  │                                 ^^^^^^^^^^^^^^^
+  Since evaluating this expression may have side-effects
+  it can not be used in a context where the polymorphic type
+    forall 'a. 'a -> 'a
+  is required.
