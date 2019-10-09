@@ -698,7 +698,7 @@ unify scope ta@(TyApps (TyCon v) xs@(_:_)) b = do
         tails <- traverse (uncurry (unify scope)) (zip xs_b ys)
         pure (foldl AppCo heads tails)
 
-      _ -> 
+      _ ->
         (confesses =<< unequal ta b)
           `catchChronicle` \_ -> fmap SymCo (unify scope b ta)
 
@@ -953,13 +953,15 @@ subsumes' r scope ot@(TyTuple a b) nt@(TyTuple a' b') = do -- {{{
       cont ex | IdWrap <- wa, IdWrap <- wb = ex
       cont ex
         | an <- annotation ex =
-          Match ex [ Arm
-                     ( PTuple [ Capture elem (an, a), Capture elem' (an, b) ] (an, ot) )
-                     Nothing
-                     ( Tuple [ ExprWrapper wa (VarRef elem (an, a)) (an, a')
-                             , ExprWrapper wb (VarRef elem' (an, b)) (an, b') ]
-                             (an, nt)) ]
-                   (an, nt)
+          Let
+            [ TypedMatching
+                ( PTuple [ Capture elem (an, a), Capture elem' (an, b) ] (an, ot) )
+                ex (an, nt)
+                [ (elem, a), (elem', b) ] ]
+            ( Tuple [ ExprWrapper wa (VarRef elem (an, a)) (an, a')
+                    , ExprWrapper wb (VarRef elem' (an, b)) (an, b') ]
+              (an, nt))
+            (an, nt)
   pure (WrapFn (MkWrapCont cont "tuple re-packing")) -- }}}
 
 subsumes' _ s a@(TyApp lazy _) b@(TyApp lazy' _)

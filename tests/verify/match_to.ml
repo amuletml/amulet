@@ -1,13 +1,21 @@
 let _ = function
 | { x, y } -> x + y
 
+(* Patterns with non-total patterns should not be warned. *)
 let _ = function
 | true -> ()
 
-let f g x =
-  match g x with
+(* Don't warn when we're already of this form *)
+let _ = fun { x, y } -> x + y
+
+let f g =
+  match g () with
   | { x, y } -> x + y
 
-let f g x =
-  match g x with
+let f g =
+  match g () with
   | true -> ()
+
+let f g =
+  let { x, y } = g ()
+  x + y

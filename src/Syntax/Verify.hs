@@ -122,7 +122,7 @@ verifyExpr (If c t e _) = traverse_ verifyExpr [c, t, e]
 verifyExpr (App f x _) = verifyExpr f *> verifyExpr x
 verifyExpr m@(Fun (PatParam p) x _) = verifyMatch (const $ pure ()) m (getType p) [Arm p Nothing x]
 verifyExpr m@(Fun (EvParam _) (Match e bs _) _) = do
-  -- Handle desugared `function`p.
+  -- Handle desugared `function`.
   verifyExpr e
   verifyMatch
     (\(Arm p _ _) -> tell . pure $ MatchToFun p m)
@@ -283,18 +283,18 @@ verifyMatch rep m ty bs = do
   VerifyScope env va <- ask
   ty <- pure $ expandTypeWith (env ^. tySyms) ty
 
-  (_, err, unc) <- foldlM (\(i :: Int, err, alts) a@(Arm pat guard body) -> do
+  (_, ok, unc) <- foldlM (\(i :: Int, ok, alts) a@(Arm pat guard body) -> do
     let cov  = covering env pat alts
     -- If the covered set is empty, this arm is redundant
-    (va', err) <- case covered cov of
+    (va', ok) <- case covered cov of
       Seq.Empty -> do
         let b = case bs of
                   [_] -> BecauseMatch
                   _ | i == 0 -> BecauseArm
                   _ -> Shadowed
         tell . pure $ RedundantArm a b
-        pure (va, True)
-      (va', _) Seq.:<| _ -> pure (va', err)
+        pure (va, False)
+      (va', _) Seq.:<| _ -> pure (va', ok)
 
     local (\(VerifyScope env _) -> VerifyScope env va') $ do
       modify (Set.union (bindingSites pat))
@@ -303,12 +303,12 @@ verifyMatch rep m ty bs = do
 
     -- Return the filtered uncovered set if this pattern has no guard,
     -- otherwise use the original uncovered set.
-    pure . (i + 1, err, ) $ case guard of
+    pure . (i + 1, ok, ) $ case guard of
       Nothing -> uncovered cov
       Just{} -> alts)
-    (0, False, pure $ emptyAlt va ty) bs
+    (0, True, pure $ emptyAlt va ty) bs
 
   case (unc, bs) of
-    (Seq.Empty, [a]) | err -> rep a
+    (Seq.Empty, [a]) | ok -> rep a
     (Seq.Empty, _) -> pure ()
     (_, _) -> tell . pure . MissingPattern m . map snd . toList $ unc
