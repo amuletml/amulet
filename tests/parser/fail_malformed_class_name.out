@@ -3,3 +3,40 @@ fail_malformed_class_name.ml[1:7 ..1:12]: error
   │ 
 1 │ class a -> b begin end
   │       ^^^^^^
+fail_malformed_class_name.ml[3:7 ..3:9]: error
+  Malformed class declaration beginning with X
+
+  All class declarations must be of the form
+    X 'a1
+  where X should be a type constructor
+  │ 
+3 │ class X a begin end
+  │       ^^^
+fail_malformed_class_name.ml[4:7 ..4:11]: error
+  Malformed class declaration beginning with X
+
+  All class declarations must be of the form
+    X 'a1 'a2
+  where X should be a type constructor,
+    and 'a1..'a2 are distinct type variables
+  │ 
+4 │ class X a b begin end
+  │       ^^^^^
+fail_malformed_class_name.ml[6:7 ..6:9]: error
+  Malformed class declaration for x
+
+  All class declarations must be of the form
+    x 'a1
+
+  │ 
+6 │ class x a  begin end
+  │       ^^^
+fail_malformed_class_name.ml[7:7 ..7:11]: error
+  Malformed class declaration for x
+
+  All class declarations must be of the form
+    x 'a1 'a2
+  where 'a1..'a2 are distinct type variables
+  │ 
+7 │ class x a b  begin end
+  │       ^^^^^
