@@ -30,7 +30,7 @@ inferCon vars ret con@(ArgCon ac nm t ann) = do
 
   (ty', cs) <- listen (expandType =<< resolveKind (BecauseOf con) t)
   unless (Seq.null cs) $
-    confesses (UnsatClassCon (BecauseOf con) (cs `Seq.index` 0) (GivenContextNotEnough ty'))
+    confesses (UnsatClassCon (BecauseOf con) (cs `Seq.index` 0) (GivenContextNotEnoughIn ty'))
 
   res <- closeOver' vars (BecauseOf con) $ TyArr ty' ret
   pure ((nm, res), ArgCon ac nm ty' (ann, res))
@@ -44,7 +44,7 @@ inferCon vars ret c@(GadtCon ac nm cty ann) = do
 
   (cty, cs) <- condemn $ listen (expandType =<< resolveKind (BecauseOf c) cty)
   unless (Seq.null cs) $
-    confesses (UnsatClassCon (BecauseOf c) (cs `Seq.index` 0) (GivenContextNotEnough cty))
+    confesses (UnsatClassCon (BecauseOf c) (cs `Seq.index` 0) (GivenContextNotEnoughIn cty))
 
   var <- genName
   when (countAnon cty > 1) $ dictates (gadtConManyArgs c)

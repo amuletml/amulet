@@ -163,6 +163,8 @@ data WhyUnsat
   | BadDefault (Var Desugared) (Type Typed)
   | forall p. (Show (Ann p), Pretty (Type p), Var p ~ Var Resolved)
       => GivenContextNotEnough (Type p)
+  | forall p. (Show (Ann p), Pretty (Type p), Var p ~ Var Resolved)
+      => GivenContextNotEnoughIn (Type p)
   | TooConcrete (Type Typed)
   | It'sQuantified
   | MagicErrors [TypeError]
@@ -724,6 +726,18 @@ instance Note TypeError Style where
           | otherwise =
               indent 2 "Could not deduce" <+> (Right <$> displayType tau)
                 <+> "from the context" <+> (Right <$> displayType ctx)
+
+  formatNote f (ArisingFrom (UnsatClassCon _ (ConImplicit why _ _ tau) (GivenContextNotEnoughIn ctx)) _) =
+    vsep [ f [annotation why]
+         , msg
+         ]
+    where
+      msg | TyCon v <- ctx, v == tyUnitName =
+              indent 2 "No instance for" <+> (Right <$> displayType tau)
+                <+> "arising from" <+> (Right <$> blameOf why)
+          | otherwise =
+              indent 2 "Could not deduce" <+> (Right <$> displayType tau)
+                <+> "from the context given in the type" <+> (Right <$> displayType ctx)
 
 
   formatNote f (ArisingFrom (UnsatClassCon _ (ConImplicit _ _ _ t) (BadDefault meth ty)) r') =

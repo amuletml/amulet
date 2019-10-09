@@ -443,11 +443,12 @@ inferProg (Open mod pre:prg) = do
 
 inferProg (c@Class{}:prg) = do
   let v = className c
-  (stmts, decls, clss, implicits) <- condemn $ inferClass c
+  (stmts, decls, clss, implicits, syms) <- condemn $ inferClass c
   first (stmts ++) <$> do
-    local (names %~ focus decls) $
-      local (classDecs . at v ?~ clss) $
-      local (classes %~ mappend implicits) $
+    local (names %~ focus decls)
+      . local (classDecs . at v ?~ clss)
+      . local (classes %~ mappend implicits)
+      . local (tySyms %~ extendTySyms syms) $
         inferProg prg
 
 inferProg (inst@Instance{}:prg) = do
