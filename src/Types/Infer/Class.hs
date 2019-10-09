@@ -20,7 +20,7 @@ import Data.Spanned
 import Data.Reason
 import Data.Graph
 import Data.Maybe
-import Data.List (sortOn, partition)
+import Data.List (sortOn, partition, unzip4)
 import Data.Char
 
 import Control.Monad.State
@@ -61,7 +61,9 @@ inferClass :: forall m. MonadInfer Typed m
            -> m ( [Toplevel Typed]
                 , Telescope Typed
                 , ClassInfo
-                , ImplicitScope ClassInfo Typed )
+                , ImplicitScope ClassInfo Typed
+                , [TySymInfo]
+                )
 inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
   let toVar :: TyConArg Typed -> Type Typed
       toVar (TyVarArg v) = TyVar v
@@ -108,17 +110,23 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
       unwind t = pure t
 
 
-  (assocts, assocty_tele, assoct_defs) <- fmap unzip3 . for assoctys $ \meth@(AssocType method ty ann) -> do
+  (assocts, assocty_tele, assoct_defs, assoct_info) <- fmap unzip4 . for assoctys $ \meth@(AssocType method ty ann) -> do
     let replaceK by (TyPi b t) = TyPi b $ replaceK by t
         replaceK by _ = by
     checkWildcard meth ty
 
     declared <- checkAgainstKind (BecauseOf meth) ty TyType
     let ty = replaceK declared k
+    let info = TyFamInfo { _tsName = method
+                         , _tsEquations = []
+                         , _tsConstraint = Just classConstraint
+                         , _tsArgs = map argName params
+                         , _tsKind = ty }
 
     pure ( Map.singleton method (declared, ty)
          , one method ty
          , TypeDecl Private method [] (Just []) (ann, ty)
+         , info
          )
 
   ctx <- local (names %~ focus (mconcat assocty_tele <> one name k)) . for ctx $ \x -> do
@@ -250,7 +258,9 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
     pure ( assoct_defs ++ tyDecl:map (LetStmt Public . pure) decs
          , tele <> mconcat assocty_tele
          , info
-         , scope)
+         , scope
+         , assoct_info
+         )
 inferClass _ = error "not a class"
 
 inferInstance :: forall m. MonadInfer Typed m
@@ -348,9 +358,6 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
 
         ret (TyPi _ r) = ret r
         ret r = r
-
-        argName (TyVarArg v) = v
-        argName (TyAnnArg v _) = v
 
     (declared, global_t) <- case Map.lookup var assocTySigs of
       Just x -> pure x
@@ -540,6 +547,11 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
 
   pure (LetStmt Public (methods ++ defaultMethods ++ [bind]):axioms, instanceName, globalInsnConTy, info, tysyms)
 inferInstance _ = error "not an instance"
+
+argName :: TyConArg p -> Var p
+argName (TyVarArg v) = v
+argName (TyAnnArg v _) = v
+
 
 addArg :: Map.Map (Var Typed) (Type Typed) -> Type Typed -> Expr Typed -> Expr Typed
 addArg skolSub ty@(TyPi (Invisible v k req) rest) ex =
