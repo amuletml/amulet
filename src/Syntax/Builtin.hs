@@ -200,6 +200,10 @@ builtins =
            , stringOp C.vOpConcat
 
            , cmp C.vOpEq, cmp C.vOpNe
+
+           , ( ofCore C.vFloat2Int, tyFloat ~> tyInt )
+           , ( ofCore C.vInt2Float, tyInt ~> tyFloat )
+
            , (opAppName, a *. b *. (TyVar a ~> TyVar b) ~> TyVar a ~> TyVar b)
            , (lAZYName, lAZYTy), (forceName, forceTy)
            , (cONSName, cONSTy), (nILName, nILTy)

@@ -1,9 +1,11 @@
 do
-  local function Cons(x) return { x, __tag = "Cons" } end
   local Nil = { __tag = "Nil" }
-  (nil)(Cons({ _1 = 1, _2 = Cons({ _1 = 2, _2 = Cons({ _1 = 3, _2 = Nil }) }) }))
+  (nil)({
+    { _1 = 1, _2 = { { _1 = 2, _2 = { { _1 = 3, _2 = Nil }, __tag = "Cons" } }, __tag = "Cons" } },
+    __tag = "Cons"
+  })
   (nil)(1)
-  (nil)(Cons({ _1 = 2, _2 = Nil }))
+  (nil)({ { _1 = 2, _2 = Nil }, __tag = "Cons" })
   local function j(xss)
     if xss.__tag ~= "Cons" then
       return Nil
@@ -15,11 +17,17 @@ do
         return j(xs)
       end
       local tmp0 = xss0[1]
-      return Cons({ _2 = n(tmp0._2), _1 = { _1 = x, _2 = tmp0._1 } })
+      return { { _2 = n(tmp0._2), _1 = { _1 = x, _2 = tmp0._1 } }, __tag = "Cons" }
     end
-    return n(Cons({ _1 = 4, _2 = Cons({ _1 = 5, _2 = Cons({ _1 = 6, _2 = Nil }) }) }))
+    return n({
+      { _1 = 4, _2 = { { _1 = 5, _2 = { { _1 = 6, _2 = Nil }, __tag = "Cons" } }, __tag = "Cons" } },
+      __tag = "Cons"
+    })
   end
-  (nil)(j(Cons({ _1 = 1, _2 = Cons({ _1 = 2, _2 = Cons({ _1 = 3, _2 = Nil }) }) })))
+  (nil)(j({
+    { _1 = 1, _2 = { { _1 = 2, _2 = { { _1 = 3, _2 = Nil }, __tag = "Cons" } }, __tag = "Cons" } },
+    __tag = "Cons"
+  }))
   local function r(xss)
     if xss.__tag ~= "Cons" then
       return Nil
@@ -29,11 +37,14 @@ do
     local b = x + 1
     local function v(xss0)
       if xss0.__tag == "Cons" then
-        return Cons({ _1 = { _1 = x, _2 = b }, _2 = v(xss0[1]._2) })
+        return { { _1 = { _1 = x, _2 = b }, _2 = v(xss0[1]._2) }, __tag = "Cons" }
       end
       return r(xs)
     end
-    return v(Cons({ _1 = b, _2 = Cons({ _1 = x, _2 = Nil }) }))
+    return v({ { _1 = b, _2 = { { _1 = x, _2 = Nil }, __tag = "Cons" } }, __tag = "Cons" })
   end
-  (nil)(r(Cons({ _1 = 1, _2 = Cons({ _1 = 2, _2 = Cons({ _1 = 3, _2 = Nil }) }) })))
+  (nil)(r({
+    { _1 = 1, _2 = { { _1 = 2, _2 = { { _1 = 3, _2 = Nil }, __tag = "Cons" } }, __tag = "Cons" } },
+    __tag = "Cons"
+  }))
 end
