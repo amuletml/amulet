@@ -51,7 +51,8 @@ builtins :: [( CoVar, T.Text, [CoVar]
              , Maybe (Int, [LuaExpr] -> (Seq LuaStmt, [LuaExpr]))
              , [LuaStmt] )]
 builtins =
-  [ ( vLAZY, "__builtin_Lazy", [], Nothing
+  [ ( vLAZY, "__builtin_Lazy", []
+    , Just (1, \[x] -> (mempty, [[lua| { %x, false, __tag = "lazy" }|]]))
       -- Lazy doesn't technically _need_ a tag, and including it in fact
       -- raises the memory usage of things. But, the REPL is taught to
       -- recognise __tag fields and print them as constructors, and so
@@ -61,14 +62,17 @@ builtins =
         return { x, false, __tag = "lazy" }
       end
       |] )
-  , ( vNIL, "Nil", [], Nothing
+
+  , ( vNIL, "Nil", [], Just (0, \_ -> (mempty, [[lua| { __tag = "Nil" } |]]))
     , [luaStmts| local Nil = { __tag = "Nil" } |] )
-  , ( vCONS, "Cons", [], Nothing
+
+  , ( vCONS, "Cons", [], Just (1, \[x] -> (mempty, [[lua| { %x, __tag = "Cons" } |]]))
     , [luaStmts|
       local function Cons(x)
         return { x, __tag = "Cons" }
       end
       |] )
+
   , ( vForce, "__builtin_force", [vUnit], Nothing
     , [luaStmts|
        local function __builtin_trap()
@@ -86,14 +90,17 @@ builtins =
          end
        end
       |] )
-  , ( vOpApp, "__builtin_app", [], Nothing
+
+  , ( vOpApp, "__builtin_app", [], Just (2, \[f, x] -> (mempty, [[lua| %f(%x) |]]))
     , [luaStmts|
       local function __builtin_app(f, x)
         return f(x)
       end
     |] )
-  , ( vUnit, "__builtin_unit", [], Nothing
+
+  , ( vUnit, "__builtin_unit", [], Just (0, \_ -> (mempty, [[lua| { __tag = "__builtin_unit" } |]]))
     , [luaStmts|local __builtin_unit = { __tag = "__builtin_unit" }|] )
+
   , ( vRef, "__builtin_ref", []
     , Just (1, \[var] -> ( mempty, [ [lua| { %var, __tag = 'Ref' } |] ]))
     , [luaStmts|
@@ -101,6 +108,7 @@ builtins =
           return { x, __tag = 'Ref' }
         end
       |] )
+
   , ( vAssign, "__builtin_swap", [vUnit]
     , Just (2, \[var, val] -> ( Seq.fromList [luaStmts| %var[1] = %val |]
                               , [ [lua| __builtin_unit |] ]))
@@ -116,6 +124,7 @@ builtins =
           return var[1]
         end
       |] )
+
   , ( vStrVal, "__builtin_strval", [], Just (1, \[l] -> (mempty, [ [lua|%l|] ]))
     , [luaStmts|
         local function __builtin_strval(x)
@@ -146,6 +155,7 @@ builtins =
           return x
         end
       |] )
+
   , ( backendClone, "__builtin_clone", [], Nothing
     , [luaStmts|
          local function __builtin_clone(record)
@@ -156,6 +166,7 @@ builtins =
           return new
          end
       |] )
+
   , ( vExtend, "__builtin_extend", [ backendClone ], Nothing
     , [luaStmts|
         local function __builtin_extend(key, value, record)
@@ -164,6 +175,11 @@ builtins =
           return new
         end
       |] )
+
+    -- Note: the definition generates records that look correct
+    -- according to the type, but since the type system prevents
+    -- accessing a removed key, it's fine for us /not/ to remove it.
+    -- Hence the inline definition just returning the original record.
   , ( vRestrict, "__builtin_restrict", [ backendClone ]
     , Just (2, \[key, t] -> (mempty, [[lua| { _1 = %t[%key], _2 = %t }|]]))
     , [luaStmts|
@@ -173,11 +189,56 @@ builtins =
           return { _1 = record[key], _2 = new }
         end
       |] )
+
+  , ( vInt2Float, "__builtin_float_of_int", []
+    , Just (1, \[x] -> (mempty, [[lua| %x |]]))
+    , [luaStmts|
+        local function __builtin_float_of_int(x)
+          return x
+        end |] )
+
+  , ( vFloat2Int, "__builtin_int_of_float", []
+    , Nothing
+    , [luaStmts|
+        local function __builtin_int_of_float(x)
+          if x >= 0 then
+            return math.floor(x + 0.5)
+          else
+            return math.ceil(x - 0.5)
+          end
+        end |] )
+
   , ( vEQ, "nil", [], Just (0, \[] -> (mempty, [[lua|nil|]])), [] )
-    -- Note: the definition generates records that look correct
-    -- according to the type, but since the type system prevents
-    -- accessing a removed key, it's fine for us /not/ to remove it.
-    -- Hence the inline definition just returning the original record.
+
+  -- TC error_message builtins:
+  , ( tcString, "__tc_S", [], Just (1, \[x] -> (mempty, [[lua| { %x, __tag = "String" } |]]))
+    , [luaStmts|
+        local function __tc_S(x)
+          return { x, __tag = "String" }
+        end
+      |] )
+
+  , ( tcHCat, "__tc_H", [], Just (1, \[x] -> (mempty, [[lua| { %x, __tag = ":<#>:" } |]]))
+    , [luaStmts|
+        local function __tc_H(x)
+          return { x, __tag = ":<#>:" }
+        end
+      |] )
+
+  , ( tcVCat, "__tc_V", [], Just (1, \[x] -> (mempty, [[lua| { %x, __tag = ":<>:" } |]]))
+    , [luaStmts|
+        local function __tc_V(x)
+          return { x, __tag = ":<>:" }
+        end
+      |] )
+
+  , ( tcShowType, "__tc_St", [], Just (1, \[x] -> (mempty, [[lua| { %x, __tag = "ShowType" } |]]))
+    , [luaStmts|
+        local function __tc_St(x)
+          return { x, __tag = "ShowType" }
+        end
+      |] )
+
   ] ++ map genOp ops
 
   where

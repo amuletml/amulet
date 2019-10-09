@@ -77,6 +77,8 @@ instance Pretty Value where
     p x = pretty x
   pretty (Constructor "Nil" []) = brackets mempty
 
+  pretty (Constructor "lazy" [x, _]) = stypeSkol (string "lazy") <+> pretty x
+
   pretty (Constructor x ts) = colour (text x) <+> hsep (map parensIf ts) where
     parensIf x@Constructor{} = parens (pretty x)
     parensIf x = pretty x

@@ -32,9 +32,11 @@ tyvarRecord, tyvarNew, tyvarKey, tyvarType :: CoVar
 backendRet, backendClone :: CoVar
 vEq, vEQ :: CoVar
 
+vFloat2Int, vInt2Float :: CoVar
+
 tcTypeError, tcErrKind, tcString, tcHCat, tcVCat, tcShowType :: CoVar
 
-[ vBool, vInt, vString, vFloat, vUnit, vLazy, vArrow, vProduct, vList, vRefTy, vKStrTy, vKIntTy, vRowCons, vOpAdd, vOpSub, vOpMul, vOpDiv, vOpExp, vOpLt, vOpGt, vOpLe, vOpGe, vOpAddF, vOpSubF, vOpMulF, vOpDivF, vOpExpF, vOpLtF, vOpGtF, vOpLeF, vOpGeF, vOpConcat, vOpEq, vOpNe, vError, vLAZY, vForce, tyvarA, tyvarB, argvarX, vOpApp, vCONS, vNIL, vAssign, vDeref, vRef, vStrVal, vIntVal, vExtend, vRestrict, vKSTR, vKINT, vROWCONS, tyvarRecord, tyvarNew, tyvarKey, tyvarType, vEq, vEQ, backendRet, backendClone, tcTypeError, tcErrKind, tcString, tcHCat, tcVCat, tcShowType ] = makeBuiltins
+[ vBool, vInt, vString, vFloat, vUnit, vLazy, vArrow, vProduct, vList, vRefTy, vKStrTy, vKIntTy, vRowCons, vOpAdd, vOpSub, vOpMul, vOpDiv, vOpExp, vOpLt, vOpGt, vOpLe, vOpGe, vOpAddF, vOpSubF, vOpMulF, vOpDivF, vOpExpF, vOpLtF, vOpGtF, vOpLeF, vOpGeF,vInt2Float, vFloat2Int, vOpConcat, vOpEq, vOpNe, vError, vLAZY, vForce, tyvarA, tyvarB, argvarX, vOpApp, vCONS, vNIL, vAssign, vDeref, vRef, vStrVal, vIntVal, vExtend, vRestrict, vKSTR, vKINT, vROWCONS, tyvarRecord, tyvarNew, tyvarKey, tyvarType, vEq, vEQ, backendRet, backendClone, tcTypeError, tcErrKind, tcString, tcHCat, tcVCat, tcShowType ] = makeBuiltins
   [ ("bool", TypeConVar)
   , ("int", TypeConVar)
   , ("string", TypeConVar)
@@ -70,6 +72,9 @@ tcTypeError, tcErrKind, tcString, tcHCat, tcVCat, tcShowType :: CoVar
   , (">.", ValueVar)
   , ("<=.", ValueVar)
   , (">=.", ValueVar)
+
+  , ("float_of_int", ValueVar)
+  , ("int_of_float", ValueVar)
 
   , ("^", ValueVar)
 
@@ -117,7 +122,7 @@ tcTypeError, tcErrKind, tcString, tcHCat, tcVCat, tcShowType :: CoVar
   , ("<ret>", ValueVar)
   , ("<clone>", ValueVar)
   , ("type_error", TypeConVar)
-  , ("ErrorMessage", DataConVar)
+  , ("error_message", DataConVar)
   , ("String", DataConVar)
   , (":<>:", DataConVar)
   , (":<#>:", DataConVar)

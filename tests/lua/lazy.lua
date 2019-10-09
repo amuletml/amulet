@@ -14,9 +14,8 @@ do
       return x[1]
     end
   end
-  local function __builtin_Lazy(x) return { x, false, __tag = "lazy" } end
   (nil)({
     _2 = function(x) return __builtin_force(x) end,
-    _1 = __builtin_Lazy(function(tmp) return 2 end)
+    _1 = { function(tmp) return 2 end, false, __tag = "lazy" }
   })
 end
