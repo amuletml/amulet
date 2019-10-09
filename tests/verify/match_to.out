@@ -1,14 +1,26 @@
-match_to.ml[4:9 ..4:16]: warning
+match_to.ml[1:9 ..1:16]: note
+match with a single arm can be rewritten using let.
+  │ 
+1 │ let _ = function
+  │         ^^^^^^^^
+• Note: Replace with let { x = x, y = y } = …
+match_to.ml[5:9 ..5:16]: warning
   Non-exhaustive patterns in expression
   │ 
-4 │ let _ = function
+5 │ let _ = function
   │         ^^^^^^^^
   • Note: The following patterns are not covered
       false
-match_to.ml[12:3 ..12:16]: warning
+match_to.ml[12:3 ..12:17]: note
+match with a single arm can be rewritten using let.
+   │ 
+12 │   match g () with
+   │   ^^^^^^^^^^^^^^^
+• Note: Replace with let { x = x, y = y } = …
+match_to.ml[16:3 ..16:17]: warning
   Non-exhaustive patterns in expression
    │ 
-12 │   match g x with
-   │   ^^^^^^^^^^^^^^
+16 │   match g () with
+   │   ^^^^^^^^^^^^^^^
   • Note: The following patterns are not covered
       false

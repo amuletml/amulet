@@ -21,6 +21,6 @@ end
 (* actually exhaustive but really hard to check *)
 let bar : forall 'a. baz 'a => f 'a -> () = function
   | F1 as a ->
-      match baz a with
-      | G1 -> ()
+      let G1 = baz a
+      ()
   | _ -> ()
