@@ -114,4 +114,3 @@ instance Pretty Lit where
   pretty (LiBool True) = sliteral (string "true")
   pretty (LiBool False) = sliteral (string "false")
   pretty LiUnit = sliteral (parens empty)
-

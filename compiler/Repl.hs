@@ -35,10 +35,9 @@ import qualified Foreign.Lua as L
 import System.Console.Haskeline hiding (display, bracket, throwTo)
 import System.IO
 
-import qualified Syntax.Resolve.Toplevel as R
-import qualified Syntax.Resolve.Scope as R
 import qualified Syntax.Builtin as Bi
-import Syntax.Resolve (resolveProgram)
+import Syntax.Resolve (ResolveResult(..), resolveProgram)
+import Syntax.Resolve.Scope (Signature)
 import Syntax.Desugar (desugarProgram)
 import Syntax.Verify
 import Syntax (displayType)
@@ -85,8 +84,7 @@ instance MonadFail L.Lua where
   fail x = error $ "MonadFail L.Lua: fail " ++ x
 
 data ReplState = ReplState
-  { resolveScope :: R.Scope
-  , moduleScope  :: R.ModuleScope
+  { resolveScope :: Signature
   , inferScope   :: T.Env
   , emitState    :: B.TopEmitState
   , lastName     :: S.Name
@@ -108,7 +106,6 @@ defaultState mode = do
 
   pure ReplState
     { resolveScope = Bi.builtinResolve
-    , moduleScope  = Bi.builtinModules
     , inferScope   = Bi.builtinEnv
     , emitState    = B.defaultEmitState
     , lastName     = S.TgName (T.pack "a") 1
@@ -219,10 +216,10 @@ infoCommand (T.pack . dropWhile isSpace -> input) = do
 
       resolved <-
         flip evalNameyT (lastName state) $
-          resolveProgram (resolveScope state) (moduleScope state) prog
+          resolveProgram (resolveScope state) prog
 
       case resolved of
-        Right ([ S.LetStmt _ [S.Binding _ (S.VarRef name _) _ _] ], _) ->
+        Right (ResolveResult [ S.LetStmt _ [S.Binding _ (S.VarRef name _) _ _] ] _ _) ->
           liftIO . hPutDoc handle . displayType $
             (inferScope state ^. T.names . at name . non undefined)
         _ -> liftIO . hPutDoc handle $ "Name not in scope:" <+> pretty (getL var)
@@ -243,10 +240,10 @@ typeCommand (dropWhile isSpace -> input) = do
           prog :: [S.Toplevel S.Parsed]
           prog = [ S.LetStmt S.Public [ S.Matching (S.Wildcard ann) parsed ann ] ]
 
-      resolved <- resolveProgram (resolveScope state) (moduleScope state) prog
+      resolved <- resolveProgram (resolveScope state) prog
       case resolved of
         Left es -> liftIO $ traverse_ (hReport (outputHandle state) files) es
-        Right (resolved, _) -> do
+        Right (ResolveResult resolved _ _) -> do
           ~[S.LetStmt _ [ S.Matching _ desugared _ ]] <- desugarProgram resolved
           inferred <- inferExpr (inferScope state) desugared
           let (ty, es) = case inferred of
@@ -365,9 +362,7 @@ parseCore state parser name input = do
                       Left s -> s
                       Right e -> [S.LetStmt S.Public [S.Binding (S.Name "_") e True (annotation e)]]
 
-      let rScope = resolveScope state
-          lEnv = lowerState state
-      let cont modScope' resolved prog env' = do
+      let cont prog rScp env' = do
             verifyV <- genName
             let es = case runVerify env' verifyV (verifyProgram prog) of
                        Left es -> toList es
@@ -376,10 +371,7 @@ parseCore state parser name input = do
             if any isError es
                then pure Nothing
                else do
-                 let (var, tys) = R.extractToplevels parsed'
-                     (var', tys') = R.extractToplevels resolved
-
-                 (lEnv', lower) <- L.runLowerWithEnv lEnv (L.lowerProgEnv prog)
+                 (lEnv', lower) <- L.runLowerWithEnv (lowerState state) (L.lowerProgEnv prog)
                  lower <- killNewtypePass lower
                  lastG <- genName
                  case lower of
@@ -391,27 +383,24 @@ parseCore state parser name input = do
                                  _ -> []
                              , prog
                              , lower
-                             , state { resolveScope = rScope { R.varScope = R.insertN' (R.varScope rScope) (zip var var')
-                                                             , R.tyScope  = R.insertN' (R.tyScope rScope)  (zip tys tys')
-                                                             }
-                                     , moduleScope = modScope'
+                             , state { resolveScope = rScp
                                      , inferScope = env'
                                      , lowerState = lEnv'
                                      , lastName = lastG })
-      resolved <- resolveProgram rScope (moduleScope state) parsed'
+      resolved <- resolveProgram (resolveScope state) parsed'
       case resolved of
         Left es -> liftIO $ traverse_ (hReport (outputHandle state) files) es $> Nothing
-        Right (resolved, modScope') -> do
+        Right (ResolveResult resolved _ rScp) -> do
           desugared <- desugarProgram resolved
           inferred <- inferProgram (inferScope state) desugared
           case inferred of
             This es -> liftIO $ traverse_ (hReport (outputHandle state) files) es $> Nothing
-            That (prog, env') -> cont modScope' resolved prog env'
+            That (prog, env') -> cont prog rScp env'
             These es (prog, env') -> do
               liftIO $ traverse_ (hReport (outputHandle state) files) es
               if any isError es
-                 then pure Nothing
-                 else cont modScope' resolved prog env'
+              then pure Nothing
+              else cont prog rScp env'
 
 emitCore :: ReplState -> [Stmt CoVar] -> (B.TopEmitState, LuaStmt, Bs.ByteString)
 emitCore state core =

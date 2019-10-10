@@ -37,6 +37,7 @@ data ResolveError
   | EmptyBegin -- ^ This @begin@ block has no expressions
   | IllegalMethod -- ^ An illegal method within an @instance@
   | LastStmtNotExpr -- ^ Invalid statement in tail position
+  | LetOpenStruct -- ^ Invalid module struct in a let open.
 
   | TFClauseWrongHead (Type Parsed) (Var Parsed)
   | TFClauseWrongArity Int Int
@@ -64,6 +65,7 @@ instance Pretty ResolveError where
   pretty EmptyBegin = "Empty begin expression"
   pretty IllegalMethod = "Illegal pattern in instance method declaration"
   pretty LastStmtNotExpr = "The last statement in a" <+> keyword "begin" <+> "block should be an expression"
+  pretty LetOpenStruct = "Cannot declare a module within a" <+> keyword "let open" <+> "expression"
   pretty (TFClauseWrongHead t tau) =
     vsep [ "The lhs of a type function equation must be headed by the type function constructor"
          , "Expected" <+> pretty tau <+> "but got" <+> pretty t

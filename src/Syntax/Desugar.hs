@@ -32,18 +32,23 @@ desugarProgram = traverse statement
 
 statement :: forall m. MonadNamey m => Toplevel Resolved -> m (Toplevel Desugared)
 statement (LetStmt am vs) = LetStmt am <$> traverse binding vs
-statement (Module am v ss) = Module am v <$> traverse statement ss
+statement (Module am v t) = Module am v <$> modTerm t
 statement (Instance a b c m d) = Instance a (ty <$> b) (ty c) <$> traverse instItem m <*> pure d where
   instItem (MethodImpl b) = MethodImpl <$> binding b
   instItem (TypeImpl v as t a) = pure $ TypeImpl v (map tyA as) (ty t) a
 statement (Class am a b c fd m d) = Class am a (ty <$> b) (tyA <$> c) (map go fd) <$> traverse classItem m <*> pure d where
   go (Fundep f t a) = Fundep f t a
-statement (Open v a) = pure $ Open v a
+statement (Open v) = Open <$> modTerm v
 statement (ForeignVal am v x t a) = pure $ ForeignVal am v x (ty t) a
 statement (TypeDecl am v arg cs a) = pure $ TypeDecl am v (map tyA arg) (map ctor <$> cs) a
 statement (TySymDecl am v arg exp a) = pure $ TySymDecl am v (map tyA arg) (ty exp) a
 statement (TypeFunDecl am v arg ks bd a) = pure $ TypeFunDecl am v (map tyA arg) (fmap ty ks) (map eq bd) a where
   eq (TyFunClause f t a) = TyFunClause (ty f) (ty t) a
+
+modTerm :: MonadNamey m => ModuleTerm Resolved -> m (ModuleTerm Desugared)
+modTerm (ModStruct ss a) = ModStruct <$> traverse statement ss <*> pure a
+modTerm (ModRef v a) = pure $ ModRef v a
+modTerm (ModLoad v a) = pure $ ModLoad v a
 
 classItem :: forall m. MonadNamey m => ClassItem Resolved -> m (ClassItem Desugared)
 classItem (MethodSig v t a) = pure $ MethodSig v (ty t) a
@@ -120,7 +125,7 @@ expr (ListComp e qs an) = transListComp (e, qs, an) (ListExp [] an)
 expr (DoExpr bind qs an) = begin <$> transDoExpr (VarRef bind an) qs where
   begin = flip Begin an . (:[])
 
-expr (OpenIn mod e an) = OpenIn mod <$> expr e <*> pure an
+expr (OpenIn mod e an) = OpenIn <$> modTerm mod <*> expr e <*> pure an
 
 buildTuple :: forall m. MonadNamey m => Ann Desugared
            -> Maybe (Expr Desugared)

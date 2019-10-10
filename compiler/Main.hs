@@ -23,7 +23,6 @@ import Types.Infer (inferProgram)
 
 import Syntax.Resolve (ResolveError, resolveProgram)
 import qualified Syntax.Resolve.Scope as RS
-import Syntax.Resolve.Toplevel (extractToplevels)
 import Syntax.Desugar (desugarProgram)
 import qualified Syntax.Builtin as Bi
 import Syntax.Verify
@@ -58,71 +57,69 @@ data CompileResult
 
 compile :: DoOptimise -> [(SourceName, T.Text)] -> CompileResult
 compile _ [] = error "Cannot compile empty input"
-compile opt (file:files) =
-  let (res, name) = flip runNamey firstName $ do
-        file' <- go (Right ([], [], [], Bi.builtinResolve, Bi.builtinModules, Bi.builtinEnv)) file
-        foldlM go file' files
-  in case res of
-       Right (ve, te, prg, _, _, env) ->
-         -- We run these outside the main namey monad to allow these to be lazily evaluated.
-         let (lower, name') = flip runNamey name $ runLowerT (lowerProg prg)
-             (optm, _) = flip runNamey name' $ case opt of
-                Do -> optimise lower
-                Don't -> do
-                  noNewtype <- killNewtypePass lower
-                  reduce <- reducePass noNewtype
-                  pure (deadCodePass reduce)
-             lua = compileProgram optm
-         in CSuccess ve te prg lower optm lua env
-       Left err -> err
+compile opt (file:files) = undefined
+  -- let (res, name) = flip runNamey firstName $ do
+  --       file' <- go (Right ([], [], [], Bi.builtinResolve, Bi.builtinModules, Bi.builtinEnv)) file
+  --       foldlM go file' files
+  -- in case res of
+  --      Right (ve, te, prg, _, _, env) ->
+  --        -- We run these outside the main namey monad to allow these to be lazily evaluated.
+  --        let (lower, name') = flip runNamey name $ runLowerT (lowerProg prg)
+  --            (optm, _) = flip runNamey name' $ case opt of
+  --               Do -> optimise lower
+  --               Don't -> do
+  --                 noNewtype <- killNewtypePass lower
+  --                 reduce <- reducePass noNewtype
+  --                 pure (deadCodePass reduce)
+  --            lua = compileProgram optm
+  --        in CSuccess ve te prg lower optm lua env
+  --      Left err -> err
 
-  where
-    go (Right (errs, tyerrs, tops, scope, modScope, env)) (name, file) =
-      case runParser name (L.fromStrict file) parseTops of
-        (Just parsed, _) -> do
-          resolved <- resolveProgram scope modScope parsed
-          case resolved of
-            Right (resolved, modScope') -> do
-              desugared <- desugarProgram resolved
-              infered <- inferProgram env desugared
-              case infered of
-                That (prog, env') -> do
-                  verifyV <- genName
-                  let x = runVerify env' verifyV (verifyProgram prog)
-                      (var, tys) = extractToplevels parsed
-                      (var', tys') = extractToplevels resolved
-                      errs' = case x of
-                        Left es -> toList es
-                        Right () -> []
-                  pure $ Right ( errs ++ errs'
-                               , tyerrs
-                               , tops ++ prog
-                               , scope { RS.varScope = RS.insertN' (RS.varScope scope) (zip var var')
-                                       , RS.tyScope  = RS.insertN' (RS.tyScope scope)  (zip tys tys')
-                                       }
-                               , modScope'
-                               , env' )
-                These errors (_, _) | any isError errors -> pure (Left (CInfer errors))
-                These errors (prog, env') -> do
-                  verifyV <- genName
-                  let x = runVerify env' verifyV (verifyProgram prog)
-                      (var, tys) = extractToplevels parsed
-                      (var', tys') = extractToplevels resolved
-                      errs' = case x of
-                        Left es -> toList es
-                        Right () -> []
-                  pure $ Right ( errs ++ errs'
-                               , tyerrs ++ errors
-                               , tops ++ prog
-                               , scope { RS.varScope = RS.insertN' (RS.varScope scope) (zip var var')
-                                       , RS.tyScope  = RS.insertN' (RS.tyScope scope)  (zip tys tys')
-                                       }
-                               , modScope'
-                               , env' )
-                This e -> pure $ Left $ CInfer e
-            Left e -> pure $ Left $ CResolve e
-        (Nothing, es) -> pure $ Left $ CParse es
-    go x _ = pure x
+  -- where
+  --   go (Right (errs, tyerrs, tops, scope, modScope, env)) (name, file) =
+  --     case runParser name (L.fromStrict file) parseTops of
+  --       (Just parsed, _) -> do
+  --         resolved <- resolveProgram scope modScope parsed
+  --         case resolved of
+  --           Right (resolved, modScope') -> do
+  --             desugared <- desugarProgram resolved
+  --             infered <- inferProgram env desugared
+  --             case infered of
+  --               That (prog, env') -> do
+  --                 verifyV <- genName
+  --                 let x = runVerify env' verifyV (verifyProgram prog)
+  --                     errs' = case x of
+  --                       Left es -> toList es
+  --                       Right () -> []
+  --                 pure $ Right ( errs ++ errs'
+  --                              , tyerrs
+  --                              , tops ++ prog
+  --                              , scope { RS.varScope = RS.insertN' (RS.varScope scope) (zip var var')
+  --                                      , RS.tyScope  = RS.insertN' (RS.tyScope scope)  (zip tys tys')
+  --                                      }
+  --                              , modScope'
+  --                              , env' )
+  --               These errors (_, _) | any isError errors -> pure (Left (CInfer errors))
+  --               These errors (prog, env') -> do
+  --                 verifyV <- genName
+  --                 let x = runVerify env' verifyV (verifyProgram prog)
+  --                     (var, tys) = extractToplevels parsed
+  --                     (var', tys') = extractToplevels resolved
+  --                     errs' = case x of
+  --                       Left es -> toList es
+  --                       Right () -> []
+  --                 pure $ Right ( errs ++ errs'
+  --                              , tyerrs ++ errors
+  --                              , tops ++ prog
+  --                              , scope { RS.varScope = RS.insertN' (RS.varScope scope) (zip var var')
+  --                                      , RS.tyScope  = RS.insertN' (RS.tyScope scope)  (zip tys tys')
+  --                                      }
+  --                              , modScope'
+  --                              , env' )
+  --               This e -> pure $ Left $ CInfer e
+  --           Left e -> pure $ Left $ CResolve e
+  --       (Nothing, es) -> pure $ Left $ CParse es
+  --   go x _ = pure x
 
 
 compileFromTo :: DoOptimise -> D.DebugMode

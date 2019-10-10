@@ -109,6 +109,7 @@ import Syntax
   open     { Token TcOpen _ _ }
   lazy     { Token TcLazy _ _ }
   as       { Token TcAs _ _ }
+  import   { Token TcImport _ _ }
   class    { Token TcClass _ _ }
   instance { Token TcInstance _ _ }
   when     { Token TcWhen _ _ }
@@ -191,21 +192,17 @@ Top :: { Toplevel Parsed }
       -- 1    2     3       4       5               6             7
         { withPos2 $2 $7 $ TypeFunDecl $1 (getL $4) $5 $6 (getL $7) }
 
-    | module qconid '=' Begin(Tops)            { Module Public (getName $2) (getL $4) }
-    | private module qconid '=' Begin(Tops)    { Module Private (getName $3) (getL $5) }
-    | module conid '=' Begin(Tops)             { Module Public (getName $2) (getL $4) }
-    | private module conid '=' Begin(Tops)     { Module Private (getName $3) (getL $5) }
-    | module conid '=' Con                     { Open (getL $4) (Just (getIdent $2)) }
+    | module conid '=' ModuleTerm              { Module Public (getName $2) $4 }
+    | private module conid '=' ModuleTerm      { Module Private (getName $3) $5 }
+    | open ModuleTerm                          { Open $2 }
 
     -- Note, we use fmap rather than <$>, as Happy's parser really doesn't like that.
-    | class Type Fundeps Begin(ClassItems) 
+    | class Type Fundeps Begin(ClassItems)
         {% fmap (withPos2 $1 $4) $ buildClass Public $2 $3 (getL $4) }
     | private class Type Fundeps Begin(ClassItems)
         {% fmap (withPos2 $1 $5) $ buildClass Private $3 $4 (getL $5) }
 
     | instance Type Begin(Methods)             {% fmap (withPos2 $1 $3) $ buildInstance $2 (getL $3) }
-
-    | open Con                                 { Open (getL $2) Nothing }
 
 TyFunBody :: { [TyFunClause Parsed] }
   : List(TyFunEq, TopSep) { $1 }
@@ -216,6 +213,11 @@ TyFunEq :: { TyFunClause Parsed }
 TyFunKindSig :: { Maybe (Type Parsed) }
   : ':' Type { Just (getL $2) }
   |          { Nothing }
+
+ModuleTerm :: { ModuleTerm Parsed }
+  : Begin(Tops)                             { withPos1 $1 $ ModStruct (getL $1) }
+  | Con                                     { withPos1 $1 $ ModRef (getL $1) }
+  | import string                           { withPos2 $1 $2 $ ModLoad (getString $1) }
 
 Begin(a)
   : begin a end                             { lPos2 $1 $3 $2 }
@@ -304,7 +306,7 @@ Expr0 :: { Expr Parsed }
       : fun ListE1(Parameter) '->' ExprBlock '$end'
         { respanFun $1 $4 $ foldr (\x y -> withPos2 x $4 $ Fun x y) $4 $2 }
       | let BindGroup ExprIn ExprBlock '$end'  { withPos2 $1 $4 $ Let (reverse $2) $4 }
-      | let open Con ExprIn ExprBlock '$end'   { withPos2 $1 $5 $ OpenIn (getL $3) $5 }
+      | let open ModuleTerm ExprIn ExprBlock '$end' { withPos2 $1 $5 $ OpenIn $3 $5 }
       | if Expr then ExprBlock else ExprBlock '$end'
           { withPos2 $1 $6 $ If $2 $4 $6 }
       | match Exprs with ListE1(Arm) '$end'    { withPos2 $1 $3 $ Match $2 $4 }
@@ -319,9 +321,9 @@ Expr0 :: { Expr Parsed }
 -- This is required in order to avoid shift-reduce conflicts: otherwise
 -- 'M. foo.bar' could be M.(foo.bar) or M.(foo).bar
 PreAtom :: { Expr Parsed }
-     : Atom                                   { $1 }
-     | qdotid Atom                            { withPos2 $1 $2 $ OpenIn (getName $1) $2 }
-     | '!' Atom                               { makeBang $1 $2 }
+  : Atom                                      { $1 }
+  | qdotid Atom                               { withPos2 $1 $2 $ OpenIn (withPos1 $1 $ ModRef (getName $1)) $2 }
+  | '!' Atom                                  { makeBang $1 $2 }
 
 Atom :: { Expr Parsed }
      : Var                                    { withPos1 $1 (VarRef (getL $1)) }

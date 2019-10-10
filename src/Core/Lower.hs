@@ -40,7 +40,7 @@ import qualified Syntax as S
 import Syntax.Let
 import Syntax.Var (Var, Typed, VarResolved(..))
 import Syntax.Transform
-import Syntax (Expr(..), Pattern(..), Skolem(..), Toplevel(..), Constructor(..), Arm(..))
+import Syntax (Expr(..), Pattern(..), Skolem(..), ModuleTerm(..), Toplevel(..), Constructor(..), Arm(..))
 
 import Text.Pretty.Semantic (pretty)
 
@@ -273,6 +273,11 @@ lowerAnyway (RecordExt e xs _) = do
   pure $ Extend e' (zipWith build xs xs')
   where build (S.Field name _ _) (atom, ty) = (name, ty, atom)
 
+lowerAnyway (S.OpenIn _ x _) =
+  -- This is safe to do, as we know x will only be a reference/load, and so has
+  -- been lowered already.
+  lowerAnyway x
+
 lowerAnyway (Literal l _) = pure . Atom . Lit $ lowerLiteral l
 lowerAnyway (S.App f x _) = C.App <$> lowerExprAtom f <*> lowerExprAtom x
 
@@ -295,11 +300,20 @@ lowerProgEnv stmt = do
 (<$$>) :: (Functor f1, Functor f2) => (a -> b) -> f1 (f2 a) -> f1 (f2 b)
 (<$$>) = (<$>) . fmap
 
+lowerModule :: forall m. MonadLower m => ModuleTerm Typed -> m (LowerState, [Stmt])
+lowerModule (ModStruct ms _) = lowerProg' ms
+lowerModule ModRef{} = asks (,[])
+lowerModule ModLoad{} = asks (,[])
+
 lowerProg' :: forall m. MonadLower m => [Toplevel Typed] -> m (LowerState, [Stmt])
 
 lowerProg' [] = asks (,[])
-lowerProg' (Open _ _:prg) = lowerProg' prg
-lowerProg' (Module _ _ b:prg) = lowerProg' (b ++ prg)
+lowerProg' (Open m:prg) = do
+  (s, ms) <- lowerModule m
+  (ms++) <$$> local (\_ -> s) (lowerProg' prg)
+lowerProg' (Module _ _ m:prg) = do
+  (s, ms) <- lowerModule m
+  (ms++) <$$> local (\_ -> s) (lowerProg' prg)
 
 -- ∨ TC desugars all of these to TypeDecl + Let
 lowerProg' (Class{}:prg) = lowerProg' prg

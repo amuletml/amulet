@@ -26,14 +26,23 @@ import Syntax.Var
 data TopAccess = Public | Private
   deriving (Eq, Ord, Show, Data)
 
+data ModuleTerm p
+  = ModStruct [Toplevel p] (Ann p)
+  | ModRef (Var p) (Ann p)
+  | ModLoad Text (Ann p)
+
+deriving instance (Eq (Var p), Eq (Ann p)) => Eq (ModuleTerm p)
+deriving instance (Show (Var p), Show (Ann p)) => Show (ModuleTerm p)
+deriving instance (Ord (Var p), Ord (Ann p)) => Ord (ModuleTerm p)
+deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (ModuleTerm p)
+
 data Toplevel p
   = LetStmt TopAccess [Binding p]
   | ForeignVal TopAccess (Var p) Text (Type p) (Ann p)
   | TypeDecl TopAccess (Var p) [TyConArg p] (Maybe [Constructor p]) (Ann p)
   | TySymDecl TopAccess (Var p) [TyConArg p] (Type p) (Ann p)
-  | Module TopAccess (Var p) [Toplevel p]
-  | Open { openName :: Var p
-         , openAs :: Maybe Text }
+  | Module TopAccess (Var p) (ModuleTerm p)
+  | Open (ModuleTerm p)
 
   | Class { className :: Var p
           , classAccess :: TopAccess
@@ -131,7 +140,13 @@ makePrisms ''Constructor
 makeLenses ''ClassItem
 makeLenses ''Fundep
 
+instance Spanned (Ann p) => Spanned (ModuleTerm p) where
+  annotation (ModStruct _ a) = annotation a
+  annotation (ModRef _ a) = annotation a
+  annotation (ModLoad _ a) = annotation a
+
 instance (Spanned (Constructor p), Spanned (Ann p)) => Spanned (Toplevel p) where
+  annotation (LetStmt _ []) = internal
   annotation (LetStmt _ [b]) = annotation b
   annotation (LetStmt _ (b:vs)) = sconcat (annotation b :| map annotation vs)
   annotation (TypeDecl _ _ _ (Just cs) x) = sconcat (annotation x :| map annotation cs)
@@ -141,7 +156,8 @@ instance (Spanned (Constructor p), Spanned (Ann p)) => Spanned (Toplevel p) wher
   annotation (Class _ _ _ _ _ _ x) = annotation x
   annotation (Instance _ _ _ _ x) = annotation x
   annotation x@TypeFunDecl{} = annotation (ann x)
-  annotation _ = internal
+  annotation (Module _ _ m) = annotation m
+  annotation (Open m) = annotation m
 
 instance Spanned (Ann p) => Spanned (Fundep p) where
   annotation = annotation . view fdAnn
@@ -175,6 +191,15 @@ prettyAcc :: TopAccess -> Doc
 prettyAcc Public = empty
 prettyAcc x = pretty x <+> empty
 
+instance Pretty (Var p) => Pretty (ModuleTerm p) where
+  pretty (ModStruct bod _) =
+    vsep [ keyword "begin"
+         , indent 2 (align (pretty bod))
+         , keyword "end"
+         ]
+  pretty (ModRef v _) = pretty v
+  pretty (ModLoad t _) = keyword "import" <+> sstring (dquotes (text t))
+
 instance Pretty (Var p) => Pretty (Toplevel p) where
   pretty (LetStmt _ []) = string "empty let?"
   pretty (LetStmt m (x:xs)) =
@@ -191,17 +216,13 @@ instance Pretty (Var p) => Pretty (Toplevel p) where
           Just [] -> equals <+> pipe
           Just cs -> equals <#> indent 2 (vsep (map ((pipe <+>) . pretty) cs))
     in keyword "type" <+> prettyAcc m <> pretty ty <+> hsep (map ((squote <>) . pretty) args) <+> ct
-  pretty (Open m Nothing) = keyword "open" <+> pretty m
-  pretty (Open m (Just a)) = keyword "open" <+> pretty m <+> keyword "as" <+> text a
+  pretty (Open m) = keyword "open" <+> pretty m
 
   pretty (TySymDecl m ty args exp _) =
     prettyAcc m <+> keyword "type" <> pretty ty <+> hsep (map ((squote <>) . pretty) args) <+> pretty exp
 
   pretty (Module am m bod) =
-    vsep [ keyword "module" <+> prettyAcc am <> pretty m <+> equals <+> keyword "begin"
-         , indent 2 (align (pretty bod))
-         , keyword "end"
-         ]
+    keyword "module" <+> prettyAcc am <> pretty m <+> equals <+> pretty bod
 
   pretty (Class v am c h fd m _) =
     vsep [ keyword "class" <+> prettyAcc am <> maybe (parens mempty) pretty c

@@ -1,5 +1,7 @@
-internal: error
+fail_unresolved_module.ml[8:6 ..8:8]: error
   Module not in scope: `X.Z`
 
   Arising from use of the declaration
-
+  │ 
+8 │ open X.Z
+  │      ^^^

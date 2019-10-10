@@ -166,10 +166,10 @@ proveSentence report success stdout tau = do
   let prog = [ TySymDecl Public (Name "_") [] (foldr addForall t (ftv t)) (annotation tau) ]
       addForall v = TyForall v (Just TyType)
       t = getL tau
-  x <- resolveProgram rScope builtinModules prog
+  x <- resolveProgram rScope prog
   case x of
     Left es -> liftIO $ traverse_ report es
-    Right (p, _) -> do
+    Right (ResolveResult p _ _) -> do
       x <- inferProgram env =<< desugarProgram p
       case x of
         This es -> liftIO $ traverse_ report es
@@ -184,9 +184,9 @@ proveSentence report success stdout tau = do
          else liftIO $ hPutDoc stdout (keyword "probably not.")
     solve _ = undefined
 
-rScope :: R.Scope
-rScope = R.emptyScope { R.tyScope = made } where
-  made = foldr (\v m -> Map.insert (Name (fst v)) (R.SVar (snd v)) m) mempty builtins
+rScope :: R.Signature
+rScope = mempty { R._types = made } where
+  made = foldr (\v m -> Map.insert (fst v) (R.SVar (snd v)) m) mempty builtins
   i x = (x, TgInternal x)
   builtins =
     Set.fromList [ i "+", i "not", i "ff", i "tt", i "<->", ("->", tyArrowName), ("*", tyTupleName) ]

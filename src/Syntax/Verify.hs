@@ -77,8 +77,8 @@ verifyProgram = traverse_ verifyStmt where
 
   verifyStmt TypeDecl{} = pure ()
   verifyStmt TypeFunDecl{} = pure ()
-  verifyStmt (Module _ _ p) = verifyProgram p
-  verifyStmt Open{} = pure ()
+  verifyStmt (Module _ _ m) = verifyModule m
+  verifyStmt (Open m) = verifyModule m
 
 -- | Verify a recursive definition is well-formed
 verifyBindingGroup :: MonadVerify m
@@ -108,6 +108,11 @@ verifyBindingGroup k _ = traverse_ verifyScc . depOrder where
 
       unless (naked `Set.disjoint` vars) $
         tell (Seq.singleton (NonRecursiveRhs blame var (Set.toList (naked `Set.intersection` vars))))
+
+verifyModule :: MonadVerify m => ModuleTerm Typed -> m ()
+verifyModule (ModStruct m _) = verifyProgram m
+verifyModule ModRef{} = pure ()
+verifyModule ModLoad{} = pure ()
 
 verifyExpr :: MonadVerify m => Expr Typed -> m ()
 verifyExpr (VarRef v (s, t)) = do
