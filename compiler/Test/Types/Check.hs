@@ -15,6 +15,7 @@ import Parser.Wrapper (runParser)
 import Parser
 
 import Syntax.Resolve (ResolveResult(..), resolveProgram)
+import Syntax.Resolve.Import (runNullImport)
 import Types.Infer (inferProgram)
 import Syntax.Desugar (desugarProgram)
 import Syntax.Types (difference, toMap)
@@ -26,7 +27,7 @@ import Text.Pretty.Semantic
 result :: String -> T.Text -> T.Text
 result f c = runIdentity . flip evalNameyT firstName $ do
   let parsed = requireJust f c $ runParser f (L.fromStrict c) parseTops
-  ResolveResult resolved _ _ <- requireRight f c <$> resolveProgram builtinResolve parsed
+  ResolveResult resolved _ _ <- requireRight f c <$> runNullImport (resolveProgram builtinResolve parsed)
 
   desugared <- desugarProgram resolved
   inferred <- inferProgram builtinEnv desugared

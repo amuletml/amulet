@@ -19,12 +19,12 @@ import Syntax.Resolve.Scope
 import Syntax.Var
 
 data ImportResult
-  -- | The module was successfully imported. This contains the "name" of the
-  -- module, and its contents.
+  -- | The module was successfully imported. This contains the "name" of
+  -- the module, and its contents.
   = Imported (Var Resolved) Signature
   | Errored -- ^ The module errored while importing.
-  -- | An import loop, with the a list of import locations and what they try to
-  -- load.
+  -- | An import loop, with the a list of import locations and what they
+  -- try to load.
   | ImportCycle (E.NonEmpty (FilePath, Span))
   | NotFound -- ^ The module could not be found while importing.
   deriving Show
@@ -33,8 +33,8 @@ data ImportResult
 class Monad m => MonadImporter m where
   -- | Import a module with a given name (usually a file path).
   --
-  -- The 'Span' should be the location of the import node - this is used for
-  -- relative file lookup, and error reporting in the event of an import cycle.
+  -- The 'Span' should be the location of the import node - this is used
+  -- for error reporting in the event of an import cycle.
   importModule :: Span -> Text -> m ImportResult
 
 instance MonadImporter m => MonadImporter (ReaderT e m) where

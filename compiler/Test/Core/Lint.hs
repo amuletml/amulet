@@ -15,6 +15,7 @@ import Control.Monad.Namey
 import Types.Infer (inferProgram)
 
 import Syntax.Resolve (ResolveError, ResolveResult(..), resolveProgram)
+import Syntax.Resolve.Import (runNullImport)
 import Syntax.Desugar (desugarProgram)
 import Syntax.Builtin
 
@@ -52,7 +53,7 @@ compile name file = do
   case runParser name (L.fromStrict file) parseTops of
     (Nothing, es) -> pure $ CParse es
     (Just parsed, _) -> do
-      resolved <- resolveProgram builtinResolve parsed
+      resolved <- runNullImport $ resolveProgram builtinResolve parsed
       case resolved of
         Left es -> pure $ CResolve es
         Right (ResolveResult resolved _ _) -> do
