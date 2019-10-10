@@ -28,17 +28,16 @@ module Syntax.Resolve
   , VarKind(..)
   ) where
 
+import Control.Lens hiding (Lazy, Context)
 import Control.Monad.Chronicles
 import Control.Monad.Reader
 import Control.Applicative
 import Control.Monad.Namey
-import Control.Lens hiding (Lazy, Context)
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import Data.Traversable
-import Data.Bifunctor
 import Data.Foldable
 import Data.Function
 import Data.Functor
@@ -76,15 +75,15 @@ resolveProgram :: MonadNamey m
                -> m (Either [ResolveError] ResolveResult)
                -- ^ The resolved program or a list of resolution errors
 resolveProgram sc ts
-  = (these (Left . toList) (\((s, exposed), inner) -> Right (ResolveResult s exposed inner)) (\x _ -> Left (toList x))<$>)
+  = (these (Left . toList) (\(s, exposed, inner) -> Right (ResolveResult s exposed inner)) (\x _ -> Left (toList x))<$>)
   . runChronicleT . flip runReaderT (Context sc mempty)
-  $ reTops ts mempty >>= \x -> (x,) <$> view scope
+  $ reTops ts mempty
 
 -- | Resolve the whole program
 reTops :: MonadResolve m
        => [Toplevel Parsed] -> Signature
-       -> m ([Toplevel Resolved], Signature)
-reTops [] sig = pure ([], sig)
+       -> m ([Toplevel Resolved], Signature, Signature)
+reTops [] sig = views scope ([], sig,)
 
 reTops (LetStmt am bs:rest) sig = do
   (bs', vs, ts) <- unzip3 <$> traverse reBinding bs
@@ -154,7 +153,7 @@ reTops (r@(Open mod):rest) sig = do
   (mod', sig') <- retcons (wrapError r) $ reModule mod
   case sig' of
     Nothing -> confess empty
-    Just sig' -> local (scope %~ (<>sig')) $ first (Open mod':) <$> reTops rest sig
+    Just sig' -> local (scope %~ (<>sig')) $ first3 (Open mod':) <$> reTops rest sig
 
 reTops (r@(Module am name mod):rest) sig = do
   name' <- tagVar name
@@ -221,20 +220,20 @@ reTops (t@(Instance cls ctx head ms ann):rest) sig = do
 
     pure (Instance cls' ctx' head' ms'' ann)
 
-  first (t':) <$> reTops rest sig
+  first3 (t':) <$> reTops rest sig
 
 reTopsWith :: MonadResolve m
            => TopAccess -> [Toplevel Parsed] -> Signature
            -> (Signature -> Signature)
            -> m (Toplevel Resolved)
-           -> m ([Toplevel Resolved], Signature)
+           -> m ([Toplevel Resolved], Signature, Signature)
 reTopsWith am ts sig extend t = do
   let sig' = case am of
         Public -> extend sig
         Private -> sig
   local (scope %~ extend) $ do
     t' <- t
-    first (t':) <$> reTops ts sig'
+    first3 (t':) <$> reTops ts sig'
 
 -- | Resolve a module term.
 reModule :: MonadResolve m
@@ -244,7 +243,7 @@ reModule (ModStruct bod an) = do
   res <- recover Nothing $ Just <$> reTops bod mempty
   pure $ case res of
     Nothing -> (ModStruct [] an, Nothing)
-    Just (bod', sig) -> (ModStruct bod' an, Just sig)
+    Just (bod', sig, _) -> (ModStruct bod' an, Just sig)
 reModule (ModRef ref an) = do
   (ref', sig) <- recover (junkVar, Nothing)
                $ view scope >>= lookupIn (^.modules) ref VarModule

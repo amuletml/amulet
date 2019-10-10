@@ -374,13 +374,13 @@ parseCore state parser name input = do
                  (lEnv', lower) <- L.runLowerWithEnv (lowerState state) (L.lowerProgEnv prog)
                  lower <- killNewtypePass lower
                  lastG <- genName
-                 case lower of
-                   [] -> error "lower returned no statements for the repl"
-                   _ -> pure ()
-                 pure $ Just ( case last lower of
-                                 (C.StmtLet (C.One (v, t, _))) -> [(v, t)]
-                                 (C.StmtLet (C.Many vs)) -> map (\(v, t, _) -> (v, t)) vs
-                                 _ -> []
+                 let lastTerms = case lower of
+                       [] -> []
+                       _:_ -> case last lower of
+                         (C.StmtLet (C.One (v, t, _))) -> [(v, t)]
+                         (C.StmtLet (C.Many vs)) -> map (\(v, t, _) -> (v, t)) vs
+                         _ -> []
+                 pure $ Just ( lastTerms
                              , prog
                              , lower
                              , state { resolveScope = rScp
