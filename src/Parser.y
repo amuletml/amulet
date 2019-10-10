@@ -217,7 +217,7 @@ TyFunKindSig :: { Maybe (Type Parsed) }
 ModuleTerm :: { ModuleTerm Parsed }
   : Begin(Tops)                             { withPos1 $1 $ ModStruct (getL $1) }
   | Con                                     { withPos1 $1 $ ModRef (getL $1) }
-  | import string                           { withPos2 $1 $2 $ ModLoad (getString $1) }
+  | import string                           { withPos2 $1 $2 $ ModLoad (getString $2) }
 
 Begin(a)
   : begin a end                             { lPos2 $1 $3 $2 }

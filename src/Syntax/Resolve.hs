@@ -47,6 +47,7 @@ import Data.Maybe
 import Data.These
 import Data.List
 
+import Syntax.Resolve.Import
 import Syntax.Resolve.Scope
 import Syntax.Resolve.Error
 import Syntax.Subst
@@ -64,10 +65,11 @@ data ResolveResult = ResolveResult
 
 type MonadResolve m = ( MonadChronicles ResolveError m
                       , MonadReader Context m
+                      , MonadImporter m
                       , MonadNamey m )
 
 -- | Resolve a program within a given 'Scope' and 'ModuleScope'
-resolveProgram :: MonadNamey m
+resolveProgram :: (MonadNamey m, MonadImporter m)
                => Signature -- ^ The scope in which to resolve this program
                -- ^ The current module scope. We return an updated
                -- version of this if we declare or extend any modules.
@@ -248,7 +250,21 @@ reModule (ModRef ref an) = do
   (ref', sig) <- recover (junkVar, Nothing)
                $ view scope >>= lookupIn (^.modules) ref VarModule
   pure (ModRef ref' an, sig)
-reModule ModLoad{} = error "TODO: Not yet implemented"
+reModule r@(ModLoad path a) = do
+  result <- importModule a path
+  (var, sig) <- case result of
+    Imported var sig -> pure (var, Just sig)
+    Errored -> pure (junkVar, Nothing)
+    ImportCycle loop -> do
+      dictates (wrapError r (ImportLoop loop))
+      pure (junkVar, Nothing)
+    NotFound -> do
+      dictates (wrapError r (UnresolvedImport path))
+      pure (junkVar, Nothing)
+
+  -- Replace this with a reference so we don't have to care later on
+  -- about this. Bit ugly, but I'll survive
+  pure (ModRef var a, sig)
 
 resolveTele :: (MonadResolve m, Reasonable f p)
             => f p -> [TyConArg Parsed] -> m ([TyConArg Resolved], [(Var Parsed, Var Resolved)])

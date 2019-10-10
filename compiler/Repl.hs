@@ -38,6 +38,7 @@ import System.IO
 import qualified Syntax.Builtin as Bi
 import Syntax.Resolve (ResolveResult(..), resolveProgram)
 import Syntax.Resolve.Scope (Signature)
+import Syntax.Resolve.Import (runNullImport)
 import Syntax.Desugar (desugarProgram)
 import Syntax.Verify
 import Syntax (displayType)
@@ -215,8 +216,9 @@ infoCommand (T.pack . dropWhile isSpace -> input) = do
           prog :: [S.Toplevel S.Parsed]
 
       resolved <-
-        flip evalNameyT (lastName state) $
-          resolveProgram (resolveScope state) prog
+          flip evalNameyT (lastName state)
+        . runNullImport
+        $ resolveProgram (resolveScope state) prog
 
       case resolved of
         Right (ResolveResult [ S.LetStmt _ [S.Binding _ (S.VarRef name _) _ _] ] _ _) ->
@@ -240,7 +242,7 @@ typeCommand (dropWhile isSpace -> input) = do
           prog :: [S.Toplevel S.Parsed]
           prog = [ S.LetStmt S.Public [ S.Matching (S.Wildcard ann) parsed ann ] ]
 
-      resolved <- resolveProgram (resolveScope state) prog
+      resolved <- runNullImport $ resolveProgram (resolveScope state) prog
       case resolved of
         Left es -> liftIO $ traverse_ (hReport (outputHandle state) files) es
         Right (ResolveResult resolved _ _) -> do
@@ -387,7 +389,7 @@ parseCore state parser name input = do
                                      , inferScope = env'
                                      , lowerState = lEnv'
                                      , lastName = lastG })
-      resolved <- resolveProgram (resolveScope state) parsed'
+      resolved <- runNullImport $ resolveProgram (resolveScope state) parsed'
       case resolved of
         Left es -> liftIO $ traverse_ (hReport (outputHandle state) files) es $> Nothing
         Right (ResolveResult resolved _ rScp) -> do
@@ -514,7 +516,7 @@ startServer ready port state = Net.withSocketsDo $ bracket getSock Net.close (wo
   getSock = do
     (addr:_) <-
       Net.getAddrInfo (Just (Net.defaultHints { Net.addrFlags = [ Net.AI_NUMERICHOST
-                                                                , Net.AI_PASSIVE 
+                                                                , Net.AI_PASSIVE
                                                                 ]
                                               , Net.addrSocketType = Net.Stream }))
                       (Just "127.0.0.1")

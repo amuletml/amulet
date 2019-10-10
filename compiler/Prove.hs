@@ -35,6 +35,7 @@ import Syntax.Subst
 import Syntax.Types
 import Syntax
 
+import Syntax.Resolve.Import (runNullImport)
 import qualified Syntax.Resolve.Scope as R
 import Syntax.Resolve
 import Syntax.Desugar
@@ -166,7 +167,7 @@ proveSentence report success stdout tau = do
   let prog = [ TySymDecl Public (Name "_") [] (foldr addForall t (ftv t)) (annotation tau) ]
       addForall v = TyForall v (Just TyType)
       t = getL tau
-  x <- resolveProgram rScope prog
+  x <- runNullImport $ resolveProgram rScope prog
   case x of
     Left es -> liftIO $ traverse_ report es
     Right (ResolveResult p _ _) -> do

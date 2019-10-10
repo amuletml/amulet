@@ -136,6 +136,7 @@ library
                      , base >= 4.9 && < 4.14
                      , lens >= 4.15 && < 4.19
                      , these >= 1 && < 1.1
+                     , filepath >= 1.4 && < 1.5
                      , hashable >= 1.2 && < 1.4
                      , containers >= 0.5 && < 0.7
                      , these-lens >= 1 && < 1.1
@@ -191,6 +192,7 @@ library
                      , Syntax.Resolve
                      , Syntax.Resolve.Error
                      , Syntax.Resolve.Scope
+                     , Syntax.Resolve.Import
                      -- TC
                      , Types.Infer
                      , Types.Holes
