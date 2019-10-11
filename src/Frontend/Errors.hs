@@ -81,8 +81,10 @@ displayDoc :: MonadIO m => Handle -> SimpleDoc (Either N.NoteStyle Style) -> m (
 displayDoc h err = liftIO $ do
   term <- hIsTerminalDevice h
   let display = if term then A.displayDecorated else P.display
-  T.hPutStrLn h (display (either N.toAnsi toAnsi <$> err))
-
+      displayed = display (either N.toAnsi toAnsi <$> err)
+  if T.null displayed
+     then pure ()
+     else T.hPutStrLn h displayed
 
 highlightAmulet :: T.Text -> N.Highlighted Style
 highlightAmulet t =
