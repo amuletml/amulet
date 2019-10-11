@@ -107,6 +107,8 @@ tokens :-
   <0> ":"      { constTok TcColon }
   <0> ";" ";"  { constTok TcTopSep }
   <0> ";"      { constTok TcSemicolon }
+  <0> "(" "|"  { constTok TcOBanana }
+  <0> "|" ")"  { constTok TcCBanana }
   <0> "("      { constTok TcOParen }
   <0> ")"      { constTok TcCParen }
   <0> "@"      { constTok TcAt }

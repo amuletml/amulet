@@ -120,7 +120,9 @@ unifyPure_v :: [(Type Typed, Type Typed)] -> Maybe (Subst Typed)
 unifyPure_v ts = fst . flip runNamey firstName $ do
   let err_unify_pure = error "unifyPure_v: forced variable substitution in pure unifier should be impossible"
   x <- runChronicleT $ do
-    (sub, _, _) <- solve (fmap (uncurry (ConUnify (It'sThis BecauseInternal) mempty err_unify_pure)) (Seq.fromList ts)) mempty
+    (sub, _, _) <- solveWith (fmap (uncurry (ConUnify (It'sThis BecauseInternal) mempty err_unify_pure)) (Seq.fromList ts))
+                              mempty
+                              emptyState{_solveFuel = 1}
     pure sub
   case x of
     These e x | null e -> pure (Just x)
@@ -161,8 +163,15 @@ solve :: (MonadNamey m, MonadChronicles TypeError m)
       => Seq.Seq (Constraint Typed)
       -> SolverInfo
       -> m (Subst Typed, Map.Map (Var Typed) (Wrapper Typed), [Constraint Typed])
-solve cs info = do
-  (cs', s) <- runSolve False info emptyState (doSolve cs)
+solve cs info = solveWith cs info emptyState
+
+solveWith :: (MonadNamey m, MonadChronicles TypeError m)
+      => Seq.Seq (Constraint Typed)
+      -> SolverInfo
+      -> SolveState
+      -> m (Subst Typed, Map.Map (Var Typed) (Wrapper Typed), [Constraint Typed])
+solveWith cs info state = do
+  (cs', s) <- runSolve False info state (doSolve cs)
   let ss = s ^. solveTySubst
   pure (fmap (apply ss) ss, s ^. solveCoSubst, cs')
 
@@ -668,7 +677,7 @@ unify scope (TyOperator l v r) (TyOperator l' v' r')
 unify scope ta@(TyApps (TyCon v) xs@(_:_)) b = do
   x <- view solveInfo
 
-  traceM (show (x ^. at v))
+  traceM (show (x, v, x ^. at v))
 
   case x ^. at v of
     Just (Right tf) -> unifyTyFunApp tf scope xs b
@@ -698,7 +707,8 @@ unify scope ta@(TyApps (TyCon v) xs@(_:_)) b = do
         tails <- traverse (uncurry (unify scope)) (zip xs_b ys)
         pure (foldl AppCo heads tails)
 
-      _ ->
+      _ -> do
+        doWork (unequal ta b)
         (confesses =<< unequal ta b)
           `catchChronicle` \_ -> fmap SymCo (unify scope b ta)
 

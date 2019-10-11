@@ -63,6 +63,8 @@ data TokenClass
   | TcBang -- ^ A @!@ token.
   | TcSemicolon -- ^ A @;@ token.
   | TcTopSep -- ^ A @;;@ token.
+  | TcOBanana -- ^ A @(|@ token.
+  | TcCBanana -- ^ A @|)@ token.
   | TcOParen -- ^ A @(@ token.
   | TcCParen -- ^ A @)@ token.
   | TcAt -- ^ A @@{@ token.
@@ -153,6 +155,8 @@ instance Show TokenClass where
   show TcCBrace = "}"
   show TcOSquare = "["
   show TcCSquare = "]"
+  show TcOBanana = "(|"
+  show TcCBanana = "|)"
 
   show (TcOp t) = unpack t
   show (TcIdentifier t) = unpack t

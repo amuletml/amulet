@@ -6,7 +6,7 @@ let a && b = if a then b else false
 let a || b = if a then true else b
 let not a = if a then false else true
 
-let () = ignore { ands = (&&), ors = (||), not }
+let () = ignore { ands = (&&), ors = ( || ), not }
 
 let () = ignore @@ fun () ->
   if bool

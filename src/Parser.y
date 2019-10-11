@@ -122,6 +122,8 @@ import Syntax
   ';'      { Token TcSemicolon _ _ }
   '('      { Token TcOParen _ _ }
   ')'      { Token TcCParen _ _ }
+  '(|'     { Token TcOBanana _ _ }
+  '|)'     { Token TcCBanana _ _ }
   '@'      { Token TcAt _ _ }
   '{'      { Token TcOBrace _ _ }
   '}'      { Token TcCBrace _ _ }
@@ -332,6 +334,7 @@ Atom :: { Expr Parsed }
      | hole                                   { withPos1 $1 (Hole (Name (getHole $1))) }
      | '_'                                    { withPos1 $1 (Hole (Name (T.singleton '_'))) }
      | begin List1(CompStmt, ExprSep) end     { withPos2 $1 $3 $ DoExpr bindVar $2 }
+     | '(|' Expr0 ListE1(PreAtom) '|)'        { withPos2 $1 $4 $ Idiom pureVar apVar ($2:$3) }
      | '(' ')'                                { withPos2 $1 $2 $ Literal LiUnit }
      | '(' Section ')'                        { withPos2 $1 $3 $ Parens $2 }
      | '(' NullSection ',' List1(NullSection, ',') ')'
@@ -671,6 +674,8 @@ tuplePattern [x] a = case x of
 tuplePattern xs a = PTuple xs a
 
 bindVar = Name (T.pack ">>=")
+apVar = Name (T.pack "<*>")
+pureVar = Name (T.pack "pure")
 
 getIdent  (Token (TcOp x) _ _)         = x
 getIdent  (Token (TcIdentifier x) _ _) = x

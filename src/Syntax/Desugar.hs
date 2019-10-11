@@ -125,6 +125,16 @@ expr (ListComp e qs an) = transListComp (e, qs, an) (ListExp [] an)
 expr (DoExpr bind qs an) = begin <$> transDoExpr (VarRef bind an) qs where
   begin = flip Begin an . (:[])
 
+expr (Idiom _ _ [] _) = error "parse error Idiom made it to Ds"
+expr (Idiom pure_v app_v (fn:args) an) =
+  do
+    fn <- expr fn
+    foldl mkapp (App pure fn an) <$> traverse expr args
+  where
+    mkapp f x = App (App app f an) x an
+    pure = VarRef pure_v an
+    app = VarRef app_v an
+
 expr (OpenIn mod e an) = OpenIn <$> modTerm mod <*> expr e <*> pure an
 
 buildTuple :: forall m. MonadNamey m => Ann Desugared
@@ -228,7 +238,7 @@ transListComp (ex, CompGen v l1 an:qs, an') l2 = do
                 [ Arm { armPat = consPat cx cus' an
                       , armGuard = Nothing
                       , armExp =
-                          Match x
+                          maybeMatch x
                              ( Arm { armPat = pat v
                                  , armGuard = Nothing
                                  , armExp = success }
@@ -250,6 +260,11 @@ transListComp (ex, CompLet bs _:qs, an) l =
 transListComp (ex, CompGuard e:qs, an) l =
   If <$> expr e <*> transListComp (ex, qs, an) l <*> pure l <*> pure an
 transListComp (ex, [], an) l = cons <$> expr ex <*> pure l <*> pure an
+
+maybeMatch :: Expr Desugared -> [Arm Desugared] -> Ann Desugared -> Expr Desugared
+maybeMatch ex [arm@Arm{ armGuard = Nothing, armExp = body }] ann =
+  Let [Matching (armPat arm) ex ann] body ann
+maybeMatch ex arms ann = Match ex arms ann
 
 transDoExpr :: forall m. MonadNamey m => Expr Desugared -> [CompStmt Resolved] -> m (Expr Desugared)
 transDoExpr bind = go where

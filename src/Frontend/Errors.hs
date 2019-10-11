@@ -122,6 +122,6 @@ highlightAmulet t =
 
     toStyle t
       | t >= TcArrow && t <= TcUnderscore = soperator
-      | t >= TcComma && t <= TcCSquare = soperator
+      | t >= TcComma && t <= TcCBanana = soperator
       | t >= TcLet && t <= TcAs = soperator
       | otherwise = id
