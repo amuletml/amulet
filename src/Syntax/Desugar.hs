@@ -120,6 +120,16 @@ expr (ListComp e qs an) = transListComp (e, qs, an) (ListExp [] an)
 expr (DoExpr bind qs an) = begin <$> transDoExpr (VarRef bind an) qs where
   begin = flip Begin an . (:[])
 
+expr (Idiom _ _ [] _) = error "parse error Idiom made it to Ds"
+expr (Idiom pure_v app_v (fn:args) an) =
+  do
+    fn <- expr fn
+    foldl mkapp (App pure fn an) <$> traverse expr args
+  where
+    mkapp f x = App (App app f an) x an
+    pure = VarRef pure_v an
+    app = VarRef app_v an
+
 expr (OpenIn mod e an) = OpenIn mod <$> expr e <*> pure an
 
 buildTuple :: forall m. MonadNamey m => Ann Desugared

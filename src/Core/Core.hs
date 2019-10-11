@@ -219,7 +219,7 @@ instance (Annotation b, Pretty a) => Pretty (AnnTerm b a) where
     prettyRows :: [(Text, Type a, Atom a)] -> Doc
     prettyRows = hsep . punctuate comma . map (\(x, t, v) -> text x <+> colon <+> pretty t <+> equals <+> pretty v)
   pretty (AnnValues an xs) =
-    annotated an $ soperator (string "(|") <+> (hsep . punctuate comma . map pretty $ xs) <+> soperator (string "|)")
+    annotated an $ soperator (string "(#") <+> (hsep . punctuate comma . map pretty $ xs) <+> soperator (string "#)")
   pretty (AnnCast an a phi) = annotated an $ parens $ pretty a <+> soperator (string "|>") <+> pretty phi
 
 instance Pretty a => Pretty (Coercion a) where

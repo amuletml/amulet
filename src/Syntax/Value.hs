@@ -39,6 +39,7 @@ value BothSection{} = True
 value AccessSection{} = True
 value (ListExp xs _) = all value xs
 value ListComp{} = False
+value Idiom{} = False
 value (OpenIn _ e _) = value e
 value (ExprWrapper _ e _) = value e
 value (DoExpr _ e _) =

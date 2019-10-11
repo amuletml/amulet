@@ -87,7 +87,7 @@ let zip (Stream (f, start)) (Stream (g, start')) =
         | Yield (y, sb') -> Yield ((x, y), sa, sb', None)
   Stream (go, start, start', None)
 
-let (|>) x f = f x
+let ( |> ) x f = f x
 let uncurry f (x, y) = f x y
 
 let (>>>) f g = fun x -> g (f x)
