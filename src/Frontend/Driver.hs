@@ -23,11 +23,22 @@ module Frontend.Driver
   ( Driver, emptyDriver
   , fileMap
 
+  -- * REPL interaction
+  --
+  -- $repl
   , resolve, resolveWith
   , infer, inferWith
   , lower, lowerWith
-  , compile
 
+  -- * Compilation
+  --
+  -- $compile
+  , compile
+  , loadPrelude
+
+  -- * Querying the driver
+  --
+  -- $query
   , getSignature, getTypeEnv
   , getVerified, getVerifiedAll
   , getLowered
@@ -86,6 +97,10 @@ import Text.Pretty.Note
 -- Modules may not go through all stages of a pipeline at once (or at all). The
 -- only requirement is that their dependencies have been processed before they
 -- have.
+--
+-- Note, while 'sig' represents the current module's signature, 'env' and
+-- '_lowerState' are the /accumulated/ state of this module and all it
+-- dependencies.
 data Stage
   = SParsed     { _pBody :: [Toplevel Parsed] }
   | SUnparsed
@@ -128,15 +143,24 @@ data Driver = Driver
 makeLenses ''Module
 makeLenses ''Driver
 
+-- | The default file driver.
 emptyDriver :: Driver
 emptyDriver = Driver mempty mempty
 
+-- | Construct a file map, suitable for use with 'fileSpans' and other
+-- "Text.Pretty.Note" functions.
 fileMap :: MonadIO m => Driver -> m FileMap
 fileMap driver
   = liftIO
   . traverse (\mod -> (modSource mod,) <$> T.readFile (modLocation mod))
   . Map.elems
   $ driver ^. modules
+
+{- $repl
+
+   These functions provide a way of loading an external expression,
+   utilising the driver when loading external files.
+-}
 
 -- | Resolve a term with the current driver.
 resolve :: (MonadNamey m, MonadIO m, MonadState Driver m)
@@ -224,7 +248,13 @@ lowerWith root parsed sig env lState = do
           (lEnv, l) <- runLowerWithEnv (lState <> lEnv) (lowerProgEnv inferred)
           pure (Just (concat (ls Seq.|> l), lEnv, inferred, env, resolved))
 
--- | Attempt to compile a single file.
+{- $compile
+
+   Various helper functions for compiling a whole bundle of files.
+ -}
+
+-- | Attempt to compile a single file. Returns the concatenated core of
+-- all files.
 compile :: (MonadNamey m, MonadIO m, MonadState Driver m)
         => FilePath -> m (Maybe [Stmt CoVar], ErrorBundle)
 compile path = do
@@ -258,6 +288,24 @@ lowerIts :: (MonadNamey m, MonadState Driver m)
          -> m (Set.Set FilePath, LowerState, Seq.Seq [Stmt CoVar])
 lowerIts all paths state = foldrM (lowerIt all) state paths
 
+
+verifyProg :: Name -> Env -> [Toplevel Typed] -> (Bool, ErrorBundle)
+verifyProg v env inferred =
+  let verified' = runVerify env v (verifyProgram inferred)
+  in case verified' of
+    Right () -> (True, mempty)
+    Left es -> (any isError es, mempty & verifyErrors .~ toList es)
+
+{- $query
+
+   We provide various methods for querying "the oracle". These take some
+   /absolute/ file path, and perform whatever compilation steps required
+   in order to produce the required output.
+
+   All functions also return an 'ErrorBundle', holding any errors which
+   occurred in the process of loading this module.
+-}
+
 addModule :: (MonadNamey m, MonadState Driver m, MonadIO m)
           => FilePath -> m Module
 addModule path = do
@@ -284,9 +332,6 @@ addModule path = do
   pure mod
 
 -- | Get or compute a module's signature.
---
--- This returns the signature, if it could be computed successfully, as
--- well any errors encountered when satisfying the request.
 getSignature :: (MonadNamey m, MonadState Driver m, MonadIO m)
            => FilePath -> m (Maybe Signature, ErrorBundle)
 getSignature path = do
@@ -313,10 +358,6 @@ getSignature path = do
     stage -> pure (Just (sig stage), mempty)
 
 -- | Get or compute a module's type environment.
---
--- This returns the environment, if it could be computed successfully, as
--- well as an errors encountered while satisfying the request (such as
--- type errors in imported modules, etc...)
 getTypeEnv :: (MonadNamey m, MonadState Driver m, MonadIO m)
             => FilePath -> m (Maybe Env, ErrorBundle)
 getTypeEnv path = do
@@ -358,9 +399,6 @@ getTypeEnv path = do
     stage -> pure (Just (env stage), depErrors)
 
 -- | Determine whether a module can be successfully verified.
---
--- The error handle includes all errors resulting from /this verification
--- pass/.
 getVerified :: (MonadNamey m, MonadState Driver m, MonadIO m)
              => FilePath -> m (Maybe (), ErrorBundle)
 getVerified path = do
@@ -397,13 +435,6 @@ getVerifiedAll path = do
   (there, depErrors) <- checkAll getVerifiedAll () (mod ^. dependencies)
 
   pure (here >> there, depErrors <> errors)
-
-verifyProg :: Name -> Env -> [Toplevel Typed] -> (Bool, ErrorBundle)
-verifyProg v env inferred =
-  let verified' = runVerify env v (verifyProgram inferred)
-  in case verified' of
-    Right () -> (True, mempty)
-    Left es -> (any isError es, mempty & verifyErrors .~ toList es)
 
 -- | Get or compute a module's core representation.
 getLowered :: (MonadNamey m, MonadState Driver m, MonadIO m)
