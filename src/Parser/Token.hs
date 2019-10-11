@@ -54,6 +54,7 @@ data TokenClass
   | TcInstance -- ^ An @instance@ token.
   | TcWhen -- ^ A @when@ token.
   | TcPrivate -- ^ A @private@ token.
+  | TcImport -- ^ An @import@ token.
   | TcAs   -- ^ An @as@ token.
 
   | TcDot -- ^ A @.@ token.
@@ -134,6 +135,7 @@ instance Show TokenClass where
   show TcModule = "module"
   show TcOpen = "open"
   show TcLazy = "lazy"
+  show TcImport = "import"
   show TcAs = "as"
   show TcClass = "class"
   show TcInstance = "instance"

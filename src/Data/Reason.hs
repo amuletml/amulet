@@ -86,6 +86,9 @@ instance (Data p, Data (Ann p), Data (Var p), Pretty (Var p)) => Reasonable Cons
 instance (Spanned (Ann p), Data p, Data (Ann p), Data (Var p), Pretty (Var p)) => Reasonable Toplevel p where
   blame _ = string "the" <+> highlight "declaration"
 
+instance (Spanned (Ann p), Pretty (Var p)) => Reasonable ModuleTerm p where
+  blame _ = string "the" <+> highlight "module"
+
 instance (Spanned (Ann p), Pretty (Var p)) => Reasonable Binding p where
   blame _ = string "the" <+> highlight "binding"
 

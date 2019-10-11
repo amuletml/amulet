@@ -11,6 +11,7 @@ import Data.Text (Text)
 import Data.Typeable
 import Data.Data
 
+import {-# SOURCE #-} Syntax.Toplevel
 import Syntax.Type
 import Syntax.Var
 
@@ -79,7 +80,7 @@ data Expr p
   | TupleSection [Maybe (Expr p)] (Ann p)
 
   -- Module
-  | OpenIn (Var p) (Expr p) (Ann p)
+  | OpenIn (ModuleTerm p) (Expr p) (Ann p)
 
   -- Laziness
   | Lazy (Expr p) (Ann p)

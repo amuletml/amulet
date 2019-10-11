@@ -1,19 +1,20 @@
-{-# LANGUAGE OverloadedStrings, LambdaCase, FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings, LambdaCase, FlexibleContexts, TemplateHaskell #-}
 
 -- | Track variables in the current scope while resolving 'Syntax'. This
 -- also tracks ambiguous definitions and modules.
 module Syntax.Resolve.Scope
-  ( Scope(..)
-  , ScopeVariable(..)
-  , ModuleScope(..)
-  , emptyScope, emptyModules
-  , tagVar, tagModule
-  , extend, extendN
-  , extendTy, extendTyN
-  , extendTyvar, extendTyvarN
-  , extendM
-  , insertN'
+  ( Slot(..)
+  , VarName
+  , Signature(..), vals, types, modules
+  , Context(..), scope, tyvars, emptyContext
+  , tagVar
+  , withVal, withVals, extendVals
+  , withTy, withTys
+  , withMod
+  , extendTyvar, extendTyvars
   ) where
+
+import Control.Lens hiding (Context)
 
 import qualified Data.Map as Map
 import qualified Data.Text as T
@@ -26,38 +27,46 @@ import Control.Monad.Namey
 import Syntax.Var
 
 -- | A variable in the current scope
-data ScopeVariable
+data Slot
   = SVar (Var Resolved)       -- ^ Can be resolved to a specific variable
   | SAmbiguous [Var Resolved] -- ^ Can be resolved to 2 or more variables.
-  deriving (Eq, Ord, Show)
+  deriving Show
 
--- | The current scope of the resolver.
-data Scope = Scope
-             { -- | All variables in the current scope
-               varScope    :: Map.Map (Var Parsed) ScopeVariable
-               -- | All types in the current scope
-             , tyScope     :: Map.Map (Var Parsed) ScopeVariable
-               -- | All type variables in the current scope
-             , tyvarScope  :: Map.Map (Var Parsed) ScopeVariable
-               -- | The current module we are resolving in
-             , modStack    :: [T.Text]
-             }
-  deriving (Show)
+type VarName = T.Text
 
--- | A mapping of fully-qualified module names to the variables within
--- them.
---
--- There is only one 'ModuleScope' for the resolution process.
-newtype ModuleScope = ModuleScope (Map.Map (Var Parsed) (Var Resolved, Scope))
-  deriving (Show)
+-- | The signature for a module.
+data Signature = Signature
+  { -- | All value variables in the module.
+    _vals :: Map.Map VarName Slot
+    -- | All types in the module
+  , _types :: Map.Map VarName Slot
+    -- | All child modules in the module. If the signature is 'Nothing',
+    -- this means the module could not be resolved.
+  , _modules :: Map.Map VarName (Var Resolved, Maybe Signature)
+  }
+  deriving Show
 
--- | An empty scope, suitable for a new module
-emptyScope :: Scope
-emptyScope = Scope mempty mempty mempty mempty
+instance Semigroup Signature where
+  (Signature v t m) <> (Signature v' t' m') = Signature (Map.union v' v) (Map.union t' t) (Map.union m' m)
 
--- | An empty module scope
-emptyModules :: ModuleScope
-emptyModules = ModuleScope mempty
+instance Monoid Signature where
+  mempty = Signature mempty mempty mempty
+
+-- | The current state of the resolver.
+data Context = Context
+  { -- | All declared items in the current scope
+    _scope :: Signature
+    -- | All type variables in the current scope
+  , _tyvars :: Map.Map VarName Slot
+  }
+  deriving Show
+
+makeLenses ''Signature
+makeLenses ''Context
+
+-- | An empty context for resolving
+emptyContext :: Context
+emptyContext = Context mempty mempty
 
 -- | Convert a parsed variable into a resolved one. This requires that
 -- the variable is unqualified.
@@ -65,71 +74,57 @@ tagVar :: MonadNamey m => Var Parsed -> m (Var Resolved)
 tagVar (Name n) = TgName n <$> gen
 tagVar x = error ("Cannot tag variable " ++ show x)
 
--- | Convert a parsed module name into a resolved one. This works on both
--- unqualified and qualified module names.
-tagModule :: MonadNamey m => Var Parsed -> m (Var Resolved)
-tagModule n = TgName (T.intercalate (T.singleton '.') (expand n)) <$> gen where
-  expand (Name n) = [n]
-  expand (InModule m n) = m:expand n
+insertV :: Var Parsed -> a -> Map.Map VarName a -> Map.Map VarName a
+insertV (Name v) x = Map.insert v x
+insertV v@InModule{} _ = error ("Cannot insert InModule" ++ show v)
 
 -- | Insert one or more variables into a map. If multiple variables with
 -- the same name are defined, this will be considered as ambiguous.
-insertN :: Map.Map (Var Parsed) ScopeVariable
-        -> [(Var Parsed, Var Resolved)] -> Map.Map (Var Parsed) ScopeVariable
-insertN scope = foldr (\case
-                          [(v, v')] -> Map.insert v (SVar v')
-                          vs@((v,_):_) -> Map.insert v (SAmbiguous (map snd vs))
-                          [] -> undefined) scope
-                . groupBy ((==) `on` fst)
-                . sortOn fst
+insertVs :: [(Var Parsed, Var Resolved)]
+        -> Map.Map VarName Slot -> Map.Map VarName Slot
+insertVs vs scope
+  = foldr (\case
+      [(v, v')] -> insertV v (SVar v')
+      vs@((v,_):_) -> insertV v (SAmbiguous (map snd vs))
+      [] -> id) scope
+  . groupBy ((==) `on` fst)
+  . sortOn fst
+  $ vs
 
--- | Insert one or more variables into a map. If a variable is declared
--- multiple times, we will prefer the latest definition.
-insertN' :: Map.Map (Var Parsed) ScopeVariable
-         -> [(Var Parsed, Var Resolved)] -> Map.Map (Var Parsed) ScopeVariable
-insertN' = foldl' (\s (v, v') -> Map.insert v (SVar v') s)
+-- | Extend a signature with a variable.
+withVal :: Var Parsed -> Var Resolved -> Signature -> Signature
+withVal v v' = vals %~ insertV v (SVar v')
 
--- | Create a scope with one variable and evaluate the provided monad
+-- | Extend a signature with multiples variables.
+withVals :: [(Var Parsed, Var Resolved)] -> Signature -> Signature
+withVals vs = vals %~ insertVs vs
+
+-- | Create a scope with multiple variables and evaluate the provided
+-- monad within it.
+extendVals :: MonadReader Context m => [(Var Parsed, Var Resolved)] -> m a -> m a
+extendVals vs = local (scope . vals %~ insertVs vs)
+
+-- | Extend a signature with a type.
+withTy :: Var Parsed -> Var Resolved -> Signature -> Signature
+withTy v v' = types %~ insertV v (SVar v')
+
+-- | Extend a signature with multiple types.
+withTys :: [(Var Parsed, Var Resolved)] -> Signature -> Signature
+withTys vs = types %~ insertVs vs
+
+-- | Extend a signature with a module.
+withMod :: Var Parsed -> Var Resolved -> Maybe Signature -> Signature -> Signature
+withMod v v' m = modules %~ insertV v (v', m)
+
+-- | Create a scope with a type variable and evaluate the provided monad
 -- within it.
-extend :: MonadReader Scope m => (Var Parsed, Var Resolved) -> m a -> m a
-extend (v, v') =
-  local (\x -> x { varScope = Map.insert v (SVar v') (varScope x) })
+extendTyvar :: MonadReader Context m => Var Parsed -> Var Resolved -> m a -> m a
+extendTyvar v v' = local (tyvars %~ insertV v (SVar v'))
 
--- | Create a scope with one or more variables and evaluate the provided
--- monad within it.
-extendN :: MonadReader Scope m => [(Var Parsed, Var Resolved)] -> m a -> m a
-extendN vs =
-  local (\x -> x { varScope = insertN (varScope x) vs })
-
--- | Create a scope with one type and evaluate the provided monad within
--- it.
-extendTy :: MonadReader Scope m => (Var Parsed, Var Resolved) -> m a -> m a
-extendTy (v, v') =
-  local (\x -> x { tyScope = Map.insert v (SVar v') (tyScope x) })
-
--- | Create a scope with one or more types and evaluate the provided
--- monad within it.
-extendTyN :: MonadReader Scope m => [(Var Parsed, Var Resolved)] -> m a -> m a
-extendTyN vs =
-  local (\x -> x { tyScope = insertN (tyScope x) vs })
-
--- | Create a scope with one type variables and evaluate the provided
--- monad within it.
-extendTyvar :: MonadReader Scope m => (Var Parsed, Var Resolved) -> m a -> m a
-extendTyvar (v, v') =
-  local (\x -> x { tyvarScope = Map.insert v (SVar v') (tyvarScope x) })
-
--- | Create a scope with one or more type variables and evaluate the
+-- | Create a scope with multiple type variables and evaluate the
 -- provided monad within it.
-extendTyvarN :: MonadReader Scope m => [(Var Parsed, Var Resolved)] -> m a -> m a
-extendTyvarN vs =
-  local (\x -> x { tyvarScope = insertN (tyvarScope x) vs })
-
--- | Enter a child module and evaluate the provide monad within it.
-extendM :: MonadReader Scope m => Var Parsed -> m a -> m a
-extendM m = local (\x -> x { modStack = extend m (modStack x) }) where
-  extend (Name n) xs = n:xs
-  extend (InModule m n) xs = m:extend n xs
+extendTyvars :: MonadReader Context m => [(Var Parsed, Var Resolved)] -> m a -> m a
+extendTyvars vs = local (tyvars %~ insertVs vs)
 
 gen :: MonadNamey m => m Int
 gen = (\(TgName _ i) -> i) <$> genName

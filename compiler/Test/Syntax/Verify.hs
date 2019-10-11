@@ -12,7 +12,8 @@ import Data.Foldable
 import Parser.Wrapper (runParser)
 import Parser
 
-import Syntax.Resolve (resolveProgram)
+import Syntax.Resolve (ResolveResult(..), resolveProgram)
+import Syntax.Resolve.Import (runNullImport)
 import Syntax.Desugar (desugarProgram)
 import Syntax.Verify
 import Syntax.Builtin
@@ -27,7 +28,7 @@ result f c = fst . flip runNamey firstName $ do
   let parsed = requireJust f c $ runParser f (L.fromStrict c) parseTops
       prettyErrs = vsep . map (N.format (N.fileSpans [(f, c)] N.defaultHighlight))
 
-  (resolved, _) <- requireRight f c <$> resolveProgram builtinResolve builtinModules parsed
+  ResolveResult resolved _ _ <- requireRight f c <$> runNullImport (resolveProgram builtinResolve parsed)
   desugared <- desugarProgram resolved
   (inferred, env) <- requireThat f c <$> inferProgram builtinEnv desugared
   v <- genName

@@ -6,10 +6,12 @@ module Syntax.Resolve.Error
 
 import Control.Applicative ((<|>))
 
+import qualified Data.List.NonEmpty as E
 import qualified Data.Text as T
 import Data.Spanned
 import Data.Reason
 import Data.Maybe
+import Data.Span
 
 import Syntax
 
@@ -37,6 +39,10 @@ data ResolveError
   | EmptyBegin -- ^ This @begin@ block has no expressions
   | IllegalMethod -- ^ An illegal method within an @instance@
   | LastStmtNotExpr -- ^ Invalid statement in tail position
+  | LetOpenStruct -- ^ Invalid module struct in a let open.
+
+  | UnresolvedImport T.Text -- ^ Cannot resolve this module.
+  | ImportLoop (E.NonEmpty (FilePath, Span)) -- ^ Cyclic dependencies when loading modules.
 
   | TFClauseWrongHead (Type Parsed) (Var Parsed)
   | TFClauseWrongArity Int Int
@@ -64,6 +70,11 @@ instance Pretty ResolveError where
   pretty EmptyBegin = "Empty begin expression"
   pretty IllegalMethod = "Illegal pattern in instance method declaration"
   pretty LastStmtNotExpr = "The last statement in a" <+> keyword "begin" <+> "block should be an expression"
+  pretty LetOpenStruct = "Cannot declare a module within a" <+> keyword "let open" <+> "expression"
+
+  pretty (UnresolvedImport name) = "Cannot resolve" <+> dquotes (text name)
+  pretty (ImportLoop ((name, _) E.:| _)) = "Loop loading " <+> dquotes (string name)
+
   pretty (TFClauseWrongHead t tau) =
     vsep [ "The lhs of a type function equation must be headed by the type function constructor"
          , "Expected" <+> pretty tau <+> "but got" <+> pretty t

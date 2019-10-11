@@ -16,7 +16,8 @@ import Parser
 
 import Types.Infer (inferProgram)
 
-import Syntax.Resolve (resolveProgram)
+import Syntax.Resolve (ResolveResult(..), resolveProgram)
+import Syntax.Resolve.Import (runNullImport)
 import Syntax.Desugar (desugarProgram)
 import Syntax.Builtin
 
@@ -36,7 +37,7 @@ import Text.Pretty.Semantic
 result :: Bool -> String -> T.Text -> T.Text
 result o f c = fst . flip runNamey firstName $ do
   let parsed = requireJust f c $ runParser f (L.fromStrict c) parseTops
-  (resolved, _) <- requireRight f c <$> resolveProgram builtinResolve builtinModules parsed
+  ResolveResult resolved _ _ <- requireRight f c <$> runNullImport (resolveProgram builtinResolve parsed)
   desugared <- desugarProgram resolved
   (inferred, _) <- requireThat f c <$> inferProgram builtinEnv desugared
   lower <- runLowerT (lowerProg inferred)
