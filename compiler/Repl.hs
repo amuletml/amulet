@@ -413,12 +413,15 @@ loadFile file = do
       Just core -> do
         hReportAll handle files es
 
-        (sig, env) <- wrapDriver $ do
+        (sig, env, lEnv) <- wrapDriver $ do
           ~(Just sig, _) <- D.getSignature path
           ~(Just env, _) <- D.getTypeEnv path
-          pure (sig, env)
+          ~(Just (_, lEnv), _) <- D.getLowered path
+          pure (sig, env, lEnv)
 
-        modify (\s -> s { resolveScope = resolveScope s <> sig, inferScope = inferScope s <> env })
+        modify (\s -> s { resolveScope = resolveScope s <> sig
+                        , inferScope = inferScope s <> env
+                        , lowerState = lowerState s <> lEnv })
 
         core <- wrapNamey $ killNewtypePass core
         (luaExpr, luaSyntax) <- emitCore core

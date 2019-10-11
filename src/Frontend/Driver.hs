@@ -27,7 +27,10 @@ module Frontend.Driver
   , infer, inferWith
   , lower, lowerWith
   , compile
-  , getSignature, getTypeEnv, getVerified, getVerifiedAll
+
+  , getSignature, getTypeEnv
+  , getVerified, getVerifiedAll
+  , getLowered
   ) where
 
 import System.Directory
@@ -401,6 +404,20 @@ verifyProg v env inferred =
   in case verified' of
     Right () -> (True, mempty)
     Left es -> (any isError es, mempty & verifyErrors .~ toList es)
+
+-- | Get or compute a module's core representation.
+getLowered :: (MonadNamey m, MonadState Driver m, MonadIO m)
+            => FilePath -> m (Maybe ([Stmt CoVar], LowerState), ErrorBundle)
+getLowered path = do
+  (ok, errs) <- getVerifiedAll path
+
+  case ok of
+    Nothing -> pure (Nothing, errs)
+    Just () -> do
+      (_, lEnv, lowered) <- lowerIt True path mempty
+      case lowered of
+        _ Seq.:|> lowered -> pure (Just (lowered, lEnv), errs)
+        _ -> error "Must have returned some core."
 
 -- | Update an item within the state
 updateMod :: MonadState Driver m
