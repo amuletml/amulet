@@ -34,7 +34,6 @@ module Frontend.Driver
   --
   -- $compile
   , compile
-  , loadPrelude
 
   -- * Querying the driver
   --
