@@ -174,15 +174,15 @@ instance Note VerifyError Style where
          , indent 6 . fmap Right . hsep . intersperse pipe . map pretty $ ps ]
 
   formatNote f (MatchToLet a e) =
-    vsep [ Right <$> keyword "match" <+> "with a single arm can be rewritten using" <+> keyword "let" <> "."
+    vsep [ indent 2 $ Right <$> keyword "match" <+> "with a single arm can be rewritten using" <+> keyword "let" <> "."
          , f [annotation e]
-         , Right <$> note <+> "Replace with" <+> keyword "let" <+> pretty a <+> equals <+> "…"
+         , indent 2 $ Right <$> note <+> "Replace with" <+> keyword "let" <+> pretty a <+> equals <+> "…"
          ]
 
   formatNote f (MatchToFun a e) =
-    vsep [ Right <$> keyword "function" <+> "with a single arm can be rewritten using" <+> keyword "fun" <> "."
+    vsep [ indent 2 $ Right <$> keyword "function" <+> "with a single arm can be rewritten using" <+> keyword "fun" <> "."
          , f [annotation e]
-         , Right <$> note <+> "Replace with" <+> keyword "fun" <+> pretty a <+> arrow <+> "…"
+         , indent 2 $ Right <$> note <+> "Replace with" <+> keyword "fun" <+> pretty a <+> arrow <+> "…"
          ]
 
   formatNote f x = indent 2 (Right <$> pretty x) <#> f [annotation x]
