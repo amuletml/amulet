@@ -129,7 +129,7 @@ main = do
   case options of
     CompilerOptions { replCommand = Just str, serverPort = i } -> runRemoteReplCommand i str
     CompilerOptions { debugMode = db, input = Nothing, serverPort = i } -> repl i db
-    -- CompilerOptions { debugMode = db, forceRepl = True, input = Just file, serverPort = i } -> replFrom i db fs
+    CompilerOptions { debugMode = db, forceRepl = True, input = file, serverPort = i } -> replFrom i db file
 
     CompilerOptions { output = Just out, input = Just file }
       | out == file -> do

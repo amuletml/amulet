@@ -103,7 +103,7 @@ data Module = Module
   , modSource :: SourceName
   , modVar :: Name
 
-  -- | Modules which depend on this one.
+  -- | Other modules on which this depends.
   , _dependencies :: Set.Set FilePath
   -- | The first module which depends on this one. Used for producing
   -- traces for cyclic dependencies.

@@ -23,7 +23,6 @@ import Data.Bifunctor
 import Data.Foldable
 import Data.Position
 import Data.Spanned
-import Data.Functor
 import Data.Triple
 import Data.Maybe
 import Data.Char
@@ -95,7 +94,7 @@ data ReplState = ReplState
 
   , debugMode    :: DebugMode
 
-  , currentFiles :: [FilePath]
+  , currentFile  :: Maybe FilePath
   , outputHandle :: Handle
   }
 
@@ -120,7 +119,7 @@ defaultState mode = do
 
     , debugMode    = mode
 
-    , currentFiles = []
+    , currentFile  = Nothing
     , outputHandle = stdout
     }
 
@@ -190,15 +189,15 @@ parseArgs xs =
 
 loadCommand :: (MonadState ReplState m, MonadIO m) => String -> m ()
 loadCommand arg = case parseArgs arg of
-                    [] -> outputDoc "Usage `:load [file]`"
-                    files -> loadFiles files
+                    [file] -> loadFile file
+                    _ -> outputDoc "Usage `:load [file]`"
 
 reloadCommand :: (MonadState ReplState m, MonadIO m) => m ()
 reloadCommand = do
-  files <- gets currentFiles
-  case files of
-    [] -> outputDoc "No files to reload"
-    files -> loadFiles files
+  file <- gets currentFile
+  case file of
+    Nothing -> outputDoc "No module to reload"
+    Just file -> loadFile file
 
 infoCommand :: (MonadState ReplState m, MonadIO m) => String -> m ()
 infoCommand (T.pack . dropWhile isSpace -> input) = do
@@ -388,58 +387,60 @@ emitCore core = do
   modify (\s -> s { emitState = emit' })
   pure (luaExpr, luaSyntax)
 
-
 -- | Reset the environment and load a series of files from environment
-loadFiles :: (MonadState ReplState m, MonadIO m) => [FilePath] -> m ()
-loadFiles files = do
+loadFile :: (MonadState ReplState m, MonadIO m) => FilePath -> m ()
+loadFile file = do
   -- Reset the state
   dmode <- gets debugMode
   handle <- gets outputHandle
   state' <- liftIO (defaultState dmode)
-  put state' { currentFiles = files, outputHandle = handle }
+  put state' { currentFile = Just file, outputHandle = handle }
 
   -- Load each file in turn
-  _ <- foldlM (go (length files)) True (zip [(1::Int)..] files)
-  pure ()
-  where
-    go _ False _ = pure False
-    go n True (i, file) = do
-      outputDoc $ "Loading [" <> shown i <> "/" <> shown n <> "]:" <+> verbatim file
+  path <- liftIO $ canonicalizePath file
+  exists <- liftIO $ doesFileExist path
+  if not exists
+  then outputDoc ("Cannot open" <+> verbatim file)
+  else do
+    outputDoc $ "Loading:" <+> verbatim file
 
-      contents <- liftIO . try . T.readFile $ file
-      case contents of
-        Right contents -> execFile file contents
-        Left (_ :: IOException) -> outputDoc ("Cannot open" <+> verbatim file) $> False
+    (core, es) <- wrapDriver $ D.compile path
 
-execFile :: (MonadState ReplState m, MonadIO m)
-         => SourceName -> T.Text
-         -> m Bool
-execFile name line = do
-  oldInfer <- gets inferScope
+    files <- D.fileMap =<< gets driver
+    hReportAll handle files es
+    case core of
+      Nothing -> pure ()
+      Just core -> do
+        hReportAll handle files es
 
-  core <- parseCore (Left <$> parseTops) name line
-  case core of
-    Nothing -> pure False
-    Just (_, prog, core) -> do
-      (luaExpr, luaSyntax) <- emitCore core
-      state <- get
-      liftIO $ do
-        res <- L.runWith (luaState state) $ do
-          code <- L.dostring luaSyntax
+        (sig, env) <- wrapDriver $ do
+          ~(Just sig, _) <- D.getSignature path
+          ~(Just env, _) <- D.getTypeEnv path
+          pure (sig, env)
 
-          liftIO $ dump (debugMode state) prog core core luaExpr oldInfer (inferScope state)
-          case code of
-            L.OK -> pure (Right ())
-            _ -> do
-              val <- valueRepr (pure ())
-              L.pop 1
-              case val of
-                String str -> pure (Left (text str <+> parens (shown code)))
-                _ -> pure (Left (keyword "Error:" <+> pretty val))
+        modify (\s -> s { resolveScope = resolveScope s <> sig, inferScope = inferScope s <> env })
 
-        case res of
-          Left err -> hPutDoc (outputHandle state) err $> False
-          Right () -> pure True
+        core <- wrapNamey $ killNewtypePass core
+        (luaExpr, luaSyntax) <- emitCore core
+
+        luaState <- gets luaState
+        liftIO $ do
+          dump dmode [] core core luaExpr Bi.builtinEnv env
+          res <- L.runWith luaState $ do
+            code <- L.dostring luaSyntax
+
+            case code of
+              L.OK -> pure (Right ())
+              _ -> do
+                val <- valueRepr (pure ())
+                L.pop 1
+                case val of
+                  String str -> pure (Left (text str <+> parens (shown code)))
+                  _ -> pure (Left (keyword "Error:" <+> pretty val))
+
+          case res of
+            Left err -> hPutDoc handle err
+            Right () -> pure ()
 
 outputDoc :: (MonadState ReplState m, MonadIO m) => Doc -> m ()
 outputDoc x = do
@@ -463,11 +464,11 @@ runRemoteReplCommand port command = Net.withSocketsDo $ do
       putStrLn $ "Failed to connect to server on port " ++ show port
 
 repl :: Int -> DebugMode -> IO ()
-repl port mode = replFrom port mode []
+repl port mode = replFrom port mode Nothing
 
-replFrom :: Int -> DebugMode -> [FilePath] -> IO ()
-replFrom port mode files = do
-  state <- execStateT (loadFiles files) =<< defaultState mode
+replFrom :: Int -> DebugMode -> Maybe FilePath -> IO ()
+replFrom port mode file = do
+  state <- maybe pure (execStateT . loadFile) file =<< defaultState mode
   hSetBuffering stdout LineBuffering
 
   ready <- newEmptyMVar
