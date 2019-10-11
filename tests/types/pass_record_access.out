@@ -1,3 +1,4 @@
++ : int -> int -> int
 access : Infer{'a : type}. { 'a | a : int } -> int
 access_2 : Infer{'a : type}. { { 'a | b : int } | a : int } -> int
 access_match : Infer{'a : type}. { { 'a | c : int } | a : int, b : int } -> int

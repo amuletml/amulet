@@ -25,7 +25,6 @@ import Data.List
 import Core.Optimise.Reduce.Pattern
 import Core.Optimise.Reduce.Inline
 import Core.Optimise.Reduce.Base
-import Core.Optimise.Reduce.Fold
 import Core.Optimise
 import Core.Builtin
 import Core.Types
@@ -256,20 +255,8 @@ reduceTermK u d@(AnnApp _ f x) cont
           varSubst %= VarMap.delete (toVar lamV) . VarMap.delete (toVar lazyV) . VarMap.delete (toVar xV)
           reduceTermK u (AnnLet lf (One (la, lat, AnnAtom mempty (Lit Unit))) lbod) cont
 
-        | otherwise
-        -> do
-          x' <- reduceAtom' x
-          s <- ask
-          if
-            -- Constant folding
-            | Ref fv _ <- f'
-            , Ref xv _ <- x'
-            , Just (Values xs) <- lookupTerm xv s
-            , Just a' <- foldApply (toVar (lookupRawVar fv s)) xs
-            -> changing $ cont a'
-
-            -- Nothing to do
-            | otherwise -> cont (App f' x')
+        | otherwise -> do x' <- reduceAtom' x
+                          cont (App f' x')
 
 reduceTermK _ d@(AnnTyApp _ f t) cont
   = inlineOr d UsedOther cont basic

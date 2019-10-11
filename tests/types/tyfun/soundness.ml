@@ -1,3 +1,5 @@
+external val (+) : int -> int -> int = ""
+
 type dict 'c = Dict : 'c => dict 'c
 type 'p :- 'q = Sub of ('p => unit -> dict 'q)
 

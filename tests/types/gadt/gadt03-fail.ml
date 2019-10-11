@@ -1,3 +1,4 @@
+external val (^) : string -> string -> string = ""
 external val to_string : 'a -> string = "tostring"
 
 type term 'a =

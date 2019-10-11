@@ -1,3 +1,4 @@
+* : int -> int -> int
 nested : type -> type
 Nested : Spec{'a : type}. (nested ('a * 'a) * nested ('a * 'a)) -> nested 'a
 One : Spec{'a : type}. 'a -> nested 'a

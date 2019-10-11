@@ -1,3 +1,5 @@
+external val (+) : int -> int -> int = ""
+
 let f g =
   let () = g ()
   ()

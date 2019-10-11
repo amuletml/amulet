@@ -1,6 +1,6 @@
 do
-  local Nil = { __tag = "Nil" }
   local function Cons(x) return { x, __tag = "Cons" } end
+  local Nil = { __tag = "Nil" }
   local _greater_greater_equals = bind
   local pure = pure
   _greater_greater_equals({

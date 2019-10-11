@@ -12,6 +12,13 @@ fail_private.ml[11:11 ..11:15]: error
    │ 
 11 │ let () = (X.Y.a + X.b + X.A) : X.c
    │           ^^^^^
+fail_private.ml[11:17 ..11:17]: error
+  Variable not in scope: `+`
+
+  Arising from use of the expression
+   │ 
+11 │ let () = (X.Y.a + X.b + X.A) : X.c
+   │                 ^
 fail_private.ml[11:19 ..11:21]: error
   Variable not in scope: `X.b`
 
@@ -19,6 +26,13 @@ fail_private.ml[11:19 ..11:21]: error
    │ 
 11 │ let () = (X.Y.a + X.b + X.A) : X.c
    │                   ^^^
+fail_private.ml[11:23 ..11:23]: error
+  Variable not in scope: `+`
+
+  Arising from use of the expression
+   │ 
+11 │ let () = (X.Y.a + X.b + X.A) : X.c
+   │                       ^
 fail_private.ml[11:25 ..11:27]: error
   Constructor not in scope: `X.A`
 

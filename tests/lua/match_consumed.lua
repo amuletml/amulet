@@ -3,7 +3,7 @@ do
     return function(x)
       local a = f(1)
       if x.__tag == "None" then
-        return f(a)
+        return f(a + 0)
       end
       return f(a + x[1] * 2)
     end

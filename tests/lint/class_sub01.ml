@@ -1,3 +1,5 @@
+external val (^) : string -> string -> string = ""
+external val (+) : int -> int -> int = ""
 type foo 'a = Foo of 'a
 class show 'a begin
   val show : 'a -> string

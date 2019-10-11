@@ -1,3 +1,4 @@
+external val (+) : int -> int -> int = ""
 type option 'a = None | Some of 'a
 
 let consume_none = function

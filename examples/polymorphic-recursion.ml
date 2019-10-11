@@ -1,3 +1,5 @@
+external val (+) : int -> int -> int = ""
+
 type list 'a = Nil | Cons of 'a * list 'a
 type nested 'a = Epsilon | Sub of 'a * nested (list 'a)
 

@@ -1,18 +1,6 @@
-multi_errs01.ml[2:19 ..2:22]: error
+multi_errs01.ml[3:19 ..3:22]: error
   │ 
-2 │   let foo x = 2 + true
+3 │   let foo x = 2 + true
   │                   ^^^^
   Couldn't match actual type bool
     with the type expected by the context, int
-multi_errs01.ml[3:3 ..3:11]: error
-  │ 
-3 │   foo "foo"
-  │   ^^^^^^^^^
-  Couldn't match actual type int
-    with the type expected by the context, unit
-multi_errs01.ml[1:5 ..1:6]: error
-  │ 
-1 │ let () =
-  │     ^^
-  Couldn't match actual type int
-    with the type expected by the context, unit

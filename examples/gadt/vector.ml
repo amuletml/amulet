@@ -1,3 +1,8 @@
+external val ( ^ ) : string -> string -> string = ""
+external val ( * ) : int -> int -> int = ""
+external val ( + ) : int -> int -> int = ""
+external val ( - ) : int -> int -> int = ""
+external val ( == ) : 'a -> 'a -> bool = ""
 external val print : 'a -> unit = "print"
 external val any_to_string : 'a -> string = "tostring"
 external val io_write : string -> unit = "io.write"

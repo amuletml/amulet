@@ -1,6 +1,6 @@
-wild04.ml[2:9 ..2:9]: error
+wild04.ml[4:9 ..4:9]: error
   │ 
-2 │ let y = x ^ ""
+4 │ let y = x ^ ""
   │         ^
   Couldn't match actual type unit
     with the type expected by the context, string

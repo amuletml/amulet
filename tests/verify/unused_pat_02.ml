@@ -1,3 +1,5 @@
+external val (+) : int -> int -> int = ""
+
 let x =
   match (1, 2) with
   | (0, 0) -> 0

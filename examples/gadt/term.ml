@@ -1,3 +1,4 @@
+external val ( * ) : int -> int -> int = ""
 type term 'a =
   | Lit : int -> term int
   | Fun : ('a -> 'b) -> term ('a -> 'b)

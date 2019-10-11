@@ -1,5 +1,5 @@
-tyfun-err02.ml[13:9 ..13:29]: error
+tyfun-err02.ml[15:9 ..15:29]: error
    │ 
-13 │ let _ = show (fun x -> x + 1)
+15 │ let _ = show (fun x -> x + 1)
    │         ^^^^^^^^^^^^^^^^^^^^^
   Can't show functional type int -> int

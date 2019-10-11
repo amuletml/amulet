@@ -1,3 +1,7 @@
+external val ( * ) : int -> int -> int = ""
+external val ( - ) : int -> int -> int = ""
+external val ( == ) : int -> int -> bool = ""
+
 external val print : int -> unit = "print"
 
 let fix (f : lazy 'a -> 'a) : 'a = f (fix f)

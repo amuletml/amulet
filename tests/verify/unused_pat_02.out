@@ -1,0 +1,11 @@
+definition of +[1:1 ..1:1]: warning
+  Syntax error in definition of +
+  │ 
+1 │ external val (+) : int -> int -> int = ""
+  │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+definition of +[1:1 ..1:1]: error
+  Unexpected <eof>, expected one of false, function, nil, not, true, '...', '(', '{', '-', '#', identifier, quasi-quoted expression, quasi-quoted variable, int, float, string
+  │ 
+1 │ 
+  │ ^

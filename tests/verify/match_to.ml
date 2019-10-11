@@ -1,3 +1,5 @@
+external val (+) : int -> int -> int = ""
+
 let _ = function
 | { x, y } -> x + y
 

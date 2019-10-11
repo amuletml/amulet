@@ -12,6 +12,13 @@ fail_pattern_ambiguity.ml[2:13 ..2:13]: error
   │ 
 2 │ | (a, a) -> a + a
   │             ^
+fail_pattern_ambiguity.ml[2:15 ..2:15]: error
+  Variable not in scope: `+`
+
+  Arising from use of the expression
+  │ 
+2 │ | (a, a) -> a + a
+  │               ^
 fail_pattern_ambiguity.ml[2:17 ..2:17]: error
   Ambiguous reference to variable: `a`
 

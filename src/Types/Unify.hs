@@ -189,7 +189,7 @@ doSolve (ConUnify because scope v a b :<| xs) = do
   sub <- use solveTySubst
   scope <- pure (apply sub scope)
 
-  traceM (displayS (keyword "[W]:" <+> pretty (ConUnify because scope v (apply sub a) (apply sub b))))
+  traceM (displayS (keyword "[W]:" <+> pretty because <+> pretty (ConUnify because scope v (apply sub a) (apply sub b))))
 
   solveFuel .= SOLVER_FUEL
 
@@ -206,7 +206,7 @@ doSolve (ConUnify because scope v a b :<| xs) = do
 doSolve (ConSubsume because scope v a b :<| xs) = do
   sub <- use solveTySubst
 
-  traceM (displayS (pretty (ConSubsume because scope v (apply sub a) (apply sub b))))
+  traceM (displayS (pretty because <+> pretty (ConSubsume because scope v (apply sub a) (apply sub b))))
   let a' = apply sub a
   sub <- use solveTySubst
 

@@ -1,3 +1,5 @@
+external val ( * ) : int -> int -> int = "function(x, y) return x * y end"
+
 external val print : string -> unit = "print"
 external val to_string : 'a -> string = "tostring"
 

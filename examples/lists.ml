@@ -1,3 +1,5 @@
+external val (+) : int -> int -> int = ""
+external val (==) : 'a -> 'a -> bool = ""
 external val print : 'a -> unit = "print"
 external val write : string -> unit = "io.write"
 external val string_of : 'a -> string = "tostring"

@@ -1,3 +1,6 @@
+external val (^) : string -> string -> string =
+  "function(x, y) return x .. y end"
+
 external val use : 'a -> unit = "print"
 
 class show 'a begin

@@ -1,1 +1,2 @@
+> : int -> int -> bool
 foo : int -> int

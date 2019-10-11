@@ -1,1 +1,3 @@
+^ : string -> string -> string
++ : int -> int -> int
 main : int * string

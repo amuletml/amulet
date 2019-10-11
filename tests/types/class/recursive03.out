@@ -1,7 +1,7 @@
-recursive03.ml[18:5 ..18:23]: error
+recursive03.ml[20:5 ..20:23]: error
   No instance for show 'a arising from use of the expression
    │ 
-19 │   print (show x)
+21 │   print (show x)
    │          ^^^^^^
 
   • Note: this constraint was not quantified over because
@@ -9,6 +9,6 @@ recursive03.ml[18:5 ..18:23]: error
     in all of their bindings.
 
    │ 
-18 │ let foo (x : 'a) : unit =
+20 │ let foo (x : 'a) : unit =
    │     ^^^^^^^^^^^^^^^^^^^
    This binding should have had a complete type signature.

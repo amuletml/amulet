@@ -1,26 +1,37 @@
-match_to.ml[1:9 ..1:16]: note
+definition of +[1:1 ..1:1]: warning
+  Syntax error in definition of +
+  │ 
+1 │ external val (+) : int -> int -> int = ""
+  │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+definition of +[1:1 ..1:1]: error
+  Unexpected <eof>, expected one of false, function, nil, not, true, '...', '(', '{', '-', '#', identifier, quasi-quoted expression, quasi-quoted variable, int, float, string
+  │ 
+1 │ 
+  │ ^
+match_to.ml[3:9 ..3:16]: note
   match with a single arm can be rewritten using let.
   │ 
-1 │ let _ = function
+3 │ let _ = function
   │         ^^^^^^^^
   • Note: Replace with let { x = x, y = y } = …
-match_to.ml[5:9 ..5:16]: warning
+match_to.ml[7:9 ..7:16]: warning
   Non-exhaustive patterns in expression
   │ 
-5 │ let _ = function
+7 │ let _ = function
   │         ^^^^^^^^
   • Note: The following patterns are not covered
       false
-match_to.ml[12:3 ..12:17]: note
+match_to.ml[14:3 ..14:17]: note
   match with a single arm can be rewritten using let.
    │ 
-12 │   match g () with
+14 │   match g () with
    │   ^^^^^^^^^^^^^^^
   • Note: Replace with let { x = x, y = y } = …
-match_to.ml[16:3 ..16:17]: warning
+match_to.ml[18:3 ..18:17]: warning
   Non-exhaustive patterns in expression
    │ 
-16 │   match g () with
+18 │   match g () with
    │   ^^^^^^^^^^^^^^^
   • Note: The following patterns are not covered
       false

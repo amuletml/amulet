@@ -1,3 +1,5 @@
+external val (^) : string -> string -> string = ""
+
 class show 'a
   val show : 'a -> string
 

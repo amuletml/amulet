@@ -1,2 +1,3 @@
++ : int -> int -> int
 apply : Spec{'row : type}. { 'row | apply : Spec{'a : type}. Spec{'b : type}. ('a -> 'b) -> 'a -> 'b } -> Spec{'a : type}. Spec{'b : type}. ('a -> 'b) -> 'a -> 'b
 main : int

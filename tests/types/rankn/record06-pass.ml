@@ -1,3 +1,5 @@
+external val (+) : int -> int -> int = ""
+
 (* Slight variation on record05, where the forall is later in the type *)
 let apply
   : forall 'row.

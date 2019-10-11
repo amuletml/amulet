@@ -1,5 +1,14 @@
-let |>#0 x#1 f#2 = f#2 x#1
-let <|#3 f#4 x#5 = f#4 x#5
-let add#6 a#7 b#8 = (a#7 + b#8)
-let main#9 =
-  (((2 |>#0 ((+ 3)))) add#6 3)
+pass_ops.ml[4:19 ..4:19]: error
+  Variable not in scope: `+`
+
+  Arising from use of the expression
+  │ 
+4 │ let a `add` b = a + b
+  │                   ^
+pass_ops.ml[6:20 ..6:20]: error
+  Variable not in scope: `+`
+
+  Arising from use of the expression
+  │ 
+6 │ let main = (2 |> (3+)) `add` 3
+  │                    ^

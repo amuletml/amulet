@@ -1,3 +1,6 @@
+external val ( + ) : int -> int -> int = ""
+external val ( / ) : int -> int -> float = ""
+
 let ( <| ) f x = f x
 let ( |> ) x f = f x
 

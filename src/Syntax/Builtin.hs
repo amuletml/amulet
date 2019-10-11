@@ -191,20 +191,7 @@ instance Monoid BuiltinModule where
 builtins :: BuiltinModule
 builtins =
   mempty
-  { vars = [ intOp C.vOpAdd, intOp C.vOpSub, intOp C.vOpMul, opOf C.vOpDiv (tyInt ~> tyInt ~> tyFloat), intOp C.vOpExp
-           , intCmp C.vOpLt, intCmp C.vOpGt, intCmp C.vOpLe, intCmp C.vOpGe
-
-           , floatOp C.vOpAddF, floatOp C.vOpSubF, floatOp C.vOpMulF, floatOp C.vOpDivF, floatOp C.vOpExpF
-           , floatCmp C.vOpLtF, floatCmp C.vOpGtF, floatCmp C.vOpLeF, floatCmp C.vOpGeF
-
-           , stringOp C.vOpConcat
-
-           , cmp C.vOpEq, cmp C.vOpNe
-
-           , ( ofCore C.vFloat2Int, tyFloat ~> tyInt )
-           , ( ofCore C.vInt2Float, tyInt ~> tyFloat )
-
-           , (opAppName, a *. b *. (TyVar a ~> TyVar b) ~> TyVar a ~> TyVar b)
+  { vars = [ (opAppName, a *. b *. (TyVar a ~> TyVar b) ~> TyVar a ~> TyVar b)
            , (lAZYName, lAZYTy), (forceName, forceTy)
            , (cONSName, cONSTy), (nILName, nILTy)
 
@@ -282,18 +269,6 @@ builtins =
   }
 
   where
-
-    -- Helper functions for operators
-    opOf x t = (ofCore x, t)
-    op t x = (ofCore x, t)
-
-    intOp = op $ tyInt ~> tyInt ~> tyInt
-    floatOp = op $ tyFloat ~> tyFloat ~> tyFloat
-    stringOp = op $ tyString ~> tyString ~> tyString
-    intCmp = op $ tyInt ~> tyInt ~> tyBool
-    floatCmp = op $ tyFloat ~> tyFloat ~> tyBool
-    cmp = op $ a *.TyVar a ~> TyVar a ~> tyBool
-
     -- Helper functions for types
     tp x = (ofCore x, TyType)
 

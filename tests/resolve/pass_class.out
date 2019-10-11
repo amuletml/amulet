@@ -1,11 +1,7 @@
-class () => semigroup#0 a#1  begin
-  val <>#2 : 'a#1 -> 'a#1 -> 'a#1
-end
-instance () => semigroup#0 int begin
-  <>#2 = ((+))
-end
-class () => default#3 a#4  begin
-  val a#6 : 'a#4
-  val b#5 : 'a#4
-  let a#6 = b#5
-end
+pass_class.ml[5:15 ..5:15]: error
+  Variable not in scope: `+`
+
+  Arising from use of the expression
+  │ 
+5 │   let (<>) = (+)
+  │               ^

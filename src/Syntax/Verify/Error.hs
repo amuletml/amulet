@@ -36,6 +36,7 @@ data WhyRedundant
   = Shadowed -- ^ This arm is shadowed by a previous one.
   | BecauseMatch -- ^ This whole match expression is redundant.
   | BecauseArm -- ^ This specific arm is redundant.
+  deriving Show
 
 instance Pretty WhyRedundant where
   pretty Shadowed = "This case is covered by all previous patterns and so can be removed"
@@ -69,6 +70,7 @@ data VerifyError
 
   -- | Top-level @ref α@ binding
   | ToplevelRefBinding BindingSite
+  deriving Show
 
 
 instance Spanned VerifyError where
