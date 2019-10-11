@@ -154,6 +154,7 @@ instance Respannable (Ann p) => Respannable (Expr p) where
   respan k (ListExp e a) = ListExp e (respan k a)
   respan k (ListComp e qs a) = ListComp e qs (respan k a)
   respan k (DoExpr v qs a) = DoExpr v qs (respan k a)
+  respan k (Idiom vp va es a) = Idiom vp va es (respan k a)
 
   respan k (Record fs a) = Record fs (respan k a)
   respan k (RecordExt f fs a) = RecordExt f fs (respan k a)
