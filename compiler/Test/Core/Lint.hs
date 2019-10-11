@@ -49,7 +49,7 @@ toEither (These e _) = Left e
 toEither (That x) = Right x
 
 compile :: MonadNamey m => SourceName -> T.Text -> m CompileResult
-compile name file = do
+compile name file =
   case runParser name (L.fromStrict file) parseTops of
     (Nothing, es) -> pure $ CParse es
     (Just parsed, _) -> do

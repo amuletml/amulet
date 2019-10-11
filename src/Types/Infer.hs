@@ -503,8 +503,9 @@ inferMod (ModStruct bod a) = do
        . (classDecs %~ (<> (env ^. classDecs)))
        . (modules %~ (<> (env ^. modules)))
        , (env ^. classes, env ^. tySyms))
-inferMod (ModRef name a) =
-  (ModRef name (a, undefined),id,) <$> view (modules . at name . non undefined)
+inferMod (ModRef name a) = do
+  mod <- view (modules . at name) >>= maybe (confesses (NotInScope name)) pure
+  pure (ModRef name (a, undefined), id, mod)
 inferMod ModLoad{} = error "Impossible"
 
 buildList :: Ann Resolved -> Type Typed -> [Expr Typed] -> Expr Typed
@@ -552,7 +553,7 @@ instantiateTc r tau = do
       x <- genName
       i <- view classes
       tell (Seq.singleton (ConImplicit r i x tau))
-      (k, sigma) <- go sigma 
+      (k, sigma) <- go sigma
       let wrap ex =
             ExprWrapper (WrapVar x) (ExprWrapper (TypeAsc ty) ex (annotation ex, ty)) (annotation ex, sigma)
       pure (k . wrap, sigma)

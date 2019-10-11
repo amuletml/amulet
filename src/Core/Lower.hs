@@ -310,10 +310,10 @@ lowerProg' :: forall m. MonadLower m => [Toplevel Typed] -> m (LowerState, [Stmt
 lowerProg' [] = asks (,[])
 lowerProg' (Open m:prg) = do
   (s, ms) <- lowerModule m
-  (ms++) <$$> local (\_ -> s) (lowerProg' prg)
+  (ms++) <$$> local (const s) (lowerProg' prg)
 lowerProg' (Module _ _ m:prg) = do
   (s, ms) <- lowerModule m
-  (ms++) <$$> local (\_ -> s) (lowerProg' prg)
+  (ms++) <$$> local (const s) (lowerProg' prg)
 
 -- ∨ TC desugars all of these to TypeDecl + Let
 lowerProg' (Class{}:prg) = lowerProg' prg

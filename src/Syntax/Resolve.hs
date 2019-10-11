@@ -65,11 +65,11 @@ data ResolveResult = ResolveResult
 
 type MonadResolve m = ( MonadChronicles ResolveError m
                       , MonadReader Context m
-                      , MonadImporter m
+                      , MonadImport m
                       , MonadNamey m )
 
 -- | Resolve a program within a given 'Scope' and 'ModuleScope'
-resolveProgram :: (MonadNamey m, MonadImporter m)
+resolveProgram :: (MonadNamey m, MonadImport m)
                => Signature -- ^ The scope in which to resolve this program
                -- ^ The current module scope. We return an updated
                -- version of this if we declare or extend any modules.
@@ -90,7 +90,7 @@ reTops [] sig = views scope ([], sig,)
 reTops (LetStmt am bs:rest) sig = do
   (bs', vs, ts) <- unzip3 <$> traverse reBinding bs
   reTopsWith am rest sig (withVals (concat vs)) $ extendTyvars (concat ts) $
-    (LetStmt am <$> traverse (uncurry (flip (<$>) . reExpr . view bindBody)) (zip bs bs'))
+    LetStmt am <$> traverse (uncurry (flip (<$>) . reExpr . view bindBody)) (zip bs bs')
 
 reTops (r@(ForeignVal am v t ty a):rest) sig = do
   v' <- tagVar v

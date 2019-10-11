@@ -32,6 +32,12 @@ data LowerState
     , types :: VarMap.Map VarSet.Set
     } deriving (Eq, Show)
 
+instance Semigroup LowerState where
+  (LS v c t) <> (LS v' c' t') = LS (VarMap.union v v') (VarMap.union c c') (VarMap.union t t')
+
+instance Monoid LowerState where
+  mempty = LS mempty mempty mempty
+
 type LowerTrack = VarMap.Map CoVar
 
 type MonadLower m

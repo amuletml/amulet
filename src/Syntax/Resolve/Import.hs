@@ -1,8 +1,8 @@
 {-# LANGUAGE DerivingStrategies, GeneralizedNewtypeDeriving #-}
 module Syntax.Resolve.Import
   ( ImportResult(..)
-  , MonadImporter(..)
-  , NullImporter
+  , MonadImport(..)
+  , NullImport
   , runNullImport
   ) where
 
@@ -29,25 +29,25 @@ data ImportResult
   | NotFound -- ^ The module could not be found while importing.
   deriving Show
 
--- | A monad under which other modules may be imported.
-class Monad m => MonadImporter m where
+-- | A monad with which other modules may be imported.
+class Monad m => MonadImport m where
   -- | Import a module with a given name (usually a file path).
   --
   -- The 'Span' should be the location of the import node - this is used
   -- for error reporting in the event of an import cycle.
   importModule :: Span -> Text -> m ImportResult
 
-instance MonadImporter m => MonadImporter (ReaderT e m) where
+instance MonadImport m => MonadImport (ReaderT e m) where
   importModule s path = lift (importModule s path)
 
-instance (Semigroup c, MonadImporter m) => MonadImporter (ChronicleT c m) where
+instance (Semigroup c, MonadImport m) => MonadImport (ChronicleT c m) where
   importModule s path = lift (importModule s path)
 
-newtype NullImporter m a = Null { runNullImport :: m a }
+newtype NullImport m a = Null { runNullImport :: m a }
   deriving newtype (Functor, Applicative, Monad, MonadNamey)
 
-instance Monad m => MonadImporter (NullImporter m) where
+instance Monad m => MonadImport (NullImport m) where
   importModule _ _ = pure NotFound
 
-instance MonadTrans NullImporter where
+instance MonadTrans NullImport where
   lift = Null
