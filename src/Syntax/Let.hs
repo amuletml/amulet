@@ -62,6 +62,7 @@ freeIn (RightSection a b _) = freeIn a <> freeIn b
 freeIn (BothSection b _) = freeIn b
 freeIn AccessSection{} = mempty
 freeIn (Vta e _ _) = freeIn e
+freeIn (Idiom vp va es _) = Set.fromList [vp, va] <> foldMap freeIn es
 freeIn (ListExp e _) = foldMap freeIn e
 freeIn (ListComp e qs _) = freeIn e <> freeInStmt qs
 freeIn (DoExpr v qs _) = freeInStmt qs <> bind where

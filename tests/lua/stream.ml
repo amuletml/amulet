@@ -30,7 +30,7 @@ let dump_stream e (Stream (f, start)) =
   io_write "["
   go start
 
-let (|>) x f = f x
+let ( |> ) x f = f x
 
 let main = range (1, 5) |> dump_stream to_string
 (* With `match` commuting conversion, this will do a single pass over the input
