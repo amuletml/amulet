@@ -23,9 +23,7 @@ import Data.Bifunctor
 import Data.Foldable
 import Data.Position
 import Data.Spanned
-import Data.Functor
 import Data.Triple
-import Data.These
 import Data.Maybe
 import Data.Char
 
@@ -33,14 +31,13 @@ import qualified Foreign.Lua.Core.Types as L
 import qualified Foreign.Lua as L
 
 import System.Console.Haskeline hiding (display, bracket, throwTo)
+import System.Directory
 import System.IO
 
-import qualified Syntax.Resolve.Toplevel as R
-import qualified Syntax.Resolve.Scope as R
 import qualified Syntax.Builtin as Bi
-import Syntax.Resolve (resolveProgram)
-import Syntax.Desugar (desugarProgram)
-import Syntax.Verify
+import Syntax.Resolve (ResolveResult(..), resolveProgram)
+import Syntax.Resolve.Scope (Signature)
+import Syntax.Resolve.Import (runNullImport)
 import Syntax (displayType)
 import qualified Syntax.Var as S
 import qualified Syntax as S
@@ -48,19 +45,20 @@ import qualified Syntax as S
 import qualified Control.Monad.Infer as T
 import Control.Monad.Namey
 
-import Types.Infer (inferProgram, inferExpr)
-
 import Parser.Wrapper (Parser, runParser)
 import Parser.Token
 import Parser.Error
 import Parser
 
-import qualified Core.Core as C
 import qualified Core.Lower as L
+import qualified Core.Core as C
 import Core.Optimise.Newtype
 import Core.Occurrence
 import Core.Core (Stmt)
 import Core.Var
+
+import qualified Frontend.Driver as D
+import Frontend.Errors
 
 import Control.Lens
 
@@ -70,14 +68,12 @@ import qualified Backend.Escape as B
 import Language.Lua.Syntax
 
 import Text.Pretty.Semantic
-import Text.Pretty.Note
 
 import qualified Network.Socket as Net
 
 import Control.Concurrent
 
 import Repl.Display
-import Errors
 import Debug
 
 -- Aghh MonadFail!
@@ -85,18 +81,20 @@ instance MonadFail L.Lua where
   fail x = error $ "MonadFail L.Lua: fail " ++ x
 
 data ReplState = ReplState
-  { resolveScope :: R.Scope
-  , moduleScope  :: R.ModuleScope
+  { resolveScope :: Signature
   , inferScope   :: T.Env
   , emitState    :: B.TopEmitState
   , lastName     :: S.Name
   , lowerState   :: L.LowerState
 
+  , driver       :: D.Driver
+  , root         :: FilePath
+
   , luaState     :: L.State
 
   , debugMode    :: DebugMode
 
-  , currentFiles :: [FilePath]
+  , currentFile  :: Maybe FilePath
   , outputHandle :: Handle
   }
 
@@ -106,9 +104,9 @@ defaultState mode = do
   -- Init our default libraries
   L.runWith state L.openlibs
 
+  root <- getCurrentDirectory
   pure ReplState
     { resolveScope = Bi.builtinResolve
-    , moduleScope  = Bi.builtinModules
     , inferScope   = Bi.builtinEnv
     , emitState    = B.defaultEmitState
     , lastName     = S.TgName (T.pack "a") 1
@@ -116,9 +114,12 @@ defaultState mode = do
 
     , luaState     = state
 
+    , driver       = D.emptyDriver
+    , root         = root
+
     , debugMode    = mode
 
-    , currentFiles = []
+    , currentFile  = Nothing
     , outputHandle = stdout
     }
 
@@ -188,15 +189,15 @@ parseArgs xs =
 
 loadCommand :: (MonadState ReplState m, MonadIO m) => String -> m ()
 loadCommand arg = case parseArgs arg of
-                    [] -> outputDoc "Usage `:load [file]`"
-                    files -> loadFiles files
+                    [file] -> loadFile file
+                    _ -> outputDoc "Usage `:load [file]`"
 
 reloadCommand :: (MonadState ReplState m, MonadIO m) => m ()
 reloadCommand = do
-  files <- gets currentFiles
-  case files of
-    [] -> outputDoc "No files to reload"
-    files -> loadFiles files
+  file <- gets currentFile
+  case file of
+    Nothing -> outputDoc "No module to reload"
+    Just file -> loadFile file
 
 infoCommand :: (MonadState ReplState m, MonadIO m) => String -> m ()
 infoCommand (T.pack . dropWhile isSpace -> input) = do
@@ -209,20 +210,19 @@ infoCommand (T.pack . dropWhile isSpace -> input) = do
   case parsed of
     Nothing -> pure ()
     Just var -> do
-      let prog = [ S.LetStmt S.Public
-                    [ S.Binding (S.Name "_")
+      let prog :: [S.Toplevel S.Parsed]
+          prog = [ S.LetStmt S.Public
+                   [ S.Binding (S.Name "_")
                         (S.VarRef (getL var) (annotation var))
-                        True (annotation var)
-                    ]
-                 ]
-          prog :: [S.Toplevel S.Parsed]
+                        True (annotation var) ] ]
 
       resolved <-
-        flip evalNameyT (lastName state) $
-          resolveProgram (resolveScope state) (moduleScope state) prog
+          flip evalNameyT (lastName state)
+        . runNullImport
+        $ resolveProgram (resolveScope state) prog
 
       case resolved of
-        Right ([ S.LetStmt _ [S.Binding _ (S.VarRef name _) _ _] ], _) ->
+        Right (ResolveResult [ S.LetStmt _ [S.Binding _ (S.VarRef name _) _ _] ] _ _) ->
           liftIO . hPutDoc handle . displayType $
             (inferScope state ^. T.names . at name . non undefined)
         _ -> liftIO . hPutDoc handle $ "Name not in scope:" <+> pretty (getL var)
@@ -238,41 +238,37 @@ typeCommand (dropWhile isSpace -> input) = do
   liftIO $ traverse_ (hReport (outputHandle state) files) parseMsg
   case parsed of
     Nothing -> pure ()
-    Just parsed -> flip evalNameyT (lastName state) $ do
+    Just parsed -> do
       let ann = annotation parsed
           prog :: [S.Toplevel S.Parsed]
           prog = [ S.LetStmt S.Public [ S.Matching (S.Wildcard ann) parsed ann ] ]
 
-      resolved <- resolveProgram (resolveScope state) (moduleScope state) prog
-      case resolved of
-        Left es -> liftIO $ traverse_ (hReport (outputHandle state) files) es
-        Right (resolved, _) -> do
-          ~[S.LetStmt _ [ S.Matching _ desugared _ ]] <- desugarProgram resolved
-          inferred <- inferExpr (inferScope state) desugared
-          let (ty, es) = case inferred of
-                This es -> (Nothing, es)
-                That ty -> (Just ty, [])
-                These es ty -> if any isError es then (Nothing, es) else (Just ty, es)
-          liftIO $ traverse_ (hReport (outputHandle state) files) es
-          case ty of
-            Nothing -> pure ()
-            Just t ->
-              liftIO $ hPutDoc handle (string input <+> colon <+> displayType t)
+      (infer, es) <- wrapDriver $ D.inferWith (root state) prog (resolveScope state) (inferScope state)
+      hReportAll (outputHandle state) files es
+      case infer of
+        Nothing -> pure ()
+        Just (prog, _, _) ->
+          let ~[S.LetStmt _ [ S.TypedMatching _ expr _ _ ]] = prog
+              t = S.getType expr
+          in liftIO $ hPutDoc handle (string input <+> colon <+> displayType t)
+
 
 execString :: (MonadState ReplState m, MonadIO m)
            => SourceName -> T.Text
            -> m Bool
 execString name line = do
-  state <- get
-  core <- flip evalNameyT (lastName state) $ parseCore state parseRepl' name line
+  oldInfer <- gets inferScope
+
+  core <- parseCore parseRepl' name line
   case core of
     Nothing -> pure False
-    Just (vs, prog, core, state') -> do
-      let (emit', luaExpr, luaSyntax) = emitCore state' core
+    Just (vs, prog, core) -> do
+      (luaExpr, luaSyntax) <- emitCore core
+      state <- get
       (ok, res) <- liftIO $ do
-        dump (debugMode state') prog core core luaExpr (inferScope state) (inferScope state')
+        dump (debugMode state) prog core core luaExpr oldInfer (inferScope state)
 
-        L.runWith (luaState state') $ do
+        L.runWith (luaState state) $ do
           L.OK <- L.dostring "-- time out hook\nlocal function f() error('Timed out!', 3) end; debug.sethook(f, '', 1e6)"
           L.OK <- L.loadbuffer luaSyntax ('=':name)
           res <- L.try $ L.call 0 L.multret
@@ -280,18 +276,17 @@ execString name line = do
           case res of
             Right () -> do
               vs' <- for vs $ \(v, _) -> do
-                let Just (_, vs) = VarMap.lookup v (emit' ^. B.topVars)
+                let Just (_, vs) = VarMap.lookup v (emitState state ^. B.topVars)
                 repr <- traverse (valueRepr . evalExpr . B.unsimple) vs
                 let CoVar id _ _ = v
                     var = S.TgName (covarDisplayName v) id
-                case inferScope state' ^. T.names . at var of
+                case inferScope state ^. T.names . at var of
                   Just ty -> pure (Just (pretty v <+> colon <+> nest 2 (displayType ty <+> equals </> hsep (map pretty repr))))
                   Nothing -> pure Nothing
 
               pure (True, vsep (catMaybes vs'))
             Left (L.Exception msg) -> pure (False, string msg)
 
-      put state' { emitState = emit' }
       outputDoc res
       pure ok
 
@@ -304,9 +299,6 @@ evalExpr (LuaInteger n) = L.pushinteger (fromIntegral n)
 evalExpr (LuaNumber n) = L.pushnumber (L.Number n)
 evalExpr (LuaString s) = L.pushstring (T.encodeUtf8 s)
 evalExpr s = error ("Not a simple expression: " ++ show s)
-
-isError :: Note a b => a -> Bool
-isError x = diagnosticKind x == ErrorMessage
 
 -- | We convert any top-level local declarations into global ones. This
 -- means they are accessible outside normal REPL invocations.
@@ -345,14 +337,14 @@ patchupUsage (C.StmtLet (C.Many v):xs) = C.StmtLet (C.Many (map (first3 patchupV
 patchupVarUsage :: OccursVar a -> OccursVar a
 patchupVarUsage (OccursVar v u) = OccursVar v (u <> Once)
 
-parseCore :: (MonadNamey m, MonadIO m)
-          => ReplState
-          -> Parser (Either [S.Toplevel S.Parsed] (S.Expr S.Parsed)) -> SourceName -> T.Text
+parseCore :: (MonadState ReplState m, MonadIO m)
+          => Parser (Either [S.Toplevel S.Parsed] (S.Expr S.Parsed))
+          -> SourceName -> T.Text
           -> m (Maybe ([(CoVar, C.Type CoVar)]
                       , [S.Toplevel S.Typed]
-                      , [Stmt CoVar]
-                      , ReplState))
-parseCore state parser name input = do
+                      , [Stmt CoVar]))
+parseCore parser name input = do
+  state <- get
   let files :: [(String, T.Text)]
       files = [(name, input)]
       (parsed, parseMsg) = runParser name (L.fromStrict input) parser
@@ -362,118 +354,96 @@ parseCore state parser name input = do
     Nothing -> pure Nothing
     Just parsed -> do
       let parsed' = case parsed of
-                      Left s -> s
-                      Right e -> [S.LetStmt S.Public [S.Binding (S.Name "_") e True (annotation e)]]
+            Left s -> s
+            Right e -> [S.LetStmt S.Public [S.Binding (S.Name "_") e True (annotation e)]]
 
-      let rScope = resolveScope state
-          lEnv = lowerState state
-      let cont modScope' resolved prog env' = do
-            verifyV <- genName
-            let es = case runVerify env' verifyV (verifyProgram prog) of
-                       Left es -> toList es
-                       Right () -> []
-            liftIO $ traverse_ (hReport (outputHandle state) files) es
-            if any isError es
-               then pure Nothing
-               else do
-                 let (var, tys) = R.extractToplevels parsed'
-                     (var', tys') = R.extractToplevels resolved
+      (lower, es) <- wrapDriver $ D.lowerWith (root state) parsed'
+                       (resolveScope state) (inferScope state) (lowerState state)
+      hReportAll (outputHandle state) files es
+      case lower of
+        Nothing -> pure Nothing
+        Just (lower, lState, typed, env, ResolveResult _ _ sig) -> do
+          lower <- wrapNamey $ killNewtypePass lower
+          let lastTerms = case lower of
+                [] -> []
+                _:_ -> case last lower of
+                  (C.StmtLet (C.One (v, t, _))) -> [(v, t)]
+                  (C.StmtLet (C.Many vs)) -> map (\(v, t, _) -> (v, t)) vs
+                  _ -> []
 
-                 (lEnv', lower) <- L.runLowerWithEnv lEnv (L.lowerProgEnv prog)
-                 lower <- killNewtypePass lower
-                 lastG <- genName
-                 case lower of
-                   [] -> error "lower returned no statements for the repl"
-                   _ -> pure ()
-                 pure $ Just ( case last lower of
-                                 (C.StmtLet (C.One (v, t, _))) -> [(v, t)]
-                                 (C.StmtLet (C.Many vs)) -> map (\(v, t, _) -> (v, t)) vs
-                                 _ -> []
-                             , prog
-                             , lower
-                             , state { resolveScope = rScope { R.varScope = R.insertN' (R.varScope rScope) (zip var var')
-                                                             , R.tyScope  = R.insertN' (R.tyScope rScope)  (zip tys tys')
-                                                             }
-                                     , moduleScope = modScope'
-                                     , inferScope = env'
-                                     , lowerState = lEnv'
-                                     , lastName = lastG })
-      resolved <- resolveProgram rScope (moduleScope state) parsed'
-      case resolved of
-        Left es -> liftIO $ traverse_ (hReport (outputHandle state) files) es $> Nothing
-        Right (resolved, modScope') -> do
-          desugared <- desugarProgram resolved
-          inferred <- inferProgram (inferScope state) desugared
-          case inferred of
-            This es -> liftIO $ traverse_ (hReport (outputHandle state) files) es $> Nothing
-            That (prog, env') -> cont modScope' resolved prog env'
-            These es (prog, env') -> do
-              liftIO $ traverse_ (hReport (outputHandle state) files) es
-              if any isError es
-                 then pure Nothing
-                 else cont modScope' resolved prog env'
+          modify (\s -> s { resolveScope = sig, inferScope = env, lowerState = lState })
+          pure $ Just (lastTerms, typed, lower)
 
-emitCore :: ReplState -> [Stmt CoVar] -> (B.TopEmitState, LuaStmt, Bs.ByteString)
-emitCore state core =
+
+emitCore :: MonadState ReplState m => [Stmt CoVar] -> m (LuaStmt, Bs.ByteString)
+emitCore core = do
+  emit <- gets emitState
+
   let core' = patchupUsage . snd . tagOccurStmt (const occursSet) OccursVar $ core
-      (luaStmt, emit') = uncurry B.addBuiltins $ runState (B.emitStmt core') (emitState state)
+      (luaStmt, emit') = uncurry B.addBuiltins $ runState (B.emitStmt core') emit
       luaExpr = LuaDo . map (patchupLua emit') . toList $ luaStmt
       luaSyntax = T.encodeUtf8 . display . uncommentDoc . renderPretty 0.8 100 . pretty $ luaExpr
-  in (emit', luaExpr, luaSyntax)
 
+  modify (\s -> s { emitState = emit' })
+  pure (luaExpr, luaSyntax)
 
 -- | Reset the environment and load a series of files from environment
-loadFiles :: (MonadState ReplState m, MonadIO m) => [FilePath] -> m ()
-loadFiles files = do
+loadFile :: (MonadState ReplState m, MonadIO m) => FilePath -> m ()
+loadFile file = do
   -- Reset the state
   dmode <- gets debugMode
   handle <- gets outputHandle
   state' <- liftIO (defaultState dmode)
-  put state' { currentFiles = files, outputHandle = handle }
+  put state' { currentFile = Just file, outputHandle = handle }
 
   -- Load each file in turn
-  _ <- foldlM (go (length files)) True (zip [(1::Int)..] files)
-  pure ()
-  where
-    go _ False _ = pure False
-    go n True (i, file) = do
-      outputDoc $ "Loading [" <> shown i <> "/" <> shown n <> "]:" <+> verbatim file
+  path <- liftIO $ canonicalizePath file
+  exists <- liftIO $ doesFileExist path
+  if not exists
+  then outputDoc ("Cannot open" <+> verbatim file)
+  else do
+    outputDoc $ "Loading:" <+> verbatim file
 
-      contents <- liftIO . try . T.readFile $ file
-      case contents of
-        Right contents -> execFile file contents
-        Left (_ :: IOException) -> outputDoc ("Cannot open" <+> verbatim file) $> False
+    (core, es) <- wrapDriver $ D.compile path
 
-execFile :: (MonadState ReplState m, MonadIO m)
-         => SourceName -> T.Text
-         -> m Bool
-execFile name line = do
-  state <- get
-  core <- flip evalNameyT (lastName state) $ parseCore state (Left <$> parseTops) name line
-  case core of
-    Nothing -> pure False
-    Just (_, prog, core, state') -> do
-      let (emit', luaExpr, luaSyntax) = emitCore state' core
-      ok <- liftIO $ do
-        res <- L.runWith (luaState state') $ do
-          code <- L.dostring luaSyntax
+    files <- D.fileMap =<< gets driver
+    hReportAll handle files es
+    case core of
+      Nothing -> pure ()
+      Just core -> do
+        hReportAll handle files es
 
-          liftIO $ dump (debugMode state') prog core core luaExpr (inferScope state) (inferScope state')
-          case code of
-            L.OK -> pure (Right ())
-            _ -> do
-              val <- valueRepr (pure ())
-              L.pop 1
-              case val of
-                String str -> pure (Left (text str <+> parens (shown code)))
-                _ -> pure (Left (keyword "Error:" <+> pretty val))
+        (sig, env, lEnv) <- wrapDriver $ do
+          ~(Just sig, _) <- D.getSignature path
+          ~(Just env, _) <- D.getTypeEnv path
+          ~(Just (_, lEnv), _) <- D.getLowered path
+          pure (sig, env, lEnv)
 
-        case res of
-          Left err -> hPutDoc (outputHandle state) err $> False
-          Right () -> pure True
+        modify (\s -> s { resolveScope = resolveScope s <> sig
+                        , inferScope = inferScope s <> env
+                        , lowerState = lowerState s <> lEnv })
 
-      put state' { emitState = emit' }
-      pure ok
+        core <- wrapNamey $ killNewtypePass core
+        (luaExpr, luaSyntax) <- emitCore core
+
+        luaState <- gets luaState
+        liftIO $ do
+          dump dmode [] core core luaExpr Bi.builtinEnv env
+          res <- L.runWith luaState $ do
+            code <- L.dostring luaSyntax
+
+            case code of
+              L.OK -> pure (Right ())
+              _ -> do
+                val <- valueRepr (pure ())
+                L.pop 1
+                case val of
+                  String str -> pure (Left (text str <+> parens (shown code)))
+                  _ -> pure (Left (keyword "Error:" <+> pretty val))
+
+          case res of
+            Left err -> hPutDoc handle err
+            Right () -> pure ()
 
 outputDoc :: (MonadState ReplState m, MonadIO m) => Doc -> m ()
 outputDoc x = do
@@ -497,11 +467,11 @@ runRemoteReplCommand port command = Net.withSocketsDo $ do
       putStrLn $ "Failed to connect to server on port " ++ show port
 
 repl :: Int -> DebugMode -> IO ()
-repl port mode = replFrom port mode []
+repl port mode = replFrom port mode Nothing
 
-replFrom :: Int -> DebugMode -> [FilePath] -> IO ()
-replFrom port mode files = do
-  state <- execStateT (loadFiles files) =<< defaultState mode
+replFrom :: Int -> DebugMode -> Maybe FilePath -> IO ()
+replFrom port mode file = do
+  state <- maybe pure (execStateT . loadFile) file =<< defaultState mode
   hSetBuffering stdout LineBuffering
 
   ready <- newEmptyMVar
@@ -525,7 +495,7 @@ startServer ready port state = Net.withSocketsDo $ bracket getSock Net.close (wo
   getSock = do
     (addr:_) <-
       Net.getAddrInfo (Just (Net.defaultHints { Net.addrFlags = [ Net.AI_NUMERICHOST
-                                                                , Net.AI_PASSIVE 
+                                                                , Net.AI_PASSIVE
                                                                 ]
                                               , Net.addrSocketType = Net.Stream }))
                       (Just "127.0.0.1")
@@ -571,3 +541,23 @@ startServer ready port state = Net.withSocketsDo $ bracket getSock Net.close (wo
     hClose handle
 
     work state sock
+
+wrapDriver :: MonadState ReplState m
+           => StateT D.Driver (NameyT m) a
+           -> m a
+wrapDriver m = do
+  state <- get
+  ((res, drive), name)
+    <- flip runNameyT (lastName state)
+     . flip runStateT (driver state)
+     $ m
+  put state { lastName = name, driver = drive }
+  pure res
+
+wrapNamey :: MonadState ReplState m
+          => NameyT m a
+          -> m a
+wrapNamey m = do
+  (res, name) <- runNameyT m =<< gets lastName
+  modify (\s -> s { lastName = name })
+  pure res

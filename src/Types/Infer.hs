@@ -309,10 +309,11 @@ infer (Begin xs a) = do
   (end, t) <- infer' end
   pure (Begin (start ++ [end]) (a, t), t)
 
-infer (OpenIn mod expr _) = do
-  (modImplicits, modTysym) <- view (modules . at mod . non undefined)
-  local (classes %~ (<>modImplicits)) . local (tySyms %~ (<> modTysym)) $
-    infer expr
+infer (OpenIn mod expr a) = do
+  (mod', exEnv, (modImplicits, modTysym)) <- inferMod mod
+  local (exEnv . (classes %~ (<>modImplicits)) . (tySyms %~ (<>modTysym))) $ do
+    (expr', ty) <- infer expr
+    pure (OpenIn mod' expr' (a, ty), ty)
 
 infer ex = do
   x <- freshTV
@@ -436,11 +437,6 @@ inferProg (decl@(TypeDecl am n tvs cs ann):prg) = do
                 . (constructors %~ Set.union ts') ) $
           cont (Just cs')
 
-inferProg (Open mod pre:prg) = do
-  (modImplicits, modTysym) <- view (modules . at mod . non undefined)
-  local (classes %~ (<>modImplicits)) . local (tySyms %~ (<> modTysym)) $
-    consFst (Open mod pre) $ inferProg prg
-
 inferProg (c@Class{}:prg) = do
   let v = className c
   (stmts, decls, clss, implicits, syms) <- condemn $ inferClass c
@@ -482,18 +478,35 @@ inferProg (decl@(TypeFunDecl am tau arguments kindsig equations ann):prg) = do
     local (names %~ focus (one tau kind)) $
       consFst fakeDecl $ inferProg prg
 
-inferProg (Module am name body:prg) = do
-  (body', env) <- inferProg body
+inferProg (Open mod:prg) = do
+  (mod', exEnv, (modImplicits, modTysym)) <- inferMod mod
+  local (exEnv. (classes %~ (<>modImplicits)) . (tySyms %~ (<>modTysym))) $
+    consFst (Open mod') $ inferProg prg
 
-  -- Extend the current scope and module scope
-  local ( (names %~ (<> (env ^. names)))
-        . (types %~ (<> (env ^. types)))
-        . (classDecs %~ (<> (env ^. classDecs)))
-        . (modules %~ (Map.insert name (env ^. classes, env ^. tySyms) . (<> (env ^. modules))))) $
-    consFst (Module am name body') $
+inferProg (Module am name mod:prg) = do
+  (mod', exEnv, modInfo) <- inferMod mod
+  local (exEnv . (modules %~ Map.insert name modInfo)) $
+    consFst (Module am name mod') $
     inferProg prg
 
 inferProg [] = asks ([],)
+
+inferMod :: MonadInfer Typed m => ModuleTerm Desugared
+         -> m (ModuleTerm Typed, Env -> Env, (ImplicitScope ClassInfo Typed, TySyms))
+inferMod (ModStruct bod a) = do
+  (bod', env) <- inferProg bod
+  -- So this behaviour is somewhat incorrect, as we'll exposed any type
+  -- functions/implicits that we open in our signature. But it'll do for now.
+  pure (ModStruct bod' (a, undefined)
+       , (names %~ (<> (env ^. names)))
+       . (types %~ (<> (env ^. types)))
+       . (classDecs %~ (<> (env ^. classDecs)))
+       . (modules %~ (<> (env ^. modules)))
+       , (env ^. classes, env ^. tySyms))
+inferMod (ModRef name a) = do
+  mod <- view (modules . at name) >>= maybe (confesses (NotInScope name)) pure
+  pure (ModRef name (a, undefined), id, mod)
+inferMod ModLoad{} = error "Impossible"
 
 buildList :: Ann Resolved -> Type Typed -> [Expr Typed] -> Expr Typed
 buildList an tau [] =
@@ -540,7 +553,7 @@ instantiateTc r tau = do
       x <- genName
       i <- view classes
       tell (Seq.singleton (ConImplicit r i x tau))
-      (k, sigma) <- go sigma 
+      (k, sigma) <- go sigma
       let wrap ex =
             ExprWrapper (WrapVar x) (ExprWrapper (TypeAsc ty) ex (annotation ex, ty)) (annotation ex, sigma)
       pure (k . wrap, sigma)

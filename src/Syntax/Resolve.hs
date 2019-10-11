@@ -24,21 +24,20 @@
 module Syntax.Resolve
   ( resolveProgram
   , ResolveError(..)
+  , ResolveResult(..)
   , VarKind(..)
   ) where
 
+import Control.Lens hiding (Lazy, Context)
 import Control.Monad.Chronicles
 import Control.Monad.Reader
 import Control.Applicative
-import Control.Monad.State
 import Control.Monad.Namey
-import Control.Lens hiding (Lazy)
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import Data.Traversable
-import Data.Sequence (Seq)
 import Data.Foldable
 import Data.Function
 import Data.Functor
@@ -48,7 +47,7 @@ import Data.Maybe
 import Data.These
 import Data.List
 
-import Syntax.Resolve.Toplevel
+import Syntax.Resolve.Import
 import Syntax.Resolve.Scope
 import Syntax.Resolve.Error
 import Syntax.Subst
@@ -56,67 +55,65 @@ import Syntax
 
 import Parser.Unicode
 
+data ResolveResult = ResolveResult
+  { program :: [Toplevel Resolved] -- ^ The resolved program
+  -- | The exported signature, which other modules may import
+  , exposed :: Signature
+  -- | The current resolver state, suitable for use within REPL.
+  , state :: Signature
+  }
+
 type MonadResolve m = ( MonadChronicles ResolveError m
-                      , MonadReader Scope m
-                      , MonadNamey m
-                      , MonadState ModuleScope m)
+                      , MonadReader Context m
+                      , MonadImport m
+                      , MonadNamey m )
 
 -- | Resolve a program within a given 'Scope' and 'ModuleScope'
-resolveProgram :: MonadNamey m
-               => Scope -- ^ The scope in which to resolve this program
-               -> ModuleScope
+resolveProgram :: (MonadNamey m, MonadImport m)
+               => Signature -- ^ The scope in which to resolve this program
                -- ^ The current module scope. We return an updated
                -- version of this if we declare or extend any modules.
                -> [Toplevel Parsed] -- ^ The program to resolve
-               -> m (Either [ResolveError] ([Toplevel Resolved], ModuleScope))
+               -> m (Either [ResolveError] ResolveResult)
                -- ^ The resolved program or a list of resolution errors
-resolveProgram scope modules = runResolve scope modules . resolveModule
-
--- | Run the resolver monad.
-runResolve :: MonadNamey m
-           => Scope -- ^ The initial state to resolve objects in
-           -> ModuleScope -- ^ The scope for modules
-           -> StateT ModuleScope (ReaderT Scope (ChronicleT (Seq ResolveError) m)) a
-           -> m (Either [ResolveError] (a, ModuleScope))
-runResolve scope modules
-  = (these (Left . toList) Right (\x _ -> Left (toList x))<$>)
-  . runChronicleT . flip runReaderT scope . flip runStateT modules
+resolveProgram sc ts
+  = (these (Left . toList) (\(s, exposed, inner) -> Right (ResolveResult s exposed inner)) (\x _ -> Left (toList x))<$>)
+  . runChronicleT . flip runReaderT (Context sc mempty)
+  $ reTops ts mempty
 
 -- | Resolve the whole program
-resolveModule :: MonadResolve m => [Toplevel Parsed] -> m [Toplevel Resolved]
-resolveModule [] = pure []
+reTops :: MonadResolve m
+       => [Toplevel Parsed] -> Signature
+       -> m ([Toplevel Resolved], Signature, Signature)
+reTops [] sig = views scope ([], sig,)
 
-resolveModule (LetStmt am bs:rs) = do
+reTops (LetStmt am bs:rest) sig = do
   (bs', vs, ts) <- unzip3 <$> traverse reBinding bs
-  extendTyvarN (concat ts) . extendN (concat vs) $ (:)
-    <$> (LetStmt am <$> traverse (uncurry (flip (<$>) . reExpr . view bindBody)) (zip bs bs'))
-    <*> resolveModule rs
+  reTopsWith am rest sig (withVals (concat vs)) $ extendTyvars (concat ts) $
+    LetStmt am <$> traverse (uncurry (flip (<$>) . reExpr . view bindBody)) (zip bs bs')
 
-resolveModule (r@(ForeignVal am v t ty a):rs) = do
+reTops (r@(ForeignVal am v t ty a):rest) sig = do
   v' <- tagVar v
-  extend (v, v') $ (:)
-    <$> (ForeignVal am
+  reTopsWith am rest sig (withVal v v') $
+    ForeignVal am
           <$> lookupEx v `catchJunk` r
           <*> pure t
           <*> reType r (wrap ty)
-          <*> pure a)
-    <*> resolveModule rs
+          <*> pure a
 
   where wrap x = foldr (TyPi . flip (flip Invisible Nothing) Spec) x (toList (ftv x))
 
-resolveModule (d@(TySymDecl am t vs ty ann):rs) = do
+reTops (d@(TySymDecl am t vs ty ann):ts) sig = do
   t' <- tagVar t
   (vs', sc) <- resolveTele d vs
-  extendTyvarN sc $ do
-    decl <- TySymDecl am t' vs' <$> reType d ty <*> pure ann
-    extendTy (t, t') $
-      (decl:) <$> resolveModule rs
+  decl <- extendTyvars sc $
+    TySymDecl am t' vs' <$> reType d ty <*> pure ann
+  reTopsWith am ts sig (withTy t t') (pure decl)
 
-
-resolveModule (d@(TypeFunDecl am tau args kindsig eqs ann):rest) = do
+reTops (d@(TypeFunDecl am tau args kindsig eqs ann):rest) sig = do
   tau' <- tagVar tau
   (args, _) <- resolveTele d args
-  extendTy (tau, tau') $ do
+  reTopsWith am rest sig (withTy tau tau') $ do
     eqs <- for eqs $ \clause@(TyFunClause lhs@(TyApps t xs) rhs ann) -> do
       when (t /= TyCon tau) $
         confesses (ArisingFrom (TFClauseWrongHead t tau) (BecauseOf clause))
@@ -125,84 +122,65 @@ resolveModule (d@(TypeFunDecl am tau args kindsig eqs ann):rest) = do
 
       let fv = Set.toList (ftv lhs)
       fv' <- traverse tagVar fv
-      extendTyvarN (zip fv fv') $
+      extendTyvars (zip fv fv') $
         (\x y -> TyFunClause x y ann) <$> reType clause lhs <*> reType clause rhs
 
     kindsig <- traverse (reType d) kindsig
-    (TypeFunDecl am tau' args kindsig eqs ann:) <$> resolveModule rest
+    pure $ TypeFunDecl am tau' args kindsig eqs ann
 
 
-resolveModule (d@(TypeDecl am t vs cs ann):rs) = do
+reTops (d@(TypeDecl am t vs cs ann):rest) sig = do
   t'  <- tagVar t
   (vs', sc) <- resolveTele d vs
   let c = maybe [] (map extractCons) cs
   c' <- traverse tagVar c
-  extendTy (t, t') $ extendN (zip c c') $ do
-    body <- TypeDecl am t' vs'
+  reTopsWith am rest sig (withTy t t' . withVals (zip c c')) $
+    TypeDecl am t' vs'
       <$> maybe (pure Nothing) (fmap Just . traverse (resolveCons sc) . zip c') cs
       <*> pure ann
-    (body:) <$> resolveModule rs
 
   where resolveCons _  (v', UnitCon ac _ a) = pure $ UnitCon ac v' a
-        resolveCons vs (v', r@(ArgCon ac _ t a)) = ArgCon ac v' <$> extendTyvarN vs (reType r t) <*> pure a
+        resolveCons vs (v', r@(ArgCon ac _ t a)) = ArgCon ac v' <$> extendTyvars vs (reType r t) <*> pure a
         resolveCons _  (v', r@(GadtCon ac _ t a)) = do
           let fvs = toList (ftv t)
           fresh <- traverse tagVar fvs
-          t' <- extendTyvarN (zip fvs fresh) (reType r t)
+          t' <- extendTyvars (zip fvs fresh) (reType r t)
           pure (GadtCon ac v' t' a)
 
         extractCons (UnitCon _ v _) = v
         extractCons (ArgCon _ v _ _) = v
         extractCons (GadtCon _ v _ _) = v
 
-resolveModule (r@(Open name as):rs) =
-  -- Opens hard-fail, as anything inside it will probably fail to resolve
-  retcons (wrapError r) $
-    resolveOpen name as (\name' -> (Open name' as:) <$> resolveModule rs)
+reTops (r@(Open mod):rest) sig = do
+  (mod', sig') <- retcons (wrapError r) $ reModule mod
+  case sig' of
+    Nothing -> confess empty
+    Just sig' -> local (scope %~ (<>sig')) $ first3 (Open mod':) <$> reTops rest sig
 
-resolveModule (Module am name body:rs) = do
-  fullName <- foldl (flip InModule) name <$> asks modStack
-  body' <- extendM name $ resolveModule body
+reTops (r@(Module am name mod):rest) sig = do
+  name' <- tagVar name
+  (mod', sig') <- retcons (wrapError r) $ reModule mod
+  reTopsWith am rest sig (withMod name name' sig') $ pure (Module am name' mod')
 
-  let (vars, tys) = extractToplevels body
-  let (vars', tys') = extractToplevels body'
-
-  (ModuleScope modules) <- get
-  (name', scope) <- case Map.lookup fullName modules of
-                      Just env -> pure env
-                      Nothing -> (,emptyScope) <$> tagModule fullName
-
-  let scope' = scope { varScope = foldr (uncurry Map.insert) (varScope scope) (zip vars (map SVar vars'))
-                     , tyScope  = foldr (uncurry Map.insert) (tyScope scope) (zip tys (map SVar tys')) }
-  put $ ModuleScope $ Map.insert fullName (name', scope') modules
-
-  extendN (modZip name name' vars vars') $ extendTyN (modZip name name' tys tys') $ (:)
-    <$> pure (Module am name' body')
-    <*> resolveModule rs
-
-  where modZip name name' v v' = zip (map (name<>) v) (map (name'<>) v')
-
-resolveModule (t@(Class name am ctx tvs fds ms ann):rs) = do
+reTops (t@(Class name am ctx tvs fds ms ann):rest) sig = do
   name' <- tagVar name
   (tvs', tvss) <- resolveTele t tvs
 
-  extendTy (name, name') $ do
+  (ctx', fds', (ms', vs')) <- local (scope %~ withTy name name') $ do
     tyfuns <- fmap concat . for ms $ \case
       AssocType name _ _ -> (:[]) . (name,) <$> tagVar name
       _ -> pure []
 
-    (ctx', fds', (ms', vs')) <- extendTyvarN tvss . extendTyN tyfuns $
+    extendTyvars tvss . local (scope %~ withTys tyfuns) $
       (,,) <$> traverse (reType t) ctx
            <*> traverse reFd fds
            <*> reClassItem (map fst tvss) ms
 
-    let typeNames = map fst . filter ((\case { AssocType{} -> True; _ -> False }) . snd) $ zip vs' ms
-        varNames = map fst . filter ((\case { AssocType{} -> False; _ -> True}) . snd) $ zip vs' ms
+  let (vars, types) = partition ((\case { AssocType{} -> False; _ -> True}) . snd) (zip vs' ms)
 
-    extendTyN typeNames . extendN varNames $ do
-      ms'' <- extendTyvarN tvss $ sequence ms'
-      (Class name' am ctx' tvs' fds' ms'' ann:) <$>
-        resolveModule rs
+  reTopsWith am rest sig (withVals (map fst vars) . withTys ((name, name') : map fst types)) $ do
+    ms'' <- extendTyvars tvss $ sequence ms'
+    pure $ Class name' am ctx' tvs' fds' ms'' ann
 
   where
     reClassItem tvs' (m@(MethodSig name ty an):rest) = do
@@ -229,40 +207,64 @@ resolveModule (t@(Class name am ctx tvs fds ms ann):rs) = do
       tv x = lookupTyvar x `catchJunk` fd
 
 
-resolveModule (t@(Instance cls ctx head ms ann):rs) = do
+reTops (t@(Instance cls ctx head ms ann):rest) sig = do
   cls' <- lookupTy cls `catchJunk` t
 
   let fvs = toList (foldMap ftv ctx <> ftv head)
   fvs' <- traverse tagVar fvs
 
-  t' <- extendTyvarN (zip fvs fvs') $ do
+  t' <- extendTyvars (zip fvs fvs') $ do
     ctx' <- traverse (reType t) ctx
     head' <- reType t head
 
     (ms', vs) <- unzip <$> traverse reMethod ms
-    ms'' <- extendN (concat vs) (sequence ms')
+    ms'' <- extendVals (concat vs) (sequence ms')
 
     pure (Instance cls' ctx' head' ms'' ann)
 
-  (t':) <$> resolveModule rs
+  first3 (t':) <$> reTops rest sig
 
+reTopsWith :: MonadResolve m
+           => TopAccess -> [Toplevel Parsed] -> Signature
+           -> (Signature -> Signature)
+           -> m (Toplevel Resolved)
+           -> m ([Toplevel Resolved], Signature, Signature)
+reTopsWith am ts sig extend t = do
+  let sig' = case am of
+        Public -> extend sig
+        Private -> sig
+  local (scope %~ extend) $ do
+    t' <- t
+    first3 (t':) <$> reTops ts sig'
 
-lookupVar :: MonadResolve m
-          => Var Parsed -> VarKind -> Map.Map (Var Parsed) ScopeVariable
-          -> m (Var Resolved)
-lookupVar v k m = case Map.lookup v m of
-    Nothing -> confesses (NotInScope k v [])
-    Just (SVar x) -> pure x
-    Just (SAmbiguous vs) -> confesses (Ambiguous v vs)
+-- | Resolve a module term.
+reModule :: MonadResolve m
+         => ModuleTerm Parsed
+         -> m (ModuleTerm Resolved, Maybe Signature)
+reModule (ModStruct bod an) = do
+  res <- recover Nothing $ Just <$> reTops bod mempty
+  pure $ case res of
+    Nothing -> (ModStruct [] an, Nothing)
+    Just (bod', sig, _) -> (ModStruct bod' an, Just sig)
+reModule (ModRef ref an) = do
+  (ref', sig) <- recover (junkVar, Nothing)
+               $ view scope >>= lookupIn (^.modules) ref VarModule
+  pure (ModRef ref' an, sig)
+reModule r@(ModLoad path a) = do
+  result <- importModule a path
+  (var, sig) <- case result of
+    Imported var sig -> pure (var, Just sig)
+    Errored -> pure (junkVar, Nothing)
+    ImportCycle loop -> do
+      dictates (wrapError r (ImportLoop loop))
+      pure (junkVar, Nothing)
+    NotFound -> do
+      dictates (wrapError r (UnresolvedImport path))
+      pure (junkVar, Nothing)
 
-lookupEx :: MonadResolve m => Var Parsed -> m (Var Resolved)
-lookupEx v = asks varScope >>= lookupVar v (if isCtorVar v then VarCtor else VarVar)
-
-lookupTy :: MonadResolve m => Var Parsed -> m (Var Resolved)
-lookupTy v = asks tyScope >>= lookupVar v (if isCtorVar v then VarCtor else VarType)
-
-lookupTyvar :: MonadResolve m => Var Parsed -> m (Var Resolved)
-lookupTyvar v = asks tyvarScope >>= lookupVar v VarTyvar
+  -- Replace this with a reference so we don't have to care later on
+  -- about this. Bit ugly, but I'll survive
+  pure (ModRef var a, sig)
 
 resolveTele :: (MonadResolve m, Reasonable f p)
             => f p -> [TyConArg Parsed] -> m ([TyConArg Resolved], [(Var Parsed, Var Resolved)])
@@ -282,7 +284,7 @@ reExpr r@(VarRef v a) = flip VarRef a <$> (lookupEx v `catchJunk` r)
 
 reExpr (Let bs c a) = do
   (bs', vs, ts) <- unzip3 <$> traverse reBinding bs
-  extendTyvarN (concat ts) . extendN (concat vs) $
+  extendTyvars (concat ts) . extendVals (concat vs) $
     Let <$> traverse (uncurry (flip (<$>) . reExpr . view bindBody)) (zip bs bs')
         <*> reExpr c
         <*> pure a
@@ -294,7 +296,7 @@ reExpr (Fun p e a) = do
         pure (PatParam p', vs, ts)
       reWholePattern' _ = error "EvParam resolve"
   (p', vs, ts) <- reWholePattern' p
-  extendTyvarN ts . extendN vs $ Fun p' <$> reExpr e <*> pure a
+  extendTyvars ts . extendVals vs $ Fun p' <$> reExpr e <*> pure a
 
 reExpr r@(Begin [] a) = dictates (wrapError r EmptyBegin) $> junkExpr a
 reExpr (Begin es a) = Begin <$> traverse reExpr es <*> pure a
@@ -314,7 +316,7 @@ reExpr r@(Ascription e t a) = do
   t <- reType r t
   let boundByT (TyPi (Invisible v@(TgName p _) _ _) t) = (Name p, v):boundByT t
       boundByT _ = []
-  Ascription <$> extendTyvarN (boundByT t) (reExpr e) <*> pure t <*> pure a
+  Ascription <$> extendTyvars (boundByT t) (reExpr e) <*> pure t <*> pure a
 reExpr e@(Record fs a) = do
   let ls = map (view fName) fs
       dupes = mapMaybe (listToMaybe . tail) . group . sort $ ls
@@ -337,9 +339,17 @@ reExpr (Tuple es a) = Tuple <$> traverse reExpr es <*> pure a
 reExpr (ListExp es a) = ListExp <$> traverse reExpr es <*> pure a
 reExpr (TupleSection es a) = TupleSection <$> traverse (traverse reExpr) es <*> pure a
 
-reExpr r@(OpenIn m e a) =
-  retcons (wrapError r) $
-    resolveOpen m Nothing (\m' -> OpenIn m' <$> reExpr e <*> pure a)
+reExpr r@(OpenIn m e a) = retcons (wrapError r) $ do
+  -- Disable structs in local lets - they may bind variables, and we don't
+  -- currently support that.
+  case m of
+    ModStruct{} -> dictates (wrapError r LetOpenStruct)
+    _ -> pure ()
+
+  (m', sig) <- reModule m
+  case sig of
+    Nothing -> pure $ OpenIn m' (junkExpr a) a
+    Just sig -> OpenIn m' <$> local (scope %~ (<>sig)) (reExpr e) <*> pure a
 
 reExpr (Lazy e a) = Lazy <$> reExpr e <*> pure a
 reExpr (Vta e t a) = Vta <$> reExpr e <*> reType e t <*> pure a
@@ -351,11 +361,11 @@ reExpr (ListComp e qs a) =
       go (CompGen b e an:qs) acc = do
         e <- reExpr e
         (b, es, ts) <- reWholePattern b
-        extendTyvarN ts . extendN es $
+        extendTyvars ts . extendVals es $
           go qs (CompGen b e an:acc)
       go (CompLet bs an:qs) acc =do
         (bs', vs, ts) <- unzip3 <$> traverse reBinding bs
-        extendTyvarN (concat ts) . extendN (concat vs) $ do
+        extendTyvars (concat ts) . extendVals (concat vs) $ do
           bs <- traverse (uncurry (flip (<$>) . reExpr . view bindBody)) (zip bs bs')
           go qs (CompLet bs an:acc)
       go [] acc = ListComp <$> reExpr e <*> pure (reverse acc) <*> pure a
@@ -373,11 +383,11 @@ reExpr (DoExpr var qs a) =
       go (r@(CompGen b e an):qs) acc flag = do
         e <- reExpr e
         (b, es, ts) <- reWholePattern b
-        extendTyvarN ts . extendN es $
+        extendTyvars ts . extendVals es $
           go qs (CompGen b e an:acc) (flag <|> Just r)
       go (CompLet bs an:qs) acc flag = do
         (bs', vs, ts) <- unzip3 <$> traverse reBinding bs
-        extendTyvarN (concat ts) . extendN (concat vs) $ do
+        extendTyvars (concat ts) . extendVals (concat vs) $ do
           bs <- traverse (uncurry (flip (<$>) . reExpr . view bindBody)) (zip bs bs')
           go qs (CompLet bs an:acc) flag
       go [] acc flag = do
@@ -390,11 +400,14 @@ reExpr (DoExpr var qs a) =
 
 reExpr ExprWrapper{} = error "resolve cast"
 
+reField :: MonadResolve m => Field Parsed -> m (Field Resolved)
+reField (Field n e s) = Field n <$> reExpr e <*> pure s
+
 reArm :: MonadResolve m
       => Arm Parsed -> m (Arm Resolved)
 reArm (Arm p g b) = do
   (p', vs, ts) <- reWholePattern p
-  extendTyvarN ts . extendN vs $
+  extendTyvars ts . extendVals vs $
     Arm p' <$> traverse reExpr g <*> reExpr b
 
 reType :: (MonadResolve m, Reasonable a p)
@@ -407,7 +420,7 @@ reType _ v@TyWithConstraints{} = error ("impossible! resolving withcons " ++ sho
 reType _ (TyLit v) = pure (TyLit v)
 reType r (TyPi (Invisible v k req) ty) = do
   v' <- tagVar v
-  ty' <- extendTyvar (v, v') $ reType r ty
+  ty' <- extendTyvar v v' $ reType r ty
   k <- traverse (reType r) k
   pure (TyPi (Invisible v' k req) ty')
 reType r (TyPi (Anon f) x) = TyPi . Anon <$> reType r f <*> reType r x
@@ -471,7 +484,7 @@ rePattern r@(PType p t a) = do
   (p', vs, ts) <- rePattern p
   let fvs = toList (ftv t)
   fresh <- for fvs $ \x -> lookupTyvar x `absolving` tagVar x
-  t' <- extendTyvarN (zip fvs fresh) (reType r t)
+  t' <- extendTyvars (zip fvs fresh) (reType r t)
   let r' = PType p' t' a
   pure (r', vs, zip3 fvs fresh (repeat r') ++ ts)
 rePattern (PRecord f a) = do
@@ -519,29 +532,59 @@ reMethod (MethodImpl b@Matching{}) =
 reMethod b@(TypeImpl var args exp ann) = do
   var' <- retcons (wrapError b) $ lookupTy var
   (args, sc) <- resolveTele b args
-  exp <- extendTyvarN sc $
+  exp <- extendTyvars sc $
     reType b exp
   pure (pure (TypeImpl var' args exp ann), [(var, var')])
 
 reMethod (MethodImpl TypedMatching{}) = error "reBinding TypedMatching{}"
 
-resolveOpen :: MonadResolve m => Var Parsed -> Maybe T.Text -> (Var Resolved -> m a) -> m a
-resolveOpen name as m = do
-  stack <- asks modStack
-  (ModuleScope modules) <- get
-  case lookupModule name modules stack of
-    Nothing -> confesses (NotInScope VarModule name [])
-    Just (name', Scope vars tys _ _) ->
-      let prefix = maybe id InModule as
-      in
-        local (\s -> s { varScope = Map.mapKeys prefix vars `Map.union` varScope s
-                       , tyScope  = Map.mapKeys prefix tys  `Map.union` tyScope s }) (m name')
+-- | Lookup a variable in a signature, using a specific lens.
+lookupIn :: MonadResolve m
+         => (Signature -> Map.Map VarName a)
+         -> Var Parsed -> VarKind -> Signature
+         -> m a
+lookupIn g v k = go v where
+  go (Name n) env =
+    case Map.lookup n (g env) of
+      Nothing -> confesses (NotInScope k v [])
+      Just x -> pure x
+  go (InModule m n) env =
+    case Map.lookup m (env ^. modules) of
+      Nothing -> confesses (NotInScope k v [])
+      -- Abort without an error if the module is unresolved. This is "safe", as
+      -- we'll have already produced an error at the original error.
+      Just (_, Nothing) -> confess mempty
+      Just (_, Just env) -> go n env
 
-  where
-    lookupModule n m [] = Map.lookup n m
-    lookupModule n m x@(_:xs) = Map.lookup (foldl (flip InModule) n x) m
-                                <|> lookupModule n m xs
+-- | Convert a slot into a concrete variable
+lookupSlot :: MonadResolve m
+           => Var Parsed -> Slot
+           -> m (Var Resolved)
+lookupSlot _ (SVar x) = pure x
+lookupSlot v (SAmbiguous vs) = confesses (Ambiguous v vs)
 
+-- | Lookup a value/expression variable.
+lookupEx :: MonadResolve m => Var Parsed -> m (Var Resolved)
+lookupEx v = view scope
+         >>= lookupIn (^.vals) v (if isCtorVar v then VarCtor else VarVar)
+         >>= lookupSlot v
+
+-- | Lookup a type name.
+lookupTy :: MonadResolve m => Var Parsed -> m (Var Resolved)
+lookupTy v = view scope
+         >>= lookupIn (^.types) v (if isCtorVar v then VarCtor else VarType)
+         >>= lookupSlot v
+
+-- | Lookup a tyvar.
+lookupTyvar :: MonadResolve m => Var Parsed -> m (Var Resolved)
+lookupTyvar v@(Name n) = do
+  vars <- view tyvars
+  case Map.lookup n vars of
+    Nothing -> confesses (NotInScope VarTyvar v [])
+    Just x -> lookupSlot v x
+lookupTyvar InModule{} = error "Impossible: InModule tyvar"
+
+-- | A garbage variable used when we cannot resolve something.
 junkVar :: Var Resolved
 junkVar = TgInternal "<missing>"
 
@@ -552,12 +595,10 @@ wrapError :: Reasonable e p => e p -> ResolveError -> ResolveError
 wrapError _  e@(ArisingFrom _ _) = e
 wrapError r e = ArisingFrom e (BecauseOf r)
 
+-- | Catch an error, returning a junk variable instead.
 catchJunk :: (MonadResolve m, Reasonable e p)
           => m (Var Resolved) -> e p -> m (Var Resolved)
 catchJunk m r = recover junkVar (retcons (wrapError r) m)
-
-reField :: MonadResolve m => Field Parsed -> m (Field Resolved)
-reField (Field n e s) = Field n <$> reExpr e <*> pure s
 
 isCtorVar :: Var Parsed -> Bool
 isCtorVar (Name t) = T.length t > 0 && classify (T.head t) == Upper

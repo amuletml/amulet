@@ -8,15 +8,10 @@ module Option =
     | Just x -> Just (f x)
     | Nothing -> Nothing
 
-module Option.Helpers =
-  open Option
-
-  let fmap = map
-
-module Option =
-  open Option.Helpers
-  open Helpers
+  module Helpers =
+    let fmap = map
 
 module O = Option.Helpers
 
 let _ = O.fmap (fun x -> x + 1) Option.Nothing
+let _ = Option.(Helpers.fmap (fun x -> x + 1) Nothing)

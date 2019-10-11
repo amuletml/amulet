@@ -5,7 +5,6 @@ import qualified Data.Text.Lazy as L
 import qualified Data.Text.IO as T
 import qualified Data.Text as T
 import Data.Position (SourceName)
-import Data.Foldable
 import Data.Spanned
 import Data.These
 import Data.List
@@ -15,9 +14,8 @@ import Control.Monad.Namey
 
 import Types.Infer (inferProgram)
 
-import Syntax.Resolve (ResolveError, resolveProgram)
-import Syntax.Resolve.Toplevel (extractToplevels)
-import qualified Syntax.Resolve.Scope as RS
+import Syntax.Resolve (ResolveError, ResolveResult(..), resolveProgram)
+import Syntax.Resolve.Import (runNullImport)
 import Syntax.Desugar (desugarProgram)
 import Syntax.Builtin
 
@@ -50,45 +48,27 @@ toEither (These [] x) = Right x
 toEither (These e _) = Left e
 toEither (That x) = Right x
 
-compile :: MonadNamey m => [(SourceName, T.Text)] -> m CompileResult
-compile [] = error "Cannot compile empty input"
-compile (file:files) = do
-  file' <- go (Right ([], builtinResolve, builtinModules, builtinEnv)) file
-  files' <- foldlM go file' files
-  case files' of
-    Right (prg, _, _, _) -> CSuccess <$> runLowerT (lowerProg prg)
-    Left err -> pure err
-
-  where
-    go (Right (tops, scope, modScope, env)) (name, file) =
-      case runParser name (L.fromStrict file) parseTops of
-        (Just parsed, _) -> do
-          resolved <- resolveProgram scope modScope parsed
-          case resolved of
-            Right (resolved, modScope') -> do
-              desugared <- desugarProgram resolved
-              infered <- toEither <$> inferProgram env desugared
-              case infered of
-                Right (prog, env') ->
-                  let (var, tys) = extractToplevels parsed
-                      (var', tys') = extractToplevels resolved
-                  in pure $ Right (tops ++ prog
-                                  , scope { RS.varScope = RS.insertN' (RS.varScope scope) (zip var var')
-                                          , RS.tyScope  = RS.insertN' (RS.tyScope scope)  (zip tys tys')
-                                          }
-                                  , modScope'
-                                  , env')
-                Left es -> pure $ Left $ CInfer es
-            Left es -> pure $ Left $ CResolve es
-        (Nothing, es) -> pure $ Left $ CParse es
-    go x _ = pure x
+compile :: MonadNamey m => SourceName -> T.Text -> m CompileResult
+compile name file =
+  case runParser name (L.fromStrict file) parseTops of
+    (Nothing, es) -> pure $ CParse es
+    (Just parsed, _) -> do
+      resolved <- runNullImport $ resolveProgram builtinResolve parsed
+      case resolved of
+        Left es -> pure $ CResolve es
+        Right (ResolveResult resolved _ _) -> do
+          desugared <- desugarProgram resolved
+          infered <- toEither <$> inferProgram builtinEnv desugared
+          case infered of
+            Left es -> pure $ CInfer es
+            Right (prg, _) -> CSuccess <$> runLowerT (lowerProg prg)
 
 
 testLint :: ([Stmt CoVar] -> Namey [Stmt CoVar]) -> String -> Assertion
 testLint f file = do
   contents <- T.readFile file
   fst . flip runNamey firstName $ do
-    s <- compile [(file, contents)]
+    s <- compile file contents
     case s of
       CSuccess c -> do
         c' <- f c
