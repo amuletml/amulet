@@ -52,6 +52,7 @@ instance Spanned (Ann p) => Spanned (Expr p) where
   annotation (ListExp _ a) = annotation a
   annotation (ListComp _ _ a) = annotation a
   annotation (DoExpr _ _ a) = annotation a
+  annotation (Idiom _ _ _ a) = annotation a
 
   annotation (ExprWrapper _ _ a) = annotation a
 
@@ -150,6 +151,7 @@ instance Pretty (Var p) => Pretty (Expr p) where
   pretty (ListExp es _) = brackets (hsep (punctuate comma (map pretty es)))
   pretty (ListComp e qs _) =
     brackets (pretty e <+> pipe <+> hsep (punctuate comma (map pretty qs)))
+  pretty (Idiom _ _ xs _) = "(|" <+> hsep (map parenArg xs) <+> "|)"
 
   pretty (ExprWrapper wrap ex an) = go wrap ex where
     go (TypeLam v t) ex =

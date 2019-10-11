@@ -361,6 +361,9 @@ reExpr (ListComp e qs a) =
       go [] acc = ListComp <$> reExpr e <*> pure (reverse acc) <*> pure a
   in go qs []
 
+reExpr r@(Idiom vp va es a) = Idiom <$> lookupEx' vp <*> lookupEx' va <*> traverse reExpr es <*> pure a where
+  lookupEx' v = lookupEx v `catchJunk` r
+
 reExpr (DoExpr var qs a) =
   let go (CompGuard e:qs) acc flag = do
         e <- reExpr e
