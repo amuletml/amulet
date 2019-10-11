@@ -36,7 +36,6 @@ executable amc
 
   other-modules:       Repl
                      , Debug
-                     , Errors
                      , Repl.Display
   default-language:    Haskell2010
 
@@ -57,7 +56,6 @@ executable amc-prove
                      , these >= 1 && < 1.1
                      , haskeline >= 0.7 && < 0.8
                      , containers >= 0.5 && < 0.7
-  other-modules:       Errors
 
   ghc-options: -Wextra -Wall -Wno-name-shadowing -Wno-implicit-prelude
                -j +RTS -A32M -RTS

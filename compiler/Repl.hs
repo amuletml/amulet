@@ -59,7 +59,7 @@ import Core.Core (Stmt)
 import Core.Var
 
 import qualified Frontend.Driver as D
-import qualified Frontend.Errors as D
+import Frontend.Errors
 
 import Control.Lens
 
@@ -75,7 +75,6 @@ import qualified Network.Socket as Net
 import Control.Concurrent
 
 import Repl.Display
-import Errors
 import Debug
 
 -- Aghh MonadFail!
@@ -246,7 +245,7 @@ typeCommand (dropWhile isSpace -> input) = do
           prog = [ S.LetStmt S.Public [ S.Matching (S.Wildcard ann) parsed ann ] ]
 
       (infer, es) <- wrapDriver $ D.inferWith (root state) prog (resolveScope state) (inferScope state)
-      D.hReportAll (outputHandle state) files es
+      hReportAll (outputHandle state) files es
       case infer of
         Nothing -> pure ()
         Just (prog, _, _) ->
@@ -361,7 +360,7 @@ parseCore parser name input = do
 
       (lower, es) <- wrapDriver $ D.lowerWith (root state) parsed'
                        (resolveScope state) (inferScope state) (lowerState state)
-      D.hReportAll (outputHandle state) files es
+      hReportAll (outputHandle state) files es
       case lower of
         Nothing -> pure Nothing
         Just (lower, lState, typed, env, ResolveResult _ _ sig) -> do

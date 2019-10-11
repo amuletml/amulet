@@ -43,7 +43,7 @@ import Syntax.Desugar
 import Types.Infer
 import Types.Holes
 
-import Errors
+import Frontend.Errors
 
 import Data.Spanned
 import Data.These
