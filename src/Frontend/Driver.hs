@@ -41,6 +41,7 @@ import Control.Lens
 import qualified Data.List.NonEmpty as E
 import qualified Data.Map.Strict as Map
 import qualified Data.Text.Lazy.IO as L
+import qualified Data.Sequence as Seq
 import qualified Data.Text.IO as T
 import qualified Data.Text as T
 import qualified Data.Set as Set
@@ -95,7 +96,7 @@ data Stage
   | SVerified   { _tBody :: [Toplevel Typed],    sig :: Signature, env :: Env }
   | SUnverified {                                sig :: Signature, env :: Env }
 
-  | SEmitted    {                                sig :: Signature, env :: Env, _lowerState :: LowerState }
+  | SEmitted    { _cBody :: [Stmt CoVar],        sig :: Signature, env :: Env, _lowerState :: LowerState }
 
 data Module = Module
   { modLocation :: FilePath
@@ -216,9 +217,9 @@ lowerWith root parsed sig env lState = do
         (_, False) -> pure Nothing
 
         (Just (), True) -> do
-          (lEnv, ls) <- lowerIts deps
+          (_, lEnv, ls) <- lowerIts False deps mempty
           (lEnv, l) <- runLowerWithEnv (lState <> lEnv) (lowerProgEnv inferred)
-          pure (Just (concat (reverse (l:ls)), lEnv, inferred, env, resolved))
+          pure (Just (concat (ls Seq.|> l), lEnv, inferred, env, resolved))
 
 -- | Attempt to compile a single file.
 compile :: (MonadNamey m, MonadIO m, MonadState Driver m)
@@ -228,26 +229,31 @@ compile path = do
   case ok of
     Nothing -> pure (Nothing, errs)
     Just () -> do
-      (_, lowered) <- lowerIt path
-      pure (Just (concat (reverse lowered)), errs)
+      (_, _, lowered) <- lowerIt True path mempty
+      pure (Just (concat lowered), errs)
 
 lowerIt :: (MonadNamey m, MonadState Driver m)
-        => FilePath -> m (LowerState, [[Stmt CoVar]])
-lowerIt path = do
-  mod <- findMod path
-  case mod ^. stage of
-    SEmitted _ _ lEnv -> pure (lEnv, [])
-    SVerified prog sig env -> do
-      (lEnv, ls) <- lowerIts (mod ^. dependencies)
-      (lEnv, l) <- runLowerWithEnv lEnv (lowerProgEnv prog)
-      updateMod path $ stage .~ SEmitted sig env lEnv
-      pure (lEnv, l:ls)
-
-    _ -> error "Impossible: Should have been verified"
+        => Bool -> FilePath
+        -> (Set.Set FilePath, LowerState, Seq.Seq [Stmt CoVar])
+        -> m (Set.Set FilePath, LowerState, Seq.Seq [Stmt CoVar])
+lowerIt all path (visited, lEnv, stmts)
+  | path `Set.member` visited = pure (visited, lEnv, stmts)
+  | otherwise = do
+      mod <- findMod path
+      (lEnv, stmts) <- case mod ^. stage of
+        SEmitted l _ _ lEnv' -> pure (lEnv <> lEnv', if all then stmts Seq.|> l else stmts)
+        SVerified prog sig env -> do
+          (lEnv, l) <- runLowerWithEnv lEnv (lowerProgEnv prog)
+          updateMod path $ stage .~ SEmitted l sig env lEnv
+          pure (lEnv, stmts Seq.|> l)
+        _ -> error "Impossible: Should have been verified"
+      pure (Set.insert path visited, lEnv, stmts)
 
 lowerIts :: (MonadNamey m, MonadState Driver m)
-        => Set.Set FilePath -> m (LowerState, [[Stmt CoVar]])
-lowerIts = foldrM (\x y -> (<>y) <$> lowerIt x) (defaultState, [])
+         => Bool -> Set.Set FilePath
+         -> (Set.Set FilePath, LowerState, Seq.Seq [Stmt CoVar])
+         -> m (Set.Set FilePath, LowerState, Seq.Seq [Stmt CoVar])
+lowerIts all paths state = foldrM (lowerIt all) state paths
 
 addModule :: (MonadNamey m, MonadState Driver m, MonadIO m)
           => FilePath -> m Module
