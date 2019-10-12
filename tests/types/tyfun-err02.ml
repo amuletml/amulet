@@ -1,3 +1,5 @@
+external val (+) : int -> int -> int = ""
+
 open Amc
 
 class show 'a begin

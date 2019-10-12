@@ -1,3 +1,7 @@
+external val ( +. )  : float -> float -> float = "function(x, y) return x + y end"
+external val ( **. ) : float -> float -> float = "function(x, y) return x ^ y end"
+external val ( *. )  : float -> float -> float = "function(x, y) return x * y end"
+external val ( /. )  : float -> float -> float = "function(x, y) return x / y end"
 external val ignore : 'a -> () = "nil"
 
 let main { a, b, c } =

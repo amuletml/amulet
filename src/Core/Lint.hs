@@ -62,18 +62,18 @@ insertTy :: IsVar a => a -> VarMap.Map VarInfo -> VarMap.Map VarInfo
 insertTy v = VarMap.insert (toVar v) (varInfo v)
 
 instance Pretty a => Pretty (CoreError a) where
-  pretty (TypeMismatch l r) = text "Expected type" <+> pretty l </>
+  pretty (TypeMismatch l r) = text "XXXX: Expected type" <+> pretty l </>
                               text "     got type" <+> pretty r
-  pretty (InfoMismatch v l r) = text "Expected var info" <+> string (show l) </>
+  pretty (InfoMismatch v l r) = text "XXXX: Expected var info" <+> string (show l) </>
                                 text "     got var info" <+> string (show r) </>
                                 text "for" <+> pretty v
-  pretty (InfoIllegal v l r) = text "Expected var info like" <+> string (show l) </>
+  pretty (InfoIllegal v l r) = text "XXXX: Expected var info like" <+> string (show l) </>
                                text "          got var info" <+> string (show r) </>
                                text "for" <+> pretty v
-  pretty (NoSuchVar a) = text "No such variable" <+> pretty a
-  pretty IllegalUnbox = text "Illegal unboxed type"
-  pretty (InvalidCoercion a) = text "Illegal coercion" <+> pretty a
-  pretty (PatternMismatch l r) = text "Expected vars" <+> pVs l </>
+  pretty (NoSuchVar a) = text "XXXX: No such variable" <+> pretty a
+  pretty IllegalUnbox = text "XXXX: Illegal unboxed type"
+  pretty (InvalidCoercion a) = text "XXXX: Illegal coercion" <+> pretty a
+  pretty (PatternMismatch l r) = text "XXXX: Expected vars" <+> pVs l </>
                                  text "     got vars" <+> pVs r
     where pVs = hsep . punctuate comma . map (\(v, ty) -> pretty v <+> colon <+> pretty ty)
           pVs :: [(a, Type a)] -> Doc

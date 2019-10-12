@@ -1,3 +1,5 @@
+external val (+) : int -> int -> int = "nil"
+
 let x |> f = f x
 let f <| x = f x
 

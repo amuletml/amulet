@@ -1,2 +1,7 @@
-let f#0 = function
-  | x#1 when (x#1 > 2) -> ()
+pass_guard.ml[4:12 ..4:12]: error
+  Variable not in scope: `>`
+
+  Arising from use of the expression
+  │ 
+4 │ | x when x > 2 -> ()
+  │            ^

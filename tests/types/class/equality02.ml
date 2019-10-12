@@ -1,3 +1,5 @@
+external val (+) : int -> int -> int = ""
+
 type foo 'a =
   | Foo1 : foo int
 

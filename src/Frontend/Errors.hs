@@ -40,6 +40,7 @@ data ErrorBundle = Errors
   , _typeErrors    :: [TypeError]
   , _verifyErrors  :: [VerifyError]
   }
+  deriving Show
 
 makeLenses ''ErrorBundle
 

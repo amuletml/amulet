@@ -1,11 +1,12 @@
-class () => semigroup#0 a#1  begin
-  val <>#2 : 'a#1 -> 'a#1 -> 'a#1
+let +#0 x#1 y#2 = (x#1 +#0 y#2)
+class () => semigroup#3 a#4  begin
+  val <>#5 : 'a#4 -> 'a#4 -> 'a#4
 end
-instance () => semigroup#0 int begin
-  <>#2 = ((+))
+instance () => semigroup#3 int begin
+  <>#5 = ((+#0))
 end
-class () => default#3 a#4  begin
-  val a#6 : 'a#4
-  val b#5 : 'a#4
-  let a#6 = b#5
+class () => default#6 a#7  begin
+  val a#9 : 'a#7
+  val b#8 : 'a#7
+  let a#9 = b#8
 end

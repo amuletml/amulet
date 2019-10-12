@@ -3,6 +3,11 @@
    declaration before the join.
    *)
 
+external val (+) : int -> int -> int =
+  "function(x, y) return x + y end"
+external val ( * ) : int -> int -> int =
+  "function(x, y) return x * y end"
+
 type option 't = None | Some of 't
 
 let main f x =

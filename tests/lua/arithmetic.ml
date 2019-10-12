@@ -1,3 +1,6 @@
+external val (+) : int -> int -> int =
+  "function(x, y) return x + y end"
+
 let main f =
   let a = f 1
   let b = f 2

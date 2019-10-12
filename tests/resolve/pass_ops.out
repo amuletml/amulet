@@ -1,5 +1,6 @@
-let |>#0 x#1 f#2 = f#2 x#1
-let <|#3 f#4 x#5 = f#4 x#5
-let add#6 a#7 b#8 = (a#7 + b#8)
-let main#9 =
-  (((2 |>#0 ((+ 3)))) add#6 3)
+foreign val +#0 : int -> int -> int = "nil"
+let |>#1 x#2 f#3 = f#3 x#2
+let <|#4 f#5 x#6 = f#5 x#6
+let add#7 a#8 b#9 = (a#8 +#0 b#9)
+let main#10 =
+  (((2 |>#1 ((+#0 3)))) add#7 3)

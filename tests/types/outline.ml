@@ -1,3 +1,5 @@
+external val ( * ) : int -> int -> int = ""
+
 type nested 'a = Nested of nested ('a * 'a) * nested ('a * 'a) | One of 'a
 
 let size (x : nested 'a) =

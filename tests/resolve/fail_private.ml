@@ -1,3 +1,5 @@
+let x + y = x + y
+
 module X =
   private module Y =
     let a = 0

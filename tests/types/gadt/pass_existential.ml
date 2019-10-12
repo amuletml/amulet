@@ -1,5 +1,7 @@
 external val print : string -> unit = "print"
 external val io_write : string -> unit = "io.write"
+external val (-) : int -> int -> int = ""
+external val (==) : int -> int -> bool = ""
 
 type natural = Z | S of natural
 

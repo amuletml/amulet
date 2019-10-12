@@ -1,3 +1,5 @@
+external val (==) : () -> () -> bool = ""
+
 let x && y = if x then y else false
 
 class eq 'a

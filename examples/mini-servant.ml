@@ -1,3 +1,4 @@
+external val (==) : 'a -> 'a -> bool = ""
 external val error : string -> 'a = "error"
 
 type 'a :> 'b

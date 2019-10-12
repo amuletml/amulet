@@ -1,3 +1,4 @@
++ : int -> int -> int
 foo : Spec{'a : type}. 'a -> 'a * Spec{'a : type}. 'a -> int
 fst : Infer{'a : type}. Infer{'b : type}. ('a * 'b) -> 'a
 snd : Infer{'a : type}. Infer{'b : type}. ('a * 'b) -> 'b

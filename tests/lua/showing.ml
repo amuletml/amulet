@@ -1,3 +1,4 @@
+external val ( ^ ) : string -> string -> string = "function(x, y) return x .. y end"
 external val print : 'a -> unit = "print"
 external val int_to_str : int -> string = "int_to_str"
 

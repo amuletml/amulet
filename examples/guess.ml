@@ -1,3 +1,6 @@
+external val (==) : 'a -> 'a -> bool = ""
+external val (<) : int -> int -> bool = ""
+external val (>) : int -> int -> bool = ""
 external val random : int -> int -> int = "math.random"
 external val random_seed : int -> unit  = "math.randomseed"
 

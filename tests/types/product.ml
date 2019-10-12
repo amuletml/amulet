@@ -1,3 +1,5 @@
+external val (+) : int -> int -> int = ""
+
 class functor 'f begin
   val map : forall 'a 'b. ('a -> 'b) -> 'f 'a -> 'f 'b
 end

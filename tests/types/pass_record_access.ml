@@ -1,3 +1,5 @@
+external val (+) : int -> int -> int = ""
+
 let access x = x.a + 0
 
 let access_2 x = x.a + x.b

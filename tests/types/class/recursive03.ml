@@ -1,3 +1,5 @@
+external val (^) : string -> string -> string = ""
+
 external val prim_show : 'a -> string = "tostring"
 external val print : string -> unit = "print"
 

@@ -1,3 +1,6 @@
+external val (^) : string -> string -> string = ""
+external val (+) : int -> int -> int = ""
+
 let main =
   let id x = x
   let cross f g (x, y) = (f x, g y)

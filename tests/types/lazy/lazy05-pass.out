@@ -1,3 +1,6 @@
+* : int -> int -> int
+- : int -> int -> int
+== : int -> int -> bool
 print : int -> unit
 fix : Spec{'a : type}. (lazy 'a -> 'a) -> 'a
 fact : int -> int

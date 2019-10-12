@@ -1,3 +1,7 @@
+external val (+) : int -> int -> int = ""
+external val (-) : int -> int -> int = ""
+external val (^) : string -> string -> string = ""
+external val (<=) : int -> int -> bool = ""
 external val print : string -> () = "print"
 external val num_to_string : int -> string = "tostring"
 

@@ -1,3 +1,4 @@
+external val (+) : int -> int -> int = ""
 (* test basic HM inference *)
 
 let a = true

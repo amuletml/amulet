@@ -39,7 +39,7 @@ do
       end
       return error("Pattern matching failure in match expression at match_heuristic.ml[11:15 ..11:22]")
     else
-      if tmp1.__tag == "Cons" then
+      if tmp1.__tag ~= "Nil" then
         return 3
       end
       if tmp0 == 2 then

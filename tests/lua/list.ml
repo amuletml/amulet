@@ -1,3 +1,6 @@
+external val (+) : int -> int -> int =
+  "function(x, y) return x + y end"
+
 external val ignore : 'a -> () = "nil"
 
 let () = ignore [1,2,3]

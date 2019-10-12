@@ -1,11 +1,11 @@
 do
   local Nil = { __tag = "Nil" }
   local function zip(f, xs, ys)
-    if xs.__tag ~= "Cons" then
+    if xs.__tag == "Nil" then
       return { { _1 = 1, _2 = Nil }, __tag = "Cons" }
     end
     local tmp = xs[1]
-    if ys.__tag ~= "Cons" then
+    if ys.__tag == "Nil" then
       return { { _1 = 2, _2 = Nil }, __tag = "Cons" }
     end
     local tmp2 = ys[1]

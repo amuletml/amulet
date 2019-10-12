@@ -1,4 +1,4 @@
-record02-fail.ml[3:17 ..3:36]: error
+record02-fail.ml[5:17 ..5:36]: error
   Could not match the rigid type variable 'a with the type int
 
   • When checking that the type
@@ -8,5 +8,5 @@ record02-fail.ml[3:17 ..3:36]: error
 
   • Arising in the this field bar
   │ 
-3 │ let foo = Foo { bar = fun x -> x + 1 }
+5 │ let foo = Foo { bar = fun x -> x + 1 }
   │                 ^^^^^^^^^^^^^^^^^^^^
