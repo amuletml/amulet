@@ -67,7 +67,7 @@ for arg in $*; do
 cat >"pkg/usr/bin/$arg" <<EOF
 #!/usr/bin/env sh
 cd /usr/lib/amuletml/
-exec $arg "\$@"
+exec ./$arg "\$@"
 EOF
 chmod 755 "pkg/usr/bin/$arg"
 
