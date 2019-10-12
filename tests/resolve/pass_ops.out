@@ -1,14 +1,6 @@
-pass_ops.ml[4:19 ..4:19]: error
-  Variable not in scope: `+`
-
-  Arising from use of the expression
-  │ 
-4 │ let a `add` b = a + b
-  │                   ^
-pass_ops.ml[6:20 ..6:20]: error
-  Variable not in scope: `+`
-
-  Arising from use of the expression
-  │ 
-6 │ let main = (2 |> (3+)) `add` 3
-  │                    ^
+foreign val +#0 : int -> int -> int = "nil"
+let |>#1 x#2 f#3 = f#3 x#2
+let <|#4 f#5 x#6 = f#5 x#6
+let add#7 a#8 b#9 = (a#8 +#0 b#9)
+let main#10 =
+  (((2 |>#1 ((+#0 3)))) add#7 3)

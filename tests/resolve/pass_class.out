@@ -1,7 +1,12 @@
-pass_class.ml[5:15 ..5:15]: error
-  Variable not in scope: `+`
-
-  Arising from use of the expression
-  │ 
-5 │   let (<>) = (+)
-  │               ^
+let +#0 x#1 y#2 = (x#1 +#0 y#2)
+class () => semigroup#3 a#4  begin
+  val <>#5 : 'a#4 -> 'a#4 -> 'a#4
+end
+instance () => semigroup#3 int begin
+  <>#5 = ((+#0))
+end
+class () => default#6 a#7  begin
+  val a#9 : 'a#7
+  val b#8 : 'a#7
+  let a#9 = b#8
+end

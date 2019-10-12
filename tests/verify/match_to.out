@@ -1,14 +1,3 @@
-definition of +[1:1 ..1:1]: warning
-  Syntax error in definition of +
-  │ 
-1 │ external val (+) : int -> int -> int = ""
-  │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-definition of +[1:1 ..1:1]: error
-  Unexpected <eof>, expected one of false, function, nil, not, true, '...', '(', '{', '-', '#', identifier, quasi-quoted expression, quasi-quoted variable, int, float, string
-  │ 
-1 │ 
-  │ ^
 match_to.ml[3:9 ..3:16]: note
   match with a single arm can be rewritten using let.
   │ 

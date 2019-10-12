@@ -1,4 +1,4 @@
-external val (+) : int -> int -> int = ""
+external val (+) : int -> int -> int = "nil"
 
 let x =
   match (1, 2) with

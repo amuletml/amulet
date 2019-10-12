@@ -293,7 +293,7 @@ lowerIt :: (MonadNamey m, MonadState Driver m)
         -> (Set.Set FilePath, LowerState, Seq.Seq [Stmt CoVar])
         -> m (Set.Set FilePath, LowerState, Seq.Seq [Stmt CoVar])
 lowerIt all path (visited, lEnv, stmts)
-  -- | path `Set.member` visited = pure (visited, lEnv, stmts)
+  | path `Set.member` visited = pure (visited, lEnv, stmts)
   | otherwise = do
       mod <- findMod path
       (lEnv, stmts) <- case mod ^. stage of

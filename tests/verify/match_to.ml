@@ -1,4 +1,4 @@
-external val (+) : int -> int -> int = ""
+external val (+) : int -> int -> int = "nil"
 
 let _ = function
 | { x, y } -> x + y

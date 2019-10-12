@@ -1,7 +1,7 @@
-pass_guard.ml[2:12 ..2:12]: error
+pass_guard.ml[4:12 ..4:12]: error
   Variable not in scope: `>`
 
   Arising from use of the expression
   │ 
-2 │ | x when x > 2 -> ()
+4 │ | x when x > 2 -> ()
   │            ^
