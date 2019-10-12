@@ -41,4 +41,6 @@ fi
 
 echo "Loading ghci.."
 
+export AMC_LIBDIR=$PWD/lib/
+
 exec stack exec -- ghci -O0 -j2 +RTS -A128M -RTS -fhide-source-paths $WARN -i./src/:$out_dir/src/:./compiler/ ./compiler/Main.hs $@

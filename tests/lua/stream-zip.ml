@@ -1,3 +1,8 @@
+external val ( + ) : int -> int -> int = "function(x, y) return x + y end"
+external val ( * ) : int -> int -> int = "function(x, y) return x * y end"
+external val ( ^ ) : string -> string -> string = "function(x, y) return x .. y end"
+external val ( > ) : int -> int -> bool = "function(x, y) return x > y end"
+external val ( <= ) : int -> int -> bool = "function(x, y) return x > y end"
 external val io_write : string -> unit = "io.write"
 external val print : string -> unit = "print"
 external val to_string : 'a -> string = "tostring"

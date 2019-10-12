@@ -281,7 +281,7 @@ execString name line = do
                 let CoVar id _ _ = v
                     var = S.TgName (covarDisplayName v) id
                 case inferScope state ^. T.names . at var of
-                  Just ty -> pure (Just (pretty v <+> colon <+> nest 2 (displayType ty <+> equals </> hsep (map pretty repr))))
+                  Just _ -> pure (Just (pretty v <+> equals </> hsep (map pretty repr)))
                   Nothing -> pure Nothing
 
               pure (True, vsep (catMaybes vs'))
@@ -359,7 +359,8 @@ parseCore parser name input = do
 
       (lower, es) <- wrapDriver $ D.lowerWith (root state) parsed'
                        (resolveScope state) (inferScope state) (lowerState state)
-      hReportAll (outputHandle state) files es
+      driver_files <- D.fileMap =<< gets driver
+      hReportAll (outputHandle state) (files ++ driver_files) es
       case lower of
         Nothing -> pure Nothing
         Just (lower, lState, typed, env, ResolveResult _ _ sig) -> do
@@ -394,7 +395,18 @@ loadFile file = do
   dmode <- gets debugMode
   handle <- gets outputHandle
   state' <- liftIO (defaultState dmode)
-  put state' { currentFile = Just file, outputHandle = handle }
+  put state'
+
+  (prelude_sig, prelude_env, core) <- wrapDriver D.loadPrelude
+
+  modify' (\s -> s { currentFile = Just file
+                   , outputHandle = handle
+                   , resolveScope = prelude_sig <> resolveScope s
+                   , inferScope = prelude_env <> inferScope s })
+
+  (_, luaSyntax) <- emitCore core
+  _ <- liftIO $ L.runWith (luaState state') $
+    L.dostring luaSyntax
 
   -- Load each file in turn
   path <- liftIO $ canonicalizePath file
@@ -466,12 +478,33 @@ runRemoteReplCommand port command = Net.withSocketsDo $ do
     Left (_ :: SomeException) ->
       putStrLn $ "Failed to connect to server on port " ++ show port
 
+loadReplPrelude :: ReplState -> IO ReplState
+loadReplPrelude st = flip execStateT st $ do
+  dmode <- gets debugMode
+  handle <- gets outputHandle
+  state' <- liftIO (defaultState dmode)
+  put state'
+  (prelude_sig, prelude_env, core) <- wrapDriver D.loadPrelude
+
+  modify (\s -> s { currentFile = Nothing
+                  , outputHandle = handle
+                  , resolveScope = prelude_sig <> resolveScope s
+                  , inferScope = prelude_env <> inferScope s
+                  })
+
+  (_, luaSyntax) <- emitCore core
+
+  _ <- liftIO $ L.runWith (luaState state') $
+    L.dostring luaSyntax
+
+  get
+
 repl :: Int -> DebugMode -> IO ()
 repl port mode = replFrom port mode Nothing
 
 replFrom :: Int -> DebugMode -> Maybe FilePath -> IO ()
 replFrom port mode file = do
-  state <- maybe pure (execStateT . loadFile) file =<< defaultState mode
+  state <- maybe loadReplPrelude (execStateT . loadFile) file =<< defaultState mode
   hSetBuffering stdout LineBuffering
 
   ready <- newEmptyMVar
@@ -561,3 +594,4 @@ wrapNamey m = do
   (res, name) <- runNameyT m =<< gets lastName
   modify (\s -> s { lastName = name })
   pure res
+

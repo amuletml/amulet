@@ -36,7 +36,8 @@ import Frontend.Errors
 import qualified Debug as D
 import Repl
 
-runCompile :: MonadIO m => DoOptimise -> SourceName
+runCompile :: MonadIO m
+           => DoOptimise -> SourceName
            -> m ( Maybe ( Env
                         , [Stmt CoVar]
                         , [Stmt CoVar]

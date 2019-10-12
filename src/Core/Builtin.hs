@@ -13,12 +13,6 @@ import Core.Core
 import Core.Var
 
 vBool, vInt, vString, vFloat, vUnit, vLazy, vArrow, vProduct, vList, vRefTy, vKStrTy, vKIntTy, vRowCons :: CoVar
-vOpAdd, vOpSub, vOpMul, vOpDiv, vOpExp :: CoVar
-vOpLt, vOpGt, vOpLe, vOpGe :: CoVar
-vOpAddF, vOpSubF, vOpMulF, vOpDivF, vOpExpF :: CoVar
-vOpLtF, vOpGtF, vOpLeF, vOpGeF :: CoVar
-vOpConcat :: CoVar
-vOpEq, vOpNe :: CoVar
 vError :: CoVar
 vLAZY, vForce :: CoVar
 tyvarA, tyvarB, argvarX :: CoVar
@@ -32,11 +26,9 @@ tyvarRecord, tyvarNew, tyvarKey, tyvarType :: CoVar
 backendRet, backendClone :: CoVar
 vEq, vEQ :: CoVar
 
-vFloat2Int, vInt2Float :: CoVar
-
 tcTypeError, tcErrKind, tcString, tcHCat, tcVCat, tcShowType :: CoVar
 
-[ vBool, vInt, vString, vFloat, vUnit, vLazy, vArrow, vProduct, vList, vRefTy, vKStrTy, vKIntTy, vRowCons, vOpAdd, vOpSub, vOpMul, vOpDiv, vOpExp, vOpLt, vOpGt, vOpLe, vOpGe, vOpAddF, vOpSubF, vOpMulF, vOpDivF, vOpExpF, vOpLtF, vOpGtF, vOpLeF, vOpGeF,vInt2Float, vFloat2Int, vOpConcat, vOpEq, vOpNe, vError, vLAZY, vForce, tyvarA, tyvarB, argvarX, vOpApp, vCONS, vNIL, vAssign, vDeref, vRef, vStrVal, vIntVal, vExtend, vRestrict, vKSTR, vKINT, vROWCONS, tyvarRecord, tyvarNew, tyvarKey, tyvarType, vEq, vEQ, backendRet, backendClone, tcTypeError, tcErrKind, tcString, tcHCat, tcVCat, tcShowType ] = makeBuiltins
+[ vBool, vInt, vString, vFloat, vUnit, vLazy, vArrow, vProduct, vList, vRefTy, vKStrTy, vKIntTy, vRowCons, vError, vLAZY, vForce, tyvarA, tyvarB, argvarX, vOpApp, vCONS, vNIL, vAssign, vDeref, vRef, vStrVal, vIntVal, vExtend, vRestrict, vKSTR, vKINT, vROWCONS, tyvarRecord, tyvarNew, tyvarKey, tyvarType, vEq, vEQ, backendRet, backendClone, tcTypeError, tcErrKind, tcString, tcHCat, tcVCat, tcShowType ] = makeBuiltins
   [ ("bool", TypeConVar)
   , ("int", TypeConVar)
   , ("string", TypeConVar)
@@ -50,36 +42,6 @@ tcTypeError, tcErrKind, tcString, tcHCat, tcVCat, tcShowType :: CoVar
   , ("known_string", TypeConVar)
   , ("known_int", TypeConVar)
   , ("row_cons", TypeConVar)
-
-  , ("+", ValueVar)
-  , ("-", ValueVar)
-  , ("*", ValueVar)
-  , ("/", ValueVar)
-  , ("**", ValueVar)
-
-  , ("<", ValueVar)
-  , (">", ValueVar)
-  , ("<=", ValueVar)
-  , (">=", ValueVar)
-
-  , ("+.", ValueVar)
-  , ("-.", ValueVar)
-  , ("*.", ValueVar)
-  , ("/.", ValueVar)
-  , ("**.", ValueVar)
-
-  , ("<.", ValueVar)
-  , (">.", ValueVar)
-  , ("<=.", ValueVar)
-  , (">=.", ValueVar)
-
-  , ("float_of_int", ValueVar)
-  , ("int_of_float", ValueVar)
-
-  , ("^", ValueVar)
-
-  , ("==", ValueVar)
-  , ("<>", ValueVar)
 
   , ("error", ValueVar)
 
@@ -175,15 +137,6 @@ builtinVarList = vars where
   arrTy = ForallTy Irrelevant
   prodTy a b = RowsTy NilTy [("_1", a), ("_2", b)]
 
-  intOp, floatOp, stringOp, intCmp, floatCmp :: Type b
-  intOp = tupTy [tyInt, tyInt] `arrTy` tyInt
-  floatOp = tupTy [tyFloat, tyFloat] `arrTy` tyFloat
-  stringOp = tupTy [tyString, tyString] `arrTy` tyString
-  intCmp = tupTy [tyInt, tyInt] `arrTy` tyBool
-  floatCmp = tupTy [tyFloat, tyFloat] `arrTy` tyBool
-
-  cmp = ForallTy (Relevant name) StarTy $ tupTy [VarTy name, VarTy name] `arrTy` tyBool
-
   name, name', record, ttype, key, new :: b
   name = fromVar tyvarA
   name' = fromVar tyvarB
@@ -196,17 +149,7 @@ builtinVarList = vars where
   appsTy = foldl1 AppTy
 
   vars :: [(a, Type b)]
-  vars = [ op vOpAdd intOp, op vOpSub intOp
-         , op vOpMul intOp, op vOpDiv (tupTy [tyInt, tyInt] `arrTy` tyFloat), op vOpExp intOp
-         , op vOpLt intCmp, op vOpGt intCmp, op vOpLe intCmp, op vOpGe intCmp
-
-         , op vOpAddF floatOp, op vOpSubF floatOp, op vOpMulF floatOp, op vOpDivF floatOp, op vOpExpF floatOp
-         , op vOpLtF floatCmp, op vOpGtF floatCmp, op vOpLeF floatCmp, op vOpGeF floatCmp
-
-         , op vOpConcat stringOp
-
-         , op vOpEq cmp, op vOpNe cmp
-         , op vOpApp
+  vars = [ op vOpApp
             (ForallTy (Relevant name) StarTy $
                ForallTy (Relevant name') StarTy $
                  ValuesTy [VarTy name `arrTy` VarTy name', VarTy name] `arrTy` VarTy name')

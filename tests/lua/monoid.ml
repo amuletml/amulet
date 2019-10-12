@@ -1,5 +1,6 @@
 external val tostring : 'a -> string = "tostring"
 external val writeln : string -> unit = "print"
+external val (^) : string -> string -> string = "function(x, y) return x .. y end"
 
 class functor 'f begin
   val (<$>) : forall 'a 'b. ('a -> 'b) -> 'f 'a -> 'f 'b

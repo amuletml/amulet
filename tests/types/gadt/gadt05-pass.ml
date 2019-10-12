@@ -1,3 +1,5 @@
+external val (+) : int -> int -> int = ""
+
 type t 't 'a =
   | T : 'a -> t () 'a
 

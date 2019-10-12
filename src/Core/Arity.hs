@@ -129,20 +129,4 @@ mapArity f (Arity a p) = Arity (f a) p
 -- | Various built-in functions with a predetermined arity
 opArity :: VarMap.Map Arity
 opArity = VarMap.fromList . map (flip Arity True <$>) $
-    [ (vOpAdd, 1), (vOpAddF, 1)
-    , (vOpSub, 1), (vOpSubF, 1)
-    , (vOpMul, 1), (vOpMulF, 1)
-    , (vOpDiv, 1), (vOpDivF, 1)
-    , (vOpExp, 1), (vOpExpF, 1)
-    , (vOpLt,  1), (vOpLtF,  1)
-    , (vOpGt,  1), (vOpGtF,  1)
-    , (vOpLe,  1), (vOpLeF,  1)
-    , (vOpGe,  1), (vOpGeF,  1)
-    , (vLAZY,  2)
-    , (vCONS,  2), (vNIL, 1)
-
-    , (vOpConcat,  1)
-
-    , (vOpEq, 2)
-    , (vOpNe, 2)
-    ]
+    [ (vLAZY,  2), (vCONS,  2), (vNIL, 1) ]

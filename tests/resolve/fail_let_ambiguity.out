@@ -1,7 +1,7 @@
-fail_let_ambiguity.ml[6:18 ..6:18]: error
+fail_let_ambiguity.ml[8:18 ..8:18]: error
   Ambiguous reference to variable: `y`
 
   Arising from use of the expression
   │ 
-6 │ let main _ = x + y
+8 │ let main _ = x + y
   │                  ^

@@ -1,3 +1,4 @@
++ : int -> int -> int
 a : bool
 b : bool
 x : int

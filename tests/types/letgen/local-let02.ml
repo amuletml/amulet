@@ -1,3 +1,6 @@
+external val (^) : string -> string -> string = ""
+external val (+) : int -> int -> int = ""
+
 let main x =
   let id x = x
   let g f = f (id x) (* non-let bound variable *)

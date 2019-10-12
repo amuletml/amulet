@@ -1,3 +1,5 @@
+external val (==) : int -> int -> bool = ""
+
 class eq 'a begin
   val (===) : 'a -> 'a -> bool
 end

@@ -1,3 +1,4 @@
+external val (+) : int -> int -> int = ""
 let apply
   : forall 'row 'a 'b.
     { 'row | apply : forall 'a 'b. ('a -> 'b) -> 'a -> 'b }

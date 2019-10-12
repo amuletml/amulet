@@ -1,4 +1,4 @@
 do
   local use = print
-  use(function(fk) return "tail()" end)
+  use(function(ft) return "tail" .. "()" end)
 end

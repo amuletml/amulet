@@ -1,3 +1,4 @@
+external val (^) : string -> string -> string = ""
 type coroutine 'a 'b
 
 external val co_create : ('a -> 'b) -> coroutine 'a 'b = "coroutine.create"

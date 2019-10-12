@@ -1,3 +1,5 @@
+external val (+) : int -> int -> int = ""
+
 module Option =
   type option 'a =
     | Just of 'a

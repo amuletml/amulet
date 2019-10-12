@@ -1,3 +1,5 @@
+let x + y = x + y
+
 class semigroup 'a
   val (<>) : 'a -> 'a -> 'a
 

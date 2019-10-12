@@ -1,3 +1,4 @@
+== : unit -> unit -> bool
 && : bool -> bool -> bool
 eq : type -> constraint
 =.= : Spec{'a : type}. eq 'a => 'a -> 'a -> bool

@@ -190,24 +190,6 @@ builtins =
         end
       |] )
 
-  , ( vInt2Float, "__builtin_float_of_int", []
-    , Just (1, \[x] -> (mempty, [[lua| %x |]]))
-    , [luaStmts|
-        local function __builtin_float_of_int(x)
-          return x
-        end |] )
-
-  , ( vFloat2Int, "__builtin_int_of_float", []
-    , Nothing
-    , [luaStmts|
-        local function __builtin_int_of_float(x)
-          if x >= 0 then
-            return math.floor(x + 0.5)
-          else
-            return math.ceil(x - 0.5)
-          end
-        end |] )
-
   , ( vEQ, "nil", [], Just (0, \[] -> (mempty, [[lua|nil|]])), [] )
 
   -- TC error_message builtins:
@@ -239,33 +221,4 @@ builtins =
         end
       |] )
 
-  ] ++ map genOp ops
-
-  where
-    genOp (var, op) =
-      let name = escaper (covarDisplayName var)
-          name_ = LuaName name
-          inner = LuaBinOp (LuaRef left) op (LuaRef right)
-      in ( var, name, []
-         , Just (2, \[l, r] -> (mempty, [LuaBinOp l op r]))
-         , [luaStmts|local function $name_($left, $right) return %inner end|] )
-    left  = LuaName "l"
-    right = LuaName "r"
-
-    ops :: [(CoVar, T.Text)]
-    ops =
-      [ (vOpAdd, "+"),  (vOpAddF, "+")
-      , (vOpSub, "-"),  (vOpSubF, "-")
-      , (vOpMul, "*"),  (vOpMulF, "*")
-      , (vOpDiv, "/"),  (vOpDivF, "/")
-      , (vOpExp, "^"),  (vOpExpF, "^")
-      , (vOpLt,  "<"),  (vOpLtF,  "<")
-      , (vOpGt,  ">"),  (vOpGtF,  "<")
-      , (vOpLe,  "<="), (vOpLeF,  "<=")
-      , (vOpGe,  ">="), (vOpGeF,  ">=")
-
-      , (vOpConcat, "..")
-
-      , (vOpEq, "==")
-      , (vOpNe, "~=")
-      ]
+  ]

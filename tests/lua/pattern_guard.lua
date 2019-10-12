@@ -1,7 +1,7 @@
 do
   local Nil = { __tag = "Nil" }
   local function filter(f, x)
-    if x.__tag ~= "Cons" then
+    if x.__tag == "Nil" then
       return Nil
     end
     local tmp = x[1]

@@ -1,3 +1,4 @@
+^ : string -> string -> string
 show : type -> constraint
 show : Spec{'a : type}. show 'a => 'a -> string
 box : Infer{'a : type}. ('a -> type) -> 'a -> type
