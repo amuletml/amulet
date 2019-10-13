@@ -1,19 +1,23 @@
-{-# LANGUAGE RankNTypes, OverloadedStrings, ScopedTypeVariables, FlexibleContexts, TemplateHaskell, CPP #-}
-module Main where
+{-# LANGUAGE RankNTypes, OverloadedStrings, ScopedTypeVariables, FlexibleContexts, TemplateHaskell, NamedFieldPuns #-}
+module Main(main) where
 
 import System.Exit (ExitCode(..), exitWith)
 import System.IO (hPutStrLn, stderr)
-import Options.Applicative hiding (ParseError)
-
-import qualified Data.Text.IO as T
-import qualified Data.Text as T
-import Data.Position (SourceName)
+import System.Environment
+import System.Directory
 
 import Control.Monad.Infer (Env, firstName)
 import Control.Monad.Namey
 import Control.Monad.State
 
-import System.Directory
+import qualified Data.Text.IO as T
+import qualified Data.Text as T
+import Data.Position (SourceName)
+import Data.Traversable
+import Data.Foldable
+import Data.List
+
+import Options.Applicative hiding (ParseError)
 
 import Language.Lua.Syntax
 import Backend.Lua
@@ -28,7 +32,6 @@ import Core.Core (Stmt)
 import Core.Var (CoVar)
 
 import Text.Pretty.Semantic hiding (empty)
-import Text.Pretty.Note
 
 import Frontend.Driver
 import Frontend.Errors
@@ -83,71 +86,138 @@ compileFromTo opt dbg file emit = do
 
 data DoOptimise = Do | Don't
 
-data CompilerOptions
-  = CompilerOptions
-    { debugMode   :: D.DebugMode
-    , forceRepl   :: Bool
-    , optLevel    :: Int
-    , replCommand :: Maybe String
-    , serverPort  :: Int
+data CompilerOptions = CompilerOptions
+  { debugMode   :: D.DebugMode
+  , libraryPath :: [String]
+  }
+  deriving (Show)
 
-    , input       :: Maybe FilePath
+data Command
+  = Compile
+    { input       :: FilePath
     , output      :: Maybe FilePath
+    , optLevel    :: Int
+    , options     :: CompilerOptions
+    }
+  | Repl
+    { toLoad      :: Maybe FilePath
+    , serverPort  :: Int
+    , options     :: CompilerOptions
+    }
+  | Connect
+    { remoteCmd   :: String
+    , serverPort  :: Int
     }
   deriving (Show)
 
-isError :: Note a b => a -> Bool
-isError x = diagnosticKind x == ErrorMessage
+newtype Args
+  = Args
+    { mainCommand :: Command
+    }
+  deriving (Show)
 
-flags :: ParserInfo CompilerOptions
-flags = flip info (fullDesc <> progDesc ("The Amulet compiler and REPL, version " ++ $(amcVersion))) . flip (<**>) helper $
-  CompilerOptions
-   <$> ( flag' D.Test   (long "test" <> short 't' <> help "Provides additional debug information on the output")
-     <|> flag' D.TestTc (long "test-tc"           <> help "Provides additional type check information on the output")
-     <|> pure D.Void )
+argParser :: ParserInfo Args
+argParser = info (args <**> helper <**> version)
+       $ fullDesc <> progDesc ("The Amulet compiler and REPL, version " ++ $(amcVersion))
+  where
+    version :: Parser (a -> a)
+    version
+      = infoOption $(amcVersion)
+      $ long "version" <> short 'v' <> help "Show version information"
 
-   <*> switch ( long "repl" <> short 'r' <> help "Go to the REPL after loading each file" )
+    args :: Parser Args
+    args = Args <$> command'
 
-   <*> option auto ( long "opt" <> short 'O' <> metavar "LEVEL" <> value 1 <> help "Controls the optimisation level." )
+    command' :: Parser Command
+    command' =
+      hsubparser
+      (  command "compile"
+         ( info compileCommand
+         $ fullDesc <> progDesc "Compile an Amulet file to Lua.")
+      <> command "repl"
+         ( info replCommand
+         $ fullDesc <> progDesc "Launch the Amulet REPL." )
+      <> command "connect"
+         ( info connectCommand
+         $ fullDesc <> progDesc "Connect to an already running REPL instance." )
+      ) <|> pure (Repl Nothing defaultPort (CompilerOptions D.Void []))
 
-   <*> (Just <$>
-         option str
-         ( long "client" <> short 'c' <> metavar "COMMAND"
-        <> help "Connect to another running REPL to execute the command" )
-     <|> pure Nothing)
+    compileCommand :: Parser Command
+    compileCommand = Compile
+      <$> argument str (metavar "FILE" <> help "The file to compile.")
+      <*> optional ( option str
+           ( long "out" <> short 'o' <> metavar "FILE"
+          <> help "Write the generated Lua to a specific file." ) )
+      <*> option auto ( long "opt" <> short 'O' <> metavar "LEVEL" <> value 1 <> showDefault
+                     <> help "Controls the optimisation level." )
+      <*> compilerOptions
 
-   <*> option auto ( long "port" <> metavar "PORT" <> value 5478 <> help "Port to use for the REPL server. (Default: 5478)" )
+    replCommand :: Parser Command
+    replCommand = Repl
+      <$> optional (argument str (metavar "FILE" <> help "A file to load into the REPL."))
+      <*> option auto ( long "port" <> metavar "PORT" <> value defaultPort <> showDefault
+                     <> help "Port to use for the REPL server." )
+      <*> compilerOptions
 
-   <*> (argument (Just <$> str) (metavar "FILE") <|> pure Nothing)
-   <*> (Just <$>
-         option str
-         ( long "out" <> short 'o' <> metavar "FILE"
-        <> help "Write the generated Lua to a specific file." )
-     <|> pure Nothing)
+    connectCommand :: Parser Command
+    connectCommand = Connect
+      <$> argument str (metavar "COMMAND" <> help "The command to run on the remote REPL.")
+      <*> option auto ( long "port" <> metavar "PORT" <> value defaultPort <> showDefault
+                     <> help "Port the remote REPL is hosted on." )
 
+    compilerOptions :: Parser CompilerOptions
+    compilerOptions = CompilerOptions
+      <$> ( flag' D.Test   (long "test" <> short 't' <> help "Provides additional debug information on the output")
+        <|> flag' D.TestTc (long "test-tc"           <> help "Provides additional type check information on the output")
+        <|> pure D.Void )
+      <*> many (option str (long "lib" <> help "Add a folder to the library path"))
+
+    optional :: Parser a -> Parser (Maybe a)
+    optional p = (Just <$> p) <|> pure Nothing
+
+    defaultPort :: Int
+    defaultPort = 5478
+
+extendPath :: [String] -> IO ()
+extendPath paths = do
+  paths <- sequence <$> for paths (\path -> do
+    path' <- canonicalizePath path
+    exists <- doesDirectoryExist path'
+    pure $ if exists then Right path' else Left path)
+  case paths of
+    Left path -> do
+      hPutStrLn stderr (path ++ ": No such directory")
+      exitWith (ExitFailure 1)
+    Right [] -> pure ()
+    Right paths -> do
+      existing <- lookupEnv "AMC_LIBRARY_PATH"
+      setEnv "AMC_LIBRARY_PATH" . intercalate ":" $ paths ++ toList existing
 
 main :: IO ()
 main = do
-  options <- execParser flags
+  options <- execParser argParser
   case options of
-    CompilerOptions { replCommand = Just str, serverPort = i } -> runRemoteReplCommand i str
-    CompilerOptions { debugMode = db, input = Nothing, serverPort = i } -> repl i db
-    CompilerOptions { debugMode = db, forceRepl = True, input = file, serverPort = i } -> replFrom i db file
+    Args Repl { toLoad, serverPort, options } -> do
+      extendPath (libraryPath options)
+      replFrom serverPort (debugMode options) toLoad
+    Args Connect { remoteCmd, serverPort } -> runRemoteReplCommand serverPort remoteCmd
 
-    CompilerOptions { output = Just out, input = Just file }
-      | out == file -> do
-          hPutStrLn stderr ("Cannot overwrite input file " ++ out)
-          exitWith (ExitFailure 1)
+    Args Compile { input, output = Just output } | input == output -> do
+      hPutStrLn stderr ("Cannot overwrite input file " ++ input)
+      exitWith (ExitFailure 1)
 
-    -- CompilerOptions { debugMode = db, optLevel = opt, output = Nothing, input = Just file } | db /= D.Void -> do
-    --   let opt' = if opt >= 1 then Do else Don't
-    --   _ <- test opt' db file
-    --   pure ()
+    Args Compile { input, output, optLevel, options } -> do
+      exists <- doesFileExist input
+      if not exists
+      then hPutStrLn stderr ("Cannot find input file " ++ input)
+        >> exitWith (ExitFailure 1)
+      else pure ()
 
-    CompilerOptions { debugMode = db, optLevel = opt, output = out, input = Just file } -> do
-      let opt' = if opt >= 1 then Do else Don't
-          out' :: Pretty a => a -> IO ()
-          out' = case out of
+      let opt = if optLevel >= 1 then Do else Don't
+          writeOut :: Pretty a => a -> IO ()
+          writeOut = case output of
                    Nothing -> putDoc . pretty
                    Just f -> T.writeFile f . T.pack . show . pretty
-      compileFromTo opt' db file out'
+
+      extendPath (libraryPath options)
+      compileFromTo opt (debugMode options) input writeOut
