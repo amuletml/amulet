@@ -289,7 +289,7 @@ gatherDepsOf f = fmap snd . foldlM go mempty where
     | path `Set.member` visited = pure (visited, seq)
     | otherwise = do
         this <- f path
-        deps <- uses (modules . at path) (maybe mempty (^.dependencies)) -- mathues: I don't understand lens.
+        deps <- uses (modules . at path) (foldMap (^.dependencies))
         (visited, seq) <- foldlM go (Set.insert path visited, seq) deps
         pure (visited, seq Seq.|> this)
 
@@ -445,7 +445,7 @@ getVerifiedAll :: (MonadNamey m, MonadState Driver m, MonadIO m)
 getVerifiedAll path = do
   here <- getVerified path
 
-  deps <- uses (modules . at path) (foldMap (^.dependencies))
+  deps <- uses (modules . at path) (foldMap (^. dependencies))
   there <- foldMapM getVerifiedAll deps
 
   pure (All here <> there)

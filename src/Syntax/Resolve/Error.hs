@@ -73,7 +73,7 @@ instance Pretty ResolveError where
   pretty LetOpenStruct = "Cannot declare a module within a" <+> keyword "let open" <+> "expression"
 
   pretty (UnresolvedImport name) = "Cannot resolve" <+> dquotes (text name)
-  pretty (ImportLoop ((name, _) E.:| _)) = "Cycle importing" <+> dquotes (string name)
+  pretty (ImportLoop _) = "Modules form an inport cycle"
 
   pretty (TFClauseWrongHead t tau) =
     vsep [ "The lhs of a type function equation must be headed by the type function constructor"
