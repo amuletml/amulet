@@ -25,13 +25,16 @@ if which upx &>/dev/null; then
 fi
 
 version=$(grep version amuletml.cabal | head -1 | sed -re 's/version:\s*//g')
-echo "Generating packages for amuletml $version"
+echo "Generating packages for amuletml $version…"
 
 # Generate an archive for the libraries:
-tar -cvf result/amuletml-${version}-lib.tar.xz lib/
+echo "Generating library archive…"
+tar -cJf result/amuletml-${version}-lib.tar.xz lib/
 
 # Generate an Arch Linux package if 'makepkg' was found in the path
-# Chaotic evil: we don't actually use makepkg
+# Chaotic evil: we don't use makepkg
+# Chaotic good: we don't compress the package (the executables were already
+# upx'd)
 
 if ! which makepkg &>/dev/null; then
   exit 0
@@ -39,15 +42,15 @@ fi
 
 echo "Generating Arch package…"
 
-size="$(du result/ | sed -re 's/([0-9]+).*/\1/g')" # The way makepkg computes filesize is retarded so we ignore it
-echo $size
+# The way makepkg computes filesize is retarded so we ignore it
+size="$(du result/ | sed -re 's/([0-9]+).*/\1/g')"
 
 sudo rm -rf pkg/
 mkdir -p pkg/usr/{bin,lib/amuletml}
 for arg in $*; do
-  cp "result/$arg" pkg/usr/lib/amuletml/ -rv
+  cp "result/$arg" pkg/usr/lib/amuletml/
 done
-cp lib/ pkg/usr/lib/amuletml/ -rv
+cp lib/ pkg/usr/lib/amuletml/ -r
 
 cat >pkg/.PKGINFO <<EOF
 pkgname = amuletml
@@ -89,7 +92,7 @@ list_package_files | LANG=C bsdtar -cf - --format=mtree \
   --options='!all,use-set,type,uid,gid,mode,time,size,md5,sha256,link' \
   --files-from - --exclude .MTREE | gzip -c -f -n > .MTREE
 
-list_package_files | bsdtar --null --files-from - -cf ../result/amuletml-$version.pkg.tar.xz
+list_package_files | tar --no-recursion --null --files-from - -cf ../result/amuletml-$version.pkg.tar
 popd &>/dev/null
 
 echo "Generating generic binary distribution…"
@@ -98,7 +101,7 @@ echo "Generating generic binary distribution…"
 pushd pkg &>/dev/null
 
 # Remove Arch noise
-rm .MTREE .PKGINFO
+# rm .MTREE .PKGINFO
 
 # Generate the installation script
 
@@ -141,7 +144,7 @@ done
 echo "echo \"Installed amuletml $version to \${PREFIX}\"" >> install.sh
 chmod 755 install.sh
 
-list_package_files | bsdtar --null --files-from - -cf ../result/amuletml-$version-bindist.tar.xz
+list_package_files | tar --no-recursion --null --files-from - -cf ../result/amuletml-$version-bindist.tar
 
 popd &>/dev/null
 

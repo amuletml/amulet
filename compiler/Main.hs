@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, OverloadedStrings, ScopedTypeVariables, FlexibleContexts #-}
+{-# LANGUAGE RankNTypes, OverloadedStrings, ScopedTypeVariables, FlexibleContexts, TemplateHaskell, CPP #-}
 module Main where
 
 import System.Exit (ExitCode(..), exitWith)
@@ -35,6 +35,8 @@ import Frontend.Errors
 
 import qualified Debug as D
 import Repl
+
+import Version
 
 runCompile :: MonadIO m
            => DoOptimise -> SourceName
@@ -98,7 +100,7 @@ isError :: Note a b => a -> Bool
 isError x = diagnosticKind x == ErrorMessage
 
 flags :: ParserInfo CompilerOptions
-flags = flip info (fullDesc <> progDesc "The Amulet compiler and REPL") . flip (<**>) helper $
+flags = flip info (fullDesc <> progDesc ("The Amulet compiler and REPL, version " ++ $(amcVersion))) . flip (<**>) helper $
   CompilerOptions
    <$> ( flag' D.Test   (long "test" <> short 't' <> help "Provides additional debug information on the output")
      <|> flag' D.TestTc (long "test-tc"           <> help "Provides additional type check information on the output")
@@ -149,3 +151,4 @@ main = do
                    Nothing -> putDoc . pretty
                    Just f -> T.writeFile f . T.pack . show . pretty
       compileFromTo opt' db file out'
+
