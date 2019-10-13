@@ -538,15 +538,18 @@ instance MonadNamey m => MonadNamey (FileImport m) where
   genName = lift genName
 
 instance (MonadNamey m, MonadState Driver m, MonadIO m) => MonadImport (FileImport m) where
-  importModule loc relPath | Just ('%', relPath) <- T.uncons relPath = FileIm \(LoadContext _ source) -> do
-    absPath <- findFile' (searchPath (T.unpack relPath))
-    case absPath of
-      Nothing -> pure (NotFound, mempty)
-      Just absPath -> (,Set.singleton absPath) <$> importFile source (Just loc) absPath
+  importModule loc relPath
+    | not (T.pack "./" `T.isPrefixOf` relPath)
+    = FileIm \(LoadContext _ source) -> do
+      absPath <- findFile' (searchPath (T.unpack relPath))
+      case absPath of
+        Nothing -> pure (NotFound, mempty)
+        Just absPath -> (,Set.singleton absPath) <$> importFile source (Just loc) absPath
 
-  importModule loc relPath = FileIm \(LoadContext curDir source) -> do
-    absPath <- liftIO $ canonicalizePath (curDir </> T.unpack relPath)
-    (,Set.singleton absPath) <$> importFile source (Just loc) absPath
+    | otherwise
+    = FileIm \(LoadContext curDir source) -> do
+      absPath <- liftIO $ canonicalizePath (curDir </> T.unpack relPath)
+      (,Set.singleton absPath) <$> importFile source (Just loc) absPath
 
 -- | Import a file from the current directory.
 importFile :: (MonadNamey m, MonadState Driver m, MonadIO m)
@@ -601,10 +604,10 @@ findFile' = search where
 -- compiler's executable.
 searchPath :: FilePath -> [IO [FilePath]]
 searchPath p =
-  [ lookupEnv "AMC_LIBRARY_PATH" <&> fmap (\path -> map (</> p <.> "ml") (splitPath path))
+  [ lookupEnv "AMC_LIBRARY_PATH" <&> fmap (\path -> map (</> p) (splitPath path))
                                  <&> msum
-  , getExecutablePath <&> \execP -> [takeDirectory execP </> "lib" </> p <.> "ml"]
-  , getExecutablePath <&> \execP -> [takeDirectory (takeDirectory execP) </> "lib" </> p <.> "ml"]
+  , getExecutablePath <&> \execP -> [takeDirectory execP </> "lib" </> p]
+  , getExecutablePath <&> \execP -> [takeDirectory (takeDirectory execP) </> "lib" </> p]
   ]
     where
       splitPath = Set.toList . Set.fromList . map T.unpack . T.split (==':') . T.pack
@@ -617,7 +620,7 @@ searchPath p =
 loadPrelude :: forall m.
                (MonadNamey m, MonadState Driver m, MonadIO m)
             => m (Signature, Env, [Stmt CoVar])
-loadPrelude = load =<< findFile' ((toList <$> lookupEnv "AMC_PRELUDE") : searchPath "prelude") where
+loadPrelude = load =<< findFile' ((toList <$> lookupEnv "AMC_PRELUDE") : searchPath "prelude.ml") where
   load Nothing = liftIO . throwIO . userError $ "Failed to locate Amulet prelude"
   load (Just p) = do
     r <- compile p

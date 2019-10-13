@@ -24,7 +24,7 @@ if which upx &>/dev/null; then
   upx result/*
 fi
 
-version=$(grep version amuletml.cabal | head -1 | sed -re 's/version:\s*//g')
+version=$(grep version amuletml.cabal | head -1 | sed -re 's/version:\s*//g').$(git rev-parse --short '@')
 echo "Generating packages for amuletml $version…"
 
 # Generate an archive for the libraries:

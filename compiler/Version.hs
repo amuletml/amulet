@@ -7,7 +7,7 @@ import Language.Haskell.TH
 import System.Process
 
 gitRevision :: ExpQ
-gitRevision = [| $(stringE =<< runIO (init <$> readProcess "git" ["rev-parse", "--short", "@"] "")) :: [Char]  |]
+gitRevision = [| $(stringE =<< runIO (init <$> readProcess "git" ["rev-parse", "--short", "@"] "")) :: String  |]
 
 versionStr :: String
 versionStr = VERSION_amuletml
