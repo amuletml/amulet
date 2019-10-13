@@ -19,11 +19,7 @@ external val exit_failure : unit -> 'a =
 
 external val getenv : string -> (string -> 'a) -> 'a -> 'a =
   "function(x, some, none) \
-     if os.getenv(x) then \
-       return some(os.getenv(x)) \
-     else \
-       return none \
-     end \
+    return ((type(os.getenv(x)) == 'string') and some(os.getenv(x))) or none\
    end"
 
 external val time_now : unit -> time = "function() return os.time() end"
