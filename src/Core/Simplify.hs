@@ -1,4 +1,5 @@
 -- | The frontend to the optimiser.
+{-# LANGUAGE ScopedTypeVariables #-}
 module Core.Simplify
   ( optimise
   ) where
@@ -20,9 +21,9 @@ import Control.Monad
 lintPasses :: Bool
 lintPasses = True
 
-optmOnce :: [Stmt CoVar] -> Namey [Stmt CoVar]
+optmOnce :: forall m. Monad m => [Stmt CoVar] -> NameyT m [Stmt CoVar]
 optmOnce = passes where
-  passes :: [Stmt CoVar] -> Namey [Stmt CoVar]
+  passes :: [Stmt CoVar] -> NameyT m [Stmt CoVar]
   passes = foldr1 (>=>)
            [ linted "Reduce" reducePass
            , linted "Dead code" $ pure . deadCodePass
@@ -41,12 +42,12 @@ linted pass fn
   | otherwise = fn
 
 -- | Run the optimiser multiple times over the input core.
-optimise :: [Stmt CoVar] -> Namey [Stmt CoVar]
+optimise :: forall m. Monad m => [Stmt CoVar] -> NameyT m [Stmt CoVar]
 optimise = go 10 <=< prepasses . if lintPasses then runLint "Lower" =<< checkStmt emptyScope else id where
-  go :: Integer -> [Stmt CoVar] -> Namey [Stmt CoVar]
+  go :: Integer -> [Stmt CoVar] -> NameyT m [Stmt CoVar]
   go k sts
     | k > 0 = go (k - 1) =<< optmOnce sts
     | otherwise = pure sts
 
-  prepasses :: [Stmt CoVar] -> Namey [Stmt CoVar]
+  prepasses :: [Stmt CoVar] -> NameyT m [Stmt CoVar]
   prepasses = linted "Newtype" killNewtypePass
