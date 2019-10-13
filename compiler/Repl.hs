@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, FlexibleContexts, ScopedTypeVariables, ViewPatterns, TypeFamilies, MultiWayIf #-}
+{-# LANGUAGE OverloadedStrings, FlexibleContexts, ScopedTypeVariables, ViewPatterns, TypeFamilies, MultiWayIf, TemplateHaskell #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
 module Repl
@@ -76,6 +76,7 @@ import qualified Network.Socket as Net
 import Control.Concurrent
 
 import Repl.Display
+import Version
 import Debug
 
 -- Aghh MonadFail!
@@ -190,6 +191,8 @@ execCommand _ "add-library-path" arg = liftIO $
            existing <- lookupEnv "AMC_LIBRARY_PATH"
            setEnv "AMC_LIBRARY_PATH" (maybe path ((path ++ ":") ++) existing)
          else putStrLn $ arg ++ ": No such directory"
+
+execCommand _ "version" _ = liftIO (putStrLn ("The Amulet compiler, version " ++ $amcVersion))
 
 execCommand _ cmd _ = outputDoc ("Unknown command" <+> verbatim cmd)
 

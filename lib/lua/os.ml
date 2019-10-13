@@ -11,6 +11,13 @@ external val strftime : string -> time -> string =
      end\
    end"
 
+external val describe_time :
+  time -> {
+    hour : int, min : int, sec : int,
+    wday : int, yday : int, day : int, year : int, month : int
+  } =
+    "function(time) return os.date('*t', time) end"
+
 external val exit_success : unit -> 'a =
   "function() return os.exit(0) end"
 
