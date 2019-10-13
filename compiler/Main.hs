@@ -51,7 +51,7 @@ runCompile opt file = do
     . flip runStateT emptyDriver
     $ do
       (core, errors) <- compile path
-      ~(Just env, _) <- getTypeEnv path
+      ~(Just env) <- getTypeEnv path
       pure (env, core, errors)
 
   pure $ case core of

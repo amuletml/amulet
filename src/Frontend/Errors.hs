@@ -62,7 +62,7 @@ reportAll :: N.FileMap -> ErrorBundle -> SimpleDoc (Either N.NoteStyle Style)
 reportAll fs (Errors ps rs ts vs)
   = filterSimpleDoc (either (const True) uncommentFilter)
   . renderPretty 0.4 100
-  . foldr (<##>) mempty
+  . vsep
   $ fmt ps <> fmt rs <> fmt ts <> fmt vs
   where
     fmt :: N.Note a Style => [a] -> [P.Doc (Either N.NoteStyle Style)]
