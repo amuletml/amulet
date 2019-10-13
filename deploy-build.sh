@@ -66,8 +66,7 @@ for arg in $*; do
 
 cat >"pkg/usr/bin/$arg" <<EOF
 #!/usr/bin/env sh
-cd /usr/lib/amuletml/
-exec ./$arg "\$@"
+exec /usr/lib/amuletml/$arg "\$@"
 EOF
 chmod 755 "pkg/usr/bin/$arg"
 
@@ -135,7 +134,7 @@ done
 for arg in $*; do
 
   echo "echo 'Patching $arg..'" >> install.sh
-  echo "sed -ire \"s;cd /usr;cd \${PREFIX}/usr;g\" \${PREFIX}/usr/bin/$arg" >> install.sh
+  echo "sed -ire \"s;exec /usr;exec \${PREFIX}/usr;g\" \${PREFIX}/usr/bin/$arg" >> install.sh
 
 done
 
