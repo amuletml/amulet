@@ -7,10 +7,16 @@ import Language.Haskell.TH
 import System.Process
 
 gitRevision :: ExpQ
-gitRevision = [| $(stringE =<< runIO (init <$> readProcess "git" ["rev-parse", "--short", "@"] "")) :: String  |]
+gitRevision = do
+  addDependentFile ".git/logs/HEAD"
+  [| $(stringE =<< runIO (init <$> readProcess "git" ["rev-parse", "--short", "@"] "")) :: String  |]
 
 versionStr :: String
+#if defined(VERSION_amuletml)
 versionStr = VERSION_amuletml
+#else
+versionStr = "unknown"
+#endif
 
 amcVersion :: ExpQ
 amcVersion = [| $(lift versionStr) ++ " (" ++ $gitRevision ++ ")" |]
