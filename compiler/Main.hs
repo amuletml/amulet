@@ -151,4 +151,3 @@ main = do
                    Nothing -> putDoc . pretty
                    Just f -> T.writeFile f . T.pack . show . pretty
       compileFromTo opt' db file out'
-

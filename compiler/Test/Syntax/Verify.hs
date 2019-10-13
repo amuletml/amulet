@@ -32,9 +32,8 @@ result f c = fst . flip runNamey firstName $ do
   desugared <- desugarProgram resolved
   (inferred, env) <- requireThat f c <$> inferProgram builtinEnv desugared
   v <- genName
-  case runVerify env v (verifyProgram inferred) of
-    Left es -> pure (displayPlain (prettyErrs (toList es)))
-    Right () -> pure T.empty
+  let (_, es) = runVerify env v (verifyProgram inferred)
+  pure $ if null es then T.empty else displayPlain (prettyErrs (toList es))
 
 tests :: IO TestTree
 tests = do
