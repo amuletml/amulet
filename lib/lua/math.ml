@@ -31,9 +31,11 @@ external val negative_infty : float = "-math.huge"
 external val nan            : float = "-(0/0)"
 
 external val is_nan : float -> bool =
-  "function(x) return (type(x) == 'number') and x ~= x end"
+  "function(x) return x ~= x end"
 
-external val seed_random  : float -> unit = "math.randomseed"
+external val seed_random  : int -> unit = "math.randomseed"
+
 external val random_float : unit -> float =
   "function(x) return math.random() end"
+
 external val random_int : int -> int -> int = "math.random"

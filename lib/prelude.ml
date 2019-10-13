@@ -147,8 +147,8 @@ instance monad option begin
     | None -> None
 end
 
-external val parse_int : string -> option int =
-  "function(x) \
+external private val prim_parse_int : (int -> option int) -> option int -> string -> option int =
+  "function(Some, None, x) \
      if tonumber(x) and ((math.modf(tonumber(x))) == tonumber(x)) then \
        return Some(tonumber(x)) \
      else \
@@ -156,14 +156,18 @@ external val parse_int : string -> option int =
      end \
    end"
 
-external val parse_float : string -> option float =
-  "function(x) \
+let parse_int = prim_parse_int Some None
+
+external private val prim_parse_float : (float -> option float) -> option float -> string -> option float =
+  "function(Some, None, x) \
      if tonumber(x) then \
        return Some(tonumber(x)) \
      else \
        return None \
      end \
    end"
+
+let parse_float = prim_parse_float Some None
 
 external private val string_of_int : int -> string = "tostring"
 external private val string_of_float : float -> string = "tostring"

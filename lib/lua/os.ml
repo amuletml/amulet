@@ -17,12 +17,12 @@ external val exit_success : unit -> 'a =
 external val exit_failure : unit -> 'a =
   "function() return os.exit(1) end"
 
-external val getenv : string -> string =
-  "function(x) \
+external val getenv : string -> (string -> 'a) -> 'a -> 'a =
+  "function(x, some, none) \
      if os.getenv(x) then \
-       return os.getenv(x) \
+       return some(os.getenv(x)) \
      else \
-       return '' \
+       return none \
      end \
    end"
 
