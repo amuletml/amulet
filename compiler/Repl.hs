@@ -284,10 +284,10 @@ execString name line = do
                   Just _ -> pure (Just (pretty v <+> equals </> hsep (map pretty repr)))
                   Nothing -> pure Nothing
 
-              pure (True, vsep (catMaybes vs'))
-            Left (L.Exception msg) -> pure (False, string msg)
+              pure (True, catMaybes vs')
+            Left (L.Exception msg) -> pure (False, [string msg])
 
-      outputDoc res
+      unless (null res) (outputDoc (vsep res))
       pure ok
 
 evalExpr :: LuaExpr -> L.Lua ()
@@ -426,9 +426,9 @@ loadFile file = do
         hReportAll handle files es
 
         (sig, env, lEnv) <- wrapDriver $ do
-          ~(Just sig, _) <- D.getSignature path
-          ~(Just env, _) <- D.getTypeEnv path
-          ~(Just (_, lEnv), _) <- D.getLowered path
+          ~(Just sig) <- D.getSignature path
+          ~(Just env) <- D.getTypeEnv path
+          ~(Just lEnv) <- D.getLowerState path
           pure (sig, env, lEnv)
 
         modify (\s -> s { resolveScope = resolveScope s <> sig

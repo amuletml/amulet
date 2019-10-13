@@ -40,7 +40,7 @@ module Frontend.Driver
   -- $query
   , getSignature, getTypeEnv
   , getVerified, getVerifiedAll
-  , getLowered
+  , getLowerState, getLowered
   , loadPrelude
   ) where
 
@@ -61,15 +61,12 @@ import qualified Data.Sequence as Seq
 import qualified Data.Text.IO as T
 import qualified Data.Text as T
 import qualified Data.Set as Set
-import Data.Traversable
-import Data.Bifunctor
 import Data.Position
 import Data.Foldable
 import Data.Functor
-import Data.Graph
+import Data.Monoid
 import Data.Maybe
 import Data.These
-import Data.List
 import Data.Span
 
 import Core.Core (Stmt)
@@ -178,16 +175,16 @@ resolve root parsed = resolveWith root parsed builtinResolve
 resolveWith :: (MonadNamey m, MonadIO m, MonadState Driver m)
             => FilePath -> [Toplevel Parsed] -> Signature
             -> m (Maybe ResolveResult, ErrorBundle)
-resolveWith root parsed sig = fst <$> resolveWithDeps root parsed sig
+resolveWith root parsed sig = errorsFromDeps =<< resolveWithDeps root parsed sig
 
 resolveWithDeps :: (MonadNamey m, MonadIO m, MonadState Driver m)
                 => FilePath -> [Toplevel Parsed] -> Signature
                 -> m ((Maybe ResolveResult, ErrorBundle), Set.Set FilePath)
 resolveWithDeps root parsed sig = do
   (resolved, deps) <- flip runFileImport (LoadContext root Nothing)
-                 $ resolveProgram sig parsed
+                    $ resolveProgram sig parsed
   (,deps) <$> case resolved of
-    Left es -> pure (Nothing, mempty & (resolveErrors .~ es)) -- TODO: Locate errors
+    Left es -> pure (Nothing, mempty & (resolveErrors %~ (<>es)))
     Right resolved -> pure (Just resolved, mempty)
 
 -- | Infer a term with the current driver.
@@ -202,27 +199,27 @@ inferWith :: (MonadNamey m, MonadIO m, MonadState Driver m)
           => FilePath -> [Toplevel Parsed] -> Signature -> Env
           -> m ( Maybe ([Toplevel Typed], Env, ResolveResult)
                , ErrorBundle)
-inferWith root parsed sig env = fst <$> inferWithDeps root parsed sig env
+inferWith root parsed sig env = errorsFromDeps =<< inferWithDeps root parsed sig env
 
 inferWithDeps :: (MonadNamey m, MonadIO m, MonadState Driver m)
               => FilePath -> [Toplevel Parsed] -> Signature -> Env
               -> m (( Maybe ([Toplevel Typed], Env, ResolveResult)
                     , ErrorBundle), Set.Set FilePath)
 inferWithDeps root parsed sig env = do
-  ((res, errs), deps) <- resolveWithDeps root parsed sig
+  ((res, errors), deps) <- resolveWithDeps root parsed sig
   (,deps) <$> case res of
-    Nothing -> pure (Nothing, errs)
+    Nothing -> pure (Nothing, errors)
     Just r@(ResolveResult resolved _ _) -> do
-      (env, errs) <- second (<>errs) <$> checkAll getTypeEnv env deps
-      case env of
-        Nothing -> pure (Nothing, errs)
-        Just env -> do
-          inferred <- inferProgram env =<< desugarProgram resolved
+      AllOf env' <- foldMapM (fmap AllOf . getTypeEnv) deps
+      case env' of
+        Nothing -> pure (Nothing, errors)
+        Just env' -> do
+          inferred <- inferProgram (env <> env') =<< desugarProgram resolved
           pure $ case inferred of
-            That (tBody, env') -> (Just (tBody, env', r), errs)
-            This es -> (Nothing, errs & typeErrors .~ es)
-            These es _ | any isError es -> (Nothing, errs & typeErrors .~ es)
-            These es (tBody, env') -> (Just (tBody, env', r), errs & typeErrors .~ es)
+            That (tBody, env') -> (Just (tBody, env', r), errors)
+            This es -> (Nothing, errors & typeErrors .~ es)
+            These es _ | any isError es -> (Nothing, errors & typeErrors .~ es)
+            These es (tBody, env') -> (Just (tBody, env', r), errors & typeErrors .~ es)
 
 -- | Lower a term with the current driver
 lower :: (MonadNamey m, MonadIO m, MonadState Driver m)
@@ -237,22 +234,31 @@ lowerWith :: (MonadNamey m, MonadIO m, MonadState Driver m)
             -> m ( Maybe ([Stmt CoVar], LowerState, [Toplevel Typed], Env, ResolveResult)
                  , ErrorBundle)
 lowerWith root parsed sig env lState = do
-  ((res, errs), deps) <- inferWithDeps root parsed sig env
+  ((res, errors), deps) <- inferWithDeps root parsed sig env
   case res of
-    Nothing -> pure (Nothing, errs)
+    Nothing -> (Nothing, ) . (errors<>) . fold <$> gatherDepsOf getErrors deps
     Just (inferred, env, resolved) -> do
-      (verified, errs) <- second (errs<>) <$> checkAll getVerifiedAll () deps
+      All verified <- foldMapM getVerifiedAll deps
+      errors <- fold <$> gatherDepsOf getErrors deps
+
       v <- genName
       let (verified', errs') = verifyProg v env inferred
 
-      (,errs<>errs') <$> case (verified, verified') of
-        (Nothing, _) -> pure Nothing
+      (,errors<>errs') <$> case (verified, verified') of
+        (False, _) -> pure Nothing
         (_, False) -> pure Nothing
 
-        (Just (), True) -> do
-          (_, lEnv, ls) <- lowerIts False (Set.toList deps) mempty
-          (lEnv, l) <- runLowerWithEnv (lState <> lEnv) (lowerProgEnv inferred)
+        (True, True) -> do
+          ~(Just (ls, lEnv)) <- fmap Seq.unzip . sequence <$> gatherDepsOf getNewlyLowered deps
+          (lEnv, l) <- runLowerWithEnv (lState <> fold lEnv) (lowerProgEnv inferred)
           pure (Just (concat (ls Seq.|> l), lEnv, inferred, env, resolved))
+
+  where
+    getNewlyLowered path = do
+      stg <- uses (modules . at path) (fmap (^.stage))
+      case stg of
+        Just (SEmitted _ _ _ lEnv) -> pure (Just ([], lEnv))
+        _ -> getLowered path
 
 {- $compile
 
@@ -264,52 +270,34 @@ lowerWith root parsed sig env lState = do
 compile :: (MonadNamey m, MonadIO m, MonadState Driver m)
         => FilePath -> m (Maybe [Stmt CoVar], ErrorBundle)
 compile path = do
-  (ok, errs) <- getVerifiedAll path
-  case ok of
-    Nothing -> pure (Nothing, errs)
-    Just () -> do
-      mod <- findMod path
-      deps <- getDependencyGraph mod
-      (_, _, lowered) <- lowerIts True deps mempty
-      pure (Just (concat (Seq.reverse lowered)), errs)
-  where
-    getDependencyEdgeList mod = do
-      let deps_list = toList (mod ^. dependencies)
+  l <- fmap (concat . fmap fst) . sequence <$> gatherDeps getLowered path
+  errors <- fold <$> gatherDeps getErrors path
+  pure (l, errors)
 
-      edges <- concat <$> for deps_list \dep -> do
-        mod <- findMod dep
-        getDependencyEdgeList mod
-      pure ((modLocation mod, modLocation mod, deps_list):edges)
+errorsFromDeps :: (MonadNamey m, MonadState Driver m)
+               => ((Maybe a, ErrorBundle), Set.Set FilePath)
+               -> m (Maybe a, ErrorBundle)
+errorsFromDeps ((result, errors), deps) = do
+  errors' <- fold <$> gatherDepsOf getErrors deps
+  pure (result, errors' <> errors)
 
-    getDependencyGraph mod = do
-      edges <- getDependencyEdgeList mod
-      let (graph, get_vertex, _) = graphFromEdges edges
-          vertices = topSort graph
-          files = map (view _1 . get_vertex) vertices
-      pure (nub (reverse files))
+gatherDepsOf :: (MonadNamey m, MonadState Driver m)
+             => (FilePath -> m a)
+             -> Set.Set FilePath -> m (Seq.Seq a)
+gatherDepsOf f = fmap snd . foldlM go mempty where
+  go (visited, seq) path
+    | path `Set.member` visited = pure (visited, seq)
+    | otherwise = do
+        this <- f path
+        deps <- uses (modules . at path) (foldMap (^.dependencies))
+        (visited, seq) <- foldlM go (Set.insert path visited, seq) deps
+        pure (visited, seq Seq.|> this)
 
-lowerIt :: (MonadNamey m, MonadState Driver m)
-        => Bool -> FilePath
-        -> (Set.Set FilePath, LowerState, Seq.Seq [Stmt CoVar])
-        -> m (Set.Set FilePath, LowerState, Seq.Seq [Stmt CoVar])
-lowerIt all path (visited, lEnv, stmts)
-  | path `Set.member` visited = pure (visited, lEnv, stmts)
-  | otherwise = do
-      mod <- findMod path
-      (lEnv, stmts) <- case mod ^. stage of
-        SEmitted l _ _ lEnv' -> pure (lEnv <> lEnv', if all then l Seq.<| stmts else stmts)
-        SVerified prog sig env -> do
-          (lEnv, l) <- runLowerWithEnv (defaultState <> lEnv) (lowerProgEnv prog)
-          updateMod path $ stage .~ SEmitted l sig env lEnv
-          pure (lEnv, l Seq.<| stmts)
-        _ -> error "Impossible: Should have been verified"
-      pure (Set.insert path visited, lEnv, stmts)
-
-lowerIts :: (MonadNamey m, MonadState Driver m)
-         => Bool -> [FilePath]
-         -> (Set.Set FilePath, LowerState, Seq.Seq [Stmt CoVar])
-         -> m (Set.Set FilePath, LowerState, Seq.Seq [Stmt CoVar])
-lowerIts all paths state = foldrM (lowerIt all) state (reverse paths)
+-- | Walk over all nodes in dependency order. Effectively a preorder traversal.
+gatherDeps :: (MonadNamey m, MonadState Driver m)
+           => (FilePath -> m a)
+           -> FilePath -> m (Seq.Seq a)
+gatherDeps f = gatherDepsOf f . Set.singleton
 
 verifyProg :: Name -> Env -> [Toplevel Typed] -> (Bool, ErrorBundle)
 verifyProg v env inferred =
@@ -355,15 +343,17 @@ addModule path = do
 
 -- | Get or compute a module's signature.
 getSignature :: (MonadNamey m, MonadState Driver m, MonadIO m)
-             => FilePath -> m (Maybe Signature, ErrorBundle)
+             => FilePath -> m (Maybe Signature)
 getSignature path = do
-  mod <- uses modules (Map.lookup path)
+  mod <- use (modules . at path)
   mod <- case mod of
-    Nothing -> addModule path
-    Just mod -> pure mod
+    Nothing -> do
+      exists <- liftIO $ doesFileExist path
+      if exists then Just <$> addModule path else pure Nothing
+    Just mod -> pure (Just mod)
 
-  case mod ^. stage of
-    SUnparsed -> pure (Nothing, mod ^. errors)
+  case maybe SUnparsed (^. stage) mod of
+    SUnparsed -> pure Nothing
     SParsed parsed -> do
       (resolved, deps) <-
           flip runFileImport (LoadContext (dropFileName path) (Just path))
@@ -371,33 +361,35 @@ getSignature path = do
       case resolved of
         Left es -> do
           updateMod path $ (stage .~ SUnresolved) . (dependencies .~ deps) . (errors . resolveErrors .~ es)
-          (Nothing,) . (^.errors) <$> findMod path
+          pure Nothing
         Right (ResolveResult resolved sig _) -> do
           updateMod path $ (stage .~ SResolved resolved sig) . (dependencies .~ deps)
-          (Just sig,) . (^.errors) <$> findMod path
+          pure (Just sig)
 
-    SUnresolved -> pure (Nothing, mempty)
-    stage -> pure (Just (sig stage), mempty)
+    SUnresolved -> pure Nothing
+    stage -> pure (Just (sig stage))
 
 -- | Get or compute a module's type environment.
 getTypeEnv :: (MonadNamey m, MonadState Driver m, MonadIO m)
-           => FilePath -> m (Maybe Env, ErrorBundle)
+           => FilePath -> m (Maybe Env)
 getTypeEnv path = do
-  (_, depErrors) <- getSignature path
+  _ <- getSignature path
 
-  mod <- findMod path
-  case mod ^. stage of
-    SParsed{} -> pure (Nothing, depErrors)
-    SUntyped{} -> pure (Nothing, depErrors)
-    SUnresolved{} -> pure (Nothing, depErrors)
+  mod <- use (modules . at path)
+  case maybe SUnparsed (^.stage) mod of
+    SParsed{} -> pure Nothing
+    SUnparsed{} -> pure Nothing
+    SUnresolved{} -> pure Nothing
+    SUntyped{} -> pure Nothing
 
     SResolved { _rBody = rBody, sig } -> do
-      (env, depErrors) <- second (depErrors<>) <$> checkAll getTypeEnv builtinEnv (mod ^. dependencies)
+      let ~(Just mod') = mod
+      AllOf env <- foldMapM (fmap AllOf . getTypeEnv) (mod' ^. dependencies)
       case env of
         -- One of our dependencies failed: Mark us as failed too and abort.
-        Nothing -> updateMod path (stage .~ SUntyped sig) $> (Nothing, depErrors)
+        Nothing -> updateMod path (stage .~ SUntyped sig) $> Nothing
         Just env -> do
-          inferred <- inferProgram env =<< desugarProgram rBody
+          inferred <- inferProgram (builtinEnv <> env) =<< desugarProgram rBody
           let (res, es) = case inferred of
                 That res -> (Just res, [])
                 This es -> (Nothing, es)
@@ -407,7 +399,7 @@ getTypeEnv path = do
           case res of
             Nothing -> do
               updateMod path $ (stage .~ SUntyped sig) . (errors . typeErrors .~ es)
-              (Nothing,) . (depErrors<>) . (^.errors) <$> findMod path
+              pure Nothing
             Just (tBody, modEnv) ->
               let env' = env
                     & (names %~ (<> (modEnv ^. names)))
@@ -415,63 +407,81 @@ getTypeEnv path = do
                     . (classDecs %~ (<> (modEnv ^. classDecs)))
                     . (classes %~ (<> (modEnv ^. classes)))
                     . (T.modules %~ (<> (modEnv ^. T.modules))
-                        . Map.insert (modVar mod) (modEnv ^. classes, modEnv ^. tySyms))
+                        . Map.insert (modVar mod') (modEnv ^. classes, modEnv ^. tySyms))
               in do updateMod path $ (stage .~ STyped tBody sig env') . (errors . typeErrors .~ es)
-                    (Just env',) . (depErrors<>) . (^.errors) <$> findMod path
+                    pure (Just env')
 
-    stage -> pure (Just (env stage), depErrors)
+    stage -> pure (Just (env stage))
 
 -- | Determine whether a module can be successfully verified.
 getVerified :: (MonadNamey m, MonadState Driver m, MonadIO m)
-            => FilePath -> m (Maybe (), ErrorBundle)
+            => FilePath -> m Bool
 getVerified path = do
-  (_, depErrors) <- getTypeEnv path
+  _ <- getTypeEnv path
 
-  mod <- findMod path
-  case mod ^. stage of
-    SParsed{} -> pure (Nothing, depErrors)
-    SUnparsed{} -> pure (Nothing, depErrors)
-    SUntyped{} -> pure (Nothing, depErrors)
-    SUnresolved{} -> pure (Nothing, depErrors)
+  stg <- uses (modules . at path) (maybe SUnparsed (^.stage))
+  case stg of
+    SParsed{} -> pure False
+    SUnparsed{} -> pure False
+    SUntyped{} -> pure False
+    SUnresolved{} -> pure False
 
-    SResolved{} -> error "Impossible resolved - should have been typed."
+    SResolved{} -> error "Impossible SResolved - should have been typed."
 
     -- Already done
-    SUnverified{} -> pure (Nothing, mempty)
-    SVerified{} -> pure (Just (), mempty)
-    SEmitted{} -> pure (Just (), mempty)
+    SUnverified{} -> pure False
+    SVerified{} -> pure True
+    SEmitted{} -> pure True
 
     STyped prog sig env -> do
       v <- genName
       let (verified, errs) = verifyProg v env prog
       updateMod path $ (stage .~ if verified then SVerified prog sig env else SUnverified sig env)
                      . (errors %~ (<>errs))
-      pure ( if verified then Just () else Nothing
-           , depErrors <> errs)
+      pure verified
 
 getVerifiedAll :: (MonadNamey m, MonadState Driver m, MonadIO m)
-             => FilePath -> m (Maybe (), ErrorBundle)
+               => FilePath -> m All
 getVerifiedAll path = do
-  (here, errors) <- getVerified path
+  here <- getVerified path
 
-  mod <- findMod path
-  (there, depErrors) <- checkAll getVerifiedAll () (mod ^. dependencies)
+  deps <- uses (modules . at path) (foldMap (^. dependencies))
+  there <- foldMapM getVerifiedAll deps
 
-  pure (here >> there, depErrors <> errors)
+  pure (All here <> there)
+
+-- | Get or compute a module's lower state.
+getLowerState :: (MonadNamey m, MonadState Driver m, MonadIO m)
+              => FilePath -> m (Maybe LowerState)
+getLowerState path = do
+  ok <- getVerified path
+  if not ok then pure Nothing else do
+    ~(Just mod) <- use (modules . at path)
+    case mod ^. stage of
+      SEmitted _ _ _ lEnv -> pure (Just lEnv)
+      SVerified prog sig env -> do
+        AllOf lEnv <- foldMapM (fmap AllOf . getLowerState) (mod ^. dependencies)
+        case lEnv of
+          Nothing -> pure Nothing
+          Just lEnv -> do
+            (lEnv, l) <- runLowerWithEnv (defaultState <> lEnv) (lowerProgEnv prog)
+            updateMod path $ stage .~ SEmitted l sig env lEnv
+            pure (Just lEnv)
+      _ -> error "Impossible: Should have been verified"
 
 -- | Get or compute a module's core representation.
 getLowered :: (MonadNamey m, MonadState Driver m, MonadIO m)
-            => FilePath -> m (Maybe ([Stmt CoVar], LowerState), ErrorBundle)
+            => FilePath -> m (Maybe ([Stmt CoVar], LowerState))
 getLowered path = do
-  (ok, errs) <- getVerifiedAll path
+  lEnv <- getLowerState path
+  case lEnv of
+    Nothing -> pure Nothing
+    Just lEnv -> fmap ((,lEnv) . _cBody . (^.stage)) <$> use (modules . at path)
 
-  case ok of
-    Nothing -> pure (Nothing, errs)
-    Just () -> do
-      (_, lEnv, lowered) <- lowerIt True path mempty
-      case lowered of
-        _ Seq.:|> lowered -> pure (Just (lowered, lEnv), errs)
-        _ -> error "Must have returned some core."
+-- | Get the errors for a specific file.
+getErrors :: (MonadNamey m, MonadState Driver m)
+          => FilePath -> m ErrorBundle
+getErrors path = maybe mempty (^.errors) <$> use (modules . at path)
 
 -- | Update an item within the state
 updateMod :: MonadState Driver m
@@ -549,9 +559,10 @@ importFile fromPath fromLoc path = do
         SUnresolved -> pure Errored
         SUnparsed -> pure Errored
         SParsed _ -> do
-          let ~(Just loc) = fromLoc
           state <- get
-          pure (ImportCycle ((modSource mod, loc) E.:| findCycle mod state))
+          let ~(Just loc) = fromLoc
+              fromMod = flip Map.lookup (state ^. modules) =<< fromPath
+          pure (ImportCycle ((modSource mod, loc) E.:| foldMap (`findCycle` state) fromMod))
 
         stage -> pure (Imported (modVar mod) (sig stage))
 
@@ -560,7 +571,7 @@ importFile fromPath fromLoc path = do
       if not exists then pure NotFound else do
         mod <- addModule path
         updateMod path $ dependent .~ ((,) <$> fromPath <*> fromLoc)
-        maybe Errored (Imported (modVar mod)) . fst <$> getSignature path
+        maybe Errored (Imported (modVar mod)) <$> getSignature path
 
 -- | Find the first file which matches a list.
 findFile' :: MonadIO m
@@ -601,8 +612,8 @@ loadPrelude = load =<< findFile' (lookupEnv "AMC_PRELUDE" : searchPath "prelude"
     r <- compile p
     case r of
       (Just stmts, _) -> do
-        ~(Just sig, _) <- getSignature p
-        ~(Just env, _) <- getTypeEnv p
+        ~(Just sig) <- getSignature p
+        ~(Just env) <- getTypeEnv p
         pure (sig, env, stmts)
       _ -> liftIO . throwIO . userError $ "Failed to load Amulet prelude from " ++ p
 
@@ -618,18 +629,14 @@ instance Semigroup a => Semigroup (AllOf a) where
   (AllOf (Just x)) <> (AllOf (Just y)) = AllOf (Just (x <> y))
   _ <> _ = AllOf Nothing
 
+instance Monoid a => Monoid (AllOf a) where
+  mempty = AllOf (Just mempty)
+
 -- | Akin to 'sequenceA', this maps over a collection, accumulating the
 -- results only if all functions return 'Just'.
-checkAll :: (Monad m, Foldable t, Semigroup b)
-         => (a -> m (Maybe b, ErrorBundle)) -> b -> t a -> m (Maybe b, ErrorBundle)
-checkAll fn start xs
-    = first (\(AllOf x) -> x)
-  <$> foldrM (\x acc -> (<>acc) . first AllOf <$> fn x)
-             (AllOf (Just start), mempty) xs
-
--- | Find a module within the state, knowing that it is present.
-findMod :: MonadState Driver m => FilePath -> m Module
-findMod p = uses modules (fromJust . Map.lookup p)
+foldMapM :: (Monad m, Foldable t, Monoid b)
+         => (a -> m b) -> t a -> m b
+foldMapM f = foldrM (\a b -> (<>b) <$> f a) mempty
 
 isError :: Note a b => a -> Bool
 isError x = diagnosticKind x == ErrorMessage

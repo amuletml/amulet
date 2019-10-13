@@ -6,13 +6,13 @@ module Control.Monad.Chronicles
   ( module Control.Monad.Chronicle
   , Chronicles, ChroniclesT, MonadChronicles
   , dictates, confesses, retcons
-  , dictate, confess
+  , dictate
   , recover, absolving, silence
   , catchChronicle
   ) where
 
 import qualified Control.Monad.Chronicle as M
-import Control.Monad.Chronicle hiding (dictate, confess) 
+import Control.Monad.Chronicle hiding (dictate)
 
 import Data.Sequence (Seq, null)
 import Prelude hiding (null)
@@ -35,11 +35,6 @@ dictate :: MonadChronicles c m => Seq c -> m ()
 dictate c
   | null c = pure ()
   | otherwise = M.dictate c
-
-confess :: MonadChronicles c m => Seq c -> m a
-confess c
-  | null c = pure undefined
-  | otherwise = M.confess c
 
 -- | 'retcon' a single value
 retcons :: MonadChronicles c m => (c -> c) -> m a -> m a
@@ -71,4 +66,3 @@ silence = absolve se where
 -- Note this does not catch non-fatal errors. Use 'retcon' for that.
 catchChronicle :: MonadChronicle c m => m a -> (c -> m a) -> m a
 catchChronicle m f = memento (M.condemn m) >>= either f pure
-
