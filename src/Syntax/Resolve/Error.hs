@@ -73,7 +73,7 @@ instance Pretty ResolveError where
   pretty LetOpenStruct = "Cannot declare a module within a" <+> keyword "let open" <+> "expression"
 
   pretty (UnresolvedImport name) = "Cannot resolve" <+> dquotes (text name)
-  pretty (ImportLoop ((name, _) E.:| _)) = "Loop loading " <+> dquotes (string name)
+  pretty (ImportLoop ((name, _) E.:| _)) = "Cycle importing" <+> dquotes (string name)
 
   pretty (TFClauseWrongHead t tau) =
     vsep [ "The lhs of a type function equation must be headed by the type function constructor"
@@ -99,4 +99,9 @@ instance Note ResolveError Style where
     body (ArisingFrom er a) = body er <|> Just (f [annotation a])
     body (NonLinearPattern _ ps) = Just (f (map annotation ps))
     body (NonLinearRecord e _) = Just (f [annotation e])
+    body (ImportLoop loop) = Just . foldl1 (<#>) . E.map imported $ loop
     body _ = Nothing
+
+    imported (name, pos)
+      = f [ pos ]
+        <#> indent 2 (note <+> dquotes (string name) <+> "imported from" <+> dquotes (string (fileName pos)))
