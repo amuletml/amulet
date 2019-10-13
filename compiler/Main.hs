@@ -3,17 +3,21 @@ module Main(main) where
 
 import System.Exit (ExitCode(..), exitWith)
 import System.IO (hPutStrLn, stderr)
-import Options.Applicative hiding (ParseError)
-
-import qualified Data.Text.IO as T
-import qualified Data.Text as T
-import Data.Position (SourceName)
+import System.Environment
+import System.Directory
 
 import Control.Monad.Infer (Env, firstName)
 import Control.Monad.Namey
 import Control.Monad.State
 
-import System.Directory
+import qualified Data.Text.IO as T
+import qualified Data.Text as T
+import Data.Position (SourceName)
+import Data.Traversable
+import Data.Foldable
+import Data.List
+
+import Options.Applicative hiding (ParseError)
 
 import Language.Lua.Syntax
 import Backend.Lua
@@ -119,7 +123,7 @@ argParser = info (args <**> helper <**> version)
     version :: Parser (a -> a)
     version
       = infoOption $(amcVersion)
-      $ long "--version" <> short 'v' <> help "Show version information"
+      $ long "version" <> short 'v' <> help "Show version information"
 
     args :: Parser Args
     args = Args <$> command'
@@ -166,7 +170,7 @@ argParser = info (args <**> helper <**> version)
       <$> ( flag' D.Test   (long "test" <> short 't' <> help "Provides additional debug information on the output")
         <|> flag' D.TestTc (long "test-tc"           <> help "Provides additional type check information on the output")
         <|> pure D.Void )
-      <*> pure []
+      <*> many (option str (long "lib" <> help "Add a folder to the library path"))
 
     optional :: Parser a -> Parser (Maybe a)
     optional p = (Just <$> p) <|> pure Nothing
@@ -174,11 +178,28 @@ argParser = info (args <**> helper <**> version)
     defaultPort :: Int
     defaultPort = 5478
 
+extendPath :: [String] -> IO ()
+extendPath paths = do
+  paths <- sequence <$> for paths (\path -> do
+    path' <- canonicalizePath path
+    exists <- doesDirectoryExist path'
+    pure $ if exists then Right path' else Left path)
+  case paths of
+    Left path -> do
+      hPutStrLn stderr (path ++ ": No such directory")
+      exitWith (ExitFailure 1)
+    Right [] -> pure ()
+    Right paths -> do
+      existing <- lookupEnv "AMC_LIBRARY_PATH"
+      setEnv "AMC_LIBRARY_PATH" . intercalate ":" $ paths ++ toList existing
+
 main :: IO ()
 main = do
   options <- execParser argParser
   case options of
-    Args (Repl { toLoad, serverPort, options }) -> replFrom serverPort (debugMode options) toLoad
+    Args (Repl { toLoad, serverPort, options }) -> do
+      extendPath (libraryPath options)
+      replFrom serverPort (debugMode options) toLoad
     Args (Connect { remoteCmd, serverPort }) -> runRemoteReplCommand serverPort remoteCmd
 
     Args (Compile { input, output = Just output }) | input == output -> do
@@ -197,4 +218,6 @@ main = do
           writeOut = case output of
                    Nothing -> putDoc . pretty
                    Just f -> T.writeFile f . T.pack . show . pretty
+
+      extendPath (libraryPath options)
       compileFromTo opt (debugMode options) input writeOut
