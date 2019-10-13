@@ -574,39 +574,50 @@ importFile fromPath fromLoc path = do
         maybe Errored (Imported (modVar mod)) <$> getSignature path
 
 -- | Find the first file which matches a list.
-findFile' :: MonadIO m
-          => [IO (Maybe FilePath)] -> m (Maybe FilePath)
-findFile' searchPath = liftIO $ search searchPath where
+findFile' :: forall m. MonadIO m
+          => [IO [FilePath]] -> m (Maybe FilePath)
+findFile' = search where
+  search :: [IO [FilePath]] -> m (Maybe FilePath)
   search [] = pure Nothing
   search (p:ps) = do
-    path <- p
-    case path of
+    paths <- liftIO p
+    r <- searchMany paths
+    case r of
+      Just r -> pure (Just r)
       Nothing -> search ps
-      Just path -> do
-        path <- canonicalizePath path
-        exists <- doesFileExist path
-        if exists then pure (Just path) else search ps
+
+  searchMany (path:paths) = searchOne path (searchMany paths)
+  searchMany [] = pure mempty
+
+  searchOne path cont = do
+    path <- liftIO $ canonicalizePath path
+    exists <- liftIO $ doesFileExist path
+    if exists then pure (Just path) else cont
+
 
 -- | The default path to use with 'findFile''. This will attempt to locate
--- a file from one of the "known directories" - $AMC_LIBDIR, ../lib/
+-- a file from one of the "known directories" - $AMC_LIBRARY_PATH, ../lib/
 -- relative to the compiler's executable, or lib/ relative to the
 -- compiler's executable.
-searchPath :: FilePath -> [IO (Maybe FilePath)]
+searchPath :: FilePath -> [IO [FilePath]]
 searchPath p =
-  [ lookupEnv "AMC_LIBDIR" <&> fmap \path -> path </> p <.> "ml"
-  , getExecutablePath <&> \execP -> Just (takeDirectory execP </> "lib" </> p <.> "ml")
-  , getExecutablePath <&> \execP -> Just (takeDirectory (takeDirectory execP) </> "lib" </> p <.> "ml")
+  [ lookupEnv "AMC_LIBRARY_PATH" <&> fmap (\path -> map (</> p <.> "ml") (splitPath path))
+                                 <&> msum
+  , getExecutablePath <&> \execP -> [takeDirectory execP </> "lib" </> p <.> "ml"]
+  , getExecutablePath <&> \execP -> [takeDirectory (takeDirectory execP) </> "lib" </> p <.> "ml"]
   ]
+    where
+      splitPath = Set.toList . Set.fromList . map T.unpack . T.split (==':') . T.pack
 
 -- | Load the "prelude" module from a set of known locations:
 -- * The AMC_PRELUDE environment variable (a file)
--- * $AMC_LIBDIR/prelude.ml
+-- * $AMC_LIBRARY_PATH/prelude.ml
 -- * ../lib/prelude.ml relative to the compiler's executable
 -- * lib/prelude.ml relative to the compiler's executable
 loadPrelude :: forall m.
                (MonadNamey m, MonadState Driver m, MonadIO m)
             => m (Signature, Env, [Stmt CoVar])
-loadPrelude = load =<< findFile' (lookupEnv "AMC_PRELUDE" : searchPath "prelude") where
+loadPrelude = load =<< findFile' ((toList <$> lookupEnv "AMC_PRELUDE") : searchPath "prelude") where
   load Nothing = liftIO . throwIO . userError $ "Failed to locate Amulet prelude"
   load (Just p) = do
     r <- compile p

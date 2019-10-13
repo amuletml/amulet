@@ -31,6 +31,7 @@ import qualified Foreign.Lua.Core.Types as L
 import qualified Foreign.Lua as L
 
 import System.Console.Haskeline hiding (display, bracket, throwTo)
+import System.Environment
 import System.Directory
 import System.IO
 
@@ -177,6 +178,18 @@ execCommand _ "info" arg = infoCommand arg
 
 execCommand _ "c" arg = compileCommand arg
 execCommand _ "compile" arg = compileCommand arg
+
+execCommand _ "add-library-path" arg = liftIO $
+  case dropWhile isSpace arg of
+    [] -> putStrLn ":add-library-path needs an argument"
+    dir -> do
+      path <- canonicalizePath dir
+      exists <- doesDirectoryExist path
+      if exists
+         then do
+           existing <- lookupEnv "AMC_LIBRARY_PATH"
+           setEnv "AMC_LIBRARY_PATH" (maybe path ((path ++ ":") ++) existing)
+         else putStrLn $ arg ++ ": No such directory"
 
 execCommand _ cmd _ = outputDoc ("Unknown command" <+> verbatim cmd)
 
