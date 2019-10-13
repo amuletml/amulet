@@ -110,7 +110,7 @@ data Command
     }
   deriving (Show)
 
-data Args
+newtype Args
   = Args
     { mainCommand :: Command
     }
@@ -130,8 +130,8 @@ argParser = info (args <**> helper <**> version)
 
     command' :: Parser Command
     command' =
-      ( hsubparser
-      $  command "compile"
+      hsubparser
+      (  command "compile"
          ( info compileCommand
          $ fullDesc <> progDesc "Compile an Amulet file to Lua.")
       <> command "repl"
@@ -145,7 +145,7 @@ argParser = info (args <**> helper <**> version)
     compileCommand :: Parser Command
     compileCommand = Compile
       <$> argument str (metavar "FILE" <> help "The file to compile.")
-      <*> optional ( option str $
+      <*> optional ( option str
            ( long "out" <> short 'o' <> metavar "FILE"
           <> help "Write the generated Lua to a specific file." ) )
       <*> option auto ( long "opt" <> short 'O' <> metavar "LEVEL" <> value 1 <> showDefault
@@ -197,16 +197,16 @@ main :: IO ()
 main = do
   options <- execParser argParser
   case options of
-    Args (Repl { toLoad, serverPort, options }) -> do
+    Args Repl { toLoad, serverPort, options } -> do
       extendPath (libraryPath options)
       replFrom serverPort (debugMode options) toLoad
-    Args (Connect { remoteCmd, serverPort }) -> runRemoteReplCommand serverPort remoteCmd
+    Args Connect { remoteCmd, serverPort } -> runRemoteReplCommand serverPort remoteCmd
 
-    Args (Compile { input, output = Just output }) | input == output -> do
+    Args Compile { input, output = Just output } | input == output -> do
       hPutStrLn stderr ("Cannot overwrite input file " ++ input)
       exitWith (ExitFailure 1)
 
-    Args (Compile { input, output, optLevel, options }) -> do
+    Args Compile { input, output, optLevel, options } -> do
       exists <- doesFileExist input
       if not exists
       then hPutStrLn stderr ("Cannot find input file " ++ input)
