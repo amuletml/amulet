@@ -20,6 +20,7 @@ import Control.Monad.Reader
 import Control.Lens hiding (Lazy, (:>))
 
 import Text.Pretty.Semantic
+import Text.Pretty.Note
 
 import Syntax.Verify.Pattern
 import Syntax.Verify.Error
@@ -42,14 +43,17 @@ type MonadVerify m =
 
 runVerify :: Env
           -> Var Resolved
-          -> WriterT (Seq.Seq VerifyError) (StateT (Set.Set BindingSite) (Reader VerifyScope)) () -> Either (Seq.Seq VerifyError) ()
+          -> WriterT (Seq.Seq VerifyError) (StateT (Set.Set BindingSite) (Reader VerifyScope)) ()
+          -> (Bool, Seq.Seq VerifyError)
 runVerify env var = fixup
                   . flip runReader (VerifyScope env (emptyAbsState var))
                   . flip runStateT mempty
                   . runWriterT where
   fixup (((), w), st) =
     let errs = w <> Seq.fromList (map DefinedUnused (Set.elems st))
-     in if Seq.null errs then Right () else Left errs
+    in (all nonFatal errs, errs)
+
+  nonFatal x = diagnosticKind x /= ErrorMessage
 
 verifyProgram :: forall m. MonadVerify m => [Toplevel Typed] -> m ()
 verifyProgram = traverse_ verifyStmt where

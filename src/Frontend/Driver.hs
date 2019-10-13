@@ -301,10 +301,8 @@ gatherDeps f = gatherDepsOf f . Set.singleton
 
 verifyProg :: Name -> Env -> [Toplevel Typed] -> (Bool, ErrorBundle)
 verifyProg v env inferred =
-  let verified' = runVerify env v (verifyProgram inferred)
-  in case verified' of
-    Right () -> (True, mempty)
-    Left es -> (any isError es, mempty & verifyErrors .~ toList es)
+  let (ok, es) = runVerify env v (verifyProgram inferred)
+  in (ok, mempty & verifyErrors .~ toList es)
 
 {- $query
 
