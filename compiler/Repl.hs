@@ -55,6 +55,7 @@ import qualified Core.Core as C
 import Core.Optimise.Newtype
 import Core.Occurrence
 import Core.Core (Stmt)
+import Core.Simplify
 import Core.Var
 
 import qualified Frontend.Driver as D
@@ -174,6 +175,9 @@ execCommand _ "type" arg = typeCommand arg
 execCommand _ "i" arg = infoCommand arg
 execCommand _ "info" arg = infoCommand arg
 
+execCommand _ "c" arg = compileCommand arg
+execCommand _ "compile" arg = compileCommand arg
+
 execCommand _ cmd _ = outputDoc ("Unknown command" <+> verbatim cmd)
 
 -- | Split a string into arguments
@@ -252,6 +256,27 @@ typeCommand (dropWhile isSpace -> input) = do
               t = S.getType expr
           in liftIO $ hPutDoc handle (string input <+> colon <+> displayType t)
 
+compileCommand :: (MonadState ReplState m, MonadIO m) => FilePath -> m ()
+compileCommand [] = liftIO $ putStrLn ":compile command needs an argument"
+compileCommand (dropWhile isSpace -> path) = do
+  current <- gets currentFile
+  output <- gets outputHandle
+  files <- D.fileMap =<< gets driver
+  case current of
+    Just file -> do
+      in_p <- liftIO $ canonicalizePath file
+      (core, errors) <- wrapDriver (D.compile in_p)
+      handle <- liftIO $ openFile path WriteMode
+
+      case core of
+        Just core -> do
+          optm <- wrapNamey $ optimise core
+          (_, lua) <- emitCore optm
+          liftIO $ Bs.hPutStr handle lua
+        Nothing ->
+          hReportAll output files errors
+      liftIO $ hClose handle
+    Nothing -> liftIO $ putStrLn "No file loaded"
 
 execString :: (MonadState ReplState m, MonadIO m)
            => SourceName -> T.Text
