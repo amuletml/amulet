@@ -43,10 +43,13 @@ import Core.Var
 import qualified Syntax as S
 import Syntax.Var (Typed)
 
+import Text.Pretty.Semantic
+
 type ArmId = Int
 type ArmSet = HSet.HashSet ArmId
 type ArmMap = HMap.HashMap ArmId
 
+-- | A substitution from one variable to another
 data VariableSubst
   = VS
   { varFrom :: CoVar
@@ -67,26 +70,56 @@ data ArmLeaf
 data ArmNode
   = ArmComplete
     { nodeArms    :: ArmSet
-    , nodeSuccess :: [ArmLeaf] }
+      -- ^ Arms which are mentioned in this or any child node.
+    , nodeSuccess :: [ArmLeaf]
+      -- ^ Arms which are successfully matched here.
+    }
+    -- ^ This match expression has terminated and found a match. From now on, we
+    -- need only evaluate guards.
+
   | ArmMatch
     { nodeArms    :: ArmSet
     , nodeSuccess :: [ArmLeaf]
     , nodeAtom    :: Atom CoVar
-    , nodeNodes   :: [(Pattern CoVar, ArmNode)] }
+      -- ^ The atom to match against
+    , nodeNodes   :: [(Pattern CoVar, ArmNode)]
+      -- ^ The child nodes, and their associated pattern.
+    }
   deriving (Show)
 
+instance Pretty ArmNode where
+  pretty (ArmComplete arms success) = "Complete" <+> parens (shown arms) <+> shown success
+  pretty (ArmMatch arms success atom nodes)
+    = "Match" <+> parens (shown arms) <+> shown success <+> pretty atom
+    <#> (indent 2 . vsep $ map (\(p, n) -> pretty p <+> "=>" <#> indent 2 (pretty n)) nodes)
+
+-- | A of a single case in a match expression.
 data PatternRow
   = PR
     { rowArm      :: ArmId
+      -- ^ The id of this row. This is just the 0-based index within the list of
+      -- rows of the original match expression.
     , rowPatterns :: VarMap.Map (S.Pattern Typed)
-    , rowGuarded  :: Bool
+      -- ^ The current state of the deconstructed pattern. Given a pattern like
+      -- @x with (a, b)@, we may split this into @x with a@ and @y with b@.
+    , rowGuarded  :: Bool -- ^ Whether this row has a guard.
     , rowVarBinds :: [VariableSubst]
-    , rowTyBinds  :: [VariableSubst] }
-  deriving (Show)
+      -- ^ A mapping from the keys in 'rowPatterns', to the variable mentioned
+      -- in 'S.Wildcard' or 'S.As'.
+    , rowTyBinds  :: [VariableSubst] -- ^ Type variables bound by this pattern.
+    }
+  deriving Show
 
 data ArmExpr m
   = ExprOnce (Term CoVar) [(CoVar, Type CoVar)] [(CoVar, Type CoVar)]
   | ExprLambda ([VariableSubst] -> [VariableSubst] -> m (Term CoVar))
+
+instance Pretty (ArmExpr m) where
+  pretty (ExprOnce term _ _) = "Once" <+> parens (pretty term)
+  pretty (ExprLambda _) = "Lambda"
+
+instance Show (ArmExpr m) where
+  show = show . pretty
 
 lowerMatch :: MonadLower m => Atom CoVar -> [(S.Pattern Typed, Maybe (Term CoVar), Term CoVar)] -> m (Term CoVar)
 lowerMatch (Ref r ty) cases = lowerMatch' r ty cases
@@ -136,13 +169,13 @@ flattenLeaf bodies guards (ArmLeaf n vs ts) rest = do
       . (substituteInTys . VarMap.fromList . map (\(VS a b _) -> (a, VarTy b)) $ ts)
       $ foldr (\(VS f t ty) -> C.Let (One (t, ty, Atom (Ref f ty)))) bod vs
 
-flattenNode :: forall m. MonadLower m
+flattenNode :: MonadLower m
             => ArmMap (ArmExpr m) -> ArmMap (ArmExpr m)
             -> ArmNode -> m (Term CoVar)
-flattenNode bodies guards (ArmComplete _ leafs)
-  = foldrM (flattenLeaf bodies guards) undefined leafs
-flattenNode bodies guards a@(ArmMatch _ leafs atom' children) = do
-  let shared = HMap.keys . HMap.filter (>1) . countShared $ a
+flattenNode bodies guards (ArmComplete _ leafs) =
+  foldrM (flattenLeaf bodies guards) (error "Leaf patterns must be total") leafs
+flattenNode bodies guards (ArmMatch _ leafs atom' children) = do
+  let shared = HMap.keys $ HMap.filter (>1) countShared
   (bodies', binds) <- foldrM generateBinds (bodies, id) shared
   (guards', binds) <- foldrM generateBinds (guards, binds) shared
 
@@ -159,67 +192,68 @@ flattenNode bodies guards a@(ArmMatch _ leafs atom' children) = do
 
   where
     -- | Count the number of times each 'ArmId' occurs
-    countShared :: ArmNode -> ArmMap Int
-    countShared arm =
-      let branches = HSet.foldr add mempty (nodeArms arm)
-      in foldr (add . leafArm) branches (nodeSuccess arm)
+    countShared :: ArmMap Int
+    countShared =
+      let branches = foldr (flip (HSet.foldr add) . nodeArms . snd) mempty children
+      in foldr (add . leafArm) branches leafs
       where add k = HMap.insertWith (+) k (1 :: Int)
 
-    -- | Lift a pattern match into a lambda, passing arguments as values.
-    generateBinds :: ArmId
-                  -> (ArmMap (ArmExpr m), Term CoVar -> Term CoVar)
-                  -> m (ArmMap (ArmExpr m), Term CoVar -> Term CoVar)
-    generateBinds n (bods, build) =
-      case HMap.lookup n bodies of
-        Nothing -> pure (bods, build)
-        Just ExprLambda{} -> pure (bods, build)
-        Just (ExprOnce Atom{} _ _) -> pure (bods, build)
-        Just (ExprOnce bod fv tvs) -> do
-          v <- fresh ValueVar
-          a <- fresh ValueVar
+-- | Lift a pattern match into a lambda, passing arguments as values.
+generateBinds :: forall m. MonadLower m
+              => ArmId
+              -> (ArmMap (ArmExpr m), Term CoVar -> Term CoVar)
+              -> m (ArmMap (ArmExpr m), Term CoVar -> Term CoVar)
+generateBinds n (bods, build) =
+  case HMap.lookup n bods of
+    Nothing -> pure (bods, build)
+    Just ExprLambda{} -> pure (bods, build)
+    Just (ExprOnce Atom{} _ _) -> pure (bods, build)
+    Just (ExprOnce bod fv tvs) -> do
+      v <- fresh ValueVar
+      a <- fresh ValueVar
 
-          let buildLam aty bod' = foldr (Lam . uncurry TypeArgument) (Lam (TermArgument a aty) bod') tvs
-              buildLamTy fty = foldr (uncurry (ForallTy . Relevant)) fty tvs
+      let buildLam aty bod' = foldr (Lam . uncurry TypeArgument) (Lam (TermArgument a aty) bod') tvs
+          buildLamTy fty = foldr (uncurry (ForallTy . Relevant)) fty tvs
 
-              buildApp :: [VariableSubst] -> CoVar -> Type CoVar -> Atom CoVar -> m (Term CoVar)
-              buildApp = buildApp' tvs
-              buildApp' [] _ f fty arg = pure (App (Ref f fty) arg)
-              buildApp' ((tv,_):tvs) ts f fty@(ForallTy (Relevant _) _ ftyr) arg = do
-                f' <- fresh ValueVar
-                let Just tv' = varFrom <$> find ((==tv) . varTo) ts
-                    fty' = substituteInType (VarMap.singleton tv (VarTy tv')) ftyr
-                Let (One (f', fty', TyApp (Ref f fty) (VarTy tv'))) <$> buildApp' tvs ts f' fty' arg
-              buildApp' _ _ _ _ _ = error "Tyvar without a place to apply it"
+          buildApp :: [VariableSubst] -> CoVar -> Type CoVar -> Atom CoVar -> m (Term CoVar)
+          buildApp = buildApp' tvs
+          buildApp' [] _ f fty arg = pure (App (Ref f fty) arg)
+          buildApp' ((tv,_):tvs) ts f fty@(ForallTy (Relevant _) _ ftyr) arg = do
+            f' <- fresh ValueVar
+            let Just tv' = varFrom <$> find ((==tv) . varTo) ts
+                fty' = substituteInType (VarMap.singleton tv (VarTy tv')) ftyr
+            Let (One (f', fty', TyApp (Ref f fty) (VarTy tv'))) <$> buildApp' tvs ts f' fty' arg
+          buildApp' _ _ _ _ _ = error "Tyvar without a place to apply it"
 
-          case fv of
-            [] ->
-              let ty = buildLamTy . ForallTy Irrelevant tyUnit . fromJust . approximateType $ bod
-              in pure ( HMap.insert n (ExprLambda (\_ ts -> buildApp ts v ty (Lit Unit))) bods
-                      , Let (One (v, ty, buildLam tyUnit bod)) . build )
-            [(a', aty)] ->
-              let ty = buildLamTy . ForallTy Irrelevant aty . fromJust . approximateType $ bod
-              in pure ( HMap.insert n (ExprLambda (\_ ts -> buildApp ts v ty (Ref a' ty))) bods
-                      , Let (One (v, ty, buildLam aty bod)) . build )
-            _ -> do
-              let aty = ValuesTy (map snd fv)
-                  ty = buildLamTy . ForallTy Irrelevant aty . fromJust . approximateType $ bod
+      case fv of
+        [] ->
+          let ty = buildLamTy . ForallTy Irrelevant tyUnit . fromJust . approximateType $ bod
+          in pure ( HMap.insert n (ExprLambda (\_ ts -> buildApp ts v ty (Lit Unit))) bods
+                  , Let (One (v, ty, buildLam tyUnit bod)) . build )
+        [(a', aty)] ->
+          let ty = buildLamTy . ForallTy Irrelevant aty . fromJust . approximateType $ bod
+          in pure ( HMap.insert n (ExprLambda (\_ ts -> buildApp ts v ty (Ref a' ty))) bods
+                  , Let (One (v, ty, buildLam aty bod)) . build )
+        _ -> do
+          let aty = ValuesTy (map snd fv)
+              ty = buildLamTy . ForallTy Irrelevant aty . fromJust . approximateType $ bod
 
-                  bod' = Match (Ref a aty)
-                    [ Arm { _armPtrn = PatValues (map (uncurry Capture) fv)
-                          , _armTy = aty
-                          , _armBody = bod
-                          , _armVars = fv
-                          , _armTyvars = [] } ]
+              bod' = Match (Ref a aty)
+                [ Arm { _armPtrn = PatValues (map (uncurry Capture) fv)
+                      , _armTy = aty
+                      , _armBody = bod
+                      , _armVars = fv
+                      , _armTyvars = [] } ]
 
-                  genApp vs ts = do
-                    tvar <- fresh ValueVar
-                    let tup = Values . flip map fv $ \(v, _) ->
-                          let Just (VS v' _ ty') = find ((==v) . varTo) vs
-                          in Ref v' ty'
-                    Let (One (tvar, aty, tup)) <$> buildApp ts v ty (Ref tvar aty)
+              genApp vs ts = do
+                tvar <- fresh ValueVar
+                let tup = Values . flip map fv $ \(v, _) ->
+                      let Just (VS v' _ ty') = find ((==v) . varTo) vs
+                      in Ref v' ty'
+                Let (One (tvar, aty, tup)) <$> buildApp ts v ty (Ref tvar aty)
 
-              pure ( HMap.insert n (ExprLambda genApp) bods
-                   , Let (One (v, ty, buildLam aty bod')) . build )
+          pure ( HMap.insert n (ExprLambda genApp) bods
+               , Let (One (v, ty, buildLam aty bod')) . build )
 
 -- | Find a "good" variable to match against, and match against it using
 -- 'lowerOneOf'.
@@ -366,7 +400,7 @@ lowerOne tys rss = do
 -- 'lowerOne'.
 lowerOneOf :: forall m. MonadLower m
            => [ArmLeaf]
-           -> CoVar -> Type CoVar
+           -> CoVar -> Type CoVar -- ^ The variable to match against and its type.
            -> VarMap.Map (Type CoVar) -> [PatternRow]
            -> m ArmNode
 lowerOneOf preLeafs var ty tys = go [] . map prepare
