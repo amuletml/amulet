@@ -364,11 +364,7 @@ instance Pretty TypeError where
 
   pretty (ImpredicativeApp tf tx)
     = vsep [ string "Illegal use of polymorphic type" <+> displayType tx
-           , indent 2 $ string "as argument to the type function" <+> displayType tf
-           , note <+> string "instantiating a type variable"
-           <+> nest 2 (parens (string "the argument to" <+> displayType tf)
-                   </> string "with a polymorphic type constitutes"
-                   <+> stypeCon (string "impredicative polymorphism"))
+           , indent 2 $ string "as argument to the type constructor" <+> displayType tf
            ]
 
   pretty (EscapedSkolems [skol] _) | ByConstraint con <- _skolMotive skol =
