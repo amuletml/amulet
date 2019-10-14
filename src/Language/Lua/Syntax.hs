@@ -110,6 +110,11 @@ assocOf _    = ALeft
 block :: Doc -> [Doc] -> Doc -> Doc
 block header body footer = header <> nest 2 (line <> vsep body) <> line <> footer
 
+-- | A 'block', which may potentially be simplified to a single line.
+miniBlock :: Doc -> Doc -> Doc -> Doc
+miniBlock header body footer = header <> nest 2 (softline <> body) <> softline <> footer
+
+
 -- | A variant of 'block' but with an empty footer
 headedBlock :: Doc -> [Doc] -> Doc
 headedBlock header body = block header body empty
@@ -132,6 +137,8 @@ instance Pretty LuaStmt where
     block (keyword "repeat")
           (map pretty t)
           (keyword "until" <+> pretty c)
+  pretty (LuaIfElse [(c,[t])]) =
+    miniBlock (keyword "if" <+> pretty c <+> keyword "then") (pretty t) (keyword "end")
   pretty (LuaIfElse ((c,t):bs)) =
     let pprintElse [] = keyword "end"
         pprintElse [(LuaTrue, b)] =

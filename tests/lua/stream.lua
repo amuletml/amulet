@@ -3,9 +3,7 @@ do
   local print = print
   local to_string = tostring
   local function go(st)
-    if st > 5 then
-      return print("]")
-    end
+    if st > 5 then return print("]") end
     local tmp = st + 1
     io_write("'" .. to_string(st) .. "', ")
     return go(tmp)
