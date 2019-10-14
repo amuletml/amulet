@@ -51,17 +51,13 @@ do
   end
   local tmp = zip(Stream({
     _1 = function(n)
-      if n > 100 then
-        return Done
-      end
+      if n > 100 then return Done end
       return Yield({ _1 = n, _2 = n + 1 })
     end,
     _2 = 1
   }))(Stream({
     _1 = function(n)
-      if n > 300 then
-        return Done
-      end
+      if n > 300 then return Done end
       return Yield({ _1 = n, _2 = n + 1 })
     end,
     _2 = 100

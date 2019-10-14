@@ -1,5 +1,3 @@
-external val ignore : 'a -> unit = "function(x) end"
-
 let f1 p k = function
 | 0 when p () -> k 0
 | _ -> k 3 (* Should be shared. *)
