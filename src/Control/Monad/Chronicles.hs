@@ -14,8 +14,7 @@ module Control.Monad.Chronicles
 import qualified Control.Monad.Chronicle as M
 import Control.Monad.Chronicle hiding (dictate)
 
-import Data.Sequence (Seq, null)
-import Prelude hiding (null)
+import Data.Sequence (Seq)
 
 import GHC.Stack
 
@@ -32,9 +31,7 @@ confesses :: MonadChronicles c m => c -> m a
 confesses = confess . pure
 
 dictate :: MonadChronicles c m => Seq c -> m ()
-dictate c
-  | null c = pure ()
-  | otherwise = M.dictate c
+dictate = M.dictate
 
 -- | 'retcon' a single value
 retcons :: MonadChronicles c m => (c -> c) -> m a -> m a

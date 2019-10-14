@@ -254,7 +254,11 @@ reModule r@(ModLoad path a) = do
   result <- importModule a path
   (var, sig) <- case result of
     Imported var sig -> pure (var, Just sig)
-    Errored -> pure (junkVar, Nothing)
+    Errored -> do
+      -- Mark us as having failed resolution, but don't print an error for this
+      -- module.
+      dictate mempty
+      pure (junkVar, Nothing)
     ImportCycle loop -> do
       dictates (wrapError r (ImportLoop loop))
       pure (junkVar, Nothing)

@@ -1,8 +1,8 @@
 {-# LANGUAGE OverloadedStrings, MultiParamTypeClasses, FlexibleContexts, NamedFieldPuns #-}
 module Test.Golden
-  ( goldenFile
-  , goldenDir
-  , goldenDirOn
+  ( goldenFileM, goldenFile
+  , goldenDirOnM, goldenDirOn
+  , goldenDirM, goldenDir
   ) where
 
 import Test.Tasty.Providers
@@ -38,7 +38,7 @@ data GoldenTest
     { input  :: FilePath
     , output :: String
     , directory  :: String
-    , generator  :: FilePath -> T.Text -> T.Text
+    , generator  :: FilePath -> T.Text -> IO T.Text
     }
   deriving (Typeable)
 
@@ -48,7 +48,7 @@ instance IsTest GoldenTest where
 
     let fullOutput = directory ++ output
 
-    actual <- generator input <$> T.readFile (directory ++ input)
+    actual <- generator input =<< T.readFile (directory ++ input)
     expected <- (Just <$> T.readFile fullOutput) `catch` catchIO
 
     case actual `seq` expected of
@@ -79,14 +79,22 @@ instance IsTest GoldenTest where
 
   testOptions = pure [ Option (Proxy :: Proxy Regenerate) ]
 
+goldenFileM :: (FilePath -> T.Text -> IO T.Text) -> FilePath -> String -> String -> TestTree
+goldenFileM fn dir name out = singleTest name (GoldenTest name out dir fn)
 
 goldenFile :: (FilePath -> T.Text -> T.Text) -> FilePath -> String -> String -> TestTree
-goldenFile fn dir name out = singleTest name (GoldenTest name out dir fn)
+goldenFile fn = goldenFileM (\f -> pure . fn f)
 
-goldenDirOn :: (FilePath -> T.Text -> T.Text) -> (String -> String) -> FilePath -> String -> IO [TestTree]
-goldenDirOn fn out dir ext = mapMaybe (\x -> goldenFile fn dir x . out <$> spanTail ext x) . sort <$> listDirectory dir where
+goldenDirOnM :: (FilePath -> T.Text -> IO T.Text) -> (String -> String) -> FilePath -> String -> IO [TestTree]
+goldenDirOnM fn out dir ext = mapMaybe (\x -> goldenFileM fn dir x . out <$> spanTail ext x) . sort <$> listDirectory dir where
   spanTail _ [] = Nothing
   spanTail s x@(y:ys) = if x == s then Just [] else (y:) <$> spanTail s ys
+
+goldenDirOn :: (FilePath -> T.Text -> T.Text) -> (String -> String) -> FilePath -> String -> IO [TestTree]
+goldenDirOn fn = goldenDirOnM (\f -> pure . fn f)
+
+goldenDirM :: (FilePath -> T.Text -> IO T.Text) -> FilePath -> String -> IO [TestTree]
+goldenDirM = flip goldenDirOnM (++".out")
 
 goldenDir :: (FilePath -> T.Text -> T.Text) -> FilePath -> String -> IO [TestTree]
 goldenDir = flip goldenDirOn (++".out")
