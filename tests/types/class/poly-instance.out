@@ -1,0 +1,6 @@
+poly-instance.ml[4:1 ..4:38]: error
+  │ 
+4 │ instance foo (trivial => 'a) begin end
+  │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  Illegal use of polymorphic type trivial => 'a
+    as argument to the type constructor Foo

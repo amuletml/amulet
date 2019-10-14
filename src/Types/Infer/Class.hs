@@ -133,6 +133,7 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
     () <- validContext "class" classAnn x
     checkAgainstKind (BecauseOf clss) x tyConstraint
 
+
   (fold -> scope, rows') <- local (names %~ focus (one name k <> mconcat assocty_tele)) . fmap unzip . for (getContext ctx) $
     \obligation -> do
       impty <-
@@ -315,6 +316,10 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
   checkFundeps ctx ann fundeps instHead
 
   (instHead, skolSub) <- skolFreeTy mempty (ByInstanceHead instHead ann) oldInstHead
+
+  _ <- flip transformM oldInstHead $ \case
+    tau@(TyPi Implicit{} _) -> confesses (ArisingFrom (ImpredicativeApp (TyCon classCon) tau) (BecauseOf inst))
+    t -> pure t
 
   scope <- view classes
   let overlapping = filter ((/= Superclass) . view implSort) . filter (applicable instHead scope) $
