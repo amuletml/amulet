@@ -60,6 +60,7 @@ silence = absolve se where
 
 -- | An equivalent of 'catchError' for 'MonadChronicle'.
 --
--- Note this does not catch non-fatal errors. Use 'retcon' for that.
+-- Note, this captures both fatal and non-fatal errors and treats them
+-- identically. This may or may not be what you want.
 catchChronicle :: MonadChronicle c m => m a -> (c -> m a) -> m a
 catchChronicle m f = memento (M.condemn m) >>= either f pure
