@@ -313,7 +313,7 @@ infer (OpenIn mod expr a) = do
   (mod', exEnv, (modImplicits, modTysym)) <- inferMod mod
   local (exEnv . (classes %~ (<>modImplicits)) . (tySyms %~ (<>modTysym))) $ do
     (expr', ty) <- infer expr
-    pure (OpenIn mod' expr' (a, ty), ty)
+    pure (ExprWrapper (TypeAsc ty) (OpenIn mod' (ExprWrapper (TypeAsc ty) expr' (a, ty)) (a, ty)) (a, ty), ty)
 
 infer ex = do
   x <- freshTV
