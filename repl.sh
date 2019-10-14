@@ -4,7 +4,7 @@ set -e
 
 WARN=(-Wextra -Wall -Wno-name-shadowing -Wno-implicit-prelude \
   -Wno-missing-import-lists -Wredundant-constraints \
-  -fno-show-valid-hole-fits)
+  -fno-show-valid-hole-fits -fhide-source-paths)
 
 out_dir=".stack-work/amulet"
 
@@ -45,4 +45,7 @@ echo "Loading ghci.."
 
 export AMC_LIBRARY_PATH=$PWD/lib/:$AMC_LIBRARY_PATH
 
-exec stack exec -- ghci -O0 -j2 +RTS -A128M -RTS -fhide-source-paths ${WARN[@]} -i./src/:$out_dir/src/:./compiler/ ./compiler/Main.hs $@
+exec stack exec -- \
+  ghci -O0 -j2 +RTS -A128M -RTS ${WARN[@]} \
+  -i./src/:$out_dir/src/:./compiler/:./tools/ \
+  ./compiler/Main.hs "$@"
