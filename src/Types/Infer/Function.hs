@@ -80,7 +80,7 @@ checkTypeFunTotality = terminates
 (~<) :: Type Typed -> Type Typed -> Bool
 a ~< TyVar b = b `Set.member` ftv a && a /= TyVar b
 -- ↑ E.g.: S 'a ~< 'a
-TyApps head xs ~< term = term `elem` (head:xs)
+TyApps head xs@(_:_) ~< term = term `elem` (head:xs)
 -- ↑ E.g.: 'f int ~< int
 _ ~< _ = False
 
