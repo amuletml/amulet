@@ -1,12 +1,10 @@
 {-# LANGUAGE FlexibleContexts, TypeFamilies, ScopedTypeVariables, UndecidableInstances #-}
-module Types.Wellformed (wellformed, arity, normType, skols, Skolem(..)) where
+module Types.Wellformed (wellformed, skols, Skolem(..)) where
 
 import Control.Monad.Infer
 
 import qualified Data.Set as Set
 import Data.Foldable
-import Data.Function
-import Data.List (unionBy)
 
 import Syntax
 
@@ -40,34 +38,6 @@ wellformed tp = case tp of
     wellformed b
   TyParens t -> wellformed t
   TyOperator l _ r -> wellformed l *> wellformed r
-
-arity :: Type p -> Int
-arity (TyArr _ t) = 1 + arity t
-arity (TyForall _ _ t) = arity t
-arity _ = 0
-
--- Make a type into its equivalent in prenex normal form.
-normType :: forall p. Ord (Var p) => Type p -> Type p
-normType = flatten . uncurry collect . runWriter . spread . applyCons where
-  collect t xs = case Set.toList xs of
-    [] -> t
-    xs -> foldr TyPi t xs
-
-  spread :: Type p -> Writer (Set.Set (TyBinder p)) (Type p)
-  spread (TyPi b@Invisible{} t) = spread t <* tell (Set.singleton b)
-  spread (TyArr a t) = TyArr a <$> spread t
-  spread x = pure x
-
-  flatten (TyRows r rs) =
-    case r of
-      TyRows r' rs' -> flatten (TyRows r' (unionBy ((==) `on` fst) rs rs'))
-      TyExactRows rs' -> flatten (TyExactRows (unionBy ((==) `on` fst) rs rs'))
-      _ -> TyRows r rs
-  flatten (TyForall v k t) = TyForall v (fmap flatten k) (flatten t)
-  flatten (TyArr a b) = TyArr (flatten a) (flatten b)
-  flatten (TyApp a b) = TyApp (flatten a) (flatten b)
-  flatten (TyTuple a b) = TyTuple (flatten a) (flatten b)
-  flatten t = t
 
 skols :: (Show (Var p), Ord (Var p)) => Type p -> Set.Set (Skolem p)
 skols TyCon{}  = mempty

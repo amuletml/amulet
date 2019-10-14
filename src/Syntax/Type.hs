@@ -260,23 +260,6 @@ appsView = reverse . go where
   go (TyOperator l o r) = [r, l, TyCon o]
   go t = [t]
 
-isReflexiveCo :: Coercion p -> Bool
-isReflexiveCo ReflCo{} = True
-isReflexiveCo (SymCo c) = isReflexiveCo c
-isReflexiveCo (AppCo a b) = isReflexiveCo a && isReflexiveCo b
-isReflexiveCo (ArrCo a b) = isReflexiveCo a && isReflexiveCo b
-isReflexiveCo (ProdCo a b) = isReflexiveCo a && isReflexiveCo b
-isReflexiveCo (ExactRowsCo rs) = all (isReflexiveCo . snd) rs
-isReflexiveCo (RowsCo c rs) = isReflexiveCo c && all (isReflexiveCo . snd) rs
-isReflexiveCo (ForallCo _ d c) = isReflexiveCo d && isReflexiveCo c
-isReflexiveCo AssumedCo{} = False
-isReflexiveCo ProjCo{} = False
-isReflexiveCo VarCo{} = False
-isReflexiveCo P1{} = False
-isReflexiveCo P2{} = False
-isReflexiveCo MvCo{} = False
-isReflexiveCo InstCo{} = False
-
 pattern TyApps :: Type p -> [Type p] -> Type p
 pattern TyApps head xs <- (appsView -> (head:xs)) where
   TyApps head xs = foldl TyApp head xs
