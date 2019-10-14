@@ -1,0 +1,16 @@
+tests/resolve/modules/loop_3.ml[1:12 ..1:31]: error
+  Modules form an import cycle
+
+  Arising from use of the module
+  │ 
+1 │ module M = import "./loop_1.ml"
+  │            ^^^^^^^^^^^^^^^^^^^^
+  • Note: "tests/resolve/modules/loop_1.ml" imported from "tests/resolve/modules/loop_3.ml"
+  │ 
+1 │ module M = import "./loop_3.ml"
+  │            ^^^^^^^^^^^^^^^^^^^^
+  • Note: "tests/resolve/modules/loop_3.ml" imported from "tests/resolve/modules/loop_2.ml"
+  │ 
+1 │ module M = import "./loop_2.ml"
+  │            ^^^^^^^^^^^^^^^^^^^^
+  • Note: "tests/resolve/modules/loop_2.ml" imported from "tests/resolve/modules/loop_1.ml"

@@ -184,7 +184,7 @@ resolveWithDeps root parsed sig = do
   (resolved, deps) <- flip runFileImport (LoadContext root Nothing)
                     $ resolveProgram sig parsed
   (,deps) <$> case resolved of
-    Left es -> pure (Nothing, mempty & (resolveErrors %~ (<>es)))
+    Left es -> pure (Nothing, mempty & (resolveErrors .~ es))
     Right resolved -> pure (Just resolved, mempty)
 
 -- | Infer a term with the current driver.
@@ -537,7 +537,7 @@ instance MonadNamey m => MonadNamey (FileImport m) where
 
 instance (MonadNamey m, MonadState Driver m, MonadIO m) => MonadImport (FileImport m) where
   importModule loc relPath
-    | not (T.pack "./" `T.isPrefixOf` relPath)
+    | not (T.pack "." `T.isPrefixOf` relPath)
     = FileIm \(LoadContext _ source) -> do
       absPath <- findFile' (searchPath (T.unpack relPath))
       case absPath of

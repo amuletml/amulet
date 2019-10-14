@@ -1,0 +1,7 @@
+fail_import_not_found.ml[1:6 ..1:36]: error
+  Cannot resolve "./modules/not_found.ml"
+
+  Arising from use of the module
+  │ 
+1 │ open import "./modules/not_found.ml"
+  │      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
