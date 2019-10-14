@@ -167,6 +167,8 @@ lowerAt (Access r k _) ty = do
 lowerAt (BinOp left op right a) t = lowerAt (S.App (S.App op left a) right a) t
 lowerAt Hole{} _ = error "holes can't be lowered"
 
+lowerAt (S.OpenIn _ x _) t = lowerAt x t
+
 lowerAt (Tuple [x] _) t = lowerAt x t
 lowerAt (Tuple (x:xs) _) (ExactRowsTy [(_, a), (_, b)]) = do
   x <- lowerAtAtom x a
