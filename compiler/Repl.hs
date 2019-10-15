@@ -53,7 +53,6 @@ import Parser
 
 import qualified Core.Lower as L
 import qualified Core.Core as C
-import Core.Optimise.Newtype
 import Core.Occurrence
 import Core.Core (Stmt)
 import Core.Simplify
@@ -405,7 +404,6 @@ parseCore parser name input = do
       case lower of
         Nothing -> pure Nothing
         Just (lower, lState, typed, env, ResolveResult _ _ sig) -> do
-          lower <- wrapNamey $ killNewtypePass lower
           let lastTerms = case lower of
                 [] -> []
                 _:_ -> case last lower of
@@ -476,7 +474,6 @@ loadFile file = do
                         , inferScope = inferScope s <> env
                         , lowerState = lowerState s <> lEnv })
 
-        core <- wrapNamey $ killNewtypePass core
         (luaExpr, luaSyntax) <- emitCore core
 
         luaState <- gets luaState

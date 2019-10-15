@@ -3,7 +3,7 @@ do
   local function _dollardShowdd(tmp)
     return {
       show = function(tmp0) return "()" end,
-      ["show'"] = function(ez) return _dollardShowdd(nil).show(ez) end
+      ["show'"] = function(fa) return _dollardShowdd(nil).show(fa) end
     }
   end
   use(_dollardShowdd(nil).show)

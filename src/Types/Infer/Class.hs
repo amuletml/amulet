@@ -43,6 +43,7 @@ import Syntax
 import {-# SOURCE #-} Types.Infer
 import Types.Infer.Function
 import Types.Infer.Builtin
+import Types.Infer.Let
 import Types.Kinds
 import Types.Unify
 
@@ -442,22 +443,23 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
         (e, cs) <- listen $ do
           fixHeadVars skolSub
           check e sig
-        (sub, wrap, deferred) <- condemn $ solve cs =<< getSolveInfo
 
-        deferred <- pure (fmap (apply sub) deferred)
-        (compose sub -> sub, wrap', cons) <- solve (Seq.fromList deferred) =<< getSolveInfo
+        (sub, wrap, cons) <- condemn $ solveFixpoint (BecauseOf bind) cs =<< getSolveInfo
 
         unless (null cons) $ do
           let (c@(ConImplicit reason _ _ _):_) = reverse cons
           confesses (addBlame reason (UnsatClassCon reason c (InstanceMethod ctx)))
 
-        name <- genName
-        let shove cs (ExprWrapper w e a) = ExprWrapper w (shove cs e) a
-            shove cs x = addLet wrap' name cs x
-            fakeExp =
+        let fakeExp =
               App (appArg instSub bindGroupTy (VarRef v' (an, bindGroupTy)))
                   (VarRef fullCtx (an, ctx))
                   (an, sig)
+
+        let needsLet = wrap `Map.restrictKeys` freeIn e
+            addOne (v, ExprApp e) ex =
+              Let [ Binding v e False (annotation ex, getType e) ] ex (annotation ex, getType ex)
+            addOne _ ex = ex
+            addFreeDicts ex = foldr addOne ex (Map.toList needsLet)
 
         pure ( (nameName v, v')
              , (nameName v, fakeExp)
@@ -465,7 +467,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
                 (addArg skolSub bindGroupTy
                   (Fun (EvParam instancePattern)
                     (Ascription
-                      (solveEx mempty sub (wrap <> wrap') (shove deferred e))
+                      (solveEx mempty sub wrap (addFreeDicts e))
                         sig (an, sig))
                   (an, TyArr ctx sig)))
                True
@@ -489,10 +491,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
         an = annotation expr
 
     (e, cs) <- listen $ check expr ty
-    (sub, wrap, deferred) <- condemn $ solve cs =<< getSolveInfo
-
-    deferred <- pure (fmap (apply sub) deferred)
-    (compose sub -> sub, wrap', cons) <- solve (Seq.fromList deferred) =<< getSolveInfo
+    (sub, wrap, cons) <- condemn $ solveFixpoint (BecauseOf inst) cs =<< getSolveInfo
 
     unless (null cons) $ do
       let (c@(ConImplicit reason _ _ _):_) = reverse cons
@@ -500,10 +499,10 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
 
     capture <- genName
     let shove cs (ExprWrapper w e a) = ExprWrapper w (shove cs e) a
-        shove cs x = addLet wrap' capture cs x
+        shove cs x = addLet wrap capture cs x
 
     var <- genNameFrom name
-    body <- expandEta ty $ solveEx mempty sub (wrap <> wrap') (shove deferred e)
+    body <- expandEta ty $ solveEx mempty sub wrap (shove cons e)
     let bind = Binding var (addArg skolSub bindGroupTy fun) False (an, bindGroupTy)
         fun = Fun (EvParam instancePattern)
                 body

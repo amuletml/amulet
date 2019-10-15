@@ -79,10 +79,13 @@ instance Pretty Value where
 
   pretty (Constructor "lazy" [x, _]) = stypeSkol (string "lazy") <+> pretty x
 
+  pretty (Constructor x []) = stypeCon (text x)
+
   pretty (Constructor x ts) = colour (text x) <+> hsep (map parensIf ts) where
     parensIf x@Constructor{} = parens (pretty x)
     parensIf x = pretty x
     colour = if isLower (T.head x) then stypeSkol else stypeCon
+
   pretty (Table m) | isTuple m = parens (hsep (punctuate comma (map pretty vs))) where
     vs = getValues m
     getValues m = case m Map.! T.pack "_2" of
