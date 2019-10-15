@@ -41,7 +41,7 @@ data ParseError
   | UnexpectedToken Token [String]
   -- | An expression, where a statement was expected
   | MalformedStatement
-  deriving (Show)
+  deriving (Eq, Show)
 
 instance Pretty ParseError where
   pretty (Failure _ s) = string s

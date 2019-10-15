@@ -145,6 +145,8 @@ test-suite tests
 
                      , Test.Parser.Lexer
                      , Test.Parser.Parser
+
+                     , Test.Lua.Gen
                      , Test.Lua.Parser
   default-language:    Haskell2010
 

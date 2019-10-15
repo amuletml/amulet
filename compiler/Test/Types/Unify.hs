@@ -16,9 +16,9 @@ import Syntax
 
 prop_unifyMakesGoodCoercion :: Property
 prop_unifyMakesGoodCoercion = property $ do
-  aty <- forAllWith (displayS . displayType) genType
+  aty <- forAllWith (show . displayType) genType
   case unify aty aty of
-    Left e -> (footnote . displayS . pretty . toList $ e) *> failure
+    Left e -> (footnote . show . pretty . toList $ e) *> failure
     Right x | (ca, cb) <- provenCoercion x -> do
       footnote . displayS $
           keyword "Given type:" <+> displayType aty

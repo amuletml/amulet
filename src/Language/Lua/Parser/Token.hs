@@ -140,7 +140,8 @@ instance Show TokenClass where
   show TcEOF = "<eof>"
 
 -- | A token, with its class, start, and end position.
-data Token = Token !TokenClass !SourcePos !SourcePos deriving Show
+data Token = Token !TokenClass !SourcePos !SourcePos
+  deriving (Eq, Show)
 
 instance Spanned Token where
   annotation (Token _ s e) = mkSpanUnsafe s e

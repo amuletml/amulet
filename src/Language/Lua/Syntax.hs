@@ -103,20 +103,47 @@ assocOf ".." = ARight
 assocOf "^"  = ARight
 assocOf _    = ALeft
 
--- | Emit an indented block of objects, with a header and footer
+contained :: Doc -> [Doc] -> Doc -> Doc
+contained header body footer = header <> nest 2 (line <> vsep body) <> line <> footer
+
+-- | Emit an indented block of statements, with a header and footer
 --
 -- We have this weird asymmetry of 'line' as we need to indent the first line
 -- line of the body but don't want to indent the footer.
-block :: Doc -> [Doc] -> Doc -> Doc
-block header body footer = header <> nest 2 (line <> vsep body) <> line <> footer
+block :: Doc -> [LuaStmt] -> Doc -> Doc
+block header body footer = header <> nest 2 (line <> stmts body) <> line <> footer
 
--- | A 'block', which may potentially be simplified to a single line.
-miniBlock :: Doc -> Doc -> Doc -> Doc
-miniBlock header body footer = header <> nest 2 (softline <> body) <> softline <> footer
+stmts :: [LuaStmt] -> Doc
+stmts [] = mempty
+stmts [x] = pretty x
+stmts (a:b:cs)
+  | trailingExpr a && leadingS b = pretty a <> ";" <#> stmts (b:cs)
+  | otherwise = pretty a <#> stmts (b:cs) where
+  trailingExpr LuaAssign{} = True
+  trailingExpr LuaRepeat{} = True
+  trailingExpr LuaReturn{} = True
+  trailingExpr LuaLocal{} = True
+  trailingExpr LuaCallS{} = True
+  trailingExpr _ = False
 
+  leadingS (LuaCallS c) = leadingC c
+  leadingS (LuaAssign (v:_) _) = leadingVar v
+  leadingS _ = False
+
+  leadingC (LuaCall e _) = leadingFn e
+  leadingC (LuaInvoke e _ _) = leadingFn e
+
+  leadingFn (LuaCallE c) = leadingC c
+  leadingFn (LuaRef LuaName{}) = False
+  leadingFn _ = True
+
+  leadingVar LuaName{} = False
+  leadingVar (LuaIndex (LuaRef v) _) = leadingVar v
+  leadingVar (LuaIndex _ _) = True
+  leadingVar LuaQuoteV{} = False
 
 -- | A variant of 'block' but with an empty footer
-headedBlock :: Doc -> [Doc] -> Doc
+headedBlock :: Doc -> [LuaStmt] -> Doc
 headedBlock header body = block header body empty
 
 -- | Build a series of function arguments
@@ -126,42 +153,42 @@ args = parens . hsep . punctuate comma
 instance Pretty LuaStmt where
   pretty (LuaDo xs) =
     block (keyword "do")
-          (map pretty xs)
+          xs
           (keyword "end")
   pretty (LuaAssign ns xs) = hsep (punctuate comma (map pretty ns)) <+> equals <+> hsep (punctuate comma (map pretty xs))
   pretty (LuaWhile c t) =
     block (keyword "while" <+> pretty c <+> keyword "do")
-          (map pretty t)
+          t
           (keyword "end")
   pretty (LuaRepeat t c) =
     block (keyword "repeat")
-          (map pretty t)
+          t
           (keyword "until" <+> pretty c)
   pretty (LuaIfElse [(c,[t])]) =
-    miniBlock (keyword "if" <+> pretty c <+> keyword "then") (pretty t) (keyword "end")
+    group $ block (keyword "if" <+> pretty c <+> keyword "then") [t] (keyword "end")
   pretty (LuaIfElse ((c,t):bs)) =
     let pprintElse [] = keyword "end"
         pprintElse [(LuaTrue, b)] =
-             headedBlock (keyword "else") (map pretty b)
+             headedBlock (keyword "else") b
           <> keyword "end"
         pprintElse ((c, b):xs) =
              headedBlock (keyword "elseif" <+> pretty c <+> keyword "then")
-                         (map pretty b)
+                         b
           <> pprintElse xs
      in headedBlock (keyword "if" <+> pretty c <+> keyword "then")
-                    (map pretty t)
+                    t
      <> pprintElse bs
   pretty (LuaIfElse []) = error "impossible"
   pretty (LuaFornum v s e i b) =
     block ( keyword "for" <+> pretty v <+> equals
         <+> pretty s <+> comma <+> pretty e <+> comma <+> pretty i <+> keyword "do" )
-          (map pretty b)
+          b
           (keyword "end")
   pretty (LuaFor vs es b) =
     block ( keyword "for" <+> hsep (punctuate comma (map pretty vs))
         <+> keyword "in" <+> hsep (punctuate comma (map pretty es))
         <+> keyword "do" )
-         (map pretty b)
+         b
          (keyword "end")
   pretty (LuaLocalFun n a b) =
     funcBlock (keyword "local function" <+> pretty n <> args (map pretty a))
@@ -172,8 +199,11 @@ instance Pretty LuaStmt where
                         <+> equals <+> hsep (punctuate comma (map pretty xs))
   pretty (LuaQuoteS x) = "@" <> text x
   pretty LuaBreak = keyword "break"
-  pretty (LuaReturn v) = keyword "return" <+> pretty v
+  pretty (LuaReturn []) = keyword "return"
+  pretty (LuaReturn vs) = keyword "return" <+> hsep (punctuate comma (map pretty vs))
   pretty (LuaCallS x) = pretty x
+
+  prettyList = stmts
 
 instance Pretty LuaVar where
   pretty (LuaName x) = text x
@@ -206,16 +236,16 @@ instance Pretty LuaExpr where
       op "and" = skeyword "and"
       op "or" = skeyword "or"
       op o = text o
-  pretty e@(LuaUnOp o x) = op o <> prettyWith (precedenceOf e) x where
-    op "not" = skeyword "not "
-    op o = text o
+  pretty e@(LuaUnOp "not" x) = skeyword "not " <> prettyWith (precedenceOf e) x
+  pretty (LuaUnOp "-" x@LuaUnOp{}) = text "-" <> parens (pretty x)
+  pretty e@(LuaUnOp o x) = text o <> prettyWith (precedenceOf e) x
   pretty (LuaRef x) = pretty x
   pretty (LuaFunction a b) =
     funcBlock (keyword "function" <> args (map pretty a))
               b
               (keyword "end")
   pretty (LuaTable []) = lbrace <> rbrace
-  pretty (LuaTable ps) = group (block lbrace (punctuate comma . entries 1 $ ps) rbrace) where
+  pretty (LuaTable ps) = group (contained lbrace (punctuate comma . entries 1 $ ps) rbrace) where
     entries _ [] = []
     entries n ((LuaString k, v):es) | validKey k = text k <+> value v : entries n es
     entries n ((LuaInteger k, v):es) | k == n = pretty v : entries (n + 1) es
@@ -239,8 +269,8 @@ prettyWith desired expr =
 -- | An alternative to 'block' which may group simple functions onto one line
 funcBlock :: Doc -> [LuaStmt] -> Doc -> Doc
 funcBlock header [] = group . block header []
-funcBlock header [r@LuaReturn{}] = group . block header [pretty r]
-funcBlock header body = block header (map pretty body)
+funcBlock header r@[LuaReturn{}] = group . block header r
+funcBlock header body = block header body
 
 validKey :: Text -> Bool
 validKey t = case T.uncons t of
