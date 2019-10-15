@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleContexts, TupleSections, ScopedTypeVariables,
    ViewPatterns, LambdaCase, TypeFamilies, CPP #-}
-module Types.Infer.Let (inferLetTy, fakeLetTys, rename, skolCheck, PatternStrat(..), localGenStrat) where
+module Types.Infer.Let (inferLetTy, fakeLetTys, rename, skolCheck, PatternStrat(..), localGenStrat, solveFixpoint) where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
@@ -30,13 +30,13 @@ import Syntax
 import Types.Infer.Pattern
 import Types.Infer.Builtin
 import Types.Infer.Outline
-import Types.Infer.Class
 import Types.Wellformed
 import Types.Kinds
 import Types.Unify
 
 import Text.Pretty.Semantic
 
+import {-# SOURCE #-} Types.Infer.Class
 import {-# SOURCE #-} Types.Infer
 
 solveFixpoint :: (MonadNamey m, MonadChronicles TypeError m)
