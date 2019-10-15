@@ -9,6 +9,6 @@ do
     return go(tmp)
   end
   io_write("[")
-  local main = go(1)
+  local main = go(1);
   (nil)(main)
 end

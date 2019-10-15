@@ -6,6 +6,6 @@ do
       _1 = function(tmp) return 2 * tmp end,
       _2 = { _1 = function(r) return r / 2 end, _2 = function(tbl) return tbl.foo end }
     }
-  }
+  };
   (nil)(main)
 end
