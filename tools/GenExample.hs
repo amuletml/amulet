@@ -53,7 +53,7 @@ main = do
 
 genTable :: [Token] -> [(T.Text, [Token])]
 genTable ((Token (TcComment comment) _ _):xs) =
-  let (ours, next) = span (not . isComment) xs
+  let (ours, next) = break isComment xs
    in (comment, dropWhile isTrivial ours):genTable next
 genTable (_:_) = error "Error in example input"
 genTable [] = []
