@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, TupleSections, LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-| Support for Cram[1] tests within Tasty.
 
   Cram tests allow writing a series of commands, along with their
@@ -83,7 +83,7 @@ parseTest = go . zip [1..] . L.lines where
         Right out' -> (Command (L.toStrict . L.drop 4 $ l) out':) <$> go ls'
     | L.isPrefixOf "  " l = Left ("Unexpected command output on line " ++ show n)
     | otherwise =
-      let (comments, ls') = span (not . L.isPrefixOf "  " . snd) ls
+      let (comments, ls') = break (L.isPrefixOf "  " . snd) ls
       in (Comment (map (L.toStrict . snd) ((n, l):comments)):) <$> go ls'
 
   goOut :: Int -> T.Text -> Either String OutputLine
