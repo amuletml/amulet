@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings, TupleSections, LambdaCase #-}
-{-| Support for CamM[1] tests within Tasty.
+{-| Support for Cram[1] tests within Tasty.
 
   Cram tests allow writing a series of commands, along with their
   expected outputs. They are effectively a golden test on an executable's
