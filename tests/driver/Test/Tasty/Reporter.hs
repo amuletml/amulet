@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings, FlexibleContexts #-}
-module Test.Reporter (boringReporter) where
+module Test.Tasty.Reporter (boringReporter) where
 
 import Control.Concurrent.STM
 import Control.Monad.Reader
@@ -13,9 +13,8 @@ import Data.Monoid
 import Data.Proxy
 
 import Test.Tasty.Ingredients.ConsoleReporter (UseColor(..))
-import Test.Tasty.Ingredients
-import Test.Tasty.Providers
 import Test.Tasty.Runners hiding (Ap(..))
+import Test.Tasty.Providers
 import Test.Tasty.Options
 import Test.Options
 

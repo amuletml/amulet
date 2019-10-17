@@ -1,6 +1,5 @@
 module Test.Parser.Parser (tests) where
 
-import Test.Tasty
 import Test.Util
 
 import qualified Data.Text.Lazy as L

@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings, FlexibleContexts, ScopedTypeVariables, ViewPatterns, TypeFamilies, MultiWayIf, TemplateHaskell #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
-module Repl
+module Amc.Repl
   ( repl
   , replFrom
   , runRemoteReplCommand
@@ -74,9 +74,9 @@ import qualified Network.Socket as Net
 
 import Control.Concurrent
 
-import Repl.Display
+import Amc.Repl.Display
+import Amc.Debug
 import Version
-import Debug
 
 -- Aghh MonadFail!
 instance MonadFail L.Lua where

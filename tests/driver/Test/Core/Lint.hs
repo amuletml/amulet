@@ -31,8 +31,8 @@ import Parser.Wrapper (runParser)
 import Parser (parseTops)
 import Parser.Error
 
-import Test.Tasty
 import Test.Tasty.HUnit
+import Test.Tasty
 
 import System.Directory
 

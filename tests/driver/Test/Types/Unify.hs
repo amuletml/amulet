@@ -5,6 +5,7 @@ import Text.Pretty.Semantic
 
 import Test.Syntax.Gen
 import Test.Types.Util
+import Test.Util
 
 import Data.Function
 import Data.Foldable
@@ -85,5 +86,5 @@ provenCoercion (ForallCo v k t) =
    in (TyForall v (Just ka) ta, TyForall v (Just kb) tb)
 provenCoercion (AssumedCo a b) = (a, b)
 
-tests :: Group
-tests = $$(discover)
+tests :: TestTree
+tests = hedgehog $ $$(discover)
