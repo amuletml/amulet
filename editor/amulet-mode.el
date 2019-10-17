@@ -145,7 +145,7 @@
                :name "amulet-mode--process"
                :connection-type 'pipe
                ;; TODO: Extract from flycheck
-               :command '("amc")))
+               :command '("amc" "repl")))
         (set-process-sentinel amulet-mode--process #'amulet-mode--process-sentinel))
       (error
        (when amulet-mode--process (delete-process amulet-mode--process))
@@ -176,7 +176,7 @@
 
    See `https://amulet.squiddev.cc/'."
   :command ("amc"
-            "--client"
+            "connect"
             (eval (concat ":l " (flycheck-save-buffer-to-temp #'flycheck-temp-file-system))))
   :error-patterns
     ;; These patterns are slightly odd: we just try to match until we find a
@@ -194,7 +194,15 @@
                       (or
                         (: "\n" line-end)
                         (: "\n" (not (any "/")) (zero-or-more not-newline)))))
+            line-end)
+     (info line-start (file-name) "[" line ":" column " .." (one-or-more digit) ":" (one-or-more digit) "]: note\n"
+            (message (one-or-more not-newline)
+                     (zero-or-more
+                      (or
+                        (: "\n" line-end)
+                        (: "\n" (not (any "/")) (zero-or-more not-newline)))))
             line-end))
+
 
   :error-filter
   (lambda (errors)

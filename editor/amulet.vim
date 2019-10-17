@@ -41,7 +41,7 @@ function! AmuletStart(...)
     if exists("b:amulet_pid")
       return 0
     end
-    let b:amulet_pid = jobstart(["amc", "--port", a:0 == 1 ? a:1 : 6000])
+    let b:amulet_pid = jobstart(["amc", "repl", "--port", a:0 == 1 ? a:1 : 6000])
     let b:amulet_port = a:0 == 1 ? a:1 : 6000
   else
     echo "Having vim manage the compiler is only supported on nvim"
@@ -66,7 +66,7 @@ function! s:CallAmc(...)
     let cmd = cmd . " --port " . b:amulet_port
   end
 
-  let res = system('amc --client ' . cmd)
+  let res = system('amc connect ' . cmd)
   if res =~ "Failed to connect to server on port"
     if has('nvim') && b:autostart_amc == 1
       call AmuletStart()
