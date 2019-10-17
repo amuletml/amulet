@@ -217,3 +217,6 @@ end
 external val print : string -> unit = "print"
 
 external val lua_version : string = "_VERSION"
+
+let negate x  = 0 - x
+let negatef x = 0.0 -. x
