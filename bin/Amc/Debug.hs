@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings, ScopedTypeVariables, FlexibleContexts #-}
-module Debug
+module Amc.Debug
   ( DebugMode(..)
   , dump
   ) where

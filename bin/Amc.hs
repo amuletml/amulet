@@ -36,8 +36,8 @@ import Text.Pretty.Semantic hiding (empty)
 import Frontend.Driver
 import Frontend.Errors
 
-import qualified Debug as D
-import Repl
+import qualified Amc.Debug as D
+import Amc.Repl
 
 import Version
 

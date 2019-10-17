@@ -16,8 +16,8 @@ flag amc-prove-server
   manual:      True
 
 executable amc
-  main-is:             Main.hs
-  hs-source-dirs:      compiler
+  main-is:             Amc.hs
+  hs-source-dirs:      bin
   build-depends:       mtl >= 2.2 && < 2.3
                      , text >= 1.2 && < 1.3
                      , base >= 4.9 && < 4.14
@@ -36,10 +36,10 @@ executable amc
                      , template-haskell >= 2.13 && < 2.16
                      , pretty-show
 
-  other-modules:       Repl
-                     , Debug
+  other-modules:       Amc.Debug
                      , Version
-                     , Repl.Display
+                     , Amc.Repl
+                     , Amc.Repl.Display
   default-language:    Haskell2010
 
   ghc-options: -Wextra -Wall -Wno-name-shadowing -Wno-implicit-prelude
@@ -51,7 +51,7 @@ executable amc
 
 executable amc-prove
   main-is:             Prove.hs
-  hs-source-dirs:      compiler, tools
+  hs-source-dirs:      bin
   build-depends:       amuletml
                      , base >= 4.9 && < 4.14
                      , text >= 1.2 && < 1.3
@@ -78,7 +78,7 @@ executable amc-prove
 
 executable amc-example
   main-is:             GenExample.hs
-  hs-source-dirs:      compiler, tools
+  hs-source-dirs:      bin
   build-depends:       amuletml
                      , mtl >= 2.2 && < 2.3
                      , base >= 4.9 && < 4.14
@@ -105,8 +105,8 @@ executable amc-example
 
 test-suite tests
   type:                exitcode-stdio-1.0
-  main-is:             Test.hs
-  hs-source-dirs:      compiler
+  main-is:             Main.hs
+  hs-source-dirs:      tests/driver
   build-depends:       mtl >= 2.2 && < 2.3
                      , stm >= 2.5 && < 2.6
                      , text >= 1.2 && < 1.3
@@ -129,14 +129,16 @@ test-suite tests
                      , optparse-applicative >= 0.14 && < 0.16
                      , regex-base >= 0.94 && < 1.0
                      , regex-pcre-builtin >= 0.95.1.1.8.43 && < 1.0
-  other-modules:       Test.Cram
-                     , Test.Golden
-                     , Test.Reporter
-                     , Test.Options
-                     , Test.Rerun
+  other-modules:       Test.Options
                      , Test.Util
 
                      , Test.Frontend.Amc
+
+                     , Test.Tasty.Cram
+                     , Test.Tasty.Golden
+                     , Test.Tasty.Reporter
+                     , Test.Tasty.Rerun
+
 
                      , Test.Core.Lint
                      , Test.Core.Backend
