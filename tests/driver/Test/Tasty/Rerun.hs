@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings, FlexibleContexts, TupleSections #-}
-module Test.Rerun (rerunning) where
+module Test.Tasty.Rerun (rerunning) where
 
 import Control.Concurrent.STM
 import Control.Monad.Reader
@@ -16,9 +16,9 @@ import System.IO.Error
 import System.FilePath
 import System.Directory
 
-import Test.Tasty.Options
 import Test.Tasty.Runners hiding (Ap(..))
 import Test.Tasty.Providers
+import Test.Tasty.Options
 import Test.Options
 
 import Text.Read

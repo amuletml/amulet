@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings, MultiParamTypeClasses, FlexibleContexts, NamedFieldPuns #-}
-module Test.Golden
+module Test.Tasty.Golden
   ( Regenerate(..)
   , goldenFileM, goldenFile
   , goldenDirOnM, goldenDirOn

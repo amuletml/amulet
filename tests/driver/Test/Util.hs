@@ -3,7 +3,7 @@ module Test.Util
   ( displayPlain
   , displayPlainVerbose
   , hedgehog
-  , module Test.Golden
+  , module M
 
   , requireJust, requireRight, requireThat, requireThese
 
@@ -13,9 +13,10 @@ module Test.Util
 import Hedgehog
 import Hedgehog.Internal.Property (unGroupName, unPropertyName)
 
+import Test.Tasty.Golden as M
+import Test.Tasty.Cram as M
 import Test.Tasty.Hedgehog
-import Test.Golden
-import Test.Tasty
+import Test.Tasty as M
 
 import qualified Data.Text as T
 import Data.These

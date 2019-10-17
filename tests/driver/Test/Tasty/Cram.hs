@@ -6,7 +6,7 @@
   output, but gathered into a single file.
 
   [1]: https://bitheap.org/cram/ -}
-module Test.Cram (cram, cramDir) where
+module Test.Tasty.Cram (cram, cramDir) where
 
 import Control.Monad
 
@@ -24,7 +24,7 @@ import Text.Regex.Base.RegexLike
 import Text.Regex.PCRE.Text
 import Text.Printf (printf)
 
-import Test.Golden (Regenerate(..))
+import Test.Tasty.Golden (Regenerate(..))
 import Test.Tasty.Providers
 import Test.Tasty.Options
 

@@ -1,6 +1,5 @@
 module Test.Core.Backend (tests) where
 
-import Test.Tasty
 import Test.Util
 
 import Control.Monad.State

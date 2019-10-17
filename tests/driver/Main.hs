@@ -3,15 +3,12 @@ module Main where
 import Test.Tasty.Ingredients.Basic
 import Test.Tasty.Runners.AntXML
 import Test.Tasty.Ingredients
+import Test.Tasty.Reporter
+import Test.Tasty.Rerun
 import Test.Tasty
-
-import Test.Reporter
-import Test.Rerun
-import Test.Util
 
 import qualified Test.Types.Unify as Solver
 import qualified Test.Core.Lint as Lint
-
 import qualified Test.Parser.Lexer as Lexer
 import qualified Test.Parser.Parser as Parser
 import qualified Test.Syntax.Resolve as Resolve
@@ -23,7 +20,7 @@ import qualified Test.Frontend.Amc as Amc
 
 tests :: IO TestTree
 tests = testGroup "Tests" <$> sequence
-  [ pure (hedgehog Solver.tests)
+  [ pure Solver.tests
 
   , Amc.tests
   , Lint.tests

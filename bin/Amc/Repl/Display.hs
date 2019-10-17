@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Repl.Display where
+module Amc.Repl.Display where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Text.Encoding as T
