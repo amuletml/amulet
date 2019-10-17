@@ -20,6 +20,6 @@ install:
 - stack --no-terminal --install-ghc test --only-dependencies
 
 script:
-- stack --no-terminal build --fast --ghc-options "-Werror -fmax-pmcheck-iterations=5000000"
+- stack --no-terminal build --fast --test --no-run-tests --ghc-options "-Werror -fmax-pmcheck-iterations=5000000"
 - env AMC_LIBRARY_PATH=$PWD/lib/ stack --no-terminal test --fast --ghc-options "-Werror -fmax-pmcheck-iterations=5000000" --test-arguments "--xml junit.xml --display t --hedgehog-tests 10000"
 - stack --no-terminal exec --package=hlint -- hlint --git
