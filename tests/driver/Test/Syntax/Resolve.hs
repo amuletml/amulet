@@ -1,7 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 module Test.Syntax.Resolve (tests) where
 
-import Test.Tasty
 import Test.Util
 
 import Control.Monad.Infer

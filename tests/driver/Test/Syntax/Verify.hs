@@ -1,6 +1,5 @@
 module Test.Syntax.Verify (tests) where
 
-import Test.Tasty
 import Test.Util
 
 import Control.Monad.Infer

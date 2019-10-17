@@ -1,6 +1,5 @@
 module Test.Types.Check (tests) where
 
-import Test.Tasty
 import Test.Util
 
 import Control.Monad.Infer (names, firstName)
