@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings, MultiParamTypeClasses, FlexibleContexts, NamedFieldPuns #-}
 module Test.Golden
-  ( goldenFileM, goldenFile
+  ( Regenerate(..)
+  , goldenFileM, goldenFile
   , goldenDirOnM, goldenDirOn
   , goldenDirM, goldenDir
   ) where

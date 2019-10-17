@@ -19,11 +19,13 @@ import qualified Test.Syntax.Verify as Verify
 import qualified Test.Types.Check as TypesC
 import qualified Test.Core.Backend as Backend
 import qualified Test.Lua.Parser as LParser
+import qualified Test.Frontend.Amc as Amc
 
 tests :: IO TestTree
 tests = testGroup "Tests" <$> sequence
   [ pure (hedgehog Solver.tests)
 
+  , Amc.tests
   , Lint.tests
   , Lexer.tests
   , Parser.tests

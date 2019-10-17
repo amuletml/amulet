@@ -26,6 +26,13 @@ packages:
   original:
     hackage: ghc-lib-parser-8.8.0.20190723@sha256:34ffe7ca5e6ba21eb6bf2c118046e8891a9a79007eb3db48052124d3a7186bfd,8377
 - completed:
+    hackage: regex-pcre-builtin-0.95.1.1.8.43@sha256:2d671af361adf1776fde182a687bb6da022b1e5e3b0a064ce264289de63564a5,3088
+    pantry-tree:
+      size: 2587
+      sha256: 9224e37b215488b81a0fab0e8caa991010a4e053ba0e001de0b02c46a420622c
+  original:
+    hackage: regex-pcre-builtin-0.95.1.1.8.43@sha256:2d671af361adf1776fde182a687bb6da022b1e5e3b0a064ce264289de63564a5,3088
+- completed:
     hackage: http-kit-0.5.1@sha256:2c79d675df6836f3f07861475692ce757c47adcd2257af87246cf6b1e0efae1b,1989
     pantry-tree:
       size: 877
