@@ -47,5 +47,5 @@ export AMC_LIBRARY_PATH=$PWD/lib/:$AMC_LIBRARY_PATH
 
 exec stack exec -- \
   ghci -O0 -j2 +RTS -A128M -RTS ${WARN[@]} \
-  -i./src/:$out_dir/src/:./compiler/:./tools/ \
-  ./compiler/Main.hs "$@"
+  -i./src/:$out_dir/src/:./bin/ \
+  ./bin/Amc.hs "$@"

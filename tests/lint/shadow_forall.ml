@@ -8,4 +8,4 @@
 
 let foo : forall 'a. 'a -> forall 'b. 'b -> 'a = fun x y -> x
 
-let main = foo foo foo
+let main : int -> string -> int = foo foo foo

@@ -124,6 +124,8 @@ data TypeError where
   DeadBranch :: TypeError -> TypeError
 
   AmbiguousType :: (Ord (Var p), Pretty (Var p)) => Var p -> Type p -> Set.Set (Var p) -> TypeError
+  ValueRestriction :: SomeReason -> Type Typed -> Set.Set (Var Typed) -> TypeError
+
   AmbiguousMethodTy :: (Ord (Var p), Pretty (Var p)) => Var p -> Type p -> Set.Set (Var p) -> TypeError
 
   UnsatClassCon :: SomeReason -> Constraint Typed -> WhyUnsat -> TypeError
@@ -512,6 +514,20 @@ instance Pretty TypeError where
     vsep [ "Invalid type in context for" <+> string what <+> "declaration:"
          , indent 4 (displayType ty)
          ]
+
+  pretty (ValueRestriction _ tau free) =
+    vsep [ "This top-level binding can not have a polymorphic type because of the value restriction"
+         , note <+> "It has type" <+> displayType tau
+         , note <+> "But the variable" <+> vars
+         , bullet "Solution: give it a monomorphic type signature. For example:"
+         , indent 4 (displayType (apply (Map.fromList (zip var_list (repeat tyUnit))) tau))
+         ]
+    where
+      var_list = Set.toList free
+      vars =
+        case var_list of
+          [x] -> pretty x <+> "needs to be determined"
+          xs -> hsep (map pretty xs) <+> "need to be determined"
 
   pretty (CanNotVta ty arg) =
     vsep [ "Can not apply expression of type" <+> displayType ty
