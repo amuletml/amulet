@@ -5,6 +5,7 @@ module Data.VarMap
   , lookup, member, findWithDefault
   , insert, delete
   , map, mapWithKey, singleton, union, unionSemigroup
+  , withoutKeys
   , alter
   , difference, intersection
   , foldrWithKey, foldr
@@ -14,6 +15,7 @@ module Data.VarMap
 import Control.Lens (At(..), Ixed(..), Index, IxValue)
 import qualified Data.HashMap.Strict as Map
 import qualified Prelude as P
+import Data.Foldable (foldl')
 import Data.Coerce
 import Prelude hiding (lookup, map, null, foldr)
 
@@ -69,7 +71,7 @@ alter f k (Map m) = Map (Map.alter f k m)
 mapWithKey :: (CoVar -> a -> b) -> Map a -> Map b
 mapWithKey f (Map a) = Map (Map.mapWithKey f a)
 
-singleton :: CoVar -> a ->  Map a
+singleton :: CoVar -> a -> Map a
 singleton x v = coerce (Map.singleton x v)
 
 unionSemigroup :: Semigroup a => Map a -> Map a -> Map a
@@ -77,6 +79,9 @@ unionSemigroup (Map l) (Map r) = Map (Map.unionWith (<>) l r)
 
 foldrWithKey :: (CoVar -> a -> b -> b) -> b -> Map a -> b
 foldrWithKey f b (Map m) = Map.foldrWithKey f b m
+
+withoutKeys :: Map a -> [CoVar] -> Map a
+withoutKeys (Map a) keys = Map (foldl' (flip Map.delete) a keys)
 
 foldr :: (a -> b -> b) -> b -> Map a -> b
 foldr f b (Map m) = Map.foldr f b m

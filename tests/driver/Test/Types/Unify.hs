@@ -49,6 +49,10 @@ provenCoercion P2{} = undefined
 provenCoercion InstCo{} = undefined
 provenCoercion (SymCo c)
   | (a, b) <- provenCoercion c = (b, a)
+provenCoercion (TransCo x y)
+  | (a, _) <- provenCoercion x
+  , (_, c) <- provenCoercion y
+  = (a, c)
 provenCoercion (AppCo c c')
   | (f, f') <- provenCoercion c, (x, x') <- provenCoercion c'
   = (TyApp f x, TyApp f' x')

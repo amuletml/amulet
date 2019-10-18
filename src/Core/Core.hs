@@ -144,6 +144,7 @@ data Capture a = Capture a (Type a)
 data Coercion a
   = SameRepr (Type a) (Type a)
   | Symmetry (Coercion a)
+  | Trans (Coercion a) (Coercion a)
 
   | Application (Coercion a) (Coercion a)
   | Quantified (BoundTv a) (Coercion a) (Coercion a)
@@ -224,13 +225,14 @@ instance (Annotation b, Pretty a) => Pretty (AnnTerm b a) where
 
 instance Pretty a => Pretty (Coercion a) where
   pretty (SameRepr a b) = pretty a <+> soperator (char '~') <+> pretty b
-  pretty (Application c c') = pretty c <+> pretty c'
+  pretty (Application c c') = pretty c <+> parens (pretty c')
   pretty (Record r s) = enclose (lbrace <> space) (space <> rbrace) (pretty r <+> hsep (punctuate comma (map pprCoRow s)))
   pretty (ExactRecord r) = enclose (lbrace <> space) (space <> rbrace) (hsep (punctuate comma (map pprCoRow r)))
   pretty (Projection _ rs') =
     enclose (lbrace <> space) (space <> rbrace)
       (keyword "proj" <+> hsep (punctuate comma (map pprCoRow rs')))
   pretty (Symmetry f) = keyword "sym" <+> parens (pretty f)
+  pretty (Trans x y) = parens (pretty x) <+> soperator (char '∘') <+> parens (pretty y)
   pretty (Quantified (Relevant v) dom c) = keyword "∀" <> (pretty v <+> colon <+> pretty dom) <> dot <+> pretty c
   pretty (Quantified Irrelevant dom c) = pretty dom <+> arrow <+> pretty c
   pretty (CoercionVar x) = pretty x
@@ -418,6 +420,10 @@ relates (Projection rs rs') = do
 relates (Symmetry x) = do
   (a, b) <- relates x
   pure (b, a)
+relates (Trans x y) = do
+  (a, _) <- relates x
+  (_, b) <- relates y
+  pure (a, b)
 relates (Quantified v co c) = do
   (a, b) <- relates c
   (c, d) <- relates co

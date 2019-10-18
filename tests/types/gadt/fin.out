@@ -1,6 +1,11 @@
 fin.ml[11:14 ..11:18]: error
+  No instance for 'n ~ S (S 'k) arising in this expression
    │ 
 11 │   | SS SZ -> FS FZ
    │              ^^^^^
-  Couldn't match actual type fin (S (S 'k))
-    with the type expected by the context, fin 'n
+  • Because:
+   │ 
+11 │   | SS SZ -> FS FZ
+   │              ^^^^^
+  Couldn't match actual type 'n ~ 'n
+    with the type expected by the context, 'n ~ S (S 'k)

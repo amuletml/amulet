@@ -10,8 +10,8 @@ AddS : Infer{'il : type}. Infer{'im : type}. Spec{'a : 'il}. Spec{'c : 'im}. Spe
 add : nat -> nat -> nat -> constraint
 ev : Spec{'a : nat}. Spec{'b : nat}. Spec{'c : nat}. add 'a 'b 'c => add_ev 'a 'b 'c
 vect : nat -> type -> type
-Nil : Infer{'wj : type}. Spec{'n : 'wj}. Spec{'a : type}. ('n ~ Z) ⊃ vect 'n 'a
-Cons : Infer{'xr : type}. Spec{'n : 'xr}. Spec{'a : type}. Spec{'n : nat}. ('n ~ S 'n) ⊃ ('a * vect 'n 'a) -> vect 'n 'a
+Nil : Infer{'wy : type}. Spec{'n : 'wy}. Spec{'a : type}. ('n ~ Z) ⊃ vect 'n 'a
+Cons : Infer{'yg : type}. Spec{'n : 'yg}. Spec{'a : type}. Spec{'n : nat}. ('n ~ S 'n) ⊃ ('a * vect 'n 'a) -> vect 'n 'a
 append_with : Spec{'k : nat}. Spec{'l : nat}. Spec{'n : nat}. Spec{'a : type}. add_ev 'n 'k 'l -> vect 'n 'a -> vect 'k 'a -> vect 'l 'a
 append : Infer{'k : nat}. Infer{'l : nat}. Infer{'n : nat}. Infer{'a : type}. add 'n 'k 'l => vect 'n 'a -> vect 'k 'a -> vect 'l 'a
 :: : Infer{'a : type}. Infer{'n : nat}. 'a -> vect 'n 'a -> vect (S 'n) 'a

@@ -414,7 +414,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
           axiom_t = close $
             foldr (TyPi . Anon)
               (TyApps tyEq [ TyApps (TyCon var) (instArgs ++ map TyVar argvs), exp])
-              ( zipWith (\a b -> TyApps tyEq [a, b]) classArgs instArgs
+              ( zipWith (\a b -> TyApps tyEq [b, a]) classArgs instArgs
              ++ map (\a -> TyApps tyEq [TyVar a, TyVar a]) argvs)
           close t = foldr (\v -> TyPi (Invisible v (Just TyType) Req)) t (ftv t)
       pure (info, axdef)

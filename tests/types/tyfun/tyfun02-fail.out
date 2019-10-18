@@ -2,4 +2,4 @@ tyfun02-fail.ml[11:16 ..12:10]: error
    │ 
 14 │   | _ -> Xs
    │          ^^
-  No instance for collapse 'a ~ string arising from this expression
+  No instance for collapse 'a ~ string arising from the expression

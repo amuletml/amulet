@@ -1,4 +1,9 @@
 gadt07-escape-fail.ml[10:3 ..10:17]: error
+  No instance for 'a ~ int arising in the expression
+   │ 
+10 │   match hval with
+   │   ^^^^^^^^^^^^^^^
+  • Because:
   Could not match the rigid type variable 'a with the type int
 
   Where the type variable a is an existential,

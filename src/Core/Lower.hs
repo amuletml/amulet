@@ -204,6 +204,7 @@ co (S.VarCo x) = CoercionVar (mkCo x)
 co (S.ReflCo t) = SameRepr (lowerType t) (lowerType t)
 co (S.AssumedCo t t') = SameRepr (lowerType t) (lowerType t')
 co (S.SymCo c) = Symmetry (co c)
+co (S.TransCo x y) = Trans (co x) (co y)
 co (S.AppCo a b) = Application (co a) (co b)
 co (S.ArrCo a b) = C.Quantified Irrelevant (co a) (co b)
 co (S.ProdCo a b) = ExactRecord [("_1", co a), ("_2", co b)]
