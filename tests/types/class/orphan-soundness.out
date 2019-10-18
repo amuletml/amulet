@@ -1,0 +1,5 @@
+orphan-soundness.ml[6:3 ..8:5]: error
+  │ 
+6 │   instance foo 'a begin
+  │   ^^^^^^^^^^^^^^^^^^^^^
+  This instance should be defined in the same module as foo

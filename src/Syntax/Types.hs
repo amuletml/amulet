@@ -6,7 +6,7 @@ module Syntax.Types
   , Scope(..), namesInScope, inScope, scopeToList
   , Env, freeInEnv, difference, envOf, scopeFromList, toMap
   , names, typeVars, constructors, types, letBound, classes, modules
-  , classDecs, tySyms
+  , classDecs, tySyms, declaredHere
   , ClassInfo(..), ciName, ciMethods, ciContext, ciConstructorName, ciAssocTs
   , TySymInfo(..), tsName, tsArgs, tsExpansion, tsKind, TySyms, tsEquations, tsConstraint
   , ciConstructorTy, ciHead, ciClassSpan, ciDefaults, ciMinimal, ciFundep
@@ -74,8 +74,9 @@ data Env
         , _classes      :: ImplicitScope ClassInfo Typed
         , _typeVars     :: Set.Set (Var Typed)
         , _constructors :: Set.Set (Var Typed)
-        , _types        :: Map.Map (Var Typed) (Set.Set (Var Typed))
         , _letBound     :: Set.Set (Var Typed)
+        , _declaredHere :: Set.Set (Var Typed) -- Only types
+        , _types        :: Map.Map (Var Typed) (Set.Set (Var Typed))
         , _modules      :: Map.Map (Var Typed) (ImplicitScope ClassInfo Typed, TySyms)
         , _classDecs    :: Map.Map (Var Typed) ClassInfo
         , _tySyms       :: TySyms
@@ -147,22 +148,21 @@ Scope x \\ Scope y = Scope (x Map.\\ y)
 
 instance Monoid Env where
   mappend = (<>)
-  mempty = Env mempty mempty mempty mempty mempty mempty mempty mempty mempty
+  mempty = Env mempty mempty mempty mempty mempty mempty mempty mempty mempty mempty
 
 instance Semigroup Env where
-  Env s i c t d l m n o <> Env s' i' c' t' d' l' m' n' o' =
-    Env (s <> s') (i <> i') (c <> c') (t <> t') (d <> d') (l <> l') (m <> m') (n <> n') (o <> o')
+  Env s i c t d l m n o p <> Env s' i' c' t' d' l' m' n' o' p' =
+    Env (s <> s') (i <> i') (c <> c') (t <> t') (d <> d') (l <> l') (m <> m') (n <> n') (o <> o') (p <> p')
 
 difference :: Env -> Env -> Env
-difference (Env ma _ mc md me l _ cd td) (Env ma' mi' mc' md' me' l' mm' cd' td') =
-  Env (ma \\ ma') mi' (mc Set.\\ mc')
-    (md Set.\\ md') (me Map.\\ me') (l Set.\\ l') mm' (cd Map.\\ cd') (td Map.\\ td')
+difference (Env a b c d e f g h i j) (Env a' _ c' d' e' f' g' h' i' j') =
+  Env (a \\ a') b (c Set.\\ c') (d Set.\\ d') (e Set.\\ e') (f Set.\\ f') (g Map.\\ g') (h Map.\\ h') (i Map.\\ i') (j Map.\\ j')
 
 freeInEnv :: Env -> Set.Set (Var Typed)
 freeInEnv = foldMap ftv . view names
 
 envOf :: Scope Resolved (Type Typed) -> Env
-envOf a = Env a mempty mempty mempty mempty mempty mempty mempty mempty
+envOf a = Env a mempty mempty mempty mempty mempty mempty mempty mempty mempty
 
 scopeFromList :: Ord (Var p) => [(Var p, f)] -> Scope p f
 scopeFromList = Scope . Map.fromList
