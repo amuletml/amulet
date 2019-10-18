@@ -1,0 +1,9 @@
+fail_value_restriction2.ml[2:5 ..2:5]: error
+  │ 
+2 │ let f = id id
+  │     ^
+  This top-level binding can not have a polymorphic type because of the value restriction
+  • Note: It has type 'a -> 'a
+  • Note: But the variable a needs to be determined
+  • Solution: give it a monomorphic type signature. For example:
+      unit -> unit

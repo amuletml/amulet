@@ -530,10 +530,13 @@ consFst = fmap . first . (:)
 closeOverStrat :: MonadInfer Typed m
                => SomeReason
                -> Set.Set (Var Typed) -> Expr Typed -> Type Typed -> m (Type Typed)
-closeOverStrat r _ e =
-  if value e
-     then closeOver r
-     else annotateKind r
+closeOverStrat r _ e t =
+  if value e then closeOver r t else do
+    vars_scope <- view typeVars
+    let vars = ftv t `Set.difference` vars_scope
+    unless (Set.null vars) $
+      confesses (ValueRestriction r t vars)
+    annotateKind r t
 
 firstForall :: MonadInfer Typed m => Type Desugared -> Type Typed -> m (TyBinder Typed, Type Typed)
 firstForall _ (TyPi x@Invisible{} k) = pure (x, k)
