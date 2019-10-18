@@ -100,6 +100,7 @@ data Coercion p
   | MvCo (Var p) -- coercion metavariable
   | ReflCo (Type p) -- <T> : T ~ T
   | SymCo (Coercion p) -- sym (X : T ~ S) : S ~ T
+  | TransCo (Coercion p) (Coercion p) -- trans (X : T ~ S) (Y : S ~ U) : T ~ U
   | AppCo (Coercion p) (Coercion p) -- (f : B ~ D) (x : A ~ C) : B A ~ D C
   | ArrCo (Coercion p) (Coercion p) -- (x : S ~ T) -> (y : S' ~ T') : (S -> S') ~ (T -> T')
   | ProdCo (Coercion p) (Coercion p) -- (x : S ~ T, y : S' ~ T') : (S, S') ~ (T, T')
@@ -153,6 +154,7 @@ instance Pretty (Var p) => Pretty (Coercion p) where
   pretty (ReflCo t) = enclose (char '<') (char '>') (pretty t)
   pretty (AssumedCo a b) = enclose (char '<') (char '>') (pretty a <> comma <+> pretty b)
   pretty (SymCo x) = keyword "sym" <+> pretty x
+  pretty (TransCo x y) = parens (pretty x) <+> soperator (char '∘') <+> parens (pretty y)
   pretty (AppCo f x) = pretty f <+> pretty x
   pretty (ArrCo f x) = pretty f <+> arrow <+> pretty x
   pretty (ProdCo f x) = pretty f <+> prod <+> pretty x

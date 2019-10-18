@@ -113,7 +113,7 @@ makeTypeFunctionHIT args = traverse go where
     name <- genName
     let (TyApps tyfun args') = lhs
         argtvs = map (\(TyAnnArg a _) -> a) args
-        needs = zipWith (\a b -> TyApps tyEq [TyVar a, b]) argtvs args'
+        needs = zipWith (\a b -> TyApps tyEq [b, TyVar a]) argtvs args'
         tau = foldr TyArr (TyApps tyEq [TyApps tyfun (map TyVar argtvs), rhs]) needs
         fv = Set.toList (ftv tau)
         closed = foldr (\v -> TyPi (Invisible v (Just TyType) Spec)) tau fv

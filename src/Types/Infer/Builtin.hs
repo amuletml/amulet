@@ -69,7 +69,11 @@ leakEqualities :: ( Reasonable f p
                => f p
                -> [(Type Typed, Type Typed)]
                -> m ()
-leakEqualities r ((a, b):xs) = unify (BecauseOf r) a b *> leakEqualities r xs
+leakEqualities r ((a, b):xs) = do
+  x <- genName
+  i <- view classes
+  tell (Seq.singleton (ConImplicit (BecauseOf r) i x (TyApps tyEq [a, b])))
+  leakEqualities r xs
 leakEqualities _ [] = pure ()
 
 decompose :: MonadInfer Typed m

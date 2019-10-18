@@ -65,6 +65,7 @@ substituteInTys = term where
 
   coercion m (SameRepr t t') = SameRepr (gotype m t) (gotype m t')
   coercion m (Symmetry c) = Symmetry (coercion m c)
+  coercion m (Trans x y) = Trans (coercion m x) (coercion m y)
   coercion m (Application f x) = Application (coercion m f) (coercion m x)
   coercion m (ExactRecord rs) = ExactRecord (map (second (coercion m)) rs)
   coercion m (Record c rs) = Record (coercion m c) (map (second (coercion m)) rs)
@@ -120,6 +121,7 @@ substituteInCo m c
 
   coercion (SameRepr t t') = SameRepr (gotype t) (gotype t')
   coercion (Symmetry c) = Symmetry (coercion c)
+  coercion (Trans x y) = Trans (coercion x) (coercion y)
   coercion (Application f x) = Application (coercion f) (coercion x)
   coercion (ExactRecord rs) = ExactRecord (map (second coercion) rs)
   coercion (Record c rs) = Record (coercion c) (map (second coercion) rs)

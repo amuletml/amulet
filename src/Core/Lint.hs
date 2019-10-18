@@ -16,6 +16,7 @@ import qualified Data.VarMap as VarMap
 import qualified Data.VarSet as VarSet
 import qualified Data.Sequence as Seq
 import qualified Data.Text as T
+import Data.Functor.Constant
 import Data.Traversable
 import Data.Foldable
 import Data.Function
@@ -206,7 +207,7 @@ checkTerm s (Lam arg@(TypeArgument a ty) bod) = do
   errs <- gatherError' . liftError $
     -- Ensure type is valid and we're declaring a tyvar
        unless (varInfo a == TypeVar) (pushError (InfoIllegal a TypeVar (varInfo a)))
-    *> checkType s ty
+    *> checkType (s { tyVars = VarSet.insert (toVar a) (tyVars s) }) ty
 
   (bty, bod') <- checkTerm (s { tyVars = VarSet.insert (toVar a) (tyVars s) }) bod
   pure ( ForallTy (Relevant a) ty <$> bty
@@ -343,8 +344,9 @@ checkTypeBoxed s x = checkType s x *> checkNoUnboxed x
 --
 -- Ideally this would use ApplicativeDo, but GHC is still a little silly at
 -- desugaring it all.
-checkCoercion :: IsVar a => Scope a -> Coercion a -> Errors (CoreErrors a) (Type a, Type a)
+checkCoercion :: forall a. IsVar a => Scope a -> Coercion a -> Errors (CoreErrors a) (Type a, Type a)
 checkCoercion s = checkCo where
+  checkCo :: Coercion a -> Errors (CoreErrors a) (Type a, Type a)
   checkCo (SameRepr a b) =
        checkType s a
     *> checkType s b
@@ -383,6 +385,12 @@ checkCoercion s = checkCo where
       _ -> pushError (InvalidCoercion (Axiom ax i))
 
   checkCo (Symmetry x) = swap <$> checkCo x
+  checkCo co@(Trans x y) =
+    (\((tx, ty), (ty', tz)) ->
+       (if ty `apart` ty'
+        then failure (Seq.fromList [ InvalidCoercion co, TypeMismatch ty ty' ])
+        else pure ())
+       $> (tx, tz)) `bindErrors` ((,) <$> checkCo x <*> checkCo y)
   checkCo (Quantified v l r) =
     (\(f, g) (x, y) -> (ForallTy v f x, ForallTy v g y)) <$> checkCo l <*> checkCo r
 
@@ -392,11 +400,15 @@ checkCoercion s = checkCo where
   coAxT x = error (show x)
 
   checkCoAx _ (coAxT -> ts) args =
-    (VarTy (fromVar tyvarA), snd (last ts))
-    -- TODO: This is quite sad. Can we fix it? See lint/tyfun-unsat.ml
-      <$ traverse_ checkCo' (zip ts args)
-  checkCo' ((a, b), co) = (\(l, r) -> if (a `apart` l) || (b `apart` r) then pushError (InvalidCoercion co) else pure ())
-    <$> checkCo co
+    (\sub -> bimap (substituteInType sub) (substituteInType sub) (last ts)) . fold
+      <$> traverse checkCo' (zip ts args)
+
+  checkCo' ((a, b), co) =
+    (\(l, r) ->
+      case (unify a l, unify b r) of
+         (Just a, Just b) -> pure ((a <> b) `VarMap.withoutKeys` VarSet.toList (tyVars s))
+         (_, _) -> pushError (InvalidCoercion co))
+    `bindErrors` checkCo co
 
 checkPattern :: forall a. IsVar a => Scope a -> Type a -> Pattern a -> Errors (CoreErrors a) ()
 checkPattern s = checkPat where
@@ -524,3 +536,7 @@ patternVars PatWildcard{} = []
 
 captureVars :: Capture a -> (a, Type a)
 captureVars (Capture v ty) = (v, ty)
+
+bindErrors :: (a -> Errors e b) -> Errors e a -> Errors e b
+bindErrors f (Pure a) = f a
+bindErrors _ (Other (Constant x)) = failure x

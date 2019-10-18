@@ -807,8 +807,8 @@ tyFunByEval (TyFamInfo tn eqs relevant _ con) scope args tb = do
              then do
                let r_t = foldl TyApp (apply sub result) (apply sub rest_args)
                traceM (displayS (keyword "[D]:" <+> pretty r_t <+> "~" <+> pretty tb))
-               _ <- unify scope r_t tb
-               pure (Just (foldl AppCo (InstCo con cos) (map ReflCo rest_args)))
+               other_co <- unify scope r_t tb
+               pure (pure (foldl AppCo (InstCo con cos) (map ReflCo rest_args) `TransCo` other_co))
 
              else pure Nothing
 
