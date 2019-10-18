@@ -20,8 +20,11 @@
 
 -}
 module Frontend.Driver
-  ( Driver, emptyDriver
+  ( Driver
+  , makeDriver, makeDriverWith
+  , DriverConfig(..), makeConfig
   , fileMap
+  , getConfig, adjustConfig
 
   -- * REPL interaction
   --
@@ -136,19 +139,50 @@ data LoadedFile = LoadedFile
   , _errors :: ErrorBundle
   } deriving Show
 
+newtype DriverConfig = DriverConfig
+  { libraryPath :: [FilePath]
+  -- ^ The path of folders to look up files from.
+  } deriving Show
+
 data Driver = Driver
   { -- | All loaded files.
     _files :: Map.Map FilePath LoadedFile
   -- | A mapping of pretty source paths, to cannonical file names.
   , _filePaths :: Map.Map SourceName FilePath
+  -- | The driver's current config
+  , _config :: DriverConfig
   } deriving Show
 
 makeLenses ''LoadedFile
 makeLenses ''Driver
 
--- | The default file driver.
-emptyDriver :: Driver
-emptyDriver = Driver mempty mempty
+-- | Construct a new driver from the given config.
+makeDriverWith :: DriverConfig -> Driver
+makeDriverWith = Driver mempty mempty
+
+-- | Construct a new driver using 'makeConfig'.
+makeDriver :: IO Driver
+makeDriver = Driver mempty mempty <$> makeConfig
+
+-- | The default driver config.
+--
+-- This constructs a library path which will attempt to locate a file
+-- from one of the "known directories" - $AMC_LIBRARY_PATH, ../lib/
+-- relative to the compiler's executable, or lib/ relative to the
+-- compiler's executable.
+makeConfig :: IO DriverConfig
+makeConfig = do
+  execP <- getExecutablePath
+  mainPath <- foldMap splitPath <$> lookupEnv "AMC_LIBRARY_PATH"
+
+  pure $ DriverConfig
+    (mainPath
+    ++ [ takeDirectory execP </> "lib"
+       , takeDirectory (takeDirectory execP) </> "lib"
+       ])
+  where
+    splitPath = Set.toList . Set.fromList . map T.unpack . T.split (==':') . T.pack
+
 
 -- | Construct a file map, suitable for use with 'fileSpans' and other
 -- "Text.Pretty.Note" functions.
@@ -158,6 +192,13 @@ fileMap driver
   . traverse (\file -> (fileSource file,) <$> T.readFile (fileLocation file))
   . Map.elems
   $ driver ^. files
+
+-- | Get the current config
+getConfig :: Driver -> DriverConfig
+getConfig = _config
+
+adjustConfig :: MonadState Driver m => (DriverConfig -> DriverConfig) -> m ()
+adjustConfig = (config%=)
 
 {- $repl
 
@@ -537,7 +578,8 @@ instance (MonadNamey m, MonadState Driver m, MonadIO m) => MonadImport (FileImpo
   importModule loc relPath
     | not (T.pack "." `T.isPrefixOf` relPath)
     = FileIm \(LoadContext _ source) -> do
-      absPath <- findFile' (searchPath (T.unpack relPath))
+      libPath <- uses config libraryPath
+      absPath <- liftIO $ findFile' (map (</> T.unpack relPath) libPath)
       case absPath of
         Nothing -> pure (NotFound, mempty)
         Just absPath -> (,Set.singleton absPath) <$> importFile source (Just loc) absPath
@@ -573,59 +615,32 @@ importFile fromPath fromLoc path = do
         maybe Errored (Imported (fileVar file)) <$> getSignature path
 
 -- | Find the first file which matches a list.
-findFile' :: forall m. MonadIO m
-          => [IO [FilePath]] -> m (Maybe FilePath)
-findFile' = search where
-  search :: [IO [FilePath]] -> m (Maybe FilePath)
-  search [] = pure Nothing
-  search (p:ps) = do
-    paths <- liftIO p
-    r <- searchMany paths
-    case r of
-      Just r -> pure (Just r)
-      Nothing -> search ps
-
-  searchMany (path:paths) = searchOne path (searchMany paths)
-  searchMany [] = pure mempty
-
-  searchOne path cont = do
-    path <- liftIO $ canonicalizePath path
-    exists <- liftIO $ doesFileExist path
-    if exists then pure (Just path) else cont
-
-
--- | The default path to use with 'findFile''. This will attempt to locate
--- a file from one of the "known directories" - $AMC_LIBRARY_PATH, ../lib/
--- relative to the compiler's executable, or lib/ relative to the
--- compiler's executable.
-searchPath :: FilePath -> [IO [FilePath]]
-searchPath p =
-  [ lookupEnv "AMC_LIBRARY_PATH" <&> fmap (\path -> map (</> p) (splitPath path))
-                                 <&> msum
-  , getExecutablePath <&> \execP -> [takeDirectory execP </> "lib" </> p]
-  , getExecutablePath <&> \execP -> [takeDirectory (takeDirectory execP) </> "lib" </> p]
-  ]
-    where
-      splitPath = Set.toList . Set.fromList . map T.unpack . T.split (==':') . T.pack
+findFile' :: [FilePath] -> IO (Maybe FilePath)
+findFile' [] = pure Nothing
+findFile' (x:xs) = do
+  path <- canonicalizePath x
+  exists <- doesFileExist path
+  if exists then pure (Just path) else findFile' xs
 
 -- | Load the "prelude" module from a set of known locations:
 -- * The AMC_PRELUDE environment variable (a file)
--- * $AMC_LIBRARY_PATH/prelude.ml
--- * ../lib/prelude.ml relative to the compiler's executable
--- * lib/prelude.ml relative to the compiler's executable
+-- * $libraryPath/prelude.ml
 loadPrelude :: forall m.
                (MonadNamey m, MonadState Driver m, MonadIO m)
             => m (Signature, Env, [Stmt CoVar])
-loadPrelude = load =<< findFile' ((toList <$> lookupEnv "AMC_PRELUDE") : searchPath "prelude.ml") where
-  load Nothing = liftIO . throwIO . userError $ "Failed to locate Amulet prelude"
-  load (Just p) = do
-    r <- compile p
-    case r of
-      (Just stmts, _) -> do
-        ~(Just sig) <- getSignature p
-        ~(Just env) <- getTypeEnv p
-        pure (sig, env, stmts)
-      _ -> liftIO . throwIO . userError $ "Failed to load Amulet prelude from " ++ p
+loadPrelude = do
+  libPath <- uses config (map (</> "prelude.ml") . libraryPath)
+  prelude <- liftIO $ findFile' =<< (++) <$> (toList <$> lookupEnv "AMC_PRELUDE") <*> pure libPath
+  case prelude of
+    Nothing -> liftIO . throwIO . userError $ "Failed to locate Amulet prelude"
+    (Just p) -> do
+      r <- compile p
+      case r of
+        (Just stmts, _) -> do
+          ~(Just sig) <- getSignature p
+          ~(Just env) <- getTypeEnv p
+          pure (sig, env, stmts)
+        _ -> liftIO . throwIO . userError $ "Failed to load Amulet prelude from " ++ p
 
 -- | Try to identify the cycle of files requiring each other.
 findCycle :: LoadedFile -> Driver -> [(FilePath, Span)]

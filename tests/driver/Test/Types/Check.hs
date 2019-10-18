@@ -76,7 +76,7 @@ checkLint optm file = flip evalNameyT firstName $ do
         Nothing -> pure ()
         Just (_, es) -> liftIO $ assertFailure ("Core lint failed:\n" ++ T.unpack (displayDetailed (pretty es)))
       -- Optimise runs lower by default
-      when optm (optimise lowered $> ())
+      when optm (optimise True lowered $> ())
 
 tests :: IO TestTree
 tests = do

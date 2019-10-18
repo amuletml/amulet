@@ -31,7 +31,6 @@ import qualified Foreign.Lua.Core.Types as L
 import qualified Foreign.Lua as L
 
 import System.Console.Haskeline hiding (display, bracket, throwTo)
-import System.Environment
 import System.Directory
 import System.IO
 
@@ -100,8 +99,8 @@ data ReplState = ReplState
   , outputHandle :: Handle
   }
 
-defaultState :: DebugMode -> IO ReplState
-defaultState mode = do
+defaultState :: DebugMode -> D.DriverConfig -> IO ReplState
+defaultState mode config = do
   state <- L.newstate
   -- Init our default libraries
   L.runWith state L.openlibs
@@ -116,7 +115,7 @@ defaultState mode = do
 
     , luaState     = state
 
-    , driver       = D.emptyDriver
+    , driver       = D.makeDriverWith config
     , root         = root
 
     , debugMode    = mode
@@ -179,17 +178,15 @@ execCommand _ "info" arg = infoCommand arg
 execCommand _ "c" arg = compileCommand arg
 execCommand _ "compile" arg = compileCommand arg
 
-execCommand _ "add-library-path" arg = liftIO $
+execCommand _ "add-library-path" arg =
   case dropWhile isSpace arg of
-    [] -> putStrLn ":add-library-path needs an argument"
+    [] -> liftIO $ putStrLn ":add-library-path needs an argument"
     dir -> do
-      path <- canonicalizePath dir
-      exists <- doesDirectoryExist path
+      path <- liftIO $ canonicalizePath dir
+      exists <- liftIO $ doesDirectoryExist path
       if exists
-         then do
-           existing <- lookupEnv "AMC_LIBRARY_PATH"
-           setEnv "AMC_LIBRARY_PATH" (maybe path ((path ++ ":") ++) existing)
-         else putStrLn $ arg ++ ": No such directory"
+      then wrapDriver $ D.adjustConfig (\c -> c { D.libraryPath = path : D.libraryPath c })
+      else liftIO . putStrLn $ arg ++ ": No such directory"
 
 execCommand _ "version" _ = liftIO (putStrLn ("The Amulet compiler, version " ++ $amcVersion))
 
@@ -285,7 +282,7 @@ compileCommand (dropWhile isSpace -> path) = do
 
       case core of
         Just core -> do
-          optm <- wrapNamey $ optimise core
+          optm <- wrapNamey $ optimise False core
           (_, lua) <- emitCore optm
           liftIO $ Bs.hPutStr handle lua
         Nothing ->
@@ -431,9 +428,10 @@ emitCore core = do
 loadFile :: (MonadState ReplState m, MonadIO m) => FilePath -> m ()
 loadFile file = do
   -- Reset the state
+  dconfig <- gets (D.getConfig . driver)
   dmode <- gets debugMode
   handle <- gets outputHandle
-  state' <- liftIO (defaultState dmode)
+  state' <- liftIO (defaultState dmode dconfig)
   put state'
 
   (prelude_sig, prelude_env, core) <- wrapDriver D.loadPrelude
@@ -518,9 +516,10 @@ runRemoteReplCommand port command = Net.withSocketsDo $ do
 
 loadReplPrelude :: ReplState -> IO ReplState
 loadReplPrelude st = flip execStateT st $ do
+  dconfig <- gets (D.getConfig . driver)
   dmode <- gets debugMode
   handle <- gets outputHandle
-  state' <- liftIO (defaultState dmode)
+  state' <- liftIO (defaultState dmode dconfig)
   put state'
   (prelude_sig, prelude_env, core) <- wrapDriver D.loadPrelude
 
@@ -537,12 +536,12 @@ loadReplPrelude st = flip execStateT st $ do
 
   get
 
-repl :: Int -> DebugMode -> IO ()
-repl port mode = replFrom port mode Nothing
+repl :: Int -> DebugMode -> D.DriverConfig -> IO ()
+repl port mode config = replFrom port mode config Nothing
 
-replFrom :: Int -> DebugMode -> Maybe FilePath -> IO ()
-replFrom port mode file = do
-  state <- maybe loadReplPrelude (execStateT . loadFile) file =<< defaultState mode
+replFrom :: Int -> DebugMode -> D.DriverConfig -> Maybe FilePath -> IO ()
+replFrom port mode config file = do
+  state <- maybe loadReplPrelude (execStateT . loadFile) file =<< defaultState mode config
   hSetBuffering stdout LineBuffering
 
   ready <- newEmptyMVar

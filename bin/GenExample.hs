@@ -27,9 +27,10 @@ main :: IO ()
 main = do
   [file] <- getArgs
 
+  driver <- makeDriver
   (((core, errors), driver), _) <-
       flip runNameyT firstName
-    . flip runStateT emptyDriver
+    . flip runStateT driver
     $ compile file
 
   x <- T.readFile file

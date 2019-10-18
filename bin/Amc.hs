@@ -3,7 +3,6 @@ module Main(main) where
 
 import System.Exit (ExitCode(..), exitWith)
 import System.IO (hPutStrLn, stderr)
-import System.Environment
 import System.Directory
 
 import Control.Monad.Infer (Env, firstName)
@@ -14,8 +13,6 @@ import qualified Data.Text.IO as T
 import qualified Data.Text as T
 import Data.Position (SourceName)
 import Data.Traversable
-import Data.Foldable
-import Data.List
 
 import Options.Applicative hiding (ParseError)
 
@@ -30,10 +27,11 @@ import Core.Optimise.DeadCode (deadCodePass)
 import Core.Simplify (optimise)
 import Core.Core (Stmt)
 import Core.Var (CoVar)
+import Core.Lint
 
 import Text.Pretty.Semantic hiding (empty)
 
-import Frontend.Driver
+import qualified Frontend.Driver as D
 import Frontend.Errors
 
 import qualified Amc.Debug as D
@@ -42,41 +40,44 @@ import Amc.Repl
 import Version
 
 runCompile :: MonadIO m
-           => DoOptimise -> SourceName
+           => DoOptimise -> DoLint -> D.DriverConfig
+           -> SourceName
            -> m ( Maybe ( Env
                         , [Stmt CoVar]
                         , [Stmt CoVar]
                         , LuaStmt)
                 , ErrorBundle
-                , Driver )
-runCompile opt file = do
+                , D.Driver )
+runCompile opt (DoLint lint) dconfig file = do
   path <- liftIO $ canonicalizePath file
   (((env, core, errors), driver), name) <-
       flip runNameyT firstName
-    . flip runStateT emptyDriver
+    . flip runStateT (D.makeDriverWith dconfig)
     $ do
-      (core, errors) <- compile path
-      ~(Just env) <- getTypeEnv path
+      (core, errors) <- D.compile path
+      ~(Just env) <- D.getTypeEnv path
       pure (env, core, errors)
 
   pure $ case core of
     Nothing -> (Nothing, errors, driver)
     Just core ->
       let optimised = flip evalNamey name $ case opt of
-            Do -> optimise core
-            Don't -> deadCodePass <$> (reducePass =<< killNewtypePass core)
+            Opt -> optimise lint core
+            NoOpt -> do
+              when lint (runLint "Lower" (checkStmt emptyScope core) (pure ()))
+              (runLint "Optimised" =<< checkStmt emptyScope) . deadCodePass <$> (reducePass =<< killNewtypePass core)
           lua = compileProgram optimised
       in ( Just (env, core, optimised, lua)
          , errors
          , driver )
 
-compileFromTo :: DoOptimise -> D.DebugMode
+compileFromTo :: DoOptimise -> DoLint -> D.DebugMode -> D.DriverConfig
               -> FilePath
               -> (forall a. Pretty a => a -> IO ())
               -> IO ()
-compileFromTo opt dbg file emit = do
-  (compiled, errors, driver) <- runCompile opt file
-  files <- fileMap driver
+compileFromTo opt lint dbg config file emit = do
+  (compiled, errors, driver) <- runCompile opt lint config file
+  files <- D.fileMap driver
   reportAllS files errors
   case compiled of
     Just (env, core, opt, lua) -> do
@@ -84,7 +85,8 @@ compileFromTo opt dbg file emit = do
       emit lua
     Nothing -> pure ()
 
-data DoOptimise = Do | Don't
+data DoOptimise = NoOpt | Opt
+newtype DoLint = DoLint Bool
 
 data CompilerOptions = CompilerOptions
   { debugMode   :: D.DebugMode
@@ -98,6 +100,7 @@ data Command
     , output      :: Maybe FilePath
     , optLevel    :: Int
     , options     :: CompilerOptions
+    , coreLint    :: Bool
     }
   | Repl
     { toLoad      :: Maybe FilePath
@@ -151,6 +154,7 @@ argParser = info (args <**> helper <**> version)
       <*> option auto ( long "opt" <> short 'O' <> metavar "LEVEL" <> value 1 <> showDefault
                      <> help "Controls the optimisation level." )
       <*> compilerOptions
+      <*> switch (long "core-lint" <> help "Verified that Amulet's intermediate representation is well-formed.")
 
     replCommand :: Parser Command
     replCommand = Repl
@@ -178,8 +182,8 @@ argParser = info (args <**> helper <**> version)
     defaultPort :: Int
     defaultPort = 5478
 
-extendPath :: [String] -> IO ()
-extendPath paths = do
+driverConfig :: CompilerOptions -> IO D.DriverConfig
+driverConfig (CompilerOptions _ paths) = do
   paths <- sequence <$> for paths (\path -> do
     path' <- canonicalizePath path
     exists <- doesDirectoryExist path'
@@ -188,36 +192,35 @@ extendPath paths = do
     Left path -> do
       hPutStrLn stderr (path ++ ": No such directory")
       exitWith (ExitFailure 1)
-    Right [] -> pure ()
     Right paths -> do
-      existing <- lookupEnv "AMC_LIBRARY_PATH"
-      setEnv "AMC_LIBRARY_PATH" . intercalate ":" $ paths ++ toList existing
+      config <- D.makeConfig
+      pure config { D.libraryPath = paths ++ D.libraryPath config }
 
 main :: IO ()
 main = do
   options <- execParser argParser
   case options of
     Args Repl { toLoad, serverPort, options } -> do
-      extendPath (libraryPath options)
-      replFrom serverPort (debugMode options) toLoad
+      config <- driverConfig options
+      replFrom serverPort (debugMode options) config toLoad
     Args Connect { remoteCmd, serverPort } -> runRemoteReplCommand serverPort remoteCmd
 
     Args Compile { input, output = Just output } | input == output -> do
       hPutStrLn stderr ("Cannot overwrite input file " ++ input)
       exitWith (ExitFailure 1)
 
-    Args Compile { input, output, optLevel, options } -> do
+    Args Compile { input, output, optLevel, options, coreLint } -> do
       exists <- doesFileExist input
       if not exists
       then hPutStrLn stderr ("Cannot find input file " ++ input)
         >> exitWith (ExitFailure 1)
       else pure ()
 
-      let opt = if optLevel >= 1 then Do else Don't
+      let opt = if optLevel >= 1 then Opt else NoOpt
           writeOut :: Pretty a => a -> IO ()
           writeOut = case output of
                    Nothing -> putDoc . pretty
                    Just f -> T.writeFile f . T.pack . show . pretty
 
-      extendPath (libraryPath options)
-      compileFromTo opt (debugMode options) input writeOut
+      config <- driverConfig options
+      compileFromTo opt (DoLint coreLint) (debugMode options) config input writeOut
