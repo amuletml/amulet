@@ -578,9 +578,9 @@ addArg _ _ ex = ex
 
 appArg :: Map.Map (Var Typed) (Type Typed) -> Type Typed -> Expr Typed -> Expr Typed
 appArg sub (TyPi (Invisible v _ _) rest) ex =
-  case Map.lookup v sub of
-    Just x -> appArg sub rest $ ExprWrapper (TypeApp x) ex (annotation ex, apply sub rest)
-    Nothing -> appArg sub rest $ ExprWrapper (TypeApp TyType) ex (annotation ex, apply sub rest)
+  appArg sub rest $ case Map.lookup v sub of
+    Just x -> ExprWrapper (TypeApp x) ex (annotation ex, apply sub rest)
+    Nothing -> ExprWrapper (TypeApp TyType) ex (annotation ex, apply (Map.insert v TyType sub) rest)
 appArg _ _ ex = ex
 
 transplantPi :: Type Typed -> Type Typed -> Type Typed
