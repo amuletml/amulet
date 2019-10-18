@@ -1,5 +1,4 @@
 do
-  local __builtin_unit = { __tag = "__builtin_unit" }
   local function __builtin_trap()
     error("Loop while forcing thunk")
   end
