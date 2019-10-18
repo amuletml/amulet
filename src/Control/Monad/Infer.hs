@@ -519,7 +519,7 @@ instance Pretty TypeError where
     vsep [ "This top-level binding can not have a polymorphic type because of the value restriction"
          , note <+> "It has type" <+> displayType tau
          , note <+> "But the variable" <+> vars
-         , bullet $ "Solution: give it a monomorphic type signature. For example:"
+         , bullet "Solution: give it a monomorphic type signature. For example:"
          , indent 4 (displayType (apply (Map.fromList (zip var_list (repeat tyUnit))) tau))
          ]
     where
