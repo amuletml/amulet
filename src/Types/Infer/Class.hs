@@ -579,8 +579,8 @@ addArg _ _ ex = ex
 appArg :: Map.Map (Var Typed) (Type Typed) -> Type Typed -> Expr Typed -> Expr Typed
 appArg sub (TyPi (Invisible v _ _) rest) ex =
   case Map.lookup v sub of
-    Just x -> appArg sub rest $ ExprWrapper (TypeApp x) ex (annotation ex, rest)
-    Nothing -> appArg sub rest $ ExprWrapper (TypeApp TyType) ex (annotation ex, rest)
+    Just x -> appArg sub rest $ ExprWrapper (TypeApp x) ex (annotation ex, apply sub rest)
+    Nothing -> appArg sub rest $ ExprWrapper (TypeApp TyType) ex (annotation ex, apply sub rest)
 appArg _ _ ex = ex
 
 transplantPi :: Type Typed -> Type Typed -> Type Typed
@@ -602,7 +602,7 @@ reduceClassContext extra annot cons = do
         don't_skol <-
           case appsView con of
             TyCon v:args -> do
-              fds <- view (classDecs . at v) 
+              fds <- view (classDecs . at v)
               case fds of
                 Just (view ciFundep -> fds) ->
                   pure (foldMap (ftv . map (args !!)) (map (view _2) fds))

@@ -86,7 +86,8 @@ let serve p h xs =
   | Some x -> x ()
 
 type api <- (p "hello" :> get string) <|> (p "echo" :> capture int :> get int)
-let handler = (fun () -> "hello, world!") :<|> (fun x () -> x)
+let handler : (unit -> string) * (int -> unit -> int) =
+  (fun () -> "hello, world!") :<|> (fun x () -> x)
 
 let x = serve (Proxy : proxy api) handler [ "hello" ]
 let y = serve (Proxy : proxy api) handler [ "echo", "123" ]

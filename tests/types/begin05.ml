@@ -5,7 +5,7 @@ end
 
 type identity 'a = Identity of 'a
 
-let _ = begin
+let _ : identity int = begin
   with x <- Identity 1
   2
 end
