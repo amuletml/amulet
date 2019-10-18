@@ -424,7 +424,7 @@ inferProg (decl@(TypeDecl am n tvs cs ann):prg) = do
         consFst (TypeDecl am n tvs cs (ann, undefined)) $
           inferProg prg
 
-  local (names %~ focus (one n (fst (rename kind)))) $
+  local (names %~ focus (one n (fst (rename kind)))) . local (declaredHere %~ Set.insert n) $
     case cs of
       Nothing -> cont Nothing
       Just cs -> do
@@ -442,6 +442,7 @@ inferProg (c@Class{}:prg) = do
   (stmts, decls, clss, implicits, syms) <- condemn $ inferClass c
   first (stmts ++) <$> do
     local (names %~ focus decls)
+      . local (declaredHere %~ Set.insert v)
       . local (classDecs . at v ?~ clss)
       . local (classes %~ mappend implicits)
       . local (tySyms %~ extendTySyms syms) $
@@ -484,7 +485,7 @@ inferProg (Open mod:prg) = do
     consFst (Open mod') $ inferProg prg
 
 inferProg (Module am name mod:prg) = do
-  (mod', exEnv, modInfo) <- inferMod mod
+  (mod', exEnv, modInfo) <- local (declaredHere .~ mempty) $ inferMod mod
   local (exEnv . (modules %~ Map.insert name modInfo)) $
     consFst (Module am name mod') $
     inferProg prg

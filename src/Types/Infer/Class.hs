@@ -281,7 +281,7 @@ inferInstance :: forall m. MonadInfer Typed m
                    , ClassInfo
                    , [TySymInfo]
                    )
-inferInstance inst@(Instance clss ctx instHead bindings ann) = do
+inferInstance inst@(Instance clss ctx instHead bindings ann) = condemn $ do
   traverse_ (checkWildcard inst) ctx
   checkWildcard inst instHead
 
@@ -322,9 +322,22 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
   globalInsnConTy <- silence $
     closeOver (BecauseOf inst) (TyPi (Implicit ctx) instHead)
 
-  checkFundeps ctx ann fundeps instHead
+  condemn $ checkFundeps ctx ann fundeps instHead
 
   (instHead, skolSub) <- skolFreeTy mempty (ByInstanceHead instHead ann) oldInstHead
+
+  let ty_cons = Map.fromList $ map (_2 %~ fromJust)
+                             $ filter (isJust . snd)
+                             $ zip [negate 1 ..]
+                             $ map getTyCon (appsView instHead)
+
+      getTyCon (TyCon x) = Just x
+      getTyCon (TyPromotedCon x) = Just x
+      getTyCon _ = Nothing
+
+  declaredHere <- view declaredHere
+
+  guardOrphans (BecauseOf inst) declaredHere fundeps ty_cons
 
   _ <- flip transformM oldInstHead $ \case
     tau@(TyPi Implicit{} _) -> confesses (ArisingFrom (ImpredicativeApp (TyCon classCon) tau) (BecauseOf inst))
@@ -454,7 +467,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
 
         unless (null cons) $ do
           let (c@(ConImplicit reason _ _ _):_) = reverse cons
-          confesses (addBlame reason (UnsatClassCon reason c (InstanceMethod ctx)))
+          dictates (addBlame reason (UnsatClassCon reason c (InstanceMethod ctx)))
 
         let fakeExp =
               App (appArg instSub bindGroupTy (VarRef v' (an, bindGroupTy)))
@@ -486,7 +499,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
 
   case satisfy (`Map.member` definedHere) minimal of
     Sat -> pure ()
-    Unsat xs -> confesses (UndefinedMethods instHead xs ann)
+    Unsat xs -> dictates (UndefinedMethods instHead xs ann)
 
   scope <- mappend localAssums' <$> view classes
   (usedDefaults, defaultMethods) <- fmap unzip
@@ -501,7 +514,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
 
     unless (null cons) $ do
       let (c@(ConImplicit reason _ _ _):_) = reverse cons
-      confesses (addBlame reason (UnsatClassCon reason c (InstanceMethod ctx)))
+      dictates (addBlame reason (UnsatClassCon reason c (InstanceMethod ctx)))
 
     capture <- genName
     let shove cs (ExprWrapper w e a) = ExprWrapper w (shove cs e) a
@@ -540,7 +553,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
       solve cs =<< getSolveInfo
 
   unless (null unsolved) $
-    confesses (addBlame (BecauseOf inst)
+    dictates (addBlame (BecauseOf inst)
       (UnsatClassCon (BecauseOf inst) (head unsolved) (InstanceClassCon classAnn)))
 
   let inside = case whatDo of
@@ -586,6 +599,21 @@ appArg _ _ ex = ex
 transplantPi :: Type Typed -> Type Typed -> Type Typed
 transplantPi (TyPi b@Invisible{} rest) ty = TyPi b (transplantPi rest ty)
 transplantPi _ t = t
+
+guardOrphans :: MonadChronicles TypeError m
+             => SomeReason
+             -> Set.Set (Var Resolved)
+             -> [([Int], [Int], Ann Resolved)]
+             -> Map.Map Int VarResolved
+             -> m ()
+guardOrphans inst inScope [] tycons
+  | any (`Set.member` inScope) (Map.elems tycons) = pure ()
+  | otherwise = dictates (OrphanInstance inst (Set.fromList (Map.elems tycons) Set.\\ inScope))
+
+guardOrphans inst inScope fundeps tycons = for_ fundeps $ \(_, det, _) -> do
+  let tc = tycons `Map.withoutKeys` (Set.fromList det)
+  unless (any (`Set.member` inScope) (Map.elems tc)) $
+    dictates (OrphanInstance inst (Set.fromList (Map.elems tycons) Set.\\ inScope))
 
 reduceClassContext :: forall m. (MonadInfer Typed m, HasCallStack)
                    => ImplicitScope ClassInfo Typed
@@ -762,7 +790,7 @@ validContext :: MonadChronicles TypeError m => String -> Ann Desugared -> Type D
 validContext what ann t@(TyApps f xs@(_:_))
   -- | TyCon v <- f, v == tyEqName = unless (what == "instance") $ confesses (InvalidContext what ann t)
   | TyCon{} <- f = pure ()
-  | otherwise = traverse_ (validContext what ann) xs `catchChronicle` \_ -> confesses (InvalidContext what ann t)
+  | otherwise = traverse_ (validContext what ann) xs `catchChronicle` \_ -> dictates (InvalidContext what ann t)
 validContext _ _ TyApp{} = error "Impossible TyApp - handled by TyApps"
 
 validContext what ann (TyTuple a b) = do
@@ -774,18 +802,18 @@ validContext what ann (TyOperator a _ b) = do
   validContext what ann b
 
 validContext _ _ TyCon{} = pure ()
-validContext what ann t@TyPromotedCon{} = confesses (InvalidContext what ann t)
-validContext w a t@TyVar{} = confesses (InvalidContext w a t)
-validContext w a t@TyArr{} = confesses (InvalidContext w a t)
+validContext what ann t@TyPromotedCon{} = dictates (InvalidContext what ann t)
+validContext w a t@TyVar{} = dictates (InvalidContext w a t)
+validContext w a t@TyArr{} = dictates (InvalidContext w a t)
 validContext w a t@(TyPi _ x) =
-  validContext w a x `catchChronicle` \_ -> confesses (InvalidContext w a t)
-validContext w a t@TyRows{} = confesses (InvalidContext w a t)
-validContext w a t@TyExactRows{} = confesses (InvalidContext w a t)
-validContext w a t@TyWildcard{} = confesses (InvalidContext w a t)
-validContext w a t@TySkol{} = confesses (InvalidContext w a t)
-validContext w a t@TyWithConstraints{} = confesses (InvalidContext w a t)
-validContext w a t@TyType{} = confesses (InvalidContext w a t)
-validContext w a t@TyLit{} = confesses (InvalidContext w a t)
+  validContext w a x `catchChronicle` \_ -> dictates (InvalidContext w a t)
+validContext w a t@TyRows{} = dictates (InvalidContext w a t)
+validContext w a t@TyExactRows{} = dictates (InvalidContext w a t)
+validContext w a t@TyWildcard{} = dictates (InvalidContext w a t)
+validContext w a t@TySkol{} = dictates (InvalidContext w a t)
+validContext w a t@TyWithConstraints{} = dictates (InvalidContext w a t)
+validContext w a t@TyType{} = dictates (InvalidContext w a t)
+validContext w a t@TyLit{} = dictates (InvalidContext w a t)
 validContext w a (TyParens t) = validContext w a t
 
 tooConcrete :: MonadInfer Typed m => Type Typed -> m Bool
@@ -865,7 +893,7 @@ checkFundeps context ann fds ty = do
              else mempty
 
     unless (fv_t `Set.isSubsetOf` fv_f) $
-      confesses $ NotCovered ann fda (map (args !!) from) (Set.toList (fv_t Set.\\ fv_f))
+      dictates $ NotCovered ann fda (map (args !!) from) (Set.toList (fv_t Set.\\ fv_f))
 
     let stub i x | i `Set.member` to_set = freshTV
                  | otherwise = pure x
@@ -877,7 +905,7 @@ checkFundeps context ann fds ty = do
 
     case overlapping of
       [] -> pure ()
-      (x:_) -> confesses (Overlap Overinst instHead (x ^. implSpan) ann)
+      (x:_) -> dictates (Overlap Overinst instHead (x ^. implSpan) ann)
 
 splitContext :: Type Typed -> [Type Typed]
 splitContext (TyTuple a b) = a:splitContext b

@@ -143,6 +143,8 @@ data TypeError where
   TypeFamInInstHead :: Type Typed -> Type Typed -> TypeError
   InvalidContext :: String -> Span -> Type Desugared -> TypeError
 
+  OrphanInstance :: SomeReason -> Set.Set (Var Typed) -> TypeError
+
   NotAClass :: Var Typed -> TypeError
 
   CanNotVta :: Type Typed -> Type Desugared -> TypeError
@@ -541,6 +543,14 @@ instance Pretty TypeError where
          , "is required."
          ]
 
+  pretty (OrphanInstance _ vs) =
+    vsep [ "This instance should be defined in the same module as" <+> vars ]
+      where
+        vs_list = Set.toList vs
+        vars = case vs_list of
+          [x] -> stypeCon $ pretty x
+          _ -> "at least one of" <+> hsep (map (stypeCon . pretty) vs_list)
+
   pretty (UnsaturatedTS _ info n) =
     vsep [ "Type" <+> thing <+> stypeCon (pretty (info ^. tsName)) <+> "appears with" <+> nargs <> comma
          , "but in its definition it has" <+> sliteral (int (length (info ^. tsArgs)))
@@ -594,6 +604,7 @@ instance Spanned TypeError where
   annotation (WarningError x) = annotation x
   annotation (UnsatClassCon x _ _) = annotation x
   annotation (TyFamLackingArgs x _ _) = annotation x
+  annotation (OrphanInstance x _) = annotation x
   annotation x = error (show (pretty x))
 
 instance Note TypeError Style where
