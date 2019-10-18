@@ -127,14 +127,20 @@ data TypeError where
   AmbiguousMethodTy :: (Ord (Var p), Pretty (Var p)) => Var p -> Type p -> Set.Set (Var p) -> TypeError
 
   UnsatClassCon :: SomeReason -> Constraint Typed -> WhyUnsat -> TypeError
-  Overlap :: WhatOverlaps -> Type Typed -> Span -> Span -> TypeError
   ClassStackOverflow :: SomeReason -> [Type Typed] -> Type Typed -> TypeError
+
   WrongClass :: InstanceItem Desugared -> Var Typed -> TypeError
+  Overlap :: WhatOverlaps -> Type Typed -> Span -> Span -> TypeError
+
   UndefinedMethods :: Type Typed -> Formula Text -> Span -> TypeError
   UndefinedTyFam :: Var Typed -> Type Typed -> Span -> TypeError
-  InvalidContext :: String -> Span -> Type Desugared -> TypeError
+
+  TyFamLackingArgs :: InstanceItem Desugared -> Int -> Int -> TypeError
+
   MagicInstance :: Var Typed -> SomeReason -> TypeError
   TypeFamInInstHead :: Type Typed -> Type Typed -> TypeError
+  InvalidContext :: String -> Span -> Type Desugared -> TypeError
+
   NotAClass :: Var Typed -> TypeError
 
   CanNotVta :: Type Typed -> Type Desugared -> TypeError
@@ -490,6 +496,18 @@ instance Pretty TypeError where
              <+> "in an instance for" <+> displayType inst
          ]
 
+  pretty (TyFamLackingArgs _ wanted got) =
+    vsep [ "This associated type instance has"
+            <+> int got <+> "argument" <> plArg <> ", but" <+> int wanted <+> expected ]
+    where
+      plArg
+        | got == 1 = empty
+        | otherwise = char 's'
+      expected
+        | wanted == 1 = "was expected"
+        | otherwise = "were expected"
+
+
   pretty (InvalidContext what _ ty) =
     vsep [ "Invalid type in context for" <+> string what <+> "declaration:"
          , indent 4 (displayType ty)
@@ -559,6 +577,7 @@ instance Spanned TypeError where
   annotation (TyFunInLhs x _) = annotation x
   annotation (WarningError x) = annotation x
   annotation (UnsatClassCon x _ _) = annotation x
+  annotation (TyFamLackingArgs x _ _) = annotation x
   annotation x = error (show (pretty x))
 
 instance Note TypeError Style where

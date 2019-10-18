@@ -2,4 +2,4 @@ has_sing : type -> constraint
 sing_t : type -> 'k -> type
 sint : int -> type
 SInt : Spec{'i : int}. known_int 'i => sint 'i
-sing : Infer{'k : type}. Infer{'a : 'k}. sing_t int 'a
+sing : sing_t int 123

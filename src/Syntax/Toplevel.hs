@@ -88,6 +88,7 @@ data ClassItem p
                   , _methAnn :: Ann p
                   }
   | AssocType { _methName :: Var p
+              , _methArgs :: [TyConArg p]
               , _methKind :: Type p
               , _methAnn  :: Ann p
               }
@@ -175,7 +176,7 @@ instance Spanned (Ann p) => Spanned (InstanceItem p) where
 instance Pretty (Var p) => Pretty (ClassItem p) where
   pretty (MethodSig v t _) = keyword "val" <+> pretty v <+> colon <+> pretty t
   pretty (DefaultMethod b _) = keyword "let" <+> pretty b
-  pretty (AssocType v k _) = keyword "type" <+> pretty v <+> colon <+> pretty k
+  pretty (AssocType v as k _) = keyword "type" <+> pretty v <+> hsep (map pretty as) <+> colon <+> pretty k
 
 instance Pretty (Var p) => Pretty (Fundep p) where
   pretty (Fundep from to _) = hsep (punctuate comma (map k from))

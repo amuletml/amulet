@@ -155,7 +155,7 @@ resolveClassKind stmt@(Class classcon _ ctx args _ methods _) = do
         replaceK _ k = k
     local (names %~ focus scope) $ do
       tys <- fmap mconcat . for methods $ \case
-        AssocType v ty _ -> do
+        AssocType v _ ty _ -> do
           ty <- checkKind ty TyType
           pure (one v (replaceK kind ty))
         _ -> pure mempty

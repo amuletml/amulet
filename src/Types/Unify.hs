@@ -319,7 +319,7 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do -- {{{
   ignored <- freshTV
 
   case possible of
-    xs | True, allSameHead xs
+    xs | allSameHead xs
        , concreteUnderOne cons || hasExactMatch cons xs
        , applic <- filter (applicable cons scope) xs
        , not (null applic) -> do
@@ -791,6 +791,7 @@ tyFunByEval (TyFamInfo tn eqs relevant _ con) scope args tb = do
       let vars = Set.toList (ftv declared')
       fresh <- fmap Map.fromList . for vars $ \v -> (v,) <$> freshTV
       let (declared, result) = (apply fresh declared', apply fresh result')
+          rest_args = drop (length declared) args
 
       x <- ack (zip declared args)
 
@@ -804,9 +805,10 @@ tyFunByEval (TyFamInfo tn eqs relevant _ con) scope args tb = do
           if all (apart flat) skipped
 
              then do
-               traceM (displayS (keyword "[D]:" <+> pretty (apply sub result) <+> "~" <+> pretty tb))
-               _ <- unify scope tb (apply sub result)
-               pure (Just (InstCo con cos))
+               let r_t = foldl TyApp (apply sub result) (apply sub rest_args)
+               traceM (displayS (keyword "[D]:" <+> pretty r_t <+> "~" <+> pretty tb))
+               _ <- unify scope r_t tb
+               pure (Just (foldl AppCo (InstCo con cos) (map ReflCo rest_args)))
 
              else pure Nothing
 

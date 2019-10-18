@@ -237,8 +237,8 @@ ClassItems :: { [ClassItem Parsed] }
 ClassItem :: { ClassItem Parsed }
   : val BindName ':' Type { withPos2 $1 $4 $ MethodSig (getL $2) (getL $4) }
   | let Binding { withPos2 $1 $2 $ DefaultMethod $2 }
-  | type BindName ':' Type { withPos2 $1 $4 $ AssocType (getL $2) (getL $4) }
-  | type BindName          { withPos2 $1 $2 $ AssocType (getL $2) TyType }
+  | type BindName ListE(TyConArg) ':' Type { withPos2 $1 $5 $ AssocType (getL $2) $3 (getL $5) }
+  | type BindName ListE(TyConArg) { withPos2 $1 $2 $ AssocType (getL $2) $3 TyType }
 
 Fundeps :: { [Fundep Parsed] }
   : '|' List1(Fundep, ',') { $2 }
