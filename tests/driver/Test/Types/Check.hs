@@ -6,12 +6,16 @@ import Test.Util
 import Control.Monad.Infer (names, firstName)
 import Control.Monad.IO.Class
 import Control.Monad.Namey
+import Control.Monad
 import Control.Lens ((^.), to, runIdentity)
 
 import qualified Data.Text.Lazy as L
 import qualified Data.Text.IO as T
 import qualified Data.Text as T
+import qualified Data.Set as Set
 import qualified Data.Map as Map
+import Data.Functor
+import Data.Maybe
 
 import Parser.Wrapper (runParser)
 import Parser
@@ -24,6 +28,7 @@ import Syntax.Types (difference, toMap)
 import Syntax.Builtin
 
 import Core.Lower
+import Core.Simplify
 import Core.Lint
 
 import System.Directory
@@ -54,8 +59,8 @@ result f c = runIdentity . flip evalNameyT firstName $ do
 
     prettyErrs = vsep . map (N.format (N.fileSpans [(f, c)] N.defaultHighlight))
 
-checkLint :: String -> Assertion
-checkLint file = flip evalNameyT firstName $ do
+checkLint :: Bool -> String -> Assertion
+checkLint optm file = flip evalNameyT firstName $ do
   c <- liftIO (T.readFile file)
   let parsed = requireJust file c $ runParser file (L.fromStrict c) parseTops
   ResolveResult resolved _ _ <- requireRight file c <$> runNullImport (resolveProgram builtinResolve parsed)
@@ -66,9 +71,12 @@ checkLint file = flip evalNameyT firstName $ do
     Left _ -> pure ()
     Right (prg, _) -> do
       lowered <- runLowerT (lowerProg prg)
+
       case runLintOK (checkStmt emptyScope lowered) of
         Nothing -> pure ()
         Just (_, es) -> liftIO $ assertFailure ("Core lint failed:\n" ++ T.unpack (displayDetailed (pretty es)))
+      -- Optimise runs lower by default
+      when optm (optimise lowered $> ())
 
 tests :: IO TestTree
 tests = do
@@ -76,9 +84,15 @@ tests = do
   lint <- traverse makeLint groups
   pure $ testGroup "Types" [ testGroup "Inference" golden, testGroup "Lint" lint ]
   where
-    makeLint (group, dir) = do
-      files <- filter (isExtensionOf "ml") <$> listDirectory dir
-      pure $ testGroup group (map (\x -> testCase x (checkLint (dir </> x))) files)
+    makeLint (group, dir) =
+          testGroup group
+        . mapMaybe (\x ->
+            let full = dir </> x in
+            if Set.member full exclude
+            then Nothing
+            else Just (testCase x (checkLint False full)))
+        . filter (isExtensionOf "ml")
+      <$> listDirectory dir
     groups =
       [ ("Default tests", "tests/types/")
       , ("GADT tests", "tests/types/gadt/")
@@ -90,4 +104,8 @@ tests = do
       , ("Visible type application tests", "tests/types/vta/")
       , ("Type synonym tests ", "tests/types/synonym/")
       , ("Type function tests ", "tests/types/tyfun/")
+      ]
+    exclude = Set.fromList
+      [ "tests/types/class/type-sk.ml"
+      , "tests/types/class/n-queens.ml"
       ]
