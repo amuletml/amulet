@@ -576,10 +576,10 @@ unify scope (TyArr l r) (TyApp (TyApp (TyCon v) l') r')
   | v == tyArrowName = ArrCo <$> unify scope l l' <*> unify scope r r'
 
 unify scope x@(TyApp f g) y@(TyArr l r) =
-  rethrow x y $ ArrCo <$> unify scope f (TyApp (TyCon tyArrowName) l) <*> unify scope g r
+  rethrow x y $ AppCo <$> unify scope f (TyApp (TyCon tyArrowName) l) <*> unify scope g r
 
 unify scope x@(TyArr l r) y@(TyApp f g) =
-  rethrow x y $ ArrCo <$> unify scope (TyApp (TyCon tyArrowName) l) f <*> unify scope r g
+  rethrow x y $ AppCo <$> unify scope (TyApp (TyCon tyArrowName) l) f <*> unify scope r g
 
 unify scope (TyArr a b) (TyArr a' b') = ArrCo <$> unify scope a a' <*> unify scope b b'
 unify scope (TyPi (Implicit a) b) (TyPi (Implicit a') b') =
@@ -653,9 +653,9 @@ unify scope (TyTuple l r) (TyApp (TyApp (TyCon v) l') r')
   | v == tyTupleName = ProdCo <$> unify scope l l' <*> unify scope r r'
 
 unify scope x@(TyApp f g) y@(TyTuple l r) =
-  rethrow x y $ ProdCo <$> unify scope f (TyApp (TyCon tyTupleName) l) <*> unify scope g r
+  rethrow x y $ AppCo <$> unify scope f (TyApp (TyCon tyTupleName) l) <*> unify scope g r
 unify scope x@(TyTuple l r) y@(TyApp f g) =
-  rethrow x y $ ProdCo <$> unify scope (TyApp (TyCon tyTupleName) l) f <*> unify scope r g
+  rethrow x y $ AppCo <$> unify scope (TyApp (TyCon tyTupleName) l) f <*> unify scope r g
 
 unify scope (TyOperator l v r) (TyTuple l' r')
   | v == tyTupleName = ProdCo <$> unify scope l l' <*> unify scope r r'
