@@ -2,7 +2,7 @@ Using amc with the help flag displays all sub-command and the top-level options.
 
   $ amc --help
   Usage: amc [COMMAND] [-v|--version]
-    The Amulet compiler and REPL, version 0.4.0.0 \(\w+\)(re)
+    The Amulet compiler and REPL, version [0-9.]+ \(\w+\)(re)
   
   Available options:
     -h,--help                Show this help text
