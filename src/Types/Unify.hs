@@ -968,7 +968,7 @@ subsumes' r scope ot@(TyTuple a b) nt@(TyTuple a' b') = do -- {{{
           Let
             [ TypedMatching
                 ( PTuple [ Capture elem (an, a), Capture elem' (an, b) ] (an, ot) )
-                ex (an, nt)
+                ex (an, ot)
                 [ (elem, a), (elem', b) ] ]
             ( Tuple [ ExprWrapper wa (VarRef elem (an, a)) (an, a')
                     , ExprWrapper wb (VarRef elem' (an, b)) (an, b') ]
