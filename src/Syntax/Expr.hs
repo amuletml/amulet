@@ -182,6 +182,7 @@ deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Pattern p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Pattern p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Pattern p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Pattern p)
+instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Plated (Pattern p)
 
 makeLenses ''Parameter
 makeLenses ''Binding

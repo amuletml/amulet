@@ -10,7 +10,7 @@ type slist 't =
 type 'a ~~ 'b = Refl : 'a ~ 'b => 'a ~~ 'b
 
 class tyfun 'f begin
-  type apply : type -> type
+  type apply 'x
 end
 
 type function map 'f 'xs begin

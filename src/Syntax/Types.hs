@@ -118,8 +118,8 @@ data ClassInfo
         -- ^ The head of this class (name applied to parameters)
       , _ciMethods :: Map.Map (Var Typed) (Type Typed)
         -- ^ A map of methods to their signatures
-      , _ciAssocTs :: Map.Map (Var Typed) (Type Typed, Type Typed)
-        -- ^ A map of associated types to their (declared, actual) kinds
+      , _ciAssocTs :: Map.Map (Var Typed) (Int, Type Typed, Type Typed)
+        -- ^ A map of associated types to their arities + (declared, actual) kinds
       , _ciContext :: Map.Map Text (Type Typed)
         -- ^ The superclasses of this class,
       , _ciConstructorName :: Var Typed

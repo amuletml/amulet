@@ -53,7 +53,7 @@ modTerm (ModLoad v a) = pure $ ModLoad v a
 classItem :: forall m. MonadNamey m => ClassItem Resolved -> m (ClassItem Desugared)
 classItem (MethodSig v t a) = pure $ MethodSig v (ty t) a
 classItem (DefaultMethod m a) = DefaultMethod <$> binding m <*> pure a
-classItem (AssocType v t a) = pure $ AssocType v (ty t) a
+classItem (AssocType v as t a) = pure $ AssocType v (map tyA as) (ty t) a
 
 expr :: forall m. MonadNamey m => Expr Resolved -> m (Expr Desugared)
 expr (Literal l a) = pure (Literal l a)

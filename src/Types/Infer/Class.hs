@@ -111,20 +111,28 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
       unwind t = pure t
 
 
-  (assocts, assocty_tele, assoct_defs, assoct_info) <- fmap unzip4 . for assoctys $ \meth@(AssocType method ty ann) -> do
+  (assocts, assocty_tele, assoct_defs, assoct_info) <- fmap unzip4 . for assoctys $ \meth@(AssocType method vs ty ann) -> do
     let replaceK by (TyPi b t) = TyPi b $ replaceK by t
         replaceK by _ = by
     checkWildcard meth ty
 
     declared <- checkAgainstKind (BecauseOf meth) ty TyType
-    let ty = replaceK declared k
+
+    vs <- for vs $ \case
+      TyAnnArg v k -> TyAnnArg v <$> checkAgainstKind (BecauseOf meth) k TyType
+      TyVarArg v -> TyAnnArg v <$> freshTV
+
+    let ty = kindFromArgs vs $ replaceK declared k
+        kindFromArgs (TyAnnArg _ k:xs) cont = TyPi (Anon k) $ kindFromArgs xs cont
+        kindFromArgs (_:_) _ = undefined
+        kindFromArgs [] cont = cont
     let info = TyFamInfo { _tsName = method
                          , _tsEquations = []
                          , _tsConstraint = Just classConstraint
                          , _tsArgs = map argName params
                          , _tsKind = ty }
 
-    pure ( Map.singleton method (declared, ty)
+    pure ( Map.singleton method (length vs, declared, ty)
          , one method ty
          , TypeDecl Private method [] (Just []) (ann, ty)
          , info
@@ -362,21 +370,19 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = do
         as (TyPi _ r) = as r
         as _ = []
 
-        ret (TyPi _ r) = ret r
-        ret r = r
-
-    (declared, global_t) <- case Map.lookup var assocTySigs of
+    (argn, declared, global_t) <- case Map.lookup var assocTySigs of
       Just x -> pure x
       Nothing -> confesses (WrongClass bind clss)
 
-    padding_vars <- replicateM (length (as declared) - length args) genName
     let argts = zip argvs (as declared)
-        argvs = map argName args ++ padding_vars
+        argvs = map argName args
+
+    when (argn /= length args) $
+      confesses (TyFamLackingArgs bind argn (length args))
 
     local (names %~ focus (teleFromList argts)) . local (classes %~ mappend localAssums) $ do
-      (exp, cs) <- listen $
-        checkAgainstKind (BecauseOf bind) (foldl TyApp (apply (fmap unlift skolSub) exp) (map TyVar padding_vars)) (ret declared)
-
+      (exp, cs) <- condemn . listen $
+        checkAgainstKind (BecauseOf bind) (apply (fmap unlift skolSub) exp) declared
 
       let fake_clause = TyFunClause (apply skolSub (TyApps (TyCon var) (instArgs ++ map (TyVar . argName) args)))
                             exp (ann, declared)

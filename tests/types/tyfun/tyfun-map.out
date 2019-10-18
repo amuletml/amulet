@@ -3,13 +3,13 @@ cons : Infer{'a : type}. Infer{'b : type}. 'b -> 'a -> type
 proxy : Infer{'a : type}. 'a -> type
 Proxy : Infer{'a : type}. Spec{'a : 'a}. proxy 'a
 slist : type -> type
-SNil : Infer{'dq : type}. Spec{'t : 'dq}. ('t ~ nil) ⊃ slist 't
-SCons : Infer{'ex : type}. Infer{'a : type}. Spec{'t : 'ex}. Spec{'a : 'a}. Spec{'xs : type}. ('t ~ cons 'a 'xs) ⊃ (proxy 'a * slist 'xs) -> slist 't
+SNil : Infer{'dr : type}. Spec{'t : 'dr}. ('t ~ nil) ⊃ slist 't
+SCons : Infer{'ey : type}. Infer{'a : type}. Spec{'t : 'ey}. Spec{'a : 'a}. Spec{'xs : type}. ('t ~ cons 'a 'xs) ⊃ (proxy 'a * slist 'xs) -> slist 't
 ~~ : Infer{'a : type}. 'a -> 'a -> type
 Refl : Infer{'a : type}. Spec{'a : 'a}. Spec{'b : 'a}. ~ 'a 'b => ~~ 'a 'b
-tyfun : Infer{'ik : type}. 'ik -> constraint
-apply : Infer{'ik : type}. 'ik -> type -> type
-map : 'ik -> type -> type
+tyfun : Infer{'il : type}. 'il -> constraint
+apply : 'iw -> Infer{'il : type}. 'il -> type
+map : 'iw -> type -> type
 compose : Infer{'a : type}. Infer{'b : type}. 'b -> 'a -> type
-comp_app : Spec{'ik : type}. Spec{'a : type}. Spec{'f : 'ik}. Spec{'g : 'a}. Spec{'b : type}. (tyfun 'f * tyfun 'g) => proxy 'f -> proxy 'g -> proxy 'b -> ~~ (apply (compose 'f 'g) 'b) (apply 'f (apply 'g 'b))
+comp_app : Spec{'il : type}. Spec{'f : type}. Spec{'g : type}. Spec{'a : 'il}. (tyfun 'f * tyfun 'g) => proxy 'f -> proxy 'g -> proxy 'a -> ~~ (apply (compose 'f 'g) 'a) (apply 'f (apply 'g 'a))
 foo : Spec{'f : type}. Spec{'g : type}. Spec{'xs : type}. (tyfun 'f * tyfun 'g) => slist 'xs -> ~~ (map 'f (map 'g 'xs)) (map (compose 'f 'g) 'xs)

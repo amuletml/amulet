@@ -168,7 +168,7 @@ reTops (t@(Class name am ctx tvs fds ms ann):rest) sig = do
 
   (ctx', fds', (ms', vs')) <- local (scope %~ withTy name name') $ do
     tyfuns <- fmap concat . for ms $ \case
-      AssocType name _ _ -> (:[]) . (name,) <$> tagVar name
+      AssocType name _ _ _ -> (:[]) . (name,) <$> tagVar name
       _ -> pure []
 
     extendTyvars tvss . local (scope %~ withTys tyfuns) $
@@ -188,10 +188,11 @@ reTops (t@(Class name am ctx tvs fds ms ann):rest) sig = do
       name' <- tagVar name
       pure ( (MethodSig name' <$> reType m (wrap tvs' ty) <*> pure an):ra
            , (name, name'):rb )
-    reClassItem tvs' (m@(AssocType name ty an):rest) = do
+    reClassItem tvs' (m@(AssocType name args ty an):rest) = do
       name' <- lookupTy name
       (ra, rb) <- reClassItem tvs' rest
-      pure ( (AssocType name' <$> reType m (wrap tvs' ty) <*> pure an):ra
+      (tele, _) <- resolveTele m args
+      pure ( (AssocType name' tele <$> reType m (wrap tvs' ty) <*> pure an):ra
            , (name, name'):rb )
     reClassItem tvs' (DefaultMethod b an:rest) = do
       (ra, rb) <- reClassItem tvs' rest

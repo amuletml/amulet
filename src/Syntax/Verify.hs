@@ -143,7 +143,7 @@ verifyExpr Literal{} = pure ()
 verifyExpr m@(Match e bs _) = do
   verifyExpr e
   verifyMatch
-    (\(Arm p _ _) -> tell . pure $ MatchToLet p m)
+    (\(Arm p _ _) -> unless (gadtPat p) $ tell . pure $ MatchToLet p m)
     m (getType e) bs
 verifyExpr Function{} = error "Impossible: Function has been desugared."
 verifyExpr (BinOp l o r _) = traverse_ verifyExpr [l, o, r]
@@ -277,6 +277,11 @@ nonTrivial (ExprWrapper w e _) =
   case w of
     WrapFn (MkWrapCont k _) -> nonTrivial (k e)
     _ -> nonTrivial e
+
+gadtPat :: Pattern Typed -> Bool
+gadtPat = any isGadt . universe where
+  isGadt (PGadtCon _ _ vs _ _) = not (null vs)
+  isGadt _ = False
 
 -- | Verify a series of patterns are total
 verifyMatch :: MonadVerify m
