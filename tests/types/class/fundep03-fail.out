@@ -1,5 +1,5 @@
 fundep03-fail.ml[36:17 ..36:59]: error
-  No instance for add (S (S Z)) (S (S (S Z))) 'c arising from use of the expression
+  No instance for add (S (S Z)) (S (S (S Z))) 'l arising from use of the expression
    │ 
 36 │ let onetofive = append (1 :: 2 :: Nil) (3 :: 4 :: 5 :: Nil)
    │                 ^^^^^^^^^^^^^^^^^^^^^^
