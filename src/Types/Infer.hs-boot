@@ -5,6 +5,7 @@ module Types.Infer
   , closeOver
 
   , infer, check, solveEx
+  , infer', instantiateTc
   ) where
 
 import Prelude hiding (lookup)
@@ -26,5 +27,8 @@ inferProgram :: MonadNamey m => Env -> [Toplevel Desugared] -> m (These [TypeErr
 check :: forall m. MonadInfer Typed m => Expr Desugared -> Type Typed -> m (Expr Typed)
 
 infer :: MonadInfer Typed m => Expr Desugared -> m (Expr Typed, Type Typed)
+infer' :: MonadInfer Typed m => Expr Desugared -> m (Expr Typed, Type Typed)
+
+instantiateTc :: MonadInfer Typed m => SomeReason -> Type Typed -> m (Expr Typed -> Expr Typed, Type Typed)
 
 solveEx :: TySyms -> Subst Typed -> Map.Map (Var Typed) (Wrapper Typed) -> Expr Typed -> Expr Typed

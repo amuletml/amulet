@@ -8,4 +8,4 @@ term : type -> type -> type
 Var : Spec{'ctx : type}. Spec{'ty : type}. elem 'ty 'ctx -> term 'ctx 'ty
 Lam : Infer{'mu : type}. Spec{'ty : 'mu}. Spec{'a : type}. Spec{'b : type}. Spec{'ctx : type}. ('ty ~ 'a -> 'b) ⊃ term ('a * 'ctx) 'b -> term 'ctx 'ty
 App : Infer{'ov : type}. Spec{'ty : 'ov}. Spec{'a : type}. Spec{'b : type}. Spec{'ctx : type}. ('ty ~ 'b) ⊃ (term 'ctx ('a -> 'b) * term 'ctx 'a) -> term 'ctx 'ty
-const : Infer{'b : type}. Infer{'y : type}. Infer{'xs : type}. term 'xs ('b -> 'y -> 'b)
+const : Infer{'b : type}. Infer{'xs : type}. Infer{'y : type}. term 'xs ('b -> 'y -> 'b)

@@ -4,8 +4,8 @@ k1 : Infer{'a : type}. type -> 'a -> type
 K1 : Spec{'a : type}. Spec{'x : 'a}. 'a -> k1 'a 'x
 foo : type
 Foo : int -> foo
-gshow : Infer{'ia : type}. ('ia -> type) -> constraint
-gshow : Spec{'f : 'ia -> type}. gshow 'f => Infer{'ia : type}. Spec{'x : 'ia}. 'f 'x -> string
+gshow : Infer{'ie : type}. ('ie -> type) -> constraint
+gshow : Spec{'f : 'ie -> type}. gshow 'f => Infer{'ie : type}. Spec{'x : 'ie}. 'f 'x -> string
 show : type -> constraint
 show : Spec{'a : type}. show 'a => 'a -> string
 genericShow : Infer{'a : type}. Infer{'f : 'ad -> type}. gshow 'f => generic 'a 'f => 'a -> string

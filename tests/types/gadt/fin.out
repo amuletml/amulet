@@ -1,5 +1,5 @@
 fin.ml[11:14 ..11:18]: error
-  No instance for 'n ~ S (S 'k) arising in this expression
+  No instance for 'n ~ S (S 'k) arising in the expression
    │ 
 11 │   | SS SZ -> FS FZ
    │              ^^^^^

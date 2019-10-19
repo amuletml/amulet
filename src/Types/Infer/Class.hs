@@ -611,7 +611,7 @@ guardOrphans inst inScope [] tycons
   | otherwise = dictates (OrphanInstance inst (Set.fromList (Map.elems tycons) Set.\\ inScope))
 
 guardOrphans inst inScope fundeps tycons = for_ fundeps $ \(_, det, _) -> do
-  let tc = tycons `Map.withoutKeys` (Set.fromList det)
+  let tc = tycons `Map.withoutKeys` Set.fromList det
   unless (any (`Set.member` inScope) (Map.elems tc)) $
     dictates (OrphanInstance inst (Set.fromList (Map.elems tycons) Set.\\ inScope))
 

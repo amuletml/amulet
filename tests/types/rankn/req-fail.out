@@ -3,6 +3,6 @@ req-fail.ml[3:5 ..3:5]: error
 3 │ let _ = foo 123
   │     ^
   Couldn't match actual type forall 'a -> 'a -> unit
-    with the type expected by the context, int -> 'j
+    with the type expected by the context, int -> 'k
 
   • Did you apply a function to too many arguments?

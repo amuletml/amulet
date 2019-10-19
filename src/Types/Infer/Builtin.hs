@@ -114,34 +114,35 @@ decompose r p t =
 -- instantiating 'TyForall's and discharging 'Implicit' binders.
 quantifier :: MonadInfer Typed m
            => SomeReason
+           -> (Specificity -> Bool) -- The quantifiers we can skip over.
            -> Type Typed
            -> m (TyBinder Typed, Type Typed, Expr Typed -> Expr Typed)
 
-quantifier r (TyPi (Invisible v _ req) rest) | req /= Req = do
+quantifier r pred (TyPi (Invisible v _ req) rest) | pred req = do
   var <- refreshTV v
   let map = Map.singleton v var
       exp ex | an <- annotation ex =
         ExprWrapper (TypeApp var) ex (an, apply map rest)
-  (a, b, k) <- quantifier r (apply map rest)
+  (a, b, k) <- quantifier r pred (apply map rest)
   pure (a, b, k . exp)
 
-quantifier r ty@TyWithConstraints{} = do
+quantifier r pred ty@TyWithConstraints{} = do
   (rest, k) <- discharge (Const r) ty
-  (a, b, k') <- quantifier r rest
+  (a, b, k') <- quantifier r pred rest
   pure (a, b, k' . k)
 
-quantifier r wty@(TyPi (Implicit tau) sigma) = do
+quantifier r pred wty@(TyPi (Implicit tau) sigma) = do
   x <- genName
   i <- view classes
   tell (Seq.singleton (ConImplicit r i x tau))
 
-  (dom, cod, k) <- quantifier r sigma
+  (dom, cod, k) <- quantifier r pred sigma
   let wrap ex = ExprWrapper (WrapVar x) (ExprWrapper (TypeAsc wty) ex (annotation ex, wty)) (annotation ex, sigma)
   pure (dom, cod, k . wrap)
 
-quantifier _ (TyPi x b) = pure (x, b, id)
-quantifier _ (TyApp (TyApp (TyCon n) l) r) | n == tyArrowName = pure (Anon l, r, id)
-quantifier r t = do
+quantifier _ _ (TyPi x b) = pure (x, b, id)
+quantifier _ _ (TyApp (TyApp (TyCon n) l) r) | n == tyArrowName = pure (Anon l, r, id)
+quantifier r _ t = do
   (a, b) <- (,) <$> freshTV <*> freshTV
   k <- subsumes r t (TyPi (Anon a) b)
   pure (Anon a, b, \x -> ExprWrapper k x (annotation x, TyPi (Anon a) b))

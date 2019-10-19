@@ -1,0 +1,4 @@
+map : Infer{'a : type}. Infer{'b : type}. ('b -> 'a) -> list 'b -> list 'a
+poly : (Spec{'a : type}. 'a -> 'a) -> int * bool
+single : Infer{'a : type}. 'a -> list 'a
+x : list (int * bool)

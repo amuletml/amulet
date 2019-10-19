@@ -7,6 +7,6 @@ option : type -> type
 Some : Spec{'a : type}. 'a -> option 'a
 None : Spec{'a : type}. option 'a
 <$> : Infer{'a : type}. Infer{'b : type}. ('b -> 'a) -> option 'b -> option 'a
-<*> : Infer{'a : type}. Infer{'b : type}. option ('b -> 'a) -> option 'b -> option 'a
+<*> : Infer{'a : type}. Infer{'b : type}. option ('a -> 'b) -> option 'a -> option 'b
 cast : Spec{'a : type}. Spec{'b : type}. repr 'a -> repr 'b -> 'a -> option 'b
 main : unit

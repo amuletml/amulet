@@ -1,0 +1,6 @@
+|> : Infer{'a : type}. Infer{'b : type}. 'a -> ('a -> 'b) -> 'b
+:@ : Infer{'a : type}. Infer{'b : type}. ('a -> 'b) -> 'a -> 'b
+poly : (Spec{'a : type}. 'a -> 'a) -> int * bool
+id : Infer{'a : type}. 'a -> 'a
+a : int * bool
+b : int * bool

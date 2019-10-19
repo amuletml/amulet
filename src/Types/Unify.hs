@@ -82,6 +82,7 @@ data SolveScope
                , _don'tTouch :: Set.Set (Var Typed)
                , _depth :: [Type Typed]
                , _solveInfo :: SolverInfo
+               , _guarded :: Bool
                }
   deriving (Eq, Show, Ord)
 
@@ -142,7 +143,7 @@ runSolve :: MonadNamey m
          -> m ([Constraint Typed], SolveState)
 runSolve skol info s x = runReaderT (runStateT (execWriterT act) s) emptyScope where
   act = (,) <$> genName <*> x
-  emptyScope = SolveScope skol mempty [] info
+  emptyScope = SolveScope skol mempty [] info False
 
 getSolveInfo :: MonadReader Env m => m SolverInfo
 getSolveInfo = do
@@ -189,7 +190,7 @@ doSolve (ConUnify because scope v a b :<| xs) = do
   sub <- use solveTySubst
   scope <- pure (apply sub scope)
 
-  traceM (displayS (keyword "[W]:" <+> pretty because <+> pretty (ConUnify because scope v (apply sub a) (apply sub b))))
+  traceM (displayS (keyword "[W]:" <+> pretty (ConUnify because scope v (apply sub a) (apply sub b))))
 
   solveFuel .= SOLVER_FUEL
 
@@ -206,7 +207,7 @@ doSolve (ConUnify because scope v a b :<| xs) = do
 doSolve (ConSubsume because scope v a b :<| xs) = do
   sub <- use solveTySubst
 
-  traceM (displayS (pretty because <+> pretty (ConSubsume because scope v (apply sub a) (apply sub b))))
+  traceM (displayS (pretty (ConSubsume because scope v (apply sub a) (apply sub b))))
   let a' = apply sub a
   sub <- use solveTySubst
 
@@ -460,14 +461,16 @@ bind scope var ty
   | TyVar var == ty = pure (ReflCo ty)
   -- /\ Var-var deletion
   | TyWildcard (Just (TyVar v)) <- ty, v == var = pure (ReflCo ty)
-  -- /\ Var-wildcard deletion (same as above, but with an indirection)
-  | TyPi (Invisible _ _ r) _ <- ty, r /= Req = confesses (Impredicative var ty)
   -- /\ Predicativity checking
   | otherwise = do
+      -- guarded <- view guarded
       env <- use solveTySubst
       assum <- use solveAssumptions
       noTouch <- view don'tTouch
       ty <- pure (apply (env `compose` assum) ty) -- shadowing
+
+--       when (isPoly ty && not guarded) $
+--         confesses (Impredicative var ty)
 
       when (occurs var ty) $
         confesses (Occurs var ty)
@@ -690,7 +693,8 @@ unify scope ta@(TyApps (TyCon v) xs@(_:_)) b = do
 
       TyApps f ys@(_:_) | length xs == length ys -> rethrow ta b $ do
         heads <- unify scope (TyCon v) f
-        tails <- traverse (uncurry (unify scope)) (zip xs ys)
+        tails <- polyInstSafe $
+          traverse (uncurry (unify scope)) (zip xs ys)
         pure (foldl AppCo heads tails)
 
       TyApps f ys@(_:_) | length ys < length xs -> rethrow ta b $ do
@@ -703,9 +707,10 @@ unify scope ta@(TyApps (TyCon v) xs@(_:_)) b = do
             xs_a = take (xs_l - ys_l) xs
             xs_b = drop (xs_l - ys_l) xs
 
-        heads <- unify scope (TyApps (TyCon v) xs_a) f
-        tails <- traverse (uncurry (unify scope)) (zip xs_b ys)
-        pure (foldl AppCo heads tails)
+        polyInstSafe $ do
+          heads <- unify scope (TyApps (TyCon v) xs_a) f
+          tails <- traverse (uncurry (unify scope)) (zip xs_b ys)
+          pure (foldl AppCo heads tails)
 
       _ -> do
         doWork (unequal ta b)
@@ -977,7 +982,7 @@ subsumes' r scope ot@(TyTuple a b) nt@(TyTuple a' b') = do -- {{{
   pure (WrapFn (MkWrapCont cont "tuple re-packing")) -- }}}
 
 subsumes' _ s a@(TyApp lazy _) b@(TyApp lazy' _)
-  | lazy == lazy', lazy' == tyLazy = probablyCast <$> unify s a b
+  | lazy == lazy', lazy' == tyLazy = probablyCast <$> polyInstSafe (unify s a b)
 
 subsumes' r scope (TyApp lazy ty') ty | lazy == tyLazy, lazySubOk ty' ty = do
   co <- subsumes' r scope ty' ty
@@ -1249,6 +1254,13 @@ prettyConcrete _ = True
 
 concreteUnderOne :: Type Typed -> Bool
 concreteUnderOne t = all prettyConcrete (appsView t)
+
+isPoly :: Type p -> Bool
+isPoly (TyPi (Invisible _ _ r) _) = r /= Req
+isPoly _ = False
+
+polyInstSafe :: MonadReader SolveScope m => m a -> m a
+polyInstSafe = local (guarded .~ True)
 
 firstBlame, secondBlame :: SomeReason -> SomeReason
 firstBlame (It'sThis (BecauseOfExpr (Tuple (x:_) _) _)) = becauseExp x
