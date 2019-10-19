@@ -309,7 +309,7 @@ ofCore v@(CoVar i _ _) = TgName (covarDisplayName v) i
 (~>) = TyArr
 
 (*.) :: Var Typed -> Type Typed -> Type Typed
-v *. t = TyForall v (Just TyType) t
+v *. t = TyPi (Invisible v (Just TyType) Spec) t
 
 infixr ~>
 infixr *.
