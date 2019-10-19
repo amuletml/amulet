@@ -463,14 +463,10 @@ bind scope var ty
   | TyWildcard (Just (TyVar v)) <- ty, v == var = pure (ReflCo ty)
   -- /\ Predicativity checking
   | otherwise = do
-      -- guarded <- view guarded
       env <- use solveTySubst
       assum <- use solveAssumptions
       noTouch <- view don'tTouch
       ty <- pure (apply (env `compose` assum) ty) -- shadowing
-
---       when (isPoly ty && not guarded) $
---         confesses (Impredicative var ty)
 
       when (occurs var ty) $
         confesses (Occurs var ty)

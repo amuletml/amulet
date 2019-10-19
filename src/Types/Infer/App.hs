@@ -32,7 +32,7 @@ import Text.Pretty.Semantic
 import Debug.Trace
 #endif
 
--- Infer an application, supporting "Quick Look" impredicativity: We
+-- | Infer an application, supporting "Quick Look" impredicativity: We
 -- consider all of the arguments to a function application (or
 -- operator) together, then do two passes over them:
 --
@@ -113,7 +113,7 @@ inferApps exp expected =
         Anon dom -> do
           x <- check arg dom
 
-          let cont ex = App ex x (annotation ex, cod)
+          let cont ex = App ex x (annotation ex <> annotation x, cod)
 
           (conts, result) <- checkArguments as qs
           pure (inst_cont:cont:conts, result)
@@ -131,7 +131,7 @@ inferApps exp expected =
             Nothing -> resolveKind reason arg
 
           let ty = apply (Map.singleton v arg) cod
-              cont ex = ExprWrapper (TypeApp arg) ex (annotation ex, ty)
+              cont ex = ExprWrapper (TypeApp arg) ex (annotation ex <> annotation reason, ty)
 
           (conts, result) <- checkArguments as qs
           pure (inst_cont:cont:conts, result)
