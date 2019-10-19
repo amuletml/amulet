@@ -8,4 +8,4 @@ gshow : Infer{'id : type}. ('id -> type) -> constraint
 gshow : Spec{'f : 'id -> type}. gshow 'f => Infer{'id : type}. Spec{'x : 'id}. 'f 'x -> string
 show : type -> constraint
 show : Spec{'a : type}. show 'a => 'a -> string
-genericShow : Infer{'a : type}. Infer{'f : 'ad -> type}. gshow 'f => generic 'a 'f => 'a -> string
+genericShow : Infer{'a : type}. Infer{'rep : 'ad -> type}. gshow 'rep => generic 'a 'rep => 'a -> string
