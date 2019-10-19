@@ -1,5 +1,11 @@
 {-# LANGUAGE FlexibleContexts, TupleSections, ScopedTypeVariables,
    TypeFamilies, CPP, StandaloneDeriving, UndecidableInstances #-}
+
+-- | This module implements the "Quick Look" impredicative polymorphism.
+-- At a glance: Application spines are traversed twice, the first time
+-- to collect impredicative instantiations (this is the "quick look"
+-- pass, which is so called because it ignores hard expressions - @let@,
+-- @match@ etc) and the second time to type-check as usual.
 module Types.Infer.App (inferApps) where
 
 import Prelude
@@ -16,12 +22,14 @@ import Data.Maybe
 import Control.Monad.Infer
 import Control.Lens
 
+import Syntax.Builtin
 import Syntax.Subst
+import Syntax.Types
 import Syntax.Var
 import Syntax
 
-import Types.Infer.Builtin
 import {-# SOURCE #-} Types.Infer
+import Types.Infer.Builtin
 import Types.Kinds
 import Types.Unify
 
@@ -54,6 +62,7 @@ inferApps exp expected =
     traceM ("function type: " ++ displayS (pretty function_t))
 #endif
 
+    -- Pass 1:
     ((ql_sub, quantifiers), cs) <-
       censor (const mempty) . listen $
         quickLook function_t =<< for arguments (\a@(x, y) -> (x, y,) <$> inferQL a)
@@ -69,11 +78,16 @@ inferApps exp expected =
 
     tell cs
 
+    ty_syms <- view tySyms
+
     r_ql_sub <- case expected of
-      Just tau@(TyApps (TyCon _) (_:_)) | result@(TyApps (TyCon _) (_:_)) <- getQuantR quantifiers -> do
--- Pushing down the result type into the quick look substitution
--- is only sound if both are /guarded/. Do note that missing a
--- substitution here isn't unsound, it'll just lead to wonky inference.
+      Just tau@(TyApps (TyCon t) (_:_))
+        | result@(TyApps (TyCon t') (_:_)) <- getQuantR quantifiers
+        , invariant ty_syms t, invariant ty_syms t' -> do
+        -- Pushing down the result type into the quick look substitution
+        -- is only sound if both are /guarded/, i.e. applications of an
+        -- (invariant) constructor. Do note that missing a substitution
+        -- here isn't unsound, it'll just lead to wonky inference.
         _ <- subsumes (becauseExp exp) result (apply ql_sub tau)
         pure $ fromMaybe mempty (unifyPure result tau)
       _ -> pure mempty
@@ -99,48 +113,60 @@ inferApps exp expected =
       Nothing -> pure id
 
     pure (wrap (foldr (.) id (reverse arg_ks) function), result)
-  where
-    spine ex@(App fn arg _) =
-      let sp = spine fn
-       in (ExprArg arg, BecauseOf ex):sp
-    spine ex@(Vta fn arg _) =
-      let sp = spine fn
-       in (TypeArg arg, BecauseOf ex):sp
-    spine ex = [(ExprArg ex, BecauseOf ex)]
 
-    checkArguments ((ExprArg arg, _):as) (Quant tau dom cod inst_cont qs) =
-      case dom of
-        Anon dom -> do
-          x <- check arg dom
+spine :: (Ann p ~ Ann Resolved, Var p ~ Var Resolved) => Expr p -> [(Arg p, SomeReason)]
+spine ex@(App fn arg _) =
+  let sp = spine fn
+   in (ExprArg arg, BecauseOf ex):sp
+spine ex@(Vta fn arg _) =
+  let sp = spine fn
+   in (TypeArg arg, BecauseOf ex):sp
+spine ex = [(ExprArg ex, BecauseOf ex)]
 
-          let cont ex = App ex x (annotation ex <> annotation x, cod)
+-- | Check the given 'Arg's against some 'Quantifiers', returning a set
+-- of suspended 'App'/'Vta's and the result 'Type' of the expression.
+checkArguments :: MonadInfer Typed m
+               => [(Arg Desugared, SomeReason)]
+               -> Quantifiers Typed
+               -> m ( [ Expr Typed -> Expr Typed]
+                    , Type Typed )
+checkArguments ((ExprArg arg, _):as) (Quant tau dom cod inst_cont qs) =
+  case dom of
+    Anon dom -> do
+      x <- check arg dom
 
-          (conts, result) <- checkArguments as qs
-          pure (inst_cont:cont:conts, result)
-        Invisible _ _ Req -> do
-          (_, t) <- infer arg
-          b <- freshTV
-          confesses (NotEqual tau (TyArr t b))
-        _ -> error "checkArguments ExprArg: impossible quantifier"
+      let cont ex = App ex x (annotation ex <> annotation x, cod)
 
-    checkArguments ((TypeArg arg, reason):as) (Quant tau dom cod inst_cont qs) =
-      case dom of
-        Invisible v kind r | r /= Infer{} -> do
-          arg <- case kind of
-            Just k -> checkAgainstKind reason arg k
-            Nothing -> resolveKind reason arg
+      (conts, result) <- checkArguments as qs
+      pure (inst_cont:cont:conts, result)
+    Invisible _ _ Req -> do
+      (_, t) <- infer arg
+      b <- freshTV
+      confesses (NotEqual tau (TyArr t b))
+    _ -> error "checkArguments ExprArg: impossible quantifier"
 
-          let ty = apply (Map.singleton v arg) cod
-              cont ex = ExprWrapper (TypeApp arg) ex (annotation ex <> annotation reason, ty)
+checkArguments ((TypeArg arg, reason):as) (Quant tau dom cod inst_cont qs) =
+  case dom of
+    Invisible v kind r | r /= Infer{} -> do
+      arg <- case kind of
+        Just k -> checkAgainstKind reason arg k
+        Nothing -> resolveKind reason arg
 
-          (conts, result) <- checkArguments as qs
-          pure (inst_cont:cont:conts, result)
-        _ -> confesses (ArisingFrom (CanNotVta tau arg) reason)
+      let ty = apply (Map.singleton v arg) cod
+          cont ex = ExprWrapper (TypeApp arg) ex (annotation ex <> annotation reason, ty)
 
-    checkArguments [] Quant{} = error "arity mismatch. impossible in checkArguments"
+      (conts, result) <- checkArguments as qs
+      pure (inst_cont:cont:conts, result)
+    _ -> confesses (ArisingFrom (CanNotVta tau arg) reason)
 
-    checkArguments _ (Result tau) = pure ([], tau)
+checkArguments [] Quant{} = error "arity mismatch. impossible in checkArguments"
 
+checkArguments _ (Result tau) = pure ([], tau)
+
+-- | Perform the "quick look" pass, exposing as many quantifiers in the
+-- function's type as there are 'Arg's given, returning a substitution
+-- with impredicative instantiation and a linked data structure
+-- representing the quantifiers.
 quickLook :: MonadInfer Typed m
           => Type Typed
           -> [(Arg Desugared, SomeReason, Maybe (Type Typed))]
@@ -172,21 +198,51 @@ quickLook t ((TypeArg tau, reason, _):args) = do
       pure (sub, Quant t dom cod wrap qs)
 quickLook tau [] = pure (mempty, Result tau)
 
+-- | Return the impredicative instantiation from quickly looking at this
+-- expression.
 inferQL :: MonadInfer Typed m => (Arg Desugared, SomeReason) -> m (Maybe (Type Typed))
 inferQL (arg, reason) = case arg of
   ExprArg a -> inferQL_ex a
   TypeArg tau -> pure <$> liftType reason tau
 
+-- | Look at an expression quickly.
 inferQL_ex :: MonadInfer Typed m => Expr Desugared -> m (Maybe (Type Typed))
+
+#ifdef TRACE_TC
+inferQL_ex ex | trace ("looking quickly at " ++ displayS (pretty ex)) False = undefined
+#endif
+
 inferQL_ex ex@(VarRef x _) = do
   (_, _, (new, _)) <- third3A (discharge ex) =<< lookupTy' Strong x
   (_, tau) <- censor (const mempty) $ instantiateTc (BecauseOf ex) new
   if hasPoly tau
      then pure (pure tau)
      else pure Nothing
+
+-- Look at expressions quickly. Here, we assume that traversing
+-- expressions is "cheap", but solving constraints is "expensive". Since
+-- the second pass will solve constraints anyway, we /don't need any
+-- solving from the quick look pass/.
+inferQL_ex ex@App{} = quiet $ do
+  t <- snd <$> inferApps ex Nothing
+  pure . snd <$> instantiateTc (BecauseOf ex) t
+inferQL_ex ex@Vta{} = quiet $ do
+  t <- snd <$> inferApps ex Nothing
+  pure . snd <$> instantiateTc (BecauseOf ex) t
+inferQL_ex ex@(BinOp l o r a) = quiet $ do
+  t <- snd <$> inferApps (App (App o l a) r a) Nothing
+  pure . snd <$> instantiateTc (BecauseOf ex) t
+
 inferQL_ex (Literal l _) = pure (pure (litTy l))
 inferQL_ex ex@(Ascription _ t _) = pure <$> liftType (BecauseOf ex) t
 inferQL_ex _ = pure Nothing
+
+-- | Is this type constructor invariant in its arguments?
+invariant :: Map.Map (Var Typed) TySymInfo -> Var Typed -> Bool
+invariant syms x =
+     x /= tyArrowName       -- The function type is co/contravariant
+  && x /= tyTupleName       -- The tuple type is covariant
+  && x `Map.notMember` syms -- Type families have weird variance that can't be solved quickly
 
 data Arg p = ExprArg (Expr p) | TypeArg (Type p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Arg p)
@@ -222,3 +278,6 @@ hasPoly :: Type Typed -> Bool
 hasPoly = any isForall . universe where
   isForall (TyPi Invisible{} _) = True
   isForall _ = False
+
+quiet :: MonadWriter w m => m a -> m a
+quiet = censor (const mempty)
