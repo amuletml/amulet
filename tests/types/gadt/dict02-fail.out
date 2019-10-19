@@ -1,6 +1,12 @@
-dict02-fail.ml[17:25 ..17:26]: error
+dict02-fail.ml[17:17 ..17:22]: error
    │ 
 17 │ let x = with_d (bar ()) () (fun x -> show x)
-   │                         ^^
-  Couldn't match actual type unit
-    with the type expected by the context, int
+   │                 ^^^^^^
+  Couldn't match actual type dict (show int)
+    with the type expected by the context, dict ('c unit)
+dict02-fail.ml[17:17 ..17:22]: error
+   │ 
+17 │ let x = with_d (bar ()) () (fun x -> show x)
+   │                 ^^^^^^
+  Couldn't match actual type dict (show int)
+    with the type expected by the context, dict ('c unit)

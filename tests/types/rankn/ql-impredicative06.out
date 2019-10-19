@@ -1,0 +1,8 @@
+ql-impredicative06.ml[10:16 ..10:17]: error
+   │ 
+10 │ let t = choose id auto
+   │                ^^
+  Couldn't match actual type 'b -> 'b
+    with the type expected by the context, forall 'a. 'a -> 'a
+
+  • Did you forget some of the arguments to a function?

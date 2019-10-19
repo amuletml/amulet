@@ -1,0 +1,5 @@
+:: : Infer{'a : type}. 'a -> list 'a -> list 'a
+ids : list (Spec{'a : type}. 'a -> 'a)
++ : int -> int -> int
+length : Infer{'a : type}. list 'a -> int
+x : int

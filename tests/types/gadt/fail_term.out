@@ -1,12 +1,12 @@
 fail_term.ml[16:3 ..16:30]: error
-  No instance for 'a -> 'b -> 'b ~ 'b -> 'y -> 'b arising in this expression
+  No instance for 'a -> 'b -> 'b ~ 'b -> 'y -> 'b arising in the expression
    │ 
 16 │   Lam (Lam (Var (There Here)))
    │   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   • Because:
   Could not match the rigid type variable 'b with the type 'a
 
-  • Arising in this expression
+  • Arising in the expression
    │ 
 16 │   Lam (Lam (Var (There Here)))
    │   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^

@@ -7,9 +7,9 @@ do
     local tmp2 = ys[1]
     local tmp3, tmp4 = tmp2._1, tmp2._2
     local tmp0, tmp1 = tmp._1, tmp._2
-    if tmp3 ~= 0 then return { { _1 = f(tmp0)(tmp3), _2 = zip(f, tmp1, tmp4) }, __tag = "Cons" } end
-    if tmp0 == 0 then return { { _1 = 3, _2 = Nil }, __tag = "Cons" } end
-    return { { _1 = f(tmp0)(0), _2 = zip(f, tmp1, tmp4) }, __tag = "Cons" }
+    if tmp0 ~= 0 then return { { _1 = f(tmp0)(tmp3), _2 = zip(f, tmp1, tmp4) }, __tag = "Cons" } end
+    if tmp3 == 0 then return { { _1 = 3, _2 = Nil }, __tag = "Cons" } end
+    return { { _1 = f(0)(tmp3), _2 = zip(f, tmp1, tmp4) }, __tag = "Cons" }
   end
   local function zip0(f) return function(xs) return function(ys) return zip(f, xs, ys) end end end
   (nil)(zip0)
