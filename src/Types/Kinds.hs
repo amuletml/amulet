@@ -285,8 +285,8 @@ inferKind (TyOperator left op right) = do
     Just k ->
       view _3 <$> instantiate Strong Expression k
 
-  ~(Anon lt, c1, _) <- quantifier reason ty
-  ~(Anon rt, c2, _) <- quantifier reason c1
+  ~(Anon lt, c1, _) <- quantifier reason (/= Req) ty
+  ~(Anon rt, c2, _) <- quantifier reason (/= Req) c1
   left <- checkKind left lt
   right <- checkKind right rt
   pure (TyOperator left op right, c2)
@@ -322,7 +322,7 @@ inferKind t@TyApp{} | TyCon v:xs <- appsView t = do
 
   reason <- get
   let checkOne arg kind = do
-        (dom, cod, _) <- quantifier reason kind
+        (dom, cod, _) <- quantifier reason (/= Req) kind
         case dom of
           Anon d -> do
             arg <- checkKind arg d
@@ -350,7 +350,7 @@ inferKind t@TyApp{} | TyCon v:xs <- appsView t = do
 
 inferKind (TyApp f x) = do
   reason <- get
-  (f, (dom, c, _)) <- secondA (quantifier reason) =<< inferKind f
+  (f, (dom, c, _)) <- secondA (quantifier reason (/= Req)) =<< inferKind f
 
   case dom of
     Anon d -> do

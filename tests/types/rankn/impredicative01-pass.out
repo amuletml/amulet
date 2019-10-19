@@ -1,0 +1,3 @@
+id : type -> type
+Id : Spec{'a : type}. 'a -> id 'a
+foo : id (Spec{'a : type}. 'a -> 'a)

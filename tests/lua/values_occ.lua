@@ -6,12 +6,12 @@ do
     local tmp = xs[1]
     local go = tmp._1
     return Stream({
-      _2 = tmp._2,
       _1 = function(st)
         local tmp0 = go(st)
         local x = tmp0._1
-        return { _1 = x * x, _2 = tmp0._2 }
-      end
+        return { _2 = tmp0._2, _1 = x * x }
+      end,
+      _2 = tmp._2
     })
   end
   print(to_string(sum_squares))

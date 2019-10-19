@@ -130,7 +130,12 @@ prettyType (TyPi x t) = uncurry prettyQuantifiers . second reverse $ unwind t [x
   sameAs Anon{} Anon{} = True
   sameAs Implicit{} Implicit{} = True
   sameAs _ _ = False
+
 prettyType (TyApp (TyApp (TyCon v) l) r) | isOpName (displayS (pretty v)) = prettyType (TyOperator l v r)
+-- Hack for the guarded unification magic type: \/
+prettyType (TyApp (TyCon v) x) | show (pretty v) == mempty = displayType x
+-- This is really gross
+
 prettyType (TyApp x e) = parenTyFun x (displayType x) <+> parenTyArg e (displayType e)
 prettyType (TyRows p rows) = enclose (lbrace <> space) (space <> rbrace) $
   pretty p <+> soperator pipe <+> hsep (punctuate comma (displayRows rows))
