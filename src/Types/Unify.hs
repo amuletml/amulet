@@ -848,7 +848,11 @@ lookupEquality class_info scope assum a b = normal <|> fundepEquality where
   normal =
     let choices = filter ((/= Superclass) . view implSort) $
           find (TyApps tyEq [a, b]) scope <> find (TyApps tyEq [b, a]) scope
-     in assert (all ((== LocalAssum) . view implSort) choices) (map makeCo choices)
+
+        equality_invariants xs =
+             all ((== LocalAssum) . view implSort) xs
+          && none (not . null . view implPre) xs
+     in assert (equality_invariants choices) (map makeCo choices)
 
   makeCo ImplChoice{..} =
     case _implClass of
@@ -863,7 +867,7 @@ lookupEquality class_info scope assum a b = normal <|> fundepEquality where
           a :: Type Typed
           used x = map (implClass .~ x)
 
-  find_ffs t = map snd . filter (matches tau . view implHead . snd) . concatMap splat . Map.toList . keys where
+  find_ffs t = map snd . filter (null . view implPre . snd) . filter (matches tau . view implHead . snd) . concatMap splat . Map.toList . keys where
     tau = transformType go t
     splat (x, t) = map (x,) t
     go (TySkol v) | Just x <- assum ^. at (v ^. skolIdent) = x
@@ -1120,7 +1124,10 @@ skolemise motive wt@(TyPi (Implicit ity) t) = do
       go x = do
         var <- genName
         pure ([Capture var (internal, x)], insert internal LocalAssum var x (MagicInfo []) scp)
+
   (pat, scope) <- go ity
+  traceM (show (pretty ity))
+
   let wrap ex | an <- annotation ex =
         Fun (EvParam (PTuple pat (an, ity)))
           (ExprWrapper omega ex (an, ty)) (an, wt)
