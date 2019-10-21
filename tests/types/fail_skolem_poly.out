@@ -6,11 +6,11 @@ fail_skolem_poly.ml[3:32 ..3:32]: error
 3 │ let poly_fail = poly (fun x -> x + 1)
   │                                ^
 
-  • When checking that this expression has type
-     forall 'a. 'a -> 'a
+  • When checking that this expression
   │ 
 3 │ let poly_fail = poly (fun x -> x + 1)
   │                       ^^^^^^^^^^^^^^
+  has type forall 'a. 'a -> 'a
 fail_skolem_poly.ml[3:32 ..3:36]: error
   Could not match the rigid type variable 'a with the type int
 
@@ -19,8 +19,8 @@ fail_skolem_poly.ml[3:32 ..3:36]: error
 3 │ let poly_fail = poly (fun x -> x + 1)
   │                                ^^^^^
 
-  • When checking that this expression has type
-     forall 'a. 'a -> 'a
+  • When checking that this expression
   │ 
 3 │ let poly_fail = poly (fun x -> x + 1)
   │                       ^^^^^^^^^^^^^^
+  has type forall 'a. 'a -> 'a

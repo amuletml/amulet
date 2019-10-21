@@ -1,0 +1,13 @@
+quantified-eq-loopy.ml[3:14 ..3:14]: error
+  Could not match the rigid type variable 'a with the type 'b
+
+  • Arising in this expression
+  │ 
+3 │     fun x -> x
+  │              ^
+
+  • When checking that this expression
+  │ 
+3 │     fun x -> x
+  │     ^^^^^^^^^^
+  has type forall 'a 'b. ('a ~ 'b => 'a ~ 'b) => 'a -> 'b

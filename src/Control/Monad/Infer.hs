@@ -630,9 +630,10 @@ instance Note TypeError Style where
                                          , f [annotation rs]
                                          , empty ])
                  in
-                  k (vsep [ indent 2 $ bullet "When checking that this expression has type"
-                          , indent 5 (Right <$> displayType t)
-                          , nest (-2) $ f [annotation ex] ])
+                  k (vsep [ indent 2 . bullet $ "When checking that this expression"
+                          , nest (-2) $ f [annotation ex]
+                          , indent 2 $ "has type" <+> nest 4 (Right <$> displayType t)
+                          ])
              BySubsumption s t ->
                vsep [ indent 2 $ bullet "When checking that the type"
                     , indent 5 (Right <$> displayType s)
@@ -671,7 +672,7 @@ instance Note TypeError Style where
                     , indent 2 $ bullet "Arising in the" <+> (Right <$> blameOf rs)
                     , nest (-2) $ f [annotation rs]
                     ]
-             ByConstraint p -> 
+             ByConstraint p ->
                vsep [ indent 2 $ "Where the type variable" <+> sk (pretty v)
                     , indent 2 "was made rigid because of a quantified constraint:"
                     , indent 2 (Right <$> displayType p)
