@@ -1,4 +1,4 @@
-pattern02.ml[4:5 ..4:20]: error
+pattern02.ml[4:5 ..4:20]: error (E2008)
   │ 
 4 │ let It (foo, finger) = It (1, fun x -> x)
   │     ^^^^^^^^^^^^^^^^
@@ -7,7 +7,7 @@ pattern02.ml[4:5 ..4:20]: error
           bound by the type of It, forall 'a. 'a * ('a -> int) -> exists,
   • Note: in the inferred type for foo,
       'a
-pattern02.ml[4:5 ..4:20]: error
+pattern02.ml[4:5 ..4:20]: error (E2008)
   │ 
 4 │ let It (foo, finger) = It (1, fun x -> x)
   │     ^^^^^^^^^^^^^^^^

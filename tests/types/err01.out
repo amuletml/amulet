@@ -1,4 +1,4 @@
-err01.ml[10:11 ..10:12]: error
+err01.ml[10:11 ..10:12]: error (E2001)
    │ 
 10 │   enqueue go (start, stop)
    │           ^^

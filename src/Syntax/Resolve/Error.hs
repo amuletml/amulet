@@ -105,3 +105,19 @@ instance Note ResolveError Style where
     imported (name, pos)
       = f [ pos ]
         <#> indent 2 (note <+> dquotes (string name) <+> "imported from" <+> dquotes (string (fileName pos)))
+
+  noteId NotInScope{}         = Just 1001
+  noteId Ambiguous{}          = Just 1002
+  noteId NonLinearPattern{}   = Just 1003
+  noteId NonLinearRecord{}    = Just 1004
+  noteId EmptyMatch{}         = Just 1005
+  noteId EmptyBegin{}         = Just 1006
+  noteId IllegalMethod{}      = Just 1007
+  noteId LastStmtNotExpr{}    = Just 1008
+  noteId LetOpenStruct{}      = Just 1009
+  noteId UnresolvedImport{}   = Just 1010
+  noteId ImportLoop{}         = Just 1011
+  noteId TFClauseWrongHead{}  = Just 1012
+  noteId TFClauseWrongArity{} = Just 1013
+
+  noteId (ArisingFrom e _)    = noteId e

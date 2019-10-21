@@ -1,4 +1,4 @@
-insufficient-ty-sig.ml[5:11 ..6:7]: error
+insufficient-ty-sig.ml[5:11 ..6:7]: error (E2018)
   │ 
 6 │   (=.=)
   │    ^^^

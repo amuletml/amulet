@@ -1,4 +1,4 @@
-vta-fail01.ml[3:17 ..3:21]: error
+vta-fail01.ml[3:17 ..3:21]: error (E2001)
   │ 
 3 │ let _ = id @int "foo"
   │                 ^^^^^

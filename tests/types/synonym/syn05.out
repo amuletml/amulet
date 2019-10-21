@@ -1,4 +1,4 @@
-syn05.ml[4:1 ..4:24]: error
+syn05.ml[4:1 ..4:24]: error (E2034)
   │ 
 4 │ instance x foo begin end
   │ ^^^^^^^^^^^^^^^^^^^^^^^^

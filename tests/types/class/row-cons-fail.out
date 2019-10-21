@@ -1,4 +1,4 @@
-row-cons-fail.ml[1:9 ..1:39]: error
+row-cons-fail.ml[1:9 ..1:39]: error (E2018)
   No instance for row_cons 'record "y" 'type { x : int } arising in the expression
   │ 
 1 │ let x = Amc.restrict_row @"y" { x = 1 }

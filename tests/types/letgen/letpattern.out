@@ -1,4 +1,4 @@
-letpattern.ml[1:5 ..1:6]: error
+letpattern.ml[1:5 ..1:6]: error (E2001)
   │ 
 1 │ let () =
   │     ^^

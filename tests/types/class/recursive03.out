@@ -1,4 +1,4 @@
-recursive03.ml[20:5 ..20:23]: error
+recursive03.ml[20:5 ..20:23]: error (E2018)
   No instance for show 'a arising from use of the expression
    │ 
 21 │   print (show x)

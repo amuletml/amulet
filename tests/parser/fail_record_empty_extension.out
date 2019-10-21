@@ -1,4 +1,4 @@
-fail_record_empty_extension.ml[1:18 ..1:18]: error
+fail_record_empty_extension.ml[1:18 ..1:18]: error (E0006)
   Unexpected }, expected identifier
   │ 
 1 │ let a = { 0 with }

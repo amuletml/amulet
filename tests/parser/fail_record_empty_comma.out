@@ -1,4 +1,4 @@
-fail_record_empty_comma.ml[2:11 ..2:11]: error
+fail_record_empty_comma.ml[2:11 ..2:11]: error (E0006)
   Unexpected ,, expected '}'
   │ 
 2 │ let a = { , }

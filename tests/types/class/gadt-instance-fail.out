@@ -1,4 +1,4 @@
-gadt-instance-fail.ml[21:18 ..21:30]: warning
+gadt-instance-fail.ml[21:18 ..21:30]: warning (W2014)
   Note: This branch will never be executed,
   because it has unsatisfiable constraints
    │ 

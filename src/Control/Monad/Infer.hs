@@ -869,6 +869,72 @@ instance Note TypeError Style where
 
   formatNote f x = f [annotation x] <#> indent 2 (Right <$> pretty x)
 
+  noteId NotEqual{}           = Just 2001
+
+  noteId Occurs{}             = Just 2002
+  noteId CustomTypeError{}    = Just 2003
+
+  noteId NotInScope{}         = Just 2004
+  noteId FoundHole{}          = Just 2005
+
+  noteId Impredicative{}      = Just 2006
+  noteId ImpredicativeApp{}   = Just 2007
+
+  noteId EscapedSkolems{}     = Just 2008
+  noteId SkolBinding{}        = Just 2009
+
+
+  noteId NoOverlap{}          = Just 2010
+
+  noteId CanNotInstance{}     = Just 2011
+
+  noteId Malformed{}          = Just 2012
+
+  noteId PatternRecursive{}   = Just 2013
+  noteId DeadBranch{}         = Just 2014
+
+  noteId AmbiguousType{}      = Just 2015
+  noteId ValueRestriction{}   = Just 2016
+
+  noteId AmbiguousMethodTy{}  = Just 2017
+
+  noteId UnsatClassCon{}      = Just 2018
+  noteId ClassStackOverflow{} = Just 2019
+
+  noteId WrongClass{}         = Just 2020
+  noteId Overlap{}            = Just 2021
+
+  noteId UndefinedMethods{}   = Just 2022
+  noteId UndefinedTyFam{}     = Just 2023
+
+  noteId TyFamLackingArgs{}   = Just 2024
+
+  noteId MagicInstance{}      = Just 2025
+  noteId TypeFamInInstHead{}  = Just 2026
+  noteId InvalidContext{}     = Just 2027
+
+  noteId OrphanInstance{}     = Just 2028
+
+  noteId NotAClass{}          = Just 2029
+
+  noteId CanNotVta{}          = Just 2030
+
+  noteId NotPromotable{}      = Just 2031
+  noteId WildcardNotAllowed{} = Just 2032
+
+  noteId NotValue{}           = Just 2033
+  noteId UnsaturatedTS{}      = Just 2034
+
+  noteId NotCovered{}         = Just 2035
+
+  noteId MightNotTerminate{}  = Just 2036
+  noteId TyFunInLhs{}         = Just 2037
+
+  noteId (Note x _) = noteId x
+  noteId (Suggestion x _) = noteId x
+  noteId (ArisingFrom x _) = noteId x
+  noteId (WarningError x) = noteId x
+
 missing :: [(Text, b)] -> [(Text, b)] -> Doc
 missing ra rb
   | length ra < length rb

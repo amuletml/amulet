@@ -1,4 +1,4 @@
-record04-fail.ml[3:35 ..3:46]: error
+record04-fail.ml[3:35 ..3:46]: error (E2001)
   │ 
 3 │ let foo = Foo { bar = fun x -> x, quux = "foo" }
   │                                   ^^^^^^^^^^^^

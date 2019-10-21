@@ -1,4 +1,4 @@
-fail_import_not_found_path.ml[1:6 ..1:26]: error
+fail_import_not_found_path.ml[1:6 ..1:26]: error (E1010)
   Cannot resolve "not_found.ml"
 
   Arising from use of the module

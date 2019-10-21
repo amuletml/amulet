@@ -1,9 +1,9 @@
-fail_malformed_class_name.ml[1:7 ..1:12]: error
+fail_malformed_class_name.ml[1:7 ..1:12]: error (E0007)
   Malformed class declaration a -> b
   │ 
 1 │ class a -> b begin end
   │       ^^^^^^
-fail_malformed_class_name.ml[3:7 ..3:9]: error
+fail_malformed_class_name.ml[3:7 ..3:9]: error (E0007)
   Malformed class declaration beginning with X
 
   All class declarations must be of the form
@@ -12,7 +12,7 @@ fail_malformed_class_name.ml[3:7 ..3:9]: error
   │ 
 3 │ class X a begin end
   │       ^^^
-fail_malformed_class_name.ml[4:7 ..4:11]: error
+fail_malformed_class_name.ml[4:7 ..4:11]: error (E0007)
   Malformed class declaration beginning with X
 
   All class declarations must be of the form
@@ -22,7 +22,7 @@ fail_malformed_class_name.ml[4:7 ..4:11]: error
   │ 
 4 │ class X a b begin end
   │       ^^^^^
-fail_malformed_class_name.ml[6:7 ..6:9]: error
+fail_malformed_class_name.ml[6:7 ..6:9]: error (E0007)
   Malformed class declaration for x
 
   All class declarations must be of the form
@@ -31,7 +31,7 @@ fail_malformed_class_name.ml[6:7 ..6:9]: error
   │ 
 6 │ class x a  begin end
   │       ^^^
-fail_malformed_class_name.ml[7:7 ..7:11]: error
+fail_malformed_class_name.ml[7:7 ..7:11]: error (E0007)
   Malformed class declaration for x
 
   All class declarations must be of the form

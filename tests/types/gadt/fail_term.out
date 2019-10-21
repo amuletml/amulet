@@ -1,4 +1,4 @@
-fail_term.ml[16:3 ..16:30]: error
+fail_term.ml[16:3 ..16:30]: error (E2018)
   No instance for 'a -> 'b -> 'b ~ 'x -> 'y -> 'x arising in the expression
    │ 
 16 │   Lam (Lam (Var (There Here)))

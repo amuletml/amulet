@@ -1,4 +1,4 @@
-recursive_03.ml[1:5 ..1:5]: error
+recursive_03.ml[1:5 ..1:5]: error (E3001)
   Invalid recursive right-hand side for variable x
   • Note: because evaluation of the variable x is not delayed
   Arising from use of the binding

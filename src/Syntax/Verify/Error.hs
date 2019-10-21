@@ -188,3 +188,13 @@ instance Note VerifyError Style where
          ]
 
   formatNote f x = indent 2 (Right <$> pretty x) <#> f [annotation x]
+
+  noteId NonRecursiveRhs{}     = Just 3001
+  noteId DefinedUnused{}       = Just 3002
+  noteId ParseErrorInForeign{} = Just 3003
+  noteId LazyLet{}             = Just 3004
+  noteId RedundantArm{}        = Just 3005
+  noteId MissingPattern{}      = Just 3006
+  noteId MatchToLet{}          = Just 3007
+  noteId MatchToFun{}          = Just 3008
+  noteId ToplevelRefBinding{}  = Just 3009

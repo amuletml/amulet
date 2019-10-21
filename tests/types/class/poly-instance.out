@@ -1,4 +1,4 @@
-poly-instance.ml[4:1 ..4:38]: error
+poly-instance.ml[4:1 ..4:38]: error (E2007)
   │ 
 4 │ instance foo (trivial => 'a) begin end
   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

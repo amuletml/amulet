@@ -1,4 +1,4 @@
-class07.ml[9:9 ..9:32]: error
+class07.ml[9:9 ..9:32]: error (E2015)
   │ 
 9 │ let foo x = show (read (show x))
   │         ^^^^^^^^^^^^^^^^^^^^^^^^

@@ -1,4 +1,4 @@
-fail_bind_qualified.ml[1:6 ..1:14]: error
+fail_bind_qualified.ml[1:6 ..1:14]: error (E0010)
   Attempting to bind a qualified variable `Foo.bar`
   │ 
 1 │ let (`Foo.bar`) = ()

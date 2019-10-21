@@ -1,4 +1,4 @@
-assoc02.ml[17:22 ..17:23]: error
+assoc02.ml[17:22 ..17:23]: error (E2001)
    │ 
 17 │ let _ : bar string = ()
    │                      ^^

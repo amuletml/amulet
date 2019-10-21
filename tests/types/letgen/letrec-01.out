@@ -1,4 +1,4 @@
-letrec-01.ml[1:5 ..1:10]: error
+letrec-01.ml[1:5 ..1:10]: error (E2013)
   Recursive pattern bindings are not allowed
   • Note: this definition refers to itself directly
 

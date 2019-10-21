@@ -3,13 +3,13 @@ language: generic
 
 cache:
   directories:
-  - $HOME/.stack
+  - "$HOME/.stack"
 
 addons:
   apt:
     packages:
-      - libgmp-dev
-      - lld-6.0
+    - libgmp-dev
+    - lld-6.0
 
 before_install:
 - mkdir -p ~/.local/bin
@@ -23,3 +23,9 @@ script:
 - stack --no-terminal build --fast --test --no-run-tests --ghc-options "-Werror -fmax-pmcheck-iterations=5000000"
 - env AMC_LIBRARY_PATH=$PWD/lib/ stack --no-terminal test --fast --ghc-options "-Werror -fmax-pmcheck-iterations=5000000" --test-arguments "--xml junit.xml --display t --hedgehog-tests 10000 --timeout 30"
 - stack --no-terminal exec --package=hlint -- hlint --git
+
+notifications:
+  slack:
+    secure: TbIOHm1fK3MZIsgSwbNXZh3017o47Hc1Q2DUOjNPOFhULOa7QoaUZLrcDFlPOKa9w3rVtivjEkdKac1Hw7kV8Zi18Rx7pEyu6ydtqfD5GLYpFNAZ/Mu/x9ODw8/iNBhr+HDPVal1pN5gBGTCtWZwd7cMeOAmPxl/5UoVBwvsSuUomFbpAgnfrVrPisO03ZTVxOECtDFQsT3PjGjVi3QoPNclO/blJlQ+2N+Lq6WbAyUWngGwwvYqX6SsmOQWFNOQOTLMn28GekUZzkYX14b6P26MO6t/zaJU2218Q43/y/Jhljig1kM5C/LSsVntpaumsSYzr3F6azc9hfB3eDA0+tdk2jduUil5DO0ZhZqO+NzRKHbh4aLE2e5t10a5DG+Z5waxa/OSvFAglfgkoyOayq4JpJW1dp2SpOU9DnLLB45cltYlqOCnoWFSI9G9iHCMUyaaKVGThCTRug3Sg2eXvoQe6dQgej441qUZCUOHNIGOVlBodRU9bXzlPaBgB5jsOlf77/GxJTBknXQ3hOJIsJbQuCrlKew91gS/rCQMTVYTrnAlJ57LGNQ9qXyznNZt1HakYh83tQYTCzk7dq3aDYlJ3VBcT21apijitUavCVoyYbrzIbZ4oOHQjC3dc4CZTZUfkBDxI14hfZ3BY2BygHh/UqoSfJ1JAiNVdhDaHcM=
+  on_success: change
+  on_failure: always

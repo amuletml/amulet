@@ -1,4 +1,4 @@
-fin.ml[11:14 ..11:18]: error
+fin.ml[11:14 ..11:18]: error (E2018)
   No instance for 'n ~ S (S 'k) arising in the expression
    │ 
 11 │   | SS SZ -> FS FZ

@@ -1,4 +1,4 @@
-fail_span.ml[1:12 ..1:16]: error
+fail_span.ml[1:12 ..1:16]: error (E0006)
   Unexpected match, expected one of forall, '_', type, lazy, '(', '{', identifier, constructor, type variable, int, string
   │ 
 1 │ let main : match = 1

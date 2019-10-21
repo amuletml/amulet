@@ -1,4 +1,4 @@
-vta-fail04.ml[1:9 ..1:38]: error
+vta-fail04.ml[1:9 ..1:38]: error (E2030)
   │ 
 1 │ let _ = (let 1 = 1 in fun x -> x) @int
   │         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

@@ -1,4 +1,4 @@
-req-fail.ml[3:5 ..3:5]: error
+req-fail.ml[3:5 ..3:5]: error (E2001)
   │ 
 3 │ let _ = foo 123
   │     ^

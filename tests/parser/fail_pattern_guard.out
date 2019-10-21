@@ -1,4 +1,4 @@
-fail_pattern_guard.ml[2:10 ..2:11]: error
+fail_pattern_guard.ml[2:10 ..2:11]: error (E0006)
   Unexpected ->, expected one of '_', let, fun, if, begin, true, false, match, function, lazy, '(', '(|', '{', '[', '!', identifier, constructor, qdotid, hole, int, float, string
   │ 
 2 │ | x when -> ()

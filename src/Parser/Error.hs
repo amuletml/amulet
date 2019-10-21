@@ -195,3 +195,17 @@ instance Note ParseError Style where
   formatNote f x
     = indent 2 (Right <$> pretty x)
       <##> f [annotation x]
+
+  noteId Failure{}             = Just 0001
+  noteId UnexpectedCharacter{} = Just 0002
+  noteId UnexpectedEnd{}       = Just 0003
+  noteId UnclosedString{}      = Just 0004
+  noteId UnclosedComment{}     = Just 0005
+  noteId UnexpectedToken{}     = Just 0006
+  noteId MalformedClass{}      = Just 0007
+  noteId MalformedInstance{}   = Just 0008
+  noteId MisplacedWith{}       = Just 0009
+  noteId BindQualified{}       = Just 0010
+  noteId InvalidEscapeCode{}   = Just 0011
+  noteId UnalignedIn{}         = Just 0012
+  noteId UnindentContext{}     = Just 0013

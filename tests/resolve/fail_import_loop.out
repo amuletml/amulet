@@ -1,4 +1,4 @@
-tests/resolve/modules/loop_3.ml[1:12 ..1:31]: error
+tests/resolve/modules/loop_3.ml[1:12 ..1:31]: error (E1011)
   Modules form an import cycle
 
   Arising from use of the module

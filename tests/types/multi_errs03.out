@@ -1,10 +1,10 @@
-multi_errs03.ml[4:19 ..4:22]: error
+multi_errs03.ml[4:19 ..4:22]: error (E2001)
   │ 
 4 │   let foo x = 2 + true
   │                   ^^^^
   Couldn't match actual type bool
     with the type expected by the context, int
-multi_errs03.ml[8:5 ..8:6]: error
+multi_errs03.ml[8:5 ..8:6]: error (E2001)
   │ 
 8 │ and () = "foo"
   │     ^^

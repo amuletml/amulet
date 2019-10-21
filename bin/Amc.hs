@@ -38,6 +38,8 @@ import qualified Amc.Repl as R
 
 import Version
 
+import Amc.Explain
+
 runCompile :: MonadIO m
            => DoOptimise -> DoLint -> D.DriverConfig
            -> SourceName
@@ -119,6 +121,7 @@ data Command
     { remoteCmd   :: String
     , serverPort  :: Int
     }
+  | Explain { errId :: Int }
   deriving (Show)
 
 newtype Args
@@ -151,7 +154,14 @@ argParser = info (args <**> helper <**> version)
       <> command "connect"
          ( info connectCommand
          $ fullDesc <> progDesc "Connect to an already running REPL instance." )
-      ) <|> pure (Repl Nothing defaultPort DefaultPrelude (CompilerOptions D.Void [] False))
+      <> command "explain"
+         ( info explainCommand
+         $ fullDesc <> progDesc "Explain an error message." )
+      ) <|> pure (Repl Nothing defaultPort (CompilerOptions D.Void [] False))
+
+    explainCommand :: Parser Command
+    explainCommand = Explain
+      <$> argument auto (metavar "ERROR" <> help "The error message code to explain")
 
     compileCommand :: Parser Command
     compileCommand = Compile
@@ -244,6 +254,8 @@ main = do
                                , R.coreLint = coreLint options }
         toLoad
     Args Connect { remoteCmd, serverPort } -> R.runRemoteReplCommand serverPort remoteCmd
+
+    Args Explain { errId } -> explainError errId
 
     Args Compile { input, output = Just output } | input == output -> do
       hPutStrLn stderr ("Cannot overwrite input file " ++ input)

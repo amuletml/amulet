@@ -1,4 +1,4 @@
-wild04.ml[4:9 ..4:9]: error
+wild04.ml[4:9 ..4:9]: error (E2001)
   │ 
 4 │ let y = x ^ ""
   │         ^

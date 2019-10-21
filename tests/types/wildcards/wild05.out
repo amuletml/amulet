@@ -1,4 +1,4 @@
-wild05.ml[1:24 ..1:24]: error
+wild05.ml[1:24 ..1:24]: error (E2009)
   Could not match the rigid type variable 'a with the type int
 
   • Arising in this expression

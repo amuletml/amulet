@@ -1,4 +1,4 @@
-gadt07-escape-fail.ml[10:3 ..10:17]: error
+gadt07-escape-fail.ml[10:3 ..10:17]: error (E2018)
   No instance for 'a ~ int arising in the expression
    │ 
 10 │   match hval with

@@ -1,4 +1,4 @@
-minimal-def.ml[21:1 ..21:26]: error
+minimal-def.ml[21:1 ..21:26]: error (E2022)
    │ 
 21 │ instance foo int begin end
    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^
