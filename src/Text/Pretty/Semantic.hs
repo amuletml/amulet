@@ -22,7 +22,7 @@ module Text.Pretty.Semantic
   , uncommentDoc, uncommentFilter
   , toAnsi
 
-  , skeyword, sliteral, sstring, scomment, stypeCon, stypeVar, stypeSkol, soperator
+  , skeyword, sliteral, sstring, scomment, serror, stypeCon, stypeVar, stypeSkol, soperator
 
   , arrow, equals, colon, prod, pipe, note
   , keyword, highlight
@@ -58,6 +58,7 @@ data Style
   | Literal
   | String
   | Comment
+  | Error
 
   | TypeCon
   | TypeVar
@@ -116,6 +117,7 @@ toAnsi Keyword  = DullColour Magenta
 toAnsi Literal  = BrightColour Yellow
 toAnsi String   = DullColour Green
 toAnsi Comment  = BrightColour Black
+toAnsi Error    = BrightColour Red
 toAnsi TypeCon  = DullColour Blue
 toAnsi TypeVar  = DullColour Yellow
 toAnsi TypeSkol = DullColour Red
@@ -138,11 +140,12 @@ instance {-# OVERLAPPABLE #-} Pretty a => Pretty [a] where
   pretty = prettyList
 
 -- | Construct a document with a specific annotation
-skeyword, sliteral, sstring, scomment, stypeCon, stypeVar, stypeSkol, soperator :: Doc -> Doc
+skeyword, sliteral, sstring, scomment, serror, stypeCon, stypeVar, stypeSkol, soperator :: Doc -> Doc
 skeyword = annotate Keyword . pretty
 sliteral = annotate Literal . pretty
 sstring = annotate String . pretty
 scomment = annotate Comment . pretty
+serror = annotate Error . pretty
 stypeCon = annotate TypeCon . pretty
 stypeVar = annotate TypeVar . pretty
 stypeSkol = annotate TypeSkol . pretty

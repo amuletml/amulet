@@ -82,7 +82,7 @@ instance Pretty a => Pretty (CoreError a) where
   prettyList = vsep . map pretty
 
 instance Pretty a => Annotation (CoreError a) where
-  annotated e a = "(* XXX" <+> align (pretty e) <+> "*)" <#> a
+  annotated e a = serror $ "(* XXX" <+> align (pretty e) <+> "*)" <#> a
 
 instance Pretty a => Annotation (Seq.Seq (CoreError a)) where
   annotated = flip (foldr annotated)
