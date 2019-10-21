@@ -2,5 +2,5 @@ vta-fail03.ml[1:13 ..1:18]: error
   │ 
 1 │ let foo x = x @int
   │             ^^^^^^
-  Can not apply expression of type 'l
+  Can not apply expression of type 'n
     to visible type argument int

@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleContexts, TupleSections, ScopedTypeVariables,
-   ViewPatterns, LambdaCase, TypeFamilies, CPP #-}
+   LambdaCase, TypeFamilies, CPP #-}
 module Types.Infer.Let (inferLetTy, fakeLetTys, rename, skolCheck, PatternStrat(..), localGenStrat, solveFixpoint) where
 
 import qualified Data.Map.Strict as Map
@@ -38,39 +38,6 @@ import Text.Pretty.Semantic
 
 import {-# SOURCE #-} Types.Infer.Class
 import {-# SOURCE #-} Types.Infer
-
-solveFixpoint :: (MonadNamey m, MonadChronicles TypeError m)
-              => SomeReason
-              -> Seq.Seq (Constraint Typed)
-              -> Map.Map (Var Resolved) (Either ClassInfo TySymInfo)
-              -> m (Subst Typed, Map.Map (Var Resolved) (Wrapper Typed), [Constraint Typed])
-solveFixpoint blame = (fmap (_3 %~ reblame_con blame) . ) . go True (mempty, mempty) where
-  go True (sub, wraps) cs c = do
-    (compose sub -> sub, wraps', cons) <- solve cs c
-    let new_cons = apply sub cons
-
-    go (length cons < Seq.length cs && any isEquality new_cons) (sub, wraps' <> wraps) (Seq.fromList new_cons) c
-
-  go False (sub, wraps) cs c = do
-    (compose sub -> sub, wraps', cons) <- solve cs c
-    (compose sub -> sub, wraps'', cons) <- solve (Seq.fromList (apply sub cons)) c
-    pure (sub, wraps'' <> wraps' <> wraps, apply sub cons)
-
-  isEquality (ConImplicit _ _ _ (TyApps t as)) | t == tyEq && solvable as = True
-  isEquality _ = False
-
-  solvable [TyApps{}, TyVar{}] = True
-  solvable [TyVar{}, TyApps{}] = True
-  solvable _ = False
-
-  reblame_con r = map go where
-    go (ConUnify _ a b c d) = ConUnify r a b c d
-    go (ConSubsume _ a b c d) = ConSubsume r a b c d
-    go (ConImplies _ a b c) = ConImplies r a b c
-    go (ConImplicit (It'sThis BecauseInternal) a b c) = ConImplicit r a b c
-    go (ConImplicit r a b c) = ConImplicit r a b c
-    go x@ConFail{} = x
-    go x@DeferredError{} = x
 
 inferLetTy :: forall m. MonadInfer Typed m
            => (Set.Set (Var Typed) -> Expr Typed -> Type Typed -> m (Type Typed))
@@ -212,7 +179,7 @@ inferLetTy closeOver strategy vs =
                 exp <- check (exp' exp) tyvar
                 pure (Binding var exp True (ann, tyvar), tyvar)
 
-        (solution, wrap, cons) <- solveFixpoint (It'sThis BecauseInternal) cs =<< getSolveInfo
+        (solution, wrap, cons) <- solveFixpoint (It'sThis (BecauseInternal "fixed point solving")) cs =<< getSolveInfo
 
         tys <- view tySyms
         if null cons

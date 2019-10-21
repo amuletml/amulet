@@ -14,7 +14,7 @@ do
     end
   end
   (nil)({
-    _2 = function(x) return __builtin_force(x) end,
-    _1 = { function(tmp) return 2 end, false, __tag = "lazy" }
+    _1 = { function(tmp) return 2 end, false, __tag = "lazy" },
+    _2 = function(x) return __builtin_force(x) end
   })
 end

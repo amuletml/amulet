@@ -10,10 +10,10 @@ y : type
 z : type
 stop : type
 more : type
-combine : Infer{'ex : type}. Infer{'ey : type}. Infer{'ez : type}. 'ez -> 'ey -> 'ex -> constraint
-eval1 : Infer{'nc : type}. Infer{'nd : type}. Infer{'ne : type}. 'ne -> 'nd -> 'nc -> constraint
-evalaux : Infer{'cir : type}. Infer{'cis : type}. Infer{'cit : type}. 'cit -> 'cis -> 'cir -> constraint
-eval : Infer{'cqz : type}. Infer{'cra : type}. 'cra -> 'cqz -> constraint
+combine : Infer{'gt : type}. Infer{'gu : type}. Infer{'gv : type}. 'gv -> 'gu -> 'gt -> constraint
+eval1 : Infer{'qm : type}. Infer{'qn : type}. Infer{'qo : type}. 'qo -> 'qn -> 'qm -> constraint
+evalaux : Infer{'cqn : type}. Infer{'cqo : type}. Infer{'cqp : type}. 'cqp -> 'cqo -> 'cqn -> constraint
+eval : Infer{'dav : type}. Infer{'daw : type}. 'daw -> 'dav -> constraint
 eval : Spec{'x : type}. Spec{'y : type}. eval 'x 'y => 'x -> 'y
 bot : Spec{'a : type}. 'a
 kk0 : type

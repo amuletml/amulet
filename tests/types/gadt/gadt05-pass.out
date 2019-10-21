@@ -1,5 +1,5 @@
 + : int -> int -> int
 t : type -> type -> type
-T : Infer{'bg : type}. Spec{'t : 'bg}. Spec{'a : type}. ('t ~ unit) ⊃ 'a -> t 't 'a
+T : Infer{'bo : type}. Spec{'t : 'bo}. Spec{'a : type}. ('t ~ unit) ⊃ 'a -> t 't 'a
 foo : Spec{'a : type}. Spec{'t : type}. ('a -> 'a) -> t 't 'a -> t 't 'a
 bar : Spec{'t : type}. t 't int -> t 't int

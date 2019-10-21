@@ -1,5 +1,5 @@
 + : int -> int -> int
 foo : type -> type
-Foo1 : Infer{'al : type}. Spec{'a : 'al}. ('a ~ int) ⊃ foo 'a
+Foo1 : Infer{'at : type}. Spec{'a : 'at}. ('a ~ int) ⊃ foo 'a
 bar : Spec{'a : type}. ~ 'a int => 'a -> int
 foo : Spec{'a : type}. foo 'a -> 'a -> int
