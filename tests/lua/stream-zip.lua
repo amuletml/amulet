@@ -30,15 +30,15 @@ do
               return Done
             end
           else
-            local tmp5 = g(sb)
             local x0 = x[1]
+            local tmp5 = g(sb)
             if tmp5.__tag == "Skip" then
               return Skip({ _1 = sa, _2 = { _1 = tmp5[1], _2 = Some(x0) } })
             elseif tmp5.__tag == "Yield" then
               local tmp6 = tmp5[1]
               return Yield({
-                _2 = { _1 = sa, _2 = { _2 = None, _1 = tmp6._2 } },
-                _1 = { _1 = x0, _2 = tmp6._1 }
+                _1 = { _1 = x0, _2 = tmp6._1 },
+                _2 = { _1 = sa, _2 = { _1 = tmp6._2, _2 = None } }
               })
             elseif tmp5.__tag == "Done" then
               return Done

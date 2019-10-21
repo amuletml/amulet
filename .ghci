@@ -7,3 +7,6 @@ import Text.Show.Pretty (ppShow, pPrint)
 
 :def test \x -> pure $ ":!stack test --fast " ++ concat [ " --test-arguments '-p " ++ x ++ "'" | x /= "" ]
 :def test! const (pure ":!stack test --fast --test-arguments '-r'")
+
+:def compile \x -> pure $ ":main compile " ++ x
+:def repl \x -> pure $ ":main repl " ++ x

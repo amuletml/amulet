@@ -23,6 +23,6 @@ terminal : Spec{'a : constraint}. :- 'a trivial
 map_dict : Spec{'a : constraint}. Spec{'b : constraint}. :- 'a 'b -> dict 'a -> dict 'b
 unmap_dict : Spec{'a : constraint}. Spec{'b : constraint}. (dict 'a -> dict 'b) -> :- 'a 'b
 :~: : Infer{'a : type}. 'a -> 'a -> type
-Refl : Infer{'bce : type}. Infer{'a : type}. Spec{'b : 'bce}. Spec{'a : 'a}. ('b ~ 'a) ⊃ :~: 'a 'b
+Refl : Infer{'bju : type}. Infer{'a : type}. Spec{'b : 'bju}. Spec{'a : 'a}. ('b ~ 'a) ⊃ :~: 'a 'b
 eq_dict : Infer{'a : type}. Spec{'b : 'a}. Spec{'c : 'a}. :~: 'b 'c -> dict (~ 'b 'c)
 dict_eq : Infer{'a : type}. Spec{'b : 'a}. Spec{'c : 'a}. dict (~ 'b 'c) -> :~: 'b 'c

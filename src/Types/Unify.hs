@@ -121,7 +121,8 @@ unifyPure_v :: [(Type Typed, Type Typed)] -> Maybe (Subst Typed)
 unifyPure_v ts = fst . flip runNamey firstName $ do
   let err_unify_pure = error "unifyPure_v: forced variable substitution in pure unifier should be impossible"
   x <- runChronicleT $ do
-    (sub, _, _) <- solveWith (fmap (uncurry (ConUnify (It'sThis BecauseInternal) mempty err_unify_pure)) (Seq.fromList ts))
+    (sub, _, _) <- solveWith (fmap (uncurry (ConUnify (It'sThis (BecauseInternal "pure unifier"))
+                                      mempty err_unify_pure)) (Seq.fromList ts))
                               mempty
                               emptyState{_solveFuel = 1}
     pure sub
@@ -308,28 +309,30 @@ doSolve (ohno@(ConImplicit reason scope var con@TyPi{}) :<| cs) = do -- {{{
 doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do -- {{{
   doSolve cs
   sub <- use solveTySubst
-  scope <- pure (apply sub scope)
-  let old = apply sub cons
-  cons <- reduceTyFuns scope (apply sub cons)
+  let scope' = apply sub scope
+      old = apply sub cons
+  cons <- reduceTyFuns scope' (apply sub cons)
 
   traceM (displayS (pretty (apply sub ohno)))
 
-  let possible = lookup cons scope
+  let possible = lookup cons scope'
   traceM ("considering between: " ++ show (map (pretty . view implType) possible))
+
 
   ignored <- freshTV
 
   case possible of
     xs | allSameHead xs
        , concreteUnderOne cons || hasExactMatch cons xs
-       , applic <- filter (applicable cons scope) xs
+       , applic <- filter (applicable cons scope') xs
        , not (null applic) -> do
       let imp = pickBestPossible applic
 
       traceM (displayS ("best possible:" <+> pretty var <+> pretty (imp ^. implVar) <+> pretty (imp ^. implType)))
+      traceM ("\x1b[41mXXXXX:\x1b[0m " ++ displayS (pretty old) ++ " ={reduce}= " ++ displayS (pretty cons))
 
       w <- local (depth %~ (cons :)) $
-        useImplicit reason cons scope imp
+        useImplicit reason cons old scope' imp
           `catchChronicle`
             \e -> confesses (usingFor imp cons (headSeq e))
       solveCoSubst . at var ?= w
@@ -339,14 +342,14 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do -- {{{
       | not (concreteUnderOne cons), imp ^. implSort == LocalAssum || fundepsAllow imp cons -> do
       traceM (displayS ("only possible:" <+> pretty var <+> pretty (imp ^. implVar) <+> pretty (imp ^. implType)))
 
-      w <- useImplicit reason cons scope imp
+      w <- useImplicit reason cons old scope' imp
           `catchChronicle`
             \e -> confesses (usingFor imp cons (headSeq e))
       solveCoSubst . at var ?= w
 
-    _ | let tup = TyTuple cons ignored, [imp] <- lookup tup scope -> do
+    _ | let tup = TyTuple cons ignored, [imp] <- lookup tup scope' -> do
       traceM (displayS ("decomposing tuple:" <+> pretty (imp ^. implType)))
-      w <- useImplicit reason tup scope imp
+      w <- useImplicit reason tup (TyTuple old ignored) scope' imp
             `catchChronicle` \e -> confesses (usingFor imp cons (headSeq e))
       v <- genName
 
@@ -358,9 +361,9 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do -- {{{
           an = annotation reason
       solveCoSubst . at var ?= ExprApp pi1
 
-    _ | let tup = TyTuple ignored cons, [imp] <- lookup tup scope -> do
+    _ | let tup = TyTuple ignored cons, [imp] <- lookup tup scope' -> do
       traceM (displayS ("decomposing tuple:" <+> pretty (imp ^. implType)))
-      w <- useImplicit reason tup scope imp
+      w <- useImplicit reason tup (TyTuple ignored old) scope' imp
             `catchChronicle` \e -> confesses (usingFor imp cons (headSeq e))
       v <- genName
 
@@ -375,7 +378,7 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do -- {{{
     _ ->
       case head (appsView cons) of
         TyCon v | Just solve <- magicClass v -> do
-          (w, cs) <- censor (const mempty) $ listen $ solve reason scope old
+          (w, cs) <- censor (const mempty) $ listen $ solve reason scope' old
           doSolve (Seq.fromList cs)
             `catchChronicle`
               \e -> confesses (ArisingFrom (UnsatClassCon reason (apply sub ohno) (MagicErrors (toList e))) reason)
@@ -430,18 +433,27 @@ headSeq (Seq.viewl -> (x Seq.:< _)) = x
 headSeq _ = undefined
 
 useImplicit :: forall m. MonadSolve m
-            => SomeReason -> Type Typed -> ImplicitScope ClassInfo Typed
+            => SomeReason
+            -> Type Typed
+            -> Type Typed
+            -> ImplicitScope ClassInfo Typed
             -> Implicit ClassInfo Typed -> m (Wrapper Typed)
-useImplicit reason ty scope (ImplChoice _ oty _ imp _ _ _) = go where
+useImplicit reason ty old_ty scope (ImplChoice _ oty _ imp _ _ _) = go where
   go :: m (Wrapper Typed)
   go = do
     guardClassOverflow reason ty
 
     w <- subsumes' reason scope oty ty
+    sub <- use solveTySubst
+    (w', _) <- capture $ unify scope ty (apply sub old_ty)
     let start = VarRef imp (annotation reason, oty)
-    pure (ExprApp (Ascription (ExprWrapper w start (annotation reason, ty))
-                    ty
-                    (annotation reason, ty)))
+
+    traceM ("\x1b[41museImplicit cast:\x1b[0m " ++ displayS (pretty w'))
+
+    pure . ExprApp . tracePrettyId $
+      ExprWrapper (Cast w')
+        (Ascription (ExprWrapper w start (annotation reason, ty)) ty (annotation reason, ty))
+            (annotation reason, old_ty)
 
 -- 'ImplChoice's for which 'implSort' /= 'InstSort' never have their
 -- 'implClass' forced. That means that 'Superclass' and 'LocalAssum'
@@ -676,8 +688,6 @@ unify scope (TyOperator l v r) (TyOperator l' v' r')
 unify scope ta@(TyApps (TyCon v) xs@(_:_)) b = do
   x <- view solveInfo
 
-  traceM (show (x, v, x ^. at v))
-
   case x ^. at v of
     Just (Right tf) -> unifyTyFunApp tf scope xs b
     _ -> case b of
@@ -762,7 +772,7 @@ unifyTyFunApp' info scope args tb = do
   where
     don't = do
       var <- genName
-      tell [ConImplicit (It'sThis BecauseInternal) scope var
+      tell [ConImplicit (It'sThis (BecauseInternal "deferred tyfam equality")) scope var
               (TyApps tyEq [TyApps (TyCon (info ^. tsName)) args, tb])]
       pure (VarCo var)
 
@@ -777,7 +787,7 @@ tyFunByEval (TyFamInfo tn eqs relevant _ con) scope args tb = do
       let Just sub = unifyPure_v (zip decl_args args)
           TyApps _ decl_args = tau
       var <- genName
-      tell [ConImplicit (It'sThis BecauseInternal) scope var (apply sub tau)]
+      tell [ConImplicit (It'sThis (BecauseInternal "tyfam constraint")) scope var (apply sub tau)]
     Nothing -> pure ()
 
   case lookupEquality info scope assum (TyApps (TyCon tn) args) tb of
@@ -798,10 +808,7 @@ tyFunByEval (TyFamInfo tn eqs relevant _ con) scope args tb = do
 
       case x of
         Just (sub, cos) -> do
-          traceM (show sub)
-
           (flat, _) <- flatten assum info (TyApps (TyCon tn) (apply sub declared))
-          traceM (show (pretty flat))
 
           if all (apart flat) skipped
 

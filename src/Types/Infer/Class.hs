@@ -152,7 +152,7 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
       pure ( singleton classAnn Superclass var impty (MagicInfo [])
            , (Implicit, var, name, obligation))
 
-  (_, _, cs) <- solve (fmap (moreScope scope) cs) =<< getSolveInfo
+  (_, _, cs) <- solveFixpoint (BecauseOf clss) (fmap (moreScope scope) cs) =<< getSolveInfo
   unless (null cs) $
     confesses (UnsatClassCon (BecauseOf clss) (head cs)
                 (GivenContextNotEnough (fromMaybe (TyCon tyUnitName) ctx)))
@@ -183,16 +183,13 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
     (fold -> defaultMap) <-
       local (classes %~ mappend scope)
       . local (names %~ focus tele)
-      . for defaults $ \(DefaultMethod (Binding method exp _ _) _) -> do
+      . for defaults $ \(DefaultMethod bind@(Binding method exp _ _) _) -> do
       let sig = tele ^. at method . non undefined
 
       (_, cs) <- listen $
         check exp sig
 
-      (sub, _, deferred) <- condemn $ solve cs =<< getSolveInfo
-
-      deferred <- pure (fmap (apply sub) deferred)
-      (_, _, cons) <- solve (Seq.fromList deferred) =<< getSolveInfo
+      (_, _, cons) <- condemn $ solveFixpoint (BecauseOf bind) cs =<< getSolveInfo
 
       unless (null cons) $ do
         let (c@(ConImplicit reason _ _ _):_) = reverse cons
@@ -333,6 +330,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = condemn $ do
 
       getTyCon (TyCon x) = Just x
       getTyCon (TyPromotedCon x) = Just x
+      getTyCon (TyApps f (_:_)) = getTyCon f
       getTyCon _ = Nothing
 
   declaredHere <- view declaredHere
@@ -535,7 +533,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = condemn $ do
 
   (contextFields, cs) <- listen . for (Map.toList classContext) $ \(name, ty) -> do
     var <- genName
-    tell (pure (ConImplicit (BecauseOf inst) scope var ty))
+    tell (pure (ConImplicit (BecauseOf inst) (scope <> localAssums) var ty))
     pure (Field name
            (ExprWrapper (WrapVar var)
              (Fun (EvParam (PType (Capture var (ann, ty)) ty (ann, ty)))
@@ -550,7 +548,7 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = condemn $ do
 
   (solution, needed, unsolved) <-
     local (tySyms %~ extendTySyms tysyms) $
-      solve cs =<< getSolveInfo
+      solveFixpoint (BecauseOf inst) cs =<< getSolveInfo
 
   unless (null unsolved) $
     dictates (addBlame (BecauseOf inst)
@@ -961,7 +959,7 @@ checkValidMethodTy reason method vars ty = unless (Set.null diff) err where
 fixHeadVars :: forall m. MonadInfer Typed m => Map.Map (Var Resolved) (Type Typed) -> m ()
 fixHeadVars = (() <$) .  Map.traverseWithKey fixone where
   fixone :: Var Resolved -> Type Typed -> m (Wrapper Typed)
-  fixone var = unify (It'sThis BecauseInternal) (TyVar var)
+  fixone var = unify (It'sThis (BecauseInternal "instance head variable fixing")) (TyVar var)
 
 unlift :: Type Typed -> Type Desugared
 unlift = raiseT id

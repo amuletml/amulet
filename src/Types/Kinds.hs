@@ -1,4 +1,4 @@
-{-# LANGUAGE ConstraintKinds, FlexibleContexts, LambdaCase, TypeFamilies #-}
+{-# LANGUAGE ConstraintKinds, FlexibleContexts, LambdaCase, TypeFamilies, ViewPatterns #-}
 module Types.Kinds
   ( resolveKind
   , resolveTyDeclKind, resolveClassKind, resolveTySymDeclKind, resolveTyFunDeclKind
@@ -7,6 +7,7 @@ module Types.Kinds
   , checkAgainstKind, getKind, liftType
   , generalise
   , checkKind
+  , solveFixpoint
   )
   where
 
@@ -17,11 +18,13 @@ import Control.Applicative
 import Control.Arrow
 import Control.Lens
 
+import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
 import Data.Traversable
 import Data.Foldable
 import Data.Spanned
+import Data.Reason
 import Data.Triple
 import Data.Maybe
 
@@ -51,6 +54,40 @@ type MonadKind m =
 
 type Kind = Type
 
+solveFixpoint :: (MonadNamey m, MonadChronicles TypeError m)
+              => SomeReason
+              -> Seq.Seq (Constraint Typed)
+              -> Map.Map (Var Resolved) (Either ClassInfo TySymInfo)
+              -> m (Subst Typed, Map.Map (Var Resolved) (Wrapper Typed), [Constraint Typed])
+solveFixpoint blame = (fmap (_3 %~ reblame_con blame) . ) . go True (mempty, mempty) where
+  go True (sub, wraps) cs c = do
+    (compose sub -> sub, wraps', cons) <- solve cs c
+    let new_cons = apply sub cons
+
+    go (length cons < Seq.length cs && any isEquality new_cons) (sub, wraps' <> wraps) (Seq.fromList new_cons) c
+
+  go False (sub, wraps) cs c = do
+    (compose sub -> sub, wraps', cons) <- solve cs c
+    (compose sub -> sub, wraps'', cons) <- solve (Seq.fromList (apply sub cons)) c
+    pure (sub, wraps'' <> wraps' <> wraps, apply sub cons)
+
+  isEquality (ConImplicit _ _ _ (TyApps t as)) | t == tyEq && solvable as = True
+  isEquality _ = False
+
+  solvable [TyApps{}, TyVar{}] = True
+  solvable [TyVar{}, TyApps{}] = True
+  solvable _ = False
+
+  reblame_con r = map go where
+    go (ConUnify _ a b c d) = ConUnify r a b c d
+    go (ConSubsume _ a b c d) = ConSubsume r a b c d
+    go (ConImplies _ a b c) = ConImplies r a b c
+    go (ConImplicit (It'sThis BecauseInternal{}) a b c) = ConImplicit r a b c
+    go (ConImplicit r a b c) = ConImplicit r a b c
+    go x@ConFail{} = x
+    go x@DeferredError{} = x
+
+
 resolveKind :: MonadKind m => SomeReason -> Type Desugared -> m (Type Typed)
 resolveKind reason otp = do
   ((ty, _), cs) <- let cont t = do
@@ -58,7 +95,7 @@ resolveKind reason otp = do
                         expandType t
                      in runWriterT (runStateT (cont otp) reason)
 
-  (sub, _, cons) <- solve cs =<< getSolveInfo
+  (sub, _, cons) <- solveFixpoint reason cs =<< getSolveInfo
 
   unless (null cons) $ do
     tell (Seq.fromList cons)
@@ -80,7 +117,7 @@ checkAgainstKind r t k = solveK pure r $
 annotateKind :: MonadKind m => SomeReason -> Type Typed -> m (Type Typed)
 annotateKind r ty = do
   ((ty, _), cs) <- runWriterT (runStateT (fmap fst (inferKind (raiseT id ty))) r)
-  (sub, _, cons) <- solve cs =<< getSolveInfo
+  (sub, _, cons) <- solveFixpoint r cs =<< getSolveInfo
   unless (null cons) $ do
     tell (Seq.fromList cons)
   pure (apply sub ty)
@@ -134,7 +171,7 @@ resolveTyFunDeclKind reason name arguments kindsig equations = do
  where
    solveK k = do
      (((kind, equations, args), _), cs) <- runWriterT (runStateT k reason)
-     (sub, _, cons) <- solve cs =<< getSolveInfo
+     (sub, _, cons) <- solveFixpoint reason cs =<< getSolveInfo
      unless (null cons) $ do
        tell (Seq.fromList cons)
      pure ( apply sub kind
@@ -231,7 +268,7 @@ solveForKind2 :: MonadKind m => SomeReason -> KindT m (Type Typed, Kind Typed) -
 solveForKind2 reason = solveK cont reason where
   solveK cont reason k = do
     (((typ_e, kind), _), cs) <- runWriterT (runStateT k reason)
-    (sub, _, cons) <- solve cs =<< getSolveInfo
+    (sub, _, cons) <- solveFixpoint reason cs =<< getSolveInfo
     unless (null cons) $ do
       tell (Seq.fromList cons)
     cont (apply sub typ_e, apply sub kind)
@@ -241,7 +278,7 @@ solveForKind2 reason = solveK cont reason where
 solveK :: MonadKind m => (Type Typed -> m (Type Typed)) -> SomeReason -> KindT m (Type Typed) -> m (Type Typed)
 solveK cont reason k = do
   ((kind, _), cs) <- runWriterT (runStateT k reason)
-  (sub, _, cons) <- solve cs =<< getSolveInfo
+  (sub, _, cons) <- solveFixpoint reason cs =<< getSolveInfo
   unless (null cons) $ do
     tell (Seq.fromList cons)
   cont =<< expandType (apply sub kind)
