@@ -1,1 +1,45 @@
-TC: Occurs
+Amulet does not support equi-recursive, or infinite, types.
+
+This error happens when Amulet is trying to solve an equality constraint
+between a type variable and a compound type that mentions that variable.
+
+For example:
+
+  let x = [x] in ()
+
+If we say that 'x : T', for any type 'T', then that must also be the
+type of '[x]'. However, the latter has type 'list T', and thus the
+equation `T ~ list T` arises. This equation does have a unique solution,
+namely the infinite type
+
+  list (list (list (list (list (list (list (list ...)))))))
+
+However, this is generally not what the user wants, even if it would be
+easy to support, since infinite types tend to hide genuine programming
+errors. If we allowed infinite types, then the following functions would
+all type-check, even though they are all buggy:
+
+  let search p = function
+    | [] -> error "not found"
+    | Cons (x, xs) ->
+        if p x then
+          x
+        else
+          search p (* forgot to pass xs *)
+
+  let search' p = function
+    | [] -> error "not found"
+    | Cons (x, xs) ->
+        if p x then
+          x
+        else
+          search (* forgot to pass p and xs *)
+
+  let search'' p = function
+    | [] -> error "not found"
+    | Cons (x, xs) ->
+        if p x then
+          x
+        else
+          p (* returned the predicate instead of searching *)
+

@@ -1,1 +1,11 @@
-TC: NotInScope
+The type checker could not find a value in scope. This is a bug in the
+compiler, since badly-scoped programs should be rejected by the resolver
+(see E1001).
+
+Please upload your program to a pastebin site and open an issue in the
+Amulet repository:
+
+  https://github.com/tmpim/amulet/issues/new?title=TC%20Not%20in%20scope
+
+Try to reduce your program to the smallest possible that still exhibits
+the bug.

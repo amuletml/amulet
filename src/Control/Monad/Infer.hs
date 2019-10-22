@@ -883,7 +883,6 @@ instance Note TypeError Style where
   noteId EscapedSkolems{}     = Just 2008
   noteId SkolBinding{}        = Just 2009
 
-
   noteId NoOverlap{}          = Just 2010
 
   noteId CanNotInstance{}     = Just 2011
@@ -929,6 +928,9 @@ instance Note TypeError Style where
 
   noteId MightNotTerminate{}  = Just 2036
   noteId TyFunInLhs{}         = Just 2037
+  noteId DIMalformedHead{}    = Just 0008 -- This is a parse error that TC emits
+  noteId DICan'tDerive{}      = Just 2038
+  noteId NotAnIdiom{}         = Just 2039
 
   noteId (Note x _) = noteId x
   noteId (Suggestion x _) = noteId x

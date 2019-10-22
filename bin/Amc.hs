@@ -157,7 +157,7 @@ argParser = info (args <**> helper <**> version)
       <> command "explain"
          ( info explainCommand
          $ fullDesc <> progDesc "Explain an error message." )
-      ) <|> pure (Repl Nothing defaultPort (CompilerOptions D.Void [] False))
+      ) <|> pure (Repl Nothing defaultPort DefaultPrelude (CompilerOptions D.Void [] False))
 
     explainCommand :: Parser Command
     explainCommand = Explain
