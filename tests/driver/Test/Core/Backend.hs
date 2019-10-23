@@ -42,7 +42,7 @@ result o f c = fst . flip runNamey firstName $ do
   lower <- runLowerT (lowerProg inferred)
   compiled <-
     if o
-    then compileProgram <$> optimise lower
+    then compileProgram <$> optimise True lower
     else pure . LuaDo . toList . fst
        . uncurry addBuiltins
        . flip runState defaultEmitState . emitStmt

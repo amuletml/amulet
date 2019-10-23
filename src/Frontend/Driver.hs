@@ -14,14 +14,17 @@
   files and programs, feeding them through the various stages of
   compilation, and caching the output.
 
-  The aim of the driver is to be as lazy as possible - if we are resolving an
-  expression and end up loading another module, then we don't need to type check
-  the loaded module either.
+  The aim of the driver is to be as lazy as possible - if we are
+  resolving an expression and end up loading another file, then we don't
+  need to type check the loaded file either.
 
 -}
 module Frontend.Driver
-  ( Driver, emptyDriver
+  ( Driver
+  , makeDriver, makeDriverWith
+  , DriverConfig(..), makeConfig
   , fileMap
+  , getConfig, adjustConfig
 
   -- * REPL interaction
   --
@@ -29,6 +32,7 @@ module Frontend.Driver
   , resolve, resolveWith
   , infer, inferWith
   , lower, lowerWith
+  , locatePrelude
 
   -- * Compilation
   --
@@ -38,10 +42,9 @@ module Frontend.Driver
   -- * Querying the driver
   --
   -- $query
-  , getSignature, getTypeEnv
+  , getSignature, getTypeEnv, getOpenedTypeEnv
   , getVerified, getVerifiedAll
   , getLowerState, getLowered
-  , loadPrelude
   ) where
 
 import System.Environment
@@ -51,7 +54,6 @@ import System.FilePath
 import Control.Monad.State.Strict
 import Control.Monad.Namey
 import Control.Applicative
-import Control.Exception
 import Control.Lens hiding ((<.>))
 
 import qualified Data.List.NonEmpty as E
@@ -82,8 +84,7 @@ import Syntax.Builtin (builtinResolve, builtinEnv)
 import Syntax.Desugar (desugarProgram)
 import Syntax (Toplevel)
 import Syntax.Verify
-import Syntax.Types hiding (modules)
-import qualified Syntax.Types as T
+import Syntax.Types
 import Syntax.Var
 
 import Parser.Wrapper (runParser)
@@ -93,16 +94,16 @@ import Frontend.Errors
 
 import Text.Pretty.Note
 
--- | The stage a module is at. Modules are parsed, resolved, type
--- checked, verified, and then lowered.
+-- | The stage a file is at. Files are parsed, resolved, type checked,
+-- verified, and then lowered.
 --
--- Modules may not go through all stages of a pipeline at once (or at all). The
--- only requirement is that their dependencies have been processed before they
--- have.
+-- Files may not go through all stages of a pipeline at once (or at
+-- all). The only requirement is that their dependencies have been
+-- processed before they have.
 --
--- Note, while 'sig' represents the current module's signature, 'env' and
--- '_lowerState' are the /accumulated/ state of this module and all it
--- dependencies.
+-- Note, while 'sig' represents the current file's module signature,
+-- 'env' and '_lowerState' are the /accumulated/ state of this file and
+-- all it dependencies.
 data Stage
   = SParsed     { _pBody :: [Toplevel Parsed] }
   | SUnparsed
@@ -119,45 +120,90 @@ data Stage
   | SEmitted    { _cBody :: [Stmt CoVar],        sig :: Signature, env :: Env, _lowerState :: LowerState }
   deriving Show
 
-data Module = Module
-  { modLocation :: FilePath
-  , modSource :: SourceName
-  , modVar :: Name
+data LoadedFile = LoadedFile
+  { fileLocation :: FilePath
+  , fileSource :: SourceName
+  , fileVar :: Name
 
-  -- | Modules upon which this one depends.
+  -- | Files upon which this one depends.
   , _dependencies :: Set.Set FilePath
   -- | The first module upon which this one depends. Used for producing
   -- traces for cyclic dependencies.
   , _dependent :: Maybe (FilePath, Span)
 
-  -- | The stage through the pipeline of this module.
+  -- | The stage through the pipeline of this file.
   , _stage :: Stage
 
   , _errors :: ErrorBundle
   } deriving Show
 
-data Driver = Driver
-  { -- | All loaded modules
-    _modules :: Map.Map FilePath Module
-  -- | A mapping of pretty source paths, to cannonical file names.
-  , _filePaths :: Map.Map SourceName FilePath
+newtype DriverConfig = DriverConfig
+  { libraryPath :: [FilePath]
+  -- ^ The path of folders to look up files from.
   } deriving Show
 
-makeLenses ''Module
+data Driver = Driver
+  { -- | All loaded files.
+    _files :: Map.Map FilePath LoadedFile
+  -- | A mapping of pretty source paths, to cannonical file names.
+  , _filePaths :: Map.Map SourceName FilePath
+  -- | The driver's current config
+  , _config :: DriverConfig
+  } deriving Show
+
+makeLenses ''LoadedFile
 makeLenses ''Driver
 
--- | The default file driver.
-emptyDriver :: Driver
-emptyDriver = Driver mempty mempty
+-- | Construct a new driver from the given config.
+makeDriverWith :: DriverConfig -> Driver
+makeDriverWith = Driver mempty mempty
+
+-- | Construct a new driver using 'makeConfig'.
+makeDriver :: IO Driver
+makeDriver = Driver mempty mempty <$> makeConfig
+
+-- | The default driver config.
+--
+-- This constructs a library path which will attempt to locate a file
+-- from one of the "known directories" - $AMC_LIBRARY_PATH, ../lib/
+-- relative to the compiler's executable, or lib/ relative to the
+-- compiler's executable.
+makeConfig :: IO DriverConfig
+makeConfig = do
+  execP <- getExecutablePath
+  mainPath <- foldMap splitPath <$> lookupEnv "AMC_LIBRARY_PATH"
+
+  pure $ DriverConfig
+    (mainPath
+    ++ [ takeDirectory execP </> "lib"
+       , takeDirectory (takeDirectory execP) </> "lib"
+       ])
+  where
+    splitPath = Set.toList . Set.fromList . map T.unpack . T.split (==':') . T.pack
+
+-- | Locate the "prelude" module from a set of known locations:
+-- * The AMC_PRELUDE environment variable (a file)
+-- * $libraryPath/prelude.ml
+locatePrelude :: MonadIO m => DriverConfig -> m (Maybe FilePath)
+locatePrelude config = do
+  let libPath = map (</> "prelude.ml") (libraryPath config)
+  liftIO $ findFile' =<< (++) <$> (toList <$> lookupEnv "AMC_PRELUDE") <*> pure libPath
 
 -- | Construct a file map, suitable for use with 'fileSpans' and other
 -- "Text.Pretty.Note" functions.
 fileMap :: MonadIO m => Driver -> m FileMap
 fileMap driver
   = liftIO
-  . traverse (\mod -> (modSource mod,) <$> T.readFile (modLocation mod))
+  . traverse (\file -> (fileSource file,) <$> T.readFile (fileLocation file))
   . Map.elems
-  $ driver ^. modules
+  $ driver ^. files
+
+-- | Get the current config
+getConfig :: Driver -> DriverConfig
+getConfig = _config
+
+adjustConfig :: MonadState Driver m => (DriverConfig -> DriverConfig) -> m ()
+adjustConfig = (config%=)
 
 {- $repl
 
@@ -255,7 +301,7 @@ lowerWith root parsed sig env lState = do
 
   where
     getNewlyLowered path = do
-      stg <- uses (modules . at path) (fmap (^.stage))
+      stg <- uses (files . at path) (fmap (^.stage))
       case stg of
         Just (SEmitted _ _ _ lEnv) -> pure (Just ([], lEnv))
         _ -> getLowered path
@@ -289,7 +335,7 @@ gatherDepsOf f = fmap snd . foldlM go mempty where
     | path `Set.member` visited = pure (visited, seq)
     | otherwise = do
         this <- f path
-        deps <- uses (modules . at path) (foldMap (^.dependencies))
+        deps <- uses (files . at path) (foldMap (^.dependencies))
         (visited, seq) <- foldlM go (Set.insert path visited, seq) deps
         pure (visited, seq Seq.|> this)
 
@@ -311,20 +357,20 @@ verifyProg v env inferred =
    in order to produce the required output.
 
    All functions also return an 'ErrorBundle', holding any errors which
-   occurred in the process of loading this module.
+   occurred in the process of loading this file.
 -}
 
-addModule :: (MonadNamey m, MonadState Driver m, MonadIO m)
-          => FilePath -> m Module
-addModule path = do
+addFile :: (MonadNamey m, MonadState Driver m, MonadIO m)
+        => FilePath -> m LoadedFile
+addFile path = do
   name <- liftIO $ makeRelativeToCurrentDirectory path
   var <- genNameFrom (T.pack ("\"" ++ name ++ "\""))
   contents <- liftIO $ L.readFile path
   let (parsed, es) = runParser name contents parseTops
-  let mod = Module
-        { modLocation = path
-        , modSource = name
-        , modVar = var
+  let file = LoadedFile
+        { fileLocation = path
+        , fileSource = name
+        , fileVar = var
 
         , _dependencies = mempty
         , _dependent = Nothing
@@ -335,22 +381,22 @@ addModule path = do
         }
 
   filePaths %= Map.insert name path
-  modules %= Map.insert path mod
+  files %= Map.insert path file
 
-  pure mod
+  pure file
 
--- | Get or compute a module's signature.
+-- | Get or compute a file's signature.
 getSignature :: (MonadNamey m, MonadState Driver m, MonadIO m)
              => FilePath -> m (Maybe Signature)
 getSignature path = do
-  mod <- use (modules . at path)
-  mod <- case mod of
+  file <- use (files . at path)
+  file <- case file of
     Nothing -> do
       exists <- liftIO $ doesFileExist path
-      if exists then Just <$> addModule path else pure Nothing
-    Just mod -> pure (Just mod)
+      if exists then Just <$> addFile path else pure Nothing
+    Just file -> pure (Just file)
 
-  case maybe SUnparsed (^. stage) mod of
+  case maybe SUnparsed (^. stage) file of
     SUnparsed -> pure Nothing
     SParsed parsed -> do
       (resolved, deps) <-
@@ -358,34 +404,34 @@ getSignature path = do
         $ resolveProgram builtinResolve parsed
       case resolved of
         Left es -> do
-          updateMod path $ (stage .~ SUnresolved) . (dependencies .~ deps) . (errors . resolveErrors .~ es)
+          updateFile path $ (stage .~ SUnresolved) . (dependencies .~ deps) . (errors . resolveErrors .~ es)
           pure Nothing
         Right (ResolveResult resolved sig _) -> do
-          updateMod path $ (stage .~ SResolved resolved sig) . (dependencies .~ deps)
+          updateFile path $ (stage .~ SResolved resolved sig) . (dependencies .~ deps)
           pure (Just sig)
 
     SUnresolved -> pure Nothing
     stage -> pure (Just (sig stage))
 
--- | Get or compute a module's type environment.
+-- | Get or compute a file's type environment.
 getTypeEnv :: (MonadNamey m, MonadState Driver m, MonadIO m)
            => FilePath -> m (Maybe Env)
 getTypeEnv path = do
   _ <- getSignature path
 
-  mod <- use (modules . at path)
-  case maybe SUnparsed (^.stage) mod of
+  file <- use (files . at path)
+  case maybe SUnparsed (^.stage) file of
     SParsed{} -> pure Nothing
     SUnparsed{} -> pure Nothing
     SUnresolved{} -> pure Nothing
     SUntyped{} -> pure Nothing
 
     SResolved { _rBody = rBody, sig } -> do
-      let ~(Just mod') = mod
-      AllOf env <- foldMapM (fmap AllOf . getTypeEnv) (mod' ^. dependencies)
+      let ~(Just file') = file
+      AllOf env <- foldMapM (fmap AllOf . getTypeEnv) (file' ^. dependencies)
       case env of
         -- One of our dependencies failed: Mark us as failed too and abort.
-        Nothing -> updateMod path (stage .~ SUntyped sig) $> Nothing
+        Nothing -> updateFile path (stage .~ SUntyped sig) $> Nothing
         Just env -> do
           inferred <- inferProgram (builtinEnv <> env) =<< desugarProgram rBody
           let (res, es) = case inferred of
@@ -396,28 +442,41 @@ getTypeEnv path = do
 
           case res of
             Nothing -> do
-              updateMod path $ (stage .~ SUntyped sig) . (errors . typeErrors .~ es)
+              updateFile path $ (stage .~ SUntyped sig) . (errors . typeErrors .~ es)
               pure Nothing
             Just (tBody, modEnv) ->
               let env' = env
                     & (names %~ (<> (modEnv ^. names)))
                     . (types %~ (<> (modEnv ^. types)))
                     . (classDecs %~ (<> (modEnv ^. classDecs)))
-                    . (classes %~ (<> (modEnv ^. classes)))
-                    . (T.modules %~ (<> (modEnv ^. T.modules))
-                        . Map.insert (modVar mod') (modEnv ^. classes, modEnv ^. tySyms))
-              in do updateMod path $ (stage .~ STyped tBody sig env') . (errors . typeErrors .~ es)
+                    . (modules %~ (<> (modEnv ^. modules))
+                        . Map.insert (fileVar file') (modEnv ^. classes, modEnv ^. tySyms))
+              in do updateFile path $ (stage .~ STyped tBody sig env') . (errors . typeErrors .~ es)
                     pure (Just env')
 
     stage -> pure (Just (env stage))
 
--- | Determine whether a module can be successfully verified.
+-- | Get or compute a file's "opened" type environment. Namely, the
+-- environment as if it had been opened in the current scope.
+getOpenedTypeEnv :: (MonadNamey m, MonadState Driver m, MonadIO m)
+           => FilePath -> m (Maybe Env)
+getOpenedTypeEnv path = do
+  env <- getTypeEnv path
+  case env of
+    Nothing -> pure Nothing
+    Just env -> do
+      ~(Just file) <- use (files . at path)
+      let ~(Just (modImplicits, modTysym)) = env ^. modules . at (fileVar file)
+      pure . Just $ env & (classes %~ (<>modImplicits)) . (tySyms %~ (<>modTysym))
+
+
+-- | Determine whether a file can be successfully verified.
 getVerified :: (MonadNamey m, MonadState Driver m, MonadIO m)
             => FilePath -> m Bool
 getVerified path = do
   _ <- getTypeEnv path
 
-  stg <- uses (modules . at path) (maybe SUnparsed (^.stage))
+  stg <- uses (files . at path) (maybe SUnparsed (^.stage))
   case stg of
     SParsed{} -> pure False
     SUnparsed{} -> pure False
@@ -434,7 +493,7 @@ getVerified path = do
     STyped prog sig env -> do
       v <- genName
       let (verified, errs) = verifyProg v env prog
-      updateMod path $ (stage .~ if verified then SVerified prog sig env else SUnverified sig env)
+      updateFile path $ (stage .~ if verified then SVerified prog sig env else SUnverified sig env)
                      . (errors %~ (<>errs))
       pure verified
 
@@ -443,53 +502,52 @@ getVerifiedAll :: (MonadNamey m, MonadState Driver m, MonadIO m)
 getVerifiedAll path = do
   here <- getVerified path
 
-  deps <- uses (modules . at path) (foldMap (^. dependencies))
+  deps <- uses (files . at path) (foldMap (^. dependencies))
   there <- foldMapM getVerifiedAll deps
 
   pure (All here <> there)
 
--- | Get or compute a module's lower state.
+-- | Get or compute a file's lower state.
 getLowerState :: (MonadNamey m, MonadState Driver m, MonadIO m)
               => FilePath -> m (Maybe LowerState)
 getLowerState path = do
   ok <- getVerified path
   if not ok then pure Nothing else do
-    ~(Just mod) <- use (modules . at path)
-    case mod ^. stage of
+    ~(Just file) <- use (files . at path)
+    case file ^. stage of
       SEmitted _ _ _ lEnv -> pure (Just lEnv)
       SVerified prog sig env -> do
-        AllOf lEnv <- foldMapM (fmap AllOf . getLowerState) (mod ^. dependencies)
+        AllOf lEnv <- foldMapM (fmap AllOf . getLowerState) (file ^. dependencies)
         case lEnv of
           Nothing -> pure Nothing
           Just lEnv -> do
             (lEnv, l) <- runLowerWithEnv (defaultState <> lEnv) (lowerProgEnv prog)
-            updateMod path $ stage .~ SEmitted l sig env lEnv
+            updateFile path $ stage .~ SEmitted l sig env lEnv
             pure (Just lEnv)
       _ -> error "Impossible: Should have been verified"
 
--- | Get or compute a module's core representation.
+-- | Get or compute a file's core representation.
 getLowered :: (MonadNamey m, MonadState Driver m, MonadIO m)
             => FilePath -> m (Maybe ([Stmt CoVar], LowerState))
 getLowered path = do
   lEnv <- getLowerState path
   case lEnv of
     Nothing -> pure Nothing
-    Just lEnv -> fmap ((,lEnv) . _cBody . (^.stage)) <$> use (modules . at path)
+    Just lEnv -> fmap ((,lEnv) . _cBody . (^.stage)) <$> use (files . at path)
 
 -- | Get the errors for a specific file.
 getErrors :: (MonadNamey m, MonadState Driver m)
           => FilePath -> m ErrorBundle
-getErrors path = maybe mempty (^.errors) <$> use (modules . at path)
+getErrors path = maybe mempty (^.errors) <$> use (files . at path)
 
 -- | Update an item within the state
-updateMod :: MonadState Driver m
-          => FilePath -> (Module -> Module) -> m ()
-updateMod path f = modules %= Map.update (Just . f) path
-
+updateFile :: MonadState Driver m
+           => FilePath -> (LoadedFile -> LoadedFile) -> m ()
+updateFile path f = files %= Map.update (Just . f) path
 
 {- $importer
 
-   Modules are originally located and inserted into the cache when
+   LoadedFiles are originally located and inserted into the cache when
    running resolution. The process is relatively simple:
 
     - 'importFile': This attempts to load a file from the cache. If the
@@ -499,9 +557,8 @@ updateMod path f = modules %= Map.update (Just . f) path
       import and error.
 
     - 'FileImport'/'runFileImport': Resolution is run within this
-      monad. This is effectively 'importFile' specialised for a module -
-      it supports relative paths, and tracks dependencies between
-      modules.
+      monad. This is effectively 'importFile' specialised for a file - it
+      supports relative paths, and tracks dependencies between modules.
 -}
 
 data LoadContext = LoadContext
@@ -539,7 +596,8 @@ instance (MonadNamey m, MonadState Driver m, MonadIO m) => MonadImport (FileImpo
   importModule loc relPath
     | not (T.pack "." `T.isPrefixOf` relPath)
     = FileIm \(LoadContext _ source) -> do
-      absPath <- findFile' (searchPath (T.unpack relPath))
+      libPath <- uses config libraryPath
+      absPath <- liftIO $ findFile' (map (</> T.unpack relPath) libPath)
       case absPath of
         Nothing -> pure (NotFound, mempty)
         Just absPath -> (,Set.singleton absPath) <$> importFile source (Just loc) absPath
@@ -553,86 +611,39 @@ instance (MonadNamey m, MonadState Driver m, MonadIO m) => MonadImport (FileImpo
 importFile :: (MonadNamey m, MonadState Driver m, MonadIO m)
            => Maybe FilePath -> Maybe Span -> FilePath -> m ImportResult
 importFile fromPath fromLoc path = do
-  mod <- uses modules (Map.lookup path)
-  case mod of
-    Just mod -> do
-      case mod ^. stage of
+  file <- use (files . at path)
+  case file of
+    Just file -> do
+      case file ^. stage of
         SUnresolved -> pure Errored
         SUnparsed -> pure Errored
         SParsed _ -> do
           state <- get
           let ~(Just loc) = fromLoc
-              fromMod = flip Map.lookup (state ^. modules) =<< fromPath
-          pure (ImportCycle ((modSource mod, loc) E.:| foldMap (`findCycle` state) fromMod))
+              fromFile = flip Map.lookup (state ^. files) =<< fromPath
+          pure (ImportCycle ((fileSource file, loc) E.:| foldMap (`findCycle` state) fromFile))
 
-        stage -> pure (Imported (modVar mod) (sig stage))
+        stage -> pure (Imported (fileVar file) (sig stage))
 
     Nothing -> do
       exists <- liftIO $ doesFileExist path
       if not exists then pure NotFound else do
-        mod <- addModule path
-        updateMod path $ dependent .~ ((,) <$> fromPath <*> fromLoc)
-        maybe Errored (Imported (modVar mod)) <$> getSignature path
+        file <- addFile path
+        updateFile path $ dependent .~ ((,) <$> fromPath <*> fromLoc)
+        maybe Errored (Imported (fileVar file)) <$> getSignature path
 
 -- | Find the first file which matches a list.
-findFile' :: forall m. MonadIO m
-          => [IO [FilePath]] -> m (Maybe FilePath)
-findFile' = search where
-  search :: [IO [FilePath]] -> m (Maybe FilePath)
-  search [] = pure Nothing
-  search (p:ps) = do
-    paths <- liftIO p
-    r <- searchMany paths
-    case r of
-      Just r -> pure (Just r)
-      Nothing -> search ps
+findFile' :: [FilePath] -> IO (Maybe FilePath)
+findFile' [] = pure Nothing
+findFile' (x:xs) = do
+  path <- canonicalizePath x
+  exists <- doesFileExist path
+  if exists then pure (Just path) else findFile' xs
 
-  searchMany (path:paths) = searchOne path (searchMany paths)
-  searchMany [] = pure mempty
-
-  searchOne path cont = do
-    path <- liftIO $ canonicalizePath path
-    exists <- liftIO $ doesFileExist path
-    if exists then pure (Just path) else cont
-
-
--- | The default path to use with 'findFile''. This will attempt to locate
--- a file from one of the "known directories" - $AMC_LIBRARY_PATH, ../lib/
--- relative to the compiler's executable, or lib/ relative to the
--- compiler's executable.
-searchPath :: FilePath -> [IO [FilePath]]
-searchPath p =
-  [ lookupEnv "AMC_LIBRARY_PATH" <&> fmap (\path -> map (</> p) (splitPath path))
-                                 <&> msum
-  , getExecutablePath <&> \execP -> [takeDirectory execP </> "lib" </> p]
-  , getExecutablePath <&> \execP -> [takeDirectory (takeDirectory execP) </> "lib" </> p]
-  ]
-    where
-      splitPath = Set.toList . Set.fromList . map T.unpack . T.split (==':') . T.pack
-
--- | Load the "prelude" module from a set of known locations:
--- * The AMC_PRELUDE environment variable (a file)
--- * $AMC_LIBRARY_PATH/prelude.ml
--- * ../lib/prelude.ml relative to the compiler's executable
--- * lib/prelude.ml relative to the compiler's executable
-loadPrelude :: forall m.
-               (MonadNamey m, MonadState Driver m, MonadIO m)
-            => m (Signature, Env, [Stmt CoVar])
-loadPrelude = load =<< findFile' ((toList <$> lookupEnv "AMC_PRELUDE") : searchPath "prelude.ml") where
-  load Nothing = liftIO . throwIO . userError $ "Failed to locate Amulet prelude"
-  load (Just p) = do
-    r <- compile p
-    case r of
-      (Just stmts, _) -> do
-        ~(Just sig) <- getSignature p
-        ~(Just env) <- getTypeEnv p
-        pure (sig, env, stmts)
-      _ -> liftIO . throwIO . userError $ "Failed to load Amulet prelude from " ++ p
-
--- | Try to identify the cycle of modules requiring each other.
-findCycle :: Module -> Driver -> [(FilePath, Span)]
-findCycle (Module { modSource, _stage = SParsed _, _dependent = Just (from, loc) }) st =
-  (modSource, loc) : findCycle (fromJust (Map.lookup from (st ^. modules))) st
+-- | Try to identify the cycle of files requiring each other.
+findCycle :: LoadedFile -> Driver -> [(FilePath, Span)]
+findCycle (LoadedFile { fileSource, _stage = SParsed _, _dependent = Just (from, loc) }) st =
+  (fileSource, loc) : findCycle (fromJust (Map.lookup from (st ^. files))) st
 findCycle _ _ = []
 
 newtype AllOf a = AllOf (Maybe a)
