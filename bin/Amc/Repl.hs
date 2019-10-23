@@ -434,16 +434,10 @@ loadFile file = do
   state' <- liftIO (defaultState dmode dconfig)
   put state'
 
-  (prelude_sig, prelude_env, core) <- wrapDriver D.loadPrelude
-
   modify' (\s -> s { currentFile = Just file
-                   , outputHandle = handle
-                   , resolveScope = prelude_sig <> resolveScope s
-                   , inferScope = prelude_env <> inferScope s })
+                   , outputHandle = handle })
 
-  (_, luaSyntax) <- emitCore core
-  _ <- liftIO $ L.runWith (luaState state') $
-    L.dostring luaSyntax
+  setupPrelude
 
   -- Load each file in turn
   path <- liftIO $ canonicalizePath file
@@ -514,34 +508,32 @@ runRemoteReplCommand port command = Net.withSocketsDo $ do
     Left (_ :: SomeException) ->
       putStrLn $ "Failed to connect to server on port " ++ show port
 
-loadReplPrelude :: ReplState -> IO ReplState
-loadReplPrelude st = flip execStateT st $ do
-  dconfig <- gets (D.getConfig . driver)
-  dmode <- gets debugMode
-  handle <- gets outputHandle
-  state' <- liftIO (defaultState dmode dconfig)
-  put state'
-  (prelude_sig, prelude_env, core) <- wrapDriver D.loadPrelude
+setupPrelude :: (MonadState ReplState m, MonadIO m) => m ()
+setupPrelude = do
+  prelude <- gets (D.prelude . D.getConfig . driver)
+  case prelude of
+    Nothing -> pure ()
+    Just prelude -> do
+      lowered <- wrapDriver (D.getLowered prelude)
+      case lowered of
+        Nothing -> pure ()
+        Just (core, preludeLower) -> do
+          (_, luaSyntax) <- emitCore core
+          lState <- gets luaState
+          _ <- liftIO . L.runWith lState . L.dostring $ luaSyntax
 
-  modify (\s -> s { currentFile = Nothing
-                  , outputHandle = handle
-                  , resolveScope = prelude_sig <> resolveScope s
-                  , inferScope = prelude_env <> inferScope s
-                  })
-
-  (_, luaSyntax) <- emitCore core
-
-  _ <- liftIO $ L.runWith (luaState state') $
-    L.dostring luaSyntax
-
-  get
+          ~(Just preludeSig, Just preludeEnv) <-
+            wrapDriver ((,) <$> D.getSignature prelude <*> D.getTypeEnv prelude)
+          modify (\s -> s { resolveScope = resolveScope s <> preludeSig
+                          , inferScope = inferScope s <> preludeEnv
+                          , lowerState = lowerState s <> preludeLower })
 
 repl :: Int -> DebugMode -> D.DriverConfig -> IO ()
 repl port mode config = replFrom port mode config Nothing
 
 replFrom :: Int -> DebugMode -> D.DriverConfig -> Maybe FilePath -> IO ()
 replFrom port mode config file = do
-  state <- maybe loadReplPrelude (execStateT . loadFile) file =<< defaultState mode config
+  state <- execStateT (maybe setupPrelude loadFile file) =<< defaultState mode config
   hSetBuffering stdout LineBuffering
 
   ready <- newEmptyMVar

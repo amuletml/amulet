@@ -17,7 +17,8 @@ Each sub-command can be run with --help too.
 
   $ amc compile --help
   Usage: amc compile FILE [-o|--out FILE] [-O|--opt LEVEL] 
-                     [(-t|--test) | --test-tc] [--lib ARG] [--core-lint]
+                     [(-t|--test) | --test-tc] [--lib ARG] 
+                     [--no-prelude | --prelude PATH] [--core-lint]
     Compile an Amulet file to Lua.
   
   Available options:
@@ -28,12 +29,15 @@ Each sub-command can be run with --help too.
     --test-tc                Provides additional type check information on the
                              output
     --lib ARG                Add a folder to the library path
+    --no-prelude             Do not load files with a prelude.
+    --prelude PATH           Specify a custom prelude to use.
     --core-lint              Verified that Amulet's intermediate representation is
                              well-formed.
     -h,--help                Show this help text
 
   $ amc repl --help
-  Usage: amc repl [FILE] [--port PORT] [(-t|--test) | --test-tc] [--lib ARG]
+  Usage: amc repl [FILE] [--port PORT] [(-t|--test) | --test-tc] [--lib ARG] 
+                  [--no-prelude | --prelude PATH]
     Launch the Amulet REPL.
   
   Available options:
@@ -43,6 +47,8 @@ Each sub-command can be run with --help too.
     --test-tc                Provides additional type check information on the
                              output
     --lib ARG                Add a folder to the library path
+    --no-prelude             Do not load files with a prelude.
+    --prelude PATH           Specify a custom prelude to use.
     -h,--help                Show this help text
 
   $ amc connect --help

@@ -86,11 +86,18 @@ compileFromTo opt lint dbg config file emit = do
     Nothing -> pure ()
 
 data DoOptimise = NoOpt | Opt
+  deriving Show
+
 newtype DoLint = DoLint Bool
+  deriving Show
+
+data Prelude = NoPrelude | DefaultPrelude | CustomPrelude String
+  deriving Show
 
 data CompilerOptions = CompilerOptions
   { debugMode   :: D.DebugMode
   , libraryPath :: [String]
+  , prelude     :: Prelude
   }
   deriving (Show)
 
@@ -143,7 +150,7 @@ argParser = info (args <**> helper <**> version)
       <> command "connect"
          ( info connectCommand
          $ fullDesc <> progDesc "Connect to an already running REPL instance." )
-      ) <|> pure (Repl Nothing defaultPort (CompilerOptions D.Void []))
+      ) <|> pure (Repl Nothing defaultPort (CompilerOptions D.Void [] DefaultPrelude))
 
     compileCommand :: Parser Command
     compileCommand = Compile
@@ -175,6 +182,9 @@ argParser = info (args <**> helper <**> version)
         <|> flag' D.TestTc (long "test-tc"           <> help "Provides additional type check information on the output")
         <|> pure D.Void )
       <*> many (option str (long "lib" <> help "Add a folder to the library path"))
+      <*> ( flag' NoPrelude (long "no-prelude" <> help "Do not load files with a prelude.")
+        <|> option (CustomPrelude <$> str) ( long "prelude" <> metavar "PATH" <> help "Specify a custom prelude to use." )
+        <|> pure DefaultPrelude )
 
     optional :: Parser a -> Parser (Maybe a)
     optional p = (Just <$> p) <|> pure Nothing
@@ -183,18 +193,37 @@ argParser = info (args <**> helper <**> version)
     defaultPort = 5478
 
 driverConfig :: CompilerOptions -> IO D.DriverConfig
-driverConfig (CompilerOptions _ paths) = do
+driverConfig (CompilerOptions _ paths prelude) = do
   paths <- sequence <$> for paths (\path -> do
     path' <- canonicalizePath path
     exists <- doesDirectoryExist path'
     pure $ if exists then Right path' else Left path)
-  case paths of
+
+  config <- case paths of
     Left path -> do
       hPutStrLn stderr (path ++ ": No such directory")
       exitWith (ExitFailure 1)
     Right paths -> do
       config <- D.makeConfig
       pure config { D.libraryPath = paths ++ D.libraryPath config }
+
+  case prelude of
+    NoPrelude -> pure config { D.prelude = Nothing }
+    CustomPrelude path -> do
+      wholePath <- canonicalizePath path
+      exists <- doesFileExist wholePath
+      unless exists $ do
+        hPutStrLn stderr (path ++ ": No such file")
+        exitWith (ExitFailure 1)
+
+      pure config { D.prelude = Just wholePath }
+    DefaultPrelude -> do
+      prelude <- D.findPrelude (D.libraryPath config)
+      case prelude of
+        Nothing -> do
+          hPutStrLn stderr "Cannot locate prelude"
+          exitWith (ExitFailure 1)
+        Just prelude -> pure config { D.prelude = Just prelude }
 
 main :: IO ()
 main = do

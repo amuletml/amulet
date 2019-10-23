@@ -320,7 +320,7 @@ instance Pretty TypeError where
       describe TyType = "type constructor"
       describe _ = "function"
 
-  pretty (NotInScope e) = string "Variable not in scope:" <+> pretty e
+  pretty (NotInScope e) = string "INTERNAL TC ERROR: Variable not in scope:" <+> pretty e
   pretty (ArisingFrom er _) = pretty er
 
   pretty (CustomTypeError e) = e
