@@ -16,39 +16,34 @@ Using amc with the help flag displays all sub-command and the top-level options.
 Each sub-command can be run with --help too.
 
   $ amc compile --help
-  Usage: amc compile FILE [-o|--out FILE] [-O|--opt LEVEL] 
-                     [(-t|--test) | --test-tc] [--lib ARG] 
-                     [--no-prelude | --prelude PATH] [--core-lint]
+  Usage: amc compile FILE [-o|--out FILE] [-O|--opt LEVEL] [--lib ARG]
     Compile an Amulet file to Lua.
   
   Available options:
     FILE                     The file to compile.
     -o,--out FILE            Write the generated Lua to a specific file.
     -O,--opt LEVEL           Controls the optimisation level. (default: 1)
+    --core-lint              Verified that Amulet's intermediate representation is
+                             well-formed.
     -t,--test                Provides additional debug information on the output
     --test-tc                Provides additional type check information on the
                              output
     --lib ARG                Add a folder to the library path
-    --no-prelude             Do not load files with a prelude.
-    --prelude PATH           Specify a custom prelude to use.
-    --core-lint              Verified that Amulet's intermediate representation is
-                             well-formed.
     -h,--help                Show this help text
 
   $ amc repl --help
-  Usage: amc repl [FILE] [--port PORT] [(-t|--test) | --test-tc] [--lib ARG] 
-                  [--no-prelude | --prelude PATH]
+  Usage: amc repl [FILE] [--port PORT] [--no-prelude | --prelude PATH] [--lib ARG]
     Launch the Amulet REPL.
   
   Available options:
     FILE                     A file to load into the REPL.
     --port PORT              Port to use for the REPL server. (default: 5478)
+    --no-prelude             Do not load files with a prelude.
+    --prelude PATH           Specify a custom prelude to use.
     -t,--test                Provides additional debug information on the output
     --test-tc                Provides additional type check information on the
                              output
     --lib ARG                Add a folder to the library path
-    --no-prelude             Do not load files with a prelude.
-    --prelude PATH           Specify a custom prelude to use.
     -h,--help                Show this help text
 
   $ amc connect --help

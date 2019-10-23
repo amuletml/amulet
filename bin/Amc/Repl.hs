@@ -2,7 +2,8 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
 
 module Amc.Repl
-  ( repl
+  ( ReplConfig(..)
+  , repl
   , replFrom
   , runRemoteReplCommand
   ) where
@@ -22,6 +23,7 @@ import Data.Traversable
 import Data.Bifunctor
 import Data.Foldable
 import Data.Position
+import Data.Functor
 import Data.Spanned
 import Data.Triple
 import Data.Maybe
@@ -81,6 +83,14 @@ import Version
 instance MonadFail L.Lua where
   fail x = error $ "MonadFail L.Lua: fail " ++ x
 
+data ReplConfig = ReplConfig
+  { port         :: Int
+  , debugMode    :: DebugMode
+  , root         :: FilePath
+  , driverConfig :: D.DriverConfig
+  , prelude      :: Maybe FilePath
+  }
+
 data ReplState = ReplState
   { resolveScope :: Signature
   , inferScope   :: T.Env
@@ -89,23 +99,20 @@ data ReplState = ReplState
   , lowerState   :: L.LowerState
 
   , driver       :: D.Driver
-  , root         :: FilePath
+  , config       :: ReplConfig
 
   , luaState     :: L.State
-
-  , debugMode    :: DebugMode
 
   , currentFile  :: Maybe FilePath
   , outputHandle :: Handle
   }
 
-defaultState :: DebugMode -> D.DriverConfig -> IO ReplState
-defaultState mode config = do
+defaultState :: ReplConfig -> IO ReplState
+defaultState config = do
   state <- L.newstate
   -- Init our default libraries
   L.runWith state L.openlibs
 
-  root <- getCurrentDirectory
   pure ReplState
     { resolveScope = Bi.builtinResolve
     , inferScope   = Bi.builtinEnv
@@ -115,10 +122,8 @@ defaultState mode config = do
 
     , luaState     = state
 
-    , driver       = D.makeDriverWith config
-    , root         = root
-
-    , debugMode    = mode
+    , driver       = D.makeDriverWith (driverConfig config)
+    , config       = config
 
     , currentFile  = Nothing
     , outputHandle = stdout
@@ -259,7 +264,7 @@ typeCommand (dropWhile isSpace -> input) = do
           prog :: [S.Toplevel S.Parsed]
           prog = [ S.LetStmt S.Public [ S.Matching (S.Wildcard ann) parsed ann ] ]
 
-      (infer, es) <- wrapDriver $ D.inferWith (root state) prog (resolveScope state) (inferScope state)
+      (infer, es) <- wrapDriver $ D.inferWith (root (config state)) prog (resolveScope state) (inferScope state)
       hReportAll (outputHandle state) files es
       case infer of
         Nothing -> pure ()
@@ -303,7 +308,7 @@ execString name line = do
       (luaExpr, luaSyntax) <- emitCore core
       state <- get
       (ok, res) <- liftIO $ do
-        dump (debugMode state) prog core core luaExpr oldInfer (inferScope state)
+        dump (debugMode (config state)) prog core core luaExpr oldInfer (inferScope state)
 
         L.runWith (luaState state) $ do
           L.OK <- L.dostring "-- time out hook\nlocal function f() error('Timed out!', 3) end; debug.sethook(f, '', 1e6)"
@@ -394,7 +399,7 @@ parseCore parser name input = do
             Left s -> s
             Right e -> [S.LetStmt S.Public [S.Binding (S.Name "_") e True (annotation e)]]
 
-      (lower, es) <- wrapDriver $ D.lowerWith (root state) parsed'
+      (lower, es) <- wrapDriver $ D.lowerWith (root (config state)) parsed'
                        (resolveScope state) (inferScope state) (lowerState state)
       driver_files <- D.fileMap =<< gets driver
       hReportAll (outputHandle state) (files ++ driver_files) es
@@ -428,16 +433,17 @@ emitCore core = do
 loadFile :: (MonadState ReplState m, MonadIO m) => FilePath -> m ()
 loadFile file = do
   -- Reset the state
-  dconfig <- gets (D.getConfig . driver)
-  dmode <- gets debugMode
+  config <- gets config
   handle <- gets outputHandle
-  state' <- liftIO (defaultState dmode dconfig)
-  put state'
+  state' <- liftIO (defaultState config)
+  put state' { currentFile = Just file
+             , outputHandle = handle }
 
-  modify' (\s -> s { currentFile = Just file
-                   , outputHandle = handle })
-
-  setupPrelude
+  -- FIXME: This is a little broken, in that if the prelude and the
+  -- loaded file both require the same code, we will execute it
+  -- twice. Ideally we should probably have a 'loadFilsImpl', which loads
+  -- 1..n files, and correctly handles stitching them together.
+  _ <- setupPrelude
 
   -- Load each file in turn
   path <- liftIO $ canonicalizePath file
@@ -446,46 +452,8 @@ loadFile file = do
   then outputDoc ("Cannot open" <+> verbatim file)
   else do
     outputDoc $ "Loading:" <+> verbatim file
+    loadFileImpl path $> ()
 
-    (core, es) <- wrapDriver $ D.compile path
-
-    files <- D.fileMap =<< gets driver
-    hReportAll handle files es
-    case core of
-      Nothing -> pure ()
-      Just core -> do
-        hReportAll handle files es
-
-        (sig, env, lEnv) <- wrapDriver $ do
-          ~(Just sig) <- D.getSignature path
-          ~(Just env) <- D.getTypeEnv path
-          ~(Just lEnv) <- D.getLowerState path
-          pure (sig, env, lEnv)
-
-        modify (\s -> s { resolveScope = resolveScope s <> sig
-                        , inferScope = inferScope s <> env
-                        , lowerState = lowerState s <> lEnv })
-
-        (luaExpr, luaSyntax) <- emitCore core
-
-        luaState <- gets luaState
-        liftIO $ do
-          dump dmode [] core core luaExpr Bi.builtinEnv env
-          res <- L.runWith luaState $ do
-            code <- L.dostring luaSyntax
-
-            case code of
-              L.OK -> pure (Right ())
-              _ -> do
-                val <- valueRepr (pure ())
-                L.pop 1
-                case val of
-                  String str -> pure (Left (text str <+> parens (shown code)))
-                  _ -> pure (Left (keyword "Error:" <+> pretty val))
-
-          case res of
-            Left err -> hPutDoc handle err
-            Right () -> pure ()
 
 outputDoc :: (MonadState ReplState m, MonadIO m) => Doc -> m ()
 outputDoc x = do
@@ -508,38 +476,67 @@ runRemoteReplCommand port command = Net.withSocketsDo $ do
     Left (_ :: SomeException) ->
       putStrLn $ "Failed to connect to server on port " ++ show port
 
-setupPrelude :: (MonadState ReplState m, MonadIO m) => m ()
+loadFileImpl :: (MonadState ReplState m, MonadIO m) => FilePath -> m Bool
+loadFileImpl path = do
+  (core, es) <- wrapDriver $ D.compile path
+
+  files <- D.fileMap =<< gets driver
+  handle <- gets outputHandle
+  hReportAll handle files es
+  case core of
+    Nothing -> pure False
+    Just core -> do
+      (sig, env, lEnv) <- wrapDriver $ do
+        ~(Just sig) <- D.getSignature path
+        ~(Just env) <- D.getOpenedTypeEnv path
+        ~(Just lEnv) <- D.getLowerState path
+        pure (sig, env, lEnv)
+
+      modify (\s -> s { resolveScope = resolveScope s <> sig
+                      , inferScope = inferScope s <> env
+                      , lowerState = lowerState s <> lEnv })
+
+      (luaExpr, luaSyntax) <- emitCore core
+
+      luaState <- gets luaState
+      debug <- gets (debugMode . config)
+      liftIO $ do
+        dump debug [] core core luaExpr Bi.builtinEnv env
+        res <- L.runWith luaState $ do
+          code <- L.dostring luaSyntax
+
+          case code of
+            L.OK -> pure (Right ())
+            _ -> do
+              val <- valueRepr (pure ())
+              L.pop 1
+              case val of
+                String str -> pure (Left (text str <+> parens (shown code)))
+                _ -> pure (Left (keyword "Error:" <+> pretty val))
+
+        case res of
+          Left err -> hPutDoc handle err >> pure False
+          Right () -> pure True
+
+setupPrelude :: (MonadState ReplState m, MonadIO m) => m Bool
 setupPrelude = do
-  prelude <- gets (D.prelude . D.getConfig . driver)
+  prelude <- gets (prelude . config)
   case prelude of
-    Nothing -> pure ()
-    Just prelude -> do
-      lowered <- wrapDriver (D.getLowered prelude)
-      case lowered of
-        Nothing -> pure ()
-        Just (core, preludeLower) -> do
-          (_, luaSyntax) <- emitCore core
-          lState <- gets luaState
-          _ <- liftIO . L.runWith lState . L.dostring $ luaSyntax
+    Nothing -> pure True
+    Just prelude -> loadFileImpl prelude
 
-          ~(Just preludeSig, Just preludeEnv) <-
-            wrapDriver ((,) <$> D.getSignature prelude <*> D.getTypeEnv prelude)
-          modify (\s -> s { resolveScope = resolveScope s <> preludeSig
-                          , inferScope = inferScope s <> preludeEnv
-                          , lowerState = lowerState s <> preludeLower })
+repl :: ReplConfig -> IO ()
+repl config = replFrom config Nothing
 
-repl :: Int -> DebugMode -> D.DriverConfig -> IO ()
-repl port mode config = replFrom port mode config Nothing
-
-replFrom :: Int -> DebugMode -> D.DriverConfig -> Maybe FilePath -> IO ()
-replFrom port mode config file = do
-  state <- execStateT (maybe setupPrelude loadFile file) =<< defaultState mode config
+replFrom :: ReplConfig -> Maybe FilePath -> IO ()
+replFrom config file = do
+  state <- execStateT (maybe (setupPrelude $> ()) loadFile file) =<< defaultState config
   hSetBuffering stdout LineBuffering
 
   ready <- newEmptyMVar
   tid <-
-    if port /= 0
-       then forkIO $ startServer ready port state
+    if (port config) /= 0
+       then forkIO $ startServer ready (port config) state
        else do
          putMVar ready ()
          myThreadId

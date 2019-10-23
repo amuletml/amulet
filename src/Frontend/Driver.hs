@@ -22,8 +22,7 @@
 module Frontend.Driver
   ( Driver
   , makeDriver, makeDriverWith
-  , DriverConfig(..)
-  , makeConfig, findPrelude
+  , DriverConfig(..), makeConfig
   , fileMap
   , getConfig, adjustConfig
 
@@ -33,6 +32,7 @@ module Frontend.Driver
   , resolve, resolveWith
   , infer, inferWith
   , lower, lowerWith
+  , locatePrelude
 
   -- * Compilation
   --
@@ -42,7 +42,7 @@ module Frontend.Driver
   -- * Querying the driver
   --
   -- $query
-  , getSignature, getTypeEnv
+  , getSignature, getTypeEnv, getOpenedTypeEnv
   , getVerified, getVerifiedAll
   , getLowerState, getLowered
   ) where
@@ -85,7 +85,6 @@ import Syntax.Desugar (desugarProgram)
 import Syntax (Toplevel)
 import Syntax.Verify
 import Syntax.Types
-import qualified Syntax.Types as T
 import Syntax.Var
 
 import Parser.Wrapper (runParser)
@@ -138,19 +137,17 @@ data LoadedFile = LoadedFile
   , _errors :: ErrorBundle
   } deriving Show
 
-data DriverConfig = DriverConfig
-  { -- | The path of folders to look up files from.
-    libraryPath :: [FilePath]
-  , -- | The path the prelude is located at, if defined.
-    prelude :: Maybe FilePath
+newtype DriverConfig = DriverConfig
+  { libraryPath :: [FilePath]
+  -- ^ The path of folders to look up files from.
   } deriving Show
 
 data Driver = Driver
   { -- | All loaded files.
     _files :: Map.Map FilePath LoadedFile
-    -- | A mapping of pretty source paths, to cannonical file names.
+  -- | A mapping of pretty source paths, to cannonical file names.
   , _filePaths :: Map.Map SourceName FilePath
-    -- | The driver's current config
+  -- | The driver's current config
   , _config :: DriverConfig
   } deriving Show
 
@@ -171,36 +168,26 @@ makeDriver = Driver mempty mempty <$> makeConfig
 -- from one of the "known directories" - $AMC_LIBRARY_PATH, ../lib/
 -- relative to the compiler's executable, or lib/ relative to the
 -- compiler's executable.
---
--- This will also attempt to load the "prelude" module from a series of
--- known locations:
--- * The AMC_PRELUDE environment variable (a file)
--- * $libraryPath/prelude.ml
 makeConfig :: IO DriverConfig
 makeConfig = do
   execP <- getExecutablePath
   mainPath <- foldMap splitPath <$> lookupEnv "AMC_LIBRARY_PATH"
 
-  let path =
-        mainPath ++
-        [ takeDirectory execP </> "lib"
-        , takeDirectory (takeDirectory execP) </> "lib"
-        ]
-
-  DriverConfig path <$> findPrelude path
-
+  pure $ DriverConfig
+    (mainPath
+    ++ [ takeDirectory execP </> "lib"
+       , takeDirectory (takeDirectory execP) </> "lib"
+       ])
   where
     splitPath = Set.toList . Set.fromList . map T.unpack . T.split (==':') . T.pack
 
--- | Attempt to locate the prelude from a library path.
---
--- This uses the same resolution logic as described in 'makeConfig'.
-findPrelude :: [FilePath] -> IO (Maybe FilePath)
-findPrelude path =
-  findFile' =<< (++)
-            <$> (toList <$> lookupEnv "AMC_PRELUDE")
-            <*> pure (map (</> "prelude.ml") path)
-
+-- | Locate the "prelude" module from a set of known locations:
+-- * The AMC_PRELUDE environment variable (a file)
+-- * $libraryPath/prelude.ml
+locatePrelude :: MonadIO m => DriverConfig -> m (Maybe FilePath)
+locatePrelude config = do
+  let libPath = map (</> "prelude.ml") (libraryPath config)
+  liftIO $ findFile' =<< (++) <$> (toList <$> lookupEnv "AMC_PRELUDE") <*> pure libPath
 
 -- | Construct a file map, suitable for use with 'fileSpans' and other
 -- "Text.Pretty.Note" functions.
@@ -412,43 +399,19 @@ getSignature path = do
   case maybe SUnparsed (^. stage) file of
     SUnparsed -> pure Nothing
     SParsed parsed -> do
-      preludePath <- uses config prelude
-      case preludePath of
-        Nothing -> loadWith parsed mempty mempty
-        Just preludePath -> do
-          preludeFile <- use (files . at preludePath)
-          case preludeFile of
-            Nothing -> do
-              sig <- getSignature preludePath
-              case sig of
-                Nothing -> addPrelude preludePath >> pure Nothing
-                Just sig -> loadWith parsed (Set.singleton preludePath) sig
-
-            Just preludeFile ->
-              case preludeFile ^. stage of
-                SUnresolved -> addPrelude preludePath >> pure Nothing
-                SUnparsed -> addPrelude preludePath >> pure Nothing
-                SParsed{} -> loadWith parsed mempty mempty
-                stage -> loadWith parsed (Set.singleton preludePath) (sig stage)
+      (resolved, deps) <-
+          flip runFileImport (LoadContext (dropFileName path) (Just path))
+        $ resolveProgram builtinResolve parsed
+      case resolved of
+        Left es -> do
+          updateFile path $ (stage .~ SUnresolved) . (dependencies .~ deps) . (errors . resolveErrors .~ es)
+          pure Nothing
+        Right (ResolveResult resolved sig _) -> do
+          updateFile path $ (stage .~ SResolved resolved sig) . (dependencies .~ deps)
+          pure (Just sig)
 
     SUnresolved -> pure Nothing
     stage -> pure (Just (sig stage))
-
-  where
-    addPrelude preludePath = updateFile path $ dependencies %~ (Set.singleton preludePath<>)
-
-    loadWith parsed baseDeps baseSig = do
-      (resolved, deps) <-
-          flip runFileImport (LoadContext (dropFileName path) (Just path))
-        $ resolveProgram (builtinResolve <> baseSig) parsed
-      case resolved of
-        Left es -> do
-          updateFile path $ (stage .~ SUnresolved) . (dependencies %~ ((deps<>baseDeps)<>)) . (errors . resolveErrors .~ es)
-          pure Nothing
-        Right (ResolveResult resolved sig _) -> do
-          updateFile path $ (stage .~ SResolved resolved sig) . (dependencies %~ ((deps<>baseDeps)<>))
-          pure (Just sig)
-
 
 -- | Get or compute a file's type environment.
 getTypeEnv :: (MonadNamey m, MonadState Driver m, MonadIO m)
@@ -486,13 +449,26 @@ getTypeEnv path = do
                     & (names %~ (<> (modEnv ^. names)))
                     . (types %~ (<> (modEnv ^. types)))
                     . (classDecs %~ (<> (modEnv ^. classDecs)))
-                    . (classes %~ (<> (modEnv ^. classes))) -- TODO: Remove! Only the prelude should do this.
-                    . (T.modules %~ (<> (modEnv ^. T.modules))
+                    . (modules %~ (<> (modEnv ^. modules))
                         . Map.insert (fileVar file') (modEnv ^. classes, modEnv ^. tySyms))
               in do updateFile path $ (stage .~ STyped tBody sig env') . (errors . typeErrors .~ es)
                     pure (Just env')
 
     stage -> pure (Just (env stage))
+
+-- | Get or compute a file's "opened" type environment. Namely, the
+-- environment as if it had been opened in the current scope.
+getOpenedTypeEnv :: (MonadNamey m, MonadState Driver m, MonadIO m)
+           => FilePath -> m (Maybe Env)
+getOpenedTypeEnv path = do
+  env <- getTypeEnv path
+  case env of
+    Nothing -> pure Nothing
+    Just env -> do
+      ~(Just file) <- use (files . at path)
+      let ~(Just (modImplicits, modTysym)) = env ^. modules . at (fileVar file)
+      pure . Just $ env & (classes %~ (<>modImplicits)) . (tySyms %~ (<>modTysym))
+
 
 -- | Determine whether a file can be successfully verified.
 getVerified :: (MonadNamey m, MonadState Driver m, MonadIO m)

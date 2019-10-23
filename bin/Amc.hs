@@ -35,7 +35,7 @@ import qualified Frontend.Driver as D
 import Frontend.Errors
 
 import qualified Amc.Debug as D
-import Amc.Repl
+import qualified Amc.Repl as R
 
 import Version
 
@@ -97,7 +97,6 @@ data Prelude = NoPrelude | DefaultPrelude | CustomPrelude String
 data CompilerOptions = CompilerOptions
   { debugMode   :: D.DebugMode
   , libraryPath :: [String]
-  , prelude     :: Prelude
   }
   deriving (Show)
 
@@ -106,12 +105,13 @@ data Command
     { input       :: FilePath
     , output      :: Maybe FilePath
     , optLevel    :: Int
-    , options     :: CompilerOptions
     , coreLint    :: Bool
+    , options     :: CompilerOptions
     }
   | Repl
     { toLoad      :: Maybe FilePath
     , serverPort  :: Int
+    , prelude     :: Prelude
     , options     :: CompilerOptions
     }
   | Connect
@@ -150,7 +150,7 @@ argParser = info (args <**> helper <**> version)
       <> command "connect"
          ( info connectCommand
          $ fullDesc <> progDesc "Connect to an already running REPL instance." )
-      ) <|> pure (Repl Nothing defaultPort (CompilerOptions D.Void [] DefaultPrelude))
+      ) <|> pure (Repl Nothing defaultPort DefaultPrelude (CompilerOptions D.Void []))
 
     compileCommand :: Parser Command
     compileCommand = Compile
@@ -160,14 +160,17 @@ argParser = info (args <**> helper <**> version)
           <> help "Write the generated Lua to a specific file." ) )
       <*> option auto ( long "opt" <> short 'O' <> metavar "LEVEL" <> value 1 <> showDefault
                      <> help "Controls the optimisation level." )
+      <*> switch (long "core-lint" <> hidden <> help "Verified that Amulet's intermediate representation is well-formed.")
       <*> compilerOptions
-      <*> switch (long "core-lint" <> help "Verified that Amulet's intermediate representation is well-formed.")
 
     replCommand :: Parser Command
     replCommand = Repl
       <$> optional (argument str (metavar "FILE" <> help "A file to load into the REPL."))
       <*> option auto ( long "port" <> metavar "PORT" <> value defaultPort <> showDefault
                      <> help "Port to use for the REPL server." )
+      <*> ( flag' NoPrelude (long "no-prelude" <> help "Do not load files with a prelude.")
+        <|> option (CustomPrelude <$> str) ( long "prelude" <> metavar "PATH" <> help "Specify a custom prelude to use." )
+        <|> pure DefaultPrelude )
       <*> compilerOptions
 
     connectCommand :: Parser Command
@@ -178,13 +181,10 @@ argParser = info (args <**> helper <**> version)
 
     compilerOptions :: Parser CompilerOptions
     compilerOptions = CompilerOptions
-      <$> ( flag' D.Test   (long "test" <> short 't' <> help "Provides additional debug information on the output")
-        <|> flag' D.TestTc (long "test-tc"           <> help "Provides additional type check information on the output")
+      <$> ( flag' D.Test   (long "test" <> short 't' <> hidden <> help "Provides additional debug information on the output")
+        <|> flag' D.TestTc (long "test-tc"           <> hidden <> help "Provides additional type check information on the output")
         <|> pure D.Void )
       <*> many (option str (long "lib" <> help "Add a folder to the library path"))
-      <*> ( flag' NoPrelude (long "no-prelude" <> help "Do not load files with a prelude.")
-        <|> option (CustomPrelude <$> str) ( long "prelude" <> metavar "PATH" <> help "Specify a custom prelude to use." )
-        <|> pure DefaultPrelude )
 
     optional :: Parser a -> Parser (Maybe a)
     optional p = (Just <$> p) <|> pure Nothing
@@ -193,13 +193,13 @@ argParser = info (args <**> helper <**> version)
     defaultPort = 5478
 
 driverConfig :: CompilerOptions -> IO D.DriverConfig
-driverConfig (CompilerOptions _ paths prelude) = do
+driverConfig (CompilerOptions _ paths) = do
   paths <- sequence <$> for paths (\path -> do
     path' <- canonicalizePath path
     exists <- doesDirectoryExist path'
     pure $ if exists then Right path' else Left path)
 
-  config <- case paths of
+  case paths of
     Left path -> do
       hPutStrLn stderr (path ++ ": No such directory")
       exitWith (ExitFailure 1)
@@ -207,38 +207,45 @@ driverConfig (CompilerOptions _ paths prelude) = do
       config <- D.makeConfig
       pure config { D.libraryPath = paths ++ D.libraryPath config }
 
-  case prelude of
-    NoPrelude -> pure config { D.prelude = Nothing }
-    CustomPrelude path -> do
-      wholePath <- canonicalizePath path
-      exists <- doesFileExist wholePath
-      unless exists $ do
-        hPutStrLn stderr (path ++ ": No such file")
-        exitWith (ExitFailure 1)
+findPrelude :: Prelude -> D.DriverConfig -> IO (Maybe FilePath)
+findPrelude NoPrelude _ = pure Nothing
+findPrelude (CustomPrelude path) _ = do
+  wholePath <- canonicalizePath path
+  exists <- doesFileExist wholePath
+  unless exists $ do
+    hPutStrLn stderr (path ++ ": No such file")
+    exitWith (ExitFailure 1)
 
-      pure config { D.prelude = Just wholePath }
-    DefaultPrelude -> do
-      prelude <- D.findPrelude (D.libraryPath config)
-      case prelude of
-        Nothing -> do
-          hPutStrLn stderr "Cannot locate prelude"
-          exitWith (ExitFailure 1)
-        Just prelude -> pure config { D.prelude = Just prelude }
+  pure (Just wholePath)
+findPrelude DefaultPrelude config = do
+  prelude <- D.locatePrelude config
+  case prelude of
+    Nothing -> do
+      hPutStrLn stderr "Cannot locate prelude. Check your package path, or run using --no-prelude."
+      exitWith (ExitFailure 1)
+    Just prelude -> pure (Just prelude)
 
 main :: IO ()
 main = do
   options <- execParser argParser
   case options of
-    Args Repl { toLoad, serverPort, options } -> do
-      config <- driverConfig options
-      replFrom serverPort (debugMode options) config toLoad
-    Args Connect { remoteCmd, serverPort } -> runRemoteReplCommand serverPort remoteCmd
+    Args Repl { toLoad, serverPort, prelude, options } -> do
+      dConfig <- driverConfig options
+      prelude <- findPrelude prelude dConfig
+      root <- getCurrentDirectory
+      R.replFrom R.ReplConfig { R.port = serverPort
+                               , R.debugMode = debugMode options
+                               , R.root = root
+                               , R.driverConfig = dConfig
+                               , R.prelude = prelude }
+        toLoad
+    Args Connect { remoteCmd, serverPort } -> R.runRemoteReplCommand serverPort remoteCmd
 
     Args Compile { input, output = Just output } | input == output -> do
       hPutStrLn stderr ("Cannot overwrite input file " ++ input)
       exitWith (ExitFailure 1)
 
-    Args Compile { input, output, optLevel, options, coreLint } -> do
+    Args Compile { input, output, optLevel, coreLint, options } -> do
       exists <- doesFileExist input
       if not exists
       then hPutStrLn stderr ("Cannot find input file " ++ input)
