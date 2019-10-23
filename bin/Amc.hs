@@ -64,12 +64,14 @@ runCompile opt (DoLint lint) dconfig file = do
       let optimised = flip evalNamey name $ case opt of
             Opt -> optimise lint core
             NoOpt -> do
-              when lint (runLint "Lower" (checkStmt emptyScope core) (pure ()))
-              (runLint "Optimised" =<< checkStmt emptyScope) . deadCodePass <$> (reducePass =<< killNewtypePass core)
+              lintIt "Lower" (checkStmt emptyScope core) (pure ())
+              (lintIt "Optimised"  =<< checkStmt emptyScope) . deadCodePass <$> (reducePass =<< killNewtypePass core)
           lua = compileProgram optimised
       in ( Just (env, core, optimised, lua)
          , errors
          , driver )
+  where
+    lintIt name = if lint then runLint name else flip const
 
 compileFromTo :: DoOptimise -> DoLint -> D.DebugMode -> D.DriverConfig
               -> FilePath
@@ -184,7 +186,7 @@ argParser = info (args <**> helper <**> version)
         <|> flag' D.TestTc (long "test-tc"           <> hidden <> help "Provides additional type check information on the output")
         <|> pure D.Void )
       <*> many (option str (long "lib" <> help "Add a folder to the library path"))
-      <*> switch (long "core-lint" <> hidden <> help "Verified that Amulet's intermediate representation is well-formed.")
+      <*> switch (long "core-lint" <> hidden <> help "Verify that Amulet's intermediate representation is well-formed.")
 
     optional :: Parser a -> Parser (Maybe a)
     optional p = (Just <$> p) <|> pure Nothing

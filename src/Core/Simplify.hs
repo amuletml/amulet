@@ -22,14 +22,14 @@ optmOnce :: forall m. Monad m => Bool -> [Stmt CoVar] -> NameyT m [Stmt CoVar]
 optmOnce lint = passes where
   passes :: [Stmt CoVar] -> NameyT m [Stmt CoVar]
   passes = foldr1 (>=>)
-           [ linting "Ringuce" reducePass
+           [ linting "Reduce" reducePass
            , linting "Dead code" $ pure . deadCodePass
            , linting "Uncurry" uncurryPass
 
            , linting "Sinking" $ pure . sinkingPass . tagFreeSet
 
            , linting "CSE" (pure . csePass)
-           , linting "Ringuce #2" reducePass
+           , linting "Reduce #2" reducePass
            ]
   linting = if lint then linted else flip const
 
