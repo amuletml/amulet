@@ -1,4 +1,4 @@
-external val (==) : 'a -> 'a -> bool = ""
+external val (==) : 'a -> 'a -> bool = "function(x, y) return x == y end"
 external val error : string -> 'a = "error"
 
 type 'a :> 'b
@@ -80,14 +80,24 @@ instance (parse 'x * server 'r 's) => server (capture 'x :> 'r) ('x -> 's) begin
     | _ -> None
 end
 
-let serve p h xs =
-  match route p h xs with
-  | None -> error "404"
-  | Some x -> x ()
+let serve
+  :    forall ('layout : type)
+    -> forall 'a
+     .  server 'layout 'a
+    => 'a
+    -> list string -> string
+  =
+    fun h xs ->
+      match route (Proxy : proxy 'layout) h xs with
+      | None -> error "404"
+      | Some x -> x ()
 
-type api <- (p "hello" :> get string) <|> (p "echo" :> capture int :> get int)
-let handler : (unit -> string) * (int -> unit -> int) =
-  (fun () -> "hello, world!") :<|> (fun x () -> x)
+type api <-
+      (p "hello" :> get string)
+  <|> (p "echo" :> capture int :> get int)
+let handler =
+  (fun () -> "hello, world!") :<|> (fun (x : int) () -> x)
 
-let x = serve (Proxy : proxy api) handler [ "hello" ]
-let y = serve (Proxy : proxy api) handler [ "echo", "123" ]
+let x = serve @api handler [ "hello" ]
+let y = serve @api handler [ "echo", "123" ]
+let _ = serve @api handler [ "hello" ]
