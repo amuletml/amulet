@@ -27,7 +27,7 @@ Each sub-command can be run with --help too.
     --test-tc                Provides additional type check information on the
                              output
     --lib ARG                Add a folder to the library path
-    --core-lint              Verified that Amulet's intermediate representation is
+    --core-lint              Verify that Amulet's intermediate representation is
                              well-formed.
     -h,--help                Show this help text
 
@@ -44,7 +44,7 @@ Each sub-command can be run with --help too.
     --test-tc                Provides additional type check information on the
                              output
     --lib ARG                Add a folder to the library path
-    --core-lint              Verified that Amulet's intermediate representation is
+    --core-lint              Verify that Amulet's intermediate representation is
                              well-formed.
     -h,--help                Show this help text
 
