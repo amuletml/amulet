@@ -16,8 +16,7 @@ Using amc with the help flag displays all sub-command and the top-level options.
 Each sub-command can be run with --help too.
 
   $ amc compile --help
-  Usage: amc compile FILE [-o|--out FILE] [-O|--opt LEVEL] 
-                     [(-t|--test) | --test-tc] [--lib ARG]
+  Usage: amc compile FILE [-o|--out FILE] [-O|--opt LEVEL] [--lib ARG]
     Compile an Amulet file to Lua.
   
   Available options:
@@ -28,19 +27,29 @@ Each sub-command can be run with --help too.
     --test-tc                Provides additional type check information on the
                              output
     --lib ARG                Add a folder to the library path
+    --core-lint              Verify that Amulet's intermediate representation is
+                             well-formed. This is an internal debugging flag, and
+                             should only be used if you suspect there is a bug in
+                             Amulet.
     -h,--help                Show this help text
 
   $ amc repl --help
-  Usage: amc repl [FILE] [--port PORT] [(-t|--test) | --test-tc] [--lib ARG]
+  Usage: amc repl [FILE] [--port PORT] [--no-prelude | --prelude PATH] [--lib ARG]
     Launch the Amulet REPL.
   
   Available options:
     FILE                     A file to load into the REPL.
     --port PORT              Port to use for the REPL server. (default: 5478)
+    --no-prelude             Do not load files with a prelude.
+    --prelude PATH           Specify a custom prelude to use.
     -t,--test                Provides additional debug information on the output
     --test-tc                Provides additional type check information on the
                              output
     --lib ARG                Add a folder to the library path
+    --core-lint              Verify that Amulet's intermediate representation is
+                             well-formed. This is an internal debugging flag, and
+                             should only be used if you suspect there is a bug in
+                             Amulet.
     -h,--help                Show this help text
 
   $ amc connect --help

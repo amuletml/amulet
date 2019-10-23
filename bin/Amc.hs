@@ -3,7 +3,6 @@ module Main(main) where
 
 import System.Exit (ExitCode(..), exitWith)
 import System.IO (hPutStrLn, stderr)
-import System.Environment
 import System.Directory
 
 import Control.Monad.Infer (Env, firstName)
@@ -14,8 +13,6 @@ import qualified Data.Text.IO as T
 import qualified Data.Text as T
 import Data.Position (SourceName)
 import Data.Traversable
-import Data.Foldable
-import Data.List
 
 import Options.Applicative hiding (ParseError)
 
@@ -30,53 +27,59 @@ import Core.Optimise.DeadCode (deadCodePass)
 import Core.Simplify (optimise)
 import Core.Core (Stmt)
 import Core.Var (CoVar)
+import Core.Lint
 
 import Text.Pretty.Semantic hiding (empty)
 
-import Frontend.Driver
+import qualified Frontend.Driver as D
 import Frontend.Errors
 
 import qualified Amc.Debug as D
-import Amc.Repl
+import qualified Amc.Repl as R
 
 import Version
 
 runCompile :: MonadIO m
-           => DoOptimise -> SourceName
+           => DoOptimise -> DoLint -> D.DriverConfig
+           -> SourceName
            -> m ( Maybe ( Env
                         , [Stmt CoVar]
                         , [Stmt CoVar]
                         , LuaStmt)
                 , ErrorBundle
-                , Driver )
-runCompile opt file = do
+                , D.Driver )
+runCompile opt (DoLint lint) dconfig file = do
   path <- liftIO $ canonicalizePath file
   (((env, core, errors), driver), name) <-
       flip runNameyT firstName
-    . flip runStateT emptyDriver
+    . flip runStateT (D.makeDriverWith dconfig)
     $ do
-      (core, errors) <- compile path
-      ~(Just env) <- getTypeEnv path
+      (core, errors) <- D.compile path
+      ~(Just env) <- D.getTypeEnv path
       pure (env, core, errors)
 
   pure $ case core of
     Nothing -> (Nothing, errors, driver)
     Just core ->
       let optimised = flip evalNamey name $ case opt of
-            Do -> optimise core
-            Don't -> deadCodePass <$> (reducePass =<< killNewtypePass core)
+            Opt -> optimise lint core
+            NoOpt -> do
+              lintIt "Lower" (checkStmt emptyScope core) (pure ())
+              (lintIt "Optimised"  =<< checkStmt emptyScope) . deadCodePass <$> (reducePass =<< killNewtypePass core)
           lua = compileProgram optimised
       in ( Just (env, core, optimised, lua)
          , errors
          , driver )
+  where
+    lintIt name = if lint then runLint name else flip const
 
-compileFromTo :: DoOptimise -> D.DebugMode
+compileFromTo :: DoOptimise -> DoLint -> D.DebugMode -> D.DriverConfig
               -> FilePath
               -> (forall a. Pretty a => a -> IO ())
               -> IO ()
-compileFromTo opt dbg file emit = do
-  (compiled, errors, driver) <- runCompile opt file
-  files <- fileMap driver
+compileFromTo opt lint dbg config file emit = do
+  (compiled, errors, driver) <- runCompile opt lint config file
+  files <- D.fileMap driver
   reportAllS files errors
   case compiled of
     Just (env, core, opt, lua) -> do
@@ -84,11 +87,19 @@ compileFromTo opt dbg file emit = do
       emit lua
     Nothing -> pure ()
 
-data DoOptimise = Do | Don't
+data DoOptimise = NoOpt | Opt
+  deriving Show
+
+newtype DoLint = DoLint Bool
+  deriving Show
+
+data Prelude = NoPrelude | DefaultPrelude | CustomPrelude String
+  deriving Show
 
 data CompilerOptions = CompilerOptions
   { debugMode   :: D.DebugMode
   , libraryPath :: [String]
+  , coreLint    :: Bool
   }
   deriving (Show)
 
@@ -102,6 +113,7 @@ data Command
   | Repl
     { toLoad      :: Maybe FilePath
     , serverPort  :: Int
+    , prelude     :: Prelude
     , options     :: CompilerOptions
     }
   | Connect
@@ -140,7 +152,7 @@ argParser = info (args <**> helper <**> version)
       <> command "connect"
          ( info connectCommand
          $ fullDesc <> progDesc "Connect to an already running REPL instance." )
-      ) <|> pure (Repl Nothing defaultPort (CompilerOptions D.Void []))
+      ) <|> pure (Repl Nothing defaultPort DefaultPrelude (CompilerOptions D.Void [] False))
 
     compileCommand :: Parser Command
     compileCommand = Compile
@@ -157,6 +169,9 @@ argParser = info (args <**> helper <**> version)
       <$> optional (argument str (metavar "FILE" <> help "A file to load into the REPL."))
       <*> option auto ( long "port" <> metavar "PORT" <> value defaultPort <> showDefault
                      <> help "Port to use for the REPL server." )
+      <*> ( flag' NoPrelude (long "no-prelude" <> help "Do not load files with a prelude.")
+        <|> option (CustomPrelude <$> str) ( long "prelude" <> metavar "PATH" <> help "Specify a custom prelude to use." )
+        <|> pure DefaultPrelude )
       <*> compilerOptions
 
     connectCommand :: Parser Command
@@ -167,10 +182,13 @@ argParser = info (args <**> helper <**> version)
 
     compilerOptions :: Parser CompilerOptions
     compilerOptions = CompilerOptions
-      <$> ( flag' D.Test   (long "test" <> short 't' <> help "Provides additional debug information on the output")
-        <|> flag' D.TestTc (long "test-tc"           <> help "Provides additional type check information on the output")
+      <$> ( flag' D.Test   (long "test" <> short 't' <> hidden <> help "Provides additional debug information on the output")
+        <|> flag' D.TestTc (long "test-tc"           <> hidden <> help "Provides additional type check information on the output")
         <|> pure D.Void )
       <*> many (option str (long "lib" <> help "Add a folder to the library path"))
+      <*> switch ( long "core-lint" <> hidden
+                 <> help ( "Verify that Amulet's intermediate representation is well-formed. This is an internal debugging flag, "
+                        ++ "and should only be used if you suspect there is a bug in Amulet." ) )
 
     optional :: Parser a -> Parser (Maybe a)
     optional p = (Just <$> p) <|> pure Nothing
@@ -178,29 +196,55 @@ argParser = info (args <**> helper <**> version)
     defaultPort :: Int
     defaultPort = 5478
 
-extendPath :: [String] -> IO ()
-extendPath paths = do
+driverConfig :: CompilerOptions -> IO D.DriverConfig
+driverConfig CompilerOptions { libraryPath =  paths } = do
   paths <- sequence <$> for paths (\path -> do
     path' <- canonicalizePath path
     exists <- doesDirectoryExist path'
     pure $ if exists then Right path' else Left path)
+
   case paths of
     Left path -> do
       hPutStrLn stderr (path ++ ": No such directory")
       exitWith (ExitFailure 1)
-    Right [] -> pure ()
     Right paths -> do
-      existing <- lookupEnv "AMC_LIBRARY_PATH"
-      setEnv "AMC_LIBRARY_PATH" . intercalate ":" $ paths ++ toList existing
+      config <- D.makeConfig
+      pure config { D.libraryPath = paths ++ D.libraryPath config }
+
+findPrelude :: Prelude -> D.DriverConfig -> IO (Maybe FilePath)
+findPrelude NoPrelude _ = pure Nothing
+findPrelude (CustomPrelude path) _ = do
+  wholePath <- canonicalizePath path
+  exists <- doesFileExist wholePath
+  unless exists $ do
+    hPutStrLn stderr (path ++ ": No such file")
+    exitWith (ExitFailure 1)
+
+  pure (Just wholePath)
+findPrelude DefaultPrelude config = do
+  prelude <- D.locatePrelude config
+  case prelude of
+    Nothing -> do
+      hPutStrLn stderr "Cannot locate prelude. Check your package path, or run using --no-prelude."
+      exitWith (ExitFailure 1)
+    Just prelude -> pure (Just prelude)
 
 main :: IO ()
 main = do
   options <- execParser argParser
   case options of
-    Args Repl { toLoad, serverPort, options } -> do
-      extendPath (libraryPath options)
-      replFrom serverPort (debugMode options) toLoad
-    Args Connect { remoteCmd, serverPort } -> runRemoteReplCommand serverPort remoteCmd
+    Args Repl { toLoad, serverPort, prelude, options } -> do
+      dConfig <- driverConfig options
+      prelude <- findPrelude prelude dConfig
+      root <- getCurrentDirectory
+      R.replFrom R.ReplConfig { R.port = serverPort
+                               , R.debugMode = debugMode options
+                               , R.root = root
+                               , R.driverConfig = dConfig
+                               , R.prelude = prelude
+                               , R.coreLint = coreLint options }
+        toLoad
+    Args Connect { remoteCmd, serverPort } -> R.runRemoteReplCommand serverPort remoteCmd
 
     Args Compile { input, output = Just output } | input == output -> do
       hPutStrLn stderr ("Cannot overwrite input file " ++ input)
@@ -213,11 +257,11 @@ main = do
         >> exitWith (ExitFailure 1)
       else pure ()
 
-      let opt = if optLevel >= 1 then Do else Don't
+      let opt = if optLevel >= 1 then Opt else NoOpt
           writeOut :: Pretty a => a -> IO ()
           writeOut = case output of
                    Nothing -> putDoc . pretty
                    Just f -> T.writeFile f . T.pack . show . pretty
 
-      extendPath (libraryPath options)
-      compileFromTo opt (debugMode options) input writeOut
+      config <- driverConfig options
+      compileFromTo opt (DoLint (coreLint options)) (debugMode options) config input writeOut
