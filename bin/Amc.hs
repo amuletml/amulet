@@ -186,7 +186,9 @@ argParser = info (args <**> helper <**> version)
         <|> flag' D.TestTc (long "test-tc"           <> hidden <> help "Provides additional type check information on the output")
         <|> pure D.Void )
       <*> many (option str (long "lib" <> help "Add a folder to the library path"))
-      <*> switch (long "core-lint" <> hidden <> help "Verify that Amulet's intermediate representation is well-formed.")
+      <*> switch ( long "core-lint" <> hidden
+                 <> help ( "Verify that Amulet's intermediate representation is well-formed. This is an internal debugging flag, "
+                        ++ "and should only be used if you suspect there is a bug in Amulet." ) )
 
     optional :: Parser a -> Parser (Maybe a)
     optional p = (Just <$> p) <|> pure Nothing

@@ -28,7 +28,9 @@ Each sub-command can be run with --help too.
                              output
     --lib ARG                Add a folder to the library path
     --core-lint              Verify that Amulet's intermediate representation is
-                             well-formed.
+                             well-formed. This is an internal debugging flag, and
+                             should only be used if you suspect there is a bug in
+                             Amulet.
     -h,--help                Show this help text
 
   $ amc repl --help
@@ -45,7 +47,9 @@ Each sub-command can be run with --help too.
                              output
     --lib ARG                Add a folder to the library path
     --core-lint              Verify that Amulet's intermediate representation is
-                             well-formed.
+                             well-formed. This is an internal debugging flag, and
+                             should only be used if you suspect there is a bug in
+                             Amulet.
     -h,--help                Show this help text
 
   $ amc connect --help
