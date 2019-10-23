@@ -473,8 +473,9 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = condemn $ do
                   (an, sig)
 
         let needsLet = wrap `Map.restrictKeys` freeIn e
-            addOne (v, ExprApp e) ex =
-              Let [ Binding v e False (annotation ex, getType e) ] ex (annotation ex, getType ex)
+            addOne (v, ExprApp e) ex
+              | VarRef v' _ <- e, v == v' = ex
+              | otherwise = Let [ Binding v e False (annotation ex, getType e) ] ex (annotation ex, getType ex)
             addOne _ ex = ex
             addFreeDicts ex = foldr addOne ex (Map.toList needsLet)
 
