@@ -89,7 +89,9 @@ data ReplConfig = ReplConfig
   , root         :: FilePath
   , driverConfig :: D.DriverConfig
   , prelude      :: Maybe FilePath
+  , coreLint     :: Bool
   }
+  deriving Show
 
 data ReplState = ReplState
   { resolveScope :: Signature
@@ -287,7 +289,8 @@ compileCommand (dropWhile isSpace -> path) = do
 
       case core of
         Just core -> do
-          optm <- wrapNamey $ optimise False core
+          lint <- gets (coreLint . config)
+          optm <- wrapNamey $ optimise lint core
           (_, lua) <- emitCore optm
           liftIO $ Bs.hPutStr handle lua
         Nothing ->
@@ -535,7 +538,7 @@ replFrom config file = do
 
   ready <- newEmptyMVar
   tid <-
-    if (port config) /= 0
+    if port config /= 0
        then forkIO $ startServer ready (port config) state
        else do
          putMVar ready ()

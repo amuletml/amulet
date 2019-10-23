@@ -97,6 +97,7 @@ data Prelude = NoPrelude | DefaultPrelude | CustomPrelude String
 data CompilerOptions = CompilerOptions
   { debugMode   :: D.DebugMode
   , libraryPath :: [String]
+  , coreLint    :: Bool
   }
   deriving (Show)
 
@@ -105,7 +106,6 @@ data Command
     { input       :: FilePath
     , output      :: Maybe FilePath
     , optLevel    :: Int
-    , coreLint    :: Bool
     , options     :: CompilerOptions
     }
   | Repl
@@ -150,7 +150,7 @@ argParser = info (args <**> helper <**> version)
       <> command "connect"
          ( info connectCommand
          $ fullDesc <> progDesc "Connect to an already running REPL instance." )
-      ) <|> pure (Repl Nothing defaultPort DefaultPrelude (CompilerOptions D.Void []))
+      ) <|> pure (Repl Nothing defaultPort DefaultPrelude (CompilerOptions D.Void [] False))
 
     compileCommand :: Parser Command
     compileCommand = Compile
@@ -160,7 +160,6 @@ argParser = info (args <**> helper <**> version)
           <> help "Write the generated Lua to a specific file." ) )
       <*> option auto ( long "opt" <> short 'O' <> metavar "LEVEL" <> value 1 <> showDefault
                      <> help "Controls the optimisation level." )
-      <*> switch (long "core-lint" <> hidden <> help "Verified that Amulet's intermediate representation is well-formed.")
       <*> compilerOptions
 
     replCommand :: Parser Command
@@ -185,6 +184,7 @@ argParser = info (args <**> helper <**> version)
         <|> flag' D.TestTc (long "test-tc"           <> hidden <> help "Provides additional type check information on the output")
         <|> pure D.Void )
       <*> many (option str (long "lib" <> help "Add a folder to the library path"))
+      <*> switch (long "core-lint" <> hidden <> help "Verified that Amulet's intermediate representation is well-formed.")
 
     optional :: Parser a -> Parser (Maybe a)
     optional p = (Just <$> p) <|> pure Nothing
@@ -193,7 +193,7 @@ argParser = info (args <**> helper <**> version)
     defaultPort = 5478
 
 driverConfig :: CompilerOptions -> IO D.DriverConfig
-driverConfig (CompilerOptions _ paths) = do
+driverConfig CompilerOptions { libraryPath =  paths } = do
   paths <- sequence <$> for paths (\path -> do
     path' <- canonicalizePath path
     exists <- doesDirectoryExist path'
@@ -237,7 +237,8 @@ main = do
                                , R.debugMode = debugMode options
                                , R.root = root
                                , R.driverConfig = dConfig
-                               , R.prelude = prelude }
+                               , R.prelude = prelude
+                               , R.coreLint = coreLint options }
         toLoad
     Args Connect { remoteCmd, serverPort } -> R.runRemoteReplCommand serverPort remoteCmd
 
@@ -245,7 +246,7 @@ main = do
       hPutStrLn stderr ("Cannot overwrite input file " ++ input)
       exitWith (ExitFailure 1)
 
-    Args Compile { input, output, optLevel, coreLint, options } -> do
+    Args Compile { input, output, optLevel, options } -> do
       exists <- doesFileExist input
       if not exists
       then hPutStrLn stderr ("Cannot find input file " ++ input)
@@ -259,4 +260,4 @@ main = do
                    Just f -> T.writeFile f . T.pack . show . pretty
 
       config <- driverConfig options
-      compileFromTo opt (DoLint coreLint) (debugMode options) config input writeOut
+      compileFromTo opt (DoLint (coreLint options)) (debugMode options) config input writeOut

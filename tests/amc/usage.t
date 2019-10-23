@@ -23,12 +23,12 @@ Each sub-command can be run with --help too.
     FILE                     The file to compile.
     -o,--out FILE            Write the generated Lua to a specific file.
     -O,--opt LEVEL           Controls the optimisation level. (default: 1)
-    --core-lint              Verified that Amulet's intermediate representation is
-                             well-formed.
     -t,--test                Provides additional debug information on the output
     --test-tc                Provides additional type check information on the
                              output
     --lib ARG                Add a folder to the library path
+    --core-lint              Verified that Amulet's intermediate representation is
+                             well-formed.
     -h,--help                Show this help text
 
   $ amc repl --help
@@ -44,6 +44,8 @@ Each sub-command can be run with --help too.
     --test-tc                Provides additional type check information on the
                              output
     --lib ARG                Add a folder to the library path
+    --core-lint              Verified that Amulet's intermediate representation is
+                             well-formed.
     -h,--help                Show this help text
 
   $ amc connect --help
