@@ -1,0 +1,42 @@
++ : int -> int -> int
+head : Infer{'a : type}. list 'a -> 'a
+tail : Infer{'a : type}. list 'a -> list 'a
+single : Infer{'a : type}. 'a -> list 'a
+append : Infer{'a : type}. list 'a -> list 'a -> list 'a
+length : Infer{'a : type}. list 'a -> int
+st : Infer{'a : type}. Infer{'b : type}. 'b -> 'a -> type
+runST : Spec{'a : type}. (Spec{'s : 'b}. st 's 'a) -> 'a
+argST : Spec{'s : 'b}. st 's int
+:: : Infer{'a : type}. 'a -> list 'a -> list 'a
+id : Infer{'a : type}. 'a -> 'a
+const : Infer{'a : type}. Infer{'b : type}. 'a -> 'b -> 'a
+ids : list (Spec{'a : type}. 'a -> 'a)
+inc : int -> int
+choose : Infer{'a : type}. 'a -> 'a -> 'a
+poly : (Spec{'a : type}. 'a -> 'a) -> int * bool
+map : Infer{'a : type}. Infer{'aap : type}. ('aap -> 'a) -> list 'aap -> list 'a
+$ : Infer{'a : type}. Infer{'b : type}. ('a -> 'b) -> 'a -> 'b
+|> : Infer{'a : type}. Infer{'b : type}. 'a -> ('a -> 'b) -> 'b
+a : list (Spec{'a : type}. 'a -> 'a)
+b : int * bool
+c : int * bool
+d : int * bool
+e : int
+f : list (Spec{'a : type}. 'a -> 'a)
+g : Infer{'a : type}. unit -> 'a -> 'a
+h : Infer{'a : type}. unit -> list ('a -> 'a) -> list ('a -> 'a)
+i : unit -> list (list (Spec{'a : type}. 'a -> 'a)) -> list (list (Spec{'a : type}. 'a -> 'a))
+j : list (Spec{'a : type}. 'a -> 'a) -> list (int * bool)
+k : list (Spec{'a : type}. 'a -> 'a)
+l : list (Spec{'a : type}. 'a -> 'a)
+m : list (Spec{'a : type}. 'a -> 'a)
+n : list (int -> int)
+o : list (int * bool)
+p : list (Spec{'a : type}. 'a -> 'a)
+q : int * bool
+r : int * bool
+s : int
+t : int
+u : int
+paper_g : Spec{'a : type}. list 'a -> list 'a -> 'a
+v : Infer{'a : type}. unit -> 'a -> 'a
