@@ -55,7 +55,7 @@ data TokenClass
   | TcWhen -- ^ A @when@ token.
   | TcPrivate -- ^ A @private@ token.
   | TcImport -- ^ An @import@ token.
-  | TcInclude -- ^ An @import@ token.
+  | TcInclude -- ^ An @include@ token.
   | TcAs   -- ^ An @as@ token.
 
   | TcDot -- ^ A @.@ token.
