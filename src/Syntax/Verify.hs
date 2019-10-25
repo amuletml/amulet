@@ -83,6 +83,7 @@ verifyProgram = traverse_ verifyStmt where
   verifyStmt TypeFunDecl{} = pure ()
   verifyStmt (Module _ _ m) = verifyModule m
   verifyStmt (Open m) = verifyModule m
+  verifyStmt (Include m) = verifyModule m
 
 -- | Verify a recursive definition is well-formed
 verifyBindingGroup :: MonadVerify m

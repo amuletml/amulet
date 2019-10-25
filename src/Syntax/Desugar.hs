@@ -38,7 +38,10 @@ statement (Instance a b c m d) = Instance a (ty <$> b) (ty c) <$> traverse instI
   instItem (TypeImpl v as t a) = pure $ TypeImpl v (map tyA as) (ty t) a
 statement (Class am a b c fd m d) = Class am a (ty <$> b) (tyA <$> c) (map go fd) <$> traverse classItem m <*> pure d where
   go (Fundep f t a) = Fundep f t a
+
 statement (Open v) = Open <$> modTerm v
+statement (Include v) = Include <$> modTerm v
+
 statement (ForeignVal am v x t a) = pure $ ForeignVal am v x (ty t) a
 statement (TypeDecl am v arg cs a) = pure $ TypeDecl am v (map tyA arg) (map ctor <$> cs) a
 statement (TySymDecl am v arg exp a) = pure $ TySymDecl am v (map tyA arg) (ty exp) a

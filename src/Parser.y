@@ -114,6 +114,7 @@ import Syntax
   instance { Token TcInstance _ _ }
   when     { Token TcWhen _ _ }
   private  { Token TcPrivate _ _ }
+  include  { Token TcInclude _ _ }
 
   ','      { Token TcComma _ _ }
   '.'      { Token TcDot _ _ }
@@ -197,6 +198,7 @@ Top :: { Toplevel Parsed }
     | module conid '=' ModuleTerm              { Module Public (getName $2) $4 }
     | private module conid '=' ModuleTerm      { Module Private (getName $3) $5 }
     | open ModuleTerm                          { Open $2 }
+    | include ModuleTerm                       { Include $2 }
 
     -- Note, we use fmap rather than <$>, as Happy's parser really doesn't like that.
     | class Type Fundeps Begin(ClassItems)
