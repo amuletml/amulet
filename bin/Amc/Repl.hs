@@ -326,7 +326,7 @@ execString name line = do
                 let CoVar id _ _ = v
                     var = S.TgName (covarDisplayName v) id
                 case inferScope state ^. T.names . at var of
-                  Just _ -> pure (Just (pretty v <+> equals </> hsep (map pretty repr)))
+                  Just _ -> pure (Just (pretty v <+> equals <+> hsep (map pretty repr)))
                   Nothing -> pure Nothing
 
               pure (True, catMaybes vs')

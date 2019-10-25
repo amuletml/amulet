@@ -55,7 +55,7 @@ valueRepr getVal = do
                else pure mempty
       tab <- loop (L.next table)
       pure $ if T.pack "__tag" `Map.member` tab
-                then case tab Map.! T.pack "__tag" of
+                then case tab ! T.pack "__tag" of
                        String x -> if x == T.pack "__builtin_unit"
                                       then Nil
                                       else Constructor x (map snd (Map.toList (Map.delete (T.pack "__tag") tab)))
@@ -72,7 +72,7 @@ instance Pretty Value where
   pretty (Boolean x) = sliteral . string $ if x then "true" else "false"
   pretty (Opaque x)  = enclose (char '<') (char '>') (keyword x)
 
-  pretty (Constructor "Cons" [Table m]) = p (m Map.! "_1") <+> soperator (string "::") <+> pretty (m Map.! "_2") where
+  pretty (Constructor "Cons" [Table m]) = p (m ! "_1") <+> soperator (string "::") <+> pretty (m ! "_2") where
     p x@(Constructor "Cons" _) = parens (pretty x)
     p x = pretty x
   pretty (Constructor "Nil" []) = brackets mempty
@@ -88,9 +88,9 @@ instance Pretty Value where
 
   pretty (Table m) | isTuple m = parens (hsep (punctuate comma (map pretty vs))) where
     vs = getValues m
-    getValues m = case m Map.! T.pack "_2" of
-      Table m' | isTuple m' -> (m Map.! T.pack "_1"):getValues m'
-      _ -> [ m Map.! T.pack "_1", m Map.! T.pack "_2" ]
+    getValues m = case m ! T.pack "_2" of
+      Table m' | isTuple m' -> (m ! T.pack "_1"):getValues m'
+      _ -> [ m ! T.pack "_1", m ! T.pack "_2" ]
   pretty (Table m) = enclose (char '{' <> space) (space <> char '}') (hsep (punctuate comma vs)) where
     vs = map (\(k, v) -> text k <+> equals <+> pretty v) $ Map.toList m
 
@@ -99,3 +99,6 @@ isTuple m = Map.size m == 2 && "_1" `Map.member` m && "_2" `Map.member` m
 
 isInt :: L.Number -> Integer -> Bool
 isInt x n = round (10 ^ n * (x - fromIntegral (round x :: Integer))) == (0 :: Integer)
+
+(!) :: Ord k => Map.Map k Value -> k -> Value
+m ! k = fromMaybe Nil (Map.lookup k m)
