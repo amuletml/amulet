@@ -450,6 +450,11 @@ inferProg (Open mod:prg) = do
   local (exEnv. (classes %~ (<>modImplicits)) . (tySyms %~ (<>modTysym))) $
     consFst (Open mod') $ inferProg prg
 
+inferProg (Include mod:prg) = do
+  (mod', exEnv, (modImplicits, modTysym)) <- inferMod mod
+  local (exEnv. (classes %~ (<>modImplicits)) . (tySyms %~ (<>modTysym))) $
+    consFst (Include mod') $ inferProg prg
+
 inferProg (Module am name mod:prg) = do
   (mod', exEnv, modInfo) <- local (declaredHere .~ mempty) $ inferMod mod
   local (exEnv . (modules %~ Map.insert name modInfo)) $

@@ -55,6 +55,7 @@ data TokenClass
   | TcWhen -- ^ A @when@ token.
   | TcPrivate -- ^ A @private@ token.
   | TcImport -- ^ An @import@ token.
+  | TcInclude -- ^ An @include@ token.
   | TcAs   -- ^ An @as@ token.
 
   | TcDot -- ^ A @.@ token.
@@ -141,6 +142,7 @@ instance Show TokenClass where
   show TcInstance = "instance"
   show TcWhen = "when"
   show TcPrivate = "private"
+  show TcInclude = "include"
 
   show TcComma = ","
   show TcDot = "."
