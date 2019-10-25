@@ -157,6 +157,14 @@ reTops (r@(Open mod):rest) sig = do
     Nothing -> confess empty
     Just sig' -> local (scope %~ (<>sig')) $ first3 (Open mod':) <$> reTops rest sig
 
+reTops (r@(Include mod):rest) sig = do
+  (mod', sig') <- retcons (wrapError r) $ reModule mod
+  case sig' of
+    Nothing -> confess empty
+    Just sig' -> local (scope %~ (<>sig')) $ do
+      (prog, siga, sigb) <- reTops rest sig
+      pure (Include mod':prog, siga <> sig', sigb)
+
 reTops (r@(Module am name mod):rest) sig = do
   name' <- tagVar name
   (mod', sig') <- retcons (wrapError r) $ reModule mod

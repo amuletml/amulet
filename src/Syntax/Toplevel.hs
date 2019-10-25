@@ -41,8 +41,10 @@ data Toplevel p
   | ForeignVal TopAccess (Var p) Text (Type p) (Ann p)
   | TypeDecl TopAccess (Var p) [TyConArg p] (Maybe [Constructor p]) (Ann p)
   | TySymDecl TopAccess (Var p) [TyConArg p] (Type p) (Ann p)
+
   | Module TopAccess (Var p) (ModuleTerm p)
   | Open (ModuleTerm p)
+  | Include (ModuleTerm p)
 
   | Class { className :: Var p
           , classAccess :: TopAccess
@@ -159,6 +161,7 @@ instance (Spanned (Constructor p), Spanned (Ann p)) => Spanned (Toplevel p) wher
   annotation x@TypeFunDecl{} = annotation (ann x)
   annotation (Module _ _ m) = annotation m
   annotation (Open m) = annotation m
+  annotation (Include m) = annotation m
 
 instance Spanned (Ann p) => Spanned (Fundep p) where
   annotation = annotation . view fdAnn
@@ -218,6 +221,7 @@ instance Pretty (Var p) => Pretty (Toplevel p) where
           Just cs -> equals <#> indent 2 (vsep (map ((pipe <+>) . pretty) cs))
     in keyword "type" <+> prettyAcc m <> pretty ty <+> hsep (map ((squote <>) . pretty) args) <+> ct
   pretty (Open m) = keyword "open" <+> pretty m
+  pretty (Include m) = keyword "include" <+> pretty m
 
   pretty (TySymDecl m ty args exp _) =
     prettyAcc m <+> keyword "type" <> pretty ty <+> hsep (map ((squote <>) . pretty) args) <+> pretty exp

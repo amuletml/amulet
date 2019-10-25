@@ -311,9 +311,15 @@ lowerModule ModLoad{} = asks (,[])
 lowerProg' :: forall m. MonadLower m => [Toplevel Typed] -> m (LowerState, [Stmt])
 
 lowerProg' [] = asks (,[])
+
+lowerProg' (Include m:prg) = do
+  (s, ms) <- lowerModule m
+  (ms++) <$$> local (const s) (lowerProg' prg)
+
 lowerProg' (Open m:prg) = do
   (s, ms) <- lowerModule m
   (ms++) <$$> local (const s) (lowerProg' prg)
+
 lowerProg' (Module _ _ m:prg) = do
   (s, ms) <- lowerModule m
   (ms++) <$$> local (const s) (lowerProg' prg)
