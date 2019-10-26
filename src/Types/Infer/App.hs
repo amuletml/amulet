@@ -35,10 +35,7 @@ import Types.Unify
 
 import Text.Pretty.Semantic
 
-
-#ifdef TRACE_TC
-import Debug.Trace
-#endif
+import Types.Unify.Trace
 
 -- | Infer an application, supporting "Quick Look" impredicativity: We
 -- consider all of the arguments to a function application (or
@@ -58,9 +55,7 @@ inferApps exp expected =
     (function, function_t) <- infer' function
     function_t <- refresh function_t
 
-#ifdef TRACE_TC
-    traceM ("function type: " ++ displayS (pretty function_t))
-#endif
+    traceM TcQL (string "function type:" <+> pretty function_t)
 
     -- Pass 1:
     ((ql_sub, quantifiers), cs) <-
@@ -92,22 +87,17 @@ inferApps exp expected =
         pure $ fromMaybe mempty (unifyPure result tau)
       _ -> pure mempty
 
-#ifdef TRACE_TC
-    traceM ("Quick Look results: " ++ show (pretty <$> (ql_sub <> r_ql_sub), pretty quantifiers))
-#endif
+    traceM TcQL (string "QL pass subst:" <+> shown (pretty <$> (ql_sub <> r_ql_sub)))
+    traceM TcQL (string "QL pass quant:" <+> pretty quantifiers)
 
     (arg_ks, result) <-
       checkArguments arguments (applyQ r_ql_sub quantifiers)
 
-#ifdef TRACE_TC
-    traceM ("resulting type: " ++ displayS (pretty result))
-#endif
+    traceM TcQL (pretty exp <+> soperator (char '↑') <+> pretty result)
 
     wrap <- case expected of
       Just tau -> do
-#ifdef TRACE_TC
-        traceM ("QL expected result: " ++ displayS (pretty tau))
-#endif
+        traceM TcQL (pretty result <+> soperator (char '≤') <+> pretty tau)
         wrap <- subsumes (becauseExp exp) result tau
         pure $ \ex -> ExprWrapper wrap ex (annotation ex, tau)
       Nothing -> pure id
@@ -208,9 +198,7 @@ inferQL (arg, reason) = case arg of
 -- | Look at an expression quickly.
 inferQL_ex :: MonadInfer Typed m => Expr Desugared -> m (Maybe (Type Typed))
 
-#ifdef TRACE_TC
-inferQL_ex ex | trace ("looking quickly at " ++ displayS (pretty ex)) False = undefined
-#endif
+inferQL_ex ex | trace TcQL (keyword "Γ ⊢" <+> pretty ex <+> soperator (char '↑')) False = undefined
 
 inferQL_ex ex@(VarRef x _) = do
   (_, _, (new, _)) <- third3A (discharge ex) =<< lookupTy' Strong x
