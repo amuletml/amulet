@@ -192,7 +192,9 @@ library
                -Wno-implicit-prelude -Wno-missing-import-lists
                -Wredundant-constraints -Wno-monomorphism-restriction
                -fno-show-valid-hole-fits
-               -j +RTS -A32M -RTS
+               -j +RTS -A32M -RTS -pgmP cpp
+
+  cpp-options: -DDISABLE_AMC_TRACE
 
   build-tool-depends: alex:alex >= 3.2.4 && < 4.0
                     , happy:happy >= 1.19.12 && < 2.0
@@ -242,7 +244,9 @@ library
                      , Types.Unify
                      , Types.Infer.Let
                      , Types.Infer.App
+                     , Types.Unify.Base
                      , Types.Wellformed
+                     , Types.Unify.Trace
                      , Types.Unify.Magic
                      , Types.Infer.Class
                      , Types.Infer.Errors
@@ -250,6 +254,7 @@ library
                      , Types.Infer.Outline
                      , Types.Infer.Pattern
                      , Types.Infer.Function
+                     , Types.Unify.Equality
                      , Types.Infer.Constructor
                      -- Pretty
                      , Text.Dot

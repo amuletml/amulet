@@ -47,9 +47,7 @@ import Types.Unify
 
 import Text.Pretty.Semantic
 
-#ifdef TRACE_TC
-import Debug.Trace
-#endif
+import Types.Unify.Trace
 
 -- | Solve for the types of bindings in a problem: Either @TypeDecl@s,
 -- @LetStmt@s, or @ForeignVal@s.
@@ -77,6 +75,7 @@ inferExpr env exp = fmap fst <$> runInfer env (inferOne exp) where
 -- | Check an 'Expr'ession against a known 'Type', annotating it with
 -- appropriate 'Wrapper's, and performing /some/ level of desugaring.
 check :: forall m. MonadInfer Typed m => Expr Desugared -> Type Typed -> m (Expr Typed)
+check e t | trace TcC (keyword "Γ ⊢" <+> pretty e <+> soperator (char '↓') <+> pretty t) False = undefined
 check e oty@TyPi{} | isSkolemisable oty = do
   let reason = BecauseOf e
 
@@ -200,6 +199,9 @@ check e ty = do
 -- than the environment, producing an 'Expr'ession annotated with
 -- 'Wrapper's where nescessary.
 infer :: MonadInfer Typed m => Expr Desugared -> m (Expr Typed, Type Typed)
+
+infer e | trace TcI (keyword "Γ ⊢" <+> pretty e <+> soperator (char '↑')) False = undefined
+
 infer (VarRef k a) = do
   (cont, old, (new, cont')) <- third3A (discharge (VarRef k a :: Expr Desugared)) =<< lookupTy' Strong k
   old <- expandType old

@@ -15,8 +15,9 @@ import Data.Spanned
 
 import Text.Pretty.Semantic
 
+import Types.Unify.Base
+
 type Solver m = SomeReason -> ImplicitScope ClassInfo Typed -> Type Typed -> m (Maybe (Wrapper Typed))
-type MonadSolve m = (MonadNamey m, MonadWriter [Constraint Typed] m, MonadChronicles TypeError m)
 type TfSolver m = ImplicitScope ClassInfo Typed -> [Type Typed] -> Type Typed -> m (Maybe (Coercion Typed))
 
 magicClass :: MonadSolve m => Var Typed -> Maybe (Solver m)
