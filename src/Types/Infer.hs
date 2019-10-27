@@ -447,6 +447,26 @@ inferProg (decl@(TypeFunDecl am tau arguments kindsig equations ann):prg) = do
     local (names %~ focus (one tau kind)) $
       consFst fakeDecl $ inferProg prg
 
+inferProg (DeriveInstance tau ann:prg) = do
+  tau <- checkAgainstKind (BecauseOf (DeriveInstance tau ann)) tau tyConstraint
+  let inst = DeriveInstance tau (ann, tyConstraint)
+
+  name <- case tau of
+    TyPi (Implicit _) (TyApps (TyCon class_con) (_:_)) -> pure class_con
+    TyApps (TyCon class_con) (_:_) -> pure class_con
+    _ -> confesses (DIMalformedHead (BecauseOf inst))
+
+  class_info <- view (classDecs . at name)
+
+  st <- case class_info of
+    Just (MagicInfo _ (Just derive)) -> runDerive derive tau ann
+    Just ClassInfo { _ciDerive = Just derive }  -> runDerive derive tau ann
+    _ -> confesses (DICan'tDerive name (BecauseOf inst))
+
+  case st of
+    Just st -> inferProg (st:prg)
+    Nothing -> confesses (DICan'tDerive name (BecauseOf inst))
+
 inferProg (Open mod:prg) = do
   (mod', exEnv, (modImplicits, modTysym)) <- inferMod mod
   local (exEnv. (classes %~ (<>modImplicits)) . (tySyms %~ (<>modTysym))) $

@@ -192,7 +192,7 @@ library
                -Wno-implicit-prelude -Wno-missing-import-lists
                -Wredundant-constraints -Wno-monomorphism-restriction
                -fno-show-valid-hole-fits
-               -j +RTS -A32M -RTS -pgmP cpp
+               -j +RTS -A32M -RTS
 
   cpp-options: -DDISABLE_AMC_TRACE
 
@@ -255,6 +255,7 @@ library
                      , Types.Infer.Pattern
                      , Types.Infer.Function
                      , Types.Unify.Equality
+                     , Types.Derive.Typeable
                      , Types.Infer.Constructor
                      -- Pretty
                      , Text.Dot

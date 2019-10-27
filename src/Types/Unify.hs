@@ -117,7 +117,7 @@ doSolve (ConUnify because scope v a b :<| xs) = do
 doSolve (ConSubsume because scope v a b :<| xs) = do
   sub <- use solveTySubst
 
-  traceM TopS (keyword "[W]: " <+> pretty (ConSubsume because scope v (apply sub a) (apply sub b)))
+  traceM TopS (keyword "[W]:" <+> pretty (ConSubsume because scope v (apply sub a) (apply sub b)))
   let a' = apply sub a
   sub <- use solveTySubst
 
@@ -222,11 +222,11 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do -- {{{
       old = apply sub cons
   cons <- reduceTyFuns scope' (apply sub cons)
 
-  traceM TopS (pretty (apply sub ohno))
+  traceM TopS (keyword "[W]:" <+> pretty (apply sub ohno))
 
+  traceM TopS (shown scope')
   let possible = lookup cons scope'
   traceM TopS ("considering between: " <+> hsep (map (pretty . view implType) possible))
-
 
   ignored <- freshTV
 
@@ -589,10 +589,10 @@ skolemise motive wt@(TyPi (Implicit ity) t) = do
   let go (TyTuple a b) = do
         var <- genName
         (pat, scope) <- go b
-        pure (Capture var (internal, a):pat, insert internal LocalAssum var a (MagicInfo []) scope)
+        pure (Capture var (internal, a):pat, insert internal LocalAssum var a (MagicInfo [] Nothing) scope)
       go x = do
         var <- genName
-        pure ([Capture var (internal, x)], insert internal LocalAssum var x (MagicInfo []) scp)
+        pure ([Capture var (internal, x)], insert internal LocalAssum var x (MagicInfo [] Nothing) scp)
 
   (pat, scope) <- go ity
   traceM TopS (pretty ity)

@@ -115,6 +115,7 @@ import Syntax
   when     { Token TcWhen _ _ }
   private  { Token TcPrivate _ _ }
   include  { Token TcInclude _ _ }
+  deriving { Token TcDeriving _ _ }
 
   ','      { Token TcComma _ _ }
   '.'      { Token TcDot _ _ }
@@ -207,6 +208,7 @@ Top :: { Toplevel Parsed }
         {% fmap (withPos2 $1 $5) $ buildClass Private $3 $4 (getL $5) }
 
     | instance Type Begin(Methods)             {% fmap (withPos2 $1 $3) $ buildInstance $2 (getL $3) }
+    | deriving Type                            { withPos2 $1 $2 $ DeriveInstance (getL $2) }
 
 TyFunBody :: { [TyFunClause Parsed] }
   : List(TyFunEq, TopSep) { $1 }
@@ -734,10 +736,10 @@ buildInstance (L ty typ) ms =
   case ty of
     (TyPi (Implicit ctx) ty) -> do
       name <- go ty
-      pure (Instance name (Just ctx) ty ms)
+      pure (Instance name (Just ctx) ty ms False)
     ty -> do
       name <- go ty
-      pure (Instance name Nothing ty ms)
+      pure (Instance name Nothing ty ms False)
   where
     go :: Type Parsed -> Parser (Var Parsed)
     go (TyCon v) = pure v

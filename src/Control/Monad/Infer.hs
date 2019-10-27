@@ -143,6 +143,9 @@ data TypeError where
   TypeFamInInstHead :: Type Typed -> Type Typed -> TypeError
   InvalidContext :: String -> Span -> Type Desugared -> TypeError
 
+  DIMalformedHead :: SomeReason -> TypeError
+  DICan'tDerive   :: Var Typed -> SomeReason -> TypeError
+
   OrphanInstance :: SomeReason -> Set.Set (Var Typed) -> TypeError
 
   NotAClass :: Var Typed -> TypeError
@@ -485,6 +488,12 @@ instance Pretty TypeError where
   pretty (NotAClass name) =
     vsep [ "Can not make an instance of" <+> pretty name <+> "because it is not a class" ]
 
+  pretty (DIMalformedHead _) =
+    "Malformed head in" <+> keyword "deriving instance" <+> "clause"
+
+  pretty (DICan'tDerive n _) =
+    "Can't derive an instance of class" <+> stypeSkol (pretty n)
+
   pretty (TypeFamInInstHead fun _) =
     vsep [ "Illegal type family application" <+> displayType fun
             <+> "in instance head" ]
@@ -605,6 +614,8 @@ instance Spanned TypeError where
   annotation (UnsatClassCon x _ _) = annotation x
   annotation (TyFamLackingArgs x _ _) = annotation x
   annotation (OrphanInstance x _) = annotation x
+  annotation (DIMalformedHead x) = annotation x
+  annotation (DICan'tDerive _ x) = annotation x
   annotation x = error (show (pretty x))
 
 instance Note TypeError Style where

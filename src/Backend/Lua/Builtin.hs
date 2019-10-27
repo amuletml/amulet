@@ -215,5 +215,60 @@ builtins =
           return { x, __tag = "ShowType" }
         end
       |] )
+  , ( tcTYPEABLE, "_Typeable", [], Just (1, \[x] -> (mempty, [[lua| %x() |]]))
+    , [luaStmts|
+        local function _Typeable(x)
+          return x()
+        end
+      |] )
+  , ( tcTypeableApp, "_Typeable_app", [], Nothing
+    , [luaStmts|
+        local function _Typeable_app(pair)
+          local ta, tb = pair._1[1], pair._2[1]
+          local finger
+          if ta.fingerprint > 0 or tb.fingerprint > 0 then
+            finger = (ta.fingerprint + 10^(math.floor(math.log(ta.fingerprint))) * tb.fingerprint)
+                        / 10^(math.floor(math.log(math.abs(ta.fingerprint)) + math.log(math.abs(tb.fingerprint))))
+          else
+            finger = ta.fingerprint + 10^(math.floor(math.log(-ta.fingerprint))) * tb.fingerprint
+          end
 
+          return { { fingerprint = finger, name = ta.name .. " :$ " .. tb.name } , __tag = "TypeRep" }
+        end
+      |] )
+
+-- Type _Typeable_app instance makes a decimal of the concatenation of
+-- the thing so that it doesn't clash with a variable that happens to
+-- end up with the same "fingerprint". Eww
+-- TODO: please improve this, jesus fuck
+
+  , ( tcTypeableKnownKnown, "_Typeable_kk", [], Nothing
+    , [luaStmts|
+        local function _Typeable_kk(finger, name)
+          return { { fingerprint = finger, name = name } , __tag = "TypeRep" }
+        end
+      |] )
+
+  , ( tcTYPEREP, "_TypeRep", [], Just (1, \[x] -> (mempty, [[lua| { %x, __tag = "TypeRep" } |]]))
+    , [luaStmts|
+        local function _TypeRep(x)
+          return { x, __tag = "TypeRep" }
+        end
+      |] )
+  , ( tcUnTypeable, "__type_of", [], Just (1, \[x] -> (mempty, [[lua| function() return %x end |]]))
+    , [luaStmts|
+        local function type_of(x)
+          return function() return x end
+        end
+      |] )
+  , ( tcEqTypeRep, "__eq_type_rep", [], Nothing
+    , [luaStmts|
+        local function __eq_type_rep(tr_a, tr_b, keq, kne)
+          if tr_a[1].fingerprint == tr_b[1].fingerprint then
+            return keq()() -- n.b.: first argument is ghost of equality proof
+          else
+            return kne()
+          end
+        end
+      |] )
   ]

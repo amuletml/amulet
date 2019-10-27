@@ -1,12 +1,12 @@
 include import "./amulet/base.ml"
 include import "./amulet/option.ml"
 include import "./amulet/list.ml"
+include import "./amulet/typeable.ml"
 
 include import "./data/foldable.ml"
 include import "./data/traversable.ml"
 
 include import "./data/enumeration.ml"
-
 
 external private val prim_parse_int : (int -> option int) -> option int -> string -> option int =
   "function(Some, None, x) \

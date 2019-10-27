@@ -28,7 +28,13 @@ vEq, vEQ :: CoVar
 
 tcTypeError, tcErrKind, tcString, tcHCat, tcVCat, tcShowType :: CoVar
 
-[ vBool, vInt, vString, vFloat, vUnit, vLazy, vArrow, vProduct, vList, vRefTy, vKStrTy, vKIntTy, vRowCons, vError, vLAZY, vForce, tyvarA, tyvarB, argvarX, vOpApp, vCONS, vNIL, vAssign, vDeref, vRef, vStrVal, vIntVal, vExtend, vRestrict, vKSTR, vKINT, vROWCONS, tyvarRecord, tyvarNew, tyvarKey, tyvarType, vEq, vEQ, backendRet, backendClone, tcTypeError, tcErrKind, tcString, tcHCat, tcVCat, tcShowType ] = makeBuiltins
+tcTypeable, tcTypeRep, tcUnTypeable, tcTYPEABLE, tcTYPEREP, tcEqTypeRep :: CoVar
+tyvarKind :: CoVar
+tyvarProxy :: CoVar
+
+tcTypeableApp, tcTypeableKnownKnown :: CoVar
+
+[ vBool, vInt, vString, vFloat, vUnit, vLazy, vArrow, vProduct, vList, vRefTy, vKStrTy, vKIntTy, vRowCons, vError, vLAZY, vForce, tyvarA, tyvarB, argvarX, vOpApp, vCONS, vNIL, vAssign, vDeref, vRef, vStrVal, vIntVal, vExtend, vRestrict, vKSTR, vKINT, vROWCONS, tyvarRecord, tyvarNew, tyvarKey, tyvarType, vEq, vEQ, backendRet, backendClone, tcTypeError, tcErrKind, tcString, tcHCat, tcVCat, tcShowType, tcTypeable, tcUnTypeable, tcTypeRep, tcTYPEABLE, tcTYPEREP, tcEqTypeRep, tcTypeableApp, tcTypeableKnownKnown, tyvarKind, tyvarProxy ] = makeBuiltins
   [ ("bool", TypeConVar)
   , ("int", TypeConVar)
   , ("string", TypeConVar)
@@ -89,6 +95,17 @@ tcTypeError, tcErrKind, tcString, tcHCat, tcVCat, tcShowType :: CoVar
   , (":<>:", DataConVar)
   , (":<#>:", DataConVar)
   , ("ShowType", DataConVar)
+
+  , ("typeable", TypeConVar)
+  , ("type_of", ValueVar)
+  , ("type_rep", TypeConVar)
+  , ("$Typeable", ValueVar)
+  , ("$TypeRep", ValueVar)
+  , ("eq_type_rep", ValueVar)
+  , ("$TypeableApp", ValueVar)
+  , ("$TypeableKK", ValueVar)
+  , ("kind", TypeVar)
+  , ("proxy", TypeVar)
   ]
 
 tyBool, tyInt, tyString, tyFloat, tyUnit, tyLazy, tyList, tyRef, tyKStr, tyKInt, tyRowCons, tyEq :: IsVar a => Type a
@@ -127,6 +144,8 @@ builtinTyList = [ fromVar vBool
                 , fromVar tcVCat
                 , fromVar tcString
                 , fromVar tcTypeError
+                , fromVar tcTypeable
+                , fromVar tcTypeRep
                 ]
 
 builtinVarList :: forall a b. (IsVar a, IsVar b) => [(a, Type b)]
@@ -137,13 +156,14 @@ builtinVarList = vars where
   arrTy = ForallTy Irrelevant
   prodTy a b = RowsTy NilTy [("_1", a), ("_2", b)]
 
-  name, name', record, ttype, key, new :: b
+  name, name', record, ttype, key, new, proxy :: b
   name = fromVar tyvarA
   name' = fromVar tyvarB
   record = fromVar tyvarRecord
   ttype = fromVar tyvarType
   key = fromVar tyvarKey
   new = fromVar tyvarNew
+  proxy = fromVar tyvarProxy
 
   appsTy :: [Type b] -> Type b
   appsTy = foldl1 AppTy
@@ -170,6 +190,46 @@ builtinVarList = vars where
 
          , op vIntVal (ForallTy (Relevant name) tyInt $ AppTy tyKInt (VarTy name) `arrTy` tyInt)
          , op vKINT (ForallTy (Relevant name) tyInt $ tyInt `arrTy` AppTy tyKInt (VarTy name))
+
+         , op tcTYPEABLE
+             ( ForallTy (Relevant name) StarTy
+             $ ForallTy (Relevant proxy) StarTy (AppTy (VarTy proxy) (VarTy name) `arrTy` AppTy (ConTy (fromVar tcTypeRep)) (VarTy name))
+                 `arrTy` AppTy (ConTy (fromVar tcTypeable)) (VarTy name))
+
+         , op tcTYPEREP (ForallTy (Relevant name) StarTy
+                          $ ExactRowsTy [ ("fingerprint", tyInt)
+                                        , ("name", tyString) ]
+                    `arrTy` AppTy (ConTy (fromVar tcTypeRep)) (VarTy name))
+
+         , op tcEqTypeRep ( ForallTy (Relevant name) StarTy
+                          $ ForallTy (Relevant name') StarTy
+                          $ ForallTy (Relevant new) StarTy
+                          $ tupTy [ AppTy (ConTy (fromVar tcTypeRep)) (VarTy name)
+                                  , AppTy (ConTy (fromVar tcTypeRep)) (VarTy name')
+                                  , appsTy [ tyEq, VarTy name, VarTy name' ]
+                                      `arrTy` (tyUnit `arrTy` VarTy new)
+                                  , tyUnit `arrTy` VarTy new ]
+                              `arrTy` VarTy new)
+
+         , op tcUnTypeable ( ForallTy (Relevant name) StarTy
+                           $ ForallTy (Relevant proxy) StarTy
+                           $ AppTy (ConTy (fromVar tcTypeable)) (VarTy name)
+                     `arrTy` (AppTy (VarTy proxy) (VarTy name)
+                     `arrTy` AppTy (ConTy (fromVar tcTypeRep)) (VarTy name)))
+
+         , op tcTypeableApp ( ForallTy (Relevant name) (StarTy `arrTy` StarTy)
+                            $ ForallTy (Relevant name') StarTy
+                            $ (AppTy (ConTy (fromVar tcTypeable)) (VarTy name)
+                                `prodTy` AppTy (ConTy (fromVar tcTypeable)) (VarTy name'))
+                               `arrTy` AppTy (ConTy (fromVar tcTypeable)) (AppTy (VarTy name) (VarTy name'))
+                            )
+
+         , op tcTypeableKnownKnown
+              ( ForallTy (Relevant name) StarTy
+              $ tupTy [ AppTy tyKInt StarTy
+                      , AppTy tyKStr StarTy
+                      ]
+                 `arrTy` AppTy (ConTy (fromVar tcTypeable)) (VarTy name))
 
          , op vExtend $
              ForallTy (Relevant key) tyString $

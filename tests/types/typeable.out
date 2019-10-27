@@ -1,0 +1,6 @@
+foo : type
+bar : type
+option : type -> type
+Some : Spec{'a : type}. 'a -> option 'a
+None : Spec{'a : type}. option 'a
+cast : Spec{'a : type}. Spec{'b : type}. (typeable 'a * typeable 'b) => 'a -> option 'b

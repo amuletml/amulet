@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleInstances, FlexibleContexts, UndecidableInstances
   , StandaloneDeriving, GeneralizedNewtypeDeriving, DerivingStrategies
-  , TypeFamilies, TemplateHaskell, FunctionalDependencies #-}
+  , TypeFamilies, TemplateHaskell, FunctionalDependencies, RankNTypes #-}
 module Syntax.Types
   ( Telescope, one, foldTele, foldTeleM, teleFromList, mapTele, traverseTele, teleToList
   , Scope(..), namesInScope, inScope, scopeToList
@@ -9,15 +9,19 @@ module Syntax.Types
   , classDecs, tySyms, declaredHere
   , ClassInfo(..), ciName, ciMethods, ciContext, ciConstructorName, ciAssocTs
   , TySymInfo(..), tsName, tsArgs, tsExpansion, tsKind, TySyms, tsEquations, tsConstraint
-  , ciConstructorTy, ciHead, ciClassSpan, ciDefaults, ciMinimal, ciFundep
+  , ciConstructorTy, ciHead, ciClassSpan, ciDefaults, ciMinimal, ciFundep, ciDerive
   , Origin(..)
 
   , focus
+  , DerivingStrat(..)
   ) where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
+
+import Control.Monad.Reader.Class
+import Control.Monad.Namey
 
 import Control.Lens
 
@@ -135,9 +139,29 @@ data ClassInfo
         -- ^ Minimal definition
       , _ciFundep :: [([Int], [Int], Ann Resolved)]
         -- ^ Functional dependencies
+      , _ciDerive :: Maybe DerivingStrat
+        -- ^ Deriving strategy for this class
       }
-  | MagicInfo { _ciFundep :: [([Int], [Int], Ann Resolved)] }
+  | MagicInfo
+      { _ciFundep :: [([Int], [Int], Ann Resolved)]
+      , _ciDerive :: Maybe DerivingStrat
+      }
   deriving (Eq, Show, Ord)
+
+newtype DerivingStrat =
+  DerivingStrat { runDerive :: forall m. (MonadReader Env m, MonadNamey m)
+                            => Type Typed
+                            -> Ann Resolved
+                            -> m (Maybe (Toplevel Desugared)) }
+
+instance Eq DerivingStrat where
+  _ == _ = False
+
+instance Show DerivingStrat where
+  show _ = "<deriving handler>"
+
+instance Ord DerivingStrat where
+  _ `compare` _ = GT
 
 makeLenses ''Env
 makeLenses ''ClassInfo

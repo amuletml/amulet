@@ -58,7 +58,11 @@ data Toplevel p
              , instanceCtx :: Maybe (Type p)
              , instanceHead :: Type p
              , instanceMethods :: [InstanceItem p]
+             , instanceDeriveGenerated :: Bool
              , ann :: Ann p }
+
+  | DeriveInstance { derivingType :: Type p
+                   , ann :: Ann p }
 
   | TypeFunDecl { tyfunAccess :: TopAccess
                 , tyfunName :: Var p
@@ -157,7 +161,8 @@ instance (Spanned (Constructor p), Spanned (Ann p)) => Spanned (Toplevel p) wher
   annotation (TySymDecl _ _ _ _ x) = annotation x
   annotation (ForeignVal _ _ _ _ x) = annotation x
   annotation (Class _ _ _ _ _ _ x) = annotation x
-  annotation (Instance _ _ _ _ x) = annotation x
+  annotation (Instance _ _ _ _ _ x) = annotation x
+  annotation (DeriveInstance _ x) = annotation x
   annotation x@TypeFunDecl{} = annotation (ann x)
   annotation (Module _ _ m) = annotation m
   annotation (Open m) = annotation m
@@ -238,12 +243,14 @@ instance Pretty (Var p) => Pretty (Toplevel p) where
          ]
     where fds = case fd of { [] -> empty; _ -> pipe <+> hsep (map pretty fd) }
 
-  pretty (Instance _ c h m _) =
+  pretty (Instance _ c h m _ _) =
     vsep [ keyword "instance" <+> maybe (parens mempty) pretty c
             <+> soperator (string "=>") <+> pretty h <+> keyword "begin"
          , indent 2 (align (pretty m))
          , keyword "end"
          ]
+
+  pretty (DeriveInstance t _) = keyword "deriving instance" <+> pretty t
 
   pretty (TypeFunDecl ac name args kindsig equations _) =
     prettyAcc ac <+> keyword "type function" <+> pretty name <+> hsep (map ((squote <>) . pretty) args) <> ks <+> keyword "begin"

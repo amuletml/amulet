@@ -56,6 +56,7 @@ data TokenClass
   | TcPrivate -- ^ A @private@ token.
   | TcImport -- ^ An @import@ token.
   | TcInclude -- ^ An @include@ token.
+  | TcDeriving -- ^ A @deriving@ token.
   | TcAs   -- ^ An @as@ token.
 
   | TcDot -- ^ A @.@ token.
@@ -140,6 +141,7 @@ instance Show TokenClass where
   show TcAs = "as"
   show TcClass = "class"
   show TcInstance = "instance"
+  show TcDeriving = "deriving"
   show TcWhen = "when"
   show TcPrivate = "private"
   show TcInclude = "include"

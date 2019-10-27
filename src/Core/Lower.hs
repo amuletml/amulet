@@ -329,6 +329,7 @@ lowerProg' (Class{}:prg) = lowerProg' prg
 lowerProg' (Instance{}:prg) = lowerProg' prg
 lowerProg' (TySymDecl{}:prg) = lowerProg' prg
 lowerProg' (TypeFunDecl{}:prg) = lowerProg' prg
+lowerProg' (DeriveInstance{}:prg) = lowerProg' prg
 
 lowerProg' (ForeignVal _ v ex tp _:prg) =
   let tyB = lowerType tp
@@ -561,4 +562,6 @@ boxedTys = VarMap.fromList
            $ C.builtinVarList where
   boxed = VarSet.fromList
     [ C.vOpApp, C.vAssign, C.vExtend, C.vRestrict
+    , C.tcEqTypeRep
+    , C.tcTypeableApp, C.tcTypeableKnownKnown
     ]

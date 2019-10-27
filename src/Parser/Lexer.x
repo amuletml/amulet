@@ -102,6 +102,7 @@ tokens :-
   <0> "when"     { constTok TcWhen }
   <0> "private"  { constTok TcPrivate }
   <0> "include"  { constTok TcInclude }
+  <0> "deriving" { constTok TcDeriving }
 
   <0> ","      { constTok TcComma }
   <0> "."      { constTok TcDot }
