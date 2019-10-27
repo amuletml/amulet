@@ -14,7 +14,6 @@ module Syntax.Implicits
 import qualified Data.Map.Merge.Strict as Map
 import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
-import qualified Data.Text as T
 import qualified Data.Set as Set
 
 import Data.List.NonEmpty (NonEmpty((:|)))
@@ -31,6 +30,9 @@ import Syntax hiding ((:>))
 import Prelude hiding (lookup)
 
 import Syntax.Subst
+
+import Core.Builtin
+import Core.Var
 
 -- | An obligation the solver needs to resolve if it chose this
 -- implicit parameter.
@@ -288,10 +290,10 @@ matches TyPromotedCon{} _ = False
 matches (TyApp f x) (TyApp f' x') = f `matches` f' && x `matches` x'
 
 matches (TyApp f x) (a :-> b) =
-  matches f (TyApp (TyCon (TgName (T.pack "->") (negate 7))) a) && matches x b
+  matches f (TyApp (TyCon tyArr_n) a) && matches x b
 
 matches (TyApp f x) (TyTuple a b) =
-  matches f (TyApp (TyCon (TgName (T.pack "*") (negate 8))) a) && matches x b
+  matches f (TyApp (TyCon tyProd_n) a) && matches x b
 
 matches TyApp{} _ = False
 
@@ -305,7 +307,7 @@ matches (TyPi b t) (TyPi b' t') = t `matches` t' && b `matchesBinder` b' where
   matchesBinder _ _ = False
 
 matches (a :-> b) (TyApp f x) =
-  matches f (TyApp (TyCon (TgName (T.pack "->") (negate 7))) a) && matches x b
+  matches f (TyApp (TyCon tyArr_n) a) && matches x b
 
 matches TyPi{} _ = False
 
@@ -328,7 +330,7 @@ matches TyExactRows{} _ = False
 matches (TyTuple a b) (TyTuple a' b') = matches a a' && matches b b'
 
 matches (TyTuple a b) (TyApp f x) =
-  matches f (TyApp (TyCon (TgName (T.pack "*") (negate 8))) a) && matches x b
+  matches f (TyApp (TyCon tyProd_n) a) && matches x b
 
 matches TyTuple{} _ = False
 
@@ -354,3 +356,11 @@ boundByImpl :: Ord (Var p) => Implicit i p -> Set.Set (Var p)
 boundByImpl = foldMap fv . view implPre where
   fv (Quantifier v) = Set.singleton (v ^?! tyBinderVar)
   fv _ = mempty
+
+tyArr_n :: Var Typed
+tyArr_n = TgName nm id where
+  CoVar id (Just nm) _ = vArrow
+
+tyProd_n :: Var Typed
+tyProd_n = TgName nm id where
+  CoVar id (Just nm) _ = vProduct
