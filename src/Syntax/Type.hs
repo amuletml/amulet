@@ -128,6 +128,13 @@ pattern (:->) :: Type p -> Type p -> Type p
 pattern t :-> t' <- TyPi (Anon t) t' where
   t :-> ty = TyPi (Anon t) ty
 
+pattern (:=>) :: Type p -> Type p -> Type p
+pattern t :=> t' <- TyPi (Implicit t) t' where
+ t :=> ty = TyPi (Implicit t) ty
+
+infixr :->
+infixr :=>
+
 pattern TyForall :: Var p -> Maybe (Type p) -> Type p -> Type p
 pattern TyForall v k t' <- TyPi (Invisible v k _) t' where
   TyForall v k ty = TyPi (Invisible v k Infer) ty

@@ -170,6 +170,10 @@ reTops (r@(Module am name mod):rest) sig = do
   (mod', sig') <- retcons (wrapError r) $ reModule mod
   reTopsWith am rest sig (withMod name name' sig') $ pure (Module am name' mod')
 
+reTops (d@(DeriveInstance t ann):rest) sig = do
+  t <- reType d t
+  first3 (DeriveInstance t ann:) <$> reTops rest sig
+
 reTops (t@(Class name am ctx tvs fds ms ann):rest) sig = do
   name' <- tagVar name
   (tvs', tvss) <- resolveTele t tvs
@@ -216,7 +220,7 @@ reTops (t@(Class name am ctx tvs fds ms ann):rest) sig = do
       tv x = lookupTyvar x `catchJunk` fd
 
 
-reTops (t@(Instance cls ctx head ms ann):rest) sig = do
+reTops (t@(Instance cls ctx head ms _ ann):rest) sig = do
   cls' <- lookupTy cls `catchJunk` t
 
   let fvs = toList (foldMap ftv ctx <> ftv head)
@@ -229,7 +233,7 @@ reTops (t@(Instance cls ctx head ms ann):rest) sig = do
     (ms', vs) <- unzip <$> traverse reMethod ms
     ms'' <- extendVals (concat vs) (sequence ms')
 
-    pure (Instance cls' ctx' head' ms'' ann)
+    pure (Instance cls' ctx' head' ms'' False ann)
 
   first3 (t':) <$> reTops rest sig
 

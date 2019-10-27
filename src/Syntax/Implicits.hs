@@ -1,5 +1,5 @@
 {-# LANGUAGE StandaloneDeriving, FlexibleContexts, FlexibleInstances,
-   UndecidableInstances, ScopedTypeVariables, TemplateHaskell, MultiParamTypeClasses #-}
+   UndecidableInstances, ScopedTypeVariables, TemplateHaskell, MultiParamTypeClasses, GADTs #-}
 module Syntax.Implicits
   ( ImplicitScope
   , Obligation(..), Sort(..)
@@ -15,6 +15,7 @@ import qualified Data.Map.Merge.Strict as Map
 import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
+
 import Data.List.NonEmpty (NonEmpty((:|)))
 import Data.Text (Text)
 import Data.Semigroup
@@ -29,6 +30,9 @@ import Syntax hiding ((:>))
 import Prelude hiding (lookup)
 
 import Syntax.Subst
+
+import Core.Builtin
+import Core.Var
 
 -- | An obligation the solver needs to resolve if it chose this
 -- implicit parameter.
@@ -154,7 +158,7 @@ insert annot sort v ty info = go ts implicit where
     insert' xs i Nothing = Just (Many (go xs i (Trie Map.empty)))
 
 -- | Find a type in a trie by conservative fuzzy search.
-lookup :: forall i p. Ord (Var p) => Type p -> ImplicitScope i p -> [Implicit i p]
+lookup :: forall i p. Var p ~ Var Typed => Type p -> ImplicitScope i p -> [Implicit i p]
 lookup ty = go ts  where
   ts = appsView ty
   go :: [Type p] -> ImplicitScope i p -> [Implicit i p]
@@ -264,7 +268,7 @@ merge = Map.merge Map.preserveMissing Map.preserveMissing (Map.zipWithMatched (c
 
 -- | Does there exist a substitution that can make a the same as b?
 -- (Conservative check.)
-matches :: Ord (Var p) => Type p -> Type p -> Bool
+matches :: Var p ~ Var Typed => Type p -> Type p -> Bool
 matches (TyParens x) x' = matches x x'
 matches x (TyParens x') = matches x x'
 
@@ -284,6 +288,13 @@ matches (TyPromotedCon t) (TyPromotedCon t') = t == t'
 matches TyPromotedCon{} _ = False
 
 matches (TyApp f x) (TyApp f' x') = f `matches` f' && x `matches` x'
+
+matches (TyApp f x) (a :-> b) =
+  matches f (TyApp (TyCon tyArr_n) a) && matches x b
+
+matches (TyApp f x) (TyTuple a b) =
+  matches f (TyApp (TyCon tyProd_n) a) && matches x b
+
 matches TyApp{} _ = False
 
 matches (TyOperator l o r) x' = matches ((TyCon o `TyApp` l) `TyApp` r) x'
@@ -294,6 +305,9 @@ matches (TyPi b t) (TyPi b' t') = t `matches` t' && b `matchesBinder` b' where
   matchesBinder (Implicit t) (Implicit t') = t `matches` t'
   matchesBinder (Invisible _ k x) (Invisible _ k' x') = x == x' && fromMaybe False (matches <$> k <*> k')
   matchesBinder _ _ = False
+
+matches (a :-> b) (TyApp f x) =
+  matches f (TyApp (TyCon tyArr_n) a) && matches x b
 
 matches TyPi{} _ = False
 
@@ -314,6 +328,10 @@ matches (TyExactRows vs') (TyRows _ vs) = length vs' >= length vs && all m (over
 matches TyExactRows{} _ = False
 
 matches (TyTuple a b) (TyTuple a' b') = matches a a' && matches b b'
+
+matches (TyTuple a b) (TyApp f x) =
+  matches f (TyApp (TyCon tyProd_n) a) && matches x b
+
 matches TyTuple{} _ = False
 
 matches (TySkol v) (TySkol v') = v == v'
@@ -338,3 +356,11 @@ boundByImpl :: Ord (Var p) => Implicit i p -> Set.Set (Var p)
 boundByImpl = foldMap fv . view implPre where
   fv (Quantifier v) = Set.singleton (v ^?! tyBinderVar)
   fv _ = mempty
+
+tyArr_n :: Var Typed
+tyArr_n = TgName nm id where
+  CoVar id (Just nm) _ = vArrow
+
+tyProd_n :: Var Typed
+tyProd_n = TgName nm id where
+  CoVar id (Just nm) _ = vProduct

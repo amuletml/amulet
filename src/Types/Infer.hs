@@ -118,13 +118,13 @@ check ex@(Fun pat e an) ty = do
   (dom, cod, _) <- quantifier (becauseExp ex) (/= Req) ty
   let domain = _tyBinderType dom
 
-  (p, tau, vs, cs, is) <- inferParameter pat
-  _ <- unify (becauseExp ex) domain (_tyBinderType tau)
+  (p, vs, cs, is) <- checkParameter pat domain
   let tvs = boundTvs (p ^. paramPat) vs
 
   implies (Arm (pat ^. paramPat) Nothing e) domain cs $
     case dom of
       Anon{} -> do
+        traceM TcB (shown vs)
         e <- local (typeVars %~ Set.union tvs) . local (names %~ focus vs) . local (classes %~ mappend is) $
           check e cod
         pure (Fun p e (an, ty))
@@ -446,6 +446,26 @@ inferProg (decl@(TypeFunDecl am tau arguments kindsig equations ann):prg) = do
   local (tySyms %~ Map.insert tau tfinfo) $
     local (names %~ focus (one tau kind)) $
       consFst fakeDecl $ inferProg prg
+
+inferProg (DeriveInstance tau ann:prg) = do
+  tau <- checkAgainstKind (BecauseOf (DeriveInstance tau ann)) tau tyConstraint
+  let inst = DeriveInstance tau (ann, tyConstraint)
+
+  name <- case tau of
+    TyPi (Implicit _) (TyApps (TyCon class_con) (_:_)) -> pure class_con
+    TyApps (TyCon class_con) (_:_) -> pure class_con
+    _ -> confesses (DIMalformedHead (BecauseOf inst))
+
+  class_info <- view (classDecs . at name)
+
+  st <- case class_info of
+    Just (MagicInfo _ (Just derive)) -> runDerive derive tau ann
+    Just ClassInfo { _ciDerive = Just derive }  -> runDerive derive tau ann
+    _ -> confesses (DICan'tDerive name (BecauseOf inst))
+
+  case st of
+    Just st -> inferProg (st:prg)
+    Nothing -> confesses (DICan'tDerive name (BecauseOf inst))
 
 inferProg (Open mod:prg) = do
   (mod', exEnv, (modImplicits, modTysym)) <- inferMod mod

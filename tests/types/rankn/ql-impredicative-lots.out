@@ -14,7 +14,7 @@ ids : list (Spec{'a : type}. 'a -> 'a)
 inc : int -> int
 choose : Infer{'a : type}. 'a -> 'a -> 'a
 poly : (Spec{'a : type}. 'a -> 'a) -> int * bool
-map : Infer{'a : type}. Infer{'aap : type}. ('aap -> 'a) -> list 'aap -> list 'a
+map : Infer{'a : type}. Infer{'aaj : type}. ('aaj -> 'a) -> list 'aaj -> list 'a
 $ : Infer{'a : type}. Infer{'b : type}. ('a -> 'b) -> 'a -> 'b
 |> : Infer{'a : type}. Infer{'b : type}. 'a -> ('a -> 'b) -> 'b
 a : list (Spec{'a : type}. 'a -> 'a)
