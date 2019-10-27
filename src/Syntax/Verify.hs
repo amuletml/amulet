@@ -78,8 +78,8 @@ verifyProgram = traverse_ verifyStmt where
   verifyStmt Instance{} = pure ()
   verifyStmt TySymDecl{} = pure ()
 
-
   verifyStmt TypeDecl{} = pure ()
+  verifyStmt DeriveInstance{} = pure ()
   verifyStmt TypeFunDecl{} = pure ()
   verifyStmt (Module _ _ m) = verifyModule m
   verifyStmt (Open m) = verifyModule m

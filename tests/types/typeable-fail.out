@@ -1,0 +1,5 @@
+typeable-fail.ml[4:1 ..6:3]: error
+  │ 
+4 │ instance typeable foo begin
+  │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  Can not make instance of built-in class typeable

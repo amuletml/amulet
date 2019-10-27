@@ -101,13 +101,12 @@ checkPattern pat@(PTuple xs ann) ty@TyTuple{} = do
   (ps, bs, cs, is) <- go xs ty
   pure (PTuple ps (ann, ty), bs, cs, is)
 
-checkPattern pt@(PType p t ann) ty = do
-  (p', it, binds, cs, is) <- inferPattern p
+checkPattern pt@(PType _ t ann) ty = do
+  (p', it, binds, cs, is) <- inferPattern pt
   t' <- resolveKind (BecauseOf pt) t
   _ <- subsumes (becausePat pt) t' it
   co <- unify (becausePat pt) ty t'
   wrapPattern (PType p' t', binds, cs, is) (ann, ty) (t', co)
-
 
 checkPattern pat@(Destructure con Nothing an) target = do
   (con_ty, sub) <- skolGadt con =<< lookupTy' Strong con
@@ -216,5 +215,5 @@ makeClassScope _ [] = pure mempty
 makeClassScope an (Implicit ty:tys) = do
   v <- genName
   (vs, is) <- makeClassScope an tys
-  pure ((v, ty):vs, insert an LocalAssum v ty (MagicInfo []) is)
+  pure ((v, ty):vs, insert an LocalAssum v ty (MagicInfo [] Nothing) is)
 makeClassScope an (_:tys) = makeClassScope an tys -- impossible but why not?

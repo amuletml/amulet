@@ -2,6 +2,8 @@ open import "./base.ml"
 
 type option 'a = Some of 'a | None
 
+deriving typeable option
+
 let from_option x = function
   | Some x -> x
   | None -> x

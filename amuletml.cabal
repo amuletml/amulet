@@ -255,6 +255,7 @@ library
                      , Types.Infer.Pattern
                      , Types.Infer.Function
                      , Types.Unify.Equality
+                     , Types.Derive.Typeable
                      , Types.Infer.Constructor
                      -- Pretty
                      , Text.Dot

@@ -33,11 +33,12 @@ desugarProgram = traverse statement
 statement :: forall m. MonadNamey m => Toplevel Resolved -> m (Toplevel Desugared)
 statement (LetStmt am vs) = LetStmt am <$> traverse binding vs
 statement (Module am v t) = Module am v <$> modTerm t
-statement (Instance a b c m d) = Instance a (ty <$> b) (ty c) <$> traverse instItem m <*> pure d where
+statement (Instance a b c m _ d) = Instance a (ty <$> b) (ty c) <$> traverse instItem m <*> pure False <*> pure d where
   instItem (MethodImpl b) = MethodImpl <$> binding b
   instItem (TypeImpl v as t a) = pure $ TypeImpl v (map tyA as) (ty t) a
 statement (Class am a b c fd m d) = Class am a (ty <$> b) (tyA <$> c) (map go fd) <$> traverse classItem m <*> pure d where
   go (Fundep f t a) = Fundep f t a
+statement (DeriveInstance t an) = pure $ DeriveInstance (ty t) an
 
 statement (Open v) = Open <$> modTerm v
 statement (Include v) = Include <$> modTerm v

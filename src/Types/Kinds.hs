@@ -442,7 +442,7 @@ checkKind (TyPi binder b) ek = do
     Implicit t -> do
       t' <- checkKind t tyConstraint
       v <- genName
-      local (classes %~ insert (annotation reason) LocalAssum v t' (MagicInfo [])) $
+      local (classes %~ insert (annotation reason) LocalAssum v t' (MagicInfo [] Nothing)) $
         TyPi (Implicit t') <$> checkKind b ek
 
     Invisible v (Just arg) r -> do

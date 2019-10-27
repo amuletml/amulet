@@ -149,7 +149,7 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
         closeOver' vars (BecauseOf clss) $
           TyPi (Implicit classConstraint) obligation
       ~var@(TgName name _) <- genNameWith (classCon' <> T.singleton '$')
-      pure ( singleton classAnn Superclass var impty (MagicInfo [])
+      pure ( singleton classAnn Superclass var impty (MagicInfo [] Nothing)
            , (Implicit, var, name, obligation))
 
   (_, _, cs) <- solveFixpoint (BecauseOf clss) (fmap (moreScope scope) cs) =<< getSolveInfo
@@ -259,6 +259,7 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
           ClassInfo name classConstraint methodMap (mconcat assocts) contextMap classCon classConTy classAnn defaultMap
           (makeMinimalFormula methodMap defaultMap)
           (map makeFundep fundeps)
+          Nothing
         methodMap = Map.fromList (map (\(_, n, _, t) -> (n, t)) rows)
         contextMap = Map.fromList (map (\(_, _, l, t) -> (l, t)) rows')
 
@@ -278,7 +279,7 @@ inferInstance :: forall m. MonadInfer Typed m
                    , ClassInfo
                    , [TySymInfo]
                    )
-inferInstance inst@(Instance clss ctx instHead bindings ann) = condemn $ do
+inferInstance inst@(Instance clss ctx instHead bindings we'reDeriving ann) = condemn $ do
   traverse_ (checkWildcard inst) ctx
   checkWildcard inst instHead
 
@@ -287,10 +288,11 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = condemn $ do
     Nothing -> confesses (ArisingFrom (NotAClass clss) (BecauseOf inst))
 
   () <- case info of
-    MagicInfo{} -> confesses (MagicInstance clss (BecauseOf inst))
+    MagicInfo{} -> unless we'reDeriving $ confesses (MagicInstance clss (BecauseOf inst))
+    ClassInfo { _ciDerive = Just _ } -> unless we'reDeriving $ confesses (MagicInstance clss (BecauseOf inst))
     _ -> pure ()
 
-  ~info@(ClassInfo clss classHead methodSigs assocTySigs classContext classCon classConTy classAnn defaults minimal fundeps) <-
+  ~info@(ClassInfo clss classHead methodSigs assocTySigs classContext classCon classConTy classAnn defaults minimal fundeps _) <-
     view (classDecs . at clss . non undefined)
 
   let classCon' = nameName classCon
@@ -362,10 +364,10 @@ inferInstance inst@(Instance clss ctx instHead bindings ann) = condemn $ do
         mkBinds (TyTuple a b) = do
           var <- genName
           (scope, pat) <- mkBinds b
-          pure (insert ann LocalAssum var a (MagicInfo []) scope, PTuple [Capture var (ann, a), pat] (ann, TyTuple a b))
+          pure (insert ann LocalAssum var a (MagicInfo [] Nothing) scope, PTuple [Capture var (ann, a), pat] (ann, TyTuple a b))
         mkBinds x = do
           var <- genName
-          pure (singleton ann LocalAssum var x (MagicInfo []), Capture var (ann, x))
+          pure (singleton ann LocalAssum var x (MagicInfo [] Nothing), Capture var (ann, x))
         addFull (as, p) = (as, PAs p fullCtx (ann, ctx))
      in addFull <$> mkBinds ctx
 
@@ -661,7 +663,7 @@ reduceClassContext extra annot cons = do
                      , needs', scope', sub )
         | otherwise =
           -- see comment in 'fundepsAllow' for why this can be undefined
-          let (bindings, needs', scope', sub) = dedup (insert annot LocalAssum var con (MagicInfo []) scope) needs
+          let (bindings, needs', scope', sub) = dedup (insert annot LocalAssum var con (MagicInfo [] Nothing) scope) needs
            in (bindings, (var, con, r):needs', scope', sub)
       dedup scope [] = ([], [], scope, mempty)
       (aliases, stillNeeded, usable, substitution) = dedup mempty needs
