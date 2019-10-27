@@ -224,7 +224,6 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do -- {{{
 
   traceM TopS (keyword "[W]:" <+> pretty (apply sub ohno))
 
-  traceM TopS (shown scope')
   let possible = lookup cons scope'
   traceM TopS ("considering between: " <+> hsep (map (pretty . view implType) possible))
 
@@ -315,6 +314,7 @@ hasExactMatch t = any ((== t) . view implHead)
 
 pickBestPossible :: [Implicit ClassInfo Typed] -> Implicit ClassInfo Typed
 pickBestPossible [] = error "No choices"
+pickBestPossible xs | Just i <- find ((== internal) . view implSpan) xs = i
 pickBestPossible xs = head best where
   ~(x:_) = L.groupBy ((==) `on` superclasses) (L.sortOn superclasses xs)
   best = L.sortOn specificity x

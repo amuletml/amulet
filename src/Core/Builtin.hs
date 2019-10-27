@@ -217,7 +217,7 @@ builtinVarList = vars where
                      `arrTy` (AppTy (VarTy proxy) (VarTy name)
                      `arrTy` AppTy (ConTy (fromVar tcTypeRep)) (VarTy name)))
 
-         , op tcTypeableApp ( ForallTy (Relevant name) (StarTy `arrTy` StarTy)
+         , op tcTypeableApp ( ForallTy (Relevant name) StarTy
                             $ ForallTy (Relevant name') StarTy
                             $ (AppTy (ConTy (fromVar tcTypeable)) (VarTy name)
                                 `prodTy` AppTy (ConTy (fromVar tcTypeable)) (VarTy name'))

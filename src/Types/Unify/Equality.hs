@@ -489,7 +489,7 @@ lookupEquality class_info scope assum a b = normal <|> fundepEquality where
         [ (xs, tail (appsView y), need, det)
         | (x, y) <- inst_pairs
         , let TyApps (TyCon class_tc) xs = x
-        , let Just (Left clss) = class_info ^. at class_tc
+        , Just (Left clss) <- [class_info ^. at class_tc]
         , (need, det, _) <- clss ^. ciFundep
         ]
 

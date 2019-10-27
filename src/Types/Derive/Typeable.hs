@@ -76,7 +76,7 @@ builtin_typeable tau@(TyCon (TgName name id)) scope =
     internal
     InstSort
     tcTypeable_kk
-    ( TyApp tyKInt (TyLit (LiInt (fromIntegral id)))
+    ( tvA_n *. TyApp tyKInt (TyLit (LiInt (fromIntegral id)))
   :=> (TyApp tyKStr (TyLit (LiStr name)) :=> TyApp (TyCon tyTypeable_n) tau ))
     typeable_CI
     scope
