@@ -215,6 +215,7 @@ builtins =
           return { x, __tag = "ShowType" }
         end
       |] )
+
   , ( tcTYPEABLE, "_Typeable", [], Just (1, \[x] -> (mempty, [[lua| %x() |]]))
     , [luaStmts|
         local function _Typeable(x)
@@ -225,15 +226,7 @@ builtins =
     , [luaStmts|
         local function _Typeable_app(pair)
           local ta, tb = pair._1[1], pair._2[1]
-          local finger
-          if ta.fingerprint > 0 or tb.fingerprint > 0 then
-            finger = (ta.fingerprint + 10^(math.floor(math.log(ta.fingerprint))) * tb.fingerprint)
-                        / 10^(math.floor(math.log(math.abs(ta.fingerprint)) + math.log(math.abs(tb.fingerprint))))
-          else
-            finger = ta.fingerprint + 10^(math.floor(math.log(-ta.fingerprint))) * tb.fingerprint
-          end
-
-          return { { fingerprint = finger, name = ta.name .. " :$ " .. tb.name } , __tag = "TypeRep" }
+          return { { name = "(" .. ta.name .. ") :$ (" .. tb.name .. ")" } , __tag = "TypeRep" }
         end
       |] )
 
@@ -245,14 +238,14 @@ builtins =
   , ( tcTypeableKnownKnown, "_Typeable_kk", [], Nothing
     , [luaStmts|
         local function _Typeable_kk(finger, name)
-          return { { fingerprint = finger, name = name } , __tag = "TypeRep" }
+          return { { name = name .. "#" .. finger } , __tag = "TypeRep" }
         end
       |] )
 
   , ( tcTYPEREP, "_TypeRep", [], Just (1, \[x] -> (mempty, [[lua| { %x, __tag = "TypeRep" } |]]))
     , [luaStmts|
         local function _TypeRep(x)
-          return { x, __tag = "TypeRep" }
+          return { { name = x.name .. "#" .. x.fingerprint }, __tag = "TypeRep" }
         end
       |] )
   , ( tcUnTypeable, "__type_of", [], Just (1, \[x] -> (mempty, [[lua| function() return %x end |]]))
@@ -264,7 +257,7 @@ builtins =
   , ( tcEqTypeRep, "__eq_type_rep", [], Nothing
     , [luaStmts|
         local function __eq_type_rep(tr_a, tr_b, keq, kne)
-          if tr_a[1].fingerprint == tr_b[1].fingerprint then
+          if tr_a[1].name == tr_b[1].name then
             return keq()() -- n.b.: first argument is ghost of equality proof
           else
             return kne()
