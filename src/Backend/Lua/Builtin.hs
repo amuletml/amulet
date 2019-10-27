@@ -242,7 +242,7 @@ builtins =
         end
       |] )
 
-  , ( tcTYPEREP, "_TypeRep", [], Just (1, \[x] -> (mempty, [[lua| { %x, __tag = "TypeRep" } |]]))
+  , ( tcTYPEREP, "_TypeRep", [], Nothing
     , [luaStmts|
         local function _TypeRep(x)
           return { { name = x.name .. "#" .. x.fingerprint }, __tag = "TypeRep" }
