@@ -593,6 +593,7 @@ isTopTok TcType = True
 isTopTok TcVal = True
 isTopTok TcPrivate = True
 isTopTok TcOpen = True
+isTopTok TcDeriving = True
 isTopTok _ = False
 
 -- | Get the left most margin of the current context
