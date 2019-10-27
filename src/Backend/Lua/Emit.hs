@@ -159,12 +159,24 @@ toGraph = Graph DirectedGraph
         . VarMap.foldrWithKey (\v node xs -> gen v node ++ xs) []
   where
     gen _ EmittedUpvalue{} = []
-    gen var node = Node (defaultInfo { label = Just (display . renderPretty 0.8 100 $ pretty var <> ":=" <> genNode node) }) var
-                   : VarSet.foldr (\var' xs -> Edge defaultInfo var var' : xs) [] (node ^. emitDeps)
+    gen var node
+      = Node (defaultInfo { label = Just (display . renderPretty 0.8 100 $ pretty var <> ":=" <> genNode var node) }) var
+      : ( if var /= main node then [] else
+          VarSet.foldr (\var' xs -> Edge defaultInfo var var' : xs) [] (node ^. emitDeps)
+          ++ VarSet.foldr (\var' xs -> Edge defaultInfo { style = Just Dashed } var' var : xs) [] (VarSet.delete var (node ^. emitBinds)) )
 
-    genNode (EmittedExpr expr _ _ _) = vsep . map pretty $ expr
-    genNode (EmittedStmt stmt _ _ _) = vsep . map pretty . toList $ stmt
-    genNode EmittedUpvalue{} = "Upvalue"
+    -- | Try to determine the "primary" node of this term. This is actually
+    -- entirely arbitrary - the only requirement is that it is equal for all
+    -- nodes in this group.
+    main = head . VarSet.toList . (^. emitBinds)
+
+    genNode var node@(EmittedExpr expr _ _ _)
+      | var == main node = vsep . map pretty $ expr
+      | otherwise = "Subsumed with " <+> pretty (main node)
+    genNode var node@(EmittedStmt stmt _ _ _)
+      | var == main node = vsep . map pretty . toList $ stmt
+      | otherwise = "Subsumed with" <+> pretty (main node)
+    genNode _ EmittedUpvalue{} = "Upvalue"
 
 instance IsVar a => Pretty (VarMap.Map (EmittedNode a)) where
   pretty = drawGraph disp . toGraph where
@@ -599,19 +611,19 @@ runNES deps m = do
   pure (deps', binds, a)
 
 withinExpr :: ( Occurs a
-            , MonadReader (EmitScope a) m
-            , MonadState (EmitState a) m )
-         => a -> EmitYield a -> AnnTerm VarSet.Set a
-         -> StateT (NodeEmitState a) m [LuaExpr]
-         -> m ()
+              , MonadReader (EmitScope a) m
+              , MonadState (EmitState a) m )
+           => a -> EmitYield a -> AnnTerm VarSet.Set a
+           -> StateT (NodeEmitState a) m [LuaExpr]
+           -> m ()
 withinExpr var yield term m = withinTerm var term $ flip EmittedExpr yield <$> m
 
 withinTerm :: ( Occurs a
-            , MonadReader (EmitScope a) m
-            , MonadState (EmitState a) m )
-         => a -> AnnTerm VarSet.Set a
-         -> StateT (NodeEmitState a) m (VarSet.Set -> VarSet.Set -> EmittedNode a)
-         -> m ()
+              , MonadReader (EmitScope a) m
+              , MonadState (EmitState a) m )
+           => a -> AnnTerm VarSet.Set a
+           -> StateT (NodeEmitState a) m (VarSet.Set -> VarSet.Set -> EmittedNode a)
+           -> m ()
 withinTerm var term m = do
   ari <- view emitArity
   prev <- use emitPrev
@@ -672,7 +684,8 @@ emitAtom (Ref (toVar -> v) _) = do
           pure expr
     Just (EmittedExpr expr yield binds deps) -> do
       (stmts, vals) <- genYield pushScope' yield expr
-      (nodeState . emitGraph) %= VarMap.insert v (EmittedStmt stmts vals binds deps)
+      let node = EmittedStmt stmts vals binds deps
+      (nodeState . emitGraph) %= \g -> VarSet.foldr (flip VarMap.insert node) g binds
       pure (map unsimple vals)
     where
       -- | Detect if the @emitted@ has a loop
@@ -861,7 +874,7 @@ emitStmt (Foreign n t s:xs) = do
 
           topVars %= VarMap.insert (toVar n)
             ( VarInline (length as) inline
-            , simpleVars [LuaName n'])
+            , simpleVars [LuaName n'] )
           -- This one may never be visited normally, so we'll push the
           -- extra-variable version of it instead.
           topExVars %= VarMap.insert (toVar n) ([], pure $ LuaLocal [LuaName n'] [ex])
