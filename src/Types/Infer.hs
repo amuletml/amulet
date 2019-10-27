@@ -118,13 +118,13 @@ check ex@(Fun pat e an) ty = do
   (dom, cod, _) <- quantifier (becauseExp ex) (/= Req) ty
   let domain = _tyBinderType dom
 
-  (p, tau, vs, cs, is) <- inferParameter pat
-  _ <- unify (becauseExp ex) domain (_tyBinderType tau)
+  (p, vs, cs, is) <- checkParameter pat domain
   let tvs = boundTvs (p ^. paramPat) vs
 
   implies (Arm (pat ^. paramPat) Nothing e) domain cs $
     case dom of
       Anon{} -> do
+        traceM TcB (shown vs)
         e <- local (typeVars %~ Set.union tvs) . local (names %~ focus vs) . local (classes %~ mappend is) $
           check e cod
         pure (Fun p e (an, ty))

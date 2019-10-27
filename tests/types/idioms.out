@@ -1,3 +1,3 @@
 pure : Infer{'a : type}. 'a -> list 'a
 <*> : Infer{'a : type}. Infer{'b : type}. list ('b -> 'a) -> list 'b -> list 'a
-cartesian : Infer{'a : type}. Infer{'b : type}. list 'a -> list 'b -> list ('a * 'b)
+cartesian : Infer{'b : type}. Infer{'a : type}. list 'a -> list 'b -> list ('a * 'b)
