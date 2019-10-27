@@ -230,11 +230,6 @@ builtins =
         end
       |] )
 
--- Type _Typeable_app instance makes a decimal of the concatenation of
--- the thing so that it doesn't clash with a variable that happens to
--- end up with the same "fingerprint". Eww
--- TODO: please improve this, jesus fuck
-
   , ( tcTypeableKnownKnown, "_Typeable_kk", [], Nothing
     , [luaStmts|
         local function _Typeable_kk(finger, name)
