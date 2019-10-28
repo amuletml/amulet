@@ -258,7 +258,7 @@ builtinVarList = vars where
                 ForallTy (Relevant ttype) StarTy $
                   ForallTy (Relevant new) StarTy $
                     tyString `arrTy` appsTy [tyRowCons, VarTy record, VarTy ttype, VarTy key, VarTy new ]
-         , op vEQ $ ForallTy (Relevant name) StarTy $ appsTy [ tyEq, VarTy name, VarTy name ] 
+         , op vEQ $ ForallTy (Relevant name) StarTy $ appsTy [ tyEq, VarTy name, VarTy name ]
          ]
 
 isError :: IsVar a => a -> Bool

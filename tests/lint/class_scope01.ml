@@ -13,7 +13,7 @@ class show 'a => show_but_different 'a
 instance show 'a => show_but_different 'a
   let show_diff = show
 
-let foo (f : forall 'a. show 'a => 'a -> string) = 
+let foo (f : forall 'a. show 'a => 'a -> string) =
   f () ^ " and " ^ f 123
 
 let f & g = fun x -> f (g x)

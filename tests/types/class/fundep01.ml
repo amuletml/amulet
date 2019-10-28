@@ -1,4 +1,4 @@
-class generic 'a 'rep | 'a -> 'rep begin 
+class generic 'a 'rep | 'a -> 'rep begin
   val into : 'a -> 'rep 'k
 end
 

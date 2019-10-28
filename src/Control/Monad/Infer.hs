@@ -171,7 +171,7 @@ data WhyInstantiate = Expression | Subsumption
 data WhyUnsat
   = NotAFun
   | PatBinding
-  | RecursiveDeduced 
+  | RecursiveDeduced
   | InstanceMethod (Type Typed)
   | InstanceClassCon Span
   | BadDefault (Var Desugared) (Type Typed)

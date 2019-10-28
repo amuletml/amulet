@@ -1,5 +1,5 @@
 type nat = Z | S of nat
-type vec 'n 'a = 
+type vec 'n 'a =
   | Nil : vec Z 'a
   | Cons : 'a * vec 'n 'a -> vec (S 'n) 'a
 

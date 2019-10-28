@@ -38,7 +38,7 @@ killNewtypePass = go mempty mempty where
 
 isNewtype :: IsVar a => Type a -> Maybe (Spine a)
 isNewtype (ForallTy Irrelevant from to) =
-  case isNewtype to of 
+  case isNewtype to of
     Just _ -> Nothing
     _ -> Just $ Spine [(Irrelevant, from)] to
 isNewtype (ForallTy (Relevant var) k t) = do
