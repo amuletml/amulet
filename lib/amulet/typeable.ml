@@ -4,11 +4,11 @@ open import "./option.ml"
 type 'a :~: 'b =
   Refl : 'a ~ 'b => 'a :~: 'b
 
-deriving typeable (:~:)
+deriving instance typeable (:~:)
 
 type proxy 'a = Proxy
 
-deriving typeable proxy
+deriving instance typeable proxy
 
 let is_same_type (p : proxy 'a) (q : proxy 'b) : option ('a :~: 'b) =
   eq_type_rep (type_of p) (type_of q)
@@ -30,6 +30,6 @@ let cast
 type dynamic =
   Dynamic : forall 'a. typeable 'a => 'a -> dynamic
 
-deriving typeable dynamic
+deriving instance typeable dynamic
 
 let from_dynamic (Dynamic x) = cast x

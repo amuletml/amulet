@@ -1,7 +1,7 @@
 type foo
 type bar
-deriving typeable foo
-deriving typeable bar
+deriving instance typeable foo
+deriving instance typeable bar
 
 type option 'a = Some of 'a | None
 
