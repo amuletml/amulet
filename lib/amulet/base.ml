@@ -225,7 +225,6 @@ instance show 'a => show (ref 'a) begin
   let show x = "ref (" ^ show (!x) ^ ")"
 end
 
-external val print : string -> unit = "print"
 external val lua_version : string = "_VERSION"
 
 let negate x  = 0 - x

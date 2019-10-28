@@ -9,6 +9,8 @@ include import "./data/traversable.ml"
 
 include import "./data/enumeration.ml"
 
+module Io = import "./lua/io.ml"
+
 external private val prim_parse_int : (int -> option int) -> option int -> string -> option int =
   "function(Some, None, x) \
      if tonumber(x) and ((math.modf(tonumber(x))) == tonumber(x)) then \
@@ -49,3 +51,7 @@ let x // y =
     throw DivideBy0
   else
     floor (x / y)
+
+let put_line = Io.put_line
+let put_bytes = Io.put_bytes
+let print = Io.print
