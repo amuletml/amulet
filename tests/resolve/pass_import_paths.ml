@@ -1,5 +1,5 @@
 (* Library imports *)
-module M = import "prelude.ml"
+module M = import "lua/math.ml" (* math.ml won't change *)
 
 (* Relative paths *)
 module M = import "./modules/basic.ml"

@@ -1,7 +1,8 @@
 include import "./amulet/base.ml"
 include import "./amulet/option.ml"
 include import "./amulet/list.ml"
-include import "./amulet/typeable.ml"
+module Typeable = import "./amulet/typeable.ml"
+module Exception = import "./amulet/exception.ml"
 
 include import "./data/foldable.ml"
 include import "./data/traversable.ml"
@@ -40,3 +41,11 @@ external val int_of_float : float -> int =
     end \
    end"
 
+external val floor : float -> int = "math.floor"
+
+let x // y =
+  let open Exception
+  if y == 0 then
+    throw DivideBy0
+  else
+    floor (x / y)
