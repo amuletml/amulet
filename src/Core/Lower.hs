@@ -1,4 +1,4 @@
-{-# LANGUAGE LambdaCase, TupleSections,
+{-# LANGUAGE TupleSections,
     PatternSynonyms, RankNTypes, ScopedTypeVariables, FlexibleContexts,
     ConstraintKinds, OverloadedStrings, TypeFamilies #-}
 module Core.Lower
@@ -32,6 +32,7 @@ import Core.Optimise (substituteInType, substituteInTys, fresh, freshFrom)
 import Core.Core hiding (Atom, Term, Stmt, Type, Pattern, Arm)
 import Core.Core (pattern Atom)
 import Core.Types (unify, unifyClosed, replaceTy)
+import Core.Lower.TypeRepr
 import Core.Lower.Pattern
 import Core.Lower.Basic
 import Core.Var
@@ -40,7 +41,7 @@ import qualified Syntax as S
 import Syntax.Let
 import Syntax.Var (Var, Typed, VarResolved(..))
 import Syntax.Transform
-import Syntax (Expr(..), Pattern(..), Skolem(..), ModuleTerm(..), Toplevel(..), Constructor(..), Arm(..))
+import Syntax (Expr(..), Pattern(..), Skolem(..), ModuleTerm(..), Toplevel(..), Arm(..))
 
 import Text.Pretty.Semantic (pretty)
 
@@ -52,13 +53,18 @@ type Stmt = C.Stmt CoVar
 type Lower = ContT Term
 
 defaultState :: LowerState
-defaultState = LS mempty ctors  mempty where
+defaultState = LS mempty ctors types where
   ctors :: VarMap.Map (C.Type CoVar)
   ctors = VarMap.fromList
            [ (C.vCONS,
               ForallTy (Relevant name) StarTy $
                 VarTy name `prodTy` AppTy C.tyList (VarTy name) `arrTy` AppTy C.tyList (VarTy name))
            , (C.vNIL, ForallTy (Relevant name) StarTy $ AppTy C.tyList (VarTy name))]
+  types :: VarMap.Map TypeRepr
+  types = VarMap.fromList
+            ( (C.vList, SumTy (VarSet.fromList [C.vCONS, C.vNIL]))
+            : map (,OpaqueTy) [ C.vBool, C.vInt, C.vString, C.vFloat, C.vUnit
+                              , C.vLazy, C.vArrow, C.vProduct, C.vRefTy ] )
   name = C.tyvarA
   arrTy = ForallTy Irrelevant
   prodTy a b = RowsTy NilTy [("_1", a), ("_2", b)]
@@ -365,22 +371,11 @@ lowerProg' (LetStmt _ vs:prg) = do
     vs' <- lowerLet vs
     foldr ((.) . ((:) . C.StmtLet)) id vs' <$$> lowerProg' prg
 
-lowerProg' (TypeDecl _ var _ Nothing _:prg) =
-  (C.Type (mkType var) []:) <$$> lowerProg' prg
-lowerProg' (TypeDecl _ var _ (Just cons) _:prg) = do
-  let cons' = map (\case
-                       UnitCon _ p (_, t) -> (p, mkCon p, lowerType t)
-                       ArgCon _ p _ (_, t) -> (p, mkCon p, lowerType t)
-                       GadtCon _ p t _ -> (p, mkCon p, lowerType t))
-                cons
-      ccons = map (\(_, a, b) -> (a, b)) cons'
-      scons = map (\(a, _, b) -> (mkCon a, b)) cons'
-
-      conset = VarSet.fromList (map fst scons)
-
-  (C.Type (mkType var) ccons:) <$$> local (\s ->
-    s { ctors = VarMap.union (VarMap.fromList scons) (ctors s)
-      , types = VarMap.insert (mkType var) conset (types s)
+lowerProg' (TypeDecl _ var _ cons  _:prg) = do
+  ~(tyStmts@(C.Type _ cs:_), repr) <- getTypeRepr (mkType var) cons
+  (tyStmts++) <$$> local (\s ->
+    s { ctors = VarMap.union (VarMap.fromList cs) (ctors s)
+      , types = VarMap.insert (mkType var) repr (types s)
       }) (lowerProg' prg)
 
 lowerLet :: MonadLower m => [S.Binding Typed] -> m [Binding CoVar]

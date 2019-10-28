@@ -31,6 +31,7 @@ import Data.Bifunctor
 import Data.Foldable
 import Data.Triple
 import Data.Maybe
+import Data.Span
 
 import qualified Core.Core as C
 import Core.Optimise (substituteInType, substituteInTys, fresh, freshFrom)
@@ -85,6 +86,12 @@ data ArmNode
     , nodeNodes   :: [(Pattern CoVar, ArmNode)]
       -- ^ The child nodes, and their associated pattern.
     }
+  | ArmLet
+    { nodeArms    :: ArmSet
+    , nodeSuccess :: [ArmLeaf] -- Should be empty
+    , nodeBind    :: (CoVar, Type CoVar, Term CoVar)
+    , nodeBody    :: ArmNode
+    }
   deriving (Show)
 
 instance Pretty ArmNode where
@@ -92,6 +99,10 @@ instance Pretty ArmNode where
   pretty (ArmMatch arms success atom nodes)
     = "Match" <+> parens (shown arms) <+> shown success <+> pretty atom
     <#> (indent 2 . vsep $ map (\(p, n) -> pretty p <+> "=>" <#> indent 2 (pretty n)) nodes)
+  pretty (ArmLet arms success (v, ty, x) node)
+    = "Let" <+> parens (shown arms) <+> shown success <+> pretty v <+> colon <+> pretty ty <+> equals <+> pretty x
+    <#> indent 2 (pretty node)
+
 
 -- | A of a single case in a match expression.
 data PatternRow
@@ -197,6 +208,8 @@ flattenNode bodies guards (ArmMatch _ leafs atom' children) = do
       let branches = foldr (flip (HSet.foldr add) . nodeArms . snd) mempty children
       in foldr (add . leafArm) branches leafs
       where add k = HMap.insertWith (+) k (1 :: Int)
+flattenNode bodies guards (ArmLet _ _ bind child) =
+  C.Let (One bind) <$> flattenNode bodies guards child
 
 -- | Lift a pattern match into a lambda, passing arguments as values.
 generateBinds :: forall m. MonadLower m
@@ -359,12 +372,11 @@ lowerOne tys rss = do
       getCtors v = do
         ctor <- VarMap.lookup v (ctors state)
         ty <- getType ctor
-        VarMap.lookup ty (types state)
-
-      getType (ForallTy _ _ t) = getType t
-      getType (ConTy a) = pure a
-      getType (AppTy f _) = getType f
-      getType _ = Nothing
+        case VarMap.lookup ty (types state) of
+          Nothing -> error ("Cannot find " ++ show ty)
+          Just OpaqueTy -> Nothing
+          Just (SumTy ctors) -> Just ctors
+          Just (WrapperTy ctor _ _) -> Just (VarSet.singleton ctor)
 
     -- | Compute the "arity" heuristic for a given row variable.
     --
@@ -415,8 +427,8 @@ lowerOneOf preLeafs var ty tys = go [] . map prepare
 
     go unc [] = lowerOne tys (reverse unc)
     go unc rs@((S.PRecord{},_):_) = goRows unc mempty rs
-    go unc rs@((S.Destructure{},_):_) = goCtors unc mempty rs
-    go unc rs@((S.PGadtCon{},_):_) = goCtors unc mempty rs
+    go unc rs@((S.Destructure{},_):_) = goCtorsWith unc rs
+    go unc rs@((S.PGadtCon{},_):_) = goCtorsWith unc rs
     go unc rs@((S.PLiteral{},_):_) = goLiterals unc mempty rs
     go unc ((p, r):rs) = go (goGeneric p r:unc) rs
 
@@ -463,6 +475,46 @@ lowerOneOf preLeafs var ty tys = go [] . map prepare
         v <- freshFromPat p
         pure ( Map.insert f (v, lowerType (S.getType p)) fs
              , VarMap.insert v p ps )
+
+    goCtorsWith unc rs = do
+     let Just tyName = getType ty
+     repr <- asks (fromMaybe (error ("Cannot find " ++ show tyName)) . VarMap.lookup tyName . types)
+     case repr of
+       OpaqueTy -> error "Impossible matching on opaque type"
+       SumTy _ -> goCtors unc mempty rs
+       WrapperTy _ from to -> do
+         let Just map = unify to ty
+             from' = substituteInType map from
+         coVar <- case rs of
+               ((S.PGadtCon _ _ _ (Just child) _, _):_) -> freshFromPat child
+               _ -> fresh ValueVar
+         node <- goNewtype unc (Capture coVar from') rs
+         pure (ArmLet (nodeArms node) mempty
+                (coVar, from', Cast (Ref var ty) from' (SameRepr ty from'))
+                node)
+
+    -- | Split patterns into those matching against the constructor and those not
+    goNewtype :: [PatternRow] -> Capture CoVar
+              -> [(S.Pattern Typed, PatternRow)]
+              -> m ArmNode
+    goNewtype unc (Capture c cty) [] =
+      lowerOne (VarMap.insert c cty tys) (reverse unc)
+
+    goNewtype unc cap@(Capture c _) (( S.PGadtCon _ _ [] (Just p) _
+                                     , PR arm pats gd vBind tyBind ):rs) =
+      -- The wrapped value is matched by the pattern - focus on that next.
+      let r' = PR arm (VarMap.insert c p pats) gd vBind tyBind
+      in goNewtype (r':unc) cap rs
+
+    goNewtype unc cap@(Capture c _) (( S.PGadtCon _ _ [(v, t)] Nothing _
+                                     , PR arm pats gd vBind tyBind ):rs) =
+      -- The wrapped value is the dictionary - just add a wildcard pattern.
+      let r' = PR arm (VarMap.insert c (S.Capture v (internal, t)) pats) gd vBind tyBind
+      in goNewtype (r':unc) cap rs
+
+    goNewtype _ _ ((S.PGadtCon{}, _):_) = error "Impossible: Malformed pattern for newtype."
+
+    goNewtype unc cap ((p, r):rs) = goNewtype (goGeneric p r:unc) cap rs
 
     -- | Build up a mapping of (constructors -> (contents variable, rows)).
     goCtors :: [PatternRow] -> VarMap.Map ([Capture CoVar], [PatternRow])
@@ -577,3 +629,9 @@ dropNForalls :: Int -> Type a -> Type a
 dropNForalls 0 t = t
 dropNForalls x (ForallTy _ _ t) = dropNForalls (x - 1) t
 dropNForalls _ _ = undefined
+
+getType :: Type a -> Maybe a
+getType (ForallTy _ _ t) = getType t
+getType (ConTy a) = pure a
+getType (AppTy f _) = getType f
+getType _ = Nothing
