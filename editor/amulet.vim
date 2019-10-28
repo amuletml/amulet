@@ -19,10 +19,15 @@ let b:amc_deps = []
 
 hi! AmuletError cterm=underline ctermfg=red
 hi! AmuletWarn cterm=underline ctermfg=yellow
+hi! AmuletNote cterm=underline ctermfg=cyan
+
 hi! AmuletErrorVtxt ctermfg=red cterm=italic
 hi! AmuletWarnVtxt ctermfg=yellow cterm=italic
+hi! AmuletNoteVtxt ctermfg=cyan cterm=italic
+
 sign define amuletError   text=! texthl=AmuletError
 sign define amuletWarning text=* texthl=AmuletWarn
+sign define amuletNote text=* texthl=AmuletNote
 
 function! s:HighlightRange(group, line, start_col, length)
   " Vim columns are 1-indexed, but nvim's are 0-indexed
@@ -64,16 +69,11 @@ function! s:CallAmc(...)
 
   if exists("b:amulet_pid")
     let cmd = cmd . " --port " . b:amulet_port
-  end
+  endif
 
   let res = system('amc connect ' . cmd)
   if res =~ "Failed to connect to server on port"
-    if has('nvim') && b:autostart_amc == 1
-      call AmuletStart()
-      return call("s:CallAmc", a:000)
-    else
-      throw "Couldn't connect to a running amc"
-    end
+    throw "Couldn't connect to a running amc"
   elseif res =~ "Invalid option `--client`"
     throw "Installed version of amc doesn't have client/server support"
   else
@@ -93,7 +93,7 @@ function! AmuletLoad(verbose, qf)
   let file = expand("%:p")
 
   try
-    let out = split(call("s:CallAmc", [":l"] + b:amc_deps + [file]), '\n')
+    let out = split(call("s:CallAmc", [":l", file]), '\n')
   catch /version/
     echo "Your version of amc is too old to have client/server support"
   catch /amc/
@@ -101,7 +101,7 @@ function! AmuletLoad(verbose, qf)
     return -1
   endtry
 
-  let err_msg_pat = "\\v^" . file
+  let err_msg_pat = "\\v(error|warning|note) \\([EWN][0-9]{4}\\)$"
   let nerrors = 0
   let nwarns = 0
 
@@ -139,18 +139,17 @@ function! AmuletLoad(verbose, qf)
 
         caddexpr expand("%:p") . ":" . lineno . ":" . err_msg
 
-        if range[1] == range[3]
-          let group = "AmuletError"
-          let sign = "amuletError"
-          if match(line, "warning$") != -1
-            let group = "AmuletWarn"
-            let sign = "amuletWarning"
-          end
+        let group = (match(line, "warning") != -1) ? "AmuletWarn" : (match(line, "note$") != -1) ? "AmuletNote" : "AmuletError"
+        let sign = (match(line, "warning") != -1) ? "amuletWarning" : (match(line, "note$") != -1) ? "amuletNote" : "amuletError"
 
+        for l in range(range[1], range[3])
+          execute "sign place " . (idx + l) . " line=" . l . " name=" . sign
+        endfor
+
+        if range[1] == range[3]
           call s:HighlightRange(group, lineno, range[2], range[4] - range[2] + 1)
-          execute "sign place " . idx . " line=" . lineno . " name=" . sign
           if has('nvim-0.3.2')
-            call nvim_buf_set_virtual_text(0, s:vtext_ns, str2nr(lineno - 1), [[err_msg, group . "vtxt"]], {})
+            call nvim_buf_set_virtual_text(0, s:vtext_ns, str2nr(lineno - 1), [[err_msg, group . "Vtxt"]], {})
           endif
         endif
 
