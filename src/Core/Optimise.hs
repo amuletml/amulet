@@ -35,7 +35,7 @@ substitute m = term where
   term (Extend e rs) = Extend (atom e) (map (third3 atom) rs)
   term (Values xs) = Values (map atom xs)
   term (TyApp f t) = TyApp (atom f) t
-  term (Cast f t) = Cast (atom f) t
+  term (Cast f to co) = Cast (atom f) to co
 
   atom x@(Ref v _) = VarMap.findWithDefault x (toVar v) m
   atom x@Lit{} = x
@@ -55,7 +55,7 @@ substituteInTys = term where
   term m (AnnExtend z e rs) = AnnExtend z (atom m e) (map (trimap id (gotype m) (atom m)) rs)
   term m (AnnValues z xs) = AnnValues z (map (atom m) xs)
   term m (AnnTyApp z f t) = AnnTyApp z (atom m f) (gotype m t)
-  term m (AnnCast z f t) = AnnCast z (atom m f) (coercion m t)
+  term m (AnnCast z f to co) = AnnCast z (atom m f) (gotype m to) (coercion m co)
   term m (AnnLam z arg b) = AnnLam z (go arg) (term (delete m) b) where
     go (TermArgument v t) = TermArgument v (gotype m t)
     go (TypeArgument v t) = TypeArgument v (gotype m t)
@@ -146,7 +146,7 @@ refresh = refreshTerm mempty mempty where
   refreshTerm vm tm (Extend e bs) = pure $
     Extend (substAtom vm tm e) (map (trimap id (substituteInType tm) (substAtom vm tm)) bs)
   refreshTerm vm tm (Values xs) = pure $ Values (map (substAtom vm tm) xs)
-  refreshTerm vm tm (Cast e c) = pure $ Cast (substAtom vm tm e) (substituteInCo tm c)
+  refreshTerm vm tm (Cast e t c) = pure $ Cast (substAtom vm tm e) (substituteInType tm t) (substituteInCo tm c)
 
   refreshTerm vm tm (Lam (TermArgument v ty) b) = do
     v' <- freshFrom' v

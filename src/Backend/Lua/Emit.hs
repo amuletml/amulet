@@ -508,7 +508,7 @@ emitExpr var yield t@(AnnMatch _ test arms) = do
 -- Trivial terms. These will just be emitted inline.
 emitExpr var yield t@(AnnAtom _ x)    = withinExpr var yield t $ emitAtom x
 emitExpr var yield t@(AnnTyApp _ x _) = withinExpr var yield t $ emitAtom x
-emitExpr var yield t@(AnnCast _ x _)  = withinExpr var yield t $ emitAtom x
+emitExpr var yield t@(AnnCast _ x _ _)  = withinExpr var yield t $ emitAtom x
 
 emitExpr var yield t@(AnnApp _ f e) = withinTerm var t $ do
   e' <- emitAtom e

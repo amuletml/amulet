@@ -100,7 +100,7 @@ sinkTerm s (AnnMatch _ t bs) =
 sinkTerm s (AnnTyApp _ f ty) = flushBinds (sinkable s) (TyApp f ty)
 sinkTerm s (AnnExtend _ f fs) = flushBinds (sinkable s) (Extend f fs)
 sinkTerm s (AnnValues _ xs) = flushBinds (sinkable s) (Values xs)
-sinkTerm s (AnnCast _ f co) = flushBinds (sinkable s) (Cast f co)
+sinkTerm s (AnnCast _ f ty co) = flushBinds (sinkable s) (Cast f ty co)
 
 flushBinds :: [Sinkable a] -> Term a -> Term a
 flushBinds [] t = t
