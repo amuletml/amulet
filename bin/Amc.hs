@@ -22,7 +22,6 @@ import Backend.Lua
 import qualified Syntax.Builtin as Bi
 
 import Core.Optimise.Reduce (reducePass)
-import Core.Optimise.Newtype (killNewtypePass)
 import Core.Optimise.DeadCode (deadCodePass)
 import Core.Simplify (optimise)
 import Core.Core (Stmt)
@@ -65,7 +64,7 @@ runCompile opt (DoLint lint) dconfig file = do
             Opt -> optimise lint core
             NoOpt -> do
               lintIt "Lower" (checkStmt emptyScope core) (pure ())
-              (lintIt "Optimised"  =<< checkStmt emptyScope) . deadCodePass <$> (reducePass =<< killNewtypePass core)
+              (lintIt "Optimised"  =<< checkStmt emptyScope) . deadCodePass <$> reducePass core
           lua = compileProgram optimised
       in ( Just (env, core, optimised, lua)
          , errors

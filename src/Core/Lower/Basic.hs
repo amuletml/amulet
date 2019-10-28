@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings, ConstraintKinds, FlexibleContexts #-}
 module Core.Lower.Basic
-  ( LowerState(..)
+  ( TypeRepr(..)
+  , LowerState(..)
   , LowerTrack
   , MonadLower
   , mkTyvar, mkVal, mkType, mkCo, mkCon, mkVar
@@ -24,12 +25,23 @@ import qualified Syntax as S
 import Syntax.Var (VarResolved(..), Var, Resolved, Typed)
 import Syntax (Lit(..), Skolem(..))
 
+data TypeRepr
+  = OpaqueTy -- ^ An opaque type, for interfacing with foreign values.
+  | SumTy VarSet.Set -- ^ A sum type, with the set of constructors.
+
+  -- | A type which just wraps another.
+  --
+  -- This holds the name of the constructor, and the inner and outer
+  -- type, both sharing their free variables.
+  | WrapperTy CoVar (C.Type CoVar) (C.Type CoVar)
+  deriving (Show, Eq)
+
 data LowerState
   = LS
     { vars  :: VarMap.Map (C.Type CoVar)
     , ctors :: VarMap.Map (C.Type CoVar)
     -- | The map of types to their constructors /if they have any/.
-    , types :: VarMap.Map VarSet.Set
+    , types :: VarMap.Map TypeRepr
     } deriving (Eq, Show)
 
 instance Semigroup LowerState where
