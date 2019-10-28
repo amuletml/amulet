@@ -26,8 +26,7 @@ types/2002.txt TC: Occurs
 types/2003.txt TC: CustomTypeError
 types/2004.txt TC: NotInScope
 types/2005.txt TC: FoundHole
-types/2006.txt TC: Impredicative
-types/2007.txt TC: ImpredicativeApp
+types/2006.txt TC: ImpredicativeApp
 types/2008.txt TC: EscapedSkolems
 types/2009.txt TC: SkolBinding
 types/2010.txt TC: NoOverlap
@@ -36,7 +35,7 @@ types/2012.txt TC: Malformed
 types/2013.txt TC: PatternRecursive
 types/2014.txt TC: DeadBranch
 types/2015.txt TC: AmbiguousType
-types/2016.txt TC: ValueRestriction
+types/2016.txt TC: NotValue/ValueRestriction
 types/2017.txt TC: AmbiguousMethodTy
 types/2018.txt TC: UnsatClassCon
 types/2019.txt TC: ClassStackOverflow
@@ -53,7 +52,6 @@ types/2029.txt TC: NotAClass
 types/2030.txt TC: CanNotVta
 types/2031.txt TC: NotPromotable
 types/2032.txt TC: WildcardNotAllowed
-types/2033.txt TC: NotValue
 types/2034.txt TC: UnsaturatedTS
 types/2035.txt TC: NotCovered
 types/2036.txt TC: MightNotTerminate

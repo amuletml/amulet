@@ -1,1 +1,14 @@
-TC: ValueRestriction
+Amulet does not permit expressions which are not syntatically values to
+take on polymorphic types, because that would compromise soundness.
+Consider the `let`-binding
+
+    let x = ref None
+
+This would have type `forall 'a. ref (option 'a)`: Trouble.
+
+    x := Some 1 (* use x @int *)
+    !x 123      (* use x @(int -> unit) *)
+
+Furthermore, top-level bindings can not have any generalisable variables
+in their types, for the same reason (the compiler can't insert a
+`forall` to generalise them).

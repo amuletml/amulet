@@ -1,0 +1,11 @@
+fd-coverage.ml[2:1 ..2:35]: error (E2035)
+  │ 
+2 │ instance foo 'a ('a * 'b) begin end
+  │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  Illegal instance declaration:
+    the type 'a
+    doesn't determine the variable b
+  │ 
+1 │ class foo 'a 'b | 'a -> 'b begin end
+  │                   ^^^^^^^^
+  Note: needed because of this functional dependency

@@ -877,8 +877,8 @@ instance Note TypeError Style where
   noteId NotInScope{}         = Just 2004
   noteId FoundHole{}          = Just 2005
 
-  noteId Impredicative{}      = Just 2006
-  noteId ImpredicativeApp{}   = Just 2007
+  noteId Impredicative{}      = Nothing
+  noteId ImpredicativeApp{}   = Just 2006
 
   noteId EscapedSkolems{}     = Just 2008
   noteId SkolBinding{}        = Just 2009
@@ -894,6 +894,7 @@ instance Note TypeError Style where
 
   noteId AmbiguousType{}      = Just 2015
   noteId ValueRestriction{}   = Just 2016
+  noteId NotValue{}           = Just 2016
 
   noteId AmbiguousMethodTy{}  = Just 2017
 
@@ -921,7 +922,6 @@ instance Note TypeError Style where
   noteId NotPromotable{}      = Just 2031
   noteId WildcardNotAllowed{} = Just 2032
 
-  noteId NotValue{}           = Just 2033
   noteId UnsaturatedTS{}      = Just 2034
 
   noteId NotCovered{}         = Just 2035

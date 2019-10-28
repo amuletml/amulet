@@ -1,22 +1,22 @@
 This error indicates that there was a mismatch between concrete types in
 the inferred and expected types for an expression. For example:
 
-  let x : unit = 1000 + 200 + 30 + 4
-  (*  ~~~~~~~~   ~~~~~~~~~~~~~~~~~~~  *)
-  (*   |            Has type int      *)
-  (*  Claims to be type unit          *)
+    let x : unit = 1000 + 200 + 30 + 4
+    (*  ~~~~~~~~   ~~~~~~~~~~~~~~~~~~~  *)
+    (*   |            Has type int      *)
+    (*  Claims to be type unit          *)
 
 This can also happen when e.g. the elements of a list, or members of a
 record, have incompatible types:
 
-  let { x = x : int } = { x = "foo" }
-  (*        ~~~~~~~       ~~~~~~~~~                    *)
-  (*          |              | Member x is a string    *)
-  (*          | Member x is expected to be of type int *)
+    let { x = x : int } = { x = "foo" }
+    (*        ~~~~~~~       ~~~~~~~~~                    *)
+    (*          |              | Member x is a string    *)
+    (*          | Member x is expected to be of type int *)
 
 Type annotations are not the only place where this can crop up:
 
-  let add_1 x = x + 1
-  (* val add_1 : int -> int *)
-  let _ = add_1 "foo"
-  (* Couldn't match actual type string with expected type int *)
+    let add_1 x = x + 1
+    (* val add_1 : int -> int *)
+    let _ = add_1 "foo"
+    (* Couldn't match actual type string with expected type int *)

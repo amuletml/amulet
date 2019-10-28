@@ -1,1 +1,1 @@
-TC: Impredicative
+TC: ImpredicativeApp
