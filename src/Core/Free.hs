@@ -139,6 +139,6 @@ tagFreeTerm ann var = tagTerm where
     let (fv, f') = tagAtom f
     in (fv, AnnTyApp (ann an fv) f' (conv ty))
 
-  tagTerm (AnnCast an x co) =
+  tagTerm (AnnCast an x to co) =
     let (fv, x') = tagAtom x
-    in (fv, AnnCast (ann an fv) x' (conv co))
+    in (fv, AnnCast (ann an fv) x' (conv to) (conv co))

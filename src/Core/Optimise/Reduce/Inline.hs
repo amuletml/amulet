@@ -147,7 +147,7 @@ sizeTerm :: IsVar v => ReduceScope a -> AnnTerm b v -> Int
 -- Effectively free
 sizeTerm s (AnnAtom _ a) = sizeAtom s a
 sizeTerm s (AnnTyApp _ t _) = sizeAtom s t
-sizeTerm s (AnnCast _ t _) = sizeAtom s t
+sizeTerm s (AnnCast _ t _ _) = sizeAtom s t
 
 sizeTerm s (AnnApp _ f x) = 2 + sizeAtom s f + sizeAtom s x
 
@@ -241,7 +241,7 @@ shouldInline s st usage (args, tyargs, rhs)
     usefulResult c (AnnAtom _ a) = usefulResultA c a
     usefulResult c (AnnApp _ f _) = usefulResultA c f
     usefulResult c (AnnTyApp _ f _) = usefulResultA c f
-    usefulResult c (AnnCast _ f _) = usefulResultA c f
+    usefulResult c (AnnCast _ f _ _) = usefulResultA c f
     -- Ensure at least one arm is interesting
     usefulResult c (AnnMatch _ _ arms)
       = any (usefulResult c . view armBody) arms

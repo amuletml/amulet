@@ -63,7 +63,7 @@ data AnnTerm b a
   | AnnValues b [Atom a] -- ^ Unboxed tuple
 
   | AnnTyApp b (Atom a) (Type a) -- ^ Eliminate a 'Lam' expecting a 'TypeArgument'
-  | AnnCast b (Atom a) (Coercion a) -- ^ Cast an 'Atom' using some 'Coercion'.
+  | AnnCast b (Atom a) (Type a) (Coercion a) -- ^ Cast an 'Atom' using some 'Coercion'.
   deriving (Eq, Show, Ord, Functor, Generic, Hashable)
 
 -- | An 'AnnTerm' with '()' annotations.
@@ -104,8 +104,8 @@ pattern TyApp :: Atom a -> Type a -> Term a
 pattern TyApp f x = AnnTyApp () f x
 
 -- | Match a 'Cast' with '()' annotation
-pattern Cast :: Atom a -> Coercion a -> Term a
-pattern Cast a ty = AnnCast () a ty
+pattern Cast :: Atom a -> Type a -> Coercion a -> Term a
+pattern Cast a to co = AnnCast () a to co
 
 -- | A binding group
 data AnnBinding b a
@@ -221,7 +221,7 @@ instance (Annotation b, Pretty a) => Pretty (AnnTerm b a) where
     prettyRows = hsep . punctuate comma . map (\(x, t, v) -> text x <+> colon <+> pretty t <+> equals <+> pretty v)
   pretty (AnnValues an xs) =
     annotated an $ soperator (string "(#") <+> (hsep . punctuate comma . map pretty $ xs) <+> soperator (string "#)")
-  pretty (AnnCast an a phi) = annotated an $ parens $ pretty a <+> soperator (string "|>") <+> pretty phi
+  pretty (AnnCast an a to phi) = annotated an $ parens $ pretty a <+> soperator (string "|>") <+> pretty phi <+> colon <+> pretty to
 
 instance Pretty a => Pretty (Coercion a) where
   pretty (SameRepr a b) = pretty a <+> soperator (char '~') <+> pretty b
@@ -339,7 +339,7 @@ freeIn (AnnMatch _ e bs) = freeInAtom e <> foldMap freeInBranch bs where
 freeIn (AnnExtend _ c rs) = freeInAtom c <> foldMap (freeInAtom . thd3) rs
 freeIn (AnnValues _ xs) = foldMap freeInAtom xs
 freeIn (AnnTyApp _ f _) = freeInAtom f
-freeIn (AnnCast _ f _) = freeInAtom f
+freeIn (AnnCast _ f _ _) = freeInAtom f
 
 freeInTy :: IsVar a => Type a -> VarSet.Set
 freeInTy (VarTy v) = VarSet.singleton (toVar v)
@@ -362,7 +362,7 @@ occursInTerm v (Atom a) = occursInAtom v a
 occursInTerm v (App f x) = occursInAtom v f || occursInAtom v x
 occursInTerm v (Lam _ b) = occursInTerm v b
 occursInTerm v (TyApp f _) = occursInAtom v f
-occursInTerm v (Cast f _) = occursInAtom v f
+occursInTerm v (Cast f _ _) = occursInAtom v f
 occursInTerm v (Let (One va) e) = occursInTerm v (thd3 va) || occursInTerm v e
 occursInTerm v (Let (Many vs) e) = any (occursInTerm v . thd3) vs || occursInTerm v e
 occursInTerm v (Match e bs) = occursInAtom v e || any (occursInTerm v . view armBody) bs
@@ -438,7 +438,7 @@ extractAnn (AnnMatch b _ _)  = b
 extractAnn (AnnExtend b _ _) = b
 extractAnn (AnnValues b _)  = b
 extractAnn (AnnTyApp b _ _)  = b
-extractAnn (AnnCast b _ _)   = b
+extractAnn (AnnCast b _ _ _)   = b
 
 instance Plated (Atom a) where
   plate = gplate
