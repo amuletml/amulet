@@ -303,13 +303,14 @@ checkTerm s (TyApp f x) = do
 
   pure ((\es -> AnnTyApp es f x) <$> res)
 
-checkTerm s (Cast x co) = do
+checkTerm s (Cast x expTo co) = do
   res <- gatherError $ do
     (ty, (from, to)) <- liftError $ (,) <$> checkAtom s x <*> checkCoercion s co
     when (from `apart` ty) (chuckError (TypeMismatch from ty))
+    when (to `apart` expTo) (chuckError (TypeMismatch expTo to))
     pure to
 
-  pure ((\es -> AnnCast es x co) <$> res)
+  pure ((\es -> AnnCast es x expTo co) <$> res)
 
 -- | Verify a type is valid within the given scope
 --

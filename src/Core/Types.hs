@@ -46,7 +46,7 @@ approximateAtomType (Lit l) = fmap fromVar $ case l of
 -- mismatch.
 approximateType :: IsVar a => AnnTerm b a -> Maybe (Type a)
 approximateType (AnnAtom _ a) = pure (approximateAtomType a)
-approximateType (AnnCast _ _ phi) = snd <$> relates phi
+approximateType (AnnCast _ _ to _) = Just to
 approximateType (AnnApp _ f _) = do
   let ForallTy _ _ d = approximateAtomType f
   pure d

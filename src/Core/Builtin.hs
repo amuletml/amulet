@@ -268,27 +268,30 @@ fakeStrVal, fakeKSTR, fakeIntVal, fakeKINT :: IsVar a => Term a
 fakeStrVal =
   Lam (TypeArgument (fromVar tyvarA) tyString) $
     Lam (TermArgument (fromVar argvarX) (AppTy tyKStr (VarTy (fromVar tyvarA)))) $
-      Cast (Ref (fromVar argvarX) (AppTy tyKStr (VarTy (fromVar tyvarA))))
+      mkCast (Ref (fromVar argvarX) (AppTy tyKStr (VarTy (fromVar tyvarA))))
         (SameRepr (AppTy tyKStr (VarTy (fromVar tyvarA))) tyString)
 
 fakeKSTR =
   Lam (TypeArgument (fromVar tyvarA) tyString) $
     Lam (TermArgument (fromVar argvarX) (AppTy tyKStr (VarTy (fromVar tyvarA)))) $
-      Cast (Ref (fromVar argvarX) (AppTy tyKStr (VarTy (fromVar tyvarA))))
+      mkCast (Ref (fromVar argvarX) (AppTy tyKStr (VarTy (fromVar tyvarA))))
         (Symmetry (SameRepr (AppTy tyKStr (VarTy (fromVar tyvarA))) tyString))
 
 fakeIntVal =
   Lam (TypeArgument (fromVar tyvarA) tyInt) $
     Lam (TermArgument (fromVar argvarX) (AppTy tyKInt (VarTy (fromVar tyvarA)))) $
-      Cast (Ref (fromVar argvarX) (AppTy tyKInt (VarTy (fromVar tyvarA))))
+      mkCast (Ref (fromVar argvarX) (AppTy tyKInt (VarTy (fromVar tyvarA))))
         (SameRepr (AppTy tyKInt (VarTy (fromVar tyvarA))) tyInt)
 
 fakeKINT =
   Lam (TypeArgument (fromVar tyvarA) tyInt) $
     Lam (TermArgument (fromVar argvarX) (AppTy tyKInt (VarTy (fromVar tyvarA)))) $
-      Cast (Ref (fromVar argvarX) (AppTy tyKInt (VarTy (fromVar tyvarA))))
+      mkCast (Ref (fromVar argvarX) (AppTy tyKInt (VarTy (fromVar tyvarA))))
         (Symmetry (SameRepr (AppTy tyKInt (VarTy (fromVar tyvarA))) tyInt))
 
 makeBuiltins :: [ (Text, VarInfo) ] -> [CoVar]
 makeBuiltins xs = zipWith go xs [-1, -2 ..] where
   go (name, t) id = CoVar id (Just name) t
+
+mkCast :: Atom a -> Coercion a -> Term a
+mkCast a co = let Just (_, to) = relates co in Cast a to co

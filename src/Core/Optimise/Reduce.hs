@@ -185,29 +185,26 @@ reduceTerm _ (AnnLam _ arg body) = do
     nonBreaker (Ref v _) s = not . varLoopBreak . lookupVar v $ s
     nonBreaker Lit{} _ = True
 
-reduceTerm u (AnnCast _ a co) = do
+reduceTerm u (AnnCast _ a (fmap underlying -> to) co) = do
   a' <- reduceAtom u a
-  if redundantCo co
+  let from = approximateAtomType a'
+  if from `unifyClosed` to
   then changed $ Atom a'
   else do
-    let co' = squishCoercion (underlying <$> co)
     s <- ask
     if
-      -- If we point to another cast, and our one reverses theirs then
-      -- eliminate it.
-
-      -- TODO: Could we replace this so we chain the coercion, then
-      -- detect if it's redundant? This way we can remove /any/ casts
-      -- of casts.
+      -- If we point to another cast, either try to merge or eliminate
+      -- them.
       | Ref v _ <- a'
-      , Just (Cast oa oco) <- lookupTerm v s
-      , Just (l, r) <- relates co'
-      , Just (l', r') <- relates oco
-      , r `unifyClosed` l'
-      , l `unifyClosed` r'
-      -> changed $ Atom oa
+      , Just (Cast oa _ oco) <- lookupTerm v s
+      -> if approximateAtomType oa `unifyClosed` from
+         then changed $ Atom oa
+         else let co' = squishCoercion (oco `Trans` (underlying <$> co))
+              in changed $ Cast oa to co'
 
-      | otherwise -> pure $ Cast a' co'
+      | otherwise ->
+        let co' = squishCoercion (underlying <$> co)
+        in pure $ Cast a' to co'
 
 reduceTerm u t@AnnMatch{} = reduceTermK u t pure
 reduceTerm u t@AnnLet{}   = reduceTermK u t pure
@@ -524,8 +521,3 @@ inlineOr t usage cont def = do
 
     substScope :: VarMap.Map (VarDef a) -> Subst a -> VarMap.Map (VarDef a)
     substScope = foldr (\(v, x) -> VarMap.insert (toVar v) (basicDef v (Atom x)))
-
-redundantCo :: IsVar a => Coercion a -> Bool
-redundantCo c
-  | Just (a, b) <- relates c = a `unifyClosed` b
-  | otherwise = False
