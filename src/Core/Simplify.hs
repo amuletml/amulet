@@ -5,7 +5,6 @@ module Core.Simplify
   ) where
 
 import Core.Optimise.CommonExpElim
-import Core.Optimise.Newtype
 import Core.Optimise.DeadCode
 import Core.Optimise.Sinking
 import Core.Optimise.Reduce
@@ -38,13 +37,10 @@ linted pass fn = fmap (runLint pass =<< checkStmt emptyScope) . fn
 
 -- | Run the optimiser multiple times over the input core.
 optimise :: forall m. Monad m => Bool -> [Stmt CoVar] -> NameyT m [Stmt CoVar]
-optimise lint = go 10 <=< prepasses <=< linting "Lower" pure where
+optimise lint = go 10 <=< linting "Lower" pure where
   go :: Integer -> [Stmt CoVar] -> NameyT m [Stmt CoVar]
   go k sts
     | k > 0 = go (k - 1) =<< optmOnce lint sts
     | otherwise = pure sts
-
-  prepasses :: [Stmt CoVar] -> NameyT m [Stmt CoVar]
-  prepasses = linting "Newtype" killNewtypePass
 
   linting = if lint then linted else flip const

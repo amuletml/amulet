@@ -281,6 +281,7 @@ library
                      , Core.Lower
                      , Core.Lower.Basic
                      , Core.Lower.Pattern
+                     , Core.Lower.TypeRepr
                      , Core.Types
                      , Core.Builtin
                      , Core.Optimise
@@ -291,7 +292,6 @@ library
                      , Core.Optimise.Reduce.Inline
                      , Core.Optimise.Reduce.Pattern
                      , Core.Optimise.Sinking
-                     , Core.Optimise.Newtype
                      , Core.Optimise.Uncurry
                      , Core.Optimise.DeadCode
                      , Core.Optimise.CommonExpElim
