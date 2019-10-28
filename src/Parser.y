@@ -208,7 +208,7 @@ Top :: { Toplevel Parsed }
         {% fmap (withPos2 $1 $5) $ buildClass Private $3 $4 (getL $5) }
 
     | instance Type Begin(Methods)             {% fmap (withPos2 $1 $3) $ buildInstance $2 (getL $3) }
-    | deriving Type                            { withPos2 $1 $2 $ DeriveInstance (getL $2) }
+    | deriving instance Type                   { withPos2 $1 $3 $ DeriveInstance (getL $3) }
 
 TyFunBody :: { [TyFunClause Parsed] }
   : List(TyFunEq, TopSep) { $1 }

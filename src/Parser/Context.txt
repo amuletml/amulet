@@ -26,6 +26,9 @@ _       TypeBody | Offside      -> Pop
 =       TypeHead | Not offside  -> Replace with TypeBody
 _       TypeHead | Offside      -> Pop
 
+instance DerivingHead           -> Replace with DerivingBody
+_       DerivingHead | Offside  -> Pop
+
 _       ModuleHead<I> | Offside -> Add =, $begin, Replace with EmptyBlock+ModuleBody
 
         ModuleBody              -> Pop
@@ -74,6 +77,7 @@ module  _                       -> Push ModuleHead
 class   _                       -> Push ClassHead
 instance _                      -> Push InstHead
 type    _                       -> Push TypeHead
+deriving _                      -> Push DerivingHead
 begin   TypeHead                -> Replace with Block+TypeFunBody
 _       TypeHead | Not offside, Is some top-level token
                                 -> Insert $begin, Replace with Block+TypeFunBody

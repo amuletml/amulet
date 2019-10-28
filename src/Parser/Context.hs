@@ -95,6 +95,11 @@ data Context
   -- | The body of an instance definition.
   | CtxInstBody
 
+  -- | Within a deriving term, before the @instance@
+  | CtxDerivingHead SourcePos
+  -- | Within a deriving term, after the @instance@.
+  | CtxDerivingBody SourcePos
+
   -- | The body of a list expression.
   --
   -- This will be inside a 'CtxBracket', so is only used as a marker.
@@ -390,6 +395,13 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
     (_, CtxTypeHead offside:ck)
       | spCol tp <= spCol offside -> handleContext tok ck
 
+    -- @deriving instance@ --> Replace with deriving body
+    (TcInstance, CtxDerivingHead offside:ck)
+      -> pure (Result tok Done, CtxDerivingBody offside:ck)
+    -- Offside rule for deriving.
+    (_, CtxDerivingBody offside:ck)
+      | spCol tp <= spCol offside -> handleContext tok ck
+
     -- @let ...@ ~~> Push a let context
     (TcLet, _) -> pure
       ( Result tok Done
@@ -454,6 +466,8 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
     (TcInstance, _) -> pure (Result tok Done, CtxInstHead (getMarginAt tp c):c)
     -- @type@ ~~> Push a type context
     (TcType, _) -> pure (Result tok Done, CtxTypeHead tp:c)
+    -- @deriving@ --> Push a deriving context
+    (TcDeriving, _) -> pure (Result tok Done, CtxDerivingHead tp:c)
 
     -- @begin ...@ ~~> CtxEmptyBlock : CtxBracket(end)
     (TcBegin, _) -> pure
