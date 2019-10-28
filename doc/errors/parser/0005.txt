@@ -1,1 +1,9 @@
-Parser: UnclosedComment
+A comment was opened (using `(*`), but never closed. Add `*)` in order to
+end the comment.
+
+ • Note that comments may be nested, meaning that you may need to close
+   multiple comments.
+
+ • It is possible to accidentally introduce a comment, especially when
+   using operator sections. In these cases, add a space within the
+   section's parenthesis.

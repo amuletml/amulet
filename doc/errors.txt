@@ -1,4 +1,3 @@
-parser/0001.txt Parser: Failure
 parser/0002.txt Parser: UnexpectedCharacter
 parser/0003.txt Parser: UnexpectedEnd
 parser/0004.txt Parser: UnclosedString
@@ -10,7 +9,6 @@ parser/0009.txt Parser: MisplacedWith
 parser/0010.txt Parser: BindQualified
 parser/0011.txt Parser: InvalidEscapeCode
 parser/0012.txt Parser: UnalignedIn
-parser/0013.txt Parser: UnindentContext
 resolve/1001.txt Resolver: NotInScope
 resolve/1002.txt Resolver: Ambiguous
 resolve/1003.txt Resolver: NonLinearPattern

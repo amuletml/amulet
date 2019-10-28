@@ -264,9 +264,9 @@ TyConArg :: { TyConArg Parsed }
          | '(' TyVar ':' Type ')' { TyAnnArg (getL $2) (getL $4) }
 
 Ctor :: { Constructor Parsed }
-     : Access conid                                   { withPos1 $2    $ UnitCon $1 (getName $2) }
-     | Access conid of Type                           { withPos2 $2 $4 $ ArgCon  $1 (getName $2) (getL $4) }
-     | Access conid ':' Type                          { withPos2 $2 $4 $ GadtCon $1 (getName $2) (getL $4) }
+     : Access BindCon                          { withPos1 $2    $ UnitCon $1 (getL $2) }
+     | Access BindCon of Type                  { withPos2 $2 $4 $ ArgCon  $1 (getL $2) (getL $4) }
+     | Access BindCon ':' Type                 { withPos2 $2 $4 $ GadtCon $1 (getL $2) (getL $4) }
 
 Repl :: { Either (Toplevel Parsed) (Expr Parsed) }
      : Top   ReplSep                           { Left $1 }
@@ -463,8 +463,11 @@ PostBinding :: { Expr Parsed }
   : '=' ExprBlock '$end'                       { $2 }
 
 BindName :: { Located (Var Parsed) }
-  : ident                                      { lPos1 $1 $ getName $1 }
+  : Var                                        {% checkUnqualified $1 }
   | '(' OperatorName ')'                       {% checkUnqualified $2 }
+
+BindCon :: { Located (Var Parsed) }
+  : Con                                        {% checkUnqualified $1 }
 
 BindOp :: { Located (Var Parsed) }
   : InfixName                                  {% checkUnqualified $1 }
