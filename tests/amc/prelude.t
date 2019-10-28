@@ -1,10 +1,9 @@
 Repl will be launched with the prelude
 
-  $ echo 'print "Hello"' | amc repl
+  $ echo 'put_line "Hello"' | amc repl
   Listening on port 5478
+  > _ = ()
   > Hello
-  _ = ()
-  > 
 
 Not using the prelude will fail
 
