@@ -31,8 +31,8 @@ do
   writeln(_dollarshow(function(x)
     return tostring(x)
   end, _dollartraverse(nil, _dollardApplicativeaqe({
-    ["×"] = function(x) return function(ys) return _dollar_d7(nil, x, ys) end end,
-    zero = Nil
+    zero = Nil,
+    ["×"] = function(x) return function(ys) return _dollar_d7(nil, x, ys) end end
   }), function(tmp0) return { { _1 = tmp0._1, _2 = Nil }, __tag = "Cons" } end, {
     {
       _1 = tmp,

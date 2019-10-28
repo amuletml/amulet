@@ -31,7 +31,7 @@ import qualified Core.Builtin as C
 import Core.Optimise (substituteInType, substituteInTys, fresh, freshFrom)
 import Core.Core hiding (Atom, Term, Stmt, Type, Pattern, Arm)
 import Core.Core (pattern Atom)
-import Core.Types (unify, replaceTy)
+import Core.Types (unify, unifyClosed, replaceTy)
 import Core.Lower.Pattern
 import Core.Lower.Basic
 import Core.Var
@@ -179,11 +179,13 @@ lowerAt (ExprWrapper wrap e an) ty =
   case wrap of
     S.WrapFn f -> lowerExprTerm (S.runWrapper f e)
     S.TypeAsc ty -> lowerExprTerm (Ascription e ty (fst an, ty))
-    S.Cast S.ReflCo{} -> lowerAt e ty
     S.ExprApp f -> lowerAt (S.App e f an) ty
     S.Cast c -> do
-      ex' <- lowerExprAtom e
-      pure (C.Cast ex' ty (squishCoercion (co c)))
+      let from = lowerType (S.getType e)
+      ex' <- lowerAt e from
+      if ty `unifyClosed` from
+      then pure ex'
+      else (\x -> C.Cast x ty (squishCoercion (co c))) <$> onAtom ex' from
     S.TypeApp t -> do
       ex' <- lowerAtAtom e (lowerType (S.getType e))
       pure (C.TyApp ex' (lowerType t))

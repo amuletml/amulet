@@ -10,4 +10,4 @@ import qualified System.Environment as E
 :def compile \x -> pure $ ":main compile " ++ x
 :def repl \x -> pure $ ":main repl " ++ x
 
-:def trace \xs -> pure $ "E.setEnv \"AMC_TRACE\" \"" ++ xs ++ "\""
+:def amc-trace \xs -> pure $ "E.setEnv \"AMC_TRACE\" \"" ++ xs ++ "\""
