@@ -35,7 +35,6 @@ data ResolveError
   | NonLinearPattern (Var Resolved) [Pattern Resolved] -- ^ This pattern declares one variable multiple times
   | NonLinearRecord (Expr Parsed) T.Text -- ^ This record declares an entry multiple times
 
-  | EmptyMatch -- ^ This @match@ has no patterns
   | EmptyBegin -- ^ This @begin@ block has no expressions
   | IllegalMethod -- ^ An illegal method within an @instance@
   | LastStmtNotExpr -- ^ Invalid statement in tail position
@@ -66,7 +65,6 @@ instance Pretty ResolveError where
   pretty (NonLinearPattern v _) = "Non-linear pattern (multiple definitions of" <+> verbatim v <+> ")"
   pretty (NonLinearRecord _ t) = "Duplicate field" <+> stypeSkol (text t) <+> "in record" <#> empty
 
-  pretty EmptyMatch = "Empty match expression"
   pretty EmptyBegin = "Empty begin expression"
   pretty IllegalMethod = "Illegal pattern in instance method declaration"
   pretty LastStmtNotExpr = "The last statement in a" <+> keyword "begin" <+> "block should be an expression"
@@ -110,7 +108,6 @@ instance Note ResolveError Style where
   noteId Ambiguous{}          = Just 1002
   noteId NonLinearPattern{}   = Just 1003
   noteId NonLinearRecord{}    = Just 1004
-  noteId EmptyMatch{}         = Just 1005
   noteId EmptyBegin{}         = Just 1006
   noteId IllegalMethod{}      = Just 1007
   noteId LastStmtNotExpr{}    = Just 1008
