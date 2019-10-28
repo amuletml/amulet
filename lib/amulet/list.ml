@@ -1,5 +1,6 @@
 module Amc = import "amulet/prim.ml"
 open import "./base.ml"
+open import "./exception.ml"
 
 let reverse xs =
   let loop acc = function
@@ -61,3 +62,23 @@ let iteri cont =
         cont x
         loop (i + 1) xs
   loop 0
+
+let head xs =
+  match xs with
+  | [] -> throw (Invalid "head")
+  | Cons (x, _) -> x
+
+let tail xs =
+  match xs with
+  | [] -> throw (Invalid "tail")
+  | Cons (_, xs) -> xs
+
+let head_or x xs =
+  match xs with
+  | [] -> x
+  | Cons (x, _) -> x
+
+let tail_or ys xs =
+  match xs with
+  | [] -> ys
+  | Cons (_, xs) -> xs
