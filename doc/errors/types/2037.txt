@@ -1,1 +1,28 @@
-TC: TyFunInLhs
+The left-hand-side of this closed type function equation mentions an
+application of a type function or synoynm, because type functions might
+not be /injective/: i.e., they might map different arguments to the same
+type.
+
+Consider this program:
+
+    type function foo 'a : type begin
+      foo int    = int
+      foo string = int
+      foo bool   = bool
+    end
+
+    type function bar 'a begin
+      bar (foo 'a) = 'a
+    end
+
+Now, consider we're trying to prove the equality
+
+    bar int ~ 'a
+
+Here, we have a problem. `int` is equal to both `foo int` and `foo
+string`, at the same time, and so there's no hope for an unambiguous
+reduction of the type family! Moreover, this compromises type safety:
+
+    bar int ~ int    (* by int ~ foo int *)
+    bar int ~ string (* by int ~ foo string *)
+    int ~ string     (* by the first and second equations *)

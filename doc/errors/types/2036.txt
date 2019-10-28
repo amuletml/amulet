@@ -1,1 +1,19 @@
-TC: MightNotTerminate
+This type function equation might not terminate because of a recursive
+call in which the arguments are not strictly decreasing in size. For
+example:
+
+    type function foo 'a begin
+      foo int = foo int
+    end
+
+Reducing `foo int ~ 'a` leads the compiler to conclude `'a ~ foo int`...
+and then it gets stuck in a loop, since now it needs to reduce the same
+equation as the one it had in the first place.
+
+For totality to hold, a recursive call can only be made using types that
+were arguments to type applications in the LHS:
+
+    type function foo 'a begin
+      foo (option 'a) = foo 'a (* fine: 'a < option 'a *)
+      foo (list int)  = foo int (* fine : int < list int *)
+    end
