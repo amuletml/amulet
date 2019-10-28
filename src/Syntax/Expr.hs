@@ -93,7 +93,8 @@ data Expr p
   | ListComp (Expr p) [CompStmt p] (Ann p)
   -- Monads
   | DoExpr (Var p) [CompStmt p] (Ann p)
-  | Idiom (Var p) (Var p) [Expr p] (Ann p)
+  | Idiom (Var p) (Var p) (Expr p) (Ann p)
+  -- Idiom brackets just take a single Expr; the TC knows how to handle them
 
   | ExprWrapper (Wrapper p) (Expr p) (Ann p)
 

@@ -315,6 +315,23 @@ infer (OpenIn mod expr a) = do
     (expr', ty) <- infer expr
     pure (ExprWrapper (TypeAsc ty) (OpenIn mod' (ExprWrapper (TypeAsc ty) expr' (a, ty)) (a, ty)) (a, ty), ty)
 
+infer (Idiom pure_v app_v expr ann) =
+  do
+    ~(fn:as) <- reverse <$> spine expr
+    infer (make_idiom fn as)
+  where
+    spine (BinOp l o r _) = pure [ r, l, o ]
+    spine (App f x _) = do
+      sp <- spine f
+      pure (x:sp)
+    spine ex@Fun{} = pure [ex]
+    spine ex@VarRef{} = pure [ex]
+    spine ex@ListExp{} = pure [ex]
+    spine x = confesses (addBlame (becauseExp expr) (NotAnIdiom x))
+
+    make_idiom fun =
+      foldl (\f x -> BinOp f (VarRef app_v ann) x ann) (App (VarRef pure_v ann) fun ann)
+
 infer ex = do
   x <- freshTV
   ex' <- check ex x

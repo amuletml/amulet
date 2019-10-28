@@ -165,7 +165,7 @@ verifyExpr (Vta e _ _) = verifyExpr e
 verifyExpr (OpenIn _ e _) = verifyExpr e
 verifyExpr (ListExp e _) = traverse_ verifyExpr e
 verifyExpr (ListComp e qs _) = verifyExpr e *> traverse_ verifyCompStmt qs
-verifyExpr (Idiom _ _ es _) = traverse_ verifyExpr es
+verifyExpr (Idiom _ _ es _) = verifyExpr es
 verifyExpr (DoExpr _ qs _) = traverse_ verifyCompStmt qs
 verifyExpr (ExprWrapper w e a) =
   case w of

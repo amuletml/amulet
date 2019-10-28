@@ -151,7 +151,7 @@ instance Pretty (Var p) => Pretty (Expr p) where
   pretty (ListExp es _) = brackets (hsep (punctuate comma (map pretty es)))
   pretty (ListComp e qs _) =
     brackets (pretty e <+> pipe <+> hsep (punctuate comma (map pretty qs)))
-  pretty (Idiom _ _ xs _) = "(|" <+> hsep (map parenArg xs) <+> "|)"
+  pretty (Idiom _ _ xs _) = "(|" <+> pretty xs <+> "|)"
 
   pretty (ExprWrapper wrap ex an) = go wrap ex where
     go (TypeLam v t) ex =

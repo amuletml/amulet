@@ -11,14 +11,14 @@ end
 
 instance traversable option begin
   let traverse cont = function
-    | Some x -> (| Some (cont x) |)
-    | None -> pure None
+    | Some x -> (| Some @@ cont x |)
+    | None -> (| None |)
 end
 
 instance traversable list begin
   let traverse cont =
     let loop = function
-      | Cons (x, xs) -> (| cons (cont x) (loop xs) |)
-      | [] -> pure []
+      | Cons (x, xs) -> (| cont x :: loop xs |)
+      | [] -> (| [] |)
     loop
 end
