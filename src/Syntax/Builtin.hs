@@ -321,7 +321,7 @@ builtinInstances :: ImplicitScope T.ClassInfo Typed
 builtinInstances = builtinTypeableInsts
 
 typeable_CI :: T.ClassInfo
-typeable_CI = 
+typeable_CI =
   T.ClassInfo { T._ciName = tyTypeable_n
               , T._ciHead = TyApps (TyCon tyTypeable_n) [ TyVar a ]
               , T._ciMethods =

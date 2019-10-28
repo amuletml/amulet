@@ -1,5 +1,5 @@
 class foo 'a begin
-  type bar : type 
+  type bar : type
   val into : 'a -> bar 'a
 end
 

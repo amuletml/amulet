@@ -11,7 +11,7 @@ end
 let foo : dict (show ()) = Dict
 let bar : unit -> dict (show int) = fun () -> bar ()
 
-let with_d (x : dict ('c 'a)) (e : 'a) (foo : forall 'a. 'c 'a => 'a -> 'b) : 'b = 
+let with_d (x : dict ('c 'a)) (e : 'a) (foo : forall 'a. 'c 'a => 'a -> 'b) : 'b =
   match x with
   | Dict -> foo e
 

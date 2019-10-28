@@ -82,6 +82,6 @@ instance Pretty a => Pretty (Formula a) where
     <+> hsep (punctuate comma (map pretty (init xs))) <+> string "or"
     <+> pretty (last xs)
   pretty (And xs) =
-        hsep (punctuate comma (map pretty (init xs))) 
-    <> string ", and" 
+        hsep (punctuate comma (map pretty (init xs)))
+    <> string ", and"
     <+> pretty (last xs)

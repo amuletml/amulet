@@ -15,7 +15,7 @@ let range start stop =
  *   Could not match expected type option ('a * 'b) with option (int * int)
  *
  *   Arising in the expression
- *    │ 
+ *    │
  * 58 │   enqueue go (start, stop)
  *    │
  * or something like, at least. Regression test to make sure we don't break that

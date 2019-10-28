@@ -53,7 +53,7 @@ tracePrettyId _ x = x
 {-# NOINLINE tracePrettyId #-}
 
 traceM c s = U.unsafePerformIO (traceMaybe_s c (displayS (pretty s))) `seq` pure ()
-trace c s x = U.unsafePerformIO (traceMaybe_s c (displayS (pretty s))) `seq` x 
+trace c s x = U.unsafePerformIO (traceMaybe_s c (displayS (pretty s))) `seq` x
 traceShow c s x = U.unsafePerformIO (traceMaybe_s c (show s)) `seq` x
 tracePrettyId c x = trace c (displayS (pretty x)) x
 
