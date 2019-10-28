@@ -162,6 +162,7 @@ data TypeError where
 
   MightNotTerminate :: TyFunClause Typed -> Type Typed -> Type Typed -> TypeError
   TyFunInLhs :: SomeReason -> Type Typed -> TypeError
+  NotAnIdiom :: Pretty (Var p) => Expr p -> TypeError
 
 
 data WhatOverlaps = Overinst | Overeq Bool
@@ -580,6 +581,9 @@ instance Pretty TypeError where
 
   pretty (TyFunInLhs _ tau) =
     vsep [ "Type synonym application" <+> displayType tau <+> "is illegal in LHS of type function equation" ]
+
+  pretty (NotAnIdiom _) =
+    vsep [ "This expression can not be used in an idiom bracket because it is not a function application" ]
 
   pretty (WarningError x) = pretty x
 
