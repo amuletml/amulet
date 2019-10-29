@@ -438,9 +438,13 @@ loadFile file = do
   -- Reset the state
   config <- gets config
   handle <- gets outputHandle
+  driver <- gets driver
   state' <- liftIO (defaultState config)
   put state' { currentFile = Just file
-             , outputHandle = handle }
+             , outputHandle = handle
+             , driver = driver }
+
+  wrapDriver D.tock
 
   -- FIXME: This is a little broken, in that if the prelude and the
   -- loaded file both require the same code, we will execute it
