@@ -447,6 +447,7 @@ reType r (TyRows t f) = TyRows <$> reType r t
                                <*> traverse (\(a, b) -> (a,) <$> reType r b) f
 reType r (TyExactRows f) = TyExactRows <$> traverse (\(a, b) -> (a,) <$> reType r b) f
 reType r (TyTuple ta tb) = TyTuple <$> reType r ta <*> reType r tb
+reType r (TyTupleL ta tb) = TyTupleL <$> reType r ta <*> reType r tb
 reType _ (TyWildcard _) = pure (TyWildcard Nothing)
 reType r (TyParens t) = TyParens <$> reType r t
 reType r (TyOperator tl o tr) = TyOperator <$> reType r tl <*> (lookupTy o `catchJunk` r) <*> reType r tr

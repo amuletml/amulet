@@ -1,5 +1,5 @@
 fail_span.ml[1:12 ..1:16]: error
-  Unexpected match, expected one of forall, '_', type, lazy, '(', '{', identifier, constructor, type variable, int, string
+  Unexpected match, expected one of forall, '_', true, false, type, lazy, '(', '{', '[', identifier, constructor, type variable, int, string
   │ 
 1 │ let main : match = 1
   │            ^^^^^

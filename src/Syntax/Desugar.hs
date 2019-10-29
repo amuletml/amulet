@@ -171,6 +171,7 @@ ty (TyPi b p) = TyPi (binder b) (ty p)
 ty (TyRows t fs) = TyRows (ty t) (map (second ty) fs)
 ty (TyExactRows fs) = TyExactRows (map (second ty) fs)
 ty (TyTuple l r) = TyTuple (ty l) (ty r)
+ty (TyTupleL l r) = TyTupleL (ty l) (ty r)
 ty (TyWildcard t) = TyWildcard (ty <$> t)
 ty TySkol{} = error "TySkol in desugar"
 ty TyWithConstraints{} = error "TywithConstraints in desugar"

@@ -10,18 +10,8 @@ nasty_cycle.ml[19:25 ..19:25]: error
 19 │       | Right p -> Left p
    │                         ^
 nasty_cycle.ml[18:26 ..18:32]: error
-  No instance for S 'n ~ S (S 's) arising in the expression
    │ 
 18 │       | Left p -> Right (Even2 p)
    │                          ^^^^^^^
-  • Because:
-  Could not match the rigid type variable 's with the type S 's
-
-  Where the type variable s is an existential,
-  bound by the constructor SS, which has type
-     forall 'n 's. snat 's -> snat (S 's)
-
-  • Arising in the the expression
-   │ 
-18 │       | Left p -> Right (Even2 p)
-   │                          ^^^^^^^
+  Couldn't match actual type S 'n
+    with the type expected by the context, S (S 's)

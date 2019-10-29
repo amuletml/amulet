@@ -1,11 +1,6 @@
 gadt03-fail.ml[8:12 ..8:19]: error
-  No instance for bool ~ int arising in the expression
   │ 
 8 │ let show = function
   │            ^^^^^^^^
-  • Because:
-  │ 
-8 │ let show = function
-  │            ^^^^^^^^
-  Couldn't match actual type bool ~ bool
-    with the type expected by the context, bool ~ int
+  Couldn't match actual type bool
+    with the type expected by the context, int

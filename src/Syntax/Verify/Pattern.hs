@@ -473,6 +473,7 @@ inhabited env (AbsState st cs i)
   go c (TyWithConstraints _ t) = go c t
   go _ TyType = inhb
   go _ TyLit{} = inhb
+  go _ TyTupleL{} = inhb
 
   -- | Returns the type name if this type is concrete (defined as has 0 or more
   -- constructors, rather than being abstract).

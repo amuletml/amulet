@@ -396,6 +396,11 @@ inferKind (TyApp f x) = do
     Invisible{} -> error "inferKind TyApp: visible argument to implicit quantifier"
     Implicit{} -> error "inferKind TyApp: visible argument to implicit quantifier"
 
+inferKind (TyTupleL a b) = do
+  (a, k_a) <- inferKind a
+  (b, k_b) <- inferKind b
+  pure (TyTupleL a b, TyTuple k_a k_b)
+
 inferKind (TyRows p rs) = do
   (p, k) <- secondA isType =<< inferKind p
   rs <- for rs $ \(row, ty) -> do
@@ -425,9 +430,6 @@ checkKind (TyExactRows rs) k = do
     ty <- checkKind ty k
     pure (row, ty)
   pure (TyExactRows rs)
-
-checkKind (TyTuple a b) (TyTuple ak bk) =
-  TyTuple <$> checkKind a ak <*> checkKind b bk
 
 checkKind (TyTuple a b) ek =
   TyTuple <$> checkKind a ek <*> checkKind b ek
@@ -557,8 +559,8 @@ closeOver' vars r a = do
 promoteOrError :: Type Typed -> Maybe Doc
 promoteOrError TyWithConstraints{} = Just (string "mentions constraints")
 promoteOrError TyTuple{} = Nothing
-promoteOrError TyRows{} = Just (string "mentions a tuple")
-promoteOrError TyExactRows{} = Just (string "mentions a tuple")
+promoteOrError TyRows{} = Just (string "mentions a record")
+promoteOrError TyExactRows{} = Just (string "mentions a record")
 promoteOrError (TyApp a b) = promoteOrError a <|> promoteOrError b
 promoteOrError (TyPi (Invisible _ a _) b) = join (traverse promoteOrError a) <|> promoteOrError b
 promoteOrError (TyPi (Anon a) b) = promoteOrError a <|> promoteOrError b
@@ -570,6 +572,7 @@ promoteOrError TyPromotedCon{} = Nothing
 promoteOrError TyType{} = Nothing
 promoteOrError TyWildcard{} = Nothing
 promoteOrError TyLit{} = Nothing
+promoteOrError TyTupleL{} = Nothing
 promoteOrError (TyParens p) = promoteOrError p
 promoteOrError (TyOperator l _ r) = promoteOrError l <|> promoteOrError r
 

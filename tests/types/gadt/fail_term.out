@@ -1,18 +1,6 @@
 fail_term.ml[16:3 ..16:30]: error
-  No instance for 'a -> 'b -> 'b ~ 'x -> 'y -> 'x arising in the expression
    │ 
 16 │   Lam (Lam (Var (There Here)))
    │   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  • Because:
-  Could not match the rigid type variable 'b with the type 'a
-
-  • Arising in the expression
-   │ 
-16 │   Lam (Lam (Var (There Here)))
-   │   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-  • When checking that this expression
-   │ 
-16 │   Lam (Lam (Var (There Here)))
-   │   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  has type forall 'a 'b. term unit ('a -> 'b -> 'b)
+  Couldn't match actual type 'a -> 'b -> 'b
+    with the type expected by the context, 'x -> 'y -> 'x

@@ -193,6 +193,7 @@ checkWildcard e (TyPi b x) = flip (*>) (checkWildcard e x) $
 checkWildcard e (TyRows t rs) = checkWildcard e t *> traverse_ (checkWildcard e . snd) rs
 checkWildcard e (TyExactRows rs) = traverse_ (checkWildcard e . snd) rs
 checkWildcard e (TyTuple a b) = checkWildcard e a *> checkWildcard e b
+checkWildcard e (TyTupleL a b) = checkWildcard e a *> checkWildcard e b
 checkWildcard e (TyOperator l _ r) = checkWildcard e l *> checkWildcard e r
 checkWildcard e (TyParens t) = checkWildcard e t
 
@@ -220,6 +221,7 @@ getHead t@TyWithConstraints{} = t
 getHead t@TyType = t
 getHead t@TyWildcard{} = t
 getHead t@TyOperator{} = t
+getHead t@TyTupleL{} = t
 getHead (TyParens t) = getHead t
 
 expandTypeWith :: TySyms -> Type Typed -> Type Typed
@@ -247,6 +249,8 @@ expandTypeWith _ x@TySkol{} = x
 expandTypeWith _ x@TyLit{} = x
 
 expandTypeWith s (TyTuple a b) = TyTuple (expandTypeWith s a) (expandTypeWith s b)
+expandTypeWith s (TyTupleL a b) = TyTupleL (expandTypeWith s a) (expandTypeWith s b)
+
 expandTypeWith s (TyPi b r) = TyPi b' (expandTypeWith s r) where
   b' = case b of
     Anon t -> Anon (expandTypeWith s t)

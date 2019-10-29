@@ -88,6 +88,7 @@ recursiveCall :: Var Typed -> Type Typed -> [[Type Typed]]
 recursiveCall c (TyApps (TyCon c') args)
   | c == c' = [args] | otherwise = concatMap (recursiveCall c) args
 recursiveCall c (TyTuple a b) = recursiveCall c a <|> recursiveCall c b
+recursiveCall c (TyTupleL a b) = recursiveCall c a <|> recursiveCall c b
 recursiveCall c (TyPi b r) =
   recursiveCall c r <|> case b of
     Anon t -> recursiveCall c t

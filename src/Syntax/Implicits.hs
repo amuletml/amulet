@@ -258,6 +258,7 @@ getHead t@TyLit{} = (t, Seq.empty)
 getHead t@TyWildcard{} = (t, Seq.empty)
 getHead (TyParens t) = getHead t
 getHead t@TyOperator{} = (t, Seq.empty)
+getHead t@TyTupleL{} = (t, Seq.empty)
 
 -- | Split the type of an implicit variable into its head and a set of
 -- obligations.
@@ -333,6 +334,9 @@ matches (TyTuple a b) (TyApp f x) =
   matches f (TyApp (TyCon tyProd_n) a) && matches x b
 
 matches TyTuple{} _ = False
+
+matches (TyTupleL a b) (TyTupleL a' b') = a `matches` a' && b `matches` b'
+matches (TyTupleL _ _) _ = False
 
 matches (TySkol v) (TySkol v') = v == v'
 matches TySkol{} _ = False
