@@ -287,11 +287,9 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do -- {{{
 
     _ ->
       case head (appsView cons) of
-        TyCon v | Just solve <- magicClass v -> do
+        TyCon v | Just (solve, report) <- magicClass v -> do
           (w, cs) <- censor (const mempty) $ listen $ solve reason scope' old
-          doSolve (Seq.fromList cs)
-            `catchChronicle`
-              \e -> confesses (ArisingFrom (UnsatClassCon reason (apply sub ohno) (MagicErrors (toList e))) reason)
+          doSolve (Seq.fromList cs) `catchChronicle` report reason old 
           case w of
             Just solution -> solveCoSubst . at var ?= solution
             Nothing -> do

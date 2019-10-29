@@ -425,6 +425,7 @@ deSkol = go mempty where
   go acc (TyWithConstraints cs x) = TyWithConstraints (map (bimap (go acc) (go acc)) cs) (go acc x)
   go acc (TyOperator l o r) = TyOperator (go acc l) o (go acc r)
   go acc (TyParens p) = TyParens $ go acc p
+  go acc (TyTupleL a b) = TyTupleL (go acc a) (go acc b)
   go _ TyType = TyType
 
 expandTyBindings :: MonadReader Env m => Binding Typed -> m (Binding Typed)

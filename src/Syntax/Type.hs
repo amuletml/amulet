@@ -43,6 +43,7 @@ data Type p
 
   | TyType -- yeah, type : type, fight me
   | TyLit Lit
+  | TyTupleL (Type p) (Type p) -- A lifted tuple
 
 data TyBinder p
   = Anon { _tyBinderType :: Type p } -- ^ A function type
@@ -213,6 +214,7 @@ instance (Pretty (Var p)) => Pretty (Type p) where
   pretty (TyOperator l o r) = pretty l <+> pretty o <+> pretty r
 
   pretty (TyParens t) = parens $ pretty t
+  pretty (TyTupleL a b) = parens $ pretty a <+> comma <+> pretty b
 
   pretty (TyWithConstraints a b) =
     parens (hsep (punctuate comma (map prettyEq a))) <+> soperator (char '⊃') <+> pretty b

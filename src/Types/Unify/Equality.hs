@@ -266,6 +266,10 @@ unify scope x@(TyApp f g) y@(TyOperator l v r) =
 unify scope (TyOperator l v r) (TyOperator l' v' r')
   | v == v' = AppCo <$> unify scope l l' <*> unify scope r r'
 
+unify scope (TyTupleL a b) (TyTupleL a' b') =
+  (\_ _ -> AssumedCo (TyTupleL a b) (TyTupleL b b'))
+    <$> unify scope a a' <*> unify scope b b'
+
 unify scope ta@(TyApps (TyCon v) xs@(_:_)) b = do
   x <- view solveInfo
 
@@ -560,6 +564,7 @@ flatten assum i = runWriterT . go 0 where
     go_b (Invisible v k r) = Invisible v <$> traverse (go (l + 1)) k <*> pure r
 
   go l (TyTuple a b) = TyTuple <$> go (l + 1) a <*> go (l + 1) b
+  go l (TyTupleL a b) = TyTupleL <$> go (l + 1) a <*> go (l + 1) b
   go l (TyRows t rs) = TyRows <$> go (l + 1) t <*> traverse (_2 %%~ go (l + 1)) rs
   go l (TyExactRows rs) = TyExactRows <$> traverse (_2 %%~ go (l + 1)) rs
   go x (TyOperator l o r) = TyOperator <$> go (x + 1) l <*> pure o <*> go (x + 1) r

@@ -815,6 +815,7 @@ validContext w a t@TySkol{} = dictates (InvalidContext w a t)
 validContext w a t@TyWithConstraints{} = dictates (InvalidContext w a t)
 validContext w a t@TyType{} = dictates (InvalidContext w a t)
 validContext w a t@TyLit{} = dictates (InvalidContext w a t)
+validContext w a t@TyTupleL{} = dictates (InvalidContext w a t)
 validContext w a (TyParens t) = validContext w a t
 
 tooConcrete :: MonadInfer Typed m => Type Typed -> m Bool

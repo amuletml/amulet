@@ -595,13 +595,17 @@ TypeAtom :: { Located (Type Parsed) }
          | type                                   { lPos1 $1 TyType }
          | lazy                                   { lPos1 $1 $ TyCon (Name (T.pack "lazy")) }
          | '(' ')'                                { lPos2 $1 $2 $ TyCon (Name (T.pack "unit")) }
-         | '(' Type ')'                           { lPos2 $1 $3 $ TyParens (getL $2) }
+         | '(' List1(Type,',') ')'                { lPos2 $1 $3 $ mkTupleTypeL (map getL $2) }
+         | '[' List1(Type,',') ']'                { lPos2 $1 $3 $ mkListTypeL (map getL $2) }
          | '(' TypeOperatorF ')'                  { lPos2 $1 $3 $ TyParens (TyCon $2) }
          | '{' ListT(TypeRow, ',') '}'            { lPos2 $1 $3 $ TyExactRows $2 }
          | '{' Type '|' ListT(TypeRow, ',') '}'   { lPos2 $1 $5 $ TyRows (getL $2) $4 }
          | '_'                                    { lPos1 $1 (TyWildcard Nothing) }
+
          | string                                 { lPos1 $1 $ TyLit (LiStr (getString $1)) }
          | int                                    { lPos1 $1 $ TyLit (LiInt (getInt $1)) }
+         | true                                   { lPos1 $1 $ TyLit (LiBool True) }
+         | false                                  { lPos1 $1 $ TyLit (LiBool False) }
 
 TypeRow :: { (T.Text, Type Parsed) }
   : ident ':' Type                                { (getIdent $1, getL $3) }
@@ -706,6 +710,18 @@ forallTy spec vs t = foldr TyPi t (map (\(x, k) -> Invisible x k spec) vs)
 respanFun :: (Spanned a, Spanned b) => a -> b -> Expr Parsed -> Expr Parsed
 respanFun s e (Fun p b _) = Fun p b (mkSpanUnsafe (spanStart (annotation s)) (spanEnd (annotation e)))
 respanFun _ _ _ = error "what"
+
+mkTupleTypeL :: [Type p] -> Type p
+mkTupleTypeL [x] = TyParens x
+mkTupleTypeL (x:xs) =
+  let go [x] = x
+      go (x:xs) = TyTupleL x (go xs)
+      go [] = undefined
+   in go (x:xs)
+
+mkListTypeL :: [Type Parsed] -> Type Parsed
+mkListTypeL [] = TyPromotedCon (Name (T.pack "Nil"))
+mkListTypeL (x:xs) = TyApp (TyPromotedCon (Name (T.pack "Cons"))) (TyTupleL x (mkListTypeL xs))
 
 buildClass :: TopAccess -> Located (Type Parsed) -> [Fundep Parsed]
            -> [ClassItem Parsed] -> Parser (Span -> Toplevel Parsed)

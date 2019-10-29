@@ -25,6 +25,7 @@ wellformed tp = case tp of
     wellformed b
   TyApp a b -> wellformed a *> wellformed b
   TyTuple a b -> wellformed a *> wellformed b
+  TyTupleL a b -> wellformed a *> wellformed b
   TyRows rho rows -> do
     case rho of
       TyRows{} -> pure ()
@@ -56,6 +57,7 @@ skols (TyPi b t)
 skols (TyRows r rs) = skols r <> foldMap (skols . snd) rs
 skols (TyExactRows rs) = foldMap (skols . snd) rs
 skols (TyTuple a b) = skols a <> skols b
+skols (TyTupleL a b) = skols a <> skols b
 skols (TyWithConstraints cs a) =
   foldMap (\(x, y) -> skols x <> skols y) cs <> skols a
 skols (TyParens t) = skols t
