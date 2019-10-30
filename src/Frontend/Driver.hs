@@ -40,7 +40,7 @@ module Frontend.Driver
   -- * Compilation
   --
   -- $compile
-  , compile
+  , compile, compiles
 
   -- * Querying the driver
   --
@@ -346,13 +346,20 @@ lowerWith root parsed sig env lState = do
    Various helper functions for compiling a whole bundle of files.
  -}
 
--- | Attempt to compile a single file. Returns the concatenated core of
--- all files.
+-- | Attempt to compile a single of file. Returns the concatenated core
+-- of all files.
+compiles :: (MonadNamey m, MonadIO m, MonadState Driver m)
+         => FilePath -> m (Maybe [Stmt CoVar], ErrorBundle)
+compiles = compile . pure
+
+-- | Attempt to compile a collection of files. Returns the concatenated
+-- core of all files.
 compile :: (MonadNamey m, MonadIO m, MonadState Driver m)
-        => FilePath -> m (Maybe [Stmt CoVar], ErrorBundle)
-compile path = do
-  l <- fmap (concat . fmap fst) . sequence <$> gatherDeps getLowered path
-  errors <- fold <$> gatherDeps getErrors path
+        => [FilePath] -> m (Maybe [Stmt CoVar], ErrorBundle)
+compile ps = do
+  let paths = Set.fromList ps
+  l <- fmap (concat . fmap fst) . sequence <$> gatherDepsOf getLowered paths
+  errors <- fold <$> gatherDepsOf getErrors paths
   pure (l, errors)
 
 errorsFromDeps :: (MonadNamey m, MonadState Driver m)
@@ -373,12 +380,6 @@ gatherDepsOf f = fmap snd . foldlM go mempty where
         deps <- uses (files . at path) (foldMap (^.dependencies))
         (visited, seq) <- foldlM go (Set.insert path visited, seq) deps
         pure (visited, seq Seq.|> this)
-
--- | Walk over all nodes in dependency order. Effectively a preorder traversal.
-gatherDeps :: (MonadNamey m, MonadState Driver m)
-           => (FilePath -> m a)
-           -> FilePath -> m (Seq.Seq a)
-gatherDeps f = gatherDepsOf f . Set.singleton
 
 verifyProg :: Name -> Env -> [Toplevel Typed] -> (Bool, ErrorBundle)
 verifyProg v env inferred =
