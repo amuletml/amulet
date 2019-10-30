@@ -1,7 +1,9 @@
 {-# LANGUAGE OverloadedStrings, ScopedTypeVariables, FlexibleContexts #-}
 module Amc.Debug
   ( DebugMode(..)
-  , dump
+  , dumpCore
+  , dumpTypes
+  , dumpCallbacks
   ) where
 
 import Control.Lens
@@ -13,41 +15,49 @@ import Syntax
 import Core.Core (Stmt)
 import Core.Var
 
+import qualified Frontend.Driver as D
+import Frontend.Errors
+
 import Backend.Lua
 
 import Text.Pretty.Semantic
+import qualified Text.Pretty.Ansi as A
 
 data DebugMode = Void | Test | TestTc
   deriving (Show, Eq)
 
-dump :: DebugMode
-     -> [Toplevel Typed]
-     -> [Stmt CoVar] -- ^ Core
-     -> [Stmt CoVar] -- ^ Optimised code
-     -> LuaStmt
-     -> Env          -- ^ Base environment
-     -> Env          -- ^ Current environment
-     -> IO ()
+dumpCallbacks :: DebugMode -> D.DriverCallbacks
+dumpCallbacks kind = D.defaultCallbacks { D.onTyped = onTyped } where
+  onTyped :: FilePath -> Maybe ([Toplevel Typed], Env, Env) -> ErrorBundle -> IO ()
+  onTyped _ Nothing _ = pure ()
+  onTyped path (Just (ast, env, penv)) _ = do
+    unless (kind == Void) . A.putDoc . annotate (A.BrightColour A.Green) $ "(* Checked:" <+> string path <+> "*)"
+    dumpTypes kind ast penv env
 
-dump Void _ _ _ _ _ _ = pure ()
+dumpTypes :: DebugMode
+          -> [Toplevel Typed]
+          -> Env -- ^ Old env
+          -> Env -- ^ New env
+          -> IO ()
+dumpTypes Void _ _ _ = pure ()
+dumpTypes _ ast penv env = do
+    A.putDoc . annotate (A.BrightColour A.Green) $ "(* Program: *)"
+    putDoc (pretty ast)
+    A.putDoc . annotate (A.BrightColour A.Green) $ "(* Type inference: *)"
+    ifor_ (difference env penv ^. names . to toMap) . curry $ \(k :: Var Resolved, t :: Type Typed) ->
+      putDoc (pretty k <+> colon <+> displayType t)
 
-dump Test ast core optm lua penv env = do
-  putStrLn "\x1b[1;32m(* Program: *)\x1b[0m"
-  putDoc (pretty ast)
-  putStrLn "\x1b[1;32m(* Type inference: *)\x1b[0m"
-  ifor_ (difference env penv ^. names . to toMap) . curry $ \(k :: Var Resolved, t :: Type Typed) ->
-    putDoc (pretty k <+> colon <+> displayType t)
-  putStrLn "\x1b[1;32m(* Core lowering: *)\x1b[0m"
+dumpCore :: DebugMode
+         -> [Stmt CoVar] -- ^ Core
+         -> [Stmt CoVar] -- ^ Optimised code
+         -> LuaStmt
+         -> IO ()
+dumpCore Void _ _ _ = pure ()
+dumpCore TestTc _ _ _ = pure ()
+dumpCore Test core optm lua = do
+  A.putDoc . annotate (A.BrightColour A.Green) $ "(* Core lowering: *)"
   putDoc (pretty core)
-  putStrLn "\x1b[1;32m(* Optimised: *)\x1b[0m"
+  A.putDoc . annotate (A.BrightColour A.Green) $ "(* Optimised: *)"
   putDoc (pretty optm)
-  putStrLn "\x1b[1;32m(* Compiled: *)\x1b[0m"
+  A.putDoc . annotate (A.BrightColour A.Green) $ "(* Compiled: *)"
   putDoc (pretty lua)
-  pure ()
-
-dump TestTc ast _ _ _ penv env = do
-  putStrLn "\x1b[1;32m(* Program: *)\x1b[0m"
-  putDoc (pretty ast)
-  putStrLn "\x1b[1;32m(* Type inference: *)\x1b[0m"
-  ifor_ (difference env penv ^. names . to toMap) . curry $ \(k :: Var Resolved, t :: Type Typed) ->
-    putDoc (pretty k <+> colon <+> pretty t)
