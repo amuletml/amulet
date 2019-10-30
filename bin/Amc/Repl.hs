@@ -312,7 +312,6 @@ execString :: (MonadState ReplState m, MonadIO m)
            -> m Bool
 execString name line = do
   oldInfer <- gets inferScope
-
   core <- parseCore parseRepl' name line
   case core of
     Nothing -> pure False
@@ -320,7 +319,8 @@ execString name line = do
       (luaExpr, luaSyntax) <- emitCore core
       state <- get
       (ok, res) <- liftIO $ do
-        dump (debugMode (config state)) prog core core luaExpr oldInfer (inferScope state)
+        dumpTypes (debugMode (config state)) prog oldInfer (inferScope state)
+        dumpCore (debugMode (config state)) core core luaExpr
 
         L.runWith (luaState state) $ do
           L.OK <- L.dostring "-- time out hook\nlocal function f() error('Timed out!', 3) end; debug.sethook(f, '', 1e6)"
@@ -495,7 +495,6 @@ loadFiles paths = do
   case core of
     Nothing -> pure False
     Just core -> do
-      oldEnv <- gets inferScope
       for_ paths $ \path -> do
         (sig, env, lEnv) <- wrapDriver $ do
           ~(Just sig) <- D.getSignature path
@@ -506,14 +505,13 @@ loadFiles paths = do
         modify (\s -> s { resolveScope = resolveScope s <> sig
                         , inferScope = inferScope s <> env
                         , lowerState = lowerState s <> lEnv })
-      newEnv <- gets inferScope
 
       (luaExpr, luaSyntax) <- emitCore core
 
       luaState <- gets luaState
       debug <- gets (debugMode . config)
       liftIO $ do
-        dump debug [] core core luaExpr oldEnv newEnv
+        dumpCore debug core core luaExpr
         res <- L.runWith luaState $ do
           code <- L.dostring luaSyntax
           case code of

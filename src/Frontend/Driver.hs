@@ -23,6 +23,7 @@ module Frontend.Driver
   ( Driver
   , makeDriver, makeDriverWith
   , DriverConfig(..), makeConfig
+  , DriverCallbacks(..), defaultCallbacks
   , fileMap
   , getConfig, adjustConfig
 
@@ -48,6 +49,7 @@ module Frontend.Driver
   , getSignature, getTypeEnv, getOpenedTypeEnv
   , getVerified, getVerifiedAll
   , getLowerState, getLowered
+  , getErrors, getErrorsAll
   ) where
 
 import System.Environment
@@ -159,9 +161,28 @@ data LoadedFile = LoadedFile
   , _errors :: ErrorBundle
   } deriving Show
 
-newtype DriverConfig = DriverConfig
+data DriverCallbacks = DriverCallbacks
+  { onResolved :: FilePath -> Maybe ([Toplevel Resolved], Signature) -> ErrorBundle -> IO ()
+  -- | Provides the program, the environment, and the starting
+  -- environment (suitable for identifying new names).
+  , onTyped    :: FilePath -> Maybe ([Toplevel Typed], Env, Env) -> ErrorBundle -> IO ()
+  , onVerified :: FilePath -> Maybe ([Toplevel Typed], Env) -> ErrorBundle -> IO ()
+  , onEmitted  :: FilePath -> [Stmt CoVar] -> IO ()
+  }
+
+defaultCallbacks :: DriverCallbacks
+defaultCallbacks = DriverCallbacks f f f (\_ _ -> pure ()) where
+  f :: FilePath -> Maybe a -> ErrorBundle -> IO ()
+  f _ _ _ = pure ()
+
+instance Show DriverCallbacks where
+  show _ = "DriverCallbacks"
+
+data DriverConfig = DriverConfig
   { libraryPath :: [FilePath]
   -- ^ The path of folders to look up files from.
+  , callbacks :: DriverCallbacks
+  -- ^ Callbacks for when a module has finished a particular stage.
   } deriving Show
 
 data Driver = Driver
@@ -200,6 +221,7 @@ makeConfig = do
     ++ [ takeDirectory execP </> "lib"
        , takeDirectory (takeDirectory execP) </> "lib"
        ])
+    defaultCallbacks
   where
     splitPath = Set.toList . Set.fromList . map T.unpack . T.split (==':') . T.pack
 
@@ -491,8 +513,10 @@ getSignature path = do
       case resolved of
         Left es -> do
           updateFile path $ (stage .~ SUnresolved) . (dependencies .~ deps) . (errors . resolveErrors .~ es)
+          runCallback path onResolved Nothing
           pure Nothing
         Right (ResolveResult resolved sig _) -> do
+          runCallback path onResolved (Just (resolved, sig))
           updateFile path $ (stage .~ SResolved resolved sig) . (dependencies .~ deps)
           pure (Just sig)
 
@@ -530,6 +554,7 @@ getTypeEnv path = do
           case res of
             Nothing -> do
               updateFile path $ (stage .~ SUntyped sig) . (errors . typeErrors .~ es)
+              runCallback path onTyped Nothing
               pure Nothing
             Just (tBody, modEnv) ->
               let env' = env
@@ -539,6 +564,7 @@ getTypeEnv path = do
                     . (modules %~ (<> (modEnv ^. modules))
                         . Map.insert (fileVar file') (modEnv ^. classes, modEnv ^. tySyms))
               in do updateFile path $ (stage .~ STyped tBody sig env') . (errors . typeErrors .~ es)
+                    runCallback path onTyped (Just (tBody, env', builtinEnv <> env))
                     pure (Just env')
 
     stage -> pure (Just (env stage))
@@ -583,6 +609,7 @@ getVerified path = do
       let (verified, errs) = verifyProg v env prog
       updateFile path $ (stage .~ if verified then SVerified prog sig env else SUnverified sig env)
                      . (errors %~ (<>errs))
+      runCallback path onVerified (if verified then Just (prog, env) else Nothing)
       pure verified
 
 getVerifiedAll :: (MonadNamey m, MonadState Driver m, MonadIO m)
@@ -611,6 +638,7 @@ getLowerState path = do
           Just lEnv -> do
             (lEnv, l) <- runLowerWithEnv (defaultState <> lEnv) (lowerProgEnv prog)
             updateFile path $ stage .~ SEmitted l sig env lEnv
+            uses config ((\f -> f path l) . onEmitted . callbacks) >>= liftIO
             pure (Just lEnv)
       _ -> error "Impossible: Should have been verified"
 
@@ -627,6 +655,11 @@ getLowered path = do
 getErrors :: (MonadNamey m, MonadState Driver m)
           => FilePath -> m ErrorBundle
 getErrors path = maybe mempty (^.errors) <$> use (files . at path)
+
+-- | Get the errors for this file, and all dependencies.
+getErrorsAll :: (MonadNamey m, MonadState Driver m)
+          => FilePath -> m ErrorBundle
+getErrorsAll = fmap fold . gatherDepsOf getErrors . Set.singleton
 
 -- | Update an item within the state
 updateFile :: MonadState Driver m
@@ -746,3 +779,11 @@ foldMapM f = foldrM (\a b -> (<>b) <$> f a) mempty
 
 isError :: Note a b => a -> Bool
 isError x = diagnosticKind x == ErrorMessage
+
+runCallback :: (MonadIO m, MonadState Driver m)
+            => FilePath
+            -> (DriverCallbacks -> FilePath -> a -> ErrorBundle -> IO ())
+            -> a -> m ()
+runCallback path fn x = do
+  ~(Just file) <- use (files . at path)
+  uses config ((\f -> f path x (file ^. errors)) . fn . callbacks) >>= liftIO

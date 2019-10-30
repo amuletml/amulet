@@ -19,8 +19,6 @@ import Options.Applicative hiding (ParseError)
 import Language.Lua.Syntax
 import Backend.Lua
 
-import qualified Syntax.Builtin as Bi
-
 import Core.Optimise.Reduce (reducePass)
 import Core.Optimise.DeadCode (deadCodePass)
 import Core.Simplify (optimise)
@@ -81,8 +79,8 @@ compileFromTo opt lint dbg config file emit = do
   files <- D.fileMap driver
   reportAllS files errors
   case compiled of
-    Just (env, core, opt, lua) -> do
-      D.dump dbg [] core opt lua Bi.builtinEnv env
+    Just (_, core, opt, lua) -> do
+      D.dumpCore dbg core opt lua
       emit lua
     Nothing -> pure ()
 
@@ -196,7 +194,7 @@ argParser = info (args <**> helper <**> version)
     defaultPort = 5478
 
 driverConfig :: CompilerOptions -> IO D.DriverConfig
-driverConfig CompilerOptions { libraryPath =  paths } = do
+driverConfig CompilerOptions { debugMode = debug, libraryPath =  paths } = do
   paths <- sequence <$> for paths (\path -> do
     path' <- canonicalizePath path
     exists <- doesDirectoryExist path'
@@ -208,7 +206,8 @@ driverConfig CompilerOptions { libraryPath =  paths } = do
       exitWith (ExitFailure 1)
     Right paths -> do
       config <- D.makeConfig
-      pure config { D.libraryPath = paths ++ D.libraryPath config }
+      pure config { D.libraryPath = paths ++ D.libraryPath config
+                  , D.callbacks = D.dumpCallbacks debug }
 
 findPrelude :: Prelude -> D.DriverConfig -> IO (Maybe FilePath)
 findPrelude NoPrelude _ = pure Nothing
@@ -248,6 +247,22 @@ main = do
     Args Compile { input, output = Just output } | input == output -> do
       hPutStrLn stderr ("Cannot overwrite input file " ++ input)
       exitWith (ExitFailure 1)
+
+    Args Compile { input, options = options@CompilerOptions { debugMode = D.TestTc } } -> do
+      exists <- doesFileExist input
+      if not exists
+      then hPutStrLn stderr ("Cannot find input file " ++ input)
+        >> exitWith (ExitFailure 1)
+      else pure ()
+
+      config <- driverConfig options
+      path <- liftIO $ canonicalizePath input
+      (errors, driver) <-
+          flip evalNameyT firstName
+        . flip runStateT (D.makeDriverWith config)
+        $ D.getTypeEnv path >> D.getErrorsAll path
+      files <- D.fileMap driver
+      reportAllS files errors
 
     Args Compile { input, output, optLevel, options } -> do
       exists <- doesFileExist input
