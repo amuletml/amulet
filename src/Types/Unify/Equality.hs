@@ -9,6 +9,8 @@ module Types.Unify.Equality
   , unifyPure, unifyPure_v
   , overlap
   , InField(..)
+
+  , unequal, rethrow
   ) where
 
 import Control.Monad.Except
@@ -44,7 +46,7 @@ import Data.Ord
 
 import Text.Pretty.Semantic
 
-import Types.Unify.Magic
+import {-# SOURCE #-} Types.Unify.Magic
 import Types.Unify.Trace
 import Types.Unify.Base
 
@@ -80,7 +82,7 @@ bind scope var ty
                      -- v1 is bad but v2 is free. So what we do is add
                      -- v2 := v1 to the environment.
 
-                   | otherwise -> confesses =<< unequal (TyVar var) ty
+                   | otherwise -> confesses =<< unequal scope (TyVar var) ty
                    -- No can do.
                 pure (ReflCo ty)
               Just ty' -> unify scope ty (apply env ty')
@@ -118,13 +120,13 @@ unify scope (TySkol x) (TySkol y) -- {{{
                else confesses (SkolBinding x (TySkol y))
 -- }}}
 
-unify _ ta@(TyPromotedCon a) tb@(TyPromotedCon b)
+unify scope ta@(TyPromotedCon a) tb@(TyPromotedCon b)
   | a == b = pure (ReflCo tb)
-  | otherwise = confesses =<< unequal ta tb
+  | otherwise = confesses =<< unequal scope ta tb
 
-unify _ ta@(TyLit a) tb@(TyLit b)
+unify scope ta@(TyLit a) tb@(TyLit b)
   | a == b = pure (ReflCo tb)
-  | otherwise = confesses =<< unequal ta tb
+  | otherwise = confesses =<< unequal scope ta tb
 
 unify scope (TyVar a) b = bind scope a b
 unify scope a (TyVar b) = SymCo <$> bind scope b a
@@ -168,10 +170,10 @@ unify scope (TyArr l r) (TyApp (TyApp (TyCon v) l') r')
   | v == tyArrowName = ArrCo <$> unify scope l l' <*> unify scope r r'
 
 unify scope x@(TyApp f g) y@(TyArr l r) =
-  rethrow x y $ AppCo <$> unify scope f (TyApp (TyCon tyArrowName) l) <*> unify scope g r
+  rethrow scope x y $ AppCo <$> unify scope f (TyApp (TyCon tyArrowName) l) <*> unify scope g r
 
 unify scope x@(TyArr l r) y@(TyApp f g) =
-  rethrow x y $ AppCo <$> unify scope (TyApp (TyCon tyArrowName) l) f <*> unify scope r g
+  rethrow scope x y $ AppCo <$> unify scope (TyApp (TyCon tyArrowName) l) f <*> unify scope r g
 
 unify scope (TyArr a b) (TyArr a' b') = ArrCo <$> unify scope a a' <*> unify scope b b'
 unify scope (TyPi (Implicit a) b) (TyPi (Implicit a') b') =
@@ -184,7 +186,7 @@ unify scope ta@(TyCon a) tb@(TyCon b)
       x <- use solveAssumptions
       case lookupEquality i scope x ta tb of
         (x:_) -> pure x
-        _ -> confesses =<< unequal ta tb
+        _ -> confesses =<< unequal scope ta tb
 
 unify scope (TyForall v Nothing ty) (TyForall v' Nothing ty') = do
   fresh <- freshTV
@@ -245,9 +247,9 @@ unify scope (TyTuple l r) (TyApp (TyApp (TyCon v) l') r')
   | v == tyTupleName = ProdCo <$> unify scope l l' <*> unify scope r r'
 
 unify scope x@(TyApp f g) y@(TyTuple l r) =
-  rethrow x y $ AppCo <$> unify scope f (TyApp (TyCon tyTupleName) l) <*> unify scope g r
+  rethrow scope x y $ AppCo <$> unify scope f (TyApp (TyCon tyTupleName) l) <*> unify scope g r
 unify scope x@(TyTuple l r) y@(TyApp f g) =
-  rethrow x y $ AppCo <$> unify scope (TyApp (TyCon tyTupleName) l) f <*> unify scope r g
+  rethrow scope x y $ AppCo <$> unify scope (TyApp (TyCon tyTupleName) l) f <*> unify scope r g
 
 unify scope (TyOperator l v r) (TyTuple l' r')
   | v == tyTupleName = ProdCo <$> unify scope l l' <*> unify scope r r'
@@ -259,9 +261,9 @@ unify scope (TyTuple a b) (TyTuple a' b') =
   ProdCo <$> unify scope a a' <*> unify scope b b'
 
 unify scope x@(TyOperator l v r) y@(TyApp f g) =
-  rethrow x y $ AppCo <$> unify scope (TyApp (TyCon v) l) f <*> unify scope g r
+  rethrow scope x y $ AppCo <$> unify scope (TyApp (TyCon v) l) f <*> unify scope g r
 unify scope x@(TyApp f g) y@(TyOperator l v r) =
-  rethrow x y $ AppCo <$> unify scope f (TyApp (TyCon v) l) <*> unify scope r g
+  rethrow scope x y $ AppCo <$> unify scope f (TyApp (TyCon v) l) <*> unify scope r g
 
 unify scope (TyOperator l v r) (TyOperator l' v' r')
   | v == v' = AppCo <$> unify scope l l' <*> unify scope r r'
@@ -278,19 +280,19 @@ unify scope ta@(TyApps (TyCon v) xs@(_:_)) b = do
     _ -> case b of
       TyApps (TyCon v') _
         | Just (Right _) <- x ^. at v' -> do
-          doWork (unequal ta b)
+          doWork (unequal scope ta b)
           SymCo <$> unify scope b ta
-        | v /= v' -> confesses =<< unequal ta b
+        | v /= v' -> confesses =<< unequal scope ta b
 
-      TyApps f ys@(_:_) | length xs == length ys -> rethrow ta b $ do
+      TyApps f ys@(_:_) | length xs == length ys -> rethrow scope ta b $ do
         heads <- unify scope (TyCon v) f
         tails <- polyInstSafe $
           traverse (uncurry (unify scope)) (zip xs ys)
         pure (foldl AppCo heads tails)
 
-      TyApps f ys@(_:_) | length ys < length xs -> rethrow ta b $ do
+      TyApps f ys@(_:_) | length ys < length xs -> rethrow scope ta b $ do
         case f of
-          TyCon{} -> confesses =<< unequal ta b
+          TyCon{} -> confesses =<< unequal scope ta b
           _ -> pure ()
 
         let ys_l = length ys
@@ -304,16 +306,16 @@ unify scope ta@(TyApps (TyCon v) xs@(_:_)) b = do
           pure (foldl AppCo heads tails)
 
       _ -> do
-        doWork (unequal ta b)
-        (confesses =<< unequal ta b)
+        doWork (unequal scope ta b)
+        (confesses =<< unequal scope ta b)
           `catchChronicle` \_ -> fmap SymCo (unify scope b ta)
 
-unify scope a tb@(TyApps (TyCon _) (_:_)) = rethrow a tb $ SymCo <$> unify scope tb a
+unify scope a tb@(TyApps (TyCon _) (_:_)) = rethrow scope a tb $ SymCo <$> unify scope tb a
 
 unify scope (TyApp f x) (TyApp g y) = AppCo <$> unify scope f g <*> unify scope x y
 
 unify _ TyType TyType = pure (ReflCo TyType)
-unify _ a b = confesses =<< unequal a b -- }}}
+unify scope a b = confesses =<< unequal scope a b -- }}}
 
 unifyPure :: Type Typed -> Type Typed -> Maybe (Subst Typed)
 unifyPure a b = unifyPure_v [(a, b)]
@@ -384,7 +386,7 @@ unifyTyFunApp' info scope args tb = do
 -- tyFunByEval ti scope args (TyVar v) = pure <$> bind scope v (TyApps (TyCon (ti ^. tsName)) args)
 tyFunByEval (TyFamInfo tn _ _ _ _) scope args tb | Just solve <- magicTyFun tn = solve scope args tb
 tyFunByEval (TyFamInfo tn eqs relevant _ con) scope args tb = do
-  doWork (unequal (TyApps (TyCon tn) args) tb)
+  doWork (unequal scope (TyApps (TyCon tn) args) tb)
   info <- view solveInfo
   assum <- use solveAssumptions
   () <- case con of
@@ -521,7 +523,7 @@ reduceTyFuns scope orig = do
   info <- view solveInfo
 
   (tau, funs) <- (_1 %~ apply sub) <$> flatten assum info orig
-  traceM EquS ("flattened: " <+> pretty tau)
+  traceM EquS ("flattened:" <+> pretty tau)
   let eqs = Map.toList funs
 
   (_, state) <- censor (const mempty) . capture . for eqs $ \(var, TyApps (TyCon tyfun) args) -> do
@@ -583,6 +585,59 @@ overlap xs ys
   = map get inter
   where get [(t, a), (_, b)] = (t, a, b)
         get _ = undefined
+
+unequal :: forall m. MonadSolve m => ImplicitScope ClassInfo Typed -> Type Typed -> Type Typed -> m TypeError
+unequal scope a b =
+  do
+    x <- use solveTySubst
+
+    let ta = apply x a
+        tb = apply x b
+
+    (a_st, red_a) <- entirely_reduce noReductions ta
+    (b_st, red_b) <- entirely_reduce noReductions tb
+
+    let cont = reduction (string "left-hand") a_st red_a ta
+            <> reduction (string "right-hand") b_st red_b tb
+
+    pure (appEndo cont (NotEqual red_a red_b))
+  where
+    entirely_reduce :: Int -> Type Typed -> m (Int, Type Typed)
+    entirely_reduce 0 ty = pure (0, ty)
+    entirely_reduce n ty = do
+      let t = TyParens ty
+      red <- reduceTyFuns scope t
+      if red /= t
+         then let ~(TyParens t) = red in entirely_reduce (n - 1) t
+         else pure (n, ty)
+
+    reduction :: Doc -> Int -> Type Typed -> Type Typed -> Endo TypeError
+    reduction _ x _ _ | x == noReductions = mempty
+    reduction side _ red tau =
+      let doc = if wide > 20
+                   then mempty
+                    <#> indent 4
+                          (align (vsep [ "Where the" <+> side <+> "side type,"
+                                       , indent 2 r <> comma
+                                       , "is the reduction of"
+                                       , indent 2 t
+                                       ]))
+                   else hsep [ "Where" <+> t <+> soperator (string "~>") <+> r ]
+          t = displayTypeTyped tau
+          r = displayTypeTyped red
+          wide = length (show r)
+       in Endo (flip Note doc)
+
+    noReductions :: Int
+    noReductions = 20
+
+rethrow :: MonadSolve m => ImplicitScope ClassInfo Typed -> Type Typed -> Type Typed -> m a -> m a
+rethrow scope l r cont =
+  condemn cont
+    `catchChronicle` \e -> confess =<< for e go
+  where
+    go NotEqual{} = unequal scope l r
+    go x = pure x
 
 data UsedEq = Var | Proj1 | Proj2 deriving (Eq, Show, Ord)
 

@@ -5,7 +5,8 @@ import Control.Arrow
 import Control.Lens hiding (Lazy, (:>))
 
 import Syntax.Var
-import Syntax
+import Syntax.Expr
+import Syntax.Type
 
 transformType
   :: (Type p -> Type p)

@@ -66,7 +66,7 @@ instance Spanned ConcreteReason where
 instance Pretty ConcreteReason where
   pretty (BecauseOfExpr e _) = pretty e
   pretty (BecauseOfPat e) = pretty e
-  pretty BecauseInternal{} = keyword "internal compiler error"
+  pretty (BecauseInternal x) = keyword x
 
 -- | A type which can be blamed for an error
 class (Spanned (f p), Pretty (f p)) => Reasonable f p where

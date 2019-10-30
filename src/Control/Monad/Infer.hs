@@ -87,10 +87,7 @@ deriving instance (Eq (Ann p), Eq (Var p), Eq (Expr p), Eq (Type p))
   => Eq (Constraint p)
 
 data TypeError where
-  NotEqual :: (Show (Var p), Pretty (Var p), Ord (Var p))
-           => { actual :: Type p
-              , expected :: Type p }
-           -> TypeError
+  NotEqual :: { actual :: Type Typed, expected :: Type Typed } -> TypeError
 
   Occurs :: (Pretty (Var p), Ord (Var p)) => Var p -> Type p -> TypeError
   CustomTypeError :: Doc -> TypeError
@@ -311,8 +308,8 @@ refreshTV v = TyVar <$> genNameFrom nm where
 instance Pretty TypeError where
   pretty NotEqual{ expected, actual } =
     vsep
-      $ nest 2 ("Couldn't match" <+> highlight "actual" <+> "type" <+> displayType actual
-           </> "with the" <+> highlight "type expected by the context," <+> displayType expected)
+      $ nest 2 ("Couldn't match" <+> highlight "actual" <+> "type" <+> displayTypeTyped actual
+           </> "with the" <+> highlight "type expected by the context," <+> displayTypeTyped expected)
       : case (expected, actual) of
           (TyArr{}, TyArr{}) -> []
           (TyArr{}, t) ->
