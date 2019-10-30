@@ -18,11 +18,12 @@ import Data.Spanned
 
 import Text.Pretty.Semantic
 
+import Types.Unify.Equality
 import Types.Unify.Base
 
 type Solver m = SomeReason -> ImplicitScope ClassInfo Typed -> Type Typed -> m (Maybe (Wrapper Typed))
 type TfSolver m = ImplicitScope ClassInfo Typed -> [Type Typed] -> Type Typed -> m (Maybe (Coercion Typed))
-type Reporter m = SomeReason -> Type Typed -> Seq.Seq TypeError -> m ()
+type Reporter m = SomeReason -> ImplicitScope ClassInfo Typed -> Type Typed -> Seq.Seq TypeError -> m ()
 
 magicClass :: MonadSolve m => Var Typed -> Maybe (Solver m, Reporter m)
 magicClass v
@@ -34,11 +35,13 @@ magicClass v
   | otherwise = Nothing
 
 confess' :: MonadSolve m => Reporter m
-confess' reason ts xs = confesses (UnsatClassCon reason (ConImplicit reason mempty undefined ts) (MagicErrors (toList xs)))
+confess' reason _ ts xs = confesses (UnsatClassCon reason (ConImplicit reason mempty undefined ts) (MagicErrors (toList xs)))
 
 confess_eq :: MonadSolve m => Reporter m
-confess_eq reason (TyApps _ [a, b]) _ = confesses (ArisingFrom (NotEqual a b) reason)
-confess_eq _ _ _ = undefined
+confess_eq reason scope (TyApps _ [a, b]) _ = do
+  e <- unequal scope a b
+  confesses (ArisingFrom e reason)
+confess_eq _ _ _ _ = undefined
 
 solveEq :: MonadSolve m => Solver m
 solveEq blame classes ty@(TyApps _ [a, b]) = do

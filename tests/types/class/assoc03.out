@@ -3,4 +3,5 @@ assoc03.ml[13:16 ..13:17]: error
 13 │   let into _ = ()
    │                ^^
   Couldn't match actual type unit
-    with the type expected by the context, bar unit
+    with the type expected by the context, string
+  • Note: Where bar unit ~> string

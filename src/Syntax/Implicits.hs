@@ -26,7 +26,8 @@ import Data.List hiding (insert, lookup)
 
 import Control.Lens
 
-import Syntax hiding ((:>))
+import Syntax.Type
+import Syntax.Var
 import Prelude hiding (lookup)
 
 import Syntax.Subst

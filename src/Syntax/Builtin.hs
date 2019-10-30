@@ -56,7 +56,7 @@ import Data.Span
 import Syntax.Implicits
 import Syntax.Boolean
 import Syntax.Var
-import Syntax
+import Syntax.Type hiding (record)
 
 import qualified Core.Builtin as C
 import Core.Var
