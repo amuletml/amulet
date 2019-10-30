@@ -31,6 +31,7 @@ external private val prim_catch : (unit -> 'a) -> (some exception -> 'a) -> 'a =
   "function(k, h) \
      local ok, err = pcall(k) \
      if not ok then \
+       if type(err) ~= 'table' then return error(err) end \
        return h(err) \
      else \
        return err \
