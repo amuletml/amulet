@@ -101,8 +101,6 @@ import Frontend.Errors
 
 import Text.Pretty.Note
 
-import Debug.Trace
-
 -- | The stage a file is at. Files are parsed, resolved, type checked,
 -- verified, and then lowered.
 --
@@ -147,7 +145,7 @@ data LoadedFile = LoadedFile
   , fileVar      :: Name
 
   , fileHash    :: BS.ByteString
-  , fileClock   :: Clock
+  , _fileClock   :: Clock
 
   -- | Files upon which this one depends.
   , _dependencies :: Set.Set FilePath
@@ -399,8 +397,8 @@ verifyProg v env inferred =
 
 -- | Get a file, reloading from disk if the cache state has changed.
 getFile :: forall m. (MonadNamey m, MonadState Driver m, MonadIO m)
-        => FilePath -> m LoadedFile
-getFile = fmap (fst . fromJust) . reloadFile where
+        => FilePath -> m (Maybe LoadedFile)
+getFile = fmap (fmap fst) . reloadFile where
   -- | Get or reload a file, returning it and whether it changed.
   reloadFile :: FilePath -> m (Maybe (LoadedFile, Bool))
   reloadFile path = do
@@ -418,7 +416,15 @@ getFile = fmap (fst . fromJust) . reloadFile where
             Just . (,True) <$> addFile path name var sha contents
 
       Just file
-        | fileClock file == clock -> pure (Just (file, False))
+        | file ^. fileClock == clock -> pure (Just (file, False))
+
+        | SEmitted{} <- file ^. stage
+        , cTock (file ^. fileClock) == cTock clock ->
+            -- If we've emitted the file, and we're on the same major tick, then
+            -- it's not safe to recompile - we don't want to break any REPL
+            -- state. So just update the clock.
+            updateFile path (fileClock .~ clock) $> (Just (file, False))
+
         | otherwise -> do
           contents <- read path
           case contents of
@@ -430,7 +436,9 @@ getFile = fmap (fst . fromJust) . reloadFile where
                 -- If it's been updated on disk, just reload it immediately.
                 Just . (,True) <$> addFile path (fileSource file) (fileVar file) sha contents
               | otherwise -> do
-                -- Otherwise check each dependency.
+                -- Otherwise check each dependency. We update the clock
+                -- beforehand, to avoid getting into any dependency loops.
+                updateFile path (fileClock .~ clock)
                 Any changed <- foldMapM (fmap (Any . maybe True snd) . reloadFile) (file ^. dependencies)
                 if changed
                 then Just . (,True) <$> addFile path (fileSource file) (fileVar file) sha contents
@@ -453,7 +461,7 @@ getFile = fmap (fst . fromJust) . reloadFile where
           , fileVar      = var
 
           , fileHash    = hash
-          , fileClock   = clock
+          , _fileClock   = clock
 
           , _dependencies = mempty
           , _dependent = Nothing
@@ -471,12 +479,11 @@ getFile = fmap (fst . fromJust) . reloadFile where
 getSignature :: (MonadNamey m, MonadState Driver m, MonadIO m)
              => FilePath -> m (Maybe Signature)
 getSignature path = do
-  file <- getFile path
+  file <- fromMaybe (error ("Cannot find " ++ show path)) <$> getFile path
   case file ^. stage of
     SUnparsed -> pure Nothing
     SParsed parsed -> do
       updateFile path $ stage .~ SResolving
-      traceM ("Resolving " ++ path)
       (resolved, deps) <-
           flip runFileImport (LoadContext (dropFileName path) (Just path))
         $ resolveProgram builtinResolve parsed
@@ -691,10 +698,10 @@ instance (MonadNamey m, MonadState Driver m, MonadIO m) => MonadImport (FileImpo
 importFile :: (MonadNamey m, MonadState Driver m, MonadIO m)
            => Maybe FilePath -> Maybe Span -> FilePath -> m ImportResult
 importFile fromPath fromLoc path = do
-  file <- use (files . at path)
+  file <- getFile path
   case file of
-    Just{} -> do
-      file <- getFile path
+    Nothing -> pure NotFound
+    Just file -> do
       case file ^. stage of
         SResolving -> do
           state <- get
@@ -702,14 +709,10 @@ importFile fromPath fromLoc path = do
               fromFile = flip Map.lookup (state ^. files) =<< fromPath
           pure (ImportCycle ((fileSource file, loc) E.:| foldMap (`findCycle` state) fromFile))
 
-        _ -> maybe Errored (Imported (fileVar file)) <$> getSignature path
+        _ -> do
+          updateFile path $ dependent %~ (<|> ((,) <$> fromPath <*> fromLoc))
+          maybe Errored (Imported (fileVar file)) <$> getSignature path
 
-    Nothing -> do
-      exists <- liftIO $ doesFileExist path
-      if not exists then pure NotFound else do
-        file <- getFile path
-        updateFile path $ dependent .~ ((,) <$> fromPath <*> fromLoc)
-        maybe Errored (Imported (fileVar file)) <$> getSignature path
 
 -- | Find the first file which matches a list.
 findFile' :: [FilePath] -> IO (Maybe FilePath)
@@ -721,7 +724,7 @@ findFile' (x:xs) = do
 
 -- | Try to identify the cycle of files requiring each other.
 findCycle :: LoadedFile -> Driver -> [(FilePath, Span)]
-findCycle (LoadedFile { fileSource, _stage = SParsed _, _dependent = Just (from, loc) }) st =
+findCycle (LoadedFile { fileSource, _stage = SResolving, _dependent = Just (from, loc) }) st =
   (fileSource, loc) : findCycle (fromJust (Map.lookup from (st ^. files))) st
 findCycle _ _ = []
 

@@ -266,7 +266,9 @@ typeCommand (dropWhile isSpace -> input) = do
           prog :: [S.Toplevel S.Parsed]
           prog = [ S.LetStmt S.Public [ S.Matching (S.Wildcard ann) parsed ann ] ]
 
-      (infer, es) <- wrapDriver $ D.inferWith (root (config state)) prog (resolveScope state) (inferScope state)
+      (infer, es) <- wrapDriver $ do
+        D.tick
+        D.inferWith (root (config state)) prog (resolveScope state) (inferScope state)
       hReportAll (outputHandle state) files es
       case infer of
         Nothing -> pure ()
@@ -284,7 +286,7 @@ compileCommand (dropWhile isSpace -> path) = do
   case current of
     Just file -> do
       in_p <- liftIO $ canonicalizePath file
-      (core, errors) <- wrapDriver (D.compile in_p)
+      (core, errors) <- wrapDriver $ D.tick >> D.compile in_p
       handle <- liftIO $ openFile path WriteMode
 
       case core of
@@ -402,8 +404,9 @@ parseCore parser name input = do
             Left s -> s
             Right e -> [S.LetStmt S.Public [S.Binding (S.Name "_") e True (annotation e)]]
 
-      (lower, es) <- wrapDriver $ D.lowerWith (root (config state)) parsed'
-                       (resolveScope state) (inferScope state) (lowerState state)
+      (lower, es) <- wrapDriver $ do
+        D.tick
+        D.lowerWith (root (config state)) parsed' (resolveScope state) (inferScope state) (lowerState state)
       driver_files <- D.fileMap =<< gets driver
       hReportAll (outputHandle state) (files ++ driver_files) es
       case lower of
@@ -485,7 +488,7 @@ runRemoteReplCommand port command = Net.withSocketsDo $ do
 
 loadFileImpl :: (MonadState ReplState m, MonadIO m) => FilePath -> m Bool
 loadFileImpl path = do
-  (core, es) <- wrapDriver $ D.compile path
+  (core, es) <- wrapDriver $ D.tick >> D.compile path
 
   files <- D.fileMap =<< gets driver
   handle <- gets outputHandle
