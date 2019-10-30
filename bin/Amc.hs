@@ -53,7 +53,7 @@ runCompile opt (DoLint lint) dconfig file = do
       flip runNameyT firstName
     . flip runStateT (D.makeDriverWith dconfig)
     $ do
-      (core, errors) <- D.compile path
+      (core, errors) <- D.compiles path
       ~(Just env) <- D.getTypeEnv path
       pure (env, core, errors)
 

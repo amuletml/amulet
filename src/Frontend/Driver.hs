@@ -26,6 +26,9 @@ module Frontend.Driver
   , fileMap
   , getConfig, adjustConfig
 
+  -- * Cache invalidation
+  , tick, tock
+
   -- * REPL interaction
   --
   -- $repl
@@ -37,7 +40,7 @@ module Frontend.Driver
   -- * Compilation
   --
   -- $compile
-  , compile
+  , compile, compiles
 
   -- * Querying the driver
   --
@@ -56,9 +59,11 @@ import Control.Monad.Namey
 import Control.Applicative
 import Control.Lens hiding ((<.>))
 
+import qualified Data.Text.Lazy.Encoding as L
+import qualified Data.ByteString.Lazy as BSL
 import qualified Data.List.NonEmpty as E
 import qualified Data.Map.Strict as Map
-import qualified Data.Text.Lazy.IO as L
+import qualified Data.ByteString as BS
 import qualified Data.Sequence as Seq
 import qualified Data.Text.IO as T
 import qualified Data.Text as T
@@ -70,6 +75,8 @@ import Data.Monoid
 import Data.Maybe
 import Data.These
 import Data.Span
+
+import qualified Crypto.Hash.SHA256 as SHA
 
 import Core.Core (Stmt)
 import Core.Var (CoVar)
@@ -108,6 +115,7 @@ data Stage
   = SParsed     { _pBody :: [Toplevel Parsed] }
   | SUnparsed
 
+  | SResolving
   | SResolved   { _rBody :: [Toplevel Resolved], sig :: Signature }
   | SUnresolved
 
@@ -120,10 +128,24 @@ data Stage
   | SEmitted    { _cBody :: [Stmt CoVar],        sig :: Signature, env :: Env, _lowerState :: LowerState }
   deriving Show
 
+-- | A clock, composed of a major 'cTock' counter and a minor 'cTick' counter.
+--
+-- Ticks represent a "minor" change to the cache, which does not require
+-- us to update the executable state. Any file which has not yet been
+-- emitted may be reloaded at this point.
+--
+-- Tocks are used for a major change, where we will dispose of the whole
+-- executable state. Any module may be reloaded at this point.
+data Clock = Clock { cTock :: Int, cTick :: Int }
+  deriving (Show, Eq, Ord)
+
 data LoadedFile = LoadedFile
   { fileLocation :: FilePath
-  , fileSource :: SourceName
-  , fileVar :: Name
+  , fileSource   :: SourceName
+  , fileVar      :: Name
+
+  , fileHash    :: BS.ByteString
+  , _fileClock   :: Clock
 
   -- | Files upon which this one depends.
   , _dependencies :: Set.Set FilePath
@@ -145,8 +167,8 @@ newtype DriverConfig = DriverConfig
 data Driver = Driver
   { -- | All loaded files.
     _files :: Map.Map FilePath LoadedFile
-  -- | A mapping of pretty source paths, to cannonical file names.
-  , _filePaths :: Map.Map SourceName FilePath
+    -- | The current clock of the loader.
+  , _clock :: Clock
   -- | The driver's current config
   , _config :: DriverConfig
   } deriving Show
@@ -156,11 +178,11 @@ makeLenses ''Driver
 
 -- | Construct a new driver from the given config.
 makeDriverWith :: DriverConfig -> Driver
-makeDriverWith = Driver mempty mempty
+makeDriverWith = Driver mempty (Clock 0 0)
 
 -- | Construct a new driver using 'makeConfig'.
 makeDriver :: IO Driver
-makeDriver = Driver mempty mempty <$> makeConfig
+makeDriver = Driver mempty (Clock 0 0) <$> makeConfig
 
 -- | The default driver config.
 --
@@ -204,6 +226,19 @@ getConfig = _config
 
 adjustConfig :: MonadState Driver m => (DriverConfig -> DriverConfig) -> m ()
 adjustConfig = (config%=)
+
+-- | Update the drivers's internal counter, allowing to reload any
+-- non-emitted files.
+tick :: MonadState Driver m => m ()
+tick = clock %= \(Clock to ti) -> Clock to (ti + 1)
+
+-- | Update the driver's internal counter, allowing it to reload any
+-- emitted file.
+--
+-- This should only be used in conjunction with resetting your execution
+-- state (such as a Lua environment).
+tock :: MonadState Driver m => m ()
+tock = clock %= \(Clock to _) -> Clock (to + 1) 0
 
 {- $repl
 
@@ -311,13 +346,20 @@ lowerWith root parsed sig env lState = do
    Various helper functions for compiling a whole bundle of files.
  -}
 
--- | Attempt to compile a single file. Returns the concatenated core of
--- all files.
+-- | Attempt to compile a single of file. Returns the concatenated core
+-- of all files.
+compiles :: (MonadNamey m, MonadIO m, MonadState Driver m)
+         => FilePath -> m (Maybe [Stmt CoVar], ErrorBundle)
+compiles = compile . pure
+
+-- | Attempt to compile a collection of files. Returns the concatenated
+-- core of all files.
 compile :: (MonadNamey m, MonadIO m, MonadState Driver m)
-        => FilePath -> m (Maybe [Stmt CoVar], ErrorBundle)
-compile path = do
-  l <- fmap (concat . fmap fst) . sequence <$> gatherDeps getLowered path
-  errors <- fold <$> gatherDeps getErrors path
+        => [FilePath] -> m (Maybe [Stmt CoVar], ErrorBundle)
+compile ps = do
+  let paths = Set.fromList ps
+  l <- fmap (concat . fmap fst) . sequence <$> gatherDepsOf getLowered paths
+  errors <- fold <$> gatherDepsOf getErrors paths
   pure (l, errors)
 
 errorsFromDeps :: (MonadNamey m, MonadState Driver m)
@@ -339,12 +381,6 @@ gatherDepsOf f = fmap snd . foldlM go mempty where
         (visited, seq) <- foldlM go (Set.insert path visited, seq) deps
         pure (visited, seq Seq.|> this)
 
--- | Walk over all nodes in dependency order. Effectively a preorder traversal.
-gatherDeps :: (MonadNamey m, MonadState Driver m)
-           => (FilePath -> m a)
-           -> FilePath -> m (Seq.Seq a)
-gatherDeps f = gatherDepsOf f . Set.singleton
-
 verifyProg :: Name -> Env -> [Toplevel Typed] -> (Bool, ErrorBundle)
 verifyProg v env inferred =
   let (ok, es) = runVerify env v (verifyProgram inferred)
@@ -360,45 +396,95 @@ verifyProg v env inferred =
    occurred in the process of loading this file.
 -}
 
-addFile :: (MonadNamey m, MonadState Driver m, MonadIO m)
-        => FilePath -> m LoadedFile
-addFile path = do
-  name <- liftIO $ makeRelativeToCurrentDirectory path
-  var <- genNameFrom (T.pack ("\"" ++ name ++ "\""))
-  contents <- liftIO $ L.readFile path
-  let (parsed, es) = runParser name contents parseTops
-  let file = LoadedFile
-        { fileLocation = path
-        , fileSource = name
-        , fileVar = var
+-- | Get a file, reloading from disk if the cache state has changed.
+getFile :: forall m. (MonadNamey m, MonadState Driver m, MonadIO m)
+        => FilePath -> m (Maybe LoadedFile)
+getFile = fmap (fmap fst) . reloadFile where
+  -- | Get or reload a file, returning it and whether it changed.
+  reloadFile :: FilePath -> m (Maybe (LoadedFile, Bool))
+  reloadFile path = do
+    file <- use (files . at path)
+    clock <- use clock
+    case file of
+      Nothing -> do
+        contents <- read path
+        case contents of
+          Nothing -> pure Nothing
+          Just (sha, contents) -> do
+            -- File isn't in cache: add it.
+            name <- liftIO $ makeRelativeToCurrentDirectory path
+            var <- genNameFrom (T.pack ("\"" ++ name ++ "\""))
+            Just . (,True) <$> addFile path name var sha contents
 
-        , _dependencies = mempty
-        , _dependent = Nothing
+      Just file
+        | file ^. fileClock == clock -> pure (Just (file, False))
 
-        , _stage = maybe SUnparsed SParsed parsed
+        | SEmitted{} <- file ^. stage
+        , cTock (file ^. fileClock) == cTock clock ->
+            -- If we've emitted the file, and we're on the same major tick, then
+            -- it's not safe to recompile - we don't want to break any REPL
+            -- state. So just update the clock.
+            updateFile path (fileClock .~ clock) $> (Just (file, False))
 
-        , _errors = mempty & parseErrors .~ es
-        }
+        | otherwise -> do
+          contents <- read path
+          case contents of
+            Nothing ->
+              -- Remove file from cache if it doesn't exist on disk
+              (files %= Map.delete path) $> Nothing
+            Just (sha, contents)
+              | sha /= fileHash file ->
+                -- If it's been updated on disk, just reload it immediately.
+                Just . (,True) <$> addFile path (fileSource file) (fileVar file) sha contents
+              | otherwise -> do
+                -- Otherwise check each dependency. We update the clock
+                -- beforehand, to avoid getting into any dependency loops.
+                updateFile path (fileClock .~ clock)
+                Any changed <- foldMapM (fmap (Any . maybe True snd) . reloadFile) (file ^. dependencies)
+                if changed
+                then Just . (,True) <$> addFile path (fileSource file) (fileVar file) sha contents
+                else pure (Just (file, False))
 
-  filePaths %= Map.insert name path
-  files %= Map.insert path file
+  read :: FilePath -> m (Maybe (BS.ByteString, BSL.ByteString))
+  read path = do
+    exists <- liftIO $ doesFileExist path
+    if not exists then pure Nothing else do
+      contents <- liftIO $ BSL.readFile path
+      pure (Just (SHA.hashlazy contents, contents))
 
-  pure file
+  addFile :: FilePath -> String -> Name -> BS.ByteString -> BSL.ByteString -> m LoadedFile
+  addFile path name var hash contents = do
+    clock <- use clock
+    let (parsed, es) = runParser name (L.decodeUtf8 contents) parseTops
+    let file = LoadedFile
+          { fileLocation = path
+          , fileSource   = name
+          , fileVar      = var
+
+          , fileHash    = hash
+          , _fileClock   = clock
+
+          , _dependencies = mempty
+          , _dependent = Nothing
+
+          , _stage = maybe SUnparsed SParsed parsed
+
+          , _errors = mempty & parseErrors .~ es
+          }
+
+    files %= Map.insert path file
+
+    pure file
 
 -- | Get or compute a file's signature.
 getSignature :: (MonadNamey m, MonadState Driver m, MonadIO m)
              => FilePath -> m (Maybe Signature)
 getSignature path = do
-  file <- use (files . at path)
-  file <- case file of
-    Nothing -> do
-      exists <- liftIO $ doesFileExist path
-      if exists then Just <$> addFile path else pure Nothing
-    Just file -> pure (Just file)
-
-  case maybe SUnparsed (^. stage) file of
+  file <- fromMaybe (error ("Cannot find " ++ show path)) <$> getFile path
+  case file ^. stage of
     SUnparsed -> pure Nothing
     SParsed parsed -> do
+      updateFile path $ stage .~ SResolving
       (resolved, deps) <-
           flip runFileImport (LoadContext (dropFileName path) (Just path))
         $ resolveProgram builtinResolve parsed
@@ -426,6 +512,7 @@ getTypeEnv path = do
     SUnresolved{} -> pure Nothing
     SUntyped{} -> pure Nothing
 
+    SResolving{} -> error "Impossible SResolving - should have been resolved."
     SResolved { _rBody = rBody, sig } -> do
       let ~(Just file') = file
       AllOf env <- foldMapM (fmap AllOf . getTypeEnv) (file' ^. dependencies)
@@ -483,6 +570,7 @@ getVerified path = do
     SUntyped{} -> pure False
     SUnresolved{} -> pure False
 
+    SResolving{} -> error "Impossible SResolving - should have been resolved."
     SResolved{} -> error "Impossible SResolved - should have been typed."
 
     -- Already done
@@ -611,26 +699,21 @@ instance (MonadNamey m, MonadState Driver m, MonadIO m) => MonadImport (FileImpo
 importFile :: (MonadNamey m, MonadState Driver m, MonadIO m)
            => Maybe FilePath -> Maybe Span -> FilePath -> m ImportResult
 importFile fromPath fromLoc path = do
-  file <- use (files . at path)
+  file <- getFile path
   case file of
+    Nothing -> pure NotFound
     Just file -> do
       case file ^. stage of
-        SUnresolved -> pure Errored
-        SUnparsed -> pure Errored
-        SParsed _ -> do
+        SResolving -> do
           state <- get
           let ~(Just loc) = fromLoc
               fromFile = flip Map.lookup (state ^. files) =<< fromPath
           pure (ImportCycle ((fileSource file, loc) E.:| foldMap (`findCycle` state) fromFile))
 
-        stage -> pure (Imported (fileVar file) (sig stage))
+        _ -> do
+          updateFile path $ dependent %~ (<|> ((,) <$> fromPath <*> fromLoc))
+          maybe Errored (Imported (fileVar file)) <$> getSignature path
 
-    Nothing -> do
-      exists <- liftIO $ doesFileExist path
-      if not exists then pure NotFound else do
-        file <- addFile path
-        updateFile path $ dependent .~ ((,) <$> fromPath <*> fromLoc)
-        maybe Errored (Imported (fileVar file)) <$> getSignature path
 
 -- | Find the first file which matches a list.
 findFile' :: [FilePath] -> IO (Maybe FilePath)
@@ -642,7 +725,7 @@ findFile' (x:xs) = do
 
 -- | Try to identify the cycle of files requiring each other.
 findCycle :: LoadedFile -> Driver -> [(FilePath, Span)]
-findCycle (LoadedFile { fileSource, _stage = SParsed _, _dependent = Just (from, loc) }) st =
+findCycle (LoadedFile { fileSource, _stage = SResolving, _dependent = Just (from, loc) }) st =
   (fileSource, loc) : findCycle (fromJust (Map.lookup from (st ^. files))) st
 findCycle _ _ = []
 

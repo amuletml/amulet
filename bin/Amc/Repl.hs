@@ -119,16 +119,27 @@ defaultState config = do
     { resolveScope = Bi.builtinResolve
     , inferScope   = Bi.builtinEnv
     , emitState    = B.defaultEmitState
-    , lastName     = S.TgName (T.pack "a") 1
     , lowerState   = L.defaultState
-
     , luaState     = state
 
+    , lastName     = S.TgName (T.pack "a") 1
     , driver       = D.makeDriverWith (driverConfig config)
     , config       = config
 
     , currentFile  = Nothing
     , outputHandle = stdout
+    }
+
+resetState :: ReplState -> IO ReplState
+resetState state = do
+  lState <- L.newstate
+  L.runWith lState L.openlibs
+  pure state
+    { resolveScope = Bi.builtinResolve
+    , inferScope   = Bi.builtinEnv
+    , emitState    = B.defaultEmitState
+    , lowerState   = L.defaultState
+    , luaState     = lState
     }
 
 type Listener = Maybe ThreadId
@@ -212,15 +223,11 @@ parseArgs xs =
 
 loadCommand :: (MonadState ReplState m, MonadIO m) => String -> m ()
 loadCommand arg = case parseArgs arg of
-                    [file] -> loadFile file
+                    [file] -> loadFile (Just file)
                     _ -> outputDoc "Usage `:load [file]`"
 
 reloadCommand :: (MonadState ReplState m, MonadIO m) => m ()
-reloadCommand = do
-  file <- gets currentFile
-  case file of
-    Nothing -> outputDoc "No module to reload"
-    Just file -> loadFile file
+reloadCommand = loadFile =<< gets currentFile
 
 infoCommand :: (MonadState ReplState m, MonadIO m) => String -> m ()
 infoCommand (T.pack . dropWhile isSpace -> input) = do
@@ -266,7 +273,9 @@ typeCommand (dropWhile isSpace -> input) = do
           prog :: [S.Toplevel S.Parsed]
           prog = [ S.LetStmt S.Public [ S.Matching (S.Wildcard ann) parsed ann ] ]
 
-      (infer, es) <- wrapDriver $ D.inferWith (root (config state)) prog (resolveScope state) (inferScope state)
+      (infer, es) <- wrapDriver $ do
+        D.tick
+        D.inferWith (root (config state)) prog (resolveScope state) (inferScope state)
       hReportAll (outputHandle state) files es
       case infer of
         Nothing -> pure ()
@@ -284,7 +293,7 @@ compileCommand (dropWhile isSpace -> path) = do
   case current of
     Just file -> do
       in_p <- liftIO $ canonicalizePath file
-      (core, errors) <- wrapDriver (D.compile in_p)
+      (core, errors) <- wrapDriver $ D.tick >> D.compiles in_p
       handle <- liftIO $ openFile path WriteMode
 
       case core of
@@ -402,8 +411,9 @@ parseCore parser name input = do
             Left s -> s
             Right e -> [S.LetStmt S.Public [S.Binding (S.Name "_") e True (annotation e)]]
 
-      (lower, es) <- wrapDriver $ D.lowerWith (root (config state)) parsed'
-                       (resolveScope state) (inferScope state) (lowerState state)
+      (lower, es) <- wrapDriver $ do
+        D.tick
+        D.lowerWith (root (config state)) parsed' (resolveScope state) (inferScope state) (lowerState state)
       driver_files <- D.fileMap =<< gets driver
       hReportAll (outputHandle state) (files ++ driver_files) es
       case lower of
@@ -433,30 +443,25 @@ emitCore core = do
   pure (luaExpr, luaSyntax)
 
 -- | Reset the environment and load a series of files from environment
-loadFile :: (MonadState ReplState m, MonadIO m) => FilePath -> m ()
+loadFile :: (MonadState ReplState m, MonadIO m) => Maybe FilePath -> m ()
 loadFile file = do
   -- Reset the state
-  config <- gets config
-  handle <- gets outputHandle
-  state' <- liftIO (defaultState config)
-  put state' { currentFile = Just file
-             , outputHandle = handle }
+  put =<< (liftIO . resetState) =<< get
+  modify (\s ->  s { currentFile = file })
+  wrapDriver D.tock
 
-  -- FIXME: This is a little broken, in that if the prelude and the
-  -- loaded file both require the same code, we will execute it
-  -- twice. Ideally we should probably have a 'loadFilsImpl', which loads
-  -- 1..n files, and correctly handles stitching them together.
-  _ <- setupPrelude
+  -- Determine whether to load the prelude and an additional file.
+  prelude <- gets (toList . prelude . config)
+  load <- case file of
+    Nothing -> pure []
+    Just file -> do
+      path <- liftIO $ canonicalizePath file
+      exists <- liftIO $ doesFileExist path
+      if exists
+      then outputDoc ("Loading:" <+> verbatim file) $> [path]
+      else outputDoc ("Cannot open" <+> verbatim file) $> []
 
-  -- Load each file in turn
-  path <- liftIO $ canonicalizePath file
-  exists <- liftIO $ doesFileExist path
-  if not exists
-  then outputDoc ("Cannot open" <+> verbatim file)
-  else do
-    outputDoc $ "Loading:" <+> verbatim file
-    loadFileImpl path $> ()
-
+  loadFiles (prelude ++ load) $> ()
 
 outputDoc :: (MonadState ReplState m, MonadIO m) => Doc -> m ()
 outputDoc x = do
@@ -479,9 +484,10 @@ runRemoteReplCommand port command = Net.withSocketsDo $ do
     Left (_ :: SomeException) ->
       putStrLn $ "Failed to connect to server on port " ++ show port
 
-loadFileImpl :: (MonadState ReplState m, MonadIO m) => FilePath -> m Bool
-loadFileImpl path = do
-  (core, es) <- wrapDriver $ D.compile path
+loadFiles :: (MonadState ReplState m, MonadIO m) => [FilePath] -> m Bool
+loadFiles [] = pure True
+loadFiles paths = do
+  (core, es) <- wrapDriver $ D.tick >> D.compile paths
 
   files <- D.fileMap =<< gets driver
   handle <- gets outputHandle
@@ -489,25 +495,27 @@ loadFileImpl path = do
   case core of
     Nothing -> pure False
     Just core -> do
-      (sig, env, lEnv) <- wrapDriver $ do
-        ~(Just sig) <- D.getSignature path
-        ~(Just env) <- D.getOpenedTypeEnv path
-        ~(Just lEnv) <- D.getLowerState path
-        pure (sig, env, lEnv)
+      oldEnv <- gets inferScope
+      for_ paths $ \path -> do
+        (sig, env, lEnv) <- wrapDriver $ do
+          ~(Just sig) <- D.getSignature path
+          ~(Just env) <- D.getOpenedTypeEnv path
+          ~(Just lEnv) <- D.getLowerState path
+          pure (sig, env, lEnv)
 
-      modify (\s -> s { resolveScope = resolveScope s <> sig
-                      , inferScope = inferScope s <> env
-                      , lowerState = lowerState s <> lEnv })
+        modify (\s -> s { resolveScope = resolveScope s <> sig
+                        , inferScope = inferScope s <> env
+                        , lowerState = lowerState s <> lEnv })
+      newEnv <- gets inferScope
 
       (luaExpr, luaSyntax) <- emitCore core
 
       luaState <- gets luaState
       debug <- gets (debugMode . config)
       liftIO $ do
-        dump debug [] core core luaExpr Bi.builtinEnv env
+        dump debug [] core core luaExpr oldEnv newEnv
         res <- L.runWith luaState $ do
           code <- L.dostring luaSyntax
-
           case code of
             L.OK -> pure (Right ())
             _ -> do
@@ -521,19 +529,12 @@ loadFileImpl path = do
           Left err -> hPutDoc handle err >> pure False
           Right () -> pure True
 
-setupPrelude :: (MonadState ReplState m, MonadIO m) => m Bool
-setupPrelude = do
-  prelude <- gets (prelude . config)
-  case prelude of
-    Nothing -> pure True
-    Just prelude -> loadFileImpl prelude
-
 repl :: ReplConfig -> IO ()
 repl config = replFrom config Nothing
 
 replFrom :: ReplConfig -> Maybe FilePath -> IO ()
 replFrom config file = do
-  state <- execStateT (maybe (setupPrelude $> ()) loadFile file) =<< defaultState config
+  state <- execStateT (loadFile file) =<< defaultState config
   hSetBuffering stdout LineBuffering
 
   ready <- newEmptyMVar

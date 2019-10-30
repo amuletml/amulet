@@ -31,7 +31,7 @@ main = do
   (((core, errors), driver), _) <-
       flip runNameyT firstName
     . flip runStateT driver
-    $ compile file
+    $ compiles file
 
   x <- T.readFile file
 
