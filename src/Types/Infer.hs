@@ -579,12 +579,18 @@ solveEx syms ss cs = transformExprTyped go id goType where
 
   goWrap (TypeApp t) = TypeApp (goType t)
   goWrap (TypeAsc t) = TypeAsc (goType t)
-  goWrap (Cast c) = Cast (goCast c) where
+  goWrap (Cast c) = erase_c $ Cast (goCast c) where
     goCast = transformCoercion go goType
     go (MvCo v) = case Map.lookup v cs of
       Just (Cast c) -> c
       x -> error ("coercion metavariable " ++ show v ++ " not solved to cast " ++ show x)
     go x = x
+
+    erase_c (Cast c)
+      | isReflexiveCo c = IdWrap
+      | otherwise = Cast c
+    erase_c x = x
+
   goWrap (TypeLam l t) = TypeLam l (goType t)
   goWrap (ExprApp f) = ExprApp (go f)
   goWrap (x Syntax.:> y) = goWrap x Syntax.:> goWrap y
@@ -597,3 +603,25 @@ solveEx syms ss cs = transformExprTyped go id goType where
 
   goType :: Type Typed -> Type Typed
   goType = apply ss
+
+-- | Is this coercion equal to reflexivity? (Conservative)
+isReflexiveCo :: Eq (Var p) => Coercion p -> Bool
+isReflexiveCo VarCo{} = False
+isReflexiveCo MvCo{} = False
+isReflexiveCo ReflCo{} = True
+isReflexiveCo (AssumedCo a b) = a == b
+
+isReflexiveCo (SymCo c) = isReflexiveCo c
+isReflexiveCo TransCo{} = False
+
+isReflexiveCo (AppCo a b) = isReflexiveCo a && isReflexiveCo b
+isReflexiveCo (ArrCo a b) = isReflexiveCo a && isReflexiveCo b
+isReflexiveCo (ProdCo a b) = isReflexiveCo a && isReflexiveCo b
+isReflexiveCo (ExactRowsCo rs) = all (isReflexiveCo . snd) rs
+isReflexiveCo (RowsCo a rs) = isReflexiveCo a && all (isReflexiveCo . snd) rs
+isReflexiveCo ProjCo{} = False
+isReflexiveCo (ForallCo _ a b) = isReflexiveCo a && isReflexiveCo b
+
+isReflexiveCo P1{} = False
+isReflexiveCo P2{} = False
+isReflexiveCo InstCo{} = False
