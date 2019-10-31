@@ -23,7 +23,7 @@ type vect 'n 'a =
   | Nil : vect Z 'a
   | Cons : 'a * vect 'n 'a -> vect (S 'n) 'a
 
-let append_with (ev : add_ev 'n 'k 'l) (xs : vect 'n 'a) (ys : vect 'k 'a) : vect 'l 'a =
+let rec append_with (ev : add_ev 'n 'k 'l) (xs : vect 'n 'a) (ys : vect 'k 'a) : vect 'l 'a =
   match ev, xs with
   | AddZ, Nil -> ys
   | AddS p, Cons (x, xs) -> Cons (x, append_with p xs ys)

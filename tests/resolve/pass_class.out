@@ -1,4 +1,4 @@
-let +#0 x#1 y#2 = (x#1 +#0 y#2)
+let rec +#0 x#1 y#2 = (x#1 +#0 y#2)
 class () => semigroup#3 a#4  begin
   val <>#5 : 'a#4 -> 'a#4 -> 'a#4
 end

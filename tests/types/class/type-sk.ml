@@ -68,7 +68,7 @@ instance ( eval1 'x 'y 'q
 class eval 'x 'y | 'x -> 'y begin end
 instance evalaux 'x 'y more => eval 'x 'y begin end
 
-let eval : forall 'x 'y. eval 'x 'y => 'x -> 'y =
+let rec eval : forall 'x 'y. eval 'x 'y => 'x -> 'y =
   fun x -> eval x
 
 external val bot : 'a = "nil"

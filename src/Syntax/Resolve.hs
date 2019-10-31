@@ -40,12 +40,14 @@ import qualified Data.Text as T
 import Data.Traversable
 import Data.Foldable
 import Data.Function
+import Data.Spanned
 import Data.Functor
 import Data.Reason
 import Data.Triple
 import Data.Maybe
 import Data.These
 import Data.List
+import Data.Span
 
 import Syntax.Resolve.Import
 import Syntax.Resolve.Scope
@@ -78,7 +80,7 @@ resolveProgram :: (MonadNamey m, MonadImport m)
                -- ^ The resolved program or a list of resolution errors
 resolveProgram sc ts
   = (these (Left . toList) (\(s, exposed, inner) -> Right (ResolveResult s exposed inner)) (\x _ -> Left (toList x))<$>)
-  . runChronicleT . flip runReaderT (Context sc mempty)
+  . runChronicleT . flip runReaderT (emptyContext & scope .~ sc)
   $ reTops ts mempty
 
 -- | Resolve the whole program
@@ -87,10 +89,14 @@ reTops :: MonadResolve m
        -> m ([Toplevel Resolved], Signature, Signature)
 reTops [] sig = views scope ([], sig,)
 
-reTops (LetStmt am bs:rest) sig = do
+reTops (r@(LetStmt re am bs):rest) sig = do
   (bs', vs, ts) <- unzip3 <$> traverse reBinding bs
-  reTopsWith am rest sig (withVals (concat vs)) $ extendTyvars (concat ts) $
-    LetStmt am <$> traverse (uncurry (flip (<$>) . reExpr . view bindBody)) (zip bs bs')
+  let body = extendTyvars (concat ts) $
+        LetStmt re am <$> traverse (uncurry (flip (<$>) . reExpr . view bindBody)) (zip bs bs')
+      addBinds m = foldr (\(Name v, _) -> Map.insert v (annotation r)) m (concat vs)
+  case re of
+    NonRecursive -> reTopsWith am rest sig (withVals (concat vs)) . pure =<< local (nonRecs %~ addBinds) body
+    Recursive -> reTopsWith am rest sig (withVals (concat vs)) body
 
 reTops (r@(ForeignVal am v t ty a):rest) sig = do
   v' <- tagVar v
@@ -261,7 +267,7 @@ reModule (ModStruct bod an) = do
     Just (bod', sig, _) -> (ModStruct bod' an, Just sig)
 reModule (ModRef ref an) = do
   (ref', sig) <- recover (junkVar, Nothing)
-               $ view scope >>= lookupIn (^.modules) ref VarModule
+               $ view scope >>= lookupIn (^.modules) (const mempty) ref VarModule
   pure (ModRef ref' an, sig)
 reModule r@(ModLoad path a) = do
   result <- importModule a path
@@ -301,12 +307,14 @@ resolveTele _ [] = pure ([], [])
 reExpr :: MonadResolve m => Expr Parsed -> m (Expr Resolved)
 reExpr r@(VarRef v a) = flip VarRef a <$> (lookupEx v `catchJunk` r)
 
-reExpr (Let bs c a) = do
+reExpr (Let re bs c a) = do
   (bs', vs, ts) <- unzip3 <$> traverse reBinding bs
-  extendTyvars (concat ts) . extendVals (concat vs) $
-    Let <$> traverse (uncurry (flip (<$>) . reExpr . view bindBody)) (zip bs bs')
-        <*> reExpr c
-        <*> pure a
+  let extend = extendTyvars (concat ts) . extendVals (concat vs)
+      reBody = traverse (uncurry (flip (<$>) . reExpr . view bindBody)) (zip bs bs')
+      addBinds m = foldr (\(Name v, _) -> Map.insert v a) m (concat vs)
+  case re of
+    NonRecursive -> Let re <$> local (nonRecs %~ addBinds) reBody <*> extend (reExpr c) <*> pure a
+    Recursive -> extend $ Let re <$> reBody <*> reExpr c <*> pure a
 reExpr (If c t b a) = If <$> reExpr c <*> reExpr t <*> reExpr b <*> pure a
 reExpr (App f p a) = App <$> reExpr f <*> reExpr p <*> pure a
 reExpr (Fun p e a) = do
@@ -561,16 +569,19 @@ reMethod (MethodImpl TypedMatching{}) = error "reBinding TypedMatching{}"
 -- | Lookup a variable in a signature, using a specific lens.
 lookupIn :: MonadResolve m
          => (Signature -> Map.Map VarName a)
+         -> (Context -> Map.Map VarName Span)
          -> Var Parsed -> VarKind -> Signature
          -> m a
-lookupIn g v k = go v where
+lookupIn g nonRec v k = go v where
   go (Name n) env =
     case Map.lookup n (g env) of
-      Nothing -> confesses (NotInScope k v [])
+      Nothing -> do
+        pos <- asks (Map.lookup n . nonRec)
+        confesses (NotInScope k v pos)
       Just x -> pure x
   go (InModule m n) env =
     case Map.lookup m (env ^. modules) of
-      Nothing -> confesses (NotInScope k v [])
+      Nothing -> confesses (NotInScope k v Nothing)
       -- Abort without an error if the module is unresolved. This is "safe", as
       -- we'll have already produced an error at the original error.
       Just (_, Nothing) -> confess mempty
@@ -586,13 +597,13 @@ lookupSlot v (SAmbiguous vs) = confesses (Ambiguous v vs)
 -- | Lookup a value/expression variable.
 lookupEx :: MonadResolve m => Var Parsed -> m (Var Resolved)
 lookupEx v = view scope
-         >>= lookupIn (^.vals) v (if isCtorVar v then VarCtor else VarVar)
+         >>= lookupIn (^.vals) (^.nonRecs) v (if isCtorVar v then VarCtor else VarVar)
          >>= lookupSlot v
 
 -- | Lookup a type name.
 lookupTy :: MonadResolve m => Var Parsed -> m (Var Resolved)
 lookupTy v = view scope
-         >>= lookupIn (^.types) v (if isCtorVar v then VarCtor else VarType)
+         >>= lookupIn (^.types) (const mempty) v (if isCtorVar v then VarCtor else VarType)
          >>= lookupSlot v
 
 -- | Lookup a tyvar.
@@ -600,7 +611,7 @@ lookupTyvar :: MonadResolve m => Var Parsed -> m (Var Resolved)
 lookupTyvar v@(Name n) = do
   vars <- view tyvars
   case Map.lookup n vars of
-    Nothing -> confesses (NotInScope VarTyvar v [])
+    Nothing -> confesses (NotInScope VarTyvar v Nothing)
     Just x -> lookupSlot v x
 lookupTyvar InModule{} = error "Impossible: InModule tyvar"
 

@@ -1,6 +1,6 @@
 let x :: xs = Cons (x, xs)
 
-let zip2 xs ys =
+let rec zip2 xs ys =
   match xs, ys with
   | Cons (x, xs), Cons (y, ys) -> (x, y) :: zip2 xs ys
   | _, _ -> []

@@ -37,7 +37,7 @@ deriving instance (Ord (Var p), Ord (Ann p)) => Ord (ModuleTerm p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (ModuleTerm p)
 
 data Toplevel p
-  = LetStmt TopAccess [Binding p]
+  = LetStmt RecKind TopAccess  [Binding p]
   | ForeignVal TopAccess (Var p) Text (Type p) (Ann p)
   | TypeDecl TopAccess (Var p) [TyConArg p] (Maybe [Constructor p]) (Ann p)
   | TySymDecl TopAccess (Var p) [TyConArg p] (Type p) (Ann p)
@@ -153,9 +153,9 @@ instance Spanned (Ann p) => Spanned (ModuleTerm p) where
   annotation (ModLoad _ a) = annotation a
 
 instance (Spanned (Constructor p), Spanned (Ann p)) => Spanned (Toplevel p) where
-  annotation (LetStmt _ []) = internal
-  annotation (LetStmt _ [b]) = annotation b
-  annotation (LetStmt _ (b:vs)) = sconcat (annotation b :| map annotation vs)
+  annotation (LetStmt _ _ []) = internal
+  annotation (LetStmt _ _ [b]) = annotation b
+  annotation (LetStmt _ _ (b:vs)) = sconcat (annotation b :| map annotation vs)
   annotation (TypeDecl _ _ _ (Just cs) x) = sconcat (annotation x :| map annotation cs)
   annotation (TypeDecl _ _ _ Nothing x) = annotation x
   annotation (TySymDecl _ _ _ _ x) = annotation x
@@ -200,6 +200,10 @@ prettyAcc :: TopAccess -> Doc
 prettyAcc Public = empty
 prettyAcc x = pretty x <+> empty
 
+prettyRec :: RecKind -> Doc
+prettyRec Recursive = keyword "rec" <> space
+prettyRec NonRecursive = mempty
+
 instance Pretty (Var p) => Pretty (ModuleTerm p) where
   pretty (ModStruct bod _) =
     vsep [ keyword "begin"
@@ -210,10 +214,10 @@ instance Pretty (Var p) => Pretty (ModuleTerm p) where
   pretty (ModLoad t _) = keyword "import" <+> sstring (dquotes (text t))
 
 instance Pretty (Var p) => Pretty (Toplevel p) where
-  pretty (LetStmt _ []) = string "empty let?"
-  pretty (LetStmt m (x:xs)) =
+  pretty (LetStmt _ _ []) = string "empty let?"
+  pretty (LetStmt re m (x:xs)) =
     let prettyBind x = keyword "and" <+> pretty x
-     in keyword "let" <+> prettyAcc m <> pretty x
+     in keyword "let" <+> prettyRec re <> prettyAcc m <> pretty x
              <> case xs of
                   [] -> empty
                   _ -> line <> vsep (map prettyBind xs)

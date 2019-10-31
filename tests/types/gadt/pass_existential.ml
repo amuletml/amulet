@@ -13,7 +13,7 @@ type some_nat =
   | SomeNat : nat 'n -> some_nat
 
 let with_natural i (k : forall 'n. nat 'n -> 'b) =
-  let go n =
+  let rec go n =
     if n == 0 then
       SomeNat Zero
     else
@@ -24,7 +24,7 @@ let with_natural i (k : forall 'n. nat 'n -> 'b) =
 
 let main = with_natural 10 @@ fun x ->
   with_natural 20 @@ fun y ->
-    let ppr_nat (n : nat 'n) : unit =
+    let rec ppr_nat (n : nat 'n) : unit =
       match n with
       | Zero -> print "Zero"
       | Succ k ->

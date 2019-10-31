@@ -120,7 +120,7 @@ lowerBothTerm e = let t = lowerType (S.getType e)
 lowerAt :: MonadLower m => Expr Typed -> Type -> Lower m Term
 lowerAt (Ascription e _ _) t = lowerAt e t
 
-lowerAt (S.Let vs t _) ty = do
+lowerAt (S.Let _ vs t _) ty = do
   vs' <- lowerLet vs
   let k = foldr ((.) . C.Let) id vs'
   k <$> lowerAtTerm t ty
@@ -361,7 +361,7 @@ lowerProg' (ForeignVal _ v ex tp _:prg) =
     unwrap as r = Just (ForallTy Irrelevant (ValuesTy (reverse as)) r)
 
 
-lowerProg' (LetStmt _ vs:prg) = do
+lowerProg' (LetStmt _ _ vs:prg) = do
   let env' = VarMap.fromList (foldMap lowerBind vs)
       lowerBind bind =
         let ty = lowerType (bind ^. (S.bindAnn . _2))
