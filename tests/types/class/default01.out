@@ -1,5 +1,5 @@
-eq : type -> constraint
+eq : Req{'a : type}. constraint
 eq : Spec{'a : type}. eq 'a => 'a -> 'a -> bool
-show : type -> constraint
+show : Req{'a : type}. constraint
 show_tail : Spec{'a : type}. show 'a => 'a -> string
 show : Spec{'a : type}. show 'a => 'a -> string

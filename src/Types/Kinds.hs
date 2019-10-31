@@ -15,7 +15,7 @@ import Control.Monad.State.Strict
 import Control.Monad.Chronicles
 import Control.Monad.Infer
 import Control.Applicative
-import Control.Arrow
+import Control.Arrow hiding ((<+>))
 import Control.Lens
 
 import qualified Data.Map.Strict as Map
@@ -41,6 +41,7 @@ import Syntax.Raise
 import Syntax.Var
 import Syntax
 
+import Types.Unify.Trace
 import Text.Pretty.Semantic
 
 type KindT m = StateT SomeReason (WriterT (Seq.Seq (Constraint Typed)) m)
@@ -122,16 +123,20 @@ annotateKind r ty = do
     tell (Seq.fromList cons)
   pure (apply sub ty)
 
-initialKind :: MonadKind m => Type Typed -> [TyConArg Desugared] -> KindT m (Type Typed, Telescope Typed)
-initialKind k (TyVarArg v:as) = do
-  (k, t) <- initialKind k as
+initialKind :: MonadKind m => Dep -> Type Typed -> [TyConArg Desugared] -> KindT m (Type Typed, Telescope Typed)
+initialKind dep k (TyVarArg v:as) = do
+  (k, t) <- initialKind dep k as
   ty <- freshTV
-  pure (TyArr ty k, one v ty <> t)
-initialKind ret (TyAnnArg v k:as) = do
+  pure (mkFunT dep v ty k, one v ty <> t)
+initialKind dep ret (TyAnnArg v k:as) = do
   k <- checkKind k TyType
-  (s, t) <- initialKind ret as
-  pure (TyArr k s, t <> one v k)
-initialKind ret [] = pure (ret, mempty)
+  (s, t) <- initialKind dep ret as
+  pure (mkFunT dep v k s, t <> one v k)
+initialKind _ ret [] = pure (ret, mempty)
+
+mkFunT :: Dep -> Var Resolved -> Type Typed -> Type Typed -> Type Typed
+mkFunT NoDep _ a b = TyArr a b
+mkFunT LotsaDep v a b = TyPi (Invisible v (Just a) Req) b
 
 resolveTyFunDeclKind :: MonadKind m
                      => SomeReason
@@ -154,20 +159,29 @@ resolveTyFunDeclKind reason name arguments kindsig equations = do
         t <- freshTV
         pure (TyAnnArg v t, t)
 
-    let initk (TyAnnArg _ k:xs) = TyArr k <$> initk xs
+    let initk (TyAnnArg v k:xs) = TyPi (Invisible v (Just k) Req) <$> initk xs
         initk (_:_) = undefined
         initk [] = pure return_kind
+        fromArgs (~(TyAnnArg v t):xs) = one v t <> fromArgs xs
+        fromArgs [] = mempty
     kind <- initk args
 
-    eqs <- local (names %~ focus (one name kind)) $
-      for equations $ \(TyFunClause ty@(TyApps (TyCon con) xs) rhs an) -> do
+    eqs <- local (names %~ focus (one name kind <> fromArgs args)) $
+      for equations $ \clause@(TyFunClause ty@(TyApps (TyCon con) xs) rhs an) -> do
         tvs <- for (Set.toList (ftv ty)) $ \v -> (,) v <$> freshTV
         local (names %~ focus (teleFromList tvs)) $ do
+          put (BecauseOf clause)
+
           ty <- TyApps (TyCon con) <$> traverse (uncurry checkKind) (zip xs argts)
           rhs <- checkKind rhs return_kind
+
+          put reason
           pure (TyFunClause ty rhs (an, kind))
+
     pure (kind, eqs, args)
-  pure (k, eqs, arguments)
+
+  let k' = undependentify k
+  pure (k', eqs, arguments)
  where
    solveK k = do
      (((kind, equations, args), _), cs) <- runWriterT (runStateT k reason)
@@ -176,9 +190,15 @@ resolveTyFunDeclKind reason name arguments kindsig equations = do
        tell (Seq.fromList cons)
      pure ( apply sub kind
           , map (\(TyFunClause lhs rhs (ann, kind)) -> TyFunClause (apply sub lhs) (apply sub rhs) (ann, apply sub kind)) equations
-          , map (apply_arg sub) args)
+          , map (apply_arg sub) args
+          )
    apply_arg sub (TyAnnArg v t) = TyAnnArg v (apply sub t)
    apply_arg _ _ = undefined
+
+   undependentify (TyPi (Invisible v (Just k) Req) rest)
+     | v `Set.notMember` ftv rest = TyArr k (undependentify rest)
+     | otherwise = TyPi (Invisible v (Just k) Req) (undependentify rest)
+   undependentify t = t
 
 resolveClassKind :: MonadKind m
                  => Toplevel Desugared
@@ -186,7 +206,7 @@ resolveClassKind :: MonadKind m
 resolveClassKind stmt@(Class classcon _ ctx args _ methods _) = do
   let reason = BecauseOf stmt
   k <- solveForKind reason $ do
-    (kind, tele) <- initialKind tyConstraint args
+    (kind, tele) <- initialKind LotsaDep tyConstraint args
     let scope = one classcon kind <> tele
         replaceK (TyPi b t) k = TyPi b (replaceK t k)
         replaceK _ k = k
@@ -216,6 +236,8 @@ resolveClassKind stmt@(Class classcon _ ctx args _ methods _) = do
     expandType kind
   let remake (TyVarArg v:as) (TyArr k r) = TyAnnArg v k:remake as r
       remake (TyAnnArg v _:as) (TyArr k r) = TyAnnArg v k:remake as r
+      remake (TyVarArg v:as) (TyPi (Invisible _ (Just k) Req) r) = TyAnnArg v k:remake as r
+      remake (TyAnnArg v _:as) (TyPi (Invisible _ (Just k) Req) r) = TyAnnArg v k:remake as r
       remake cs (TyPi Invisible{} x) = remake cs x
       remake _ _ = []
   pure (k, remake args k)
@@ -228,7 +250,7 @@ resolveTySymDeclKind :: MonadKind m
                   -> m (Type Typed, Type Typed, [TyConArg Typed])
 resolveTySymDeclKind reason _ args expansion = do
   (expansion, k) <- solveForKind2 reason $ do
-    (kind, tele) <- initialKind TyType args
+    (kind, tele) <- initialKind NoDep TyType args
     let replace x (TyArr t r) = TyArr t (replace x r)
         replace x _ = x
 
@@ -253,7 +275,7 @@ resolveTyDeclKind reason tycon args cons = do
       argTvName (TyAnnArg v _) = Just v
       vs = mapMaybe argTvName args
   k <- solveForKind reason $ do
-    (kind, tele) <- initialKind TyType args
+    (kind, tele) <- initialKind NoDep TyType args
     let scope = one tycon kind <> tele
 
     local (names %~ focus scope) $ do
@@ -292,6 +314,7 @@ solveK cont reason k = do
   cont =<< expandType (apply sub kind)
 
 inferKind :: MonadKind m => Type Desugared -> KindT m (Type Typed, Kind Typed)
+inferKind p | trace KcI (pretty p) False = undefined
 inferKind (TyCon v) = do
   info <- view (tySyms . at v)
   case info of
@@ -372,17 +395,19 @@ inferKind t@TyApp{} | TyCon v:xs <- appsView t = do
           Anon d -> do
             arg <- checkKind arg d
             pure (arg, cod)
+          Invisible v k Req -> do
+            arg <- checkKind arg =<< fromMaybe freshTV (pure <$> k)
+            pure (arg, apply (Map.singleton v arg) cod)
           Invisible{} -> error "inferKind TyApp: visible argument to implicit quantifier"
           Implicit{} -> error "inferKind TyApp: visible argument to implicit quantifier"
       checkSpine fun (arg:args) kind = do
         (arg, kind) <- checkOne arg kind
-        checkSpine (TyApp fun arg) args kind
-      checkSpine fun [] k = pure (fun, k)
+        (_3 %~ (arg:)) <$> checkSpine (TyApp fun arg) args kind
+      checkSpine fun [] k = pure (fun, k, [])
 
-  (fun, result) <- checkSpine (TyCon v) xs ki
+  (fun, result, _) <- checkSpine (TyCon v) xs ki
 
-  con <- view (tySyms . at v)
-  case con of
+  case info of
     Just tau | Just (Just t) <- tau ^? tsConstraint -> do
       let Just sub = unifyPure_v (zip args xs)
           TyApps _ xs = fun
@@ -391,6 +416,7 @@ inferKind t@TyApp{} | TyCon v:xs <- appsView t = do
       tell (Seq.singleton (ConImplicit reason scope var (apply sub t)))
     _ -> pure ()
 
+  traceM KcI (pretty fun <+> soperator (char '↑') <+> pretty result)
   pure (fun, result)
 
 inferKind (TyApp f x) = do
@@ -433,6 +459,7 @@ inferKind t = do
 checkKind :: MonadKind m
           => Type Desugared -> Kind Typed -> KindT m (Type Typed)
 
+checkKind t e | trace KcI (pretty t <+> soperator (char '↓') <+> pretty e) False = undefined
 checkKind (TyExactRows rs) k = do
   rs <- for rs $ \(row, ty) -> do
     ty <- checkKind ty k
@@ -592,3 +619,5 @@ generalise ftv r ty =
     case Set.toList (fv `Set.difference` env) of
       [] -> pure ty
       vs -> annotateKind r $ foldr (\v rest -> TyPi (Invisible v Nothing Spec) rest) (killWildcard ty) vs
+
+data Dep = NoDep | LotsaDep

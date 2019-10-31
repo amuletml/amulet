@@ -1,6 +1,6 @@
 == : unit -> unit -> bool
 && : bool -> bool -> bool
-eq : type -> constraint
+eq : Req{'a : type}. constraint
 =.= : Spec{'a : type}. eq 'a => 'a -> 'a -> bool
 id : type -> type
 Id : Spec{'a : type}. 'a -> id 'a

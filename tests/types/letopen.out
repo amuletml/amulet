@@ -1,2 +1,2 @@
-foo : type -> constraint
+foo : Req{'a : type}. constraint
 foo_it : Spec{'a : type}. foo 'a => 'a -> unit

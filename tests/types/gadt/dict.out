@@ -1,6 +1,6 @@
 dict : constraint -> type
 Dict : Spec{'c : constraint}. 'c => dict 'c
-show : type -> constraint
+show : Req{'a : type}. constraint
 show : Spec{'a : type}. show 'a => 'a -> string
 foo : dict (show unit)
 bar : unit -> dict (show int)

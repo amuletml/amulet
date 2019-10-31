@@ -112,7 +112,7 @@ reTops (d@(TySymDecl am t vs ty ann):ts) sig = do
 
 reTops (d@(TypeFunDecl am tau args kindsig eqs ann):rest) sig = do
   tau' <- tagVar tau
-  (args, _) <- resolveTele d args
+  (args, vars) <- resolveTele d args
   reTopsWith am rest sig (withTy tau tau') $ do
     eqs <- for eqs $ \clause@(TyFunClause lhs@(TyApps t xs) rhs ann) -> do
       when (t /= TyCon tau) $
@@ -125,7 +125,7 @@ reTops (d@(TypeFunDecl am tau args kindsig eqs ann):rest) sig = do
       extendTyvars (zip fv fv') $
         (\x y -> TyFunClause x y ann) <$> reType clause lhs <*> reType clause rhs
 
-    kindsig <- traverse (reType d) kindsig
+    kindsig <- extendTyvars vars $ traverse (reType d) kindsig
     pure $ TypeFunDecl am tau' args kindsig eqs ann
 
 

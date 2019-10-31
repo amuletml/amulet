@@ -1,2 +1,2 @@
-bar : Infer{'g : type}. 'g -> constraint
-foo : Infer{'g : type}. 'g -> constraint
+bar : Infer{'g : type}. Req{'a : 'g}. constraint
+foo : Infer{'g : type}. Req{'a : 'g}. constraint

@@ -1,6 +1,6 @@
 {-# LANGUAGE MultiWayIf, FlexibleContexts, ScopedTypeVariables,
    TupleSections, ConstraintKinds, CPP, TypeFamilies, OverloadedStrings,
-   RecordWildCards #-}
+   RecordWildCards, ViewPatterns #-}
 {-# OPTIONS_GHC -fmax-pmcheck-iterations=5000000 #-}
 module Types.Unify.Equality
   ( unify
@@ -13,7 +13,7 @@ module Types.Unify.Equality
   , unequal, rethrow
   ) where
 
-import Control.Monad.Except
+import Control.Monad.State
 import Control.Applicative
 import Control.Monad.Infer
 import Control.Lens hiding (Empty, (:>))
@@ -203,6 +203,19 @@ unify scope (TyForall v (Just k) ty) (TyForall v' (Just k') ty') = do
   ForallCo tv c <$>
     unify scope (apply (Map.singleton v fresh) ty) (apply (Map.singleton v' fresh) ty')
 
+-- We can unify non-dependent function types with non-dependent function
+-- types but phrased differently.
+
+unify scope l@(TyPi (Anon co) dom) r@(TyPi (Invisible v (Just co') Req) dom') | v `Set.notMember` ftv dom' = do
+  _ <- unify scope co co'
+  _ <- unify scope dom dom'
+  pure (AssumedCo l r)
+
+unify scope l@(TyPi (Invisible v (Just co') Req) dom') r@(TyPi (Anon co) dom) | v `Set.notMember` ftv dom' = do
+  _ <- unify scope co co'
+  _ <- unify scope dom dom'
+  pure (AssumedCo l r)
+
 unify scope (TyRows rho arow) (TyRows sigma brow)
   | overlaps <- overlap arow brow
   , rhoNew <- L.deleteFirstsBy ((==) `on` fst) (L.sortOn fst arow) (L.sortOn fst brow)
@@ -357,12 +370,18 @@ unifyTyFunApp ti _ args tb
       False
   = undefined
 
-unifyTyFunApp TySymInfo{} _ _ _ = undefined
-unifyTyFunApp ti@(TyFamInfo tn _ _ _ _)   scope args tb@(TyApps (TyCon tn') args') | tn == tn' = do
+unifyTyFunApp (TySymInfo _ exp decl_args _) scope actual_args tb = do
+  let used = take (length decl_args) actual_args
+      unused = drop (length decl_args) actual_args
+      Just sub = unifyPure_v (zip (map TyVar decl_args) used)
+  unify scope (foldl TyApp (apply sub exp) unused) tb
+
+unifyTyFunApp ti@(TyFamInfo tn _ _ _ _) scope args tb@(TyApps (TyCon tn') args') | tn == tn' = do
   x <- memento $ foldl AppCo (ReflCo (TyCon tn)) <$> traverse (uncurry (unify scope)) (zip args args')
   case x of
     Left _ -> unifyTyFunApp' ti scope args tb
     Right x -> pure x
+
 unifyTyFunApp ti scope args (TyVar v) = bind scope v (TyApps (TyCon (ti ^. tsName)) args)
 unifyTyFunApp ti scope args tb = unifyTyFunApp' ti scope args tb
 
@@ -399,7 +418,17 @@ tyFunByEval (TyFamInfo tn eqs relevant _ con) scope args tb = do
 
   case lookupEquality info scope assum (TyApps (TyCon tn) args) tb of
     (x:_) -> pure (Just x)
-    _ -> go [] eqs
+    _ -> do
+      let eq = TyApps tyEq [TyApps (TyCon tn) args, tb]
+      ~(TyApps _ [flat_l, flat_r], sub) <- flatten assum info eq
+
+      unless (isJust (unifyPure flat_l flat_r)) $ do
+        traceM EquS (string "type family occurs check error")
+        err <- unequal mempty flat_l flat_r
+        confesses $ Note err (shown sub)
+        -- XXX: we pass mempty to unequal because here the unexpanded type is more helpful
+
+      go [] eqs
 
   where
     go skipped ((declared', result', con):eqs) | null eqs --> all prettyConcrete (take (length relevant) args) = do
@@ -443,7 +472,7 @@ tyFunByEval (TyFamInfo tn eqs relevant _ con) scope args tb = do
 
     p --> q = not p || q
 
-tyFunByEval _ _ _ _ = undefined
+tyFunByEval e scope args tb = Just <$> unifyTyFunApp e scope args tb
 
 lookupEquality :: SolverInfo
                -> ImplicitScope ClassInfo Typed
@@ -540,13 +569,23 @@ removeTypeFamApps tau = do
   flatten mempty x tau
 
 flatten :: forall m. MonadNamey m => Subst Typed -> SolverInfo -> Type Typed -> m (Type Typed, Subst Typed)
-flatten assum i = runWriterT . go 0 where
-  go :: Int -> Type Typed -> WriterT (Subst Typed) m (Type Typed)
+flatten assum i = runWriterT . flip evalStateT mempty . go 0 where
+  go :: Int
+     -> Type Typed
+     -> StateT (Map.Map (Type Typed) (Var Typed))
+          (WriterT (Subst Typed) m) (Type Typed)
+
   go l tau@(TyApps (TyCon v) as@(_:_))
     | l > 0, Just (Right _) <- i ^. at v = do
-      ~v@(TyVar key) <- freshTV
-      tell (Map.singleton key tau)
-      pure v
+      existing <- use (at tau)
+      case existing of
+        Just k -> pure (TyVar k)
+        _ -> do
+          traceM EquS ("flattener: using new for" <+> pretty tau)
+          ~v@(TyVar key) <- freshTV
+          tell (Map.singleton key tau)
+          at tau ?= key
+          pure v
     | otherwise = TyApps (TyCon v) <$> traverse (go (l + 1)) as
 
   go l (TyApp f x) = TyApp <$> go (l + 1) f <*> go (l + 1) x
@@ -590,17 +629,20 @@ unequal :: forall m. MonadSolve m => ImplicitScope ClassInfo Typed -> Type Typed
 unequal scope a b =
   do
     x <- use solveTySubst
+    info <- view solveInfo
 
     let ta = apply x a
         tb = apply x b
+        fix = Map.fromList . map (\x -> (x ^. skolIdent, TyVar (x ^. skolVar))) . Set.toList . skols
 
-    (a_st, red_a) <- entirely_reduce noReductions ta
-    (b_st, red_b) <- entirely_reduce noReductions tb
+    (~(TyApps _ [ta, tb]), sub) <- flatten (fix ta <> fix tb) info (TyApps tyEq [ta, tb])
 
-    let cont = reduction (string "left-hand") a_st red_a ta
-            <> reduction (string "right-hand") b_st red_b tb
+    (fold -> types, fold -> sub) <-
+      fmap unzip . for (Map.toList sub) $ \(var, tf) -> do
+        (st, red) <- entirely_reduce noReductions tf
+        pure (reduction st red tf, Map.singleton var red)
 
-    pure (appEndo cont (NotEqual red_a red_b))
+    pure (appEndo types (NotEqual (apply sub ta) (apply sub tb)))
   where
     entirely_reduce :: Int -> Type Typed -> m (Int, Type Typed)
     entirely_reduce 0 ty = pure (0, ty)
@@ -611,13 +653,13 @@ unequal scope a b =
          then let ~(TyParens t) = red in entirely_reduce (n - 1) t
          else pure (n, ty)
 
-    reduction :: Doc -> Int -> Type Typed -> Type Typed -> Endo TypeError
-    reduction _ x _ _ | x == noReductions = mempty
-    reduction side _ red tau =
+    reduction :: Int -> Type Typed -> Type Typed -> Endo TypeError
+    reduction x _ _ | x == noReductions = mempty
+    reduction _ red tau =
       let doc = if wide > 20
                    then mempty
                     <#> indent 4
-                          (align (vsep [ "Where the" <+> side <+> "side type,"
+                          (align (vsep [ "Where the type,"
                                        , indent 2 r <> comma
                                        , "is the reduction of"
                                        , indent 2 t

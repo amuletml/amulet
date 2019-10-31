@@ -177,8 +177,13 @@ prettyQuantifiers prettyType inner (q:qs) =
        <> dot <+> prettyQuantifiers prettyType inner those
      Invisible _ _ Infer:_ -> prettyQuantifiers prettyType inner those
      Invisible _ _ Req:_ ->
-       keyword "forall"
-       <+> hsep (map (stypeVar . (char '\'' <>) . pretty . (^?! tyBinderVar)) (q:these))
+       let b (Invisible v k _) =
+             case k of
+               Nothing -> stypeVar (char '\'' <> pretty v)
+               Just k -> parens $ stypeVar (char '\'' <> pretty v) <+> colon <+> prettyType k
+           b _ = undefined
+        in keyword "forall"
+       <+> hsep (map b (q:these))
        <+> arrow <+> prettyQuantifiers prettyType inner those
      Anon{}:_ ->
        let arg x = parenTuple x (prettyType x)

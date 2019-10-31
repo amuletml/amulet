@@ -9,10 +9,10 @@ R : Spec{'f : 'a -> type}. Spec{'g : 'a -> type}. Spec{'a : 'a}. 'g 'a -> :+: 'f
 P : Spec{'f : 'a -> type}. Spec{'g : 'a -> type}. Spec{'a : 'a}. ('f 'a * 'g 'a) -> :*: 'f 'g 'a
 fix : (type -> type) -> type
 Fix : Spec{'f : type -> type}. 'f (fix 'f) -> fix 'f
-functor : (type -> type) -> constraint
+functor : Req{'f : type -> type}. constraint
 <$> : Spec{'f : type -> type}. functor 'f => Spec{'a : type}. Spec{'b : type}. ('a -> 'b) -> 'f 'a -> 'f 'b
-recursive : type -> constraint
-rep : type -> type -> type
+recursive : Req{'t : type}. constraint
+rep : Req{'t : type}. type -> type
 from : Spec{'t : type}. recursive 't => fix (rep 't) -> 't
 into : Spec{'t : type}. recursive 't => 't -> fix (rep 't)
 unfix : Infer{'f : type -> type}. fix 'f -> 'f (fix 'f)

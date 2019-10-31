@@ -1,10 +1,10 @@
 do
   local use = print
-  local function _dollardShowea(tmp)
+  local function _dollardShowdu(tmp)
     return {
       show = function(tmp0) return "()" end,
-      ["show'"] = function(gh) return _dollardShowea(nil).show(gh) end
+      ["show'"] = function(fy) return _dollardShowdu(nil).show(fy) end
     }
   end
-  use(_dollardShowea(nil).show)
+  use(_dollardShowdu(nil).show)
 end

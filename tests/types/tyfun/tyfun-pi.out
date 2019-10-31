@@ -1,0 +1,7 @@
+tyfun-pi.ml[27:9 ..27:135]: error
+   │ 
+27 │ let x : map S [Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z] :~: [12] = Refl
+   │         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  Couldn't match actual type int
+    with the type expected by the context, nat
+  • Note: Where ret S ~> nat
