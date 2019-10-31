@@ -1,1 +1,1 @@
-foo : Infer{'d : type}. 'd -> constraint
+foo : Infer{'d : type}. Req{'a : 'd}. constraint

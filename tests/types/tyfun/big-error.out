@@ -5,12 +5,12 @@ big-error.ml[12:58 ..12:61]: error
   Couldn't match actual type S (S (S (S Z)))
     with the type expected by the context, S (S (S (S (S Z))))
   • Note: 
-      Where the right-hand side type,
+      Where the type,
         S (S (S (S (S Z)))),
       is the reduction of
         length [1, 2, 3, 4, 5]
   • Note: 
-      Where the left-hand side type,
+      Where the type,
         S (S (S (S Z))),
       is the reduction of
         length [1, 2, 3, 4]

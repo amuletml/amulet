@@ -1,8 +1,8 @@
-foo : type -> constraint
+foo : Req{'a : type}. constraint
 foo : Spec{'a : type}. foo 'a => 'a -> unit
-bar : type -> constraint
+bar : Req{'a : type}. constraint
 bar : Spec{'a : type}. bar 'a => 'a -> unit
-baz : type -> constraint
+baz : Req{'a : type}. constraint
 baz : Spec{'a : type}. baz 'a => 'a -> unit
-quux : type -> constraint
+quux : Req{'a : type}. constraint
 quux : Spec{'a : type}. quux 'a => 'a -> unit

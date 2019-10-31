@@ -1,4 +1,4 @@
-eq : type -> constraint
+eq : Req{'a : type}. constraint
 eq : Spec{'a : type}. eq 'a => 'a -> 'a -> bool
-ord : type -> constraint
+ord : Req{'a : type}. constraint
 lte : Spec{'a : type}. ord 'a => 'a -> 'a -> bool

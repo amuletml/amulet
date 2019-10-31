@@ -3,8 +3,8 @@ Z : nat
 S : nat -> nat
 + : nat -> nat -> nat
 pi : nat -> type
-SZ : Infer{'dn : type}. Spec{'number : 'dn}. ('number ~ Z) ⊃ pi 'number
-SS : Infer{'eo : type}. Spec{'number : 'eo}. Spec{'n : nat}. ('number ~ S 'n) ⊃ pi 'n -> pi 'number
+SZ : Infer{'dl : type}. Spec{'number : 'dl}. ('number ~ Z) ⊃ pi 'number
+SS : Infer{'em : type}. Spec{'number : 'em}. Spec{'n : nat}. ('number ~ S 'n) ⊃ pi 'n -> pi 'number
 ~~ : Infer{'a : type}. 'a -> 'a -> type
 Refl : Infer{'a : type}. Spec{'a : 'a}. Spec{'b : 'a}. ~ 'a 'b => ~~ 'a 'b
 add_zero_right : Spec{'n : nat}. pi 'n -> ~~ (+ 'n Z) 'n

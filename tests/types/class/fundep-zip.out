@@ -1,5 +1,5 @@
 :: : Infer{'a : type}. 'a -> list 'a -> list 'a
 zip2 : Infer{'a : type}. Infer{'b : type}. list 'a -> list 'b -> list ('a * 'b)
-zip : type -> type -> type -> constraint
+zip : Req{'a : type}. Req{'b : type}. Req{'c : type}. constraint
 zip : Spec{'a : type}. Spec{'b : type}. Spec{'c : type}. zip 'a 'b 'c => list 'a -> list 'b -> 'c
 z3 : Spec{'a : type}. Spec{'b : type}. Spec{'c : type}. list 'a -> list 'b -> list 'c -> list ('a * 'b * 'c)

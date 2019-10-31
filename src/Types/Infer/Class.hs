@@ -51,9 +51,9 @@ import GHC.Stack
 
 extendTySyms :: Foldable t => t TySymInfo -> Map.Map VarResolved TySymInfo -> Map.Map VarResolved TySymInfo
 extendTySyms syms empty = foldr extend empty syms where
-  extend info@(TyFamInfo name eqs args kind con) = Map.alter go name where
+  extend info@(TyFamInfo name eqs _ kind con) = Map.alter go name where
     go Nothing = Just info
-    go (Just (TyFamInfo _ eqs' _ _ con')) = Just (TyFamInfo name (eqs ++ eqs') args kind (con <|> con'))
+    go (Just (TyFamInfo _ eqs' args _ con')) = Just (TyFamInfo name (eqs ++ eqs') args kind (con <|> con'))
     go (Just TySymInfo{}) = error "Impossible inferInstance extend TySymInfo"
   extend TySymInfo{} = error "Impossible inferInstance extend TySymInfo"
 
@@ -87,7 +87,7 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
 
 
   let forallVars = getForallVars k
-      getForallVars (TyForall v _ t) = Set.singleton v <> getForallVars t
+      getForallVars (TyPi (Invisible v _ r) t) | r /= Req = Set.singleton v <> getForallVars t
       getForallVars _ = mempty
 
   let declaredVars =
@@ -128,7 +128,7 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
       TyAnnArg v k -> TyAnnArg v <$> checkAgainstKind (BecauseOf meth) k TyType
       TyVarArg v -> TyAnnArg v <$> freshTV
 
-    let ty = kindFromArgs vs $ replaceK declared k
+    let ty = replaceK (kindFromArgs vs declared) k
         kindFromArgs (TyAnnArg _ k:xs) cont = TyPi (Anon k) $ kindFromArgs xs cont
         kindFromArgs (_:_) _ = undefined
         kindFromArgs [] cont = cont
@@ -428,6 +428,7 @@ inferInstance inst@(Instance clss ctx instHead bindings we'reDeriving ann) = con
 
       ax <- genName
       con <- genName
+
       let eq = [ ( instArgs ++ map (TyVar . argName) args
                  , exp
                  , con ) ]

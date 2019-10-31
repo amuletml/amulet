@@ -1,6 +1,6 @@
 id : type -> type
 Id : Spec{'a : type}. 'a -> id 'a
 unId : Infer{'a : type}. id 'a -> 'a
-data : type -> constraint
+data : Req{'a : type}. constraint
 gmapT : Spec{'a : type}. data 'a => (Spec{'b : type}. data 'b => unit -> 'b -> 'b) -> 'a -> 'a
 gfoldl : Spec{'a : type}. data 'a => Spec{'w : type -> type}. (Spec{'a : type}. Spec{'b : type}. data 'a => 'w ('a -> 'b) -> 'a -> 'w 'b) -> (Spec{'g : type}. 'g -> 'w 'g) -> 'a -> 'w 'a
