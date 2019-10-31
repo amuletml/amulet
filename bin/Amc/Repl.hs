@@ -308,7 +308,7 @@ compileCommand (dropWhile isSpace -> path) = do
       case core of
         Just core -> do
           lint <- gets (coreLint . config)
-          optm <- wrapNamey $ optimise lint core
+          optm <- wrapNamey $ optimise (defaultInfo { useLint = lint }) core
           (_, lua) <- emitCore optm
           liftIO $ Bs.hPutStr handle lua
         Nothing ->
@@ -443,7 +443,7 @@ emitCore :: MonadState ReplState m => [Stmt CoVar] -> m (LuaStmt, Bs.ByteString)
 emitCore core = do
   emit <- gets emitState
 
-  let core' = patchupUsage . snd . tagOccurStmt (const occursSet) OccursVar $ core
+  let core' = patchupUsage . snd . tagOccurStmt (const occursSet) OccursVar mempty $ core
       (luaStmt, emit') = uncurry B.addBuiltins $ runState (B.emitStmt core') emit
       luaExpr = LuaDo . map (patchupLua emit') . toList $ luaStmt
       luaSyntax = T.encodeUtf8 . display . uncommentDoc . renderPretty 0.8 100 . pretty $ luaExpr

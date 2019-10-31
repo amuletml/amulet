@@ -80,12 +80,12 @@ instance Pretty a => Pretty (OccursVar a) where
   pretty = pretty . underlying
 
 -- | Tag each variable with it's 'Occurrence' /at the binding point/.
-tagOccursVar :: IsVar a => [AnnStmt b a] -> [AnnStmt b (OccursVar a)]
-tagOccursVar = snd . tagOccurStmt const OccursVar
+tagOccursVar :: IsVar a => VarSet.Set -> [AnnStmt b a] -> [AnnStmt b (OccursVar a)]
+tagOccursVar exp = snd . tagOccurStmt const OccursVar exp
 
 -- | Tag each expression with its free variables and their occurrence.
-tagOccursMap :: IsVar a => [AnnStmt b a] -> [AnnStmt OccursMap a]
-tagOccursMap = snd . tagOccurStmt (flip const) const
+tagOccursMap :: IsVar a => VarSet.Set -> [AnnStmt b a] -> [AnnStmt OccursMap a]
+tagOccursMap exp = snd . tagOccurStmt (flip const) const exp
 
 -- | Compute the occurrence set from an 'OccursMap'.
 occursSet :: OccursMap -> VarSet.Set
@@ -97,15 +97,16 @@ occursSet = VarMap.foldrWithKey ins mempty where
 tagOccurStmt :: forall a a' b b'. IsVar a
              => (b -> OccursMap -> b')  -- ^ Build a new annotation from the set of free variables
              -> (a -> Occurrence -> a') -- ^ Build a new variable from its occurrence.
+             -> VarSet.Set              -- ^ Always used variables. i.e. those which are exported.
              -> [AnnStmt b a]           -- ^ The statements to tag
              -> (OccursMap, [AnnStmt b' a'])
-tagOccurStmt ann var = tagStmt where
+tagOccurStmt ann var export = tagStmt where
   conv = fmap (`var` defOcc)
   conv :: Type a -> Type a'
   var' v = var v . occurrenceIn v
 
   tagStmt :: [AnnStmt b a] -> (OccursMap, [AnnStmt b' a'])
-  tagStmt [] = (mempty, [])
+  tagStmt [] = (VarSet.foldr (\v -> VarMap.insert v Multi) mempty export, [])
   tagStmt (Foreign v ty txt:xs) =
     let (fv, xs') = tagStmt xs
     in ( toVar v `VarMap.delete` fv

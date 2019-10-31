@@ -81,7 +81,7 @@ testLint f file = do
 
 testLintLower, testLintSimplify :: String -> Assertion
 testLintLower = testLint pure
-testLintSimplify = testLint (optimise True)
+testLintSimplify = testLint (optimise defaultInfo { useLint = True })
 
 tests :: IO TestTree
 tests = do
