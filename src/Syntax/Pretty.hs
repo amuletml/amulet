@@ -46,10 +46,10 @@ applyCons (TyWithConstraints cs a) =
 -- | Pretty-print a type, with syntax as close to source Amulet as
 -- possible
 displayType :: forall p. (Pretty (Var p), Ord (Var p)) => Type p -> Doc
-displayType = prettyType . dropKindVars mempty
+displayType = prettyType . undependentify . dropKindVars mempty
 
 displayTypeTyped :: Var p ~ Var Resolved => Type p -> Doc
-displayTypeTyped = prettyTypeTyped . dropKindVars mempty
+displayTypeTyped = prettyTypeTyped . undependentify . dropKindVars mempty
 
 dropKindVars :: forall p. (Pretty (Var p), Ord (Var p)) => Subst p -> Type p -> Type p
 dropKindVars sub (TyPi x@(Invisible v (Just TyType) _) t)
@@ -226,6 +226,12 @@ listType (TyApp (TyPromotedCon v) (TyTupleL hd tl))
   | v == cONSName = (hd:) <$> listType tl
   | otherwise = Nothing
 listType _ = Nothing
+
+undependentify :: Ord (Var p) => Type p -> Type p
+undependentify (TyPi (Invisible v (Just k) Req) rest)
+  | v `Set.notMember` ftv rest = TyArr k (undependentify rest)
+  | otherwise = TyPi (Invisible v (Just k) Req) (undependentify rest)
+undependentify t = t
 
 prettyMotive :: SkolemMotive Typed -> Doc
 prettyMotive (ByAscription _ t) = string "of the context, the type" <#> displayType t
