@@ -16,6 +16,8 @@ import qualified Data.Text.Lazy as L
 import qualified Data.Text.IO as T
 import qualified Data.Text as T
 
+import qualified Data.Map.Strict as Map
+
 import qualified Data.ByteString as Bs
 import qualified Data.VarMap as VarMap
 
@@ -38,7 +40,7 @@ import System.IO
 
 import qualified Syntax.Builtin as Bi
 import Syntax.Resolve (ResolveResult(..), resolveProgram)
-import Syntax.Resolve.Scope (Signature)
+import Syntax.Resolve.Scope (Signature(..), Slot(..))
 import Syntax.Resolve.Import (runNullImport)
 import Syntax (displayType)
 import qualified Syntax.Var as S
@@ -207,6 +209,13 @@ execCommand _ "add-library-path" arg =
       else liftIO . putStrLn $ arg ++ ": No such directory"
 
 execCommand _ "version" _ = liftIO (putStrLn ("The Amulet compiler, version " ++ $amcVersion))
+execCommand _ "complete" arg = do
+  let word = dropWhile isSpace arg
+  (_, completions) <- completeInScope (reverse word, "")
+  out <- gets outputHandle
+  liftIO $
+    for_ completions $ \(Completion rep _ _) ->
+      hPutStrLn out rep
 
 execCommand _ cmd _ = outputDoc ("Unknown command" <+> verbatim cmd)
 
@@ -527,6 +536,41 @@ loadFiles paths = do
           Left err -> hPutDoc handle err >> pure False
           Right () -> pure True
 
+completeInScope :: MonadState ReplState m => CompletionFunc m
+completeInScope = completeWord Nothing " \n\t" $ \the_word -> do
+  sig <- gets resolveScope
+  let qual = T.splitOn (T.singleton '.') (T.pack the_word)
+      prefix = init qual
+      word = last qual
+      prefix_str =
+        case prefix of
+          [] -> ""
+          _ -> T.unpack (T.intercalate (T.singleton '.') prefix) ++ "."
+
+  let comps = complete_from sig prefix word
+  pure (map (\(Completion sub disp done) -> Completion (prefix_str ++ sub) disp done) comps)
+  where
+    complete_from (Signature vals tys mods) [] word =
+      let sc = if not (T.null word)
+                  then if isUpper (T.head word)
+                          then (mod <$> mods) <> (val <$> vals)
+                          else (val <$> vals) <> (val <$> tys)
+                  else (mod <$> mods) <> (val <$> vals) <> (val <$> tys)
+       in map snd $ filter (T.isPrefixOf word . fst) $ Map.toList sc
+    complete_from (Signature _ _ our_mods) (m:mods) word =
+      case Map.lookup m our_mods of
+        Just (_, Just sig) -> complete_from sig mods word
+        _ -> []
+
+    val (SVar v) = simpleCompletion (T.unpack (nameName v))
+    val (SAmbiguous (v:_)) = simpleCompletion (T.unpack (nameName v))
+    val (SAmbiguous []) = undefined
+
+    nameName (S.TgName v _) = v
+    nameName (S.TgInternal v) = v
+
+    mod (v, _) = Completion (T.unpack (nameName v `T.snoc` '.')) (T.unpack (nameName v)) False
+
 repl :: ReplConfig -> IO ()
 repl config = replFrom config Nothing
 
@@ -545,7 +589,7 @@ replFrom config file = do
 
   takeMVar ready
   bracket (pure ()) (const (killThread tid)) $ \() ->
-    evalStateT (runInputT defaultSettings (runRepl (Just tid))) state
+    evalStateT (runInputT (completeInScope `setComplete` defaultSettings) (runRepl (Just tid))) state
 
 finish :: MonadIO m => Listener -> m ()
 finish Nothing = pure ()
