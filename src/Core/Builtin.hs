@@ -146,6 +146,8 @@ builtinTyList = [ fromVar vBool
                 , fromVar tcTypeError
                 , fromVar tcTypeable
                 , fromVar tcTypeRep
+
+                , fromVar vCONS, fromVar vNIL -- XXX: tyfun-tyfun fails without this
                 ]
 
 builtinVarList :: forall a b. (IsVar a, IsVar b) => [(a, Type b)]
