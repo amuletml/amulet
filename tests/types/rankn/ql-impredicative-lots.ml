@@ -5,11 +5,11 @@ let head (Cons (x, _)) = x
 let tail (Cons (_, x)) = x
 let single x = [x]
 
-let append = function
+let rec append = function
   | [] -> fun ys -> ys
   | Cons (x, xs) -> fun ys -> Cons (x, append xs ys)
 
-let length = function
+let rec length = function
   | [] -> 0
   | Cons (_, xs) -> 1 + length xs
 

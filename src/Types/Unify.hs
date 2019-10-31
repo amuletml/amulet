@@ -444,7 +444,7 @@ subsumes' r scope ot@(TyTuple a b) nt@(TyTuple a' b') = do -- {{{
       cont ex | IdWrap <- wa, IdWrap <- wb = ex
       cont ex
         | an <- annotation ex =
-          Let
+          Let NonRecursive
             [ TypedMatching
                 ( PTuple [ Capture elem (an, a), Capture elem' (an, b) ] (an, ot) )
                 ex (an, ot)
@@ -708,7 +708,7 @@ mkRecordWrapper keys matched matched_t th tw cont exp =
 
       -- Update the record in place
       wrapEx ex | an <- annotation ex =
-        Let [Binding exp ex True (an, th)]
+        Let NonRecursive [Binding exp ex True (an, th)]
           (cont (recordExt (ref an) (foldMap (updateField an (ref an)) keys) (an, matched_t)))
           (an, tw)
    in wrapEx

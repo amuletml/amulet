@@ -6,7 +6,7 @@ let ids : list (forall 'a. 'a -> 'a) =
 
 external val (+) : int -> int -> int = ""
 
-let length = function
+let rec length = function
   | [] -> 0
   | Cons (_, xs) -> 1 + length xs
 

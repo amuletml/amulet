@@ -142,7 +142,7 @@ class Spanned a => Respannable a where
 
 instance Respannable (Ann p) => Respannable (Expr p) where
   respan k (VarRef v a) = VarRef v (respan k a)
-  respan k (Let vs r a) = Let vs r (respan k a)
+  respan k (Let re vs r a) = Let re vs r (respan k a)
   respan k (If c t f a) = If c t f (respan k a)
   respan k (App f x a) = App f x (respan k a)
   respan k (Fun p b a) = Fun p b (respan k a)

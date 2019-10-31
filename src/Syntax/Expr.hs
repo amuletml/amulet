@@ -15,6 +15,10 @@ import {-# SOURCE #-} Syntax.Toplevel
 import Syntax.Type
 import Syntax.Var
 
+-- | Whether this binding can refer to itself or not.
+data RecKind = Recursive | NonRecursive
+  deriving (Show, Eq, Ord, Data)
+
 data Binding p
   -- | @let implicit f x = ...@
   = Binding { _bindVariable :: Var p
@@ -51,7 +55,7 @@ deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Para
 
 data Expr p
   = VarRef (Var p) (Ann p)
-  | Let [Binding p] (Expr p) (Ann p)
+  | Let RecKind [Binding p] (Expr p) (Ann p)
   | If (Expr p) (Expr p) (Expr p) (Ann p)
   | App (Expr p) (Expr p) (Ann p)
   | Fun (Parameter p) (Expr p) (Ann p)

@@ -1,1 +1,1 @@
-let x = x
+let rec x = x

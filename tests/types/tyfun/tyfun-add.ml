@@ -12,12 +12,12 @@ type pi 'number =
 type 'a ~~ 'b =
   Refl : 'a ~ 'b => 'a ~~ 'b
 
-let add_zero_right (x : pi 'n) : ('n + Z) ~~ 'n =
+let rec add_zero_right (x : pi 'n) : ('n + Z) ~~ 'n =
   match x with
   | SZ -> Refl
   | SS k -> match (add_zero_right k) with | Refl -> Refl
 
-let add_succ_right (x : pi 'n) (y : pi 'm) : ('n + S 'm) ~~ S ('n + 'm) =
+let rec add_succ_right (x : pi 'n) (y : pi 'm) : ('n + S 'm) ~~ S ('n + 'm) =
   match x, y with
   | SZ, _ -> Refl
   | SS k, m ->

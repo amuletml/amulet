@@ -1,6 +1,6 @@
 let a :: b = Cons (a, b)
 
-let zip f xs ys =
+let rec zip f xs ys =
   match xs, ys with
   | Nil, _ -> [1]
   | _, Nil -> [2]

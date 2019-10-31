@@ -6,7 +6,7 @@ type fin 'n =
   | FZ : fin (S 'k)
   | FS : fin 'k -> fin (S 'k)
 
-let to_fin (x : snat 'n) : fin 'n =
+let rec to_fin (x : snat 'n) : fin 'n =
   match x with
   | SS SZ -> FS FZ
   | SS x -> FS (to_fin x)

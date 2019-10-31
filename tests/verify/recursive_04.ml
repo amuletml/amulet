@@ -1,1 +1,1 @@
-let f x = f x
+let rec f x = f x

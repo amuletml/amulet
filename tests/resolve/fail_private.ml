@@ -1,4 +1,4 @@
-let x + y = x + y
+let rec x + y = x + y
 
 module X =
   private module Y =

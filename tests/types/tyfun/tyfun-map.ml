@@ -32,7 +32,7 @@ let comp_app :
   =
     fun _ _ _ -> Refl
 
-let foo :
+let rec foo :
     forall 'f 'g 'xs. tyfun 'f * tyfun 'g
                    => slist 'xs
                    -> map 'f (map 'g 'xs) ~~ map (compose 'f 'g) 'xs

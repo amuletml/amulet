@@ -6,7 +6,7 @@ type elem 'x 'xs =
   | Here : elem 'x ('x * 'xs)
   | There : elem 'x 'xs -> elem 'x ('y * 'xs)
 
-let index (x : elem 'a 'ts) (xs : list 'ts) : 'a =
+let rec index (x : elem 'a 'ts) (xs : list 'ts) : 'a =
   match x, xs with
   | Here, Cons (a, _) -> a
   | There p, Cons (_, xs) -> index p xs

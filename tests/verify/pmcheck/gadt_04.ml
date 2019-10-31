@@ -12,13 +12,13 @@ type fin 'n =
   | FZ : fin (S 'n)
   | FS : fin 'n -> fin (S 'n)
 
-let f (vect : vect 'a 'n) (idx : fin 'n) : 'a =
+let rec f (vect : vect 'a 'n) (idx : fin 'n) : 'a =
   match vect, idx with
   | Nil_, _ -> error ""
   | Cons_ (x, _), FZ -> x
   | Cons_ (_, xs), FS k -> f xs k
 
-let g (vect : vect 'a 'n) (idx : fin 'n) : 'a =
+let rec g (vect : vect 'a 'n) (idx : fin 'n) : 'a =
   match vect, idx with
   | Cons_ (x, _), FZ -> x
   | Cons_ (_, xs), FS k -> g xs k

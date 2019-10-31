@@ -87,10 +87,13 @@ reTops :: MonadResolve m
        -> m ([Toplevel Resolved], Signature, Signature)
 reTops [] sig = views scope ([], sig,)
 
-reTops (LetStmt am bs:rest) sig = do
+reTops (LetStmt re am bs:rest) sig = do
   (bs', vs, ts) <- unzip3 <$> traverse reBinding bs
-  reTopsWith am rest sig (withVals (concat vs)) $ extendTyvars (concat ts) $
-    LetStmt am <$> traverse (uncurry (flip (<$>) . reExpr . view bindBody)) (zip bs bs')
+  let body = extendTyvars (concat ts) $
+        LetStmt re am <$> traverse (uncurry (flip (<$>) . reExpr . view bindBody)) (zip bs bs')
+  case re of
+    NonRecursive -> reTopsWith am rest sig (withVals (concat vs)) . pure =<< body
+    Recursive -> reTopsWith am rest sig (withVals (concat vs)) body
 
 reTops (r@(ForeignVal am v t ty a):rest) sig = do
   v' <- tagVar v
@@ -301,12 +304,13 @@ resolveTele _ [] = pure ([], [])
 reExpr :: MonadResolve m => Expr Parsed -> m (Expr Resolved)
 reExpr r@(VarRef v a) = flip VarRef a <$> (lookupEx v `catchJunk` r)
 
-reExpr (Let bs c a) = do
+reExpr (Let re bs c a) = do
   (bs', vs, ts) <- unzip3 <$> traverse reBinding bs
-  extendTyvars (concat ts) . extendVals (concat vs) $
-    Let <$> traverse (uncurry (flip (<$>) . reExpr . view bindBody)) (zip bs bs')
-        <*> reExpr c
-        <*> pure a
+  let extend = extendTyvars (concat ts) . extendVals (concat vs)
+      reBody = traverse (uncurry (flip (<$>) . reExpr . view bindBody)) (zip bs bs')
+  case re of
+    NonRecursive -> Let re <$> reBody <*> extend (reExpr c) <*> pure a
+    Recursive -> extend $ Let re <$> reBody <*> reExpr c <*> pure a
 reExpr (If c t b a) = If <$> reExpr c <*> reExpr t <*> reExpr b <*> pure a
 reExpr (App f p a) = App <$> reExpr f <*> reExpr p <*> pure a
 reExpr (Fun p e a) = do

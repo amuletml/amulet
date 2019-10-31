@@ -17,7 +17,7 @@ instance show int begin
   let show = prim_show
 end
 
-let foo (x : 'a) : unit =
+let rec foo (x : 'a) : unit =
   print (show x)
   bar [x]
 and bar x = foo x

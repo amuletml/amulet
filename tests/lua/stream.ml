@@ -23,7 +23,7 @@ let range (start, limit) =
   Stream (go, start)
 
 let dump_stream e (Stream (f, start)) =
-  let go st =
+  let rec go st =
     match f st with
     | Skip st -> go st
     | Yield (a, st) ->

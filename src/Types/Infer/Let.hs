@@ -69,7 +69,7 @@ inferLetTy closeOver strategy vs =
               let needsLet = wraps `Map.restrictKeys` freeIn ex
                   addOne (v, ExprApp e) ex
                     | VarRef v' _ <- e, v == v' = ex
-                    | otherwise = Let [ Binding v e False (annotation ex, getType e) ] ex (annotation ex, getType ex)
+                    | otherwise = Let Recursive [ Binding v e False (annotation ex, getType e) ] ex (annotation ex, getType ex)
                   addOne _ ex = ex
                   addFreeDicts ex = foldr addOne ex (Map.toList needsLet)
 
@@ -252,7 +252,7 @@ inferLetTy closeOver strategy vs =
                      (Ascription
                        (ExprWrapper tyLams
                          (wrapper Full
-                           (Let inners (Record fields (an, recTy)) (an, recTy)))
+                           (Let Recursive inners (Record fields (an, recTy)) (an, recTy)))
                          (an, closed))
                        closed (an, closed))
                      True

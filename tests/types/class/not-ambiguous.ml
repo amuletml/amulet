@@ -6,7 +6,7 @@ end
 
 instance show 't => show (list 't) begin
   let show xs =
-    let f xs = match xs with
+    let rec f = function
       | [x]            -> show x
       | (Cons (x, xs)) -> show x ^ "," ^ f xs
     in "[" ^ f xs ^ "]"

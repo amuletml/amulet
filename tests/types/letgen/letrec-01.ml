@@ -1,1 +1,1 @@
-let (a, b) = (a, b)
+let rec (a, b) = (a, b)
