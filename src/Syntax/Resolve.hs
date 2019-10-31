@@ -287,13 +287,15 @@ resolveTele :: (MonadResolve m, Reasonable f p)
             => f p -> [TyConArg Parsed] -> m ([TyConArg Resolved], [(Var Parsed, Var Resolved)])
 resolveTele r (TyVarArg v:as) = do
   v' <- tagVar v
-  (as, vs) <- resolveTele r as
-  pure (TyVarArg v':as, (v, v'):vs)
+  extendTyvar v v' $ do
+    (as, vs) <- resolveTele r as
+    pure (TyVarArg v':as, (v, v'):vs)
 resolveTele r (TyAnnArg v k:as) = do
   v' <- tagVar v
-  ((as, vs), k) <-
-    (,) <$> resolveTele r as <*> reType r k
-  pure (TyAnnArg v' k:as, (v, v'):vs)
+  extendTyvar v v' $ do
+    ((as, vs), k) <-
+      (,) <$> resolveTele r as <*> reType r k
+    pure (TyAnnArg v' k:as, (v, v'):vs)
 resolveTele _ [] = pure ([], [])
 
 reExpr :: MonadResolve m => Expr Parsed -> m (Expr Resolved)

@@ -1,0 +1,9 @@
+tyfun-pi-fail.ml[11:1 ..14:3]: error
+   │ 
+11 │ type function map 'f 'xs begin
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  Rigid type variable f has escaped its scope of map 'f (Cons ('a, 'as))
+  • Note: the variable f was rigidified because it is bound by the LHS of a type function equation, namely
+          map 'f (Cons ('a, 'as)),
+  • Note: in the inferred type for map,
+      'o -> list (arg 'f) -> list (ret 'f)

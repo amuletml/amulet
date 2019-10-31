@@ -321,7 +321,10 @@ fakeLetTys bs = do
 
 data PatternStrat = Fail | Propagate
 
-skolCheck :: MonadInfer Typed m => Var Typed -> SomeReason -> Type Typed -> m (Type Typed)
+skolCheck :: ( MonadChronicles TypeError m
+             , MonadReader Env m
+             )
+          => Var Typed -> SomeReason -> Type Typed -> m (Type Typed)
 skolCheck var exp ty = do
   let blameSkol :: TypeError -> (Var Desugared, SomeReason) -> TypeError
       blameSkol e (v, r) =
@@ -336,7 +339,10 @@ skolCheck var exp ty = do
   checkAmbiguous var exp t
   pure t
 
-checkAmbiguous :: forall m. MonadInfer Typed m => Var Typed -> SomeReason -> Type Typed -> m ()
+checkAmbiguous :: forall m. ( MonadChronicles TypeError m
+                            , MonadReader Env m
+                            )
+               => Var Typed -> SomeReason -> Type Typed -> m ()
 checkAmbiguous var exp tau = go mempty mempty tau where
   go :: Set.Set (Var Typed) -> Set.Set (Var Typed) -> Type Typed -> m ()
   go ok s (TyPi (Invisible v _ Req) t) = go (Set.insert v ok) s t

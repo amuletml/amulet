@@ -31,9 +31,10 @@ import Data.Maybe
 import Types.Wellformed (wellformed)
 import Types.Infer.Builtin
 import Types.Infer.Errors
-import Types.Unify (solve, getSolveInfo, unifyPure_v)
+import Types.Unify (solve, getSolveInfo, unifyPure_v, freshSkol)
 
 import Syntax.Implicits
+import Syntax.Transform
 import Syntax.Builtin
 import Syntax.Subst
 import Syntax.Types
@@ -43,6 +44,8 @@ import Syntax
 
 import Types.Unify.Trace
 import Text.Pretty.Semantic
+
+import {-# SOURCE #-} Types.Infer.Let (skolCheck)
 
 type KindT m = StateT SomeReason (WriterT (Seq.Seq (Constraint Typed)) m)
 
@@ -173,14 +176,30 @@ resolveTyFunDeclKind reason name arguments kindsig equations = do
           put (BecauseOf clause)
 
           ty <- TyApps (TyCon con) <$> traverse (uncurry checkKind) (zip xs argts)
-          rhs <- checkKind rhs return_kind
+
+          skols <- for (Set.toList (ftv ty)) $ \v ->
+            (,) v <$> freshSkol (ByTyFunLhs ty an) ty v
+
+          let sk (_, t) ~(_, TySkol s) = (s ^. skolIdent, t)
+
+          traceM KcC (shown (zipWith sk tvs skols))
+          traceM KcC (shown skols)
+          traceM KcC (displayType ty)
+
+          rhs <-
+            local (names %~ focus (teleFromList (zipWith sk tvs skols))) $
+              checkKind (apply (raiseT id <$> Map.fromList skols) rhs) return_kind
+
+          let our_skols =
+                Set.fromList $ map (\(_, TySkol s) -> s ^. skolIdent) $ skols
 
           put reason
-          pure (TyFunClause ty rhs (an, kind))
+          pure (TyFunClause ty (unskolemise' our_skols rhs) (an, kind))
 
     pure (kind, eqs, args)
 
   let k' = undependentify k
+  k' <- skolCheck name reason k'
   pure (k', eqs, arguments)
  where
    solveK k = do
@@ -199,6 +218,12 @@ resolveTyFunDeclKind reason name arguments kindsig equations = do
      | v `Set.notMember` ftv rest = TyArr k (undependentify rest)
      | otherwise = TyPi (Invisible v (Just k) Req) (undependentify rest)
    undependentify t = t
+
+   unskolemise m (TySkol v)
+     | (v ^. skolIdent) `Set.member` m = TyVar (v ^. skolVar)
+     | otherwise = TySkol v
+   unskolemise _ t = t
+   unskolemise' m = transformType (unskolemise m)
 
 resolveClassKind :: MonadKind m
                  => Toplevel Desugared

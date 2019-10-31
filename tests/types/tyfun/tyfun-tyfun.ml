@@ -6,7 +6,7 @@ class ty_fun 'f begin
   type apply ('x : arg 'f) : ret 'f
 end
 
-type function map 'f 'xs : list (ret 'f) begin
+type function map 'f ('xs : list (arg 'f)) : list (ret 'f) begin
   map 'f Nil = Nil
   map 'f (Cons ('a, 'as)) = apply 'f 'a :: map 'f 'as
 end

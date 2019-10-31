@@ -7,7 +7,7 @@ end
 (* map has a proper pi type:
   * forall ('f : 'k) -> list (arg 'f) -> list (ret 'f)
   *)
-type function map 'f 'xs : list (ret 'f) begin
+type function map 'f ('xs : list (arg 'f)) : list (ret 'f) begin
   map 'f Nil = Nil
   map 'f (Cons ('a, 'as)) = Cons (apply 'f 'a, map 'f 'as)
 end
