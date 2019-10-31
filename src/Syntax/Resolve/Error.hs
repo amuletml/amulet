@@ -4,13 +4,10 @@ module Syntax.Resolve.Error
   , VarKind(..)
   ) where
 
-import Control.Applicative ((<|>))
-
 import qualified Data.List.NonEmpty as E
 import qualified Data.Text as T
 import Data.Spanned
 import Data.Reason
-import Data.Maybe
 import Data.Span
 
 import Syntax
@@ -29,7 +26,11 @@ data VarKind
 -- | An error in the resolution process. Note that one error may be
 -- thrown multiple times.
 data ResolveError
-  = NotInScope VarKind (Var Parsed)   [Var Parsed] -- ^ This object was not in scope
+  -- ^ This object was not in scope.
+  --
+  -- This optionally contains a location where a recursive modifier should be
+  -- added.
+  = NotInScope VarKind (Var Parsed) (Maybe Span)
 
   | Ambiguous (Var Parsed) [Var Resolved] -- ^ This reference could refer to more than one variable
   | NonLinearPattern (Var Resolved) [Pattern Resolved] -- ^ This pattern declares one variable multiple times
@@ -95,12 +96,14 @@ instance Spanned ResolveError where
 instance Note ResolveError Style where
   diagnosticKind _ = ErrorMessage
 
-  formatNote f x = indent 2 (Right <$> pretty x) <#> fromJust (body x) where
-    body (ArisingFrom er a) = body er <|> Just (f [annotation a])
-    body (NonLinearPattern _ ps) = Just (f (map annotation ps))
-    body (NonLinearRecord e _) = Just (f [annotation e])
-    body (ImportLoop loop) = Just . foldl1 (<#>) . E.map imported $ loop
-    body _ = Nothing
+  formatNote f x = indent 2 (Right <$> pretty x) <#> body mempty x where
+    body _ (ArisingFrom er a) = body (f [annotation a]) er
+    body _ (NonLinearPattern _ ps) = f (map annotation ps)
+    body _ (NonLinearRecord e _) = f [annotation e]
+    body _ (ImportLoop loop) = foldl1 (<#>) . E.map imported $ loop
+    body doc (NotInScope _ _ (Just pos)) =
+      doc <#> indent 2 (Right <$> "Do you need a" <+> keyword "rec" <+> "modifier here?") <#> f [pos]
+    body doc _ = doc
 
     imported (name, pos)
       = f [ pos ]
