@@ -190,8 +190,16 @@ resolveClassKind stmt@(Class classcon _ ctx args _ methods _) = do
     let scope = one classcon kind <> tele
         replaceK (TyPi b t) k = TyPi b (replaceK t k)
         replaceK _ k = k
+
+        forTys (m:ms) k = do
+          t <- k m
+          local (names %~ focus t) $ do
+            t' <- forTys ms k
+            pure (t <> t')
+        forTys [] _ = pure mempty
+
     local (names %~ focus scope) $ do
-      tys <- fmap mconcat . for methods $ \case
+      tys <- forTys methods $ \case
         AssocType v _ ty _ -> do
           ty <- checkKind ty TyType
           pure (one v (replaceK kind ty))

@@ -20,7 +20,7 @@ import Data.Spanned
 import Data.Reason
 import Data.Graph
 import Data.Maybe
-import Data.List (sortOn, partition, unzip4)
+import Data.List (sortOn, partition)
 import Data.Char
 
 import Control.Monad.State
@@ -110,8 +110,14 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
       unwind (TyTuple a b) = a:unwind b
       unwind t = pure t
 
+      forTys (m:ms) k = do
+        (a, tele, d, i) <- k m
+        local (names %~ focus tele) $ do
+          (as, teles, ds, is) <- forTys ms k
+          pure (a:as, tele <> teles, d:ds, i:is)
+      forTys [] _ = pure ([], mempty, [], [])
 
-  (assocts, assocty_tele, assoct_defs, assoct_info) <- fmap unzip4 . for assoctys $ \meth@(AssocType method vs ty ann) -> do
+  (assocts, assocty_tele, assoct_defs, assoct_info) <- forTys assoctys $ \meth@(AssocType method vs ty ann) -> do
     let replaceK by (TyPi b t) = TyPi b $ replaceK by t
         replaceK by _ = by
     checkWildcard meth ty
@@ -126,6 +132,7 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
         kindFromArgs (TyAnnArg _ k:xs) cont = TyPi (Anon k) $ kindFromArgs xs cont
         kindFromArgs (_:_) _ = undefined
         kindFromArgs [] cont = cont
+
     let info = TyFamInfo { _tsName = method
                          , _tsEquations = []
                          , _tsConstraint = Just classConstraint
@@ -138,12 +145,12 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
          , info
          )
 
-  ctx <- local (names %~ focus (mconcat assocty_tele <> one name k)) . for ctx $ \x -> do
+  ctx <- local (names %~ focus (assocty_tele <> one name k)) . for ctx $ \x -> do
     () <- validContext "class" classAnn x
     checkAgainstKind (BecauseOf clss) x tyConstraint
 
 
-  (fold -> scope, rows') <- local (names %~ focus (one name k <> mconcat assocty_tele)) . fmap unzip . for (getContext ctx) $
+  (fold -> scope, rows') <- local (names %~ focus (one name k <> assocty_tele)) . fmap unzip . for (getContext ctx) $
     \obligation -> do
       impty <-
         closeOver' vars (BecauseOf clss) $
@@ -157,7 +164,7 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
     confesses (UnsatClassCon (BecauseOf clss) (head cs)
                 (GivenContextNotEnough (fromMaybe (TyCon tyUnitName) ctx)))
 
-  local (names %~ focus (one name k <> mk_scope params <> mconcat assocty_tele)) $ do
+  local (names %~ focus (one name k <> mk_scope params <> assocty_tele)) $ do
     -- Infer the types for every method
     (decls, rows) <- fmap unzip . for signatures $ \meth@(MethodSig method ty _) -> do
       checkWildcard meth ty
@@ -264,7 +271,7 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
         contextMap = Map.fromList (map (\(_, _, l, t) -> (l, t)) rows')
 
     pure ( assoct_defs ++ tyDecl:map (LetStmt Public . pure) decs
-         , tele <> mconcat assocty_tele
+         , tele <> assocty_tele
          , info
          , scope
          , assoct_info
@@ -378,7 +385,14 @@ inferInstance inst@(Instance clss ctx instHead bindings we'reDeriving ann) = con
 
   let TyApps _ classArgs = classHead
 
-  (tysyms, axioms) <- fmap unzip . for (filter (not . method) bindings) $ \bind@(TypeImpl var args exp ann) -> do
+  let forAx (m:ms) k = do
+        (syms, axs) <- k m
+        local (tySyms %~ extendTySyms [syms]) $ do
+          (syms', axs') <- forAx ms k
+          pure (syms:syms', axs:axs')
+      forAx [] _ = pure ([], [])
+
+  (tysyms, axioms) <- forAx (filter (not . method) bindings) $ \bind@(TypeImpl var args exp ann) -> do
     let as (TyPi (Anon b) r) = b:as r
         as (TyPi _ r) = as r
         as _ = []
@@ -395,7 +409,9 @@ inferInstance inst@(Instance clss ctx instHead bindings we'reDeriving ann) = con
 
     local (names %~ focus (teleFromList argts)) . local (classes %~ mappend localAssums) $ do
       (exp, cs) <- condemn . listen $
-        checkAgainstKind (BecauseOf bind) (apply (fmap unlift skolSub) exp) declared
+        checkAgainstKind (BecauseOf bind)
+          (apply (fmap unlift (instSub <> skolSub)) exp)
+          (apply instSub declared)
 
       let fake_clause = TyFunClause (apply skolSub (TyApps (TyCon var) (instArgs ++ map (TyVar . argName) args)))
                             exp (ann, declared)
@@ -407,7 +423,8 @@ inferInstance inst@(Instance clss ctx instHead bindings we'reDeriving ann) = con
       exp <- pure (deSkolFreeTy exp)
 
       unless (Seq.null cs) $
-        confesses (addBlame (BecauseOf bind) (UnsatClassCon (BecauseOf bind) (cs `Seq.index` 0) (InstanceMethod ctx)))
+        confesses (addBlame (BecauseOf bind)
+                    (UnsatClassCon (BecauseOf bind) (cs `Seq.index` 0) (InstanceMethod ctx)))
 
       ax <- genName
       con <- genName

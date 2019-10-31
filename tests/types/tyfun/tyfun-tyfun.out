@@ -1,0 +1,9 @@
+:: : Infer{'a : type}. 'a -> list 'a -> list 'a
+ty_fun : Infer{'at : type}. 'at -> constraint
+arg : Infer{'at : type}. 'at -> type
+ret : Infer{'at : type}. 'at -> type
+apply : arg 'f -> Infer{'at : type}. 'at -> ret 'f
+map : arg 'f -> list 'at -> list (ret 'f)
+nat : type
+Z : nat
+S : nat -> nat
