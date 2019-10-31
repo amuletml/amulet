@@ -106,7 +106,7 @@ tagOccurStmt ann var export = tagStmt where
   var' v = var v . occurrenceIn v
 
   tagStmt :: [AnnStmt b a] -> (OccursMap, [AnnStmt b' a'])
-  tagStmt [] = (VarSet.foldr (\v -> VarMap.insert v Multi) mempty export, [])
+  tagStmt [] = (VarSet.foldr (`VarMap.insert` Multi) mempty export, [])
   tagStmt (Foreign v ty txt:xs) =
     let (fv, xs') = tagStmt xs
     in ( toVar v `VarMap.delete` fv
