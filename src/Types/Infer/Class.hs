@@ -270,7 +270,7 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
         methodMap = Map.fromList (map (\(_, n, _, t) -> (n, t)) rows)
         contextMap = Map.fromList (map (\(_, _, l, t) -> (l, t)) rows')
 
-    pure ( assoct_defs ++ tyDecl:map (LetStmt Public . pure) decs
+    pure ( assoct_defs ++ tyDecl:map (LetStmt Recursive Public . pure) decs
          , tele <> assocty_tele
          , info
          , scope
@@ -495,7 +495,7 @@ inferInstance inst@(Instance clss ctx instHead bindings we'reDeriving ann) = con
         let needsLet = wrap `Map.restrictKeys` freeIn e
             addOne (v, ExprApp e) ex
               | VarRef v' _ <- e, v == v' = ex
-              | otherwise = Let [ Binding v e False (annotation ex, getType e) ] ex (annotation ex, getType ex)
+              | otherwise = mkLet [ Binding v e False (annotation ex, getType e) ] ex (annotation ex, getType ex)
             addOne _ ex = ex
             addFreeDicts ex = foldr addOne ex (Map.toList needsLet)
 
@@ -587,7 +587,7 @@ inferInstance inst@(Instance clss ctx instHead bindings we'reDeriving ann) = con
                 (ann, localInsnConTy)
       bind = Binding instanceName (Ascription fun globalInsnConTy (ann, globalInsnConTy)) True (ann, globalInsnConTy)
 
-  pure (LetStmt Public (methods ++ defaultMethods ++ [bind]):axioms, instanceName, globalInsnConTy, info, tysyms)
+  pure (LetStmt Recursive Public (methods ++ defaultMethods ++ [bind]):axioms, instanceName, globalInsnConTy, info, tysyms)
 inferInstance _ = error "not an instance"
 
 argName :: TyConArg p -> Var p
@@ -799,7 +799,7 @@ useForSimpl span scope (ImplChoice head oty pre var _ _ _) ty =
 
 mkLet :: [Binding p] -> Expr p -> Ann p -> Expr p
 mkLet [] = const
-mkLet xs = Let xs
+mkLet xs = Let Recursive xs
 
 (!) :: (Show k, Ord k, HasCallStack) => Map.Map k v -> k -> v
 m ! k = fromMaybe (error ("Key " ++ show k ++ " not in map")) (Map.lookup k m)

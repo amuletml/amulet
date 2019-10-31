@@ -1,4 +1,4 @@
-let f x =
+let rec f x =
   let k = g x
   k
 and g x =

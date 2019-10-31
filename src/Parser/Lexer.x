@@ -67,42 +67,43 @@ tokens :-
   <0> "->"     { constTok TcArrow }
   <0> "<-"     { constTok TcGenerator }
   <0> "="      { constTok TcEqual }
-  <0> "forall" { constTok TcForall }
   <0> "=>"     { constTok TcImplies }
   <0> "|"      { constTok TcPipe }
   <0> "*"      { constTok TcStar }
   <0> "~"      { constTok TcTilde }
   <0> \_       { constTok TcUnderscore }
 
-  <0> "let"      { constTok TcLet }
-  <0> "fun"      { constTok TcFun }
-  <0> "and"      { constTok TcAnd }
-  <0> "if"       { constTok TcIf }
-  <0> "then"     { constTok TcThen }
-  <0> "else"     { constTok TcElse }
-  <0> "begin"    { constTok TcBegin }
-  <0> "end"      { constTok TcEnd }
-  <0> "in"       { constTok TcIn }
-  <0> "external" { constTok TcExternal }
-  <0> "val"      { constTok TcVal }
-  <0> "true"     { constTok TcTrue }
-  <0> "false"    { constTok TcFalse }
-  <0> "match"    { constTok TcMatch }
-  <0> "with"     { constTok TcWith }
-  <0> "function" { constTok TcFunction }
-  <0> "type"     { constTok TcType }
-  <0> "of"       { constTok TcOf }
-  <0> "module"   { constTok TcModule }
-  <0> "open"     { constTok TcOpen }
-  <0> "lazy"     { constTok TcLazy }
-  <0> "import"   { constTok TcImport }
-  <0> "as"       { constTok TcAs }
-  <0> "class"    { constTok TcClass }
-  <0> "instance" { constTok TcInstance }
-  <0> "when"     { constTok TcWhen }
-  <0> "private"  { constTok TcPrivate }
-  <0> "include"  { constTok TcInclude }
+  <0> "and"      { constTok TcAnd      }
+  <0> "as"       { constTok TcAs       }
+  <0> "begin"    { constTok TcBegin    }
+  <0> "class"    { constTok TcClass    }
   <0> "deriving" { constTok TcDeriving }
+  <0> "else"     { constTok TcElse     }
+  <0> "end"      { constTok TcEnd      }
+  <0> "external" { constTok TcExternal }
+  <0> "false"    { constTok TcFalse    }
+  <0> "forall"   { constTok TcForall   }
+  <0> "fun"      { constTok TcFun      }
+  <0> "function" { constTok TcFunction }
+  <0> "if"       { constTok TcIf       }
+  <0> "import"   { constTok TcImport   }
+  <0> "in"       { constTok TcIn       }
+  <0> "include"  { constTok TcInclude  }
+  <0> "instance" { constTok TcInstance }
+  <0> "lazy"     { constTok TcLazy     }
+  <0> "let"      { constTok TcLet      }
+  <0> "match"    { constTok TcMatch    }
+  <0> "module"   { constTok TcModule   }
+  <0> "of"       { constTok TcOf       }
+  <0> "open"     { constTok TcOpen     }
+  <0> "private"  { constTok TcPrivate  }
+  <0> "rec"      { constTok TcRec      }
+  <0> "then"     { constTok TcThen     }
+  <0> "true"     { constTok TcTrue     }
+  <0> "type"     { constTok TcType     }
+  <0> "val"      { constTok TcVal      }
+  <0> "when"     { constTok TcWhen     }
+  <0> "with"     { constTok TcWith     }
 
   <0> ","      { constTok TcComma }
   <0> "."      { constTok TcDot }

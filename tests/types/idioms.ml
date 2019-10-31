@@ -6,7 +6,7 @@ let cartesian xs ys = (| (,) xs ys |)
 let x :: xs = Cons (x, xs)
 
 let traverse cont =
-  let loop = function
+  let rec loop = function
     | Cons (x, xs) -> (| cont x :: loop xs |)
     | [] -> (| [] |)
   loop

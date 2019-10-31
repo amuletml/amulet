@@ -19,78 +19,79 @@ import Data.Span
 -- is the underlying representation of what the lexer produces and the
 -- parser consumes.
 data TokenClass
-  = TcArrow -- ^ A @->@ token.
-  | TcGenerator -- ^ A @<-@ token.
-  | TcEqual -- ^ A @=@ token.
-  | TcForall -- ^ A @forall@ token.
-  | TcImplies -- ^ A @=>@ token.
-  | TcPipe -- ^ A @|@ token.
-  | TcStar -- ^ A @*@ token.
-  | TcTilde -- ^ A @~@ token.
+  = TcArrow      -- ^ A @->@ token.
+  | TcGenerator  -- ^ A @<-@ token.
+  | TcEqual      -- ^ A @=@ token.
+  | TcImplies    -- ^ A @=>@ token.
+  | TcPipe       -- ^ A @|@ token.
+  | TcStar       -- ^ A @*@ token.
+  | TcTilde      -- ^ A @~@ token.
   | TcUnderscore -- ^ A @_@ token.
 
-  | TcLet -- ^ A @let@ token.
-  | TcAnd -- ^ An @and@ token.
-  | TcFun -- ^ A @fun@ token.
-  | TcIf -- ^ An @if@ token.
-  | TcThen -- ^ A @then@ token.
-  | TcElse -- ^ An @else@ token.
-  | TcBegin -- ^ A @begin@ token.
-  | TcEnd -- ^ An @end@ token.
-  | TcIn -- ^ An @in@ token.
-  | TcExternal -- ^ An @external@ token.
-  | TcVal -- ^ A @val@ token.
-  | TcTrue -- ^ A @true@ token.
-  | TcFalse -- ^ A @false@ token.
-  | TcMatch -- ^ A @match@ token.
-  | TcFunction -- ^ A @function@ token.
-  | TcWith -- ^ A @with@ token.
-  | TcType -- ^ A @type@ token.
-  | TcOf -- ^ An @of@ token.
-  | TcModule -- ^ A @module@ token.
-  | TcOpen -- ^ An @open@ token.
-  | TcLazy -- ^ A @lazy@ token.
-  | TcClass -- ^ A @class@ token.
-  | TcInstance -- ^ An @instance@ token.
-  | TcWhen -- ^ A @when@ token.
-  | TcPrivate -- ^ A @private@ token.
-  | TcImport -- ^ An @import@ token.
-  | TcInclude -- ^ An @include@ token.
-  | TcDeriving -- ^ A @deriving@ token.
-  | TcAs   -- ^ An @as@ token.
+  | TcAnd      -- ^ The @and@ keyword.
+  | TcAs       -- ^ The @as@ keyword.
+  | TcBegin    -- ^ The @begin@ keyword.
+  | TcClass    -- ^ The @class@ keyword.
+  | TcDeriving -- ^ The @deriving@ keyword.
+  | TcElse     -- ^ The @else@ keyword.
+  | TcEnd      -- ^ The @end@ keyword.
+  | TcExternal -- ^ The @external@ keyword.
+  | TcFalse    -- ^ The @false@ keyword.
+  | TcForall   -- ^ The @forall@ keyword.
+  | TcFun      -- ^ The @fun@ keyword.
+  | TcFunction -- ^ The @function@ keyword.
+  | TcIf       -- ^ The @if@ keyword.
+  | TcImport   -- ^ The @import@ keyword.
+  | TcIn       -- ^ The @in@ keyword.
+  | TcInclude  -- ^ The @include@ keyword.
+  | TcInstance -- ^ The @instance@ keyword.
+  | TcLazy     -- ^ The @lazy@ keyword.
+  | TcLet      -- ^ The @let@ keyword.
+  | TcMatch    -- ^ The @match@ keyword.
+  | TcModule   -- ^ The @module@ keyword.
+  | TcOf       -- ^ The @of@ keyword.
+  | TcOpen     -- ^ The @open@ keyword.
+  | TcPrivate  -- ^ The @private@ keyword.
+  | TcRec      -- ^ The @rec@ keyword.
+  | TcThen     -- ^ The @then@ keyword.
+  | TcTrue     -- ^ The @true@ keyword.
+  | TcType     -- ^ The @type@ keyword.
+  | TcVal      -- ^ The @val@ keyword.
+  | TcWhen     -- ^ The @when@ keyword.
+  | TcWith     -- ^ The @with@ keyword.
 
-  | TcDot -- ^ A @.@ token.
-  | TcComma -- ^ A @,@ token.
-  | TcColon -- ^ A @:@ token.
-  | TcBang -- ^ A @!@ token.
+  | TcDot       -- ^ A @.@ token.
+  | TcComma     -- ^ A @,@ token.
+  | TcColon     -- ^ A @:@ token.
+  | TcBang      -- ^ A @!@ token.
   | TcSemicolon -- ^ A @;@ token.
-  | TcTopSep -- ^ A @;;@ token.
-  | TcOBanana -- ^ A @(|@ token.
-  | TcCBanana -- ^ A @|)@ token.
-  | TcOParen -- ^ A @(@ token.
-  | TcCParen -- ^ A @)@ token.
-  | TcAt -- ^ A @@{@ token.
-  | TcOBrace -- ^ A @{@ token.
-  | TcCBrace -- ^ A @}@ token.
-  | TcOSquare -- ^ A @[@ token.
-  | TcCSquare -- ^ A @]@ token.
+  | TcTopSep    -- ^ A @;;@ token.
+  | TcOBanana   -- ^ A @(|@ token.
+  | TcCBanana   -- ^ A @|)@ token.
+  | TcOParen    -- ^ A @(@ token.
+  | TcCParen    -- ^ A @)@ token.
+  | TcAt        -- ^ A @@{@ token.
+  | TcOBrace    -- ^ A @{@ token.
+  | TcCBrace    -- ^ A @}@ token.
+  | TcOSquare   -- ^ A @[@ token.
+  | TcCSquare   -- ^ A @]@ token.
 
-  | TcOp Text                     -- ^ Operators (@+@)
-  | TcIdentifier Text             -- ^ Identifiers (@foo@)
-  | TcOpIdent Text                -- ^ Backtick ops (@`foo`@)
-  | TcConIdent Text               -- ^ Constructors (@Foo@)
-  | TcIdentifierQual [Text] Text  -- ^ Qualified identifiers (@Foo.bar@)
-  | TcOpIdentQual [Text] Text     -- ^ Qualified backtick ops (@`Foo.bar`@)
-  | TcConIdentQual [Text] Text    -- ^ Qualified constructors (@Foo.Bar@)
-  | TcDotQual [Text]              -- ^ Qualified module, used for "let open ..." (@Foo.@)
-  | TcTyvar Text                  -- ^ Type variable (@'foo@)
-  | TcAccess Text                 -- ^ Record access (@.foo@)
-  | TcDotOp Text                  -- ^ Dot operators (@.+@)
-  | TcHole Text                   -- ^ Hole (@_foo@)
+  | TcOp Text                    -- ^ Operators (@+@)
+  | TcIdentifier Text            -- ^ Identifiers (@foo@)
+  | TcOpIdent Text               -- ^ Backtick ops (@`foo`@)
+  | TcConIdent Text              -- ^ Constructors (@Foo@)
+  | TcIdentifierQual [Text] Text -- ^ Qualified identifiers (@Foo.bar@)
+  | TcOpIdentQual [Text] Text    -- ^ Qualified backtick ops (@`Foo.bar`@)
+  | TcConIdentQual [Text] Text   -- ^ Qualified constructors (@Foo.Bar@)
+  | TcDotQual [Text]             -- ^ Qualified module, used for "let open ..." (@Foo.@)
+  | TcTyvar Text                 -- ^ Type variable (@'foo@)
+  | TcAccess Text                -- ^ Record access (@.foo@)
+  | TcDotOp Text                 -- ^ Dot operators (@.+@)
+  | TcHole Text                  -- ^ Hole (@_foo@)
 
   | TcInteger Integer -- ^ Integer literal
-  | TcFloat Double -- ^ Floating-point literal
-  | TcString Text -- ^ String literal
+  | TcFloat Double    -- ^ Floating-point literal
+  | TcString Text     -- ^ String literal
 
   -- "Virtual" tokens. It might be possible merge "end" and "in", but
   -- this allows for easier inspection
@@ -109,42 +110,43 @@ instance Show TokenClass where
   show TcArrow = "->"
   show TcGenerator = "<-"
   show TcEqual = "="
-  show TcForall = "forall"
   show TcImplies = "=>"
   show TcPipe = "|"
   show TcStar = "*"
   show TcTilde = "~"
   show TcUnderscore = "_"
 
-  show TcLet = "let"
-  show TcFun = "fun"
   show TcAnd = "and"
-  show TcIf = "if"
-  show TcThen = "then"
-  show TcElse = "else"
-  show TcBegin = "begin"
-  show TcEnd = "end"
-  show TcIn = "in"
-  show TcExternal = "external"
-  show TcVal = "val"
-  show TcTrue = "true"
-  show TcFalse = "false"
-  show TcMatch = "match"
-  show TcWith = "with"
-  show TcFunction = "function"
-  show TcType = "type"
-  show TcOf = "of"
-  show TcModule = "module"
-  show TcOpen = "open"
-  show TcLazy = "lazy"
-  show TcImport = "import"
   show TcAs = "as"
+  show TcBegin = "begin"
   show TcClass = "class"
-  show TcInstance = "instance"
   show TcDeriving = "deriving"
-  show TcWhen = "when"
-  show TcPrivate = "private"
+  show TcElse = "else"
+  show TcEnd = "end"
+  show TcExternal = "external"
+  show TcFalse = "false"
+  show TcForall = "forall"
+  show TcFun = "fun"
+  show TcFunction = "function"
+  show TcIf = "if"
+  show TcImport = "import"
+  show TcIn = "in"
   show TcInclude = "include"
+  show TcInstance = "instance"
+  show TcLazy = "lazy"
+  show TcLet = "let"
+  show TcMatch = "match"
+  show TcModule = "module"
+  show TcOf = "of"
+  show TcOpen = "open"
+  show TcPrivate = "private"
+  show TcRec = "rec"
+  show TcThen = "then"
+  show TcTrue = "true"
+  show TcType = "type"
+  show TcVal = "val"
+  show TcWhen = "when"
+  show TcWith = "with"
 
   show TcComma = ","
   show TcDot = "."

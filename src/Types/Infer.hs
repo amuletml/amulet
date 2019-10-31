@@ -99,7 +99,7 @@ check (Hole v a) t = do
   tell (Seq.singleton (ConFail env (a, t) v t))
   pure (Hole v (a, t))
 
-check (Let ns b an) t = do
+check (Let re ns b an) t = do
   (ns, ts, vars) <-
     inferLetTy localGenStrat Propagate ns
       `catchChronicle` \e -> do
@@ -112,7 +112,7 @@ check (Let ns b an) t = do
     local (letBound %~ Set.union bvs) $
       local (names %~ focus ts) $ do
         b <- check b t
-        pure (Let ns b (an, t))
+        pure (Let re ns b (an, t))
 
 check ex@(Fun pat e an) ty = do
   (dom, cod, _) <- quantifier (becauseExp ex) (/= Req) ty
@@ -230,7 +230,7 @@ infer (ListExp es an) = do
   es <- traverse (`check` t) es
   pure (buildList an t es, TyApp tyList t)
 
-infer (Let ns b an) = do
+infer (Let re ns b an) = do
   (ns, ts, vars) <- inferLetTy localGenStrat Propagate ns
     `catchChronicle` \e -> do
        tell (DeferredError <$> e)
@@ -242,7 +242,7 @@ infer (Let ns b an) = do
     local (letBound %~ Set.union bvs) $
       local (names %~ focus ts) $ do
         (b, ty) <- infer' b
-        pure (Let ns b (an, ty), ty)
+        pure (Let re ns b (an, ty), ty)
 
 infer ex@(Ascription e ty an) = do
   ty <- resolveKind (becauseExp ex) ty
@@ -356,7 +356,7 @@ inferRows rows = for rows $ \(Field n e s) -> do
 
 inferProg :: MonadInfer Typed m
           => [Toplevel Desugared] -> m ([Toplevel Typed], Env)
-inferProg (stmt@(LetStmt am ns):prg) = censor (const mempty) $ do
+inferProg (stmt@(LetStmt re am ns):prg) = censor (const mempty) $ do
   (ns', ts, _) <- retcons (addBlame (BecauseOf stmt)) (inferLetTy (closeOverStrat (BecauseOf stmt)) Fail ns)
   let bvs = Set.fromList (namesInScope (focus ts mempty))
 
@@ -372,7 +372,7 @@ inferProg (stmt@(LetStmt am ns):prg) = censor (const mempty) $ do
     xs -> confess (mconcat xs)
 
   local (letBound %~ Set.union bvs) . local (names %~ focus ts) $
-    consFst (LetStmt am ns') $
+    consFst (LetStmt re am ns') $
       inferProg prg
 
 inferProg (st@(ForeignVal am v d t ann):prg) = do
@@ -435,7 +435,7 @@ inferProg (c@Class{}:prg) = do
 
 inferProg (inst@Instance{}:prg) = do
   (stmt, instName, instTy, ci, syms) <- condemn $ inferInstance inst
-  let addFst (LetStmt _ []) = id
+  let addFst (LetStmt _ _ []) = id
       addFst stmt = consFst stmt
 
   flip (foldr addFst) (reverse stmt)

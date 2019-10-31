@@ -3,12 +3,12 @@ type vec 'n 'a =
   | Nil : vec Z 'a
   | Cons : 'a * vec 'n 'a -> vec (S 'n) 'a
 
-let zip (a : vec 'n 'a) (b : vec 'n 'b) : vec 'n ('a * 'b) =
+let rec zip (a : vec 'n 'a) (b : vec 'n 'b) : vec 'n ('a * 'b) =
   match a, b with
   | Nil, Nil -> Nil
   | Cons (x, xs), Cons (y, ys) -> Cons ((x, y), xs `zip` ys)
 
-let map (f : 'a -> 'b) (v : vec 'n 'a) : vec 'n 'b =
+let rec map (f : 'a -> 'b) (v : vec 'n 'a) : vec 'n 'b =
   match v with
   | Nil -> Nil
   | Cons (x, xs) -> Cons (f x, map f xs)

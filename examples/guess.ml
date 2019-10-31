@@ -27,7 +27,7 @@ let read_line _ = read "*l"
 let () =
   random_seed (current_time ())
   let vl = random 1 10
-  let loop () =
+  let rec loop () =
     print "Guess a number between 1 and 10: "
     match int_of_string (read_line ()) with
     | Just guess ->

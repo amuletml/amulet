@@ -21,7 +21,7 @@ instance Spanned (Ann p) => Spanned (Binding p) where
 
 instance Spanned (Ann p) => Spanned (Expr p) where
   annotation (VarRef _ a) = annotation a
-  annotation (Let _ _ a) = annotation a
+  annotation (Let _ _ _ a) = annotation a
   annotation (If _ _ _ a) = annotation a
   annotation (App _ _ a) = annotation a
   annotation (Fun _ _ a) = annotation a
@@ -96,16 +96,20 @@ parenArg f = case f of
   App{} -> parens (pretty f)
   _ -> parenFun f
 
+letRec :: RecKind -> Doc
+letRec Recursive = keyword "rec" <> space
+letRec NonRecursive = mempty
+
 instance Pretty (Var p) => Pretty (Expr p) where
   pretty (VarRef v _) =
     let x = show (pretty v)
      in if isUpper (head x)
            then stypeCon (pretty v)
            else pretty v
-  pretty (Let [] _ _) = keyword "let" <+> braces mempty
-  pretty (Let (x:xs) e _) =
+  pretty (Let r [] _ _) = keyword "let" <+> letRec r <> braces mempty
+  pretty (Let r (x:xs) e _) =
     let prettyBind x = keyword "and" <+> pretty x
-     in keyword "let" <+> pretty x
+     in keyword "let" <+> letRec r <> pretty x
             <#> case xs of
               [] -> keyword "in" <+> pretty e
               _ -> vsep (map prettyBind xs) <#> keyword "in" <+> pretty e

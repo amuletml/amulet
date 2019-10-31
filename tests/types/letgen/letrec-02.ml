@@ -1,3 +1,3 @@
-let (f, g) = (foo, bar)
+let rec (f, g) = (foo, bar)
 and foo = f
 and bar = g

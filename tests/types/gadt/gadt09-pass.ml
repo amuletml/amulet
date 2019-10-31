@@ -15,7 +15,7 @@ let (<*>) f x = match f, x with
   | Some f, Some x -> Some (f x)
   | _, _ -> None
 
-let cast : forall 'a 'b. repr 'a -> repr 'b -> 'a -> option 'b =
+let rec cast : forall 'a 'b. repr 'a -> repr 'b -> 'a -> option 'b =
   fun ra rb x ->
     match ra, rb with
     | Unit, Unit -> Some x

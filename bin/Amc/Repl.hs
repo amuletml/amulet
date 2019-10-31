@@ -241,7 +241,7 @@ infoCommand (T.pack . dropWhile isSpace -> input) = do
     Nothing -> pure ()
     Just var -> do
       let prog :: [S.Toplevel S.Parsed]
-          prog = [ S.LetStmt S.Public
+          prog = [ S.LetStmt S.NonRecursive S.Public
                    [ S.Binding (S.Name "_")
                         (S.VarRef (getL var) (annotation var))
                         True (annotation var) ] ]
@@ -252,7 +252,7 @@ infoCommand (T.pack . dropWhile isSpace -> input) = do
         $ resolveProgram (resolveScope state) prog
 
       case resolved of
-        Right (ResolveResult [ S.LetStmt _ [S.Binding _ (S.VarRef name _) _ _] ] _ _) ->
+        Right (ResolveResult [ S.LetStmt _ _ [S.Binding _ (S.VarRef name _) _ _] ] _ _) ->
           liftIO . hPutDoc handle . displayType $
             (inferScope state ^. T.names . at name . non undefined)
         _ -> liftIO . hPutDoc handle $ "Name not in scope:" <+> pretty (getL var)
@@ -271,7 +271,7 @@ typeCommand (dropWhile isSpace -> input) = do
     Just parsed -> do
       let ann = annotation parsed
           prog :: [S.Toplevel S.Parsed]
-          prog = [ S.LetStmt S.Public [ S.Matching (S.Wildcard ann) parsed ann ] ]
+          prog = [ S.LetStmt S.NonRecursive S.Public [ S.Matching (S.Wildcard ann) parsed ann ] ]
 
       (infer, es) <- wrapDriver $ do
         D.tick
@@ -280,7 +280,7 @@ typeCommand (dropWhile isSpace -> input) = do
       case infer of
         Nothing -> pure ()
         Just (prog, _, _) ->
-          let ~[S.LetStmt _ [ S.TypedMatching _ expr _ _ ]] = prog
+          let ~[S.LetStmt _ _ [ S.TypedMatching _ expr _ _ ]] = prog
               t = S.getType expr
           in liftIO $ hPutDoc handle (string input <+> colon <+> displayType t)
 
@@ -409,7 +409,7 @@ parseCore parser name input = do
     Just parsed -> do
       let parsed' = case parsed of
             Left s -> s
-            Right e -> [S.LetStmt S.Public [S.Binding (S.Name "_") e True (annotation e)]]
+            Right e -> [S.LetStmt S.NonRecursive S.Public [S.Binding (S.Name "_") e True (annotation e)]]
 
       (lower, es) <- wrapDriver $ do
         D.tick

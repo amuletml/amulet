@@ -1,0 +1,22 @@
+fail_recursive.ml[5:30 ..5:32]: error
+  Variable not in scope: `map`
+
+  Arising from use of the expression
+  │ 
+5 │ | Cons (x, xs) -> Cons (f x, map f xs)
+  │                              ^^^
+  Do you need a rec modifier here?
+  │ 
+3 │ let map f = function
+  │     ^^^
+fail_recursive.ml[10:32 ..10:33]: error
+  Variable not in scope: `go`
+
+  Arising from use of the expression
+   │ 
+10 │   | Cons (x, xs) -> Cons (f x, go xs)
+   │                                ^^
+  Do you need a rec modifier here?
+   │ 
+ 8 │   let go = function
+   │   ^^^^^^^^^^^^^^^^^

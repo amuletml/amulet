@@ -38,7 +38,7 @@ freeIn (RecordExt e rs _) = freeIn e <> foldMap (freeIn . view fExpr) rs
 freeIn (BinOp a b c _) = freeIn a <> freeIn b <> freeIn c
 freeIn (VarRef v _) = Set.singleton v
 freeIn (Begin es _) = foldMap freeIn es
-freeIn (Let vs b _) =
+freeIn (Let _ vs b _) =
   (freeIn b <> foldMap (freeIn . view bindBody) vs)
     Set.\\ foldMapOf (each . bindVariable) Set.singleton vs
 freeIn (App f x _) = freeIn f <> freeIn x

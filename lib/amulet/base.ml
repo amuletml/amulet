@@ -204,7 +204,7 @@ instance show 'a => show (list 'a) begin
         show b
       else
         a ^ ", " ^ show b
-    let loop acc = function
+    let rec loop acc = function
       | [] -> acc ^ "]"
       | Cons (x, xs) -> loop (acc <> x) xs
     fun x ->
