@@ -1,3 +1,5 @@
+type option 'a = None | Some of 'a
+
 module M =
   let f () = 0
 

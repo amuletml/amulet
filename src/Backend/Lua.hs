@@ -26,7 +26,7 @@ import Core.Var
 compileProgram :: IsVar a => Maybe Signature -> [Stmt a] -> LuaStmt
 compileProgram sig
   = LuaDo . toList . fst
-  . maybe id (\sig (stmt, state) -> (addExport sig stmt state, state)) sig
   . uncurry addBuiltins
+  . maybe id (\sig (stmt, state) -> (addExport sig stmt state, state)) sig
   . flip runState defaultEmitState . emitStmt
   . snd . tagOccurStmt (const occursSet) OccursVar (foldMap exportedNames sig)
