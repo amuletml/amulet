@@ -229,6 +229,23 @@ function! AmuletParseDeps()
   call call('AmuletDep', deplist)
 endfunction
 
+function! AmuletComplete(findstart, base)
+  if a:findstart
+    " locate the start of the word
+    let line = getline('.')
+    let start = col('.') - 1
+    while start > 0 && !(line[start - 1] =~ ' ')
+      echo line[start - 1]
+      let start -= 1
+    endwhile
+    return start
+  else
+    return split(s:CallAmc(":complete", a:base), "\n")
+  endif
+endfunction
+
+set omnifunc=AmuletComplete
+
 nnoremap <buffer> <silent> <LocalLeader>t :call AmuletType()<ENTER>
 nnoremap <buffer> <silent> <LocalLeader>l :call AmuletLoad(1,'')<ENTER>
 nnoremap <buffer> <silent> <LocalLeader>L :call AmuletLoad(0,'qf')<ENTER>
