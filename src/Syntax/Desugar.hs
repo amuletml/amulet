@@ -205,6 +205,7 @@ pat (PList ps a) = build ps where
 tyA :: TyConArg Resolved -> TyConArg Desugared
 tyA (TyVarArg v) = TyVarArg v
 tyA (TyAnnArg v t) = TyAnnArg v (ty t)
+tyA (TyInvisArg v t) = TyInvisArg v (ty t)
 
 param :: Parameter Resolved -> Parameter Desugared
 param (PatParam p) = PatParam (pat p)

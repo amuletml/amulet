@@ -387,6 +387,7 @@ inferProg (decl@(TySymDecl am n tvs exp ann):prg) = do
   let td = TypeDecl am n tvs (Just [ArgCon am n exp (ann, kind)]) (ann, kind)
       argv (TyAnnArg v _:xs) = v:argv xs
       argv (TyVarArg v:xs) = v:argv xs
+      argv (TyInvisArg v _:xs) = v:argv xs
       argv [] = []
       info = TySymInfo n exp (argv tvs) kind
 
@@ -404,6 +405,7 @@ inferProg (decl@(TypeDecl am n tvs cs ann):prg) = do
         flip foldMap tvs $ \case
           TyVarArg v -> Set.singleton v
           TyAnnArg v _ -> Set.singleton v
+          TyInvisArg v _ -> Set.singleton v
 
   let cont cs =
         consFst (TypeDecl am n tvs cs (ann, undefined)) $
@@ -450,7 +452,7 @@ inferProg (decl@(TypeFunDecl am tau arguments kindsig equations ann):prg) = do
   let tfinfo =
         TyFamInfo { _tsName = tau
                   , _tsEquations = zipWith make_eq equations cons
-                  , _tsArgs = map arg_name arguments
+                  , _tsArgs = map arg_name (filter vis arguments)
                   , _tsKind = kind
                   , _tsConstraint = Nothing
                   }
@@ -459,6 +461,8 @@ inferProg (decl@(TypeFunDecl am tau arguments kindsig equations ann):prg) = do
       make_eq _ _ = undefined
       arg_name (TyAnnArg v _) = v
       arg_name _ = undefined
+      vis TyInvisArg{} = False
+      vis _ = True
 
   local (tySyms %~ Map.insert tau tfinfo) $
     local (names %~ focus (one tau kind)) $

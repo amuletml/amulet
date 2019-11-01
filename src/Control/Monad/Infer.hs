@@ -400,9 +400,9 @@ instance Pretty TypeError where
 
   pretty (NotPromotable c x err) =
     vsep [ string "The constructor" <+> pretty c <+> string "can not be used as a type"
-         , note <+> "because its kind,"
-         , indent 2 (pretty x)
-         , err
+         , note <+> align (vsep [ "because its would-be promoted kind,"
+                                , indent 2 (pretty x)
+                                , err ])
          ]
 
   pretty (SkolBinding (Skolem _ v _ m) t) =
