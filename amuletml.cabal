@@ -27,6 +27,8 @@ executable amc
                      , network >= 3.1 && < 3.2
                      , process >= 1.6 && < 1.7
                      , amuletml
+                     , filepath >= 1.4 && < 1.5
+                     , fsnotify >= 0.3 && < 0.4
                      , directory >= 1.3 && < 1.4
                      , haskeline >= 0.7 && < 0.8
                      , containers >= 0.5 && < 0.7
@@ -36,8 +38,9 @@ executable amc
                      , template-haskell >= 2.13 && < 2.16
                      , pretty-show
 
-  other-modules:       Amc.Debug
-                     , Version
+  other-modules:       Version
+                     , Amc.Debug
+                     , Amc.Compile
                      , Amc.Repl
                      , Amc.Repl.Display
   default-language:    Haskell2010
