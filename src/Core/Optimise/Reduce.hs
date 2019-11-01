@@ -31,11 +31,12 @@ import Core.Types
 
 import Core.Optimise.DeadCode
 
-reducePass :: (IsVar a, MonadNamey m) => [Stmt a] -> m [Stmt a]
-reducePass = runReduceN ( fmap deadCodePass
-                        . reduceStmts
-                        . snd
-                        . tagOccurStmt (const occursSet) OccursVar ) 4
+reducePass :: (IsVar a, MonadNamey m) => OptimiseInfo -> [Stmt a] -> m [Stmt a]
+reducePass info =
+  runReduceN ( fmap (deadCodePass info)
+             . reduceStmts
+             . snd
+             . tagOccurStmt (const occursSet) OccursVar (exportNames info) ) 4
 
 annotate :: IsVar a => Term a -> AnnTerm VarSet.Set (OccursVar a)
 annotate = snd . tagOccurTerm (const occursSet) OccursVar

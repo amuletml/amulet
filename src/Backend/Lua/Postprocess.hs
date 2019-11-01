@@ -14,12 +14,16 @@
  other definition will have already been stripped by the optimiser, and
  so it is not safe to remove them.
 -}
-module Backend.Lua.Postprocess (addBuiltins) where
+module Backend.Lua.Postprocess
+  ( addBuiltins
+  , addExport
+  ) where
 
 import Control.Lens
 
 import qualified Data.VarSet as VarSet
 import qualified Data.VarMap as VarMap
+import qualified Data.Sequence as Seq
 import qualified Data.Map as Map
 import Data.Sequence (Seq)
 import Data.Tuple
@@ -32,10 +36,13 @@ import Backend.Escape
 
 import Core.Var
 
+import Syntax.Resolve.Scope
+import Syntax.Var
+
 -- | Walks the Lua tree and identifies which builtins are not fully
 -- applied (and so their variable is referenced), injecting them into the
 -- program.
-addBuiltins ::  Seq LuaStmt -> TopEmitState -> (Seq LuaStmt, TopEmitState)
+addBuiltins :: Seq LuaStmt -> TopEmitState -> (Seq LuaStmt, TopEmitState)
 addBuiltins stmt state = fmap (flip (set topExVars) state) . swap
                        $ genBuiltins (VarSet.toList (foldMap opsStmt stmt)) (state ^. topExVars) stmt
   where
@@ -87,3 +94,22 @@ addBuiltins stmt state = fmap (flip (set topExVars) state) . swap
     opsCall (LuaInvoke f _ xs) = foldMap opsExpr (f:xs)
 
     usedNames =  Map.filter (`VarMap.member` (state ^. topExVars)) (fromEsc (state ^. topEscape))
+
+addExport :: Signature -> Seq LuaStmt -> TopEmitState -> Seq LuaStmt
+addExport sig stmt state = stmt Seq.|> LuaReturn [exports sig] where
+  var :: CoVar -> LuaExpr
+  var v =
+    case state ^. topVars . at v of
+      Just (_, x:_) -> unsimple x
+      _ -> LuaNil
+
+  exports :: Signature -> LuaExpr
+  exports sig = LuaTable $
+    let vars = Map.foldrWithKey
+                 (\k s xs ->
+                    case s of
+                      SVar (TgName n i) -> (LuaString k, var (CoVar i (Just n) ValueVar)) : xs
+                      _ -> xs)
+                 [] (sig ^. vals)
+        mods = Map.foldrWithKey (\k (_, Just m) xs -> (LuaString k, exports m) : xs) vars (sig ^. modules)
+    in mods

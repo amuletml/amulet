@@ -9,8 +9,8 @@ module Backend.Lua.Emit
   , defaultEmitState
   ) where
 
+import Control.Monad.State.Strict
 import Control.Monad.Reader
-import Control.Monad.State
 import Control.Lens
 
 import qualified Data.Sequence as Seq

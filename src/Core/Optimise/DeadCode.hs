@@ -29,10 +29,10 @@ import Core.Optimise
 import Core.Arity
 
 -- | Perform a dead-code elimination pass
-deadCodePass :: IsVar a => [Stmt a] -> [Stmt a]
-deadCodePass = snd . freeS emptyScope where
+deadCodePass :: IsVar a => OptimiseInfo -> [Stmt a] -> [Stmt a]
+deadCodePass info = snd . freeS emptyScope where
   freeS :: IsVar a => ArityScope -> [Stmt a] -> (VarSet.Set, [Stmt a])
-  freeS _ [] = (mempty, mempty)
+  freeS _ [] = (exportNames info, mempty)
 
   freeS s (x@(Foreign v ty _):xs) =
     let s' = extendForeign s (v, ty)
