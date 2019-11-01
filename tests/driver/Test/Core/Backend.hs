@@ -42,11 +42,11 @@ result o f c = fst . flip runNamey firstName $ do
   lower <- runLowerT (lowerProg inferred)
   compiled <-
     if o
-    then compileProgram <$> optimise True lower
+    then compileProgram mempty <$> optimise (defaultInfo { useLint = True}) lower
     else pure . LuaDo . toList . fst
        . uncurry addBuiltins
        . flip runState defaultEmitState . emitStmt
-       . patchupUsage . snd . tagOccurStmt (const occursSet) OccursVar
+       . patchupUsage . snd . tagOccurStmt (const occursSet) OccursVar mempty
        $ lower
   pure . display . uncommentDoc . renderPretty 0.8 120 . (<##>empty)
        $ pretty compiled

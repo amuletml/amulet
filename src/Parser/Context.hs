@@ -600,14 +600,15 @@ isIfContinue _ = False
 -- | This token starts a top-level term
 isTopTok :: TokenClass -> Bool
 isTopTok TcClass = True
+isTopTok TcDeriving = True
+isTopTok TcInclude = True
 isTopTok TcInstance = True
 isTopTok TcLet = True
 isTopTok TcModule = True
+isTopTok TcOpen = True
+isTopTok TcPrivate = True
 isTopTok TcType = True
 isTopTok TcVal = True
-isTopTok TcPrivate = True
-isTopTok TcOpen = True
-isTopTok TcDeriving = True
 isTopTok _ = False
 
 -- | Get the left most margin of the current context
