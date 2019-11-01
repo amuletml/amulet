@@ -16,7 +16,8 @@ Using amc with the help flag displays all sub-command and the top-level options.
 Each sub-command can be run with --help too.
 
   $ amc compile --help
-  Usage: amc compile FILE [-o|--out FILE] [-O|--opt LEVEL] [--export] [--lib ARG]
+  Usage: amc compile FILE [-o|--out FILE] [-O|--opt LEVEL] [--export] [--watch] 
+                     [--lib ARG]
     Compile an Amulet file to Lua.
   
   Available options:
@@ -25,6 +26,8 @@ Each sub-command can be run with --help too.
     -O,--opt LEVEL           Controls the optimisation level. (default: 1)
     --export                 Export all declared variables in this module,
                              returning them at the end of the program.
+    --watch                  After compiling, watch for further changes to the
+                             file and recompile it again.
     -t,--test                Provides additional debug information on the output
     --test-tc                Provides additional type check information on the
                              output
