@@ -69,6 +69,7 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
   let toVar :: TyConArg Typed -> Type Typed
       toVar (TyVarArg v) = TyVar v
       toVar (TyAnnArg v _) = TyVar v
+      toVar (TyInvisArg v _) = TyVar v
 
   let classCon' =
         T.cons (toUpper (T.head (nameName name)))
@@ -93,7 +94,8 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
   let declaredVars =
          foldMap (\case
            TyVarArg v -> Set.singleton v
-           TyAnnArg v _ -> Set.singleton v) params
+           TyAnnArg v _ -> Set.singleton v
+           TyInvisArg v _ -> Set.singleton v) params
 
       vars = declaredVars <> forallVars
 
@@ -126,10 +128,12 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
 
     vs <- for vs $ \case
       TyAnnArg v k -> TyAnnArg v <$> checkAgainstKind (BecauseOf meth) k TyType
+      TyInvisArg v k -> TyInvisArg v <$> checkAgainstKind (BecauseOf meth) k TyType
       TyVarArg v -> TyAnnArg v <$> freshTV
 
     let ty = replaceK (kindFromArgs vs declared) k
         kindFromArgs (TyAnnArg _ k:xs) cont = TyPi (Anon k) $ kindFromArgs xs cont
+        kindFromArgs (TyInvisArg v k:xs) cont = TyPi (Invisible v (Just k) Spec) $ kindFromArgs xs cont
         kindFromArgs (_:_) _ = undefined
         kindFromArgs [] cont = cont
 
@@ -593,7 +597,7 @@ inferInstance _ = error "not an instance"
 argName :: TyConArg p -> Var p
 argName (TyVarArg v) = v
 argName (TyAnnArg v _) = v
-
+argName (TyInvisArg v _) = v
 
 addArg :: Map.Map (Var Typed) (Type Typed) -> Type Typed -> Expr Typed -> Expr Typed
 addArg skolSub ty@(TyPi (Invisible v k req) rest) ex =

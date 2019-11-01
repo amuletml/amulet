@@ -52,8 +52,8 @@ displayTypeTyped :: Var p ~ Var Resolved => Type p -> Doc
 displayTypeTyped = prettyTypeTyped . undependentify . dropKindVars mempty
 
 dropKindVars :: forall p. (Pretty (Var p), Ord (Var p)) => Subst p -> Type p -> Type p
-dropKindVars sub (TyPi x@(Invisible v (Just TyType) _) t)
-  | v `kindVarIn` t, v `Set.member` ftv t = dropKindVars (Map.insert v TyType sub) t
+dropKindVars sub (TyPi x@(Invisible v (Just TyType) r) t)
+  | r == Infer, v `kindVarIn` t, v `Set.member` ftv t = dropKindVars (Map.insert v TyType sub) t
   | otherwise = TyPi x (dropKindVars sub t)
 
 dropKindVars s (TyPi q ty) = TyPi (apply s q) (dropKindVars s ty)

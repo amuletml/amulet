@@ -31,7 +31,7 @@ import Data.Maybe
 import Types.Wellformed (wellformed)
 import Types.Infer.Builtin
 import Types.Infer.Errors
-import Types.Unify (solve, getSolveInfo, unifyPure_v, freshSkol)
+import Types.Unify (solve, getSolveInfo, unifyPure_v, freshSkol, skolFreeTy)
 
 import Syntax.Implicits
 import Syntax.Transform
@@ -135,6 +135,10 @@ initialKind dep ret (TyAnnArg v k:as) = do
   k <- checkKind k TyType
   (s, t) <- initialKind dep ret as
   pure (mkFunT dep v k s, t <> one v k)
+initialKind dep ret (TyInvisArg v k:as) = do
+  k <- checkKind k TyType
+  (s, t) <- initialKind dep ret as
+  pure (TyPi (Invisible v (Just k) Spec) s, t <> one v k)
 initialKind _ ret [] = pure (ret, mempty)
 
 mkFunT :: Dep -> Var Resolved -> Type Typed -> Type Typed -> Type Typed
@@ -158,43 +162,94 @@ resolveTyFunDeclKind reason name arguments kindsig equations = do
       TyAnnArg v t -> do
         t <- expandType =<< checkKind t TyType
         pure (TyAnnArg v t, t)
+      TyInvisArg v t -> do
+        t <- expandType =<< checkKind t TyType
+        pure (TyInvisArg v t, t)
       TyVarArg v -> do
         t <- freshTV
         pure (TyAnnArg v t, t)
 
     let initk (TyAnnArg v k:xs) = TyPi (Invisible v (Just k) Req) <$> initk xs
+        initk (TyInvisArg v k:xs) = TyPi (Invisible v (Just k) Spec) <$> initk xs
         initk (_:_) = undefined
         initk [] = pure return_kind
-        fromArgs (~(TyAnnArg v t):xs) = one v t <> fromArgs xs
+
+        fromArgs (TyAnnArg v t:xs) = one v t <> fromArgs xs
+        fromArgs (TyInvisArg v t:xs) = one v t <> fromArgs xs
+        fromArgs (_:_) = undefined
         fromArgs [] = mempty
+
+    let vis_argts = mapMaybe (\case { (TyInvisArg{}, _) -> Nothing; (_, k) -> Just k }) (zip args argts)
+        vis_args = filter (\case { TyInvisArg{} -> False; _ -> True }) args
+
     kind <- initk args
 
-    eqs <- local (names %~ focus (one name kind <> fromArgs args)) $
+    invis_tvs <- fmap catMaybes . for args $ \case
+      TyInvisArg v _ -> do
+        sk <- freshSkol (ByAscription (annotation reason) kind) kind v
+        pure $ Just (v, sk)
+      _ -> pure Nothing 
+
+    traceM KcC (keyword "initial kind:" <+> pretty kind)
+
+    scope <- view classes
+
+    (eqs, cs) <- censor (const mempty) . listen . local (names %~ focus (one name kind <> fromArgs args)) $
       for equations $ \clause@(TyFunClause ty@(TyApps (TyCon con) xs) rhs an) -> do
         tvs <- for (Set.toList (ftv ty)) $ \v -> (,) v <$> freshTV
         local (names %~ focus (teleFromList tvs)) $ do
           put (BecauseOf clause)
 
-          ty <- TyApps (TyCon con) <$> traverse (uncurry checkKind) (zip xs argts)
+          (~ty@(TyApps _ xs), lhs_cs) <- censor (const mempty) . listen $
+            TyApps (TyCon con) <$> traverse (uncurry checkKind) (zip xs vis_argts)
+              `catchChronicle` (confess . fmap (addBlame (BecauseOf clause)))
+          let (eq, sub) = Seq.partition (\case { ConImplicit _ _ _ (TyApps t [_, _]) -> t == tyEq; _ -> False }) lhs_cs
+          tell sub
 
           skols <- for (Set.toList (ftv ty)) $ \v ->
             (,) v <$> freshSkol (ByTyFunLhs ty an) ty v
 
           let sk (_, t) ~(_, TySkol s) = (s ^. skolIdent, t)
 
-          traceM KcC (shown (zipWith sk tvs skols))
-          traceM KcC (shown skols)
-          traceM KcC (displayType ty)
-
-          rhs <-
+          (rhs, rhs_cs) <- censor (const mempty) . listen $
             local (names %~ focus (teleFromList (zipWith sk tvs skols))) $
               checkKind (apply (raiseT id <$> Map.fromList skols) rhs) return_kind
+            `catchChronicle` (confess . fmap (addBlame (BecauseOf clause)))
+
+          case kindsig of
+            Just _ -> do
+              let preceding =
+                    Seq.fromList $
+                      zipWith (\l r -> ConUnify (BecauseOf clause) scope undefined l r)
+                        (map (TyVar . argName) vis_args)
+                        (apply (Map.fromList skols) xs)
+              let to_eq ~(ConImplicit because scope var (TyApps _ [a, b])) = do
+                    pure ()
+                    (b, _) <- skolFreeTy mempty (ByTyFunLhs ty an) b
+                    pure $ ConUnify because scope var a b
+
+              eqs <- traverse to_eq eq
+
+              tell (Seq.singleton
+                     (ConImplies (BecauseOf clause)
+                        (TyApps return_kind (map (TyVar . argName) vis_args))
+                        (preceding <> eqs)
+                        rhs_cs))
+            Nothing -> do
+              tell eq
+              tell rhs_cs
 
           let our_skols =
                 Set.fromList $ map (\(_, TySkol s) -> s ^. skolIdent) $ skols
 
           put reason
           pure (TyFunClause ty (unskolemise' our_skols rhs) (an, kind))
+
+    let fix (v, s) = ConUnify reason scope undefined (TyVar v) s
+
+    if null invis_tvs
+       then tell cs
+       else tell (Seq.singleton (ConImplies reason return_kind (fix <$> Seq.fromList invis_tvs) cs))
 
     pure (kind, eqs, args)
 
@@ -212,6 +267,7 @@ resolveTyFunDeclKind reason name arguments kindsig equations = do
           , map (apply_arg sub) args
           )
    apply_arg sub (TyAnnArg v t) = TyAnnArg v (apply sub t)
+   apply_arg sub (TyInvisArg v t) = TyInvisArg v (apply sub t)
    apply_arg _ _ = undefined
 
    undependentify (TyPi (Invisible v (Just k) Req) rest)
@@ -224,6 +280,10 @@ resolveTyFunDeclKind reason name arguments kindsig equations = do
      | otherwise = TySkol v
    unskolemise _ t = t
    unskolemise' m = transformType (unskolemise m)
+
+   argName (TyVarArg v) = v
+   argName (TyAnnArg v _) = v
+   argName (TyInvisArg v _) = v
 
 resolveClassKind :: MonadKind m
                  => Toplevel Desugared
@@ -298,6 +358,7 @@ resolveTyDeclKind :: MonadKind m
 resolveTyDeclKind reason tycon args cons = do
   let argTvName (TyVarArg v)   = Just v
       argTvName (TyAnnArg v _) = Just v
+      argTvName (TyInvisArg v _) = Just v
       vs = mapMaybe argTvName args
   k <- solveForKind reason $ do
     (kind, tele) <- initialKind NoDep TyType args
@@ -342,9 +403,9 @@ inferKind :: MonadKind m => Type Desugared -> KindT m (Type Typed, Kind Typed)
 inferKind p | trace KcI (pretty p) False = undefined
 inferKind (TyCon v) = do
   info <- view (tySyms . at v)
+  reason <- get
   case info of
     Just info -> do
-      reason <- get
       unless (null (info ^. tsArgs)) $
         confesses (UnsaturatedTS reason info 0)
     Nothing -> pure ()
@@ -362,10 +423,12 @@ inferKind (TyLit l) = pure (TyLit l, litTy l)
 
 inferKind (TyPromotedCon v) = do
   x <- view (names . at v)
+  reason <- get
   case x of
     Nothing -> confesses (NotInScope v)
     Just k -> do
       (_, _, k) <- instantiate Strong Expression k
+      (k, _) <- discharge (Const reason) k
       case promoteOrError k of
         Nothing -> pure (TyPromotedCon v, k)
         Just err -> confesses (NotPromotable v k err)
@@ -421,6 +484,9 @@ inferKind t@TyApp{} | TyCon v:xs <- appsView t = do
             arg <- checkKind arg d
             pure (arg, cod)
           Invisible v k Req -> do
+            traceM KcC $ "infer TyApp:"
+            traceM KcC $ string "    argument:" <+> pretty arg
+            traceM KcC $ string "    domain:" <+> shown (fmap pretty k)
             arg <- checkKind arg =<< fromMaybe freshTV (pure <$> k)
             pure (arg, apply (Map.singleton v arg) cod)
           Invisible{} -> error "inferKind TyApp: visible argument to implicit quantifier"
@@ -522,9 +588,19 @@ checkKind (TyPi binder b) ek = do
       let bind = Invisible v (Just x) r
       pure $ TyPi bind b
 
+checkKind (TyTupleL a b) ek = do
+  reason <- get
+  (x, y, _) <- decompose reason _TyTuple ek
+  a <- checkKind a x
+  b <- checkKind b y
+  pure (TyTupleL a b)
+
 checkKind ty u = do
   reason <- get
   (t, k) <- inferKind ty
+  traceM KcC $ "checking: deferring to inference + sub"
+  traceM KcC $ string "   inferred:" <+> pretty k
+  traceM KcC $ string "   wanted:" <+> pretty u
   _ <- subsumes reason k u
   pure t
 
@@ -617,7 +693,7 @@ closeOver' vars r a = do
 
 
 promoteOrError :: Type Typed -> Maybe Doc
-promoteOrError TyWithConstraints{} = Just (string "mentions constraints")
+promoteOrError TyWithConstraints{} = Nothing -- Just (string "mentions constraints")
 promoteOrError TyTuple{} = Nothing
 promoteOrError TyRows{} = Just (string "mentions a record")
 promoteOrError TyExactRows{} = Just (string "mentions a record")

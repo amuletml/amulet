@@ -1,9 +1,9 @@
 :: : Infer{'a : type}. 'a -> list 'a -> list 'a
-ty_fun : Infer{'at : type}. Req{'f : 'at}. constraint
-arg : Infer{'at : type}. Req{'f : 'at}. type
-ret : Infer{'at : type}. Req{'f : 'at}. type
-apply : Infer{'at : type}. Req{'f : 'at}. arg 'f -> ret 'f
-map : Req{'f : 'at}. list (arg 'f) -> list (ret 'f)
+ty_fun : Infer{'as : type}. Req{'f : 'as}. constraint
+arg : Infer{'as : type}. Req{'f : 'as}. type
+ret : Infer{'as : type}. Req{'f : 'as}. type
+apply : Infer{'as : type}. Req{'f : 'as}. arg 'f -> ret 'f
+map : Req{'f : 'as}. list (arg 'f) -> list (ret 'f)
 nat : type
 Z : nat
 S : nat -> nat

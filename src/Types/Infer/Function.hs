@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, LambdaCase #-}
 module Types.Infer.Function
   ( checkValidTypeFunction
   , makeTypeFunctionHIT
@@ -113,7 +113,7 @@ makeTypeFunctionHIT args = traverse go where
   go (TyFunClause lhs rhs ann) = do
     name <- genName
     let (TyApps tyfun args') = lhs
-        argtvs = map (\(TyAnnArg a _) -> a) args
+        argtvs = map (\case { TyAnnArg a _ -> a; TyInvisArg a _ -> a; TyVarArg a -> a }) args
         needs = zipWith (\a b -> TyApps tyEq [b, TyVar a]) argtvs args'
         tau = foldr TyArr (TyApps tyEq [TyApps tyfun (map TyVar argtvs), rhs]) needs
         fv = Set.toList (ftv tau)

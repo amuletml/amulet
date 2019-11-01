@@ -123,7 +123,9 @@ reTops (d@(TypeFunDecl am tau args kindsig eqs ann):rest) sig = do
     eqs <- for eqs $ \clause@(TyFunClause lhs@(TyApps t xs) rhs ann) -> do
       when (t /= TyCon tau) $
         confesses (ArisingFrom (TFClauseWrongHead t tau) (BecauseOf clause))
-      when (length xs /= length args) $
+      let vis TyInvisArg{} = False
+          vis _ = True
+      when (length xs /= length (filter vis args)) $
         confesses (ArisingFrom (TFClauseWrongArity (length xs) (length args)) (BecauseOf clause))
 
       let fv = Set.toList (ftv lhs)
@@ -302,6 +304,12 @@ resolveTele r (TyAnnArg v k:as) = do
     ((as, vs), k) <-
       (,) <$> resolveTele r as <*> reType r k
     pure (TyAnnArg v' k:as, (v, v'):vs)
+resolveTele r (TyInvisArg v k:as) = do
+  v' <- tagVar v
+  extendTyvar v v' $ do
+    ((as, vs), k) <-
+      (,) <$> resolveTele r as <*> reType r k
+    pure (TyInvisArg v' k:as, (v, v'):vs)
 resolveTele _ [] = pure ([], [])
 
 reExpr :: MonadResolve m => Expr Parsed -> m (Expr Resolved)

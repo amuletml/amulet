@@ -265,6 +265,7 @@ Method :: { InstanceItem Parsed }
 TyConArg :: { TyConArg Parsed }
          : TyVar { TyVarArg (getL $1) }
          | '(' TyVar ':' Type ')' { TyAnnArg (getL $2) (getL $4) }
+         | '{' TyVar ':' Type '}' { TyInvisArg (getL $2) (getL $4) }
 
 Ctor :: { Constructor Parsed }
      : Access conid                                   { withPos1 $2    $ UnitCon $1 (getName $2) }

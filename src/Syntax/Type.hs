@@ -144,6 +144,7 @@ pattern TyForall v k t' <- TyPi (Invisible v k _) t' where
 data TyConArg p
   = TyVarArg (Var p)
   | TyAnnArg (Var p) (Type p) -- ( 'a : k )
+  | TyInvisArg (Var p) (Type p) -- { 'a : k }
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (TyConArg p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (TyConArg p)
@@ -238,6 +239,7 @@ instance Pretty (Var p) => Pretty (TyBinder p) where
 instance Pretty (Var p) => Pretty (TyConArg p) where
   pretty (TyVarArg var) = pretty var
   pretty (TyAnnArg v k) = parens (pretty v <+> colon <+> pretty k)
+  pretty (TyInvisArg v k) = braces (pretty v <+> colon <+> pretty k)
 
 getType :: Data (f Typed) => f Typed -> Type Typed
 getType = snd . head . catMaybes . gmapQ get where
