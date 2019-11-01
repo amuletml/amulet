@@ -18,6 +18,7 @@ import Control.Concurrent
 import qualified Data.Set as Set
 import qualified Data.Map as Map
 import Data.Position (SourceName)
+import Data.Bifunctor
 import Data.Foldable
 import Data.Functor
 import Data.List
@@ -29,6 +30,8 @@ import Core.Optimise.DeadCode (deadCodePass)
 import Core.Optimise.Reduce (reducePass)
 import Core.Simplify
 import Core.Lint
+
+import Syntax.Var
 
 import Text.Pretty.Semantic hiding (empty)
 
@@ -48,13 +51,13 @@ data Options = Options
   }
   deriving Show
 
-compileIt :: Options -> D.Driver -> SourceName
-          -> (Doc -> IO ())
-          -> IO (D.Driver, Set.Set FilePath)
-compileIt Options { optLevel, lint, export, debug } driver file emit = do
+compileIt :: (D.Driver, Name)
+          -> Options -> SourceName -> (Doc -> IO ())
+          -> IO ((D.Driver, Name), Set.Set FilePath)
+compileIt (driver, name) Options { optLevel, lint, export, debug } file emit = do
   path <- canonicalizePath file
   ((((core, errors), sig), driver), name) <-
-      flip runNameyT firstName
+      flip runNameyT name
     . flip runStateT driver
     $ (,) <$> D.compiles path <*> D.getSignature path
 
@@ -77,7 +80,7 @@ compileIt Options { optLevel, lint, export, debug } driver file emit = do
       emit (pretty lua)
 
   fileNames <- traverse (canonicalizePath . fst) files
-  pure (driver, Set.fromList fileNames)
+  pure ((driver, name), Set.fromList fileNames)
   where
     lintIt name = if lint then runLint name else flip const
 
@@ -86,7 +89,8 @@ compileIt Options { optLevel, lint, export, debug } driver file emit = do
 compileFile :: Options -> D.DriverConfig -> SourceName
             -> (Doc -> IO ())
             -> IO ()
-compileFile opt config file emit = compileIt opt (D.makeDriverWith config) file emit $> ()
+compileFile opt config file emit =
+  compileIt (D.makeDriverWith config, firstName) opt file emit $> ()
 
 -- | Compile a file, and then watch for c
 watchFile :: Options -> D.DriverConfig -> SourceName
@@ -94,12 +98,12 @@ watchFile :: Options -> D.DriverConfig -> SourceName
           -> IO ()
 watchFile opt config file emit = do
   chan <- newChan
-  withManager (go mempty (D.makeDriverWith config) chan)
+  withManager (go mempty (D.makeDriverWith config, firstName) chan)
 
   where
-    go :: Map.Map FilePath StopListening -> D.Driver -> EventChannel -> WatchManager -> IO ()
-    go dirs driver channel mgr = do
-      (driver, files) <- compileIt opt driver file emit
+    go :: Map.Map FilePath StopListening -> (D.Driver, Name) -> EventChannel -> WatchManager -> IO ()
+    go dirs state channel mgr = do
+      (state, files) <- compileIt state opt file emit
 
       -- Update the files we're currently watching.
       let newDirs = Set.map dropFileName files
@@ -113,7 +117,7 @@ watchFile opt config file emit = do
 
       changes <- wait files channel
       putStrLn ("File(s) " ++ intercalate ", " (map quot changes) ++ " changed.")
-      go dirs' (execState D.tock driver) channel mgr
+      go dirs' (first (execState D.tock) state) channel mgr
 
     quot x = "'" ++ x ++ "'"
 
