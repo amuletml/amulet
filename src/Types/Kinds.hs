@@ -260,8 +260,10 @@ resolveTyFunDeclKind reason name arguments kindsig equations = do
    solveK k = do
      (((kind, equations, args), _), cs) <- runWriterT (runStateT k reason)
      (sub, _, cons) <- solveFixpoint reason cs =<< getSolveInfo
+
      unless (null cons) $ do
-       tell (Seq.fromList cons)
+       confesses (UnsatClassCon reason (head cons) (GivenContextNotEnough tyUnit))
+
      pure ( apply sub kind
           , map (\(TyFunClause lhs rhs (ann, kind)) -> TyFunClause (apply sub lhs) (apply sub rhs) (ann, apply sub kind)) equations
           , map (apply_arg sub) args

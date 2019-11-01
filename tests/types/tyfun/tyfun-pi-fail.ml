@@ -1,14 +1,10 @@
-class ty_fun 'f begin
-  type ret
-  type arg
-  type apply ('x : arg 'f) : ret 'f
-end
+type nat = Z | S of nat
+type vect 'n 'a =
+  | Nil : vect Z 'a
+  | Cons : 'a * vect 'k 'a -> vect (S 'k) 'a
 
-(* map has a proper pi type:
-  * forall ('f : 'k) -> list (arg 'f) -> list (ret 'f)
-  * we have exactly 0 hope of inferring it.
-  *)
-type function map 'f 'xs begin
+type function map 'f 'xs
+begin
+  map 'f (Cons ('x, 'xs)) = Cons ('f 'x, map 'f 'xs)
   map 'f Nil = Nil
-  map 'f (Cons ('a, 'as)) = Cons (apply 'f 'a, map 'f 'as)
 end

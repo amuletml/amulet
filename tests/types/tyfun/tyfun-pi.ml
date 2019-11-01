@@ -1,27 +1,16 @@
-class ty_fun 'f begin
-  type ret
-  type arg
-  type apply ('x : arg 'f) : ret 'f
-end
-
-(* map has a proper pi type:
-  * forall ('f : 'k) -> list (arg 'f) -> list (ret 'f)
-  *)
-type function map 'f ('xs : list (arg 'f)) : list (ret 'f) begin
-  map 'f Nil = Nil
-  map 'f (Cons ('a, 'as)) = Cons (apply 'f 'a, map 'f 'as)
-end
-
 type nat = Z | S of nat
+type vect 'n 'a =
+  | Nil : vect Z 'a
+  | Cons : 'a * vect 'k 'a -> vect (S 'k) 'a
 
-instance ty_fun S begin
-  type arg = nat
-  type ret = nat
-  type apply 'n = S 'n
+(* 'replicate' has a proper pi:
+  * forall {'k : type} ('n : nat) ('a : 'k) -> vect 'n 'k
+  *)
+type function replicate {'k : type} 'n ('a : 'k) : vect 'n 'k begin
+  replicate Z 'x      = Nil
+  replicate (S 'k) 'a = Cons ('a, replicate 'k 'a)
 end
 
-type 'a :~: 'b = Refl : 'a ~ 'b => 'a :~: 'b
+(* type 'a ~~ 'b = Refl : 'a ~ 'b => 'a ~~ 'b *)
 
-(* this error is /fast/ because we don't ever need to reduce the map.
- * not a single step *)
-let x : map S [Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z] :~: [12] = Refl
+(* let foo : replicate (S (S (S Z))) [int] ~~ [int] = Refl *)
