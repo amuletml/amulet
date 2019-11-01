@@ -5,27 +5,15 @@ import System.Exit (ExitCode(..), exitWith)
 import System.IO (hPutStrLn, stderr)
 import System.Directory
 
-import Control.Monad.Infer (Env, firstName)
+import Control.Monad.Infer (firstName)
 import Control.Monad.Namey
 import Control.Monad.State
 
 import qualified Data.Text.IO as T
 import qualified Data.Text as T
-import Data.Position (SourceName)
 import Data.Traversable
 
 import Options.Applicative hiding (ParseError)
-
-import Language.Lua.Syntax
-import Backend.Lua
-
-import Syntax.Resolve.Scope (exportedNames)
-import Core.Optimise.DeadCode (deadCodePass)
-import Core.Optimise.Reduce (reducePass)
-import Core.Simplify
-import Core.Core (Stmt)
-import Core.Var (CoVar)
-import Core.Lint
 
 import Text.Pretty.Semantic hiding (empty)
 
@@ -34,60 +22,9 @@ import Frontend.Errors
 
 import qualified Amc.Debug as D
 import qualified Amc.Repl as R
+import qualified Amc.Compile as C
 
 import Version
-
-runCompile :: MonadIO m
-           => DoOptimise -> DoLint -> DoExport -> D.DriverConfig
-           -> SourceName
-           -> m ( Maybe ( Env
-                        , [Stmt CoVar]
-                        , [Stmt CoVar]
-                        , LuaStmt)
-                , ErrorBundle
-                , D.Driver )
-runCompile opt (DoLint lint) (DoExport export) dconfig file = do
-  path <- liftIO $ canonicalizePath file
-  (((sig, env, core, errors), driver), name) <-
-      flip runNameyT firstName
-    . flip runStateT (D.makeDriverWith dconfig)
-    $ do
-      (core, errors) <- D.compiles path
-      ~(Just sig) <- D.getSignature path
-      ~(Just env) <- D.getTypeEnv path
-      pure (sig, env, core, errors)
-
-  pure $ case core of
-    Nothing -> (Nothing, errors, driver)
-    Just core ->
-      let sig' = if export then Just sig else Nothing
-          info = defaultInfo { useLint = lint
-                             , exportNames = foldMap exportedNames sig' }
-          optimised = flip evalNamey name $ case opt of
-            Opt -> optimise info core
-            NoOpt -> do
-              lintIt "Lower" (checkStmt emptyScope core) (pure ())
-              (lintIt "Optimised"  =<< checkStmt emptyScope) . deadCodePass info <$> reducePass info core
-          lua = compileProgram sig' optimised
-      in ( Just (env, core, optimised, lua)
-         , errors
-         , driver )
-  where
-    lintIt name = if lint then runLint name else flip const
-
-compileFromTo :: DoOptimise -> DoLint -> DoExport -> D.DebugMode -> D.DriverConfig
-              -> FilePath
-              -> (forall a. Pretty a => a -> IO ())
-              -> IO ()
-compileFromTo opt lint export dbg config file emit = do
-  (compiled, errors, driver) <- runCompile opt lint export config file
-  files <- D.fileMap driver
-  reportAllS files errors
-  case compiled of
-    Just (_, core, opt, lua) -> do
-      D.dumpCore dbg core opt lua
-      emit lua
-    Nothing -> pure ()
 
 data DoOptimise = NoOpt | Opt
   deriving Show
@@ -114,6 +51,7 @@ data Command
     , output      :: Maybe FilePath
     , optLevel    :: Int
     , export      :: Bool
+    , watch       :: Bool
     , options     :: CompilerOptions
     }
   | Repl
@@ -169,6 +107,7 @@ argParser = info (args <**> helper <**> version)
       <*> option auto ( long "opt" <> short 'O' <> metavar "LEVEL" <> value 1 <> showDefault
                      <> help "Controls the optimisation level." )
       <*> switch (long "export" <> help "Export all declared variables in this module, returning them at the end of the program.")
+      <*> switch (long "watch" <> help "After compiling, watch for further changes to the file and recompile it again.")
       <*> compilerOptions
 
     replCommand :: Parser Command
@@ -274,18 +213,26 @@ main = do
       files <- D.fileMap driver
       reportAllS files errors
 
-    Args Compile { input, output, optLevel, export, options } -> do
+    Args Compile { input, output, optLevel, export, options, watch } -> do
       exists <- doesFileExist input
       if not exists
       then hPutStrLn stderr ("Cannot find input file " ++ input)
         >> exitWith (ExitFailure 1)
       else pure ()
 
-      let opt = if optLevel >= 1 then Opt else NoOpt
+      let opts = C.Options
+            { C.optLevel = if optLevel >= 1 then C.Opt else C.NoOpt
+            , C.lint = coreLint options
+            , C.export = export
+            , C.debug = debugMode options
+            }
+
           writeOut :: Pretty a => a -> IO ()
           writeOut = case output of
                    Nothing -> putDoc . pretty
                    Just f -> T.writeFile f . T.pack . show . pretty
 
       config <- driverConfig options
-      compileFromTo opt (DoLint (coreLint options)) (DoExport export) (debugMode options) config input writeOut
+      if watch
+      then C.watchFile   opts config input writeOut
+      else C.compileFile opts config input writeOut
