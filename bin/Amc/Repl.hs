@@ -59,6 +59,7 @@ import qualified Core.Core as C
 import Core.Occurrence
 import Core.Core (Stmt)
 import Core.Simplify
+import Core.Lint
 import Core.Var
 
 import qualified Frontend.Driver as D
@@ -514,6 +515,9 @@ loadFiles paths = do
         modify (\s -> s { resolveScope = resolveScope s <> sig
                         , inferScope = inferScope s <> env
                         , lowerState = lowerState s <> lEnv })
+
+      lint <- gets (coreLint . config)
+      when lint $ runLint "Lowered" (checkStmt emptyScope core) (pure ())
 
       (luaExpr, luaSyntax) <- emitCore core
 
