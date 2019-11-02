@@ -14,8 +14,6 @@ Can be safely converted into:
       let open M
       x
 
-
-
 Note, there is no theoretical reason for this limitation. However, such
 modules may reference locally bound type variables or other names, which
 make compilation much harder. This limitation will be lifted in the
