@@ -2,7 +2,8 @@
 
 -- | A collection of utility methods for the optimiser.
 module Core.Optimise
-  ( substitute, substituteInTys, substituteInType, substituteInCo
+  ( OptimiseInfo(..)
+  , substitute, substituteInTys, substituteInType, substituteInCo
   , module Core.Core
   , module Core.Var
   , refresh, fresh, fresh', freshFrom, freshFrom'
@@ -14,6 +15,7 @@ import Control.Monad.Namey
 import Control.Lens
 
 import qualified Data.VarMap as VarMap
+import qualified Data.VarSet as VarSet
 import Data.Foldable
 import Data.Triple
 import Data.Maybe
@@ -22,6 +24,16 @@ import Core.Core
 import Core.Var
 
 import Syntax.Var
+
+-- | Options which guide the Core optimiser.
+data OptimiseInfo = OptimiseInfo
+  { -- | Names which are exported, and so should be preserved across
+    -- optimisation.
+    exportNames :: VarSet.Set
+    -- | Whether to run Core lint during optimisation.
+  , useLint :: Bool
+  }
+  deriving Show
 
 -- | Substitute a variable with some other atom
 substitute :: IsVar a => VarMap.Map (Atom a) -> Term a -> Term a

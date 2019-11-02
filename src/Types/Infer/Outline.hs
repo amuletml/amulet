@@ -31,7 +31,7 @@ approxType' r@(Ascription _ t _) = resolveKind (becauseExp r) t
 approxType' (Match _ (Arm _ _ e:_) _) = approxType' e
 approxType' (If _ t _ _) = approxType' t
 approxType' (Begin xs _) = approxType' (last xs)
-approxType' (Let _ e _) = approxType' e
+approxType' (Let _ _ e _) = approxType' e
 
 approxType' (Literal l _) = pure (litTy l)
 

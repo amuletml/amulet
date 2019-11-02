@@ -6,7 +6,9 @@ module Syntax.Resolve.Scope
   ( Slot(..)
   , VarName
   , Signature(..), vals, types, modules
-  , Context(..), scope, tyvars, emptyContext
+  , Context(..), scope, tyvars, nonRecs
+  , emptyContext
+  , exportedNames
   , tagVar
   , withVal, withVals, extendVals
   , withTy, withTys
@@ -16,15 +18,20 @@ module Syntax.Resolve.Scope
 
 import Control.Lens hiding (Context)
 
+import qualified Data.VarSet as VarSet
 import qualified Data.Map as Map
 import qualified Data.Text as T
+import Data.Foldable
 import Data.Function
+import Data.Span
 import Data.List
 
 import Control.Monad.Reader
 import Control.Monad.Namey
 
 import Syntax.Var
+
+import Core.Var
 
 -- | A variable in the current scope
 data Slot
@@ -58,6 +65,8 @@ data Context = Context
     _scope :: Signature
     -- | All type variables in the current scope
   , _tyvars :: Map.Map VarName Slot
+    -- | Non-recursive names whose definitions we are within.
+  , _nonRecs :: Map.Map VarName Span
   }
   deriving Show
 
@@ -66,7 +75,17 @@ makeLenses ''Context
 
 -- | An empty context for resolving
 emptyContext :: Context
-emptyContext = Context mempty mempty
+emptyContext = Context mempty mempty mempty
+
+-- | Get all names exported by a module.
+exportedNames :: Signature -> VarSet.Set
+exportedNames sig
+   = foldMap ofSlot (sig ^. vals)
+  <> foldMap (exportedNames . fold . snd) (sig ^. modules)
+  where
+    ofSlot (SVar (TgName n i)) = VarSet.singleton (CoVar i (Just n) ValueVar)
+    ofSlot (SVar TgInternal{}) = mempty
+    ofSlot SAmbiguous{} = mempty
 
 -- | Convert a parsed variable into a resolved one. This requires that
 -- the variable is unqualified.

@@ -1,0 +1,16 @@
+big-error.ml[12:58 ..12:61]: error (E2001)
+   │ 
+12 │ let x : length [1, 2, 3, 4] :~: length [1, 2, 3, 4, 5] = Refl
+   │                                                          ^^^^
+  Couldn't match actual type S (S (S (S Z)))
+    with the type expected by the context, S (S (S (S (S Z))))
+  • Note: 
+      Where the type,
+        S (S (S (S (S Z)))),
+      is the reduction of
+        length [1, 2, 3, 4, 5]
+  • Note: 
+      Where the type,
+        S (S (S (S Z))),
+      is the reduction of
+        length [1, 2, 3, 4]

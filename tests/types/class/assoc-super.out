@@ -1,8 +1,8 @@
 == : int -> int -> bool
-eq : type -> constraint
+eq : Req{'a : type}. constraint
 === : Spec{'a : type}. eq 'a => 'a -> 'a -> bool
-collection : type -> constraint
-elem : type -> type
+collection : Req{'a : type}. constraint
+elem : Req{'a : type}. type
 memq : Spec{'a : type}. collection 'a => elem 'a -> 'a -> bool
 insert : Spec{'a : type}. collection 'a => elem 'a -> 'a -> 'a
 empty : Spec{'a : type}. collection 'a => 'a

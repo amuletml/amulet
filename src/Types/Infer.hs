@@ -99,7 +99,7 @@ check (Hole v a) t = do
   tell (Seq.singleton (ConFail env (a, t) v t))
   pure (Hole v (a, t))
 
-check (Let ns b an) t = do
+check (Let re ns b an) t = do
   (ns, ts, vars) <-
     inferLetTy localGenStrat Propagate ns
       `catchChronicle` \e -> do
@@ -112,7 +112,7 @@ check (Let ns b an) t = do
     local (letBound %~ Set.union bvs) $
       local (names %~ focus ts) $ do
         b <- check b t
-        pure (Let ns b (an, t))
+        pure (Let re ns b (an, t))
 
 check ex@(Fun pat e an) ty = do
   (dom, cod, _) <- quantifier (becauseExp ex) (/= Req) ty
@@ -230,7 +230,7 @@ infer (ListExp es an) = do
   es <- traverse (`check` t) es
   pure (buildList an t es, TyApp tyList t)
 
-infer (Let ns b an) = do
+infer (Let re ns b an) = do
   (ns, ts, vars) <- inferLetTy localGenStrat Propagate ns
     `catchChronicle` \e -> do
        tell (DeferredError <$> e)
@@ -242,7 +242,7 @@ infer (Let ns b an) = do
     local (letBound %~ Set.union bvs) $
       local (names %~ focus ts) $ do
         (b, ty) <- infer' b
-        pure (Let ns b (an, ty), ty)
+        pure (Let re ns b (an, ty), ty)
 
 infer ex@(Ascription e ty an) = do
   ty <- resolveKind (becauseExp ex) ty
@@ -356,7 +356,7 @@ inferRows rows = for rows $ \(Field n e s) -> do
 
 inferProg :: MonadInfer Typed m
           => [Toplevel Desugared] -> m ([Toplevel Typed], Env)
-inferProg (stmt@(LetStmt am ns):prg) = censor (const mempty) $ do
+inferProg (stmt@(LetStmt re am ns):prg) = censor (const mempty) $ do
   (ns', ts, _) <- retcons (addBlame (BecauseOf stmt)) (inferLetTy (closeOverStrat (BecauseOf stmt)) Fail ns)
   let bvs = Set.fromList (namesInScope (focus ts mempty))
 
@@ -372,7 +372,7 @@ inferProg (stmt@(LetStmt am ns):prg) = censor (const mempty) $ do
     xs -> confess (mconcat xs)
 
   local (letBound %~ Set.union bvs) . local (names %~ focus ts) $
-    consFst (LetStmt am ns') $
+    consFst (LetStmt re am ns') $
       inferProg prg
 
 inferProg (st@(ForeignVal am v d t ann):prg) = do
@@ -387,6 +387,7 @@ inferProg (decl@(TySymDecl am n tvs exp ann):prg) = do
   let td = TypeDecl am n tvs (Just [ArgCon am n exp (ann, kind)]) (ann, kind)
       argv (TyAnnArg v _:xs) = v:argv xs
       argv (TyVarArg v:xs) = v:argv xs
+      argv (TyInvisArg v _:xs) = v:argv xs
       argv [] = []
       info = TySymInfo n exp (argv tvs) kind
 
@@ -404,6 +405,7 @@ inferProg (decl@(TypeDecl am n tvs cs ann):prg) = do
         flip foldMap tvs $ \case
           TyVarArg v -> Set.singleton v
           TyAnnArg v _ -> Set.singleton v
+          TyInvisArg v _ -> Set.singleton v
 
   let cont cs =
         consFst (TypeDecl am n tvs cs (ann, undefined)) $
@@ -435,7 +437,7 @@ inferProg (c@Class{}:prg) = do
 
 inferProg (inst@Instance{}:prg) = do
   (stmt, instName, instTy, ci, syms) <- condemn $ inferInstance inst
-  let addFst (LetStmt _ []) = id
+  let addFst (LetStmt _ _ []) = id
       addFst stmt = consFst stmt
 
   flip (foldr addFst) (reverse stmt)
@@ -450,7 +452,7 @@ inferProg (decl@(TypeFunDecl am tau arguments kindsig equations ann):prg) = do
   let tfinfo =
         TyFamInfo { _tsName = tau
                   , _tsEquations = zipWith make_eq equations cons
-                  , _tsArgs = map arg_name arguments
+                  , _tsArgs = map arg_name (filter vis arguments)
                   , _tsKind = kind
                   , _tsConstraint = Nothing
                   }
@@ -459,6 +461,8 @@ inferProg (decl@(TypeFunDecl am tau arguments kindsig equations ann):prg) = do
       make_eq _ _ = undefined
       arg_name (TyAnnArg v _) = v
       arg_name _ = undefined
+      vis TyInvisArg{} = False
+      vis _ = True
 
   local (tySyms %~ Map.insert tau tfinfo) $
     local (names %~ focus (one tau kind)) $
@@ -579,12 +583,18 @@ solveEx syms ss cs = transformExprTyped go id goType where
 
   goWrap (TypeApp t) = TypeApp (goType t)
   goWrap (TypeAsc t) = TypeAsc (goType t)
-  goWrap (Cast c) = Cast (goCast c) where
+  goWrap (Cast c) = erase_c $ Cast (goCast c) where
     goCast = transformCoercion go goType
     go (MvCo v) = case Map.lookup v cs of
       Just (Cast c) -> c
       x -> error ("coercion metavariable " ++ show v ++ " not solved to cast " ++ show x)
     go x = x
+
+    erase_c (Cast c)
+      | isReflexiveCo c = IdWrap
+      | otherwise = Cast c
+    erase_c x = x
+
   goWrap (TypeLam l t) = TypeLam l (goType t)
   goWrap (ExprApp f) = ExprApp (go f)
   goWrap (x Syntax.:> y) = goWrap x Syntax.:> goWrap y
@@ -597,3 +607,25 @@ solveEx syms ss cs = transformExprTyped go id goType where
 
   goType :: Type Typed -> Type Typed
   goType = apply ss
+
+-- | Is this coercion equal to reflexivity? (Conservative)
+isReflexiveCo :: Eq (Var p) => Coercion p -> Bool
+isReflexiveCo VarCo{} = False
+isReflexiveCo MvCo{} = False
+isReflexiveCo ReflCo{} = True
+isReflexiveCo (AssumedCo a b) = a == b
+
+isReflexiveCo (SymCo c) = isReflexiveCo c
+isReflexiveCo TransCo{} = False
+
+isReflexiveCo (AppCo a b) = isReflexiveCo a && isReflexiveCo b
+isReflexiveCo (ArrCo a b) = isReflexiveCo a && isReflexiveCo b
+isReflexiveCo (ProdCo a b) = isReflexiveCo a && isReflexiveCo b
+isReflexiveCo (ExactRowsCo rs) = all (isReflexiveCo . snd) rs
+isReflexiveCo (RowsCo a rs) = isReflexiveCo a && all (isReflexiveCo . snd) rs
+isReflexiveCo ProjCo{} = False
+isReflexiveCo (ForallCo _ a b) = isReflexiveCo a && isReflexiveCo b
+
+isReflexiveCo P1{} = False
+isReflexiveCo P2{} = False
+isReflexiveCo InstCo{} = False

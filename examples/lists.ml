@@ -13,13 +13,13 @@ type list 'a =
 let id x = x
 
 let map f =
-  let go cont = function
+  let rec go cont = function
     | Nil -> cont Nil
     | Cons (h, t) -> go (compose cont (fun x -> Cons (f h, x))) t
   go id
 
 let print_list xs =
-  let inner xs k =
+  let rec inner xs k =
     match xs with
     | Cons (h, t) ->
       write "Cons ("
@@ -31,7 +31,7 @@ let print_list xs =
       k ()
   inner xs (fun _ -> print "")
 
-let range start stop =
+let rec range start stop =
   if start == stop then
     Nil
   else

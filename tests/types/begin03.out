@@ -1,4 +1,4 @@
-monad : (type -> type) -> constraint
+monad : Req{'m : type -> type}. constraint
 >>= : Spec{'m : type -> type}. monad 'm => Spec{'a : type}. Spec{'b : type}. 'm 'a -> ('a -> 'm 'b) -> 'm 'b
 pure : Spec{'m : type -> type}. monad 'm => Spec{'a : type}. 'a -> 'm 'a
 identity : type -> type

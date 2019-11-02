@@ -1,8 +1,14 @@
 -- | The frontend to the optimiser.
 {-# LANGUAGE ScopedTypeVariables #-}
 module Core.Simplify
-  ( optimise
+  ( OptimiseInfo(..), defaultInfo
+  , optimise
   ) where
+
+import Control.Monad.Namey
+import Control.Monad
+
+import Data.Functor
 
 import Core.Optimise.CommonExpElim
 import Core.Optimise.DeadCode
@@ -14,33 +20,40 @@ import Core.Optimise
 import Core.Free
 import Core.Lint
 
-import Control.Monad.Namey
-import Control.Monad
+defaultInfo :: OptimiseInfo
+defaultInfo = OptimiseInfo mempty True
 
-optmOnce :: forall m. Monad m => Bool -> [Stmt CoVar] -> NameyT m [Stmt CoVar]
-optmOnce lint = passes where
+optmOnce :: forall m. Monad m => OptimiseInfo -> [Stmt CoVar] -> NameyT m [Stmt CoVar]
+optmOnce info = passes where
   passes :: [Stmt CoVar] -> NameyT m [Stmt CoVar]
   passes = foldr1 (>=>)
            [ linting "Reduce" reducePass
-           , linting "Dead code" $ pure . deadCodePass
-           , linting "Uncurry" uncurryPass
+           , linting' "Dead code" deadCodePass
+           , linting "Uncurry" (const uncurryPass)
 
-           , linting "Sinking" $ pure . sinkingPass . tagFreeSet
+           , linting "Sinking" (const (pure . sinkingPass . tagFreeSet))
 
-           , linting "CSE" (pure . csePass)
+           , linting "CSE" (const (pure . csePass))
            , linting "Reduce #2" reducePass
            ]
-  linting = if lint then linted else flip const
 
-linted :: Monad f => String -> ([Stmt CoVar] -> f [Stmt CoVar]) -> [Stmt CoVar] -> f [Stmt CoVar]
-linted pass fn = fmap (runLint pass =<< checkStmt emptyScope) . fn
+  linting :: Functor f
+          => String -> (OptimiseInfo -> [Stmt CoVar] -> f [Stmt CoVar])
+          -> [Stmt CoVar] -> f [Stmt CoVar]
+  linting name fn prog = fn info prog
+    <&> (\prog' -> if useLint info
+                   then runLint name (checkStmt emptyScope prog') prog'
+                   else prog')
+
+  linting' name pass = linting name (\i -> pure . pass i)
 
 -- | Run the optimiser multiple times over the input core.
-optimise :: forall m. Monad m => Bool -> [Stmt CoVar] -> NameyT m [Stmt CoVar]
-optimise lint = go 10 <=< linting "Lower" pure where
-  go :: Integer -> [Stmt CoVar] -> NameyT m [Stmt CoVar]
-  go k sts
-    | k > 0 = go (k - 1) =<< optmOnce lint sts
-    | otherwise = pure sts
-
-  linting = if lint then linted else flip const
+optimise :: forall m. Monad m => OptimiseInfo -> [Stmt CoVar] -> NameyT m [Stmt CoVar]
+optimise info prog = do
+  when (useLint info) (runLint "Lowered" (checkStmt emptyScope prog) (pure ()))
+  go 10 prog
+  where
+    go :: Integer -> [Stmt CoVar] -> NameyT m [Stmt CoVar]
+    go k sts
+      | k > 0 = go (k - 1) =<< optmOnce info sts
+      | otherwise = pure sts

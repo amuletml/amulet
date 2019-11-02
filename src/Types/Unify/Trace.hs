@@ -20,7 +20,7 @@ import Data.Maybe
 
 import Text.Pretty.Semantic
 
-data Component = TopS | EquS | SubS | TcI | TcC | TcQL | TcB
+data Component = TopS | EquS | SubS | TcI | TcC | TcQL | TcB | KcI | KcC
   deriving (Eq, Read)
 
 instance Show Component where
@@ -31,6 +31,8 @@ instance Show Component where
   show TcC  = "⊢↓"
   show TcB  = "Γ,"
   show TcQL = "QL"
+  show KcI  = "K↑"
+  show KcC  = "K↓"
 
 traceM :: (Applicative m, Pretty a) => Component -> a -> m ()
 trace :: Pretty x => Component -> x -> a -> a

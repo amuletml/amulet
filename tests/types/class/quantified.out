@@ -1,5 +1,5 @@
 ^ : string -> string -> string
-show : type -> constraint
+show : Req{'a : type}. constraint
 show : Spec{'a : type}. show 'a => 'a -> string
 box : Infer{'a : type}. ('a -> type) -> 'a -> type
 Box : Spec{'f : 'a -> type}. Spec{'a : 'a}. 'f 'a -> box 'f 'a

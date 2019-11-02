@@ -5,7 +5,8 @@ import Control.Arrow
 import Control.Lens hiding (Lazy, (:>))
 
 import Syntax.Var
-import Syntax
+import Syntax.Expr
+import Syntax.Type
 
 transformType
   :: (Type p -> Type p)
@@ -21,6 +22,7 @@ transformType ft = goT where
   transT (TyRows f fs) = TyRows (goT f) (map (second goT) fs)
   transT (TyExactRows fs) = TyExactRows (map (second goT) fs)
   transT (TyTuple l r) = TyTuple (goT l) (goT r)
+  transT (TyTupleL l r) = TyTupleL (goT l) (goT r)
   transT (TyOperator l o r) = TyOperator (goT l) o (goT r)
   transT (TyParens t) = TyParens (goT t)
 
@@ -72,7 +74,7 @@ transformExpr
   -> Expr p -> Expr p
 transformExpr fe = goE where
   transE (VarRef v a) = VarRef v a
-  transE (Let vs r a) = Let (map goB vs) (goE r) a
+  transE (Let re vs r a) = Let re (map goB vs) (goE r) a
   transE (If c t f a) = If (goE c) (goE t) (goE f) a
   transE (App f x a) = App (goE f) (goE x) a
   transE (Fun p b a) = Fun p (goE b) a
@@ -126,7 +128,7 @@ transformExprTyped
   -> Expr Typed -> Expr Typed
 transformExprTyped fe fc ft = goE where
   transE (VarRef v a) = VarRef v (goA a)
-  transE (Let vs r a) = Let (map transBind vs) (goE r) (goA a)
+  transE (Let re vs r a) = Let re (map transBind vs) (goE r) (goA a)
   transE (If c t f a) = If (goE c) (goE t) (goE f) (goA a)
   transE (App f x a) = App (goE f) (goE x) (goA a)
   transE (Fun p b a) = Fun (goPa p) (goE b) (goA a)
@@ -212,7 +214,7 @@ transformPatternTyped fp ft = goP where
 
 correct :: Type Typed -> Expr Typed -> Expr Typed
 correct ty (VarRef v a) = VarRef v (fst a, ty)
-correct ty (Let vs r a) = Let vs r (fst a, ty)
+correct ty (Let re vs r a) = Let re vs r (fst a, ty)
 correct ty (If c t f a) = If c t f (fst a, ty)
 correct ty (App f x a) = App f x (fst a, ty)
 correct ty (Fun p b a) = Fun p b (fst a, ty)

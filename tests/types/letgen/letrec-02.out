@@ -1,9 +1,9 @@
-letrec-02.ml[1:5 ..1:10]: error (E2013)
+letrec-02.ml[1:9 ..1:14]: error (E2013)
   Pattern bindings can not participate in recursion
 
   │ 
-1 │ let (f, g) = (foo, bar)
-  │     ^^^^^^
+1 │ let rec (f, g) = (foo, bar)
+  │         ^^^^^^
 
   • Note: this binding is in the same recursive group as these
 

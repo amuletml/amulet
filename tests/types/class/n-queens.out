@@ -1,42 +1,42 @@
 nil : Spec{'a : type}. 'a
 nil : type
 cons : Infer{'a : type}. Infer{'b : type}. 'b -> 'a -> type
-first : Infer{'jm : type}. Infer{'jn : type}. 'jn -> 'jm -> constraint
-list_cat : Infer{'pg : type}. Infer{'ph : type}. Infer{'pi : type}. 'pi -> 'ph -> 'pg -> constraint
-cat_all : Infer{'yt : type}. Infer{'yu : type}. 'yu -> 'yt -> constraint
+first : Infer{'jm : type}. Infer{'jn : type}. Req{'list : 'jn}. Req{'x : 'jm}. constraint
+list_cat : Infer{'oq : type}. Infer{'or : type}. Infer{'os : type}. Req{'a : 'os}. Req{'b : 'or}. Req{'c : 'oq}. constraint
+cat_all : Infer{'ww : type}. Infer{'wx : type}. Req{'ls : 'wx}. Req{'l : 'ww}. constraint
 t : type
 f : type
-not : Infer{'ahp : type}. Infer{'ahq : type}. 'ahq -> 'ahp -> constraint
-or : Infer{'amh : type}. Infer{'ami : type}. Infer{'amj : type}. 'amj -> 'ami -> 'amh -> constraint
-any_t : Infer{'awa : type}. Infer{'awb : type}. 'awb -> 'awa -> constraint
+not : Infer{'aen : type}. Infer{'aeo : type}. Req{'b0 : 'aeo}. Req{'b : 'aen}. constraint
+or : Infer{'aip : type}. Infer{'aiq : type}. Infer{'air : type}. Req{'b1 : 'air}. Req{'b2 : 'aiq}. Req{'b : 'aip}. constraint
+any_t : Infer{'aqs : type}. Infer{'aqt : type}. Req{'l : 'aqt}. Req{'r : 'aqs}. constraint
 nat : type
 Z : nat
 S : nat -> nat
-peq : Infer{'bgb : type}. Infer{'bgc : type}. Infer{'bgd : type}. 'bgd -> 'bgc -> 'bgb -> constraint
-plt : Infer{'bsy : type}. Infer{'bsz : type}. Infer{'bta : type}. 'bta -> 'bsz -> 'bsy -> constraint
-absdiff : Infer{'cfv : type}. Infer{'cfw : type}. Infer{'cfx : type}. 'cfx -> 'cfw -> 'cfv -> constraint
-range : Infer{'cti : type}. Infer{'ctj : type}. 'ctj -> 'cti -> constraint
-apply : Infer{'daj : type}. Infer{'dak : type}. Infer{'dal : type}. 'dal -> 'dak -> 'daj -> constraint
-conj1 : Infer{'dcc : type}. 'dcc -> constraint
-map : Infer{'dgq : type}. Infer{'dgr : type}. Infer{'dgs : type}. 'dgs -> 'dgr -> 'dgq -> constraint
-mapcat : Infer{'dro : type}. Infer{'drp : type}. Infer{'drq : type}. 'drq -> 'drp -> 'dro -> constraint
-appendif : Infer{'ecb : type}. Infer{'ecc : type}. Infer{'ecd : type}. Infer{'ece : type}. 'ece -> 'ecd -> 'ecc -> 'ecb -> constraint
-filter : Infer{'ekj : type}. Infer{'ekk : type}. Infer{'ekl : type}. 'ekl -> 'ekk -> 'ekj -> constraint
+peq : Infer{'bar : type}. Infer{'bas : type}. Infer{'bat : type}. Req{'a : 'bat}. Req{'b : 'bas}. Req{'t : 'bar}. constraint
+plt : Infer{'bkp : type}. Infer{'bkq : type}. Infer{'bkr : type}. Req{'a : 'bkr}. Req{'b : 'bkq}. Req{'t : 'bkp}. constraint
+absdiff : Infer{'bvn : type}. Infer{'bvo : type}. Infer{'bvp : type}. Req{'a : 'bvp}. Req{'b : 'bvo}. Req{'c : 'bvn}. constraint
+range : Infer{'chb : type}. Infer{'chc : type}. Req{'n : 'chc}. Req{'xs : 'chb}. constraint
+apply : Infer{'cng : type}. Infer{'cnh : type}. Infer{'cni : type}. Req{'f : 'cni}. Req{'a : 'cnh}. Req{'r : 'cng}. constraint
+conj1 : Infer{'cot : type}. Req{'list : 'cot}. constraint
+map : Infer{'cst : type}. Infer{'csu : type}. Infer{'csv : type}. Req{'f : 'csv}. Req{'xs : 'csu}. Req{'ys : 'cst}. constraint
+mapcat : Infer{'dcb : type}. Infer{'dcc : type}. Infer{'dcd : type}. Req{'f : 'dcd}. Req{'xs : 'dcc}. Req{'zs : 'dcb}. constraint
+appendif : Infer{'dlb : type}. Infer{'dlc : type}. Infer{'dld : type}. Infer{'dle : type}. Req{'pred : 'dle}. Req{'x : 'dld}. Req{'ys : 'dlc}. Req{'zs : 'dlb}. constraint
+filter : Infer{'dsd : type}. Infer{'dse : type}. Infer{'dsf : type}. Req{'f : 'dsf}. Req{'xs : 'dse}. Req{'ys : 'dsd}. constraint
 queen : Infer{'a : type}. Infer{'b : type}. 'b -> 'a -> type
 queen1 : Infer{'a : type}. 'a -> type
-queens_in : Infer{'fba : type}. Infer{'fbb : type}. Infer{'fbc : type}. 'fbc -> 'fbb -> 'fba -> constraint
-threatens : Infer{'fic : type}. Infer{'fid : type}. Infer{'fie : type}. 'fie -> 'fid -> 'fic -> constraint
-threatens1 : Infer{'a : type}. 'a -> type
-safe : Infer{'gde : type}. Infer{'gdf : type}. Infer{'gdg : type}. 'gdg -> 'gdf -> 'gde -> constraint
+queens_in : Infer{'egj : type}. Infer{'egk : type}. Infer{'egl : type}. Req{'n : 'egl}. Req{'x : 'egk}. Req{'queens : 'egj}. constraint
+threatens : Infer{'emh : type}. Infer{'emi : type}. Infer{'emj : type}. Req{'a : 'emj}. Req{'b : 'emi}. Req{'t : 'emh}. constraint
+threatens1 : Infer{'fap : type}. 'fap -> type
+safe : Infer{'fdr : type}. Infer{'fds : type}. Infer{'fdt : type}. Req{'config : 'fdt}. Req{'queen : 'fds}. Req{'t : 'fdr}. constraint
 safe1 : Infer{'a : type}. 'a -> type
-addqueen : Infer{'gqb : type}. Infer{'gqc : type}. Infer{'gqd : type}. Infer{'gqe : type}. 'gqe -> 'gqd -> 'gqc -> 'gqb -> constraint
+addqueen : Infer{'fom : type}. Infer{'fon : type}. Infer{'foo : type}. Infer{'fop : type}. Req{'n : 'fop}. Req{'x : 'foo}. Req{'c : 'fon}. Req{'cs : 'fom}. constraint
 addqueen2 : Infer{'a : type}. Infer{'b : type}. 'b -> 'a -> type
-addq_all : Infer{'hgb : type}. Infer{'hgc : type}. Infer{'hgd : type}. Infer{'hge : type}. 'hge -> 'hgd -> 'hgc -> 'hgb -> constraint
-addqueens : Infer{'hid : type}. Infer{'hie : type}. Infer{'hif : type}. Infer{'hig : type}. 'hig -> 'hif -> 'hie -> 'hid -> constraint
-addq_if : Infer{'hkf : type}. Infer{'hkg : type}. Infer{'hkh : type}. Infer{'hki : type}. Infer{'hkj : type}. 'hkj -> 'hki -> 'hkh -> 'hkg -> 'hkf -> constraint
+addq_all : Infer{'gbt : type}. Infer{'gbu : type}. Infer{'gbv : type}. Infer{'gbw : type}. Req{'n : 'gbw}. Req{'x : 'gbv}. Req{'cs : 'gbu}. Req{'cs1 : 'gbt}. constraint
+addqueens : Infer{'gdn : type}. Infer{'gdo : type}. Infer{'gdp : type}. Infer{'gdq : type}. Req{'n : 'gdq}. Req{'x : 'gdp}. Req{'cs : 'gdo}. Req{'cs1 : 'gdn}. constraint
+addq_if : Infer{'gfh : type}. Infer{'gfi : type}. Infer{'gfj : type}. Infer{'gfk : type}. Infer{'gfl : type}. Req{'p : 'gfl}. Req{'n : 'gfk}. Req{'x : 'gfj}. Req{'cs : 'gfi}. Req{'cs1 : 'gfh}. constraint
 snat : nat -> type
-SZ : Infer{'iko : type}. Spec{'n : 'iko}. ('n ~ Z) ⊃ snat 'n
-SS : Infer{'ilp : type}. Spec{'n : 'ilp}. Spec{'n : nat}. ('n ~ S 'n) ⊃ snat 'n -> snat 'n
-solution : nat -> type -> constraint
+SZ : Infer{'haz : type}. Spec{'n : 'haz}. ('n ~ Z) ⊃ snat 'n
+SS : Infer{'hca : type}. Spec{'n : 'hca}. Spec{'n : nat}. ('n ~ S 'n) ⊃ snat 'n -> snat 'n
+solution : Req{'n : nat}. Req{'c : type}. constraint
 solution : Spec{'n : nat}. Spec{'c : type}. solution 'n 'c => snat 'n -> 'c
 x : cons (queen (S (S (S Z))) (S Z)) (cons (queen (S (S Z)) (S (S (S Z)))) (cons (queen (S Z) Z) (cons (queen Z (S (S Z))) nil)))

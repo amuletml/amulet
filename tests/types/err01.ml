@@ -2,7 +2,7 @@ external val ( + ) : int -> int -> int = ""
 
 type queue 'a
 type option 'a = Some of 'a
-let enqueue : forall 'a 'b. ('a -> option ('a * 'b)) -> 'a -> queue 'b =
+let rec enqueue : forall 'a 'b. ('a -> option ('a * 'b)) -> 'a -> queue 'b =
   fun f x -> enqueue f x
 
 let range start stop =

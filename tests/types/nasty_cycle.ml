@@ -9,7 +9,7 @@ type even 'n =
 
 type either 'l 'r = Left of 'l | Right of 'r
 
-let is_even (x : snat 'n) : either (even 'n) (even (S 'n)) =
+let rec is_even (x : snat 'n) : either (even 'n) (even (S 'n)) =
   match x with
   | SZ -> Left Even0
   | SS SZ -> Right (Even2 Even0)

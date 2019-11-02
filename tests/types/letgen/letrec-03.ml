@@ -1,4 +1,4 @@
-let (a, b) = f x y
+let rec (a, b) = f x y
 and x = g y
 and y = f x
 and f = f h

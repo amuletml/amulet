@@ -1,0 +1,7 @@
+nat : type
+Z : nat
+S : nat -> nat
+vect : nat -> type -> type
+Nil : Infer{'cp : type}. Spec{'n : 'cp}. Spec{'a : type}. ('n ~ Z) ⊃ vect 'n 'a
+Cons : Infer{'eb : type}. Spec{'n : 'eb}. Spec{'a : type}. Spec{'k : nat}. ('n ~ S 'k) ⊃ ('a * vect 'k 'a) -> vect 'n 'a
+replicate : Spec{'k : type}. Req{'n : nat}. Req{'a : 'k}. vect 'n 'k

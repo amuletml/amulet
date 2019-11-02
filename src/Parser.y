@@ -80,42 +80,43 @@ import Syntax
   '->'     { Token TcArrow _ _ }
   '<-'     { Token TcGenerator _ _ }
   '='      { Token TcEqual _ _ }
-  forall   { Token TcForall _ _ }
   '=>'     { Token TcImplies _ _ }
   '|'      { Token TcPipe _ _ }
   '*'      { Token TcStar _ _ }
   '~'      { Token TcTilde _ _ }
   '_'      { Token TcUnderscore _ _ }
 
-  let      { Token TcLet _ _ }
-  fun      { Token TcFun _ _ }
   and      { Token TcAnd _ _ }
-  if       { Token TcIf _ _ }
-  then     { Token TcThen _ _ }
-  else     { Token TcElse _ _ }
-  begin    { Token TcBegin _ _ }
-  end      { Token TcEnd _ _ }
-  in       { Token TcIn _ _ }
-  external { Token TcExternal _ _ }
-  val      { Token TcVal _ _ }
-  true     { Token TcTrue _ _ }
-  false    { Token TcFalse _ _ }
-  match    { Token TcMatch _ _ }
-  with     { Token TcWith _ _ }
-  function { Token TcFunction _ _ }
-  type     { Token TcType _ _ }
-  of       { Token TcOf _ _ }
-  module   { Token TcModule _ _ }
-  open     { Token TcOpen _ _ }
-  lazy     { Token TcLazy _ _ }
   as       { Token TcAs _ _ }
-  import   { Token TcImport _ _ }
+  begin    { Token TcBegin _ _ }
   class    { Token TcClass _ _ }
-  instance { Token TcInstance _ _ }
-  when     { Token TcWhen _ _ }
-  private  { Token TcPrivate _ _ }
-  include  { Token TcInclude _ _ }
   deriving { Token TcDeriving _ _ }
+  else     { Token TcElse _ _ }
+  end      { Token TcEnd _ _ }
+  external { Token TcExternal _ _ }
+  false    { Token TcFalse _ _ }
+  forall   { Token TcForall _ _ }
+  fun      { Token TcFun _ _ }
+  function { Token TcFunction _ _ }
+  if       { Token TcIf _ _ }
+  import   { Token TcImport _ _ }
+  in       { Token TcIn _ _ }
+  include  { Token TcInclude _ _ }
+  instance { Token TcInstance _ _ }
+  lazy     { Token TcLazy _ _ }
+  let      { Token TcLet _ _ }
+  match    { Token TcMatch _ _ }
+  module   { Token TcModule _ _ }
+  of       { Token TcOf _ _ }
+  open     { Token TcOpen _ _ }
+  private  { Token TcPrivate _ _ }
+  rec      { Token TcRec _ _ }
+  then     { Token TcThen _ _ }
+  true     { Token TcTrue _ _ }
+  type     { Token TcType _ _ }
+  val      { Token TcVal _ _ }
+  when     { Token TcWhen _ _ }
+  with     { Token TcWith _ _ }
 
   ','      { Token TcComma _ _ }
   '.'      { Token TcDot _ _ }
@@ -173,13 +174,15 @@ Access :: { TopAccess }
   | private                                    { Private }
 
 TopSep :: { () }
-    : ';;'   { () }
-    | '$sep' { () }
+  : ';;'   { () }
+  | '$sep' { () }
 
 Top :: { Toplevel Parsed }
     -- See comment on 'Access' as to why this is inlined
-    : let BindGroup                            { LetStmt Public (reverse $2) }
-    | let private BindGroup                    { LetStmt Private (reverse $3) }
+    : let BindGroup                            { LetStmt NonRecursive Public (reverse $2) }
+    | let private BindGroup                    { LetStmt NonRecursive Private (reverse $3) }
+    | let rec BindGroup                        { LetStmt Recursive Public (reverse $3) }
+    | let rec private BindGroup                { LetStmt Recursive Private (reverse $4) }
 
     | external Access val BindName ':' Type '=' string
       { withPos2 $1 $8 $ ForeignVal $2 (getL $4) (getString $8) (getL $6) }
@@ -262,6 +265,7 @@ Method :: { InstanceItem Parsed }
 TyConArg :: { TyConArg Parsed }
          : TyVar { TyVarArg (getL $1) }
          | '(' TyVar ':' Type ')' { TyAnnArg (getL $2) (getL $4) }
+         | '{' TyVar ':' Type '}' { TyInvisArg (getL $2) (getL $4) }
 
 Ctor :: { Constructor Parsed }
      : Access BindCon                          { withPos1 $2    $ UnitCon $1 (getL $2) }
@@ -311,7 +315,8 @@ ExprApp :: { Expr Parsed }
 Expr0 :: { Expr Parsed }
       : fun ListE1(Parameter) '->' ExprBlock '$end'
         { respanFun $1 $4 $ foldr (\x y -> withPos2 x $4 $ Fun x y) $4 $2 }
-      | let BindGroup ExprIn ExprBlock '$end'  { withPos2 $1 $4 $ Let (reverse $2) $4 }
+      | let     BindGroup ExprIn ExprBlock '$end'   { withPos2 $1 $4 $ Let NonRecursive (reverse $2) $4 }
+      | let rec BindGroup ExprIn ExprBlock '$end'   { withPos2 $1 $5 $ Let Recursive (reverse $3) $5 }
       | let open ModuleTerm ExprIn ExprBlock '$end' { withPos2 $1 $5 $ OpenIn $3 $5 }
       | if Expr then ExprBlock else ExprBlock '$end'
           { withPos2 $1 $6 $ If $2 $4 $6 }
@@ -598,13 +603,17 @@ TypeAtom :: { Located (Type Parsed) }
          | type                                   { lPos1 $1 TyType }
          | lazy                                   { lPos1 $1 $ TyCon (Name (T.pack "lazy")) }
          | '(' ')'                                { lPos2 $1 $2 $ TyCon (Name (T.pack "unit")) }
-         | '(' Type ')'                           { lPos2 $1 $3 $ TyParens (getL $2) }
+         | '(' List1(Type,',') ')'                { lPos2 $1 $3 $ mkTupleTypeL (map getL $2) }
+         | '[' List1(Type,',') ']'                { lPos2 $1 $3 $ mkListTypeL (map getL $2) }
          | '(' TypeOperatorF ')'                  { lPos2 $1 $3 $ TyParens (TyCon $2) }
          | '{' ListT(TypeRow, ',') '}'            { lPos2 $1 $3 $ TyExactRows $2 }
          | '{' Type '|' ListT(TypeRow, ',') '}'   { lPos2 $1 $5 $ TyRows (getL $2) $4 }
          | '_'                                    { lPos1 $1 (TyWildcard Nothing) }
+
          | string                                 { lPos1 $1 $ TyLit (LiStr (getString $1)) }
          | int                                    { lPos1 $1 $ TyLit (LiInt (getInt $1)) }
+         | true                                   { lPos1 $1 $ TyLit (LiBool True) }
+         | false                                  { lPos1 $1 $ TyLit (LiBool False) }
 
 TypeRow :: { (T.Text, Type Parsed) }
   : ident ':' Type                                { (getIdent $1, getL $3) }
@@ -709,6 +718,18 @@ forallTy spec vs t = foldr TyPi t (map (\(x, k) -> Invisible x k spec) vs)
 respanFun :: (Spanned a, Spanned b) => a -> b -> Expr Parsed -> Expr Parsed
 respanFun s e (Fun p b _) = Fun p b (mkSpanUnsafe (spanStart (annotation s)) (spanEnd (annotation e)))
 respanFun _ _ _ = error "what"
+
+mkTupleTypeL :: [Type p] -> Type p
+mkTupleTypeL [x] = TyParens x
+mkTupleTypeL (x:xs) =
+  let go [x] = x
+      go (x:xs) = TyTupleL x (go xs)
+      go [] = undefined
+   in go (x:xs)
+
+mkListTypeL :: [Type Parsed] -> Type Parsed
+mkListTypeL [] = TyPromotedCon (Name (T.pack "Nil"))
+mkListTypeL (x:xs) = TyApp (TyPromotedCon (Name (T.pack "Cons"))) (TyTupleL x (mkListTypeL xs))
 
 buildClass :: TopAccess -> Located (Type Parsed) -> [Fundep Parsed]
            -> [ClassItem Parsed] -> Parser (Span -> Toplevel Parsed)

@@ -2,13 +2,15 @@
 module Types.Derive.Typeable (deriveTypeable, builtinTypeableInsts) where
 
 import Syntax.Implicits
+import Syntax.Toplevel
 import Syntax.Builtin
 import Syntax.Types
+import Syntax.Type
+import Syntax.Expr
+import Syntax.Var
 
 import Data.Span
 
-import Syntax.Pretty ()
-import Syntax
 
 deriveTypeable :: DerivingStrat
 deriveTypeable = DerivingStrat genTypeable

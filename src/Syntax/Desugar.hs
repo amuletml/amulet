@@ -31,7 +31,7 @@ desugarProgram :: forall m. MonadNamey m => [Toplevel Resolved] -> m [Toplevel D
 desugarProgram = traverse statement
 
 statement :: forall m. MonadNamey m => Toplevel Resolved -> m (Toplevel Desugared)
-statement (LetStmt am vs) = LetStmt am <$> traverse binding vs
+statement (LetStmt re am vs) = LetStmt re am <$> traverse binding vs
 statement (Module am v t) = Module am v <$> modTerm t
 statement (Instance a b c m _ d) = Instance a (ty <$> b) (ty c) <$> traverse instItem m <*> pure False <*> pure d where
   instItem (MethodImpl b) = MethodImpl <$> binding b
@@ -64,7 +64,7 @@ expr (Literal l a) = pure (Literal l a)
 expr (VarRef v a) = pure (VarRef v a)
 expr (Hole v a) = pure (Hole v a)
 expr (ExprWrapper w e a) = ExprWrapper (wrapper w) <$> expr e <*> pure a
-expr (Let vs e a) = Let <$> traverse binding vs <*> expr e <*> pure a
+expr (Let re vs e a) = Let re <$> traverse binding vs <*> expr e <*> pure a
 expr (If c t e a) = If <$> expr c <*> expr t <*> expr e <*> pure a
 expr (App f x a) = App <$> expr f <*> expr x <*> pure a
 expr (Fun p b a) = Fun (param p) <$> expr b <*> pure a
@@ -97,7 +97,7 @@ expr (LeftSection op vl an) = do
     Literal{} -> pure $ go vl'
     _ -> do
       ~(Capture lv _, ref) <- fresh "x" an
-      pure $ Let [Binding lv vl' False an] (go ref) an
+      pure $ Let NonRecursive [Binding lv vl' False an] (go ref) an
 
 expr (RightSection vl op an) = expr (App op vl an)
 expr (BothSection o _) = expr o
@@ -112,7 +112,7 @@ expr (Tuple es a) = Tuple <$> traverse expr es <*> pure a
 expr (TupleSection es a) = do
   es' <- traverse (traverse expr) es
   (args, binds, tuple) <- foldrM (buildTuple a) ([], [], []) es'
-  pure $ foldf (\(v, e) r -> Let [Binding v e False a] r a) binds
+  pure $ foldf (\(v, e) r -> Let NonRecursive [Binding v e False a] r a) binds
        $ foldf (\v e -> Fun (PatParam v) e a) args
        $ Tuple tuple a
 
@@ -171,6 +171,7 @@ ty (TyPi b p) = TyPi (binder b) (ty p)
 ty (TyRows t fs) = TyRows (ty t) (map (second ty) fs)
 ty (TyExactRows fs) = TyExactRows (map (second ty) fs)
 ty (TyTuple l r) = TyTuple (ty l) (ty r)
+ty (TyTupleL l r) = TyTupleL (ty l) (ty r)
 ty (TyWildcard t) = TyWildcard (ty <$> t)
 ty TySkol{} = error "TySkol in desugar"
 ty TyWithConstraints{} = error "TywithConstraints in desugar"
@@ -204,6 +205,7 @@ pat (PList ps a) = build ps where
 tyA :: TyConArg Resolved -> TyConArg Desugared
 tyA (TyVarArg v) = TyVarArg v
 tyA (TyAnnArg v t) = TyAnnArg v (ty t)
+tyA (TyInvisArg v t) = TyInvisArg v (ty t)
 
 param :: Parameter Resolved -> Parameter Desugared
 param (PatParam p) = PatParam (pat p)
@@ -228,7 +230,8 @@ transListComp (ex, CompGen v l1 an:qs, an') l2 = do
   l1 <- expr l1
   success <- transListComp (ex, qs, an) (App (VarRef h an) us' an)
   pure $
-    Let [ Binding h
+    Let NonRecursive
+        [ Binding h
             (Fun (PatParam cus)
               (Match us
                 [ Arm { armPat = consPat cx cus' an
@@ -252,14 +255,14 @@ transListComp (ex, CompGen v l1 an:qs, an') l2 = do
       (App (VarRef h an) l1 an)
       an'
 transListComp (ex, CompLet bs _:qs, an) l =
-  Let <$> traverse binding bs <*> transListComp (ex, qs, an) l <*> pure an
+  Let NonRecursive <$> traverse binding bs <*> transListComp (ex, qs, an) l <*> pure an
 transListComp (ex, CompGuard e:qs, an) l =
   If <$> expr e <*> transListComp (ex, qs, an) l <*> pure l <*> pure an
 transListComp (ex, [], an) l = cons <$> expr ex <*> pure l <*> pure an
 
 maybeMatch :: Expr Desugared -> [Arm Desugared] -> Ann Desugared -> Expr Desugared
 maybeMatch ex [arm@Arm{ armGuard = Nothing, armExp = body }] ann =
-  Let [Matching (armPat arm) ex ann] body ann
+  Let NonRecursive [Matching (armPat arm) ex ann] body ann
 maybeMatch ex arms ann = Match ex arms ann
 
 transDoExpr :: forall m. MonadNamey m => Expr Desugared -> [CompStmt Resolved] -> m (Expr Desugared)
@@ -268,7 +271,7 @@ transDoExpr bind = go where
     e <- expr e
     cont <- Fun (PatParam (pat p)) <$> go qs <*> pure an
     pure $ BinOp e bind cont an
-  go (CompLet bg an:qs) = Let <$> traverse binding bg <*> go qs <*> pure an
+  go (CompLet bg an:qs) = Let NonRecursive <$> traverse binding bg <*> go qs <*> pure an
   go [CompGuard e] = expr e
   go (CompGuard e:qs) =
     let begin a b = Begin [ a, b ]

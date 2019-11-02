@@ -11,12 +11,12 @@ end
 
 instance foldable list begin
   let foldl f =
-    let loop z = function
+    let rec loop z = function
       | [] -> z
       | Cons (x, xs) -> loop (f z x) xs
     loop
   let foldr f z =
-    let loop = function
+    let rec loop = function
       | [] -> z
       | Cons (x, xs) -> f x (loop xs)
     loop

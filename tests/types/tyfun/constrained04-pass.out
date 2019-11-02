@@ -1,2 +1,2 @@
-c2 : Infer{'f : type}. 'f -> constraint
-f2 : Infer{'f : type}. 'f -> type
+c2 : Infer{'f : type}. Req{'t : 'f}. constraint
+f2 : Infer{'f : type}. Req{'t : 'f}. type

@@ -1,15 +1,15 @@
-module Amc = import "amulet/prim.ml"
+private module Amc = import "amulet/prim.ml"
 open import "./base.ml"
 open import "./exception.ml"
 
 let reverse xs =
-  let loop acc = function
+  let rec loop acc = function
     | [] -> acc
     | Cons (x, xs) -> loop (x :: acc) xs
   loop [] xs
 
 let filter p xs =
-  let filter_acc acc = function
+  let rec filter_acc acc = function
     | [] -> acc
     | Cons (x, xs) ->
         if p x then
@@ -18,7 +18,7 @@ let filter p xs =
           filter_acc acc xs
   reverse (filter_acc [] xs)
 
-let private aux ys prev = function
+let rec private aux ys prev = function
   | [] -> Amc.set_snd prev ys
   | Cons (x, xs) ->
       let next = Amc.alloc_tuple x []
@@ -36,7 +36,7 @@ let x ++ y =
 
 let concat = join @list
 
-let zip_with k xs ys =
+let rec zip_with k xs ys =
   match xs, ys with
   | Cons (x, xs), Cons (y, ys) -> k x y :: zip_with k xs ys
   | _, _ -> []
@@ -44,19 +44,19 @@ let zip_with k xs ys =
 let zip xs = zip_with (,) xs
 
 let mapi cont =
-  let loop i = function
+  let rec loop i = function
     | [] -> []
     | Cons (x, xs) -> Cons (cont i x, loop (i + 1) xs)
   loop 0
 
-let iter cont = function
+let rec iter cont = function
   | [] -> ()
   | Cons (x, xs) ->
       cont x
       iter cont xs
 
 let iteri cont =
-  let loop i = function
+  let rec loop i = function
     | [] -> ()
     | Cons (x, xs) ->
         cont x

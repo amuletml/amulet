@@ -1,4 +1,4 @@
-show : type -> constraint
+show : Req{'a : type}. constraint
 show : Spec{'a : type}. show 'a => 'a -> string
 show_box : type
 Box : Spec{'a : type}. show 'a => 'a -> show_box

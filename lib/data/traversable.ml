@@ -17,7 +17,7 @@ end
 
 instance traversable list begin
   let traverse cont =
-    let loop = function
+    let rec loop = function
       | Cons (x, xs) -> (| cont x :: loop xs |)
       | [] -> (| [] |)
     loop

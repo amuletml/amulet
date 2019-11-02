@@ -69,7 +69,7 @@ inferLetTy closeOver strategy vs =
               let needsLet = wraps `Map.restrictKeys` freeIn ex
                   addOne (v, ExprApp e) ex
                     | VarRef v' _ <- e, v == v' = ex
-                    | otherwise = Let [ Binding v e False (annotation ex, getType e) ] ex (annotation ex, getType ex)
+                    | otherwise = Let Recursive [ Binding v e False (annotation ex, getType e) ] ex (annotation ex, getType ex)
                   addOne _ ex = ex
                   addFreeDicts ex = foldr addOne ex (Map.toList needsLet)
 
@@ -252,7 +252,7 @@ inferLetTy closeOver strategy vs =
                      (Ascription
                        (ExprWrapper tyLams
                          (wrapper Full
-                           (Let inners (Record fields (an, recTy)) (an, recTy)))
+                           (Let Recursive inners (Record fields (an, recTy)) (an, recTy)))
                          (an, closed))
                        closed (an, closed))
                      True
@@ -321,7 +321,10 @@ fakeLetTys bs = do
 
 data PatternStrat = Fail | Propagate
 
-skolCheck :: MonadInfer Typed m => Var Typed -> SomeReason -> Type Typed -> m (Type Typed)
+skolCheck :: ( MonadChronicles TypeError m
+             , MonadReader Env m
+             )
+          => Var Typed -> SomeReason -> Type Typed -> m (Type Typed)
 skolCheck var exp ty = do
   let blameSkol :: TypeError -> (Var Desugared, SomeReason) -> TypeError
       blameSkol e (v, r) =
@@ -336,7 +339,10 @@ skolCheck var exp ty = do
   checkAmbiguous var exp t
   pure t
 
-checkAmbiguous :: forall m. MonadInfer Typed m => Var Typed -> SomeReason -> Type Typed -> m ()
+checkAmbiguous :: forall m. ( MonadChronicles TypeError m
+                            , MonadReader Env m
+                            )
+               => Var Typed -> SomeReason -> Type Typed -> m ()
 checkAmbiguous var exp tau = go mempty mempty tau where
   go :: Set.Set (Var Typed) -> Set.Set (Var Typed) -> Type Typed -> m ()
   go ok s (TyPi (Invisible v _ Req) t) = go (Set.insert v ok) s t
@@ -425,6 +431,7 @@ deSkol = go mempty where
   go acc (TyWithConstraints cs x) = TyWithConstraints (map (bimap (go acc) (go acc)) cs) (go acc x)
   go acc (TyOperator l o r) = TyOperator (go acc l) o (go acc r)
   go acc (TyParens p) = TyParens $ go acc p
+  go acc (TyTupleL a b) = TyTupleL (go acc a) (go acc b)
   go _ TyType = TyType
 
 expandTyBindings :: MonadReader Env m => Binding Typed -> m (Binding Typed)

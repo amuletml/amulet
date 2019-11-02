@@ -16,7 +16,7 @@ let range start finish =
   if start > finish then
     []
   else
-    let go n =
+    let rec go n =
       n :: if n == finish then [] else go (successor n)
     go start
 
@@ -27,7 +27,7 @@ let private range_up start next finish =
   else
     let delta = x2 - x1
     let y' = y - delta
-    let go_up x =
+    let rec go_up x =
       if x > y' then
         [enum_of_int x]
       else
@@ -41,7 +41,7 @@ let private range_down start next finish =
   else
     let delta = x2 - x1
     let y' = y - delta
-    let go_down x =
+    let rec go_down x =
       if x < y' then
         [enum_of_int x]
       else

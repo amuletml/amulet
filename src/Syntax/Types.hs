@@ -26,9 +26,12 @@ import Control.Monad.Namey
 import Control.Lens
 
 import Syntax.Implicits
+import Syntax.Toplevel
 import Syntax.Boolean
 import Syntax.Subst
-import Syntax
+import Syntax.Expr
+import Syntax.Type
+import Syntax.Var
 
 -- A bag of bindings, returned from pattern match checking
 newtype Telescope p =

@@ -18,8 +18,6 @@ module Types.Unify.Base
 -- Monadic user functions:
   , doWork, polyInstSafe
 
--- Type errors:
-  , unequal, rethrow
 -- Type shape predicates:
   , prettyConcrete, concretish, concreteUnderOne
   ) where
@@ -27,8 +25,6 @@ module Types.Unify.Base
 import Control.Monad.State
 import Control.Monad.Infer
 import Control.Lens hiding (Empty, (:>))
-
-import Data.Traversable
 
 import Syntax.Subst
 import Syntax.Types
@@ -38,7 +34,6 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 
 import Prelude hiding (lookup)
-
 
 type SolverInfo = Map.Map (Var Typed) (Either ClassInfo TySymInfo)
 
@@ -105,11 +100,6 @@ instance HasSolverInfo Env where
 getSolveInfo :: (MonadReader env m, HasSolverInfo env) => m SolverInfo
 getSolveInfo = asks asksSolveInfo
 
-unequal :: MonadSolve m => Type Typed -> Type Typed -> m TypeError
-unequal a b = do
-  x <- use solveTySubst
-  pure (NotEqual (apply x a) (apply x b))
-
 prettyConcrete :: Type Typed -> Bool
 prettyConcrete TyVar{} = False
 prettyConcrete (TyWildcard t) = maybe False prettyConcrete t
@@ -141,11 +131,3 @@ doWork e = do
   solveFuel .= (x - 1)
   unless (x >= 0) $
     confesses =<< e
-
-rethrow :: MonadSolve m => Type Typed -> Type Typed -> m a -> m a
-rethrow l r cont =
-  condemn cont
-    `catchChronicle` \e -> confess =<< for e go
-  where
-    go NotEqual{} = unequal l r
-    go x = pure x

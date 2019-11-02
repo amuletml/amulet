@@ -150,7 +150,7 @@ instance Note VerifyError Style where
              , format (fileSpans spans highlightLua) err
              ]
 
-  formatNote f (LazyLet (Let bs ex _) _) =
+  formatNote f (LazyLet (Let _ bs ex _) _) =
     vsep
       [ indent 2 "Automatic thunking of" <+> (Right <$> keyword "let") <> "s does not cover bindings"
       , empty

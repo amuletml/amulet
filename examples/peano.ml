@@ -21,13 +21,13 @@ let fold num z s =
 
 let pred num = fold num None Some
 
-let from_int k =
+let rec from_int k =
   if k == 0 then Z else S (from_int (k - 1))
 
-let to_int num = fold num 0 (fun x -> to_int x + 1)
+let rec to_int num = fold num 0 (fun x -> to_int x + 1)
 let print_nat num = string_of_int (to_int num)
 
-let add n k =
+let rec add n k =
   match n with
   | Z -> k
   | S n -> S (add n k)

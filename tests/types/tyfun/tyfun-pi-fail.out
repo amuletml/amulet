@@ -1,0 +1,6 @@
+tyfun-pi-fail.ml[8:3 ..8:52]: error (E2001)
+  │ 
+8 │   map 'f (Cons ('x, 'xs)) = Cons ('f 'x, map 'f 'xs)
+  │   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  Couldn't match actual type Z
+    with the type expected by the context, S Z

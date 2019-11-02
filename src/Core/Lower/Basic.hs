@@ -105,7 +105,10 @@ lowerType (S.TyWildcard _) = error "impossible lowerType TyWildcard"
 lowerType (S.TyParens t) = lowerType t
 lowerType (S.TyWithConstraints _ t) = lowerType t
 lowerType S.TyType = StarTy
+
+-- All "lifted" types can just be *, screw Lint
 lowerType S.TyLit{} = StarTy
+lowerType S.TyTupleL{} = StarTy
 
 -- | Lower a literal from "Syntax" to one from "Core.Core".
 lowerLiteral :: Lit -> Literal

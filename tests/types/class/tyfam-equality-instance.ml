@@ -48,6 +48,6 @@ end
 let unfix (Fix f) = f
 
 let cata phi x =
-  let cata_base phi x =
+  let rec cata_base phi x =
     phi @@ (cata_base phi <$>) @@ unfix x
   cata_base phi (into x)

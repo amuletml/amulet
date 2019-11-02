@@ -101,7 +101,7 @@ function! AmuletLoad(verbose, qf)
     return -1
   endtry
 
-  let err_msg_pat = "\\v(error|warning|note) \\([EWN][0-9]{4}\\)$"
+  let err_msg_pat = "\\v(error|warning|note)( \\([EWN][0-9]{4}\\))?$"
   let nerrors = 0
   let nwarns = 0
 
@@ -228,6 +228,23 @@ function! AmuletParseDeps()
   silent keeppatterns %s/(\* amulet\.vim: \(.*\) \*)/\=add(deplist,submatch(1))/gne
   call call('AmuletDep', deplist)
 endfunction
+
+function! AmuletComplete(findstart, base)
+  if a:findstart
+    " locate the start of the word
+    let line = getline('.')
+    let start = col('.') - 1
+    while start > 0 && !(line[start - 1] =~ ' ')
+      echo line[start - 1]
+      let start -= 1
+    endwhile
+    return start
+  else
+    return split(s:CallAmc(":complete", a:base), "\n")
+  endif
+endfunction
+
+set omnifunc=AmuletComplete
 
 nnoremap <buffer> <silent> <LocalLeader>t :call AmuletType()<ENTER>
 nnoremap <buffer> <silent> <LocalLeader>l :call AmuletLoad(1,'')<ENTER>

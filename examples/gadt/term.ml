@@ -5,7 +5,7 @@ type term 'a =
   | App : term ('a -> 'b) * term 'a -> term 'b
 
 
-let eval (x : term 'a) : 'a =
+let rec eval (x : term 'a) : 'a =
   match x with
   | Lit l -> l
   | Fun x -> x

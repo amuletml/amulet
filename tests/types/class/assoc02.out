@@ -3,4 +3,5 @@ assoc02.ml[17:22 ..17:23]: error (E2001)
 17 │ let _ : bar string = ()
    │                      ^^
   Couldn't match actual type unit
-    with the type expected by the context, bar string
+    with the type expected by the context, int
+  • Note: Where bar string ~> int

@@ -58,7 +58,7 @@ runVerify env var = fixup
 verifyProgram :: forall m. MonadVerify m => [Toplevel Typed] -> m ()
 verifyProgram = traverse_ verifyStmt where
   verifyStmt :: Toplevel Typed -> m ()
-  verifyStmt st@(LetStmt am vs) = verifyBindingGroup addBind (BecauseOf st) vs where
+  verifyStmt st@(LetStmt _ am vs) = verifyBindingGroup addBind (BecauseOf st) vs where
     addBind :: BindingSite -> m ()
     addBind b@(BindingSite _ _ tau) = do
       when (am == Public) $
@@ -123,7 +123,7 @@ verifyExpr :: MonadVerify m => Expr Typed -> m ()
 verifyExpr (VarRef v (s, t)) = do
   modify $ Set.delete (BindingSite v s t)
   pure ()
-verifyExpr ex@(Let vs e (_, ty)) = do
+verifyExpr ex@(Let _ vs e (_, ty)) = do
   when (isLazy ty && isWrappedThunk e && any nonTrivialRhs vs) $
     tell (Seq.singleton (LazyLet ex ty))
   verifyBindingGroup (modify . Set.insert) (BecauseOf ex) vs
@@ -186,7 +186,7 @@ unguardedVars (RecordExt e rs _)   = unguardedVars e <> foldMap (unguardedVars .
 unguardedVars (BinOp a b c _)      = unguardedVars a <> unguardedVars b <> unguardedVars c
 unguardedVars (VarRef v _)         = Set.singleton v
 unguardedVars (Begin es _)         = foldMap unguardedVars es
-unguardedVars (Let vs b _)         = (unguardedVars b <> foldMap (unguardedVars . view bindBody) vs)
+unguardedVars (Let _ vs b _)       = (unguardedVars b <> foldMap (unguardedVars . view bindBody) vs)
                               Set.\\ foldMapOf (each . bindVariable) Set.singleton vs
 unguardedVars (App f x _) =
   case f of
@@ -248,7 +248,7 @@ nonTrivial :: Expr Typed -> Bool
 nonTrivial App{} = True
 nonTrivial BinOp{} = True
 nonTrivial (If c t e _) = nonTrivial c || nonTrivial t || nonTrivial e
-nonTrivial (Let vs e _) = nonTrivial e || any nonTrivialRhs vs
+nonTrivial (Let _ vs e _) = nonTrivial e || any nonTrivialRhs vs
 nonTrivial (Begin es _) = any nonTrivial es
 nonTrivial (Match e cs _) = nonTrivial e || any (\(Arm _ g a) -> nonTrivial a || maybe False nonTrivial g) cs
 nonTrivial VarRef{} = False

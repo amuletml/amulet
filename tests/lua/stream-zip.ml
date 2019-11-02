@@ -58,7 +58,7 @@ let range (start, limit) =
   Stream (go, start)
 
 let fold_stream f z (Stream (stream, start)) =
-  let go ac st =
+  let rec go ac st =
     match stream st with
     | Yield (a, st) -> go (f a ac) st
     | Skip st -> go ac st
@@ -66,7 +66,7 @@ let fold_stream f z (Stream (stream, start)) =
   go z start
 
 let dump_stream e (Stream (f, start)) =
-  let go st =
+  let rec go st =
     match f st with
     | Skip st -> go st
     | Yield (a, st) -> begin

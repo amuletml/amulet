@@ -5,4 +5,4 @@ type t 'a =
   | A : t a
   | B : t b
 
-let f (A : t a) : a = f A
+let rec f (A : t a) : a = f A

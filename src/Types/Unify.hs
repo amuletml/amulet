@@ -287,11 +287,9 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do -- {{{
 
     _ ->
       case head (appsView cons) of
-        TyCon v | Just solve <- magicClass v -> do
+        TyCon v | Just (solve, report) <- magicClass v -> do
           (w, cs) <- censor (const mempty) $ listen $ solve reason scope' old
-          doSolve (Seq.fromList cs)
-            `catchChronicle`
-              \e -> confesses (ArisingFrom (UnsatClassCon reason (apply sub ohno) (MagicErrors (toList e))) reason)
+          doSolve (Seq.fromList cs) `catchChronicle` report reason scope' old
           case w of
             Just solution -> solveCoSubst . at var ?= solution
             Nothing -> do
@@ -446,7 +444,7 @@ subsumes' r scope ot@(TyTuple a b) nt@(TyTuple a' b') = do -- {{{
       cont ex | IdWrap <- wa, IdWrap <- wb = ex
       cont ex
         | an <- annotation ex =
-          Let
+          Let NonRecursive
             [ TypedMatching
                 ( PTuple [ Capture elem (an, a), Capture elem' (an, b) ] (an, ot) )
                 ex (an, ot)
@@ -710,7 +708,7 @@ mkRecordWrapper keys matched matched_t th tw cont exp =
 
       -- Update the record in place
       wrapEx ex | an <- annotation ex =
-        Let [Binding exp ex True (an, th)]
+        Let NonRecursive [Binding exp ex True (an, th)]
           (cont (recordExt (ref an) (foldMap (updateField an (ref an)) keys) (an, matched_t)))
           (an, tw)
    in wrapEx

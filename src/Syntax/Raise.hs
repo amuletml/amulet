@@ -25,6 +25,7 @@ raiseT v (TySkol (Skolem n u t m)) = TySkol (Skolem (v n) (v u) (raiseT v t) (mo
 raiseT v (TyVar n) = TyVar (v n)
 raiseT v (TyApp x y) = TyApp (raiseT v x) (raiseT v y)
 raiseT v (TyTuple x y) = TyTuple (raiseT v x) (raiseT v y)
+raiseT v (TyTupleL x y) = TyTupleL (raiseT v x) (raiseT v y)
 raiseT v (TyRows rho rows) = TyRows (raiseT v rho) (map (second (raiseT v)) rows)
 raiseT v (TyExactRows rows) = TyExactRows (map (second (raiseT v)) rows)
 raiseT v (TyWithConstraints eq a) = TyWithConstraints (map (bimap (raiseT v) (raiseT v)) eq) (raiseT v a)

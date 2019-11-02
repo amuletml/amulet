@@ -26,7 +26,7 @@ let parse_num x =
 
 let () =
   let thrd _ =
-    let inner vl =
+    let rec inner vl =
       match vl with
       | Just x ->
         print ("number was " ^ string_of_int x)
@@ -36,7 +36,7 @@ let () =
         exit 0
     inner (co_yield ())
   let coro = co_create thrd
-  let loop () =
+  let rec loop () =
     write "enter number: "
     let ln = read_stdin "*l"
     let num = parse_num ln

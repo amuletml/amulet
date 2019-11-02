@@ -11,6 +11,6 @@ class02.ml[3:3 ..3:27]: error (E2001)
 3 │   val foo : 'a () -> string
   │   ^^^^^^^^^^^^^^^^^^^^^^^^^
   Couldn't match actual type type
-    with the type expected by the context, 'bq -> 'br
+    with the type expected by the context, 'bn -> 'bo
 
   • Did you apply a type constructor to too many arguments?

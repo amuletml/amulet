@@ -1,4 +1,4 @@
-recursive03.ml[20:5 ..20:23]: error (E2018)
+recursive03.ml[20:9 ..20:27]: error (E2018)
   No instance for show 'a arising from use of the expression
    │ 
 21 │   print (show x)
@@ -9,6 +9,6 @@ recursive03.ml[20:5 ..20:23]: error (E2018)
     in all of their bindings.
 
    │ 
-20 │ let foo (x : 'a) : unit =
-   │     ^^^^^^^^^^^^^^^^^^^
+20 │ let rec foo (x : 'a) : unit =
+   │         ^^^^^^^^^^^^^^^^^^^
    This binding should have had a complete type signature.
