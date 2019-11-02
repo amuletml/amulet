@@ -1,1 +1,22 @@
-Resolver: LetOpenStruct
+While `let open` can be used to bring existing modules into scope, it
+cannot be used to declare new modules. Instead, lift the module to the
+top-level. For instance
+
+    let y =
+      let open begin let x = 0 end
+      x
+
+Can be safely converted into:
+
+
+    module M = let x = 0
+    let y =
+      let open M
+      x
+
+
+
+Note, there is no theoretical reason for this limitation. However, such
+modules may reference locally bound type variables or other names, which
+make compilation much harder. This limitation will be lifted in the
+future.

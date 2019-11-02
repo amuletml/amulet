@@ -1,1 +1,19 @@
-Resolver: UnresolvedImport
+The file you are trying to import cannot be found.
+
+Amulet supports two kinds of imports, make sure you are using the correct
+one:
+
+ - If an import starts with "../" or "./", it will be resolved relative
+   to the current file. This should be used for referencing files within
+   the same project.
+
+   In this case, make sure the file name is spelled correctly, and that
+   the relative path is correct.
+
+ - Otherwise, Amulet will attempt to load from the library path. This
+   style of import should be used when trying to access external
+   libraries.
+
+   The default library path will only include Amulet's standard
+   library. If you need to add external libraries, you can add them to
+   the path with --lib.

@@ -1,1 +1,14 @@
-Resolver: IllegalMethod
+Let bindings within class instances have slightly different behaviour to
+let bindings on the top-level of a program. Every binding must declare a
+single method and so cannot be composed of a pattern.
+
+Instead of writing the following:
+
+    instance applicative list
+      let (pure, (<*>)) = (List.pure, List.( <*> ))
+
+You should write each binding separately:
+
+    instance applicative list
+      let pure = List.pure
+      let (<*>) = List.( <*> )

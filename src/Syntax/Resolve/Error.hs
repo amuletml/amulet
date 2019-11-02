@@ -111,7 +111,7 @@ instance Note ResolveError Style where
   noteId Ambiguous{}          = Just 1002
   noteId NonLinearPattern{}   = Just 1003
   noteId NonLinearRecord{}    = Just 1004
-  noteId EmptyBegin{}         = Just 1006
+  noteId EmptyBegin{}         = Nothing
   noteId IllegalMethod{}      = Just 1007
   noteId LastStmtNotExpr{}    = Just 1008
   noteId LetOpenStruct{}      = Just 1009

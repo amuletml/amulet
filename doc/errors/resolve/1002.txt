@@ -1,1 +1,14 @@
-Resolver: Ambiguous
+Amulet allows you to declare multiple variables with the same name at the
+same time. However, if you try to use such a variable, the compiler does
+not know which variable you wanted to use, and so will spit out an error.
+
+    let x = 0 and x = 1
+    x (* Does this mean 0 or 1? *)
+
+The solution is to rename the variables to all be something different. If
+you don't need a variable at all, you can replace it with an underscore
+(`_`):
+
+
+    let x = 0 and _ = 1
+    x (* x is definitely 0 *)

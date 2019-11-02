@@ -13,7 +13,6 @@ resolve/1001.txt Resolver: NotInScope
 resolve/1002.txt Resolver: Ambiguous
 resolve/1003.txt Resolver: NonLinearPattern
 resolve/1004.txt Resolver: NonLinearRecord
-resolve/1006.txt Resolver: EmptyBegin
 resolve/1007.txt Resolver: IllegalMethod
 resolve/1008.txt Resolver: LastStmtNotExpr
 resolve/1009.txt Resolver: LetOpenStruct
