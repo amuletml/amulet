@@ -1,1 +1,13 @@
-Verify: MatchToLet
+If you have a `match` expression with a single clause, you can rewrite it
+as a pattern-matching let expression instead. This reduces indentation,
+and should make your code easier to read.
+
+For instance this expression
+
+    match f () with
+    | (a, b) -> a + b
+
+may be converted into the simpler
+
+    let (a, b) = f ()
+    a + b

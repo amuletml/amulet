@@ -46,10 +46,11 @@ instance Pretty WhyRedundant where
 data VerifyError
   -- | Recursive binding groups which cannot be evaluated, as they depend
   -- on themselves.
-  = NonRecursiveRhs { why :: SomeReason
-                    , var :: Var Typed
-                    , unguarded :: [Var Typed]
-                    }
+  = MalformedRecursiveRhs
+    { why :: SomeReason
+    , var :: Var Typed
+    , unguarded :: [Var Typed]
+    }
   -- | Unused local variables
   | DefinedUnused BindingSite
   -- | Malformed foreign declarations
@@ -74,7 +75,7 @@ data VerifyError
 
 
 instance Spanned VerifyError where
-  annotation (NonRecursiveRhs e _ _) = annotation e
+  annotation (MalformedRecursiveRhs e _ _) = annotation e
   annotation (DefinedUnused b) = boundWhere b
   annotation (ParseErrorInForeign _ e) = annotation e
   annotation (LazyLet e _) = annotation e
@@ -85,7 +86,7 @@ instance Spanned VerifyError where
   annotation (ToplevelRefBinding (BindingSite _ s _)) = annotation s
 
 instance Pretty VerifyError where
-  pretty (NonRecursiveRhs re ex xs) =
+  pretty (MalformedRecursiveRhs re ex xs) =
     vsep [ "Invalid recursive right-hand side for variable" <+> skeyword (pretty ex)
          , if null xs
               then empty
@@ -131,7 +132,7 @@ instance Pretty VerifyError where
 
 
 instance Note VerifyError Style where
-  diagnosticKind NonRecursiveRhs{} = ErrorMessage
+  diagnosticKind MalformedRecursiveRhs{} = ErrorMessage
   diagnosticKind ParseErrorInForeign{} = WarningMessage
   diagnosticKind DefinedUnused{} = WarningMessage
   diagnosticKind LazyLet{} = WarningMessage
@@ -159,7 +160,7 @@ instance Note VerifyError Style where
       , indent 2 "will be evaluated lazily, but" <+> (if length bs == 1 then "this" else "these")
           <+> "binding" <> if length bs == 1 then "" else "s"
       , f (fmap annotation bs)
-      , indent 2 "are" <+> (Right <$> highlight "strict.")
+      , indent 2 (if length bs == 1 then "is" else "are") <+> (Right <$> highlight "strict.")
       , indent 2 $ bullet "Note: if this is what you want, use" <+> (Right <$> keyword "lazy") <+> "explicitly"
       , indent 6 "to silence this warning."
       ]
@@ -189,7 +190,7 @@ instance Note VerifyError Style where
 
   formatNote f x = indent 2 (Right <$> pretty x) <#> f [annotation x]
 
-  noteId NonRecursiveRhs{}     = Just 3001
+  noteId MalformedRecursiveRhs{}     = Just 3001
   noteId DefinedUnused{}       = Just 3002
   noteId ParseErrorInForeign{} = Just 3003
   noteId LazyLet{}             = Just 3004
