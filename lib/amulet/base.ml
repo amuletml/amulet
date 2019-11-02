@@ -19,10 +19,10 @@ external val (>=.) : float -> float -> bool = "function (x, y) return x >= y end
 
 (* Boolean operators: *)
 let a || b =
-  if a then true else b
+  if a then true else force b
 
 let a && b =
-  if a then b else false
+  if a then force b else false
 
 let not a = if a then false else true
 
