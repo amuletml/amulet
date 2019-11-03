@@ -1,11 +1,17 @@
+{-# LANGUAGE FlexibleContexts, GADTs, TupleSections #-}
 module Types.Infer.Errors where
 --
 import Control.Monad.Infer
 import Control.Lens
 
+import qualified Data.Set as Set
+import Data.Maybe
+
 import {-# SOURCE #-} Types.Holes
 
 import Syntax.Transform
+import Syntax.Builtin
+import Syntax.Types
 import Syntax.Subst
 import Syntax
 
@@ -82,3 +88,45 @@ foundHole env ann hole ht sub =
     unskolemise _ x = x
 
     hole_t = transformType (unskolemise TySkol) (apply sub ht)
+
+unsatClassCon :: (MonadReader Env m, Reasonable f p)
+              => f p
+              -> Constraint Typed
+              -> WhyUnsat
+              -> m TypeError
+unsatClassCon why con@(ConImplicit _ _ _ (TyApps (TyCon clss_tc) args)) unsat | clss_tc /= tyEqName =
+  do
+    scope_ts <- view tySyms
+    class_info <- view (classDecs . at clss_tc . non (error "unsatClassCon: TyCon{} class with no info in scope"))
+    let dropped = can_drop (class_info ^. ciFundep)
+        relevant_args = map snd . filter (flip Set.notMember dropped . fst) . zip [0..] $ args
+        tfs = mapMaybe (isTf_app scope_ts) relevant_args
+        notes = foldMap mkNote (Set.toList (Set.fromList tfs))
+
+    pure (appEndo notes (ArisingFrom (UnsatClassCon (BecauseOf why) con unsat) (BecauseOf why)))
+  where
+    isTf ts t =
+      case ts ^. at t of
+        Just TyFamInfo{ _tsConstraint = x } -> Just (isJust x)
+        _ -> Nothing
+
+    isTf_app ts (TyApps (TyCon v) _) = (, v) <$> isTf ts v
+    isTf_app _ _ = Nothing
+
+    can_drop fd =
+      case fd of
+        [] -> mempty
+        (f:fds) -> foldr (Set.intersection . fd_det) (fd_det f) fds
+      where fd_det (_, x, _) = Set.fromList x
+
+    mkNote :: (Bool, Var Typed) -> Endo TypeError
+    mkNote ~(is_assoc, v) = Endo $ \x ->
+      let what =
+            if is_assoc
+               then string "an" <+> keyword "associated type"
+               else string "a" <+> keyword "type function"
+       in Note x
+            (displayType (TyCon v :: Type Typed)
+              <+> string "is" <+> what <> string ", and so may not be injective")
+
+unsatClassCon why con unsat = pure (UnsatClassCon (BecauseOf why) con unsat)

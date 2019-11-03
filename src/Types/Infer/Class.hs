@@ -43,6 +43,7 @@ import Syntax
 import {-# SOURCE #-} Types.Infer
 import Types.Infer.Function
 import Types.Infer.Builtin
+import Types.Infer.Errors
 import Types.Infer.Let
 import Types.Kinds
 import Types.Unify
@@ -165,8 +166,8 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
 
   (_, _, cs) <- solveFixpoint (BecauseOf clss) (fmap (moreScope scope) cs) =<< getSolveInfo
   unless (null cs) $
-    confesses (UnsatClassCon (BecauseOf clss) (head cs)
-                (GivenContextNotEnough (fromMaybe (TyCon tyUnitName) ctx)))
+    confesses =<<
+      unsatClassCon clss (head cs) (GivenContextNotEnough (fromMaybe (TyCon tyUnitName) ctx))
 
   local (names %~ focus (one name k <> mk_scope params <> assocty_tele)) $ do
     -- Infer the types for every method
@@ -204,7 +205,7 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
 
       unless (null cons) $ do
         let (c@(ConImplicit reason _ _ _):_) = reverse cons
-        confesses (addBlame reason (UnsatClassCon reason c (BadDefault method sig)))
+        confesses =<< unsatClassCon (Const reason) c (BadDefault method sig)
 
       pure (Map.singleton (nameName method) exp)
 
@@ -427,8 +428,7 @@ inferInstance inst@(Instance clss ctx instHead bindings we'reDeriving ann) = con
       exp <- pure (deSkolFreeTy exp)
 
       unless (Seq.null cs) $
-        confesses (addBlame (BecauseOf bind)
-                    (UnsatClassCon (BecauseOf bind) (cs `Seq.index` 0) (InstanceMethod ctx)))
+        confesses =<< unsatClassCon bind (cs `Seq.index` 0) (InstanceMethod ctx)
 
       ax <- genName
       con <- genName
@@ -489,7 +489,7 @@ inferInstance inst@(Instance clss ctx instHead bindings we'reDeriving ann) = con
 
         unless (null cons) $ do
           let (c@(ConImplicit reason _ _ _):_) = reverse cons
-          dictates (addBlame reason (UnsatClassCon reason c (InstanceMethod ctx)))
+          dictates =<< unsatClassCon (Const reason) c (InstanceMethod ctx)
 
         let fakeExp =
               App (appArg instSub bindGroupTy (VarRef v' (an, bindGroupTy)))
@@ -537,7 +537,7 @@ inferInstance inst@(Instance clss ctx instHead bindings we'reDeriving ann) = con
 
     unless (null cons) $ do
       let (c@(ConImplicit reason _ _ _):_) = reverse cons
-      dictates (addBlame reason (UnsatClassCon reason c (InstanceMethod ctx)))
+      dictates =<< unsatClassCon (Const reason) c (InstanceMethod ctx)
 
     capture <- genName
     let shove cs (ExprWrapper w e a) = ExprWrapper w (shove cs e) a
@@ -576,8 +576,7 @@ inferInstance inst@(Instance clss ctx instHead bindings we'reDeriving ann) = con
       solveFixpoint (BecauseOf inst) cs =<< getSolveInfo
 
   unless (null unsolved) $
-    dictates (addBlame (BecauseOf inst)
-      (UnsatClassCon (BecauseOf inst) (head unsolved) (InstanceClassCon classAnn)))
+    dictates =<< unsatClassCon inst (head unsolved) (InstanceClassCon classAnn)
 
   let inside = case whatDo of
         [(_, _)] -> solveEx mempty solution needed (fields ^. to head . fExpr)
@@ -731,7 +730,7 @@ reduceClassContext extra annot cons = do
   for_ stillNeeded $ \(var, ty, reason) -> do
     c <- tooConcrete ty
     when c $
-      confesses (addBlame reason (UnsatClassCon reason (ConImplicit reason scope var ty) (TooConcrete ty)))
+      confesses =<< unsatClassCon (Const reason) (ConImplicit reason scope var ty) (TooConcrete ty)
 
   pure (addCtx stillNeeded' . apply substitution, wrap, stillNeeded', substitution)
 

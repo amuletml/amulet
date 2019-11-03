@@ -262,7 +262,7 @@ resolveTyFunDeclKind reason name arguments kindsig equations = do
      (sub, _, cons) <- solveFixpoint reason cs =<< getSolveInfo
 
      unless (null cons) $ do
-       confesses (UnsatClassCon reason (head cons) (GivenContextNotEnough tyUnit))
+       confesses =<< unsatClassCon (Const reason) (head cons) (GivenContextNotEnough tyUnit)
 
      pure ( apply sub kind
           , map (\(TyFunClause lhs rhs (ann, kind)) -> TyFunClause (apply sub lhs) (apply sub rhs) (ann, apply sub kind)) equations

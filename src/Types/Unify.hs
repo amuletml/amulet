@@ -1,6 +1,6 @@
 {-# LANGUAGE MultiWayIf, FlexibleContexts, ScopedTypeVariables,
    ViewPatterns, ConstraintKinds, CPP, TypeFamilies, OverloadedStrings,
-   DisambiguateRecordFields #-}
+   DisambiguateRecordFields, TypeApplications #-}
 
 -- | This module implements the logic responsible for solving the
 -- sequence of @Constraint@s the type-checker generates for a particular
@@ -225,16 +225,20 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do -- {{{
   traceM TopS (keyword "[W]:" <+> pretty (apply sub ohno))
 
   let possible = lookup cons scope'
-  traceM TopS ("considering between: " <+> hsep (map (pretty . view implType) possible))
+  traceM TopS ("considering between:" <#> vsep (map (indent 2 . pretty . view implType) possible))
 
   ignored <- freshTV
+  isMagic <- isMagicClass cons
 
   case possible of
     xs | allSameHead xs
        , concreteUnderOne cons || hasExactMatch cons xs
        , applic <- filter (applicable cons scope') xs
-       , not (null applic) -> do
-      let imp = pickBestPossible applic
+       , not (null applic)
+       , let imp = pickBestPossible applic
+       , trace TopS (shown (imp ^. implVar, isSuper imp)) True
+       , not isMagic || not (isSuper imp) 
+       -> do
 
       traceM TopS ("best possible:" <+> pretty var <+> pretty (imp ^. implVar) <+> pretty (imp ^. implType))
 
@@ -756,5 +760,18 @@ reblame_con r = map go where
   go (ConImplicit _ a b c) = ConImplicit r a b c
   go x@ConFail{} = x
   go x@DeferredError{} = x
+
+isMagicClass :: forall m. MonadSolve m => Type Typed -> m Bool
+isMagicClass (TyApps (TyCon v) _) =
+  case magicClass @m v of
+    Just{} -> pure True
+    _ -> pure False
+
+isMagicClass _ = pure False
+
+isSuper :: Implicit info p -> Bool
+isSuper i = (i ^. implSort) == Superclass || any isImplic (i ^. implPre) where
+  isImplic Implication{} = True
+  isImplic _ = False
 
 -- vim: fdm=marker
