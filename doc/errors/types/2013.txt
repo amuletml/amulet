@@ -1,1 +1,1 @@
-TC: PatternRecursive
+Pattern bindings can not be used in a 'let rec'.

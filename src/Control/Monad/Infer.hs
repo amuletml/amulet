@@ -886,11 +886,11 @@ instance Note TypeError Style where
   noteId EscapedSkolems{}     = Just 2008
   noteId SkolBinding{}        = Just 2009
 
-  noteId NoOverlap{}          = Just 2010
+  noteId NoOverlap{}          = Nothing
 
   noteId CanNotInstance{}     = Just 2011
 
-  noteId Malformed{}          = Just 2012
+  noteId Malformed{}          = Nothing
 
   noteId PatternRecursive{}   = Just 2013
   noteId DeadBranch{}         = Just 2014

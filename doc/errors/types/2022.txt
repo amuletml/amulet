@@ -1,1 +1,1 @@
-TC: UndefinedMethods
+This instance declaration is missing some methods.

@@ -1,1 +1,25 @@
-TC: Overlap
+These two instance declarations are both valid choices for a particular
+instantiation, and any choice between them would be arbitrary and depend
+on implementation details of the compiler. Thus, the second instance is
+flagged as an error.
+
+Example:
+
+    class foo 'a begin
+      val x : 'a -> string
+    end
+
+    instance foo int begin
+      let x _ = "foo"
+    end
+
+    instance foo int begin
+      let x _ = "bar"
+    end
+
+
+    put_line (x 123)
+
+Here, either instance could be selected, and the runtime behaviour of
+the program would depend on what instance the compiler decided to pick,
+so the program is rejected.

@@ -1,1 +1,23 @@
-TC: AmbiguousMethodTy
+This method signature has an ambiguous type, i.e. it doesn't mention
+some of the variables bound by the class head.
+
+Class methods have to mention at least a subset of the variables bound
+by the class head, with the condition that the subset is enough to
+determine all of the other bound variables via functional dependencies.
+For example:
+
+
+    class foo 'a 'b begin
+      val x : unit -> 'a
+    end
+
+The type of x is ambiguous since it only mentions `'a`, and that's not
+enough to determine `'b`.
+
+    class bar 'a 'b | 'a -> 'b begin
+      val y : unit -> 'a
+    end
+
+Here, the type of y is the same as that of x, but it is not ambiguous
+for the class `bar` since knowing the instantiation of `'a` is enough to
+figure out the instantiation of `'b`.

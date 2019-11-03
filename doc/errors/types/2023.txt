@@ -1,1 +1,2 @@
-TC: UndefinedTyFam
+This instance declaration is missing a declaration for an associated
+type.

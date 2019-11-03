@@ -1,1 +1,5 @@
-TC: ImpredicativeApp
+A polymorphic type (`forall 'a. ...`, `forall 'a -> ...`, or `p => ...`)
+was used as an argument to a type constructor in a context where
+impredicativity is disallowed.
+
+Currently, this only happens in instance heads.

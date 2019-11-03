@@ -1,1 +1,23 @@
-TC: UnsatClassCon
+The body of this binding gave rise to constraints which Amulet could not
+quantify over.
+
+Amulet can not quantify over constraints in these situations:
+
+  * The binding is not a function: Adding a constraint would turn it
+    into a function, thus changing the performance characteristics of
+    the program
+
+  * The binding is a pattern binding: Any choice of instantiation for an
+    unsatisfied constraint in a pattern binding body would be arbitrary
+    and thus the behaviour of the program would depend on type-checking
+    internals
+
+  * The unsatisfiable constraint is in an instance method or default
+    method: add the solution to the class context, instance context, or
+    context of the method's type
+
+  * The binding has a type signature and the constraint could not be
+    deduced from that context: add it to the context
+
+  * The constraint is "too concrete", and an instance can not possibly
+    be added because of the orphan check

@@ -1,1 +1,9 @@
-TC: InvalidContext
+None of these are valid in a class/instance context, unless under an
+application to a type constructor:
+
+  * Record types
+  * Type variables
+  * Lifted tuple types
+  * The 'type' type
+  * Type-level literals
+  * Function types

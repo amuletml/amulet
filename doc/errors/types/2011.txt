@@ -1,1 +1,9 @@
-TC: CanNotInstance
+The "hole" in a polymorphic record type can only be instanced with
+another record type. For example, this is illegal, because the type
+variable `'a` is used in a polymorphic record but is later instantiated
+to be an integer.
+
+    let foo : forall 'a. 'a -> { 'a | x : int } -> int =
+      fun _ r -> r.x
+
+    foo 123 { x = 1 }

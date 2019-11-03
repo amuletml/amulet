@@ -28,9 +28,7 @@ types/2005.txt TC: FoundHole
 types/2006.txt TC: ImpredicativeApp
 types/2008.txt TC: EscapedSkolems
 types/2009.txt TC: SkolBinding
-types/2010.txt TC: NoOverlap
 types/2011.txt TC: CanNotInstance
-types/2012.txt TC: Malformed
 types/2013.txt TC: PatternRecursive
 types/2014.txt TC: DeadBranch
 types/2015.txt TC: AmbiguousType

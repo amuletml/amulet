@@ -1,1 +1,10 @@
-TC: MagicInstance
+An attempt was made to write an instance of one of the following magic
+classes:
+
+  * Amc.row_cons
+  * Amc.known_int
+  * Amc.known_string
+  * typeable
+
+The first three are solved "magically" by the compiler, and the latter
+can have instances declared with `deriving instance typeable foo`.
