@@ -1,4 +1,4 @@
-tyfun02-fail.ml[11:16 ..12:10]: error
+tyfun02-fail.ml[11:5 ..11:49]: error
    │ 
 14 │   | _ -> Xs
    │          ^^

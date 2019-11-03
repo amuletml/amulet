@@ -1,10 +1,14 @@
-class07.ml[9:9 ..9:32]: error
+class07.ml[9:9 ..9:32]: warning
   │ 
 9 │ let foo x = show (read (show x))
   │         ^^^^^^^^^^^^^^^^^^^^^^^^
-  Ambiguous type for value foo
-
+  Ambiguous type for value foo:
     show 'a * read 'a * show 'dw => 'dw -> string
-
-  • Note: The variable a appears in a constraint,
-      but not in the consequent of the type
+  The variable a is ambiguous
+class07.ml[9:5 ..9:7]: warning
+  │ 
+9 │ let foo x = show (read (show x))
+  │     ^^^
+  Ambiguous type for value foo:
+    show 'b * read 'b * show 'a => 'a -> string
+  The variable b is ambiguous

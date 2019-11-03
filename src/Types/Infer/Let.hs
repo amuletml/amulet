@@ -30,6 +30,7 @@ import Syntax
 import Types.Infer.Pattern
 import Types.Infer.Builtin
 import Types.Infer.Outline
+import Types.Infer.Errors
 import Types.Wellformed
 import Types.Kinds
 import Types.Unify
@@ -75,11 +76,10 @@ inferLetTy closeOver strategy vs =
 
               when (not (null needed) && not canAdd) $
                 let fakeCon = ConImplicit (head needed ^. _3) undefined (fst blame) (head needed ^. _2)
-                 in confesses . addBlame (snd blame) $
-                   UnsatClassCon (snd blame) fakeCon (GivenContextNotEnough (getTypeContext ty))
+                 in confesses =<< unsatClassCon (Const (snd blame)) fakeCon (GivenContextNotEnough (getTypeContext ty))
 
               when (not (isFn ex) && not (null cons)) $
-                confesses (addBlame (snd blame) (UnsatClassCon (snd blame) (head cons) NotAFun))
+                confesses =<< unsatClassCon (Const (snd blame)) (head cons) NotAFun
 
               pure ( context
                    , wrapper
@@ -117,7 +117,6 @@ inferLetTy closeOver strategy vs =
               _ <- unify (becauseExp exp) ty (snd tv)
               pure (exp', ty, True)
             ex -> do
-              checkAmbiguous var (becauseExp exp) ty
               let exp' (Ascription e _ _) = exp' e
                   exp' e = e
               exp <- check (exp' exp) ty
@@ -150,7 +149,7 @@ inferLetTy closeOver strategy vs =
         case strategy of
           Fail ->
             when (cons /= []) $
-              confesses (ArisingFrom (UnsatClassCon (BecauseOf b) (head cons) PatBinding) (BecauseOf b))
+              confesses =<< unsatClassCon b (head cons) PatBinding
           Propagate -> tell (Seq.fromList cons)
 
         tel' <- traverseTele (const solved) tel
@@ -174,7 +173,6 @@ inferLetTy closeOver strategy vs =
                 _ <- unify (becauseExp exp) ty tyvar
                 pure (Binding var exp' True (ann, ty), ty)
               _ -> do
-                checkAmbiguous var (becauseExp exp) tyvar
                 let exp' (Ascription e _ _) = exp' e
                     exp' e = e
                 exp <- check (exp' exp) tyvar
@@ -205,8 +203,7 @@ inferLetTy closeOver strategy vs =
              when (any (/= Guessed) origins || all (== Supplied) origins) $ do
                let Just reason = fst <$>
                      find ((/= Guessed) . snd) (zip vars origins)
-                   blame = BecauseOf reason
-               confesses $ ArisingFrom (UnsatClassCon blame (head cons) RecursiveDeduced) blame
+               confesses =<< unsatClassCon reason (head cons) RecursiveDeduced
 
              recVar <- genName
              innerNames <- fmap Map.fromList . for tvs $ \(v, _) ->
@@ -343,11 +340,11 @@ checkAmbiguous :: forall m. ( MonadChronicles TypeError m
                             , MonadReader Env m
                             )
                => Var Typed -> SomeReason -> Type Typed -> m ()
-checkAmbiguous var exp tau = go mempty mempty tau where
-  go :: Set.Set (Var Typed) -> Set.Set (Var Typed) -> Type Typed -> m ()
-  go ok s (TyPi (Invisible v _ Req) t) = go (Set.insert v ok) s t
-  go ok s (TyPi Invisible{} t) = go ok s t
-  go ok s (TyPi (Implicit v) t)
+checkAmbiguous var exp tau = go mempty mempty mempty tau where
+  go :: Set.Set (Var Typed) -> Set.Set (Var Typed) -> Set.Set (Var Typed) -> Type Typed -> m ()
+  go ok s tfs (TyPi (Invisible v _ Req) t) = go (Set.insert v ok) s tfs t
+  go ok s tfs(TyPi Invisible{} t) = go ok s tfs t
+  go ok s tfs (TyPi (Implicit v) t)
     | (TyCon clss:args) <- appsView v = do
         ci <- view (classDecs . at clss)
         case ci of
@@ -355,16 +352,57 @@ checkAmbiguous var exp tau = go mempty mempty tau where
             let fds = ci ^. ciFundep
                 det (_, x, _) = x
                 fundep_ok = foldMap (ftv . (args !!)) (foldMap det fds)
-             in go (ok <> fundep_ok) (s <> ftv v) t
-          Nothing -> go ok (s <> ftv v) t
-    | TyTuple a b <- v = go ok s (TyPi (Implicit a) (TyPi (Implicit b) t))
-    | otherwise = go ok (s <> ftv v) t
-  go ok s t =
-    if not (Set.null (s Set.\\ (fv <> ok)))
-       then confesses (addBlame exp (AmbiguousType var tau (s Set.\\ (fv <> ok))))
+             in go (ok <> fundep_ok) (s <> ftv v) tfs t
+          Nothing -> go ok (s <> ftv v) tfs t
+    | TyTuple a b <- v = go ok s tfs (TyPi (Implicit a) (TyPi (Implicit b) t))
+    | otherwise = go ok (s <> ftv v) tfs t
+
+  go ok s tfs (TyPi (Anon dom) cod) = do
+    scope <- view tySyms
+
+    let (no_can_do, tfs') =
+          foldMapOf cosmos fv_under_tf dom
+
+        fv_under_tf (TyApps (TyCon v) apps)
+          | v `Map.member` scope = (ftv apps, Set.singleton v)
+          | otherwise = mempty
+        fv_under_tf _ = mempty
+
+        ok_fvs = fv `Set.difference` no_can_do
+    go (ok <> ok_fvs) s (tfs <> tfs') cod
+    where fv = ftv dom
+
+  go ok s tfs t = do
+    scope <- view tySyms
+
+    let (no_can_do, tfs') =
+          foldMapOf cosmos fv_under_tf t
+
+        fv_under_tf (TyApps (TyCon v) apps)
+          | v `Map.member` scope = (ftv apps, Set.singleton v)
+          | otherwise = mempty
+        fv_under_tf _ = mempty
+
+        ok_fvs = fv `Set.difference` no_can_do
+
+    if not (Set.null (s Set.\\ (ok_fvs <> ok)))
+       then dictates (addBlame exp (note_tfs scope (Set.toList (tfs <> tfs'))
+                        (AmbiguousType var tau (s Set.\\ (ok_fvs <> ok)))))
        else pure ()
     where fv = ftv t
 
+  note_tfs :: Map.Map (Var Typed) TySymInfo -> [Var Typed] -> TypeError -> TypeError
+  note_tfs scope (v:vs) e =
+    Note (note_tfs scope vs e) $
+      case scope ^. at v of
+        Just TyFamInfo { _tsConstraint = Just _ } ->
+          displayType (TyCon v :: Type Typed)
+            <+> string "is an" <+> keyword "associated type" <> string ", and so may not be injective"
+        Just TyFamInfo{} ->
+          displayType (TyCon v :: Type Typed)
+            <+> string "is a" <+> keyword "type function" <> string ", and so may not be injective"
+        _ -> undefined
+  note_tfs _ [] e = e
 
 
 rename :: Type Typed -> (Type Typed, Subst Typed)

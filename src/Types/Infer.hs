@@ -46,6 +46,7 @@ import Types.Kinds
 import Types.Unify
 
 import Text.Pretty.Semantic
+import Text.Pretty.Note
 
 import Types.Unify.Trace
 
@@ -363,13 +364,14 @@ inferProg (stmt@(LetStmt re am ns):prg) = censor (const mempty) $ do
   (ts, es) <- flip foldTeleM ts $ \var ty -> do
     ty <- memento $ skolCheck var (BecauseOf stmt) ty
     case ty of
-      Left e -> pure (mempty, [e])
+      Left e -> pure (mempty, e)
       Right t -> do
         t <- expandType t
         pure (one var t, mempty)
-  case es of
-    [] -> pure ()
-    xs -> confess (mconcat xs)
+
+  if Seq.null es
+     then pure ()
+     else confess (Seq.filter ((/= WarningMessage) . diagnosticKind) es)
 
   local (letBound %~ Set.union bvs) . local (names %~ focus ts) $
     consFst (LetStmt re am ns') $
