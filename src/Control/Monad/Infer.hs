@@ -440,18 +440,16 @@ instance Pretty TypeError where
          whatIs t = string "the type" <+> displayType (withoutSkol t)
 
   pretty (AmbiguousType v t (Set.toList -> vs)) =
-    vsep [ "Ambiguous type for value" <+> stypeSkol (pretty v)
-         , empty
+    vsep [ "Ambiguous type for value" <+> stypeSkol (pretty v) <> char ':'
          , indent 2 $ displayType t
-         , empty
-         , bullet "Note:" <+> vars <+> "appears in a constraint,"
-         , indent 4 "but not in the consequent of the type"
+         , vars
          ]
     where
       vars = case vs of
-        [x] -> "The variable" <+> stypeSkol (pretty x)
+        [x] -> "The variable" <+> stypeSkol (pretty x) <+> "is ambiguous"
         xs -> "The variables"
                 <+> hsep (punctuate comma (map (stypeSkol . pretty) xs))
+                <+> "are ambiguous"
 
   pretty (AmbiguousMethodTy v _ (Set.toList -> vs)) =
     vsep [ "Ambiguous type for method" <+> stypeSkol (pretty v)
@@ -621,9 +619,11 @@ instance Spanned TypeError where
 
 instance Note TypeError Style where
   diagnosticKind (ArisingFrom e _) = diagnosticKind e
+  diagnosticKind (Note e _) = diagnosticKind e
   diagnosticKind (Overlap (Overeq True) _ _ _) = WarningMessage
   diagnosticKind DeadBranch{} = WarningMessage
   diagnosticKind MightNotTerminate{} = WarningMessage
+  diagnosticKind AmbiguousType{} = WarningMessage
   diagnosticKind WarningError{} = ErrorMessage
   diagnosticKind _ = ErrorMessage
 
@@ -863,6 +863,12 @@ instance Note TypeError Style where
         [] -> undefined
         [x] -> "variable" <+> skeyword (pretty x)
         xs -> "variables" <+> hsep (map (skeyword . pretty) xs)
+
+  formatNote f (ArisingFrom (Note x p) r) =
+    vsep [ formatNote f (ArisingFrom x r)
+         , indent 2 (Right <$> note p) ]
+    where
+      note x = bullet "Note:" <+> pretty x
 
   formatNote f x = f [annotation x] <#> indent 2 (Right <$> pretty x)
 

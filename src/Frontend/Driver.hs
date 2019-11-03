@@ -72,6 +72,7 @@ import qualified Data.Text as T
 import qualified Data.Set as Set
 import Data.Position
 import Data.Foldable
+import Data.Function
 import Data.Functor
 import Data.Monoid
 import Data.Maybe
@@ -146,8 +147,14 @@ data LoadedFile = LoadedFile
   , fileSource   :: SourceName
   , fileVar      :: Name
 
-  , fileHash    :: BS.ByteString
-  , _fileClock   :: Clock
+  , fileHash        :: BS.ByteString -- ^ A SHA256 hash of this file's contents
+
+  -- | The time this file was last loaded. This must be greater or equal
+  -- to any of its dependencies.
+  , fileLoadClock   :: Clock
+  -- | The time this file was last checked for changes. This is used as a
+  -- mechanism to prevent checking every time.
+  , _fileCheckClock :: Clock
 
   -- | Files upon which this one depends.
   , _dependencies :: Set.Set FilePath
@@ -421,9 +428,13 @@ verifyProg v env inferred =
 -- | Get a file, reloading from disk if the cache state has changed.
 getFile :: forall m. (MonadNamey m, MonadState Driver m, MonadIO m)
         => FilePath -> m (Maybe LoadedFile)
-getFile = fmap (fmap fst) . reloadFile where
-  -- | Get or reload a file, returning it and whether it changed.
-  reloadFile :: FilePath -> m (Maybe (LoadedFile, Bool))
+getFile = reloadFile where
+  -- | Get or reload a file, returning it.
+  --
+  -- Note, the file's check clock should be its previous one in the event
+  -- the file did not change. The file within the Driver state will be
+  -- updated to have the latest time.
+  reloadFile :: FilePath -> m (Maybe LoadedFile)
   reloadFile path = do
     file <- use (files . at path)
     clock <- use clock
@@ -436,17 +447,18 @@ getFile = fmap (fmap fst) . reloadFile where
             -- File isn't in cache: add it.
             name <- liftIO $ makeRelativeToCurrentDirectory path
             var <- genNameFrom (T.pack ("\"" ++ name ++ "\""))
-            Just . (,True) <$> addFile path name var sha contents
+            Just <$> addFile path name var sha contents
 
       Just file
-        | file ^. fileClock == clock -> pure (Just (file, False))
+        -- We've already checked this tick, don't do anything.
+        | file ^. fileCheckClock == clock -> pure (Just file)
 
         | SEmitted{} <- file ^. stage
-        , cTock (file ^. fileClock) == cTock clock ->
+        , cTock (file ^. fileCheckClock) == cTock clock ->
             -- If we've emitted the file, and we're on the same major tick, then
             -- it's not safe to recompile - we don't want to break any REPL
             -- state. So just update the clock.
-            updateFile path (fileClock .~ clock) $> (Just (file, False))
+            updateFile path (fileCheckClock .~ clock) $> (Just file)
 
         | otherwise -> do
           contents <- read path
@@ -457,15 +469,17 @@ getFile = fmap (fmap fst) . reloadFile where
             Just (sha, contents)
               | sha /= fileHash file ->
                 -- If it's been updated on disk, just reload it immediately.
-                Just . (,True) <$> addFile path (fileSource file) (fileVar file) sha contents
+                Just <$> addFile path (fileSource file) (fileVar file) sha contents
               | otherwise -> do
-                -- Otherwise check each dependency. We update the clock
-                -- beforehand, to avoid getting into any dependency loops.
-                updateFile path (fileClock .~ clock)
-                Any changed <- foldMapM (fmap (Any . maybe True snd) . reloadFile) (file ^. dependencies)
+                -- Otherwise check each dependency. We update the clock beforehand, to
+                -- avoid getting into any dependency loops.
+                updateFile path (fileCheckClock .~ clock)
+                -- If this file has been loaded before its dependency, then the dependency
+                -- was loaded on a later clock tick, and so we're out of date.
+                Any changed <- foldMapM (fmap (Any . maybe True (on (<) fileLoadClock file)) . reloadFile) (file ^. dependencies)
                 if changed
-                then Just . (,True) <$> addFile path (fileSource file) (fileVar file) sha contents
-                else pure (Just (file, False))
+                then Just <$> addFile path (fileSource file) (fileVar file) sha contents
+                else pure (Just file)
 
   read :: FilePath -> m (Maybe (BS.ByteString, BSL.ByteString))
   read path = do
@@ -483,8 +497,9 @@ getFile = fmap (fmap fst) . reloadFile where
           , fileSource   = name
           , fileVar      = var
 
-          , fileHash    = hash
-          , _fileClock   = clock
+          , fileHash        = hash
+          , fileLoadClock   = clock
+          , _fileCheckClock = clock
 
           , _dependencies = mempty
           , _dependent = Nothing

@@ -1,4 +1,4 @@
-soundness.ml[22:10 ..22:80]: error (E2018)
+soundness.ml[22:5 ..22:58]: error (E2018)
    │ 
 22 │ let no : forall 'a 'b. trivial :- (discrim 'a 'b ~ string) = Sub (fun _ -> Dict)
    │                                                                            ^^^^
