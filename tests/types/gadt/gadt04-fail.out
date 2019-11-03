@@ -1,4 +1,4 @@
-gadt04-fail.ml[2:5 ..2:26]: error (E2012)
+gadt04-fail.ml[2:5 ..2:26]: error 
   │ 
 2 │   | MkT : int * (int -> t)
   │     ^^^^^^^^^^^^^^^^^^^^^^

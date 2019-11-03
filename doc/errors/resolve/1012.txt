@@ -1,1 +1,13 @@
-Resolver: TFClauseWrongHead
+The clauses of type functions all need to have the type function being
+declared itself as the head of the application. That is, the following
+is legal:
+
+    type function f 'a 'b 'c begin
+      f 'a 'b 'c = ()
+    end
+
+But the following is not:
+
+    type function f 'a 'b 'c begin
+      g 'a 'b 'c = ()
+    end

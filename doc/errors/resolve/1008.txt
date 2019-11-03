@@ -1,1 +1,38 @@
-Resolver: LastStmtNotExpr
+Because of how `begin` expressions are desugared, the last statement in
+the block needs to be an expression.
+
+The desugaring of `begin` blocks is described by the following rules:
+
+1. A 'with' binding is turned into a use of the monadic (>>=) operator:
+
+    begin
+      with p <- e;
+      ...
+    end
+    (* => *)
+    e >>= fun p -> begin ... end
+
+2. A 'let' statement is turned into a 'let' expression:
+    begin
+      let p = e;
+      ...
+    end
+    (* => *)
+    let p = e in begin ... end
+
+3. An expression used in a non-tail, non binding context is transformed
+into a match against the unit `()`:
+
+    begin
+      e
+      ...
+    end
+    (* => *)
+    let () = e in begin ... end
+
+4. `begin` of a single expression is turned into that expression.
+    begin
+      e
+    end
+    (* => *)
+    e
