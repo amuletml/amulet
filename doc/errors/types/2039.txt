@@ -1,1 +1,12 @@
-TC: NotAnIdiom
+Idiom brackets provide a convenient syntax for writing functions
+involving applicative computations.
+
+    (| f x y |)
+
+Is equivalent to writing
+
+    f <$> x <*> y
+
+While other application-like expressions can be written in idiom-bracket
+notation (such as binary operators), most other expressions do not make
+sense in that context, and so are rejected.

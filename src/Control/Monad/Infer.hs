@@ -918,7 +918,7 @@ instance Note TypeError Style where
 
   noteId OrphanInstance{}     = Just 2028
 
-  noteId NotAClass{}          = Just 2029
+  noteId NotAClass{}          = Nothing
 
   noteId CanNotVta{}          = Just 2030
 

@@ -1,1 +1,11 @@
-TC: DICan'tDerive
+Amulet is unable to derive an instance for this class. There may be
+several reasons for this:
+
+ - The class is not derivable at all. Currently only the `typeable`
+   class may be derived.
+
+ - The instance definition is malformed. Deriving instances must take
+   the form:
+
+       type foo = Foo
+       deriving instance typeable foo

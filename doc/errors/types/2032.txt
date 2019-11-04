@@ -1,1 +1,21 @@
-TC: WildcardNotAllowed
+Type wildcards allow you to leave off parts of a type, making them
+substantially shorter. However, there are some places where wildcards
+cannot be used, and the full type must be given.
+
+    type foo = Foo of _
+    (* You must give a concrete type here, such as *)
+    type foo = Foo of int
+
+Type wildcards cannot be used in:
+ - Constructor definitions
+ - Class method signatures
+ - Within type functions. When writing a type function which matches on
+   any value, use a type variable instead of a wildcard.
+
+       type function foo 'a
+         foo _ = ()
+
+   Should become
+
+       type function foo 'a
+         foo 'a = ()
