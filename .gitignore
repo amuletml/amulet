@@ -29,3 +29,6 @@ doc/*.pdf
 doc/*.synctex.gz
 
 /*.xml
+
+*.tags
+/.tags

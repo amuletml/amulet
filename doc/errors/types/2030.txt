@@ -1,1 +1,22 @@
-TC: CanNotVta
+For a visible type application `f @t` to be legal, the type of `f` must
+have a quantifier of visibility *at least* 'Spec' at its head, i.e. the
+type of `f` must start with a user-written `forall`.
+
+Note that type variables mentioned in indirect user supplied type
+signatures are also bound by 'Spec' foralls:
+
+    let foo (x : 'a) (y : 'b) : 'a = x
+    let _ = foo @int
+    (* legal *)
+
+However, if the type hints are incomplete, no type variables are
+available for VTA:
+
+    let foo (x : 'a) y : 'a = x
+    let _ = foo @int
+    (* Can not apply expression of type 'b -> 'a -> 'b
+         to visible type argument int *)
+
+If the type signature for a function has a `forall 'a ->` quantifier
+(i.e. a forall quantifier with visibility 'Req'), it _must_ be given a
+visible type argument, even if the argument is a wildcard.

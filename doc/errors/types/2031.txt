@@ -1,1 +1,14 @@
-TC: NotPromotable
+When a data constructor is used as a type expression, we require that
+the type of the constructor be *promotable* to a kind, and furthermore
+that the promoted kind be useful.
+
+This means that, currently, constructors that take records as arguments
+can't be promoted. Here is what can be promoted:
+
+  * Function types, qualified types and quantified types
+    (a -> b, a => b and forall a. b respectively)
+  * Tuple types (using the promoted tuple types)
+  * All type constructors, and applications thereof
+  * Promoted data constructors, and applications thereof
+  * Type variables, wildcards
+  * The 'int', 'bool' and 'string' types
