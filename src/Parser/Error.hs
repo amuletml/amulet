@@ -197,11 +197,11 @@ instance Note ParseError Style where
       <##> f [annotation x]
 
   noteId Failure{}             = Nothing
-  noteId UnexpectedCharacter{} = Just 0002
-  noteId UnexpectedEnd{}       = Just 0003
+  noteId UnexpectedCharacter{} = Nothing
+  noteId UnexpectedEnd{}       = Nothing
   noteId UnclosedString{}      = Just 0004
   noteId UnclosedComment{}     = Just 0005
-  noteId UnexpectedToken{}     = Just 0006
+  noteId UnexpectedToken{}     = Nothing
   noteId MalformedClass{}      = Just 0007
   noteId MalformedInstance{}   = Just 0008
   noteId MisplacedWith{}       = Just 0009

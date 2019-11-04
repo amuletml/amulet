@@ -1,8 +1,5 @@
-parser/0002.txt Parser: UnexpectedCharacter
-parser/0003.txt Parser: UnexpectedEnd
 parser/0004.txt Parser: UnclosedString
 parser/0005.txt Parser: UnclosedComment
-parser/0006.txt Parser: UnexpectedToken
 parser/0007.txt Parser: MalformedClass
 parser/0008.txt Parser: MalformedInstance
 parser/0009.txt Parser: MisplacedWith

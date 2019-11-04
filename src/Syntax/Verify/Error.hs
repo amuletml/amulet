@@ -190,7 +190,7 @@ instance Note VerifyError Style where
 
   formatNote f x = indent 2 (Right <$> pretty x) <#> f [annotation x]
 
-  noteId MalformedRecursiveRhs{}     = Just 3001
+  noteId MalformedRecursiveRhs{} = Just 3001
   noteId DefinedUnused{}       = Just 3002
   noteId ParseErrorInForeign{} = Just 3003
   noteId LazyLet{}             = Just 3004
