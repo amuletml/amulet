@@ -1,4 +1,4 @@
-The type checker encountered a hole (_) expression in the program.
+The type checker encountered a hole (`_`) expression in the program.
 Furthermore, if it can find suitable expressions of the type this hole
 was inferred to have, it will print them.
 

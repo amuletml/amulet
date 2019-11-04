@@ -4,11 +4,11 @@ directly, such as `foo`). While qualified and unqualified names may be
 accessed interchangeably, it makes no sense to declare a qualified
 name:
 
-  let Foo.x = 1
+    let Foo.x = 1
 
 Instead, one should just write the following:
 
-  let x = 1
+    let x = 1
 
 The same restriction applies to any declaration, including patterns,
 types and constructors.

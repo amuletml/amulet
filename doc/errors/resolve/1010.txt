@@ -3,14 +3,14 @@ The file you are trying to import cannot be found.
 Amulet supports two kinds of imports, make sure you are using the
 correct one:
 
- - If an import starts with "../" or "./", it will be resolved relative
+1. If an import starts with "../" or "./", it will be resolved relative
    to the current file. This should be used for referencing files within
    the same project.
 
    In this case, make sure the file name is spelled correctly, and that
    the relative path is correct.
 
- - Otherwise, Amulet will attempt to load from the library path. This
+2. Otherwise, Amulet will attempt to load from the library path. This
    style of import should be used when trying to access external
    libraries.
 

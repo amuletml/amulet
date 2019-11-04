@@ -4,8 +4,14 @@ Amulet Compiler Documentation
 Currently this directory has all the text files that get embedded for
 error message explanations.
 
-### Adding an error
+Style conventions for error explanations:
 
-1. Bump this integer: 0002; Let that be the new error code.
-2. Make a file `errors/$code.txt`
-3. Add it to the `errors.txt` file.
+* Format error explanations as Markdown:
+
+  * Always use numbered lists
+  * Always use indented code blocks, indenting by 8 spaces if they're
+    meant to be in a list element
+  * Align list elements vertically after the counter
+  * Start any headers inside the explanation at `####`
+
+* Hard wrap lines at 72 characters.

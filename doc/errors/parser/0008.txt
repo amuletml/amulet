@@ -1,11 +1,10 @@
 This instance's head could not be parsed. Every instance should be
-composed of a (lower case) class name, which should be applied with
-several argument.
+composed of a (lower case) class name applied to at least one argument.
 
     instance eq int
 
-Instances may also impose additional constraints on its arguments, such
-as requiring the elements of a list to also have an instance of this
-class.
+Instances may also impose additional constraints on their arguments,
+such as requiring the elements of a list to also have an instance of
+this class.
 
     instance eq 'a => eq (list 'a)

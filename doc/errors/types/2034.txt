@@ -3,7 +3,7 @@ it was declared to have. This is because such an under-saturated
 application would correspond to a type-level lambda, and type-level
 lambda expressions make type inference undecidable.
 
-Possible fix: eta reduction
+#### Possible fix: eta reduction
 
 In the synonym:
 
