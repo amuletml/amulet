@@ -1,9 +1,9 @@
 None of these are valid in a class/instance context, unless under an
 application to a type constructor:
 
-  * Record types
-  * Type variables
-  * Lifted tuple types
-  * The 'type' type
-  * Type-level literals
-  * Function types
+1. Record types
+2. Type variables
+3. Lifted tuple types
+4. The 'type' type
+5. Type-level literals
+6. Function types

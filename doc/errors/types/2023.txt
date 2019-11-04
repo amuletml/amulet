@@ -1,2 +1,2 @@
-This instance declaration is missing a declaration for an associated
+This instance declaration is missing a definition for an associated
 type.

@@ -3,15 +3,15 @@ prefixing them with a `\`. If you need to write a backslash on its own,
 this can be done by escaping the slash using `\\`.
 
 The following escape codes are supported:
- • `\a` - Bell                  (0x07 in ASCII)
- • `\b` - Backspace.            (0x08 in ASCII)
- • `\f` - Form feed page break. (0x0C in ASCII)
- • `\n` - Newline/Line feed.    (0x0A in ASCII)
- • `\r` - Return carriage.      (0x0D in ASCII)
- • `\t` - Horizontal tab.       (0x09 in ASCII)
- • `\v` - Vertical tab.         (0x0B in ASCII)
- • `\"` - Double quote (`"`)    (0x22 in ASCII)
- • `\\` - Backslash (`\`)       (0x5C in ASCII)
 
- • For any other character, you can use the hexadecimal ASCII value with
+ * `\a` - Bell                  (0x07 in ASCII)
+ * `\b` - Backspace.            (0x08 in ASCII)
+ * `\f` - Form feed page break. (0x0C in ASCII)
+ * `\n` - Newline/Line feed.    (0x0A in ASCII)
+ * `\r` - Return carriage.      (0x0D in ASCII)
+ * `\t` - Horizontal tab.       (0x09 in ASCII)
+ * `\v` - Vertical tab.         (0x0B in ASCII)
+ * `\"` - Double quote (`"`)    (0x22 in ASCII)
+ * `\\` - Backslash (`\`)       (0x5C in ASCII)
+ * For any other character, you can use the hexadecimal ASCII value with
    `\x`. For instance, `\x61` represents the character `a`.

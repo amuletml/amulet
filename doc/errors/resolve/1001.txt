@@ -3,21 +3,21 @@ this is that you have misspelled the name you are trying to use.
 However, if you would expect this variable to be available, there are
 several other things to try:
 
- - If the name is something you'd expect to be built in to Amulet, make
-   sure you've imported the prelude:
+ 1. If the name is something you'd expect to be built in to Amulet, make
+    sure you've imported the prelude:
 
        open import "prelude.ml" (* Needed for `None` *)
        let x = None
 
- - If the name is defined in another file or module, make sure you have
-   imported and opened the file.
+ 2. If the name is defined in another file or module, make sure you have
+    imported and opened the file.
 
        open import "./my_lib.ml"
        (* ^ Needed in order for `my_function` to be in scope. *)
 
        let x = my_function ()
 
- - When writing recursive functions, make sure you have used the `rec`
+3. When writing recursive functions, make sure you have used the `rec`
    modifier:
 
        (* Without `rec`, you won't be able to use `fib` within its

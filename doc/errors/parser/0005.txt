@@ -1,9 +1,13 @@
 A comment was opened (using `(*`), but never closed. Add `*)` in order
 to end the comment.
 
- • Note that comments may be nested, meaning that you may need to close
+1. Note that comments may be nested, meaning that you may need to close
    multiple comments.
 
- • It is possible to accidentally introduce a comment, especially when
+2. It is possible to accidentally introduce a comment, especially when
    using operator sections. In these cases, add a space within the
    section's parenthesis.
+
+   The most common case of this is referring to the multiplication (or
+   product type) operators, which would be spelled `(*)`. However, this
+   is an unclosed comment, so write `( * )` instead.
