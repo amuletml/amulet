@@ -42,7 +42,6 @@ types/2025.txt TC: MagicInstance
 types/2026.txt TC: TypeFamInInstHead
 types/2027.txt TC: InvalidContext
 types/2028.txt TC: OrphanInstance
-types/2029.txt TC: NotAClass
 types/2030.txt TC: CanNotVta
 types/2031.txt TC: NotPromotable
 types/2032.txt TC: WildcardNotAllowed
