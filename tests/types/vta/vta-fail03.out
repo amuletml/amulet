@@ -1,4 +1,4 @@
-vta-fail03.ml[1:13 ..1:18]: error
+vta-fail03.ml[1:13 ..1:18]: error (E2030)
   │ 
 1 │ let foo x = x @int
   │             ^^^^^^

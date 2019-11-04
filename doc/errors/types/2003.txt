@@ -1,0 +1,6 @@
+Compilation was aborted because of a custom type error (see [1]).
+
+Please consult the documentation of whatever library you are using to
+know more.
+
+[1]: https://amulet.ahti.space/amulet/99-builtins#type-errors

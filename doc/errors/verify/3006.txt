@@ -1,0 +1,23 @@
+This pattern matching expression does not handle every possible case
+that may occur. If such a case does occur, your code will throw an error
+and the program will most likely crash.
+
+Amulet will inform you which pattern arms are missing. You should just
+be able to copy each arm, and add some implementation for it.
+
+Note, if this pattern occurs within a let binding or function, you will
+need to replace it with a `match` expression. For instance these
+definitions:
+
+    let [x] = xs
+    let 2 + 2 = 5
+
+Should be written as:
+
+    let x = match xs with
+            | [x] -> x
+            | _ -> error "TODO"
+    let x + y =
+      match x, y with
+      | 2, 2 -> 5
+      | x, y -> x + y

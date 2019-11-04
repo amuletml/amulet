@@ -1,0 +1,27 @@
+When defining an instance of a class, care must be taken to ensure there
+is only one possible instance for any type (see also error 2021).
+
+In order to ensure this, we require that every instance must be defined
+in the same module as the types it mentions, or the class your are
+implementing.
+
+Consider a definition of pairs of integers, with an associates `show`
+instance:
+
+    class foo 'a
+      val x : 'a -> string
+
+    instance foo int
+      let x _ = "foo"
+
+This is valid, as the instance is defined alongside the class. However,
+if you tried to define the instances elsewhere, you could bypass the
+overlap check:
+
+    module A =
+      instance foo int
+        let x _ = "foo"
+
+    module B =
+      instance foo int
+        let x _ = "bar"

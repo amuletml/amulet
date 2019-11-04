@@ -1,18 +1,18 @@
-fail_import_abandon.ml[6:8 ..6:30]: error
+fail_import_abandon.ml[6:8 ..6:30]: error (E1010)
   Cannot resolve "./not_found.ml"
 
   Arising from use of the module
   │ 
 6 │   open import "./not_found.ml"
   │        ^^^^^^^^^^^^^^^^^^^^^^^
-fail_import_abandon.ml[15:17 ..15:39]: error
+fail_import_abandon.ml[15:17 ..15:39]: error (E1010)
   Cannot resolve "./not_found.ml"
 
   Arising from use of the module
    │ 
 15 │ module B = open import "./not_found.ml"
    │                 ^^^^^^^^^^^^^^^^^^^^^^^
-fail_import_abandon.ml[25:12 ..25:22]: error
+fail_import_abandon.ml[25:12 ..25:22]: error (E1001)
   Variable not in scope: `not_defined`
 
   Arising from use of the expression

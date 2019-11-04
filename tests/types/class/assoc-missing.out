@@ -1,4 +1,4 @@
-assoc-missing.ml[5:1 ..5:26]: error
+assoc-missing.ml[5:1 ..5:26]: error (E2023)
   │ 
 5 │ instance foo int begin end
   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^

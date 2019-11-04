@@ -1,0 +1,23 @@
+Amulet heavily relies on indentation in order to determine how a program
+should be parsed. As a result, it's a good idea to ensure that your code
+is laid out correctly.
+
+Here, the warning is triggered when the `in` separator is not aligned
+with the corresponding `let`:
+
+    let x = 0
+      in ()
+
+The easiest way to fix this is just to remove the `in` token and adjust
+the indentation:
+
+    let x = 0
+    ()
+
+The following are also acceptable alternatives:
+
+    let x = 0 in
+    ()
+
+    let x = 0
+    in ()

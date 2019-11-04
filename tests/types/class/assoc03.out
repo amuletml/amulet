@@ -1,4 +1,4 @@
-assoc03.ml[13:16 ..13:17]: error
+assoc03.ml[13:16 ..13:17]: error (E2001)
    │ 
 13 │   let into _ = ()
    │                ^^

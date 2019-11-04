@@ -1,4 +1,4 @@
-empty_match_02.ml[19:34 ..19:41]: warning
+empty_match_02.ml[19:34 ..19:41]: warning (W3006)
   Non-exhaustive patterns in expression
    │ 
 19 │ let f2 : t1 b -> forall 'a. 'a = function ()

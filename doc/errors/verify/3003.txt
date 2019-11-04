@@ -1,0 +1,16 @@
+While external values are normally bound to simple names, they may
+actually contain any Lua expression. These definitions are emitted
+verbatim into the compiled program, meaning if they are not valid Lua,
+then your code will fail to run.
+
+If you receive this warning, check your expression is a valid Lua
+_expression_. If you need to evaluate a statement, you may wrap it in a
+closure and call it immediately:
+
+    external val f : () = "(function() for i = 1, 10 do print(i) end)()"
+
+Please note that Amulet's parser may not be entirely correct. If you
+receive this error, and you are sure that your code is syntactically
+valid, please file a bug report[1].
+
+[1]: https://github.com/tmpim/amulet/issues/new?title=Lua%20parser%20bug

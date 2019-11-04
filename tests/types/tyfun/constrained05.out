@@ -1,4 +1,4 @@
-constrained05.ml[9:15 ..9:26]: error
+constrained05.ml[9:15 ..9:26]: error (E2018)
   │ 
 9 │ type foo 'a = Foo of f2 'a
   │               ^^^^^^^^^^^^

@@ -1,4 +1,4 @@
-tyfun02-fail.ml[11:5 ..11:49]: error
+tyfun02-fail.ml[11:5 ..11:49]: error (E2018)
    │ 
 14 │   | _ -> Xs
    │          ^^

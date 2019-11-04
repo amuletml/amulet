@@ -1,4 +1,4 @@
-toomany01.ml[9:7 ..9:9]: error
+toomany01.ml[9:7 ..9:9]: error (E2020)
   │ 
 9 │   let bar = ()
   │       ^^^

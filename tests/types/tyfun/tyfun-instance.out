@@ -1,4 +1,4 @@
-tyfun-instance.ml[7:1 ..7:26]: error
+tyfun-instance.ml[7:1 ..7:26]: error (E2034)
   │ 
 7 │ instance bar foo begin end
   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^

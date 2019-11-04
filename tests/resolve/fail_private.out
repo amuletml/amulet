@@ -1,39 +1,39 @@
-fail_private.ml[13:10 ..13:34]: error
+fail_private.ml[13:10 ..13:34]: error (E1001)
   Type not in scope: `X.c`
 
   Arising from use of the expression
    │ 
 13 │ let () = (X.Y.a + X.b + X.A) : X.c
    │          ^^^^^^^^^^^^^^^^^^^^^^^^^
-fail_private.ml[13:11 ..13:15]: error
+fail_private.ml[13:11 ..13:15]: error (E1001)
   Variable not in scope: `X.Y.a`
 
   Arising from use of the expression
    │ 
 13 │ let () = (X.Y.a + X.b + X.A) : X.c
    │           ^^^^^
-fail_private.ml[13:19 ..13:21]: error
+fail_private.ml[13:19 ..13:21]: error (E1001)
   Variable not in scope: `X.b`
 
   Arising from use of the expression
    │ 
 13 │ let () = (X.Y.a + X.b + X.A) : X.c
    │                   ^^^
-fail_private.ml[13:25 ..13:27]: error
+fail_private.ml[13:25 ..13:27]: error (E1001)
   Constructor not in scope: `X.A`
 
   Arising from use of the expression
    │ 
 13 │ let () = (X.Y.a + X.b + X.A) : X.c
    │                         ^^^
-fail_private.ml[15:1 ..15:26]: error
+fail_private.ml[15:1 ..15:26]: error (E1001)
   Type not in scope: `X.d`
 
   Arising from use of the declaration
    │ 
 15 │ instance X.d int begin end
    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^
-fail_private.ml[15:1 ..15:26]: error
+fail_private.ml[15:1 ..15:26]: error (E1001)
   Type not in scope: `X.d`
 
   Arising from use of the declaration

@@ -1,0 +1,9 @@
+This class's head could not be parsed. Every class should be composed of
+a (lower case) class name, followed by any number of type variables.
+
+    class eq 'a
+
+Classes may also require several "super classes", by placing them before
+the class name in a tuple.
+
+    class ord 'a => eq 'a

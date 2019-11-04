@@ -1,4 +1,4 @@
-constrained04.ml[10:3 ..10:17]: error
+constrained04.ml[10:3 ..10:17]: error (E2018)
   Could not deduce c2 'a from the context
     unit
 

@@ -42,6 +42,8 @@ executable amc
                      , Amc.Debug
                      , Amc.Compile
                      , Amc.Repl
+                     , Amc.Explain
+                     , Amc.Explain.TH
                      , Amc.Repl.Display
   default-language:    Haskell2010
 

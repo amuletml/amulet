@@ -9,7 +9,7 @@ Not using the prelude will fail
 
   $ echo 'print "Hello"' | amc repl --no-prelude
   Listening on port 5478
-  > =stdin[1:1 ..1:5]: error
+  > =stdin[1:1 ..1:5]: error (E1001)
     Variable not in scope: `print`
   
     Arising from use of the expression

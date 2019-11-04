@@ -1,4 +1,4 @@
-fail_do_with.ml[1:10 ..1:20]: error
+fail_do_with.ml[1:10 ..1:20]: error (E0009)
   Misplaced with statement
   with bindings may only appear within monadic begin/end blocks. Is this statement correctly aligned?
   │ 

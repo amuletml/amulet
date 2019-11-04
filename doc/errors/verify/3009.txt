@@ -1,0 +1,18 @@
+Bindings with type `ref _` at the top-level are global, mutable state
+and should generally be avoided. Prefer to give `ref` bindings the
+smallest possible scope. For example, instead of writing
+
+    let counter = ref 0
+    let next_int () =
+      let cur = !counter
+      counter := cur + 1
+      cur
+
+Write instead:
+
+    let next_int =
+      let counter = ref 0
+      fun () ->
+        let cur = !counter
+        counter := cur + 1
+        cur

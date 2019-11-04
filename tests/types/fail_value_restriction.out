@@ -1,4 +1,4 @@
-fail_value_restriction.ml[9:10 ..9:11]: error
+fail_value_restriction.ml[9:10 ..9:11]: error (E2001)
   │ 
 9 │   print (!r)
   │          ^^

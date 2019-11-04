@@ -1,0 +1,22 @@
+Amulet has sugar for monadic computations, through the use of begin/end
+blocks. In order to bind a monadic value, one should use a with
+statement:
+
+  begin
+    with x <- f ()
+    pure (x + 1)
+  end
+
+These statements cannot be used outside of monadic blocks. For instance
+the following is invalid:
+
+  let x = with x <- f ()
+
+When using begin/end, make sure that all terms are aligned to the same
+column:
+
+  begin
+    let y = 2
+      with z <- f () (* Incorrect! *)
+    pure (x + 1)
+  end

@@ -1,4 +1,4 @@
-class06.ml[6:11 ..6:16]: error
+class06.ml[6:11 ..6:16]: error (E2018)
   No instance for foo unit arising from use of the expression
   │ 
 6 │   let 0 = foo ()

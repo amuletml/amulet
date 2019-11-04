@@ -1,11 +1,11 @@
-verify16.ml[6:11 ..6:11]: error
+verify16.ml[6:11 ..6:11]: error (E3001)
   Invalid recursive right-hand side for variable f
   • Note: because evaluation of the variable g is not delayed
   Arising from use of the binding
   │ 
 6 │   let rec f = id (fun _ -> g) 1
   │           ^
-verify16.ml[7:7 ..7:7]: error
+verify16.ml[7:7 ..7:7]: error (E3001)
   Invalid recursive right-hand side for variable g
   • Note: because evaluation of the variable f is not delayed
   Arising from use of the binding

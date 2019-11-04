@@ -20,10 +20,13 @@ import Data.Foldable
 import Data.Position
 import Data.Spanned
 import Data.Span
+import Data.Char
 import Data.List
 
 import Text.Pretty.Ansi
 import Text.Pretty
+
+import Text.Printf (printf)
 
 -- | The severity of a note
 data NoteKind
@@ -53,6 +56,9 @@ class Spanned a => Note a b | a -> b where
   formatNote :: ([Span] -> NoteDoc b) -- ^ A function which renders one or more 'Span's in a readable manner.
              -> a -- ^ The note to convert
              -> NoteDoc b
+  -- | A number uniquely identifying this note
+  noteId :: a -> Maybe Int
+  noteId _ = Nothing
 
 -- | A mapping of file names and their contents
 type FileMap = [(SourceName, T.Text)]
@@ -66,8 +72,12 @@ format f x =
             NoteMessage -> annotate (NoteKind NoteMessage) "note"
             WarningMessage -> annotate (NoteKind WarningMessage) "warning"
             ErrorMessage -> annotate (NoteKind ErrorMessage) "error"
+      num = 
+        case noteId x of
+          Just num -> parens (string (printf "%c%.4d" (toUpper (head (show c))) num))
+          Nothing -> mempty
       body = formatNote f x
-  in (Right <$> formatSpan a <> colon) <+> (Left <$> c) <##> body
+   in (Right <$> formatSpan a <> colon) <+> (Left <$> (c <+> num)) <##> body
 
 -- | Convert a note style to an ANSI style
 toAnsi :: NoteStyle -> AnsiStyle

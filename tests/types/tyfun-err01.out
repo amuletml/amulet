@@ -1,4 +1,4 @@
-tyfun-err01.ml[9:22 ..9:23]: error
+tyfun-err01.ml[9:22 ..9:23]: error (E2003)
   │ 
 9 │ let foo : foo bool = ()
   │                      ^^

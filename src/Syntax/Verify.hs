@@ -112,7 +112,7 @@ verifyBindingGroup k _ = traverse_ verifyScc . depOrder where
       verifyExpr ex
 
       unless (naked `Set.disjoint` vars) $
-        tell (Seq.singleton (NonRecursiveRhs blame var (Set.toList (naked `Set.intersection` vars))))
+        tell (Seq.singleton (MalformedRecursiveRhs blame var (Set.toList (naked `Set.intersection` vars))))
 
 verifyModule :: MonadVerify m => ModuleTerm Typed -> m ()
 verifyModule (ModStruct m _) = verifyProgram m

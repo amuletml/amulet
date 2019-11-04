@@ -1,10 +1,10 @@
-undecidable-super-class.ml[1:1 ..1:37]: error
+undecidable-super-class.ml[1:1 ..1:37]: error (E2027)
   │ 
 1 │ class 'a * 'b => andc 'a 'b begin end
   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   Invalid type in context for class declaration:
       'a
-undecidable-super-class.ml[1:1 ..1:37]: error
+undecidable-super-class.ml[1:1 ..1:37]: error (E2027)
   │ 
 1 │ class 'a * 'b => andc 'a 'b begin end
   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

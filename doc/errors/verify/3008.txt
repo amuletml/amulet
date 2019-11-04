@@ -1,0 +1,13 @@
+`function` expressions provide a convenient way of writing functions
+which split on a single argument. However, if your function only has one
+arm to split on, it may be written more easily using `fun`. This makes
+your code shorter, and should be easier to understand:
+
+For instance, this expression:
+
+    function
+    | (a, b) -> a + b
+
+may be rewritten as the simpler
+
+    fun (a, b) -> a + b

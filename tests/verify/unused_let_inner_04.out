@@ -1,9 +1,9 @@
-unused_let_inner_04.ml[2:8 ..2:8]: warning
+unused_let_inner_04.ml[2:8 ..2:8]: warning (W3002)
   Bound locally but not used: 'a'
   │ 
 2 │   let (a, b) = (1, 2)
   │        ^
-unused_let_inner_04.ml[2:11 ..2:11]: warning
+unused_let_inner_04.ml[2:11 ..2:11]: warning (W3002)
   Bound locally but not used: 'b'
   │ 
 2 │   let (a, b) = (1, 2)

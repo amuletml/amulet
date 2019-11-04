@@ -1,4 +1,4 @@
-fail_value_restriction2.ml[2:5 ..2:5]: error
+fail_value_restriction2.ml[2:5 ..2:5]: error (E2016)
   │ 
 2 │ let f = id id
   │     ^

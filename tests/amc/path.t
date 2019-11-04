@@ -1,7 +1,7 @@
 amc compile will extend the compile path
 
   $ amc compile tests/amc/files/import.ml
-  tests/amc/files/import.ml[1:6 ..1:23]: error
+  tests/amc/files/import.ml[1:6 ..1:23]: error (E1010)
     Cannot resolve "my_lib.ml"
   
     Arising from use of the module

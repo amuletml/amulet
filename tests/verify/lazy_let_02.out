@@ -1,4 +1,4 @@
-lazy_let_02.ml[4:3 ..5:5]: warning
+lazy_let_02.ml[4:3 ..5:5]: warning (W3004)
   Automatic thunking of lets does not cover bindings
 
   • Note: the expression
@@ -9,6 +9,6 @@ lazy_let_02.ml[4:3 ..5:5]: warning
   │ 
 4 │   let _ = print "foo"
   │       ^
-  are strict.
+  is strict.
   • Note: if this is what you want, use lazy explicitly
       to silence this warning.

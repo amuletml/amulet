@@ -57,7 +57,7 @@ data ParseError
   -- | Attempting to use with in an invalid contxt
   | MisplacedWith Span
 
-  -- | Attempting to bind a qualified name
+  -- | Attempting to declare a qualified name
   | BindQualified (Var Parsed) Span
 
   -- | An invalid escape code
@@ -140,7 +140,7 @@ instance Pretty ParseError where
     </> keyword "with" <+> "bindings may only appear within monadic" <+> keyword "begin" <> "/" <>
         keyword "end" <+> "blocks. Is this statement correctly aligned?"
 
-  pretty (BindQualified tok _) = "Attempting to bind a qualified variable" <+> verbatim (pretty tok)
+  pretty (BindQualified tok _) = "Attempting to declare a qualified name" <+> verbatim (pretty tok)
 
   pretty (InvalidEscapeCode _) = "Unknown escape code."
 
@@ -195,3 +195,17 @@ instance Note ParseError Style where
   formatNote f x
     = indent 2 (Right <$> pretty x)
       <##> f [annotation x]
+
+  noteId Failure{}             = Nothing
+  noteId UnexpectedCharacter{} = Nothing
+  noteId UnexpectedEnd{}       = Nothing
+  noteId UnclosedString{}      = Just 0004
+  noteId UnclosedComment{}     = Just 0005
+  noteId UnexpectedToken{}     = Nothing
+  noteId MalformedClass{}      = Just 0007
+  noteId MalformedInstance{}   = Just 0008
+  noteId MisplacedWith{}       = Just 0009
+  noteId BindQualified{}       = Just 0010
+  noteId InvalidEscapeCode{}   = Just 0011
+  noteId UnalignedIn{}         = Just 0012
+  noteId UnindentContext{}     = Nothing

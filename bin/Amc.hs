@@ -23,6 +23,7 @@ import Frontend.Errors
 import qualified Amc.Debug as D
 import qualified Amc.Repl as R
 import qualified Amc.Compile as C
+import Amc.Explain
 
 import Version
 
@@ -64,6 +65,7 @@ data Command
     { remoteCmd   :: String
     , serverPort  :: Int
     }
+  | Explain { errId :: Int }
   deriving (Show)
 
 newtype Args
@@ -96,7 +98,14 @@ argParser = info (args <**> helper <**> version)
       <> command "connect"
          ( info connectCommand
          $ fullDesc <> progDesc "Connect to an already running REPL instance." )
+      <> command "explain"
+         ( info explainCommand
+         $ fullDesc <> progDesc "Explain an error message." )
       ) <|> pure (Repl Nothing defaultPort DefaultPrelude (CompilerOptions D.Void [] False))
+
+    explainCommand :: Parser Command
+    explainCommand = Explain
+      <$> argument auto (metavar "ERROR" <> help "The error message code to explain")
 
     compileCommand :: Parser Command
     compileCommand = Compile
@@ -192,6 +201,8 @@ main = do
                                , R.coreLint = coreLint options }
         toLoad
     Args Connect { remoteCmd, serverPort } -> R.runRemoteReplCommand serverPort remoteCmd
+
+    Args Explain { errId } -> explainError errId
 
     Args Compile { input, output = Just output } | input == output -> do
       hPutStrLn stderr ("Cannot overwrite input file " ++ input)

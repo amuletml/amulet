@@ -1,4 +1,4 @@
-quantified-eq-loopy.ml[3:14 ..3:14]: error
+quantified-eq-loopy.ml[3:14 ..3:14]: error (E2009)
   Could not match the rigid type variable 'a with the type 'b
 
   • Arising in this expression

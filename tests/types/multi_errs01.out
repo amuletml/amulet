@@ -1,4 +1,4 @@
-multi_errs01.ml[3:19 ..3:22]: error
+multi_errs01.ml[3:19 ..3:22]: error (E2001)
   │ 
 3 │   let foo x = 2 + true
   │                   ^^^^

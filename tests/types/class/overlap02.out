@@ -1,4 +1,4 @@
-overlap02.ml[2:1 ..2:25]: error
+overlap02.ml[2:1 ..2:25]: error (E2021)
   Overlapping instances for foo unit
   • Note: first defined here,
   │ 

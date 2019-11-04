@@ -1,4 +1,4 @@
-value.ml[3:33 ..3:47]: error
+value.ml[3:33 ..3:47]: error (E2016)
   │ 
 3 │ let foo : forall 'a. 'a -> 'a = id (fun x -> x)
   │                                 ^^^^^^^^^^^^^^^
