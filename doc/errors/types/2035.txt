@@ -1,0 +1,32 @@
+This instance declaration violates at least one functional dependency of
+the class declaration. For type checking with fundeps to be terminating
+it is required that instances satisfy the following condition, called
+the "coverage condition":
+
+> For each functional dependency `'tvs_left -> 'tvs_right` of the class,
+> every type variable that appears in the types corresponding to
+> `tvs_right` must appear in the types corresponding to `tvs_left` in
+> the instance head.
+
+Concretely, given the following class:
+
+    class r 'a 'b | 'a -> 'b begin end
+
+The following instances are admissible:
+
+    instance r string string       begin end
+    (* no type variables *)
+
+    instance r (list 'a) (list 'a) begin end
+    (* 'a appears in both sides *)
+
+    instance r ('a * 'b) 'a        begin end
+    (* 'a in the right => 'a in the left *)
+
+But the following are not:
+
+    instance r string 'a    begin end
+    (* 'a appears only on the right *)
+
+    instance r 'a ('a * 'b) begin end
+    (* 'b appears only on the right *)

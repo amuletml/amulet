@@ -1,4 +1,4 @@
-tf-not-injective.ml[24:5 ..27:48]: error
+tf-not-injective.ml[24:5 ..27:48]: error (E2018)
    │ 
 30 │       let rep2 = subst (inj_1 p1 p2) rep1
    │                         ^^^^^^^^

@@ -1,4 +1,4 @@
-overlap.ml[2:3 ..2:18]: error
+overlap.ml[2:3 ..2:18]: error (E2021)
   Overlapping equations for foo int
   • Note: first defined here,
   │ 

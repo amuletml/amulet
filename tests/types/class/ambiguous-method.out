@@ -1,4 +1,4 @@
-ambiguous-method.ml[3:3 ..3:12]: error
+ambiguous-method.ml[3:3 ..3:12]: error (E2017)
   │ 
 3 │   val y : 'b
   │   ^^^^^^^^^^

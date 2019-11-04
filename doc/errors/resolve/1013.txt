@@ -1,0 +1,10 @@
+All clauses of the type function must have as many *visible* arguments
+as given in the type function declaration. That is, the following is
+legal only when n = k:
+
+    type function f 'a1 ... 'an begin
+      f t1 ... tk = ()
+    end
+
+For more information, see also the explanation of E2024, which concerns
+arity mismatches in associated type definitions.

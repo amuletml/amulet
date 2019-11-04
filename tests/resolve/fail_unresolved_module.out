@@ -1,4 +1,4 @@
-fail_unresolved_module.ml[8:6 ..8:8]: error
+fail_unresolved_module.ml[8:6 ..8:8]: error (E1001)
   Module not in scope: `X.Z`
 
   Arising from use of the declaration

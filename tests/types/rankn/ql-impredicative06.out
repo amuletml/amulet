@@ -1,4 +1,4 @@
-ql-impredicative06.ml[10:16 ..10:17]: error
+ql-impredicative06.ml[10:16 ..10:17]: error (E2001)
    │ 
 10 │ let t = choose id auto
    │                ^^

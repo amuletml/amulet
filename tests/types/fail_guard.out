@@ -1,4 +1,4 @@
-fail_guard.ml[2:10 ..2:10]: error
+fail_guard.ml[2:10 ..2:10]: error (E2001)
   │ 
 2 │ | _ when 2 -> ()
   │          ^

@@ -1,10 +1,10 @@
-begin05.ml[10:3 ..10:3]: error
+begin05.ml[10:3 ..10:3]: error (E2001)
    │ 
 10 │   2
    │   ^
   Couldn't match actual type int
     with the type expected by the context, identity 'b
-begin05.ml[8:5 ..8:20]: error
+begin05.ml[8:5 ..8:20]: error (E2018)
   No instance for monad identity arising in the binding
   │ 
 8 │ let _ : identity int = begin

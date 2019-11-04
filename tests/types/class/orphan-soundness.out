@@ -1,4 +1,4 @@
-orphan-soundness.ml[6:3 ..8:5]: error
+orphan-soundness.ml[6:3 ..8:5]: error (E2028)
   │ 
 6 │   instance foo 'a begin
   │   ^^^^^^^^^^^^^^^^^^^^^

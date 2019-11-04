@@ -1,4 +1,4 @@
-letrec-03.ml[1:9 ..1:14]: error
+letrec-03.ml[1:9 ..1:14]: error (E2013)
   Pattern bindings can not participate in recursion
 
   │ 

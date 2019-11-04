@@ -1,0 +1,2 @@
+While solving for a particular type class instance, more than 25 nested
+class constraints had to be solved, and the solver gave up.

@@ -1,4 +1,4 @@
-class05.ml[5:5 ..5:5]: error
+class05.ml[5:5 ..5:5]: error (E2018)
   No instance for foo unit arising in the binding
   │ 
 5 │ let 0 = foo ()

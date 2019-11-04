@@ -1,4 +1,4 @@
-begin01.ml[8:5 ..8:5]: error
+begin01.ml[8:5 ..8:5]: error (E2018)
   No instance for monad identity arising in the binding
   │ 
 8 │ let _ = begin

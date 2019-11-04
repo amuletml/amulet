@@ -1,0 +1,57 @@
+A rigid type variable has escaped its scope. This can happen for one of
+two reasons:
+
+* The type variable was made rigid because it is an existential declared
+  by a GADT constructor, and it has escaped to the return type of the
+  pattern-match:
+
+    type foo = Foo : forall 'a. show 'a => 'a -> foo
+
+    let un_foo (Foo x) = x
+
+  Here, `un_foo` can not be given a meaningful type, since there is no
+  way to statically refer to the type contained in the `foo` outside of
+  the scope of the pattern match.
+
+  One might think that the function `un_foo` would have the following
+  type:
+
+    val un_foo : forall 'a. foo -> 'a
+
+  However, this type is bogus: it says that `un_foo` can return _any_
+  type when given a foo (consider `un_foo @int`, `un_foo @string`);
+  However, `un_foo` can only return the type that was stored in the
+  `Foo` constructor!
+
+  Using constraints of the rigid type variables is permissible, as long
+  as they are specified in the GADT constructor. So, with the `Foo`
+  above, the following program is legal:
+
+    instance show foo where
+      show (Foo x) = "Foo " ^ show x
+    end
+
+  The use of `show x` gives rise to a `show α` constraint (where `α` is
+  the rigid type variable introduced by matching on `Foo`), which can be
+  satisfied with the `show α` dictionary packaged inside `Foo`.
+
+* The type variable was made rigid because of a rank-N type
+  (with N ≥ 2), and an unification variable from an outer scope was
+  unified with it.
+
+  A function with higher-rank type such as the following, in which `'r`
+  and `'s` are bound at distinct scopes, implies that `'r` can not
+  depend on `'s`
+
+    val foo : forall 'r. (forall 's. 's -> 'r) -> 'r
+
+  As an example of why this is useful, consider a scoped state
+  transformer monad, that can be used purely:
+
+    type st 's 'a  (* here, and below, 's is the state thread *)
+    type st_ref 's
+
+    val run_st : forall 'a. (forall 's. unit -> st 's 'a) -> 'a
+
+  Since the `'a` in the type of `run_st` can not depend on the `'s`,
+  it's impossible for a `st_ref` to escape its scope.

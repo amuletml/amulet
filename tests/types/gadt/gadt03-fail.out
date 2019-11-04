@@ -1,4 +1,4 @@
-gadt03-fail.ml[8:12 ..8:19]: error
+gadt03-fail.ml[8:12 ..8:19]: error (E2001)
   │ 
 8 │ let show = function
   │            ^^^^^^^^

@@ -12,6 +12,7 @@ Using amc with the help flag displays all sub-command and the top-level options.
     compile                  Compile an Amulet file to Lua.
     repl                     Launch the Amulet REPL.
     connect                  Connect to an already running REPL instance.
+    explain                  Explain an error message.
 
 Each sub-command can be run with --help too.
 

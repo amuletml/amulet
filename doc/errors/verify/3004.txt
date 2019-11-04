@@ -1,0 +1,26 @@
+When an expression is expected to have the type of 'lazy', Amulet will
+try to convert it to a thunk.
+
+Consider:
+
+    let x = f () || g ()
+
+Here, `( || )` expects the second argument to be lazy. As a result, this
+is translated into the following:
+
+    let x = f () || lazy (g ())
+
+However, due to how type inference works, this automatic thunking does
+not quite work as expected when in the presence of bindings. Imagine
+binding `g ()` to a variable:
+
+    let x = f () || let y = g () in y
+
+This is elaborated into the following:
+
+    let x = f () || (let y = g () in lazy y)
+
+This is clearly not what you would expect, as ideally the whole
+expression would be made lazy. In these cases, one should either
+refactor the expression into a smaller function, or use `lazy`
+explicitly.

@@ -1,4 +1,4 @@
-lhs.ml[3:3 ..3:24]: error
+lhs.ml[3:3 ..3:24]: error (E2037)
   │ 
 3 │   bar (foo int) = string
   │   ^^^^^^^^^^^^^^^^^^^^^^

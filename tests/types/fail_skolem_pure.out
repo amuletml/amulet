@@ -1,4 +1,4 @@
-fail_skolem_pure.ml[2:32 ..2:32]: error
+fail_skolem_pure.ml[2:32 ..2:32]: error (E2009)
   Could not match the rigid type variable 'a with the type 'f 'a
 
   • Arising in this expression

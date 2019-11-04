@@ -1,4 +1,4 @@
-fail_recursive.ml[5:30 ..5:32]: error
+fail_recursive.ml[5:30 ..5:32]: error (E1001)
   Variable not in scope: `map`
 
   Arising from use of the expression
@@ -9,7 +9,7 @@ fail_recursive.ml[5:30 ..5:32]: error
   │ 
 3 │ let map f = function
   │     ^^^
-fail_recursive.ml[10:32 ..10:33]: error
+fail_recursive.ml[10:32 ..10:33]: error (E1001)
   Variable not in scope: `go`
 
   Arising from use of the expression

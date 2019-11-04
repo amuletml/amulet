@@ -1,25 +1,25 @@
-fail_unresolved.ml[6:3 ..6:7]: error
+fail_unresolved.ml[6:3 ..6:7]: error (E1001)
   Variable not in scope: `foo_0`
 
   Arising from use of the expression
   │ 
 6 │   foo_0
   │   ^^^^^
-fail_unresolved.ml[13:9 ..13:18]: error
+fail_unresolved.ml[13:9 ..13:18]: error (E1001)
   Type not in scope: `foo_0`
 
   Arising from use of the expression
    │ 
 13 │ let _ : foo_0 = ()
    │         ^^^^^^^^^^
-fail_unresolved.ml[18:9 ..18:12]: error
+fail_unresolved.ml[18:9 ..18:12]: error (E1001)
   Constructor not in scope: `Foo0`
 
   Arising from use of the expression
    │ 
 18 │ let _ = Foo0
    │         ^^^^
-fail_unresolved.ml[21:9 ..21:54]: error
+fail_unresolved.ml[21:9 ..21:54]: error (E1001)
   Type variable not in scope: `foo_0`
 
   Arising from use of the expression

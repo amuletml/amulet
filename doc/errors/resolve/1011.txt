@@ -1,0 +1,10 @@
+Amulet does not allow two files to import each other.
+
+While it may sound unsavoury, if you find yourself needing to have two
+files reference each other, consider refactoring your code so that such
+cycles can be eliminated.
+
+Aside from class instances, Amulet does not require that a type's
+behaviour is defined in the same file as its definition. Therefore, it's
+often possible to reorganise modules to declare types in one file, and
+certain behaviours in others.

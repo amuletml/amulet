@@ -1,0 +1,14 @@
+Amulet distinguishes between qualified names (those belonging to a
+module, such as `Foo.bar`) and unqualified names (those accessed
+directly, such as `foo`). While qualified and unqualified names may be
+accessed interchangeably, it makes no sense to declare a qualified
+name:
+
+  let Foo.x = 1
+
+Instead, one should just write the following:
+
+  let x = 1
+
+The same restriction applies to any declaration, including patterns,
+types and constructors.

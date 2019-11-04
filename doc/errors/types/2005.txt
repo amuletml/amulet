@@ -1,0 +1,10 @@
+The type checker encountered a hole (_) expression in the program.
+Furthermore, if it can find suitable expressions of the type this hole
+was inferred to have, it will print them.
+
+    let swap : forall 'a. ('a * 'b) -> ('b * 'a) = _
+
+Here, the compiler suggests the following expression as an
+implementation for swap, since it is unambiguous.
+
+    fun (x, y) -> (y, x)

@@ -1,4 +1,4 @@
-too-concrete01.ml[6:15 ..6:24]: error
+too-concrete01.ml[6:15 ..6:24]: error (E2018)
   No instance for eq string arising from use of the expression
   │ 
 6 │   fun x -> if x == "foo" then "foo" else "bar"

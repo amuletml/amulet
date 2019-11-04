@@ -1,0 +1,19 @@
+This associated type declaration appears with a different number of
+arguments than it was declared to have.
+
+For example:
+
+    class foo 't begin
+      type bar ('x : type)
+      type quux : type -> type
+    end
+
+These associated types seem to both have two arguments (the class
+argument `'t` and the other argument), since they both have the same
+kind. However, this is not the case:
+
+  * `bar` reduces to a type expression of kind `type` after receiving
+    two arguments (`'t` and `'x`)
+
+  * quux reduces to a type expression of kind `type -> type` after
+    receiving a single argument, namely `'t`.

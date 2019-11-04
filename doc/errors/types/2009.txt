@@ -1,0 +1,12 @@
+When a type variable is explicitly made polymorphic (with a type
+annotation, with an existential variable in a GADT constructor, with
+an instance head, or with the LHS of a type function), it becomes
+"rigid" and different from all other types (except for itself).
+
+This error happens when the programmer has tried to use some concrete
+type in place of a rigid type variable:
+
+    let id : forall 'a. 'a -> 'a =
+      fun x -> x + 1
+    (*         ^ ^ expects type int *)
+    (*         | has type a         *)

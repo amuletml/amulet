@@ -1,4 +1,4 @@
-empty_match_03.ml[3:26 ..3:32]: warning
+empty_match_03.ml[3:26 ..3:32]: warning (W3005)
   Redundant pattern in expression
   │ 
 3 │ let f : void -> () = fun _ -> ()

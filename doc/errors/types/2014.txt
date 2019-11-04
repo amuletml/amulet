@@ -1,0 +1,15 @@
+This branch of a (GADT) pattern match has unsatisfiable constraints, and
+thus can never be executed. Generally, these are equality constraints
+arising between indices of the generalised type:
+
+    type vect 'n 'a =
+      | Nil : vect Z 'a
+      | Cons : 'a * vect 'n a -> vect (S 'n) 'a
+
+    let foo (x : vect Z 'a) =
+      match x with
+      | Nil    -> () (* This branch is fine; Z ~ Z *)
+      | Cons _ -> ()
+        (* This branch will never be executed since Cons isn't an
+        inhabitant of `vect Z _`, and the type checker can tell you
+        since Z ~/~ S _ *)

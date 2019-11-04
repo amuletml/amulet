@@ -1,4 +1,4 @@
-typeable-fail.ml[4:1 ..6:3]: error
+typeable-fail.ml[4:1 ..6:3]: error (E2025)
   │ 
 4 │ instance typeable foo begin
   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^

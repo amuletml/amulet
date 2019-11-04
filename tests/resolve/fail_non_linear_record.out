@@ -1,0 +1,6 @@
+fail_non_linear_record.ml[2:3 ..4:10]: error (E1004)
+  Duplicate field x in record
+
+  │ 
+2 │   { x = 0,
+  │   ^^^^^^^^

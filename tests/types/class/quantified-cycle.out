@@ -1,4 +1,4 @@
-quantified-cycle.ml[12:10 ..12:16]: error
+quantified-cycle.ml[12:10 ..12:16]: error (E2019)
    │ 
 12 │ let () = meth T1
    │          ^^^^^^^

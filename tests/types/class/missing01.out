@@ -1,4 +1,4 @@
-missing01.ml[5:1 ..5:22]: error
+missing01.ml[5:1 ..5:22]: error (E2022)
   │ 
 5 │ instance foo begin end
   │ ^^^^^^^^^^^^^^^^^^^^^^

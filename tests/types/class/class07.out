@@ -1,11 +1,11 @@
-class07.ml[9:9 ..9:32]: warning
+class07.ml[9:9 ..9:32]: warning (W2015)
   │ 
 9 │ let foo x = show (read (show x))
   │         ^^^^^^^^^^^^^^^^^^^^^^^^
   Ambiguous type for value foo:
     show 'a * read 'a * show 'dw => 'dw -> string
   The variable a is ambiguous
-class07.ml[9:5 ..9:7]: warning
+class07.ml[9:5 ..9:7]: warning (W2015)
   │ 
 9 │ let foo x = show (read (show x))
   │     ^^^

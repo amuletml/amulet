@@ -1,10 +1,10 @@
-definition of x[1:3 ..1:3]: warning
+definition of x[1:3 ..1:3]: warning (W3003)
   Syntax error in definition of x
   │ 
 1 │ external val x : int = "x x"
   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-definition of x[1:3 ..1:3]: error
+definition of x[1:3 ..1:3]: error 
   Unexpected x, expected one of and, or, '+', '-', '*', '/', '%', '..', '==', '~=', '<', '>', '<=', '>='
   │ 
 1 │ x x

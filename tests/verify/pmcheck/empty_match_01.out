@@ -1,11 +1,11 @@
-empty_match_01.ml[2:33 ..2:40]: warning
+empty_match_01.ml[2:33 ..2:40]: warning (W3006)
   Non-exhaustive patterns in expression
   │ 
 2 │ let f1 : forall 'a. int -> 'a = function ()
   │                                 ^^^^^^^^
   • Note: The following patterns are not covered
       _
-empty_match_01.ml[7:22 ..7:29]: warning
+empty_match_01.ml[7:22 ..7:29]: warning (W3006)
   Non-exhaustive patterns in expression
   │ 
 7 │ let f2 : foo -> () = function ()

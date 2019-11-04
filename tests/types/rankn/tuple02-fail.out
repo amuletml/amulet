@@ -1,4 +1,4 @@
-tuple02-fail.ml[1:42 ..1:52]: error
+tuple02-fail.ml[1:42 ..1:52]: error (E2009)
   Could not match the rigid type variable 'a with the type int
 
   • When checking that the type

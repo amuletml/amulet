@@ -1,4 +1,4 @@
-pass_guard.ml[4:12 ..4:12]: error
+pass_guard.ml[4:12 ..4:12]: error (E1001)
   Variable not in scope: `>`
 
   Arising from use of the expression

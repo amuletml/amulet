@@ -1,4 +1,4 @@
-tyfun-arity.ml[3:5 ..3:15]: error
+tyfun-arity.ml[3:5 ..3:15]: error (E2034)
   │ 
 3 │ let foo : f int = _
   │     ^^^^^^^^^^^

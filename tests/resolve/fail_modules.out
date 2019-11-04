@@ -1,4 +1,4 @@
-fail_modules.ml[4:9 ..4:9]: error
+fail_modules.ml[4:9 ..4:9]: error (E1001)
   Variable not in scope: `x`
 
   Arising from use of the expression

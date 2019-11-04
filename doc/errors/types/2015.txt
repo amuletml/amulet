@@ -1,0 +1,12 @@
+The type for this function is ambiguous, that is, it has variables that
+appear in a constraint (i.e. will affect the runtime behaviour of the
+function) that can't be determined by unification.
+
+This can happen because:
+
+  * The type variable never appears in the type after it appears in the
+    constraint.
+
+  * The type variable only appears as an argument to a type family
+    (either an associated type or a type function), in which case it can
+    not be determined because type families aren't injective.

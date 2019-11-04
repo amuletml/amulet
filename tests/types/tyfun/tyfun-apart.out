@@ -1,4 +1,4 @@
-tyfun-apart.ml[13:5 ..13:58]: error
+tyfun-apart.ml[13:5 ..13:58]: error (E2018)
    │ 
 13 │ let no : forall 'a 'b. trivial :- (discrim 'a 'b ~ string) = Sub (fun _ -> Dict)
    │                                                                            ^^^^

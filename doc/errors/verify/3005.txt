@@ -1,0 +1,32 @@
+The arm of this pattern is covered by some combination of the patterns
+preceding it, and so will never be executed.
+
+The easiest way to resolve this error is to remove any arms marked as
+redundant. This will have no impact on your program's behaviour.
+
+However, there may be times you want this pattern arm to be used, but
+the compiler is insisting it isn't. There may be several reasons for
+this:
+
+ - The first pattern to match will be the one which executed. For
+   instance, in the following code, the last case will never be executed
+   as `n` will always match first.
+
+        let rec fac = function
+        | 0 -> 1
+        | n -> n * fac (n - 1)
+        | 1 -> 1
+
+   In these cases, you may wish to reorder your patterns, so that the
+   more restrictive patterns appear first.
+
+ - If you do not want to reorder your patterns, you may wish to make
+   them more restrictive, replacing wildcards with more explicit checks.
+
+ - If this pattern is not covered by previous patterns, or this is the
+   first pattern, your type is 'uninhabited'. This means that there is
+   no way your code could ever create a value which has this type, and
+   so you shouldn't ever need to match for it.
+
+   These cases can be replaced with an empty match (`match x with ()` or
+   `function ()`).

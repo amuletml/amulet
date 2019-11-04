@@ -1,4 +1,4 @@
-dict02-fail.ml[17:25 ..17:26]: error
+dict02-fail.ml[17:25 ..17:26]: error (E2001)
    │ 
 17 │ let x = with_d (bar ()) () (fun x -> show x)
    │                         ^^

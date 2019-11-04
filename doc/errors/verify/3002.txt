@@ -1,0 +1,16 @@
+This definition is not used anywhere within your program. This means the
+variable definition can be removed, replaced with a pattern wildcard
+(`_`), or entirely removed.
+
+For instance, the binding
+
+    let (x, y) = do_something ()
+    y
+
+Can be replaced with:
+
+    let (_, y) = do_something ()
+    y
+
+In the cases where no variables are used at all, and the definition has
+no side effects, then it may be removed entirely.

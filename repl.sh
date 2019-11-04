@@ -38,6 +38,11 @@ find src/ -type f -name '*.y' | while read -r fname; do
 done
 
 if [[ $1 == "reload" ]]; then
+  echo $(stat -c '%Y' doc/errors.txt) $(stat -c '%Y' bin/Amc/Explain.hs)
+  if [[ $(stat -c '%Y' doc/errors.txt) > $(stat -c '%Y' bin/Amc/Explain.hs) ]] ; then
+    echo "Updating error explanation module.."
+    touch bin/Amc/Explain.hs
+  fi
   exit 0
 fi
 

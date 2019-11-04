@@ -1,0 +1,18 @@
+Type families (associated types, type functions) can not appear in
+instance heads. This is because type families are not injective, i.e.
+one can not run them "backwards" from the solution to get the arguments
+to the function, and so if they were allowed in instance heads, instance
+selection would be undecidable.
+
+A workaround: Introduce a fresh type variable to your instance head,
+then constraint it to be equal to the type function application in the
+instance context. That is, turn
+
+    instance foo int (fam 'a) begin end
+
+into
+
+    instance 'b ~ fam 'a => foo int 'b begin end
+
+This causes instance selection to *always* pick that instance, then
+afterwards constrain the second parameter to be equal to `fam 'a`.

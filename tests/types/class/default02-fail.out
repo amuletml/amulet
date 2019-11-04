@@ -1,4 +1,4 @@
-default02-fail.ml[14:8 ..14:15]: error
+default02-fail.ml[14:8 ..14:15]: error (E2018)
   No instance for eq 'a when checking that show_tail
   is an implementation for type
     forall 'a. show 'a => 'a -> string

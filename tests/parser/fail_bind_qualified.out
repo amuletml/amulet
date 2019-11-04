@@ -1,5 +1,5 @@
-fail_bind_qualified.ml[1:6 ..1:14]: error
-  Attempting to bind a qualified variable `Foo.bar`
+fail_bind_qualified.ml[1:6 ..1:14]: error (E0010)
+  Attempting to declare a qualified name `Foo.bar`
   │ 
 1 │ let (`Foo.bar`) = ()
   │      ^^^^^^^^^
