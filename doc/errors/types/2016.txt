@@ -1,4 +1,4 @@
-Amulet does not permit expressions which are not syntatically values to
+Amulet does not permit expressions which are not syntactically values to
 take on polymorphic types, because that would compromise soundness.
 Consider the `let`-binding
 

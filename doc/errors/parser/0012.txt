@@ -1,6 +1,6 @@
 Amulet heavily relies on indentation in order to determine how a program
 should be parsed. As a result, it's a good idea to ensure that your code
-is layed out correctly.
+is laid out correctly.
 
 Here, the warning is triggered when the `in` separator is not aligned
 with the corresponding `let`:

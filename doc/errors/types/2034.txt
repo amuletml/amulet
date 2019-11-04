@@ -1,4 +1,4 @@
-A type synoynm (or type function) can't appear with less arguments than
+A type synonym (or type function) can't appear with less arguments than
 it was declared to have. This is because such an undersaturated
 application would correspond to a type-level lambda, and type-level
 lambda expressions make type inference undecidable.

@@ -5,7 +5,7 @@ several argument.
     instance eq int
 
 Instances may also impose additional constraints on its arguments, such
-as requiring the elemtents of a list to also have an instance of this
+as requiring the elements of a list to also have an instance of this
 class.
 
     instance eq 'a => eq (list 'a)
