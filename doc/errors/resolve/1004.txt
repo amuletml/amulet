@@ -1,11 +1,11 @@
-In Amulet, records cannot have multiple fields with the same
-name. Allowing this, would lead to confusing behaviour: which value did
-you want to access here:
+In Amulet, records cannot have multiple fields with the same name.
+Allowing this, would lead to confusing behaviour: which value did you
+want to access here:
 
     let person = { name = "Clara",
                    name = "Clive" }
     person.name (* Clara or Clive? *)
 
-This error most likely occurs due to a field name being misspelled, or an
-accidental copy-and-paste resulting in a field being declared multiple
-times.
+This error most likely occurs due to a field name being misspelled, or
+an accidental copy-and-paste resulting in a field being declared
+multiple times.

@@ -1,7 +1,7 @@
 The file you are trying to import cannot be found.
 
-Amulet supports two kinds of imports, make sure you are using the correct
-one:
+Amulet supports two kinds of imports, make sure you are using the
+correct one:
 
  - If an import starts with "../" or "./", it will be resolved relative
    to the current file. This should be used for referencing files within

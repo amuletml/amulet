@@ -1,13 +1,14 @@
 The right hand side of this recursive definition is invalid. In order to
-compute the value of this variable, we'd need to know it's value already.
+compute the value of this variable, we'd need to know it's value
+already.
 
 For instance, consider this definition:
 
     let rec x = x
 
-Computing x would result in an infinite loop - in order to evaluate x, we
-need to evaluate x. This can be avoided by making x lazy, or converting
-it into a function:
+Computing x would result in an infinite loop - in order to evaluate x,
+we need to evaluate x. This can be avoided by making x lazy, or
+converting it into a function:
 
     let rec x = lazy (force x)
 

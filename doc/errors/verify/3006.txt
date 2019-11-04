@@ -1,9 +1,9 @@
-This pattern matching expression does not handle every possible case that
-may occur. If such a case does occur, your code will throw an error and
-the pogram will most likely crash.
+This pattern matching expression does not handle every possible case
+that may occur. If such a case does occur, your code will throw an error
+and the pogram will most likely crash.
 
-Amulet will inform you which pattern arms are missing. You should just be
-able to copy each arm, and add some implementation for it.
+Amulet will inform you which pattern arms are missing. You should just
+be able to copy each arm, and add some implementation for it.
 
 Note, if this pattern occurs within a let binding or function, you will
 need to replace it with a `match` expression. For instance these

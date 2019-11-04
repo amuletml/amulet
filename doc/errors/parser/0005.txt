@@ -1,5 +1,5 @@
-A comment was opened (using `(*`), but never closed. Add `*)` in order to
-end the comment.
+A comment was opened (using `(*`), but never closed. Add `*)` in order
+to end the comment.
 
  • Note that comments may be nested, meaning that you may need to close
    multiple comments.

@@ -1,6 +1,6 @@
-If you have a `match` expression with a single clause, you can rewrite it
-as a pattern-matching let expression instead. This reduces indentation,
-and should make your code easier to read.
+If you have a `match` expression with a single clause, you can rewrite
+it as a pattern-matching let expression instead. This reduces
+indentation, and should make your code easier to read.
 
 For instance this expression
 

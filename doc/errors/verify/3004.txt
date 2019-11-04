@@ -21,5 +21,6 @@ This is elaborated into the following:
     let x = f () || (let y = g () in lazy y)
 
 This is clearly not what you would expect, as ideally the whole
-expression would be made lazy. In these cases, one should either refactor
-the expression into a smaller function, or use `lazy` explicitly.
+expression would be made lazy. In these cases, one should either
+refactor the expression into a smaller function, or use `lazy`
+explicitly.

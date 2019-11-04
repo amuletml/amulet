@@ -1,7 +1,8 @@
 Amulet distinguishes between qualified names (those belonging to a
 module, such as `Foo.bar`) and unqualified names (those accessed
 directly, such as `foo`). While qualified and unqualified names may be
-accessed interchangably, it makes no sense to declare a qualifified name:
+accessed interchangably, it makes no sense to declare a qualifified
+name:
 
   let Foo.x = 1
 

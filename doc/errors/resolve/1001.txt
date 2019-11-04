@@ -1,7 +1,7 @@
 This name cannot be found in the current scope. The most likely cause of
-this is that you have misspelled the name you are trying to use. However,
-if you would expect this variable to be available, there are several
-other things to try:
+this is that you have misspelled the name you are trying to use.
+However, if you would expect this variable to be available, there are
+several other things to try:
 
  - If the name is something you'd expect to be built in to Amulet, make
    sure you've imported the prelude:
