@@ -1,4 +1,4 @@
-tests/resolve/modules/syntax_error.ml[1:1 ..1:4]: error (E0006)
+tests/resolve/modules/syntax_error.ml[1:1 ..1:4]: error 
   Unexpected This, expected type
   │ 
 1 │ This is a syntax error
