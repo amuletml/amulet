@@ -12,8 +12,8 @@ the following is invalid:
 
   let x = with x <- f ()
 
-When using begin/end, make sure that all terms are are aligned to the
-same column:
+When using begin/end, make sure that all terms are aligned to the same
+column:
 
   begin
     let y = 2

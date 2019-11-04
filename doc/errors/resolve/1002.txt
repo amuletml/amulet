@@ -10,6 +10,5 @@ The solution is to rename the variables to all be something different.
 If you don't need a variable at all, you can replace it with an
 underscore (`_`):
 
-
     let x = 0 and _ = 1
     x (* x is definitely 0 *)

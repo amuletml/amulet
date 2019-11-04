@@ -1,7 +1,6 @@
 This method implementation is not of a method of the class being
 declared. For example:
 
-
     class foo 'a begin
       val x : unit -> 'a
     end
@@ -9,4 +8,3 @@ declared. For example:
     instance foo int begin
       let y _ = ...
     end
-

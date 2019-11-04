@@ -7,14 +7,12 @@ behaviour would be expected here.
     (* `x is declared twice. *)
     | _ -> false
 
-
 In order to resolve this error, variables should be renamed to ensure
 each one is unique.
 
 One interpretation of the above code is that it would check that both
 options contain the same value (as they are bound to the same
 variable). This behaviour can be emulated with a pattern guard:
-
 
     function
     | Just x, Just y when x == y -> true

@@ -1,5 +1,5 @@
 The left-hand-side of this closed type function equation mentions an
-application of a type function or synoynm, because type functions might
+application of a type function or synonym, because type functions might
 not be /injective/: i.e., they might map different arguments to the same
 type.
 

@@ -14,6 +14,5 @@ into
 
     instance 'b ~ fam 'a => foo int 'b begin end
 
-
 This causes instance selection to *always* pick that instance, then
 afterwards constrain the second parameter to be equal to `fam 'a`.
