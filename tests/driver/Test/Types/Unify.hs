@@ -7,38 +7,65 @@ import Test.Syntax.Gen
 import Test.Types.Util
 import Test.Util
 
+import qualified Data.Set as Set
+
 import Data.Function
 import Data.Foldable
 import Data.List
 
 import Hedgehog
 
+import Syntax.Subst
 import Syntax
 
-prop_unifyMakesGoodCoercion :: Property
-prop_unifyMakesGoodCoercion = property $ do
+prop_genTypeWellScoped :: Property
+prop_genTypeWellScoped = property $ do
+  aty <- forAllWith (displayS . displayType) genType
+  footnote . displayS $
+    vsep [ string "Type:" <+> displayTypeTyped aty
+         , string "ftv:" <+> shown (ftv aty)
+         ]
+  assert (Set.null (ftv aty))
+
+prop_unify_goodReflCo :: Property
+prop_unify_goodReflCo = property $ do
   aty <- forAllWith (show . displayType) genType
   case unify aty aty of
     Left e -> (footnote . show . pretty . toList $ e) *> failure
     Right x | (ca, cb) <- provenCoercion x -> do
       footnote . displayS $
           keyword "Given type:" <+> displayType aty
-          <#> keyword "Coercion proves:" <+> pretty ca <+> soperator (char '~') <+> pretty cb
-      assert (aty `equivalent` ca && aty `equivalent` cb)
+          <#> keyword "Coercion proves:" <+> displayType ca <+> soperator (char '~') <+> displayType cb
+      case unify aty ca of
+        Left e -> do
+          footnote $ "Left-hand type of coercion doesn't match unifier input"
+          footnote . show . pretty . toList $ e
+          failure
+        Right{} -> pure ()
 
--- TODO: This is timing out. Why?
--- prop_disjointTypesDon'tUnify :: Property
--- prop_disjointTypesDon'tUnify = property $ do
---   aty <- forAllWith (displayS . displayType) genType
---   bty <- forAllWith (displayS . displayType) genType
---   unless (aty `disjoint` bty) discard
---   case unify aty bty of
---     Left{} -> success
---     Right x | (ca, cb) <- provenCoercion x -> do
---       footnote . displayS $
---         keyword "Given types:" <+> displayType aty <+> keyword "and" <+> displayType aty
---           <#> keyword "Coercion proves:" <+> pretty ca <+> soperator (char '~') <+> pretty cb
---       failure
+      case unify ca cb of
+        Left e -> do
+          footnote $ "Unifier did not make a reflexive coercion for equal input types"
+          footnote . show . pretty . toList $ e
+          failure
+        Right{} -> pure ()
+
+prop_unify_goodCoOrDisjoint :: Property
+prop_unify_goodCoOrDisjoint = property $ do
+  aty <- forAllWith (displayS . displayType) genType
+  bty <- forAllWith (displayS . displayType) genType
+  footnote . displayS $
+    keyword "Given types:" <+> displayType aty <+> keyword "and" <+> displayType bty
+
+  case unify aty bty of
+    Left{} -> footnote "They're disjoint" *> success
+    Right x | (ca, cb) <- provenCoercion x -> do
+      footnote . displayS $
+        keyword "Given types:" <+> displayType aty <+> keyword "and" <+> displayType aty
+          <#> keyword "Coercion proves:" <+> displayType ca <+> soperator (char '~') <+> displayType cb
+      if ca `disjoint` aty || cb `disjoint` bty
+         then failure
+         else success
 
 provenCoercion :: Coercion Typed -> (Type Typed, Type Typed)
 provenCoercion (ReflCo a) = (a, a)
@@ -84,10 +111,10 @@ provenCoercion (ProjCo rs rs') =
       (ss, ts) = unzip (map proven rs')
       first = unionBy ((==) `on` fst) as ss
    in (TyExactRows first, TyRows (TyExactRows bs) ts)
-provenCoercion (ForallCo v k t) =
+provenCoercion (ForallCo v vis k t) =
   let (ka, kb) = provenCoercion k
       (ta, tb) = provenCoercion t
-   in (TyForall v (Just ka) ta, TyForall v (Just kb) tb)
+   in (TyPi (Invisible v (Just ka) vis) ta, TyPi (Invisible v (Just kb) vis) tb)
 provenCoercion (AssumedCo a b) = (a, b)
 
 tests :: TestTree

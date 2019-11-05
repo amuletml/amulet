@@ -18,12 +18,14 @@ as can be found [here] in the compiler repository, generated at $date.
 
 Keep in mind that the compiler can also print these explanations, using
 the \`amc explain [number]\`{} subcommand.
+
+
 EOF
 
 cat errors.txt | while read -r file_desc; do
   fname=$(echo $file_desc | cut -d' ' -f1)
   num=$(echo $fname | sed -re 's;\w+/0*([0-9]{1,4}).txt;\1;g')
-  anchor=$(echo $file_desc | cut -d' ' -f3)
+  anchor=$(echo $file_desc | cut -d' ' -f3 | cut -d'/' -f1)
 
   printf "### E%.4d: \"%s\" {#%s}\n" $num $anchor $anchor >> $out
 

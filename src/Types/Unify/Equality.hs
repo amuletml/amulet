@@ -188,19 +188,21 @@ unify scope ta@(TyCon a) tb@(TyCon b)
         (x:_) -> pure x
         _ -> confesses =<< unequal scope ta tb
 
-unify scope (TyForall v Nothing ty) (TyForall v' Nothing ty') = do
+unify scope (TyPi (Invisible v ka vis) ty) (TyPi (Invisible v' kb vis') ty') | vis == vis' = do
+  ka <-
+    case ka of
+      Nothing -> pure TyType
+      Just t -> pure t
+  kb <-
+    case kb of
+      Nothing -> pure TyType
+      Just t -> pure t
+
+  c <- unify scope ka kb
   fresh <- freshTV
-  let (TyVar tv) = fresh
+  let TyVar tv = fresh
 
-  ForallCo tv (ReflCo TyType) <$>
-    unify scope (apply (Map.singleton v fresh) ty) (apply (Map.singleton v' fresh) ty')
-
-unify scope (TyForall v (Just k) ty) (TyForall v' (Just k') ty') = do
-  c <- unify scope k k'
-  fresh <- freshTV
-  let (TyVar tv) = fresh
-
-  ForallCo tv c <$>
+  ForallCo tv vis c <$>
     unify scope (apply (Map.singleton v fresh) ty) (apply (Map.singleton v' fresh) ty')
 
 -- We can unify non-dependent function types with non-dependent function
@@ -282,7 +284,7 @@ unify scope (TyOperator l v r) (TyOperator l' v' r')
   | v == v' = AppCo <$> unify scope l l' <*> unify scope r r'
 
 unify scope (TyTupleL a b) (TyTupleL a' b') =
-  (\_ _ -> AssumedCo (TyTupleL a b) (TyTupleL b b'))
+  (\_ _ -> AssumedCo (TyTupleL a b) (TyTupleL a' b'))
     <$> unify scope a a' <*> unify scope b b'
 
 unify scope ta@(TyApps (TyCon v) xs@(_:_)) b = do

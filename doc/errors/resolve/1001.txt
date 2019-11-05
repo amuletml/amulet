@@ -3,26 +3,26 @@ this is that you have misspelled the name you are trying to use.
 However, if you would expect this variable to be available, there are
 several other things to try:
 
- 1. If the name is something you'd expect to be built in to Amulet, make
-    sure you've imported the prelude:
+1. If the name is something you'd expect to be built in to Amulet, make
+   sure you've imported the prelude:
 
-       open import "prelude.ml" (* Needed for `None` *)
-       let x = None
+        open import "prelude.ml" (* Needed for 'None' *)
+        let x = None
 
- 2. If the name is defined in another file or module, make sure you have
-    imported and opened the file.
+2. If the name is defined in another file or module, make sure you have
+   imported and opened the file.
 
-       open import "./my_lib.ml"
-       (* ^ Needed in order for `my_function` to be in scope. *)
+        open import "./my_lib.ml"
+        (* ^ Needed in order for 'my_function' to be in scope. *)
 
-       let x = my_function ()
+        let x = my_function ()
 
 3. When writing recursive functions, make sure you have used the `rec`
    modifier:
 
-       (* Without `rec`, you won't be able to use `fib` within its
-       definition. *)
-       let rec fib = function
-       | 0 -> 1
-       | 1 -> 1
-       | n -> fib (n - 1) * fib (n - 2)
+         (* Without 'rec', you won't be able to use 'fib' within its
+         definition. *)
+         let rec fib = function
+         | 0 -> 1
+         | 1 -> 1
+         | n -> fib (n - 1) * fib (n - 2)

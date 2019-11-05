@@ -1,5 +1,5 @@
-A comment was opened (using `(*`), but never closed. Add `*)` in order
-to end the comment.
+A comment was opened (using `(*`​), but never closed. Add
+`*)`​ in order to end the comment.
 
 1. Note that comments may be nested, meaning that you may need to close
    multiple comments.
@@ -9,5 +9,5 @@ to end the comment.
    section's parenthesis.
 
    The most common case of this is referring to the multiplication (or
-   product type) operators, which would be spelled `(*)`. However, this
-   is an unclosed comment, so write `( * )` instead.
+   product type) operators, which would be spelled `(*)`​. However,
+   this is an unclosed comment, so write `( * )`​ instead.

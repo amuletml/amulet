@@ -79,7 +79,7 @@ instance Ord (Var p) => Substitutable p (Coercion p) where
   ftv (ExactRowsCo rs) = foldMap (ftv . snd) rs
   ftv (RowsCo c rs) = ftv c <> foldMap (ftv . snd) rs
   ftv (ProjCo rs rs') = foldMap (ftv . snd) rs <> foldMap (ftv . snd) rs'
-  ftv (ForallCo v t cs) = ftv t <> v `Set.delete` ftv cs
+  ftv (ForallCo v _ t cs) = ftv t <> v `Set.delete` ftv cs
   ftv VarCo{} = mempty
   ftv P1{} = mempty
   ftv P2{} = mempty
@@ -100,7 +100,7 @@ instance Ord (Var p) => Substitutable p (Coercion p) where
   apply s (ExactRowsCo rs) = ExactRowsCo (map (second (apply s)) rs)
   apply s (RowsCo c rs) = RowsCo (apply s c) (map (second (apply s)) rs)
   apply s (ProjCo rs rs') = ProjCo (map (second (apply s)) rs) (map (second (apply s)) rs')
-  apply s (ForallCo v c cs) = ForallCo v (apply s c) (apply s' cs) where
+  apply s (ForallCo v vis c cs) = ForallCo v vis (apply s c) (apply s' cs) where
     s' = Map.delete v s
   apply s (InstCo ax ts) = InstCo ax (apply s ts)
 

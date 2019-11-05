@@ -626,7 +626,7 @@ isReflexiveCo (ProdCo a b) = isReflexiveCo a && isReflexiveCo b
 isReflexiveCo (ExactRowsCo rs) = all (isReflexiveCo . snd) rs
 isReflexiveCo (RowsCo a rs) = isReflexiveCo a && all (isReflexiveCo . snd) rs
 isReflexiveCo ProjCo{} = False
-isReflexiveCo (ForallCo _ a b) = isReflexiveCo a && isReflexiveCo b
+isReflexiveCo (ForallCo _ _ a b) = isReflexiveCo a && isReflexiveCo b
 
 isReflexiveCo P1{} = False
 isReflexiveCo P2{} = False

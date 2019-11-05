@@ -110,7 +110,7 @@ data Coercion p
   | ProjCo [(Text, Type p)] [(Text, Coercion p)]
     -- { x : A ~ B | y : S ~ T } : { x : A, y : S } ~ { x : B | y : T }
   | AssumedCo (Type p) (Type p) -- <A, B> : A ~ B
-  | ForallCo (Var p) (Coercion p) (Coercion p)
+  | ForallCo (Var p) Specificity (Coercion p) (Coercion p)
     -- (forall (v : x : c ~ d). phi : a ~ b) : forall (v : c). a ~ forall (v : d). b
   | P1 (Var p) -- { _1 : a ~ b, _2 : c ~ d }.1 : a ~ b
   | P2 (Var p) -- { _1 : a ~ b, _2 : c ~ d }.2 : a ~ b
@@ -174,7 +174,7 @@ instance Pretty (Var p) => Pretty (Coercion p) where
   pretty (ProjCo _ rs') =
     enclose (lbrace <> space) (space <> rbrace) $ keyword "proj" <+> pprRow rs'
     where pprRow xs = hsep (punctuate comma (map (\(n, v) -> text n <+> colon <+> pretty v) xs))
-  pretty (ForallCo v c cs) = keyword "∀" <> parens (pretty v <+> colon <+> pretty c) <> dot <+> pretty cs
+  pretty (ForallCo v _ c cs) = keyword "∀" <> parens (pretty v <+> colon <+> pretty c) <> dot <+> pretty cs
   pretty (P1 c) = pretty c <> keyword ".1"
   pretty (P2 c) = pretty c <> keyword ".2"
   pretty (InstCo ax t) = pretty ax <+> hsep (map (parens . pretty) t)
