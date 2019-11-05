@@ -15,3 +15,7 @@ Style conventions for error explanations:
   * Start any headers inside the explanation at `####`
 
 * Hard wrap lines at 72 characters.
+
+* Don't use \` in code examples (etc) because it will be suffixed with
+  `{.amulet}` for the error index; If you really need monospace,
+  non-highlighted text, suffix it with a ZWS

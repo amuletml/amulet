@@ -47,10 +47,9 @@ checkExpr e t = flip Namey.evalNamey MonadInfer.firstName $ MonadInfer.runInfer 
 
 equivalent, disjoint :: Type Typed -> Type Typed -> Bool
 equivalent a b =
-  let task = Seq.singleton (ConUnify (BecauseOf (Blame internal)) mempty (TgInternal "co") a b)
-   in case flip Namey.evalNamey MonadInfer.firstName . MonadInfer.runChronicleT . flip solve mempty $ task of
-     That{} -> True
-     _ -> False
+  case unifyPure a b of
+    Just _ -> True
+    _ -> False
 
 disjoint a b = not (a `equivalent` b)
 

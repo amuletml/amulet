@@ -63,7 +63,7 @@ transformCoercion fc ft = goC where
   transC (RowsCo c rs) = RowsCo (goC c) (map (second goC) rs)
   transC (ProjCo rs rs') = ProjCo (map (second goT) rs) (map (second goC) rs')
   transC (SymCo c) = SymCo (goC c)
-  transC (ForallCo v a c) = ForallCo v (goC a) (goC c)
+  transC (ForallCo v vis a c) = ForallCo v vis (goC a) (goC c)
   transC (InstCo ax ts) = InstCo ax (map goC ts)
 
   goT = transformType ft . ft
