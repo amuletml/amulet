@@ -104,6 +104,7 @@ tokens :-
   <0> "val"      { constTok TcVal      }
   <0> "when"     { constTok TcWhen     }
   <0> "with"     { constTok TcWith     }
+  <0> "static"   { constTok TcStatic   }
 
   <0> ","      { constTok TcComma }
   <0> "."      { constTok TcDot }
@@ -112,6 +113,9 @@ tokens :-
   <0> ";"      { constTok TcSemicolon }
   <0> "(" "|"  { constTok TcOBanana }
   <0> "|" ")"  { constTok TcCBanana }
+  <0> "[" "|"  { constTok TcOTelephone }
+  <0> "|" "]"  { constTok TcCTelephone }
+  <0> "$" "("  { constTok TcOUnquote }
   <0> "("      { constTok TcOParen }
   <0> ")"      { constTok TcCParen }
   <0> "@"      { constTok TcAt }

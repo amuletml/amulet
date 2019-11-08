@@ -117,6 +117,7 @@ import Syntax
   val      { Token TcVal _ _ }
   when     { Token TcWhen _ _ }
   with     { Token TcWith _ _ }
+  static   { Token TcWith _ _ }
 
   ','      { Token TcComma _ _ }
   '.'      { Token TcDot _ _ }
@@ -124,9 +125,12 @@ import Syntax
   ';;'     { Token TcTopSep _ _ }
   ';'      { Token TcSemicolon _ _ }
   '('      { Token TcOParen _ _ }
+  '$('     { Token TcOUnquote _ _ }
   ')'      { Token TcCParen _ _ }
   '(|'     { Token TcOBanana _ _ }
   '|)'     { Token TcCBanana _ _ }
+  '[|'     { Token TcOTelephone _ _ }
+  '|]'     { Token TcCTelephone _ _ }
   '@'      { Token TcAt _ _ }
   '{'      { Token TcOBrace _ _ }
   '}'      { Token TcCBrace _ _ }
@@ -212,6 +216,9 @@ Top :: { Toplevel Parsed }
 
     | instance Type Begin(Methods)             {% fmap (withPos2 $1 $3) $ buildInstance $2 (getL $3) }
     | deriving instance Type                   { withPos2 $1 $3 $ DeriveInstance (getL $3) }
+
+    -- A top-level unquote:
+    | static Expr                              { withPos2 $1 $2 $ TopUnquote $2 }
 
 TyFunBody :: { [TyFunClause Parsed] }
   : List(TyFunEq, TopSep) { $1 }
@@ -344,6 +351,8 @@ Atom :: { Expr Parsed }
      | '_'                                    { withPos1 $1 (Hole (Name (T.singleton '_'))) }
      | begin List1(CompStmt, ExprSep) end     { withPos2 $1 $3 $ DoExpr bindVar $2 }
      | '(|' Expr '|)'                         { withPos2 $1 $3 $ Idiom pureVar apVar $2 }
+     | '[|' Expr '|]'                         { withPos2 $1 $3 $ Quote $2 }
+     | '$(' Expr ')'                          { withPos2 $1 $3 $ Unquote $2 }
      | '(' ')'                                { withPos2 $1 $2 $ Literal LiUnit }
      | '(' Section ')'                        { withPos2 $1 $3 $ Parens $2 }
      | '(' NullSection ',' List1(NullSection, ',') ')'

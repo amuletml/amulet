@@ -245,6 +245,8 @@ reTops (t@(Instance cls ctx head ms _ ann):rest) sig = do
 
   first3 (t':) <$> reTops rest sig
 
+reTops (TopUnquote ex _:_) _ = error $ "TODO: resolve top-level unquote " ++ show ex
+
 reTopsWith :: MonadResolve m
            => TopAccess -> [Toplevel Parsed] -> Signature
            -> (Signature -> Signature)
@@ -432,6 +434,9 @@ reExpr (DoExpr var qs a) =
             Nothing -> pure undefined
         pure $ DoExpr var (reverse acc) a
   in go qs [] Nothing
+
+reExpr (Quote ex _) = error $ "TODO: resolve quote " ++ show ex
+reExpr (Unquote ex _) = error $ "TODO: resolve unquote " ++ show ex
 
 reExpr ExprWrapper{} = error "resolve cast"
 

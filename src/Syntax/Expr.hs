@@ -100,6 +100,10 @@ data Expr p
   | Idiom (Var p) (Var p) (Expr p) (Ann p)
   -- Idiom brackets just take a single Expr; the TC knows how to handle them
 
+  -- Macros:
+  | Quote (Expr p) (Ann p)
+  | Unquote (Expr p) (Ann p)
+
   | ExprWrapper (Wrapper p) (Expr p) (Ann p)
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Expr p)

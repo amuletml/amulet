@@ -59,22 +59,26 @@ data TokenClass
   | TcVal      -- ^ The @val@ keyword.
   | TcWhen     -- ^ The @when@ keyword.
   | TcWith     -- ^ The @with@ keyword.
+  | TcStatic   -- ^ The @static@ keyword.
 
-  | TcDot       -- ^ A @.@ token.
-  | TcComma     -- ^ A @,@ token.
-  | TcColon     -- ^ A @:@ token.
-  | TcBang      -- ^ A @!@ token.
-  | TcSemicolon -- ^ A @;@ token.
-  | TcTopSep    -- ^ A @;;@ token.
-  | TcOBanana   -- ^ A @(|@ token.
-  | TcCBanana   -- ^ A @|)@ token.
-  | TcOParen    -- ^ A @(@ token.
-  | TcCParen    -- ^ A @)@ token.
-  | TcAt        -- ^ A @@{@ token.
-  | TcOBrace    -- ^ A @{@ token.
-  | TcCBrace    -- ^ A @}@ token.
-  | TcOSquare   -- ^ A @[@ token.
-  | TcCSquare   -- ^ A @]@ token.
+  | TcDot        -- ^ A @.@ token.
+  | TcComma      -- ^ A @,@ token.
+  | TcColon      -- ^ A @:@ token.
+  | TcBang       -- ^ A @!@ token.
+  | TcSemicolon  -- ^ A @;@ token.
+  | TcTopSep     -- ^ A @;;@ token.
+  | TcOBanana    -- ^ A @(|@ token.
+  | TcCBanana    -- ^ A @|)@ token.
+  | TcOTelephone -- ^ A @[|@ token.
+  | TcCTelephone -- ^ A @[|@ token.
+  | TcOParen     -- ^ A @(@ token.
+  | TcCParen     -- ^ A @)@ token.
+  | TcAt         -- ^ A @@{@ token.
+  | TcOUnquote   -- ^ A @{@ token.
+  | TcOBrace     -- ^ A @{@ token.
+  | TcCBrace     -- ^ A @}@ token.
+  | TcOSquare    -- ^ A @[@ token.
+  | TcCSquare    -- ^ A @]@ token.
 
   | TcOp Text                    -- ^ Operators (@+@)
   | TcIdentifier Text            -- ^ Identifiers (@foo@)
@@ -155,6 +159,7 @@ instance Show TokenClass where
   show TcSemicolon = ";"
   show TcTopSep = ";;"
   show TcOParen = "("
+  show TcOUnquote = "$("
   show TcCParen = ")"
   show TcAt = "@"
   show TcOBrace = "{"
@@ -163,6 +168,8 @@ instance Show TokenClass where
   show TcCSquare = "]"
   show TcOBanana = "(|"
   show TcCBanana = "|)"
+  show TcOTelephone = "[|"
+  show TcCTelephone = "|]"
 
   show (TcOp t) = unpack t
   show (TcIdentifier t) = unpack t

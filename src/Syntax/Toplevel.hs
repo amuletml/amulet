@@ -71,6 +71,7 @@ data Toplevel p
                 , tyfunEqs :: [TyFunClause p]
                 , ann :: Ann p
                 }
+  | TopUnquote (Expr p) (Ann p)
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Toplevel p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Toplevel p)
@@ -167,6 +168,7 @@ instance (Spanned (Constructor p), Spanned (Ann p)) => Spanned (Toplevel p) wher
   annotation (Module _ _ m) = annotation m
   annotation (Open m) = annotation m
   annotation (Include m) = annotation m
+  annotation (TopUnquote _ m) = annotation m
 
 instance Spanned (Ann p) => Spanned (Fundep p) where
   annotation = annotation . view fdAnn
@@ -261,6 +263,8 @@ instance Pretty (Var p) => Pretty (Toplevel p) where
       <#> indent 2 (align (vsep (map pretty equations)))
       <#> keyword "end"
     where ks = foldMap ((colon <+>) . pretty) kindsig
+
+  pretty (TopUnquote e _) = keyword "static" <+> pretty e
 
 instance Pretty (Var p) => Pretty (TyFunClause p) where
   pretty (TyFunClause lhs rhs _) = pretty lhs <+> equals <+> pretty rhs
