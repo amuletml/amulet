@@ -477,6 +477,9 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
     (TcOParen, _) -> pure (Result tok Done, CtxBracket TcCParen:c)
     (TcOBrace, _) -> pure (Result tok Done, CtxBracket TcCBrace:c)
     (TcOSquare, _) -> pure (Result tok Done, CtxList:CtxBracket TcCSquare:c)
+    (TcOUnquote, _) -> pure (Result tok Done, CtxBracket TcCParen:c)
+    (TcOBanana, _) -> pure (Result tok Done, CtxBracket TcCBanana:c)
+    (TcOTelephone, _) -> pure (Result tok Done, CtxBracket TcCTelephone:c)
 
     -- @[ ... | @ ~~> CtxListComprehension
     (TcPipe, CtxList:ck) -> pure (Result tok Done, CtxListComprehension:ck)
@@ -522,6 +525,8 @@ canTerminate :: TokenClass -> Bool
 canTerminate TcCBrace = True
 canTerminate TcCParen = True
 canTerminate TcCSquare = True
+canTerminate TcCBanana = True
+canTerminate TcCTelephone = True
 canTerminate TcComma = True
 canTerminate TcElse = True
 canTerminate TcEnd = True
