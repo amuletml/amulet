@@ -151,6 +151,7 @@ instance Show TokenClass where
   show TcVal = "val"
   show TcWhen = "when"
   show TcWith = "with"
+  show TcStatic = "static"
 
   show TcComma = ","
   show TcDot = "."

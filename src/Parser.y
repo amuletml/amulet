@@ -117,7 +117,7 @@ import Syntax
   val      { Token TcVal _ _ }
   when     { Token TcWhen _ _ }
   with     { Token TcWith _ _ }
-  static   { Token TcWith _ _ }
+  static   { Token TcStatic _ _ }
 
   ','      { Token TcComma _ _ }
   '.'      { Token TcDot _ _ }
