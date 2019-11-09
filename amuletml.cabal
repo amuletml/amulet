@@ -44,6 +44,7 @@ executable amc
                      , optparse-applicative >= 0.14 && < 0.16
                      , template-haskell >= 2.13 && < 2.16
                      , rope-utf16-splay >= 0.3 && < 0.4
+                     , unordered-containers >= 0.2 && < 0.3
                      , pretty-show
 
   other-modules:       Version
