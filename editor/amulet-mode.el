@@ -1,8 +1,8 @@
 ;;; amulet-mode.el --- Editing support for Amulet -*- lexical-binding: t; -*-
 
 ;;; Commentary:
-;; Just a very quick implementation of syntax highlighting and error displaying
-;; for Amulet.
+;; Just a very quick implementation of syntax highlighting and other editor
+;; integration for Amulet.
 
 ;;; Code:
 
@@ -112,108 +112,16 @@
 
   ;; Syntax highlighting
   (set-syntax-table amulet-mode--syntax-table)
-  (setq-local font-lock-defaults '(amulet-mode--font-lock))
+  (setq-local font-lock-defaults '(amulet-mode--font-lock)))
 
-  (amulet-mode-start))
-
-(defvar amulet-mode--process
-  nil
-  "The current Amulet process.")
-
-(defun amulet-mode--process-sentinel (process event)
-  "Display a message when the Amulet PROCESS receives an error-like EVENT."
-  (unless (or (eq event "deleted\n")
-              (eq event "finished\n")
-              (eq event "open\n"))
-    (message (format "Amulet process %s (%s)" event process))))
-
-(defun amulet-mode-start ()
-  "Start the Amulet process if not already running."
-  (interactive)
-  (cond
-   ((not (eq major-mode 'amulet-mode))
-    (message "Buffer is not using Amulet."))
-
-   ((and amulet-mode--process (process-live-p amulet-mode--process))
-    (message "Amulet is currently live"))
-
-   (t
-    (condition-case err
-      (progn
-        (setq amulet-mode--process
-              (make-process
-               :name "amulet-mode--process"
-               :connection-type 'pipe
-               ;; TODO: Extract from flycheck
-               :command '("amc" "repl")))
-        (set-process-sentinel amulet-mode--process #'amulet-mode--process-sentinel))
-      (error
-       (when amulet-mode--process (delete-process amulet-mode--process))
-       (signal (car err) (cdr err)))))))
-
-(defun amulet-mode-restart ()
-  "Start or restart the Amulet background process."
-  (interactive)
-  (if (eq major-mode 'amulet-mode)
-      (progn
-        (when amulet-mode--process (delete-process amulet-mode--process))
-        (amulet-mode-start))
-      (message "Buffer is not using Amulet.")))
-
-(defun amulet-mode-stop ()
-  "Kill the Amulet background process."
-  (interactive)
-  (cond
-   ((not (eq major-mode 'amulet-mode))
-    (message "Buffer is not using Amulet."))
-   (amulet-mode--process
-    (delete-process amulet-mode--process))))
-
-(require 'flycheck)
-
-(flycheck-define-checker amulet
-  "An Amulet syntax checker using amc.
-
-   See `https://amulet.squiddev.cc/'."
-  :command ("amc"
-            "connect"
-            (eval (concat ":l " (flycheck-save-buffer-to-temp #'flycheck-temp-file-system))))
-  :error-patterns
-    ;; These patterns are slightly odd: we just try to match until we find a
-    ;; line starting with "/" (which is the next error).
-    ((error line-start (file-name) "[" line ":" column " .." (one-or-more digit) ":" (one-or-more digit) "]: error\n"
-            (message (one-or-more not-newline)
-                     (zero-or-more
-                      (or
-                        (: "\n" line-end)
-                        (: "\n" (not (any "/")) (zero-or-more not-newline)))))
-            line-end)
-     (warning line-start (file-name) "[" line ":" column " .." (one-or-more digit) ":" (one-or-more digit) "]: warning\n"
-            (message (one-or-more not-newline)
-                     (zero-or-more
-                      (or
-                        (: "\n" line-end)
-                        (: "\n" (not (any "/")) (zero-or-more not-newline)))))
-            line-end)
-     (info line-start (file-name) "[" line ":" column " .." (one-or-more digit) ":" (one-or-more digit) "]: note\n"
-            (message (one-or-more not-newline)
-                     (zero-or-more
-                      (or
-                        (: "\n" line-end)
-                        (: "\n" (not (any "/")) (zero-or-more not-newline)))))
-            line-end))
-
-
-  :error-filter
-  (lambda (errors)
-    (dolist (error errors)
-      ;; Inject the line number if needed.
-      (unless (flycheck-error-line error) (setf (flycheck-error-line error) 1)))
-    errors)
-
-  :modes amulet-mode)
-
-;;;###autoload(add-to-list 'flycheck-checkers 'amulet)
+(with-eval-after-load 'lsp-mode
+  ;; If LSP is installed (and loaded), set up editor integration.
+  (add-to-list 'lsp-language-id-configuration '(amulet-mode . "amulet"))
+  (lsp-register-client
+   (make-lsp-client
+    :new-connection (lsp-stdio-connection '("/home/squiddev/programming/amulet/.stack-work/install/x86_64-linux-tinfo6/61b4306616bf79a681d016c373f9f630e924d42cf4a06df5cecc4540df6c0e84/8.8.1/bin/amc" "editor"))
+    :major-modes '(amulet-mode)
+    :server-id 'amc-lsp)))
 
 (provide 'amulet-mode)
 ;;; amulet-mode.el ends here
