@@ -40,7 +40,8 @@ Each sub-command can be run with --help too.
     -h,--help                Show this help text
 
   $ amc repl --help
-  Usage: amc repl [FILE] [--port PORT] [--no-prelude | --prelude PATH] [--lib ARG]
+  Usage: amc repl [FILE] [--port PORT] [--no-prelude | --prelude PATH] [--no-code]
+                  [--lib ARG]
     Launch the Amulet REPL.
   
   Available options:
@@ -48,6 +49,8 @@ Each sub-command can be run with --help too.
     --port PORT              Port to use for the REPL server. (default: 5478)
     --no-prelude             Do not load files with a prelude.
     --prelude PATH           Specify a custom prelude to use.
+    --no-code                Stop compilation of loaded modules after
+                             type-checking.
     -t,--test                Provides additional debug information on the output
     --test-tc                Provides additional type check information on the
                              output
