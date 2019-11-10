@@ -599,7 +599,12 @@ lookupIn g nonRec v k = go v where
 lookupSlot :: MonadResolve m
            => Var Parsed -> Slot
            -> m (Var Resolved)
-lookupSlot _ (SVar x) = pure x
+lookupSlot v (SVar x) = pure $
+  let toName (Name x) = x
+      toName (InModule t x) = t <> T.singleton '.' <> toName x
+   in case x of
+     TgInternal n -> TgInternal n
+     TgName _ id -> TgName (toName v) id
 lookupSlot v (SAmbiguous vs) = confesses (Ambiguous v vs)
 
 -- | Lookup a value/expression variable.
