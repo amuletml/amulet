@@ -1,0 +1,24 @@
+scope.ml[10:11 ..10:13]: error (E2001)
+   │ 
+10 │   let _ = X.x + 1
+   │           ^^^
+  Couldn't match actual type X.t
+    with the type expected by the context, int
+scope.ml[14:5 ..14:5]: error (E2001)
+   │ 
+14 │     x + 1
+   │     ^
+  Couldn't match actual type t
+    with the type expected by the context, int
+scope.ml[15:15 ..15:15]: error (E2001)
+   │ 
+15 │   let _ = X.( x + 1 )
+   │               ^
+  Couldn't match actual type t
+    with the type expected by the context, int
+scope.ml[18:11 ..18:13]: error (E2001)
+   │ 
+18 │   let _ = X.x + 1
+   │           ^^^
+  Couldn't match actual type X.t
+    with the type expected by the context, int

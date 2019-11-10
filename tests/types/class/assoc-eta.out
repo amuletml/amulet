@@ -1,5 +1,5 @@
 has_sing : Req{'k : type}. constraint
 sing_t : Req{'k : type}. 'k -> type
 sint : int -> type
-SInt : Spec{'i : int}. known_int 'i => sint 'i
+SInt : Spec{'i : int}. Amc.known_int 'i => sint 'i
 sing : sing_t int 123

@@ -101,9 +101,9 @@ tyArrow      = TyCon tyArrowName
 tyList       = TyCon tyListName
 tyConstraint = TyCon tyConstraintName
 tyRef        = TyCon tyRefName
-tyKStr       = TyCon tyKStrName
-tyKInt       = TyCon tyKIntName
-tyRowCons    = TyCon rowConsName
+tyKStr       = TyCon (TgInternal "Amc" <> tyKStrName)
+tyKInt       = TyCon (TgInternal "Amc" <> tyKIntName)
+tyRowCons    = TyCon (TgInternal "Amc" <> rowConsName)
 tyEq         = TyCon tyEqName
 
 forceName, lAZYName :: Var Typed
