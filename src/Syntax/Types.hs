@@ -3,7 +3,7 @@
   , TypeFamilies, TemplateHaskell, FunctionalDependencies, RankNTypes #-}
 module Syntax.Types
   ( Telescope, one, foldTele, foldTeleM, teleFromList, mapTele, traverseTele, teleToList
-  , Scope(..), namesInScope, inScope, scopeToList
+  , Scope(..), namesInScope, inScope, scopeToList, mapScope
   , Env, freeInEnv, difference, envOf, scopeFromList, toMap
   , names, typeVars, constructors, types, letBound, classes, modules
   , classDecs, tySyms, declaredHere
@@ -202,6 +202,9 @@ scopeToList (Scope m) = Map.toList m
 
 inScope :: Ord (Var p) => Var p -> Scope p f -> Bool
 inScope v (Scope m) = v `Map.member` m
+
+mapScope :: (Var p -> Var p) -> (f -> f) -> Scope p f -> Scope p f
+mapScope k k' (Scope m) = Scope (k' <$> Map.mapKeysMonotonic k m)
 
 focus :: Telescope t -> Scope Resolved (Type t) -> Scope Resolved (Type t)
 focus m s = Scope (getScope s <> getTele m)

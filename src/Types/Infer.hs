@@ -312,7 +312,7 @@ infer (Begin xs a) = do
 
 infer (OpenIn mod expr a) = do
   (mod', exEnv, (modImplicits, modTysym)) <- inferMod mod
-  local (exEnv . (classes %~ (<>modImplicits)) . (tySyms %~ (<>modTysym))) $ do
+  local (unqualify mod . exEnv Nothing . (classes %~ (<>modImplicits)) . (tySyms %~ (<>modTysym))) $ do
     (expr', ty) <- infer expr
     pure (ExprWrapper (TypeAsc ty) (OpenIn mod' (ExprWrapper (TypeAsc ty) expr' (a, ty)) (a, ty)) (a, ty), ty)
 
@@ -492,37 +492,52 @@ inferProg (DeriveInstance tau ann:prg) = do
 
 inferProg (Open mod:prg) = do
   (mod', exEnv, (modImplicits, modTysym)) <- inferMod mod
-  local (exEnv. (classes %~ (<>modImplicits)) . (tySyms %~ (<>modTysym))) $
+
+  local (unqualify mod . exEnv Nothing . (classes %~ (<>modImplicits)) . (tySyms %~ (<>modTysym))) $
     consFst (Open mod') $ inferProg prg
 
 inferProg (Include mod:prg) = do
   (mod', exEnv, (modImplicits, modTysym)) <- inferMod mod
-  local (exEnv. (classes %~ (<>modImplicits)) . (tySyms %~ (<>modTysym))) $
+
+  local (unqualify mod . exEnv Nothing . (classes %~ (<>modImplicits)) . (tySyms %~ (<>modTysym))) $
     consFst (Include mod') $ inferProg prg
 
 inferProg (Module am name mod:prg) = do
   (mod', exEnv, modInfo) <- local (declaredHere .~ mempty) $ inferMod mod
-  local (exEnv . (modules %~ Map.insert name modInfo)) $
+  local (exEnv (Just name) . (modules %~ Map.insert name modInfo)) $
     consFst (Module am name mod') $
     inferProg prg
 
 inferProg [] = asks ([],)
 
 inferMod :: MonadInfer Typed m => ModuleTerm Desugared
-         -> m (ModuleTerm Typed, Env -> Env, (ImplicitScope ClassInfo Typed, TySyms))
+         -> m (ModuleTerm Typed, Maybe (Var Resolved) -> Env -> Env, (ImplicitScope ClassInfo Typed, TySyms))
 inferMod (ModStruct bod a) = do
   (bod', env) <- inferProg bod
   -- So this behaviour is somewhat incorrect, as we'll exposed any type
   -- functions/implicits that we open in our signature. But it'll do for now.
+  let append x p = maybe p (<> p) x
+      qualifyWrt prefix scope =
+        let go (TyCon n) = 
+              if n `inScope` scope
+                 then TyCon (append prefix n)
+                 else TyCon n
+            go x = x
+         in transformType go
+
   pure (ModStruct bod' (a, undefined)
-       , (names %~ (<> (env ^. names)))
-       . (types %~ (<> (env ^. types)))
-       . (classDecs %~ (<> (env ^. classDecs)))
-       . (modules %~ (<> (env ^. modules)))
+       , \prefix ->
+           (names %~ (<> mapScope (append prefix) (qualifyWrt prefix (env ^. names)) (env ^. names)))
+         . (types %~ (<> (Set.mapMonotonic (append prefix)
+                            <$> Map.mapKeysMonotonic (append prefix) (env ^. types))))
+         . (classDecs %~ (<> (env ^. classDecs)))
+         . (modules %~ (<> Map.mapKeysMonotonic (append prefix) (env ^. modules)))
        , (env ^. classes, env ^. tySyms))
+
 inferMod (ModRef name a) = do
   mod <- view (modules . at name) >>= maybe (confesses (NotInScope name)) pure
-  pure (ModRef name (a, undefined), id, mod)
+  pure (ModRef name (a, undefined), const id, mod)
+
 inferMod ModLoad{} = error "Impossible"
 
 buildList :: Ann Resolved -> Type Typed -> [Expr Typed] -> Expr Typed
@@ -631,3 +646,25 @@ isReflexiveCo (ForallCo _ _ a b) = isReflexiveCo a && isReflexiveCo b
 isReflexiveCo P1{} = False
 isReflexiveCo P2{} = False
 isReflexiveCo InstCo{} = False
+
+unqualifyWrt :: (Var p ~ Var Resolved) => T.Text -> Type p -> Type p
+unqualifyWrt n = transformType go where
+  go (TyCon v) = TyCon (unqualifyVarWrt n v)
+  go t = t
+
+unqualifyVarWrt :: T.Text -> Var Resolved -> Var Resolved
+unqualifyVarWrt n (TgName v id)
+  | n `T.isPrefixOf` v = TgName (T.drop (T.length n) v) id
+  | otherwise = TgName v id
+unqualifyVarWrt _ n = n
+
+unqualify :: (Var p ~ Var Resolved) => ModuleTerm p -> Env -> Env
+unqualify (ModRef v _) =
+ let prefix =
+       case v of
+         TgName v _ -> v <> T.singleton '.'
+         TgInternal v -> v <> T.singleton '.'
+  in (names %~ mapScope id (unqualifyWrt prefix))
+   . (types %~ fmap (Set.mapMonotonic (unqualifyVarWrt prefix)))
+
+unqualify _ = id
