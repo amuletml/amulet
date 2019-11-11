@@ -5,7 +5,7 @@ complicated.
 
     type function foo ('x : bool) begin
       foo true  = forall 'a. 'a -> 'a
-      foo false = ()
+      foo false = unit
     end
 
     type sbool 'x =
@@ -13,8 +13,8 @@ complicated.
       | SFalse : sbool false
 
     let
-      foo :
-        forall 'b. sbool 'b -> foo 'b -> ()
+      bar :
+        forall 'b. sbool 'b -> foo 'b -> unit
       =
         fun x y ->
           match x with
@@ -38,9 +38,9 @@ following:
 1. Assign an unknown type `alpha` for y
 2. Since `y` is used in an application, `alpha` must really be equal to
 `beta -> gamma` (for some unknown `beta`, `gamma`)
-3. The argument to `y` is `()`, so `beta` must be equal to `()`
+3. The argument to `y` is `()`, so `beta` must be equal to `unit`
 
-Solving these constraints, we arrive at the type `() -> gamma` for the
+Solving these constraints, we arrive at the type `unit -> gamma` for the
 term `y`.
 
 Back to the branch `| STrue -> y ()`, amc will see that `y` is used in a
@@ -55,7 +55,7 @@ A possible fix is to "invert" the pattern matching as follows:
 
     let
       foo :
-        forall 'b. sbool 'b -> foo 'b -> ()
+        forall 'b. sbool 'b -> foo 'b -> unit
       =
         function
           | STrue -> fun (y : forall 'a. 'a -> 'a) -> y ()
