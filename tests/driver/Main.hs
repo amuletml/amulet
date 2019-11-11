@@ -7,7 +7,8 @@ import Test.Tasty.Reporter
 import Test.Tasty.Rerun
 import Test.Tasty
 
--- import qualified Test.Types.Unify as Solver
+import qualified Test.Types.Unify as Solver
+import qualified Test.Types.Holes as Holes
 import qualified Test.Core.Lint as Lint
 import qualified Test.Parser.Lexer as Lexer
 import qualified Test.Parser.Parser as Parser
@@ -20,10 +21,12 @@ import qualified Test.Frontend.Amc as Amc
 
 tests :: IO TestTree
 tests = testGroup "Tests" <$> sequence
-  -- [ pure Solver.tests Has a tendency to timeout. TODO: Get better CI
-  -- machines
+  -- These two will timeout if you run 10000 of them.
+  -- TODO: Get better CI machines
+  [ pure Solver.tests
+  , pure Holes.tests
 
-  [ Amc.tests
+  , Amc.tests
   , Lint.tests
   , Lexer.tests
   , Parser.tests
