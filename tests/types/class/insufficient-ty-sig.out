@@ -3,3 +3,4 @@ insufficient-ty-sig.ml[5:11 ..6:7]: error (E2018)
 6 │   (=.=)
   │    ^^^
   No instance for eq 'a arising from this expression
+insufficient-ty-sig.ml[5:11 ..6:7]: Use amc explain 2018 for more information

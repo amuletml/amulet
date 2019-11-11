@@ -4,3 +4,4 @@ begin04.ml[21:3 ..21:15]: error (E2001)
    │   ^^^^^^^^^^^^^
   Couldn't match actual type list int
     with the type expected by the context, identity 'b
+begin04.ml[21:3 ..21:15]: Use amc explain 2001 for more information

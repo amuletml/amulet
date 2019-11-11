@@ -3,3 +3,4 @@ typeable-fail.ml[4:1 ..6:3]: error (E2025)
 4 │ instance typeable foo begin
   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^
   Can not make instance of built-in class typeable
+typeable-fail.ml[4:1 ..6:3]: Use amc explain 2025 for more information

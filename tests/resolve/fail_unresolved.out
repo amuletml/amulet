@@ -5,6 +5,7 @@ fail_unresolved.ml[6:3 ..6:7]: error (E1001)
   │ 
 6 │   foo_0
   │   ^^^^^
+fail_unresolved.ml[6:3 ..6:7]: Use amc explain 1001 for more information
 fail_unresolved.ml[13:9 ..13:18]: error (E1001)
   Type not in scope: `foo_0`
 
@@ -12,6 +13,7 @@ fail_unresolved.ml[13:9 ..13:18]: error (E1001)
    │ 
 13 │ let _ : foo_0 = ()
    │         ^^^^^^^^^^
+fail_unresolved.ml[13:9 ..13:18]: Use amc explain 1001 for more information
 fail_unresolved.ml[18:9 ..18:12]: error (E1001)
   Constructor not in scope: `Foo0`
 
@@ -19,6 +21,7 @@ fail_unresolved.ml[18:9 ..18:12]: error (E1001)
    │ 
 18 │ let _ = Foo0
    │         ^^^^
+fail_unresolved.ml[18:9 ..18:12]: Use amc explain 1001 for more information
 fail_unresolved.ml[21:9 ..21:54]: error (E1001)
   Type variable not in scope: `foo_0`
 
@@ -26,3 +29,4 @@ fail_unresolved.ml[21:9 ..21:54]: error (E1001)
    │ 
 21 │ let _ : forall 'foo_1 'foo_2 'bar_0. () -> 'foo_0 = ()
    │         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+fail_unresolved.ml[21:9 ..21:54]: Use amc explain 1001 for more information

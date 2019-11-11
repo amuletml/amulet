@@ -3,3 +3,4 @@ class06.ml[6:11 ..6:16]: error (E2018)
   │ 
 6 │   let 0 = foo ()
   │           ^^^^^^
+class06.ml[6:11 ..6:16]: Use amc explain 2018 for more information

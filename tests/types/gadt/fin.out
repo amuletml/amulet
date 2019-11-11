@@ -4,3 +4,4 @@ fin.ml[11:14 ..11:18]: error (E2001)
    │              ^^^^^
   Couldn't match actual type 'n
     with the type expected by the context, S (S 'k)
+fin.ml[11:14 ..11:18]: Use amc explain 2001 for more information

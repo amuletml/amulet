@@ -4,3 +4,4 @@ letpattern.ml[1:5 ..1:6]: error (E2001)
   │     ^^
   Couldn't match actual type {  }
     with the type expected by the context, unit
+letpattern.ml[1:5 ..1:6]: Use amc explain 2001 for more information

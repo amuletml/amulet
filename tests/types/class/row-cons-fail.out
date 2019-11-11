@@ -11,3 +11,4 @@ row-cons-fail.ml[1:9 ..1:39]: error (E2018)
                        and exact record { x : int }
   • Note: no fields match
   • The following fields are missing: x
+row-cons-fail.ml[1:9 ..1:39]: Use amc explain 2018 for more information

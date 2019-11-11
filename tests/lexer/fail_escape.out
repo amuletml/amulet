@@ -3,11 +3,13 @@ fail_escape.ml[1:2 ..1:3]: error (E0011)
   │ 
 1 │ "\#  \0 \
   │  ^^
+fail_escape.ml[1:2 ..1:3]: Use amc explain 0011 for more information
 fail_escape.ml[1:6 ..1:7]: error (E0011)
   Unknown escape code.
   │ 
 1 │ "\#  \0 \
   │      ^^
+fail_escape.ml[1:6 ..1:7]: Use amc explain 0011 for more information
 fail_escape.ml[2:1 ..2:1]: error (E0004)
   Unexpected end of input, expecting `"` to close string
   │ 
@@ -15,3 +17,4 @@ fail_escape.ml[2:1 ..2:1]: error (E0004)
   │ ^
 2 │ 
   │ ^
+fail_escape.ml[2:1 ..2:1]: Use amc explain 0004 for more information

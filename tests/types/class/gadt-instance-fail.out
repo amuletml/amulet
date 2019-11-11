@@ -6,3 +6,4 @@ gadt-instance-fail.ml[21:18 ..21:30]: warning (W2014)
    │                  ^^^^^^^^^^^^^
   Couldn't match actual type Z
     with the type expected by the context, S 'n
+gadt-instance-fail.ml[21:18 ..21:30]: Use amc explain 2014 for more information

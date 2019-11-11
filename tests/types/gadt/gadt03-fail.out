@@ -4,3 +4,4 @@ gadt03-fail.ml[8:12 ..8:19]: error (E2001)
   │            ^^^^^^^^
   Couldn't match actual type bool
     with the type expected by the context, int
+gadt03-fail.ml[8:12 ..8:19]: Use amc explain 2001 for more information

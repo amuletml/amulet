@@ -5,6 +5,7 @@ holes.ml[10:47 ..10:47]: error (E2005)
   Found typed hole _ of type 'a -> 'a || 'b
   • Valid replacements include:
       • fun c -> In1 c
+holes.ml[10:47 ..10:47]: Use amc explain 2005 for more information
 holes.ml[11:47 ..11:47]: error (E2005)
    │ 
 11 │   let or_in2 : forall 'a 'b. 'b -> 'a || 'b = _
@@ -12,6 +13,7 @@ holes.ml[11:47 ..11:47]: error (E2005)
   Found typed hole _ of type 'b -> 'a || 'b
   • Valid replacements include:
       • fun c -> In2 c
+holes.ml[11:47 ..11:47]: Use amc explain 2005 for more information
 holes.ml[13:79 ..13:79]: error (E2005)
    │ 
 13 │   let or_elim : forall 'a 'b 'r. ('a -> 'r) -> ('b -> 'r) -> 'a || 'b -> 'r = _
@@ -21,6 +23,7 @@ holes.ml[13:79 ..13:79]: error (E2005)
       • fun h g -> function
         | (In1 c) -> h c
         | (In2 a) -> g a
+holes.ml[13:79 ..13:79]: Use amc explain 2005 for more information
 holes.ml[15:54 ..15:54]: error (E2005)
    │ 
 15 │   let or_swap : forall 'a 'b. 'a || 'b -> 'b || 'a = _
@@ -30,6 +33,7 @@ holes.ml[15:54 ..15:54]: error (E2005)
       • function
         | (In1 z) -> In2 z
         | (In2 x) -> In1 x
+holes.ml[15:54 ..15:54]: Use amc explain 2005 for more information
 holes.ml[17:53 ..17:53]: error (E2005)
    │ 
 17 │   let and_in : forall 'a 'b. 'a -> 'b -> 'a && 'b = _
@@ -37,6 +41,7 @@ holes.ml[17:53 ..17:53]: error (E2005)
   Found typed hole _ of type 'a -> 'b -> 'a && 'b
   • Valid replacements include:
       • fun y z -> And (y, z)
+holes.ml[17:53 ..17:53]: Use amc explain 2005 for more information
 holes.ml[18:72 ..18:72]: error (E2005)
    │ 
 18 │   let and_elim : forall 'a 'b 'r. 'a && 'b -> ('a -> 'b -> 'r) -> 'r = _
@@ -44,6 +49,7 @@ holes.ml[18:72 ..18:72]: error (E2005)
   Found typed hole _ of type 'a && 'b -> ('a -> 'b -> 'r) -> 'r
   • Valid replacements include:
       • fun (And (y, z)) h -> h y z
+holes.ml[18:72 ..18:72]: Use amc explain 2005 for more information
 holes.ml[20:50 ..20:50]: error (E2005)
    │ 
 20 │   let and_p1 : forall 'a 'b 'r. 'a && 'b -> 'a = _
@@ -51,6 +57,7 @@ holes.ml[20:50 ..20:50]: error (E2005)
   Found typed hole _ of type 'a && 'b -> 'a
   • Valid replacements include:
       • fun (And (c, x)) -> c
+holes.ml[20:50 ..20:50]: Use amc explain 2005 for more information
 holes.ml[21:50 ..21:50]: error (E2005)
    │ 
 21 │   let and_p2 : forall 'a 'b 'r. 'a && 'b -> 'b = _
@@ -58,6 +65,7 @@ holes.ml[21:50 ..21:50]: error (E2005)
   Found typed hole _ of type 'a && 'b -> 'b
   • Valid replacements include:
       • fun (And (a, b)) -> b
+holes.ml[21:50 ..21:50]: Use amc explain 2005 for more information
 holes.ml[23:55 ..23:55]: error (E2005)
    │ 
 23 │   let and_swap : forall 'a 'b. 'a && 'b -> 'b && 'a = _
@@ -65,6 +73,7 @@ holes.ml[23:55 ..23:55]: error (E2005)
   Found typed hole _ of type 'a && 'b -> 'b && 'a
   • Valid replacements include:
       • fun (And (a, b)) -> And (b, a)
+holes.ml[23:55 ..23:55]: Use amc explain 2005 for more information
 holes.ml[25:73 ..25:73]: error (E2005)
    │ 
 25 │   let contrapositive : forall 'p 'q. ('p -> 'q) -> (not 'q -> not 'p) = _
@@ -72,6 +81,7 @@ holes.ml[25:73 ..25:73]: error (E2005)
   Found typed hole _ of type ('p -> 'q) -> not 'q -> not 'p
   • Valid replacements include:
       • fun g (Not h) -> Not (fun c -> h (g c))
+holes.ml[25:73 ..25:73]: Use amc explain 2005 for more information
 holes.ml[26:58 ..26:58]: error (E2005)
    │ 
 26 │   let noncontradiction : forall 'p. not ('p && not 'p) = _
@@ -79,6 +89,7 @@ holes.ml[26:58 ..26:58]: error (E2005)
   Found typed hole _ of type not ('p && not 'p)
   • Valid replacements include:
       • Not (fun (And (y, (Not h))) -> h y)
+holes.ml[26:58 ..26:58]: Use amc explain 2005 for more information
 holes.ml[27:42 ..27:42]: error (E2005)
    │ 
 27 │   let ex_falso : forall 'a. void -> 'a = _
@@ -86,3 +97,4 @@ holes.ml[27:42 ..27:42]: error (E2005)
   Found typed hole _ of type void -> 'a
   • Valid replacements include:
       • function ()
+holes.ml[27:42 ..27:42]: Use amc explain 2005 for more information

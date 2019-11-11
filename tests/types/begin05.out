@@ -4,6 +4,7 @@ begin05.ml[10:3 ..10:3]: error (E2001)
    │   ^
   Couldn't match actual type int
     with the type expected by the context, identity 'b
+begin05.ml[10:3 ..10:3]: Use amc explain 2001 for more information
 begin05.ml[8:5 ..8:20]: error (E2018)
   No instance for monad identity arising in the binding
   │ 
@@ -11,3 +12,4 @@ begin05.ml[8:5 ..8:20]: error (E2018)
   │     ^^^^^^^^^^^^^^^^
   • Note: this constraint can not be quantified over
     because it is impossible to quantify over pattern bindings
+begin05.ml[8:5 ..8:20]: Use amc explain 2018 for more information

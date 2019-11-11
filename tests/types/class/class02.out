@@ -6,6 +6,7 @@ class02.ml[3:3 ..3:27]: error (E2001)
     with the type expected by the context, 'k -> 'l
 
   • Did you apply a type constructor to too many arguments?
+class02.ml[3:3 ..3:27]: Use amc explain 2001 for more information
 class02.ml[3:3 ..3:27]: error (E2001)
   │ 
 3 │   val foo : 'a () -> string
@@ -14,3 +15,4 @@ class02.ml[3:3 ..3:27]: error (E2001)
     with the type expected by the context, 'bn -> 'bo
 
   • Did you apply a type constructor to too many arguments?
+class02.ml[3:3 ..3:27]: Use amc explain 2001 for more information

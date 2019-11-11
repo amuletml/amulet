@@ -3,3 +3,4 @@ rec.ml[2:3 ..2:24]: warning (W2036)
 2 │   foo 'a = foo (list 'a)
   │   ^^^^^^^^^^^^^^^^^^^^^^
   Recursive call foo 'a --> foo (list 'a) might not terminate
+rec.ml[2:3 ..2:24]: Use amc explain 2036 for more information

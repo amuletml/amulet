@@ -8,3 +8,4 @@ overlap02.ml[2:1 ..2:25]: error (E2021)
   │ 
 3 │ instance foo () begin end
   │ ^^^^^^^^^^^^^^^^^^^^^^^^^
+overlap02.ml[2:1 ..2:25]: Use amc explain 2021 for more information

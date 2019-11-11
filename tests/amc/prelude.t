@@ -16,6 +16,7 @@ Not using the prelude will fail
     │ 
   1 │ print "Hello"
     │ ^^^^^
+  =stdin[1:1 ..1:5]: Use amc explain 1001 for more information
   > 
 
 One can use a custom prelude

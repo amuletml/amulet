@@ -14,6 +14,7 @@ $end $end <eof>
     │             ^
   4 │           in x
     │           ^^
+  unaligned_let.ml[4:11 ..4:12]: Use amc explain 0012 for more information
   unaligned_let.ml[7:13 ..7:14]: warning (W0012)
     This `in` is misaligned with the corresponding `let`
     │ 
@@ -21,4 +22,5 @@ $end $end <eof>
     │            ^
   7 │             in x
     │             ^^
+  unaligned_let.ml[7:13 ..7:14]: Use amc explain 0012 for more information
 *)

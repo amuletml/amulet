@@ -12,3 +12,4 @@ letrec-02.ml[1:9 ..1:14]: error (E2013)
   │     ^^^
 3 │ and bar = g
   │     ^^^
+letrec-02.ml[1:9 ..1:14]: Use amc explain 2013 for more information

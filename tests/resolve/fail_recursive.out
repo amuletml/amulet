@@ -9,6 +9,7 @@ fail_recursive.ml[5:30 ..5:32]: error (E1001)
   │ 
 3 │ let map f = function
   │     ^^^
+fail_recursive.ml[5:30 ..5:32]: Use amc explain 1001 for more information
 fail_recursive.ml[10:32 ..10:33]: error (E1001)
   Variable not in scope: `go`
 
@@ -20,3 +21,4 @@ fail_recursive.ml[10:32 ..10:33]: error (E1001)
    │ 
  8 │   let go = function
    │   ^^^^^^^^^^^^^^^^^
+fail_recursive.ml[10:32 ..10:33]: Use amc explain 1001 for more information

@@ -3,3 +3,4 @@ error01.ml[6:5 ..6:6]: error (E2003)
 6 │ let () = foo ()
   │     ^^
   foo
+error01.ml[6:5 ..6:6]: Use amc explain 2003 for more information

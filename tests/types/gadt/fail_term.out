@@ -4,3 +4,4 @@ fail_term.ml[16:3 ..16:30]: error (E2001)
    │   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   Couldn't match actual type 'a -> 'b -> 'b
     with the type expected by the context, 'x -> 'y -> 'x
+fail_term.ml[16:3 ..16:30]: Use amc explain 2001 for more information

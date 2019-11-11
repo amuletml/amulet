@@ -14,3 +14,4 @@ big-error.ml[12:58 ..12:61]: error (E2001)
         S (S (S (S Z))),
       is the reduction of
         length [1, 2, 3, 4]
+big-error.ml[12:58 ..12:61]: Use amc explain 2001 for more information

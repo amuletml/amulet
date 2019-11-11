@@ -3,3 +3,4 @@ conbox02-fail.ml[15:28 ..15:32]: error (E2018)
    │ 
 15 │ let xs = [ Box (), Box "", Box 1 ]
    │                            ^^^^^
+conbox02-fail.ml[15:28 ..15:32]: Use amc explain 2018 for more information

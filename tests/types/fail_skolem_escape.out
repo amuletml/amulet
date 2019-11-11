@@ -7,3 +7,4 @@ fail_skolem_escape.ml[2:19 ..2:38]: error (E2008)
           forall 'b. 'b -> 'a,
   • Note: in the inferred type for escape_fail,
       'b
+fail_skolem_escape.ml[2:19 ..2:38]: Use amc explain 2008 for more information

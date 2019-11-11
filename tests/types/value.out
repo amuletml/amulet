@@ -6,3 +6,4 @@ value.ml[3:33 ..3:47]: error (E2016)
   it can not be used in a context where the polymorphic type
     forall 'a. 'a -> 'a
   is required.
+value.ml[3:33 ..3:47]: Use amc explain 2016 for more information

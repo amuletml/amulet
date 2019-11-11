@@ -33,6 +33,8 @@ checkValidTypeFunction _ _ _ _ equations =
       familyFree (BecauseOf clause) lhs
       checkWildcard clause lhs
       checkWildcard clause rhs
+      when (isSkolemisable rhs) $
+        dictates (PolyTyFunRhs (BecauseOf clause) rhs)
     overlap mempty equations
     terminates equations
     pure ()

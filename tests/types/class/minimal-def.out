@@ -5,3 +5,4 @@ minimal-def.ml[21:1 ..21:26]: error (E2022)
   Missing implementation of methods in instance for foo int
   Namely, there must be an implementation for at least
     i, j, either f or g, and one of k, l or m
+minimal-def.ml[21:1 ..21:26]: Use amc explain 2022 for more information

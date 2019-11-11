@@ -10,3 +10,4 @@ tuple02-fail.ml[1:42 ..1:52]: error (E2009)
   │ 
 1 │ let foo : (forall 'a. 'a -> 'a) * int = (fun 0 -> (), 1)
   │                                          ^^^^^^^^^^^
+tuple02-fail.ml[1:42 ..1:52]: Use amc explain 2009 for more information
