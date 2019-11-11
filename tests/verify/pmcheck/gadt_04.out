@@ -4,4 +4,3 @@ gadt_04.ml[17:5 ..17:23]: warning (W3005)
 17 │   | Nil_, _ -> error ""
    │     ^^^^^^^^^^^^^^^^^^^
   • Note: This case can never occur.
-gadt_04.ml[17:5 ..17:23]: Use amc explain 3005 for more information

@@ -4,4 +4,3 @@ tyfun-pi-fail.ml[8:3 ..8:52]: error (E2001)
   │   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   Couldn't match actual type Z
     with the type expected by the context, S Z
-tyfun-pi-fail.ml[8:3 ..8:52]: Use amc explain 2001 for more information

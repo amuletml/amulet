@@ -3,4 +3,3 @@ verify14.ml[5:7 ..5:7]: warning (W3002)
   │ 
 5 │   let y = f x
   │       ^
-verify14.ml[5:7 ..5:7]: Use amc explain 3002 for more information

@@ -4,4 +4,3 @@ record04-fail.ml[3:35 ..3:46]: error (E2001)
   │                                   ^^^^^^^^^^^^
   Couldn't match actual type string
     with the type expected by the context, int
-record04-fail.ml[3:35 ..3:46]: Use amc explain 2001 for more information

@@ -3,7 +3,6 @@ fail_unterminated_string.ml[1:15 ..1:15]: error (E0004)
   │ 
 1 │ let x = "hello
   │         ^     ^
-fail_unterminated_string.ml[1:15 ..1:15]: Use amc explain 0004 for more information
 fail_unterminated_string.ml[2:1 ..2:1]: error (E0004)
   Unexpected end of input, expecting `"` to close string
   │ 
@@ -11,4 +10,3 @@ fail_unterminated_string.ml[2:1 ..2:1]: error (E0004)
   │         ^
 2 │ 
   │ ^
-fail_unterminated_string.ml[2:1 ..2:1]: Use amc explain 0004 for more information

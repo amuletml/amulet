@@ -3,4 +3,3 @@ too-concrete01.ml[6:15 ..6:24]: error (E2018)
   │ 
 6 │   fun x -> if x == "foo" then "foo" else "bar"
   │               ^^^^^^^^^^
-too-concrete01.ml[6:15 ..6:24]: Use amc explain 2018 for more information

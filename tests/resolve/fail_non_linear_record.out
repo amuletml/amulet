@@ -4,4 +4,3 @@ fail_non_linear_record.ml[2:3 ..4:10]: error (E1004)
   │ 
 2 │   { x = 0,
   │   ^^^^^^^^
-fail_non_linear_record.ml[2:3 ..4:10]: Use amc explain 1004 for more information

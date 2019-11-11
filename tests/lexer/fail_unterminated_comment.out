@@ -5,4 +5,3 @@ fail_unterminated_comment.ml[7:1 ..7:1]: error (E0005)
   │ ^
 7 │ 
   │ ^
-fail_unterminated_comment.ml[7:1 ..7:1]: Use amc explain 0005 for more information

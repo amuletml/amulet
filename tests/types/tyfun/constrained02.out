@@ -3,4 +3,3 @@ constrained02.ml[6:5 ..6:32]: error (E2018)
 6 │   | MkBox : bar 'a -> bar_box 'a
   │     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   Could not deduce foo 'a from the context given in the type bar 'a -> bar_box 'a
-constrained02.ml[6:5 ..6:32]: Use amc explain 2018 for more information

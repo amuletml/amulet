@@ -6,4 +6,3 @@ ql-impredicative05.ml[6:16 ..6:17]: error (E2001)
     with the type expected by the context, forall 'b. 'b -> 'b
 
   • Did you forget some of the arguments to a function?
-ql-impredicative05.ml[6:16 ..6:17]: Use amc explain 2001 for more information

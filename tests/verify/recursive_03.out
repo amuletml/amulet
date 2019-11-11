@@ -5,4 +5,3 @@ recursive_03.ml[1:9 ..1:9]: error (E3001)
   │ 
 1 │ let rec x = x
   │         ^
-recursive_03.ml[1:9 ..1:9]: Use amc explain 3001 for more information

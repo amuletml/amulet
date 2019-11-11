@@ -3,10 +3,8 @@ unused_let_inner_03.ml[2:7 ..2:7]: warning (W3002)
   │ 
 2 │   let y = 0
   │       ^
-unused_let_inner_03.ml[2:7 ..2:7]: Use amc explain 3002 for more information
 unused_let_inner_03.ml[3:7 ..3:7]: warning (W3002)
   Bound locally but not used: 'x'
   │ 
 3 │   let x = 0
   │       ^
-unused_let_inner_03.ml[3:7 ..3:7]: Use amc explain 3002 for more information

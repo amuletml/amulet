@@ -3,4 +3,3 @@ constrained05.ml[9:15 ..9:26]: error (E2018)
 9 │ type foo 'a = Foo of f2 'a
   │               ^^^^^^^^^^^^
   Could not deduce c2 'a from the context given in the type f2 'a
-constrained05.ml[9:15 ..9:26]: Use amc explain 2018 for more information

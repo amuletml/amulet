@@ -5,4 +5,3 @@ fail_let_open_struct.ml[2:3 ..2:33]: error (E1009)
   │ 
 2 │   let open begin type t end in ()
   │   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-fail_let_open_struct.ml[2:3 ..2:33]: Use amc explain 1009 for more information

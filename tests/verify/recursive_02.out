@@ -5,7 +5,6 @@ recursive_02.ml[6:11 ..6:11]: error (E3001)
   │ 
 6 │   let rec f = (fun _ -> g) 1
   │           ^
-recursive_02.ml[6:11 ..6:11]: Use amc explain 3001 for more information
 recursive_02.ml[7:7 ..7:7]: error (E3001)
   Invalid recursive right-hand side for variable g
   • Note: because evaluation of the variable f is not delayed
@@ -13,4 +12,3 @@ recursive_02.ml[7:7 ..7:7]: error (E3001)
   │ 
 7 │   and g = (fun _ -> f) 1
   │       ^
-recursive_02.ml[7:7 ..7:7]: Use amc explain 3001 for more information

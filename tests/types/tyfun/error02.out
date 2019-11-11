@@ -3,4 +3,3 @@ error02.ml[4:5 ..4:6]: error (E2003)
 4 │ let () = foo ()
   │     ^^
   Stuck type expression in Amc.type_error: foo int
-error02.ml[4:5 ..4:6]: Use amc explain 2003 for more information

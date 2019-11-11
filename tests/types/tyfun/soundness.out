@@ -3,4 +3,3 @@ soundness.ml[22:5 ..22:58]: error (E2018)
 22 │ let no : forall 'a 'b. trivial :- (discrim 'a 'b ~ string) = Sub (fun _ -> Dict)
    │                                                                            ^^^^
   No instance for discrim 'a 'b ~ string arising from this expression
-soundness.ml[22:5 ..22:58]: Use amc explain 2018 for more information

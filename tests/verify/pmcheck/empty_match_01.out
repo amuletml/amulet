@@ -5,7 +5,6 @@ empty_match_01.ml[2:33 ..2:40]: warning (W3006)
   │                                 ^^^^^^^^
   • Note: The following patterns are not covered
       _
-empty_match_01.ml[2:33 ..2:40]: Use amc explain 3006 for more information
 empty_match_01.ml[7:22 ..7:29]: warning (W3006)
   Non-exhaustive patterns in expression
   │ 
@@ -13,4 +12,3 @@ empty_match_01.ml[7:22 ..7:29]: warning (W3006)
   │                      ^^^^^^^^
   • Note: The following patterns are not covered
       _
-empty_match_01.ml[7:22 ..7:29]: Use amc explain 3006 for more information

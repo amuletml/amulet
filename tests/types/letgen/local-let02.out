@@ -4,11 +4,9 @@ local-let02.ml[9:15 ..9:15]: error (E2001)
   │               ^
   Couldn't match actual type int
     with the type expected by the context, string
-local-let02.ml[9:15 ..9:15]: Use amc explain 2001 for more information
 local-let02.ml[9:15 ..9:20]: error (E2001)
   │ 
 9 │   h (fun x -> x ^ "")
   │               ^^^^^^
   Couldn't match actual type string
     with the type expected by the context, int
-local-let02.ml[9:15 ..9:20]: Use amc explain 2001 for more information

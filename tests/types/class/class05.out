@@ -5,4 +5,3 @@ class05.ml[5:5 ..5:5]: error (E2018)
   │     ^
   • Note: this constraint can not be quantified over
     because it is impossible to quantify over pattern bindings
-class05.ml[5:5 ..5:5]: Use amc explain 2018 for more information

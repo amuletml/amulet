@@ -4,4 +4,3 @@ fail_do_with.ml[1:10 ..1:20]: error (E0009)
   │ 
 1 │ let () = with x <- 0
   │          ^^^^^^^^^^^
-fail_do_with.ml[1:10 ..1:20]: Use amc explain 0009 for more information

@@ -5,4 +5,3 @@ empty_match_02.ml[19:34 ..19:41]: warning (W3006)
    │                                  ^^^^^^^^
   • Note: The following patterns are not covered
       _
-empty_match_02.ml[19:34 ..19:41]: Use amc explain 3006 for more information

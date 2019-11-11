@@ -11,4 +11,3 @@ wild05.ml[1:24 ..1:24]: error (E2009)
 1 │ let f (x : 'a) : int = x
   │       ^^^^^^^^^^^^^^^^^^
   has type forall 'a. 'a -> int
-wild05.ml[1:24 ..1:24]: Use amc explain 2009 for more information

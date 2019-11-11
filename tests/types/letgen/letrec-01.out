@@ -5,4 +5,3 @@ letrec-01.ml[1:9 ..1:14]: error (E2013)
   │ 
 1 │ let rec (a, b) = (a, b)
   │         ^^^^^^
-letrec-01.ml[1:9 ..1:14]: Use amc explain 2013 for more information

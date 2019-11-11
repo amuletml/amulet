@@ -4,4 +4,3 @@ vta-fail04.ml[1:9 ..1:38]: error (E2030)
   │         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   Can not apply expression of type 'f -> 'f
     to visible type argument int
-vta-fail04.ml[1:9 ..1:38]: Use amc explain 2030 for more information

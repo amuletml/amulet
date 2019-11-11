@@ -4,4 +4,3 @@ vta-fail02.ml[2:9 ..2:15]: error (E2030)
   │         ^^^^^^^
   Can not apply expression of type int -> int
     to visible type argument int
-vta-fail02.ml[2:9 ..2:15]: Use amc explain 2030 for more information

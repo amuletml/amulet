@@ -3,4 +3,3 @@ constrained02-fail.ml[12:21 ..12:33]: error (E2018)
    │ 
 12 │ let foo x = fst (x, bot : f2 bool)
    │                     ^^^^^^^^^^^^^
-constrained02-fail.ml[12:21 ..12:33]: Use amc explain 2018 for more information

@@ -4,4 +4,3 @@ tyfun-arity.ml[3:5 ..3:15]: error (E2034)
   │     ^^^^^^^^^^^
   Type function f appears with one argument,
   but in its definition it has 2
-tyfun-arity.ml[3:5 ..3:15]: Use amc explain 2034 for more information

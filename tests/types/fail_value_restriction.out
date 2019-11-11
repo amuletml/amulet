@@ -4,4 +4,3 @@ fail_value_restriction.ml[9:10 ..9:11]: error (E2001)
   │          ^^
   Couldn't match actual type option int
     with the type expected by the context, string
-fail_value_restriction.ml[9:10 ..9:11]: Use amc explain 2001 for more information

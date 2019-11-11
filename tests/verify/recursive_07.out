@@ -5,4 +5,3 @@ recursive_07.ml[2:5 ..2:5]: error (E3001)
   │ 
 2 │ and g = f
   │     ^
-recursive_07.ml[2:5 ..2:5]: Use amc explain 3001 for more information

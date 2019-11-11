@@ -4,4 +4,3 @@ empty_match_03.ml[3:26 ..3:32]: warning (W3005)
 3 │ let f : void -> () = fun _ -> ()
   │                          ^^^^^^^
   • Note: This can be replaced by an empty match.
-empty_match_03.ml[3:26 ..3:32]: Use amc explain 3005 for more information

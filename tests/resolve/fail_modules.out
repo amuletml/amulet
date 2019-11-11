@@ -5,4 +5,3 @@ fail_modules.ml[4:9 ..4:9]: error (E1001)
   │ 
 4 │ let y = x
   │         ^
-fail_modules.ml[4:9 ..4:9]: Use amc explain 1001 for more information

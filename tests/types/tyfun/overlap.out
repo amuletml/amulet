@@ -8,4 +8,3 @@ overlap.ml[2:3 ..2:18]: error (E2021)
   │ 
 3 │   foo int = bool
   │   ^^^^^^^^^^^^^^
-overlap.ml[2:3 ..2:18]: Use amc explain 2021 for more information

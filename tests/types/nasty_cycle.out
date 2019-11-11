@@ -9,11 +9,9 @@ nasty_cycle.ml[19:25 ..19:25]: error (E2009)
    │ 
 19 │       | Right p -> Left p
    │                         ^
-nasty_cycle.ml[19:25 ..19:25]: Use amc explain 2009 for more information
 nasty_cycle.ml[18:26 ..18:32]: error (E2001)
    │ 
 18 │       | Left p -> Right (Even2 p)
    │                          ^^^^^^^
   Couldn't match actual type S 'n
     with the type expected by the context, S (S 's)
-nasty_cycle.ml[18:26 ..18:32]: Use amc explain 2001 for more information

@@ -3,4 +3,3 @@ orphan-soundness.ml[6:3 ..8:5]: error (E2028)
 6 │   instance foo 'a begin
   │   ^^^^^^^^^^^^^^^^^^^^^
   This instance should be defined in the same module as foo
-orphan-soundness.ml[6:3 ..8:5]: Use amc explain 2028 for more information

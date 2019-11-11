@@ -3,4 +3,3 @@ fail_malformed_instance.ml[1:10 ..1:11]: error (E0008)
   │ 
 1 │ instance 'a begin end
   │          ^^
-fail_malformed_instance.ml[1:10 ..1:11]: Use amc explain 0008 for more information
