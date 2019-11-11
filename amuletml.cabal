@@ -153,6 +153,7 @@ test-suite tests
                      , Test.Syntax.Verify
 
                      , Test.Types.Check
+                     , Test.Types.Holes
                      , Test.Types.Unify
                      , Test.Types.Util
 
