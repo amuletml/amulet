@@ -3,4 +3,3 @@ tyfun02-fail.ml[11:5 ..11:49]: error (E2018)
 14 │   | _ -> Xs
    │          ^^
   No instance for collapse 'a ~ string arising from the expression
-tyfun02-fail.ml[11:5 ..11:49]: Use amc explain 2018 for more information

@@ -16,7 +16,9 @@ Not using the prelude will fail
     │ 
   1 │ print "Hello"
     │ ^^^^^
-  =stdin[1:1 ..1:5]: Use amc explain 1001 for more information
+  
+  The following message has a detailed explanation: 1001.
+  Try 'amc explain 1001' to see it.
   > 
 
 One can use a custom prelude

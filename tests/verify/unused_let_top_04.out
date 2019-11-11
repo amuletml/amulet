@@ -3,10 +3,8 @@ unused_let_top_04.ml[1:14 ..1:14]: warning (W3002)
   │ 
 1 │ let private (a, b) = (1, 2)
   │              ^
-unused_let_top_04.ml[1:14 ..1:14]: Use amc explain 3002 for more information
 unused_let_top_04.ml[1:17 ..1:17]: warning (W3002)
   Bound locally but not used: 'b'
   │ 
 1 │ let private (a, b) = (1, 2)
   │                 ^
-unused_let_top_04.ml[1:17 ..1:17]: Use amc explain 3002 for more information

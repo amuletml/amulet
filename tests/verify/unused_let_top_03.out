@@ -3,4 +3,3 @@ unused_let_top_03.ml[1:13 ..1:13]: warning (W3002)
   │ 
 1 │ let private x = 1
   │             ^
-unused_let_top_03.ml[1:13 ..1:13]: Use amc explain 3002 for more information

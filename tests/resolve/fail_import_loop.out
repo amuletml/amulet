@@ -14,4 +14,3 @@ tests/resolve/modules/loop_3.ml[1:12 ..1:31]: error (E1011)
 1 │ module M = import "./loop_2.ml"
   │            ^^^^^^^^^^^^^^^^^^^^
   • Note: "tests/resolve/modules/loop_2.ml" imported from "tests/resolve/modules/loop_1.ml"
-tests/resolve/modules/loop_3.ml[1:12 ..1:31]: Use amc explain 1011 for more information

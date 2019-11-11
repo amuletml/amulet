@@ -4,4 +4,3 @@ vta-fail01.ml[3:17 ..3:21]: error (E2001)
   │                 ^^^^^
   Couldn't match actual type string
     with the type expected by the context, int
-vta-fail01.ml[3:17 ..3:21]: Use amc explain 2001 for more information

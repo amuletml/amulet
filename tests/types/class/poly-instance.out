@@ -4,4 +4,3 @@ poly-instance.ml[4:1 ..4:38]: error (E2006)
   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   Illegal use of polymorphic type trivial => 'a
     as argument to the type constructor Foo
-poly-instance.ml[4:1 ..4:38]: Use amc explain 2006 for more information

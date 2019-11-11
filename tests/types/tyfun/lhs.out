@@ -3,4 +3,3 @@ lhs.ml[3:3 ..3:24]: error (E2037)
 3 │   bar (foo int) = string
   │   ^^^^^^^^^^^^^^^^^^^^^^
   Type synonym application foo int is illegal in LHS of type function equation
-lhs.ml[3:3 ..3:24]: Use amc explain 2037 for more information

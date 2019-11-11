@@ -3,7 +3,6 @@ fail_malformed_class_name.ml[1:7 ..1:12]: error (E0007)
   │ 
 1 │ class a -> b begin end
   │       ^^^^^^
-fail_malformed_class_name.ml[1:7 ..1:12]: Use amc explain 0007 for more information
 fail_malformed_class_name.ml[3:7 ..3:9]: error (E0007)
   Malformed class declaration beginning with X
 
@@ -13,7 +12,6 @@ fail_malformed_class_name.ml[3:7 ..3:9]: error (E0007)
   │ 
 3 │ class X a begin end
   │       ^^^
-fail_malformed_class_name.ml[3:7 ..3:9]: Use amc explain 0007 for more information
 fail_malformed_class_name.ml[4:7 ..4:11]: error (E0007)
   Malformed class declaration beginning with X
 
@@ -24,7 +22,6 @@ fail_malformed_class_name.ml[4:7 ..4:11]: error (E0007)
   │ 
 4 │ class X a b begin end
   │       ^^^^^
-fail_malformed_class_name.ml[4:7 ..4:11]: Use amc explain 0007 for more information
 fail_malformed_class_name.ml[6:7 ..6:9]: error (E0007)
   Malformed class declaration for x
 
@@ -34,7 +31,6 @@ fail_malformed_class_name.ml[6:7 ..6:9]: error (E0007)
   │ 
 6 │ class x a  begin end
   │       ^^^
-fail_malformed_class_name.ml[6:7 ..6:9]: Use amc explain 0007 for more information
 fail_malformed_class_name.ml[7:7 ..7:11]: error (E0007)
   Malformed class declaration for x
 
@@ -44,4 +40,3 @@ fail_malformed_class_name.ml[7:7 ..7:11]: error (E0007)
   │ 
 7 │ class x a b  begin end
   │       ^^^^^
-fail_malformed_class_name.ml[7:7 ..7:11]: Use amc explain 0007 for more information

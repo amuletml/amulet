@@ -8,7 +8,9 @@ amc compile will extend the compile path
     │ 
   1 │ open import "my_lib.ml"
     │      ^^^^^^^^^^^^^^^^^^
-  tests/amc/files/import.ml[1:6 ..1:23]: Use amc explain 1010 for more information
+  
+  The following message has a detailed explanation: 1010.
+  Try 'amc explain 1010' to see it.
 
   $ amc compile --lib tests/amc/lib tests/amc/files/import.ml
   do

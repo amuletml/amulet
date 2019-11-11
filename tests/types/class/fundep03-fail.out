@@ -9,4 +9,3 @@ fundep03-fail.ml[36:17 ..36:59]: error (E2018)
 36 │ let onetofive = append (1 :: 2 :: Nil) (3 :: 4 :: 5 :: Nil)
    │                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   • Possible fix: add a parameter, or a type signature
-fundep03-fail.ml[36:17 ..36:59]: Use amc explain 2018 for more information

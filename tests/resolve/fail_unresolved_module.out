@@ -5,4 +5,3 @@ fail_unresolved_module.ml[8:6 ..8:8]: error (E1001)
   │ 
 8 │ open X.Z
   │      ^^^
-fail_unresolved_module.ml[8:6 ..8:8]: Use amc explain 1001 for more information

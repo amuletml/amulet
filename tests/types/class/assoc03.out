@@ -5,4 +5,3 @@ assoc03.ml[13:16 ..13:17]: error (E2001)
   Couldn't match actual type unit
     with the type expected by the context, string
   • Note: Where bar unit ~> string
-assoc03.ml[13:16 ..13:17]: Use amc explain 2001 for more information

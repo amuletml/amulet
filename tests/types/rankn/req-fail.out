@@ -6,4 +6,3 @@ req-fail.ml[3:5 ..3:5]: error (E2001)
     with the type expected by the context, int -> 'm
 
   • Did you apply a function to too many arguments?
-req-fail.ml[3:5 ..3:5]: Use amc explain 2001 for more information

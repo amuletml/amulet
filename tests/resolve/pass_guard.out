@@ -5,4 +5,3 @@ pass_guard.ml[4:12 ..4:12]: error (E1001)
   │ 
 4 │ | x when x > 2 -> ()
   │            ^
-pass_guard.ml[4:12 ..4:12]: Use amc explain 1001 for more information

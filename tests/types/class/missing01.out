@@ -5,4 +5,3 @@ missing01.ml[5:1 ..5:22]: error (E2022)
   Missing implementation of methods in instance for foo
   Namely, there must be an implementation for at least
     x
-missing01.ml[5:1 ..5:22]: Use amc explain 2022 for more information

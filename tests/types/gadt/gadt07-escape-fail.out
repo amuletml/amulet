@@ -4,4 +4,3 @@ gadt07-escape-fail.ml[10:3 ..10:17]: error (E2001)
    │   ^^^^^^^^^^^^^^^
   Couldn't match actual type 'a
     with the type expected by the context, int
-gadt07-escape-fail.ml[10:3 ..10:17]: Use amc explain 2001 for more information

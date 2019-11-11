@@ -12,4 +12,3 @@ recursive03.ml[20:9 ..20:27]: error (E2018)
 20 │ let rec foo (x : 'a) : unit =
    │         ^^^^^^^^^^^^^^^^^^^
    This binding should have had a complete type signature.
-recursive03.ml[20:9 ..20:27]: Use amc explain 2018 for more information

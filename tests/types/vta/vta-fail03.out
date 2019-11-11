@@ -4,4 +4,3 @@ vta-fail03.ml[1:13 ..1:18]: error (E2030)
   │             ^^^^^^
   Can not apply expression of type 'n
     to visible type argument int
-vta-fail03.ml[1:13 ..1:18]: Use amc explain 2030 for more information

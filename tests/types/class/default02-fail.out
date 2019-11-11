@@ -10,4 +10,3 @@ default02-fail.ml[14:8 ..14:15]: error (E2018)
    │ 
 14 │     if x `eq` x then
    │        ^^^^^^^^
-default02-fail.ml[14:8 ..14:15]: Use amc explain 2018 for more information

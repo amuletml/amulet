@@ -16,4 +16,3 @@ quantified-cycle.ml[12:10 ..12:16]: error (E2019)
         (forall 'a. c (t1 'a)) => c (t2 'a)
       as a solution for the constraint
         c (t2 'a)
-quantified-cycle.ml[12:10 ..12:16]: Use amc explain 2019 for more information

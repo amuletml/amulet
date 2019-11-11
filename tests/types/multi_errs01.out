@@ -4,4 +4,3 @@ multi_errs01.ml[3:19 ..3:22]: error (E2001)
   │                   ^^^^
   Couldn't match actual type bool
     with the type expected by the context, int
-multi_errs01.ml[3:19 ..3:22]: Use amc explain 2001 for more information

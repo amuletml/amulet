@@ -11,4 +11,3 @@ fail_skolem_pure.ml[2:32 ..2:32]: error (E2009)
 2 │ let pure_fail = pure (fun x -> x)
   │                       ^^^^^^^^^^
   has type forall 'a. 'a -> 'f 'a
-fail_skolem_pure.ml[2:32 ..2:32]: Use amc explain 2009 for more information

@@ -8,4 +8,3 @@ overlap01.ml[4:1 ..4:38]: error (E2021)
   │ 
 5 │ instance foo () begin let x _ = () end
   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-overlap01.ml[4:1 ..4:38]: Use amc explain 2021 for more information

@@ -11,4 +11,3 @@ constrained04.ml[10:3 ..10:17]: error (E2018)
    │ 
 10 │   type f2 = f2 'a
    │   ^^^^^^^^^^^^^^^
-constrained04.ml[10:3 ..10:17]: Use amc explain 2018 for more information

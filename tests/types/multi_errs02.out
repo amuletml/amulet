@@ -4,11 +4,9 @@ multi_errs02.ml[3:19 ..3:22]: error (E2001)
   │                   ^^^^
   Couldn't match actual type bool
     with the type expected by the context, int
-multi_errs02.ml[3:19 ..3:22]: Use amc explain 2001 for more information
 multi_errs02.ml[8:5 ..8:6]: error (E2001)
   │ 
 8 │ let () = "foo"
   │     ^^
   Couldn't match actual type string
     with the type expected by the context, unit
-multi_errs02.ml[8:5 ..8:6]: Use amc explain 2001 for more information

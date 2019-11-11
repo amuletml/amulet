@@ -3,4 +3,3 @@ tyfun-err01.ml[9:22 ..9:23]: error (E2003)
 9 │ let foo : foo bool = ()
   │                      ^^
   Unexpected argument to foo: bool
-tyfun-err01.ml[9:22 ..9:23]: Use amc explain 2003 for more information

@@ -5,4 +5,3 @@ ambiguous-method.ml[3:3 ..3:12]: error (E2017)
   Ambiguous type for method y
   • Note: The variable a is bound in the class head
   but doesn't appear in the method type
-ambiguous-method.ml[3:3 ..3:12]: Use amc explain 2017 for more information
