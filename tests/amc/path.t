@@ -8,6 +8,7 @@ amc compile will extend the compile path
     │ 
   1 │ open import "my_lib.ml"
     │      ^^^^^^^^^^^^^^^^^^
+  tests/amc/files/import.ml[1:6 ..1:23]: Use amc explain 1010 for more information
 
   $ amc compile --lib tests/amc/lib tests/amc/files/import.ml
   do

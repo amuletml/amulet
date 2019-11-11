@@ -9,3 +9,5 @@ definition of x[1:3 ..1:3]: error
   │ 
 1 │ x x
   │   ^
+
+definition of x[1:3 ..1:3]: Use amc explain 3003 for more information

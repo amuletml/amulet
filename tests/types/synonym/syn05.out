@@ -4,3 +4,4 @@ syn05.ml[4:1 ..4:24]: error (E2034)
   │ ^^^^^^^^^^^^^^^^^^^^^^^^
   Type synonym foo appears with no arguments,
   but in its definition it has 1
+syn05.ml[4:1 ..4:24]: Use amc explain 2034 for more information

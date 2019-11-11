@@ -4,9 +4,11 @@ undecidable-super-class.ml[1:1 ..1:37]: error (E2027)
   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   Invalid type in context for class declaration:
       'a
+undecidable-super-class.ml[1:1 ..1:37]: Use amc explain 2027 for more information
 undecidable-super-class.ml[1:1 ..1:37]: error (E2027)
   │ 
 1 │ class 'a * 'b => andc 'a 'b begin end
   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   Invalid type in context for class declaration:
       'b
+undecidable-super-class.ml[1:1 ..1:37]: Use amc explain 2027 for more information

@@ -3,3 +3,4 @@ unused_let_inner_01.ml[2:7 ..2:7]: warning (W3002)
   │ 
 2 │   let y = 1
   │       ^
+unused_let_inner_01.ml[2:7 ..2:7]: Use amc explain 3002 for more information

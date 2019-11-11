@@ -3,8 +3,10 @@ unused_pat_01.ml[4:6 ..4:6]: warning (W3002)
   │ 
 4 │   | (a, b) -> 0
   │      ^
+unused_pat_01.ml[4:6 ..4:6]: Use amc explain 3002 for more information
 unused_pat_01.ml[4:9 ..4:9]: warning (W3002)
   Bound locally but not used: 'b'
   │ 
 4 │   | (a, b) -> 0
   │         ^
+unused_pat_01.ml[4:9 ..4:9]: Use amc explain 3002 for more information

@@ -5,3 +5,4 @@ fail_let_ambiguity.ml[8:18 ..8:18]: error (E1002)
   │ 
 8 │ let main _ = x + y
   │                  ^
+fail_let_ambiguity.ml[8:18 ..8:18]: Use amc explain 1002 for more information

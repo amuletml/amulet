@@ -4,6 +4,7 @@ match_to.ml[3:9 ..3:16]: note (N3007)
 3 │ let _ = function
   │         ^^^^^^^^
   • Note: Replace with let { x = x, y = y } = …
+match_to.ml[3:9 ..3:16]: Use amc explain 3007 for more information
 match_to.ml[7:9 ..7:16]: warning (W3006)
   Non-exhaustive patterns in expression
   │ 
@@ -11,12 +12,14 @@ match_to.ml[7:9 ..7:16]: warning (W3006)
   │         ^^^^^^^^
   • Note: The following patterns are not covered
       false
+match_to.ml[7:9 ..7:16]: Use amc explain 3006 for more information
 match_to.ml[14:3 ..14:17]: note (N3007)
   match with a single arm can be rewritten using let.
    │ 
 14 │   match g () with
    │   ^^^^^^^^^^^^^^^
   • Note: Replace with let { x = x, y = y } = …
+match_to.ml[14:3 ..14:17]: Use amc explain 3007 for more information
 match_to.ml[18:3 ..18:17]: warning (W3006)
   Non-exhaustive patterns in expression
    │ 
@@ -24,3 +27,4 @@ match_to.ml[18:3 ..18:17]: warning (W3006)
    │   ^^^^^^^^^^^^^^^
   • Note: The following patterns are not covered
       false
+match_to.ml[18:3 ..18:17]: Use amc explain 3006 for more information

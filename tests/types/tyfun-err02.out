@@ -3,3 +3,4 @@ tyfun-err02.ml[15:9 ..15:29]: error (E2003)
 15 │ let _ = show (fun x -> x + 1)
    │         ^^^^^^^^^^^^^^^^^^^^^
   Can't show functional type int -> int
+tyfun-err02.ml[15:9 ..15:29]: Use amc explain 2003 for more information

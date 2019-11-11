@@ -4,3 +4,4 @@ tyfun-instance.ml[7:1 ..7:26]: error (E2034)
   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^
   Type function foo appears with no arguments,
   but in its definition it has 1
+tyfun-instance.ml[7:1 ..7:26]: Use amc explain 2034 for more information

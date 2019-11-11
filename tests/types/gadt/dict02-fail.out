@@ -4,3 +4,4 @@ dict02-fail.ml[17:25 ..17:26]: error (E2001)
    │                         ^^
   Couldn't match actual type unit
     with the type expected by the context, int
+dict02-fail.ml[17:25 ..17:26]: Use amc explain 2001 for more information

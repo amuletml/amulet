@@ -30,7 +30,7 @@ cat errors.txt | while read -r file_desc; do
   printf "### E%.4d: \"%s\" {#%s}\n" $num $anchor $anchor >> $out
 
   cat errors/$fname | \
-    sed -re 's/`([ ,.])/`{.amulet}\1/g' \
+    sed -re 's/`([ ,.\):;])/`{.amulet}\1/g' \
     >> $out
 
   echo >> $out

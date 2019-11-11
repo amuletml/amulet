@@ -5,6 +5,7 @@ fail_import_abandon.ml[6:8 ..6:30]: error (E1010)
   │ 
 6 │   open import "./not_found.ml"
   │        ^^^^^^^^^^^^^^^^^^^^^^^
+fail_import_abandon.ml[6:8 ..6:30]: Use amc explain 1010 for more information
 fail_import_abandon.ml[15:17 ..15:39]: error (E1010)
   Cannot resolve "./not_found.ml"
 
@@ -12,6 +13,7 @@ fail_import_abandon.ml[15:17 ..15:39]: error (E1010)
    │ 
 15 │ module B = open import "./not_found.ml"
    │                 ^^^^^^^^^^^^^^^^^^^^^^^
+fail_import_abandon.ml[15:17 ..15:39]: Use amc explain 1010 for more information
 fail_import_abandon.ml[25:12 ..25:22]: error (E1001)
   Variable not in scope: `not_defined`
 
@@ -19,3 +21,4 @@ fail_import_abandon.ml[25:12 ..25:22]: error (E1001)
    │ 
 25 │   let () = not_defined
    │            ^^^^^^^^^^^
+fail_import_abandon.ml[25:12 ..25:22]: Use amc explain 1001 for more information

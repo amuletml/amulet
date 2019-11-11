@@ -161,6 +161,8 @@ data TypeError where
   TyFunInLhs :: SomeReason -> Type Typed -> TypeError
   NotAnIdiom :: Pretty (Var p) => Expr p -> TypeError
 
+  PolyTyFunRhs :: SomeReason -> Type Typed -> TypeError
+
 
 data WhatOverlaps = Overinst | Overeq Bool
 
@@ -580,6 +582,13 @@ instance Pretty TypeError where
   pretty (NotAnIdiom _) =
     vsep [ "This expression can not be used in an idiom bracket because it is not a function application" ]
 
+  pretty (PolyTyFunRhs _ tau) =
+    vsep [ "The right-hand-side of this type function equation is a polymorphic type."
+         , "This is technically unsupported, and might lead to strange type checking failures."
+         , "Offending type:"
+         , indent 2 (displayTypeTyped tau)
+         ]
+
   pretty (WarningError x) = pretty x
 
   pretty (UnsatClassCon _ (ConImplicit _ _ _ t) _) = string "No instance for" <+> pretty t
@@ -615,6 +624,7 @@ instance Spanned TypeError where
   annotation (OrphanInstance x _) = annotation x
   annotation (DIMalformedHead x) = annotation x
   annotation (DICan'tDerive _ x) = annotation x
+  annotation (PolyTyFunRhs x _) = annotation x
   annotation x = error (show (pretty x))
 
 instance Note TypeError Style where
@@ -624,6 +634,7 @@ instance Note TypeError Style where
   diagnosticKind DeadBranch{} = WarningMessage
   diagnosticKind MightNotTerminate{} = WarningMessage
   diagnosticKind AmbiguousType{} = WarningMessage
+  diagnosticKind PolyTyFunRhs{} = WarningMessage
   diagnosticKind WarningError{} = ErrorMessage
   diagnosticKind _ = ErrorMessage
 
@@ -934,6 +945,7 @@ instance Note TypeError Style where
   noteId DIMalformedHead{}    = Just 0008 -- This is a parse error that TC emits
   noteId DICan'tDerive{}      = Just 2038
   noteId NotAnIdiom{}         = Just 2039
+  noteId PolyTyFunRhs{}       = Just 2040
 
   noteId (Note x _) = noteId x
   noteId (Suggestion x _) = noteId x

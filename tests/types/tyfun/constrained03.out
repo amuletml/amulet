@@ -3,3 +3,4 @@ constrained03.ml[9:1 ..11:3]: error (E2018)
 10 │   val foo : 'a -> f2 'a
    │   ^^^^^^^^^^^^^^^^^^^^^
   No instance for c2 'a arising from the method signature
+constrained03.ml[9:1 ..11:3]: Use amc explain 2018 for more information

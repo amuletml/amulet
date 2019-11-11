@@ -72,12 +72,19 @@ format f x =
             NoteMessage -> annotate (NoteKind NoteMessage) "note"
             WarningMessage -> annotate (NoteKind WarningMessage) "warning"
             ErrorMessage -> annotate (NoteKind ErrorMessage) "error"
-      num = 
+      num =
         case noteId x of
           Just num -> parens (string (printf "%c%.4d" (toUpper (head (show c))) num))
           Nothing -> mempty
+      info =
+        case noteId x of
+          Just num -> (Right <$> formatSpan a <> colon)
+                  <+> string "Use amc explain"
+                  <+> (string (printf "%.4d" num))
+                  <+> string "for more information"
+          Nothing -> empty
       body = formatNote f x
-   in (Right <$> formatSpan a <> colon) <+> (Left <$> (c <+> num)) <##> body
+   in (Right <$> formatSpan a <> colon) <+> (Left <$> (c <+> num)) <##> body <##> info
 
 -- | Convert a note style to an ANSI style
 toAnsi :: NoteStyle -> AnsiStyle

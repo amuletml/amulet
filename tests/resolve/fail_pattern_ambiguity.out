@@ -5,6 +5,7 @@ fail_pattern_ambiguity.ml[4:3 ..4:8]: error (E1003)
   │ 
 4 │ | (a, a) -> a + a
   │    ^  ^
+fail_pattern_ambiguity.ml[4:3 ..4:8]: Use amc explain 1003 for more information
 fail_pattern_ambiguity.ml[4:13 ..4:13]: error (E1002)
   Ambiguous reference to variable: `a`
 
@@ -12,6 +13,7 @@ fail_pattern_ambiguity.ml[4:13 ..4:13]: error (E1002)
   │ 
 4 │ | (a, a) -> a + a
   │             ^
+fail_pattern_ambiguity.ml[4:13 ..4:13]: Use amc explain 1002 for more information
 fail_pattern_ambiguity.ml[4:17 ..4:17]: error (E1002)
   Ambiguous reference to variable: `a`
 
@@ -19,3 +21,4 @@ fail_pattern_ambiguity.ml[4:17 ..4:17]: error (E1002)
   │ 
 4 │ | (a, a) -> a + a
   │                 ^
+fail_pattern_ambiguity.ml[4:17 ..4:17]: Use amc explain 1002 for more information

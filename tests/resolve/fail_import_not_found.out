@@ -5,3 +5,4 @@ fail_import_not_found.ml[1:6 ..1:36]: error (E1010)
   │ 
 1 │ open import "./modules/not_found.ml"
   │      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+fail_import_not_found.ml[1:6 ..1:36]: Use amc explain 1010 for more information

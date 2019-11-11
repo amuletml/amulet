@@ -10,3 +10,4 @@ record02-fail.ml[5:17 ..5:36]: error (E2009)
   │ 
 5 │ let foo = Foo { bar = fun x -> x + 1 }
   │                 ^^^^^^^^^^^^^^^^^^^^
+record02-fail.ml[5:17 ..5:36]: Use amc explain 2009 for more information

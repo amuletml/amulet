@@ -9,3 +9,4 @@ fd-coverage.ml[2:1 ..2:35]: error (E2035)
 1 │ class foo 'a 'b | 'a -> 'b begin end
   │                   ^^^^^^^^
   Note: needed because of this functional dependency
+fd-coverage.ml[2:1 ..2:35]: Use amc explain 2035 for more information

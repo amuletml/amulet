@@ -1,30 +1,54 @@
+tyfun-terminate.ml[6:3 ..6:63]: warning (W2040)
+  │ 
+6 │   really_recursive C      = forall 'a. really_recursive C -> 'a
+  │   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  The right-hand-side of this type function equation is a polymorphic type.
+  This is technically unsupported, and might lead to strange type checking failures.
+  Offending type:
+    forall 'a. really_recursive C -> 'a
+tyfun-terminate.ml[6:3 ..6:63]: Use amc explain 2040 for more information
+tyfun-terminate.ml[7:3 ..7:57]: warning (W2040)
+  │ 
+7 │   really_recursive (D 'c) = 'c => really_recursive (D 'c)
+  │   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  The right-hand-side of this type function equation is a polymorphic type.
+  This is technically unsupported, and might lead to strange type checking failures.
+  Offending type:
+    'c => really_recursive (D 'c)
+tyfun-terminate.ml[7:3 ..7:57]: Use amc explain 2040 for more information
 tyfun-terminate.ml[4:3 ..4:69]: warning (W2036)
   │ 
 4 │   really_recursive A      = (really_recursive A * really_recursive A)
   │   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   Recursive call really_recursive A --> really_recursive A might not terminate
+tyfun-terminate.ml[4:3 ..4:69]: Use amc explain 2036 for more information
 tyfun-terminate.ml[5:3 ..5:52]: warning (W2036)
   │ 
 5 │   really_recursive B      = really_recursive B -> ()
   │   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   Recursive call really_recursive B --> really_recursive B might not terminate
+tyfun-terminate.ml[5:3 ..5:52]: Use amc explain 2036 for more information
 tyfun-terminate.ml[6:3 ..6:63]: warning (W2036)
   │ 
 6 │   really_recursive C      = forall 'a. really_recursive C -> 'a
   │   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   Recursive call really_recursive C --> really_recursive C might not terminate
+tyfun-terminate.ml[6:3 ..6:63]: Use amc explain 2036 for more information
 tyfun-terminate.ml[7:3 ..7:57]: warning (W2036)
   │ 
 7 │   really_recursive (D 'c) = 'c => really_recursive (D 'c)
   │   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   Recursive call really_recursive (D 'c) --> really_recursive (D 'c) might not terminate
+tyfun-terminate.ml[7:3 ..7:57]: Use amc explain 2036 for more information
 tyfun-terminate.ml[8:3 ..8:54]: warning (W2036)
   │ 
 8 │   really_recursive E      = { x : really_recursive E }
   │   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   Recursive call really_recursive E --> really_recursive E might not terminate
+tyfun-terminate.ml[8:3 ..8:54]: Use amc explain 2036 for more information
 tyfun-terminate.ml[9:3 ..9:64]: warning (W2036)
   │ 
 9 │   really_recursive (F 'a) = { 'a | x : really_recursive (F 'a) }
   │   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   Recursive call really_recursive (F 'a) --> really_recursive (F 'a) might not terminate
+tyfun-terminate.ml[9:3 ..9:64]: Use amc explain 2036 for more information

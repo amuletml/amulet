@@ -4,3 +4,4 @@ err01.ml[10:11 ..10:12]: error (E2001)
    │           ^^
   Couldn't match actual type option (int * int)
     with the type expected by the context, option ((int * int) * 'b)
+err01.ml[10:11 ..10:12]: Use amc explain 2001 for more information

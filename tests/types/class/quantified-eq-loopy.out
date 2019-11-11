@@ -11,3 +11,4 @@ quantified-eq-loopy.ml[3:14 ..3:14]: error (E2009)
 3 │     fun x -> x
   │     ^^^^^^^^^^
   has type forall 'a 'b. ('a ~ 'b => 'a ~ 'b) => 'a -> 'b
+quantified-eq-loopy.ml[3:14 ..3:14]: Use amc explain 2009 for more information

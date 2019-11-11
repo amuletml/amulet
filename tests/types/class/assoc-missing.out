@@ -3,3 +3,4 @@ assoc-missing.ml[5:1 ..5:26]: error (E2023)
 5 │ instance foo int begin end
   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^
   Missing definition of type family bar in an instance for foo int
+assoc-missing.ml[5:1 ..5:26]: Use amc explain 2023 for more information

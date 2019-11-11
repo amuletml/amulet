@@ -4,3 +4,4 @@ tf-not-injective.ml[24:5 ..27:48]: error (E2018)
    │                         ^^^^^^^^
   Could not deduce eq_1 (rep 'a) (rep 'b) from the context recursive 'a * recursive 'b * eq_1 (rep 'a) (rep 'b)
   • Note: rep is an associated type, and so may not be injective
+tf-not-injective.ml[24:5 ..27:48]: Use amc explain 2018 for more information

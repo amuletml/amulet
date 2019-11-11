@@ -3,3 +3,4 @@ assoc-argl.ml[6:3 ..6:15]: error (E2024)
 6 │   type bar = ()
   │   ^^^^^^^^^^^^^
   This associated type instance has 0 arguments, but 1 was expected
+assoc-argl.ml[6:3 ..6:15]: Use amc explain 2024 for more information
