@@ -54,8 +54,8 @@ newtype Verbosity = Verbosity Bool
   deriving (Show, Eq, Typeable)
 
 instance IsOption Verbosity where
-  optionName = "timing"
-  optionHelp = "Show times to run tests"
+  optionName = "verbose"
+  optionHelp = "Be verbose about printing results"
   defaultValue = Verbosity False
   parseValue = fmap Verbosity . safeReadBool
   optionCLParser = flagCLParser (Just 'v') (Verbosity True)
@@ -126,7 +126,7 @@ runReporter options tree smap = do
                    <+> string "after"
                    <+> shown (resultTime r)
                    <+> string "seconds"
-      Failure TestFailed -> string "ABORTED"
+      Failure _ -> string "ABORTED"
                    <+> parens (string (resultDescription r))
                    <+> string "after"
                    <+> shown (resultTime r)
