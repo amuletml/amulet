@@ -30,7 +30,6 @@ echo "Generating packages for amuletml $version…"
 # Generate an archive for the libraries:
 echo "Generating library archive…"
 tar -cJf result/amuletml-${version}-lib.tar.xz lib/
-gpg --armor --detach-sign result/amuletml-$version-lib.tar.xz
 
 # Generate an Arch Linux package if 'makepkg' was found in the path
 # Chaotic evil: we don't use makepkg
@@ -46,7 +45,7 @@ echo "Generating Arch package…"
 # The way makepkg computes filesize is retarded so we ignore it
 size="$(du result/ | sed -re 's/([0-9]+).*/\1/g')"
 
-sudo rm -rf pkg/
+rm -rf pkg/
 mkdir -p pkg/usr/{bin,lib/amuletml}
 for arg in $*; do
   cp "result/$arg" pkg/usr/lib/amuletml/
@@ -76,7 +75,7 @@ chmod 755 "pkg/usr/bin/$arg"
 
 done
 
-sudo chown root:root -R pkg/*
+fakeroot chown root:root -R pkg/*
 
 touch pkg/.MTREE
 
@@ -146,9 +145,8 @@ echo "echo \"Installed amuletml $version to \${PREFIX}\"" >> install.sh
 chmod 755 install.sh
 
 list_package_files | tar --no-recursion --null --files-from - -cf ../result/amuletml-$version-bindist.tar
-gpg --armor --detach-sign ../result/amuletml-$version-bindist.tar
 
 popd &>/dev/null
 
 echo "Cleaning up package files"
-sudo rm -rf pkg/
+rm -rf pkg/
