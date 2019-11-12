@@ -2,10 +2,8 @@ pipeline {
   agent any
   stages {
     stage('Validate the pushed code') {
-      stage('Check code style') {
-        steps {
-          sh 'stack exec -- hlint --git'
-        }
+      steps {
+        sh 'stack exec --package=hlint -- hlint --git'
       }
     }
     stage('Run tests') {
