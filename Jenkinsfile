@@ -1,6 +1,10 @@
 pipeline {
   agent any
 
+  environment {
+    SIGNING_KEY_PW = credentials('jenkins-signing-key-pass')
+  }
+
   stages {
     stage('Set up stack') {
       steps {
@@ -42,14 +46,20 @@ pipeline {
 
     stage('Compile for deployment') {
       steps {
-        sh './deploy-build.sh'
+        sh 'tools/deploy-build.sh'
       }
     }
   }
+
   post {
     always {
-      archiveArtifacts artifacts: 'result/*'
       junit 'junit.xml'
+    }
+
+    success {
+      sh 'tools/sign.sh'
+
+      archiveArtifacts artifacts: 'result/*'
     }
   }
 }
