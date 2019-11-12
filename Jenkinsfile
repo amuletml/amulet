@@ -58,8 +58,13 @@ pipeline {
 
     success {
       sh 'tools/sign.sh'
-
       archiveArtifacts artifacts: 'result/*'
+
+      sh '''
+        cp result/*.pkg.tar* /srv/http/x86_64/
+        repo-add /srv/http/x86_64/amuletml-nightly.db.tar.gz \
+          /srv/http/x86_64/*.pkg.tar
+      '''
     }
   }
 }
