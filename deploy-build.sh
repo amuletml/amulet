@@ -45,7 +45,7 @@ echo "Generating Arch package…"
 # The way makepkg computes filesize is retarded so we ignore it
 size="$(du result/ | sed -re 's/([0-9]+).*/\1/g')"
 
-sudo rm -rf pkg/
+rm -rf pkg/
 mkdir -p pkg/usr/{bin,lib/amuletml}
 for arg in $*; do
   cp "result/$arg" pkg/usr/lib/amuletml/
@@ -75,7 +75,7 @@ chmod 755 "pkg/usr/bin/$arg"
 
 done
 
-sudo chown root:root -R pkg/*
+fakeroot chown root:root -R pkg/*
 
 touch pkg/.MTREE
 
@@ -149,4 +149,4 @@ list_package_files | tar --no-recursion --null --files-from - -cf ../result/amul
 popd &>/dev/null
 
 echo "Cleaning up package files"
-sudo rm -rf pkg/
+rm -rf pkg/
