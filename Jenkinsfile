@@ -75,7 +75,8 @@ pipeline {
         message: "Build ${env.BUILD_NUMBER} (Triggered by commit to ${env.BRANCH_NAME}) passed! :tada:"
 
       sh 'tools/sign.sh'
-      archiveArtifacts artifacts: 'result/*'
+      archiveArtifacts artifacts: 'result/*tar'
+      archiveArtifacts artifacts: 'result/*asc'
 
       sh '''
         cp result/*.pkg.tar* /srv/http/x86_64/
