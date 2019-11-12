@@ -50,19 +50,35 @@ instance IsOption Timing where
   parseValue = fmap Timing . safeReadBool
   optionCLParser = flagCLParser (Just 't') (Timing True)
 
+newtype Verbosity = Verbosity Bool
+  deriving (Show, Eq, Typeable)
+
+instance IsOption Verbosity where
+  optionName = "timing"
+  optionHelp = "Show times to run tests"
+  defaultValue = Verbosity False
+  parseValue = fmap Verbosity . safeReadBool
+  optionCLParser = flagCLParser (Just 'v') (Verbosity True)
+
 boringReporter :: Ingredient
 boringReporter
   = TestReporter
     [ Option (Proxy :: Proxy TestDisplay)
     , Option (Proxy :: Proxy Timing)
     , Option (Proxy :: Proxy UseColor)
+    , Option (Proxy :: Proxy Verbosity)
     ] run where
   run options tree = Just (runReporter options tree)
 
 runReporter :: OptionSet -> TestTree -> StatusMap -> IO (Time -> IO Bool)
 runReporter options tree smap = do
   -- Print a dot for each of the tests
-  hSetBuffering stdout NoBuffering
+  case beVerbose of
+    Verbosity True -> do
+      putStrLn "=> Running tests verbosely"
+      hSetBuffering stdout LineBuffering
+    _ -> hSetBuffering stdout NoBuffering
+
   results <- printProgress smap mempty
   putStrLn ""
 
@@ -74,6 +90,7 @@ runReporter options tree smap = do
 
   where
     testDisplay = lookupOption options :: TestDisplay
+    beVerbose = lookupOption options :: Verbosity
 
     printProgress :: StatusMap -> IntMap.IntMap Result -> IO (IntMap.IntMap Result)
     printProgress tests results
@@ -84,14 +101,36 @@ runReporter options tree smap = do
             done <- IntMap.mapMaybe getResult <$> traverse readTVar tests
             if null done then retry
             else pure done
-          traverse_ printProgressDot results'
+          traverse_ (go beVerbose) results'
           printProgress (tests `IntMap.difference` results') (results `IntMap.union` results')
+
+    go (Verbosity x) =
+      if x
+         then printProgressLoudly
+         else printProgressDot
 
     -- | Writes a progress dot to the terminal
     printProgressDot r = T.hPutStr stdout . displayDecorated . renderPretty 0.4 100 $ case resultOutcome r of
       Success -> annotate (DullColour Green) "•"
       Failure TestFailed -> annotate (DullColour Red) "◼"
       Failure _ -> annotate (DullColour Magenta) "✱"
+
+    printProgressLoudly r = T.hPutStrLn stdout . displayDecorated . renderPretty 0.4 100 $ case resultOutcome r of
+      Success -> string "Passed"
+                   <+> parens (string (resultDescription r))
+                   <+> string "after"
+                   <+> shown (resultTime r)
+                   <+> string "seconds"
+      Failure TestFailed -> string "FAILED"
+                   <+> parens (string (resultDescription r))
+                   <+> string "after"
+                   <+> shown (resultTime r)
+                   <+> string "seconds"
+      Failure TestFailed -> string "ABORTED"
+                   <+> parens (string (resultDescription r))
+                   <+> string "after"
+                   <+> shown (resultTime r)
+                   <+> string "seconds"
 
     printResults :: IntMap.IntMap Result -> IO ()
     printResults results =
