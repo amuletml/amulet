@@ -30,7 +30,6 @@ echo "Generating packages for amuletml $version…"
 # Generate an archive for the libraries:
 echo "Generating library archive…"
 tar -cJf result/amuletml-${version}-lib.tar.xz lib/
-gpg --armor --detach-sign result/amuletml-$version-lib.tar.xz
 
 # Generate an Arch Linux package if 'makepkg' was found in the path
 # Chaotic evil: we don't use makepkg
@@ -146,7 +145,6 @@ echo "echo \"Installed amuletml $version to \${PREFIX}\"" >> install.sh
 chmod 755 install.sh
 
 list_package_files | tar --no-recursion --null --files-from - -cf ../result/amuletml-$version-bindist.tar
-gpg --armor --detach-sign ../result/amuletml-$version-bindist.tar
 
 popd &>/dev/null
 
