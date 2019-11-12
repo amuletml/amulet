@@ -2,11 +2,18 @@ pipeline {
   agent any
 
   stages {
+    stage('Set up stack') {
+      steps {
+        sh 'stack exec --package=hlint -- true'
+      }
+    }
+
     stage('Validate the pushed code') {
       steps {
         sh 'stack exec --package=hlint -- hlint --git'
       }
     }
+
     stage('Run tests') {
       steps {
         sh '''
@@ -16,6 +23,7 @@ pipeline {
         '''
       }
     }
+
     stage('Compile for deployment') {
       steps {
         timestamps () {
