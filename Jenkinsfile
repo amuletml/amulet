@@ -1,10 +1,6 @@
 pipeline {
   agent any
 
-  environment {
-    AMC_LIBRARY_PATH = "${PWD}/lib/"
-  }
-
   stages {
     stage('Validate the pushed code') {
       steps {
@@ -13,7 +9,11 @@ pipeline {
     }
     stage('Run tests') {
       steps {
-        sh 'stack test --fast --test-arguments "--xml junit.xml --display t --hedgehog-tests 10000"'
+        sh '''
+          env AMC_LIBRARY_PATH=${PWD}/lib \
+          stack test --fast \
+          --test-arguments "--xml junit.xml --display t --hedgehog-tests 5000"
+        '''
       }
     }
     stage('Compile for deployment') {
