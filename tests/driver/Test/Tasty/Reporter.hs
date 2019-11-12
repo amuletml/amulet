@@ -88,7 +88,7 @@ runReporter options tree smap = do
           printProgress (tests `IntMap.difference` results') (results `IntMap.union` results')
 
     -- | Writes a progress dot to the terminal
-    printProgressDot r = T.hPutStr stdout . displayDecorated . renderPretty 0.4 100 $ case resultOutcome r of
+    printProgressDot r = T.hPutStrLn stdout . displayDecorated . renderPretty 0.4 100 $ case resultOutcome r of
       Success -> annotate (DullColour Green) "•"
       Failure TestFailed -> annotate (DullColour Red) "◼"
       Failure _ -> annotate (DullColour Magenta) "✱"
