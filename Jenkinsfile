@@ -16,7 +16,7 @@ pipeline {
       parallel {
         stage('Validate the pushed code') {
           steps {
-            sh 'stack exec --package=hlint -- hlint --git'
+            sh 'stack exec --package=hlint -- hlint -v --git'
           }
         }
 
