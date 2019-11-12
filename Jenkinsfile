@@ -6,15 +6,15 @@ pipeline {
   }
 
   stages {
-    stage('Set up stack') {
+    stage('Set up Stack dependencies') {
       steps {
         sh 'stack exec --package=hlint -- true'
       }
     }
 
-    stage('') {
+    stage('Initial validation') {
       parallel {
-        stage('Validate the pushed code') {
+        stage('Lint the pushed code') {
           steps {
             sh 'stack exec --package=hlint -- hlint -v --git'
           }
@@ -33,7 +33,7 @@ pipeline {
       }
     }
 
-    stage('Run tests') {
+    stage('Run the test suite') {
       steps {
         sh '''
           env AMC_LIBRARY_PATH=${PWD}/lib \
@@ -56,13 +56,30 @@ pipeline {
       junit 'junit.xml'
     }
 
+    aborted {
+      slackSend color: '#808080',
+        message: "Build ${env.BUILD_NUMBER} (Triggered by commit to ${env.BRANCH_NAME}) aborted",
+        iconEmoji: 'unamused',
+        username: "Amulet Jenkins"
+    }
+
+    failure {
+      slackSend color: 'danger',
+        message: "Build ${env.BUILD_NUMBER} (Triggered by commit to ${env.BRANCH_NAME}) failed :disappointed:",
+        iconEmoji: 'unamused',
+        username: "Amulet Jenkins"
+    }
+
     success {
+      slackSend color: 'good',
+        message: "Build ${env.BUILD_NUMBER} (Triggered by commit to ${env.BRANCH_NAME}) passed! :tada:"
+
       sh 'tools/sign.sh'
       archiveArtifacts artifacts: 'result/*'
 
       sh '''
         cp result/*.pkg.tar* /srv/http/x86_64/
-        repo-add /srv/http/x86_64/amuletml-nightly.db.tar.gz \
+        repo-add -R -p /srv/http/x86_64/amuletml-nightly.db.tar.gz \
           /srv/http/x86_64/*.pkg.tar
       '''
     }
