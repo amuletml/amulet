@@ -2,16 +2,9 @@ pipeline {
   agent any
   stages {
     stage('Validate the pushed code') {
-      parallel {
-        stage('Load Amulet into GHCi, once') {
-          steps {
-            sh "echo ':q' | ./repl.sh -fno-code"
-          }
-        }
-        stage('Check code style') {
-          steps {
-            sh 'stack exec -- hlint --git'
-          }
+      stage('Check code style') {
+        steps {
+          sh 'stack exec -- hlint --git'
         }
       }
     }
