@@ -7,13 +7,9 @@ pipeline {
       }
     }
     stage('Run tests') {
-      parallel {
-        stage('Run tests') {
-          steps {
-            timestamps () {
-              sh 'stack test --fast --test-arguments "--xml junit.xml --display t"'
-            }
-          }
+      steps {
+        timestamps () {
+          sh 'stack test --fast --test-arguments "--xml junit.xml --display t"'
         }
       }
     }
