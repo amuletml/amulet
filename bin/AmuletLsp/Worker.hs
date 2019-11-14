@@ -159,9 +159,9 @@ data FileState
   deriving Show
 
 data RequestKind a where
-  ReqParsed   :: RequestKind [Toplevel Parsed]
-  ReqResolved :: RequestKind (Signature, [Toplevel Resolved])
-  ReqTyped    :: RequestKind (Signature, Env, [Toplevel Typed])
+  ReqParsed   :: RequestKind (Maybe [Toplevel Parsed])
+  ReqResolved :: RequestKind (Maybe (Signature, [Toplevel Resolved]))
+  ReqTyped    :: RequestKind (Maybe (Signature, Env, [Toplevel Typed]))
   ReqErrors   :: RequestKind ErrorBundle
 
 data Request where
@@ -297,24 +297,22 @@ trySatisfyRequest wrk (RequestLatest file kind err ok) = do
      , Just OpenedContents { openVersion } ) ->
       case kind of
         ReqParsed
-          | VersionedData v contents <- openParsed, v == openVersion ->
-             Just $ ok openVersion contents
-          | Just v <- openPVersion, v == openVersion ->
-             Just $ err (ResponseError UnknownErrorCode "File could not be parsed." Nothing)
+          | VersionedData v contents <- openParsed, v == openVersion -> Just $ ok openVersion (Just contents)
+          | Just v <- openPVersion, v == openVersion -> Just $ ok openVersion Nothing
           | otherwise -> Nothing
 
         ReqResolved
           | Done c <- working, c == clk ->
             case openResolved of
-              VersionedData v contents | v == openVersion -> Just $ ok openVersion contents
-              _ -> Just $ err (ResponseError UnknownErrorCode "File could not be resolved." Nothing)
+              VersionedData v contents | v == openVersion -> Just $ ok openVersion (Just contents)
+              _ -> Just $ ok openVersion Nothing
           | otherwise -> Nothing
 
         ReqTyped
           | Done c <- working, c == clk ->
             case openTyped of
-              VersionedData v contents | v == openVersion -> Just $ ok openVersion contents
-              _ -> Just $ err (ResponseError UnknownErrorCode "File could not be typed." Nothing)
+              VersionedData v contents | v == openVersion -> Just $ ok openVersion (Just contents)
+              _ -> Just $ ok openVersion Nothing
           | otherwise -> Nothing
 
         ReqErrors
@@ -330,9 +328,8 @@ startRequest wrk lId req = do
   atomically $ do
     sat <- trySatisfyRequest wrk req
     case sat of
-      Just{} -> do
-        modifyTVar (readyRequests wrk) (Map.insert lId req)
-      Nothing -> do
+      Just{} -> modifyTVar (readyRequests wrk) (Map.insert lId req)
+      Nothing ->
         modifyTVar (pendingRequests wrk) $ bimap
           (Map.insert lId req)
           (HM.alter (Just . Map.insert lId req . fold) (requestFile req))

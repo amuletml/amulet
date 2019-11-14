@@ -14,6 +14,7 @@ import           Data.Default
 import           Data.Foldable
 import           Data.Maybe
 import qualified Data.Text as T
+import           Data.Triple
 import           Frontend.Errors
 import           GHC.Generics
 import           Generics.Constructor
@@ -189,7 +190,7 @@ handleRequest _ wrk (NotCancelRequestFromClient msg) =
 handleRequest lf wrk (ReqDocumentSymbols msg)
   = startRequest wrk (msg ^. id)
   . RequestLatest (toNormalizedUri rawUri) ReqParsed (sendReplyError lf msg)
-  $ \_ -> sendReply lf msg RspDocumentSymbols . DSDocumentSymbols . List . getOutline
+  $ \_ -> sendReply lf msg RspDocumentSymbols . DSDocumentSymbols . List . maybe [] getOutline
   where rawUri = msg ^. params . textDocument . uri
 
 handleRequest lf wrk (ReqCodeAction msg)
@@ -203,8 +204,7 @@ handleRequest lf wrk (ReqCodeAction msg)
 handleRequest lf wrk (ReqCodeLens msg)
   = startRequest wrk (msg ^. id)
   . RequestLatest (toNormalizedUri rawUri) ReqTyped (sendReplyError lf msg)
-  $ \_ (_, _, prog) ->
-      sendReply lf msg RspCodeLens . List $ getCodeLenses prog
+  $ \_ -> sendReply lf msg RspCodeLens . List . maybe [] (getCodeLenses . thd3)
   where rawUri = msg ^. params . textDocument . uri
 
 -- handleRequest lf (ReqFoldingRange msg) = undefined
