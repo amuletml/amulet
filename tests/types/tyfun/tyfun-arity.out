@@ -1,6 +1,6 @@
-tyfun-arity.ml[3:5 ..3:15]: error (E2034)
+tyfun-arity.ml[3:11 ..3:19]: error (E2034)
   │ 
 3 │ let foo : f int = _
-  │     ^^^^^^^^^^^
+  │           ^^^^^^^^^
   Type function f appears with one argument,
   but in its definition it has 2

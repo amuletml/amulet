@@ -19,26 +19,26 @@ do
   local function f3(p)
     return function(k)
       return function(x)
-        local function tmp3(tmp0) return k(3) end
-        local tmp0 = x._1
         local tmp = x._2
-        local function tmp2(tmp0) return p(nil) end
-        local function tmp1(tmp0) return k(2) end
+        local function tmp3(tmp0) return k(2) end
+        local function tmp2(tmp0) return k(3) end
+        local tmp0 = x._1
+        local function tmp1(tmp0) return p(nil) end
         if tmp0 == 0 then
           return k(0)
         elseif tmp0 == 1 then
           if tmp == 1 then
-            if tmp2(nil) then return tmp1(nil) end
-            return tmp3(nil)
+            if tmp1(nil) then return tmp3(nil) end
+            return tmp2(nil)
           elseif tmp == 2 then
             return k(1)
           else
-            return tmp3(nil)
+            return tmp2(nil)
           end
         else
-          if tmp ~= 1 then return tmp3(nil) end
-          if tmp2(nil) then return tmp1(nil) end
-          return tmp3(nil)
+          if tmp ~= 1 then return tmp2(nil) end
+          if tmp1(nil) then return tmp3(nil) end
+          return tmp2(nil)
         end
       end
     end
