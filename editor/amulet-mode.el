@@ -1,15 +1,56 @@
 ;;; amulet-mode.el --- Editing support for Amulet -*- lexical-binding: t; -*-
 
 ;;; Commentary:
-;; Just a very quick implementation of syntax highlighting and error displaying
-;; for Amulet.
+;; Just a very quick implementation of syntax highlighting and other editor
+;; integration for Amulet.
 
 ;;; Code:
 
+(defcustom amulet-mode-amc-executable "amc"
+  "The executable of the main Amulet compiler.
+
+This should be a string containing the name or path of the
+executable. This defaults to \"amc\"."
+  :type '(choice (const :tag "Default executable" "amc")
+                  (file :tag "Name or path"))
+  :tag "amc executable"
+  :group 'amulet-mode
+  :risky t)
+
+(defcustom amulet-mode-amulet-lsp-executable "amulet-lsp"
+  "The executable of the Amulet Language Server.
+
+This should be a string containing the name or path of the
+executable. This defaults to \"amulet-lsp\"."
+  :type '(choice (const :tag "Default executable" "amulet-lsp")
+                  (file :tag "Name or path"))
+  :tag "amulet-lsp executable"
+  :group 'amulet-mode
+  :risky t)
+
+(defun amulet-mode--string-vector-p (val)
+  "A predicate to check if VAL is a vector entirely composed of lists."
+  (and (vectorp val) (seq-every-p #'stringp val)))
+
+(define-widget 'amulet-mode--string-vector 'lazy
+  "A widget which specifies a vector of strings."
+  :offset 4
+  :tag "Vector"
+  :type '(restricted-sexp :match-alternatives (amulet-mode--string-vector-p)))
+
+(defcustom amulet-mode-library-path '[]
+  "Additional directories to add to Amulet's library path.
+
+Ideally this should be specified as a dir-local variable."
+  :type 'amulet-mode--string-vector
+  :tag "Library path"
+  :group 'amulet-mode
+  :risky t)
+
 (defconst amulet-mode--keywords
-  '("forall" "let" "fun" "and" "if" "then" "else" "begin" "end" "in" "external"
-    "val" "true" "false" "match" "with" "function" "type" "of" "module" "open"
-    "lazy" "as" "class" "instance" "when" "private")
+  '("and" "as" "begin" "class" "deriving" "else" "end" "external" "false" "forall"
+    "fun" "function" "if" "import" "in" "include" "instance" "lazy" "let" "match"
+    "module" "of" "open" "private" "rec" "then" "true" "type" "val" "when" "with")
   "All Amulet keywords.  These are just extracted from Lexer.x.")
 
 (defconst amulet-mode--font-lock
@@ -112,108 +153,31 @@
 
   ;; Syntax highlighting
   (set-syntax-table amulet-mode--syntax-table)
-  (setq-local font-lock-defaults '(amulet-mode--font-lock))
+  (setq-local font-lock-defaults '(amulet-mode--font-lock)))
 
-  (amulet-mode-start))
+(defun amulet-mode--lsp-command ()
+  "The command to start the LSP server. This can be taken as a
+  function reference in order to defer evaluation of
+  `amulet-mode-amulet-lsp-executable'"
+  amulet-mode-amulet-lsp-executable)
 
-(defvar amulet-mode--process
-  nil
-  "The current Amulet process.")
+(with-eval-after-load 'lsp-mode
+  ;; If LSP is installed (and loaded), set up editor integration.
+  (add-to-list 'lsp-language-id-configuration '(amulet-mode . "amulet"))
 
-(defun amulet-mode--process-sentinel (process event)
-  "Display a message when the Amulet PROCESS receives an error-like EVENT."
-  (unless (or (eq event "deleted\n")
-              (eq event "finished\n")
-              (eq event "open\n"))
-    (message (format "Amulet process %s (%s)" event process))))
+  (lsp-register-custom-settings
+   '(("amulet.libraryPath" amulet-mode-library-path)))
 
-(defun amulet-mode-start ()
-  "Start the Amulet process if not already running."
-  (interactive)
-  (cond
-   ((not (eq major-mode 'amulet-mode))
-    (message "Buffer is not using Amulet."))
+  (lsp-register-client
+   (make-lsp-client
+    :new-connection (lsp-stdio-connection #'amulet-mode--lsp-command)
+    :major-modes '(amulet-mode)
+    :server-id 'amc-lsp
+    :initialized-fn (lambda (workspace)
+                      (with-lsp-workspace workspace
+                        (lsp--set-configuration
+                         (lsp-configuration-section "amulet")))))))
 
-   ((and amulet-mode--process (process-live-p amulet-mode--process))
-    (message "Amulet is currently live"))
-
-   (t
-    (condition-case err
-      (progn
-        (setq amulet-mode--process
-              (make-process
-               :name "amulet-mode--process"
-               :connection-type 'pipe
-               ;; TODO: Extract from flycheck
-               :command '("amc" "repl")))
-        (set-process-sentinel amulet-mode--process #'amulet-mode--process-sentinel))
-      (error
-       (when amulet-mode--process (delete-process amulet-mode--process))
-       (signal (car err) (cdr err)))))))
-
-(defun amulet-mode-restart ()
-  "Start or restart the Amulet background process."
-  (interactive)
-  (if (eq major-mode 'amulet-mode)
-      (progn
-        (when amulet-mode--process (delete-process amulet-mode--process))
-        (amulet-mode-start))
-      (message "Buffer is not using Amulet.")))
-
-(defun amulet-mode-stop ()
-  "Kill the Amulet background process."
-  (interactive)
-  (cond
-   ((not (eq major-mode 'amulet-mode))
-    (message "Buffer is not using Amulet."))
-   (amulet-mode--process
-    (delete-process amulet-mode--process))))
-
-(require 'flycheck)
-
-(flycheck-define-checker amulet
-  "An Amulet syntax checker using amc.
-
-   See `https://amulet.squiddev.cc/'."
-  :command ("amc"
-            "connect"
-            (eval (concat ":l " (flycheck-save-buffer-to-temp #'flycheck-temp-file-system))))
-  :error-patterns
-    ;; These patterns are slightly odd: we just try to match until we find a
-    ;; line starting with "/" (which is the next error).
-    ((error line-start (file-name) "[" line ":" column " .." (one-or-more digit) ":" (one-or-more digit) "]: error\n"
-            (message (one-or-more not-newline)
-                     (zero-or-more
-                      (or
-                        (: "\n" line-end)
-                        (: "\n" (not (any "/")) (zero-or-more not-newline)))))
-            line-end)
-     (warning line-start (file-name) "[" line ":" column " .." (one-or-more digit) ":" (one-or-more digit) "]: warning\n"
-            (message (one-or-more not-newline)
-                     (zero-or-more
-                      (or
-                        (: "\n" line-end)
-                        (: "\n" (not (any "/")) (zero-or-more not-newline)))))
-            line-end)
-     (info line-start (file-name) "[" line ":" column " .." (one-or-more digit) ":" (one-or-more digit) "]: note\n"
-            (message (one-or-more not-newline)
-                     (zero-or-more
-                      (or
-                        (: "\n" line-end)
-                        (: "\n" (not (any "/")) (zero-or-more not-newline)))))
-            line-end))
-
-
-  :error-filter
-  (lambda (errors)
-    (dolist (error errors)
-      ;; Inject the line number if needed.
-      (unless (flycheck-error-line error) (setf (flycheck-error-line error) 1)))
-    errors)
-
-  :modes amulet-mode)
-
-;;;###autoload(add-to-list 'flycheck-checkers 'amulet)
 
 (provide 'amulet-mode)
 ;;; amulet-mode.el ends here

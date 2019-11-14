@@ -37,7 +37,7 @@ deriving instance (Ord (Var p), Ord (Ann p)) => Ord (ModuleTerm p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (ModuleTerm p)
 
 data Toplevel p
-  = LetStmt RecKind TopAccess  [Binding p]
+  = LetStmt RecKind TopAccess [Binding p]
   | ForeignVal TopAccess (Var p) Text (Type p) (Ann p)
   | TypeDecl TopAccess (Var p) [TyConArg p] (Maybe [Constructor p]) (Ann p)
   | TySymDecl TopAccess (Var p) [TyConArg p] (Type p) (Ann p)

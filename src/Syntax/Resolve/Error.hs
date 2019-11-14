@@ -43,6 +43,8 @@ data ResolveError
 
   | UnresolvedImport T.Text -- ^ Cannot resolve this module.
   | ImportLoop (E.NonEmpty (FilePath, Span)) -- ^ Cyclic dependencies when loading modules.
+  | ImportError Span FilePath
+  -- ^ This file errored when importing. This is only used when compiling single files (such as in an editor).
 
   | TFClauseWrongHead (Type Parsed) (Var Parsed)
   | TFClauseWrongArity Int Int
@@ -73,6 +75,7 @@ instance Pretty ResolveError where
 
   pretty (UnresolvedImport name) = "Cannot resolve" <+> dquotes (text name)
   pretty (ImportLoop _) = "Modules form an import cycle"
+  pretty (ImportError _ file) = "Error importing" <+> dquotes (string file)
 
   pretty (TFClauseWrongHead t tau) =
     vsep [ "The lhs of a type function equation must be headed by the type function constructor"
@@ -89,6 +92,7 @@ instance Pretty ResolveError where
 instance Spanned ResolveError where
   annotation (ArisingFrom _ x) = annotation x
   annotation (NonLinearRecord e _) = annotation e
+  annotation (ImportError e _) = annotation e
   annotation x = error (show x)
 
 instance Note ResolveError Style where
@@ -117,6 +121,7 @@ instance Note ResolveError Style where
   noteId LetOpenStruct{}      = Just 1009
   noteId UnresolvedImport{}   = Just 1010
   noteId ImportLoop{}         = Just 1011
+  noteId ImportError{}        = Nothing
   noteId TFClauseWrongHead{}  = Just 1012
   noteId TFClauseWrongArity{} = Just 1013
 
