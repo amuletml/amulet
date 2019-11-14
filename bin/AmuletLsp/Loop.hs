@@ -1,34 +1,42 @@
 {-# LANGUAGE OverloadedStrings, DeriveGeneric, DuplicateRecordFields, FlexibleContexts #-}
 module AmuletLsp.Loop (run) where
 
-import           AmuletLsp.Features
-import           AmuletLsp.Worker
-import           Control.Applicative
-import           Control.Concurrent
-import           Control.Concurrent.STM
-import           Control.Lens hiding (List)
-import           Control.Monad
-import           Data.Aeson.Types
-import           Data.Bifunctor
-import           Data.Default
-import           Data.Foldable
-import           Data.Maybe
+import AmuletLsp.Features
+import AmuletLsp.Worker
+
+import Control.Lens hiding (List)
+import Control.Concurrent.STM
+import Control.Applicative
+import Control.Concurrent
+import Control.Monad
+
 import qualified Data.Text as T
-import           Data.Triple
-import           Frontend.Errors
-import           GHC.Generics
-import           Generics.Constructor
+import Data.Aeson.Types
+import Data.Bifunctor
+import Data.Foldable
+import Data.Default
+import Data.Triple
+import Data.Maybe
+
+import Frontend.Errors
+
+import Generics.Constructor
+import GHC.Generics
+
 import qualified Language.Haskell.LSP.Control as Control
-import qualified Language.Haskell.LSP.Core as C
-import           Language.Haskell.LSP.Messages
-import           Language.Haskell.LSP.Types
 import qualified Language.Haskell.LSP.Types.Lens as L
-import           Language.Haskell.LSP.Types.Lens hiding (error)
+import Language.Haskell.LSP.Types.Lens hiding (error)
 import qualified Language.Haskell.LSP.VFS as VFS
-import           Prelude hiding (id)
-import           System.Exit
-import           System.Log.Logger
-import           Text.Pretty.Semantic
+import qualified Language.Haskell.LSP.Core as C
+import Language.Haskell.LSP.Messages
+import Language.Haskell.LSP.Types
+
+import Text.Pretty.Semantic
+
+import Prelude hiding (id)
+
+import System.Log.Logger
+import System.Exit
 
 newtype Config = Config
   { libraryPath :: [FilePath]

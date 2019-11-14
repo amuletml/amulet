@@ -1,15 +1,18 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Main (main) where
 
-import           AmuletLsp.Loop
-import           Options.Applicative
-import           System.Exit
-import           System.IO
+import AmuletLsp.Loop
+
+import Options.Applicative
+
+import qualified System.Log.Handler.Simple as LH
 import qualified System.Log.Formatter as LF
 import qualified System.Log.Handler as LH
-import qualified System.Log.Handler.Simple as LH
-import           System.Log.Logger
-import           Version
+import System.Log.Logger
+import System.Exit
+import System.IO
+
+import Version
 
 newtype Args = Args { _log :: Maybe FilePath }
 

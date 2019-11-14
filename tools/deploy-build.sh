@@ -3,7 +3,7 @@
 set -e
 
 if [[ $# == 0 ]]; then
-  exec $0 amc amc-prove
+  exec $0 amc amc-prove amulet-lsp
 fi
 
 build () {

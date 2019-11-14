@@ -13,7 +13,7 @@ check() {
   done
 }
 
-if check | grep '.'; then
+if check | grep -v 'No hints' | grep '.'; then
   exit 1
 else
   exit 0

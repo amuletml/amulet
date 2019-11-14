@@ -1,23 +1,29 @@
 {-# LANGUAGE OverloadedStrings, DuplicateRecordFields, FlexibleContexts, TypeFamilies #-}
 module AmuletLsp.Features where
 
-import           Control.Applicative
-import           Control.Lens hiding (List)
-import           Control.Monad.Infer (TypeError(..))
-import           Data.Foldable
-import           Data.Maybe
-import           Data.Position
-import           Data.Span
-import           Data.Spanned
+import Control.Monad.Infer (TypeError(..))
+import Control.Lens hiding (List)
+import Control.Applicative
+
 import qualified Data.Text as T
-import           Frontend.Errors
-import           Language.Haskell.LSP.Types
-import           Language.Haskell.LSP.Types.Lens hiding (error)
-import           Prelude hiding (id)
-import           Syntax
+import Data.Foldable
+import Data.Position
+import Data.Spanned
+import Data.Maybe
+import Data.Span
+
+import Frontend.Errors
+
+import Language.Haskell.LSP.Types.Lens hiding (error)
+import Language.Haskell.LSP.Types
+
+import Prelude hiding (id)
+
 import qualified Syntax.Resolve.Error as R
-import           Text.Pretty.Note
-import           Text.Pretty.Semantic hiding (line)
+import Syntax
+
+import Text.Pretty.Semantic hiding (line)
+import Text.Pretty.Note
 
 getOutline :: [Toplevel Parsed] -> [DocumentSymbol]
 getOutline = concatMap getTop where

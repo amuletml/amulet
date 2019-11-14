@@ -16,55 +16,64 @@ module AmuletLsp.Worker
   , startRequest, cancelRequest
   ) where
 
-import           AmuletLsp.NameyMT
-import           Control.Applicative
-import           Control.Concurrent
-import           Control.Concurrent.STM
-import           Control.Lens hiding (List)
-import           Control.Monad
-import           Control.Monad.IO.Class
-import           Control.Monad.Infer (TypeError(..))
-import           Control.Monad.Namey
-import           Control.Monad.Trans.Class
+import Control.Monad.Infer (TypeError(..))
+import Control.Lens hiding (List)
+import Control.Monad.Trans.Class
+import Control.Concurrent.STM
+import Control.Monad.IO.Class
+import Control.Applicative
+import Control.Monad.Namey
+import Control.Concurrent
+import Control.Monad
+
 import qualified Crypto.Hash.SHA256 as SHA
-import           Data.Bifunctor
-import qualified Data.ByteString as BS
+
+import qualified Data.Text.Lazy.Encoding as L
 import qualified Data.ByteString.Lazy as BSL
-import           Data.Either
-import           Data.Foldable
-import           Data.Function
-import           Data.Functor
 import qualified Data.HashMap.Strict as HM
 import qualified Data.List.NonEmpty as E
-import qualified Data.Map.Strict as Map
-import           Data.Monoid
 import qualified Data.Rope.UTF16 as Rope
-import           Data.Span
+import qualified Data.Map.Strict as Map
+import qualified Data.ByteString as BS
 import qualified Data.Text as T
-import qualified Data.Text.Lazy.Encoding as L
-import           Data.These
-import           Data.Triple
-import           Frontend.Errors
-import           Language.Haskell.LSP.Types
-import           Parser (parseTops)
-import           Parser.Error (ParseError)
-import           Parser.Wrapper (runParser)
-import           Syntax (Toplevel(..))
-import           Syntax.Builtin (builtinResolve, builtinEnv)
-import           Syntax.Desugar (desugarProgram)
-import           Syntax.Resolve (ResolveResult(..), resolveProgram)
+import Data.Bifunctor
+import Data.Foldable
+import Data.Function
+import Data.Functor
+import Data.Either
+import Data.Monoid
+import Data.Triple
+import Data.These
+import Data.Span
+
+import Frontend.Errors
+
+import Language.Haskell.LSP.Types
+
+import Parser.Wrapper (runParser)
+import Parser.Error (ParseError)
+import Parser (parseTops)
+
+import Syntax.Resolve (ResolveResult(..), resolveProgram)
+import Syntax.Builtin (builtinResolve, builtinEnv)
+import Syntax.Resolve.Scope (Signature)
+import Syntax.Desugar (desugarProgram)
 import qualified Syntax.Resolve as R
-import           Syntax.Resolve.Import
-import           Syntax.Resolve.Scope (Signature)
-import           Syntax.Types
-import           Syntax.Var
-import           Syntax.Verify
-import           System.Directory
-import           System.Environment
-import           System.FilePath
-import           System.Log.Logger
-import           Text.Pretty.Note
-import           Types.Infer (inferProgram)
+import Syntax (Toplevel(..))
+import Syntax.Resolve.Import
+import System.Environment
+import System.Log.Logger
+import System.Directory
+import System.FilePath
+import Syntax.Verify
+import Syntax.Types
+import Syntax.Var
+
+import Text.Pretty.Note
+
+import Types.Infer (inferProgram)
+
+import AmuletLsp.NameyMT
 
 -- | A unique version used to identify currently edited files.
 newtype Version = Version Int
