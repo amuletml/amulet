@@ -51,6 +51,7 @@ types/2036.txt TC: MightNotTerminate
 types/2037.txt TC: TyFunInLhs
 types/2038.txt TC: DICan'tDerive
 types/2039.txt TC: NotAnIdiom
+types/2040.txt TC: PolyTyFunRhs
 verify/3001.txt Verify: MalformedRecursiveRhs
 verify/3002.txt Verify: DefinedUnused
 verify/3003.txt Verify: ParseErrorInForeign

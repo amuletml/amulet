@@ -1,8 +1,8 @@
-A string was opened with a double quote ('"'), but never closed.
+A string was opened with a double quote (`"`), but never closed.
 
 1. Amulet strings cannot span multiple lines. If you want to write a
    multi-line string, use `^` to concatenate multiple strings together.
 
-2. You can use a backslash ('\') to escape "special" characters within a
+2. You can use a backslash (`\\`) to escape "special" characters within a
    string, such as single or double quotes. Make sure you've not
    accidentally escaped this string's closing quote.

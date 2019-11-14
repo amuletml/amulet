@@ -1,4 +1,4 @@
-{-# LANGUAGE ConstraintKinds, FlexibleContexts #-}
+{-# LANGUAGE ConstraintKinds, FlexibleContexts, ScopedTypeVariables #-}
 module Types.Unify.Magic (magicClass, magicTyFun) where
 
 import Control.Monad.Infer
@@ -31,7 +31,7 @@ magicClass v
   | v == tyKIntName = Just (solveKnownLit knownIntName knownIntTy knownIntTy' tyKInt tyInt, confess')
   | v == rowConsName = Just (solveRowCons, confess')
   | v == tyEqName = Just (solveEq, confess_eq)
-  | v == tyTypeError_n = Just (\_ _ (TyApps _ [a]) -> solveTypeError a, confess')
+  | v == tyTypeError_n = Just (\_ scope (TyApps _ [a]) -> solveTypeError scope a, confess')
   | otherwise = Nothing
 
 confess' :: MonadSolve m => Reporter m
@@ -117,16 +117,26 @@ isRows _ = False
 
 magicTyFun :: MonadSolve m => Var Typed -> Maybe (TfSolver m)
 magicTyFun v
-  | v == tyTypeError_n = Just (\_ [a] _ -> solveTypeError a)
+  | v == tyTypeError_n = Just (\scope [a] _ -> solveTypeError scope a)
   | otherwise = Nothing
 
-solveTypeError :: MonadSolve m => Type Typed -> m a
-solveTypeError = confesses . CustomTypeError . toTypeError where
-  toTypeError :: Type Typed -> Doc
+solveTypeError :: forall m a. MonadSolve m => ImplicitScope ClassInfo Typed -> Type Typed -> m a
+solveTypeError scope t = confesses . CustomTypeError =<< toTypeError' t where
+  toTypeError, toTypeError' :: Type Typed -> m Doc
+  toTypeError' t = toTypeError =<< reduceTyFuns scope (TyParens t)
+
   toTypeError (TyApps (TyCon v) [a, b])
-    | v == tyVCat_n = toTypeError a <#> toTypeError b
-    | v == tyHCat_n = toTypeError a <+> toTypeError b
+    | v == tyVCat_n = (<#>) <$> toTypeError' a <*> toTypeError' b
+    | v == tyHCat_n = (<+>) <$> toTypeError' a <*> toTypeError' b
+
   toTypeError (TyApps (TyPromotedCon v) [a])
-    | v == tyeString_n, TyLit (LiStr a) <- a = text a
-    | v == tyShowType_n = displayType a
-  toTypeError x = error (displayS (pretty x) ++ "Kind error in solveTypeError")
+    | v == tyeString_n = do
+      a <- reduceTyFuns scope a
+      case a of
+        TyLit (LiStr a) -> pure $ text a
+        _ -> pure $ displayTypeTyped a
+    | v == tyShowType_n = pure $ displayTypeTyped a
+
+  toTypeError (TyParens x) = toTypeError x
+
+  toTypeError _ = pure $ string "Stuck type expression in Amc.type_error:" <+> displayTypeTyped t

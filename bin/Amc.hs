@@ -60,6 +60,7 @@ data Command
     { toLoad      :: Maybe FilePath
     , serverPort  :: Int
     , prelude     :: Prelude
+    , noCode      :: Bool
     , options     :: CompilerOptions
     }
   | Connect
@@ -108,7 +109,7 @@ argParser = info (args <**> helper <**> version)
       <> command "editor"
          ( info editorCommand
          $ fullDesc <> progDesc "Launch an LSP server on stdin/stdout." )
-      ) <|> pure (Repl Nothing defaultPort DefaultPrelude (CompilerOptions D.Void [] False))
+      ) <|> pure (Repl Nothing defaultPort DefaultPrelude False (CompilerOptions D.Void [] False))
 
     explainCommand :: Parser Command
     explainCommand = Explain
@@ -134,6 +135,7 @@ argParser = info (args <**> helper <**> version)
       <*> ( flag' NoPrelude (long "no-prelude" <> help "Do not load files with a prelude.")
         <|> option (CustomPrelude <$> str) ( long "prelude" <> metavar "PATH" <> help "Specify a custom prelude to use." )
         <|> pure DefaultPrelude )
+      <*> switch (long "no-code" <> help "Stop compilation of loaded modules after type-checking.")
       <*> compilerOptions
 
     connectCommand :: Parser Command
@@ -162,7 +164,7 @@ argParser = info (args <**> helper <**> version)
     defaultPort = 5478
 
 driverConfig :: CompilerOptions -> IO D.DriverConfig
-driverConfig CompilerOptions { debugMode = debug, libraryPath =  paths } = do
+driverConfig CompilerOptions { debugMode = debug, libraryPath = paths } = do
   paths <- sequence <$> for paths (\path -> do
     path' <- canonicalizePath path
     exists <- doesDirectoryExist path'
@@ -199,14 +201,14 @@ main :: IO ()
 main = do
   options <- execParser argParser
   case options of
-    Args Repl { toLoad, serverPort, prelude, options } -> do
+    Args Repl { toLoad, serverPort, prelude, noCode, options } -> do
       dConfig <- driverConfig options
       prelude <- findPrelude prelude dConfig
       root <- getCurrentDirectory
       R.replFrom R.ReplConfig { R.port = serverPort
                                , R.debugMode = debugMode options
                                , R.root = root
-                               , R.driverConfig = dConfig
+                               , R.driverConfig = dConfig { D.checkOnly = noCode }
                                , R.prelude = prelude
                                , R.coreLint = coreLint options }
         toLoad

@@ -190,6 +190,7 @@ data DriverConfig = DriverConfig
   -- ^ The path of folders to look up files from.
   , callbacks :: DriverCallbacks
   -- ^ Callbacks for when a module has finished a particular stage.
+  , checkOnly :: Bool
   } deriving Show
 
 data Driver = Driver
@@ -229,6 +230,7 @@ makeConfig = do
        , takeDirectory (takeDirectory execP) </> "lib"
        ])
     defaultCallbacks
+    False
   where
     splitPath = Set.toList . Set.fromList . map T.unpack . T.split (==':') . T.pack
 
@@ -345,8 +347,13 @@ lowerWith :: (MonadNamey m, MonadIO m, MonadState Driver m)
                  , ErrorBundle)
 lowerWith root parsed sig env lState = do
   ((res, errors), deps) <- inferWithDeps root parsed sig env
+  c <- use config
   case res of
     Nothing -> (Nothing, ) . (errors<>) . fold <$> gatherDepsOf getErrors deps
+
+    Just (inferred, env, resolved) | checkOnly c -> do
+      pure (Just ([], mempty, inferred, env, resolved), errors)
+
     Just (inferred, env, resolved) -> do
       All verified <- foldMapM getVerifiedAll deps
       errors <- fold <$> gatherDepsOf getErrors deps
@@ -642,6 +649,8 @@ getLowerState :: (MonadNamey m, MonadState Driver m, MonadIO m)
               => FilePath -> m (Maybe LowerState)
 getLowerState path = do
   ok <- getVerified path
+  c <- use config
+
   if not ok then pure Nothing else do
     ~(Just file) <- use (files . at path)
     case file ^. stage of
@@ -650,6 +659,7 @@ getLowerState path = do
         AllOf lEnv <- foldMapM (fmap AllOf . getLowerState) (file ^. dependencies)
         case lEnv of
           Nothing -> pure Nothing
+          _ | checkOnly c -> pure (Just mempty)
           Just lEnv -> do
             (lEnv, l) <- runLowerWithEnv (defaultState <> lEnv) (lowerProgEnv prog)
             updateFile path $ stage .~ SEmitted l sig env lEnv
@@ -662,8 +672,10 @@ getLowered :: (MonadNamey m, MonadState Driver m, MonadIO m)
             => FilePath -> m (Maybe ([Stmt CoVar], LowerState))
 getLowered path = do
   lEnv <- getLowerState path
+  c <- use config
   case lEnv of
     Nothing -> pure Nothing
+    _ | checkOnly c -> pure (Just (mempty, mempty))
     Just lEnv -> fmap ((,lEnv) . _cBody . (^.stage)) <$> use (files . at path)
 
 -- | Get the errors for a specific file.

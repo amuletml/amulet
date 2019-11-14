@@ -1,6 +1,6 @@
 {-# LANGUAGE ConstraintKinds, FlexibleContexts, FlexibleInstances,
    UndecidableInstances, MultiParamTypeClasses, OverloadedStrings,
-   ScopedTypeVariables, TupleSections #-}
+   ScopedTypeVariables, TupleSections, GADTs #-}
 module Syntax.Verify
   ( VerifyError(..)
   , BindingSite(..)
@@ -9,6 +9,7 @@ module Syntax.Verify
   ) where
 
 import qualified Data.Sequence as Seq
+import qualified Data.Text as T
 import qualified Data.Set as Set
 import Data.Foldable
 import Data.Reason
@@ -26,6 +27,7 @@ import Syntax.Verify.Pattern
 import Syntax.Verify.Error
 
 import Syntax.Builtin (tyLazy, forceName, tyRefName)
+import Syntax.Transform
 import Syntax.Types
 import Syntax.Let
 import Syntax
@@ -81,7 +83,22 @@ verifyProgram = traverse_ verifyStmt where
   verifyStmt TypeDecl{} = pure ()
   verifyStmt DeriveInstance{} = pure ()
   verifyStmt TypeFunDecl{} = pure ()
-  verifyStmt (Module _ _ m) = verifyModule m
+
+  -- Here we do the opposite of TC: Since we're working with the final
+  -- 'Env' (where everything is fully qualified), when entering a module
+  -- definition, remove the prefix.
+  verifyStmt (Module _ nm m) = do
+    let prefix = case nm of
+          TgName n _ -> n <> T.singleton '.'
+          TgInternal v -> v <> T.singleton '.'
+
+    let go (VerifyScope env m) =
+          flip VerifyScope m $
+            env & names %~ mapScope id (unqualifyWrt prefix)
+                & types %~ fmap (Set.mapMonotonic (unqualifyVarWrt prefix))
+
+    local go $ verifyModule m
+
   verifyStmt (Open m) = verifyModule m
   verifyStmt (Include m) = verifyModule m
 
@@ -329,3 +346,14 @@ verifyMatch rep m ty bs = do
     (Seq.Empty, [a]) | ok -> rep a
     (Seq.Empty, _) -> pure ()
     (_, _) -> tell . pure . MissingPattern m . map snd . toList $ unc
+
+unqualifyWrt :: (Var p ~ Var Resolved) => T.Text -> Type p -> Type p
+unqualifyWrt n = transformType go where
+  go (TyCon v) = TyCon (unqualifyVarWrt n v)
+  go t = t
+
+unqualifyVarWrt :: T.Text -> Var Resolved -> Var Resolved
+unqualifyVarWrt n (TgName v id)
+  | n `T.isPrefixOf` v = TgName (T.drop (T.length n) v) id
+  | otherwise = TgName v id
+unqualifyVarWrt _ n = n

@@ -16,7 +16,9 @@ import System.IO
 import qualified Data.Text.Lazy as L
 import qualified Data.Text.IO as T
 import qualified Data.Text as T
+import qualified Data.Set as Set
 import Data.Position
+import Data.Maybe
 
 import Control.Monad.Infer (TypeError)
 import Syntax.Resolve (ResolveError)
@@ -63,10 +65,31 @@ reportAll fs (Errors ps rs ts vs)
   = filterSimpleDoc (either (const True) uncommentFilter)
   . renderPretty 0.4 100
   . vsep
-  $ fmt ps <> fmt rs <> fmt ts <> fmt vs
+  $ fmt ps <> fmt rs <> fmt ts <> fmt vs <> info
   where
     fmt :: N.Note a Style => [a] -> [P.Doc (Either N.NoteStyle Style)]
     fmt = map (N.format (N.fileSpans fs highlightAmulet))
+    info :: [ P.Doc (Either N.NoteStyle Style) ]
+    info =
+      let errs = Set.toList (Set.fromList (mapMaybe N.noteId ps
+                                        <> mapMaybe N.noteId rs
+                                        <> mapMaybe N.noteId ts
+                                        <> mapMaybe N.noteId vs))
+          (them, errors, explanations) =
+            case errs of
+              [_] -> (string "it", string "message", string "has a detailed explanation")
+              _ -> (string "them", string "messages", string "have detailed explanations")
+          nums = hsep (punctuate comma (map int errs))
+       in
+        case errs of
+          [] -> []
+          _ ->
+            [ empty
+            , string "The following" <+> errors <+> explanations <> char ':' <+> nums <> char '.'
+            ,     string "Try"
+              <+> squote <> (Right <$> skeyword (string "amc explain" <+> int (head errs))) <> squote
+              <+> string "to see" <+> them <> char '.'
+            ]
 
 -- | Report a note to a handle - be it a terminal or file.
 hReport :: (MonadIO m, N.Note a Style) => Handle -> N.FileMap -> a -> m ()

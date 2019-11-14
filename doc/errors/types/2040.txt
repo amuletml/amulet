@@ -1,0 +1,84 @@
+Type functions with polymorphic (`forall .` or `forall ->`) headed types
+do not play nicely with how the Amulet type checker is implemented
+internally. Thus, using these types in practice might be a bit
+complicated.
+
+    type function foo ('x : bool) begin
+      foo true  = forall 'a. 'a -> 'a
+      foo false = unit
+    end
+
+    type sbool 'x =
+      | STrue  : sbool true
+      | SFalse : sbool false
+
+    let
+      bar :
+        forall 'b. sbool 'b -> foo 'b -> unit
+      =
+        fun x y ->
+          match x with
+          | STrue -> y ()
+          | SFalse -> y
+
+This program certainly looks reasonable, and one might reasonably expect
+it to type-check. But consider what happens when type-checking the
+branch
+
+    | STrue -> y ()
+
+The way type checking Amulet proceeds is by building up a set of
+constraints by walking over the term, then solving them afterwards, to
+support the more complex type system features (like GADTs and type
+functions, both of which are at play here).
+
+When amc sees an application like `y ()`, what it does is (roughly) as
+following:
+
+1. Assign an unknown type `alpha` for y
+2. Since `y` is used in an application, `alpha` must really be equal to
+`beta -> gamma` (for some unknown `beta`, `gamma`)
+3. The argument to `y` is `()`, so `beta` must be equal to `unit`
+
+Solving these constraints, we arrive at the type `unit -> gamma` for the
+term `y`.
+
+Back to the branch `| STrue -> y ()`, amc will see that `y` is used in a
+function position and infer a type like `alpha -> beta` for it, which is
+wrong. When generating constraints for the branch, amc doesn't yet know
+that `y` has type `forall 'a. 'a -> 'a`; It knows is `y : foo b`
+(from the type signature) and that `b ~ true` (from matching on STrue),
+but it hasn't quite pieced this information together to arrive at
+`y : forall 'a. 'a -> 'a`: that's what the solver does!
+
+A possible fix is to "invert" the pattern matching as follows:
+
+    let
+      foo :
+        forall 'b. sbool 'b -> foo 'b -> unit
+      =
+        function
+          | STrue -> fun (y : forall 'a. 'a -> 'a) -> y ()
+          | SFalse -> fun y -> y
+
+Here, the GADT pattern matching scopes over the function expression
+`fun (y : forall 'a. 'a -> 'a)`, and we can indeed conclude from
+`b ~ true` that `foo b ~ forall 'a. 'a -> 'a`. Thus, `y` enters scope
+with a known polymorphic type, and inference can proceed.
+
+The reason that ascribing a type to `y` in the left-hand side doesn't
+work is that type ascriptions against polymorphic types will make all
+the bound type variables rigid and then check the term against a type
+with no quantifiers. For example:
+
+    (fun x -> x) : forall 'a. 'a -> 'a
+
+What happens is that first we _skolemise_ the type
+`forall 'a. 'a -> 'a`,
+returning a type with a rigid variable instead of `'a` (say `'A`). Then,
+we check the function expression against the type `'A -> 'A`.
+
+You can already see why `(y : forall 'a. 'a -> 'a)` won't work: We
+skolemise the type to `'A -> 'A` and then try unifying
+`forall 'a. 'a -> 'a` (from the expansion of `foo b` with `b ~ true`)
+with `'A -> 'A`, which fails.

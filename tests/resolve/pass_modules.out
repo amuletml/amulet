@@ -4,7 +4,7 @@ module X#0 = begin
   end
 end
 module Z#3 = Y#1
-let a#4 = x#2
+let a#4 = Z.x#2
 open X#0
-let b#5 = x#2
-let z#6 = X#0.({ a = x#2 })
+let b#5 = Y.x#2
+let z#6 = X#0.({ a = Y.x#2 })

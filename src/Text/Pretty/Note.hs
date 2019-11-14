@@ -72,7 +72,7 @@ format f x =
             NoteMessage -> annotate (NoteKind NoteMessage) "note"
             WarningMessage -> annotate (NoteKind WarningMessage) "warning"
             ErrorMessage -> annotate (NoteKind ErrorMessage) "error"
-      num = 
+      num =
         case noteId x of
           Just num -> parens (string (printf "%c%.4d" (toUpper (head (show c))) num))
           Nothing -> mempty

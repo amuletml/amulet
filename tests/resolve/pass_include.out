@@ -6,4 +6,4 @@ module Y#2 = begin
   include X#0
 end
 foreign val +#4 : int -> int -> int = "function(x, y) return x + y end"
-let _ = (x#1 +#4 y#3)
+let _ = (Y.x#1 +#4 Y.y#3)

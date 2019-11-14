@@ -1,3 +1,19 @@
+tyfun-terminate.ml[6:3 ..6:63]: warning (W2040)
+  │ 
+6 │   really_recursive C      = forall 'a. really_recursive C -> 'a
+  │   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  The right-hand-side of this type function equation is a polymorphic type.
+  This is technically unsupported, and might lead to strange type checking failures.
+  Offending type:
+    forall 'a. really_recursive C -> 'a
+tyfun-terminate.ml[7:3 ..7:57]: warning (W2040)
+  │ 
+7 │   really_recursive (D 'c) = 'c => really_recursive (D 'c)
+  │   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  The right-hand-side of this type function equation is a polymorphic type.
+  This is technically unsupported, and might lead to strange type checking failures.
+  Offending type:
+    'c => really_recursive (D 'c)
 tyfun-terminate.ml[4:3 ..4:69]: warning (W2036)
   │ 
 4 │   really_recursive A      = (really_recursive A * really_recursive A)
