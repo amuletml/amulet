@@ -110,7 +110,7 @@ data FileContents
     }
   -- | A file which exists on disk.
   | DiskContents
-    { diskDirty    :: {-# UNPACK #-} !Bool -- ^ Set when the file needs to be reloaded from disk.
+    { diskDirty    :: !Bool -- ^ Set when the file needs to be reloaded from disk.
     }
   deriving Show
 
