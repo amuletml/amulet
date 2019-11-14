@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts, FlexibleInstances, TypeOperators, TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleContexts, FlexibleInstances, TypeOperators #-}
 module Generics.Constructor
   ( ConstructorName(..)
   , conNameOf
@@ -21,4 +21,4 @@ instance (ConstructorName f) => ConstructorName (D1 c f) where
   gconNameOf (M1 x) = gconNameOf x
 
 instance (Constructor c) => ConstructorName (C1 c f) where
-  gconNameOf x = conName x
+  gconNameOf = conName

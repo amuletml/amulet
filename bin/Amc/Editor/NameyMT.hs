@@ -14,7 +14,7 @@ import Syntax.Var
 -- Internally, this reserves a block of names from the 'TVar', and then uses
 -- them. This avoids having to perform an atomic operation for every single
 -- fresh variable usage.
-data NameyMT a = NameyMT
+newtype NameyMT a = NameyMT
   { runNameyMT :: TVar Int -> (Int, Int) -> IO (a, (Int, Int)) }
   deriving (Functor)
 

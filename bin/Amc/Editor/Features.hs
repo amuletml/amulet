@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, DuplicateRecordFields, FlexibleContexts, TupleSections, TypeFamilies #-}
+{-# LANGUAGE OverloadedStrings, DuplicateRecordFields, FlexibleContexts, TypeFamilies #-}
 module Amc.Editor.Features where
 
 import           Control.Applicative

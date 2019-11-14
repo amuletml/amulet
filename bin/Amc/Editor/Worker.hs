@@ -27,6 +27,7 @@ import           Control.Monad.Infer (TypeError(..))
 import           Control.Monad.Namey
 import           Control.Monad.Trans.Class
 import qualified Crypto.Hash.SHA256 as SHA
+import           Data.Bifunctor
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
 import           Data.Either
@@ -324,14 +325,14 @@ trySatisfyRequest wrk (RequestLatest file kind err ok) = do
 
 -- | Add a new request, which will be run when the state is ready.
 startRequest :: Worker -> LspId -> Request -> IO ()
-startRequest wrk id req = (\x -> x) <=< atomically $ do
+startRequest wrk lId req = id <=< atomically $ do
   sat <- trySatisfyRequest wrk req
   -- TODO: These should be run off-thread.
   case sat of
     Nothing -> do
-      modifyTVar (pendingRequests wrk) $ \(reqs, fileReqs) ->
-        ( Map.insert id req reqs
-        , HM.alter (\old -> Just (Map.insert id req (fold old))) (requestFile req) fileReqs )
+      modifyTVar (pendingRequests wrk) $ bimap
+        (Map.insert lId req)
+        (HM.alter (Just . Map.insert lId req . fold) (requestFile req))
       pure (pure ())
     Just x -> pure x
 
@@ -385,7 +386,7 @@ newtype FileImport m a = FileIm
                   -> m (a, HM.HashMap NormalizedUri (Span, Maybe Env)) }
 
 instance Functor f => Functor (FileImport f) where
-  fmap f (FileIm go) = FileIm $ \c -> ((\(a, w) -> (f a, w)) <$> go c)
+  fmap f (FileIm go) = FileIm $ fmap (first f) . go
 
 instance Applicative f => Applicative (FileImport f) where
   pure x = FileIm (\_ -> pure (x, mempty))
@@ -407,12 +408,12 @@ instance MonadNamey m => MonadNamey (FileImport m) where
 instance MonadIO m => MonadImport (FileImport m) where
   importModule loc relPath = FileIm $ \(wrk, curFile, load) -> liftIO $ do
     absFile <-
-      if (T.pack "." `T.isPrefixOf` relPath)
+      if T.pack "." `T.isPrefixOf` relPath
       then case uriToFilePath (fromNormalizedUri curFile) of
              Nothing -> pure Nothing
              Just curFile -> Just <$> canonicalizePath (dropFileName curFile </> T.unpack relPath)
       else do
-        libPath <- atomically $ readTVar (libraryPath wrk)
+        libPath <- readTVarIO (libraryPath wrk)
         findFile' (map (</> T.unpack relPath) libPath)
 
     case absFile of
@@ -438,12 +439,12 @@ instance MonadIO m => MonadImport (FileImport m) where
               WorkingRoot -> do
                 logs ("Cycle importing " ++ show absFile ++ " / " ++ show (working file))
                 ret absFile (Just mempty) . ImportCycle $
-                  (getRel curFile (toNorm absFile), (fixLoc curFile loc)) E.:| []
+                  (getRel curFile (toNorm absFile), fixLoc curFile loc) E.:| []
               WorkingDep _ loc -> do
                 logs ("Cycle importing " ++ show absFile)
                 -- TODO: Enumerate the whole graph
                 ret absFile (Just mempty) . ImportCycle $
-                  (getRel curFile (toNorm absFile), (fixLoc curFile loc)) E.:| []
+                  (getRel curFile (toNorm absFile), fixLoc curFile loc) E.:| []
               Done _ -> error "Impossible"
 
     where
@@ -501,9 +502,9 @@ workOnce wrk@Worker { pushErrors, fileContents, fileStates } baseClock priority 
             -- was loaded on a later clock tick, and so we're out of date.
             Any changed <- if changed
               then pure (Any True)
-              else foldMapM (\(dPath, loc) -> (Any . maybe True (on (<) compileClock file)) <$> loadFile dPath (Just (path, loc)))
+              else foldMapM (\(dPath, loc) -> Any . maybe True (on (<) compileClock file) <$> loadFile dPath (Just (path, loc)))
                             (HM.toList (dependencies file))
-            file <- if not changed then pure file else do
+            file <- if not changed then pure file else
               case parsed of
                 Nothing -> pure file
                 Just parsed -> do
@@ -601,7 +602,7 @@ workOnce wrk@Worker { pushErrors, fileContents, fileStates } baseClock priority 
 
   -- | Parse a file from the contents on disk, transforming a state to a "disk state".
   parseOfDisk :: NormalizedUri -> Maybe [Toplevel Parsed] -> BS.ByteString -> Maybe FileState -> IO FileState
-  parseOfDisk _ parsed hash (Just f@DiskState{}) = do
+  parseOfDisk _ parsed hash (Just f@DiskState{}) =
     -- If we've got an old disk state, update it.
     pure f
       { working = WorkingRoot

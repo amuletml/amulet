@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, DeriveGeneric, DuplicateRecordFields, FlexibleContexts, TupleSections #-}
+{-# LANGUAGE OverloadedStrings, DeriveGeneric, DuplicateRecordFields, FlexibleContexts #-}
 module Amc.Editor (run) where
 
 import           Amc.Editor.Features
@@ -22,6 +22,7 @@ import qualified Language.Haskell.LSP.Core as C
 import           Language.Haskell.LSP.Messages
 import           Language.Haskell.LSP.Types
 import           Language.Haskell.LSP.Types.Lens hiding (error)
+import qualified Language.Haskell.LSP.Types.Lens as L
 import           Language.Haskell.LSP.Utility (logs)
 import qualified Language.Haskell.LSP.VFS as VFS
 import           Prelude hiding (id)
@@ -98,8 +99,8 @@ run = do
       }
       where handle c = Just (atomically . writeTQueue qIn . c)
 
-    commandIds :: [T.Text]
-    commandIds = []
+    -- commandIds :: [T.Text]
+    -- commandIds = []
 
     options :: C.Options
     options =
@@ -180,7 +181,7 @@ handleRequest _ wrk (NotDidChangeWatchedFiles msg) = do
 -}
 
 handleRequest _ wrk (NotCancelRequestFromClient msg) =
-  cancelRequest wrk (msg ^. params . id)
+  cancelRequest wrk (msg ^. params . L.id)
 
 handleRequest lf wrk (ReqDocumentSymbols msg)
   = startRequest wrk (msg ^. id)
@@ -209,12 +210,12 @@ handleRequest _ _ msg = logs ("Unknown message " ++ conNameOf msg)
 
 -- | Send a reply to a request.
 sendReply :: C.LspFuncs c -> RequestMessage m req resp -> (ResponseMessage resp -> FromServerMessage) -> resp -> IO ()
-sendReply lf req wrapMsg msg = do
+sendReply lf req wrapMsg msg =
   C.sendFunc lf . wrapMsg $
     ResponseMessage "2.0" (responseId $ req ^. id) (Just msg) Nothing
 
 -- | Send a an error in reply to a request.
 sendReplyError :: C.LspFuncs c -> RequestMessage m req resp -> ResponseError -> IO ()
-sendReplyError lf req err = do
+sendReplyError lf req err =
   C.sendFunc lf . RspError $
     ResponseMessage "2.0" (responseId $ req ^. id) Nothing (Just err)
