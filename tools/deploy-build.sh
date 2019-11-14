@@ -25,6 +25,7 @@ if which upx &>/dev/null; then
 fi
 
 version=$(grep version amuletml.cabal | head -1 | sed -re 's/version:\s*//g').$(date +'%Y.%m.%d.%H.%M')
+branch=$(git rev-parse --abbrev-ref @)
 echo "Generating packages for amuletml $version…"
 
 # Generate an archive for the libraries:
@@ -52,8 +53,12 @@ for arg in $*; do
 done
 cp lib/ pkg/usr/lib/amuletml/ -r
 
+if [[ "$branch" != "master" ]]; then
+  short_branch=$branch
+fi
+
 cat >pkg/.PKGINFO <<EOF
-pkgname = amuletml
+pkgname = amuletml${short_branch}
 pkgbase = amuletml
 pkgver = $version-1
 url = https://github.com/tmpim/amulet
@@ -92,7 +97,7 @@ list_package_files | LANG=C bsdtar -cf - --format=mtree \
   --options='!all,use-set,type,uid,gid,mode,time,size,md5,sha256,link' \
   --files-from - --exclude .MTREE | gzip -c -f -n > .MTREE
 
-list_package_files | tar --no-recursion --null --files-from - -cf ../result/amuletml-$version.pkg.tar
+list_package_files | tar --no-recursion --null --files-from - -cf ../result/amuletml-$version-$branch.pkg.tar
 popd &>/dev/null
 
 echo "Generating generic binary distribution…"
