@@ -1,5 +1,5 @@
 {-# LANGUAGE GADTs, NamedFieldPuns, OverloadedStrings, TupleSections #-}
-module Amc.Editor.Worker
+module AmuletLsp.Worker
   ( Version(..)
   , RequestKind(..)
   , Request(..)
@@ -16,7 +16,7 @@ module Amc.Editor.Worker
   , startRequest, cancelRequest
   ) where
 
-import           Amc.Editor.NameyMT
+import           AmuletLsp.NameyMT
 import           Control.Applicative
 import           Control.Concurrent
 import           Control.Concurrent.STM
@@ -46,7 +46,6 @@ import           Data.These
 import           Data.Triple
 import           Frontend.Errors
 import           Language.Haskell.LSP.Types
-import           Language.Haskell.LSP.Utility (logs)
 import           Parser (parseTops)
 import           Parser.Error (ParseError)
 import           Parser.Wrapper (runParser)
@@ -63,6 +62,7 @@ import           Syntax.Verify
 import           System.Directory
 import           System.Environment
 import           System.FilePath
+import           System.Log.Logger
 import           Text.Pretty.Note
 import           Types.Infer (inferProgram)
 
@@ -159,9 +159,9 @@ data FileState
   deriving Show
 
 data RequestKind a where
-  ReqParsed   :: RequestKind [Toplevel Parsed]
-  ReqResolved :: RequestKind (Signature, [Toplevel Resolved])
-  ReqTyped    :: RequestKind (Signature, Env, [Toplevel Typed])
+  ReqParsed   :: RequestKind (Maybe [Toplevel Parsed])
+  ReqResolved :: RequestKind (Maybe (Signature, [Toplevel Resolved]))
+  ReqTyped    :: RequestKind (Maybe (Signature, Env, [Toplevel Typed]))
   ReqErrors   :: RequestKind ErrorBundle
 
 data Request where
@@ -179,8 +179,8 @@ data Worker = Worker
   { -- | Report errors back to the client.
     pushErrors   :: NormalizedUri -> ErrorBundle -> IO ()
 
-    -- | The thread the worker runs on.
-  , runThread    :: ThreadId
+  , refreshThread :: ThreadId -- ^ The thread the main worker runs on.
+  , requestThread :: ThreadId -- ^ The task requests are run on.
 
     -- | The complete path to resolve libraries on.
   , libraryPath  :: TVar [FilePath]
@@ -204,11 +204,11 @@ data Worker = Worker
     -- be prioritised.
   , toRefresh    :: TVar (Maybe (Maybe NormalizedUri))
 
-    -- | A lookup of request ids to their corresponding requests, and also a map
-    -- of uris to their pending requests.
+    -- | A lookup of unsatisfied request ids to their corresponding
+    -- requests, and also a map of uris to their pending requests.
   , pendingRequests :: TVar ( Map.Map LspId Request
                             , HM.HashMap NormalizedUri (Map.Map LspId Request) )
-    -- | Requests which are ready to be executed.
+    -- | Requests which are satisfied and ready to be executed.
   , readyRequests   :: TVar (Map.Map LspId Request)
   }
 
@@ -226,9 +226,8 @@ makeWorker :: [FilePath] -> (NormalizedUri -> ErrorBundle -> IO ()) -> IO Worker
 makeWorker extra pushErrors = do
   path <- (extra++) <$> mainPath
   current <- myThreadId
-  worker <- atomically $ Worker pushErrors
-    <$> pure current      -- Runner thread
-    <*> newTVar path      -- Library path
+  worker <- atomically $ Worker pushErrors current current
+    <$> newTVar path      -- Library path
     <*> newTVar mempty    -- File contents
     <*> newTVar mempty    -- File states
     <*> newTVar (Clock 0) -- Clock
@@ -236,8 +235,9 @@ makeWorker extra pushErrors = do
     <*> newTVar Nothing   -- To refresh
     <*> newTVar mempty    -- Pending requests
     <*> newTVar mempty    -- Ready requests
-  wrkId <- forkIO (run worker)
-  pure worker { runThread = wrkId }
+  refId <- forkIO (runRefresh worker)
+  reqId <- forkIO (runRequests worker)
+  pure worker { refreshThread = refId, requestThread = reqId }
 
 updateConfig :: Worker -> [FilePath] -> IO ()
 updateConfig wrk extra = do
@@ -297,24 +297,22 @@ trySatisfyRequest wrk (RequestLatest file kind err ok) = do
      , Just OpenedContents { openVersion } ) ->
       case kind of
         ReqParsed
-          | VersionedData v contents <- openParsed, v == openVersion ->
-             Just $ ok openVersion contents
-          | Just v <- openPVersion, v == openVersion ->
-             Just $ err (ResponseError UnknownErrorCode "File could not be parsed." Nothing)
+          | VersionedData v contents <- openParsed, v == openVersion -> Just $ ok openVersion (Just contents)
+          | Just v <- openPVersion, v == openVersion -> Just $ ok openVersion Nothing
           | otherwise -> Nothing
 
         ReqResolved
           | Done c <- working, c == clk ->
             case openResolved of
-              VersionedData v contents | v == openVersion -> Just $ ok openVersion contents
-              _ -> Just $ err (ResponseError UnknownErrorCode "File could not be resolved." Nothing)
+              VersionedData v contents | v == openVersion -> Just $ ok openVersion (Just contents)
+              _ -> Just $ ok openVersion Nothing
           | otherwise -> Nothing
 
         ReqTyped
           | Done c <- working, c == clk ->
             case openTyped of
-              VersionedData v contents | v == openVersion -> Just $ ok openVersion contents
-              _ -> Just $ err (ResponseError UnknownErrorCode "File could not be typed." Nothing)
+              VersionedData v contents | v == openVersion -> Just $ ok openVersion (Just contents)
+              _ -> Just $ ok openVersion Nothing
           | otherwise -> Nothing
 
         ReqErrors
@@ -325,17 +323,19 @@ trySatisfyRequest wrk (RequestLatest file kind err ok) = do
 
 -- | Add a new request, which will be run when the state is ready.
 startRequest :: Worker -> LspId -> Request -> IO ()
-startRequest wrk lId req = id <=< atomically $ do
-  sat <- trySatisfyRequest wrk req
-  -- TODO: These should be run off-thread.
-  case sat of
-    Nothing -> do
-      modifyTVar (pendingRequests wrk) $ bimap
-        (Map.insert lId req)
-        (HM.alter (Just . Map.insert lId req . fold) (requestFile req))
-      pure (pure ())
-    Just x -> pure x
+startRequest wrk lId req = do
+  debugM logN ("Queuing request " ++ show lId)
+  atomically $ do
+    sat <- trySatisfyRequest wrk req
+    case sat of
+      Just{} -> modifyTVar (readyRequests wrk) (Map.insert lId req)
+      Nothing ->
+        modifyTVar (pendingRequests wrk) $ bimap
+          (Map.insert lId req)
+          (HM.alter (Just . Map.insert lId req . fold) (requestFile req))
 
+-- | Cancel a pending or ready request. This will not interrupt already
+-- running requests.
 cancelRequest :: Worker -> LspId -> IO ()
 cancelRequest wrk id = atomically $ do
   modifyTVar (readyRequests wrk) (Map.delete id)
@@ -345,6 +345,41 @@ cancelRequest wrk id = atomically $ do
       Nothing -> (reqs, fileReqs)
       Just req -> (reqs', HM.adjust (Map.delete id) (requestFile req) fileReqs)
 
+-- | Queue any pending for a file which are now ready to be executed.
+queueRequests :: Worker -> NormalizedUri -> IO ()
+queueRequests wrk@Worker { readyRequests, pendingRequests } path = atomically $ do
+  (idReqs, fileReqs) <- readTVar pendingRequests
+  case HM.lookup path fileReqs of
+    Nothing -> pure ()
+    Just filePending -> do
+      sats <- Map.foldrWithKey (\lId req sats -> maybe id (const (Map.insert lId req)) <$> trySatisfyRequest wrk req <*> sats)
+               (pure mempty) filePending
+      if Map.null sats then pure () else do
+        modifyTVar readyRequests (Map.union sats)
+        writeTVar pendingRequests (idReqs Map.\\ sats, HM.insert path (filePending Map.\\ sats) fileReqs)
+
+-- | A background thread to run requests.
+runRequests :: Worker -> IO ()
+runRequests wrk@Worker { readyRequests, pendingRequests } = forever (join findAction) where
+  findAction :: IO (IO ())
+  findAction = maybe findAction pure <=< atomically $ do
+    -- Pull a request from the ready queue and attempt to satisfy
+    -- it. Remove it from the queue, and either run it or add it back
+    -- to the pending queue.
+    requests <- readTVar readyRequests
+    case Map.minViewWithKey requests of
+      Nothing -> retry
+      Just ((lId, req), requests) -> do
+        action <- trySatisfyRequest wrk req
+        writeTVar readyRequests requests
+        case action of
+          Just{} -> pure ()
+          Nothing ->
+            modifyTVar pendingRequests $ bimap
+              (Map.insert lId req)
+              (HM.alter (Just . Map.insert lId req . fold) (requestFile req))
+        pure ((*> debugM logN ("Run request " ++ show lId)) <$> action)
+
 -- | Generate a singular name with the given text.
 genOneName :: Worker -> T.Text -> STM Name
 genOneName wrk txt = do
@@ -352,12 +387,13 @@ genOneName wrk txt = do
   writeTVar (nextName wrk) (n + 1)
   pure (TgName txt n)
 
-
-run :: Worker -> IO ()
-run wrk@Worker { toRefresh, clock } = work Nothing where
+-- | Watch the 'toRefresh' variable and issue a rebuild whenever it
+-- changes.
+runRefresh :: Worker -> IO ()
+runRefresh wrk@Worker { toRefresh, clock } = work Nothing where
   work :: Maybe ThreadId -> IO ()
   work task = do
-    logs "Polling state"
+    debugM logN "Polling state"
     (refresh, clk) <- atomically $ do
       -- Treat toRefresh as a TMVar - if not present, then retry. Otherwise
       -- clear immediately.
@@ -376,11 +412,12 @@ run wrk@Worker { toRefresh, clock } = work Nothing where
       Just tid -> killThread tid
 
     -- Spin up the worker on a separate thread and wait for further changes.
-    logs ("Recompiling " ++ show refresh)
+    debugM logN ("Recompiling " ++ show refresh)
     task <- forkIO (workOnce wrk clk refresh)
     work (Just task)
 
-
+-- | A file importer which loads a file using an arbitrary function,
+-- keeping track of dependencies.
 newtype FileImport m a = FileIm
   { runFileImport :: (Worker, NormalizedUri, NormalizedUri -> Maybe (NormalizedUri, Span) -> IO (Maybe FileState))
                   -> m (a, HM.HashMap NormalizedUri (Span, Maybe Env)) }
@@ -423,9 +460,11 @@ instance MonadIO m => MonadImport (FileImport m) where
         case file of
           Nothing -> ret absFile Nothing NotFound
 
-          Just DiskState { fileVar, working = Done _, diskResolved, diskTyped } ->
-            ret absFile diskTyped $ maybe Errored (Imported fileVar) diskResolved
-
+          -- File is up-to-date
+          Just DiskState { working = Done _, diskResolved = Nothing } ->
+            ret absFile Nothing Errored
+          Just DiskState { fileVar, working = Done _, diskResolved = Just resolved, diskTyped } ->
+            ret absFile diskTyped (Imported fileVar resolved)
           Just OpenedState { fileVar, working = Done _, openPVersion, openResolved, openTyped }
              | VersionedData v (sig, _) <- openResolved, Just pv <- openPVersion, v == pv ->
                let env = case openTyped of
@@ -434,14 +473,15 @@ instance MonadIO m => MonadImport (FileImport m) where
                in ret absFile env (Imported fileVar sig)
              | otherwise -> ret absFile Nothing Errored
 
+          -- File is still being loaded: try to identify the cycle.
           Just file ->
             case working file of
               WorkingRoot -> do
-                logs ("Cycle importing " ++ show absFile ++ " / " ++ show (working file))
+                debugM logN ("Cycle importing " ++ show absFile ++ " / " ++ show (working file))
                 ret absFile (Just mempty) . ImportCycle $
                   (getRel curFile (toNorm absFile), fixLoc curFile loc) E.:| []
               WorkingDep _ loc -> do
-                logs ("Cycle importing " ++ show absFile)
+                warningM logN ("Cycle importing " ++ show absFile)
                 -- TODO: Enumerate the whole graph
                 ret absFile (Just mempty) . ImportCycle $
                   (getRel curFile (toNorm absFile), fixLoc curFile loc) E.:| []
@@ -452,13 +492,13 @@ instance MonadIO m => MonadImport (FileImport m) where
 
       fixLoc _ span = span -- TODO: Fix positions
 
-      ret path state res = pure (res, HM.singleton (toNorm path)  (loc, state))
+      ret path state res = pure (res, HM.singleton (toNorm path) (loc, state))
 
 -- | Reprocess any changed files, reloading/recompiling them and their dependencies.
 --
--- This should never be called directly, as it is not safe to run multiple
--- instances of 'workOnce' at once. Instead, 'run' will make sure a single
--- 'workOnce' instance is dispatched at-a-time.
+-- This should never be called directly, as it is not safe to run
+-- multiple instances of 'workOnce' at once. Instead, 'runRefresh' will
+-- make sure a single 'workOnce' instance is dispatched at-a-time.
 workOnce :: Worker -- ^ The worker to evaluate in
          -> Clock
          -> Maybe NormalizedUri
@@ -478,7 +518,7 @@ workOnce wrk@Worker { pushErrors, fileContents, fileStates } baseClock priority 
   -- This returns the file's state, or Nothing if the file does not exist.
   loadFile :: NormalizedUri -> Maybe (NormalizedUri, Span) -> IO (Maybe FileState)
   loadFile path from = do
-    logs ("Importing " ++ show path ++ " from " ++ show (fst <$> from))
+    debugM logN ("Importing " ++ show path ++ " from " ++ show (fst <$> from))
     file <- atomically (HM.lookup path <$> readTVar fileStates)
     case file of
       -- We've already checked this tick, don't do anything.
@@ -490,11 +530,12 @@ workOnce wrk@Worker { pushErrors, fileContents, fileStates } baseClock priority 
         case file of
           Nothing -> do
             atomically $ modifyTVar fileStates (HM.delete path)
+            queueRequests wrk path
             pure Nothing
           Just file -> do
             -- Otherwise check each dependency. We update the clock and working
             -- state beforehand, to avoid getting into any dependency loops.
-            logs ("Marking as working " ++ show path)
+            debugM logN ("Starting " ++ show path)
             updateFile path (file { checkClock = baseClock
                                   , working = maybe WorkingRoot (uncurry WorkingDep) from })
 
@@ -508,7 +549,7 @@ workOnce wrk@Worker { pushErrors, fileContents, fileStates } baseClock priority 
               case parsed of
                 Nothing -> pure file
                 Just parsed -> do
-                  logs ("Loading " ++ show path)
+                  debugM logN ("Resolving " ++ show path)
                   (errors, resolved, typed) <-
                     loadFrom path (fileVar file) parsed
                       (case file of { OpenedState{} -> True; DiskState{} -> False })
@@ -524,11 +565,12 @@ workOnce wrk@Worker { pushErrors, fileContents, fileStates } baseClock priority 
 
             -- Mark us as done and update the file.
             let file' = file { working = Done baseClock }
-            logs ("Finished " ++ show path)
+            debugM logN ("Finished " ++ show path)
             updateFile path file'
             case file' of
               OpenedState{ errors } -> when changed (pushErrors path errors)
               DiskState{} -> pure ()
+            queueRequests wrk path
             pure (Just file')
 
   -- | Parse a file, updating the state and returning whether it changed or not.
@@ -671,7 +713,6 @@ workOnce wrk@Worker { pushErrors, fileContents, fileStates } baseClock priority 
   isTyError FoundHole{} = False
   isTyError x = diagnosticKind x == ErrorMessage
 
-
   freshDisk :: Name -> BS.ByteString -> Maybe [Toplevel Parsed] -> FileState
   freshDisk name hash parsed =
     DiskState
@@ -735,6 +776,7 @@ findFile' (x:xs) = do
   exists <- doesFileExist path
   if exists then pure (Just path) else findFile' xs
 
+-- | Make one file relative to another's directory.
 getRel :: NormalizedUri -> NormalizedUri -> FilePath
 getRel curFile path =
   case (uriToFilePath (fromNormalizedUri curFile), uriToFilePath (fromNormalizedUri path)) of
@@ -743,3 +785,6 @@ getRel curFile path =
       , length rel <= length p -> rel
     (_ , Just p) -> p
     (_, Nothing) | NormalizedUri path <- path -> T.unpack path
+
+logN :: String
+logN = "AmuletLsp.Worker"

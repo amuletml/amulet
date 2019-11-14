@@ -23,7 +23,6 @@ import Frontend.Errors
 import qualified Amc.Debug as D
 import qualified Amc.Repl as R
 import qualified Amc.Compile as C
-import qualified Amc.Editor as E
 import Amc.Explain
 
 import Version
@@ -68,7 +67,6 @@ data Command
     , serverPort  :: Int
     }
   | Explain { errId :: Int }
-  | Editor
   deriving (Show)
 
 newtype Args
@@ -104,11 +102,6 @@ argParser = info (args <**> helper <**> version)
       <> command "explain"
          ( info explainCommand
          $ fullDesc <> progDesc "Explain an error message." )
-      ) <|> hsubparser
-      ( internal
-      <> command "editor"
-         ( info editorCommand
-         $ fullDesc <> progDesc "Launch an LSP server on stdin/stdout." )
       ) <|> pure (Repl Nothing defaultPort DefaultPrelude False (CompilerOptions D.Void [] False))
 
     explainCommand :: Parser Command
@@ -143,9 +136,6 @@ argParser = info (args <**> helper <**> version)
       <$> argument str (metavar "COMMAND" <> help "The command to run on the remote REPL.")
       <*> option auto ( long "port" <> metavar "PORT" <> value defaultPort <> showDefault
                      <> help "Port the remote REPL is hosted on." )
-
-    editorCommand :: Parser Command
-    editorCommand = pure Editor
 
     compilerOptions :: Parser CompilerOptions
     compilerOptions = CompilerOptions
@@ -215,7 +205,6 @@ main = do
     Args Connect { remoteCmd, serverPort } -> R.runRemoteReplCommand serverPort remoteCmd
 
     Args Explain { errId } -> explainError errId
-    Args Editor -> E.run
 
     Args Compile { input, output = Just output } | input == output -> do
       hPutStrLn stderr ("Cannot overwrite input file " ++ input)

@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings, DuplicateRecordFields, FlexibleContexts, TypeFamilies #-}
-module Amc.Editor.Features where
+module AmuletLsp.Features where
 
 import           Control.Applicative
 import           Control.Lens hiding (List)
@@ -15,6 +15,7 @@ import           Language.Haskell.LSP.Types
 import           Language.Haskell.LSP.Types.Lens hiding (error)
 import           Prelude hiding (id)
 import           Syntax
+import qualified Syntax.Resolve.Error as R
 import           Text.Pretty.Note
 import           Text.Pretty.Semantic hiding (line)
 
@@ -140,16 +141,22 @@ getCodeLenses = getTops [] where
   getBinding ac _ = ac
 
 -- | Construct a diagnostic of some error.
-diagnosticOf :: (Note a Style, Pretty a) => Maybe DiagnosticSource -> a -> Diagnostic
-diagnosticOf source m =
+diagnosticOf :: Note a Style
+             => Maybe DiagnosticSource -> (a -> Doc) -> a
+             -> Diagnostic
+diagnosticOf source disp m =
   Diagnostic
   { _range = rangeOf (annotation m)
   , _severity = Just (severityOf (diagnosticKind m))
   , _code = NumberValue . fromIntegral <$> noteId m
-  , _message = renderBasic . pretty $ m
+  , _message = renderBasic . disp $ m
   , _relatedInformation = Nothing
   , _source = source
   }
+
+prettyResolve :: R.ResolveError -> Doc
+prettyResolve (R.ArisingFrom e _) = prettyResolve e
+prettyResolve e = pretty e
 
 severityOf :: NoteKind -> DiagnosticSeverity
 severityOf NoteMessage    = DsInfo
