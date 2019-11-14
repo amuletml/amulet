@@ -53,7 +53,13 @@ import Types.Unify.Trace
 -- | Solve for the types of bindings in a problem: Either @TypeDecl@s,
 -- @LetStmt@s, or @ForeignVal@s.
 inferProgram :: MonadNamey m => Env -> [Toplevel Desugared] -> m (These [TypeError] ([Toplevel Typed], Env))
-inferProgram env ct = fmap fst <$> runInfer env (inferProg ct)
+inferProgram env ct = fmap fst <$> runInfer env (go ct) where
+  go :: MonadInfer Typed m => [Toplevel Desugared] -> m ([Toplevel Typed], Env)
+  go ct = do
+    (p, cs) <- listen $ inferProg ct
+    _ <- solveFixpoint (It'sThis (BecauseInternal "last round of solving")) (onlyDeferred cs) =<< getSolveInfo
+    pure p
+
 
 -- | Infer the type of a single expression, including any residual
 -- constraints as context in the resulting type, generalise over it, and
@@ -357,8 +363,11 @@ inferRows rows = for rows $ \(Field n e s) -> do
 
 inferProg :: MonadInfer Typed m
           => [Toplevel Desugared] -> m ([Toplevel Typed], Env)
-inferProg (stmt@(LetStmt re am ns):prg) = censor (const mempty) $ do
+inferProg (stmt@(LetStmt re am ns):prg) = censor onlyDeferred $ do
   (ns', ts, _) <- retcons (addBlame (BecauseOf stmt)) (inferLetTy (closeOverStrat (BecauseOf stmt)) Fail ns)
+    `catchChronicle` \e -> do
+      tell (DeferredError <$> e)
+      fakeLetTys ns
   let bvs = Set.fromList (namesInScope (focus ts mempty))
 
   (ts, es) <- flip foldTeleM ts $ \var ty -> do
@@ -668,3 +677,8 @@ unqualify (ModRef v _) =
    . (types %~ fmap (Set.mapMonotonic (unqualifyVarWrt prefix)))
 
 unqualify _ = id
+
+onlyDeferred :: Seq.Seq (Constraint Typed) -> Seq.Seq (Constraint Typed)
+onlyDeferred = Seq.filter $ \case
+  DeferredError{} -> True
+  _ -> False

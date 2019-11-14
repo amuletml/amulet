@@ -4,8 +4,8 @@ do
   local writeln = print
   local function _dollardApplicativeaou(tmp)
     return {
-      pure = function(tmp0) return tmp.zero end,
       ["<*>"] = function(tmp0) return function(tmp1) return tmp["×"](tmp0)(tmp1) end end,
+      pure = function(tmp0) return tmp.zero end,
       ["Applicative$ky"] = function(tmp0) return function(tmp1) return tmp1 end end
     }
   end
@@ -25,7 +25,7 @@ do
   local function _dollar_d7(cgs, x, ys)
     if x.__tag == "Nil" then return ys end
     local tmp = x[1]
-    return { { _1 = tmp._1, _2 = _dollar_d7(nil, tmp._2, ys) }, __tag = "Cons" }
+    return { { _2 = _dollar_d7(nil, tmp._2, ys), _1 = tmp._1 }, __tag = "Cons" }
   end
   local tmp = { _1 = 1, _2 = nil }
   writeln(_dollarshow(function(x)

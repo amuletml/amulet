@@ -9,7 +9,7 @@ do
       _1 = function(st)
         local tmp0 = go(st)
         local x = tmp0._1
-        return { _1 = x * x, _2 = tmp0._2 }
+        return { _2 = tmp0._2, _1 = x * x }
       end,
       _2 = tmp._2
     })
