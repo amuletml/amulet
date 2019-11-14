@@ -97,7 +97,7 @@ list_package_files | LANG=C bsdtar -cf - --format=mtree \
   --options='!all,use-set,type,uid,gid,mode,time,size,md5,sha256,link' \
   --files-from - --exclude .MTREE | gzip -c -f -n > .MTREE
 
-list_package_files | tar --no-recursion --null --files-from - -cf ../result/amuletml-$version-$branch.pkg.tar
+list_package_files | tar --no-recursion --null --files-from - -cf ../result/amuletml-$version.pkg.tar
 popd &>/dev/null
 
 echo "Generating generic binary distribution…"
