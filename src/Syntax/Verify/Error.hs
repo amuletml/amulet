@@ -97,7 +97,7 @@ instance Pretty VerifyError where
     where plural | length xs == 1 = empty | otherwise = char 's'
   pretty (DefinedUnused (BindingSite v _ _)) =
     string "Bound locally but not used:" <+> squotes (pretty v)
-  pretty (ParseErrorInForeign var err) =
+  pretty (ParseErrorInForeign _ err) =
     vsep [ "Invalid syntax in definition of foreign value"
          , pretty err ]
   pretty (LazyLet _ _) =
