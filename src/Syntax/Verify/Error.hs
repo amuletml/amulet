@@ -77,7 +77,7 @@ data VerifyError
 instance Spanned VerifyError where
   annotation (MalformedRecursiveRhs e _ _) = annotation e
   annotation (DefinedUnused b) = boundWhere b
-  annotation (ParseErrorInForeign _ e) = annotation e
+  annotation (ParseErrorInForeign t _) = annotation t
   annotation (LazyLet e _) = annotation e
   annotation (RedundantArm a _) = annotation a
   annotation (MissingPattern e _) = annotation e
@@ -98,7 +98,7 @@ instance Pretty VerifyError where
   pretty (DefinedUnused (BindingSite v _ _)) =
     string "Bound locally but not used:" <+> squotes (pretty v)
   pretty (ParseErrorInForeign var err) =
-    vsep [ "Invalid syntax in definition of foreign value" <+> pretty var
+    vsep [ "Invalid syntax in definition of foreign value"
          , pretty err ]
   pretty (LazyLet _ _) =
     vsep [ "Automatic thunking of" <+> keyword "let" <> "s does not cover bindings"
