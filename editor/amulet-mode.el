@@ -6,39 +6,51 @@
 
 ;;; Code:
 
+(defcustom amulet-mode-amc-executable "amc"
+  "The executable of the main Amulet compiler.
+
+This should be a string containing the name or path of the
+executable. This defaults to \"amc\"."
+  :type '(choice (const :tag "Default executable" "amc")
+                  (file :tag "Name or path"))
+  :tag "amc executable"
+  :group 'amulet-mode
+  :risky t)
+
+(defcustom amulet-mode-amulet-lsp-executable "amulet-lsp"
+  "The executable of the Amulet Language Server.
+
+This should be a string containing the name or path of the
+executable. This defaults to \"amulet-lsp\"."
+  :type '(choice (const :tag "Default executable" "amulet-lsp")
+                  (file :tag "Name or path"))
+  :tag "amulet-lsp executable"
+  :group 'amulet-mode
+  :risky t)
+
+(defun amulet-mode--string-vector-p (val)
+  "A predicate to check if VAL is a vector entirely composed of lists."
+  (and (vectorp val) (seq-every-p #'stringp val)))
+
+(define-widget 'amulet-mode--string-vector 'lazy
+  "A widget which specifies a vector of strings."
+  :offset 4
+  :tag "Vector"
+  :type '(restricted-sexp :match-alternatives (amulet-mode--string-vector-p)))
+
+(defcustom amulet-mode-library-path '[]
+  "Additional directories to add to Amulet's library path.
+
+Ideally this should be specified as a dir-local variable."
+  :type 'amulet-mode--string-vector
+  :tag "Library path"
+  :group 'amulet-mode
+  :risky t)
 
 (defconst amulet-mode--keywords
-  '("and"
-    "as"
-    "begin"
-    "class"
-    "deriving"
-    "else"
-    "end"
-    "external"
-    "false"
-    "forall"
-    "fun"
-    "function"
-    "if"
-    "import"
-    "in"
-    "include"
-    "instance"
-    "lazy"
-    "let"
-    "match"
-    "module"
-    "of"
-    "open"
-    "private"
-    "rec"
-    "then"
-    "true"
-    "type"
-    "val"
-    "when"
-    "with")
+  '("and" "as" "begin" "class" "deriving" "else" "end" "external" "false" "forall"
+    "fun" "function" "if" "import" "in" "include" "instance" "lazy" "let" "match"
+    "module" "of" "open" "private" "rec" "then" "true" "type" "val" "when" "with")
   "All Amulet keywords.  These are just extracted from Lexer.x.")
 
 (defconst amulet-mode--font-lock
@@ -143,14 +155,29 @@
   (set-syntax-table amulet-mode--syntax-table)
   (setq-local font-lock-defaults '(amulet-mode--font-lock)))
 
+(defun amulet-mode--lsp-command ()
+  "The command to start the LSP server. This can be taken as a
+  function reference in order to defer evaluation of
+  `amulet-mode-amulet-lsp-executable'"
+  amulet-mode-amulet-lsp-executable)
+
 (with-eval-after-load 'lsp-mode
   ;; If LSP is installed (and loaded), set up editor integration.
   (add-to-list 'lsp-language-id-configuration '(amulet-mode . "amulet"))
+
+  (lsp-register-custom-settings
+   '(("amulet.libraryPath" amulet-mode-library-path)))
+
   (lsp-register-client
    (make-lsp-client
-    :new-connection (lsp-stdio-connection '("/home/squiddev/programming/amulet/.stack-work/install/x86_64-linux-tinfo6/61b4306616bf79a681d016c373f9f630e924d42cf4a06df5cecc4540df6c0e84/8.8.1/bin/amc" "editor"))
+    :new-connection (lsp-stdio-connection #'amulet-mode--lsp-command)
     :major-modes '(amulet-mode)
-    :server-id 'amc-lsp)))
+    :server-id 'amc-lsp
+    :initialized-fn (lambda (workspace)
+                      (with-lsp-workspace workspace
+                        (lsp--set-configuration
+                         (lsp-configuration-section "amulet")))))))
+
 
 (provide 'amulet-mode)
 ;;; amulet-mode.el ends here

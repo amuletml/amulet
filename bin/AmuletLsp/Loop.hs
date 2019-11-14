@@ -1,8 +1,8 @@
 {-# LANGUAGE OverloadedStrings, DeriveGeneric, DuplicateRecordFields, FlexibleContexts #-}
-module Amc.Editor (run) where
+module AmuletLsp.Loop (run) where
 
-import           Amc.Editor.Features
-import           Amc.Editor.Worker
+import           AmuletLsp.Features
+import           AmuletLsp.Worker
 import           Control.Applicative
 import           Control.Concurrent
 import           Control.Concurrent.STM
@@ -21,41 +21,42 @@ import qualified Language.Haskell.LSP.Control as Control
 import qualified Language.Haskell.LSP.Core as C
 import           Language.Haskell.LSP.Messages
 import           Language.Haskell.LSP.Types
-import           Language.Haskell.LSP.Types.Lens hiding (error)
 import qualified Language.Haskell.LSP.Types.Lens as L
-import           Language.Haskell.LSP.Utility (logs)
+import           Language.Haskell.LSP.Types.Lens hiding (error)
 import qualified Language.Haskell.LSP.VFS as VFS
 import           Prelude hiding (id)
 import           System.Exit
-import qualified System.Log.Logger as L
+import           System.Log.Logger
+import           Text.Pretty.Semantic
 
 newtype Config = Config
-  { libraryPath :: Maybe [FilePath]
+  { libraryPath :: [FilePath]
   }
   deriving (Show, Generic)
 
 instance FromJSON Config where
-  parseJSON = genericParseJSON defaultOptions
+  parseJSON = withObject "Config" $ \v -> do
+    s <- v .: "amulet"
+    flip (withObject "Config.settings") s $ \o -> Config
+      <$> o .:? "libraryPath"                 .!= []
 
-run :: IO ()
+run :: IO ExitCode
 run = do
-  C.setupLogger (Just "/tmp/amc-lsp.log") [] L.DEBUG
-
   qIn <- atomically newTQueue
   e <- Control.run (callbacks qIn) (handlers qIn) options Nothing
-  exitWith (if e == 0 then ExitSuccess else ExitFailure e)
+  pure (if e == 0 then ExitSuccess else ExitFailure e)
 
   where
     callbacks :: TQueue FromClientMessage -> C.InitializeCallbacks Config
     callbacks qIn = C.InitializeCallbacks
         { C.onInitialConfiguration
-            = maybe (pure (Config Nothing)) (first T.pack . parseEither parseJSON)
+            = maybe (pure (Config [])) (first T.pack . parseEither parseJSON)
             . (^. params . initializationOptions)
         , C.onConfigurationChange
             = first T.pack . parseEither parseJSON . (^. params . settings)
         , C.onStartup = \lf -> do
             config <- C.config lf
-            wrk <- makeWorker (maybe [] (fromMaybe [] . libraryPath) config) (publishDiagnostics lf)
+            wrk <- makeWorker (maybe [] libraryPath config) (publishDiagnostics lf)
             _ <- forkIO (loop lf wrk qIn)
             return Nothing
         }
@@ -66,10 +67,10 @@ run = do
       . fmServerPublishDiagnosticsNotification
       $ PublishDiagnosticsParams
       { _uri = fromNormalizedUri uri
-      , _diagnostics = List $ map (diagnosticOf (Just "amc.parser")) (es ^. parseErrors)
-                           ++ map (diagnosticOf (Just "amc.resolve")) (es ^. resolveErrors)
-                           ++ map (diagnosticOf (Just "amc.tc")) (es ^. typeErrors)
-                           ++ map (diagnosticOf (Just "amc.verify")) (es ^. verifyErrors)
+      , _diagnostics = List $ map (diagnosticOf (Just "amc.parser")  pretty)        (es ^. parseErrors)
+                           ++ map (diagnosticOf (Just "amc.resolve") prettyResolve) (es ^. resolveErrors)
+                           ++ map (diagnosticOf (Just "amc.tc")      pretty)        (es ^. typeErrors)
+                           ++ map (diagnosticOf (Just "amc.verify")  pretty)        (es ^. verifyErrors)
       }
 
 
@@ -125,12 +126,14 @@ run = do
 
 handleRequest :: C.LspFuncs Config -> Worker -> FromClientMessage -> IO ()
 
-handleRequest _ _ (RspFromClient msg) = logs ("Received message from client (" ++ show msg ++ ")")
-handleRequest _ _ NotInitialized{} = logs "Initialized server."
+handleRequest _ _ (RspFromClient msg) =
+  infoM logN ("Received message from client (" ++ show msg ++ ")")
+handleRequest _ _ NotInitialized{} =
+  infoM logN "Initialized server"
 handleRequest lf wrk NotDidChangeConfiguration{} = do
   config <- C.config lf
-  logs ("Updated config with " ++ show config)
-  updateConfig wrk (maybe [] (fromMaybe [] . libraryPath) config)
+  infoM logN ("Updated config with " ++ show config)
+  updateConfig wrk (maybe [] libraryPath config)
 
 
 {- * File changes:
@@ -206,7 +209,8 @@ handleRequest lf wrk (ReqCodeLens msg)
 
 -- handleRequest lf (ReqFoldingRange msg) = undefined
 
-handleRequest _ _ msg = logs ("Unknown message " ++ conNameOf msg)
+handleRequest _ _ msg =
+  warningM logN ("Unknown message " ++ conNameOf msg)
 
 -- | Send a reply to a request.
 sendReply :: C.LspFuncs c -> RequestMessage m req resp -> (ResponseMessage resp -> FromServerMessage) -> resp -> IO ()
@@ -219,3 +223,7 @@ sendReplyError :: C.LspFuncs c -> RequestMessage m req resp -> ResponseError -> 
 sendReplyError lf req err =
   C.sendFunc lf . RspError $
     ResponseMessage "2.0" (responseId $ req ^. id) Nothing (Just err)
+
+-- | The name of the logger to use.
+logN :: String
+logN = "AmuletLsp.Loop"

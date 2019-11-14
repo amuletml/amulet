@@ -1,5 +1,5 @@
 {-# LANGUAGE GADTs, NamedFieldPuns, OverloadedStrings, TupleSections #-}
-module Amc.Editor.Worker
+module AmuletLsp.Worker
   ( Version(..)
   , RequestKind(..)
   , Request(..)
@@ -16,7 +16,7 @@ module Amc.Editor.Worker
   , startRequest, cancelRequest
   ) where
 
-import           Amc.Editor.NameyMT
+import           AmuletLsp.NameyMT
 import           Control.Applicative
 import           Control.Concurrent
 import           Control.Concurrent.STM
@@ -46,7 +46,6 @@ import           Data.These
 import           Data.Triple
 import           Frontend.Errors
 import           Language.Haskell.LSP.Types
-import           Language.Haskell.LSP.Utility (logs)
 import           Parser (parseTops)
 import           Parser.Error (ParseError)
 import           Parser.Wrapper (runParser)
@@ -63,6 +62,7 @@ import           Syntax.Verify
 import           System.Directory
 import           System.Environment
 import           System.FilePath
+import           System.Log.Logger
 import           Text.Pretty.Note
 import           Types.Infer (inferProgram)
 
@@ -357,7 +357,7 @@ run :: Worker -> IO ()
 run wrk@Worker { toRefresh, clock } = work Nothing where
   work :: Maybe ThreadId -> IO ()
   work task = do
-    logs "Polling state"
+    debugM logN "Polling state"
     (refresh, clk) <- atomically $ do
       -- Treat toRefresh as a TMVar - if not present, then retry. Otherwise
       -- clear immediately.
@@ -376,7 +376,7 @@ run wrk@Worker { toRefresh, clock } = work Nothing where
       Just tid -> killThread tid
 
     -- Spin up the worker on a separate thread and wait for further changes.
-    logs ("Recompiling " ++ show refresh)
+    debugM logN ("Recompiling " ++ show refresh)
     task <- forkIO (workOnce wrk clk refresh)
     work (Just task)
 
@@ -423,8 +423,10 @@ instance MonadIO m => MonadImport (FileImport m) where
         case file of
           Nothing -> ret absFile Nothing NotFound
 
-          Just DiskState { fileVar, working = Done _, diskResolved, diskTyped } ->
-            ret absFile diskTyped $ maybe Errored (Imported fileVar) diskResolved
+          Just DiskState { working = Done _, diskResolved = Nothing } ->
+            ret absFile Nothing Errored
+          Just DiskState { fileVar, working = Done _, diskResolved = Just resolved, diskTyped } ->
+            ret absFile diskTyped (Imported fileVar resolved)
 
           Just OpenedState { fileVar, working = Done _, openPVersion, openResolved, openTyped }
              | VersionedData v (sig, _) <- openResolved, Just pv <- openPVersion, v == pv ->
@@ -437,11 +439,11 @@ instance MonadIO m => MonadImport (FileImport m) where
           Just file ->
             case working file of
               WorkingRoot -> do
-                logs ("Cycle importing " ++ show absFile ++ " / " ++ show (working file))
+                debugM logN ("Cycle importing " ++ show absFile ++ " / " ++ show (working file))
                 ret absFile (Just mempty) . ImportCycle $
                   (getRel curFile (toNorm absFile), fixLoc curFile loc) E.:| []
               WorkingDep _ loc -> do
-                logs ("Cycle importing " ++ show absFile)
+                warningM logN ("Cycle importing " ++ show absFile)
                 -- TODO: Enumerate the whole graph
                 ret absFile (Just mempty) . ImportCycle $
                   (getRel curFile (toNorm absFile), fixLoc curFile loc) E.:| []
@@ -452,7 +454,7 @@ instance MonadIO m => MonadImport (FileImport m) where
 
       fixLoc _ span = span -- TODO: Fix positions
 
-      ret path state res = pure (res, HM.singleton (toNorm path)  (loc, state))
+      ret path state res = pure (res, HM.singleton (toNorm path) (loc, state))
 
 -- | Reprocess any changed files, reloading/recompiling them and their dependencies.
 --
@@ -478,7 +480,7 @@ workOnce wrk@Worker { pushErrors, fileContents, fileStates } baseClock priority 
   -- This returns the file's state, or Nothing if the file does not exist.
   loadFile :: NormalizedUri -> Maybe (NormalizedUri, Span) -> IO (Maybe FileState)
   loadFile path from = do
-    logs ("Importing " ++ show path ++ " from " ++ show (fst <$> from))
+    debugM logN ("Importing " ++ show path ++ " from " ++ show (fst <$> from))
     file <- atomically (HM.lookup path <$> readTVar fileStates)
     case file of
       -- We've already checked this tick, don't do anything.
@@ -494,7 +496,7 @@ workOnce wrk@Worker { pushErrors, fileContents, fileStates } baseClock priority 
           Just file -> do
             -- Otherwise check each dependency. We update the clock and working
             -- state beforehand, to avoid getting into any dependency loops.
-            logs ("Marking as working " ++ show path)
+            debugM logN ("Starting " ++ show path)
             updateFile path (file { checkClock = baseClock
                                   , working = maybe WorkingRoot (uncurry WorkingDep) from })
 
@@ -508,7 +510,7 @@ workOnce wrk@Worker { pushErrors, fileContents, fileStates } baseClock priority 
               case parsed of
                 Nothing -> pure file
                 Just parsed -> do
-                  logs ("Loading " ++ show path)
+                  debugM logN ("Resolving " ++ show path)
                   (errors, resolved, typed) <-
                     loadFrom path (fileVar file) parsed
                       (case file of { OpenedState{} -> True; DiskState{} -> False })
@@ -524,7 +526,7 @@ workOnce wrk@Worker { pushErrors, fileContents, fileStates } baseClock priority 
 
             -- Mark us as done and update the file.
             let file' = file { working = Done baseClock }
-            logs ("Finished " ++ show path)
+            debugM logN ("Finished " ++ show path)
             updateFile path file'
             case file' of
               OpenedState{ errors } -> when changed (pushErrors path errors)
@@ -743,3 +745,6 @@ getRel curFile path =
       , length rel <= length p -> rel
     (_ , Just p) -> p
     (_, Nothing) | NormalizedUri path <- path -> T.unpack path
+
+logN :: String
+logN = "AmuletLsp.Worker"

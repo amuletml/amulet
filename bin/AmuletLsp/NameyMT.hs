@@ -1,5 +1,5 @@
 {-# LANGUAGE DeriveFunctor, TupleSections #-}
-module Amc.Editor.NameyMT
+module AmuletLsp.NameyMT
   ( NameyMT
   , evalNameyMT
   ) where
