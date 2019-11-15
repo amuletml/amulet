@@ -165,16 +165,20 @@ test-suite tests
                      , base >= 4.9 && < 4.14
                      , lens >= 4.15 && < 4.19
                      , Diff >= 0.3.4 && < 0.5
+                     , aeson >= 1.4.5
                      , HUnit >= 1.6 && < 1.7
                      , tasty >= 1.0 && < 1.3
                      , these >= 1 && < 1.1
                      , typed-process >= 0.2.6.0 && < 0.3
                      , amuletml
+                     , lsp-test == 0.8.0.0
                      , filepath >= 1.4 && < 1.5
                      , hedgehog >= 1.0 && < 1.1
                      , directory >= 1.3 && < 1.4
                      , containers >= 0.5 && < 0.7
+                     , pretty-show >= 1.9.0 && < 2.0
                      , tasty-hunit >= 0.10 && < 0.11
+                     , data-default >= 0.7
                      , tasty-hedgehog >= 1.0 && < 1.1
                      , monad-chronicle >= 1 && < 1.1
                      , optparse-applicative >= 0.14 && < 0.16
@@ -187,6 +191,8 @@ test-suite tests
 
                      , Test.Tasty.Cram
                      , Test.Tasty.Golden
+                     , Test.Tasty.HUnitPretty
+                     , Test.Tasty.Lsp
                      , Test.Tasty.Reporter
                      , Test.Tasty.Rerun
                      , Test.Tasty.Xml
@@ -208,6 +214,11 @@ test-suite tests
 
                      , Test.Lua.Gen
                      , Test.Lua.Parser
+
+                     , Test.Lsp
+                     , Test.Lsp.Diagnostics
+                     , Test.Lsp.SymbolList
+                     , Test.Lsp.TypeOverlay
   default-language:    Haskell2010
 
   ghc-options:         -Wextra -Wall -Wno-name-shadowing

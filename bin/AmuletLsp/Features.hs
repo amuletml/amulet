@@ -37,13 +37,19 @@ getOutline = concatMap getTop where
      => Var Parsed -> SymbolKind -> a
      -> Maybe T.Text -> Maybe [DocumentSymbol]
      -> DocumentSymbol
-  mk name kind node detail children =
+  mk name kind node = mkWith name kind (annotation node) node
+
+  mkWith :: Spanned a
+     => Var Parsed -> SymbolKind -> Span -> a
+     -> Maybe T.Text -> Maybe [DocumentSymbol]
+     -> DocumentSymbol
+  mkWith name kind range node detail children =
     DocumentSymbol
     { _name = getName name
     , _detail = detail
     , _kind = kind
     , _deprecated = Nothing
-    , _range = rangeOf (annotation node)
+    , _range = rangeOf range
     , _selectionRange = firstLine (rangeOf (annotation node))
     , _children = List <$> children
     }
@@ -68,9 +74,9 @@ getOutline = concatMap getTop where
   getTop Instance{} = []
   getTop DeriveInstance{} = []
 
-
+  getBinding :: Binding Parsed -> [DocumentSymbol]
   getBinding b@(Binding v _ _ _) = [ mk v SkFunction b Nothing Nothing ]
-  getBinding Matching{} = [] -- TODO: Fill this one out.
+  getBinding b@(Matching p _ _) = getPattern (annotation b) [] p
   getBinding TypedMatching{} = []
 
   getClassItem :: ClassItem Parsed -> [DocumentSymbol]
@@ -83,6 +89,18 @@ getOutline = concatMap getTop where
   getCtor c@(UnitCon _ v _) = mk v SkConstructor c Nothing Nothing
   getCtor c@(ArgCon _ v _ _) = mk v SkConstructor c Nothing Nothing
   getCtor c@(GadtCon _ v _ _) = mk v SkConstructor c Nothing Nothing
+
+  getPattern :: Span -> [DocumentSymbol] -> Pattern Parsed -> [DocumentSymbol]
+  getPattern _   ds Wildcard{}           = ds
+  getPattern def ds p@(Capture v _)      = mkWith v SkVariable def p Nothing Nothing:ds
+  getPattern def ds (Destructure _ p _)  = foldl' (getPattern def) ds p
+  getPattern def ds n@(PAs p v _)        = getPattern def (mkWith v SkVariable def n Nothing Nothing:ds) p
+  getPattern def ds (PType p _ _)        = getPattern def ds p
+  getPattern def ds (PTuple ps _)        = foldl' (getPattern def) ds ps
+  getPattern def ds (PRecord ps _)       = foldl' (\x -> getPattern def x . snd) ds ps
+  getPattern def ds (PList ps _)         = foldl' (getPattern def) ds ps
+  getPattern def ds (PGadtCon _ _ _ p _) = foldl' (getPattern def) ds p
+  getPattern _   ds PLiteral{}           = ds
 
 -- | Get all code actions within a range.
 --

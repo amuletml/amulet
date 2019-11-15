@@ -18,6 +18,7 @@ import qualified Test.Types.Check as TypesC
 import qualified Test.Core.Backend as Backend
 import qualified Test.Lua.Parser as LParser
 import qualified Test.Frontend.Amc as Amc
+import qualified Test.Lsp as Lsp
 
 tests :: IO TestTree
 tests = testGroup "Tests" <$> sequence
@@ -35,6 +36,7 @@ tests = testGroup "Tests" <$> sequence
   , Verify.tests
   , Backend.tests
   , LParser.tests
+  , Lsp.tests
   ]
 
 main :: IO ()
