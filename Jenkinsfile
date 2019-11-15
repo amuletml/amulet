@@ -39,7 +39,7 @@ pipeline {
           env AMC_LIBRARY_PATH=${PWD}/lib \
           stack test \
             --flag amuletml:amc-prove-server \
-            --test-arguments "-j6 --xml junit.xml --display t --hedgehog-tests 5000 -v"
+            --test-arguments "-j3 --xml junit.xml --display t --hedgehog-tests 1000 -v -t60"
         '''
       }
     }
