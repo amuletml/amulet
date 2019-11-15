@@ -1,10 +1,10 @@
 module Main where
 
 import Test.Tasty.Ingredients.Basic
-import Test.Tasty.Runners.AntXML
 import Test.Tasty.Ingredients
 import Test.Tasty.Reporter
 import Test.Tasty.Rerun
+import Test.Tasty.Xml
 import Test.Tasty
 
 import qualified Test.Types.Unify as Solver
@@ -42,5 +42,5 @@ main = tests >>= defaultMainWithIngredients ingredients where
   ingredients =
     [ rerunning
       [ listingTests
-      , boringReporter `composeReporters` antXMLRunner ]
+      , boringReporter `composeReporters` xmlReporter ]
     ]

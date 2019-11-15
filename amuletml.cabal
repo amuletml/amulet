@@ -160,6 +160,7 @@ test-suite tests
   hs-source-dirs:      tests/driver
   build-depends:       mtl >= 2.2 && < 2.3
                      , stm >= 2.5 && < 2.6
+                     , xml >= 1.3
                      , text >= 1.2 && < 1.3
                      , base >= 4.9 && < 4.14
                      , lens >= 4.15 && < 4.19
@@ -174,7 +175,6 @@ test-suite tests
                      , directory >= 1.3 && < 1.4
                      , containers >= 0.5 && < 0.7
                      , tasty-hunit >= 0.10 && < 0.11
-                     , tasty-ant-xml >= 1.1 && < 1.2
                      , tasty-hedgehog >= 1.0 && < 1.1
                      , monad-chronicle >= 1 && < 1.1
                      , optparse-applicative >= 0.14 && < 0.16
@@ -189,7 +189,7 @@ test-suite tests
                      , Test.Tasty.Golden
                      , Test.Tasty.Reporter
                      , Test.Tasty.Rerun
-
+                     , Test.Tasty.Xml
 
                      , Test.Core.Lint
                      , Test.Core.Backend
