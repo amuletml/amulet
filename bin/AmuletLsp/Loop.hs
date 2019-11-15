@@ -198,7 +198,9 @@ handleRequest _ wrk (NotCancelRequestFromClient msg) =
 handleRequest lf wrk (ReqDocumentSymbols msg)
   = startRequest wrk (msg ^. id)
   . RequestLatest (toNormalizedUri rawUri) ReqParsed (sendReplyError lf msg)
-  $ \_ -> sendReply lf msg RspDocumentSymbols . DSDocumentSymbols . List . maybe [] getOutline
+  $ \_ prog -> do
+    debugM logN ("Outline of " ++ show prog)
+    sendReply lf msg RspDocumentSymbols . DSDocumentSymbols . List . maybe [] getOutline $ prog
   where rawUri = msg ^. params . textDocument . uri
 
 handleRequest lf wrk (ReqCodeAction msg)

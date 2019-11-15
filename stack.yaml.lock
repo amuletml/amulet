@@ -33,6 +33,27 @@ packages:
   original:
     hackage: regex-pcre-builtin-0.95.1.1.8.43@sha256:2d671af361adf1776fde182a687bb6da022b1e5e3b0a064ce264289de63564a5,3088
 - completed:
+    hackage: lsp-test-0.8.0.0@sha256:c8f9477a3e7579d9acf627e08cf32dfb7675b4c4661595875720c7f0614b261d,3506
+    pantry-tree:
+      size: 1112
+      sha256: b46f02c8c7cc291ea52bb3c584b104b4469b980b5fdba3a5a6e7b0ad089c13ac
+  original:
+    hackage: lsp-test-0.8.0.0@sha256:c8f9477a3e7579d9acf627e08cf32dfb7675b4c4661595875720c7f0614b261d,3506
+- completed:
+    hackage: aeson-pretty-0.8.8@sha256:9924a16d0c362ff59dd6d5b875749ff5d599d2688f89d080388a0014714441ef,2291
+    pantry-tree:
+      size: 337
+      sha256: 0e6cc718e70c2cc51726570f2faed6f5cd56e0c23a546198cca2a217213ccc43
+  original:
+    hackage: aeson-pretty-0.8.8@sha256:9924a16d0c362ff59dd6d5b875749ff5d599d2688f89d080388a0014714441ef,2291
+- completed:
+    hackage: conduit-parse-0.2.1.0@sha256:1c9f890d0cccdaa0f7d160cf4d1cf68f6e9e659a82f2db092ac7f4459395fdad,1730
+    pantry-tree:
+      size: 444
+      sha256: fe002a95d26ae31ece9fc585d2dabf049b8a1970c76e519db4788000c6ed9974
+  original:
+    hackage: conduit-parse-0.2.1.0@sha256:1c9f890d0cccdaa0f7d160cf4d1cf68f6e9e659a82f2db092ac7f4459395fdad,1730
+- completed:
     hackage: haskell-lsp-0.17.0.0@sha256:ddfcc2798f04bcb1ec20fafc02c03faa197322192578e879cef5852aba43ebcb,5264
     pantry-tree:
       size: 1725
