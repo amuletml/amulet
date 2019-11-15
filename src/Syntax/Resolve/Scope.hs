@@ -6,11 +6,11 @@ module Syntax.Resolve.Scope
   ( Slot(..)
   , VarName
   , Signature(..), vals, types, modules
-  , Context(..), scope, tyvars, nonRecs
+  , Context(..), scope, tyvars, nonRecs, locals
   , emptyContext
   , exportedNames
   , tagVar
-  , withVal, withVals, extendVals
+  , withVal, withVals, extendVals, extendLocals
   , withTy, withTys
   , withMod
   , extendTyvar, extendTyvars
@@ -19,6 +19,7 @@ module Syntax.Resolve.Scope
 import Control.Lens hiding (Context)
 
 import qualified Data.VarSet as VarSet
+import qualified Data.Set as Set
 import qualified Data.Map as Map
 import qualified Data.Text as T
 import Data.Foldable
@@ -67,6 +68,9 @@ data Context = Context
   , _tyvars :: Map.Map VarName Slot
     -- | Non-recursive names whose definitions we are within.
   , _nonRecs :: Map.Map VarName Span
+    -- | Lambda, local let or match-bound names that need to be 'lift'ed
+    -- when going into a quote.
+  , _locals :: Set.Set (Var Resolved)
   }
   deriving Show
 
@@ -75,7 +79,7 @@ makeLenses ''Context
 
 -- | An empty context for resolving
 emptyContext :: Context
-emptyContext = Context mempty mempty mempty
+emptyContext = Context mempty mempty mempty mempty
 
 -- | Get all names exported by a module.
 exportedNames :: Signature -> VarSet.Set
@@ -122,6 +126,12 @@ withVals vs = vals %~ insertVs vs
 -- monad within it.
 extendVals :: MonadReader Context m => [(Var Parsed, Var Resolved)] -> m a -> m a
 extendVals vs = local (scope . vals %~ insertVs vs)
+
+-- | Create a scope with multiple variables and evaluate the provided
+-- monad within it.
+extendLocals :: MonadReader Context m => [(Var Parsed, Var Resolved)] -> m a -> m a
+extendLocals vs = local (scope . vals %~ insertVs vs)
+                . local (locals %~ mappend (Set.fromList (map snd vs)))
 
 -- | Extend a signature with a type.
 withTy :: Var Parsed -> Var Resolved -> Signature -> Signature

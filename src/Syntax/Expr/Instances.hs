@@ -54,6 +54,9 @@ instance Spanned (Ann p) => Spanned (Expr p) where
   annotation (DoExpr _ _ a) = annotation a
   annotation (Idiom _ _ _ a) = annotation a
 
+  annotation (Quote _ a) = annotation a
+  annotation (Unquote _ a) = annotation a
+
   annotation (ExprWrapper _ _ a) = annotation a
 
 instance Spanned (Ann p) => Spanned (Pattern p) where

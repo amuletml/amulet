@@ -319,7 +319,7 @@ reExpr r@(VarRef v a) = flip VarRef a <$> (lookupEx v `catchJunk` r)
 
 reExpr (Let re bs c a) = do
   (bs', vs, ts) <- unzip3 <$> traverse reBinding bs
-  let extend = extendTyvars (concat ts) . extendVals (concat vs)
+  let extend = extendTyvars (concat ts) . extendLocals (concat vs)
       reBody = traverse (uncurry (flip (<$>) . reExpr . view bindBody)) (zip bs bs')
       addBinds m = foldr (\(Name v, _) -> Map.insert v a) m (concat vs)
   case re of
@@ -333,7 +333,7 @@ reExpr (Fun p e a) = do
         pure (PatParam p', vs, ts)
       reWholePattern' _ = error "EvParam resolve"
   (p', vs, ts) <- reWholePattern' p
-  extendTyvars ts . extendVals vs $ Fun p' <$> reExpr e <*> pure a
+  extendTyvars ts . extendLocals vs $ Fun p' <$> reExpr e <*> pure a
 
 reExpr r@(Begin [] a) = dictates (wrapError r EmptyBegin) $> junkExpr a
 reExpr (Begin es a) = Begin <$> traverse reExpr es <*> pure a
@@ -398,11 +398,11 @@ reExpr (ListComp e qs a) =
       go (CompGen b e an:qs) acc = do
         e <- reExpr e
         (b, es, ts) <- reWholePattern b
-        extendTyvars ts . extendVals es $
+        extendTyvars ts . extendLocals es $
           go qs (CompGen b e an:acc)
       go (CompLet bs an:qs) acc =do
         (bs', vs, ts) <- unzip3 <$> traverse reBinding bs
-        extendTyvars (concat ts) . extendVals (concat vs) $ do
+        extendTyvars (concat ts) . extendLocals (concat vs) $ do
           bs <- traverse (uncurry (flip (<$>) . reExpr . view bindBody)) (zip bs bs')
           go qs (CompLet bs an:acc)
       go [] acc = ListComp <$> reExpr e <*> pure (reverse acc) <*> pure a
@@ -420,23 +420,22 @@ reExpr (DoExpr var qs a) =
       go (r@(CompGen b e an):qs) acc flag = do
         e <- reExpr e
         (b, es, ts) <- reWholePattern b
-        extendTyvars ts . extendVals es $
+        extendTyvars ts . extendLocals es $
           go qs (CompGen b e an:acc) (flag <|> Just r)
       go (CompLet bs an:qs) acc flag = do
         (bs', vs, ts) <- unzip3 <$> traverse reBinding bs
-        extendTyvars (concat ts) . extendVals (concat vs) $ do
+        extendTyvars (concat ts) . extendLocals (concat vs) $ do
           bs <- traverse (uncurry (flip (<$>) . reExpr . view bindBody)) (zip bs bs')
           go qs (CompLet bs an:acc) flag
       go [] acc flag = do
-        var <-
-          case flag of
-            Just r -> lookupEx var `catchJunk` r
-            Nothing -> pure undefined
+        var <- case flag of
+          Just r -> lookupEx var `catchJunk` r
+          Nothing -> pure junkVar
         pure $ DoExpr var (reverse acc) a
   in go qs [] Nothing
 
-reExpr (Quote ex _) = error $ "TODO: resolve quote " ++ show ex
-reExpr (Unquote ex _) = error $ "TODO: resolve unquote " ++ show ex
+reExpr (Quote ex _) = quote =<< reExpr ex -- TODO: call out to the type checker /here/
+reExpr (Unquote ex a) = Unquote <$> reExpr ex <*> pure a
 
 reExpr ExprWrapper{} = error "resolve cast"
 
@@ -447,7 +446,7 @@ reArm :: MonadResolve m
       => Arm Parsed -> m (Arm Resolved)
 reArm (Arm p g b) = do
   (p', vs, ts) <- reWholePattern p
-  extendTyvars ts . extendVals vs $
+  extendTyvars ts . extendLocals vs $
     Arm p' <$> traverse reExpr g <*> reExpr b
 
 reType :: (MonadResolve m, Reasonable a p)
@@ -652,3 +651,401 @@ catchJunk m r = recover junkVar (retcons (wrapError r) m)
 isCtorVar :: Var Parsed -> Bool
 isCtorVar (Name t) = T.length t > 0 && classify (T.head t) == Upper
 isCtorVar (InModule _ v) = isCtorVar v
+
+quote :: MonadResolve m => Expr Resolved -> m (Expr Resolved)
+quote ex@(VarRef v a) = do
+  x <- view locals
+  if v `Set.member` x
+     then App <$> getv "lift" ex <*> pure ex <*> pure a
+     else App <$> getv "Ref" ex <*> quoteName v (BecauseOf ex) <*> pure a
+
+quote ex@(If c t e a) = do
+  c <- quote c
+  t <- quote t
+  e <- quote e
+  App <$> getv "If" ex <*> pure (Tuple [ c, t, e ] a) <*> pure a
+
+quote ex@(App f x a) = do
+  f <- quote f
+  x <- quote x
+  App <$> getv "App" ex <*> pure (Tuple [ f, x ] a) <*> pure a
+
+quote ex@(Fun p x a) = do
+  p <- quotePat $
+    case p of
+      PatParam p -> p
+      EvParam p -> p
+  x <- quote x
+  App <$> getv "Fun" ex <*> pure (Tuple [ p, x ] a) <*> pure a
+
+quote ex@(Match s as a) = do
+  s <- quote s
+  as <- traverse quoteArm as
+  App <$> getv "Match" ex
+      <*> pure (Tuple [ s, ListExp as a ] a)
+      <*> pure a
+
+quote ex@(Function as a) = do
+  as <- traverse quoteArm as
+  App <$> getv "Function" ex
+      <*> pure (ListExp as a)
+      <*> pure a
+
+quote ex@(BinOp l o r a) = do
+  l <- quote l
+  o <- quote o
+  r <- quote r
+  App <$> getv "Bin_op" ex
+      <*> pure (Tuple [ l, o, r ] a)
+      <*> pure a
+
+quote ex@(Hole v a) = App <$> getv "Hole" ex <*> quoteName v (BecauseOf ex) <*> pure a
+quote ex@(Literal l a) = App <$> getv "Lit" ex <*> quoteLit l (BecauseOf ex) <*> pure a
+
+quote ex@(Ascription e t a) = do
+  e <- quote e
+  t <- quoteType t (BecauseOf ex)
+  App <$> getv "Ascription" ex
+      <*> pure (Tuple [ e, t ] a)
+      <*> pure a
+
+quote ex@(Record fs a) = do
+  fs <- traverse quoteField fs
+  App <$> getv "Record" ex
+      <*> pure (ListExp fs a)
+      <*> pure a
+
+quote ex@(RecordExt e fs a) = do
+  e <- quote e
+  fs <- traverse quoteField fs
+  App <$> getv "Update" ex
+      <*> pure (Tuple [ e, ListExp fs a ] a)
+      <*> pure a
+
+quote ex@(Access e k a) = do
+  e <- quote e
+  App <$> getv "Access" ex
+      <*> pure (Tuple [ e, Literal (LiStr k) a ] a)
+      <*> pure a
+
+quote ex@(LeftSection l o a) = do
+  l <- quote l
+  o <- quote o
+  App <$> getv "Left_s" ex
+      <*> pure (Tuple [ l, o ] a)
+      <*> pure a
+
+quote ex@(RightSection o r a) = do
+  o <- quote o
+  r <- quote r
+  App <$> getv "Right_s" ex
+      <*> pure (Tuple [ o, r ] a)
+      <*> pure a
+
+quote ex@(AccessSection k a) = App <$> getv "Access_s" ex <*> pure (Literal (LiStr k) a) <*> pure a
+
+quote (BothSection o _) = quote o -- TODO: I hope!
+quote (Parens p _) = quote p -- TODO: I hope!
+
+quote ex@(Tuple es a) = do
+  es <- traverse quote es
+  App <$> getv "Tuple" ex
+      <*> pure (ListExp es a)
+      <*> pure a
+
+quote ex@(TupleSection es a) = do
+  es <- for es $ \case
+    Just e -> App <$> getv "Some" ex <*> quote e <*> pure a
+    Nothing -> getv "None" ex
+
+  App <$> getv "Tuple_s" ex
+      <*> pure (ListExp es a)
+      <*> pure a
+
+quote ex@(Vta e t a) = do
+  e <- quote e
+  t <- quoteType t (BecauseOf ex)
+  App <$> getv "Ty_app" ex
+      <*> pure (Tuple [ e, t ] a)
+      <*> pure a
+
+quote ex@(Lazy e a) = do
+  e <- quote e
+  App <$> getv "Lazy" ex <*> pure e <*> pure a
+
+quote ex@(ListExp es a) = do
+  es <- traverse quote es
+  App <$> getv "List" ex <*> pure (ListExp es a) <*> pure a
+
+quote ex@(ListComp r sts a) = do
+  es <- traverse quoteStmt sts
+  r <- quote r
+  App <$> getv "List_comp" ex <*> pure (Tuple [ r, ListExp es a ] a) <*> pure a
+
+quote ex@(Let r bs e a) = do
+  bs <- traverse quoteBinding bs
+  e <- quote e
+  r <- case r of
+    Recursive -> getv "Rec" ex
+    NonRecursive -> getv "Not_rec" ex
+  App <$> getv "Let" ex <*> pure (Tuple [ r, ListExp bs a, e ] a) <*> pure a
+
+quote ex@(DoExpr bind sts a) = do
+  sts <- traverse quoteStmt sts
+  bind <-
+    if bind == junkVar
+       then getv "None" ex
+       else App <$> getv "Some" ex <*> quoteName bind (BecauseOf ex) <*> pure a
+  App <$> getv "Do" ex
+      <*> pure (Record [ Field "bind_name" bind a
+                       , Field "statements" (ListExp sts a) a
+                       ]
+                  a)
+      <*> pure a
+
+quote ex@(Idiom pure_v ap e a) = do
+  pure_v <- quoteName pure_v (BecauseOf ex)
+  ap <- quoteName ap (BecauseOf ex)
+  e <- quote e
+  App <$> getv "Idiom" ex
+      <*> pure (Record [ Field "pure_name" pure_v a
+                       , Field "ap_name" ap a
+                       , Field "inner" e a
+                       ]
+                  a)
+      <*> pure a
+
+quote ex@(Begin exs a) = do
+  exs <- traverse quote exs
+  App <$> getv "Begin" ex
+      <*> pure (ListExp exs a)
+      <*> pure a
+
+quote ex@(OpenIn mod ex' a) = do
+  mod <- quoteMod mod
+  ex' <- quote ex'
+  App <$> getv "Let_open" ex
+      <*> pure (Tuple [ mod, ex' ] a)
+      <*> pure a
+
+quote (Unquote ex _) = pure ex
+quote (Quote ex a) = error "impossible: quote quote"
+-- Why is this case impossible?
+-- reExpr [| x |] calls reExpr x
+-- Consider: reExpr [| [| 1 |] |]
+--  -> reExpr [| 1 |]
+--    -> quote 1
+--  -> quote (quote 1)
+-- *not* [| (quote 1) |]
+
+quote ExprWrapper{} = error "quote cast"
+
+quoteLit :: MonadResolve m => Lit -> SomeReason -> m (Expr Resolved)
+quoteLit (LiBool True) r = getv "True" (Const r)
+quoteLit (LiBool False) r = getv "False" (Const r)
+quoteLit (LiInt i) r =
+  App <$> getv "Int" (Const r) <*> pure (Literal (LiInt i) (annotation r)) <*> pure (annotation r)
+quoteLit (LiFloat i) r =
+  App <$> getv "Float" (Const r) <*> pure (Literal (LiFloat i) (annotation r)) <*> pure (annotation r)
+quoteLit (LiStr s) r =
+  App <$> getv "String" (Const r) <*> pure (Literal (LiStr s) (annotation r)) <*> pure (annotation r)
+quoteLit LiUnit r = getv "Unit" (Const r)
+
+quoteName :: MonadResolve m => Var Resolved -> SomeReason -> m (Expr Resolved)
+quoteName (TgName x id) r =
+  App <$> getv "Name" (Const r)
+      <*> pure (Tuple [ Literal (LiStr x) an, Literal (LiInt (fromIntegral id)) an ] an)
+      <*> pure an
+  where an = annotation r
+
+quoteName v@TgInternal{} a = pure $ VarRef v (annotation a)
+
+quotePat :: MonadResolve m => Pattern Resolved -> m (Expr Resolved)
+quotePat p@Wildcard{} = getv "Wild_p" p
+quotePat p@(Capture v a) = App <$> getv "Var_p" p <*> quoteName v (BecauseOf p) <*> pure a
+
+quotePat p@(Destructure v (Just p') a) = do
+  v <- quoteName v (BecauseOf p)
+  p' <- quotePat p'
+  App <$> getv "Des_p" p <*> pure (Tuple [ v, p' ] a) <*> pure a
+
+quotePat p@(Destructure v Nothing a) = App <$> getv "Con_p" p <*> quoteName v (BecauseOf p) <*> pure a
+
+quotePat p@(PAs p' v a) = do
+  v <- quoteName v (BecauseOf p)
+  p' <- quotePat p'
+  App <$> getv "As_p" p <*> pure (Tuple [ p', v ] a) <*> pure a
+
+quotePat p@(PType p' t a) = do
+  p' <- quotePat p'
+  t <- quoteType t (BecauseOf p)
+  App <$> getv "Ascription_p" p <*> pure (Tuple [ p', t ] a) <*> pure a
+
+quotePat p@(PRecord rs a) = do
+  rs <- for rs $ \(k, p) -> do
+    p <- quotePat p
+    pure (Tuple [ Literal (LiStr k) a, p ] a)
+  App <$> getv "Record_p" p <*> pure (ListExp rs a) <*> pure a
+
+quotePat p@(PTuple ps a) = do
+  ps <- traverse quotePat ps
+  App <$> getv "Tuple_p" p <*> pure (ListExp ps a) <*> pure a
+
+quotePat p@(PList ps a) = do
+  ps <- traverse quotePat ps
+  App <$> getv "List_p" p <*> pure (ListExp ps a) <*> pure a
+
+quotePat ex@(PLiteral l a) = App <$> getv "Lit_p" ex <*> quoteLit l (BecauseOf ex) <*> pure a
+quotePat PGadtCon{} = error "impossible [| gadt con |]pat"
+
+quoteStmt :: MonadResolve m => CompStmt Resolved -> m (Expr Resolved)
+quoteStmt st@(CompGen pat ex a) = do
+  pat <- quotePat pat
+  ex <- quote ex
+  App <$> getv "Gen_st" st
+      <*> pure (Tuple [ pat, ex ] a)
+      <*> pure a
+quoteStmt st@(CompLet bs a) = do
+  bs <- traverse quoteBinding bs
+  App <$> getv "Let_st" st
+      <*> pure (ListExp bs a)
+      <*> pure a
+quoteStmt st@(CompGuard e) = do
+  e <- quote e
+  App <$> getv "Guard_st" st <*> pure e <*> pure (annotation e)
+
+quoteBinding :: MonadResolve m => Binding Resolved -> m (Expr Resolved)
+quoteBinding b@(Binding v b' _ a) = do
+  v <- quoteName v (BecauseOf b)
+  b' <- quote b'
+  App <$> getv "Var_b" b
+      <*> pure (Tuple [ v, b' ] a)
+      <*> pure a
+quoteBinding b@(Matching p b' a) = do
+  p <- quotePat p
+  b' <- quote b'
+  App <$> getv "Match_b" b
+      <*> pure (Tuple [ p, b' ] a)
+      <*> pure a
+quoteBinding TypedMatching{} = error "impossible [| typed matching |]binding"
+
+quoteArm :: MonadResolve m => Arm Resolved -> m (Expr Resolved)
+quoteArm (Arm p Nothing e) = do
+  p <- quotePat p
+  e <- quote e
+  let a = annotation e
+  App <$> getv "Arm" e <*> pure (Tuple [ p, e ] a) <*> pure a
+quoteArm (Arm p (Just g) e) = do
+  p <- quotePat p
+  e <- quote e
+  g <- quote g
+  let a = annotation e
+  App <$> getv "Guarded" e <*> pure (Tuple [ p, g, e ] a) <*> pure a
+
+quoteField :: MonadResolve m => Field Resolved -> m (Expr Resolved)
+quoteField (Field k e a) = do
+  e <- quote e
+  pure $ Tuple [ Literal (LiStr k) a, e ] a
+
+quoteMod :: MonadResolve m => ModuleTerm Resolved -> m (Expr Resolved)
+quoteMod ModStruct{} = error "impossible quote local module struct"
+quoteMod m@(ModRef v a) =
+  App <$> getv "Ref_mod" m <*> quoteName v (BecauseOf m) <*> pure a
+quoteMod m@(ModLoad k a) =
+  App <$> getv "Load_mod" m <*> pure (Literal (LiStr k) a) <*> pure a
+
+quoteType :: MonadResolve m => Type Resolved -> SomeReason -> m (Expr Resolved)
+quoteType (TyCon v) r = App <$> getv "Con_t" (Const r) <*> quoteName v r <*> pure (annotation r)
+quoteType (TyPromotedCon v) r = 
+  App <$> getv "Promoted_t" (Const r) <*> quoteName v r <*> pure (annotation r)
+quoteType (TyVar v) r = App <$> getv "Var_t" (Const r) <*> quoteName v r <*> pure (annotation r)
+quoteType (TyPi (Anon t) e) r = do
+  t <- quoteType t r
+  e <- quoteType e r
+  App <$> getv "Arr_t" (Const r) <*> pure (Tuple [ t, e ] (annotation r)) <*> pure (annotation r)
+quoteType (TyPi (Implicit t) e) r = do
+  t <- quoteType t r
+  e <- quoteType e r
+  App <$> getv "Qual_t" (Const r) <*> pure (Tuple [ t, e ] (annotation r)) <*> pure (annotation r)
+
+quoteType (TyPi (Invisible v k vis) e) r = do
+  v <- quoteName v r
+  e <- quoteType e r
+  vis <- case vis of
+    Req   -> getv "Required" (Const r)
+    Spec  -> getv "Specified" (Const r)
+    Infer -> getv "Inferred" (Const r)
+  k <- case k of
+    Just t -> App <$> getv "Some" (Const r)
+                  <*> quoteType t r
+                  <*> pure (annotation r)
+    Nothing -> getv "None" (Const r)
+
+  App <$> getv "Forall_t" (Const r)
+      <*> pure (Record [ Field "var" v (annotation r)
+                       , Field "kind" k (annotation r)
+                       , Field "vis" vis (annotation r)
+                       , Field "body" e (annotation r)
+                       ]
+                  (annotation r))
+      <*> pure (annotation r)
+
+quoteType (TyApp f x) r = do
+  f <- quoteType f r
+  x <- quoteType x r
+  App <$> getv "App_t" (Const r) <*> pure (Tuple [ f, x ] (annotation r)) <*> pure (annotation r)
+
+quoteType (TyRows t rs) r = do
+  e <- quoteType t r
+  x <- for rs $ \(k, t) -> do
+    t <- quoteType t r
+    pure (Tuple [ Literal (LiStr k) (annotation r), t ] (annotation r))
+
+  App <$> getv "Extension_t" (Const r)
+      <*> pure (Tuple [ e, ListExp x (annotation r) ] (annotation r))
+      <*> pure (annotation r)
+
+quoteType (TyExactRows rs) r = do
+  x <- for rs $ \(k, t) -> do
+    t <- quoteType t r
+    pure (Tuple [ Literal (LiStr k) (annotation r), t ] (annotation r))
+
+  App <$> getv "Record_t" (Const r)
+      <*> pure (ListExp x (annotation r))
+      <*> pure (annotation r)
+
+quoteType (TyTuple a b) r = do
+  a <- quoteType a r
+  b <- quoteType b r
+  App <$> getv "Tuple_t" (Const r)
+      <*> pure (Tuple [a, b] (annotation r))
+      <*> pure (annotation r)
+
+quoteType (TyTupleL a b) r = do
+  a <- quoteType a r
+  b <- quoteType b r
+  App <$> getv "Pair_t" (Const r)
+      <*> pure (Tuple [a, b] (annotation r))
+      <*> pure (annotation r)
+
+quoteType (TyOperator a o b) r = do
+  a <- quoteType a r
+  b <- quoteType b r
+  o <- quoteName o r
+  App <$> getv "Op_t" (Const r)
+      <*> pure (Record [ Field "left" a (annotation r)
+                       , Field "right" b (annotation r)
+                       , Field "operator" o (annotation r)]
+                  (annotation r))
+      <*> pure (annotation r)
+
+quoteType (TyWildcard _) r = getv "Wild_t" (Const r)
+quoteType (TyParens t) r = quoteType t r
+quoteType TyType r = getv "Type_t" (Const r)
+quoteType TySkol{} _ = error "impossible: [| skol |]type"
+quoteType TyWithConstraints{} _ = error "impossible: [| constraints |]type"
+quoteType (TyLit l) r =
+  App <$> getv "Lit_t" (Const r) <*> quoteLit l r <*> pure (annotation r)
+
+getv :: (MonadResolve m, Reasonable e p) => T.Text -> e p -> m (Expr Resolved)
+getv t r = VarRef <$> (lookupEx (Name t) `catchJunk` r) <*> pure (annotation r)

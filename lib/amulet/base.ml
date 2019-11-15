@@ -65,6 +65,10 @@ instance eq 'a => eq (list 'a) begin
     | _, _ -> false
 end
 
+instance eq 'a * eq 'b => eq ('a * 'b) begin
+  let (a, b) == (c, d) = a == c && b == d
+end
+
 (* The 'ord' class *)
 
 type ordering = Lt | Eq | Gt
