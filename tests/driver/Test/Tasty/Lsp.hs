@@ -5,9 +5,11 @@ module Test.Tasty.Lsp
   , lspSession
   , workspace
   , range
+  , resolveCodeLens
   ) where
 
 import Control.Monad.IO.Class
+import Control.Exception
 
 import Data.Aeson.Types
 import Data.Default
@@ -15,6 +17,7 @@ import Data.Default
 import Language.Haskell.LSP.Types.Capabilities as M
 import Language.Haskell.LSP.Types as M
 import Language.Haskell.LSP.Test as M
+
 import Test.Tasty.HUnitPretty as M
 import Test.Tasty.Providers
 
@@ -44,3 +47,16 @@ workspace = "tests/editor/workspace"
 -- | A helper method for constructing ranges
 range :: Int -> Int -> Int -> Int -> Range
 range l1 c1 l2 c2 = Range (Position l1 c1) (Position l2 c2)
+
+-- | Checks the response for errors and throws an exception if needed.
+-- Returns the result if successful.
+getResponseResult :: ResponseMessage a -> a
+getResponseResult (ResponseMessage _ _ (Just res) _) = res
+getResponseResult (ResponseMessage _ id Nothing (Just err)) = throw (UnexpectedResponseError id err)
+getResponseResult (ResponseMessage _ _ Nothing Nothing) = error "No response or error given"
+
+-- | Resolve a code lens.
+resolveCodeLens :: CodeLens -> Session [CodeLens]
+resolveCodeLens lens = do
+  List rsp <- getResponseResult <$> request CodeLensResolve lens
+  pure rsp

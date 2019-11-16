@@ -139,31 +139,6 @@ getCodeActions file filterRange = foldl' getAction [] . (^.typeErrors) where
     , _command = Nothing
     }
 
--- | Get code lenses for this program.
---
--- Currently, this provides type signatures for any top-level binding within the
--- program.
-getCodeLenses :: [Toplevel Typed] -> [CodeLens]
-getCodeLenses = getTops [] where
-  -- TODO: Split this into "get lenses" (which uses the resolved tree) and
-  -- "resolve lenses" (which uses the type environment). We'll need to ensure
-  -- the two match up.
-
-  getTop ac (LetStmt _ _ b) = foldl getBinding ac b
-  getTop ac (Module _ _ (ModStruct ms _)) = getTops ac ms
-  getTop ac (Open (ModStruct ms _)) = getTops ac ms
-  getTop ac (Include (ModStruct ms _)) = getTops ac ms
-  getTop ac _ = ac
-  getTops = foldl' getTop
-
-  getBinding :: [CodeLens] -> Binding Typed -> [CodeLens]
-  getBinding ac (Binding v _ _ (p, ty)) =
-    CodeLens (rangeOf p)
-      (Just (Command (renderBasic $ pretty v <+> colon <+> displayType ty) "" Nothing))
-      Nothing
-    : ac
-  getBinding ac _ = ac
-
 -- | Construct a diagnostic of some error.
 diagnosticOf :: Note a Style
              => Maybe DiagnosticSource -> (a -> Doc) -> a

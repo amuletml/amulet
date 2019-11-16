@@ -1,6 +1,7 @@
 {-# LANGUAGE DuplicateRecordFields, OverloadedStrings #-}
 module Test.Lsp.TypeOverlay (typeOverlayTests) where
 
+import Data.Aeson.Types
 import Data.Text ()
 
 import Test.Tasty.Lsp
@@ -12,15 +13,39 @@ typeOverlayTests = testGroup "Type overlay"
       ident <- openDoc "main.ml" "amulet"
       lenses <- getCodeLenses ident
       assertIn $ lenses @?= [ CodeLens
-                              { _range = range 2 4  2 5
-                              , _command = Just (Command "y : int" "" Nothing)
-                              , _xdata = Nothing
+                              { _range = range 2 4 2 5
+                              , _command = Nothing
+                              , _xdata = Just (object [("name", String "y"), ("id", Number 2), ("file", Number 0)])
                               }
                             , CodeLens
                               { _range = range 0 4 0 5
-                              , _command = Just (Command "x : int" "" Nothing)
-                              , _xdata = Nothing
+                              , _command = Nothing
+                              , _xdata = Just (object [("name", String "x"), ("id", Number 1), ("file", Number 0)])
                               } ]
+
+  , lspSession "Code lenses are resolved" $ do
+      ident <- openDoc "main.ml" "amulet"
+      _ <- getCodeLenses ident
+      resolved <- resolveCodeLens CodeLens
+                  { _range = range 0 4 0 5
+                  , _command = Nothing
+                  , _xdata = Just (object [("name", "x"), ("id", Number 1), ("file", Number 0)])
+                  }
+      assertIn $ resolved @?= [ CodeLens
+                                { _range = range 0 4 0 5
+                                , _command = Just (Command "x : int" "" Nothing)
+                                , _xdata = Nothing
+                                } ]
+  , lspSession "Malformed code lenses resolve to nothing" $ do
+      ident <- openDoc "main.ml" "amulet"
+      _ <- getCodeLenses ident
+      resolved <- resolveCodeLens CodeLens
+                  { _range = range 0 4 0 5
+                  , _command = Nothing
+                  , _xdata = Just (object [("name", String "x"), ("id", Number 1), ("file", Number 5)])
+                  }
+      assertIn $ resolved @?= [ ]
+
 
   , lspSession "Is not shown on errors" $ do
       ident <- openDoc "main.ml" "amulet"

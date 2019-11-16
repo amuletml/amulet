@@ -141,7 +141,10 @@ executable amulet-lsp
                      , pretty-show
 
   other-modules:       Version
+
                      , AmuletLsp.Features
+                     , AmuletLsp.Features.TypeOverlay
+
                      , AmuletLsp.Loop
                      , AmuletLsp.NameyMT
                      , AmuletLsp.Worker
