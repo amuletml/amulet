@@ -42,16 +42,21 @@ import Syntax.Var
 import System.Log.Logger
 import System.Exit
 
-newtype Config = Config
+data Config = Config
   { libraryPath :: [FilePath]
+  , typeOverlay :: Bool
   }
   deriving (Show, Generic)
+
+instance Default Config where
+  def = Config [] True
 
 instance FromJSON Config where
   parseJSON = withObject "Config" $ \v -> do
     s <- v .: "amulet"
     flip (withObject "Config.settings") s $ \o -> Config
-      <$> o .:? "libraryPath"                 .!= []
+      <$> o .:? "libraryPath"                 .!= libraryPath def
+      <*> o .:? "typeOverlay"                 .!= typeOverlay def
 
 -- | Set up and run the server.
 --
@@ -71,7 +76,7 @@ run = do
     callbacks :: TQueue FromClientMessage -> C.InitializeCallbacks Config
     callbacks qIn = C.InitializeCallbacks
         { C.onInitialConfiguration
-            = maybe (pure (Config [])) (first T.pack . parseEither parseJSON)
+            = maybe (pure def) (first T.pack . parseEither parseJSON)
             . (^. params . initializationOptions)
         , C.onConfigurationChange
             = first T.pack . parseEither parseJSON . (^. params . settings)
@@ -122,9 +127,6 @@ run = do
       }
       where handle c = Just (atomically . writeTQueue qIn . c)
 
-    -- commandIds :: [T.Text]
-    -- commandIds = []
-
     options :: C.Options
     options =
       def { C.textDocumentSync       = Just TextDocumentSyncOptions
@@ -134,18 +136,7 @@ run = do
                                        , _willSaveWaitUntil = Just False
                                        , _save              = Just SaveOptions { _includeText = Just False }
                                        }
-          -- , C.completionProvider     = Nothing -- CompletionOptions
-          --                              { _resolveProvider   = Just True
-          --                              , _triggerCharacters = Just ["."]
-          --                              }
-          , C.codeActionProvider     = Just (CodeActionOptionsStatic True)
-          , C.codeLensProvider       = Just CodeLensOptions
-                                       { _resolveProvider = Just True
-                                       }
-          -- , C.foldingRangeProvider   = Just (FoldingRangeOptionsStatic True)
-          -- , C.executeCommandProvider = Just ExecuteCommandOptions
-          --                              { _commands          = List commandIds
-          --                              }
+          , C.codeActionKinds        = Just [CodeActionQuickFix]
           }
 
 handleRequest :: C.LspFuncs Config -> Worker -> FromClientMessage -> IO ()
@@ -213,8 +204,7 @@ handleRequest _ wrk (NotCancelRequestFromClient msg) =
 handleRequest lf wrk (ReqDocumentSymbols msg)
   = startRequest wrk (msg ^. id)
   . RequestLatest (toNormalizedUri rawUri) ReqParsed (sendReplyError lf msg)
-  $ \_ _ prog -> do
-    debugM logN ("Outline of " ++ show prog)
+  $ \_ _ prog ->
     sendReply lf msg RspDocumentSymbols . DSDocumentSymbols . List . maybe [] getOutline $ prog
   where rawUri = msg ^. params . textDocument . uri
 
@@ -226,17 +216,20 @@ handleRequest lf wrk (ReqCodeAction msg)
       in sendReply lf msg RspCodeAction . List $ getCodeActions versioned (msg ^. params . range) es
   where rawUri = msg ^. params . textDocument . uri
 
-handleRequest lf wrk (ReqCodeLens msg)
-  = startRequest wrk (msg ^. id)
-  . RequestLatest (toNormalizedUri rawUri) ReqTyped (sendReplyError lf msg)
-  $ \name _ -> sendReply lf msg RspCodeLens . List . maybe [] (TO.getTypeOverlay name . (\(_, p, _, _) -> p))
+handleRequest lf wrk (ReqCodeLens msg) = do
+  typeOverlay <- typeOverlay . fromMaybe def <$> C.config lf
+  if typeOverlay
+  then startRequest wrk (msg ^. id)
+     . RequestLatest (toNormalizedUri rawUri) ReqTyped (sendReplyError lf msg)
+     $ \name _ -> sendReply lf msg RspCodeLens . List . maybe [] (TO.getTypeOverlay name . (\(_, p, _, _) -> p))
+  else sendReply lf msg RspCodeLens (List [])
   where rawUri = msg ^. params . textDocument . uri
 
 handleRequest lf wrk (ReqCodeLensResolve msg) =
   case msg ^. params of
     -- We're already resolved? This should never happen, but just send it
     -- back anyway.
-    c@(CodeLens _ Just{} _) -> sendReply lf msg RspCodeLens (List [c])
+    c@(CodeLens _ Just{} _) -> sendReply lf msg RspCodeLensResolve c
 
     c@(CodeLens _ _ (Just extra))
       | Success od@(TO.OverlayData _ _ fileVar) <- fromJSON extra -> do
@@ -247,23 +240,24 @@ handleRequest lf wrk (ReqCodeLensResolve msg) =
           case uri of
             Nothing -> do
               infoM logN ("Skiping outdated code lens for " ++ show uri)
-              sendReply lf msg RspCodeLens (List [])
+              sendReplyError lf msg $ ResponseError ContentModified "File is no longer available" Nothing
             Just path
               -> startRequest wrk (msg ^. id)
                . RequestLatest path ReqTyped (sendReplyError lf msg)
                $ \_ _ r ->
                    case r of
-                     Nothing -> sendReply lf msg RspCodeLens (List [])
+                     Nothing ->
+                       sendReplyError lf msg $ ResponseError ContentModified "File cannot be loaded" Nothing
                      Just (_, _, env, _)
                        | Just lens <- TO.resolveTypeOverlay env od c
-                       -> sendReply lf msg RspCodeLens (List [lens])
+                       -> sendReply lf msg RspCodeLensResolve lens
                        | otherwise -> do
                            warningM logN ("Skiping out-of-date type overlay for " ++ show c)
-                           sendReply lf msg RspCodeLens (List [])
+                           sendReplyError lf msg $ ResponseError ContentModified "Variable is no longer available" Nothing
 
     c -> do
       errorM logN ("Skiping malformed code lens for " ++ show c)
-      sendReply lf msg RspCodeLens (List [])
+      sendReplyError lf msg $ ResponseError InvalidParams "Code lens is missing data" Nothing
 
 -- handleRequest lf (ReqFoldingRange msg) = undefined
 
@@ -271,16 +265,12 @@ handleRequest _ _ msg =
   warningM logN ("Unknown message " ++ conNameOf msg)
 
 -- | Send a reply to a request.
-sendReply :: C.LspFuncs c -> RequestMessage m req resp -> (ResponseMessage resp -> FromServerMessage) -> resp -> IO ()
-sendReply lf req wrapMsg msg =
-  C.sendFunc lf . wrapMsg $
-    ResponseMessage "2.0" (responseId $ req ^. id) (Just msg) Nothing
+sendReply :: C.LspFuncs c -> RequestMessage ClientMethod req resp -> (ResponseMessage resp -> FromServerMessage) -> resp -> IO ()
+sendReply lf req wrapMsg = C.sendFunc lf . wrapMsg . C.makeResponseMessage req
 
 -- | Send a an error in reply to a request.
-sendReplyError :: C.LspFuncs c -> RequestMessage m req resp -> ResponseError -> IO ()
-sendReplyError lf req err =
-  C.sendFunc lf . RspError $
-    ResponseMessage "2.0" (responseId $ req ^. id) Nothing (Just err)
+sendReplyError :: C.LspFuncs c -> RequestMessage ClientMethod req resp -> ResponseError -> IO ()
+sendReplyError lf req = C.sendFunc lf . RspError . C.makeResponseError (responseId $ req ^. id)
 
 -- | The name of the logger to use.
 logN :: String

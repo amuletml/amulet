@@ -47,6 +47,18 @@ Ideally this should be specified as a dir-local variable."
   :group 'amulet-mode
   :risky t)
 
+(defcustom amulet-mode-type-overlay t
+  "Whether to enable the \"type overlay\".
+
+This shows the type signature next to every top-level let
+binding, making it easier to determine what a function does."
+  :type '(choice (const :tag "On" t)
+                 (const :tag "Off" :json-false))
+  :tag "Type overlay enabled"
+  :group 'amulet-mode
+  :risky t)
+
+
 (defconst amulet-mode--keywords
   '("and" "as" "begin" "class" "deriving" "else" "end" "external" "false" "forall"
     "fun" "function" "if" "import" "in" "include" "instance" "lazy" "let" "match"
@@ -159,14 +171,15 @@ Ideally this should be specified as a dir-local variable."
   "The command to start the LSP server. This can be taken as a
   function reference in order to defer evaluation of
   `amulet-mode-amulet-lsp-executable'"
-  amulet-mode-amulet-lsp-executable)
+  `(,amulet-mode-amulet-lsp-executable "--log=lsp.log"))
 
 (with-eval-after-load 'lsp-mode
   ;; If LSP is installed (and loaded), set up editor integration.
   (add-to-list 'lsp-language-id-configuration '(amulet-mode . "amulet"))
 
   (lsp-register-custom-settings
-   '(("amulet.libraryPath" amulet-mode-library-path)))
+   '(("amulet.libraryPath" amulet-mode-library-path)
+     ("amulet.typeOverlay" amulet-mode-type-overlay)))
 
   (lsp-register-client
    (make-lsp-client
