@@ -4,11 +4,12 @@
   , FunctionalDependencies
   , TypeFamilies
   , ScopedTypeVariables
+  , StandaloneDeriving
   #-}
 module Syntax.Subst
   ( Subst
   , Substitutable
-  , tyVarOcc, foldOccMap
+  , OccMap, tyVarOcc, foldOccMap, subtractOccs, removeOccs, diffOccs, occToFv
   , ftv, nominalTvs
   , apply
   , compose
@@ -131,6 +132,8 @@ s1 `compose` s2 = fmap (apply s1) s2 <> fmap (apply s2) s1
 
 newtype OccMap p = OccMap (Map.Map (Var p) Int)
 
+deriving instance Show (Var p) => Show (OccMap p)
+
 instance forall p. Ord (Var p) => Semigroup (OccMap p) where
   OccMap x <> OccMap y = OccMap (x `go` y) where
     go = Map.merge Map.preserveMissing Map.preserveMissing (Map.zipWithMatched (const (+)))
@@ -155,8 +158,18 @@ singletonOcc v = OccMap (Map.singleton v 1)
 removeOccs :: Ord (Var p) => OccMap p -> Set.Set (Var p) -> OccMap p
 removeOccs (OccMap m) s = OccMap (m `Map.withoutKeys` s)
 
+subtractOccs :: Ord (Var p) => OccMap p -> Set.Set (Var p) -> OccMap p
+subtractOccs (OccMap m) s = OccMap (Map.unionWith (-) m (Map.fromList (zip (Set.toList s) (repeat 1))))
+
 foldOccMap :: (Var p -> Int -> b -> b) -> b -> OccMap p -> b
 foldOccMap k b (OccMap m) = Map.foldrWithKey k b m
+
+diffOccs :: Ord (Var p) => OccMap p -> OccMap p -> OccMap p
+diffOccs (OccMap m) (OccMap m') = OccMap (Map.filter (>= 1) (go m m')) where
+  go = Map.merge Map.preserveMissing Map.dropMissing (Map.zipWithMatched (const (-)))
+
+occToFv :: OccMap p -> Set.Set (Var p)
+occToFv (OccMap m) = Map.keysSet m
 
 tyVarOcc :: Ord (Var p) => Type p -> OccMap p
 tyVarOcc TyCon{} = mempty
