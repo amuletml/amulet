@@ -26,7 +26,7 @@ pipeline {
               stack build \
                 --ghc-options "-optc-static -optl-static -fhide-source-paths" \
                 --flag amuletml:amc-prove-server \
-                --test --no-run-tests -j6
+                --test --no-run-tests -j3
             '''
           }
         }
