@@ -54,7 +54,7 @@ done
 cp lib/ pkg/usr/lib/amuletml/ -r
 
 if [[ "$branch" != "master" ]]; then
-  short_branch=$branch
+  short_branch="-$(echo "${branch}" | sed -re 's;/;_;g')"
 fi
 
 cat >pkg/.PKGINFO <<EOF
