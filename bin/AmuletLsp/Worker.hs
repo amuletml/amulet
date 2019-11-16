@@ -1,18 +1,34 @@
 {-# LANGUAGE GADTs, NamedFieldPuns, OverloadedStrings, TupleSections #-}
+
+{-| The worker is responsible for loading files, updating diagnostics, and
+  dispatching requests.
+
+
+  Files are updated using various update methods, and then explicitly
+  re-compiled using 'refresh'. All complex work (either compiling, or
+  dispatching threads), is done entirely asynchronously.
+
+  The worker uses two threads: one compiles files, and another just
+  dispatches requests. It might be possible to improve the concurrency of
+  the worker in the future (such as multiple threads compiling), but
+  currently the performance is good-enough.
+-}
 module AmuletLsp.Worker
   ( Version(..)
-  , RequestKind(..)
-  , Request(..)
   , Worker
   , makeWorker
   , updateConfig
 
+  -- * File updating
   , updateFile
   , touchFile
   , closeFile
-
+  , findFile
   , refresh
 
+  -- * Request handling
+  , RequestKind(..)
+  , Request(..)
   , startRequest, cancelRequest
   ) where
 
@@ -63,7 +79,7 @@ import Syntax (Toplevel(..))
 import Syntax.Resolve.Import
 import System.Environment
 import System.Log.Logger
-import System.Directory
+import System.Directory hiding (findFile)
 import System.FilePath
 import Syntax.Verify
 import Syntax.Types
@@ -170,15 +186,22 @@ data FileState
 data RequestKind a where
   ReqParsed   :: RequestKind (Maybe [Toplevel Parsed])
   ReqResolved :: RequestKind (Maybe (Signature, [Toplevel Resolved]))
-  ReqTyped    :: RequestKind (Maybe (Signature, Env, [Toplevel Typed]))
+  ReqTyped    :: RequestKind (Maybe (Signature, [Toplevel Resolved], Env, [Toplevel Typed]))
   ReqErrors   :: RequestKind ErrorBundle
 
 data Request where
-  -- | Use the result of the current file when processing has finished. If not
-  -- available, produce an error.
-  RequestLatest ::
-       NormalizedUri -> RequestKind a
-    -> (ResponseError -> IO ()) -> (Version -> a -> IO ())
+  -- | Use the result of the current file when processing has finished.
+  RequestLatest
+    :: NormalizedUri
+    -> RequestKind a
+    -- ^ The kind of the request. This determines what data is fetched from the
+    -- store.
+    -> (ResponseError -> IO ())
+    -- ^ A function to call on error (such as being cancelled, or file is not
+    -- open). This should just send the response immediately.
+    -> (Name -> Version -> a -> IO ())
+    -- ^ A function to call on success. Is called with the file's ID, the
+    -- current version and appropriate data.
     -> Request
 
 requestFile :: Request -> NormalizedUri
@@ -201,6 +224,11 @@ data Worker = Worker
     -- | The actual internal states of each file. These are updated in one go,
     -- in order to ensure they are all in a consistent state.
   , fileStates   :: TVar (HM.HashMap NormalizedUri FileState)
+
+    -- | A map of each 'FileState''s 'fileVar', to its URI. As names can be more
+    -- compactly encoded (i.e just a name), we prefer them when communicating
+    -- with the client.
+  , fileVars     :: TVar (Map.Map Name NormalizedUri)
 
      -- | The current global version that "fileContents" is on.
   , clock        :: TVar Clock
@@ -239,6 +267,7 @@ makeWorker extra pushErrors = do
     <$> newTVar path      -- Library path
     <*> newTVar mempty    -- File contents
     <*> newTVar mempty    -- File states
+    <*> newTVar mempty    -- File vars
     <*> newTVar (Clock 0) -- Clock
     <*> newTVar 0         -- Next name
     <*> newTVar Nothing   -- To refresh
@@ -280,6 +309,10 @@ closeFile wrk path = atomically $ do
   modifyTVar (fileContents wrk) (HM.delete path)
   modifyTVar (clock wrk) tick
 
+-- | Try to locate a file from its name.
+findFile :: Worker -> Name -> IO (Maybe NormalizedUri)
+findFile wrk name = Map.lookup name <$> readTVarIO (fileVars wrk)
+
 -- | Reload any out-of-date files, recompiling them and their dependents.
 refresh :: Worker -> Maybe NormalizedUri -> IO ()
 refresh wrk file = atomically $ do
@@ -302,30 +335,36 @@ trySatisfyRequest wrk (RequestLatest file kind err ok) = do
     (_, Just DiskContents{}) ->
       Just $ err (ResponseError InvalidRequest "File is not open" Nothing)
 
-    (  Just OpenedState{ openPVersion, openParsed, openResolved, openTyped, working, errors }
+    (  Just OpenedState{ fileVar, openPVersion, openParsed, openResolved, openTyped, working, errors }
      , Just OpenedContents { openVersion } ) ->
-      case kind of
+      let ok' = ok fileVar openVersion
+      in case kind of
         ReqParsed
-          | VersionedData v contents <- openParsed, v == openVersion -> Just $ ok openVersion (Just contents)
-          | Just v <- openPVersion, v == openVersion -> Just $ ok openVersion Nothing
+          | VersionedData v contents <- openParsed, v == openVersion -> Just $ ok' (Just contents)
+          | Just v <- openPVersion, v == openVersion -> Just $ ok' Nothing
           | otherwise -> Nothing
 
         ReqResolved
           | Done c <- working, c == clk ->
             case openResolved of
-              VersionedData v contents | v == openVersion -> Just $ ok openVersion (Just contents)
-              _ -> Just $ ok openVersion Nothing
+              VersionedData v contents | v == openVersion -> Just $ ok' (Just contents)
+              _ -> Just $ ok' Nothing
           | otherwise -> Nothing
 
         ReqTyped
           | Done c <- working, c == clk ->
             case openTyped of
-              VersionedData v contents | v == openVersion -> Just $ ok openVersion (Just contents)
-              _ -> Just $ ok openVersion Nothing
+              VersionedData v (sig, env, tProg)
+                | v == openVersion
+                -- This is guaranteed to be the same version, as we're on the
+                -- latest version/clock.
+                , VersionedData _ (_, rProg) <- openResolved
+                -> Just $ ok' (Just (sig, rProg, env, tProg))
+              _ -> Just $ ok' Nothing
           | otherwise -> Nothing
 
         ReqErrors
-          | Done c <- working, c == clk -> Just $ ok openVersion errors
+          | Done c <- working, c == clk -> Just $ ok' errors
           | otherwise -> Nothing
 
     (_, Just OpenedContents{}) -> Nothing
@@ -512,7 +551,7 @@ workOnce :: Worker -- ^ The worker to evaluate in
          -> Clock
          -> Maybe NormalizedUri
          -> IO ()
-workOnce wrk@Worker { pushErrors, fileContents, fileStates } baseClock priority = do
+workOnce wrk@Worker { pushErrors, fileContents, fileStates, fileVars } baseClock priority = do
   case priority of
     Nothing -> pure ()
     Just path -> loadFile path Nothing $> ()
@@ -528,25 +567,40 @@ workOnce wrk@Worker { pushErrors, fileContents, fileStates } baseClock priority 
   loadFile :: NormalizedUri -> Maybe (NormalizedUri, Span) -> IO (Maybe FileState)
   loadFile path from = do
     debugM logN ("Importing " ++ show path ++ " from " ++ show (fst <$> from))
-    file <- atomically (HM.lookup path <$> readTVar fileStates)
-    case file of
+    oldFile <- atomically (HM.lookup path <$> readTVar fileStates)
+    case oldFile of
       -- We've already checked this tick, don't do anything.
       Just file | checkClock file == baseClock -> pure (Just file)
 
       _ -> do
-        (changed, parsed, file) <- parseFile path file
+        (changed, parsed, file) <- parseFile path oldFile
         -- Update the file, at least a little
         case file of
           Nothing -> do
-            atomically $ modifyTVar fileStates (HM.delete path)
+            atomically $ do
+              modifyTVar fileStates (HM.delete path)
+              maybe (pure ()) (modifyTVar fileVars . Map.delete . fileVar) oldFile
+
             queueRequests wrk path
             pure Nothing
           Just file -> do
             -- Otherwise check each dependency. We update the clock and working
             -- state beforehand, to avoid getting into any dependency loops.
             debugM logN ("Starting " ++ show path)
-            updateFile path (file { checkClock = baseClock
-                                  , working = maybe WorkingRoot (uncurry WorkingDep) from })
+
+            atomically $ do
+              -- Update var mapping
+              case oldFile of
+                Just oldFile
+                  | fileVar oldFile /= fileVar file
+                  -> modifyTVar fileVars ( Map.delete (fileVar oldFile)
+                                         . Map.insert (fileVar file) path )
+                  | otherwise -> pure ()
+                Nothing -> modifyTVar fileVars (Map.insert (fileVar file) path)
+
+              modifyTVar fileStates . HM.insert path $
+                file { checkClock = baseClock
+                     , working = maybe WorkingRoot (uncurry WorkingDep) from }
 
             -- If this file has been loaded before its dependency, then the dependency
             -- was loaded on a later clock tick, and so we're out of date.

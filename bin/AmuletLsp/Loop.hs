@@ -1,6 +1,9 @@
 {-# LANGUAGE OverloadedStrings, DeriveGeneric, DuplicateRecordFields, FlexibleContexts #-}
+
+{-| The main LSP server loop. -}
 module AmuletLsp.Loop (run) where
 
+import qualified AmuletLsp.Features.TypeOverlay as TO
 import AmuletLsp.Features
 import AmuletLsp.Worker
 
@@ -15,7 +18,6 @@ import Data.Aeson.Types
 import Data.Bifunctor
 import Data.Foldable
 import Data.Default
-import Data.Triple
 import Data.Maybe
 
 import Frontend.Errors
@@ -35,6 +37,8 @@ import Text.Pretty.Semantic
 
 import Prelude hiding (id)
 
+import Syntax.Var
+
 import System.Log.Logger
 import System.Exit
 
@@ -49,6 +53,14 @@ instance FromJSON Config where
     flip (withObject "Config.settings") s $ \o -> Config
       <$> o .:? "libraryPath"                 .!= []
 
+-- | Set up and run the server.
+--
+-- The main server is pretty simple: we forward all messages into a
+-- separate 'TQueue', pull them out on a separate thread, and pass them
+-- to 'handleRequest'.
+--
+-- We try to run requests as quickly as possible, thus everything is done
+-- asynchronously on the worker.
 run :: IO ExitCode
 run = do
   qIn <- atomically newTQueue
@@ -105,6 +117,7 @@ run = do
       , C.documentSymbolHandler     = handle ReqDocumentSymbols
       , C.codeActionHandler         = handle ReqCodeAction
       , C.codeLensHandler           = handle ReqCodeLens
+      , C.codeLensResolveHandler    = handle ReqCodeLensResolve
       -- , C.foldingRangeHandler   = handle ReqFoldingRange
       }
       where handle c = Just (atomically . writeTQueue qIn . c)
@@ -126,7 +139,9 @@ run = do
           --                              , _triggerCharacters = Just ["."]
           --                              }
           , C.codeActionProvider     = Just (CodeActionOptionsStatic True)
-          , C.codeLensProvider       = Just (CodeLensOptions (Just False))
+          , C.codeLensProvider       = Just CodeLensOptions
+                                       { _resolveProvider = Just True
+                                       }
           -- , C.foldingRangeProvider   = Just (FoldingRangeOptionsStatic True)
           -- , C.executeCommandProvider = Just ExecuteCommandOptions
           --                              { _commands          = List commandIds
@@ -198,7 +213,7 @@ handleRequest _ wrk (NotCancelRequestFromClient msg) =
 handleRequest lf wrk (ReqDocumentSymbols msg)
   = startRequest wrk (msg ^. id)
   . RequestLatest (toNormalizedUri rawUri) ReqParsed (sendReplyError lf msg)
-  $ \_ prog -> do
+  $ \_ _ prog -> do
     debugM logN ("Outline of " ++ show prog)
     sendReply lf msg RspDocumentSymbols . DSDocumentSymbols . List . maybe [] getOutline $ prog
   where rawUri = msg ^. params . textDocument . uri
@@ -206,7 +221,7 @@ handleRequest lf wrk (ReqDocumentSymbols msg)
 handleRequest lf wrk (ReqCodeAction msg)
   = startRequest wrk (msg ^. id)
   . RequestLatest (toNormalizedUri rawUri) ReqErrors (sendReplyError lf msg)
-  $ \(Version ver) es ->
+  $ \_ (Version ver) es ->
       let versioned = VersionedTextDocumentIdentifier rawUri (Just ver)
       in sendReply lf msg RspCodeAction . List $ getCodeActions versioned (msg ^. params . range) es
   where rawUri = msg ^. params . textDocument . uri
@@ -214,8 +229,41 @@ handleRequest lf wrk (ReqCodeAction msg)
 handleRequest lf wrk (ReqCodeLens msg)
   = startRequest wrk (msg ^. id)
   . RequestLatest (toNormalizedUri rawUri) ReqTyped (sendReplyError lf msg)
-  $ \_ -> sendReply lf msg RspCodeLens . List . maybe [] (getCodeLenses . thd3)
+  $ \name _ -> sendReply lf msg RspCodeLens . List . maybe [] (TO.getTypeOverlay name . (\(_, p, _, _) -> p))
   where rawUri = msg ^. params . textDocument . uri
+
+handleRequest lf wrk (ReqCodeLensResolve msg) =
+  case msg ^. params of
+    -- We're already resolved? This should never happen, but just send it
+    -- back anyway.
+    c@(CodeLens _ Just{} _) -> sendReply lf msg RspCodeLens (List [c])
+
+    c@(CodeLens _ _ (Just extra))
+      | Success od@(TO.OverlayData _ _ fileVar) <- fromJSON extra -> do
+          -- Find which file this type overlay refers to, and then fire
+          -- off a fresh request to fetch the environment and resolve the
+          -- code lens.
+          uri <- findFile wrk (TgName "" fileVar)
+          case uri of
+            Nothing -> do
+              infoM logN ("Skiping outdated code lens for " ++ show uri)
+              sendReply lf msg RspCodeLens (List [])
+            Just path
+              -> startRequest wrk (msg ^. id)
+               . RequestLatest path ReqTyped (sendReplyError lf msg)
+               $ \_ _ r ->
+                   case r of
+                     Nothing -> sendReply lf msg RspCodeLens (List [])
+                     Just (_, _, env, _)
+                       | Just lens <- TO.resolveTypeOverlay env od c
+                       -> sendReply lf msg RspCodeLens (List [lens])
+                       | otherwise -> do
+                           warningM logN ("Skiping out-of-date type overlay for " ++ show c)
+                           sendReply lf msg RspCodeLens (List [])
+
+    c -> do
+      errorM logN ("Skiping malformed code lens for " ++ show c)
+      sendReply lf msg RspCodeLens (List [])
 
 -- handleRequest lf (ReqFoldingRange msg) = undefined
 
