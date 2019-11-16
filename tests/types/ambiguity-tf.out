@@ -1,0 +1,7 @@
+option : type -> type
+None : Spec{'a : type}. option 'a
+Some : Spec{'a : type}. 'a -> option 'a
+collects : Req{'c : type}. constraint
+elem : Req{'c : type}. type
+uncons : Spec{'c : type}. collects 'c => 'c -> option (elem 'c * 'c)
+foldr : Infer{'a : type}. Infer{'b : type}. collects 'a => (elem 'a -> 'b -> 'b) -> 'b -> 'a -> 'b

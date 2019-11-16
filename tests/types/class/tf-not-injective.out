@@ -1,3 +1,11 @@
+tf-not-injective.ml[24:5 ..27:48]: warning (W2015)
+   │ 
+24 │ let cast' :
+   │     ^^^^^^^
+  Ambiguous type for value cast':
+    forall 'a 'b. recursive 'a * recursive 'b * eq_1 (rep 'a) (rep 'b) => proxy (rep 'a) -> proxy (rep 'b) -> 'a -> 'b
+  The variable b is ambiguous
+  • Note: rep is an associated type, and so may not be injective
 tf-not-injective.ml[24:5 ..27:48]: error (E2018)
    │ 
 30 │       let rep2 = subst (inj_1 p1 p2) rep1

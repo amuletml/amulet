@@ -341,7 +341,7 @@ checkAmbiguous :: forall m. ( MonadChronicles TypeError m
                             )
                => Var Typed -> SomeReason -> Type Typed -> m ()
 checkAmbiguous var exp tau = go mempty mempty mempty tau where
-  go :: Set.Set (Var Typed) -> Set.Set (Var Typed) -> Set.Set (Var Typed) -> Type Typed -> m ()
+  go :: Set.Set (Var Typed) -> OccMap Typed -> Set.Set (Var Typed) -> Type Typed -> m ()
   go ok s tfs (TyPi (Invisible v _ Req) t) = go (Set.insert v ok) s tfs t
   go ok s tfs(TyPi Invisible{} t) = go ok s tfs t
   go ok s tfs (TyPi (Implicit v) t)
@@ -352,10 +352,10 @@ checkAmbiguous var exp tau = go mempty mempty mempty tau where
             let fds = ci ^. ciFundep
                 det (_, x, _) = x
                 fundep_ok = foldMap (ftv . (args !!)) (foldMap det fds)
-             in go (ok <> fundep_ok) (s <> ftv v) tfs t
-          Nothing -> go ok (s <> ftv v) tfs t
+             in go (ok <> fundep_ok) (s <> tyVarOcc v) tfs t
+          Nothing -> go ok (s <> tyVarOcc v) tfs t
     | TyTuple a b <- v = go ok s tfs (TyPi (Implicit a) (TyPi (Implicit b) t))
-    | otherwise = go ok (s <> ftv v) tfs t
+    | otherwise = go ok (s <> tyVarOcc v) tfs t
 
   go ok s tfs (TyPi (Anon dom) cod) = do
     scope <- view tySyms
@@ -383,13 +383,15 @@ checkAmbiguous var exp tau = go mempty mempty mempty tau where
           | otherwise = mempty
         fv_under_tf _ = mempty
 
-        ok_fvs = fv `Set.difference` no_can_do
+        ok_fvs = fv `subtractOccs` no_can_do
 
-    if not (Set.null (s Set.\\ (ok_fvs <> ok)))
+    let fv_set = occToFv ((s `diffOccs` ok_fvs) `removeOccs` ok)
+
+    if not (Set.null fv_set)
        then dictates (addBlame exp (note_tfs scope (Set.toList (tfs <> tfs'))
-                        (AmbiguousType var tau (s Set.\\ (ok_fvs <> ok)))))
+                        (AmbiguousType var tau fv_set)))
        else pure ()
-    where fv = ftv t
+    where fv = tyVarOcc t
 
   note_tfs :: Map.Map (Var Typed) TySymInfo -> [Var Typed] -> TypeError -> TypeError
   note_tfs scope (v:vs) e =
