@@ -26,10 +26,11 @@ lspSessionWith :: FilePath -> Maybe Value -> ClientCapabilities -> TestName -> S
 lspSessionWith root config caps name session = testCase name $
   runSessionWithConfig cfg program caps root session
   where
-    program = "amulet-lsp"
+    program = "amulet-lsp --log=-"
     cfg = def
       { lspConfig = config
-      , messageTimeout = 5
+      , messageTimeout = 2
+      -- , logStdErr = True
       }
 
 -- | Test an LSP session with the default workspace and configuration options.
@@ -56,7 +57,5 @@ getResponseResult (ResponseMessage _ id Nothing (Just err)) = throw (UnexpectedR
 getResponseResult (ResponseMessage _ _ Nothing Nothing) = error "No response or error given"
 
 -- | Resolve a code lens.
-resolveCodeLens :: CodeLens -> Session [CodeLens]
-resolveCodeLens lens = do
-  List rsp <- getResponseResult <$> request CodeLensResolve lens
-  pure rsp
+resolveCodeLens :: CodeLens -> Session CodeLens
+resolveCodeLens lens = getResponseResult <$> request CodeLensResolve lens

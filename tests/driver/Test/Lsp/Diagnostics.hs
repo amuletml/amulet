@@ -24,7 +24,7 @@ diagnosticsTests = testGroup "Diagnostics"
                              { _range = range 0 0 0 4
                              , _severity = Just DsError
                              , _code = Nothing
-                             , _source = Just "amc.parser"
+                             , _source = Just "amulet.parser"
                              , _message = "Unexpected lets, expected type"
                              , _relatedInformation = Nothing } ]
 
@@ -39,7 +39,7 @@ diagnosticsTests = testGroup "Diagnostics"
                              { _range = range 0 8 0 9
                              , _severity = Just DsError
                              , _code = Just (NumberValue 1001)
-                             , _source = Just "amc.resolve"
+                             , _source = Just "amulet.resolve"
                              , _message = "Variable not in scope: `y`"
                              , _relatedInformation = Nothing } ]
   ]

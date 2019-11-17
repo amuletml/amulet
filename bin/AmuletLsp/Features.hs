@@ -19,11 +19,9 @@ import Language.Haskell.LSP.Types
 
 import Prelude hiding (id)
 
-import qualified Syntax.Resolve.Error as R
 import Syntax
 
 import Text.Pretty.Semantic hiding (line)
-import Text.Pretty.Note
 
 getOutline :: [Toplevel Parsed] -> [DocumentSymbol]
 getOutline = concatMap getTop where
@@ -139,33 +137,15 @@ getCodeActions file filterRange = foldl' getAction [] . (^.typeErrors) where
     , _command = Nothing
     }
 
--- | Construct a diagnostic of some error.
-diagnosticOf :: Note a Style
-             => Maybe DiagnosticSource -> (a -> Doc) -> a
-             -> Diagnostic
-diagnosticOf source disp m =
-  Diagnostic
-  { _range = rangeOf (annotation m)
-  , _severity = Just (severityOf (diagnosticKind m))
-  , _code = NumberValue . fromIntegral <$> noteId m
-  , _message = renderBasic . disp $ m
-  , _relatedInformation = Nothing
-  , _source = source
-  }
-
-prettyResolve :: R.ResolveError -> Doc
-prettyResolve (R.ArisingFrom e _) = prettyResolve e
-prettyResolve e = pretty e
-
-severityOf :: NoteKind -> DiagnosticSeverity
-severityOf NoteMessage    = DsInfo
-severityOf WarningMessage = DsWarning
-severityOf ErrorMessage   = DsError
-
+-- | Convert a span into a range.
 rangeOf :: Span -> Range
 rangeOf s = Range (startPosOf (spanStart s)) (endPosOf (spanEnd s)) where
   endPosOf (SourcePos _ line col) = Position (line - 1) col
   startPosOf (SourcePos _ line col) = Position (line - 1) (col - 1)
+
+-- | Convert a span into a location.
+locationOf :: Span -> Location
+locationOf s = Location (fromNormalizedUri (NormalizedUri (T.pack (fileName s)))) (rangeOf s)
 
 -- | Take the first line of a range.
 firstLine :: Range -> Range
