@@ -53,12 +53,8 @@ for arg in $*; do
 done
 cp lib/ pkg/usr/lib/amuletml/ -r
 
-if [[ "$branch" != "master" ]]; then
-  short_branch="-$(echo "${branch}" | sed -re 's;/;_;g')"
-fi
-
 cat >pkg/.PKGINFO <<EOF
-pkgname = amuletml${short_branch}
+pkgname = amuletml
 pkgbase = amuletml
 pkgver = $version-1
 url = https://github.com/tmpim/amulet

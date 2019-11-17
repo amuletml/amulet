@@ -79,14 +79,6 @@ pipeline {
       sh 'tools/sign.sh'
       archiveArtifacts artifacts: 'result/*tar'
       archiveArtifacts artifacts: 'result/*asc'
-
-      sh '''
-        if [[ "$(git rev-parse --abbrev-ref @)" == "master" ]]; then
-          cp result/*.pkg.tar* /srv/http/x86_64/
-          repo-add -R -p /srv/http/x86_64/amuletml-nightly.db.tar.gz \
-            /srv/http/x86_64/*.pkg.tar
-        fi
-      '''
     }
   }
 }
