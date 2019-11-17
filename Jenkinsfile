@@ -26,7 +26,8 @@ pipeline {
               stack build \
                 --ghc-options "-optc-static -optl-static -fhide-source-paths" \
                 --flag amuletml:amc-prove-server \
-                --test --no-run-tests -j3
+                --test --no-run-tests -j3 \
+                --fast
             '''
           }
         }
@@ -39,14 +40,15 @@ pipeline {
           env AMC_LIBRARY_PATH=${PWD}/lib \
           stack test \
             --flag amuletml:amc-prove-server \
-            --test-arguments "-j3 --xml junit.xml --display t --hedgehog-tests 1000 -v -t60"
+            --test-arguments "-j3 --xml junit.xml --display t --hedgehog-tests 1000 -v -t60" \
+            --fast
         '''
       }
     }
 
     stage('Compile for deployment') {
       steps {
-        sh 'tools/deploy-build.sh'
+        sh 'env FAST="--fast" tools/deploy-build.sh'
       }
     }
   }
