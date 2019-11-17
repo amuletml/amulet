@@ -1,0 +1,6 @@
+uninhabited_01.ml[7:3 ..7:20]: warning (W3005)
+  Redundant pattern in expression
+  │ 
+7 │ | L x -> zero_elim x
+  │   ^^^^^^^^^^^^^^^^^^
+  • Note: This case can never occur.

@@ -263,6 +263,7 @@ covering' env = go where
   -- namely we find every possible case.
   go ((p@(Destructure _ _ (_, ty)), VVariable v vTy) :*: xs) = do
     (k, arg) <- constructors env ty vTy
+    maybe (pure ()) guardInhabited arg
     guardAll xs
     case arg of
       Nothing -> onVar p v (VDestructure k Nothing) xs
@@ -272,6 +273,7 @@ covering' env = go where
 
   go ((p@(PGadtCon _ _ _ _ (_, ty)), VVariable v vTy) :*: xs) = do
     (k, arg) <- constructors env ty vTy
+    maybe (pure ()) guardInhabited arg
     guardAll xs
     case arg of
       Nothing -> onVar p v (VDestructure k Nothing) xs
@@ -436,7 +438,6 @@ inhabited env (AbsState st cs i)
   . flip evalNameyT i
   . flip evalStateT (st, cs)
   . go mempty
-  -- . expandTypeWith (env ^. tySyms)
   where
 
   inhb :: Monad m => m ()
