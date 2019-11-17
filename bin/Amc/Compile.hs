@@ -18,6 +18,7 @@ import Control.Concurrent
 import qualified Data.Set as Set
 import qualified Data.Map as Map
 import Data.Position (SourceName)
+import qualified Data.Text as T
 import Data.Bifunctor
 import Data.Foldable
 import Data.Functor
@@ -55,7 +56,7 @@ compileIt :: (D.Driver, Name)
           -> Options -> SourceName -> (Doc -> IO ())
           -> IO ((D.Driver, Name), Set.Set FilePath)
 compileIt (driver, name) Options { optLevel, lint, export, debug } file emit = do
-  path <- canonicalizePath file
+  path <- canonicalizePath (T.unpack file)
   ((((core, errors), sig), driver), name) <-
       flip runNameyT name
     . flip runStateT driver
@@ -79,7 +80,7 @@ compileIt (driver, name) Options { optLevel, lint, export, debug } file emit = d
       D.dumpCore debug core optimised lua
       emit (pretty lua)
 
-  fileNames <- traverse (canonicalizePath . fst) files
+  fileNames <- traverse (canonicalizePath . T.unpack . fst) files
   pure ((driver, name), Set.fromList fileNames)
   where
     lintIt name = if lint then runLint name else flip const

@@ -4,8 +4,10 @@ module Data.Position
   , SourcePos(..)
   ) where
 
+import qualified Data.Text as T
+
 -- | The type of file names
-type SourceName = String
+type SourceName = T.Text
 
 -- | The type of column numbers
 type Column = Int
@@ -21,8 +23,4 @@ data SourcePos = SourcePos { spFile :: SourceName -- ^ The file name of this pos
   deriving (Eq)
 
 instance Show SourcePos where
-  show (SourcePos f l c) = "[" ++ show (lim f f) ++ ":" ++ show l ++ ":" ++ show c ++ "]"
-    where
-      lim [] x = x
-      lim ('/':xs) _ = lim xs xs
-      lim (_:xs) x = lim xs x
+  show (SourcePos f l c) = "[" ++ show (T.takeWhileEnd (/='/') f) ++ ":" ++ show l ++ ":" ++ show c ++ "]"

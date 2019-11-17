@@ -1,4 +1,4 @@
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE OverloadedStrings, TemplateHaskell #-}
 module Test.Lua.Parser (tests) where
 
 import Test.Lua.Gen
@@ -17,11 +17,13 @@ import Hedgehog
 
 result :: String -> T.Text -> T.Text
 result file contents =
-  case parseStmts (SourcePos file 1 1) (L.fromStrict contents) of
+  case parseStmts (SourcePos name 1 1) (L.fromStrict contents) of
     Right res-> displayPlain $ Right <$> vsep (map pretty res)
     Left e -> displayPlain $ prettyErr e
 
-  where prettyErr = N.format (N.fileSpans [(file, contents)] N.defaultHighlight)
+  where
+    name = T.pack file
+    prettyErr = N.format (N.fileSpans [(name , contents)] N.defaultHighlight)
 
 prop_roundtripStmts :: Property
 prop_roundtripStmts = withTests 7500 . property $ do

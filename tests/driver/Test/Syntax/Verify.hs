@@ -23,13 +23,14 @@ import qualified Text.Pretty.Note as N
 import Text.Pretty.Semantic
 
 result :: String -> T.Text -> T.Text
-result f c = fst . flip runNamey firstName $ do
-  let parsed = requireJust f c $ runParser f (L.fromStrict c) parseTops
-      prettyErrs = vsep . map (N.format (N.fileSpans [(f, c)] N.defaultHighlight))
+result file contents = fst . flip runNamey firstName $ do
+  let name = T.pack file
+      parsed = requireJust name contents $ runParser name (L.fromStrict contents) parseTops
+      prettyErrs = vsep . map (N.format (N.fileSpans [(name, contents)] N.defaultHighlight))
 
-  ResolveResult resolved _ _ <- requireRight f c <$> runNullImport (resolveProgram builtinResolve parsed)
+  ResolveResult resolved _ _ <- requireRight name contents <$> runNullImport (resolveProgram builtinResolve parsed)
   desugared <- desugarProgram resolved
-  (inferred, env) <- requireThat f c <$> inferProgram builtinEnv desugared
+  (inferred, env) <- requireThat name contents <$> inferProgram builtinEnv desugared
   v <- genName
   let (_, es) = runVerify env v (verifyProgram inferred)
   pure $ if null es then T.empty else displayPlain (prettyErrs (toList es))

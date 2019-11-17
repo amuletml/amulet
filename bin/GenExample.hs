@@ -45,7 +45,7 @@ main = do
       exitSuccess
     Just _ -> pure ()
 
-  case runLexerTrivial file (x ^. lazy) lexerScan of
+  case runLexerTrivial (T.pack file) (x ^. lazy) lexerScan of
     (Just ts, _) -> do
       putStrLn "<table><tbody>"
       putStrLn $ toMarkdown (T.lines x) $ genTable ts

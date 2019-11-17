@@ -25,10 +25,11 @@ result :: String -> T.Text -> IO T.Text
 result file contents = do
   driver <- makeDriver
   flip evalNameyT firstName . flip evalStateT driver $ do
-    let parsed = requireJust file contents $ runParser file (L.fromStrict contents) parseTops
+    let name = T.pack file
+        parsed = requireJust name contents $ runParser name (L.fromStrict contents) parseTops
     (resolved, errors) <- resolve "tests/resolve" parsed
 
-    files <- ((file, contents):) <$> (fileMap =<< get)
+    files <- ((name, contents):) <$> (fileMap =<< get)
     let fmt :: N.Note a Style => [a] -> [N.NoteDoc Style]
         fmt = map (N.format (N.fileSpans files N.defaultHighlight))
     pure . displayPlainVerbose . vsep . concat $

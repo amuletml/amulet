@@ -13,6 +13,7 @@ import Control.Monad.Namey
 
 import qualified Data.List.NonEmpty as E
 import Data.Text (Text)
+import Data.Position
 import Data.Span
 
 import Syntax.Resolve.Scope
@@ -25,7 +26,7 @@ data ImportResult
   | Errored -- ^ The module errored while importing.
   -- | An import loop, with the a list of import locations and what they
   -- try to load.
-  | ImportCycle (E.NonEmpty (FilePath, Span))
+  | ImportCycle (E.NonEmpty (SourceName, Span))
   | NotFound -- ^ The module could not be found while importing.
   deriving Show
 

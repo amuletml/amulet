@@ -34,14 +34,15 @@ import Backend.Lua
 import Text.Pretty.Semantic
 
 result :: Bool -> String -> T.Text -> T.Text
-result o f c = fst . flip runNamey firstName $ do
-  let parsed = requireJust f c $ runParser f (L.fromStrict c) parseTops
-  ResolveResult resolved _ _ <- requireRight f c <$> runNullImport (resolveProgram builtinResolve parsed)
+result opt path contents = fst . flip runNamey firstName $ do
+  let name = T.pack path
+      parsed = requireJust name contents $ runParser name (L.fromStrict contents) parseTops
+  ResolveResult resolved _ _ <- requireRight name contents <$> runNullImport (resolveProgram builtinResolve parsed)
   desugared <- desugarProgram resolved
-  (inferred, _) <- requireThat f c <$> inferProgram builtinEnv desugared
+  (inferred, _) <- requireThat name contents <$> inferProgram builtinEnv desugared
   lower <- runLowerT (lowerProg inferred)
   compiled <-
-    if o
+    if opt
     then compileProgram mempty <$> optimise (defaultInfo { useLint = True}) lower
     else pure . LuaDo . toList . fst
        . uncurry addBuiltins

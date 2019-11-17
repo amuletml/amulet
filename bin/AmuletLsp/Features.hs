@@ -145,7 +145,7 @@ rangeOf s = Range (startPosOf (spanStart s)) (endPosOf (spanEnd s)) where
 
 -- | Convert a span into a location.
 locationOf :: Span -> Location
-locationOf s = Location (fromNormalizedUri (NormalizedUri (T.pack (fileName s)))) (rangeOf s)
+locationOf s = Location (fromNormalizedUri (NormalizedUri (fileName s))) (rangeOf s)
 
 -- | Take the first line of a range.
 firstLine :: Range -> Range

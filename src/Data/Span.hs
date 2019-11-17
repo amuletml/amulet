@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -funbox-strict-fields #-}
-{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveDataTypeable, OverloadedStrings #-}
 
 -- | Spans, created by the lexer, represent the length and position of a
 -- token (indirectly) for use in error reporting. Spans are kept alive
@@ -17,8 +17,9 @@ module Data.Span
 import Text.Pretty.Semantic (Pretty(..))
 import Text.Pretty
 
-import Data.Data
+import qualified Data.Text as T
 import Data.Position
+import Data.Data
 
 -- ^ The span from which a token was parsed.
 data Span
@@ -77,7 +78,7 @@ formatSpan Span { fileName = n
               , line1 = l1, col1 = c1
               , line2 = l2, col2 = c2 }
     | n == "<wired in>" = string "internal"
-    | otherwise = string n <> brackets (int l1 <> colon <> int c1 <+> string ".." <> int l2 <> colon <> int c2)
+    | otherwise = text n <> brackets (int l1 <> colon <> int c1 <+> string ".." <> int l2 <> colon <> int c2)
 
 instance Pretty Span where
   pretty = formatSpan
@@ -87,4 +88,4 @@ instance Semigroup Span where
     | fa == fb = Span fa ca1 la1 cb2 lb2
     | x == internal = y
     | y == internal = x
-    | otherwise = error $ "<> spans of different files: " ++ fa ++ ", " ++ fb
+    | otherwise = error $ "<> spans of different files: " ++ T.unpack fa ++ ", " ++ T.unpack fb

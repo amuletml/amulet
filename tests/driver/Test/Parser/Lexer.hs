@@ -15,7 +15,7 @@ import Text.Pretty.Semantic
 
 result :: String -> T.Text -> T.Text
 result file contents =
-  case runLexer file (L.fromStrict contents) lexerContextScan of
+  case runLexer name (L.fromStrict contents) lexerContextScan of
     (Just toks, []) -> displayPlain $ writeToks 1 True toks
     (Just toks, es) -> displayPlain $ writeToks 1 True toks <##>
                        string "(*" <##> indent 2 (prettyErrs es) <##> string "*)"
@@ -29,21 +29,26 @@ result file contents =
           | otherwise
           = space <> string (show tc) <> writeToks l False ts
 
-        prettyErrs = vsep . map (N.format (N.fileSpans [(file, contents)] N.defaultHighlight))
+        name = T.pack file
+        prettyErrs = vsep . map (N.format (N.fileSpans [(name, contents)] N.defaultHighlight))
 
 resultTrivial :: String -> T.Text -> T.Text
 resultTrivial file contents =
-  let (Just toks, _) = runLexerTrivial file (L.fromStrict contents) lexerScan
+  let (Just toks, _) = runLexerTrivial name (L.fromStrict contents) lexerScan
   in T.pack (concatMap (\(Token tc f t) -> "\"" <> show tc <> "\" " <> sp f <> "-" <> sp t <> "\n") toks)
-  where sp (SourcePos _ l c) = show l ++ ":" ++ show c
+  where
+    name = T.pack file
+    sp (SourcePos _ l c) = show l ++ ":" ++ show c
 
 resultContext :: String -> T.Text -> T.Text
 resultContext file contents =
-  case runParser file (L.fromStrict contents) parseTops of
+  case runParser name (L.fromStrict contents) parseTops of
     (Nothing, es) -> error . T.unpack . displayPlain . vsep . map prettyErr $ es
     (Just _, _) -> result file contents
 
-  where prettyErr = N.format (N.fileSpans [(file, contents)] N.defaultHighlight)
+  where
+    name = T.pack file
+    prettyErr = N.format (N.fileSpans [(name, contents)] N.defaultHighlight)
 
 tests :: IO TestTree
 tests = testGroup "Lexer" <$> sequenceA

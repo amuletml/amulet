@@ -33,7 +33,7 @@ parseStmts p i = runParser p i P.parseStmts
 
 highlightLua :: T.Text -> Highlighted Style
 highlightLua t =
-  case runParser (SourcePos "" 0 0) (L.fromStrict t) lexer of
+  case runParser (SourcePos mempty 0 0) (L.fromStrict t) lexer of
     Left _ -> defaultHighlight t
     Right ts -> buildTokens 0 ts
 

@@ -72,7 +72,7 @@ verifyProgram = traverse_ verifyStmt where
         Public -> pure ()
 
   verifyStmt st@(ForeignVal _ v d _ (_, _)) =
-    case parseExpr (SourcePos ("definition of " ++ displayS (pretty v)) 1 1) (d ^. lazy) of
+    case parseExpr (SourcePos ("definition of " <> displayT (pretty v)) 1 1) (d ^. lazy) of
       Left e -> tell (Seq.singleton (ParseErrorInForeign st e))
       Right _ -> pure ()
 

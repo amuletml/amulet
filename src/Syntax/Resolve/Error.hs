@@ -6,6 +6,7 @@ module Syntax.Resolve.Error
 
 import qualified Data.List.NonEmpty as E
 import qualified Data.Text as T
+import Data.Position
 import Data.Spanned
 import Data.Reason
 import Data.Span
@@ -42,7 +43,7 @@ data ResolveError
   | LetOpenStruct -- ^ Invalid module struct in a let open.
 
   | UnresolvedImport T.Text -- ^ Cannot resolve this module.
-  | ImportLoop (E.NonEmpty (FilePath, Span)) -- ^ Cyclic dependencies when loading modules.
+  | ImportLoop (E.NonEmpty (SourceName, Span)) -- ^ Cyclic dependencies when loading modules.
   | ImportError Span FilePath
   -- ^ This file errored when importing. This is only used when compiling single files (such as in an editor).
 
@@ -109,7 +110,7 @@ instance Note ResolveError Style where
 
     imported (name, pos)
       = f [ pos ]
-        <#> indent 2 (note <+> dquotes (string name) <+> "imported from" <+> dquotes (string (fileName pos)))
+        <#> indent 2 (note <+> dquotes (text name) <+> "imported from" <+> dquotes (text (fileName pos)))
 
   noteId NotInScope{}         = Just 1001
   noteId Ambiguous{}          = Just 1002

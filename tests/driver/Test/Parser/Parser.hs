@@ -13,13 +13,15 @@ import Text.Pretty.Semantic
 
 result :: String -> T.Text -> T.Text
 result file contents =
-  case runParser file (L.fromStrict contents) parseTops of
+  case runParser name (L.fromStrict contents) parseTops of
     (Just res, []) -> displayPlain $ Right <$> pretty res
     (Just res, es) -> displayPlain $ (Right <$> pretty res) <##>
                        string "(*" <##> indent 2 (prettyErrs es) <##> string "*)"
     (Nothing, es) -> displayPlain $ prettyErrs es
 
-  where prettyErrs = vsep . map (N.format (N.fileSpans [(file, contents)] N.defaultHighlight))
+  where
+    name = T.pack file
+    prettyErrs = vsep . map (N.format (N.fileSpans [(name, contents)] N.defaultHighlight))
 
 tests :: IO TestTree
 tests = testGroup "Test.Parser.Parser" <$> goldenDir result "tests/parser/" ".ml"

@@ -66,9 +66,10 @@ compile name file =
 
 testLint :: ([Stmt CoVar] -> Namey [Stmt CoVar]) -> String -> Assertion
 testLint f file = do
+  let name = T.pack file
   contents <- T.readFile file
   fst . flip runNamey firstName $ do
-    s <- compile file contents
+    s <- compile name contents
     case s of
       CSuccess c -> do
         c' <- f c

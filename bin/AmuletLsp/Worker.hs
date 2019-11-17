@@ -527,12 +527,12 @@ instance MonadIO m => MonadImport (FileImport m) where
               WorkingRoot -> do
                 debugM logN ("Cycle importing " ++ show absFile ++ " / " ++ show (working file))
                 ret absFile (Just mempty) . ImportCycle $
-                  (getRel curFile (toNorm absFile), fixLoc curFile loc) E.:| []
+                  (T.pack (getRel curFile (toNorm absFile)), fixLoc curFile loc) E.:| []
               WorkingDep _ loc -> do
                 warningM logN ("Cycle importing " ++ show absFile)
                 -- TODO: Enumerate the whole graph
                 ret absFile (Just mempty) . ImportCycle $
-                  (getRel curFile (toNorm absFile), fixLoc curFile loc) E.:| []
+                  (T.pack (getRel curFile (toNorm absFile)), fixLoc curFile loc) E.:| []
               Done _ -> error "Impossible"
 
     where
@@ -662,7 +662,7 @@ workOnce wrk@Worker { pushErrors, fileContents, fileStates, fileVars } baseClock
               Just f@DiskState { diskPHash = Just hash, diskParsed }
                 | hash == sha -> pure (False, diskParsed, Just f)
               _ ->
-                let (parsed, _) = runParser (T.unpack tPath) (L.decodeUtf8 contents) parseTops
+                let (parsed, _) = runParser tPath (L.decodeUtf8 contents) parseTops
                 in (True,parsed,) . Just <$> parseOfDisk path parsed sha state
 
       Just DiskContents { diskDirty }
@@ -674,7 +674,7 @@ workOnce wrk@Worker { pushErrors, fileContents, fileStates, fileVars } baseClock
             case contents of
               Nothing -> pure (True, Nothing, Nothing)
               Just (sha, contents) ->
-                let (parsed, _) = runParser (T.unpack tPath) (L.decodeUtf8 contents) parseTops
+                let (parsed, _) = runParser tPath (L.decodeUtf8 contents) parseTops
                 in (True,parsed,) . Just <$> parseOfDisk path parsed sha state
 
       Just OpenedContents { openVersion, openContents }
@@ -686,7 +686,7 @@ workOnce wrk@Worker { pushErrors, fileContents, fileStates, fileVars } baseClock
           in pure (False, parsed, Just f)
 
         | otherwise -> do
-            let (parsed, es) = runParser (T.unpack tPath) (Rope.toLazyText openContents) parseTops
+            let (parsed, es) = runParser tPath (Rope.toLazyText openContents) parseTops
             state' <- case state of
               Just f@OpenedState { openParsed } -> pure $ f
                 { checkClock = baseClock
