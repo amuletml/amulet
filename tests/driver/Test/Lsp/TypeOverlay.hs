@@ -1,8 +1,14 @@
-{-# LANGUAGE DuplicateRecordFields, OverloadedStrings #-}
+{-# LANGUAGE DuplicateRecordFields, OverloadedStrings, ScopedTypeVariables #-}
 module Test.Lsp.TypeOverlay (typeOverlayTests) where
+
+import Prelude hiding (error)
+
+import Control.Lens ((^.))
 
 import Data.Aeson.Types
 import Data.Text ()
+
+import Language.Haskell.LSP.Types.Lens hiding (range)
 
 import Test.Tasty.Lsp
 import Test.Tasty
@@ -31,21 +37,22 @@ typeOverlayTests = testGroup "Type overlay"
                   , _command = Nothing
                   , _xdata = Just (object [("name", "x"), ("id", Number 1), ("file", Number 0)])
                   }
-      assertIn $ resolved @?= [ CodeLens
-                                { _range = range 0 4 0 5
-                                , _command = Just (Command "x : int" "" Nothing)
-                                , _xdata = Nothing
-                                } ]
-  , lspSession "Malformed code lenses resolve to nothing" $ do
+      assertIn $ resolved @?= CodeLens
+                              { _range = range 0 4 0 5
+                              , _command = Just (Command "x : int" "" Nothing)
+                              , _xdata = Nothing
+                              }
+  , lspSession "Malformed code lenses produce an error" $ do
       ident <- openDoc "main.ml" "amulet"
       _ <- getCodeLenses ident
-      resolved <- resolveCodeLens CodeLens
-                  { _range = range 0 4 0 5
-                  , _command = Nothing
-                  , _xdata = Just (object [("name", String "x"), ("id", Number 1), ("file", Number 5)])
-                  }
-      assertIn $ resolved @?= [ ]
-
+      response :: ResponseMessage CodeLens <-
+        request CodeLensResolve CodeLens
+        { _range = range 0 4 0 5
+        , _command = Nothing
+        , _xdata = Just (object [("name", String "x"), ("id", Number 1), ("file", Number 5)])
+        }
+      assertIn $ response ^. result @?= Nothing
+      assertIn $ response ^. error @?= Just (ResponseError ContentModified "File is no longer available" Nothing)
 
   , lspSession "Is not shown on errors" $ do
       ident <- openDoc "main.ml" "amulet"

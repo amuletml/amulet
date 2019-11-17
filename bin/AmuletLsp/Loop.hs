@@ -4,6 +4,7 @@
 module AmuletLsp.Loop (run) where
 
 import qualified AmuletLsp.Features.TypeOverlay as TO
+import AmuletLsp.Diagnostic
 import AmuletLsp.Features
 import AmuletLsp.Worker
 
@@ -32,8 +33,6 @@ import qualified Language.Haskell.LSP.VFS as VFS
 import qualified Language.Haskell.LSP.Core as C
 import Language.Haskell.LSP.Messages
 import Language.Haskell.LSP.Types
-
-import Text.Pretty.Semantic
 
 import Prelude hiding (id)
 
@@ -93,10 +92,10 @@ run = do
       . fmServerPublishDiagnosticsNotification
       $ PublishDiagnosticsParams
       { _uri = fromNormalizedUri uri
-      , _diagnostics = List $ map (diagnosticOf (Just "amc.parser")  pretty)        (es ^. parseErrors)
-                           ++ map (diagnosticOf (Just "amc.resolve") prettyResolve) (es ^. resolveErrors)
-                           ++ map (diagnosticOf (Just "amc.tc")      pretty)        (es ^. typeErrors)
-                           ++ map (diagnosticOf (Just "amc.verify")  pretty)        (es ^. verifyErrors)
+      , _diagnostics = List $ map diagnosticOf (es ^. parseErrors)
+                           ++ map diagnosticOf (es ^. resolveErrors)
+                           ++ map diagnosticOf (es ^. typeErrors)
+                           ++ map diagnosticOf (es ^. verifyErrors)
       }
 
 

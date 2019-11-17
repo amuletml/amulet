@@ -638,7 +638,7 @@ workOnce wrk@Worker { pushErrors, fileContents, fileStates, fileVars } baseClock
 
   -- | Parse a file, updating the state and returning whether it changed or not.
   parseFile :: NormalizedUri -> Maybe FileState -> IO (Bool, Maybe [Toplevel Parsed], Maybe FileState)
-  parseFile path state = do
+  parseFile path@(NormalizedUri tPath) state = do
     contents <- atomically (HM.lookup path <$> readTVar fileContents)
     case contents of
       -- If we've no file contents at all, attempt to read from disk. If the
@@ -662,7 +662,7 @@ workOnce wrk@Worker { pushErrors, fileContents, fileStates, fileVars } baseClock
               Just f@DiskState { diskPHash = Just hash, diskParsed }
                 | hash == sha -> pure (False, diskParsed, Just f)
               _ ->
-                let (parsed, _) = runParser "=input" (L.decodeUtf8 contents) parseTops
+                let (parsed, _) = runParser (T.unpack tPath) (L.decodeUtf8 contents) parseTops
                 in (True,parsed,) . Just <$> parseOfDisk path parsed sha state
 
       Just DiskContents { diskDirty }
@@ -674,7 +674,7 @@ workOnce wrk@Worker { pushErrors, fileContents, fileStates, fileVars } baseClock
             case contents of
               Nothing -> pure (True, Nothing, Nothing)
               Just (sha, contents) ->
-                let (parsed, _) = runParser "=input" (L.decodeUtf8 contents) parseTops
+                let (parsed, _) = runParser (T.unpack tPath) (L.decodeUtf8 contents) parseTops
                 in (True,parsed,) . Just <$> parseOfDisk path parsed sha state
 
       Just OpenedContents { openVersion, openContents }
@@ -686,7 +686,7 @@ workOnce wrk@Worker { pushErrors, fileContents, fileStates, fileVars } baseClock
           in pure (False, parsed, Just f)
 
         | otherwise -> do
-            let (parsed, es) = runParser "=input" (Rope.toLazyText openContents) parseTops
+            let (parsed, es) = runParser (T.unpack tPath) (Rope.toLazyText openContents) parseTops
             state' <- case state of
               Just f@OpenedState { openParsed } -> pure $ f
                 { checkClock = baseClock
