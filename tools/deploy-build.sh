@@ -9,7 +9,7 @@ fi
 build () {
   stack build \
     --ghc-options "-optc-static -optl-static -fhide-source-paths" \
-    --flag amuletml:amc-prove-server
+    --flag amuletml:amc-prove-server $FAST
 }
 
 build
