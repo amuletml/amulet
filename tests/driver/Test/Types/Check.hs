@@ -38,9 +38,9 @@ import qualified Text.Pretty.Note as N
 import Text.Pretty.Semantic hiding ((</>))
 
 result :: String -> T.Text -> T.Text
-result f c = runIdentity . flip evalNameyT firstName $ do
-  let parsed = requireJust f c $ runParser f (L.fromStrict c) parseTops
-  ResolveResult resolved _ _ <- requireRight f c <$> runNullImport (resolveProgram builtinResolve parsed)
+result file contents = runIdentity . flip evalNameyT firstName $ do
+  let parsed = requireJust name contents $ runParser name (L.fromStrict contents) parseTops
+  ResolveResult resolved _ _ <- requireRight name contents <$> runNullImport (resolveProgram builtinResolve parsed)
 
   desugared <- desugarProgram resolved
   inferred <- inferProgram builtinEnv desugared
@@ -57,13 +57,15 @@ result f c = runIdentity . flip evalNameyT firstName $ do
 
     reportComponent (v, t) = pretty v <+> colon <+> pretty t
 
-    prettyErrs = vsep . map (N.format (N.fileSpans [(f, c)] N.defaultHighlight))
+    name = T.pack file
+    prettyErrs = vsep . map (N.format (N.fileSpans [(name, contents)] N.defaultHighlight))
 
 checkLint :: Bool -> String -> Assertion
 checkLint optm file = flip evalNameyT firstName $ do
-  c <- liftIO (T.readFile file)
-  let parsed = requireJust file c $ runParser file (L.fromStrict c) parseTops
-  ResolveResult resolved _ _ <- requireRight file c <$> runNullImport (resolveProgram builtinResolve parsed)
+  contents <- liftIO (T.readFile file)
+  let name = T.pack file
+      parsed = requireJust name contents $ runParser name (L.fromStrict contents) parseTops
+  ResolveResult resolved _ _ <- requireRight name contents <$> runNullImport (resolveProgram builtinResolve parsed)
 
   desugared <- desugarProgram resolved
   inferred <- toEither <$> inferProgram builtinEnv desugared

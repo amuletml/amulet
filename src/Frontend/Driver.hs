@@ -454,7 +454,7 @@ getFile = reloadFile where
             -- File isn't in cache: add it.
             name <- liftIO $ makeRelativeToCurrentDirectory path
             var <- genNameFrom (T.pack ("\"" ++ name ++ "\""))
-            Just <$> addFile path name var sha contents
+            Just <$> addFile path (T.pack name) var sha contents
 
       Just file
         -- We've already checked this tick, don't do anything.
@@ -495,13 +495,13 @@ getFile = reloadFile where
       contents <- liftIO $ BSL.readFile path
       pure (Just (SHA.hashlazy contents, contents))
 
-  addFile :: FilePath -> String -> Name -> BS.ByteString -> BSL.ByteString -> m LoadedFile
-  addFile path name var hash contents = do
+  addFile :: FilePath -> SourceName -> Name -> BS.ByteString -> BSL.ByteString -> m LoadedFile
+  addFile path source var hash contents = do
     clock <- use clock
-    let (parsed, es) = runParser name (L.decodeUtf8 contents) parseTops
+    let (parsed, es) = runParser source (L.decodeUtf8 contents) parseTops
     let file = LoadedFile
           { fileLocation = path
-          , fileSource   = name
+          , fileSource   = source
           , fileVar      = var
 
           , fileHash        = hash
@@ -784,7 +784,7 @@ findFile' (x:xs) = do
   if exists then pure (Just path) else findFile' xs
 
 -- | Try to identify the cycle of files requiring each other.
-findCycle :: LoadedFile -> Driver -> [(FilePath, Span)]
+findCycle :: LoadedFile -> Driver -> [(SourceName, Span)]
 findCycle (LoadedFile { fileSource, _stage = SResolving, _dependent = Just (from, loc) }) st =
   (fileSource, loc) : findCycle (fromJust (Map.lookup from (st ^. files))) st
 findCycle _ _ = []

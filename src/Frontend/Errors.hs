@@ -112,7 +112,7 @@ displayDoc h err = liftIO $ do
 
 highlightAmulet :: T.Text -> N.Highlighted Style
 highlightAmulet t =
-  case runLexer "" (L.fromStrict t) lexerScan of
+  case runLexer mempty (L.fromStrict t) lexerScan of
     (Nothing, _) -> N.defaultHighlight t
     (Just ts, _) -> buildTokens 0 ts
 

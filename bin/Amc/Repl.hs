@@ -242,7 +242,7 @@ reloadCommand = loadFile =<< gets currentFile
 infoCommand :: (MonadState ReplState m, MonadIO m) => String -> m ()
 infoCommand (T.pack . dropWhile isSpace -> input) = do
   state <- get
-  let files :: [(String, T.Text)]
+  let files :: [(SourceName, T.Text)]
       files = [("<input>", input)]
       (parsed, parseMsg) = runParser "<input>" (L.fromStrict input) parseInfoVar
       handle = outputHandle state
@@ -271,7 +271,7 @@ infoCommand (T.pack . dropWhile isSpace -> input) = do
 typeCommand :: (MonadState ReplState m, MonadIO m) => String -> m ()
 typeCommand (dropWhile isSpace -> input) = do
   state <- get
-  let files :: [(String, T.Text)]
+  let files :: [(SourceName, T.Text)]
       files = [("<input>", T.pack input)]
       (parsed, parseMsg) = runParser "<input>" (L.pack input) parseReplExpr
       handle = outputHandle state
@@ -334,7 +334,7 @@ execString name line = do
 
         L.runWith (luaState state) $ do
           L.OK <- L.dostring "-- time out hook\nlocal function f() error('Timed out!', 3) end; debug.sethook(f, '', 1e6)"
-          L.OK <- L.loadbuffer luaSyntax ('=':name)
+          L.OK <- L.loadbuffer luaSyntax ('=':T.unpack name)
           res <- L.try $ L.call 0 L.multret
 
           case res of
@@ -409,7 +409,7 @@ parseCore :: (MonadState ReplState m, MonadIO m)
                       , [Stmt CoVar]))
 parseCore parser name input = do
   state <- get
-  let files :: [(String, T.Text)]
+  let files :: [(SourceName, T.Text)]
       files = [(name, input)]
       (parsed, parseMsg) = runParser name (L.fromStrict input) parser
   liftIO $ traverse_ (hReport (outputHandle state) files) parseMsg

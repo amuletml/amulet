@@ -36,8 +36,8 @@ luaQuote parser = QuasiQuoter
   go build s = do
     loc <- TH.location
     let (line, col)  = TH.loc_start loc
-        pos = SourcePos (TH.loc_filename loc) line col
-        spans = [( TH.loc_filename loc
+        pos = SourcePos (T.pack (TH.loc_filename loc)) line col
+        spans = [( T.pack (TH.loc_filename loc)
                  , T.replicate (line - 1) "\n" <> T.replicate (col - 1) " " <> T.pack s)]
     case parser pos (L.pack s) of
       Right res -> build res

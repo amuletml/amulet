@@ -247,5 +247,5 @@ main = do
 
       config <- driverConfig options
       if watch
-      then C.watchFile   opts config input writeOut
-      else C.compileFile opts config input writeOut
+      then C.watchFile   opts config (T.pack input) writeOut
+      else C.compileFile opts config (T.pack input) writeOut
