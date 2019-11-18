@@ -19,7 +19,7 @@ import Syntax.Subst
 import Syntax
 
 prop_genTypeWellScoped :: Property
-prop_genTypeWellScoped = property $ do
+prop_genTypeWellScoped = withTests 1000 . property $ do
   aty <- forAllWith (displayS . displayType) genType
   footnote . displayS $
     vsep [ string "Type:" <+> displayTypeTyped aty
@@ -28,7 +28,7 @@ prop_genTypeWellScoped = property $ do
   assert (Set.null (ftv aty))
 
 prop_unify_goodReflCo :: Property
-prop_unify_goodReflCo = property $ do
+prop_unify_goodReflCo = withTests 1000 . property $ do
   aty <- forAllWith (show . displayType) genType
   case unify aty aty of
     Left e -> (footnote . show . pretty . toList $ e) *> failure

@@ -32,3 +32,8 @@ doc/*.synctex.gz
 
 *.tags
 /.tags
+
+*.hi
+*.hi-boot
+*.o
+*.o-boot
