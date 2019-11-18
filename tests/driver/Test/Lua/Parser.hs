@@ -24,12 +24,12 @@ result file contents =
   where prettyErr = N.format (N.fileSpans [(file, contents)] N.defaultHighlight)
 
 prop_roundtripStmts :: Property
-prop_roundtripStmts = withTests 1000 . property $ do
+prop_roundtripStmts = withTests 7500 . property $ do
   stmts <- forAllWith (show . pretty) genStmts
   tripping stmts (display . renderPretty 0.4 100 . pretty) (parseStmts (SourcePos "in" 1 1) . L.fromStrict)
 
 prop_roundtripExpr :: Property
-prop_roundtripExpr = withTests 1000 . property $ do
+prop_roundtripExpr = withTests 7500 . property $ do
   stmts <- forAllWith (show . pretty) genExpr
   tripping stmts (display . renderPretty 0.4 100 . pretty) (parseExpr (SourcePos "in" 1 1) . L.fromStrict)
 

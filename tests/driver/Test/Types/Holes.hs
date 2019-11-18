@@ -1,4 +1,4 @@
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TemplateHaskell, OverloadedStrings #-}
 module Test.Types.Holes where
 
 import Control.Monad.Namey
@@ -28,10 +28,10 @@ import Unsafe.Coerce
 import Hedgehog
 
 prop_amuseMakesTermsOfType :: Property
-prop_amuseMakesTermsOfType = property $ testAmuse genSimpleType
+prop_amuseMakesTermsOfType = withTests 500 $ property $ testAmuse genSimpleType
 
 prop_amuseProvesFormulas :: Property
-prop_amuseProvesFormulas = property $ testAmuse genFormula
+prop_amuseProvesFormulas = withTests 500 $ property $ testAmuse genFormula
 
 testAmuse :: Gen (Type Typed) -> PropertyT IO ()
 testAmuse gen = do
@@ -39,12 +39,16 @@ testAmuse gen = do
   let (terms, nm) =
         runNamey (findHoleCandidate mempty internal builtinEnv aty) firstName
 
+  cover 5 "single solution" (length terms == 1)
+  cover 20 "multiple solutions" (length terms == 1)
+
   for_ terms $ \term -> do
     let term' = forgetTypes term
         ([LetStmt _ _ [Binding _  term'' _ _]], _) =
           runNamey (desugarProgram
                       [LetStmt NonRecursive Private [Binding firstName term' False internal]])
                    nm
+
 
     case checkExpr term'' aty of
       Left e -> do
