@@ -97,7 +97,7 @@ packages:
     hackage: http-kit-0.5.1
 snapshots:
 - completed:
-    size: 329708
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/nightly/2019/9/29.yaml
-    sha256: ecbe5193ed2c0f2773327a3dac9337bae7736c3b473eb7f8a73c35cc05896894
-  original: nightly-2019-09-29
+    size: 419588
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/nightly/2019/11/17.yaml
+    sha256: e6d7c3b548c2e874a13b28fec6942eef37b55bec21c4d12167515347365554b8
+  original: nightly-2019-11-17
