@@ -38,14 +38,14 @@ prop_unify_goodReflCo = withTests 1000 . property $ do
           <#> keyword "Coercion proves:" <+> displayType ca <+> soperator (char '~') <+> displayType cb
       case unify aty ca of
         Left e -> do
-          footnote $ "Left-hand type of coercion doesn't match unifier input"
+          footnote "Left-hand type of coercion doesn't match unifier input"
           footnote . show . pretty . toList $ e
           failure
         Right{} -> pure ()
 
       case unify ca cb of
         Left e -> do
-          footnote $ "Unifier did not make a reflexive coercion for equal input types"
+          footnote "Unifier did not make a reflexive coercion for equal input types"
           footnote . show . pretty . toList $ e
           failure
         Right{} -> pure ()
@@ -118,4 +118,4 @@ provenCoercion (ForallCo v vis k t) =
 provenCoercion (AssumedCo a b) = (a, b)
 
 tests :: TestTree
-tests = hedgehog $ $$(discover)
+tests = hedgehog $$(discover)
