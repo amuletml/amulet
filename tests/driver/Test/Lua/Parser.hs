@@ -41,5 +41,5 @@ tests = do
   golden <- goldenDir result "tests/lua_parse/" ".lua"
   pure $ testGroup "Test.Lua.Parser"
     [ testGroup "Golden" golden
-    , hedgehog $ $$(discover)
+    , hedgehog $$(discover)
     ]

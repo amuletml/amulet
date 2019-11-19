@@ -59,7 +59,7 @@ testAmuse gen = do
       Right () -> success
 
 tests :: TestTree
-tests = hedgehog $ $$(discover)
+tests = hedgehog $$(discover)
 
 forgetTypes :: Expr Typed -> Expr Resolved
 forgetTypes (VarRef v (an, _)) = VarRef v an
