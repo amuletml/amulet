@@ -60,6 +60,7 @@ type pattern =
   | Con_p of name
   | Des_p of name * pattern
   | As_p  of pattern * name
+  | Lit_p of literal
 
 instance eq pattern begin
   let a == b =
@@ -70,6 +71,7 @@ instance eq pattern begin
     | Des_p (n, p), Des_p (n', p') ->
         n == n' && p == p'
     | As_p (p, n), As_p (p', n') -> n == n' && p == p'
+    | Lit_p l, Lit_p l' -> l == l'
     | _, _ -> false
 end
 
