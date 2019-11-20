@@ -1,4 +1,4 @@
-private module Amc = import "amulet/prim.ml"
+private module Amc = import "./prim.ml"
 open import "./base.ml"
 open import "./exception.ml"
 
