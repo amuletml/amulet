@@ -8,7 +8,6 @@ import Control.Monad.State
 import qualified Data.IntMap as IntMap
 import qualified Data.Text.IO as T
 import Data.Sequence (Seq)
-import Data.Foldable
 import Data.Monoid
 import Data.Proxy
 
@@ -74,11 +73,10 @@ runReporter :: OptionSet -> TestTree -> StatusMap -> IO (Time -> IO Bool)
 runReporter options tree smap = do
   -- Print a dot for each of the tests
   case beVerbose of
-    Verbosity True -> do
-      putStrLn "=> Running tests verbosely"
-      hSetBuffering stdout LineBuffering
-    _ -> hSetBuffering stdout NoBuffering
+    Verbosity True -> putStrLn "=> Running tests verbosely"
+    _ -> pure ()
 
+  hSetBuffering stdout NoBuffering
   results <- printProgress smap mempty
   putStrLn ""
 
@@ -92,6 +90,17 @@ runReporter options tree smap = do
     testDisplay = lookupOption options :: TestDisplay
     beVerbose = lookupOption options :: Verbosity
 
+    names :: IntMap.IntMap [TestName]
+    names = flip evalState 0 . flip runReaderT [] . getAp $ foldTestTree
+      trivialFold
+      { foldSingle = \_ name _ -> Ap $ do
+          idx <- get
+          group <- ask
+          put (idx + 1)
+          pure (IntMap.singleton idx (name : group))
+      , foldGroup = \name (Ap children) -> Ap $ local (name:) children }
+     options tree
+
     printProgress :: StatusMap -> IntMap.IntMap Result -> IO (IntMap.IntMap Result)
     printProgress tests results
       | null tests = pure results
@@ -101,36 +110,50 @@ runReporter options tree smap = do
             done <- IntMap.mapMaybe getResult <$> traverse readTVar tests
             if null done then retry
             else pure done
-          traverse_ (go beVerbose) results'
+          IntMap.foldlWithKey (\m idx result -> m >> printProgressOf (names IntMap.! idx) result) (pure ()) results'
           printProgress (tests `IntMap.difference` results') (results `IntMap.union` results')
 
-    go (Verbosity x) =
-      if x
-         then printProgressLoudly
-         else printProgressDot
+    outcomeDot Success = annotate (DullColour Green) "•"
+    outcomeDot (Failure TestFailed) = annotate (DullColour Red) "◼"
+    outcomeDot (Failure _) = annotate (DullColour Magenta) "✱"
+
+    outcomeStr Success                        = annotate (DullColour Green)   "PASS   "
+    outcomeStr (Failure TestFailed)           = annotate (DullColour Red)     "FAIL   "
+    outcomeStr (Failure TestThrewException{}) = annotate (DullColour Magenta) "ERROR  "
+    outcomeStr (Failure TestTimedOut{})       = annotate (DullColour Magenta) "TIMEOUT"
+    outcomeStr (Failure TestDepFailed{})      = annotate (DullColour Magenta) "ERROR  "
+
+    printProgressOf, printProgressDot, printProgressLoudly :: [TestName] -> Result-> IO ()
+
+    printProgressOf =
+      case beVerbose of
+        Verbosity True -> printProgressLoudly
+        Verbosity False -> printProgressDot
 
     -- | Writes a progress dot to the terminal
-    printProgressDot r = T.hPutStr stdout . displayDecorated . renderPretty 0.4 100 $ case resultOutcome r of
-      Success -> annotate (DullColour Green) "•"
-      Failure TestFailed -> annotate (DullColour Red) "◼"
-      Failure _ -> annotate (DullColour Magenta) "✱"
+    printProgressDot _ r = do
+      term <- hIsTerminalDevice stdout
+      let disp = if term then displayDecorated else display
+      T.hPutStr stdout . disp . renderPretty 0.4 100 . outcomeDot . resultOutcome $ r
 
-    printProgressLoudly r = T.hPutStrLn stdout . displayDecorated . renderPretty 0.4 100 $ case resultOutcome r of
-      Success -> string "Passed"
-                   <+> parens (string (resultDescription r))
-                   <+> string "after"
-                   <+> shown (resultTime r)
-                   <+> string "seconds"
-      Failure TestFailed -> string "FAILED"
-                   <+> parens (string (resultDescription r))
-                   <+> string "after"
-                   <+> shown (resultTime r)
-                   <+> string "seconds"
-      Failure _ -> string "ABORTED"
-                   <+> parens (string (resultDescription r))
-                   <+> string "after"
-                   <+> shown (resultTime r)
-                   <+> string "seconds"
+    -- | Writes the test name and result.
+    --
+    -- When in a terminal, this will rewrite the current line's contents,
+    -- otherwise it will stream the result.
+    printProgressLoudly name r = do
+      term <- hIsTerminalDevice stdout
+      if not term
+      then T.putStrLn . display . renderPretty 0.4 100 $ message
+      else
+        let putLn = if null (resultDescription r) then T.putStr else T.putStrLn
+        in putLn . ("\x1b[2K\x1b[1G"<>) . displayDecorated . renderPretty 0.4 100 $ message
+      where
+        message = outcomeStr (resultOutcome r)
+              <+> hcat (punctuate (annotate (BrightColour Cyan) " ▸ ") (map string (reverse name)))
+               <> displayTime (resultTime r)
+               <> (case resultDescription r of
+                     "" -> mempty
+                     l -> nest 2 (line <> string l))
 
     printResults :: IntMap.IntMap Result -> IO ()
     printResults results =
@@ -176,11 +199,14 @@ runReporter options tree smap = do
       | None <- testDisplay, null desc, level > 0 = mempty
       | otherwise = pure
         $ string name
-       <> (if time <= 0.01 then mempty else
-           annotate (DullColour Magenta) $ " took " <> string (printf "%.2fs" time))
+       <> displayTime time
        <> (if total == 0 then mempty else
            annotate (DullColour Cyan) $ " (" <> shown success <+> "out of" <+> shown total <+> "passed)")
        <> nest 2 (foldMap (line<>) desc)
+
+    displayTime time
+      | time <= 0.01 = mempty
+      | otherwise = annotate (DullColour Magenta) $ " took" <+> string (printf "%.2fs" time)
 
 data Results = Results
   { totalTests :: Int
