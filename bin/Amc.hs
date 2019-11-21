@@ -57,6 +57,12 @@ data Command
     , time        :: Maybe FilePath
     , options     :: CompilerOptions
     }
+  | Chicken
+    { input       :: FilePath
+    , cOutput     :: FilePath
+    , optLevel    :: Int
+    , options     :: CompilerOptions
+    }
   | Repl
     { toLoad      :: Maybe FilePath
     , serverPort  :: Int
@@ -95,6 +101,9 @@ argParser = info (args <**> helper <**> version)
       (  command "compile"
          ( info compileCommand
          $ fullDesc <> progDesc "Compile an Amulet file to Lua.")
+      <> command "chicken"
+         ( info chickenCommand
+         $ fullDesc <> progDesc "Compile an Amulet program to C, using Chicken Scheme.")
       <> command "repl"
          ( info replCommand
          $ fullDesc <> progDesc "Launch the Amulet REPL." )
@@ -123,6 +132,18 @@ argParser = info (args <**> helper <**> version)
       <*> optional (option str
             ( long "time" <> metavar "FILE" <> hidden
            <> help "Write the self-timing report to a file. Use - for stdout."))
+      <*> compilerOptions
+
+    chickenCommand :: Parser Command
+    chickenCommand = Chicken
+      <$> argument str (metavar "FILE" <> help "The file to compile.")
+      <*> option str
+           ( long "out" <> short 'o' <> metavar "FILE"
+          <> help "Put the generated executable in this file"
+          <> showDefault
+          <> value "main" ) 
+      <*> option auto ( long "opt" <> short 'O' <> metavar "LEVEL" <> value 1 <> showDefault
+                     <> help "Controls the optimisation level." )
       <*> compilerOptions
 
     replCommand :: Parser Command
@@ -268,3 +289,20 @@ main = do
             withFile file WriteMode $ \h ->
               timingReport (hPutDoc h)
           Nothing -> pure ()
+
+    Args Chicken { input, cOutput, optLevel, options } -> do
+      exists <- doesFileExist input
+      if not exists
+      then hPutStrLn stderr ("Cannot find input file " ++ input)
+        >> exitWith (ExitFailure 1)
+      else pure ()
+
+      let opts = C.Options
+            { C.optLevel = if optLevel >= 1 then C.Opt else C.NoOpt
+            , C.lint = coreLint options
+            , C.export = False
+            , C.debug = debugMode options
+            }
+
+      config <- driverConfig options
+      C.compileViaChicken opts config (T.pack input) cOutput

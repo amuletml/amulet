@@ -4,11 +4,13 @@ module Amc.Compile
   , Options(..)
   , compileFile
   , watchFile
+  , compileViaChicken
   ) where
 
 import System.Directory
 import System.FilePath
 import System.FSNotify
+import System.IO
 
 import Control.Monad.Infer (firstName)
 import Control.Monad.Namey
@@ -24,6 +26,7 @@ import Data.Foldable
 import Data.Functor
 import Data.List
 
+import Backend.Scheme
 import Backend.Lua
 
 import Syntax.Resolve.Scope (exportedNames)
@@ -129,3 +132,35 @@ watchFile opt config file emit = do
       if Set.member path files
       then pure [path]
       else wait files chan
+
+compileViaChicken :: Options -> D.DriverConfig -> SourceName -> String -> IO ()
+compileViaChicken opt config file output = go (D.makeDriverWith config, firstName) opt where
+  lintIt name = if lint opt then runLint name else flip const
+
+  go :: (D.Driver, Name) -> Options -> IO ()
+  go (driver, name) Options { optLevel, lint, debug } = do
+    path <- canonicalizePath (T.unpack file)
+    ((((core, errors), _), driver), name) <-
+        flip runNameyT name
+      . flip runStateT driver
+      $ (,) <$> D.compiles path <*> D.getSignature path
+
+    files <- D.fileMap driver
+    reportAllS files errors
+
+    scm <- case core of
+      Nothing -> pure mempty
+      Just core -> do
+        let info = defaultInfo { useLint = lint, exportNames = mempty }
+            optimised = flip evalNamey name $ case optLevel of
+              Opt -> optimise info core
+              NoOpt -> do
+                lintIt "Lower" (checkStmt emptyScope core) (pure ())
+                (lintIt "Optimised"  =<< checkStmt emptyScope) . deadCodePass info <$> reducePass info core
+            lua = compileProgram Nothing optimised
+            chicken = genScheme optimised
+        D.dumpCore debug core optimised lua
+        pure chicken
+
+    withFile output WriteMode $ \h ->
+      hPutDoc h scm
