@@ -10,6 +10,7 @@ Using amc with the help flag displays all sub-command and the top-level options.
   
   Available commands:
     compile                  Compile an Amulet file to Lua.
+    chicken                  Compile an Amulet program to C, using Chicken Scheme.
     repl                     Launch the Amulet REPL.
     connect                  Connect to an already running REPL instance.
     explain                  Explain an error message.
