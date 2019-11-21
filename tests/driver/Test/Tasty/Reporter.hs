@@ -142,13 +142,18 @@ runReporter options tree smap = do
     -- otherwise it will stream the result.
     printProgressLoudly name r = do
       term <- hIsTerminalDevice stdout
-      if term
-      then T.putStr . ("\x1b[2K\x1b[1G"<>) . displayDecorated . renderPretty 0.4 100 $ message
-      else T.putStrLn . display . renderPretty 0.4 100 $ message
+      if not term
+      then T.putStrLn . display . renderPretty 0.4 100 $ message
+      else
+        let putLn = if null (resultDescription r) then T.putStr else T.putStrLn
+        in putLn . ("\x1b[2K\x1b[1G"<>) . displayDecorated . renderPretty 0.4 100 $ message
       where
         message = outcomeStr (resultOutcome r)
               <+> hcat (punctuate (annotate (BrightColour Cyan) " ▸ ") (map string (reverse name)))
                <> displayTime (resultTime r)
+               <> (case resultDescription r of
+                     "" -> mempty
+                     l -> nest 2 (line <> string l))
 
     printResults :: IntMap.IntMap Result -> IO ()
     printResults results =
