@@ -30,7 +30,7 @@ endTimer (Timer desc t_then) = do
     Just x | "file:" `isPrefixOf` x -> do
       let fname = drop (length "file:") x
       liftIO $ appendFile fname (reportTimer desc elapsed)
-    Just x | x == "io" || x == "stdout" -> do
+    Just x | x == "io" || x == "stdout" ->
       liftIO $ putStrLn (reportTimer desc elapsed)
     _ -> pure ()
 
