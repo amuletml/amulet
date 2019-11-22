@@ -239,7 +239,7 @@ makeConfig = do
 -- * The AMC_PRELUDE environment variable (a file)
 -- * $libraryPath/prelude.ml
 locatePrelude :: MonadIO m => DriverConfig -> m (Maybe FilePath)
-locatePrelude config = withTimer "Locating prelude" $ do
+locatePrelude config = withTimer "Locating prelude" do
   let libPath = map (</> "prelude.ml") (libraryPath config)
   liftIO $ findFile' =<< (++) <$> (toList <$> lookupEnv "AMC_PRELUDE") <*> pure libPath
 
@@ -293,7 +293,7 @@ resolveWith root parsed sig = errorsFromDeps =<< resolveWithDeps root parsed sig
 resolveWithDeps :: (MonadNamey m, MonadIO m, MonadState Driver m)
                 => FilePath -> [Toplevel Parsed] -> Signature
                 -> m ((Maybe ResolveResult, ErrorBundle), Set.Set FilePath)
-resolveWithDeps root parsed sig = withTimer ("Resolving " ++ root) $ do
+resolveWithDeps root parsed sig = withTimer ("Resolving " ++ root) do
   (resolved, deps) <- flip runFileImport (LoadContext root Nothing)
                     $ resolveProgram sig parsed
   (,deps) <$> case resolved of
@@ -318,11 +318,11 @@ inferWithDeps :: (MonadNamey m, MonadIO m, MonadState Driver m)
               => FilePath -> [Toplevel Parsed] -> Signature -> Env
               -> m (( Maybe ([Toplevel Typed], Env, ResolveResult)
                     , ErrorBundle), Set.Set FilePath)
-inferWithDeps root parsed sig env = withTimer ("Type checking " ++ root) do
+inferWithDeps root parsed sig env = do
   ((res, errors), deps) <- resolveWithDeps root parsed sig
   (,deps) <$> case res of
     Nothing -> pure (Nothing, errors)
-    Just r@(ResolveResult resolved _ _) -> do
+    Just r@(ResolveResult resolved _ _) -> withTimer ("Type checking " ++ root) do
       AllOf env' <- foldMapM (fmap AllOf . getTypeEnv) deps
       case env' of
         Nothing -> pure (Nothing, errors)
@@ -346,13 +346,13 @@ lowerWith :: (MonadNamey m, MonadIO m, MonadState Driver m)
             => FilePath -> [Toplevel Parsed] -> Signature -> Env -> LowerState
             -> m ( Maybe ([Stmt CoVar], LowerState, [Toplevel Typed], Env, ResolveResult)
                  , ErrorBundle)
-lowerWith root parsed sig env lState = withTimer ("Lowering " ++ root) $ do
+lowerWith root parsed sig env lState = do
   ((res, errors), deps) <- inferWithDeps root parsed sig env
   c <- use config
   case res of
     Nothing -> (Nothing, ) . (errors<>) . fold <$> gatherDepsOf getErrors deps
 
-    Just (inferred, env, resolved) | checkOnly c -> do
+    Just (inferred, env, resolved) | checkOnly c -> withTimer ("Lowering " ++ root) do
       pure (Just ([], mempty, inferred, env, resolved), errors)
 
     Just (inferred, env, resolved) -> do
@@ -524,11 +524,11 @@ getFile = reloadFile where
 -- | Get or compute a file's signature.
 getSignature :: (MonadNamey m, MonadState Driver m, MonadIO m)
              => FilePath -> m (Maybe Signature)
-getSignature path = withTimer ("Getting signature for " ++ path) $ do
+getSignature path = do
   file <- fromMaybe (error ("Cannot find " ++ show path)) <$> getFile path
   case file ^. stage of
     SUnparsed -> pure Nothing
-    SParsed parsed -> do
+    SParsed parsed -> withTimer ("Resolving " ++ path) do
       updateFile path $ stage .~ SResolving
       (resolved, deps) <-
           flip runFileImport (LoadContext (dropFileName path) (Just path))
@@ -549,7 +549,7 @@ getSignature path = withTimer ("Getting signature for " ++ path) $ do
 -- | Get or compute a file's type environment.
 getTypeEnv :: (MonadNamey m, MonadState Driver m, MonadIO m)
            => FilePath -> m (Maybe Env)
-getTypeEnv path = withTimer ("Getting type environment for " ++ path) $ do
+getTypeEnv path = do
   _ <- getSignature path
 
   file <- use (files . at path)
@@ -566,7 +566,7 @@ getTypeEnv path = withTimer ("Getting type environment for " ++ path) $ do
       case env of
         -- One of our dependencies failed: Mark us as failed too and abort.
         Nothing -> updateFile path (stage .~ SUntyped sig) $> Nothing
-        Just env -> do
+        Just env -> withTimer ("Type checking " ++ path) do
           inferred <- inferProgram (builtinEnv <> env) =<< desugarProgram rBody
           let (res, es) = case inferred of
                 That res -> (Just res, [])
@@ -609,7 +609,7 @@ getOpenedTypeEnv path = do
 -- | Determine whether a file can be successfully verified.
 getVerified :: (MonadNamey m, MonadState Driver m, MonadIO m)
             => FilePath -> m Bool
-getVerified path = withTimer ("Verifying " ++ path) $ do
+getVerified path = do
   _ <- getTypeEnv path
 
   stg <- uses (files . at path) (maybe SUnparsed (^.stage))
@@ -627,7 +627,7 @@ getVerified path = withTimer ("Verifying " ++ path) $ do
     SVerified{} -> pure True
     SEmitted{} -> pure True
 
-    STyped prog sig env -> do
+    STyped prog sig env -> withTimer ("Verifying " ++ path) do
       v <- genName
       let (verified, errs) = verifyProg v env prog
       updateFile path $ (stage .~ if verified then SVerified prog sig env else SUnverified sig env)
@@ -648,7 +648,7 @@ getVerifiedAll path = do
 -- | Get or compute a file's lower state.
 getLowerState :: (MonadNamey m, MonadState Driver m, MonadIO m)
               => FilePath -> m (Maybe LowerState)
-getLowerState path = withTimer ("Getting lower state for " ++ path) $ do
+getLowerState path = do
   ok <- getVerified path
   c <- use config
 
@@ -661,7 +661,7 @@ getLowerState path = withTimer ("Getting lower state for " ++ path) $ do
         case lEnv of
           Nothing -> pure Nothing
           _ | checkOnly c -> pure (Just mempty)
-          Just lEnv -> do
+          Just lEnv -> withTimer ("Lowering for " ++ path) do
             (lEnv, l) <- runLowerWithEnv (defaultState <> lEnv) (lowerProgEnv prog)
             updateFile path $ stage .~ SEmitted l sig env lEnv
             uses config ((\f -> f path l) . onEmitted . callbacks) >>= liftIO
@@ -671,7 +671,7 @@ getLowerState path = withTimer ("Getting lower state for " ++ path) $ do
 -- | Get or compute a file's core representation.
 getLowered :: (MonadNamey m, MonadState Driver m, MonadIO m)
             => FilePath -> m (Maybe ([Stmt CoVar], LowerState))
-getLowered path = withTimer ("Getting lowered program for " ++ path) $ do
+getLowered path = do
   lEnv <- getLowerState path
   c <- use config
   case lEnv of
@@ -759,7 +759,7 @@ instance (MonadNamey m, MonadState Driver m, MonadIO m) => MonadImport (FileImpo
 -- | Import a file from the current directory.
 importFile :: (MonadNamey m, MonadState Driver m, MonadIO m)
            => Maybe FilePath -> Maybe Span -> FilePath -> m ImportResult
-importFile fromPath fromLoc path = withTimer ("Importing " ++ path) $ do
+importFile fromPath fromLoc path = withTimer ("Importing " ++ path) do
   file <- getFile path
   case file of
     Nothing -> pure NotFound

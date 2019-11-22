@@ -18,7 +18,7 @@ Each sub-command can be run with --help too.
 
   $ amc compile --help
   Usage: amc compile FILE [-o|--out FILE] [-O|--opt LEVEL] [--export] [--watch] 
-                     [--time FILE] [--lib ARG]
+                     [--lib ARG]
     Compile an Amulet file to Lua.
   
   Available options:

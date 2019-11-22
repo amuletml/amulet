@@ -120,8 +120,9 @@ argParser = info (args <**> helper <**> version)
                      <> help "Controls the optimisation level." )
       <*> switch (long "export" <> help "Export all declared variables in this module, returning them at the end of the program.")
       <*> switch (long "watch" <> help "After compiling, watch for further changes to the file and recompile it again.")
-      <*> optional
-            (option str (long "time" <> metavar "FILE" <> help "Write the self-timing report to a file. Use - for stdout."))
+      <*> optional (option str
+            ( long "time" <> metavar "FILE" <> hidden
+           <> help "Write the self-timing report to a file. Use - for stdout."))
       <*> compilerOptions
 
     replCommand :: Parser Command
@@ -263,7 +264,7 @@ main = do
         C.compileFile opts config (T.pack input) writeOut
         case time of
           Just "-" -> timingReport putDoc
-          Just file -> 
+          Just file ->
             withFile file WriteMode $ \h ->
               timingReport (hPutDoc h)
           Nothing -> pure ()
