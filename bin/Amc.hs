@@ -2,12 +2,13 @@
 module Main(main) where
 
 import System.Exit (ExitCode(..), exitWith)
-import System.IO (hPutStrLn, stderr)
+import System.IO (hPutStrLn, stderr, withFile, IOMode(..))
 import System.Directory
 
 import Control.Monad.Infer (firstName)
 import Control.Monad.Namey
 import Control.Monad.State
+import Control.Timing
 
 import qualified Data.Text.IO as T
 import qualified Data.Text as T
@@ -53,6 +54,7 @@ data Command
     , optLevel    :: Int
     , export      :: Bool
     , watch       :: Bool
+    , time        :: Maybe FilePath
     , options     :: CompilerOptions
     }
   | Repl
@@ -118,6 +120,8 @@ argParser = info (args <**> helper <**> version)
                      <> help "Controls the optimisation level." )
       <*> switch (long "export" <> help "Export all declared variables in this module, returning them at the end of the program.")
       <*> switch (long "watch" <> help "After compiling, watch for further changes to the file and recompile it again.")
+      <*> optional
+            (option str (long "time" <> metavar "FILE" <> help "Write the self-timing report to a file. Use - for stdout."))
       <*> compilerOptions
 
     replCommand :: Parser Command
@@ -210,7 +214,7 @@ main = do
       hPutStrLn stderr ("Cannot overwrite input file " ++ input)
       exitWith (ExitFailure 1)
 
-    Args Compile { input, options = options@CompilerOptions { debugMode = D.TestTc } } -> do
+    Args Compile { input, options = options@CompilerOptions { debugMode = D.TestTc }, time } -> do
       exists <- doesFileExist input
       if not exists
       then hPutStrLn stderr ("Cannot find input file " ++ input)
@@ -226,7 +230,14 @@ main = do
       files <- D.fileMap driver
       reportAllS files errors
 
-    Args Compile { input, output, optLevel, export, options, watch } -> do
+      case time of
+        Just "-" -> timingReport putDoc
+        Just file ->
+          withFile file WriteMode $ \h ->
+            timingReport (hPutDoc h)
+        Nothing -> pure ()
+
+    Args Compile { input, output, optLevel, export, options, watch, time } -> do
       exists <- doesFileExist input
       if not exists
       then hPutStrLn stderr ("Cannot find input file " ++ input)
@@ -247,5 +258,12 @@ main = do
 
       config <- driverConfig options
       if watch
-      then C.watchFile   opts config (T.pack input) writeOut
-      else C.compileFile opts config (T.pack input) writeOut
+      then C.watchFile opts config (T.pack input) writeOut
+      else do
+        C.compileFile opts config (T.pack input) writeOut
+        case time of
+          Just "-" -> timingReport putDoc
+          Just file -> 
+            withFile file WriteMode $ \h ->
+              timingReport (hPutDoc h)
+          Nothing -> pure ()
