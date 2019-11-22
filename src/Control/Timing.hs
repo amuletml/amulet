@@ -1,3 +1,4 @@
+{-# LANGUAGE MultiWayIf #-}
 module Control.Timing
   ( Timer
   , newTimer
@@ -10,6 +11,7 @@ import Control.Monad.IO.Class
 import System.Environment
 
 import Data.Time.Clock
+import Data.Fixed
 
 import Data.List
 
@@ -42,4 +44,25 @@ withTimer desc k = do
   pure r
 
 reportTimer :: String -> NominalDiffTime -> String
-reportTimer desc t = "amc: " ++ desc ++ " took " ++ show t
+reportTimer desc t = "amc: " ++ desc ++ " took " ++ magnitude where
+  magnitude =
+    let pTime = negate $ logBase 10 (realToFrac sec)
+        pTime :: Double
+        -- We take -log₁₀(elapsed) to get the magnitude so the bounds
+        -- are clearer.
+     in if | pTime < 0 -> show sec ++ "s"
+           | pTime > 0 && pTime <= 3 -> show_s (sec * mili) ++ "ms"
+           | pTime > 3 && pTime <= 6 -> show_s (sec * micro) ++ "us"
+           | pTime > 6 && pTime <= 9 -> show_s (sec * nano) ++ "ns"
+           | otherwise {- pTime > 9 -} -> show_s (sec * pico) ++ "ps"
+
+  sec = nominalDiffTimeToSeconds t
+
+  show_s :: Pico -> String
+  show_s = (show :: Double -> String) . realToFrac
+
+  mili, micro, nano, pico :: Pico
+  mili  = 10 ^ (3 :: Int)
+  micro = 10 ^ (6 :: Int)
+  nano  = 10 ^ (9 :: Int)
+  pico  = 10 ^ (12 :: Int)
