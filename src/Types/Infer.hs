@@ -523,12 +523,13 @@ inferMod :: MonadInfer Typed m => ModuleTerm Desugared
          -> m (ModuleTerm Typed, Maybe (Var Resolved) -> Env -> Env, (ImplicitScope ClassInfo Typed, TySyms))
 inferMod (ModStruct bod a) = do
   (bod', env) <- inferProg bod
+  outside <- view names
   -- So this behaviour is somewhat incorrect, as we'll exposed any type
   -- functions/implicits that we open in our signature. But it'll do for now.
   let append x p = maybe p (<> p) x
       qualifyWrt prefix scope =
         let go (TyCon n) = 
-              if n `inScope` scope
+              if not (n `inScope` scope)
                  then TyCon (append prefix n)
                  else TyCon n
             go x = x
@@ -536,7 +537,7 @@ inferMod (ModStruct bod a) = do
 
   pure (ModStruct bod' (a, undefined)
        , \prefix ->
-           (names %~ (<> mapScope (append prefix) (qualifyWrt prefix (env ^. names)) (env ^. names)))
+           (names %~ (<> mapScope (append prefix) (qualifyWrt prefix outside) (env ^. names)))
          . (types %~ (<> (Set.mapMonotonic (append prefix)
                             <$> Map.mapKeysMonotonic (append prefix) (env ^. types))))
          . (classDecs %~ (<> (env ^. classDecs)))
