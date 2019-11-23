@@ -48,6 +48,7 @@ import qualified Syntax as S
 
 import qualified Control.Monad.Infer as T
 import Control.Monad.Namey
+import Control.Timing
 
 import Parser.Wrapper (Parser, runParser)
 import Parser.Token
@@ -454,7 +455,7 @@ emitCore core = do
 
 -- | Reset the environment and load a series of files from environment
 loadFile :: (MonadState ReplState m, MonadIO m) => Maybe FilePath -> m ()
-loadFile file = do
+loadFile file = withTimer ("Loading " ++ show file ++ " into the REPL") $ do
   -- Reset the state
   put =<< (liftIO . resetState) =<< get
   modify (\s ->  s { currentFile = file })
@@ -497,7 +498,7 @@ runRemoteReplCommand port command = Net.withSocketsDo $ do
 loadFiles :: (MonadState ReplState m, MonadIO m) => [FilePath] -> m Bool
 loadFiles [] = pure True
 loadFiles paths = do
-  (core, es) <- wrapDriver $ D.tick >> D.compile paths
+  (core, es) <- withTimer "REPL tick" $ wrapDriver $ D.tick >> D.compile paths
 
   files <- D.fileMap =<< gets driver
   handle <- gets outputHandle
