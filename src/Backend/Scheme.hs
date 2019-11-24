@@ -9,7 +9,10 @@ import Core.Var
 import Text.Pretty.Semantic
 
 genScheme :: [Stmt CoVar] -> Doc
-genScheme = vsep . map genOne
+genScheme sts =
+      parens (keyword "import" <+> string "scheme")
+  <#> parens (keyword "import" <+> parens (string "chicken base"))
+  <#> vsep (map genOne sts)
 
 genOne :: Stmt CoVar -> Doc
 genOne (Foreign v _ e) = parens $

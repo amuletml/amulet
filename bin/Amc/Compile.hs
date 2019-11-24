@@ -179,17 +179,21 @@ compileViaChicken opt config file output = go (D.makeDriverWith config, firstNam
     chicken <- getChicken
     let chicken_process = proc chicken [ "-prologue", base_ss
                                        , "-uses", "library"
-                                       , "-strict-types"
+                                       , "-x", "-strict-types"
                                        , "-strip", "-static"
                                        , path
                                        , "-o", output
                                        ]
+    setEnv "CHICKEN_OPTIONS" "-emit-link-file /dev/null"
     (_, _, _, handle) <-
-      createProcess (chicken_process { std_out = Inherit, std_in = NoStream, std_err = Inherit })
+      createProcess (chicken_process { std_out = Inherit
+                                     , std_in = NoStream
+                                     , std_err = Inherit
+                                     })
 
     code <- waitForProcess handle
 
-    removePathForcibly path
+    -- removePathForcibly path
 
     case code of
       ExitSuccess   -> pure ()
