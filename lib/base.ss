@@ -1,6 +1,7 @@
 (declare (uses library))
 (import scheme)
 (import (chicken fixnum))
+(import (chicken base))
 
 (define *big-mersenne-prime* 2147483647)
 (define *buckets* 15)
@@ -50,6 +51,8 @@
     new-table))
 
 (define (@@#-20 f x) (f x))
+
+(define error#-14 error)
 
 (define (lazy#-15 x)
   (vector #f x))
