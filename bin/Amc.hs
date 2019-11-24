@@ -141,7 +141,7 @@ argParser = info (args <**> helper <**> version)
            ( long "out" <> short 'o' <> metavar "FILE"
           <> help "Put the generated executable in this file"
           <> showDefault
-          <> value "main.scm" ) 
+          <> value "amulet.out" ) 
       <*> option auto ( long "opt" <> short 'O' <> metavar "LEVEL" <> value 1 <> showDefault
                      <> help "Controls the optimisation level." )
       <*> compilerOptions

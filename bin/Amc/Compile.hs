@@ -7,15 +7,19 @@ module Amc.Compile
   , compileViaChicken
   ) where
 
+import System.Environment
 import System.Directory
 import System.FilePath
 import System.FSNotify
+import System.Process
+import System.Exit
 import System.IO
 
 import Control.Monad.Infer (firstName)
 import Control.Monad.Namey
 import Control.Monad.State
 import Control.Concurrent
+import Control.Exception
 
 import qualified Data.Set as Set
 import qualified Data.Map as Map
@@ -24,6 +28,7 @@ import qualified Data.Text as T
 import Data.Bifunctor
 import Data.Foldable
 import Data.Functor
+import Data.Maybe
 import Data.List
 
 import Backend.Scheme
@@ -148,6 +153,11 @@ compileViaChicken opt config file output = go (D.makeDriverWith config, firstNam
     files <- D.fileMap driver
     reportAllS files errors
 
+    base_ss <- D.locateSchemeBase config
+    base_ss <- case base_ss of
+      Just s -> pure s
+      Nothing -> throwIO (userError "Couldn't locate base.ss file")
+
     scm <- case core of
       Nothing -> pure mempty
       Just core -> do
@@ -162,5 +172,30 @@ compileViaChicken opt config file output = go (D.makeDriverWith config, firstNam
         D.dumpCore debug core optimised lua
         pure chicken
 
-    withFile output WriteMode $ \h ->
-      hPutDoc h scm
+    (path, temp_h) <- openTempFile "." "amulet.ss"
+    hPutDoc temp_h scm
+    hClose temp_h
+
+    chicken <- getChicken
+    let chicken_process = proc chicken [ "-prologue", base_ss
+                                       , "-uses", "library"
+                                       , "-strict-types"
+                                       , "-strip", "-static"
+                                       , path
+                                       , "-o", output
+                                       ]
+    (_, _, _, handle) <-
+      createProcess (chicken_process { std_out = Inherit, std_in = NoStream, std_err = Inherit })
+
+    code <- waitForProcess handle
+
+    removePathForcibly path
+
+    case code of
+      ExitSuccess   -> pure ()
+      ExitFailure _ -> exitWith code
+
+getChicken :: IO String
+getChicken = do
+  x <- lookupEnv "CHICKENC"
+  pure $ fromMaybe "chicken-csc" x

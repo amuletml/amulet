@@ -42,6 +42,7 @@ module Frontend.Driver
   --
   -- $compile
   , compile, compiles
+  , locateSchemeBase
 
   -- * Querying the driver
   --
@@ -242,6 +243,14 @@ locatePrelude :: MonadIO m => DriverConfig -> m (Maybe FilePath)
 locatePrelude config = withTimer "Locating prelude" do
   let libPath = map (</> "prelude.ml") (libraryPath config)
   liftIO $ findFile' =<< (++) <$> (toList <$> lookupEnv "AMC_PRELUDE") <*> pure libPath
+
+-- | Locate the Chicken Scheme support code from a set of known locations:
+-- * The AMC_SCM_BASE environment variable (a file)
+-- * $libraryPath/base.ss
+locateSchemeBase :: MonadIO m => DriverConfig -> m (Maybe FilePath)
+locateSchemeBase config = withTimer "Locating Scheme base" do
+  let libPath = map (</> "base.ss") (libraryPath config)
+  liftIO $ findFile' =<< (++) <$> (toList <$> lookupEnv "AMC_SCM_BASE") <*> pure libPath
 
 -- | Construct a file map, suitable for use with 'fileSpans' and other
 -- "Text.Pretty.Note" functions.

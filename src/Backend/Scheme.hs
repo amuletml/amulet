@@ -63,7 +63,18 @@ genTerm (Match t bs) =
 genTerm (TyApp a _) = genAtom a
 genTerm (Cast a _ _) = genAtom a
 
-genTerm Extend{} = error "todo genTerm Extend"
+genTerm (Extend atom rows) =
+  let new = parens $ keyword "copy-record-storage" <+> genAtom atom
+      ext (k, _, a) = parens $ keyword "record-storage-insert!"
+                           <+> string "new-record"
+                           <+> shown k
+                           <+> genAtom a
+   in parens $
+     keyword "let"
+       <+> parens (parens (string "new-record" <+> new))
+       <#> vsep (map (indent 2 . ext) rows)
+       <#> indent 2 (string "new-record")
+
 genTerm Values{} = error "todo genTerm Values"
 
 genBranch :: Atom CoVar -> Arm CoVar -> Doc
@@ -89,7 +100,15 @@ genBranch a (Arm p _ t _ _) =
      PatLit l -> parens . align $
            parens (keyword "eq?" <+> genAtom a <+> genLit l)
        <#> rhs
-     PatRecord{} -> error "todo: genBranch PatRecord"
+     PatRecord vs ->
+       let captures = map capture vs
+           capture (k, Capture v _) = parens $
+             var v <+> parens (keyword "record-storage-ref"
+                                   <+> genAtom a
+                                   <+> genLit (Str k))
+        in parens . align $
+                sliteral (string "#t")
+            <#> parens (keyword "let" <+> parens (vsep captures) <#> indent 2 rhs)
      PatValues{} -> error "todo: genBranch PatValues"
 
 genAtom :: Atom CoVar -> Doc
@@ -106,8 +125,8 @@ genLit (Str t)   = sliteral (shown t)
 genLit (Float d) = sliteral (double d)
 genLit LitTrue   = sliteral (string "#t")
 genLit LitFalse  = sliteral (string "#f")
-genLit Unit      = sliteral (string "#f")
-genLit RecNil    = error "todo: genLit RecNil"
+genLit Unit      = parens $ keyword "void"
+genLit RecNil    = parens $ keyword "make-record-storage"
 
 quote :: CoVar -> Doc
 quote v = parens $ keyword "quote" <+> var v
