@@ -230,7 +230,11 @@ TyFunKindSig :: { Maybe (Type Parsed) }
 ModuleTerm :: { ModuleTerm Parsed }
   : Begin(Tops)                             { withPos1 $1 $ ModStruct (getL $1) }
   | Con                                     { withPos1 $1 $ ModRef (getL $1) }
-  | import string                           { withPos2 $1 $2 $ ModLoad (getString $2) }
+  | import string                           { withPos2 $1 $2 $ ModImport (getString $2) }
+  | import '{' ListT(TargetImport, ',') '}' { withPos2 $1 $4 $ ModTargetImport $3 }
+
+TargetImport :: { TargetImport Parsed }
+  : ident '=' string                        { withPos2 $1 $3 $ TargetImport (getIdent $1) (getString $3) }
 
 Begin(a)
   : begin a end                             { lPos2 $1 $3 $2 }

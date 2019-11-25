@@ -49,6 +49,8 @@ import Data.These
 import Data.List
 import Data.Span
 
+import qualified CompileTarget as CT
+
 import Syntax.Resolve.Import
 import Syntax.Resolve.Scope
 import Syntax.Resolve.Error
@@ -72,15 +74,14 @@ type MonadResolve m = ( MonadChronicles ResolveError m
 
 -- | Resolve a program within a given 'Scope' and 'ModuleScope'
 resolveProgram :: (MonadNamey m, MonadImport m)
-               => Signature -- ^ The scope in which to resolve this program
-               -- ^ The current module scope. We return an updated
-               -- version of this if we declare or extend any modules.
+               => CT.Target -- ^ The backend we're using
+               -> Signature -- ^ The scope in which to resolve this program
                -> [Toplevel Parsed] -- ^ The program to resolve
                -> m (Either [ResolveError] ResolveResult)
                -- ^ The resolved program or a list of resolution errors
-resolveProgram sc ts
+resolveProgram ct sc ts
   = (these (Left . toList) (\(s, exposed, inner) -> Right (ResolveResult s exposed inner)) (\x _ -> Left (toList x))<$>)
-  . runChronicleT . flip runReaderT (emptyContext & scope .~ sc)
+  . runChronicleT . flip runReaderT (mkContext ct & scope .~ sc)
   $ reTops ts mempty
 
 -- | Resolve the whole program
@@ -274,7 +275,7 @@ reModule (ModRef ref an) = do
   (ref', sig) <- recover (junkVar, Nothing)
                $ view scope >>= lookupIn (^.modules) (const mempty) ref VarModule
   pure (ModRef ref' an, sig)
-reModule r@(ModLoad path a) = do
+reModule r@(ModImport path a) = do
   result <- importModule a path
   (var, sig) <- case result of
     Imported var sig -> pure (var, Just sig)
@@ -293,6 +294,15 @@ reModule r@(ModLoad path a) = do
   -- Replace this with a reference so we don't have to care later on
   -- about this. Bit ugly, but I'll survive
   pure (ModRef var a, sig)
+
+reModule r@(ModTargetImport mods a) = do
+  target <- view target
+  case filter ((==CT.name target) . importBackend) mods of
+    [] -> dictates (wrapError r (NoMatchingImport target)) $> junk
+    [TargetImport _ path ann] -> reModule (ModImport path ann)
+    xs -> dictates (ManyMatchingImports target xs a) $> junk
+
+  where junk = (ModRef junkVar a, Nothing)
 
 resolveTele :: (MonadResolve m, Reasonable f p)
             => f p -> [TyConArg Parsed] -> m ([TyConArg Resolved], [(Var Parsed, Var Resolved)])
@@ -639,7 +649,8 @@ junkExpr :: Ann Resolved -> Expr Resolved
 junkExpr = VarRef junkVar
 
 wrapError :: Reasonable e p => e p -> ResolveError -> ResolveError
-wrapError _  e@(ArisingFrom _ _) = e
+wrapError _  e@ArisingFrom{} = e
+wrapError _  e@ManyMatchingImports{} = e
 wrapError r e = ArisingFrom e (BecauseOf r)
 
 -- | Catch an error, returning a junk variable instead.

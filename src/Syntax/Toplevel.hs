@@ -26,10 +26,22 @@ import Syntax.Var
 data TopAccess = Public | Private
   deriving (Eq, Ord, Show, Data)
 
+data TargetImport p = TargetImport
+  { importBackend :: Text
+  , importPath    :: Text
+  , importAnn     :: Ann p
+  }
+
+deriving instance Eq (Ann p) => Eq (TargetImport p)
+deriving instance Show (Ann p) => Show (TargetImport p)
+deriving instance Ord (Ann p) => Ord (TargetImport p)
+deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (TargetImport p)
+
 data ModuleTerm p
   = ModStruct [Toplevel p] (Ann p)
   | ModRef (Var p) (Ann p)
-  | ModLoad Text (Ann p)
+  | ModImport Text (Ann p)
+  | ModTargetImport [TargetImport p] (Ann p)
 
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (ModuleTerm p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (ModuleTerm p)
@@ -149,10 +161,14 @@ makePrisms ''Constructor
 makeLenses ''ClassItem
 makeLenses ''Fundep
 
+instance Spanned (Ann p) => Spanned (TargetImport p) where
+  annotation = annotation . importAnn
+
 instance Spanned (Ann p) => Spanned (ModuleTerm p) where
   annotation (ModStruct _ a) = annotation a
   annotation (ModRef _ a) = annotation a
-  annotation (ModLoad _ a) = annotation a
+  annotation (ModImport _ a) = annotation a
+  annotation (ModTargetImport _ a) = annotation a
 
 instance (Spanned (Constructor p), Spanned (Ann p)) => Spanned (Toplevel p) where
   annotation (LetStmt _ _ []) = internal
@@ -206,6 +222,9 @@ prettyRec :: RecKind -> Doc
 prettyRec Recursive = keyword "rec" <> space
 prettyRec NonRecursive = mempty
 
+instance Pretty (TargetImport p) where
+  pretty (TargetImport backend path _) = text backend <+> equals <+> sstring (dquotes (text path))
+
 instance Pretty (Var p) => Pretty (ModuleTerm p) where
   pretty (ModStruct bod _) =
     vsep [ keyword "begin"
@@ -213,7 +232,8 @@ instance Pretty (Var p) => Pretty (ModuleTerm p) where
          , keyword "end"
          ]
   pretty (ModRef v _) = pretty v
-  pretty (ModLoad t _) = keyword "import" <+> sstring (dquotes (text t))
+  pretty (ModImport t _) = keyword "import" <+> sstring (dquotes (text t))
+  pretty (ModTargetImport ts _) = keyword "import" <+> braces (hsep . punctuate comma . map pretty $ ts)
 
 instance Pretty (Var p) => Pretty (Toplevel p) where
   pretty (LetStmt _ _ []) = string "empty let?"

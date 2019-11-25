@@ -1,0 +1,25 @@
+fail_import_target.ml[1:12 ..1:49]: error (E1014)
+  No suitable import for compile target "lua"
+
+  Arising from use of the module
+  │ 
+1 │ module M = import { luaa = "./modules/basic.ml" }
+  │            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+fail_import_target.ml[3:12 ..6:1]: error (E1015)
+  Multiple possible imports for compile target "lua"
+  │ 
+4 │   lua = "./modules/basic.ml",
+  │   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+5 │   lua = "./modules/different.ml"
+  │   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+fail_import_target.ml[8:9 ..8:9]: error (E1001)
+  Variable not in scope: `x`
+
+  Arising from use of the expression
+  │ 
+8 │ let x = x
+  │         ^
+  Do you need a rec modifier here?
+  │ 
+8 │ let x = x
+  │     ^

@@ -25,6 +25,8 @@ import Core.Simplify
 import Core.Lint
 import Core.Var
 
+import CompileTarget (lua)
+
 import Text.Pretty.Semantic
 
 import Parser.Wrapper (runParser)
@@ -53,7 +55,7 @@ compile name file =
   case runParser name (L.fromStrict file) parseTops of
     (Nothing, es) -> pure $ CParse es
     (Just parsed, _) -> do
-      resolved <- runNullImport $ resolveProgram builtinResolve parsed
+      resolved <- runNullImport $ resolveProgram lua builtinResolve parsed
       case resolved of
         Left es -> pure $ CResolve es
         Right (ResolveResult resolved _ _) -> do

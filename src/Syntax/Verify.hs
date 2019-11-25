@@ -135,7 +135,8 @@ verifyBindingGroup k _ = traverse_ verifyScc . depOrder where
 verifyModule :: MonadVerify m => ModuleTerm Typed -> m ()
 verifyModule (ModStruct m _) = verifyProgram m
 verifyModule ModRef{} = pure ()
-verifyModule ModLoad{} = pure ()
+verifyModule ModImport{} = pure ()
+verifyModule ModTargetImport{} = pure ()
 
 verifyExpr :: MonadVerify m => Expr Typed -> m ()
 verifyExpr (VarRef v (s, t)) = do

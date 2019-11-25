@@ -18,8 +18,6 @@ import Core.Var
 import qualified Frontend.Driver as D
 import Frontend.Errors
 
-import Backend.Lua
-
 import Text.Pretty.Semantic
 import qualified Text.Pretty.Ansi as A
 
@@ -50,14 +48,14 @@ dumpTypes _ ast penv env = do
 dumpCore :: DebugMode
          -> [Stmt CoVar] -- ^ Core
          -> [Stmt CoVar] -- ^ Optimised code
-         -> LuaStmt
+         -> Doc          -- ^ Compiled code
          -> IO ()
 dumpCore Void _ _ _ = pure ()
 dumpCore TestTc _ _ _ = pure ()
-dumpCore Test core optm lua = do
+dumpCore Test core optm out = do
   A.putDoc . annotate (A.BrightColour A.Green) $ "(* Core lowering: *)"
   putDoc (pretty core)
   A.putDoc . annotate (A.BrightColour A.Green) $ "(* Optimised: *)"
   putDoc (pretty optm)
   A.putDoc . annotate (A.BrightColour A.Green) $ "(* Compiled: *)"
-  putDoc (pretty lua)
+  putDoc out

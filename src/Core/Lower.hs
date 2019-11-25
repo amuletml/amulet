@@ -314,7 +314,8 @@ lowerProgEnv stmt = do
 lowerModule :: forall m. MonadLower m => ModuleTerm Typed -> m (LowerState, [Stmt])
 lowerModule (ModStruct ms _) = lowerProg' ms
 lowerModule ModRef{} = asks (,[])
-lowerModule ModLoad{} = asks (,[])
+lowerModule ModImport{} = asks (,[])
+lowerModule ModTargetImport{} = asks (,[])
 
 lowerProg' :: forall m. MonadLower m => [Toplevel Typed] -> m (LowerState, [Stmt])
 

@@ -2,9 +2,11 @@
 module Amc.Compile
   ( Optimise(..)
   , Options(..), ChickenOptions(..)
+  , Emit
   , compileFile
   , watchFile
-  , compileViaChicken
+  , compileWithLua
+  , compileWithChicken
   ) where
 
 import System.Environment
@@ -22,6 +24,7 @@ import Control.Concurrent
 import Control.Exception
 import Control.Timing
 
+import qualified Data.Text.IO as T
 import qualified Data.Set as Set
 import qualified Data.Map as Map
 import Data.Position (SourceName)
@@ -32,14 +35,16 @@ import Data.Functor
 import Data.Maybe
 import Data.List
 
-import Backend.Scheme
-import Backend.Lua
-
-import Syntax.Resolve.Scope (exportedNames)
+import Syntax.Resolve.Scope (Signature, exportedNames)
 import Core.Optimise.DeadCode (deadCodePass)
 import Core.Optimise.Reduce (reducePass)
+import Core.Core (Stmt)
 import Core.Simplify
 import Core.Lint
+import Core.Var
+
+import Backend.Scheme
+import Backend.Lua
 
 import Syntax.Var
 
@@ -59,21 +64,20 @@ data Options = Options
   , export   :: Bool
   , debug    :: D.DebugMode
   }
-  deriving Show
 
 data ChickenOptions = ChickenOptions
-  { coOptLevel    :: Optimise
-  , coLint        :: Bool
-  , coDebug       :: D.DebugMode
-  , keepScm       :: Maybe FilePath
+  { keepScm       :: Maybe FilePath
   , useCC         :: (Maybe String, [String])
   , useLD         :: (Maybe String, [String])
   , staticChicken :: Bool
+  , output        :: FilePath
   }
   deriving Show
 
+type Emit = Maybe Signature -> [Stmt CoVar] -> IO Doc
+
 compileIt :: (D.Driver, Name)
-          -> Options -> SourceName -> (Doc -> IO ())
+          -> Options -> SourceName -> Emit
           -> IO ((D.Driver, Name), Set.Set FilePath)
 compileIt (driver, name) Options { optLevel, lint, export, debug } file emit = do
   path <- canonicalizePath (T.unpack file)
@@ -96,9 +100,8 @@ compileIt (driver, name) Options { optLevel, lint, export, debug } file emit = d
             NoOpt -> do
               lintIt "Lower" (checkStmt emptyScope core) (pure ())
               (lintIt "Optimised"  =<< checkStmt emptyScope) . deadCodePass info <$> reducePass info core
-          lua = compileProgram sig' optimised
-      D.dumpCore debug core optimised lua
-      emit (pretty lua)
+      compiled <- emit sig' optimised
+      D.dumpCore debug core optimised compiled
 
   fileNames <- traverse (canonicalizePath . T.unpack . fst) files
   pure ((driver, name), Set.fromList fileNames)
@@ -107,15 +110,13 @@ compileIt (driver, name) Options { optLevel, lint, export, debug } file emit = d
 
 -- | Compile a file, passing the result to some "emitting function", such
 -- as writing to a file or the terminal.
-compileFile :: Options -> D.DriverConfig -> SourceName
-            -> (Doc -> IO ())
+compileFile :: Options -> D.DriverConfig -> SourceName -> Emit
             -> IO ()
 compileFile opt config file emit =
   compileIt (D.makeDriverWith config, firstName) opt file emit $> ()
 
 -- | Compile a file, and then watch for c
-watchFile :: Options -> D.DriverConfig -> SourceName
-          -> (Doc -> IO ())
+watchFile :: Options -> D.DriverConfig -> SourceName -> Emit
           -> IO ()
 watchFile opt config file emit = do
   chan <- newChan
@@ -150,81 +151,66 @@ watchFile opt config file emit = do
       then pure [path]
       else wait files chan
 
-compileViaChicken :: ChickenOptions -> D.DriverConfig -> SourceName -> String -> IO ()
-compileViaChicken opt config file output = go (D.makeDriverWith config, firstName) opt where
-  lintIt name = if coLint opt then runLint name else flip const
+compileWithLua :: Maybe FilePath -> Emit
+compileWithLua file sig prog = do
+  let lua = pretty $ compileProgram sig prog
+  case file of
+    Nothing -> putDoc lua
+    Just f -> T.writeFile f . display . renderPretty 0.4 100 $ lua
+  pure lua
 
-  go :: (D.Driver, Name) -> ChickenOptions -> IO ()
-  go (driver, name) ChickenOptions { coOptLevel, coLint, coDebug } = do
-    path <- canonicalizePath (T.unpack file)
-    ((((core, errors), _), driver), name) <-
-        flip runNameyT name
-      . flip runStateT driver
-      $ (,) <$> D.compiles path <*> D.getSignature path
+compileWithChicken :: D.DriverConfig -> ChickenOptions -> Emit
+compileWithChicken config opt _ prog = do
+  let scm = genScheme prog
 
-    files <- D.fileMap driver
-    reportAllS files errors
+  (path, temp_h) <- openTempFile "." "amulet.ss"
+  withTimer "Generating Scheme" $ hPutDoc temp_h scm
+  hClose temp_h
 
-    base_ss <- D.locateSchemeBase config
-    base_ss <- case base_ss of
-      Just s -> pure s
-      Nothing -> throwIO (userError "Couldn't locate base.ss file")
+  chicken <- getChicken
 
-    case core of
-      Nothing -> pure ()
-      Just core -> do
-        let info = defaultInfo { useLint = coLint, exportNames = mempty }
-            optimised = flip evalNamey name $ case coOptLevel of
-              Opt -> optimise info core
-              NoOpt -> do
-                lintIt "Lower" (checkStmt emptyScope core) (pure ())
-                (lintIt "Optimised"  =<< checkStmt emptyScope) . deadCodePass info <$> reducePass info core
-            lua = compileProgram Nothing optimised
-            scm = genScheme optimised
-        D.dumpCore coDebug core optimised lua
+  base_ss <- D.locateSchemeBase config
+  base_ss <- case base_ss of
+    Just s -> pure s
+    Nothing -> throwIO (userError "Couldn't locate the base.ss file")
 
-        (path, temp_h) <- openTempFile "." "amulet.ss"
-        withTimer "Generating Scheme" $ hPutDoc temp_h scm
-        hClose temp_h
+  let chicken_process = proc chicken chicken_cmdline
+      chicken_cmdline =
+        [ "-prologue", base_ss
+        , "-uses", "library"
+        , "-x", "-strict-types"
+        , "-strip"
+        , path, "-o", output opt ]
+        ++ case fst (useCC opt) of
+             Just cc -> [ "-cc", cc ]
+             Nothing -> []
+        ++ case fst (useLD opt) of
+             Just cc -> [ "-ld", cc ]
+             Nothing -> []
+        ++ (snd (useCC opt) >>= \x -> ["-C", x])
+        ++ (snd (useLD opt) >>= \x -> ["-L", x])
+        ++ [ "-static" | staticChicken opt ]
 
-        chicken <- getChicken
-        let chicken_process = proc chicken chicken_cmdline
-            chicken_cmdline =
-              [ "-prologue", base_ss
-              , "-uses", "library"
-              , "-x", "-strict-types"
-              , "-strip"
-              , path, "-o", output ]
-              ++ case fst (useCC opt) of
-                   Just cc -> [ "-cc", cc ]
-                   Nothing -> []
-              ++ case fst (useLD opt) of
-                   Just cc -> [ "-ld", cc ]
-                   Nothing -> []
-              ++ (snd (useCC opt) >>= \x -> ["-C", x])
-              ++ (snd (useLD opt) >>= \x -> ["-L", x])
-              ++ [ "-static" | staticChicken opt ]
+  code <- withTimer ("Chicken compiler for " ++ path) $ do
+    setEnv "CHICKEN_OPTIONS" "-emit-link-file /dev/null"
+    (_, _, _, handle) <-
+      createProcess (chicken_process { std_out = Inherit
+                                     , std_in = NoStream
+                                     , std_err = Inherit
+                                     })
+    waitForProcess handle
 
-        code <- withTimer ("Chicken compiler for " ++ path) $ do
-          setEnv "CHICKEN_OPTIONS" "-emit-link-file /dev/null"
-          (_, _, _, handle) <-
-            createProcess (chicken_process { std_out = Inherit
-                                           , std_in = NoStream
-                                           , std_err = Inherit
-                                           })
-          waitForProcess handle
+  case keepScm opt of
+    Just "-" -> do
+      putStrLn "amc: Generated Scheme:"
+      hPutDoc stdout scm
+      removeFile path
+    Just p -> renameFile path p
+    _ -> removeFile path
 
-        case keepScm opt of
-          Just "-" -> do
-            putStrLn "amc: Generated Scheme:"
-            hPutDoc stdout scm
-            removeFile path
-          Just p -> renameFile path p
-          _ -> removeFile path
-
-        case code of
-          ExitSuccess   -> pure ()
-          ExitFailure _ -> exitWith code
+  case code of
+    ExitSuccess   -> pure (pretty scm)
+    ExitFailure _ -> exitWith code
 
 getChicken :: IO String
 getChicken = do

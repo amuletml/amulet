@@ -102,6 +102,8 @@ import Syntax.Var
 import Parser.Wrapper (runParser)
 import Parser (parseTops)
 
+import CompileTarget (Target, lua)
+
 import Frontend.Errors
 
 import Text.Pretty.Note
@@ -193,6 +195,8 @@ data DriverConfig = DriverConfig
   , callbacks :: DriverCallbacks
   -- ^ Callbacks for when a module has finished a particular stage.
   , checkOnly :: Bool
+  , target    :: Target
+  -- ^ The compile target we're using.
   } deriving Show
 
 data Driver = Driver
@@ -233,6 +237,7 @@ makeConfig = do
        ])
     defaultCallbacks
     False
+    lua
   where
     splitPath = Set.toList . Set.fromList . map T.unpack . T.split (==':') . T.pack
 
@@ -303,8 +308,9 @@ resolveWithDeps :: (MonadNamey m, MonadIO m, MonadState Driver m)
                 => FilePath -> [Toplevel Parsed] -> Signature
                 -> m ((Maybe ResolveResult, ErrorBundle), Set.Set FilePath)
 resolveWithDeps root parsed sig = withTimer ("Resolving " ++ root) do
+  target <- uses config target
   (resolved, deps) <- flip runFileImport (LoadContext root Nothing)
-                    $ resolveProgram sig parsed
+                    $ resolveProgram target sig parsed
   (,deps) <$> case resolved of
     Left es -> pure (Nothing, mempty & (resolveErrors .~ es))
     Right resolved -> pure (Just resolved, mempty)
@@ -539,9 +545,10 @@ getSignature path = do
     SUnparsed -> pure Nothing
     SParsed parsed -> withTimer ("Resolving " ++ path) do
       updateFile path $ stage .~ SResolving
+      target <- uses config target
       (resolved, deps) <-
           flip runFileImport (LoadContext (dropFileName path) (Just path))
-        $ resolveProgram builtinResolve parsed
+        $ resolveProgram target builtinResolve parsed
       case resolved of
         Left es -> do
           updateFile path $ (stage .~ SUnresolved) . (dependencies .~ deps) . (errors . resolveErrors .~ es)

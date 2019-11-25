@@ -10,7 +10,6 @@ import Control.Monad.Namey
 import Control.Monad.State
 import Control.Timing
 
-import qualified Data.Text.IO as T
 import qualified Data.Text as T
 import Data.Traversable
 import Data.Maybe
@@ -21,6 +20,8 @@ import Text.Pretty.Semantic hiding (empty)
 
 import qualified Frontend.Driver as D
 import Frontend.Errors
+
+import qualified CompileTarget as CT
 
 import qualified Amc.Debug as D
 import qualified Amc.Repl as R
@@ -151,7 +152,7 @@ argParser = info (args <**> helper <**> version)
            ( long "out" <> short 'o' <> metavar "FILE"
           <> help "Put the generated executable in this file"
           <> showDefault
-          <> value "amulet.out" ) 
+          <> value "amulet.out" )
       <*> option auto ( long "opt" <> short 'O' <> metavar "LEVEL" <> value 1 <> showDefault
                      <> help "Controls the optimisation level." )
       <*> optional (option str
@@ -294,6 +295,7 @@ main = do
         >> exitWith (ExitFailure 1)
       else pure ()
 
+      config <- driverConfig options
       let opts = C.Options
             { C.optLevel = if optLevel >= 1 then C.Opt else C.NoOpt
             , C.lint = coreLint options
@@ -301,22 +303,7 @@ main = do
             , C.debug = debugMode options
             }
 
-          writeOut :: Pretty a => a -> IO ()
-          writeOut = case output of
-                   Nothing -> putDoc . pretty
-                   Just f -> T.writeFile f . T.pack . show . pretty
-
-      config <- driverConfig options
-      if watch
-      then C.watchFile opts config (T.pack input) writeOut
-      else do
-        C.compileFile opts config (T.pack input) writeOut
-        case time of
-          Just "-" -> timingReport putDoc
-          Just file ->
-            withFile file WriteMode $ \h ->
-              timingReport (hPutDoc h)
-          Nothing -> pure ()
+      compileOrWatch watch time opts config { D.target = CT.lua } (T.pack input) (C.compileWithLua output)
 
     Args opt@Chicken{ input, cOutput, optLevel, options, time, keepScheme, useCC, ccOptions, useLD, ldOptions } -> do
       exists <- doesFileExist input
@@ -325,22 +312,32 @@ main = do
         >> exitWith (ExitFailure 1)
       else pure ()
 
-      let opts = C.ChickenOptions
-            { C.coOptLevel = if optLevel >= 1 then C.Opt else C.NoOpt
-            , C.coLint = coreLint options
-            , C.coDebug = debugMode options
-            , C.keepScm = keepScheme
+      let opts = C.Options
+            { C.optLevel = if optLevel >= 1 then C.Opt else C.NoOpt
+            , C.lint = coreLint options
+            , C.debug = debugMode options
+            , C.export = False
+            }
+
+          copts = C.ChickenOptions
+            { C.keepScm = keepScheme
             , C.useCC = (mkCc useCC, ccOptions ++ [ "-static" | static opt || musl opt ])
             , C.useLD = (useLD, ldOptions ++ [ "-static" | static opt || musl opt ])
             , C.staticChicken = not (dynamicCsc opt)
+            , C.output = cOutput
             }
           mkCc c | musl opt = Just (fromMaybe "musl-gcc" c) | otherwise = c
 
       config <- driverConfig options
-      C.compileViaChicken opts config (T.pack input) cOutput
-      case time of
-        Just "-" -> timingReport putDoc
-        Just file ->
-          withFile file WriteMode $ \h ->
-            timingReport (hPutDoc h)
-        Nothing -> pure ()
+      compileOrWatch False time opts config { D.target = CT.scheme } (T.pack input)
+        (C.compileWithChicken config copts)
+
+compileOrWatch :: Bool -> Maybe FilePath -> C.Options -> D.DriverConfig -> T.Text -> C.Emit -> IO ()
+compileOrWatch True _ opts config source emit = C.watchFile opts config source emit
+compileOrWatch False time opts config source emit = do
+  C.compileFile opts config source emit
+  case time of
+    Just "-" -> timingReport putDoc
+    Just file ->
+      withFile file WriteMode (timingReport . hPutDoc)
+    Nothing -> pure ()

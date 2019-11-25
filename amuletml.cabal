@@ -390,6 +390,7 @@ library
                      , Control.Monad.Chronicles
                      -- Misc
                      , Generics.Constructor
+                     , CompileTarget
   if os(linux)
     ghc-options: -optl-fuse-ld=lld
     extra-libraries: m, pthread
