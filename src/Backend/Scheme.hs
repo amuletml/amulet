@@ -83,7 +83,7 @@ genTerm unpack (Let (One (v, t, e)) b) =
 genTerm unpack (Let (Many vars) b) =
   let binding (v, _, e) = parens $ var v <+> align (genTerm unpack e)
    in parens $
-     keyword "let"
+     keyword "letrec"
        <+> parens (align (vsep (map binding vars)))
        <#> indent 2 (genTerm unpack b)
 
