@@ -24,7 +24,7 @@ pipeline {
           steps {
             sh '''
               stack build \
-                --ghc-options "-optc-static -optl-static -fhide-source-paths" \
+                --ghc-options "-optc-static -optl-static -fhide-source-paths -Werror" \
                 --flag amuletml:amc-prove-server \
                 --test --no-run-tests -j3 \
                 --fast

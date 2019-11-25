@@ -185,6 +185,7 @@ instance (Spanned (Constructor p), Spanned (Ann p)) => Spanned (Toplevel p) wher
   annotation (Module _ _ m) = annotation m
   annotation (Open m) = annotation m
   annotation (Include m) = annotation m
+  annotation (Codegen _ m) = annotation m
 
 instance Spanned (Ann p) => Spanned (Fundep p) where
   annotation = annotation . view fdAnn
