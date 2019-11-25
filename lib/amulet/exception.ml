@@ -25,18 +25,8 @@ instance exception (some exception) begin
   let describe_exception (MkSome exc) = describe_exception exc
 end
 
-external private val prim_throw : (some exception -> string) -> some exception -> 'a =
-  "function(desc, exc) return error(setmetatable(exc, { __tostring = desc })) end"
-external private val prim_catch : (unit -> 'a) -> (some exception -> 'a) -> 'a =
-  "function(k, h) \
-     local ok, err = pcall(k) \
-     if not ok then \
-       if type(err) ~= 'table' then return error(err) end \
-       return h(err) \
-     else \
-       return err \
-     end \
-   end"
+open import { lua = "./../lua/exception.ml", scheme = "./../scheme/condition.ml" }
+
 
 let throw x = prim_throw describe_exception (into_exception x)
 

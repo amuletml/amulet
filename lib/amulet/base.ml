@@ -1,21 +1,9 @@
-external val ( + )  : int -> int -> int   = "function (x, y) return x + y end"
-external val ( * )  : int -> int -> int   = "function (x, y) return x * y end"
-external val ( - )  : int -> int -> int   = "function (x, y) return x - y end"
-external val ( ** ) : int -> int -> int   = "function (x, y) return x ^ y end"
-external val ( / )  : int -> int -> float = "function (x, y) return x / y end"
+private module Base_defs = import {
+  lua = "./base/lua.ml",
+  scheme = "./base/scheme.ml"
+}
 
-external val ( +. )  : float -> float -> float = "function (x, y) return x + y end"
-external val ( *. )  : float -> float -> float = "function (x, y) return x * y end"
-external val ( -. )  : float -> float -> float = "function (x, y) return x - y end"
-external val ( **. ) : float -> float -> float = "function (x, y) return x ^ y end"
-external val ( /. )  : float -> float -> float = "function (x, y) return x / y end"
-
-external val (^) : string -> string -> string = "function(x, y) return x .. y end"
-
-external val (<.)  : float -> float -> bool = "function (x, y) return x < y end"
-external val (<=.) : float -> float -> bool = "function (x, y) return x <= y end"
-external val (>.)  : float -> float -> bool = "function (x, y) return x > y end"
-external val (>=.) : float -> float -> bool = "function (x, y) return x >= y end"
+include Base_defs.Public
 
 (* Boolean operators: *)
 let a || b =
@@ -40,13 +28,9 @@ class eq 'a begin
   let x == y = not (x <> y)
 end
 
-external private val int_eq    : int -> int -> bool       = "function(x, y) return x == y end"
-external private val float_eq  : float -> float -> bool   = "function(x, y) return x == y end"
-external private val string_eq : string -> string -> bool = "function(x, y) return x == y end"
-
-instance eq int    begin let (==) = int_eq end
-instance eq float  begin let (==) = float_eq end
-instance eq string begin let (==) = string_eq end
+instance eq int    begin let (==) = Base_defs.int_eq end
+instance eq float  begin let (==) = Base_defs.float_eq end
+instance eq string begin let (==) = Base_defs.string_eq end
 
 instance eq () begin
   let _ == _ = true
@@ -90,11 +74,6 @@ class eq 'a => ord 'a begin
   let x <= y = match compare x y with | Gt -> false | _ -> true
 end
 
-external private val lt_int : int -> int -> bool = "function (x, y) return x < y end"
-external private val lte_int : int -> int -> bool = "function (x, y) return x <= y end"
-external private val gt_int : int -> int -> bool = "function (x, y) return x > y end"
-external private val gte_int : int -> int -> bool = "function (x, y) return x >= y end"
-
 instance ord () begin
   let _ < _ = false
   let _ > _ = false
@@ -104,22 +83,17 @@ instance ord () begin
 end
 
 instance ord int begin
-  let (<) = lt_int
-  let (<=) = lte_int
-  let (>) = gt_int
-  let (>=) = gte_int
+  let (<)  = Base_defs.lt_int
+  let (<=) = Base_defs.lte_int
+  let (>)  = Base_defs.gt_int
+  let (>=) = Base_defs.gte_int
 end
 
-external private val lt_string : string -> string -> bool = "function (x, y) return x < y end"
-external private val lte_string : string -> string -> bool = "function (x, y) return x <= y end"
-external private val gt_string : string -> string -> bool = "function (x, y) return x > y end"
-external private val gte_string : string -> string -> bool = "function (x, y) return x >= y end"
-
 instance ord string begin
-  let (<) = lt_string
-  let (<=) = lte_string
-  let (>) = gt_string
-  let (>=) = gte_string
+  let (<)  = Base_defs.lt_string
+  let (<=) = Base_defs.lte_string
+  let (>)  = Base_defs.gt_string
+  let (>=) = Base_defs.gte_string
 end
 
 instance ord 'a => ord (list 'a) begin
@@ -178,19 +152,16 @@ end
 
 (* The 'show' class *)
 
-external private val string_of_int : int -> string = "tostring"
-external private val string_of_float : float -> string = "tostring"
-
 class show 'a begin
   val show : 'a -> string
 end
 
 instance show int begin
-  let show = string_of_int
+  let show = Base_defs.string_of_int
 end
 
 instance show float begin
-  let show = string_of_float
+  let show = Base_defs.string_of_float
 end
 
 instance show () begin
@@ -200,7 +171,7 @@ end
 instance show 'a => show (list 'a) begin
   let show =
     let a <> b =
-      if a `string_eq` "" then
+      if a `Base_defs.string_eq` "" then
         show b
       else
         a ^ ", " ^ show b
@@ -224,8 +195,6 @@ end
 instance show 'a => show (ref 'a) begin
   let show x = "ref (" ^ show (!x) ^ ")"
 end
-
-external val lua_version : string = "_VERSION"
 
 let negate x  = 0 - x
 let negatef x = 0.0 -. x
