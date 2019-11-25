@@ -63,6 +63,7 @@ data Command
     { input       :: FilePath
     , cOutput     :: FilePath
     , optLevel    :: Int
+    , watch       :: Bool
     , time        :: Maybe FilePath
     , keepScheme  :: Maybe FilePath
     , useCC       :: Maybe String
@@ -136,13 +137,9 @@ argParser = info (args <**> helper <**> version)
       <*> optional ( option str
            ( long "out" <> short 'o' <> metavar "FILE"
           <> help "Write the generated Lua to a specific file." ) )
-      <*> option auto ( long "opt" <> short 'O' <> metavar "LEVEL" <> value 1 <> showDefault
-                     <> help "Controls the optimisation level." )
+      <*> opt
       <*> switch (long "export" <> help "Export all declared variables in this module, returning them at the end of the program.")
-      <*> switch (long "watch" <> help "After compiling, watch for further changes to the file and recompile it again.")
-      <*> optional (option str
-            ( long "time" <> metavar "FILE" <> hidden
-           <> help "Write the self-timing report to a file. Use - for stdout."))
+      <*> watch <*> time
       <*> compilerOptions
 
     chickenCommand :: Parser Command
@@ -153,11 +150,7 @@ argParser = info (args <**> helper <**> version)
           <> help "Put the generated executable in this file"
           <> showDefault
           <> value "amulet.out" )
-      <*> option auto ( long "opt" <> short 'O' <> metavar "LEVEL" <> value 1 <> showDefault
-                     <> help "Controls the optimisation level." )
-      <*> optional (option str
-            ( long "time" <> metavar "FILE" <> hidden
-           <> help "Write the self-timing report to a file. Use - for stdout."))
+      <*> opt <*> watch <*> time
       <*> optional (option str
             ( long "keep-scheme" <> metavar "FILE" <> hidden
            <> help "Write the generated Scheme to a file. This is a debugging flag. Do not expect the generated Scheme to be readable."))
@@ -205,6 +198,13 @@ argParser = info (args <**> helper <**> version)
 
     optional :: Parser a -> Parser (Maybe a)
     optional p = (Just <$> p) <|> pure Nothing
+
+    opt = option auto ( long "opt" <> short 'O' <> metavar "LEVEL" <> value 1 <> showDefault
+                     <> help "Controls the optimisation level." )
+    time = optional (option str
+            ( long "time" <> metavar "FILE" <> hidden
+           <> help "Write the self-timing report to a file. Use - for stdout."))
+    watch = switch (long "watch" <> help "After compiling, watch for further changes to the file and recompile it again.")
 
     defaultPort :: Int
     defaultPort = 5478

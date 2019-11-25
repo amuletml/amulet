@@ -1,0 +1,11 @@
+This target-specific import defines multiple path to load for the
+current compile target.
+
+For instance, if targetting Lua, the following definition says that both
+"./a.ml" and "./b.ml" should be imported, which is invalid:
+
+    open import { lua = "./a.ml", lua = "./b.ml" }
+
+This error most likely occurs due to a target name being misspelled, or
+an accidental copy-and-paste resulting in a target being declared
+multiple times.

@@ -34,7 +34,7 @@ result file contents = fst . flip runNamey firstName $ do
   desugared <- desugarProgram resolved
   (inferred, env) <- requireThat name contents <$> inferProgram builtinEnv desugared
   v <- genName
-  let (_, es) = runVerify env v (verifyProgram inferred)
+  let (_, es) = runVerify env lua v (verifyProgram inferred)
   pure $ if null es then T.empty else displayPlain (prettyErrs (toList es))
 
 tests :: IO TestTree

@@ -1,0 +1,13 @@
+This target-specific import does not define a path to load for the
+current compile target.
+
+For instance, the following definition will work when targetting Lua,
+but will fail when compiling to Scheme, as there is no path to import.
+
+    open import { lua = "./other.ml" }
+
+- If your imported module doesn't define any external definitions, this
+  can be replaced with a normal import.
+
+- Check you've spelled the compile target correctly in your import
+  definition.

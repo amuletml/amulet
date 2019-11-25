@@ -17,6 +17,8 @@ resolve/1010.txt Resolver: UnresolvedImport
 resolve/1011.txt Resolver: ImportLoop
 resolve/1012.txt Resolver: TFClauseWrongHead
 resolve/1013.txt Resolver: TFClauseWrongArity
+resolve/1014.txt Resolver: NoMatchingImport
+resolve/1015.txt Resolver: ManyMatchingImports
 types/2001.txt TC: NotEqual
 types/2002.txt TC: Occurs
 types/2003.txt TC: CustomTypeError

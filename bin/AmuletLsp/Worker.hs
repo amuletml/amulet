@@ -744,7 +744,7 @@ workOnce wrk@Worker { pushErrors, fileContents, fileStates, fileVars, target } b
         vEs <- case tyRes of
           Just (prog, env) | verify -> do
             name <- genName
-            pure . toList . snd . runVerify env name $ verifyProgram prog
+            pure . toList . snd . runVerify env target name $ verifyProgram prog
           _ -> pure []
 
         pure ( mempty & (typeErrors .~ tEs) . (verifyErrors .~ vEs)

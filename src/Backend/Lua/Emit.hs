@@ -21,6 +21,7 @@ import Data.Sequence (Seq((:<|)))
 import qualified Data.Text as T
 import Data.Traversable
 import Data.Bifunctor
+import Data.Position
 import Data.Foldable
 import Data.Triple
 import Data.List (partition)

@@ -375,7 +375,8 @@ lowerWith root parsed sig env lState = do
       errors <- fold <$> gatherDepsOf getErrors deps
 
       v <- genName
-      let (verified', errs') = verifyProg v env inferred
+      target <- uses config target
+      let (verified', errs') = verifyProg v env target inferred
 
       (,errors<>errs') <$> case (verified, verified') of
         (False, _) -> pure Nothing
@@ -433,9 +434,9 @@ gatherDepsOf f = fmap snd . foldlM go mempty where
         (visited, seq) <- foldlM go (Set.insert path visited, seq) deps
         pure (visited, seq Seq.|> this)
 
-verifyProg :: Name -> Env -> [Toplevel Typed] -> (Bool, ErrorBundle)
-verifyProg v env inferred =
-  let (ok, es) = runVerify env v (verifyProgram inferred)
+verifyProg :: Name -> Env -> Target -> [Toplevel Typed] -> (Bool, ErrorBundle)
+verifyProg v env target inferred =
+  let (ok, es) = runVerify env target v (verifyProgram inferred)
   in (ok, mempty & verifyErrors .~ toList es)
 
 {- $query
@@ -645,7 +646,8 @@ getVerified path = do
 
     STyped prog sig env -> withTimer ("Verifying " ++ path) do
       v <- genName
-      let (verified, errs) = verifyProg v env prog
+      target <- uses config target
+      let (verified, errs) = verifyProg v env target prog
       updateFile path $ (stage .~ if verified then SVerified prog sig env else SUnverified sig env)
                      . (errors %~ (<>errs))
       runCallback path onVerified (if verified then Just (prog, env) else Nothing)

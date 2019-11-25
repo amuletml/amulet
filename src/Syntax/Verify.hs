@@ -12,6 +12,7 @@ import qualified Data.Sequence as Seq
 import qualified Data.Text as T
 import qualified Data.Set as Set
 import Data.Foldable
+import Data.Position
 import Data.Reason
 import Data.Graph
 
@@ -32,23 +33,26 @@ import Syntax.Types
 import Syntax.Let
 import Syntax
 
-import Language.Lua.Parser
+import qualified CompileTarget as CT
 
 import Types.Infer.Builtin (getHead, expandTypeWith)
 
-data VerifyScope = VerifyScope Env AbsState
-
+data VerifyScope = VerifyScope
+  { env        :: Env
+  , patternAbs :: AbsState
+  , target     :: CT.Target
+  }
 type MonadVerify m =
   ( MonadWriter (Seq.Seq VerifyError) m
   , MonadReader VerifyScope m
   , MonadState (Set.Set BindingSite) m )
 
-runVerify :: Env
+runVerify :: Env -> CT.Target
           -> Var Resolved
           -> WriterT (Seq.Seq VerifyError) (StateT (Set.Set BindingSite) (Reader VerifyScope)) ()
           -> (Bool, Seq.Seq VerifyError)
-runVerify env var = fixup
-                  . flip runReader (VerifyScope env (emptyAbsState var))
+runVerify env target var = fixup
+                  . flip runReader (VerifyScope env (emptyAbsState var) target)
                   . flip runStateT mempty
                   . runWriterT where
   fixup (((), w), st) =
@@ -71,9 +75,10 @@ verifyProgram = traverse_ verifyStmt where
         Private -> modify (Set.insert b)
         Public -> pure ()
 
-  verifyStmt st@(ForeignVal _ v d _ (_, _)) =
-    case parseExpr (SourcePos ("definition of " <> displayT (pretty v)) 1 1) (d ^. lazy) of
-      Left e -> tell (Seq.singleton (ParseErrorInForeign st e))
+  verifyStmt st@(ForeignVal _ v d _ (_, _)) = do
+    target <- asks target
+    case CT.parse target (SourcePos ("definition of " <> displayT (pretty v)) 1 1) (d ^. lazy) of
+      Left e -> tell (Seq.singleton (ParseErrorInForeign st e target))
       Right _ -> pure ()
 
   verifyStmt Class{} = pure ()
@@ -92,13 +97,10 @@ verifyProgram = traverse_ verifyStmt where
     let prefix = case nm of
           TgName n _ -> n <> T.singleton '.'
           TgInternal v -> v <> T.singleton '.'
+        ext s = s { env = env s & names %~ mapScope id (unqualifyWrt prefix)
+                                & types %~ fmap (Set.mapMonotonic (unqualifyVarWrt prefix)) }
 
-    let go (VerifyScope env m) =
-          flip VerifyScope m $
-            env & names %~ mapScope id (unqualifyWrt prefix)
-                & types %~ fmap (Set.mapMonotonic (unqualifyVarWrt prefix))
-
-    local go $ verifyModule m
+    local ext $ verifyModule m
 
   verifyStmt (Open m) = verifyModule m
   verifyStmt (Include m) = verifyModule m
@@ -312,11 +314,11 @@ verifyMatch :: MonadVerify m
             -> [Arm Typed] -- ^ The arms within the current match
             -> m ()
 verifyMatch _ m ty [] = do
-  VerifyScope env as <- ask
+  VerifyScope env as _ <- ask
   when (inhabited env as ty) $
     tell . pure $ MissingPattern m [VVariable undefined ty]
 verifyMatch rep m ty bs = do
-  VerifyScope env va <- ask
+  VerifyScope env va _ <- ask
   ty <- pure $ expandTypeWith (env ^. tySyms) ty
 
   (_, ok, unc) <- foldlM (\(i :: Int, ok, alts) a@(Arm pat guard body) -> do
@@ -332,7 +334,7 @@ verifyMatch rep m ty bs = do
         pure (va, False)
       (va', _) Seq.:<| _ -> pure (va', ok)
 
-    local (\(VerifyScope env _) -> VerifyScope env va') $ do
+    local (\vs -> vs { patternAbs = va' }) $ do
       modify (Set.union (bindingSites pat))
       maybe (pure ()) verifyExpr guard
       verifyExpr body

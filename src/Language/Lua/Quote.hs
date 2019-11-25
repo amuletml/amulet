@@ -5,9 +5,10 @@ module Language.Lua.Quote
   , luaStmts
   ) where
 
-import qualified Data.Text as T
 import qualified Data.Text.Lazy as L
+import qualified Data.Text as T
 import Data.Generics
+import Data.Position
 
 import qualified Language.Haskell.TH.Syntax as TH
 import qualified Language.Haskell.TH as TH
