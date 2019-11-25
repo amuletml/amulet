@@ -394,6 +394,7 @@ patchupUsage :: IsVar a => [C.AnnStmt b (OccursVar a)] -> [C.AnnStmt b(OccursVar
 patchupUsage [] = []
 patchupUsage (s@C.Foreign{}:xs) = s:patchupUsage xs
 patchupUsage (s@C.Type{}:xs) = s:patchupUsage xs
+patchupUsage (s@C.RawCode{}:xs) = s:patchupUsage xs
 patchupUsage (C.StmtLet (C.One v):xs) = C.StmtLet (C.One (first3 patchupVarUsage v)):patchupUsage xs
 patchupUsage (C.StmtLet (C.Many v):xs) = C.StmtLet (C.Many (map (first3 patchupVarUsage) v)):patchupUsage xs
 

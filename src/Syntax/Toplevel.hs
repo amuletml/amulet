@@ -72,6 +72,8 @@ data Toplevel p
                 , ann :: Ann p
                 }
 
+  | Codegen Text (Ann p) -- Slap a string right into the output, no questions asked
+
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Toplevel p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Toplevel p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Toplevel p)
@@ -261,6 +263,8 @@ instance Pretty (Var p) => Pretty (Toplevel p) where
       <#> indent 2 (align (vsep (map pretty equations)))
       <#> keyword "end"
     where ks = foldMap ((colon <+>) . pretty) kindsig
+
+  pretty (Codegen c _) = keyword "@cg" <+> text c
 
 instance Pretty (Var p) => Pretty (TyFunClause p) where
   pretty (TyFunClause lhs rhs _) = pretty lhs <+> equals <+> pretty rhs

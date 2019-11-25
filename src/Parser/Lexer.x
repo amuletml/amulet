@@ -49,7 +49,8 @@ $opHead = [\: \! \# \$ \% \& \* \+ \/ \< \= \> \? \@ \\ \^ \| \- \~ $unicodeSymb
 $opTail = [$opHead \.]
 
 tokens :-
-  <0> $white+    { whitespace }
+  <0> ^ "@cg " .+ $ { lexTok $ TcAtCG . T.drop 4 }
+  <0> $white+       { whitespace }
 
   -- Comments
   <0> "(*"           { beginComment }

@@ -517,6 +517,9 @@ inferProg (Module am name mod:prg) = do
     consFst (Module am name mod') $
     inferProg prg
 
+inferProg (Codegen code ann:prg) =
+  consFst (Codegen code (ann, tyUnit)) (inferProg prg)
+
 inferProg [] = asks ([],)
 
 inferMod :: MonadInfer Typed m => ModuleTerm Desugared

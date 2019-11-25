@@ -23,6 +23,7 @@ genOne (Foreign v _ e) = parens $
   keyword "define" <+> var v <+> text e
 genOne (Type _ cs) = vsep (map genConstructor cs)
 genOne (StmtLet bs) = genTopBinds bs
+genOne (RawCode c) = text c
 
 genTopBinds :: Binding CoVar -> Doc
 genTopBinds (One (v, _, e)) = parens $

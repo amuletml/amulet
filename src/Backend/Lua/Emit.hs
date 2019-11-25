@@ -839,6 +839,8 @@ emitLit RecNil    = LuaTable []
 emitStmt :: forall a m. (Occurs a, MonadState TopEmitState m)
          => [AnnStmt VarSet.Set a] -> m (Seq LuaStmt)
 emitStmt [] = pure mempty
+emitStmt (RawCode c:xs) = (Seq.singleton (LuaQuoteS c) <>) <$> emitStmt xs
+
 emitStmt (Foreign n t s:xs) = do
   n' <- pushTopScope n
   topArity %= flip extendForeign (n, t)
