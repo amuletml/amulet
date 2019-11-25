@@ -42,6 +42,7 @@ statement (DeriveInstance t an) = pure $ DeriveInstance (ty t) an
 
 statement (Open v) = Open <$> modTerm v
 statement (Include v) = Include <$> modTerm v
+statement (Codegen c a) = pure $ Codegen c a
 
 statement (ForeignVal am v x t a) = pure $ ForeignVal am v x (ty t) a
 statement (TypeDecl am v arg cs a) = pure $ TypeDecl am v (map tyA arg) (map ctor <$> cs) a
@@ -52,7 +53,10 @@ statement (TypeFunDecl am v arg ks bd a) = pure $ TypeFunDecl am v (map tyA arg)
 modTerm :: MonadNamey m => ModuleTerm Resolved -> m (ModuleTerm Desugared)
 modTerm (ModStruct ss a) = ModStruct <$> traverse statement ss <*> pure a
 modTerm (ModRef v a) = pure $ ModRef v a
-modTerm (ModLoad v a) = pure $ ModLoad v a
+modTerm (ModImport p a) = pure $ ModImport p a
+modTerm (ModTargetImport ps a) = pure $ ModTargetImport (map targetImport ps) a where
+  targetImport :: TargetImport Resolved -> TargetImport Desugared
+  targetImport (TargetImport backend path a) = TargetImport backend path a
 
 classItem :: forall m. MonadNamey m => ClassItem Resolved -> m (ClassItem Desugared)
 classItem (MethodSig v t a) = pure $ MethodSig v (ty t) a

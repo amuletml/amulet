@@ -31,13 +31,15 @@ import Backend.Lua.Postprocess
 import Backend.Lua.Emit
 import Backend.Lua
 
+import CompileTarget
+
 import Text.Pretty.Semantic
 
 result :: Bool -> String -> T.Text -> T.Text
 result opt path contents = fst . flip runNamey firstName $ do
   let name = T.pack path
       parsed = requireJust name contents $ runParser name (L.fromStrict contents) parseTops
-  ResolveResult resolved _ _ <- requireRight name contents <$> runNullImport (resolveProgram builtinResolve parsed)
+  ResolveResult resolved _ _ <- requireRight name contents <$> runNullImport (resolveProgram lua builtinResolve parsed)
   desugared <- desugarProgram resolved
   (inferred, _) <- requireThat name contents <$> inferProgram builtinEnv desugared
   lower <- runLowerT (lowerProg inferred)
@@ -65,6 +67,7 @@ patchupUsage :: IsVar a => [AnnStmt b (OccursVar a)] -> [AnnStmt b(OccursVar a)]
 patchupUsage [] = []
 patchupUsage (s@Foreign{}:xs) = s:patchupUsage xs
 patchupUsage (s@Type{}:xs) = s:patchupUsage xs
+patchupUsage (s@RawCode{}:xs) = s:patchupUsage xs
 patchupUsage (StmtLet (One v):xs) = StmtLet (One (first3 patchupVarUsage v)):patchupUsage xs
 patchupUsage (StmtLet (Many v):xs) = StmtLet (Many (map (first3 patchupVarUsage) v)):patchupUsage xs
 

@@ -5,6 +5,7 @@ module Syntax.Verify.Error
   , WhyRedundant(..)
   ) where
 
+import Data.Position
 import Data.Spanned
 import Data.Reason
 import Data.Span
@@ -16,7 +17,7 @@ import Text.Pretty.Note
 import Syntax.Verify.Pattern
 import Syntax
 
-import Language.Lua.Parser
+import qualified CompileTarget as CT
 
 -- | Bound variable within a term or expression
 data BindingSite
@@ -54,8 +55,10 @@ data VerifyError
   -- | Unused local variables
   | DefinedUnused BindingSite
   -- | Malformed foreign declarations
-  | ParseErrorInForeign { stmt :: Toplevel Typed
-                        , err :: ParseError }
+  | ParseErrorInForeign
+    { stmt :: Toplevel Typed
+    , err :: CT.ParseError
+    , errTarg :: CT.Target }
 
   -- | Misleading laziness on let expressions
   | LazyLet (Expr Typed) (Type Typed)
@@ -77,7 +80,7 @@ data VerifyError
 instance Spanned VerifyError where
   annotation (MalformedRecursiveRhs e _ _) = annotation e
   annotation (DefinedUnused b) = boundWhere b
-  annotation (ParseErrorInForeign t _) = annotation t
+  annotation (ParseErrorInForeign t _ _) = annotation t
   annotation (LazyLet e _) = annotation e
   annotation (RedundantArm a _) = annotation a
   annotation (MissingPattern e _) = annotation e
@@ -97,7 +100,7 @@ instance Pretty VerifyError where
     where plural | length xs == 1 = empty | otherwise = char 's'
   pretty (DefinedUnused (BindingSite v _ _)) =
     string "Bound locally but not used:" <+> squotes (pretty v)
-  pretty (ParseErrorInForeign _ err) =
+  pretty (ParseErrorInForeign _ err _) =
     vsep [ "Invalid syntax in definition of foreign value"
          , pretty err ]
   pretty (LazyLet _ _) =
@@ -142,13 +145,13 @@ instance Note VerifyError Style where
   diagnosticKind MatchToFun{} = NoteMessage
   diagnosticKind ToplevelRefBinding{} = WarningMessage
 
-  formatNote f (ParseErrorInForeign (ForeignVal _ var s _ (span, _)) err) =
+  formatNote f (ParseErrorInForeign (ForeignVal _ var s _ (span, _)) err targ) =
     let SourcePos name _ _ = spanStart (annotation err)
         spans = [( name, s )]
      in vsep [ indent 2 "Syntax error in definition of" <+> (Right <$> skeyword (pretty var))
              , f [span]
              , empty
-             , format (fileSpans spans highlightLua) err
+             , format (fileSpans spans (CT.highlight targ)) err
              ]
 
   formatNote f (LazyLet (Let _ bs ex _) _) =

@@ -1,6 +1,5 @@
 module Language.Lua.Parser
   ( ParseError(..)
-  , SourcePos(..)
 
   , parseExpr
   , parseStmt

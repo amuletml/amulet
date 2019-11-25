@@ -1,0 +1,2 @@
+open "tests/resolve/modules/basic.ml"#0
+let y#3 = x#1

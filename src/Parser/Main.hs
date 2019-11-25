@@ -8,6 +8,7 @@ module Main where
 import System.Environment
 
 import Control.Monad.Writer
+import Control.Arrow hiding ((<+>))
 
 import qualified Data.Text.Lazy as L
 import qualified Data.Text.IO as T
@@ -25,7 +26,7 @@ import Text.Pretty.Semantic
 
 testLexer :: [(FilePath, T.Text)] -> IO ()
 testLexer fs = for_ fs $ \(name, file) ->
-  case runLexer name (L.fromStrict file) lexerScan of
+  case runLexer (T.pack name) (L.fromStrict file) lexerScan of
     (Just toks, es) -> do
       print (map (\(Token t _ _) -> t) toks)
       go toks Done defaultContext
@@ -52,7 +53,7 @@ testLexer fs = for_ fs $ \(name, file) ->
             . fmap (either N.toAnsi toAnsi)
             . filterSimpleDoc (either (const True) uncommentFilter)
             . renderPretty 0.4 100
-            . N.format (N.fileSpans fs N.defaultHighlight)
+            . N.format (N.fileSpans (map (first T.pack) fs) N.defaultHighlight)
 
 main :: IO ()
 main = do

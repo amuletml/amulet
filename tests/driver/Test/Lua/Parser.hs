@@ -7,6 +7,7 @@ import Test.Util
 
 import qualified Data.Text.Lazy as L
 import qualified Data.Text as T
+import Data.Position
 
 import Language.Lua.Parser
 

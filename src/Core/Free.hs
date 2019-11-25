@@ -35,6 +35,9 @@ tagFreeStmt ann var = tagStmt where
 
   tagStmt :: [AnnStmt b a] -> (VarSet.Set, [AnnStmt b' a'])
   tagStmt [] = (mempty, [])
+  tagStmt (RawCode c:xs) =
+    let (fv, xs') = tagStmt xs
+     in (fv, RawCode c:xs')
   tagStmt (Foreign v ty txt:xs) =
     let (fv, xs') = tagStmt xs
     in ( toVar v `VarSet.delete` fv

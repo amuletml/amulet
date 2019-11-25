@@ -10,6 +10,7 @@ module Data.VarMap
   , difference, intersection
   , foldrWithKey, foldr
   , (<>), mempty
+  , (!)
   ) where
 
 import Control.Lens (At(..), Ixed(..), Index, IxValue)
@@ -18,6 +19,8 @@ import qualified Prelude as P
 import Data.Foldable (foldl')
 import Data.Coerce
 import Prelude hiding (lookup, map, null, foldr)
+
+import GHC.Stack
 
 import Core.Var
 
@@ -85,6 +88,13 @@ withoutKeys (Map a) keys = Map (foldl' (flip Map.delete) a keys)
 
 foldr :: (a -> b -> b) -> b -> Map a -> b
 foldr f b (Map m) = Map.foldr f b m
+
+(!) :: HasCallStack => Map a -> CoVar -> a
+map ! var =
+  case lookup var map of
+    Just v -> v
+    Nothing -> error "VarMap.!: key not present in map"
+
 
 type instance Index (Map a) = CoVar
 type instance IxValue (Map a) = a

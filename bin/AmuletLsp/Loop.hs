@@ -38,6 +38,8 @@ import Prelude hiding (id)
 
 import Syntax.Var
 
+import qualified CompileTarget as CT
+
 import System.Log.Logger
 import System.Exit
 
@@ -81,7 +83,7 @@ run = do
             = first T.pack . parseEither parseJSON . (^. params . settings)
         , C.onStartup = \lf -> do
             config <- C.config lf
-            wrk <- makeWorker (maybe [] libraryPath config) (publishDiagnostics lf)
+            wrk <- makeWorker (maybe [] libraryPath config) CT.lua (publishDiagnostics lf)
             _ <- forkIO (loop lf wrk qIn)
             return Nothing
         }

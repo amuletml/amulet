@@ -17,6 +17,8 @@ import Syntax.Desugar (desugarProgram)
 import Syntax.Verify
 import Syntax.Builtin
 
+import CompileTarget
+
 import Types.Infer (inferProgram)
 
 import qualified Text.Pretty.Note as N
@@ -28,11 +30,11 @@ result file contents = fst . flip runNamey firstName $ do
       parsed = requireJust name contents $ runParser name (L.fromStrict contents) parseTops
       prettyErrs = vsep . map (N.format (N.fileSpans [(name, contents)] N.defaultHighlight))
 
-  ResolveResult resolved _ _ <- requireRight name contents <$> runNullImport (resolveProgram builtinResolve parsed)
+  ResolveResult resolved _ _ <- requireRight name contents <$> runNullImport (resolveProgram lua builtinResolve parsed)
   desugared <- desugarProgram resolved
   (inferred, env) <- requireThat name contents <$> inferProgram builtinEnv desugared
   v <- genName
-  let (_, es) = runVerify env v (verifyProgram inferred)
+  let (_, es) = runVerify env lua v (verifyProgram inferred)
   pure $ if null es then T.empty else displayPlain (prettyErrs (toList es))
 
 tests :: IO TestTree

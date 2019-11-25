@@ -28,6 +28,7 @@ csePass = cseStmt emptyScope where
         bs' = map (\(var, ty, ex) -> (var, ty, cseTerm scope mempty ex)) bs
      in StmtLet (Many bs'):cseStmt s' xs
   cseStmt scope (d@(Type _ cs):xs) = d:cseStmt (extendPureCtors scope cs) xs
+  cseStmt scope (d@RawCode{}:xs) = d:cseStmt scope xs
   cseStmt _ [] = []
 
 cseTerm :: forall a. IsVar a => ArityScope -> CseScope a -> Term a -> Term a

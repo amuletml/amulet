@@ -10,9 +10,9 @@ import Control.Monad.Namey
 import Control.Monad.State
 import Control.Timing
 
-import qualified Data.Text.IO as T
 import qualified Data.Text as T
 import Data.Traversable
+import Data.Maybe
 
 import Options.Applicative hiding (ParseError)
 
@@ -20,6 +20,8 @@ import Text.Pretty.Semantic hiding (empty)
 
 import qualified Frontend.Driver as D
 import Frontend.Errors
+
+import qualified CompileTarget as CT
 
 import qualified Amc.Debug as D
 import qualified Amc.Repl as R
@@ -55,6 +57,22 @@ data Command
     , export      :: Bool
     , watch       :: Bool
     , time        :: Maybe FilePath
+    , options     :: CompilerOptions
+    }
+  | Chicken
+    { input       :: FilePath
+    , cOutput     :: FilePath
+    , optLevel    :: Int
+    , watch       :: Bool
+    , time        :: Maybe FilePath
+    , keepScheme  :: Maybe FilePath
+    , useCC       :: Maybe String
+    , useLD       :: Maybe String
+    , ccOptions   :: [String]
+    , ldOptions   :: [String]
+    , static      :: Bool
+    , musl        :: Bool
+    , dynamicCsc  :: Bool
     , options     :: CompilerOptions
     }
   | Repl
@@ -95,6 +113,9 @@ argParser = info (args <**> helper <**> version)
       (  command "compile"
          ( info compileCommand
          $ fullDesc <> progDesc "Compile an Amulet file to Lua.")
+      <> command "chicken"
+         ( info chickenCommand
+         $ fullDesc <> progDesc "Compile an Amulet program to C, using Chicken Scheme.")
       <> command "repl"
          ( info replCommand
          $ fullDesc <> progDesc "Launch the Amulet REPL." )
@@ -116,13 +137,36 @@ argParser = info (args <**> helper <**> version)
       <*> optional ( option str
            ( long "out" <> short 'o' <> metavar "FILE"
           <> help "Write the generated Lua to a specific file." ) )
-      <*> option auto ( long "opt" <> short 'O' <> metavar "LEVEL" <> value 1 <> showDefault
-                     <> help "Controls the optimisation level." )
+      <*> opt
       <*> switch (long "export" <> help "Export all declared variables in this module, returning them at the end of the program.")
-      <*> switch (long "watch" <> help "After compiling, watch for further changes to the file and recompile it again.")
+      <*> watch <*> time
+      <*> compilerOptions
+
+    chickenCommand :: Parser Command
+    chickenCommand = Chicken
+      <$> argument str (metavar "FILE" <> help "The file to compile.")
+      <*> option str
+           ( long "out" <> short 'o' <> metavar "FILE"
+          <> help "Put the generated executable in this file"
+          <> showDefault
+          <> value "amulet.out" )
+      <*> opt <*> watch <*> time
       <*> optional (option str
-            ( long "time" <> metavar "FILE" <> hidden
-           <> help "Write the self-timing report to a file. Use - for stdout."))
+            ( long "keep-scheme" <> metavar "FILE" <> hidden
+           <> help "Write the generated Scheme to a file. This is a debugging flag. Do not expect the generated Scheme to be readable."))
+      <*> optional (option str
+            ( long "cc" <> metavar "PROGRAM" <> hidden
+           <> help "Use PROGRAM as the C compiler"))
+      <*> optional (option str
+            ( long "ld" <> metavar "PROGRAM" <> hidden
+           <> help "Use PROGRAM as the object file linker"))
+      <*> many (option str (short 'C' <> help "Pass an option to the C compiler"))
+      <*> many (option str (short 'L' <> help "Pass an option to the linker"))
+      <*> switch (long "static" <> short 's' <> help "Pass -static to the C compiler and linker")
+      <*> switch (long "musl"
+               <> help "Use musl-gcc for compilation. Implies --static")
+      <*> switch (long "dynamic-libchicken"
+               <> help "Link against the Chicken Scheme libraries dynamically.")
       <*> compilerOptions
 
     replCommand :: Parser Command
@@ -154,6 +198,13 @@ argParser = info (args <**> helper <**> version)
 
     optional :: Parser a -> Parser (Maybe a)
     optional p = (Just <$> p) <|> pure Nothing
+
+    opt = option auto ( long "opt" <> short 'O' <> metavar "LEVEL" <> value 1 <> showDefault
+                     <> help "Controls the optimisation level." )
+    time = optional (option str
+            ( long "time" <> metavar "FILE" <> hidden
+           <> help "Write the self-timing report to a file. Use - for stdout."))
+    watch = switch (long "watch" <> help "After compiling, watch for further changes to the file and recompile it again.")
 
     defaultPort :: Int
     defaultPort = 5478
@@ -238,7 +289,24 @@ main = do
             timingReport (hPutDoc h)
         Nothing -> pure ()
 
-    Args Compile { input, output, optLevel, export, options, watch, time } -> do
+    Args Compile{ input, output, optLevel, export, options, watch, time } -> do
+      exists <- doesFileExist input
+      if not exists
+      then hPutStrLn stderr ("Cannot find input file " ++ input)
+        >> exitWith (ExitFailure 1)
+      else pure ()
+
+      config <- driverConfig options
+      let opts = C.Options
+            { C.optLevel = if optLevel >= 1 then C.Opt else C.NoOpt
+            , C.lint = coreLint options
+            , C.export = export
+            , C.debug = debugMode options
+            }
+
+      compileOrWatch watch time opts config { D.target = CT.lua } (T.pack input) (C.compileWithLua output)
+
+    Args opt@Chicken{ input, cOutput, optLevel, options, time, keepScheme, useCC, ccOptions, useLD, ldOptions } -> do
       exists <- doesFileExist input
       if not exists
       then hPutStrLn stderr ("Cannot find input file " ++ input)
@@ -248,23 +316,29 @@ main = do
       let opts = C.Options
             { C.optLevel = if optLevel >= 1 then C.Opt else C.NoOpt
             , C.lint = coreLint options
-            , C.export = export
             , C.debug = debugMode options
+            , C.export = False
             }
 
-          writeOut :: Pretty a => a -> IO ()
-          writeOut = case output of
-                   Nothing -> putDoc . pretty
-                   Just f -> T.writeFile f . T.pack . show . pretty
+          copts = C.ChickenOptions
+            { C.keepScm = keepScheme
+            , C.useCC = (mkCc useCC, ccOptions ++ [ "-static" | static opt || musl opt ])
+            , C.useLD = (useLD, ldOptions ++ [ "-static" | static opt || musl opt ])
+            , C.staticChicken = not (dynamicCsc opt)
+            , C.output = cOutput
+            }
+          mkCc c | musl opt = Just (fromMaybe "musl-gcc" c) | otherwise = c
 
       config <- driverConfig options
-      if watch
-      then C.watchFile opts config (T.pack input) writeOut
-      else do
-        C.compileFile opts config (T.pack input) writeOut
-        case time of
-          Just "-" -> timingReport putDoc
-          Just file ->
-            withFile file WriteMode $ \h ->
-              timingReport (hPutDoc h)
-          Nothing -> pure ()
+      compileOrWatch False time opts config { D.target = CT.scheme } (T.pack input)
+        (C.compileWithChicken config copts)
+
+compileOrWatch :: Bool -> Maybe FilePath -> C.Options -> D.DriverConfig -> T.Text -> C.Emit -> IO ()
+compileOrWatch True _ opts config source emit = C.watchFile opts config source emit
+compileOrWatch False time opts config source emit = do
+  C.compileFile opts config source emit
+  case time of
+    Just "-" -> timingReport putDoc
+    Just file ->
+      withFile file WriteMode (timingReport . hPutDoc)
+    Nothing -> pure ()

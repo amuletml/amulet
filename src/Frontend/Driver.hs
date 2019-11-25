@@ -42,6 +42,7 @@ module Frontend.Driver
   --
   -- $compile
   , compile, compiles
+  , locateSchemeBase
 
   -- * Querying the driver
   --
@@ -100,6 +101,8 @@ import Syntax.Var
 
 import Parser.Wrapper (runParser)
 import Parser (parseTops)
+
+import CompileTarget (Target, lua)
 
 import Frontend.Errors
 
@@ -192,6 +195,8 @@ data DriverConfig = DriverConfig
   , callbacks :: DriverCallbacks
   -- ^ Callbacks for when a module has finished a particular stage.
   , checkOnly :: Bool
+  , target    :: Target
+  -- ^ The compile target we're using.
   } deriving Show
 
 data Driver = Driver
@@ -232,6 +237,7 @@ makeConfig = do
        ])
     defaultCallbacks
     False
+    lua
   where
     splitPath = Set.toList . Set.fromList . map T.unpack . T.split (==':') . T.pack
 
@@ -242,6 +248,14 @@ locatePrelude :: MonadIO m => DriverConfig -> m (Maybe FilePath)
 locatePrelude config = withTimer "Locating prelude" do
   let libPath = map (</> "prelude.ml") (libraryPath config)
   liftIO $ findFile' =<< (++) <$> (toList <$> lookupEnv "AMC_PRELUDE") <*> pure libPath
+
+-- | Locate the Chicken Scheme support code from a set of known locations:
+-- * The AMC_SCM_BASE environment variable (a file)
+-- * $libraryPath/base.ss
+locateSchemeBase :: MonadIO m => DriverConfig -> m (Maybe FilePath)
+locateSchemeBase config = withTimer "Locating Scheme base" do
+  let libPath = map (</> "base.ss") (libraryPath config)
+  liftIO $ findFile' =<< (++) <$> (toList <$> lookupEnv "AMC_SCM_BASE") <*> pure libPath
 
 -- | Construct a file map, suitable for use with 'fileSpans' and other
 -- "Text.Pretty.Note" functions.
@@ -294,8 +308,9 @@ resolveWithDeps :: (MonadNamey m, MonadIO m, MonadState Driver m)
                 => FilePath -> [Toplevel Parsed] -> Signature
                 -> m ((Maybe ResolveResult, ErrorBundle), Set.Set FilePath)
 resolveWithDeps root parsed sig = withTimer ("Resolving " ++ root) do
+  target <- uses config target
   (resolved, deps) <- flip runFileImport (LoadContext root Nothing)
-                    $ resolveProgram sig parsed
+                    $ resolveProgram target sig parsed
   (,deps) <$> case resolved of
     Left es -> pure (Nothing, mempty & (resolveErrors .~ es))
     Right resolved -> pure (Just resolved, mempty)
@@ -360,7 +375,8 @@ lowerWith root parsed sig env lState = do
       errors <- fold <$> gatherDepsOf getErrors deps
 
       v <- genName
-      let (verified', errs') = verifyProg v env inferred
+      target <- uses config target
+      let (verified', errs') = verifyProg v env target inferred
 
       (,errors<>errs') <$> case (verified, verified') of
         (False, _) -> pure Nothing
@@ -418,9 +434,9 @@ gatherDepsOf f = fmap snd . foldlM go mempty where
         (visited, seq) <- foldlM go (Set.insert path visited, seq) deps
         pure (visited, seq Seq.|> this)
 
-verifyProg :: Name -> Env -> [Toplevel Typed] -> (Bool, ErrorBundle)
-verifyProg v env inferred =
-  let (ok, es) = runVerify env v (verifyProgram inferred)
+verifyProg :: Name -> Env -> Target -> [Toplevel Typed] -> (Bool, ErrorBundle)
+verifyProg v env target inferred =
+  let (ok, es) = runVerify env target v (verifyProgram inferred)
   in (ok, mempty & verifyErrors .~ toList es)
 
 {- $query
@@ -530,9 +546,10 @@ getSignature path = do
     SUnparsed -> pure Nothing
     SParsed parsed -> withTimer ("Resolving " ++ path) do
       updateFile path $ stage .~ SResolving
+      target <- uses config target
       (resolved, deps) <-
           flip runFileImport (LoadContext (dropFileName path) (Just path))
-        $ resolveProgram builtinResolve parsed
+        $ resolveProgram target builtinResolve parsed
       case resolved of
         Left es -> do
           updateFile path $ (stage .~ SUnresolved) . (dependencies .~ deps) . (errors . resolveErrors .~ es)
@@ -629,7 +646,8 @@ getVerified path = do
 
     STyped prog sig env -> withTimer ("Verifying " ++ path) do
       v <- genName
-      let (verified, errs) = verifyProg v env prog
+      target <- uses config target
+      let (verified, errs) = verifyProg v env target prog
       updateFile path $ (stage .~ if verified then SVerified prog sig env else SUnverified sig env)
                      . (errors %~ (<>errs))
       runCallback path onVerified (if verified then Just (prog, env) else Nothing)
