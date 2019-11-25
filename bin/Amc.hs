@@ -160,17 +160,18 @@ argParser = info (args <**> helper <**> version)
            <> help "Write the self-timing report to a file. Use - for stdout."))
       <*> optional (option str
             ( long "keep-scheme" <> metavar "FILE" <> hidden
-           <> help "Write the generated Scheme to a file."))
+           <> help "Write the generated Scheme to a file. This is a debugging flag. Do not expect the generated Scheme to be readable."))
       <*> optional (option str
             ( long "cc" <> metavar "PROGRAM" <> hidden
            <> help "Use PROGRAM as the C compiler"))
       <*> optional (option str
             ( long "ld" <> metavar "PROGRAM" <> hidden
            <> help "Use PROGRAM as the object file linker"))
-      <*> many (option str (long "opt-cc" <> help "Pass an option to the C compiler"))
-      <*> many (option str (long "opt-ld" <> help "Pass an option to the linker"))
+      <*> many (option str (short 'C' <> help "Pass an option to the C compiler"))
+      <*> many (option str (short 'L' <> help "Pass an option to the linker"))
       <*> switch (long "static" <> short 's' <> help "Pass -static to the C compiler and linker")
-      <*> switch (long "musl" <> help "Prepend \"musl-\" to the C compiler name (i.e., use a musl compiler). Implies --static")
+      <*> switch (long "musl"
+               <> help "Use musl-gcc for compilation. Implies --static")
       <*> switch (long "dynamic-libchicken"
                <> help "Link against the Chicken Scheme libraries dynamically.")
       <*> compilerOptions
