@@ -314,7 +314,8 @@ lowerProgEnv stmt = do
 lowerModule :: forall m. MonadLower m => ModuleTerm Typed -> m (LowerState, [Stmt])
 lowerModule (ModStruct ms _) = lowerProg' ms
 lowerModule ModRef{} = asks (,[])
-lowerModule ModLoad{} = asks (,[])
+lowerModule ModImport{} = asks (,[])
+lowerModule ModTargetImport{} = asks (,[])
 
 lowerProg' :: forall m. MonadLower m => [Toplevel Typed] -> m (LowerState, [Stmt])
 
@@ -331,6 +332,8 @@ lowerProg' (Open m:prg) = do
 lowerProg' (Module _ _ m:prg) = do
   (s, ms) <- lowerModule m
   (ms++) <$$> local (const s) (lowerProg' prg)
+
+lowerProg' (Codegen c _:prg) = (RawCode c:) <$$> lowerProg' prg
 
 -- ∨ TC desugars all of these to TypeDecl + Let
 lowerProg' (Class{}:prg) = lowerProg' prg

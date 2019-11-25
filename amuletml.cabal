@@ -368,6 +368,7 @@ library
                      , Core.Optimise.CommonExpElim
                      -- Backend
                      , Backend.Lua
+                     , Backend.Scheme
                      , Backend.Lua.Emit
                      , Backend.Lua.Inline
                      , Backend.Lua.Builtin
@@ -389,6 +390,7 @@ library
                      , Control.Monad.Chronicles
                      -- Misc
                      , Generics.Constructor
+                     , CompileTarget
   if os(linux)
     ghc-options: -optl-fuse-ld=lld
     extra-libraries: m, pthread

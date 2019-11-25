@@ -517,6 +517,9 @@ inferProg (Module am name mod:prg) = do
     consFst (Module am name mod') $
     inferProg prg
 
+inferProg (Codegen code ann:prg) =
+  consFst (Codegen code (ann, tyUnit)) (inferProg prg)
+
 inferProg [] = asks ([],)
 
 inferMod :: MonadInfer Typed m => ModuleTerm Desugared
@@ -548,7 +551,8 @@ inferMod (ModRef name a) = do
   mod <- view (modules . at name) >>= maybe (confesses (NotInScope name)) pure
   pure (ModRef name (a, undefined), const id, mod)
 
-inferMod ModLoad{} = error "Impossible"
+inferMod ModImport{} = error "Impossible"
+inferMod ModTargetImport{} = error "Impossible"
 
 buildList :: Ann Resolved -> Type Typed -> [Expr Typed] -> Expr Typed
 buildList an tau [] =

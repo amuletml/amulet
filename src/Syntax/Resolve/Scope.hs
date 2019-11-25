@@ -6,8 +6,8 @@ module Syntax.Resolve.Scope
   ( Slot(..)
   , VarName
   , Signature(..), vals, types, modules
-  , Context(..), scope, tyvars, nonRecs
-  , emptyContext
+  , Context(..), scope, tyvars, nonRecs, target
+  , mkContext
   , exportedNames
   , tagVar
   , withVal, withVals, extendVals
@@ -28,6 +28,8 @@ import Data.List
 
 import Control.Monad.Reader
 import Control.Monad.Namey
+
+import CompileTarget
 
 import Syntax.Var
 
@@ -67,6 +69,9 @@ data Context = Context
   , _tyvars :: Map.Map VarName Slot
     -- | Non-recursive names whose definitions we are within.
   , _nonRecs :: Map.Map VarName Span
+    -- | The backend we're targeting, and thus the kind of file we should
+    -- be loading.
+  , _target  :: Target
   }
   deriving Show
 
@@ -74,8 +79,8 @@ makeLenses ''Signature
 makeLenses ''Context
 
 -- | An empty context for resolving
-emptyContext :: Context
-emptyContext = Context mempty mempty mempty
+mkContext :: Target -> Context
+mkContext = Context mempty mempty mempty
 
 -- | Get all names exported by a module.
 exportedNames :: Signature -> VarSet.Set

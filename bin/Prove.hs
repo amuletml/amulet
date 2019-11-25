@@ -21,6 +21,8 @@ import qualified Data.Text.Lazy as L
 
 import Data.Text.Lazy (Text)
 import Data.Foldable
+import Data.Spanned
+import Data.These
 import Data.List
 
 import qualified Data.Map.Strict as Map
@@ -45,8 +47,7 @@ import Types.Holes
 
 import Frontend.Errors
 
-import Data.Spanned
-import Data.These
+import CompileTarget
 
 import System.IO
 
@@ -167,7 +168,7 @@ proveSentence report success stdout tau = do
   let prog = [ TySymDecl Public (Name "_") [] (foldr addForall t (ftv t)) (annotation tau) ]
       addForall v = TyForall v (Just TyType)
       t = getL tau
-  x <- runNullImport $ resolveProgram rScope prog
+  x <- runNullImport $ resolveProgram lua rScope prog
   case x of
     Left es -> liftIO $ traverse_ report es
     Right (ResolveResult p _ _) -> do

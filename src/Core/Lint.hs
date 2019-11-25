@@ -161,6 +161,7 @@ checkStmt s (Type v ctors:xs) = do
          *> checkType s' x)
 
   ((Type v ctors, es):) <$> checkStmt s' xs
+checkStmt s (RawCode t:xs) = ((RawCode t, mempty):) <$> checkStmt s xs
 
 checkAtom :: IsVar a
          => Scope a

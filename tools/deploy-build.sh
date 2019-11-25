@@ -63,6 +63,7 @@ packager = $(git config --get user.name) <$(git config --get user.email)>
 size = $size
 license = BSD
 arch = $(uname -m)
+depend = chicken
 EOF
 
 # Generate fake executables for the packages

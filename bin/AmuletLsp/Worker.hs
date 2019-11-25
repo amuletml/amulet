@@ -85,6 +85,8 @@ import Syntax.Verify
 import Syntax.Types
 import Syntax.Var
 
+import CompileTarget (Target)
+
 import Text.Pretty.Note
 
 import Types.Infer (inferProgram)
@@ -217,6 +219,9 @@ data Worker = Worker
     -- | The complete path to resolve libraries on.
   , libraryPath  :: TVar [FilePath]
 
+    -- | The compile target, use for resolution.
+  , target       :: Target
+
     -- | A mapping of file names to some representation of their contents. This
     -- is updated immediately whenever a file changes.
   , fileContents :: TVar (HM.HashMap NormalizedUri FileContents)
@@ -259,12 +264,13 @@ mainPath = do
     ]
 
 -- | Construct a worker from a library path, and some "error reporting" function.
-makeWorker :: [FilePath] -> (NormalizedUri -> ErrorBundle -> IO ()) -> IO Worker
-makeWorker extra pushErrors = do
+makeWorker :: [FilePath] -> Target -> (NormalizedUri -> ErrorBundle -> IO ()) -> IO Worker
+makeWorker extra target pushErrors = do
   path <- (extra++) <$> mainPath
   current <- myThreadId
   worker <- atomically $ Worker pushErrors current current
     <$> newTVar path      -- Library path
+    <*> pure    target    -- Compile target
     <*> newTVar mempty    -- File contents
     <*> newTVar mempty    -- File states
     <*> newTVar mempty    -- File vars
@@ -551,7 +557,7 @@ workOnce :: Worker -- ^ The worker to evaluate in
          -> Clock
          -> Maybe NormalizedUri
          -> IO ()
-workOnce wrk@Worker { pushErrors, fileContents, fileStates, fileVars } baseClock priority = do
+workOnce wrk@Worker { pushErrors, fileContents, fileStates, fileVars, target } baseClock priority = do
   case priority of
     Nothing -> pure ()
     Just path -> loadFile path Nothing $> ()
@@ -725,7 +731,7 @@ workOnce wrk@Worker { pushErrors, fileContents, fileStates, fileVars } baseClock
   loadFrom :: NormalizedUri -> Name -> [Toplevel Parsed] -> Bool
            -> IO (ErrorBundle, Maybe (Signature, [Toplevel Resolved]), Maybe (Signature, Env, [Toplevel Typed]))
   loadFrom path var parsed verify = flip evalNameyMT (nextName wrk) $ do
-    (resolved, dependencies) <- flip runFileImport (wrk, path, loadFile) $ resolveProgram builtinResolve parsed
+    (resolved, dependencies) <- flip runFileImport (wrk, path, loadFile) $ resolveProgram target builtinResolve parsed
     let env = HM.foldrWithKey (getEnvs path) (Right builtinEnv) dependencies
     case (resolved, env) of
       (Right (ResolveResult resolved sig _), Right env) -> do
@@ -738,7 +744,7 @@ workOnce wrk@Worker { pushErrors, fileContents, fileStates, fileVars } baseClock
         vEs <- case tyRes of
           Just (prog, env) | verify -> do
             name <- genName
-            pure . toList . snd . runVerify env name $ verifyProgram prog
+            pure . toList . snd . runVerify env target name $ verifyProgram prog
           _ -> pure []
 
         pure ( mempty & (typeErrors .~ tEs) . (verifyErrors .~ vEs)

@@ -79,6 +79,8 @@ import qualified Network.Socket as Net
 
 import Control.Concurrent
 
+import CompileTarget (lua)
+
 import Amc.Repl.Display
 import Amc.Debug
 import Version
@@ -260,7 +262,7 @@ infoCommand (T.pack . dropWhile isSpace -> input) = do
       resolved <-
           flip evalNameyT (lastName state)
         . runNullImport
-        $ resolveProgram (resolveScope state) prog
+        $ resolveProgram lua (resolveScope state) prog
 
       case resolved of
         Right (ResolveResult [ S.LetStmt _ _ [S.Binding _ (S.VarRef name _) _ _] ] _ _) ->
@@ -331,7 +333,7 @@ execString name line = do
       state <- get
       (ok, res) <- liftIO $ do
         dumpTypes (debugMode (config state)) prog oldInfer (inferScope state)
-        dumpCore (debugMode (config state)) core core luaExpr
+        dumpCore (debugMode (config state)) core core (pretty luaExpr)
 
         L.runWith (luaState state) $ do
           L.OK <- L.dostring "-- time out hook\nlocal function f() error('Timed out!', 3) end; debug.sethook(f, '', 1e6)"
@@ -394,6 +396,7 @@ patchupUsage :: IsVar a => [C.AnnStmt b (OccursVar a)] -> [C.AnnStmt b(OccursVar
 patchupUsage [] = []
 patchupUsage (s@C.Foreign{}:xs) = s:patchupUsage xs
 patchupUsage (s@C.Type{}:xs) = s:patchupUsage xs
+patchupUsage (s@C.RawCode{}:xs) = s:patchupUsage xs
 patchupUsage (C.StmtLet (C.One v):xs) = C.StmtLet (C.One (first3 patchupVarUsage v)):patchupUsage xs
 patchupUsage (C.StmtLet (C.Many v):xs) = C.StmtLet (C.Many (map (first3 patchupVarUsage) v)):patchupUsage xs
 
@@ -525,7 +528,7 @@ loadFiles paths = do
       luaState <- gets luaState
       debug <- gets (debugMode . config)
       liftIO $ do
-        dumpCore debug core core luaExpr
+        dumpCore debug core core (pretty luaExpr)
         res <- L.runWith luaState $ do
           code <- L.dostring luaSyntax
           case code of

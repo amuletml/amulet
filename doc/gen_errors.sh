@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+cd "$(dirname "${BASH_SOURCE[0]}")"
+
 while IFS= read -r line; do
   path=$PWD/errors/$(echo $line | cut -d' ' -f1)
   if [[ -f $path ]]; then

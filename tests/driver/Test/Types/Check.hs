@@ -27,6 +27,8 @@ import Syntax.Desugar (desugarProgram)
 import Syntax.Types (difference, toMap)
 import Syntax.Builtin
 
+import CompileTarget
+
 import Core.Lower
 import Core.Simplify
 import Core.Lint
@@ -40,7 +42,7 @@ import Text.Pretty.Semantic hiding ((</>))
 result :: String -> T.Text -> T.Text
 result file contents = runIdentity . flip evalNameyT firstName $ do
   let parsed = requireJust name contents $ runParser name (L.fromStrict contents) parseTops
-  ResolveResult resolved _ _ <- requireRight name contents <$> runNullImport (resolveProgram builtinResolve parsed)
+  ResolveResult resolved _ _ <- requireRight name contents <$> runNullImport (resolveProgram lua builtinResolve parsed)
 
   desugared <- desugarProgram resolved
   inferred <- inferProgram builtinEnv desugared
@@ -65,7 +67,7 @@ checkLint optm file = flip evalNameyT firstName $ do
   contents <- liftIO (T.readFile file)
   let name = T.pack file
       parsed = requireJust name contents $ runParser name (L.fromStrict contents) parseTops
-  ResolveResult resolved _ _ <- requireRight name contents <$> runNullImport (resolveProgram builtinResolve parsed)
+  ResolveResult resolved _ _ <- requireRight name contents <$> runNullImport (resolveProgram lua builtinResolve parsed)
 
   desugared <- desugarProgram resolved
   inferred <- toEither <$> inferProgram builtinEnv desugared

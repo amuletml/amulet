@@ -1,4 +1,4 @@
-{-# LANGUAGE
+{-# language
   OverloadedStrings, NamedFieldPuns, FlexibleContexts
 , FlexibleInstances, TupleSections, ViewPatterns
 , ScopedTypeVariables, TemplateHaskell, QuasiQuotes #-}
@@ -21,6 +21,7 @@ import Data.Sequence (Seq((:<|)))
 import qualified Data.Text as T
 import Data.Traversable
 import Data.Bifunctor
+import Data.Position
 import Data.Foldable
 import Data.Triple
 import Data.List (partition)
@@ -839,6 +840,8 @@ emitLit RecNil    = LuaTable []
 emitStmt :: forall a m. (Occurs a, MonadState TopEmitState m)
          => [AnnStmt VarSet.Set a] -> m (Seq LuaStmt)
 emitStmt [] = pure mempty
+emitStmt (RawCode c:xs) = (Seq.singleton (LuaQuoteS c) <>) <$> emitStmt xs
+
 emitStmt (Foreign n t s:xs) = do
   n' <- pushTopScope n
   topArity %= flip extendForeign (n, t)
