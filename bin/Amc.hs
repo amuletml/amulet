@@ -13,6 +13,7 @@ import Control.Timing
 import qualified Data.Text.IO as T
 import qualified Data.Text as T
 import Data.Traversable
+import Data.Maybe
 
 import Options.Applicative hiding (ParseError)
 
@@ -61,6 +62,15 @@ data Command
     { input       :: FilePath
     , cOutput     :: FilePath
     , optLevel    :: Int
+    , time        :: Maybe FilePath
+    , keepScheme  :: Maybe FilePath
+    , useCC       :: Maybe String
+    , useLD       :: Maybe String
+    , ccOptions   :: [String]
+    , ldOptions   :: [String]
+    , static      :: Bool
+    , musl        :: Bool
+    , dynamicCsc  :: Bool
     , options     :: CompilerOptions
     }
   | Repl
@@ -144,6 +154,24 @@ argParser = info (args <**> helper <**> version)
           <> value "amulet.out" ) 
       <*> option auto ( long "opt" <> short 'O' <> metavar "LEVEL" <> value 1 <> showDefault
                      <> help "Controls the optimisation level." )
+      <*> optional (option str
+            ( long "time" <> metavar "FILE" <> hidden
+           <> help "Write the self-timing report to a file. Use - for stdout."))
+      <*> optional (option str
+            ( long "keep-scheme" <> metavar "FILE" <> hidden
+           <> help "Write the generated Scheme to a file."))
+      <*> optional (option str
+            ( long "cc" <> metavar "PROGRAM" <> hidden
+           <> help "Use PROGRAM as the C compiler"))
+      <*> optional (option str
+            ( long "ld" <> metavar "PROGRAM" <> hidden
+           <> help "Use PROGRAM as the object file linker"))
+      <*> many (option str (long "opt-cc" <> help "Pass an option to the C compiler"))
+      <*> many (option str (long "opt-ld" <> help "Pass an option to the linker"))
+      <*> switch (long "static" <> short 's' <> help "Pass -static to the C compiler and linker")
+      <*> switch (long "musl" <> help "Prepend \"musl-\" to the C compiler name (i.e., use a musl compiler). Implies --static")
+      <*> switch (long "dynamic-libchicken"
+               <> help "Link against the Chicken Scheme libraries dynamically.")
       <*> compilerOptions
 
     replCommand :: Parser Command
@@ -259,7 +287,7 @@ main = do
             timingReport (hPutDoc h)
         Nothing -> pure ()
 
-    Args Compile { input, output, optLevel, export, options, watch, time } -> do
+    Args Compile{ input, output, optLevel, export, options, watch, time } -> do
       exists <- doesFileExist input
       if not exists
       then hPutStrLn stderr ("Cannot find input file " ++ input)
@@ -290,19 +318,29 @@ main = do
               timingReport (hPutDoc h)
           Nothing -> pure ()
 
-    Args Chicken { input, cOutput, optLevel, options } -> do
+    Args opt@Chicken{ input, cOutput, optLevel, options, time, keepScheme, useCC, ccOptions, useLD, ldOptions } -> do
       exists <- doesFileExist input
       if not exists
       then hPutStrLn stderr ("Cannot find input file " ++ input)
         >> exitWith (ExitFailure 1)
       else pure ()
 
-      let opts = C.Options
-            { C.optLevel = if optLevel >= 1 then C.Opt else C.NoOpt
-            , C.lint = coreLint options
-            , C.export = False
-            , C.debug = debugMode options
+      let opts = C.ChickenOptions
+            { C.coOptLevel = if optLevel >= 1 then C.Opt else C.NoOpt
+            , C.coLint = coreLint options
+            , C.coDebug = debugMode options
+            , C.keepScm = keepScheme
+            , C.useCC = (mkCc useCC, ccOptions ++ [ "-static" | static opt || musl opt ])
+            , C.useLD = (useLD, ldOptions ++ [ "-static" | static opt || musl opt ])
+            , C.staticChicken = not (dynamicCsc opt)
             }
+          mkCc c | musl opt = Just (fromMaybe "musl-gcc" c) | otherwise = c
 
       config <- driverConfig options
       C.compileViaChicken opts config (T.pack input) cOutput
+      case time of
+        Just "-" -> timingReport putDoc
+        Just file ->
+          withFile file WriteMode $ \h ->
+            timingReport (hPutDoc h)
+        Nothing -> pure ()

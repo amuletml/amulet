@@ -1,7 +1,7 @@
 {-# LANGUAGE NamedFieldPuns, RankNTypes #-}
 module Amc.Compile
   ( Optimise(..)
-  , Options(..)
+  , Options(..), ChickenOptions(..)
   , compileFile
   , watchFile
   , compileViaChicken
@@ -20,6 +20,7 @@ import Control.Monad.Namey
 import Control.Monad.State
 import Control.Concurrent
 import Control.Exception
+import Control.Timing
 
 import qualified Data.Set as Set
 import qualified Data.Map as Map
@@ -57,6 +58,17 @@ data Options = Options
   , lint     :: Bool
   , export   :: Bool
   , debug    :: D.DebugMode
+  }
+  deriving Show
+
+data ChickenOptions = ChickenOptions
+  { coOptLevel    :: Optimise
+  , coLint        :: Bool
+  , coDebug       :: D.DebugMode
+  , keepScm       :: Maybe FilePath
+  , useCC         :: (Maybe String, [String])
+  , useLD         :: (Maybe String, [String])
+  , staticChicken :: Bool
   }
   deriving Show
 
@@ -138,12 +150,12 @@ watchFile opt config file emit = do
       then pure [path]
       else wait files chan
 
-compileViaChicken :: Options -> D.DriverConfig -> SourceName -> String -> IO ()
+compileViaChicken :: ChickenOptions -> D.DriverConfig -> SourceName -> String -> IO ()
 compileViaChicken opt config file output = go (D.makeDriverWith config, firstName) opt where
-  lintIt name = if lint opt then runLint name else flip const
+  lintIt name = if coLint opt then runLint name else flip const
 
-  go :: (D.Driver, Name) -> Options -> IO ()
-  go (driver, name) Options { optLevel, lint, debug } = do
+  go :: (D.Driver, Name) -> ChickenOptions -> IO ()
+  go (driver, name) ChickenOptions { coOptLevel, coLint, coDebug } = do
     path <- canonicalizePath (T.unpack file)
     ((((core, errors), _), driver), name) <-
         flip runNameyT name
@@ -161,39 +173,55 @@ compileViaChicken opt config file output = go (D.makeDriverWith config, firstNam
     scm <- case core of
       Nothing -> pure mempty
       Just core -> do
-        let info = defaultInfo { useLint = lint, exportNames = mempty }
-            optimised = flip evalNamey name $ case optLevel of
+        let info = defaultInfo { useLint = coLint, exportNames = mempty }
+            optimised = flip evalNamey name $ case coOptLevel of
               Opt -> optimise info core
               NoOpt -> do
                 lintIt "Lower" (checkStmt emptyScope core) (pure ())
                 (lintIt "Optimised"  =<< checkStmt emptyScope) . deadCodePass info <$> reducePass info core
             lua = compileProgram Nothing optimised
             chicken = genScheme optimised
-        D.dumpCore debug core optimised lua
+        D.dumpCore coDebug core optimised lua
         pure chicken
 
     (path, temp_h) <- openTempFile "." "amulet.ss"
-    hPutDoc temp_h scm
+    withTimer "Generating Scheme" $ hPutDoc temp_h scm
     hClose temp_h
 
     chicken <- getChicken
-    let chicken_process = proc chicken [ "-prologue", base_ss
-                                       , "-uses", "library"
-                                       , "-x", "-strict-types"
-                                       , "-strip", "-static"
-                                       , path
-                                       , "-o", output
-                                       ]
-    setEnv "CHICKEN_OPTIONS" "-emit-link-file /dev/null"
-    (_, _, _, handle) <-
-      createProcess (chicken_process { std_out = Inherit
-                                     , std_in = NoStream
-                                     , std_err = Inherit
-                                     })
+    let chicken_process = proc chicken chicken_cmdline
+        chicken_cmdline =
+          [ "-prologue", base_ss
+          , "-uses", "library"
+          , "-x", "-strict-types"
+          , "-strip"
+          , path, "-o", output ]
+          ++ case fst (useCC opt) of
+               Just cc -> [ "-cc", cc ]
+               Nothing -> []
+          ++ case fst (useLD opt) of
+               Just cc -> [ "-ld", cc ]
+               Nothing -> []
+          ++ (snd (useCC opt) >>= \x -> ["-C", x])
+          ++ (snd (useLD opt) >>= \x -> ["-L", x])
+          ++ [ "-static" | staticChicken opt ]
 
-    code <- waitForProcess handle
+    code <- withTimer ("Chicken compiler for " ++ path) $ do
+      setEnv "CHICKEN_OPTIONS" "-emit-link-file /dev/null"
+      (_, _, _, handle) <-
+        createProcess (chicken_process { std_out = Inherit
+                                       , std_in = NoStream
+                                       , std_err = Inherit
+                                       })
+      waitForProcess handle
 
-    -- removePathForcibly path
+    case keepScm opt of
+      Just "-" -> do
+        putStrLn "amc: Generated Scheme:"
+        hPutDoc stdout scm
+        removeFile path
+      Just p -> renameFile path p
+      _ -> removeFile path
 
     case code of
       ExitSuccess   -> pure ()

@@ -1,4 +1,4 @@
-{-# LANGUAGE
+{-# language
   OverloadedStrings, NamedFieldPuns, FlexibleContexts
 , FlexibleInstances, TupleSections, ViewPatterns
 , ScopedTypeVariables, TemplateHaskell, QuasiQuotes #-}

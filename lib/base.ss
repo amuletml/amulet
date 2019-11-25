@@ -68,7 +68,7 @@
           (vector-ref lazy 1)))))
 
 (define (Cons#-21 x) (vector 'Cons#-21 x))
-(define Nil#-22 'Nil#-22)
+(define Nil#-22 (vector 'Nil#-22))
 
 (define (:=#-23 ref val)
   (vector-set! ref 0 val)
