@@ -170,8 +170,8 @@ compileViaChicken opt config file output = go (D.makeDriverWith config, firstNam
       Just s -> pure s
       Nothing -> throwIO (userError "Couldn't locate base.ss file")
 
-    scm <- case core of
-      Nothing -> pure mempty
+    case core of
+      Nothing -> pure ()
       Just core -> do
         let info = defaultInfo { useLint = coLint, exportNames = mempty }
             optimised = flip evalNamey name $ case coOptLevel of
@@ -180,52 +180,51 @@ compileViaChicken opt config file output = go (D.makeDriverWith config, firstNam
                 lintIt "Lower" (checkStmt emptyScope core) (pure ())
                 (lintIt "Optimised"  =<< checkStmt emptyScope) . deadCodePass info <$> reducePass info core
             lua = compileProgram Nothing optimised
-            chicken = genScheme optimised
+            scm = genScheme optimised
         D.dumpCore coDebug core optimised lua
-        pure chicken
 
-    (path, temp_h) <- openTempFile "." "amulet.ss"
-    withTimer "Generating Scheme" $ hPutDoc temp_h scm
-    hClose temp_h
+        (path, temp_h) <- openTempFile "." "amulet.ss"
+        withTimer "Generating Scheme" $ hPutDoc temp_h scm
+        hClose temp_h
 
-    chicken <- getChicken
-    let chicken_process = proc chicken chicken_cmdline
-        chicken_cmdline =
-          [ "-prologue", base_ss
-          , "-uses", "library"
-          , "-x", "-strict-types"
-          , "-strip"
-          , path, "-o", output ]
-          ++ case fst (useCC opt) of
-               Just cc -> [ "-cc", cc ]
-               Nothing -> []
-          ++ case fst (useLD opt) of
-               Just cc -> [ "-ld", cc ]
-               Nothing -> []
-          ++ (snd (useCC opt) >>= \x -> ["-C", x])
-          ++ (snd (useLD opt) >>= \x -> ["-L", x])
-          ++ [ "-static" | staticChicken opt ]
+        chicken <- getChicken
+        let chicken_process = proc chicken chicken_cmdline
+            chicken_cmdline =
+              [ "-prologue", base_ss
+              , "-uses", "library"
+              , "-x", "-strict-types"
+              , "-strip"
+              , path, "-o", output ]
+              ++ case fst (useCC opt) of
+                   Just cc -> [ "-cc", cc ]
+                   Nothing -> []
+              ++ case fst (useLD opt) of
+                   Just cc -> [ "-ld", cc ]
+                   Nothing -> []
+              ++ (snd (useCC opt) >>= \x -> ["-C", x])
+              ++ (snd (useLD opt) >>= \x -> ["-L", x])
+              ++ [ "-static" | staticChicken opt ]
 
-    code <- withTimer ("Chicken compiler for " ++ path) $ do
-      setEnv "CHICKEN_OPTIONS" "-emit-link-file /dev/null"
-      (_, _, _, handle) <-
-        createProcess (chicken_process { std_out = Inherit
-                                       , std_in = NoStream
-                                       , std_err = Inherit
-                                       })
-      waitForProcess handle
+        code <- withTimer ("Chicken compiler for " ++ path) $ do
+          setEnv "CHICKEN_OPTIONS" "-emit-link-file /dev/null"
+          (_, _, _, handle) <-
+            createProcess (chicken_process { std_out = Inherit
+                                           , std_in = NoStream
+                                           , std_err = Inherit
+                                           })
+          waitForProcess handle
 
-    case keepScm opt of
-      Just "-" -> do
-        putStrLn "amc: Generated Scheme:"
-        hPutDoc stdout scm
-        removeFile path
-      Just p -> renameFile path p
-      _ -> removeFile path
+        case keepScm opt of
+          Just "-" -> do
+            putStrLn "amc: Generated Scheme:"
+            hPutDoc stdout scm
+            removeFile path
+          Just p -> renameFile path p
+          _ -> removeFile path
 
-    case code of
-      ExitSuccess   -> pure ()
-      ExitFailure _ -> exitWith code
+        case code of
+          ExitSuccess   -> pure ()
+          ExitFailure _ -> exitWith code
 
 getChicken :: IO String
 getChicken = do

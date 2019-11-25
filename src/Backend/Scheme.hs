@@ -1,3 +1,4 @@
+{-# LANGUAGE ViewPatterns #-}
 module Backend.Scheme (genScheme) where
 
 import Control.Lens
@@ -56,6 +57,10 @@ genTerm unpack (Lam c b) =
     TermArgument v _ -> parens $
       keyword "lambda" <+> parens (var v) <#> indent 2 (genTerm unpack b)
 
+genTerm unpack (Let (One (v, _, erase -> Atom (Ref v' _))) b)
+  | v' `M.member` unpack = genTerm (M.insert v (unpack M.! v') unpack) b
+  | otherwise = genTerm (M.insert v [var v'] unpack) b
+
 genTerm unpack (Let (One (v, t, e)) b) =
   let binding = genTerm unpack e
       vars = case t of
@@ -92,8 +97,10 @@ genTerm u (TyApp a _) = genAtom u a
 genTerm u (Cast a _ _) = genAtom u a
 
 genTerm u (Extend atom rows) =
-  let new = parens $ keyword "copy-record-storage" <+> genAtom u atom
-      ext (k, _, a) = parens $ keyword "record-storage-insert!"
+  let new = parens $ keyword "copy-record-storage"
+                 <+> genAtom u atom
+                 <+> sliteral (int (length rows))
+      ext (k, _, a) = parens $ keyword "record-storage-set!"
                            <+> string "new-record"
                            <+> shown k
                            <+> genAtom u a
@@ -104,6 +111,11 @@ genTerm u (Extend atom rows) =
        <#> indent 2 (string "new-record")
 
 genTerm u (Values xs) = parens $ keyword "values" <+> hsep (map (genAtom u) xs)
+
+erase :: Term a -> Term a
+erase (Cast a _ _) = Atom a
+erase (TyApp a _) = Atom a
+erase a = a
 
 genBranch :: Map [Doc] -> Atom CoVar -> Arm CoVar -> Doc
 genBranch unpack a (Arm p _ t _ _) =
@@ -164,7 +176,7 @@ genLit (Float d) = sliteral (double d)
 genLit LitTrue   = sliteral (string "#t")
 genLit LitFalse  = sliteral (string "#f")
 genLit Unit      = parens $ keyword "void"
-genLit RecNil    = parens $ keyword "make-record-storage"
+genLit RecNil    = parens $ keyword "make-record-storage" <+> sliteral (int 0)
 
 quote :: CoVar -> Doc
 quote v = parens $ keyword "quote" <+> var v
