@@ -25,6 +25,10 @@ instance exception (some exception) begin
   let describe_exception (MkSome exc) = describe_exception exc
 end
 
+instance show (some exception) begin
+  let show x = describe_exception x
+end
+
 open import { lua = "./../lua/exception.ml", scheme = "./../scheme/condition.ml" }
 
 

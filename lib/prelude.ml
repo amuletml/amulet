@@ -4,6 +4,8 @@ include import "./amulet/list.ml"
 module Typeable = import "./amulet/typeable.ml"
 module Exception = import "./amulet/exception.ml"
 
+let error = Exception.error
+
 include import "./data/foldable.ml"
 include import "./data/traversable.ml"
 

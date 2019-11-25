@@ -91,12 +91,12 @@
 
 (define (@@#-20 f x) (f x))
 
-(define error#-14 error)
+(define |id#-14| error) ; error
 
-(define (lazy#-15 x)
+(define (|id#-15| x) ; lazy
   (vector #f x))
 
-(define (force#-16 lazy)
+(define (|id#-16| lazy) ; force
   (if (vector-ref lazy 0)
       (vector-ref lazy 1)
       (begin
@@ -106,65 +106,65 @@
           (vector-set! lazy 0 #t)
           (vector-ref lazy 1)))))
 
-(define (Cons#-21 x) (vector 'Cons#-21 x))
-(define Nil#-22 (vector 'Nil#-22))
+(define (|id#-21| x) (vector '|id#-21| x))
+(define |id#-22| (vector '|id#-22|))
 
-(define (:=#-23 ref val)
+(define (|id#-23| ref val) ; :=
   (vector-set! ref 0 val)
   (void))
 
-(define (!#-24 ref)
+(define (|id#-24| ref) ; !
   (vector-ref ref 0))
 
-(define (ref#-25 val)
+(define (|id#-25| val) ; ref
   (vector val))
 
-(define (string_value#-26 val) val)
-(define (int_value#-27 val) val)
+(define (|id#-26| val) val)
+(define (|id#-27| val) val)
 
-(define (extend_row#-28 key val rec)
+(define (|id#-28| key val rec)
   (let ((new-rec (copy-record-storage rec 1)))
     (record-storage-set! rec key val)
     rec))
 
-(define (restrict_row#-29 key rec)
+(define (|id#-29| key rec)
   (let ((new-rec (make-record-storage 2))
         (value (record-storage-ref rec key)))
     (record-storage-set! new-rec "_1" value)
     (record-storage-set! new-rec "_2" rec)
     new-rec))
 
-(define ($KnownString#-30 val) val)
-(define ($KnownInt#-31 val) val)
-(define ($RowCons#-32 val) val)
+(define ($|id#-30| val) val)
+(define ($|id#-31| val) val)
+(define ($|id#-32| val) val)
 
-(define $Refl#-38 'Refl)
+(define $|id#-38| 'Refl)
 
-(define $Refl#-38 'Refl)
+(define $|id#-38| 'Refl)
 
-(define (String#-43 x) (vector 'String#-43 x))
+(define (|id#-43| x) (vector '|id#-43| x))
 (define (:<>:#-44 x) (vector ':<>:#-44 x))
 (define (:<#>:#-45 x) (vector ':<#>:#-45 x))
-(define (ShowType#-46 x) (vector 'ShowType#-46 x))
+(define (|id#-46| x) (vector '|id#-46| x))
 
-(define ($Typeable#-50 x) (x))
+(define (|id#-50| x) (x (void)))
 
-(define ($TypeableApp#-53 pair)
+(define (|id#-53| pair)
   (let ((ta (record-storage-ref pair "_1"))
         (tb (record-storage-ref pair "_2")))
     (string-append "(" ta ") :$ (" tb ")")))
 
-(define ($TypeableKK#-54 name finger)
+(define (|id#-54| name finger)
   (string-append name "#" (number->string finger)))
 
-(define ($TypeRep#-51 x)
+(define (|id#-51| x)
   (string-append (record-storage-ref x "name")
                  "#"
-                 (record-storage-ref x "fingerprint")))
+                 (number->string (record-storage-ref x "fingerprint"))))
 
-(define (type_of#-48 x) (lambda () x))
+(define (|id#-48| x) (lambda () x))
 
-(define (eq_type_rep#-52 tr_a tr_b keq kne)
+(define (|id#-52| tr_a tr_b keq kne)
   (if (string=? tr_a tr_b)
       ((keq 'Refl) (void))
       (kne (void))))

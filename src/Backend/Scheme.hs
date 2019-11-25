@@ -167,8 +167,8 @@ genAtom unpack (Ref v _) =
     Nothing -> var v
 
 var :: CoVar -> Doc
-var (CoVar id (Just t) _) = char '|' <> text t <> char '#' <> int id <> char '|'
-var (CoVar id Nothing _)  = string "_#" <> int id
+var (CoVar id h _) =
+  char '|' <> string "id" <> char '#' <> int id <> char '|' <+> string ("#;(" ++ show h ++ ")")
 
 genLit :: Literal -> Doc
 genLit (Int i)   = sliteral (integer i)
