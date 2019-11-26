@@ -1,16 +1,24 @@
 {-# LANGUAGE ViewPatterns #-}
-module Backend.Scheme (genScheme) where
+module Backend.Scheme (genScheme, amuletHash) where
 
 import Control.Lens
 
 import qualified Data.VarMap as M
 import Data.VarMap (Map)
 
+import qualified Data.Map as Map
+
+import qualified Data.Text.Encoding as E
+import qualified Data.ByteString as Bs
+import Data.Text (Text)
+import GHC.Word
+
 import Core.Types
 import Core.Core
 import Core.Var
 
 import Text.Pretty.Semantic
+
 
 genScheme :: [Stmt CoVar] -> Doc
 genScheme sts =
@@ -97,6 +105,9 @@ genTerm unpack (Match t bs) =
 genTerm u (TyApp a _) = genAtom u a
 genTerm u (Cast a _ _) = genAtom u a
 
+genTerm u (Extend (Lit RecNil{}) rows) =
+  smallRecord u rows
+
 genTerm u (Extend atom rows) =
   let new = parens $ keyword "copy-record-storage"
                  <+> genAtom u atom
@@ -105,6 +116,7 @@ genTerm u (Extend atom rows) =
                            <+> string "new-record"
                            <+> shown k
                            <+> genAtom u a
+                           <+> int (fromIntegral (amuletHash k))
    in parens $
      keyword "let"
        <+> parens (parens (string "new-record" <+> new))
@@ -144,9 +156,10 @@ genBranch unpack a (Arm p _ t _ _) =
      PatRecord vs ->
        let captures = map capture vs
            capture (k, Capture v _) = parens $
-             var v <+> parens (keyword "record-storage-ref"
+             var v <+> parens (keyword "record-storage-ref-hashed"
                                    <+> genAtom unpack a
-                                   <+> genLit (Str k))
+                                   <+> genLit (Str k)
+                                   <+> int (fromIntegral (amuletHash k)))
         in parens . align $
                 sliteral (string "#t")
             <#> parens (keyword "let" <+> parens (vsep captures) <#> indent 2 rhs)
@@ -197,3 +210,39 @@ genConstructor (v, t) =
                   (parens (keyword "vector" <+> hsep l))
                   vs
        in parens $ keyword "define" <+> var v <+> lambda
+
+amuletHash :: Text -> Word32
+amuletHash = flip mod 2147483647 . Bs.foldl' go 1 . E.encodeUtf8 where
+  go hash ch = (hash * 31) + fromIntegral ch
+
+smallRecord :: Map [Doc] -> [(Text, Type CoVar, Atom CoVar)] -> Doc
+smallRecord unpack rows =
+  let n_rows = length rows
+      n_residues = ceiling (fromIntegral n_rows * 2.5 :: Double)
+
+      residue :: Word32 -> Int
+      residue x = fromIntegral x `mod` n_residues
+
+      hashed :: [(Int, [(Doc, Doc)])]
+      hashed =
+        map (\(k, _, v) -> (residue (amuletHash k), [(genLit (Str k), genAtom unpack v)])) rows
+
+      hashed_map :: Map.Map Int [(Doc, Doc)]
+      hashed_map = Map.fromListWith (++) hashed
+
+      nth_bucket :: Int -> Doc
+      nth_bucket key =
+        case Map.lookup key hashed_map of
+          Just xs -> parens $
+            keyword "cons"
+              <+> sliteral (int (length xs))
+              <+> parens (keyword "list"
+                      <+> hsep (map (\(k, v) -> parens (keyword "cons" <+> k <+> v)) xs))
+          Nothing -> parens $ keyword "cons" <+> sliteral (int 0) <+> parens (keyword "list")
+
+      made_buckets = hsep (map nth_bucket [0..n_residues-1])
+   in
+    parens $
+         keyword "cons"
+     <+> sliteral (int n_residues)
+     <+> parens (keyword "vector" <+> made_buckets)

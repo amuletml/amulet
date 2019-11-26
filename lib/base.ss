@@ -1,31 +1,29 @@
 (declare (uses library))
-(import scheme)
+(import (chicken foreign))
 (import (chicken fixnum))
 (import (chicken base))
+(import scheme)
 
 (define *big-mersenne-prime* 2147483647)
 (define *buckets* 15)
 
-(define (hash-string str)
-  (let ((len (string-length str)))
-    (letrec ((go (lambda (idx acc)
-                   (if (fx< idx len)
-                       (let ((ch (string-ref str idx)))
-                         (go (fx+ 1 idx) (fxmod (fx+ (fx* acc 31)
-                                                     (char->integer ch))
-                                                *big-mersenne-prime*)))
-                       acc))))
-      (go 0 1))))
+(define hash-string
+  (foreign-lambda* int ((c-string str))
+    "uint32_t hash = 1;
+     for (int i = 0; str[i] != 0; i++) {
+       hash = (hash * 31) + str[i];
+     }
+     C_return(hash % 2147483647);"))
 
 (define (make-record-storage #!optional (n-buckets *buckets*))
   (cons n-buckets
         (make-vector n-buckets (cons 0 '()))))
 
-(define (record-storage-bucket table hash)
+(define-inline (record-storage-bucket table hash)
   (vector-ref (cdr table) (fxmod hash (car table))))
 
-(define (record-storage-set! table key value)
-  (let* ((hash (hash-string key))
+(define (record-storage-set! table key value #!optional hash)
+  (let* ((hash (or hash (hash-string key)))
          (bucket (record-storage-bucket table hash))
          (n-buckets (car table))
          (n-entries (car bucket))
@@ -75,6 +73,13 @@
     (let ((elem (string-assoc (cdr bucket) key)))
       (when elem (cdr elem)))))
 
+(define (record-storage-ref-hashed table key hash)
+  (let* ((bucket (record-storage-bucket table hash)))
+    (if (= 0 (car bucket))
+      (cdadr bucket)
+      (let ((elem (string-assoc (cdr bucket) key)))
+        (when elem (cdr elem))))))
+
 (define (copy-record-storage old-table #!optional (more-buckets 0))
   (let ((new-table (make-record-storage (+ (car old-table) more-buckets)))
         (old-length (car old-table))
@@ -89,7 +94,7 @@
           (loop (+ 1 idx)))))
     new-table))
 
-(define (@@#-20 f x) (f x))
+(define (|id#-20| f x) (f x))
 
 (define |id#-14| error) ; error
 
@@ -134,17 +139,15 @@
     (record-storage-set! new-rec "_2" rec)
     new-rec))
 
-(define ($|id#-30| val) val)
-(define ($|id#-31| val) val)
-(define ($|id#-32| val) val)
+(define (|id#-30| val) val)
+(define (|id#-31| val) val)
+(define (|id#-32| val) val)
 
-(define $|id#-38| 'Refl)
-
-(define $|id#-38| 'Refl)
+(define |id#-38| 'Refl)
 
 (define (|id#-43| x) (vector '|id#-43| x))
-(define (:<>:#-44 x) (vector ':<>:#-44 x))
-(define (:<#>:#-45 x) (vector ':<#>:#-45 x))
+(define (|id#-44| x) (vector ':<>:#-44 x))
+(define (|id#-45| x) (vector ':<#>:#-45 x))
 (define (|id#-46| x) (vector '|id#-46| x))
 
 (define (|id#-50| x) (x (void)))
