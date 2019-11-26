@@ -34,7 +34,7 @@ explainError code =
               Nothing -> do
                 putStr err
                 exitSuccess)
-            `catch` 
+            `catch`
               \ioe ->
                 if isDoesNotExistError ioe
                    then do

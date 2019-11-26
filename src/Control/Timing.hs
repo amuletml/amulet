@@ -50,7 +50,7 @@ newTimer desc = do
   timer <- Timer desc <$> liftIO getCurrentTime <*> pure dHash
   liftIO $ mask $ \_ -> do
     q <- takeMVar finishedTimers
-    putMVar finishedTimers =<< evaluate (Started timer:q) 
+    putMVar finishedTimers =<< evaluate (Started timer:q)
   pure timer
 
 -- | End the given timer and report the elapsed time to AMC_TIMING.
@@ -70,7 +70,7 @@ endTimer timer@(Timer desc t_then _) = do
   --     ↓ can't be made into (.) because impredicative polymorphism
   liftIO $ mask $ \_ -> do
     q <- takeMVar finishedTimers
-    putMVar finishedTimers =<< evaluate (Elapsed timer elapsed:q) 
+    putMVar finishedTimers =<< evaluate (Elapsed timer elapsed:q)
 
 withTimer :: MonadIO m => String -> m a -> m a
 withTimer desc k = do
