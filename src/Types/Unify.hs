@@ -237,7 +237,7 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do -- {{{
        , not (null applic)
        , let imp = pickBestPossible applic
        , trace TopS (shown (imp ^. implVar, isSuper imp)) True
-       , not isMagic || not (isSuper imp) 
+       , not isMagic || not (isSuper imp)
        -> do
 
       traceM TopS ("best possible:" <+> pretty var <+> pretty (imp ^. implVar) <+> pretty (imp ^. implType))

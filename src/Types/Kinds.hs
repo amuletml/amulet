@@ -188,7 +188,7 @@ resolveTyFunDeclKind reason name arguments kindsig equations = do
       TyInvisArg v _ -> do
         sk <- freshSkol (ByAscription (annotation reason) kind) kind v
         pure $ Just (v, sk)
-      _ -> pure Nothing 
+      _ -> pure Nothing
 
     traceM KcC (keyword "initial kind:" <+> pretty kind)
 

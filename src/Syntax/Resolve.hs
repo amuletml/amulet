@@ -246,7 +246,7 @@ reTops (t@(Instance cls ctx head ms _ ann):rest) sig = do
 
   first3 (t':) <$> reTops rest sig
 
-reTops ((Codegen code ann):rest) sig = 
+reTops ((Codegen code ann):rest) sig =
   first3 (Codegen code ann:) <$> reTops rest sig
 
 reTopsWith :: MonadResolve m

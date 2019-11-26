@@ -531,7 +531,7 @@ inferMod (ModStruct bod a) = do
   -- functions/implicits that we open in our signature. But it'll do for now.
   let append x p = maybe p (<> p) x
       qualifyWrt prefix scope =
-        let go (TyCon n) = 
+        let go (TyCon n) =
               if not (n `inScope` scope)
                  then TyCon (append prefix n)
                  else TyCon n

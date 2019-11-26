@@ -2,6 +2,9 @@
 /dist-newstyle
 /result
 *.lua
+*.ss
+*.out
+*.c
 *.prof
 *.svg
 !/assets/*svg
