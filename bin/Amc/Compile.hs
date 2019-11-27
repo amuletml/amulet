@@ -77,9 +77,12 @@ data ChickenOptions = ChickenOptions
 type Emit = Maybe Signature -> [Stmt CoVar] -> IO Doc
 
 compileIt :: (D.Driver, Name)
-          -> Options -> SourceName -> Emit
+          -> Options
+          -> SourceName
+          -> Emit
+          -> IO ()
           -> IO ((D.Driver, Name), Set.Set FilePath)
-compileIt (driver, name) Options { optLevel, lint, export, debug } file emit = do
+compileIt (driver, name) Options { optLevel, lint, export, debug } file emit exit = do
   path <- canonicalizePath (T.unpack file)
   ((((core, errors), sig), driver), name) <-
       flip runNameyT name
@@ -90,7 +93,7 @@ compileIt (driver, name) Options { optLevel, lint, export, debug } file emit = d
   reportAllS files errors
 
   case core of
-    Nothing -> pure ()
+    Nothing -> exit
     Just core -> do
       let sig' = if export then sig else Nothing
           info = defaultInfo { useLint = lint
@@ -113,7 +116,7 @@ compileIt (driver, name) Options { optLevel, lint, export, debug } file emit = d
 compileFile :: Options -> D.DriverConfig -> SourceName -> Emit
             -> IO ()
 compileFile opt config file emit =
-  compileIt (D.makeDriverWith config, firstName) opt file emit $> ()
+  compileIt (D.makeDriverWith config, firstName) opt file emit exitFailure $> ()
 
 -- | Compile a file, and then watch for c
 watchFile :: Options -> D.DriverConfig -> SourceName -> Emit
@@ -125,7 +128,7 @@ watchFile opt config file emit = do
   where
     go :: Map.Map FilePath StopListening -> (D.Driver, Name) -> EventChannel -> WatchManager -> IO ()
     go dirs state channel mgr = do
-      (state, files) <- compileIt state opt file emit
+      (state, files) <- compileIt state opt file emit (pure ())
 
       -- Update the files we're currently watching.
       let newDirs = Set.map dropFileName files
