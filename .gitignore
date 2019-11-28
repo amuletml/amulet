@@ -3,7 +3,7 @@
 /result
 *.lua
 *.ss
-*.out
+/*.out
 *.c
 *.prof
 *.svg

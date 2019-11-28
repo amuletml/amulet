@@ -302,7 +302,7 @@ endModuleNull t (LI _ _ _ _) _ ep = do
   s <- getState
   setState $ s { modulePrefix = [] }
   setStartCode 0
-  pure (Token (t (modulePrefix s)) (tokenStart s) ep)
+  pure (Token (t (reverse (modulePrefix s))) (tokenStart s) ep)
 
 lexOperator :: Action Token
 lexOperator (LI sp str _ _) len ep =
