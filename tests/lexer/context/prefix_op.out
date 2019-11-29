@@ -1,0 +1,8 @@
+let x =
+  f
+  $sep ! x
+
+$end $sep let x =
+  f
+    ! x
+$end <eof>

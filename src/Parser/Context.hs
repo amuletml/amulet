@@ -486,7 +486,8 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
 -- | If this token can be considered an operator. Namely, if it can be
 -- aligned on the current offside line.
 --
--- Note, pipes ('|') and the various brackets are not considered operators.
+-- Note, pipes ('|'), the various brackets and the prefix '!' are not
+-- considered operators.
 isOp :: TokenClass -> Bool
 isOp TcArrow = True
 isOp TcGenerator = True
@@ -497,7 +498,6 @@ isOp TcTilde = True
 isOp TcDot = True
 isOp TcComma = True
 isOp TcColon = True
-isOp TcBang = True
 isOp TcOp{} = True
 isOp TcOpIdent{} = True
 isOp TcOpIdentQual{} = True
