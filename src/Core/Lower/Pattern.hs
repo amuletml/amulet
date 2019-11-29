@@ -19,6 +19,7 @@ module Core.Lower.Pattern
 
 import Control.Monad.Reader
 import Control.Monad.Namey
+import Control.Applicative
 import Control.Lens
 
 import qualified Data.HashMap.Strict as HMap
@@ -51,12 +52,22 @@ type ArmSet = HSet.HashSet ArmId
 type ArmMap = HMap.HashMap ArmId
 
 -- | A substitution from one variable to another
+--
+-- Counter intuitively, this is a substitution from "to" to "from". We
+-- effectively start with "from", and we end up using "to" within the
+-- body.
 data VariableSubst
   = VS
-  { varFrom :: CoVar
-  , varTo   :: CoVar
-  , varTy   :: Type CoVar }
-  deriving (Show)
+  { varFrom :: CoVar -- ^ The variable bound within the core pattern
+  , varTo   :: CoVar -- ^ The variable used within the term
+  , varTy   :: Type CoVar -- ^ The type of each variable
+  }
+
+instance Pretty VariableSubst where
+  pretty (VS from to ty) = parens $ pretty from <+> arrow <+> pretty to <+> pretty colon <+> pretty ty
+
+instance Show VariableSubst where
+  show = show . show . pretty
 
 -- | A leaf in a pattern matching tree.
 data ArmLeaf
@@ -175,8 +186,7 @@ flattenLeaf bodies guards (ArmLeaf n vs ts) rest = do
 
   where
     generate (ExprLambda f) = f vs ts
-    generate (ExprOnce bod _ _) =
-      pure
+    generate (ExprOnce bod _ _) = pure
       . (substituteInTys . VarMap.fromList . map (\(VS a b _) -> (a, VarTy b)) $ ts)
       $ foldr (\(VS f t ty) -> C.Let (One (t, ty, Atom (Ref f ty)))) bod vs
 
@@ -212,6 +222,10 @@ flattenNode bodies guards (ArmLet _ _ bind child) =
   C.Let (One bind) <$> flattenNode bodies guards child
 
 -- | Lift a pattern match into a lambda, passing arguments as values.
+--
+-- This takes two terms: a map of arms and their bodies, and a function
+-- mapping terms to terms, yielding a updated map and a function which
+-- will add any other bindings into scope.
 generateBinds :: forall m. MonadLower m
               => ArmId
               -> (ArmMap (ArmExpr m), Term CoVar -> Term CoVar)
@@ -222,10 +236,12 @@ generateBinds n (bods, build) =
     Just ExprLambda{} -> pure (bods, build)
     Just (ExprOnce Atom{} _ _) -> pure (bods, build)
     Just (ExprOnce bod fv tvs) -> do
-      v <- fresh ValueVar
-      a <- fresh ValueVar
+      vFn <- fresh ValueVar
+      vArg <- case fv of
+             [(a', _)] -> pure a'
+             _ -> fresh ValueVar
 
-      let buildLam aty bod' = foldr (Lam . uncurry TypeArgument) (Lam (TermArgument a aty) bod') tvs
+      let buildLam aty bod' = foldr (Lam . uncurry TypeArgument) (Lam (TermArgument vArg aty) bod') tvs
           buildLamTy fty = foldr (uncurry (ForallTy . Relevant)) fty tvs
 
           buildApp :: [VariableSubst] -> CoVar -> Type CoVar -> Atom CoVar -> m (Term CoVar)
@@ -239,19 +255,19 @@ generateBinds n (bods, build) =
           buildApp' _ _ _ _ _ = error "Tyvar without a place to apply it"
 
       case fv of
-        [] ->
+        [] -> do
           let ty = buildLamTy . ForallTy Irrelevant tyUnit . fromJust . approximateType $ bod
-          in pure ( HMap.insert n (ExprLambda (\_ ts -> buildApp ts v ty (Lit Unit))) bods
-                  , Let (One (v, ty, buildLam tyUnit bod)) . build )
-        [(a', aty)] ->
+          pure ( HMap.insert n (ExprLambda (\_ ts -> buildApp ts vFn ty (Lit Unit))) bods
+               , Let (One (vFn, ty, buildLam tyUnit bod)) . build )
+        [(a', aty)] -> do
           let ty = buildLamTy . ForallTy Irrelevant aty . fromJust . approximateType $ bod
-          in pure ( HMap.insert n (ExprLambda (\_ ts -> buildApp ts v ty (Ref a' ty))) bods
-                  , Let (One (v, ty, buildLam aty bod)) . build )
+          pure ( HMap.insert n (ExprLambda (\vs ts -> buildApp ts vFn ty (uncurry Ref (renameVar vs a' aty)))) bods
+               , Let (One (vFn, ty, buildLam aty bod)) . build )
         _ -> do
           let aty = ValuesTy (map snd fv)
               ty = buildLamTy . ForallTy Irrelevant aty . fromJust . approximateType $ bod
 
-              bod' = Match (Ref a aty)
+              bod' = Match (Ref vArg aty)
                 [ Arm { _armPtrn = PatValues (map (uncurry Capture) fv)
                       , _armTy = aty
                       , _armBody = bod
@@ -260,13 +276,11 @@ generateBinds n (bods, build) =
 
               genApp vs ts = do
                 tvar <- fresh ValueVar
-                let tup = Values . flip map fv $ \(v, _) ->
-                      let Just (VS v' _ ty') = find ((==v) . varTo) vs
-                      in Ref v' ty'
-                Let (One (tvar, aty, tup)) <$> buildApp ts v ty (Ref tvar aty)
+                let tup = Values . flip map fv $ \(v, vty) -> uncurry Ref (renameVar vs v vty)
+                Let (One (tvar, aty, tup)) <$> buildApp ts vFn ty (Ref tvar aty)
 
           pure ( HMap.insert n (ExprLambda genApp) bods
-               , Let (One (v, ty, buildLam aty bod')) . build )
+               , Let (One (vFn, ty, buildLam aty bod')) . build )
 
 -- | Find a "good" variable to match against, and match against it using
 -- 'lowerOneOf'.
@@ -635,3 +649,6 @@ getType (ForallTy _ _ t) = getType t
 getType (ConTy a) = pure a
 getType (AppTy f _) = getType f
 getType _ = Nothing
+
+renameVar :: [VariableSubst] -> CoVar -> Type CoVar -> (CoVar, Type CoVar)
+renameVar vs v ty = maybe (v, ty) (liftA2 (,) varFrom varTy) $ find ((==v) . varTo) vs
