@@ -357,7 +357,7 @@ lower :: (MonadNamey m, MonadIO m, MonadState Driver m)
 lower root parsed = lowerWith root parsed builtinResolve builtinEnv defaultState
 
 -- | Lower a term with the current driver and a custom environment.
-lowerWith :: (MonadNamey m, MonadIO m, MonadState Driver m)
+lowerWith :: forall m. (MonadNamey m, MonadIO m, MonadState Driver m)
             => FilePath -> [Toplevel Parsed] -> Signature -> Env -> LowerState
             -> m ( Maybe ([Stmt CoVar], LowerState, [Toplevel Typed], Env, ResolveResult)
                  , ErrorBundle)
@@ -383,16 +383,30 @@ lowerWith root parsed sig env lState = do
         (_, False) -> pure Nothing
 
         (True, True) -> do
-          ~(Just (ls, lEnv)) <- fmap Seq.unzip . sequence <$> gatherDepsOf getNewlyLowered deps
-          (lEnv, l) <- runLowerWithEnv (lState <> fold lEnv) (lowerProgEnv inferred)
+          -- Get all currently lowered files, lower everything, and then
+          -- find which ones have been newly lowered, including the core
+          -- in the output.
+          lowered <- fold <$> gatherDepsOf currentlyLowered deps
+          ~(AllOf (Just lEnv)) <- foldMapM (fmap AllOf . getLowerState) deps
+          newlyLowered <- (`Set.difference` lowered) . fold <$> gatherDepsOf currentlyLowered deps
+          ls <- gatherDepsOf (getLoweredIf newlyLowered) newlyLowered
+
+          (lEnv, l) <- runLowerWithEnv (lState <> lEnv) (lowerProgEnv inferred)
           pure (Just (concat (ls Seq.|> l), lEnv, inferred, env, resolved))
 
   where
-    getNewlyLowered path = do
+    currentlyLowered :: FilePath -> m (Set.Set FilePath)
+    currentlyLowered path = do
       stg <- uses (files . at path) (fmap (^.stage))
-      case stg of
-        Just (SEmitted _ _ _ lEnv) -> pure (Just ([], lEnv))
-        _ -> getLowered path
+      pure $ case stg of
+        Just SEmitted{} -> Set.singleton path
+        _ -> mempty
+
+    getLoweredIf :: Set.Set FilePath -> FilePath -> m [Stmt CoVar]
+    getLoweredIf deps path =
+      if path `Set.member` deps
+      then fst . fromJust <$> getLowered path
+      else pure []
 
 {- $compile
 
