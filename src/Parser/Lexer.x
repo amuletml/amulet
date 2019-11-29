@@ -126,9 +126,13 @@ tokens :-
   <0> 0 x $hex+                        { onString $ TcInteger . parseNum 16 . L.drop 2 }
   <0> 0 b [01]+                        { onString $ TcInteger . parseNum 2 . L.drop 2 }
 
-  <0> $digit+ \. $digit+               { onString $ TcFloat . parseDouble }
-  <0> $digit+ \. $digit+ [Ee] $digit+  { onString $ TcFloat . parseDouble }
-  <0> $digit+ \. $digit+ [Ee] [\+\-] $digit+ { onString $ TcFloat . parseDouble }
+  <0> "-" $digit+                      { onString $ TcInteger . negate . parseNum 10 . L.drop 1 }
+  <0> "-" 0 x $hex+                    { onString $ TcInteger . negate . parseNum 16 . L.drop 3 }
+  <0> "-" 0 b [01]+                    { onString $ TcInteger . negate . parseNum 2 . L.drop 3 }
+
+  <0> "-"? $digit+ \. $digit+                     { onString $ TcFloat . parseDouble }
+  <0> "-"? $digit+ \. $digit+ [Ee] $digit+        { onString $ TcFloat . parseDouble }
+  <0> "-"? $digit+ \. $digit+ [Ee] [\+\-] $digit+ { onString $ TcFloat . parseDouble }
 
   -- Identifiers
   <0> $lower $ident*                   { lexTok TcIdentifier }
