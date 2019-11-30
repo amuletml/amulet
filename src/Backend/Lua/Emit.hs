@@ -73,7 +73,7 @@ data EmitYield
   = YieldReturn -- ^ Return the expression(s) using 'LuaReturn'
   | YieldDiscard -- ^ Discard this expression
   | YieldStore [LuaVar] -- ^ Assign this expression(s) to these variables
-  | YieldDeclare CoVar (Type CoVar) Occurrence -- ^ Declare this variable
+  | YieldDeclare CoVar Type Occurrence -- ^ Declare this variable
   deriving Show
 
 -- | The top-level emitting state. This is substantially simpler than the
@@ -126,7 +126,7 @@ instance Emitter Lua where
 
     where
       -- | Generate a set of bindings for a tuple variable
-      tupleVars :: T.Text -> Int -> [Type a] -> [LuaExpr]
+      tupleVars :: T.Text -> Int -> [Type] -> [LuaExpr]
               -> ([LuaSimple], [LuaVar], [LuaExpr])
       tupleVars _ _ [] es = ([], [], es)
       tupleVars v n (_:ts) [] =
@@ -257,7 +257,7 @@ emitExpr :: forall a m. ( Occurs a
          -> m ()
 
 emitExpr var yield (AnnLet _ (One (v, ty, e)) r) = do
-  let yield' = if usedWhen v == Dead then YieldDiscard else YieldDeclare (toVar v) (toVar <$> ty) (usedWhen v)
+  let yield' = if usedWhen v == Dead then YieldDiscard else YieldDeclare (toVar v) ty (usedWhen v)
   emitExpr v yield' e
   local (emitArity %~ flip extendPureLets [(v, ty, e)]) $
     emitExpr var yield r
@@ -298,7 +298,7 @@ emitExpr var yield (AnnMatch _ test [arm@Arm { _armPtrn = p, _armBody = body, _a
   , usedWhen v == Once
   = do
       -- Push our pattern into the scope
-      withinExpr v (YieldDeclare (toVar v) (toVar <$> getTy v) (usedWhen v)) (AnnAtom (freeInAtom test) test) $ do
+      withinExpr v (YieldDeclare (toVar v) (getTy v) (usedWhen v)) (AnnAtom (freeInAtom test) test) $ do
         test' <- emitAtom test
         pure . snd . head $ patternBindings p test'
 
@@ -322,7 +322,7 @@ emitExpr var yield t@(AnnMatch _ test arms) = do
     YieldDiscard -> pure (YieldDiscard, mempty, mempty)
     YieldStore vs -> pure (YieldStore vs, mempty, vs)
     YieldDeclare v ty _ -> do
-      v' <- genVars pushScope (fromVar v) (fromVar <$> ty) (Just t)
+      v' <- genVars pushScope (fromVar v) ty (Just t)
       pure (YieldStore v', pure (LuaLocal v' []), v')
 
   (deps, binds, body) <- case arms of
@@ -528,29 +528,23 @@ emitExpr var yield (AnnExtend fv tbl fs) = do
       clone <- uses (nodeState . emitEscape) (getVar B.backendClone)
       pure (LuaCallE (LuaCall (LuaRef (LuaName clone)) [expr]))
 
-emitAtomS :: ( Occurs a
-             , MonadState (NodeEmitState Lua) m)
-          => Atom a
-          -> m LuaExpr
+emitAtomS :: MonadState (NodeEmitState Lua) m
+          => Atom -> m LuaExpr
 emitAtomS a = (\[x] -> x) <$> emitAtom a
 
-emitAtom :: (IsVar a, MonadState (NodeEmitState Lua) m)
-         => Atom a
-         -> m [LuaExpr]
+emitAtom :: MonadState (NodeEmitState Lua) m
+         => Atom -> m [LuaExpr]
 emitAtom (Lit l) = pure [emitLit l]
-emitAtom (Ref v _) = emitRef (toVar v)
+emitAtom (Ref v _) = emitRef v
 
 -- | A variant of 'emitAtom' which always binds expressions.
 --
 -- This is suitable for when something is used many times, even when not
 -- annotated as such (hence the name).
-emitAtomMany :: forall a m.
-                ( IsVar a
-                , MonadState (EmitState Lua) m)
-             => Atom a
-             -> m [LuaExpr]
+emitAtomMany :: MonadState (EmitState Lua) m
+             => Atom -> m [LuaExpr]
 emitAtomMany (Lit l) = pure [emitLit l]
-emitAtomMany (Ref v _) = map unsimple <$> emitVarBinds (toVar v)
+emitAtomMany (Ref v _) = map unsimple <$> emitVarBinds v
 
 -- | Generate the variables needed for this binding
 --
@@ -558,7 +552,7 @@ emitAtomMany (Ref v _) = map unsimple <$> emitVarBinds (toVar v)
 -- not know the RHS.
 genVars :: (IsVar a, Monad m)
         => (a -> m T.Text) -- ^ The fresh variable generator function
-        -> a -> Type a -> Maybe (AnnTerm b a)
+        -> a -> Type -> Maybe (AnnTerm b a)
         -- ^ The variable, its type and an optional body to extract the names from.
         -> m [LuaVar]
 genVars es v ValuesTy{}
@@ -656,7 +650,7 @@ emitStmt (Type _ cs:xs) = do
 
 emitStmt (StmtLet (One (v, ty, e)):xs) = do
   TopEmitState { _topArity = ari, _topEscape = esc, _topVars = vars } <- get
-  let yield = if usedWhen v == Dead then YieldDiscard else YieldDeclare (toVar v) (toVar <$> ty) (usedWhen v)
+  let yield = if usedWhen v == Dead then YieldDiscard else YieldDeclare (toVar v) ty (usedWhen v)
       (stmts, binds, esc') =
         emitTerm (EmitScope ari) esc
                  (VarMap.mapWithKey (\v (d, b) -> EmittedUpvalue d b (VarSet.singleton v)) vars)
@@ -747,7 +741,7 @@ captureBinding (Capture n _) v
 patternGraph :: ( Occurs a
                 , MonadReader (EmitScope a) m
                 , MonadState (EmitState Lua) m )
-             => Atom a -> [LuaExpr] -> AnnArm VarSet.Set a
+             => Atom -> [LuaExpr] -> AnnArm VarSet.Set a
              -> EmittedGraph Lua
              -> m (EmittedGraph Lua)
 patternGraph test test' Arm { _armPtrn = p, _armVars = vs } graph = do
@@ -773,7 +767,7 @@ patternGraph test test' Arm { _armPtrn = p, _armVars = vs } graph = do
 
   -- Boring expressions
   pure $ foldr
-    (\(v, expr) -> VarMap.insert (toVar v) (EmittedExpr expr (YieldDeclare (toVar v) (toVar <$> getTy v) (usedWhen v)) (one v) deps))
+    (\(v, expr) -> VarMap.insert (toVar v) (EmittedExpr expr (YieldDeclare (toVar v) (getTy v) (usedWhen v)) (one v) deps))
     graph' once
 
   where

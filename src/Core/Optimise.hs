@@ -36,7 +36,7 @@ data OptimiseInfo = OptimiseInfo
   deriving Show
 
 -- | Substitute a variable with some other atom
-substitute :: IsVar a => VarMap.Map (Atom a) -> Term a -> Term a
+substitute :: VarMap.Map Atom -> Term a -> Term a
 substitute m = term where
   term (Atom a) = Atom (atom a)
   term (App f x) = App (atom f) (atom x)
@@ -55,9 +55,9 @@ substitute m = term where
   arm = armBody %~ term
 
 -- | Substitute a type variable with some other type inside terms
-substituteInTys :: forall a b. IsVar a => VarMap.Map (Type a) -> AnnTerm b a -> AnnTerm b a
+substituteInTys :: forall a b. IsVar a => VarMap.Map Type -> AnnTerm b a -> AnnTerm b a
 substituteInTys = term where
-  term :: VarMap.Map (Type a) -> AnnTerm b a -> AnnTerm b a
+  term :: VarMap.Map Type -> AnnTerm b a -> AnnTerm b a
   term m a | VarMap.null m = a
   term m (AnnAtom z a) = AnnAtom z (atom m a)
   term m (AnnApp z f x) = AnnApp z (atom m f) (atom m x)
@@ -104,19 +104,19 @@ substituteInTys = term where
 
   capture m (Capture v ty) = Capture v (gotype m ty)
 
-  gotype :: VarMap.Map (Type a) -> Type a -> Type a
+  gotype :: VarMap.Map Type -> Type -> Type
   gotype = substituteInType
 
 -- | Substitute a type variable with some other type inside a type
-substituteInType :: IsVar a => VarMap.Map (Type a) -> Type a -> Type a
+substituteInType :: VarMap.Map Type -> Type -> Type
 substituteInType = goMaybe where
   goMaybe m t | VarMap.null m = t
               | otherwise = gotype m t
 
-  gotype m x@(VarTy v) = VarMap.findWithDefault x (toVar v) m
+  gotype m x@(VarTy v) = VarMap.findWithDefault x v m
   gotype _ x@ConTy{} = x
   gotype m (ForallTy v c t) = ForallTy v (gotype m c) (goMaybe (remove v m) t) where
-    remove (Relevant var) m = VarMap.delete (toVar var) m
+    remove (Relevant var) m = VarMap.delete var m
     remove Irrelevant m = m
   gotype m (AppTy f x) = AppTy (gotype m f) (gotype m x)
   gotype m (RowsTy v rs) = RowsTy (gotype m v) (map (second (gotype m)) rs)
@@ -126,7 +126,7 @@ substituteInType = goMaybe where
   gotype _ NilTy = NilTy
 
 -- | Substitute a type variable with some other type inside a coercion
-substituteInCo :: IsVar a => VarMap.Map (Type a) -> Coercion a -> Coercion a
+substituteInCo :: VarMap.Map Type -> Coercion -> Coercion
 substituteInCo m c
   | VarMap.null m = c
   | otherwise = coercion c where
@@ -150,7 +150,7 @@ substituteInCo m c
 refresh :: (MonadNamey m, IsVar a) => Term a -> m (Term a)
 refresh = refreshTerm mempty mempty where
   refreshTerm :: (MonadNamey m, IsVar a)
-              => VarMap.Map (Atom a) -> VarMap.Map (Type a)
+              => VarMap.Map Atom -> VarMap.Map Type
               -> Term a -> m (Term a)
   refreshTerm vm tm (Atom a) = pure $ Atom (substAtom vm tm a)
   refreshTerm vm tm (App f x) = pure $ App (substAtom vm tm f) (substAtom vm tm x)
@@ -164,42 +164,42 @@ refresh = refreshTerm mempty mempty where
     v' <- freshFrom' v
     let ty' = substituteInType tm ty
         vm' = VarMap.insert (toVar v) (Ref v' ty') vm
-    Lam (TermArgument v' ty') <$> refreshTerm vm' tm b
+    Lam (TermArgument (fromVar v') ty') <$> refreshTerm vm' tm b
   refreshTerm vm tm (Lam (TypeArgument v ty) b) = do
     v' <- freshFrom' v
     let ty' = substituteInType tm ty
         tm' = VarMap.insert (toVar v) (VarTy v') tm
-    Lam (TypeArgument v' ty') <$> refreshTerm vm tm' b
+    Lam (TypeArgument (fromVar v') ty') <$> refreshTerm vm tm' b
 
   refreshTerm vm tm (Let (One (v, ty, e)) b) = do
     v' <- freshFrom' v
     let ty' = substituteInType tm ty
         vm' = VarMap.insert (toVar v) (Ref v' ty') vm
     e' <- refreshTerm vm' tm e
-    Let (One (v', ty', e')) <$> refreshTerm vm' tm b
+    Let (One (fromVar v', ty', e')) <$> refreshTerm vm' tm b
   refreshTerm vm tm (Let (Many vs) r) = do
     (vm', vs') <- foldrM (\(v, ty, b) (m, vs') -> do
       v' <- freshFrom' v
       let ty' = substituteInType tm ty
       pure ( VarMap.insert (toVar v) (Ref v' ty') m
-           , (v', ty', b):vs' )) (vm, []) vs
+           , (fromVar v', ty', b):vs' )) (vm, []) vs
 
     vs'' <- traverse (third3A (refreshTerm vm' tm)) vs'
     Let (Many vs'') <$> refreshTerm vm' tm r
 
   refreshTerm vm tm (Match e branches) = Match (substAtom vm tm e) <$> traverse (refreshArm vm tm) branches where
     refreshArm :: (IsVar a, MonadNamey m)
-               => VarMap.Map (Atom a) -> VarMap.Map (Type a)
+               => VarMap.Map Atom -> VarMap.Map Type
                -> Arm a -> m (Arm a)
     refreshArm vm tm a = do
       (tm', ts) <- foldrM (\(v, ty) (tm, ts) -> do
         v' <- freshFrom' v
         let ty' = substituteInType tm ty
-        pure (VarMap.insert (toVar v) (VarTy v') tm, (v', ty'):ts)) (tm, []) (a ^. armTyvars)
+        pure (VarMap.insert (toVar v) (VarTy v') tm, (fromVar v', ty'):ts)) (tm, []) (a ^. armTyvars)
       (vm', vs) <- foldrM (\(v, ty) (vm, vs) -> do
         v' <- freshFrom' v
         let ty' = substituteInType tm' ty
-        pure (VarMap.insert (toVar v) (Ref v' ty') vm, (v', ty'):vs)) (vm, []) (a ^. armVars)
+        pure (VarMap.insert (toVar v) (Ref v' ty') vm, (fromVar v', ty'):vs)) (vm, []) (a ^. armVars)
 
       branch' <- refreshTerm vm' tm' (a ^. armBody)
       pure ( Arm { _armPtrn = substPattern vm' (a ^. armPtrn)
@@ -208,13 +208,12 @@ refresh = refreshTerm mempty mempty where
                  , _armVars = vs
                  , _armTyvars = ts } )
 
-  substAtom :: IsVar a
-            => VarMap.Map (Atom a) -> VarMap.Map (Type a)
-            -> Atom a -> Atom a
-  substAtom vm tm (Ref v ty) = fromMaybe (Ref v (substituteInType tm ty)) (VarMap.lookup (toVar v) vm)
+  substAtom :: VarMap.Map Atom -> VarMap.Map Type
+            -> Atom -> Atom
+  substAtom vm tm (Ref v ty) = fromMaybe (Ref v (substituteInType tm ty)) (VarMap.lookup v vm)
   substAtom _ _ a@Lit{} = a
 
-  substPattern :: IsVar a => VarMap.Map (Atom a) -> Pattern a -> Pattern a
+  substPattern :: IsVar a => VarMap.Map Atom -> Pattern a -> Pattern a
   substPattern _ p@Constr{} = p
   substPattern vm (Destr c p) = Destr c (map (substCapture vm) p)
   substPattern vm (PatRecord fs) = PatRecord (map (second (substCapture vm)) fs)
@@ -222,10 +221,10 @@ refresh = refreshTerm mempty mempty where
   substPattern _ p@PatLit{} = p
   substPattern _ p@PatWildcard = p
 
-  substCapture :: IsVar a => VarMap.Map (Atom a) -> Capture a -> Capture a
+  substCapture :: IsVar a => VarMap.Map Atom -> Capture a -> Capture a
   substCapture vm (Capture v _) =
     let Just (Ref v' ty') = VarMap.lookup (toVar v) vm
-    in Capture v' ty'
+    in Capture (fromVar v') ty'
 
 -- | Get the variable bound by the given argument
 argVar :: IsVar a => Argument a -> CoVar
@@ -241,7 +240,7 @@ freshFrom (CoVar _ name dat) = do
 
 -- | Create a new fresh variable with the same name as a previous
 -- one.
-freshFrom' :: (MonadNamey m, IsVar a) => a -> m a
+freshFrom' :: (MonadNamey m, IsVar a, IsVar b) => a -> m b
 freshFrom' x = fromVar <$> freshFrom (toVar x)
 
 -- | Create a fresh 'CoVar'

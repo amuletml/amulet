@@ -54,11 +54,11 @@ emptyScope :: ArityScope
 emptyScope = ArityScope opArity
 
 -- | Compute the arity of a term
-atomArity :: IsVar a => ArityScope -> Atom a -> Arity
+atomArity :: ArityScope -> Atom -> Arity
 atomArity s (Ref r _) = varArity r s
 atomArity _ (Lit _)   = Arity 0 True
 
-termArity :: IsVar a => ArityScope -> AnnTerm b a -> Arity
+termArity :: ArityScope -> AnnTerm b a -> Arity
 -- Lookup within the parent scope
 termArity s (AnnAtom _ a)     = atomArity s a
 termArity s (AnnApp   _ a _)  = mapArity pred (atomArity s a)
@@ -103,23 +103,23 @@ maybeInsert v a m
 -- This will add any term which has an arity greater than 0 - we need not
 -- consider terms which are strictly pure but have a arity of 0 (such as
 -- atoms) as references to them will already be pure.
-extendPureLets :: IsVar a => ArityScope -> [(a, Type a, AnnTerm b a)] -> ArityScope
+extendPureLets :: IsVar a => ArityScope -> [(a, Type, AnnTerm b a)] -> ArityScope
 extendPureLets s vs = s { pureArity = foldr (\(v, _, e) p -> maybeInsert v (termArity s e) p) (pureArity s) vs }
 
 -- | Extend the arity scope with all constructors defined within a type.
-extendPureCtors :: IsVar a => ArityScope -> [(a, Type a)] -> ArityScope
+extendPureCtors :: IsVar a => ArityScope -> [(a, Type)] -> ArityScope
 extendPureCtors s cts = s {
   pureArity = foldr (\(v, ty) p -> VarMap.insert (toVar v) (Arity (typeArity ty) True) p) (pureArity s) cts }
 
   where
-    typeArity :: Type a -> Int
+    typeArity :: Type -> Int
     typeArity (ForallTy _ _ ty) = 1 + typeArity ty
     typeArity _ = 0
 
-extendForeign :: IsVar a => ArityScope -> (a, Type a) -> ArityScope
+extendForeign :: IsVar a => ArityScope -> (a, Type) -> ArityScope
 extendForeign (ArityScope scope) (var, ty) =
   ArityScope (VarMap.insert (toVar var) (Arity (typeArity ty) False) scope)
-  where typeArity :: Type a -> Int
+  where typeArity :: Type -> Int
         typeArity (ForallTy _ _ ty) = 1 + typeArity ty
         typeArity _ = 0
 

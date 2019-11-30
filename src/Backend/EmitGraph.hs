@@ -85,7 +85,7 @@ class Emitter a where
   -- variables which were bound. We do not emit bindings for expressions
   -- which are just variables, returning variable directly.
   genDeclare :: Monad m
-             => (v -> m T.Text) -> v -> Type v -> [EExpr a]
+             => (v -> m T.Text) -> v -> Type -> [EExpr a]
              -> m (EStmt a, [EAtom a])
 
   -- | Convert a simple atom into an expression.
@@ -105,7 +105,7 @@ class Emitter a where
   -- | Acts as a view pattern for determining if this is a yield term
   -- which should declare this variable.
   -- It returns the variable's name, its type, and how it is used.
-  yieldDeclare :: EYield a -> Maybe (CoVar, Type CoVar, Occurrence)
+  yieldDeclare :: EYield a -> Maybe (CoVar, Type, Occurrence)
 
   -- | Convert an expression and a yield context to a set of statements.
   --
@@ -393,10 +393,10 @@ nodeStmts EmittedUpvalue{} = mempty
 -- ordering, even when it doesn't need to. Ideally we could build a
 -- partial ordering of the "interesting" terms, and then merge that with
 -- the original list.
-sortAtoms :: forall a v b.
-             (IsVar v, Emitter a)
+sortAtoms :: forall a b.
+             Emitter a
           => EmittedGraph a
-          -> (b -> Atom v) -> [b] -> [b]
+          -> (b -> Atom) -> [b] -> [b]
 sortAtoms graph ex atoms =
   let (lits, vars) = spanVars atoms
   in if VarMap.size vars <= 1

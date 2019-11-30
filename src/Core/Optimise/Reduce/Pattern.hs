@@ -18,7 +18,7 @@ import Data.List
 
 import Core.Optimise.Reduce.Base
 
-type Subst a = [(a, Atom a)]
+type Subst a = [(a, Atom)]
 
 data PatternResult a
   = PatternFail -- ^ A pattern which did not match at all
@@ -47,7 +47,7 @@ extract (PatternComplete s) = s
 
 reducePattern :: forall a. IsVar a
               => ReduceScope a
-              -> Atom a -> Pattern a
+              -> Atom -> Pattern a
               -> PatternResult a
 
 -- A wildcard always yields a complete pattern
@@ -62,7 +62,7 @@ reducePattern _ (Lit l') (PatLit l)
 
 -- If we're matching against a known constructor it is easy to accept or reject
 reducePattern s (Ref v _) (Constr c)
-  | lookupRawVar v s == c = PatternComplete mempty
+  | lookupRawVar v s == toVar c = PatternComplete mempty
 
   | isCtor (lookupRawVar v s) s = PatternFail
   | Just (App (Ref c' _) _) <- lookupRawTerm v s
@@ -70,7 +70,7 @@ reducePattern s (Ref v _) (Constr c)
 
 reducePattern s (Ref v _) (Destr c [Capture a _])
   | Just (App (Ref c' _) a') <- lookupRawTerm v s
-  , lookupRawVar c' s == c = PatternComplete [(a, a')]
+  , lookupRawVar c' s == toVar c = PatternComplete [(a, a')]
 
   | isCtor (lookupRawVar v s) s = PatternFail
   | Just (App (Ref c' _) _) <- lookupRawTerm v s
@@ -108,7 +108,7 @@ reducePattern s (Ref v _) p
 
 -- If we are matching against a literal, we know any usage of it within
 -- the branch will be that.
-reducePattern _ (Ref v _) (PatLit l) = PatternUnknown [(v, Lit l)]
+reducePattern _ (Ref v _) (PatLit l) = PatternUnknown [(fromVar v, Lit l)]
 
 reducePattern _ _ _ = PatternUnknown mempty
 
@@ -184,7 +184,7 @@ filterDeadArms pat s = goArm where
 simplifyArms :: (IsVar v, IsVar a)
              => (Pattern v -> Pattern a)
              -> ReduceScope a
-             -> Atom a -> [AnnArm b v]
+             -> Atom -> [AnnArm b v]
              -> Either (AnnArm b v, Subst a) [(AnnArm b v, Subst a)]
 simplifyArms f s test arms = filterDeadArms (_armPtrn . fst) s <$> foldCases arms where
   foldCases [] = Right []

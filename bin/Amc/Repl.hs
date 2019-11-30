@@ -408,7 +408,7 @@ patchupVarUsage (OccursVar v u) = OccursVar v (u <> Once)
 parseCore :: (MonadState ReplState m, MonadIO m)
           => Parser (Either [S.Toplevel S.Parsed] (S.Expr S.Parsed))
           -> SourceName -> T.Text
-          -> m (Maybe ([(CoVar, C.Type CoVar)]
+          -> m (Maybe ([(CoVar, C.Type)]
                       , [S.Toplevel S.Typed]
                       , [Stmt CoVar]))
 parseCore parser name input = do

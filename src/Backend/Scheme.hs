@@ -130,7 +130,7 @@ erase (Cast a _ _) = Atom a
 erase (TyApp a _) = Atom a
 erase a = a
 
-genBranch :: Map [Doc] -> Atom CoVar -> Arm CoVar -> Doc
+genBranch :: Map [Doc] -> Atom -> Arm CoVar -> Doc
 genBranch unpack a (Arm p _ t _ _) =
   let rhs = align $ genTerm unpack t
    in case p of
@@ -172,7 +172,7 @@ genBranch unpack a (Arm p _ t _ _) =
                                         <+> parens (keyword "values" <+> genAtom unpack a)))
                   <#> indent 2 rhs)
 
-genAtom :: Map [Doc] -> Atom CoVar -> Doc
+genAtom :: Map [Doc] -> Atom -> Doc
 genAtom _ (Lit l) = genLit l
 genAtom unpack (Ref v _) =
   case M.lookup v unpack of
@@ -195,7 +195,7 @@ genLit RecNil    = parens $ keyword "make-record-storage" <+> sliteral (int 0)
 quote :: CoVar -> Doc
 quote v = parens $ keyword "quote" <+> var v
 
-genConstructor :: (CoVar, Type CoVar) -> Doc
+genConstructor :: (CoVar, Type) -> Doc
 genConstructor (v, t) =
   let ar = arity t in case ar of
     0 -> parens $ keyword "define" <+> var v <+> parens (keyword "vector" <+> quote v)
@@ -215,7 +215,7 @@ amuletHash :: Text -> Word32
 amuletHash = flip mod 2147483647 . Bs.foldl' go 1 . E.encodeUtf8 where
   go hash ch = (hash * 31) + fromIntegral ch
 
-smallRecord :: Map [Doc] -> [(Text, Type CoVar, Atom CoVar)] -> Doc
+smallRecord :: Map [Doc] -> [(Text, Type, Atom)] -> Doc
 smallRecord unpack rows =
   let n_rows = length rows
       n_residues = ceiling (fromIntegral n_rows * 2.5 :: Double)

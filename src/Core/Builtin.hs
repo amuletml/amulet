@@ -108,19 +108,19 @@ tcTypeableApp, tcTypeableKnownKnown :: CoVar
   , ("proxy", TypeVar)
   ]
 
-tyBool, tyInt, tyString, tyFloat, tyUnit, tyLazy, tyList, tyRef, tyKStr, tyKInt, tyRowCons, tyEq :: IsVar a => Type a
-tyBool    = ConTy $ fromVar vBool
-tyInt     = ConTy $ fromVar vInt
-tyString  = ConTy $ fromVar vString
-tyUnit    = ConTy $ fromVar vUnit
-tyFloat   = ConTy $ fromVar vFloat
-tyLazy    = ConTy $ fromVar vLazy
-tyList    = ConTy $ fromVar vList
-tyRef     = ConTy $ fromVar vRefTy
-tyKStr    = ConTy $ fromVar vKStrTy
-tyKInt    = ConTy $ fromVar vKIntTy
-tyRowCons = ConTy $ fromVar vRowCons
-tyEq      = ConTy $ fromVar vEq
+tyBool, tyInt, tyString, tyFloat, tyUnit, tyLazy, tyList, tyRef, tyKStr, tyKInt, tyRowCons, tyEq :: Type
+tyBool    = ConTy vBool
+tyInt     = ConTy vInt
+tyString  = ConTy vString
+tyUnit    = ConTy vUnit
+tyFloat   = ConTy vFloat
+tyLazy    = ConTy vLazy
+tyList    = ConTy vList
+tyRef     = ConTy vRefTy
+tyKStr    = ConTy vKStrTy
+tyKInt    = ConTy vKIntTy
+tyRowCons = ConTy vRowCons
+tyEq      = ConTy vEq
 
 builtinTyList :: IsVar a => [a]
 builtinTyList = [ fromVar vBool
@@ -150,7 +150,7 @@ builtinTyList = [ fromVar vBool
                 , fromVar vCONS, fromVar vNIL -- XXX: tyfun-tyfun fails without this
                 ]
 
-builtinVarList :: forall a b. (IsVar a, IsVar b) => [(a, Type b)]
+builtinVarList :: forall a. IsVar a => [(a, Type)]
 builtinVarList = vars where
   op x t = (fromVar x, t)
 
@@ -158,19 +158,19 @@ builtinVarList = vars where
   arrTy = ForallTy Irrelevant
   prodTy a b = RowsTy NilTy [("_1", a), ("_2", b)]
 
-  name, name', record, ttype, key, new, proxy :: b
-  name = fromVar tyvarA
-  name' = fromVar tyvarB
-  record = fromVar tyvarRecord
-  ttype = fromVar tyvarType
-  key = fromVar tyvarKey
-  new = fromVar tyvarNew
-  proxy = fromVar tyvarProxy
+  name, name', record, ttype, key, new, proxy :: CoVar
+  name = tyvarA
+  name' = tyvarB
+  record = tyvarRecord
+  ttype = tyvarType
+  key = tyvarKey
+  new = tyvarNew
+  proxy = tyvarProxy
 
-  appsTy :: [Type b] -> Type b
+  appsTy :: [Type] -> Type
   appsTy = foldl1 AppTy
 
-  vars :: [(a, Type b)]
+  vars :: [(a, Type)]
   vars = [ op vOpApp
             (ForallTy (Relevant name) StarTy $
                ForallTy (Relevant name') StarTy $
@@ -196,7 +196,7 @@ builtinVarList = vars where
          , op tcTYPEABLE
              ( ForallTy (Relevant name) StarTy
              $ ForallTy (Relevant proxy) StarTy (AppTy (VarTy proxy) (VarTy name) `arrTy` AppTy (ConTy (fromVar tcTypeRep)) (VarTy name))
-                 `arrTy` AppTy (ConTy (fromVar tcTypeable)) (VarTy name))
+                 `arrTy` AppTy (ConTy tcTypeable) (VarTy name))
 
          , op tcTYPEREP (ForallTy (Relevant name) StarTy
                           $ ExactRowsTy [ ("fingerprint", tyInt)
@@ -295,5 +295,5 @@ makeBuiltins :: [ (Text, VarInfo) ] -> [CoVar]
 makeBuiltins xs = zipWith go xs [-1, -2 ..] where
   go (name, t) id = CoVar id (Just name) t
 
-mkCast :: Atom a -> Coercion a -> Term a
+mkCast :: Atom -> Coercion -> Term a
 mkCast a co = let Just (_, to) = relates co in Cast a to co
