@@ -373,6 +373,7 @@ library
                      , Backend.Lua.Inline
                      , Backend.Lua.Builtin
                      , Backend.Lua.Postprocess
+                     , Backend.EmitGraph
                      , Backend.Escape
                      -- Lua
                      , Language.Lua.Quote
