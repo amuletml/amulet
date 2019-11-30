@@ -7,6 +7,7 @@ module Amc.Compile
   , compileFile
   , watchFile
   , compileWithLua
+  , compileWithLlvm
   , compileWithChicken
   , compileStaticLua
   ) where
@@ -49,6 +50,7 @@ import Core.Lint
 import Core.Var
 
 import Backend.Scheme
+import Backend.Llvm
 import Backend.Lua
 
 import Syntax.Var
@@ -177,6 +179,14 @@ compileWithLua file sig prog = do
     Nothing -> putDoc lua
     Just f -> T.writeFile f . display . renderPretty 0.4 100 $ lua
   pure lua
+
+compileWithLlvm :: Maybe FilePath -> Emit
+compileWithLlvm file sig prog = do
+  let c = shown $ compileToLlvm sig prog
+  case file of
+    Nothing -> putDoc c
+    Just f -> T.writeFile f . display . renderPretty 0.4 100 $ c
+  pure c
 
 compileWithChicken :: D.DriverConfig -> ChickenOptions -> Emit
 compileWithChicken config opt _ prog = do

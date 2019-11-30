@@ -48,10 +48,11 @@ data Target = Target
 instance Show Target where
   show (Target name _ _) = "Target " ++ show name
 
-lua, scheme :: Target
+lua, scheme, native :: Target
 lua = Target "lua" (\pos file -> bimap ParseError (const ()) $ Lua.parseExpr pos file) Lua.highlightLua
 scheme = Target "scheme" (\_ _ -> pure ()) defaultHighlight
+native = Target "native" (\_ _ -> pure ()) defaultHighlight
 
 -- | All known backend targets.
 targets :: [Target]
-targets = [ lua, scheme ]
+targets = [ lua, scheme, native ]

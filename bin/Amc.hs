@@ -75,6 +75,11 @@ data Command
     , ccOptions   :: [String]
     , ldOptions   :: [String]
     , static      :: Bool
+  | Native
+    { input       :: FilePath
+    , optLevel    :: Int
+    , watch       :: Bool
+    , time        :: Maybe FilePath
     , options     :: CompilerOptions
     }
   | Chicken
@@ -131,6 +136,9 @@ argParser = info (args <**> helper <**> version)
       (  command "compile"
          ( info compileCommand
          $ fullDesc <> progDesc "Compile an Amulet file to Lua.")
+      <> command "native"
+         ( info nativeCommand
+         $ fullDesc <> progDesc "Compile an Amulet program to C.")
       <> command "chicken"
          ( info chickenCommand
          $ fullDesc <> progDesc "Compile an Amulet program to C, using Chicken Scheme.")
@@ -160,6 +168,13 @@ argParser = info (args <**> helper <**> version)
           <> help "Write the generated Lua to a specific file." ) )
       <*> opt
       <*> switch (long "export" <> help "Export all declared variables in this module, returning them at the end of the program.")
+      <*> watch <*> time
+      <*> compilerOptions
+
+    nativeCommand :: Parser Command
+    nativeCommand = Native
+      <$> argument str (metavar "FILE" <> help "The file to compile.")
+      <*> opt
       <*> watch <*> time
       <*> compilerOptions
 
@@ -359,6 +374,24 @@ main = do
             }
 
       compileOrWatch watch time opts config { D.target = CT.lua } (T.pack input) (C.compileWithLua output)
+
+    Args Native{ input, optLevel, options, watch, time } -> do
+      exists <- doesFileExist input
+      if not exists
+      then hPutStrLn stderr ("Cannot find input file " ++ input)
+        >> exitWith (ExitFailure 1)
+      else pure ()
+
+      config <- driverConfig options
+      let opts = C.Options
+            { C.optLevel = if optLevel >= 1 then C.Opt else C.NoOpt
+            , C.lint = coreLint options
+            , C.export = False
+            , C.debug = debugMode options
+            }
+
+      compileOrWatch watch time opts config { D.target = CT.native } (T.pack input)
+        (C.compileWithLlvm Nothing)
 
     Args opt@Chicken{ input, cOutput, optLevel, options, time, keepScheme, useCC, ccOptions, useLD, ldOptions } -> do
       exists <- doesFileExist input
