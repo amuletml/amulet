@@ -138,7 +138,7 @@ argParser = info (args <**> helper <**> version)
          $ fullDesc <> progDesc "Compile an Amulet file to Lua.")
       <> command "native"
          ( info nativeCommand
-         $ fullDesc <> progDesc "Compile an Amulet program to C.")
+         $ fullDesc <> progDesc "Compile an Amulet program to a native binary, using LLVM.")
       <> command "chicken"
          ( info chickenCommand
          $ fullDesc <> progDesc "Compile an Amulet program to C, using Chicken Scheme.")

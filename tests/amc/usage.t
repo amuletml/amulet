@@ -10,6 +10,8 @@ Using amc with the help flag displays all sub-command and the top-level options.
   
   Available commands:
     compile                  Compile an Amulet file to Lua.
+    native                   Compile an Amulet program to a native binary, using
+                             LLVM.
     chicken                  Compile an Amulet program to C, using Chicken Scheme.
     static                   Compile an Amulet program to a native program that
                              embeds the Lua interpreter.
