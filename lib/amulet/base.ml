@@ -49,6 +49,10 @@ instance eq 'a => eq (list 'a) begin
     | _, _ -> false
 end
 
+instance eq 'a * eq 'b => eq ('a * 'b) begin
+  let (a, b) == (c, d) = a == c && b == d
+end
+
 (* The 'ord' class *)
 
 type ordering = Lt | Eq | Gt
@@ -72,6 +76,14 @@ class eq 'a => ord 'a begin
   let x >= y = match compare x y with | Lt -> false | _ -> true
   let x < y  = match compare x y with | Lt -> true  | _ -> false
   let x <= y = match compare x y with | Gt -> false | _ -> true
+end
+
+instance ord 'a * ord 'b => ord ('a * 'b) begin
+  let (a, b) `compare` (c, d) =
+    match a `compare` c with
+    | Eq -> b `compare` d
+    | Lt -> Lt
+    | Gt -> Gt
 end
 
 instance ord () begin
