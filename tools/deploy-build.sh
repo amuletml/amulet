@@ -64,6 +64,10 @@ size = $size
 license = BSD
 arch = $(uname -m)
 depend = chicken
+depend = pkgconf
+depend = lua
+depend = gcc
+optdepend = luajit: For faster 'amc native' programs
 EOF
 
 # Generate fake executables for the packages

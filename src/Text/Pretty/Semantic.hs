@@ -17,7 +17,7 @@ module Text.Pretty.Semantic
   , Doc
 
   , putDoc, putDocWithoutColour, hPutDoc
-  , displayT, displayS, displayDetailed
+  , displayT, displayS, displayDetailed, toText
   , renderAnsi, renderAnsiDetailed
   , uncommentDoc, uncommentFilter
   , toAnsi
@@ -88,6 +88,10 @@ hPutDoc h doc = do
 -- colour it.
 displayT :: Doc -> T.Text
 displayT = A.displayDecorated . renderAnsi
+
+-- | Convert a 'Doc'ument to a 'Text', without ANSI escape sequences.
+toText :: Doc -> T.Text
+toText = P.display . renderAnsi
 
 -- | Convert a document to a string, using ANSI escape sequences to
 -- colour it.

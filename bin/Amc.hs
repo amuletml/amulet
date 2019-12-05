@@ -61,6 +61,22 @@ data Command
     , time        :: Maybe FilePath
     , options     :: CompilerOptions
     }
+  | StaticGen
+    { input       :: FilePath
+    , cOutput     :: FilePath
+    , keepLua     :: Maybe FilePath
+    , keepCShim   :: Maybe FilePath
+    , optLevel    :: Int
+    , watch       :: Bool
+    , time        :: Maybe FilePath
+    , useLiblua   :: String
+    , useCC       :: Maybe String
+    , useLD       :: Maybe String
+    , ccOptions   :: [String]
+    , ldOptions   :: [String]
+    , static      :: Bool
+    , options     :: CompilerOptions
+    }
   | Chicken
     { input       :: FilePath
     , cOutput     :: FilePath
@@ -118,6 +134,9 @@ argParser = info (args <**> helper <**> version)
       <> command "chicken"
          ( info chickenCommand
          $ fullDesc <> progDesc "Compile an Amulet program to C, using Chicken Scheme.")
+      <> command "static"
+         ( info nativeCommand
+         $ fullDesc <> progDesc "Compile an Amulet program to a native program that embeds the Lua interpreter.")
       <> command "repl"
          ( info replCommand
          $ fullDesc <> progDesc "Launch the Amulet REPL." )
@@ -169,6 +188,37 @@ argParser = info (args <**> helper <**> version)
                <> help "Use musl-gcc for compilation. Implies --static")
       <*> switch (long "dynamic-libchicken"
                <> help "Link against the Chicken Scheme libraries dynamically.")
+      <*> compilerOptions
+
+    nativeCommand :: Parser Command
+    nativeCommand = StaticGen
+      <$> argument str (metavar "FILE" <> help "The file to compile.")
+      <*> option str
+           ( long "out" <> short 'o' <> metavar "FILE"
+          <> help "Put the generated executable in this file"
+          <> showDefault
+          <> value "amulet.out" )
+      <*> optional (option str
+            ( long "keep-lua" <> metavar "FILE" <> hidden
+           <> help "Write the generated Lua code to a file."))
+      <*> optional (option str
+            ( long "keep-shim" <> metavar "FILE" <> hidden
+           <> help "Write the generated C shim to a file."))
+      <*> opt <*> watch <*> time
+      <*> option str
+            ( long "lua" <> metavar "LUA" <> hidden
+           <> help ("Use this Lua implementation. This is used as the name of the pkg-config package"
+                 ++ "used to find the proper include paths and libraries for this Lua implementation.")
+           <> value "lua" )
+      <*> optional (option str
+            ( long "cc" <> metavar "PROGRAM" <> hidden
+           <> help "Use PROGRAM as the C compiler"))
+      <*> optional (option str
+            ( long "ld" <> metavar "PROGRAM" <> hidden
+           <> help "Use PROGRAM as the object file linker"))
+      <*> many (option str (short 'C' <> help "Pass an option to the C compiler"))
+      <*> many (option str (short 'L' <> help "Pass an option to the linker"))
+      <*> switch (long "static" <> short 's' <> help "Pass -static to the C compiler and linker")
       <*> compilerOptions
 
     replCommand :: Parser Command
@@ -336,6 +386,34 @@ main = do
       config <- driverConfig options
       compileOrWatch False time opts config { D.target = CT.scheme } (T.pack input)
         (C.compileWithChicken config copts)
+
+    Args opt@StaticGen{ options } -> do
+      exists <- doesFileExist (input opt)
+      if not exists
+      then hPutStrLn stderr ("Cannot find input file " ++ input opt)
+        >> exitWith (ExitFailure 1)
+      else pure ()
+
+      let opts = C.Options
+            { C.optLevel = if optLevel opt >= 1 then C.Opt else C.NoOpt
+            , C.lint = coreLint options
+            , C.debug = debugMode options
+            , C.export = False
+            }
+
+          copts = C.StaticOptions
+            { C.keepLua       = keepLua opt
+            , C.keepC         = keepCShim opt
+            , C.suseCC        = (useCC opt, ccOptions opt ++ [ "-static" | static opt ])
+            , C.suseLD        = (useLD opt, ldOptions opt ++ [ "-static" | static opt ])
+            , C.isStatic      = static opt
+            , C.soutput       = cOutput opt
+            , C.luaImpl       = useLiblua opt
+            }
+
+      config <- driverConfig options
+      compileOrWatch False (time opt) opts config { D.target = CT.lua } (T.pack (input opt))
+        (C.compileStaticLua config copts)
 
 compileOrWatch :: Bool -> Maybe FilePath -> C.Options -> D.DriverConfig -> T.Text -> C.Emit -> IO ()
 compileOrWatch True _ opts config source emit = C.watchFile opts config source emit
