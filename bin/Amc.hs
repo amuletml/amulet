@@ -134,7 +134,7 @@ argParser = info (args <**> helper <**> version)
       <> command "chicken"
          ( info chickenCommand
          $ fullDesc <> progDesc "Compile an Amulet program to C, using Chicken Scheme.")
-      <> command "native"
+      <> command "static"
          ( info nativeCommand
          $ fullDesc <> progDesc "Compile an Amulet program to a native program that embeds the Lua interpreter.")
       <> command "repl"
