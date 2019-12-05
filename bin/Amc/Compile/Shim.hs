@@ -1,34 +1,33 @@
 {-# LANGUAGE CPP #-}
-
 #ifndef __HLINT__
 {-# LANGUAGE QuasiQuotes #-}
-#endif
 
 module Amc.Compile.Shim (shim) where
 
 import Amc.Compile.Raw
 
 -- Hlint doesn't like this
-#ifndef __HLINT__
+-- and we have to indent the preprocessor directives otherwise Haskell
+-- CPP will expand them
 shim :: String
 shim = [raw|
-#ifdef __cplusplus
-extern "C" {
-#endif
-#include <lauxlib.h>
-#include <lua.h>
-#include <lualib.h>
-#ifdef __cplusplus
-}
-#endif
-#include <signal.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+  #ifdef __cplusplus
+  extern "C" {
+  #endif
+  #include <lauxlib.h>
+  #include <lua.h>
+  #include <lualib.h>
+  #ifdef __cplusplus
+  }
+  #endif
+  #include <signal.h>
+  #include <stdio.h>
+  #include <stdlib.h>
+  #include <string.h>
 
-#if LUA_VERSION_NUM == 501
-  #define LUA_OK 0
-#endif
+  #if LUA_VERSION_NUM == 501
+    #define LUA_OK 0
+  #endif
 
 /* Copied from lua.c */
 static lua_State *globalL = NULL;
@@ -114,6 +113,10 @@ int main(int argc, char *argv[]) {
   return 0;
 }
 |]
+
 #else
+
+module Amc.Compile.Shim (shim) where
 shim = ""
+
 #endif
