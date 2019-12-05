@@ -20,11 +20,13 @@ import Data.Maybe
 import Frontend.Driver
 import Frontend.Errors
 
+import GHC.IO.Encoding
 import System.Exit
 import System.IO
 
 main :: IO ()
 main = do
+  setLocaleEncoding utf8
   [file] <- getArgs
 
   driver <- makeDriver

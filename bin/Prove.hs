@@ -50,6 +50,7 @@ import Frontend.Errors
 import CompileTarget
 
 import System.IO
+import GHC.IO.Encoding
 
 #ifdef WITH_SERVER
 import Control.Monad
@@ -72,6 +73,7 @@ import GHC.IO.Exception
 
 main :: IO ()
 main = do
+  setLocaleEncoding utf8
   x <- getArgs
   case x of
     [] -> putDoc ("Welcome to" <+> keyword "amc-prove") *> runInputT defaultSettings prover

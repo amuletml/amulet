@@ -9,6 +9,7 @@ import qualified System.Log.Handler.Simple as LH
 import qualified System.Log.Formatter as LF
 import qualified System.Log.Handler as LH
 import System.Log.Logger
+import GHC.IO.Encoding
 import System.Exit
 import System.IO
 
@@ -52,6 +53,7 @@ setupLogger (Just path) = do
 
 main :: IO ()
 main = do
+  setLocaleEncoding utf8
   Args log <- execParser argParser
   setupLogger log
   exitWith =<< run

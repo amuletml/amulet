@@ -28,6 +28,8 @@ import qualified Amc.Repl as R
 import qualified Amc.Compile as C
 import Amc.Explain
 
+import GHC.IO.Encoding
+
 import Version
 
 data DoOptimise = NoOpt | Opt
@@ -245,6 +247,8 @@ findPrelude DefaultPrelude config = do
 
 main :: IO ()
 main = do
+  setLocaleEncoding utf8
+
   options <- execParser argParser
   case options of
     Args Repl { toLoad, serverPort, prelude, noCode, options } -> do
