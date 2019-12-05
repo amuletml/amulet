@@ -1,12 +1,14 @@
-{-# LANGUAGE NamedFieldPuns, RankNTypes #-}
+{-# LANGUAGE NamedFieldPuns, RankNTypes, DuplicateRecordFields,
+   DisambiguateRecordFields #-}
 module Amc.Compile
   ( Optimise(..)
-  , Options(..), ChickenOptions(..)
+  , Options(..), ChickenOptions(..), StaticOptions(..)
   , Emit
   , compileFile
   , watchFile
   , compileWithLua
   , compileWithChicken
+  , compileStaticLua
   ) where
 
 import System.Environment
@@ -24,11 +26,14 @@ import Control.Concurrent
 import Control.Exception
 import Control.Timing
 
+import qualified Data.Text.Encoding as T
+import qualified Data.ByteString as Bs
 import qualified Data.Text.IO as T
 import qualified Data.Set as Set
 import qualified Data.Map as Map
-import Data.Position (SourceName)
 import qualified Data.Text as T
+
+import Data.Position (SourceName)
 import Data.Bifunctor
 import Data.Foldable
 import Data.Functor
@@ -53,6 +58,7 @@ import Text.Pretty.Semantic hiding (empty)
 import qualified Frontend.Driver as D
 import Frontend.Errors
 
+import qualified Amc.Compile.Shim as C
 import qualified Amc.Debug as D
 
 data Optimise = Opt | NoOpt
@@ -73,6 +79,16 @@ data ChickenOptions = ChickenOptions
   , output        :: FilePath
   }
   deriving Show
+
+data StaticOptions = StaticOptions
+  { keepLua  :: Maybe FilePath
+  , keepC    :: Maybe FilePath
+  , suseCC   :: (Maybe String, [String])
+  , suseLD   :: (Maybe String, [String])
+  , soutput  :: FilePath
+  , luaImpl  :: String
+  , isStatic :: Bool
+  }
 
 type Emit = Maybe Signature -> [Stmt CoVar] -> IO Doc
 
@@ -219,3 +235,88 @@ getChicken :: IO String
 getChicken = do
   x <- lookupEnv "CHICKENC"
   pure $ fromMaybe "chicken-csc" x
+
+compileStaticLua :: D.DriverConfig -> StaticOptions -> Emit
+compileStaticLua _ opt sig prog = do
+  -- Generate the Lua code
+  let lua = pretty $ compileProgram sig prog
+
+  -- ... and print it, if the user asked to do so;
+  case keepLua opt of
+    Nothing -> pure ()
+    Just "-" -> putDoc lua
+    Just f -> T.writeFile f . display . renderPretty 0.4 100 $ lua
+
+  -- Find the correct C compiler and linker flags for the Lua
+  -- implementation the user chose.
+  cflagsI <- words <$> readProcess "pkg-config" [ luaImpl opt, "--cflags-only-I" ] ""
+  ldFlags <- words <$> readProcess "pkg-config"
+               ([ luaImpl opt, "--libs" ] ++ [ "--static" | isStatic opt ])
+               ""
+
+  -- Create temporary files for the C compiler output
+  (obj_file, temp_h) <- openTempFile "." "amulet.o"
+  hClose temp_h
+
+  -- ... and for our C shim.
+  (path, temp_h) <- openTempFile "." "amulet.c"
+
+  -- Don't forget to remove them!
+  let cleanup = traverse_ removePathForcibly [ obj_file, path ]
+
+  -- Print the C shim to the C temporary file.
+  genCCode temp_h lua
+  hClose temp_h
+
+  -- and call the C compiler on it.
+  cc_status <- withTimer ("C compiler for " ++ path) $ do
+    let (cc_program, cc_args) = first (fromMaybe "gcc") (suseCC opt)
+        cc_process = proc cc_program cc_cmdline
+        cc_cmdline = [ "-c", path, "-O3", "-g", "-o", obj_file ] ++ cc_args ++ cflagsI
+    (_, _, _, handle) <-
+      createProcess (cc_process { std_out = Inherit
+                                , std_in = NoStream
+                                , std_err = Inherit })
+    waitForProcess handle
+
+  -- If the user asked to keep the C shim, then we do so here.
+  case keepC opt of
+    Just "-" -> do
+      genCCode stdout lua
+      removeFile path
+    Just p -> renameFile path p
+    _ -> removeFile path
+
+  -- If the C compiler failed, then we fail as well.
+  exitMaybe cleanup cc_status
+
+  -- Call the linker.
+  ld_status <- withTimer ("System linker for " ++ path) $ do
+    let (ld_program, ld_args) = first (fromMaybe "gcc") (suseLD opt)
+        ld_cmdline = [ "-o", soutput opt, obj_file ] ++ ld_args ++ ldFlags
+        ld_process = proc ld_program ld_cmdline
+    (_, _, _, handle) <-
+      createProcess (ld_process { std_out = Inherit
+                                , std_in = NoStream
+                                , std_err = Inherit })
+    waitForProcess handle
+
+  -- If the linker failed, then we fail as well.
+  exitMaybe cleanup ld_status
+
+  cleanup
+  pure lua
+
+genCCode :: Handle -> Doc -> IO ()
+genCCode h code = do
+  let text = toText code
+      bytes = Bs.unpack (T.encodeUtf8 text `Bs.snoc` 0)
+
+  hPutStrLn h $ "static char program[" ++ show (length bytes) ++ "] = {" ++ intercalate "," (map show bytes) ++ "};"
+  hPutStrLn h C.shim
+
+exitMaybe :: IO () -> ExitCode -> IO ()
+exitMaybe cleanup c =
+  case c of
+    ExitSuccess{} -> pure ()
+    e -> cleanup *> exitWith e
