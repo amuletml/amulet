@@ -1,8 +1,15 @@
+{-# LANGUAGE CPP #-}
+
+#ifndef __HLINT__
 {-# LANGUAGE QuasiQuotes #-}
+#endif
+
 module Amc.Compile.Shim (shim) where
 
 import Amc.Compile.Raw
 
+-- Hlint doesn't like this
+#ifndef __HLINT__
 shim :: String
 shim = [raw|
 #ifdef __cplusplus
@@ -107,3 +114,6 @@ int main(int argc, char *argv[]) {
   return 0;
 }
 |]
+#else
+shim = ""
+#endif
