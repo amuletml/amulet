@@ -1,5 +1,6 @@
-open import "../amulet/base.ml"
+open import "../amulet/exception.ml"
 open import "../amulet/option.ml"
+open import "../amulet/base.ml"
 
 class functor 'f => foldable 'f begin
   val foldl : ('b -> 'a -> 'b) -> 'b -> 'f 'a -> 'b
@@ -7,6 +8,17 @@ class functor 'f => foldable 'f begin
 
   let foldl f z xs = foldr (fun b g x -> g (f x b)) id xs z
   let foldr f z xs = foldl (fun g b x -> g (f b x)) id xs z
+
+  val foldl1 : ('a -> 'a -> 'a) -> 'f 'a -> 'a
+
+  let foldl1 f xs = 
+    let kf m y =
+      Some (match m with
+        | None -> y
+        | Some x -> f x y)
+    match foldl kf None xs with
+    | None -> error "foldl1: empty structure"
+    | Some x -> x
 end
 
 instance foldable list begin
@@ -42,15 +54,14 @@ let length xs = foldl (fun l _ -> l + 1) 0 xs
 
 let to_list xs = foldr (::) [] xs
 
-(* Kinda gross: a module with all the above definitions specialised for
- * lists, so the optimiser (hopefully) deals with them better. *)
+let minimum xs =
+  foldl1 (fun s x -> if x < s then x else s) xs
 
-module List = begin
-  let sum (xs : list _) = foldl (+) 0 xs
-  let floating_sum (xs : list _) = foldl (+.) 0.0 xs
+let maximum xs =
+  foldl1 (fun s x -> if x > s then x else s) xs
 
-  let product (xs : list _) = foldl ( * ) 1 xs
-  let floating_product (xs : list _) = foldl ( *. ) 1.0 xs
+let minimumBy compare xs =
+  foldl1 (fun s x -> match x `compare` s with | Lt -> x | _ -> s) xs
 
-  let length (xs : list _) = foldl (fun l _ -> l + 1) 0 xs
-end
+let maximumBy compare xs =
+  foldl1 (fun s x -> match x `compare` s with | Gt -> x | _ -> s) xs

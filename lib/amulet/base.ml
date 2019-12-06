@@ -78,6 +78,15 @@ class eq 'a => ord 'a begin
   let x <= y = match compare x y with | Gt -> false | _ -> true
 end
 
+instance eq ordering begin
+  let a == b =
+    match a, b with
+    | Gt, Gt -> true
+    | Eq, Eq -> true
+    | Lt, Lt -> true
+    | _, _ -> false
+end
+
 instance ord 'a * ord 'b => ord ('a * 'b) begin
   let (a, b) `compare` (c, d) =
     match a `compare` c with
