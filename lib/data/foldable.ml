@@ -1,5 +1,6 @@
 open import "../amulet/exception.ml"
 open import "../amulet/option.ml"
+open import "../amulet/either.ml"
 open import "../amulet/base.ml"
 
 class functor 'f => foldable 'f begin
@@ -42,6 +43,16 @@ instance foldable option begin
   let foldr f z = function
     | Some x -> f x z
     | None -> z
+end
+
+instance foldable (either 'a) begin
+  let foldl f z = function
+    | Right a -> f z a
+    | Left _ -> z
+
+  let foldr f z = function
+    | Right a -> f a z
+    | Left _ -> z
 end
 
 let sum xs = foldl (+) 0 xs
