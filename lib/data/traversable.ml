@@ -1,5 +1,6 @@
 open import "../amulet/base.ml"
 open import "../amulet/option.ml"
+open import "../amulet/either.ml"
 
 class functor 't => traversable 't begin
   val traverse : forall 'f. applicative 'f => ('a -> 'f 'b) -> 't 'a -> 'f ('t 'b)
@@ -13,6 +14,12 @@ instance traversable option begin
   let traverse cont = function
     | Some x -> (| Some @@ cont x |)
     | None -> (| None |)
+end
+
+instance traversable (either 'a) begin
+  let traverse cont = function
+    | Right a -> (| Right @@ cont a |)
+    | Left b -> pure @@ Left b
 end
 
 instance traversable list begin
