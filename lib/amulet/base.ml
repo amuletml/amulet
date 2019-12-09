@@ -217,6 +217,10 @@ instance show 'a => show (ref 'a) begin
   let show x = "ref (" ^ show (!x) ^ ")"
 end
 
+instance show string begin
+  let show x = "\"" ^ x ^ "\""
+end
+
 let negate x  = 0 - x
 let negatef x = 0.0 -. x
 
