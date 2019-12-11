@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+
 module Amc.Repl.Display where
 
 import qualified Data.Map.Strict as Map
