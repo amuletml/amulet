@@ -25,6 +25,7 @@ import qualified CompileTarget as CT
 
 import qualified Amc.Debug as D
 import qualified Amc.Repl as R
+import qualified Amc.Repl.State as R
 import qualified Amc.Compile as C
 import Amc.Explain
 

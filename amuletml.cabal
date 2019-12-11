@@ -48,6 +48,10 @@ executable amc
                      , Amc.Explain.TH
 
                      , Amc.Repl
+                     , Amc.Repl.Server
+                     , Amc.Repl.State
+                     , Amc.Repl.Eval
+                     , Amc.Repl.Command
                      , Amc.Repl.Display
   default-language:    Haskell2010
 
