@@ -25,15 +25,15 @@ import Data.List
 
 -- | Compute the arity of a function type. Namely, how many terms one can
 -- apply to it.
-arity :: Type a -> Int
+arity :: Type -> Int
 arity (ForallTy Relevant{} _ t) = arity t
 arity (ForallTy Irrelevant _ t) = 1 + arity t
 arity _ = 0
 
 -- | Get the type of an atom.
-approximateAtomType :: IsVar a => Atom a -> Type a
+approximateAtomType :: Atom -> Type
 approximateAtomType (Ref _ t) = t
-approximateAtomType (Lit l) = fmap fromVar $ case l of
+approximateAtomType (Lit l) = case l of
   Int{} -> tyInt
   Float{} -> tyFloat
   Str{} -> tyString
@@ -44,13 +44,13 @@ approximateAtomType (Lit l) = fmap fromVar $ case l of
 
 -- | Approximate the type of a term, returning 'Nothing' if there was a
 -- mismatch.
-approximateType :: IsVar a => AnnTerm b a -> Maybe (Type a)
+approximateType :: IsVar a => AnnTerm b a -> Maybe Type
 approximateType (AnnAtom _ a) = pure (approximateAtomType a)
 approximateType (AnnCast _ _ to _) = Just to
 approximateType (AnnApp _ f _) = do
   let ForallTy _ _ d = approximateAtomType f
   pure d
-approximateType (AnnLam _ (TypeArgument v k) f) = ForallTy (Relevant v) k <$> approximateType f
+approximateType (AnnLam _ (TypeArgument v k) f) = ForallTy (Relevant (toVar v)) k <$> approximateType f
 approximateType (AnnLam _ (TermArgument _ t) f) = ForallTy Irrelevant t <$> approximateType f
 approximateType (AnnLet _ _ e) = approximateType e
 approximateType (AnnMatch _ _ xs) = case xs of
@@ -61,50 +61,47 @@ approximateType (AnnExtend _ e rs) =
 approximateType (AnnValues _ xs) = pure (ValuesTy (map approximateAtomType xs))
 approximateType (AnnTyApp _ f at) = do
   let ForallTy (Relevant v) _ t = approximateAtomType f
-  let replace = transform go
-      go (VarTy v') | v == v' = at
-      go x = x
-  pure (replace t)
+  pure (replaceTy v at t)
 
 -- | Attempt to unify two types, returning a possible substitution
 -- mapping of type variables to replacement types.
-unify :: IsVar a => Type a -> Type a -> Maybe (VarMap.Map (Type a))
+unify :: Type -> Type -> Maybe (VarMap.Map Type)
 unify = unifyWith mempty
 
 -- | Attempt to unify two types with an existing unification scheme.
-unifyWith :: IsVar a => VarMap.Map (Type a) -> Type a -> Type a -> Maybe (VarMap.Map (Type a))
+unifyWith :: VarMap.Map Type -> Type -> Type -> Maybe (VarMap.Map Type)
 unifyWith m a b = execStateT (unify' a b) m
 
-unify' :: IsVar a => Type a -> Type a -> StateT (VarMap.Map (Type a)) Maybe ()
+unify' :: Type -> Type -> StateT (VarMap.Map Type) Maybe ()
 unify' t'@(VarTy v) t
   | t' == t = pure ()
   | otherwise = do
-      x <- gets (VarMap.lookup (toVar v))
+      x <- gets (VarMap.lookup v)
       case x of
         Just t' -> unify' t t'
-        Nothing -> modify (VarMap.insert (toVar v) t)
+        Nothing -> modify (VarMap.insert v t)
 unify' t (VarTy v) = unify' (VarTy v) t
 unify' (ConTy v) (ConTy v') = mempty <$ guard (v == v')
 unify' (ForallTy Irrelevant a b) (ForallTy Irrelevant a' b') = liftA2 (<>) (unify' a a') (unify' b b')
 
-unify' (AppTy (AppTy (ConTy v) a) r) (ForallTy Irrelevant a' r') | toVar v == vArrow = liftA2 (<>) (unify' a a') (unify' r r')
-unify' (ForallTy Irrelevant a' r') (AppTy (AppTy (ConTy v) a) r) | toVar v == vArrow = liftA2 (<>) (unify' a a') (unify' r r')
+unify' (AppTy (AppTy (ConTy v) a) r) (ForallTy Irrelevant a' r') | v == vArrow = liftA2 (<>) (unify' a a') (unify' r r')
+unify' (ForallTy Irrelevant a' r') (AppTy (AppTy (ConTy v) a) r) | v == vArrow = liftA2 (<>) (unify' a a') (unify' r r')
 
 unify' (AppTy f g) (ForallTy Irrelevant c d) =
-  liftA2 (<>) (unify' f (AppTy (ConTy (fromVar vArrow)) c)) (unify' g d)
+  liftA2 (<>) (unify' f (AppTy (ConTy vArrow) c)) (unify' g d)
 unify' (ForallTy Irrelevant c d) (AppTy f g) =
-  liftA2 (<>) (unify' (AppTy (ConTy (fromVar vArrow)) c) f) (unify' d g)
+  liftA2 (<>) (unify' (AppTy (ConTy vArrow) c) f) (unify' d g)
 
 unify' (AppTy (AppTy (ConTy v) a) r) (RowsTy NilTy [(T.unpack -> "_1", a'), (T.unpack -> "_2", r')])
-  | toVar v == vProduct = liftA2 (<>) (unify' a a') (unify' r r')
+  | v == vProduct = liftA2 (<>) (unify' a a') (unify' r r')
 unify' (RowsTy NilTy [(T.unpack -> "_1", a'), (T.unpack -> "_2", r')]) (AppTy (AppTy (ConTy v) a) r)
-  | toVar v == vProduct = liftA2 (<>) (unify' a a') (unify' r r')
+  | v == vProduct = liftA2 (<>) (unify' a a') (unify' r r')
 
 unify' (RowsTy NilTy [(T.unpack -> "_1", c), (T.unpack -> "_2", d)]) (AppTy f g) =
-   liftA2 (<>) (unify' (AppTy (ConTy (fromVar vProduct)) c) f) (unify' d g)
+   liftA2 (<>) (unify' (AppTy (ConTy vProduct) c) f) (unify' d g)
 
 unify' (AppTy f g) (RowsTy NilTy [(T.unpack -> "_1", c), (T.unpack -> "_2", d)]) =
-   liftA2 (<>) (unify' (AppTy (ConTy (fromVar vProduct)) c) f) (unify' d g)
+   liftA2 (<>) (unify' (AppTy (ConTy vProduct) c) f) (unify' d g)
 
 unify' x@RowsTy{} y@RowsTy{} =
   let (inner, rows) = getRows x
@@ -131,11 +128,11 @@ unify' _ _ = lift Nothing
 --
 -- This is a more lightweight version of @Core.Optimise@'s
 -- @substituteInType@.
-replaceTy :: IsVar a => a -> Type a -> Type a -> Type a
+replaceTy :: CoVar -> Type -> Type -> Type
 replaceTy var at ty =
   case ty of
     VarTy t
-      | toVar t == toVar var -> at
+      | t == var -> at
       | otherwise -> ty
     ForallTy (Relevant x) a b ->
       ForallTy (Relevant x) (replaceTy var at a) $
@@ -147,23 +144,23 @@ replaceTy var at ty =
     _ -> ty
 -- | Determines if these two types unify under /closed/ variables. This
 -- effectively determines if the two types are equivalent.
-unifyClosed :: IsVar a => Type a -> Type a -> Bool
+unifyClosed :: Type -> Type -> Bool
 unifyClosed = go mempty where
   go _ (ConTy a) (ConTy b) = a == b
-  go s (VarTy a) (VarTy b) = fromMaybe a (VarMap.lookup (toVar a) s) == b
+  go s (VarTy a) (VarTy b) = fromMaybe a (VarMap.lookup a s) == b
   go s (ForallTy (Relevant v) c ty) (ForallTy (Relevant v') c' ty')
     | v == v' = go s c c' && go s' ty ty'
-    | otherwise = go (VarMap.insert (toVar v) v' s') ty ty' && go s c c'
-    where s' = VarMap.delete (toVar v') s
+    | otherwise = go (VarMap.insert v v' s') ty ty' && go s c c'
+    where s' = VarMap.delete v' s
   go s (ForallTy Irrelevant a r) (ForallTy Irrelevant a' r') = go s a a' && go s r r'
 
-  go s (AppTy (AppTy (ConTy v) a) r) (ForallTy Irrelevant a' r') | toVar v == vArrow = go s a a' && go s r r'
-  go s (ForallTy Irrelevant a' r') (AppTy (AppTy (ConTy v) a) r) | toVar v == vArrow = go s a a' && go s r r'
+  go s (AppTy (AppTy (ConTy v) a) r) (ForallTy Irrelevant a' r') | v == vArrow = go s a a' && go s r r'
+  go s (ForallTy Irrelevant a' r') (AppTy (AppTy (ConTy v) a) r) | v == vArrow = go s a a' && go s r r'
 
   go s (AppTy (AppTy (ConTy v) a) r) (RowsTy NilTy [(T.unpack -> "_1", a'), (T.unpack -> "_2", r')])
-    | toVar v == vProduct = go s a a' && go s r r'
+    | v == vProduct = go s a a' && go s r r'
   go s (RowsTy NilTy [(T.unpack -> "_1", a'), (T.unpack -> "_2", r')]) (AppTy (AppTy (ConTy v) a) r)
-    | toVar v == vProduct = go s a a' && go s r r'
+    | v == vProduct = go s a a' && go s r r'
 
   go s (AppTy f x) (AppTy f' x') = go s f f' && go s x x'
   go s (RowsTy f ts) (RowsTy f' ts') =
@@ -190,7 +187,7 @@ unifyClosed = go mempty where
   goRec NilTy = (Nothing, [])
   goRec x = (Just x, [])
 
-getRows :: Type a -> (Type a, [(T.Text, Type a)])
+getRows :: Type -> (Type, [(T.Text, Type)])
 getRows (RowsTy i ts) =
   let (inner, ts') = getRows i
    in (inner, ts' ++ ts)

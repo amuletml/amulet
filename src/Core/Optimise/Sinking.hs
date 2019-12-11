@@ -29,7 +29,7 @@ import Data.Triple
 import Core.Optimise
 import qualified Core.Arity as A
 
-data Sinkable a = Sinkable { sBind  :: (a, Type a, Term a)
+data Sinkable a = Sinkable { sBind  :: (a, Type, Term a)
                            , sFree  :: VarSet.Set
                            , sBound :: VarSet.Set }
   deriving (Show)

@@ -29,8 +29,7 @@ import Data.Span
 import qualified Core.Core as C
 import qualified Core.Builtin as C
 import Core.Optimise (substituteInType, substituteInTys, fresh, freshFrom)
-import Core.Core hiding (Atom, Term, Stmt, Type, Pattern, Arm)
-import Core.Core (pattern Atom)
+import Core.Core hiding (Term, Stmt, Pattern, Arm)
 import Core.Types (unify, unifyClosed, replaceTy)
 import Core.Lower.TypeRepr
 import Core.Lower.Pattern
@@ -45,16 +44,14 @@ import Syntax (Expr(..), Pattern(..), Skolem(..), ModuleTerm(..), Toplevel(..), 
 
 import Text.Pretty.Semantic (pretty)
 
-type Atom = C.Atom CoVar
 type Term = C.Term CoVar
-type Type = C.Type CoVar
 type Stmt = C.Stmt CoVar
 
 type Lower = ContT Term
 
 defaultState :: LowerState
 defaultState = LS mempty ctors types where
-  ctors :: VarMap.Map (C.Type CoVar)
+  ctors :: VarMap.Map C.Type
   ctors = VarMap.fromList
            [ (C.vCONS,
               ForallTy (Relevant name) StarTy $
@@ -207,7 +204,7 @@ lowerAt (ExprWrapper wrap e an) ty =
 
 lowerAt e _ = lowerAnyway e
 
-co :: S.Coercion Typed -> Coercion CoVar
+co :: S.Coercion Typed -> Coercion
 co (S.VarCo x) = CoercionVar (mkCo x)
 co (S.ReflCo t) = SameRepr (lowerType t) (lowerType t)
 co (S.AssumedCo t t') = SameRepr (lowerType t) (lowerType t')

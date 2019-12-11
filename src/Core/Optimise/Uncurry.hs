@@ -42,13 +42,13 @@ import Data.Triple
 
 import Core.Optimise
 
-type Bind a = (a, Type a, Term a)
+type Bind = (CoVar, Type, Term CoVar)
 
 -- | Runs the uncurry pass on the provided statements.
 --
 -- We need a fresh source of variables for workers and temporary
 -- variables, hence the 'MonadNamey'.
-uncurryPass :: forall a m. (MonadNamey m, IsVar a) => [Stmt a] -> m [Stmt a]
+uncurryPass :: forall m. MonadNamey m => [Stmt CoVar] -> m [Stmt CoVar]
 uncurryPass = transS where
   transS [] = pure []
   transS (StmtLet (One var):ss) = do
@@ -93,55 +93,55 @@ uncurryPass = transS where
     vs' <- buildBinds vs
     Let (Many vs') <$> transT r
 
-  buildBinds :: [Bind a] -> m [Bind a]
+  buildBinds :: [Bind] -> m [Bind]
   buildBinds binds = do
     (binds', extras) <- unzip <$> traverse go binds
     pure (mconcat (binds':extras))
 
     where go b = maybe (b, []) (second pure) <$> buildBind b
 
-  buildBind :: Bind a -> m (Maybe (Bind a, Bind a))
+  buildBind :: Bind -> m (Maybe (Bind, Bind))
   buildBind (wrapVar, wrapTy, workTerm)
     | isInteresting 0 workTerm = do
-        workVar <- freshFrom' wrapVar
+        workVar <- freshFrom wrapVar
         (workTy, workTerm', wrapTerm) <- buildBoxedWrapper workVar wrapTy workTerm
         pure (Just ((workVar, workTy, workTerm'), (wrapVar, wrapTy, wrapTerm)))
     | otherwise = pure Nothing
 
 -- ^ Build a boxed wrapper for some worker function.
-buildBoxedWrapper :: forall m a. (IsVar a, MonadNamey m)
-                  => a      -- ^ The worker's variable
-                  -> Type a -- ^ The wrapper's variable
-                  -> Term a -- ^ The original worker's definition
-                  -> m (Type a, Term a, Term a)
+buildBoxedWrapper :: forall m. MonadNamey m
+                  => CoVar  -- ^ The worker's variable
+                  -> Type   -- ^ The wrapper's variable
+                  -> Term CoVar -- ^ The original worker's definition
+                  -> m (Type, Term CoVar, Term CoVar)
                   -- ^ The worker's type and definition, plus the wrapper's definition.
 buildBoxedWrapper = buildWrapper mempty mempty id mempty mempty mempty id where
-  buildWrapper :: Seq (a, Type a) -- ^ The type arguments of the worker function
-               -> Seq (a, Type a) -- ^ The value arguments of the worker function
-               -> (Term a -> Term a) -- ^ The builder for the worker's body. Used for packing tuples.
+  buildWrapper :: Seq (CoVar, Type) -- ^ The type arguments of the worker function
+               -> Seq (CoVar, Type) -- ^ The value arguments of the worker function
+               -> (Term CoVar -> Term CoVar) -- ^ The builder for the worker's body. Used for packing tuples.
 
-               -> VarMap.Map (Type a) -- ^ A set of type variable substitutions to make
+               -> VarMap.Map Type -- ^ A set of type variable substitutions to make
 
-               -> Seq (a, Type a)
+               -> Seq (CoVar, Type)
                   -- ^ The type arguments to be applied to the worker function within the wrapper
-               -> Seq (a, Type a)
+               -> Seq (CoVar, Type)
                   -- ^ The value arguments to be applied to the worker function within the wrapper
-               -> (Term a -> Term a) -- ^ The builder for the wrapper's body. Used for unpacking tuples.
+               -> (Term CoVar -> Term CoVar) -- ^ The builder for the wrapper's body. Used for unpacking tuples.
 
-               -> a -> Type a -> Term a -- ^ The existing worker var/type/term
+               -> CoVar -> Type -> Term CoVar -- ^ The existing worker var/type/term
 
-               -> m (Type a, Term a, Term a) -- ^ The type and term of the worker, and the wrapper's term
+               -> m (Type, Term CoVar, Term CoVar) -- ^ The type and term of the worker, and the wrapper's term
   buildWrapper wkTAs wkVAs wkBuild wrSub wrTAs wrVAs wrBuild bVar bType bTerm =
     case (bType, bTerm) of
       -- Type lambdas are nice and simple: we just add a type application
       -- and wrap the wrapper in a lambda.
       (ForallTy (Relevant _) _ rType, Lam (TypeArgument v ty) rTerm) -> do
-        v' <- freshFrom' v
+        v' <- freshFrom v
         let ty' = substituteInType wrSub ty
 
         (workTy, workTerm, wrapTerm) <- buildWrapper
           (wkTAs |> (v, ty)) wkVAs wkBuild
-          (VarMap.insert (toVar v) (VarTy v') wrSub) (wrTAs |> (v',ty')) wrVAs wrBuild
+          (VarMap.insert v (VarTy v') wrSub) (wrTAs |> (v',ty')) wrVAs wrBuild
           bVar rType rTerm
 
         pure ( workTy, workTerm
@@ -151,9 +151,9 @@ buildBoxedWrapper = buildWrapper mempty mempty id mempty mempty mempty id where
       -- flatten the tuples, and then repack them for the original
       -- function.
       (ForallTy Irrelevant _ rType, Lam (TermArgument v (ValuesTy tys)) rTerm) -> do
-        v' <- freshFrom' v
-        vs  <- traverse (const (fromVar <$> fresh ValueVar)) tys
-        vs' <- traverse (const (fromVar <$> fresh ValueVar)) tys
+        v' <- freshFrom v
+        vs <- traverse (const (fresh' ValueVar)) tys
+        vs' <- traverse (const (fresh' ValueVar)) tys
         let tys' = map (substituteInType wrSub) tys
 
         let wkPack = Let (One (v, ValuesTy tys, Values (zipWith Ref vs tys)))
@@ -176,7 +176,7 @@ buildBoxedWrapper = buildWrapper mempty mempty id mempty mempty mempty id where
       -- Basic term lambdas are also simple: add the variables and wrap
       -- it up in a lambda.
       (ForallTy Irrelevant _ rType, Lam (TermArgument v ty) rTerm) -> do
-        v' <- freshFrom' v
+        v' <- freshFrom v
         let ty' = substituteInType wrSub ty
 
         (workTy, workTerm, wrapTerm) <- buildWrapper
@@ -188,7 +188,7 @@ buildBoxedWrapper = buildWrapper mempty mempty id mempty mempty mempty id where
              , Lam (TermArgument v' ty') wrapTerm )
 
       (_, _) -> do
-        argVar <- fresh' ValueVar
+        argVar <- fresh ValueVar
 
         let wkVAs' = toList wkVAs
             argTy = ValuesTy (map snd wkVAs')
@@ -227,7 +227,7 @@ buildBoxedWrapper = buildWrapper mempty mempty id mempty mempty mempty id where
 
 -- | Determine if a term has 2 or more variable lambdas and the body is
 -- contains something other than a chain of applications.
-isInteresting :: IsVar a => Int -> Term a -> Bool
+isInteresting :: Int -> Term CoVar -> Bool
 isInteresting n (Lam TypeArgument{} b) = isInteresting n b
 isInteresting n (Lam TermArgument{} b) = isInteresting (n + 1) b
 isInteresting n body = n >= 2 && not (isWorker Nothing Nothing body)
@@ -237,7 +237,7 @@ isInteresting n body = n >= 2 && not (isWorker Nothing Nothing body)
 --
 -- Note this is not complete: we'd rather duplicate worker functions
 -- than skip potential optimisation opportunities.
-isWorker :: IsVar a => Maybe a -> Maybe a -> Term a -> Bool
+isWorker :: Maybe CoVar -> Maybe CoVar -> Term CoVar -> Bool
 -- If we're a type application then we must be applying to the previous
 -- function.
 isWorker p a (Let (One (v, _, TyApp (Ref f _) _)) body)

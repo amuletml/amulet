@@ -34,7 +34,7 @@ csePass = cseStmt emptyScope where
 cseTerm :: forall a. IsVar a => ArityScope -> CseScope a -> Term a -> Term a
 cseTerm scope map (Let (One bind@(v, ty, cseTerm scope map -> ex)) body)
   | Just var <- ex `Map.lookup` map = -- eliminate it
-    cseTerm scope map $ substitute (Vm.singleton (toVar v) (Ref var ty)) body
+    cseTerm scope map $ substitute (Vm.singleton (toVar v) (Ref (toVar var) ty)) body
   | worthIt ex && isPure scope ex = -- include it for elimination
     let scope' = extendPureLets scope [bind]
         map' = Map.insert ex v map

@@ -41,14 +41,14 @@ reducePass info =
 annotate :: IsVar a => Term a -> AnnTerm VarSet.Set (OccursVar a)
 annotate = snd . tagOccurTerm (const occursSet) OccursVar
 
-extendVar :: IsVar a => (a, Type a, Term a) -> ReduceScope a -> ReduceScope a
+extendVar :: IsVar a => (a, Type, Term a) -> ReduceScope a -> ReduceScope a
 extendVar b@(v, _, e) = (varScope %~ VarMap.insert (toVar v) (basicDef v e))
                       . (ariScope %~ flip extendPureLets [b])
 
-extendVars :: IsVar a => [(a, Type a, Term a)] -> ReduceScope a -> ReduceScope a
+extendVars :: IsVar a => [(a, Type, Term a)] -> ReduceScope a -> ReduceScope a
 extendVars vs s = foldr extendVar s vs where
 
-extendVarsRec :: IsVar a => [(a, Type a, Term a)] -> ReduceScope a -> ReduceScope a
+extendVarsRec :: IsVar a => [(a, Type, Term a)] -> ReduceScope a -> ReduceScope a
 extendVarsRec vs s = foldr extend s vs where
   extend b@(v, _, e) = (varScope %~ VarMap.insert (toVar v) (basicRecDef v e))
                      . (ariScope %~ flip extendPureLets [b])
@@ -59,16 +59,16 @@ extendBreakers vs s = VarSet.foldr extend s vs where
 
 mapVar :: Functor f
        => (AnnTerm b (OccursVar a) -> f (Term a))
-       -> (OccursVar a, Type (OccursVar a), AnnTerm b (OccursVar a))
-       -> f (a, Type a, Term a)
-mapVar f (v, ty, e) = (underlying v, underlying <$> ty, ) <$> f e
+       -> (OccursVar a, Type, AnnTerm b (OccursVar a))
+       -> f (a, Type, Term a)
+mapVar f (v, ty, e) = (underlying v, ty, ) <$> f e
 
 reduceStmts :: MonadReduce a m => [AnnStmt VarSet.Set (OccursVar a)] -> m [Stmt a]
 reduceStmts [] = pure []
 reduceStmts (RawCode c:xs) = (RawCode c:) <$> reduceStmts xs
 reduceStmts (Foreign v ty def:ss) = do
   ss' <- local (ariScope %~ flip extendForeign (v, ty)) (reduceStmts ss)
-  pure (Foreign (underlying v) (underlying <$> ty) def:ss')
+  pure (Foreign (underlying v) ty def:ss')
 reduceStmts (StmtLet (One var):ss) = do
   var' <- mapVar reduceTerm' var
   ss' <- local (extendVar var') (reduceStmts ss)
@@ -98,7 +98,7 @@ reduceStmts (StmtLet (Many vs):ss) =
     unwrapNode (CyclicSCC vs) = StmtLet (Many vs)
 
 reduceStmts (Type v cases:ss) = do
-  let cases' = map (underlying *** fmap underlying) cases
+  let cases' = map (first underlying) cases
   local ( (typeScope %~ VarMap.insert (toVar v) cases')
         . (ctorScope %~ VarMap.union (VarMap.fromList (map buildCtor cases')))
         . (ariScope %~ flip extendPureCtors cases) ) $
@@ -110,8 +110,7 @@ reduceStmts (Type v cases:ss) = do
 --
 -- This doesn't do anything fancy: we just inline trivial variables.
 reduceAtom :: MonadReduce a m
-           => UsedAs -> Atom (OccursVar a)
-           -> m (Atom a)
+           => UsedAs -> Atom -> m Atom
 reduceAtom u (Ref v ty) = do
   -- Beta reduction (let case)
   v' <- asks (lookupTerm v)
@@ -136,14 +135,13 @@ reduceAtom u (Ref v ty) = do
               varSubst %= VarMap.insert (toVar v) (SubDone t')
               pure basic
         _ -> pure basic
-  where basic = (Ref (underlying v) (underlying <$> ty))
+  where basic = (Ref (toVar v) ty)
 
 reduceAtom _ (Lit l) = pure (Lit l)
 
 -- | Reduce an atom with the default context
 reduceAtom' :: MonadReduce a m
-            => Atom (OccursVar a)
-            -> m (Atom a)
+            => Atom -> m Atom
 reduceAtom' = reduceAtom UsedOther
 
 -- | Simplify a term within the current context
@@ -167,7 +165,7 @@ reduceTerm _ (AnnExtend _ e fs) = do
     [] -> changed $ Atom e'
     _ -> pure $ Extend e' fs'
   where
-    reduceRow (t, ty, e) = (t, underlying <$> ty, ) <$> reduceAtom' e
+    reduceRow (t, ty, e) = (t, ty, ) <$> reduceAtom' e
 
 reduceTerm _ (AnnLam _ arg body) = do
   body' <- reduceTerm' body
@@ -175,9 +173,9 @@ reduceTerm _ (AnnLam _ arg body) = do
   case (underlying <$> arg, body') of
     -- Eta conversion (function case)
     (TermArgument var _, App r (Ref var' _))
-      | var == var', nonBreaker r s -> changed $ Atom r
+      | toVar var == var', nonBreaker r s -> changed $ Atom r
     (TypeArgument var _, TyApp r (VarTy var'))
-      | var == var', nonBreaker r s -> changed $ Atom r
+      | toVar var == var', nonBreaker r s -> changed $ Atom r
 
     (arg', _) -> pure $ Lam arg' body'
 
@@ -187,7 +185,7 @@ reduceTerm _ (AnnLam _ arg body) = do
     nonBreaker (Ref v _) s = not . varLoopBreak . lookupVar v $ s
     nonBreaker Lit{} _ = True
 
-reduceTerm u (AnnCast _ a (fmap underlying -> to) co) = do
+reduceTerm u (AnnCast _ a to co) = do
   a' <- reduceAtom u a
   let from = approximateAtomType a'
   if from `unifyClosed` to
@@ -201,11 +199,11 @@ reduceTerm u (AnnCast _ a (fmap underlying -> to) co) = do
       , Just (Cast oa _ oco) <- lookupTerm v s
       -> if approximateAtomType oa `unifyClosed` from
          then changed $ Atom oa
-         else let co' = squishCoercion (oco `Trans` (underlying <$> co))
+         else let co' = squishCoercion (oco `Trans` co)
               in changed $ Cast oa to co'
 
       | otherwise ->
-        let co' = squishCoercion (underlying <$> co)
+        let co' = squishCoercion co
         in pure $ Cast a' to co'
 
 reduceTerm u t@AnnMatch{} = reduceTermK u t pure
@@ -262,7 +260,7 @@ reduceTermK _ d@(AnnTyApp _ f t) cont
   where
     basic = do
       f' <- reduceAtom UsedApply f
-      cont $ TyApp f' (underlying <$> t)
+      cont $ TyApp f' t
 
 reduceTermK u (AnnLet fa (One (va, tya, AnnLet fb bb rb)) ra) cont =
   flip (reduceTermK u) cont $ AnnLet fb bb (AnnLet fa (One (va, tya, rb)) ra)
@@ -276,8 +274,8 @@ reduceTermK u (AnnLet _ (One b@(v, ty, e)) rest) cont = do
         -- Applications are fine in the once case (will not duplicate work or code), as long as they
         -- are pure. We also check they are not constructors, as those can never be inlined and the
         -- pattern matcher will not see deferred definitions.
-        AnnApp _ (Ref f _) _   -> used == Once && pures && inlinableFn s st f
-        AnnTyApp _ (Ref f _) _ -> used == Once && pures && inlinableFn s st f
+        AnnApp _ (Ref f _) _   -> used == Once && pures && inlineableFn s st f
+        AnnTyApp _ (Ref f _) _ -> used == Once && pures && inlineableFn s st f
         -- Lambdas are fine in the once or "once lambda" case as they'll not duplicate code and will
         -- only be inlined if applied (and so not duplicate work).
         AnnLam{} -> used == Once || used == OnceLambda
@@ -299,20 +297,20 @@ reduceTermK u (AnnLet _ (One b@(v, ty, e)) rest) cont = do
         -- considered dead.
         _ -> changed rest'
     | otherwise -> reduceTermK UsedOther e $ \e' -> do
-      considerE e' (local (extendVar (v', ty', e'))
+      considerE e' (local (extendVar (v', ty, e'))
                      (reduceTermK u rest cont))
 
   where
     v' = underlying v
-    ty' = underlying <$> ty
 
-    inlinableFn s st f =
-      let f' = lookupRawVar (underlying f) s
+    inlineableFn :: ReduceScope a -> ReduceState a -> CoVar -> Bool
+    inlineableFn s st f =
+      let f' = lookupRawVar f s
       in if
-      | toVar f' == vLAZY -> True
+      | f' == vLAZY -> True
       | isCtor f' s -> False
-      | Nothing <- VarMap.lookup (toVar f') (s ^. varScope)
-      , Nothing <- VarMap.lookup (toVar f') (st ^. varSubst)
+      | Nothing <- VarMap.lookup f' (s ^. varScope)
+      , Nothing <- VarMap.lookup f' (st ^. varSubst)
       -> False
       | otherwise -> True
 
@@ -324,15 +322,14 @@ reduceTermK u (AnnLet _ (One b@(v, ty, e)) rest) cont = do
         -- Let of bottom conversion: we've errored here, so we can skip any
         -- remaining code.
         App (Ref f _) msg
-          | toVar (lookupRawVar f s) == vError
+          | lookupRawVar f s == vError
           ->
-            let Just ty = fmap underlying <$> approximateType rest -- TODO: Is this valid with our use of cont?
-                errTy = ForallTy Irrelevant (tyString :: Type a)
-                na = fromVar tyvarA :: a
+            let Just ty = approximateType rest -- TODO: Is this valid with our use of cont?
+                errTy = ForallTy Irrelevant tyString
             in changed $
               Let (One ( v', errTy ty
-                       , TyApp (Ref (fromVar vError) (ForallTy (Relevant na) StarTy (errTy (VarTy na)))) ty))
-                (App (Ref v' (errTy ty)) msg)
+                       , TyApp (Ref (fromVar vError) (ForallTy (Relevant tyvarA) StarTy (errTy (VarTy tyvarA)))) ty))
+                (App (Ref (toVar v') (errTy ty)) msg)
 
         _ -> rest' >>= finalise e'
 
@@ -345,12 +342,12 @@ reduceTermK u (AnnLet _ (One b@(v, ty, e)) rest) cont = do
         | Atom a <- e', isTrivialAtom a -> changed rest'
 
         -- Eta conversion for simple lets
-        | Atom (Ref ov _) <- rest', ov == v' -> changed e'
+        | Atom (Ref ov _) <- rest', ov == toVar v' -> changed e'
 
         -- Eta conversion for single constructor types
         | Atom (Lit Unit) <- rest', ty == tyUnit -> changed e'
         | Atom (Ref _ oty) <- rest'
-        , ty' `unifyClosed` oty
+        , ty `unifyClosed` oty
         , Just tyName <- unwrapTy ty
         , Just [_] <- VarMap.lookup (toVar tyName) (s ^. typeScope)
         -> changed e'
@@ -360,7 +357,7 @@ reduceTermK u (AnnLet _ (One b@(v, ty, e)) rest) cont = do
         , Just restTy <- approximateType rest'
         -> do
             join <- fresh' ValueVar
-            let joinTy = ForallTy Irrelevant ty' restTy
+            let joinTy = ForallTy Irrelevant ty restTy
                 joinVar = Ref join joinTy
 
                 shoveJoinArm :: Arm a -> m (Arm a) = armBody %%~ shoveJoin
@@ -369,12 +366,12 @@ reduceTermK u (AnnLet _ (One b@(v, ty, e)) rest) cont = do
                 shoveJoin (Atom a) = pure (App joinVar a)
                 shoveJoin ex = do
                   var <- fresh' ValueVar
-                  pure (Let (One (var, ty', ex)) (App joinVar (Ref var ty')))
+                  pure (Let (One (fromVar var, ty, ex)) (App joinVar (Ref var ty)))
 
             arms' <- traverse shoveJoinArm arms
-            changed $ Let (One (join, joinTy, Lam (TermArgument v' ty') rest')) (Match test arms')
+            changed $ Let (One (fromVar join, joinTy, Lam (TermArgument v' ty) rest')) (Match test arms')
 
-        | otherwise -> pure (Let (One (v', ty', e')) rest')
+        | otherwise -> pure (Let (One (v', ty, e')) rest')
 
 reduceTermK u (AnnLet f (Many vs) rest) cont =
   case stronglyConnComp . map buildNode $ vs of
@@ -421,7 +418,7 @@ reduceTermK _ (AnnMatch _ test arms) cont = do
       arms'' <- reduceArms test' arms' []
       cont $ Match test' arms''
   where
-    reduceArms :: Atom a -> [(AnnArm VarSet.Set (OccursVar a), Subst a)] -> [Pattern a] -> m [Arm a]
+    reduceArms :: Atom -> [(AnnArm VarSet.Set (OccursVar a), Subst a)] -> [Pattern a] -> m [Arm a]
     reduceArms (Ref v _) ((a@Arm { _armPtrn = PatWildcard },subst):_) ps = do
       a' <- local (varScope . at (toVar v) %~ extendNot ps) $ reduceArm pure a subst
       pure [a']
@@ -443,7 +440,7 @@ reduceTermK _ (AnnMatch _ test arms) cont = do
       pure $ (underlying <$> a) & armBody .~ body'
     reduceArm cont a@Arm{ _armVars = vs, _armBody = body } subst = do
       -- Otherwise we look up types and attempt to unify them.
-      let Just tySubst = foldr (foldVar (underlies vs)) (Just mempty) subst
+      let Just tySubst = foldr (foldVar (map (first underlying) vs)) (Just mempty) subst
       body' <- reduceBody cont subst body
 
       pure $ (underlying <$> a)
@@ -464,10 +461,7 @@ reduceTermK _ (AnnMatch _ test arms) cont = do
             (mempty, id) subst
       in binds <$> local (varScope %~ VarMap.union sub) (reduceTermK UsedOther body cont)
 
-    underlies :: Functor f => [(OccursVar a, f (OccursVar a))] -> [(a, f a)]
-    underlies = map (\(a, b) -> (underlying a, underlying <$> b))
-
-    foldVar :: [(a, Type a)] -> (a, Atom a) -> Maybe (VarMap.Map (Type a)) -> Maybe (VarMap.Map (Type a))
+    foldVar :: [(a, Type)] -> (a, Atom) -> Maybe (VarMap.Map Type) -> Maybe (VarMap.Map Type)
     foldVar _ _ Nothing = Nothing
     foldVar vs (v, a) (Just sol) = do
       vty <- snd <$> find ((==v) . fst) vs
@@ -507,8 +501,8 @@ inlineOr t usage cont def = do
     -- This doesn't need to be perfect, it's just a small tweak to catch a
     -- couple of common cases (such as matching on unboxed tuples).
     inlineMatches :: ReduceScope a
-                  -> InlineSubst a (OccursVar a) ()
-                  -> InlineSubst a (OccursVar a) ()
+                  -> InlineSubst a ()
+                  -> InlineSubst a ()
     inlineMatches s (vs, ts, Match test@(Ref v _) arms)
       | Just{} <- VarMap.lookup (toVar v) vs
       = case simplifyArms id s test arms of
@@ -518,8 +512,8 @@ inlineOr t usage cont def = do
           Right arms' -> (vs, ts, Match test (map fst arms'))
     inlineMatches _ x = x
 
-    substVars :: VarMap.Map (Atom (OccursVar a)) -> Subst a -> VarMap.Map (Atom (OccursVar a))
-    substVars = foldr (\(v, x) -> VarMap.insert (toVar v) ((flip OccursVar MultiLambda) <$> x))
+    substVars :: VarMap.Map Atom -> Subst a -> VarMap.Map Atom
+    substVars = foldr (\(v, x) -> VarMap.insert (toVar v) x)
 
     substScope :: VarMap.Map (VarDef a) -> Subst a -> VarMap.Map (VarDef a)
     substScope = foldr (\(v, x) -> VarMap.insert (toVar v) (basicDef v (Atom x)))

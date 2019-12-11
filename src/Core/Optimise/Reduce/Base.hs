@@ -83,10 +83,10 @@ unknownRecDef = VarDef Nothing [] True
 -- | A read-only scope within the reducer monad
 data ReduceScope a
   = RScope
-  { _varScope  :: VarMap.Map (VarDef a)    -- ^ Lookup of variables to their definition.
-  , _typeScope :: VarMap.Map [(a, Type a)] -- ^ Lookup of types to their list of constructors.
-  , _ctorScope :: VarMap.Map (a, Type a)   -- ^ Lookup of constructors to their parent type and signature type.
-  , _ariScope :: ArityScope                -- ^ The current arity scope
+  { _varScope  :: VarMap.Map (VarDef a)  -- ^ Lookup of variables to their definition.
+  , _typeScope :: VarMap.Map [(a, Type)] -- ^ Lookup of types to their list of constructors.
+  , _ctorScope :: VarMap.Map (a, Type)   -- ^ Lookup of constructors to their parent type and signature type.
+  , _ariScope :: ArityScope              -- ^ The current arity scope
   }
   deriving (Show)
 
@@ -125,10 +125,10 @@ runReduce m = fmap getSum <$> evalRWST m emptyScope emptyState where
 
   arrTy = ForallTy Irrelevant
   prodTy a b = RowsTy NilTy [("_1", a), ("_2", b)]
-  name :: a
-  name = fromVar tyvarA
+  name :: CoVar
+  name = tyvarA
 
-  builtinTys :: VarMap.Map [(a, Type a)]
+  builtinTys :: VarMap.Map [(a, Type)]
   builtinTys = VarMap.fromList
     [(fromVar vList,
       [ (fromVar vCONS, ForallTy (Relevant name) StarTy $
@@ -136,7 +136,7 @@ runReduce m = fmap getSum <$> evalRWST m emptyScope emptyState where
       , (fromVar vNIL, ForallTy (Relevant name) StarTy $ AppTy tyList (VarTy name)) ])
     ]
 
-  builtinCtors :: VarMap.Map (a, Type a)
+  builtinCtors :: VarMap.Map (a, Type)
   builtinCtors = VarMap.fromList
     [ (vCONS, (fromVar vList, ForallTy (Relevant name) StarTy $
           VarTy name `prodTy` AppTy tyList (VarTy name) `arrTy` AppTy tyList (VarTy name)))
@@ -202,21 +202,21 @@ lookupTerm v s =
 
 -- | Find the raw version of the provided variable, that is the variable
 -- with all type applications eliminated.
-lookupRawVar :: IsVar a => a -> ReduceScope a -> a
+lookupRawVar :: IsVar v => v -> ReduceScope a -> CoVar
 lookupRawVar v s =
   case lookupTerm v s of
     Just (TyApp (Ref v' _) _) -> lookupRawVar v' s
     Just (Atom (Ref v' _)) -> v'
-    _ -> v
+    _ -> toVar v
 
 -- | Find the raw definition of the provide variable, that is the
 -- definition once all type applications have been removed from this
 -- variable.
-lookupRawTerm :: IsVar a => a -> ReduceScope a -> Maybe (Term a)
+lookupRawTerm :: IsVar v => v -> ReduceScope a -> Maybe (Term a)
 lookupRawTerm v s = lookupTerm (lookupRawVar v s) s
 
 -- | Extract the type name from a constructor's type. This is a little grim.
-unwrapTy :: Type a -> Maybe a
+unwrapTy :: Type -> Maybe CoVar
 unwrapTy (ForallTy _ _ t) = unwrapTy t
 unwrapTy (AppTy t _) = unwrapTy t
 unwrapTy (ConTy v) = Just v
