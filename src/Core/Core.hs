@@ -24,46 +24,46 @@ import Control.Lens
 import GHC.Generics
 
 -- | Atoms.
-data Atom a
-  = Ref a (Type a) -- ^ A reference to a variable, with an explicit type
+data Atom
+  = Ref CoVar Type -- ^ A reference to a variable, with an explicit type
   | Lit Literal -- ^ A literal.
-  deriving (Show, Functor, Generic)
+  deriving (Show, Generic)
 
-instance Eq a => Eq (Atom a) where
+instance Eq Atom where
   Ref a _ == Ref b _ = a == b
   Lit a == Lit b = a == b
   _ == _ = False
 
-instance Ord a => Ord (Atom a) where
+instance Ord Atom where
   Ref a _ `compare` Ref b _ = a `compare` b
   Ref{} `compare` _ = LT
   Lit a `compare` Lit b = a `compare` b
   Lit{} `compare` _ = GT
 
-instance Hashable a => Hashable (Atom a) where
+instance Hashable Atom where
   hashWithSalt s (Ref a _) = hashWithSalt s a
   hashWithSalt s (Lit l) = hashWithSalt s l
 
 -- | The domain of a lambda
 data Argument a
-  = TermArgument a (Type a) -- ^ Computationally-relevant domain
-  | TypeArgument a (Type a) -- ^ Type abstraction, erased at Emit-time.
+  = TermArgument a Type -- ^ Computationally-relevant domain
+  | TypeArgument a Type -- ^ Type abstraction, erased at Emit-time.
   deriving (Eq, Show, Ord, Functor, Generic, Hashable)
 
 -- | Terms.
 data AnnTerm b a
-  = AnnAtom b (Atom a) -- ^ Embed an 'Atom' into a 'Term'
-  | AnnApp b (Atom a) (Atom a) -- ^ Eliminate a 'Lam' expecting a 'TermArgument'
+  = AnnAtom b Atom -- ^ Embed an 'Atom' into a 'Term'
+  | AnnApp b Atom Atom -- ^ Eliminate a 'Lam' expecting a 'TermArgument'
   | AnnLam b (Argument a) (AnnTerm b a) -- ^ A lambda abstraction, with explicit domain, encompassing a 'Term'.
 
   | AnnLet b (AnnBinding b a) (AnnTerm b a) -- ^ Bind some variables within the scope of some 'Term'
-  | AnnMatch b (Atom a) [AnnArm b a] -- ^ Pattern matching
+  | AnnMatch b Atom [AnnArm b a] -- ^ Pattern matching
 
-  | AnnExtend b (Atom a) [(Text, Type a, Atom a)] -- ^ Record extension
-  | AnnValues b [Atom a] -- ^ Unboxed tuple
+  | AnnExtend b Atom [(Text, Type, Atom)] -- ^ Record extension
+  | AnnValues b [Atom] -- ^ Unboxed tuple
 
-  | AnnTyApp b (Atom a) (Type a) -- ^ Eliminate a 'Lam' expecting a 'TypeArgument'
-  | AnnCast b (Atom a) (Type a) (Coercion a) -- ^ Cast an 'Atom' using some 'Coercion'.
+  | AnnTyApp b Atom Type -- ^ Eliminate a 'Lam' expecting a 'TypeArgument'
+  | AnnCast b Atom Type Coercion -- ^ Cast an 'Atom' using some 'Coercion'.
   deriving (Eq, Show, Ord, Functor, Generic, Hashable)
 
 -- | An 'AnnTerm' with '()' annotations.
@@ -72,11 +72,11 @@ type Term = AnnTerm ()
 {-# COMPLETE Atom, App, Lam, Let, Match, Extend, Values, TyApp, Cast #-}
 
 -- | Match an 'Atom' with '()' annotation
-pattern Atom :: Atom a -> Term a
+pattern Atom :: Atom -> Term a
 pattern Atom a = AnnAtom () a
 
 -- | Match an 'App' with '()' annotation
-pattern App :: Atom a -> Atom a -> Term a
+pattern App :: Atom -> Atom -> Term a
 pattern App f x = AnnApp () f x
 
 -- | Match an 'App' with '()' annotation
@@ -88,29 +88,29 @@ pattern Let :: Binding a -> Term a -> Term a
 pattern Let b r = AnnLet () b r
 
 -- | Match a 'Match' with '()' annotation
-pattern Match :: Atom a -> [Arm a] -> Term a
+pattern Match :: Atom -> [Arm a] -> Term a
 pattern Match t b = AnnMatch () t b
 
 -- | Match an 'Extend' with '()' annotation
-pattern Extend :: Atom a -> [(Text, Type a, Atom a)] -> Term a
+pattern Extend :: Atom -> [(Text, Type, Atom)] -> Term a
 pattern Extend f fs = AnnExtend () f fs
 
 -- | Match an 'Extend' with '()' annotation
-pattern Values :: [Atom a] -> Term a
+pattern Values :: [Atom] -> Term a
 pattern Values xs = AnnValues () xs
 
 -- | Match a 'TyApp' with '()' annotation
-pattern TyApp :: Atom a -> Type a -> Term a
+pattern TyApp :: Atom -> Type -> Term a
 pattern TyApp f x = AnnTyApp () f x
 
 -- | Match a 'Cast' with '()' annotation
-pattern Cast :: Atom a -> Type a -> Coercion a -> Term a
+pattern Cast :: Atom -> Type -> Coercion -> Term a
 pattern Cast a to co = AnnCast () a to co
 
 -- | A binding group
 data AnnBinding b a
-  = One (a, Type a, AnnTerm b a) -- ^ Acyclic binding group (no recursion)
-  | Many [(a, Type a, AnnTerm b a)] -- ^ Cyclic, possibly mutually recursive binding groups
+  = One (a, Type, AnnTerm b a) -- ^ Acyclic binding group (no recursion)
+  | Many [(a, Type, AnnTerm b a)] -- ^ Cyclic, possibly mutually recursive binding groups
   deriving (Eq, Show, Ord, Functor, Generic, Hashable)
 
 -- | An 'AnnBinding' with '()' annotations.
@@ -119,10 +119,10 @@ type Binding = AnnBinding ()
 -- | An 'Arm' of a pattern matching expression.
 data AnnArm b a = Arm
   { _armPtrn :: Pattern a -- ^ The pattern
-  , _armTy   :: Type a -- ^ The type of the scrutinee
+  , _armTy   :: Type -- ^ The type of the scrutinee
   , _armBody :: AnnTerm b a -- ^ The body of the arm
-  , _armVars :: [(a, Type a)] -- ^ Bound value variables
-  , _armTyvars :: [(a, Type a)] -- ^ Existential type variables
+  , _armVars :: [(a, Type)] -- ^ Bound value variables
+  , _armTyvars :: [(a, Type)] -- ^ Existential type variables
   }
   deriving (Eq, Show, Ord, Functor, Generic, Hashable)
 
@@ -138,24 +138,24 @@ data Pattern a
   | PatWildcard
   deriving (Eq, Show, Ord, Functor, Generic, Hashable)
 
-data Capture a = Capture a (Type a)
+data Capture a = Capture a Type
   deriving (Eq, Show, Ord, Functor, Generic, Hashable)
 
-data Coercion a
-  = SameRepr (Type a) (Type a)
-  | Symmetry (Coercion a)
-  | Trans (Coercion a) (Coercion a)
+data Coercion
+  = SameRepr Type Type
+  | Symmetry Coercion
+  | Trans Coercion Coercion
 
-  | Application (Coercion a) (Coercion a)
-  | Quantified (BoundTv a) (Coercion a) (Coercion a)
-  | ExactRecord [(Text, Coercion a)]
-  | Record (Coercion a) [(Text, Coercion a)]
-  | Projection [(Text, Coercion a)] [(Text, Coercion a)]
+  | Application Coercion Coercion
+  | Quantified BoundTv Coercion Coercion
+  | ExactRecord [(Text, Coercion)]
+  | Record Coercion [(Text, Coercion)]
+  | Projection [(Text, Coercion)] [(Text, Coercion)]
 
-  | CoercionVar a
-  | Nth a Int
-  | Axiom a [Coercion a]
-  deriving (Eq, Show, Ord, Functor, Generic, Hashable)
+  | CoercionVar CoVar
+  | Nth CoVar Int
+  | Axiom CoVar [Coercion]
+  deriving (Eq, Show, Ord, Generic, Hashable)
 
 data Literal
   = Int Integer
@@ -165,27 +165,27 @@ data Literal
   | Unit | RecNil
   deriving (Eq, Show, Ord, Generic, Hashable, Data, Typeable)
 
-data Type a
-  = ConTy a -- A type constructor
-  | VarTy a -- A type variable
-  | ForallTy (BoundTv a) (Type a) (Type a) -- ^ A function abstraction
-  | AppTy (Type a) (Type a) -- ^ A @tycon x@ type application
-  | RowsTy (Type a) [(Text, Type a)] -- ^ The type of record extensions
-  | ValuesTy [Type a] -- ^ The type of unboxed tuples
+data Type
+  = ConTy CoVar -- ^ A type constructor
+  | VarTy CoVar -- ^ A type variable
+  | ForallTy BoundTv Type Type -- ^ A function abstraction
+  | AppTy Type Type -- ^ A @tycon x@ type application
+  | RowsTy Type [(Text, Type)] -- ^ The type of record extensions
+  | ValuesTy [Type] -- ^ The type of unboxed tuples
   | NilTy -- ^ The type of empty records
   | StarTy -- ^ The type of types
-  deriving (Eq, Show, Ord, Functor, Generic, Hashable)
+  deriving (Eq, Show, Ord, Generic, Hashable)
 
-pattern ExactRowsTy :: [(Text, Type a)] -> Type a
+pattern ExactRowsTy :: [(Text, Type)] -> Type
 pattern ExactRowsTy ts = RowsTy NilTy ts
 
-data BoundTv a = Irrelevant | Relevant a
-  deriving (Eq, Show, Ord, Functor, Generic, Hashable)
+data BoundTv = Irrelevant | Relevant CoVar
+  deriving (Eq, Show, Ord, Generic, Hashable)
 
 data AnnStmt b a
-  = Foreign a (Type a) Text
+  = Foreign a Type Text
   | StmtLet (AnnBinding b a)
-  | Type a [(a, Type a)]
+  | Type a [(a, Type)]
   | RawCode Text
   deriving (Eq, Show, Ord, Functor, Generic, Hashable)
 
@@ -199,7 +199,7 @@ makePrisms ''Coercion
 
 type Stmt = AnnStmt ()
 
-instance Pretty a => Pretty (Atom a) where
+instance Pretty Atom where
   pretty (Ref v ty) = pretty v <> scomment (string ":[" <> pretty ty <> string "]")
   pretty (Lit l) = pretty l
 
@@ -218,13 +218,13 @@ instance (Annotation b, Pretty a) => Pretty (AnnTerm b a) where
     annotated an $ fill 20 (keyword "let rec") <#> indent 2 (pprLet xs) <#> (keyword "in" <+> pretty e)
   pretty (AnnMatch an e ps) = annotated an $ keyword "match" <+> pretty e <+> pprArms ps
   pretty (AnnExtend an x rs) = annotated an $ braces $ pretty x <+> pipe <+> prettyRows rs where
-    prettyRows :: [(Text, Type a, Atom a)] -> Doc
+    prettyRows :: [(Text, Type, Atom)] -> Doc
     prettyRows = hsep . punctuate comma . map (\(x, t, v) -> text x <+> colon <+> pretty t <+> equals <+> pretty v)
   pretty (AnnValues an xs) =
     annotated an $ soperator (string "(#") <+> (hsep . punctuate comma . map pretty $ xs) <+> soperator (string "#)")
   pretty (AnnCast an a to phi) = annotated an $ parens $ pretty a <+> soperator (string "|>") <+> pretty phi <+> colon <+> pretty to
 
-instance Pretty a => Pretty (Coercion a) where
+instance Pretty Coercion where
   pretty (SameRepr a b) = pretty a <+> soperator (char '~') <+> pretty b
   pretty (Application c c') = pretty c <+> parens (pretty c')
   pretty (Record r s) = enclose (lbrace <> space) (space <> rbrace) (pretty r <+> hsep (punctuate comma (map pprCoRow s)))
@@ -240,10 +240,10 @@ instance Pretty a => Pretty (Coercion a) where
   pretty (Nth a i) = pretty a <> dot <> sliteral (int i)
   pretty (Axiom co ts) = pretty (foldl Application (CoercionVar co) ts)
 
-pprLet :: (Annotation b, Pretty a) => [(a, Type a, AnnTerm b a)] -> Doc
+pprLet :: (Annotation b, Pretty a) => [(a, Type, AnnTerm b a)] -> Doc
 pprLet = vsep . punctuate semi . map pprLet1
 
-pprLet1 :: (Annotation b, Pretty a) => (a, Type a, AnnTerm b a) -> Doc
+pprLet1 :: (Annotation b, Pretty a) => (a, Type, AnnTerm b a) -> Doc
 pprLet1 (a, b, c) = pretty a <+> colon <+> pretty b <+> nest 2 (equals </> pretty c)
 
 pprBegin :: [Doc] -> Doc
@@ -256,7 +256,7 @@ pprArms = braces' . vsep . map (indent 2) . punctuate semi . map one where
     <+> colon <+> pretty b <+> nest 2 (arrow </> pretty c)
   pprTv (a, t) = stypeVar (squote <> pretty a) <+> colon <+> pretty t
 
-pprCoRow :: Pretty a => (Text, Coercion a) -> Doc
+pprCoRow :: (Text, Coercion) -> Doc
 pprCoRow (a, b) = text a <+> equals <+> pretty b
 
 braces' :: Doc -> Doc
@@ -276,7 +276,7 @@ instance Pretty a => Pretty (Pattern a) where
 instance Pretty a => Pretty (Capture a) where
   pretty (Capture v ty) = pretty v <> scomment (string ":[" <> pretty ty <> string "]")
 
-instance Pretty a => Pretty (Type a) where
+instance Pretty Type where
   pretty (ConTy v) = stypeCon (pretty v)
   pretty (VarTy v) = stypeVar (squote <> pretty v)
   pretty (ForallTy (Relevant vs) c v)
@@ -287,11 +287,11 @@ instance Pretty a => Pretty (Type a) where
     | otherwise = pretty x <+> arrow <+> pretty e
 
   pretty (ExactRowsTy rows) = braces $ prettyRows rows where
-    prettyRows :: [(Text, Type a)] -> Doc
+    prettyRows :: [(Text, Type)] -> Doc
     prettyRows = hsep . punctuate comma . map (\(x, t) -> text x <+> colon <+> pretty t)
 
   pretty (RowsTy p rows) = braces $ pretty p <+> pipe <+> prettyRows rows where
-    prettyRows :: [(Text, Type a)] -> Doc
+    prettyRows :: [(Text, Type)] -> Doc
     prettyRows = hsep . punctuate comma . map (\(x, t) -> text x <+> colon <+> pretty t)
   pretty NilTy = braces empty
 
@@ -324,8 +324,8 @@ instance (Annotation b, Pretty a) => Pretty (AnnStmt b a) where
 instance Pretty a => Pretty [Stmt a] where
   pretty = vcat . map pretty
 
-freeInAtom :: IsVar a => Atom a -> VarSet.Set
-freeInAtom (Ref v _) = VarSet.singleton (toVar v)
+freeInAtom :: Atom -> VarSet.Set
+freeInAtom (Ref v _) = VarSet.singleton v
 freeInAtom (Lit _) = mempty
 
 freeIn :: IsVar a => AnnTerm b a -> VarSet.Set
@@ -343,8 +343,8 @@ freeIn (AnnValues _ xs) = foldMap freeInAtom xs
 freeIn (AnnTyApp _ f _) = freeInAtom f
 freeIn (AnnCast _ f _ _) = freeInAtom f
 
-freeInTy :: IsVar a => Type a -> VarSet.Set
-freeInTy (VarTy v) = VarSet.singleton (toVar v)
+freeInTy :: Type -> VarSet.Set
+freeInTy (VarTy v) = VarSet.singleton v
 freeInTy (ForallTy (Relevant v) a b) = freeInTy a <> (toVar v `VarSet.delete` freeInTy b)
 freeInTy (ForallTy Irrelevant a b) = freeInTy a <> freeInTy b
 freeInTy (AppTy a b) = freeInTy a <> freeInTy b
@@ -355,8 +355,8 @@ freeInTy ConTy{} = mempty
 freeInTy StarTy = mempty
 freeInTy NilTy = mempty
 
-occursInAtom :: IsVar a => a -> Atom a -> Bool
-occursInAtom v (Ref v' _) = toVar v == toVar v'
+occursInAtom :: IsVar a => a -> Atom -> Bool
+occursInAtom v (Ref v' _) = toVar v == v'
 occursInAtom _ (Lit _) = False
 
 occursInTerm :: IsVar a => a -> Term a -> Bool
@@ -371,9 +371,9 @@ occursInTerm v (Match e bs) = occursInAtom v e || any (occursInTerm v . view arm
 occursInTerm v (Extend e fs) = occursInAtom v e || any (occursInAtom v . thd3) fs
 occursInTerm v (Values xs) = any (occursInAtom v) xs
 
-occursInTy :: IsVar a => a -> Type a -> Bool
+occursInTy :: CoVar -> Type -> Bool
 occursInTy _ (ConTy _) = False
-occursInTy v (VarTy v') = toVar v == toVar v'
+occursInTy v (VarTy v') = v == v'
 occursInTy v (ForallTy b k t)
   | Relevant v /= b = occursInTy v k || occursInTy v t
   | otherwise = occursInTy v k
@@ -384,7 +384,7 @@ occursInTy v (ValuesTy xs) = any (occursInTy v) xs
 occursInTy _ StarTy = False
 occursInTy _ NilTy = False
 
-relates :: Coercion a -> Maybe (Type a, Type a)
+relates :: Coercion -> Maybe (Type, Type)
 relates (SameRepr a b) = Just (a, b)
 relates (CoercionVar _) = Nothing
 relates Nth{} = Nothing
@@ -442,28 +442,7 @@ extractAnn (AnnValues b _)  = b
 extractAnn (AnnTyApp b _ _)  = b
 extractAnn (AnnCast b _ _ _)   = b
 
-instance Plated (Atom a) where
-  plate = gplate
-
-instance Plated (AnnTerm b a) where
-  plate = gplate
-
-instance Plated (AnnBinding b a) where
-  plate = gplate
-
-instance Plated (Pattern a) where
-  plate = gplate
-
-instance Plated (Coercion a) where
-  plate = gplate
-
-instance Plated (Type a) where
-  plate = gplate
-
-instance Plated (AnnStmt b a) where
-  plate = gplate
-
-squishCoercion :: Coercion a -> Coercion a
+squishCoercion :: Coercion -> Coercion
 squishCoercion (Application c d)
   | SameRepr t s <- squishCoercion c, SameRepr x y <- squishCoercion d =
     SameRepr (AppTy t x) (AppTy s y)

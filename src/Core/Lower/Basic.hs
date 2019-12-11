@@ -33,13 +33,13 @@ data TypeRepr
   --
   -- This holds the name of the constructor, and the inner and outer
   -- type, both sharing their free variables.
-  | WrapperTy CoVar (C.Type CoVar) (C.Type CoVar)
+  | WrapperTy CoVar C.Type C.Type
   deriving (Show, Eq)
 
 data LowerState
   = LS
-    { vars  :: VarMap.Map (C.Type CoVar)
-    , ctors :: VarMap.Map (C.Type CoVar)
+    { vars  :: VarMap.Map C.Type
+    , ctors :: VarMap.Map C.Type
     -- | The map of types to their constructors /if they have any/.
     , types :: VarMap.Map TypeRepr
     } deriving (Eq, Show)
@@ -70,7 +70,7 @@ mkVar k (TgName n i) = CoVar i (Just n) k
 mkVar _ n@TgInternal{} = error ("Cannot convert " ++ show n ++ " to CoVar")
 
 -- | Lower a type from "Syntax" to one in "Core.Core".
-lowerType :: S.Type Typed -> C.Type CoVar
+lowerType :: S.Type Typed -> C.Type
 lowerType t@S.TyTuple{} = go t where
   go (S.TyTuple a b) = ExactRowsTy [("_1", lowerType a), ("_2", lowerType b)]
   go x = lowerType x

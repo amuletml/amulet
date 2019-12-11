@@ -61,8 +61,8 @@ deadCodePass info = snd . freeS emptyScope where
     let s' = extendPureCtors s cases
     in (x:) <$> freeS s' xs
 
-  freeA :: IsVar a => ArityScope -> Atom a -> (VarSet.Set, Atom a)
-  freeA _ t@(Ref v _)= (VarSet.singleton (toVar v), t)
+  freeA :: ArityScope -> Atom -> (VarSet.Set, Atom)
+  freeA _ t@(Ref v _)= (VarSet.singleton v, t)
   freeA _ t@Lit{} = (mempty, t)
 
   freeT :: IsVar a => ArityScope -> Term a -> (VarSet.Set, Term a)
@@ -114,9 +114,9 @@ deadCodePass info = snd . freeS emptyScope where
   buildFrees :: IsVar a
              => ArityScope
              -> VarSet.Set -- ^ The free variables within the body of this binding group
-             -> [(VarSet.Set, (a, Type a, Term a))] -- ^ Each binding group and free variables within the value
+             -> [(VarSet.Set, (a, Type, Term a))] -- ^ Each binding group and free variables within the value
              -> Bool -- ^ Whether we need to perform another round
-             -> [(VarSet.Set, (a, Type a, Term a))] -- ^ Bindings which we consider dead
+             -> [(VarSet.Set, (a, Type, Term a))] -- ^ Bindings which we consider dead
              -> VarSet.Set -- ^ The set of free variables including the bindings and their variables
   buildFrees s free [] True rest = buildFrees s free rest False []
   buildFrees _ free [] False _   = free

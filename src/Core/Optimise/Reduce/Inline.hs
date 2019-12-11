@@ -17,12 +17,12 @@ module Core.Optimise.Reduce.Inline
   ) where
 
 import Control.Monad.RWS
-import Control.Arrow (first, (***))
 import Control.Lens
 
 import qualified Data.VarMap as VarMap
 import qualified Data.VarSet as VarSet
 import qualified Data.Text as T
+import Data.Bifunctor
 import Data.Triple
 import Data.Graph
 import Data.List
@@ -48,7 +48,7 @@ data UsedAs
 data LoopScore = LS !Int Int
   deriving (Show, Eq, Ord)
 
-type Binder a = (a, Type a, AnnTerm VarSet.Set a)
+type Binder a = (a, Type, AnnTerm VarSet.Set a)
 
 -- | Return a set of all loop breakers within this binding group
 loopBreakers :: forall a. IsVar a
@@ -99,6 +99,7 @@ loopScore s (v, _, t) fv
   where
     scored x = LS x (-sizeTerm s t)
 
+    ctor :: IsVar a => (Atom -> Bool) -> AnnTerm b a -> Bool
     -- Records and tuples are constructors
     ctor _ AnnValues{} = True
     ctor _ AnnExtend{} = True
@@ -108,10 +109,10 @@ loopScore s (v, _, t) fv
     ctor f (AnnApp _ r _)   = f r
     ctor f (AnnTyApp _ r _) = f r
     -- Walk down the tree. Yay, ANF!
-    ctor f (AnnLet _ (One (v, _, e)) r) = ctor f r || (ctor f e && ctor (refEq v) r)
+    ctor f (AnnLet _ (One (v, _, e)) r) = ctor f r || (ctor f e && ctor (refEq (toVar v)) r)
     ctor _ _ = False
 
-    ctorAtom (Ref r _) = VarMap.member (toVar r) (s ^. ctorScope)
+    ctorAtom (Ref r _) = VarMap.member r (s ^. ctorScope)
     ctorAtom _ = False
 
     refEq r (Ref r' _) = r == r'
@@ -123,7 +124,7 @@ isTrivialTerm (AnnAtom _ a) = isTrivialAtom a
 isTrivialTerm _ = False
 
 -- | Determine if this is a trivially inlinable atom
-isTrivialAtom :: Atom a -> Bool
+isTrivialAtom :: Atom -> Bool
 isTrivialAtom Ref{} = True
 isTrivialAtom (Lit (Str t)) = T.length t <= 8
 isTrivialAtom (Lit _) = True
@@ -132,7 +133,7 @@ isTrivialAtom (Lit _) = True
 --
 -- Make sure you update the values in 'canInline' too when changing
 -- these.
-sizeAtom :: IsVar v => ReduceScope a -> Atom v -> Int
+sizeAtom :: ReduceScope a -> Atom -> Int
 sizeAtom s (Ref v _) = if isCtor v s then 1 else 2
 sizeAtom _ (Lit _) = 1
 
@@ -161,21 +162,21 @@ sizeTerm s (AnnMatch _ e bs) = sizeAtom s e + sum (map (sizeTerm s . view armBod
 sizeTerm s (AnnExtend _ e rs) = 10 + sizeAtom s e + sum (map (sizeAtom s . thd3) rs)
 sizeTerm s (AnnValues _ xs) = sum (map (sizeAtom s) xs)
 
-type InlineVars a v b = ([(a, Atom v)], [(a, Type v)], AnnTerm b a)
+type InlineVars a b = ([(a, Atom)], [(a, Type)], AnnTerm b a)
 
-type InlineSubst a v b = (VarMap.Map (Atom v), VarMap.Map (Type v), AnnTerm b a)
+type InlineSubst a b = (VarMap.Map Atom, VarMap.Map Type, AnnTerm b a)
 
-inlineSubst :: IsVar a => InlineVars a v b -> InlineSubst a v b
+inlineSubst :: IsVar a => InlineVars a b -> InlineSubst a b
 inlineSubst (vs, ts, term) =
   ( VarMap.fromList (map (first toVar) vs)
   , VarMap.fromList (map (first toVar) ts)
   , term )
 
-shouldInline :: (IsVar v, IsVar u)
+shouldInline :: IsVar v
              => ReduceScope a
              -> ReduceState a
              -> UsedAs
-             -> InlineSubst v u b
+             -> InlineSubst v b
              -> Bool
 shouldInline s st usage (args, tyargs, rhs)
   | rhsSize <= argSize + 10 = True
@@ -283,8 +284,8 @@ shouldInline s st usage (args, tyargs, rhs)
 -- | Gather information about a potential inlining candidate at this site
 gatherInlining :: MonadReduce a m
                => AnnTerm VarSet.Set (OccursVar a)
-               -> m (Maybe ( Either (InlineVars (OccursVar a) (OccursVar a) VarSet.Set)
-                                    (InlineVars a (OccursVar a) ())
+               -> m (Maybe ( Either (InlineVars (OccursVar a) VarSet.Set)
+                                    (InlineVars a ())
                            , VarSet.Set ))
 gatherInlining (AnnApp _ (Ref f _) x) = do
   s <- gets (VarMap.lookup (toVar f) . view varSubst)
@@ -332,7 +333,7 @@ gatherInlining t = pure . Just $ (Left (mempty, mempty, t), mempty)
 -- | Build up a set of terms for inlining when the terms have been
 -- annotated.
 buildKnownInline :: IsVar a
-              => InlineVars (OccursVar a) (OccursVar a) VarSet.Set
+              => InlineVars (OccursVar a) VarSet.Set
               -> AnnTerm VarSet.Set (OccursVar a)
 buildKnownInline (vs, ts, rhs)
   = substituteInTys (VarMap.fromList . map (first toVar) $ ts)
@@ -348,13 +349,11 @@ buildKnownInline (vs, ts, rhs)
 -- | Build up a set of terms for inlining when the terms have not been
 -- annotated.
 buildUnknownInline :: IsVar a
-                   => InlineVars a (OccursVar a) ()
+                   => InlineVars a ()
                    -> Term a
 buildUnknownInline (vs, ts, rhs)
-  = substituteInTys (VarMap.fromList . map (toVar *** fmap underlying) $ ts)
+  = substituteInTys (VarMap.fromList . map (first toVar) $ ts)
   . foldr buildLet rhs
   $ vs
   where
-    buildLet (v, a) rest =
-      let a' = underlying <$> a
-      in Let (One (v, approximateAtomType a', Atom a')) rest
+    buildLet (v, a) = Let (One (v, approximateAtomType a, Atom a))
