@@ -101,8 +101,6 @@ tagOccurStmt :: forall a a' b b'. IsVar a
              -> [AnnStmt b a]           -- ^ The statements to tag
              -> (OccursMap, [AnnStmt b' a'])
 tagOccurStmt ann var export = tagStmt where
-  conv = fmap (`var` defOcc)
-  conv :: Type a -> Type a'
   var' v = var v . occurrenceIn v
 
   tagStmt :: [AnnStmt b a] -> (OccursMap, [AnnStmt b' a'])
@@ -113,24 +111,24 @@ tagOccurStmt ann var export = tagStmt where
   tagStmt (Foreign v ty txt:xs) =
     let (fv, xs') = tagStmt xs
     in ( toVar v `VarMap.delete` fv
-       , Foreign (var' v fv) (conv ty) txt:xs')
+       , Foreign (var' v fv) ty txt:xs')
   tagStmt (Type v tys:xs) =
     let (fv, xs') = tagStmt xs
     in ( fv
        , Type (var v defOcc) (map (tagCons fv) tys):xs') where
-      tagCons fv (cons, ty) = (var' cons fv, conv ty)
+      tagCons fv (cons, ty) = (var' cons fv, ty)
   tagStmt (StmtLet (One (v, ty, e)):xs) =
     let (fve, e') = tagOccurTerm ann var e
         (fvr, xs') = tagStmt xs
         fv = fve # VarMap.delete (toVar v) fvr
-    in (fv, StmtLet (One (var' v fvr, conv ty, e')):xs')
+    in (fv, StmtLet (One (var' v fvr, ty, e')):xs')
   tagStmt (StmtLet (Many vs):xs) =
     let (fvvs, vs') = unzip (map (tagOccurTerm ann var . thd3) vs)
         (fvr, xs') = tagStmt xs
 
         fvs = occConcat (fvr : fvvs)
         fv = foldr (VarMap.delete . toVar . fst3) fvs vs
-    in (fv, StmtLet (Many (zipWith (\(v, ty, _) e -> (var' v fvs, conv ty, e)) vs vs')):xs')
+    in (fv, StmtLet (Many (zipWith (\(v, ty, _) e -> (var' v fvs, ty, e)) vs vs')):xs')
 
 -- | Tag a term with occurrence information
 tagOccurTerm :: forall a a' b b'. IsVar a
@@ -139,14 +137,11 @@ tagOccurTerm :: forall a a' b b'. IsVar a
              -> AnnTerm b a             -- ^ The term to tag
              -> (OccursMap, AnnTerm b' a')
 tagOccurTerm ann var = tagTerm where
-  conv :: Functor f => f a -> f a'
-  conv = fmap (`var` defOcc)
-
   var' v = var v . occurrenceIn v
 
   tagAtom (Lit l) = (mempty, Lit l)
   tagAtom (Ref a ty) = ( VarMap.singleton (toVar a) Once
-                       , Ref (var a defOcc) (conv ty))
+                       , Ref a ty)
 
   tagTerm (AnnAtom an a) =
     let (fv, a') = tagAtom a
@@ -162,25 +157,25 @@ tagOccurTerm ann var = tagTerm where
     let (fv, bod') = tagTerm bod
         fv' = VarMap.map escapeLambda (VarMap.delete (toVar arg) fv)
     in ( fv'
-       , AnnLam (ann an fv') (TermArgument (var' arg fv) (conv ty)) bod')
+       , AnnLam (ann an fv') (TermArgument (var' arg fv) ty) bod')
   tagTerm (AnnLam an (TypeArgument arg ty) bod) =
     let (fv, bod') = tagTerm bod
         fv' = VarMap.map escapeLambda fv
     in ( fv'
-       , AnnLam (ann an fv') (TypeArgument (var arg MultiLambda) (conv ty)) bod')
+       , AnnLam (ann an fv') (TypeArgument (var arg MultiLambda) ty) bod')
 
   tagTerm (AnnLet an (One (v, ty, e)) r) =
     let (fve, e') = tagTerm e
         (fvr, r') = tagTerm r
         fv = fve # VarMap.delete (toVar v) fvr
-    in (fv, AnnLet (ann an fv) (One (var' v fvr, conv ty, e')) r')
+    in (fv, AnnLet (ann an fv) (One (var' v fvr, ty, e')) r')
   tagTerm (AnnLet an (Many vs) r) =
     let (fvvs, vs') = unzip (map (tagTerm . thd3) vs)
         (fvr, r') = tagTerm r
 
         fvs = occConcat (fvr : fvvs)
         fv = foldr (VarMap.delete . toVar . fst3) fvs vs
-    in (fv, AnnLet (ann an fv) (Many (zipWith (\(v, ty, _) e -> (var' v fvs, conv ty, e)) vs vs')) r')
+    in (fv, AnnLet (ann an fv) (Many (zipWith (\(v, ty, _) e -> (var' v fvs, ty, e)) vs vs')) r')
 
   tagTerm (AnnMatch an t bs) =
     let (fvt, t') = tagAtom t
@@ -192,17 +187,17 @@ tagOccurTerm ann var = tagTerm where
             p' = flip var' fvb <$> p
         in (foldr (VarMap.delete . toVar . fst) fvb pv
            , Arm { _armPtrn = p'
-                 , _armTy = conv (a ^. armTy)
+                 , _armTy = a ^. armTy
                  , _armBody = b'
-                 , _armVars = map (\(v, ty) -> (var' v fvb, conv ty)) pv
-                 , _armTyvars = map (\(v, ty) -> (var v defOcc, conv ty)) (a ^. armTyvars)
+                 , _armVars = map (\(v, ty) -> (var' v fvb, ty)) pv
+                 , _armTyvars = map (\(v, ty) -> (var v defOcc, ty)) (a ^. armTyvars)
                  })
 
   tagTerm (AnnExtend an f fs) =
     let (fvf, f') = tagAtom f
         (fvfs, fs') = unzip (map (\(n, ty, a) ->
                                      let (fva, a') = tagAtom a
-                                     in (fva, (n, conv ty, a'))) fs)
+                                     in (fva, (n, ty, a'))) fs)
         fv = occConcat (fvf : fvfs)
     in (fv, AnnExtend (ann an fv) f' fs')
 
@@ -213,11 +208,11 @@ tagOccurTerm ann var = tagTerm where
 
   tagTerm (AnnTyApp an f ty) =
     let (fv, f') = tagAtom f
-    in (fv, AnnTyApp (ann an fv) f' (conv ty))
+    in (fv, AnnTyApp (ann an fv) f' ty)
 
   tagTerm (AnnCast an x to co) =
     let (fv, x') = tagAtom x
-    in (fv, AnnCast (ann an fv) x' (conv to) (conv co))
+    in (fv, AnnCast (ann an fv) x' to co)
 
 -- | An extension of 'IsVar' which also tracks occurrence information
 class IsVar a => Occurs a where

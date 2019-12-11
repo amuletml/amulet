@@ -32,7 +32,7 @@ getTypeRepr var (Just ctors) =
     _ -> pure ( [ Type var ctors' ]
               , SumTy (VarSet.fromList (map fst ctors')) )
 
-isNewtype :: IsVar a => Type a -> Maybe (Spine a)
+isNewtype :: Type -> Maybe Spine
 isNewtype (ForallTy Irrelevant _ ForallTy{}) = Nothing -- Cannot have multiple relevant arguments
 isNewtype (ForallTy Irrelevant from to) =
   pure (Spine [(Irrelevant, from)] from to)
@@ -42,21 +42,20 @@ isNewtype (ForallTy (Relevant var) k rest) = do
   pure (Spine ((Relevant var, k):tys) from to)
 isNewtype _ = Nothing
 
-data Spine a =
-  Spine [(BoundTv a, Type a)] (Type a) (Type a)
+data Spine = Spine [(BoundTv, Type)] Type Type
   deriving (Eq, Show, Ord)
 
 newtypeWorker :: forall a m. (IsVar a, MonadNamey m)
-              => Spine a -> m (Term a)
+              => Spine -> m (Term a)
 newtypeWorker (Spine tys dom cod) = do
-  let wrap :: [(BoundTv a, Type a)] -> (a -> Type a -> Term a) -> m (Term a)
-      wrap ((Relevant v, c):ts) ex = Lam (TypeArgument v c) <$> wrap ts ex
+  let wrap :: [(BoundTv, Type)] -> (CoVar -> Type -> Term a) -> m (Term a)
+      wrap ((Relevant v, c):ts) ex = Lam (TypeArgument (fromVar v) c) <$> wrap ts ex
       wrap [(Irrelevant, c)] ex = do
         v <- fresh ValueVar
-        Lam (TermArgument (fromVar v) c) <$> pure (ex (fromVar v) c)
+        Lam (TermArgument (fromVar v) c) <$> pure (ex v c)
       wrap _ _ = undefined
 
-      work :: a -> Type a -> Term a
+      work :: CoVar -> Type -> Term a
       work var ty = Cast (Ref var ty) cod (SameRepr dom cod)
 
   wrap tys work

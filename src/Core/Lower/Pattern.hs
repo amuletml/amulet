@@ -60,7 +60,7 @@ data VariableSubst
   = VS
   { varFrom :: CoVar -- ^ The variable bound within the core pattern
   , varTo   :: CoVar -- ^ The variable used within the term
-  , varTy   :: Type CoVar -- ^ The type of each variable
+  , varTy   :: Type  -- ^ The type of each variable
   }
 
 instance Pretty VariableSubst where
@@ -92,7 +92,7 @@ data ArmNode
   | ArmMatch
     { nodeArms    :: ArmSet
     , nodeSuccess :: [ArmLeaf]
-    , nodeAtom    :: Atom CoVar
+    , nodeAtom    :: Atom
       -- ^ The atom to match against
     , nodeNodes   :: [(Pattern CoVar, ArmNode)]
       -- ^ The child nodes, and their associated pattern.
@@ -100,7 +100,7 @@ data ArmNode
   | ArmLet
     { nodeArms    :: ArmSet
     , nodeSuccess :: [ArmLeaf] -- Should be empty
-    , nodeBind    :: (CoVar, Type CoVar, Term CoVar)
+    , nodeBind    :: (CoVar, Type, Term CoVar)
     , nodeBody    :: ArmNode
     }
   deriving (Show)
@@ -133,7 +133,7 @@ data PatternRow
   deriving Show
 
 data ArmExpr m
-  = ExprOnce (Term CoVar) [(CoVar, Type CoVar)] [(CoVar, Type CoVar)]
+  = ExprOnce (Term CoVar) [(CoVar, Type)] [(CoVar, Type)]
   | ExprLambda ([VariableSubst] -> [VariableSubst] -> m (Term CoVar))
 
 instance Pretty (ArmExpr m) where
@@ -143,7 +143,7 @@ instance Pretty (ArmExpr m) where
 instance Show (ArmExpr m) where
   show = show . pretty
 
-lowerMatch :: MonadLower m => Atom CoVar -> [(S.Pattern Typed, Maybe (Term CoVar), Term CoVar)] -> m (Term CoVar)
+lowerMatch :: MonadLower m => Atom -> [(S.Pattern Typed, Maybe (Term CoVar), Term CoVar)] -> m (Term CoVar)
 lowerMatch (Ref r ty) cases = lowerMatch' r ty cases
 lowerMatch a cases = do
   let ty = approximateAtomType a
@@ -151,7 +151,7 @@ lowerMatch a cases = do
   Let (One (v, ty, Atom a)) <$> lowerMatch' v ty cases
 
 lowerMatch' :: forall m. MonadLower m
-            => CoVar -> Type CoVar -> [(S.Pattern Typed, Maybe (Term CoVar), Term CoVar)] -> m (Term CoVar)
+            => CoVar -> Type -> [(S.Pattern Typed, Maybe (Term CoVar), Term CoVar)] -> m (Term CoVar)
 lowerMatch' var ty cases = do
   let bodies :: ArmMap (ArmExpr m) = mconcat (zipWith (flip HMap.singleton . makeBody) cases [0..])
       guards :: ArmMap (ArmExpr m) = mconcat (zipWith makeGuard cases [0..])
@@ -244,7 +244,7 @@ generateBinds n (bods, build) =
       let buildLam aty bod' = foldr (Lam . uncurry TypeArgument) (Lam (TermArgument vArg aty) bod') tvs
           buildLamTy fty = foldr (uncurry (ForallTy . Relevant)) fty tvs
 
-          buildApp :: [VariableSubst] -> CoVar -> Type CoVar -> Atom CoVar -> m (Term CoVar)
+          buildApp :: [VariableSubst] -> CoVar -> Type -> Atom -> m (Term CoVar)
           buildApp = buildApp' tvs
           buildApp' [] _ f fty arg = pure (App (Ref f fty) arg)
           buildApp' ((tv,_):tvs) ts f fty@(ForallTy (Relevant _) _ ftyr) arg = do
@@ -285,7 +285,7 @@ generateBinds n (bods, build) =
 -- | Find a "good" variable to match against, and match against it using
 -- 'lowerOneOf'.
 lowerOne :: MonadLower m
-         => VarMap.Map (Type CoVar) -> [PatternRow]
+         => VarMap.Map Type -> [PatternRow]
          -> m ArmNode
 lowerOne _ [] = error "Cannot have an empty match"
 lowerOne tys rss = do
@@ -426,8 +426,8 @@ lowerOne tys rss = do
 -- 'lowerOne'.
 lowerOneOf :: forall m. MonadLower m
            => [ArmLeaf]
-           -> CoVar -> Type CoVar -- ^ The variable to match against and its type.
-           -> VarMap.Map (Type CoVar) -> [PatternRow]
+           -> CoVar -> Type -- ^ The variable to match against and its type.
+           -> VarMap.Map Type -> [PatternRow]
            -> m ArmNode
 lowerOneOf preLeafs var ty tys = go [] . map prepare
   where
@@ -470,7 +470,7 @@ lowerOneOf preLeafs var ty tys = go [] . map prepare
 
     -- | Build up a mapping of (field -> variable)s and extract the child
     -- patterns.
-    goRows :: [PatternRow] -> Map.Map T.Text (CoVar, Type CoVar)
+    goRows :: [PatternRow] -> Map.Map T.Text (CoVar, Type)
            -> [(S.Pattern Typed, PatternRow)]
            -> m ArmNode
     goRows unc fields [] = do
@@ -616,7 +616,7 @@ isTrivialPat S.Capture{} = True
 isTrivialPat (S.PAs p _ _) = isTrivialPat p
 isTrivialPat _ = False
 
-patternVars :: Pattern CoVar -> [(CoVar, Type CoVar)]
+patternVars :: Pattern CoVar -> [(CoVar, Type)]
 patternVars (Destr _ p) = map captureVars p
 patternVars (PatRecord ps) = map (captureVars . snd) ps
 patternVars (PatValues ps) = map captureVars ps
@@ -624,10 +624,10 @@ patternVars Constr{} = []
 patternVars PatLit{} = []
 patternVars PatWildcard{} = []
 
-captureVars :: Capture CoVar -> (CoVar, Type CoVar)
+captureVars :: Capture CoVar -> (CoVar, Type)
 captureVars (Capture v ty) = (v, ty)
 
-patternVars' :: S.Pattern Typed -> [(CoVar, Type CoVar)]
+patternVars' :: S.Pattern Typed -> [(CoVar, Type)]
 patternVars' S.Wildcard{} = []
 patternVars' S.PLiteral{} = []
 patternVars' (S.Capture v (_, ty)) = [(mkVal v, lowerType ty)]
@@ -639,16 +639,16 @@ patternVars' (S.PType p _ _) = patternVars' p
 patternVars' (S.PTuple ps _) = concatMap patternVars' ps
 patternVars' S.PList{} = error "PList is handled by desugar"
 
-dropNForalls :: Int -> Type a -> Type a
+dropNForalls :: Int -> Type -> Type
 dropNForalls 0 t = t
 dropNForalls x (ForallTy _ _ t) = dropNForalls (x - 1) t
 dropNForalls _ _ = undefined
 
-getType :: Type a -> Maybe a
+getType :: Type -> Maybe CoVar
 getType (ForallTy _ _ t) = getType t
 getType (ConTy a) = pure a
 getType (AppTy f _) = getType f
 getType _ = Nothing
 
-renameVar :: [VariableSubst] -> CoVar -> Type CoVar -> (CoVar, Type CoVar)
+renameVar :: [VariableSubst] -> CoVar -> Type -> (CoVar, Type)
 renameVar vs v ty = maybe (v, ty) (liftA2 (,) varFrom varTy) $ find ((==v) . varTo) vs

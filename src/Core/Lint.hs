@@ -18,6 +18,7 @@ import qualified Data.Sequence as Seq
 import qualified Data.Text as T
 import Data.Functor.Constant
 import Data.Traversable
+import Data.Bifunctor
 import Data.Foldable
 import Data.Function
 import Data.Functor
@@ -33,36 +34,36 @@ import Core.Types
 import Text.Pretty.Semantic hiding ((<>))
 import Text.Pretty.Annotation
 
-data CoreError a
-  = TypeMismatch (Type a) (Type a)
-  | InfoMismatch a VarInfo VarInfo
-  | InfoIllegal a VarInfo VarInfo
-  | NoSuchVar a
+data CoreError
+  = TypeMismatch Type Type
+  | InfoMismatch CoVar VarInfo VarInfo
+  | InfoIllegal CoVar VarInfo VarInfo
+  | NoSuchVar CoVar
   | IllegalUnbox
-  | InvalidCoercion (Coercion a)
-  | PatternMismatch [(a, Type a)] [(a, Type a)]
+  | InvalidCoercion Coercion
+  | PatternMismatch [(CoVar, Type)] [(CoVar, Type)]
 
-type CoreErrors a = (Seq.Seq (CoreError a))
+type CoreErrors = (Seq.Seq CoreError)
 
 type LintResult = Sum Int
 
-data Scope a = Scope { vars :: VarMap.Map (Type a, VarInfo)
-                     , types :: VarMap.Map VarInfo
-                     , tyVars :: VarSet.Set }
+data Scope = Scope { vars :: VarMap.Map (Type, VarInfo)
+                   , types :: VarMap.Map VarInfo
+                   , tyVars :: VarSet.Set }
   deriving (Show)
 
-emptyScope :: IsVar a => Scope a
+emptyScope :: Scope
 emptyScope = Scope (VarMap.fromList (map (\(a, b) -> (a, (b, varInfo a))) builtinVarList))
                    (VarMap.fromList (map (,TypeConVar) builtinTyList))
                    mempty
 
-insertVar :: IsVar a => a -> Type a -> VarMap.Map (Type a, VarInfo) -> VarMap.Map (Type a, VarInfo)
+insertVar :: IsVar a => a -> Type -> VarMap.Map (Type, VarInfo) -> VarMap.Map (Type, VarInfo)
 insertVar v t = VarMap.insert (toVar v) (t, varInfo v)
 
 insertTy :: IsVar a => a -> VarMap.Map VarInfo -> VarMap.Map VarInfo
 insertTy v = VarMap.insert (toVar v) (varInfo v)
 
-instance Pretty a => Pretty (CoreError a) where
+instance Pretty CoreError where
   pretty (TypeMismatch l r) = text "Expected type" <+> pretty l </>
                               text "     got type" <+> pretty r
   pretty (InfoMismatch v l r) = text "Expected var info" <+> string (show l) </>
@@ -77,17 +78,17 @@ instance Pretty a => Pretty (CoreError a) where
   pretty (PatternMismatch l r) = text "Expected vars" <+> pVs l </>
                                  text "     got vars" <+> pVs r
     where pVs = hsep . punctuate comma . map (\(v, ty) -> pretty v <+> colon <+> pretty ty)
-          pVs :: [(a, Type a)] -> Doc
+          pVs :: [(CoVar, Type)] -> Doc
 
   prettyList = vsep . map pretty
 
-instance Pretty a => Annotation (CoreError a) where
+instance Annotation CoreError where
   annotated e a = serror ("(* XXX" <+> align (pretty e) <+> "*)") <#> a
 
-instance Pretty a => Annotation (Seq.Seq (CoreError a)) where
+instance Annotation (Seq.Seq CoreError) where
   annotated = flip (foldr annotated)
 
-instance Pretty a => Pretty [(AnnStmt (CoreErrors a) a, CoreErrors a)] where
+instance Pretty a => Pretty [(AnnStmt CoreErrors a, CoreErrors)] where
   pretty = vsep . map (\(s, es) -> annotated es (pretty s))
 
 runLint :: Pretty b
@@ -106,14 +107,14 @@ runLintOK m = case runWriter m of
                 (x, Sum c) -> Just (c, x)
 
 checkStmt :: (IsVar a, MonadWriter LintResult m)
-          => Scope a
+          => Scope
           -> [Stmt a]
-          -> m [(AnnStmt (CoreErrors a) a, CoreErrors a)]
+          -> m [(AnnStmt CoreErrors a, CoreErrors)]
 checkStmt _ [] = pure []
 checkStmt s (Foreign v ty b:xs) = do
   es <- gatherError' . liftError $
     -- Ensure we're declaring a value
-       unless (varInfo v == ValueVar) (pushError (InfoIllegal v ValueVar (varInfo v)))
+       unless (varInfo v == ValueVar) (pushError (InfoIllegal (toVar v) ValueVar (varInfo v)))
     -- And the type is well formed
     *> checkType s ty
 
@@ -127,7 +128,7 @@ checkStmt s (StmtLet (One (v, ty, e)):xs) = do
     (case ty' of
        Just ty' | ty `apart` ty' -> pushError (TypeMismatch ty ty')
        _ -> pure ())
-    *> unless (varInfo v == ValueVar) (pushError (InfoIllegal v ValueVar (varInfo v)))
+    *> unless (varInfo v == ValueVar) (pushError (InfoIllegal (toVar v) ValueVar (varInfo v)))
     *> checkType s ty
 
   ((StmtLet (One (v, ty, e')), es):) <$> checkStmt (s { vars = insertVar v ty (vars s) }) xs
@@ -141,7 +142,7 @@ checkStmt s (StmtLet (Many vs):xs) = do
       (case ty' of
          Just ty' | ty `apart` ty' -> pushError (TypeMismatch ty ty')
          _ -> pure ())
-      *> unless (varInfo v == ValueVar) (pushError (InfoIllegal v ValueVar (varInfo v)))
+      *> unless (varInfo v == ValueVar) (pushError (InfoIllegal (toVar v) ValueVar (varInfo v)))
       *> checkType s ty
     pure ((v, ty, e'), es)
 
@@ -153,20 +154,17 @@ checkStmt s (Type v ctors:xs) = do
 
   es <- gatherError' . liftError $
     -- Ensure we're declaring a type
-       unless (varInfo v == TypeConVar) (pushError (InfoIllegal v TypeConVar (varInfo v)))
+       unless (varInfo v == TypeConVar) (pushError (InfoIllegal (toVar v) TypeConVar (varInfo v)))
     *> for_ ctors (\(v, x) ->
          -- Ensure we're declaring a constructor
-         unless (varInfo v == DataConVar) (pushError (InfoIllegal v DataConVar (varInfo v)))
+         unless (varInfo v == DataConVar) (pushError (InfoIllegal (toVar v) DataConVar (varInfo v)))
           -- Ensure the type is well formed
          *> checkType s' x)
 
   ((Type v ctors, es):) <$> checkStmt s' xs
 checkStmt s (RawCode t:xs) = ((RawCode t, mempty):) <$> checkStmt s xs
 
-checkAtom :: IsVar a
-         => Scope a
-         -> Atom a
-         -> Errors (CoreErrors a) (Type a)
+checkAtom :: Scope -> Atom -> Errors CoreErrors Type
 checkAtom s (Ref v ty) =
   case VarMap.lookup (toVar v) (vars s) of
     Nothing -> pushError (NoSuchVar v)
@@ -180,9 +178,9 @@ checkAtom s (Ref v ty) =
 checkAtom _ (Lit l) = pure (litTy l)
 
 checkTerm :: forall a m. (IsVar a, MonadWriter LintResult m)
-         => Scope a
+         => Scope
          -> Term a
-         -> m (Maybe (Type a), AnnTerm (CoreErrors a) a)
+         -> m (Maybe Type, AnnTerm CoreErrors a)
 checkTerm s (Atom a) = do
   res <- gatherError (liftError (checkAtom s a))
   pure (flip AnnAtom a <$> res)
@@ -198,7 +196,7 @@ checkTerm s (App f x) = do
 checkTerm s (Lam arg@(TermArgument a ty) bod) = do
   errs <- gatherError' . liftError $
     -- Ensure type is valid and we're declaring a value
-       unless (varInfo a == ValueVar) (pushError (InfoIllegal a ValueVar (varInfo a)))
+       unless (varInfo a == ValueVar) (pushError (InfoIllegal (toVar a) ValueVar (varInfo a)))
     *> checkType s ty
 
   (bty, bod') <- checkTerm (s { vars = insertVar a ty (vars s) }) bod
@@ -207,11 +205,11 @@ checkTerm s (Lam arg@(TermArgument a ty) bod) = do
 checkTerm s (Lam arg@(TypeArgument a ty) bod) = do
   errs <- gatherError' . liftError $
     -- Ensure type is valid and we're declaring a tyvar
-       unless (varInfo a == TypeVar) (pushError (InfoIllegal a TypeVar (varInfo a)))
+       unless (varInfo a == TypeVar) (pushError (InfoIllegal (toVar a) TypeVar (varInfo a)))
     *> checkType (s { tyVars = VarSet.insert (toVar a) (tyVars s) }) ty
 
   (bty, bod') <- checkTerm (s { tyVars = VarSet.insert (toVar a) (tyVars s) }) bod
-  pure ( ForallTy (Relevant a) ty <$> bty
+  pure ( ForallTy (Relevant (toVar a)) ty <$> bty
        , AnnLam errs arg bod')
 
 checkTerm s (Let (One (v, ty, e)) r) = do
@@ -223,7 +221,7 @@ checkTerm s (Let (One (v, ty, e)) r) = do
     (case ty' of
        Just ty' | ty `apart` ty' -> pushError (TypeMismatch ty ty')
        _ -> pure ())
-    *> unless (varInfo v == ValueVar) (pushError (InfoIllegal v ValueVar (varInfo v)))
+    *> unless (varInfo v == ValueVar) (pushError (InfoIllegal (toVar v) ValueVar (varInfo v)))
     *> checkType s ty
 
   pure ( tyr, AnnLet es (One (v, ty, e')) r')
@@ -238,7 +236,7 @@ checkTerm s (Let (Many vs) r) = do
       (case ty' of
          Just ty' | ty `apart` ty' -> pushError (TypeMismatch ty ty')
          _ -> pure ())
-      *> unless (varInfo v == ValueVar) (pushError (InfoIllegal v ValueVar (varInfo v)))
+      *> unless (varInfo v == ValueVar) (pushError (InfoIllegal (toVar v) ValueVar (varInfo v)))
       *> checkType s ty
     pure ((v, ty, e'), es)
 
@@ -258,7 +256,7 @@ checkTerm s (Match e bs) = do
         (case tye of
            Just tye | ty `apart` tye -> pushError (TypeMismatch ty tye)
            _ -> pure ())
-        *> when (vs /= patternVars p) (pushError (PatternMismatch (patternVars p) vs))
+        *> when (vs /= patternVars p) (pushError (PatternMismatch (first toVar <$> patternVars p) (first toVar <$> vs)))
         *> checkPattern s ty p
       pure ((tyr, Arm p ty r' vs tvs), es)
 
@@ -317,9 +315,9 @@ checkTerm s (Cast x expTo co) = do
 --
 -- TODO: We should really verify the kinds match up, but we're a long way away
 -- from that working
-checkType :: IsVar a => Scope a -> Type a -> Errors (CoreErrors a) ()
+checkType :: Scope -> Type -> Errors CoreErrors ()
 checkType s (ConTy v) =
-  case VarMap.lookup (toVar v) (types s) of
+  case VarMap.lookup v (types s) of
     Nothing -> pushError (NoSuchVar v)
     Just inf | not (isTypeInfo inf) -> pushError (InfoIllegal v TypeConVar inf)
              | otherwise -> pure ()
@@ -338,7 +336,7 @@ checkType s (ValuesTy xs) = traverse_ (checkTypeBoxed s) xs
 checkType _ StarTy = pure ()
 checkType _ NilTy = pure ()
 
-checkTypeBoxed :: IsVar a => Scope a -> Type a -> Errors (CoreErrors a) ()
+checkTypeBoxed :: Scope -> Type -> Errors CoreErrors ()
 checkTypeBoxed s x = checkType s x *> checkNoUnboxed x
 
 -- | Check a coercion is well formed within a given scope, returning the input
@@ -346,9 +344,9 @@ checkTypeBoxed s x = checkType s x *> checkNoUnboxed x
 --
 -- Ideally this would use ApplicativeDo, but GHC is still a little silly at
 -- desugaring it all.
-checkCoercion :: forall a. IsVar a => Scope a -> Coercion a -> Errors (CoreErrors a) (Type a, Type a)
+checkCoercion :: Scope -> Coercion -> Errors CoreErrors (Type, Type)
 checkCoercion s = checkCo where
-  checkCo :: Coercion a -> Errors (CoreErrors a) (Type a, Type a)
+  checkCo :: Coercion -> Errors CoreErrors (Type, Type)
   checkCo (SameRepr a b) =
        checkType s a
     *> checkType s b
@@ -413,40 +411,39 @@ checkCoercion s = checkCo where
          (_, _) -> pushError (InvalidCoercion co))
     `bindErrors` checkCo co
 
-checkPattern :: forall a. IsVar a => Scope a -> Type a -> Pattern a -> Errors (CoreErrors a) ()
+checkPattern :: forall a. IsVar a => Scope -> Type -> Pattern a -> Errors CoreErrors ()
 checkPattern s = checkPat where
-  checkCapture :: Type a -> Capture a -> Errors (CoreErrors a) ()
+  checkCapture :: Type -> Capture a -> Errors CoreErrors ()
   checkCapture ty' (Capture a ty)
     | ty `apartOpen` ty' = pushError (TypeMismatch ty ty')
-    | varInfo a /= ValueVar = pushError (InfoIllegal a ValueVar (varInfo a))
+    | varInfo a /= ValueVar = pushError (InfoIllegal (toVar a) ValueVar (varInfo a))
     | otherwise = pure ()
 
-  checkPat :: Type a -> Pattern a -> Errors (CoreErrors a) ()
+  checkPat :: Type -> Pattern a -> Errors CoreErrors ()
   checkPat _ PatWildcard = pure mempty
   checkPat (RowsTy _ _) (PatLit RecNil) = pure mempty
   checkPat NilTy (PatLit RecNil) = pure mempty
   checkPat ty' (PatLit l) =
     let ty = litTy l
-        ty :: Type a
     in when (ty `apart` ty') (pushError (TypeMismatch ty ty'))
     $> mempty
   checkPat ty' (Constr a) =
     case VarMap.lookup (toVar a) (vars s) of
-      Nothing -> pushError (NoSuchVar a)
+      Nothing -> pushError (NoSuchVar (toVar a))
       Just (ty, inf)
         -- Ensure types line up
         | inst ty `apartOpen` ty' -> pushError (TypeMismatch ty' (inst ty))
         -- Ensure we're matching on a constructor
-        | inf /= varInfo a -> pushError (InfoMismatch a inf (varInfo a))
-        | inf /= DataConVar  -> pushError (InfoMismatch a DataConVar (varInfo a))
+        | inf /= varInfo a -> pushError (InfoMismatch (toVar a) inf (varInfo a))
+        | inf /= DataConVar  -> pushError (InfoMismatch (toVar a) DataConVar (varInfo a))
         | otherwise -> pure mempty
   checkPat ty' (Destr a p) =
     case VarMap.lookup (toVar a) (vars s) of
-      Nothing -> pushError (NoSuchVar a)
+      Nothing -> pushError (NoSuchVar (toVar a))
       Just (ty, inf)
         -- Ensure we're matching on a constructor
-        | inf /= varInfo a -> pushError (InfoMismatch a inf (varInfo a))
-        | inf /= DataConVar  -> pushError (InfoMismatch a DataConVar (varInfo a))
+        | inf /= varInfo a -> pushError (InfoMismatch (toVar a) inf (varInfo a))
+        | inf /= DataConVar  -> pushError (InfoMismatch (toVar a) DataConVar (varInfo a))
         -- Ensure types line up
         | (qs, r) <- splitForallTy $ inst ty
         , Just s <- r `unify` ty'
@@ -475,38 +472,38 @@ checkPattern s = checkPat where
   splitForallTy (ForallTy Irrelevant q t) = splitForallTy t & _1 %~ (q:)
   splitForallTy t = ([], t)
 
-checkNoUnboxed :: Type a -> Errors (CoreErrors a) ()
+checkNoUnboxed :: Type -> Errors CoreErrors ()
 checkNoUnboxed ValuesTy{} = pushError IllegalUnbox
 checkNoUnboxed _ = pure ()
 
 unknownVar :: IsVar a => a
 unknownVar = fromVar (CoVar (-100) (Just "?") ValueVar)
 
-unknownTyvar :: IsVar a => Type a
+unknownTyvar :: Type
 unknownTyvar = VarTy unknownVar
 
 -- | Throw an error within an applicative
-pushError :: CoreError a -> Errors (CoreErrors a) b
+pushError :: CoreError -> Errors CoreErrors b
 pushError = failure . pure
 
 -- | Throw an error within an error monad
-chuckError :: MonadError (CoreErrors a) m => CoreError a -> m b
+chuckError :: MonadError CoreErrors m => CoreError -> m b
 chuckError = throwError . pure
 
 -- | Lift an 'Errors' into an error monad
-liftError :: MonadError (CoreErrors a) m => Errors (CoreErrors a) b -> m b
+liftError :: MonadError CoreErrors m => Errors CoreErrors b -> m b
 liftError m = case runErrors m of
                 Left e -> throwError e
                 Right x -> pure x
 
-gatherError :: MonadWriter LintResult m => ExceptT (CoreErrors a) m b -> m (Maybe b, CoreErrors a)
+gatherError :: MonadWriter LintResult m => ExceptT CoreErrors m b -> m (Maybe b, CoreErrors)
 gatherError m = do
   res <- runExceptT m
   case res of
     Left e -> tell (Sum (Seq.length e)) >> pure (Nothing, e)
     Right x -> pure (Just x, mempty)
 
-gatherError' :: MonadWriter LintResult m => ExceptT (CoreErrors a) m () -> m (CoreErrors a)
+gatherError' :: MonadWriter LintResult m => ExceptT CoreErrors m () -> m CoreErrors
 gatherError' = fmap snd . gatherError
 
 forMA :: (Monoid m, Applicative f) => [a] -> (a -> f (b, m)) -> f ([b], m)
@@ -514,22 +511,22 @@ forMA vs f = foldr (\x a ->
                       (\(a, b) (a', b') -> (a : a', b <> b'))
                       <$> f x <*> a) (pure mempty) vs
 
-litTy :: IsVar a => Literal -> Type a
-litTy (Int _) = fromVar <$> tyInt
-litTy (Str _) = fromVar <$> tyString
-litTy (Float _) = fromVar <$> tyFloat
-litTy LitTrue = fromVar <$> tyBool
-litTy LitFalse = fromVar <$> tyBool
-litTy Unit = fromVar <$> tyUnit
+litTy :: Literal -> Type
+litTy (Int _) = tyInt
+litTy (Str _) = tyString
+litTy (Float _) = tyFloat
+litTy LitTrue = tyBool
+litTy LitFalse = tyBool
+litTy Unit = tyUnit
 litTy RecNil = NilTy
 
-uni, apart, uniOpen, apartOpen :: IsVar a => Type a -> Type a -> Bool
+uni, apart, uniOpen, apartOpen :: Type -> Type -> Bool
 uni = uniOpen
 apart a b = not (uni a b)
 uniOpen a b = isJust (unify a b)
 apartOpen a b = not (uniOpen a b)
 
-patternVars :: Pattern a -> [(a, Type a)]
+patternVars :: Pattern a -> [(a, Type)]
 patternVars (Destr _ p) = map captureVars p
 patternVars (PatRecord ps) = map (captureVars . snd) ps
 patternVars (PatValues ps) = map captureVars ps
@@ -537,7 +534,7 @@ patternVars Constr{} = []
 patternVars PatLit{} = []
 patternVars PatWildcard{} = []
 
-captureVars :: Capture a -> (a, Type a)
+captureVars :: Capture a -> (a, Type)
 captureVars (Capture v ty) = (v, ty)
 
 bindErrors :: (a -> Errors e b) -> Errors e a -> Errors e b
