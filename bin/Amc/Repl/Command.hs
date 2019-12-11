@@ -57,22 +57,22 @@ finish (Just i) = liftIO $ throwTo i ThreadKilled
 
 
 execCommand :: (MonadState ReplState m, MonadIO m) => Listener -> String -> String -> m ()
-execCommand tid "quit" _ = finish tid
-execCommand tid "q"    _ = finish tid
+execCommand tid "quit"  _   = finish tid
+execCommand tid "q"     _   = finish tid
 
-execCommand _ "l"    arg = loadCommand arg
-execCommand _ "load" arg = loadCommand arg
+execCommand _ "l"       arg = loadCommand arg
+execCommand _ "load"    arg = loadCommand arg
 
-execCommand _ "r"      _ = reloadCommand
-execCommand _ "reload" _ = reloadCommand
+execCommand _ "r"       _   = reloadCommand
+execCommand _ "reload"  _   = reloadCommand
 
-execCommand _ "t" arg = typeCommand arg
-execCommand _ "type" arg = typeCommand arg
+execCommand _ "t"       arg = typeCommand arg
+execCommand _ "type"    arg = typeCommand arg
 
-execCommand _ "i" arg = infoCommand arg
-execCommand _ "info" arg = infoCommand arg
+execCommand _ "i"       arg = infoCommand arg
+execCommand _ "info"    arg = infoCommand arg
 
-execCommand _ "c" arg = compileCommand arg
+execCommand _ "c"       arg = compileCommand arg
 execCommand _ "compile" arg = compileCommand arg
 
 execCommand _ "add-library-path" arg =
@@ -85,7 +85,7 @@ execCommand _ "add-library-path" arg =
       then wrapDriver $ D.adjustConfig (\c -> c { D.libraryPath = path : D.libraryPath c })
       else liftIO . putStrLn $ arg ++ ": No such directory"
 
-execCommand _ "version" _ = liftIO (putStrLn ("The Amulet compiler, version " ++ $amcVersion))
+execCommand _ "version"  _   = liftIO (putStrLn ("The Amulet compiler, version " ++ $amcVersion))
 execCommand _ "complete" arg = do
   let word = dropWhile isSpace arg
   (_, completions) <- completeInScope (reverse word, "")
@@ -97,9 +97,10 @@ execCommand _ "complete" arg = do
 execCommand _ cmd _ = outputDoc ("Unknown command" <+> verbatim cmd)
 
 loadCommand :: (MonadState ReplState m, MonadIO m) => String -> m ()
-loadCommand arg = case parseArgs arg of
-                    [file] -> loadFile (Just file)
-                    _ -> outputDoc "Usage `:load [file]`"
+loadCommand arg =
+  case parseArgs arg of
+    [file] -> loadFile (Just file)
+    _ -> outputDoc "Usage `:load [file]`"
 
 reloadCommand :: (MonadState ReplState m, MonadIO m) => m ()
 reloadCommand = loadFile =<< gets currentFile
