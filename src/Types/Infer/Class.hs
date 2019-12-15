@@ -489,7 +489,7 @@ inferInstance inst@(Instance clss ctx instHead bindings we'reDeriving ann) = con
 
         unless (null cons) $ do
           let (c@(ConImplicit reason _ _ _):_) = reverse cons
-          dictates =<< unsatClassCon (Const reason) c (InstanceMethod ctx)
+          dictates . addBlame reason =<< unsatClassCon (Const reason) c (InstanceMethod ctx)
 
         let fakeExp =
               App (appArg instSub bindGroupTy (VarRef v' (an, bindGroupTy)))
@@ -537,7 +537,7 @@ inferInstance inst@(Instance clss ctx instHead bindings we'reDeriving ann) = con
 
     unless (null cons) $ do
       let (c@(ConImplicit reason _ _ _):_) = reverse cons
-      dictates =<< unsatClassCon (Const reason) c (InstanceMethod ctx)
+      dictates . addBlame reason =<< unsatClassCon (Const reason) c (InstanceMethod ctx)
 
     capture <- genName
     let shove cs (ExprWrapper w e a) = ExprWrapper w (shove cs e) a
@@ -576,7 +576,7 @@ inferInstance inst@(Instance clss ctx instHead bindings we'reDeriving ann) = con
       solveFixpoint (BecauseOf inst) cs =<< getSolveInfo
 
   unless (null unsolved) $
-    dictates =<< unsatClassCon inst (head unsolved) (InstanceClassCon classAnn)
+    dictates . addBlame (BecauseOf inst) =<< unsatClassCon inst (head unsolved) (InstanceClassCon classAnn)
 
   let inside = case whatDo of
         [(_, _)] -> solveEx mempty solution needed (fields ^. to head . fExpr)

@@ -1,0 +1,14 @@
+quantified-tf-fail.ml[24:29 ..24:34]: error (E2018)
+  Could not deduce show (apply 'f 'a) from the context
+    forall 'a. show (apply 'f 'a)
+
+  • Note: this constraint can not be quantified over
+    because it originated from a method in an instance.
+
+  • Possible fix: add it to the instance context
+
+  Arising in the the expression
+   │ 
+24 │   let show (Mk x) = "Mk " ^ show x
+   │                             ^^^^^^
+  • Note: apply is an associated type, and so may not be injective
