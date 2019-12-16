@@ -612,7 +612,7 @@ TypeAtom :: { Located (Type Parsed) }
          | lazy                                   { lPos1 $1 $ TyCon (Name (T.pack "lazy")) }
          | '(' ')'                                { lPos2 $1 $2 $ TyCon (Name (T.pack "unit")) }
          | '(' List1(Type,',') ')'                { lPos2 $1 $3 $ mkTupleTypeL (map getL $2) }
-         | '[' List1(Type,',') ']'                { lPos2 $1 $3 $ mkListTypeL (map getL $2) }
+         | '[' List(Type,',') ']'                 { lPos2 $1 $3 $ mkListTypeL (map getL $2) }
          | '(' TypeOperatorF ')'                  { lPos2 $1 $3 $ TyParens (TyCon $2) }
          | '{' ListT(TypeRow, ',') '}'            { lPos2 $1 $3 $ TyExactRows $2 }
          | '{' Type '|' ListT(TypeRow, ',') '}'   { lPos2 $1 $5 $ TyRows (getL $2) $4 }
