@@ -33,6 +33,7 @@ data LuaStmt
   | LuaBreak
   | LuaCallS LuaCall
   | LuaQuoteS Text
+  | LuaRawS Text
   deriving (Eq, Show, Ord, Typeable, Data)
 
 -- | A shorthand for a basic @if@/@else@ constructor
@@ -198,6 +199,7 @@ instance Pretty LuaStmt where
   pretty (LuaLocal vs xs) = keyword "local" <+> hsep (punctuate comma (map pretty vs))
                         <+> equals <+> hsep (punctuate comma (map pretty xs))
   pretty (LuaQuoteS x) = "@" <> text x
+  pretty (LuaRawS x) = text x
   pretty LuaBreak = keyword "break"
   pretty (LuaReturn []) = keyword "return"
   pretty (LuaReturn vs) = keyword "return" <+> hsep (punctuate comma (map pretty vs))
