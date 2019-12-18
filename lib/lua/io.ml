@@ -73,7 +73,7 @@ end
 let open_file path (mode : mode) =
   let m_str = show mode
   io_open path m_str
-    id
+    (fun x -> x)
     (fun x -> throw (IoError x))
 
 let open_for_reading path = open_file path Read_m
