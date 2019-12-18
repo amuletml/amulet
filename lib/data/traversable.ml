@@ -6,7 +6,7 @@ class functor 't => traversable 't begin
   val traverse : forall 'f. applicative 'f => ('a -> 'f 'b) -> 't 'a -> 'f ('t 'b)
   val sequence : forall 'f. applicative 'f => 't ('f 'a) -> 'f ('t 'a)
 
-  let sequence xs = traverse id xs
+  let sequence xs = traverse (fun x -> x) xs
   let traverse cont xs = sequence (cont <$> xs)
 end
 

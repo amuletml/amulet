@@ -15,7 +15,6 @@ let a && b =
 let not a = if a then false else true
 
 (* Explicit type signatures for VTA: *)
-let id (x : 'a) : 'a = x
 let const (x : 'a) (_ : 'b) : 'a = x
 
 (* The 'eq' class *)

@@ -7,8 +7,8 @@ class functor 'f => foldable 'f begin
   val foldl : ('b -> 'a -> 'b) -> 'b -> 'f 'a -> 'b
   val foldr : ('a -> 'b -> 'b) -> 'b -> 'f 'a -> 'b
 
-  let foldl f z xs = foldr (fun b g x -> g (f x b)) id xs z
-  let foldr f z xs = foldl (fun g b x -> g (f b x)) id xs z
+  let foldl f z xs = foldr (fun b g x -> g (f x b)) (fun x -> x) xs z
+  let foldr f z xs = foldl (fun g b x -> g (f b x)) (fun x -> x) xs z
 
   val foldl1 : ('a -> 'a -> 'a) -> 'f 'a -> 'a
 

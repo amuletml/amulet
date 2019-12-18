@@ -2,6 +2,7 @@ include import "./amulet/base.ml"
 include import "./amulet/option.ml"
 include import "./amulet/either.ml"
 include import "./amulet/list.ml"
+include import "./amulet/category.ml"
 module Typeable = import "./amulet/typeable.ml"
 module Exception = import "./amulet/exception.ml"
 
@@ -18,7 +19,6 @@ open import {
   lua    = "./lua/conversion.ml",
   scheme = "./scheme/conversion.ml"
 }
-
 
 let x // y =
   let open Exception
