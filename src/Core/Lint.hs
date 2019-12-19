@@ -162,7 +162,6 @@ checkStmt s (Type v ctors:xs) = do
          *> checkType s' x)
 
   ((Type v ctors, es):) <$> checkStmt s' xs
-checkStmt s (RawCode t:xs) = ((RawCode t, mempty):) <$> checkStmt s xs
 
 checkAtom :: Scope -> Atom -> Errors CoreErrors Type
 checkAtom s (Ref v ty) =

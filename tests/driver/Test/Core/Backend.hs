@@ -67,7 +67,6 @@ patchupUsage :: IsVar a => [AnnStmt b (OccursVar a)] -> [AnnStmt b(OccursVar a)]
 patchupUsage [] = []
 patchupUsage (s@Foreign{}:xs) = s:patchupUsage xs
 patchupUsage (s@Type{}:xs) = s:patchupUsage xs
-patchupUsage (s@RawCode{}:xs) = s:patchupUsage xs
 patchupUsage (StmtLet (One v):xs) = StmtLet (One (first3 patchupVarUsage v)):patchupUsage xs
 patchupUsage (StmtLet (Many v):xs) = StmtLet (Many (map (first3 patchupVarUsage) v)):patchupUsage xs
 

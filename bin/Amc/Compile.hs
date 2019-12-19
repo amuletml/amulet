@@ -2,16 +2,14 @@
    DisambiguateRecordFields #-}
 module Amc.Compile
   ( Optimise(..)
-  , Options(..), ChickenOptions(..), StaticOptions(..)
+  , Options(..), StaticOptions(..)
   , Emit
   , compileFile
   , watchFile
   , compileWithLua
-  , compileWithChicken
   , compileStaticLua
   ) where
 
-import System.Environment
 import System.Directory
 import System.FilePath
 import System.FSNotify
@@ -23,7 +21,6 @@ import Control.Monad.Infer (firstName)
 import Control.Monad.Namey
 import Control.Monad.State
 import Control.Concurrent
-import Control.Exception
 import Control.Timing
 
 import qualified Data.Text.Encoding as T
@@ -48,7 +45,6 @@ import Core.Simplify
 import Core.Lint
 import Core.Var
 
-import Backend.Scheme
 import Backend.Lua
 
 import Syntax.Var
@@ -70,15 +66,6 @@ data Options = Options
   , export   :: Bool
   , debug    :: D.DebugMode
   }
-
-data ChickenOptions = ChickenOptions
-  { keepScm       :: Maybe FilePath
-  , useCC         :: (Maybe String, [String])
-  , useLD         :: (Maybe String, [String])
-  , staticChicken :: Bool
-  , output        :: FilePath
-  }
-  deriving Show
 
 data StaticOptions = StaticOptions
   { keepLua  :: Maybe FilePath
@@ -177,64 +164,6 @@ compileWithLua file sig prog = do
     Nothing -> putDoc lua
     Just f -> T.writeFile f . display . renderPretty 0.4 100 $ lua
   pure lua
-
-compileWithChicken :: D.DriverConfig -> ChickenOptions -> Emit
-compileWithChicken config opt _ prog = do
-  let scm = genScheme prog
-
-  (path, temp_h) <- openTempFile "." "amulet.ss"
-  withTimer "Generating Scheme" $ hPutDoc temp_h scm
-  hClose temp_h
-
-  chicken <- getChicken
-
-  base_ss <- D.locateSchemeBase config
-  base_ss <- case base_ss of
-    Just s -> pure s
-    Nothing -> throwIO (userError "Couldn't locate the base.ss file")
-
-  let chicken_process = proc chicken chicken_cmdline
-      chicken_cmdline =
-        [ "-prologue", base_ss
-        , "-uses", "library"
-        , "-x", "-strict-types"
-        , "-strip"
-        , path, "-o", output opt ]
-        ++ case fst (useCC opt) of
-             Just cc -> [ "-cc", cc ]
-             Nothing -> []
-        ++ case fst (useLD opt) of
-             Just cc -> [ "-ld", cc ]
-             Nothing -> []
-        ++ (snd (useCC opt) >>= \x -> ["-C", x])
-        ++ (snd (useLD opt) >>= \x -> ["-L", x])
-        ++ [ "-static" | staticChicken opt ]
-
-  code <- withTimer ("Chicken compiler for " ++ path) $ do
-    setEnv "CHICKEN_OPTIONS" "-emit-link-file /dev/null"
-    (_, _, _, handle) <-
-      createProcess (chicken_process { std_out = Inherit
-                                     , std_in = NoStream
-                                     , std_err = Inherit
-                                     })
-    waitForProcess handle
-
-  case keepScm opt of
-    Just "-" -> do
-      putStrLn "amc: Generated Scheme:"
-      hPutDoc stdout scm
-      removeFile path
-    Just p -> renameFile path p
-    _ -> removeFile path
-
-  case code of
-    ExitSuccess   -> pure (pretty scm)
-    ExitFailure _ -> exitWith code
-
-getChicken :: IO String
-getChicken = do
-  x <- lookupEnv "CHICKENC"
-  pure $ fromMaybe "chicken-csc" x
 
 compileStaticLua :: D.DriverConfig -> StaticOptions -> Emit
 compileStaticLua _ opt sig prog = do

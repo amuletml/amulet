@@ -34,9 +34,6 @@ deadCodePass info = snd . freeS emptyScope where
   freeS :: IsVar a => ArityScope -> [Stmt a] -> (VarSet.Set, [Stmt a])
   freeS _ [] = (exportNames info, mempty)
 
-  freeS s (RawCode c:xs) =
-    let (fxs, xs') = freeS s xs
-     in (fxs, RawCode c:xs')
   freeS s (x@(Foreign v ty _):xs) =
     let s' = extendForeign s (v, ty)
         (fxs, xs') = freeS s' xs

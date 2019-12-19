@@ -12,7 +12,6 @@ import Control.Timing
 
 import qualified Data.Text as T
 import Data.Traversable
-import Data.Maybe
 
 import Options.Applicative hiding (ParseError)
 
@@ -78,22 +77,6 @@ data Command
     , static      :: Bool
     , options     :: CompilerOptions
     }
-  | Chicken
-    { input       :: FilePath
-    , cOutput     :: FilePath
-    , optLevel    :: Int
-    , watch       :: Bool
-    , time        :: Maybe FilePath
-    , keepScheme  :: Maybe FilePath
-    , useCC       :: Maybe String
-    , useLD       :: Maybe String
-    , ccOptions   :: [String]
-    , ldOptions   :: [String]
-    , static      :: Bool
-    , musl        :: Bool
-    , dynamicCsc  :: Bool
-    , options     :: CompilerOptions
-    }
   | Repl
     { toLoad      :: Maybe FilePath
     , serverPort  :: Int
@@ -132,9 +115,6 @@ argParser = info (args <**> helper <**> version)
       (  command "compile"
          ( info compileCommand
          $ fullDesc <> progDesc "Compile an Amulet file to Lua.")
-      <> command "chicken"
-         ( info chickenCommand
-         $ fullDesc <> progDesc "Compile an Amulet program to C, using Chicken Scheme.")
       <> command "static"
          ( info nativeCommand
          $ fullDesc <> progDesc "Compile an Amulet program to a native program that embeds the Lua interpreter.")
@@ -160,35 +140,9 @@ argParser = info (args <**> helper <**> version)
            ( long "out" <> short 'o' <> metavar "FILE"
           <> help "Write the generated Lua to a specific file." ) )
       <*> opt
-      <*> switch (long "export" <> help "Export all declared variables in this module, returning them at the end of the program.")
+      <*> switch (long "export"
+               <> help "Export all declared variables in this module, returning them at the end of the program.")
       <*> watch <*> time
-      <*> compilerOptions
-
-    chickenCommand :: Parser Command
-    chickenCommand = Chicken
-      <$> argument str (metavar "FILE" <> help "The file to compile.")
-      <*> option str
-           ( long "out" <> short 'o' <> metavar "FILE"
-          <> help "Put the generated executable in this file"
-          <> showDefault
-          <> value "amulet.out" )
-      <*> opt <*> watch <*> time
-      <*> optional (option str
-            ( long "keep-scheme" <> metavar "FILE" <> hidden
-           <> help "Write the generated Scheme to a file. This is a debugging flag. Do not expect the generated Scheme to be readable."))
-      <*> optional (option str
-            ( long "cc" <> metavar "PROGRAM" <> hidden
-           <> help "Use PROGRAM as the C compiler"))
-      <*> optional (option str
-            ( long "ld" <> metavar "PROGRAM" <> hidden
-           <> help "Use PROGRAM as the object file linker"))
-      <*> many (option str (short 'C' <> help "Pass an option to the C compiler"))
-      <*> many (option str (short 'L' <> help "Pass an option to the linker"))
-      <*> switch (long "static" <> short 's' <> help "Pass -static to the C compiler and linker")
-      <*> switch (long "musl"
-               <> help "Use musl-gcc for compilation. Implies --static")
-      <*> switch (long "dynamic-libchicken"
-               <> help "Link against the Chicken Scheme libraries dynamically.")
       <*> compilerOptions
 
     nativeCommand :: Parser Command
@@ -228,7 +182,8 @@ argParser = info (args <**> helper <**> version)
       <*> option auto ( long "port" <> metavar "PORT" <> value defaultPort <> showDefault
                      <> help "Port to use for the REPL server." )
       <*> ( flag' NoPrelude (long "no-prelude" <> help "Do not load files with a prelude.")
-        <|> option (CustomPrelude <$> str) ( long "prelude" <> metavar "PATH" <> help "Specify a custom prelude to use." )
+        <|> option (CustomPrelude <$> str)
+              (long "prelude" <> metavar "PATH" <> help "Specify a custom prelude to use." )
         <|> pure DefaultPrelude )
       <*> switch (long "no-code" <> help "Stop compilation of loaded modules after type-checking.")
       <*> compilerOptions
@@ -360,33 +315,6 @@ main = do
             }
 
       compileOrWatch watch time opts config { D.target = CT.lua } (T.pack input) (C.compileWithLua output)
-
-    Args opt@Chicken{ input, cOutput, optLevel, options, time, keepScheme, useCC, ccOptions, useLD, ldOptions } -> do
-      exists <- doesFileExist input
-      if not exists
-      then hPutStrLn stderr ("Cannot find input file " ++ input)
-        >> exitWith (ExitFailure 1)
-      else pure ()
-
-      let opts = C.Options
-            { C.optLevel = if optLevel >= 1 then C.Opt else C.NoOpt
-            , C.lint = coreLint options
-            , C.debug = debugMode options
-            , C.export = False
-            }
-
-          copts = C.ChickenOptions
-            { C.keepScm = keepScheme
-            , C.useCC = (mkCc useCC, ccOptions ++ [ "-static" | static opt || musl opt ])
-            , C.useLD = (useLD, ldOptions ++ [ "-static" | static opt || musl opt ])
-            , C.staticChicken = not (dynamicCsc opt)
-            , C.output = cOutput
-            }
-          mkCc c | musl opt = Just (fromMaybe "musl-gcc" c) | otherwise = c
-
-      config <- driverConfig options
-      compileOrWatch False time opts config { D.target = CT.scheme } (T.pack input)
-        (C.compileWithChicken config copts)
 
     Args opt@StaticGen{ options } -> do
       exists <- doesFileExist (input opt)

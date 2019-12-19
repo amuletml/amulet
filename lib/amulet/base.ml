@@ -1,6 +1,5 @@
 private module Base_defs = import {
   lua = "./base/lua.ml",
-  scheme = "./base/scheme.ml"
 }
 
 include Base_defs.Public

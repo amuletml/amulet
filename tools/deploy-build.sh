@@ -63,10 +63,9 @@ packager = $(git config --get user.name) <$(git config --get user.email)>
 size = $size
 license = BSD
 arch = $(uname -m)
-depend = chicken
-depend = pkgconf
 depend = lua
 depend = gcc
+depend = pkgconf
 optdepend = luajit: For faster 'amc native' programs
 EOF
 

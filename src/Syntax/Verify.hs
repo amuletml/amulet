@@ -88,7 +88,6 @@ verifyProgram = traverse_ verifyStmt where
   verifyStmt TypeDecl{} = pure ()
   verifyStmt DeriveInstance{} = pure ()
   verifyStmt TypeFunDecl{} = pure ()
-  verifyStmt Codegen{} = pure ()
 
   -- Here we do the opposite of TC: Since we're working with the final
   -- 'Env' (where everything is fully qualified), when entering a module

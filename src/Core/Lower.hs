@@ -330,8 +330,6 @@ lowerProg' (Module _ _ m:prg) = do
   (s, ms) <- lowerModule m
   (ms++) <$$> local (const s) (lowerProg' prg)
 
-lowerProg' (Codegen c _:prg) = (RawCode c:) <$$> lowerProg' prg
-
 -- ∨ TC desugars all of these to TypeDecl + Let
 lowerProg' (Class{}:prg) = lowerProg' prg
 lowerProg' (Instance{}:prg) = lowerProg' prg
