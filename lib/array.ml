@@ -115,9 +115,10 @@ let ( .() ) (Array r as arr) i =
   in_bounds "(.())" arr i
   geti r.backing (i + r.offset)
 
-let update (Array r as arr) i x =
+let ( .()<- ) (Array r as arr) i x =
   in_bounds "update" arr i
-  seti r.backing (i + r.offset) x
+  let _ = seti r.backing (i + r.offset) x
+  ()
 
 let take n (Array r) =
   if r.length - n >= r.offset then

@@ -300,12 +300,24 @@ ExprOp :: { Expr Parsed }
 
 ExprDotOp :: { Expr Parsed  }
   : ExprTyApp                                  { $1 }
-  | ExprDotOp '.' '(' Exprs ')'                { withPos2 $1 $5 $ BinOp $1 (withPos2 $2 $3 . VarRef . Name $ T.pack ".()") $4 }
-  | ExprDotOp '.' '{' Exprs '}'                { withPos2 $1 $5 $ BinOp $1 (withPos2 $2 $3 . VarRef . Name $ T.pack ".{}") $4 }
-  | ExprDotOp '.' '[' Exprs ']'                { withPos2 $1 $5 $ BinOp $1 (withPos2 $2 $3 . VarRef . Name $ T.pack ".[]") $4 }
-  | ExprDotOp dotop '(' Exprs ')'              { withPos2 $1 $5 $ BinOp $1 (withPos2 $2 $3 . VarRef . Name $ getIdent $2 <> T.pack "()") $4 }
-  | ExprDotOp dotop '{' Exprs '}'              { withPos2 $1 $5 $ BinOp $1 (withPos2 $2 $3 . VarRef . Name $ getIdent $2 <> T.pack "{}") $4 }
-  | ExprDotOp dotop '[' Exprs ']'              { withPos2 $1 $5 $ BinOp $1 (withPos2 $2 $3 . VarRef . Name $ getIdent $2 <> T.pack "[]") $4 }
+  | ExprDotOp DotOp                            { let (name, idx, end) = $2
+                                                 in withPos2 $1 end $ BinOp $1 (withPos1 name . VarRef . Name . getL $ name) idx }
+
+DotOp :: { (Located T.Text, Expr Parsed, Span) }
+  : '.' '(' Exprs ')'                          { (lPos2 $1 $2 $ T.pack ".()",               $3, annotation $4) }
+  | '.' '{' Exprs '}'                          { (lPos2 $1 $2 $ T.pack ".{}",               $3, annotation $4) }
+  | '.' '[' Exprs ']'                          { (lPos2 $1 $2 $ T.pack ".[]",               $3, annotation $4) }
+  | dotop '(' Exprs ')'                        { (lPos2 $1 $2 $ getIdent $1 <> T.pack "()", $3, annotation $4) }
+  | dotop '{' Exprs '}'                        { (lPos2 $1 $2 $ getIdent $1 <> T.pack "{}", $3, annotation $4) }
+  | dotop '[' Exprs ']'                        { (lPos2 $1 $2 $ getIdent $1 <> T.pack "[]", $3, annotation $4) }
+
+DotOpRaw ::  { (Located T.Text) }
+  : '.' '(' ')'                                { lPos2 $1 $3 $ T.pack ".()"               }
+  | '.' '{' '}'                                { lPos2 $1 $3 $ T.pack ".{}"               }
+  | '.' '[' ']'                                { lPos2 $1 $3 $ T.pack ".[]"               }
+  | dotop '(' ')'                              { lPos2 $1 $3 $ getIdent $1 <> T.pack "()" }
+  | dotop '{' '}'                              { lPos2 $1 $3 $ getIdent $1 <> T.pack "{}" }
+  | dotop '[' ']'                              { lPos2 $1 $3 $ getIdent $1 <> T.pack "[]" }
 
 ExprTyApp :: { Expr Parsed }
   : ExprApp                                    { $1 }
@@ -329,6 +341,13 @@ Expr0 :: { Expr Parsed }
       | function ListE1(Arm) '$end'            { withPos1 $1 $ Function $2 }
       | function '(' ')'                       { withPos1 $1 $ Function [] }
       | lazy PreAtom                           { withPos2 $1 $2 $ Lazy $2 }
+      | ExprDotOp DotOp '<-' PreAtom           { -- We need this comment to ensure the variables are aligned in the if.
+                                                 let (name, idx, end) = $2
+                                                     expr = $1
+                                                     rhs = $4
+                                                     op' = withPos2 name $3 . VarRef . Name $ getL name <> T.pack "<-"
+                                                     a = annotation expr <> annotation rhs
+                                                 in App (App (App op' expr a) idx a) rhs a }
       | PreAtom                                { $1 }
 
 -- | A 'prefixed' atom.
@@ -397,13 +416,8 @@ Infix :: { Expr Parsed }
 OperatorName :: { Located (Var Parsed) }
   : InfixName                                 { $1 }
   | '!'                                       { lPos1 $1 . Name $ T.pack "!" }
-
-  | '.' '(' ')'                               { lPos2 $1 $3 . Name $ T.pack ".()" }
-  | '.' '{' '}'                               { lPos2 $1 $3 . Name $ T.pack ".{}" }
-  | '.' '[' ']'                               { lPos2 $1 $3 . Name $ T.pack ".[]" }
-  | dotop '(' ')'                             { lPos2 $1 $3 . Name $ getIdent $1 <> T.pack "()" }
-  | dotop '{' '}'                             { lPos2 $1 $3 . Name $ getIdent $1 <> T.pack "{}" }
-  | dotop '[' ']'                             { lPos2 $1 $3 . Name $ getIdent $1 <> T.pack "[]" }
+  | DotOpRaw                                  { lPos1 $1 . Name $ getL $1 }
+  | DotOpRaw '<-'                             { lPos2 $1 $2 . Name $ getL $1 <> T.pack "<-" }
 
 Operator :: { Expr Parsed }
   : OperatorName                              { withPos1 $1 $ VarRef (getL $1) }
