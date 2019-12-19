@@ -84,8 +84,6 @@ data Toplevel p
                 , ann :: Ann p
                 }
 
-  | Codegen Text (Ann p) -- Slap a string right into the output, no questions asked
-
 deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Toplevel p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (Toplevel p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Toplevel p)
@@ -97,7 +95,6 @@ deriving instance (Eq (Var p), Eq (Ann p)) => Eq (TyFunClause p)
 deriving instance (Show (Var p), Show (Ann p)) => Show (TyFunClause p)
 deriving instance (Ord (Var p), Ord (Ann p)) => Ord (TyFunClause p)
 deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (TyFunClause p)
-
 
 data ClassItem p
   = MethodSig { _methName :: Var p
@@ -185,7 +182,6 @@ instance (Spanned (Constructor p), Spanned (Ann p)) => Spanned (Toplevel p) wher
   annotation (Module _ _ m) = annotation m
   annotation (Open m) = annotation m
   annotation (Include m) = annotation m
-  annotation (Codegen _ m) = annotation m
 
 instance Spanned (Ann p) => Spanned (Fundep p) where
   annotation = annotation . view fdAnn
@@ -284,8 +280,6 @@ instance Pretty (Var p) => Pretty (Toplevel p) where
       <#> indent 2 (align (vsep (map pretty equations)))
       <#> keyword "end"
     where ks = foldMap ((colon <+>) . pretty) kindsig
-
-  pretty (Codegen c _) = keyword "@cg" <+> text c
 
 instance Pretty (Var p) => Pretty (TyFunClause p) where
   pretty (TyFunClause lhs rhs _) = pretty lhs <+> equals <+> pretty rhs

@@ -65,7 +65,6 @@ mapVar f (v, ty, e) = (underlying v, ty, ) <$> f e
 
 reduceStmts :: MonadReduce a m => [AnnStmt VarSet.Set (OccursVar a)] -> m [Stmt a]
 reduceStmts [] = pure []
-reduceStmts (RawCode c:xs) = (RawCode c:) <$> reduceStmts xs
 reduceStmts (Foreign v ty def:ss) = do
   ss' <- local (ariScope %~ flip extendForeign (v, ty)) (reduceStmts ss)
   pure (Foreign (underlying v) ty def:ss')

@@ -10,15 +10,11 @@ let error = Exception.error
 
 include import "./data/foldable.ml"
 include import "./data/traversable.ml"
-
 include import "./data/enumeration.ml"
 
-module Io = import { lua = "./lua/io.ml", scheme = "./scheme/io.ml" }
+module Io = import { lua = "./lua/io.ml" }
 
-open import {
-  lua    = "./lua/conversion.ml",
-  scheme = "./scheme/conversion.ml"
-}
+open import { lua = "./lua/conversion.ml" }
 
 let x // y =
   let open Exception

@@ -374,7 +374,6 @@ library
                      , Core.Optimise.CommonExpElim
                      -- Backend
                      , Backend.Lua
-                     , Backend.Scheme
                      , Backend.Lua.Emit
                      , Backend.Lua.Inline
                      , Backend.Lua.Builtin

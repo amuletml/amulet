@@ -88,7 +88,6 @@ data TokenClass
   | TcAccess Text                -- ^ Record access (@.foo@)
   | TcDotOp Text                 -- ^ Dot operators (@.+@)
   | TcHole Text                  -- ^ Hole (@_foo@)
-  | TcAtCG Text                  -- ^ The @\@cg ...@ keyword.
 
   | TcInteger Integer -- ^ Integer literal
   | TcFloat Double    -- ^ Floating-point literal
@@ -177,7 +176,6 @@ instance Show TokenClass where
   show (TcTyvar t) = '\'':unpack t
   show (TcAccess t) = '.':unpack t
   show (TcHole t) = '_':unpack t
-  show (TcAtCG t) = "@cg " ++ unpack t
   show (TcString t) = show (unpack t)
   show (TcInteger i) = show i
   show (TcFloat i) = show i

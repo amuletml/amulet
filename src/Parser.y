@@ -150,8 +150,6 @@ import Syntax
   float    { Token (TcFloat _) _ _ }
   string   { Token (TcString  _) _ _ }
 
-  '@cg'    { Token (TcAtCG _) _ _ }
-
   '$begin' { Token TcVBegin _ _ }
   '$end'   { Token TcVEnd _ _ }
   '$in'    { Token TcVIn _ _ }
@@ -214,8 +212,6 @@ Top :: { Toplevel Parsed }
 
     | instance Type Begin(Methods)             {% fmap (withPos2 $1 $3) $ buildInstance $2 (getL $3) }
     | deriving instance Type                   { withPos2 $1 $3 $ DeriveInstance (getL $3) }
-
-    | '@cg'                                    { withPos1 $1 $ Codegen (getCG $1) }
 
 TyFunBody :: { [TyFunClause Parsed] }
   : List(TyFunEq, TopSep) { $1 }
@@ -714,9 +710,6 @@ getName (Token (TcOpIdentQual ms x) _ _)    = foldl (flip InModule) (Name x) ms
 getName (Token (TcConIdentQual ms x) _ _)   = foldl (flip InModule) (Name x) ms
 getName (Token (TcDotQual ms) _ _)          = foldl (flip InModule) (Name (last ms)) (init ms)
 getName x                                   = Name (getIdent x)
-
-getCG (Token (TcAtCG ms) _ _) = ms
-getCG _ = error "not a codegen token"
 
 
 getHole   (Token (TcHole x) _ _)       = x

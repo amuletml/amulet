@@ -186,7 +186,6 @@ data AnnStmt b a
   = Foreign a Type Text
   | StmtLet (AnnBinding b a)
   | Type a [(a, Type)]
-  | RawCode Text
   deriving (Eq, Show, Ord, Functor, Generic, Hashable)
 
 makeLenses ''AnnArm
@@ -319,7 +318,6 @@ instance (Annotation b, Pretty a) => Pretty (AnnStmt b a) where
   pretty (StmtLet (Many xs)) = keyword "let rec" <+> pprLet xs
   pretty (Type v cs) = keyword "type" <+> pretty v <+> pprBegin (map pprCons cs) where
     pprCons (x, t) = pretty x <+> colon <+> pretty t
-  pretty (RawCode c) = keyword "@cg" <+> text c
 
 instance Pretty a => Pretty [Stmt a] where
   pretty = vcat . map pretty
