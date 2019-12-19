@@ -29,7 +29,7 @@ instance show (some exception) begin
   let show x = describe_exception x
 end
 
-open import { lua = "./../lua/exception.ml", scheme = "./../scheme/condition.ml" }
+open import { lua = "./../lua/exception.ml" }
 
 
 let throw x = prim_throw describe_exception (into_exception x)

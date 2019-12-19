@@ -66,7 +66,6 @@ addBuiltins stmt state = fmap (flip (set topExVars) state) . swap
     opsStmt LuaBreak = mempty
     opsStmt (LuaCallS f) = opsCall f
     opsStmt LuaQuoteS{} = mempty
-    opsStmt LuaRawS{} = mempty
 
     opsExpr :: LuaExpr -> VarSet.Set
     opsExpr LuaNil = mempty

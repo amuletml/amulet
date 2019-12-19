@@ -71,7 +71,6 @@ getOutline = concatMap getTop where
     [ mk v SkClass t (getApp v args) (Just (concatMap getClassItem ms)) ]
   getTop Instance{} = []
   getTop DeriveInstance{} = []
-  getTop Codegen{} = []
 
   getBinding :: Binding Parsed -> [DocumentSymbol]
   getBinding b@(Binding v _ _ _) = [ mk v SkFunction b Nothing Nothing ]

@@ -105,9 +105,6 @@ tagOccurStmt ann var export = tagStmt where
 
   tagStmt :: [AnnStmt b a] -> (OccursMap, [AnnStmt b' a'])
   tagStmt [] = (VarSet.foldr (`VarMap.insert` Multi) mempty export, [])
-  tagStmt (RawCode c:xs) =
-    let (fv, xs') = tagStmt xs
-     in (fv, RawCode c:xs')
   tagStmt (Foreign v ty txt:xs) =
     let (fv, xs') = tagStmt xs
     in ( toVar v `VarMap.delete` fv

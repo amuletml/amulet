@@ -42,7 +42,6 @@ statement (DeriveInstance t an) = pure $ DeriveInstance (ty t) an
 
 statement (Open v) = Open <$> modTerm v
 statement (Include v) = Include <$> modTerm v
-statement (Codegen c a) = pure $ Codegen c a
 
 statement (ForeignVal am v x t a) = pure $ ForeignVal am v x (ty t) a
 statement (TypeDecl am v arg cs a) = pure $ TypeDecl am v (map tyA arg) (map ctor <$> cs) a
