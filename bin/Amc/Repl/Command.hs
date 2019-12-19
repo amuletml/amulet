@@ -60,6 +60,9 @@ execCommand :: (MonadState ReplState m, MonadIO m) => Listener -> String -> Stri
 execCommand tid "quit"  _   = finish tid
 execCommand tid "q"     _   = finish tid
 
+execCommand _ "h"       _   = helpCommand
+execCommand _ "help"    _   = helpCommand
+
 execCommand _ "l"       arg = loadCommand arg
 execCommand _ "load"    arg = loadCommand arg
 
@@ -94,7 +97,19 @@ execCommand _ "complete" arg = do
     for_ completions $ \(Completion rep _ _) ->
       hPutStrLn out rep
 
-execCommand _ cmd _ = outputDoc ("Unknown command" <+> verbatim cmd)
+execCommand _ cmd _ = outputDoc ("Unknown command" <+> verbatim cmd <+> " Use :h for help.")
+
+helpCommand :: (MonadState ReplState m, MonadIO m) => m ()
+helpCommand =
+  outputDoc "Available commands:\n\
+    \ :q[uit]                 Quit\n\
+    \ :l[oad]    <file>       Import definitions from <file>\n\
+    \ :r[eload]               Reload all loaded modules\n\
+    \ :t[ype]    <expr>       Show the type of <expr>\n\
+    \ :i[nfo]    <var>        Prints the type of <var> as it can be found in the environment\n\
+    \ :c[ompile] <file>       Compiles the current environment to <file>\n\
+    \ :add-library-path <dir> Adds the directory <dir> to the library path\n\
+    \ :complete  <expr>       Shows possible completions for <expr>"
 
 loadCommand :: (MonadState ReplState m, MonadIO m) => String -> m ()
 loadCommand arg =
