@@ -48,10 +48,7 @@ main = do
     Just _ -> pure ()
 
   case runLexerTrivial (T.pack file) (x ^. lazy) lexerScan of
-    (Just ts, _) -> do
-      putStrLn "<table><tbody>"
-      putStrLn $ toMarkdown (T.lines x) $ genTable ts
-      putStrLn "</tbody></table>"
+    (Just ts, _) -> putStrLn . toMarkdown (T.lines x) $ genTable ts
     (Nothing, _) -> error "Lexing error"
 
 genTable :: [Token] -> [(T.Text, [Token])]
@@ -69,15 +66,15 @@ toMarkdown lines = foldMap go where
         cmnt = T.drop 2 (T.take (T.length comment - 2) comment)
      in
       unlines (
-        [ "<tr>"
-        , "<td class=explanation>"
+        [ "<div class=explanation>"
         , T.unpack cmnt
-        , "</td>"
-        , "<td class=code-td>"
+        , "</div>"
+        , "<div class=code-cell>"
         , "```amulet"
         ]
       ++ map T.unpack (mapMaybe (\x -> lines ^? ix x) [firstLine-1..lastLine-1])
-      ++ [ "```\n</td></tr>" ])
+      ++ [ "```"
+         , "</div></tr>" ])
 
 isComment :: Token -> Bool
 isComment (Token TcComment{} _ _) = True
