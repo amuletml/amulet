@@ -1,5 +1,5 @@
 do
-  local print = print
-  print(1)
-  print(1)
+  local _print = print
+  _print(1)
+  _print(1)
 end

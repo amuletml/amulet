@@ -5,7 +5,7 @@ do
   local Done = { __tag = "Done" }
   local function Yield(a) return { __tag = "Yield", a } end
   local function Skip(a) return { __tag = "Skip", a } end
-  local print = print
+  local _print = print
   local to_string = tostring
   local function zip(tmp)
     local tmp0 = tmp[1]
@@ -75,5 +75,5 @@ do
       return ac
     end
   end
-  print(to_string(go0(0, tmp._2)))
+  _print(to_string(go0(0, tmp._2)))
 end

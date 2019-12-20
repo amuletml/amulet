@@ -1,4 +1,4 @@
 do
-  local print = print
-  print(false)
+  local _print = print
+  _print(false)
 end
