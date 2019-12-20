@@ -1,6 +1,6 @@
 do
   local function Stream(a) return { __tag = "Stream", a } end
-  local print = print
+  local _print = print
   local to_string = tostring
   local function sum_squares(xs)
     local tmp = xs[1]
@@ -14,5 +14,5 @@ do
       _2 = tmp._2
     })
   end
-  print(to_string(sum_squares))
+  _print(to_string(sum_squares))
 end

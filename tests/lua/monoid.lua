@@ -1,6 +1,6 @@
 do
   local Nil = { __tag = "Nil" }
-  local tostring = tostring
+  local _tostring = tostring
   local writeln = print
   local function _dollardApplicativeaou(tmp)
     return {
@@ -29,7 +29,7 @@ do
   end
   local tmp = { _1 = 1, _2 = nil }
   writeln(_dollarshow(function(x)
-    return tostring(x)
+    return _tostring(x)
   end, _dollartraverse(nil, _dollardApplicativeaou({
     ["×"] = function(x) return function(ys) return _dollar_d7(nil, x, ys) end end,
     zero = Nil

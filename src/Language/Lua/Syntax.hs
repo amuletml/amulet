@@ -282,7 +282,19 @@ validKey t = case T.uncons t of
 
 -- | A set of all Lua keywords, which cannot be used as identifiers.
 keywords :: Set.Set T.Text
-keywords = Set.fromList [ "and", "break", "do", "else", "elseif", "end"
-                        , "false", "for" , "function",  "if", "in", "local"
-                        , "nil", "not", "or", "repeat", "return", "then"
-                        , "true", "until", "while", "goto" ]
+keywords = Set.fromList
+  [ "and", "break", "do", "else", "elseif", "end"
+  , "false", "for" , "function",  "if", "in", "local"
+  , "nil", "not", "or", "repeat", "return", "then"
+  , "true", "until", "while", "goto"
+  -- since these are commonly used in foreign
+  -- code, we escape them to prevent clashes.
+  , "os", "io", "fs", "arg", "ffi", "bit", "bitop", "next"
+  , "utf8", "math", "load", "type", "table", "pcall", "love"
+  , "print", "pairs", "bit32", "debug", "error", "xpcall"
+  , "module", "ipairs", "assert", "rawset", "select", "string"
+  , "unpack", "rawlen", "rawget", "dofile", "require"
+  , "package", "loadfile", "tonumber", "tostring"
+  , "rawequal", "coroutine", "loadstring", "setmetatable"
+  , "getmetatable", "collectgarbage"
+  ]
