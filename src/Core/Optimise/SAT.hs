@@ -193,10 +193,14 @@ mkApps at (ForallTy Irrelevant _ t) (TermArgument x tau:xs) = do
   this_app <- fromVar . mkVal <$> genName
   Let (One (this_app, t, App at (Ref (toVar x) tau))) <$>
     mkApps (Ref (toVar this_app) t) t xs
-mkApps at (ForallTy _ _ t) (TypeArgument v _:xs) = do
+mkApps at (ForallTy r _ t) (TypeArgument v _:xs) = do
   this_app <- fromVar . mkVal <$> genName
-  Let (One (this_app, t, TyApp at (VarTy (toVar v)))) <$>
-    mkApps (Ref (toVar this_app) t) t xs
+  let t' =
+        case r of
+          Relevant binder -> substituteInType (VarMap.singleton binder (VarTy (toVar v))) t
+          Irrelevant -> t
+  Let (One (this_app, t', TyApp at (VarTy (toVar v)))) <$>
+    mkApps (Ref (toVar this_app) t') t xs
 mkApps _ xs ys = error $ "Type error in mkApps: " ++ show xs ++ " " ++ show ys
 
 dropQuantifiers :: Int -> Type -> Type
