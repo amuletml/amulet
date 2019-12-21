@@ -364,6 +364,7 @@ library
                      , Core.Optimise
                      , Core.Simplify
                      , Core.Occurrence
+                     , Core.Optimise.SAT
                      , Core.Optimise.Reduce
                      , Core.Optimise.Reduce.Base
                      , Core.Optimise.Reduce.Inline
