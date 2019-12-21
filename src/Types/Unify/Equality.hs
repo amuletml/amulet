@@ -426,8 +426,8 @@ tyFunByEval (TyFamInfo tn eqs relevant _ con) scope args tb = do
 
       unless (isJust (unifyPure flat_l flat_r)) $ do
         traceM EquS (string "type family occurs check error")
-        err <- unequal mempty flat_l flat_r
-        confesses $ Note err (shown sub)
+        err <- unequal mempty (apply sub flat_l) (apply sub flat_r)
+        confesses err
         -- XXX: we pass mempty to unequal because here the unexpanded type is more helpful
 
       go [] eqs
