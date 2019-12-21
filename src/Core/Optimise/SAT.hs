@@ -60,6 +60,7 @@ import Data.Semigroup
 import Data.Maybe
 import Data.List
 
+
 -- | Do the static argument transformation on a whole program.
 staticArgsPass :: (MonadNamey m, IsVar a) => [Stmt a] -> m [Stmt a]
 staticArgsPass = traverse staticArg_stmt
@@ -127,14 +128,17 @@ doStaticArgs the_func the_type the_body =
   where
     func_name = fromMaybe "" (toVar the_func ^. covarName)
 
-    calls = filter ((==) n_lams . length) $ findCalls the_func the_body
     (binders, innards) = splitLams the_body
-    n_lams = manifestLams the_type the_body
+    n_lams = length binders
 
     worker_ty = dropQuantifiers (length static_binders) the_type
 
+    -- See «Dropping call prefixes» below
     all_binders =
-      map (sconcat . NE.fromList) . transpose . map (flip (zipWith isStatic) binders) $ calls
+        map (sconcat . NE.fromList)
+      . transpose
+      . map (take n_lams . (++ repeat NonStatic) . flip (zipWith isStatic) binders) $ calls
+    calls = dropPrefixes . sortOn length $ findCalls the_func the_body
 
     static_lams body = foldr mkLam body static_binders where
       mkLam (Static a) = Lam a
@@ -145,7 +149,10 @@ doStaticArgs the_func the_type the_body =
 
     static_binders = filter (/= NonStatic) all_binders
 
-    worth_it = length static_binders >= 2
+    worth_it = any value static_binders where
+      value (Static TypeArgument{}) = False
+      value (Static TermArgument{}) = True
+      value NonStatic = False
 
     can_be_done = ok all_binders where
       ok (Static _:xs) = ok xs
@@ -180,6 +187,38 @@ doStaticArgs the_func the_type the_body =
 
        in go static_binders
 
+{-
+Note «Dropping call prefixes»
+
+findCalls f [ f @a @b c d e ] will return the very unhelpful list
+
+    [ [ @a ]
+    , [ @a @b ]
+    , [ @a @b c ]
+    , [ @a @b c d ]
+    , [ @a @b c d e ]
+    ] -- possibly out of order
+
+Since all of those correspond to a single saturated call, we drop from
+the list any call that corresponds to a prefix of a larger call. Any
+calls that remain are legit unsaturated and thus remove all of the
+parameters that don't appear from the SAT candidates. But! Consider this:
+
+let rec fn x y z = ...
+  let _ = whatever (fn x y)
+  fn x y z
+
+This is /still/ SAT'able in the arguments x and y, because the calls end
+up looking like
+
+  [ [ x, y ]
+  , [ x, y, z ]
+  ]
+
+For the purpose of the analysis it doesn't /matter/ if a call is
+unsaturated, as long as it's a prefix of another, saturated call.
+-}
+
 isStatic :: IsVar a => Core.Optimise.Arg -> Argument a -> Static (Argument a)
 isStatic (TyArg (VarTy v')) arg@(TypeArgument v _)
   | toVar v == v' = Static arg
@@ -207,6 +246,12 @@ dropQuantifiers :: Int -> Type -> Type
 dropQuantifiers 0 t = t
 dropQuantifiers n (ForallTy _ _ t) = dropQuantifiers (n - 1) t
 dropQuantifiers _ _ = error "type error in dropQuantifiers"
+
+dropPrefixes :: Eq a => [[a]] -> [[a]]
+dropPrefixes [] = []
+dropPrefixes (x:xs)
+  | any (x `isPrefixOf`) xs = dropPrefixes xs
+  | otherwise = x:dropPrefixes xs
 
 data Static a = Static a | NonStatic
   deriving (Eq, Show, Ord)

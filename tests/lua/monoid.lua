@@ -12,10 +12,10 @@ do
   local function _colon_colon(x)
     return function(y) return { { _1 = x, _2 = y }, __tag = "Cons" } end
   end
-  local function _dollartraverse_sat(cak, tmp, k, x)
+  local function _dollartraverse(cak, tmp, k, x)
     if x.__tag == "Nil" then return tmp.pure(Nil) end
     local tmp0 = x[1]
-    return tmp["<*>"](tmp["Applicative$ky"](_colon_colon)(k(tmp0._1)))(_dollartraverse_sat(nil, tmp, k, tmp0._2))
+    return tmp["<*>"](tmp["Applicative$ky"](_colon_colon)(k(tmp0._1)))(_dollartraverse(nil, tmp, k, tmp0._2))
   end
   local function _dollar_d7(cgs, x, ys)
     if x.__tag == "Nil" then return ys end
@@ -28,7 +28,7 @@ do
     local tmp = x[1]
     return _tostring(tmp._1) .. " :: " .. _dollarshow_sat(tmp._2)
   end
-  writeln(_dollarshow_sat(_dollartraverse_sat(nil, _dollardApplicativeaou({
+  writeln(_dollarshow_sat(_dollartraverse(nil, _dollardApplicativeaou({
     ["×"] = function(x) return function(ys) return _dollar_d7(nil, x, ys) end end,
     zero = Nil
   }), function(tmp0) return { { _1 = tmp0._1, _2 = Nil }, __tag = "Cons" } end, {
