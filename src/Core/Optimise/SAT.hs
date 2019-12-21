@@ -57,6 +57,7 @@ import Core.Optimise
 
 import qualified Data.List.NonEmpty as NE
 import Data.Semigroup
+import Data.Maybe
 import Data.List
 
 -- | Do the static argument transformation on a whole program.
