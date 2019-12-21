@@ -13,8 +13,9 @@ import Data.Functor
 import Core.Optimise.CommonExpElim
 import Core.Optimise.DeadCode
 import Core.Optimise.Sinking
-import Core.Optimise.Reduce
 import Core.Optimise.Uncurry
+import Core.Optimise.Reduce
+import Core.Optimise.SAT
 import Core.Optimise
 
 import Core.Free
@@ -29,6 +30,7 @@ optmOnce info = passes where
   passes = foldr1 (>=>)
            [ linting "Reduce" reducePass
            , linting' "Dead code" deadCodePass
+           , linting "Static arguments" (const staticArgsPass)
            , linting "Uncurry" (const uncurryPass)
 
            , linting "Sinking" (const (pure . sinkingPass . tagFreeSet))

@@ -8,6 +8,8 @@ module Core.Optimise
   , module Core.Var
   , refresh, fresh, fresh', freshFrom, freshFrom'
   , argVar
+  , Call, Arg(..)
+  , findCalls, splitLams
   ) where
 
 import Control.Arrow (second)
@@ -252,3 +254,50 @@ fresh k = do
 -- | Create a fresh variable
 fresh' :: (MonadNamey m, IsVar a) => VarInfo -> m a
 fresh' k = fromVar <$> fresh k
+
+-- | Find *all* uses of a given variable in a term. Note that this
+-- includes unsaturated uses, too; If you need only the saturated
+-- arguments, filter the list based on length.
+findCalls :: forall a. IsVar a => a -> Term a -> [Call]
+findCalls func_var term = filter (not . null) . map reverse $ call ++ concat (toList calls) where
+  fn = toVar func_var
+  (calls, call) = findCallsWk (VarMap.singleton fn [[]]) term
+
+  maybe_L empty _ [] = empty
+  maybe_L _ list xs = list xs
+
+  findCallsWk :: VarMap.Map [Call] -> Term a -> (VarMap.Map [Call], [Call])
+  findCallsWk calls (Let (One (v, _, term)) rest) =
+    let (calls', call) = findCallsWk calls term
+        calls'' = maybe_L calls' (\x -> VarMap.insert (toVar v) x calls') call
+     in findCallsWk calls'' rest
+
+  findCallsWk calls (Let (Many vs) rest) =
+    let go_bind (v, _, term) =
+          let (calls', call) = findCallsWk calls term
+           in maybe_L calls' (\x -> VarMap.insert (toVar v) x calls') call
+        calls'' = foldMap go_bind vs
+     in findCallsWk calls'' rest
+
+  findCallsWk calls (App (Ref f _) x)
+    | Just call <- VarMap.lookup f calls = (calls, map (TermArg x:) call)
+
+  findCallsWk calls (TyApp (Ref f _) x)
+    | Just call <- VarMap.lookup f calls = (calls, map (TyArg x:) call)
+
+  findCallsWk calls (Match _ as) =
+    let (calls_map, result) = unzip $ map (findCallsWk calls . view armBody) as
+     in (mconcat calls_map, concat result)
+
+  findCallsWk calls (Lam _ rest) = findCallsWk calls rest
+
+  findCallsWk calls _ = (calls, [])
+
+type Call = [Arg]
+data Arg = TyArg Type | TermArg Atom
+  deriving (Eq, Show, Ord)
+
+-- | Peel off all lambdas that prefix a term.
+splitLams :: Term a -> ([Argument a], Term a)
+splitLams (Lam x t) | (as, t) <- splitLams t = (x:as, t)
+splitLams t = ([], t)
