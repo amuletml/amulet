@@ -86,10 +86,11 @@ check e t | trace TcC (keyword "Γ ⊢" <+> pretty e <+> soperator (char '↓') 
 check e oty@TyPi{} | isSkolemisable oty = do
   let reason = BecauseOf e
 
-  unless (value e) $
+  (wrap, ty, scope, vs) <- skolemise (ByAscription (annotation e) oty) oty
+
+  when (not (value e) && scope == mempty) $
     dictates (addBlame reason (NotValue reason oty))
 
-  (wrap, ty, scope, vs) <- skolemise (ByAscription (annotation e) oty) oty
 
   tvs <- view typeVars
   local (classes %~ mappend scope) $ do
