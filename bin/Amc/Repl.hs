@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, ScopedTypeVariables, TypeFamilies, MultiWayIf #-}
+{-# LANGUAGE OverloadedStrings, ScopedTypeVariables, TypeFamilies, MultiWayIf, TemplateHaskell #-}
 
 module Amc.Repl
   ( repl
@@ -27,19 +27,24 @@ import Amc.Repl.Server
 import Amc.Repl.State
 import Amc.Repl.Eval
 import Amc.Repl.Command
+import Version
 
 runRepl :: Listener -> InputT (StateT ReplState IO) ()
 runRepl tid = do
-  line <- getInputLine "> "
-  case line of
-    Nothing -> finish tid
-    Just "" -> runRepl tid
-    Just (':':cmd) -> do
-      lift $ uncurry (execCommand tid) . span (/=' ') $ cmd
-      runRepl tid
-    Just line -> getInput line False >>= (lift . execString "=stdin" . T.pack) >> runRepl tid
-
+  liftIO $ putStrLn $ "Amulet REPL " ++ $amcVersion ++ " :h for available commands"
+  runReplOnce tid
   where
+    runReplOnce :: Listener -> InputT (StateT ReplState IO) ()
+    runReplOnce tid = do
+      line <- getInputLine "> "
+      case line of
+        Nothing -> finish tid
+        Just "" -> runReplOnce tid
+        Just (':':cmd) -> do
+          lift $ uncurry (execCommand tid) . span (/=' ') $ cmd
+          runReplOnce tid
+        Just line -> getInput line False >>= (lift . execString "=stdin" . T.pack) >> runReplOnce tid
+
     getInput :: String -> Bool -> InputT (StateT ReplState IO) String
     getInput input empty =
       case runParser "=stdin" (L.pack input) parseRepl' of
