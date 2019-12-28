@@ -315,8 +315,8 @@ covering' env = go where
   -- up. Thus we represent them as pairs, and hope it all works out.
   go ((PTuple [p] _, u) :*: xs) = go ((p, u) :*: xs)
   -- ConCon for tuples: This always matches, so we just visit the children.
-  go ((PTuple (p1:p2) _, VTuple u1 u2) :*: xs) = do
-    (u1', (u2', xs')) <- go ((p1, u1) :*: (mkTuple p2 undefined, u2) :*: xs)
+  go ((PTuple (p1:p2) a, VTuple u1 u2) :*: xs) = do
+    (u1', (u2', xs')) <- go ((p1, u1) :*: (mkTuple p2 a, u2) :*: xs)
     pure (VTuple u1' u2', xs')
   -- ConVar for tuples: This always matches, so we just build up child value
   -- abstractions and then visit as normal.
@@ -459,8 +459,8 @@ inhabited env (AbsState st cs i)
   -- We don't really have the concept of uninhabited types, so we assume
   -- type names are.
   go _ TyPromotedCon{} = inhb
-  -- For now, we'll just assume all Pi types are inhabited
-  -- XXX: matheus: they all are
+  -- For now, we'll just assume all Pi types are inhabited. Thankfully,
+  -- they all are.
   go _ TyPi{} = inhb
   -- All the boring types: just determine if the children are inhabited
   go c (TyRows f fs) = go c f >> traverse_ (go c . snd) fs
