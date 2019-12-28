@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, OverloadedStrings, ScopedTypeVariables, FlexibleContexts, TemplateHaskell, NamedFieldPuns #-}
+{-# LANGUAGE RankNTypes, OverloadedStrings, ScopedTypeVariables, FlexibleContexts, TemplateHaskell, NamedFieldPuns, ViewPatterns #-}
 module Main(main) where
 
 import System.Exit (ExitCode(..), exitWith)
@@ -10,12 +10,15 @@ import Control.Monad.Namey
 import Control.Monad.State
 import Control.Timing
 
+import qualified Data.Set as Set
 import qualified Data.Text as T
 import Data.Traversable
+import Data.Monoid
 
 import Options.Applicative hiding (ParseError)
 
 import Text.Pretty.Semantic hiding (empty)
+import Text.Read
 
 import qualified Frontend.Driver as D
 import Frontend.Errors
@@ -44,6 +47,8 @@ newtype DoExport = DoExport Bool
 data Prelude = NoPrelude | DefaultPrelude | CustomPrelude String
   deriving Show
 
+-- | Generic compiler options, shared between the REPL and various
+-- compile modes.
 data CompilerOptions = CompilerOptions
   { debugMode   :: D.DebugMode
   , libraryPath :: [String]
@@ -51,24 +56,28 @@ data CompilerOptions = CompilerOptions
   }
   deriving (Show)
 
+-- | Options specific to commands which emit code.
+data CodegenOptions = CodegenOptions
+  { optLevel      :: Int
+  , watch         :: Bool
+  , time          :: Maybe FilePath
+  , promoteErrors :: ErrorFilter
+  }
+  deriving (Show)
+
 data Command
   = Compile
     { input       :: FilePath
     , output      :: Maybe FilePath
-    , optLevel    :: Int
     , export      :: Bool
-    , watch       :: Bool
-    , time        :: Maybe FilePath
     , options     :: CompilerOptions
+    , genOpts     :: CodegenOptions
     }
   | StaticGen
     { input       :: FilePath
     , cOutput     :: FilePath
     , keepLua     :: Maybe FilePath
     , keepCShim   :: Maybe FilePath
-    , optLevel    :: Int
-    , watch       :: Bool
-    , time        :: Maybe FilePath
     , useLiblua   :: String
     , useCC       :: Maybe String
     , useLD       :: Maybe String
@@ -76,6 +85,7 @@ data Command
     , ldOptions   :: [String]
     , static      :: Bool
     , options     :: CompilerOptions
+    , genOpts     :: CodegenOptions
     }
   | Repl
     { toLoad      :: Maybe FilePath
@@ -139,11 +149,10 @@ argParser = info (args <**> helper <**> version)
       <*> optional ( option str
            ( long "out" <> short 'o' <> metavar "FILE"
           <> help "Write the generated Lua to a specific file." ) )
-      <*> opt
       <*> switch (long "export"
                <> help "Export all declared variables in this module, returning them at the end of the program.")
-      <*> watch <*> time
       <*> compilerOptions
+      <*> codegenOptions
 
     nativeCommand :: Parser Command
     nativeCommand = StaticGen
@@ -159,7 +168,6 @@ argParser = info (args <**> helper <**> version)
       <*> optional (option str
             ( long "keep-shim" <> metavar "FILE" <> hidden
            <> help "Write the generated C shim to a file."))
-      <*> opt <*> watch <*> time
       <*> option str
             ( long "lua" <> metavar "LUA" <> hidden
            <> help ("Use this Lua implementation. This is used as the name of the pkg-config package"
@@ -175,6 +183,7 @@ argParser = info (args <**> helper <**> version)
       <*> many (option str (short 'L' <> help "Pass an option to the linker"))
       <*> switch (long "static" <> short 's' <> help "Pass -static to the C compiler and linker")
       <*> compilerOptions
+      <*> codegenOptions
 
     replCommand :: Parser Command
     replCommand = Repl
@@ -204,15 +213,27 @@ argParser = info (args <**> helper <**> version)
                  <> help ( "Verify that Amulet's intermediate representation is well-formed. This is an internal debugging flag, "
                         ++ "and should only be used if you suspect there is a bug in Amulet." ) )
 
+    codegenOptions :: Parser CodegenOptions
+    codegenOptions = CodegenOptions
+      <$> option auto ( long "opt" <> short 'O' <> metavar "LEVEL" <> value 1 <> showDefault
+                     <> help "Controls the optimisation level." )
+      <*> switch (long "watch" <> help "After compiling, watch for further changes to the file and recompile it again.")
+      <*> optional (option str ( long "time" <> metavar "FILE" <> hidden
+                              <> help "Write the self-timing report to a file. Use - for stdout." ))
+      <*> (mkWarns <$> many (option (eitherReader readWarn)
+                             ( long "warn" <> short 'W'
+                            <> help "Enable/disable a warning" )))
+
+    readWarn "error" = Right (const (defaultFilter { filterAll = True }))
+    readWarn "no-error" = Right (const (defaultFilter { filterAll = False }))
+    readWarn ('e':'r':'r':'o':'r':'=':(readMaybe -> Just val)) = Right (\f -> f { filterInclude = Set.insert val (filterInclude f) })
+    readWarn ('n':'o':'-':'e':'r':'r':'o':'r':'=':(readMaybe -> Just val)) = Right (\f -> f { filterExclude = Set.insert val (filterExclude f) })
+    readWarn e = Left ("Unknown error '"  ++ e ++ "'.")
+
+    mkWarns xs = appEndo (getDual (foldMap (Dual . Endo) xs)) defaultFilter
+
     optional :: Parser a -> Parser (Maybe a)
     optional p = (Just <$> p) <|> pure Nothing
-
-    opt = option auto ( long "opt" <> short 'O' <> metavar "LEVEL" <> value 1 <> showDefault
-                     <> help "Controls the optimisation level." )
-    time = optional (option str
-            ( long "time" <> metavar "FILE" <> hidden
-           <> help "Write the self-timing report to a file. Use - for stdout."))
-    watch = switch (long "watch" <> help "After compiling, watch for further changes to the file and recompile it again.")
 
     defaultPort :: Int
     defaultPort = 5478
@@ -255,7 +276,7 @@ main :: IO ()
 main = do
   setLocaleEncoding utf8
 
-  options <- execParser argParser
+  options <- customExecParser (prefs subparserInline) argParser
   case options of
     Args Repl { toLoad, serverPort, prelude, noCode, options } -> do
       dConfig <- driverConfig options
@@ -276,7 +297,8 @@ main = do
       hPutStrLn stderr ("Cannot overwrite input file " ++ input)
       exitWith (ExitFailure 1)
 
-    Args Compile { input, options = options@CompilerOptions { debugMode = D.TestTc }, time } -> do
+    Args Compile { input, options = options@CompilerOptions { debugMode = D.TestTc }
+                 , genOpts = CodegenOptions { time } } -> do
       exists <- doesFileExist input
       if not exists
       then hPutStrLn stderr ("Cannot find input file " ++ input)
@@ -299,7 +321,8 @@ main = do
             timingReport (hPutDoc h)
         Nothing -> pure ()
 
-    Args Compile{ input, output, optLevel, export, options, watch, time } -> do
+    Args Compile { input, output, export, options
+                 , genOpts = CodegenOptions { watch, time, optLevel, promoteErrors } } -> do
       exists <- doesFileExist input
       if not exists
       then hPutStrLn stderr ("Cannot find input file " ++ input)
@@ -312,11 +335,12 @@ main = do
             , C.lint = coreLint options
             , C.export = export
             , C.debug = debugMode options
+            , C.promoteErrors = promoteErrors
             }
 
       compileOrWatch watch time opts config { D.target = CT.lua } (T.pack input) (C.compileWithLua output)
 
-    Args opt@StaticGen{ options } -> do
+    Args opt@StaticGen{ options, genOpts = CodegenOptions { time, optLevel, watch, promoteErrors } } -> do
       exists <- doesFileExist (input opt)
       if not exists
       then hPutStrLn stderr ("Cannot find input file " ++ input opt)
@@ -324,10 +348,11 @@ main = do
       else pure ()
 
       let opts = C.Options
-            { C.optLevel = if optLevel opt >= 1 then C.Opt else C.NoOpt
+            { C.optLevel = if optLevel >= 1 then C.Opt else C.NoOpt
             , C.lint = coreLint options
             , C.debug = debugMode options
             , C.export = False
+            , C.promoteErrors = promoteErrors
             }
 
           copts = C.StaticOptions
@@ -341,7 +366,7 @@ main = do
             }
 
       config <- driverConfig options
-      compileOrWatch False (time opt) opts config { D.target = CT.lua } (T.pack (input opt))
+      compileOrWatch watch time opts config { D.target = CT.lua } (T.pack (input opt))
         (C.compileStaticLua config copts)
 
 compileOrWatch :: Bool -> Maybe FilePath -> C.Options -> D.DriverConfig -> T.Text -> C.Emit -> IO ()

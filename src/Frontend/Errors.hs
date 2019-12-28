@@ -1,9 +1,10 @@
-{-# LANGUAGE FlexibleContexts, TemplateHaskell #-}
+{-# LANGUAGE FlexibleContexts, NamedFieldPuns, TemplateHaskell #-}
 
 {-| Various utilities for reporting errors to the user. -}
 module Frontend.Errors
   ( ErrorBundle(..)
   , parseErrors, resolveErrors, typeErrors, verifyErrors
+  , ErrorFilter(..), defaultFilter, hasErrors
   , report, hReport
   , reportAll, hReportAll, reportAllS
   ) where
@@ -51,6 +52,32 @@ instance Semigroup ErrorBundle where
 
 instance Monoid ErrorBundle where
   mempty = Errors mempty mempty mempty mempty
+
+-- | A filter to determine which notes/warnings should be promoted to an error
+data ErrorFilter = ErrorFilter
+  { filterAll :: Bool -- ^ Whether to promote all errors by default
+  , filterInclude :: Set.Set Int -- ^ Promoted errors
+  , filterExclude :: Set.Set Int -- ^ Demoted errors
+  }
+  deriving Show
+
+defaultFilter :: ErrorFilter
+defaultFilter = ErrorFilter False mempty mempty
+
+hasErrors :: ErrorFilter -> ErrorBundle -> Bool
+hasErrors (ErrorFilter all include exclude) es
+   = go (es ^. parseErrors)
+  || go (es ^. resolveErrors)
+  || go (es ^. typeErrors)
+  || go (es ^. verifyErrors)
+  where
+    go :: N.Note a s => [a] -> Bool
+    go = any (\n -> N.diagnosticKind n > N.ErrorMessage || maybe False matches (N.noteId n))
+
+    matches n
+      | Set.member n include = True
+      | Set.member n exclude = False
+      | otherwise = all
 
 -- | Report a note, converting it into a simple document suitable for rendering.
 report :: N.Note a Style => N.FileMap -> a -> SimpleDoc (Either N.NoteStyle Style)

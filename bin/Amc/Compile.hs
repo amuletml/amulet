@@ -61,10 +61,11 @@ data Optimise = Opt | NoOpt
   deriving Show
 
 data Options = Options
-  { optLevel :: Optimise
-  , lint     :: Bool
-  , export   :: Bool
-  , debug    :: D.DebugMode
+  { optLevel      :: Optimise
+  , lint          :: Bool
+  , export        :: Bool
+  , debug         :: D.DebugMode
+  , promoteErrors :: ErrorFilter
   }
 
 data StaticOptions = StaticOptions
@@ -85,7 +86,7 @@ compileIt :: (D.Driver, Name)
           -> Emit
           -> IO ()
           -> IO ((D.Driver, Name), Set.Set FilePath)
-compileIt (driver, name) Options { optLevel, lint, export, debug } file emit exit = do
+compileIt (driver, name) Options { optLevel, lint, export, debug, promoteErrors } file emit exit = do
   path <- canonicalizePath (T.unpack file)
   ((((core, errors), sig), driver), name) <-
       flip runNameyT name
@@ -97,6 +98,7 @@ compileIt (driver, name) Options { optLevel, lint, export, debug } file emit exi
 
   case core of
     Nothing -> exit
+    Just _ | hasErrors promoteErrors errors -> exit
     Just core -> do
       let sig' = if export then sig else Nothing
           info = defaultInfo { useLint = lint
