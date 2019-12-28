@@ -1,0 +1,22 @@
+issue_234.ml[7:3 ..7:17]: warning (W3006)
+  Non-exhaustive patterns in expression
+  │ 
+7 │   match expr with
+  │   ^^^^^^^^^^^^^^^
+  • Note: The following patterns are not covered
+      Atom _ | Case (Case _, _)
+issue_234.ml[8:16 ..8:16]: warning (W3002)
+  Bound locally but not used: 't'
+  │ 
+8 │   | Case (Atom(t), s, f)->()
+  │                ^
+issue_234.ml[8:20 ..8:20]: warning (W3002)
+  Bound locally but not used: 's'
+  │ 
+8 │   | Case (Atom(t), s, f)->()
+  │                    ^
+issue_234.ml[8:23 ..8:23]: warning (W3002)
+  Bound locally but not used: 'f'
+  │ 
+8 │   | Case (Atom(t), s, f)->()
+  │                       ^
