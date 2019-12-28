@@ -19,20 +19,15 @@ Using amc with the help flag displays all sub-command and the top-level options.
 Each sub-command can be run with --help too.
 
   $ amc compile --help
-  Usage: amc compile FILE [-o|--out FILE] [-O|--opt LEVEL] [--export] [--watch] 
-                     [--lib ARG]
+  Usage: amc compile FILE [-o|--out FILE] [--export] [--lib ARG] [-O|--opt LEVEL] 
+                     [--watch] [-W|--warn ARG]
     Compile an Amulet file to Lua.
   
   Available options:
     FILE                     The file to compile.
     -o,--out FILE            Write the generated Lua to a specific file.
-    -O,--opt LEVEL           Controls the optimisation level. (default: 1)
     --export                 Export all declared variables in this module,
                              returning them at the end of the program.
-    --watch                  After compiling, watch for further changes to the
-                             file and recompile it again.
-    --time FILE              Write the self-timing report to a file. Use - for
-                             stdout.
     -t,--test                Provides additional debug information on the output
     --test-tc                Provides additional type check information on the
                              output
@@ -41,6 +36,12 @@ Each sub-command can be run with --help too.
                              well-formed. This is an internal debugging flag, and
                              should only be used if you suspect there is a bug in
                              Amulet.
+    -O,--opt LEVEL           Controls the optimisation level. (default: 1)
+    --watch                  After compiling, watch for further changes to the
+                             file and recompile it again.
+    --time FILE              Write the self-timing report to a file. Use - for
+                             stdout.
+    -W,--warn ARG            Enable/disable a warning
     -h,--help                Show this help text
 
   $ amc repl --help
