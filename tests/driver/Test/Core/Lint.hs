@@ -1,86 +1,51 @@
 {-# LANGUAGE OverloadedStrings, FlexibleContexts #-}
 module Test.Core.Lint (tests) where
 
-import qualified Data.Text.Lazy as L
-import qualified Data.Text.IO as T
 import qualified Data.Text as T
-import Data.Position (SourceName)
-import Data.Spanned
-import Data.These
 import Data.List
 
-import Control.Monad.Infer (TypeError, firstName)
+import Control.Monad.Infer (firstName)
+import Control.Monad.State
 import Control.Monad.Namey
 
-import Types.Infer (inferProgram)
-
-import Syntax.Resolve (ResolveError, ResolveResult(..), resolveProgram)
-import Syntax.Resolve.Import (runNullImport)
-import Syntax.Desugar (desugarProgram)
-import Syntax.Builtin
-
-import Core.Lower (runLowerT, lowerProg)
 import Core.Core (Stmt)
 import Core.Simplify
 import Core.Lint
 import Core.Var
 
-import CompileTarget (lua)
-
 import Text.Pretty.Semantic
-
-import Parser.Wrapper (runParser)
-import Parser (parseTops)
-import Parser.Error
 
 import Test.Tasty.HUnit
 import Test.Tasty
 
 import System.Directory
 
-data CompileResult
-  = CSuccess [Stmt CoVar]
-  | CParse   [ParseError]
-  | CResolve [ResolveError]
-  | CInfer   [TypeError]
-
-toEither :: These [a] b -> Either [a] b
-toEither (This e) = Left e
-toEither (These [] x) = Right x
-toEither (These e _) = Left e
-toEither (That x) = Right x
-
-compile :: MonadNamey m => SourceName -> T.Text -> m CompileResult
-compile name file =
-  case runParser name (L.fromStrict file) parseTops of
-    (Nothing, es) -> pure $ CParse es
-    (Just parsed, _) -> do
-      resolved <- runNullImport $ resolveProgram lua builtinResolve parsed
-      case resolved of
-        Left es -> pure $ CResolve es
-        Right (ResolveResult resolved _ _) -> do
-          desugared <- desugarProgram resolved
-          infered <- toEither <$> inferProgram builtinEnv desugared
-          case infered of
-            Left es -> pure $ CInfer es
-            Right (prg, _) -> CSuccess <$> runLowerT (lowerProg prg)
-
+import Frontend.Driver
+import Frontend.Errors
+import CompileTarget
 
 testLint :: ([Stmt CoVar] -> Namey [Stmt CoVar]) -> String -> Assertion
 testLint f file = do
-  let name = T.pack file
-  contents <- T.readFile file
-  fst . flip runNamey firstName $ do
-    s <- compile name contents
-    case s of
-      CSuccess c -> do
-        c' <- f c
-        case runLintOK (checkStmt emptyScope c') of
-          Nothing -> pure $ pure ()
-          Just (_, es) -> pure $ assertFailure $ "Core lint failed: " ++ displayS (pretty es)
-      CParse es -> pure $ assertFailure $ displayS $ vsep $ map (\e -> string "Parse error: " <+> pretty e <+> " at " <+> pretty (annotation e)) es
-      CResolve e -> pure $ assertFailure $ "Resolution error: " ++ displayS (pretty e)
-      CInfer e -> pure $ assertFailure $ "Type error: " ++ displayS (pretty e)
+  libPath <- makeRelativeToCurrentDirectory "lib"
+  path <- makeRelativeToCurrentDirectory file
+  let driver = makeDriverWith DriverConfig
+        { libraryPath = [ libPath ]
+        , callbacks = defaultCallbacks
+        , checkOnly = False
+        , target = lua }
+  (((core, errors), driver), name) <-
+      flip runNameyT firstName
+    . flip runStateT driver
+    $ compiles path
+  case core of
+    Just core | not (hasErrors defaultFilter { filterAll = True } errors) -> do
+      let core' = evalNamey (f core) name
+      case runLintOK (checkStmt emptyScope core') of
+        Nothing -> pure ()
+        Just (_, es) -> assertFailure $ "Core lint failed: " ++ displayS (pretty es)
+    _ -> do
+      files <- fileMap driver
+      assertFailure . T.unpack . display $ reportAll files errors
 
 testLintLower, testLintSimplify :: String -> Assertion
 testLintLower = testLint pure
@@ -99,18 +64,23 @@ tests = do
 files :: [String]
 files =
   [ "gadt/vector.ml"
-  , "gadt/term.ml"
   , "gadt/existential.ml"
+  , "gadt/term.ml"
 
+  , "class/lens.ml"
+  , "class/profunctors.ml"
+  , "class/quantified.ml"
+
+  , "amulet-logo.ml"
   , "church-lists.ml"
   , "coroutines.ml"
   , "guess.ml"
   , "id.ml"
   , "lazy-list.ml"
   , "lists.ml"
+  , "mini-servant.ml"
   , "modules.ml"
   , "peano.ml"
   , "pipe.ml"
   , "polymorphic-recursion.ml"
-  , "mini-servant.ml"
   ]

@@ -2,61 +2,17 @@
 
   See `assets/logo.svg' or `assets/logo.png' for an example of the output *)
 
-let x |> f = f x
+open import "prelude.ml"
 
-external val string_of_float : float -> string = "function(x) return (\"%g\"):format(x) end"
+let x |> f = f x
+let map = (<$>)
 external val float_of_int : int -> float = "function(x) return x end"
 
-external val io_write : string -> unit = "io.write"
-
-class show 'a
-  val show : 'a -> string
-
-instance show float
-  let show = string_of_float
-
-let print x =
-  io_write (show x)
-  io_write "\n"
-
 module Math =
-  external val sin : float -> float = "math.sin"
-  external val cos : float -> float = "math.cos"
-  external val rad : float -> float = "math.rad"
+  include import "lua/math.ml"
 
-  (* Convert polar coordinates to Cartesian ones *)
+  (** Convert polar coordinates to Cartesian ones *)
   let polar r theta = (r *. cos theta, r *. sin theta)
-
-module List =
-  type list 'a =
-    | Nil
-    | Cons of 'a * list 'a
-
-  let x :: xs = Cons (x, xs)
-
-  let map f = function
-    | Nil -> Nil
-    | Cons (x, xs) -> f x :: map f xs
-
-  let foldl f a = function
-    | Nil -> a
-    | Cons (x, xs) -> foldl f (f a x) xs
-
-  let range = function
-    | x when x < 0 -> Nil
-    | x -> x :: range (x - 1)
-
-  let xs ++ ys =
-    match xs, ys with
-    | Nil, ys -> ys
-    | xs, Nil -> xs
-    | Cons (x, xs), ys ->
-       let go = function
-         | Nil -> ys
-         | Cons (x, xs) -> x :: go xs
-       x :: go xs
-
-open List
 
 module SVG =
   type node =
@@ -105,17 +61,16 @@ let () =
     angle_at theta |> (+.offset) |> Math.rad
     |> Math.polar r
 
-  let core = range points |> map (point_at core_size 0.0)
+  let core = point_at core_size 0.0 <$> range 0 points
   let edges =
-    range points
-    |> map (fun point -> ClosedPath {
-              style = "fill:#216778",
-              points = point_at (core_size +. padding)              gap          point
-                    :: point_at (core_size +. padding +. edge_size) gap          point
-                    :: point_at (core_size +. padding +. edge_size) (0.0 -. gap) (point + 1)
-                    :: point_at (core_size +. padding)              (0.0 -. gap) (point + 1)
-                    :: Nil
-           })
+    (fun point -> ClosedPath {
+       style = "fill:#216778",
+       points = point_at (core_size +. padding)              gap          point
+             :: point_at (core_size +. padding +. edge_size) gap          point
+             :: point_at (core_size +. padding +. edge_size) (0.0 -. gap) (point + 1)
+             :: point_at (core_size +. padding)              (0.0 -. gap) (point + 1)
+             :: Nil
+     }) <$> range 0 points
 
   print (SVG {
     viewbox = { x = 0.0 -. 13.0, y = 0.0 -. 14.0, width = 26.0, height = 26.0 },

@@ -42,7 +42,7 @@ let rec xs ++ ys =
   | Cons (x, xs), ys -> Cons (x, xs ++ ys)
 
 (** Do all elements of the list satisfy the predicate p?
- * 
+ *
  * This function is tail recursive, and does not risk overflowing the
  * stack.
  *

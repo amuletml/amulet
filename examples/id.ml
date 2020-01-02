@@ -1,6 +1,3 @@
-external val (+) : int -> int -> int = ""
-
-external val print : int -> unit = "print"
-let id x = x
+open import "prelude.ml"
 
 let () = print (((id id) 2) + 2)

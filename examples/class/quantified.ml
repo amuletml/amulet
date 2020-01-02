@@ -1,3 +1,5 @@
+open import "amulet/base.ml"
+
 let x && y = if x then y else false
 
 class eq 'a

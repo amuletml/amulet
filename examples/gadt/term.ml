@@ -1,4 +1,5 @@
-external val ( * ) : int -> int -> int = ""
+external val ( * ) : int -> int -> int = "function(a, b) return a * b end"
+
 type term 'a =
   | Lit : int -> term int
   | Fun : ('a -> 'b) -> term ('a -> 'b)

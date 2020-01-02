@@ -1,14 +1,4 @@
-external val tostring : 'a -> string = "tostring"
-external val writeln : string -> unit = "print"
-
-class functor 'f begin
-  val (<$>) : forall 'a 'b. ('a -> 'b) -> 'f 'a -> 'f 'b
-end
-
-class functor 'f => applicative 'f begin
-  val pure : forall 'a. 'a -> 'f 'a
-  val (<*>) : forall 'a 'b. 'f ('a -> 'b) -> 'f 'a -> 'f 'b
-end
+open import "prelude.ml"
 
 class monoid 'a begin
   val (×) : 'a -> 'a -> 'a
@@ -19,30 +9,6 @@ instance monoid string begin
   let (×) = (^)
   let zero = ""
 end
-
-class show 'a begin
-  val show : 'a -> string
-end
-
-instance show string begin
-  let show x = x
-end
-
-instance show int begin
-  let show x = tostring x
-end
-
-instance show bool begin
-  let show = function
-    | true -> "true"
-    | false -> "false"
-end
-
-instance show 'a * show 'b => show ('a * 'b) begin
-  let show (x, y) = "(" ^ show x ^ ", " ^ show y ^ ")"
-end
-
-let print x = writeln (show x)
 
 type identity 'a = Identity of 'a
 let runId (Identity x) = x
@@ -74,35 +40,8 @@ let x |> f = f x
 let first k (a, b) = (,b) <$> k a
 let second k (a, b) = (a,) <$> k b
 
-let l .~ b = runId & l (fun _ -> Identity b)
+let l ~. b = runId & l (fun _ -> Identity b)
 let s ^. l = getConst (l Const s)
-
-let (::) x y = Cons (x, y)
-
-instance show 'a => show (list 'a) begin
-  let show = function
-    | Nil -> "Nil"
-    | Cons (x, xs) -> show x ^ " :: " ^ show xs
-end
-
-instance functor list begin
-  let f <$> xs = [ f x | with x <- xs ]
-end
-
-instance applicative list begin
-  let pure x = [x]
-  let fs <*> xs = [ f x | with f <- fs, with x <- xs]
-end
-
-class traversable 't begin
-  val traverse : forall 'f 'a 'b. applicative 'f => ('a -> 'f 'b) -> 't 'a -> 'f ('t 'b)
-end
-
-instance traversable list begin
-  let traverse k = function
-    | Nil -> pure Nil
-    | Cons (x, xs) -> (::) <$> k x <*> traverse k xs
-end
 
 instance monoid (list 'a) begin
   let zero = Nil
@@ -121,7 +60,7 @@ let f =
 
 let () =
   let p = (1, "foo")
-  print (p |> second .~ 2)
+  print (p |> second ~. 2)
   let xs = [p, p, p]
   print (toListOf (traverse & first) xs)
   ()
