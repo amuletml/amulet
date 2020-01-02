@@ -228,14 +228,14 @@ and merge cmp = function
  *
  * Runtime: O(n log n)
  *)
-let sortBy cmp xs = merge_all cmp (sequences cmp xs)
+let sort_by cmp xs = merge_all cmp (sequences cmp xs)
 
 (** Sort a list using the polymorphic compare function, from the ord
  * typeclass.
  *
  * Runtime: O(n log n)
  *)
-let sort xs = sortBy compare xs
+let sort xs = sort_by compare xs
 
 (** Find an element in a list of key-value pairs.
  *
