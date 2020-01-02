@@ -12,7 +12,7 @@ class functor 'f => foldable 'f begin
 
   val foldl1 : ('a -> 'a -> 'a) -> 'f 'a -> 'a
 
-  let foldl1 f xs = 
+  let foldl1 f xs =
     let kf m y =
       Some (match m with
         | None -> y

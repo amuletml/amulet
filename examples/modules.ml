@@ -1,4 +1,4 @@
-external val (+) : int -> int -> int = ""
+external val (+) : int -> int -> int = "function(a, b) return a + b end"
 
 module Option =
   type option 'a =

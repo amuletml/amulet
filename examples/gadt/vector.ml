@@ -1,8 +1,8 @@
-external val ( ^ ) : string -> string -> string = ""
-external val ( * ) : int -> int -> int = ""
-external val ( + ) : int -> int -> int = ""
-external val ( - ) : int -> int -> int = ""
-external val ( == ) : 'a -> 'a -> bool = ""
+external val ( ^ ) : string -> string -> string = "function(a, b) return a ^ b end"
+external val ( * ) : int -> int -> int = "function (a, b) return a * b end"
+external val ( + ) : int -> int -> int = "function (a, b) return a + b end"
+external val ( - ) : int -> int -> int = "function (a, b) return a - b end"
+external val ( == ) : 'a -> 'a -> bool = "function (a, b) return a == b end"
 external val print : 'a -> unit = "print"
 external val any_to_string : 'a -> string = "tostring"
 external val io_write : string -> unit = "io.write"
@@ -71,7 +71,7 @@ let replicate (n : nat 'n) (x : 'a) : vect 'n 'a =
     match l with
     | Zero -> Nil
     | Succ k -> Cons (x, go k)
-  in go n
+  go n
 
 (* rank n: forall 'b. (forall 'n. nat 'n -> 'b) -> int -> 'b *)
 let with_natural (k : forall 'n. nat 'n -> 'b) i =
@@ -79,16 +79,16 @@ let with_natural (k : forall 'n. nat 'n -> 'b) i =
     if n == 0 then
       SomeNat Zero
     else
-      match go (n - 1) with
-      | SomeNat x -> SomeNat (Succ x)
-  in match go i with
-  | SomeNat n -> k n
+      let SomeNat x = go (n - 1)
+      SomeNat (Succ x)
+  let SomeNat n = go i
+  k n
 
 (* uses supplied type *)
 let rec decide_lte (x : nat 'n) (y : nat 'm) : maybe (lte 'n 'm) =
   match x, y with
-  | Zero, y -> Some LteZero
-  | Succ k, Zero -> None
+  | Zero, _ -> Some LteZero
+  | Succ _, Zero -> None
   | Succ k, Succ n ->
       match decide_lte k n with
       | Some p -> Some (LteSucc p)
@@ -103,8 +103,7 @@ let rec ppr_nat (n : nat 'n) : unit =
     io_write "Succ "
     ppr_nat k
 
-(* unit *)
-let main =
+let () =
   (* vect (s (s (s z))) int *)
   let foo n =
     match decide_lte (Succ (Succ (Succ Zero))) n with

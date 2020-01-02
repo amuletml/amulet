@@ -1,46 +1,37 @@
-external val (==) : 'a -> 'a -> bool = ""
-external val (<) : int -> int -> bool = ""
-external val (>) : int -> int -> bool = ""
+open import "prelude.ml"
+
 external val random : int -> int -> int = "math.random"
 external val random_seed : int -> unit  = "math.randomseed"
-
-external val print_endline : string -> unit = "print"
-external val print : string -> unit  = "io.write"
-external val read : string -> string  = "io.read"
 
 external val current_time : unit -> int  = "function() return os.time() end"
 
 external val prim_int_of_string : string -> int  = "tonumber"
-external val string_of_int : int -> string  = "tostring"
 
 external val is_nil : 'a -> bool = "function(x) return x == nil end"
 
-type option 'a =
-  | Just of 'a
-  | Nothing
-
 let int_of_string str =
   let vl = prim_int_of_string str
-  if is_nil vl then Nothing else Just vl
+  if is_nil vl then None else Some vl
 
-let read_line _ = read "*l"
+let read_line () = Io.(read_line (file_of standard_in))
+
 let () =
   random_seed (current_time ())
   let vl = random 1 10
   let rec loop () =
-    print "Guess a number between 1 and 10: "
-    match int_of_string (read_line ()) with
-    | Just guess ->
+    put_line "Guess a number between 1 and 10: "
+    match read_line () >>= int_of_string with
+    | Some guess ->
         if vl == guess then
-          print_endline "You got it!"
+          put_line "You got it!"
         else if vl > guess then
-          print_endline "Too low!"
+          put_line "Too low!"
           loop ()
         else if vl < guess then
-          print_endline "Too high!"
+          put_line "Too high!"
           loop ()
         else loop ()
-    | Nothing ->
-       print_endline "Not a number!"
+    | None ->
+       put_line "Not a number!"
        loop ()
   loop ()

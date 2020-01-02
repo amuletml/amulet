@@ -1,9 +1,5 @@
-external val (+) : int -> int -> int = ""
-external val (-) : int -> int -> int = ""
-external val (^) : string -> string -> string = ""
-external val (<=) : int -> int -> bool = ""
-external val print : string -> () = "print"
-external val num_to_string : int -> string = "tostring"
+open import "prelude.ml"
+open import "amulet/exception.ml"
 
 let x |> f = f x
 
@@ -18,7 +14,9 @@ let rec zip_with f (a : list _) (b : list _) : list _ =
   | Cons (x, xs), Cons (y, ys) -> f x y :: zip_with f xs ys
   | _ -> Nil
 
-let tail (Cons (_, xs)) = xs
+let tail = function
+  | Nil -> Exception.(Invalid "Empty list" |> throw)
+  | (Cons (_, xs)) -> xs
 
 let rec take n (xs : list 'a) : list 'a =
   match xs with
@@ -28,18 +26,17 @@ let rec take n (xs : list 'a) : list 'a =
      then Nil
      else x :: take (n - 1) xs
 
-let list_to_string (to_string : 'a -> string) = function
+instance show 'a => show (list 'a)
+  let show = function
   | Nil -> "[]"
   | Cons (x, xs) ->
      match force xs with
-     | Nil -> "[" ^ to_string x ^ "]"
+     | Nil -> "[" ^ show x ^ "]"
      | _ -> let rec go = function
               | Nil -> "]"
-              | Cons (x, xs) -> ", " ^ to_string x ^ go (force xs)
-            "[" ^ to_string x ^ go xs
+              | Cons (x, xs) -> ", " ^ show x ^ go (force xs)
+            "[" ^ show x ^ go xs
 
 let rec fibs = 0 :: 1 :: zip_with (+) fibs (tail fibs)
 
-let () = take 20 fibs
-         |> list_to_string num_to_string
-         |> print
+let () = take 20 fibs |> print
