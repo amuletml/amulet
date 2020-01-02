@@ -632,19 +632,28 @@ unequal scope a b =
   do
     x <- use solveTySubst
     info <- view solveInfo
+    let isTf (TyCon v) =
+          case info ^. at v of
+            Just (Right TySymInfo{}) -> True
+            _ -> False
+        isTf _ = False
 
     let ta = apply x a
         tb = apply x b
         fix = Map.fromList . map (\x -> (x ^. skolIdent, TyVar (x ^. skolVar))) . Set.toList . skols
 
-    (~(TyApps _ [ta, tb]), sub) <- flatten (fix ta <> fix tb) info (TyApps tyEq [ta, tb])
+    if isTf (head (appsView a)) || isTf (head (appsView b))
+       then do
+         (~(TyApps _ [ta, tb]), sub) <- flatten (fix ta <> fix tb) info (TyApps tyEq [ta, tb])
 
-    (fold -> types, fold -> sub) <-
-      fmap unzip . for (Map.toList sub) $ \(var, tf) -> do
-        (st, red) <- entirely_reduce noReductions tf
-        pure (reduction st red tf, Map.singleton var red)
+         (fold -> types, fold -> sub) <-
+           fmap unzip . for (Map.toList sub) $ \(var, tf) -> do
+             (st, red) <- entirely_reduce noReductions tf
+             pure (reduction st red tf, Map.singleton var red)
 
-    pure (appEndo types (NotEqual (apply sub ta) (apply sub tb)))
+         pure (appEndo types (NotEqual (apply sub ta) (apply sub tb)))
+       else pure (NotEqual ta tb)
+
   where
     entirely_reduce :: Int -> Type Typed -> m (Int, Type Typed)
     entirely_reduce 0 ty = pure (0, ty)
