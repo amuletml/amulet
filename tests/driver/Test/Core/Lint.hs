@@ -24,8 +24,11 @@ import Frontend.Driver
 import Frontend.Errors
 import CompileTarget
 
-testLint :: ([Stmt CoVar] -> Namey [Stmt CoVar]) -> String -> Assertion
-testLint f file = do
+data Mode = Strict | Lax
+  deriving Eq
+
+testLint :: ([Stmt CoVar] -> Namey [Stmt CoVar]) -> Mode -> String -> Assertion
+testLint f mode file = do
   libPath <- makeRelativeToCurrentDirectory "lib"
   path <- makeRelativeToCurrentDirectory file
   let driver = makeDriverWith DriverConfig
@@ -38,7 +41,7 @@ testLint f file = do
     . flip runStateT driver
     $ compiles path
   case core of
-    Just core | not (hasErrors defaultFilter { filterAll = True } errors) -> do
+    Just core | mode == Lax || not (hasErrors defaultFilter { filterAll = True } errors) -> do
       let core' = evalNamey (f core) name
       case runLintOK (checkStmt emptyScope core') of
         Nothing -> pure ()
@@ -47,17 +50,17 @@ testLint f file = do
       files <- fileMap driver
       assertFailure . T.unpack . display $ reportAll files errors
 
-testLintLower, testLintSimplify :: String -> Assertion
+testLintLower, testLintSimplify :: Mode -> String -> Assertion
 testLintLower = testLint pure
 testLintSimplify = testLint (optimise defaultInfo { useLint = True })
 
 tests :: IO TestTree
 tests = do
-  folderLint <- map (testCase <*> testLintSimplify . ("tests/lint/"++)) . sort <$> listDirectory "tests/lint/"
+  folderLint <- map (testCase <*> testLintSimplify Lax . ("tests/lint/"++)) . sort <$> listDirectory "tests/lint/"
 
   pure $ testGroup "Test.Core.Lint"
-    [ testGroup "Examples" [ testGroup "Lower" (map (testCase <*> testLintLower . ("examples/"++)) files)
-                           , testGroup "Simplify" (map (testCase <*> testLintSimplify . ("examples/"++)) files) ]
+    [ testGroup "Examples" [ testGroup "Lower" (map (testCase <*> testLintLower Strict . ("examples/"++)) files)
+                           , testGroup "Simplify" (map (testCase <*> testLintSimplify Strict . ("examples/"++)) files) ]
     , testGroup "Test folder" folderLint
     ]
 
