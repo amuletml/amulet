@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Test.Core.Lint (tests) where
 
 import qualified Data.Text as T
@@ -8,10 +8,8 @@ import Control.Monad.Infer (firstName)
 import Control.Monad.State
 import Control.Monad.Namey
 
-import Core.Core (Stmt)
 import Core.Simplify
 import Core.Lint
-import Core.Var
 
 import Text.Pretty.Semantic
 
@@ -27,8 +25,8 @@ import CompileTarget
 data Mode = Strict | Lax
   deriving Eq
 
-testLint :: ([Stmt CoVar] -> Namey [Stmt CoVar]) -> Mode -> String -> Assertion
-testLint f mode file = do
+testLint :: Mode -> String -> Assertion
+testLint mode file = do
   libPath <- makeRelativeToCurrentDirectory "lib"
   path <- makeRelativeToCurrentDirectory file
   let driver = makeDriverWith DriverConfig
@@ -42,7 +40,7 @@ testLint f mode file = do
     $ compiles path
   case core of
     Just core | mode == Lax || not (hasErrors defaultFilter { filterAll = True } errors) -> do
-      let core' = evalNamey (f core) name
+      let core' = evalNamey (optimise defaultInfo { useLint = True } core) name
       case runLintOK (checkStmt emptyScope core') of
         Nothing -> pure ()
         Just (_, es) -> assertFailure $ "Core lint failed: " ++ displayS (pretty es)
@@ -50,17 +48,12 @@ testLint f mode file = do
       files <- fileMap driver
       assertFailure . T.unpack . display $ reportAll files errors
 
-testLintLower, testLintSimplify :: Mode -> String -> Assertion
-testLintLower = testLint pure
-testLintSimplify = testLint (optimise defaultInfo { useLint = True })
-
 tests :: IO TestTree
 tests = do
-  folderLint <- map (testCase <*> testLintSimplify Lax . ("tests/lint/"++)) . sort <$> listDirectory "tests/lint/"
+  folderLint <- map (testCase <*> testLint Lax . ("tests/lint/"++)) . sort <$> listDirectory "tests/lint/"
 
   pure $ testGroup "Test.Core.Lint"
-    [ testGroup "Examples" [ testGroup "Lower" (map (testCase <*> testLintLower Strict . ("examples/"++)) files)
-                           , testGroup "Simplify" (map (testCase <*> testLintSimplify Strict . ("examples/"++)) files) ]
+    [ testGroup "Examples" (map (testCase <*> testLint Strict . ("examples/"++)) files)
     , testGroup "Test folder" folderLint
     ]
 
