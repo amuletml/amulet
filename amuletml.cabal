@@ -41,7 +41,6 @@ executable amc
   other-modules:       Version
                      , Amc.Debug
                      , Amc.Compile
-                     , Amc.Compile.Raw
                      , Amc.Compile.Shim
 
                      , Amc.Explain

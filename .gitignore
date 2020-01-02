@@ -8,6 +8,7 @@
 *.prof
 *.svg
 !/assets/*svg
+!/bin/Amc/Compile/Shim.c
 
 .stack-work
 
