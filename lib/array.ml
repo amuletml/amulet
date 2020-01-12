@@ -100,7 +100,7 @@ instance show 'a => show (array 'a) begin
 end
 
 instance eq 'a => eq (array 'a) begin
-  let (Array a) == (Array b) =
+  let Array a == Array b =
     let elem_cmp (x : 'a) (y : 'a) = x == y
     (a.length - a.offset) == (b.length - b.offset) &&
       let rec loop (i : int) : bool =

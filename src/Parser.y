@@ -476,7 +476,7 @@ Binding :: { Binding Parsed }
              True
              (withPos2 $1 $4 id) }
 
-        | ArgP BindOp ArgP PostBinding
+        | BPattern BindOp BPattern PostBinding
           { Binding (getL $2)
               (withPos2 $1 $4 (Fun (PatParam $1) (withPos2 $3 $4 (Fun (PatParam $3) $4))))
               True
