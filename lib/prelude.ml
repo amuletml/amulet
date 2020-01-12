@@ -26,3 +26,6 @@ let x // y =
 let put_line = Io.put_line
 let put_bytes = Io.put_bytes
 let print = Io.print
+
+let flip f x y = f y x
+let x |> f = f x
