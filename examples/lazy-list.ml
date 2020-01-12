@@ -1,8 +1,6 @@
 open import "prelude.ml"
 open import "amulet/exception.ml"
 
-let x |> f = f x
-
 type list 'a =
   | Nil
   | Cons of 'a * lazy (list 'a)

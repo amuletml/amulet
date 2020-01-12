@@ -4,7 +4,6 @@
 
 open import "prelude.ml"
 
-let x |> f = f x
 let map = (<$>)
 external val float_of_int : int -> float = "function(x) return x end"
 

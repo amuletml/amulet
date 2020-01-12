@@ -6,7 +6,7 @@ deriving instance typeable option
 
 let from_option x = function
   | Some x -> x
-  | None -> x
+  | None -> force x
 
 instance eq 'a => eq (option 'a) begin
   let x == y =
