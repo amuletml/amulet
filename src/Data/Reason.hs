@@ -158,6 +158,10 @@ instance Respannable (Ann p) => Respannable (Expr p) where
   respan k (ListComp e qs a) = ListComp e qs (respan k a)
   respan k (DoExpr v qs a) = DoExpr v qs (respan k a)
   respan k (Idiom vp va es a) = Idiom vp va es (respan k a)
+  respan k (ListFrom v x a) = ListFrom v x (respan k a)
+  respan k (ListFromTo v x y a) = ListFromTo v x y (respan k a)
+  respan k (ListFromThen v x y a) = ListFromThen v x y (respan k a)
+  respan k (ListFromThenTo v x y z a) = ListFromThenTo v x y z (respan k a)
 
   respan k (Record fs a) = Record fs (respan k a)
   respan k (RecordExt f fs a) = RecordExt f fs (respan k a)

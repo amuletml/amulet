@@ -346,6 +346,72 @@ infer (Idiom pure_v app_v expr ann) =
     make_idiom fun =
       foldl (\f x -> BinOp f (VarRef app_v ann) x ann) (App (VarRef pure_v ann) fun ann)
 
+infer ex@(ListFrom range_v start an) = do
+  let reason = becauseExp ex
+  (fun, range_t) <- infer (VarRef range_v an)
+  ~(Anon t1, c1, w1) <- quantifier reason (/= Req) range_t
+
+  start <- check start t1
+
+  t_con <- freshTV
+  let list_t = TyApp t_con t1
+  w2 <- subsumes reason c1 list_t
+  pure (ExprWrapper w2 (App (w1 fun) start (an, c1)) (an, list_t), list_t)
+
+infer ex@(ListFromTo range_v start end an) = do
+  let reason = becauseExp ex
+  (fun, range_t) <- infer (VarRef range_v an)
+  ~(Anon t1, c1, w1) <- quantifier reason (/= Req) range_t
+  ~(Anon t2, c2, w2) <- quantifier reason (/= Req) c1
+
+  start <- check start t1
+  end <- check end t1
+  _ <- unify (becauseExp ex) t2 t1
+
+  t_con <- freshTV
+  let list_t = TyApp t_con t1
+  w3 <- subsumes reason c2 list_t
+  pure (ExprWrapper w3 (App (w2 (App (w1 fun) start (an, c1))) end (an, c2)) (an, list_t), list_t)
+
+infer ex@(ListFromThen range_v start next an) = do
+  let reason = becauseExp ex
+  (fun, range_t) <- infer (VarRef range_v an)
+  ~(Anon t1, c1, w1) <- quantifier reason (/= Req) range_t
+  ~(Anon t2, c2, w2) <- quantifier reason (/= Req) c1
+
+  start <- check start t1
+  next <- check next t1
+  _ <- unify (becauseExp ex) t2 t1
+
+  t_con <- freshTV
+  let list_t = TyApp t_con t1
+  w3 <- subsumes reason c2 list_t
+  pure (ExprWrapper w3 (App (w2 (App (w1 fun) start (an, c1))) next (an, c2)) (an, list_t), list_t)
+
+infer ex@(ListFromThenTo range_v start next end an) = do
+  let reason = becauseExp ex
+  (fun, range_t) <- infer (VarRef range_v an)
+  ~(Anon t1, c1, w1) <- quantifier reason (/= Req) range_t
+  ~(Anon t2, c2, w2) <- quantifier reason (/= Req) c1
+  ~(Anon t3, c3, w3) <- quantifier reason (/= Req) c2
+
+  start <- check start t1
+  next <- check next t1
+  end <- check end t1
+  _ <- unify (becauseExp ex) t2 t1
+  _ <- unify (becauseExp ex) t3 t1
+
+  t_con <- freshTV
+  let list_t = TyApp t_con t1
+  w4 <- subsumes reason c3 list_t
+  pure ( ExprWrapper w4
+          (App (w3
+              (App (w2
+                  (App (w1 fun) start (an, c1)))
+                next (an, c2)))
+            end (an, c3)) (an, list_t)
+       , list_t)
+
 infer ex = do
   x <- freshTV
   ex' <- check ex x
@@ -519,10 +585,12 @@ inferProg (Include mod:prg) = do
     consFst (Include mod') $ inferProg prg
 
 inferProg (Module am name mod:prg) = do
-  (mod', exEnv, modInfo) <- local (declaredHere .~ mempty) $ inferMod mod
-  local (exEnv (Just name) . (modules %~ Map.insert name modInfo)) $
-    consFst (Module am name mod') $
-    inferProg prg
+  (mod', exEnv, modInfo@(modImp, modTS)) <- local (declaredHere .~ mempty) $ inferMod mod
+  local (exEnv (Just name)) $
+    local (modules %~ Map.insert name modInfo) $
+      local ((classes %~ (<>modImp)) . (tySyms %~ (<>modTS))) $
+        consFst (Module am name mod') $
+          inferProg prg
 
 inferProg [] = asks ([],)
 

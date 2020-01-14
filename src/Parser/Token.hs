@@ -61,6 +61,7 @@ data TokenClass
   | TcWith     -- ^ The @with@ keyword.
 
   | TcDot       -- ^ A @.@ token.
+  | TcDotDot    -- ^ A @..@ token.
   | TcComma     -- ^ A @,@ token.
   | TcColon     -- ^ A @:@ token.
   | TcBang      -- ^ A @!@ token.
@@ -150,6 +151,7 @@ instance Show TokenClass where
 
   show TcComma = ","
   show TcDot = "."
+  show TcDotDot = ".."
   show TcColon = ":"
   show TcBang = "!"
   show TcSemicolon = ";"

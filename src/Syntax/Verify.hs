@@ -187,6 +187,10 @@ verifyExpr (ListExp e _) = traverse_ verifyExpr e
 verifyExpr (ListComp e qs _) = verifyExpr e *> traverse_ verifyCompStmt qs
 verifyExpr (Idiom _ _ es _) = verifyExpr es
 verifyExpr (DoExpr _ qs _) = traverse_ verifyCompStmt qs
+verifyExpr (ListFrom _ x _) = verifyExpr x
+verifyExpr (ListFromTo _ x y _) = verifyExpr x *> verifyExpr y
+verifyExpr (ListFromThen _ x y _) = verifyExpr x *> verifyExpr y
+verifyExpr (ListFromThenTo _ x y z _) = verifyExpr x *> verifyExpr y *> verifyExpr z
 verifyExpr (ExprWrapper w e a) =
   case w of
     WrapFn (MkWrapCont k _) -> verifyExpr (k e)
@@ -289,6 +293,10 @@ nonTrivial (Parens e _) = nonTrivial e
 nonTrivial (Tuple es _) = any nonTrivial es
 nonTrivial (ListExp es _) = any nonTrivial es
 nonTrivial ListComp{} = False
+nonTrivial ListFrom{} = True
+nonTrivial ListFromTo{} = True
+nonTrivial ListFromThen{} = True
+nonTrivial ListFromThenTo{} = True
 nonTrivial DoExpr{} = False
 nonTrivial Idiom{} = False
 nonTrivial TupleSection{} = False

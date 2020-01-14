@@ -106,6 +106,7 @@ tokens :-
   <0> "with"     { constTok TcWith     }
 
   <0> ","      { constTok TcComma }
+  <0> "." "."  { constTok TcDotDot }
   <0> "."      { constTok TcDot }
   <0> ":"      { constTok TcColon }
   <0> ";" ";"  { constTok TcTopSep }

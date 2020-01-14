@@ -1,3 +1,4 @@
+{- HLINT ignore -}
 {-# LANGUAGE TemplateHaskell, OverloadedStrings #-}
 module Test.Types.Holes where
 
@@ -59,7 +60,7 @@ testAmuse gen = do
       Right () -> success
 
 tests :: TestTree
-tests = hedgehog $$(discover)
+tests = hedgehog $$discover
 
 forgetTypes :: Expr Typed -> Expr Resolved
 forgetTypes (VarRef v (an, _)) = VarRef v an
@@ -102,6 +103,10 @@ forgetTypes (ListExp es (a, _)) = ListExp (forgetTypes <$> es) a
 forgetTypes ListComp{} = undefined
 forgetTypes DoExpr{} = undefined
 forgetTypes Idiom{} = undefined
+forgetTypes ListFrom{} = undefined
+forgetTypes ListFromTo{} = undefined
+forgetTypes ListFromThen{} = undefined
+forgetTypes ListFromThenTo{} = undefined
 
 forgetTypes (ExprWrapper _ e _) = forgetTypes e
 
