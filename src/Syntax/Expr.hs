@@ -101,8 +101,15 @@ data Expr p
   -- Ranges
   | ListFromTo (Var p) {- 'range' variable -}
       (Expr p) (Expr p) (Ann p)
+
   | ListFromThenTo (Var p) {- 'range_then' variable -}
       (Expr p) (Expr p) (Expr p) (Ann p)
+
+  | ListFrom (Var p) {- 'unbounded_range' variable -}
+      (Expr p) (Ann p)
+
+  | ListFromThen (Var p) {- 'unbounded_range_then' variable -}
+      (Expr p) (Expr p) (Ann p)
 
   -- Monads
   | DoExpr (Var p) [CompStmt p] (Ann p)

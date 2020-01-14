@@ -53,8 +53,11 @@ instance Spanned (Ann p) => Spanned (Expr p) where
   annotation (ListComp _ _ a) = annotation a
   annotation (DoExpr _ _ a) = annotation a
   annotation (Idiom _ _ _ a) = annotation a
-  annotation (ListFromThenTo _ _ _ _ a) = annotation a
+
+  annotation (ListFrom _ _ a) = annotation a
   annotation (ListFromTo _ _ _ a) = annotation a
+  annotation (ListFromThen _ _ _ a) = annotation a
+  annotation (ListFromThenTo _ _ _ _ a) = annotation a
 
   annotation (ExprWrapper _ _ a) = annotation a
 
@@ -154,13 +157,19 @@ instance Pretty (Var p) => Pretty (Expr p) where
   pretty (OpenIn v e _) = pretty v <> string "." <> parens (pretty e)
   pretty (Lazy e _) = keyword "lazy" <+> parenArg e
   pretty (Vta e t _) = parenFun e <+> keyword "as" <+> pretty t
+
   pretty (ListExp es _) = brackets (hsep (punctuate comma (map pretty es)))
   pretty (ListComp e qs _) =
     brackets (pretty e <+> pipe <+> hsep (punctuate comma (map pretty qs)))
+  pretty (ListFrom _ x _) =
+    brackets (pretty x <+> soperator (string ".."))
   pretty (ListFromTo _ x y _) =
     brackets (pretty x <+> soperator (string "..") <+> pretty y)
+  pretty (ListFromThen _ x y _) =
+    brackets (pretty x <> comma <> pretty y <+> soperator (string ".."))
   pretty (ListFromThenTo _ x y z _) =
-    brackets (pretty x <> comma <> pretty z <+> soperator (string "..") <+> pretty y)
+    brackets (pretty x <> comma <> pretty y <+> soperator (string "..") <+> pretty z)
+
   pretty (Idiom _ _ xs _) = "(|" <+> pretty xs <+> "|)"
 
   pretty (ExprWrapper wrap ex an) = go wrap ex where

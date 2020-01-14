@@ -12,7 +12,7 @@ class enumeration 'x begin
 end
 
 (* [start .. finish] *)
-let range start finish =
+let range_from_to start finish =
   if start > finish then
     []
   else
@@ -48,7 +48,8 @@ let private range_down start next finish =
         enum_of_int x :: go_down (x + delta)
     start :: go_down x2
 
-let range_then start next finish =
+(* [start, next .. finish] *)
+let range_from_then_to start next finish =
   if next >= start then
     range_up start next finish
   else

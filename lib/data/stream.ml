@@ -19,6 +19,8 @@ end
 type stream 'a =
   private Stream : forall 's. ('s -> step 's 'a) * 's -> stream 'a
 
+deriving instance typeable stream
+
 instance show 'a => show (stream 'a) begin
   let show (Stream (step, start)) =
     let show_e (x : 'a) = show x
@@ -128,17 +130,33 @@ let unfoldr z f =
     | None -> Done
   Stream (step, z)
 
-let range start fin =
+let range_from start =
+  Stream (fun i -> Yield (i + 1, enum_of_int i), start)
+
+let range_from_then (start : 'a) (next : 'a) =
+  let start = int_of_enum start
+  let next = int_of_enum next
+  let delta =
+    if start > next then start - next else next - start
+  Stream (fun i -> Yield (i + delta, enum_of_int i), start)
+
+let range_from_to (start : 'a) (fin : 'a) =
+  let fin = int_of_enum fin
+  let start = int_of_enum start
+
   let delta = if fin > start then 1 else -1
   let cmp = if fin > start then (<=) else (>=)
   let step i =
     if i `cmp` fin then
-      Yield (i + delta, i)
+      Yield (i + delta, enum_of_int i)
     else
       Done
   Stream (step, start)
 
-let range_then start next fin =
+let range_from_then_to (start : 'a) (next : 'a) (fin : 'a) =
+  let start = int_of_enum start
+  let next = int_of_enum next
+  let fin = int_of_enum fin
   let delta = if fin > start then next - start else start - next
   let cmp = if fin > start then (<=) else (>=)
   let step i =

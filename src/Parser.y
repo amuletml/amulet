@@ -374,11 +374,21 @@ Atom :: { Expr Parsed }
          { withPos2 $1 $5 $ tupleExpr ($2:$4) }
      | '{' ListT(ExprRow, ',') '}'            { withPos2 $1 $3 $ Record $2 }
      | '{' Expr with List1T(ExprRow, ',') '}' { withPos2 $1 $5 $ RecordExt $2 $4 }
+
+     | '[' Expr '..' ']'
+       { withPos2 $1 $4 $ ListFrom uRangeVar $2 }
+
      | '[' Expr '..' Expr ']'
        { withPos2 $1 $5 $ ListFromTo rangeVar $2 $4 }
+
+     | '[' Expr ',' Expr '..' ']'
+       { withPos2 $1 $6 $ ListFromThen uRangeThenVar $2 $4 }
+
      | '[' Expr ',' Expr '..' Expr ']'
        { withPos2 $1 $7 $ ListFromThenTo rangeThenVar $2 $4 $6 }
+
      | '[' List(Expr, ',') ']'                { withPos2 $1 $3 $ ListExp $2 }
+
      | '[' Expr '|' List1(CompStmt, ',') ']'  { withPos2 $1 $5 $ ListComp $2 $4 }
      | Atom access                            { withPos2 $1 $2 $ Access $1 (getIdent $2) }
 
@@ -715,8 +725,10 @@ tuplePattern xs a = PTuple xs a
 bindVar = Name (T.pack ">>=")
 apVar = Name (T.pack "<*>")
 pureVar = Name (T.pack "pure")
-rangeVar = Name (T.pack "range")
-rangeThenVar = Name (T.pack "range_then")
+uRangeVar = Name (T.pack "range_from")
+rangeVar = Name (T.pack "range_from_to")
+uRangeThenVar = Name (T.pack "range_from_then")
+rangeThenVar = Name (T.pack "range_from_then_to")
 
 getIdent  (Token (TcOp x) _ _)         = x
 getIdent  (Token (TcIdentifier x) _ _) = x
