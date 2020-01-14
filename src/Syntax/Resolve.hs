@@ -420,6 +420,14 @@ reExpr (ListComp e qs a) =
 reExpr r@(Idiom vp va es a) = Idiom <$> lookupEx' vp <*> lookupEx' va <*> reExpr es <*> pure a where
   lookupEx' v = lookupEx v `catchJunk` r
 
+reExpr r@(ListFromTo v x y a) = ListFromTo <$> lookupEx' v <*> reExpr x <*> reExpr y <*> pure a where
+  lookupEx' v = lookupEx v `catchJunk` r
+
+reExpr r@(ListFromThenTo v x y z a) =
+  ListFromThenTo <$> lookupEx' v <*> reExpr x <*> reExpr y <*> reExpr z <*> pure a
+    where lookupEx' v = lookupEx v `catchJunk` r
+
+
 reExpr (DoExpr var qs a) =
   let go (CompGuard e:qs) acc flag = do
         e <- reExpr e

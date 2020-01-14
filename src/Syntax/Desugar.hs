@@ -133,6 +133,9 @@ expr (DoExpr bind qs an) = begin <$> transDoExpr (VarRef bind an) qs where
   begin = flip Begin an . (:[])
 
 expr (Idiom pure_v app_v fn an) = Idiom pure_v app_v <$> expr fn <*> pure an
+expr (ListFromTo r_v x y an) = ListFromTo r_v <$> expr x <*> expr y <*> pure an
+expr (ListFromThenTo r_v x y z an) =
+  ListFromThenTo r_v <$> expr x <*> expr y <*> expr z <*> pure an
 
 expr (OpenIn mod e an) = OpenIn <$> modTerm mod <*> expr e <*> pure an
 

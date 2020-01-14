@@ -108,6 +108,9 @@ transformExpr fe = goE where
   transE (ListComp e qs a) = ListComp (goE e) (map goQ qs) a
   transE (DoExpr v qs a) = DoExpr v (map goQ qs) a
   transE (Idiom vp va es a) = Idiom vp va (goE es) a
+  transE (ListFromTo v x y a) = ListFromTo v (goE x) (goE y) a
+  transE (ListFromThenTo v x y z a) =
+    ListFromThenTo v (goE x) (goE y) (goE z) a
 
   goB (Binding v e c a) = Binding v (goE e) c a
   goB (TypedMatching v e a b) = TypedMatching v (goE e) a b
@@ -162,6 +165,9 @@ transformExprTyped fe fc ft = goE where
   transE (ListComp e qs a) = ListComp (transE e) (map goQ qs) (goA a)
   transE (DoExpr v qs a) = DoExpr v (map goQ qs) (goA a)
   transE (Idiom vp va es a) = Idiom vp va (goE es) (goA a)
+  transE (ListFromTo v x y a) = ListFromTo v (goE x) (goE y) (goA a)
+  transE (ListFromThenTo v x y z a) =
+    ListFromThenTo v (goE x) (goE y) (goE z) (goA a)
 
   transBind (Binding v e b a) = Binding v (goE e) b (goA a)
   transBind (Matching p e a) = Matching (goP p) (goE e) (goA a)
@@ -247,5 +253,8 @@ correct ty (ListExp e a) = ListExp e (fst a, ty)
 correct ty (ListComp e qs a) = ListComp e qs (fst a, ty)
 correct ty (DoExpr v qs a) = DoExpr v qs (fst a, ty)
 correct ty (Idiom vp va es a) = Idiom vp va es (fst a, ty)
+correct ty (ListFromTo v x y a) = ListFromTo v x y (fst a, ty)
+correct ty (ListFromThenTo v x y z a) =
+  ListFromThenTo v x y z (fst a, ty)
 
 correct ty (ExprWrapper w e a) = ExprWrapper w e (fst a, ty)
