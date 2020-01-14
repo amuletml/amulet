@@ -102,6 +102,8 @@ forgetTypes (ListExp es (a, _)) = ListExp (forgetTypes <$> es) a
 forgetTypes ListComp{} = undefined
 forgetTypes DoExpr{} = undefined
 forgetTypes Idiom{} = undefined
+forgetTypes ListFromTo{} = undefined
+forgetTypes ListFromThenTo{} = undefined
 
 forgetTypes (ExprWrapper _ e _) = forgetTypes e
 
