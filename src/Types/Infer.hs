@@ -167,6 +167,12 @@ check e@(Access rc key a) ty = do
     check rc (TyRows rho [(key, ty)])
   pure (Access rc key (a, ty))
 
+check ex@(ListExp es an) t@(TyApp f x) = do
+  w <- unify (becauseExp ex) f tyList
+  es <- traverse (`check` x) es
+
+  pure (ExprWrapper w (buildList an x es) (an, t))
+
 -- This is _very_ annoying, but we need it for nested ascriptions
 check ex@(Ascription e ty an) goal = do
   ty <- expandType =<< resolveKind (becauseExp ex) ty
