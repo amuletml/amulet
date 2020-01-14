@@ -143,10 +143,11 @@ reTops (d@(TypeDecl am t vs cs ann):rest) sig = do
   (vs', sc) <- resolveTele d vs
   let c = maybe [] (map extractCons) cs
   c' <- traverse tagVar c
-  reTopsWith am rest sig (withTy t t' . withVals (zip c c')) $
+  decl <- local (scope %~ withTy t t') $
     TypeDecl am t' vs'
       <$> maybe (pure Nothing) (fmap Just . traverse (resolveCons sc) . zip c') cs
       <*> pure ann
+  reTopsWith am rest sig (withTy t t' . withVals (zip c c')) (pure decl)
 
   where resolveCons _  (v', UnitCon ac _ a) = pure $ UnitCon ac v' a
         resolveCons vs (v', r@(ArgCon ac _ t a)) = ArgCon ac v' <$> extendTyvars vs (reType r t) <*> pure a
