@@ -241,7 +241,6 @@ let sort xs = sort_by compare xs
  *
  * Runtime: O(n)
  *)
-
 let rec lookup key = function
   | Cons ((k, v), xs) ->
       if k == key then
@@ -249,3 +248,17 @@ let rec lookup key = function
       else
         lookup key xs
   | [] -> None
+
+(** 'scanl' is similar to 'foldl', but it returns a list containing
+ * successive results of the stepper function.
+ *
+ * Runtime: O(n)
+ *)
+
+let scanl func q ls =
+  let rec go k z = function
+    | [] -> k [z]
+    | Cons (x, xs) ->
+        go (fun xs -> k (z :: xs)) (func z x) xs
+  go (fun x -> x) q ls
+

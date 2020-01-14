@@ -28,11 +28,12 @@ instance foldable list begin
       | [] -> z
       | Cons (x, xs) -> loop (f z x) xs
     loop
+
   let foldr f z =
-    let rec loop = function
-      | [] -> z
-      | Cons (x, xs) -> f x (loop xs)
-    loop
+    let rec loop k = function
+      | [] -> k z
+      | Cons (x, xs) -> loop (fun r -> k (f x r)) xs
+    loop (fun x -> x)
 end
 
 instance foldable option begin
