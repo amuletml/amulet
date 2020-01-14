@@ -350,7 +350,8 @@ infer ex@(ListFromTo range_v start end an) = do
   end <- check end t1
   _ <- unify (becauseExp ex) t2 t1
 
-  let list_t = TyApp tyList t1
+  t_con <- freshTV
+  let list_t = TyApp t_con t1
   w3 <- subsumes reason c2 list_t
   pure (ExprWrapper w3 (App (w2 (App (w1 fun) start (an, c1))) end (an, c2)) (an, list_t), list_t)
 
@@ -367,7 +368,8 @@ infer ex@(ListFromThenTo range_v start next end an) = do
   _ <- unify (becauseExp ex) t2 t1
   _ <- unify (becauseExp ex) t3 t1
 
-  let list_t = TyApp tyList t1
+  t_con <- freshTV
+  let list_t = TyApp t_con t1
   w4 <- subsumes reason c3 list_t
   pure ( ExprWrapper w4
           (App (w3

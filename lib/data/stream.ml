@@ -128,13 +128,25 @@ let unfoldr z f =
     | None -> Done
   Stream (step, z)
 
-let arithmetic_seq start next =
-  let delta =
-    if start > next then
-      next - start
+let range start fin =
+  let delta = if fin > start then 1 else -1
+  let cmp = if fin > start then (<=) else (>=)
+  let step i =
+    if i `cmp` fin then
+      Yield (i + delta, i)
     else
-      negate (start - next)
-  unfoldr start @@ fun i -> Some (i, i + delta)
+      Done
+  Stream (step, start)
+
+let range_then start next fin =
+  let delta = if fin > start then next - start else start - next
+  let cmp = if fin > start then (<=) else (>=)
+  let step i =
+    if i `cmp` fin then
+      Yield (i + delta, i)
+    else
+      Done
+  Stream (step, start)
 
 let from_list xs =
   let uncons = function
