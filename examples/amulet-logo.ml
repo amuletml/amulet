@@ -60,7 +60,7 @@ let () =
     angle_at theta |> (+.offset) |> Math.rad
     |> Math.polar r
 
-  let core = point_at core_size 0.0 <$> range 0 points
+  let core = point_at core_size 0.0 <$> [0 .. points]
   let edges =
     (fun point -> ClosedPath {
        style = "fill:#216778",
@@ -69,7 +69,7 @@ let () =
              :: point_at (core_size +. padding +. edge_size) (0.0 -. gap) (point + 1)
              :: point_at (core_size +. padding)              (0.0 -. gap) (point + 1)
              :: Nil
-     }) <$> range 0 points
+     }) <$> [0 .. points]
 
   print (SVG {
     viewbox = { x = 0.0 -. 13.0, y = 0.0 -. 14.0, width = 26.0, height = 26.0 },
