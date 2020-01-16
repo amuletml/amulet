@@ -1,10 +1,6 @@
 pipeline {
   agent any
 
-  environment {
-    SIGNING_KEY_PW = credentials('jenkins-signing-key-pass')
-  }
-
   stages {
     stage('Set up Stack dependencies') {
       steps {
@@ -58,27 +54,8 @@ pipeline {
       junit 'junit.xml'
     }
 
-    aborted {
-      slackSend color: '#808080',
-        message: "Build ${env.BUILD_NUMBER} (Triggered by commit to ${env.BRANCH_NAME}) aborted",
-        iconEmoji: 'unamused',
-        username: "Amulet Jenkins"
-    }
-
-    failure {
-      slackSend color: 'danger',
-        message: "Build ${env.BUILD_NUMBER} (Triggered by commit to ${env.BRANCH_NAME}) failed :disappointed:",
-        iconEmoji: 'unamused',
-        username: "Amulet Jenkins"
-    }
-
     success {
-      slackSend color: 'good',
-        message: "Build ${env.BUILD_NUMBER} (Triggered by commit to ${env.BRANCH_NAME}) passed! :tada:"
-
-      sh 'tools/sign.sh'
-      archiveArtifacts artifacts: 'result/*tar'
-      archiveArtifacts artifacts: 'result/*asc'
+      archiveArtifacts artifacts: 'result/*'
     }
   }
 }
