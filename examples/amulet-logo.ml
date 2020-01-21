@@ -3,9 +3,7 @@
   See `assets/logo.svg' or `assets/logo.png' for an example of the output *)
 
 open import "prelude.ml"
-
-let map = (<$>)
-external val float_of_int : int -> float = "function(x) return x end"
+open import { lua = "lua/conversion.ml" }
 
 module Math =
   include import "lua/math.ml"
