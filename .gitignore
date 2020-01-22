@@ -41,3 +41,6 @@ doc/*.synctex.gz
 *.hi-boot
 *.o
 *.o-boot
+
+/.idea
+*.iml

@@ -51,10 +51,10 @@ data ParseError
 
   -- | A malformed class declaration
   | MalformedClass Span (Type Parsed)
-  -- | A malformed instanc declaration
+  -- | A malformed instance declaration
   | MalformedInstance Span (Type Parsed)
 
-  -- | Attempting to use with in an invalid contxt
+  -- | Attempting to use with in an invalid context
   | MisplacedWith Span
 
   -- | Attempting to declare a qualified name
