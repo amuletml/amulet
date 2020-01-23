@@ -5,6 +5,20 @@
 
 packages:
 - completed:
+    cabal-file:
+      size: 9886
+      sha256: fd8ba63b20d0ffc89a106b703e208c72da394e42433d046482de1ff6f8f7a908
+    name: hslua
+    version: 1.0.3.2
+    git: https://github.com/amuletml/hslua
+    pantry-tree:
+      size: 7320
+      sha256: 0abeba67a781c297db1c6c5d232aff563be5a22cf2403da813a997c35864211f
+    commit: fb3454f06ab62130fc31d7f40e153a08450999c9
+  original:
+    git: https://github.com/amuletml/hslua
+    commit: fb3454f06ab62130fc31d7f40e153a08450999c9
+- completed:
     hackage: ghc-lib-parser-8.8.0.20190723@sha256:34ffe7ca5e6ba21eb6bf2c118046e8891a9a79007eb3db48052124d3a7186bfd,8377
     pantry-tree:
       size: 21278

@@ -147,6 +147,7 @@ tokens :-
 
   -- Operators
   <0> $opHead $opTail*                 { lexOperator }
+  <0> \. $opHead $opTail* \.           { lexOperator }
   <0> \. $opHead $opTail*              { lexTok TcDotOp }
   <0> \` $lower $ident* \`             { lexTok $ TcOpIdent . T.init . T.tail }
 
