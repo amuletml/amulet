@@ -2,14 +2,14 @@ class foo 'a | 'a -> 'a begin type bar end
 
 type 'a ~~ 'b = Refl : 'a ~ 'b => 'a ~~ 'b
 
-module Bar_int = begin
+module Bar_int = struct
   instance foo 'a begin
     type bar = int
   end
   let bar_is_int : forall 'a. bar 'a ~~ int = Refl
 end
 
-module Bar_string = begin
+module Bar_string = struct
   instance foo 'a begin
     type bar = string
   end

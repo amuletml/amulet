@@ -309,7 +309,7 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
     (_, CtxModuleBody:ck) -> handleContext tok ck
 
     -- @module ... = begin@ ~~> Push module + bracket
-    (TcBegin, CtxModuleBodyUnresolved mod:ck)
+    (TcStruct, CtxModuleBodyUnresolved mod:ck)
       | spCol tp >= spCol mod
       -> pure ( Result tok Done
               , CtxEmptyBlock Nothing : CtxModuleBody : CtxBracket TcEnd : ck )
@@ -470,7 +470,7 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
     (TcDeriving, _) -> pure (Result tok Done, CtxDerivingHead tp:c)
 
     -- @begin ...@ ~~> CtxEmptyBlock : CtxBracket(end)
-    (TcBegin, _) -> pure
+    (TcDo, _) -> pure
       ( Result tok Done
       , CtxEmptyBlock Nothing:CtxMonad:CtxBracket TcEnd:c)
     -- @(@, @{@, @[@  ~~> CtxBracket()|}|])

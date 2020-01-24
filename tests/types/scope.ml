@@ -1,7 +1,7 @@
 external val (+) : int -> int -> int =
   "function(x, y) return x + y end"
 
-module X = begin
+module X = struct
   type t = T
   let x = T
 end

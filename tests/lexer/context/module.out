@@ -3,18 +3,18 @@ module X =
   $begin let _ = 1
 
 
-$end $end $sep module X = begin
+$end $end $sep module X = module
   let _ = 1
 $end end
 
 
 $sep module X =
-begin
+module
   let _ = 1
 $end end
 
 $sep module X =
-  begin
+  module
     let _ = 1
   $end end
 

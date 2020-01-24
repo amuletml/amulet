@@ -1,6 +1,6 @@
-begin04.ml[21:3 ..21:15]: error (E2001)
+begin04.ml[21:3 ..21:14]: error (E2001)
    │ 
-21 │   with y <- [2]
-   │   ^^^^^^^^^^^^^
+21 │   let! y = [2]
+   │   ^^^^^^^^^^^^
   Couldn't match actual type list int
     with the type expected by the context, identity 'b

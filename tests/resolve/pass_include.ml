@@ -1,8 +1,8 @@
-module X = begin
+module X = struct
   let x = 1
 end
 
-module Y = begin
+module Y = struct
   let y = 1
   include X
 end

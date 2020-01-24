@@ -1,4 +1,4 @@
-module Public = begin
+module Public = struct
   external val ( + )  : int -> int -> int   = "function (x, y) return x + y end"
   external val ( * )  : int -> int -> int   = "function (x, y) return x * y end"
   external val ( - )  : int -> int -> int   = "function (x, y) return x - y end"

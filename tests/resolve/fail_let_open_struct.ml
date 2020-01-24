@@ -1,2 +1,2 @@
 let () =
-  let open begin type t end in ()
+  let open struct type t end in ()

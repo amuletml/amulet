@@ -5,7 +5,7 @@ end
 
 type identity 'a = Identity of 'a
 
-let _ = begin
-  with x <- Identity 1
+let _ = do
+  let! x = Identity 1
   pure 2
 end
