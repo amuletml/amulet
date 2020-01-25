@@ -308,7 +308,7 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
     -- Offside rule for modules
     (_, CtxModuleBody:ck) -> handleContext tok ck
 
-    -- @module ... = begin@ ~~> Push module + bracket
+     -- @module ... = struct@ ~~> Push module + bracket
     (TcStruct, CtxModuleBodyUnresolved mod:ck)
       | spCol tp >= spCol mod
       -> pure ( Result tok Done
