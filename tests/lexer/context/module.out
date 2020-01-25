@@ -3,18 +3,18 @@ module X =
   $begin let _ = 1
 
 
-$end $end $sep module X = module
+$end $end $sep module X = struct
   let _ = 1
 $end end
 
 
 $sep module X =
-module
+struct
   let _ = 1
 $end end
 
 $sep module X =
-  module
+  struct
     let _ = 1
   $end end
 

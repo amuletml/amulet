@@ -1,4 +1,4 @@
-let ( ) = of
+let ( ) = do
   let x = 0
   $end $sep let! x = 0
   $sep let x = 0
