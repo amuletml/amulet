@@ -7,7 +7,7 @@ begin05.ml[10:3 ..10:3]: error (E2001)
 begin05.ml[8:5 ..8:20]: error (E2018)
   No instance for monad identity arising in the binding
   │ 
-8 │ let _ : identity int = begin
+8 │ let _ : identity int = do
   │     ^^^^^^^^^^^^^^^^
   • Note: this constraint can not be quantified over
     because it is impossible to quantify over pattern bindings

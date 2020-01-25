@@ -11,3 +11,5 @@ import qualified System.Environment as E
 :def repl \x -> pure $ ":main repl " ++ x
 
 :def amc-trace \xs -> pure $ "E.setEnv \"AMC_TRACE\" \"" ++ xs ++ "\""
+
+:set -fobject-code

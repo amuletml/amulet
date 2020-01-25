@@ -16,8 +16,8 @@ instance monad list begin
 end
 
 (* can't mix and match monads *)
-let test = begin
-  with x <- Identity 1
-  with y <- [2]
+let test = do
+  let! x = Identity 1
+  let! y = [2]
   pure 2
 end

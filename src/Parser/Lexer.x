@@ -91,10 +91,13 @@ tokens :-
   <0> "include"  { constTok TcInclude  }
   <0> "instance" { constTok TcInstance }
   <0> "lazy"     { constTok TcLazy     }
+  <0> "let!"     { constTok TcLetBang  }
   <0> "let"      { constTok TcLet      }
   <0> "match"    { constTok TcMatch    }
   <0> "module"   { constTok TcModule   }
+  <0> "struct"   { constTok TcStruct   }
   <0> "of"       { constTok TcOf       }
+  <0> "do"       { constTok TcDo       }
   <0> "open"     { constTok TcOpen     }
   <0> "private"  { constTok TcPrivate  }
   <0> "rec"      { constTok TcRec      }

@@ -147,8 +147,8 @@ class applicative 'f => monad 'f begin
   val (>>=) : 'f 'a -> ('a -> 'f 'b) -> 'f 'b
   val join  : 'f ('f 'a) -> 'f 'a
 
-  let join x = begin
-    with x <- x
+  let join x = do
+    let! x = x
     x
   end
 

@@ -308,8 +308,8 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
     -- Offside rule for modules
     (_, CtxModuleBody:ck) -> handleContext tok ck
 
-    -- @module ... = begin@ ~~> Push module + bracket
-    (TcBegin, CtxModuleBodyUnresolved mod:ck)
+     -- @module ... = struct@ ~~> Push module + bracket
+    (TcStruct, CtxModuleBodyUnresolved mod:ck)
       | spCol tp >= spCol mod
       -> pure ( Result tok Done
               , CtxEmptyBlock Nothing : CtxModuleBody : CtxBracket TcEnd : ck )
@@ -469,8 +469,8 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
     -- @deriving@ --> Push a deriving context
     (TcDeriving, _) -> pure (Result tok Done, CtxDerivingHead tp:c)
 
-    -- @begin ...@ ~~> CtxEmptyBlock : CtxBracket(end)
-    (TcBegin, _) -> pure
+     -- @do ...@ ~~> CtxEmptyBlock : CtxBracket(end)
+    (TcDo, _) -> pure
       ( Result tok Done
       , CtxEmptyBlock Nothing:CtxMonad:CtxBracket TcEnd:c)
     -- @(@, @{@, @[@  ~~> CtxBracket()|}|])

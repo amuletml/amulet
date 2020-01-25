@@ -47,9 +47,12 @@ data TokenClass
   | TcInstance -- ^ The @instance@ keyword.
   | TcLazy     -- ^ The @lazy@ keyword.
   | TcLet      -- ^ The @let@ keyword.
+  | TcLetBang  -- ^ The @let!@ keyword.
   | TcMatch    -- ^ The @match@ keyword.
   | TcModule   -- ^ The @module@ keyword.
+  | TcStruct   -- ^ The @include@ keyword.
   | TcOf       -- ^ The @of@ keyword.
+  | TcDo       -- ^ The @of@ keyword.
   | TcOpen     -- ^ The @open@ keyword.
   | TcPrivate  -- ^ The @private@ keyword.
   | TcRec      -- ^ The @rec@ keyword.
@@ -136,9 +139,12 @@ instance Show TokenClass where
   show TcInstance = "instance"
   show TcLazy = "lazy"
   show TcLet = "let"
+  show TcLetBang = "let!"
   show TcMatch = "match"
   show TcModule = "module"
+  show TcStruct = "struct"
   show TcOf = "of"
+  show TcDo = "do"
   show TcOpen = "open"
   show TcPrivate = "private"
   show TcRec = "rec"

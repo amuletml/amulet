@@ -105,9 +105,12 @@ import Syntax
   instance { Token TcInstance _ _ }
   lazy     { Token TcLazy _ _ }
   let      { Token TcLet _ _ }
+  'let!'   { Token TcLetBang _ _ }
   match    { Token TcMatch _ _ }
   module   { Token TcModule _ _ }
+  struct   { Token TcStruct _ _ }
   of       { Token TcOf _ _ }
+  do       { Token TcDo _ _ }
   open     { Token TcOpen _ _ }
   private  { Token TcPrivate _ _ }
   rec      { Token TcRec _ _ }
@@ -225,13 +228,17 @@ TyFunKindSig :: { Maybe (Type Parsed) }
   |          { Nothing }
 
 ModuleTerm :: { ModuleTerm Parsed }
-  : Begin(Tops)                             { withPos1 $1 $ ModStruct (getL $1) }
+  : Struct(Tops)                            { withPos1 $1 $ ModStruct (getL $1) }
   | Con                                     { withPos1 $1 $ ModRef (getL $1) }
   | import string                           { withPos2 $1 $2 $ ModImport (getString $2) }
   | import '{' ListT(TargetImport, ',') '}' { withPos2 $1 $4 $ ModTargetImport $3 }
 
 TargetImport :: { TargetImport Parsed }
   : ident '=' string                        { withPos2 $1 $3 $ TargetImport (getIdent $1) (getString $3) }
+
+Struct(a)
+  : struct a end                            { lPos2 $1 $3 $2 }
+  | '$begin' a '$end'                       { lPos2 $1 $3 $2 }
 
 Begin(a)
   : begin a end                             { lPos2 $1 $3 $2 }
@@ -366,7 +373,10 @@ Atom :: { Expr Parsed }
      | Lit                                    { withPos1 $1 (Literal (getL $1)) }
      | hole                                   { withPos1 $1 (Hole (Name (getHole $1))) }
      | '_'                                    { withPos1 $1 (Hole (Name (T.singleton '_'))) }
-     | begin List1(CompStmt, ExprSep) end     { withPos2 $1 $3 $ DoExpr bindVar $2 }
+     | do List1(CompStmt(DoStmt), ExprSep) end
+       { withPos2 $1 $3 $ DoExpr bindVar $2 }
+     | begin List1(Expr, ExprSep) end
+       { withPos2 $1 $3 $ Begin $2 }
      | '(|' Expr '|)'                         { withPos2 $1 $3 $ Idiom pureVar apVar $2 }
      | '(' ')'                                { withPos2 $1 $2 $ Literal LiUnit }
      | '(' Section ')'                        { withPos2 $1 $3 $ Parens $2 }
@@ -389,16 +399,19 @@ Atom :: { Expr Parsed }
 
      | '[' List(Expr, ',') ']'                { withPos2 $1 $3 $ ListExp $2 }
 
-     | '[' Expr '|' List1(CompStmt, ',') ']'  { withPos2 $1 $5 $ ListComp $2 $4 }
+     | '[' Expr '|' List1(CompStmt(BasicStmt), ',') ']'  { withPos2 $1 $5 $ ListComp $2 $4 }
      | Atom access                            { withPos2 $1 $2 $ Access $1 (getIdent $2) }
 
-CompStmt :: { CompStmt Parsed }
+CompStmt(Stmt) :: { CompStmt Parsed }
   : let BindGroup                             { withPos1 $1 $ CompLet (reverse $2) }
-  | BasicStmt                                 { $1 }
+  | Stmt                                      { $1 }
   | Expr                                      { CompGuard $1 }
 
 BasicStmt :: { CompStmt Parsed }
   : with Pattern '<-' Expr                    { withPos2 $1 $4 $ CompGen $2 $4 }
+
+DoStmt :: { CompStmt Parsed }
+  : 'let!' Pattern '=' Expr                    { withPos2 $1 $4 $ CompGen $2 $4 }
 
 -- | Computations which are not valid in an expression context. Allows us to
 -- produce somewhat more friendly error messages in the common case.

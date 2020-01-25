@@ -281,9 +281,11 @@ transDoExpr bind = go where
     pure $ BinOp e bind cont an
   go (CompLet bg an:qs) = Let NonRecursive <$> traverse binding bg <*> go qs <*> pure an
   go [CompGuard e] = expr e
-  go (CompGuard e:qs) =
-    let begin a b = Begin [ a, b ]
-     in begin <$> expr e <*> go qs <*> pure (annotation e)
+  go (CompGuard e:qs) = do
+    let an = annotation e
+    e <- expr e
+    cont <- Fun (PatParam (Wildcard an)) <$> go qs <*> pure an
+    pure $ BinOp e bind cont an
   go [] = undefined
 
 consPat :: (Var p ~ VarResolved) => Pattern p -> Pattern p -> Ann p -> Pattern p

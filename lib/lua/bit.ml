@@ -18,7 +18,7 @@ external val lshift  : int -> int -> int = "bit32.lshift"
 external val rrotate : int -> int -> int = "bit32.rrotate"
 external val rshift  : int -> int -> int = "bit32.rshift"
 
-module Ops = begin
+module Ops = struct
   let ( .<<. ) = lshift
   let ( .>>. ) = rshift
   let ( .|. )  = bitor

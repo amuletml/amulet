@@ -6,7 +6,7 @@ let andalso a b =
   | false -> false
 
 let main =
-  print (andalso false (begin
-    print "foo"
+  print (andalso false (do
+    let _ = print "foo"
     true
   end))

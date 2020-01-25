@@ -10,7 +10,7 @@ instance monad identity begin
   let (Identity x) >>= f = f x
 end
 
-let test = begin
-  with x <- Identity 1
+let test = do
+  let! x = Identity 1
   pure 2
 end

@@ -1,7 +1,7 @@
-fail_let_open_struct.ml[2:3 ..2:33]: error (E1009)
+fail_let_open_struct.ml[2:3 ..2:34]: error (E1009)
   Cannot declare a module within a let open expression
 
   Arising from use of the expression
   │ 
-2 │   let open begin type t end in ()
-  │   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2 │   let open struct type t end in ()
+  │   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

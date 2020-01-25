@@ -69,10 +69,9 @@ let dump_stream e (Stream (f, start)) =
   let rec go st =
     match f st with
     | Skip st -> go st
-    | Yield (a, st) -> begin
+    | Yield (a, st) ->
       io_write ("'" ^ e a ^ "', ");
       go st
-    end
     | Done -> print "]"
   io_write "[";
   go start

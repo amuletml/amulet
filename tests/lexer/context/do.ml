@@ -1,6 +1,6 @@
-let () = begin
+let () = do
   let x = 0
-  with x <- 0
+  let! x = 0
   let x = 0
   0
 end
