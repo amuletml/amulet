@@ -142,7 +142,7 @@ instance Show TokenClass where
   show TcLetBang = "let!"
   show TcMatch = "match"
   show TcModule = "module"
-  show TcStruct = "module"
+  show TcStruct = "struct"
   show TcOf = "of"
   show TcDo = "of"
   show TcOpen = "open"
