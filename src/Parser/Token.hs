@@ -144,7 +144,7 @@ instance Show TokenClass where
   show TcModule = "module"
   show TcStruct = "struct"
   show TcOf = "of"
-  show TcDo = "of"
+  show TcDo = "do"
   show TcOpen = "open"
   show TcPrivate = "private"
   show TcRec = "rec"
