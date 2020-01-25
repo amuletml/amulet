@@ -469,7 +469,7 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
     -- @deriving@ --> Push a deriving context
     (TcDeriving, _) -> pure (Result tok Done, CtxDerivingHead tp:c)
 
-    -- @begin ...@ ~~> CtxEmptyBlock : CtxBracket(end)
+     -- @do ...@ ~~> CtxEmptyBlock : CtxBracket(end)
     (TcDo, _) -> pure
       ( Result tok Done
       , CtxEmptyBlock Nothing:CtxMonad:CtxBracket TcEnd:c)
