@@ -106,6 +106,6 @@ chars = Map.fromList
   , ('-', "_minus")
   , ('~', "_tilde")
   , ('[', "_lbrack")
-  , (']', "_rbrack ")
+  , (']', "_rbrack")
   , ('\'', "_prime")
   , ('_', "_") ]
