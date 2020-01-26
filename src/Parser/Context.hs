@@ -460,6 +460,8 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
 
     -- @module@ ~~> Push a module context
     (TcModule, _) -> pure (Result tok Done, CtxModuleHead False (getMarginAt tp c):c)
+    -- @open@ ~~> Push an unresolved module
+    (TcOpen, _) | isToplevel c -> pure (Result tok Done, CtxModuleBodyUnresolved (getMarginAt tp c):c)
     -- @class@ ~~> Push a class context
     (TcClass, _) -> pure (Result tok Done, CtxClassHead (getMarginAt tp c):c)
     -- @instance@ ~~> Push an instance context
@@ -601,6 +603,7 @@ isIfContinue _ = False
 isTopTok :: TokenClass -> Bool
 isTopTok TcClass = True
 isTopTok TcDeriving = True
+isTopTok TcExternal = True
 isTopTok TcInclude = True
 isTopTok TcInstance = True
 isTopTok TcLet = True

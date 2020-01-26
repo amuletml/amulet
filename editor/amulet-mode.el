@@ -60,9 +60,10 @@ binding, making it easier to determine what a function does."
 
 
 (defconst amulet-mode--keywords
-  '("and" "as" "begin" "class" "deriving" "else" "end" "external" "false" "forall"
-    "fun" "function" "if" "import" "in" "include" "instance" "lazy" "let" "match"
-    "module" "of" "open" "private" "rec" "then" "true" "type" "val" "when" "with")
+  '("and" "as" "begin" "class" "deriving" "do" "else" "end" "external" "false"
+    "forall" "fun" "function" "if" "import" "in" "include" "instance" "lazy"
+    "let" "match" "module" "of" "open" "private" "rec" "struct" "then" "true"
+    "type" "val" "when" "with")
   "All Amulet keywords.  These are just extracted from Lexer.x.")
 
 (defconst amulet-mode--font-lock

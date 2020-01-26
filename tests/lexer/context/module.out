@@ -20,6 +20,10 @@ $sep module X =
 
 $sep module X = Y
 
+$sep open struct
+  type x
+end
+
 
 $sep private module Y =
   $begin let a = 0

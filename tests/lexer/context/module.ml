@@ -20,6 +20,10 @@ module X =
 
 module X = Y
 
+open struct
+  type x
+end
+
 (* Access modifiers *)
 private module Y =
   let a = 0
