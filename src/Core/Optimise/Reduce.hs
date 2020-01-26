@@ -15,6 +15,7 @@ import Control.Monad.RWS
 import Control.Lens
 import Control.Arrow hiding ((<+>))
 
+import qualified Data.Map.Strict as Map
 import qualified Data.VarMap as VarMap
 import qualified Data.VarSet as VarSet
 import Data.Triple
@@ -156,15 +157,35 @@ reduceTerm _ (AnnValues _ vs) = Values <$> traverse reduceAtom' vs
 reduceTerm _ (AnnExtend _ e fs) = do
   e' <- reduceAtom' e
   fs' <- traverse reduceRow fs
-  case fs' of
+  s <- ask
+  case (e', fs') of
     -- Eliminate empty extensions
+    (_, []) -> changed $ Atom e'
 
-    -- TODO: Could we do an additional filter which removes redundant fields (for
-    -- cases where we can see the parent record and it's the same value).
-    [] -> changed $ Atom e'
-    _ -> pure $ Extend e' fs'
+    -- If we're updating an existing update, then merge the two.
+    (Ref v _, ours)
+      | Just (Extend e theirs) <- lookupTerm v s
+      ->
+        let theirKs = mkMap theirs
+            ourKs = mkMap ours
+        in
+        if
+          -- If all our keys are identical to the previous one, just inline this
+          -- binding. This just prevents us creating entirely duplicate objects.
+          | foldr (\p@(k,_,_) a -> a && maybe False ((==p)) (Map.lookup k theirKs)) True ours
+          -> changed $ Atom e'
+
+          -- Otherwise just merge the two bindings. This may have the
+          -- unfortunate side effect of making variables last for longer, but
+          -- should be good enough for now.
+          | otherwise
+          -> changed . Extend e $ foldr (\x s -> if fst3 x `Map.member` ourKs then s else x:s) ours theirs
+
+    (_, _) -> pure $ Extend e' fs'
   where
     reduceRow (t, ty, e) = (t, ty, ) <$> reduceAtom' e
+    mkIdx s@(k, _, _) = (k, s)
+    mkMap = Map.fromList . map mkIdx
 
 reduceTerm _ (AnnLam _ arg body) = do
   body' <- reduceTerm' body
