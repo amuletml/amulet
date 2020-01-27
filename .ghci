@@ -13,3 +13,6 @@ import qualified System.Environment as E
 :def amc-trace \xs -> pure $ "E.setEnv \"AMC_TRACE\" \"" ++ xs ++ "\""
 
 :set -fobject-code
+:def l const (pure ":list")
+:def c const (pure ":continue")
+:def s const (pure ":step")
