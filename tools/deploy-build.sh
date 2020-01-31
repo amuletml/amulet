@@ -17,7 +17,7 @@ rm -rfv result/
 mkdir -p result/
 
 for arg in $*; do
-  cp .stack-work/dist/*/"Cabal-3.0.0.0/build/$arg/$arg" result/
+  cp .stack-work/dist/*/"Cabal-3.0.1.0/build/$arg/$arg" result/
 done
 
 if which upx &>/dev/null; then
