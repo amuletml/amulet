@@ -6,19 +6,12 @@ if [[ $# == 0 ]]; then
   exec $0 amc amc-prove amulet-lsp
 fi
 
-build () {
-  stack build \
-    --ghc-options "-optc-static -optl-static -fhide-source-paths" \
-    --flag amuletml:amc-prove-server $FAST
-}
-
-build
 rm -rfv result/
 mkdir -p result/
 
-for arg in $*; do
-  cp .stack-work/dist/*/"Cabal-3.0.1.0/build/$arg/$arg" result/
-done
+stack install --local-bin-path=result \
+ --ghc-options "-optc-static -optl-static -fhide-source-paths" \
+ --flag amuletml:amc-prove-server $FAST
 
 if which upx &>/dev/null; then
   upx result/*
