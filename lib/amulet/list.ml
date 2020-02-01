@@ -262,3 +262,22 @@ let scanl func q ls =
         go (fun xs -> k (z :: xs)) (func z x) xs
   go (fun x -> x) q ls
 
+(**
+ * compact takes a list of optionals and returns the present elements
+ *
+ * Runtime: O(n)
+ *)
+let rec compact = function
+  | Nil -> []
+  | Cons (None, tl) -> compact tl
+  | Cons (Some a, tl) -> a :: compact tl
+
+(**
+ * length returns the number of elements in the list
+ *
+ * Runtime: O(n)
+ *)
+let rec length = function
+  | Nil -> 0
+  | Cons (_, tl) -> 1 + length tl
+
