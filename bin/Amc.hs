@@ -13,6 +13,7 @@ import Control.Timing
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import Data.Traversable
+import Data.Foldable
 import Data.Monoid
 
 import Options.Applicative hiding (ParseError)
@@ -267,10 +268,15 @@ findPrelude (CustomPrelude path) _ = do
 findPrelude DefaultPrelude config = do
   prelude <- D.locatePrelude config
   case prelude of
-    Nothing -> do
+    Left search -> do
       hPutStrLn stderr "Cannot locate prelude. Check your package path, or run using --no-prelude."
+      case search of
+        [] -> hPutStrLn stderr "Library path is empty (is Amulet configured correctly?)"
+        xs -> do
+          hPutStrLn stderr "Searched in"
+          for_ xs (\x -> hPutStrLn stderr (" - " ++ x))
       exitWith (ExitFailure 1)
-    Just prelude -> pure (Just prelude)
+    Right prelude -> pure (Just prelude)
 
 main :: IO ()
 main = do

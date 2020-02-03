@@ -11,6 +11,7 @@ import Data.Spanned
 import Data.Reason
 import Data.Span
 
+import Syntax.Resolve.Import
 import Syntax
 
 import qualified CompileTarget as CT
@@ -44,7 +45,7 @@ data ResolveError
   | LastStmtNotExpr -- ^ Invalid statement in tail position
   | LetOpenStruct -- ^ Invalid module struct in a let open.
 
-  | UnresolvedImport T.Text -- ^ Cannot resolve this module.
+  | UnresolvedImport T.Text SearchedIn -- ^ Cannot resolve this module.
   | ImportLoop (E.NonEmpty (SourceName, Span)) -- ^ Cyclic dependencies when loading modules.
   -- | This file errored when importing. This is only used when compiling
   -- single files (such as in an editor).
@@ -59,6 +60,13 @@ data ResolveError
   -- such as a source position.
   | ArisingFrom ResolveError SomeReason
   deriving (Show)
+
+searchedIn :: SearchedIn -> Doc
+searchedIn (Relative _) = mempty
+searchedIn (LibraryPath []) =
+  mempty <#> "The library path appears to be empty. Is Amulet correctly configured?"
+searchedIn (LibraryPath xs) =
+  mempty <#> "Searched in:" <#> indent 2 (vsep . map (bullet . string) $ xs)
 
 instance Pretty VarKind where
   pretty VarVar = "Variable"
@@ -79,7 +87,7 @@ instance Pretty ResolveError where
   pretty LastStmtNotExpr = "The last statement in a" <+> keyword "begin" <+> "block should be an expression"
   pretty LetOpenStruct = "Cannot declare a module within a" <+> keyword "let open" <+> "expression"
 
-  pretty (UnresolvedImport name) = "Cannot resolve" <+> dquotes (text name)
+  pretty (UnresolvedImport name search) = "Cannot resolve" <+> dquotes (text name) <> searchedIn search
   pretty (ImportLoop _) = "Modules form an import cycle"
   pretty (ImportError _ file) = "Error importing" <+> dquotes (string file)
   pretty (NoMatchingImport target) = "No suitable import for compile target" <+> dquotes (text (CT.name target))
@@ -107,15 +115,25 @@ instance Spanned ResolveError where
 instance Note ResolveError Style where
   diagnosticKind _ = ErrorMessage
 
-  formatNote f x = indent 2 (Right <$> pretty x) <#> body mempty x where
+  formatNote f x = body mempty x where
+    body :: NoteDoc Style -> ResolveError -> NoteDoc Style
     body _ (ArisingFrom er a) = body (f [annotation a]) er
-    body _ (NonLinearPattern _ ps) = f (map annotation ps)
-    body _ (NonLinearRecord e _) = f [annotation e]
-    body _ (ImportLoop loop) = foldl1 (<#>) . E.map imported $ loop
-    body _ (ManyMatchingImports _ xs _) = f (map annotation xs)
-    body doc (NotInScope _ _ (Just pos)) =
-      doc <#> indent 2 (Right <$> "Do you need a" <+> keyword "rec" <+> "modifier here?") <#> f [pos]
-    body doc _ = doc
+    body _ (NonLinearPattern _ ps) = def <#> f (map annotation ps)
+    body _ (NonLinearRecord e _) = def <#> f [annotation e]
+    body d (UnresolvedImport name search)
+        = wrap ("Cannot resolve" <+> dquotes (text name))
+      <#> d
+      <#> wrap (searchedIn search)
+    body _ (ImportLoop loop) = def <#> foldl1 (<#>) (E.map imported loop)
+    body _ (ManyMatchingImports _ xs _) = def <#> f (map annotation xs)
+    body d (NotInScope _ _ (Just pos))
+        = def <#> d
+      <#> wrap ("Do you need a" <+> keyword "rec" <+> "modifier here?")
+      <#> f [pos]
+    body d _ = def <#> d
+
+    wrap d = indent 2 (Right <$> d)
+    def = wrap (pretty x)
 
     imported (name, pos)
       = f [ pos ]

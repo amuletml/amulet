@@ -285,8 +285,8 @@ reModule r@(ModImport path a) = do
     ImportCycle loop -> do
       dictates (wrapError r (ImportLoop loop))
       pure (junkVar, Nothing)
-    NotFound -> do
-      dictates (wrapError r (UnresolvedImport path))
+    NotFound search -> do
+      dictates (wrapError r (UnresolvedImport path search))
       pure (junkVar, Nothing)
 
   -- Replace this with a reference so we don't have to care later on
