@@ -433,7 +433,7 @@ reExpr r@(ListFromThenTo v x y z a) =
   ListFromThenTo <$> lookupEx' v <*> reExpr x <*> reExpr y <*> reExpr z <*> pure a
     where lookupEx' v = lookupEx v `catchJunk` r
 
-reExpr (DoExpr var qs a) =
+reExpr whole_ex@(DoExpr var qs a) =
   let go (CompGuard e:qs) acc flag = do
         e <- reExpr e
         go qs (CompGuard e:acc) flag
@@ -453,7 +453,7 @@ reExpr (DoExpr var qs a) =
         var <-
           case flag of
             Just r -> lookupEx var `catchJunk` r
-            Nothing -> pure undefined
+            Nothing -> lookupEx var `catchJunk` whole_ex
         pure $ DoExpr var (reverse acc) a
   in go qs [] Nothing
 
