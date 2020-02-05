@@ -262,22 +262,17 @@ let scanl func q ls =
         go (fun xs -> k (z :: xs)) (func z x) xs
   go (fun x -> x) q ls
 
-(**
- * compact takes a list of optionals and returns the present elements
+(** Filter a list according to a predicate, and returns the present elements
  *
- * Runtime: O(n)
- *)
-let rec compact = function
-  | Nil -> []
-  | Cons (None, tl) -> compact tl
-  | Cons (Some a, tl) -> a :: compact tl
-
-(**
- * length returns the number of elements in the list
+ * This function is tail recursive, and does not risk overflowing the
+ * stack.
  *
- * Runtime: O(n)
- *)
-let rec length = function
-  | Nil -> 0
-  | Cons (_, tl) -> 1 + length tl
-
+ * Runtime: O(n) *)
+let filter_map p xs =
+  let rec filter_map_acc acc = function
+    | [] -> acc
+    | Cons (x, xs) ->
+        match p x with
+        | Some a -> filter_map_acc (a :: acc) xs
+        | None -> filter_map_acc acc xs
+  reverse (filter_map_acc [] xs)
