@@ -233,7 +233,7 @@ test-suite tests
 
   ghc-options:         -Wextra -Wall -Wno-name-shadowing
                        -Wno-implicit-prelude -Wno-missing-import-lists
-                       -j +RTS -A32M -RTS
+                       -j +RTS -A32M -RTS -threaded
   if os(linux)
     ghc-options: -optl-fuse-ld=lld
     extra-libraries: m, pthread
