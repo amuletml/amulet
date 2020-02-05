@@ -2,9 +2,10 @@
 module Test.Core.Lint (tests) where
 
 import qualified Data.Text as T
+import Data.IORef
 import Data.List
 
-import Control.Monad.Infer (firstName)
+import Control.Monad.Infer (Name, firstName)
 import Control.Monad.State
 import Control.Monad.Namey
 
@@ -25,19 +26,20 @@ import CompileTarget
 data Mode = Strict | Lax
   deriving Eq
 
-testLint :: Mode -> String -> Assertion
-testLint mode file = do
-  libPath <- makeRelativeToCurrentDirectory "lib"
+testLint :: IORef (Driver, Name) -> Mode -> String -> Assertion
+testLint state mode file = do
   path <- makeRelativeToCurrentDirectory file
-  let driver = makeDriverWith DriverConfig
-        { libraryPath = [ libPath ]
-        , callbacks = defaultCallbacks
-        , checkOnly = False
-        , target = lua }
+
+  -- Read the driver from the store and then update it. In a multi-threaded
+  -- environment, this is technically a race condition, but it doesn't really
+  -- matter - we're only doing this to preserve the file cache between runs.
+  (driver, name) <- readIORef state
   (((core, errors), driver), name) <-
-      flip runNameyT firstName
+      flip runNameyT name
     . flip runStateT driver
     $ compiles path
+  writeIORef state (driver, name)
+
   case core of
     Just core | mode == Lax || not (hasErrors defaultFilter { filterAll = True } errors) -> do
       let core' = evalNamey (optimise defaultInfo { useLint = True } core) name
@@ -50,10 +52,17 @@ testLint mode file = do
 
 tests :: IO TestTree
 tests = do
-  folderLint <- map (testCase <*> testLint Lax . ("tests/lint/"++)) . sort <$> listDirectory "tests/lint/"
+  libPath <- makeRelativeToCurrentDirectory "lib"
+  driver <- newIORef ( makeDriverWith DriverConfig
+                       { libraryPath = [ libPath ]
+                       , callbacks = defaultCallbacks
+                       , checkOnly = False
+                       , target = lua }
+                     , firstName )
+  folderLint <- map (testCase <*> testLint driver Lax . ("tests/lint/"++)) . sort <$> listDirectory "tests/lint/"
 
   pure $ testGroup "Test.Core.Lint"
-    [ testGroup "Examples" (map (testCase <*> testLint Strict . ("examples/"++)) files)
+    [ testGroup "Examples" (map (testCase <*> testLint driver Strict . ("examples/"++)) files)
     , testGroup "Test folder" folderLint
     ]
 
