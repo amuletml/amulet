@@ -268,7 +268,7 @@ let scanl func q ls =
  * stack.
  *
  * Runtime: O(n) *)
-let filter_map p xs =
+let filter_map = fun p -> fun xs ->
   let rec filter_map_acc acc = function
     | [] -> acc
     | Cons (x, xs) ->
