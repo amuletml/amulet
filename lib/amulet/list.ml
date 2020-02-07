@@ -262,3 +262,17 @@ let scanl func q ls =
         go (fun xs -> k (z :: xs)) (func z x) xs
   go (fun x -> x) q ls
 
+(** Filter a list according to a predicate, and returns the present elements
+ *
+ * This function is tail recursive, and does not risk overflowing the
+ * stack.
+ *
+ * Runtime: O(n) *)
+let filter_map p xs =
+  let rec filter_map_acc acc = function
+    | [] -> reverse acc
+    | Cons (x, xs) ->
+        match p x with
+        | Some a -> filter_map_acc (a :: acc) xs
+        | None -> filter_map_acc acc xs
+  filter_map_acc [] xs
