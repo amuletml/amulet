@@ -333,7 +333,7 @@ skolCheck var exp ty = do
     confesses (blameSkol (EscapedSkolems (Set.toList (skols ty)) ty) (var, exp))
 
   let t = deSkol ty
-  checkAmbiguous var exp t
+  condemn $ checkAmbiguous var exp t
   pure t
 
 checkAmbiguous :: forall m. ( MonadChronicles TypeError m
@@ -388,8 +388,8 @@ checkAmbiguous var exp tau = go mempty mempty mempty tau where
     let fv_set = occToFv ((s `diffOccs` ok_fvs) `removeOccs` ok)
 
     if not (Set.null fv_set)
-       then dictates (addBlame exp (note_tfs scope (Set.toList (tfs <> tfs'))
-                        (AmbiguousType var tau fv_set)))
+       then confesses (addBlame exp (note_tfs scope (Set.toList (tfs <> tfs'))
+                          (AmbiguousType var tau fv_set)))
        else pure ()
     where fv = tyVarOcc t
 

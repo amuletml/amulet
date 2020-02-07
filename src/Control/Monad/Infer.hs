@@ -633,7 +633,6 @@ instance Note TypeError Style where
   diagnosticKind (Overlap (Overeq True) _ _ _) = WarningMessage
   diagnosticKind DeadBranch{} = WarningMessage
   diagnosticKind MightNotTerminate{} = WarningMessage
-  diagnosticKind AmbiguousType{} = WarningMessage
   diagnosticKind PolyTyFunRhs{} = WarningMessage
   diagnosticKind WarningError{} = ErrorMessage
   diagnosticKind _ = ErrorMessage
