@@ -1,6 +1,7 @@
 {-# LANGUAGE DerivingStrategies, GeneralizedNewtypeDeriving #-}
 module Syntax.Resolve.Import
-  ( ImportResult(..)
+  ( SearchedIn(..)
+  , ImportResult(..)
   , MonadImport(..)
   , NullImport
   , runNullImport
@@ -19,6 +20,13 @@ import Data.Span
 import Syntax.Resolve.Scope
 import Syntax.Var
 
+-- | Where a library was searched for, in the event that it could not be
+-- located.
+data SearchedIn
+  = Relative FilePath -- ^ This was a relative import, resolving to a single location.
+  | LibraryPath [FilePath] -- ^ The list of paths along the library path that were searched.
+  deriving Show
+
 data ImportResult
   -- | The module was successfully imported. This contains the "name" of
   -- the module, and its contents.
@@ -27,7 +35,7 @@ data ImportResult
   -- | An import loop, with the a list of import locations and what they
   -- try to load.
   | ImportCycle (E.NonEmpty (SourceName, Span))
-  | NotFound -- ^ The module could not be found while importing.
+  | NotFound SearchedIn -- ^ The module could not be found while importing.
   deriving Show
 
 -- | A monad with which other modules may be imported.
@@ -48,7 +56,7 @@ newtype NullImport m a = Null { runNullImport :: m a }
   deriving newtype (Functor, Applicative, Monad, MonadNamey)
 
 instance Monad m => MonadImport (NullImport m) where
-  importModule _ _ = pure NotFound
+  importModule _ _ = pure (NotFound (LibraryPath []))
 
 instance MonadTrans NullImport where
   lift = Null

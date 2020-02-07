@@ -63,6 +63,7 @@ import Data.These
 import Data.Span
 
 import Frontend.Errors
+import Frontend.Files
 
 import Language.Haskell.LSP.Types
 
@@ -77,7 +78,6 @@ import Syntax.Desugar (desugarProgram)
 import qualified Syntax.Resolve as R
 import Syntax (Toplevel(..))
 import Syntax.Resolve.Import
-import System.Environment
 import System.Log.Logger
 import System.Directory hiding (findFile)
 import System.FilePath
@@ -254,19 +254,10 @@ data Worker = Worker
   , readyRequests   :: TVar (Map.Map LspId Request)
   }
 
-mainPath :: IO [FilePath]
-mainPath = do
-  execP <- getExecutablePath
-  path <- foldMap splitPath <$> lookupEnv "AMC_LIBRARY_PATH"
-  pure $ path ++
-    [ takeDirectory execP </> "lib"
-    , takeDirectory (takeDirectory execP) </> "lib"
-    ]
-
 -- | Construct a worker from a library path, and some "error reporting" function.
 makeWorker :: [FilePath] -> Target -> (NormalizedUri -> ErrorBundle -> IO ()) -> IO Worker
 makeWorker extra target pushErrors = do
-  path <- (extra++) <$> mainPath
+  path <- (extra++) <$> buildLibraryPath
   current <- myThreadId
   worker <- atomically $ Worker pushErrors current current
     <$> newTVar path      -- Library path
@@ -285,7 +276,7 @@ makeWorker extra target pushErrors = do
 
 updateConfig :: Worker -> [FilePath] -> IO ()
 updateConfig wrk extra = do
-  path <- (extra++) <$> mainPath
+  path <- (extra++) <$> buildLibraryPath
   atomically $ writeTVar (libraryPath wrk) path
 
 -- | Update the contents of a file.
@@ -501,18 +492,18 @@ instance MonadIO m => MonadImport (FileImport m) where
     absFile <-
       if T.pack "." `T.isPrefixOf` relPath
       then case uriToFilePath (fromNormalizedUri curFile) of
-             Nothing -> pure Nothing
-             Just curFile -> Just <$> canonicalizePath (dropFileName curFile </> T.unpack relPath)
+             Nothing -> pure (Left (Relative (T.unpack relPath)))
+             Just curFile -> Right <$> canonicalizePath (dropFileName curFile </> T.unpack relPath)
       else do
         libPath <- readTVarIO (libraryPath wrk)
-        findFile' (map (</> T.unpack relPath) libPath)
+        first LibraryPath <$> findFile' (map (</> T.unpack relPath) libPath)
 
     case absFile of
-      Nothing -> pure (NotFound, mempty)
-      Just absFile -> do
+      Left err -> pure (NotFound err, mempty)
+      Right absFile -> do
         file <- load (toNorm absFile) (Just (curFile, loc))
         case file of
-          Nothing -> ret absFile Nothing NotFound
+          Nothing -> ret absFile Nothing (NotFound (Relative absFile))
 
           -- File is up-to-date
           Just DiskState { working = Done _, diskResolved = Nothing } ->
@@ -833,17 +824,6 @@ workOnce wrk@Worker { pushErrors, fileContents, fileStates, fileVars, target } b
   justOpens f OpenedContents{} xs = f : xs
   justOpens _ DiskContents{} xs = xs
 
-
-foldMapM :: (Monad m, Foldable t, Monoid b) => (a -> m b) -> t a -> m b
-foldMapM f = foldrM (\a b -> (<>b) <$> f a) mempty
-
--- | Find the first file which matches a list.
-findFile' :: [FilePath] -> IO (Maybe FilePath)
-findFile' [] = pure Nothing
-findFile' (x:xs) = do
-  path <- canonicalizePath x
-  exists <- doesFileExist path
-  if exists then pure (Just path) else findFile' xs
 
 -- | Make one file relative to another's directory.
 getRel :: NormalizedUri -> NormalizedUri -> FilePath

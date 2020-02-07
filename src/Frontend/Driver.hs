@@ -42,7 +42,6 @@ module Frontend.Driver
   --
   -- $compile
   , compile, compiles
-  , locateSchemeBase
 
   -- * Querying the driver
   --
@@ -105,6 +104,7 @@ import Parser (parseTops)
 import CompileTarget (Target, lua)
 
 import Frontend.Errors
+import Frontend.Files
 
 import Text.Pretty.Note
 
@@ -220,42 +220,18 @@ makeDriver :: IO Driver
 makeDriver = Driver mempty (Clock 0 0) <$> makeConfig
 
 -- | The default driver config.
---
--- This constructs a library path which will attempt to locate a file
--- from one of the "known directories" - $AMC_LIBRARY_PATH, ../lib/
--- relative to the compiler's executable, or lib/ relative to the
--- compiler's executable.
 makeConfig :: IO DriverConfig
 makeConfig = do
-  execP <- getExecutablePath
-  mainPath <- foldMap splitPath <$> lookupEnv "AMC_LIBRARY_PATH"
-
-  pure $ DriverConfig
-    (mainPath
-    ++ [ takeDirectory execP </> "lib"
-       , takeDirectory (takeDirectory execP) </> "lib"
-       ])
-    defaultCallbacks
-    False
-    lua
-  where
-    splitPath = Set.toList . Set.fromList . map T.unpack . T.split (==':') . T.pack
+  path <- buildLibraryPath
+  pure $ DriverConfig path defaultCallbacks False lua
 
 -- | Locate the "prelude" module from a set of known locations:
 -- * The AMC_PRELUDE environment variable (a file)
 -- * $libraryPath/prelude.ml
-locatePrelude :: MonadIO m => DriverConfig -> m (Maybe FilePath)
+locatePrelude :: MonadIO m => DriverConfig -> m (Either [FilePath] FilePath)
 locatePrelude config = withTimer "Locating prelude" do
   let libPath = map (</> "prelude.ml") (libraryPath config)
   liftIO $ findFile' =<< (++) <$> (toList <$> lookupEnv "AMC_PRELUDE") <*> pure libPath
-
--- | Locate the Chicken Scheme support code from a set of known locations:
--- * The AMC_SCM_BASE environment variable (a file)
--- * $libraryPath/base.ss
-locateSchemeBase :: MonadIO m => DriverConfig -> m (Maybe FilePath)
-locateSchemeBase config = withTimer "Locating Scheme base" do
-  let libPath = map (</> "base.ss") (libraryPath config)
-  liftIO $ findFile' =<< (++) <$> (toList <$> lookupEnv "AMC_SCM_BASE") <*> pure libPath
 
 -- | Construct a file map, suitable for use with 'fileSpans' and other
 -- "Text.Pretty.Note" functions.
@@ -780,8 +756,8 @@ instance (MonadNamey m, MonadState Driver m, MonadIO m) => MonadImport (FileImpo
       libPath <- uses config libraryPath
       absPath <- liftIO $ findFile' (map (</> T.unpack relPath) libPath)
       case absPath of
-        Nothing -> pure (NotFound, mempty)
-        Just absPath -> (,Set.singleton absPath) <$> importFile source (Just loc) absPath
+        Left searched -> pure (NotFound (LibraryPath searched), mempty)
+        Right absPath -> (,Set.singleton absPath) <$> importFile source (Just loc) absPath
 
     | otherwise
     = FileIm \(LoadContext curDir source) -> do
@@ -794,7 +770,7 @@ importFile :: (MonadNamey m, MonadState Driver m, MonadIO m)
 importFile fromPath fromLoc path = withTimer ("Importing " ++ path) do
   file <- getFile path
   case file of
-    Nothing -> pure NotFound
+    Nothing -> pure (NotFound (Relative path))
     Just file -> do
       case file ^. stage of
         SResolving -> do
@@ -807,14 +783,6 @@ importFile fromPath fromLoc path = withTimer ("Importing " ++ path) do
           updateFile path $ dependent %~ (<|> ((,) <$> fromPath <*> fromLoc))
           maybe Errored (Imported (fileVar file)) <$> getSignature path
 
-
--- | Find the first file which matches a list.
-findFile' :: [FilePath] -> IO (Maybe FilePath)
-findFile' [] = pure Nothing
-findFile' (x:xs) = do
-  path <- canonicalizePath x
-  exists <- doesFileExist path
-  if exists then pure (Just path) else findFile' xs
 
 -- | Try to identify the cycle of files requiring each other.
 findCycle :: LoadedFile -> Driver -> [(SourceName, Span)]
@@ -830,12 +798,6 @@ instance Semigroup a => Semigroup (AllOf a) where
 
 instance Monoid a => Monoid (AllOf a) where
   mempty = AllOf (Just mempty)
-
--- | Akin to 'sequenceA', this maps over a collection, accumulating the
--- results only if all functions return 'Just'.
-foldMapM :: (Monad m, Foldable t, Monoid b)
-         => (a -> m b) -> t a -> m b
-foldMapM f = foldrM (\a b -> (<>b) <$> f a) mempty
 
 isError :: Note a b => a -> Bool
 isError x = diagnosticKind x == ErrorMessage

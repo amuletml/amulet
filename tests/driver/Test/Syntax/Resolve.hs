@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, OverloadedStrings #-}
 module Test.Syntax.Resolve (tests) where
 
 import Test.Util
@@ -32,11 +32,19 @@ result file contents = do
     files <- ((name, contents):) <$> (fileMap =<< get)
     let fmt :: N.Note a Style => [a] -> [N.NoteDoc Style]
         fmt = map (N.format (N.fileSpans files N.defaultHighlight))
-    pure . displayPlainVerbose . vsep . concat $
+    pure . cleanup . displayPlainVerbose . vsep . concat $
       [ maybe [] (pure . fmap Right . pretty . program) resolved
       , fmt (errors ^. parseErrors)
       , fmt (errors ^. resolveErrors)
       ]
+
+  where
+    -- | Terrible function to drop any "Searched in" paths. Otherwise we
+    -- end up with tests which depend on library paths.
+    cleanup
+      = T.unlines
+      . filter (\line -> not ("    •" `T.isPrefixOf` line && ".ml" `T.isSuffixOf` line))
+      . T.lines
 
 tests :: IO TestTree
 tests = testGroup "Tests.Syntax.Resolve" <$> goldenDirM result "tests/resolve/" ".ml"

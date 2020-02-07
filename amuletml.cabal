@@ -286,6 +286,7 @@ library
                      -- Main frontend
                      , Frontend.Driver
                      , Frontend.Errors
+                     , Frontend.Files
                      -- the AST
                      , Syntax
                      , Syntax.Let
