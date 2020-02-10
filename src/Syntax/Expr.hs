@@ -10,6 +10,7 @@ import Control.Lens hiding (Lazy, (:>))
 import Data.Text (Text)
 import Data.Typeable
 import Data.Data
+import Data.Span
 
 import {-# SOURCE #-} Syntax.Toplevel
 import Syntax.Type
@@ -61,8 +62,13 @@ data Expr p
   | Fun (Parameter p) (Expr p) (Ann p)
   | Begin [Expr p] (Ann p)
   | Literal Lit (Ann p)
-  | Match (Expr p) [Arm p] (Ann p)
-  | Function [Arm p] (Ann p)
+  | Match (Expr p) [Arm p] Span (Ann p)
+  -- ^ A pattern matching statement. The first annotation just spans the
+  -- @match@ keyword (used for warnings), and the later one the whole
+  -- statement.
+  | Function [Arm p] Span (Ann p)
+    -- ^ Shorthand for @fun x -> match x with ...@. The annotations are
+    -- the same as with 'Match'.
   | BinOp (Expr p) (Expr p) (Expr p) (Ann p)
   | Hole (Var p) (Ann p)
   | Ascription (Expr p) (Type p) (Ann p)

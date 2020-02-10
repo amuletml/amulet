@@ -13,8 +13,10 @@ import qualified Data.Text as T
 import qualified Data.Set as Set
 import Data.Foldable
 import Data.Position
+import Data.Spanned
 import Data.Reason
 import Data.Graph
+import Data.Span
 
 import Control.Monad.Writer.Strict
 import Control.Monad.State.Strict
@@ -150,22 +152,22 @@ verifyExpr ex@(Let _ vs e (_, ty)) = do
   verifyExpr e
 verifyExpr (If c t e _) = traverse_ verifyExpr [c, t, e]
 verifyExpr (App f x _) = verifyExpr f *> verifyExpr x
-verifyExpr m@(Fun (PatParam p) x _) = verifyMatch (const $ pure ()) m (getType p) [Arm p Nothing x]
-verifyExpr m@(Fun (EvParam _) (Match e bs _) _) = do
+verifyExpr m@(Fun (PatParam p) x _) = verifyMatch (const $ pure ()) (annotation m) (getType p) [Arm p Nothing x]
+verifyExpr (Fun (EvParam _) (Match e bs an _) _) = do
   -- Handle desugared `function`.
   verifyExpr e
   verifyMatch
-    (\(Arm p _ _) -> tell . pure $ MatchToFun p m)
-    m (getType e) bs
+    (\(Arm p _ _) -> tell . pure $ MatchToFun an p)
+    an (getType e) bs
 
 verifyExpr (Fun _ x _) = verifyExpr x
 verifyExpr (Begin es _) = traverse_ verifyExpr es
 verifyExpr Literal{} = pure ()
-verifyExpr m@(Match e bs _) = do
+verifyExpr (Match e bs an _) = do
   verifyExpr e
   verifyMatch
-    (\(Arm p _ _) -> unless (gadtPat p) $ tell . pure $ MatchToLet p m)
-    m (getType e) bs
+    (\(Arm p _ _) -> unless (gadtPat p) $ tell . pure $ MatchToLet an p)
+    an (getType e) bs
 verifyExpr Function{} = error "Impossible: Function has been desugared."
 verifyExpr (BinOp l o r _) = traverse_ verifyExpr [l, o, r]
 verifyExpr Hole{} = pure ()
@@ -219,7 +221,7 @@ unguardedVars (App f x _) =
 unguardedVars Fun{}                = mempty
 unguardedVars (Record rs _)        = foldMap (unguardedVars . view fExpr) rs
 unguardedVars (Access e _ _)       = unguardedVars e
-unguardedVars (Match t ps _)       = unguardedVars t <> foldMap unguardedVarsBranch ps where
+unguardedVars (Match t ps _ _)     = unguardedVars t <> foldMap unguardedVarsBranch ps where
   unguardedVarsBranch (Arm p g e)  = (foldMap unguardedVars g <> unguardedVars e) Set.\\ bound p
 unguardedVars Literal{}            = mempty
 unguardedVars Hole{}               = mempty
@@ -274,7 +276,7 @@ nonTrivial BinOp{} = True
 nonTrivial (If c t e _) = nonTrivial c || nonTrivial t || nonTrivial e
 nonTrivial (Let _ vs e _) = nonTrivial e || any nonTrivialRhs vs
 nonTrivial (Begin es _) = any nonTrivial es
-nonTrivial (Match e cs _) = nonTrivial e || any (\(Arm _ g a) -> nonTrivial a || maybe False nonTrivial g) cs
+nonTrivial (Match e cs _ _) = nonTrivial e || any (\(Arm _ g a) -> nonTrivial a || maybe False nonTrivial g) cs
 nonTrivial VarRef{} = False
 nonTrivial Fun{} = False
 nonTrivial Literal{} = False
@@ -316,7 +318,7 @@ gadtPat = any isGadt . universe where
 verifyMatch :: MonadVerify m
             => (Arm Typed -> m ())
             -- ^ An additional function to call on well-formed matches of one case.
-            -> Expr Typed -- ^ The match expression, used for error reporting
+            -> Span -- ^ The match expression, used for error reporting
             -> Type Typed -- ^ The type of the term to match against
             -> [Arm Typed] -- ^ The arms within the current match
             -> m ()

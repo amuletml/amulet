@@ -140,7 +140,7 @@ check ex@(Fun pat e an) ty = do
 
 check (If c t e an) ty = If <$> check c tyBool <*> check t ty <*> check e ty <*> pure (an, ty)
 
-check (Match t ps a) ty = do
+check (Match t ps p a) ty = do
   tt <-
     case ps of
       (Arm p _ _:_) -> view _2 <$> inferPattern p
@@ -159,7 +159,7 @@ check (Match t ps a) ty = do
         g' <- traverse (`check` tyBool) g
         e' <- check e ty
         pure (Arm p' g' e')
-  pure (Match t ps (a, ty))
+  pure (Match t ps p (a, ty))
 
 check e@(Access rc key a) ty = do
   rho <- freshTV
@@ -275,7 +275,7 @@ infer ex@Vta{} = do
   (k, ty) <- secondA expandType =<< instantiateTc (becauseExp ex) ty
   pure (k ex, ty)
 
-infer ex@(Match t ps a) = do
+infer ex@(Match t ps p a) = do
   (t', tt) <- infer t
   ty <- freshTV
 
@@ -287,7 +287,7 @@ infer ex@(Match t ps a) = do
       e' <- check e ty
       g' <- traverse (`check` tyBool) g
       pure (Arm p' g' e')
-  pure (Match t' ps' (a, ty), ty)
+  pure (Match t' ps' p (a, ty), ty)
 
 infer (Record rows a) = do
   (rows, rowts) <- unzip <$> inferRows rows

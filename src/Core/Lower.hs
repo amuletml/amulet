@@ -150,7 +150,7 @@ lowerAt (Begin xs _) t = lowerAtTerm (last xs) t >>= flip (foldrM bind) (init xs
   bind e r = flip C.Let r . One <$> (build <$> fresh ValueVar <*> lowerBothTerm e)
   build a (b, c) = (a, c, b)
 
-lowerAt (S.Match ex cs an) ty = do
+lowerAt (S.Match ex cs _ an) ty = do
   (ex', _) <- lowerBothAtom ex
   cs' <- for cs (\(Arm pat g e) -> (pat,,)
                   <$> traverse (`lowerAtTerm` C.tyBool) g

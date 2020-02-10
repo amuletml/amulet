@@ -349,12 +349,14 @@ reExpr (Begin es a) = Begin <$> traverse reExpr es <*> pure a
 
 reExpr (Literal l a) = pure (Literal l a)
 
-reExpr (Match e ps a) = do
+reExpr (Match e ps p a) = do
   e' <- reExpr e
   ps' <- traverse reArm ps
-  pure (Match e' ps' a)
+  pure (Match e' ps' p a)
 
-reExpr (Function ps a) = flip Function a <$> traverse reArm ps
+reExpr (Function ps p a) = do
+  ps' <- traverse reArm ps
+  pure (Function ps' p a)
 
 reExpr (BinOp l o r a) = BinOp <$> reExpr l <*> reExpr o <*> reExpr r <*> pure a
 reExpr (Hole v a) = Hole <$> tagVar v <*> pure a
