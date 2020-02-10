@@ -39,7 +39,7 @@ setupLogger (Just path) = do
   let level = DEBUG
   logStream <- case path of
     "-" -> pure stderr
-    _ -> openFile path AppendMode
+    _ -> openFile path WriteMode
   hSetEncoding logStream utf8
 
   logH <- LH.streamHandler logStream level

@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs, NamedFieldPuns, OverloadedStrings, TupleSections #-}
+{-# LANGUAGE GADTs, NamedFieldPuns, OverloadedStrings, TupleSections, MultiWayIf #-}
 
 {-| The worker is responsible for loading files, updating diagnostics, and
   dispatching requests.
@@ -30,6 +30,8 @@ module AmuletLsp.Worker
   , RequestKind(..)
   , Request(..)
   , startRequest, cancelRequest
+
+  , forkIOWith
   ) where
 
 import Control.Monad.Infer (TypeError(..))
@@ -41,6 +43,7 @@ import Control.Applicative
 import Control.Monad.Namey
 import Control.Concurrent
 import Control.Monad
+import GHC.Conc
 
 import qualified Crypto.Hash.SHA256 as SHA
 
@@ -133,8 +136,15 @@ data FileContents
   deriving Show
 
 data Working
+  -- | This file has been loaded. Clock is the /current/ clock. This does
+  -- not indicate that the file did not error, simply that we finished
+  -- processing it.
   = Done Clock
+  -- | A file which is currently being worked upon. This is a root file,
+  -- and thus wasn't imported by anyone else.
   | WorkingRoot
+  -- | Like 'WorkingRoot', but imported by another file at a specific
+  -- location.
   | WorkingDep NormalizedUri Span
   deriving Show
 
@@ -270,8 +280,8 @@ makeWorker extra target pushErrors = do
     <*> newTVar Nothing   -- To refresh
     <*> newTVar mempty    -- Pending requests
     <*> newTVar mempty    -- Ready requests
-  refId <- forkIO (runRefresh worker)
-  reqId <- forkIO (runRequests worker)
+  refId <- forkIOWith "Refresh" (runRefresh worker)
+  reqId <- forkIOWith "Requests" (runRequests worker)
   pure worker { refreshThread = refId, requestThread = reqId }
 
 updateConfig :: Worker -> [FilePath] -> IO ()
@@ -454,11 +464,13 @@ runRefresh wrk@Worker { toRefresh, clock } = work Nothing where
     -- world.
     case task of
       Nothing -> pure ()
-      Just tid -> killThread tid
+      Just tid -> do
+        infoM logN "Killing previous task"
+        killThread tid
 
     -- Spin up the worker on a separate thread and wait for further changes.
-    debugM logN ("Recompiling " ++ show refresh)
-    task <- forkIO (workOnce wrk clk refresh)
+    infoM logN ("Recompiling " ++ maybe "everything" showUri refresh)
+    task <- forkIOWith ("Recompiling " ++ maybe "everything" showUri refresh) (workOnce wrk clk refresh)
     work (Just task)
 
 -- | A file importer which loads a file using an arbitrary function,
@@ -522,11 +534,11 @@ instance MonadIO m => MonadImport (FileImport m) where
           Just file ->
             case working file of
               WorkingRoot -> do
-                debugM logN ("Cycle importing " ++ show absFile ++ " / " ++ show (working file))
+                debugM logN ("Cycle importing " ++ absFile ++ " / " ++ show (working file))
                 ret absFile (Just mempty) . ImportCycle $
                   (T.pack (getRel curFile (toNorm absFile)), fixLoc curFile loc) E.:| []
               WorkingDep _ loc -> do
-                warningM logN ("Cycle importing " ++ show absFile)
+                warningM logN ("Cycle importing " ++ absFile)
                 -- TODO: Enumerate the whole graph
                 ret absFile (Just mempty) . ImportCycle $
                   (T.pack (getRel curFile (toNorm absFile)), fixLoc curFile loc) E.:| []
@@ -560,10 +572,12 @@ workOnce wrk@Worker { pushErrors, fileContents, fileStates, fileVars, target } b
 
   -- | Load a single file, specifying which file required this one.
   --
+  -- Called from MonadImport (and itself).
+  --
   -- This returns the file's state, or Nothing if the file does not exist.
   loadFile :: NormalizedUri -> Maybe (NormalizedUri, Span) -> IO (Maybe FileState)
   loadFile path from = do
-    debugM logN ("Importing " ++ show path ++ " from " ++ show (fst <$> from))
+    debugM logN ("Importing " ++ showUri path ++ " from " ++ maybe "?" (showUri . fst) from)
     oldFile <- atomically (HM.lookup path <$> readTVar fileStates)
     case oldFile of
       -- We've already checked this tick, don't do anything.
@@ -574,6 +588,7 @@ workOnce wrk@Worker { pushErrors, fileContents, fileStates, fileVars, target } b
         -- Update the file, at least a little
         case file of
           Nothing -> do
+            -- We couldn't find the file at all - delete it from our cache.
             atomically $ do
               modifyTVar fileStates (HM.delete path)
               maybe (pure ()) (modifyTVar fileVars . Map.delete . fileVar) oldFile
@@ -583,8 +598,6 @@ workOnce wrk@Worker { pushErrors, fileContents, fileStates, fileVars, target } b
           Just file -> do
             -- Otherwise check each dependency. We update the clock and working
             -- state beforehand, to avoid getting into any dependency loops.
-            debugM logN ("Starting " ++ show path)
-
             atomically $ do
               -- Update var mapping
               case oldFile of
@@ -599,17 +612,27 @@ workOnce wrk@Worker { pushErrors, fileContents, fileStates, fileVars, target } b
                 file { checkClock = baseClock
                      , working = maybe WorkingRoot (uncurry WorkingDep) from }
 
-            -- If this file has been loaded before its dependency, then the dependency
-            -- was loaded on a later clock tick, and so we're out of date.
-            Any changed <- if changed
-              then pure (Any True)
-              else foldMapM (\(dPath, loc) -> Any . maybe True (on (<) compileClock file) <$> loadFile dPath (Just (path, loc)))
-                            (HM.toList (dependencies file))
+            Any changed <- if
+              -- Short circuit if this file ever changed
+              | changed -> pure (Any True)
+              -- If this file never completed last time, just mark it as changed.
+              | inProgress (working file) && checkClock file /= baseClock
+              -> infoM logN (showUri path ++ " never completed, retrying") $> Any True
+              -- If this file has been loaded before its dependency, then the dependency
+              -- was loaded on a later clock tick, and so we're out of date.
+              | otherwise ->
+                  foldMapM (\(dPath, loc) -> Any . maybe True (on (<) compileClock file) <$> loadFile dPath (Just (path, loc)))
+                           (HM.toList (dependencies file))
+
+            debugM logN $ "Starting " ++ showUri path
+              ++ ". State: "   ++ (case file of OpenedState{} -> "opened" ; DiskState{} -> "on disk")
+              ++ ", Changed: " ++ show changed
+
             file <- if not changed then pure file else
               case parsed of
-                Nothing -> pure file
+                Nothing -> infoM logN (showUri path ++ ": parsing returned nil") >> pure file
                 Just parsed -> do
-                  debugM logN ("Resolving " ++ show path)
+                  debugM logN ("Resolving " ++ showUri path)
                   (errors, resolved, typed) <-
                     loadFrom path (fileVar file) parsed
                       (case file of { OpenedState{} -> True; DiskState{} -> False })
@@ -625,7 +648,7 @@ workOnce wrk@Worker { pushErrors, fileContents, fileStates, fileVars, target } b
 
             -- Mark us as done and update the file.
             let file' = file { working = Done baseClock }
-            debugM logN ("Finished " ++ show path)
+            debugM logN ("Finished " ++ showUri path)
             updateFile path file'
             case file' of
               OpenedState{ errors } -> when changed (pushErrors path errors)
@@ -695,7 +718,7 @@ workOnce wrk@Worker { pushErrors, fileContents, fileStates, fileVars, target } b
                 , openParsed = maybe openParsed (VersionedData openVersion) parsed
                 , errors = mempty & parseErrors .~ es }
 
-              Just DiskState{ fileVar } -> pure (freshOpen fileVar openVersion parsed es)
+              Just DiskState { fileVar } -> pure (freshOpen fileVar openVersion parsed es)
               Nothing -> do
                 name <- atomically $ nameOf path
                 pure (freshOpen name openVersion parsed es)
@@ -719,6 +742,8 @@ workOnce wrk@Worker { pushErrors, fileContents, fileStates, fileVars, target } b
     name <- atomically $ nameOf path
     pure (freshDisk name hash parsed)
 
+  -- | Run the actual loading pass. This resolves the file (including any
+  -- imports), then desugars, types and optionally verifies it.
   loadFrom :: NormalizedUri -> Name -> [Toplevel Parsed] -> Bool
            -> IO (ErrorBundle, Maybe (Signature, [Toplevel Resolved]), Maybe (Signature, Env, [Toplevel Typed]))
   loadFrom path var parsed verify = flip evalNameyMT (nextName wrk) $ do
@@ -837,3 +862,18 @@ getRel curFile path =
 
 logN :: String
 logN = "AmuletLsp.Worker"
+
+forkIOWith :: String -> IO () -> IO ThreadId
+forkIOWith label action = do
+  t <- forkIO action
+  labelThread t label
+  infoM logN $ "Thread " ++ show t ++ " has name " ++ label
+  pure t
+
+inProgress :: Working -> Bool
+inProgress Done{} = False
+inProgress WorkingRoot{} = True
+inProgress WorkingDep{} = True
+
+showUri :: NormalizedUri -> String
+showUri (NormalizedUri u) = T.unpack u

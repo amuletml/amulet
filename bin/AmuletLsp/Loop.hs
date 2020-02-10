@@ -11,7 +11,6 @@ import AmuletLsp.Worker
 import Control.Lens hiding (List)
 import Control.Concurrent.STM
 import Control.Applicative
-import Control.Concurrent
 import Control.Monad
 
 import qualified Data.Text as T
@@ -84,7 +83,7 @@ run = do
         , C.onStartup = \lf -> do
             config <- C.config lf
             wrk <- makeWorker (maybe [] libraryPath config) CT.lua (publishDiagnostics lf)
-            _ <- forkIO (loop lf wrk qIn)
+            _ <- forkIOWith "Loop" (loop lf wrk qIn)
             return Nothing
         }
 
