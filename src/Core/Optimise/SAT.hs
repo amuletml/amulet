@@ -60,7 +60,6 @@ import Data.Semigroup
 import Data.Maybe
 import Data.List
 
-
 -- | Do the static argument transformation on a whole program.
 staticArgsPass :: (MonadNamey m, IsVar a) => [Stmt a] -> m [Stmt a]
 staticArgsPass = traverse staticArg_stmt
@@ -174,13 +173,13 @@ doStaticArgs the_func the_type the_body =
     mkShadow worker =
       let go_dynamic args = do
             inside <- mkApps (Ref worker worker_ty) worker_ty args
-            pure $ foldr Lam inside args
+            refresh $ foldr Lam inside args
 
           go (Static (TypeArgument _ k):xs) = do
-            x <- fromVar . mkTyvar <$> genName
+            x <- fresh' TypeVar
             Lam (TypeArgument x k) <$> go xs
           go (Static (TermArgument _ k):xs) = do
-            x <- fromVar . mkVal <$> genName
+            x <- fresh' ValueVar
             Lam (TermArgument x k) <$> go xs
           go [] = go_dynamic non_static_bndrs
           go _ = error "NonStatic binder in static_binders"
@@ -229,11 +228,11 @@ isStatic _ _ = NonStatic
 mkApps :: forall a m. (IsVar a, MonadNamey m) => Atom -> Type -> [Argument a] -> m (Term a)
 mkApps at _ [] = pure $ Atom at
 mkApps at (ForallTy Irrelevant _ t) (TermArgument x tau:xs) = do
-  this_app <- fromVar . mkVal <$> genName
+  this_app <- fresh' ValueVar
   Let (One (this_app, t, App at (Ref (toVar x) tau))) <$>
     mkApps (Ref (toVar this_app) t) t xs
 mkApps at (ForallTy r _ t) (TypeArgument v _:xs) = do
-  this_app <- fromVar . mkVal <$> genName
+  this_app <- fresh' ValueVar
   let t' =
         case r of
           Relevant binder -> substituteInType (VarMap.singleton binder (VarTy (toVar v))) t
