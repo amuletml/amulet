@@ -99,7 +99,7 @@ getFolds = toList . foldMap getTop where
   getExpr (Idiom _ _ e _) = getExpr e
   getExpr (ExprWrapper _ e _) = getExpr e
 
-  getArm Arm { armExp = e } = e `mkTo` getExpr e
+  getArm a@Arm { armExp = e } = a `mkTo` getExpr e
 
   getComp (CompGuard e) = getExpr e
   getComp (CompLet bs _) = foldMap getBinding bs
