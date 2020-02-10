@@ -54,12 +54,12 @@ packages:
   original:
     hackage: conduit-parse-0.2.1.0@sha256:1c9f890d0cccdaa0f7d160cf4d1cf68f6e9e659a82f2db092ac7f4459395fdad,1730
 - completed:
-    hackage: lsp-test-0.8.2.0@sha256:1c18303139699c56d6fc916047e45e35156c73bcd16bb00e280a55c840bd54d6,3522
+    hackage: lsp-test-0.10.1.0@sha256:4aeb4a23a6e034f6870a2ca6055029061cdb6b68f833d4314f4f839fe6c8a39c,3472
     pantry-tree:
       size: 1112
-      sha256: ddedeaf5603d0c084db4e0f14e9f8bc780472071e3a1d001195489aa63d0bb2e
+      sha256: 77dc92b7493b2e4db417eb98ee4455db5d98b60c78b21ee173394606fdbdb121
   original:
-    hackage: lsp-test-0.8.2.0@sha256:1c18303139699c56d6fc916047e45e35156c73bcd16bb00e280a55c840bd54d6,3522
+    hackage: lsp-test-0.10.1.0@sha256:4aeb4a23a6e034f6870a2ca6055029061cdb6b68f833d4314f4f839fe6c8a39c,3472
 - completed:
     hackage: regex-pcre-builtin-0.95.1.1.8.43@sha256:2d671af361adf1776fde182a687bb6da022b1e5e3b0a064ce264289de63564a5,3088
     pantry-tree:
@@ -68,19 +68,19 @@ packages:
   original:
     hackage: regex-pcre-builtin-0.95.1.1.8.43@sha256:2d671af361adf1776fde182a687bb6da022b1e5e3b0a064ce264289de63564a5,3088
 - completed:
-    hackage: haskell-lsp-0.18.0.0@sha256:f0e04c740ed1a5520735605eeabb00570e42e786a46f53342f48817ad28f4f36,5264
+    hackage: haskell-lsp-0.20.0.1@sha256:fd4f773c9a32c6e76d57381956b3c2e1302230ae2ad784722ce85ff6e7d64ceb,5315
     pantry-tree:
       size: 1726
-      sha256: 723c4b5376038e2af2413f0ea0c8622c36e005c898e5e04f7e9aeaeb906525d0
+      sha256: f541056204ef590eb6f4c4352b3446a222f169f887b55ae0d28d97fb3ed520d1
   original:
-    hackage: haskell-lsp-0.18.0.0@sha256:f0e04c740ed1a5520735605eeabb00570e42e786a46f53342f48817ad28f4f36,5264
+    hackage: haskell-lsp-0.20.0.1@sha256:fd4f773c9a32c6e76d57381956b3c2e1302230ae2ad784722ce85ff6e7d64ceb,5315
 - completed:
-    hackage: haskell-lsp-types-0.18.0.0@sha256:3e6768076c054457eef433617fd6b0f569ebdd0d9c652e2aa7232029adf7cdbe,2941
+    hackage: haskell-lsp-types-0.20.0.0@sha256:24dcd72f3d39260b9ebb447e89175e09f2244a17d24eca8bf6dbea3f9cf20977,2941
     pantry-tree:
       size: 2451
-      sha256: ed80f3a1d490bd93ea63c78d2ad0cee90f14d2a17597ce99d73a43307ad2e537
+      sha256: 8d4a6011264f75f301e14549d40327f90bd7524b0c647983cd571bf3419f7945
   original:
-    hackage: haskell-lsp-types-0.18.0.0@sha256:3e6768076c054457eef433617fd6b0f569ebdd0d9c652e2aa7232029adf7cdbe,2941
+    hackage: haskell-lsp-types-0.20.0.0@sha256:24dcd72f3d39260b9ebb447e89175e09f2244a17d24eca8bf6dbea3f9cf20977,2941
 - completed:
     hackage: hslogger-1.3.1.0@sha256:2df525ae8ee83b4d885e4c97ef0df715122f2e37585a7d84117e2daea9fa9029,2787
     pantry-tree:

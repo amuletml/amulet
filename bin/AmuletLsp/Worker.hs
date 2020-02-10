@@ -658,7 +658,7 @@ workOnce wrk@Worker { pushErrors, fileContents, fileStates, fileVars, target } b
 
   -- | Parse a file, updating the state and returning whether it changed or not.
   parseFile :: NormalizedUri -> Maybe FileState -> IO (Bool, Maybe [Toplevel Parsed], Maybe FileState)
-  parseFile path@(NormalizedUri tPath) state = do
+  parseFile path@(NormalizedUri _ tPath) state = do
     contents <- atomically (HM.lookup path <$> readTVar fileContents)
     case contents of
       -- If we've no file contents at all, attempt to read from disk. If the
@@ -841,7 +841,7 @@ workOnce wrk@Worker { pushErrors, fileContents, fileStates, fileVars, target } b
 
 
   nameOf :: NormalizedUri -> STM Name
-  nameOf (NormalizedUri name) = genOneName wrk ("\"" <> name <> "\"")
+  nameOf (NormalizedUri _ name) = genOneName wrk ("\"" <> name <> "\"")
 
   updateFile :: NormalizedUri -> FileState -> IO ()
   updateFile path = atomically . modifyTVar fileStates . HM.insert path
@@ -858,7 +858,7 @@ getRel curFile path =
       | rel <- makeRelative (dropFileName f) p
       , length rel <= length p -> rel
     (_ , Just p) -> p
-    (_, Nothing) | NormalizedUri path <- path -> T.unpack path
+    (_, Nothing) | NormalizedUri _ path <- path -> T.unpack path
 
 logN :: String
 logN = "AmuletLsp.Worker"
@@ -876,4 +876,4 @@ inProgress WorkingRoot{} = True
 inProgress WorkingDep{} = True
 
 showUri :: NormalizedUri -> String
-showUri (NormalizedUri u) = T.unpack u
+showUri (NormalizedUri _ u) = T.unpack u

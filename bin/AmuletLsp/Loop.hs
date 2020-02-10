@@ -167,7 +167,7 @@ handleRequest lf wrk (NotDidOpenTextDocument msg) = do
   case file of
     Nothing -> pure ()
     Just file -> do
-      updateFile wrk nUri (Version (VFS._version file)) (VFS._text file)
+      updateFile wrk nUri (Version (VFS._lsp_version file)) (VFS._text file)
       refresh wrk (Just nUri)
 
 handleRequest _ wrk (NotDidSaveTextDocument msg) =
@@ -180,7 +180,7 @@ handleRequest lf wrk (NotDidChangeTextDocument msg) = do
   case file of
     Nothing -> pure ()
     Just file -> do
-      updateFile wrk nUri (Version (VFS._version file)) (VFS._text file)
+      updateFile wrk nUri (Version (VFS._lsp_version file)) (VFS._text file)
       refresh wrk (Just nUri)
 
 handleRequest _ wrk (NotDidCloseTextDocument msg) = do
