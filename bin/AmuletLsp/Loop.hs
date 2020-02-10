@@ -5,6 +5,7 @@ module AmuletLsp.Loop (run) where
 
 import AmuletLsp.Features.TypeOverlay
 import AmuletLsp.Features.Outline
+import AmuletLsp.Features.Folding
 import AmuletLsp.Diagnostic
 import AmuletLsp.Features
 import AmuletLsp.Worker
@@ -260,7 +261,13 @@ handleRequest lf wrk (ReqCodeLensResolve msg) =
       errorM logN ("Skiping malformed code lens for " ++ show c)
       sendReplyError lf msg $ ResponseError InvalidParams "Code lens is missing data" Nothing
 
--- handleRequest lf (ReqFoldingRange msg) = undefined
+handleRequest lf wrk (ReqFoldingRange msg)
+  = startRequest wrk (msg ^. id)
+  . RequestLatest (toNormalizedUri rawUri) ReqParsed (sendReplyError lf msg)
+  $ \_ _ prog ->
+    sendReply lf msg RspFoldingRange . List . maybe [] getFolds $ prog
+  where rawUri = msg ^. params . textDocument . uri
+
 
 handleRequest _ _ msg =
   warningM logN ("Unknown message " ++ conNameOf msg)
