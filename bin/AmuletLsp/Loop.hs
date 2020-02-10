@@ -3,7 +3,8 @@
 {-| The main LSP server loop. -}
 module AmuletLsp.Loop (run) where
 
-import qualified AmuletLsp.Features.TypeOverlay as TO
+import AmuletLsp.Features.TypeOverlay
+import AmuletLsp.Features.Outline
 import AmuletLsp.Diagnostic
 import AmuletLsp.Features
 import AmuletLsp.Worker
@@ -123,7 +124,7 @@ run = do
       , C.codeActionHandler         = handle ReqCodeAction
       , C.codeLensHandler           = handle ReqCodeLens
       , C.codeLensResolveHandler    = handle ReqCodeLensResolve
-      -- , C.foldingRangeHandler   = handle ReqFoldingRange
+      , C.foldingRangeHandler       = handle ReqFoldingRange
       }
       where handle c = Just (atomically . writeTQueue qIn . c)
 
@@ -221,7 +222,7 @@ handleRequest lf wrk (ReqCodeLens msg) = do
   if typeOverlay
   then startRequest wrk (msg ^. id)
      . RequestLatest (toNormalizedUri rawUri) ReqTyped (sendReplyError lf msg)
-     $ \name _ -> sendReply lf msg RspCodeLens . List . maybe [] (TO.getTypeOverlay name . (\(_, p, _, _) -> p))
+     $ \name _ -> sendReply lf msg RspCodeLens . List . maybe [] (getTypeOverlay name . (\(_, p, _, _) -> p))
   else sendReply lf msg RspCodeLens (List [])
   where rawUri = msg ^. params . textDocument . uri
 
@@ -232,7 +233,7 @@ handleRequest lf wrk (ReqCodeLensResolve msg) =
     c@(CodeLens _ Just{} _) -> sendReply lf msg RspCodeLensResolve c
 
     c@(CodeLens _ _ (Just extra))
-      | Success od@(TO.OverlayData _ _ fileVar) <- fromJSON extra -> do
+      | Success od@(OverlayData _ _ fileVar) <- fromJSON extra -> do
           -- Find which file this type overlay refers to, and then fire
           -- off a fresh request to fetch the environment and resolve the
           -- code lens.
@@ -249,7 +250,7 @@ handleRequest lf wrk (ReqCodeLensResolve msg) =
                      Nothing ->
                        sendReplyError lf msg $ ResponseError ContentModified "File cannot be loaded" Nothing
                      Just (_, _, env, _)
-                       | Just lens <- TO.resolveTypeOverlay env od c
+                       | Just lens <- resolveTypeOverlay env od c
                        -> sendReply lf msg RspCodeLensResolve lens
                        | otherwise -> do
                            warningM logN ("Skiping out-of-date type overlay for " ++ show c)

@@ -149,6 +149,7 @@ executable amulet-lsp
 
                      , AmuletLsp.Features
                      , AmuletLsp.Features.TypeOverlay
+                     , AmuletLsp.Features.Outline
 
                      , AmuletLsp.Diagnostic
                      , AmuletLsp.Loop
