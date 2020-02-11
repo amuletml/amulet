@@ -276,3 +276,26 @@ let filter_map p xs =
         | Some a -> filter_map_acc (a :: acc) xs
         | None -> filter_map_acc acc xs
   filter_map_acc [] xs
+
+
+(** Fetch the last element in a list.
+ *
+ *  O(n).
+ **)
+let rec last = function
+  | [] -> error "last: empty list"
+  | Cons (x, []) -> x
+  | Cons (_, xs) -> last xs
+
+(** Return a list containing all but the last element of a list. Note:
+ *  'init' completely and totally destroys any hope of sharing.
+ *
+ *  O(n).
+ **)
+let init xs =
+  let rec init' x = function
+    | [] -> []
+    | Cons (y, xs) -> x :: init' y xs
+  match xs with
+  | [] -> []
+  | Cons (x, xs) -> init' x xs
