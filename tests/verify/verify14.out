@@ -1,5 +1,5 @@
-verify14.ml[5:7 ..5:7]: warning (W3002)
+verify14.ml[5:7 ..5:13]: warning (W3002)
   Bound locally but not used: 'y'
   │ 
 5 │   let y = f x
-  │       ^
+  │       ^^^^^^^

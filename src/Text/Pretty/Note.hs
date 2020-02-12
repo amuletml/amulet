@@ -67,7 +67,7 @@ type FileMap = [(SourceName, T.Text)]
 -- information.
 format :: Note a b => ([Span] -> NoteDoc b) -> a -> NoteDoc b
 format f x =
-  let a = annotation x
+  let a = spanOf x
       c = case diagnosticKind x of
             NoteMessage -> annotate (NoteKind NoteMessage) "note"
             WarningMessage -> annotate (NoteKind WarningMessage) "warning"

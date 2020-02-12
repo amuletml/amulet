@@ -38,9 +38,9 @@ newtype Telescope p =
   Telescope { getTele :: Map.Map (Var Resolved) (Type p) }
   deriving newtype (Semigroup, Monoid)
 
-deriving instance (Show (Ann p), Show (Var p)) => Show (Telescope p)
-deriving instance Ord (Var p) => Ord (Telescope p)
-deriving instance Ord (Var p) => Eq (Telescope p)
+deriving instance ShowPhrase p => Show (Telescope p)
+deriving instance OrdPhrase p => Ord (Telescope p)
+deriving instance EqPhrase p => Eq (Telescope p)
 
 type instance Index (Telescope p) = Var Resolved
 type instance IxValue (Telescope p) = Type p
@@ -54,26 +54,26 @@ newtype Scope p f =
   Scope { getScope :: Map.Map (Var p) f }
 
 deriving instance (Show (Var p), Show f) => Show (Scope p f)
-deriving instance (Ord (Var p), Ord f) => Ord (Scope p f)
-deriving instance (Ord (Var p), Ord f) => Eq (Scope p f)
-deriving instance Ord (Var p) => Semigroup (Scope p f)
-deriving instance Ord (Var p) => Monoid (Scope p f)
+deriving instance (OrdPhrase p, Ord f) => Ord (Scope p f)
+deriving instance (OrdPhrase p, Ord f) => Eq (Scope p f)
+deriving instance OrdPhrase p => Semigroup (Scope p f)
+deriving instance OrdPhrase p => Monoid (Scope p f)
 
-instance (Ord (Var p), Ord (Ann p)) => Traversable (Scope p) where
+instance OrdPhrase p => Traversable (Scope p) where
   traverse f (Scope m) = Scope <$> traverse f m
 
-instance Ord (Var p) => Foldable (Scope p) where
+instance OrdPhrase p => Foldable (Scope p) where
   foldMap f (Scope m) = foldMap f m
 
-instance (Ord (Var p), Ord (Ann p)) => Functor (Scope p) where
+instance OrdPhrase p => Functor (Scope p) where
   fmap f (Scope m) = Scope (fmap f m)
 
 type instance Index (Scope p f) = Var p
 type instance IxValue (Scope p f) = f
-instance Ord (Var p) => Ixed (Scope p f) where
+instance OrdPhrase p => Ixed (Scope p f) where
   ix k f (Scope m) = Scope <$> ix k f m
 
-instance Ord (Var p) => At (Scope p f) where
+instance OrdPhrase p => At (Scope p f) where
   at k f (Scope m) = Scope <$> at k f m
 
 data Env
@@ -170,7 +170,7 @@ makeLenses ''Env
 makeLenses ''ClassInfo
 makeLenses ''TySymInfo
 
-(\\) :: Ord (Var p) => Scope p f -> Scope p f -> Scope p f
+(\\) :: OrdPhrase p => Scope p f -> Scope p f -> Scope p f
 Scope x \\ Scope y = Scope (x Map.\\ y)
 
 instance Monoid Env where
@@ -191,7 +191,7 @@ freeInEnv = foldMap ftv . view names
 envOf :: Scope Resolved (Type Typed) -> Env
 envOf a = Env a mempty mempty mempty mempty mempty mempty mempty mempty mempty
 
-scopeFromList :: Ord (Var p) => [(Var p, f)] -> Scope p f
+scopeFromList :: OrdPhrase p => [(Var p, f)] -> Scope p f
 scopeFromList = Scope . Map.fromList
 
 namesInScope :: Scope p f -> [Var p]
@@ -200,7 +200,7 @@ namesInScope (Scope m) = Map.keys m
 scopeToList :: Scope p f -> [(Var p, f)]
 scopeToList (Scope m) = Map.toList m
 
-inScope :: Ord (Var p) => Var p -> Scope p f -> Bool
+inScope :: OrdPhrase p => Var p -> Scope p f -> Bool
 inScope v (Scope m) = v `Map.member` m
 
 mapScope :: (Var p -> Var p) -> (f -> f) -> Scope p f -> Scope p f
@@ -247,4 +247,3 @@ instance Substitutable Typed Env where
   apply sub env = env & names %~ go
                       & classes %~ apply sub
     where go (Scope m) = Scope (fmap (apply sub) m)
-

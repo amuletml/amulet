@@ -60,9 +60,10 @@ fixupType o@TyOperator{} =
   in x
 
   where
-    go es ops (TyOperator lhs o rhs) =
+    go :: [Type Parsed] -> [(Type Parsed, Int)] -> Type Parsed -> ([Type Parsed], [(Type Parsed, Int)])
+    go es ops (TyOperator lhs o@(TyCon v _) rhs) =
       let (es', ops') = go es ops lhs
-          (pre, ass) = precedenceOf tyPrecedence o
+          (pre, ass) = precedenceOf tyPrecedence v
           (es'', ops'') = popUntil es' ops' pre ass
       in go es'' ((o, pre):ops'') rhs
     go es ops e = (e:es, ops)

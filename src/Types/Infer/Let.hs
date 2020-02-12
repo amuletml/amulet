@@ -65,12 +65,12 @@ inferLetTy closeOver strategy vs =
         (context, wrapper, solve, reduce_sub) <-
           case strategy of
             Fail -> do
-              (context, wrapper, needed, sub') <- reduceClassContext mempty (annotation ex) cons
+              (context, wrapper, needed, sub') <- reduceClassContext mempty (spanOf ex) cons
 
               let needsLet = wraps `Map.restrictKeys` freeIn ex
                   addOne (v, ExprApp e) ex
                     | VarRef v' _ <- e, v == v' = ex
-                    | otherwise = Let Recursive [ Binding v e False (annotation ex, getType e) ] ex (annotation ex, getType ex)
+                    | otherwise = Let Recursive [ Binding v e False (spanOf ex, getType e) ] ex (spanOf ex, getType ex)
                   addOne _ ex = ex
                   addFreeDicts ex = foldr addOne ex (Map.toList needsLet)
 
@@ -139,7 +139,7 @@ inferLetTy closeOver strategy vs =
           -- here: have expression type (inferred)
           --       want pattern type (inferred)
           wrap <- subsumes (BecauseOf b) ety pty
-          pure (ExprWrapper wrap e (annotation e, pty), p, pty, tel)
+          pure (ExprWrapper wrap e (spanOf e, pty), p, pty, tel)
 
         (solution, wraps, cons) <- solveFixpoint (BecauseOf b) cs =<< getSolveInfo
         tys <- view tySyms
@@ -230,9 +230,9 @@ inferLetTy closeOver strategy vs =
                  solveOne _ _ = undefined
 
              let (blamed:_) = vars
-                 an = annotation blamed
+                 an = spanOf blamed
 
-             (context, wrapper, needed, sub') <- reduceClassContext mempty (annotation blamed) cons
+             (context, wrapper, needed, sub') <- reduceClassContext mempty (spanOf blamed) cons
 
              (info, inners, fields) <- unzip3 <$> traverse (solveOne sub') bindings
              let rows = map (\(t, _, _, ty) -> (t, ty)) info
@@ -260,9 +260,9 @@ inferLetTy closeOver strategy vs =
                       context ty
                    (ty', _) <- pure $ rename ty'
                    let lineUp c (TyForall v _ rest) ex =
-                         lineUp c rest $ ExprWrapper (TypeApp (TyVar v)) ex (annotation ex, rest)
+                         lineUp c rest $ ExprWrapper (TypeApp (TyVar v ())) ex (spanOf ex, rest)
                        lineUp ((v, t, _):cs) (TyPi (Implicit _) rest) ex =
-                         lineUp cs rest $ App ex (VarRef v (annotation ex, t)) (annotation ex, rest)
+                         lineUp cs rest $ App ex (VarRef v (spanOf ex, t)) (spanOf ex, rest)
                        lineUp _ _ e = e
                        lineUp :: [(Var Typed, Type Typed, SomeReason)] -> Type Typed -> Expr Typed -> Expr Typed
                    pure $ Binding var
@@ -345,7 +345,7 @@ checkAmbiguous var exp tau = go mempty mempty mempty tau where
   go ok s tfs (TyPi (Invisible v _ Req) t) = go (Set.insert v ok) s tfs t
   go ok s tfs(TyPi Invisible{} t) = go ok s tfs t
   go ok s tfs (TyPi (Implicit v) t)
-    | (TyCon clss:args) <- appsView v = do
+    | (TyCon clss ():args) <- appsView v = do
         ci <- view (classDecs . at clss)
         case ci of
           Just ci ->
@@ -363,7 +363,7 @@ checkAmbiguous var exp tau = go mempty mempty mempty tau where
     let (no_can_do, tfs') =
           foldMapOf cosmos fv_under_tf dom
 
-        fv_under_tf (TyApps (TyCon v) apps)
+        fv_under_tf (TyApps (TyCon v _) apps)
           | v `Map.member` scope = (ftv apps, Set.singleton v)
           | otherwise = mempty
         fv_under_tf _ = mempty
@@ -378,7 +378,7 @@ checkAmbiguous var exp tau = go mempty mempty mempty tau where
     let (no_can_do, tfs') =
           foldMapOf cosmos fv_under_tf t
 
-        fv_under_tf (TyApps (TyCon v) apps)
+        fv_under_tf (TyApps (TyCon v _) apps)
           | v `Map.member` scope = (ftv apps, Set.singleton v)
           | otherwise = mempty
         fv_under_tf _ = mempty
@@ -398,10 +398,10 @@ checkAmbiguous var exp tau = go mempty mempty mempty tau where
     Note (note_tfs scope vs e) $
       case scope ^. at v of
         Just TyFamInfo { _tsConstraint = Just _ } ->
-          displayType (TyCon v :: Type Typed)
+          displayType (TyCon v () :: Type Typed)
             <+> string "is an" <+> keyword "associated type" <> string ", and so may not be injective"
         Just TyFamInfo{} ->
-          displayType (TyCon v :: Type Typed)
+          displayType (TyCon v () :: Type Typed)
             <+> string "is a" <+> keyword "type function" <> string ", and so may not be injective"
         _ -> undefined
   note_tfs _ [] e = e
@@ -412,7 +412,7 @@ rename = go 0 mempty mempty where
   go :: Int -> Set.Set T.Text -> Subst Typed -> Type Typed -> (Type Typed, Subst Typed)
   go n l s (TyPi (Invisible v k req) t) =
     let (v', n', l') = new n l v
-        s' = Map.insert v (TyVar v') s
+        s' = Map.insert v (TyVar v' ()) s
         (ty, s'') = go n' l' s' t
      in (TyPi (Invisible v' (fmap (apply s) k) req) ty, s'')
   go n l s (TyPi (Anon k) t) =
@@ -457,7 +457,7 @@ deSkol = go mempty where
       Anon a -> TyPi (Anon (go acc a)) (go acc k)
       Implicit a -> TyPi (Implicit (go acc a)) (go acc k)
   go acc ty@(TySkol (Skolem _ var _ _))
-    | var `Set.member` acc = TyVar var
+    | var `Set.member` acc = TyVar var ()
     | otherwise = ty
   go _ x@TyCon{} = x
   go _ x@TyLit{} = x

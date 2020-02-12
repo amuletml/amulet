@@ -88,23 +88,23 @@ tyHCat_n = ofCore C.tcHCat
 tyVCat_n = ofCore C.tcVCat
 tyShowType_n = ofCore C.tcShowType
 
-tyErrMsg = TyCon tyErrMsg_n
+tyErrMsg = con tyErrMsg_n
 
 tyUnit, tyBool, tyInt, tyString, tyFloat, tyLazy, tyConstraint, tyArrow, tyList, tyRef, tyKStr, tyKInt, tyRowCons, tyEq :: Type Typed
-tyInt        = TyCon tyIntName
-tyString     = TyCon tyStringName
-tyBool       = TyCon tyBoolName
-tyUnit       = TyCon tyUnitName
-tyFloat      = TyCon tyFloatName
-tyLazy       = TyCon tyLazyName
-tyArrow      = TyCon tyArrowName
-tyList       = TyCon tyListName
-tyConstraint = TyCon tyConstraintName
-tyRef        = TyCon tyRefName
-tyKStr       = TyCon (TgInternal "Amc" <> tyKStrName)
-tyKInt       = TyCon (TgInternal "Amc" <> tyKIntName)
-tyRowCons    = TyCon (TgInternal "Amc" <> rowConsName)
-tyEq         = TyCon tyEqName
+tyInt        = con tyIntName
+tyString     = con tyStringName
+tyBool       = con tyBoolName
+tyUnit       = con tyUnitName
+tyFloat      = con tyFloatName
+tyLazy       = con tyLazyName
+tyArrow      = con tyArrowName
+tyList       = con tyListName
+tyConstraint = con tyConstraintName
+tyRef        = con tyRefName
+tyKStr       = con (TgInternal "Amc" <> tyKStrName)
+tyKInt       = con (TgInternal "Amc" <> tyKIntName)
+tyRowCons    = con (TgInternal "Amc" <> rowConsName)
+tyEq         = con tyEqName
 
 forceName, lAZYName :: Var Typed
 forceName = ofCore C.vForce
@@ -120,10 +120,10 @@ derefName = ofCore C.vDeref
 refName = ofCore C.vRef
 
 forceTy, lAZYTy, cONSTy, nILTy :: Type Typed
-forceTy = a *. TyApp tyLazy (TyVar a) ~> TyVar a
-lAZYTy = a *. (tyUnit ~> TyVar a) ~> TyApp tyLazy (TyVar a)
-cONSTy = a *. TyTuple (TyVar a) (TyApp tyList (TyVar a)) ~> TyApp tyList (TyVar a)
-nILTy = a *. TyApp tyList (TyVar a)
+forceTy = a *. TyApp tyLazy (var a) ~> var a
+lAZYTy = a *. (tyUnit ~> var a) ~> TyApp tyLazy (var a)
+cONSTy = a *. TyTuple (var a) (TyApp tyList (var a)) ~> TyApp tyList (var a)
+nILTy = a *. TyApp tyList (var a)
 
 forceTy', lAZYTy', cONSTy', nILTy' :: Type Typed -> Type Typed
 forceTy' x = TyApp tyLazy x ~> x
@@ -143,10 +143,10 @@ intValName = ofCore C.vIntVal
 knownIntName = ofCore C.vKINT
 
 strValTy, knownStrTy, intValTy, knownIntTy :: Type Typed
-strValTy = TyPi (Invisible a (Just tyString) Req) $ TyPi (Implicit (TyApp tyKStr (TyVar a))) tyString
-knownStrTy = TyPi (Invisible a (Just tyString) Infer) $ tyString ~> TyApp tyKStr (TyVar a)
-intValTy = TyPi (Invisible a (Just tyInt) Req) $ TyPi (Implicit (TyApp tyKInt (TyVar a))) tyInt
-knownIntTy = TyPi (Invisible a (Just tyInt) Infer) $ tyInt ~> TyApp tyKInt (TyVar a)
+strValTy = TyPi (Invisible a (Just tyString) Req) $ TyPi (Implicit (TyApp tyKStr (var a))) tyString
+knownStrTy = TyPi (Invisible a (Just tyString) Infer) $ tyString ~> TyApp tyKStr (var a)
+intValTy = TyPi (Invisible a (Just tyInt) Req) $ TyPi (Implicit (TyApp tyKInt (var a))) tyInt
+knownIntTy = TyPi (Invisible a (Just tyInt) Infer) $ tyInt ~> TyApp tyKInt (var a)
 
 knownStrTy', knownIntTy' :: Type Typed -> Type Typed
 knownStrTy' a = tyString ~> TyApp tyKStr a
@@ -161,22 +161,22 @@ extendName = ofCore C.vExtend
 restrictName = ofCore C.vRestrict
 
 rowConsTy :: Type Typed
-rowConsTy = TyPi (Invisible key (Just tyString) Infer) $ record *. ttype *. new *. tyString ~> TyApps tyRowCons [TyVar record, TyVar key, TyVar ttype, TyVar new]
+rowConsTy = TyPi (Invisible key (Just tyString) Infer) $ record *. ttype *. new *. tyString ~> TyApps tyRowCons [var record, var key, var ttype, var new]
 
 rowConsTy' :: Type Typed -> Type Typed
 rowConsTy'' :: Type Typed -> Type Typed -> Type Typed
 rowConsTy''' :: Type Typed -> Type Typed -> Type Typed -> Type Typed
 rowConsTy'''' :: Type Typed -> Type Typed -> Type Typed -> Type Typed -> Type Typed
-rowConsTy' x = record *. ttype *. new *. tyString ~> foldl1 TyApp [tyRowCons, TyVar record, x, TyVar ttype, TyVar new ]
-rowConsTy'' x y = ttype *. new *. tyString ~> foldl1 TyApp [tyRowCons, y, x, TyVar ttype, TyVar new ]
-rowConsTy''' x y z = new *. tyString ~> foldl1 TyApp [tyRowCons, y, x, z, TyVar new ]
+rowConsTy' x = record *. ttype *. new *. tyString ~> foldl1 TyApp [tyRowCons, var record, x, var ttype, var new ]
+rowConsTy'' x y = ttype *. new *. tyString ~> foldl1 TyApp [tyRowCons, y, x, var ttype, var new ]
+rowConsTy''' x y z = new *. tyString ~> foldl1 TyApp [tyRowCons, y, x, z, var new ]
 rowConsTy'''' x y z a = tyString ~> foldl1 TyApp [tyRowCons, y, x, z, a ]
 
 rEFLName :: Var Typed
 rEFLName = ofCore C.vEQ
 
 rEFLTy :: Type Typed
-rEFLTy = a *. TyApps tyEq [TyVar a, TyVar a]
+rEFLTy = a *. TyApps tyEq [var a, var a]
 
 rEFLTy' :: Type Typed -> Type Typed
 rEFLTy' x = TyApps tyEq [x, x]
@@ -213,29 +213,29 @@ instance Monoid BuiltinModule where
 builtins :: BuiltinModule
 builtins =
   mempty
-  { vars = [ (opAppName, a *. b *. (TyVar a ~> TyVar b) ~> TyVar a ~> TyVar b)
+  { vars = [ (opAppName, a *. b *. (var a ~> var b) ~> var a ~> var b)
            , (lAZYName, lAZYTy)
            , (forceName, forceTy)
            , (cONSName, cONSTy)
            , (nILName, nILTy)
 
-           , (assignName, a *. TyApp tyRef (TyVar a) ~> (TyVar a ~> tyUnit))
-           , (derefName, a *. TyApp tyRef (TyVar a) ~> TyVar a)
-           , (refName, a *. TyVar a ~> TyApp tyRef (TyVar a))
+           , (assignName, a *. TyApp tyRef (var a) ~> (var a ~> tyUnit))
+           , (derefName, a *. TyApp tyRef (var a) ~> var a)
+           , (refName, a *. var a ~> TyApp tyRef (var a))
 
            , ( eqTypeRep_n, a *. b *. new
-                         *. TyApps (TyCon tyTypeRep_n) [ TyVar a ]
-                         ~> TyApps (TyCon tyTypeRep_n) [ TyVar b ]
-                         ~> TyPi (Implicit (TyApps tyEq [ TyVar a, TyVar b ])) (tyUnit ~> TyVar new)
-                         ~> (tyUnit ~> TyVar new)
-                         ~> TyVar new )
+                         *. TyApps (con tyTypeRep_n) [ var a ]
+                         ~> TyApps (con tyTypeRep_n) [ var b ]
+                         ~> TyPi (Implicit (TyApps tyEq [ var a, var b ])) (tyUnit ~> var new)
+                         ~> (tyUnit ~> var new)
+                         ~> var new )
 
            , ( typeOf_n, a *. tvProxy_n
-                      *. TyPi (Implicit (TyApps (TyCon tyTypeable_n) [ TyVar a ]))
-                          (TyApps (TyVar tvProxy_n) [ TyVar a ] ~> TyApps (TyCon tyTypeRep_n) [ TyVar a ] ))
+                      *. TyPi (Implicit (TyApps (con tyTypeable_n) [ var a ]))
+                          (TyApps (var tvProxy_n) [ var a ] ~> TyApps (con tyTypeRep_n) [ var a ] ))
            , ( mkTypeRep_n
              , a *. TyExactRows [ ("fingerprint", tyInt) , ("name", tyString) ]
-                 ~> TyApps (TyCon tyTypeRep_n) [ TyVar a ] )
+                 ~> TyApps (con tyTypeRep_n) [ var a ] )
 
            ]
 
@@ -246,9 +246,9 @@ builtins =
             , (tyConstraintName, TyType)
             , (tyListName, TyType ~> TyType)
             , (tyRefName, TyType ~> TyType)
-            , (tyEqName, a *. TyVar a ~> TyVar a ~> tyConstraint)
-            , (tyTypeable_n, a *. TyVar a ~> tyConstraint)
-            , (tyTypeRep_n, a *. TyVar a ~> TyType)
+            , (tyEqName, a *. var a ~> var a ~> tyConstraint)
+            , (tyTypeable_n, a *. var a ~> tyConstraint)
+            , (tyTypeRep_n, a *. var a ~> TyType)
             ]
 
   , constructors = Map.fromList
@@ -269,22 +269,22 @@ builtins =
                               TyPi (Invisible record (Just TyType) Spec) $
                               TyPi (Invisible ttype (Just TyType) Spec) $
                               TyPi (Invisible new (Just TyType) Spec) $
-                              TyPi (Implicit (foldl1 TyApp [tyRowCons, TyVar record, TyVar key, TyVar ttype, TyVar new ] )) $
-                                TyVar ttype ~> TyVar record ~> TyVar new
+                              TyPi (Implicit (foldl1 TyApp [tyRowCons, var record, var key, var ttype, var new ] )) $
+                                var ttype ~> var record ~> var new
                             )
                           , ( restrictName
                             , TyPi (Invisible key (Just tyString) Req) $
                               TyPi (Invisible record (Just TyType) Spec) $
                               TyPi (Invisible ttype (Just TyType) Spec) $
                               TyPi (Invisible new (Just TyType) Spec) $
-                              TyPi (Implicit (foldl1 TyApp [tyRowCons, TyVar record, TyVar key, TyVar ttype, TyVar new ] )) $
-                                TyVar new ~> (TyVar ttype `TyTuple` TyVar record)
+                              TyPi (Implicit (foldl1 TyApp [tyRowCons, var record, var key, var ttype, var new ] )) $
+                                var new ~> (var ttype `TyTuple` var record)
                             )
                           , ( tyeString_n, tyString ~> tyErrMsg )
                           , ( tyHCat_n, tyErrMsg ~> tyErrMsg ~> tyErrMsg )
                           , ( tyVCat_n, tyErrMsg ~> tyErrMsg ~> tyErrMsg )
-                          , ( tyShowType_n, a *. TyVar a ~> tyErrMsg )
-                          , ( tyTypeError_n, a *. tyErrMsg ~> TyVar a )
+                          , ( tyShowType_n, a *. var a ~> tyErrMsg )
+                          , ( tyTypeError_n, a *. tyErrMsg ~> var a )
                           ]
                  , types = [ (tyKStrName, tyString ~> tyConstraint)
                            , (tyKIntName, tyInt ~> tyConstraint)
@@ -293,8 +293,8 @@ builtins =
                            , (tyeString_n, tyString ~> tyErrMsg )
                            , (tyHCat_n, tyErrMsg ~> tyErrMsg ~> tyErrMsg )
                            , (tyVCat_n, tyErrMsg ~> tyErrMsg ~> tyErrMsg )
-                           , (tyShowType_n, a *. TyVar a ~> tyErrMsg )
-                           , (tyTypeError_n, a *. tyErrMsg ~> TyVar a )
+                           , (tyShowType_n, a *. var a ~> tyErrMsg )
+                           , (tyTypeError_n, a *. tyErrMsg ~> var a )
                            ]
                  , classes = [ (tyKStrName, T.MagicInfo [] Nothing)
                              , (tyKIntName, T.MagicInfo [] Nothing)
@@ -308,7 +308,7 @@ builtins =
   , families = [ (tyTypeError_n, T.TyFamInfo { T._tsName = tyTypeError_n
                                              , T._tsEquations = []
                                              , T._tsArgs = [a]
-                                             , T._tsKind = a *. tyErrMsg ~> TyVar a
+                                             , T._tsKind = a *. tyErrMsg ~> var a
                                              , T._tsConstraint = Nothing
                                              }) ]
   }
@@ -323,18 +323,18 @@ builtinInstances = builtinTypeableInsts
 typeable_CI :: T.ClassInfo
 typeable_CI =
   T.ClassInfo { T._ciName = tyTypeable_n
-              , T._ciHead = TyApps (TyCon tyTypeable_n) [ TyVar a ]
+              , T._ciHead = TyApps (con tyTypeable_n) [ var a ]
               , T._ciMethods =
                   Map.fromList [ (typeOf_n, tvProxy_n
-                                         *. TyApps (TyVar tvProxy_n) [ TyVar a ]
-                                         ~> TyApps (TyCon tyTypeRep_n) [ TyVar a ])
+                                         *. TyApps (var tvProxy_n) [ var a ]
+                                         ~> TyApps (con tyTypeRep_n) [ var a ])
                                ]
               , T._ciAssocTs = mempty
               , T._ciContext = mempty
               , T._ciConstructorName = ofCore C.tcTYPEABLE
               , T._ciConstructorTy =
-                a *. (tvProxy_n *. TyApps (TyVar tvProxy_n) [ TyVar a ] ~> TyApps (TyCon tyTypeRep_n) [ TyVar a ])
-                  ~> TyApps (TyCon tyTypeable_n) [ TyVar a ]
+                a *. (tvProxy_n *. TyApps (var tvProxy_n) [ var a ] ~> TyApps (con tyTypeRep_n) [ var a ])
+                  ~> TyApps (con tyTypeable_n) [ var a ]
               , T._ciClassSpan = internal
               , T._ciDefaults = mempty
               , T._ciMinimal = Var "type_of"
@@ -398,3 +398,7 @@ record = ofCore C.tyvarRecord
 ttype = ofCore C.tyvarType
 key = ofCore C.tyvarKey
 new = ofCore C.tyvarNew
+
+var, con :: Var Typed -> Type Typed
+var v = TyVar v ()
+con v = TyCon v ()

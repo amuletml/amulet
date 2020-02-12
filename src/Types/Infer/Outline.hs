@@ -28,7 +28,7 @@ approxType' r@(Fun p e _) = TyPi <$> approxParam p <*> approxType' e where
   approxParam (EvParam p) = Anon <$> approxPattern r p
 
 approxType' r@(Ascription _ t _) = resolveKind (becauseExp r) t
-approxType' (Match _ (Arm _ _ e:_) _ _) = approxType' e
+approxType' (Match _ (Arm _ _ e _:_) _ _) = approxType' e
 approxType' (If _ t _ _) = approxType' t
 approxType' (Begin xs _) = approxType' (last xs)
 approxType' (Let _ _ e _) = approxType' e

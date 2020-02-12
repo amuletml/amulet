@@ -30,7 +30,7 @@ getFolds = toList . foldMap getTop where
   getTop (Include m)    = getModule m
   getTop (Module _ _ m) = getModule m
 
-  getTop (LetStmt _ _ bindings) = foldMap getBinding bindings
+  getTop (LetStmt _ _ bindings _) = foldMap getBinding bindings
 
   getModule :: ModuleTerm Parsed -> Seq FoldingRange
   getModule m@(ModStruct ts _) = mk m <> foldMap getTop ts
@@ -109,7 +109,7 @@ getFolds = toList . foldMap getTop where
 
 mk :: (Spanned a, MonadPlus m) => a -> m FoldingRange
 mk node =
-  let s = annotation node
+  let s = spanOf node
       (SourcePos _ sl sc) = spanStart s
       (SourcePos _ el ec) = spanEnd s
   in if sl >= el then mzero else

@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts, OverloadedStrings, TypeFamilies, UndecidableInstances #-}
+{-# LANGUAGE FlexibleContexts, OverloadedStrings, TypeFamilies, UndecidableInstances, MultiParamTypeClasses, StandaloneDeriving, DerivingVia #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 module Syntax.Expr.Instances () where
 
@@ -9,82 +9,92 @@ import Text.Pretty.Semantic
 import Data.Bifunctor
 import Data.Spanned
 import Data.List
-import Data.Data
 import Data.Char
 
 import Syntax.Expr
 import Syntax.Type
 import Syntax.Var
 
-instance Spanned (Ann p) => Spanned (Binding p) where
-  annotation = annotation . _bindAnn
+instance Annotated (Binding p) where
+  type Annotation (Binding p) = Ann p
+  annotation = _bindAnn
 
-instance Spanned (Ann p) => Spanned (Expr p) where
-  annotation (VarRef _ a) = annotation a
-  annotation (Let _ _ _ a) = annotation a
-  annotation (If _ _ _ a) = annotation a
-  annotation (App _ _ a) = annotation a
-  annotation (Fun _ _ a) = annotation a
-  annotation (Begin _ a) = annotation a
-  annotation (Literal _ a) = annotation a
-  annotation (Match _ _ _ a) = annotation a
-  annotation (Function _ _ a) = annotation a
-  annotation (BinOp _ _ _ a) = annotation a
-  annotation (Hole _ a) = annotation a
-  annotation (Ascription _ _ a) = annotation a
+instance Annotated (Expr p) where
+  type Annotation (Expr p) = Ann p
+  annotation (VarRef _ a) = a
+  annotation (Let _ _ _ a) = a
+  annotation (If _ _ _ a) = a
+  annotation (App _ _ a) = a
+  annotation (Fun _ _ a) = a
+  annotation (Begin _ a) = a
+  annotation (Literal _ a) = a
+  annotation (Match _ _ _ a) = a
+  annotation (Function _ _ a) = a
+  annotation (BinOp _ _ _ a) = a
+  annotation (Hole _ a) = a
+  annotation (Ascription _ _ a) = a
 
-  annotation (Record _ a) = annotation a
-  annotation (RecordExt _ _ a) = annotation a
-  annotation (Access _ _ a) = annotation a
+  annotation (Record _ a) = a
+  annotation (RecordExt _ _ a) = a
+  annotation (Access _ _ a) = a
 
-  annotation (LeftSection _ _ a) = annotation a
-  annotation (RightSection _ _ a) = annotation a
-  annotation (BothSection _ a) = annotation a
-  annotation (AccessSection _ a) = annotation a
-  annotation (Parens _ a) = annotation a
+  annotation (LeftSection _ _ a) = a
+  annotation (RightSection _ _ a) = a
+  annotation (BothSection _ a) = a
+  annotation (AccessSection _ a) = a
+  annotation (Parens _ a) = a
 
-  annotation (Tuple _ a) = annotation a
-  annotation (TupleSection _ a) = annotation a
+  annotation (Tuple _ a) = a
+  annotation (TupleSection _ a) = a
 
-  annotation (OpenIn _ _ a) = annotation a
-  annotation (Lazy _ a) = annotation a
-  annotation (Vta _ _ a) = annotation a
-  annotation (ListExp _ a) = annotation a
-  annotation (ListComp _ _ a) = annotation a
-  annotation (DoExpr _ _ a) = annotation a
-  annotation (Idiom _ _ _ a) = annotation a
+  annotation (OpenIn _ _ a) = a
+  annotation (Lazy _ a) = a
+  annotation (Vta _ _ a) = a
+  annotation (ListExp _ a) = a
+  annotation (ListComp _ _ a) = a
+  annotation (DoExpr _ _ a) = a
+  annotation (Idiom _ _ _ a) = a
 
-  annotation (ListFrom _ _ a) = annotation a
-  annotation (ListFromTo _ _ _ a) = annotation a
-  annotation (ListFromThen _ _ _ a) = annotation a
-  annotation (ListFromThenTo _ _ _ _ a) = annotation a
+  annotation (ListFrom _ _ a) = a
+  annotation (ListFromTo _ _ _ a) = a
+  annotation (ListFromThen _ _ _ a) = a
+  annotation (ListFromThenTo _ _ _ _ a) = a
 
-  annotation (ExprWrapper _ _ a) = annotation a
+  annotation (ExprWrapper _ _ a) = a
 
-instance Spanned (Ann p) => Spanned (Pattern p) where
-  annotation (Wildcard a) = annotation a
-  annotation (Capture _ a) = annotation a
-  annotation (Destructure _ _ a) = annotation a
-  annotation (PAs _ _ a) = annotation a
-  annotation (PType _ _ a) = annotation a
-  annotation (PRecord _ a) = annotation a
-  annotation (PTuple _ a) = annotation a
-  annotation (PLiteral _ a) = annotation a
-  annotation (PGadtCon _ _ _ _ a) = annotation a
-  annotation (PList _ a) = annotation a
+instance Annotated (Pattern p) where
+  type Annotation (Pattern p) = Ann p
+  annotation (Wildcard a) = a
+  annotation (Capture _ a) = a
+  annotation (Destructure _ _ a) = a
+  annotation (PAs _ _ a) = a
+  annotation (PType _ _ a) = a
+  annotation (PRecord _ a) = a
+  annotation (PTuple _ a) = a
+  annotation (PLiteral _ a) = a
+  annotation (PGadtCon _ _ _ _ a) = a
+  annotation (PList _ a) = a
 
-instance Spanned (Ann p) => Spanned (Arm p) where
-  annotation (Arm p _ e) = annotation p <> annotation e
+instance Annotated (Arm p) where
+  type Annotation (Arm p) = RawAnn p
+  annotation = armAnn
 
-instance Spanned (Ann p) => Spanned (Parameter p) where
+instance Annotated (Parameter p) where
+  type Annotation (Parameter p) = Ann p
   annotation = annotation . view paramPat
 
-instance Spanned (Ann p) => Spanned (CompStmt p) where
+instance Annotated (CompStmt p) where
+  type Annotation (CompStmt p) = Ann p
   annotation (CompGuard ex) = annotation ex
-  annotation (CompLet _ a) = annotation a
-  annotation (CompGen _ _ a) = annotation a
+  annotation (CompLet _ a) = a
+  annotation (CompGen _ _ a) = a
 
-instance (Data (Var p), Data (Ann p), Data p) => Spanned (Wrapper p)
+deriving via AnnotatedVia (Binding p)   (Ann p)    instance Spanned (Ann p)    => Spanned (Binding p)
+deriving via AnnotatedVia (Expr p)      (Ann p)    instance Spanned (Ann p)    => Spanned (Expr p)
+deriving via AnnotatedVia (Pattern p)   (Ann p)    instance Spanned (Ann p)    => Spanned (Pattern p)
+deriving via AnnotatedVia (Arm p)       (RawAnn p) instance Spanned (RawAnn p) => Spanned (Arm p)
+deriving via AnnotatedVia (Parameter p) (Ann p)    instance Spanned (Ann p)    => Spanned (Parameter p)
+deriving via AnnotatedVia (CompStmt p)  (Ann p)    instance Spanned (Ann p)    => Spanned (CompStmt p)
 
 parenFun :: Pretty (Var p) => Expr p -> Doc
 parenFun f = case f of
@@ -196,7 +206,7 @@ instance Pretty (Var p) => Pretty (CompStmt p) where
   pretty (CompGuard e) = pretty e
 
 instance Pretty (Var p) => Pretty (Arm p) where
-  pretty (Arm p g b) = pipe <+> nest 4 (pretty p <+> prettyGuard g <> arrow </> pretty b) where
+  pretty (Arm p g b _) = pipe <+> nest 4 (pretty p <+> prettyGuard g <> arrow </> pretty b) where
     prettyGuard Nothing = mempty
     prettyGuard (Just g) = keyword "when" <+> pretty g <+> mempty
 

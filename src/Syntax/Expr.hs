@@ -40,19 +40,19 @@ data Binding p
                   , _bindBindings :: [(Var Typed, Type Typed)]
                   }
 
-deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Binding p)
-deriving instance (Show (Var p), Show (Ann p)) => Show (Binding p)
-deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Binding p)
-deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Binding p)
+deriving instance EqPhrase p => Eq (Binding p)
+deriving instance ShowPhrase p => Show (Binding p)
+deriving instance OrdPhrase p => Ord (Binding p)
+deriving instance DataPhrase p => Data (Binding p)
 
 data Parameter p
   = PatParam { _paramPat :: Pattern p }
   | EvParam { _paramPat :: Pattern p }
 
-deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Parameter p)
-deriving instance (Show (Var p), Show (Ann p)) => Show (Parameter p)
-deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Parameter p)
-deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Parameter p)
+deriving instance EqPhrase p => Eq (Parameter p)
+deriving instance ShowPhrase p => Show (Parameter p)
+deriving instance OrdPhrase p => Ord (Parameter p)
+deriving instance DataPhrase p => Data (Parameter p)
 
 data Expr p
   = VarRef (Var p) (Ann p)
@@ -124,31 +124,32 @@ data Expr p
 
   | ExprWrapper (Wrapper p) (Expr p) (Ann p)
 
-deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Expr p)
-deriving instance (Show (Var p), Show (Ann p)) => Show (Expr p)
-deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Expr p)
-deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Expr p)
+deriving instance EqPhrase p => Eq (Expr p)
+deriving instance ShowPhrase p => Show (Expr p)
+deriving instance OrdPhrase p => Ord (Expr p)
+deriving instance DataPhrase p => Data (Expr p)
 
 data CompStmt p
   = CompGen (Pattern p) (Expr p) (Ann p)
   | CompLet [Binding p] (Ann p)
   | CompGuard (Expr p)
 
-deriving instance (Eq (Var p), Eq (Ann p)) => Eq (CompStmt p)
-deriving instance (Show (Var p), Show (Ann p)) => Show (CompStmt p)
-deriving instance (Ord (Var p), Ord (Ann p)) => Ord (CompStmt p)
-deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (CompStmt p)
+deriving instance EqPhrase p => Eq (CompStmt p)
+deriving instance ShowPhrase p => Show (CompStmt p)
+deriving instance OrdPhrase p => Ord (CompStmt p)
+deriving instance DataPhrase p => Data (CompStmt p)
 
 data Arm p
   = Arm { armPat :: Pattern p
         , armGuard :: Maybe (Expr p)
         , armExp :: Expr p
+        , armAnn :: RawAnn p
         }
 
-deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Arm p)
-deriving instance (Show (Var p), Show (Ann p)) => Show (Arm p)
-deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Arm p)
-deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Arm p)
+deriving instance EqPhrase p => Eq (Arm p)
+deriving instance ShowPhrase p => Show (Arm p)
+deriving instance OrdPhrase p => Ord (Arm p)
+deriving instance DataPhrase p => Data (Arm p)
 
 data Field p =
   Field { _fName :: Text
@@ -156,10 +157,10 @@ data Field p =
         , _fAnn :: Ann p
         }
 
-deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Field p)
-deriving instance (Show (Var p), Show (Ann p)) => Show (Field p)
-deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Field p)
-deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Field p)
+deriving instance EqPhrase p => Eq (Field p)
+deriving instance ShowPhrase p => Show (Field p)
+deriving instance OrdPhrase p => Ord (Field p)
+deriving instance DataPhrase p => Data (Field p)
 
 data Wrapper p
   = TypeApp (Type p)
@@ -188,10 +189,10 @@ instance Show (WrapCont p) where
 
 infixr 5 :>
 
-deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Wrapper p)
-deriving instance (Show (Var p), Show (Ann p)) => Show (Wrapper p)
-deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Wrapper p)
-deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Wrapper p)
+deriving instance EqPhrase p => Eq (Wrapper p)
+deriving instance ShowPhrase p => Show (Wrapper p)
+deriving instance OrdPhrase p => Ord (Wrapper p)
+deriving instance DataPhrase p => Data (Wrapper p)
 
 data Pattern p
   = Wildcard (Ann p)
@@ -205,11 +206,11 @@ data Pattern p
   | PLiteral Lit (Ann p)
   | PGadtCon (Var p) [Var p] [(Var p, Type p)] (Maybe (Pattern p)) (Ann p)
 
-deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Pattern p)
-deriving instance (Show (Var p), Show (Ann p)) => Show (Pattern p)
-deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Pattern p)
-deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Pattern p)
-instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Plated (Pattern p)
+deriving instance EqPhrase p => Eq (Pattern p)
+deriving instance ShowPhrase p => Show (Pattern p)
+deriving instance OrdPhrase p => Ord (Pattern p)
+deriving instance DataPhrase p => Data (Pattern p)
+instance DataPhrase p => Plated (Pattern p)
 
 makeLenses ''Parameter
 makeLenses ''Binding

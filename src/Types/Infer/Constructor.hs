@@ -52,7 +52,7 @@ inferCon vars ret c@(GadtCon ac nm cty ann) = do
   let generalise (TyPi q t) = TyPi q <$> generalise t
       generalise ty = do
         ~(sub, _, []) <- condemn $ solve (Seq.singleton (ConUnify (BecauseOf c) mempty var ret ty)) =<< getSolveInfo
-        tell (map (first TyVar) (Map.toAscList sub))
+        tell (map (first (`TyVar` ())) (Map.toAscList sub))
         pure ret
 
   (cty, cons) <- runWriterT (generalise cty)
@@ -91,7 +91,7 @@ closeOverGadt cbv r cons cty = do
 
 -- A bit of a hack for better aesthetics
 simplify :: Type Typed -> Type Typed -> Either (Map.Map (Var Typed) (Type Typed)) (Type Typed, Type Typed)
-simplify (TyVar v@(TgName x _)) b@(TyVar (TgName y _))
+simplify (TyVar v@(TgName x _) ()) b@(TyVar (TgName y _) ())
   | x == y = Left (Map.singleton v b)
 simplify x y = Right (x, y)
 

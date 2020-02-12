@@ -144,4 +144,4 @@ data Token = Token !TokenClass !SourcePos !SourcePos
   deriving (Eq, Show)
 
 instance Spanned Token where
-  annotation (Token _ s e) = mkSpanUnsafe s e
+  spanOf (Token _ s e) = mkSpanUnsafe s e

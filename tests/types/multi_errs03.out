@@ -4,9 +4,9 @@ multi_errs03.ml[4:19 ..4:22]: error (E2001)
   │                   ^^^^
   Couldn't match actual type bool
     with the type expected by the context, int
-multi_errs03.ml[8:5 ..8:6]: error (E2001)
+multi_errs03.ml[8:5 ..8:14]: error (E2001)
   │ 
 8 │ and () = "foo"
-  │     ^^
+  │     ^^^^^^^^^^
   Couldn't match actual type string
     with the type expected by the context, unit

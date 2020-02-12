@@ -1,6 +1,6 @@
-gadt_04.ml[17:5 ..17:23]: warning (W3005)
+gadt_04.ml[17:3 ..17:23]: warning (W3005)
   Redundant pattern in expression
    │ 
 17 │   | Nil_, _ -> error ""
-   │     ^^^^^^^^^^^^^^^^^^^
+   │   ^^^^^^^^^^^^^^^^^^^^^
   • Note: This case can never occur.

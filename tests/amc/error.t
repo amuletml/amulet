@@ -1,10 +1,10 @@
 Amc will tell the user it can explain things
 
   $ amc compile tests/amc/files/error.ml
-  tests/amc/files/error.ml[1:5 ..1:6]: error (E2001)
+  tests/amc/files/error.ml[1:5 ..1:10]: error (E2001)
     │ 
   1 │ let () = 1
-    │     ^^
+    │     ^^^^^^
     Couldn't match actual type int
       with the type expected by the context, unit
   

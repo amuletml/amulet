@@ -105,7 +105,7 @@ instance Pretty ParseError where
 
             fakeAround :: Type Parsed -> Int -> Type Parsed
             fakeAround t 0 = t
-            fakeAround t n = TyApp (fakeAround t (n - 1)) (TyVar (Name (pack ('a':show n))))
+            fakeAround t n = TyApp (fakeAround t (n - 1)) (TyVar (Name (pack ('a':show n))) undefined)
          in case root of
            c@TyCon{} ->
              vsep [ "Malformed class declaration for" <+> displayType c
@@ -151,26 +151,26 @@ instance Pretty ParseError where
     </> "This token is outside the context started at" <+> prettyPos (spanStart p)
 
 instance Spanned ParseError where
-  annotation (Failure p _) = mkSpan1 p
+  spanOf (Failure p _) = mkSpan1 p
 
-  annotation (UnexpectedCharacter p _) = mkSpan1 p
-  annotation (UnexpectedEnd p) = mkSpan1 p
-  annotation (UnclosedString p _ _) = mkSpan1 p
-  annotation (UnclosedComment p _) = mkSpan1 p
+  spanOf (UnexpectedCharacter p _) = mkSpan1 p
+  spanOf (UnexpectedEnd p) = mkSpan1 p
+  spanOf (UnclosedString p _ _) = mkSpan1 p
+  spanOf (UnclosedComment p _) = mkSpan1 p
 
-  annotation (UnexpectedToken t _) = annotation t
+  spanOf (UnexpectedToken t _) = spanOf t
 
-  annotation (MalformedClass p _) = p
-  annotation (MalformedInstance p _) = p
+  spanOf (MalformedClass p _) = p
+  spanOf (MalformedInstance p _) = p
 
-  annotation (MisplacedWith p) = p
+  spanOf (MisplacedWith p) = p
 
-  annotation (BindQualified _ p) = p
+  spanOf (BindQualified _ p) = p
 
-  annotation (InvalidEscapeCode p) = p
+  spanOf (InvalidEscapeCode p) = p
 
-  annotation (UnalignedIn p _) = p
-  annotation (UnindentContext p _) = p
+  spanOf (UnalignedIn p _) = p
+  spanOf (UnindentContext p _) = p
 
 prettyPos :: SourcePos -> Doc a
 prettyPos p = shown (spLine p) <> colon <> shown (spCol p)
@@ -194,7 +194,7 @@ instance Note ParseError Style where
       <##> f [mkSpan1 s, mkSpan1 p]
   formatNote f x
     = indent 2 (Right <$> pretty x)
-      <##> f [annotation x]
+      <##> f [spanOf x]
 
   noteId Failure{}             = Nothing
   noteId UnexpectedCharacter{} = Nothing

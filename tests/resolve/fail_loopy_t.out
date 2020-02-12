@@ -1,7 +1,7 @@
-fail_loopy_t.ml[1:13 ..1:19]: error (E1001)
+fail_loopy_t.ml[1:19 ..1:19]: error (E1001)
   Constructor not in scope: `T`
 
-  Arising from use of the constructor
+  Arising from use of the type
   │ 
 1 │ type t 'a = T : t T
-  │             ^^^^^^^
+  │                   ^

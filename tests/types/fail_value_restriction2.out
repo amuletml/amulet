@@ -1,16 +1,16 @@
-fail_value_restriction2.ml[2:5 ..2:5]: error (E2016)
+fail_value_restriction2.ml[2:1 ..2:13]: error (E2016)
   │ 
 2 │ let f = id id
-  │     ^
+  │ ^^^^^^^^^^^^^
   This top-level binding can not have a polymorphic type because of the value restriction
   • Note: It has type 'a -> 'a
   • Note: But the variable a needs to be determined
   • Solution: give it a monomorphic type signature. For example:
       unit -> unit
-fail_value_restriction2.ml[3:5 ..3:5]: error (E2016)
+fail_value_restriction2.ml[3:1 ..3:11]: error (E2016)
   │ 
 3 │ let _ = f 0
-  │     ^
+  │ ^^^^^^^^^^^
   This top-level binding can not have a polymorphic type because of the value restriction
   • Note: It has type 'bt
   • Note: But the variable bt needs to be determined

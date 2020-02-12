@@ -13,7 +13,7 @@
 
   Currently the latter of these is chosen, as Happy always prefers to shift.
 
-  === In type annotations and ascriptions (+6)
+  === In type spanOfs and ascriptions (+6)
 
   There's several cases where type ascriptions cause ambiguities. As
   these fall into one state, we'll group them here:
@@ -183,10 +183,10 @@ TopSep :: { () }
 
 Top :: { Toplevel Parsed }
     -- See comment on 'Access' as to why this is inlined
-    : let BindGroup                            { LetStmt NonRecursive Public (reverse $2) }
-    | let private BindGroup                    { LetStmt NonRecursive Private (reverse $3) }
-    | let rec BindGroup                        { LetStmt Recursive Public (reverse $3) }
-    | let rec private BindGroup                { LetStmt Recursive Private (reverse $4) }
+    : let BindGroup                            { withPos2 $1 (head $2) $ LetStmt NonRecursive Public (reverse $2) }
+    | let private BindGroup                    { withPos2 $1 (head $3) $ LetStmt NonRecursive Private (reverse $3) }
+    | let rec BindGroup                        { withPos2 $1 (head $3) $ LetStmt Recursive Public (reverse $3) }
+    | let rec private BindGroup                { withPos2 $1 (head $4) $ LetStmt Recursive Private (reverse $4) }
 
     | external Access val BindName ':' Type '=' string
       { withPos2 $1 $8 $ ForeignVal $2 (getL $4) (getString $8) (getL $6) }
@@ -275,9 +275,9 @@ Method :: { InstanceItem Parsed }
     { withPos2 $1 $5 $ TypeImpl (getL $2) $3 (getL $5) }
 
 TyConArg :: { TyConArg Parsed }
-         : TyVar { TyVarArg (getL $1) }
-         | '(' TyVar ':' Type ')' { TyAnnArg (getL $2) (getL $4) }
-         | '{' TyVar ':' Type '}' { TyInvisArg (getL $2) (getL $4) }
+  : TyVar                                      { TyVarArg (getL $1) }
+  | '(' TyVar ':' Type ')'                     { TyAnnArg (getL $2) (getL $4) }
+  | '{' TyVar ':' Type '}'                     { TyInvisArg (getL $2) (getL $4) }
 
 Ctor :: { Constructor Parsed }
      : Access BindCon                          { withPos1 $2    $ UnitCon $1 (getL $2) }
@@ -312,12 +312,12 @@ ExprDotOp :: { Expr Parsed  }
                                                  in withPos2 $1 end $ BinOp $1 (withPos1 name . VarRef . Name . getL $ name) idx }
 
 DotOp :: { (Located T.Text, Expr Parsed, Span) }
-  : '.' '(' Exprs ')'                          { (lPos2 $1 $2 $ T.pack ".()",               $3, annotation $4) }
-  | '.' '{' Exprs '}'                          { (lPos2 $1 $2 $ T.pack ".{}",               $3, annotation $4) }
-  | '.' '[' Exprs ']'                          { (lPos2 $1 $2 $ T.pack ".[]",               $3, annotation $4) }
-  | dotop '(' Exprs ')'                        { (lPos2 $1 $2 $ getIdent $1 <> T.pack "()", $3, annotation $4) }
-  | dotop '{' Exprs '}'                        { (lPos2 $1 $2 $ getIdent $1 <> T.pack "{}", $3, annotation $4) }
-  | dotop '[' Exprs ']'                        { (lPos2 $1 $2 $ getIdent $1 <> T.pack "[]", $3, annotation $4) }
+  : '.' '(' Exprs ')'                          { (lPos2 $1 $2 $ T.pack ".()",               $3, spanOf $4) }
+  | '.' '{' Exprs '}'                          { (lPos2 $1 $2 $ T.pack ".{}",               $3, spanOf $4) }
+  | '.' '[' Exprs ']'                          { (lPos2 $1 $2 $ T.pack ".[]",               $3, spanOf $4) }
+  | dotop '(' Exprs ')'                        { (lPos2 $1 $2 $ getIdent $1 <> T.pack "()", $3, spanOf $4) }
+  | dotop '{' Exprs '}'                        { (lPos2 $1 $2 $ getIdent $1 <> T.pack "{}", $3, spanOf $4) }
+  | dotop '[' Exprs ']'                        { (lPos2 $1 $2 $ getIdent $1 <> T.pack "[]", $3, spanOf $4) }
 
 DotOpRaw ::  { (Located T.Text) }
   : '.' '(' ')'                                { lPos2 $1 $3 $ T.pack ".()"               }
@@ -345,10 +345,10 @@ Expr0 :: { Expr Parsed }
       | if Expr then ExprBlock else ExprBlock '$end'
           { withPos2 $1 $6 $ If $2 $4 $6 }
 
-      | match Exprs with ListE1(Arm) '$end'    { withPos2 $1 (last $4) $ Match $2 $4 (annotation $1) }
-      | match Exprs with '(' ')'               { withPos2 $1 $5        $ Match $2 [] (annotation $1) }
-      | function ListE1(Arm) '$end'            { withPos2 $1 (last $2) $ Function $2 (annotation $1) }
-      | function '(' ')'                       { withPos2 $1 $3        $ Function [] (annotation $1) }
+      | match Exprs with ListE1(Arm) '$end'    { withPos2 $1 (last $4) $ Match $2 $4 (spanOf $1) }
+      | match Exprs with '(' ')'               { withPos2 $1 $5        $ Match $2 [] (spanOf $1) }
+      | function ListE1(Arm) '$end'            { withPos2 $1 (last $2) $ Function $2 (spanOf $1) }
+      | function '(' ')'                       { withPos2 $1 $3        $ Function [] (spanOf $1) }
 
       | lazy PreAtom                           { withPos2 $1 $2 $ Lazy $2 }
       | ExprDotOp DotOp '<-' PreAtom           { -- We need this comment to ensure the variables are aligned in the if.
@@ -356,7 +356,7 @@ Expr0 :: { Expr Parsed }
                                                      expr = $1
                                                      rhs = $4
                                                      op' = withPos2 name $3 . VarRef . Name $ getL name <> T.pack "<-"
-                                                     a = annotation expr <> annotation rhs
+                                                     a = spanOf expr <> spanOf rhs
                                                  in App (App (App op' expr a) idx a) rhs a }
       | PreAtom                                { $1 }
 
@@ -419,7 +419,7 @@ DoStmt :: { CompStmt Parsed }
 -- produce somewhat more friendly error messages in the common case.
 ExprNonComp :: { Expr Parsed }
   : Expr                                      { $1 }
-  | BasicStmt                                 {% tellErrors [MisplacedWith (annotation $1)]
+  | BasicStmt                                 {% tellErrors [MisplacedWith (spanOf $1)]
                                                  *> pure (withPos1 $1 (Literal LiUnit)) }
 
 ExprBlock :: { Expr Parsed }
@@ -494,23 +494,22 @@ BindGroup :: { [Binding Parsed] }
           | BindGroup and Binding             { $3 : $1 }
 
 Binding :: { Binding Parsed }
-        : BPattern PostBinding              { withPos1 $1 $ Matching $1 $2 }
+        : BPattern PostBinding              { withPos2 $1 $2 $ Matching $1 $2 }
         | BPattern ':' Type PostBinding
-          { withPos2 $1 $3 $ Matching $1 $ withPos2 $3 $4 $ Ascription $4 (getL $3) }
+          { withPos2 $1 $4 $ Matching $1 $ withPos2 $3 $4 $ Ascription $4 (getL $3) }
 
         | BindName ListE1(Parameter) PostBinding
-          { Binding (getL $1) (foldr (\x y -> withPos2 x $3 (Fun x y)) $3 $2) True (withPos1 $1 id) }
+          { withPos2 $1 $3 $ Binding (getL $1) (foldr (\x y -> withPos2 x $3 (Fun x y)) $3 $2) True }
+
         | BindName ListE1(Parameter) ':' Type PostBinding
-          { Binding (getL $1)
+          { withPos2 $1 $5 $ Binding (getL $1)
              (foldr (\x y -> withPos2 x $5 (Fun x y)) (Ascription $5 (getL $4) (withPos2 $1 $5 id)) $2)
-             True
-             (withPos2 $1 $4 id) }
+             True }
 
         | BPattern BindOp BPattern PostBinding
-          { Binding (getL $2)
+          { withPos2 $1 $4 $ Binding (getL $2)
               (withPos2 $1 $4 (Fun (PatParam $1) (withPos2 $3 $4 (Fun (PatParam $3) $4))))
-              True
-              (withPos2 $1 $3 id) }
+              True }
 
 PostBinding :: { Expr Parsed }
   : '=' ExprBlock '$end'                       { $2 }
@@ -567,7 +566,7 @@ Lit :: { Located Lit }
 -- | An alternative to Pattern which uses TypeOp instead of Type,
 -- suitable for usage in match arms.
 --
--- This ensures '->' does not occur on the top level of a type annotation, and
+-- This ensures '->' does not occur on the top level of a type spanOf, and
 -- so there is no conflict with the '->' in an arm.
 MPattern :: { Pattern Parsed }
          : ArgP                   { $1 }
@@ -578,7 +577,7 @@ MPattern :: { Pattern Parsed }
 -- | An alternative to Pattern without any type pattern, suitable for usage in
 -- bindings.
 --
--- We place the type annotation on the expression instead of within the pattern,
+-- We place the type spanOf on the expression instead of within the pattern,
 -- as that allows for easier desugaring later on.
 BPattern :: { Pattern Parsed }
          : ArgP                   { $1 }
@@ -605,7 +604,8 @@ PatternRow :: { (T.Text, Pattern Parsed) }
   | ident                                         { (getIdent $1, withPos1 $1 $ Capture(getName $1)) }
 
 Arm :: { Arm Parsed }
-    : '|' List1(MPattern, ',') Guard '->' ExprBlock { Arm (completeTuple PTuple $2) $3 $5 }
+    : '|' List1(MPattern, ',') Guard '->' ExprBlock
+    { withPos2 $1 $5 $ Arm (completeTuple PTuple $2) $3 $5 }
 
 Guard :: { Maybe (Expr Parsed) }
   :                                               { Nothing }
@@ -637,23 +637,23 @@ TypeApp :: { Located (Type Parsed) }
   : TypeAtom                                      { $1 }
   | TypeApp TypeAtom                              { lPos2 $1 $2 $ TyApp (getL $1) (getL $2) }
 
-TypeOperator :: { Var Parsed  }
-  : InfixName                                     { getL $1 }
+TypeOperator :: { Type Parsed  }
+  : InfixName                                     { withPos1 $1 $ TyCon (getL $1) }
 
-TypeOperatorF :: { Var Parsed }
+TypeOperatorF :: { Type Parsed }
   : TypeOperator                                  { $1 }
-  | '->'                                          { Name $ T.pack "->" }
+  | '->'                                          { withPos1 $1 . TyCon . Name $ T.pack "->" }
 
 TypeAtom :: { Located (Type Parsed) }
-         : Var                                    { lPos1 $1 $ TyCon (getL $1) }
-         | TyVar                                  { lPos1 $1 $ TyVar (getL $1) }
-         | Con                                    { lPos1 $1 $ TyPromotedCon (getL $1) }
+         : Var                                    { wlPos1 $1 $ TyCon (getL $1) }
+         | TyVar                                  { wlPos1 $1 $ TyVar (getL $1) }
+         | Con                                    { wlPos1 $1 $ TyPromotedCon (getL $1) }
          | type                                   { lPos1 $1 TyType }
-         | lazy                                   { lPos1 $1 $ TyCon (Name (T.pack "lazy")) }
-         | '(' ')'                                { lPos2 $1 $2 $ TyCon (Name (T.pack "unit")) }
+         | lazy                                   { wlPos1 $1 $ TyCon (Name (T.pack "lazy")) }
+         | '(' ')'                                { wlPos2 $1 $2 $ TyCon (Name (T.pack "unit")) }
          | '(' List1(Type,',') ')'                { lPos2 $1 $3 $ mkTupleTypeL (map getL $2) }
-         | '[' List(Type,',') ']'                 { lPos2 $1 $3 $ mkListTypeL (map getL $2) }
-         | '(' TypeOperatorF ')'                  { lPos2 $1 $3 $ TyParens (TyCon $2) }
+         | '[' List(Type,',') ']'                 { wlPos2 $1 $3 $ mkListTypeL (map getL $2) }
+         | '(' TypeOperatorF ')'                  { lPos2 $1 $3 $ TyParens $2 }
          | '{' ListT(TypeRow, ',') '}'            { lPos2 $1 $3 $ TyExactRows $2 }
          | '{' Type '|' ListT(TypeRow, ',') '}'   { lPos2 $1 $5 $ TyRows (getL $2) $4 }
          | '_'                                    { lPos1 $1 (TyWildcard Nothing) }
@@ -672,7 +672,7 @@ data Located a = L a Span
   deriving (Eq, Show, Ord)
 
 instance Spanned (Located a) where
-  annotation (L _ s) = s
+  spanOf (L _ s) = s
 
 instance Functor Located where
   fmap f (L a s) = L (f a) s
@@ -716,11 +716,17 @@ lPos1 s x = withPos1 s (L x)
 lPos2 :: (Spanned a, Spanned b) => a -> b -> c -> Located c
 lPos2 s e x = withPos2 s e (L x)
 
+wlPos1 :: Spanned a => a -> (Span -> b) -> Located b
+wlPos1 s x = withPos1 s (\s -> L (x s) s)
+
+wlPos2 :: (Spanned a, Spanned b) => a -> b -> (Span -> c) -> Located c
+wlPos2 s e x = withPos2 s e (\s -> L (x s) s)
+
 withPos1 :: Spanned a => a -> (Span -> b) -> b
-withPos1 s f = f (annotation s)
+withPos1 s f = f (spanOf s)
 
 withPos2 :: (Spanned a, Spanned b) => a -> b -> (Span -> c) -> c
-withPos2 s e f = f (annotation s <!> annotation e)
+withPos2 s e f = f (spanOf s <!> spanOf e)
 
 (<!>) :: Span -> Span -> Span
 s <!> e = mkSpanUnsafe (spanStart s) (spanEnd e)
@@ -731,7 +737,7 @@ tupleExpr xs | all isJust xs = Tuple (map fromJust xs)
 
 completeTuple :: Spanned (f Parsed) => ([f Parsed] -> Span -> f Parsed) -> [f Parsed] -> f Parsed
 completeTuple _ [x] = x
-completeTuple k (x:xs) = k (x:xs) (sconcat (annotation x :| map annotation xs))
+completeTuple k (x:xs) = k (x:xs) (sconcat (spanOf x :| map spanOf xs))
 
 tuplePattern :: [Pattern Parsed] -> Ann Parsed -> Pattern Parsed
 tuplePattern [] a = PLiteral LiUnit a
@@ -772,7 +778,7 @@ getL      (L x _)                    = x
 forallTy spec vs t = foldr TyPi t (map (\(x, k) -> Invisible x k spec) vs)
 
 respanFun :: (Spanned a, Spanned b) => a -> b -> Expr Parsed -> Expr Parsed
-respanFun s e (Fun p b _) = Fun p b (annotation s <!> annotation e)
+respanFun s e (Fun p b _) = Fun p b (spanOf s <!> spanOf e)
 respanFun _ _ _ = error "what"
 
 mkTupleTypeL :: [Type p] -> Type p
@@ -783,9 +789,9 @@ mkTupleTypeL (x:xs) =
       go [] = undefined
    in go (x:xs)
 
-mkListTypeL :: [Type Parsed] -> Type Parsed
-mkListTypeL [] = TyPromotedCon (Name (T.pack "Nil"))
-mkListTypeL (x:xs) = TyApp (TyPromotedCon (Name (T.pack "Cons"))) (TyTupleL x (mkListTypeL xs))
+mkListTypeL :: [Type Parsed] -> Span -> Type Parsed
+mkListTypeL [] s = TyPromotedCon (Name (T.pack "Nil")) s
+mkListTypeL (x:xs) s = TyApp (TyPromotedCon (Name (T.pack "Cons")) s) (TyTupleL x (mkListTypeL xs s))
 
 buildClass :: TopAccess -> Located (Type Parsed) -> [Fundep Parsed]
            -> [ClassItem Parsed] -> Parser (Span -> Toplevel Parsed)
@@ -799,9 +805,9 @@ buildClass am (L parsed typ) fundep ms =
       pure (Class name am Nothing ts fundep ms)
   where
     go :: [TyConArg Parsed] -> Type Parsed -> Parser (Var Parsed, [TyConArg Parsed])
-    go ts (TyCon v) = pure (v, ts)
+    go ts (TyCon v _) = pure (v, ts)
     go ts (TyParens t) = go ts t
-    go ts (TyApp rest (TyVar v)) = go (TyVarArg v:ts) rest
+    go ts (TyApp rest (TyVar v a)) = go (TyVarArg v:ts) rest
     go ts ty = do
       tellErrors [MalformedClass typ parsed]
       pure (undefined, ts)
@@ -822,7 +828,7 @@ buildInstance (L ty typ) ms =
       pure (Instance name Nothing ty ms False)
   where
     go :: Type Parsed -> Parser (Var Parsed)
-    go (TyCon v) = pure v
+    go (TyCon v _) = pure v
     go (TyApp rest _) = go rest
     go ty = do
       tellErrors [MalformedInstance typ ty]

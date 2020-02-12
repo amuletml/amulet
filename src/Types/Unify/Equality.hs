@@ -54,9 +54,9 @@ import Prelude hiding (lookup)
 
 bind :: MonadSolve m => ImplicitScope ClassInfo Typed -> Var Typed -> Type Typed -> m (Coercion Typed) --- {{{
 bind scope var ty
-  | TyVar var == ty = pure (ReflCo ty)
+  | TyVar var () == ty = pure (ReflCo ty)
   -- /\ Var-var deletion
-  | TyWildcard (Just (TyVar v)) <- ty, v == var = pure (ReflCo ty)
+  | TyWildcard (Just (TyVar v ())) <- ty, v == var = pure (ReflCo ty)
   -- /\ Predicativity checking
   | otherwise = do
       env <- use solveTySubst
@@ -67,7 +67,7 @@ bind scope var ty
       when (occurs var ty) $
         confesses (Occurs var ty)
 
-      if | TyVar var == ty -> pure (ReflCo ty)
+      if | TyVar var () == ty -> pure (ReflCo ty)
          | otherwise ->
             case Map.lookup var env of
               Nothing -> do
@@ -76,13 +76,13 @@ bind scope var ty
                      -- /\ We're allowed to bind the variable, so just
                      -- do it.
 
-                   | var `Set.member` noTouch, TyVar v <- ty, v `Set.notMember` noTouch ->
-                     solveTySubst .= (env `compose` Map.singleton v (TyVar var))
+                   | var `Set.member` noTouch, TyVar v () <- ty, v `Set.notMember` noTouch ->
+                     solveTySubst .= (env `compose` Map.singleton v (TyVar var ()))
                      -- /\ The equality is of the form v1 := v2, where
                      -- v1 is bad but v2 is free. So what we do is add
                      -- v2 := v1 to the environment.
 
-                   | otherwise -> confesses =<< unequal scope (TyVar var) ty
+                   | otherwise -> confesses =<< unequal scope (TyVar var ()) ty
                    -- No can do.
                 pure (ReflCo ty)
               Just ty' -> unify scope ty (apply env ty')
@@ -120,7 +120,7 @@ unify scope (TySkol x) (TySkol y) -- {{{
                else confesses (SkolBinding x (TySkol y))
 -- }}}
 
-unify scope ta@(TyPromotedCon a) tb@(TyPromotedCon b)
+unify scope ta@(TyPromotedCon a ()) tb@(TyPromotedCon b ())
   | a == b = pure (ReflCo tb)
   | otherwise = confesses =<< unequal scope ta tb
 
@@ -128,8 +128,8 @@ unify scope ta@(TyLit a) tb@(TyLit b)
   | a == b = pure (ReflCo tb)
   | otherwise = confesses =<< unequal scope ta tb
 
-unify scope (TyVar a) b = bind scope a b
-unify scope a (TyVar b) = SymCo <$> bind scope b a
+unify scope (TyVar a ()) b = bind scope a b
+unify scope a (TyVar b ()) = SymCo <$> bind scope b a
 
 unify scope (TyWildcard (Just a)) b = unify scope a b
 unify scope a (TyWildcard (Just b)) = SymCo <$> unify scope b a
@@ -144,9 +144,9 @@ unify scope skt@(TySkol t@(Skolem sv _ _ _)) b = do -- {{{
       _ <- unify scope b ty'
       pure (AssumedCo (TySkol t) ty')
     Nothing -> case b of
-      TyVar v -> bind scope v (TySkol t)
+      TyVar v () -> bind scope v (TySkol t)
       TyWildcard (Just tau) -> unify scope skt tau
-      TyApps (TyCon v) xs | Just (Right tf) <- Map.lookup v info ->
+      TyApps (TyCon v ()) xs | Just (Right tf) <- Map.lookup v info ->
         SymCo <$> unifyTyFunApp tf scope xs skt
       _ ->
         case lookupEquality info scope subst skt b of
@@ -163,23 +163,23 @@ unify scope skt@(TySkol t@(Skolem sv _ _ _)) b = do -- {{{
 unify scope b (TySkol t) = SymCo <$> unify scope (TySkol t) b -- }}}
 
 -- ((->) a b) = a -> b
-unify scope (TyApp (TyApp (TyCon v) l) r) (TyArr l' r')
+unify scope (TyApp (TyApp (TyCon v ()) l) r) (TyArr l' r')
   | v == tyArrowName = ArrCo <$> unify scope l l' <*> unify scope r r'
 
-unify scope (TyArr l r) (TyApp (TyApp (TyCon v) l') r')
+unify scope (TyArr l r) (TyApp (TyApp (TyCon v ()) l') r')
   | v == tyArrowName = ArrCo <$> unify scope l l' <*> unify scope r r'
 
 unify scope x@(TyApp f g) y@(TyArr l r) =
-  rethrow scope x y $ AppCo <$> unify scope f (TyApp (TyCon tyArrowName) l) <*> unify scope g r
+  rethrow scope x y $ AppCo <$> unify scope f (TyApp (TyCon tyArrowName ()) l) <*> unify scope g r
 
 unify scope x@(TyArr l r) y@(TyApp f g) =
-  rethrow scope x y $ AppCo <$> unify scope (TyApp (TyCon tyArrowName) l) f <*> unify scope r g
+  rethrow scope x y $ AppCo <$> unify scope (TyApp (TyCon tyArrowName ()) l) f <*> unify scope r g
 
 unify scope (TyArr a b) (TyArr a' b') = ArrCo <$> unify scope a a' <*> unify scope b b'
 unify scope (TyPi (Implicit a) b) (TyPi (Implicit a') b') =
   ArrCo <$> unify scope a a' <*> unify scope b b' -- Technically cheating but yay desugaring
 
-unify scope ta@(TyCon a) tb@(TyCon b)
+unify scope ta@(TyCon a ()) tb@(TyCon b ())
   | a == b = pure (ReflCo tb)
   | otherwise = do
       i <- view solveInfo
@@ -200,7 +200,7 @@ unify scope (TyPi (Invisible v ka vis) ty) (TyPi (Invisible v' kb vis') ty') | v
 
   c <- unify scope ka kb
   fresh <- freshTV
-  let TyVar tv = fresh
+  let TyVar tv () = fresh
 
   ForallCo tv vis c <$>
     unify scope (apply (Map.singleton v fresh) ty) (apply (Map.singleton v' fresh) ty')
@@ -255,30 +255,30 @@ unify _ x tp@TyRows{} = confesses (Note (CanNotInstance tp x) isRec)
 unify _ tp@TyRows{} x = confesses (Note (CanNotInstance tp x) isRec)
 
 -- ((*) a b) = a * b
-unify scope (TyApp (TyApp (TyCon v) l) r) (TyTuple l' r')
+unify scope (TyApp (TyApp (TyCon v ()) l) r) (TyTuple l' r')
   | v == tyTupleName = ProdCo <$> unify scope l l' <*> unify scope r r'
 
-unify scope (TyTuple l r) (TyApp (TyApp (TyCon v) l') r')
+unify scope (TyTuple l r) (TyApp (TyApp (TyCon v ()) l') r')
   | v == tyTupleName = ProdCo <$> unify scope l l' <*> unify scope r r'
 
 unify scope x@(TyApp f g) y@(TyTuple l r) =
-  rethrow scope x y $ AppCo <$> unify scope f (TyApp (TyCon tyTupleName) l) <*> unify scope g r
+  rethrow scope x y $ AppCo <$> unify scope f (TyApp (TyCon tyTupleName ()) l) <*> unify scope g r
 unify scope x@(TyTuple l r) y@(TyApp f g) =
-  rethrow scope x y $ AppCo <$> unify scope (TyApp (TyCon tyTupleName) l) f <*> unify scope r g
+  rethrow scope x y $ AppCo <$> unify scope (TyApp (TyCon tyTupleName ()) l) f <*> unify scope r g
 
-unify scope (TyOperator l v r) (TyTuple l' r')
+unify scope (TyOperator l (TyCon v _) r) (TyTuple l' r')
   | v == tyTupleName = ProdCo <$> unify scope l l' <*> unify scope r r'
 
-unify scope (TyTuple l r) (TyOperator l' v r')
+unify scope (TyTuple l r) (TyOperator l' (TyCon v _) r')
   | v == tyTupleName = ProdCo <$> unify scope l l' <*> unify scope r r'
 
 unify scope (TyTuple a b) (TyTuple a' b') =
   ProdCo <$> unify scope a a' <*> unify scope b b'
 
 unify scope x@(TyOperator l v r) y@(TyApp f g) =
-  rethrow scope x y $ AppCo <$> unify scope (TyApp (TyCon v) l) f <*> unify scope g r
+  rethrow scope x y $ AppCo <$> unify scope (TyApp v l) f <*> unify scope g r
 unify scope x@(TyApp f g) y@(TyOperator l v r) =
-  rethrow scope x y $ AppCo <$> unify scope f (TyApp (TyCon v) l) <*> unify scope r g
+  rethrow scope x y $ AppCo <$> unify scope f (TyApp v l) <*> unify scope r g
 
 unify scope (TyOperator l v r) (TyOperator l' v' r')
   | v == v' = AppCo <$> unify scope l l' <*> unify scope r r'
@@ -287,20 +287,20 @@ unify scope (TyTupleL a b) (TyTupleL a' b') =
   (\_ _ -> AssumedCo (TyTupleL a b) (TyTupleL a' b'))
     <$> unify scope a a' <*> unify scope b b'
 
-unify scope ta@(TyApps (TyCon v) xs@(_:_)) b = do
+unify scope ta@(TyApps (TyCon v ()) xs@(_:_)) b = do
   x <- view solveInfo
 
   case x ^. at v of
     Just (Right tf) -> unifyTyFunApp tf scope xs b
     _ -> case b of
-      TyApps (TyCon v') _
+      TyApps (TyCon v' ()) _
         | Just (Right _) <- x ^. at v' -> do
           doWork (unequal scope ta b)
           SymCo <$> unify scope b ta
         | v /= v' -> confesses =<< unequal scope ta b
 
       TyApps f ys@(_:_) | length xs == length ys -> rethrow scope ta b $ do
-        heads <- unify scope (TyCon v) f
+        heads <- unify scope (TyCon v ()) f
         tails <- polyInstSafe $
           traverse (uncurry (unify scope)) (zip xs ys)
         pure (foldl AppCo heads tails)
@@ -316,7 +316,7 @@ unify scope ta@(TyApps (TyCon v) xs@(_:_)) b = do
             xs_b = drop (xs_l - ys_l) xs
 
         polyInstSafe $ do
-          heads <- unify scope (TyApps (TyCon v) xs_a) f
+          heads <- unify scope (TyApps (TyCon v ()) xs_a) f
           tails <- traverse (uncurry (unify scope)) (zip xs_b ys)
           pure (foldl AppCo heads tails)
 
@@ -325,7 +325,7 @@ unify scope ta@(TyApps (TyCon v) xs@(_:_)) b = do
         (confesses =<< unequal scope ta b)
           `catchChronicle` \_ -> fmap SymCo (unify scope b ta)
 
-unify scope a tb@(TyApps (TyCon _) (_:_)) = rethrow scope a tb $ SymCo <$> unify scope tb a
+unify scope a tb@(TyApps TyCon{} (_:_)) = rethrow scope a tb $ SymCo <$> unify scope tb a
 
 unify scope (TyApp f x) (TyApp g y) = AppCo <$> unify scope f g <*> unify scope x y
 
@@ -366,7 +366,7 @@ tyFunByEval :: forall m. MonadSolve m
 unifyTyFunApp ti _ args tb
   | trace EquS
       (keyword "[W] TF:"
-        <+> pretty (TyApps (TyCon (ti ^. tsName)) args)
+        <+> pretty (TyApps (TyCon (ti ^. tsName) ()) args)
         <+> soperator (char '~')
         <+> pretty tb)
       False
@@ -375,16 +375,16 @@ unifyTyFunApp ti _ args tb
 unifyTyFunApp (TySymInfo _ exp decl_args _) scope actual_args tb = do
   let used = take (length decl_args) actual_args
       unused = drop (length decl_args) actual_args
-      Just sub = unifyPure_v (zip (map TyVar decl_args) used)
+      Just sub = unifyPure_v (zip (map (`TyVar` ()) decl_args) used)
   unify scope (foldl TyApp (apply sub exp) unused) tb
 
-unifyTyFunApp ti@(TyFamInfo tn _ _ _ _) scope args tb@(TyApps (TyCon tn') args') | tn == tn' = do
-  x <- memento $ foldl AppCo (ReflCo (TyCon tn)) <$> traverse (uncurry (unify scope)) (zip args args')
+unifyTyFunApp ti@(TyFamInfo tn _ _ _ _) scope args tb@(TyApps (TyCon tn' ()) args') | tn == tn' = do
+  x <- memento $ foldl AppCo (ReflCo (TyCon tn ())) <$> traverse (uncurry (unify scope)) (zip args args')
   case x of
     Left _ -> unifyTyFunApp' ti scope args tb
     Right x -> pure x
 
-unifyTyFunApp ti scope args (TyVar v) = bind scope v (TyApps (TyCon (ti ^. tsName)) args)
+unifyTyFunApp ti scope args (TyVar v ()) = bind scope v (TyApps (TyCon (ti ^. tsName) ()) args)
 unifyTyFunApp ti scope args tb = unifyTyFunApp' ti scope args tb
 
 unifyTyFunApp' info scope args tb = do
@@ -393,21 +393,21 @@ unifyTyFunApp' info scope args tb = do
   case x of
     Just t -> pure t
     Nothing -> case tb of
-      TyApps (TyCon tn') their@(_:_) | Just (Right info') <- Map.lookup tn' solve_info -> do
-        y <- tyFunByEval info' scope their (TyApps (TyCon (info ^. tsName)) args)
+      TyApps (TyCon tn' ()) their@(_:_) | Just (Right info') <- Map.lookup tn' solve_info -> do
+        y <- tyFunByEval info' scope their (TyApps (TyCon (info ^. tsName) ()) args)
         maybe don't pure y
       _ -> don't
   where
     don't = do
       var <- genName
       tell [ConImplicit (It'sThis (BecauseInternal "deferred tyfam equality")) scope var
-              (TyApps tyEq [TyApps (TyCon (info ^. tsName)) args, tb])]
+              (TyApps tyEq [TyApps (TyCon (info ^. tsName) ()) args, tb])]
       pure (VarCo var)
 
 -- tyFunByEval ti scope args (TyVar v) = pure <$> bind scope v (TyApps (TyCon (ti ^. tsName)) args)
 tyFunByEval (TyFamInfo tn _ _ _ _) scope args tb | Just solve <- magicTyFun tn = solve scope args tb
 tyFunByEval (TyFamInfo tn eqs relevant _ con) scope args tb = do
-  doWork (unequal scope (TyApps (TyCon tn) args) tb)
+  doWork (unequal scope (TyApps (TyCon tn ()) args) tb)
   info <- view solveInfo
   assum <- use solveAssumptions
   () <- case con of
@@ -418,10 +418,10 @@ tyFunByEval (TyFamInfo tn eqs relevant _ con) scope args tb = do
       tell [ConImplicit (It'sThis (BecauseInternal "tyfam constraint")) scope var (apply sub tau)]
     Nothing -> pure ()
 
-  case lookupEquality info scope assum (TyApps (TyCon tn) args) tb of
+  case lookupEquality info scope assum (TyApps (TyCon tn ()) args) tb of
     (x:_) -> pure (Just x)
     _ -> do
-      let eq = TyApps tyEq [TyApps (TyCon tn) args, tb]
+      let eq = TyApps tyEq [TyApps (TyCon tn ()) args, tb]
       ~(TyApps _ [flat_l, flat_r], sub) <- flatten assum info eq
 
       unless (isJust (unifyPure flat_l flat_r)) $ do
@@ -446,7 +446,7 @@ tyFunByEval (TyFamInfo tn eqs relevant _ con) scope args tb = do
 
       case x of
         Just (sub, cos) -> do
-          (flat, _) <- flatten assum info (TyApps (TyCon tn) (apply sub declared))
+          (flat, _) <- flatten assum info (TyApps (TyCon tn ()) (apply sub declared))
 
           if all (apart flat) skipped
 
@@ -459,7 +459,7 @@ tyFunByEval (TyFamInfo tn eqs relevant _ con) scope args tb = do
 
              else pure Nothing
 
-        _ -> go (TyApps (TyCon tn) declared:skipped) eqs
+        _ -> go (TyApps (TyCon tn ()) declared:skipped) eqs
     go skipped (_:eqs) = go skipped eqs
     go _ [] = pure Nothing
 
@@ -502,7 +502,7 @@ lookupEquality class_info scope assum a b = normal <|> fundepEquality where
   find t scope = used Var   (find_ffs t scope)
              <|> used Proj1 (find_ffs (TyTuple t a) scope)
              <|> used Proj2 (find_ffs (TyTuple a t) scope)
-    where a = TyVar (TgInternal "a")
+    where a = TyVar (TgInternal "a") ()
           a :: Type Typed
           used x = map (implClass .~ x)
 
@@ -517,15 +517,15 @@ lookupEquality class_info scope assum a b = normal <|> fundepEquality where
       all_instances = Map.keys (keys scope)
 
       inst_pairs =
-            [ (x, y) | x@(TyApps (TyCon c) _) <- all_instances
-                     , y@(TyApps (TyCon c') _) <- all_instances, c == c', x /= y ]
+            [ (x, y) | x@(TyApps (TyCon c ()) _) <- all_instances
+                     , y@(TyApps (TyCon c' ()) _) <- all_instances, c == c', x /= y ]
         <|> [ (x, y) | TyTuple x y <- all_instances
-                     , let TyApps (TyCon c) _ = x, let TyApps (TyCon c') _ = y, c == c' ]
+                     , let TyApps (TyCon c ()) _ = x, let TyApps (TyCon c' ()) _ = y, c == c' ]
 
       pair_fds =
         [ (xs, tail (appsView y), need, det)
         | (x, y) <- inst_pairs
-        , let TyApps (TyCon class_tc) xs = x
+        , let TyApps (TyCon class_tc ()) xs = x
         , Just (Left clss) <- [class_info ^. at class_tc]
         , (need, det, _) <- clss ^. ciFundep
         ]
@@ -557,9 +557,9 @@ reduceTyFuns scope orig = do
   traceM EquS ("flattened:" <+> pretty tau)
   let eqs = Map.toList funs
 
-  (_, state) <- censor (const mempty) . capture . for eqs $ \(var, TyApps (TyCon tyfun) args) -> do
+  (_, state) <- censor (const mempty) . capture . for eqs $ \(var, TyApps (TyCon tyfun ()) args) -> do
     let Just (Right tf) = Map.lookup tyfun info
-    unifyTyFunApp' tf scope args (TyVar var)
+    unifyTyFunApp' tf scope args (TyVar var ())
 
   if null eqs
      then pure orig
@@ -577,18 +577,18 @@ flatten assum i = runWriterT . flip evalStateT mempty . go 0 where
      -> StateT (Map.Map (Type Typed) (Var Typed))
           (WriterT (Subst Typed) m) (Type Typed)
 
-  go l tau@(TyApps (TyCon v) as@(_:_))
+  go l tau@(TyApps (TyCon v ()) as@(_:_))
     | l > 0, Just (Right _) <- i ^. at v = do
       existing <- use (at tau)
       case existing of
-        Just k -> pure (TyVar k)
+        Just k -> pure (TyVar k ())
         _ -> do
           traceM EquS ("flattener: using new for" <+> pretty tau)
-          ~v@(TyVar key) <- freshTV
+          ~v@(TyVar key ()) <- freshTV
           tell (Map.singleton key tau)
           at tau ?= key
           pure v
-    | otherwise = TyApps (TyCon v) <$> traverse (go (l + 1)) as
+    | otherwise = TyApps (TyCon v ()) <$> traverse (go (l + 1)) as
 
   go l (TyApp f x) = TyApp <$> go (l + 1) f <*> go (l + 1) x
   go l (TySkol v)
@@ -615,8 +615,8 @@ flatten assum i = runWriterT . flip evalStateT mempty . go 0 where
   go l (TyParens t) = TyParens <$> go (l + 1) t
 
 occurs :: Var Typed -> Type Typed -> Bool
-occurs _ (TyVar _) = False
-occurs _ (TyWildcard (Just (TyVar _))) = False
+occurs _ TyVar{} = False
+occurs _ (TyWildcard (Just TyVar{})) = False
 occurs v (TyWildcard (Just t)) = occurs v t
 occurs x e = x `Set.member` ftv e
 
@@ -632,7 +632,7 @@ unequal scope a b =
   do
     x <- use solveTySubst
     info <- view solveInfo
-    let isTf (TyCon v) =
+    let isTf (TyCon v ()) =
           case info ^. at v of
             Just (Right TySymInfo{}) -> True
             _ -> False
@@ -640,7 +640,7 @@ unequal scope a b =
 
     let ta = apply x a
         tb = apply x b
-        fix = Map.fromList . map (\x -> (x ^. skolIdent, TyVar (x ^. skolVar))) . Set.toList . skols
+        fix = Map.fromList . map (\x -> (x ^. skolIdent, TyVar (x ^. skolVar) ())) . Set.toList . skols
 
     if isTf (head (appsView a)) || isTf (head (appsView b))
        then do

@@ -154,7 +154,7 @@ data ValueAbs p
   | VLiteral Lit
   | VNotLiteral (Var p) (Set.Set Lit)
 
-deriving instance (Show (Var p), Show (Ann p)) => Show (ValueAbs p)
+deriving instance ShowPhrase p => Show (ValueAbs p)
 
 instance Pretty (Var p) => Pretty (ValueAbs p) where
   pretty VVariable{} = skeyword "_"
@@ -368,7 +368,7 @@ covering' env = go where
     constrain [mkUni ty (TyTuple v1 v2)]
     pure (v1, v2)
 
-  rowTy (TyVar _) = mempty
+  rowTy TyVar{} = mempty
   rowTy (TyRows f fs) = rowTy f <> Map.fromList fs
   rowTy (TyExactRows fs) = Map.fromList fs
   rowTy (TyParens t) = rowTy t
@@ -417,7 +417,7 @@ constructors env kty vty = do
   where
     -- | Get the constructors for a given type
     ctors :: Type Typed -> Set.Set (Var Typed)
-    ctors (TyCon v) = fromMaybe (error $ "Cannot find constructors for " ++ show v) (env ^. (types . at v))
+    ctors (TyCon v _) = fromMaybe (error $ "Cannot find constructors for " ++ show v) (env ^. (types . at v))
     ctors (TyApp f _) = ctors f
     ctors t = error $ "Cannot get type name from " ++ show (pretty t)
 
@@ -445,13 +445,13 @@ inhabited env (AbsState st cs i)
 
   go :: (MonadPlus m, MonadNamey m, MonadState CoverState m)
      => Set.Set (Var Typed) -> Type Typed -> m ()
-  go c (TyVar v) = do
+  go c (TyVar v _) = do
     let c' = Set.insert v c
     t' <- gets (typeWithin v . fst)
     case t' of
       -- If there's no substitution, or a loop in the substitution, assume it's inhabited.
       Nothing -> inhb
-      Just (TyVar v') | Set.member v' c' -> inhb
+      Just (TyVar v' _) | Set.member v' c' -> inhb
       Just t' -> go c' t'
 
   go c t@TyApp{} = ctorCheck c t
@@ -466,7 +466,7 @@ inhabited env (AbsState st cs i)
   go c (TyRows f fs) = go c f >> traverse_ (go c . snd) fs
   go c (TyExactRows fs) = traverse_ (go c . snd) fs
   go c (TyTuple l r) = go c l >> go c r
-  go c (TyOperator l v r) = go c (TyApp (TyApp (TyCon v) l) r)
+  go c (TyOperator l v r) = go c (TyApp (TyApp v l) r)
   go c (TyWildcard t) = maybe inhb (go c) t
   go c (TyParens t) = go c t
 
@@ -481,7 +481,7 @@ inhabited env (AbsState st cs i)
   --
   -- We pass in a set of previously visited type names to avoid getting into
   -- loops.
-  concreteTy c (TyCon v)
+  concreteTy c (TyCon v _)
     | v `Set.notMember` c
     , isJust (env ^. (types . at v))
     = Just v

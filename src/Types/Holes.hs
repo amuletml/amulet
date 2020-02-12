@@ -64,7 +64,7 @@ fill t | trace (displayS (keyword "fill" <+> pretty t)) False = undefined
 #endif
 
 fill t@TyPi{} | isSkolemisable t = fake [t] $ \[a] -> do
-  (_, t, _, _) <- skolemise (ByAscription (annotation a) t) t
+  (_, t, _, _) <- skolemise (ByAscription (spanOf a) t) t
   fill t
 
 -- fill TyPromotedCon{} = fail "findHoleCandidate: Kind error (TyPromotedCon)"
@@ -119,7 +119,7 @@ fill t | t == tyBool = fake [t] $ \[a] ->
 fill t | t == tyUnit = fake [t] $ pure . Literal LiUnit . head
 
 -- Sum types: we need to try each constructor.
-fill ty@(TyApps (TyCon ty_v) _) = once (knownImplication ty) <|> do
+fill ty@(TyApps (TyCon ty_v ()) _) = once (knownImplication ty) <|> do
   -- Search all constructors for the type..
   con <- explore =<< view (psEnv . types . at ty_v . non mempty . to Set.toList)
 #ifdef TRACE_TC
@@ -156,7 +156,7 @@ fill ty@(TyApps (TyCon ty_v) _) = once (knownImplication ty) <|> do
 
 -- Applications of type operators can be filled just like other
 -- applications
-fill (TyOperator l v r) = fill (TyApps (TyCon v) [l, r])
+fill (TyOperator l v r) = fill (TyApps v [l, r])
 
 -- Filling pairs? Fill the left-hand side and the right-hand side in
 -- order.
@@ -176,7 +176,8 @@ fill ty@(TyExactRows xs) = fake [ty] $ \[ann] -> do
 fill _ = fail ""
 
 makeFunction :: MonadPs m => Type Typed -> Type Typed -> m (Expr Typed)
-makeFunction domain@(TyApps (TyCon t) _) body_t = fake [domain] $ \[ann] -> do
+makeFunction domain@(TyApps (TyCon t ()) _) body_t = fake [domain] $ \[ann] -> do
+  span <- view psAnn
   cons <- view (psEnv . types . at t . non undefined . to Set.toList)
 
   arms <- for cons $ \con -> do
@@ -190,9 +191,9 @@ makeFunction domain@(TyApps (TyCon t) _) body_t = fake [domain] $ \[ann] -> do
         guard (nonRec t dom)
         Just sub <- pure $ unifyPure cod domain
         assume (apply sub dom) $ \pat ->
-          Arm (Destructure con (Just pat) ann) Nothing <$> fill body_t
+          Arm (Destructure con (Just pat) ann) Nothing <$> fill body_t <*> pure span
 
-      _ -> Arm (Destructure con Nothing ann) Nothing <$> fill body_t
+      _ -> Arm (Destructure con Nothing ann) Nothing <$> fill body_t <*> pure span
 
   pure $ Function arms internal ann
 
@@ -200,8 +201,8 @@ makeFunction _ _ = undefined
 
 -- | Is this type constructor a sum type constructor?
 isSum :: MonadReader PsScope m => Type Typed -> m Bool
-isSum (TyOperator l o r) = isSum (TyApps (TyCon o) [l, r])
-isSum (TyApps (TyCon t) _) = do
+isSum (TyOperator l o r) = isSum (TyApps o [l, r])
+isSum (TyApps (TyCon t ()) _) = do
   x <- view (psEnv . types . at t)
   pure $ case x of
     Just t -> Set.size t /= 1
@@ -287,7 +288,7 @@ assume ty@(TyExactRows xs) k = go [] xs k where
   go pats ((label, t):xs) k = assume t $ \pat -> go ((label, pat):pats) xs k
   go pats [] k = fake [ty] $ \[record] -> k (PRecord (reverse pats) record)
 
-assume ty@(TyApps (TyCon c) xs) k = fake [ty] $ \[pat] -> do
+assume ty@(TyApps (TyCon c ()) xs) k = fake [ty] $ \[pat] -> do
   cs <- view (psEnv . types . at c . non mempty . to Set.toList)
   case cs of
     [con] -> do
@@ -350,7 +351,7 @@ genNameWithHint vars ty =
     discriminate _ = undefined
 
 nonRec :: Var Typed -> Type Typed -> Bool
-nonRec v (TyApps (TyCon x) _) = x /= v
+nonRec v (TyApps (TyCon x ()) _) = x /= v
 nonRec v (TyTuple a b) = nonRec v a && nonRec v b
 nonRec v (TyPi _ b) = nonRec v b
 nonRec _ TyVar{} = True
@@ -361,5 +362,5 @@ nonRec _ TyType{} = True
 nonRec v (TyRows t xs) = nonRec v t && all (nonRec v . snd) xs
 nonRec v (TyExactRows xs) = all (nonRec v . snd) xs
 nonRec v (TyParens p) = nonRec v p
-nonRec v (TyOperator l v' r) = v /= v' && nonRec v l && nonRec v r
+nonRec v (TyOperator l o r) = nonRec v o && nonRec v l && nonRec v r
 nonRec _ _ = error "nonRec: that's a weird type you have there."

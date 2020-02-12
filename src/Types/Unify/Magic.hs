@@ -50,7 +50,7 @@ solveEq blame classes ty@(TyApps _ [a, b]) = do
   let refl = ExprWrapper (Cast (AssumedCo (TyApps tyEq [a, a]) (TyApps tyEq [a, b])))
                 (ExprWrapper (TypeApp a) (VarRef rEFLName (span, rEFLTy)) (span, rEFLTy' a))
                 (span, ty)
-      span = annotation blame
+      span = spanOf blame
   pure (Just (ExprApp refl))
 solveEq _ _ _ = undefined
 
@@ -69,7 +69,7 @@ solveKnownLit name ty ty' constraint return blame _ (TyApp _ str) =
             (span, ty' (TyLit t)))
           (Literal t (span, return))
           (span, TyApp constraint (TyLit t))
-    span = annotation blame
+    span = spanOf blame
 solveKnownLit _ _ _ _ _ _ _ _ = error "kind error in solveKnownString"
 
 solveRowCons :: MonadSolve m => Solver m
@@ -103,7 +103,7 @@ solveRowCons blame classes ty =
                 (span, ty)
           keyt = TyLit (LiStr key)
        in ExprApp solution
-    span = annotation blame
+    span = spanOf blame
     xs `without` b = filter ((/= b) . fst) xs
 
     getRows (TyExactRows rs) = (Nothing, rs)
@@ -125,11 +125,11 @@ solveTypeError scope t = confesses . CustomTypeError =<< toTypeError' t where
   toTypeError, toTypeError' :: Type Typed -> m Doc
   toTypeError' t = toTypeError =<< reduceTyFuns scope (TyParens t)
 
-  toTypeError (TyApps (TyCon v) [a, b])
+  toTypeError (TyApps (TyCon v ()) [a, b])
     | v == tyVCat_n = (<#>) <$> toTypeError' a <*> toTypeError' b
     | v == tyHCat_n = (<+>) <$> toTypeError' a <*> toTypeError' b
 
-  toTypeError (TyApps (TyPromotedCon v) [a])
+  toTypeError (TyApps (TyPromotedCon v ()) [a])
     | v == tyeString_n = do
       a <- reduceTyFuns scope a
       case a of

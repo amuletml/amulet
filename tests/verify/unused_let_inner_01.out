@@ -1,5 +1,5 @@
-unused_let_inner_01.ml[2:7 ..2:7]: warning (W3002)
+unused_let_inner_01.ml[2:7 ..2:11]: warning (W3002)
   Bound locally but not used: 'y'
   │ 
 2 │   let y = 1
-  │       ^
+  │       ^^^^^

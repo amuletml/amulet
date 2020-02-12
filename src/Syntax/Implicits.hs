@@ -46,9 +46,9 @@ data Obligation p
 data Sort = InstSort | Superclass | LocalAssum
   deriving (Eq, Show, Ord)
 
-deriving instance (Show (Var p), Show (Ann p)) => Show (Obligation p)
-deriving instance Ord (Var p) => Ord (Obligation p)
-deriving instance Eq (Var p) => Eq (Obligation p)
+deriving instance ShowPhrase p => Show (Obligation p)
+deriving instance OrdPhrase p => Ord (Obligation p)
+deriving instance EqPhrase p => Eq (Obligation p)
 
 -- | A concrete representation of /one/ implicit parameter, stored in an
 -- implicit parameter scope (a trie, indexed by the 'head').
@@ -67,9 +67,9 @@ data Implicit info p
                }
 
 
-deriving instance (Show info, Show (Var p), Show (Ann p)) => Show (Implicit info p)
-deriving instance (Ord info, Ord (Var p)) => Ord (Implicit info p)
-deriving instance (Eq info, Eq (Var p)) => Eq (Implicit info p)
+deriving instance (Show info, ShowPhrase p) => Show (Implicit info p)
+deriving instance (Ord info, OrdPhrase p) => Ord (Implicit info p)
+deriving instance (Eq info, EqPhrase p) => Eq (Implicit info p)
 
 makeLenses ''Implicit
 
@@ -84,18 +84,18 @@ data Node info p
   -- | There are choices to consider, but there are also more to go
   | ManyMore [Implicit info p] (ImplicitScope info p)
 
-deriving instance (Show info, Show (Var p), Show (Ann p)) => Show (Node info p)
-deriving instance (Ord info, Ord (Var p)) => Ord (Node info p)
-deriving instance (Eq info, Eq (Var p)) => Eq (Node info p)
+deriving instance (Show info, ShowPhrase p) => Show (Node info p)
+deriving instance (Ord info, OrdPhrase p) => Ord (Node info p)
+deriving instance (Eq info, EqPhrase p) => Eq (Node info p)
 
 -- | A trie of implicit choices.
 newtype ImplicitScope info p = Trie (Map.Map (Type p) (Node info p))
 
-deriving instance (Show info, Show (Var p), Show (Ann p)) => Show (ImplicitScope info p)
-deriving instance (Ord info, Ord (Var p)) => Ord (ImplicitScope info p)
-deriving instance (Eq info, Eq (Var p)) => Eq (ImplicitScope info p)
+deriving instance (Show info, ShowPhrase p) => Show (ImplicitScope info p)
+deriving instance (Ord info, OrdPhrase p) => Ord (ImplicitScope info p)
+deriving instance (Eq info, EqPhrase p) => Eq (ImplicitScope info p)
 
-instance Ord (Var p) => Substitutable p (ImplicitScope i p) where
+instance OrdPhrase p => Substitutable p (ImplicitScope i p) where
   ftv = foldMap ftv . keys
   apply m (Trie trie) = Trie . rebalance $ fmap (apply m) trie where
     rebalance :: Map.Map (Type p) (Node i p) -> Map.Map (Type p) (Node i p)
@@ -118,7 +118,7 @@ instance Ord (Var p) => Substitutable p (ImplicitScope i p) where
     makeTrie [] n = n
     makeTrie (x:xs) n = Many (Trie (Map.singleton x (makeTrie xs n)))
 
-instance Ord (Var p) => Substitutable p (Node i p) where
+instance OrdPhrase p => Substitutable p (Node i p) where
   ftv (One i) = ftv i
   ftv (Some is) = ftv is
   ftv (Many t) = ftv t
@@ -129,14 +129,14 @@ instance Ord (Var p) => Substitutable p (Node i p) where
   apply m (Many t) = Many (apply m t)
   apply m (ManyMore is t) = ManyMore (apply m is) (apply m t)
 
-instance Ord (Var p) => Substitutable p (Implicit i p) where
+instance OrdPhrase p => Substitutable p (Implicit i p) where
   ftv i = ftv (i ^. implType) Set.\\ boundByImpl i
   apply m i = i & implHead %~ apply m' & implType %~ apply m' where
     m' = m `Map.withoutKeys` boundByImpl i
 
 -- | Insert a choice for a *fully-known* (@Solved@) implicit parameter
 -- (the variable @v@) of type @tau@ at the given trie.
-insert :: forall i p. Ord (Var p) => Ann Resolved -> Sort -> Var p -> Type p -> i -> ImplicitScope i p -> ImplicitScope i p
+insert :: forall i p. OrdPhrase p => Ann Resolved -> Sort -> Var p -> Type p -> i -> ImplicitScope i p -> ImplicitScope i p
 insert annot sort v ty info = go ts implicit where
   (head, obligations) = getHead ty
 
@@ -159,7 +159,7 @@ insert annot sort v ty info = go ts implicit where
     insert' xs i Nothing = Just (Many (go xs i (Trie Map.empty)))
 
 -- | Find a type in a trie by conservative fuzzy search.
-lookup :: forall i p. Var p ~ Var Typed => Type p -> ImplicitScope i p -> [Implicit i p]
+lookup :: forall i p. p ~ Typed => Type p -> ImplicitScope i p -> [Implicit i p]
 lookup ty = go ts  where
   ts = appsView ty
   go :: [Type p] -> ImplicitScope i p -> [Implicit i p]
@@ -182,13 +182,13 @@ lookup ty = go ts  where
     fixup [x] = Just x
     fixup (x:xs) = Just (sconcat (x :| xs))
 
-instance Ord (Var p) => Monoid (ImplicitScope i p) where
+instance OrdPhrase p => Monoid (ImplicitScope i p) where
   mempty = Trie mempty
 
-instance Ord (Var p) => Semigroup (ImplicitScope i p) where
+instance OrdPhrase p => Semigroup (ImplicitScope i p) where
   Trie m <> Trie m' = Trie (merge m m')
 
-instance Ord (Var p) => Semigroup (Node i p) where
+instance OrdPhrase p => Semigroup (Node i p) where
   One x <> One y = Some [x, y]
   One x <> Some xs = Some (x:xs)
   One x <> ManyMore xs t = ManyMore (x:xs) t
@@ -211,7 +211,7 @@ instance Ord (Var p) => Semigroup (Node i p) where
 
 -- | Compute the set of keys in a scope. Note that this operation takes
 -- time proportional to the number of elements in the trie!
-keys :: forall i p. Ord (Var p) => ImplicitScope i p -> Map.Map (Type p) [Implicit i p]
+keys :: OrdPhrase p => ImplicitScope i p -> Map.Map (Type p) [Implicit i p]
 keys = go where
   go (Trie m) = foldMap goNode m
 
@@ -223,7 +223,7 @@ keys = go where
 
 -- | Find the 'Many' node located at the end of the provided spine
 -- section in the scope.
-subTrie :: forall i p. Ord (Var p) => [Type p] -> ImplicitScope i p -> Maybe (ImplicitScope i p)
+subTrie :: OrdPhrase p => [Type p] -> ImplicitScope i p -> Maybe (ImplicitScope i p)
 subTrie = go where
   go (x:xs) (Trie m) = goNode xs (Map.lookup x m)
   go [] t = Just t
@@ -232,7 +232,7 @@ subTrie = go where
   goNode _ _ = Nothing
 
 -- | Make a trie consisting of the only the one given implicit.
-singleton :: Ord (Var p) => Ann Resolved -> Sort -> Var p -> Type p -> i -> ImplicitScope i p
+singleton :: OrdPhrase p => Ann Resolved -> Sort -> Var p -> Type p -> i -> ImplicitScope i p
 singleton a s v t i = insert a s v t i mempty
 
 
@@ -265,12 +265,13 @@ getHead t@TyTupleL{} = (t, Seq.empty)
 -- obligations.
 splitImplVarType = getHead
 
-merge :: Ord (Var p) => Map.Map (Type p) (Node i p) -> Map.Map (Type p) (Node i p) -> Map.Map (Type p) (Node i p)
+merge :: OrdPhrase p => Map.Map (Type p) (Node i p) -> Map.Map (Type p) (Node i p) -> Map.Map (Type p) (Node i p)
 merge = Map.merge Map.preserveMissing Map.preserveMissing (Map.zipWithMatched (const (<>)))
 
 -- | Does there exist a substitution that can make a the same as b?
 -- (Conservative check.)
-matches :: Var p ~ Var Typed => Type p -> Type p -> Bool
+matches :: (Var p ~ Var Typed, TypeAnn p ~ TypeAnn Typed, EqPhrase p)
+        => Type p -> Type p -> Bool
 matches (TyParens x) x' = matches x x'
 matches x (TyParens x') = matches x x'
 
@@ -280,27 +281,27 @@ matches _ TyVar{} = True
 matches TyWildcard{} _ = True
 matches _ TyWildcard{} = True
 
-matches (TyCon t) (TyCon t') = t == t'
+matches (TyCon t _) (TyCon t' _) = t == t'
 matches TyCon{} _ = False
 
 matches (TyLit t) (TyLit t') = t == t'
 matches TyLit{} _ = False
 
-matches (TyPromotedCon t) (TyPromotedCon t') = t == t'
+matches (TyPromotedCon t _) (TyPromotedCon t' _) = t == t'
 matches TyPromotedCon{} _ = False
 
 matches (TyApp f x) (TyApp f' x') = f `matches` f' && x `matches` x'
 
 matches (TyApp f x) (a :-> b) =
-  matches f (TyApp (TyCon tyArr_n) a) && matches x b
+  matches f (TyApp (TyCon tyArr_n ()) a) && matches x b
 
 matches (TyApp f x) (TyTuple a b) =
-  matches f (TyApp (TyCon tyProd_n) a) && matches x b
+  matches f (TyApp (TyCon tyProd_n ()) a) && matches x b
 
 matches TyApp{} _ = False
 
-matches (TyOperator l o r) x' = matches ((TyCon o `TyApp` l) `TyApp` r) x'
-matches x (TyOperator l o r) = matches x ((TyCon o `TyApp` l) `TyApp` r)
+matches (TyOperator l o r) x' = matches ((o `TyApp` l) `TyApp` r) x'
+matches x (TyOperator l o r) = matches x ((o `TyApp` l) `TyApp` r)
 
 matches (TyPi b t) (TyPi b' t') = t `matches` t' && b `matchesBinder` b' where
   matchesBinder (Anon t) (Anon t') = t `matches` t'
@@ -309,7 +310,7 @@ matches (TyPi b t) (TyPi b' t') = t `matches` t' && b `matchesBinder` b' where
   matchesBinder _ _ = False
 
 matches (a :-> b) (TyApp f x) =
-  matches f (TyApp (TyCon tyArr_n) a) && matches x b
+  matches f (TyApp (TyCon tyArr_n ()) a) && matches x b
 
 matches TyPi{} _ = False
 
@@ -332,7 +333,7 @@ matches TyExactRows{} _ = False
 matches (TyTuple a b) (TyTuple a' b') = matches a a' && matches b b'
 
 matches (TyTuple a b) (TyApp f x) =
-  matches f (TyApp (TyCon tyProd_n) a) && matches x b
+  matches f (TyApp (TyCon tyProd_n ()) a) && matches x b
 
 matches TyTuple{} _ = False
 

@@ -1,16 +1,16 @@
-pattern02.ml[4:5 ..4:20]: error (E2008)
+pattern02.ml[4:1 ..4:41]: error (E2008)
   │ 
 4 │ let It (foo, finger) = It (1, fun x -> x)
-  │     ^^^^^^^^^^^^^^^^
+  │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   Rigid type variable a has escaped its scope of 'a * ('a -> int) -> exists
   • Note: the variable a was rigidified because it is an existential,
           bound by the type of It, forall 'a. 'a * ('a -> int) -> exists,
   • Note: in the inferred type for foo,
       'a
-pattern02.ml[4:5 ..4:20]: error (E2008)
+pattern02.ml[4:1 ..4:41]: error (E2008)
   │ 
 4 │ let It (foo, finger) = It (1, fun x -> x)
-  │     ^^^^^^^^^^^^^^^^
+  │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   Rigid type variable a has escaped its scope of 'a * ('a -> int) -> exists
   • Note: the variable a was rigidified because it is an existential,
           bound by the type of It, forall 'a. 'a * ('a -> int) -> exists,

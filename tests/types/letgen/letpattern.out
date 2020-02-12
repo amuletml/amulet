@@ -1,6 +1,6 @@
-letpattern.ml[1:5 ..1:6]: error (E2001)
+letpattern.ml[1:5 ..8:13]: error (E2001)
   │ 
 1 │ let () =
-  │     ^^
+  │     ^^^^
   Couldn't match actual type {  }
     with the type expected by the context, unit

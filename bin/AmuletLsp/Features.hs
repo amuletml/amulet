@@ -29,7 +29,7 @@ getCodeActions file filterRange = foldl' getAction [] . (^.typeErrors) where
   -- raw "replace" action.
 
   getAction ac err
-    | errPos <- rangeOf (annotation err)
+    | errPos <- rangeOf (spanOf err)
     , filterRange ^. end >= errPos ^. start
     , filterRange ^. start <= errPos ^. end
     = getActionOf errPos ac err

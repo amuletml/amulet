@@ -68,9 +68,9 @@ inferClass :: forall m. MonadInfer Typed m
                 )
 inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
   let toVar :: TyConArg Typed -> Type Typed
-      toVar (TyVarArg v) = TyVar v
-      toVar (TyAnnArg v _) = TyVar v
-      toVar (TyInvisArg v _) = TyVar v
+      toVar (TyVarArg v) = TyVar v ()
+      toVar (TyAnnArg v _) = TyVar v ()
+      toVar (TyInvisArg v _) = TyVar v ()
 
   let classCon' =
         T.cons (toUpper (T.head (nameName name)))
@@ -79,7 +79,7 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
 
   ((k, params), cs) <- listen $ resolveClassKind clss
 
-  let classConstraint = foldl TyApp (TyCon name) (map toVar params)
+  let classConstraint = foldl TyApp (TyCon name ()) (map toVar params)
       mk_scope (TyAnnArg v k:cs) = one v k <> mk_scope cs
       mk_scope (_:cs) = mk_scope cs
       mk_scope [] = mempty
@@ -146,7 +146,7 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
 
     pure ( Map.singleton method (length vs, declared, ty)
          , one method ty
-         , TypeDecl Private method [] (Just []) (ann, ty)
+         , TypeDecl Private method [] (Just []) ann
          , info
          )
 
@@ -167,7 +167,7 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
   (_, _, cs) <- solveFixpoint (BecauseOf clss) (fmap (moreScope scope) cs) =<< getSolveInfo
   unless (null cs) $
     confesses =<<
-      unsatClassCon clss (head cs) (GivenContextNotEnough (fromMaybe (TyCon tyUnitName) ctx))
+      unsatClassCon clss (head cs) (GivenContextNotEnough (fromMaybe (TyCon tyUnitName ()) ctx))
 
   local (names %~ focus (one name k <> mk_scope params <> assocty_tele)) $ do
     -- Infer the types for every method
@@ -222,7 +222,7 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
     let tyDecl :: Toplevel Typed
         tyDecl = TypeDecl Public name params
           (Just [ArgCon Private classCon inner (classAnn, classConTy)])
-          (classAnn, undefined)
+          classAnn
 
     let mkDecl :: (Type Typed -> TyBinder Typed, Var Typed, T.Text, Type Typed) -> m (Binding Typed)
         mkDecl (f, var, label, theTy) = do
@@ -275,7 +275,7 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
         methodMap = Map.fromList (map (\(_, n, _, t) -> (n, t)) rows)
         contextMap = Map.fromList (map (\(_, _, l, t) -> (l, t)) rows')
 
-    pure ( assoct_defs ++ tyDecl:map (LetStmt Recursive Public . pure) decs
+    pure ( assoct_defs ++ tyDecl:map (\x -> LetStmt Recursive Public [x] (spanOf clss)) decs
          , tele <> assocty_tele
          , info
          , scope
@@ -342,8 +342,8 @@ inferInstance inst@(Instance clss ctx instHead bindings we'reDeriving ann) = con
                              $ zip [negate 1 ..]
                              $ map getTyCon (appsView instHead)
 
-      getTyCon (TyCon x) = Just x
-      getTyCon (TyPromotedCon x) = Just x
+      getTyCon (TyCon x ()) = Just x
+      getTyCon (TyPromotedCon x ()) = Just x
       getTyCon (TyApps f (_:_)) = getTyCon f
       getTyCon _ = Nothing
 
@@ -352,7 +352,7 @@ inferInstance inst@(Instance clss ctx instHead bindings we'reDeriving ann) = con
   guardOrphans (BecauseOf inst) declaredHere fundeps ty_cons
 
   _ <- flip transformM oldInstHead $ \case
-    tau@(TyPi Implicit{} _) -> confesses (ArisingFrom (ImpredicativeApp (TyCon classCon) tau) (BecauseOf inst))
+    tau@(TyPi Implicit{} _) -> confesses (ArisingFrom (ImpredicativeApp (TyCon classCon ()) tau) (BecauseOf inst))
     t -> pure t
 
   scope <- view classes
@@ -418,7 +418,7 @@ inferInstance inst@(Instance clss ctx instHead bindings we'reDeriving ann) = con
           (apply (fmap unlift (instSub <> skolSub)) exp)
           (apply instSub declared)
 
-      let fake_clause = TyFunClause (apply skolSub (TyApps (TyCon var) (instArgs ++ map (TyVar . argName) args)))
+      let fake_clause = TyFunClause (apply skolSub (TyApps (TyCon var ()) (instArgs ++ map (flip TyVar () . argName) args)))
                             exp (ann, declared)
           TyApps _ instArgs = oldInstHead
 
@@ -433,7 +433,7 @@ inferInstance inst@(Instance clss ctx instHead bindings we'reDeriving ann) = con
       ax <- genName
       con <- genName
 
-      let eq = [ ( instArgs ++ map (TyVar . argName) args
+      let eq = [ ( instArgs ++ map (flip TyVar () . argName) args
                  , exp
                  , con ) ]
 
@@ -444,13 +444,13 @@ inferInstance inst@(Instance clss ctx instHead bindings we'reDeriving ann) = con
                            , _tsConstraint = Just classHead
                            }
 
-      let axdef = TypeDecl Private ax [] (Just [axiom]) (ann, TyType)
+      let axdef = TypeDecl Private ax [] (Just [axiom]) ann
           axiom = GadtCon Private con axiom_t (ann, TyType)
           axiom_t = close $
             foldr (TyPi . Anon)
-              (TyApps tyEq [ TyApps (TyCon var) (instArgs ++ map TyVar argvs), exp])
+              (TyApps tyEq [ TyApps (TyCon var ()) (instArgs ++ map (`TyVar` ()) argvs), exp])
               ( zipWith (\a b -> TyApps tyEq [b, a]) classArgs instArgs
-             ++ map (\a -> TyApps tyEq [TyVar a, TyVar a]) argvs)
+             ++ map (\a -> TyApps tyEq [TyVar a (), TyVar a ()]) argvs)
           close t = foldr (\v -> TyPi (Invisible v (Just TyType) Req)) t (ftv t)
       pure (info, axdef)
 
@@ -499,7 +499,7 @@ inferInstance inst@(Instance clss ctx instHead bindings we'reDeriving ann) = con
         let needsLet = wrap `Map.restrictKeys` freeIn e
             addOne (v, ExprApp e) ex
               | VarRef v' _ <- e, v == v' = ex
-              | otherwise = mkLet [ Binding v e False (annotation ex, getType e) ] ex (annotation ex, getType ex)
+              | otherwise = mkLet [ Binding v e False (spanOf ex, getType e) ] ex (spanOf ex, getType ex)
             addOne _ ex = ex
             addFreeDicts ex = foldr addOne ex (Map.toList needsLet)
 
@@ -530,7 +530,7 @@ inferInstance inst@(Instance clss ctx instHead bindings we'reDeriving ann) = con
     . for (Map.toList needed) $ \(name, expr) -> do
     let ty = methodNames ! name
         bindGroupTy = transplantPi globalInsnConTy (TyArr ctx ty)
-        an = annotation expr
+        an = spanOf expr
 
     (e, cs) <- listen $ check expr ty
     (sub, wrap, cons) <- condemn $ solveFixpoint (BecauseOf inst) cs =<< getSolveInfo
@@ -590,7 +590,8 @@ inferInstance inst@(Instance clss ctx instHead bindings we'reDeriving ann) = con
                 (ann, localInsnConTy)
       bind = Binding instanceName (Ascription fun globalInsnConTy (ann, globalInsnConTy)) True (ann, globalInsnConTy)
 
-  pure (LetStmt Recursive Public (methods ++ defaultMethods ++ [bind]):axioms, instanceName, globalInsnConTy, info, tysyms)
+  pure ( LetStmt Recursive Public (methods ++ defaultMethods ++ [bind]) (spanOf inst)
+       : axioms, instanceName, globalInsnConTy, info, tysyms)
 inferInstance _ = error "not an instance"
 
 argName :: TyConArg p -> Var p
@@ -604,18 +605,18 @@ addArg skolSub ty@(TyPi (Invisible v k req) rest) ex =
     Just (TySkol s) ->
       ExprWrapper (TypeLam s (fromMaybe TyType k))
         (addArg skolSub rest ex)
-        (annotation ex, TyPi (Invisible v k req) (getType ex))
+        (spanOf ex, TyPi (Invisible v k req) (getType ex))
     _ ->
       let fakeSkol = Skolem v v ty (ByConstraint ty)
        in ExprWrapper (TypeLam fakeSkol (fromMaybe TyType k)) (addArg skolSub rest ex)
-            (annotation ex, TyPi (Invisible v k req) (getType ex))
+            (spanOf ex, TyPi (Invisible v k req) (getType ex))
 addArg _ _ ex = ex
 
 appArg :: Map.Map (Var Typed) (Type Typed) -> Type Typed -> Expr Typed -> Expr Typed
 appArg sub (TyPi (Invisible v _ _) rest) ex =
   appArg sub rest $ case Map.lookup v sub of
-    Just x -> ExprWrapper (TypeApp x) ex (annotation ex, apply sub rest)
-    Nothing -> ExprWrapper (TypeApp TyType) ex (annotation ex, apply (Map.insert v TyType sub) rest)
+    Just x -> ExprWrapper (TypeApp x) ex (spanOf ex, apply sub rest)
+    Nothing -> ExprWrapper (TypeApp TyType) ex (spanOf ex, apply (Map.insert v TyType sub) rest)
 appArg _ _ ex = ex
 
 transplantPi :: Type Typed -> Type Typed -> Type Typed
@@ -651,7 +652,7 @@ reduceClassContext extra annot cons = do
   let needed sub (ConImplicit r _ var con:cs) = do
         don't_skol <-
           case appsView con of
-            TyCon v:args -> do
+            TyCon v ():args -> do
               fds <- view (classDecs . at v)
               case fds of
                 Just (view ciFundep -> fds) ->
@@ -719,7 +720,7 @@ reduceClassContext extra annot cons = do
       shoveFn cs (ExprWrapper w e a) = ExprWrapper w (shoveFn cs e) a
       shoveFn cs e = addFns cs e
 
-      addLet ex = mkLet (aliases ++ simplif) ex (annotation ex, getType ex)
+      addLet ex = mkLet (aliases ++ simplif) ex (spanOf ex, getType ex)
       shove (ExprWrapper w e a) = ExprWrapper w (shove e) a
       shove (Fun x@EvParam{} e a) = Fun x (shove e) a
       shove x = addLet x
@@ -735,7 +736,7 @@ reduceClassContext extra annot cons = do
   pure (addCtx stillNeeded' . apply substitution, wrap, stillNeeded', substitution)
 
 addLet :: Map.Map (Var Typed) (Wrapper Typed) -> Var Typed -> [Constraint Typed] -> Expr Typed -> Expr Typed
-addLet wrap' name (ConImplicit _ _ var ty:cs) ex | an <- annotation ex =
+addLet wrap' name (ConImplicit _ _ var ty:cs) ex | an <- spanOf ex =
   addLet wrap' name cs $
     mkLet (mkBind var (reify wrap' name an ty var) (an, ty))
       ex (an, getType ex)
@@ -758,11 +759,11 @@ reify wrap' name an ty var =
 fun :: Var Typed -> Type Typed -> Expr Typed -> Expr Typed
 fun v t e = ExprWrapper (TypeAsc ty) (Fun (EvParam (PType (Capture v (an, t)) t (an, t))) e (an, ty)) (an, ty) where
   ty = TyArr t (getType e)
-  an = annotation e
+  an = spanOf e
 
 deSkolFreeTy :: Type Typed -> Type Typed
 deSkolFreeTy = transformType go where
-  go (TySkol v) = TyVar (v ^. skolVar)
+  go (TySkol v) = TyVar (v ^. skolVar) ()
   go x = x
 
 nameName :: Var Desugared -> T.Text
@@ -786,7 +787,7 @@ useForSimpl span scope (ImplChoice head oty pre var _ _ _) ty =
     Nothing -> error "What?"
     Just sub ->
       let wrap (Quantifier (Invisible v _ _):cs) ex (TyPi Invisible{} rest) =
-            wrap cs (ExprWrapper (TypeApp (Map.findWithDefault TyType v sub)) ex (annotation ex, rest)) rest
+            wrap cs (ExprWrapper (TypeApp (Map.findWithDefault TyType v sub)) ex (spanOf ex, rest)) rest
           wrap (Quantifier _:_) _ _ = error "malformed Quantifier"
           wrap (Implication v:cs) ex (TyPi (Implicit _) rest) =
             let v' = apply sub v
@@ -795,7 +796,7 @@ useForSimpl span scope (ImplChoice head oty pre var _ _ _) ty =
                [] -> Nothing
                (x:_) -> do
                  x <- useForSimpl span scope x v'
-                 wrap cs (App ex x (annotation ex, rest)) rest
+                 wrap cs (App ex x (spanOf ex, rest)) rest
           wrap [] ex _ = Just ex
           wrap _ _ _ = Nothing
       in wrap pre (VarRef var (span, oty)) oty
@@ -841,7 +842,7 @@ validContext w a (TyParens t) = validContext w a t
 
 tooConcrete :: MonadInfer Typed m => Type Typed -> m Bool
 tooConcrete (TyApps t _) | t == tyEq = pure False
-tooConcrete (appsView -> (TyCon clss:xs)) = do
+tooConcrete (appsView -> (TyCon clss ():xs)) = do
   x <- view (classDecs . at clss)
   case x of
     Just info -> pure $
@@ -936,7 +937,7 @@ splitContext t = [t]
 
 impliedByContextEntry :: MonadInfer Typed m => Type Typed -> m (Set.Set (Var Typed), Set.Set (Var Typed))
 impliedByContextEntry x
-  | (TyCon clss:args) <- appsView x, args /= [] = do
+  | (TyCon clss _:args) <- appsView x, args /= [] = do
      ci <- view (classDecs . at clss)
      case ci of
        Just info ->
@@ -949,7 +950,7 @@ impliedByContextEntry x
 
 expandEta :: MonadNamey m => Type Typed -> Expr Typed -> m (Expr Typed)
 expandEta ty ex = go ty ex where
-  an = annotation ex
+  an = spanOf ex
 
   go (TyPi (Anon a) b) ex = do
     x <- genName
@@ -984,10 +985,10 @@ checkValidMethodTy reason method vars ty = unless (Set.null diff) err where
 fixHeadVars :: forall m. MonadInfer Typed m => Map.Map (Var Resolved) (Type Typed) -> m ()
 fixHeadVars = (() <$) .  Map.traverseWithKey fixone where
   fixone :: Var Resolved -> Type Typed -> m (Wrapper Typed)
-  fixone var = unify (It'sThis (BecauseInternal "instance head variable fixing")) (TyVar var)
+  fixone var = unify (It'sThis (BecauseInternal "instance head variable fixing")) (TyVar var ())
 
 unlift :: Type Typed -> Type Desugared
-unlift = raiseT id
+unlift = raiseT id id
 
 moreScope :: ImplicitScope ClassInfo Typed -> Constraint Typed -> Constraint Typed
 moreScope sc (ConImplicit r sc' v t) = ConImplicit r (sc <> sc') v t

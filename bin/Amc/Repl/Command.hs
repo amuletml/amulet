@@ -134,8 +134,8 @@ infoCommand (T.pack . dropWhile isSpace -> input) = do
       let prog :: [S.Toplevel S.Parsed]
           prog = [ S.LetStmt S.NonRecursive S.Public
                    [ S.Binding (S.Name "_")
-                        (S.VarRef (getL var) (annotation var))
-                        True (annotation var) ] ]
+                        (S.VarRef (getL var) (spanOf var))
+                        True (spanOf var) ] (spanOf var) ]
 
       resolved <-
           flip evalNameyT (lastName state)
@@ -143,7 +143,7 @@ infoCommand (T.pack . dropWhile isSpace -> input) = do
         $ resolveProgram lua (resolveScope state) prog
 
       case resolved of
-        Right (ResolveResult [ S.LetStmt _ _ [S.Binding _ (S.VarRef name _) _ _] ] _ _) ->
+        Right (ResolveResult [ S.LetStmt _ _ [S.Binding _ (S.VarRef name _) _ _] _ ] _ _) ->
           liftIO . hPutDoc handle . displayType $
             (inferScope state ^. T.names . at name . non undefined)
         _ -> liftIO . hPutDoc handle $ "Name not in scope:" <+> pretty (getL var)
@@ -159,9 +159,9 @@ typeCommand (dropWhile isSpace -> input) = do
   case parsed of
     Nothing -> pure ()
     Just parsed -> do
-      let ann = annotation parsed
+      let ann = spanOf parsed
           prog :: [S.Toplevel S.Parsed]
-          prog = [ S.LetStmt S.NonRecursive S.Public [ S.Matching (S.Wildcard ann) parsed ann ] ]
+          prog = [ S.LetStmt S.NonRecursive S.Public [ S.Matching (S.Wildcard ann) parsed ann ] ann ]
 
       (infer, es) <- wrapDriver $ do
         D.tick
@@ -170,7 +170,7 @@ typeCommand (dropWhile isSpace -> input) = do
       case infer of
         Nothing -> pure ()
         Just (prog, _, _) ->
-          let ~[S.LetStmt _ _ [ S.TypedMatching _ expr _ _ ]] = prog
+          let ~[S.LetStmt _ _ [ S.TypedMatching _ expr _ _ ] _] = prog
               t = S.getType expr
           in liftIO $ hPutDoc handle (string input <+> colon <+> displayType t)
 

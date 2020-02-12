@@ -1,18 +1,14 @@
 {-# LANGUAGE DeriveDataTypeable, FlexibleContexts, FlexibleInstances
   , PatternSynonyms, StandaloneDeriving, TemplateHaskell, TypeFamilies
-  , UndecidableInstances #-}
+  , UndecidableInstances, DerivingVia #-}
 
 -- | The core types to represent top level statements within Amulet's syntax.
 module Syntax.Toplevel where
 
 import Control.Lens
 
-import Data.List.NonEmpty(NonEmpty ((:|)))
-import Data.Semigroup (sconcat)
 import Data.Text (Text)
-import Data.Typeable
 import Data.Spanned
-import Data.Span
 import Data.Data
 
 import Text.Pretty.Semantic
@@ -29,30 +25,30 @@ data TopAccess = Public | Private
 data TargetImport p = TargetImport
   { importBackend :: Text
   , importPath    :: Text
-  , importAnn     :: Ann p
+  , importAnn     :: RawAnn p
   }
 
-deriving instance Eq (Ann p) => Eq (TargetImport p)
-deriving instance Show (Ann p) => Show (TargetImport p)
-deriving instance Ord (Ann p) => Ord (TargetImport p)
-deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (TargetImport p)
+deriving instance EqPhrase p => Eq (TargetImport p)
+deriving instance ShowPhrase p => Show (TargetImport p)
+deriving instance OrdPhrase p => Ord (TargetImport p)
+deriving instance DataPhrase p => Data (TargetImport p)
 
 data ModuleTerm p
-  = ModStruct [Toplevel p] (Ann p)
-  | ModRef (Var p) (Ann p)
-  | ModImport Text (Ann p)
-  | ModTargetImport [TargetImport p] (Ann p)
+  = ModStruct [Toplevel p] (RawAnn p)
+  | ModRef (Var p) (RawAnn p)
+  | ModImport Text (RawAnn p)
+  | ModTargetImport [TargetImport p] (RawAnn p)
 
-deriving instance (Eq (Var p), Eq (Ann p)) => Eq (ModuleTerm p)
-deriving instance (Show (Var p), Show (Ann p)) => Show (ModuleTerm p)
-deriving instance (Ord (Var p), Ord (Ann p)) => Ord (ModuleTerm p)
-deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (ModuleTerm p)
+deriving instance EqPhrase p => Eq (ModuleTerm p)
+deriving instance ShowPhrase p => Show (ModuleTerm p)
+deriving instance OrdPhrase p => Ord (ModuleTerm p)
+deriving instance DataPhrase p => Data (ModuleTerm p)
 
 data Toplevel p
-  = LetStmt RecKind TopAccess [Binding p]
-  | ForeignVal TopAccess (Var p) Text (Type p) (Ann p)
-  | TypeDecl TopAccess (Var p) [TyConArg p] (Maybe [Constructor p]) (Ann p)
-  | TySymDecl TopAccess (Var p) [TyConArg p] (Type p) (Ann p)
+  = LetStmt RecKind TopAccess [Binding p] (RawAnn p)
+  | ForeignVal TopAccess (Var p) Text (Type p) (RawAnn p)
+  | TypeDecl TopAccess (Var p) [TyConArg p] (Maybe [Constructor p]) (RawAnn p)
+  | TySymDecl TopAccess (Var p) [TyConArg p] (Type p) (RawAnn p)
 
   | Module TopAccess (Var p) (ModuleTerm p)
   | Open (ModuleTerm p)
@@ -64,56 +60,56 @@ data Toplevel p
           , classParams :: [TyConArg p]
           , classDeps :: [Fundep p]
           , classMethods :: [ClassItem p]
-          , ann :: Ann p }
+          , ann :: RawAnn p }
 
   | Instance { instanceClass :: Var p
              , instanceCtx :: Maybe (Type p)
              , instanceHead :: Type p
              , instanceMethods :: [InstanceItem p]
              , instanceDeriveGenerated :: Bool
-             , ann :: Ann p }
+             , ann :: RawAnn p }
 
   | DeriveInstance { derivingType :: Type p
-                   , ann :: Ann p }
+                   , ann :: RawAnn p }
 
   | TypeFunDecl { tyfunAccess :: TopAccess
                 , tyfunName :: Var p
                 , tyfunArgs :: [TyConArg p]
                 , tyfunKindSig :: Maybe (Type p)
                 , tyfunEqs :: [TyFunClause p]
-                , ann :: Ann p
+                , ann :: RawAnn p
                 }
 
-deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Toplevel p)
-deriving instance (Show (Var p), Show (Ann p)) => Show (Toplevel p)
-deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Toplevel p)
-deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Toplevel p)
+deriving instance EqPhrase p => Eq (Toplevel p)
+deriving instance ShowPhrase p => Show (Toplevel p)
+deriving instance OrdPhrase p => Ord (Toplevel p)
+deriving instance DataPhrase p => Data (Toplevel p)
 
 data TyFunClause p = TyFunClause (Type p) (Type p) (Ann p)
 
-deriving instance (Eq (Var p), Eq (Ann p)) => Eq (TyFunClause p)
-deriving instance (Show (Var p), Show (Ann p)) => Show (TyFunClause p)
-deriving instance (Ord (Var p), Ord (Ann p)) => Ord (TyFunClause p)
-deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (TyFunClause p)
+deriving instance EqPhrase p => Eq (TyFunClause p)
+deriving instance ShowPhrase p => Show (TyFunClause p)
+deriving instance OrdPhrase p => Ord (TyFunClause p)
+deriving instance DataPhrase p => Data (TyFunClause p)
 
 data ClassItem p
   = MethodSig { _methName :: Var p
               , _methTy :: Type p
-              , _methAnn :: Ann p
+              , _methAnn :: RawAnn p
               }
   | DefaultMethod { _methodBinding :: Binding p
-                  , _methAnn :: Ann p
+                  , _methAnn :: RawAnn p
                   }
   | AssocType { _methName :: Var p
               , _methArgs :: [TyConArg p]
               , _methKind :: Type p
-              , _methAnn  :: Ann p
+              , _methAnn  :: RawAnn p
               }
 
-deriving instance (Eq (Var p), Eq (Ann p)) => Eq (ClassItem p)
-deriving instance (Show (Var p), Show (Ann p)) => Show (ClassItem p)
-deriving instance (Ord (Var p), Ord (Ann p)) => Ord (ClassItem p)
-deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (ClassItem p)
+deriving instance EqPhrase p => Eq (ClassItem p)
+deriving instance ShowPhrase p => Show (ClassItem p)
+deriving instance OrdPhrase p => Ord (ClassItem p)
+deriving instance DataPhrase p => Data (ClassItem p)
 
 data InstanceItem p
   = MethodImpl (Binding p)
@@ -123,21 +119,21 @@ data InstanceItem p
              , _typeAnn :: Ann p
              }
 
-deriving instance (Eq (Var p), Eq (Ann p)) => Eq (InstanceItem p)
-deriving instance (Show (Var p), Show (Ann p)) => Show (InstanceItem p)
-deriving instance (Ord (Var p), Ord (Ann p)) => Ord (InstanceItem p)
-deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (InstanceItem p)
+deriving instance EqPhrase p => Eq (InstanceItem p)
+deriving instance ShowPhrase p => Show (InstanceItem p)
+deriving instance OrdPhrase p => Ord (InstanceItem p)
+deriving instance DataPhrase p => Data (InstanceItem p)
 
 data Fundep p =
   Fundep { _fdFrom :: [Var p]
          , _fdTo :: [Var p]
-         , _fdAnn :: Ann p
+         , _fdAnn :: RawAnn p
          }
 
-deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Fundep p)
-deriving instance (Show (Var p), Show (Ann p)) => Show (Fundep p)
-deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Fundep p)
-deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Fundep p)
+deriving instance EqPhrase p => Eq (Fundep p)
+deriving instance ShowPhrase p => Show (Fundep p)
+deriving instance OrdPhrase p => Ord (Fundep p)
+deriving instance DataPhrase p => Data (Fundep p)
 
 data Constructor p
   = UnitCon TopAccess (Var p) (Ann p)
@@ -146,11 +142,10 @@ data Constructor p
   -- In GadtCon, the Type p is the type of the overall thing
   | GadtCon TopAccess (Var p) (Type p) (Ann p)
 
-deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Constructor p)
-deriving instance (Show (Var p), Show (Ann p)) => Show (Constructor p)
-deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Constructor p)
-deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Constructor p)
-instance (Data (Var p), Data (Ann p), Data p) => Spanned (Constructor p)
+deriving instance EqPhrase p => Eq (Constructor p)
+deriving instance ShowPhrase p => Show (Constructor p)
+deriving instance OrdPhrase p => Ord (Constructor p)
+deriving instance DataPhrase p => Data (Constructor p)
 
 makePrisms ''Toplevel
 makePrisms ''Constructor
@@ -158,43 +153,63 @@ makePrisms ''Constructor
 makeLenses ''ClassItem
 makeLenses ''Fundep
 
-instance Spanned (Ann p) => Spanned (TargetImport p) where
-  annotation = annotation . importAnn
+instance Annotated (Constructor p) where
+  type Annotation (Constructor p) = Ann p
+  annotation (UnitCon _ _ a) = a
+  annotation (ArgCon _ _ _ a) = a
+  annotation (GadtCon _ _ _ a) = a
 
-instance Spanned (Ann p) => Spanned (ModuleTerm p) where
-  annotation (ModStruct _ a) = annotation a
-  annotation (ModRef _ a) = annotation a
-  annotation (ModImport _ a) = annotation a
-  annotation (ModTargetImport _ a) = annotation a
+instance Annotated (TargetImport p) where
+  type Annotation (TargetImport p) = RawAnn p
+  annotation = importAnn
 
-instance (Spanned (Constructor p), Spanned (Ann p)) => Spanned (Toplevel p) where
-  annotation (LetStmt _ _ []) = internal
-  annotation (LetStmt _ _ [b]) = annotation b
-  annotation (LetStmt _ _ (b:vs)) = sconcat (annotation b :| map annotation vs)
-  annotation (TypeDecl _ _ _ (Just cs) x) = sconcat (annotation x :| map annotation cs)
-  annotation (TypeDecl _ _ _ Nothing x) = annotation x
-  annotation (TySymDecl _ _ _ _ x) = annotation x
-  annotation (ForeignVal _ _ _ _ x) = annotation x
-  annotation (Class _ _ _ _ _ _ x) = annotation x
-  annotation (Instance _ _ _ _ _ x) = annotation x
-  annotation (DeriveInstance _ x) = annotation x
-  annotation x@TypeFunDecl{} = annotation (ann x)
+instance Annotated (ModuleTerm p) where
+  type Annotation (ModuleTerm p) = RawAnn p
+  annotation (ModStruct _ a) = a
+  annotation (ModRef _ a) = a
+  annotation (ModImport _ a) = a
+  annotation (ModTargetImport _ a) = a
+
+instance Annotated (Toplevel p) where
+  type Annotation (Toplevel p) = RawAnn p
+  annotation (LetStmt _ _ _ x) = x
+  annotation (TypeDecl _ _ _ _ x) = x
+  annotation (TySymDecl _ _ _ _ x) = x
+  annotation (ForeignVal _ _ _ _ x) = x
+  annotation (Class _ _ _ _ _ _ x) = x
+  annotation (Instance _ _ _ _ _ x) = x
+  annotation (DeriveInstance _ x) = x
+  annotation x@TypeFunDecl{} = ann x
   annotation (Module _ _ m) = annotation m
   annotation (Open m) = annotation m
   annotation (Include m) = annotation m
 
-instance Spanned (Ann p) => Spanned (Fundep p) where
-  annotation = annotation . view fdAnn
+instance Annotated (Fundep p) where
+  type Annotation (Fundep p) = RawAnn p
+  annotation = view fdAnn
 
-instance Spanned (Ann p) => Spanned (TyFunClause p) where
-  annotation (TyFunClause _ _ x) = annotation x
+instance Annotated (TyFunClause p) where
+  type Annotation (TyFunClause p) = Ann p
+  annotation (TyFunClause _ _ x) = x
 
-instance Spanned (Ann p) => Spanned (ClassItem p) where
-  annotation = annotation . view methAnn
+instance Annotated (ClassItem p) where
+  type Annotation (ClassItem p) = RawAnn p
+  annotation = view methAnn
 
-instance Spanned (Ann p) => Spanned (InstanceItem p) where
-  annotation (TypeImpl _ _ _ x) = annotation x
+instance Annotated (InstanceItem p) where
+  type Annotation (InstanceItem p) = Ann p
+  annotation (TypeImpl _ _ _ x) = x
   annotation (MethodImpl b) = annotation b
+
+deriving via AnnotatedVia (Constructor p)  (Ann p)    instance Spanned (Ann p)    => Spanned (Constructor p)
+deriving via AnnotatedVia (TargetImport p) (RawAnn p) instance Spanned (RawAnn p) => Spanned (TargetImport p)
+deriving via AnnotatedVia (ModuleTerm p)   (RawAnn p) instance Spanned (RawAnn p) => Spanned (ModuleTerm p)
+deriving via AnnotatedVia (Toplevel p)     (RawAnn p) instance Spanned (RawAnn p) => Spanned (Toplevel p)
+deriving via AnnotatedVia (Fundep p)       (RawAnn p) instance Spanned (RawAnn p) => Spanned (Fundep p)
+deriving via AnnotatedVia (TyFunClause p)  (Ann p)    instance Spanned (Ann p)    => Spanned (TyFunClause p)
+deriving via AnnotatedVia (ClassItem p)    (RawAnn p) instance Spanned (RawAnn p) => Spanned (ClassItem p)
+deriving via AnnotatedVia (InstanceItem p) (Ann p)    instance Spanned (Ann p)    => Spanned (InstanceItem p)
+
 
 instance Pretty (Var p) => Pretty (ClassItem p) where
   pretty (MethodSig v t _) = keyword "val" <+> pretty v <+> colon <+> pretty t
@@ -233,8 +248,8 @@ instance Pretty (Var p) => Pretty (ModuleTerm p) where
   pretty (ModTargetImport ts _) = keyword "import" <+> braces (hsep . punctuate comma . map pretty $ ts)
 
 instance Pretty (Var p) => Pretty (Toplevel p) where
-  pretty (LetStmt _ _ []) = string "empty let?"
-  pretty (LetStmt re m (x:xs)) =
+  pretty (LetStmt _ _ [] _) = string "empty let?"
+  pretty (LetStmt re m (x:xs) _) =
     let prettyBind x = keyword "and" <+> pretty x
      in keyword "let" <+> prettyRec re <> prettyAcc m <> pretty x
              <> case xs of

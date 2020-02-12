@@ -70,7 +70,7 @@ instance Reasonable Blame p where
   blame _ = string "a test"
 
 instance Spanned (Blame p) where
-  annotation (Blame x) =x
+  spanOf (Blame x) =x
 
 instance Pretty (Blame p) where
   pretty _ = empty

@@ -14,6 +14,7 @@ module Data.Reason
   , blameOf
   , becauseExp, becausePat
   , Respannable(..)
+  , InType(..)
   ) where
 
 import Data.Functor.Const
@@ -37,8 +38,8 @@ instance Pretty SomeReason where
   pretty (It'sThis x) = pretty x
 
 instance Spanned SomeReason where
-  annotation (BecauseOf a) = annotation a
-  annotation (It'sThis a) = annotation a
+  spanOf (BecauseOf a) = spanOf a
+  spanOf (It'sThis a) = spanOf a
 
 instance Show SomeReason where
   show (BecauseOf _) = "reason"
@@ -59,9 +60,9 @@ instance Show ConcreteReason where
   show (BecauseInternal x) = "internal blame: " ++ x
 
 instance Spanned ConcreteReason where
-  annotation (BecauseOfExpr e _) = annotation e
-  annotation (BecauseOfPat e) = annotation e
-  annotation _ = internal
+  spanOf (BecauseOfExpr e _) = spanOf e
+  spanOf (BecauseOfPat e) = spanOf e
+  spanOf _ = internal
 
 instance Pretty ConcreteReason where
   pretty (BecauseOfExpr e _) = pretty e
@@ -80,30 +81,30 @@ instance (Spanned (Pattern p), Pretty (Var p)) => Reasonable Pattern p where
 instance (Spanned (Expr p), Pretty (Var p)) => Reasonable Expr p where
   blame _ = string "the" <+> highlight "expression"
 
-instance (Data p, Data (Ann p), Data (Var p), Pretty (Var p)) => Reasonable Constructor p where
+instance (Spanned (Ann p), Pretty (Var p)) => Reasonable Constructor p where
   blame _ = string "the" <+> highlight "constructor"
 
-instance (Spanned (Ann p), Data p, Data (Ann p), Data (Var p), Pretty (Var p)) => Reasonable Toplevel p where
+instance (Spanned (RawAnn p), Pretty (Var p)) => Reasonable Toplevel p where
   blame _ = string "the" <+> highlight "declaration"
 
-instance (Spanned (Ann p), Pretty (Var p)) => Reasonable ModuleTerm p where
+instance (Spanned (RawAnn p), Pretty (Var p)) => Reasonable ModuleTerm p where
   blame _ = string "the" <+> highlight "module"
 
 instance (Spanned (Ann p), Pretty (Var p)) => Reasonable Binding p where
   blame _ = string "the" <+> highlight "binding"
 
-instance (Spanned (Ann p), Pretty (Var p)) => Reasonable Arm p where
+instance (Spanned (RawAnn p), Pretty (Var p)) => Reasonable Arm p where
   blame _ = string "the pattern-matching clause"
 
 instance (Spanned (Ann p), Pretty (Var p)) => Reasonable CompStmt p where
   blame _ = string "the statement"
 
-instance (Spanned (Ann p), Pretty (Var p)) => Reasonable ClassItem p where
+instance (Spanned (RawAnn p), Pretty (Var p)) => Reasonable ClassItem p where
   blame MethodSig{} = string "the" <+> highlight "method signature"
   blame DefaultMethod{} = string "the" <+> highlight "default method"
   blame AssocType{} = string "the" <+> highlight "associated type"
 
-instance (Spanned (Ann p), Pretty (Var p)) => Reasonable Fundep p where
+instance (Spanned (RawAnn p), Pretty (Var p)) => Reasonable Fundep p where
   blame _ = string "the functional dependency"
 
 instance (Spanned (Ann p), Pretty (Var p)) => Reasonable TyFunClause p where
@@ -117,10 +118,21 @@ instance Reasonable (Const SomeReason) p where
   blame = blameOf . getConst
 
 instance Spanned (Const SomeReason a) where
-  annotation = annotation . getConst
+  spanOf = spanOf . getConst
 
 instance Pretty (Const SomeReason a) where
   pretty = pretty . getConst
+
+data InType p = InType (Type p) (TypeAnn p)
+
+instance Spanned (TypeAnn p) => Spanned (InType p) where
+  spanOf (InType _ s) = spanOf s
+
+instance Pretty (Type p) => Pretty (InType p) where
+  pretty (InType t _) = pretty t
+
+instance (Spanned (TypeAnn p), Pretty (Type p)) => Reasonable InType p where
+  blame _ = string "the" <+> highlight "type"
 
 -- | Convert a reason into a pretty-printed document
 blameOf :: SomeReason -> Doc

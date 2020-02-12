@@ -78,15 +78,15 @@ data VerifyError
 
 
 instance Spanned VerifyError where
-  annotation (MalformedRecursiveRhs e _ _) = annotation e
-  annotation (DefinedUnused b) = boundWhere b
-  annotation (ParseErrorInForeign t _ _) = annotation t
-  annotation (LazyLet e _) = annotation e
-  annotation (RedundantArm a _) = annotation a
-  annotation (MissingPattern e _) = e
-  annotation (MatchToLet e _) = e
-  annotation (MatchToFun e _) = e
-  annotation (ToplevelRefBinding (BindingSite _ s _)) = annotation s
+  spanOf (MalformedRecursiveRhs e _ _) = spanOf e
+  spanOf (DefinedUnused b) = boundWhere b
+  spanOf (ParseErrorInForeign t _ _) = spanOf t
+  spanOf (LazyLet e _) = spanOf e
+  spanOf (RedundantArm a _) = spanOf a
+  spanOf (MissingPattern e _) = e
+  spanOf (MatchToLet e _) = e
+  spanOf (MatchToFun e _) = e
+  spanOf (ToplevelRefBinding (BindingSite _ s _)) = spanOf s
 
 instance Pretty VerifyError where
   pretty (MalformedRecursiveRhs re ex xs) =
@@ -145,8 +145,8 @@ instance Note VerifyError Style where
   diagnosticKind MatchToFun{} = NoteMessage
   diagnosticKind ToplevelRefBinding{} = WarningMessage
 
-  formatNote f (ParseErrorInForeign (ForeignVal _ var s _ (span, _)) err targ) =
-    let SourcePos name _ _ = spanStart (annotation err)
+  formatNote f (ParseErrorInForeign (ForeignVal _ var s _ span) err targ) =
+    let SourcePos name _ _ = spanStart (spanOf err)
         spans = [( name, s )]
      in vsep [ indent 2 "Syntax error in definition of" <+> (Right <$> skeyword (pretty var))
              , f [span]
@@ -159,10 +159,10 @@ instance Note VerifyError Style where
       [ indent 2 "Automatic thunking of" <+> (Right <$> keyword "let") <> "s does not cover bindings"
       , empty
       , indent 2 $ bullet "Note: the expression"
-      , f [annotation ex]
+      , f [spanOf ex]
       , indent 2 "will be evaluated lazily, but" <+> (if length bs == 1 then "this" else "these")
           <+> "binding" <> if length bs == 1 then "" else "s"
-      , f (fmap annotation bs)
+      , f (fmap spanOf bs)
       , indent 2 (if length bs == 1 then "is" else "are") <+> (Right <$> highlight "strict.")
       , indent 2 $ bullet "Note: if this is what you want, use" <+> (Right <$> keyword "lazy") <+> "explicitly"
       , indent 6 "to silence this warning."
@@ -170,7 +170,7 @@ instance Note VerifyError Style where
   formatNote _ LazyLet{} = error "impossible"
   formatNote f (RedundantArm a pat) =
     vsep [ indent 2 "Redundant pattern in expression"
-         , f [annotation a]
+         , f [spanOf a]
          , indent 2 $ note <+> (Right <$> pretty pat)
          ]
   formatNote f (MissingPattern a ps) =
@@ -191,7 +191,7 @@ instance Note VerifyError Style where
          , indent 2 $ Right <$> note <+> "Replace with" <+> keyword "fun" <+> pretty pat <+> arrow <+> "…"
          ]
 
-  formatNote f x = indent 2 (Right <$> pretty x) <#> f [annotation x]
+  formatNote f x = indent 2 (Right <$> pretty x) <#> f [spanOf x]
 
   noteId MalformedRecursiveRhs{} = Just 3001
   noteId DefinedUnused{}       = Just 3002

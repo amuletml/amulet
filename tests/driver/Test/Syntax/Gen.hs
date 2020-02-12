@@ -40,9 +40,9 @@ gen_type = do
 
   let base_case =
           [ Gen.element [ tyUnit, tyBool, tyInt, tyString ]
-          , Gen.element [ TyPromotedCon nILName, TyPromotedCon cONSName ]
+          , Gen.element [ TyPromotedCon nILName (), TyPromotedCon cONSName () ]
           ]
-        ++ [ TyVar <$> referToVar | not (null scope) ]
+        ++ [ TyVar <$> referToVar <*> pure () | not (null scope) ]
 
   Gen.recursive Gen.choice
     base_case
@@ -101,14 +101,14 @@ genFormula = do
 gen_formula :: (MonadGen m, MonadReader InScopeSet m) => m (Type Typed)
 gen_formula =
   Gen.recursive Gen.choice
-    [ TyVar <$> referToVar ]
+    [ TyVar <$> referToVar <*> pure () ]
     [ TyArr <$> gen_formula <*> gen_formula
     , TyTuple <$> gen_formula <*> gen_formula
     ]
 
 intro :: MonadReader InScopeSet m => m (Type Typed) -> m (Type Typed)
 intro k = withVar $ \v ->
-  TyPi (Invisible v Nothing Spec) . TyArr (TyVar v) <$> k
+  TyPi (Invisible v Nothing Spec) . TyArr (TyVar v ()) <$> k
 
 intros :: MonadReader InScopeSet m => Int -> m (Type Typed) -> m (Type Typed)
 intros 0 k = k

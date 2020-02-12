@@ -84,7 +84,7 @@ decompose :: MonadInfer Typed m
 decompose r p (TyForall v _ rest) = do
   var <- refreshTV v
   let map = Map.singleton v var
-      exp ex | an <- annotation ex =
+      exp ex | an <- spanOf ex =
         ExprWrapper (TypeApp var) ex (an, apply map rest)
   (a, b, k) <- decompose r p rest
   pure (a, b, k . exp)
@@ -100,7 +100,7 @@ decompose r p ty@(TyPi (Implicit cls) rest) = do
   tell (pure (ConImplicit r i x cls))
 
   (a, b, k) <- decompose r p rest
-  let wrap ex = ExprWrapper (WrapVar x) (ExprWrapper (TypeAsc ty) ex (annotation ex, ty)) (annotation ex, rest)
+  let wrap ex = ExprWrapper (WrapVar x) (ExprWrapper (TypeAsc ty) ex (spanOf ex, ty)) (spanOf ex, rest)
   pure (a, b, k . wrap)
 decompose r p t =
   case t ^? p of
@@ -108,7 +108,7 @@ decompose r p t =
     Nothing -> do
       (a, b) <- (,) <$> freshTV <*> freshTV
       k <- subsumes r t (p # (a, b))
-      pure (a, b, \x -> ExprWrapper k x (annotation x, p # (a, b)))
+      pure (a, b, \x -> ExprWrapper k x (spanOf x, p # (a, b)))
 
 -- | Get the first /visible/ 'TyBinder' in this 'Type', possibly
 -- instantiating 'TyForall's and discharging 'Implicit' binders.
@@ -121,7 +121,7 @@ quantifier :: MonadInfer Typed m
 quantifier r pred (TyPi (Invisible v _ req) rest) | pred req = do
   var <- refreshTV v
   let map = Map.singleton v var
-      exp ex | an <- annotation ex =
+      exp ex | an <- spanOf ex =
         ExprWrapper (TypeApp var) ex (an, apply map rest)
   (a, b, k) <- quantifier r pred (apply map rest)
   pure (a, b, k . exp)
@@ -137,15 +137,15 @@ quantifier r pred wty@(TyPi (Implicit tau) sigma) = do
   tell (Seq.singleton (ConImplicit r i x tau))
 
   (dom, cod, k) <- quantifier r pred sigma
-  let wrap ex = ExprWrapper (WrapVar x) (ExprWrapper (TypeAsc wty) ex (annotation ex, wty)) (annotation ex, sigma)
+  let wrap ex = ExprWrapper (WrapVar x) (ExprWrapper (TypeAsc wty) ex (spanOf ex, wty)) (spanOf ex, sigma)
   pure (dom, cod, k . wrap)
 
 quantifier _ _ (TyPi x b) = pure (x, b, id)
-quantifier _ _ (TyApp (TyApp (TyCon n) l) r) | n == tyArrowName = pure (Anon l, r, id)
+quantifier _ _ (TyApp (TyApp (TyCon n ()) l) r) | n == tyArrowName = pure (Anon l, r, id)
 quantifier r _ t = do
   (a, b) <- (,) <$> freshTV <*> freshTV
   k <- subsumes r t (TyPi (Anon a) b)
-  pure (Anon a, b, \x -> ExprWrapper k x (annotation x, TyPi (Anon a) b))
+  pure (Anon a, b, \x -> ExprWrapper k x (spanOf x, TyPi (Anon a) b))
 
 discharge :: (Reasonable f p, MonadInfer Typed m)
           => f p
@@ -226,22 +226,22 @@ getHead (TyParens t) = getHead t
 
 expandTypeWith :: TySyms -> Type Typed -> Type Typed
 expandTypeWith syms t@TyApp{}
-  | (TyCon v:xs) <- appsView t =
+  | (TyCon v ():xs) <- appsView t =
     case syms ^. at v of
       Just t@TySymInfo{} ->
         let exp = map (expandTypeWith syms) xs
             sub = Map.fromList $ zip (t ^. tsArgs) exp
             rest = drop (length (t ^. tsArgs)) exp
          in foldl TyApp (expandTypeWith syms (apply sub (t ^?! tsExpansion))) rest
-      _ -> foldl TyApp (TyCon v) (map (expandTypeWith syms) xs)
+      _ -> foldl TyApp (TyCon v ()) (map (expandTypeWith syms) xs)
   | (x:xs) <- appsView t = foldl TyApp (expandTypeWith syms x) (map (expandTypeWith syms) xs)
   | otherwise = undefined
-expandTypeWith syms (TyCon v) =
+expandTypeWith syms (TyCon v ()) =
   case syms ^. at v of
     Just t@TySymInfo{} -> expandTypeWith syms (t ^?! tsExpansion)
-    _ -> TyCon v
+    _ -> TyCon v ()
 
-expandTypeWith syms (TyOperator l o r) = expandTypeWith syms (TyApp (TyApp (TyCon o) l) r)
+expandTypeWith syms (TyOperator l o r) = expandTypeWith syms (TyApp (TyApp o l) r)
 
 expandTypeWith _ x@TyVar{} = x
 expandTypeWith _ x@TyPromotedCon{} = x
@@ -266,4 +266,3 @@ expandTypeWith _ TyType = TyType
 
 expandType :: MonadReader Env m => Type Typed -> m (Type Typed)
 expandType t = expandTypeWith <$> view tySyms <*> pure t
-
