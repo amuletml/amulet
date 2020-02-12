@@ -45,9 +45,9 @@ testAmuse gen = do
 
   for_ terms $ \term -> do
     let term' = forgetTypes term
-        ([LetStmt _ _ [Binding _  term'' _ _]], _) =
+        ([LetStmt _ _ [Binding _  term'' _ _] a], _) =
           runNamey (desugarProgram
-                      [LetStmt NonRecursive Private [Binding firstName term' False internal]])
+                      [LetStmt NonRecursive Private [Binding firstName term' False internal] a])
                    nm
 
 
@@ -76,9 +76,9 @@ forgetTypes (Fun p bd (a, _)) = Fun (forgetP p) (forgetTypes bd) a where
 forgetTypes (Begin es (a, _)) = Begin (forgetTypes <$> es) a
 forgetTypes (Literal l (a, _)) = Literal l a
 forgetTypes (Match e as p (a, _)) = Match (forgetTypes e) (forgetArm <$> as) p a where
-  forgetArm (Arm p g e) = Arm (forgetPat p) (forgetTypes <$> g) (forgetTypes e)
+  forgetArm (Arm p g e a) = Arm (forgetPat p) (forgetTypes <$> g) (forgetTypes e) a
 forgetTypes (Function as p (a, _)) = Function (forgetArm <$> as) p a where
-  forgetArm (Arm p g e) = Arm (forgetPat p) (forgetTypes <$> g) (forgetTypes e)
+  forgetArm (Arm p g e a) = Arm (forgetPat p) (forgetTypes <$> g) (forgetTypes e) a
 forgetTypes (BinOp l o r (a, _)) = BinOp (forgetTypes l) (forgetTypes o) (forgetTypes r) a
 forgetTypes (Hole v (a, _)) = Hole v a
 forgetTypes (Ascription e t (a, _)) = Ascription (forgetTypes e) (forgetKind t) a
@@ -127,5 +127,5 @@ forgetPat PGadtCon{} = undefined
 
 forgetKind :: Type Typed -> Type Resolved
 forgetKind = unsafeCoerce . transformType go where
-  go (TySkol v) = TyVar (v ^. skolVar)
+  go (TySkol v) = TyVar (v ^. skolVar) undefined
   go x = x

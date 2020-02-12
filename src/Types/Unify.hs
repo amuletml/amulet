@@ -172,7 +172,7 @@ doSolve (ConFail env a v t :<| cs) = do
 
 doSolve (ConImplicit _ _ v x :<| cs) | x == tyUnit = do
   doSolve cs
-  let wrap ex | an <- annotation ex, ty <- getType ex = App ex (Literal LiUnit (an, tyUnit)) (an, ty)
+  let wrap ex | an <- spanOf ex, ty <- getType ex = App ex (Literal LiUnit (an, tyUnit)) (an, ty)
       wrap :: Expr Typed -> Expr Typed
   solveCoSubst . at v ?= WrapFn (MkWrapCont wrap "unit solution app")
 
@@ -181,16 +181,16 @@ doSolve (ConImplicit why scope v (TyTuple a b) :<| cs) = do -- {{{
   varb <- genName
   solveCoSubst . at v ?= ExprApp
     (Tuple [ ExprWrapper (WrapVar vara)
-              (Fun (EvParam (Capture vara (annotation why, a)))
-                (VarRef vara (annotation why, a))
-                (annotation why, TyArr a a))
-              (annotation why, a)
+              (Fun (EvParam (Capture vara (spanOf why, a)))
+                (VarRef vara (spanOf why, a))
+                (spanOf why, TyArr a a))
+              (spanOf why, a)
            , ExprWrapper (WrapVar varb)
-              (Fun (EvParam (Capture varb (annotation why, b)))
-                (VarRef varb (annotation why, b))
-                (annotation why, TyArr b b))
-              (annotation why, b)]
-           (annotation why, TyTuple a b))
+              (Fun (EvParam (Capture varb (spanOf why, b)))
+                (VarRef varb (spanOf why, b))
+                (spanOf why, TyArr b b))
+              (spanOf why, b)]
+           (spanOf why, TyTuple a b))
   doSolve (ConImplicit why scope varb b :< ConImplicit why scope vara a :<| cs) -- }}}
 
 doSolve (ohno@(ConImplicit reason scope var con@TyPi{}) :<| cs) = do -- {{{
@@ -211,7 +211,7 @@ doSolve (ohno@(ConImplicit reason scope var con@TyPi{}) :<| cs) = do -- {{{
     Just w -> do
       let wanted = ExprWrapper (wrap :> w) (identity head) (a, con)
           identity t = Fun (EvParam (PType (Capture var (a, t)) t (a, t))) (VarRef var (a, t)) (a, TyArr t t)
-          a = annotation reason
+          a = spanOf reason
 
       solveCoSubst . at var ?= ExprApp wanted -- }}}
 
@@ -271,7 +271,7 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do -- {{{
                                     (an, tup)))
                     (VarRef v (an, cons)) (an, tup :-> cons))
                   (an, cons)
-          an = annotation reason
+          an = spanOf reason
       solveCoSubst . at var ?= ExprApp pi1
 
     _ | let tup = TyTuple ignored cons, [imp] <- lookup tup scope' -> do
@@ -286,22 +286,22 @@ doSolve (ohno@(ConImplicit reason scope var cons) :<| cs) = do -- {{{
                                     (an, tup)))
                     (VarRef v (an, cons)) (an, tup :-> cons))
                   (an, cons)
-          an = annotation reason
+          an = spanOf reason
       solveCoSubst . at var ?= ExprApp pi1
 
     _ ->
       case head (appsView cons) of
-        TyCon v | Just (solve, report) <- magicClass v -> do
+        TyCon v () | Just (solve, report) <- magicClass v -> do
           (w, cs) <- censor (const mempty) $ listen $ solve reason scope' old
           doSolve (Seq.fromList cs) `catchChronicle` report reason scope' old
           case w of
             Just solution -> solveCoSubst . at var ?= solution
             Nothing -> do
               traceM TopS (string " => quantifiying over magic class")
-              solveCoSubst . at var ?= ExprApp (VarRef var (annotation reason, cons))
+              solveCoSubst . at var ?= ExprApp (VarRef var (spanOf reason, cons))
               tell (pure (apply sub ohno))
         _ -> do
-          solveCoSubst . at var ?= ExprApp (VarRef var (annotation reason, cons))
+          solveCoSubst . at var ?= ExprApp (VarRef var (spanOf reason, cons))
           tell (pure (apply sub ohno))
 --- }}}
 
@@ -359,14 +359,14 @@ useImplicit reason ty old_ty scope (ImplChoice _ oty _ imp _ _ _) = go where
     w <- subsumes' reason scope oty ty
     sub <- use solveTySubst
     (w', _) <- capture $ unify scope ty (apply sub old_ty)
-    let start = VarRef imp (annotation reason, oty)
+    let start = VarRef imp (spanOf reason, oty)
 
     traceM TopS (string "\x1b[41museImplicit cast:\x1b[0m " <+> pretty w')
 
     pure . ExprApp . tracePrettyId TopS $
       ExprWrapper (Cast w')
-        (Ascription (ExprWrapper w start (annotation reason, ty)) ty (annotation reason, ty))
-            (annotation reason, old_ty)
+        (Ascription (ExprWrapper w start (spanOf reason, ty)) ty (spanOf reason, ty))
+            (spanOf reason, old_ty)
 
 -- 'ImplChoice's for which 'implSort' /= 'InstSort' never have their
 -- 'implClass' forced. That means that 'Superclass' and 'LocalAssum'
@@ -402,7 +402,7 @@ subsumes' r s (TyPi (Implicit t) t1) t2 -- {{{
       omega <- subsumes' r s t1 t2
       let con = ConImplicit r s var t
       doSolve (Seq.singleton con)
-      let wrap ex | an <- annotation ex
+      let wrap ex | an <- spanOf ex
             = ExprWrapper omega
                 (ExprWrapper (TypeAsc t1)
                    (ExprWrapper (WrapVar var) ex (an, t1)) (an, t1)) (an, t2)
@@ -412,7 +412,7 @@ subsumes' r s (TyPi (Implicit t) t1) t2 -- {{{
       omega <- subsumes' r s t1 t2
       let con = ConImplicit r s var t
       doSolve (Seq.singleton con)
-      let wrap ex | an <- annotation ex
+      let wrap ex | an <- spanOf ex
             = ExprWrapper omega
                 (ExprWrapper (TypeAsc t1)
                    (ExprWrapper (WrapVar var) ex (an, t1)) (an, t1)) (an, t2)
@@ -424,7 +424,7 @@ subsumes' b s t1@TyPi{} t2 | isInstantiatable t1 = do
   (cont, _, t1') <- instantiate Strong Subsumption t1
   omega <- subsumes b s t1' t2
   let inst = fromMaybe id cont
-      wrap ex = ExprWrapper omega (inst ex) (annotation ex, t2)
+      wrap ex = ExprWrapper omega (inst ex) (spanOf ex, t2)
   pure (WrapFn (MkWrapCont wrap ("instantiation " ++ show t1 ++ " => " ++ show t2)))
 
 subsumes' r scope ot@(TyTuple a b) nt@(TyTuple a' b') = do -- {{{
@@ -447,7 +447,7 @@ subsumes' r scope ot@(TyTuple a b) nt@(TyTuple a' b') = do -- {{{
               (an, nt)
       cont ex | IdWrap <- wa, IdWrap <- wb = ex
       cont ex
-        | an <- annotation ex =
+        | an <- spanOf ex =
           Let NonRecursive
             [ TypedMatching
                 ( PTuple [ Capture elem (an, a), Capture elem' (an, b) ] (an, ot) )
@@ -466,7 +466,7 @@ subsumes' r scope (TyApp lazy ty') ty | lazy == tyLazy, lazySubOk ty' ty = do
   co <- subsumes' r scope ty' ty
   -- We have a thunk and want a value
   let wrap ex
-        | an <- annotation ex =
+        | an <- spanOf ex =
           -- ... so force it
           ExprWrapper co
             (App (ExprWrapper (TypeApp ty') (VarRef forceName (an, forceTy)) (an, forceTy' ty'))
@@ -479,7 +479,7 @@ subsumes' r scope ty' (TyApp lazy ty) | lazy == tyLazy, lazySubOk ty ty' = do
   wp <- subsumes' r scope ty ty'
   -- We have a value and want a thunk
   let wrap ex
-        | an <- annotation ex =
+        | an <- spanOf ex =
           App (ExprWrapper (TypeApp ty) (VarRef lAZYName (an, lAZYTy))
                 (an, lAZYTy' ty))
               -- So put it in a function to delay evaluation!
@@ -531,7 +531,7 @@ subsumes' r scope th@(TyExactRows rhas) tw@(TyRows rho rwant) = do -- {{{
   let cast = probablyCast co
   exp <- genName
 
-  let mkw ex = ExprWrapper cast ex (annotation ex, tw)
+  let mkw ex = ExprWrapper cast ex (spanOf ex, tw)
   pure (WrapFn
           (MkWrapCont (mkRecordWrapper rhas matched matched_t th tw mkw exp)
             "exact→poly record subsumption")) -- }}}
@@ -563,7 +563,7 @@ subsumes' r scope th@(TyRows rho rhas) tw@(TyRows sigma rwant) = do -- {{{
     cast <- probablyCast <$> unify scope sigma new
     exp <- genName
 
-    let mkw ex = ExprWrapper cast ex (annotation ex, tw)
+    let mkw ex = ExprWrapper cast ex (spanOf ex, tw)
     pure (WrapFn
             (MkWrapCont (mkRecordWrapper rhas matched matched_t th tw mkw exp)
               "exact→poly record subsumption"))
@@ -599,7 +599,7 @@ skolemise motive wt@(TyPi (Implicit ity) t) = do
   (pat, scope) <- go ity
   traceM TopS (pretty ity)
 
-  let wrap ex | an <- annotation ex =
+  let wrap ex | an <- spanOf ex =
         Fun (EvParam (PTuple pat (an, ity)))
           (ExprWrapper omega ex (an, ty)) (an, wt)
   pure (WrapFn (MkWrapCont wrap "constraint lambda"), ty, scope, vs)
@@ -653,7 +653,7 @@ secondBlame (It'sThis (BecauseOfExpr (Tuple (_:xs) an) _)) =
     [] -> error "wot"
     [x] -> becauseExp x
     xs@(x:ys) ->
-      let len = sconcat (annotation x :| map annotation ys)
+      let len = sconcat (spanOf x :| map spanOf ys)
        in becauseExp (respan (const len) (Tuple xs an))
 secondBlame x = x
 
@@ -679,7 +679,7 @@ reblame r e = addBlame r e
 
 select :: Respannable (Ann a) => Text -> [Field a] -> Maybe (Expr a)
 select t = fmap go . find ((== t) . view fName) where
-  go (Field _ e s) = respan (const (annotation s)) e
+  go (Field _ e s) = respan (const (spanOf s)) e
 
 mkRecordWrapper :: [(Text, Type Typed)]
                 -> Map.Map Text (Type Typed, Type Typed, Wrapper Typed)
@@ -691,7 +691,7 @@ mkRecordWrapper keys matched matched_t th tw cont exp =
   let ref an = VarRef exp (an, th)
       wrapField (Field k ex (an, old)) =
         case Map.lookup k matched of
-          Just (_, new, wrap) -> Field k (ExprWrapper wrap ex (annotation ex, new)) (an, new)
+          Just (_, new, wrap) -> Field k (ExprWrapper wrap ex (spanOf ex, new)) (an, new)
           Nothing -> Field k ex (an, old)
 
       updateField :: Ann Desugared -> Expr Typed -> (Text, Type Typed) -> [Field Typed]
@@ -711,7 +711,7 @@ mkRecordWrapper keys matched matched_t th tw cont exp =
       wrapEx ex@(VarRef _ (an, _)) = cont (recordExt ex (foldMap (updateField an ex) keys) (an, matched_t))
 
       -- Update the record in place
-      wrapEx ex | an <- annotation ex =
+      wrapEx ex | an <- spanOf ex =
         Let NonRecursive [Binding exp ex True (an, th)]
           (cont (recordExt (ref an) (foldMap (updateField an (ref an)) keys) (an, matched_t)))
           (an, tw)
@@ -762,7 +762,7 @@ reblame_con r = map go where
   go x@DeferredError{} = x
 
 isMagicClass :: forall m. MonadSolve m => Type Typed -> m Bool
-isMagicClass (TyApps (TyCon v) _) =
+isMagicClass (TyApps (TyCon v ()) _) =
   case magicClass @m v of
     Just{} -> pure True
     _ -> pure False

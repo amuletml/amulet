@@ -205,7 +205,7 @@ instance Show TokenClass where
 data Token = Token !TokenClass !SourcePos !SourcePos deriving Show
 
 instance Spanned Token where
-  annotation (Token _ s e) = mkSpanUnsafe s e
+  spanOf (Token _ s e) = mkSpanUnsafe s e
 
 -- | Determine the friendly name of a virtual token
 friendlyName :: TokenClass -> String

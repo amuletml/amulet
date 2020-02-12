@@ -31,7 +31,7 @@ desugarProgram :: forall m. MonadNamey m => [Toplevel Resolved] -> m [Toplevel D
 desugarProgram = traverse statement
 
 statement :: forall m. MonadNamey m => Toplevel Resolved -> m (Toplevel Desugared)
-statement (LetStmt re am vs) = LetStmt re am <$> traverse binding vs
+statement (LetStmt re am vs a) = LetStmt re am <$> traverse binding vs <*> pure a
 statement (Module am v t) = Module am v <$> modTerm t
 statement (Instance a b c m _ d) = Instance a (ty <$> b) (ty c) <$> traverse instItem m <*> pure False <*> pure d where
   instItem (MethodImpl b) = MethodImpl <$> binding b
@@ -76,7 +76,7 @@ expr (Match e bs p a) = Match <$> expr e <*> traverse arm bs <*> pure p <*> pure
 expr (Function bs p a) = do
   let name = case bs of
                [] -> "bot"
-               [Arm b _ _] | Just n <- getPatternName b -> n
+               [Arm b _ _ _] | Just n <- getPatternName b -> n
                _ -> "x"
   (cap, rhs) <- fresh name a
   Fun (EvParam cap) <$>
@@ -164,16 +164,16 @@ binding (Matching p e a) = Matching (pat p) <$> expr e <*> pure a
 binding TypedMatching{} = error "TypedMatching{} desugar binding"
 
 arm :: forall m. MonadNamey m => Arm Resolved -> m (Arm Desugared)
-arm (Arm p g e) = Arm (pat p) <$> traverse expr g <*> expr e
+arm (Arm p g e a) = Arm (pat p) <$> traverse expr g <*> expr e <*> pure a
 
 wrapper :: Wrapper Resolved -> Wrapper Desugared
 wrapper = error "Wrapper during desugaring"
 
 ty :: Type Resolved -> Type Desugared
-ty (TyCon v) = TyCon v
+ty (TyCon v _) = TyCon v ()
 ty (TyLit v) = TyLit v
-ty (TyVar v) = TyVar v
-ty (TyPromotedCon v) = TyPromotedCon v
+ty (TyVar v _) = TyVar v ()
+ty (TyPromotedCon v _) = TyPromotedCon v ()
 ty (TyApp f x) = TyApp (ty f) (ty x)
 ty (TyPi b p) = TyPi (binder b) (ty p)
 ty (TyRows t fs) = TyRows (ty t) (map (second ty) fs)
@@ -185,8 +185,8 @@ ty TySkol{} = error "TySkol in desugar"
 ty TyWithConstraints{} = error "TywithConstraints in desugar"
 ty (TyParens t) = ty t
 ty (TyOperator l o r)
-  | o == tyTupleName = TyTuple (ty l) (ty r)
-  | otherwise = TyApp (TyApp (TyCon o) (ty l)) (ty r)
+  | TyCon o' _ <- o, o' == tyTupleName = TyTuple (ty l) (ty r)
+  | otherwise = TyApp (TyApp (ty o) (ty l)) (ty r)
 
 ty TyType = TyType
 
@@ -244,21 +244,25 @@ transListComp (ex, CompGen v l1 an:qs, an') l2 = do
               (Match us
                 [ Arm { armPat = consPat cx cus' an
                       , armGuard = Nothing
+                      , armAnn = an
                       , armExp =
                           maybeMatch x
                              ( Arm { armPat = pat v
-                                 , armGuard = Nothing
-                                 , armExp = success }
+                                   , armGuard = Nothing
+                                   , armExp = success
+                                   , armAnn = an }
                              : [ Arm { armPat = Wildcard an
                                      , armGuard = Nothing
                                      , armExp = App (VarRef h an) us' an
+                                     , armAnn = an
                                      }
                                | refutable (pat v) ] )
                             an
                       }
                 , Arm { armPat = Wildcard an
                       , armGuard = Nothing
-                      , armExp = l2 } ] an an)
+                      , armExp = l2
+                      , armAnn = an} ] an an)
                 an) True an ]
       (App (VarRef h an) l1 an)
       an'

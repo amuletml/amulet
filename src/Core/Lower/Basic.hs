@@ -83,23 +83,23 @@ lowerType (S.TyPi bind b)
     ForallTy Irrelevant (lowerType a) (lowerType b)
   | S.Implicit a <- bind =
     ForallTy Irrelevant (lowerType a) (lowerType b)
-lowerType (S.TyApp (S.TyApp (S.TyCon v) l) r)
+lowerType (S.TyApp (S.TyApp (S.TyCon v ()) l) r)
   | v == Bi.tyArrowName = ForallTy Irrelevant (lowerType l) (lowerType r)
   | v == Bi.tyTupleName = lowerType (S.TyTuple l r)
 lowerType (S.TyApp a b) = AppTy (lowerType a) (lowerType b)
 lowerType (S.TyRows rho vs) = RowsTy (lowerType rho) (map (fmap lowerType) vs)
 lowerType (S.TyExactRows []) = NilTy
 lowerType (S.TyExactRows vs) = ExactRowsTy (map (fmap lowerType) vs)
-lowerType (S.TyVar v) = VarTy (mkTyvar v)
-lowerType (S.TyCon v)
+lowerType (S.TyVar v _) = VarTy (mkTyvar v)
+lowerType (S.TyCon v _)
   | v == Bi.tyConstraintName = StarTy
   | otherwise = ConTy (mkType v)
-lowerType (S.TyPromotedCon v) = ConTy (mkCon v) -- TODO this is in the wrong scope
+lowerType (S.TyPromotedCon v _) = ConTy (mkCon v) -- TODO this is in the wrong scope
 lowerType (S.TySkol (Skolem (TgName _ v) (TgName n _) _ _)) = VarTy (CoVar v (Just n) TypeVar)
 lowerType (S.TySkol _) = error "impossible lowerType TySkol"
 lowerType (S.TyOperator l o r)
-  | o == Bi.tyTupleName = lowerType (S.TyTuple l r)
-  | otherwise = (ConTy (mkType o) `AppTy` lowerType l) `AppTy` lowerType r
+  | S.TyCon o' _ <- o, o' == Bi.tyTupleName = lowerType (S.TyTuple l r)
+  | otherwise = (lowerType o `AppTy` lowerType l) `AppTy` lowerType r
 lowerType (S.TyWildcard (Just t)) = lowerType t
 lowerType (S.TyWildcard _) = error "impossible lowerType TyWildcard"
 lowerType (S.TyParens t) = lowerType t

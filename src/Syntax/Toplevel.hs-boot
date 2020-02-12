@@ -11,8 +11,8 @@ import Syntax.Var
 type role ModuleTerm nominal
 data ModuleTerm p
 
-instance (Eq (Var p), Eq (Ann p)) => Eq (ModuleTerm p)
-instance (Show (Var p), Show (Ann p)) => Show (ModuleTerm p)
-instance (Ord (Var p), Ord (Ann p)) => Ord (ModuleTerm p)
-instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (ModuleTerm p)
+instance EqPhrase p => Eq (ModuleTerm p)
+instance ShowPhrase p => Show (ModuleTerm p)
+instance OrdPhrase p => Ord (ModuleTerm p)
+instance DataPhrase p => Data (ModuleTerm p)
 instance Pretty (Var p) => Pretty (ModuleTerm p)

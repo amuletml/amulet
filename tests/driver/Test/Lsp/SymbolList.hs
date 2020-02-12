@@ -39,7 +39,7 @@ symbolListTests = testGroup "Symbol list"
         , _detail = Nothing
         , _kind = SkVariable
         , _deprecated = Nothing
-        , _range = range 0 4 0 5
+        , _range = range 0 4 0 9
         , _selectionRange = range 0 4 0 5
         , _children = Nothing
         }
@@ -48,7 +48,7 @@ symbolListTests = testGroup "Symbol list"
         , _detail = Nothing
         , _kind = SkVariable
         , _deprecated = Nothing
-        , _range = range 2 4 2 5
+        , _range = range 2 4 2 9
         , _selectionRange = range 2 4 2 5
         , _children = Nothing
         } ]

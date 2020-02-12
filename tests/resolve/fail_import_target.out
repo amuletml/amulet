@@ -22,4 +22,4 @@ fail_import_target.ml[8:9 ..8:9]: error (E1001)
   Do you need a rec modifier here?
   │ 
 8 │ let x = x
-  │     ^
+  │ ^^^^^^^^^

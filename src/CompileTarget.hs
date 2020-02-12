@@ -23,7 +23,7 @@ instance Pretty ParseError where
   pretty (ParseError x) = pretty x
 
 instance Spanned ParseError where
-  annotation (ParseError x) = annotation x
+  spanOf (ParseError x) = spanOf x
 
 instance Note ParseError Style where
   diagnosticKind (ParseError x) = diagnosticKind x

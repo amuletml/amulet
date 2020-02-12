@@ -12,11 +12,11 @@ transformType
   :: (Type p -> Type p)
   -> Type p -> Type p
 transformType ft = goT where
-  transT (TyCon v) = TyCon v
+  transT (TyCon v a) = TyCon v a
   transT (TyLit v) = TyLit v
-  transT (TyVar v) = TyVar v
+  transT (TyVar v a) = TyVar v a
   transT (TyWildcard v) = TyWildcard v
-  transT (TyPromotedCon v) = TyPromotedCon v
+  transT (TyPromotedCon v a) = TyPromotedCon v a
   transT (TyPi x r) = TyPi (transB x) (goT r)
   transT (TyApp f x) = TyApp (goT f) (goT x)
   transT (TyRows f fs) = TyRows (goT f) (map (second goT) fs)
@@ -125,7 +125,7 @@ transformExpr fe = goE where
 
   goE = transE . fe
 
-  goArm (Arm p g e) = Arm p (goE <$> g) (goE e)
+  goArm (Arm p g e a) = Arm p (goE <$> g) (goE e) a
 
 transformExprTyped
   :: (Expr Typed -> Expr Typed)
@@ -202,7 +202,7 @@ transformExprTyped fe fc ft = goE where
 
   goP = transformPatternTyped id ft
 
-  goArm (Arm p g e) = Arm (goP p) (goE <$> g) (goE e)
+  goArm (Arm p g e a) = Arm (goP p) (goE <$> g) (goE e) a
 
 transformPatternTyped
   :: (Pattern Typed -> Pattern Typed)

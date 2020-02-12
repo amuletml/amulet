@@ -90,10 +90,10 @@ reTops :: MonadResolve m
        -> m ([Toplevel Resolved], Signature, Signature)
 reTops [] sig = views scope ([], sig,)
 
-reTops (r@(LetStmt re am bs):rest) sig = do
+reTops (r@(LetStmt re am bs a):rest) sig = do
   (bs', vs, ts) <- unzip3 <$> traverse reBinding bs
   let body = extendTyvars (concat ts) $
-        LetStmt re am <$> traverse (uncurry (flip (<$>) . reExpr . view bindBody)) (zip bs bs')
+        LetStmt re am <$> traverse (uncurry (flip (<$>) . reExpr . view bindBody)) (zip bs bs') <*> pure a
       addBinds m = foldr (\(Name v, _) -> Map.insert v (annotation r)) m (concat vs)
   case re of
     NonRecursive -> reTopsWith am rest sig (withVals (concat vs)) . pure =<< local (nonRecs %~ addBinds) body
@@ -105,7 +105,7 @@ reTops (r@(ForeignVal am v t ty a):rest) sig = do
     ForeignVal am
           <$> lookupEx v `catchJunk` r
           <*> pure t
-          <*> reType r (wrap ty)
+          <*> reType (wrap ty)
           <*> pure a
 
   where wrap x = foldr (TyPi . flip (flip Invisible Nothing) Spec) x (toList (ftv x))
@@ -114,7 +114,7 @@ reTops (d@(TySymDecl am t vs ty ann):ts) sig = do
   t' <- tagVar t
   (vs', sc) <- resolveTele d vs
   decl <- extendTyvars sc $
-    TySymDecl am t' vs' <$> reType d ty <*> pure ann
+    TySymDecl am t' vs' <$> reType ty <*> pure ann
   reTopsWith am ts sig (withTy t t') (pure decl)
 
 reTops (d@(TypeFunDecl am tau args kindsig eqs ann):rest) sig = do
@@ -122,8 +122,10 @@ reTops (d@(TypeFunDecl am tau args kindsig eqs ann):rest) sig = do
   (args, vars) <- resolveTele d args
   reTopsWith am rest sig (withTy tau tau') $ do
     eqs <- for eqs $ \clause@(TyFunClause lhs@(TyApps t xs) rhs ann) -> do
-      when (t /= TyCon tau) $
-        confesses (ArisingFrom (TFClauseWrongHead t tau) (BecauseOf clause))
+      case t of
+        TyCon t' _ | t' == tau -> pure ()
+        _ -> confesses (ArisingFrom (TFClauseWrongHead t tau) (BecauseOf clause))
+
       let vis TyInvisArg{} = False
           vis _ = True
       when (length xs /= length (filter vis args)) $
@@ -132,9 +134,9 @@ reTops (d@(TypeFunDecl am tau args kindsig eqs ann):rest) sig = do
       let fv = Set.toList (ftv lhs)
       fv' <- traverse tagVar fv
       extendTyvars (zip fv fv') $
-        (\x y -> TyFunClause x y ann) <$> reType clause lhs <*> reType clause rhs
+        (\x y -> TyFunClause x y ann) <$> reType lhs <*> reType rhs
 
-    kindsig <- extendTyvars vars $ traverse (reType d) kindsig
+    kindsig <- extendTyvars vars $ traverse reType kindsig
     pure $ TypeFunDecl am tau' args kindsig eqs ann
 
 
@@ -150,11 +152,11 @@ reTops (d@(TypeDecl am t vs cs ann):rest) sig = do
   reTopsWith am rest sig (withTy t t' . withVals (zip c c')) (pure decl)
 
   where resolveCons _  (v', UnitCon ac _ a) = pure $ UnitCon ac v' a
-        resolveCons vs (v', r@(ArgCon ac _ t a)) = ArgCon ac v' <$> extendTyvars vs (reType r t) <*> pure a
-        resolveCons _  (v', r@(GadtCon ac _ t a)) = do
+        resolveCons vs (v', ArgCon ac _ t a) = ArgCon ac v' <$> extendTyvars vs (reType t) <*> pure a
+        resolveCons _  (v', GadtCon ac _ t a) = do
           let fvs = toList (ftv t)
           fresh <- traverse tagVar fvs
-          t' <- extendTyvars (zip fvs fresh) (reType r t)
+          t' <- extendTyvars (zip fvs fresh) (reType t)
           pure (GadtCon ac v' t' a)
 
         extractCons (UnitCon _ v _) = v
@@ -180,8 +182,8 @@ reTops (r@(Module am name mod):rest) sig = do
   (mod', sig') <- retcons (wrapError r) $ reModule mod
   reTopsWith am rest sig (withMod name name' sig') $ pure (Module am name' mod')
 
-reTops (d@(DeriveInstance t ann):rest) sig = do
-  t <- reType d t
+reTops (DeriveInstance t ann:rest) sig = do
+  t <- reType t
   first3 (DeriveInstance t ann:) <$> reTops rest sig
 
 reTops (t@(Class name am ctx tvs fds ms ann):rest) sig = do
@@ -194,7 +196,7 @@ reTops (t@(Class name am ctx tvs fds ms ann):rest) sig = do
       _ -> pure []
 
     extendTyvars tvss . local (scope %~ withTys tyfuns) $
-      (,,) <$> traverse (reType t) ctx
+      (,,) <$> traverse reType ctx
            <*> traverse reFd fds
            <*> reClassItem (map fst tvss) ms
 
@@ -205,16 +207,16 @@ reTops (t@(Class name am ctx tvs fds ms ann):rest) sig = do
     pure $ Class name' am ctx' tvs' fds' ms'' ann
 
   where
-    reClassItem tvs' (m@(MethodSig name ty an):rest) = do
+    reClassItem tvs' ((MethodSig name ty an):rest) = do
       (ra, rb) <- reClassItem tvs' rest
       name' <- tagVar name
-      pure ( (MethodSig name' <$> reType m (wrap tvs' ty) <*> pure an):ra
+      pure ( (MethodSig name' <$> reType (wrap tvs' ty) <*> pure an):ra
            , (name, name'):rb )
     reClassItem tvs' (m@(AssocType name args ty an):rest) = do
       name' <- lookupTy name
       (ra, rb) <- reClassItem tvs' rest
       (tele, _) <- resolveTele m args
-      pure ( (AssocType name' tele <$> reType m (wrap tvs' ty) <*> pure an):ra
+      pure ( (AssocType name' tele <$> reType (wrap tvs' ty) <*> pure an):ra
            , (name, name'):rb )
     reClassItem tvs' (DefaultMethod b an:rest) = do
       (ra, rb) <- reClassItem tvs' rest
@@ -237,8 +239,8 @@ reTops (t@(Instance cls ctx head ms _ ann):rest) sig = do
   fvs' <- traverse tagVar fvs
 
   t' <- extendTyvars (zip fvs fvs') $ do
-    ctx' <- traverse (reType t) ctx
-    head' <- reType t head
+    ctx' <- traverse reType ctx
+    head' <- reType head
 
     (ms', vs) <- unzip <$> traverse reMethod ms
     ms'' <- extendVals (concat vs) (sequence ms')
@@ -313,13 +315,13 @@ resolveTele r (TyAnnArg v k:as) = do
   v' <- tagVar v
   extendTyvar v v' $ do
     ((as, vs), k) <-
-      (,) <$> resolveTele r as <*> reType r k
+      (,) <$> resolveTele r as <*> reType k
     pure (TyAnnArg v' k:as, (v, v'):vs)
 resolveTele r (TyInvisArg v k:as) = do
   v' <- tagVar v
   extendTyvar v v' $ do
     ((as, vs), k) <-
-      (,) <$> resolveTele r as <*> reType r k
+      (,) <$> resolveTele r as <*> reType k
     pure (TyInvisArg v' k:as, (v, v'):vs)
 resolveTele _ [] = pure ([], [])
 
@@ -360,8 +362,8 @@ reExpr (Function ps p a) = do
 
 reExpr (BinOp l o r a) = BinOp <$> reExpr l <*> reExpr o <*> reExpr r <*> pure a
 reExpr (Hole v a) = Hole <$> tagVar v <*> pure a
-reExpr r@(Ascription e t a) = do
-  t <- reType r t
+reExpr (Ascription e t a) = do
+  t <- reType t
   let boundByT (TyPi (Invisible v@(TgName p _) _ _) t) = (Name p, v):boundByT t
       boundByT _ = []
   Ascription <$> extendTyvars (boundByT t) (reExpr e) <*> pure t <*> pure a
@@ -400,7 +402,7 @@ reExpr r@(OpenIn m e a) = retcons (wrapError r) $ do
     Just sig -> OpenIn m' <$> local (scope %~ (<>sig)) (reExpr e) <*> pure a
 
 reExpr (Lazy e a) = Lazy <$> reExpr e <*> pure a
-reExpr (Vta e t a) = Vta <$> reExpr e <*> reType e t <*> pure a
+reExpr (Vta e t a) = Vta <$> reExpr e <*> reType t <*> pure a
 
 reExpr (ListComp e qs a) =
   let go (CompGuard e:qs) acc = do
@@ -466,36 +468,35 @@ reField (Field n e s) = Field n <$> reExpr e <*> pure s
 
 reArm :: MonadResolve m
       => Arm Parsed -> m (Arm Resolved)
-reArm (Arm p g b) = do
+reArm (Arm p g b a) = do
   (p', vs, ts) <- reWholePattern p
   extendTyvars ts . extendVals vs $
-    Arm p' <$> traverse reExpr g <*> reExpr b
+    Arm p' <$> traverse reExpr g <*> reExpr b <*> pure a
 
-reType :: (MonadResolve m, Reasonable a p)
-       => a p -> Type Parsed -> m (Type Resolved)
-reType r (TyCon v) = TyCon <$> (lookupTy v `catchJunk` r)
-reType r (TyVar v) = TyVar <$> (lookupTyvar v `catchJunk` r)
-reType r (TyPromotedCon v) = TyPromotedCon <$> (lookupEx v `catchJunk` r)
-reType _ v@TySkol{} = error ("impossible! resolving skol " ++ show v)
-reType _ v@TyWithConstraints{} = error ("impossible! resolving withcons " ++ show v)
-reType _ (TyLit v) = pure (TyLit v)
-reType r (TyPi (Invisible v k req) ty) = do
+reType :: MonadResolve m => Type Parsed -> m (Type Resolved)
+reType t@(TyCon v a) = TyCon <$> (lookupTy v `catchJunk` InType t a) <*> pure a
+reType t@(TyVar v a) = TyVar <$> (lookupTyvar v `catchJunk` InType t a) <*> pure a
+reType t@(TyPromotedCon v a) = TyPromotedCon <$> (lookupEx v `catchJunk` InType t a) <*> pure a
+reType v@TySkol{} = error ("impossible! resolving skol " ++ show v)
+reType v@TyWithConstraints{} = error ("impossible! resolving withcons " ++ show v)
+reType (TyLit v) = pure (TyLit v)
+reType (TyPi (Invisible v k req) ty) = do
   v' <- tagVar v
-  ty' <- extendTyvar v v' $ reType r ty
-  k <- traverse (reType r) k
+  ty' <- extendTyvar v v' $ reType ty
+  k <- traverse reType k
   pure (TyPi (Invisible v' k req) ty')
-reType r (TyPi (Anon f) x) = TyPi . Anon <$> reType r f <*> reType r x
-reType r (TyPi (Implicit f) x) = TyPi . Implicit <$> reType r f <*> reType r x
-reType r (TyApp f x) = TyApp <$> reType r f <*> reType r x
-reType r (TyRows t f) = TyRows <$> reType r t
-                               <*> traverse (\(a, b) -> (a,) <$> reType r b) f
-reType r (TyExactRows f) = TyExactRows <$> traverse (\(a, b) -> (a,) <$> reType r b) f
-reType r (TyTuple ta tb) = TyTuple <$> reType r ta <*> reType r tb
-reType r (TyTupleL ta tb) = TyTupleL <$> reType r ta <*> reType r tb
-reType _ (TyWildcard _) = pure (TyWildcard Nothing)
-reType r (TyParens t) = TyParens <$> reType r t
-reType r (TyOperator tl o tr) = TyOperator <$> reType r tl <*> (lookupTy o `catchJunk` r) <*> reType r tr
-reType _ TyType = pure TyType
+reType (TyPi (Anon f) x) = TyPi . Anon <$> reType f <*> reType x
+reType (TyPi (Implicit f) x) = TyPi . Implicit <$> reType f <*> reType x
+reType (TyApp f x) = TyApp <$> reType f <*> reType x
+reType (TyRows t f) = TyRows <$> reType t
+                             <*> traverse (\(a, b) -> (a,) <$> reType b) f
+reType (TyExactRows f) = TyExactRows <$> traverse (\(a, b) -> (a,) <$> reType b) f
+reType (TyTuple ta tb) = TyTuple <$> reType ta <*> reType tb
+reType (TyTupleL ta tb) = TyTupleL <$> reType ta <*> reType tb
+reType (TyWildcard _) = pure (TyWildcard Nothing)
+reType (TyParens t) = TyParens <$> reType t
+reType (TyOperator tl o tr) = TyOperator <$> reType tl <*> reType o <*> reType tr
+reType TyType = pure TyType
 
 reWholePattern :: forall m. MonadResolve m
                => Pattern Parsed
@@ -542,11 +543,11 @@ rePattern r@(Destructure v p a) = do
       (p', vs, ts) <- rePattern pat
       pure (Just p', vs, ts)
   pure (Destructure v' p' a, vs, ts)
-rePattern r@(PType p t a) = do
+rePattern (PType p t a) = do
   (p', vs, ts) <- rePattern p
   let fvs = toList (ftv t)
   fresh <- for fvs $ \x -> lookupTyvar x `absolving` tagVar x
-  t' <- extendTyvars (zip fvs fresh) (reType r t)
+  t' <- extendTyvars (zip fvs fresh) (reType t)
   let r' = PType p' t' a
   pure (r', vs, zip3 fvs fresh (repeat r') ++ ts)
 rePattern (PRecord f a) = do
@@ -594,8 +595,7 @@ reMethod (MethodImpl b@Matching{}) =
 reMethod b@(TypeImpl var args exp ann) = do
   var' <- retcons (wrapError b) $ lookupTy var
   (args, sc) <- resolveTele b args
-  exp <- extendTyvars sc $
-    reType b exp
+  exp <- extendTyvars sc $ reType exp
   pure (pure (TypeImpl var' args exp ann), [(var, var')])
 
 reMethod (MethodImpl TypedMatching{}) = error "reBinding TypedMatching{}"

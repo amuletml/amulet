@@ -1,7 +1,7 @@
-tf-not-injective.ml[24:5 ..27:48]: error (E2015)
+tf-not-injective.ml[24:1 ..31:15]: error (E2015)
    │ 
 24 │ let cast' :
-   │     ^^^^^^^
+   │ ^^^^^^^^^^^
   Ambiguous type for value cast':
     forall 'a 'b. recursive 'a * recursive 'b * eq_1 (rep 'a) (rep 'b) => proxy (rep 'a) -> proxy (rep 'b) -> 'a -> 'b
   The variable b is ambiguous

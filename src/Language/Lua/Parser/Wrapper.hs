@@ -95,7 +95,7 @@ instance Show a => Show (ParseResult a) where
 
 instance Pretty a => Pretty (ParseResult a) where
   pretty (POK _ s) = pretty s
-  pretty (PFailed e) = pretty (annotation e) <> string ":" <+> pretty e
+  pretty (PFailed e) = pretty (spanOf e) <> string ":" <+> pretty e
 
 newtype Parser a = P { unP :: PState -> ParseResult a }
 

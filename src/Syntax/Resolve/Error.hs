@@ -106,26 +106,26 @@ instance Pretty ResolveError where
     pretty er <#> empty <#> nest 4 (string "Arising from use of" <+> blameOf ex)
 
 instance Spanned ResolveError where
-  annotation (ArisingFrom _ x) = annotation x
-  annotation (NonLinearRecord e _) = annotation e
-  annotation (ImportError e _) = annotation e
-  annotation (ManyMatchingImports _ _ a) = a
-  annotation x = error (show x)
+  spanOf (ArisingFrom _ x) = spanOf x
+  spanOf (NonLinearRecord e _) = spanOf e
+  spanOf (ImportError e _) = spanOf e
+  spanOf (ManyMatchingImports _ _ a) = a
+  spanOf x = error (show x)
 
 instance Note ResolveError Style where
   diagnosticKind _ = ErrorMessage
 
   formatNote f x = body mempty x where
     body :: NoteDoc Style -> ResolveError -> NoteDoc Style
-    body _ (ArisingFrom er a) = body (f [annotation a]) er
-    body _ (NonLinearPattern _ ps) = def <#> f (map annotation ps)
-    body _ (NonLinearRecord e _) = def <#> f [annotation e]
+    body _ (ArisingFrom er a) = body (f [spanOf a]) er
+    body _ (NonLinearPattern _ ps) = def <#> f (map spanOf ps)
+    body _ (NonLinearRecord e _) = def <#> f [spanOf e]
     body d (UnresolvedImport name search)
         = wrap ("Cannot resolve" <+> dquotes (text name))
       <#> d
       <#> wrap (searchedIn search)
     body _ (ImportLoop loop) = def <#> foldl1 (<#>) (E.map imported loop)
-    body _ (ManyMatchingImports _ xs _) = def <#> f (map annotation xs)
+    body _ (ManyMatchingImports _ xs _) = def <#> f (map spanOf xs)
     body d (NotInScope _ _ (Just pos))
         = def <#> d
       <#> wrap ("Do you need a" <+> keyword "rec" <+> "modifier here?")

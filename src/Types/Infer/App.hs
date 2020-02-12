@@ -64,20 +64,20 @@ inferApps exp expected =
 
     quantifiers <- pure (applyQ ql_sub quantifiers)
 
-    let fake_ty_con = TyCon (TgInternal T.empty)
+    let fake_ty_con = TyCon (TgInternal T.empty) ()
     for_ (Map.toList ql_sub) $ \(var, tau) ->
       -- Here we need these to be guarded, so they need to be in the RHS
       -- of a type application. Since we don't have a suitable type, we
       -- use an internal TyCon with an invisible name. (Evil!)
-      unify (becauseExp exp) (TyApp fake_ty_con (TyVar var)) (TyApp fake_ty_con tau)
+      unify (becauseExp exp) (TyApp fake_ty_con (TyVar var ())) (TyApp fake_ty_con tau)
 
     tell cs
 
     ty_syms <- view tySyms
 
     r_ql_sub <- case expected of
-      Just tau@(TyApps (TyCon t) (_:_))
-        | result@(TyApps (TyCon t') (_:_)) <- getQuantR quantifiers
+      Just tau@(TyApps (TyCon t ()) (_:_))
+        | result@(TyApps (TyCon t' ()) (_:_)) <- getQuantR quantifiers
         , invariant ty_syms t, invariant ty_syms t' -> do
         -- Pushing down the result type into the quick look substitution
         -- is only sound if both are /guarded/, i.e. applications of an
@@ -99,7 +99,7 @@ inferApps exp expected =
       Just tau -> do
         traceM TcQL (pretty result <+> soperator (char '≤') <+> pretty tau)
         wrap <- subsumes (becauseExp exp) result tau
-        pure $ \ex -> ExprWrapper wrap ex (annotation ex, tau)
+        pure $ \ex -> ExprWrapper wrap ex (spanOf ex, tau)
       Nothing -> pure id
 
     pure (wrap (foldr (.) id (reverse arg_ks) function), result)
@@ -125,7 +125,7 @@ checkArguments ((ExprArg arg, _):as) (Quant tau dom cod inst_cont qs) =
     Anon dom -> do
       x <- check arg dom
 
-      let cont ex = App ex x (annotation ex <> annotation x, cod)
+      let cont ex = App ex x (spanOf ex <> spanOf x, cod)
 
       (conts, result) <- checkArguments as qs
       pure (inst_cont:cont:conts, result)
@@ -143,7 +143,7 @@ checkArguments ((TypeArg arg, reason):as) (Quant tau dom cod inst_cont qs) =
         Nothing -> resolveKind reason arg
 
       let ty = apply (Map.singleton v arg) cod
-          cont ex = ExprWrapper (TypeApp arg) ex (annotation ex <> annotation reason, ty)
+          cont ex = ExprWrapper (TypeApp arg) ex (spanOf ex <> spanOf reason, ty)
 
       (conts, result) <- checkArguments as qs
       pure (inst_cont:cont:conts, result)
@@ -233,7 +233,7 @@ invariant syms x =
   && x `Map.notMember` syms -- Type families have weird variance that can't be solved quickly
 
 data Arg p = ExprArg (Expr p) | TypeArg (Type p)
-deriving instance (Show (Var p), Show (Ann p)) => Show (Arg p)
+deriving instance ShowPhrase p => Show (Arg p)
 
 instance Pretty (Var p) => Pretty (Arg p) where
   pretty (ExprArg e) = pretty e
@@ -258,7 +258,7 @@ refresh (TyPi (Invisible v k r) t) = do
   let nn (TgName t _) = t
       nn (TgInternal t) = t
   new_v <- genNameFrom (nn v)
-  let sub = Map.singleton v (TyVar new_v)
+  let sub = Map.singleton v (TyVar new_v ())
   TyPi (Invisible new_v k r) <$> refresh (apply sub t)
 refresh t = pure t
 

@@ -6,6 +6,7 @@ import Control.Lens hiding (Lazy)
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
+import qualified Data.Text as T
 import Data.Bifunctor
 import Data.Text (Text)
 import Data.Char
@@ -38,7 +39,7 @@ applyCons (TyTupleL a b) = TyTupleL (applyCons a) (applyCons b)
 applyCons (TyParens t) = TyParens (applyCons t)
 applyCons (TyOperator l o r) = TyOperator (applyCons l) o (applyCons r)
 applyCons (TyWithConstraints cs a) =
-  let eq (TyVar a, t) = Map.singleton a t
+  let eq (TyVar a _, t) = Map.singleton a t
       eq _ = Map.empty
       eqs = foldMap eq cs
    in apply eqs a
@@ -78,7 +79,7 @@ kindVarIn v (TyPi (Invisible _ k _) t) = v `Set.member` foldMap ftv k || kindVar
 kindVarIn v (TyPi (Anon a) b) = kindVarIn v a && kindVarIn v b
 kindVarIn v (TyPi (Implicit a) b) = kindVarIn v a && kindVarIn v b
 kindVarIn _ TyPromotedCon{} = True
-kindVarIn v (TyVar x) = x /= v
+kindVarIn v (TyVar x _) = x /= v
 kindVarIn v (TyWildcard x) = case x of
   Just x -> kindVarIn v x
   Nothing -> True
@@ -107,9 +108,9 @@ prettyType (TyPi x t) = uncurry (prettyQuantifiers prettyType) . second reverse 
   unwind (TyPi x t) xs = unwind t (x:xs)
   unwind t xs = (t, xs)
 
-prettyType (TyApp (TyApp (TyCon v) l) r) | isOpName (displayS (pretty v)) = prettyType (TyOperator l v r)
+prettyType (TyApp (TyApp v l) r) | isOpName v = prettyType (TyOperator l v r)
 -- Hack for the guarded unification magic type: \/
-prettyType (TyApp (TyCon v) x) | show (pretty v) == mempty = displayType x
+prettyType (TyApp (TyCon v _) x) | show (pretty v) == mempty = displayType x
 -- This is really gross
 
 prettyType (TyApp x e) = parenTyFun x (displayType x) <+> parenTyArg e (displayType e)
@@ -140,9 +141,9 @@ prettyTypeTyped (TyPi x t) = uncurry (prettyQuantifiers prettyTypeTyped) . secon
   unwind (TyPi x t) xs = unwind t (x:xs)
   unwind t xs = (t, xs)
 
-prettyTypeTyped (TyApp (TyApp (TyCon v) l) r) | isOpName (displayS (pretty v)) = prettyTypeTyped (TyOperator l v r)
+prettyTypeTyped (TyApp (TyApp v l) r) | isOpName v = prettyTypeTyped (TyOperator l v r)
 -- Hack for the guarded unification magic type: \/
-prettyTypeTyped (TyApp (TyCon v) x) | show (pretty v) == mempty = displayTypeTyped x
+prettyTypeTyped (TyApp (TyCon v _) x) | show (pretty v) == mempty = displayTypeTyped x
 -- This is really gross
 
 prettyTypeTyped (TyApp x e) = parenTyFun x (displayType x) <+> parenTyArg' e (displayTypeTyped e) where
@@ -215,14 +216,15 @@ parenTyFun _ = id
 parenTuple TyPi{} = parens
 parenTuple _ = id
 
-isOpName :: String -> Bool
-isOpName = not . isAlphaNum . head
+isOpName :: Pretty (Var p) => Type p -> Bool
+isOpName (TyCon v _) = not . isAlphaNum . T.head . display . renderCompact . pretty $ v
+isOpName _ = False
 
 listType :: Var p ~ Var Resolved => Type p -> Maybe [Type p]
-listType (TyPromotedCon v)
+listType (TyPromotedCon v _)
   | v == nILName = pure []
   | otherwise = Nothing
-listType (TyApp (TyPromotedCon v) (TyTupleL hd tl))
+listType (TyApp (TyPromotedCon v _) (TyTupleL hd tl))
   | v == cONSName = (hd:) <$> listType tl
   | otherwise = Nothing
 listType _ = Nothing

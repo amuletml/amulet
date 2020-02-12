@@ -1,4 +1,4 @@
-{-# LANGUAGE ConstraintKinds, FlexibleContexts, LambdaCase, TypeFamilies, ViewPatterns #-}
+{-# LANGUAGE ConstraintKinds, FlexibleContexts, LambdaCase, TypeFamilies, ViewPatterns, TupleSections #-}
 module Types.Kinds
   ( resolveKind
   , resolveTyDeclKind, resolveClassKind, resolveTySymDeclKind, resolveTyFunDeclKind
@@ -120,7 +120,7 @@ checkAgainstKind r t k = solveK pure r $
 
 annotateKind :: MonadKind m => SomeReason -> Type Typed -> m (Type Typed)
 annotateKind r ty = do
-  ((ty, _), cs) <- runWriterT (runStateT (fmap fst (inferKind (raiseT id ty))) r)
+  ((ty, _), cs) <- runWriterT (runStateT (fmap fst (inferKind (raiseT id id ty))) r)
   (sub, _, cons) <- solveFixpoint r cs =<< getSolveInfo
   unless (null cons) $ do
     tell (Seq.fromList cons)
@@ -186,7 +186,7 @@ resolveTyFunDeclKind reason name arguments kindsig equations = do
 
     invis_tvs <- fmap catMaybes . for args $ \case
       TyInvisArg v _ -> do
-        sk <- freshSkol (ByAscription (annotation reason) kind) kind v
+        sk <- freshSkol (ByAscription (spanOf reason) kind) kind v
         pure $ Just (v, sk)
       _ -> pure Nothing
 
@@ -195,13 +195,13 @@ resolveTyFunDeclKind reason name arguments kindsig equations = do
     scope <- view classes
 
     (eqs, cs) <- censor (const mempty) . listen . local (names %~ focus (one name kind <> fromArgs args)) $
-      for equations $ \clause@(TyFunClause ty@(TyApps (TyCon con) xs) rhs an) -> do
+      for equations $ \clause@(TyFunClause ty@(TyApps (TyCon con ()) xs) rhs an) -> do
         tvs <- for (Set.toList (ftv ty)) $ \v -> (,) v <$> freshTV
         local (names %~ focus (teleFromList tvs)) $ do
           put (BecauseOf clause)
 
           (~ty@(TyApps _ xs), lhs_cs) <- censor (const mempty) . listen $
-            TyApps (TyCon con) <$> traverse (uncurry checkKind) (zip xs vis_argts)
+            TyApps (TyCon con ()) <$> traverse (uncurry checkKind) (zip xs vis_argts)
               `catchChronicle` (confess . fmap (addBlame (BecauseOf clause)))
           let (eq, sub) = Seq.partition (\case { ConImplicit _ _ _ (TyApps t [_, _]) -> t == tyEq; _ -> False }) lhs_cs
           tell sub
@@ -213,7 +213,7 @@ resolveTyFunDeclKind reason name arguments kindsig equations = do
 
           (rhs, rhs_cs) <- censor (const mempty) . listen $
             local (names %~ focus (teleFromList (zipWith sk tvs skols))) $
-              checkKind (apply (raiseT id <$> Map.fromList skols) rhs) return_kind
+              checkKind (apply (raiseT id id <$> Map.fromList skols) rhs) return_kind
             `catchChronicle` (confess . fmap (addBlame (BecauseOf clause)))
 
           case kindsig of
@@ -221,7 +221,7 @@ resolveTyFunDeclKind reason name arguments kindsig equations = do
               let preceding =
                     Seq.fromList $
                       zipWith (\l r -> ConUnify (BecauseOf clause) scope undefined l r)
-                        (map (TyVar . argName) vis_args)
+                        (map (flip TyVar () . argName) vis_args)
                         (apply (Map.fromList skols) xs)
               let to_eq ~(ConImplicit because scope var (TyApps _ [a, b])) = do
                     pure ()
@@ -232,7 +232,7 @@ resolveTyFunDeclKind reason name arguments kindsig equations = do
 
               tell (Seq.singleton
                      (ConImplies (BecauseOf clause)
-                        (TyApps return_kind (map (TyVar . argName) vis_args))
+                        (TyApps return_kind (map (flip TyVar () . argName) vis_args))
                         (preceding <> eqs)
                         rhs_cs))
             Nothing -> do
@@ -245,7 +245,7 @@ resolveTyFunDeclKind reason name arguments kindsig equations = do
           put reason
           pure (TyFunClause ty (unskolemise' our_skols rhs) (an, kind))
 
-    let fix (v, s) = ConUnify reason scope undefined (TyVar v) s
+    let fix (v, s) = ConUnify reason scope undefined (TyVar v ()) s
 
     if null invis_tvs
        then tell cs
@@ -278,7 +278,7 @@ resolveTyFunDeclKind reason name arguments kindsig equations = do
    undependentify t = t
 
    unskolemise m (TySkol v)
-     | (v ^. skolIdent) `Set.member` m = TyVar (v ^. skolVar)
+     | (v ^. skolIdent) `Set.member` m = TyVar (v ^. skolVar) ()
      | otherwise = TySkol v
    unskolemise _ t = t
    unskolemise' m = transformType (unskolemise m)
@@ -377,7 +377,7 @@ resolveTyDeclKind reason tycon args cons = do
       remake (TyAnnArg v _:as) (TyArr k r) = TyAnnArg v k:remake as r
       remake as (TyForall _ _ k) = remake as k
       remake _ _ = []
-  pure (k, foldl TyApp (TyCon tycon) (map TyVar vs), remake args k)
+  pure (k, foldl TyApp (TyCon tycon ()) (map (`TyVar` ()) vs), remake args k)
 
 solveForKind :: MonadKind m => SomeReason -> KindT m (Type Typed) -> m (Type Typed)
 solveForKind reason = solveK (closeOver reason) reason
@@ -403,7 +403,7 @@ solveK cont reason k = do
 
 inferKind :: MonadKind m => Type Desugared -> KindT m (Type Typed, Kind Typed)
 inferKind p | trace KcI (pretty p) False = undefined
-inferKind (TyCon v) = do
+inferKind (TyCon v ()) = do
   info <- view (tySyms . at v)
   reason <- get
   case info of
@@ -419,11 +419,11 @@ inferKind (TyCon v) = do
       confesses (ArisingFrom (NotInScope v) x)
     Just k -> do
       (_, _, k) <- instantiate Strong Expression k
-      pure (TyCon v, k)
+      pure (TyCon v (), k)
 
 inferKind (TyLit l) = pure (TyLit l, litTy l)
 
-inferKind (TyPromotedCon v) = do
+inferKind (TyPromotedCon v ()) = do
   x <- view (names . at v)
   reason <- get
   case x of
@@ -432,16 +432,18 @@ inferKind (TyPromotedCon v) = do
       (_, _, k) <- instantiate Strong Expression k
       (k, _) <- discharge (Const reason) k
       case promoteOrError k of
-        Nothing -> pure (TyPromotedCon v, k)
+        Nothing -> pure (TyPromotedCon v (), k)
         Just err -> confesses (NotPromotable v k err)
 
 inferKind (TyOperator left op right) = do
   reason <- get
-  kind <- view (names . at op)
-  ty <- case kind of
-    Nothing -> confesses (NotInScope op)
-    Just k ->
-      view _3 <$> instantiate Strong Expression k
+  (op, ty) <- case op of
+    TyCon op () -> do
+      kind <- view (names . at op)
+      (TyCon op (),) <$> case kind of
+        Nothing -> confesses (NotInScope op)
+        Just k -> view _3 <$> instantiate Strong Expression k
+    _ -> inferKind op
 
   ~(Anon lt, c1, _) <- quantifier reason (/= Req) ty
   ~(Anon rt, c2, _) <- quantifier reason (/= Req) c1
@@ -449,9 +451,9 @@ inferKind (TyOperator left op right) = do
   right <- checkKind right rt
   pure (TyOperator left op right, c2)
 
-inferKind (TyVar v) = do
+inferKind (TyVar v ()) = do
   k <- maybe freshTV pure =<< view (names . at v)
-  pure (TyVar v, k)
+  pure (TyVar v (), k)
 
 inferKind (TyWildcard (Just v)) = do
   (v, k) <- inferKind v
@@ -464,9 +466,9 @@ inferKind (TyWildcard Nothing) = do
 
 inferKind (TySkol sk) = do
   k <- maybe freshTV pure =<< view (names . at (sk ^. skolIdent))
-  pure (raiseT id (TySkol sk), k)
+  pure (raiseT id id (TySkol sk), k)
 
-inferKind t@TyApp{} | TyCon v:xs <- appsView t = do
+inferKind t@TyApp{} | TyCon v ():xs <- appsView t = do
   info <- view (tySyms . at v)
   reason <- get
   scope <- view classes
@@ -476,7 +478,7 @@ inferKind t@TyApp{} | TyCon v:xs <- appsView t = do
         unless (length (info ^. tsArgs) <= length xs) $
           confesses (UnsaturatedTS reason info (length xs))
         pure (info ^. tsKind)
-      Nothing -> snd <$> inferKind (TyCon v)
+      Nothing -> snd <$> inferKind (TyCon v ())
 
   reason <- get
   let checkOne arg kind = do
@@ -498,7 +500,7 @@ inferKind t@TyApp{} | TyCon v:xs <- appsView t = do
         (_3 %~ (arg:)) <$> checkSpine (TyApp fun arg) args kind
       checkSpine fun [] k = pure (fun, k, [])
 
-  (fun, result, _) <- checkSpine (TyCon v) xs ki
+  (fun, result, _) <- checkSpine (TyCon v ()) xs ki
 
   case info of
     Just tau | Just (Just t) <- tau ^? tsConstraint -> do
@@ -572,7 +574,7 @@ checkKind (TyPi binder b) ek = do
     Implicit t -> do
       t' <- checkKind t tyConstraint
       v <- genName
-      local (classes %~ insert (annotation reason) LocalAssum v t' (MagicInfo [] Nothing)) $
+      local (classes %~ insert (spanOf reason) LocalAssum v t' (MagicInfo [] Nothing)) $
         TyPi (Implicit t') <$> checkKind b ek
 
     Invisible v (Just arg) r -> do
@@ -613,7 +615,7 @@ inferGadtConKind :: MonadKind m
                  -> [Var Typed]
                  -> KindT m ()
 inferGadtConKind con typ tycon args = go typ (gadtConResult typ) where
-  go ty (TyApps (TyCon hd) apps)
+  go ty (TyApps (TyCon hd ()) apps)
     | hd == tycon =
       let fv = toList (foldMap ftv apps)
        in do
@@ -622,11 +624,11 @@ inferGadtConKind con typ tycon args = go typ (gadtConResult typ) where
            _ <- checkKind ty TyType
            for_ (zip args apps) $ \(var, arg) -> do
              (_, k) <- inferKind arg
-             checkKind (TyVar var) =<< expandType k
+             checkKind (TyVar var ()) =<< expandType k
   go _ _ = do
     tp <- checkKind typ TyType
     confesses . flip ArisingFrom (BecauseOf con) $ gadtConShape
-      (tp, foldl TyApp (TyCon tycon) (map TyVar args))
+      (tp, foldl TyApp (TyCon tycon ()) (map (`TyVar`()) args))
       (gadtConResult tp)
       (Malformed tp)
 
@@ -654,7 +656,7 @@ closeOver r a = silence $ do
         squish (x, []) = x
         squish (x, vs) = foldr (flip tyForall (Just TyType)) x vs
 
-        split (TyForall v (Just t@(TyVar x)) ty)
+        split (TyForall v (Just t@(TyVar x _)) ty)
           | v `Set.member` freevars = do
             tell (Set.singleton x)
             tyForall v (Just t) <$> split ty
@@ -683,7 +685,7 @@ closeOver' vars r a = do
       squish (x, []) = x
       squish (x, vs) = foldr (flip tyForall (Just TyType)) x vs
 
-      split (TyForall v (Just t@(TyVar x)) ty)
+      split (TyForall v (Just t@(TyVar x _)) ty)
         | v `Set.member` freevars = do
           tell (Set.singleton x)
           tyForall v (Just t) <$> split ty

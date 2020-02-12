@@ -48,17 +48,17 @@ gadtConShape (_, t) ty oerr = k . fix . flip Note (itShouldBe <#> itIs) . flip N
       flip Suggestion $
         string "did you mean a function,"
           <+> nest 2 (string "like" </> pretty (TyArr a b) <> char '?')
-    TyCon v -> case appsView t of
-      TyCon v':_ | v == v' ->
+    TyCon v () -> case appsView t of
+      TyCon v' ():_ | v == v' ->
         flip Suggestion $
           string "did you mean to saturate it with respect to universals,"
             <#> string "as in" <+> pretty t <> char '?'
-      [TyCon v'] | v /= v' ->
+      [TyCon v' ()] | v /= v' ->
         flip Suggestion $
           string "did you mean to use" <+> pretty v' <+> string "instead of" <+> pretty v <> char '?'
       _ -> id
     TyApp{} -> case (appsView ty, appsView t) of
-      (TyCon v':xs, TyCon v:_) | v /= v' ->
+      (TyCon v' ():xs, TyCon v ():_) | v /= v' ->
         flip Suggestion $
           string "did you mean" <+> pretty (rewind v xs) </> string "instead of" <+> pretty ty <> char '?'
       _ -> id
@@ -76,7 +76,7 @@ getErr (ArisingFrom e blame) = case getErr e of
 getErr x = (x, id)
 
 rewind :: Var Typed -> [Type Typed] -> Type Typed
-rewind x = foldl TyApp (TyCon x)
+rewind x = foldl TyApp (TyCon x ())
 
 foundHole :: MonadNamey m => Env -> Ann Typed -> Var Typed -> Type Typed -> Subst Typed -> m TypeError
 foundHole env ann hole ht sub =
@@ -94,7 +94,7 @@ unsatClassCon :: (MonadReader Env m, Reasonable f p)
               -> Constraint Typed
               -> WhyUnsat
               -> m TypeError
-unsatClassCon why con@(ConImplicit _ _ _ (TyApps (TyCon clss_tc) args)) unsat | clss_tc /= tyEqName =
+unsatClassCon why con@(ConImplicit _ _ _ (TyApps (TyCon clss_tc ()) args)) unsat | clss_tc /= tyEqName =
   do
     scope_ts <- view tySyms
     class_info <- view (classDecs . at clss_tc . non (error "unsatClassCon: TyCon{} class with no info in scope"))
@@ -110,7 +110,7 @@ unsatClassCon why con@(ConImplicit _ _ _ (TyApps (TyCon clss_tc) args)) unsat | 
         Just TyFamInfo{ _tsConstraint = x } -> Just (isJust x)
         _ -> Nothing
 
-    isTf_app ts (TyApps (TyCon v) _) = (, v) <$> isTf ts v
+    isTf_app ts (TyApps (TyCon v ()) _) = (, v) <$> isTf ts v
     isTf_app _ _ = Nothing
 
     can_drop fd =
@@ -126,7 +126,7 @@ unsatClassCon why con@(ConImplicit _ _ _ (TyApps (TyCon clss_tc) args)) unsat | 
                then string "an" <+> keyword "associated type"
                else string "a" <+> keyword "type function"
        in Note x
-            (displayType (TyCon v :: Type Typed)
+            (displayType (TyCon v () :: Type Typed)
               <+> string "is" <+> what <> string ", and so may not be injective")
 
 unsatClassCon why con unsat = pure (UnsatClassCon (BecauseOf why) con unsat)

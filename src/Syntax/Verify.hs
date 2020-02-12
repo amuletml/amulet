@@ -66,18 +66,18 @@ runVerify env target var = fixup
 verifyProgram :: forall m. MonadVerify m => [Toplevel Typed] -> m ()
 verifyProgram = traverse_ verifyStmt where
   verifyStmt :: Toplevel Typed -> m ()
-  verifyStmt st@(LetStmt _ am vs) = verifyBindingGroup addBind (BecauseOf st) vs where
+  verifyStmt st@(LetStmt _ am vs _) = verifyBindingGroup addBind (BecauseOf st) vs where
     addBind :: BindingSite -> m ()
     addBind b@(BindingSite _ _ tau) = do
       when (am == Public) $
         case tau of
-          TyApps (TyCon v) [_] | v == tyRefName -> tell (Seq.singleton (ToplevelRefBinding b))
+          TyApps (TyCon v _) [_] | v == tyRefName -> tell (Seq.singleton (ToplevelRefBinding b))
           _ -> pure ()
       case am of
         Private -> modify (Set.insert b)
         Public -> pure ()
 
-  verifyStmt st@(ForeignVal _ v d _ (_, _)) = do
+  verifyStmt st@(ForeignVal _ v d _ _) = do
     target <- asks target
     case CT.parse target (SourcePos ("definition of " <> displayT (pretty v)) 1 1) (d ^. lazy) of
       Left e -> tell (Seq.singleton (ParseErrorInForeign st e target))
@@ -152,12 +152,12 @@ verifyExpr ex@(Let _ vs e (_, ty)) = do
   verifyExpr e
 verifyExpr (If c t e _) = traverse_ verifyExpr [c, t, e]
 verifyExpr (App f x _) = verifyExpr f *> verifyExpr x
-verifyExpr m@(Fun (PatParam p) x _) = verifyMatch (const $ pure ()) (annotation m) (getType p) [Arm p Nothing x]
+verifyExpr m@(Fun (PatParam p) x _) = verifyMatch (const $ pure ()) (spanOf m) (getType p) [Arm p Nothing x (spanOf m)]
 verifyExpr (Fun (EvParam _) (Match e bs an _) _) = do
   -- Handle desugared `function`.
   verifyExpr e
   verifyMatch
-    (\(Arm p _ _) -> tell . pure $ MatchToFun an p)
+    (\(Arm p _ _ _) -> tell . pure $ MatchToFun an p)
     an (getType e) bs
 
 verifyExpr (Fun _ x _) = verifyExpr x
@@ -166,7 +166,7 @@ verifyExpr Literal{} = pure ()
 verifyExpr (Match e bs an _) = do
   verifyExpr e
   verifyMatch
-    (\(Arm p _ _) -> unless (gadtPat p) $ tell . pure $ MatchToLet an p)
+    (\(Arm p _ _ _) -> unless (gadtPat p) $ tell . pure $ MatchToLet an p)
     an (getType e) bs
 verifyExpr Function{} = error "Impossible: Function has been desugared."
 verifyExpr (BinOp l o r _) = traverse_ verifyExpr [l, o, r]
@@ -222,7 +222,7 @@ unguardedVars Fun{}                = mempty
 unguardedVars (Record rs _)        = foldMap (unguardedVars . view fExpr) rs
 unguardedVars (Access e _ _)       = unguardedVars e
 unguardedVars (Match t ps _ _)     = unguardedVars t <> foldMap unguardedVarsBranch ps where
-  unguardedVarsBranch (Arm p g e)  = (foldMap unguardedVars g <> unguardedVars e) Set.\\ bound p
+  unguardedVarsBranch (Arm p g e _) = (foldMap unguardedVars g <> unguardedVars e) Set.\\ bound p
 unguardedVars Literal{}            = mempty
 unguardedVars Hole{}               = mempty
 unguardedVars (If a b c _)         = unguardedVars a <> unguardedVars b <> unguardedVars c
@@ -276,7 +276,7 @@ nonTrivial BinOp{} = True
 nonTrivial (If c t e _) = nonTrivial c || nonTrivial t || nonTrivial e
 nonTrivial (Let _ vs e _) = nonTrivial e || any nonTrivialRhs vs
 nonTrivial (Begin es _) = any nonTrivial es
-nonTrivial (Match e cs _ _) = nonTrivial e || any (\(Arm _ g a) -> nonTrivial a || maybe False nonTrivial g) cs
+nonTrivial (Match e cs _ _) = nonTrivial e || any (\(Arm _ g a _) -> nonTrivial a || maybe False nonTrivial g) cs
 nonTrivial VarRef{} = False
 nonTrivial Fun{} = False
 nonTrivial Literal{} = False
@@ -330,7 +330,7 @@ verifyMatch rep m ty bs = do
   VerifyScope env va _ <- ask
   ty <- pure $ expandTypeWith (env ^. tySyms) ty
 
-  (_, ok, unc) <- foldlM (\(i :: Int, ok, alts) a@(Arm pat guard body) -> do
+  (_, ok, unc) <- foldlM (\(i :: Int, ok, alts) a@(Arm pat guard body _) -> do
     let cov  = covering env pat alts
     -- If the covered set is empty, this arm is redundant
     (va', ok) <- case covered cov of
@@ -362,7 +362,7 @@ verifyMatch rep m ty bs = do
 
 unqualifyWrt :: (Var p ~ Var Resolved) => T.Text -> Type p -> Type p
 unqualifyWrt n = transformType go where
-  go (TyCon v) = TyCon (unqualifyVarWrt n v)
+  go (TyCon v a) = TyCon (unqualifyVarWrt n v) a
   go t = t
 
 unqualifyVarWrt :: T.Text -> Var Resolved -> Var Resolved

@@ -74,7 +74,7 @@ inferExpr env exp = fmap fst <$> runInfer env (inferOne exp) where
     (sub, _, deferred) <- condemn $ retcons (addBlame (becauseExp expr)) $ solve cs =<< getSolveInfo
     deferred <- pure (fmap (apply sub) deferred)
     (compose sub -> sub, _, cons) <- condemn $ solve (Seq.fromList deferred) =<< getSolveInfo
-    (context, _, _, compose sub -> sub) <- reduceClassContext mempty (annotation expr) cons
+    (context, _, _, compose sub -> sub) <- reduceClassContext mempty (spanOf expr) cons
 
     vt <- closeOverStrat (becauseExp expr) mempty expr (apply sub (context ty))
     pure (fst (rename vt))
@@ -86,7 +86,7 @@ check e t | trace TcC (keyword "Γ ⊢" <+> pretty e <+> soperator (char '↓') 
 check e oty@TyPi{} | isSkolemisable oty = do
   let reason = BecauseOf e
 
-  (wrap, ty, scope, vs) <- skolemise (ByAscription (annotation e) oty) oty
+  (wrap, ty, scope, vs) <- skolemise (ByAscription (spanOf e) oty) oty
 
   when (not (value e) && scope == mempty) $
     dictates (addBlame reason (NotValue reason oty))
@@ -97,10 +97,10 @@ check e oty@TyPi{} | isSkolemisable oty = do
     (e, cs) <- censor (const mempty) . listen $ check e ty
     (_, as) <- censor (const mempty) . listen . for vs $ \(a, b) ->
       unless (Set.member a tvs) $
-        () <$ unify (becauseExp e) (TyVar a) b
+        () <$ unify (becauseExp e) (TyVar a ()) b
 
     tell (Seq.singleton (ConImplies reason tyUnit as cs))
-    pure (ExprWrapper wrap e (annotation e, oty))
+    pure (ExprWrapper wrap e (spanOf e, oty))
 
 check (Hole v a) t = do
   env <- ask
@@ -129,7 +129,7 @@ check ex@(Fun pat e an) ty = do
   (p, vs, cs, is) <- checkParameter pat domain
   let tvs = boundTvs (p ^. paramPat) vs
 
-  implies (Arm (pat ^. paramPat) Nothing e) domain cs $
+  implies (Arm (pat ^. paramPat) Nothing e an) domain cs $
     case dom of
       Anon{} -> do
         traceM TcB (shown vs)
@@ -143,22 +143,22 @@ check (If c t e an) ty = If <$> check c tyBool <*> check t ty <*> check e ty <*>
 check (Match t ps p a) ty = do
   tt <-
     case ps of
-      (Arm p _ _:_) -> view _2 <$> inferPattern p
+      (Arm p _ _ _:_) -> view _2 <$> inferPattern p
       _ -> view _2 <$> infer t
   t <- check t tt
 
-  ps <- for ps $ \(Arm p g e) -> do
+  ps <- for ps $ \(Arm p g e a) -> do
     (p', ms, cs, is) <- checkPattern p tt
     let tvs = boundTvs p' ms
 
-    implies (Arm p g e) tt cs
+    implies (Arm p g e a) tt cs
       . local (typeVars %~ Set.union tvs)
       . local (names %~ focus ms)
       . local (classes %~ mappend is)
       $ do
         g' <- traverse (`check` tyBool) g
         e' <- check e ty
-        pure (Arm p' g' e')
+        pure (Arm p' g' e' a)
   pure (Match t ps p (a, ty))
 
 check e@(Access rc key a) ty = do
@@ -205,7 +205,7 @@ check e ty = do
   -- here: have t (inferred)
   --       want ty (given)
   c <- subsumes (becauseExp e) t ty
-  pure (ExprWrapper c e' (annotation e, ty))
+  pure (ExprWrapper c e' (spanOf e, ty))
 
 -- [Complete and Easy]: See https://www.cl.cam.ac.uk/~nk480/bidir.pdf
 
@@ -279,14 +279,14 @@ infer ex@(Match t ps p a) = do
   (t', tt) <- infer t
   ty <- freshTV
 
-  ps' <- for ps $ \(Arm p g e) -> do
+  ps' <- for ps $ \(Arm p g e a) -> do
     (p', ms, cs, is) <- checkPattern p tt
     let tvs = boundTvs p' ms
     leakEqualities ex cs
     local (typeVars %~ Set.union tvs) . local (names %~ focus ms) . local (classes %~ mappend is) $ do
       e' <- check e ty
       g' <- traverse (`check` tyBool) g
-      pure (Arm p' g' e')
+      pure (Arm p' g' e' a)
   pure (Match t' ps' p (a, ty), ty)
 
 infer (Record rows a) = do
@@ -436,7 +436,7 @@ inferRows rows = for rows $ \(Field n e s) -> do
 
 inferProg :: MonadInfer Typed m
           => [Toplevel Desugared] -> m ([Toplevel Typed], Env)
-inferProg (stmt@(LetStmt re am ns):prg) = censor onlyDeferred $ do
+inferProg (stmt@(LetStmt re am ns a):prg) = censor onlyDeferred $ do
   (ns', ts, _) <- retcons (addBlame (BecauseOf stmt)) (inferLetTy (closeOverStrat (BecauseOf stmt)) Fail ns)
     `catchChronicle` \e -> do
       tell (DeferredError <$> e)
@@ -456,19 +456,19 @@ inferProg (stmt@(LetStmt re am ns):prg) = censor onlyDeferred $ do
      else confess (Seq.filter ((/= WarningMessage) . diagnosticKind) es)
 
   local (letBound %~ Set.union bvs) . local (names %~ focus ts) $
-    consFst (LetStmt re am ns') $
+    consFst (LetStmt re am ns' a) $
       inferProg prg
 
 inferProg (st@(ForeignVal am v d t ann):prg) = do
   t' <- resolveKind (BecauseOf st) t
   local (names %~ focus (one v t')) . local (letBound %~ Set.insert v) $
-    consFst (ForeignVal am v d t' (ann, t')) $
+    consFst (ForeignVal am v d t' ann) $
       inferProg prg
 
 inferProg (decl@(TySymDecl am n tvs exp ann):prg) = do
   (kind, exp, tvs) <- resolveTySymDeclKind (BecauseOf decl) n tvs exp
 
-  let td = TypeDecl am n tvs (Just [ArgCon am n exp (ann, kind)]) (ann, kind)
+  let td = TypeDecl am n tvs (Just [ArgCon am n exp (ann, kind)]) ann
       argv (TyAnnArg v _:xs) = v:argv xs
       argv (TyVarArg v:xs) = v:argv xs
       argv (TyInvisArg v _:xs) = v:argv xs
@@ -492,7 +492,7 @@ inferProg (decl@(TypeDecl am n tvs cs ann):prg) = do
           TyInvisArg v _ -> Set.singleton v
 
   let cont cs =
-        consFst (TypeDecl am n tvs cs (ann, undefined)) $
+        consFst (TypeDecl am n tvs cs ann) $
           inferProg prg
 
   local (names %~ focus (one n (fst (rename kind)))) . local (declaredHere %~ Set.insert n) $
@@ -521,11 +521,11 @@ inferProg (c@Class{}:prg) = do
 
 inferProg (inst@Instance{}:prg) = do
   (stmt, instName, instTy, ci, syms) <- condemn $ inferInstance inst
-  let addFst (LetStmt _ _ []) = id
+  let addFst (LetStmt _ _ [] _) = id
       addFst stmt = consFst stmt
 
   flip (foldr addFst) (reverse stmt)
-    . local (classes %~ insert (annotation inst) InstSort instName instTy ci)
+    . local (classes %~ insert (spanOf inst) InstSort instName instTy ci)
     . local (tySyms %~ extendTySyms syms)
     $ inferProg prg
 
@@ -540,7 +540,7 @@ inferProg (decl@(TypeFunDecl am tau arguments kindsig equations ann):prg) = do
                   , _tsKind = kind
                   , _tsConstraint = Nothing
                   }
-      fakeDecl = TypeDecl am tau arguments (Just cons) (ann, kind)
+      fakeDecl = TypeDecl am tau arguments (Just cons) ann
       make_eq (TyFunClause (TyApps _ lhs) rhs _) (GadtCon _ v _ _) = (lhs, rhs, v)
       make_eq _ _ = undefined
       arg_name (TyAnnArg v _) = v
@@ -554,11 +554,11 @@ inferProg (decl@(TypeFunDecl am tau arguments kindsig equations ann):prg) = do
 
 inferProg (DeriveInstance tau ann:prg) = do
   tau <- checkAgainstKind (BecauseOf (DeriveInstance tau ann)) tau tyConstraint
-  let inst = DeriveInstance tau (ann, tyConstraint)
+  let inst = DeriveInstance tau ann
 
   name <- case tau of
-    TyPi (Implicit _) (TyApps (TyCon class_con) (_:_)) -> pure class_con
-    TyApps (TyCon class_con) (_:_) -> pure class_con
+    TyPi (Implicit _) (TyApps (TyCon class_con ()) (_:_)) -> pure class_con
+    TyApps (TyCon class_con ()) (_:_) -> pure class_con
     _ -> confesses (DIMalformedHead (BecauseOf inst))
 
   class_info <- view (classDecs . at name)
@@ -603,14 +603,14 @@ inferMod (ModStruct bod a) = do
   -- functions/implicits that we open in our signature. But it'll do for now.
   let append x p = maybe p (<> p) x
       qualifyWrt prefix scope =
-        let go (TyCon n) =
+        let go (TyCon n ()) =
               if not (n `inScope` scope)
-                 then TyCon (append prefix n)
-                 else TyCon n
+                 then TyCon (append prefix n) ()
+                 else TyCon n ()
             go x = x
          in transformType go
 
-  pure (ModStruct bod' (a, undefined)
+  pure (ModStruct bod' a
        , \prefix ->
            (names %~ (<> mapScope (append prefix) (qualifyWrt prefix outside) (env ^. names)))
          . (types %~ (<> (Set.mapMonotonic (append prefix)
@@ -621,7 +621,7 @@ inferMod (ModStruct bod a) = do
 
 inferMod (ModRef name a) = do
   mod <- view (modules . at name) >>= maybe (confesses (NotInScope name)) pure
-  pure (ModRef name (a, undefined), const id, mod)
+  pure (ModRef name a, const id, mod)
 
 inferMod ModImport{} = error "Impossible"
 inferMod ModTargetImport{} = error "Impossible"
@@ -672,7 +672,7 @@ instantiateTc r tau = do
       tell (Seq.singleton (ConImplicit r i x tau))
       (k, sigma) <- go sigma
       let wrap ex =
-            ExprWrapper (WrapVar x) (ExprWrapper (TypeAsc ty) ex (annotation ex, ty)) (annotation ex, sigma)
+            ExprWrapper (WrapVar x) (ExprWrapper (TypeAsc ty) ex (spanOf ex, ty)) (spanOf ex, sigma)
       pure (k . wrap, sigma)
     go x = pure (id, x)
 
@@ -712,7 +712,7 @@ solveEx syms ss cs = transformExprTyped go id goType where
   goType = apply ss
 
 -- | Is this coercion equal to reflexivity? (Conservative)
-isReflexiveCo :: Eq (Var p) => Coercion p -> Bool
+isReflexiveCo :: EqPhrase p => Coercion p -> Bool
 isReflexiveCo VarCo{} = False
 isReflexiveCo MvCo{} = False
 isReflexiveCo ReflCo{} = True
@@ -735,7 +735,7 @@ isReflexiveCo InstCo{} = False
 
 unqualifyWrt :: (Var p ~ Var Resolved) => T.Text -> Type p -> Type p
 unqualifyWrt n = transformType go where
-  go (TyCon v) = TyCon (unqualifyVarWrt n v)
+  go (TyCon v a) = TyCon (unqualifyVarWrt n v) a
   go t = t
 
 unqualifyVarWrt :: T.Text -> Var Resolved -> Var Resolved

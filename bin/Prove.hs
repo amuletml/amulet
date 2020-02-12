@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings, RankNTypes, FlexibleContexts,
-   ScopedTypeVariables, CPP #-}
+   ScopedTypeVariables, CPP, PatternSynonyms #-}
 
 #ifdef WITH_SERVER
 {-# LANGUAGE RecordWildCards #-}
@@ -23,6 +23,7 @@ import Data.Text.Lazy (Text)
 import Data.Foldable
 import Data.Spanned
 import Data.These
+import Data.Span
 import Data.List
 
 import qualified Data.Map.Strict as Map
@@ -157,8 +158,8 @@ handleSentence success handle sentence =
 propVarToTv :: Type Parsed -> Type Parsed
 propVarToTv = transformType go where
   go :: Type Parsed -> Type Parsed
-  go (TyPromotedCon v) = TyVar v
-  go (TyLit v) = TyVar (Name (displayT (pretty v)))
+  go (TyPromotedCon v a) = TyVar v a
+  go (TyLit v) = TyVar (Name (displayT (pretty v))) internal
   go x = x
 
 proveSentence :: MonadIO m
@@ -167,7 +168,7 @@ proveSentence :: MonadIO m
               -> Handle
               -> Located (Type Parsed) -> NameyT m ()
 proveSentence report success stdout tau = do
-  let prog = [ TySymDecl Public (Name "_") [] (foldr addForall t (ftv t)) (annotation tau) ]
+  let prog = [ TySymDecl Public (Name "_") [] (foldr addForall t (ftv t)) (spanOf tau) ]
       addForall v = TyForall v (Just TyType)
       t = getL tau
   x <- runNullImport $ resolveProgram lua rScope prog
@@ -181,7 +182,7 @@ proveSentence report success stdout tau = do
         That (p, _) -> solve p
   where
     solve [ TypeDecl _ _ _ (Just [ArgCon _ _ ty _]) _ ] = do
-      candidates <- findHoleCandidate mempty (annotation tau) env ty
+      candidates <- findHoleCandidate mempty (spanOf tau) env ty
       liftIO success
       if not (null candidates)
          then liftIO $ hPutDoc stdout (keyword "yes." <#> indent 2 (pretty (head candidates)))
@@ -215,29 +216,29 @@ env =
                , ( TgInternal "L"
                  , TyForall a (Just TyType) $
                    TyForall b (Just TyType) $
-                     TyVar a :-> TyOperator (TyVar a) (TgInternal "+") (TyVar b)
+                     Var a :-> TyOperator (Var a) (Con (TgInternal "+")) (Var b)
                  )
                , ( TgInternal "R"
                  , TyForall a (Just TyType) $
                    TyForall b (Just TyType) $
-                     TyVar b :-> TyOperator (TyVar a) (TgInternal "+") (TyVar b)
+                     Var b :-> TyOperator (Var a) (Con (TgInternal "+")) (Var b)
                  )
                , ( TgInternal "<->", TyType :-> TyType :-> TyType )
                , ( TgInternal "Equiv"
                  , TyForall a (Just TyType) $
                    TyForall b (Just TyType) $
-                     TyTuple (TyVar a :-> TyVar b)
-                             (TyVar b :-> TyVar a)
-                       :-> TyOperator (TyVar a) (TgInternal "<->") (TyVar b)
+                     TyTuple (Var a :-> Var b)
+                             (Var b :-> Var a)
+                       :-> TyOperator (Var a) (Con (TgInternal "<->")) (Var b)
                  )
                , ( TgInternal "not", TyType :-> TyType )
                , ( TgInternal "Not"
                  , TyForall a (Just TyType) $
-                   (TyVar a :-> TyForall b (Just TyType) (TyVar b)) :-> TyApps (TyCon (TgInternal "not")) [TyVar a]
+                   (Var a :-> TyForall b (Just TyType) (Var b)) :-> TyApps (Con (TgInternal "not")) [Var a]
                  )
                , (TgInternal "ff", TyType :-> TyType)
                , (TgInternal "tt", TyType :-> TyType)
-               , ( TgInternal "T", TyCon (TgInternal "tt") )
+               , ( TgInternal "T", Con (TgInternal "tt") )
                ]
     a = TgInternal "a"
     b = TgInternal "b"
@@ -273,3 +274,8 @@ proverHelp = vsep
       <+> hsep [ stypeCon "P" <+> soperator "*" <+> stypeCon "Q" <+> arrow <+> stypeCon "R" ]
       <> ".)"
   ]
+
+pattern Var :: Var Typed  -> Type Typed
+pattern Var v = TyVar v ()
+pattern Con :: Var Typed  -> Type Typed
+pattern Con v = TyCon v ()

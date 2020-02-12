@@ -80,11 +80,8 @@ data Constraint p
   | ConFail Env (Ann p) (Var p) (Type p)
   | DeferredError TypeError
 
-deriving instance (Show (Ann p), Show (Var p), Show (Expr p), Show (Type p))
-  => Show (Constraint p)
-
-deriving instance (Eq (Ann p), Eq (Var p), Eq (Expr p), Eq (Type p))
-  => Eq (Constraint p)
+deriving instance (ShowPhrase p) => Show (Constraint p)
+deriving instance (EqPhrase p) => Eq (Constraint p)
 
 data TypeError where
   NotEqual :: { actual :: Type Typed, expected :: Type Typed } -> TypeError
@@ -174,9 +171,9 @@ data WhyUnsat
   | InstanceMethod (Type Typed)
   | InstanceClassCon Span
   | BadDefault (Var Desugared) (Type Typed)
-  | forall p. (Show (Ann p), Pretty (Type p), Var p ~ Var Resolved)
+  | forall p. (ShowPhrase p, Pretty (Type p), Var p ~ Var Resolved)
       => GivenContextNotEnough (Type p)
-  | forall p. (Show (Ann p), Pretty (Type p), Var p ~ Var Resolved)
+  | forall p. (ShowPhrase p, Pretty (Type p), Var p ~ Var Resolved)
       => GivenContextNotEnoughIn (Type p)
   | TooConcrete (Type Typed)
   | It'sQuantified
@@ -184,7 +181,7 @@ data WhyUnsat
 
 deriving instance Show WhyUnsat
 
-instance (Show (Ann p), Show (Var p), Ord (Var p), Substitutable p (Type p))
+instance (ShowPhrase p, OrdPhrase p, Substitutable p (Type p))
           => Substitutable p (Constraint p) where
 
   ftv (ConUnify _ s _ a b) = foldMap ftv (keys s) <> ftv a <> ftv b
@@ -257,7 +254,7 @@ instantiate str r tp@(TyPi (Invisible v _ spec) ty) | can str spec = do
   var <- refreshTV v
   let map = Map.singleton v var
 
-      appThisTy e = ExprWrapper (TypeApp var) e (annotation e, apply map ty)
+      appThisTy e = ExprWrapper (TypeApp var) e (spanOf e, apply map ty)
   (k, _, t) <- instantiate str r (apply map ty)
   pure (squish appThisTy k, tp, t)
 
@@ -269,7 +266,7 @@ instantiate str r tp@(TyPi (Anon co) od@dm) = do
       lam :: Expr Typed -> Expr Typed
       lam e | od == dm = e
       lam e
-        | ann <- annotation e
+        | ann <- spanOf e
         = Fun (PatParam (PType (Capture var (ann, co)) co (ann, co)))
            (cont (App e (VarRef var (ann, co)) (ann, od))) (ann, ty)
 
@@ -283,7 +280,7 @@ instantiate str r tp@(TyPi (Implicit co) od@dm) = do
       lam :: Expr Typed -> Expr Typed
       lam e | od == dm = e
       lam e
-        | ann <- annotation e
+        | ann <- spanOf e
         = Fun (EvParam (PType (Capture var (ann, co)) co (ann, co)))
             (cont (App e (VarRef var (ann, co)) (ann, od))) (ann, ty)
 
@@ -299,10 +296,10 @@ can Weak Infer = True
 can Weak _ = False
 
 freshTV :: MonadNamey m => m (Type Typed)
-freshTV = TyVar <$> genName
+freshTV = flip TyVar () <$> genName
 
 refreshTV :: MonadNamey m => Var Typed -> m (Type Typed)
-refreshTV v = TyVar <$> genNameFrom nm where
+refreshTV v = flip TyVar () <$> genNameFrom nm where
   nm = case v of
     TgInternal x -> x
     TgName x _ -> x
@@ -603,29 +600,29 @@ instance Pretty TypeError where
   pretty NotCovered{} = string "coverage condition error should be formatNoted"
 
 instance Spanned TypeError where
-  annotation (ArisingFrom e@ArisingFrom{} _) = annotation e
-  annotation (ArisingFrom _ x) = annotation x
-  annotation (Overlap _ _ x _) = annotation x
-  annotation (ClassStackOverflow x _ _) = annotation x
-  annotation (WrongClass x _) = annotation x
-  annotation (UndefinedMethods _ _ x) = annotation x
-  annotation (UndefinedTyFam _ _ x) = annotation x
-  annotation (InvalidContext _ x _) = annotation x
-  annotation (WildcardNotAllowed x) = annotation x
-  annotation (NotValue x _) = annotation x
-  annotation (UnsaturatedTS x _ _) = annotation x
-  annotation (NotCovered x _ _ _) = annotation x
-  annotation (MagicInstance _ x) = annotation x
-  annotation (MightNotTerminate x _ _) = annotation x
-  annotation (TyFunInLhs x _) = annotation x
-  annotation (WarningError x) = annotation x
-  annotation (UnsatClassCon x _ _) = annotation x
-  annotation (TyFamLackingArgs x _ _) = annotation x
-  annotation (OrphanInstance x _) = annotation x
-  annotation (DIMalformedHead x) = annotation x
-  annotation (DICan'tDerive _ x) = annotation x
-  annotation (PolyTyFunRhs x _) = annotation x
-  annotation x = error (show (pretty x))
+  spanOf (ArisingFrom e@ArisingFrom{} _) = spanOf e
+  spanOf (ArisingFrom _ x) = spanOf x
+  spanOf (Overlap _ _ x _) = spanOf x
+  spanOf (ClassStackOverflow x _ _) = spanOf x
+  spanOf (WrongClass x _) = spanOf x
+  spanOf (UndefinedMethods _ _ x) = spanOf x
+  spanOf (UndefinedTyFam _ _ x) = spanOf x
+  spanOf (InvalidContext _ x _) = spanOf x
+  spanOf (WildcardNotAllowed x) = spanOf x
+  spanOf (NotValue x _) = spanOf x
+  spanOf (UnsaturatedTS x _ _) = spanOf x
+  spanOf (NotCovered x _ _ _) = spanOf x
+  spanOf (MagicInstance _ x) = spanOf x
+  spanOf (MightNotTerminate x _ _) = spanOf x
+  spanOf (TyFunInLhs x _) = spanOf x
+  spanOf (WarningError x) = spanOf x
+  spanOf (UnsatClassCon x _ _) = spanOf x
+  spanOf (TyFamLackingArgs x _ _) = spanOf x
+  spanOf (OrphanInstance x _) = spanOf x
+  spanOf (DIMalformedHead x) = spanOf x
+  spanOf (DICan'tDerive _ x) = spanOf x
+  spanOf (PolyTyFunRhs x _) = spanOf x
+  spanOf x = error (show (pretty x))
 
 instance Note TypeError Style where
   diagnosticKind (ArisingFrom e _) = diagnosticKind e
@@ -646,14 +643,14 @@ instance Note TypeError Style where
          , case m of
              ByAscription ex t ->
                let k =
-                     if annotation rs `includes` annotation ex
+                     if spanOf rs `includes` spanOf ex
                         then id
                         else (<#>) (vsep [ indent 2 $ bullet "Arising in" <+> (Right <$> blameOf rs)
-                                         , f [annotation rs]
+                                         , f [spanOf rs]
                                          , empty ])
                  in
                   k (vsep [ indent 2 . bullet $ "When checking that this expression"
-                          , nest (-2) $ f [annotation ex]
+                          , nest (-2) $ f [spanOf ex]
                           , indent 2 $ "has type" <+> nest 4 (Right <$> displayType t)
                           ])
              BySubsumption s t ->
@@ -665,7 +662,7 @@ instance Note TypeError Style where
                     , empty
 
                     , indent 2 $ bullet "Arising in the" <+> (Right <$> blameOf rs)
-                    , f [annotation rs]
+                    , f [spanOf rs]
                     ]
              ByExistential c t ->
                vsep [ indent 2 $ string "Where the type variable"
@@ -676,7 +673,7 @@ instance Note TypeError Style where
                     , empty
 
                     , indent 2 $ bullet "Arising in the" <+> (Right <$> blameOf rs)
-                    , nest (-2) $ f [annotation rs]
+                    , nest (-2) $ f [spanOf rs]
                     ]
              ByInstanceHead v t ->
                vsep [ indent 2 "Where the type variable" <+> sk (pretty v)
@@ -684,7 +681,7 @@ instance Note TypeError Style where
                     , f [t]
                     , empty
                     , indent 2 $ bullet "Arising in the" <+> (Right <$> blameOf rs)
-                    , nest (-2) $ f [annotation rs]
+                    , nest (-2) $ f [spanOf rs]
                     ]
              ByTyFunLhs v t ->
                vsep [ indent 2 "Where the type variable" <+> sk (pretty v)
@@ -692,7 +689,7 @@ instance Note TypeError Style where
                     , f [t]
                     , empty
                     , indent 2 $ bullet "Arising in the" <+> (Right <$> blameOf rs)
-                    , nest (-2) $ f [annotation rs]
+                    , nest (-2) $ f [spanOf rs]
                     ]
              ByConstraint p ->
                vsep [ indent 2 $ "Where the type variable" <+> sk (pretty v)
@@ -710,13 +707,13 @@ instance Note TypeError Style where
     vsep [ indent 2 "Recursive pattern bindings are not allowed"
          , indent 2 $ bullet "Note: this definition refers to itself" <+> (Right <$> highlight "directly")
          , empty
-         , f [annotation p]
+         , f [spanOf p]
          ]
 
   formatNote f (ArisingFrom (PatternRecursive p bs) _) | bs <- delete p bs =
     vsep [ indent 2 "Pattern bindings can not participate in recursion"
          , empty
-         , f [annotation p]
+         , f [spanOf p]
          , empty
          , indent 2 $ bullet "Note: this binding is in the same"
            <+> (Right <$> highlight "recursive group") <+> string "as these"
@@ -725,7 +722,7 @@ instance Note TypeError Style where
                               <+> "other binding" <> (if length bs - 3 /= 1 then "s." else ".")
                             , empty ]
                   else empty
-         , f (map annotation (take 3 bs))
+         , f (map spanOf (take 3 bs))
          ]
 
   formatNote f (ArisingFrom (DeadBranch e) r) =
@@ -735,33 +732,33 @@ instance Note TypeError Style where
 
   formatNote f (ArisingFrom (UnsatClassCon _ (ConImplicit r _ _ t) RecursiveDeduced) r') =
     vsep [ indent 2 "No instance for" <+> (Right <$> displayType t) <+> "arising from use of the expression"
-         , f [annotation r]
+         , f [spanOf r]
          , mempty
          , indent 2 $ bullet "Note: this constraint was not quantified over because"
          , indent 4 "recursive binding groups must have complete type signatures"
          , indent 4 "in all of their bindings."
          , mempty
-         , f [annotation r']
+         , f [spanOf r']
          , indent 3 "This binding should have had a complete type signature."
          ]
 
   formatNote f (ArisingFrom (UnsatClassCon _ (ConImplicit r _ _ t) (TooConcrete _)) _) =
     vsep [ indent 2 "No instance for" <+> (Right <$> displayType t) <+> "arising from use of the expression"
-         , f [annotation r]
+         , f [spanOf r]
          ]
 
   formatNote f (ArisingFrom (UnsatClassCon _ (ConImplicit r _ _ t) NotAFun) r') =
     vsep [ indent 2 "No instance for" <+> (Right <$> displayType t) <+> "arising from use of the expression"
-         , f [annotation r]
+         , f [spanOf r]
          , indent 2 $ bullet "Note: this constraint was not quantified over because"
          , indent 4 "the binding it would scope over is not a function"
-         , if annotation r /= annotation r' then f [annotation r'] else empty
+         , if spanOf r /= spanOf r' then f [spanOf r'] else empty
          , indent 2 $ bullet "Possible fix: add a parameter, or a type signature"
          ]
 
   formatNote f (ArisingFrom (UnsatClassCon _ (ConImplicit _ _ _ t) PatBinding) r') =
     vsep [ indent 2 "No instance for" <+> (Right <$> displayType t) <+> "arising in the binding"
-         , f [annotation r']
+         , f [spanOf r']
          , indent 2 $ bullet "Note: this constraint can not be quantified over"
          , indent 4 "because it is impossible to quantify over pattern bindings"
          ]
@@ -777,15 +774,15 @@ instance Note TypeError Style where
          , indent 2 $ bullet "Possible fix: add it to the instance context"
          , empty
          , indent 2 "Arising in the" <+> (Right <$> blameOf r')
-         , f [annotation r']
+         , f [spanOf r']
          ]
 
   formatNote f (ArisingFrom (UnsatClassCon _ (ConImplicit why _ _ tau) (GivenContextNotEnough ctx)) _) =
-    vsep [ f [annotation why]
+    vsep [ f [spanOf why]
          , msg
          ]
     where
-      msg | TyCon v <- ctx, v == tyUnitName =
+      msg | TyCon v _ <- ctx, v == tyUnitName =
               indent 2 "No instance for" <+> (Right <$> displayType tau)
                 <+> "arising from" <+> (Right <$> blameOf why)
           | otherwise =
@@ -793,11 +790,11 @@ instance Note TypeError Style where
                 <+> "from the context" <+> (Right <$> displayType ctx)
 
   formatNote f (ArisingFrom (UnsatClassCon _ (ConImplicit why _ _ tau) (GivenContextNotEnoughIn ctx)) _) =
-    vsep [ f [annotation why]
+    vsep [ f [spanOf why]
          , msg
          ]
     where
-      msg | TyCon v <- ctx, v == tyUnitName =
+      msg | TyCon v _ <- ctx, v == tyUnitName =
               indent 2 "No instance for" <+> (Right <$> displayType tau)
                 <+> "arising from" <+> (Right <$> blameOf why)
           | otherwise =
@@ -819,25 +816,25 @@ instance Note TypeError Style where
          , empty
 
          , indent 2 "Arising in the" <+> (Right <$> blameOf r')
-         , f [annotation r']
+         , f [spanOf r']
          ]
 
   formatNote f (ArisingFrom (UnsatClassCon _ (ConImplicit _ _ _ t) (InstanceClassCon ann)) r') =
     vsep [ indent 2 "No instance for" <+> (Right <$> displayType t) <+> "arising in the instance declaration"
-         , f [annotation r']
+         , f [spanOf r']
          , indent 2 $ bullet "Note: this is required by the context of the class,"
          , f [ann]
          ]
 
   formatNote f (ArisingFrom (UnsatClassCon _ (ConImplicit _ _ _ t) It'sQuantified) r') =
     vsep [ indent 2 "No instance for" <+> (Right <$> displayType t) <+> "arising in" <+> (Right <$> blameOf r')
-         , f [annotation r']
+         , f [spanOf r']
          , indent 2 $ bullet "Note: This constraint can not be quantified over because it is of higher rank"
          ]
 
   formatNote f (ArisingFrom (UnsatClassCon _ (ConImplicit _ _ _ t) (MagicErrors es)) r') =
     vsep [ indent 2 "No instance for" <+> (Right <$> displayType t) <+> "arising in" <+> (Right <$> blameOf r')
-         , f [annotation r']
+         , f [spanOf r']
          , indent 2 $ bullet "Because:"
          , vsep (map (formatNote f) es)
          ]
@@ -880,7 +877,7 @@ instance Note TypeError Style where
     where
       note x = bullet "Note:" <+> pretty x
 
-  formatNote f x = f [annotation x] <#> indent 2 (Right <$> pretty x)
+  formatNote f x = f [spanOf x] <#> indent 2 (Right <$> pretty x)
 
   noteId NotEqual{}           = Just 2001
 
@@ -974,7 +971,7 @@ addBlame :: SomeReason -> TypeError -> TypeError
 addBlame _ e@ArisingFrom{} = e
 addBlame x e = ArisingFrom e x
 
-withoutSkol :: Type p -> Type p
+withoutSkol :: Type Typed -> Type Typed
 withoutSkol = transformType go where
-  go (TySkol x) = TyVar (x ^. skolVar)
+  go (TySkol x) = TyVar (x ^. skolVar) ()
   go x = x

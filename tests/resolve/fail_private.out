@@ -1,10 +1,10 @@
-fail_private.ml[13:10 ..13:34]: error (E1001)
+fail_private.ml[13:32 ..13:34]: error (E1001)
   Type not in scope: `X.c`
 
-  Arising from use of the expression
+  Arising from use of the type
    │ 
 13 │ let () = (X.Y.a + X.b + X.A) : X.c
-   │          ^^^^^^^^^^^^^^^^^^^^^^^^^
+   │                                ^^^
 fail_private.ml[13:11 ..13:15]: error (E1001)
   Variable not in scope: `X.Y.a`
 
@@ -33,10 +33,10 @@ fail_private.ml[15:1 ..15:26]: error (E1001)
    │ 
 15 │ instance X.d int begin end
    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^
-fail_private.ml[15:1 ..15:26]: error (E1001)
+fail_private.ml[15:10 ..15:12]: error (E1001)
   Type not in scope: `X.d`
 
-  Arising from use of the declaration
+  Arising from use of the type
    │ 
 15 │ instance X.d int begin end
-   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │          ^^^

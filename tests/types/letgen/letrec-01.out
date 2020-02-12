@@ -1,7 +1,7 @@
-letrec-01.ml[1:9 ..1:14]: error (E2013)
+letrec-01.ml[1:9 ..1:23]: error (E2013)
   Recursive pattern bindings are not allowed
   • Note: this definition refers to itself directly
 
   │ 
 1 │ let rec (a, b) = (a, b)
-  │         ^^^^^^
+  │         ^^^^^^^^^^^^^^^

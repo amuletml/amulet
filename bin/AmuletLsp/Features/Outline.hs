@@ -16,7 +16,7 @@ import Text.Pretty.Semantic hiding (line)
 getOutline :: [Toplevel Parsed] -> [DocumentSymbol]
 getOutline = concatMap getTop where
   getTop :: Toplevel Parsed -> [DocumentSymbol]
-  getTop (LetStmt _ _ bindings) = concatMap getBinding bindings
+  getTop (LetStmt _ _ bindings _) = concatMap getBinding bindings
   getTop t@(ForeignVal _ v _ _ _) = [ mk v SkFunction t Nothing Nothing ]
 
   getTop t@(TypeDecl _ v args ctors _) =
@@ -37,7 +37,7 @@ getOutline = concatMap getTop where
 
   getBinding :: Binding Parsed -> [DocumentSymbol]
   getBinding b@(Binding v _ _ _) = [ mk v SkFunction b Nothing Nothing ]
-  getBinding b@(Matching p _ _) = getPattern (annotation b) [] p
+  getBinding b@(Matching p _ _) = getPattern (spanOf b) [] p
   getBinding TypedMatching{} = []
 
   getClassItem :: ClassItem Parsed -> [DocumentSymbol]
@@ -69,14 +69,14 @@ getName InModule{} = "?"
 
 -- | Render a type with a series of arguments.
 getApp :: Var Parsed -> [TyConArg Parsed] -> Maybe T.Text
-getApp v args = Just . renderBasic . hsep $ pretty (TyCon v :: Type Parsed) : map pretty args
+getApp v args = Just . renderBasic . hsep $ pretty (TyCon v undefined :: Type Parsed) : map pretty args
 
 -- | Construct a document symbol from a name and node.
 mk :: Spanned a
    => Var Parsed -> SymbolKind -> a
    -> Maybe T.Text -> Maybe [DocumentSymbol]
    -> DocumentSymbol
-mk name kind node = mkWith name kind (annotation node) node
+mk name kind node = mkWith name kind (spanOf node) node
 
 -- | Construct a document symbol from a name, node and custom position.
 mkWith :: Spanned a
@@ -90,6 +90,6 @@ mkWith name kind range node detail children =
   , _kind = kind
   , _deprecated = Nothing
   , _range = rangeOf range
-  , _selectionRange = firstLine (rangeOf (annotation node))
+  , _selectionRange = firstLine (rangeOf (spanOf node))
   , _children = List <$> children
   }

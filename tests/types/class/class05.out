@@ -1,7 +1,7 @@
-class05.ml[5:5 ..5:5]: error (E2018)
+class05.ml[5:5 ..5:14]: error (E2018)
   No instance for foo unit arising in the binding
   │ 
 5 │ let 0 = foo ()
-  │     ^
+  │     ^^^^^^^^^^
   • Note: this constraint can not be quantified over
     because it is impossible to quantify over pattern bindings

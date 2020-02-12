@@ -1,5 +1,5 @@
-toomany01.ml[9:7 ..9:9]: error (E2020)
+toomany01.ml[9:7 ..9:14]: error (E2020)
   │ 
 9 │   let bar = ()
-  │       ^^^
+  │       ^^^^^^^^
   Method bar is not a member of the class foo

@@ -1,9 +1,9 @@
-topref.ml[1:5 ..1:5]: warning (W3009)
+topref.ml[1:5 ..1:16]: warning (W3009)
   This top-level binding defines a reference (of type ref bool)
   • Note: This is bad style.
   │ 
 1 │ let a = ref true
-  │     ^
+  │     ^^^^^^^^^^^^
 topref.ml[2:6 ..2:6]: warning (W3009)
   This top-level binding defines a reference (of type ref bool)
   • Note: This is bad style.

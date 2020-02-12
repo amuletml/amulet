@@ -60,7 +60,7 @@ familyFree :: MonadInfer Typed m => SomeReason -> Type Typed -> m ()
 familyFree what tau = do
   info <- view tySyms
   let uni = universe tau
-      fam (TyApps (TyCon v) _) | Just _ <- Map.lookup v info = True
+      fam (TyApps (TyCon v ()) _) | Just _ <- Map.lookup v info = True
       fam _ = False
   case find fam uni of
     Just t -> confesses (TyFunInLhs what t)
@@ -69,25 +69,25 @@ familyFree what tau = do
 terminates, checkTypeFunTotality :: MonadInfer Typed m => [TyFunClause Typed] -> m ()
 terminates = traverse_ go where
   go clause@(TyFunClause lhs rhs _) =
-    let TyApps (TyCon con) argv = lhs
+    let TyApps (TyCon con ()) argv = lhs
         argvs = recursiveCall con rhs
      in case argvs of
        [] -> pure ()
        (call:_) ->
          unless (all (any (uncurry (~<)) . zip argv) argvs) $
-           dictates (MightNotTerminate clause lhs (TyApps (TyCon con) call))
+           dictates (MightNotTerminate clause lhs (TyApps (TyCon con ()) call))
 
 checkTypeFunTotality = terminates
 
 (~<) :: Type Typed -> Type Typed -> Bool
-a ~< TyVar b = b `Set.member` ftv a && a /= TyVar b
+a ~< TyVar b () = b `Set.member` ftv a && a /= TyVar b ()
 -- ↑ E.g.: S 'a ~< 'a
 TyApps head xs@(_:_) ~< term = term `elem` (head:xs)
 -- ↑ E.g.: 'f int ~< int
 _ ~< _ = False
 
 recursiveCall :: Var Typed -> Type Typed -> [[Type Typed]]
-recursiveCall c (TyApps (TyCon c') args)
+recursiveCall c (TyApps (TyCon c' ()) args)
   | c == c' = [args] | otherwise = concatMap (recursiveCall c) args
 recursiveCall c (TyTuple a b) = recursiveCall c a <|> recursiveCall c b
 recursiveCall c (TyTupleL a b) = recursiveCall c a <|> recursiveCall c b
@@ -116,8 +116,8 @@ makeTypeFunctionHIT args = traverse go where
     name <- genName
     let (TyApps tyfun args') = lhs
         argtvs = map (\case { TyAnnArg a _ -> a; TyInvisArg a _ -> a; TyVarArg a -> a }) args
-        needs = zipWith (\a b -> TyApps tyEq [b, TyVar a]) argtvs args'
-        tau = foldr TyArr (TyApps tyEq [TyApps tyfun (map TyVar argtvs), rhs]) needs
+        needs = zipWith (\a b -> TyApps tyEq [b, TyVar a ()]) argtvs args'
+        tau = foldr TyArr (TyApps tyEq [TyApps tyfun (map (`TyVar` ()) argtvs), rhs]) needs
         fv = Set.toList (ftv tau)
         closed = foldr (\v -> TyPi (Invisible v (Just TyType) Spec)) tau fv
     pure (GadtCon Public name closed ann)

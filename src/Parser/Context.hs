@@ -248,7 +248,7 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
       -- If we're on the same line then it can be anywhere. Otherwise the
       -- in should line up with the let.
       when (spLine tp /= spLine offside && spCol tp /= spCol offside) $
-        tell . pure $ UnalignedIn (annotation tok) (mkSpan1 offside)
+        tell . pure $ UnalignedIn (spanOf tok) (mkSpan1 offside)
 
       pure ( Result tok Done
            , CtxEmptyBlock (Just TcVEnd):cks )

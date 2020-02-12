@@ -152,7 +152,7 @@ lowerAt (Begin xs _) t = lowerAtTerm (last xs) t >>= flip (foldrM bind) (init xs
 
 lowerAt (S.Match ex cs _ an) ty = do
   (ex', _) <- lowerBothAtom ex
-  cs' <- for cs (\(Arm pat g e) -> (pat,,)
+  cs' <- for cs (\(Arm pat g e _) -> (pat,,)
                   <$> traverse (`lowerAtTerm` C.tyBool) g
                   <*> lowerAtTerm e ty)
   fail <- patternMatchingError "match expression" (fst an) ty
@@ -359,7 +359,7 @@ lowerProg' (ForeignVal _ v ex tp _:prg) =
     unwrap as r = Just (ForallTy Irrelevant (ValuesTy (reverse as)) r)
 
 
-lowerProg' (LetStmt _ _ vs:prg) = do
+lowerProg' (LetStmt _ _ vs _:prg) = do
   let env' = VarMap.fromList (foldMap lowerBind vs)
       lowerBind bind =
         let ty = lowerType (bind ^. (S.bindAnn . _2))

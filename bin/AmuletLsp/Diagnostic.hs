@@ -24,24 +24,24 @@ class DiagnosticLike a where
   diagnosticOf :: a -> Diagnostic
 
 instance DiagnosticLike ParseError where
-  diagnosticOf err = mkDiagnostic "amulet.parser" (annotation err) (pretty err) err
+  diagnosticOf err = mkDiagnostic "amulet.parser" (spanOf err) (pretty err) err
 
 instance DiagnosticLike R.ResolveError where
   diagnosticOf resErr = go resErr where
-    mk msg = mkDiagnostic "amulet.resolve" (annotation resErr) msg resErr
+    mk msg = mkDiagnostic "amulet.resolve" (spanOf resErr) msg resErr
 
     go (R.ArisingFrom e _) = go e
     go e@(NonLinearPattern  _ ps) =
       let d = mk (pretty e)
-          info p = DiagnosticRelatedInformation (locationOf (annotation p)) "Variable declared here"
+          info p = DiagnosticRelatedInformation (locationOf (spanOf p)) "Variable declared here"
       in d { _relatedInformation = Just (List (map info ps)) }
     go e = mk (pretty e)
 
 instance DiagnosticLike TypeError where
-  diagnosticOf err = mkDiagnostic "amulet.tc" (annotation err) (pretty err) err
+  diagnosticOf err = mkDiagnostic "amulet.tc" (spanOf err) (pretty err) err
 
 instance DiagnosticLike VerifyError where
-  diagnosticOf err = mkDiagnostic "amulet.resolve" (annotation err) (pretty err) err
+  diagnosticOf err = mkDiagnostic "amulet.resolve" (spanOf err) (pretty err) err
 
 -- | Construct a diagnostic of some error.
 mkDiagnostic :: Note a b

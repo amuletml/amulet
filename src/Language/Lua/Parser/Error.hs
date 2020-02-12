@@ -60,15 +60,15 @@ instance Pretty ParseError where
   pretty MalformedStatement = "Malformed statement: received an expression instead"
 
 instance Spanned ParseError where
-  annotation (Failure p _) = mkSpan1 p
+  spanOf (Failure p _) = mkSpan1 p
 
-  annotation (UnexpectedCharacter p _) = mkSpan1 p
-  annotation (UnexpectedEnd p) = mkSpan1 p
-  annotation (UnclosedString p _) = mkSpan1 p
-  annotation (UnclosedComment p _) = mkSpan1 p
+  spanOf (UnexpectedCharacter p _) = mkSpan1 p
+  spanOf (UnexpectedEnd p) = mkSpan1 p
+  spanOf (UnclosedString p _) = mkSpan1 p
+  spanOf (UnclosedComment p _) = mkSpan1 p
 
-  annotation (UnexpectedToken t _) = annotation t
-  annotation MalformedStatement = internal
+  spanOf (UnexpectedToken t _) = spanOf t
+  spanOf MalformedStatement = internal
 
 prettyPos :: SourcePos -> Doc a
 prettyPos p = shown (spLine p) <> colon <> shown (spCol p)
@@ -84,4 +84,4 @@ instance Note ParseError Style where
       <##> f [mkSpan1 s, mkSpan1 p]
   formatNote f x
     = indent 2 (Right <$> pretty x)
-      <##> f [annotation x]
+      <##> f [spanOf x]

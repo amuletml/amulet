@@ -39,7 +39,7 @@ instance FromJSON OverlayData
 -- pass the 'NormalizedUri', this should be more memory efficient.
 getTypeOverlay :: Name -> [Toplevel Resolved] -> [CodeLens]
 getTypeOverlay (TgName _ modu) = getTops [] where
-  getTop ac (LetStmt _ _ b) = foldl getBinding ac b
+  getTop ac (LetStmt _ _ b _) = foldl getBinding ac b
   getTop ac (Module _ _ (ModStruct ms _)) = getTops ac ms
   getTop ac (Open (ModStruct ms _)) = getTops ac ms
   getTop ac (Include (ModStruct ms _)) = getTops ac ms

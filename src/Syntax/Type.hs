@@ -1,15 +1,17 @@
 {-# LANGUAGE DeriveDataTypeable, FlexibleContexts, PatternSynonyms
   , StandaloneDeriving, TemplateHaskell, TypeFamilies
-  , UndecidableInstances, ViewPatterns #-}
+  , UndecidableInstances, ViewPatterns, ConstraintKinds
+  , MultiParamTypeClasses, FlexibleInstances #-}
 
 -- | The core types to represent types within Amulet's syntax.
 module Syntax.Type where
 
 import Control.Lens
 
-import Data.Maybe
+import qualified Data.Kind as K
 import Data.Text (Text)
 import Data.Typeable
+import Data.Spanned
 import Data.Span
 import Data.List
 import Data.Data
@@ -18,22 +20,54 @@ import Text.Pretty.Semantic
 
 import Syntax.Var
 
+-- | An annotation which contains no type information. Used for top-level
+-- terms and whatnot.
+type family RawAnn a :: * where
+  RawAnn Parsed = Span
+  RawAnn Resolved = Span
+  RawAnn Desugared = Span
+  RawAnn Typed = Span
+
+-- | The default annotation for terms which have a type.
 type family Ann a :: * where
   Ann Parsed = Span
   Ann Resolved = Span
   Ann Desugared = Span
   Ann Typed = (Span, Type Typed)
 
+-- | An annotation for types. This disappears during desugaring, as most
+-- types are synthesised.
+type family TypeAnn a :: * where
+  TypeAnn Parsed = Span
+  TypeAnn Resolved = Span
+  TypeAnn Desugared = ()
+  TypeAnn Typed = ()
+
+-- | Constraint sufficient to derive a 'Show' instance for phrase-indexed terms.
+type ConstrainPhrase (c :: K.Type -> K.Constraint) p = (c (Var p), c (Ann p), c (RawAnn p), c (TypeAnn p))
+
+-- | Constraint sufficient to derive a 'Show' instance for phrase-indexed terms.
+type ShowPhrase p = ConstrainPhrase Show p
+
+-- | Constraint sufficient to derive a 'Eq' instance for phrase-indexed terms.
+type EqPhrase p = ConstrainPhrase Eq p
+
+-- | Constraint sufficient to derive a 'Ord' instance for phrase-indexed terms.
+type OrdPhrase p = ConstrainPhrase Ord p
+
+-- | Constraint sufficient to derive a 'Data' instance for phrase-index terms.
+type DataPhrase p = (Data p, Typeable p, ConstrainPhrase Data p)
+
 data Type p
-  = TyCon (Var p)
-  | TyVar (Var p)
-  | TyPromotedCon (Var p)
+  = TyCon (Var p) (TypeAnn p)
+  | TyVar (Var p) (TypeAnn p)
+  | TyPromotedCon (Var p) (TypeAnn p)
   | TyApp (Type p) (Type p)
   | TyPi (TyBinder p) (Type p) -- ^ arrow, pi or forall
   | TyRows (Type p) [(Text, Type p)]  -- { α | foo : int, bar : string }
   | TyExactRows [(Text, Type p)] -- { foo : int, bar : string }
   | TyTuple (Type p) (Type p) -- (see note [1])
-  | TyOperator (Type p) (Var p) (Type p)
+  | TyOperator (Type p) (Type p) (Type p)
   | TyWildcard (Maybe (Type p))
   | TyParens (Type p) -- ^ @(xyz)@, just useful for resetting precedence. Removed after the resolver.
 
@@ -56,10 +90,10 @@ data TyBinder p
 data Specificity = Infer | Spec | Req
   deriving (Eq, Show, Ord, Data)
 
-deriving instance (Show (Var p), Show (Ann p)) => Show (TyBinder p)
-deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (TyBinder p)
-deriving instance Eq (Var p) => Eq (TyBinder p)
-deriving instance Ord (Var p) => Ord (TyBinder p)
+deriving instance ShowPhrase p => Show (TyBinder p)
+deriving instance DataPhrase p => Data (TyBinder p)
+deriving instance EqPhrase p => Eq (TyBinder p)
+deriving instance OrdPhrase p => Ord (TyBinder p)
 
 data Skolem p
   = Skolem { _skolIdent :: Var p -- ^ The constant itself
@@ -68,8 +102,8 @@ data Skolem p
            , _skolMotive :: SkolemMotive p
            }
 
-deriving instance (Show (Var p), Show (Ann p)) => Show (Skolem p)
-deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Skolem p)
+deriving instance ShowPhrase p => Show (Skolem p)
+deriving instance DataPhrase p => Data (Skolem p)
 
 data SkolemMotive p
   = ByAscription (Ann Desugared) (Type p) -- what r phases?
@@ -79,10 +113,10 @@ data SkolemMotive p
   | ByConstraint (Type p)
   | ByTyFunLhs (Type p) (Ann Desugared)
 
-deriving instance (Eq (Var p), Eq (Ann p)) => Eq (SkolemMotive p)
-deriving instance (Show (Var p), Show (Ann p)) => Show (SkolemMotive p)
-deriving instance (Ord (Var p), Ord (Ann p)) => Ord (SkolemMotive p)
-deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (SkolemMotive p)
+deriving instance EqPhrase p => Eq (SkolemMotive p)
+deriving instance ShowPhrase p => Show (SkolemMotive p)
+deriving instance OrdPhrase p => Ord (SkolemMotive p)
+deriving instance DataPhrase p => Data (SkolemMotive p)
 
 instance Eq (Var p) => Eq (Skolem p) where
   Skolem v _ _ _ == Skolem v' _ _ _ = v == v'
@@ -90,11 +124,11 @@ instance Eq (Var p) => Eq (Skolem p) where
 instance Ord (Var p) => Ord (Skolem p) where
   Skolem v _ _ _ `compare` Skolem v' _ _ _ = v `compare` v'
 
-deriving instance (Show (Var p), Show (Ann p)) => Show (Type p)
-deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Type p)
-deriving instance Ord (Var p) => Ord (Type p)
-deriving instance Eq (Var p) => Eq (Type p)
-instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Plated (Type p)
+deriving instance ShowPhrase p => Show (Type p)
+deriving instance DataPhrase p => Data (Type p)
+deriving instance OrdPhrase p => Ord (Type p)
+deriving instance EqPhrase p => Eq (Type p)
+instance DataPhrase p => Plated (Type p)
 
 data Coercion p
   = VarCo (Var p) -- coercion variable
@@ -116,10 +150,10 @@ data Coercion p
   | P2 (Var p) -- { _1 : a ~ b, _2 : c ~ d }.2 : a ~ b
   | InstCo (Var p) [Coercion p]
 
-deriving instance (Eq (Var p), Eq (Ann p)) => Eq (Coercion p)
-deriving instance (Show (Var p), Show (Ann p)) => Show (Coercion p)
-deriving instance (Ord (Var p), Ord (Ann p)) => Ord (Coercion p)
-deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (Coercion p)
+deriving instance EqPhrase p => Eq (Coercion p)
+deriving instance ShowPhrase p => Show (Coercion p)
+deriving instance OrdPhrase p => Ord (Coercion p)
+deriving instance DataPhrase p => Data (Coercion p)
 
 pattern TyArr :: Type p -> Type p -> Type p
 pattern TyArr t t' <- TyPi (Anon t) t' where
@@ -146,10 +180,10 @@ data TyConArg p
   | TyAnnArg (Var p) (Type p) -- ( 'a : k )
   | TyInvisArg (Var p) (Type p) -- { 'a : k }
 
-deriving instance (Eq (Var p), Eq (Ann p)) => Eq (TyConArg p)
-deriving instance (Show (Var p), Show (Ann p)) => Show (TyConArg p)
-deriving instance (Ord (Var p), Ord (Ann p)) => Ord (TyConArg p)
-deriving instance (Data p, Typeable p, Data (Var p), Data (Ann p)) => Data (TyConArg p)
+deriving instance EqPhrase p => Eq (TyConArg p)
+deriving instance ShowPhrase p => Show (TyConArg p)
+deriving instance OrdPhrase p => Ord (TyConArg p)
+deriving instance DataPhrase p => Data (TyConArg p)
 
 makePrisms ''TyBinder
 makePrisms ''Type
@@ -186,9 +220,9 @@ prettyRows :: Pretty x => Doc -> [(Text, x)] -> [Doc]
 prettyRows sep = map (\(n, v) -> text n <+> sep <+> pretty v) . sortOn fst
 
 instance (Pretty (Var p)) => Pretty (Type p) where
-  pretty (TyCon v) = stypeCon (pretty v)
-  pretty (TyPromotedCon v) = stypeCon (pretty v)
-  pretty (TyVar v) = stypeVar (squote <> pretty v)
+  pretty (TyCon v _) = stypeCon (pretty v)
+  pretty (TyPromotedCon v _) = stypeCon (pretty v)
+  pretty (TyVar v _) = stypeVar (squote <> pretty v)
   pretty (TySkol v) = stypeSkol (pretty (v ^. skolIdent) <> squote <> pretty (v ^. skolVar))
 
   pretty (TyPi x e) = pretty x <+> pretty e
@@ -241,11 +275,8 @@ instance Pretty (Var p) => Pretty (TyConArg p) where
   pretty (TyAnnArg v k) = parens (pretty v <+> colon <+> pretty k)
   pretty (TyInvisArg v k) = braces (pretty v <+> colon <+> pretty k)
 
-getType :: Data (f Typed) => f Typed -> Type Typed
-getType = snd . head . catMaybes . gmapQ get where
-  get d = fmap (`asTypeOf` (undefined :: (Span, Type Typed))) (cast d)
-  -- FIXME: Point-freeing this definition makes type inference broken.
-  -- Thanks, GHC.
+getType :: (Annotated f, Annotation f ~ Ann Typed) => f -> Type Typed
+getType = snd . annotation
 
 _TyArr :: Prism' (Type p) (Type p, Type p)
 _TyArr = prism (uncurry (TyPi . Anon)) go where
@@ -270,7 +301,7 @@ mkWildTy t = TyWildcard t
 appsView :: Type p -> [Type p]
 appsView = reverse . go where
   go (TyApp f x) = x:go f
-  go (TyOperator l o r) = [r, l, TyCon o]
+  go (TyOperator l o r) = [r, l, o]
   go t = [t]
 
 pattern TyApps :: Type p -> [Type p] -> Type p
