@@ -78,6 +78,19 @@ let intersection (S tree) (S tree') = S (T.intersection tree tree')
  * *)
 let difference (S tree) (S tree')   = S (T.difference tree tree')
 
+(** Test whether A is a subset of B: That is, every element of A is also
+ * an element of B.
+ * *)
+let rec is_subset (S a) b =
+  let rec go = function
+    | T.E -> true
+    | T.T (x, _, l, r) ->
+      if x `member` b then
+        go l && lazy (go r)
+      else
+        false
+  go a
+
 (** Given a predicate, return both the set of elements that satisfy that
  * predicate and the elements that don't satisfy the predicate. *)
 let rec partition pred (S tree) =
