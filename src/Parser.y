@@ -13,7 +13,7 @@
 
   Currently the latter of these is chosen, as Happy always prefers to shift.
 
-  === In type spanOfs and ascriptions (+6)
+  === In type annotations and ascriptions (+6)
 
   There's several cases where type ascriptions cause ambiguities. As
   these fall into one state, we'll group them here:
