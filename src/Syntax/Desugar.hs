@@ -72,15 +72,15 @@ expr (If c t e a) = If <$> expr c <*> expr t <*> expr e <*> pure a
 expr (App f x a) = App <$> expr f <*> expr x <*> pure a
 expr (Fun p b a) = Fun (param p) <$> expr b <*> pure a
 expr (Begin es a) = Begin <$> traverse expr es <*> pure a
-expr (Match e bs a) = Match <$> expr e <*> traverse arm bs <*> pure a
-expr (Function bs a) = do
+expr (Match e bs p a) = Match <$> expr e <*> traverse arm bs <*> pure p <*> pure a
+expr (Function bs p a) = do
   let name = case bs of
                [] -> "bot"
                [Arm b _ _] | Just n <- getPatternName b -> n
                _ -> "x"
   (cap, rhs) <- fresh name a
   Fun (EvParam cap) <$>
-    (Match rhs <$> traverse arm bs <*> pure a)
+    (Match rhs <$> traverse arm bs <*> pure p <*> pure a)
     <*> pure a
 -- Special case @@ so we can work on skolem variables
 expr (BinOp l (VarRef v _) r a) | v == opAppName = App <$> expr l <*> expr r <*> pure a
@@ -258,7 +258,7 @@ transListComp (ex, CompGen v l1 an:qs, an') l2 = do
                       }
                 , Arm { armPat = Wildcard an
                       , armGuard = Nothing
-                      , armExp = l2 } ] an)
+                      , armExp = l2 } ] an an)
                 an) True an ]
       (App (VarRef h an) l1 an)
       an'
@@ -271,7 +271,7 @@ transListComp (ex, [], an) l = cons <$> expr ex <*> pure l <*> pure an
 maybeMatch :: Expr Desugared -> [Arm Desugared] -> Ann Desugared -> Expr Desugared
 maybeMatch ex [arm@Arm{ armGuard = Nothing, armExp = body }] ann =
   Let NonRecursive [Matching (armPat arm) ex ann] body ann
-maybeMatch ex arms ann = Match ex arms ann
+maybeMatch ex arms ann = Match ex arms ann ann
 
 transDoExpr :: forall m. MonadNamey m => Expr Desugared -> [CompStmt Resolved] -> m (Expr Desugared)
 transDoExpr bind = go where

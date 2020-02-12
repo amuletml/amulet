@@ -1,6 +1,6 @@
-gadt03-fail.ml[8:12 ..8:19]: error (E2001)
-  │ 
-8 │ let show = function
-  │            ^^^^^^^^
+gadt03-fail.ml[8:12 ..10:29]: error (E2001)
+   │ 
+ 8 │ let show = function
+   │            ^^^^^^^^
   Couldn't match actual type bool
     with the type expected by the context, int

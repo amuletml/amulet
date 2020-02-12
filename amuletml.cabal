@@ -148,6 +148,8 @@ executable amulet-lsp
   other-modules:       Version
 
                      , AmuletLsp.Features
+                     , AmuletLsp.Features.Folding
+                     , AmuletLsp.Features.Outline
                      , AmuletLsp.Features.TypeOverlay
 
                      , AmuletLsp.Diagnostic

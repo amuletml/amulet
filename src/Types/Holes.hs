@@ -194,7 +194,7 @@ makeFunction domain@(TyApps (TyCon t) _) body_t = fake [domain] $ \[ann] -> do
 
       _ -> Arm (Destructure con Nothing ann) Nothing <$> fill body_t
 
-  pure $ Function arms ann
+  pure $ Function arms internal ann
 
 makeFunction _ _ = undefined
 

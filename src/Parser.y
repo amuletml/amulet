@@ -344,10 +344,12 @@ Expr0 :: { Expr Parsed }
       | let open ModuleTerm ExprIn ExprBlock '$end' { withPos2 $1 $5 $ OpenIn $3 $5 }
       | if Expr then ExprBlock else ExprBlock '$end'
           { withPos2 $1 $6 $ If $2 $4 $6 }
-      | match Exprs with ListE1(Arm) '$end'    { withPos2 $1 $3 $ Match $2 $4 }
-      | match Exprs with '(' ')'               { withPos2 $1 $3 $ Match $2 [] }
-      | function ListE1(Arm) '$end'            { withPos1 $1 $ Function $2 }
-      | function '(' ')'                       { withPos1 $1 $ Function [] }
+
+      | match Exprs with ListE1(Arm) '$end'    { withPos2 $1 (last $4) $ Match $2 $4 (annotation $1) }
+      | match Exprs with '(' ')'               { withPos2 $1 $5        $ Match $2 [] (annotation $1) }
+      | function ListE1(Arm) '$end'            { withPos2 $1 (last $2) $ Function $2 (annotation $1) }
+      | function '(' ')'                       { withPos2 $1 $3        $ Function [] (annotation $1) }
+
       | lazy PreAtom                           { withPos2 $1 $2 $ Lazy $2 }
       | ExprDotOp DotOp '<-' PreAtom           { -- We need this comment to ensure the variables are aligned in the if.
                                                  let (name, idx, end) = $2
@@ -718,7 +720,10 @@ withPos1 :: Spanned a => a -> (Span -> b) -> b
 withPos1 s f = f (annotation s)
 
 withPos2 :: (Spanned a, Spanned b) => a -> b -> (Span -> c) -> c
-withPos2 s e f = f (mkSpanUnsafe (spanStart $ annotation s) (spanEnd $ annotation e))
+withPos2 s e f = f (annotation s <!> annotation e)
+
+(<!>) :: Span -> Span -> Span
+s <!> e = mkSpanUnsafe (spanStart s) (spanEnd e)
 
 tupleExpr :: [Maybe (Expr Parsed)] -> Ann Parsed -> Expr Parsed
 tupleExpr xs | all isJust xs = Tuple (map fromJust xs)
@@ -767,7 +772,7 @@ getL      (L x _)                    = x
 forallTy spec vs t = foldr TyPi t (map (\(x, k) -> Invisible x k spec) vs)
 
 respanFun :: (Spanned a, Spanned b) => a -> b -> Expr Parsed -> Expr Parsed
-respanFun s e (Fun p b _) = Fun p b (mkSpanUnsafe (spanStart (annotation s)) (spanEnd (annotation e)))
+respanFun s e (Fun p b _) = Fun p b (annotation s <!> annotation e)
 respanFun _ _ _ = error "what"
 
 mkTupleTypeL :: [Type p] -> Type p

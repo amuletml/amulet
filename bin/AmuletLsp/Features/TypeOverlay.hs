@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveGeneric, OverloadedStrings, DuplicateRecordFields, FlexibleContexts, TypeFamilies #-}
 module AmuletLsp.Features.TypeOverlay
-  ( OverlayData(..)
+  ( OverlayData(OverlayData)
   , getTypeOverlay
   , resolveTypeOverlay
   ) where

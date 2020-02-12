@@ -65,12 +65,12 @@ data VerifyError
   -- | A pattern which is shadowed by another
   | RedundantArm (Arm Typed) WhyRedundant
   -- | This case is missing several patterns
-  | MissingPattern (Expr Typed) [ValueAbs Typed]
+  | MissingPattern Span [ValueAbs Typed]
 
   -- | This match expression can be rewritten as a @let@.
-  | MatchToLet (Pattern Typed) (Expr Typed)
+  | MatchToLet Span (Pattern Typed)
   -- | This function expression can be rewritten as a @fun@.
-  | MatchToFun (Pattern Typed) (Expr Typed)
+  | MatchToFun Span (Pattern Typed)
 
   -- | Top-level @ref α@ binding
   | ToplevelRefBinding BindingSite
@@ -83,9 +83,9 @@ instance Spanned VerifyError where
   annotation (ParseErrorInForeign t _ _) = annotation t
   annotation (LazyLet e _) = annotation e
   annotation (RedundantArm a _) = annotation a
-  annotation (MissingPattern e _) = annotation e
-  annotation (MatchToLet _ e) = annotation e
-  annotation (MatchToFun _ e) = annotation e
+  annotation (MissingPattern e _) = e
+  annotation (MatchToLet e _) = e
+  annotation (MatchToFun e _) = e
   annotation (ToplevelRefBinding (BindingSite _ s _)) = annotation s
 
 instance Pretty VerifyError where
@@ -117,14 +117,14 @@ instance Pretty VerifyError where
          , empty
          , indent 2 . hsep . intersperse pipe . map pretty $ ps ]
 
-  pretty (MatchToLet a _) =
+  pretty (MatchToLet _ p) =
     vsep [ keyword "match" <+> "with a single arm can be rewritten using" <+> keyword "let" <> "."
-         , note <+> "Replace with" <+> keyword "let" <+> pretty a <+> equals <+> "…"
+         , note <+> "Replace with" <+> keyword "let" <+> pretty p <+> equals <+> "…"
          ]
 
-  pretty (MatchToFun a _) =
+  pretty (MatchToFun _ p) =
     vsep [ keyword "function" <+> "with a single arm can be rewritten using" <+> keyword "fun" <> "."
-         , note <+> "Replace with" <+> keyword "fun" <+> pretty a <+> arrow <+> "…"
+         , note <+> "Replace with" <+> keyword "fun" <+> pretty p <+> arrow <+> "…"
          ]
 
   pretty (ToplevelRefBinding (BindingSite _ _ t)) =
@@ -168,27 +168,27 @@ instance Note VerifyError Style where
       , indent 6 "to silence this warning."
       ]
   formatNote _ LazyLet{} = error "impossible"
-  formatNote f (RedundantArm a b) =
+  formatNote f (RedundantArm a pat) =
     vsep [ indent 2 "Redundant pattern in expression"
          , f [annotation a]
-         , indent 2 $ note <+> (Right <$> pretty b)
+         , indent 2 $ note <+> (Right <$> pretty pat)
          ]
   formatNote f (MissingPattern a ps) =
     vsep [ indent 2 "Non-exhaustive patterns in expression"
-         , f [annotation a]
+         , f [a]
          , indent 2 $ note <+> "The following patterns are not covered"
          , indent 6 . fmap Right . hsep . intersperse pipe . map pretty $ ps ]
 
-  formatNote f (MatchToLet a e) =
+  formatNote f (MatchToLet a pat) =
     vsep [ indent 2 $ Right <$> keyword "match" <+> "with a single arm can be rewritten using" <+> keyword "let" <> "."
-         , f [annotation e]
-         , indent 2 $ Right <$> note <+> "Replace with" <+> keyword "let" <+> pretty a <+> equals <+> "…"
+         , f [a]
+         , indent 2 $ Right <$> note <+> "Replace with" <+> keyword "let" <+> pretty pat <+> equals <+> "…"
          ]
 
-  formatNote f (MatchToFun a e) =
+  formatNote f (MatchToFun a pat) =
     vsep [ indent 2 $ Right <$> keyword "function" <+> "with a single arm can be rewritten using" <+> keyword "fun" <> "."
-         , f [annotation e]
-         , indent 2 $ Right <$> note <+> "Replace with" <+> keyword "fun" <+> pretty a <+> arrow <+> "…"
+         , f [a]
+         , indent 2 $ Right <$> note <+> "Replace with" <+> keyword "fun" <+> pretty pat <+> arrow <+> "…"
          ]
 
   formatNote f x = indent 2 (Right <$> pretty x) <#> f [annotation x]

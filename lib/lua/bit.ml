@@ -1,4 +1,4 @@
-open import "amulet/base.ml"
+open import "../amulet/base.ml"
 
 external val arshift : int -> int -> int  = "bit32.arshift"
 external val bitand  : int -> int -> int  = "bit32.band"

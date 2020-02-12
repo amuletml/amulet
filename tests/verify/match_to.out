@@ -11,16 +11,16 @@ match_to.ml[7:9 ..7:16]: warning (W3006)
   │         ^^^^^^^^
   • Note: The following patterns are not covered
       false
-match_to.ml[14:3 ..14:17]: note (N3007)
+match_to.ml[14:3 ..14:7]: note (N3007)
   match with a single arm can be rewritten using let.
    │ 
 14 │   match g () with
-   │   ^^^^^^^^^^^^^^^
+   │   ^^^^^
   • Note: Replace with let { x = x, y = y } = …
-match_to.ml[18:3 ..18:17]: warning (W3006)
+match_to.ml[18:3 ..18:7]: warning (W3006)
   Non-exhaustive patterns in expression
    │ 
 18 │   match g () with
-   │   ^^^^^^^^^^^^^^^
+   │   ^^^^^
   • Note: The following patterns are not covered
       false
