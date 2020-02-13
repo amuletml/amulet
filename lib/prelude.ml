@@ -14,7 +14,7 @@ include import "./data/enumeration.ml"
 
 module Io = import { lua = "./lua/io.ml" }
 module Bit = import { lua = "./lua/bit.ml" }
-open Bit.Ops
+include Bit.Ops
 
 open import { lua = "./lua/conversion.ml" }
 

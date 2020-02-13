@@ -25,6 +25,7 @@ external private val tabulate : int -> (int -> 'a) -> storage 'a =
      return r \
    end"
 
+external private val empty_storage : storage 'a = "{}"
 external private val geti : storage 'a -> int -> 'a = "rawget"
 external private val seti : storage 'a -> int -> 'a -> storage 'a = "rawset"
 
@@ -37,6 +38,8 @@ let make len arg =
     offset = 0,
     backing = tabulate len (fun _ -> arg)
   }
+
+let size (Array { length }) = length
 
 let init len cont =
   if len < 0 then
@@ -110,6 +113,22 @@ instance eq 'a => eq (array 'a) begin
             geti a.backing i `elem_cmp` geti b.backing i || loop (i + 1)
       loop a.offset
 end
+
+let empty = Array { length = 0, offset = 0, backing = empty_storage }
+
+let iter f (Array { length, offset, backing }) =
+  let rec loop i =
+    if i > length then () else
+    (f (geti backing i))
+    loop (i + 1)
+  loop offset
+
+let iteri f (Array { length, offset, backing }) =
+  let rec loop i =
+    if i > length then () else
+    (f i (geti backing i))
+    loop (i + 1)
+  loop offset
 
 let ( .() ) (Array r as arr) i =
   in_bounds "(.())" arr i
