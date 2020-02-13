@@ -3,6 +3,7 @@ open import "./../amulet/option.ml"
 open import "./../amulet/base.ml"
 open import "./traversable.ml"
 open import "./foldable.ml"
+include import "./index.ml"
 
 private module T = import "./internal/bbtree.ml"
 
@@ -88,15 +89,23 @@ let lookup k (M tree) =
       | Gt -> go r
   go tree
 
-(** Lookup a key on the map. If it is not present, raise an exception.
- *)
-let (.[]) map key =
-  match lookup key map with
+(* instance ord index map where *)
+instance ord 'k => index (t 'k 'v)
+  type key = 'k
+  type value = 'v
+
+  let ( .?() ) map k = lookup k map
+
+  (** Lookup a key on the map. If it is not present, raise an exception.
+   *)
+  let ( .() ) map key =
+   match lookup key map with
   | None   -> error "Map.(.[]): no such key in map"
   | Some x -> x
 
-(** Update, or insert, a key on the map. Returns the new map. *)
-let (.[]<-) map key new = alter (fun _ -> Some new) key map
+instance ord 'k => set_index (t 'k 'v)
+  (** Update, or insert, a key on the map. Returns the new map. *)
+  let ( .()<- ) map key new = alter (fun _ -> Some new) key map
 
 instance functor (t 'k) begin
   let f <$> M tree =

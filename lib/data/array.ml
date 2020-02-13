@@ -1,5 +1,6 @@
 open import "amulet/exception.ml"
 open import "prelude.ml"
+include import "./index.ml"
 
 private type storage 'a
 
@@ -10,11 +11,14 @@ type array 'a =
     backing : storage 'a
   }
 
-let private in_bounds str (Array r) i =
-  if (r.offset + i <= r.length) && (i >= 1) then
-    ()
-  else
-    throw (Invalid (str ^ ": index " ^ show i ^ " is out of bounds"))
+let private is_in_bounds i (Array { offset, length }) =
+  (* Flip the argument order so the pattern match happens last. Otherwise this
+  prevents uncurrying. *)
+  offset + i <= length && i >= 1
+
+let private in_bounds str r i =
+  if is_in_bounds i r then () else
+  throw (Invalid (str ^ ": index " ^ show i ^ " is out of bounds"))
 
 external private val tabulate : int -> (int -> 'a) -> storage 'a =
   "function(index, cont) \
@@ -130,14 +134,27 @@ let iteri f (Array { length, offset, backing }) =
     loop (i + 1)
   loop offset
 
-let ( .() ) (Array r as arr) i =
-  in_bounds "(.())" arr i
-  geti r.backing (i + r.offset)
+instance index (array 'a)
+  type key = int
+  type value = 'a
 
-let ( .()<- ) (Array r as arr) i x =
-  in_bounds "update" arr i
-  let _ = seti r.backing (i + r.offset) x
-  ()
+  let ( .() ) arr i =
+    in_bounds "(.())" arr i
+    let Array { backing, offset }  = arr
+    geti backing (i + offset)
+
+  let ( .?() ) arr i =
+    if is_in_bounds i arr then
+      let Array { backing, offset }  = arr
+      geti backing (i + offset) |> Some
+    else None
+
+instance mut_index (array 'a)
+  let ( .[]<- ) arr i x =
+    in_bounds "update" arr i
+    let Array { backing, offset }  = arr
+    let _ = seti backing (i + offset) x
+    ()
 
 let take n (Array r) =
   if r.length - n >= r.offset then
