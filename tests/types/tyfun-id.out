@@ -1,0 +1,7 @@
+id : 'k -> 'k
+t : type -> type
+T : Spec{'a : type}. 'a -> t 'a
+x : id int
+x : id (int * int)
+x : id (list int)
+x : id (t int)
