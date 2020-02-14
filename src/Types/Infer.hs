@@ -167,7 +167,7 @@ check e@(Access rc key a) ty = do
     check rc (TyRows rho [(key, ty)])
   pure (Access rc key (a, ty))
 
-check ex@(ListExp es an) t@(TyApp f x) = do
+check ex@(ListExp es an) t@(TyApp f x) | f == tyList = do
   w <- unify (becauseExp ex) f tyList
   es <- traverse (`check` x) es
 
