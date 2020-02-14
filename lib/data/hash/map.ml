@@ -1,6 +1,8 @@
 open import "../../prelude.ml"
 open import "../../lua/conversion.ml"
 open import "../hash.ml"
+include import "../index.ml"
+
 private module Math = import "../../lua/math.ml"
 private module Array = import "../array.ml"
 
@@ -25,15 +27,19 @@ let make_with_capacity c =
     Math.log (float_of_int c) /. Math.log 2.0 |> Math.ceil |> (2**)
   HashMap (ref (Container { array = Array.empty, size = 0, initial }))
 
-let ( .() ) (HashMap container) k =
-  let Container { array, size } = !container
-  if size == 0 then None else
-  let rec find = function
-  | Nil-> None
-  | Cons { k = k', v } when k == k' -> Some v
-  | Cons { next } -> find next
-  let h = (hash k .&. (Array.size array - 1)) + 1
-  find Array.(array.(h))
+instance hashable 'k => index (t 'k 'v)
+  type key = 'k
+  type value = 'v
+
+  let ( .?() ) (HashMap container) k =
+    let Container { array, size } = !container
+    if size == 0 then None else
+    let rec find = function
+      | Nil -> None
+      | Cons { k = k', v } when k == k' -> Some v
+      | Cons { next } -> find next
+    let h = (hash k .&. (Array.size array - 1)) + 1
+    find (array.[h])
 
 let iter f (HashMap container) =
   let Container { array } = !container
@@ -46,12 +52,12 @@ let private put_direct array k v =
   (* This is kind of terrible - we entirely tear down the old list and
      add a new one. But it's tail recursive, so that's nice I guess... *)
   let rec find add old = function
-  | Nil -> (add, Cons { k, v, next = old })
-  | Cons { k = k', next } when k' == k -> find false old next
-  | Cons { k, v, next} -> find add (Cons { k, v, next = old }) next
+    | Nil -> (add, Cons { k, v, next = old })
+    | Cons { k = k', next } when k' == k -> find false old next
+    | Cons { k, v, next} -> find add (Cons { k, v, next = old }) next
   let h = (hash k .&. (Array.size array - 1)) + 1
-  let (added, a') = find true Nil Array.(array.(h))
-  Array.(array.(h) <- a')
+  let (added, a') = find true Nil (array.[h])
+  array.[h] <- a'
   added
 
 let private ignore _ = ()
@@ -63,16 +69,16 @@ let private rehash (HashMap container as hm) size =
   container := Container { array, size, initial }
   array
 
-let rec ( .()<- ) (HashMap container as hm) k v =
-  let Container { array, size, initial } = !container
-  let a_size = Array.size array in
-  let array =
-    if a_size == 0 then
-      let array = Array.make initial Nil
-      container := Container { array, size, initial }
-      array
-    else if size + 1 > a_size * 2 then rehash hm (a_size * 2)
-    else array
-  let added = put_direct array k v
-  if added then container := Container { array, size = size + 1, initial } else ()
-
+instance hashable 'k => mut_index (t 'k 'v)
+  let ( .[]<- ) (HashMap container as hm) k v =
+    let Container { array, size, initial } = !container
+    let a_size = Array.size array in
+    let array =
+      if a_size == 0 then
+        let array = Array.make initial Nil
+        container := Container { array, size, initial }
+        array
+      else if size + 1 > a_size * 2 then rehash hm (a_size * 2)
+      else array
+    let added = put_direct array k v
+    if added then container := Container { array, size = size + 1, initial } else ()
