@@ -1,5 +1,5 @@
-open import "amulet/exception.ml"
-open import "prelude.ml"
+open import "../amulet/exception.ml"
+open import "../prelude.ml"
 include import "./index.ml"
 
 private type storage 'a
