@@ -46,7 +46,7 @@ module Frontend.Driver
   -- * Querying the driver
   --
   -- $query
-  , getSignature, getTypeEnv, getOpenedTypeEnv
+  , getSignature, getTypeEnv
   , getVerified, getVerifiedAll
   , getLowerState, getLowered
   , getErrors, getErrorsAll
@@ -587,31 +587,12 @@ getTypeEnv path = do
               runCallback path onTyped Nothing
               pure Nothing
             Just (tBody, modEnv) ->
-              let env' = env
-                    & (names %~ (<> (modEnv ^. names)))
-                    . (types %~ (<> (modEnv ^. types)))
-                    . (classDecs %~ (<> (modEnv ^. classDecs)))
-                    . (modules %~ (<> (modEnv ^. modules))
-                        . Map.insert (fileVar file') (modEnv ^. classes, modEnv ^. tySyms))
+              let env' = env <> modEnv
               in do updateFile path $ (stage .~ STyped tBody sig env') . (errors . typeErrors .~ es)
                     runCallback path onTyped (Just (tBody, env', builtinEnv <> env))
                     pure (Just env')
 
     stage -> pure (Just (env stage))
-
--- | Get or compute a file's "opened" type environment. Namely, the
--- environment as if it had been opened in the current scope.
-getOpenedTypeEnv :: (MonadNamey m, MonadState Driver m, MonadIO m)
-           => FilePath -> m (Maybe Env)
-getOpenedTypeEnv path = do
-  env <- getTypeEnv path
-  case env of
-    Nothing -> pure Nothing
-    Just env -> do
-      ~(Just file) <- use (files . at path)
-      let ~(Just (modImplicits, modTysym)) = env ^. modules . at (fileVar file)
-      pure . Just $ env & (classes %~ (<>modImplicits)) . (tySyms %~ (<>modTysym))
-
 
 -- | Determine whether a file can be successfully verified.
 getVerified :: (MonadNamey m, MonadState Driver m, MonadIO m)

@@ -215,7 +215,7 @@ loadFiles paths = do
       for_ paths $ \path -> do
         (sig, env, lEnv) <- wrapDriver $ do
           ~(Just sig) <- D.getSignature path
-          ~(Just env) <- D.getOpenedTypeEnv path
+          ~(Just env) <- D.getTypeEnv path
           ~(Just lEnv) <- D.getLowerState path
           pure (sig, env, lEnv)
 

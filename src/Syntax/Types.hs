@@ -5,7 +5,7 @@ module Syntax.Types
   ( Telescope, one, foldTele, foldTeleM, teleFromList, mapTele, traverseTele, teleToList
   , Scope(..), namesInScope, inScope, scopeToList, mapScope
   , Env, freeInEnv, difference, envOf, scopeFromList, toMap
-  , names, typeVars, constructors, types, letBound, classes, modules
+  , names, typeVars, constructors, types, letBound, classes
   , classDecs, tySyms, declaredHere
   , ClassInfo(..), ciName, ciMethods, ciContext, ciConstructorName, ciAssocTs
   , TySymInfo(..), tsName, tsArgs, tsExpansion, tsKind, TySyms, tsEquations, tsConstraint
@@ -84,7 +84,6 @@ data Env
         , _letBound     :: Set.Set (Var Typed)
         , _declaredHere :: Set.Set (Var Typed) -- Only types
         , _types        :: Map.Map (Var Typed) (Set.Set (Var Typed))
-        , _modules      :: Map.Map (Var Typed) (ImplicitScope ClassInfo Typed, TySyms)
         , _classDecs    :: Map.Map (Var Typed) ClassInfo
         , _tySyms       :: TySyms
         }
@@ -175,21 +174,21 @@ Scope x \\ Scope y = Scope (x Map.\\ y)
 
 instance Monoid Env where
   mappend = (<>)
-  mempty = Env mempty mempty mempty mempty mempty mempty mempty mempty mempty mempty
+  mempty = Env mempty mempty mempty mempty mempty mempty mempty mempty mempty
 
 instance Semigroup Env where
-  Env s i c t d l m n o p <> Env s' i' c' t' d' l' m' n' o' p' =
-    Env (s <> s') (i <> i') (c <> c') (t <> t') (d <> d') (l <> l') (m <> m') (n <> n') (o <> o') (p <> p')
+  Env a b c d e f g h i <> Env a' b' c' d' e' f' g' h' i' =
+    Env (a <> a') (b <> b') (c <> c') (d <> d') (e <> e') (f <> f') (g <> g') (h <> h') (i <> i')
 
 difference :: Env -> Env -> Env
-difference (Env a b c d e f g h i j) (Env a' _ c' d' e' f' g' h' i' j') =
-  Env (a \\ a') b (c Set.\\ c') (d Set.\\ d') (e Set.\\ e') (f Set.\\ f') (g Map.\\ g') (h Map.\\ h') (i Map.\\ i') (j Map.\\ j')
+difference (Env a b c d e f g h i) (Env a' _ c' d' e' f' g' h' i') =
+  Env (a \\ a') b (c Set.\\ c') (d Set.\\ d') (e Set.\\ e') (f Set.\\ f') (g Map.\\ g') (h Map.\\ h') (i Map.\\ i')
 
 freeInEnv :: Env -> Set.Set (Var Typed)
 freeInEnv = foldMap ftv . view names
 
 envOf :: Scope Resolved (Type Typed) -> Env
-envOf a = Env a mempty mempty mempty mempty mempty mempty mempty mempty mempty
+envOf a = Env a mempty mempty mempty mempty mempty mempty mempty mempty
 
 scopeFromList :: OrdPhrase p => [(Var p, f)] -> Scope p f
 scopeFromList = Scope . Map.fromList

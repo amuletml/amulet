@@ -324,8 +324,8 @@ infer (Begin xs a) = do
   pure (Begin (start ++ [end]) (a, t), t)
 
 infer (OpenIn mod expr a) = do
-  (mod', exEnv, (modImplicits, modTysym)) <- inferMod mod
-  local (unqualify mod . exEnv Nothing . (classes %~ (<>modImplicits)) . (tySyms %~ (<>modTysym))) $ do
+  (mod', exEnv) <- inferMod mod
+  local (unqualify mod . exEnv Nothing) $ do
     (expr', ty) <- infer expr
     pure (ExprWrapper (TypeAsc ty) (OpenIn mod' (ExprWrapper (TypeAsc ty) expr' (a, ty)) (a, ty)) (a, ty), ty)
 
@@ -573,29 +573,27 @@ inferProg (DeriveInstance tau ann:prg) = do
     Nothing -> confesses (DICan'tDerive name (BecauseOf inst))
 
 inferProg (Open mod:prg) = do
-  (mod', exEnv, (modImplicits, modTysym)) <- inferMod mod
+  (mod', exEnv) <- inferMod mod
 
-  local (unqualify mod . exEnv Nothing . (classes %~ (<>modImplicits)) . (tySyms %~ (<>modTysym))) $
+  local (unqualify mod . exEnv Nothing) $
     consFst (Open mod') $ inferProg prg
 
 inferProg (Include mod:prg) = do
-  (mod', exEnv, (modImplicits, modTysym)) <- inferMod mod
+  (mod', exEnv) <- inferMod mod
 
-  local (unqualify mod . exEnv Nothing . (classes %~ (<>modImplicits)) . (tySyms %~ (<>modTysym))) $
+  local (unqualify mod . exEnv Nothing) $
     consFst (Include mod') $ inferProg prg
 
 inferProg (Module am name mod:prg) = do
-  (mod', exEnv, modInfo@(modImp, modTS)) <- local (declaredHere .~ mempty) $ inferMod mod
+  (mod', exEnv) <- local (declaredHere .~ mempty) $ inferMod mod
   local (exEnv (Just name)) $
-    local (modules %~ Map.insert name modInfo) $
-      local ((classes %~ (<>modImp)) . (tySyms %~ (<>modTS))) $
-        consFst (Module am name mod') $
-          inferProg prg
+      consFst (Module am name mod') (inferProg prg)
 
 inferProg [] = asks ([],)
 
+-- | Infer a module, returning a typed module and a function for extending the environment.
 inferMod :: MonadInfer Typed m => ModuleTerm Desugared
-         -> m (ModuleTerm Typed, Maybe (Var Resolved) -> Env -> Env, (ImplicitScope ClassInfo Typed, TySyms))
+         -> m (ModuleTerm Typed, Maybe (Var Typed) -> Env -> Env)
 inferMod (ModStruct bod a) = do
   (bod', env) <- inferProg bod
   outside <- view names
@@ -611,17 +609,14 @@ inferMod (ModStruct bod a) = do
          in transformType go
 
   pure (ModStruct bod' a
-       , \prefix ->
-           (names %~ (<> mapScope (append prefix) (qualifyWrt prefix outside) (env ^. names)))
-         . (types %~ (<> (Set.mapMonotonic (append prefix)
-                            <$> Map.mapKeysMonotonic (append prefix) (env ^. types))))
-         . (classDecs %~ (<> (env ^. classDecs)))
-         . (modules %~ (<> Map.mapKeysMonotonic (append prefix) (env ^. modules)))
-       , (env ^. classes, env ^. tySyms))
+       , \prefix extEnv ->
+           let new = env `difference` extEnv
+           in (<>env)
+           . (names %~ (<> mapScope (append prefix) (qualifyWrt prefix outside) (new ^. names)))
+           . (types %~ (<> (Set.mapMonotonic (append prefix) <$> Map.mapKeysMonotonic (append prefix) (new ^. types))))
+           $ extEnv)
 
-inferMod (ModRef name a) = do
-  mod <- view (modules . at name) >>= maybe (confesses (NotInScope name)) pure
-  pure (ModRef name a, const id, mod)
+inferMod (ModRef name a) = pure (ModRef name a, const id)
 
 inferMod ModImport{} = error "Impossible"
 inferMod ModTargetImport{} = error "Impossible"
