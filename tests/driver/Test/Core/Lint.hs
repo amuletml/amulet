@@ -48,7 +48,7 @@ testLint state mode file = do
         Just (_, es) -> assertFailure $ "Core lint failed: " ++ displayS (pretty es)
     _ -> do
       files <- fileMap driver
-      assertFailure . T.unpack . display $ reportAll files errors
+      assertFailure . T.unpack . display $ reportAll Amc files errors
 
 tests :: IO TestTree
 tests = do
