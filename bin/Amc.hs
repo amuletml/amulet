@@ -22,7 +22,7 @@ import Text.Pretty.Semantic hiding (empty)
 import Text.Read
 
 import qualified Frontend.Driver as D
-import Frontend.Errors
+import Frontend.Errors hiding (Repl)
 
 import qualified CompileTarget as CT
 
@@ -318,7 +318,7 @@ main = do
         . flip runStateT (D.makeDriverWith config)
         $ D.getTypeEnv path >> D.getErrorsAll path
       files <- D.fileMap driver
-      reportAllS files errors
+      reportAllS Amc files errors
 
       case time of
         Just "-" -> timingReport putDoc

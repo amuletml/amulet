@@ -10,7 +10,6 @@ module Types.Infer.Class
 
 import Prelude hiding (lookup)
 
-import qualified Data.Map.Strict as Map
 import Data.Reason
 
 import Control.Monad.Infer
@@ -23,7 +22,7 @@ import Syntax
 
 import GHC.Stack
 
-extendTySyms :: Foldable t => t TySymInfo -> Map.Map VarResolved TySymInfo -> Map.Map VarResolved TySymInfo
+extendTySyms :: Foldable t => t TySymInfo -> TySyms -> TySyms
 
 inferClass :: forall m. MonadInfer Typed m
            => Toplevel Desugared

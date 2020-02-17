@@ -365,11 +365,9 @@ builtinEnv = go builtins where
   go (BM vs ts ms cs ci fi) =
     foldr ((<>) . go . snd) (T.envOf (T.scopeFromList vs <> T.scopeFromList ts)) ms
       & T.types %~ mappend cs
-      & T.modules %~ mappend (fake ms)
       & T.classDecs %~ mappend (Map.fromList ci)
       & T.tySyms %~ mappend (Map.fromList fi)
       & T.classes %~ const builtinInstances
-  fake ms = Map.fromList (ms & map (_2 .~ mempty))
 
 -- | Construct a syntax variable from a core one
 ofCore :: CoVar -> Var Resolved

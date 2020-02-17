@@ -634,7 +634,7 @@ workOnce wrk@Worker { pushErrors, fileContents, fileStates, fileVars, target } b
                 Just parsed -> do
                   debugM logN ("Resolving " ++ showUri path)
                   (errors, resolved, typed) <-
-                    loadFrom path (fileVar file) parsed
+                    loadFrom path parsed
                       (case file of { OpenedState{} -> True; DiskState{} -> False })
                   pure $ case file of
                     f@DiskState{} ->
@@ -744,9 +744,9 @@ workOnce wrk@Worker { pushErrors, fileContents, fileStates, fileVars, target } b
 
   -- | Run the actual loading pass. This resolves the file (including any
   -- imports), then desugars, types and optionally verifies it.
-  loadFrom :: NormalizedUri -> Name -> [Toplevel Parsed] -> Bool
+  loadFrom :: NormalizedUri -> [Toplevel Parsed] -> Bool
            -> IO (ErrorBundle, Maybe (Signature, [Toplevel Resolved]), Maybe (Signature, Env, [Toplevel Typed]))
-  loadFrom path var parsed verify = flip evalNameyMT (nextName wrk) $ do
+  loadFrom path parsed verify = flip evalNameyMT (nextName wrk) $ do
     (resolved, dependencies) <- flip runFileImport (wrk, path, loadFile) $ resolveProgram target builtinResolve parsed
     let env = HM.foldrWithKey (getEnvs path) (Right builtinEnv) dependencies
     case (resolved, env) of
@@ -765,7 +765,7 @@ workOnce wrk@Worker { pushErrors, fileContents, fileStates, fileVars, target } b
 
         pure ( mempty & (typeErrors .~ tEs) . (verifyErrors .~ vEs)
              , Just (sig, resolved)
-             , (\(prog, modEnv) -> (sig, wrapEnv var env modEnv, prog)) <$> tyRes )
+             , (\(prog, modEnv) -> (sig, env <> modEnv, prog)) <$> tyRes )
 
       (Right (ResolveResult resolved sig _), Left es) ->
         pure ( mempty & resolveErrors .~ es
@@ -775,16 +775,6 @@ workOnce wrk@Worker { pushErrors, fileContents, fileStates, fileVars, target } b
       (Left es, _) ->
         pure ( mempty & resolveErrors .~ (fromLeft [] env ++ es)
              , Nothing, Nothing )
-
-  wrapEnv :: Name -> Env -> Env -> Env
-  wrapEnv var env modEnv =
-    env
-    & (names %~ (<> (modEnv ^. names)))
-    . (types %~ (<> (modEnv ^. types)))
-    . (classDecs %~ (<> (modEnv ^. classDecs)))
-    . (modules %~ (<> (modEnv ^. modules))
-        . Map.insert var (modEnv ^. classes, modEnv ^. tySyms))
-
 
   getEnvs :: NormalizedUri -> NormalizedUri -> (Span, Maybe Env) -> Either [R.ResolveError] Env
           -> Either [R.ResolveError] Env

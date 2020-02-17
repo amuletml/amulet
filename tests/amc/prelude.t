@@ -20,7 +20,7 @@ Not using the prelude will fail
     │ ^^^^^
   
   The following message has a detailed explanation: 1001.
-  Try 'amc explain 1001' to see it.
+  Try ':explain 1001' to see it.
   > 
 
 One can use a custom prelude

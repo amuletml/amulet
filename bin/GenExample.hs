@@ -42,7 +42,7 @@ main = do
   case core of
     Nothing -> do
       putStrLn "<p style=\"color: red\">Error in generating example<pre>"
-      hReportAll stdout fileMap errors
+      hReportAll stdout Amc fileMap errors
       putStrLn "</pre></p>"
       exitSuccess
     Just _ -> pure ()

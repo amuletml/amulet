@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts, LambdaCase #-}
+{-# LANGUAGE FlexibleContexts, LambdaCase, TypeFamilies #-}
 module Types.Infer.Function
   ( checkValidTypeFunction
   , makeTypeFunctionHIT
@@ -10,7 +10,6 @@ import Control.Monad.Infer
 import Control.Applicative
 import Control.Lens
 
-import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 
 import Data.Foldable
@@ -60,7 +59,7 @@ familyFree :: MonadInfer Typed m => SomeReason -> Type Typed -> m ()
 familyFree what tau = do
   info <- view tySyms
   let uni = universe tau
-      fam (TyApps (TyCon v ()) _) | Just _ <- Map.lookup v info = True
+      fam (TyApps (TyCon v ()) _) | Just _ <- info ^. at v = True
       fam _ = False
   case find fam uni of
     Just t -> confesses (TyFunInLhs what t)
