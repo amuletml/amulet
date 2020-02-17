@@ -1,0 +1,4 @@
+foo : Req{'a : type}. constraint
+get_foo : Spec{'a : type}. foo 'a => 'a
+M.t : type
+M.T : M.t

@@ -1,0 +1,6 @@
+idx : Req{'a : type}. constraint
+key : Req{'a : type}. type
+idx : Spec{'a : type}. idx 'a => 'a -> unit
+idx_key : Spec{'a : type}. idx 'a => 'a -> key 'a -> unit
+array : Infer{'a : type}. 'a -> type
+f : array int -> unit
