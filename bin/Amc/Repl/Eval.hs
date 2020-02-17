@@ -208,7 +208,7 @@ loadFiles paths = do
 
   files <- D.fileMap =<< gets driver
   handle <- gets outputHandle
-  hReportAll handle files es
+  hReportAll handle Repl files es
   case core of
     Nothing -> pure False
     Just core -> do
@@ -281,7 +281,7 @@ parseCore parser name input = do
         D.tick
         D.lowerWith (root (config state)) parsed' (resolveScope state) (inferScope state) (lowerState state)
       driver_files <- D.fileMap =<< gets driver
-      hReportAll (outputHandle state) (files ++ driver_files) es
+      hReportAll (outputHandle state) Repl (files ++ driver_files) es
       case lower of
         Nothing -> pure Nothing
         Just (lower, lState, typed, env, ResolveResult _ _ sig) -> do

@@ -13,15 +13,18 @@ import Control.Monad.Namey
 import Control.Concurrent
 import Control.Lens
 
+import qualified Data.ByteString as Bs
 import qualified Data.Text.Lazy as L
 import qualified Data.Text as T
-import qualified Data.ByteString as Bs
 
 import Data.Foldable
 import Data.Position
 import Data.Spanned
 import Data.Maybe
 import Data.Char
+import Data.List
+
+import Text.Read (readMaybe)
 
 import System.Console.Haskeline hiding (display, bracket, throwTo)
 import System.Directory
@@ -47,6 +50,7 @@ import CompileTarget (lua)
 
 import Amc.Repl.State
 import Amc.Repl.Eval
+import Amc.Explain
 import Version
 
 type Listener = Maybe ThreadId
@@ -78,6 +82,8 @@ execCommand _ "info"    arg = infoCommand arg
 execCommand _ "c"       arg = compileCommand arg
 execCommand _ "compile" arg = compileCommand arg
 
+execCommand _ "explain" arg = explainCommand arg
+
 execCommand _ "add-library-path" arg =
   case dropWhile isSpace arg of
     [] -> liftIO $ putStrLn ":add-library-path needs an argument"
@@ -108,6 +114,7 @@ helpCommand =
     \ :t[ype]    <expr>       Show the type of <expr>\n\
     \ :i[nfo]    <var>        Prints the type of <var> as it can be found in the environment\n\
     \ :c[ompile] <file>       Compiles the current environment to <file>\n\
+    \ :explain   <err>        Explain an error message.\n\
     \ :add-library-path <dir> Adds the directory <dir> to the library path\n\
     \ :complete  <expr>       Shows possible completions for <expr>"
 
@@ -166,7 +173,7 @@ typeCommand (dropWhile isSpace -> input) = do
       (infer, es) <- wrapDriver $ do
         D.tick
         D.inferWith (root (config state)) prog (resolveScope state) (inferScope state)
-      hReportAll (outputHandle state) files es
+      hReportAll (outputHandle state) Repl files es
       case infer of
         Nothing -> pure ()
         Just (prog, _, _) ->
@@ -193,9 +200,18 @@ compileCommand (dropWhile isSpace -> path) = do
           (_, lua) <- emitCore optm
           liftIO $ Bs.hPutStr handle lua
         Nothing ->
-          hReportAll output files errors
+          hReportAll output Repl files errors
       liftIO $ hClose handle
     Nothing -> liftIO $ putStrLn "No file loaded"
+
+explainCommand :: MonadIO m => String -> m ()
+explainCommand arg
+  | Just code <- readMaybe . dropWhile isSpace . dropWhileEnd isSpace $ arg
+  = liftIO $ case findError code of
+    Just err -> displayError err
+    Nothing -> putStrLn $ "No explanation for error E" ++ show code
+  | "" <- arg = liftIO $ putStrLn "Expected error code"
+  | otherwise = liftIO $ putStrLn "Cannot parse error code (should just be a number)"
 
 -- | Split a string into arguments
 parseArgs :: String -> [String]
@@ -206,4 +222,3 @@ parseArgs xs =
       parseArgs' ('\\':x:xs) = Just . (x:) . fromMaybe [] <$> parseArgs' xs
       parseArgs' (x:xs) = Just . (x:) . fromMaybe [] <$> parseArgs' xs
    in maybe ys (:ys) y
-

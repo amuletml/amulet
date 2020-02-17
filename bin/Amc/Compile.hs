@@ -94,7 +94,7 @@ compileIt (driver, name) Options { optLevel, lint, export, debug, promoteErrors 
     $ (,) <$> D.compiles path <*> D.getSignature path
 
   files <- D.fileMap driver
-  reportAllS files errors
+  reportAllS Amc files errors
 
   case core of
     Nothing -> exit

@@ -5,6 +5,7 @@ module Frontend.Errors
   ( ErrorBundle(..)
   , parseErrors, resolveErrors, typeErrors, verifyErrors
   , ErrorFilter(..), defaultFilter, hasErrors
+  , ExplainCommand(..)
   , report, hReport
   , reportAll, hReportAll, reportAllS
   ) where
@@ -43,6 +44,10 @@ data ErrorBundle = Errors
   , _typeErrors    :: [TypeError]
   , _verifyErrors  :: [VerifyError]
   }
+  deriving Show
+
+-- | How the "explain" command should be invoked.
+data ExplainCommand = Repl | Amc
   deriving Show
 
 makeLenses ''ErrorBundle
@@ -87,8 +92,8 @@ report fs
   . N.format (N.fileSpans fs highlightAmulet)
 
 -- | Report all messages in a bundle.
-reportAll :: N.FileMap -> ErrorBundle -> SimpleDoc (Either N.NoteStyle Style)
-reportAll fs (Errors ps rs ts vs)
+reportAll :: ExplainCommand -> N.FileMap -> ErrorBundle -> SimpleDoc (Either N.NoteStyle Style)
+reportAll explain fs (Errors ps rs ts vs)
   = filterSimpleDoc (either (const True) uncommentFilter)
   . renderPretty 0.4 100
   . vsep
@@ -96,6 +101,9 @@ reportAll fs (Errors ps rs ts vs)
   where
     fmt :: N.Note a Style => [a] -> [P.Doc (Either N.NoteStyle Style)]
     fmt = map (N.format (N.fileSpans fs highlightAmulet))
+    command = case explain of
+      Amc -> "amc explain"
+      Repl -> ":explain"
     info :: [ P.Doc (Either N.NoteStyle Style) ]
     info =
       let errs = Set.toList (Set.fromList (mapMaybe N.noteId ps
@@ -114,7 +122,7 @@ reportAll fs (Errors ps rs ts vs)
             [ empty
             , string "The following" <+> errors <+> explanations <> char ':' <+> nums <> char '.'
             ,     string "Try"
-              <+> squote <> (Right <$> skeyword (string "amc explain" <+> int (head errs))) <> squote
+              <+> squote <> (Right <$> skeyword (string command <+> int (head errs))) <> squote
               <+> string "to see" <+> them <> char '.'
             ]
 
@@ -122,11 +130,11 @@ reportAll fs (Errors ps rs ts vs)
 hReport :: (MonadIO m, N.Note a Style) => Handle -> N.FileMap -> a -> m ()
 hReport h fs = displayDoc h . report fs
 
-hReportAll :: MonadIO m => Handle -> N.FileMap -> ErrorBundle -> m ()
-hReportAll h fs  = displayDoc h . reportAll fs
+hReportAll :: MonadIO m => Handle -> ExplainCommand -> N.FileMap -> ErrorBundle -> m ()
+hReportAll h e fs  = displayDoc h . reportAll e fs
 
-reportAllS :: MonadIO m => N.FileMap -> ErrorBundle -> m ()
-reportAllS fs  = displayDoc stdout . reportAll fs
+reportAllS :: MonadIO m => ExplainCommand -> N.FileMap -> ErrorBundle -> m ()
+reportAllS e fs  = displayDoc stdout . reportAll e fs
 
 displayDoc :: MonadIO m => Handle -> SimpleDoc (Either N.NoteStyle Style) -> m ()
 displayDoc h err = liftIO $ do
