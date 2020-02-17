@@ -56,9 +56,9 @@ inferProgram :: MonadNamey m => Env -> [Toplevel Desugared] -> m (These [TypeErr
 inferProgram env ct = fmap fst <$> runInfer env (go ct) where
   go :: MonadInfer Typed m => [Toplevel Desugared] -> m ([Toplevel Typed], Env)
   go ct = do
-    (p, cs) <- listen $ inferProg ct
+    ((p, env), cs) <- listen $ inferProg ct
     _ <- solveFixpoint (It'sThis (BecauseInternal "last round of solving")) (onlyDeferred cs) =<< getSolveInfo
-    pure p
+    pure (p, env & declaredHere .~ mempty)
 
 
 -- | Infer the type of a single expression, including any residual
