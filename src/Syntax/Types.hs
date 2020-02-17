@@ -16,6 +16,7 @@ module Syntax.Types
   , DerivingStrat(..)
   ) where
 
+import qualified Data.Map.Merge.Strict as Map
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -178,11 +179,25 @@ instance Monoid Env where
 
 instance Semigroup Env where
   Env a b c d e f g h i <> Env a' b' c' d' e' f' g' h' i' =
-    Env (a <> a') (b <> b') (c <> c') (d <> d') (e <> e') (f <> f') (g <> g') (h <> h') (i <> i')
+    Env (a <> a') (b <> b') (c <> c') (d <> d') (e <> e') (f <> f') (g <> g') (h <> h') (i `concatSyms` i')
+
+concatSyms :: TySyms -> TySyms -> TySyms
+concatSyms = Map.merge Map.preserveMissing Map.preserveMissing (Map.zipWithMatched (const merge)) where
+  merge l@TySymInfo{} TySymInfo{} = l
+  merge l@(TyFamInfo _ leqs _ _ _) r@(TyFamInfo _ reqs _ _ _)
+    | leqs == reqs = l
+    | [] <- reqs = l
+    | otherwise = r & tsEquations .~ foldr (insertInfo reqs) reqs leqs
+  merge TySymInfo{} TyFamInfo{} = error "TySym mismatch"
+  merge TyFamInfo{} TySymInfo{} = error "TySym mismatch"
+
+  insertInfo base x xs
+    | x `elem` base = xs
+    | otherwise = x:xs
 
 difference :: Env -> Env -> Env
-difference (Env a b c d e f g h i) (Env a' _ c' d' e' f' g' h' i') =
-  Env (a \\ a') b (c Set.\\ c') (d Set.\\ d') (e Set.\\ e') (f Set.\\ f') (g Map.\\ g') (h Map.\\ h') (i Map.\\ i')
+difference (Env a b c d e f g h i) (Env a' _ c' d' e' f' g' h' _) =
+  Env (a \\ a') b (c Set.\\ c') (d Set.\\ d') (e Set.\\ e') (f Set.\\ f') (g Map.\\ g') (h Map.\\ h') i
 
 freeInEnv :: Env -> Set.Set (Var Typed)
 freeInEnv = foldMap ftv . view names

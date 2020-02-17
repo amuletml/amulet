@@ -596,25 +596,20 @@ inferMod :: MonadInfer Typed m => ModuleTerm Desugared
          -> m (ModuleTerm Typed, Maybe (Var Typed) -> Env -> Env)
 inferMod (ModStruct bod a) = do
   (bod', env) <- inferProg bod
-  outside <- view names
-  -- So this behaviour is somewhat incorrect, as we'll exposed any type
-  -- functions/implicits that we open in our signature. But it'll do for now.
   let append x p = maybe p (<> p) x
-      qualifyWrt prefix scope =
-        let go (TyCon n ()) =
-              if not (n `inScope` scope)
-                 then TyCon (append prefix n) ()
-                 else TyCon n ()
+      qualifyWrt prefix =
+        let go (TyCon n ()) = TyCon (append prefix n) ()
             go x = x
          in transformType go
 
   pure (ModStruct bod' a
        , \prefix extEnv ->
-           let new = env `difference` extEnv
-           in (<>env)
-           . (names %~ (<> mapScope (append prefix) (qualifyWrt prefix outside) (new ^. names)))
-           . (types %~ (<> (Set.mapMonotonic (append prefix) <$> Map.mapKeysMonotonic (append prefix) (new ^. types))))
-           $ extEnv)
+           let diff = env `difference` extEnv
+               env' = (declaredHere .~ mempty)
+                    . (names .~ mapScope (append prefix) (qualifyWrt prefix) (diff ^. names))
+                    . (types .~ (Set.mapMonotonic (append prefix) <$> Map.mapKeysMonotonic (append prefix) (diff ^. types)))
+                    $  env
+           in extEnv <> env')
 
 inferMod (ModRef name a) = pure (ModRef name a, const id)
 

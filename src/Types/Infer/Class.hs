@@ -50,7 +50,7 @@ import Types.Unify
 
 import GHC.Stack
 
-extendTySyms :: Foldable t => t TySymInfo -> Map.Map VarResolved TySymInfo -> Map.Map VarResolved TySymInfo
+extendTySyms :: Foldable t => t TySymInfo -> TySyms -> TySyms
 extendTySyms syms empty = foldr extend empty syms where
   extend info@(TyFamInfo name eqs _ kind con) = Map.alter go name where
     go Nothing = Just info

@@ -95,7 +95,7 @@ deriving instance (Show info, ShowPhrase p) => Show (ImplicitScope info p)
 deriving instance (Ord info, OrdPhrase p) => Ord (ImplicitScope info p)
 deriving instance (Eq info, EqPhrase p) => Eq (ImplicitScope info p)
 
-instance OrdPhrase p => Substitutable p (ImplicitScope i p) where
+instance (Eq i, OrdPhrase p) => Substitutable p (ImplicitScope i p) where
   ftv = foldMap ftv . keys
   apply m (Trie trie) = Trie . rebalance $ fmap (apply m) trie where
     rebalance :: Map.Map (Type p) (Node i p) -> Map.Map (Type p) (Node i p)
@@ -118,7 +118,7 @@ instance OrdPhrase p => Substitutable p (ImplicitScope i p) where
     makeTrie [] n = n
     makeTrie (x:xs) n = Many (Trie (Map.singleton x (makeTrie xs n)))
 
-instance OrdPhrase p => Substitutable p (Node i p) where
+instance (Eq i, OrdPhrase p) => Substitutable p (Node i p) where
   ftv (One i) = ftv i
   ftv (Some is) = ftv is
   ftv (Many t) = ftv t
@@ -136,7 +136,7 @@ instance OrdPhrase p => Substitutable p (Implicit i p) where
 
 -- | Insert a choice for a *fully-known* (@Solved@) implicit parameter
 -- (the variable @v@) of type @tau@ at the given trie.
-insert :: forall i p. OrdPhrase p => Ann Resolved -> Sort -> Var p -> Type p -> i -> ImplicitScope i p -> ImplicitScope i p
+insert :: forall i p. (Eq i, OrdPhrase p) => Ann Resolved -> Sort -> Var p -> Type p -> i -> ImplicitScope i p -> ImplicitScope i p
 insert annot sort v ty info = go ts implicit where
   (head, obligations) = getHead ty
 
@@ -159,7 +159,7 @@ insert annot sort v ty info = go ts implicit where
     insert' xs i Nothing = Just (Many (go xs i (Trie Map.empty)))
 
 -- | Find a type in a trie by conservative fuzzy search.
-lookup :: forall i p. p ~ Typed => Type p -> ImplicitScope i p -> [Implicit i p]
+lookup :: forall i p. (Eq i, p ~ Typed) => Type p -> ImplicitScope i p -> [Implicit i p]
 lookup ty = go ts  where
   ts = appsView ty
   go :: [Type p] -> ImplicitScope i p -> [Implicit i p]
@@ -182,14 +182,16 @@ lookup ty = go ts  where
     fixup [x] = Just x
     fixup (x:xs) = Just (sconcat (x :| xs))
 
-instance OrdPhrase p => Monoid (ImplicitScope i p) where
+instance (Eq i, OrdPhrase p) => Monoid (ImplicitScope i p) where
   mempty = Trie mempty
 
-instance OrdPhrase p => Semigroup (ImplicitScope i p) where
+instance (Eq i, OrdPhrase p) => Semigroup (ImplicitScope i p) where
   Trie m <> Trie m' = Trie (merge m m')
 
-instance OrdPhrase p => Semigroup (Node i p) where
-  One x <> One y = Some [x, y]
+instance (Eq i, OrdPhrase p) => Semigroup (Node i p) where
+  One x <> One y
+    | x == y = One x
+    | otherwise = Some [x, y]
   One x <> Some xs = Some (x:xs)
   One x <> ManyMore xs t = ManyMore (x:xs) t
   One x <> Many t = ManyMore [x] t
@@ -232,7 +234,7 @@ subTrie = go where
   goNode _ _ = Nothing
 
 -- | Make a trie consisting of the only the one given implicit.
-singleton :: OrdPhrase p => Ann Resolved -> Sort -> Var p -> Type p -> i -> ImplicitScope i p
+singleton :: (Eq i, OrdPhrase p) => Ann Resolved -> Sort -> Var p -> Type p -> i -> ImplicitScope i p
 singleton a s v t i = insert a s v t i mempty
 
 
@@ -265,7 +267,7 @@ getHead t@TyTupleL{} = (t, Seq.empty)
 -- obligations.
 splitImplVarType = getHead
 
-merge :: OrdPhrase p => Map.Map (Type p) (Node i p) -> Map.Map (Type p) (Node i p) -> Map.Map (Type p) (Node i p)
+merge :: (Eq i, OrdPhrase p) => Map.Map (Type p) (Node i p) -> Map.Map (Type p) (Node i p) -> Map.Map (Type p) (Node i p)
 merge = Map.merge Map.preserveMissing Map.preserveMissing (Map.zipWithMatched (const (<>)))
 
 -- | Does there exist a substitution that can make a the same as b?

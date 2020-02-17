@@ -226,7 +226,7 @@ inferQL_ex ex@(Ascription _ t _) = pure <$> liftType (BecauseOf ex) t
 inferQL_ex _ = pure Nothing
 
 -- | Is this type constructor invariant in its arguments?
-invariant :: Map.Map (Var Typed) TySymInfo -> Var Typed -> Bool
+invariant :: TySyms -> Var Typed -> Bool
 invariant syms x =
      x /= tyArrowName       -- The function type is co/contravariant
   && x /= tyTupleName       -- The tuple type is covariant
