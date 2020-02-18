@@ -506,9 +506,8 @@ lookupEquality class_info scope assum a b = normal <|> fundepEquality where
           a :: Type Typed
           used x = map (implClass .~ x)
 
-  find_ffs t = map snd . filter (null . view implPre . snd) . filter (matches tau . view implHead . snd) . concatMap splat . Map.toList . keys where
+  find_ffs t = map snd . filter (null . view implPre . snd) . filter (matches tau . view implHead . snd) . Map.toList . keys where
     tau = transformType go t
-    splat (x, t) = map (x,) t
     go (TySkol v) | Just x <- assum ^. at (v ^. skolIdent) = x
     go t = t
 

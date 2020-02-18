@@ -66,10 +66,13 @@ data Implicit info p
                  -- Invariant: 'implClass' is only defined if 'implSort' == 'InstSort'
                }
 
-
 deriving instance (Show info, ShowPhrase p) => Show (Implicit info p)
-deriving instance (Ord info, OrdPhrase p) => Ord (Implicit info p)
-deriving instance (Eq info, EqPhrase p) => Eq (Implicit info p)
+
+instance EqPhrase p => Eq (Implicit info p) where
+  l == r = _implVar l == _implVar r
+
+instance OrdPhrase p => Ord (Implicit info p) where
+  l `compare` r = _implVar l `compare` _implVar r
 
 makeLenses ''Implicit
 
@@ -78,24 +81,24 @@ data Node info p
   -- | We're done
   = One (Implicit info p)
   -- | There are multiple choices to consider
-  | Some [Implicit info p]
+  | Some (Set.Set (Implicit info p))
   -- | There are more to go
   | Many (ImplicitScope info p)
   -- | There are choices to consider, but there are also more to go
-  | ManyMore [Implicit info p] (ImplicitScope info p)
+  | ManyMore (Set.Set (Implicit info p)) (ImplicitScope info p)
 
 deriving instance (Show info, ShowPhrase p) => Show (Node info p)
-deriving instance (Ord info, OrdPhrase p) => Ord (Node info p)
-deriving instance (Eq info, EqPhrase p) => Eq (Node info p)
+deriving instance OrdPhrase p => Ord (Node info p)
+deriving instance EqPhrase p => Eq (Node info p)
 
 -- | A trie of implicit choices.
 newtype ImplicitScope info p = Trie (Map.Map (Type p) (Node info p))
 
 deriving instance (Show info, ShowPhrase p) => Show (ImplicitScope info p)
-deriving instance (Ord info, OrdPhrase p) => Ord (ImplicitScope info p)
-deriving instance (Eq info, EqPhrase p) => Eq (ImplicitScope info p)
+deriving instance OrdPhrase p => Ord (ImplicitScope info p)
+deriving instance EqPhrase p => Eq (ImplicitScope info p)
 
-instance (Eq i, OrdPhrase p) => Substitutable p (ImplicitScope i p) where
+instance OrdPhrase p => Substitutable p (ImplicitScope i p) where
   ftv = foldMap ftv . keys
   apply m (Trie trie) = Trie . rebalance $ fmap (apply m) trie where
     rebalance :: Map.Map (Type p) (Node i p) -> Map.Map (Type p) (Node i p)
@@ -118,7 +121,7 @@ instance (Eq i, OrdPhrase p) => Substitutable p (ImplicitScope i p) where
     makeTrie [] n = n
     makeTrie (x:xs) n = Many (Trie (Map.singleton x (makeTrie xs n)))
 
-instance (Eq i, OrdPhrase p) => Substitutable p (Node i p) where
+instance OrdPhrase p => Substitutable p (Node i p) where
   ftv (One i) = ftv i
   ftv (Some is) = ftv is
   ftv (Many t) = ftv t
@@ -136,7 +139,7 @@ instance OrdPhrase p => Substitutable p (Implicit i p) where
 
 -- | Insert a choice for a *fully-known* (@Solved@) implicit parameter
 -- (the variable @v@) of type @tau@ at the given trie.
-insert :: forall i p. (Eq i, OrdPhrase p) => Ann Resolved -> Sort -> Var p -> Type p -> i -> ImplicitScope i p -> ImplicitScope i p
+insert :: forall i p. OrdPhrase p => Ann Resolved -> Sort -> Var p -> Type p -> i -> ImplicitScope i p -> ImplicitScope i p
 insert annot sort v ty info = go ts implicit where
   (head, obligations) = getHead ty
 
@@ -145,35 +148,35 @@ insert annot sort v ty info = go ts implicit where
 
   go [] _ _ = error "empty spine (*very* malformed type?)"
   go [x] i (Trie m) = Trie (Map.alter (`join` i) x m)
-      where join (Just (One x)) i = Just (Some [i, x])
-            join (Just (Some xs)) i = Just (Some (i:xs))
+      where join (Just (One x)) i = Just (Some (Set.fromList [i, x]))
+            join (Just (Some xs)) i = Just (Some (Set.insert i xs))
             join Nothing i = Just (One i)
             join _ _ = Nothing
 
   go (x:xs) i (Trie l) = Trie (Map.alter (insert' xs i) x l) where
     insert' :: [Type p] -> Implicit i p -> Maybe (Node i p) -> Maybe (Node i p)
     insert' xs i (Just (Many t)) = Just (Many (go xs i t))
-    insert' xs i (Just (One t)) = Just (ManyMore [t] (go xs i mempty))
+    insert' xs i (Just (One t)) = Just (ManyMore (Set.singleton t) (go xs i mempty))
     insert' xs i (Just (Some ts)) = Just (ManyMore ts (go xs i mempty))
     insert' xs i (Just (ManyMore ts t)) = Just (ManyMore ts (go xs i t))
     insert' xs i Nothing = Just (Many (go xs i (Trie Map.empty)))
 
 -- | Find a type in a trie by conservative fuzzy search.
-lookup :: forall i p. (Eq i, p ~ Typed) => Type p -> ImplicitScope i p -> [Implicit i p]
-lookup ty = go ts  where
+lookup :: forall i p. p ~ Typed => Type p -> ImplicitScope i p -> [Implicit i p]
+lookup ty = Set.toList . go ts where
   ts = appsView ty
-  go :: [Type p] -> ImplicitScope i p -> [Implicit i p]
+  go :: [Type p] -> ImplicitScope i p -> Set.Set (Implicit i p)
   go [x] (Trie m) = case find x m of
-    Just (One x) -> [x]
+    Just (One x) -> Set.singleton x
     Just (Some xs) -> xs
     Just (ManyMore xs _) -> xs
-    _ -> []
+    _ -> mempty
   go (x:xs) (Trie m) = case find x m of
     Just (Many m) -> go xs m
-    Just (ManyMore ss m) -> ss ++ go xs m
-    Just (One x) -> [x]
+    Just (ManyMore ss m) -> ss <> go xs m
+    Just (One x) -> Set.singleton x
     Just (Some xs) -> xs
-    _ -> []
+    _ -> mempty
   go [] Trie{} = error "badly-kinded type (empty spine?)"
 
   find :: Type p -> Map.Map (Type p) (Node i p) -> Maybe (Node i p)
@@ -182,46 +185,46 @@ lookup ty = go ts  where
     fixup [x] = Just x
     fixup (x:xs) = Just (sconcat (x :| xs))
 
-instance (Eq i, OrdPhrase p) => Monoid (ImplicitScope i p) where
+instance OrdPhrase p => Monoid (ImplicitScope i p) where
   mempty = Trie mempty
 
-instance (Eq i, OrdPhrase p) => Semigroup (ImplicitScope i p) where
+instance OrdPhrase p => Semigroup (ImplicitScope i p) where
   Trie m <> Trie m' = Trie (merge m m')
 
-instance (Eq i, OrdPhrase p) => Semigroup (Node i p) where
+instance OrdPhrase p => Semigroup (Node i p) where
   One x <> One y
     | x == y = One x
-    | otherwise = Some [x, y]
-  One x <> Some xs = Some (x:xs)
-  One x <> ManyMore xs t = ManyMore (x:xs) t
-  One x <> Many t = ManyMore [x] t
+    | otherwise = Some (Set.fromList [x, y])
+  One x <> Some xs = Some (Set.insert x xs)
+  One x <> ManyMore xs t = ManyMore (Set.insert x xs) t
+  One x <> Many t = ManyMore (Set.singleton x) t
 
-  Some x <> One y = Some (x `snoc` y)
-  Some x <> Some y = Some (x ++ y)
-  Some x <> ManyMore xs t = ManyMore (x ++ xs) t
+  Some x <> One y = Some (Set.insert y x)
+  Some x <> Some y = Some (x <> y)
+  Some x <> ManyMore xs t = ManyMore (x <> xs) t
   Some x <> Many t = ManyMore x t
 
   Many x <> Many y = Many (x <> y)
-  Many t <> One x = ManyMore [x] t
+  Many t <> One x = ManyMore (Set.singleton x) t
   Many t <> Some xs = ManyMore xs t
   Many t <> ManyMore xs t' = ManyMore xs (t <> t')
 
-  ManyMore xs ts <> One x = ManyMore (xs `snoc` x) ts
-  ManyMore xs ts <> Some ys = ManyMore (xs ++ ys) ts
-  ManyMore xs ts <> ManyMore ys ts' = ManyMore (xs ++ ys) (ts <> ts')
+  ManyMore xs ts <> One x = ManyMore (Set.insert x xs) ts
+  ManyMore xs ts <> Some ys = ManyMore (xs <> ys) ts
+  ManyMore xs ts <> ManyMore ys ts' = ManyMore (xs <> ys) (ts <> ts')
   ManyMore xs ts <> Many ts' = ManyMore xs (ts <> ts')
 
 -- | Compute the set of keys in a scope. Note that this operation takes
 -- time proportional to the number of elements in the trie!
-keys :: OrdPhrase p => ImplicitScope i p -> Map.Map (Type p) [Implicit i p]
+keys :: forall i p. OrdPhrase p => ImplicitScope i p -> Map.Map (Type p) (Implicit i p)
 keys = go where
   go (Trie m) = foldMap goNode m
 
-  goNode (One x) = Map.singleton (x ^. implHead) [x]
-  goNode (Some xs) = foldMapOf each (\i -> Map.singleton (i ^. implHead) [i]) xs
+  goNode :: Node i p -> Map.Map (Type p) (Implicit i p)
+  goNode (One x) = Map.singleton (x ^. implHead) x
+  goNode (Some xs) = foldMap (\i -> Map.singleton (i ^. implHead) i) xs
   goNode (Many t) = go t
-  goNode (ManyMore xs t) = foldMapOf each (\i -> Map.singleton (i ^. implHead) [i]) xs <> go t
-
+  goNode (ManyMore xs t) = foldMap (\i -> Map.singleton (i ^. implHead) i) xs <> go t
 
 -- | Find the 'Many' node located at the end of the provided spine
 -- section in the scope.
@@ -234,9 +237,8 @@ subTrie = go where
   goNode _ _ = Nothing
 
 -- | Make a trie consisting of the only the one given implicit.
-singleton :: (Eq i, OrdPhrase p) => Ann Resolved -> Sort -> Var p -> Type p -> i -> ImplicitScope i p
+singleton :: OrdPhrase p => Ann Resolved -> Sort -> Var p -> Type p -> i -> ImplicitScope i p
 singleton a s v t i = insert a s v t i mempty
-
 
 getHead, splitImplVarType :: Type p -> (Type p, Seq.Seq (Obligation p))
 getHead t@TyVar{} = (t, Seq.empty)
@@ -267,7 +269,7 @@ getHead t@TyTupleL{} = (t, Seq.empty)
 -- obligations.
 splitImplVarType = getHead
 
-merge :: (Eq i, OrdPhrase p) => Map.Map (Type p) (Node i p) -> Map.Map (Type p) (Node i p) -> Map.Map (Type p) (Node i p)
+merge :: OrdPhrase p => Map.Map (Type p) (Node i p) -> Map.Map (Type p) (Node i p) -> Map.Map (Type p) (Node i p)
 merge = Map.merge Map.preserveMissing Map.preserveMissing (Map.zipWithMatched (const (<>)))
 
 -- | Does there exist a substitution that can make a the same as b?

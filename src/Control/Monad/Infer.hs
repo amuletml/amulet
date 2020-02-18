@@ -181,7 +181,7 @@ data WhyUnsat
 
 deriving instance Show WhyUnsat
 
-instance (ShowPhrase p, OrdPhrase p, Substitutable p (Type p))
+instance (OrdPhrase p, Substitutable p (Type p))
           => Substitutable p (Constraint p) where
 
   ftv (ConUnify _ s _ a b) = foldMap ftv (keys s) <> ftv a <> ftv b

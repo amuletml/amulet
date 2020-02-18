@@ -109,6 +109,10 @@ instance (Ord (Var p), Substitutable p a) => Substitutable p [a] where
   ftv = foldMap ftv
   apply s = map (apply s)
 
+instance (Ord a, Ord (Var p), Substitutable p a) => Substitutable p (Set.Set a) where
+  ftv = foldMap ftv
+  apply s = Set.map (apply s)
+
 instance (Ord (Var p), Substitutable p a) => Substitutable p (Seq.Seq a) where
   ftv = foldMap ftv
   apply s = fmap (apply s)
