@@ -475,7 +475,7 @@ instance Pretty TypeError where
 
   pretty (WrongClass name c) =
     vsep [ "Method" <+> pretty v <+> "is not a member of the class" <+> stypeCon (pretty c) ]
-      where gname (MethodImpl (Binding v _ _ _)) = v
+      where gname (MethodImpl (Binding v _ _ _ _)) = v
             gname (TypeImpl v _ _ _) = v
             gname _ = undefined
             v = gname name

@@ -36,7 +36,7 @@ getOutline = concatMap getTop where
   getTop DeriveInstance{} = []
 
   getBinding :: Binding Parsed -> [DocumentSymbol]
-  getBinding b@(Binding v _ _ _) = [ mk v SkFunction b Nothing Nothing ]
+  getBinding (Binding v vp _ _ _) = [ mk v SkFunction vp Nothing Nothing ]
   getBinding b@(Matching p _ _) = getPattern (spanOf b) [] p
   getBinding TypedMatching{} = []
 

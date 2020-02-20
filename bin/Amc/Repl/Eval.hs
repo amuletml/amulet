@@ -275,7 +275,9 @@ parseCore parser name input = do
     Just parsed -> do
       let parsed' = case parsed of
             Left s -> s
-            Right e -> [S.LetStmt S.NonRecursive S.Public [S.Binding (S.Name "_") e True (annotation e)] (spanOf e)]
+            Right e ->
+              let pos = spanOf e
+              in [S.LetStmt S.NonRecursive S.Public [S.Binding (S.Name "_") pos e True (annotation e)] pos]
 
       (lower, es) <- wrapDriver $ do
         D.tick

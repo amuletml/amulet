@@ -111,9 +111,9 @@ verifyBindingGroup :: MonadVerify m
                    => (BindingSite -> m ())
                    -> SomeReason -> [Binding Typed] -> m ()
 verifyBindingGroup k _ = traverse_ verifyScc . depOrder where
-  verifyScc (AcyclicSCC (Binding v e c (s, t))) =
+  verifyScc (AcyclicSCC (Binding v vp e c (_, t))) =
     when c $ do
-      k (BindingSite v s t)
+      k (BindingSite v vp t)
       verifyExpr e
 
   verifyScc (AcyclicSCC (TypedMatching p e _ _)) = do
@@ -124,10 +124,10 @@ verifyBindingGroup k _ = traverse_ verifyScc . depOrder where
 
   verifyScc (CyclicSCC vs) = do
     let vars = foldMapOf (each . bindVariable) Set.singleton vs
-    for_ vs $ \(Binding var _ c (s, ty)) ->
-      when c $ k (BindingSite var s ty)
+    for_ vs $ \(Binding var vp _ c (_, ty)) ->
+      when c $ k (BindingSite var vp ty)
 
-    for_ vs $ \b@(Binding var ex c (_, _)) -> when c $ do
+    for_ vs $ \b@(Binding var _ ex c _) -> when c $ do
       let naked = unguardedVars ex
           blame = BecauseOf b
       verifyExpr ex
@@ -265,7 +265,7 @@ isWrappedThunk _ = False
 -- | Determine if the right-hand-side of a binding is non-trivial.
 nonTrivialRhs :: Binding Typed -> Bool
 nonTrivialRhs (TypedMatching _ e _ _) = nonTrivial e
-nonTrivialRhs (Binding _ e _ _) = nonTrivial e
+nonTrivialRhs (Binding _ _ e _ _) = nonTrivial e
 nonTrivialRhs _ = error "nonTrivialRHS pre-TC Bindings"
 
 -- | Determining if an expression is non-trivial. Namely, evaluating it

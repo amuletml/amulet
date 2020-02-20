@@ -51,7 +51,7 @@ approxType' _ = guess
 approximate :: MonadInfer Typed m
             => Binding Desugared
             -> m (Origin, (Var Typed, Type Typed))
-approximate (Binding v e _ _) = do
+approximate (Binding v _ e _ _) = do
   (ty, st) <- runStateT (approxType e) Supplied
   ty' <- generalise nominalTvs (becauseExp e) ty
   pure (st, (v, if not (wasGuessed st) then ty' else ty))

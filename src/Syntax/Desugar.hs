@@ -99,8 +99,8 @@ expr (LeftSection op vl an) = do
     VarRef{} -> pure $ go vl'
     Literal{} -> pure $ go vl'
     _ -> do
-      ~(Capture lv _, ref) <- fresh "x" an
-      pure $ Let NonRecursive [Binding lv vl' False an] (go ref) an
+      ~(Capture lv vp, ref) <- fresh "x" an
+      pure $ Let NonRecursive [Binding lv vp vl' False an] (go ref) an
 
 expr (RightSection vl op an) = expr (App op vl an)
 expr (BothSection o _) = expr o
@@ -115,7 +115,7 @@ expr (Tuple es a) = Tuple <$> traverse expr es <*> pure a
 expr (TupleSection es a) = do
   es' <- traverse (traverse expr) es
   (args, binds, tuple) <- foldrM (buildTuple a) ([], [], []) es'
-  pure $ foldf (\(v, e) r -> Let NonRecursive [Binding v e False a] r a) binds
+  pure $ foldf (\(v, e) r -> Let NonRecursive [Binding v a e False a] r a) binds
        $ foldf (\v e -> Fun (PatParam v) e a) args
        $ Tuple tuple a
 
@@ -155,10 +155,10 @@ buildTuple a (Just e) (as, vs, tuple) = do
   pure (as, (v, e):vs, ref:tuple)
 
 binding :: forall m. MonadNamey m => Binding Resolved -> m (Binding Desugared)
-binding (Binding v e c a) = Binding v <$> expr e <*> pure c <*> pure a
+binding (Binding v vp e c a) = Binding v vp <$> expr e <*> pure c <*> pure a
 
-binding (Matching (Capture v _) e a) =
-  Binding v <$> expr e <*> pure True <*> pure a
+binding (Matching (Capture v vp) e a) =
+  Binding v vp <$> expr e <*> pure True <*> pure a
 binding (Matching (PType p t _) e a) = binding (Matching p (Ascription e t (annotation e)) a)
 binding (Matching p e a) = Matching (pat p) <$> expr e <*> pure a
 binding TypedMatching{} = error "TypedMatching{} desugar binding"
@@ -239,7 +239,7 @@ transListComp (ex, CompGen v l1 an:qs, an') l2 = do
   success <- transListComp (ex, qs, an) (App (VarRef h an) us' an)
   pure $
     Let NonRecursive
-        [ Binding h
+        [ Binding h an
             (Fun (PatParam cus)
               (Match us
                 [ Arm { armPat = consPat cx cus' an

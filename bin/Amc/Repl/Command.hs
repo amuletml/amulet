@@ -140,7 +140,7 @@ infoCommand (T.pack . dropWhile isSpace -> input) = do
     Just var -> do
       let prog :: [S.Toplevel S.Parsed]
           prog = [ S.LetStmt S.NonRecursive S.Public
-                   [ S.Binding (S.Name "_")
+                   [ S.Binding (S.Name "_") (spanOf var)
                         (S.VarRef (getL var) (spanOf var))
                         True (spanOf var) ] (spanOf var) ]
 
@@ -150,7 +150,7 @@ infoCommand (T.pack . dropWhile isSpace -> input) = do
         $ resolveProgram lua (resolveScope state) prog
 
       case resolved of
-        Right (ResolveResult [ S.LetStmt _ _ [S.Binding _ (S.VarRef name _) _ _] _ ] _ _) ->
+        Right (ResolveResult [ S.LetStmt _ _ [S.Binding _ _ (S.VarRef name _) _ _] _ ] _ _) ->
           liftIO . hPutDoc handle . displayType $
             (inferScope state ^. T.names . at name . non undefined)
         _ -> liftIO . hPutDoc handle $ "Name not in scope:" <+> pretty (getL var)

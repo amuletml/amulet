@@ -499,15 +499,15 @@ Binding :: { Binding Parsed }
           { withPos2 $1 $4 $ Matching $1 $ withPos2 $3 $4 $ Ascription $4 (getL $3) }
 
         | BindName ListE1(Parameter) PostBinding
-          { withPos2 $1 $3 $ Binding (getL $1) (foldr (\x y -> withPos2 x $3 (Fun x y)) $3 $2) True }
+          { withPos2 $1 $3 $ Binding (getL $1) (spanOf $1) (foldr (\x y -> withPos2 x $3 (Fun x y)) $3 $2) True }
 
         | BindName ListE1(Parameter) ':' Type PostBinding
-          { withPos2 $1 $5 $ Binding (getL $1)
+          { withPos2 $1 $5 $ Binding (getL $1) (spanOf $1)
              (foldr (\x y -> withPos2 x $5 (Fun x y)) (Ascription $5 (getL $4) (withPos2 $1 $5 id)) $2)
              True }
 
         | BPattern BindOp BPattern PostBinding
-          { withPos2 $1 $4 $ Binding (getL $2)
+          { withPos2 $1 $4 $ Binding (getL $2) (spanOf $2)
               (withPos2 $1 $4 (Fun (PatParam $1) (withPos2 $3 $4 (Fun (PatParam $3) $4))))
               True }
 

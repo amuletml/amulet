@@ -19,7 +19,7 @@ depOrder :: Ord (Var p)
 depOrder binds = extra ++ stronglyConnComp nodes where
   (extra, nodes, mapping) = foldr buildNode (mempty, mempty, mempty) binds
 
-  buildNode it@(Binding var ex _ _) (e, n, m) =
+  buildNode it@(Binding var _ ex _ _) (e, n, m) =
     ( e, (it, var, freeInMapped ex):n, Map.insert var var m )
   buildNode it@(Matching p ex _) (e, n, m) =
     case bound p of

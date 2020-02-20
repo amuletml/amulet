@@ -115,7 +115,7 @@ transformExpr fe = goE where
   transE (ListFromThenTo v x y z a) =
     ListFromThenTo v (goE x) (goE y) (goE z) a
 
-  goB (Binding v e c a) = Binding v (goE e) c a
+  goB (Binding v vp e c a) = Binding v vp (goE e) c a
   goB (TypedMatching v e a b) = TypedMatching v (goE e) a b
   goB (Matching p e a) = Matching p (goE e) a
 
@@ -175,7 +175,7 @@ transformExprTyped fe fc ft = goE where
   transE (ListFromThenTo v x y z a) =
     ListFromThenTo v (goE x) (goE y) (goE z) (goA a)
 
-  transBind (Binding v e b a) = Binding v (goE e) b (goA a)
+  transBind (Binding v vp e b a) = Binding v vp (goE e) b (goA a)
   transBind (Matching p e a) = Matching (goP p) (goE e) (goA a)
   transBind (TypedMatching p e a c) = TypedMatching (goP p) (goE e) (goA a) (map (second goT) c)
 

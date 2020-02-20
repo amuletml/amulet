@@ -383,11 +383,11 @@ lowerLet bs =
       lowerScc (CyclicSCC vs) = pure . Many <$> do
         -- Cyclic bindings will only ever be normal. Well, I
         -- jolly hope so anyway
-        for vs $ \(S.Binding var ex _ (_, ty)) -> do
+        for vs $ \(S.Binding var _ ex _ (_, ty)) -> do
           let ty' = lowerType ty
           (mkVal var,ty',) <$> lowerPolyBind ty' ex
 
-      lowerScc (AcyclicSCC (S.Binding var ex _ (_, ty))) = pure . One <$> do
+      lowerScc (AcyclicSCC (S.Binding var _ ex _ (_, ty))) = pure . One <$> do
         let ty' = lowerType ty
         (mkVal var, ty',) <$> lowerPolyBind ty' ex
 

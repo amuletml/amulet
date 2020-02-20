@@ -39,7 +39,7 @@ getFolds = toList . foldMap getTop where
   getModule ModTargetImport{} = mempty
 
   getBinding :: Binding Parsed -> Seq FoldingRange
-  getBinding b@(Binding _ e _ _) = b `mkTo` getExpr e
+  getBinding b@(Binding _ _ e _ _) = b `mkTo` getExpr e
   getBinding b@(Matching _ e _) = b `mkTo` getExpr e
   getBinding TypedMatching{} = mempty
 

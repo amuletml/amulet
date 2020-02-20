@@ -225,7 +225,7 @@ instance (Pretty (Var p)) => Pretty (Pattern p) where
     spc = foldMap (const (char ' ')) p
 
 instance Pretty (Var p) => Pretty (Binding p) where
-  pretty (Binding n v _ _) = hsep (pretty n:map pretty args) <> sig <+> nest 2 (equals </> pretty rest') where
+  pretty (Binding n _ v _ _) = hsep (pretty n:map pretty args) <> sig <+> nest 2 (equals </> pretty rest') where
     (args, rest) = takeLambdas v
     (sig, rest') = case rest of
       Ascription e t _ -> (space <> colon <+> pretty t, e)
