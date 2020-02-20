@@ -29,11 +29,13 @@ import Text.Pretty.Note
 import Syntax.Verify.Pattern
 import Syntax.Verify.Error
 
-import Syntax.Builtin (tyLazy, forceName, tyRefName)
+import Syntax.Builtin (tyLazy, forceName, tyRefName, intrinsicType)
 import Syntax.Transform
 import Syntax.Types
 import Syntax.Let
 import Syntax
+
+import Core.Intrinsic
 
 import qualified CompileTarget as CT
 
@@ -77,11 +79,19 @@ verifyProgram = traverse_ verifyStmt where
         Private -> modify (Set.insert b)
         Public -> pure ()
 
-  verifyStmt st@(ForeignVal _ v d _ _) = do
+  verifyStmt st@(ForeignVal _ v d ty _) = do
     target <- asks target
-    case CT.parse target (SourcePos ("definition of " <> displayT (pretty v)) 1 1) (d ^. lazy) of
-      Left e -> tell (Seq.singleton (ParseErrorInForeign st e target))
-      Right _ -> pure ()
+    case T.uncons d of
+      Just ('%', i) ->
+        case intrinsicOf d of
+          Nothing -> tell (Seq.singleton (UnknownIntrinsic st i))
+          Just it ->
+            when (ty /= intrinsicType it) $
+              tell (Seq.singleton (MismatchedIntrinsic st i (intrinsicType it) ty))
+      _ ->
+        case CT.parse target (SourcePos ("definition of " <> displayT (pretty v)) 1 1) (d ^. lazy) of
+          Left e -> tell (Seq.singleton (ParseErrorInForeign st e target))
+          Right _ -> pure ()
 
   verifyStmt Class{} = pure ()
   verifyStmt Instance{} = pure ()

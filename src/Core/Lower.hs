@@ -34,6 +34,7 @@ import Core.Types (unify, unifyClosed, replaceTy)
 import Core.Lower.TypeRepr
 import Core.Lower.Pattern
 import Core.Lower.Basic
+import Core.Intrinsic
 import Core.Var
 
 import qualified Syntax as S
@@ -340,13 +341,16 @@ lowerProg' (DeriveInstance{}:prg) = lowerProg' prg
 lowerProg' (ForeignVal _ v ex tp _:prg) =
   let tyB = lowerType tp
       vB = mkVal v
+      ex' = case intrinsicOf ex of
+        Nothing -> ForeignCode ex
+        Just i -> Intrinsic i
   in case unboxedTy tyB of
-       Nothing -> (Foreign vB tyB ex:) <$$> lowerProg' prg
+       Nothing -> (Foreign vB tyB ex':) <$$> lowerProg' prg
        Just tyU -> do
          vU <- freshFrom vB
-         (ex', _) <- lowerBoxedFun (Ref vU tyU) tyU
-         ([ Foreign vU tyU ex
-          , StmtLet (One (vB, tyB, ex'))
+         (wrap, _) <- lowerBoxedFun (Ref vU tyU) tyU
+         ([ Foreign vU tyU ex'
+          , StmtLet (One (vB, tyB, wrap))
           ]++) <$$> lowerProg' prg
 
   where

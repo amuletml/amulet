@@ -365,6 +365,7 @@ library
                      , Core.Builtin
                      , Core.Optimise
                      , Core.Simplify
+                     , Core.Intrinsic
                      , Core.Occurrence
                      , Core.Optimise.SAT
                      , Core.Optimise.Reduce

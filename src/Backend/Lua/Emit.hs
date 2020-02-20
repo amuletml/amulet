@@ -28,6 +28,7 @@ import Data.List (partition)
 
 import qualified Core.Builtin as B
 import Core.Occurrence
+import Core.Intrinsic
 import Core.Arity
 import Core.Types
 import Core.Core
@@ -580,7 +581,25 @@ emitStmt :: forall a m. (Occurs a, MonadState TopEmitState m)
          => [AnnStmt VarSet.Set a] -> m (Seq LuaStmt)
 emitStmt [] = pure mempty
 
-emitStmt (Foreign n t s:xs) = do
+emitStmt (Foreign n t (Intrinsic i):xs) = do
+  n' <- pushTopScope n
+  topArity %= flip extendForeign (n, t)
+
+  -- We've got an expression which can be inlined, push a 'VarInline'!
+  let op = opOfIntrinsic i
+      inline [x, y] = (mempty, [LuaBinOp x op y])
+      inline _ = error "Expected 2 arguments"
+      body = LuaBinOp [lua| x|] op [lua| y|]
+      ex = [lua|function(x, y) return %body end|]
+
+  topVars %= VarMap.insert (toVar n)
+    ( VarInline 2 inline
+    , simpleVars [LuaName n'] )
+  topExVars %= VarMap.insert (toVar n) ([], pure $ LuaLocal [LuaName n'] [ex])
+
+  emitStmt xs
+
+emitStmt (Foreign n t (ForeignCode s):xs) = do
   n' <- pushTopScope n
   topArity %= flip extendForeign (n, t)
 
@@ -792,3 +811,27 @@ tag scp con vr = LuaBinOp (LuaRef (LuaIndex vr (LuaString "__tag"))) "==" (LuaSt
 
 one :: IsVar a => a -> VarSet.Set
 one = VarSet.singleton . toVar
+
+opOfIntrinsic :: Intrinsic -> T.Text
+opOfIntrinsic IntAdd = "+"
+opOfIntrinsic IntSub = "-"
+opOfIntrinsic IntMul = "*"
+opOfIntrinsic IntDiv = "/"
+opOfIntrinsic IntPow = "^"
+opOfIntrinsic IntEq  = "=="
+opOfIntrinsic IntLt  = "<"
+opOfIntrinsic IntLe  = "<="
+
+opOfIntrinsic FloatAdd = "+"
+opOfIntrinsic FloatSub = "-"
+opOfIntrinsic FloatMul = "*"
+opOfIntrinsic FloatDiv = "/"
+opOfIntrinsic FloatPow = "^"
+opOfIntrinsic FloatEq  = "=="
+opOfIntrinsic FloatLt  = "<"
+opOfIntrinsic FloatLe  = "<="
+
+opOfIntrinsic StrConcat = ".."
+opOfIntrinsic StrEq = "=="
+opOfIntrinsic StrLt = "<"
+opOfIntrinsic StrLe = "<="
