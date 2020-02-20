@@ -581,9 +581,9 @@ emitStmt :: forall a m. (Occurs a, MonadState TopEmitState m)
          => [AnnStmt VarSet.Set a] -> m (Seq LuaStmt)
 emitStmt [] = pure mempty
 
-emitStmt (Foreign n t (Intrinsic i):xs) = do
+emitStmt (Foreign n t f@(Intrinsic i):xs) = do
   n' <- pushTopScope n
-  topArity %= flip extendForeign (n, t)
+  topArity %= extendForeign (n, t) f
 
   -- We've got an expression which can be inlined, push a 'VarInline'!
   let op = opOfIntrinsic i
@@ -599,9 +599,9 @@ emitStmt (Foreign n t (Intrinsic i):xs) = do
 
   emitStmt xs
 
-emitStmt (Foreign n t (ForeignCode s):xs) = do
+emitStmt (Foreign n t f@(ForeignCode s):xs) = do
   n' <- pushTopScope n
-  topArity %= flip extendForeign (n, t)
+  topArity %= extendForeign (n, t) f
 
   let ex = case parseExpr (SourcePos "_" 0 0) (s ^. lazy) of
         Right x -> x

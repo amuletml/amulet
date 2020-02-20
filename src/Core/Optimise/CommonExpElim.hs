@@ -17,8 +17,8 @@ type CseScope a = HashMap (Term a) a
 csePass :: forall a. IsVar a => [Stmt a] -> [Stmt a]
 csePass = cseStmt emptyScope where
   cseStmt :: ArityScope -> [Stmt a] -> [Stmt a]
-  cseStmt scope (x@(Foreign v ty _):xs) =
-    let scope' = extendForeign scope (v, ty)
+  cseStmt scope (x@(Foreign v ty f):xs) =
+    let scope' = extendForeign (v, ty) f scope
      in x:cseStmt scope' xs
   cseStmt scope (StmtLet (One b@(v, ty, ex)):xs) =
     let s' = extendPureLets scope [b]

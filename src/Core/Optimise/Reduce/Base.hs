@@ -14,6 +14,7 @@ module Core.Optimise.Reduce.Base
 
   , DefInfo(..), VarDef(..)
   , basicDef, basicRecDef
+  , foreignDef
   , unknownDef, unknownRecDef
   , ReduceScope
   , varScope, typeScope, ctorScope, ariScope
@@ -49,16 +50,21 @@ import Core.Var
 
 -- | Information about a known definition
 data DefInfo a
-  = DefInfo
-  { defVar       :: a
-  , defTerm      :: Term a
-  }
+  = NoInfo
+  | DefInfo
+    { defVar       :: a
+    , defTerm      :: Term a
+    }
+  | ForeignInfo
+    { defVar       :: a
+    , defForeign   :: Foreign
+    }
   deriving (Show)
 
 -- | A definition within the current scope
 data VarDef a
   = VarDef
-  { varDef       :: Maybe (DefInfo a)
+  { varDef       :: DefInfo a
   , varNotAmong  :: [Pattern a]
   , varLoopBreak :: !Bool
   }
@@ -66,19 +72,23 @@ data VarDef a
 
 -- | A basic variable definition
 basicDef :: a -> Term a -> VarDef a
-basicDef v t = VarDef (Just (DefInfo v t)) [] False
+basicDef v t = VarDef (DefInfo v t) [] False
 
 -- | A basic recursive variable definition
 basicRecDef :: a -> Term a -> VarDef a
-basicRecDef v t = VarDef (Just (DefInfo v t)) [] True
+basicRecDef v t = VarDef (DefInfo v t) [] True
+
+-- | A foreign variable definition
+foreignDef :: a -> Foreign -> VarDef a
+foreignDef v f = VarDef (ForeignInfo v f) [] False
 
 -- | Unknown variable definition
 unknownDef :: VarDef a
-unknownDef = VarDef Nothing [] False
+unknownDef = VarDef NoInfo [] False
 
 -- | Unknown variable definition
 unknownRecDef :: VarDef a
-unknownRecDef = VarDef Nothing [] True
+unknownRecDef = VarDef NoInfo [] True
 
 -- | A read-only scope within the reducer monad
 data ReduceScope a
@@ -145,22 +155,22 @@ runReduce m = fmap getSum <$> evalRWST m emptyScope emptyState where
   builtinVars :: VarMap.Map (VarDef a)
   builtinVars = VarMap.fromList
     [ ( fromVar vStrVal
-      , VarDef { varDef = Just (DefInfo (fromVar vStrVal) fakeStrVal)
+      , VarDef { varDef = DefInfo (fromVar vStrVal) fakeStrVal
                , varNotAmong = []
                , varLoopBreak = False }
       )
     , ( fromVar vKSTR
-      , VarDef { varDef = Just (DefInfo (fromVar vKSTR) fakeKSTR)
+      , VarDef { varDef = DefInfo (fromVar vKSTR) fakeKSTR
                , varNotAmong = []
                , varLoopBreak = False }
       )
     , ( fromVar vIntVal
-      , VarDef { varDef = Just (DefInfo (fromVar vIntVal) fakeIntVal)
+      , VarDef { varDef = DefInfo (fromVar vIntVal) fakeIntVal
                , varNotAmong = []
                , varLoopBreak = False }
       )
     , ( fromVar vKINT
-      , VarDef { varDef = Just (DefInfo (fromVar vKINT) fakeKINT)
+      , VarDef { varDef = DefInfo (fromVar vKINT) fakeKINT
                , varNotAmong = []
                , varLoopBreak = False }
       )
@@ -197,7 +207,7 @@ lookupVar v = fromMaybe unknownDef . VarMap.lookup (toVar v) . view varScope
 lookupTerm :: IsVar v => v -> ReduceScope a -> Maybe (Term a)
 lookupTerm v s =
   case VarMap.lookup (toVar v) (s ^. varScope) of
-    Just VarDef { varDef = Just DefInfo { defTerm = t } } -> Just t
+    Just VarDef { varDef = DefInfo { defTerm = t } } -> Just t
     _ -> Nothing
 
 -- | Find the raw version of the provided variable, that is the variable
