@@ -77,7 +77,9 @@ float :: Double -> Maybe (Term a)
 float = atom . Lit . Float
 
 bool :: Bool -> Maybe (Term a)
-bool x = atom (Lit (if x then LitTrue else LitFalse))
+bool x = 
+  let val = if x then LitTrue else LitFalse
+  in val `seq` atom (Lit val)
 
 atom :: Atom -> Maybe (Term a)
 atom = Just . Atom
