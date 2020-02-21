@@ -1,0 +1,15 @@
+Intrinsics are a special kind of foreign declaration which are
+understood by the compiler, meaning they can be optimised or used
+to generate efficient code.
+
+Intrinsics are declared with a foreign declaration, whose body starts
+with '%'. For instance:
+
+    external val ( + ) : int -> int -> int = "%int.add"
+
+However, when declaring an intrinsic, the types must match up exactly
+with what compiler expects. For instance, the integer add operation
+shouldn't accept two floats instead!
+
+In order to fix this, it should just be a matter of replacing the
+declaration's type with the correct one.

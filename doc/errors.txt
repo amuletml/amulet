@@ -63,3 +63,5 @@ verify/3006.txt Verify: MissingPattern
 verify/3007.txt Verify: MatchToLet
 verify/3008.txt Verify: MatchToFun
 verify/3009.txt Verify: ToplevelRefBinding
+verify/3010.txt Verify: UnknownIntrinsic
+verify/3011.txt Verify: MismatchedIntrinsic

@@ -303,7 +303,7 @@ gatherInlining (AnnApp _ (Ref f _) x) = do
     _ -> do
       s <- asks (lookupVar (toVar f))
       pure $ case s of
-        VarDef { varDef = Just DefInfo { defTerm = Lam (TermArgument v _) bod }
+        VarDef { varDef = DefInfo { defTerm = Lam (TermArgument v _) bod }
                , varLoopBreak = False }
           -> Just ( Right ([(v, x)], mempty, bod)
                   , mempty )
@@ -324,7 +324,7 @@ gatherInlining (AnnTyApp _ (Ref f _) x) = do
     _ -> do
       s <- asks (lookupVar (toVar f))
       pure $ case s of
-        VarDef { varDef = Just DefInfo { defTerm = Lam (TypeArgument v _) bod }
+        VarDef { varDef = DefInfo { defTerm = Lam (TypeArgument v _) bod }
                , varLoopBreak = False }
           -> Just (Right (mempty, [(v, x)], bod), mempty)
         _ -> Nothing

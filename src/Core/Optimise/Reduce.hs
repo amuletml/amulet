@@ -25,6 +25,7 @@ import Data.List
 
 import Core.Optimise.Reduce.Pattern
 import Core.Optimise.Reduce.Inline
+import Core.Optimise.Reduce.Fold
 import Core.Optimise.Reduce.Base
 import Core.Optimise
 import Core.Builtin
@@ -67,7 +68,9 @@ mapVar f (v, ty, e) = (underlying v, ty, ) <$> f e
 reduceStmts :: MonadReduce a m => [AnnStmt VarSet.Set (OccursVar a)] -> m [Stmt a]
 reduceStmts [] = pure []
 reduceStmts (Foreign v ty def:ss) = do
-  ss' <- local (ariScope %~ flip extendForeign (v, ty)) (reduceStmts ss)
+  ss' <- local ( (ariScope %~ extendForeign (v, ty) def)
+               . (varScope %~ VarMap.insert (toVar v) (foreignDef (underlying v) def)) )
+           (reduceStmts ss)
   pure (Foreign (underlying v) ty def:ss')
 reduceStmts (StmtLet (One var):ss) = do
   var' <- mapVar reduceTerm' var
@@ -272,8 +275,23 @@ reduceTermK u d@(AnnApp _ f x) cont
           varSubst %= VarMap.delete (toVar lamV) . VarMap.delete (toVar lazyV) . VarMap.delete (toVar xV)
           reduceTermK u (AnnLet lf (One (la, lat, AnnAtom mempty (Lit Unit))) lbod) cont
 
-        | otherwise -> do x' <- reduceAtom' x
-                          cont (App f' x')
+        | otherwise -> do
+            x' <- reduceAtom' x
+            s <- ask
+
+            if
+              | Ref fv _ <- f'
+              , Ref xv _ <- x'
+              , VarDef { varDef = ForeignInfo { defForeign = Intrinsic i } }
+                <- lookupVar fv s
+              , Just (Values xs) <- lookupTerm xv s
+              , Just a' <- foldApply i xs
+              -> changing $ cont a'
+
+              | otherwise -> cont (App f' x')
+
+
+
 
 reduceTermK _ d@(AnnTyApp _ f t) cont
   = inlineOr d UsedOther cont basic

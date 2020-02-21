@@ -12,6 +12,7 @@ TC or resolver specific names), one may use 'TgInternal'.
 module Syntax.Builtin
   ( builtinResolve
   , builtinEnv
+  , intrinsicType
 
   , tyUnitName, tyBoolName, tyIntName, tyStringName, tyFloatName
   , tyLazyName, tyConstraintName, tyArrowName, tyTupleName
@@ -59,6 +60,7 @@ import Syntax.Var
 import Syntax.Type hiding (record)
 
 import qualified Core.Builtin as C
+import Core.Intrinsic
 import Core.Var
 
 import {-# SOURCE #-} Types.Derive.Typeable
@@ -195,22 +197,22 @@ tcTypeable_app, tcTypeable_kk :: Var Typed
 tcTypeable_app = ofCore C.tcTypeableApp
 tcTypeable_kk = ofCore C.tcTypeableKnownKnown
 
-data BuiltinModule = BM
+data BuiltinPowule = BM
   { vars         :: [(Var Resolved, Type Typed)]
   , types        :: [(Var Resolved, Type Typed)]
-  , modules      :: [(Var Resolved, BuiltinModule)]
+  , modules      :: [(Var Resolved, BuiltinPowule)]
   , constructors :: Map.Map (Var Resolved) (Set.Set (Var Typed))
   , classes      :: [(Var Resolved, T.ClassInfo)]
   , families     :: [(Var Resolved, T.TySymInfo)]
   }
 
-instance Semigroup BuiltinModule where
+instance Semigroup BuiltinPowule where
   (BM v t m c ci fi) <> (BM v' t' m' c' ci' fi') = BM (v <> v') (t <> t') (m <> m') (c <> c') (ci <> ci') (fi <> fi')
 
-instance Monoid BuiltinModule where
+instance Monoid BuiltinPowule where
   mempty = BM { vars = mempty, types = mempty, modules = mempty, constructors = mempty, classes = mempty, families = mempty }
 
-builtins :: BuiltinModule
+builtins :: BuiltinPowule
 builtins =
   mempty
   { vars = [ (opAppName, a *. b *. (var a ~> var b) ~> var a ~> var b)
@@ -345,7 +347,7 @@ typeable_CI =
 -- | The builtin scope and module list for the resolver
 builtinResolve :: R.Signature
 builtinResolve = go builtins where
-  go :: BuiltinModule -> R.Signature
+  go :: BuiltinPowule -> R.Signature
   go (BM vs ts ms _ _ _) =
     R.Signature
     { R._vals = buildVars vs
@@ -368,6 +370,30 @@ builtinEnv = go builtins where
       & T.classDecs %~ mappend (Map.fromList ci)
       & T.tySyms %~ mappend (Map.fromList fi)
       & T.classes %~ const builtinInstances
+
+-- | Get the type of an intrinsic
+intrinsicType :: Intrinsic -> Type Typed
+intrinsicType IntAdd = tyInt ~> tyInt ~> tyInt
+intrinsicType IntSub = tyInt ~> tyInt ~> tyInt
+intrinsicType IntMul = tyInt ~> tyInt ~> tyInt
+intrinsicType IntDiv = tyInt ~> tyInt ~> tyFloat
+intrinsicType IntPow = tyInt ~> tyInt ~> tyInt
+intrinsicType IntEq  = tyInt ~> tyInt ~> tyBool
+intrinsicType IntLt  = tyInt ~> tyInt ~> tyBool
+intrinsicType IntLe  = tyInt ~> tyInt ~> tyBool
+intrinsicType FloatAdd = tyFloat ~> tyFloat ~> tyFloat
+intrinsicType FloatSub = tyFloat ~> tyFloat ~> tyFloat
+intrinsicType FloatMul = tyFloat ~> tyFloat ~> tyFloat
+intrinsicType FloatDiv = tyFloat ~> tyFloat ~> tyFloat
+intrinsicType FloatPow = tyFloat ~> tyFloat ~> tyFloat
+intrinsicType FloatEq  = tyFloat ~> tyFloat ~> tyBool
+intrinsicType FloatLt  = tyFloat ~> tyFloat ~> tyBool
+intrinsicType FloatLe  = tyFloat ~> tyFloat ~> tyBool
+
+intrinsicType StrConcat = tyString ~> tyString ~> tyString
+intrinsicType StrEq     = tyString ~> tyString ~> tyBool
+intrinsicType StrLt     = tyString ~> tyString ~> tyBool
+intrinsicType StrLe     = tyString ~> tyString ~> tyBool
 
 -- | Construct a syntax variable from a core one
 ofCore :: CoVar -> Var Resolved
