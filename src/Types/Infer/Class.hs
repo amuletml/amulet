@@ -558,7 +558,7 @@ inferInstance inst@(Instance clss ctx instHead bindings we'reDeriving ann) = con
 
   (contextFields, cs) <- listen . for (Map.toList classContext) $ \(name, ty) -> do
     var <- genName
-    tell (pure (ConImplicit (BecauseOf inst) (scope <> localAssums) var ty))
+    tell (pure (ConImplicit (BecauseOf inst) (scope <> localAssums') var ty))
     pure (Field name
            (ExprWrapper (WrapVar var)
              (Fun (EvParam (PType (Capture var (ann, ty)) ty (ann, ty)))
@@ -571,12 +571,17 @@ inferInstance inst@(Instance clss ctx instHead bindings we'reDeriving ann) = con
       whatDo = Map.toList (methodNames <> classContext)
       fields = methodFields ++ usedDefaults ++ contextFields
 
+  let unconstrain_local_tf (Left c) = Left c
+      unconstrain_local_tf (Right c)
+        | (c ^. tsName) `Set.member` made = Right (c & tsConstraint .~ Nothing)
+        | otherwise = Right c
+
   (solution, needed, unsolved) <-
     local (tySyms %~ extendTySyms tysyms) $
-      solveFixpoint (BecauseOf inst) cs =<< getSolveInfo
+      solveFixpoint (BecauseOf inst) cs . fmap unconstrain_local_tf =<< getSolveInfo
 
   unless (null unsolved) $
-    dictates . addBlame (BecauseOf inst) =<< unsatClassCon inst (head unsolved) (InstanceClassCon classAnn)
+    dictates . addBlame (BecauseOf inst) =<< unsatClassCon inst (Seq.index cs 0) (InstanceClassCon classAnn)
 
   let inside = case whatDo of
         [(_, _)] -> solveEx mempty solution needed (fields ^. to head . fExpr)

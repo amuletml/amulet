@@ -56,9 +56,7 @@ let map_monotonic f (S tree) =
     | T.T (x, sz, l, r) -> T.T (f x, sz, go l, go r)
   S (go tree)
 
-instance foldable t begin
-  let foldr f z (S tree) = T.inorder_fold f z tree
-end
+let foldr f z (S tree) = T.inorder_fold f z tree
 
 (** Return the least set that has all the the elements of both argument
  * sets. *)
