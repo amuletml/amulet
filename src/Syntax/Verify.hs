@@ -248,7 +248,7 @@ unguardedVars (LeftSection a b _)  = unguardedVars a <> unguardedVars b
 unguardedVars (RightSection a b _) = unguardedVars a <> unguardedVars b
 unguardedVars (BothSection b _)    = unguardedVars b
 unguardedVars AccessSection{}      = mempty
-unguardedVars x                    = mempty
+unguardedVars _                    = mempty
 
 -- | Get all binding sites within a pattern
 bindingSites :: Pattern Typed -> Set.Set BindingSite

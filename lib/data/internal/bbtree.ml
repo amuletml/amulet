@@ -60,10 +60,6 @@ let private double_l = function
   | a, x, T (c, _, T (b, _, y1, y2), z) -> bin b (bin a x y1) (bin c y2 z)
   | _ -> error "invalid left double-rotation"
 
-let private rotate_l = function
-  | (_, _, T (_, _, ly, ry)) as p when size ly < ratio * size ry -> single_l p
-  | p -> double_l p
-
 let private single_r = function
   | b, T (a, _, x, y), z -> bin a x (bin b y z)
   | _, E, _ -> error "invalid right rotation"
@@ -72,22 +68,47 @@ let private double_r = function
   | c, T (a, _, x, T (b, _, y1, y2)), z -> bin b (bin a x y1) (bin c y2 z)
   | _, _, _ -> error "invalid right double-rotation"
 
-let private rotate_r = function
-  | (_, T (_, _, ly, ry), _) as p when size ly < ratio * size ry ->
-      single_r p
-  | p -> double_r p
-
-let balance x l r =
-  let sl = size l
-  let sr = size r
-  let sx = sl + sr + 1
-  if sl + sr < 2 then
-    T (x, sx, l, r)
-  else if sr > delta * sl then
-    rotate_l (x, l, r)
-  else if sl > delta * sr then
-    rotate_r (x, l, r)
-  else T (x, sx, l, r)
+let balance (x : 'a) (l : sz_tree 'a) (r : sz_tree 'a) : sz_tree 'a =
+  match l with
+  | E -> match r with
+    | E -> T (x, 1, E, E)
+    | T (_,  _, E, E) -> T (x, 2, E, r)
+    | T (rx, _, E, T _ as rr) -> T (rx, 3, T (x, 1, E, E), rr)
+    | T (rx, _, T (rlx, _), E) -> T (rlx, 3, T (x, 1, E, E), T (rx, 1, E, E))
+    | T (rx, rs, T (rlx, rls, rll, rlr) as rl, T (_, rrs, _) as rr) ->
+      if rls < ratio * rls then
+        T (rx, 1 + rs, T (x, 1 + rls, E, rl), rr)
+      else
+        T (rlx, 1 + rs, T (x, 1 + size rll, E, rll), T (rx, 1 + rrs + size rlr, rlr, rr))
+  | T (lx, ls, ll, lr) -> match r with
+    | E -> match ll, lr with
+      | E, E -> T (x, 2, l, E)
+      | E, T (lrx, _) -> T (lrx, 3, T (lx, 1, E, E), T (x, 1, E, E))
+      | T _, E -> T (lx, 3, ll, T (x, 1, E, E))
+      | T (_, lls, _), T (lrx, lrs, lrl, lrr) ->
+        if lrs < ratio * lls then
+          T (lx, 1 + ls, ll, T (x, 1 + lrs, lr, E))
+        else
+          T (lrx, 1 + ls, T (lx, 1 + lls + size lrl, ll, lrl), T (x, 1 + size lrr, lrr, E))
+    | T (rx, rs, rl, rr) ->
+      if rs > delta * ls then
+        match rl, rr with
+        | T (rlx, rls, rll, rlr), T (_, rrs, _) ->
+          if rls < ratio * rrs then
+            T (rx, 1 + ls + rs, T (x, 1 + ls + rls, l, rl), rr)
+          else
+            T (rlx, 1 + ls + rs, T (x, 1 + ls + size rll, l, rll), T (rx, 1 + rrs + size rlr, rlr, rr))
+        | _ -> error "Impossible: balance T vs T, rs > delta * ls"
+      else if ls > delta * rs then
+        match ll, lr with
+        | T (_, lls, _), T (lrx, lrs, lrl, lrr) ->
+          if lrs < ratio * lls then
+            T (lx, 1 + ls + rs, ll, T (x, 1 + rs + lrs, lr, r))
+          else
+            T (lrx, 1 + ls + rs, T (lx, 1 + lls + size lrl, ll, lrl), T (x, 1 + rs + size lrr, lrr, r))
+        | _ -> error "Impossible: balance T vs T, ls > delta * rs"
+      else
+        T (x, 1 + rs + ls, l, r)
 
 let tree v l r =
   let ln = size l
