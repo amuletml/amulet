@@ -32,7 +32,7 @@ let inorder_fold f zero =
 instance show 'a => show (sz_tree 'a) begin
   let show = function
     | E -> "E"
-    | T (a, _, l, r) -> "( " ^ show l ^ " <- " ^ show a ^ " -> " ^ show r ^ " )"
+    | T x -> "T " ^ show x
 end
 
 instance eq 'a => eq (sz_tree 'a) begin
@@ -52,21 +52,55 @@ let bin v l r = T (v, 1 + size l + size r, l, r)
 let private delta = 3
 let private ratio = 2
 
-let private single_l = function
-  | a, x, T (b, _, y, z) -> bin b (bin a x y) z
-  | _, _, E -> error "invalid left rotation"
+let balance_l (x : 'a) (l : sz_tree 'a) (r : sz_tree 'a) : sz_tree 'a =
+  match r with
+  | E -> match l with
+    | E -> T (x, 1, E, E)
+    | T (_, _, E, E) -> T (x, 2, l, E)
+    | T (lx, _, E, T (lrx, _)) -> T (lrx, 3, T (lx, 1, E, E), T (x, 1, E, E))
+    | T (lx, _, T _ as ll, E) -> T (lx, 3, ll, T (x, 1, E, E))
+    | T (lx, ls, T (_, lls, _) as ll, T (lrx, lrs, lrl, lrr) as lr) ->
+      if lrs < ratio * lls then
+        T (lx, 1 + ls, ll, T (x, 1 + lrs, lr, E))
+      else
+        T (lrx, 1 + ls, T (lx, 1 + lls + size lrl, ll, lrl),
+            T (x, 1 + size lrr, lrr, E))
+  | T (_, rs, _) -> match l with
+    | E -> T (x, 1 + rs, E, r)
+    | T (lx, ls, ll, lr) ->
+      if ls > delta * rs then
+        let (T (_, lls, _), T (lrx, lrs, lrl, lrr)) = (ll, lr)
+        if lrs < ratio * lls then
+          T (lx, 1 + ls + rs, ll, T (x, 1 + rs + lrs, lr, r))
+        else
+          T (lrx, 1 + ls + rs, T (lx, 1 + lls + size lrl, ll, lrl),
+              T (x, 1 + rs + size lrr, lrr, r))
+      else
+        T (x, 1 + ls + rs, l, r)
 
-let private double_l = function
-  | a, x, T (c, _, T (b, _, y1, y2), z) -> bin b (bin a x y1) (bin c y2 z)
-  | _ -> error "invalid left double-rotation"
-
-let private single_r = function
-  | b, T (a, _, x, y), z -> bin a x (bin b y z)
-  | _, E, _ -> error "invalid right rotation"
-
-let private double_r = function
-  | c, T (a, _, x, T (b, _, y1, y2)), z -> bin b (bin a x y1) (bin c y2 z)
-  | _, _, _ -> error "invalid right double-rotation"
+let balance_r (x : 'a) (l : sz_tree 'a) (r : sz_tree 'a) : sz_tree 'a =
+  match l with
+  | E -> match r with
+    | E -> T (x, 1, E, E)
+    | T (_, _, E, E) -> T (x, 2, E, r)
+    | T (rx, _, E, T _ as rr) -> T (rx, 3, T (x, 1, E, E), rr)
+    | T (rx, _, T (rlx, _), E) -> T (rlx, 3, T (x, 1, E, E), T (rx, 1, E, E))
+    | T (rx, rs, T (rlx, rls, rll, rlr) as rl, T (_, rrs, _) as rr) ->
+      if rls < ratio * rrs then
+        T (rx, 1 + rs, T (x, 1 + rls, E, rl), rr)
+      else
+        T (rlx, 1 + rs, T (x, 1 + size rll, E, rll), T (rx, 1 + rrs + size rlr, rlr, rr))
+  | T (_, ls, _) -> match r with
+    | E -> T (x, 1 + ls, l, E)
+    | T (rx, rs, rl, rr) ->
+      if rs > delta * ls then
+        let (T (rlx, rls, rll, rlr), T (_, rrs, _)) = (rl, rr)
+        if rls < ratio * rrs then
+          T (rx, 1 + ls + rs, T (x, 1 + ls + rls, l, rl), rr)
+        else
+          T (rlx, 1 + ls + rs, T (x, 1 + ls + size rll, l, rll), T (rx, 1 + rrs + size rlr, rlr, rr))
+      else
+        T (x, 1 + rs + ls, l, r)
 
 let balance (x : 'a) (l : sz_tree 'a) (r : sz_tree 'a) : sz_tree 'a =
   match l with
@@ -110,32 +144,13 @@ let balance (x : 'a) (l : sz_tree 'a) (r : sz_tree 'a) : sz_tree 'a =
       else
         T (x, 1 + rs + ls, l, r)
 
-let tree v l r =
-  let ln = size l
-  let rn = size r
-  if ln + rn < 2 then
-    bin v l r
-  else if rn > ratio * ln then (* right tree is too big *)
-    let T (_, _, rl, rr) = r
-    if size rl < size rr then
-      single_l (v, l, r)
-    else
-      double_l (v, l, r)
-  else if ln > ratio * rn then
-    let T (_, _, ll, lr) = l
-    if size lr < size ll then
-      single_r (v, l, r)
-    else
-      double_r (v, l, r)
-  else bin v l r
-
 let rec insert_min x = function
   | E -> singleton x
-  | T (y, _, l, r) -> balance y (insert_min x l) r
+  | T (y, _, l, r) -> balance_l y (insert_min x l) r
 
 let rec insert_max x = function
   | E -> singleton x
-  | T (y, _, l, r) -> balance y l (insert_min x r)
+  | T (y, _, l, r) -> balance_r y l (insert_max x r)
 
 let rec link x l r =
   match l, r with
@@ -143,9 +158,9 @@ let rec link x l r =
   | l, E -> insert_max x l
   | T (y, sl, ly, ry), T (z, sr, lz, rz) ->
     if delta * sl < sr then
-      balance z (link x l lz) rz
+      balance_l z (link x l lz) rz
     else if delta * sr < sl then
-      balance y ly (link x ry r)
+      balance_r y ly (link x ry r)
     else
       bin x l r
 
@@ -167,10 +182,10 @@ let rec private glue = function
   | T (lx, ls, ll, lr) as l, T (rx, rs, rl, rr) as r ->
     if ls > rs then
       let (x, l') = max_view lx (ll, lr)
-      balance x l' r
+      balance_r x l' r
     else
       let (x, r') = min_view rx (rl, rr)
-      balance x l r'
+      balance_l x l r'
 
 let rec link2 l r =
   match l, r with
@@ -205,8 +220,8 @@ let rec insert x = function
   | E -> singleton x
   | T (y, _, l, r) as it ->
     match compare x y with
-    | Lt -> tree y (insert x l) r
-    | Gt -> tree y l (insert x r)
+    | Lt -> balance_l y (insert x l) r
+    | Gt -> balance_r y l (insert x r)
     | _ -> it
 
 let rec private cat3 = function
@@ -214,9 +229,9 @@ let rec private cat3 = function
   | v, l, E -> insert v l
   | v, T (v1, n1, l1, r1) as l, T (v2, n2, l2, r2) as r ->
     if ratio * n1 < n2 then
-      tree v2 (cat3 (v, l, l2)) r2
+      balance_r v2 (cat3 (v, l, l2)) r2
     else if ratio * n2 < n1 then
-      tree v1 l1 (cat3 (v, r1, r))
+      balance_l v1 l1 (cat3 (v, r1, r))
     else
       bin v l r
 

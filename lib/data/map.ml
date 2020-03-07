@@ -30,9 +30,9 @@ instance eq 'k * eq 'v => eq (t 'k 'v) begin
 end
 
 instance show 'k * show 'v => show (t 'k 'v) begin
-  let show (M tree) =
-    let entries = T.elements tree
-    "from_list " ^ show entries
+  let show (M tree) = show tree
+    (* let entries = T.elements tree *)
+    (* "from_list " ^ show entries *)
 end
 
 (** The empty map. *)
@@ -96,7 +96,7 @@ let (.[]) map key =
   | Some x -> x
 
 (** Update, or insert, a key on the map. Returns the new map. *)
-let (.[]<-) map key new = alter (fun _ -> Some new) key map
+let (.[]<-) map key new = insert key new map
 
 instance functor (t 'k) begin
   let f <$> M tree =
