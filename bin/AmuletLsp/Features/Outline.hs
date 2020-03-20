@@ -57,6 +57,7 @@ getOutline = concatMap getTop where
   getPattern def ds (Destructure _ p _)  = foldl' (getPattern def) ds p
   getPattern def ds n@(PAs p v _)        = getPattern def (mkWith v SkVariable def n Nothing Nothing:ds) p
   getPattern def ds (PType p _ _)        = getPattern def ds p
+  getPattern def ds (POr p q _)          = getPattern def ds p ++ getPattern def ds q
   getPattern def ds (PTuple ps _)        = foldl' (getPattern def) ds ps
   getPattern def ds (PRecord ps _)       = foldl' (\x -> getPattern def x . snd) ds ps
   getPattern def ds (PList ps _)         = foldl' (getPattern def) ds ps
