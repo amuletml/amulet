@@ -1,0 +1,11 @@
+Both branches ("disjuncts") of an or-pattern must bind exactly the set
+of variables and type variables. That is, the following is legal:
+
+  X (x : 'a) | Y (x : 'a)
+
+Since both branches bind {x, 'a}, but none of the following are:
+
+  X x        | _
+  X (x : 'a) | Y _
+  X (y : 'a) | Y (y : 'b)
+  X (x : 'a) | Y (y : 'a)

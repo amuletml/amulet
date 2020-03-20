@@ -160,6 +160,7 @@ data TypeError where
 
   PolyTyFunRhs :: SomeReason -> Type Typed -> TypeError
 
+  DisjunctClassEv :: Pattern Typed -> ImplicitScope ClassInfo Typed -> TypeError
 
 data WhatOverlaps = Overinst | Overeq Bool
 
@@ -599,6 +600,9 @@ instance Pretty TypeError where
   pretty Overlap{} = string "overlap error should be formatNoted"
   pretty NotCovered{} = string "coverage condition error should be formatNoted"
 
+  pretty (DisjunctClassEv _ p) =
+    vsep ("This branch of an or-pattern binds class evidence for":map (indent 2 . bullet . displayTypeTyped . fst) (Map.toList (keys p)))
+
 instance Spanned TypeError where
   spanOf (ArisingFrom e@ArisingFrom{} _) = spanOf e
   spanOf (ArisingFrom _ x) = spanOf x
@@ -622,6 +626,7 @@ instance Spanned TypeError where
   spanOf (DIMalformedHead x) = spanOf x
   spanOf (DICan'tDerive _ x) = spanOf x
   spanOf (PolyTyFunRhs x _) = spanOf x
+  spanOf (DisjunctClassEv x _) = spanOf x
   spanOf x = error (show (pretty x))
 
 instance Note TypeError Style where
@@ -942,6 +947,7 @@ instance Note TypeError Style where
   noteId DICan'tDerive{}      = Just 2038
   noteId NotAnIdiom{}         = Just 2039
   noteId PolyTyFunRhs{}       = Just 2040
+  noteId DisjunctClassEv{}    = Just 2041
 
   noteId (Note x _) = noteId x
   noteId (Suggestion x _) = noteId x

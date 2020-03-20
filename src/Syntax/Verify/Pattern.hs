@@ -241,6 +241,8 @@ covering' env = go where
   -- Nil
   go Nil = cover ()
 
+  go ((POr p q a, v) :*: xs) = go ((p, v) :*: xs)
+
   -- ConCon for constructors: If the constructors are the same, just
   -- recurse. Otherwise, that constructor is uncovered.
   go ((Destructure k (Just p) _, v@(VDestructure k' (Just u))) :*: xs)

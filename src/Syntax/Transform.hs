@@ -218,6 +218,7 @@ transformPatternTyped fp ft = goP where
   transP (PTuple ps a) = PTuple (map goP ps) (goA a)
   transP (PList ps a) = PList (map goP ps) (goA a)
   transP (PLiteral l a) = PLiteral l (goA a)
+  transP (POr p q a) = POr (goP p) (goP q) (goA a)
   transP (PGadtCon v vs vs' p a) = PGadtCon v vs (map (_2 %~ goT) vs') (goP <$> p) (goA a)
 
   goA (s, ty) = (s, goT ty)

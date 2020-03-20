@@ -66,6 +66,7 @@ approxPattern :: MonadInfer Typed m => Expr Desugared -> Pattern Desugared -> St
 approxPattern _ Wildcard{} = guess
 approxPattern _ Capture{} = guess
 approxPattern _ Destructure{} = guess
+approxPattern r (POr p _ _) = approxPattern r p
 approxPattern r (PAs p _ _) = approxPattern r p
 approxPattern r (PType _ t _) = resolveKind (becauseExp r) t
 approxPattern r (PRecord vs _) = do

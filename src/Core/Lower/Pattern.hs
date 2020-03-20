@@ -593,6 +593,7 @@ normalisePattern (S.PRecord fs a) = S.PRecord (map (second normalisePattern) fs)
 -- Reduce these cases to something else
 normalisePattern (S.PType p _ _) = normalisePattern p
 normalisePattern S.PList{} = error "PList is handled by desugar"
+normalisePattern S.POr{} = error "lower or-pattern"
 normalisePattern (S.PTuple ps (pos, _)) = convert ps where
   convert [] = error "Empty tuple"
   convert [x] = normalisePattern x
@@ -638,6 +639,9 @@ patternVars' (S.PGadtCon _ _ vs p _) = map ((_1 %~ mkVal) . (_2 %~ lowerType)) v
 patternVars' (S.PType p _ _) = patternVars' p
 patternVars' (S.PTuple ps _) = concatMap patternVars' ps
 patternVars' S.PList{} = error "PList is handled by desugar"
+
+-- Either disjunct works, we require they bind the same variables at the same types
+patternVars' (S.POr p _ _) = patternVars' p
 
 dropNForalls :: Int -> Type -> Type
 dropNForalls 0 t = t

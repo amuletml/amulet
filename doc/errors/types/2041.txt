@@ -1,0 +1,2 @@
+This branch ("disjunct") of an or-pattern binds evidence for a type
+class (or many type classes). Currently, this is not supported.

@@ -38,6 +38,7 @@ data ResolveError
 
   | Ambiguous (Var Parsed) [Var Resolved] -- ^ This reference could refer to more than one variable
   | NonLinearPattern (Var Resolved) [Pattern Resolved] -- ^ This pattern declares one variable multiple times
+  | UnequalVarBinds (Pattern Parsed) [Var Parsed] (Pattern Parsed) [Var Parsed]
   | NonLinearRecord (Expr Parsed) T.Text -- ^ This record declares an entry multiple times
 
   | EmptyBegin -- ^ This @begin@ block has no expressions
@@ -81,6 +82,12 @@ instance Pretty ResolveError where
   pretty (Ambiguous v _) = "Ambiguous reference to variable:" <+> verbatim v
   pretty (NonLinearPattern v _) = "Non-linear pattern (multiple definitions of" <+> verbatim v <+> ")"
   pretty (NonLinearRecord _ t) = "Duplicate field" <+> stypeSkol (text t) <+> "in record" <#> empty
+  pretty (UnequalVarBinds a abs b bbs) =
+    vsep [ "Disjuncts of an or-pattern bind different variables:"
+         , indent 2 (pretty a) <+> "binds" <+> hsep (punctuate comma (map pretty abs))
+         , "while"
+         , indent 2 (pretty b) <+> "binds" <+> hsep (punctuate comma (map pretty bbs))
+         ]
 
   pretty EmptyBegin = "Empty begin expression"
   pretty IllegalMethod = "Illegal pattern in instance method declaration"
@@ -139,20 +146,21 @@ instance Note ResolveError Style where
       = f [ pos ]
         <#> indent 2 (note <+> dquotes (text name) <+> "imported from" <+> dquotes (text (fileName pos)))
 
-  noteId NotInScope{}         = Just 1001
-  noteId Ambiguous{}          = Just 1002
-  noteId NonLinearPattern{}   = Just 1003
-  noteId NonLinearRecord{}    = Just 1004
-  noteId EmptyBegin{}         = Nothing
-  noteId IllegalMethod{}      = Just 1007
-  noteId LastStmtNotExpr{}    = Just 1008
-  noteId LetOpenStruct{}      = Just 1009
-  noteId UnresolvedImport{}   = Just 1010
-  noteId ImportLoop{}         = Just 1011
-  noteId ImportError{}        = Nothing
-  noteId NoMatchingImport{}   = Just 1014
-  noteId ManyMatchingImports{}  = Just 1015
-  noteId TFClauseWrongHead{}  = Just 1012
-  noteId TFClauseWrongArity{} = Just 1013
+  noteId NotInScope{}          = Just 1001
+  noteId Ambiguous{}           = Just 1002
+  noteId NonLinearPattern{}    = Just 1003
+  noteId NonLinearRecord{}     = Just 1004
+  noteId EmptyBegin{}          = Nothing
+  noteId IllegalMethod{}       = Just 1007
+  noteId LastStmtNotExpr{}     = Just 1008
+  noteId LetOpenStruct{}       = Just 1009
+  noteId UnresolvedImport{}    = Just 1010
+  noteId ImportLoop{}          = Just 1011
+  noteId ImportError{}         = Nothing
+  noteId NoMatchingImport{}    = Just 1014
+  noteId ManyMatchingImports{} = Just 1015
+  noteId TFClauseWrongHead{}   = Just 1012
+  noteId TFClauseWrongArity{}  = Just 1013
+  noteId UnequalVarBinds{}     = Just 1016
 
-  noteId (ArisingFrom e _)    = noteId e
+  noteId (ArisingFrom e _)     = noteId e

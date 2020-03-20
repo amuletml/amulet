@@ -574,6 +574,10 @@ MPattern :: { Pattern Parsed }
          | MPattern ':' TypeOp    { withPos2 $1 $3 $ PType $1 (getL $3) }
          | MPattern as Var        { withPos2 $1 $3 $ PAs $1 (getL $3) }
 
+MOrPattern :: { Pattern Parsed }
+           : MPattern '|' MOrPattern  { withPos2 $1 $3 $ POr $1 $3 }
+           | MPattern                 { $1 }
+
 -- | An alternative to Pattern without any type pattern, suitable for usage in
 -- bindings.
 --
@@ -590,21 +594,25 @@ Pattern :: { Pattern Parsed }
         | Pattern ':' Type        { withPos2 $1 $3 $ PType $1 (getL $3) }
         | Pattern as Var          { withPos2 $1 $3 $ PAs $1 (getL $3) }
 
+OrPattern :: { Pattern Parsed }
+          : Pattern '|' OrPattern   { withPos2 $1 $3 $ POr $1 $3 }
+          | Pattern                 { $1 }
+
 ArgP :: { Pattern Parsed }
      : BindName                                   { withPos1 $1 $ Capture (getL $1) }
      | '_'                                        { withPos1 $1 $ Wildcard }
      | Con                                        { withPos1 $1 $ Destructure (getL $1) Nothing }
      | '{' ListT(PatternRow, ',') '}'             { withPos2 $1 $3 $ PRecord $2 }
-     | '(' List(Pattern, ',') ')'                 { withPos2 $1 $3 $ tuplePattern $2 }
+     | '(' List(OrPattern, ',') ')'                 { withPos2 $1 $3 $ tuplePattern $2 }
      | Lit                                        { withPos1 $1 (PLiteral (getL $1)) }
-     | '[' List(Pattern, ',') ']'                 { withPos2 $1 $3 $ PList $2 }
+     | '[' List(OrPattern, ',') ']'                 { withPos2 $1 $3 $ PList $2 }
 
 PatternRow :: { (T.Text, Pattern Parsed) }
   : ident '=' Pattern                             { (getIdent $1, $3) }
   | ident                                         { (getIdent $1, withPos1 $1 $ Capture(getName $1)) }
 
 Arm :: { Arm Parsed }
-    : '|' List1(MPattern, ',') Guard '->' ExprBlock
+    : '|' List1(MOrPattern, ',') Guard '->' ExprBlock
     { withPos2 $1 $5 $ Arm (completeTuple PTuple $2) $3 $5 }
 
 Guard :: { Maybe (Expr Parsed) }
