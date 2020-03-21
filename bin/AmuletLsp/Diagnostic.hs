@@ -4,9 +4,12 @@
   Amulet's error messages into diagnostics. -}
 module AmuletLsp.Diagnostic (diagnosticOf) where
 
+import Control.Lens hiding (List)
+
 import Data.Spanned
 import Data.Span
 
+import Language.Haskell.LSP.Types.Lens
 import Language.Haskell.LSP.Types
 
 import Control.Monad.Infer as T (TypeError(..))
@@ -41,7 +44,13 @@ instance DiagnosticLike TypeError where
   diagnosticOf err = mkDiagnostic "amulet.tc" (spanOf err) (pretty err) err
 
 instance DiagnosticLike VerifyError where
-  diagnosticOf err = mkDiagnostic "amulet.resolve" (spanOf err) (pretty err) err
+  diagnosticOf err = go err where
+    mk msg = mkDiagnostic "amulet.verify" (spanOf err) msg err
+
+    go e@DefinedUnused{} =
+      let d = mk (pretty e)
+      in d & tags ?~ List [ DtUnnecessary ]
+    go e = mk (pretty e)
 
 -- | Construct a diagnostic of some error.
 mkDiagnostic :: Note a b
@@ -55,6 +64,7 @@ mkDiagnostic source pos msg note =
   , _message = renderBasic msg
   , _relatedInformation = Nothing
   , _source = Just source
+  , _tags = Nothing
   }
 
 severityOf :: NoteKind -> DiagnosticSeverity

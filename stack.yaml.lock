@@ -5,9 +5,6 @@
 
 packages:
 - completed:
-    cabal-file:
-      size: 9886
-      sha256: fd8ba63b20d0ffc89a106b703e208c72da394e42433d046482de1ff6f8f7a908
     name: hslua
     version: 1.0.3.2
     git: https://github.com/amuletml/hslua
@@ -18,6 +15,20 @@ packages:
   original:
     git: https://github.com/amuletml/hslua
     commit: fb3454f06ab62130fc31d7f40e153a08450999c9
+- completed:
+    hackage: haskell-lsp-0.21.0.0@sha256:2ec8d34c7acd16207876d409c20d397ffc4d00222a14226970766a29075f2b76,5315
+    pantry-tree:
+      size: 1727
+      sha256: dcfb38bdb632efa936997797a3cbe5724fe385b1d0dde8d1c9cabed93af05b59
+  original:
+    hackage: haskell-lsp-0.21.0.0@sha256:2ec8d34c7acd16207876d409c20d397ffc4d00222a14226970766a29075f2b76,5315
+- completed:
+    hackage: haskell-lsp-types-0.21.0.0@sha256:39f9590d317b4f0e0023b022b14c7ef54b024d95fef4f7a6a2396260d08e840b,2971
+    pantry-tree:
+      size: 2451
+      sha256: bcf965a5e85032263e421d47d6aba8bd2094ac102552e12c584ec7fa01f4b717
+  original:
+    hackage: haskell-lsp-types-0.21.0.0@sha256:39f9590d317b4f0e0023b022b14c7ef54b024d95fef4f7a6a2396260d08e840b,2971
 - completed:
     hackage: ghc-lib-parser-8.8.0.20190723@sha256:34ffe7ca5e6ba21eb6bf2c118046e8891a9a79007eb3db48052124d3a7186bfd,8377
     pantry-tree:
@@ -40,6 +51,13 @@ packages:
   original:
     hackage: these-lens-1@sha256:960f53c44201f5f67d0158162ce39cc7095b958d584d76a2aead358a54c137d3,1138
 - completed:
+    hackage: lsp-test-0.10.2.0@sha256:42d0b8de5be58846e605e029a84024cb0145b1f626eaa22b065362f610f3f2b1,3472
+    pantry-tree:
+      size: 1112
+      sha256: a158586561dcd89a95878173b9d4ce4d4e429fffe184c58b0a887852143d3edc
+  original:
+    hackage: lsp-test-0.10.2.0@sha256:42d0b8de5be58846e605e029a84024cb0145b1f626eaa22b065362f610f3f2b1,3472
+- completed:
     hackage: aeson-pretty-0.8.8@sha256:9924a16d0c362ff59dd6d5b875749ff5d599d2688f89d080388a0014714441ef,2291
     pantry-tree:
       size: 337
@@ -54,33 +72,12 @@ packages:
   original:
     hackage: conduit-parse-0.2.1.0@sha256:1c9f890d0cccdaa0f7d160cf4d1cf68f6e9e659a82f2db092ac7f4459395fdad,1730
 - completed:
-    hackage: lsp-test-0.10.1.0@sha256:4aeb4a23a6e034f6870a2ca6055029061cdb6b68f833d4314f4f839fe6c8a39c,3472
-    pantry-tree:
-      size: 1112
-      sha256: 77dc92b7493b2e4db417eb98ee4455db5d98b60c78b21ee173394606fdbdb121
-  original:
-    hackage: lsp-test-0.10.1.0@sha256:4aeb4a23a6e034f6870a2ca6055029061cdb6b68f833d4314f4f839fe6c8a39c,3472
-- completed:
     hackage: regex-pcre-builtin-0.95.1.1.8.43@sha256:2d671af361adf1776fde182a687bb6da022b1e5e3b0a064ce264289de63564a5,3088
     pantry-tree:
       size: 2587
       sha256: 9224e37b215488b81a0fab0e8caa991010a4e053ba0e001de0b02c46a420622c
   original:
     hackage: regex-pcre-builtin-0.95.1.1.8.43@sha256:2d671af361adf1776fde182a687bb6da022b1e5e3b0a064ce264289de63564a5,3088
-- completed:
-    hackage: haskell-lsp-0.20.0.1@sha256:fd4f773c9a32c6e76d57381956b3c2e1302230ae2ad784722ce85ff6e7d64ceb,5315
-    pantry-tree:
-      size: 1726
-      sha256: f541056204ef590eb6f4c4352b3446a222f169f887b55ae0d28d97fb3ed520d1
-  original:
-    hackage: haskell-lsp-0.20.0.1@sha256:fd4f773c9a32c6e76d57381956b3c2e1302230ae2ad784722ce85ff6e7d64ceb,5315
-- completed:
-    hackage: haskell-lsp-types-0.20.0.0@sha256:24dcd72f3d39260b9ebb447e89175e09f2244a17d24eca8bf6dbea3f9cf20977,2941
-    pantry-tree:
-      size: 2451
-      sha256: 8d4a6011264f75f301e14549d40327f90bd7524b0c647983cd571bf3419f7945
-  original:
-    hackage: haskell-lsp-types-0.20.0.0@sha256:24dcd72f3d39260b9ebb447e89175e09f2244a17d24eca8bf6dbea3f9cf20977,2941
 - completed:
     hackage: hslogger-1.3.1.0@sha256:2df525ae8ee83b4d885e4c97ef0df715122f2e37585a7d84117e2daea9fa9029,2787
     pantry-tree:
