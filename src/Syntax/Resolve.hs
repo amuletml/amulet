@@ -38,6 +38,7 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import Data.Traversable
+import Data.Bifunctor
 import Data.Foldable
 import Data.Function
 import Data.Spanned
@@ -506,16 +507,16 @@ reWholePattern :: forall m. MonadResolve m
 reWholePattern p = do
   -- Resolves a pattern and ensures it is linear
   (p', vs, ts) <- rePattern p
-  checkLinear vs
-  checkLinear ts
+  checkLinear p vs
+  checkLinear p ts
   pure (p', map lim vs, map lim ts)
+  where lim (a, b, _) = (a, b)
 
- where checkLinear :: [(Var Parsed, Var Resolved, Pattern Resolved)] -> m ()
-       checkLinear = traverse_ (\vs@((_,v, _):_) -> dictates . wrapError p $ NonLinearPattern v (map thd3 vs))
-                   . filter ((>1) . length)
-                   . groupBy ((==) `on` fst3)
-                   . sortOn fst3
-       lim (a, b, _) = (a, b)
+checkLinear :: MonadResolve m => Pattern Parsed -> [(Var Parsed, Var Resolved, Pattern Resolved)] -> m ()
+checkLinear p = traverse_ (\vs@((_,v, _):_) -> dictates . wrapError p $ NonLinearPattern v (map thd3 vs))
+              . filter ((>1) . length)
+              . groupBy ((==) `on` fst3)
+              . sortOn fst3
 
 rePattern :: MonadResolve m
           => Pattern Parsed
@@ -565,13 +566,42 @@ rePattern (PList ps a) = do
 rePattern pat@(POr p q a) = do
   (p', pvs, pts) <- rePattern p
   (q', qvs, qts) <- rePattern q
-  let avs = Set.fromList (map (view _1) pvs ++ map (view _1) pts)
-      bvs = Set.fromList (map (view _1) qvs ++ map (view _1) qts)
+  -- We require q to be linear now, as we won't validate it later.
+  checkLinear q qvs
+  checkLinear q qts
+  let avs = set pvs <> set pts
+      bvs = set qvs <> set qts
   unless (avs == bvs) $
     confesses (ArisingFrom (UnequalVarBinds p (Set.toList avs) q (Set.toList bvs)) (BecauseOf pat))
-  pure (POr p' q' a, pvs, pts)
+
+  let q'' = fixPattern (matchup pvs qvs <> matchup pts qts) q'
+  pure (POr p' q'' a, pvs, pts)
+
+  where
+    matchup :: (Ord a, Ord b) => [(a, b, c)] -> [(a, b, c)] -> Map.Map b b
+    matchup old new =
+      let old' = foldMap (\(a, b, _) -> Map.singleton a b) old in
+      foldMap (\(a, b, _) -> Map.singleton b (old' Map.! a)) new
+    set  = Set.fromList . map (view _1)
 rePattern (PLiteral l a) = pure (PLiteral l a, [], [])
 rePattern PGadtCon{} = error "Impossible PGadtCon"
+
+fixPattern :: Map.Map (Var Resolved) (Var Resolved) -> Pattern Resolved -> Pattern Resolved
+fixPattern vs = go where
+  ts = (`TyVar` undefined) <$> vs
+
+  get v = fromMaybe v (Map.lookup v vs)
+  go (Wildcard a) = Wildcard a
+  go (Capture v a) = Capture (get v) a
+  go (PAs p v a) = PAs (go p) (get v) a
+  go (Destructure v p a) = Destructure v (go <$> p) a
+  go (PType p t a) = PType (go p) (apply ts t) a
+  go (PRecord f a) = PRecord (map (second go) f) a
+  go (PTuple ps a) = PTuple (map go ps) a
+  go (PList ps a) = PList (map go ps) a
+  go (POr l r a) = POr (go l ) (go r) a
+  go (PLiteral l a) = PLiteral l a
+  go PGadtCon{} = error "Impossible"
 
 reBinding :: MonadResolve m
           => Binding Parsed

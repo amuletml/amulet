@@ -442,13 +442,7 @@ lowerOneOf preLeafs var ty tys = go [] . foldMap prepare
     --   mapping.
     -- - Flatten or patterns.
     unwrap vs (S.PAs p v _) = unwrap (VS var (mkVal v) ty:vs) p
-    unwrap vs (S.POr l r _) =
-      let left = foldMap (\(v, _) -> Map.singleton (v ^. covarName) v) (patternVars' l)
-          go (S.POr l r _) = go l ++ go r
-          go p =
-            let vs' = foldr (\(v, ty) vs -> VS v (left Map.! (v ^. covarName)) ty:vs) vs (patternVars' p) in
-            unwrap vs' p
-      in unwrap vs l ++ go r
+    unwrap vs (S.POr l r _) = unwrap vs l ++ unwrap vs r
     unwrap vs p = pure (p, vs)
 
     -- | The top-level driver which attempts to determine the "best" version.
