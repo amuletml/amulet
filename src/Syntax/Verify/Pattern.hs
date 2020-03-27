@@ -241,7 +241,8 @@ covering' env = go where
   -- Nil
   go Nil = cover ()
 
-  go ((POr p q a, v) :*: xs) = error "WIP" p q a v xs
+  -- FIXME: This is unquestionably wrong!
+  go ((POr l _ _, v) :*: xs) = go ((l, v) :*: xs)
 
   -- ConCon for constructors: If the constructors are the same, just
   -- recurse. Otherwise, that constructor is uncovered.

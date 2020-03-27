@@ -429,16 +429,30 @@ lowerOneOf :: forall m. MonadLower m
            -> CoVar -> Type -- ^ The variable to match against and its type.
            -> VarMap.Map Type -> [PatternRow]
            -> m ArmNode
-lowerOneOf preLeafs var ty tys = go [] . map prepare
+lowerOneOf preLeafs var ty tys = go [] . foldMap prepare
   where
-    prepare (PR arms pats gd vBind tyBind) =
+    prepare (PR arms pats gd vBind tyBind) = do
       let pat = fromMaybe (S.Wildcard undefined) (VarMap.lookup var pats)
-          (pat', vs) = unwrapAs pat
-      in ( pat', PR arms (VarMap.delete var pats) gd (vs ++ vBind) tyBind )
+      (pat', vs) <- unwrap [] pat
+      pure ( pat', PR arms (VarMap.delete var pats) gd (vs ++ vBind) tyBind )
 
-    unwrapAs (S.PAs p v _) = (VS var (mkVal v) ty:) <$> unwrapAs p
-    unwrapAs p = (p, [])
+    -- | Unwrap a pattern, removing several additional constructs:
+    --
+    -- - Remove as patterns, replacing them with the original variable and a
+    --   mapping.
+    -- - Flatten or patterns.
+    unwrap vs (S.PAs p v _) = unwrap (VS var (mkVal v) ty:vs) p
+    unwrap vs (S.POr l r _) =
+      let left = foldMap (\(v, _) -> Map.singleton (v ^. covarName) v) (patternVars' l)
+          go (S.POr l r _) = go l ++ go r
+          go p =
+            let vs' = foldr (\(v, ty) vs -> VS v (left Map.! (v ^. covarName)) ty:vs) vs (patternVars' p) in
+            unwrap vs' p
+      in unwrap vs l ++ go r
+    unwrap vs p = pure (p, vs)
 
+    -- | The top-level driver which attempts to determine the "best" version.
+    go :: [PatternRow] -> [(S.Pattern Typed, PatternRow)] -> m ArmNode
     go unc [] = lowerOne tys (reverse unc)
     go unc rs@((S.PRecord{},_):_) = goRows unc mempty rs
     go unc rs@((S.Destructure{},_):_) = goCtorsWith unc rs
@@ -447,6 +461,7 @@ lowerOneOf preLeafs var ty tys = go [] . map prepare
     go unc ((p, r):rs) = go (goGeneric p r:unc) rs
 
     -- | The fallback handler for "generic" fields
+    goGeneric :: S.Pattern Typed -> PatternRow -> PatternRow
     goGeneric (S.Wildcard _) r = r
     goGeneric (S.Capture v _) (PR arm ps gd vBind tyBind)
       = PR arm ps gd (VS var (mkVal v) ty:vBind) tyBind
@@ -590,10 +605,10 @@ normalisePattern (S.PGadtCon v vs vs' p a) = S.PGadtCon v vs vs' (normalisePatte
 normalisePattern (S.Destructure v (Just p) a) = S.Destructure v (Just (normalisePattern p)) a
 normalisePattern (S.PAs p v a) = S.PAs (normalisePattern p) v a
 normalisePattern (S.PRecord fs a) = S.PRecord (map (second normalisePattern) fs) a
+normalisePattern (S.POr l r a) = S.POr (normalisePattern l) (normalisePattern r) a
 -- Reduce these cases to something else
 normalisePattern (S.PType p _ _) = normalisePattern p
 normalisePattern S.PList{} = error "PList is handled by desugar"
-normalisePattern S.POr{} = error "lower or-pattern"
 normalisePattern (S.PTuple ps (pos, _)) = convert ps where
   convert [] = error "Empty tuple"
   convert [x] = normalisePattern x
