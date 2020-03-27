@@ -494,7 +494,8 @@ BindGroup :: { [Binding Parsed] }
           | BindGroup and Binding             { $3 : $1 }
 
 Binding :: { Binding Parsed }
-        : BPattern PostBinding              { withPos2 $1 $2 $ Matching $1 $2 }
+        : List1(BPattern, ',') PostBinding              
+          { withPos2 (head $1) $2 $ Matching (completeTuple PTuple $1) $2 }
         | BPattern ':' Type PostBinding
           { withPos2 $1 $4 $ Matching $1 $ withPos2 $3 $4 $ Ascription $4 (getL $3) }
 
