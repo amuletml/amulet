@@ -87,7 +87,7 @@ let lookup k (M tree) =
       | Lt -> go l
       | Gt -> go r
   go tree
-let (.?[]) map key = lookup map key
+let (.?[]) map key = lookup key map
 
 (** Lookup a key on the map. If it is not present, raise an exception.
  *)
