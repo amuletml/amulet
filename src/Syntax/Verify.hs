@@ -258,6 +258,7 @@ bindingSites Wildcard{} = mempty
 bindingSites PLiteral{} = mempty
 bindingSites (Destructure _ p _) = foldMap bindingSites p
 bindingSites (PType p _ _) = bindingSites p
+bindingSites (POr p _ _) = bindingSites p
 bindingSites (PRecord rs _) = foldMap (bindingSites . snd) rs
 bindingSites (PTuple ps _) = foldMap bindingSites ps
 bindingSites (PGadtCon _ _ _ p _) = foldMap bindingSites p

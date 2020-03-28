@@ -122,6 +122,7 @@ forgetPat (PType p t (a, _)) = PType (forgetPat p) (forgetKind t) a
 forgetPat (PRecord rs (a, _)) = PRecord (map (second forgetPat) rs) a
 forgetPat (PTuple p (a, _)) = PTuple (forgetPat <$> p) a
 forgetPat (PList p (a, _)) = PTuple (forgetPat <$> p) a
+forgetPat (POr p q (a, _)) = POr (forgetPat p) (forgetPat q) a
 forgetPat (PLiteral l (a, _)) = PLiteral l a
 forgetPat PGadtCon{} = undefined
 
