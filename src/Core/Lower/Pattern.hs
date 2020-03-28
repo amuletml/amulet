@@ -348,16 +348,17 @@ lowerOne tys rss = do
     -- within it, favouring those with less distinct cases.
     branchingFactor :: LowerState -> CoVar -> Int
     branchingFactor state var =
-      let hs = foldr (HSet.insert . maybe PatWildcard partialLower . VarMap.lookup var . rowPatterns) mempty rs
+      let hs = foldMap (maybe (HSet.singleton PatWildcard) partialLower . VarMap.lookup var . rowPatterns) rs
       in -HSet.size hs - (if partialComplete hs then 0 else 1) where
 
-      partialLower S.Wildcard{} = PatWildcard
-      partialLower S.Capture{} = PatWildcard
-      partialLower (S.PLiteral l _) = PatLit (lowerLiteral l)
-      partialLower (S.PGadtCon v _ _ _ _) = Constr (mkCon v)
-      partialLower (S.Destructure v _ _) = Constr (mkCon v)
-      partialLower (S.PRecord _ _) = PatRecord []
+      partialLower S.Wildcard{} = HSet.singleton PatWildcard
+      partialLower S.Capture{} = HSet.singleton PatWildcard
+      partialLower (S.PLiteral l _) = HSet.singleton (PatLit (lowerLiteral l))
+      partialLower (S.PGadtCon v _ _ _ _) = HSet.singleton (Constr (mkCon v))
+      partialLower (S.Destructure v _ _) = HSet.singleton (Constr (mkCon v))
+      partialLower (S.PRecord _ _) = HSet.singleton (PatRecord [])
       partialLower (S.PAs p _ _) = partialLower p
+      partialLower (S.POr l r _) = partialLower l <> partialLower r
       partialLower p = error ("Unhandled pattern " ++ show p)
 
       partialComplete hs = foldr ((||) . go) False hs where
@@ -406,6 +407,7 @@ lowerOne tys rss = do
       arityOf (S.Destructure _ Just{} _) = 1
       arityOf (S.PRecord f _) = length f
       arityOf (S.PAs p _ _) = arityOf p
+      arityOf (S.POr l r _) = min (arityOf l) (arityOf r)
       arityOf _ = 0
 
 -- | Lower a series of pattern rows, branching on the provided variable
@@ -624,6 +626,7 @@ isTrivialPat :: S.Pattern Typed -> Bool
 isTrivialPat S.Wildcard{} = True
 isTrivialPat S.Capture{} = True
 isTrivialPat (S.PAs p _ _) = isTrivialPat p
+isTrivialPat (S.POr l r _) = isTrivialPat l && isTrivialPat r
 isTrivialPat _ = False
 
 patternVars :: Pattern CoVar -> [(CoVar, Type)]
