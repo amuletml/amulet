@@ -24,6 +24,9 @@ let singleton x = S (T.singleton x)
 (** Construct a 'set' from the elements of a 'list' *)
 let from_list (xs : list _) = S (T.from_foldable xs)
 
+(** Construct a 'list' from the elements of a 'set', in ascending order *)
+let to_list (S xs) = T.inorder_fold (::) [] xs
+
 (** Insert an element into a 'set'. *)
 let insert x (S tree) = S (T.insert x tree)
 
