@@ -301,6 +301,13 @@ Exprs :: { Expr Parsed }
 
 Expr :: { Expr Parsed }
   : ExprOp                                     { fixupExpr $1 }
+  | ExprDotOp DotOp '<-' ExprOp                { -- We need this comment to ensure the variables are aligned in the if.
+                                                 let (name, idx, end) = $2
+                                                     expr = $1
+                                                     rhs = $4
+                                                     op' = withPos2 name $3 . VarRef . Name $ getL name <> T.pack "<-"
+                                                     a = spanOf expr <> spanOf rhs
+                                                 in App (App (App op' expr a) idx a) rhs a }
 
 ExprOp :: { Expr Parsed }
   : ExprDotOp                                  { $1 }
@@ -351,13 +358,6 @@ Expr0 :: { Expr Parsed }
       | function '(' ')'                       { withPos2 $1 $3        $ Function [] (spanOf $1) }
 
       | lazy PreAtom                           { withPos2 $1 $2 $ Lazy $2 }
-      | ExprDotOp DotOp '<-' PreAtom           { -- We need this comment to ensure the variables are aligned in the if.
-                                                 let (name, idx, end) = $2
-                                                     expr = $1
-                                                     rhs = $4
-                                                     op' = withPos2 name $3 . VarRef . Name $ getL name <> T.pack "<-"
-                                                     a = spanOf expr <> spanOf rhs
-                                                 in App (App (App op' expr a) idx a) rhs a }
       | PreAtom                                { $1 }
 
 -- | A 'prefixed' atom.
