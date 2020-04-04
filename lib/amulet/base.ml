@@ -29,6 +29,7 @@ end
 instance eq int    begin let (==) = Base_defs.int_eq end
 instance eq float  begin let (==) = Base_defs.float_eq end
 instance eq string begin let (==) = Base_defs.string_eq end
+instance eq bool   begin let (==) = Base_defs.bool_eq end
 
 instance eq () begin
   let _ == _ = true

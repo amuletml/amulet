@@ -835,3 +835,5 @@ opOfIntrinsic StrConcat = ".."
 opOfIntrinsic StrEq = "=="
 opOfIntrinsic StrLt = "<"
 opOfIntrinsic StrLe = "<="
+
+opOfIntrinsic BoolEq = "=="

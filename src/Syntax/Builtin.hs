@@ -395,6 +395,8 @@ intrinsicType StrEq     = tyString ~> tyString ~> tyBool
 intrinsicType StrLt     = tyString ~> tyString ~> tyBool
 intrinsicType StrLe     = tyString ~> tyString ~> tyBool
 
+intrinsicType BoolEq    = tyBool ~> tyBool ~> tyBool
+
 -- | Construct a syntax variable from a core one
 ofCore :: CoVar -> Var Resolved
 ofCore v@(CoVar i _ _) = TgName (covarDisplayName v) i

@@ -20,6 +20,7 @@ end
 external val int_eq    : int -> int -> bool       = "%int.eq"
 external val float_eq  : float -> float -> bool   = "%float.eq"
 external val string_eq : string -> string -> bool = "%string.eq"
+external val bool_eq   : bool -> bool -> bool     = "%bool.eq"
 
 external val lt_int  : int -> int -> bool = "%int.lt"
 external val lte_int : int -> int -> bool = "%int.le"
