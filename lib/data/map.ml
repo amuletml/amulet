@@ -250,6 +250,10 @@ end
 (** merge is the same function as in the Merge module. *)
 let merge = Merge.merge
 
+(** union_by keeps elements from both maps, and those present in the
+ * intersection should be combined by the provided zipping function *)
+let union_by k x y = Merge.(merge preserve_missing preserve_missing (zip_with_matched k) x y)
+
 (** Filter a map according to a predicate with access to both the keys
  * and the values. *)
 let rec filter_with_key pred (M tree) =

@@ -18,14 +18,16 @@ end
 (** The empty set. *)
 let empty = S T.empty
 
+(** Is this set empty? *)
+let null = function
+  | S T.E -> true
+  | _ -> false
+
 (** Make the set containing only the given element *)
 let singleton x = S (T.singleton x)
 
 (** Construct a 'set' from the elements of a 'list' *)
 let from_list (xs : list _) = S (T.from_foldable xs)
-
-(** Construct a 'list' from the elements of a 'set', in ascending order *)
-let to_list (S xs) = T.inorder_fold (::) [] xs
 
 (** Insert an element into a 'set'. *)
 let insert x (S tree) = S (T.insert x tree)
@@ -42,7 +44,7 @@ let members (S tree) = T.elements tree
 (** Map a function over the elements of a set. This does not assume that
  * the function is monotonic, so it has to rebuild the structure of the
  * tree. *)
-let map_keys f xs =
+let map f xs =
   from_list @@ (f <$>) @@ members xs
 
 (** Map a /monotonic/ function over the elements of a set.
