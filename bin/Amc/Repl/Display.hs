@@ -29,7 +29,7 @@ valueRepr getVal = do
   t <- L.ltype L.stackTop
   case t of
     L.TypeString ->
-      String . T.decodeLatin1 . fromJust
+      String . T.decodeUtf8 . fromJust
         <$> L.tostring L.stackTop
     L.TypeNumber -> do
       num <- fromJust <$> L.tonumber L.stackTop
