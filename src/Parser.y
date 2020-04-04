@@ -301,6 +301,13 @@ Exprs :: { Expr Parsed }
 
 Expr :: { Expr Parsed }
   : ExprOp                                     { fixupExpr $1 }
+  | ExprDotOp DotOp '<-' ExprOp                { -- We need this comment to ensure the variables are aligned in the if.
+                                                 let (name, idx, end) = $2
+                                                     expr = $1
+                                                     rhs = $4
+                                                     op' = withPos2 name $3 . VarRef . Name $ getL name <> T.pack "<-"
+                                                     a = spanOf expr <> spanOf rhs
+                                                 in App (App (App op' expr a) idx a) rhs a }
 
 ExprOp :: { Expr Parsed }
   : ExprDotOp                                  { $1 }
@@ -351,13 +358,6 @@ Expr0 :: { Expr Parsed }
       | function '(' ')'                       { withPos2 $1 $3        $ Function [] (spanOf $1) }
 
       | lazy PreAtom                           { withPos2 $1 $2 $ Lazy $2 }
-      | ExprDotOp DotOp '<-' PreAtom           { -- We need this comment to ensure the variables are aligned in the if.
-                                                 let (name, idx, end) = $2
-                                                     expr = $1
-                                                     rhs = $4
-                                                     op' = withPos2 name $3 . VarRef . Name $ getL name <> T.pack "<-"
-                                                     a = spanOf expr <> spanOf rhs
-                                                 in App (App (App op' expr a) idx a) rhs a }
       | PreAtom                                { $1 }
 
 -- | A 'prefixed' atom.
@@ -494,20 +494,21 @@ BindGroup :: { [Binding Parsed] }
           | BindGroup and Binding             { $3 : $1 }
 
 Binding :: { Binding Parsed }
-        : BPattern PostBinding              { withPos2 $1 $2 $ Matching $1 $2 }
+        : List1(BPattern, ',') PostBinding              
+          { withPos2 (head $1) $2 $ Matching (completeTuple PTuple $1) $2 }
         | BPattern ':' Type PostBinding
           { withPos2 $1 $4 $ Matching $1 $ withPos2 $3 $4 $ Ascription $4 (getL $3) }
 
         | BindName ListE1(Parameter) PostBinding
-          { withPos2 $1 $3 $ Binding (getL $1) (foldr (\x y -> withPos2 x $3 (Fun x y)) $3 $2) True }
+          { withPos2 $1 $3 $ Binding (getL $1) (spanOf $1) (foldr (\x y -> withPos2 x $3 (Fun x y)) $3 $2) True }
 
         | BindName ListE1(Parameter) ':' Type PostBinding
-          { withPos2 $1 $5 $ Binding (getL $1)
+          { withPos2 $1 $5 $ Binding (getL $1) (spanOf $1)
              (foldr (\x y -> withPos2 x $5 (Fun x y)) (Ascription $5 (getL $4) (withPos2 $1 $5 id)) $2)
              True }
 
         | BPattern BindOp BPattern PostBinding
-          { withPos2 $1 $4 $ Binding (getL $2)
+          { withPos2 $1 $4 $ Binding (getL $2) (spanOf $2)
               (withPos2 $1 $4 (Fun (PatParam $1) (withPos2 $3 $4 (Fun (PatParam $3) $4))))
               True }
 
@@ -563,56 +564,53 @@ Lit :: { Located Lit }
     | true                 { lPos1 $1 $ LiBool True }
     | false                { lPos1 $1 $ LiBool False }
 
--- | An alternative to Pattern which uses TypeOp instead of Type,
--- suitable for usage in match arms.
---
--- This ensures '->' does not occur on the top level of a type spanOf, and
--- so there is no conflict with the '->' in an arm.
-MPattern :: { Pattern Parsed }
-         : ArgP                   { $1 }
-         | Con ArgP               { withPos2 $1 $2 $ Destructure (getL $1) (Just $2) }
-         | MPattern ':' TypeOp    { withPos2 $1 $3 $ PType $1 (getL $3) }
-         | MPattern as Var        { withPos2 $1 $3 $ PAs $1 (getL $3) }
-
 -- | An alternative to Pattern without any type pattern, suitable for usage in
 -- bindings.
 --
 -- We place the type spanOf on the expression instead of within the pattern,
 -- as that allows for easier desugaring later on.
 BPattern :: { Pattern Parsed }
-         : ArgP                   { $1 }
-         | Con ArgP               { withPos2 $1 $2 $ Destructure (getL $1) (Just $2) }
-         | BPattern as Var        { withPos2 $1 $3 $ PAs $1 (getL $3) }
+  : PatternAtom                                   { $1 }
+  | Con PatternAtom                               { withPos2 $1 $2 $ Destructure (getL $1) (Just $2) }
+  | BPattern as Var                               { withPos2 $1 $3 $ PAs $1 (getL $3) }
 
 Pattern :: { Pattern Parsed }
-        : ArgP                    { $1 }
-        | Con ArgP                { withPos2 $1 $2 $ Destructure (getL $1) (Just $2) }
-        | Pattern ':' Type        { withPos2 $1 $3 $ PType $1 (getL $3) }
-        | Pattern as Var          { withPos2 $1 $3 $ PAs $1 (getL $3) }
+  : PatternAtom                                   { $1 }
+  | Con PatternAtom                               { withPos2 $1 $2 $ Destructure (getL $1) (Just $2) }
+  | Pattern ':' Type                              { withPos2 $1 $3 $ PType $1 (getL $3) }
+  | Pattern as Var                                { withPos2 $1 $3 $ PAs $1 (getL $3) }
 
-ArgP :: { Pattern Parsed }
-     : BindName                                   { withPos1 $1 $ Capture (getL $1) }
-     | '_'                                        { withPos1 $1 $ Wildcard }
-     | Con                                        { withPos1 $1 $ Destructure (getL $1) Nothing }
-     | '{' ListT(PatternRow, ',') '}'             { withPos2 $1 $3 $ PRecord $2 }
-     | '(' List(Pattern, ',') ')'                 { withPos2 $1 $3 $ tuplePattern $2 }
-     | Lit                                        { withPos1 $1 (PLiteral (getL $1)) }
-     | '[' List(Pattern, ',') ']'                 { withPos2 $1 $3 $ PList $2 }
+OrPattern(p) :: { Pattern Parsed }
+  : p                                             { $1 }
+  | p '|' OrPattern(p)                            { withPos2 $1 $3 $ POr $1 $3 }
+
+PatternTuple :: { Pattern Parsed }
+  : List1(Pattern, ',')                           { completeTuple PTuple $1 }
+
+PatternAtom :: { Pattern Parsed }
+  : BindName                                      { withPos1 $1 $ Capture (getL $1) }
+  | '_'                                           { withPos1 $1 $ Wildcard }
+  | Con                                           { withPos1 $1 $ Destructure (getL $1) Nothing }
+  | '{' ListT(PatternRow, ',') '}'                { withPos2 $1 $3 $ PRecord $2 }
+  | '(' ')'                                       { withPos2 $1 $2 $ PLiteral LiUnit }
+  | '(' OrPattern(PatternTuple) ')'               { withPos2 $1 $3 $ fixPattern $2 }
+  | Lit                                           { withPos1 $1 (PLiteral (getL $1)) }
+  | '[' List(OrPattern(Pattern), ',') ']'         { withPos2 $1 $3 $ PList $2 }
 
 PatternRow :: { (T.Text, Pattern Parsed) }
   : ident '=' Pattern                             { (getIdent $1, $3) }
   | ident                                         { (getIdent $1, withPos1 $1 $ Capture(getName $1)) }
 
 Arm :: { Arm Parsed }
-    : '|' List1(MPattern, ',') Guard '->' ExprBlock
-    { withPos2 $1 $5 $ Arm (completeTuple PTuple $2) $3 $5 }
+  : '|' OrPattern(PatternTuple) Guard '->' ExprBlock
+  { withPos2 $1 $5 $ Arm $2 $3 $5 }
 
 Guard :: { Maybe (Expr Parsed) }
   :                                               { Nothing }
   | when Expr                                     { Just $2 }
 
 Parameter :: { Parameter Parsed }
-          : ArgP             { PatParam $1 }
+  : PatternAtom                                   { PatParam $1 }
 
 Type :: { Located (Type Parsed) }
   : TypeOp                                        { $1 }
@@ -739,12 +737,11 @@ completeTuple :: Spanned (f Parsed) => ([f Parsed] -> Span -> f Parsed) -> [f Pa
 completeTuple _ [x] = x
 completeTuple k (x:xs) = k (x:xs) (sconcat (spanOf x :| map spanOf xs))
 
-tuplePattern :: [Pattern Parsed] -> Ann Parsed -> Pattern Parsed
-tuplePattern [] a = PLiteral LiUnit a
-tuplePattern [x] a = case x of
-  PType x t _ -> PType x t a
-  _ -> x
-tuplePattern xs a = PTuple xs a
+-- | "Fix" the location of a pattern, so it spans a wider range.
+fixPattern :: Pattern Parsed -> Ann Parsed -> Pattern Parsed
+fixPattern (PType x t _) a = PType x t a
+fixPattern (PTuple xs _) a = PTuple xs a
+fixPattern p _ = p
 
 bindVar = Name (T.pack ">>=")
 apVar = Name (T.pack "<*>")

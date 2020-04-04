@@ -5,8 +5,8 @@ recursive_01.ml[4:5 ..4:9]: error (E3001)
   │ 
 4 │ and g = f
   │     ^^^^^
-recursive_01.ml[2:7 ..2:11]: warning (W3002)
+recursive_01.ml[2:7 ..2:7]: warning (W3002)
   Bound locally but not used: 'y'
   │ 
 2 │   let y = 1
-  │       ^^^^^
+  │       ^

@@ -14,6 +14,8 @@ import Data.Triple
 import Data.Maybe
 import Data.Text (Text)
 import Data.List
+
+import Core.Intrinsic
 import Core.Var
 
 import Data.Typeable (Typeable)
@@ -182,8 +184,13 @@ pattern ExactRowsTy ts = RowsTy NilTy ts
 data BoundTv = Irrelevant | Relevant CoVar
   deriving (Eq, Show, Ord, Generic, Hashable)
 
+data Foreign
+  = Intrinsic Intrinsic
+  | ForeignCode Text
+  deriving (Eq, Show, Ord, Generic, Hashable)
+
 data AnnStmt b a
-  = Foreign a Type Text
+  = Foreign a Type Foreign
   | StmtLet (AnnBinding b a)
   | Type a [(a, Type)]
   deriving (Eq, Show, Ord, Functor, Generic, Hashable)

@@ -32,3 +32,4 @@ let print = Io.print
 let flip f x y = f y x
 let x |> f = f x
 let f # g = fun x -> f (g x)
+let map f x = f <$> x

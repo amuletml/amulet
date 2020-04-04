@@ -32,6 +32,7 @@ genTypeable (TyApps _ [ Con (TgName nm id) ]) ann =
         MethodImpl
           (Binding
             typeOf_n
+            ann
             (Fun (PatParam (Wildcard ann))
                 ty_con
                 ann)

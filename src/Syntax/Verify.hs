@@ -29,11 +29,13 @@ import Text.Pretty.Note
 import Syntax.Verify.Pattern
 import Syntax.Verify.Error
 
-import Syntax.Builtin (tyLazy, forceName, tyRefName)
+import Syntax.Builtin (tyLazy, forceName, tyRefName, intrinsicType)
 import Syntax.Transform
 import Syntax.Types
 import Syntax.Let
 import Syntax
+
+import Core.Intrinsic
 
 import qualified CompileTarget as CT
 
@@ -77,11 +79,19 @@ verifyProgram = traverse_ verifyStmt where
         Private -> modify (Set.insert b)
         Public -> pure ()
 
-  verifyStmt st@(ForeignVal _ v d _ _) = do
+  verifyStmt st@(ForeignVal _ v d ty _) = do
     target <- asks target
-    case CT.parse target (SourcePos ("definition of " <> displayT (pretty v)) 1 1) (d ^. lazy) of
-      Left e -> tell (Seq.singleton (ParseErrorInForeign st e target))
-      Right _ -> pure ()
+    case T.uncons d of
+      Just ('%', i) ->
+        case intrinsicOf d of
+          Nothing -> tell (Seq.singleton (UnknownIntrinsic st i))
+          Just it ->
+            when (ty /= intrinsicType it) $
+              tell (Seq.singleton (MismatchedIntrinsic st i (intrinsicType it) ty))
+      _ ->
+        case CT.parse target (SourcePos ("definition of " <> displayT (pretty v)) 1 1) (d ^. lazy) of
+          Left e -> tell (Seq.singleton (ParseErrorInForeign st e target))
+          Right _ -> pure ()
 
   verifyStmt Class{} = pure ()
   verifyStmt Instance{} = pure ()
@@ -111,9 +121,9 @@ verifyBindingGroup :: MonadVerify m
                    => (BindingSite -> m ())
                    -> SomeReason -> [Binding Typed] -> m ()
 verifyBindingGroup k _ = traverse_ verifyScc . depOrder where
-  verifyScc (AcyclicSCC (Binding v e c (s, t))) =
+  verifyScc (AcyclicSCC (Binding v vp e c (_, t))) =
     when c $ do
-      k (BindingSite v s t)
+      k (BindingSite v vp t)
       verifyExpr e
 
   verifyScc (AcyclicSCC (TypedMatching p e _ _)) = do
@@ -124,10 +134,10 @@ verifyBindingGroup k _ = traverse_ verifyScc . depOrder where
 
   verifyScc (CyclicSCC vs) = do
     let vars = foldMapOf (each . bindVariable) Set.singleton vs
-    for_ vs $ \(Binding var _ c (s, ty)) ->
-      when c $ k (BindingSite var s ty)
+    for_ vs $ \(Binding var vp _ c (_, ty)) ->
+      when c $ k (BindingSite var vp ty)
 
-    for_ vs $ \b@(Binding var ex c (_, _)) -> when c $ do
+    for_ vs $ \b@(Binding var _ ex c _) -> when c $ do
       let naked = unguardedVars ex
           blame = BecauseOf b
       verifyExpr ex
@@ -238,7 +248,7 @@ unguardedVars (LeftSection a b _)  = unguardedVars a <> unguardedVars b
 unguardedVars (RightSection a b _) = unguardedVars a <> unguardedVars b
 unguardedVars (BothSection b _)    = unguardedVars b
 unguardedVars AccessSection{}      = mempty
-unguardedVars x = error (show x)
+unguardedVars _                    = mempty
 
 -- | Get all binding sites within a pattern
 bindingSites :: Pattern Typed -> Set.Set BindingSite
@@ -248,6 +258,7 @@ bindingSites Wildcard{} = mempty
 bindingSites PLiteral{} = mempty
 bindingSites (Destructure _ p _) = foldMap bindingSites p
 bindingSites (PType p _ _) = bindingSites p
+bindingSites (POr p _ _) = bindingSites p
 bindingSites (PRecord rs _) = foldMap (bindingSites . snd) rs
 bindingSites (PTuple ps _) = foldMap bindingSites ps
 bindingSites (PGadtCon _ _ _ p _) = foldMap bindingSites p
@@ -265,7 +276,7 @@ isWrappedThunk _ = False
 -- | Determine if the right-hand-side of a binding is non-trivial.
 nonTrivialRhs :: Binding Typed -> Bool
 nonTrivialRhs (TypedMatching _ e _ _) = nonTrivial e
-nonTrivialRhs (Binding _ e _ _) = nonTrivial e
+nonTrivialRhs (Binding _ _ e _ _) = nonTrivial e
 nonTrivialRhs _ = error "nonTrivialRHS pre-TC Bindings"
 
 -- | Determining if an expression is non-trivial. Namely, evaluating it

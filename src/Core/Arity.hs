@@ -116,12 +116,17 @@ extendPureCtors s cts = s {
     typeArity (ForallTy _ _ ty) = 1 + typeArity ty
     typeArity _ = 0
 
-extendForeign :: IsVar a => ArityScope -> (a, Type) -> ArityScope
-extendForeign (ArityScope scope) (var, ty) =
-  ArityScope (VarMap.insert (toVar var) (Arity (typeArity ty) False) scope)
-  where typeArity :: Type -> Int
-        typeArity (ForallTy _ _ ty) = 1 + typeArity ty
-        typeArity _ = 0
+extendForeign :: IsVar a => (a, Type) -> Foreign -> ArityScope -> ArityScope
+extendForeign (var, ty) f (ArityScope scope) =
+  ArityScope (VarMap.insert (toVar var) (Arity (typeArity ty) isPure ) scope)
+  where
+    typeArity :: Type -> Int
+    typeArity (ForallTy _ _ ty) = 1 + typeArity ty
+    typeArity _ = 0
+
+    isPure = case f of
+      Intrinsic _ -> True
+      ForeignCode _ -> False
 
 mapArity :: (Int -> Int) -> Arity -> Arity
 mapArity f (Arity a p) = Arity (f a) p

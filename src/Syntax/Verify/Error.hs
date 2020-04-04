@@ -5,6 +5,7 @@ module Syntax.Verify.Error
   , WhyRedundant(..)
   ) where
 
+import qualified Data.Text as T
 import Data.Position
 import Data.Spanned
 import Data.Reason
@@ -59,6 +60,17 @@ data VerifyError
     { stmt :: Toplevel Typed
     , err :: CT.ParseError
     , errTarg :: CT.Target }
+  -- | Unknown intrinsic name
+  | UnknownIntrinsic
+    { stmt      :: Toplevel Typed
+    , intrinsic :: T.Text }
+  -- | Intrinsic name doesn't match expected type
+  | MismatchedIntrinsic
+    { stmt      :: Toplevel Typed
+    , intrinsic :: T.Text
+    , expTy     :: Type Typed
+    , actualTy  :: Type Typed }
+
 
   -- | Misleading laziness on let expressions
   | LazyLet (Expr Typed) (Type Typed)
@@ -81,6 +93,8 @@ instance Spanned VerifyError where
   spanOf (MalformedRecursiveRhs e _ _) = spanOf e
   spanOf (DefinedUnused b) = boundWhere b
   spanOf (ParseErrorInForeign t _ _) = spanOf t
+  spanOf (UnknownIntrinsic s _) = spanOf s
+  spanOf (MismatchedIntrinsic s _ _ _) = spanOf s
   spanOf (LazyLet e _) = spanOf e
   spanOf (RedundantArm a _) = spanOf a
   spanOf (MissingPattern e _) = e
@@ -103,6 +117,13 @@ instance Pretty VerifyError where
   pretty (ParseErrorInForeign _ err _) =
     vsep [ "Invalid syntax in definition of foreign value"
          , pretty err ]
+  pretty (UnknownIntrinsic _ t) = "Unknown intrinsic" <+> squotes (text t)
+  pretty (MismatchedIntrinsic _ t e a) =
+    vsep [ "Mismatched type for intrinsic" <+> squotes (text t) <> ". Definition has type"
+         , indent 2 (pretty a)
+         , "but should have type"
+         , indent 2 (pretty e)
+         ]
   pretty (LazyLet _ _) =
     vsep [ "Automatic thunking of" <+> keyword "let" <> "s does not cover bindings"
          ]
@@ -137,13 +158,15 @@ instance Pretty VerifyError where
 instance Note VerifyError Style where
   diagnosticKind MalformedRecursiveRhs{} = ErrorMessage
   diagnosticKind ParseErrorInForeign{} = WarningMessage
-  diagnosticKind DefinedUnused{} = WarningMessage
-  diagnosticKind LazyLet{} = WarningMessage
-  diagnosticKind RedundantArm{} = WarningMessage
-  diagnosticKind MissingPattern{} = WarningMessage
-  diagnosticKind MatchToLet{} = NoteMessage
-  diagnosticKind MatchToFun{} = NoteMessage
-  diagnosticKind ToplevelRefBinding{} = WarningMessage
+  diagnosticKind UnknownIntrinsic{}    = WarningMessage
+  diagnosticKind MismatchedIntrinsic{} = ErrorMessage
+  diagnosticKind DefinedUnused{}       = WarningMessage
+  diagnosticKind LazyLet{}             = WarningMessage
+  diagnosticKind RedundantArm{}        = WarningMessage
+  diagnosticKind MissingPattern{}      = WarningMessage
+  diagnosticKind MatchToLet{}          = NoteMessage
+  diagnosticKind MatchToFun{}          = NoteMessage
+  diagnosticKind ToplevelRefBinding{}  = WarningMessage
 
   formatNote f (ParseErrorInForeign (ForeignVal _ var s _ span) err targ) =
     let SourcePos name _ _ = spanStart (spanOf err)
@@ -196,6 +219,8 @@ instance Note VerifyError Style where
   noteId MalformedRecursiveRhs{} = Just 3001
   noteId DefinedUnused{}       = Just 3002
   noteId ParseErrorInForeign{} = Just 3003
+  noteId UnknownIntrinsic{}    = Just 3010
+  noteId MismatchedIntrinsic{} = Just 3011
   noteId LazyLet{}             = Just 3004
   noteId RedundantArm{}        = Just 3005
   noteId MissingPattern{}      = Just 3006

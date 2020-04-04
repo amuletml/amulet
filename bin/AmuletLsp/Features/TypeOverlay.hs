@@ -51,7 +51,7 @@ getTypeOverlay (TgName _ modu) = getTops [] where
   mk TgInternal{} _ = error "Impossible binding to TgInternal"
 
   getBinding :: [CodeLens] -> Binding Resolved -> [CodeLens]
-  getBinding ac (Binding v _ _ pos) = mk v pos:ac
+  getBinding ac (Binding v vp _ _ _) = mk v vp:ac
   getBinding ac (Matching p _ pos) | Just v <- singleVar p = mk v pos:ac
   getBinding ac _ = ac
 

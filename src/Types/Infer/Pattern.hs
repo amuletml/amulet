@@ -43,6 +43,7 @@ inferPattern pat@(PType p t ann) = do
   case p' of
     Capture v _ -> pure (PType p' t' (ann, t'), t', one v t', cs, is)
     _ -> pure (PType p' t' (ann, t'), t', vs, cs, is)
+
 inferPattern (PRecord rows ann) = do
   rho <- freshTV
   (rowps, rowts, caps, cons, iss) <- unzip5 <$> for rows (\(var, pat) -> do
@@ -50,6 +51,7 @@ inferPattern (PRecord rows ann) = do
     pure ((var, p'), (var, t), caps, cs, iss))
   let ty = TyRows rho rowts
   pure (PRecord rowps (ann, ty), ty, mconcat caps, concat cons, fold iss)
+
 inferPattern (PTuple elems ann) =
   case elems of
     [] -> pure (PLiteral LiUnit (ann, tyUnit), tyUnit, mempty, [], mempty)
@@ -61,6 +63,27 @@ inferPattern (PTuple elems ann) =
 
 inferPattern (PLiteral l ann) = pure (PLiteral l (ann, t), t, mempty, [], mempty)
   where t = litTy l
+
+inferPattern pat@(POr p q ann) = do
+  let reason = BecauseOf pat
+  (p', pt, pvs, pcs, pis) <- inferPattern p
+  (q', qt, qvs, qcs, qis) <- inferPattern q
+
+  -- Patterns must match the same type
+  _ <- unify reason pt qt
+
+  unless (pis == mempty) $ confesses (ArisingFrom (DisjunctClassEv p' pis) (BecauseOf p'))
+  unless (qis == mempty) $ confesses (ArisingFrom (DisjunctClassEv q' qis) (BecauseOf q'))
+
+  -- Then, assuming either pcs or qcs (here we use both), check that all
+  -- the variables have the same types
+  _ <- implies pat pt (pcs ++ qcs) $ do
+    pb <- Map.toAscList <$> foldTeleM (\a b -> pure (Map.singleton a b)) pvs
+    qb <- Map.toAscList <$> foldTeleM (\a b -> pure (Map.singleton a b)) qvs
+    for (zip pb qb) $ \((_, a), (_, b)) ->
+      () <$ unify reason a b
+
+  pure (POr p' q' (ann, pt), pt, pvs, pcs, mempty)
 
 inferPattern p = do
   x <- freshTV
@@ -180,6 +203,7 @@ boundTvs p vs = pat p <> foldTele go vs where
   pat (PType _ t _) = ftv t
   pat (PRecord ps _) = foldMap (pat . snd) ps
   pat (PTuple ps _) = foldMap pat ps
+  pat (POr p _ _) = pat p -- Either disjunct works, same set, etc
   pat PLiteral{} = mempty
   pat PList{} = error "PList is handled by desugar"
 

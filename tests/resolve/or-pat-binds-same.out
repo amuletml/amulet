@@ -1,0 +1,4 @@
+type t#0  =
+  | A#1 of int
+  | B#2
+let bar#3 (A#1 _) | B#2 = 0

@@ -1,5 +1,5 @@
-unused_let_top_03.ml[1:13 ..1:17]: warning (W3002)
+unused_let_top_03.ml[1:13 ..1:13]: warning (W3002)
   Bound locally but not used: 'x'
   │ 
 1 │ let private x = 1
-  │             ^^^^^
+  │             ^

@@ -19,7 +19,7 @@ depOrder :: Ord (Var p)
 depOrder binds = extra ++ stronglyConnComp nodes where
   (extra, nodes, mapping) = foldr buildNode (mempty, mempty, mempty) binds
 
-  buildNode it@(Binding var ex _ _) (e, n, m) =
+  buildNode it@(Binding var _ ex _ _) (e, n, m) =
     ( e, (it, var, freeInMapped ex):n, Map.insert var var m )
   buildNode it@(Matching p ex _) (e, n, m) =
     case bound p of
@@ -96,6 +96,7 @@ bound (PAs p v _) = fromList [v] <> bound p
 bound (PRecord vs _) = foldMap (bound . snd) vs
 bound (PTuple ps _) = foldMap bound ps
 bound (PList ps _) = foldMap bound ps
+bound (POr p q _) = bound p <> bound q
 bound (Capture p _) = fromList [p]
 bound (PType p _ _) = bound p
 bound (PGadtCon _ _ vs p _) = fromList (map fst vs) <> foldMap bound p
@@ -108,6 +109,7 @@ boundWith (Destructure _ x _) = foldMap boundWith x
 boundWith (PRecord vs _) = foldMap (boundWith . snd) vs
 boundWith (PTuple ps _) = foldMap boundWith ps
 boundWith (PList ps _) = foldMap boundWith ps
+boundWith (POr p q _) = boundWith p <> boundWith q
 boundWith (Capture p a) = fromList [(p, a)]
 boundWith (PAs p v a) = fromList [(v, a)] <> boundWith p
 boundWith (PType p _ _) = boundWith p

@@ -45,9 +45,9 @@ testAmuse gen = do
 
   for_ terms $ \term -> do
     let term' = forgetTypes term
-        ([LetStmt _ _ [Binding _  term'' _ _] a], _) =
+        ([LetStmt _ _ [Binding _ vp term'' _ _] a], _) =
           runNamey (desugarProgram
-                      [LetStmt NonRecursive Private [Binding firstName term' False internal] a])
+                      [LetStmt NonRecursive Private [Binding firstName vp term' False internal] a])
                    nm
 
 
@@ -65,7 +65,7 @@ tests = hedgehog $$discover
 forgetTypes :: Expr Typed -> Expr Resolved
 forgetTypes (VarRef v (an, _)) = VarRef v an
 forgetTypes (Let re bs bd (a, _)) = Let re (forgetBinds <$> bs) (forgetTypes bd) a where
-  forgetBinds (Binding v e b (a, _)) = Binding v (forgetTypes e) b a
+  forgetBinds (Binding v vp e b (a, _)) = Binding v vp (forgetTypes e) b a
   forgetBinds (Matching p e (a, _)) = Matching (forgetPat p) (forgetTypes e) a
   forgetBinds (TypedMatching p e (a, _) _) = Matching (forgetPat p) (forgetTypes e) a
 forgetTypes (If c t e (a, _)) = If (forgetTypes c) (forgetTypes t) (forgetTypes e) a
@@ -122,6 +122,7 @@ forgetPat (PType p t (a, _)) = PType (forgetPat p) (forgetKind t) a
 forgetPat (PRecord rs (a, _)) = PRecord (map (second forgetPat) rs) a
 forgetPat (PTuple p (a, _)) = PTuple (forgetPat <$> p) a
 forgetPat (PList p (a, _)) = PTuple (forgetPat <$> p) a
+forgetPat (POr p q (a, _)) = POr (forgetPat p) (forgetPat q) a
 forgetPat (PLiteral l (a, _)) = PLiteral l a
 forgetPat PGadtCon{} = undefined
 

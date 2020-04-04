@@ -51,7 +51,7 @@ approxType' _ = guess
 approximate :: MonadInfer Typed m
             => Binding Desugared
             -> m (Origin, (Var Typed, Type Typed))
-approximate (Binding v e _ _) = do
+approximate (Binding v _ e _ _) = do
   (ty, st) <- runStateT (approxType e) Supplied
   ty' <- generalise nominalTvs (becauseExp e) ty
   pure (st, (v, if not (wasGuessed st) then ty' else ty))
@@ -66,6 +66,7 @@ approxPattern :: MonadInfer Typed m => Expr Desugared -> Pattern Desugared -> St
 approxPattern _ Wildcard{} = guess
 approxPattern _ Capture{} = guess
 approxPattern _ Destructure{} = guess
+approxPattern r (POr p _ _) = approxPattern r p
 approxPattern r (PAs p _ _) = approxPattern r p
 approxPattern r (PType _ t _) = resolveKind (becauseExp r) t
 approxPattern r (PRecord vs _) = do

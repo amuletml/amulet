@@ -79,7 +79,7 @@ data Command
     , cOutput     :: FilePath
     , keepLua     :: Maybe FilePath
     , keepCShim   :: Maybe FilePath
-    , useLiblua   :: String
+    , useLiblua   :: Maybe String
     , useCC       :: Maybe String
     , useLD       :: Maybe String
     , ccOptions   :: [String]
@@ -169,11 +169,10 @@ argParser = info (args <**> helper <**> version)
       <*> optional (option str
             ( long "keep-shim" <> metavar "FILE" <> hidden
            <> help "Write the generated C shim to a file."))
-      <*> option str
+      <*> optional (option str
             ( long "lua" <> metavar "LUA" <> hidden
            <> help ("Use this Lua implementation. This is used as the name of the pkg-config package"
-                 ++ "used to find the proper include paths and libraries for this Lua implementation.")
-           <> value "lua" )
+                 ++ "used to find the proper include paths and libraries for this Lua implementation.")))
       <*> optional (option str
             ( long "cc" <> metavar "PROGRAM" <> hidden
            <> help "Use PROGRAM as the C compiler"))
@@ -353,6 +352,20 @@ main = do
         >> exitWith (ExitFailure 1)
       else pure ()
 
+      luaImpl <- case useLiblua opt of
+        Just lib -> do
+          exists <- C.libExists lib
+          unless exists $ hPutStrLn stderr ("Library " ++ lib ++ " is not installed")
+                       >> exitWith (ExitFailure 1)
+          pure lib
+        Nothing -> do
+          lib <- findM C.libExists ["lua", "lua5.3", "lua53", "lua5.2", "lua52", "lua5.1", "lua51"]
+          case lib of
+            Nothing -> do
+              hPutStrLn stderr "Cannot find the Lua development library. Either install the missing packages or use --lua to specify a custom one."
+              exitWith (ExitFailure 1)
+            Just lib -> pure lib
+
       let opts = C.Options
             { C.optLevel = if optLevel >= 1 then C.Opt else C.NoOpt
             , C.lint = coreLint options
@@ -368,7 +381,7 @@ main = do
             , C.suseLD        = (useLD opt, ldOptions opt ++ [ "-static" | static opt ])
             , C.isStatic      = static opt
             , C.soutput       = cOutput opt
-            , C.luaImpl       = useLiblua opt
+            , C.luaImpl       = luaImpl
             }
 
       config <- driverConfig options
@@ -384,3 +397,8 @@ compileOrWatch False time opts config source emit = do
     Just file ->
       withFile file WriteMode (timingReport . hPutDoc)
     Nothing -> pure ()
+
+findM :: (Foldable t, Monad m) => (a -> m Bool) -> t a -> m (Maybe a)
+findM p = foldM filter Nothing where
+  filter Nothing x  = (\f -> if f then Just x else Nothing) <$> p x
+  filter (Just x) _ = pure (Just x)

@@ -1,0 +1,6 @@
+or-pat-cls.ml[4:10 ..4:12]: error (E2041)
+  │ 
+4 │ let foo (X x | Y x) = x
+  │          ^^^
+  This branch of an or-pattern binds class evidence for
+    • x int

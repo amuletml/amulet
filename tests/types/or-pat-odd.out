@@ -1,0 +1,4 @@
+t : type
+X : int -> t
+Y : string -> t
+foo : (t * t) -> int * string

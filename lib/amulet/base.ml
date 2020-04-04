@@ -187,6 +187,11 @@ instance show () begin
   let show () = "()"
 end
 
+external private val show_string : string -> string = "function(x) return ('%q'):format(x) end"
+instance show string begin
+  let show = show_string
+end
+
 instance show 'a => show (list 'a) begin
   let show =
     let a <> b =

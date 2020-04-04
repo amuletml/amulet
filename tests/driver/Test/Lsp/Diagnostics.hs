@@ -26,7 +26,8 @@ diagnosticsTests = testGroup "Diagnostics"
                              , _code = Nothing
                              , _source = Just "amulet.parser"
                              , _message = "Unexpected lets, expected type"
-                             , _relatedInformation = Nothing } ]
+                             , _relatedInformation = Nothing
+                             , _tags = Nothing } ]
 
   , lspSession "Resolve errors provide diagnostics" $ do
       ident <- openDoc "main.ml" "amulet"
@@ -41,5 +42,6 @@ diagnosticsTests = testGroup "Diagnostics"
                              , _code = Just (NumberValue 1001)
                              , _source = Just "amulet.resolve"
                              , _message = "Variable not in scope: `y`"
-                             , _relatedInformation = Nothing } ]
+                             , _relatedInformation = Nothing
+                             , _tags = Nothing } ]
   ]

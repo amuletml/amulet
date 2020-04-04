@@ -19,6 +19,7 @@ resolve/1012.txt Resolver: TFClauseWrongHead
 resolve/1013.txt Resolver: TFClauseWrongArity
 resolve/1014.txt Resolver: NoMatchingImport
 resolve/1015.txt Resolver: ManyMatchingImports
+resolve/1016.txt Resolver: UnequalVarBinds
 types/2001.txt TC: NotEqual
 types/2002.txt TC: Occurs
 types/2003.txt TC: CustomTypeError
@@ -54,6 +55,7 @@ types/2037.txt TC: TyFunInLhs
 types/2038.txt TC: DICan'tDerive
 types/2039.txt TC: NotAnIdiom
 types/2040.txt TC: PolyTyFunRhs
+types/2041.txt TC: DisjunctClassEv
 verify/3001.txt Verify: MalformedRecursiveRhs
 verify/3002.txt Verify: DefinedUnused
 verify/3003.txt Verify: ParseErrorInForeign
@@ -63,3 +65,5 @@ verify/3006.txt Verify: MissingPattern
 verify/3007.txt Verify: MatchToLet
 verify/3008.txt Verify: MatchToFun
 verify/3009.txt Verify: ToplevelRefBinding
+verify/3010.txt Verify: UnknownIntrinsic
+verify/3011.txt Verify: MismatchedIntrinsic

@@ -1,0 +1,9 @@
+evil-cycle.ml[5:1 ..5:25]: error (E2018)
+  No instance for x test arising in the instance declaration
+  │ 
+5 │ instance y test begin end
+  │ ^^^^^^^^^^^^^^^^^^^^^^^^^
+  • Note: this is required by the context of the class,
+  │ 
+3 │ class x 'a => y 'a begin end
+  │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^

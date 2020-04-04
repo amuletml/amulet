@@ -1,0 +1,4 @@
+t : type -> type
+X : Spec{'a : type}. 'a -> t 'a
+Y : Infer{'br : type}. Spec{'a : 'br}. ('a ~ int) ⊃ int -> t 'a
+foo : Infer{'a : type}. t 'a -> int

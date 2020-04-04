@@ -348,16 +348,17 @@ lowerOne tys rss = do
     -- within it, favouring those with less distinct cases.
     branchingFactor :: LowerState -> CoVar -> Int
     branchingFactor state var =
-      let hs = foldr (HSet.insert . maybe PatWildcard partialLower . VarMap.lookup var . rowPatterns) mempty rs
+      let hs = foldMap (maybe (HSet.singleton PatWildcard) partialLower . VarMap.lookup var . rowPatterns) rs
       in -HSet.size hs - (if partialComplete hs then 0 else 1) where
 
-      partialLower S.Wildcard{} = PatWildcard
-      partialLower S.Capture{} = PatWildcard
-      partialLower (S.PLiteral l _) = PatLit (lowerLiteral l)
-      partialLower (S.PGadtCon v _ _ _ _) = Constr (mkCon v)
-      partialLower (S.Destructure v _ _) = Constr (mkCon v)
-      partialLower (S.PRecord _ _) = PatRecord []
+      partialLower S.Wildcard{} = HSet.singleton PatWildcard
+      partialLower S.Capture{} = HSet.singleton PatWildcard
+      partialLower (S.PLiteral l _) = HSet.singleton (PatLit (lowerLiteral l))
+      partialLower (S.PGadtCon v _ _ _ _) = HSet.singleton (Constr (mkCon v))
+      partialLower (S.Destructure v _ _) = HSet.singleton (Constr (mkCon v))
+      partialLower (S.PRecord _ _) = HSet.singleton (PatRecord [])
       partialLower (S.PAs p _ _) = partialLower p
+      partialLower (S.POr l r _) = partialLower l <> partialLower r
       partialLower p = error ("Unhandled pattern " ++ show p)
 
       partialComplete hs = foldr ((||) . go) False hs where
@@ -406,6 +407,7 @@ lowerOne tys rss = do
       arityOf (S.Destructure _ Just{} _) = 1
       arityOf (S.PRecord f _) = length f
       arityOf (S.PAs p _ _) = arityOf p
+      arityOf (S.POr l r _) = min (arityOf l) (arityOf r)
       arityOf _ = 0
 
 -- | Lower a series of pattern rows, branching on the provided variable
@@ -429,16 +431,24 @@ lowerOneOf :: forall m. MonadLower m
            -> CoVar -> Type -- ^ The variable to match against and its type.
            -> VarMap.Map Type -> [PatternRow]
            -> m ArmNode
-lowerOneOf preLeafs var ty tys = go [] . map prepare
+lowerOneOf preLeafs var ty tys = go [] . foldMap prepare
   where
-    prepare (PR arms pats gd vBind tyBind) =
+    prepare (PR arms pats gd vBind tyBind) = do
       let pat = fromMaybe (S.Wildcard undefined) (VarMap.lookup var pats)
-          (pat', vs) = unwrapAs pat
-      in ( pat', PR arms (VarMap.delete var pats) gd (vs ++ vBind) tyBind )
+      (pat', vs) <- unwrap [] pat
+      pure ( pat', PR arms (VarMap.delete var pats) gd (vs ++ vBind) tyBind )
 
-    unwrapAs (S.PAs p v _) = (VS var (mkVal v) ty:) <$> unwrapAs p
-    unwrapAs p = (p, [])
+    -- | Unwrap a pattern, removing several additional constructs:
+    --
+    -- - Remove as patterns, replacing them with the original variable and a
+    --   mapping.
+    -- - Flatten or patterns.
+    unwrap vs (S.PAs p v _) = unwrap (VS var (mkVal v) ty:vs) p
+    unwrap vs (S.POr l r _) = unwrap vs l ++ unwrap vs r
+    unwrap vs p = pure (p, vs)
 
+    -- | The top-level driver which attempts to determine the "best" version.
+    go :: [PatternRow] -> [(S.Pattern Typed, PatternRow)] -> m ArmNode
     go unc [] = lowerOne tys (reverse unc)
     go unc rs@((S.PRecord{},_):_) = goRows unc mempty rs
     go unc rs@((S.Destructure{},_):_) = goCtorsWith unc rs
@@ -447,6 +457,7 @@ lowerOneOf preLeafs var ty tys = go [] . map prepare
     go unc ((p, r):rs) = go (goGeneric p r:unc) rs
 
     -- | The fallback handler for "generic" fields
+    goGeneric :: S.Pattern Typed -> PatternRow -> PatternRow
     goGeneric (S.Wildcard _) r = r
     goGeneric (S.Capture v _) (PR arm ps gd vBind tyBind)
       = PR arm ps gd (VS var (mkVal v) ty:vBind) tyBind
@@ -590,6 +601,7 @@ normalisePattern (S.PGadtCon v vs vs' p a) = S.PGadtCon v vs vs' (normalisePatte
 normalisePattern (S.Destructure v (Just p) a) = S.Destructure v (Just (normalisePattern p)) a
 normalisePattern (S.PAs p v a) = S.PAs (normalisePattern p) v a
 normalisePattern (S.PRecord fs a) = S.PRecord (map (second normalisePattern) fs) a
+normalisePattern (S.POr l r a) = S.POr (normalisePattern l) (normalisePattern r) a
 -- Reduce these cases to something else
 normalisePattern (S.PType p _ _) = normalisePattern p
 normalisePattern S.PList{} = error "PList is handled by desugar"
@@ -614,6 +626,7 @@ isTrivialPat :: S.Pattern Typed -> Bool
 isTrivialPat S.Wildcard{} = True
 isTrivialPat S.Capture{} = True
 isTrivialPat (S.PAs p _ _) = isTrivialPat p
+isTrivialPat (S.POr l r _) = isTrivialPat l && isTrivialPat r
 isTrivialPat _ = False
 
 patternVars :: Pattern CoVar -> [(CoVar, Type)]
@@ -638,6 +651,9 @@ patternVars' (S.PGadtCon _ _ vs p _) = map ((_1 %~ mkVal) . (_2 %~ lowerType)) v
 patternVars' (S.PType p _ _) = patternVars' p
 patternVars' (S.PTuple ps _) = concatMap patternVars' ps
 patternVars' S.PList{} = error "PList is handled by desugar"
+
+-- Either disjunct works, we require they bind the same variables at the same types
+patternVars' (S.POr p _ _) = patternVars' p
 
 dropNForalls :: Int -> Type -> Type
 dropNForalls 0 t = t

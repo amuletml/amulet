@@ -74,6 +74,7 @@ instance Annotated (Pattern p) where
   annotation (PLiteral _ a) = a
   annotation (PGadtCon _ _ _ _ a) = a
   annotation (PList _ a) = a
+  annotation (POr _ _ a) = a
 
 instance Annotated (Arm p) where
   type Annotation (Arm p) = RawAnn p
@@ -221,11 +222,12 @@ instance (Pretty (Var p)) => Pretty (Pattern p) where
   pretty (PTuple ps _) = parens (hsep (punctuate comma (map pretty ps)))
   pretty (PList ps _) = brackets (hsep (punctuate comma (map pretty ps)))
   pretty (PLiteral l _) = pretty l
+  pretty (POr pp pq _) = pretty pp <+> pipe <+> pretty pq
   pretty (PGadtCon v _ vs p _) = parens $ pretty v <+> hsep (map (pretty . fst) vs) <> spc <> foldMap pretty p where
     spc = foldMap (const (char ' ')) p
 
 instance Pretty (Var p) => Pretty (Binding p) where
-  pretty (Binding n v _ _) = hsep (pretty n:map pretty args) <> sig <+> nest 2 (equals </> pretty rest') where
+  pretty (Binding n _ v _ _) = hsep (pretty n:map pretty args) <> sig <+> nest 2 (equals </> pretty rest') where
     (args, rest) = takeLambdas v
     (sig, rest') = case rest of
       Ascription e t _ -> (space <> colon <+> pretty t, e)

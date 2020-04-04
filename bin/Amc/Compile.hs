@@ -8,6 +8,7 @@ module Amc.Compile
   , watchFile
   , compileWithLua
   , compileStaticLua
+  , libExists
   ) where
 
 import System.Directory
@@ -21,7 +22,10 @@ import Control.Monad.Infer (firstName)
 import Control.Monad.Namey
 import Control.Monad.State
 import Control.Concurrent
+import Control.Exception
 import Control.Timing
+
+import GHC.IO.Exception
 
 import qualified Data.Text.Encoding as T
 import qualified Data.ByteString as Bs
@@ -251,3 +255,18 @@ exitMaybe cleanup c =
   case c of
     ExitSuccess{} -> pure ()
     e -> cleanup *> exitWith e
+
+-- | Determine if a development library exists. This will throw an error
+-- and exit amc if @pkg-config@ is not installed.
+libExists :: String -> IO Bool
+libExists lib = do
+  res <- tryJust isMissing $ readProcessWithExitCode "pkg-config" ["--exists", lib] ""
+  case res of
+    Right (ExitSuccess, _, _) -> pure True
+    Right (ExitFailure _, _, _) -> pure False
+    Left () -> do
+      hPutStrLn stderr "pkg-config must be installed in order to generate executables."
+      exitWith (ExitFailure 1)
+ where
+   isMissing (IOError _ NoSuchThing _ _ _ _) = Just ()
+   isMissing _ = Nothing

@@ -195,7 +195,7 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
     (fold -> defaultMap) <-
       local (classes %~ mappend scope)
       . local (names %~ focus tele)
-      . for defaults $ \(DefaultMethod bind@(Binding method exp _ _) _) -> do
+      . for defaults $ \(DefaultMethod bind@(Binding method _ exp _ _) _) -> do
       let sig = tele ^. at method . non undefined
 
       (_, cs) <- listen $
@@ -237,7 +237,7 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
                  (classAnn, ty)
           ty <- silence $
             closeOver' vars (BecauseOf clss) ty
-          pure (Binding var expr True (classAnn, ty))
+          pure (Binding var classAnn expr True (classAnn, ty))
 
         newtypeClassDecl :: (Type Typed -> TyBinder Typed, Var Typed, T.Text, Type Typed) -> m (Binding Typed)
         newtypeClassDecl (f, var, _, theTy) = do
@@ -252,7 +252,7 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
                  (classAnn, ty)
           ty <- silence $
             closeOver' vars (BecauseOf clss) ty
-          pure (Binding var expr False (classAnn, ty))
+          pure (Binding var classAnn expr False (classAnn, ty))
 
     decs <- case rows ++ rows' of
       [one] -> pure <$> newtypeClassDecl one
@@ -472,7 +472,7 @@ inferInstance inst@(Instance clss ctx instHead bindings we'reDeriving ann) = con
 
   (Map.fromList -> methodMap, Map.fromList -> methodDef, methods) <- fmap unzip3 . addStuff $
     for (filter method bindings) $ \case
-      (MethodImpl bind@(Binding v e _ an)) -> do
+      (MethodImpl bind@(Binding v vp e _ an)) -> do
         sig <- case Map.lookup v methodSigs of
           Just x -> pure x
           Nothing -> confesses (WrongClass (MethodImpl bind) clss)
@@ -499,13 +499,13 @@ inferInstance inst@(Instance clss ctx instHead bindings we'reDeriving ann) = con
         let needsLet = wrap `Map.restrictKeys` freeIn e
             addOne (v, ExprApp e) ex
               | VarRef v' _ <- e, v == v' = ex
-              | otherwise = mkLet [ Binding v e False (spanOf ex, getType e) ] ex (spanOf ex, getType ex)
+              | otherwise = mkLet [ Binding v (spanOf ex) e False (spanOf ex, getType e) ] ex (spanOf ex, getType ex)
             addOne _ ex = ex
             addFreeDicts ex = foldr addOne ex (Map.toList needsLet)
 
         pure ( (nameName v, v')
              , (nameName v, fakeExp)
-             , Binding v'
+             , Binding v' vp
                 (addArg skolSub bindGroupTy
                   (Fun (EvParam instancePattern)
                     (Ascription
@@ -545,7 +545,7 @@ inferInstance inst@(Instance clss ctx instHead bindings we'reDeriving ann) = con
 
     var <- genNameFrom name
     body <- expandEta ty $ solveEx mempty sub wrap (shove cons e)
-    let bind = Binding var (addArg skolSub bindGroupTy fun) False (an, bindGroupTy)
+    let bind = Binding var an (addArg skolSub bindGroupTy fun) False (an, bindGroupTy)
         fun = Fun (EvParam instancePattern)
                 body
                 (an, TyArr ctx ty)
@@ -558,7 +558,7 @@ inferInstance inst@(Instance clss ctx instHead bindings we'reDeriving ann) = con
 
   (contextFields, cs) <- listen . for (Map.toList classContext) $ \(name, ty) -> do
     var <- genName
-    tell (pure (ConImplicit (BecauseOf inst) (scope <> localAssums) var ty))
+    tell (pure (ConImplicit (BecauseOf inst) (scope <> localAssums') var ty))
     pure (Field name
            (ExprWrapper (WrapVar var)
              (Fun (EvParam (PType (Capture var (ann, ty)) ty (ann, ty)))
@@ -571,12 +571,17 @@ inferInstance inst@(Instance clss ctx instHead bindings we'reDeriving ann) = con
       whatDo = Map.toList (methodNames <> classContext)
       fields = methodFields ++ usedDefaults ++ contextFields
 
+  let unconstrain_local_tf (Left c) = Left c
+      unconstrain_local_tf (Right c)
+        | (c ^. tsName) `Set.member` made = Right (c & tsConstraint .~ Nothing)
+        | otherwise = Right c
+
   (solution, needed, unsolved) <-
     local (tySyms %~ extendTySyms tysyms) $
-      solveFixpoint (BecauseOf inst) cs =<< getSolveInfo
+      solveFixpoint (BecauseOf inst) cs . fmap unconstrain_local_tf =<< getSolveInfo
 
   unless (null unsolved) $
-    dictates . addBlame (BecauseOf inst) =<< unsatClassCon inst (head unsolved) (InstanceClassCon classAnn)
+    dictates . addBlame (BecauseOf inst) =<< unsatClassCon inst (Seq.index cs 0) (InstanceClassCon classAnn)
 
   let inside = case whatDo of
         [(_, _)] -> solveEx mempty solution needed (fields ^. to head . fExpr)
@@ -588,7 +593,7 @@ inferInstance inst@(Instance clss ctx instHead bindings we'reDeriving ann) = con
                     inside
                     (ann, instHead))
                 (ann, localInsnConTy)
-      bind = Binding instanceName (Ascription fun globalInsnConTy (ann, globalInsnConTy)) True (ann, globalInsnConTy)
+      bind = Binding instanceName ann (Ascription fun globalInsnConTy (ann, globalInsnConTy)) True (ann, globalInsnConTy)
 
   pure ( LetStmt Recursive Public (methods ++ defaultMethods ++ [bind]) (spanOf inst)
        : axioms, instanceName, globalInsnConTy, info, tysyms)
@@ -681,7 +686,7 @@ reduceClassContext extra annot cons = do
               sub = more_sub <> here_sub
            in if var == v
                 then (bindings, needs', scope', sub)
-                else ( Binding var (VarRef v (annot, apply sub t)) False (annot, apply sub t):bindings
+                else ( Binding var annot (VarRef v (annot, apply sub t)) False (annot, apply sub t):bindings
                      , needs', scope', sub )
         | otherwise =
           -- see comment in 'fundepsAllow' for why this can be undefined
@@ -697,7 +702,7 @@ reduceClassContext extra annot cons = do
         = case useForSimpl annot scp implicit con of
             Just expr ->
               let (bindings, needs') = simpl scp needs
-               in (Binding var expr False (annot, con):bindings, needs')
+               in (Binding var annot expr False (annot, con):bindings, needs')
             Nothing -> second ((var, con, why) :) (simpl scp needs)
         | otherwise = second ((var, con, why) :) (simpl scp needs)
       simpl _ [] = ([], [])
@@ -745,8 +750,8 @@ addLet wrap' name (_:cs) ex = addLet wrap' name cs ex
 addLet _ _ [] ex = ex
 
 mkBind :: Var Typed -> Expr Typed -> Ann Typed -> [Binding Typed]
-mkBind var (VarRef var' _) | var == var' = const []
-mkBind v e = (:[]) . Binding v e False
+mkBind var (VarRef var' _) _ | var == var' = []
+mkBind v e a@(p,_) = [Binding v p e False a]
 
 reify :: Map.Map (Var Typed) (Wrapper Typed) -> Var Typed -> Ann Resolved -> Type Typed -> Var Typed -> Expr Typed
 reify wrap' name an ty var =

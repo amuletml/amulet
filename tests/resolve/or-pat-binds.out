@@ -1,0 +1,10 @@
+or-pat-binds.ml[3:10 ..3:16]: error (E1016)
+  Disjuncts of an or-pattern bind different variables:
+    (A x) binds x
+  while
+    B binds 
+
+  Arising from use of the pattern
+  │ 
+3 │ let foo (A x | B) = 0
+  │          ^^^^^^^

@@ -31,9 +31,9 @@ instance eq 'k * eq 'v => eq (t 'k 'v) begin
 end
 
 instance show 'k * show 'v => show (t 'k 'v) begin
-  let show (M tree) =
-    let entries = T.elements tree
-    "from_list " ^ show entries
+  let show (M tree) = show tree
+    (* let entries = T.elements tree *)
+    (* "from_list " ^ show entries *)
 end
 
 (** The empty map. *)
@@ -105,7 +105,7 @@ instance ord 'k => index (t 'k 'v)
 
 instance ord 'k => set_index (t 'k 'v)
   (** Update, or insert, a key on the map. Returns the new map. *)
-  let ( .()<- ) map key new = alter (fun _ -> Some new) key map
+  let ( .()<- ) map key new = insert key new map
 
 instance functor (t 'k) begin
   let f <$> M tree =
@@ -257,6 +257,10 @@ end
 
 (** merge is the same function as in the Merge module. *)
 let merge = Merge.merge
+
+(** union_by keeps elements from both maps, and those present in the
+ * intersection should be combined by the provided zipping function *)
+let union_by k x y = Merge.(merge preserve_missing preserve_missing (zip_with_matched k) x y)
 
 (** Filter a map according to a predicate with access to both the keys
  * and the values. *)

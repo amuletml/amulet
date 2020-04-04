@@ -18,6 +18,11 @@ end
 (** The empty set. *)
 let empty = S T.empty
 
+(** Is this set empty? *)
+let null = function
+  | S T.E -> true
+  | _ -> false
+
 (** Make the set containing only the given element *)
 let singleton x = S (T.singleton x)
 
@@ -39,7 +44,7 @@ let members (S tree) = T.elements tree
 (** Map a function over the elements of a set. This does not assume that
  * the function is monotonic, so it has to rebuild the structure of the
  * tree. *)
-let map_keys f xs =
+let map f xs =
   from_list @@ (f <$>) @@ members xs
 
 (** Map a /monotonic/ function over the elements of a set.
@@ -56,9 +61,7 @@ let map_monotonic f (S tree) =
     | T.T (x, sz, l, r) -> T.T (f x, sz, go l, go r)
   S (go tree)
 
-instance foldable t begin
-  let foldr f z (S tree) = T.inorder_fold f z tree
-end
+let foldr f z (S tree) = T.inorder_fold f z tree
 
 (** Return the least set that has all the the elements of both argument
  * sets. *)

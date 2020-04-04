@@ -70,7 +70,7 @@ inferLetTy closeOver strategy vs =
               let needsLet = wraps `Map.restrictKeys` freeIn ex
                   addOne (v, ExprApp e) ex
                     | VarRef v' _ <- e, v == v' = ex
-                    | otherwise = Let Recursive [ Binding v e False (spanOf ex, getType e) ] ex (spanOf ex, getType ex)
+                    | otherwise = Let Recursive [ Binding v (spanOf ex) e False (spanOf ex, getType e) ] ex (spanOf ex, getType ex)
                   addOne _ ex = ex
                   addFreeDicts ex = foldr addOne ex (Map.toList needsLet)
 
@@ -108,7 +108,7 @@ inferLetTy closeOver strategy vs =
                  , Telescope Typed
                  , Set.Set (Var Typed))
 
-      tcOne (AcyclicSCC decl@(Binding var exp _ ann)) = do
+      tcOne (AcyclicSCC decl@(Binding var vp exp _ ann)) = do
         (origin, tv@(_, ty)) <- condemn $ approximate decl
         ((exp', ty, shouldAddContext), cs) <- listen $
           case origin of
@@ -127,7 +127,7 @@ inferLetTy closeOver strategy vs =
         --       case origin of
         --         Deduced -> \e -> ExprWrapper (TypeAsc tp) e (ann, tp)
         --         _ -> id
-        pure ( [Binding var (k exp') True (ann, tp)], one var tp, mempty )
+        pure ( [Binding var vp (k exp') True (ann, tp)], one var tp, mempty )
 
       tcOne (AcyclicSCC TypedMatching{}) = error "TypedMatching being TC'd"
       tcOne (AcyclicSCC b@(Matching p e ann)) = do
@@ -166,17 +166,17 @@ inferLetTy closeOver strategy vs =
         (origins, tvs) <- unzip <$> traverse approximate vars
 
         (bindings, cs) <- listen . local (names %~ focus (teleFromList tvs)) $
-          ifor (zip tvs vars) $ \i ((_, tyvar), Binding var exp _ ann) ->
+          ifor (zip tvs vars) $ \i ((_, tyvar), Binding var vp exp _ ann) ->
             case origins !! i of
               Guessed -> do
                 (exp', ty) <- infer exp
                 _ <- unify (becauseExp exp) ty tyvar
-                pure (Binding var exp' True (ann, ty), ty)
+                pure (Binding var vp exp' True (ann, ty), ty)
               _ -> do
                 let exp' (Ascription e _ _) = exp' e
                     exp' e = e
                 exp <- check (exp' exp) tyvar
-                pure (Binding var exp True (ann, tyvar), tyvar)
+                pure (Binding var vp exp True (ann, tyvar), tyvar)
 
         (solution, wrap, cons) <- solveFixpoint (It'sThis (BecauseInternal "fixed point solving")) cs =<< getSolveInfo
 
@@ -184,10 +184,10 @@ inferLetTy closeOver strategy vs =
         if null cons
            then do
              let solveOne :: (Binding Typed, Type Typed) -> m ( Binding Typed )
-                 solveOne (Binding var exp _ an, ty) = do
+                 solveOne (Binding var vp exp _ an, ty) = do
                    ty <- closeOver mempty exp (apply solution ty)
                    (new, sub) <- pure $ rename ty
-                   pure ( Binding var
+                   pure ( Binding var vp
                            (solveEx tys (sub `compose` solution) wrap exp)
                            True
                            (fst an, new)
@@ -195,7 +195,7 @@ inferLetTy closeOver strategy vs =
                  solveOne _ = undefined
 
              bs <- traverse solveOne bindings
-             let makeTele (Binding var _ _ (_, ty):bs) = one var ty <> makeTele bs
+             let makeTele (Binding var _ _ _ (_, ty):bs) = one var ty <> makeTele bs
                  makeTele _ = mempty
                  makeTele :: [Binding Typed] -> Telescope Typed
              pure (bs, makeTele bs, mempty)
@@ -214,12 +214,12 @@ inferLetTy closeOver strategy vs =
              let solveOne :: Subst Typed
                           -> (Binding Typed, Type Typed)
                           -> m ( (T.Text, Var Typed, Ann Desugared, Type Typed), Binding Typed, Field Typed )
-                 solveOne sub (Binding var exp _ an, ty) = do
+                 solveOne sub (Binding var vp exp _ an, ty) = do
                    let nm = nameName var
                    ty <- pure (apply (solution <> sub) ty)
 
                    pure ( (nm, var, fst an, ty)
-                        , Binding (innerNames Map.! var)
+                        , Binding (innerNames Map.! var) vp
                            (Ascription
                              (transformExprTyped renameInside id id (solveEx tys (solution <> sub) wrap exp))
                              ty (fst an, ty))
@@ -245,7 +245,7 @@ inferLetTy closeOver strategy vs =
              tyLams <- mkTypeLambdas (ByConstraint recTy) closed
 
              let record =
-                   Binding recVar
+                   Binding recVar an
                      (Ascription
                        (ExprWrapper tyLams
                          (wrapper Full
@@ -265,7 +265,7 @@ inferLetTy closeOver strategy vs =
                          lineUp cs rest $ App ex (VarRef v (spanOf ex, t)) (spanOf ex, rest)
                        lineUp _ _ e = e
                        lineUp :: [(Var Typed, Type Typed, SomeReason)] -> Type Typed -> Expr Typed -> Expr Typed
-                   pure $ Binding var
+                   pure $ Binding var an
                      (ExprWrapper tyLams
                        (wrapper Thin
                          (Access
@@ -278,7 +278,7 @@ inferLetTy closeOver strategy vs =
                      (an, ty')
 
              getters <- traverse makeOne info
-             let makeTele (Binding var _ _ (_, ty):bs) = one var ty <> makeTele bs
+             let makeTele (Binding var _ _ _ (_, ty):bs) = one var ty <> makeTele bs
                  makeTele _ = mempty
                  makeTele :: [Binding Typed] -> Telescope Typed
              pure (record:getters, makeTele getters, mempty)
@@ -299,7 +299,7 @@ fakeLetTys :: MonadInfer Typed m
 fakeLetTys bs = do
   let go (b:bs) =
         case b of
-          Binding _ e _ _ -> do
+          Binding _ _ e _ _ -> do
             (var, ty) <- snd <$> approximate b
             ty <- localGenStrat mempty e ty
             (<>) (one var ty) <$> go bs

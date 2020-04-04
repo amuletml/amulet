@@ -7,6 +7,9 @@
 *.c
 *.prof
 *.svg
+*.ps
+*.aux
+*.hp
 !/assets/*svg
 !/bin/Amc/Compile/Shim.c
 
