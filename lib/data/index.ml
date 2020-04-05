@@ -1,7 +1,7 @@
 open import "../prelude.ml"
 private module String = import "../lua/string.ml"
 
-class index 'a
+class index 'a begin
   type key
   type value
 
@@ -14,8 +14,9 @@ class index 'a
 
   (** Look up an index, returning [None] if it is unavailable. *)
   val ( .?() ) : 'a -> key 'a -> option (value 'a)
+end
 
-instance index string
+instance index string begin
   type key = int
   type value = int
 
@@ -29,6 +30,7 @@ instance index string
       throw (Invalid ("string.(): index " ^ show i ^ " is out of bounds"))
     else
       String.char_code_at str i
+end
 
 class index 'a => set_index 'a
   (** Create a copy of this object with the index added or modified. *)

@@ -11,9 +11,10 @@ private type pairs 'k 'v =
 
 instance functor (pairs 'k) begin
   let f <$> x =
-    match x with
-    | Nil -> Nil
-    | Cons { k, v, next } -> Cons { k, v = f v, next = f <$> next }
+    let rec go = function
+      | Nil -> Nil
+      | Cons { k, v, next } -> Cons { k, v = f v, next = go next }
+    go x
 end
 
 let rec private pair_fold_with_key f acc = function
