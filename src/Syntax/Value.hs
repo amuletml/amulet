@@ -61,7 +61,7 @@ isFn _ = False
 conVarRef :: Var a ~ Var Resolved => Expr a -> Bool
 conVarRef (VarRef t _) =
   case t of
-    TgName n _ -> t == lAZYName || isUpper (T.head n)
+    TgName n _ -> t == lAZYName || isUpper (T.head (dropModPrefixes n))
     TgInternal t -> isUpper (T.head t)
 conVarRef (Begin [x] _) = conVarRef x
 conVarRef (If c t e _) = value c && all conVarRef [t, e]
@@ -74,3 +74,6 @@ conVarRef (DoExpr _ e _) =
     [CompGuard x] -> conVarRef x
     _ -> False
 conVarRef _ = False
+
+dropModPrefixes :: T.Text -> T.Text
+dropModPrefixes = last . T.splitOn (T.singleton '.')
