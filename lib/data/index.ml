@@ -32,13 +32,15 @@ instance index string begin
       String.char_code_at str i
 end
 
-class index 'a => set_index 'a
+class index 'a => set_index 'a begin
   (** Create a copy of this object with the index added or modified. *)
   val ( .()<- ) : 'a -> key 'a -> value 'a -> 'a
+end
 
-class index 'a => mut_index 'a
+class index 'a => mut_index 'a begin
   (** Mutate this object, adding/modifying an index. *)
   val ( .[]<- ) : 'a -> key 'a -> value 'a -> ()
+end
 
 let ( .[] ) : forall 'a. mut_index 'a => 'a -> key 'a -> value 'a = ( .() )
 
