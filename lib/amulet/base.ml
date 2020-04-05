@@ -116,6 +116,14 @@ instance ord string begin
   let (>=) = Base_defs.gte_string
 end
 
+instance ord bool begin
+  let compare x y =
+    match x, y with
+    | true, true -> Eq | false, false -> Eq
+    | true, false -> Gt
+    | false, true -> Lt
+end
+
 instance ord 'a => ord (list 'a) begin
   let compare =
     let loop xs ys =

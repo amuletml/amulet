@@ -3,7 +3,6 @@
   See `assets/logo.svg' or `assets/logo.png' for an example of the output *)
 
 open import "prelude.ml"
-open import { lua = "lua/conversion.ml" }
 
 module Math =
   include import "lua/math.ml"

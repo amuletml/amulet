@@ -134,7 +134,7 @@ let iteri f (Array { length, offset, backing }) =
     loop (i + 1)
   loop offset
 
-instance index (array 'a)
+instance index (array 'a) begin
   type key = int
   type value = 'a
 
@@ -148,13 +148,15 @@ instance index (array 'a)
       let Array { backing, offset }  = arr
       geti backing (i + offset) |> Some
     else None
+end
 
-instance mut_index (array 'a)
+instance mut_index (array 'a) begin
   let ( .[]<- ) arr i x =
     in_bounds "update" arr i
     let Array { backing, offset }  = arr
     let _ = seti backing (i + offset) x
     ()
+end
 
 let take n (Array r) =
   if r.length - n >= r.offset then

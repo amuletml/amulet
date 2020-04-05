@@ -89,8 +89,7 @@ let lookup k (M tree) =
       | Gt -> go r
   go tree
 
-(* instance ord index map where *)
-instance ord 'k => index (t 'k 'v)
+instance ord 'k => index (t 'k 'v) begin
   type key = 'k
   type value = 'v
 
@@ -99,13 +98,15 @@ instance ord 'k => index (t 'k 'v)
   (** Lookup a key on the map. If it is not present, raise an exception.
    *)
   let ( .() ) map key =
-   match lookup key map with
-  | None   -> error "Map.(.[]): no such key in map"
-  | Some x -> x
+    match lookup key map with
+    | None   -> error "Map.(.[]): no such key in map"
+    | Some x -> x
+end
 
-instance ord 'k => set_index (t 'k 'v)
+instance ord 'k => set_index (t 'k 'v) begin
   (** Update, or insert, a key on the map. Returns the new map. *)
   let ( .()<- ) map key new = insert key new map
+end
 
 instance functor (t 'k) begin
   let f <$> M tree =

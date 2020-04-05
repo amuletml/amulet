@@ -1,5 +1,4 @@
 open import "../../prelude.ml"
-open import "../../lua/conversion.ml"
 open import "../hash.ml"
 include import "../index.ml"
 
@@ -27,7 +26,7 @@ let make_with_capacity c =
     Math.log (float_of_int c) /. Math.log 2.0 |> Math.ceil |> (2**)
   HashMap (ref (Container { array = Array.empty, size = 0, initial }))
 
-instance hashable 'k => index (t 'k 'v)
+instance hashable 'k => index (t 'k 'v) begin
   type key = 'k
   type value = 'v
 
@@ -40,12 +39,13 @@ instance hashable 'k => index (t 'k 'v)
       | Cons { next } -> find next
     let h = (hash k .&. (Array.size array - 1)) + 1
     find (array.[h])
+end
 
 let iter f (HashMap container) =
   let Container { array } = !container
   let rec iter_one = function
-  | Nil -> ()
-  | Cons { k, v, next } -> f k v;iter_one next
+    | Nil -> ()
+    | Cons { k, v, next } -> f k v;iter_one next
   Array.iter iter_one array
 
 let private put_direct array k v =
@@ -69,7 +69,7 @@ let private rehash (HashMap container as hm) size =
   container := Container { array, size, initial }
   array
 
-instance hashable 'k => mut_index (t 'k 'v)
+instance hashable 'k => mut_index (t 'k 'v) begin
   let ( .[]<- ) (HashMap container as hm) k v =
     let Container { array, size, initial } = !container
     let a_size = Array.size array in
@@ -82,3 +82,4 @@ instance hashable 'k => mut_index (t 'k 'v)
       else array
     let added = put_direct array k v
     if added then container := Container { array, size = size + 1, initial } else ()
+end

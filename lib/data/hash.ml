@@ -1,21 +1,26 @@
 open import "../prelude.ml"
 
-class eq 'a => hashable 'a
+class eq 'a => hashable 'a begin
   val hash : 'a -> int
+end
 
-instance hashable int
+instance hashable int begin
   let hash x = x
+end
 
-instance hashable ()
+instance hashable () begin
   let hash () = 0
+end
 
-instance hashable bool
+instance hashable bool begin
   let hash x = if x then 1 else 0
+end
 
-instance hashable 'a * hashable 'b => hashable ('a * 'b)
+instance hashable 'a * hashable 'b => hashable ('a * 'b) begin
   let hash (a, b) = 31 * hash a + hash b
+end
 
-instance hashable string
+instance hashable string begin
   let hash xs =
     (* Hash using the djb2 hash function *)
     let open import "../lua/string.ml"
@@ -23,3 +28,4 @@ instance hashable string
     | 0 -> x
     | i -> go (x * 33 + char_code_at xs i) (i - 1)
     go 5381 (length xs)
+end
