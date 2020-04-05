@@ -29,6 +29,7 @@ end
 instance eq int    begin let (==) = Base_defs.int_eq end
 instance eq float  begin let (==) = Base_defs.float_eq end
 instance eq string begin let (==) = Base_defs.string_eq end
+instance eq bool   begin let (==) = Base_defs.bool_eq end
 
 instance eq () begin
   let _ == _ = true
@@ -113,6 +114,14 @@ instance ord string begin
   let (<=) = Base_defs.lte_string
   let (>)  = Base_defs.gt_string
   let (>=) = Base_defs.gte_string
+end
+
+instance ord bool begin
+  let compare x y =
+    match x, y with
+    | true, true -> Eq | false, false -> Eq
+    | true, false -> Gt
+    | false, true -> Lt
 end
 
 instance ord 'a => ord (list 'a) begin

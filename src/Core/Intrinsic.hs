@@ -35,6 +35,8 @@ data Intrinsic
   | StrEq
   | StrLt
   | StrLe
+
+  | BoolEq
   deriving (Eq, Ord, Generic, Hashable)
 
 names :: [(String, Intrinsic)]
@@ -61,6 +63,8 @@ names =
   , ( "string.eq", StrEq )
   , ( "string.lt", StrLt )
   , ( "string.le", StrLe )
+
+  , ( "bool.eq", BoolEq )
   ]
 
 instance Show Intrinsic where

@@ -1,4 +1,4 @@
-open import "prelude.ml"
+open import "../prelude.ml"
 
 (* The step type *)
 private type step 's 'a =

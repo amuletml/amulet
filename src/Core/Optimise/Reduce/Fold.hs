@@ -65,6 +65,8 @@ foldLiteral StrEq     [Str l, Str r] = bool (l == r)
 foldLiteral StrLt     [Str l, Str r] = bool (l < r)
 foldLiteral StrLe     [Str l, Str r] = bool (l <= r)
 
+foldLiteral BoolEq    [l, r] = bool (l == r)
+
 foldLiteral _ _ = Nothing
 
 int :: Integer -> Maybe (Term a)
@@ -77,7 +79,7 @@ float :: Double -> Maybe (Term a)
 float = atom . Lit . Float
 
 bool :: Bool -> Maybe (Term a)
-bool x = 
+bool x =
   let val = if x then LitTrue else LitFalse
   in val `seq` atom (Lit val)
 
