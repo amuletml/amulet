@@ -7,14 +7,13 @@ private type storage 'a
 type array 'a =
   private Array of {
     length  : int,
-    offset  : int,
     backing : storage 'a
   }
 
-let private is_in_bounds i (Array { offset, length }) =
+let private is_in_bounds i (Array { length }) =
   (* Flip the argument order so the pattern match happens last. Otherwise this
   prevents uncurrying. *)
-  offset + i <= length && i >= 1
+  i >= 0 && i < length
 
 let private in_bounds str r i =
   if is_in_bounds i r then () else
@@ -39,100 +38,82 @@ let make len arg =
   else ()
   Array {
     length = len,
-    offset = 0,
     backing = tabulate len (fun _ -> arg)
   }
 
 let size (Array { length }) = length
 
-let init len cont =
+let init len gen =
   if len < 0 then
     throw (Invalid ("init: can't initialise array of size " ^ show len))
   else ()
   Array {
     length = len,
-    offset = 0,
-    backing = tabulate len cont
+    backing = tabulate len (fun i -> gen (i - 1))
   }
 
-let copy (Array r) =
-  init (r.length - r.offset) @@ fun i ->
-    geti r.backing (i + r.offset)
+let copy (Array { length, backing }) =
+  Array { length, backing = tabulate length (geti backing) }
 
 let from_list (li : list 'a) =
-  let storage = tabulate 0 (fun _ -> (error "") : 'a)
+  let backing = tabulate 0 (fun _ -> (error "") : 'a)
   let rec loop i = function
     | [] -> i
     | Cons (x, xs) ->
-        let _ = seti storage i x
+        let _ = seti backing (i + 1) x
         loop (i + 1) xs
-  let len = loop 1 li
-  Array {
-    length = len - 1,
-    offset = 0,
-    backing = storage
-  }
+  let length = loop 0 li
+  Array { length, backing }
 
 let range len = init len (fun i -> i)
 
 instance functor array begin
-  let f <$> (Array r) = Array {
-    length  = r.length,
-    offset  = r.offset,
-    backing = tabulate r.length (fun i ->
-      f (geti r.backing (i + r.offset)))
+  let f <$> (Array { length, backing }) = Array {
+    length,
+    backing = tabulate length (fun i -> f (geti backing i))
   }
 end
 
 instance foldable array begin
-  let foldr func acc (Array r) =
+  let foldr func acc (Array { length, backing }) =
     let rec loop acc i =
-      if i < 1 + r.offset then
+      if i < 1 then
         acc
       else
-        loop (func (geti r.backing i) acc) (i - 1)
-    loop acc r.length
+        loop (func (geti backing i) acc) (i - 1)
+    loop acc length
 
-  let foldl func acc (Array r) =
+  let foldl func acc (Array { length, backing }) =
     let rec loop acc i =
-      if i > r.length then
+      if i > length then
         acc
       else
-        loop (func acc (geti r.backing i)) (i + 1)
-    loop acc r.offset
+        loop (func acc (geti backing i)) (i + 1)
+    loop acc 1
 end
 
 instance show 'a => show (array 'a) begin
   let show arr = "to_list " ^ show (to_list arr)
 end
 
+
 instance eq 'a => eq (array 'a) begin
   let Array a == Array b =
     let elem_cmp (x : 'a) (y : 'a) = x == y
-    (a.length - a.offset) == (b.length - b.offset) &&
+    a.length == b.length &&
       let rec loop (i : int) : bool =
-          if i > a.length then
-            true
-          else
-            geti a.backing i `elem_cmp` geti b.backing i || loop (i + 1)
-      loop a.offset
+        if i > a.length then
+          true
+        else
+          geti a.backing i `elem_cmp` geti b.backing i && loop (i + 1)
+      loop 1
 end
 
 let empty = Array { length = 0, offset = 0, backing = empty_storage }
 
-let iter f (Array { length, offset, backing }) =
-  let rec loop i =
-    if i > length then () else
-    (f (geti backing i))
-    loop (i + 1)
-  loop offset
+let iter f (x : array 'a) = foldl (fun () -> f) () x
 
-let iteri f (Array { length, offset, backing }) =
-  let rec loop i =
-    if i > length then () else
-    (f i (geti backing i))
-    loop (i + 1)
-  loop offset
+let iteri f (x : array 'a) = foldl (fun i x -> f i x; i + 1) 0 x
 
 instance index (array 'a) begin
   type key = int
@@ -140,52 +121,31 @@ instance index (array 'a) begin
 
   let ( .() ) arr i =
     in_bounds "(.())" arr i
-    let Array { backing, offset }  = arr
-    geti backing (i + offset)
+    let Array { backing }  = arr
+    geti backing (i + 1)
 
   let ( .?() ) arr i =
     if is_in_bounds i arr then
-      let Array { backing, offset }  = arr
-      geti backing (i + offset) |> Some
+      let Array { backing }  = arr
+      geti backing (i + 1) |> Some
     else None
 end
 
 instance mut_index (array 'a) begin
   let ( .[]<- ) arr i x =
     in_bounds "update" arr i
-    let Array { backing, offset }  = arr
-    let _ = seti backing (i + offset) x
+    let Array { backing }  = arr
+    let _ = seti backing (i + 1) x
     ()
 end
 
-let take n (Array r) =
-  if r.length - n >= r.offset then
-    Array {
-      length = n,
-      offset = r.offset,
-      backing = r.backing
-    }
-  else
-    throw (Invalid ("take: can't take " ^ show n ^ " elements"))
-
-let drop n (Array r) =
-  if r.offset + n <= r.length then
-    Array {
-      length = r.length,
-      offset = r.offset + n,
-      backing = r.backing
-    }
-  else
-    throw (Invalid ("drop: can't drop " ^ show n ^ " elements"))
-
 let append (Array ra) (Array rb) =
+  let length = ra.length + rb.length
   Array {
-    length = (ra.length - ra.offset) + (rb.length - rb.offset),
-    offset = 0,
-    backing = tabulate (ra.length + rb.length) (fun i ->
-      print i
+    length,
+    backing = tabulate length (fun i ->
       if i > ra.length then
-        geti rb.backing (i - ra.length + rb.offset)
+        geti rb.backing (i - ra.length)
       else
-        geti ra.backing (i + ra.offset))
+        geti ra.backing i)
   }
