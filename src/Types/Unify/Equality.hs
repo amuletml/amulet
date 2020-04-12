@@ -67,25 +67,25 @@ bind scope var ty
       when (occurs var ty) $
         confesses (Occurs var ty)
 
-      if | TyVar var () == ty -> pure (ReflCo ty)
-         | otherwise ->
-            case Map.lookup var env of
-              Nothing -> do
-                if | var `Set.notMember` noTouch ->
-                     solveTySubst .= env `compose` Map.singleton var ty
-                     -- /\ We're allowed to bind the variable, so just
-                     -- do it.
+      if TyVar var () == ty
+         then pure (ReflCo ty)
+         else case Map.lookup var env of
+           Nothing -> do
+             if | var `Set.notMember` noTouch ->
+                  solveTySubst .= env `compose` Map.singleton var ty
+                  -- /\ We're allowed to bind the variable, so just
+                  -- do it.
 
-                   | var `Set.member` noTouch, TyVar v () <- ty, v `Set.notMember` noTouch ->
-                     solveTySubst .= (env `compose` Map.singleton v (TyVar var ()))
-                     -- /\ The equality is of the form v1 := v2, where
-                     -- v1 is bad but v2 is free. So what we do is add
-                     -- v2 := v1 to the environment.
+                | var `Set.member` noTouch, TyVar v () <- ty, v `Set.notMember` noTouch ->
+                  solveTySubst .= (env `compose` Map.singleton v (TyVar var ()))
+                  -- /\ The equality is of the form v1 := v2, where
+                  -- v1 is bad but v2 is free. So what we do is add
+                  -- v2 := v1 to the environment.
 
-                   | otherwise -> confesses =<< unequal scope (TyVar var ()) ty
-                   -- No can do.
-                pure (ReflCo ty)
-              Just ty' -> unify scope ty (apply env ty')
+                | otherwise -> confesses =<< unequal scope (TyVar var ()) ty
+                -- No can do.
+             pure (ReflCo ty)
+           Just ty' -> unify scope ty (apply env ty')
 --- }}}
 
 -- FOR BOTH UNIFY AND SUBSUME:
@@ -169,10 +169,10 @@ unify scope (TyApp (TyApp (TyCon v ()) l) r) (TyArr l' r')
 unify scope (TyArr l r) (TyApp (TyApp (TyCon v ()) l') r')
   | v == tyArrowName = ArrCo <$> unify scope l l' <*> unify scope r r'
 
-unify scope x@(TyApp f g) y@(TyArr l r) | _TyCon `isn't` f =
+unify scope x@(TyApp f g) y@(TyArr l r) | not (tyConApp f) =
   rethrow scope x y $ AppCo <$> unify scope f (TyApp (TyCon tyArrowName ()) l) <*> unify scope g r
 
-unify scope x@(TyArr l r) y@(TyApp f g) | _TyCon `isn't` f =
+unify scope x@(TyArr l r) y@(TyApp f g) | not (tyConApp f) =
   rethrow scope x y $ AppCo <$> unify scope (TyApp (TyCon tyArrowName ()) l) f <*> unify scope r g
 
 unify scope (TyArr a b) (TyArr a' b') = ArrCo <$> unify scope a a' <*> unify scope b b'
@@ -238,11 +238,12 @@ unify scope ta@TyExactRows{} tb@TyRows{} = SymCo <$> unify scope tb ta
 unify scope tb@(TyRows rho brow) ta@(TyExactRows arow)
   | overlaps <- overlap brow arow
   , rhoNew <- L.deleteFirstsBy ((==) `on` fst) (L.sortOn fst arow) (L.sortOn fst brow)
-  = if | length overlaps < length brow -> confesses (NoOverlap tb ta)
-       | otherwise -> do
-          cs <- traverse (unifRow scope) overlaps
-          _ <- unify scope rho (TyExactRows rhoNew)
-          pure (SymCo (ProjCo rhoNew cs))
+  = if length overlaps < length brow
+       then confesses (NoOverlap tb ta)
+       else do
+         cs <- traverse (unifRow scope) overlaps
+         _ <- unify scope rho (TyExactRows rhoNew)
+         pure (SymCo (ProjCo rhoNew cs))
 
 unify scope ta@(TyExactRows arow) tb@(TyExactRows brow)
   | overlaps <- overlap arow brow
@@ -261,9 +262,9 @@ unify scope (TyApp (TyApp (TyCon v ()) l) r) (TyTuple l' r')
 unify scope (TyTuple l r) (TyApp (TyApp (TyCon v ()) l') r')
   | v == tyTupleName = ProdCo <$> unify scope l l' <*> unify scope r r'
 
-unify scope x@(TyApp f g) y@(TyTuple l r) | _TyCon `isn't` f =
+unify scope x@(TyApp f g) y@(TyTuple l r) | not (tyConApp f) =
   rethrow scope x y $ AppCo <$> unify scope f (TyApp (TyCon tyTupleName ()) l) <*> unify scope g r
-unify scope x@(TyTuple l r) y@(TyApp f g) | _TyCon `isn't` f =
+unify scope x@(TyTuple l r) y@(TyApp f g) | not (tyConApp f) =
   rethrow scope x y $ AppCo <$> unify scope (TyApp (TyCon tyTupleName ()) l) f <*> unify scope r g
 
 unify scope (TyOperator l (TyCon v _) r) (TyTuple l' r')
@@ -625,6 +626,11 @@ overlap xs ys
   = map get inter
   where get [(t, a), (_, b)] = (t, a, b)
         get _ = undefined
+
+tyConApp :: Type p -> Bool
+tyConApp (TyCon _ _) = True
+tyConApp (TyApp f _) = tyConApp f
+tyConApp _ = False
 
 unequal :: forall m. MonadSolve m => ImplicitScope ClassInfo Typed -> Type Typed -> Type Typed -> m TypeError
 unequal scope a b =
