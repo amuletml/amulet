@@ -70,6 +70,6 @@ resolveTypeOverlay env (OverlayData v n _) (CodeLens range Nothing _) =
   in case env ^. names . at var of
        Nothing -> Nothing
        Just ty ->
-         let cmd = Command (renderBasic $ pretty var <+> colon <+> displayType ty) "" Nothing
+         let cmd = Command (renderBasic $ pretty var <+> colon <+> displayTypeTyped ty) "" Nothing
          in Just (CodeLens range (Just cmd) Nothing)
 resolveTypeOverlay _ _ c@(CodeLens _ Just{} _)  = Just c

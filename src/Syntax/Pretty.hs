@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleContexts, UndecidableInstances
-  , FlexibleInstances, OverloadedStrings, ScopedTypeVariables, GADTs #-}
+  , FlexibleInstances, OverloadedStrings, ScopedTypeVariables, GADTs, ViewPatterns #-}
 module Syntax.Pretty (displayType, applyCons, prettyMotive, displayTypeTyped) where
 
 import Control.Lens hiding (Lazy)
@@ -114,9 +114,13 @@ prettyType (TyApp (TyCon v _) x) | show (pretty v) == mempty = displayType x
 -- This is really gross
 
 prettyType (TyApp x e) = parenTyFun x (displayType x) <+> parenTyArg e (displayType e)
-prettyType (TyRows p rows) = enclose (lbrace <> space) (space <> rbrace) $
+
+prettyType (flatRows -> Just (Just p, rows)) = enclose (lbrace <> space) (space <> rbrace) $
   pretty p <+> soperator pipe <+> hsep (punctuate comma (displayRows rows))
-prettyType (TyExactRows rows) = record (displayRows rows)
+prettyType (flatRows -> Just (Nothing, rows)) = record (displayRows rows)
+prettyType TyRows{} = error "unmatched flatRows"
+prettyType TyExactRows{} = error "unmatched flatRows"
+
 prettyType (TyTupleL x y) = parens $ prettyType x <> comma <+> prettyType y
 prettyType (TyTuple t s) =
   parenTyFun t (displayType t) <+> soperator (char '*') <+> parenTuple s (displayType s)
@@ -134,7 +138,7 @@ prettyTypeTyped t@TyWithConstraints{} = displayTypeTyped (applyCons t)
 prettyTypeTyped x@TyPromotedCon{} = pretty x
 
 prettyTypeTyped (TyWildcard x) = case x of
-  Just ty -> displayType ty
+  Just ty -> displayTypeTyped ty
   Nothing -> skeyword (char '_')
 prettyTypeTyped (TySkol v) = stypeSkol (squote <> pretty (v ^. skolVar))
 prettyTypeTyped (TyPi x t) = uncurry (prettyQuantifiers prettyTypeTyped) . second reverse $ unwind t [x] where
@@ -149,16 +153,26 @@ prettyTypeTyped (TyApp (TyCon v _) x) | show (pretty v) == mempty = displayTypeT
 prettyTypeTyped (TyApp x e) = parenTyFun x (displayType x) <+> parenTyArg' e (displayTypeTyped e) where
   parenTyArg' e d | Just _ <- listType e = d
   parenTyArg' e d = parenTyArg e d
-prettyTypeTyped (TyRows p rows) = enclose (lbrace <> space) (space <> rbrace) $
-  pretty p <+> soperator pipe <+> hsep (punctuate comma (displayRows rows))
-prettyTypeTyped (TyExactRows rows) = record (displayRowsTyped rows)
 prettyTypeTyped (TyTupleL x y) = parens $ prettyTypeTyped x <> comma <+> prettyTypeTyped y
 prettyTypeTyped (TyTuple t s) =
-  parenTyFun t (displayType t) <+> soperator (char '*') <+> parenTuple s (displayType s)
+  parenTyFun t (displayTypeTyped t) <+> soperator (char '*') <+> parenTuple s (displayTypeTyped s)
 prettyTypeTyped (TyParens t) = parens $ prettyTypeTyped t
 prettyTypeTyped (TyOperator l o r) = prettyTypeTyped l <+> pretty o <+> prettyTypeTyped r
 prettyTypeTyped TyType = keyword "type"
 prettyTypeTyped (TyLit l) = pretty l
+prettyTypeTyped (flatRows -> Just (Just p, rows)) = enclose (lbrace <> space) (space <> rbrace) $
+  pretty p <+> soperator pipe <+> hsep (punctuate comma (displayRows rows))
+prettyTypeTyped (flatRows -> Just (Nothing, rows)) = record (displayRowsTyped rows)
+prettyTypeTyped TyRows{} = error "unmatched flatRows"
+prettyTypeTyped TyExactRows{} = error "unmatched flatRows"
+
+flatRows :: Type p -> Maybe (Maybe (Type p), [(Text, Type p)])
+flatRows (TyExactRows rs) = Just (Nothing, rs)
+flatRows (TyRows t rs) =
+  case flatRows t of
+    Nothing -> Just (Just t, rs)
+    Just (t', rs') -> Just (t', rs ++ rs')
+flatRows _ = Nothing
 
 displayRows :: (Ord (Var p), Pretty (Var p)) => [(Text, Type p)] -> [Doc]
 displayRows = map (\(n, v) -> text n <+> colon <+> displayType v) . sortOn fst

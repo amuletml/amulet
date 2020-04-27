@@ -1,6 +1,7 @@
 /dist
 /dist-newstyle
 /result
+.vscode/
 *.lua
 *.ss
 /*.out
@@ -47,3 +48,5 @@ doc/*.synctex.gz
 
 /.idea
 *.iml
+
+*.tix
