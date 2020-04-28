@@ -73,7 +73,7 @@ getFolds = toList . foldMap getTop where
   getExpr e@(Begin es _) = e `mkTo` foldMap getExpr es
   getExpr e@(Match t as _ _) = mk e <> getExpr t <> foldMap getArm as
   getExpr e@(Function as _ _) = mk e <> foldMap getArm as
-  getExpr e@(DoExpr _ bs _) = mk e <> foldMap getComp bs
+  getExpr e@(MLet _ _ _ bod _) = mk e <> getExpr bod
   getExpr e@(Record fs _) = mk e <> foldMap getField fs
   getExpr e@(RecordExt r fs _) = mk e <> mk r <> foldMap getField fs
 

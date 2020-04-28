@@ -109,13 +109,6 @@ data Context
   --
   -- This will be inside a 'CtxBracket', so is only used as a marker.
   | CtxListComprehension
-
-  -- | The body of a monad computation
-  --
-  -- This has very similar semantics to 'CtxListComprehension', in which
-  -- lets are treated as statements instead.
-  | CtxMonad
-
   deriving (Show, Eq)
 
 
@@ -148,7 +141,6 @@ instance Pretty Context where
 
   pretty CtxList = stypeCon "List"
   pretty CtxListComprehension = "ListComprehension"
-  pretty CtxMonad = stypeCon "Monad"
 
   pretty x = parens . string . show $ x
 
@@ -409,6 +401,12 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
           then CtxStmtLet tp
           else CtxLet tp ):c )
 
+    (TcLetBang, _) -> pure
+      ( Result tok Done
+      , ( if isToplevel c || isStatement c
+          then CtxStmtLet tp
+          else CtxLet tp ):c )
+
     -- @let ...@ = ~~> Push a block context
     (TcEqual, CtxStmtLet _:_) -> pure
       ( Result tok Done
@@ -472,9 +470,6 @@ handleContextBlock needsSep  tok@(Token tk tp te) c =
     (TcDeriving, _) -> pure (Result tok Done, CtxDerivingHead tp:c)
 
      -- @do ...@ ~~> CtxEmptyBlock : CtxBracket(end)
-    (TcDo, _) -> pure
-      ( Result tok Done
-      , CtxEmptyBlock Nothing:CtxMonad:CtxBracket TcEnd:c)
     -- @(@, @{@, @[@  ~~> CtxBracket()|}|])
     (TcOParen, _) -> pure (Result tok Done, CtxBracket TcCParen:c)
     (TcOBrace, _) -> pure (Result tok Done, CtxBracket TcCBrace:c)
@@ -568,7 +563,6 @@ terminates TcEnd (CtxTypeFunBody{}:_) = True
 -- Block level terminators
 terminates TcTopSep (CtxBlock{}:ck) | isToplevel ck = True
 terminates TcSemicolon (CtxBlock{}:ck) | not (isToplevel ck) = True
-terminates TcSemicolon (CtxBlock{}:CtxMonad:_) = True
 
 -- List comprehension statement terminator
 terminates TcComma (CtxListComprehension:_) = True
@@ -591,7 +585,6 @@ isToplevel _ = False
 -- statement-style @let@s)?
 isStatement :: [Context] -> Bool
 isStatement (CtxListComprehension:_) = True
-isStatement (CtxBlock{}:CtxMonad:_) = True
 isStatement _ = False
 
 isIfContinue :: TokenClass -> Bool

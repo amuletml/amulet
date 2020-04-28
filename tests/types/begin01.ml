@@ -5,7 +5,6 @@ end
 
 type identity 'a = Identity of 'a
 
-let _ = do
+let _ =
   let! x = Identity 1
   pure 2
-end

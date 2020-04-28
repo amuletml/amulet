@@ -129,8 +129,7 @@ expr (Vta e t a) = Vta <$> expr e <*> pure (ty t) <*> pure a
 expr (ListExp e t) = ListExp <$> traverse expr e <*> pure t
 expr (ListComp _ [] an) = pure $ ListExp [] an
 expr (ListComp e qs an) = transListComp (e, qs, an) (ListExp [] an)
-expr (DoExpr bind qs an) = begin <$> transDoExpr (VarRef bind an) qs where
-  begin = flip Begin an . (:[])
+expr (MLet v p e b a) = MLet v (pat p) <$> expr e <*> expr b <*> pure a
 
 expr (Idiom pure_v app_v fn an) = Idiom pure_v app_v <$> expr fn <*> pure an
 expr (ListFrom r_v x an) = ListFrom r_v <$> expr x <*> pure an
@@ -277,21 +276,6 @@ maybeMatch :: Expr Desugared -> [Arm Desugared] -> Ann Desugared -> Expr Desugar
 maybeMatch ex [arm@Arm{ armGuard = Nothing, armExp = body }] ann =
   Let NonRecursive [Matching (armPat arm) ex ann] body ann
 maybeMatch ex arms ann = Match ex arms ann ann
-
-transDoExpr :: forall m. MonadNamey m => Expr Desugared -> [CompStmt Resolved] -> m (Expr Desugared)
-transDoExpr bind = go where
-  go (CompGen p e an:qs) = do
-    e <- expr e
-    cont <- Fun (PatParam (pat p)) <$> go qs <*> pure an
-    pure $ BinOp e bind cont an
-  go (CompLet bg an:qs) = Let NonRecursive <$> traverse binding bg <*> go qs <*> pure an
-  go [CompGuard e] = expr e
-  go (CompGuard e:qs) = do
-    let an = annotation e
-    e <- expr e
-    cont <- Fun (PatParam (Wildcard an)) <$> go qs <*> pure an
-    pure $ BinOp e bind cont an
-  go [] = undefined
 
 consPat :: (Var p ~ VarResolved) => Pattern p -> Pattern p -> Ann p -> Pattern p
 consPat p ps an = Destructure cONSName (Just (PTuple [p, ps] an)) an

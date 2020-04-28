@@ -44,12 +44,9 @@ value ListFromTo{} = False
 value ListFromThen{} = False
 value ListFromThenTo{} = False
 value Idiom{} = False
+value MLet{} = False
 value (OpenIn _ e _) = value e
 value (ExprWrapper _ e _) = value e
-value (DoExpr _ e _) =
-  case e of
-    [CompGuard x] -> value x
-    _ -> False
 
 isFn :: Expr a -> Bool
 isFn Fun{} = True
@@ -69,10 +66,7 @@ conVarRef (Ascription e _ _) = conVarRef e
 conVarRef (OpenIn _ e _) = conVarRef e
 conVarRef (ExprWrapper _ e _) = conVarRef e
 conVarRef (Vta e _ _) = conVarRef e
-conVarRef (DoExpr _ e _) =
-  case e of
-    [CompGuard x] -> conVarRef x
-    _ -> False
+conVarRef MLet{} = False
 conVarRef _ = False
 
 dropModPrefixes :: T.Text -> T.Text

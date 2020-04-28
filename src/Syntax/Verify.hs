@@ -170,6 +170,11 @@ verifyExpr (Fun (EvParam _) (Match e bs an _) _) = do
     (\(Arm p _ _ _) -> tell . pure $ MatchToFun an p)
     an (getType e) bs
 
+verifyExpr (MLet _ p e b _) = do
+  verifyExpr e
+  modify (Set.union (bindingSites p))
+  verifyExpr b
+
 verifyExpr (Fun _ x _) = verifyExpr x
 verifyExpr (Begin es _) = traverse_ verifyExpr es
 verifyExpr Literal{} = pure ()
@@ -198,7 +203,6 @@ verifyExpr (OpenIn _ e _) = verifyExpr e
 verifyExpr (ListExp e _) = traverse_ verifyExpr e
 verifyExpr (ListComp e qs _) = verifyExpr e *> traverse_ verifyCompStmt qs
 verifyExpr (Idiom _ _ es _) = verifyExpr es
-verifyExpr (DoExpr _ qs _) = traverse_ verifyCompStmt qs
 verifyExpr (ListFrom _ x _) = verifyExpr x
 verifyExpr (ListFromTo _ x y _) = verifyExpr x *> verifyExpr y
 verifyExpr (ListFromThen _ x y _) = verifyExpr x *> verifyExpr y
@@ -310,8 +314,8 @@ nonTrivial ListFrom{} = True
 nonTrivial ListFromTo{} = True
 nonTrivial ListFromThen{} = True
 nonTrivial ListFromThenTo{} = True
-nonTrivial DoExpr{} = False
-nonTrivial Idiom{} = False
+nonTrivial MLet{} = True
+nonTrivial Idiom{} = True
 nonTrivial TupleSection{} = False
 nonTrivial (OpenIn _ e _) = nonTrivial e
 nonTrivial Lazy{} = False

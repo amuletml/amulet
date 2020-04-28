@@ -1,5 +1,5 @@
 fail_pattern_guard.ml[2:10 ..2:11]: error 
-  Unexpected ->, expected one of '_', begin, false, fun, function, if, lazy, let, match, do, true, '(', '(|', '{', '[', '!', identifier, constructor, qdotid, hole, int, float, string
+  Unexpected ->, expected one of '_', begin, false, fun, function, if, lazy, let, 'let!', match, true, '(', '(|', '{', '[', '!', identifier, constructor, qdotid, hole, int, float, string
   │ 
 2 │ | x when -> ()
   │          ^^

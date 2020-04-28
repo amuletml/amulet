@@ -4,10 +4,10 @@ begin05.ml[10:3 ..10:3]: error (E2001)
    │   ^
   Couldn't match actual type int
     with the type expected by the context, identity 'b
-begin05.ml[8:5 ..11:3]: error (E2018)
+begin05.ml[8:5 ..11:1]: error (E2018)
   No instance for monad identity arising in the binding
    │ 
- 8 │ let _ : identity int = do
-   │     ^^^^^^^^^^^^^^^^^^^^^
+ 8 │ let _ : identity int =
+   │     ^^^^^^^^^^^^^^^^^^
   • Note: this constraint can not be quantified over
     because it is impossible to quantify over pattern bindings

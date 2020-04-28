@@ -101,7 +101,7 @@ forgetTypes (Vta e t (a, _)) = Vta (forgetTypes e) (forgetKind t) a
 forgetTypes (ListExp es (a, _)) = ListExp (forgetTypes <$> es) a
 
 forgetTypes ListComp{} = undefined
-forgetTypes DoExpr{} = undefined
+forgetTypes MLet{} = undefined
 forgetTypes Idiom{} = undefined
 forgetTypes ListFrom{} = undefined
 forgetTypes ListFromTo{} = undefined

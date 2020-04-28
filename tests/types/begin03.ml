@@ -15,12 +15,10 @@ instance monad list begin
   let xs >>= f = [ x | with x <- xs, with x <- f x ]
 end
 
-let test = do
+let test =
   let! x = Identity 1
   pure 2
-end
 
-let tes2 = do
+let tes2 =
   let! x = [1]
   pure 2
-end

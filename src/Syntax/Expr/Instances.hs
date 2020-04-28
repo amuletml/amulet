@@ -52,7 +52,7 @@ instance Annotated (Expr p) where
   annotation (Vta _ _ a) = a
   annotation (ListExp _ a) = a
   annotation (ListComp _ _ a) = a
-  annotation (DoExpr _ _ a) = a
+  annotation (MLet _ _ _ _ a) = a
   annotation (Idiom _ _ _ a) = a
 
   annotation (ListFrom _ _ a) = a
@@ -139,8 +139,9 @@ instance Pretty (Var p) => Pretty (Expr p) where
     funs e = arrow <+> pretty e
   pretty (Begin e _) =
     vsep [ keyword "begin", indent 2 (vsep (punctuate semi (map pretty e))), keyword "end" ]
-  pretty (DoExpr _ e _) =
-    vsep [ keyword "begin", indent 2 (vsep (punctuate semi (map pretty e))), keyword "end" ]
+  pretty (MLet _ p e b _) = align $
+    keyword "let!" <+> pretty p <+> equals <+> pretty e
+      <#> pretty b
   pretty (Literal l _) = pretty l
   pretty (BinOp l o r _) = parens (pretty l <+> pretty o <+> pretty r)
   pretty (Match t bs _ _) = vsep ((keyword "match" <+> pretty t <+> keyword "with"):map pretty bs)

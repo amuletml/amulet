@@ -36,7 +36,7 @@ pipeline {
           env AMC_LIBRARY_PATH=${PWD}/lib \
           stack test \
             --flag amuletml:amc-prove-server \
-            --test-arguments "+RTS -N -A128M -RTS -j3 --xml junit.xml --display t -v" \
+            --test-arguments "+RTS -A128M -RTS -j4 --xml junit.xml --display t -v" \
             --fast
         '''
       }

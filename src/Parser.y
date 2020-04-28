@@ -110,7 +110,6 @@ import Syntax
   module   { Token TcModule _ _ }
   struct   { Token TcStruct _ _ }
   of       { Token TcOf _ _ }
-  do       { Token TcDo _ _ }
   open     { Token TcOpen _ _ }
   private  { Token TcPrivate _ _ }
   rec      { Token TcRec _ _ }
@@ -348,6 +347,9 @@ Expr0 :: { Expr Parsed }
         { respanFun $1 $4 $ foldr (\x y -> withPos2 x $4 $ Fun x y) $4 $2 }
       | let     BindGroup ExprIn ExprBlock '$end'   { withPos2 $1 $4 $ Let NonRecursive (reverse $2) $4 }
       | let rec BindGroup ExprIn ExprBlock '$end'   { withPos2 $1 $5 $ Let Recursive (reverse $3) $5 }
+
+      | 'let!' Pattern PostBinding ExprIn ExprBlock '$end' { withPos2 $1 $6 $ MLet bindVar $2 $3 $5 }
+
       | let open ModuleTerm ExprIn ExprBlock '$end' { withPos2 $1 $5 $ OpenIn $3 $5 }
       | if Expr then ExprBlock else ExprBlock '$end'
           { withPos2 $1 $6 $ If $2 $4 $6 }
@@ -375,8 +377,6 @@ Atom :: { Expr Parsed }
      | Lit                                    { withPos1 $1 (Literal (getL $1)) }
      | hole                                   { withPos1 $1 (Hole (Name (getHole $1))) }
      | '_'                                    { withPos1 $1 (Hole (Name (T.singleton '_'))) }
-     | do List1(CompStmt(DoStmt), ExprSep) end
-       { withPos2 $1 $3 $ DoExpr bindVar $2 }
      | begin List1(Expr, ExprSep) end
        { withPos2 $1 $3 $ Begin $2 }
      | '(|' Expr '|)'                         { withPos2 $1 $3 $ Idiom pureVar apVar $2 }
@@ -411,9 +411,6 @@ CompStmt(Stmt) :: { CompStmt Parsed }
 
 BasicStmt :: { CompStmt Parsed }
   : with Pattern '<-' Expr                    { withPos2 $1 $4 $ CompGen $2 $4 }
-
-DoStmt :: { CompStmt Parsed }
-  : 'let!' Pattern '=' Expr                    { withPos2 $1 $4 $ CompGen $2 $4 }
 
 -- | Computations which are not valid in an expression context. Allows us to
 -- produce somewhat more friendly error messages in the common case.

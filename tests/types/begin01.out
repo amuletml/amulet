@@ -1,7 +1,7 @@
-begin01.ml[8:5 ..11:3]: error (E2018)
+begin01.ml[8:5 ..11:1]: error (E2018)
   No instance for monad identity arising in the binding
    │ 
- 8 │ let _ = do
-   │     ^^^^^^
+ 8 │ let _ =
+   │     ^^^
   • Note: this constraint can not be quantified over
     because it is impossible to quantify over pattern bindings

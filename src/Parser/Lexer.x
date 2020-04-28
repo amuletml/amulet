@@ -97,7 +97,6 @@ tokens :-
   <0> "module"   { constTok TcModule   }
   <0> "struct"   { constTok TcStruct   }
   <0> "of"       { constTok TcOf       }
-  <0> "do"       { constTok TcDo       }
   <0> "open"     { constTok TcOpen     }
   <0> "private"  { constTok TcPrivate  }
   <0> "rec"      { constTok TcRec      }

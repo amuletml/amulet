@@ -69,12 +69,7 @@ freeIn (ListFromThen v x y _) = Set.insert v (freeIn x <> freeIn y)
 freeIn (ListFromThenTo v x y z _) = Set.insert v (freeIn x <> freeIn y <> freeIn z)
 freeIn (ListExp e _) = foldMap freeIn e
 freeIn (ListComp e qs _) = freeIn e <> freeInStmt qs
-freeIn (DoExpr v qs _) = freeInStmt qs <> bind where
-  bind
-    | any isGen qs = Set.singleton v
-    | otherwise = mempty
-  isGen CompGen{} = True
-  isGen _ = False
+freeIn (MLet v p e b _) = Set.insert v (freeIn e <> (freeIn b `Set.difference` bound p))
 freeIn (OpenIn _ e _) = freeIn e
 
 freeIn Function{} = error "ds Function freeIn"

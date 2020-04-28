@@ -1,7 +1,5 @@
-let ( ) = do
+let ( ) =
   let x = 0
-  $end $sep let! x = 0
-  $sep let x = 0
-  $end $sep 0
-end
-$end <eof>
+  $end $in let! x = 0
+  $end $in let x = 0
+  $end $in 0 $end $end $end $end <eof>

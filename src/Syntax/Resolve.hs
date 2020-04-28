@@ -438,29 +438,13 @@ reExpr r@(ListFromThenTo v x y z a) =
   ListFromThenTo <$> lookupEx' v <*> reExpr x <*> reExpr y <*> reExpr z <*> pure a
     where lookupEx' v = lookupEx v `catchJunk` r
 
-reExpr whole_ex@(DoExpr var qs a) =
-  let go (CompGuard e:qs) acc flag = do
-        e <- reExpr e
-        go qs (CompGuard e:acc) flag
-      go [r@CompGen{}] _ _ = confesses (ArisingFrom LastStmtNotExpr (BecauseOf r))
-      go [r@CompLet{}] _ _ = confesses (ArisingFrom LastStmtNotExpr (BecauseOf r))
-      go (r@(CompGen b e an):qs) acc flag = do
-        e <- reExpr e
-        (b, es, ts) <- reWholePattern b
-        extendTyvars ts . extendVals es $
-          go qs (CompGen b e an:acc) (flag <|> Just r)
-      go (CompLet bs an:qs) acc flag = do
-        (bs', vs, ts) <- unzip3 <$> traverse reBinding bs
-        extendTyvars (concat ts) . extendVals (concat vs) $ do
-          bs <- traverse (uncurry (flip (<$>) . reExpr . view bindBody)) (zip bs bs')
-          go qs (CompLet bs an:acc) flag
-      go [] acc flag = do
-        var <-
-          case flag of
-            Just r -> lookupEx var `catchJunk` r
-            Nothing -> lookupEx var `catchJunk` whole_ex
-        pure $ DoExpr var (reverse acc) a
-  in go qs [] Nothing
+reExpr r@(MLet bind pat ex body a) = do
+  bind <- lookupEx bind `catchJunk` r
+  (p, vs, ts) <- reWholePattern pat
+  ex <- reExpr ex
+  extendTyvars ts . extendVals vs $ do
+    body <- reExpr body
+    pure (MLet bind p ex body a)
 
 reExpr ExprWrapper{} = error "resolve cast"
 
