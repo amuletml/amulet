@@ -145,6 +145,10 @@ lowerAt (Fun param bd an) (ForallTy Irrelevant a b) =
           Lam (TermArgument arg a) <$> lowerMatch' arg a [ (p, Nothing, bd')
                                                          , (S.Wildcard undefined, Nothing, fail) ]
 
+-- TODO: Fix the type checker
+-- (haha)
+-- See #281
+lowerAt x@Fun{} (ForallTy (Relevant v) a b) = Lam (TypeArgument v a) <$> lowerAt x b
 lowerAt x@Fun{} t = error ("lower function " ++ show (pretty x) ++ " at " ++ show (pretty t))
 
 lowerAt (Begin [x] _) t = lowerAt x t
