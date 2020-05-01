@@ -20,6 +20,8 @@ import qualified Test.Lua.Parser as LParser
 import qualified Test.Frontend.Amc as Amc
 import qualified Test.Lsp as Lsp
 
+import GHC.IO.Encoding
+
 tests :: IO TestTree
 tests = testGroup "Tests" <$> sequence
   -- These two will timeout if you run 10000 of them.
@@ -40,7 +42,9 @@ tests = testGroup "Tests" <$> sequence
   ]
 
 main :: IO ()
-main = tests >>= defaultMainWithIngredients ingredients where
+main = locale *> test where
+  locale = setLocaleEncoding utf8
+  test = tests >>= defaultMainWithIngredients ingredients
   ingredients =
     [ rerunning
       [ listingTests

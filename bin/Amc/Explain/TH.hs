@@ -1,21 +1,33 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Amc.Explain.TH where
 
+import Control.Exception
+
 import Language.Haskell.TH.Syntax
 import Language.Haskell.TH
 
 import System.FilePath
+import System.IO
 
 qReadFile :: FilePath -> Q String
 qReadFile path = do
   qAddDependentFile path
-  str <- qRunIO (readFile path)
-  length str `seq` pure str
+  qRunIO $
+    withFile path ReadMode $ \handle -> do
+      hSetEncoding handle utf8
+      s <- hGetContents handle
+      _ <- evaluate (length s)
+      pure s
 
 qReadFilesList :: FilePath -> Q [FilePath]
 qReadFilesList path = do
   qAddDependentFile path
-  contents <- qRunIO (readFile path)
+  contents <- qRunIO $
+    withFile path ReadMode $ \handle -> do
+      hSetEncoding handle utf8
+      s <- hGetContents handle
+      _ <- evaluate (length s)
+      pure s
   let files = lines contents
       fileP = map (head . words) files
   pure fileP
