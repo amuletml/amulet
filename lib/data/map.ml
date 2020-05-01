@@ -31,9 +31,9 @@ instance eq 'k * eq 'v => eq (t 'k 'v) begin
 end
 
 instance show 'k * show 'v => show (t 'k 'v) begin
-  let show (M tree) = show tree
-    (* let entries = T.elements tree *)
-    (* "from_list " ^ show entries *)
+  let show (M tree) =
+    let entries = T.elements tree
+    "from_list " ^ show entries
 end
 
 (** The empty map. *)
