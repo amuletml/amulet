@@ -351,7 +351,10 @@ genNameWithHint vars ty =
     discriminate _ = undefined
 
 nonRec :: Var Typed -> Type Typed -> Bool
-nonRec v (TyApps (TyCon x ()) _) = x /= v
+nonRec v (TyApps c _) =
+  case c of
+    TyCon x _ -> x /= v
+    _ -> True
 nonRec v (TyTuple a b) = nonRec v a && nonRec v b
 nonRec v (TyPi _ b) = nonRec v b
 nonRec _ TyVar{} = True
@@ -363,4 +366,4 @@ nonRec v (TyRows t xs) = nonRec v t && all (nonRec v . snd) xs
 nonRec v (TyExactRows xs) = all (nonRec v . snd) xs
 nonRec v (TyParens p) = nonRec v p
 nonRec v (TyOperator l o r) = nonRec v o && nonRec v l && nonRec v r
-nonRec _ _ = error "nonRec: that's a weird type you have there."
+nonRec _ t = error $ "nonRec: unhandled type " ++ show t

@@ -173,6 +173,38 @@ check ex@(ListExp es an) t@(TyApp f x) | f == tyList = do
 
   pure (ExprWrapper w (buildList an x es) (an, t))
 
+check ex@(MLet bindv pat expr body an) wanted = do
+  let reason = becauseExp ex
+      bind = VarRef bindv an
+      bind :: Expr Desugared
+  (bind, bind_t) <- infer bind
+
+  ~(Anon action_t, c1, w1) <- quantifier reason (/= Req) bind_t
+  expr <- check expr action_t
+
+  ~(Anon cont_t, res, w2)    <- quantifier reason (/= Req) c1
+  cont_a <- freshTV
+  w3 <- subsumes reason (cont_a :-> wanted) cont_t
+
+  (pat', ms, cs, is) <- checkPattern pat cont_a
+  let tvs = boundTvs pat' ms
+
+  body <- implies (Arm pat Nothing body an) cont_a cs
+        . local (typeVars %~ Set.union tvs)
+        . local (names %~ focus ms)
+        . local (classes %~ mappend is)
+        $ check body wanted
+
+  pure
+    (App
+      (w2 (App (w1 bind) expr (an, c1)))
+      (ExprWrapper w3
+        (Fun (PatParam pat')
+          body
+          (an, TyArr cont_a wanted))
+        (an, cont_t))
+      (an, res))
+
 -- This is _very_ annoying, but we need it for nested ascriptions
 check ex@(Ascription e ty an) goal = do
   ty <- expandType =<< resolveKind (becauseExp ex) ty
@@ -412,37 +444,6 @@ infer ex@(ListFromThenTo range_v start next end an) = do
             end (an, c3)) (an, list_t)
        , list_t)
 
-infer ex@(MLet bindv pat expr body an) = do
-  let reason = becauseExp ex
-      bind = VarRef bindv an
-      bind :: Expr Desugared
-  (bind, bind_t) <- infer bind
-
-  ~(Anon action_t, c1, w1) <- quantifier reason (/= Req) bind_t
-  expr <- check expr action_t
-
-  ~(Anon cont_t, res, w2)    <- quantifier reason (/= Req) c1
-  (cont_a, cont_r) <- (,) <$> freshTV <*> freshTV
-  w3 <- subsumes reason (cont_a :-> cont_r) cont_t
-
-  (pat', ms, cs, is) <- checkPattern pat cont_a
-  let tvs = boundTvs pat' ms
-
-  body <- implies (Arm pat Nothing body an) cont_a cs
-        . local (typeVars %~ Set.union tvs)
-        . local (names %~ focus ms)
-        . local (classes %~ mappend is)
-        $ check body cont_r
-
-  pure
-    (App
-      (w2 (App (w1 bind) expr (an, c1)))
-      (ExprWrapper w3
-        (Fun (PatParam pat')
-          body
-          (an, TyArr cont_a cont_r))
-        (an, cont_t))
-      (an, res), res)
 
 infer ex = do
   x <- freshTV

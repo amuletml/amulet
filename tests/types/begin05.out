@@ -3,7 +3,7 @@ begin05.ml[10:3 ..10:3]: error (E2001)
 10 │   2
    │   ^
   Couldn't match actual type int
-    with the type expected by the context, identity 'b
+    with the type expected by the context, identity int
 begin05.ml[8:5 ..11:1]: error (E2018)
   No instance for monad identity arising in the binding
    │ 

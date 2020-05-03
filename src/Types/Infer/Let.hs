@@ -178,7 +178,7 @@ inferLetTy closeOver strategy vs =
                 exp <- check (exp' exp) tyvar
                 pure (Binding var vp exp True (ann, tyvar), tyvar)
 
-        (solution, wrap, cons) <- solveFixpoint (It'sThis (BecauseInternal "fixed point solving")) cs =<< getSolveInfo
+        (solution, wrap, cons) <- condemn $ solveFixpoint (It'sThis (BecauseInternal "fixed point solving")) cs =<< getSolveInfo
 
         tys <- view tySyms
         if null cons
