@@ -1,5 +1,5 @@
-soundness.ml[22:1 ..22:80]: error (E2018)
+soundness.ml[24:1 ..24:80]: error (E2018)
    │ 
-22 │ let no : forall 'a 'b. trivial :- (discrim 'a 'b ~ string) = Sub (fun _ -> Dict)
+24 │ let no : forall 'a 'b. trivial :- (discrim 'a 'b ~ string) = Sub (fun _ -> Dict)
    │                                                                            ^^^^
   No instance for discrim 'a 'b ~ string arising from this expression

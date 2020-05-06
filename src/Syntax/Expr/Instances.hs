@@ -100,6 +100,7 @@ deriving via AnnotatedVia (CompStmt p)  (Ann p)    instance Spanned (Ann p)    =
 parenFun :: Pretty (Var p) => Expr p -> Doc
 parenFun f = case f of
   Fun{} -> parens (pretty f)
+  Function{} -> parens (pretty f)
   Let{} -> parens (pretty f)
   Match{} -> parens (pretty f)
   _ -> pretty f

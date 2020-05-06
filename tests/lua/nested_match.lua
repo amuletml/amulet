@@ -2,9 +2,9 @@ do
   local Nil = { __tag = "Nil" }
   local function zip(f)
     local function zip_sat(xs, ys)
-      if xs.__tag == "Nil" then return { { _1 = 1, _2 = Nil }, __tag = "Cons" } end
+      if xs.__tag ~= "Cons" then return { { _1 = 1, _2 = Nil }, __tag = "Cons" } end
       local tmp = xs[1]
-      if ys.__tag == "Nil" then return { { _1 = 2, _2 = Nil }, __tag = "Cons" } end
+      if ys.__tag ~= "Cons" then return { { _1 = 2, _2 = Nil }, __tag = "Cons" } end
       local tmp0, tmp1 = tmp._1, tmp._2
       local tmp2 = ys[1]
       local tmp3, tmp4 = tmp2._1, tmp2._2

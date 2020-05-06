@@ -16,7 +16,6 @@ vBool, vInt, vString, vFloat, vUnit, vLazy, vArrow, vProduct, vList, vRefTy, vKS
 vError :: CoVar
 vLAZY, vForce :: CoVar
 tyvarA, tyvarB, argvarX :: CoVar
-vOpApp :: CoVar
 vCONS, vNIL :: CoVar
 vAssign, vDeref, vRef :: CoVar
 vStrVal, vIntVal :: CoVar
@@ -34,7 +33,7 @@ tyvarProxy :: CoVar
 
 tcTypeableApp, tcTypeableKnownKnown :: CoVar
 
-[ vBool, vInt, vString, vFloat, vUnit, vLazy, vArrow, vProduct, vList, vRefTy, vKStrTy, vKIntTy, vRowCons, vError, vLAZY, vForce, tyvarA, tyvarB, argvarX, vOpApp, vCONS, vNIL, vAssign, vDeref, vRef, vStrVal, vIntVal, vExtend, vRestrict, vKSTR, vKINT, vROWCONS, tyvarRecord, tyvarNew, tyvarKey, tyvarType, vEq, vEQ, backendRet, backendClone, tcTypeError, tcErrKind, tcString, tcHCat, tcVCat, tcShowType, tcTypeable, tcUnTypeable, tcTypeRep, tcTYPEABLE, tcTYPEREP, tcEqTypeRep, tcTypeableApp, tcTypeableKnownKnown, tyvarKind, tyvarProxy ] = makeBuiltins
+[ vBool, vInt, vString, vFloat, vUnit, vLazy, vArrow, vProduct, vList, vRefTy, vKStrTy, vKIntTy, vRowCons, vError, vLAZY, vForce, tyvarA, tyvarB, argvarX, vCONS, vNIL, vAssign, vDeref, vRef, vStrVal, vIntVal, vExtend, vRestrict, vKSTR, vKINT, vROWCONS, tyvarRecord, tyvarNew, tyvarKey, tyvarType, vEq, vEQ, backendRet, backendClone, tcTypeError, tcErrKind, tcString, tcHCat, tcVCat, tcShowType, tcTypeable, tcUnTypeable, tcTypeRep, tcTYPEABLE, tcTYPEREP, tcEqTypeRep, tcTypeableApp, tcTypeableKnownKnown, tyvarKind, tyvarProxy ] = makeBuiltins
   [ ("bool", TypeConVar)
   , ("int", TypeConVar)
   , ("string", TypeConVar)
@@ -57,8 +56,6 @@ tcTypeableApp, tcTypeableKnownKnown :: CoVar
   , ("a", TypeVar)
   , ("b", TypeVar)
   , ("x", ValueVar)
-
-  , ("@@", ValueVar)
 
 -- Lists
   , ("Cons", DataConVar)
@@ -171,12 +168,7 @@ builtinVarList = vars where
   appsTy = foldl1 AppTy
 
   vars :: [(a, Type)]
-  vars = [ op vOpApp
-            (ForallTy (Relevant name) StarTy $
-               ForallTy (Relevant name') StarTy $
-                 ValuesTy [VarTy name `arrTy` VarTy name', VarTy name] `arrTy` VarTy name')
-
-         , op vError (ForallTy (Relevant name) StarTy $ tyString `arrTy` VarTy name)
+  vars = [ op vError (ForallTy (Relevant name) StarTy $ tyString `arrTy` VarTy name)
          , op vLAZY (ForallTy (Relevant name) StarTy $
             (tyUnit `arrTy` VarTy name) `arrTy` AppTy tyLazy (VarTy name))
          , op vForce (ForallTy (Relevant name) StarTy $ AppTy tyLazy (VarTy name) `arrTy` VarTy name)

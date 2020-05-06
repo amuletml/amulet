@@ -565,7 +565,7 @@ boxedTys = VarMap.fromList
            . filter (flip VarSet.member boxed . fst)
            $ C.builtinVarList where
   boxed = VarSet.fromList
-    [ C.vOpApp, C.vAssign, C.vExtend, C.vRestrict
+    [ C.vAssign, C.vExtend, C.vRestrict
     , C.tcEqTypeRep
     , C.tcTypeableApp, C.tcTypeableKnownKnown
     ]

@@ -2,6 +2,8 @@ type option 'a = None | Some of 'a
 
 external val ignore : 'a -> () = "ignore"
 
+let f @@ x = f x
+
 let () = ignore @@ fun { num, opt }->
   ignore @@ match num with
   | 1 | 2 | 3 -> 0

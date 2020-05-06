@@ -2,6 +2,8 @@ class functor 'f begin
   val map : ('a -> 'b) -> 'f 'a -> 'f 'b
 end
 
+let f @@ x = f x
+
 class functor 'f => foldable 'f begin
 end
 

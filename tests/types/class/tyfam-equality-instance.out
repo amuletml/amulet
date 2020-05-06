@@ -16,4 +16,5 @@ rep : Req{'t : type}. type -> type
 from : Spec{'t : type}. recursive 't => fix (rep 't) -> 't
 into : Spec{'t : type}. recursive 't => 't -> fix (rep 't)
 unfix : Infer{'f : type -> type}. fix 'f -> 'f (fix 'f)
+@@ : Infer{'a : type}. Infer{'b : type}. ('a -> 'b) -> 'a -> 'b
 cata : Infer{'a : type}. Infer{'b : type}. recursive 'a => (rep 'a 'b -> 'b) -> 'a -> 'b

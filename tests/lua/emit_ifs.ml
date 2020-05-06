@@ -2,6 +2,8 @@ external val ignore : 'a -> () = "nil"
 external val print : 'a -> () = "print"
 external val bool : bool = "true"
 
+let f @@ x = f x
+
 let a && b = if a then b else false
 let a || b = if a then true else b
 let not a = if a then false else true

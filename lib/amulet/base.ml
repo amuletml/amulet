@@ -11,6 +11,8 @@ let a || b =
 let a && b =
   if a then force b else false
 
+let f @@ x = f x
+
 let not a = if a then false else true
 
 (* Explicit type signatures for VTA: *)

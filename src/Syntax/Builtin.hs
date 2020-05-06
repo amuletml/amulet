@@ -26,7 +26,6 @@ module Syntax.Builtin
   , assignName, derefName, refName
 
   , cONSName, nILName, cONSTy, nILTy, cONSTy', nILTy'
-  , opAppName
 
   , strValName, strValTy, intValName, intValTy
   , knownStrName, knownStrTy, knownStrTy'
@@ -133,9 +132,6 @@ lAZYTy' x = TyArr tyUnit x ~> TyApp tyLazy x
 cONSTy' x = TyTuple x (TyApp tyList x) ~> TyApp tyList x
 nILTy' = TyApp tyList
 
-opAppName :: Var Typed
-opAppName = ofCore C.vOpApp
-
 strValName, knownStrName :: Var Typed
 strValName = ofCore C.vStrVal
 knownStrName = ofCore C.vKSTR
@@ -215,8 +211,7 @@ instance Monoid BuiltinPowule where
 builtins :: BuiltinPowule
 builtins =
   mempty
-  { vars = [ (opAppName, a *. b *. (var a ~> var b) ~> var a ~> var b)
-           , (lAZYName, lAZYTy)
+  { vars = [ (lAZYName, lAZYTy)
            , (forceName, forceTy)
            , (cONSName, cONSTy)
            , (nILName, nILTy)

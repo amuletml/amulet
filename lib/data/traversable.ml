@@ -12,13 +12,13 @@ end
 
 instance traversable option begin
   let traverse cont = function
-    | Some x -> (| Some @@ cont x |)
+    | Some x -> (| Some (cont x) |)
     | None -> (| None |)
 end
 
 instance traversable (either 'a) begin
   let traverse cont = function
-    | Right a -> (| Right @@ cont a |)
+    | Right a -> (| Right (cont a) |)
     | Left b -> pure @@ Left b
 end
 

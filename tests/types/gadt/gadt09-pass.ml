@@ -6,6 +6,7 @@ type repr 'a =
   | Int  : repr int
 
 type option 'a = Some of 'a | None
+let f @@ x = f x
 
 let (<$>) f = function
   | Some x -> Some (f x)

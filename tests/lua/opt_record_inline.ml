@@ -1,5 +1,7 @@
 external val ignore : 'a -> () = "nil"
 
+let f @@ x = f x
+
 (* Flatten nested record updates *)
 let () = ignore @@ fun x ->
   let x = { x with a = 1, c = 2 }

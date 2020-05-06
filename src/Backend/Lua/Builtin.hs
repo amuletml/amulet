@@ -91,13 +91,6 @@ builtins =
        end
       |] )
 
-  , ( vOpApp, "__builtin_app", [], Just (2, \[f, x] -> (mempty, [[lua| %f(%x) |]]))
-    , [luaStmts|
-      local function __builtin_app(f, x)
-        return f(x)
-      end
-    |] )
-
   , ( vRef, "__builtin_ref", []
     , Just (1, \[var] -> ( mempty, [ [lua| { %var, __tag = 'Ref' } |] ]))
     , [luaStmts|

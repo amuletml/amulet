@@ -6,9 +6,10 @@ natural : type
 Z : natural
 S : natural -> natural
 nat : natural -> type
-Zero : Infer{'dv : type}. Spec{'n : 'dv}. ('n ~ Z) ⊃ nat 'n
-Succ : Infer{'ew : type}. Spec{'n : 'ew}. Spec{'k : natural}. ('n ~ S 'k) ⊃ nat 'k -> nat 'n
+Zero : Infer{'dy : type}. Spec{'n : 'dy}. ('n ~ Z) ⊃ nat 'n
+Succ : Infer{'ez : type}. Spec{'n : 'ez}. Spec{'k : natural}. ('n ~ S 'k) ⊃ nat 'k -> nat 'n
 some_nat : type
 SomeNat : Spec{'n : natural}. nat 'n -> some_nat
+@@ : Infer{'a : type}. Infer{'b : type}. ('a -> 'b) -> 'a -> 'b
 with_natural : Infer{'a : type}. int -> (Spec{'n : natural}. nat 'n -> 'a) -> 'a
 main : unit

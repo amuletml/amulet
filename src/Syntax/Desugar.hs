@@ -83,7 +83,6 @@ expr (Function bs p a) = do
     (Match rhs <$> traverse arm bs <*> pure p <*> pure a)
     <*> pure a
 -- Special case @@ so we can work on skolem variables
-expr (BinOp l (VarRef v _) r a) | v == opAppName = App <$> expr l <*> expr r <*> pure a
 expr (BinOp l o r a) = BinOp <$> expr l <*> expr o <*> expr r <*> pure a
 expr (Ascription e t a) = Ascription <$> expr e <*> pure (ty t) <*> pure a
 expr (Record rs a) = Record <$> traverse field rs <*> pure a

@@ -14,4 +14,6 @@ instance show () begin
   let show () = "()"
 end
 
+let f @@ x = f x
+
 let _ = use @@ (show_tail : unit -> string)

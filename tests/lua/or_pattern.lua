@@ -5,25 +5,25 @@ do
   ignore(function(tmp)
     local num, opt = tmp.num, tmp.opt
     if num == 1 then
-      ignore(0)
       local tmp0 = opt._1
       local tmp1 = opt._2
+      ignore(0)
       if tmp0.__tag == "None" then return ignore(None) end
       local x = tmp0[1]
       if tmp1.__tag == "None" then return ignore(None) end
       return ignore(Some({ _1 = x, _2 = tmp1[1] }))
     elseif num == 2 then
-      ignore(0)
       local tmp0 = opt._1
       local tmp1 = opt._2
+      ignore(0)
       if tmp0.__tag == "None" then return ignore(None) end
       local x = tmp0[1]
       if tmp1.__tag == "None" then return ignore(None) end
       return ignore(Some({ _1 = x, _2 = tmp1[1] }))
     elseif num == 3 then
-      ignore(0)
       local tmp0 = opt._1
       local tmp1 = opt._2
+      ignore(0)
       if tmp0.__tag == "None" then return ignore(None) end
       local x = tmp0[1]
       if tmp1.__tag == "None" then return ignore(None) end

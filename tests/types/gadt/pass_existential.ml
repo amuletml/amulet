@@ -12,6 +12,8 @@ type nat 'n =
 type some_nat =
   | SomeNat : nat 'n -> some_nat
 
+let f @@ x = f x
+
 let with_natural i (k : forall 'n. nat 'n -> 'b) =
   let rec go n =
     if n == 0 then

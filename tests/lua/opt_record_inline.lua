@@ -19,10 +19,10 @@ do
     return { _1 = x0, _2 = x0 }
   end);
   (nil)(function(x)
-    local gm = __builtin_clone(x)
-    gm.a = 2
+    local iz = __builtin_clone(x)
+    iz.a = 2
     local x0 = __builtin_clone(x)
     x0.a = 1
-    return { _1 = x0, _2 = gm }
+    return { _1 = x0, _2 = iz }
   end)
 end
