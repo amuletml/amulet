@@ -1,0 +1,13 @@
+rankn-nest-fail.ml[9:37 ..9:39]: error (E2009)
+  Could not match the rigid type variable 'r with the type 'r
+
+  • Arising in this expression
+  │ 
+9 │   run_cont (f (fun x -> C (fun _ -> k x))) k
+  │                                     ^^^
+
+  • When checking that this expression
+  │ 
+8 │ let call_cc (f : ('a -> cont 'b) -> cont 'a) : cont 'a = C @@ fun k ->
+  │                                                               ^^^^^^^^
+  has type forall 'r. ('a -> 'r) -> 'r

@@ -94,7 +94,7 @@ check e oty@TyPi{} | isSkolemisable oty = do
 
   tvs <- view typeVars
   local (classes %~ mappend scope) $ do
-    (e, cs) <- censor (const mempty) . listen $ check e ty
+    (e, cs) <- censor (const mempty) . listen . local (typeVars %~ Set.union (Set.fromList (map fst vs))) $ check e ty
     (_, as) <- censor (const mempty) . listen . for vs $ \(a, b) ->
       unless (Set.member a tvs) $
         () <$ unify (becauseExp e) (TyVar a ()) b
