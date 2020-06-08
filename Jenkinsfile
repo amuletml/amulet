@@ -1,5 +1,5 @@
 pipeline {
-  agent any
+  agent { label 'static' }
 
   stages {
     stage('Set up Stack dependencies') {
