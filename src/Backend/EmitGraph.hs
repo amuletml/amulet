@@ -25,6 +25,10 @@ module Backend.EmitGraph
  -- * Emitting basic terms
  , emitRef
  , emitVarBinds
+ , emitLit
+ , emitAtom
+ , emitAtomS
+ , emitAtomMany
 
  -- * Node emit state
  , runNES
@@ -96,6 +100,9 @@ class Emitter a where
 
   -- | Construct an atom from a variable name
   mkAtomRef :: T.Text -> EAtom a
+
+  -- | Construct an atom from a literal
+  mkAtomLit :: Literal -> EAtom a
 
   -- | Generate the appropriate code for the provided yield.
   genYield :: Monad m
@@ -268,6 +275,27 @@ emitRef v = do
                Just e -> hasLoop (VarSet.insert v visiting)
                                  (e ^. emitDeps)
                                  (VarSet.foldr VarMap.delete remaining (e ^. emitBinds))
+
+emitLit :: Emitter e => Literal -> EExpr e
+emitLit = atomToExpr . mkAtomLit
+
+emitAtomS :: (Emitter e, MonadState (NodeEmitState e) m)
+          => Atom -> m (EExpr e)
+emitAtomS a = (\[x] -> x) <$> emitAtom a
+
+emitAtom :: (Emitter e, MonadState (NodeEmitState e) m)
+         => Atom -> m [EExpr e]
+emitAtom (Lit l) = pure [emitLit l]
+emitAtom (Ref v _) = emitRef v
+
+-- | A variant of 'emitAtom' which always binds expressions.
+--
+-- This is suitable for when something is used many times, even when not
+-- annotated as such (hence the name).
+emitAtomMany :: (Emitter e, MonadState (EmitState e) m)
+             => Atom -> m [EExpr e]
+emitAtomMany (Lit l) = pure [emitLit l]
+emitAtomMany (Ref v _) = map atomToExpr <$> emitVarBinds v
 
 -- | Emit the appropriate bindings for a variable.
 --

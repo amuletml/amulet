@@ -1,13 +1,10 @@
-{-# LANGUAGE GADTs, FlexibleContexts, MultiParamTypeClasses, OverloadedStrings, RankNTypes #-}
+{-# LANGUAGE GADTs, FlexibleContexts, MultiParamTypeClasses, RankNTypes #-}
 module CompileTarget where
 
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as L
-import Data.Bifunctor
 import Data.Position
 import Data.Spanned
-
-import qualified Language.Lua.Parser as Lua
 
 import Text.Pretty.Semantic
 import Text.Pretty.Note
@@ -47,10 +44,3 @@ data Target = Target
 
 instance Show Target where
   show (Target name _ _) = "Target " ++ show name
-
-lua :: Target
-lua = Target "lua" (\pos file -> bimap ParseError (const ()) $ Lua.parseExpr pos file) Lua.highlightLua
-
--- | All known backend targets.
-targets :: [Target]
-targets = [ lua ]

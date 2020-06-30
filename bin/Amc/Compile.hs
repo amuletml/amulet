@@ -8,6 +8,7 @@ module Amc.Compile
   , watchFile
   , compileWithLua
   , compileStaticLua
+  , compileWithScheme
   , libExists
   ) where
 
@@ -49,7 +50,8 @@ import Core.Simplify
 import Core.Lint
 import Core.Var
 
-import Backend.Lua
+import qualified Backend.Lua as Lua
+import qualified Backend.Scheme as Scheme
 
 import Syntax.Var
 
@@ -164,17 +166,12 @@ watchFile opt config file emit = do
       else wait files chan
 
 compileWithLua :: Maybe FilePath -> Emit
-compileWithLua file sig prog = do
-  let lua = pretty $ compileProgram sig prog
-  case file of
-    Nothing -> putDoc lua
-    Just f -> T.writeFile f . display . renderPretty 0.4 100 $ lua
-  pure lua
+compileWithLua file sig = emitTo file . pretty . Lua.compileProgram sig
 
 compileStaticLua :: D.DriverConfig -> StaticOptions -> Emit
 compileStaticLua _ opt sig prog = do
   -- Generate the Lua code
-  let lua = pretty $ compileProgram sig prog
+  let lua = pretty $ Lua.compileProgram sig prog
 
   -- ... and print it, if the user asked to do so;
   case keepLua opt of
@@ -250,6 +247,9 @@ genCCode h code = do
   hPutStrLn h $ "static char program[" ++ show (length bytes) ++ "] = {" ++ intercalate "," (map show bytes) ++ "};"
   hPutStrLn h C.shim
 
+compileWithScheme :: Maybe FilePath -> Emit
+compileWithScheme file sig = emitTo file . pretty . Scheme.compileProgram sig
+
 exitMaybe :: IO () -> ExitCode -> IO ()
 exitMaybe cleanup c =
   case c of
@@ -270,3 +270,10 @@ libExists lib = do
  where
    isMissing (IOError _ NoSuchThing _ _ _ _) = Just ()
    isMissing _ = Nothing
+
+emitTo :: Maybe FilePath -> Doc -> IO Doc
+emitTo file prog = do
+  case file of
+    Nothing -> putDoc prog
+    Just f -> T.writeFile f . display . renderPretty 0.4 100 $ prog
+  pure prog

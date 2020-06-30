@@ -24,7 +24,7 @@ import Text.Read
 import qualified Frontend.Driver as D
 import Frontend.Errors hiding (Repl)
 
-import qualified CompileTarget as CT
+import qualified CompileTargets as CT
 
 import qualified Amc.Debug as D
 import qualified Amc.Repl as R
@@ -88,6 +88,13 @@ data Command
     , options     :: CompilerOptions
     , genOpts     :: CodegenOptions
     }
+  | CompileScheme
+    { input       :: FilePath
+    , output      :: Maybe FilePath
+    , export      :: Bool
+    , options     :: CompilerOptions
+    , genOpts     :: CodegenOptions
+    }
   | Repl
     { toLoad      :: Maybe FilePath
     , serverPort  :: Int
@@ -129,6 +136,9 @@ argParser = info (args <**> helper <**> version)
       <> command "static"
          ( info nativeCommand
          $ fullDesc <> progDesc "Compile an Amulet program to a native program that embeds the Lua interpreter.")
+      <> command "compile-scheme"
+         ( info compileSchemeCommand
+         $ fullDesc <> progDesc "Compile an Amulet file to Chez Scheme.")
       <> command "repl"
          ( info replCommand
          $ fullDesc <> progDesc "Launch the Amulet REPL." )
@@ -182,6 +192,17 @@ argParser = info (args <**> helper <**> version)
       <*> many (option str (short 'C' <> help "Pass an option to the C compiler"))
       <*> many (option str (short 'L' <> help "Pass an option to the linker"))
       <*> switch (long "static" <> short 's' <> help "Pass -static to the C compiler and linker")
+      <*> compilerOptions
+      <*> codegenOptions
+
+    compileSchemeCommand :: Parser Command
+    compileSchemeCommand = CompileScheme
+      <$> argument str (metavar "FILE" <> help "The file to compile.")
+      <*> optional ( option str
+           ( long "out" <> short 'o' <> metavar "FILE"
+          <> help "Write the generated Scheme to a specific file." ) )
+      <*> switch (long "export"
+               <> help "Export all declared variables in this module, returning them at the end of the program.")
       <*> compilerOptions
       <*> codegenOptions
 
@@ -387,6 +408,25 @@ main = do
       config <- driverConfig options
       compileOrWatch watch time opts config { D.target = CT.lua } (T.pack (input opt))
         (C.compileStaticLua config copts)
+
+    Args CompileScheme { input, output, export, options
+                       , genOpts = CodegenOptions { watch, time, optLevel, promoteErrors } } -> do
+      exists <- doesFileExist input
+      if not exists
+      then hPutStrLn stderr ("Cannot find input file " ++ input)
+        >> exitWith (ExitFailure 1)
+      else pure ()
+
+      config <- driverConfig options
+      let opts = C.Options
+            { C.optLevel = if optLevel >= 1 then C.Opt else C.NoOpt
+            , C.lint = coreLint options
+            , C.export = export
+            , C.debug = debugMode options
+            , C.promoteErrors = promoteErrors
+            }
+
+      compileOrWatch watch time opts config { D.target = CT.scheme } (T.pack input) (C.compileWithScheme output)
 
 compileOrWatch :: Bool -> Maybe FilePath -> C.Options -> D.DriverConfig -> T.Text -> C.Emit -> IO ()
 compileOrWatch True _ opts config source emit = C.watchFile opts config source emit

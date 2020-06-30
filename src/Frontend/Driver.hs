@@ -101,7 +101,7 @@ import Syntax.Var
 import Parser.Wrapper (runParser)
 import Parser (parseTops)
 
-import CompileTarget (Target, lua)
+import CompileTargets
 
 import Frontend.Errors
 import Frontend.Files

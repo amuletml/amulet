@@ -101,6 +101,16 @@ instance Emitter Lua where
   mkExprRef = LuaRef . LuaName
   mkAtomRef = LuaSimp . LuaRef . LuaName
 
+  -- | Convert a literal into a Lua expression
+  mkAtomLit = LuaSimp . mk where
+    mk (Int x)   = LuaInteger (fromIntegral x)
+    mk (Float x) = LuaNumber x
+    mk (Str str) = LuaString str
+    mk LitTrue   = LuaTrue
+    mk LitFalse  = LuaFalse
+    mk Unit      = LuaNil
+    mk RecNil    = LuaTable []
+
   -- | Emit a declaration for a variable and a collection of expressions
   --
   -- This returns a 'LuaLocal' statement binding such expressions and the
@@ -529,24 +539,6 @@ emitExpr var yield (AnnExtend fv tbl fs) = do
       clone <- uses (nodeState . emitEscape) (getVar B.backendClone)
       pure (LuaCallE (LuaCall (LuaRef (LuaName clone)) [expr]))
 
-emitAtomS :: MonadState (NodeEmitState Lua) m
-          => Atom -> m LuaExpr
-emitAtomS a = (\[x] -> x) <$> emitAtom a
-
-emitAtom :: MonadState (NodeEmitState Lua) m
-         => Atom -> m [LuaExpr]
-emitAtom (Lit l) = pure [emitLit l]
-emitAtom (Ref v _) = emitRef v
-
--- | A variant of 'emitAtom' which always binds expressions.
---
--- This is suitable for when something is used many times, even when not
--- annotated as such (hence the name).
-emitAtomMany :: MonadState (EmitState Lua) m
-             => Atom -> m [LuaExpr]
-emitAtomMany (Lit l) = pure [emitLit l]
-emitAtomMany (Ref v _) = map unsimple <$> emitVarBinds v
-
 -- | Generate the variables needed for this binding
 --
 -- This is effectively a simplified version of 'genDeclare' when you do
@@ -566,16 +558,6 @@ genVars es v (ValuesTy vs) _ = do
       go n (_:ts) = LuaName (v' <> T.pack ('_':show n)) : go (n + 1) ts
   pure (go (1 :: Int) vs)
 genVars es v _ _ = pure . LuaName <$> es v
-
--- | Convert a literal into a Lua expression
-emitLit :: Literal -> LuaExpr
-emitLit (Int x)   = LuaInteger (fromIntegral x)
-emitLit (Float x) = LuaNumber x
-emitLit (Str str) = LuaString str
-emitLit LitTrue   = LuaTrue
-emitLit LitFalse  = LuaFalse
-emitLit Unit      = LuaNil
-emitLit RecNil    = LuaTable []
 
 emitStmt :: forall a m. (Occurs a, MonadState TopEmitState m)
          => [AnnStmt VarSet.Set a] -> m (Seq LuaStmt)

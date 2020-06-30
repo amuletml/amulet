@@ -46,7 +46,7 @@ import Frontend.Errors
 
 import Text.Pretty.Semantic
 
-import CompileTarget (lua)
+import CompileTargets (lua)
 
 import Amc.Repl.State
 import Amc.Repl.Eval

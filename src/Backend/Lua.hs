@@ -1,4 +1,4 @@
-{-| The frontend for the Lua backend. This acts as the primary access point
+{-| The backend for the Lua backend. This acts as the primary access point
   for basic interaction with the Lua compiler.
 -}
 module Backend.Lua
