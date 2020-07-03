@@ -316,7 +316,7 @@ resolveClassKind stmt@(Class classcon _ ctx args _ methods _) = do
         for_ methods $ \case
           m@(MethodSig _ ty _) -> do
             put (BecauseOf m)
-            _ <- retcons (addBlame (BecauseOf m)) $
+            _ <- retcons (addBlame (BecauseOf m)) . censor (Seq.filter (not . classCon)) $
               checkKind ty TyType
             put reason
           _ -> pure ()
@@ -724,5 +724,9 @@ generalise ftv r ty =
     case Set.toList (fv `Set.difference` env) of
       [] -> pure ty
       vs -> annotateKind r $ foldr (\v rest -> TyPi (Invisible v Nothing Spec) rest) (killWildcard ty) vs
+
+classCon :: Constraint Typed -> Bool
+classCon ConImplicit{} = True
+classCon _ = False
 
 data Dep = NoDep | LotsaDep
