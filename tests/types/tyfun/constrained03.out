@@ -1,5 +1,4 @@
-constrained03.ml[9:1 ..11:3]: error (E2018)
-   │ 
-10 │   val foo : 'a -> f2 'a
-   │   ^^^^^^^^^^^^^^^^^^^^^
-  No instance for c2 'a arising from the method signature
+c2 : Infer{'h : type}. Req{'t : 'h}. constraint
+f2 : Infer{'h : type}. Req{'t : 'h}. type
+c3 : Req{'a : type}. constraint
+foo : Spec{'a : type}. c3 'a => 'a -> f2 'a
