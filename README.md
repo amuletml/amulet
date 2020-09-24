@@ -6,7 +6,6 @@ row-polymorphic records, pattern matching with algebraic data types, and
 tail recursion elimination.
 
 [![Build Status](https://shamiko.amulet.works/job/amulet/job/master/badge/icon)](https://shamiko.amulet.works/job/amulet/job/master/)
-[![Nightly Build Status](https://shamiko.amulet.works/job/Amulet%20Nightly/badge/icon?subject=Nightly%20build)](https://shamiko.amulet.works/job/Amulet%20Nightly/)
 
 # Installation
 
