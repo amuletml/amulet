@@ -7,7 +7,7 @@ do
       int_sub_c = -1,
       int_mul_c = 6,
       int_div_c = 3.0,
-      int_exp_c = 8,
+      int_exp_c = 8.0,
       int_eq_c = false,
       int_lt_c = true,
       int_le_c = true,
