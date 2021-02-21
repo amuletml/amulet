@@ -68,7 +68,7 @@ import Data.Span
 import Frontend.Errors
 import Frontend.Files
 
-import Language.Haskell.LSP.Types
+import Language.LSP.Types
 
 import Parser.Wrapper (runParser)
 import Parser.Error (ParseError)
@@ -258,10 +258,10 @@ data Worker = Worker
 
     -- | A lookup of unsatisfied request ids to their corresponding
     -- requests, and also a map of uris to their pending requests.
-  , pendingRequests :: TVar ( Map.Map LspId Request
-                            , HM.HashMap NormalizedUri (Map.Map LspId Request) )
+  , pendingRequests :: TVar ( Map.Map SomeLspId Request
+                            , HM.HashMap NormalizedUri (Map.Map SomeLspId Request) )
     -- | Requests which are satisfied and ready to be executed.
-  , readyRequests   :: TVar (Map.Map LspId Request)
+  , readyRequests   :: TVar (Map.Map SomeLspId Request)
   }
 
 -- | Construct a worker from a library path, and some "error reporting" function.
@@ -377,7 +377,7 @@ trySatisfyRequest wrk (RequestLatest file kind err ok) = do
     (_, Just OpenedContents{}) -> Nothing
 
 -- | Add a new request, which will be run when the state is ready.
-startRequest :: Worker -> LspId -> Request -> IO ()
+startRequest :: Worker -> SomeLspId -> Request -> IO ()
 startRequest wrk lId req = do
   debugM logN ("Queuing request " ++ show lId)
   atomically $ do
@@ -391,7 +391,7 @@ startRequest wrk lId req = do
 
 -- | Cancel a pending or ready request. This will not interrupt already
 -- running requests.
-cancelRequest :: Worker -> LspId -> IO ()
+cancelRequest :: Worker -> SomeLspId -> IO ()
 cancelRequest wrk id = atomically $ do
   modifyTVar (readyRequests wrk) (Map.delete id)
   modifyTVar (pendingRequests wrk) $ \(reqs, fileReqs) ->

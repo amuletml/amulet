@@ -26,7 +26,7 @@ import Data.List
 
 import Text.Read (readMaybe)
 
-import System.Console.Haskeline hiding (display, bracket, throwTo)
+import System.Console.Haskeline hiding (display)
 import System.Directory
 import System.IO
 

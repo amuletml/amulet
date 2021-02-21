@@ -1,3 +1,4 @@
+{-# LANGUAGE ExplicitForAll, KindSignatures, DataKinds #-}
 module Test.Tasty.Lsp
   ( module M
   , assertIn
@@ -13,10 +14,11 @@ import Control.Exception
 
 import Data.Aeson.Types
 import Data.Default
+import Data.Maybe
 
-import Language.Haskell.LSP.Types.Capabilities as M
-import Language.Haskell.LSP.Types as M
-import Language.Haskell.LSP.Test as M
+import Language.LSP.Types.Capabilities as M
+import Language.LSP.Types as M
+import Language.LSP.Test as M
 
 import Test.Tasty.HUnitPretty as M
 import Test.Tasty.Providers
@@ -51,11 +53,10 @@ range l1 c1 l2 c2 = Range (Position l1 c1) (Position l2 c2)
 
 -- | Checks the response for errors and throws an exception if needed.
 -- Returns the result if successful.
-getResponseResult :: ResponseMessage a -> a
-getResponseResult (ResponseMessage _ _ (Just res) _) = res
-getResponseResult (ResponseMessage _ id Nothing (Just err)) = throw (UnexpectedResponseError id err)
-getResponseResult (ResponseMessage _ _ Nothing Nothing) = error "No response or error given"
+getResponseResult :: forall (m :: Method 'FromClient 'Request). ResponseMessage m -> ResponseResult m
+getResponseResult (ResponseMessage _ _ (Right res)) = res
+getResponseResult (ResponseMessage _ id (Left err)) = throw (UnexpectedResponseError (SomeLspId (fromJust id)) err)
 
 -- | Resolve a code lens.
 resolveCodeLens :: CodeLens -> Session CodeLens
-resolveCodeLens lens = getResponseResult <$> request CodeLensResolve lens
+resolveCodeLens lens = getResponseResult <$> request SCodeLensResolve lens

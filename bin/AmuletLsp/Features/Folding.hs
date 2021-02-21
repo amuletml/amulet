@@ -9,7 +9,7 @@ import Data.Position
 import Data.Spanned
 import Data.Span
 
-import Language.Haskell.LSP.Types
+import Language.LSP.Types hiding (Begin)
 
 import Syntax
 

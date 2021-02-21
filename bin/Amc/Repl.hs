@@ -10,7 +10,7 @@ import qualified Data.Text.Lazy as L
 import qualified Data.Text.IO as T
 import qualified Data.Text as T
 
-import System.Console.Haskeline hiding (display, bracket, throwTo)
+import System.Console.Haskeline
 import System.IO
 
 import Parser.Token

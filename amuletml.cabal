@@ -20,9 +20,9 @@ executable amc
   hs-source-dirs:      bin
   build-depends:       mtl >= 2.2 && < 2.3
                      , text >= 1.2 && < 1.3
-                     , base >= 4.9 && < 4.14
-                     , lens >= 4.15 && < 4.19
-                     , these >= 1 && < 1.1
+                     , base >= 4.9 && < 4.15
+                     , lens >= 4.15 && < 4.20
+                     , these >= 1 && < 1.2
                      , hslua >= 0.9 && < 1.1
                      , network >= 3.1 && < 3.2
                      , process >= 1.6 && < 1.7
@@ -30,12 +30,12 @@ executable amc
                      , filepath >= 1.4 && < 1.5
                      , fsnotify >= 0.3 && < 0.4
                      , directory >= 1.3 && < 1.4
-                     , haskeline >= 0.7 && < 0.8
+                     , haskeline >= 0.7 && < 0.9
                      , containers >= 0.5 && < 0.7
                      , bytestring >= 0.10 && < 0.11
                      , monad-chronicle >= 1 && < 1.1
                      , optparse-applicative >= 0.14 && < 0.16
-                     , template-haskell >= 2.13 && < 2.16
+                     , template-haskell >= 2.13 && < 2.17
                      , pretty-show
 
   other-modules:       Version
@@ -65,11 +65,11 @@ executable amc-prove
   main-is:             Prove.hs
   hs-source-dirs:      bin
   build-depends:       amuletml
-                     , base >= 4.9 && < 4.14
+                     , base >= 4.9 && < 4.15
                      , text >= 1.2 && < 1.3
-                     , lens >= 4.15 && < 4.19
-                     , these >= 1 && < 1.1
-                     , haskeline >= 0.7 && < 0.8
+                     , lens >= 4.15 && < 4.20
+                     , these >= 1 && < 1.2
+                     , haskeline >= 0.7 && < 0.9
                      , containers >= 0.5 && < 0.7
 
   ghc-options: -Wextra -Wall -Wno-name-shadowing -Wno-implicit-prelude
@@ -93,9 +93,9 @@ executable amc-example
   hs-source-dirs:      bin
   build-depends:       amuletml
                      , mtl >= 2.2 && < 2.3
-                     , base >= 4.9 && < 4.14
+                     , base >= 4.9 && < 4.15
                      , text >= 1.2 && < 1.3
-                     , lens >= 4.15 && < 4.19
+                     , lens >= 4.15 && < 4.20
                      , containers >= 0.5 && < 0.7
 
   ghc-options: -Wextra -Wall -Wno-name-shadowing -Wno-implicit-prelude
@@ -121,12 +121,12 @@ executable amulet-lsp
   build-depends:       mtl >= 2.2 && < 2.3
                      , stm >= 2.5 && < 3.0
                      , text >= 1.2 && < 1.3
-                     , base >= 4.9 && < 4.14
-                     , lens >= 4.15 && < 4.19
+                     , base >= 4.9 && < 4.15
+                     , lens >= 4.15 && < 4.20
                      , aeson >= 1.4.5
                      , process >= 1.6 && < 1.7
                      , data-default >= 0.7
-                     , these >= 1 && < 1.1
+                     , these >= 1 && < 1.2
                      , amuletml
                      , hslogger >= 1.3 && < 1.4
                      , filepath >= 1.4 && < 1.5
@@ -134,12 +134,12 @@ executable amulet-lsp
                      , containers >= 0.5 && < 0.7
                      , bytestring >= 0.10 && < 0.11
                      , network-uri >= 2.6.1
-                     , haskell-lsp == 0.21.0.0
-                     , haskell-lsp-types == 0.21.0.0
+                     , lsp >= 1.1
+                     , lsp-types >= 1.1
                      , transformers >= 0.5 && < 0.6
                      , monad-chronicle >= 1 && < 1.1
                      , optparse-applicative >= 0.14 && < 0.16
-                     , template-haskell >= 2.13 && < 2.16
+                     , template-haskell >= 2.13 && < 2.17
                      , rope-utf16-splay >= 0.3 && < 0.4
                      , cryptohash-sha256 >= 0.11 && < 0.12
                      , unordered-containers >= 0.2 && < 0.3
@@ -173,23 +173,23 @@ test-suite tests
                      , stm >= 2.5 && < 2.6
                      , xml >= 1.3
                      , text >= 1.2 && < 1.3
-                     , base >= 4.9 && < 4.14
-                     , lens >= 4.15 && < 4.19
+                     , base >= 4.9 && < 4.15
+                     , lens >= 4.15 && < 4.20
                      , Diff >= 0.3.4 && < 0.5
                      , aeson >= 1.4.5
                      , HUnit >= 1.6 && < 1.7
                      , tasty >= 1.0 && < 1.3
-                     , these >= 1 && < 1.1
+                     , these >= 1 && < 1.2
                      , typed-process >= 0.2.6.0 && < 0.3
                      , amuletml
-                     , lsp-test >= 0.10.2.0
+                     , lsp-test >= 0.13
                      , filepath >= 1.4 && < 1.5
                      , hedgehog >= 1.0 && < 1.1
                      , directory >= 1.3 && < 1.4
                      , containers >= 0.5 && < 0.7
                      , pretty-show >= 1.9.0 && < 2.0
                      , tasty-hunit >= 0.10 && < 0.11
-                     , haskell-lsp-types == 0.21.0.0
+                     , lsp-types >= 1.1
                      , data-default >= 0.7
                      , tasty-hedgehog >= 1.0 && < 1.1
                      , monad-chronicle >= 1 && < 1.1
@@ -244,10 +244,10 @@ library
   build-depends:       mtl >= 2.2 && < 2.3
                      , syb >= 0.7 && < 0.8
                      , text >= 1.2 && < 1.3
-                     , base >= 4.9 && < 4.14
-                     , lens >= 4.15 && < 4.19
+                     , base >= 4.9 && < 4.15
+                     , lens >= 4.15 && < 4.20
                      , time >= 1.9.3 && < 1.9.4
-                     , these >= 1 && < 1.1
+                     , these >= 1 && < 1.2
                      , array >= 0.5 && < 0.6
                      , logict >= 0.7 && < 0.8
                      , filepath >= 1.4 && < 1.5
@@ -255,10 +255,10 @@ library
                      , directory >= 1.3 && < 1.4
                      , bytestring >= 0.10 && < 0.11
                      , containers >= 0.5 && < 0.7
-                     , these-lens >= 1 && < 1.1
+                     , these-lens >= 1 && < 1.2
                      , transformers >= 0.5 && < 0.6
                      , monad-chronicle >= 1 && < 1.1
-                     , template-haskell >= 2.13 && < 2.16
+                     , template-haskell >= 2.13 && < 2.17
                      , cryptohash-sha256 >= 0.11 && < 0.12
                      , annotated-wl-pprint >= 0.7 && < 0.8
                      , unordered-containers >= 0.2 && < 0.3

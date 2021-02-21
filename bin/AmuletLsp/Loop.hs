@@ -1,4 +1,14 @@
-{-# LANGUAGE OverloadedStrings, DeriveGeneric, DuplicateRecordFields, FlexibleContexts #-}
+{-# LANGUAGE 
+  OverloadedStrings
+, DeriveGeneric
+, DuplicateRecordFields
+, FlexibleContexts
+, ScopedTypeVariables
+, DataKinds
+, KindSignatures
+, TypeFamilies
+, PolyKinds
+#-}
 
 {-| The main LSP server loop. -}
 module AmuletLsp.Loop (run) where
@@ -14,6 +24,7 @@ import Control.Lens hiding (List)
 import Control.Concurrent.STM
 import Control.Applicative
 import Control.Monad
+import Control.Monad.IO.Class
 
 import qualified Data.Text as T
 import Data.Aeson.Types
@@ -24,16 +35,12 @@ import Data.Maybe
 
 import Frontend.Errors
 
-import Generics.Constructor
 import GHC.Generics
 
-import qualified Language.Haskell.LSP.Control as Control
-import qualified Language.Haskell.LSP.Types.Lens as L
-import Language.Haskell.LSP.Types.Lens hiding (error)
-import qualified Language.Haskell.LSP.VFS as VFS
-import qualified Language.Haskell.LSP.Core as C
-import Language.Haskell.LSP.Messages
-import Language.Haskell.LSP.Types
+import Language.LSP.Types.Lens hiding (didChangeWatchedFiles)
+import qualified Language.LSP.VFS as VFS
+import qualified Language.LSP.Server as S
+import Language.LSP.Types
 
 import Prelude hiding (id)
 
@@ -60,6 +67,9 @@ instance FromJSON Config where
       <$> o .:? "libraryPath"                 .!= libraryPath def
       <*> o .:? "typeOverlay"                 .!= typeOverlay def
 
+
+type Lsp = S.LspM Config
+
 -- | Set up and run the server.
 --
 -- The main server is pretty simple: we forward all messages into a
@@ -71,87 +81,84 @@ instance FromJSON Config where
 run :: IO ExitCode
 run = do
   qIn <- atomically newTQueue
-  e <- Control.run (callbacks qIn) (handlers qIn) options Nothing
+  e <- S.runServer (server qIn)
+  -- (callbacks qIn) (handlers qIn) options Nothing
   pure (if e == 0 then ExitSuccess else ExitFailure e)
 
   where
-    callbacks :: TQueue FromClientMessage -> C.InitializeCallbacks Config
-    callbacks qIn = C.InitializeCallbacks
-        { C.onInitialConfiguration
-            = maybe (pure def) (first T.pack . parseEither parseJSON)
-            . (^. params . initializationOptions)
-        , C.onConfigurationChange
-            = first T.pack . parseEither parseJSON . (^. params . settings)
-        , C.onStartup = \lf -> do
-            config <- C.config lf
-            wrk <- makeWorker (maybe [] libraryPath config) CT.lua (publishDiagnostics lf)
-            _ <- forkIOWith "Loop" (loop lf wrk qIn)
-            return Nothing
+    server :: TQueue (Worker -> Lsp ()) -> S.ServerDefinition Config
+    server qIn = S.ServerDefinition
+        { options = options
+        , S.doInitialize = \env _ -> do
+            config <- S.runLspT env S.getConfig
+            wrk <- makeWorker (maybe [] libraryPath config) CT.lua (publishDiagnostics env)
+            _ <- forkIOWith "Loop" (loop env wrk qIn)
+            return (Right env)
+        , onConfigurationChange = pure . first T.pack . parseEither parseJSON
+        , staticHandlers = handlers qIn
+        , interpretHandler = \env -> S.Iso (S.runLspT env) liftIO
         }
 
-    publishDiagnostics :: C.LspFuncs a -> NormalizedUri -> ErrorBundle -> IO ()
-    publishDiagnostics lf uri es =
-      C.sendFunc lf . NotPublishDiagnostics
-      . fmServerPublishDiagnosticsNotification
-      $ PublishDiagnosticsParams
+    publishDiagnostics :: S.LanguageContextEnv Config -> NormalizedUri -> ErrorBundle -> IO ()
+    publishDiagnostics env uri es =
+      S.runLspT env $ S.sendNotification STextDocumentPublishDiagnostics PublishDiagnosticsParams
       { _uri = fromNormalizedUri uri
       , _diagnostics = List $ map diagnosticOf (es ^. parseErrors)
                            ++ map diagnosticOf (es ^. resolveErrors)
                            ++ map diagnosticOf (es ^. typeErrors)
                            ++ map diagnosticOf (es ^. verifyErrors)
-      }
+      , _version = Nothing -- TODO: Specify a version
+      } 
 
 
-    loop :: C.LspFuncs Config -> Worker -> TQueue FromClientMessage -> IO ()
-    loop lf wrk qIn = forever $ atomically (readTQueue qIn) >>= handleRequest lf wrk
+    loop :: S.LanguageContextEnv Config -> Worker -> TQueue (Worker -> Lsp ()) -> IO ()
+    loop env wrk qIn = forever go where
+      go :: IO ()
+      go = atomically (readTQueue qIn) >>= S.runLspT env . ($ wrk)
 
-    handlers :: TQueue FromClientMessage -> C.Handlers
-    handlers qIn = def
-      { C.initializedHandler = handle NotInitialized
-      , C.responseHandler    = handle RspFromClient
+    handlers :: TQueue (Worker -> Lsp ()) -> S.Handlers (S.LspM Config)
+    handlers qIn = mconcat
+      [ S.notificationHandler SInitialized $ \notif -> 
+          liftIO $ infoM logN ("Received message from client (" ++ show notif ++ ")")
+      , S.notificationHandler SWorkspaceDidChangeConfiguration $ queuedN $ \wrk _ -> do
+          config <- S.getConfig 
+          liftIO $ infoM logN ("Updated config with " ++ show config)
+          liftIO $ updateConfig wrk (maybe [] libraryPath config)
+      , S.notificationHandler SCancelRequest $ queuedN doCancelRequest
 
-      -- Notifications alert us when something has happened:
-      , C.didChangeConfigurationParamsHandler      = handle NotDidChangeConfiguration
       -- File changes
-      , C.didOpenTextDocumentNotificationHandler   = handle NotDidOpenTextDocument
-      , C.didSaveTextDocumentNotificationHandler   = handle NotDidSaveTextDocument
-      , C.didChangeWatchedFilesNotificationHandler = handle NotDidChangeWatchedFiles
-      , C.didChangeTextDocumentNotificationHandler = handle NotDidChangeTextDocument
-      , C.didCloseTextDocumentNotificationHandler  = handle NotDidCloseTextDocument
+      , S.notificationHandler STextDocumentDidOpen   $ queuedN didOpenTextDocument
+      , S.notificationHandler STextDocumentDidSave   $ queuedN didSaveTextDocument
+      , S.notificationHandler STextDocumentDidChange $ queuedN didChangeTextDocument
+      , S.notificationHandler STextDocumentDidClose  $ queuedN didCloseTextDocument
+      , S.notificationHandler SWorkspaceDidChangeWatchedFiles $ queuedN didChangeWatchedFiles
 
       -- Requests query information from the server.
-      , C.cancelNotificationHandler = handle NotCancelRequestFromClient
-      , C.documentSymbolHandler     = handle ReqDocumentSymbols
-      , C.codeActionHandler         = handle ReqCodeAction
-      , C.codeLensHandler           = handle ReqCodeLens
-      , C.codeLensResolveHandler    = handle ReqCodeLensResolve
-      , C.foldingRangeHandler       = handle ReqFoldingRange
-      }
-      where handle c = Just (atomically . writeTQueue qIn . c)
+      , S.requestHandler STextDocumentDocumentSymbol $ queuedR handleDocumentSymbols
+      , S.requestHandler STextDocumentCodeAction     $ queuedR handleCodeAction
+      , S.requestHandler STextDocumentCodeLens       $ queuedR handleCodeLens
+      , S.requestHandler SCodeLensResolve            $ queuedR handleCodeLensResolve
+      , S.requestHandler STextDocumentFoldingRange   $ queuedR handleFoldingRange
+      ]
+      where 
+        queuedN :: forall (m :: Method 'FromClient 'Notification). (Worker -> S.Handler Lsp m)
+                -> S.Handler Lsp m
+        queuedN f = liftIO . atomically . writeTQueue qIn . flip f
+        queuedR :: forall (m :: Method 'FromClient 'Request). (Worker -> S.Handler Lsp m)
+                -> S.Handler Lsp m
+        queuedR f x cb = liftIO . atomically . writeTQueue qIn $ \wrk -> f wrk x cb
 
-    options :: C.Options
+    options :: S.Options
     options =
-      def { C.textDocumentSync       = Just TextDocumentSyncOptions
+      def { S.textDocumentSync       = Just TextDocumentSyncOptions
                                        { _openClose         = Just True
                                        , _change            = Just TdSyncIncremental
                                        , _willSave          = Just False
                                        , _willSaveWaitUntil = Just False
-                                       , _save              = Just SaveOptions { _includeText = Just False }
+                                       , _save              = Just $ InR SaveOptions { _includeText = Just False }
                                        }
-          , C.codeActionKinds        = Just [CodeActionQuickFix]
+          , S.codeActionKinds        = Just [CodeActionQuickFix]
           }
-
-handleRequest :: C.LspFuncs Config -> Worker -> FromClientMessage -> IO ()
-
-handleRequest _ _ (RspFromClient msg) =
-  infoM logN ("Received message from client (" ++ show msg ++ ")")
-handleRequest _ _ NotInitialized{} =
-  infoM logN "Initialized server"
-handleRequest lf wrk NotDidChangeConfiguration{} = do
-  config <- C.config lf
-  infoM logN ("Updated config with " ++ show config)
-  updateConfig wrk (maybe [] libraryPath config)
-
 
 {- * File changes:
 
@@ -162,34 +169,40 @@ handleRequest lf wrk NotDidChangeConfiguration{} = do
   Note the potentially: not all actions /require/ a refresh. For instance,
   closing a file shouldn't impact the compilation state at all.
 -}
-handleRequest lf wrk (NotDidOpenTextDocument msg) = do
+
+didOpenTextDocument :: Worker -> S.Handler Lsp 'TextDocumentDidOpen
+didOpenTextDocument wrk msg = do
   let nUri = toNormalizedUri (msg ^. params . textDocument . uri)
 
-  file <- C.getVirtualFileFunc lf nUri
+  file <- S.getVirtualFile nUri
   case file of
     Nothing -> pure ()
-    Just file -> do
+    Just file -> liftIO $ do
       updateFile wrk nUri (Version (VFS._lsp_version file)) (VFS._text file)
       refresh wrk (Just nUri)
 
-handleRequest _ wrk (NotDidSaveTextDocument msg) =
+didSaveTextDocument :: Worker -> S.Handler Lsp 'TextDocumentDidSave
+didSaveTextDocument wrk msg =
   let nUri = toNormalizedUri (msg ^. params . textDocument . uri)
-  in refresh wrk (Just nUri)
+  in liftIO $ refresh wrk (Just nUri)
 
-handleRequest lf wrk (NotDidChangeTextDocument msg) = do
+didChangeTextDocument :: Worker -> S.Handler Lsp 'TextDocumentDidChange
+didChangeTextDocument wrk msg = do
   let nUri = toNormalizedUri (msg ^. params . textDocument . uri)
-  file <- C.getVirtualFileFunc lf nUri
+  file <- S.getVirtualFile nUri
   case file of
     Nothing -> pure ()
-    Just file -> do
+    Just file -> liftIO $ do
       updateFile wrk nUri (Version (VFS._lsp_version file)) (VFS._text file)
       refresh wrk (Just nUri)
 
-handleRequest _ wrk (NotDidCloseTextDocument msg) = do
-  let nUri = toNormalizedUri (msg ^. params . textDocument . uri)
-  closeFile wrk nUri
+didCloseTextDocument :: Worker -> S.Handler Lsp 'TextDocumentDidClose
+didCloseTextDocument wrk msg =
+  let nUri = toNormalizedUri (msg ^. params . textDocument . uri) 
+  in liftIO $ closeFile wrk nUri
 
-handleRequest _ wrk (NotDidChangeWatchedFiles msg) = do
+didChangeWatchedFiles :: Worker -> S.Handler Lsp 'WorkspaceDidChangeWatchedFiles
+didChangeWatchedFiles wrk msg = liftIO $ do
   for_ (msg ^. params . changes) (touchFile wrk . toNormalizedUri . (^.uri))
   refresh wrk Nothing
 
@@ -200,85 +213,92 @@ handleRequest _ wrk (NotDidChangeWatchedFiles msg) = do
   which will wait for any dependencies and evaluate when they are fulfilled.
 -}
 
-handleRequest _ wrk (NotCancelRequestFromClient msg) =
-  cancelRequest wrk (msg ^. params . L.id)
+doCancelRequest :: Worker -> S.Handler Lsp 'CancelRequest
+doCancelRequest wrk NotificationMessage{_params = CancelParams {_id = req } } =
+  liftIO $ cancelRequest wrk (SomeLspId req)
 
-handleRequest lf wrk (ReqDocumentSymbols msg)
-  = startRequest wrk (msg ^. id)
-  . RequestLatest (toNormalizedUri rawUri) ReqParsed (sendReplyError lf msg)
-  $ \_ _ prog ->
-    sendReply lf msg RspDocumentSymbols . DSDocumentSymbols . List . maybe [] getOutline $ prog
-  where rawUri = msg ^. params . textDocument . uri
+handleDocumentSymbols :: Worker -> S.Handler Lsp 'TextDocumentDocumentSymbol
+handleDocumentSymbols wrk msg cb = do
+  env <- S.getLspEnv
+  liftIO . startRequest wrk (SomeLspId (msg ^. id))
+    . RequestLatest (toNormalizedUri rawUri) ReqParsed (sendReplyError env cb)
+    $ \_ _ prog -> sendReply env cb . InL . List . maybe [] getOutline $ prog
+  where 
+    rawUri = msg ^. params . textDocument . uri
 
-handleRequest lf wrk (ReqCodeAction msg)
-  = startRequest wrk (msg ^. id)
-  . RequestLatest (toNormalizedUri rawUri) ReqErrors (sendReplyError lf msg)
-  $ \_ (Version ver) es ->
+handleCodeAction :: Worker -> S.Handler Lsp 'TextDocumentCodeAction
+handleCodeAction wrk msg cb = do
+  env <- S.getLspEnv
+  liftIO . startRequest wrk (SomeLspId (msg ^. id))
+    . RequestLatest (toNormalizedUri rawUri) ReqErrors (sendReplyError env cb)
+    $ \_ (Version ver) es ->
       let versioned = VersionedTextDocumentIdentifier rawUri (Just ver)
-      in sendReply lf msg RspCodeAction . List $ getCodeActions versioned (msg ^. params . range) es
+      in sendReply env cb . List . map InR $ getCodeActions versioned (msg ^. params . range) es
   where rawUri = msg ^. params . textDocument . uri
 
-handleRequest lf wrk (ReqCodeLens msg) = do
-  typeOverlay <- typeOverlay . fromMaybe def <$> C.config lf
+handleCodeLens :: Worker -> S.Handler Lsp 'TextDocumentCodeLens
+handleCodeLens wrk msg cb = do
+  env <- S.getLspEnv 
+  typeOverlay <- typeOverlay . fromMaybe def <$> S.getConfig
   if typeOverlay
-  then startRequest wrk (msg ^. id)
-     . RequestLatest (toNormalizedUri rawUri) ReqTyped (sendReplyError lf msg)
-     $ \name _ -> sendReply lf msg RspCodeLens . List . maybe [] (getTypeOverlay name . (\(_, p, _, _) -> p))
-  else sendReply lf msg RspCodeLens (List [])
+  then liftIO . startRequest wrk (SomeLspId (msg ^. id))
+     . RequestLatest (toNormalizedUri rawUri) ReqTyped (sendReplyError env cb)
+     $ \name _ -> sendReply env cb . List . maybe [] (getTypeOverlay name . (\(_, p, _, _) -> p))
+  else cb (Right (List []))
   where rawUri = msg ^. params . textDocument . uri
 
-handleRequest lf wrk (ReqCodeLensResolve msg) =
+handleCodeLensResolve :: Worker -> S.Handler Lsp 'CodeLensResolve
+handleCodeLensResolve wrk msg cb = do
   case msg ^. params of
     -- We're already resolved? This should never happen, but just send it
     -- back anyway.
-    c@(CodeLens _ Just{} _) -> sendReply lf msg RspCodeLensResolve c
+    c@(CodeLens _ Just{} _) -> cb (Right c)
 
     c@(CodeLens _ _ (Just extra))
       | Success od@(OverlayData _ _ fileVar) <- fromJSON extra -> do
           -- Find which file this type overlay refers to, and then fire
           -- off a fresh request to fetch the environment and resolve the
           -- code lens.
-          uri <- findFile wrk (TgName "" fileVar)
+          uri <- liftIO $ findFile wrk (TgName "" fileVar)
           case uri of
             Nothing -> do
-              infoM logN ("Skiping outdated code lens for " ++ show uri)
-              sendReplyError lf msg $ ResponseError ContentModified "File is no longer available" Nothing
-            Just path
-              -> startRequest wrk (msg ^. id)
-               . RequestLatest path ReqTyped (sendReplyError lf msg)
+              liftIO $ infoM logN ("Skiping outdated code lens for " ++ show uri)
+              cb . Left $ ResponseError ContentModified "File is no longer available" Nothing
+            Just path -> do
+              lspEnv <- S.getLspEnv 
+              liftIO . startRequest wrk (SomeLspId (msg ^. id))
+               . RequestLatest path ReqTyped (sendReplyError lspEnv cb)
                $ \_ _ r ->
                    case r of
                      Nothing ->
-                       sendReplyError lf msg $ ResponseError ContentModified "File cannot be loaded" Nothing
+                       sendReplyError lspEnv cb $ ResponseError ContentModified "File cannot be loaded" Nothing
                      Just (_, _, env, _)
                        | Just lens <- resolveTypeOverlay env od c
-                       -> sendReply lf msg RspCodeLensResolve lens
+                       -> sendReply lspEnv cb lens
                        | otherwise -> do
                            warningM logN ("Skiping out-of-date type overlay for " ++ show c)
-                           sendReplyError lf msg $ ResponseError ContentModified "Variable is no longer available" Nothing
+                           sendReplyError lspEnv cb $ ResponseError ContentModified "Variable is no longer available" Nothing
 
     c -> do
-      errorM logN ("Skiping malformed code lens for " ++ show c)
-      sendReplyError lf msg $ ResponseError InvalidParams "Code lens is missing data" Nothing
+      liftIO $ errorM logN ("Skiping malformed code lens for " ++ show c)
+      cb . Left $ ResponseError InvalidParams "Code lens is missing data" Nothing
 
-handleRequest lf wrk (ReqFoldingRange msg)
-  = startRequest wrk (msg ^. id)
-  . RequestLatest (toNormalizedUri rawUri) ReqParsed (sendReplyError lf msg)
-  $ \_ _ prog ->
-    sendReply lf msg RspFoldingRange . List . maybe [] getFolds $ prog
+handleFoldingRange :: Worker -> S.Handler Lsp 'TextDocumentFoldingRange
+handleFoldingRange wrk msg cb = do
+  env <- S.getLspEnv
+  liftIO . startRequest wrk (SomeLspId (msg ^. id))
+    . RequestLatest (toNormalizedUri rawUri) ReqParsed (sendReplyError env cb)
+    $ \_ _ prog -> sendReply env cb . List . maybe [] getFolds $ prog
   where rawUri = msg ^. params . textDocument . uri
 
 
-handleRequest _ _ msg =
-  warningM logN ("Unknown message " ++ conNameOf msg)
-
 -- | Send a reply to a request.
-sendReply :: C.LspFuncs c -> RequestMessage ClientMethod req resp -> (ResponseMessage resp -> FromServerMessage) -> resp -> IO ()
-sendReply lf req wrapMsg = C.sendFunc lf . wrapMsg . C.makeResponseMessage req
+sendReply :: S.LanguageContextEnv Config -> (Either ResponseError a -> Lsp ()) -> a -> IO ()
+sendReply env cb = S.runLspT env . cb . Right
 
 -- | Send a an error in reply to a request.
-sendReplyError :: C.LspFuncs c -> RequestMessage ClientMethod req resp -> ResponseError -> IO ()
-sendReplyError lf req = C.sendFunc lf . RspError . C.makeResponseError (responseId $ req ^. id)
+sendReplyError :: S.LanguageContextEnv Config -> (Either ResponseError a -> Lsp ()) -> ResponseError -> IO ()
+sendReplyError env cb = S.runLspT env . cb . Left
 
 -- | The name of the logger to use.
 logN :: String

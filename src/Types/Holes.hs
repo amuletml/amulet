@@ -248,7 +248,7 @@ knownImplication ty = fake [ty] $ \[app] -> do
 
 -- | Exhaustively explore a list of choices.
 explore :: MonadLogic m => [a] -> m a
-explore = foldr (interleave . pure) mzero
+explore = foldr (interleave . pure) empty
 
 fake :: MonadReader PsScope m => [Type Typed] -> ([Ann Typed] -> m a) -> m a
 fake t k = k . (flip zip t . repeat) =<< view psAnn

@@ -13,8 +13,8 @@ import Data.Span
 
 import Frontend.Errors
 
-import Language.Haskell.LSP.Types.Lens hiding (error)
-import Language.Haskell.LSP.Types
+import Language.LSP.Types.Lens hiding (error)
+import Language.LSP.Types
 
 import Prelude hiding (id)
 
@@ -23,7 +23,7 @@ import Text.Pretty.Semantic hiding (line)
 -- | Get all code actions within a range.
 --
 -- For now, this just provides a function to fill in any type hole.
-getCodeActions :: VersionedTextDocumentIdentifier -> Range -> ErrorBundle -> [CAResult]
+getCodeActions :: VersionedTextDocumentIdentifier -> Range -> ErrorBundle -> [CodeAction]
 getCodeActions file filterRange = foldl' getAction [] . (^.typeErrors) where
   -- TODO: Investigate benefits/disadvantages of using a command instead of a
   -- raw "replace" action.
@@ -36,7 +36,7 @@ getCodeActions file filterRange = foldl' getAction [] . (^.typeErrors) where
     | otherwise = ac
 
   getActionOf range ac (ArisingFrom e _) = getActionOf range ac e
-  getActionOf range ac (FoundHole _ _ exprs@(_:_)) = map (CACodeAction . mkAction range . pretty) exprs ++ ac
+  getActionOf range ac (FoundHole _ _ exprs@(_:_)) = map (mkAction range . pretty) exprs ++ ac
   getActionOf _ ac _ = ac
 
   mkAction range expr =
@@ -47,10 +47,12 @@ getCodeActions file filterRange = foldl' getAction [] . (^.typeErrors) where
             <> "'"
     , _kind = Just CodeActionQuickFix
     , _diagnostics = Nothing
+    , _isPreferred = Nothing
+    , _disabled = Nothing
     , _edit = Just (WorkspaceEdit
                     { _changes = Nothing
                     , _documentChanges = Just . List $
-                      [ TextDocumentEdit
+                      [ InL $ TextDocumentEdit
                         { _textDocument = file
                         , _edits = List [ TextEdit range (renderBasic (hang (range ^. start . character) expr)) ]
                         } ] })

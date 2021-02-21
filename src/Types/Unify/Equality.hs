@@ -1,7 +1,6 @@
 {-# LANGUAGE MultiWayIf, FlexibleContexts, ScopedTypeVariables,
    TupleSections, ConstraintKinds, CPP, TypeFamilies, OverloadedStrings,
    RecordWildCards, ViewPatterns #-}
-{-# OPTIONS_GHC -fmax-pmcheck-iterations=5000000 #-}
 module Types.Unify.Equality
   ( unify
   , flatten

@@ -19,8 +19,10 @@ symbolListTests = testGroup "Symbol list"
                         (Just (range 0 0 0 3))
                         Nothing "lets" ]
 
-      Left symbs <- getDocumentSymbols ident
-      assertIn $ symbs @?= []
+      symbs <- getDocumentSymbols ident
+      case symbs of
+        Left symbs -> assertIn $ symbs @?= []
+        Right symbs -> assertIn $ symbs @?= []
 
   , lspSession "Is provided on resolution errors" $ do
       ident <- openDoc "main.ml" "amulet"

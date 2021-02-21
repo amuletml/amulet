@@ -210,7 +210,6 @@ prettyQuantifiers prettyType inner (q:qs) =
            star = soperator (char '*')
         in hsep (punctuate (space <> star) (map (arg . (^?! _Implicit)) (q:these)))
            <+> arrow <+> prettyQuantifiers prettyType inner those
-     [] -> error "what?"
 
 
 sameAs :: TyBinder p -> TyBinder p -> Bool

@@ -14,7 +14,7 @@ import Data.Span
 
 import GHC.Generics
 
-import Language.Haskell.LSP.Types
+import Language.LSP.Types
 
 import Syntax.Types
 import Syntax

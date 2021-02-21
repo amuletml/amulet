@@ -41,7 +41,7 @@ import Data.Spanned
 import Data.Triple
 import Data.Char
 
-import System.Console.Haskeline hiding (display, bracket, throwTo)
+import System.Console.Haskeline hiding (display)
 import System.Directory
 import System.IO
 

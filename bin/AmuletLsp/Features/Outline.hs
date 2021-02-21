@@ -6,7 +6,7 @@ import Data.Foldable
 import Data.Spanned
 import Data.Span
 
-import Language.Haskell.LSP.Types
+import Language.LSP.Types
 import AmuletLsp.Features
 
 import Syntax

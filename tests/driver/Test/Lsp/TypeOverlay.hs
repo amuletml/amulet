@@ -1,4 +1,4 @@
-{-# LANGUAGE DuplicateRecordFields, OverloadedStrings, ScopedTypeVariables #-}
+{-# LANGUAGE DuplicateRecordFields, OverloadedStrings, ScopedTypeVariables, DataKinds #-}
 module Test.Lsp.TypeOverlay (typeOverlayTests) where
 
 import Prelude hiding (error)
@@ -8,7 +8,7 @@ import Control.Lens ((^.))
 import Data.Aeson.Types
 import Data.Text ()
 
-import Language.Haskell.LSP.Types.Lens hiding (range)
+import Language.LSP.Types.Lens hiding (range)
 
 import Test.Tasty.Lsp
 import Test.Tasty
@@ -45,14 +45,13 @@ typeOverlayTests = testGroup "Type overlay"
   , lspSession "Malformed code lenses produce an error" $ do
       ident <- openDoc "main.ml" "amulet"
       _ <- getCodeLenses ident
-      response :: ResponseMessage CodeLens <-
-        request CodeLensResolve CodeLens
+      response <-
+        request SCodeLensResolve CodeLens
         { _range = range 0 4 0 9
         , _command = Nothing
         , _xdata = Just (object [("name", String "x"), ("id", Number 1), ("file", Number 5)])
         }
-      assertIn $ response ^. result @?= Nothing
-      assertIn $ response ^. error @?= Just (ResponseError ContentModified "File is no longer available" Nothing)
+      assertIn $ response ^. result @?= Left (ResponseError ContentModified "File is no longer available" Nothing)
 
   , lspSession "Is not shown on errors" $ do
       ident <- openDoc "main.ml" "amulet"
