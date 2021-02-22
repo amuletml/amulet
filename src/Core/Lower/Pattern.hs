@@ -563,7 +563,7 @@ lowerOneOf preLeafs var ty tys = go [] . foldMap prepare
       (cap@(Capture c _), cases') <- case VarMap.lookup v' cases of
         Nothing -> do
           ~(dropNForalls (length cvars) -> ForallTy Irrelevant x r) <-
-              inst . fromMaybe (error (show v')) <$> asks (VarMap.lookup (mkType v) . ctors)
+              asks (inst . fromMaybe (error (show v')) . VarMap.lookup (mkType v) . ctors)
           let Just s = r `unify` lowerType cty
               ty' = substituteInType s x
           (,unc) . flip Capture ty' <$> freshFromPat p

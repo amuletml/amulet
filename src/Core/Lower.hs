@@ -1,6 +1,4 @@
-{-# LANGUAGE TupleSections,
-    PatternSynonyms, RankNTypes, ScopedTypeVariables, FlexibleContexts,
-    ConstraintKinds, OverloadedStrings, TypeFamilies #-}
+{-# LANGUAGE TupleSections, RankNTypes, ScopedTypeVariables, FlexibleContexts, ConstraintKinds, OverloadedStrings, TypeFamilies #-}
 module Core.Lower
   ( LowerState, defaultState
   , runLowerT, runLowerWithEnv

@@ -1,3 +1,5 @@
+{-# LANGUAGE TupleSections #-}
+
 -- | Represents a series of operations which may be performed on
 -- 3-tuples.
 module Data.Triple
@@ -46,4 +48,4 @@ firstA :: Applicative f => (a -> f a') -> (a, b) -> f (a', b)
 firstA f (x, y) = (,) <$> f x <*> pure y
 
 secondA :: Applicative f => (b -> f b') -> (a, b) -> f (a, b')
-secondA f (x, y) = (,) <$> pure x <*> f y
+secondA f (x, y) = (x,) <$> f y

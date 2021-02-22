@@ -156,7 +156,7 @@ instance Emitter Lua where
   yieldStmt YieldReturn es = pure (LuaReturn es)
   yieldStmt (YieldStore vs) es = pure (LuaAssign vs es)
   yieldStmt YieldDiscard es = foldMap asStmt es
-  yieldStmt (YieldDeclare _ _ _) es = foldMap asStmt es
+  yieldStmt YieldDeclare {} es = foldMap asStmt es
 
   yieldDeclare (YieldDeclare v ty occ) = Just (v, ty, occ)
   yieldDeclare _ = Nothing
@@ -346,7 +346,7 @@ emitExpr var yield t@(AnnMatch _ test arms) = do
       the edge-case where we've patterns after a wildcard (such as if the
       optimiser hasn't run).
     -}
-    (ifs : els@Arm { _armPtrn = elsPat } : rest) | (elsPat == PatWildcard || null rest)
+    (ifs : els@Arm { _armPtrn = elsPat } : rest) | elsPat == PatWildcard || null rest
       -> do
         test' <- emitAtomMany test
         (pat, ifs') <- genBranchES test' yield' ifs

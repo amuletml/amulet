@@ -94,7 +94,7 @@ data Covering a
   -- | Represents a "pure" version of the covered set. We use this to
   -- represent values constructed via "pure" (and so both the covered and
   -- uncovered sets are identical).
-  | PureCovering { pureCover :: (Seq.Seq a) }
+  | PureCovering { pureCover :: Seq.Seq a }
   deriving (Show, Functor)
 
 covered, uncovered :: Covering a -> Seq.Seq a
@@ -429,7 +429,7 @@ constructors env kty vty = do
     unwrapCtor (TyPi bind res) = case bind of
       Anon arg -> (Just arg, res)
       Implicit _ -> unwrapCtor res
-      Invisible _ _ _ -> unwrapCtor res
+      Invisible {} -> unwrapCtor res
     unwrapCtor (TyWithConstraints _ t) = unwrapCtor t
     unwrapCtor (TyParens t) = unwrapCtor t
     unwrapCtor t = (Nothing, t)

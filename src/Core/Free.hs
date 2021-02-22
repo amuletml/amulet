@@ -20,7 +20,7 @@ freeSet = fst . tagFreeStmt const const
 
 -- | Tag a list of statements with their free variables
 tagFreeSet :: IsVar a => [AnnStmt b a] -> [AnnStmt VarSet.Set a]
-tagFreeSet = snd . tagFreeStmt (flip const) const
+tagFreeSet = snd . tagFreeStmt (\_ x -> x) const
 
 -- | Tag some statements with free variable information
 tagFreeStmt :: forall a a' b b'. IsVar a

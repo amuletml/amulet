@@ -71,6 +71,7 @@ import qualified Data.Sequence as Seq
 import qualified Data.Text.IO as T
 import qualified Data.Text as T
 import qualified Data.Set as Set
+import Data.Bifunctor
 import Data.Position
 import Data.Foldable
 import Data.Function
@@ -401,7 +402,7 @@ compile :: (MonadNamey m, MonadIO m, MonadState Driver m)
         => [FilePath] -> m (Maybe [Stmt CoVar], ErrorBundle)
 compile ps = do
   let paths = Set.fromList ps
-  l <- fmap (concat . fmap fst) . sequence <$> gatherDepsOf getLowered paths
+  l <- fmap (concatMap fst) . sequence <$> gatherDepsOf getLowered paths
   errors <- fold <$> gatherDepsOf getErrors paths
   pure (l, errors)
 
@@ -472,7 +473,7 @@ getFile = reloadFile where
             -- If we've emitted the file, and we're on the same major tick, then
             -- it's not safe to recompile - we don't want to break any REPL
             -- state. So just update the clock.
-            updateFile path (fileCheckClock .~ clock) $> (Just file)
+            updateFile path (fileCheckClock .~ clock) $> Just file
 
         | otherwise -> do
           contents <- read path
@@ -711,7 +712,7 @@ newtype FileImport m a = FileIm
   { runFileImport :: LoadContext -> m (a, Set.Set FilePath) }
 
 instance Functor f => Functor (FileImport f) where
-  fmap f (FileIm go) = FileIm \c -> ((\(a, w) -> (f a, w)) <$> go c)
+  fmap f (FileIm go) = FileIm (fmap (first f) . go)
 
 instance Applicative f => Applicative (FileImport f) where
   pure x = FileIm (\_ -> pure (x, mempty))
@@ -767,7 +768,7 @@ importFile fromPath fromLoc path = withTimer ("Importing " ++ path) do
 
 -- | Try to identify the cycle of files requiring each other.
 findCycle :: LoadedFile -> Driver -> [(SourceName, Span)]
-findCycle (LoadedFile { fileSource, _stage = SResolving, _dependent = Just (from, loc) }) st =
+findCycle LoadedFile { fileSource, _stage = SResolving, _dependent = Just (from, loc) } st =
   (fileSource, loc) : findCycle (fromJust (Map.lookup from (st ^. files))) st
 findCycle _ _ = []
 

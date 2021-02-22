@@ -232,9 +232,6 @@ argParser = info (args <**> helper <**> version)
 
     mkWarns xs = appEndo (getDual (foldMap (Dual . Endo) xs)) defaultFilter
 
-    optional :: Parser a -> Parser (Maybe a)
-    optional p = (Just <$> p) <|> pure Nothing
-
     defaultPort :: Int
     defaultPort = 5478
 

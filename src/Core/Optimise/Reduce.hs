@@ -48,7 +48,7 @@ extendVar b@(v, _, e) = (varScope %~ VarMap.insert (toVar v) (basicDef v e))
                       . (ariScope %~ flip extendPureLets [b])
 
 extendVars :: IsVar a => [(a, Type, Term a)] -> ReduceScope a -> ReduceScope a
-extendVars vs s = foldr extendVar s vs where
+extendVars vs s = foldr extendVar s vs
 
 extendVarsRec :: IsVar a => [(a, Type, Term a)] -> ReduceScope a -> ReduceScope a
 extendVarsRec vs s = foldr extend s vs where
@@ -80,7 +80,7 @@ reduceStmts (StmtLet (Many vs):ss) =
   case stronglyConnComp . map buildNode $ vs of
     [] -> reduceStmts ss
     [CyclicSCC vs] -> local (ariScope %~ flip extendPureLets vs) $ do
-      breakers <- asks (flip loopBreakers vs)
+      breakers <- asks (`loopBreakers` vs)
       -- We go over the non-loop breakers (which will never be inlined), reduce
       -- them and then visit the loop breakers with these inlinable functions in
       -- scope.
@@ -138,7 +138,7 @@ reduceAtom u (Ref v ty) = do
               varSubst %= VarMap.insert (toVar v) (SubDone t')
               pure basic
         _ -> pure basic
-  where basic = (Ref (toVar v) ty)
+  where basic = Ref (toVar v) ty
 
 reduceAtom _ (Lit l) = pure (Lit l)
 
@@ -172,17 +172,16 @@ reduceTerm _ (AnnExtend _ e fs) = do
         let theirKs = mkMap theirs
             ourKs = mkMap ours
         in
-        if
+        if foldr (\p@(k,_,_) a -> a && Just p == Map.lookup k theirKs) True ours
+        then
           -- If all our keys are identical to the previous one, just inline this
           -- binding. This just prevents us creating entirely duplicate objects.
-          | foldr (\p@(k,_,_) a -> a && maybe False ((==p)) (Map.lookup k theirKs)) True ours
-          -> changed $ Atom e'
-
+          changed $ Atom e'
+        else
           -- Otherwise just merge the two bindings. This may have the
           -- unfortunate side effect of making variables last for longer, but
           -- should be good enough for now.
-          | otherwise
-          -> changed . Extend e $ foldr (\x s -> if fst3 x `Map.member` ourKs then s else x:s) ours theirs
+          changed . Extend e $ foldr (\x s -> if fst3 x `Map.member` ourKs then s else x:s) ours theirs
 
     (_, _) -> pure $ Extend e' fs'
   where
@@ -415,7 +414,7 @@ reduceTermK u (AnnLet f (Many vs) rest) cont =
   case stronglyConnComp . map buildNode $ vs of
     [] -> reduceTermK u rest cont
     [CyclicSCC vs] -> local (ariScope %~ flip extendPureLets vs) $ do
-      breakers <- asks (flip loopBreakers vs)
+      breakers <- asks (`loopBreakers` vs)
       -- We go over the non-loop breakers (which will never be inlined), reduce
       -- them and then visit the loop breakers with these inlinable functions in
       -- scope.
@@ -466,7 +465,7 @@ reduceTermK _ (AnnMatch _ test arms) cont = do
 
     extendNot ps def =
       let def' = fromMaybe unknownDef def
-      in Just def' { varNotAmong = ps ++ (varNotAmong def') }
+      in Just def' { varNotAmong = ps ++ varNotAmong def' }
 
     -- | Visit an arm with the provided continuation and substitution,
     -- applying them as needed.
@@ -524,7 +523,7 @@ inlineOr t usage cont def = do
       VarSet.foldr (\v -> (*>) (varSubst %= VarMap.delete v)) (pure ()) rs
       changing $ reduceTermK usage (buildKnownInline inl) cont
     Just (Right inl, rs)
-      | inl' <- (inlineMatches s (inlineSubst inl))
+      | inl' <- inlineMatches s (inlineSubst inl)
       , shouldInline s st usage inl'
       -> do
           VarSet.foldr (\v -> (*>) (varSubst %= VarMap.delete v)) (pure ()) rs
@@ -545,7 +544,7 @@ inlineOr t usage cont def = do
       | Just{} <- VarMap.lookup (toVar v) vs
       = case simplifyArms id s test arms of
           Left (arm, subst) -> inlineMatches
-            (s & (varScope %~ (flip substScope subst)))
+            (s & (varScope %~ (`substScope` subst)))
             (substVars vs subst, ts, arm ^. armBody)
           Right arms' -> (vs, ts, Match test (map fst arms'))
     inlineMatches _ x = x

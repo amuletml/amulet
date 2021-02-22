@@ -347,7 +347,7 @@ unifyPure_v ts = fst . flip runNamey firstName $ do
 
 unifRow :: MonadSolve m => ImplicitScope ClassInfo Typed -> (Text, Type Typed, Type Typed) -> m (Text, Coercion Typed)
 unifRow scope (t, a, b) = do
-  co <- retcons (flip Note (InField t)) (unify scope a b)
+  co <- retcons (`Note` InField t) (unify scope a b)
   pure (t, co)
 
 unifyTyFunApp, unifyTyFunApp' :: forall m. MonadSolve m
@@ -683,7 +683,7 @@ unequal scope a b =
           t = displayTypeTyped tau
           r = displayTypeTyped red
           wide = length (show r)
-       in Endo (flip Note doc)
+       in Endo (`Note` doc)
 
     noReductions :: Int
     noReductions = 20

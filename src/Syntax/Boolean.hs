@@ -1,7 +1,7 @@
 -- | Quantifier-free boolean formulae without negation, used to encode
 -- minimal definitions of type classes.
-{-# LANGUAGE DeriveFoldable, DeriveFunctor, DeriveTraversable,
-   DeriveDataTypeable #-}
+{-# LANGUAGE DeriveTraversable, DeriveDataTypeable #-}
+
 module Syntax.Boolean where
 
 -- Ord-based nub

@@ -220,11 +220,10 @@ resolveTyFunDeclKind reason name arguments kindsig equations = do
             Just _ -> do
               let preceding =
                     Seq.fromList $
-                      zipWith (\l r -> ConUnify (BecauseOf clause) scope undefined l r)
+                      zipWith (ConUnify (BecauseOf clause) scope undefined)
                         (map (flip TyVar () . argName) vis_args)
                         (apply (Map.fromList skols) xs)
               let to_eq ~(ConImplicit because scope var (TyApps _ [a, b])) = do
-                    pure ()
                     (b, _) <- skolFreeTy mempty (ByTyFunLhs ty an) b
                     pure $ ConUnify because scope var a b
 
@@ -240,7 +239,7 @@ resolveTyFunDeclKind reason name arguments kindsig equations = do
               tell rhs_cs
 
           let our_skols =
-                Set.fromList $ map (\(_, TySkol s) -> s ^. skolIdent) $ skols
+                Set.fromList $ map (\(_, TySkol s) -> s ^. skolIdent) skols
 
           put reason
           pure (TyFunClause ty (unskolemise' our_skols rhs) (an, kind))
@@ -488,10 +487,10 @@ inferKind t@TyApp{} | TyCon v ():xs <- appsView t = do
             arg <- checkKind arg d
             pure (arg, cod)
           Invisible v k Req -> do
-            traceM KcC $ "infer TyApp:"
+            traceM KcC "infer TyApp:"
             traceM KcC $ string "    argument:" <+> pretty arg
             traceM KcC $ string "    domain:" <+> shown (fmap pretty k)
-            arg <- checkKind arg =<< fromMaybe freshTV (pure <$> k)
+            arg <- checkKind arg =<< maybe freshTV pure k
             pure (arg, apply (Map.singleton v arg) cod)
           Invisible{} -> error "inferKind TyApp: visible argument to implicit quantifier"
           Implicit{} -> error "inferKind TyApp: visible argument to implicit quantifier"
@@ -602,7 +601,7 @@ checkKind (TyTupleL a b) ek = do
 checkKind ty u = do
   reason <- get
   (t, k) <- inferKind ty
-  traceM KcC $ "checking: deferring to inference + sub"
+  traceM KcC "checking: deferring to inference + sub"
   traceM KcC $ string "   inferred:" <+> pretty k
   traceM KcC $ string "   wanted:" <+> pretty u
   _ <- subsumes reason k u
@@ -654,7 +653,7 @@ closeOver r a = silence $ do
 
   let kindVars = squish . second toList . runWriter . split where
         squish (x, []) = x
-        squish (x, vs) = foldr (flip tyForall (Just TyType)) x vs
+        squish (x, vs) = foldr (`tyForall` Just TyType) x vs
 
         split (TyForall v (Just t@(TyVar x _)) ty)
           | v `Set.member` freevars = do
@@ -681,9 +680,9 @@ closeOver' vars r a = do
         | v `Set.member` vars = Spec
         | otherwise = Infer
 
-      kindVars = squish . second toList . runWriter . split where
+      kindVars = squish . second toList . runWriter . split
       squish (x, []) = x
-      squish (x, vs) = foldr (flip tyForall (Just TyType)) x vs
+      squish (x, vs) = foldr (`tyForall` Just TyType) x vs
 
       split (TyForall v (Just t@(TyVar x _)) ty)
         | v `Set.member` freevars = do

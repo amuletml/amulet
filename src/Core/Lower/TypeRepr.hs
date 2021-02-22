@@ -52,7 +52,7 @@ newtypeWorker (Spine tys dom cod) = do
       wrap ((Relevant v, c):ts) ex = Lam (TypeArgument (fromVar v) c) <$> wrap ts ex
       wrap [(Irrelevant, c)] ex = do
         v <- fresh ValueVar
-        Lam (TermArgument (fromVar v) c) <$> pure (ex v c)
+        pure (Lam (TermArgument (fromVar v) c) (ex v c))
       wrap _ _ = undefined
 
       work :: CoVar -> Type -> Term a

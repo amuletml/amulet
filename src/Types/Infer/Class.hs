@@ -661,7 +661,7 @@ reduceClassContext extra annot cons = do
               fds <- view (classDecs . at v)
               case fds of
                 Just (view ciFundep -> fds) ->
-                  pure (foldMap (ftv . map (args !!)) (map (view _2) fds))
+                  pure (foldMap (ftv . map (args !!) . view _2) fds)
                 Nothing -> pure mempty
             _ -> pure mempty
         (con, sub') <- skolFreeTy don't_skol (ByConstraint con) (apply sub con)
@@ -913,8 +913,8 @@ checkFundeps context ann fds ty = do
   (ctx_from, ctx_to) <- go (splitContext context)
 
   for_ fds $ \(from, to, fda) -> do
-    let fv_f = foldMap ftv (map (args !!) from)
-        fv_t = foldMap ftv (map (args !!) to) Set.\\ gottem
+    let fv_f = foldMap (ftv . (args !!)) from
+        fv_t = foldMap (ftv . (args !!)) to Set.\\ gottem
         to_set = Set.fromList to
         gottem =
           if ctx_from `Set.isSubsetOf` fv_f

@@ -1,6 +1,4 @@
-{-# LANGUAGE MultiWayIf, FlexibleContexts, ScopedTypeVariables,
-   ViewPatterns, ConstraintKinds, CPP, TypeFamilies, OverloadedStrings,
-   DisambiguateRecordFields, TypeApplications #-}
+{-# LANGUAGE FlexibleContexts, ScopedTypeVariables, ViewPatterns, ConstraintKinds, CPP, TypeFamilies, OverloadedStrings, DisambiguateRecordFields, TypeApplications #-}
 
 -- | This module implements the logic responsible for solving the
 -- sequence of @Constraint@s the type-checker generates for a particular

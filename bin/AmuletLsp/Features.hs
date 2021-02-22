@@ -13,7 +13,7 @@ import Data.Span
 
 import Frontend.Errors
 
-import Language.LSP.Types.Lens hiding (error)
+import Language.LSP.Types.Lens
 import Language.LSP.Types
 
 import Prelude hiding (id)

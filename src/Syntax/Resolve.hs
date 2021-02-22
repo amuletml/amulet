@@ -109,7 +109,7 @@ reTops (r@(ForeignVal am v t ty a):rest) sig = do
           <*> reType (wrap ty)
           <*> pure a
 
-  where wrap x = foldr (TyPi . flip (flip Invisible Nothing) Spec) x (toList (ftv x))
+  where wrap x = foldr (TyPi . flip (`Invisible` Nothing) Spec) x (toList (ftv x))
 
 reTops (d@(TySymDecl am t vs ty ann):ts) sig = do
   t' <- tagVar t
@@ -228,7 +228,7 @@ reTops (t@(Class name am ctx tvs fds ms ann):rest) sig = do
     unMethodImpl (MethodImpl x) = x
     unMethodImpl _ = undefined
 
-    wrap tvs' x = foldr (TyPi . flip (flip Invisible Nothing) Spec) x (ftv x `Set.difference` Set.fromList tvs')
+    wrap tvs' x = foldr (TyPi . flip (`Invisible` Nothing) Spec) x (ftv x `Set.difference` Set.fromList tvs')
     reFd fd@(Fundep f t a) = Fundep <$> traverse tv f <*> traverse tv t <*> pure a where
       tv x = lookupTyvar x `catchJunk` fd
 

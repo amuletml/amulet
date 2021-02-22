@@ -102,7 +102,7 @@ inferApps exp expected =
         pure $ \ex -> ExprWrapper wrap ex (spanOf ex, tau)
       Nothing -> pure id
 
-    pure (wrap (foldr (.) id (reverse arg_ks) function), result)
+    pure (wrap (foldr ($) function (reverse arg_ks)), result)
 
 spine :: (Ann p ~ Ann Resolved, Var p ~ Var Resolved) => Expr p -> [(Arg p, SomeReason)]
 spine ex@(App fn arg _) =

@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, FlexibleContexts, ScopedTypeVariables, TypeFamilies, MultiWayIf #-}
+{-# LANGUAGE OverloadedStrings, FlexibleContexts, ScopedTypeVariables, TypeFamilies #-}
 
 module Amc.Repl.Eval
   ( evalExpr

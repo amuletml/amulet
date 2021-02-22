@@ -93,7 +93,7 @@ inferLetTy closeOver strategy vs =
                       ConImplicit _ _ v _ -> Set.singleton v
                       _ -> mempty
                   wraps'' = Map.withoutKeys wraps notSolvedHere
-              pure (id, flip const, \_ sub -> solveEx ts (x <> sub) wraps'', mempty)
+              pure (id, \_ x -> x, \_ sub -> solveEx ts (x <> sub) wraps'', mempty)
 
         vt <- closeOver (Set.singleton (fst blame))
                 ex (apply (x `compose` reduce_sub) (context ty))

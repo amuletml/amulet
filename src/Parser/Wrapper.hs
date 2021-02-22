@@ -115,7 +115,7 @@ instance Functor Parser where
   fmap = liftM
 
 instance Applicative Parser where
-  pure a = a `seq` P (flip POK a)
+  pure a = a `seq` P (`POK` a)
   (<*>) = ap
 
 instance Monad Parser where

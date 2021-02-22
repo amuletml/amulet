@@ -1,5 +1,5 @@
-{-# LANGUAGE NamedFieldPuns, RankNTypes, DuplicateRecordFields,
-   DisambiguateRecordFields #-}
+{-# LANGUAGE NamedFieldPuns, RankNTypes, DuplicateRecordFields #-}
+
 module Amc.Compile
   ( Optimise(..)
   , Options(..), StaticOptions(..)
@@ -118,7 +118,7 @@ compileIt (driver, name) Options { optLevel, lint, export, debug, promoteErrors 
   fileNames <- traverse (canonicalizePath . T.unpack . fst) files
   pure ((driver, name), Set.fromList fileNames)
   where
-    lintIt name = if lint then runLint name else flip const
+    lintIt name = if lint then runLint name else \_ x -> x
 
 -- | Compile a file, passing the result to some "emitting function", such
 -- as writing to a file or the terminal.

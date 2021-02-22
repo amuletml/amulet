@@ -85,7 +85,7 @@ tagOccursVar exp = snd . tagOccurStmt const OccursVar exp
 
 -- | Tag each expression with its free variables and their occurrence.
 tagOccursMap :: IsVar a => VarSet.Set -> [AnnStmt b a] -> [AnnStmt OccursMap a]
-tagOccursMap exp = snd . tagOccurStmt (flip const) const exp
+tagOccursMap exp = snd . tagOccurStmt (\_ x -> x) const exp
 
 -- | Compute the occurrence set from an 'OccursMap'.
 occursSet :: OccursMap -> VarSet.Set

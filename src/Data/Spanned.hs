@@ -46,5 +46,5 @@ class Annotated e where
 -- | A wrapper for 'Annotated', useful for deriving-via.
 newtype AnnotatedVia e s = AnnotatedVia e
 
-instance (Annotated e, Spanned s, s ~ (Annotation e)) => Spanned (AnnotatedVia e s) where
+instance (Annotated e, Spanned s, s ~ Annotation e) => Spanned (AnnotatedVia e s) where
   spanOf (AnnotatedVia x) = spanOf . annotation $ x

@@ -1,14 +1,4 @@
-{-# LANGUAGE 
-  OverloadedStrings
-, DeriveGeneric
-, DuplicateRecordFields
-, FlexibleContexts
-, ScopedTypeVariables
-, DataKinds
-, KindSignatures
-, TypeFamilies
-, PolyKinds
-#-}
+{-# LANGUAGE OverloadedStrings, DeriveGeneric, DuplicateRecordFields, FlexibleContexts, ScopedTypeVariables, DataKinds, TypeFamilies, PolyKinds #-}
 
 {-| The main LSP server loop. -}
 module AmuletLsp.Loop (run) where
@@ -108,8 +98,7 @@ run = do
                            ++ map diagnosticOf (es ^. typeErrors)
                            ++ map diagnosticOf (es ^. verifyErrors)
       , _version = Nothing -- TODO: Specify a version
-      } 
-
+      }
 
     loop :: S.LanguageContextEnv Config -> Worker -> TQueue (Worker -> Lsp ()) -> IO ()
     loop env wrk qIn = forever go where
@@ -118,10 +107,10 @@ run = do
 
     handlers :: TQueue (Worker -> Lsp ()) -> S.Handlers (S.LspM Config)
     handlers qIn = mconcat
-      [ S.notificationHandler SInitialized $ \notif -> 
+      [ S.notificationHandler SInitialized $ \notif ->
           liftIO $ infoM logN ("Received message from client (" ++ show notif ++ ")")
       , S.notificationHandler SWorkspaceDidChangeConfiguration $ queuedN $ \wrk _ -> do
-          config <- S.getConfig 
+          config <- S.getConfig
           liftIO $ infoM logN ("Updated config with " ++ show config)
           liftIO $ updateConfig wrk (maybe [] libraryPath config)
       , S.notificationHandler SCancelRequest $ queuedN doCancelRequest
@@ -140,7 +129,7 @@ run = do
       , S.requestHandler SCodeLensResolve            $ queuedR handleCodeLensResolve
       , S.requestHandler STextDocumentFoldingRange   $ queuedR handleFoldingRange
       ]
-      where 
+      where
         queuedN :: forall (m :: Method 'FromClient 'Notification). (Worker -> S.Handler Lsp m)
                 -> S.Handler Lsp m
         queuedN f = liftIO . atomically . writeTQueue qIn . flip f
@@ -198,7 +187,7 @@ didChangeTextDocument wrk msg = do
 
 didCloseTextDocument :: Worker -> S.Handler Lsp 'TextDocumentDidClose
 didCloseTextDocument wrk msg =
-  let nUri = toNormalizedUri (msg ^. params . textDocument . uri) 
+  let nUri = toNormalizedUri (msg ^. params . textDocument . uri)
   in liftIO $ closeFile wrk nUri
 
 didChangeWatchedFiles :: Worker -> S.Handler Lsp 'WorkspaceDidChangeWatchedFiles
@@ -223,7 +212,7 @@ handleDocumentSymbols wrk msg cb = do
   liftIO . startRequest wrk (SomeLspId (msg ^. id))
     . RequestLatest (toNormalizedUri rawUri) ReqParsed (sendReplyError env cb)
     $ \_ _ prog -> sendReply env cb . InL . List . maybe [] getOutline $ prog
-  where 
+  where
     rawUri = msg ^. params . textDocument . uri
 
 handleCodeAction :: Worker -> S.Handler Lsp 'TextDocumentCodeAction
@@ -238,7 +227,7 @@ handleCodeAction wrk msg cb = do
 
 handleCodeLens :: Worker -> S.Handler Lsp 'TextDocumentCodeLens
 handleCodeLens wrk msg cb = do
-  env <- S.getLspEnv 
+  env <- S.getLspEnv
   typeOverlay <- typeOverlay . fromMaybe def <$> S.getConfig
   if typeOverlay
   then liftIO . startRequest wrk (SomeLspId (msg ^. id))
@@ -265,7 +254,7 @@ handleCodeLensResolve wrk msg cb = do
               liftIO $ infoM logN ("Skiping outdated code lens for " ++ show uri)
               cb . Left $ ResponseError ContentModified "File is no longer available" Nothing
             Just path -> do
-              lspEnv <- S.getLspEnv 
+              lspEnv <- S.getLspEnv
               liftIO . startRequest wrk (SomeLspId (msg ^. id))
                . RequestLatest path ReqTyped (sendReplyError lspEnv cb)
                $ \_ _ r ->
