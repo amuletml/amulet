@@ -56,6 +56,7 @@ types/2038.txt TC: DICan'tDerive
 types/2039.txt TC: NotAnIdiom
 types/2040.txt TC: PolyTyFunRhs
 types/2041.txt TC: DisjunctClassEv
+types/2042.txt TC: PatternCardinality
 verify/3001.txt Verify: MalformedRecursiveRhs
 verify/3002.txt Verify: DefinedUnused
 verify/3003.txt Verify: ParseErrorInForeign

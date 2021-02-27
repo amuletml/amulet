@@ -1,0 +1,5 @@
+wrong-cardinality-match.ml[3:1 ..4:9]: error (E2042)
+  │ 
+3 │ let f = function
+  │ ^^^^^^^^^^^^^^^^
+  Constructor takes 1 arguments but been given none

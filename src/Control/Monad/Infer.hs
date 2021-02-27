@@ -116,6 +116,7 @@ data TypeError where
 
   PatternRecursive :: Binding Desugared -> [Binding Desugared] -> TypeError
   DeadBranch :: TypeError -> TypeError
+  PatternCardinality :: Pattern Desugared -> Int -> Int -> TypeError
 
   AmbiguousType :: (Ord (Var p), Pretty (Var p)) => Var p -> Type p -> Set.Set (Var p) -> TypeError
   ValueRestriction :: SomeReason -> Type Typed -> Set.Set (Var Typed) -> TypeError
@@ -596,6 +597,13 @@ instance Pretty TypeError where
   pretty Overlap{} = string "overlap error should be formatNoted"
   pretty NotCovered{} = string "coverage condition error should be formatNoted"
 
+  pretty (PatternCardinality _ exp act) =
+    string "Constructor takes" <+> exp' <+> "arguments but been given" <+> act' where
+      exp' | exp == 0 = "no"
+           | otherwise = pretty exp
+      act' | act == 0 = "none"
+           | otherwise = pretty act
+
   pretty (DisjunctClassEv _ p) =
     vsep ("This branch of an or-pattern binds class evidence for":map (indent 2 . bullet . displayTypeTyped . fst) (Map.toList (keys p)))
 
@@ -623,6 +631,7 @@ instance Spanned TypeError where
   spanOf (DICan'tDerive _ x) = spanOf x
   spanOf (PolyTyFunRhs x _) = spanOf x
   spanOf (DisjunctClassEv x _) = spanOf x
+  spanOf (PatternCardinality p _ _) = spanOf p
   spanOf x = error (show (pretty x))
 
 instance Note TypeError Style where
@@ -944,6 +953,7 @@ instance Note TypeError Style where
   noteId NotAnIdiom{}         = Just 2039
   noteId PolyTyFunRhs{}       = Just 2040
   noteId DisjunctClassEv{}    = Just 2041
+  noteId PatternCardinality{} = Just 2042
 
   noteId (Note x _) = noteId x
   noteId (Suggestion x _) = noteId x

@@ -1,0 +1,10 @@
+A pattern match used a constructor in a way which was incompatible with
+with its definition. For instance, the constructor was defined to take
+an argument but none was given:
+
+    type t = A of int
+
+    let do_something x =
+      match x with
+      | A -> ()
+      (* ^ Should be `A _'. *)

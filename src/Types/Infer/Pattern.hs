@@ -24,6 +24,8 @@ import Syntax.Subst
 import Syntax.Var
 import Syntax
 
+import Text.Pretty.Semantic
+
 inferPattern :: MonadInfer Typed m
              => Pattern Desugared
              -> m ( Pattern Typed -- the pattern
@@ -139,6 +141,7 @@ checkPattern pat@(Destructure con Nothing an) target = do
   (bindings, is) <- makeClassScope an classes
 
   _ <- unify (becausePat pat) target rest
+  checkCompatible pat rest Nothing
   pure ( PGadtCon con skol bindings Nothing (an, target), mempty, cs, is)
 
 checkPattern pat@(Destructure con (Just p) an) target = do
@@ -148,6 +151,7 @@ checkPattern pat@(Destructure con (Just p) an) target = do
 
   (tau, cod, _) <- decompose (becausePat pat) _TyArr rest
 
+  checkCompatible pat rest (Just p)
   (p, tel, cs', is') <- checkPattern p tau
   _ <- unify (becausePat pat) target cod
   (bindings, is) <- makeClassScope an classes
@@ -241,3 +245,16 @@ makeClassScope an (Implicit ty:tys) = do
   (vs, is) <- makeClassScope an tys
   pure ((v, ty):vs, insert an LocalAssum v ty (MagicInfo [] Nothing) is)
 makeClassScope an (_:tys) = makeClassScope an tys -- impossible but why not?
+
+-- | Checks a pattern and its type have compatibile cardinalities.
+checkCompatible :: MonadInfer Typed m => Pattern Desugared
+                -> Type Typed -> Maybe (Pattern Desugared) -> m ()
+checkCompatible pat = go where
+  go (unwrap -> TyCon{}) Nothing = pure ()
+  go (TyPi Anon{} (unwrap -> TyCon{})) (Just _) = pure ()
+  go (unwrap -> TyCon{}) Just{} = dictates (PatternCardinality pat 0 1)
+  go (TyPi Anon{} (unwrap -> TyCon{})) Nothing = dictates (PatternCardinality pat 1 0)
+  go t _ = error $ "Impossible: Not a valid constructor type:" ++ show (pretty t)
+
+  unwrap (TyApp x _) = unwrap x
+  unwrap x = x
