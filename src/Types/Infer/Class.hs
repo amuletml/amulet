@@ -195,8 +195,10 @@ inferClass clss@(Class name _ ctx _ fundeps methods classAnn) = do
     (fold -> defaultMap) <-
       local (classes %~ mappend scope)
       . local (names %~ focus tele)
-      . for defaults $ \(DefaultMethod bind@(Binding method _ exp _ _) _) -> do
-      let sig = tele ^. at method . non undefined
+      . for defaults $ \item@(DefaultMethod bind@(Binding method _ exp _ _) _) -> do
+      sig <- case tele ^. at method of
+        Just s -> pure s
+        Nothing -> confesses (WrongClass method name (spanOf item))
 
       (_, cs) <- listen $
         check exp sig
@@ -404,7 +406,7 @@ inferInstance inst@(Instance clss ctx instHead bindings we'reDeriving ann) = con
 
     (argn, declared, global_t) <- case Map.lookup var assocTySigs of
       Just x -> pure x
-      Nothing -> confesses (WrongClass bind clss)
+      Nothing -> confesses (WrongClass var clss (spanOf bind))
 
     let argts = zip argvs (as declared)
         argvs = map argName args
@@ -475,7 +477,7 @@ inferInstance inst@(Instance clss ctx instHead bindings we'reDeriving ann) = con
       (MethodImpl bind@(Binding v vp e _ an)) -> do
         sig <- case Map.lookup v methodSigs of
           Just x -> pure x
-          Nothing -> confesses (WrongClass (MethodImpl bind) clss)
+          Nothing -> confesses (WrongClass v clss (spanOf bind))
 
         let bindGroupTy = transplantPi globalInsnConTy (TyArr ctx sig)
 

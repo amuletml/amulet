@@ -1,0 +1,5 @@
+additional-instance-method.ml[7:9 ..7:13]: error (E2020)
+  │ 
+7 │     let y = 0
+  │         ^^^^^
+  Method y is not a member of the class c

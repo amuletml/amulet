@@ -125,7 +125,7 @@ data TypeError where
   UnsatClassCon :: SomeReason -> Constraint Typed -> WhyUnsat -> TypeError
   ClassStackOverflow :: SomeReason -> [Type Typed] -> Type Typed -> TypeError
 
-  WrongClass :: InstanceItem Desugared -> Var Typed -> TypeError
+  WrongClass :: Var Typed -> Var Typed -> Span -> TypeError
   Overlap :: WhatOverlaps -> Type Typed -> Span -> Span -> TypeError
 
   UndefinedMethods :: Type Typed -> Formula Text -> Span -> TypeError
@@ -474,12 +474,8 @@ instance Pretty TypeError where
          , vsep (map (indent 2 . bullet . displayType) (take 5 (reverse xs)))
          ]
 
-  pretty (WrongClass name c) =
+  pretty (WrongClass v c _) =
     vsep [ "Method" <+> pretty v <+> "is not a member of the class" <+> stypeCon (pretty c) ]
-      where gname (MethodImpl (Binding v _ _ _ _)) = v
-            gname (TypeImpl v _ _ _) = v
-            gname _ = undefined
-            v = gname name
 
   pretty (NotAClass name) =
     vsep [ "Can not make an instance of" <+> pretty name <+> "because it is not a class" ]
@@ -608,7 +604,7 @@ instance Spanned TypeError where
   spanOf (ArisingFrom _ x) = spanOf x
   spanOf (Overlap _ _ x _) = spanOf x
   spanOf (ClassStackOverflow x _ _) = spanOf x
-  spanOf (WrongClass x _) = spanOf x
+  spanOf (WrongClass _ _ x) = x
   spanOf (UndefinedMethods _ _ x) = spanOf x
   spanOf (UndefinedTyFam _ _ x) = spanOf x
   spanOf (InvalidContext _ x _) = spanOf x

@@ -1,0 +1,5 @@
+additional-class-method.ml[4:3 ..4:11]: error (E2020)
+  │ 
+4 │   let x = 0
+  │   ^^^^^^^^^
+  Method x is not a member of the class c
