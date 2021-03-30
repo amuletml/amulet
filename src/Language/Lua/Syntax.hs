@@ -81,14 +81,19 @@ precedenceOf :: LuaExpr -> Precedence
 precedenceOf LuaCallE{} = PreRaw
 precedenceOf LuaRef{} = PreRaw
 precedenceOf (LuaBinOp _ op _) = PreOp $ case op of
+  -- https://www.lua.org/manual/5.3/manual.html#3.4.8
   "^" -> 0
   "*" -> 2; "/" -> 2; "%" -> 2
   "+" -> 3; "-" -> 3
   ".." -> 4
-  "==" -> 5; "~=" -> 5; "<" -> 5; ">" -> 5; ">=" -> 5; "<=" -> 5
-  "and" -> 6
-  "or" -> 7
-  _ -> 10
+  "<<" -> 5; ">>" -> 5
+  "&" -> 6
+  "~" -> 7
+  "|" -> 8
+  "==" -> 9; "~=" -> 9; "<" -> 9; ">" -> 9; ">=" -> 9; "<=" -> 9
+  "and" -> 10
+  "or" -> 11
+  _ -> 12
 precedenceOf LuaUnOp{} = PreOp 1
 precedenceOf _ = PreLit
 

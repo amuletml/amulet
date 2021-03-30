@@ -89,6 +89,12 @@ tokens :-
   <0> "<="       { constTok TcLe }
   <0> ">="       { constTok TcGe }
 
+  <0> "<<"       { constTok TcShl }
+  <0> ">>"       { constTok TcShr }
+  <0> "&"        { constTok TcBAnd }
+  <0> "|"        { constTok TcBOr }
+  <0> "~"        { constTok TcBNot }
+
   <0> "#"        { constTok TcLen }
 
   -- Numbers

@@ -48,6 +48,7 @@ data TokenClass
   | TcAdd | TcSub | TcMul | TcDiv | TcPow | TcMod
   | TcConcat
   | TCEq | TCNe | TcLt | TcGt | TcLe | TcGe
+  | TcShl | TcShr | TcBAnd | TcBOr | TcBNot
   | TcLen
 
   | TcIdentifier Text -- ^ Identifiers (@foo@)
@@ -118,6 +119,12 @@ instance Show TokenClass where
   show TcGt = ">"
   show TcLe = "<="
   show TcGe = ">="
+
+  show TcShl  = "<<"
+  show TcShr  = ">>"
+  show TcBAnd = "&"
+  show TcBOr  = "|"
+  show TcBNot = "~"
 
   show TcLen = "#"
 

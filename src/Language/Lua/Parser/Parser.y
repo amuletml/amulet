@@ -87,6 +87,12 @@ import Language.Lua.Syntax
   '<='     { Token TcLe _ _ }
   '>='     { Token TcGe _ _ }
 
+  '<<'     { Token TcShl _ _ }
+  '>>'     { Token TcShr _ _ }
+  '&'      { Token TcBAnd _ _ }
+  '|'      { Token TcBOr _ _ }
+  '~'      { Token TcBNot _ _ }
+
   '#'      { Token TcLen _ _ }
 
   ident    { Token (TcIdentifier _) _ _ }
@@ -99,9 +105,14 @@ import Language.Lua.Syntax
   float    { Token (TcFloat _) _ _ }
   string   { Token (TcString  _) _ _ }
 
+-- https://www.lua.org/manual/5.3/manual.html#3.4.8
 %left or
 %left and
 %left '<' '>' '<=' '>=' '~=' '=='
+%left '|'
+%left '~'
+%left '&'
+%left '<<' '>>'
 %right '..'
 %left '+' '-'
 %left '*' '/' '%'
@@ -167,6 +178,12 @@ Expr :: { LuaExpr }
   | Expr '<=' Expr                      { LuaBinOp $1 (T.pack "<=") $3 }
   | Expr '>=' Expr                      { LuaBinOp $1 (T.pack ">=") $3 }
 
+  | Expr '<<' Expr                      { LuaBinOp $1 (T.pack "<<") $3 }
+  | Expr '>>' Expr                      { LuaBinOp $1 (T.pack ">>") $3 }
+  | Expr '&'  Expr                      { LuaBinOp $1 (T.pack "&")  $3 }
+  | Expr '|'  Expr                      { LuaBinOp $1 (T.pack "|")  $3 }
+  | Expr '~'  Expr                      { LuaBinOp $1 (T.pack "~")  $3 }
+
 -- We need a a separate expression case in order to handle unary operator precedence
 Expr2 :: { LuaExpr }
   : Atom                                { $1 }
@@ -175,6 +192,7 @@ Expr2 :: { LuaExpr }
 
   | '-' Expr2                           { LuaUnOp (T.pack "-")      $2 }
   | '#' Expr2                           { LuaUnOp (T.pack "#")      $2 }
+  | '~' Expr2                           { LuaUnOp (T.pack "~")      $2 }
   | not Expr2                           { LuaUnOp (T.pack "not")    $2 }
 
 
