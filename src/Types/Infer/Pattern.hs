@@ -252,9 +252,11 @@ checkCompatible :: MonadInfer Typed m => Pattern Desugared
 checkCompatible pat = go where
   go (unwrap -> TyCon{}) Nothing = pure ()
   go (TyPi Anon{} (unwrap -> TyCon{})) (Just _) = pure ()
-  go (unwrap -> TyCon{}) Just{} = dictates (PatternCardinality pat 0 1)
-  go (TyPi Anon{} (unwrap -> TyCon{})) Nothing = dictates (PatternCardinality pat 1 0)
+  go (unwrap -> TyCon{}) Just{} = addProblem 0 1
+  go (TyPi Anon{} (unwrap -> TyCon{})) Nothing = addProblem 1 0
   go t _ = error $ "Impossible: Not a valid constructor type:" ++ show (pretty t)
+
+  addProblem exp act = dictates (ArisingFrom (PatternCardinality pat exp act) (becausePat pat))
 
   unwrap (TyApp x _) = unwrap x
   unwrap x = x

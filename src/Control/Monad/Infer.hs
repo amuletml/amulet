@@ -598,7 +598,7 @@ instance Pretty TypeError where
   pretty NotCovered{} = string "coverage condition error should be formatNoted"
 
   pretty (PatternCardinality _ exp act) =
-    string "Constructor takes" <+> exp' <+> "arguments but been given" <+> act' where
+    string "Constructor takes" <+> exp' <+> "arguments but was given" <+> act' where
       exp' | exp == 0 = "no"
            | otherwise = pretty exp
       act' | act == 0 = "none"
