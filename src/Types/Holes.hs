@@ -121,7 +121,7 @@ fill t | t == tyUnit = fake [t] $ pure . Literal LiUnit . head
 -- Sum types: we need to try each constructor.
 fill ty@(TyApps (TyCon ty_v ()) _) = once (knownImplication ty) <|> do
   -- Search all constructors for the type..
-  con <- explore =<< view (psEnv . types . at ty_v . non mempty . to Set.toList)
+  con <- explore =<< views (psEnv . types . at ty_v) (maybe mempty (Set.toList . _tdConstructors))
 #ifdef TRACE_TC
   traceM (displayS (keyword "try" <+> pretty con))
 #endif
@@ -178,7 +178,7 @@ fill _ = fail ""
 makeFunction :: MonadPs m => Type Typed -> Type Typed -> m (Expr Typed)
 makeFunction domain@(TyApps (TyCon t ()) _) body_t = fake [domain] $ \[ann] -> do
   span <- view psAnn
-  cons <- view (psEnv . types . at t . non undefined . to Set.toList)
+  cons <- view (psEnv . types . at t . non undefined . tdConstructors . to Set.toList)
 
   arms <- for cons $ \con -> do
     (ty, _) <- skolGadt con =<<
@@ -205,7 +205,7 @@ isSum (TyOperator l o r) = isSum (TyApps o [l, r])
 isSum (TyApps (TyCon t ()) _) = do
   x <- view (psEnv . types . at t)
   pure $ case x of
-    Just t -> Set.size t /= 1
+    Just t -> Set.size (t ^. tdConstructors) /= 1
     Nothing -> False
 isSum _ = pure False
 
@@ -289,7 +289,7 @@ assume ty@(TyExactRows xs) k = go [] xs k where
   go pats [] k = fake [ty] $ \[record] -> k (PRecord (reverse pats) record)
 
 assume ty@(TyApps (TyCon c ()) xs) k = fake [ty] $ \[pat] -> do
-  cs <- view (psEnv . types . at c . non mempty . to Set.toList)
+  cs <- views (psEnv . types . at c) (maybe mempty (Set.toList . _tdConstructors))
   case cs of
     [con] -> do
       ~(ty, _) <- skolGadt con =<<

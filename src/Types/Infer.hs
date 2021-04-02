@@ -42,6 +42,7 @@ import Types.Infer.Builtin
 import Types.Infer.Class
 import Types.Infer.App
 import Types.Infer.Let
+import Types.Inhabited
 import Types.Kinds
 import Types.Unify
 
@@ -536,8 +537,9 @@ inferProg (decl@(TypeDecl am n tvs cs ann):prg) = do
           (for cs (\con -> retcons (addBlame (BecauseOf con)) (inferCon vars retTy con)))
 
         let ts' = Set.fromList (map fst ts)
+        inhabited <- asks (\env -> inhabited env n cs')
         local ( (names %~ focus (teleFromList ts))
-                . (types %~ Map.insert n ts')
+                . (types %~ Map.insert n (TypeDef ts' inhabited))
                 . (constructors %~ Set.union ts') ) $
           cont (Just cs')
 
@@ -640,7 +642,8 @@ inferMod (ModStruct bod a) = do
            let diff = env `difference` extEnv
                env' = (declaredHere .~ mempty)
                     . (names .~ mapScope (append prefix) (qualifyWrt prefix) (diff ^. names))
-                    . (types .~ (Set.mapMonotonic (append prefix) <$> Map.mapKeysMonotonic (append prefix) (diff ^. types)))
+                    . (types .~ ((tdConstructors %~ Set.mapMonotonic (append prefix))
+                                 <$> Map.mapKeysMonotonic (append prefix) (diff ^. types)))
                     $  env
            in extEnv <> env')
 
@@ -774,7 +777,7 @@ unqualify (ModRef v _) =
          TgName v _ -> v <> T.singleton '.'
          TgInternal v -> v <> T.singleton '.'
   in (names %~ mapScope id (unqualifyWrt prefix))
-   . (types %~ fmap (Set.mapMonotonic (unqualifyVarWrt prefix)))
+   . (types %~ fmap (tdConstructors %~ Set.mapMonotonic (unqualifyVarWrt prefix)))
 
 unqualify _ = id
 

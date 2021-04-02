@@ -197,7 +197,7 @@ data BuiltinPowule = BM
   { vars         :: [(Var Resolved, Type Typed)]
   , types        :: [(Var Resolved, Type Typed)]
   , modules      :: [(Var Resolved, BuiltinPowule)]
-  , constructors :: Map.Map (Var Resolved) (Set.Set (Var Typed))
+  , constructors :: Map.Map (Var Resolved) T.TypeDef
   , classes      :: [(Var Resolved, T.ClassInfo)]
   , families     :: [(Var Resolved, T.TySymInfo)]
   }
@@ -249,7 +249,8 @@ builtins =
             ]
 
   , constructors = Map.fromList
-      [ (tyListName, Set.fromList [cONSName, nILName] )
+      [ ( tyListName
+        , T.TypeDef (Set.fromList [cONSName, nILName]) T.Inhabited )
       ]
 
   , classes = [ (tyEqName, T.MagicInfo [] Nothing)
@@ -299,7 +300,10 @@ builtins =
                                                          , ( [1, 3], [2, 0], internal ) ]
                                                          Nothing )
                              ]
-                 , constructors = Map.fromList [(tyErrMsg_n, Set.fromList [tyeString_n, tyHCat_n, tyVCat_n, tyShowType_n])]
+                 , constructors = Map.fromList
+                    [ ( tyErrMsg_n
+                      , T.TypeDef (Set.fromList [tyeString_n, tyHCat_n, tyVCat_n, tyShowType_n]) T.Inhabited )
+                    ]
                  }
         ) ]
   , families = [ (tyTypeError_n, T.TyFamInfo { T._tsName = tyTypeError_n

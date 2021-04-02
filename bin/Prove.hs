@@ -204,11 +204,11 @@ env =
          & constructors %~ mappend cons
   where
     cons = Set.fromList [TgInternal "L", TgInternal "R", TgInternal "Not", TgInternal "T", TgInternal "Equiv"]
-    tys = Map.fromList [ (TgInternal "+", Set.fromList [TgInternal "L", TgInternal "R"])
-                       , (TgInternal "not", Set.fromList [TgInternal "Not"])
-                       , (TgInternal "ff", mempty)
-                       , (TgInternal "tt", Set.fromList [TgInternal "T"])
-                       , (TgInternal "<->", Set.fromList [TgInternal "Equiv"])
+    tys = Map.fromList [ (TgInternal "+", TypeDef (Set.fromList [TgInternal "L", TgInternal "R"]) Unknown)
+                       , (TgInternal "not", TypeDef (Set.fromList [TgInternal "Not"]) Unknown)
+                       , (TgInternal "ff", TypeDef mempty Uninhabited)
+                       , (TgInternal "tt", TypeDef (Set.fromList [TgInternal "T"]) Inhabited)
+                       , (TgInternal "<->", TypeDef (Set.fromList [TgInternal "Equiv"]) Unknown)
                        ]
 
     bindings = [ (TgInternal "+", TyType :-> TyType :-> TyType)

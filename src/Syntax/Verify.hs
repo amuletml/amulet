@@ -109,7 +109,7 @@ verifyProgram = traverse_ verifyStmt where
           TgName n _ -> n <> T.singleton '.'
           TgInternal v -> v <> T.singleton '.'
         ext s = s { env = env s & names %~ mapScope id (unqualifyWrt prefix)
-                                & types %~ fmap (Set.mapMonotonic (unqualifyVarWrt prefix)) }
+                                & types %~ fmap (tdConstructors %~ Set.mapMonotonic (unqualifyVarWrt prefix)) }
 
     local ext $ verifyModule m
 

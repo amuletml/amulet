@@ -1,8 +1,8 @@
 import qualified System.Environment as E
 :seti -XOverloadedStrings -XFlexibleContexts
 
-:def r! const (pure (unlines [ ":!tools/repl.sh reload", "::r", ":!tput bel" ]))
-:def reload! const (pure (unlines [ ":!tools/repl.sh reload", "::r", ":!tput bel" ]))
+:def! r! const (pure (unlines [ ":!tools/repl.sh reload", "::r", ":!tput bel" ]))
+:def! reload! const (pure (unlines [ ":!tools/repl.sh reload", "::r", ":!tput bel" ]))
 
 :def test \x -> pure $ ":!stack test --fast " ++ concat [ " --test-arguments '-p " ++ x ++ "'" | x /= "" ]
 :def test! const (pure ":!stack test --fast --test-arguments '-r'")
