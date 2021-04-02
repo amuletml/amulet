@@ -420,7 +420,7 @@ constructors env kty vty = do
   where
     -- | Get the constructors for a given type
     ctors :: Type Typed -> Set.Set (Var Typed)
-    ctors (TyCon v _) = fromMaybe (error $ "Cannot find constructors for " ++ show v) (env ^. (types . at v))
+    ctors (TyCon v _) = maybe (error $ "Cannot find constructors for " ++ show v) _tdConstructors (env ^. (types . at v))
     ctors (TyApp f _) = ctors f
     ctors t = error $ "Cannot get type name from " ++ show (pretty t)
 
@@ -496,10 +496,15 @@ inhabited env (AbsState st cs i)
   ctorCheck :: (MonadPlus m, MonadNamey m, MonadState CoverState m)
             => Set.Set (Var Typed) -> Type Typed -> m ()
   ctorCheck c t
-    | Just v <- concreteTy c t = do
-        let c' = Set.insert v c
-        (_, arg) <- constructors env t t
-        maybe inhb (go c') arg
+    | Just v <- concreteTy c t =
+        case maybe Unknown _tdInhabited (env ^. (types . at v)) of
+          Uninhabited -> mzero
+          Inhabited -> inhb
+          Unknown ->
+            do
+            let c' = Set.insert v c
+            (_, arg) <- constructors env t t
+            maybe inhb (go c') arg
     | otherwise = inhb
 
 -- | Make a unification constraint

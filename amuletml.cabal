@@ -321,6 +321,7 @@ library
                      , Types.Holes
                      , Types.Kinds
                      , Types.Unify
+                     , Types.Inhabited
                      , Types.Infer.Let
                      , Types.Infer.App
                      , Types.Unify.Base

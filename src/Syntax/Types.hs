@@ -4,6 +4,7 @@
 module Syntax.Types
   ( Telescope, one, foldTele, foldTeleM, teleFromList, mapTele, traverseTele, teleToList
   , Scope(..), namesInScope, inScope, scopeToList, mapScope
+  , Inhabited(..), TypeDef(..), tdConstructors, tdInhabited
   , Env, freeInEnv, difference, envOf, scopeFromList, toMap
   , names, typeVars, constructors, types, letBound, classes
   , classDecs, tySyms, declaredHere
@@ -77,6 +78,18 @@ instance OrdPhrase p => Ixed (Scope p f) where
 instance OrdPhrase p => At (Scope p f) where
   at k f (Scope m) = Scope <$> at k f m
 
+data Inhabited
+  = Inhabited --- Type is unconditionally inhabited.
+  | Uninhabited --- Type is unconditionally uninhabited.
+  | Unknown --- Cannot be known.
+  deriving (Eq, Show, Ord)
+
+data TypeDef = TypeDef
+  { _tdConstructors :: Set.Set (Var Typed)
+  , _tdInhabited    :: Inhabited
+  }
+  deriving (Eq, Show, Ord)
+
 data Env
   = Env { _names        :: Scope Resolved (Type Typed)
         , _classes      :: ImplicitScope ClassInfo Typed
@@ -84,7 +97,7 @@ data Env
         , _constructors :: Set.Set (Var Typed)
         , _letBound     :: Set.Set (Var Typed)
         , _declaredHere :: Set.Set (Var Typed) -- Only types
-        , _types        :: Map.Map (Var Typed) (Set.Set (Var Typed))
+        , _types        :: Map.Map (Var Typed) TypeDef
         , _classDecs    :: Map.Map (Var Typed) ClassInfo
         , _tySyms       :: TySyms
         }
@@ -166,6 +179,7 @@ instance Show DerivingStrat where
 instance Ord DerivingStrat where
   _ `compare` _ = GT
 
+makeLenses ''TypeDef
 makeLenses ''Env
 makeLenses ''ClassInfo
 makeLenses ''TySymInfo
