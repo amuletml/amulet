@@ -24,6 +24,7 @@ foldApply IntMul [Lit (Int 1), x] = atom x
 foldApply IntMul [_, Lit (Int 0)] = int 0
 foldApply IntMul [Lit (Int 0), _] = int 0
 foldApply IntDiv [x, Lit (Int 1)] = atom x
+foldApply IntMod [x, Lit (Int 1)] = atom x
 foldApply IntEq  [Ref l _, Ref r _] | l == r = bool True
 
 -- We don't apply similar reductions for floats. Given the presence of
@@ -46,6 +47,7 @@ foldLiteral IntSub [Int l, Int r] = int (l - r)
 foldLiteral IntMul [Int l, Int r] = int (l * r)
 foldLiteral IntDiv [Int l, Int r] = float (fromIntegral l / fromIntegral r)
 foldLiteral IntPow [Int l, Int r] = float (fromIntegral l ** fromIntegral r)
+foldLiteral IntMod [Int l, Int r] = int (l `mod` r)
 foldLiteral IntEq  [Int l, Int r] = bool (l == r)
 foldLiteral IntLt  [Int l, Int r] = bool (l < r)
 foldLiteral IntLe  [Int l, Int r] = bool (l <= r)

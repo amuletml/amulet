@@ -377,6 +377,7 @@ intrinsicType IntSub = tyInt ~> tyInt ~> tyInt
 intrinsicType IntMul = tyInt ~> tyInt ~> tyInt
 intrinsicType IntDiv = tyInt ~> tyInt ~> tyFloat
 intrinsicType IntPow = tyInt ~> tyInt ~> tyFloat
+intrinsicType IntMod = tyInt ~> tyInt ~> tyInt
 intrinsicType IntEq  = tyInt ~> tyInt ~> tyBool
 intrinsicType IntLt  = tyInt ~> tyInt ~> tyBool
 intrinsicType IntLe  = tyInt ~> tyInt ~> tyBool

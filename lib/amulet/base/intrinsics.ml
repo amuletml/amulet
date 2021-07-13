@@ -4,6 +4,7 @@ module Public = struct
   external val ( - )  : int -> int -> int   = "%int.sub"
   external val ( ** ) : int -> int -> float = "%int.pow"
   external val ( / )  : int -> int -> float = "%int.div"
+  external val mod    : int -> int -> int   = "%int.mod"
 
   external val ( +. )  : float -> float -> float = "%float.add"
   external val ( *. )  : float -> float -> float = "%float.mul"

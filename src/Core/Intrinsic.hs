@@ -18,6 +18,7 @@ data Intrinsic
   | IntMul
   | IntDiv
   | IntPow
+  | IntMod
   | IntEq
   | IntLt
   | IntLe
@@ -46,6 +47,7 @@ names =
   , ( "int.mul", IntMul )
   , ( "int.div", IntDiv )
   , ( "int.pow", IntPow )
+  , ( "int.mod", IntMod )
   , ( "int.eq", IntEq )
   , ( "int.lt", IntLt )
   , ( "int.le", IntLe )
