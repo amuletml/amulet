@@ -98,7 +98,7 @@ runReporter options tree smap = do
           group <- ask
           put (idx + 1)
           pure (IntMap.singleton idx (name : group))
-      , foldGroup = \name (Ap children) -> Ap $ local (name:) children }
+      , foldGroup = \_ name (Ap children) -> Ap $ local (name:) children }
      options tree
 
     printProgress :: StatusMap -> IntMap.IntMap Result -> IO (IntMap.IntMap Result)
@@ -175,7 +175,7 @@ runReporter options tree smap = do
                        , time = resultTime result
                        , description = displayTest test result }
 
-        group name (Ap r) = Ap $ do
+        group _ name (Ap r) = Ap $ do
           level <- ask
           r' <- local (+1) r
           pure (r' { description = displayGroup level name r' })

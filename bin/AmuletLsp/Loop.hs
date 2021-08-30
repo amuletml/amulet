@@ -79,12 +79,13 @@ run = do
     server :: TQueue (Worker -> Lsp ()) -> S.ServerDefinition Config
     server qIn = S.ServerDefinition
         { options = options
+        , defaultConfig = def
         , S.doInitialize = \env _ -> do
             config <- S.runLspT env S.getConfig
-            wrk <- makeWorker (maybe [] libraryPath config) CT.lua (publishDiagnostics env)
+            wrk <- makeWorker (libraryPath config) CT.lua (publishDiagnostics env)
             _ <- forkIOWith "Loop" (loop env wrk qIn)
             return (Right env)
-        , onConfigurationChange = pure . first T.pack . parseEither parseJSON
+        , onConfigurationChange = \_ -> first T.pack . parseEither parseJSON
         , staticHandlers = handlers qIn
         , interpretHandler = \env -> S.Iso (S.runLspT env) liftIO
         }
@@ -112,7 +113,7 @@ run = do
       , S.notificationHandler SWorkspaceDidChangeConfiguration $ queuedN $ \wrk _ -> do
           config <- S.getConfig
           liftIO $ infoM logN ("Updated config with " ++ show config)
-          liftIO $ updateConfig wrk (maybe [] libraryPath config)
+          liftIO $ updateConfig wrk (libraryPath config)
       , S.notificationHandler SCancelRequest $ queuedN doCancelRequest
 
       -- File changes
@@ -228,7 +229,7 @@ handleCodeAction wrk msg cb = do
 handleCodeLens :: Worker -> S.Handler Lsp 'TextDocumentCodeLens
 handleCodeLens wrk msg cb = do
   env <- S.getLspEnv
-  typeOverlay <- typeOverlay . fromMaybe def <$> S.getConfig
+  typeOverlay <- typeOverlay <$> S.getConfig
   if typeOverlay
   then liftIO . startRequest wrk (SomeLspId (msg ^. id))
      . RequestLatest (toNormalizedUri rawUri) ReqTyped (sendReplyError env cb)

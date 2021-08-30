@@ -93,4 +93,5 @@ mkWith name kind range node detail children =
   , _range = rangeOf range
   , _selectionRange = firstLine (rangeOf (spanOf node))
   , _children = List <$> children
+  , _tags = Nothing
   }

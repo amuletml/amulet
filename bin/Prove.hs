@@ -12,7 +12,6 @@ import System.Environment
 
 import Control.Monad.IO.Class
 import Control.Monad.Namey
-import Control.Exception
 import Control.Lens
 
 import Parser.Wrapper (runParser)

@@ -82,8 +82,8 @@ gatherSuites options tree results
            , mempty )
 
     group :: MonadReader String m
-          => TestName -> Ap m (Seq TestCase, Seq TestSuite) -> Ap m (Seq TestCase, Seq TestSuite)
-    group name children = Ap $ do
+          => OptionSet -> TestName -> Ap m (Seq TestCase, Seq TestSuite) -> Ap m (Seq TestCase, Seq TestSuite)
+    group _ name children = Ap $ do
       group <- asks (`addGroup` name)
       (mempty,) . makeGroup group <$> local (const group) (getAp children)
 
@@ -97,11 +97,11 @@ gatherSuites options tree results
         , failures, errors, skipped, time
         }
 
-    getStats (Result Success _ _ time)                        = (0, 0, 0, Sum time)
-    getStats (Result (Failure TestFailed) _ _ time)           = (1, 0, 0, Sum time)
-    getStats (Result (Failure TestThrewException{}) _ _ time) = (0, 1, 0, Sum time)
-    getStats (Result (Failure TestTimedOut{}) _ _ time)       = (0, 1, 0, Sum time)
-    getStats (Result (Failure TestDepFailed{}) _ _ time)      = (0, 0, 1, Sum time)
+    getStats (Result Success _ _ time _)                        = (0, 0, 0, Sum time)
+    getStats (Result (Failure TestFailed) _ _ time _)           = (1, 0, 0, Sum time)
+    getStats (Result (Failure TestThrewException{}) _ _ time _) = (0, 1, 0, Sum time)
+    getStats (Result (Failure TestTimedOut{}) _ _ time _)       = (0, 1, 0, Sum time)
+    getStats (Result (Failure TestDepFailed{}) _ _ time _)      = (0, 0, 1, Sum time)
 
     addGroup "" n = n
     addGroup g n = g ++ "." ++ n
@@ -131,17 +131,17 @@ toXml = Xml.node (Xml.unqual "testsuites") . zipWith testSuite [(0 :: Int)..] wh
       , Xml.Attr (Xml.unqual "time") (show (resultTime (testResult tcase)))
       ], result (testResult tcase) )
 
-  result (Result Success _ _ _) = []
-  result (Result (Failure TestFailed) msg _ _) =
+  result (Result Success _ _ _ _) = []
+  result (Result (Failure TestFailed) msg _ _ _) =
     [ Xml.node (Xml.unqual "failure") ([Xml.Attr (Xml.unqual "type") "Failure"], stripAnsi msg)]
-  result (Result (Failure (TestThrewException (SomeException e))) msg _ _) =
+  result (Result (Failure (TestThrewException (SomeException e))) msg _ _ _) =
     [ Xml.node (Xml.unqual "error")
       ( [ Xml.Attr (Xml.unqual "type") (show (typeOf e))
         , Xml.Attr (Xml.unqual "message") (displayException e)
         ], stripAnsi msg )]
-  result (Result (Failure TestTimedOut{}) msg _ _) =
+  result (Result (Failure TestTimedOut{}) msg _ _ _) =
     [ Xml.node (Xml.unqual "error") ([Xml.Attr (Xml.unqual "type") "Timeout"], stripAnsi msg)]
-  result (Result (Failure TestDepFailed{}) _ _ _) = [ Xml.node (Xml.unqual "skipped") () ]
+  result (Result (Failure TestDepFailed{}) _ _ _ _) = [ Xml.node (Xml.unqual "skipped") () ]
 
   stripAnsi [] = []
   stripAnsi ('\x1b':xs) =

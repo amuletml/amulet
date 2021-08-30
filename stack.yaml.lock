@@ -15,72 +15,9 @@ packages:
   original:
     git: https://github.com/amuletml/hslua
     commit: fb3454f06ab62130fc31d7f40e153a08450999c9
-- completed:
-    hackage: lsp-1.1.1.0@sha256:c8856e5fc71bc9834301731b5ba8786159e1d7e2d2d8ee07aec4f5421f2cf847,5568
-    pantry-tree:
-      size: 1397
-      sha256: c94bd9be1c7c038c25c993985753fc88bc742321119282ecb2c3edf4beb9b599
-  original:
-    hackage: lsp-1.1.1.0@sha256:c8856e5fc71bc9834301731b5ba8786159e1d7e2d2d8ee07aec4f5421f2cf847,5568
-- completed:
-    hackage: lsp-types-1.1.0.0@sha256:071289b1c5e2ba8fedf846cfe1931d1cfdaac24a624abdf5dcee52562b1f3e2a,4240
-    pantry-tree:
-      size: 3955
-      sha256: c64a95700b5e32b3cbbb64d672f1595e0a521ae7caaacab805504300ae46f8aa
-  original:
-    hackage: lsp-types-1.1.0.0@sha256:071289b1c5e2ba8fedf846cfe1931d1cfdaac24a624abdf5dcee52562b1f3e2a,4240
-- completed:
-    hackage: lsp-test-0.13.0.0@sha256:f04ae384d6da554d83e4e396134e09f71e72dfeff3ec27d8b49ac689ac15ea37,4218
-    pantry-tree:
-      size: 906
-      sha256: 7d5be8abfeabef8fd660a5e643f7ac398f545eb3c145b6e935fae775b926d200
-  original:
-    hackage: lsp-test-0.13.0.0@sha256:f04ae384d6da554d83e4e396134e09f71e72dfeff3ec27d8b49ac689ac15ea37,4218
-- completed:
-    hackage: dependent-map-0.4.0.0@sha256:ca2b131046f4340a1c35d138c5a003fe4a5be96b14efc26291ed35fd08c62221,1657
-    pantry-tree:
-      size: 551
-      sha256: 5defa30010904d2ad05a036f3eaf83793506717c93cbeb599f40db1a3632cfc5
-  original:
-    hackage: dependent-map-0.4.0.0@sha256:ca2b131046f4340a1c35d138c5a003fe4a5be96b14efc26291ed35fd08c62221,1657
-- completed:
-    hackage: dependent-sum-0.7.1.0@sha256:5599aa89637db434431b1dd3fa7c34bc3d565ee44f0519bfbc877be1927c2531,2068
-    pantry-tree:
-      size: 290
-      sha256: 9cbfb32b5a8a782b7a1c941803fd517633cb699159b851c1d82267a9e9391b50
-  original:
-    hackage: dependent-sum-0.7.1.0@sha256:5599aa89637db434431b1dd3fa7c34bc3d565ee44f0519bfbc877be1927c2531,2068
-- completed:
-    hackage: dependent-sum-template-0.1.0.3@sha256:0bbbacdfbd3abf2a15aaf0cf2c27e5bdd159b519441fec39e1e6f2f54424adde,1682
-    pantry-tree:
-      size: 436
-      sha256: 32eeadeb991a290a1da41ce7e995dee7d38ebba3bd3e53ea8074c32c086701fd
-  original:
-    hackage: dependent-sum-template-0.1.0.3@sha256:0bbbacdfbd3abf2a15aaf0cf2c27e5bdd159b519441fec39e1e6f2f54424adde,1682
-- completed:
-    hackage: constraints-extras-0.3.0.2@sha256:013b8d0392582c6ca068e226718a4fe8be8e22321cc0634f6115505bf377ad26,1853
-    pantry-tree:
-      size: 594
-      sha256: 3ce1012bfb02e4d7def9df19ce80b8cd2b472c691b25b181d9960638673fecd1
-  original:
-    hackage: constraints-extras-0.3.0.2@sha256:013b8d0392582c6ca068e226718a4fe8be8e22321cc0634f6115505bf377ad26,1853
-- completed:
-    hackage: some-1.0.1@sha256:26e5bab7276f48b25ea8660d3fd1166c0f20fd497dac879a40f408e23211f93e,2055
-    pantry-tree:
-      size: 708
-      sha256: c882b6ebe8a0616f1ab3908f1620087ad5c6d8d82d1a72b99226f6487419bfe6
-  original:
-    hackage: some-1.0.1@sha256:26e5bab7276f48b25ea8660d3fd1166c0f20fd497dac879a40f408e23211f93e,2055
-- completed:
-    hackage: http-kit-0.5.1@sha256:2c79d675df6836f3f07861475692ce757c47adcd2257af87246cf6b1e0efae1b,1989
-    pantry-tree:
-      size: 877
-      sha256: 6f02146cf51b3d53570f30033f52bae93dcb9f40a3c01407e56a8c4c5fb8b783
-  original:
-    hackage: http-kit-0.5.1@sha256:2c79d675df6836f3f07861475692ce757c47adcd2257af87246cf6b1e0efae1b,1989
 snapshots:
 - completed:
-    size: 563103
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/17/4.yaml
-    sha256: f11e2153044f5f71ea7b1c9398f4721f517c9bd37642ed769647b896564021f3
-  original: lts-17.4
+    size: 587113
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/18/6.yaml
+    sha256: f74c482d7c93739ecf3abfbc0f2dea1c20a2dfb2462c689846ed55a9653b66f7
+  original: lts-18.6

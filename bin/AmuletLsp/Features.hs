@@ -54,9 +54,11 @@ getCodeActions file filterRange = foldl' getAction [] . (^.typeErrors) where
                     , _documentChanges = Just . List $
                       [ InL $ TextDocumentEdit
                         { _textDocument = file
-                        , _edits = List [ TextEdit range (renderBasic (hang (range ^. start . character) expr)) ]
-                        } ] })
+                        , _edits = List [ InL $ TextEdit range (renderBasic (hang (range ^. start . character) expr)) ]
+                        } ]
+                    , _changeAnnotations = Nothing })
     , _command = Nothing
+    , _xdata = Nothing
     }
 
 -- | Convert a span into a range.

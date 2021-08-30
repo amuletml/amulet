@@ -44,6 +44,7 @@ symbolListTests = testGroup "Symbol list"
         , _range = range 0 4 0 9
         , _selectionRange = range 0 4 0 5
         , _children = Nothing
+        , _tags = Nothing
         }
       , DocumentSymbol
         { _name = "y"
@@ -53,4 +54,5 @@ symbolListTests = testGroup "Symbol list"
         , _range = range 2 4 2 9
         , _selectionRange = range 2 4 2 5
         , _children = Nothing
+        , _tags = Nothing
         } ]

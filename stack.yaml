@@ -1,26 +1,25 @@
-resolver: lts-17.4
+resolver: lts-18.6
 
 extra-deps:
   # HsLua patched with 5.2 compat
   - git: https://github.com/amuletml/hslua
     commit: fb3454f06ab62130fc31d7f40e153a08450999c9
 
-  # Language server
-  - lsp-1.1.1.0@sha256:c8856e5fc71bc9834301731b5ba8786159e1d7e2d2d8ee07aec4f5421f2cf847,5568
-  - lsp-types-1.1.0.0@sha256:071289b1c5e2ba8fedf846cfe1931d1cfdaac24a624abdf5dcee52562b1f3e2a,4240
-  - lsp-test-0.13.0.0@sha256:f04ae384d6da554d83e4e396134e09f71e72dfeff3ec27d8b49ac689ac15ea37,4218
-  - dependent-map-0.4.0.0@sha256:ca2b131046f4340a1c35d138c5a003fe4a5be96b14efc26291ed35fd08c62221,1657
-  - dependent-sum-0.7.1.0@sha256:5599aa89637db434431b1dd3fa7c34bc3d565ee44f0519bfbc877be1927c2531,2068
-  - dependent-sum-template-0.1.0.3@sha256:0bbbacdfbd3abf2a15aaf0cf2c27e5bdd159b519441fec39e1e6f2f54424adde,1682
-  - constraints-extras-0.3.0.2@sha256:013b8d0392582c6ca068e226718a4fe8be8e22321cc0634f6115505bf377ad26,1853
-  - some-1.0.1@sha256:26e5bab7276f48b25ea8660d3fd1166c0f20fd497dac879a40f408e23211f93e,2055
+  # # Language server
+  # - lsp-1.1.1.0@sha256:c8856e5fc71bc9834301731b5ba8786159e1d7e2d2d8ee07aec4f5421f2cf847,5568
+  # - lsp-types-1.1.0.0@sha256:071289b1c5e2ba8fedf846cfe1931d1cfdaac24a624abdf5dcee52562b1f3e2a,4240
+  # - lsp-test-0.13.0.0@sha256:f04ae384d6da554d83e4e396134e09f71e72dfeff3ec27d8b49ac689ac15ea37,4218
+  # - dependent-map-0.4.0.0@sha256:ca2b131046f4340a1c35d138c5a003fe4a5be96b14efc26291ed35fd08c62221,1657
+  # - dependent-sum-0.7.1.0@sha256:5599aa89637db434431b1dd3fa7c34bc3d565ee44f0519bfbc877be1927c2531,2068
+  # - dependent-sum-template-0.1.0.3@sha256:0bbbacdfbd3abf2a15aaf0cf2c27e5bdd159b519441fec39e1e6f2f54424adde,1682
+  # - constraints-extras-0.3.0.2@sha256:013b8d0392582c6ca068e226718a4fe8be8e22321cc0634f6115505bf377ad26,1853
+  # - some-1.0.1@sha256:26e5bab7276f48b25ea8660d3fd1166c0f20fd497dac879a40f408e23211f93e,2055
 
-  # amc-prove-server
-  - http-kit-0.5.1@sha256:2c79d675df6836f3f07861475692ce757c47adcd2257af87246cf6b1e0efae1b,1989
+  # # amc-prove-server
+  # - http-kit-0.5.1@sha256:2c79d675df6836f3f07861475692ce757c47adcd2257af87246cf6b1e0efae1b,1989
 
 flags:
   hslua:
     lua-bit32: true
 
 require-stack-version: ">=1.9"
-compiler-check: newer-minor

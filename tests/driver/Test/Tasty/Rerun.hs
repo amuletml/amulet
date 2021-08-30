@@ -140,8 +140,8 @@ doRerun ingredients options testTree = Just $ do
     getResults tests = atomically $ IntMap.map getResult <$> traverse readTVar tests
 
     getResult :: Status -> TestResult
-    getResult (Done (Result Success _ _ _)) = ResultOk
-    getResult (Done (Result Failure{} _ _ _)) = ResultErr
+    getResult (Done (Result Success _ _ _ _)) = ResultOk
+    getResult (Done (Result Failure{} _ _ _ _)) = ResultErr
     getResult _ = ResultNotRun
 
     -- | Extract the 'RerunState' from the filtered test tree + extracted results.
@@ -158,7 +158,7 @@ doRerun ingredients options testTree = Just $ do
           suf <- ask
           pure (Map.singleton (name:suf) result)
 
-        group name (Ap r) = Ap $ local (name:) r
+        group _ name (Ap r) = Ap $ local (name:) r
 
 
 -- | Filters a test tree which matches a predicate.
