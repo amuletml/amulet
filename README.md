@@ -1,3 +1,7 @@
+Amulet is no longer under development. If you're interested in other languages
+which compile to Lua, do check out
+[this list](https://github.com/hengestone/lua-languages).
+
 # Amulet
 
 Amulet is a simple functional programming language in the ML tradition,
