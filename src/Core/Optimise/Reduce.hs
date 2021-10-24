@@ -18,10 +18,10 @@ import Control.Arrow hiding ((<+>))
 import qualified Data.Map.Strict as Map
 import qualified Data.VarMap as VarMap
 import qualified Data.VarSet as VarSet
+import Data.Foldable
 import Data.Triple
 import Data.Graph
 import Data.Maybe
-import Data.List
 
 import Core.Optimise.Reduce.Pattern
 import Core.Optimise.Reduce.Inline
@@ -488,15 +488,17 @@ reduceTermK _ (AnnMatch _ test arms) cont = do
         . (armBody .~ substituteInTys tySubst body')
 
     reduceBody :: (Term a -> m (Term a)) -> Subst a -> AnnTerm VarSet.Set (OccursVar a) -> m (Term a)
-    reduceBody cont subst body =
-      let (sub, binds) = foldr
-            (\(var, a) (sub, binds) ->
-               (VarMap.insert (toVar var) (basicDef var (Atom a)) sub,
-                if isTrivialAtom a
-                then binds
-                else Let (One (var, approximateAtomType a, Atom a)) . binds))
-            (mempty, id) subst
-      in binds <$> local (varScope %~ VarMap.union sub) (reduceTermK UsedOther body cont)
+    reduceBody cont subst body = do
+      (sub, binds) <- foldrM (\(var, a) (sub, binds) ->
+        if isTrivialAtom a
+        then pure ( VarMap.insert (toVar var) (basicDef var (Atom a)) sub, binds )
+        else do
+          let ty = approximateAtomType a
+          v <- freshFrom' var
+          pure ( VarMap.insert (toVar var) (basicDef var (Atom (Ref (toVar v) ty))) sub
+               , Let (One (v, ty, Atom a)) . binds ))
+        (mempty, id) subst
+      binds <$> local (varScope %~ VarMap.union sub) (reduceTermK UsedOther body cont)
 
     foldVar :: [(a, Type)] -> (a, Atom) -> Maybe (VarMap.Map Type) -> Maybe (VarMap.Map Type)
     foldVar _ _ Nothing = Nothing

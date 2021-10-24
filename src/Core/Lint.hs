@@ -39,6 +39,7 @@ data CoreError
   | InfoMismatch CoVar VarInfo VarInfo
   | InfoIllegal CoVar VarInfo VarInfo
   | NoSuchVar CoVar
+  | Duplicate CoVar
   | IllegalUnbox
   | InvalidCoercion Coercion
   | PatternMismatch [(CoVar, Type)] [(CoVar, Type)]
@@ -73,6 +74,7 @@ instance Pretty CoreError where
                                text "          got var info" <+> string (show r) </>
                                text "for" <+> pretty v
   pretty (NoSuchVar a) = text "No such variable" <+> pretty a
+  pretty (Duplicate a) = text "Duplicate declaration of" <+> pretty a
   pretty IllegalUnbox = text "Illegal unboxed type"
   pretty (InvalidCoercion a) = text "Illegal coercion" <+> pretty a
   pretty (PatternMismatch l r) = text "Expected vars" <+> pVs l </>
@@ -115,8 +117,8 @@ checkStmt s (Foreign v ty b:xs) = do
   es <- gatherError' . liftError $
     -- Ensure we're declaring a value
        unless (varInfo v == ValueVar) (pushError (InfoIllegal (toVar v) ValueVar (varInfo v)))
-    -- And the type is well formed
     *> checkType s ty
+    *> checkNodup v (vars s)
 
   ((Foreign v ty b, es):) <$> checkStmt (s { vars = insertVar v ty (vars s) }) xs
 
@@ -130,6 +132,7 @@ checkStmt s (StmtLet (One (v, ty, e)):xs) = do
        _ -> pure ())
     *> unless (varInfo v == ValueVar) (pushError (InfoIllegal (toVar v) ValueVar (varInfo v)))
     *> checkType s ty
+    *> checkNodup v (vars s)
 
   ((StmtLet (One (v, ty, e')), es):) <$> checkStmt (s { vars = insertVar v ty (vars s) }) xs
 checkStmt s (StmtLet (Many vs):xs) = do
@@ -144,6 +147,7 @@ checkStmt s (StmtLet (Many vs):xs) = do
          _ -> pure ())
       *> unless (varInfo v == ValueVar) (pushError (InfoIllegal (toVar v) ValueVar (varInfo v)))
       *> checkType s ty
+      *> checkNodup v (vars s)
     pure ((v, ty, e'), es)
 
   ((StmtLet (Many vs'), es):) <$> checkStmt s' xs
@@ -197,6 +201,7 @@ checkTerm s (Lam arg@(TermArgument a ty) bod) = do
     -- Ensure type is valid and we're declaring a value
        unless (varInfo a == ValueVar) (pushError (InfoIllegal (toVar a) ValueVar (varInfo a)))
     *> checkType s ty
+    *> checkNodup a (vars s)
 
   (bty, bod') <- checkTerm (s { vars = insertVar a ty (vars s) }) bod
   pure ( ForallTy Irrelevant ty <$> bty
@@ -206,6 +211,7 @@ checkTerm s (Lam arg@(TypeArgument a ty) bod) = do
     -- Ensure type is valid and we're declaring a tyvar
        unless (varInfo a == TypeVar) (pushError (InfoIllegal (toVar a) TypeVar (varInfo a)))
     *> checkType (s { tyVars = VarSet.insert (toVar a) (tyVars s) }) ty
+    *> checkNodup' a (tyVars s)
 
   (bty, bod') <- checkTerm (s { tyVars = VarSet.insert (toVar a) (tyVars s) }) bod
   pure ( ForallTy (Relevant (toVar a)) ty <$> bty
@@ -222,6 +228,7 @@ checkTerm s (Let (One (v, ty, e)) r) = do
        _ -> pure ())
     *> unless (varInfo v == ValueVar) (pushError (InfoIllegal (toVar v) ValueVar (varInfo v)))
     *> checkType s ty
+    *> checkNodup v (vars s)
 
   pure ( tyr, AnnLet es (One (v, ty, e')) r')
 
@@ -236,6 +243,7 @@ checkTerm s (Let (Many vs) r) = do
          Just ty' | ty `apart` ty' -> pushError (TypeMismatch ty ty')
          _ -> pure ())
       *> unless (varInfo v == ValueVar) (pushError (InfoIllegal (toVar v) ValueVar (varInfo v)))
+      *> checkNodup v (vars s)
       *> checkType s ty
     pure ((v, ty, e'), es)
 
@@ -257,6 +265,7 @@ checkTerm s (Match e bs) = do
            _ -> pure ())
         *> when (vs /= patternVars p) (pushError (PatternMismatch (first toVar <$> patternVars p) (first toVar <$> vs)))
         *> checkPattern s ty p
+        *> traverse_ (\(x, _) -> checkNodup x (vars s)) pVars
       pure ((tyr, Arm p ty r' vs tvs), es)
 
   -- Verify the types are consistent
@@ -494,6 +503,13 @@ liftError :: MonadError CoreErrors m => Errors CoreErrors b -> m b
 liftError m = case runErrors m of
                 Left e -> throwError e
                 Right x -> pure x
+
+checkNodup :: IsVar a => a -> VarMap.Map b -> Errors CoreErrors ()
+checkNodup v m = when (toVar v `VarMap.member` m) (pushError (Duplicate (toVar v)))
+
+checkNodup' :: IsVar a => a -> VarSet.Set -> Errors CoreErrors ()
+checkNodup' v m = when (toVar v `VarSet.member` m) (pushError (Duplicate (toVar v)))
+
 
 gatherError :: MonadWriter LintResult m => ExceptT CoreErrors m b -> m (Maybe b, CoreErrors)
 gatherError m = do
